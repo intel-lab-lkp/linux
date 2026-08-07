@@ -507,7 +507,8 @@ static int ovpn_socket(struct ovpn_ctx *ctx, sa_family_t family, int proto)
 		sock_len = sizeof(*in6);
 		break;
 	default:
-		return -1;
+		ret = -EINVAL;
+		goto err_socket;
 	}
 
 	int opt = 1;
@@ -516,13 +517,13 @@ static int ovpn_socket(struct ovpn_ctx *ctx, sa_family_t family, int proto)
 
 	if (ret < 0) {
 		perror("setsockopt for SO_REUSEADDR");
-		return ret;
+		goto err_socket;
 	}
 
 	ret = setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 	if (ret < 0) {
 		perror("setsockopt for SO_REUSEPORT");
-		return ret;
+		goto err_socket;
 	}
 
 	if (ctx->mark != 0) {
@@ -530,16 +531,16 @@ static int ovpn_socket(struct ovpn_ctx *ctx, sa_family_t family, int proto)
 				 sizeof(ctx->mark));
 		if (ret < 0) {
 			perror("setsockopt for SO_MARK");
-			return ret;
+			goto err_socket;
 		}
 	}
 
 	if (family == AF_INET6) {
 		opt = 0;
-		if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &opt,
-			       sizeof(opt))) {
+		ret = setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt));
+		if (ret < 0) {
 			perror("failed to set IPV6_V6ONLY");
-			return -1;
+			goto err_socket;
 		}
 	}
 
