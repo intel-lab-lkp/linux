@@ -1,0 +1,170 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/cirrus,cs2600.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Cirrus Logic Fractional-N Clock Synthesizer & Clock Multiplier
+
+maintainers:
+  - patches@opensource.cirrus.com
+
+description: |
+  The CS2600 is a system-clocking device that enables frequency synthesis
+  and clock generation from a stable timing reference clock. The device can
+  generate low-jitter clocks from a noisy clock reference at frequencies as
+  low as 50 Hz. The CS2600 has two clock inputs: REF_CLK_IN and CLK_IN.
+  REF_CLK_IN can be either a crystal or an external clock source.
+  REF_CLK_IN is always required to clock the PLL. Either REF_CLK_IN or
+  CLK_IN can be used as the reference frequency from which the output
+  frequency is derived.
+
+  The clock tree of the CS2600 is:
+
+                 +------------+
+  REF_CLK_IN ----| Hybrid PLL | PLL_OUT    +--------+
+                 |   + FLL    |-----+------|  GATE  |--------- CLK_OUT
+      CLK_IN ----|            |     |      +--------+
+                 +------------+     |
+                                    |      +---------+
+                                    +------| DIVIDER |-------- BCLK_OUT
+                                    |      +---------+
+                                    |
+                                    |      +---------+
+                                    +------| DIVIDER |-------- FSYNC_OUT
+                                           +---------+
+
+  Clock output names are defined in <dt-bindings/clock/cirrus,cs2600-clock.h>
+
+properties:
+  compatible:
+    enum:
+      - cirrus,cs2600
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    const: 1
+
+  clocks:
+    minItems: 1
+    maxItems: 2
+
+  clock-names:
+    minItems: 1
+    items:
+      - const: ref_clk_in
+      - const: clk_in
+
+  vdd-supply:
+    description: Power Supply
+
+  clock-output-names:
+    maxItems: 4
+    description:
+      Names for the output clocks corresponding to PLL_OUT, CLK_OUT,
+      BCLK_OUT and FSYNC_OUT.
+
+  cirrus,aux1-output-source:
+    description: |
+      Selects the signal  routed to the AUX1_OUT pin:
+        - "ref_clk_in"    the clock on REF_CLK_IN
+        - "clk_in"        the clock on CLK_IN
+        - "phase_unlock"  indicate the input and output clocks are not in phase,
+        - "freq_unlock"   indicate the PLL is unlocked,
+        - "clkin_missing" indicate no clock present at clk_in pin.
+    $ref: /schemas/types.yaml#/definitions/string
+    enum:
+      - ref_clk_in
+      - clk_in
+      - phase_unlock
+      - freq_unlock
+      - clkin_missing
+    default: ref_clk_in
+
+  cirrus,internal-oscillator:
+    description:
+      Use the internal oscillator as the source of REF_CLK_IN. The clocks
+      and clock-names properties must provide a fixed-rate clock of exactly
+      12000000 Hz as the ref_clk_in clock.
+    type: boolean
+
+  cirrus,smart-mode:
+    description:
+      Use REF_CLK_IN as the frequency reference until CLK_IN is present,
+      with a glitchless switch to CLK_IN as the frequency reference when
+      CLK_IN is present.
+    type: boolean
+
+  cirrus,smart-mode-clkin-only:
+    description:
+      In Smart Mode keep PLL_OUT disabled until there is clock on CLK_IN.
+    type: boolean
+
+  cirrus,bclk-invert:
+    description:
+      Invert the BCLK output.
+    type: boolean
+
+  cirrus,fsync-invert:
+    description:
+      Invert the FSYNC output.
+    type: boolean
+
+  cirrus,fsync-duty-cycles:
+    description:
+      FSYNC output duty. The number of BCLK cycles that FSYNC is asserted.
+      If not present the duty is 50%.
+      This is determined by the type of audio port that is being clocked.
+      For example TDM formats typically define FSYNC is a pulse of 1 BCLK
+      at the start of a frame.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [ 1, 2, 4, 8, 16, 32 ]
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+  - clocks
+  - clock-names
+  - vdd-supply
+
+allOf:
+  - if:
+      required:
+        - cirrus,smart-mode-clkin-only
+    then:
+      required:
+        - cirrus,smart-mode
+
+  # Require clk_in for smart mode
+  - if:
+      required:
+        - cirrus,smart-mode
+    then:
+      properties:
+        clocks:
+          minItems: 2
+        clock-names:
+          minItems: 2
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      clock-controller@2c {
+        compatible = "cirrus,cs2600";
+        reg = <0x2c>;
+        #clock-cells = <1>;
+        clocks = <&xtl_clk>, <&sync_clock>;
+        clock-names = "ref_clk_in", "clk_in";
+        vdd-supply = <&vreg>;
+        cirrus,smart-mode;
+        cirrus,smart-mode-clkin-only;
+      };
+    };
