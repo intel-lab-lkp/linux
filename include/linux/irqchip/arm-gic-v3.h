@@ -524,6 +524,8 @@
 #define GITS_CMD_VSGI			GITS_CMD_GICv4(3)
 #define GITS_CMD_INVDB			GITS_CMD_GICv4(0xe)
 
+#define ITS_ITT_ALIGN		SZ_256
+
 /*
  * ITS error numbers
  */
@@ -684,6 +686,16 @@ struct its_host_state {
 	void			*cmd_original;
 	void			*cmd_write;
 	size_t			cmdq_len;
+};
+
+/*
+ * The ITS command block, which is what the ITS actually parses.
+ */
+struct its_cmd_block {
+	union {
+		u64	raw_cmd[4];
+		__le64	raw_cmd_le[4];
+	};
 };
 
 /*
