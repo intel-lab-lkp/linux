@@ -5153,7 +5153,7 @@ got_pg:
 static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 		int preferred_nid, nodemask_t *nodemask,
 		struct alloc_context *ac, gfp_t *alloc_gfp,
-		unsigned int *alloc_flags)
+		unsigned int *alloc_flags, nodemask_t *tier_nodes)
 {
 	ac->highest_zoneidx = gfp_zone(gfp_mask);
 	ac->zonelist = node_zonelist(preferred_nid, gfp_mask);
@@ -5186,6 +5186,17 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 
 	/* Dirty zone balancing only done in the fast path */
 	ac->spread_dirty_pages = (gfp_mask & __GFP_WRITE);
+
+	if (mem_cgroup_tiered_limits() && tier_nodes &&
+	    !(gfp_mask & __GFP_THISNODE) &&
+	    ac->migratetype == MIGRATE_MOVABLE &&
+	    mem_cgroup_tier_allowed_nodemask(tier_nodes)) {
+		if (ac->nodemask)
+			nodes_and(*tier_nodes, *tier_nodes, *ac->nodemask);
+		/* tier_nodes must outlive the function call since ac uses it */
+		if (!nodes_empty(*tier_nodes))
+			ac->nodemask = tier_nodes;
+	}
 
 	/*
 	 * The preferred zone is used for statistics but crucially it is
@@ -5269,7 +5280,8 @@ unsigned long alloc_pages_bulk_noprof(gfp_t gfp, int preferred_nid,
 
 	/* May set ALLOC_NOFRAGMENT, fragmentation will return 1 page. */
 	gfp &= gfp_allowed_mask;
-	if (!prepare_alloc_pages(gfp, 0, preferred_nid, nodemask, &ac, &gfp, &alloc_flags))
+	if (!prepare_alloc_pages(gfp, 0, preferred_nid, nodemask, &ac, &gfp,
+				 &alloc_flags, NULL))
 		goto out;
 
 	/* Find an allowed local zone that meets the low watermark. */
@@ -5451,6 +5463,7 @@ struct page *__alloc_frozen_pages_noprof(gfp_t gfp, unsigned int order,
 		.alloc_flags = alloc_flags,
 	};
 	unsigned int fastpath_alloc_flags = alloc_flags;
+	nodemask_t tier_nodes;
 
 	/* Other flags could be supported later if needed. */
 	if (WARN_ON(alloc_flags & ~(ALLOC_NOLOCK | ALLOC_NO_CODETAG)))
@@ -5481,7 +5494,7 @@ struct page *__alloc_frozen_pages_noprof(gfp_t gfp, unsigned int order,
 	gfp = current_gfp_context(gfp);
 	alloc_gfp = gfp;
 	if (!prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &ac,
-			&alloc_gfp, &fastpath_alloc_flags))
+			&alloc_gfp, &fastpath_alloc_flags, &tier_nodes))
 		return NULL;
 
 	if (!(alloc_flags & ALLOC_NOLOCK)) {

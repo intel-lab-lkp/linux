@@ -2626,6 +2626,52 @@ bool mem_cgroup_tier_over_limit(struct folio *folio, int dst_nid)
 }
 
 /*
+ * Returns whether a mem_cgroup is above a tier's limit.
+ * The nodemask becomes populated with nodes that are under their limits.
+ */
+bool mem_cgroup_tier_allowed_nodemask(nodemask_t *mask)
+{
+	struct mem_cgroup *memcg;
+	int nr_tier_slots;
+	bool restricted = false;
+
+	if (!mem_cgroup_tiered_limits())
+		return false;
+
+	nr_tier_slots = mt_nr_tier_slots();
+	*mask = node_states[N_MEMORY];
+
+	rcu_read_lock();
+	memcg = active_memcg();
+	if (!memcg && in_task() && current->mm)
+		memcg = mem_cgroup_from_task(rcu_dereference(current->mm->owner));
+
+	for (; memcg && !mem_cgroup_is_root(memcg);
+	     memcg = parent_mem_cgroup(memcg)) {
+		if (READ_ONCE(memcg->memory.max) == PAGE_COUNTER_MAX &&
+		    READ_ONCE(memcg->memory.high) == PAGE_COUNTER_MAX)
+			continue;
+
+		for (int slot = 0; slot < nr_tier_slots; slot++) {
+			struct page_counter *tier = &memcg->tier[slot];
+			unsigned long limit;
+
+			limit = min(READ_ONCE(tier->high),
+				    READ_ONCE(tier->max));
+
+			if (page_counter_read(tier) <= limit)
+				continue;
+
+			restricted = true;
+			nodes_andnot(*mask, *mask, *mt_tier_nodes(slot));
+		}
+	}
+	rcu_read_unlock();
+
+	return restricted;
+}
+
+/*
  * Get the number of jiffies that we should penalise a mischievous cgroup which
  * is exceeding its memory.high by checking both it and its ancestors.
  */

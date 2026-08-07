@@ -655,6 +655,7 @@ static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
 }
 
 bool mem_cgroup_tier_over_limit(struct folio *folio, int dst_nid);
+bool mem_cgroup_tier_allowed_nodemask(nodemask_t *mask);
 
 int __mem_cgroup_charge(struct folio *folio, struct mm_struct *mm, gfp_t gfp);
 
@@ -1175,6 +1176,11 @@ static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
 }
 
 static inline bool mem_cgroup_tier_over_limit(struct folio *folio, int dst_nid)
+{
+	return false;
+}
+
+static inline bool mem_cgroup_tier_allowed_nodemask(nodemask_t *mask)
 {
 	return false;
 }
