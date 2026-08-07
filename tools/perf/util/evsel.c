@@ -1080,7 +1080,8 @@ static void __evsel__config_callchain(struct evsel *evsel, const struct record_o
 
 	if (EM_HOST == EM_S390 && param->record_mode == CALLCHAIN_FP) {
 		pr_warning_once(
-			"Framepointer unwinding lacks kernel support. Use '--call-graph dwarf'\n");
+			"Use '--call-graph dwarf' if user space does not maintain a s390 back chain "
+			"(e.g. is not built with '-mbackchain').\n");
 	}
 
 	evsel__set_sample_bit(evsel, CALLCHAIN);
