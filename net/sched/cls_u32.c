@@ -935,7 +935,7 @@ static int u32_change(struct net *net, struct sk_buff *in_skb,
 
 		u32_bind_filter(tp, new, base, tb);
 
-		err = u32_replace_hw_knode(tp, new, flags, extack);
+		err = u32_replace_hw_knode(tp, new, userflags, extack);
 		if (err) {
 			u32_unbind_filter(tp, new, tb);
 
@@ -1169,7 +1169,7 @@ static int u32_change(struct net *net, struct sk_buff *in_skb,
 		struct tc_u_knode __rcu **ins;
 		struct tc_u_knode *pins;
 
-		err = u32_replace_hw_knode(tp, n, flags, extack);
+		err = u32_replace_hw_knode(tp, n, userflags, extack);
 		if (err)
 			goto errunbind;
 
