@@ -95,11 +95,23 @@ static inline bool btrfs_meta_is_subpage(const struct btrfs_fs_info *fs_info)
 {
 	return fs_info->nodesize < PAGE_SIZE;
 }
-static inline bool btrfs_is_subpage(const struct btrfs_fs_info *fs_info,
-				    struct folio *folio)
+
+static inline bool btrfs_folio_is_data(const struct folio *folio)
 {
-	if (folio->mapping && folio->mapping->host)
-		ASSERT(is_data_inode(BTRFS_I(folio->mapping->host)));
+	const struct address_space *mapping = folio_mapping(folio);
+
+	/* Only metadata folio can have no mapping for dummy ebs. */
+	if (!mapping || !mapping->host)
+		return false;
+	return is_data_inode(BTRFS_I(mapping->host));
+}
+
+/* This helper can be called on both data and metadata folios. */
+static inline bool btrfs_is_subpage(const struct btrfs_fs_info *fs_info,
+				    const struct folio *folio)
+{
+	if (!btrfs_folio_is_data(folio))
+		return btrfs_meta_is_subpage(fs_info);
 	return fs_info->sectorsize < folio_size(folio);
 }
 
@@ -140,12 +152,7 @@ void btrfs_folio_end_lock_bitmap(const struct btrfs_fs_info *fs_info,
  * need to be inside the page. Those functions will truncate the range
  * automatically.
  *
- * Both btrfs_folio_*() and btrfs_folio_clamp_*() are for data folios.
- *
- * For metadata, one should use btrfs_meta_folio_*() helpers instead, and there
- * is no clamp version for metadata helpers, as we either go subpage
- * (nodesize < PAGE_SIZE) or go regular folio helpers (nodesize >= PAGE_SIZE,
- * and our folio is never larger than nodesize).
+ * All helpers can be called on both data and metadata folios.
  */
 #define DECLARE_BTRFS_SUBPAGE_OPS(name)					\
 void btrfs_subpage_set_##name(const struct btrfs_fs_info *fs_info,	\
@@ -166,9 +173,21 @@ void btrfs_folio_clamp_clear_##name(const struct btrfs_fs_info *fs_info,	\
 		struct folio *folio, u64 start, u32 len);			\
 bool btrfs_folio_clamp_test_##name(const struct btrfs_fs_info *fs_info,	\
 		struct folio *folio, u64 start, u32 len);		\
-void btrfs_meta_folio_set_##name(struct folio *folio, const struct extent_buffer *eb); \
-void btrfs_meta_folio_clear_##name(struct folio *folio, const struct extent_buffer *eb); \
-bool btrfs_meta_folio_test_##name(struct folio *folio, const struct extent_buffer *eb);
+static inline void btrfs_meta_folio_set_##name(struct folio *folio,		\
+					       const struct extent_buffer *eb)	\
+{										\
+	btrfs_folio_set_##name(eb->fs_info, folio, eb->start, eb->len);		\
+}										\
+static inline void btrfs_meta_folio_clear_##name(struct folio *folio,		\
+						 const struct extent_buffer *eb) \
+{										\
+	btrfs_folio_clear_##name(eb->fs_info, folio, eb->start, eb->len);	\
+}										\
+static inline bool btrfs_meta_folio_test_##name(struct folio *folio,		\
+				  const struct extent_buffer *eb)		\
+{										\
+	return btrfs_folio_test_##name(eb->fs_info, folio, eb->start, eb->len);	\
+}
 
 DECLARE_BTRFS_SUBPAGE_OPS(uptodate);
 DECLARE_BTRFS_SUBPAGE_OPS(dirty);

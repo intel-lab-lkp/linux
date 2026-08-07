@@ -742,29 +742,8 @@ bool btrfs_folio_clamp_test_##name(const struct btrfs_fs_info *fs_info,	\
 		return folio_test_func(folio);				\
 	btrfs_subpage_clamp_range(folio, &start, &len);			\
 	return btrfs_subpage_test_##name(fs_info, folio, start, len);	\
-}									\
-void btrfs_meta_folio_set_##name(struct folio *folio, const struct extent_buffer *eb) \
-{									\
-	if (!btrfs_meta_is_subpage(eb->fs_info)) {			\
-		folio_set_func(folio);					\
-		return;							\
-	}								\
-	btrfs_subpage_set_##name(eb->fs_info, folio, eb->start, eb->len); \
-}									\
-void btrfs_meta_folio_clear_##name(struct folio *folio, const struct extent_buffer *eb) \
-{									\
-	if (!btrfs_meta_is_subpage(eb->fs_info)) {			\
-		folio_clear_func(folio);				\
-		return;							\
-	}								\
-	btrfs_subpage_clear_##name(eb->fs_info, folio, eb->start, eb->len); \
-}									\
-bool btrfs_meta_folio_test_##name(struct folio *folio, const struct extent_buffer *eb) \
-{									\
-	if (!btrfs_meta_is_subpage(eb->fs_info))			\
-		return folio_test_func(folio);				\
-	return btrfs_subpage_test_##name(eb->fs_info, folio, eb->start, eb->len); \
 }
+
 IMPLEMENT_BTRFS_PAGE_OPS(uptodate, folio_mark_uptodate, folio_clear_uptodate,
 			 folio_test_uptodate);
 IMPLEMENT_BTRFS_PAGE_OPS(dirty, btrfs_folio_mark_dirty_reserved,
