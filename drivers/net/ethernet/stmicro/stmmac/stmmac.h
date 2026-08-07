@@ -305,6 +305,7 @@ struct stmmac_priv {
 		bool enable;
 		u8 algo;
 		u32 quanta[MTL_MAX_TX_QUEUES];
+		u32 prio[MTL_MAX_TX_QUEUES];
 	} qdisc;
 	struct dma_features dma_cap;
 	struct stmmac_counters mmc;
@@ -400,6 +401,7 @@ enum stmmac_state {
 extern const struct dev_pm_ops stmmac_simple_pm_ops;
 
 void stmmac_set_tx_queue_weight(struct stmmac_priv *priv);
+void stmmac_mac_config_tx_queues_prio(struct stmmac_priv *priv);
 int stmmac_mdio_unregister(struct net_device *ndev);
 int stmmac_mdio_register(struct net_device *ndev);
 int stmmac_mdio_reset(struct mii_bus *mii);
