@@ -9,8 +9,13 @@
 #include <linux/kmemleak.h>
 #include <linux/kvm_host.h>
 #include <asm/kvm_mmu.h>
+#include <asm/kvm_pkvm.h>
 #include <linux/memblock.h>
 #include <linux/mutex.h>
+#include <linux/of_address.h>
+#include <linux/of_reserved_mem.h>
+#include <linux/platform_device.h>
+#include <linux/irqchip/arm-gic-v3.h>
 
 #include <asm/kvm_pkvm.h>
 
@@ -39,6 +44,47 @@ static int __init register_memblock_regions(void)
 	return 0;
 }
 
+static int __init register_its_emulated_region(void)
+{
+	struct device_node *np;
+	struct resource res;
+	int i = 0;
+	int ret;
+
+	for_each_compatible_node(np, NULL, "arm,gic-v3-its") {
+		ret = of_address_to_resource(np, 0, &res);
+		if (ret)
+			goto out_fail;
+
+		if (i >= PKVM_PROTECTED_REGS_NUM) {
+			kvm_err("Out of protected region slots\n");
+			ret = -ENOSPC;
+			goto out_fail;
+		}
+
+		/*
+		 * Note: don't unmap the entire animal from the host because devices need
+		 * to be able to access GITS_TRANSLATER to raise MSIs. If the
+		 * page where GITS_TRANSLATER is given to HYP, devices won't be
+		 * able to map it in their IOMMU when the IOMMU is managed by
+		 * pKVM.
+		 */
+		kvm_nvhe_sym(pkvm_protected_regs)[i].pfn = PHYS_PFN(res.start);
+		kvm_nvhe_sym(pkvm_protected_regs)[i].cb =
+			lm_alias(&kvm_nvhe_sym(its_emulate_forward_req));
+		kvm_nvhe_sym(pkvm_protected_regs)[i].nr_pages =
+			PFN_DOWN(min_t(u64, resource_size(&res), PAGE_ALIGN_DOWN(GITS_TRANSLATER)));
+
+		i++;
+	}
+
+	kvm_nvhe_sym(num_protected_reg) = i;
+	return 0;
+out_fail:
+	of_node_put(np);
+	return ret;
+}
+
 void __init kvm_hyp_reserve(void)
 {
 	u64 hyp_mem_pages = 0;
@@ -54,6 +100,12 @@ void __init kvm_hyp_reserve(void)
 	if (ret) {
 		*hyp_memblock_nr_ptr = 0;
 		kvm_err("Failed to register hyp memblocks: %d\n", ret);
+		return;
+	}
+
+	ret = register_its_emulated_region();
+	if (ret) {
+		kvm_err("Failed to register ITS region %d\n", ret);
 		return;
 	}
 
