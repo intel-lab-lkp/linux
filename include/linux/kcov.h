@@ -2,6 +2,7 @@
 #ifndef _LINUX_KCOV_H
 #define _LINUX_KCOV_H
 
+#include <linux/bits.h>
 #include <linux/sched.h>
 #include <uapi/linux/kcov.h>
 
@@ -23,7 +24,8 @@ enum kcov_mode {
 	KCOV_MODE_TRACE_CMP = 3,
 };
 
-#define KCOV_IN_CTXSW	(1 << 30)
+#define KCOV_IN_CTXSW	BIT(30)
+#define KCOV_PAUSED	BIT(29)
 
 void kcov_task_init(struct task_struct *t);
 void kcov_task_exit(struct task_struct *t);
@@ -37,6 +39,25 @@ do {						\
 do {						\
 	(t)->kcov_mode &= ~KCOV_IN_CTXSW;	\
 } while (0)
+
+/*
+ * Pause coverage for current. Pass the returned state to kcov_resume().
+ * Callers must be uninstrumented.
+ */
+static __always_inline unsigned int kcov_pause(struct task_struct *t)
+{
+	unsigned int paused;
+
+	paused = t->kcov_mode & KCOV_PAUSED;
+	t->kcov_mode |= KCOV_PAUSED;
+	return paused;
+}
+
+static __always_inline void kcov_resume(struct task_struct *t, unsigned int paused)
+{
+	if (!paused)
+		t->kcov_mode &= ~KCOV_PAUSED;
+}
 
 /* See Documentation/dev-tools/kcov.rst for usage details. */
 void kcov_remote_start(u64 handle);
@@ -93,6 +114,8 @@ void __sanitizer_cov_trace_switch(kcov_u64 val, void *cases);
 
 static inline void kcov_task_init(struct task_struct *t) {}
 static inline void kcov_task_exit(struct task_struct *t) {}
+static inline unsigned int kcov_pause(struct task_struct *t) { return 0; }
+static inline void kcov_resume(struct task_struct *t, unsigned int paused) {}
 static inline void kcov_prepare_switch(struct task_struct *t) {}
 static inline void kcov_finish_switch(struct task_struct *t) {}
 static inline void kcov_remote_start(u64 handle) {}

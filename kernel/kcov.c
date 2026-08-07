@@ -830,7 +830,7 @@ static const struct file_operations kcov_fops = {
 
 static inline bool kcov_mode_enabled(unsigned int mode)
 {
-	return (mode & ~KCOV_IN_CTXSW) != KCOV_MODE_DISABLED;
+	return (mode & ~(KCOV_IN_CTXSW | KCOV_PAUSED)) != KCOV_MODE_DISABLED;
 }
 
 static void kcov_remote_softirq_start(struct task_struct *t)
