@@ -651,7 +651,7 @@ static void usb_audio_make_longname(struct usb_device *dev,
 	struct snd_card *card = chip->card;
 	const struct usb_audio_device_name *preset;
 	const char *s = NULL;
-	int len;
+	int len = 0;
 
 	preset = lookup_device_name(chip->usb_id);
 
@@ -675,32 +675,39 @@ static void usb_audio_make_longname(struct usb_device *dev,
 
 	if (*card->longname) {
 		strim(card->longname);
+		len = strlen(card->longname);
 		if (*card->longname)
-			strlcat(card->longname, " ", sizeof(card->longname));
+			len += scnprintf(card->longname + len,
+					 sizeof(card->longname) - len, " ");
 	}
 
-	strlcat(card->longname, card->shortname, sizeof(card->longname));
-
-	len = strlcat(card->longname, " at ", sizeof(card->longname));
+	len += scnprintf(card->longname + len, sizeof(card->longname) - len,
+			 "%s at ", card->shortname);
 
 	if (len < sizeof(card->longname))
 		usb_make_path(dev, card->longname + len, sizeof(card->longname) - len);
 
+	len = strlen(card->longname);
 	switch (snd_usb_get_speed(dev)) {
 	case USB_SPEED_LOW:
-		strlcat(card->longname, ", low speed", sizeof(card->longname));
+		strscpy(card->longname + len, ", low speed",
+			sizeof(card->longname) - len);
 		break;
 	case USB_SPEED_FULL:
-		strlcat(card->longname, ", full speed", sizeof(card->longname));
+		strscpy(card->longname + len, ", full speed",
+			sizeof(card->longname) - len);
 		break;
 	case USB_SPEED_HIGH:
-		strlcat(card->longname, ", high speed", sizeof(card->longname));
+		strscpy(card->longname + len, ", high speed",
+			sizeof(card->longname) - len);
 		break;
 	case USB_SPEED_SUPER:
-		strlcat(card->longname, ", super speed", sizeof(card->longname));
+		strscpy(card->longname + len, ", super speed",
+			sizeof(card->longname) - len);
 		break;
 	case USB_SPEED_SUPER_PLUS:
-		strlcat(card->longname, ", super speed plus", sizeof(card->longname));
+		strscpy(card->longname + len, ", super speed plus",
+			sizeof(card->longname) - len);
 		break;
 	default:
 		break;
