@@ -39,22 +39,34 @@ static void smc_diag_msg_common_fill(struct smc_diag_msg *r, struct sock *sk)
 	memset(r, 0, sizeof(*r));
 	r->diag_family = sk->sk_family;
 	sock_diag_save_cookie(sk, r->id.idiag_cookie);
-	if (!smc->clcsock)
-		return;
-	r->id.idiag_sport = htons(smc->clcsock->sk->sk_num);
-	r->id.idiag_dport = smc->clcsock->sk->sk_dport;
-	r->id.idiag_if = smc->clcsock->sk->sk_bound_dev_if;
-	if (sk->sk_protocol == SMCPROTO_SMC) {
-		r->id.idiag_src[0] = smc->clcsock->sk->sk_rcv_saddr;
-		r->id.idiag_dst[0] = smc->clcsock->sk->sk_daddr;
+	/*
+	 * smc_clcsock_release() sets smc->clcsock = NULL under
+	 * clcsock_release_lock before freeing the socket. Hold the same
+	 * mutex here to make the NULL check and all field reads atomic
+	 * with that writer. mutex_lock() is safe: this function is called
+	 * only after the hash spinlock has been dropped by
+	 * smc_diag_dump_proto().
+	 */
+	mutex_lock(&smc->clcsock_release_lock);
+	if (smc->clcsock) {
+		r->id.idiag_sport = htons(smc->clcsock->sk->sk_num);
+		r->id.idiag_dport = smc->clcsock->sk->sk_dport;
+		r->id.idiag_if = smc->clcsock->sk->sk_bound_dev_if;
+		if (sk->sk_protocol == SMCPROTO_SMC) {
+			r->id.idiag_src[0] = smc->clcsock->sk->sk_rcv_saddr;
+			r->id.idiag_dst[0] = smc->clcsock->sk->sk_daddr;
 #if IS_ENABLED(CONFIG_IPV6)
-	} else if (sk->sk_protocol == SMCPROTO_SMC6) {
-		memcpy(&r->id.idiag_src, &smc->clcsock->sk->sk_v6_rcv_saddr,
-		       sizeof(smc->clcsock->sk->sk_v6_rcv_saddr));
-		memcpy(&r->id.idiag_dst, &smc->clcsock->sk->sk_v6_daddr,
-		       sizeof(smc->clcsock->sk->sk_v6_daddr));
+		} else if (sk->sk_protocol == SMCPROTO_SMC6) {
+			memcpy(&r->id.idiag_src,
+			       &smc->clcsock->sk->sk_v6_rcv_saddr,
+			       sizeof(smc->clcsock->sk->sk_v6_rcv_saddr));
+			memcpy(&r->id.idiag_dst,
+			       &smc->clcsock->sk->sk_v6_daddr,
+			       sizeof(smc->clcsock->sk->sk_v6_daddr));
 #endif
+		}
 	}
+	mutex_unlock(&smc->clcsock_release_lock);
 }
 
 static int smc_diag_msg_attrs_fill(struct sock *sk, struct sk_buff *skb,
@@ -87,6 +99,15 @@ static int __smc_diag_dump(struct sock *sk, struct sk_buff *skb,
 
 	r = nlmsg_data(nlh);
 	smc_diag_msg_common_fill(r, sk);
+	/*
+	 * Take the socket lock to serialise against smc_conn_free(),
+	 * which drops lgr and link refcounts under lock_sock(). Without
+	 * this, a concurrent close can free lgr->lnk[] memory between
+	 * our smc_conn_lgr_valid() check and the subsequent lgr/lnk
+	 * dereferences. lock_sock() is safe here because the hash
+	 * spinlock has been dropped by smc_diag_dump_proto().
+	 */
+	lock_sock(sk);
 	r->diag_state = sk->sk_state;
 	if (smc->use_fallback)
 		r->diag_mode = SMC_DIAG_MODE_FALLBACK_TCP;
@@ -185,10 +206,13 @@ static int __smc_diag_dump(struct sock *sk, struct sk_buff *skb,
 			goto errout;
 	}
 
+	release_sock(sk);
+
 	nlmsg_end(skb, nlh);
 	return 0;
 
 errout:
+	release_sock(sk);
 	nlmsg_cancel(skb, nlh);
 	return -EMSGSIZE;
 }
@@ -204,25 +228,43 @@ static int smc_diag_dump_proto(struct proto *prot, struct sk_buff *skb,
 	int rc = 0, num = 0;
 	struct sock *sk;
 
-	read_lock(&prot->h.smc_hash->lock);
 	head = &prot->h.smc_hash->ht;
+restart:
+	num = 0;
+	read_lock(&prot->h.smc_hash->lock);
 	if (hlist_empty(head))
 		goto out;
-
 	sk_for_each(sk, head) {
 		if (!net_eq(sock_net(sk), net))
 			continue;
 		if (num < snum)
 			goto next;
+		/*
+		 * Pin sk before dropping the lock. refcount_inc_not_zero()
+		 * skips sockets already past their last reference.
+		 * smc_unhash_sk() nulls sk->sk_node.next via sk_del_node_init()
+		 * so resuming an interrupted sk_for_each() would terminate
+		 * early if a socket is unhashed while the lock is dropped.
+		 * Restart from head after each unlock, using snum to skip
+		 * already-dumped entries.
+		 */
+		if (!refcount_inc_not_zero(&sk->sk_refcnt))
+			goto next;
+		read_unlock(&prot->h.smc_hash->lock);
+
 		rc = __smc_diag_dump(sk, skb, cb, nlmsg_data(cb->nlh), bc);
+		sock_put(sk);
+
 		if (rc < 0)
-			goto out;
+			goto out_nolock;
+		snum = num + 1;
+		goto restart;
 next:
 		num++;
 	}
-
 out:
 	read_unlock(&prot->h.smc_hash->lock);
+out_nolock:
 	cb_ctx->pos[p_type] = num;
 	return rc;
 }
