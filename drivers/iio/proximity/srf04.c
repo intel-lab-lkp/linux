@@ -345,6 +345,7 @@ static void srf04_remove(struct platform_device *pdev)
 	iio_device_unregister(indio_dev);
 
 	if (data->gpiod_power) {
+		pm_runtime_dont_use_autosuspend(data->dev);
 		pm_runtime_disable(data->dev);
 		pm_runtime_set_suspended(data->dev);
 	}
