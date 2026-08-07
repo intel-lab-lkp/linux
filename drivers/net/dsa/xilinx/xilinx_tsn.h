@@ -100,6 +100,10 @@
 #define TSN_CAM_FOUND			BIT(7)
 #define TSN_CAM_VLAN			GENMASK(27, 16)
 #define TSN_CAM_PORT_LIST		GENMASK(10, 8)
+/* Classify a CAM-matched frame as endpoint management traffic so the
+ * switch delivers it on the management queue.
+ */
+#define TSN_CAM_EP_MGMTQ_EN		BIT(15)
 #define TSN_CAM_READ_KEY_ADDR		GENMASK(19, 8)
 #define TSN_CAM_MAC2_READ_KEY_BASE	0x800
 #define TSN_CAM_READ_KEY_COUNT		2048
@@ -342,6 +346,9 @@ struct xlnx_tsn_mac {
  *		   untagged; drives the native-VLAN untag enable
  * @cfg_vids: VIDs with a membership entry in the VLAN-membership memory,
  *	      used to walk and update Port-List-Valid when @vlan_aware changes
+ * @ctrl_trap_vid: native VIDs that currently carry link-local control-frame
+ *		   traps, kept in sync with the wire ports' native VIDs
+ * @ctrl_trap_count: number of valid entries in @ctrl_trap_vid
  * @indirect_lock: serialises the CAM and VLAN-membership indirect
  *		   register sequences
  * @mac: per-MAC state, indexed by user-port number (index 0 unused;
@@ -369,6 +376,8 @@ struct xlnx_tsn {
 	u16 pvid[XLNX_TSN_NUM_PORTS];
 	bool pvid_untagged[XLNX_TSN_NUM_PORTS];
 	DECLARE_BITMAP(cfg_vids, VLAN_N_VID);
+	u16 ctrl_trap_vid[XLNX_TSN_NUM_PORTS - 1];
+	u8 ctrl_trap_count;
 	struct mutex indirect_lock; /* serialises CAM + VLAN-memory access */
 	struct xlnx_tsn_mac mac[XLNX_TSN_NUM_PORTS];
 	int ptp_timer_irq;

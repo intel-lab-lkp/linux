@@ -671,11 +671,14 @@ static int xlnx_tsn_cam_read_portlist(struct xlnx_tsn *sw,
 }
 
 /* Add (add=true) or delete (add=false) the (MAC, VID) entry carrying the
- * given port list. Caller holds indirect_lock.
+ * given port list. Set mgmt for entries whose frames must be classified as
+ * endpoint management traffic; clear it for plain forwarding/FDB entries.
+ * Caller holds indirect_lock.
  */
 static int xlnx_tsn_cam_write(struct xlnx_tsn *sw, const unsigned char *addr,
-			      u16 vid, u8 portlist, bool add)
+			      u16 vid, u8 portlist, bool mgmt, bool add)
 {
+	u32 port_act;
 	int ret;
 
 	ret = xlnx_tsn_cam_wait_ready(sw);
@@ -685,13 +688,40 @@ static int xlnx_tsn_cam_write(struct xlnx_tsn *sw, const unsigned char *addr,
 	xlnx_tsn_cam_load_key(sw, addr, vid);
 	sw_iow(sw, TSN_CAM_TV1_OFFSET, 0);
 	sw_iow(sw, TSN_CAM_TV2_OFFSET, 0);
-	sw_iow(sw, TSN_CAM_PORT_ACT_OFFSET,
-	       FIELD_PREP(TSN_CAM_PORT_LIST, portlist));
+
+	port_act = FIELD_PREP(TSN_CAM_PORT_LIST, portlist);
+	if (mgmt)
+		port_act |= TSN_CAM_EP_MGMTQ_EN;
+
+	sw_iow(sw, TSN_CAM_PORT_ACT_OFFSET, port_act);
+
 	sw_iow(sw, TSN_CAM_CTRL_OFFSET,
 	       FIELD_PREP(TSN_CAM_OP_MASK, add ? TSN_CAM_OP_ADD : TSN_CAM_OP_DELETE) |
 	       TSN_CAM_OP_ENABLE);
 
 	return xlnx_tsn_cam_wait_done(sw);
+}
+
+/* IEEE 802.1 bridge-group destination MACs. A bridge must consume
+ * these locally rather than relay them between ports. Each address
+ * gets a CAM trap entry pointing to the CPU port only. The CAM
+ * matches the destination MAC exactly, so only the addresses in
+ * active use are listed here.
+ */
+static const u8 xlnx_tsn_ctrl_das[][ETH_ALEN] = {
+	{ 0x01, 0x80, 0xc2, 0x00, 0x00, 0x00 }, /* STP / RSTP / MSTP */
+	{ 0x01, 0x80, 0xc2, 0x00, 0x00, 0x0e }, /* LLDP */
+};
+
+static bool xlnx_tsn_addr_is_ctrl_trap(const unsigned char *addr)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(xlnx_tsn_ctrl_das); i++)
+		if (ether_addr_equal(addr, xlnx_tsn_ctrl_das[i]))
+			return true;
+
+	return false;
 }
 
 static void xlnx_tsn_port_fast_age(struct dsa_switch *ds, int port)
@@ -712,6 +742,9 @@ static int xlnx_tsn_port_fdb_add(struct dsa_switch *ds, int port,
 	u8 portlist;
 	int ret;
 
+	if (xlnx_tsn_addr_is_ctrl_trap(addr))
+		return 0;
+
 	if (!vid)
 		vid = TSN_SW_DEFAULT_VID;
 
@@ -719,7 +752,7 @@ static int xlnx_tsn_port_fdb_add(struct dsa_switch *ds, int port,
 	ret = xlnx_tsn_cam_read_portlist(sw, addr, vid, &portlist);
 	if (!ret) {
 		portlist |= TSN_PORT_BIT(port);
-		ret = xlnx_tsn_cam_write(sw, addr, vid, portlist, true);
+		ret = xlnx_tsn_cam_write(sw, addr, vid, portlist, false, true);
 	}
 
 	return ret;
@@ -732,6 +765,9 @@ static int xlnx_tsn_port_fdb_del(struct dsa_switch *ds, int port,
 	struct xlnx_tsn *sw = ds->priv;
 	u8 portlist;
 	int ret;
+
+	if (xlnx_tsn_addr_is_ctrl_trap(addr))
+		return 0;
 
 	if (!vid)
 		vid = TSN_SW_DEFAULT_VID;
@@ -746,7 +782,8 @@ static int xlnx_tsn_port_fdb_del(struct dsa_switch *ds, int port,
 		 * rewrite it with the updated port list.
 		 */
 		portlist &= ~TSN_PORT_BIT(port);
-		ret = xlnx_tsn_cam_write(sw, addr, vid, portlist, portlist != 0);
+		ret = xlnx_tsn_cam_write(sw, addr, vid, portlist, false,
+					 portlist != 0);
 	}
 
 	return ret;
@@ -936,12 +973,93 @@ static void xlnx_tsn_set_vlan_only_learning(struct xlnx_tsn *sw, bool on)
 	sw_iow(sw, TSN_SW_ADDR_LEARN_OFFSET, reg);
 }
 
+/* Install or remove link-local control-frame traps for one VID.
+ * Each entry points to the CPU port and marks frames as management
+ * traffic for delivery on the management queue. Caller holds
+ * indirect_lock.
+ */
+static int xlnx_tsn_set_ctrl_traps(struct xlnx_tsn *sw, u16 vid, bool add)
+{
+	int i, ret;
+
+	for (i = 0; i < ARRAY_SIZE(xlnx_tsn_ctrl_das); i++) {
+		ret = xlnx_tsn_cam_write(sw, xlnx_tsn_ctrl_das[i], vid,
+					 TSN_PORT_BIT(XLNX_TSN_CPU_PORT),
+					 true, add);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static bool xlnx_tsn_vid_in(const u16 *vids, int count, u16 vid)
+{
+	int i;
+
+	for (i = 0; i < count; i++)
+		if (vids[i] == vid)
+			return true;
+
+	return false;
+}
+
+/* Keep CAM traps in sync with the native VIDs the wire ports use. An
+ * untagged BPDU or LLDP frame is looked up under the ingress port's
+ * native VID, so a trap must exist at each native VID in use. While
+ * the bridge is not VLAN-aware every port uses the default VID. Call
+ * again whenever a native VID changes. Caller holds indirect_lock.
+ */
+static int xlnx_tsn_sync_ctrl_traps(struct xlnx_tsn *sw)
+{
+	u16 want[XLNX_TSN_NUM_PORTS - 1], vid;
+	struct dsa_port *dp;
+	int i, n, ret;
+
+	n = 0;
+	dsa_switch_for_each_user_port(dp, &sw->ds) {
+		vid = sw->vlan_aware ? sw->pvid[dp->index] : TSN_SW_DEFAULT_VID;
+		if (!xlnx_tsn_vid_in(want, n, vid))
+			want[n++] = vid;
+	}
+
+	/* Remove traps at VIDs no longer used as any wire port's native VID. */
+	i = 0;
+	while (i < sw->ctrl_trap_count) {
+		vid = sw->ctrl_trap_vid[i];
+		if (xlnx_tsn_vid_in(want, n, vid)) {
+			i++;
+			continue;
+		}
+		ret = xlnx_tsn_set_ctrl_traps(sw, vid, false);
+		if (ret)
+			return ret;
+
+		sw->ctrl_trap_vid[i] = sw->ctrl_trap_vid[--sw->ctrl_trap_count];
+	}
+
+	/* Add traps at native VIDs not yet installed. */
+	for (i = 0; i < n; i++) {
+		if (xlnx_tsn_vid_in(sw->ctrl_trap_vid, sw->ctrl_trap_count,
+				    want[i]))
+			continue;
+		ret = xlnx_tsn_set_ctrl_traps(sw, want[i], true);
+		if (ret)
+			return ret;
+
+		sw->ctrl_trap_vid[sw->ctrl_trap_count++] = want[i];
+	}
+
+	return 0;
+}
+
 static int xlnx_tsn_port_vlan_filtering(struct dsa_switch *ds, int port,
 					bool vlan_filtering,
 					struct netlink_ext_ack *extack)
 {
 	struct xlnx_tsn *sw = ds->priv;
 	struct dsa_port *dp;
+	bool old_vlan_aware;
 	unsigned long bit;
 	u32 reg, data;
 	int ret;
@@ -967,6 +1085,7 @@ static int xlnx_tsn_port_vlan_filtering(struct dsa_switch *ds, int port,
 			return ret;
 	}
 
+	old_vlan_aware = sw->vlan_aware;
 	sw->vlan_aware = vlan_filtering;
 
 	/* Miss policy for unicast and multicast. It only kicks in when the
@@ -1004,15 +1123,23 @@ static int xlnx_tsn_port_vlan_filtering(struct dsa_switch *ds, int port,
 		ret = xlnx_tsn_port_state_cycle(sw, dp->index,
 						TSN_PORT_STATE_BLOCKING);
 		if (ret)
-			return ret;
+			goto restore;
 
 		ret = xlnx_tsn_port_state_cycle(sw, dp->index,
 						TSN_PORT_STATE_FLUSH);
 		if (ret)
-			return ret;
+			goto restore;
 	}
 
+	ret = xlnx_tsn_sync_ctrl_traps(sw);
+	if (ret)
+		goto restore;
+
 	return 0;
+
+restore:
+	sw->vlan_aware = old_vlan_aware;
+	return ret;
 }
 
 static int xlnx_tsn_port_vlan_add(struct dsa_switch *ds, int port,
@@ -1061,6 +1188,7 @@ static int xlnx_tsn_port_vlan_add(struct dsa_switch *ds, int port,
 		sw->pvid[port] = vlan->vid;
 		sw->pvid_untagged[port] = untagged;
 		xlnx_tsn_apply_pvid(sw, port);
+		return xlnx_tsn_sync_ctrl_traps(sw);
 	}
 
 	if (vlan->vid == sw->pvid[port] &&
@@ -1101,6 +1229,7 @@ static int xlnx_tsn_port_vlan_del(struct dsa_switch *ds, int port,
 		sw->pvid[port] = TSN_SW_DEFAULT_VID;
 		sw->pvid_untagged[port] = false;
 		xlnx_tsn_apply_pvid(sw, port);
+		return xlnx_tsn_sync_ctrl_traps(sw);
 	}
 
 	return 0;
@@ -1204,6 +1333,21 @@ static const struct phylink_mac_ops xlnx_tsn_phylink_mac_ops = {
 	.mac_link_down	= xlnx_tsn_mac_link_down,
 };
 
+static void xlnx_tsn_remove_ctrl_traps(struct xlnx_tsn *sw)
+{
+	int i;
+
+	guard(mutex)(&sw->indirect_lock);
+
+	for (i = 0; i < sw->ctrl_trap_count; i++)
+		if (xlnx_tsn_set_ctrl_traps(sw, sw->ctrl_trap_vid[i], false))
+			dev_warn(sw->dev,
+				 "failed to remove control trap vid %u\n",
+				 sw->ctrl_trap_vid[i]);
+
+	sw->ctrl_trap_count = 0;
+}
+
 static int xlnx_tsn_setup(struct dsa_switch *ds)
 {
 	struct dsa_port *cpu_dp = dsa_to_port(ds, XLNX_TSN_CPU_PORT);
@@ -1276,9 +1420,19 @@ static int xlnx_tsn_setup(struct dsa_switch *ds)
 			return ret;
 	}
 
+	/* Trap link-local control frames (STP, LLDP) to the CPU port.
+	 * Without this, a frame arriving on one wire port would be
+	 * flooded out the other instead of reaching the host bridge.
+	 */
+	scoped_guard(mutex, &sw->indirect_lock) {
+		ret = xlnx_tsn_sync_ctrl_traps(sw);
+		if (ret)
+			return ret;
+	}
+
 	ret = xlnx_tsn_mdio_register_all(sw);
 	if (ret)
-		return ret;
+		goto err_traps;
 
 	sw->nb.notifier_call = xlnx_tsn_netdev_event;
 	ret = register_netdevice_notifier(&sw->nb);
@@ -1312,6 +1466,8 @@ err_nb:
 	unregister_netdevice_notifier(&sw->nb);
 err_mdio:
 	xlnx_tsn_mdio_unregister_all(sw);
+err_traps:
+	xlnx_tsn_remove_ctrl_traps(sw);
 	return ret;
 }
 
@@ -1326,6 +1482,8 @@ static void xlnx_tsn_teardown(struct dsa_switch *ds)
 	xlnx_tsn_ptp_exit(sw);
 	unregister_netdevice_notifier(&sw->nb);
 	xlnx_tsn_mdio_unregister_all(sw);
+
+	xlnx_tsn_remove_ctrl_traps(sw);
 
 	dsa_switch_for_each_user_port(dp, ds)
 		xlnx_tsn_set_port_state(sw, dp->index, TSN_PORT_STATE_DISABLED);
