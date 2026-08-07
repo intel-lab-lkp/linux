@@ -4252,6 +4252,8 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 {
 	guard(preempt)();
 	int cpu, success = 0;
+	/* KCOV: sched/ is uninstrumented but the wakeup callees are not. */
+	unsigned int kcov_paused = kcov_pause(current);
 
 	wake_flags |= WF_TTWU;
 
@@ -4418,6 +4420,7 @@ out:
 	if (success)
 		ttwu_stat(p, task_cpu(p), wake_flags);
 
+	kcov_resume(current, kcov_paused);
 	return success;
 }
 
