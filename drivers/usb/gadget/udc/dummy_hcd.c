@@ -229,8 +229,6 @@ static const struct {
 struct urbp {
 	struct urb		*urb;
 	struct list_head	urbp_list;
-	struct sg_mapping_iter	miter;
-	u32			miter_started;
 };
 
 
@@ -1296,7 +1294,6 @@ static int dummy_urb_enqueue(
 	if (!urbp)
 		return -ENOMEM;
 	urbp->urb = urb;
-	urbp->miter_started = 0;
 
 	dum_hcd = hcd_to_dummy_hcd(hcd);
 	spin_lock_irqsave(&dum_hcd->dum->lock, flags);
@@ -1363,12 +1360,11 @@ static int dummy_perform_transfer(struct urb *urb, struct dummy_request *req,
 		u32 len)
 {
 	void *ubuf, *rbuf;
-	struct urbp *urbp = urb->hcpriv;
 	int to_host;
-	struct sg_mapping_iter *miter = &urbp->miter;
 	u32 trans = 0;
-	u32 this_sg;
-	bool next_sg;
+	u32 req_len = len;
+	struct sg_mapping_iter miter;
+	u32 flags = SG_MITER_ATOMIC;
 
 	to_host = usb_urb_dir_in(urb);
 	rbuf = req->req.buf + req->req.actual;
@@ -1382,46 +1378,35 @@ static int dummy_perform_transfer(struct urb *urb, struct dummy_request *req,
 		return len;
 	}
 
-	if (!urbp->miter_started) {
-		u32 flags = SG_MITER_ATOMIC;
+	if (to_host)
+		flags |= SG_MITER_TO_SG;
+	else
+		flags |= SG_MITER_FROM_SG;
 
-		if (to_host)
-			flags |= SG_MITER_TO_SG;
-		else
-			flags |= SG_MITER_FROM_SG;
+	sg_miter_start(&miter, urb->sg, urb->num_sgs, flags);
 
-		sg_miter_start(miter, urb->sg, urb->num_sgs, flags);
-		urbp->miter_started = 1;
-	}
-	next_sg = sg_miter_next(miter);
-	if (next_sg == false) {
-		WARN_ON_ONCE(1);
+	if (!sg_miter_skip(&miter, urb->actual_length)) {
+		sg_miter_stop(&miter);
 		return -EINVAL;
 	}
-	do {
-		ubuf = miter->addr;
-		this_sg = min_t(u32, len, miter->length);
-		miter->consumed = this_sg;
-		trans += this_sg;
+
+	while (len && sg_miter_next(&miter)) {
+		u32 chunk = min_t(u32, len, miter.length);
 
 		if (to_host)
-			memcpy(ubuf, rbuf, this_sg);
+			memcpy(miter.addr, rbuf + trans, chunk);
 		else
-			memcpy(rbuf, ubuf, this_sg);
-		len -= this_sg;
+			memcpy(rbuf + trans, miter.addr, chunk);
+		miter.consumed = chunk;
+		trans += chunk;
+		len -= chunk;
+	}
 
-		if (!len)
-			break;
-		next_sg = sg_miter_next(miter);
-		if (next_sg == false) {
-			WARN_ON_ONCE(1);
-			return -EINVAL;
-		}
+	sg_miter_stop(&miter);
 
-		rbuf += this_sg;
-	} while (1);
+	if (unlikely(trans != req_len))
+		return -EINVAL;
 
-	sg_miter_stop(miter);
 	return trans;
 }
 
