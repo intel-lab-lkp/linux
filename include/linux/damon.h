@@ -573,6 +573,8 @@ struct damos {
 	unsigned long next_apply_sis;
 	/* informs if ongoing DAMOS walk for this scheme is finished */
 	bool walk_completed;
+	/* informs if damos is tried applied in this phase */
+	bool tried_applied;
 	/*
 	 * If the current region in the filtering stage is allowed by core
 	 * layer-handled filters.  If true, operations layer allows it, too.
