@@ -4365,6 +4365,7 @@ F:	include/linux/audit_arch.h
 F:	include/uapi/linux/audit.h
 F:	kernel/audit*
 F:	lib/*audit.c
+F:	tools/testing/selftests/audit/
 K:	\baudit_[a-z_0-9]\+\b
 
 AUTOFDO BUILD
