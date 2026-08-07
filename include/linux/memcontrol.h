@@ -530,6 +530,19 @@ static inline bool mem_cgroup_disabled(void)
 	return !cgroup_subsys_enabled(memory_cgrp_subsys);
 }
 
+#ifdef CONFIG_NUMA
+DECLARE_STATIC_KEY_FALSE(memcg_tiered_limits_key);
+static inline bool mem_cgroup_tiered_limits(void)
+{
+	return static_branch_unlikely(&memcg_tiered_limits_key);
+}
+#else
+static inline bool mem_cgroup_tiered_limits(void)
+{
+	return false;
+}
+#endif
+
 static inline void mem_cgroup_protection(struct mem_cgroup *root,
 					 struct mem_cgroup *memcg,
 					 unsigned long *min,
@@ -1081,6 +1094,11 @@ static inline bool obj_cgroup_is_root(const struct obj_cgroup *objcg)
 static inline bool mem_cgroup_disabled(void)
 {
 	return true;
+}
+
+static inline bool mem_cgroup_tiered_limits(void)
+{
+	return false;
 }
 
 static inline void memcg_memory_event(struct mem_cgroup *memcg,

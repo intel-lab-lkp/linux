@@ -320,6 +320,13 @@ EXPORT_SYMBOL(memcg_kmem_online_key);
 DEFINE_STATIC_KEY_FALSE(memcg_bpf_enabled_key);
 EXPORT_SYMBOL(memcg_bpf_enabled_key);
 
+#ifdef CONFIG_NUMA
+DEFINE_STATIC_KEY_FALSE(memcg_tiered_limits_key);
+
+/* Tier-proportional scaling of memory controller limits enabled? */
+static bool cgroup_memory_tiered_limits __ro_after_init;
+#endif
+
 /**
  * get_mem_cgroup_css_from_folio - acquire a css of the memcg associated with a folio
  * @folio: folio of interest
@@ -4202,6 +4209,9 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	struct mem_cgroup *memcg, *old_memcg;
 	bool memcg_on_dfl = cgroup_subsys_on_dfl(memory_cgrp_subsys);
 
+	if (mem_cgroup_tiered_limits() && !memcg_on_dfl)
+		pr_warn_once("cgroup.memory=tiered_limits should not be enabled with cgroupv1\n");
+
 	old_memcg = set_active_memcg(parent);
 	memcg = mem_cgroup_alloc(parent);
 	set_active_memcg(old_memcg);
@@ -5584,6 +5594,10 @@ static int __init cgroup_memory(char *s)
 			cgroup_memory_nokmem = true;
 		if (!strcmp(token, "nobpf"))
 			cgroup_memory_nobpf = true;
+#ifdef CONFIG_NUMA
+		if (!strcmp(token, "tiered_limits"))
+			cgroup_memory_tiered_limits = true;
+#endif
 	}
 	return 1;
 }
@@ -5629,6 +5643,11 @@ int __init mem_cgroup_init(void)
 
 	memcg_pn_cachep = KMEM_CACHE(mem_cgroup_per_node,
 				     SLAB_PANIC | SLAB_HWCACHE_ALIGN);
+
+#ifdef CONFIG_NUMA
+	if (cgroup_memory_tiered_limits)
+		static_branch_enable(&memcg_tiered_limits_key);
+#endif
 
 	return 0;
 }
