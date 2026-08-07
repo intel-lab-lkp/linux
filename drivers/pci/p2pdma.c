@@ -21,6 +21,39 @@
 #include <linux/seq_buf.h>
 #include <linux/xarray.h>
 
+/*
+ * Lifetime and RCU usage
+ *
+ * Within one driver bind, pdev->p2pdma is published exactly once, by
+ * pcim_p2pdma_init(), and cleared exactly once, by the pci_p2pdma_release()
+ * devres action that the same function installs. It is never re-pointed at a
+ * second struct pci_p2pdma, so a reader that observes a non-NULL pointer
+ * always observes the same, fully initialised object. That object is devres
+ * memory allocated before the action is installed, so devres frees it only
+ * after pci_p2pdma_release() has returned.
+ *
+ * Most exported entry points reach pdev->p2pdma through a struct pci_dev or a
+ * struct p2pdma_provider owned by the provider driver, and
+ * pcim_p2pdma_provider() requires callers to drop those references before the
+ * driver's remove() completes. Those cannot run concurrently with
+ * pci_p2pdma_release(), and their rcu_dereference() calls are simply how an
+ * __rcu pointer is read.
+ *
+ * pci_p2pmem_find_many() and the p2pmem sysfs attributes are the exceptions.
+ * The first walks every PCI device, so it can reach a provider whose driver is
+ * unbinding: pci_get_device() pins the struct pci_dev, not the driver. The
+ * second is reachable from userspace until sysfs_remove_group() runs at the end
+ * of the release. pci_has_p2pmem() must dereference the object to determine
+ * whether it owns a gen_pool, so even a poolless object must remain alive until
+ * that RCU reader exits. The sysfs group is created with the pool.
+ *
+ * The grace period in pci_p2pdma_release() first protects the struct
+ * pci_p2pdma itself from being freed while pci_has_p2pmem() is using it. For a
+ * pool-backed provider it also fences the gen_pool: gen_pool_alloc_owner()
+ * walks pool->chunks under RCU and gen_pool_destroy() frees those chunks
+ * without waiting for a grace period of its own, so pci_alloc_p2pmem() and
+ * p2pmem_alloc_mmap() hold rcu_read_lock() across the allocation.
+ */
 struct pci_p2pdma {
 	struct gen_pool *pool;
 	bool p2pmem_published;
@@ -235,9 +268,19 @@ static void pci_p2pdma_release(void *data)
 	if (!p2pdma)
 		return;
 
-	/* Flush and disable pci_alloc_p2p_mem() */
+	/*
+	 * Stop new RCU readers and wait for readers that observed p2pdma before
+	 * allowing devres to free it. This is required even without a pool,
+	 * because pci_has_p2pmem() dereferences every non-NULL p2pdma it finds.
+	 * For a pool-backed provider this also fences gen_pool_destroy().
+	 */
 	RCU_INIT_POINTER(pdev->p2pdma, NULL);
 	synchronize_rcu();
+
+	/*
+	 * The grace period also ensures no RCU reader can still be accessing
+	 * map_types here.
+	 */
 	xa_destroy(&p2pdma->map_types);
 
 	if (!p2pdma->pool)
@@ -255,6 +298,9 @@ static void pci_p2pdma_release(void *data)
  * for a PCI device. It allocates and sets up the necessary data
  * structures to support P2PDMA operations, including mapping type
  * tracking.
+ *
+ * The state is published once per driver bind and torn down by a devres
+ * action on unbind. Repeated calls for the same device are a no-op.
  */
 int pcim_p2pdma_init(struct pci_dev *pdev)
 {
@@ -786,6 +832,12 @@ map_through_host_bridge:
 		map_type = PCI_P2PDMA_MAP_NOT_SUPPORTED;
 	}
 done:
+	/*
+	 * pci_p2pmem_find_many() reaches this with a provider whose driver may
+	 * be unbinding, so the store runs under RCU: pci_p2pdma_release()
+	 * clears the pointer and waits for readers before destroying
+	 * map_types. See "Lifetime and RCU usage" above.
+	 */
 	rcu_read_lock();
 	p2pdma = rcu_dereference(provider->p2pdma);
 	if (p2pdma)
