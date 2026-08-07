@@ -5761,7 +5761,7 @@ static void qla_get_login_template(scsi_qla_host_t *vha)
 		       "PLOGI ELS param read fail.\n");
 		return;
 	}
-	q = (__be32 *)&ha->plogi_els_payld.fl_csp;
+	q = (__be32 *)&ha->plogi_els_payld;
 
 	bp = (uint32_t *)ha->init_cb;
 	cpu_to_be32_array(q, bp, sz / 4);
