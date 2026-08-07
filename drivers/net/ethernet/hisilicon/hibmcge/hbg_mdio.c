@@ -263,6 +263,11 @@ static int hbg_fixed_phy_init(struct hbg_priv *priv)
 	return hbg_phy_connect(priv);
 }
 
+static void hbg_phy_put(void *data)
+{
+	phy_device_put(data);
+}
+
 int hbg_mdio_init(struct hbg_priv *priv)
 {
 	struct device *dev = &priv->pdev->dev;
@@ -297,6 +302,9 @@ int hbg_mdio_init(struct hbg_priv *priv)
 	if (!phydev)
 		return dev_err_probe(dev, -ENODEV,
 				     "failed to get phy device\n");
+	ret = devm_add_action_or_reset(dev, hbg_phy_put, phydev);
+	if (ret)
+		return ret;
 
 	mac->phydev = phydev;
 	hbg_mdio_init_hw(priv);

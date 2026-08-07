@@ -2683,6 +2683,7 @@ static struct phy_device *lan78xx_get_phy(struct lan78xx_net *dev)
 
 	default:
 		netdev_err(dev->net, "Unknown CHIP ID: 0x%08x\n", dev->chipid);
+		phy_device_put(phydev);
 		return ERR_PTR(-ENODEV);
 	}
 }
@@ -2869,8 +2870,10 @@ static int lan78xx_phy_init(struct lan78xx_net *dev)
 		return PTR_ERR(phydev);
 
 	ret = lan78xx_phylink_setup(dev);
-	if (ret < 0)
+	if (ret < 0) {
+		phy_device_put(phydev);
 		return ret;
+	}
 
 	ret = lan78xx_mac_prepare_for_phy(dev);
 	if (ret < 0)
@@ -2909,10 +2912,12 @@ static int lan78xx_phy_init(struct lan78xx_net *dev)
 	ret = lan78xx_configure_leds_from_dt(dev, phydev);
 	if (ret < 0)
 		goto phylink_uninit;
+	phy_device_put(phydev);
 
 	return 0;
 
 phylink_uninit:
+	phy_device_put(phydev);
 	lan78xx_phy_uninit(dev);
 
 	return ret;

@@ -100,6 +100,7 @@ int xge_mdio_config(struct net_device *ndev)
 	struct xge_pdata *pdata = netdev_priv(ndev);
 	struct device *dev = &pdata->pdev->dev;
 	struct mii_bus *mdio_bus;
+	struct phy_device *found;
 	struct phy_device *phydev;
 	int ret;
 
@@ -120,15 +121,16 @@ int xge_mdio_config(struct net_device *ndev)
 	if (ret)
 		goto err;
 
-	phydev = phy_find_first(mdio_bus);
-	if (!phydev) {
+	found = phy_find_first(mdio_bus);
+	if (!found) {
 		dev_err(dev, "no PHY found\n");
 		ret = -ENODEV;
 		goto err;
 	}
-	phydev = phy_connect(ndev, phydev_name(phydev),
+	phydev = phy_connect(ndev, phydev_name(found),
 			     &xge_adjust_link,
 			     pdata->resources.phy_mode);
+	phy_device_put(found);
 
 	if (IS_ERR(phydev)) {
 		netdev_err(ndev, "Could not attach to PHY\n");

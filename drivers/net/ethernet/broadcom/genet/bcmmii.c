@@ -305,6 +305,7 @@ int bcmgenet_mii_probe(struct net_device *dev)
 	struct device_node *dn = kdev->of_node;
 	phy_interface_t phy_iface = priv->phy_interface;
 	struct phy_device *phydev;
+	bool put_phydev = false;
 	u32 phy_flags = PHY_BRCM_AUTO_PWRDWN_ENABLE |
 			PHY_BRCM_DIS_TXCRXC_NOENRGY |
 			PHY_BRCM_IDDQ_SUSPEND;
@@ -373,6 +374,7 @@ int bcmgenet_mii_probe(struct net_device *dev)
 				pr_err("Unable to find PHY\n");
 				return -ENODEV;
 			}
+			put_phydev = true;
 		} else {
 			phydev = dev->phydev;
 		}
@@ -380,6 +382,8 @@ int bcmgenet_mii_probe(struct net_device *dev)
 
 		ret = phy_connect_direct(dev, phydev, bcmgenet_mii_setup,
 					 phy_iface);
+		if (put_phydev)
+			phy_device_put(phydev);
 		if (ret) {
 			pr_err("could not attach to PHY\n");
 			return -ENODEV;

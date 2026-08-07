@@ -696,6 +696,10 @@ static int ax88772_init_mdio(struct usbnet *dev)
 
 static void ax88772_mdio_unregister(struct asix_common_private *priv)
 {
+	phy_device_put(priv->phydev_int);
+	priv->phydev_int = NULL;
+	phy_device_put(priv->phydev);
+	priv->phydev = NULL;
 	mdiobus_unregister(priv->mdio);
 	mdiobus_free(priv->mdio);
 }

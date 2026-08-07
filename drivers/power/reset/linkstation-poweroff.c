@@ -192,6 +192,7 @@ static void __exit linkstation_poweroff_exit(void)
 {
 	pm_power_off = NULL;
 	unregister_reboot_notifier(&linkstation_reboot_nb);
+	phy_device_put(phydev);
 }
 
 module_init(linkstation_poweroff_init);

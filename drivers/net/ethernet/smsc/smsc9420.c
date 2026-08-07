@@ -1102,19 +1102,21 @@ static void smsc9420_phy_adjust_link(struct net_device *dev)
 static int smsc9420_mii_probe(struct net_device *dev)
 {
 	struct smsc9420_pdata *pd = netdev_priv(dev);
-	struct phy_device *phydev = NULL;
+	struct phy_device *phydev;
+	struct phy_device *found;
 
 	BUG_ON(dev->phydev);
 
 	/* Device only supports internal PHY at address 1 */
-	phydev = mdiobus_get_phy(pd->mii_bus, 1);
-	if (!phydev) {
+	found = mdiobus_get_phy(pd->mii_bus, 1);
+	if (!found) {
 		netdev_err(dev, "no PHY found at address 1\n");
 		return -ENODEV;
 	}
 
-	phydev = phy_connect(dev, phydev_name(phydev),
+	phydev = phy_connect(dev, phydev_name(found),
 			     smsc9420_phy_adjust_link, PHY_INTERFACE_MODE_MII);
+	phy_device_put(found);
 
 	if (IS_ERR(phydev)) {
 		netdev_err(dev, "Could not attach to PHY\n");

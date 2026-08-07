@@ -156,6 +156,11 @@ static int ngbe_phylink_init(struct wx *wx)
 	return 0;
 }
 
+static void ngbe_phy_put(void *data)
+{
+	phy_device_put(data);
+}
+
 int ngbe_mdio_init(struct wx *wx)
 {
 	struct pci_dev *pdev = wx->pdev;
@@ -186,6 +191,9 @@ int ngbe_mdio_init(struct wx *wx)
 	wx->phydev = phy_find_first(mii_bus);
 	if (!wx->phydev)
 		return -ENODEV;
+	ret = devm_add_action_or_reset(&pdev->dev, ngbe_phy_put, wx->phydev);
+	if (ret)
+		return ret;
 
 	phy_attached_info(wx->phydev);
 

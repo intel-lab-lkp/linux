@@ -1415,7 +1415,7 @@ static void tg3_mdio_config_5785(struct tg3 *tp)
 	u32 val;
 	struct phy_device *phydev;
 
-	phydev = mdiobus_get_phy(tp->mdio_bus, tp->phy_addr);
+	phydev = tp->phydev;
 	switch (phydev->drv->phy_id & phydev->drv->phy_id_mask) {
 	case PHY_ID_BCM50610:
 	case PHY_ID_BCM50610M:
@@ -1566,6 +1566,7 @@ static int tg3_mdio_init(struct tg3 *tp)
 
 	if (!phydev || !phydev->drv) {
 		dev_warn(&tp->pdev->dev, "No PHY devices\n");
+		phy_device_put(phydev);
 		mdiobus_unregister(tp->mdio_bus);
 		mdiobus_free(tp->mdio_bus);
 		return -ENODEV;
@@ -1593,6 +1594,7 @@ static int tg3_mdio_init(struct tg3 *tp)
 		tp->phy_flags |= TG3_PHYFLG_IS_FET;
 		break;
 	}
+	tp->phydev = phydev;
 
 	tg3_flag_set(tp, MDIOBUS_INITED);
 
@@ -1606,6 +1608,8 @@ static void tg3_mdio_fini(struct tg3 *tp)
 {
 	if (tg3_flag(tp, MDIOBUS_INITED)) {
 		tg3_flag_clear(tp, MDIOBUS_INITED);
+		phy_device_put(tp->phydev);
+		tp->phydev = NULL;
 		mdiobus_unregister(tp->mdio_bus);
 		mdiobus_free(tp->mdio_bus);
 	}
@@ -1966,7 +1970,7 @@ static void tg3_setup_flow_control(struct tg3 *tp, u32 lcladv, u32 rmtadv)
 	u32 old_tx_mode = tp->tx_mode;
 
 	if (tg3_flag(tp, USE_PHYLIB))
-		autoneg = mdiobus_get_phy(tp->mdio_bus, tp->phy_addr)->autoneg;
+		autoneg = tp->phydev->autoneg;
 	else
 		autoneg = tp->link_config.autoneg;
 
@@ -2002,7 +2006,7 @@ static void tg3_adjust_link(struct net_device *dev)
 	u8 oldflowctrl, linkmesg = 0;
 	u32 mac_mode, lcl_adv, rmt_adv;
 	struct tg3 *tp = netdev_priv(dev);
-	struct phy_device *phydev = mdiobus_get_phy(tp->mdio_bus, tp->phy_addr);
+	struct phy_device *phydev = tp->phydev;
 
 	spin_lock_bh(&tp->lock);
 
@@ -2091,7 +2095,7 @@ static int tg3_phy_init(struct tg3 *tp)
 	/* Bring the PHY back to a known state. */
 	tg3_bmcr_reset(tp);
 
-	phydev = mdiobus_get_phy(tp->mdio_bus, tp->phy_addr);
+	phydev = tp->phydev;
 
 	/* Attach the MAC to the PHY. */
 	phydev = phy_connect(tp->dev, phydev_name(phydev),
@@ -2116,7 +2120,7 @@ static int tg3_phy_init(struct tg3 *tp)
 		phy_support_asym_pause(phydev);
 		break;
 	default:
-		phy_disconnect(mdiobus_get_phy(tp->mdio_bus, tp->phy_addr));
+		phy_disconnect(tp->phydev);
 		return -EINVAL;
 	}
 
@@ -2134,7 +2138,7 @@ static void tg3_phy_start(struct tg3 *tp)
 	if (!(tp->phy_flags & TG3_PHYFLG_IS_CONNECTED))
 		return;
 
-	phydev = mdiobus_get_phy(tp->mdio_bus, tp->phy_addr);
+	phydev = tp->phydev;
 
 	if (tp->phy_flags & TG3_PHYFLG_IS_LOW_POWER) {
 		tp->phy_flags &= ~TG3_PHYFLG_IS_LOW_POWER;
@@ -2155,13 +2159,13 @@ static void tg3_phy_stop(struct tg3 *tp)
 	if (!(tp->phy_flags & TG3_PHYFLG_IS_CONNECTED))
 		return;
 
-	phy_stop(mdiobus_get_phy(tp->mdio_bus, tp->phy_addr));
+	phy_stop(tp->phydev);
 }
 
 static void tg3_phy_fini(struct tg3 *tp)
 {
 	if (tp->phy_flags & TG3_PHYFLG_IS_CONNECTED) {
-		phy_disconnect(mdiobus_get_phy(tp->mdio_bus, tp->phy_addr));
+		phy_disconnect(tp->phydev);
 		tp->phy_flags &= ~TG3_PHYFLG_IS_CONNECTED;
 	}
 }
@@ -4047,7 +4051,7 @@ static void tg3_power_down_prepare(struct tg3 *tp)
 			struct phy_device *phydev;
 			u32 phyid;
 
-			phydev = mdiobus_get_phy(tp->mdio_bus, tp->phy_addr);
+			phydev = tp->phydev;
 
 			tp->phy_flags |= TG3_PHYFLG_IS_LOW_POWER;
 
@@ -12257,7 +12261,7 @@ static int tg3_get_link_ksettings(struct net_device *dev,
 		struct phy_device *phydev;
 		if (!(tp->phy_flags & TG3_PHYFLG_IS_CONNECTED))
 			return -EAGAIN;
-		phydev = mdiobus_get_phy(tp->mdio_bus, tp->phy_addr);
+		phydev = tp->phydev;
 		phy_ethtool_ksettings_get(phydev, cmd);
 
 		return 0;
@@ -12333,7 +12337,7 @@ static int tg3_set_link_ksettings(struct net_device *dev,
 		struct phy_device *phydev;
 		if (!(tp->phy_flags & TG3_PHYFLG_IS_CONNECTED))
 			return -EAGAIN;
-		phydev = mdiobus_get_phy(tp->mdio_bus, tp->phy_addr);
+		phydev = tp->phydev;
 		return phy_ethtool_ksettings_set(phydev, cmd);
 	}
 
@@ -12490,7 +12494,7 @@ static int tg3_nway_reset(struct net_device *dev)
 	if (tg3_flag(tp, USE_PHYLIB)) {
 		if (!(tp->phy_flags & TG3_PHYFLG_IS_CONNECTED))
 			return -EAGAIN;
-		r = phy_start_aneg(mdiobus_get_phy(tp->mdio_bus, tp->phy_addr));
+		r = phy_start_aneg(tp->phydev);
 	} else {
 		u32 bmcr;
 
@@ -12623,7 +12627,7 @@ static int tg3_set_pauseparam(struct net_device *dev, struct ethtool_pauseparam 
 	if (tg3_flag(tp, USE_PHYLIB)) {
 		struct phy_device *phydev;
 
-		phydev = mdiobus_get_phy(tp->mdio_bus, tp->phy_addr);
+		phydev = tp->phydev;
 
 		if (!phy_validate_pause(phydev, epause))
 			return -EINVAL;
@@ -14064,7 +14068,7 @@ static int tg3_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		struct phy_device *phydev;
 		if (!(tp->phy_flags & TG3_PHYFLG_IS_CONNECTED))
 			return -EAGAIN;
-		phydev = mdiobus_get_phy(tp->mdio_bus, tp->phy_addr);
+		phydev = tp->phydev;
 		return phy_mii_ioctl(phydev, ifr, cmd);
 	}
 

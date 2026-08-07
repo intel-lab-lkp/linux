@@ -478,6 +478,7 @@ static int mlxbf_gige_probe(struct platform_device *pdev)
 				 mlxbf_gige_link_cfgs[priv->hw_version].adjust_link,
 				 mlxbf_gige_link_cfgs[priv->hw_version].phy_mode);
 	if (err) {
+		phy_device_put(phydev);
 		dev_err(&pdev->dev, "Could not attach to PHY: %pe\n", ERR_PTR(err));
 		goto out;
 	}
@@ -486,6 +487,7 @@ static int mlxbf_gige_probe(struct platform_device *pdev)
 
 	/* Display information about attached PHY device */
 	phy_attached_info(phydev);
+	phy_device_put(phydev);
 
 	err = register_netdev(netdev);
 	if (err) {

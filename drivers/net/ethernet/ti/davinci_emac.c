@@ -1401,13 +1401,17 @@ static int emac_devioctl(struct net_device *ndev, struct ifreq *ifrq, int cmd)
  */
 static int emac_dev_open(struct net_device *ndev)
 {
+	char phy_id_buf[MII_BUS_ID_SIZE + 3];
 	struct device *emac_dev = &ndev->dev;
+	const char *phy_id;
 	struct resource *res;
 	int q, m, ret;
 	int res_num = 0, irq_num = 0;
 	int i = 0;
 	struct emac_priv *priv = netdev_priv(ndev);
 	struct phy_device *phydev = NULL;
+
+	phy_id = priv->phy_id;
 
 	ret = pm_runtime_resume_and_get(&priv->pdev->dev);
 	if (ret < 0) {
@@ -1493,7 +1497,7 @@ static int emac_dev_open(struct net_device *ndev)
 	}
 
 	/* if no phy-handle and no fixed link, use the first phy on the bus */
-	if (!phydev && !priv->phy_id) {
+	if (!phydev && !phy_id) {
 		struct device_node *np;
 
 		np = of_find_compatible_node(NULL, NULL, "ti,davinci_mdio");
@@ -1503,21 +1507,25 @@ static int emac_dev_open(struct net_device *ndev)
 			if (bus) {
 				struct phy_device *phy = phy_find_first(bus);
 
-				if (phy)
-					priv->phy_id = phydev_name(phy);
+				if (phy) {
+					strscpy(phy_id_buf, phydev_name(phy),
+						sizeof(phy_id_buf));
+					phy_id = phy_id_buf;
+					phy_device_put(phy);
+				}
 				put_device(&bus->dev); /* of_mdio_find_bus */
 			}
 			of_node_put(np); /* of_find_compatible_node */
 		}
 	}
 
-	if (!phydev && priv->phy_id && *priv->phy_id) {
-		phydev = phy_connect(ndev, priv->phy_id,
+	if (!phydev && phy_id && *phy_id) {
+		phydev = phy_connect(ndev, phy_id,
 				     &emac_adjust_link,
 				     PHY_INTERFACE_MODE_MII);
 		if (IS_ERR(phydev)) {
 			dev_err(emac_dev, "could not connect to phy %s\n",
-				priv->phy_id);
+				phy_id);
 			ret = PTR_ERR(phydev);
 			goto err;
 		}

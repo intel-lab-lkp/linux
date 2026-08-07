@@ -18,6 +18,7 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/phy.h>
+#include <linux/rcupdate.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
@@ -27,34 +28,47 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/mdio.h>
 
-static struct mdio_device *mdiobus_find_device(struct mii_bus *bus, int addr)
+/**
+ * mdiobus_get_phy - get a PHY from an MDIO bus by address
+ * @bus: MDIO bus containing the PHY
+ * @addr: PHY address on the bus
+ *
+ * Return: A referenced PHY device, or %NULL when the address is invalid or
+ * does not contain a registered PHY. The caller must call phy_device_put().
+ */
+struct phy_device *mdiobus_get_phy(struct mii_bus *bus, int addr)
 {
+	struct mdio_device *mdiodev;
+	struct phy_device *phydev = NULL;
 	bool addr_valid = addr >= 0 && addr < ARRAY_SIZE(bus->mdio_map);
 
 	if (WARN_ONCE(!addr_valid, "addr %d out of range\n", addr))
 		return NULL;
 
-	return bus->mdio_map[addr];
-}
+	rcu_read_lock();
+	mdiodev = rcu_dereference(bus->mdio_map[addr]);
+	if (mdiodev && mdiodev->flags & MDIO_DEVICE_FLAG_PHY) {
+		get_device(&mdiodev->dev);
+		phydev = container_of(mdiodev, struct phy_device, mdio);
+	}
+	rcu_read_unlock();
 
-struct phy_device *mdiobus_get_phy(struct mii_bus *bus, int addr)
-{
-	struct mdio_device *mdiodev;
-
-	mdiodev = mdiobus_find_device(bus, addr);
-	if (!mdiodev)
-		return NULL;
-
-	if (!(mdiodev->flags & MDIO_DEVICE_FLAG_PHY))
-		return NULL;
-
-	return container_of(mdiodev, struct phy_device, mdio);
+	return phydev;
 }
 EXPORT_SYMBOL(mdiobus_get_phy);
 
 bool mdiobus_is_registered_device(struct mii_bus *bus, int addr)
 {
-	return mdiobus_find_device(bus, addr) != NULL;
+	bool addr_valid = addr >= 0 && addr < ARRAY_SIZE(bus->mdio_map);
+	bool registered;
+
+	if (WARN_ONCE(!addr_valid, "addr %d out of range\n", addr))
+		return false;
+
+	registered = rcu_access_pointer(bus->mdio_map[addr]) ||
+		     (READ_ONCE(bus->mdio_map_pending) & BIT(addr));
+
+	return registered;
 }
 EXPORT_SYMBOL(mdiobus_is_registered_device);
 

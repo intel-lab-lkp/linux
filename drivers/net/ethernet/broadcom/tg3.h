@@ -3273,6 +3273,7 @@ struct tg3 {
 	int				pcie_readrq;
 
 	struct mii_bus			*mdio_bus;
+	struct phy_device		*phydev;
 	int				old_link;
 
 	u8				phy_addr;

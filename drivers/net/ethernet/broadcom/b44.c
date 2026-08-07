@@ -2238,6 +2238,7 @@ static int b44_register_phy_one(struct b44 *bp)
 	struct ssb_device *sdev = bp->sdev;
 	struct phy_device *phydev;
 	struct ssb_sprom *sprom = &sdev->bus->sprom;
+	bool phydev_ref = false;
 	int err;
 
 	mii_bus = mdiobus_alloc();
@@ -2264,6 +2265,7 @@ static int b44_register_phy_one(struct b44 *bp)
 	}
 
 	phydev = mdiobus_get_phy(bp->mii_bus, bp->phy_addr);
+	phydev_ref = !!phydev;
 	if (!phydev &&
 	    sprom->boardflags_lo & (B44_BOARDFLAG_ROBO | B44_BOARDFLAG_ADM)) {
 		dev_info(sdev->dev,
@@ -2281,6 +2283,8 @@ static int b44_register_phy_one(struct b44 *bp)
 		err = phy_connect_direct(bp->dev, phydev, &b44_adjust_link,
 					 PHY_INTERFACE_MODE_MII);
 	if (err) {
+		if (phydev_ref)
+			phy_device_put(phydev);
 		dev_err(sdev->dev, "could not attach PHY at %i\n",
 			bp->phy_addr);
 		goto err_out_mdiobus_unregister;
@@ -2297,6 +2301,8 @@ static int b44_register_phy_one(struct b44 *bp)
 	bp->old_link = 0;
 
 	phy_attached_info(phydev);
+	if (phydev_ref)
+		phy_device_put(phydev);
 
 	return 0;
 

@@ -1156,6 +1156,7 @@ void b53_get_strings(struct dsa_switch *ds, int port, u32 stringset,
 			return;
 
 		phy_ethtool_get_strings(phydev, data);
+		phy_device_put(phydev);
 	}
 }
 EXPORT_SYMBOL(b53_get_strings);
@@ -1202,6 +1203,7 @@ void b53_get_ethtool_phy_stats(struct dsa_switch *ds, int port, uint64_t *data)
 		return;
 
 	phy_ethtool_get_stats(phydev, NULL, data);
+	phy_device_put(phydev);
 }
 EXPORT_SYMBOL(b53_get_ethtool_phy_stats);
 
@@ -1213,11 +1215,16 @@ int b53_get_sset_count(struct dsa_switch *ds, int port, int sset)
 	if (sset == ETH_SS_STATS) {
 		return b53_get_mib_size(dev);
 	} else if (sset == ETH_SS_PHY_STATS) {
+		int count;
+
 		phydev = b53_get_phy_device(ds, port);
 		if (!phydev)
 			return 0;
 
-		return phy_ethtool_get_sset_count(phydev);
+		count = phy_ethtool_get_sset_count(phydev);
+		phy_device_put(phydev);
+
+		return count;
 	}
 
 	return 0;

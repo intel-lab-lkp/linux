@@ -752,6 +752,7 @@ static int lpc_mii_probe(struct net_device *ndev)
 {
 	struct netdata_local *pldat = netdev_priv(ndev);
 	struct phy_device *phydev;
+	struct phy_device *found;
 
 	/* Attach to the PHY */
 	if (lpc_phy_interface_mode(&pldat->pdev->dev) == PHY_INTERFACE_MODE_MII)
@@ -760,17 +761,18 @@ static int lpc_mii_probe(struct net_device *ndev)
 		netdev_info(ndev, "using RMII interface\n");
 
 	if (pldat->phy_node)
-		phydev =  of_phy_find_device(pldat->phy_node);
+		found = of_phy_find_device(pldat->phy_node);
 	else
-		phydev = phy_find_first(pldat->mii_bus);
-	if (!phydev) {
+		found = phy_find_first(pldat->mii_bus);
+	if (!found) {
 		netdev_err(ndev, "no PHY found\n");
 		return -ENODEV;
 	}
 
-	phydev = phy_connect(ndev, phydev_name(phydev),
+	phydev = phy_connect(ndev, phydev_name(found),
 			     &lpc_handle_link_change,
 			     lpc_phy_interface_mode(&pldat->pdev->dev));
+	phy_device_put(found);
 	if (IS_ERR(phydev)) {
 		netdev_err(ndev, "Could not attach to PHY\n");
 		return PTR_ERR(phydev);

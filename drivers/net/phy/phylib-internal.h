@@ -25,7 +25,9 @@ int phy_speed_down_core(struct phy_device *phydev);
 void phy_check_downshift(struct phy_device *phydev);
 
 int mdiobus_register_device(struct mdio_device *mdiodev);
-int mdiobus_unregister_device(struct mdio_device *mdiodev);
+int mdiobus_registration_done(struct mdio_device *mdiodev, int err);
+int mdiobus_begin_remove(struct mdio_device *mdiodev, bool dynamic);
+void mdiobus_finish_remove(struct mdio_device *mdiodev, bool dynamic);
 
 int genphy_c45_read_eee_adv(struct phy_device *phydev, unsigned long *adv);
 

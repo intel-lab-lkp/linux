@@ -377,6 +377,7 @@ static int ax_mii_probe(struct net_device *dev)
 	ret = phy_connect_direct(dev, phy_dev, ax_handle_link_change,
 				 PHY_INTERFACE_MODE_MII);
 	if (ret) {
+		phy_device_put(phy_dev);
 		netdev_err(dev, "Could not attach to PHY\n");
 		return ret;
 	}
@@ -385,6 +386,7 @@ static int ax_mii_probe(struct net_device *dev)
 
 	netdev_info(dev, "PHY driver [%s] (mii_bus:phy_addr=%s, irq=%d)\n",
 		    phy_dev->drv->name, phydev_name(phy_dev), phy_dev->irq);
+	phy_device_put(phy_dev);
 
 	return 0;
 }

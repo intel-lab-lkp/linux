@@ -2640,16 +2640,20 @@ static int dsa_user_phy_connect(struct net_device *user_dev, int addr,
 {
 	struct dsa_port *dp = dsa_user_to_port(user_dev);
 	struct dsa_switch *ds = dp->ds;
+	struct phy_device *phydev;
+	int ret;
 
-	user_dev->phydev = mdiobus_get_phy(ds->user_mii_bus, addr);
-	if (!user_dev->phydev) {
+	phydev = mdiobus_get_phy(ds->user_mii_bus, addr);
+	if (!phydev) {
 		netdev_err(user_dev, "no phy at %d\n", addr);
 		return -ENODEV;
 	}
 
-	user_dev->phydev->dev_flags |= flags;
+	phydev->dev_flags |= flags;
+	ret = phylink_connect_phy(dp->pl, phydev);
+	phy_device_put(phydev);
 
-	return phylink_connect_phy(dp->pl, user_dev->phydev);
+	return ret;
 }
 
 static int dsa_user_phy_setup(struct net_device *user_dev)

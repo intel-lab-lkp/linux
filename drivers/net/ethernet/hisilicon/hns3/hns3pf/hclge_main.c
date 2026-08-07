@@ -9731,8 +9731,11 @@ static int hclge_init_ae_dev(struct hnae3_ae_dev *ae_dev)
 err_ptp_uninit:
 	hclge_ptp_uninit(hdev);
 err_mdiobus_unreg:
-	if (hdev->hw.mac.phydev)
+	if (hdev->hw.mac.phydev) {
+		phy_device_put(hdev->hw.mac.phydev);
+		hdev->hw.mac.phydev = NULL;
 		mdiobus_unregister(hdev->hw.mac.mdio_bus);
+	}
 err_msi_irq_uninit:
 	hclge_misc_irq_uninit(hdev);
 err_msi_uninit:
@@ -10131,8 +10134,11 @@ static void hclge_uninit_ae_dev(struct hnae3_ae_dev *ae_dev)
 	hclge_uninit_mac_table(hdev);
 	hclge_del_all_fd_entries(hdev);
 
-	if (mac->phydev)
+	if (mac->phydev) {
+		phy_device_put(mac->phydev);
+		mac->phydev = NULL;
 		mdiobus_unregister(mac->mdio_bus);
+	}
 
 	/* Disable MISC vector(vector0) */
 	hclge_enable_vector(&hdev->misc_vector, false);

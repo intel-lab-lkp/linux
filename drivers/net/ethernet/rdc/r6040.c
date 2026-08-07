@@ -998,16 +998,18 @@ static void r6040_adjust_link(struct net_device *dev)
 static int r6040_mii_probe(struct net_device *dev)
 {
 	struct r6040_private *lp = netdev_priv(dev);
-	struct phy_device *phydev = NULL;
+	struct phy_device *phydev;
+	struct phy_device *found;
 
-	phydev = phy_find_first(lp->mii_bus);
-	if (!phydev) {
+	found = phy_find_first(lp->mii_bus);
+	if (!found) {
 		dev_err(&lp->pdev->dev, "no PHY found\n");
 		return -ENODEV;
 	}
 
-	phydev = phy_connect(dev, phydev_name(phydev), &r6040_adjust_link,
+	phydev = phy_connect(dev, phydev_name(found), &r6040_adjust_link,
 			     PHY_INTERFACE_MODE_MII);
+	phy_device_put(found);
 
 	if (IS_ERR(phydev)) {
 		dev_err(&lp->pdev->dev, "could not attach to PHY\n");

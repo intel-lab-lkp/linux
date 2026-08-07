@@ -2982,6 +2982,7 @@ static int fec_enet_mii_probe(struct net_device *ndev)
 {
 	struct fec_enet_private *fep = netdev_priv(ndev);
 	struct phy_device *phy_dev;
+	bool phydev_ref = false;
 	int ret;
 
 	if (fep->phy_node) {
@@ -2995,8 +2996,13 @@ static int fec_enet_mii_probe(struct net_device *ndev)
 	} else {
 		/* check for attached phy */
 		phy_dev = phy_find_first(fep->mii_bus);
-		if (fep->dev_id && phy_dev)
-			phy_dev = phy_find_next(fep->mii_bus, phy_dev);
+		if (fep->dev_id && phy_dev) {
+			struct phy_device *first = phy_dev;
+
+			phy_dev = phy_find_next(fep->mii_bus, first);
+			phy_device_put(first);
+		}
+		phydev_ref = !!phy_dev;
 
 		if (!phy_dev) {
 			netdev_info(ndev, "no PHY, assuming direct connection to switch\n");
@@ -3012,6 +3018,8 @@ static int fec_enet_mii_probe(struct net_device *ndev)
 		if (ret) {
 			if (phy_is_pseudo_fixed_link(phy_dev))
 				fixed_phy_unregister(phy_dev);
+			if (phydev_ref)
+				phy_device_put(phy_dev);
 			netdev_err(ndev, "could not attach to PHY\n");
 			return ret;
 		}
@@ -3035,6 +3043,8 @@ static int fec_enet_mii_probe(struct net_device *ndev)
 	fep->full_duplex = 0;
 
 	phy_attached_info(phy_dev);
+	if (phydev_ref)
+		phy_device_put(phy_dev);
 
 	return 0;
 }

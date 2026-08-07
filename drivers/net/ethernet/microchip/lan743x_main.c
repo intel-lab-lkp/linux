@@ -3245,6 +3245,7 @@ static int lan743x_phylink_connect(struct lan743x_adapter *adapter)
 		if (phydev) {
 			/* attach the mac to the phy */
 			ret = phylink_connect_phy(adapter->phylink, phydev);
+			phy_device_put(phydev);
 		} else if (((adapter->csr.id_rev & ID_REV_ID_MASK_) ==
 			      ID_REV_ID_LAN7431_) || adapter->is_pci11x1x) {
 			struct phylink_link_state state;

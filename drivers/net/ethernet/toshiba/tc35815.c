@@ -609,17 +609,19 @@ static int tc_mii_probe(struct net_device *dev)
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 	struct tc35815_local *lp = netdev_priv(dev);
 	struct phy_device *phydev;
+	struct phy_device *found;
 
-	phydev = phy_find_first(lp->mii_bus);
-	if (!phydev) {
+	found = phy_find_first(lp->mii_bus);
+	if (!found) {
 		printk(KERN_ERR "%s: no PHY found\n", dev->name);
 		return -ENODEV;
 	}
 
 	/* attach the mac to the phy */
-	phydev = phy_connect(dev, phydev_name(phydev),
+	phydev = phy_connect(dev, phydev_name(found),
 			     &tc_handle_link_change,
 			     lp->chiptype == TC35815_TX4939 ? PHY_INTERFACE_MODE_RMII : PHY_INTERFACE_MODE_MII);
+	phy_device_put(found);
 	if (IS_ERR(phydev)) {
 		printk(KERN_ERR "%s: Could not attach to PHY\n", dev->name);
 		return PTR_ERR(phydev);

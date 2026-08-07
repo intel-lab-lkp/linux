@@ -35,6 +35,7 @@
 #include <linux/property.h>
 #include <linux/ptp_clock_kernel.h>
 #include <linux/rtnetlink.h>
+#include <linux/sched.h>
 #include <linux/sfp.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
@@ -209,9 +210,20 @@ static void __init features_init(void)
 
 void phy_device_free(struct phy_device *phydev)
 {
-	put_device(&phydev->mdio.dev);
+	phy_device_put(phydev);
 }
 EXPORT_SYMBOL(phy_device_free);
+
+/**
+ * phy_device_put - drop a reference to a PHY device
+ * @phydev: PHY device, or %NULL
+ */
+void phy_device_put(struct phy_device *phydev)
+{
+	if (phydev)
+		put_device(&phydev->mdio.dev);
+}
+EXPORT_SYMBOL(phy_device_put);
 
 static void phy_mdio_device_free(struct mdio_device *mdiodev)
 {
@@ -227,12 +239,14 @@ static void phy_device_release(struct device *dev)
 	kfree(to_phy_device(dev));
 }
 
-static void phy_mdio_device_remove(struct mdio_device *mdiodev)
+static int __phy_device_remove(struct phy_device *phydev, bool dynamic);
+
+static int phy_mdio_device_remove(struct mdio_device *mdiodev, bool dynamic)
 {
 	struct phy_device *phydev;
 
 	phydev = container_of(mdiodev, struct phy_device, mdio);
-	phy_device_remove(phydev);
+	return __phy_device_remove(phydev, dynamic);
 }
 
 static struct phy_driver genphy_driver;
@@ -1121,25 +1135,40 @@ int phy_device_register(struct phy_device *phydev)
 	err = phy_scan_fixups(phydev);
 	if (err) {
 		phydev_err(phydev, "failed to initialize\n");
-		goto out;
+		return mdiobus_registration_done(&phydev->mdio, err);
 	}
 
 	err = device_add(&phydev->mdio.dev);
-	if (err) {
+	if (err)
 		phydev_err(phydev, "failed to add\n");
-		goto out;
-	}
 
-	return 0;
+	return mdiobus_registration_done(&phydev->mdio, err);
+}
+EXPORT_SYMBOL(phy_device_register);
 
- out:
+static int __phy_device_remove(struct phy_device *phydev, bool dynamic)
+{
+	int err;
+
+	err = mdiobus_begin_remove(&phydev->mdio, dynamic);
+	if (dynamic && err == -EBUSY)
+		dev_warn(&phydev->mdio.dev,
+			 "cannot remove a PHY while it is attached or being registered\n");
+	if (err)
+		return err;
+
+	unregister_mii_timestamper(phydev->mii_ts);
+	pse_control_put(phydev->psec);
+
+	device_del(&phydev->mdio.dev);
+
 	/* Assert the reset signal */
 	phy_device_reset(phydev, 1);
 
-	mdiobus_unregister_device(&phydev->mdio);
-	return err;
+	mdiobus_finish_remove(&phydev->mdio, dynamic);
+
+	return 0;
 }
-EXPORT_SYMBOL(phy_device_register);
 
 /**
  * phy_device_remove - Remove a previously registered phy device from the MDIO bus
@@ -1151,15 +1180,7 @@ EXPORT_SYMBOL(phy_device_register);
  */
 void phy_device_remove(struct phy_device *phydev)
 {
-	unregister_mii_timestamper(phydev->mii_ts);
-	pse_control_put(phydev->psec);
-
-	device_del(&phydev->mdio.dev);
-
-	/* Assert the reset signal */
-	phy_device_reset(phydev, 1);
-
-	mdiobus_unregister_device(&phydev->mdio);
+	__phy_device_remove(phydev, false);
 }
 EXPORT_SYMBOL(phy_device_remove);
 
@@ -1182,7 +1203,8 @@ EXPORT_SYMBOL(phy_get_c45_ids);
  * @bus: the target MII bus
  * @pos: cursor
  *
- * Return: next phy_device on the bus, or NULL
+ * Return: next referenced phy_device on the bus, or %NULL. The caller must
+ * call phy_device_put() on the returned PHY.
  */
 struct phy_device *phy_find_next(struct mii_bus *bus, struct phy_device *pos)
 {
@@ -1734,6 +1756,53 @@ static bool phy_drv_supports_irq(const struct phy_driver *phydrv)
 	return phydrv->config_intr && phydrv->handle_interrupt;
 }
 
+static int phy_claim(struct phy_device *phydev)
+{
+	struct mdio_device *mdiodev = &phydev->mdio;
+	struct mii_bus *bus = mdiodev->bus;
+	unsigned int addr = mdiodev->addr;
+	int err = 0;
+
+retry:
+	mutex_lock(&bus->mdio_map_lock);
+	if (bus->state != MDIOBUS_REGISTERING &&
+	    bus->state != MDIOBUS_REGISTERED) {
+		err = -ENODEV;
+	} else if (bus->mdio_map_removing) {
+		err = -ENODEV;
+	} else if (bus->mdio_map_pending & BIT(addr)) {
+		if (bus->mdio_map_pending_owner[addr] == current) {
+			err = -EPROBE_DEFER;
+		} else {
+			mutex_unlock(&bus->mdio_map_lock);
+			wait_event(bus->mdio_map_wait,
+				   !(READ_ONCE(bus->mdio_map_pending) & BIT(addr)) ||
+				   READ_ONCE(bus->state) == MDIOBUS_UNREGISTERING ||
+				   READ_ONCE(bus->state) == MDIOBUS_UNREGISTERED ||
+				   READ_ONCE(bus->state) == MDIOBUS_RELEASED);
+			goto retry;
+		}
+	} else if (rcu_access_pointer(bus->mdio_map[addr]) != mdiodev) {
+		err = -ENODEV;
+	} else if (phydev->attached) {
+		err = -EBUSY;
+	} else {
+		phydev->attached = true;
+	}
+	mutex_unlock(&bus->mdio_map_lock);
+
+	return err;
+}
+
+static void phy_release(struct phy_device *phydev)
+{
+	struct mii_bus *bus = phydev->mdio.bus;
+
+	mutex_lock(&bus->mdio_map_lock);
+	phydev->attached = false;
+	mutex_unlock(&bus->mdio_map_lock);
+}
+
 /**
  * phy_attach_direct - attach a network device to a given PHY device pointer
  * @dev: network device to attach
@@ -1755,6 +1824,7 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	struct module *bus_owner = phydev->mdio.bus->owner;
 	struct device *d = &phydev->mdio.dev;
 	struct module *ndev_owner = NULL;
+	bool claimed = false;
 	int err;
 
 	/* For Ethernet device drivers that register their own MDIO bus, we
@@ -1770,6 +1840,13 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	}
 
 	get_device(d);
+	err = phy_claim(phydev);
+	if (err == -EBUSY)
+		phydev_err(phydev, "PHY already attached\n");
+	if (!err)
+		claimed = true;
+	if (err)
+		goto error_put_device;
 
 	/* Assume that if there is no driver, that it doesn't
 	 * exist, and we should use the genphy driver.
@@ -1796,12 +1873,6 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 
 		if (err)
 			goto error_module_put;
-	}
-
-	if (phydev->attached_dev) {
-		dev_err(&dev->dev, "PHY already attached\n");
-		err = -EBUSY;
-		goto error;
 	}
 
 	phydev->phy_link_change = phy_link_change;
@@ -1899,6 +1970,8 @@ error_module_put:
 	phydev->is_genphy_driven = 0;
 	d->driver = NULL;
 error_put_device:
+	if (claimed)
+		phy_release(phydev);
 	put_device(d);
 	if (ndev_owner != bus_owner)
 		module_put(bus_owner);
@@ -1974,6 +2047,7 @@ void phy_detach(struct phy_device *phydev)
 
 	/* The PHY and its parent bus may be released by put_device() below. */
 	bus_owner = phydev->mdio.bus->owner;
+	phy_release(phydev);
 
 	put_device(&phydev->mdio.dev);
 	if (dev)

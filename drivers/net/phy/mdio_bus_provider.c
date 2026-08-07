@@ -330,6 +330,8 @@ struct mii_bus *mdiobus_alloc_size(size_t size)
 		return NULL;
 
 	bus->state = MDIOBUS_ALLOCATED;
+	mutex_init(&bus->mdio_map_lock);
+	init_waitqueue_head(&bus->mdio_map_wait);
 	if (size)
 		bus->priv = (void *)bus + aligned_size;
 
@@ -355,10 +357,9 @@ static int of_mdiobus_find_phy(struct device *dev, struct mdio_device *mdiodev,
 			       struct device_node *np)
 {
 	struct device_node *child;
+	int addr, ret;
 
 	for_each_available_child_of_node(np, child) {
-		int addr;
-
 		if (of_node_name_eq(child, "ethernet-phy-package")) {
 			/* Validate PHY package reg presence */
 			if (!of_property_present(child, "reg")) {
@@ -366,12 +367,13 @@ static int of_mdiobus_find_phy(struct device *dev, struct mdio_device *mdiodev,
 				return -EINVAL;
 			}
 
-			if (!of_mdiobus_find_phy(dev, mdiodev, child)) {
+			ret = of_mdiobus_find_phy(dev, mdiodev, child);
+			if (!ret || ret == -EBUSY) {
 				/* The refcount for the PHY package will be
 				 * incremented later when PHY join the Package.
 				 */
 				of_node_put(child);
-				return 0;
+				return ret;
 			}
 
 			continue;
@@ -382,6 +384,11 @@ static int of_mdiobus_find_phy(struct device *dev, struct mdio_device *mdiodev,
 			continue;
 
 		if (addr == mdiodev->addr) {
+			if (of_node_test_and_set_flag(child, OF_POPULATED)) {
+				of_node_put(child);
+				return -EBUSY;
+			}
+
 			device_set_node(dev, of_fwnode_handle(child));
 			/* The refcount on "child" is passed to the mdio
 			 * device. Do _not_ use of_node_put(child) here.
@@ -393,22 +400,26 @@ static int of_mdiobus_find_phy(struct device *dev, struct mdio_device *mdiodev,
 	return -ENODEV;
 }
 
-static void of_mdiobus_link_mdiodev(struct mii_bus *bus,
-				    struct mdio_device *mdiodev)
+static int of_mdiobus_link_mdiodev(struct mii_bus *bus,
+				   struct mdio_device *mdiodev)
 {
 	struct device *dev = &mdiodev->dev;
 
 	if (dev->of_node || !bus->dev.of_node)
-		return;
+		return 0;
 
-	of_mdiobus_find_phy(dev, mdiodev, bus->dev.of_node);
+	return of_mdiobus_find_phy(dev, mdiodev, bus->dev.of_node);
 }
 #endif
 
-static struct phy_device *mdiobus_scan(struct mii_bus *bus, int addr, bool c45)
+static struct phy_device *__mdiobus_scan(struct mii_bus *bus, int addr,
+					 bool c45)
 {
 	struct phy_device *phydev = ERR_PTR(-ENODEV);
 	struct fwnode_handle *fwnode;
+#if IS_ENABLED(CONFIG_OF_MDIO)
+	bool of_node_populated = false;
+#endif
 	char node_name[16];
 	int err;
 
@@ -420,7 +431,12 @@ static struct phy_device *mdiobus_scan(struct mii_bus *bus, int addr, bool c45)
 	/* For DT, see if the auto-probed phy has a corresponding child
 	 * in the bus node, and set the of_node pointer in this case.
 	 */
-	of_mdiobus_link_mdiodev(bus, &phydev->mdio);
+	err = of_mdiobus_link_mdiodev(bus, &phydev->mdio);
+	if (err == -EBUSY) {
+		phy_device_free(phydev);
+		return ERR_PTR(-ENODEV);
+	}
+	of_node_populated = !!phydev->mdio.dev.of_node;
 #endif
 
 	/* Search for a swnode for the phy in the swnode hierarchy of the bus.
@@ -437,6 +453,11 @@ static struct phy_device *mdiobus_scan(struct mii_bus *bus, int addr, bool c45)
 
 	err = phy_device_register(phydev);
 	if (err) {
+#if IS_ENABLED(CONFIG_OF_MDIO)
+		if (of_node_populated)
+			of_node_clear_flag(phydev->mdio.dev.of_node,
+					   OF_POPULATED);
+#endif
 		phy_device_free(phydev);
 		return ERR_PTR(-ENODEV);
 	}
@@ -458,7 +479,17 @@ static struct phy_device *mdiobus_scan(struct mii_bus *bus, int addr, bool c45)
  */
 struct phy_device *mdiobus_scan_c22(struct mii_bus *bus, int addr)
 {
-	return mdiobus_scan(bus, addr, false);
+	struct phy_device *phydev;
+	int err;
+
+	err = mdiobus_device_change_begin(bus, false);
+	if (err)
+		return ERR_PTR(err);
+
+	phydev = __mdiobus_scan(bus, addr, false);
+	mdiobus_device_change_end(bus, false);
+
+	return phydev;
 }
 EXPORT_SYMBOL(mdiobus_scan_c22);
 
@@ -476,7 +507,7 @@ EXPORT_SYMBOL(mdiobus_scan_c22);
  */
 static struct phy_device *mdiobus_scan_c45(struct mii_bus *bus, int addr)
 {
-	return mdiobus_scan(bus, addr, true);
+	return __mdiobus_scan(bus, addr, true);
 }
 
 static int mdiobus_scan_bus_c22(struct mii_bus *bus)
@@ -487,7 +518,7 @@ static int mdiobus_scan_bus_c22(struct mii_bus *bus)
 		if ((bus->phy_mask & BIT(i)) == 0) {
 			struct phy_device *phydev;
 
-			phydev = mdiobus_scan_c22(bus, i);
+			phydev = __mdiobus_scan(bus, i, false);
 			if (IS_ERR(phydev) && (PTR_ERR(phydev) != -ENODEV))
 				return PTR_ERR(phydev);
 		}
@@ -504,7 +535,7 @@ static int mdiobus_scan_bus_c45(struct mii_bus *bus)
 			struct phy_device *phydev;
 
 			/* Don't scan C45 if we already have a C22 device */
-			if (bus->mdio_map[i])
+			if (mdiobus_is_registered_device(bus, i))
 				continue;
 
 			phydev = mdiobus_scan_c45(bus, i);
@@ -529,11 +560,48 @@ static bool mdiobus_prevent_c45_scan(struct mii_bus *bus)
 	mdiobus_for_each_phy(bus, phydev) {
 		u32 oui = phydev->phy_id >> 10;
 
-		if (oui == MICREL_OUI)
+		if (oui == MICREL_OUI) {
+			phy_device_put(phydev);
 			return true;
+		}
 	}
 
 	return false;
+}
+
+static void mdiobus_stop_device_changes(struct mii_bus *bus)
+{
+	mutex_lock(&bus->mdio_map_lock);
+	bus->state = MDIOBUS_UNREGISTERING;
+	wake_up_all(&bus->mdio_map_wait);
+	mutex_unlock(&bus->mdio_map_lock);
+
+	wait_event(bus->mdio_map_wait, !READ_ONCE(bus->mdio_map_ops));
+}
+
+static void mdiobus_remove_devices(struct mii_bus *bus)
+{
+	struct mdio_device *mdiodev;
+	int i;
+
+	for (i = 0; i < PHY_MAX_ADDR; i++) {
+		mutex_lock(&bus->mdio_map_lock);
+		mdiodev = rcu_dereference_protected(bus->mdio_map[i],
+						    lockdep_is_held(&bus->mdio_map_lock));
+		if (mdiodev)
+			mdio_device_get(mdiodev);
+		mutex_unlock(&bus->mdio_map_lock);
+		if (!mdiodev)
+			continue;
+
+		if (!mdiodev->device_remove(mdiodev, false))
+			mdiodev->device_free(mdiodev);
+		mdio_device_put(mdiodev);
+	}
+
+	mutex_lock(&bus->mdio_map_lock);
+	bus->state = MDIOBUS_UNREGISTERED;
+	mutex_unlock(&bus->mdio_map_lock);
 }
 
 /**
@@ -552,10 +620,9 @@ static bool mdiobus_prevent_c45_scan(struct mii_bus *bus)
  */
 int __mdiobus_register(struct mii_bus *bus, struct module *owner)
 {
-	struct mdio_device *mdiodev;
 	struct gpio_desc *gpiod;
 	bool prevent_c45_scan;
-	int i, err;
+	int err;
 
 	if (!bus || !bus->name)
 		return -EINVAL;
@@ -596,7 +663,9 @@ int __mdiobus_register(struct mii_bus *bus, struct module *owner)
 	 *
 	 * State will be updated later in this function in case of success
 	 */
+	mutex_lock(&bus->mdio_map_lock);
 	bus->state = MDIOBUS_UNREGISTERED;
+	mutex_unlock(&bus->mdio_map_lock);
 
 	err = device_register(&bus->dev);
 	if (err) {
@@ -613,8 +682,7 @@ int __mdiobus_register(struct mii_bus *bus, struct module *owner)
 		err = dev_err_probe(&bus->dev, PTR_ERR(gpiod),
 				    "mii_bus %s couldn't get reset GPIO\n",
 				    bus->id);
-		device_del(&bus->dev);
-		return err;
+		goto error_reset_gpiod;
 	} else	if (gpiod) {
 		bus->reset_gpiod = gpiod;
 		fsleep(bus->reset_delay_us);
@@ -628,6 +696,10 @@ int __mdiobus_register(struct mii_bus *bus, struct module *owner)
 		if (err)
 			goto error_reset_gpiod;
 	}
+
+	mutex_lock(&bus->mdio_map_lock);
+	bus->state = MDIOBUS_REGISTERING;
+	mutex_unlock(&bus->mdio_map_lock);
 
 	if (bus->read) {
 		err = mdiobus_scan_bus_c22(bus);
@@ -643,20 +715,17 @@ int __mdiobus_register(struct mii_bus *bus, struct module *owner)
 			goto error;
 	}
 
+	mutex_lock(&bus->mdio_map_lock);
 	bus->state = MDIOBUS_REGISTERED;
+	mutex_unlock(&bus->mdio_map_lock);
 	dev_dbg(&bus->dev, "probed\n");
 	return 0;
 
 error:
-	for (i = 0; i < PHY_MAX_ADDR; i++) {
-		mdiodev = bus->mdio_map[i];
-		if (!mdiodev)
-			continue;
-
-		mdiodev->device_remove(mdiodev);
-		mdiodev->device_free(mdiodev);
-	}
 error_reset_gpiod:
+	mdiobus_stop_device_changes(bus);
+	mdiobus_remove_devices(bus);
+
 	/* Put PHYs in RESET to save power */
 	if (bus->reset_gpiod)
 		gpiod_set_value_cansleep(bus->reset_gpiod, 1);
@@ -668,21 +737,11 @@ EXPORT_SYMBOL(__mdiobus_register);
 
 void mdiobus_unregister(struct mii_bus *bus)
 {
-	struct mdio_device *mdiodev;
-	int i;
-
 	if (WARN_ON_ONCE(bus->state != MDIOBUS_REGISTERED))
 		return;
-	bus->state = MDIOBUS_UNREGISTERED;
 
-	for (i = 0; i < PHY_MAX_ADDR; i++) {
-		mdiodev = bus->mdio_map[i];
-		if (!mdiodev)
-			continue;
-
-		mdiodev->device_remove(mdiodev);
-		mdiodev->device_free(mdiodev);
-	}
+	mdiobus_stop_device_changes(bus);
+	mdiobus_remove_devices(bus);
 
 	/* Put PHYs in RESET to save power */
 	if (bus->reset_gpiod)
@@ -702,8 +761,11 @@ EXPORT_SYMBOL(mdiobus_unregister);
  */
 void mdiobus_free(struct mii_bus *bus)
 {
+	mutex_lock(&bus->mdio_map_lock);
+
 	/* For compatibility with error handling in drivers. */
 	if (bus->state == MDIOBUS_ALLOCATED) {
+		mutex_unlock(&bus->mdio_map_lock);
 		kfree(bus);
 		return;
 	}
@@ -711,6 +773,7 @@ void mdiobus_free(struct mii_bus *bus)
 	WARN(bus->state != MDIOBUS_UNREGISTERED,
 	     "%s: not in UNREGISTERED state\n", bus->id);
 	bus->state = MDIOBUS_RELEASED;
+	mutex_unlock(&bus->mdio_map_lock);
 
 	put_device(&bus->dev);
 }

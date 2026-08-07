@@ -3273,16 +3273,18 @@ static void et131x_adjust_link(struct net_device *netdev)
 static int et131x_mii_probe(struct net_device *netdev)
 {
 	struct et131x_adapter *adapter = netdev_priv(netdev);
-	struct  phy_device *phydev = NULL;
+	struct phy_device *found;
+	struct phy_device *phydev;
 
-	phydev = phy_find_first(adapter->mii_bus);
-	if (!phydev) {
+	found = phy_find_first(adapter->mii_bus);
+	if (!found) {
 		dev_err(&adapter->pdev->dev, "no PHY found\n");
 		return -ENODEV;
 	}
 
-	phydev = phy_connect(netdev, phydev_name(phydev),
+	phydev = phy_connect(netdev, phydev_name(found),
 			     &et131x_adjust_link, PHY_INTERFACE_MODE_MII);
+	phy_device_put(found);
 
 	if (IS_ERR(phydev)) {
 		dev_err(&adapter->pdev->dev, "Could not attach to PHY\n");

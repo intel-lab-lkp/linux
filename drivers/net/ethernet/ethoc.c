@@ -715,10 +715,13 @@ static int ethoc_mdio_probe(struct net_device *dev)
 
 	err = phy_connect_direct(dev, phy, ethoc_mdio_poll,
 				 PHY_INTERFACE_MODE_GMII);
-	if (err)
+	if (err) {
+		phy_device_put(phy);
 		return dev_err_probe(&dev->dev, err, "could not attach to PHY\n");
+	}
 
 	phy_set_max_speed(phy, SPEED_100);
+	phy_device_put(phy);
 
 	return 0;
 }
@@ -782,6 +785,8 @@ static int ethoc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	struct ethoc *priv = netdev_priv(dev);
 	struct mii_ioctl_data *mdio = if_mii(ifr);
 	struct phy_device *phy = NULL;
+	bool put_phy = false;
+	int ret;
 
 	if (!netif_running(dev))
 		return -EINVAL;
@@ -793,11 +798,16 @@ static int ethoc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		phy = mdiobus_get_phy(priv->mdio, mdio->phy_id);
 		if (!phy)
 			return -ENODEV;
+		put_phy = true;
 	} else {
 		phy = dev->phydev;
 	}
 
-	return phy_mii_ioctl(phy, ifr, cmd);
+	ret = phy_mii_ioctl(phy, ifr, cmd);
+	if (put_phy)
+		phy_device_put(phy);
+
+	return ret;
 }
 
 static void ethoc_do_set_mac_address(struct net_device *dev)

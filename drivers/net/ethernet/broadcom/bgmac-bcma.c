@@ -209,6 +209,7 @@ static int bgmac_probe(struct bcma_device *core)
 		if (ci->id == BCMA_CHIP_ID_BCM53573 && phydev &&
 		    (phydev->drv->phy_id & phydev->drv->phy_id_mask) == PHY_ID_BCM54210E)
 			phydev->dev_flags |= PHY_BRCM_EN_MASTER_MODE;
+		phy_device_put(phydev);
 	}
 
 	if (core->bus->hosttype == BCMA_HOSTTYPE_PCI) {

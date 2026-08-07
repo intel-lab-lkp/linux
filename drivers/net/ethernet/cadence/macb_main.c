@@ -998,6 +998,7 @@ static int macb_phylink_connect(struct macb *bp)
 
 		/* attach the mac to the phy */
 		ret = phylink_connect_phy(bp->phylink, phydev);
+		phy_device_put(phydev);
 	}
 
 	if (ret) {

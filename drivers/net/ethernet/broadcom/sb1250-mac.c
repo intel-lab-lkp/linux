@@ -2324,16 +2324,18 @@ out_err:
 static int sbmac_mii_probe(struct net_device *dev)
 {
 	struct sbmac_softc *sc = netdev_priv(dev);
+	struct phy_device *found;
 	struct phy_device *phy_dev;
 
-	phy_dev = phy_find_first(sc->mii_bus);
-	if (!phy_dev) {
+	found = phy_find_first(sc->mii_bus);
+	if (!found) {
 		printk(KERN_ERR "%s: no PHY found\n", dev->name);
 		return -ENXIO;
 	}
 
-	phy_dev = phy_connect(dev, dev_name(&phy_dev->mdio.dev),
+	phy_dev = phy_connect(dev, dev_name(&found->mdio.dev),
 			      &sbmac_mii_poll, PHY_INTERFACE_MODE_GMII);
+	phy_device_put(found);
 	if (IS_ERR(phy_dev)) {
 		printk(KERN_ERR "%s: could not attach to PHY\n", dev->name);
 		return PTR_ERR(phy_dev);

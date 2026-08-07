@@ -1347,6 +1347,7 @@ static int stmmac_init_phy(struct net_device *dev)
 		phydev->dev_flags |= dev_flags;
 
 		ret = phylink_connect_phy(priv->phylink, phydev);
+		phy_device_put(phydev);
 	} else {
 		fwnode_handle_put(phy_fwnode);
 		ret = phylink_fwnode_phy_connect(priv->phylink, fwnode, dev_flags);

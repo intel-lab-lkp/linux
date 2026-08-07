@@ -2668,6 +2668,8 @@ tc_init_failed:
 	tsnep_ptp_cleanup(adapter);
 ptp_init_failed:
 phy_init_failed:
+	phy_device_put(adapter->phydev);
+	adapter->phydev = NULL;
 	if (adapter->mdiobus)
 		mdiobus_unregister(adapter->mdiobus);
 mdio_init_failed:
@@ -2686,6 +2688,8 @@ static void tsnep_remove(struct platform_device *pdev)
 
 	tsnep_ptp_cleanup(adapter);
 
+	phy_device_put(adapter->phydev);
+	adapter->phydev = NULL;
 	if (adapter->mdiobus)
 		mdiobus_unregister(adapter->mdiobus);
 

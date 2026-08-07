@@ -1289,12 +1289,14 @@ static int smsc95xx_bind(struct usbnet *dev, struct usb_interface *intf)
 		netdev_err(dev->net, "can't attach PHY to %s\n", pdata->mdiobus->id);
 		goto unregister_mdio;
 	}
+	phy_device_put(pdata->phydev);
 
 	phy_attached_info(dev->net->phydev);
 
 	return 0;
 
 unregister_mdio:
+	phy_device_put(pdata->phydev);
 	mdiobus_unregister(pdata->mdiobus);
 
 free_mdio:

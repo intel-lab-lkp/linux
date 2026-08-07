@@ -358,16 +358,18 @@ ltq_etop_mdio_probe(struct net_device *dev)
 {
 	struct ltq_etop_priv *priv = netdev_priv(dev);
 	struct phy_device *phydev;
+	struct phy_device *found;
 
-	phydev = phy_find_first(priv->mii_bus);
+	found = phy_find_first(priv->mii_bus);
 
-	if (!phydev) {
+	if (!found) {
 		netdev_err(dev, "no PHY found\n");
 		return -ENODEV;
 	}
 
-	phydev = phy_connect(dev, phydev_name(phydev),
+	phydev = phy_connect(dev, phydev_name(found),
 			     &ltq_etop_mdio_link, priv->pldata->mii_mode);
+	phy_device_put(found);
 
 	if (IS_ERR(phydev)) {
 		netdev_err(dev, "Could not attach to PHY\n");

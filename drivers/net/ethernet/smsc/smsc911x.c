@@ -1032,6 +1032,7 @@ static int smsc911x_mii_probe(struct net_device *dev)
 				 pdata->config.phy_interface);
 
 	if (ret) {
+		phy_device_put(phydev);
 		netdev_err(dev, "Could not attach to PHY\n");
 		return ret;
 	}
@@ -1042,6 +1043,7 @@ static int smsc911x_mii_probe(struct net_device *dev)
 
 	/* mask with MAC supported features */
 	phy_support_asym_pause(phydev);
+	phy_device_put(phydev);
 
 	pdata->last_duplex = -1;
 	pdata->last_carrier = -1;
@@ -1107,8 +1109,10 @@ static int smsc911x_mii_init(struct platform_device *pdev,
 	}
 
 	phydev = phy_find_first(pdata->mii_bus);
-	if (phydev)
+	if (phydev) {
 		phydev->mac_managed_pm = true;
+		phy_device_put(phydev);
+	}
 
 	return 0;
 

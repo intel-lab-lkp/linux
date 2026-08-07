@@ -1274,43 +1274,27 @@ static const struct ptp_clock_info vsc85xx_clk_caps = {
 	.do_aux_work	= &vsc85xx_do_aux_work,
 };
 
-static struct vsc8531_private *vsc8584_base_priv(struct phy_device *phydev)
-{
-	struct vsc8531_private *vsc8531 = phydev->priv;
-
-	if (vsc8531->ts_base_addr != phydev->mdio.addr) {
-		struct mdio_device *dev;
-
-		dev = phydev->mdio.bus->mdio_map[vsc8531->ts_base_addr];
-		phydev = container_of(dev, struct phy_device, mdio);
-
-		return phydev->priv;
-	}
-
-	return vsc8531;
-}
-
-static bool vsc8584_is_1588_input_clk_configured(struct phy_device *phydev)
-{
-	struct vsc8531_private *vsc8531 = vsc8584_base_priv(phydev);
-
-	return vsc8531->input_clk_init;
-}
-
-static void vsc8584_set_input_clk_configured(struct phy_device *phydev)
-{
-	struct vsc8531_private *vsc8531 = vsc8584_base_priv(phydev);
-
-	vsc8531->input_clk_init = true;
-}
-
 static int __vsc8584_init_ptp(struct phy_device *phydev)
 {
 	static const u32 ltc_seq_e[] = { 0, 400000, 0, 0, 0 };
 	static const u8  ltc_seq_a[] = { 8, 6, 5, 4, 2 };
+	struct vsc8531_private *base_vsc8531 = phydev->priv;
+	struct phy_device *base_phydev = NULL;
 	u32 val;
 
-	if (!vsc8584_is_1588_input_clk_configured(phydev)) {
+	if (base_vsc8531->ts_base_addr != phydev->mdio.addr) {
+		base_phydev = mdiobus_get_phy(phydev->mdio.bus,
+					      base_vsc8531->ts_base_addr);
+		if (!base_phydev)
+			return -ENODEV;
+		if (!base_phydev->priv) {
+			phy_device_put(base_phydev);
+			return -ENODEV;
+		}
+		base_vsc8531 = base_phydev->priv;
+	}
+
+	if (!base_vsc8531->input_clk_init) {
 		phy_lock_mdio_bus(phydev);
 
 		/* 1588_DIFF_INPUT_CLK configuration: Use an external clock for
@@ -1325,8 +1309,10 @@ static int __vsc8584_init_ptp(struct phy_device *phydev)
 
 		phy_unlock_mdio_bus(phydev);
 
-		vsc8584_set_input_clk_configured(phydev);
+		base_vsc8531->input_clk_init = true;
 	}
+	if (base_phydev)
+		phy_device_put(base_phydev);
 
 	/* Disable predictor before configuring the 1588 block */
 	val = vsc85xx_ts_read_csr(phydev, PROCESSOR,

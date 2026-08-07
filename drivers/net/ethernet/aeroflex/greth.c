@@ -1268,6 +1268,7 @@ static int greth_mdio_probe(struct net_device *dev)
 	ret = phy_connect_direct(dev, phy, &greth_link_change,
 				 greth->gbit_mac ? PHY_INTERFACE_MODE_GMII : PHY_INTERFACE_MODE_MII);
 	if (ret) {
+		phy_device_put(phy);
 		if (netif_msg_ifup(greth))
 			dev_err(&dev->dev, "could not attach to PHY\n");
 		return ret;
@@ -1279,6 +1280,7 @@ static int greth_mdio_probe(struct net_device *dev)
 		phy_set_max_speed(phy, SPEED_100);
 
 	linkmode_copy(phy->advertising, phy->supported);
+	phy_device_put(phy);
 
 	greth->link = 0;
 	greth->speed = 0;

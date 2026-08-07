@@ -15,8 +15,11 @@
 #include <linux/mdio.h>
 #include <linux/mii.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/phy.h>
+#include <linux/rcupdate.h>
 #include <linux/reset.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/unistd.h>
@@ -33,12 +36,16 @@
 static int mdio_device_register_reset(struct mdio_device *mdiodev)
 {
 	struct reset_control *reset;
+	int err;
 
 	/* Deassert the optional reset signal */
 	mdiodev->reset_gpio = gpiod_get_optional(&mdiodev->dev,
 						 "reset", GPIOD_OUT_LOW);
-	if (IS_ERR(mdiodev->reset_gpio))
-		return PTR_ERR(mdiodev->reset_gpio);
+	if (IS_ERR(mdiodev->reset_gpio)) {
+		err = PTR_ERR(mdiodev->reset_gpio);
+		mdiodev->reset_gpio = NULL;
+		return err;
+	}
 
 	if (mdiodev->reset_gpio)
 		gpiod_set_consumer_name(mdiodev->reset_gpio, "PHY reset");
@@ -116,6 +123,8 @@ static void mdio_device_release(struct device *dev)
 	kfree(to_mdio_device(dev));
 }
 
+static int __mdio_device_remove(struct mdio_device *mdiodev, bool dynamic);
+
 struct mdio_device *mdio_device_create(struct mii_bus *bus, int addr)
 {
 	struct mdio_device *mdiodev;
@@ -129,7 +138,7 @@ struct mdio_device *mdio_device_create(struct mii_bus *bus, int addr)
 	mdiodev->dev.parent = &bus->dev;
 	mdiodev->dev.bus = &mdio_bus_type;
 	mdiodev->device_free = mdio_device_free;
-	mdiodev->device_remove = mdio_device_remove;
+	mdiodev->device_remove = __mdio_device_remove;
 	mdiodev->bus = bus;
 	mdiodev->addr = addr;
 	mdiodev->reset_state = -1;
@@ -159,18 +168,26 @@ int mdio_device_register(struct mdio_device *mdiodev)
 		return err;
 
 	err = device_add(&mdiodev->dev);
-	if (err) {
+	if (err)
 		pr_err("MDIO %d failed to add\n", mdiodev->addr);
-		goto out;
-	}
 
-	return 0;
-
- out:
-	mdiobus_unregister_device(mdiodev);
-	return err;
+	return mdiobus_registration_done(mdiodev, err);
 }
 EXPORT_SYMBOL(mdio_device_register);
+
+static int __mdio_device_remove(struct mdio_device *mdiodev, bool dynamic)
+{
+	int err;
+
+	err = mdiobus_begin_remove(mdiodev, dynamic);
+	if (err)
+		return err;
+
+	device_del(&mdiodev->dev);
+	mdiobus_finish_remove(mdiodev, dynamic);
+
+	return 0;
+}
 
 /**
  * mdio_device_remove - Remove a previously registered mdio device from the
@@ -183,42 +200,215 @@ EXPORT_SYMBOL(mdio_device_register);
  */
 void mdio_device_remove(struct mdio_device *mdiodev)
 {
-	device_del(&mdiodev->dev);
-	mdiobus_unregister_device(mdiodev);
+	__mdio_device_remove(mdiodev, false);
 }
 EXPORT_SYMBOL(mdio_device_remove);
 
 int mdiobus_register_device(struct mdio_device *mdiodev)
 {
+	struct mii_bus *bus = mdiodev->bus;
 	int err;
 
-	if (mdiodev->bus->mdio_map[mdiodev->addr])
-		return -EBUSY;
+	mutex_lock(&bus->mdio_map_lock);
+	if (bus->state != MDIOBUS_REGISTERING &&
+	    bus->state != MDIOBUS_REGISTERED) {
+		err = -ENODEV;
+		goto out_unlock;
+	}
+	if (bus->mdio_map_removing) {
+		err = -EBUSY;
+		goto out_unlock;
+	}
+
+	if (rcu_access_pointer(bus->mdio_map[mdiodev->addr]) ||
+	    bus->mdio_map_pending & BIT(mdiodev->addr)) {
+		err = -EBUSY;
+		goto out_unlock;
+	}
+
+	bus->mdio_map_pending |= BIT(mdiodev->addr);
+	bus->mdio_map_pending_owner[mdiodev->addr] = current;
+	bus->mdio_map_ops++;
+	mutex_unlock(&bus->mdio_map_lock);
 
 	if (mdiodev->flags & MDIO_DEVICE_FLAG_PHY) {
 		err = mdio_device_register_reset(mdiodev);
-		if (err)
+		if (err) {
+			mdiobus_registration_done(mdiodev, err);
 			return err;
+		}
 
 		/* Assert the reset signal */
 		mdio_device_reset(mdiodev, 1);
 	}
 
-	mdiodev->bus->mdio_map[mdiodev->addr] = mdiodev;
-
 	return 0;
+
+out_unlock:
+	mutex_unlock(&bus->mdio_map_lock);
+	return err;
 }
 
-int mdiobus_unregister_device(struct mdio_device *mdiodev)
+/**
+ * mdiobus_device_change_begin - start changing devices on a registered bus
+ * @bus: MDIO bus that will be scanned or changed
+ * @removing: whether to start an exclusive removal transaction
+ *
+ * Return: zero on success or a negative error code when the bus is unavailable
+ */
+int mdiobus_device_change_begin(struct mii_bus *bus, bool removing)
 {
-	if (mdiodev->bus->mdio_map[mdiodev->addr] != mdiodev)
-		return -EINVAL;
+	int err = 0;
 
-	mdio_device_unregister_reset(mdiodev);
+	mutex_lock(&bus->mdio_map_lock);
+	if (bus->state != MDIOBUS_REGISTERED) {
+		err = -ENODEV;
+	} else if (bus->mdio_map_removing ||
+		   (removing && bus->mdio_map_ops)) {
+		err = -EBUSY;
+	} else {
+		bus->mdio_map_ops++;
+		if (removing)
+			bus->mdio_map_removing = true;
+	}
+	mutex_unlock(&bus->mdio_map_lock);
 
-	mdiodev->bus->mdio_map[mdiodev->addr] = NULL;
+	return err;
+}
+EXPORT_SYMBOL_GPL(mdiobus_device_change_begin);
 
-	return 0;
+static void mdiobus_operation_done_locked(struct mii_bus *bus)
+{
+	lockdep_assert_held(&bus->mdio_map_lock);
+
+	if (WARN_ON_ONCE(!bus->mdio_map_ops))
+		return;
+	bus->mdio_map_ops--;
+	if (!bus->mdio_map_ops)
+		wake_up_all(&bus->mdio_map_wait);
+}
+
+/**
+ * mdiobus_device_change_end - finish changing devices on an MDIO bus
+ * @bus: MDIO bus previously passed to mdiobus_device_change_begin()
+ * @removing: value passed to mdiobus_device_change_begin()
+ */
+void mdiobus_device_change_end(struct mii_bus *bus, bool removing)
+{
+	mutex_lock(&bus->mdio_map_lock);
+	if (removing) {
+		WARN_ON_ONCE(!bus->mdio_map_removing);
+		bus->mdio_map_removing = false;
+	}
+	mdiobus_operation_done_locked(bus);
+	mutex_unlock(&bus->mdio_map_lock);
+}
+EXPORT_SYMBOL_GPL(mdiobus_device_change_end);
+
+static void mdiobus_operation_done(struct mii_bus *bus)
+{
+	mutex_lock(&bus->mdio_map_lock);
+	mdiobus_operation_done_locked(bus);
+	mutex_unlock(&bus->mdio_map_lock);
+}
+
+static void mdiobus_unpublish_device(struct mdio_device *mdiodev)
+{
+	struct mii_bus *bus = mdiodev->bus;
+
+	lockdep_assert_held(&bus->mdio_map_lock);
+
+	if (rcu_access_pointer(bus->mdio_map[mdiodev->addr]) == mdiodev)
+		rcu_assign_pointer(bus->mdio_map[mdiodev->addr], NULL);
+	if (mdiodev->dev.of_node)
+		of_node_clear_flag(mdiodev->dev.of_node, OF_POPULATED);
+}
+
+int mdiobus_registration_done(struct mdio_device *mdiodev, int err)
+{
+	struct mii_bus *bus = mdiodev->bus;
+
+	mutex_lock(&bus->mdio_map_lock);
+	if (WARN_ON_ONCE(!(bus->mdio_map_pending & BIT(mdiodev->addr))))
+		goto out_unlock;
+
+	if (err) {
+		mdiobus_unpublish_device(mdiodev);
+	} else {
+		WARN_ON_ONCE(rcu_access_pointer(bus->mdio_map[mdiodev->addr]));
+		/* Teardown waits for this operation before consuming the map. */
+		rcu_assign_pointer(bus->mdio_map[mdiodev->addr], mdiodev);
+	}
+
+	bus->mdio_map_pending &= ~BIT(mdiodev->addr);
+	bus->mdio_map_pending_owner[mdiodev->addr] = NULL;
+	wake_up_all(&bus->mdio_map_wait);
+
+out_unlock:
+	mutex_unlock(&bus->mdio_map_lock);
+	if (err) {
+		if (mdiodev->flags & MDIO_DEVICE_FLAG_PHY) {
+			mdio_device_reset(mdiodev, 1);
+			mdio_device_unregister_reset(mdiodev);
+		}
+	}
+	mdiobus_operation_done(bus);
+
+	return err;
+}
+
+int mdiobus_begin_remove(struct mdio_device *mdiodev, bool dynamic)
+{
+	struct mii_bus *bus = mdiodev->bus;
+	struct phy_device *phydev;
+	int err = 0;
+
+	mutex_lock(&bus->mdio_map_lock);
+	if (dynamic && bus->state != MDIOBUS_REGISTERED) {
+		err = -ENODEV;
+		goto out_unlock;
+	}
+	if (bus->mdio_map_pending & BIT(mdiodev->addr)) {
+		err = -EBUSY;
+		goto out_unlock;
+	}
+
+	if (rcu_access_pointer(bus->mdio_map[mdiodev->addr]) != mdiodev) {
+		err = -ENODEV;
+		goto out_unlock;
+	}
+
+	if (dynamic && mdiodev->flags & MDIO_DEVICE_FLAG_PHY) {
+		phydev = to_phy_device(&mdiodev->dev);
+		if (phydev->attached) {
+			err = -EBUSY;
+			goto out_unlock;
+		}
+	}
+
+	mdiobus_unpublish_device(mdiodev);
+
+out_unlock:
+	mutex_unlock(&bus->mdio_map_lock);
+	return err;
+}
+
+void mdiobus_finish_remove(struct mdio_device *mdiodev, bool dynamic)
+{
+	struct fwnode_handle *fwnode;
+
+	/* Let map readers acquire their device reference before it is dropped. */
+	synchronize_rcu();
+
+	if (mdiodev->flags & MDIO_DEVICE_FLAG_PHY)
+		mdio_device_unregister_reset(mdiodev);
+
+	/* Do not keep an overlay node alive with the removed device. */
+	if (dynamic) {
+		fwnode = dev_fwnode(&mdiodev->dev);
+		device_set_node(&mdiodev->dev, NULL);
+		fwnode_handle_put(fwnode);
+	}
 }
 
 /**

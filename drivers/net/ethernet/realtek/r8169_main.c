@@ -5423,6 +5423,11 @@ static int r8169_mdio_write_reg_c45(struct mii_bus *mii_bus, int addr,
 	return 0;
 }
 
+static void r8169_phy_put(void *data)
+{
+	phy_device_put(data);
+}
+
 static int r8169_mdio_register(struct rtl8169_private *tp)
 {
 	struct pci_dev *pdev = tp->pci_dev;
@@ -5463,9 +5468,15 @@ static int r8169_mdio_register(struct rtl8169_private *tp)
 		return ret;
 
 	tp->phydev = mdiobus_get_phy(new_bus, 0);
-	if (!tp->phydev) {
+	if (!tp->phydev)
 		return -ENODEV;
-	} else if (!tp->phydev->drv) {
+
+	ret = devm_add_action_or_reset(&pdev->dev, r8169_phy_put,
+				       tp->phydev);
+	if (ret)
+		return ret;
+
+	if (!tp->phydev->drv) {
 		/* Most chip versions fail with the genphy driver.
 		 * Therefore ensure that the dedicated PHY driver is loaded.
 		 */

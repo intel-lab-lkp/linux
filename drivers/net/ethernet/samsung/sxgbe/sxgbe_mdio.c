@@ -273,6 +273,7 @@ int sxgbe_mdio_register(struct net_device *ndev)
 				    phydev_name(phy), act ? " active" : "");
 			phy_found = true;
 		}
+		phy_device_put(phy);
 	}
 
 	if (!phy_found) {

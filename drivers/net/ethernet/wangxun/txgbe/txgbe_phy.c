@@ -521,6 +521,11 @@ static int txgbe_sfp_register(struct txgbe *txgbe)
 	return 0;
 }
 
+static void txgbe_phy_put(void *data)
+{
+	phy_device_put(data);
+}
+
 static int txgbe_ext_phy_init(struct txgbe *txgbe)
 {
 	struct phy_device *phydev;
@@ -555,6 +560,9 @@ static int txgbe_ext_phy_init(struct txgbe *txgbe)
 		wx_err(wx, "no PHY found\n");
 		return -ENODEV;
 	}
+	ret = devm_add_action_or_reset(&pdev->dev, txgbe_phy_put, phydev);
+	if (ret)
+		return ret;
 
 	phy_attached_info(phydev);
 

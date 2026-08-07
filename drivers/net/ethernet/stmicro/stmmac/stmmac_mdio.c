@@ -681,6 +681,7 @@ int stmmac_mdio_register(struct net_device *ndev)
 
 	phydev = phy_find_first(new_bus);
 	if (!phydev || phydev->mdio.addr > max_addr) {
+		phy_device_put(phydev);
 		dev_warn(dev, "No PHY found\n");
 		err = -ENODEV;
 		goto no_phy_found;
@@ -703,6 +704,7 @@ int stmmac_mdio_register(struct net_device *ndev)
 		priv->plat->phy_addr = phydev->mdio.addr;
 
 	phy_attached_info(phydev);
+	phy_device_put(phydev);
 
 bus_register_done:
 	priv->mii = new_bus;

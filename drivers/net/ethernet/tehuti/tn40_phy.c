@@ -62,8 +62,10 @@ int tn40_phy_register(struct tn40_priv *priv)
 
 	phylink = phylink_create(config, NULL, PHY_INTERFACE_MODE_XAUI,
 				 &tn40_mac_ops);
-	if (IS_ERR(phylink))
+	if (IS_ERR(phylink)) {
+		phy_device_put(phydev);
 		return PTR_ERR(phylink);
+	}
 
 	priv->phydev = phydev;
 	priv->phylink = phylink;
@@ -73,4 +75,5 @@ int tn40_phy_register(struct tn40_priv *priv)
 void tn40_phy_unregister(struct tn40_priv *priv)
 {
 	phylink_destroy(priv->phylink);
+	phy_device_put(priv->phydev);
 }

@@ -473,6 +473,7 @@ static int au1000_mii_probe(struct net_device *dev)
 {
 	struct au1000_private *const aup = netdev_priv(dev);
 	struct phy_device *phydev = NULL;
+	struct phy_device *found;
 	int phy_addr;
 
 	if (aup->phy_static_config) {
@@ -482,19 +483,25 @@ static int au1000_mii_probe(struct net_device *dev)
 			phydev = mdiobus_get_phy(aup->mii_bus, aup->phy_addr);
 		else
 			netdev_info(dev, "using PHY-less setup\n");
+		phy_device_put(phydev);
 		return 0;
 	}
 
 	/* find the first (lowest address) PHY
 	 * on the current MAC's MII bus
 	 */
-	for (phy_addr = 0; phy_addr < PHY_MAX_ADDR; phy_addr++)
-		if (mdiobus_get_phy(aup->mii_bus, phy_addr)) {
-			phydev = mdiobus_get_phy(aup->mii_bus, phy_addr);
+	for (phy_addr = 0; phy_addr < PHY_MAX_ADDR; phy_addr++) {
+		struct phy_device *candidate;
+
+		candidate = mdiobus_get_phy(aup->mii_bus, phy_addr);
+		if (candidate) {
+			phy_device_put(phydev);
+			phydev = candidate;
 			if (!aup->phy_search_highest_addr)
 				/* break out with first one found */
 				break;
 		}
+	}
 
 	if (aup->phy1_search_mac0) {
 		/* try harder to find a PHY */
@@ -511,16 +518,20 @@ static int au1000_mii_probe(struct net_device *dev)
 					mdiobus_get_phy(aup->mii_bus,
 							phy_addr);
 
-				if (aup->mac_id == 1)
+				if (aup->mac_id == 1) {
+					phy_device_put(tmp_phydev);
 					break;
+				}
 
 				/* no PHY here... */
 				if (!tmp_phydev)
 					continue;
 
 				/* already claimed by MAC0 */
-				if (tmp_phydev->attached_dev)
+				if (tmp_phydev->attached_dev) {
+					phy_device_put(tmp_phydev);
 					continue;
+				}
 
 				phydev = tmp_phydev;
 				break; /* found it */
@@ -536,8 +547,10 @@ static int au1000_mii_probe(struct net_device *dev)
 	/* now we are supposed to have a proper phydev, to attach to... */
 	BUG_ON(phydev->attached_dev);
 
-	phydev = phy_connect(dev, phydev_name(phydev),
-			     &au1000_adjust_link, PHY_INTERFACE_MODE_MII);
+	found = phydev;
+	phydev = phy_connect(dev, phydev_name(found), &au1000_adjust_link,
+			     PHY_INTERFACE_MODE_MII);
+	phy_device_put(found);
 
 	if (IS_ERR(phydev)) {
 		netdev_err(dev, "Could not attach to PHY\n");

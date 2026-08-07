@@ -605,11 +605,14 @@ static int oa_tc6_phy_init(struct oa_tc6 *tc6)
 				 &oa_tc6_handle_link_change,
 				 PHY_INTERFACE_MODE_INTERNAL);
 	if (ret) {
+		phy_device_put(tc6->phydev);
+		tc6->phydev = NULL;
 		netdev_err(tc6->netdev, "Can't attach PHY to %s\n",
 			   tc6->mdiobus->id);
 		oa_tc6_mdiobus_unregister(tc6);
 		return ret;
 	}
+	phy_device_put(tc6->phydev);
 
 	phy_attached_info(tc6->netdev->phydev);
 

@@ -1500,6 +1500,7 @@ static int ftgmac100_mii_probe(struct net_device *netdev)
 	struct platform_device *pdev = to_platform_device(priv->dev);
 	struct device_node *np = pdev->dev.of_node;
 	struct phy_device *phydev;
+	struct phy_device *found;
 	phy_interface_t phy_intf;
 	int err;
 
@@ -1533,14 +1534,15 @@ static int ftgmac100_mii_probe(struct net_device *netdev)
 			    phy_modes(phy_intf));
 	}
 
-	phydev = phy_find_first(priv->mii_bus);
-	if (!phydev) {
+	found = phy_find_first(priv->mii_bus);
+	if (!found) {
 		netdev_info(netdev, "%s: no PHY found\n", netdev->name);
 		return -ENODEV;
 	}
 
-	phydev = phy_connect(netdev, phydev_name(phydev),
+	phydev = phy_connect(netdev, phydev_name(found),
 			     &ftgmac100_adjust_link, phy_intf);
+	phy_device_put(found);
 
 	if (IS_ERR(phydev)) {
 		netdev_err(netdev, "%s: Could not attach to PHY\n", netdev->name);

@@ -664,13 +664,17 @@ static int adin1140_phy_init(struct adin1140_priv *priv,
 	ret = phy_connect_direct(priv->netdev, priv->phydev,
 				 &adin1140_handle_link_change,
 				 PHY_INTERFACE_MODE_INTERNAL);
-	if (ret)
+	if (ret) {
+		phy_device_put(priv->phydev);
+		priv->phydev = NULL;
 		return dev_err_probe(&spidev->dev, ret,
 				     "Can't attach PHY to %s\n",
 				     priv->mdiobus->id);
+	}
 
 	ret = devm_add_action_or_reset(&spidev->dev, adin1140_phy_remove,
 				       priv->phydev);
+	phy_device_put(priv->phydev);
 	if (ret)
 		return ret;
 
