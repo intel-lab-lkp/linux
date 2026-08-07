@@ -477,6 +477,13 @@ static void sfp_quirk_2500basex(const struct sfp_eeprom_id *id,
 	__set_bit(PHY_INTERFACE_MODE_2500BASEX, caps->interfaces);
 }
 
+static void sfp_quirk_25g_10g_dual(const struct sfp_eeprom_id *id,
+				   struct sfp_module_caps *caps)
+{
+	linkmode_set_bit(ETHTOOL_LINK_MODE_10000baseSR_Full_BIT,
+			 caps->link_modes);
+	__set_bit(PHY_INTERFACE_MODE_10GBASER, caps->interfaces);
+
 static void sfp_quirk_disable_autoneg(const struct sfp_eeprom_id *id,
 				      struct sfp_module_caps *caps)
 {
@@ -531,6 +538,10 @@ static const struct sfp_quirk sfp_quirks[] = {
 	// report 2500MBd NRZ in their EEPROM
 	SFP_QUIRK("ALCATELLUCENT", "G010SP", sfp_quirk_2500basex,
 		  sfp_fixup_ignore_tx_fault),
+
+	// Dell M14MK, 10/25 GBit SFP28 module. Labeled as Dell S28-10G-25G-SR-85C.
+	// Runs at 10 Gbit/s in a SFP+ port, but does not advertise this properly.
+	SFP_QUIRK_S("DELL", "M14MK", sfp_quirk_25g_10g_dual),
 
 	// Alcatel Lucent G-010S-A can operate at 2500base-X, but report 3.2GBd
 	// NRZ in their EEPROM
