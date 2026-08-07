@@ -1,0 +1,98 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/interconnect/qcom,camnoc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm Camera NOC (CAMNOC) Interconnect Provider
+
+maintainers:
+  - Aleksandar Filipov <quic_afilipov@quicinc.com>
+
+description:
+  The Camera Network-on-Chip (CAMNOC) is the internal AXI interconnect
+  within the Qualcomm camera subsystem. It arbitrates AXI bandwidth
+  between camera sub-devices (IFE, JPEG, BPS, etc.) and the external
+  memory interconnect. Multiple consumers may independently request
+  bandwidth; the CAMNOC ICC provider aggregates these requests and
+  scales CAM_CC_CAMNOC_AXI_CLK accordingly.
+
+properties:
+  compatible:
+    enum:
+      - qcom,sm8250-cam-virt
+
+  clocks:
+    items:
+      - description: CAMNOC AXI clock
+
+  clock-names:
+    items:
+      - const: camnoc_axi
+
+  '#interconnect-cells':
+    const: 1
+
+required:
+  - compatible
+  - clocks
+  - clock-names
+  - '#interconnect-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/qcom,camcc-sm8250.h>
+    #include <dt-bindings/interconnect/qcom,camnoc.h>
+
+    camnoc_icc: interconnect {
+        compatible = "qcom,sm8250-cam-virt";
+        clocks = <&camcc CAM_CC_CAMNOC_AXI_CLK>;
+        clock-names = "camnoc_axi";
+        #interconnect-cells = <1>;
+    };
+
+    /* Example camera sub-device consuming the CAMNOC provider above */
+    camera-subsystem@ac53000 {
+        reg = <0x0ac53000 0x1000>;
+
+        interconnects = <&camnoc_icc MASTER_CAMNOC_JPEG
+                         &camnoc_icc SLAVE_CAMNOC_AXI>;
+        interconnect-names = "camnoc";
+
+        /*
+         * Optional: an operating-points-v2 table lets the consumer
+         * drive its CAMNOC bandwidth vote from the same OPP that
+         * selects its core clock rate and RPMh performance state.
+         */
+        operating-points-v2 = <&camera_opp_table>;
+
+        camera_opp_table: opp-table {
+            compatible = "operating-points-v2";
+
+            opp-100000000 {
+                opp-hz = /bits/ 64 <100000000>;
+                opp-peak-kBps = <22246>;
+                required-opps = <&rpmhpd_opp_min_svs>;
+            };
+
+            opp-200000000 {
+                opp-hz = /bits/ 64 <200000000>;
+                opp-peak-kBps = <44492>;
+                required-opps = <&rpmhpd_opp_low_svs>;
+            };
+
+            opp-400000000 {
+                opp-hz = /bits/ 64 <400000000>;
+                opp-peak-kBps = <88983>;
+                required-opps = <&rpmhpd_opp_svs>;
+            };
+
+            opp-480000000 {
+                opp-hz = /bits/ 64 <480000000>;
+                opp-peak-kBps = <106780>;
+                required-opps = <&rpmhpd_opp_svs_l1>;
+            };
+        };
+    };
