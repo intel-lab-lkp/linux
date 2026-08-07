@@ -985,9 +985,14 @@ int bnxt_qplib_create_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp)
 	pbl = &sq->hwq.pbl[PBL_LVL_0];
 	req.sq_pbl = cpu_to_le64(pbl->pg_map_arr[0]);
 	req.sq_pg_size_sq_lvl = sq->hwq.pg_sz_lvl;
+	if (bnxt_re_pbl_size_supported(res->dattr->dev_cap_ext_flags_1)) {
+		qp_flags |= CMDQ_CREATE_QP_QP_FLAGS_SQ_PBL_PG_SIZE_VALID;
+		req.sq_pbl_pg_size = bnxt_qplib_get_pbl_page_size(&sq->sg_info);
+	}
 	req.sq_fwo_sq_sge =
-		cpu_to_le16(((sq->max_sge & CMDQ_CREATE_QP_SQ_SGE_MASK) <<
-			     CMDQ_CREATE_QP_SQ_SGE_SFT) | 0);
+		cpu_to_le16((((sq->sg_info.fwo_offset >> BNXT_QPLIB_QP_FWO_SHIFT) <<
+			      CMDQ_CREATE_QP_SQ_FWO_SFT) & CMDQ_CREATE_QP_SQ_FWO_MASK) |
+			    (sq->max_sge & CMDQ_CREATE_QP_SQ_SGE_MASK));
 	req.scq_cid = cpu_to_le32(qp->scq->id);
 
 	/* RQ */
@@ -997,12 +1002,16 @@ int bnxt_qplib_create_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp)
 		pbl = &rq->hwq.pbl[PBL_LVL_0];
 		req.rq_pbl = cpu_to_le64(pbl->pg_map_arr[0]);
 		req.rq_pg_size_rq_lvl = rq->hwq.pg_sz_lvl;
+		if (bnxt_re_pbl_size_supported(res->dattr->dev_cap_ext_flags_1)) {
+			qp_flags |= CMDQ_CREATE_QP_QP_FLAGS_RQ_PBL_PG_SIZE_VALID;
+			req.rq_pbl_pg_size = bnxt_qplib_get_pbl_page_size(&rq->sg_info);
+		}
 		nsge = (qp->wqe_mode == BNXT_QPLIB_WQE_MODE_STATIC) ?
 			6 : rq->max_sge;
 		req.rq_fwo_rq_sge =
-			cpu_to_le16(((nsge &
-				      CMDQ_CREATE_QP_RQ_SGE_MASK) <<
-				     CMDQ_CREATE_QP_RQ_SGE_SFT) | 0);
+			cpu_to_le16((((rq->sg_info.fwo_offset >> BNXT_QPLIB_QP_FWO_SHIFT) <<
+				      CMDQ_CREATE_QP_RQ_FWO_SFT) & CMDQ_CREATE_QP_RQ_FWO_MASK) |
+				    (nsge & CMDQ_CREATE_QP_RQ_SGE_MASK));
 	} else {
 		/* SRQ */
 		qp_flags |= CMDQ_CREATE_QP_QP_FLAGS_SRQ_USED;
