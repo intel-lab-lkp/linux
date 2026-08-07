@@ -130,8 +130,8 @@ static inline int is_itpm(struct acpi_device *dev)
 #define DEVICE_IS_TPM2 1
 
 static const struct acpi_device_id tpm_acpi_tbl[] = {
-	{"MSFT0101", DEVICE_IS_TPM2},
-	{},
+	{ .id = "MSFT0101", .driver_data = DEVICE_IS_TPM2 },
+	{ }
 };
 MODULE_DEVICE_TABLE(acpi, tpm_acpi_tbl);
 

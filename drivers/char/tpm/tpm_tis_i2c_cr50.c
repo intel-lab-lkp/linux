@@ -669,8 +669,8 @@ static const struct tpm_class_ops cr50_i2c = {
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id cr50_i2c_acpi_id[] = {
-	{ "GOOG0005", 0 },
-	{}
+	{ .id = "GOOG0005" },
+	{ }
 };
 MODULE_DEVICE_TABLE(acpi, cr50_i2c_acpi_id);
 #endif

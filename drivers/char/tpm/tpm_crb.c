@@ -917,8 +917,8 @@ static const struct dev_pm_ops crb_pm = {
 };
 
 static const struct acpi_device_id crb_device_ids[] = {
-	{"MSFT0101", 0},
-	{"", 0},
+	{ .id = "MSFT0101" },
+	{ }
 };
 MODULE_DEVICE_TABLE(acpi, crb_device_ids);
 

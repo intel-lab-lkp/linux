@@ -262,8 +262,8 @@ static const struct of_device_id of_st33zp24_spi_match[] __maybe_unused = {
 MODULE_DEVICE_TABLE(of, of_st33zp24_spi_match);
 
 static const struct acpi_device_id st33zp24_spi_acpi_match[] __maybe_unused = {
-	{"SMO3324"},
-	{}
+	{ .id = "SMO3324" },
+	{ }
 };
 MODULE_DEVICE_TABLE(acpi, st33zp24_spi_acpi_match);
 

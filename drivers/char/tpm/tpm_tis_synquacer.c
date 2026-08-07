@@ -144,8 +144,8 @@ MODULE_DEVICE_TABLE(of, tis_synquacer_of_platform_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id tpm_synquacer_acpi_tbl[] = {
-	{ "SCX0009" },
-	{},
+	{ .id = "SCX0009" },
+	{ }
 };
 MODULE_DEVICE_TABLE(acpi, tpm_synquacer_acpi_tbl);
 #endif
