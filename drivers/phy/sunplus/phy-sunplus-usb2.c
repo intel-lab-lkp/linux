@@ -84,9 +84,10 @@ static int update_disc_vol(struct sp_usbphy *usbphy)
 	u32 val, set = OTP_DISC_LEVEL_DEFAULT;
 
 	cell = nvmem_cell_get(usbphy->dev, disc_name);
-	if (IS_ERR_OR_NULL(cell)) {
+	if (IS_ERR(cell)) {
 		if (PTR_ERR(cell) == -EPROBE_DEFER)
 			return -EPROBE_DEFER;
+		goto skip_nvmem_read;
 	}
 
 	otp_v = nvmem_cell_read(cell, &otp_l);
@@ -101,6 +102,7 @@ static int update_disc_vol(struct sp_usbphy *usbphy)
 		kfree(otp_v);
 	}
 
+skip_nvmem_read:
 	val = readl(usbphy->phy_regs + CONFIG7);
 	val = (val & ~J_DISC) | set;
 	writel(val, usbphy->phy_regs + CONFIG7);
