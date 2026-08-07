@@ -18,6 +18,7 @@
 #include <linux/page_counter.h>
 #include <linux/vmpressure.h>
 #include <linux/eventfd.h>
+#include <linux/memory-tiers.h>
 #include <linux/mm.h>
 #include <linux/vmstat.h>
 #include <linux/writeback.h>
@@ -618,20 +619,36 @@ static inline bool mem_cgroup_unprotected(struct mem_cgroup *target,
 }
 
 static inline bool mem_cgroup_below_low(struct mem_cgroup *target,
-					struct mem_cgroup *memcg)
+					struct mem_cgroup *memcg, int nid)
 {
 	if (mem_cgroup_unprotected(target, memcg))
 		return false;
+
+	if (mem_cgroup_tiered_limits()) {
+		int slot = nid_tier_slot(nid);
+
+		if (slot >= 0)
+			return READ_ONCE(memcg->tier[slot].elow) >=
+				page_counter_read(&memcg->tier[slot]);
+	}
 
 	return READ_ONCE(memcg->memory.elow) >=
 		page_counter_read(&memcg->memory);
 }
 
 static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
-					struct mem_cgroup *memcg)
+					struct mem_cgroup *memcg, int nid)
 {
 	if (mem_cgroup_unprotected(target, memcg))
 		return false;
+
+	if (mem_cgroup_tiered_limits()) {
+		int slot = nid_tier_slot(nid);
+
+		if (slot >= 0)
+			return READ_ONCE(memcg->tier[slot].emin) >=
+				page_counter_read(&memcg->tier[slot]);
+	}
 
 	return READ_ONCE(memcg->memory.emin) >=
 		page_counter_read(&memcg->memory);
@@ -1142,13 +1159,13 @@ static inline bool mem_cgroup_unprotected(struct mem_cgroup *target,
 	return true;
 }
 static inline bool mem_cgroup_below_low(struct mem_cgroup *target,
-					struct mem_cgroup *memcg)
+					struct mem_cgroup *memcg, int nid)
 {
 	return false;
 }
 
 static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
-					struct mem_cgroup *memcg)
+					struct mem_cgroup *memcg, int nid)
 {
 	return false;
 }

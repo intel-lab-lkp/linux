@@ -5310,7 +5310,16 @@ void mem_cgroup_calculate_protection(struct mem_cgroup *root,
 	if (!root)
 		root = root_mem_cgroup;
 
-	page_counter_calculate_protection(&root->memory, &memcg->memory, recursive_protection);
+	page_counter_calculate_protection(&root->memory, &memcg->memory,
+					  recursive_protection);
+
+	if (mem_cgroup_tiered_limits()) {
+		int nr_tier_slots = mt_nr_tier_slots();
+
+		for (int slot = 0; slot < nr_tier_slots; slot++)
+			page_counter_calculate_protection(&root->tier[slot],
+				&memcg->tier[slot], recursive_protection);
+	}
 }
 
 static int charge_memcg(struct folio *folio, struct mem_cgroup *memcg,

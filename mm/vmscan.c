@@ -4190,7 +4190,7 @@ static bool lruvec_is_reclaimable(struct lruvec *lruvec, struct scan_control *sc
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 	DEFINE_MIN_SEQ(lruvec);
 
-	if (mem_cgroup_below_min(NULL, memcg))
+	if (mem_cgroup_below_min(NULL, memcg, lruvec_pgdat(lruvec)->node_id))
 		return false;
 
 	if (!lruvec_is_sizable(lruvec, sc))
@@ -5057,6 +5057,7 @@ static bool try_to_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	bool need_rotate = false, should_age = false;
 	long nr_batch, nr_to_scan;
 	int swappiness = get_swappiness(lruvec, sc);
+	int nid = lruvec_pgdat(lruvec)->node_id;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 
 	nr_to_scan = get_nr_to_scan(lruvec, sc, memcg, swappiness);
@@ -5064,7 +5065,7 @@ static bool try_to_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 		int delta;
 		DEFINE_MAX_SEQ(lruvec);
 
-		if (mem_cgroup_below_min(sc->target_mem_cgroup, memcg)) {
+		if (mem_cgroup_below_min(sc->target_mem_cgroup, memcg, nid)) {
 			need_rotate = true;
 			break;
 		}
@@ -5104,12 +5105,13 @@ static int shrink_one(struct lruvec *lruvec, struct scan_control *sc)
 	unsigned long reclaimed = sc->nr_reclaimed;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
+	int nid = pgdat->node_id;
 
 	/* lru_gen_age_node() called mem_cgroup_calculate_protection() */
-	if (mem_cgroup_below_min(NULL, memcg))
+	if (mem_cgroup_below_min(NULL, memcg, nid))
 		return MEMCG_LRU_YOUNG;
 
-	if (mem_cgroup_below_low(NULL, memcg)) {
+	if (mem_cgroup_below_low(NULL, memcg, nid)) {
 		/* see the comment on MEMCG_NR_GENS */
 		if (READ_ONCE(lruvec->lrugen.seg) != MEMCG_LRU_TAIL)
 			return MEMCG_LRU_TAIL;
@@ -6168,6 +6170,7 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 	};
 	struct mem_cgroup_reclaim_cookie *partial = &reclaim;
 	struct mem_cgroup *memcg;
+	int nid = pgdat->node_id;
 
 	/*
 	 * In most cases, direct reclaimers can do partial walks
@@ -6197,13 +6200,13 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 
 		mem_cgroup_calculate_protection(target_memcg, memcg);
 
-		if (mem_cgroup_below_min(target_memcg, memcg)) {
+		if (mem_cgroup_below_min(target_memcg, memcg, nid)) {
 			/*
 			 * Hard protection.
 			 * If there is no reclaimable memory, OOM.
 			 */
 			continue;
-		} else if (mem_cgroup_below_low(target_memcg, memcg)) {
+		} else if (mem_cgroup_below_low(target_memcg, memcg, nid)) {
 			/*
 			 * Soft protection.
 			 * Respect the protection only as long as
