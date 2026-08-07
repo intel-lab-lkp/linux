@@ -64,6 +64,7 @@ struct dyn_event {
 };
 
 extern struct list_head dyn_event_list;
+extern struct mutex dyn_event_ops_mutex;
 
 static inline
 int dyn_event_init(struct dyn_event *ev, struct dyn_event_operations *ops)

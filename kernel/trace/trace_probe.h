@@ -634,7 +634,12 @@ extern int traceprobe_define_arg_fields(struct trace_event_call *event_call,
 	C(TYPECAST_SYM_OFFSET,	"@SYM+/-OFFSET with typecast needs parentheses"),	\
 	C(USED_ARG_NAME,	"This argument name is already used"),		\
 	C(WPROBE_NO_MAXACT,	"Watchpoint probe does not support maxactive"),	\
-	C(WPROBE_NO_SIBLING,	"Watchpoint probe does not support sibling probes"),
+	C(WPROBE_NO_SIBLING,	"Watchpoint probe does not support sibling probes"), \
+	C(WPROBE_ON_KPROBE,	"Wprobe trigger is not supported on kprobe event"), \
+	C(WPROBE_NOT_FOUND,	"Target wprobe event is not found"),		\
+	C(WPROBE_BUSY,		"Target wprobe event is already enabled"),	\
+	C(WPROBE_NEED_FIELD,	"Wprobe trigger requires a target field"),	\
+	C(WPROBE_BAD_FIELD,	"Target field must be pointer size"),
 
 #undef C
 #define C(a, b)		TP_ERR_##a
@@ -657,6 +662,8 @@ void trace_probe_log_clear(void);
 void __trace_probe_log_err(int offset, int err);
 
 DEFINE_FREE(trace_probe_log_clear, const char *, if (_T) trace_probe_log_clear())
+
+extern const char *trace_probe_err_text[];
 
 #define trace_probe_log_err(offs, err)	\
 	__trace_probe_log_err(offs, TP_ERR_##err)
