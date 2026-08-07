@@ -118,18 +118,26 @@ static int riscv_iommu_ir_irq_domain_alloc_irqs(struct irq_domain *irqdomain,
 	 * quiesced, including MSI teardown, before switching away from or freeing
 	 * the domain. iommu_dma_map_msi() requires the group mutex to be held;
 	 * take it around the domain lookup too so info->domain can't change
-	 * out from under the build.
+	 * out from under the build. Bump info->nr_msis here too, before
+	 * irq_domain_alloc_irqs_parent() runs unlocked below, so a concurrent
+	 * riscv_iommu_ir_attach_paging_domain() can never observe a count that
+	 * is lower than the number of MSIs actually in flight for this device.
 	 */
 	scoped_guard(iommu_group, info->dev) {
 		domain = rcu_dereference_protected(info->domain, true);
 		ret = domain ? riscv_iommu_ir_build_msi_iova(domain, info->dev) : 0;
+		if (!ret)
+			info->nr_msis += nr_irqs;
 	}
 	if (ret)
 		return ret;
 
 	ret = irq_domain_alloc_irqs_parent(irqdomain, irq_base, nr_irqs, arg);
-	if (ret)
+	if (ret) {
+		guard(iommu_group)(info->dev);
+		info->nr_msis -= nr_irqs;
 		return ret;
+	}
 
 	for (i = 0; i < nr_irqs; i++) {
 		data = irq_domain_get_irq_data(irqdomain, irq_base + i);
@@ -139,9 +147,25 @@ static int riscv_iommu_ir_irq_domain_alloc_irqs(struct irq_domain *irqdomain,
 	return 0;
 }
 
+static void riscv_iommu_ir_irq_domain_free_irqs(struct irq_domain *irqdomain,
+						unsigned int irq_base, unsigned int nr_irqs)
+{
+	struct riscv_iommu_info *info = irqdomain->host_data;
+
+	irq_domain_free_irqs_parent(irqdomain, irq_base, nr_irqs);
+
+	/*
+	 * Decrement only after the parent free completes, so a concurrent
+	 * riscv_iommu_ir_attach_paging_domain() never observes a count lower
+	 * than the number of MSIs that are actually still live.
+	 */
+	scoped_guard(iommu_group, info->dev)
+		info->nr_msis -= nr_irqs;
+}
+
 static const struct irq_domain_ops riscv_iommu_ir_irq_domain_ops = {
 	.alloc = riscv_iommu_ir_irq_domain_alloc_irqs,
-	.free = irq_domain_free_irqs_parent,
+	.free = riscv_iommu_ir_irq_domain_free_irqs,
 };
 
 static const struct msi_parent_ops riscv_iommu_ir_msi_parent_ops = {
@@ -213,6 +237,54 @@ void riscv_iommu_ir_irq_domain_remove(struct device *dev, struct riscv_iommu_inf
 int riscv_iommu_ir_attach_paging_domain(struct iommu_domain *iommu_domain, struct device *dev,
 					struct iommu_domain *old)
 {
+	struct riscv_iommu_domain *domain = iommu_domain_to_riscv(iommu_domain);
+	struct riscv_iommu_info *info = dev_iommu_priv_get(dev);
+	struct riscv_iommu_domain *old_domain = NULL;
+	dma_addr_t *msi_iova = NULL;
+
+	if (old && (old->type & __IOMMU_DOMAIN_PAGING))
+		old_domain = iommu_domain_to_riscv(old);
+
+	/*
+	 * Copying is only correct between two IOMMUFD domains: their MSI IOVAs
+	 * come from the fd-wide SW_MSI reservation, so they match across
+	 * domain instances. Every other cookie type derives its MSI IOVAs from
+	 * domain-local allocator state.
+	 */
+	if (old_domain && old_domain->domain.cookie_type == IOMMU_COOKIE_IOMMUFD &&
+	    iommu_domain->cookie_type == IOMMU_COOKIE_IOMMUFD) {
+		scoped_guard(mutex, &old_domain->mutex) {
+			if (old_domain->msi_iova) {
+				msi_iova = kmemdup(old_domain->msi_iova,
+						   riscv_iommu_ir_msi_iova_count() *
+						   sizeof(*msi_iova),
+						   GFP_KERNEL);
+				if (!msi_iova)
+					return -ENOMEM;
+			}
+		}
+
+		if (msi_iova) {
+			guard(mutex)(&domain->mutex);
+
+			if (domain->msi_iova)
+				kfree(msi_iova);
+			else
+				domain->msi_iova = msi_iova;
+
+			return 0;
+		}
+	}
+
+	/*
+	 * No table to copy: build one from scratch if this device has ever
+	 * allocated MSIs, since those MSIs may already be live and expecting
+	 * riscv_iommu_ir_compose_msi_msg() to find a populated table for
+	 * whatever domain is now attached.
+	 */
+	if (info->nr_msis)
+		return riscv_iommu_ir_build_msi_iova(domain, dev);
+
 	return 0;
 }
 

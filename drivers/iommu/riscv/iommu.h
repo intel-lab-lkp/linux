@@ -46,6 +46,8 @@ struct riscv_iommu_info {
 	struct riscv_iommu_domain __rcu *domain;
 	struct irq_domain *irqdomain;
 	struct device *dev;
+	/* Number of currently allocated MSIs; protected by the group mutex */
+	unsigned int nr_msis;
 };
 
 struct riscv_iommu_device;
