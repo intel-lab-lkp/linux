@@ -782,8 +782,14 @@ static int otto_emdio_map_ports(struct device *dev)
 		 * (i.e. clause 45). Select 10GPHY mode if there is at least one PHY that
 		 * declares compatible = "ethernet-phy-ieee802.3-c45".
 		 */
-		if (of_device_is_compatible(phy_dn, "ethernet-phy-ieee802.3-c45"))
+		if (of_device_is_compatible(phy_dn, "ethernet-phy-ieee802.3-c45")) {
+			if (!priv->info->read_c45 || !priv->info->write_c45) {
+				err = dev_err_probe(dev, -EOPNOTSUPP,
+						    "bus %d does not support C45 access\n", bus);
+				goto put_nodes;
+			}
 			priv->smi_bus_is_c45[bus] = true;
+		}
 
 		__set_bit(pn, priv->valid_ports);
 		priv->smi_bus[pn] = bus;
