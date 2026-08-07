@@ -524,6 +524,21 @@ config RTC_DRV_PCF8525
           This driver can also be built as a module. If so, the module
           will be called rtc-pcf8525.
 
+config RTC_DRV_PCF8525_HWMON
+	bool "HWMON support for NXP PCF8525"
+	depends on RTC_DRV_PCF8525 && HWMON && \
+		   !(RTC_DRV_PCF8525=y && HWMON=m)
+	default y
+	help
+	  Say Y here to expose the PCF8525 internal temperature
+	  sensor through the HWMON interface.
+
+	  This option provides temperature input reporting and allows
+	  the temperature measurement update interval to be configured
+	  from userspace.
+
+	  The interface is registered only when HWMON support is enabled
+
 config RTC_DRV_PCF85363
 	tristate "NXP PCF85363"
 	select REGMAP_I2C
