@@ -166,6 +166,8 @@ struct bnxt_qplib_sg_info {
 	u32				npages;
 	u32				pgshft;
 	u32				pgsize;
+#define BNXT_QPLIB_QP_FWO_SHIFT		12      /* FWO is conveyed to firmware in 4K units */
+	u32				fwo_offset;	/* first-word offset into huge page */
 	bool				nopte;
 };
 
@@ -192,7 +194,7 @@ struct bnxt_qplib_hwq {
 	u32				max_elements;
 	u32				depth;
 	u16				element_size;	/* Size of each entry */
-	u16				qe_ppg;	/* queue entry per page */
+	u32				qe_ppg;	/* queue entry per page */
 
 	u32				prod;		/* raw */
 	u32				cons;		/* raw */
@@ -369,7 +371,7 @@ static inline u8 bnxt_qplib_base_pg_size(struct bnxt_qplib_hwq *hwq)
 	u8 pg_size = BNXT_QPLIB_HWRM_PG_SIZE_4K;
 	struct bnxt_qplib_pbl *pbl;
 
-	pbl = &hwq->pbl[PBL_LVL_0];
+	pbl = &hwq->pbl[hwq->level];
 	switch (pbl->pg_size) {
 	case ROCE_PG_SIZE_4K:
 		pg_size = BNXT_QPLIB_HWRM_PG_SIZE_4K;
@@ -637,6 +639,34 @@ static inline bool _is_modify_qp_rate_limit_supported(u16 dev_cap_ext_flags2)
 {
 	return dev_cap_ext_flags2 &
 		CREQ_QUERY_FUNC_RESP_SB_MODIFY_QP_RATE_LIMIT_SUPPORTED;
+}
+
+/* PBL page size encoding values for HWRM commands */
+#define BNXT_QPLIB_HWRM_PBL_PG_SIZE_PG_4K	0x0UL
+#define BNXT_QPLIB_HWRM_PBL_PG_SIZE_PG_8K	0x1UL
+#define BNXT_QPLIB_HWRM_PBL_PG_SIZE_PG_64K	0x2UL
+#define BNXT_QPLIB_HWRM_PBL_PG_SIZE_PG_2M	0x3UL
+#define BNXT_QPLIB_HWRM_PBL_PG_SIZE_PG_8M	0x4UL
+#define BNXT_QPLIB_HWRM_PBL_PG_SIZE_PG_1G	0x5UL
+
+/**
+ * bnxt_re_pbl_size_supported - check if firmware supports non-4K PBL pages
+ * @dev_cap_ext_flags_1: value of the dev_cap_ext_flags_1 field from QUERY_FUNC response
+ *
+ * Returns non-zero if the firmware can accept PBL pages larger than 4K.
+ */
+static inline int bnxt_re_pbl_size_supported(u8 dev_cap_ext_flags_1)
+{
+	return dev_cap_ext_flags_1 &
+		CREQ_QUERY_FUNC_RESP_SB_PBL_PAGE_SIZE_SUPPORTED;
+}
+
+static inline u8 bnxt_qplib_get_pbl_page_size(struct bnxt_qplib_sg_info *sginfo)
+{
+	/* Only 4K PBL pages are supported for now; extend this when QP/CQ
+	 * PBLs start using the larger page sizes sginfo can report.
+	 */
+	return BNXT_QPLIB_HWRM_PBL_PG_SIZE_PG_4K;
 }
 
 #endif /* __BNXT_QPLIB_RES_H__ */

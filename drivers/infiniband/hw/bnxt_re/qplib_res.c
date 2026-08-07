@@ -174,6 +174,25 @@ void bnxt_qplib_free_hwq(struct bnxt_qplib_res *res,
 
 /* All HWQs are power of 2 in size */
 
+/*
+ * At PBL_LVL_0 there is a single PBL entry and firmware uses it as the
+ * literal queue base address rather than walking an indirection table,
+ * so it never applies the FWO field for this level. Adjust fwo_offset
+ * directly into that entry's DMA address instead.
+ */
+static void bnxt_qplib_adjust_lvl0_fwo(struct bnxt_qplib_hwq *hwq,
+				       struct bnxt_qplib_hwq_attr *hwq_attr)
+{
+	struct bnxt_qplib_pbl *pbl;
+
+	if (!hwq->is_user)
+		return;
+
+	pbl = &hwq->pbl[PBL_LVL_0];
+	pbl->pg_map_arr[0] += hwq_attr->sginfo->fwo_offset;
+	hwq_attr->sginfo->fwo_offset = 0;
+}
+
 int bnxt_qplib_alloc_init_hwq(struct bnxt_qplib_hwq *hwq,
 			      struct bnxt_qplib_hwq_attr *hwq_attr)
 {
@@ -220,6 +239,8 @@ int bnxt_qplib_alloc_init_hwq(struct bnxt_qplib_hwq *hwq,
 		if (rc)
 			goto fail;
 		hwq->level = PBL_LVL_0;
+		if (hwq_attr->type == HWQ_TYPE_QUEUE)
+			bnxt_qplib_adjust_lvl0_fwo(hwq, hwq_attr);
 		goto done;
 	}
 

@@ -79,6 +79,8 @@ struct bnxt_qplib_dev_attr {
 	u32                             max_dpi;
 	u16				rate_limit_min;
 	u32				rate_limit_max;
+	u8				dev_cap_ext_flags_1;
+	u64				page_size_cap;
 };
 
 struct bnxt_qplib_pd {

@@ -2244,7 +2244,9 @@ struct creq_query_func_resp_sb {
 	__le16	max_inline_data_var_wqe;
 	__le32	start_qid;
 	u8	max_msn_table_size;
-	u8	reserved8_1;
+	u8	dev_cap_ext_flags_1;
+	#define CREQ_QUERY_FUNC_RESP_SB_PBL_PAGE_SIZE_SUPPORTED		0x1UL
+	#define CREQ_QUERY_FUNC_RESP_SB_WQE_INLINE_OPTIMIZER_SUPPORTED	0x20UL
 	__le16	dev_cap_ext_flags_2;
 	#define CREQ_QUERY_FUNC_RESP_SB_OPTIMIZE_MODIFY_QP_SUPPORTED             0x1UL
 	#define CREQ_QUERY_FUNC_RESP_SB_CHANGE_UDP_SRC_PORT_WQE_SUPPORTED        0x2UL

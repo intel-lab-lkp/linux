@@ -1141,23 +1141,42 @@ static int bnxt_re_setup_swqe_size(struct bnxt_re_qp *qp,
 	return 0;
 }
 
+static int bnxt_re_get_page_shift(struct ib_umem *umem, u64 va, u64 cmask)
+{
+	unsigned long pgsz;
+
+	pgsz = ib_umem_find_best_pgsz(umem, cmask, va);
+	if (!pgsz)
+		return -EINVAL;
+	return __ffs(pgsz);
+}
+
 static int bnxt_re_setup_sginfo(struct bnxt_re_dev *rdev,
 				struct ib_umem *umem,
 				struct bnxt_qplib_sg_info *sginfo)
 {
+	struct bnxt_qplib_dev_attr *dev_attr = rdev->dev_attr;
 	unsigned long page_size;
+	int page_shift;
 
 	if (!umem)
 		return -EINVAL;
 
-	page_size = ib_umem_find_best_pgsz(umem, SZ_4K, 0);
-	if (!page_size || page_size != SZ_4K)
-		return -EINVAL;
+	if (bnxt_re_pbl_size_supported(dev_attr->dev_cap_ext_flags_1)) {
+		page_shift = bnxt_re_get_page_shift(umem, umem->address, dev_attr->page_size_cap);
+		if (page_shift < 0)
+			return page_shift;
+	} else {
+		page_shift = __builtin_ctz(SZ_4K);
+	}
 
+	page_size = BIT(page_shift);
 	sginfo->umem = umem;
 	sginfo->npages = ib_umem_num_dma_blocks(umem, page_size);
 	sginfo->pgsize = page_size;
-	sginfo->pgshft = __builtin_ctz(page_size);
+	sginfo->pgshft = page_shift;
+	sginfo->fwo_offset = ib_umem_dma_offset(umem, page_size);
+
 	return 0;
 }
 
@@ -1224,6 +1243,15 @@ static int bnxt_re_init_user_qp(struct bnxt_re_dev *rdev, struct bnxt_re_pd *pd,
 	if (rc)
 		goto fail;
 
+	/*
+	 * The FWO field passed in the CREATE_QP command is expressed in 4K
+	 * units, so the offset must be a multiple of 4K.
+	 */
+	if (qplib_qp->sq.sg_info.fwo_offset & (SZ_4K - 1)) {
+		rc = -EINVAL;
+		goto fail;
+	}
+
 	if (qp->qplib_qp.srq)
 		goto done;
 
@@ -1241,6 +1269,11 @@ static int bnxt_re_init_user_qp(struct bnxt_re_dev *rdev, struct bnxt_re_pd *pd,
 	rc = bnxt_re_setup_sginfo(rdev, qp->rumem, &qplib_qp->rq.sg_info);
 	if (rc)
 		goto rqfail;
+
+	if (qplib_qp->rq.sg_info.fwo_offset & (SZ_4K - 1)) {
+		rc = -EINVAL;
+		goto rqfail;
+	}
 
 done:
 	if (dbr_obj)
