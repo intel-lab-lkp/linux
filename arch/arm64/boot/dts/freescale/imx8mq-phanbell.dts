@@ -46,6 +46,41 @@
 		pinctrl-0 = <&pinctrl_gpio_fan>;
 		status = "okay";
 	};
+
+	sound-analog {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "Coral Analog";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,bitclock-master = <&sound_analog_cpu>;
+		simple-audio-card,frame-master = <&sound_analog_cpu>;
+		simple-audio-card,mclk-fs = <256>;
+
+		simple-audio-card,widgets = "Headphone", "Headphone Jack",
+					    "Microphone", "Headphone Mic",
+					    "Microphone", "Internal Mic";
+
+		simple-audio-card,routing = "Headphone Jack", "HPOL",
+					    "Headphone Jack", "HPOR",
+					    "Headphone Mic", "micbias1",
+					    "DMIC L1", "Internal Mic",
+					    "DMIC R1", "Internal Mic";
+
+		/*
+		 * 32 bit slots regardless of the sample width. sai2 divides its
+		 * 24.576 MHz root by an even integer only, so a 24 bit frame at
+		 * 48 kHz would ask for 2.304 MHz, a ratio of 10.67.
+		 */
+		sound_analog_cpu: simple-audio-card,cpu {
+			sound-dai = <&sai2>;
+			system-clock-direction-out;
+			dai-tdm-slot-num = <2>;
+			dai-tdm-slot-width = <32>;
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&rt5645>;
+		};
+	};
 };
 
 &A53_0 {
@@ -272,6 +307,18 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c3>;
 	status = "okay";
+
+	rt5645: audio-codec@1a {
+		compatible = "realtek,rt5645";
+		reg = <0x1a>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_hp_det>;
+		#sound-dai-cells = <0>;
+		interrupt-parent = <&gpio5>;
+		interrupts = <4 IRQ_TYPE_EDGE_BOTH>;
+		hp-detect-gpios = <&gpio5 4 GPIO_ACTIVE_HIGH>;
+		realtek,dmic1-data-pin = <2>;
+	};
 };
 
 &fec1 {
@@ -293,6 +340,27 @@
 			reset-deassert-us = <50000>;
 		};
 	};
+};
+
+&sai2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_sai2>;
+	/*
+	 * pll8k and pll11k let fsl_sai move the mclk between the two
+	 * audio PLL families, so 44.1 kHz rates work as well as 48 kHz.
+	 */
+	clocks = <&clk IMX8MQ_CLK_SAI2_IPG>,
+		 <&clk IMX8MQ_CLK_SAI2_ROOT>,
+		 <&clk IMX8MQ_CLK_DUMMY>, <&clk IMX8MQ_CLK_DUMMY>,
+		 <&clk IMX8MQ_AUDIO_PLL1_OUT>,
+		 <&clk IMX8MQ_AUDIO_PLL2_OUT>;
+	clock-names = "bus", "mclk1", "mclk2", "mclk3",
+		      "pll8k", "pll11k";
+	assigned-clocks = <&clk IMX8MQ_CLK_SAI2>;
+	assigned-clock-parents = <&clk IMX8MQ_AUDIO_PLL1_OUT>;
+	assigned-clock-rates = <24576000>;
+	fsl,sai-mclk-direction-output;
+	status = "okay";
 };
 
 &uart1 {
@@ -383,6 +451,12 @@
 		>;
 	};
 
+	pinctrl_hp_det: hpdetgrp {
+		fsl,pins = <
+			MX8MQ_IOMUXC_SPDIF_RX_GPIO5_IO4			0xd6
+		>;
+	};
+
 	pinctrl_i2c1: i2c1grp {
 		fsl,pins = <
 			MX8MQ_IOMUXC_I2C1_SCL_I2C1_SCL			0x4000007f
@@ -407,6 +481,16 @@
 	pinctrl_pmic: pmicirqgrp {
 		fsl,pins = <
 			MX8MQ_IOMUXC_GPIO1_IO03_GPIO1_IO3	0x41
+		>;
+	};
+
+	pinctrl_sai2: sai2grp {
+		fsl,pins = <
+			MX8MQ_IOMUXC_SAI2_MCLK_SAI2_MCLK		0xd6
+			MX8MQ_IOMUXC_SAI2_TXFS_SAI2_TX_SYNC		0xd6
+			MX8MQ_IOMUXC_SAI2_TXC_SAI2_TX_BCLK		0xd6
+			MX8MQ_IOMUXC_SAI2_TXD0_SAI2_TX_DATA0		0xd6
+			MX8MQ_IOMUXC_SAI2_RXD0_SAI2_RX_DATA0		0xd6
 		>;
 	};
 
