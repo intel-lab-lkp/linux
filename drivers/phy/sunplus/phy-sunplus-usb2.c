@@ -81,7 +81,7 @@ static int update_disc_vol(struct sp_usbphy *usbphy)
 	char *disc_name = "disc_vol";
 	ssize_t otp_l = 0;
 	char *otp_v;
-	u32 val, set;
+	u32 val, set = OTP_DISC_LEVEL_DEFAULT;
 
 	cell = nvmem_cell_get(usbphy->dev, disc_name);
 	if (IS_ERR_OR_NULL(cell)) {
@@ -96,10 +96,10 @@ static int update_disc_vol(struct sp_usbphy *usbphy)
 		set = *(otp_v + 1);
 		set = (set << (sizeof(char) * 8)) | *otp_v;
 		set = (set >> usbphy->disc_vol_addr_off) & J_DISC;
+		if (set == 0)
+			set = OTP_DISC_LEVEL_DEFAULT;
+		kfree(otp_v);
 	}
-
-	if (IS_ERR(otp_v) || set == 0)
-		set = OTP_DISC_LEVEL_DEFAULT;
 
 	val = readl(usbphy->phy_regs + CONFIG7);
 	val = (val & ~J_DISC) | set;
