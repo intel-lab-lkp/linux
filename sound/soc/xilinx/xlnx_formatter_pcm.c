@@ -426,15 +426,19 @@ static int xlnx_formatter_pcm_close(struct snd_soc_component *component,
 	int ret;
 	struct xlnx_pcm_stream_param *stream_data =
 			substream->runtime->private_data;
+	struct xlnx_pcm_drv_data *adata = dev_get_drvdata(component->dev);
 
-	ret = xlnx_formatter_pcm_reset(stream_data->mmio);
-	if (ret) {
-		dev_err(component->dev, "audio formatter reset failed\n");
-		goto err_reset;
-	}
 	xlnx_formatter_disable_irqs(stream_data->mmio, substream->stream);
 
-err_reset:
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		adata->play_stream = NULL;
+	else
+		adata->capture_stream = NULL;
+
+	ret = xlnx_formatter_pcm_reset(stream_data->mmio);
+	if (ret)
+		dev_err(component->dev, "audio formatter reset failed\n");
+
 	kfree(stream_data);
 	return 0;
 }
