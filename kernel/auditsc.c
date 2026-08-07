@@ -861,6 +861,16 @@ static void audit_filter_uring(struct task_struct *tsk,
 	rcu_read_unlock();
 }
 
+static inline bool audit_exit_filter_may_match(unsigned long syscall)
+{
+	u32 word;
+
+	if (syscall >= AUDIT_BITMASK_SIZE * 32)
+		return false;
+	word = AUDIT_WORD(syscall);
+	return READ_ONCE(audit_exit_filter_mask[word]) & AUDIT_BIT(syscall);
+}
+
 /* At syscall exit time, this filter is called if the audit_state is
  * not low enough that auditing cannot take place, but is also not
  * high enough that we already know we have to write an audit record
@@ -870,6 +880,9 @@ static void audit_filter_syscall(struct task_struct *tsk,
 				 struct audit_context *ctx)
 {
 	if (auditd_test_task(tsk))
+		return;
+
+	if (!audit_exit_filter_may_match(ctx->major))
 		return;
 
 	rcu_read_lock();

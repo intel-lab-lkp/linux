@@ -272,6 +272,8 @@ extern void audit_put_tty(struct tty_struct *tty);
 /* audit watch/mark/tree functions */
 extern unsigned int audit_serial(void);
 #ifdef CONFIG_AUDITSYSCALL
+extern u32 audit_exit_filter_mask[AUDIT_BITMASK_SIZE];
+
 void audit_rule_account(const struct audit_krule *rule);
 void audit_rule_unaccount(const struct audit_krule *rule);
 

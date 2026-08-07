@@ -196,6 +196,54 @@ int audit_match_class(int class, unsigned int syscall)
 }
 
 #ifdef CONFIG_AUDITSYSCALL
+/*
+ * The mask provides a quick rejection test for syscalls which cannot match an
+ * exit filter rule.  The counters and mask updates are protected by
+ * audit_filter_mutex; the mask is read locklessly in the syscall exit path.
+ *
+ * The mask is intentionally architecture-independent.  Syscall number
+ * overlap between architectures can only cause an unnecessary filter scan.
+ */
+u32 audit_exit_filter_mask[AUDIT_BITMASK_SIZE] __read_mostly;
+static unsigned int audit_exit_filter_count[AUDIT_BITMASK_SIZE * 32];
+
+static void audit_exit_mask_update(const struct audit_krule *rule, bool add)
+{
+	unsigned int bit, index, word;
+	u32 mask, rule_mask;
+
+	lockdep_assert_held(&audit_filter_mutex);
+
+	for (word = 0; word < AUDIT_BITMASK_SIZE; word++) {
+		mask = READ_ONCE(audit_exit_filter_mask[word]);
+		rule_mask = rule->mask[word];
+		if (!rule_mask)
+			continue;
+		while (rule_mask) {
+			bit = __ffs(rule_mask);
+			index = word * 32 + bit;
+			if (add) {
+				if (!audit_exit_filter_count[index]++)
+					mask |= BIT(bit);
+			} else if (!--audit_exit_filter_count[index]) {
+				mask &= ~BIT(bit);
+			}
+			rule_mask &= ~BIT(bit);
+		}
+		WRITE_ONCE(audit_exit_filter_mask[word], mask);
+	}
+}
+
+static void audit_exit_mask_add(const struct audit_krule *rule)
+{
+	audit_exit_mask_update(rule, true);
+}
+
+static void audit_exit_mask_remove(const struct audit_krule *rule)
+{
+	audit_exit_mask_update(rule, false);
+}
+
 static inline int audit_match_class_bits(int class, const u32 *mask)
 {
 	int i;
@@ -249,6 +297,9 @@ void audit_rule_account(const struct audit_krule *rule)
 {
 	lockdep_assert_held(&audit_filter_mutex);
 
+	if (rule->listnr == AUDIT_FILTER_EXIT)
+		audit_exit_mask_add(rule);
+
 	if (audit_rule_counts_syscalls(rule))
 		audit_n_rules++;
 	if (!audit_match_signal(rule))
@@ -258,6 +309,9 @@ void audit_rule_account(const struct audit_krule *rule)
 void audit_rule_unaccount(const struct audit_krule *rule)
 {
 	lockdep_assert_held(&audit_filter_mutex);
+
+	if (rule->listnr == AUDIT_FILTER_EXIT)
+		audit_exit_mask_remove(rule);
 
 	if (audit_rule_counts_syscalls(rule))
 		audit_n_rules--;
@@ -1018,6 +1072,7 @@ static inline int audit_add_rule(struct audit_entry *entry)
 			entry->rule.prio = --prio_low;
 	}
 
+	audit_rule_account(&entry->rule);
 	if (entry->rule.flags & AUDIT_FILTER_PREPEND) {
 		list_add(&entry->rule.list,
 			 &audit_rules_list[entry->rule.listnr]);
@@ -1028,7 +1083,6 @@ static inline int audit_add_rule(struct audit_entry *entry)
 			      &audit_rules_list[entry->rule.listnr]);
 		list_add_tail_rcu(&entry->list, list);
 	}
-	audit_rule_account(&entry->rule);
 	mutex_unlock(&audit_filter_mutex);
 
 	return err;
