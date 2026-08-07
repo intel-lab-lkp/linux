@@ -29,6 +29,8 @@
 #include <linux/string.h>
 #include <linux/types.h>
 
+#include <net/netdev_queues.h>
+
 #include "xilinx_tsn.h"
 
 #define DRIVER_NAME			"xilinx_tsn_ep"
@@ -97,6 +99,7 @@ struct xlnx_tsn_ep_dma_chan {
  * @ndev: the conduit netdev ("ep")
  * @dev: backing device
  * @regs: EP MAC register window
+ * @tx_lock: protects TX ring head/tail and SKB ring slots
  * @num_tx_queues: number of TX DMA channels (one per priority)
  * @num_rx_queues: number of RX DMA channels
  * @tx_dma_chan_map: logical TX queue index -> physical DMA channel number
@@ -109,6 +112,8 @@ struct xlnx_tsn_ep {
 	struct net_device *ndev;
 	struct device *dev;
 	void __iomem *regs;
+
+	spinlock_t tx_lock;	/* protects TX ring buffers */
 
 	u32 num_tx_queues;
 	u32 num_rx_queues;
@@ -268,8 +273,145 @@ submit_new:
 	dma_async_issue_pending(xchan->chan);
 }
 
+static void ep_dma_tx_cb(void *data, const struct dmaengine_result *result)
+{
+	struct xlnx_tsn_ep_dma_chan *xchan = data;
+	struct skbuf_dma_descriptor *skbuf_dma;
+	struct xlnx_tsn_ep *ep = xchan->ep;
+	struct netdev_queue *txq;
+	struct net_device *ndev;
+	struct scatterlist *sgl;
+	struct sk_buff *skb;
+	int sg_len;
+	int len;
+
+	scoped_guard(spinlock, &ep->tx_lock) {
+		skbuf_dma = ep_get_desc(xchan,
+					xchan->ring_tail & (TX_BD_NUM_DEFAULT - 1));
+		if (!skbuf_dma || !skbuf_dma->skb)
+			return;
+
+		skb = skbuf_dma->skb;
+		sgl = skbuf_dma->sgl;
+		sg_len = skbuf_dma->sg_len;
+
+		dma_unmap_sg(xchan->dma_dev, sgl, sg_len, DMA_TO_DEVICE);
+
+		skbuf_dma->skb = NULL;
+		xchan->ring_tail++;
+	}
+
+	ndev = skb->dev;
+	txq = netdev_get_tx_queue(ndev, skb_get_queue_mapping(skb));
+	len = skb->len;
+
+	if (unlikely(result->result != DMA_TRANS_NOERROR)) {
+		DEV_STATS_INC(ndev, tx_errors);
+	} else {
+		DEV_STATS_INC(ndev, tx_packets);
+		DEV_STATS_ADD(ndev, tx_bytes, len);
+	}
+
+	dev_consume_skb_any(skb);
+	netif_txq_completed_wake(txq, 1, len,
+				 CIRC_SPACE(READ_ONCE(xchan->ring_head),
+					    READ_ONCE(xchan->ring_tail),
+					    TX_BD_NUM_DEFAULT), 2);
+}
+
 static netdev_tx_t ep_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 {
+	struct dma_async_tx_descriptor *dma_tx_desc;
+	struct xlnx_tsn_ep *ep = netdev_priv(ndev);
+	struct skbuf_dma_descriptor *skbuf_dma;
+	int queue = skb_get_queue_mapping(skb);
+	struct xlnx_tsn_ep_dma_chan *xchan;
+	struct dma_device *dma_dev;
+	struct netdev_queue *txq;
+	int sg_len, nents, ret;
+	u32 phys_chan;
+
+	if (unlikely(queue >= ep->num_tx_queues)) {
+		if (net_ratelimit())
+			netdev_warn(ndev, "Invalid TX queue %d (max %u)\n",
+				    queue, ep->num_tx_queues);
+		goto err_drop_skb;
+	}
+
+	phys_chan = ep->tx_dma_chan_map[queue];
+	if (phys_chan == TSN_DMA_CH_INVALID) {
+		if (net_ratelimit())
+			netdev_warn(ndev, "Logical TX queue %d has invalid DMA mapping\n",
+				    queue);
+		goto err_drop_skb;
+	}
+
+	xchan = ep->tx_chans[phys_chan];
+	dma_dev = xchan->chan->device;
+
+	sg_len = skb_shinfo(skb)->nr_frags + 1;
+	txq = netdev_get_tx_queue(ndev, queue);
+
+	spin_lock_bh(&ep->tx_lock);
+	if (CIRC_SPACE(xchan->ring_head, READ_ONCE(xchan->ring_tail),
+		       TX_BD_NUM_DEFAULT) <= 1) {
+		netif_txq_try_stop(txq,
+				   CIRC_SPACE(xchan->ring_head,
+					      READ_ONCE(xchan->ring_tail),
+					      TX_BD_NUM_DEFAULT),
+				   2);
+		spin_unlock_bh(&ep->tx_lock);
+		if (net_ratelimit())
+			netdev_warn(ndev, "TSN TX ring full\n");
+
+		return NETDEV_TX_BUSY;
+	}
+
+	skbuf_dma = ep_get_desc(xchan, xchan->ring_head & (TX_BD_NUM_DEFAULT - 1));
+	if (!skbuf_dma) {
+		spin_unlock_bh(&ep->tx_lock);
+		goto err_drop_skb;
+	}
+	spin_unlock_bh(&ep->tx_lock);
+
+	sg_init_table(skbuf_dma->sgl, sg_len);
+	ret = skb_to_sgvec(skb, skbuf_dma->sgl, 0, skb->len);
+	if (ret < 0)
+		goto err_drop_skb;
+
+	nents = dma_map_sg(xchan->dma_dev, skbuf_dma->sgl, sg_len, DMA_TO_DEVICE);
+	if (!nents)
+		goto err_drop_skb;
+
+	dma_tx_desc = dma_dev->device_prep_slave_sg(xchan->chan, skbuf_dma->sgl,
+						    nents, DMA_MEM_TO_DEV,
+						    DMA_PREP_INTERRUPT, NULL);
+	if (!dma_tx_desc)
+		goto err_unmap_sg;
+
+	skbuf_dma->skb = skb;
+	skbuf_dma->sg_len = sg_len;
+	dma_tx_desc->callback_param = xchan;
+	dma_tx_desc->callback_result = ep_dma_tx_cb;
+
+	spin_lock_bh(&ep->tx_lock);
+	xchan->ring_head++;
+	netdev_tx_sent_queue(txq, skb->len);
+	netif_txq_maybe_stop(txq,
+			     CIRC_SPACE(xchan->ring_head,
+					READ_ONCE(xchan->ring_tail),
+					TX_BD_NUM_DEFAULT),
+			     2, 2);
+	spin_unlock_bh(&ep->tx_lock);
+
+	dmaengine_submit(dma_tx_desc);
+	dma_async_issue_pending(xchan->chan);
+
+	return NETDEV_TX_OK;
+
+err_unmap_sg:
+	dma_unmap_sg(xchan->dma_dev, skbuf_dma->sgl, sg_len, DMA_TO_DEVICE);
+err_drop_skb:
 	dev_kfree_skb(skb);
 	DEV_STATS_INC(ndev, tx_dropped);
 	return NETDEV_TX_OK;
@@ -304,10 +446,13 @@ static int ep_open(struct net_device *ndev)
 static int ep_stop(struct net_device *ndev)
 {
 	struct xlnx_tsn_ep *ep = netdev_priv(ndev);
+	unsigned int i;
 
 	netif_tx_disable(ndev);
 	WRITE_ONCE(ep->closing, true);
 	ep_exit_dmaengine(ep);
+	for (i = 0; i < ndev->num_tx_queues; i++)
+		netdev_tx_reset_subqueue(ndev, i);
 
 	return 0;
 }
@@ -657,6 +802,7 @@ static int xlnx_tsn_ep_probe(struct platform_device *pdev)
 	ep->num_tx_queues = num_tx;
 	ep->num_rx_queues = num_rx;
 	ep->max_frm_size = TSN_MAX_VLAN_FRAME_SIZE;
+	spin_lock_init(&ep->tx_lock);
 
 	for (i = 0; i < TSN_MAX_TX_QUEUE; i++)
 		ep->tx_dma_chan_map[i] = TSN_DMA_CH_INVALID;
