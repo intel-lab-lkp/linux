@@ -495,6 +495,19 @@ static int xlnx_tsn_port_set_mac_address(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+static int xlnx_tsn_port_bridge_join(struct dsa_switch *ds, int port,
+				     struct dsa_bridge bridge,
+				     bool *tx_fwd_offload,
+				     struct netlink_ext_ack *extack)
+{
+	/* The switch fabric replicates flooded frames per egress port
+	 * on its own, so the bridge does not need to clone-and-send.
+	 */
+	*tx_fwd_offload = true;
+
+	return 0;
+}
+
 static void xlnx_tsn_port_stp_state_set(struct dsa_switch *ds, int port,
 					u8 state)
 {
@@ -729,6 +742,7 @@ static const struct dsa_switch_ops xlnx_tsn_switch_ops = {
 	.setup			= xlnx_tsn_setup,
 	.teardown		= xlnx_tsn_teardown,
 	.port_set_mac_address	= xlnx_tsn_port_set_mac_address,
+	.port_bridge_join	= xlnx_tsn_port_bridge_join,
 	.port_stp_state_set	= xlnx_tsn_port_stp_state_set,
 	.port_hwtstamp_get	= xlnx_tsn_port_hwtstamp_get,
 	.port_hwtstamp_set	= xlnx_tsn_port_hwtstamp_set,
@@ -785,6 +799,9 @@ static int xlnx_tsn_probe(struct platform_device *pdev)
 	ds->ops = &xlnx_tsn_switch_ops;
 	ds->phylink_mac_ops = &xlnx_tsn_phylink_mac_ops;
 	ds->priv = sw;
+
+	/* The fabric offloads a single bridge across the user ports. */
+	ds->max_num_bridges = 1;
 
 	platform_set_drvdata(pdev, sw);
 
