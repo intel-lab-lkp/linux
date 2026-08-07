@@ -597,8 +597,11 @@ void snd_ump_update_group_attrs(struct snd_ump_endpoint *ump)
 			}
 			if (!*fb->info.name)
 				continue;
-			if (*group->name)
-				strlcat(group->name, ", ", sizeof(group->name));
+			if (*group->name) {
+				int len = strlen(group->name);
+
+				strscpy(group->name + len, ", ", sizeof(group->name) - len);
+			}
 			safe_append_string(group->name, sizeof(group->name),
 					   fb->info.name, sizeof(fb->info.name));
 		}
