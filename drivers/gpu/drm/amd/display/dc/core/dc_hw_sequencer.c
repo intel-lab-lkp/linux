@@ -60,6 +60,7 @@ enum dc_color_space_type {
 	COLOR_SPACE_YCBCR601_TYPE,
 	COLOR_SPACE_YCBCR709_TYPE,
 	COLOR_SPACE_YCBCR2020_TYPE,
+	COLOR_SPACE_YCBCR2020_LIMITED_TYPE,
 	COLOR_SPACE_YCBCR601_LIMITED_TYPE,
 	COLOR_SPACE_YCBCR709_LIMITED_TYPE,
 	COLOR_SPACE_YCBCR709_BLACK_TYPE,
@@ -115,6 +116,10 @@ static const struct out_csc_color_matrix_type output_csc_matrix[] = {
 		{ 0x1000, 0xF149, 0xFEB7, 0x1004,
 		  0x0868, 0x15B2, 0x01E6, 0x201,
 		  0xFB88, 0xF478, 0x1000, 0x1004} },
+	{ COLOR_SPACE_YCBCR2020_LIMITED_TYPE,
+		{ 0x0E0E, 0xF313, 0xFEDF, 0x1004,
+		  0x0738, 0x12A2, 0x01A1, 0x0201,
+		  0xFC13, 0xF5DF, 0x0E0E, 0x1004} },
 	{ COLOR_SPACE_YCBCR709_BLACK_TYPE,
 		{ 0x0000, 0x0000, 0x0000, 0x1000,
 		  0x0000, 0x0000, 0x0000, 0x0200,
@@ -185,7 +190,16 @@ static bool is_ycbcr2020_type(
 {
 	bool ret = false;
 
-	if (color_space == COLOR_SPACE_2020_YCBCR_LIMITED || color_space == COLOR_SPACE_2020_YCBCR_FULL)
+	if (color_space == COLOR_SPACE_2020_YCBCR_FULL)
+		ret = true;
+	return ret;
+}
+
+static bool is_ycbcr2020_limited_type(enum dc_color_space color_space)
+{
+	bool ret = false;
+
+	if (color_space == COLOR_SPACE_2020_YCBCR_LIMITED)
 		ret = true;
 	return ret;
 }
@@ -216,6 +230,8 @@ static enum dc_color_space_type get_color_space_type(enum dc_color_space color_s
 		type = COLOR_SPACE_YCBCR601_LIMITED_TYPE;
 	else if (is_ycbcr709_limited_type(color_space))
 		type = COLOR_SPACE_YCBCR709_LIMITED_TYPE;
+	else if (is_ycbcr2020_limited_type(color_space))
+		type = COLOR_SPACE_YCBCR2020_LIMITED_TYPE;
 	else if (is_ycbcr2020_type(color_space))
 		type = COLOR_SPACE_YCBCR2020_TYPE;
 	else if (color_space == COLOR_SPACE_YCBCR709)
