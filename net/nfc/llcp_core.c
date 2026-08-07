@@ -635,23 +635,29 @@ out:
 	return ret;
 }
 
-u8 *nfc_llcp_general_bytes(struct nfc_dev *dev, size_t *general_bytes_len)
+u8 *nfc_llcp_general_bytes(struct nfc_dev *dev, u8 *out_gb, size_t gb_max_len, size_t *general_bytes_len)
 {
 	struct nfc_llcp_local *local;
 
-	local = nfc_llcp_find_local(dev);
-	if (local == NULL) {
-		*general_bytes_len = 0;
+	if (!out_gb || !general_bytes_len)
 		return NULL;
-	}
+
+	*general_bytes_len = 0;
+
+	local = nfc_llcp_find_local(dev);
+	if (local == NULL)
+		return NULL;
 
 	nfc_llcp_build_gb(local);
 
-	*general_bytes_len = local->gb_len;
+	if (local->gb && local->gb_len) {
+		*general_bytes_len = min_t(size_t, local->gb_len, gb_max_len);
+		memcpy(out_gb, local->gb, *general_bytes_len);
+	}
 
 	nfc_llcp_local_put(local);
 
-	return local->gb;
+	return out_gb;
 }
 
 int nfc_llcp_set_remote_gb(struct nfc_dev *dev, const u8 *gb, u8 gb_len)

@@ -780,9 +780,10 @@ static int nci_set_local_general_bytes(struct nfc_dev *nfc_dev)
 {
 	struct nci_dev *ndev = nfc_get_drvdata(nfc_dev);
 	struct nci_set_config_param param;
+	u8 local_gb[NFC_MAX_GT_LEN];
 	int rc;
 
-	param.val = nfc_get_local_general_bytes(nfc_dev, &param.len);
+	param.val = nfc_get_local_general_bytes(nfc_dev, local_gb, sizeof(local_gb), &param.len);
 	if ((param.val == NULL) || (param.len == 0))
 		return 0;
 
