@@ -795,12 +795,14 @@ static void __init early_pci_scan_bus(int bus)
 	int slot, func;
 
 	/* Poor man's PCI discovery */
-	for (slot = 0; slot < 32; slot++)
-		for (func = 0; func < 8; func++) {
-			/* Only probe function 0 on single fn devices */
-			if (check_dev_quirk(bus, slot, func))
-				break;
-		}
+	for (slot = 0; slot < 32; slot++) {
+		/* Only multifunction devices may have functions 1-7 */
+		if (check_dev_quirk(bus, slot, 0))
+			continue;
+
+		for (func = 1; func < 8; func++)
+			check_dev_quirk(bus, slot, func);
+	}
 }
 
 void __init early_quirks(void)
