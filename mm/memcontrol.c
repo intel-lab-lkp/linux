@@ -5717,6 +5717,41 @@ void mem_cgroup_replace_folio(struct folio *old, struct folio *new)
 }
 
 /**
+ * mem_cgroup_migrate_charge - Charge a migration destination up front.
+ * @src: Folio being migrated away from.
+ * @dst: Folio being migrated to.
+ * @force: Charge even if the destination tier is at its limit.
+ *
+ * Folio migrations result in a net 0 memcg charge, but the node location of the
+ * charge may change during promotions or demotions. When this happens, charge
+ * @dst in its own right instead of inheriting @src's charge.
+ *
+ * Return: 0, or -ENOMEM if @dst could not be charged.
+ */
+int mem_cgroup_migrate_charge(struct folio *src, struct folio *dst, bool force)
+{
+	struct mem_cgroup *memcg;
+	gfp_t gfp = GFP_KERNEL;
+	int ret;
+
+	if (mem_cgroup_disabled() || !folio_memcg_charged(src))
+		return 0;
+
+	if (!mem_cgroup_tiered_limits() ||
+	    nid_tier_slot(folio_nid(src)) == nid_tier_slot(folio_nid(dst)))
+		return 0;
+
+	/* Refuse the migration if the first reclaim round fails */
+	gfp |= force ? __GFP_NOFAIL : __GFP_NORETRY;
+
+	memcg = get_mem_cgroup_from_folio(src);
+	ret = charge_memcg(dst, memcg, gfp);
+	mem_cgroup_put(memcg);
+
+	return ret;
+}
+
+/**
  * mem_cgroup_migrate - Transfer the memcg data from the old to the new folio.
  * @old: Currently circulating folio.
  * @new: Replacement folio.

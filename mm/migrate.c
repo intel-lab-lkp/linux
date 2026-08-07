@@ -862,7 +862,13 @@ void folio_migrate_flags(struct folio *newfolio, struct folio *folio)
 	folio_copy_owner(newfolio, folio);
 	pgalloc_tag_swap(newfolio, folio);
 
-	mem_cgroup_migrate(folio, newfolio);
+	/*
+	 * For failable memcg charge transfers (demotion / promotion) the charge
+	 * has already been transferred at this point. For everyone else simply
+	 * transfer the charge here, where it can no longer fail.
+	 */
+	if (!folio_memcg_charged(newfolio))
+		mem_cgroup_migrate(folio, newfolio);
 }
 EXPORT_SYMBOL(folio_migrate_flags);
 
@@ -1216,7 +1222,7 @@ static void migrate_folio_done(struct folio *src,
 static int migrate_folio_unmap(new_folio_t get_new_folio,
 		free_folio_t put_new_folio, unsigned long private,
 		struct folio *src, struct folio **dstp, enum migrate_mode mode,
-		struct list_head *ret)
+		bool force_charge, struct list_head *ret)
 {
 	struct folio *dst;
 	int rc = -EAGAIN;
@@ -1228,6 +1234,17 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	dst = get_new_folio(src, private);
 	if (!dst)
 		return -ENOMEM;
+
+	if (mem_cgroup_migrate_charge(src, dst, force_charge)) {
+		if (put_new_folio)
+			put_new_folio(dst, private);
+		else
+			folio_put(dst);
+		if (ret)
+			list_move_tail(&src->lru, ret);
+		return -EBUSY;
+	}
+
 	*dstp = dst;
 
 	dst->migrate_info = 0;
@@ -1918,8 +1935,15 @@ static int migrate_pages_batch(struct list_head *from,
 				continue;
 			}
 
+			/*
+			 * Hotplug must not be refused: offline_pages() retries
+			 * indefinitely and ignores migration failures, so a
+			 * refusal would hang it rather than fail it.
+			 */
 			rc = migrate_folio_unmap(get_new_folio, put_new_folio,
-					private, folio, &dst, mode, ret_folios);
+					private, folio, &dst, mode,
+					reason == MR_MEMORY_HOTPLUG,
+					ret_folios);
 			/*
 			 * The rules are:
 			 *	0: folio will be put on unmap_folios list,

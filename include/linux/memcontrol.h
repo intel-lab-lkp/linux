@@ -708,6 +708,8 @@ static inline void mem_cgroup_uncharge_folios(struct folio_batch *folios)
 
 void mem_cgroup_replace_folio(struct folio *old, struct folio *new);
 void mem_cgroup_migrate(struct folio *old, struct folio *new);
+int mem_cgroup_migrate_charge(struct folio *src, struct folio *dst,
+			      bool force);
 
 /**
  * mem_cgroup_lruvec - get the lru list vector for a memcg & node
@@ -1202,6 +1204,12 @@ static inline void mem_cgroup_replace_folio(struct folio *old,
 
 static inline void mem_cgroup_migrate(struct folio *old, struct folio *new)
 {
+}
+
+static inline int mem_cgroup_migrate_charge(struct folio *src,
+					    struct folio *dst, bool force)
+{
+	return 0;
 }
 
 static inline struct lruvec *mem_cgroup_lruvec(struct mem_cgroup *memcg,
