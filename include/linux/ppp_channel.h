@@ -79,11 +79,11 @@ extern char *ppp_dev_name(struct ppp_channel *);
 
 /*
  * SMP locking notes:
- * The channel code must ensure that when it calls ppp_unregister_channel,
- * nothing is executing in any of the procedures above, for that
- * channel.  The generic layer will ensure that nothing is executing
- * in the start_xmit and ioctl routines for the channel by the time
- * that ppp_unregister_channel returns.
+ * ppp_unregister_channel() defers freeing the generic channel state to an
+ * RCU grace period, allowing in-flight RCU readers to complete safely.
+ * The generic layer also ensures that no calls to the channel's start_xmit
+ * or ioctl routines are in progress by the time ppp_unregister_channel()
+ * returns.
  */
 
 #endif /* __KERNEL__ */

@@ -213,11 +213,6 @@ The generic layer requires these guarantees from the channel:
   ppp_register_channel() is called until after the call to
   ppp_unregister_channel() returns.
 
-* No thread may be in a call to any of ppp_input(), ppp_input_error(),
-  ppp_output_wakeup(), ppp_channel_index() or ppp_unit_number() for a
-  channel at the time that ppp_unregister_channel() is called for that
-  channel.
-
 * ppp_register_channel() and ppp_unregister_channel() must be called
   from process context, not interrupt or softirq/BH context.
 
@@ -232,6 +227,10 @@ The generic layer requires these guarantees from the channel:
   process context.
 
 The generic layer provides these guarantees to the channels:
+
+* The generic layer defers freeing the generic channel state to an
+  RCU grace period in ppp_unregister_channel(), allowing in-flight RCU
+  readers to complete safely.
 
 * The generic layer will not call the start_xmit() function for a
   channel while any thread is already executing in that function for
@@ -453,4 +452,4 @@ an interface unit are:
   fragments is disabled.  This ioctl is only available if the
   CONFIG_PPP_MULTILINK option is selected.
 
-Last modified: 7-feb-2002
+Last modified: 7-aug-2026
