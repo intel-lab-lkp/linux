@@ -2147,9 +2147,16 @@ int bnxt_qplib_create_cq(struct bnxt_qplib_res *res, struct bnxt_qplib_cq *cq)
 	pg_sz_lvl |= (cq->hwq.level & CMDQ_CREATE_CQ_LVL_MASK);
 	req.pg_size_lvl = cpu_to_le32(pg_sz_lvl);
 	req.pbl = cpu_to_le64(pbl->pg_map_arr[0]);
+	if (bnxt_re_pbl_size_supported(res->dattr->dev_cap_ext_flags_1)) {
+		req.flags |= cpu_to_le16(CMDQ_CREATE_CQ_FLAGS_PBL_PG_SIZE_VALID);
+		req.pbl_pg_size = bnxt_qplib_get_pbl_page_size(&cq->sg_info);
+	}
 	req.cq_fco_cnq_id = cpu_to_le32(
-			(cq->cnq_hw_ring_id & CMDQ_CREATE_CQ_CNQ_ID_MASK) <<
-			 CMDQ_CREATE_CQ_CNQ_ID_SFT);
+			((cq->cnq_hw_ring_id & CMDQ_CREATE_CQ_CNQ_ID_MASK) <<
+			 CMDQ_CREATE_CQ_CNQ_ID_SFT) |
+			(((cq->sg_info.fwo_offset >> BNXT_QPLIB_CQ_FCO_SHIFT)
+			  << CMDQ_CREATE_CQ_CQ_FCO_SFT) &
+			 CMDQ_CREATE_CQ_CQ_FCO_MASK));
 	bnxt_qplib_fill_cmdqmsg(&msg, &req, &resp, NULL, sizeof(req),
 				sizeof(resp), 0);
 	rc = bnxt_qplib_rcfw_send_message(rcfw, &msg);

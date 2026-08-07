@@ -3611,6 +3611,15 @@ int bnxt_re_create_user_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *att
 	if (rc)
 		goto free_umem;
 
+	/*
+	 * The FCO field passed in the CREATE_CQ command is expressed in
+	 * 32-byte units, so the offset must be a multiple of 32 bytes.
+	 */
+	if (cq->qplib_cq.sg_info.fwo_offset & (BIT(BNXT_QPLIB_CQ_FCO_SHIFT) - 1)) {
+		rc = -EINVAL;
+		goto free_umem;
+	}
+
 	cq->qplib_cq.dpi = &uctx->dpi;
 	cq->qplib_cq.max_wqe = entries;
 	cq->qplib_cq.coalescing = &rdev->cq_coalescing;

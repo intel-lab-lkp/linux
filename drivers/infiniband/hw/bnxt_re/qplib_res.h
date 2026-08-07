@@ -167,6 +167,7 @@ struct bnxt_qplib_sg_info {
 	u32				pgshft;
 	u32				pgsize;
 #define BNXT_QPLIB_QP_FWO_SHIFT		12      /* FWO is conveyed to firmware in 4K units */
+#define BNXT_QPLIB_CQ_FCO_SHIFT		5	/* FCO is conveyed to firmware in 32-byte units */
 	u32				fwo_offset;	/* first-word offset into huge page */
 	bool				nopte;
 };

@@ -1146,6 +1146,7 @@ struct cmdq_create_cq {
 	#define CMDQ_CREATE_CQ_FLAGS_STEERING_TAG_VALID                0x2UL
 	#define CMDQ_CREATE_CQ_FLAGS_INFINITE_CQ_MODE                  0x4UL
 	#define CMDQ_CREATE_CQ_FLAGS_COALESCING_VALID                  0x8UL
+	#define CMDQ_CREATE_CQ_FLAGS_PBL_PG_SIZE_VALID                 0x10UL
 	__le16	cookie;
 	u8	resp_size;
 	u8	reserved8;
@@ -1178,7 +1179,17 @@ struct cmdq_create_cq {
 	__le32	cq_size;
 	__le64	pbl;
 	__le16	steering_tag;
-	u8	reserved48[2];
+	u8	pbl_pg_size;
+	#define CMDQ_CREATE_CQ_PBL_PG_SIZE_MASK  0x7UL
+	#define CMDQ_CREATE_CQ_PBL_PG_SIZE_SFT   0
+	#define CMDQ_CREATE_CQ_PBL_PG_SIZE_PG_4K   0x0UL
+	#define CMDQ_CREATE_CQ_PBL_PG_SIZE_PG_8K   0x1UL
+	#define CMDQ_CREATE_CQ_PBL_PG_SIZE_PG_64K  0x2UL
+	#define CMDQ_CREATE_CQ_PBL_PG_SIZE_PG_2M   0x3UL
+	#define CMDQ_CREATE_CQ_PBL_PG_SIZE_PG_8M   0x4UL
+	#define CMDQ_CREATE_CQ_PBL_PG_SIZE_PG_1G   0x5UL
+	#define CMDQ_CREATE_CQ_PBL_PG_SIZE_LAST   CMDQ_CREATE_CQ_PBL_PG_SIZE_PG_1G
+	u8	reserved8_1;
 	__le32  coalescing;
 	#define CMDQ_CREATE_CQ_BUF_MAXTIME_MASK          0x1ffUL
 	#define CMDQ_CREATE_CQ_BUF_MAXTIME_SFT           0
