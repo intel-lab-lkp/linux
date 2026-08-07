@@ -7,7 +7,9 @@
 
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/if_ether.h>
 #include <linux/io.h>
+#include <linux/notifier.h>
 #include <linux/types.h>
 #include <net/dsa.h>
 
@@ -16,12 +18,29 @@
 #define XLNX_TSN_PORT_MAC1	1
 #define XLNX_TSN_PORT_MAC2	2
 
+/* Unicast Frame Filter: the switch accepts an incoming frame when
+ * its destination MAC matches this 48-bit address under the 16-bit
+ * mask in the MSB register's upper half. A set mask bit acts as a
+ * wildcard for the corresponding bit of bytes 4..5.
+ */
+#define TSN_SW_MAC_LSB_OFFSET		0x0000c
+#define TSN_SW_MAC_MSB_OFFSET		0x00010
+#define TSN_SW_MAC_MSB_ADDR_MASK	GENMASK(15, 0)
+#define TSN_SW_MAC_MSB_MASK_MASK	GENMASK(31, 16)
+
+/* Mask value that covers the low nibble of byte 5, leaving a
+ * 44-bit prefix common to all switch-port MACs. Those 4 bits are
+ * filled in by the per-port MAC-nibble fields in the Switch Port
+ * State Control register below.
+ */
+#define TSN_SW_MAC_NIBBLE_WILDCARD	0x000f
+
 #define TSN_SW_STATUS_OFFSET		0x00000
 /* Poll this before changing port state. */
 #define TSN_SW_STATUS_READY		BIT(0)
 
-/* Switch Port State Control register: packs per-port STP state and
- * change-commit bits into one 32-bit word.
+/* Switch Port State Control register: packs per-port STP state,
+ * change-commit bits, and MAC-nibble fields into one 32-bit word.
  */
 #define TSN_PORT_STATE_CTRL_OFFSET	0x0004c
 
@@ -31,6 +50,12 @@
 #define MAC1_PORT_STATUS_MASK		GENMASK(11, 9)
 #define MAC2_PORT_STATUS_CHG_BIT	BIT(16)
 #define MAC2_PORT_STATUS_MASK		GENMASK(19, 17)
+#define EP_PORT_MAC_NIBBLE_MASK		GENMASK(7, 4)
+#define MAC1_PORT_MAC_NIBBLE_MASK	GENMASK(15, 12)
+#define MAC2_PORT_MAC_NIBBLE_MASK	GENMASK(23, 20)
+
+#define TSN_SW_MGMT_QUEUING_OFFSET		0x00054
+#define TSN_SW_MGMT_QUEUING_EP_SA_EGRESS	BIT(4)
 
 /* readl_poll_timeout() parameters (in microseconds): poll until
  * the port-state change-commit bit self-clears.
@@ -100,6 +125,13 @@ struct xlnx_tsn_mac {
  * @ds: DSA switch
  * @dev: backing device
  * @sw_base: switch fabric register window
+ * @conduit: DSA conduit netdev (EP MAC), used as the source of the
+ *	     shared 44-bit frame-filter prefix
+ * @mac_prefix: conduit MAC with byte 5's low nibble cleared to zero,
+ *		forming the 44-bit prefix common to all switch-port MACs
+ * @nb: netdev notifier that handles NETDEV_REGISTER on each swpN
+ *	to set its final MAC, and NETDEV_CHANGEADDR on the conduit
+ *	to refresh the shared prefix
  * @mac: per-MAC state, indexed by user-port number (index 0 unused;
  *	 MAC1 at [1], MAC2 at [2])
  */
@@ -107,6 +139,9 @@ struct xlnx_tsn {
 	struct dsa_switch ds;
 	struct device *dev;
 	void __iomem *sw_base;
+	struct net_device *conduit;
+	u8 mac_prefix[ETH_ALEN];
+	struct notifier_block nb;
 	struct xlnx_tsn_mac mac[XLNX_TSN_NUM_PORTS];
 };
 

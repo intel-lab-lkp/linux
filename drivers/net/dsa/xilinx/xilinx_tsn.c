@@ -5,12 +5,14 @@
 
 #include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/etherdevice.h>
 #include <linux/if_bridge.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/mdio.h>
 #include <linux/module.h>
+#include <linux/netdevice.h>
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
@@ -31,6 +33,74 @@ static void sw_iow(struct xlnx_tsn *sw, u32 off, u32 val)
 static u32 sw_ior(struct xlnx_tsn *sw, u32 off)
 {
 	return ioread32(sw->sw_base + off);
+}
+
+/* Cache the conduit MAC with byte 5's low nibble zeroed out. The
+ * frame-filter mask covers those 4 bits. The per-port MAC-nibble
+ * fields in +0x004C supply the actual values.
+ */
+static void xlnx_tsn_derive_prefix(struct xlnx_tsn *sw)
+{
+	memcpy(sw->mac_prefix, sw->conduit->dev_addr, ETH_ALEN);
+	sw->mac_prefix[5] &= ~TSN_SW_MAC_NIBBLE_WILDCARD;
+}
+
+static void xlnx_tsn_program_frame_filter(struct xlnx_tsn *sw)
+{
+	const u8 *p = sw->mac_prefix;
+	u32 lsb, msb;
+
+	lsb = ((u32)p[2] << 24) | ((u32)p[3] << 16) |
+	      ((u32)p[4] << 8) | p[5];
+	msb = FIELD_PREP(TSN_SW_MAC_MSB_MASK_MASK, TSN_SW_MAC_NIBBLE_WILDCARD) |
+	      FIELD_PREP(TSN_SW_MAC_MSB_ADDR_MASK,
+			 ((u32)p[0] << 8) | p[1]);
+
+	sw_iow(sw, TSN_SW_MAC_LSB_OFFSET, lsb);
+	sw_iow(sw, TSN_SW_MAC_MSB_OFFSET, msb);
+}
+
+/* True when addr's upper 44 bits match the cached prefix. The
+ * prefix has byte 5's low nibble already cleared, so byte 5 of addr
+ * is masked the same way before comparison.
+ */
+static bool xlnx_tsn_prefix_matches(struct xlnx_tsn *sw, const u8 *addr)
+{
+	if (memcmp(addr, sw->mac_prefix, ETH_ALEN - 1) != 0)
+		return false;
+
+	return (addr[5] & ~TSN_SW_MAC_NIBBLE_WILDCARD) == sw->mac_prefix[5];
+}
+
+static int xlnx_tsn_set_port_mac_nibble(struct xlnx_tsn *sw, int port,
+					u8 nibble)
+{
+	u32 mask, new_field, reg;
+
+	nibble &= TSN_SW_MAC_NIBBLE_WILDCARD;
+
+	switch (port) {
+	case XLNX_TSN_CPU_PORT:
+		mask = EP_PORT_MAC_NIBBLE_MASK;
+		new_field = FIELD_PREP(EP_PORT_MAC_NIBBLE_MASK, nibble);
+		break;
+	case XLNX_TSN_PORT_MAC1:
+		mask = MAC1_PORT_MAC_NIBBLE_MASK;
+		new_field = FIELD_PREP(MAC1_PORT_MAC_NIBBLE_MASK, nibble);
+		break;
+	case XLNX_TSN_PORT_MAC2:
+		mask = MAC2_PORT_MAC_NIBBLE_MASK;
+		new_field = FIELD_PREP(MAC2_PORT_MAC_NIBBLE_MASK, nibble);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	reg = sw_ior(sw, TSN_PORT_STATE_CTRL_OFFSET);
+	reg = (reg & ~mask) | new_field;
+	sw_iow(sw, TSN_PORT_STATE_CTRL_OFFSET, reg);
+
+	return 0;
 }
 
 static int xlnx_tsn_switch_status_ready(struct xlnx_tsn *sw)
@@ -287,11 +357,141 @@ err_unregister:
 	return ret;
 }
 
+/* Build a per-port MAC from the shared prefix. */
+static void xlnx_tsn_synth_port_mac(struct xlnx_tsn *sw, int port,
+				    u8 *out)
+{
+	u8 ep_nibble = sw->conduit->dev_addr[5] & TSN_SW_MAC_NIBBLE_WILDCARD;
+
+	memcpy(out, sw->mac_prefix, ETH_ALEN);
+	out[5] |= (ep_nibble + port) & TSN_SW_MAC_NIBBLE_WILDCARD;
+}
+
+static int xlnx_tsn_user_port_index(struct xlnx_tsn *sw,
+				    const struct net_device *dev)
+{
+	struct dsa_port *dp;
+
+	dsa_switch_for_each_user_port(dp, &sw->ds)
+		if (dp->user == dev)
+			return dp->index;
+
+	return -1;
+}
+
+static int xlnx_tsn_handle_user_register(struct xlnx_tsn *sw,
+					 struct net_device *dev, int port)
+{
+	u8 want[ETH_ALEN];
+	u8 nibble;
+
+	if (!xlnx_tsn_prefix_matches(sw, dev->dev_addr)) {
+		xlnx_tsn_synth_port_mac(sw, port, want);
+		dev_warn(sw->dev,
+			 "port %d: MAC %pM does not match conduit prefix; overriding to %pM\n",
+			 port, dev->dev_addr, want);
+		dev_addr_mod(dev, 0, want, ETH_ALEN);
+		nibble = want[5] & TSN_SW_MAC_NIBBLE_WILDCARD;
+	} else if (ether_addr_equal(dev->dev_addr, sw->conduit->dev_addr)) {
+		/* Either DSA inherited the conduit MAC, or DT gave port@N
+		 * the same address explicitly. Either way, assign a unique
+		 * per-port nibble.
+		 */
+		xlnx_tsn_synth_port_mac(sw, port, want);
+		dev_addr_mod(dev, 0, want, ETH_ALEN);
+		nibble = want[5] & TSN_SW_MAC_NIBBLE_WILDCARD;
+	} else {
+		nibble = dev->dev_addr[5] & TSN_SW_MAC_NIBBLE_WILDCARD;
+	}
+
+	return xlnx_tsn_set_port_mac_nibble(sw, port, nibble);
+}
+
+static void xlnx_tsn_handle_conduit_changeaddr(struct xlnx_tsn *sw)
+{
+	struct dsa_port *dp;
+
+	xlnx_tsn_derive_prefix(sw);
+	xlnx_tsn_program_frame_filter(sw);
+	xlnx_tsn_set_port_mac_nibble(sw, XLNX_TSN_CPU_PORT,
+				     sw->conduit->dev_addr[5]);
+
+	dsa_switch_for_each_user_port(dp, &sw->ds) {
+		u8 want[ETH_ALEN];
+
+		if (!dp->user)
+			continue;
+
+		xlnx_tsn_synth_port_mac(sw, dp->index, want);
+		dev_addr_mod(dp->user, 0, want, ETH_ALEN);
+		call_netdevice_notifiers(NETDEV_CHANGEADDR, dp->user);
+	}
+}
+
+static int xlnx_tsn_netdev_event(struct notifier_block *nb,
+				 unsigned long event, void *ptr)
+{
+	struct xlnx_tsn *sw = container_of(nb, struct xlnx_tsn, nb);
+	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	int port;
+
+	switch (event) {
+	case NETDEV_REGISTER:
+		if (dev == sw->conduit) {
+			xlnx_tsn_handle_conduit_changeaddr(sw);
+		} else {
+			port = xlnx_tsn_user_port_index(sw, dev);
+			if (port < 0)
+				return NOTIFY_DONE;
+
+			xlnx_tsn_handle_user_register(sw, dev, port);
+		}
+		break;
+	case NETDEV_CHANGEADDR:
+		if (dev == sw->conduit) {
+			xlnx_tsn_handle_conduit_changeaddr(sw);
+		} else {
+			port = xlnx_tsn_user_port_index(sw, dev);
+			if (port < 0)
+				return NOTIFY_DONE;
+
+			xlnx_tsn_set_port_mac_nibble(sw, port, dev->dev_addr[5]);
+		}
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
 static enum dsa_tag_protocol xlnx_tsn_get_tag_protocol(struct dsa_switch *ds,
 						       int port,
 						       enum dsa_tag_protocol mp)
 {
 	return DSA_TAG_PROTO_XLNX_TSN;
+}
+
+static int xlnx_tsn_port_set_mac_address(struct dsa_switch *ds, int port,
+					 const unsigned char *addr)
+{
+	u8 nibble = addr[5] & TSN_SW_MAC_NIBBLE_WILDCARD;
+	struct xlnx_tsn *sw = ds->priv;
+	struct dsa_port *dp;
+
+	if (!xlnx_tsn_prefix_matches(sw, addr))
+		return -EINVAL;
+
+	if (nibble == (sw->conduit->dev_addr[5] & TSN_SW_MAC_NIBBLE_WILDCARD))
+		return -EADDRINUSE;
+
+	dsa_switch_for_each_user_port(dp, ds) {
+		if (dp->index == port || !dp->user)
+			continue;
+
+		if ((dp->user->dev_addr[5] & TSN_SW_MAC_NIBBLE_WILDCARD) == nibble)
+			return -EADDRINUSE;
+	}
+
+	return 0;
 }
 
 static void xlnx_tsn_port_stp_state_set(struct dsa_switch *ds, int port,
@@ -426,14 +626,29 @@ static const struct phylink_mac_ops xlnx_tsn_phylink_mac_ops = {
 
 static int xlnx_tsn_setup(struct dsa_switch *ds)
 {
+	struct dsa_port *cpu_dp = dsa_to_port(ds, XLNX_TSN_CPU_PORT);
 	struct xlnx_tsn *sw = ds->priv;
 	struct dsa_port *dp;
+	u32 mgmt;
 	int ret;
 
 	if (!dsa_is_user_port(ds, XLNX_TSN_PORT_MAC1) ||
 	    !dsa_is_user_port(ds, XLNX_TSN_PORT_MAC2))
 		return dev_err_probe(sw->dev, -EINVAL,
 				     "both MAC1 and MAC2 must be enabled as switch ports\n");
+
+	if (!cpu_dp || !cpu_dp->conduit)
+		return -ENODEV;
+
+	sw->conduit = cpu_dp->conduit;
+
+	/* Route CPU-originated bridge-group control frames (STP, LLDP) to
+	 * the single wire port whose MAC-nibble field matches the frame's
+	 * source-MAC low nibble, instead of flooding to both.
+	 */
+	mgmt = sw_ior(sw, TSN_SW_MGMT_QUEUING_OFFSET);
+	mgmt |= TSN_SW_MGMT_QUEUING_EP_SA_EGRESS;
+	sw_iow(sw, TSN_SW_MGMT_QUEUING_OFFSET, mgmt);
 
 	/* CPU port stays in FORWARDING so host traffic always flows.
 	 * User ports start in DISABLED and transition from there under
@@ -451,7 +666,20 @@ static int xlnx_tsn_setup(struct dsa_switch *ds)
 			return ret;
 	}
 
-	return xlnx_tsn_mdio_register_all(sw);
+	ret = xlnx_tsn_mdio_register_all(sw);
+	if (ret)
+		return ret;
+
+	sw->nb.notifier_call = xlnx_tsn_netdev_event;
+	ret = register_netdevice_notifier(&sw->nb);
+	if (ret)
+		goto err_mdio;
+
+	return 0;
+
+err_mdio:
+	xlnx_tsn_mdio_unregister_all(sw);
+	return ret;
 }
 
 static void xlnx_tsn_teardown(struct dsa_switch *ds)
@@ -459,6 +687,7 @@ static void xlnx_tsn_teardown(struct dsa_switch *ds)
 	struct xlnx_tsn *sw = ds->priv;
 	struct dsa_port *dp;
 
+	unregister_netdevice_notifier(&sw->nb);
 	xlnx_tsn_mdio_unregister_all(sw);
 
 	dsa_switch_for_each_user_port(dp, ds)
@@ -471,6 +700,7 @@ static const struct dsa_switch_ops xlnx_tsn_switch_ops = {
 	.get_tag_protocol	= xlnx_tsn_get_tag_protocol,
 	.setup			= xlnx_tsn_setup,
 	.teardown		= xlnx_tsn_teardown,
+	.port_set_mac_address	= xlnx_tsn_port_set_mac_address,
 	.port_stp_state_set	= xlnx_tsn_port_stp_state_set,
 	.phylink_get_caps	= xlnx_tsn_phylink_get_caps,
 };
