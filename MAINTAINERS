@@ -29907,6 +29907,7 @@ M:	Srinivas Neeli <srinivas.neeli@amd.com>
 L:	netdev@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/net/xlnx,tsn-endpoint-ethernet-mac.yaml
+F:	drivers/net/dsa/xilinx/
 F:	drivers/net/ethernet/xilinx/tsn/
 F:	net/dsa/tag_xlnx_tsn.c
 

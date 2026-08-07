@@ -84,6 +84,8 @@ source "drivers/net/dsa/qca/Kconfig"
 
 source "drivers/net/dsa/sja1105/Kconfig"
 
+source "drivers/net/dsa/xilinx/Kconfig"
+
 source "drivers/net/dsa/xrs700x/Kconfig"
 
 source "drivers/net/dsa/realtek/Kconfig"

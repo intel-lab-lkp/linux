@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+config NET_DSA_XILINX_TSN
+	tristate "AMD/Xilinx TSN Endpoint Ethernet MAC switch support"
+	depends on OF && HAS_IOMEM
+	depends on NET_DSA
+	select NET_DSA_TAG_XLNX_TSN
+	help
+	  This enables DSA switch support for the three-port switch
+	  block of the AMD/Xilinx TSN Endpoint Ethernet MAC IP. Port 0
+	  is the CPU port, wired internally to the endpoint MAC; ports 1
+	  and 2 are external Ethernet ports backed by MAC1 and MAC2.
