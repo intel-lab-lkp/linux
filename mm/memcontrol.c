@@ -4717,8 +4717,13 @@ static int peak_show(struct seq_file *sf, void *v, struct page_counter *pc)
 static int memory_peak_show(struct seq_file *sf, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(seq_css(sf));
+	int ret;
 
-	return peak_show(sf, v, &memcg->memory);
+	spin_lock(&memcg->peaks_lock);
+	ret = peak_show(sf, v, &memcg->memory);
+	spin_unlock(&memcg->peaks_lock);
+
+	return ret;
 }
 
 static int peak_open(struct kernfs_open_file *of)
@@ -5862,8 +5867,13 @@ static u64 swap_current_read(struct cgroup_subsys_state *css,
 static int swap_peak_show(struct seq_file *sf, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(seq_css(sf));
+	int ret;
 
-	return peak_show(sf, v, &memcg->swap);
+	spin_lock(&memcg->peaks_lock);
+	ret = peak_show(sf, v, &memcg->swap);
+	spin_unlock(&memcg->peaks_lock);
+
+	return ret;
 }
 
 static ssize_t swap_peak_write(struct kernfs_open_file *of, char *buf,
