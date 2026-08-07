@@ -256,12 +256,21 @@ static ssize_t rebind_store(struct device_driver *dev, const char *buf,
 	if (!bid)
 		return -ENODEV;
 
+	if (!bid->udev) {
+		put_busid_priv(bid);
+		return -ENODEV;
+	}
+
+	/* get a reference to udev to prevent it from becoming NULL */
+	usb_get_dev(bid->udev);
 	/* mark the device for deletion so probe ignores it during rescan */
 	bid->status = STUB_BUSID_OTHER;
 	/* release the busid lock */
 	put_busid_priv(bid);
 
 	ret = do_rebind((char *) buf, bid);
+	/* we finished using udev and don't need the reference anymore, drop it */
+	usb_put_dev(bid->udev);
 	if (ret < 0)
 		return ret;
 
