@@ -1561,6 +1561,15 @@ void mem_cgroup_update_lru_size(struct lruvec *lruvec, enum lru_list lru,
 		*lru_size += nr_pages;
 }
 
+static struct page_counter *mem_cgroup_tier_counter(struct mem_cgroup *memcg,
+						    int slot)
+{
+	if (slot < 0)
+		return NULL;
+
+	return &memcg->tier[slot];
+}
+
 /**
  * mem_cgroup_margin - calculate chargeable space of a memory cgroup
  * @memcg: the memory cgroup
@@ -2645,13 +2654,32 @@ out:
 	css_put(&memcg->css);
 }
 
+static void mem_cgroup_uncharge_tier(struct mem_cgroup *memcg,
+				     int slot, unsigned int nr_pages)
+{
+	struct page_counter *tier_counter = mem_cgroup_tier_counter(memcg, slot);
+
+	if (tier_counter)
+		page_counter_uncharge(tier_counter, nr_pages);
+}
+
+static void mem_cgroup_charge_tier(struct mem_cgroup *memcg,
+				   int slot, unsigned int nr_pages)
+{
+	struct page_counter *tier_counter = mem_cgroup_tier_counter(memcg, slot);
+
+	if (tier_counter)
+		page_counter_charge(tier_counter, nr_pages);
+}
+
 static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
-			    unsigned int nr_pages)
+			    unsigned int nr_pages, int nid)
 {
 	unsigned int batch = max(MEMCG_CHARGE_BATCH, nr_pages);
 	int nr_retries = MAX_RECLAIM_RETRIES;
 	struct mem_cgroup *mem_over_limit;
 	struct page_counter *counter;
+	struct page_counter *tier_counter = NULL;
 	unsigned long nr_reclaimed;
 	bool passed_oom = false;
 	unsigned int reclaim_options;
@@ -2659,10 +2687,19 @@ static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
 	bool raised_max_event = false;
 	unsigned long pflags;
 	bool allow_spinning = gfpflags_allow_spinning(gfp_mask);
+	int slot = -1;
+
+	if (mem_cgroup_tiered_limits()) {
+		slot = nid_tier_slot(nid);
+		tier_counter = mem_cgroup_tier_counter(memcg, slot);
+	}
 
 retry:
-	if (consume_stock(memcg, nr_pages))
+	if (consume_stock(memcg, nr_pages)) {
+		if (tier_counter)
+			page_counter_charge(tier_counter, nr_pages);
 		return 0;
+	}
 
 	if (!allow_spinning)
 		/* Avoid the refill and flush of the older stock */
@@ -2677,8 +2714,11 @@ retry:
 		goto reclaim;
 	}
 
-	if (page_counter_try_charge(&memcg->memory, batch, &counter))
+	if (page_counter_try_charge(&memcg->memory, batch, &counter)) {
+		if (tier_counter)
+			page_counter_charge(tier_counter, nr_pages);
 		goto done_restock;
+	}
 
 	if (do_memsw_account())
 		page_counter_uncharge(&memcg->memsw, batch);
@@ -2781,6 +2821,8 @@ force:
 	 * temporarily by force charging it.
 	 */
 	page_counter_charge(&memcg->memory, nr_pages);
+	if (tier_counter)
+		page_counter_charge(tier_counter, nr_pages);
 	if (do_memsw_account())
 		page_counter_charge(&memcg->memsw, nr_pages);
 
@@ -2852,7 +2894,7 @@ static inline int try_charge(struct mem_cgroup *memcg, gfp_t gfp_mask,
 	if (mem_cgroup_is_root(memcg))
 		return 0;
 
-	return try_charge_memcg(memcg, gfp_mask, nr_pages);
+	return try_charge_memcg(memcg, gfp_mask, nr_pages, NUMA_NO_NODE);
 }
 
 static void commit_charge(struct folio *folio, struct obj_cgroup *objcg)
@@ -3152,7 +3194,7 @@ static int obj_cgroup_charge_pages(struct obj_cgroup *objcg, gfp_t gfp,
 
 	memcg = get_mem_cgroup_from_objcg(objcg);
 
-	ret = try_charge_memcg(memcg, gfp, nr_pages);
+	ret = try_charge_memcg(memcg, gfp, nr_pages, NUMA_NO_NODE);
 	if (ret)
 		goto out;
 
@@ -5280,7 +5322,8 @@ static int charge_memcg(struct folio *folio, struct mem_cgroup *memcg,
 	objcg = get_obj_cgroup_from_memcg(memcg);
 	/* Do not account at the root objcg level. */
 	if (!obj_cgroup_is_root(objcg))
-		ret = try_charge_memcg(memcg, gfp, folio_nr_pages(folio));
+		ret = try_charge_memcg(memcg, gfp, folio_nr_pages(folio),
+				       folio_nid(folio));
 	if (ret) {
 		obj_cgroup_put(objcg);
 		return ret;
@@ -5376,11 +5419,41 @@ struct uncharge_gather {
 	unsigned long pgpgout;
 	unsigned long nr_kmem;
 	int nid;
+	int tier_slot;
+	unsigned long tier_nr;
 };
 
 static inline void uncharge_gather_clear(struct uncharge_gather *ug)
 {
 	memset(ug, 0, sizeof(*ug));
+}
+
+static void flush_tier_charge(struct mem_cgroup *memcg,
+			      const struct uncharge_gather *ug)
+{
+	struct page_counter *tier_counter;
+
+	tier_counter = &memcg->tier[ug->tier_slot];
+	page_counter_uncharge(tier_counter, ug->tier_nr);
+}
+
+static void gather_tier_charge(struct uncharge_gather *ug, struct folio *folio,
+			       unsigned long nr_pages)
+{
+	int slot = nid_tier_slot(folio_nid(folio));
+
+	if (slot < 0)
+		return;
+
+	if (ug->tier_nr && slot != ug->tier_slot) {
+		rcu_read_lock();
+		flush_tier_charge(obj_cgroup_memcg(ug->objcg), ug);
+		rcu_read_unlock();
+		ug->tier_nr = 0;
+	}
+
+	ug->tier_slot = slot;
+	ug->tier_nr += nr_pages;
 }
 
 static void uncharge_batch(const struct uncharge_gather *ug)
@@ -5395,6 +5468,8 @@ static void uncharge_batch(const struct uncharge_gather *ug)
 			mod_memcg_state(memcg, MEMCG_KMEM, -ug->nr_kmem);
 			memcg1_account_kmem(memcg, -ug->nr_kmem);
 		}
+		if (ug->tier_nr)
+			flush_tier_charge(memcg, ug);
 		memcg1_oom_recover(memcg);
 	}
 
@@ -5440,8 +5515,11 @@ static void uncharge_folio(struct folio *folio, struct uncharge_gather *ug)
 		ug->nr_kmem += nr_pages;
 	} else {
 		/* LRU pages aren't accounted at the root level */
-		if (!obj_cgroup_is_root(objcg))
+		if (!obj_cgroup_is_root(objcg)) {
 			ug->nr_memory += nr_pages;
+			if (mem_cgroup_tiered_limits())
+				gather_tier_charge(ug, folio, nr_pages);
+		}
 		ug->pgpgout++;
 
 		WARN_ON_ONCE(folio_unqueue_deferred_split(folio));
@@ -5514,6 +5592,11 @@ void mem_cgroup_replace_folio(struct folio *old, struct folio *new)
 	/* Force-charge the new page. The old one will be freed soon */
 	if (!obj_cgroup_is_root(objcg)) {
 		page_counter_charge(&memcg->memory, nr_pages);
+		if (mem_cgroup_tiered_limits()) {
+			int slot = nid_tier_slot(folio_nid(new));
+
+			mem_cgroup_charge_tier(memcg, slot, nr_pages);
+		}
 		if (do_memsw_account())
 			page_counter_charge(&memcg->memsw, nr_pages);
 	}
@@ -5557,6 +5640,23 @@ void mem_cgroup_migrate(struct folio *old, struct folio *new)
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_hugetlb(old) && !objcg, old);
 	if (!objcg)
 		return;
+
+	if (!obj_cgroup_is_root(objcg) && mem_cgroup_tiered_limits()) {
+		struct mem_cgroup *memcg;
+		unsigned long nr_pages = folio_nr_pages(old);
+		int old_slot, new_slot;
+
+		rcu_read_lock();
+		memcg = obj_cgroup_memcg(objcg);
+		old_slot = nid_tier_slot(folio_nid(old));
+		new_slot = nid_tier_slot(folio_nid(new));
+
+		if (old_slot != new_slot) {
+			mem_cgroup_uncharge_tier(memcg, old_slot, nr_pages);
+			mem_cgroup_charge_tier(memcg, new_slot, nr_pages);
+		}
+		rcu_read_unlock();
+	}
 
 	/* Transfer the charge and the objcg ref */
 	commit_charge(new, objcg);
@@ -5633,7 +5733,7 @@ bool mem_cgroup_sk_charge(const struct sock *sk, unsigned int nr_pages,
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
 		return memcg1_charge_skmem(memcg, nr_pages, gfp_mask);
 
-	if (try_charge_memcg(memcg, gfp_mask, nr_pages) == 0) {
+	if (try_charge_memcg(memcg, gfp_mask, nr_pages, NUMA_NO_NODE) == 0) {
 		mod_memcg_state(memcg, MEMCG_SOCK, nr_pages);
 		return true;
 	}
