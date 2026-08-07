@@ -74,6 +74,8 @@ static unsigned int _get_maxdiv(const struct clk_div_table *table, u8 width,
 		return 1 << clk_div_mask(width);
 	if (flags & CLK_DIVIDER_EVEN_INTEGERS)
 		return 2 * (clk_div_mask(width) + 1);
+	if (flags & CLK_DIVIDER_EVEN_INTEGERS_NO_OFFSET)
+		return 2 * clk_div_mask(width);
 	if (table)
 		return _get_table_maxdiv(table, width);
 	return clk_div_mask(width) + 1;
@@ -101,6 +103,8 @@ static unsigned int _get_div(const struct clk_div_table *table,
 		return val ? val : clk_div_mask(width) + 1;
 	if (flags & CLK_DIVIDER_EVEN_INTEGERS)
 		return 2 * (val + 1);
+	if (flags & CLK_DIVIDER_EVEN_INTEGERS_NO_OFFSET)
+		return 2 * val;
 	if (table)
 		return _get_table_div(table, val);
 	return val + 1;
@@ -128,6 +132,8 @@ static unsigned int _get_val(const struct clk_div_table *table,
 		return (div == clk_div_mask(width) + 1) ? 0 : div;
 	if (flags & CLK_DIVIDER_EVEN_INTEGERS)
 		return (div >> 1) - 1;
+	if (flags & CLK_DIVIDER_EVEN_INTEGERS_NO_OFFSET)
+		return div >> 1;
 	if (table)
 		return  _get_table_val(table, div);
 	return div - 1;
@@ -181,6 +187,8 @@ static bool _is_valid_div(const struct clk_div_table *table, unsigned int div,
 {
 	if (flags & CLK_DIVIDER_POWER_OF_TWO)
 		return is_power_of_2(div);
+	if (flags & CLK_DIVIDER_EVEN_INTEGERS_NO_OFFSET)
+		return div >= 2 && !(div & 1);
 	if (table)
 		return _is_valid_table_div(table, div);
 	return true;
@@ -230,6 +238,8 @@ static int _div_round_up(const struct clk_div_table *table,
 
 	if (flags & CLK_DIVIDER_POWER_OF_TWO)
 		div = __roundup_pow_of_two(div);
+	else if (flags & CLK_DIVIDER_EVEN_INTEGERS_NO_OFFSET)
+		div = max(2, (div + 1) & ~1);
 	if (table)
 		div = _round_up_table(table, div);
 
@@ -249,6 +259,9 @@ static int _div_round_closest(const struct clk_div_table *table,
 	if (flags & CLK_DIVIDER_POWER_OF_TWO) {
 		up = __roundup_pow_of_two(up);
 		down = __rounddown_pow_of_two(down);
+	} else if (flags & CLK_DIVIDER_EVEN_INTEGERS_NO_OFFSET) {
+		up = max(2, (up + 1) & ~1);
+		down = max(2, down & ~1);
 	} else if (table) {
 		up = _round_up_table(table, up);
 		down = _round_down_table(table, down);
@@ -286,6 +299,8 @@ static int _next_div(const struct clk_div_table *table, int div,
 
 	if (flags & CLK_DIVIDER_POWER_OF_TWO)
 		return __roundup_pow_of_two(div);
+	if (flags & CLK_DIVIDER_EVEN_INTEGERS_NO_OFFSET)
+		return div + (div & 1);
 	if (table)
 		return _round_up_table(table, div);
 
@@ -371,6 +386,13 @@ int divider_ro_determine_rate(struct clk_hw *hw, struct clk_rate_request *req,
 	int div;
 
 	div = _get_div(table, val, flags, width);
+
+	if (!div) {
+		WARN(!(flags & CLK_DIVIDER_ALLOW_ZERO),
+			"%s: Zero divisor and CLK_DIVIDER_ALLOW_ZERO not set\n",
+			clk_hw_get_name(hw));
+		return -EINVAL;
+	}
 
 	/* Even a read-only clock can propagate a rate change */
 	if (clk_hw_get_flags(hw) & CLK_SET_RATE_PARENT) {

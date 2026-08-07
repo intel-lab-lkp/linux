@@ -703,6 +703,8 @@ struct clk_div_table {
  *	big endian.
  * CLK_DIVIDER_EVEN_INTEGERS - clock divisor is 2, 4, 6, 8, 10, etc.
  *	Formula is 2 * (value read from hardware + 1).
+ * CLK_DIVIDER_EVEN_INTEGERS_NO_OFFSET - clock divisor is 2, 4, 6, 8, etc.
+ *	Formula is 2 * (value read from hardware).
  */
 struct clk_divider {
 	struct clk_hw	hw;
@@ -726,6 +728,7 @@ struct clk_divider {
 #define CLK_DIVIDER_MAX_AT_ZERO		BIT(6)
 #define CLK_DIVIDER_BIG_ENDIAN		BIT(7)
 #define CLK_DIVIDER_EVEN_INTEGERS	BIT(8)
+#define CLK_DIVIDER_EVEN_INTEGERS_NO_OFFSET	BIT(9)
 
 extern const struct clk_ops clk_divider_ops;
 extern const struct clk_ops clk_divider_ro_ops;
