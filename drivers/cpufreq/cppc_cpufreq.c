@@ -855,6 +855,103 @@ static int cppc_cpufreq_set_boost(struct cpufreq_policy *policy, int state)
 	return 0;
 }
 
+/**
+ * cppc_cpufreq_sync_boost_limits - Sync boost flag, cpuinfo max and boost QoS
+ * @policy: cpufreq policy
+ * @boost_supported: whether highest_perf currently exceeds nominal_perf
+ *
+ * Highest Performance can appear or disappear at runtime via Notify(0x85).
+ *
+ * cpuinfo.max_freq always tracks the hardware maximum derived from Highest
+ * Performance so that sysfs reflects Notify(0x85) updates. Boost being off
+ * is enforced by updating the existing boost_freq_req to nominal (capping
+ * policy->max) rather than by hiding the hardware max in cpuinfo.
+ * boost_freq_req itself is only created at policy init, not here.
+ */
+static void cppc_cpufreq_sync_boost_limits(struct cpufreq_policy *policy,
+					   bool boost_supported)
+{
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	struct cppc_perf_caps *caps = &cpu_data->perf_caps;
+	unsigned int highest_freq, nominal_freq, qos_freq;
+	int ret;
+
+	if (!boost_supported && policy->boost_enabled)
+		policy->boost_enabled = false;
+
+	policy->boost_supported = boost_supported;
+
+	highest_freq = cppc_perf_to_khz(caps, caps->highest_perf);
+	nominal_freq = cppc_perf_to_khz(caps, caps->nominal_perf);
+
+	/*
+	 * Report the current hardware maximum. If Highest dropped below
+	 * Nominal (unusual, but possible with test overrides), never
+	 * advertise more than Highest allows.
+	 */
+	policy->cpuinfo.max_freq = highest_freq;
+
+	if (boost_supported && !policy->boost_enabled)
+		qos_freq = min(nominal_freq, highest_freq);
+	else
+		qos_freq = highest_freq;
+
+	/*
+	 * boost_freq_req is created in cpufreq_policy_init_qos() when
+	 * boost_supported is true at policy init. Runtime Highest changes
+	 * only update that existing request; they do not add or remove it.
+	 */
+	if (freq_qos_request_active(&policy->boost_freq_req)) {
+		ret = freq_qos_update_request(&policy->boost_freq_req,
+					      qos_freq);
+		if (ret < 0)
+			pr_debug("CPU%d: failed to sync boost QoS: %d\n",
+				 policy->cpu, ret);
+	}
+
+	pr_debug("CPU%d: highest_perf=%u boost_en=%d cpuinfo_max=%u qos_max=%u\n",
+		 policy->cpu, caps->highest_perf, policy->boost_enabled,
+		 policy->cpuinfo.max_freq, qos_freq);
+}
+
+static void cppc_cpufreq_update_limits(struct cpufreq_policy *policy)
+{
+	struct cppc_cpudata *cpu_data;
+	struct cppc_perf_caps *caps;
+	u64 prev_highest_perf;
+	u64 highest_perf;
+	int ret;
+
+	guard(cpufreq_policy_write)(policy);
+
+	cpu_data = policy->driver_data;
+	caps = &cpu_data->perf_caps;
+
+	prev_highest_perf = caps->highest_perf;
+
+	ret = cppc_get_highest_perf(policy->cpu, &highest_perf);
+	if (ret)
+		return;
+
+	if (highest_perf == prev_highest_perf)
+		return;
+
+	caps->highest_perf = highest_perf;
+
+	/*
+	 * Re-evaluate boost capability/status based on the updated Highest
+	 * Performance. Boost is supported when highest_perf exceeds
+	 * nominal_perf.
+	 */
+	cppc_cpufreq_sync_boost_limits(policy,
+				       highest_perf > caps->nominal_perf);
+
+	refresh_frequency_limits(policy);
+
+	pr_debug("CPU%d: highest_perf updated %llu -> %llu\n",
+		 policy->cpu, prev_highest_perf, highest_perf);
+}
+
 static ssize_t show_freqdomain_cpus(struct cpufreq_policy *policy, char *buf)
 {
 	struct cppc_cpudata *cpu_data = policy->driver_data;
@@ -1048,6 +1145,7 @@ static struct cpufreq_driver cppc_cpufreq_driver = {
 	.init = cppc_cpufreq_cpu_init,
 	.exit = cppc_cpufreq_cpu_exit,
 	.set_boost = cppc_cpufreq_set_boost,
+	.update_limits = cppc_cpufreq_update_limits,
 	.attr = cppc_cpufreq_attr,
 	.name = "cppc_cpufreq",
 };
