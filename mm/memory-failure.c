@@ -96,6 +96,78 @@ void num_poisoned_pages_sub(unsigned long pfn, long i)
 		memblk_nr_poison_sub(pfn, i);
 }
 
+/*
+ * Return the first or the last hardware-poisoned online page in [start,
+ * start + size), or PHYS_ADDR_MAX if the range is clean.
+ */
+static phys_addr_t range_hwpoison(phys_addr_t start, unsigned long size,
+				  bool first)
+{
+	phys_addr_t poison = PHYS_ADDR_MAX;
+	unsigned long pfn, end_pfn;
+
+	if (!size || !atomic_long_read(&num_poisoned_pages))
+		return poison;
+
+	end_pfn = PHYS_PFN(start + size - 1);
+	for (pfn = PHYS_PFN(start); pfn <= end_pfn; pfn++) {
+		struct page *page = pfn_to_online_page(pfn);
+		struct folio *folio;
+
+		cond_resched();
+
+		if (!page)
+			continue;
+
+		folio = page_folio(page);
+		if (folio_test_hugetlb(folio)) {
+			/*
+			 * hugetlbfs is a bit special, given the poison
+			 * information is at the folio, not at the page
+			 */
+			unsigned long folio_end;
+
+			/*
+			 * No hugetlb_lock: the scan is racy either way, a frame
+			 * can be poisoned right after it. Just don't let a folio
+			 * dissolved under us walk the scan backwards.
+			 */
+			folio_end = folio_pfn(folio) + folio_nr_pages(folio) - 1;
+			folio_end = max(folio_end, pfn);
+
+			if (folio_test_hwpoison(folio)) {
+				if (first)
+					return PFN_PHYS(pfn);
+				poison = PFN_PHYS(min(folio_end, end_pfn));
+			}
+			/* skip all the pfns that belong to hugetlb */
+			pfn = folio_end;
+			continue;
+		}
+
+		if (!PageHWPoison(page))
+			/* page is good, let's go to the next one */
+			continue;
+
+		if (first)
+			return PFN_PHYS(pfn);
+
+		poison = PFN_PHYS(pfn);
+	}
+
+	return poison;
+}
+
+phys_addr_t range_first_hwpoison(phys_addr_t start, unsigned long size)
+{
+	return range_hwpoison(start, size, true);
+}
+
+phys_addr_t range_last_hwpoison(phys_addr_t start, unsigned long size)
+{
+	return range_hwpoison(start, size, false);
+}
+
 /**
  * MF_ATTR_RO - Create sysfs entry for each memory failure statistics.
  * @_name: name of the file in the per NUMA sysfs directory.
