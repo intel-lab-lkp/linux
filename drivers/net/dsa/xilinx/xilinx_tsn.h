@@ -66,6 +66,18 @@ enum tsn_port_state {
 
 #define TSN_MDIO_MRD_MASK		GENMASK(15, 0)
 
+/* Per-MAC receive / transmit / speed configuration registers. */
+#define TSN_RCW1_OFFSET			0x00000404
+#define TSN_RCW1_RX_EN			BIT(28)
+
+#define TSN_TC_OFFSET			0x00000408
+#define TSN_TC_TX_EN			BIT(28)
+
+#define TSN_SPEED_CFG_OFFSET		0x00000410
+#define TSN_SPEED_CFG_MASK		GENMASK(31, 30)
+#define TSN_SPEED_CFG_100		BIT(30)
+#define TSN_SPEED_CFG_1000		BIT(31)
+
 struct mii_bus;
 struct xlnx_tsn;
 

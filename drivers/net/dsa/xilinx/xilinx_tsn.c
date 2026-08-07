@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
+#include <linux/phylink.h>
 #include <linux/platform_device.h>
 #include <net/dsa.h>
 
@@ -324,6 +325,105 @@ static void xlnx_tsn_port_stp_state_set(struct dsa_switch *ds, int port,
 	xlnx_tsn_set_port_state(sw, port, hw_state);
 }
 
+static void xlnx_tsn_phylink_get_caps(struct dsa_switch *ds, int port,
+				      struct phylink_config *config)
+{
+	if (port == XLNX_TSN_CPU_PORT) {
+		config->mac_capabilities = MAC_1000FD;
+		__set_bit(PHY_INTERFACE_MODE_INTERNAL,
+			  config->supported_interfaces);
+		return;
+	}
+
+	/* The MAC's speed-config field only encodes 100 / 1000.
+	 * Half-duplex and 10 Mbps are not supported.
+	 */
+	config->mac_capabilities = MAC_100FD | MAC_1000FD;
+	phy_interface_set_rgmii(config->supported_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_SGMII, config->supported_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_GMII, config->supported_interfaces);
+}
+
+static void xlnx_tsn_mac_config(struct phylink_config *config,
+				unsigned int mode,
+				const struct phylink_link_state *state)
+{
+	/* Interface mode (RGMII / SGMII / GMII) is fixed at IP synthesis
+	 * time. There is no runtime register to program it here.
+	 */
+}
+
+static void xlnx_tsn_mac_link_down(struct phylink_config *config,
+				   unsigned int mode,
+				   phy_interface_t interface)
+{
+	struct dsa_port *dp = dsa_phylink_to_port(config);
+	struct xlnx_tsn *sw = dp->ds->priv;
+	struct xlnx_tsn_mac *m;
+	u32 rcw1, tc;
+
+	m = &sw->mac[dp->index];
+
+	/* The CPU port has no switch-side MAC registers. Nothing to
+	 * tear down here (see xlnx_tsn_mac_link_up).
+	 */
+	if (dp->index == XLNX_TSN_CPU_PORT)
+		return;
+
+	tc = mac_ior(m, TSN_TC_OFFSET) & ~TSN_TC_TX_EN;
+	mac_iow(m, TSN_TC_OFFSET, tc);
+
+	rcw1 = mac_ior(m, TSN_RCW1_OFFSET) & ~TSN_RCW1_RX_EN;
+	mac_iow(m, TSN_RCW1_OFFSET, rcw1);
+}
+
+static void xlnx_tsn_mac_link_up(struct phylink_config *config,
+				 struct phy_device *phy, unsigned int mode,
+				 phy_interface_t interface, int speed,
+				 int duplex, bool tx_pause, bool rx_pause)
+{
+	struct dsa_port *dp = dsa_phylink_to_port(config);
+	struct xlnx_tsn *sw = dp->ds->priv;
+	u32 speed_cfg, rcw1, tc;
+	struct xlnx_tsn_mac *m;
+
+	m = &sw->mac[dp->index];
+
+	/* The CPU port is the internal endpoint MAC. It has no switch-side
+	 * MAC registers and is managed by the endpoint driver, not here.
+	 */
+	if (dp->index == XLNX_TSN_CPU_PORT)
+		return;
+
+	speed_cfg = mac_ior(m, TSN_SPEED_CFG_OFFSET) & ~TSN_SPEED_CFG_MASK;
+	switch (speed) {
+	case SPEED_1000:
+		speed_cfg |= TSN_SPEED_CFG_1000;
+		break;
+	case SPEED_100:
+		speed_cfg |= TSN_SPEED_CFG_100;
+		break;
+	default:
+		dev_warn(sw->dev,
+			 "port %d: unsupported link speed %d Mbps\n",
+			 dp->index, speed);
+		return;
+	}
+	mac_iow(m, TSN_SPEED_CFG_OFFSET, speed_cfg);
+
+	rcw1 = mac_ior(m, TSN_RCW1_OFFSET) | TSN_RCW1_RX_EN;
+	mac_iow(m, TSN_RCW1_OFFSET, rcw1);
+
+	tc = mac_ior(m, TSN_TC_OFFSET) | TSN_TC_TX_EN;
+	mac_iow(m, TSN_TC_OFFSET, tc);
+}
+
+static const struct phylink_mac_ops xlnx_tsn_phylink_mac_ops = {
+	.mac_config	= xlnx_tsn_mac_config,
+	.mac_link_up	= xlnx_tsn_mac_link_up,
+	.mac_link_down	= xlnx_tsn_mac_link_down,
+};
+
 static int xlnx_tsn_setup(struct dsa_switch *ds)
 {
 	struct xlnx_tsn *sw = ds->priv;
@@ -372,6 +472,7 @@ static const struct dsa_switch_ops xlnx_tsn_switch_ops = {
 	.setup			= xlnx_tsn_setup,
 	.teardown		= xlnx_tsn_teardown,
 	.port_stp_state_set	= xlnx_tsn_port_stp_state_set,
+	.phylink_get_caps	= xlnx_tsn_phylink_get_caps,
 };
 
 static int xlnx_tsn_map_reg(struct platform_device *pdev, const char *name,
@@ -421,6 +522,7 @@ static int xlnx_tsn_probe(struct platform_device *pdev)
 	ds->dev = dev;
 	ds->num_ports = XLNX_TSN_NUM_PORTS;
 	ds->ops = &xlnx_tsn_switch_ops;
+	ds->phylink_mac_ops = &xlnx_tsn_phylink_mac_ops;
 	ds->priv = sw;
 
 	platform_set_drvdata(pdev, sw);
