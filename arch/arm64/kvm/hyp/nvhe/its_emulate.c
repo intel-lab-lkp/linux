@@ -429,9 +429,41 @@ static void ctlr_write(struct pkvm_protected_reg *region, u64 offset, u64 value)
 	writel_relaxed(value, its->base + GITS_CTLR);
 }
 
+static void cbaser_write(struct pkvm_protected_reg *region, u64 offset, u64 value)
+{
+	struct its_priv_state *its = region->priv;
+	int num_pages;
+	u64 ctlr;
+
+	ctlr = readl_relaxed(its->base + GITS_CTLR);
+	if ((ctlr & GITS_CTLR_ENABLE) || !(ctlr & GITS_CTLR_QUIESCENT))
+		return;
+
+	num_pages = its->host_state->cmdq_len / SZ_4K;
+
+	/* Don't let the host program a different command queue */
+	value &= ~(GENMASK(7, 0) | GENMASK_ULL(51, 12));
+	value |= (num_pages - 1) & GENMASK(7, 0);
+	value |= __hyp_pa(its->cmd_original) & GENMASK_ULL(51, 12);
+	its->needs_flush = (value & GITS_CBASER_SHAREABILITY_MASK) != GITS_CBASER_InnerShareable;
+
+	writeq_relaxed(value, its->base + GITS_CBASER);
+
+	/* Restart the CMDQ to read from 0 */
+	its->cmd_offset = 0;
+	writeq_relaxed(0, its->base + GITS_CWRITER);
+}
+
+static void cbaser_read(struct pkvm_protected_reg *region, u64 offset, u64 *read)
+{
+	struct its_priv_state *its = region->priv;
+	*read = readq_relaxed(its->base + GITS_CBASER);
+}
+
 static struct its_handler its_handlers[] = {
 	ITS_HANDLER(GITS_CWRITER, sizeof(u64), cwriter_write, cwriter_read),
 	ITS_HANDLER(GITS_CTLR, sizeof(u32), ctlr_write, ctlr_read),
+	ITS_HANDLER(GITS_CBASER, sizeof(u64), cbaser_write, cbaser_read),
 	{},
 };
 
