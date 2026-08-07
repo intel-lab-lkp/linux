@@ -889,6 +889,46 @@ void unregister_wide_hw_breakpoint(struct perf_event * __percpu *cpu_events)
 EXPORT_SYMBOL_GPL(unregister_wide_hw_breakpoint);
 
 /**
+ * modify_local_hw_breakpoint_addr - update a local breakpoint address
+ * @bp: the hwbp perf event for this CPU
+ * @addr: the new address for @bp
+ *
+ * Update only the address of an installed breakpoint on the local CPU without
+ * releasing and reserving its hardware slot. The caller must update other CPUs.
+ * Return 0, or -EOPNOTSUPP if the architecture does not support this operation.
+ */
+#ifdef CONFIG_HAVE_MODIFY_LOCAL_HW_BREAKPOINT_ADDR
+int modify_local_hw_breakpoint_addr(struct perf_event *bp,
+				    unsigned long addr)
+{
+	unsigned long old_addr;
+	int ret;
+
+	lockdep_assert_irqs_disabled();
+
+	old_addr = bp->attr.bp_addr;
+	counter_arch_bp(bp)->address = addr;
+	bp->attr.bp_addr = addr;
+
+	ret = arch_modify_local_hw_breakpoint_addr(bp, addr);
+	if (ret) {
+		counter_arch_bp(bp)->address = old_addr;
+		bp->attr.bp_addr = old_addr;
+		return ret;
+	}
+
+	return 0;
+}
+#else
+int modify_local_hw_breakpoint_addr(struct perf_event *bp,
+				    unsigned long addr)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+EXPORT_SYMBOL_GPL(modify_local_hw_breakpoint_addr);
+
+/**
  * hw_breakpoint_is_used - check if breakpoints are currently used
  *
  * Returns: true if breakpoints are used, false otherwise.
