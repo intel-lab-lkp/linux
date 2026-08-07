@@ -491,7 +491,7 @@ static int rcar_gen3_thermal_request_irqs(struct rcar_gen3_thermal_priv *priv,
 
 	for (i = 0; i < 2; i++) {
 		irq = platform_get_irq_optional(pdev, i);
-		if (irq < 0)
+		if (irq < 0 && irq != -ENXIO)
 			return irq;
 
 		irqname = devm_kasprintf(dev, GFP_KERNEL, "%s:ch%d",
