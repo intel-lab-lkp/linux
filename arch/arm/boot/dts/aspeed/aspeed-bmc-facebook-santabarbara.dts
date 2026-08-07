@@ -585,24 +585,28 @@
 				compatible = "ti,ina230";
 				reg = <0x40>;
 				shunt-resistor = <2000>;
+				status = "disabled";
 			};
 
 			power-monitor@41 {
 				compatible = "ti,ina230";
 				reg = <0x41>;
 				shunt-resistor = <2000>;
+				status = "disabled";
 			};
 
 			power-monitor@44 {
 				compatible = "ti,ina230";
 				reg = <0x44>;
 				shunt-resistor = <2000>;
+				status = "disabled";
 			};
 
 			power-monitor@45 {
 				compatible = "ti,ina230";
 				reg = <0x45>;
 				shunt-resistor = <2000>;
+				status = "disabled";
 			};
 		};
 
