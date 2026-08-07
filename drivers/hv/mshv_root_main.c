@@ -2406,11 +2406,21 @@ static long mshv_ioctl_process_pt_flags(void __user *user_arg, u64 *pt_flags,
 	disabled_procs->cet_ss_support = 0;
 	disabled_procs->cet_ibt_support = 0;
 	disabled_procs->vmx_exception_inject_support = 0;
+	disabled_procs->fb_clear_support = 0;
+	disabled_procs->gds_no_support = 0;
+	disabled_procs->bhi_no_support = 0;
+	disabled_procs->bhi_dis_support = 0;
+	disabled_procs->btc_no_support = 0;
+	disabled_procs->mitigation_ctrl_support = 0;
+	disabled_procs->rfds_no_support = 0;
+	disabled_procs->rfds_clear_support = 0;
 
 	disabled_xsave->as_uint64 = U64_MAX;
 	disabled_xsave->xsave_support = 0;
 	disabled_xsave->xsaveopt_support = 0;
 	disabled_xsave->avx_support = 0;
+	disabled_xsave->xsave_comp_support = 0;
+	disabled_xsave->xsave_supervisor_support = 0;
 #endif
 
 	/* Check if user provided newer struct with feature fields */
