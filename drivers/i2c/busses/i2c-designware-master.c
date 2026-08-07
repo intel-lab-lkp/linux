@@ -918,12 +918,121 @@ i2c_dw_xfer_common(struct dw_i2c_dev *dev, struct i2c_msg msgs[], int num)
 	return num;
 }
 
+/* Poll up to ~1s in 10us steps; bounded fallback for the IRQ-off path. */
+#define I2C_DESIGNWARE_ATOMIC_POLL_RETRIES	100000
+
+/*
+ * Atomic-context variant of i2c_dw_wait_transfer().  The normal polling
+ * path (ACCESS_POLLING branch in i2c_dw_wait_transfer()) uses usleep_range()
+ * and a jiffies deadline, neither of which is safe when IRQs are disabled
+ * (noirq system resume, shutdown): the tick is frozen so jiffies does not
+ * advance, and usleep_range() may sleep.  Poll IC_RAW_INTR_STAT with
+ * udelay() and a retry count instead, while reusing the shared
+ * i2c_dw_process_transfer() state machine so TX/RX/STOP/ABRT handling is
+ * identical to the interrupt path.  Caller must have set ACCESS_POLLING.
+ */
+static int i2c_dw_wait_transfer_atomic(struct dw_i2c_dev *dev)
+{
+	unsigned int stat;
+	int retries = I2C_DESIGNWARE_ATOMIC_POLL_RETRIES;
+
+	do {
+		if (try_wait_for_completion(&dev->cmd_complete))
+			return 0;
+
+		stat = i2c_dw_read_clear_intrbits(dev);
+		if (stat)
+			i2c_dw_process_transfer(dev, stat);
+		else
+			udelay(10);
+	} while (--retries > 0);
+
+	return -ETIMEDOUT;
+}
+
+/*
+ * i2c_dw_xfer_atomic - transfer messages in atomic context.
+ *
+ * Used when IRQs are disabled, e.g. during noirq system resume where an
+ * I2C client (GPIO expander, PMIC) must be accessed before IRQs are
+ * re-enabled.  pm_runtime and mutexes may sleep, so drive the clock
+ * directly via i2c_dw_prepare_clk(); ACCESS_POLLING makes register reads
+ * use IC_RAW_INTR_STAT and routes the wait through
+ * i2c_dw_wait_transfer_atomic().
+ */
+int
+i2c_dw_xfer_atomic(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
+{
+	struct dw_i2c_dev *dev = i2c_get_adapdata(adap);
+	unsigned int flags = dev->flags;
+	int ret;
+
+	dev->flags |= ACCESS_POLLING;
+
+	ret = i2c_dw_prepare_clk(dev, true);
+	if (ret)
+		goto out_flags;
+
+	ret = i2c_dw_acquire_lock(dev);
+	if (ret)
+		goto out_clk;
+
+	reinit_completion(&dev->cmd_complete);
+	dev->msgs = msgs;
+	dev->msgs_num = num;
+	dev->cmd_err = 0;
+	dev->msg_write_idx = 0;
+	dev->msg_read_idx = 0;
+	dev->msg_err = 0;
+	dev->status = 0;
+	dev->abort_source = 0;
+	dev->rx_outstanding = 0;
+
+	i2c_dw_xfer_init(dev);
+
+	ret = i2c_dw_wait_transfer_atomic(dev);
+
+	if (i2c_dw_is_controller_active(dev)) {
+		i2c_recover_bus(&dev->adapter);
+		i2c_dw_init(dev);
+	} else {
+		__i2c_dw_disable_nowait(dev);
+	}
+
+	if (!ret) {
+		if (likely(!dev->cmd_err && !dev->status))
+			ret = 0;
+		else if (dev->cmd_err == DW_IC_ERR_TX_ABRT)
+			ret = i2c_dw_handle_tx_abort(dev);
+		else
+			ret = -EIO;
+	}
+
+	i2c_dw_release_lock(dev);
+out_clk:
+	i2c_dw_prepare_clk(dev, false);
+out_flags:
+	dev->flags = flags;
+	return ret < 0 ? ret : num;
+}
+
 int i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 {
 	struct dw_i2c_dev *dev = i2c_get_adapdata(adap);
 
 	if ((dev->flags & MODEL_MASK) == MODEL_AMD_NAVI_GPU)
 		return amd_i2c_dw_xfer_quirk(dev, msgs, num);
+
+	/*
+	 * Fall back to the atomic path when IRQs are disabled, e.g. during
+	 * noirq system resume where an I2C client (GPIO expander, PMIC)
+	 * must be accessed before IRQs are re-enabled.  The i2c core's
+	 * i2c_in_atomic_xfer_mode() gate does not cover resume_noirq
+	 * (system_state is already SYSTEM_RUNNING there), so the driver has
+	 * to route the transfer itself.
+	 */
+	if (IS_ENABLED(CONFIG_PREEMPT_COUNT) ? !preemptible() : irqs_disabled())
+		return i2c_dw_xfer_atomic(adap, msgs, num);
 
 	return i2c_dw_xfer_common(dev, msgs, num);
 }
