@@ -31,7 +31,10 @@ use crate::{
         Opaque, //
     },
 };
-use core::marker::PhantomData;
+use core::{
+    marker::PhantomData,
+    ops::Deref, //
+};
 
 /// Options for creating a misc device.
 #[derive(Copy, Clone)]
@@ -62,25 +65,30 @@ impl MiscDeviceOptions {
 /// - Deregistration occurs exactly once in [`Drop`] via `misc_deregister()`.
 /// - `inner` wraps a valid, pinned `miscdevice` created using
 ///   [`MiscDeviceOptions::into_raw`].
-#[repr(transparent)]
+#[repr(C)]
 #[pin_data(PinnedDrop)]
-pub struct MiscDeviceRegistration<T> {
+pub struct MiscDeviceRegistration<T: MiscDevice> {
     #[pin]
     inner: Opaque<bindings::miscdevice>,
-    _t: PhantomData<T>,
+    #[pin]
+    data: T::RegistrationData,
 }
 
 // SAFETY: It is allowed to call `misc_deregister` on a different thread from where you called
 // `misc_register`.
-unsafe impl<T> Send for MiscDeviceRegistration<T> {}
+unsafe impl<T: MiscDevice> Send for MiscDeviceRegistration<T> where T::RegistrationData: Send {}
 // SAFETY: All `&self` methods on this type are written to ensure that it is safe to call them in
-// parallel.
-unsafe impl<T> Sync for MiscDeviceRegistration<T> {}
+// parallel. The `RegistrationData` type is always `Sync`.
+unsafe impl<T: MiscDevice> Sync for MiscDeviceRegistration<T> {}
 
 impl<T: MiscDevice> MiscDeviceRegistration<T> {
     /// Register a misc device.
-    pub fn register(opts: MiscDeviceOptions) -> impl PinInit<Self, Error> {
+    pub fn register(
+        opts: MiscDeviceOptions,
+        data: impl PinInit<T::RegistrationData, Error>,
+    ) -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
+            data <- data,
             inner <- Opaque::try_ffi_init(move |slot: *mut bindings::miscdevice| {
                 // SAFETY: The initializer can write to the provided `slot`.
                 unsafe { slot.write(opts.into_raw::<T>()) };
@@ -88,11 +96,14 @@ impl<T: MiscDevice> MiscDeviceRegistration<T> {
                 // SAFETY: We just wrote the misc device options to the slot. The miscdevice will
                 // get unregistered before `slot` is deallocated because the memory is pinned and
                 // the destructor of this type deallocates the memory.
+                //
+                // The `data` field is `Sync + 'static`, so it's okay for the `open` callback to
+                // access it until the destructor is invoked.
+                //
                 // INVARIANT: If this returns `Ok(())`, then the `slot` will contain a registered
                 // misc device.
                 to_result(unsafe { bindings::misc_register(slot) })
             }),
-            _t: PhantomData,
         })
     }
 
@@ -112,8 +123,16 @@ impl<T: MiscDevice> MiscDeviceRegistration<T> {
     }
 }
 
+impl<T: MiscDevice> Deref for MiscDeviceRegistration<T> {
+    type Target = T::RegistrationData;
+    #[inline]
+    fn deref(&self) -> &T::RegistrationData {
+        &self.data
+    }
+}
+
 #[pinned_drop]
-impl<T> PinnedDrop for MiscDeviceRegistration<T> {
+impl<T: MiscDevice> PinnedDrop for MiscDeviceRegistration<T> {
     fn drop(self: Pin<&mut Self>) {
         // SAFETY: We know that the device is registered by the type invariants.
         unsafe { bindings::misc_deregister(self.inner.get()) };
@@ -125,6 +144,9 @@ impl<T> PinnedDrop for MiscDeviceRegistration<T> {
 pub trait MiscDevice: Sized {
     /// What kind of pointer should `Self` be wrapped in.
     type Ptr: ForeignOwnable + Send + Sync;
+
+    /// The registration data shared between all open files for this character device.
+    type RegistrationData: Sync + 'static;
 
     /// Called when the misc device is opened.
     ///
