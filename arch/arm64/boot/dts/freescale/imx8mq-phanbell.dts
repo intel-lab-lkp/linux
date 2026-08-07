@@ -101,7 +101,7 @@
 		map1 {
 			trip = <&cpu_alert1>;
 			cooling-device =
-			<&A53_0 0 2>; /* Exclude two highest OPPs */
+			<&A53_0 0 THERMAL_NO_LIMIT>;
 		};
 
 		map4 {
