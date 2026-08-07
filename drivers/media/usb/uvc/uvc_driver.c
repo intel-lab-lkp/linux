@@ -296,9 +296,21 @@ static int uvc_parse_frame(struct uvc_device *dev,
 	 * information. For uncompressed formats this can be fixed by computing
 	 * the value from the frame size.
 	 */
-	if (!(format->flags & UVC_FMT_FLAG_COMPRESSED))
-		frame->dwMaxVideoFrameBufferSize = format->bpp * frame->wWidth
-						 * frame->wHeight / 8;
+	if (!(format->flags & UVC_FMT_FLAG_COMPRESSED)) {
+		u64 bufsize;
+
+		bufsize = (u64)format->bpp * frame->wWidth * frame->wHeight / 8;
+		if (bufsize > U32_MAX) {
+			uvc_dbg(dev, DESCR,
+				"device %d videostreaming interface %d FRAME %u: computed buffer size overflows\n",
+				dev->udev->devnum,
+				alts->desc.bInterfaceNumber,
+				frame->bFrameIndex);
+			return -EINVAL;
+		}
+
+		frame->dwMaxVideoFrameBufferSize = bufsize;
+	}
 
 	/*
 	 * Clamp the default frame interval to the boundaries. A zero
