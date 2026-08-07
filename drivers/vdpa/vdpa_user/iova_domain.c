@@ -227,11 +227,23 @@ vduse_domain_get_coherent_page(struct vduse_iova_domain *domain, u64 iova)
 	u64 start = iova & PAGE_MASK;
 	u64 last = start + PAGE_SIZE - 1;
 	struct vhost_iotlb_map *map;
+	struct vdpa_map_file *map_file;
 	struct page *page = NULL;
 
 	spin_lock(&domain->iotlb_lock);
 	map = vhost_iotlb_itree_first(domain->iotlb, start, last);
 	if (!map)
+		goto out;
+
+	/*
+	 * Only coherent allocations made by this domain are backed by a real
+	 * struct page here: their map->addr is a physical address and their
+	 * backing file is the domain's own anon inode. Entries installed via a
+	 * vhost IOTLB message on a use_va device instead carry a userspace
+	 * virtual address in map->addr, and must never be fed to pfn_to_page().
+	 */
+	map_file = (struct vdpa_map_file *)map->opaque;
+	if (map_file->file != domain->file)
 		goto out;
 
 	page = pfn_to_page((map->addr + iova - map->start) >> PAGE_SHIFT);
