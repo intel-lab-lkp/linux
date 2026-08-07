@@ -216,9 +216,19 @@ int intel_huc_fw_get_binary_info(struct intel_uc_fw *huc_fw, const void *data, s
 	entry = data + header->header_length;
 
 	for (i = 0; i < header->num_of_entries; i++, entry++) {
-		if (strcmp(entry->name, "HUCP.man") == 0)
+		if (strcmp(entry->name, "HUCP.man") == 0) {
+			u32 offset = entry_offset(entry);
+
+			if (offset >= size ||
+			    size - offset < sizeof(struct intel_gsc_manifest_header)) {
+				huc_err(huc, "CPD manifest offset 0x%x out of bounds (size %zu)\n",
+					offset, size);
+				return -ENODATA;
+			}
+
 			intel_uc_fw_version_from_gsc_manifest(&huc_fw->file_selected.ver,
-							      data + entry_offset(entry));
+							      data + offset);
+		}
 
 		if (strcmp(entry->name, "huc_fw") == 0) {
 			u32 offset = entry_offset(entry);
