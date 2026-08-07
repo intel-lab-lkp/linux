@@ -50,6 +50,7 @@
 #define MAP_PADDLES			BIT(4)
 #define MAP_PROFILE_BUTTON		BIT(5)
 #define MAP_SHARE_OFFSET		BIT(6)
+#define MAP_ATROX			BIT(7)
 
 #define DANCEPAD_MAP_CONFIG	(MAP_DPAD_TO_BUTTONS |			\
 				MAP_TRIGGERS_TO_BUTTONS | MAP_STICKS_TO_NULL)
@@ -280,7 +281,8 @@ static const struct xpad_device {
 	{ 0x1430, 0xf801, "RedOctane Controller", 0, XTYPE_XBOX360 },
 	{ 0x146b, 0x0601, "BigBen Interactive XBOX 360 Controller", 0, XTYPE_XBOX360 },
 	{ 0x146b, 0x0604, "Bigben Interactive DAIJA Arcade Stick", MAP_TRIGGERS_TO_BUTTONS, XTYPE_XBOX360 },
-	{ 0x1532, 0x0a00, "Razer Atrox Arcade Stick", MAP_TRIGGERS_TO_BUTTONS, XTYPE_XBOXONE },
+	{ 0x1532, 0x0a00, "Razer Atrox Arcade Stick",
+	  MAP_TRIGGERS_TO_BUTTONS | MAP_ATROX, XTYPE_XBOXONE },
 	{ 0x1532, 0x0a03, "Razer Wildcat", 0, XTYPE_XBOXONE },
 	{ 0x1532, 0x0a29, "Razer Wolverine V2", 0, XTYPE_XBOXONE },
 	{ 0x1532, 0x0a57, "Razer Wolverine V3 Pro (Wired)", 0, XTYPE_XBOX360 },
@@ -1110,8 +1112,13 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 		}
 
 		/* TL/TR */
-		input_report_key(dev, BTN_TL,	data[5] & BIT(4));
-		input_report_key(dev, BTN_TR,	data[5] & BIT(5));
+		if (xpad->mapping & MAP_ATROX) {
+			input_report_key(dev, BTN_TL, data[5] & BIT(5));
+			input_report_key(dev, BTN_TR, data[5] & BIT(4));
+		} else {
+			input_report_key(dev, BTN_TL, data[5] & BIT(4));
+			input_report_key(dev, BTN_TR, data[5] & BIT(5));
+		}
 
 		/* stick press left/right */
 		input_report_key(dev, BTN_THUMBL, data[5] & BIT(6));
@@ -1133,10 +1140,15 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 
 		/* triggers left/right */
 		if (xpad->mapping & MAP_TRIGGERS_TO_BUTTONS) {
-			input_report_key(dev, BTN_TL2,
-					(__u16) le16_to_cpup((__le16 *)(data + 6)));
-			input_report_key(dev, BTN_TR2,
-					(__u16) le16_to_cpup((__le16 *)(data + 8)));
+			if ((xpad->mapping & MAP_ATROX) && len > 22) {
+				input_report_key(dev, BTN_TL2, data[22] & BIT(7));
+				input_report_key(dev, BTN_TR2, data[22] & BIT(6));
+			} else {
+				input_report_key(dev, BTN_TL2,
+						(__u16) le16_to_cpup((__le16 *)(data + 6)));
+				input_report_key(dev, BTN_TR2,
+						(__u16) le16_to_cpup((__le16 *)(data + 8)));
+			}
 		} else {
 			input_report_abs(dev, ABS_Z,
 					(__u16) le16_to_cpup((__le16 *)(data + 6)));
