@@ -27,6 +27,7 @@ struct pkvm_protected_reg {
 	u64 pfn;
 	u64 nr_pages;
 	pkvm_emulate_handler *cb;
+	void *priv;
 };
 
 extern struct pkvm_protected_reg kvm_nvhe_sym(pkvm_protected_regs)[];
