@@ -54,6 +54,11 @@ struct its_handler {
 	.read = (read_cb),				\
 }
 
+struct dte_entry {
+	u32	device_id;
+	u64	itt_pfn;
+};
+
 struct its_priv_state {
 	/* The location of the ITS in the hypervisor VA */
 	void __iomem	*base;
@@ -66,6 +71,9 @@ struct its_priv_state {
 	hyp_spinlock_t	its_lock;
 
 	struct its_host_state	*host_state;
+	u16			empty_entry;
+	u16			num_tracked_entries;
+	struct dte_entry	tracked_entries[];
 };
 
 #define GITS_CWRITER_RETRY	BIT_ULL(0)
@@ -110,11 +118,236 @@ static int submit_single_cmd(struct its_priv_state *its, bool retry)
 	return 0;
 }
 
+static int get_num_itt_pages(struct its_priv_state *its, u8 num_bits)
+{
+	u64 gits_typer, nr_ites;
+	size_t sz;
+
+	gits_typer = readq_relaxed(its->base + GITS_TYPER);
+	if (num_bits > FIELD_GET(GITS_TYPER_IDBITS, gits_typer))
+		return -EINVAL;
+
+	nr_ites = BIT_ULL(num_bits + 1);
+	sz = nr_ites * (FIELD_GET(GITS_TYPER_ITT_ENTRY_SIZE, gits_typer) + 1);
+	sz = max(sz, ITS_ITT_ALIGN) + ITS_ITT_ALIGN - 1;
+
+	return PAGE_ALIGN(sz) >> PAGE_SHIFT;
+}
+
+static struct its_baser *get_table_from_snapshot(struct its_host_state *host, u64 baser_type)
+{
+	int i;
+
+	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
+		if (GITS_BASER_TYPE(host->tables[i].val) == baser_type)
+			return &host->tables[i];
+	}
+
+	return NULL;
+}
+
+static int check_table_update(struct its_priv_state *its, u32 device_id, u64 type, bool rollback)
+{
+	struct its_baser *table = get_table_from_snapshot(its->host_state, type);
+	size_t lvl2_entry_sz, lvl1_table_sz, num_lvl2_entries, num_lvl1_entries;
+	u64 *snapshot_table, *original_table;
+	u64 prev_entry, new_entry;
+	u32 new_entry_index;
+	int ret;
+
+	if (!table)
+		return -EINVAL;
+
+	/* We only do shadow udates for the first level of indirect tables */
+	if (!(table->val & GITS_BASER_INDIRECT))
+		return 0;
+
+	lvl2_entry_sz = GITS_BASER_ENTRY_SIZE(table->val);
+	num_lvl2_entries = table->psz / lvl2_entry_sz;
+
+	lvl1_table_sz = (1 << table->order) << PAGE_SHIFT;
+	num_lvl1_entries = lvl1_table_sz / sizeof(u64);
+
+	new_entry_index = device_id / num_lvl2_entries;
+	if (new_entry_index >= num_lvl1_entries)
+		return -ENOSPC;
+
+	snapshot_table = kern_hyp_va(table->base_snapshot);
+	original_table = kern_hyp_va(table->base);
+
+	/*
+	 * Look at the host table copy and if the entry hasn't changed the valid
+	 * bit compared to the original table used by the hardwre, don't update anything.
+	 */
+	new_entry = snapshot_table[new_entry_index];
+	prev_entry = original_table[new_entry_index];
+	if (!((new_entry ^ prev_entry) & GITS_BASER_VALID))
+		return 0;
+
+	/*
+	 * The host can play nasty tricks with read-modify-write after a
+	 * rollback is triggered but we still hold on to the original tables
+	 * which are hyp managed and we don't give back any other page to the
+	 * host.
+	 */
+	if (rollback)
+		new_entry = new_entry ^ GITS_BASER_VALID;
+
+	if (new_entry & GITS_BASER_VALID)
+		ret = __pkvm_host_donate_hyp(hyp_phys_to_pfn(new_entry & PHYS_MASK),
+					     table->psz >> PAGE_SHIFT);
+	else
+		ret = __pkvm_hyp_donate_host(hyp_phys_to_pfn(prev_entry & PHYS_MASK),
+					     table->psz >> PAGE_SHIFT);
+	if (ret)
+		return ret;
+
+	original_table[new_entry_index] = new_entry;
+	return 0;
+}
+
+static int track_pfn_add(struct its_priv_state *its, u32 device_id, u64 pfn)
+{
+	void *virt = hyp_phys_to_virt(hyp_pfn_to_phys(pfn));
+	struct dte_entry *entries = &its->tracked_entries[0];
+	bool pfn_shared = false;
+	int ret;
+	int i;
+
+	for (i = 0; i < its->num_tracked_entries; i++) {
+		if (entries[i].itt_pfn == pfn) {
+			if (entries[i].device_id != device_id) {
+				pfn_shared = true;
+				break;
+			} else {
+				return hyp_pin_shared_mem(virt, virt + PAGE_SIZE);
+			}
+		}
+	}
+
+	if (its->empty_entry >= its->num_tracked_entries)
+		return -ENOSPC;
+
+	if (!pfn_shared) {
+		ret = __pkvm_host_share_hyp(pfn);
+		if (ret)
+			return ret;
+	}
+
+	ret = hyp_pin_shared_mem(virt, virt + PAGE_SIZE);
+	if (ret) {
+		__pkvm_host_unshare_hyp(pfn);
+		return ret;
+	}
+
+	entries[its->empty_entry].itt_pfn = pfn;
+	entries[its->empty_entry].device_id = device_id;
+
+	for (i = 0; i < its->num_tracked_entries; i++) {
+		if (!entries[i].itt_pfn && !entries[i].device_id)
+			break;
+	}
+	its->empty_entry = i;
+	return 0;
+}
+
+static int track_pfn_remove(struct its_priv_state *its, u32 device_id, u64 pfn)
+{
+	void *virt = hyp_phys_to_virt(hyp_pfn_to_phys(pfn));
+	struct dte_entry *entries = &its->tracked_entries[0];
+	int ret;
+	int i;
+
+	for (i = 0; i < its->num_tracked_entries; i++) {
+		if (entries[i].itt_pfn != pfn || entries[i].device_id != device_id)
+			continue;
+
+		/* To decrement the refcount, first try to unshare it */
+		ret = __pkvm_host_unshare_hyp(pfn);
+		if (ret == -EBUSY) {
+			hyp_unpin_shared_mem(virt, virt + PAGE_SIZE);
+			ret = __pkvm_host_unshare_hyp(pfn);
+			if (ret == -EBUSY)
+				return 0;
+
+			WARN_ON(ret);
+		}
+
+		memset(&entries[i], 0, sizeof(struct dte_entry));
+		its->empty_entry = i;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+static int track_pfn(struct its_priv_state *its, u32 device_id, u64 pfn, int num_pages,
+		     bool remove)
+{
+	int ret;
+	int i;
+
+	for (i = 0; i < num_pages; i++) {
+		if (remove)
+			ret = track_pfn_remove(its, device_id, pfn + i);
+		else
+			ret = track_pfn_add(its, device_id, pfn + i);
+
+		if (ret)
+			goto err_track_pfn;
+	}
+
+	return 0;
+err_track_pfn:
+	for (i = i - 1; i >= 0; i--) {
+		if (remove)
+			WARN_ON(track_pfn_add(its, device_id, pfn + i));
+		else
+			WARN_ON(track_pfn_remove(its, device_id, pfn + i));
+	}
+	return ret;
+}
+
+static int process_its_mapd(struct its_priv_state *its, struct its_cmd_block *cmd, bool rollback)
+{
+	phys_addr_t itt_addr = cmd->raw_cmd[2] & GENMASK(51, 8);
+	bool remove = !(cmd->raw_cmd[2] & BIT(63));
+	u8 size = cmd->raw_cmd[1] & GENMASK(4, 0);
+	u32 device_id = cmd->raw_cmd[0] >> 32;
+	int num_pages, ret;
+	u64 itt_pfn;
+
+	if (rollback)
+		remove = !remove;
+
+	itt_pfn = hyp_phys_to_pfn(itt_addr);
+	num_pages = get_num_itt_pages(its, size);
+	if (num_pages < 0)
+		return num_pages;
+
+	ret = check_table_update(its, device_id, GITS_BASER_TYPE_DEVICE, rollback);
+	if (ret)
+		return ret;
+
+	return track_pfn(its, device_id, itt_pfn, num_pages, remove);
+}
+
 static int process_cmd(struct its_priv_state *its, struct its_cmd_block *cmd,
 		       bool rollback)
 {
-	/* Passthrough everything for now */
-	return 0;
+	u8 req_type = cmd->raw_cmd[0] & GENMASK_ULL(7, 0);
+	int ret = 0;
+
+	switch (req_type) {
+	case GITS_CMD_MAPD:
+		ret = process_its_mapd(its, cmd, rollback);
+		break;
+	default:
+		/* Passthrough everything for now */
+		break;
+	}
+
+	return ret;
 }
 
 static void cwriter_write(struct pkvm_protected_reg *region, u64 offset, u64 value)
@@ -459,6 +692,9 @@ int pkvm_its_emulate_setup(phys_addr_t dev_addr, struct its_host_state *host_sta
 	priv_state->base = (void __iomem *)__hyp_va(dev_addr);
 	priv_state->cmd_original = host_state->cmd_original;
 	priv_state->cmd_host_copy = host_state->cmd_host_copy;
+	priv_state->empty_entry = 0;
+	priv_state->num_tracked_entries = ((priv_num_pages << PAGE_SHIFT) -
+		offsetof(struct its_priv_state, tracked_entries)) / sizeof(struct dte_entry);
 
 	priv_state->cmd_offset = readq_relaxed(priv_state->base + GITS_CREADR) &
 		GITS_CREADR_OFFSET;
