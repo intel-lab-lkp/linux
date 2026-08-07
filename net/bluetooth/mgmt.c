@@ -1127,13 +1127,15 @@ static void mesh_next(struct hci_dev *hdev, void *data, int err)
 		return;
 	}
 
-	err = hci_cmd_sync_queue(hdev, mesh_send_sync, mesh_tx,
+	err = hci_cmd_sync_queue(hdev, mesh_send_sync, mgmt_mesh_get(mesh_tx),
 				 mesh_send_start_complete);
 
-	if (err < 0)
+	if (err < 0) {
+		mgmt_mesh_put(mesh_tx);
 		mesh_send_complete(hdev, mesh_tx, false);
-	else
+	} else {
 		hci_dev_set_flag(hdev, HCI_MESH_SENDING);
+	}
 
 	hci_dev_unlock(hdev);
 }
@@ -2322,7 +2324,7 @@ static void mesh_send_start_complete(struct hci_dev *hdev, void *data, int err)
 	u8 mgmt_err = mgmt_status(err);
 
 	if (err == -ECANCELED)
-		return;
+		goto put;
 
 	/* Report any errors here, but don't report completion */
 
@@ -2332,12 +2334,15 @@ static void mesh_send_start_complete(struct hci_dev *hdev, void *data, int err)
 		hci_dev_lock(hdev);
 		mesh_send_complete(hdev, mesh_tx, false);
 		hci_dev_unlock(hdev);
-		return;
+		goto put;
 	}
 
 	mesh_send_interval = msecs_to_jiffies((send->cnt) * 25);
 	queue_delayed_work(hdev->req_workqueue, &hdev->mesh_send_done,
 			   mesh_send_interval);
+
+put:
+	mgmt_mesh_put(mesh_tx);
 }
 
 static int mesh_send_sync(struct hci_dev *hdev, void *data)
@@ -2538,11 +2543,15 @@ static int mesh_send(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 	sending = hci_dev_test_flag(hdev, HCI_MESH_SENDING);
 	mesh_tx = mgmt_mesh_add(sk, hdev, send, len);
 
-	if (!mesh_tx)
+	if (!mesh_tx) {
 		err = -ENOMEM;
-	else if (!sending)
-		err = hci_cmd_sync_queue(hdev, mesh_send_sync, mesh_tx,
+	} else if (!sending) {
+		err = hci_cmd_sync_queue(hdev, mesh_send_sync,
+					 mgmt_mesh_get(mesh_tx),
 					 mesh_send_start_complete);
+		if (err < 0)
+			mgmt_mesh_put(mesh_tx);
+	}
 
 	if (err < 0) {
 		bt_dev_err(hdev, "Send Mesh Failed %d", err);
