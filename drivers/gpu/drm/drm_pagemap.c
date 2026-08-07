@@ -1098,11 +1098,118 @@ void drm_pagemap_put(struct drm_pagemap *dpagemap)
 EXPORT_SYMBOL(drm_pagemap_put);
 
 /**
+ * drm_pagemap_page_get_flags() - Read the drm_pagemap flags of a device folio
+ * @page: Pointer to a page of the device folio
+ *
+ * Return: The DRM_PAGEMAP_ZDD_FLAG_* bits encoded in zone_device_data.
+ */
+static unsigned long drm_pagemap_page_get_flags(struct page *page)
+{
+	struct folio *folio = page_folio(page);
+
+	return (unsigned long)folio_zone_device_data(folio) &
+		DRM_PAGEMAP_ZDD_FLAG_MASK;
+}
+
+/**
+ * drm_pagemap_page_set_flags() - Set the drm_pagemap flags of a device folio
+ * @page: Pointer to a page of the device folio
+ * @flags: DRM_PAGEMAP_ZDD_FLAG_* bits to set
+ *
+ * Preserve any flags already encoded alongside the ZDD pointer.
+ */
+static void drm_pagemap_page_set_flags(struct page *page,
+				       unsigned long flags)
+{
+	struct folio *folio = page_folio(page);
+	struct drm_pagemap_zdd *zdd;
+
+	if (WARN_ON_ONCE(flags & ~DRM_PAGEMAP_ZDD_FLAG_MASK))
+		return;
+
+	zdd = drm_pagemap_page_zone_device_data(page);
+	flags |= drm_pagemap_page_get_flags(page);
+	folio_set_zone_device_data(folio,
+				   (void *)((unsigned long)zdd | flags));
+}
+
+/**
+ * drm_pagemap_retire_migrated_pages() - Record migrated device folios
+ * @src_pfns: source array after migrate_vma_pages() or migrate_device_pages()
+ * @npages: number of entries in @src_pfns
+ *
+ * Flag device folios that were successfully migrated to RAM before finalize
+ * unlocks the sources. The migrated state is stored in the physical folio, so
+ * it survives later folio splits and a subsequent raw-PFN eviction can skip it.
+ */
+static void drm_pagemap_retire_migrated_pages(unsigned long *src_pfns,
+					      unsigned long npages)
+{
+	unsigned long i = 0;
+
+	while (i < npages) {
+		struct page *page = migrate_pfn_to_page(src_pfns[i]);
+		unsigned long nr = 1;
+
+		if (!page) {
+			i++;
+			continue;
+		}
+
+		if (src_pfns[i] & MIGRATE_PFN_COMPOUND)
+			nr = folio_nr_pages(page_folio(page));
+
+		if ((src_pfns[i] & MIGRATE_PFN_MIGRATE) &&
+		    is_device_private_page(page))
+			drm_pagemap_page_set_flags(page,
+						   DRM_PAGEMAP_ZDD_FLAG_MIGRATED);
+
+		i += nr;
+	}
+}
+
+/**
+ * drm_pagemap_skip_retired_pages() - Drop retired PFNs from a raw-PFN eviction
+ * @src_pfns: source array after migrate_device_pfns() (MIGRATE_PFN encoded)
+ * @npages: number of entries in @src_pfns
+ *
+ * Skip source folios already migrated to RAM, identified by the migrated flag
+ * stored in the physical folio's zone_device_data.
+ */
+static void drm_pagemap_skip_retired_pages(unsigned long *src_pfns,
+					   unsigned long npages)
+{
+	unsigned long i = 0;
+
+	while (i < npages) {
+		struct page *page = migrate_pfn_to_page(src_pfns[i]);
+		unsigned long nr = 1;
+
+		if (!page) {
+			i++;
+			continue;
+		}
+
+		if (src_pfns[i] & MIGRATE_PFN_COMPOUND)
+			nr = folio_nr_pages(page_folio(page));
+
+		if ((src_pfns[i] & MIGRATE_PFN_MIGRATE) &&
+		    is_device_private_page(page) &&
+		    (drm_pagemap_page_get_flags(page) &
+		     DRM_PAGEMAP_ZDD_FLAG_MIGRATED))
+			src_pfns[i] &= ~MIGRATE_PFN_MIGRATE;
+
+		i += nr;
+	}
+}
+
+/**
  * drm_pagemap_evict_to_ram() - Evict GPU SVM range to RAM
  * @devmem_allocation: Pointer to the device memory allocation
  *
- * Similar to __drm_pagemap_migrate_to_ram but does not require mmap lock and
- * migration done via migrate_device_* functions.
+ * Similar to __drm_pagemap_migrate_to_ram(), but uses the
+ * migrate_device_* helpers and does not require the mmap lock. Device
+ * PFNs already migrated to RAM by either migration path are skipped.
  *
  * Return: 0 on success, negative error code on failure.
  */
@@ -1143,6 +1250,8 @@ retry:
 	if (err)
 		goto err_free;
 
+	drm_pagemap_skip_retired_pages(src, npages);
+
 	err = drm_pagemap_migrate_populate_ram_pfn(NULL, NULL, npages, &mpages,
 						   src, dst, 0);
 	if (err || !mpages)
@@ -1173,6 +1282,7 @@ err_finalize:
 	if (err)
 		drm_pagemap_migration_unlock_put_pages(npages, dst);
 	migrate_device_pages(src, dst, npages);
+	drm_pagemap_retire_migrated_pages(src, npages);
 	migrate_device_finalize(src, dst, npages);
 	drm_pagemap_migrate_unmap_pages(devmem_allocation->dev, pagemap_addr, dst, npages,
 					DMA_FROM_DEVICE, &state);
@@ -1303,6 +1413,7 @@ err_finalize:
 	if (err)
 		drm_pagemap_migration_unlock_put_pages(npages, migrate.dst);
 	migrate_vma_pages(&migrate);
+	drm_pagemap_retire_migrated_pages(migrate.src, npages);
 	migrate_vma_finalize(&migrate);
 	if (dev)
 		drm_pagemap_migrate_unmap_pages(dev, pagemap_addr, migrate.dst,
@@ -1355,13 +1466,18 @@ static vm_fault_t drm_pagemap_migrate_to_ram(struct vm_fault *vmf)
 static void drm_pagemap_folio_split(struct folio *orig_folio, struct folio *new_folio)
 {
 	struct drm_pagemap_zdd *zdd;
+	struct page *page;
+	unsigned long flags;
 
 	if (!new_folio)
 		return;
 
 	new_folio->pgmap = orig_folio->pgmap;
-	zdd = folio_zone_device_data(orig_folio);
-	folio_set_zone_device_data(new_folio, drm_pagemap_zdd_get(zdd));
+	page = folio_page(orig_folio, 0);
+	zdd = drm_pagemap_page_zone_device_data(page);
+	flags = drm_pagemap_page_get_flags(page);
+	folio_set_zone_device_data(new_folio,
+				   (void *)((unsigned long)drm_pagemap_zdd_get(zdd) | flags));
 }
 
 static const struct dev_pagemap_ops drm_pagemap_pagemap_ops = {
