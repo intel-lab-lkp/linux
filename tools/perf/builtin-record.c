@@ -191,6 +191,7 @@ struct record {
 };
 
 static volatile int done;
+static volatile sig_atomic_t drain_interrupted;
 
 static volatile int auxtrace_record__snapshot_started;
 static DEFINE_TRIGGER(auxtrace_snapshot_trigger);
@@ -693,6 +694,8 @@ static void sig_handler(int sig)
 	else
 		signr = sig;
 
+	if (done && sig != SIGCHLD)
+		drain_interrupted = 1;
 	done = 1;
 #ifdef HAVE_EVENTFD_SUPPORT
 	if (done_fd >= 0) {
@@ -2425,6 +2428,57 @@ static unsigned long record__waking(struct record *rec)
 	return waking;
 }
 
+/*
+ * Weak arch hook called by record__final_data().
+ * Returns 1 if the arch PMU driver still has records pending (the caller
+ * will call record__mmap_read_all() and retry), 0 when done.
+ * Implementations use perf_evsel__read() so this must be called while
+ * events are still ACTIVE (before evlist__disable()).
+ */
+__weak int arch_perf_record__need_read(struct evlist *evlist __maybe_unused)
+{
+	return 0;
+}
+
+static void record__final_aux_data(struct record *rec)
+{
+	u64 last_bytes_written = 0;
+	int retries = 0;
+#define FINAL_DATA_MAX_RETRIES 20  /* 20 * 1 ms = 20 ms max wait */
+
+	/*
+	 * Drain any remaining AUX data.  Called only when full_auxtrace is
+	 * set; --threads is mutually exclusive with full_auxtrace and is
+	 * rejected at open time, so the main thread's thread_data[0] covers
+	 * all CPUs here.
+	 * arch_perf_record__need_read() calls perf_evsel__read() and
+	 * therefore requires events to still be ACTIVE (before
+	 * evlist__disable()).
+	 * A second SIGINT/SIGTERM sets drain_interrupted to abort immediately.
+	 */
+	while (arch_perf_record__need_read(rec->evlist)) {
+		if (drain_interrupted)
+			break;
+
+		last_bytes_written = record__bytes_written(rec);
+
+		if (record__mmap_read_all(rec, true) < 0)
+			return;
+
+		if (record__bytes_written(rec) == last_bytes_written) {
+			if (++retries >= FINAL_DATA_MAX_RETRIES) {
+				pr_warning("Final AUX data drain made no forward progress after %d retries.\n",
+					   FINAL_DATA_MAX_RETRIES);
+				break;
+			}
+			usleep(1000); /* 1 ms: let AUX ring buffer consumer advance */
+		} else {
+			retries = 0;
+			usleep(100);
+		}
+	}
+}
+
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
 	int err;
@@ -2852,10 +2906,21 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		 */
 		if (done && !disabled && !target__none(&opts->target)) {
 			trigger_off(&auxtrace_snapshot_trigger);
+			if (rec->opts.full_auxtrace)
+				record__final_aux_data(rec);
 			evlist__disable(rec->evlist);
 			disabled = true;
 		}
 	}
+
+	/*
+	 * If the loop exited without entering the in-loop disable block
+	 * (early break, or child workload where target__none is true and
+	 * the block is never reached), drain any remaining AUX data now.
+	 * Events are still live at this point.
+	 */
+	if ((target__none(&opts->target) || !disabled) && rec->opts.full_auxtrace)
+		record__final_aux_data(rec);
 
 	trigger_off(&auxtrace_snapshot_trigger);
 	trigger_off(&switch_output_trigger);
