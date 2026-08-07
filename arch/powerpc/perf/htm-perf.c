@@ -108,6 +108,9 @@ struct htm_pmu_buf {
 	u64	head;
 	u64     size;
 	int     collect_htm_trace;
+	void    *htm_mem_buf;	/* Staging area for H_HTM_OP_DUMP_SYSMEM_CONF hcall */
+	u64     mem_start;	/* Hypervisor iterator position for DUMP_SYSMEM_CONF */
+	int     collect_htm_mem;	/* State flag tracking whether memory logging is ongoing */
 };
 
 /*
@@ -202,6 +205,168 @@ static ssize_t htm_return_check(int rc)
  */
 #define HTM_TRACING_ACTIVE	1
 #define HTM_TRACING_INACTIVE	0
+
+/*
+ * HTM_MEM_BUF_SIZE is the allocation size for the hcall staging buffer.
+ * The hypervisor fills as many 32-byte entries as fit within the buffer
+ * size passed to H_HTM_OP_DUMP_SYSMEM_CONF — it does not cap at a fixed
+ * entry count.
+ *
+ * HTM_MEM_BUF_SIZE is chosen to satisfy two constraints:
+ *
+ *   1. The full perf record (perf_event_header + fixed sample fields +
+ *      PERF_SAMPLE_RAW u32 size prefix + to_copy) must fit in
+ *      perf_event_header.size which is __u16 (max 65535):
+ *        overhead = 8 (perf_event_header)
+ *                 + 64 (header_size, worst case: 8 u64 sample fields)
+ *                 + 16 (id_header_size, worst case)
+ *                 +  4 (PERF_SAMPLE_RAW u32 size prefix)
+ *                 = 92 bytes
+ *        to_copy <= 65535 - 92 = 65443
+ *        round down to multiple of 32: 65440
+ *
+ *   2. HTM_MEM_BUF_SIZE must be a multiple of 32 so a whole number of
+ *      32-byte entries fill it exactly.
+ *
+ * 65440 = 32 + 2043 * 32 is the largest multiple of 32 satisfying all
+ * constraints:
+ *   - total record: 65440 + 92 = 65532 < 65535 (3-byte u16 margin)
+ *
+ * HTM_MEM_MAX_ENTRIES is derived from HTM_MEM_BUF_SIZE — not the other
+ * way around — so the hcall is always given the true buffer size and
+ * the WARN_ON_ONCE(to_copy > HTM_MEM_BUF_SIZE) guard is a genuine
+ * impossibility check rather than a post-overflow assertion.
+ */
+#define HTM_MEM_BUF_SIZE	65440U
+#define HTM_MEM_MAX_ENTRIES	((HTM_MEM_BUF_SIZE - 32) / 32)	/* 2043 */
+
+/*
+ * htm_collect_memory_config - issue one H_HTM_OP_DUMP_SYSMEM_CONF hcall
+ * and emit the result as a single PERF_SAMPLE_RAW record.
+ *
+ * Mirrors the AUX trace path: one hcall per call, return immediately.
+ * htm_dump_sample_data() calls this once per htm_event_read() invocation;
+ * the perf drain loop calls htm_event_read() repeatedly until
+ * event->count reaches zero, giving userspace a chance to drain the ring
+ * buffer between every record.  This avoids the ring-buffer-overflow
+ * problem that a while(true) loop would create: if the ring buffer fills
+ * mid-loop there is no way to break out and let userspace drain it.
+ *
+ * Returns the number of 32-byte memory configuration entries emitted
+ * (to_copy / 32) on success, -ENOSPC if throttled (sample was written,
+ * event temporarily paused — advance mem_start, retry next block next
+ * call), 0 if the stream ended normally, or a negative error code on
+ * hard failure.  The caller uses the return value directly as
+ * event->count, consistent with the AUX trace path returning count..
+ */
+static ssize_t htm_collect_memory_config(struct perf_event *event,
+					 struct htm_pmu_buf *aux_buf)
+{
+	struct perf_sample_data data;
+	struct perf_raw_record raw;
+	struct pt_regs regs;
+	u8 *htm_mem_buf = aux_buf->htm_mem_buf;
+	__be64 *num_entries;
+	u64 next_start;
+	u64 to_copy;
+	long rc;
+	ssize_t ret;
+	int retries = 0;
+
+	/*
+	 * Zero the full pt_regs before fetching the caller context.
+	 * perf_fetch_caller_regs() on PowerPC only initialises nip, msr,
+	 * gpr[1], and result; all other fields (link, ctr, xer, remaining
+	 * GPRs) would otherwise contain uninitialized stack bytes.  If the
+	 * event is opened with PERF_SAMPLE_CALLCHAIN, perf_callchain_kernel()
+	 * reads regs->link and writes it to the ring buffer, leaking kernel
+	 * stack memory to userspace.  PERF_SAMPLE_CALLCHAIN is rejected in
+	 * htm_event_init(), but zeroing here is the safe defensive practice
+	 * used by tracepoints and BPF perf-event helpers.
+	 */
+	memset(&regs, 0, sizeof(regs));
+	perf_fetch_caller_regs(&regs);
+
+	/* Issue one hcall with the current iterator position */
+	do {
+		rc = htm_hcall_wrapper(htmflags, 0, 0, 0,
+				       0, H_HTM_OP_DUMP_SYSMEM_CONF,
+				       virt_to_phys(aux_buf->htm_mem_buf),
+				       HTM_MEM_BUF_SIZE, aux_buf->mem_start);
+		ret = htm_return_check(rc);
+	} while (ret == -EBUSY && ++retries < MAX_RETRIES);
+
+	/*
+	 * ret == 0 (H_NOT_AVAILABLE): normal end of stream.
+	 * ret < 0 (error): hard failure.
+	 * Both cases: clear collect_htm_mem so the next htm_event_read()
+	 * call does not re-enter, and return so event->count is set to 0.
+	 */
+	if (ret <= 0) {
+		aux_buf->collect_htm_mem = 0;
+		return ret;
+	}
+
+	/*
+	 * Read next iterator value and payload size from the hcall response.
+	 * next_start == 0 means this is the last batch.
+	 */
+	next_start = be64_to_cpu(*((__be64 *)(htm_mem_buf + 0x8)));
+	num_entries = (__be64 *)(htm_mem_buf + 0x10);
+	to_copy = 32 + (be64_to_cpu(*num_entries) * 32);
+
+	if (WARN_ON_ONCE(to_copy > HTM_MEM_BUF_SIZE)) {
+		aux_buf->collect_htm_mem = 0;
+		return -EIO;
+	}
+
+	/*
+	 * htm_mem_buf is stable for the duration of this single call —
+	 * no loop reuse, so raw.frag.data remains valid throughout
+	 * perf_event_overflow().  No memcpy to a separate emit_buf needed.
+	 */
+	perf_sample_data_init(&data, 0, event->hw.last_period);
+	memset(&raw, 0, sizeof(raw));
+	raw.frag.data = htm_mem_buf;
+	raw.frag.size = to_copy;
+	perf_sample_save_raw_data(&data, event, &raw);
+
+	if (perf_event_overflow(event, &data, &regs)) {
+		/*
+		 * Event throttled: overflow_handler ran unconditionally before
+		 * returning, so the sample WAS written to the ring buffer.
+		 * Advance mem_start so the same block is not emitted again.
+		 * Return -ENOSPC so htm_event_read() sets event->count=1,
+		 * keeping the drain loop alive to emit the next block once
+		 * the event is unthrottled.
+		 */
+		aux_buf->mem_start = next_start;
+		if (!next_start)
+			aux_buf->collect_htm_mem = 0;
+		return -ENOSPC;
+	}
+
+	/*
+	 * perf_event_overflow() returns 0 for both "sample written" and
+	 * "ring buffer full, sample dropped" (perf_output_begin() failure
+	 * inside perf_output_sample() is silent).  Advance the iterator in
+	 * both cases.  This matches tracepoint / BPF perf-event helper
+	 * behaviour: when the ring buffer is full, records are dropped and
+	 * the stream continues.  Stalling the iterator on drop would loop
+	 * forever if the ring stayed full.  Dropped records are counted in
+	 * the PERF_RECORD_LOST entry in the ring buffer header.
+	 */
+	aux_buf->mem_start = next_start;
+	if (!next_start)
+		aux_buf->collect_htm_mem = 0;
+
+	/*
+	 * Return the number of 32-byte entries emitted.  Dividing here keeps
+	 * htm_event_read() free of format knowledge, consistent with the AUX
+	 * trace path returning chunk_size / 128.
+	 */
+	return (ssize_t)(to_copy / 32);
+}
 
 static void reset_htm_active(struct perf_event *event)
 {
@@ -594,10 +759,25 @@ static ssize_t htm_dump_sample_data(struct perf_event *event)
 	 * NMI reentrancy from corrupting an outer transaction's handle.
 	 */
 	aux_buf = perf_aux_output_begin(&handle, event);
-	if (!aux_buf)
-		return 0;
+	if (!aux_buf) {
+		/*
+		 * AUX ring buffer is full: perf_aux_output_begin() returned NULL.
+		 * If the AUX trace dump is already complete but memory
+		 * configuration collection is still in progress, we must not
+		 * return 0 here — that would signal EOF to htm_event_read() and
+		 * permanently abandon the mem config drain.  Memory config
+		 * records go to the main ring buffer via perf_event_overflow(),
+		 * which is entirely independent of the AUX ring.  Retrieve the
+		 * aux_buf from the ring's aux_private and call directly.
+		 */
+		struct htm_pmu_buf *fb = perf_get_aux(&handle);
 
-	if (!aux_buf->collect_htm_trace) {
+		if (fb && !fb->collect_htm_trace && fb->collect_htm_mem)
+			return htm_collect_memory_config(event, fb);
+		return 0;
+	}
+
+	if (!aux_buf->collect_htm_trace && !aux_buf->collect_htm_mem) {
 		/*
 		 * collect_htm_trace is cleared on hcall error and reset to 1
 		 * in htm_event_start() when tracing restarts.  If it is still
@@ -630,6 +810,11 @@ static ssize_t htm_dump_sample_data(struct perf_event *event)
 			perf_aux_output_end(&handle, 0);
 			return -EIO;
 		}
+	}
+
+	if (!aux_buf->collect_htm_trace) {
+		ret = htm_collect_memory_config(event, aux_buf);
+		goto out;
 	}
 
 	/* Derive the exact target destination point directly out of active ring pointers */
@@ -701,8 +886,8 @@ static ssize_t htm_dump_sample_data(struct perf_event *event)
 	if (target->hw_buf_size) {
 		if (aux_buf->head >= target->hw_buf_size) {
 			aux_buf->collect_htm_trace = 0;
-			perf_aux_output_end(&handle, 0);
-			return 0;
+			ret = htm_collect_memory_config(event, aux_buf);
+			goto out;
 		}
 		if (chunk_size > target->hw_buf_size - aux_buf->head)
 			chunk_size = target->hw_buf_size - aux_buf->head;
@@ -757,6 +942,8 @@ static ssize_t htm_dump_sample_data(struct perf_event *event)
 	 * buffer session.
 	 */
 	aux_buf->collect_htm_trace = 0;
+	ret = htm_collect_memory_config(event, aux_buf);
+out:
 	perf_aux_output_end(&handle, 0);
 	return ret;
 }
@@ -862,7 +1049,21 @@ static void *htm_setup_aux(struct perf_event *event, void **pages,
 		return NULL;
 	}
 
+	/*
+	 * htm_mem_buf is the staging area passed directly to the
+	 * H_HTM_OP_DUMP_SYSMEM_CONF hcall.  The hypervisor is told the
+	 * buffer length is HTM_MEM_BUF_SIZE; allocate exactly
+	 * that amount.  See the HTM_MEM_BUF_SIZE comment for the derivation.
+	 */
+	buf->htm_mem_buf = kzalloc_node(HTM_MEM_BUF_SIZE, GFP_KERNEL, cpu_to_node(cpu));
+	if (!buf->htm_mem_buf) {
+		kfree(buf);
+		return NULL;
+	}
+
 	buf->collect_htm_trace = 1;
+	buf->collect_htm_mem = 1;
+	buf->mem_start = 0;
 	buf->head = 0;
 	return buf;
 }
@@ -877,6 +1078,7 @@ static void htm_free_aux(void *aux)
 	if (!buf)
 		return;
 
+	kfree(buf->htm_mem_buf);
 	kfree(buf);
 }
 
