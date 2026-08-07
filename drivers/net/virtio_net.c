@@ -6078,6 +6078,21 @@ static int virtnet_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 	if (!prog && !old_prog)
 		return 0;
 
+	/* ethtool channel shrink is gated on xsk_get_pool_from_qid(), but
+	 * XDP detach shrinks curr_queue_pairs here without that check.
+	 * Refusing the shrink keeps AF_XDP queues active until the socket
+	 * unbinds them.
+	 */
+	if (curr_qp + xdp_qp < vi->curr_queue_pairs) {
+		for (i = curr_qp + xdp_qp; i < vi->curr_queue_pairs; i++) {
+			if (vi->rq[i].xsk_pool || vi->sq[i].xsk_pool) {
+				NL_SET_ERR_MSG_MOD(extack,
+						   "Cannot reduce queues while AF_XDP is bound");
+				return -EBUSY;
+			}
+		}
+	}
+
 	if (prog)
 		bpf_prog_add(prog, vi->max_queue_pairs - 1);
 
