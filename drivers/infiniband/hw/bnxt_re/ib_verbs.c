@@ -199,7 +199,7 @@ int bnxt_re_query_device(struct ib_device *ibdev,
 	addrconf_addr_eui48((u8 *)&ib_attr->sys_image_guid,
 			    rdev->netdev->dev_addr);
 	ib_attr->max_mr_size = BNXT_RE_MAX_MR_SIZE;
-	ib_attr->page_size_cap = BNXT_RE_PAGE_SIZE_SUPPORTED;
+	ib_attr->page_size_cap = dev_attr->mr_page_size_cap;
 
 	ib_attr->vendor_id = rdev->en_dev->pdev->vendor;
 	ib_attr->vendor_part_id = rdev->en_dev->pdev->device;
@@ -4687,7 +4687,7 @@ static struct ib_mr *__bnxt_re_user_reg_mr(struct ib_pd *ib_pd, u64 length, u64 
 		return ERR_PTR(-ENOMEM);
 	}
 
-	page_size = ib_umem_find_best_pgsz(umem, BNXT_RE_PAGE_SIZE_SUPPORTED, virt_addr);
+	page_size = ib_umem_find_best_pgsz(umem, rdev->dev_attr->mr_page_size_cap, virt_addr);
 	if (!page_size) {
 		ibdev_err(&rdev->ibdev, "umem page size unsupported!");
 		return ERR_PTR(-EINVAL);

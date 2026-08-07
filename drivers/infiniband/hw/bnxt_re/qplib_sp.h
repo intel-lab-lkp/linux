@@ -75,6 +75,7 @@ struct bnxt_qplib_dev_attr {
 	bool				is_atomic;
 	u16                             dev_cap_flags;
 	u16                             dev_cap_flags2;
+	u64				mr_page_size_cap;
 	u32                             max_dpi;
 	u16				rate_limit_min;
 	u32				rate_limit_max;
