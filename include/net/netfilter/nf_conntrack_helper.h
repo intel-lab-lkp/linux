@@ -112,6 +112,8 @@ int nf_conntrack_helpers_register(struct nf_conntrack_helper *, unsigned int,
 void nf_conntrack_helpers_unregister(struct nf_conntrack_helper **,
 				     unsigned int);
 
+void nf_conntrack_helper_release(struct nf_conntrack_helper *me);
+
 #define nf_conntrack_helper_deprecated(name) \
 	pr_warn("The %s conntrack helper is scheduled for removal.\n"	\
 		"Please contact the netfilter-devel mailing list if you still need this.\n", name)

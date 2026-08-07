@@ -448,13 +448,8 @@ static bool expect_iter_me(struct nf_conntrack_expect *exp, void *data)
 	return this == me;
 }
 
-void nf_conntrack_helper_unregister(struct nf_conntrack_helper *me)
+void nf_conntrack_helper_release(struct nf_conntrack_helper *me)
 {
-	mutex_lock(&nf_ct_helper_mutex);
-	hlist_del_rcu(&me->hnode);
-	nf_ct_helper_count--;
-	mutex_unlock(&nf_ct_helper_mutex);
-
 	/* This helper is going away, disable it. */
 	rcu_assign_pointer(me->help, NULL);
 
@@ -465,6 +460,17 @@ void nf_conntrack_helper_unregister(struct nf_conntrack_helper *me)
 
 	if (refcount_dec_and_test(&me->ct_refcnt))
 		kfree_rcu(me, rcu);
+}
+EXPORT_SYMBOL_GPL(nf_conntrack_helper_release);
+
+void nf_conntrack_helper_unregister(struct nf_conntrack_helper *me)
+{
+	mutex_lock(&nf_ct_helper_mutex);
+	hlist_del_rcu(&me->hnode);
+	nf_ct_helper_count--;
+	mutex_unlock(&nf_ct_helper_mutex);
+
+	nf_conntrack_helper_release(me);
 }
 EXPORT_SYMBOL_GPL(nf_conntrack_helper_unregister);
 
