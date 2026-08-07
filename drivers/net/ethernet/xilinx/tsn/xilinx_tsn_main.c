@@ -16,6 +16,8 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 
+#include "xilinx_tsn.h"
+
 #define TSN_NUM_CLOCKS		6
 
 /**
@@ -86,6 +88,7 @@ static struct platform_driver tsn_driver = {
 
 static struct platform_driver * const tsn_drivers[] = {
 	&tsn_driver,
+	&xlnx_tsn_ep_driver,
 };
 
 static int __init xlnx_tsn_init(void)
