@@ -29909,6 +29909,7 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/net/xlnx,tsn-endpoint-ethernet-mac.yaml
 F:	drivers/net/dsa/xilinx/
 F:	drivers/net/ethernet/xilinx/tsn/
+F:	include/linux/dsa/xlnx_tsn.h
 F:	net/dsa/tag_xlnx_tsn.c
 
 XILINX UARTLITE SERIAL DRIVER

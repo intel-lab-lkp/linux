@@ -18,6 +18,7 @@
 #include <linux/phy.h>
 #include <linux/phylink.h>
 #include <linux/platform_device.h>
+#include <linux/dsa/xlnx_tsn.h>
 #include <net/dsa.h>
 
 #include "xilinx_tsn.h"
@@ -679,8 +680,25 @@ static int xlnx_tsn_setup(struct dsa_switch *ds)
 	if (ret)
 		goto err_nb;
 
+	ret = xlnx_tsn_port_ptp_init(sw, XLNX_TSN_PORT_MAC1,
+				     "ptp_rx_mac1", "ptp_tx_mac1");
+	if (ret)
+		goto err_ptp_exit;
+
+	ret = xlnx_tsn_port_ptp_init(sw, XLNX_TSN_PORT_MAC2,
+				     "ptp_rx_mac2", "ptp_tx_mac2");
+	if (ret)
+		goto err_ptp_mac1;
+
+	sw->tagger_data.ptp_tx = xlnx_tsn_ptp_tx;
+	ds->tagger_data = &sw->tagger_data;
+
 	return 0;
 
+err_ptp_mac1:
+	xlnx_tsn_port_ptp_exit(sw, XLNX_TSN_PORT_MAC1);
+err_ptp_exit:
+	xlnx_tsn_ptp_exit(sw);
 err_nb:
 	unregister_netdevice_notifier(&sw->nb);
 err_mdio:
@@ -692,7 +710,10 @@ static void xlnx_tsn_teardown(struct dsa_switch *ds)
 {
 	struct xlnx_tsn *sw = ds->priv;
 	struct dsa_port *dp;
+	int port;
 
+	for (port = XLNX_TSN_PORT_MAC1; port <= XLNX_TSN_PORT_MAC2; port++)
+		xlnx_tsn_port_ptp_exit(sw, port);
 	xlnx_tsn_ptp_exit(sw);
 	unregister_netdevice_notifier(&sw->nb);
 	xlnx_tsn_mdio_unregister_all(sw);
@@ -709,6 +730,9 @@ static const struct dsa_switch_ops xlnx_tsn_switch_ops = {
 	.teardown		= xlnx_tsn_teardown,
 	.port_set_mac_address	= xlnx_tsn_port_set_mac_address,
 	.port_stp_state_set	= xlnx_tsn_port_stp_state_set,
+	.port_hwtstamp_get	= xlnx_tsn_port_hwtstamp_get,
+	.port_hwtstamp_set	= xlnx_tsn_port_hwtstamp_set,
+	.get_ts_info		= xlnx_tsn_get_ts_info,
 	.phylink_get_caps	= xlnx_tsn_phylink_get_caps,
 };
 

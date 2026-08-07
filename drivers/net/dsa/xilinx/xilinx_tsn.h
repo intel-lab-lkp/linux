@@ -9,10 +9,14 @@
 #include <linux/bits.h>
 #include <linux/if_ether.h>
 #include <linux/io.h>
+#include <linux/net_tstamp.h>
 #include <linux/notifier.h>
 #include <linux/ptp_clock_kernel.h>
+#include <linux/skbuff.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
+#include <linux/dsa/xlnx_tsn.h>
 #include <net/dsa.h>
 
 #define XLNX_TSN_NUM_PORTS	3
@@ -127,7 +131,44 @@ enum tsn_port_state {
 #define TSN_TIMER_PULSES_PER_PPS	128
 #define TSN_TIMER_GTX_CLK_FREQ		125000000U
 
+/* Per-MAC PTP TX / RX register windows, sitting inside each per-MAC
+ * reg space. Each PTP TX slot is 256 B wide; the first 8 B hold the
+ * cmd1/cmd2 header, leaving 248 B for frame data. HW provides 8 slots.
+ * The PTP RX buffer mirrors the layout with a 252 B usable area and
+ * an 8 B HW timestamp footer.
+ */
+#define TSN_PTP_TX_CONTROL_OFFSET	0x00012000
+#define TSN_PTP_RX_CONTROL_OFFSET	0x00012004
+
+#define TSN_PTP_RX_BASE_OFFSET		0x00010000
+#define TSN_PTP_RX_PACKET_FIELD_MASK	GENMASK(11, 8)
+#define TSN_PTP_RX_PACKET_CLEAR		BIT(0)
+
+#define TSN_PTP_TX_BASE_OFFSET		0x00011000
+#define TSN_PTP_TX_HWBUF_SIZE		0x100
+#define TSN_PTP_TX_BUFFERS		8
+#define TSN_PTP_TX_BUFFER_OFFSET(i)	(TSN_PTP_TX_BASE_OFFSET + \
+					 (i) * TSN_PTP_TX_HWBUF_SIZE)
+#define TSN_PTP_TX_CMD_FIELD_LEN	8
+#define TSN_PTP_TX_MAX_FRAME_SIZE	(TSN_PTP_TX_HWBUF_SIZE - \
+					 TSN_PTP_TX_CMD_FIELD_LEN)
+#define TSN_PTP_TX_BUFFER_CMD2_FIELD	0x4
+
+#define TSN_PTP_TX_FRAME_WAITING_MASK	GENMASK(15, 8)
+#define TSN_PTP_TX_BUFFERS_FULL_MASK	BIT(TSN_PTP_TX_BUFFERS - 1)
+#define TSN_PTP_TX_PACKET_FIELD_MASK	GENMASK(18, 16)
+
+#define TSN_PTP_HW_TSTAMP_SIZE		8
+#define TSN_PTP_RX_HWBUF_SIZE		256
+#define TSN_PTP_RX_FRAME_SIZE		252
+#define TSN_PTP_HW_TSTAMP_OFFSET	(TSN_PTP_RX_HWBUF_SIZE - \
+					 TSN_PTP_HW_TSTAMP_SIZE)
+
+#define TSN_PTP_MSG_TYPE_MASK		BIT(3)
+
+struct kernel_ethtool_ts_info;
 struct mii_bus;
+struct netlink_ext_ack;
 struct xlnx_tsn;
 
 /**
@@ -137,11 +178,32 @@ struct xlnx_tsn;
  * @regs: per-MAC register window, from reg-name "macN"
  * @mii_bus: MDIO bus registered under the "mdio-macN" DT child,
  *	     or NULL if absent
+ * @ptp_tx_irq: per-MAC PTP TX-completion interrupt
+ * @ptp_rx_irq: per-MAC PTP RX interrupt
+ * @ptp_tx_lock: serialises the PTP TX slot allocator and the TX
+ *		 completion path
+ * @ptp_txq: in-flight PTP TX frames awaiting timestamp completion.
+ *	     Each frame's slot index is kept in skb->cb[0].
+ * @tx_tstamp_work: work item queued by the PTP TX IRQ to drain
+ *		    ptp_txq and deliver timestamps through skb_tstamp_tx()
+ * @ptp_rx_hw_pointer: HW write pointer snapshot read in the RX ISR
+ * @ptp_rx_sw_pointer: SW read pointer; drained until it catches up
+ * @hwtstamp_tx_type: current SO_TIMESTAMPING TX type for this port
+ * @hwtstamp_rx_filter: current SO_TIMESTAMPING RX filter for this port
  */
 struct xlnx_tsn_mac {
 	struct xlnx_tsn *sw;
 	void __iomem *regs;
 	struct mii_bus *mii_bus;
+	int ptp_tx_irq;
+	int ptp_rx_irq;
+	spinlock_t ptp_tx_lock; /* serialises PTP TX slot alloc + completion */
+	struct sk_buff_head ptp_txq;
+	struct work_struct tx_tstamp_work;
+	u32 ptp_rx_hw_pointer;
+	u32 ptp_rx_sw_pointer;
+	int hwtstamp_tx_type;
+	int hwtstamp_rx_filter;
 };
 
 /**
@@ -167,6 +229,8 @@ struct xlnx_tsn_mac {
  *	       used as the starting point for adjust_by_scaled_ppm()
  * @pps_enable: user requested PPS event delivery
  * @countpulse: timer-tick counter, reset to zero every TSN_TIMER_PULSES_PER_PPS ticks
+ * @tagger_data: PTP TX callback descriptor handed to the tag protocol
+ *		 via @dsa_switch.tagger_data
  */
 struct xlnx_tsn {
 	struct dsa_switch ds;
@@ -183,6 +247,7 @@ struct xlnx_tsn {
 	u64 rtc_value;
 	int pps_enable;
 	int countpulse;
+	struct xlnx_tsn_tagger_data tagger_data;
 };
 
 static inline void mac_iow(struct xlnx_tsn_mac *m, u32 off, u32 val)
@@ -197,5 +262,16 @@ static inline u32 mac_ior(struct xlnx_tsn_mac *m, u32 off)
 
 int xlnx_tsn_ptp_init(struct xlnx_tsn *sw);
 void xlnx_tsn_ptp_exit(struct xlnx_tsn *sw);
+int xlnx_tsn_port_ptp_init(struct xlnx_tsn *sw, int port,
+			   const char *rx_name, const char *tx_name);
+void xlnx_tsn_port_ptp_exit(struct xlnx_tsn *sw, int port);
+void xlnx_tsn_ptp_tx(struct dsa_port *dp, struct sk_buff *skb);
+int xlnx_tsn_port_hwtstamp_get(struct dsa_switch *ds, int port,
+			       struct kernel_hwtstamp_config *config);
+int xlnx_tsn_port_hwtstamp_set(struct dsa_switch *ds, int port,
+			       struct kernel_hwtstamp_config *config,
+			       struct netlink_ext_ack *extack);
+int xlnx_tsn_get_ts_info(struct dsa_switch *ds, int port,
+			 struct kernel_ethtool_ts_info *info);
 
 #endif /* _XILINX_TSN_H */
