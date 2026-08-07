@@ -12,6 +12,7 @@
 #ifndef __ASSEMBLER__
 
 #include <linux/types.h>
+#include <linux/stddef.h>
 #include <asm/bitsperlong.h>
 #include <asm/ptrace.h>
 
@@ -408,6 +409,25 @@ struct kvm_riscv_sbi_fwft {
 
 /* One single KVM irqchip, ie. the AIA */
 #define KVM_NR_IRQCHIPS			1
+
+/* for KVM_CAP_PMU_EVENT_FILTER */
+#define KVM_PMU_EVENT_ALLOW	0
+#define KVM_PMU_EVENT_DENY	1
+
+/*
+ * For KVM_SET_PMU_EVENT_FILTER: restrict which SBI PMU events a guest may
+ * configure.  Each @events entry is a SBI PMU event index (type in bits
+ * 19:16, code in bits 15:0).  %KVM_PMU_EVENT_ALLOW permits only listed
+ * events; %KVM_PMU_EVENT_DENY rejects them.  Enforced at counter
+ * configuration (SBI PMU COUNTER_CFG_MATCH), not retroactively.
+ */
+struct kvm_pmu_event_filter {
+	__u32 action;
+	__u32 nevents;
+	__u32 flags;
+	__u32 pad;
+	__DECLARE_FLEX_ARRAY(__u64, events);
+};
 
 #endif
 
