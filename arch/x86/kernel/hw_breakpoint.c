@@ -40,6 +40,9 @@
 DEFINE_PER_CPU(unsigned long, cpu_dr7);
 EXPORT_PER_CPU_SYMBOL(cpu_dr7);
 
+/* Sequence number of the per-CPU DR7 state. */
+DEFINE_PER_CPU(unsigned int, cpu_dr7_seq);
+
 /* Per cpu debug address registers values */
 static DEFINE_PER_CPU(unsigned long, cpu_debugreg[HBP_NUM]);
 
@@ -97,38 +100,30 @@ int decode_dr7(unsigned long dr7, int bpnum, unsigned *len, unsigned *type)
 int arch_install_hw_breakpoint(struct perf_event *bp)
 {
 	struct arch_hw_breakpoint *info = counter_arch_bp(bp);
-	unsigned long *dr7;
+	unsigned int seq;
 	int i;
 
 	lockdep_assert_irqs_disabled();
 
 	for (i = 0; i < HBP_NUM; i++) {
-		struct perf_event **slot = this_cpu_ptr(&bp_per_reg[i]);
-
-		if (!*slot) {
-			*slot = bp;
+		if (!this_cpu_cmpxchg(bp_per_reg[i], NULL, bp))
 			break;
-		}
 	}
 
 	if (WARN_ONCE(i == HBP_NUM, "Can't find any breakpoint slot"))
 		return -EBUSY;
 
-	set_debugreg(info->address, i);
-	__this_cpu_write(cpu_debugreg[i], info->address);
-
-	dr7 = this_cpu_ptr(&cpu_dr7);
-	*dr7 |= encode_dr7(i, info->len, info->type);
-
-	/*
-	 * Ensure we first write cpu_dr7 before we set the DR7 register.
-	 * This ensures an NMI never see cpu_dr7 0 when DR7 is not.
-	 */
-	barrier();
-
-	set_debugreg(*dr7, 7);
-	if (info->mask)
-		amd_set_dr_addr_mask(info->mask, i);
+	do {
+		seq = this_cpu_inc_return(cpu_dr7_seq);
+		this_cpu_write(cpu_debugreg[i], info->address);
+		barrier();
+		set_debugreg(info->address, i);
+		if (info->mask)
+			amd_set_dr_addr_mask(info->mask, i);
+		this_cpu_or(cpu_dr7, encode_dr7(i, info->len, info->type));
+		barrier();
+		set_debugreg(this_cpu_read(cpu_dr7), 7);
+	} while (seq != this_cpu_read(cpu_dr7_seq));
 
 	return 0;
 }
@@ -146,36 +141,33 @@ void arch_uninstall_hw_breakpoint(struct perf_event *bp)
 {
 	struct arch_hw_breakpoint *info = counter_arch_bp(bp);
 	unsigned long dr7;
+	unsigned int seq;
 	int i;
 
 	lockdep_assert_irqs_disabled();
 
 	for (i = 0; i < HBP_NUM; i++) {
-		struct perf_event **slot = this_cpu_ptr(&bp_per_reg[i]);
-
-		if (*slot == bp) {
-			*slot = NULL;
+		if (this_cpu_read(bp_per_reg[i]) == bp)
 			break;
-		}
 	}
 
 	if (WARN_ONCE(i == HBP_NUM, "Can't find any breakpoint slot"))
 		return;
 
-	dr7 = this_cpu_read(cpu_dr7);
-	dr7 &= ~__encode_dr7(i, info->len, info->type);
+	do {
+		seq = this_cpu_inc_return(cpu_dr7_seq);
+		dr7 = this_cpu_read(cpu_dr7);
+		dr7 &= ~__encode_dr7(i, info->len, info->type);
+		set_debugreg(dr7, 7);
+		if (info->mask)
+			amd_set_dr_addr_mask(0, i);
+		barrier();
+		this_cpu_and(cpu_dr7,
+			     ~__encode_dr7(i, info->len, info->type));
+	} while (seq != this_cpu_read(cpu_dr7_seq));
 
-	set_debugreg(dr7, 7);
-	if (info->mask)
-		amd_set_dr_addr_mask(0, i);
-
-	/*
-	 * Ensure the write to cpu_dr7 is after we've set the DR7 register.
-	 * This ensures an NMI never see cpu_dr7 0 when DR7 is not.
-	 */
-	barrier();
-
-	this_cpu_write(cpu_dr7, dr7);
+	WARN_ONCE(this_cpu_cmpxchg(bp_per_reg[i], bp, NULL) != bp,
+		  "Can't release breakpoint slot");
 }
 
 static int arch_bp_generic_len(int x86_len)
@@ -309,12 +301,13 @@ static inline bool within_cpu_entry(unsigned long addr, unsigned long end)
 				sizeof(struct tlb_state)))
 			return true;
 
-		/*
-		 * When in guest (X86_FEATURE_HYPERVISOR), local_db_save()
-		 * will read per-cpu cpu_dr7 before clear dr7 register.
-		 */
+		/* local_db_save() reads this state before clearing DR7. */
 		if (within_area(addr, end, (unsigned long)&per_cpu(cpu_dr7, cpu),
 				sizeof(cpu_dr7)))
+			return true;
+		if (within_area(addr, end,
+				(unsigned long)&per_cpu(cpu_dr7_seq, cpu),
+				sizeof(cpu_dr7_seq)))
 			return true;
 	}
 
@@ -483,12 +476,17 @@ void flush_ptrace_hw_breakpoint(struct task_struct *tsk)
 
 void hw_breakpoint_restore(void)
 {
-	set_debugreg(__this_cpu_read(cpu_debugreg[0]), 0);
-	set_debugreg(__this_cpu_read(cpu_debugreg[1]), 1);
-	set_debugreg(__this_cpu_read(cpu_debugreg[2]), 2);
-	set_debugreg(__this_cpu_read(cpu_debugreg[3]), 3);
-	set_debugreg(DR6_RESERVED, 6);
-	set_debugreg(__this_cpu_read(cpu_dr7), 7);
+	unsigned int seq;
+
+	do {
+		seq = this_cpu_inc_return(cpu_dr7_seq);
+		set_debugreg(this_cpu_read(cpu_debugreg[0]), 0);
+		set_debugreg(this_cpu_read(cpu_debugreg[1]), 1);
+		set_debugreg(this_cpu_read(cpu_debugreg[2]), 2);
+		set_debugreg(this_cpu_read(cpu_debugreg[3]), 3);
+		set_debugreg(DR6_RESERVED, 6);
+		set_debugreg(this_cpu_read(cpu_dr7), 7);
+	} while (seq != this_cpu_read(cpu_dr7_seq));
 }
 EXPORT_SYMBOL_FOR_KVM(hw_breakpoint_restore);
 

@@ -18,6 +18,7 @@
 #define DR7_FIXED_1	0x00000400
 
 DECLARE_PER_CPU(unsigned long, cpu_dr7);
+DECLARE_PER_CPU(unsigned int, cpu_dr7_seq);
 
 #ifndef CONFIG_PARAVIRT_XXL
 /*
@@ -125,18 +126,20 @@ static __always_inline bool hw_breakpoint_active(void)
 
 extern void hw_breakpoint_restore(void);
 
-static __always_inline unsigned long local_db_save(void)
+static __always_inline void local_db_save(unsigned long *dr7,
+					  unsigned int *dr7_seq)
 {
-	unsigned long dr7;
+	*dr7 = 0;
+	*dr7_seq = this_cpu_read(cpu_dr7_seq);
 
 	if (static_cpu_has(X86_FEATURE_HYPERVISOR) && !hw_breakpoint_active())
-		return 0;
+		return;
 
-	get_debugreg(dr7, 7);
+	get_debugreg(*dr7, 7);
 
 	/* Architecturally set bit */
-	dr7 &= ~DR7_FIXED_1;
-	if (dr7)
+	*dr7 &= ~DR7_FIXED_1;
+	if (*dr7)
 		set_debugreg(DR7_FIXED_1, 7);
 
 	/*
@@ -145,20 +148,33 @@ static __always_inline unsigned long local_db_save(void)
 	 * be good.
 	 */
 	barrier();
-
-	return dr7;
 }
 
-static __always_inline void local_db_restore(unsigned long dr7)
+static __always_inline void local_db_restore(unsigned long dr7,
+					     unsigned int dr7_seq)
 {
+	unsigned int seq;
+
 	/*
 	 * Ensure the compiler doesn't raise this statement into
 	 * the critical section; enabling breakpoints early would
 	 * not be good.
 	 */
 	barrier();
-	if (dr7)
+
+	do {
+		seq = this_cpu_read(cpu_dr7_seq);
+		if (seq == dr7_seq) {
+			if (!dr7)
+				return;
+		} else {
+			dr7 = this_cpu_read(cpu_dr7);
+			if (!dr7)
+				dr7 = DR7_FIXED_1;
+		}
+
 		set_debugreg(dr7, 7);
+	} while (unlikely(seq != this_cpu_read(cpu_dr7_seq)));
 }
 
 #ifdef CONFIG_CPU_SUP_AMD

@@ -2139,20 +2139,22 @@ static __always_inline void exc_machine_check_user(struct pt_regs *regs)
 DEFINE_IDTENTRY_MCE(exc_machine_check)
 {
 	unsigned long dr7;
+	unsigned int dr7_seq;
 
-	dr7 = local_db_save();
+	local_db_save(&dr7, &dr7_seq);
 	exc_machine_check_kernel(regs);
-	local_db_restore(dr7);
+	local_db_restore(dr7, dr7_seq);
 }
 
 /* The user mode variant. */
 DEFINE_IDTENTRY_MCE_USER(exc_machine_check)
 {
 	unsigned long dr7;
+	unsigned int dr7_seq;
 
-	dr7 = local_db_save();
+	local_db_save(&dr7, &dr7_seq);
 	exc_machine_check_user(regs);
-	local_db_restore(dr7);
+	local_db_restore(dr7, dr7_seq);
 }
 
 #ifdef CONFIG_X86_FRED
@@ -2170,13 +2172,14 @@ DEFINE_IDTENTRY_MCE_USER(exc_machine_check)
 DEFINE_FREDENTRY_MCE(exc_machine_check)
 {
 	unsigned long dr7;
+	unsigned int dr7_seq;
 
-	dr7 = local_db_save();
+	local_db_save(&dr7, &dr7_seq);
 	if (user_mode(regs))
 		exc_machine_check_user(regs);
 	else
 		exc_machine_check_kernel(regs);
-	local_db_restore(dr7);
+	local_db_restore(dr7, dr7_seq);
 }
 #endif
 #else
@@ -2184,13 +2187,14 @@ DEFINE_FREDENTRY_MCE(exc_machine_check)
 DEFINE_IDTENTRY_RAW(exc_machine_check)
 {
 	unsigned long dr7;
+	unsigned int dr7_seq;
 
-	dr7 = local_db_save();
+	local_db_save(&dr7, &dr7_seq);
 	if (user_mode(regs))
 		exc_machine_check_user(regs);
 	else
 		exc_machine_check_kernel(regs);
-	local_db_restore(dr7);
+	local_db_restore(dr7, dr7_seq);
 }
 #endif
 
