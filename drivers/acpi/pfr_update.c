@@ -158,6 +158,14 @@ static int query_capability(struct pfru_update_cap_info *cap_hdr,
 		goto free_acpi_buffer;
 	}
 
+	if (out_obj->package.elements[CAP_CODE_TYPE_IDX].buffer.length > sizeof(cap_hdr->code_type) ||
+	    out_obj->package.elements[CAP_DRV_TYPE_IDX].buffer.length > sizeof(cap_hdr->drv_type) ||
+	    out_obj->package.elements[CAP_PLAT_ID_IDX].buffer.length > sizeof(cap_hdr->platform_id) ||
+	    out_obj->package.elements[CAP_OEM_ID_IDX].buffer.length > sizeof(cap_hdr->oem_id)) {
+		ret = -EINVAL;
+		goto free_acpi_buffer;
+	}
+
 	cap_hdr->update_cap = out_obj->package.elements[CAP_UPDATE_IDX].integer.value;
 	memcpy(&cap_hdr->code_type,
 	       out_obj->package.elements[CAP_CODE_TYPE_IDX].buffer.pointer,
