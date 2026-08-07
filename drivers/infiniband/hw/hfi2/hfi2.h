@@ -1284,6 +1284,12 @@ struct chip_params {
 	u32 csr_err_mask_reg;
 	u32 csr_err_clear_reg;
 
+	/*
+	 * Chip-variant operation callbacks. Function pointers are used here
+	 * to abstract differences between chip variants (e.g. JKR and future
+	 * generations). Each variant populates its own chip_params instance
+	 * with the appropriate implementations at driver init time.
+	 */
 	void (*hfi2_setextled)(struct hfi2_pportdata *ppd, u32 on);
 	void (*start_led_override)(struct hfi2_pportdata *ppd,
 				   unsigned int timeon, unsigned int timeoff);
