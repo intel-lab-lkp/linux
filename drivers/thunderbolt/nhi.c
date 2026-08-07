@@ -1227,6 +1227,7 @@ static struct tb *nhi_select_cm(struct tb_nhi *nhi)
 int nhi_probe(struct tb_nhi *nhi)
 {
 	struct device *dev = nhi->dev;
+	struct pci_dev *pdev;
 	struct tb *tb;
 	int res;
 
@@ -1235,6 +1236,12 @@ int nhi_probe(struct tb_nhi *nhi)
 
 	if (!nhi->ops->init_interrupts)
 		return dev_err_probe(dev, -EINVAL, "missing required NHI ops\n");
+
+	pdev = to_pci_dev(dev);
+	if (!pci_resource_is_mem(pdev, 0))
+		return dev_err_probe(dev, -ENODEV, "invalid resource type\n");
+	if (pci_resource_len(pdev, 0) < 0x40000)
+		return dev_err_probe(dev, -ENODEV, "invalid resource size\n");
 
 	nhi->hop_count = ioread32(nhi->iobase + REG_CAPS) & 0x3ff;
 	dev_dbg(dev, "total paths: %d\n", nhi->hop_count);
