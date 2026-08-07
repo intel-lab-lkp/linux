@@ -2387,6 +2387,28 @@ static int memcg_hotplug_cpu_dead(unsigned int cpu)
 	return 0;
 }
 
+static bool memcg_tier_over_limit(struct mem_cgroup *memcg,
+				  unsigned long *overage, int *breached_slot)
+{
+	int nr_tier_slots = mt_nr_tier_slots();
+
+	for (int slot = 0; slot < nr_tier_slots; slot++) {
+		unsigned long usage = page_counter_read(&memcg->tier[slot]);
+		unsigned long limit = READ_ONCE(memcg->tier[slot].high);
+
+		if (usage <= limit)
+			continue;
+
+		if (overage)
+			*overage = usage - limit;
+		if (breached_slot)
+			*breached_slot = slot;
+		return true;
+	}
+
+	return false;
+}
+
 static unsigned long reclaim_high(struct mem_cgroup *memcg,
 				  unsigned int nr_pages,
 				  gfp_t gfp_mask)
@@ -2395,10 +2417,19 @@ static unsigned long reclaim_high(struct mem_cgroup *memcg,
 
 	do {
 		unsigned long pflags;
+		const nodemask_t *reclaim_nodes = NULL;
 
 		if (page_counter_read(&memcg->memory) <=
-		    READ_ONCE(memcg->memory.high))
-			continue;
+		    READ_ONCE(memcg->memory.high)) {
+			int slot;
+
+			if (!mem_cgroup_tiered_limits())
+				continue;
+			if (!memcg_tier_over_limit(memcg, NULL, &slot))
+				continue;
+
+			reclaim_nodes = mt_tier_nodes(slot);
+		}
 
 		memcg_memory_event(memcg, MEMCG_HIGH);
 
@@ -2406,7 +2437,7 @@ static unsigned long reclaim_high(struct mem_cgroup *memcg,
 		nr_reclaimed += try_to_free_mem_cgroup_pages(memcg, nr_pages,
 							gfp_mask,
 							MEMCG_RECLAIM_MAY_SWAP,
-							NULL, NULL);
+							NULL, reclaim_nodes);
 		psi_memstall_leave(&pflags);
 	} while ((memcg = parent_mem_cgroup(memcg)) &&
 		 !mem_cgroup_is_root(memcg));
@@ -2842,23 +2873,25 @@ done_restock:
 	 * reclaim, the cost of mismatch is negligible.
 	 */
 	do {
-		bool mem_high, swap_high;
+		bool mem_high, swap_high, tier_high;
 
 		mem_high = page_counter_read(&memcg->memory) >
 			READ_ONCE(memcg->memory.high);
 		swap_high = page_counter_read(&memcg->swap) >
 			READ_ONCE(memcg->swap.high);
+		tier_high = mem_cgroup_tiered_limits() &&
+			memcg_tier_over_limit(memcg, NULL, NULL);
 
 		/* Don't bother a random interrupted task */
 		if (!in_task()) {
-			if (mem_high) {
+			if (mem_high || tier_high) {
 				schedule_work(&memcg->high_work);
 				break;
 			}
 			continue;
 		}
 
-		if (mem_high || swap_high) {
+		if (mem_high || swap_high || tier_high) {
 			/*
 			 * The allocating tasks in this cgroup will need to do
 			 * reclaim or be throttled to prevent further growth
@@ -4967,13 +5000,24 @@ static ssize_t memory_high_write(struct kernfs_open_file *of,
 
 	for (;;) {
 		unsigned long nr_pages = page_counter_read(&memcg->memory);
-		unsigned long reclaimed;
+		unsigned long reclaimed, charge;
+		const nodemask_t *reclaim_nodes = NULL;
 
 		if (high != READ_ONCE(memcg->memory.high))
 			break;
 
-		if (nr_pages <= high)
-			break;
+		if (nr_pages <= high) {
+			int slot;
+
+			if (!mem_cgroup_tiered_limits())
+				break;
+			if (!memcg_tier_over_limit(memcg, &charge, &slot))
+				break;
+
+			reclaim_nodes = mt_tier_nodes(slot);
+		} else {
+			charge = nr_pages - high;
+		}
 
 		if (signal_pending(current))
 			break;
@@ -4988,9 +5032,9 @@ static ssize_t memory_high_write(struct kernfs_open_file *of,
 			continue;
 		}
 
-		reclaimed = try_to_free_mem_cgroup_pages(memcg, nr_pages - high,
+		reclaimed = try_to_free_mem_cgroup_pages(memcg, charge,
 					GFP_KERNEL, MEMCG_RECLAIM_MAY_SWAP,
-					NULL, NULL);
+					NULL, reclaim_nodes);
 
 		if (!reclaimed && !nr_retries--)
 			break;
