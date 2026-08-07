@@ -406,6 +406,13 @@ static int cpc_validate_sysmem_reg(const struct cpc_desc *cpc_desc,
 		       cpc_desc->cpu_id, cpc_desc->version, name);
 		return -EINVAL;
 	}
+	if (reg_idx == PERF_LIMITED &&
+	    (gas->bit_offset || gas->bit_width != access_width ||
+	     (access_width == 64 && !IS_ENABLED(CONFIG_64BIT)))) {
+		pr_err("CPU%d: Performance Limited register cannot use an interlocked SystemMemory access\n",
+		       cpc_desc->cpu_id);
+		return -EINVAL;
+	}
 
 	return 0;
 
@@ -3094,9 +3101,6 @@ EXPORT_SYMBOL_GPL(cppc_get_perf_limited);
  */
 int cppc_set_perf_limited(int cpu, u64 bits_to_clear)
 {
-	u64 current_val, new_val;
-	int ret;
-
 	/* Only bits 0 and 1 are valid */
 	if (bits_to_clear & ~CPPC_PERF_LIMITED_MASK)
 		return -EINVAL;
@@ -3104,14 +3108,13 @@ int cppc_set_perf_limited(int cpu, u64 bits_to_clear)
 	if (!bits_to_clear)
 		return 0;
 
-	ret = cppc_get_perf_limited(cpu, &current_val);
-	if (ret)
-		return ret;
-
-	/* Clear the specified bits */
-	new_val = current_val & ~bits_to_clear;
-
-	return cppc_set_reg_val(cpu, PERF_LIMITED, new_val);
+	/*
+	 * Performance Limited is write-zero-to-clear.  Write one to the other
+	 * defined sticky bits so a concurrently reported event is not cleared
+	 * using a value obtained by an earlier, separate read transaction.
+	 */
+	return cppc_set_reg_val(cpu, PERF_LIMITED,
+				CPPC_PERF_LIMITED_MASK & ~bits_to_clear);
 }
 EXPORT_SYMBOL_GPL(cppc_set_perf_limited);
 
