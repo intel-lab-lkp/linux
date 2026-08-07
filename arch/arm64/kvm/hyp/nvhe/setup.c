@@ -294,6 +294,9 @@ static int donate_protected_mmio_regions(void)
 						  pkvm_protected_regs[i].nr_pages << PAGE_SHIFT);
 		if (ret)
 			goto err_setup;
+
+		if (pkvm_protected_regs[i].cb)
+			pkvm_protected_regs[i].cb = kern_hyp_va(pkvm_protected_regs[i].cb);
 	}
 
 	return 0;
