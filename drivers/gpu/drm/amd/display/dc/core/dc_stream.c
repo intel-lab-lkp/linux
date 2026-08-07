@@ -233,8 +233,9 @@ struct dc_stream_state *dc_create_stream_for_sink(
 
 fail:
 	if (stream) {
-		kfree(stream->update_scratch);
-		kfree(stream);
+		if (stream->update_scratch)
+			DC_RUN_WITH_PREEMPTION_ENABLED(kfree(stream->update_scratch));
+		DC_RUN_WITH_PREEMPTION_ENABLED(kfree(stream));
 	}
 
 	return NULL;
