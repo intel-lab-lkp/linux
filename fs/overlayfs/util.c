@@ -380,10 +380,16 @@ struct inode *ovl_i_path_real(struct inode *inode, struct path *path)
 
 	path->dentry = ovl_i_dentry_upper(inode);
 	if (!path->dentry) {
-		path->dentry = lowerpath->dentry;
-		path->mnt = lowerpath->layer->mnt;
+		if (lowerpath) {
+			path->dentry = lowerpath->dentry;
+			path->mnt = lowerpath->layer->mnt;
+		} else {
+			path->mnt = NULL;
+		}
 	} else {
 		path->mnt = ovl_upper_mnt(OVL_FS(inode->i_sb));
+		if (unlikely(!path->mnt))
+			path->dentry = NULL;
 	}
 
 	return path->dentry ? d_inode_rcu(path->dentry) : NULL;
