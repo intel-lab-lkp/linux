@@ -1272,9 +1272,13 @@ static int riscv_iommu_attach_paging_domain(struct iommu_domain *iommu_domain,
 	struct riscv_iommu_domain *domain = iommu_domain_to_riscv(iommu_domain);
 	struct riscv_iommu_device *iommu = dev_to_iommu(dev);
 	struct riscv_iommu_info *info = dev_iommu_priv_get(dev);
+	bool old_identity = old && old->type == IOMMU_DOMAIN_IDENTITY;
 	struct pt_iommu_riscv_64_hw_info pt_info;
 	u64 fsc, ta;
 	int ret;
+
+	if (old_identity && info->nr_msis)
+		return -EBUSY;
 
 	pt_iommu_riscv_64_hw_info(&domain->riscvpt, &pt_info);
 
@@ -1394,6 +1398,10 @@ static int riscv_iommu_attach_identity_domain(struct iommu_domain *iommu_domain,
 {
 	struct riscv_iommu_device *iommu = dev_to_iommu(dev);
 	struct riscv_iommu_info *info = dev_iommu_priv_get(dev);
+	bool old_paging = old && (old->type & __IOMMU_DOMAIN_PAGING);
+
+	if (old_paging && info->nr_msis)
+		return -EBUSY;
 
 	riscv_iommu_iodir_update(iommu, dev, RISCV_IOMMU_FSC_BARE, RISCV_IOMMU_PC_TA_V);
 	riscv_iommu_bond_unlink(rcu_access_pointer(info->domain), dev);
