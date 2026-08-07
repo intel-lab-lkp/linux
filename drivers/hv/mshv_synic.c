@@ -472,7 +472,13 @@ static int mshv_synic_cpu_init(unsigned int cpu)
 	 * VMBus owns SIMP/SIEFP/SCONTROL when it is active.
 	 * See hv_hyp_synic_enable_regs() for that initialization.
 	 */
-	bool vmbus_active = hv_vmbus_exists();
+	/*
+	 * On a nested root partition VMBus programs the *nested* SynIC MSRs
+	 * (SIMP/SIEFP/SCONTROL) via hv_set_msr()'s nested remap, whereas the
+	 * code below reads/writes the non-nested SynIC MSRs. So when nested,
+	 * do not defer SynIC setup to VMBus -- set up our own registers.
+	 */
+	bool vmbus_active = hv_vmbus_exists() && !hv_nested;
 
 	/*
 	 * Map the SYNIC message page. When VMBus is not active the
@@ -593,7 +599,13 @@ static int mshv_synic_cpu_exit(unsigned int cpu)
 	struct hv_synic_event_ring_page **event_ring_page =
 		&spages->synic_event_ring_page;
 	/* VMBus owns SIMP/SIEFP/SCONTROL when it is active */
-	bool vmbus_active = hv_vmbus_exists();
+	/*
+	 * On a nested root partition VMBus programs the *nested* SynIC MSRs
+	 * (SIMP/SIEFP/SCONTROL) via hv_set_msr()'s nested remap, whereas the
+	 * code below reads/writes the non-nested SynIC MSRs. So when nested,
+	 * do not defer SynIC setup to VMBus -- set up our own registers.
+	 */
+	bool vmbus_active = hv_vmbus_exists() && !hv_nested;
 
 	/* Disable the interrupt */
 	sint.as_uint64 = hv_get_non_nested_msr(HV_MSR_SINT0 + HV_SYNIC_INTERCEPTION_SINT_INDEX);
