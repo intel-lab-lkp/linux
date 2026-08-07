@@ -771,6 +771,12 @@ static int arcmsr_alloc_xor_buffer(struct AdapterControlBlock *acb)
 		(sizeof(struct XorHandle) * acb->xor_mega);
 	dma_coherent = dma_alloc_coherent(&pdev->dev, acb->init2cfg_size,
 		&dma_coherent_handle, GFP_KERNEL);
+	if (!dma_coherent) {
+		pr_info("arcmsr%d: alloc init2cfg buffer failed\n",
+			acb->host->host_no);
+		acb->xor_mega = 0;
+		return -ENOMEM;
+	}
 	acb->xorVirt = dma_coherent;
 	acb->xorPhys = dma_coherent_handle;
 	pXorPhys = (struct Xor_sg *)((unsigned long)dma_coherent +
