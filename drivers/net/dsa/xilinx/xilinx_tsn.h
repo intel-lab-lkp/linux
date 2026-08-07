@@ -10,6 +10,8 @@
 #include <linux/if_ether.h>
 #include <linux/io.h>
 #include <linux/notifier.h>
+#include <linux/ptp_clock_kernel.h>
+#include <linux/spinlock.h>
 #include <linux/types.h>
 #include <net/dsa.h>
 
@@ -103,6 +105,28 @@ enum tsn_port_state {
 #define TSN_SPEED_CFG_100		BIT(30)
 #define TSN_SPEED_CFG_1000		BIT(31)
 
+/* PTP RTC timer block: a single block per IP, physically housed
+ * inside MAC1's per-MAC reg window. Owned by the switch driver
+ * because the PHC it backs is IP-wide, not per-MAC.
+ */
+#define TSN_TIMER_RTC_OFFSET_NS		0x00012800
+#define TSN_TIMER_RTC_OFFSET_SEC_L	0x00012808
+#define TSN_TIMER_RTC_OFFSET_SEC_H	0x0001280c
+#define TSN_TIMER_RTC_INCREMENT		0x00012810
+#define TSN_TIMER_CURRENT_RTC_NS	0x00012814
+#define TSN_TIMER_CURRENT_RTC_SEC_L	0x00012818
+#define TSN_TIMER_CURRENT_RTC_SEC_H	0x0001281c
+#define TSN_TIMER_INTERRUPT		0x00012820
+
+#define TSN_TIMER_MAX_NSEC_SIZE		30
+#define TSN_TIMER_MAX_NSEC_MASK		GENMASK_ULL(TSN_TIMER_MAX_NSEC_SIZE - 1, 0)
+#define TSN_TIMER_MAX_SEC_SIZE		48
+#define TSN_TIMER_MAX_SEC_MASK		GENMASK_ULL(TSN_TIMER_MAX_SEC_SIZE - 1, 0)
+#define TSN_TIMER_INT_CLEAR		BIT(0)
+#define TSN_TIMER_RTC_NS_SHIFT		20
+#define TSN_TIMER_PULSES_PER_PPS	128
+#define TSN_TIMER_GTX_CLK_FREQ		125000000U
+
 struct mii_bus;
 struct xlnx_tsn;
 
@@ -134,6 +158,15 @@ struct xlnx_tsn_mac {
  *	to refresh the shared prefix
  * @mac: per-MAC state, indexed by user-port number (index 0 unused;
  *	 MAC1 at [1], MAC2 at [2])
+ * @ptp_timer_irq: 1 PPS / RTC-overflow interrupt
+ * @ptp_clock: registered PHC; NULL until setup() succeeds
+ * @ptp_clock_info: PHC capability + ops descriptor
+ * @reg_lock: serialises RTC offset / increment register accesses
+ *	      from process context and the PHC ops
+ * @rtc_value: base RTC increment word for the GTX clock frequency,
+ *	       used as the starting point for adjust_by_scaled_ppm()
+ * @pps_enable: user requested PPS event delivery
+ * @countpulse: timer-tick counter, reset to zero every TSN_TIMER_PULSES_PER_PPS ticks
  */
 struct xlnx_tsn {
 	struct dsa_switch ds;
@@ -143,6 +176,13 @@ struct xlnx_tsn {
 	u8 mac_prefix[ETH_ALEN];
 	struct notifier_block nb;
 	struct xlnx_tsn_mac mac[XLNX_TSN_NUM_PORTS];
+	int ptp_timer_irq;
+	struct ptp_clock *ptp_clock;
+	struct ptp_clock_info ptp_clock_info;
+	spinlock_t reg_lock; /* serialises RTC offset/increment registers */
+	u64 rtc_value;
+	int pps_enable;
+	int countpulse;
 };
 
 static inline void mac_iow(struct xlnx_tsn_mac *m, u32 off, u32 val)
@@ -154,5 +194,8 @@ static inline u32 mac_ior(struct xlnx_tsn_mac *m, u32 off)
 {
 	return ioread32(m->regs + off);
 }
+
+int xlnx_tsn_ptp_init(struct xlnx_tsn *sw);
+void xlnx_tsn_ptp_exit(struct xlnx_tsn *sw);
 
 #endif /* _XILINX_TSN_H */

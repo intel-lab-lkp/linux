@@ -3,6 +3,7 @@ config NET_DSA_XILINX_TSN
 	tristate "AMD/Xilinx TSN Endpoint Ethernet MAC switch support"
 	depends on OF && HAS_IOMEM
 	depends on NET_DSA
+	depends on PTP_1588_CLOCK
 	select NET_DSA_TAG_XLNX_TSN
 	help
 	  This enables DSA switch support for the three-port switch

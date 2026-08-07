@@ -675,8 +675,14 @@ static int xlnx_tsn_setup(struct dsa_switch *ds)
 	if (ret)
 		goto err_mdio;
 
+	ret = xlnx_tsn_ptp_init(sw);
+	if (ret)
+		goto err_nb;
+
 	return 0;
 
+err_nb:
+	unregister_netdevice_notifier(&sw->nb);
 err_mdio:
 	xlnx_tsn_mdio_unregister_all(sw);
 	return ret;
@@ -687,6 +693,7 @@ static void xlnx_tsn_teardown(struct dsa_switch *ds)
 	struct xlnx_tsn *sw = ds->priv;
 	struct dsa_port *dp;
 
+	xlnx_tsn_ptp_exit(sw);
 	unregister_netdevice_notifier(&sw->nb);
 	xlnx_tsn_mdio_unregister_all(sw);
 
