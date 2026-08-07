@@ -161,6 +161,12 @@ __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 	skb->dev = dev;
 	skb_reset_mac_header(skb);
 
+	if (unlikely(skb_headlen(skb) < ETH_HLEN)) {
+		net_warn_ratelimited("%s: dropping frame with a short linear part from %s\n",
+				     __func__, dev->name);
+		return 0;
+	}
+
 	eth = eth_skb_pull_mac(skb);
 	eth_skb_pkt_type(skb, dev);
 
