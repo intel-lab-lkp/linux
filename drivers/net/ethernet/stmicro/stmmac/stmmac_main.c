@@ -6445,19 +6445,18 @@ static int stmmac_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 static u16 stmmac_select_queue(struct net_device *dev, struct sk_buff *skb,
 			       struct net_device *sb_dev)
 {
-	int gso = skb_shinfo(skb)->gso_type;
+	u32 queue = netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;
+	struct stmmac_priv *priv = netdev_priv(dev);
 
-	if (gso & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6 | SKB_GSO_UDP_L4)) {
-		/*
-		 * There is no way to determine the number of TSO/USO
-		 * capable Queues. Let's use always the Queue 0
-		 * because if TSO/USO is supported then at least this
-		 * one will be capable.
+	if ((skb_shinfo(skb)->gso_type & priv->gso_enabled_types) &&
+	    !stmmac_tso_channel_permitted(priv, queue)) {
+		/* GSO frames need HW TSO/USO, which cannot run on TBS queues.
+		 * Fall back to the queue reserved for TSO (queue 0).
 		 */
 		return 0;
 	}
 
-	return netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;
+	return queue;
 }
 
 static int stmmac_set_mac_address(struct net_device *ndev, void *addr)
