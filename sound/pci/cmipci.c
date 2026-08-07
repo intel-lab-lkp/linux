@@ -2983,8 +2983,12 @@ static int snd_cmipci_create(struct snd_card *card, struct pci_dev *pci,
 		int l = strlen(cm->card->driver);
 		scnprintf(cm->card->driver + l, sizeof(cm->card->driver) - l,
 			  "-MC%d", cm->max_channels);
-	} else if (cm->can_ac3_sw)
-		strlcat(cm->card->driver, "-SWIEC", sizeof(cm->card->driver));
+	} else if (cm->can_ac3_sw) {
+		int l = strlen(cm->card->driver);
+
+		strscpy(cm->card->driver + l, "-SWIEC",
+			sizeof(cm->card->driver) - l);
+	}
 
 	cm->dig_status = SNDRV_PCM_DEFAULT_CON_SPDIF;
 	cm->dig_pcm_status = SNDRV_PCM_DEFAULT_CON_SPDIF;
