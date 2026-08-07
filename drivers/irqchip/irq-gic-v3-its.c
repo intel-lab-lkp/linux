@@ -78,17 +78,6 @@ struct its_collection {
 	u16			col_id;
 };
 
-/*
- * The ITS_BASER structure - contains memory information, cached
- * value of BASER register configuration and ITS page size.
- */
-struct its_baser {
-	void		*base;
-	u64		val;
-	u32		order;
-	u32		psz;
-};
-
 struct its_device;
 
 /*
@@ -5226,6 +5215,152 @@ static int __init its_compute_its_list_map(struct its_node *its)
 	}
 
 	return its_number;
+}
+
+static void its_free_snapshot(struct its_host_state *snapshot)
+{
+	int i;
+
+	if (snapshot->cmd_host_copy)
+		its_free_pages(snapshot->cmd_host_copy, get_order(ITS_CMD_QUEUE_SZ));
+
+	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
+		if (!snapshot->tables[i].base_snapshot)
+			continue;
+
+		its_free_pages(snapshot->tables[i].base_snapshot, snapshot->tables[i].order);
+	}
+
+	its_free_pages(snapshot, 0);
+}
+
+static struct its_host_state *its_snapshot_host_state(struct its_node *its)
+{
+	void *page;
+	struct its_host_state *snapshot;
+	int i;
+
+	page = its_alloc_pages_node(its->numa_node, GFP_ATOMIC | __GFP_ZERO, 0);
+	if (!page)
+		return NULL;
+
+	snapshot = (void *)page_address(page);
+	page = its_alloc_pages_node(its->numa_node, GFP_ATOMIC | __GFP_ZERO,
+				    get_order(ITS_CMD_QUEUE_SZ));
+	if (!page)
+		goto err_alloc;
+
+	snapshot->cmd_host_copy	= page_address(page);
+	snapshot->cmdq_len	= ITS_CMD_QUEUE_SZ;
+	snapshot->cmd_original	= its->cmd_base;
+	snapshot->cmd_write	= its->cmd_write;
+
+	memcpy(snapshot->tables, its->tables, sizeof(struct its_baser) * GITS_BASER_NR_REGS);
+
+	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
+		if (!(snapshot->tables[i].val & GITS_BASER_VALID))
+			continue;
+
+		if (!(snapshot->tables[i].val & GITS_BASER_INDIRECT))
+			continue;
+
+		page = its_alloc_pages_node(its->numa_node,
+					    GFP_ATOMIC | __GFP_ZERO,
+					    snapshot->tables[i].order);
+		if (!page)
+			goto err_alloc;
+
+		snapshot->tables[i].base_snapshot = page_address(page);
+
+		memcpy(snapshot->tables[i].base_snapshot, snapshot->tables[i].base,
+		       PAGE_ORDER_TO_SIZE(snapshot->tables[i].order));
+	}
+
+	return snapshot;
+
+err_alloc:
+	its_free_snapshot(snapshot);
+	return NULL;
+}
+
+static int its_emulate_switch_queues_locked(struct its_node *its, its_emulate_setup cb)
+{
+	struct its_host_state *host_snaphsot, host;
+	int i, ret;
+	u64 baser_phys;
+
+	host_snaphsot = its_snapshot_host_state(its);
+	if (!host_snaphsot)
+		return -ENOMEM;
+
+	/*
+	 * The snapshot of the ITS state will be given to the emulation, make a copy of it
+	 * so that we don't go in weeds.
+	 */
+	memcpy(&host, host_snaphsot, sizeof(host));
+
+	ret = cb(its->phys_base, host_snaphsot);
+	if (ret) {
+		its_free_snapshot(host_snaphsot);
+		return ret;
+	}
+
+	/* Switch the driver command queue to use the host copy and update the write index */
+	its->cmd_write = (its->cmd_write - its->cmd_base) +
+		(struct its_cmd_block *)host.cmd_host_copy;
+	its->cmd_base = host.cmd_host_copy;
+
+	/*
+	 * Replace the first level of the indirect tables with the snapshot table as the
+	 * emulation layer will make it innaccessible to the host.
+	 */
+	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
+		if (!(host.tables[i].val & GITS_BASER_INDIRECT))
+			continue;
+
+		baser_phys = virt_to_phys(host.tables[i].base_snapshot);
+		if (IS_ENABLED(CONFIG_ARM64_64K_PAGES) && (baser_phys >> 48))
+			baser_phys = GITS_BASER_PHYS_52_to_48(baser_phys);
+
+		its->tables[i].val &= ~GENMASK(47, 12);
+		its->tables[i].val |= baser_phys;
+		its->tables[i].base = host.tables[i].base_snapshot;
+	}
+
+	return 0;
+}
+
+void its_emulate_acquire_locks(unsigned long *flags)
+{
+	struct its_node *its;
+
+	if (WARN_ON(!flags))
+		return;
+
+	raw_spin_lock_irqsave(&its_lock, *flags);
+
+	list_for_each_entry(its, &its_nodes, entry)
+		raw_spin_lock(&its->lock);
+}
+
+int its_emulate_release_locks(int ret_pkvm_finalize, unsigned long *flags, its_emulate_setup cb)
+{
+	struct its_node *its;
+	int ret = 0;
+
+	if (WARN_ON(!flags || !cb))
+		ret = -EINVAL;
+
+	list_for_each_entry(its, &its_nodes, entry) {
+		if (!ret_pkvm_finalize && !ret)
+			ret = its_emulate_switch_queues_locked(its, cb);
+
+		raw_spin_unlock(&its->lock);
+	}
+
+	raw_spin_unlock_irqrestore(&its_lock, *flags);
+
+	return ret;
 }
 
 static int __init its_probe_one(struct its_node *its)
