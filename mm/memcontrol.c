@@ -5663,6 +5663,16 @@ void __mem_cgroup_uncharge_folios(struct folio_batch *folios)
 		uncharge_batch(&ug);
 }
 
+static void tier_kick_high(struct mem_cgroup *memcg, int slot)
+{
+	struct page_counter *tier_counter;
+
+	tier_counter = mem_cgroup_tier_counter(memcg, slot);
+	if (tier_counter && page_counter_read(tier_counter) >
+			    READ_ONCE(tier_counter->high))
+		schedule_work(&memcg->high_work);
+}
+
 /**
  * mem_cgroup_replace_folio - Charge a folio's replacement.
  * @old: Currently circulating folio.
@@ -5705,6 +5715,7 @@ void mem_cgroup_replace_folio(struct folio *old, struct folio *new)
 			int slot = nid_tier_slot(folio_nid(new));
 
 			mem_cgroup_charge_tier(memcg, slot, nr_pages);
+			tier_kick_high(memcg, slot);
 		}
 		if (do_memsw_account())
 			page_counter_charge(&memcg->memsw, nr_pages);
@@ -5798,6 +5809,7 @@ void mem_cgroup_migrate(struct folio *old, struct folio *new)
 		if (old_slot != new_slot) {
 			mem_cgroup_uncharge_tier(memcg, old_slot, nr_pages);
 			mem_cgroup_charge_tier(memcg, new_slot, nr_pages);
+			tier_kick_high(memcg, new_slot);
 		}
 		rcu_read_unlock();
 	}
