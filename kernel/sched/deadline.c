@@ -3222,8 +3222,9 @@ static void pull_dl_task(struct rq *this_rq)
 	bool resched = false;
 	struct rq *src_rq;
 	u64 dmin = LONG_MAX;
+	int dl_overload_count = dl_overloaded(this_rq);
 
-	if (likely(!dl_overloaded(this_rq)))
+	if (likely(!dl_overload_count))
 		return;
 
 	/*
@@ -3231,6 +3232,11 @@ static void pull_dl_task(struct rq *this_rq)
 	 * see overloaded we must also see the dlo_mask bit.
 	 */
 	smp_rmb();
+
+	/* If we are the only overloaded CPU do nothing */
+	if (dl_overload_count == 1 &&
+	    cpumask_test_cpu(this_rq->cpu, this_rq->rd->dlo_mask))
+		return;
 
 	for_each_cpu(cpu, this_rq->rd->dlo_mask) {
 		if (this_cpu == cpu)
