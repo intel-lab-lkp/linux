@@ -47,15 +47,10 @@ static inline struct s6d16d0 *panel_to_s6d16d0(struct drm_panel *panel)
 static int s6d16d0_unprepare(struct drm_panel *panel)
 {
 	struct s6d16d0 *s6 = panel_to_s6d16d0(panel);
-	struct mipi_dsi_device *dsi = to_mipi_dsi_device(s6->dev);
-	int ret;
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = to_mipi_dsi_device(s6->dev) };
 
 	/* Enter sleep mode */
-	ret = mipi_dsi_dcs_enter_sleep_mode(dsi);
-	if (ret) {
-		dev_err(s6->dev, "failed to enter sleep mode (%d)\n", ret);
-		return ret;
-	}
+	mipi_dsi_dcs_enter_sleep_mode_multi(&dsi_ctx);
 
 	/* Assert RESET */
 	gpiod_set_value_cansleep(s6->reset_gpio, 1);
@@ -67,7 +62,7 @@ static int s6d16d0_unprepare(struct drm_panel *panel)
 static int s6d16d0_prepare(struct drm_panel *panel)
 {
 	struct s6d16d0 *s6 = panel_to_s6d16d0(panel);
-	struct mipi_dsi_device *dsi = to_mipi_dsi_device(s6->dev);
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = to_mipi_dsi_device(s6->dev) };
 	int ret;
 
 	ret = regulator_enable(s6->supply);
@@ -83,57 +78,38 @@ static int s6d16d0_prepare(struct drm_panel *panel)
 	gpiod_set_value_cansleep(s6->reset_gpio, 0);
 	msleep(120);
 
-	/* Enabe tearing mode: send TE (tearing effect) at VBLANK */
-	ret = mipi_dsi_dcs_set_tear_on(dsi,
+	/* Enable tearing mode: send TE (tearing effect) at VBLANK */
+	mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx,
 				       MIPI_DSI_DCS_TEAR_MODE_VBLANK);
-	if (ret) {
-		dev_err(s6->dev, "failed to enable vblank TE (%d)\n", ret);
-		goto err_power_off;
-	}
 	/* Exit sleep mode and power on */
-	ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
-	if (ret) {
-		dev_err(s6->dev, "failed to exit sleep mode (%d)\n", ret);
-		goto err_power_off;
+	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
+	if (dsi_ctx.accum_err) {
+		gpiod_set_value_cansleep(s6->reset_gpio, 1);
+		regulator_disable(s6->supply);
+		return dsi_ctx.accum_err;
 	}
 
 	return 0;
-
-err_power_off:
-	gpiod_set_value_cansleep(s6->reset_gpio, 1);
-	regulator_disable(s6->supply);
-
-	return ret;
 }
 
 static int s6d16d0_enable(struct drm_panel *panel)
 {
 	struct s6d16d0 *s6 = panel_to_s6d16d0(panel);
-	struct mipi_dsi_device *dsi = to_mipi_dsi_device(s6->dev);
-	int ret;
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = to_mipi_dsi_device(s6->dev) };
 
-	ret = mipi_dsi_dcs_set_display_on(dsi);
-	if (ret) {
-		dev_err(s6->dev, "failed to turn display on (%d)\n", ret);
-		return ret;
-	}
+	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
 
-	return 0;
+	return dsi_ctx.accum_err;
 }
 
 static int s6d16d0_disable(struct drm_panel *panel)
 {
 	struct s6d16d0 *s6 = panel_to_s6d16d0(panel);
-	struct mipi_dsi_device *dsi = to_mipi_dsi_device(s6->dev);
-	int ret;
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = to_mipi_dsi_device(s6->dev) };
 
-	ret = mipi_dsi_dcs_set_display_off(dsi);
-	if (ret) {
-		dev_err(s6->dev, "failed to turn display off (%d)\n", ret);
-		return ret;
-	}
+	mipi_dsi_dcs_set_display_off_multi(&dsi_ctx);
 
-	return 0;
+	return dsi_ctx.accum_err;
 }
 
 static int s6d16d0_get_modes(struct drm_panel *panel,
