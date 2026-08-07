@@ -126,7 +126,11 @@ static void vs_primary_plane_atomic_update(struct drm_plane *plane,
 			   VSDC_FB_CONFIG_UV_SWIZZLE_EN,
 			   vs_state->format.uv_swizzle);
 
-	dma_addr = vs_fb_get_dma_addr(fb, &state->src);
+	/*
+	 * Primary plane cannot be moved, no clipping is involved,
+	 * so the non-clipped framebuffer address can be used.
+	 */
+	dma_addr = drm_fb_dma_get_gem_addr(fb, 0);
 
 	regmap_write(dc->regs, VSDC_FB_ADDRESS(output),
 		     lower_32_bits(dma_addr));
