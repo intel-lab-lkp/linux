@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+/plugin/;
+
+#include "kunit_clk_cs2600.dtsi"
+#include "clk-cs2600-kunit.h"
+
+&cs2600_kunit_i2c {
+	cs2600: cs2600@2c {
+		compatible = "cirrus,cs2600";
+		reg = <0x2c>;
+		#clock-cells = <1>;
+		clocks = <&cs2600_kunit_refclk>;
+		clock-names = "ref_clk_in";
+		vdd-supply = <&dummy_vreg>;
+	};
+};
+
+&cs2600_test_consumer {
+	assigned-clocks = <&cs2600 CS2600_CLK_OUT>,
+			  <&cs2600 CS2600_BCLK_OUT>,
+			  <&cs2600 CS2600_FSYNC_OUT>;
+	assigned-clock-rates = <CS2600_KUNIT_CLKOUT_ASSIGNED
+				CS2600_KUNIT_BCLK_ASSIGNED
+				CS2600_KUNIT_FSYNC_ASSIGNED>;
+};
+

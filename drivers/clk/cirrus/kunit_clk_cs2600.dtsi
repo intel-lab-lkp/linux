@@ -1,0 +1,40 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/cirrus,cs2600-clock.h>
+
+&{/} {
+	dummy_vreg: VDD-DUMMY {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	cs2600_kunit_refclk: cs2600_kunit_refclk {
+		compatible = "cirrus,cs2600-kunit-refclk";
+		#clock-cells = <0>;
+	};
+
+	cs2600_kunit_clkin: cs2600_kunit_clkin {
+		compatible = "cirrus,cs2600-kunit-clkin";
+		#clock-cells = <0>;
+	};
+
+	cs2600_kunit_i2c: cs2600-kunit-i2c {
+		compatible = "cirrus,cs2600-kunit-i2c";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		clock-frequency = <400000>;
+	};
+
+	cs2600_test_consumer: cs2600-test-consumer {
+		compatible = "cirrus,cs2600-kunit-consumer";
+		clocks = <&cs2600 CS2600_PLL_OUT>, <&cs2600 CS2600_CLK_OUT>,
+			 <&cs2600 CS2600_BCLK_OUT>, <&cs2600 CS2600_FSYNC_OUT>;
+		clock-names = "pllout", "clkout", "bclk", "fsync";
+	};
+};
