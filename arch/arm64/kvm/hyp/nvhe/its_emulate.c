@@ -42,17 +42,22 @@ void its_emulate_forward_req(struct pkvm_protected_reg *region, u64 offset, bool
 struct its_handler {
 	u64	offset;
 	u8	access_size;
+	u8	num_registers;
 	void	(*write)(struct pkvm_protected_reg *region, u64 offset, u64 value);
 	void	(*read)(struct pkvm_protected_reg *region, u64 offset, u64 *read);
 };
 
-#define ITS_HANDLER(off, sz, write_cb, read_cb)		\
+#define ITS_HANDLER_REG_PAIR(off, sz, registers, write_cb, read_cb)	\
 {							\
 	.offset = (off),				\
 	.access_size = (sz),				\
+	.num_registers = (registers),			\
 	.write = (write_cb),				\
 	.read = (read_cb),				\
 }
+
+#define ITS_HANDLER(off, sz, write_cb, read_cb)		\
+	ITS_HANDLER_REG_PAIR(off, sz, 1, write_cb, read_cb)
 
 struct dte_entry {
 	u32	device_id;
@@ -460,10 +465,42 @@ static void cbaser_read(struct pkvm_protected_reg *region, u64 offset, u64 *read
 	*read = readq_relaxed(its->base + GITS_CBASER);
 }
 
+static void baser_write(struct pkvm_protected_reg *region, u64 offset, u64 value)
+{
+	struct its_priv_state *its = region->priv;
+	u32 ctlr = readl_relaxed(its->base + GITS_CTLR);
+	int baser_idx;
+	u64 baser;
+
+	if ((ctlr & GITS_CTLR_ENABLE) || !(ctlr & GITS_CTLR_QUIESCENT))
+		return;
+
+	baser_idx = (offset - GITS_BASER) >> 3;
+	baser = its->host_state->tables[baser_idx].val;
+
+	/* Prevent if it tries to change from direct layout to indirect layout */
+	if ((value & GITS_BASER_INDIRECT) != (baser & GITS_BASER_INDIRECT))
+		return;
+
+	/* Don't allow the host to point to new tables or new attributes */
+	value &= ~(GENMASK_ULL(47, 12) | GENMASK_ULL(9, 0));
+	value |= (baser & GENMASK_ULL(47, 12)) | (baser & GENMASK_ULL(9, 0));
+
+	writeq_relaxed(value, its->base + offset);
+}
+
+static void baser_read(struct pkvm_protected_reg *region, u64 offset, u64 *read)
+{
+	struct its_priv_state *its = region->priv;
+	*read = readq_relaxed(its->base + offset);
+}
+
 static struct its_handler its_handlers[] = {
 	ITS_HANDLER(GITS_CWRITER, sizeof(u64), cwriter_write, cwriter_read),
 	ITS_HANDLER(GITS_CTLR, sizeof(u32), ctlr_write, ctlr_read),
 	ITS_HANDLER(GITS_CBASER, sizeof(u64), cbaser_write, cbaser_read),
+
+	ITS_HANDLER_REG_PAIR(GITS_BASER, sizeof(u64), 8, baser_write, baser_read),
 	{},
 };
 
@@ -472,13 +509,14 @@ void pkvm_its_emulate_handler(struct pkvm_protected_reg *region, u64 offset, boo
 {
 	struct its_priv_state *priv = region->priv;
 	struct its_handler *reg_handler;
+	u64 end;
 
 	if (!priv || !IS_ALIGNED(offset, reg_size))
 		return;
 
 	for (reg_handler = its_handlers; reg_handler->access_size; reg_handler++) {
-		if (reg_handler->offset > offset ||
-		    reg_handler->offset + reg_handler->access_size <= offset)
+		end = reg_handler->offset + reg_handler->access_size * reg_handler->num_registers;
+		if (reg_handler->offset > offset || end <= offset)
 			continue;
 
 		if (reg_handler->access_size < reg_size)
