@@ -393,6 +393,12 @@ TEST_MATRIX=(
 	"  C0-1:P1   .      .  P1:C2-3  C0-2     .      .      .     0 A1:0-1|XA1:0-1|B1:2-3 A1:P1|B1:P1"
 	"   C0-1     .      .  P1:C2-3  C0-2     .      .      .     0 A1:0-1|B1:2-3 A1:P0|B1:P1"
 
+	# However, a partition root changing its own cpuset.cpus to overlap with
+	# a sibling partition root will invalidate itself. Only actually allocated
+	# CPUs (effective_xcpus) should be returned to the parent, not all CPUs
+	# in cpus_allowed. The root cgroup effective CPUs must remain unchanged.
+	"  C0-1:P1   .      .   C1-2:P1    .      .      .    C0-1    0 A1:0-1 A1:P1|B1:P-1"
+
 	# cpuset.cpus can overlap with sibling cpuset.cpus.exclusive but not subsumed by it
 	"   C0-3     .      .    C4-5     X5     .      .      .     0 A1:0-3|B1:4-5"
 
