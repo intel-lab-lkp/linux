@@ -237,6 +237,20 @@ unshare_cmd_host:
 	return ret;
 }
 
+static void pkvm_teardown_its_shadow_cmdq(struct its_host_state *host_state)
+{
+	u64 i, start_pfn, num_pages = host_state->cmdq_len >> PAGE_SHIFT;
+
+	start_pfn = hyp_virt_to_pfn(host_state->cmd_host_copy);
+	hyp_unpin_shared_mem(host_state->cmd_host_copy,
+			     host_state->cmd_host_copy + host_state->cmdq_len);
+
+	for (i = 0; i < num_pages; i++)
+		WARN_ON(__pkvm_host_unshare_hyp(start_pfn + i));
+
+	WARN_ON(__pkvm_hyp_donate_host(hyp_virt_to_pfn(host_state->cmd_original), num_pages));
+}
+
 static struct pkvm_protected_reg *get_region(phys_addr_t dev_addr)
 {
 	int i;
@@ -247,6 +261,147 @@ static struct pkvm_protected_reg *get_region(phys_addr_t dev_addr)
 	}
 
 	return NULL;
+}
+
+static void pkvm_unshare_shadow_table(void *shadow, u64 nr_pages)
+{
+	u64 i, start_pfn = hyp_virt_to_pfn(shadow);
+
+	hyp_unpin_shared_mem(shadow, shadow + (nr_pages << PAGE_SHIFT));
+
+	for (i = 0; i < nr_pages; i++)
+		WARN_ON(__pkvm_host_unshare_hyp(start_pfn + i));
+}
+
+static int pkvm_host_unmap_last_level(void *shadow, size_t num_pages, u32 psz)
+{
+	phys_addr_t table_addr;
+	u64 *table = shadow;
+	int i, end;
+	int ret;
+
+	end = (num_pages << PAGE_SHIFT) / sizeof(*table);
+	for (i = 0; i < end; i++) {
+		if (!(table[i] & GITS_BASER_VALID))
+			continue;
+
+		table_addr = table[i] & PHYS_MASK;
+		ret = __pkvm_host_donate_hyp(hyp_phys_to_pfn(table_addr), psz >> PAGE_SHIFT);
+		if (ret)
+			goto err_donate;
+	}
+
+	return 0;
+err_donate:
+	for (i = i - 1; i >= 0; i--) {
+		if (!(table[i] & GITS_BASER_VALID))
+			continue;
+
+		table_addr = table[i] & PHYS_MASK;
+		__pkvm_hyp_donate_host(hyp_phys_to_pfn(table_addr), psz >> PAGE_SHIFT);
+	}
+	return ret;
+}
+
+static int pkvm_share_shadow_table(void *shadow, u64 nr_pages)
+{
+	u64 i, ret, start_pfn = hyp_virt_to_pfn(shadow);
+
+	for (i = 0; i < nr_pages; i++) {
+		ret = __pkvm_host_share_hyp(start_pfn + i);
+		if (ret)
+			goto unshare;
+	}
+
+	ret = hyp_pin_shared_mem(shadow, shadow + (nr_pages << PAGE_SHIFT));
+	if (ret)
+		goto unshare;
+
+	return ret;
+unshare:
+	while (i--)
+		__pkvm_host_unshare_hyp(start_pfn + i);
+	return ret;
+}
+
+static void pkvm_host_map_last_level(void *shadow, size_t num_pages, u32 psz)
+{
+	u64 *table = shadow;
+	int i, end = (num_pages << PAGE_SHIFT) / sizeof(*table);
+	phys_addr_t table_addr;
+
+	for (i = 0; i < end; i++) {
+		if (!(table[i] & GITS_BASER_VALID))
+			continue;
+
+		table_addr = table[i] & PHYS_MASK;
+		WARN_ON(__pkvm_hyp_donate_host(hyp_phys_to_pfn(table_addr), psz >> PAGE_SHIFT));
+	}
+}
+
+static int pkvm_setup_its_shadow_baser(struct its_host_state *host_state)
+{
+	u64 baser_val, num_pages;
+	void *original_table, *snapshot_table;
+	int ret;
+	int i;
+
+	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
+		baser_val = host_state->tables[i].val;
+		if (!(baser_val & GITS_BASER_VALID))
+			continue;
+
+		original_table = kern_hyp_va(host_state->tables[i].base);
+		num_pages = (1 << host_state->tables[i].order);
+
+		ret = __pkvm_host_donate_hyp(hyp_virt_to_pfn(original_table), num_pages);
+		if (ret)
+			goto err_donate;
+
+		if (baser_val & GITS_BASER_INDIRECT) {
+			if (!host_state->tables[i].base_snapshot) {
+				ret = -EINVAL;
+				goto err_with_donation;
+			}
+
+			snapshot_table = kern_hyp_va(host_state->tables[i].base_snapshot);
+			ret = pkvm_share_shadow_table(snapshot_table, num_pages);
+			if (ret)
+				goto err_with_donation;
+
+			ret = pkvm_host_unmap_last_level(original_table, num_pages,
+							 host_state->tables[i].psz);
+			if (ret)
+				goto err_with_share;
+		}
+	}
+
+	return 0;
+err_with_share:
+	pkvm_unshare_shadow_table(snapshot_table, num_pages);
+err_with_donation:
+	__pkvm_hyp_donate_host(hyp_virt_to_pfn(original_table), num_pages);
+err_donate:
+	for (i = i - 1; i >= 0; i--) {
+		baser_val = host_state->tables[i].val;
+		if (!(baser_val & GITS_BASER_VALID))
+			continue;
+
+		original_table = kern_hyp_va(host_state->tables[i].base);
+		num_pages = (1 << host_state->tables[i].order);
+
+		if (baser_val & GITS_BASER_INDIRECT) {
+			snapshot_table = kern_hyp_va(host_state->tables[i].base_snapshot);
+			pkvm_unshare_shadow_table(snapshot_table, num_pages);
+
+			pkvm_host_map_last_level(original_table, num_pages,
+						 host_state->tables[i].psz);
+		}
+
+		WARN_ON(__pkvm_hyp_donate_host(hyp_virt_to_pfn(original_table), num_pages));
+	}
+
+	return ret;
 }
 
 DEFINE_HYP_SPINLOCK(its_setup_lock);
@@ -294,6 +449,10 @@ int pkvm_its_emulate_setup(phys_addr_t dev_addr, struct its_host_state *host_sta
 	if (ret)
 		goto err_with_host_state;
 
+	ret = pkvm_setup_its_shadow_baser(host_state);
+	if (ret)
+		goto err_with_shadow_cmdq;
+
 	hyp_spin_lock_init(&priv_state->its_lock);
 
 	priv_state->host_state = host_state;
@@ -312,6 +471,8 @@ int pkvm_its_emulate_setup(phys_addr_t dev_addr, struct its_host_state *host_sta
 	hyp_spin_unlock(&its_setup_lock);
 
 	return 0;
+err_with_shadow_cmdq:
+	pkvm_teardown_its_shadow_cmdq(host_state);
 err_with_host_state:
 	WARN_ON(__pkvm_hyp_donate_host(hyp_virt_to_pfn(host_state), 1));
 err_with_priv:
