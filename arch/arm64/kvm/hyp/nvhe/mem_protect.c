@@ -378,7 +378,11 @@ static int host_stage2_unmap_dev_all(void)
 	u64 addr = 0;
 	int i, ret;
 
-	/* Unmap all non-memory regions to recycle the pages */
+	/*
+	 * Unmap all non-memory regions to recycle the pages.
+	 * That relies on kvm_pgtable_stage2_unmap() not clearing
+	 * counted PTEs which include hypervisor MMIO.
+	 */
 	for (i = 0; i < hyp_memblock_nr; i++, addr = reg->base + reg->size) {
 		reg = &hyp_memory[i];
 		ret = kvm_pgtable_stage2_unmap(pgt, addr, reg->base - addr);
@@ -1117,6 +1121,137 @@ unlock:
 	host_unlock_component();
 
 	return ret;
+}
+
+int __pkvm_host_donate_hyp_mmio(phys_addr_t addr, size_t size)
+{
+	kvm_pte_t pte;
+	u64 offset;
+	void *virt;
+	int ret;
+
+	/* Only before de-privilege. */
+	if (static_branch_unlikely(&kvm_protected_mode_initialized))
+		return -EPERM;
+
+	if (!PAGE_ALIGNED(addr | size) ||
+	    !pfn_range_is_valid(hyp_phys_to_pfn(addr), size >> PAGE_SHIFT))
+		return -EINVAL;
+
+	host_lock_component();
+	hyp_lock_component();
+
+	for (offset = 0; offset < size; offset += PAGE_SIZE) {
+		if (addr_is_memory(addr + offset)) {
+			ret = -EINVAL;
+			goto err_with_mapping;
+		}
+
+		ret = kvm_pgtable_get_leaf(&host_mmu.pgt, addr + offset, &pte, NULL);
+		if (ret)
+			goto err_with_mapping;
+
+		if (pte && !kvm_pte_valid(pte)) {
+			ret = -EPERM;
+			goto err_with_mapping;
+		}
+
+		virt = __hyp_va(addr + offset);
+		ret = kvm_pgtable_get_leaf(&pkvm_pgtable, (u64)virt, &pte, NULL);
+		if (ret)
+			goto err_with_mapping;
+		if (pte) {
+			ret = -EBUSY;
+			goto err_with_mapping;
+		}
+
+		ret = pkvm_create_mappings_locked(virt, virt + PAGE_SIZE, PAGE_HYP_DEVICE);
+		if (ret)
+			goto err_with_mapping;
+	}
+
+	/*
+	 * We set HYP as the owner of the MMIO pages in the host stage-2, for:
+	 * - host aborts: host_stage2_adjust_range() would fail for invalid non zero PTEs.
+	 * - recycle under memory pressure: host_stage2_unmap_dev_all() would call
+	 *   kvm_pgtable_stage2_unmap() which will not clear non zero invalid ptes (counted).
+	 * - other MMIO donation: Would fail as we check that the PTE is valid or empty.
+	 */
+	ret = host_stage2_try(kvm_pgtable_stage2_annotate, &host_mmu.pgt,
+			      addr, size, &host_s2_pool,
+			      KVM_HOST_INVALID_PTE_TYPE_DONATION,
+			      FIELD_PREP(KVM_HOST_DONATION_PTE_OWNER_MASK, PKVM_ID_HYP));
+	if (ret)
+		goto err_with_mapping;
+unlock:
+	hyp_unlock_component();
+	host_unlock_component();
+	return ret;
+err_with_mapping:
+	if (!offset)
+		goto unlock;
+
+	while (offset) {
+		offset -= PAGE_SIZE;
+		virt = __hyp_va(addr + offset);
+		WARN_ON(kvm_pgtable_hyp_unmap(&pkvm_pgtable, (u64)virt, PAGE_SIZE) != PAGE_SIZE);
+	}
+	goto unlock;
+}
+
+int __pkvm_hyp_donate_host_mmio(phys_addr_t addr, size_t size)
+{
+	kvm_pte_t pte;
+	u64 offset;
+	int ret = 0;
+	void *virt;
+
+	if (static_branch_unlikely(&kvm_protected_mode_initialized))
+		return -EPERM;
+
+	if (!PAGE_ALIGNED(addr | size) ||
+	    !pfn_range_is_valid(hyp_phys_to_pfn(addr), size >> PAGE_SHIFT))
+		return -EINVAL;
+
+	host_lock_component();
+	hyp_lock_component();
+
+	for (offset = 0; offset < size; offset += PAGE_SIZE) {
+		if (addr_is_memory(addr + offset)) {
+			ret = -EINVAL;
+			goto err_with_unmap;
+		}
+		ret = kvm_pgtable_get_leaf(&host_mmu.pgt, addr + offset, &pte, NULL);
+		if (ret)
+			goto err_with_unmap;
+		if (!pte || kvm_pte_valid(pte)) {
+			ret = -EINVAL;
+			goto err_with_unmap;
+		}
+		if (FIELD_GET(KVM_HOST_DONATION_PTE_OWNER_MASK, pte) != PKVM_ID_HYP) {
+			ret = -EPERM;
+			goto err_with_unmap;
+		}
+
+		virt = __hyp_va(addr + offset);
+		if (kvm_pgtable_hyp_unmap(&pkvm_pgtable, (u64)virt, PAGE_SIZE) != PAGE_SIZE)
+			goto err_with_unmap;
+	}
+	WARN_ON(host_stage2_idmap_locked(addr, size, PKVM_HOST_MMIO_PROT));
+unlock:
+	hyp_unlock_component();
+	host_unlock_component();
+	return ret;
+err_with_unmap:
+	if (!offset)
+		goto unlock;
+
+	while (offset) {
+		offset -= PAGE_SIZE;
+		virt = __hyp_va(addr + offset);
+		WARN_ON(pkvm_create_mappings_locked(virt, virt + PAGE_SIZE, PAGE_HYP_DEVICE));
+	}
+	goto unlock;
 }
 
 int __pkvm_hyp_donate_host(u64 pfn, u64 nr_pages)
