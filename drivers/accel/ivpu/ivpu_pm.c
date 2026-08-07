@@ -445,6 +445,7 @@ void ivpu_pm_enable(struct ivpu_device *vdev)
 
 void ivpu_pm_disable(struct ivpu_device *vdev)
 {
+	pm_runtime_dont_use_autosuspend(vdev->drm.dev);
 	pm_runtime_get_noresume(vdev->drm.dev);
 	pm_runtime_forbid(vdev->drm.dev);
 }

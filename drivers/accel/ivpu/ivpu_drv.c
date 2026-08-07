@@ -776,13 +776,15 @@ static int ivpu_dev_init(struct ivpu_device *vdev)
 
 	ret = ivpu_boot(vdev);
 	if (ret)
-		goto err_ipc_fini;
+		goto err_pm_fini;
 
 	ivpu_job_done_consumer_init(vdev);
 	ivpu_pm_enable(vdev);
 
 	return 0;
 
+err_pm_fini:
+	pm_runtime_dont_use_autosuspend(vdev->drm.dev);
 err_ipc_fini:
 	ivpu_ipc_fini(vdev);
 err_fw_fini:
