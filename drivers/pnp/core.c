@@ -23,6 +23,10 @@ static LIST_HEAD(pnp_protocols);
 LIST_HEAD(pnp_global);
 DEFINE_MUTEX(pnp_lock);
 
+static void pnp_protocol_release(struct device *dev)
+{
+}
+
 /*
  * ACPI or PNPBIOS should tell us about all platform devices, so we can
  * skip some blind probes.  ISAPNP typically enumerates only plug-in ISA
@@ -66,14 +70,17 @@ int pnp_register_protocol(struct pnp_protocol *protocol)
 
 	protocol->number = nodenum;
 	dev_set_name(&protocol->dev, "pnp%d", nodenum);
+	protocol->dev.release = pnp_protocol_release;
 
 	list_add_tail(&protocol->protocol_list, &pnp_protocols);
 
 	mutex_unlock(&pnp_lock);
 
 	ret = device_register(&protocol->dev);
-	if (ret)
+	if (ret) {
 		pnp_remove_protocol(protocol);
+		put_device(&protocol->dev);
+	}
 
 	return ret;
 }
