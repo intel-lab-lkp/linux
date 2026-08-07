@@ -171,6 +171,11 @@ static int hsr_portdev_setup(struct hsr_priv *hsr, struct net_device *dev,
 		goto fail_rx_handler;
 	dev_disable_lro(dev);
 
+	/* GRO disabling is best-effort: devices with fixed-on
+	 * GRO/GRO_HW cannot be forced off.
+	 */
+	dev_disable_gro(dev);
+
 	return 0;
 
 fail_rx_handler:
