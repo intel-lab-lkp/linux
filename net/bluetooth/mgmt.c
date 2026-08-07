@@ -1081,6 +1081,8 @@ static void mesh_send_complete(struct hci_dev *hdev,
 {
 	u8 handle = mesh_tx->handle;
 
+	lockdep_assert_held(&hdev->lock);
+
 	if (!silent)
 		mgmt_event(MGMT_EV_MESH_PACKET_CMPLT, hdev, &handle,
 			   sizeof(handle), NULL);
@@ -1095,10 +1097,15 @@ static int mesh_send_done_sync(struct hci_dev *hdev, void *data)
 	hci_dev_clear_flag(hdev, HCI_MESH_SENDING);
 	if (list_empty(&hdev->adv_instances))
 		hci_disable_advertising_sync(hdev);
+
+	hci_dev_lock(hdev);
+
 	mesh_tx = mgmt_mesh_next(hdev, NULL);
 
 	if (mesh_tx)
 		mesh_send_complete(hdev, mesh_tx, false);
+
+	hci_dev_unlock(hdev);
 
 	return 0;
 }
@@ -1107,10 +1114,18 @@ static int mesh_send_sync(struct hci_dev *hdev, void *data);
 static void mesh_send_start_complete(struct hci_dev *hdev, void *data, int err);
 static void mesh_next(struct hci_dev *hdev, void *data, int err)
 {
-	struct mgmt_mesh_tx *mesh_tx = mgmt_mesh_next(hdev, NULL);
+	struct mgmt_mesh_tx *mesh_tx;
 
-	if (!mesh_tx)
+	if (err == -ECANCELED)
 		return;
+
+	hci_dev_lock(hdev);
+
+	mesh_tx = mgmt_mesh_next(hdev, NULL);
+	if (!mesh_tx) {
+		hci_dev_unlock(hdev);
+		return;
+	}
 
 	err = hci_cmd_sync_queue(hdev, mesh_send_sync, mesh_tx,
 				 mesh_send_start_complete);
@@ -1119,6 +1134,8 @@ static void mesh_next(struct hci_dev *hdev, void *data, int err)
 		mesh_send_complete(hdev, mesh_tx, false);
 	else
 		hci_dev_set_flag(hdev, HCI_MESH_SENDING);
+
+	hci_dev_unlock(hdev);
 }
 
 static void mesh_send_done(struct work_struct *work)
@@ -2304,12 +2321,17 @@ static void mesh_send_start_complete(struct hci_dev *hdev, void *data, int err)
 	unsigned long mesh_send_interval;
 	u8 mgmt_err = mgmt_status(err);
 
+	if (err == -ECANCELED)
+		return;
+
 	/* Report any errors here, but don't report completion */
 
 	if (mgmt_err) {
 		hci_dev_clear_flag(hdev, HCI_MESH_SENDING);
 		/* Send Complete Error Code for handle */
+		hci_dev_lock(hdev);
 		mesh_send_complete(hdev, mesh_tx, false);
+		hci_dev_unlock(hdev);
 		return;
 	}
 
@@ -2415,6 +2437,8 @@ static int send_cancel(struct hci_dev *hdev, void *data)
 	struct mgmt_cp_mesh_send_cancel *cancel = (void *)cmd->param;
 	struct mgmt_mesh_tx *mesh_tx;
 
+	hci_dev_lock(hdev);
+
 	if (!cancel->handle) {
 		do {
 			mesh_tx = mgmt_mesh_next(hdev, cmd->sk);
@@ -2428,6 +2452,8 @@ static int send_cancel(struct hci_dev *hdev, void *data)
 		if (mesh_tx && mesh_tx->sk == cmd->sk)
 			mesh_send_complete(hdev, mesh_tx, false);
 	}
+
+	hci_dev_unlock(hdev);
 
 	mgmt_cmd_complete(cmd->sk, hdev->id, MGMT_OP_MESH_SEND_CANCEL,
 			  0, NULL, 0);
