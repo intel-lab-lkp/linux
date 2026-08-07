@@ -53,6 +53,7 @@
 #include <linux/seq_file.h>
 #include <linux/vmpressure.h>
 #include <linux/memremap.h>
+#include <linux/memory-tiers.h>
 #include <linux/mm_inline.h>
 #include <linux/cpu.h>
 #include <linux/oom.h>
@@ -4126,6 +4127,7 @@ static void __mem_cgroup_free(struct mem_cgroup *memcg)
 	memcg1_free_events(memcg);
 	kfree(memcg->vmstats);
 	free_percpu(memcg->vmstats_percpu);
+	kfree(memcg->tier);
 	kfree(memcg);
 }
 
@@ -4178,6 +4180,13 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 		if (!alloc_mem_cgroup_per_node_info(memcg, node))
 			goto fail;
 
+	if (mem_cgroup_tiered_limits()) {
+		memcg->tier = kcalloc(nr_node_ids, sizeof(*memcg->tier),
+				      GFP_KERNEL);
+		if (!memcg->tier)
+			goto fail;
+	}
+
 	if (memcg_wb_domain_init(memcg, GFP_KERNEL))
 		goto fail;
 
@@ -4206,6 +4215,16 @@ fail:
 	return ERR_PTR(error);
 }
 
+static void memcg_init_tier_counters(struct mem_cgroup *memcg,
+				     struct mem_cgroup *parent, bool protection)
+{
+	for (int i = 0; i < nr_node_ids; i++) {
+		page_counter_init(&memcg->tier[i],
+				  parent ? &parent->tier[i] : NULL, protection);
+		page_counter_set_high(&memcg->tier[i], PAGE_COUNTER_MAX);
+	}
+}
+
 static struct cgroup_subsys_state * __ref
 mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 {
@@ -4231,6 +4250,8 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
 	if (parent) {
 		page_counter_init(&memcg->memory, &parent->memory, memcg_on_dfl);
+		if (mem_cgroup_tiered_limits())
+			memcg_init_tier_counters(memcg, parent, memcg_on_dfl);
 		page_counter_init(&memcg->swap, &parent->swap, false);
 #ifdef CONFIG_MEMCG_V1
 		WRITE_ONCE(memcg->swappiness, mem_cgroup_swappiness(parent));
@@ -4243,6 +4264,8 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 		init_memcg_stats();
 		init_memcg_events();
 		page_counter_init(&memcg->memory, NULL, true);
+		if (mem_cgroup_tiered_limits())
+			memcg_init_tier_counters(memcg, NULL, true);
 		page_counter_init(&memcg->swap, NULL, false);
 #ifdef CONFIG_MEMCG_V1
 		page_counter_init(&memcg->kmem, NULL, false);

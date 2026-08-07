@@ -52,6 +52,7 @@ static int nr_tier_slots;
 static int tier_slot_ids[MAX_NUMNODES]   = {[0 ... MAX_NUMNODES - 1] = -1,};
 static int node_tier_slots[MAX_NUMNODES] = {[0 ... MAX_NUMNODES - 1] = -1,};
 static nodemask_t tier_nodemasks[MAX_NUMNODES];
+static unsigned long tier_capacity[MAX_NUMNODES];
 
 struct memory_dev_type *default_dram_type;
 nodemask_t default_dram_nodes __initdata = NODE_MASK_NONE;
@@ -307,8 +308,10 @@ static void establish_tier_slots(void)
 
 	lockdep_assert_held_once(&memory_tier_lock);
 
-	for (int slot = 0; slot < old_nr_tier_slots; slot++)
+	for (int slot = 0; slot < old_nr_tier_slots; slot++) {
 		nodes_clear(tier_nodemasks[slot]);
+		WRITE_ONCE(tier_capacity[slot], 0);
+	}
 
 	for (int nid = 0; nid < nr_node_ids; nid++) {
 		struct memory_tier *memtier = NULL;
@@ -323,8 +326,16 @@ static void establish_tier_slots(void)
 
 		WRITE_ONCE(node_tier_slots[nid], slot);
 
-		if (slot != -1)
-			node_set(nid, tier_nodemasks[slot]);
+		if (slot < 0)
+			continue;
+
+		node_set(nid, tier_nodemasks[slot]);
+		for (int i = 0; i < MAX_NR_ZONES; i++) {
+			struct zone *zone = &NODE_DATA(nid)->node_zones[i];
+
+			WRITE_ONCE(tier_capacity[slot],
+				tier_capacity[slot] + zone_managed_pages(zone));
+		}
 	}
 	WRITE_ONCE(nr_tier_slots, highest_slot);
 }

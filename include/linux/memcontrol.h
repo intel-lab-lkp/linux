@@ -207,6 +207,7 @@ struct mem_cgroup {
 
 	/* Accounted resources */
 	struct page_counter memory;		/* Both v1 & v2 */
+	struct page_counter *tier;		/* v2 only */
 
 	union {
 		struct page_counter swap;	/* v2 only */
