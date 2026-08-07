@@ -65,8 +65,7 @@ write
         unlock <io_state>
                 release locks on target
         unlock all
-                release all locks on target held by this user (not implemented
-                yet)
+                release all locks on target held by this user
         decodes <io_state>
                 set the legacy decoding attributes for the card
 
@@ -74,9 +73,9 @@ write
                 event if something changes on any card (not just the target)
 
         card_ID is of the form "PCI:domain:bus:dev.fn". It can be set to "default"
-        to go back to the system default card (TODO: not implemented yet). Currently,
-        only PCI is supported as a prefix, but the userland API may support other bus
-        types in the future, even if the current kernel implementation doesn't.
+        to go back to the system default card. Currently, only PCI is supported
+        as a prefix, but the userland API may support other bus types in the
+        future, even if the current kernel implementation doesn't.
 
 Note about locks:
 
