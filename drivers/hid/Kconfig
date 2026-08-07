@@ -1205,6 +1205,14 @@ config STEAM_FF
 	Say Y here if you want to enable force feedback support for the Steam
 	Deck.
 
+config HID_FLYDIGI
+	tristate "Flydigi game controller support"
+	depends on USB_HID
+	select INPUT_FF_MEMLESS
+	help
+	Support for Flydigi game controllers that use the vendor-specific
+	HID protocol, including Vader 5 Pro.
+
 config HID_STEELSERIES
 	tristate "Steelseries devices support"
 	depends on USB_HID
