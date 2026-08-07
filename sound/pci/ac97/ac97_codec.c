@@ -1832,6 +1832,7 @@ void snd_ac97_get_name(struct snd_ac97 *ac97, unsigned int id, char *name,
 		       size_t maxlen, int modem)
 {
 	const struct ac97_codec_id *pid;
+	int len;
 
 	sprintf(name, "0x%x %c%c%c", id,
 		printable(id >> 24),
@@ -1849,9 +1850,9 @@ void snd_ac97_get_name(struct snd_ac97 *ac97, unsigned int id, char *name,
 	} 
 
 	pid = look_for_codec_id(snd_ac97_codec_ids, id);
+	len = strlen(name);
 	if (pid) {
-		strlcat(name, " ", maxlen);
-		strlcat(name, pid->name, maxlen);
+		scnprintf(name + len, maxlen - len, " %s", pid->name);
 		if (pid->mask != 0xffffffff)
 			sprintf(name + strlen(name), " rev %u", id & ~pid->mask);
 		if (ac97 && pid->patch) {
@@ -1860,8 +1861,7 @@ void snd_ac97_get_name(struct snd_ac97 *ac97, unsigned int id, char *name,
 				pid->patch(ac97);
 		}
 	} else {
-		int l = strlen(name);
-		snprintf(name + l, maxlen - l, " id %x", id & 0xff);
+		snprintf(name + len, maxlen - len, " id %x", id & 0xff);
 	}
 }
 
