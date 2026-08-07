@@ -241,13 +241,13 @@ static int imx_irqsteer_probe(struct platform_device *pdev)
 	if (!data->domain) {
 		dev_err(&pdev->dev, "failed to create IRQ domain\n");
 		ret = -ENOMEM;
-		goto out;
+		goto err_clk;
 	}
 	irq_domain_set_pm_device(data->domain, &pdev->dev);
 
 	if (!data->irq_count || data->irq_count > CHAN_MAX_OUTPUT_INT) {
 		ret = -EINVAL;
-		goto out;
+		goto err_domain;
 	}
 
 	for (i = 0; i < data->irq_count; i++) {
@@ -266,7 +266,10 @@ static int imx_irqsteer_probe(struct platform_device *pdev)
 	pm_runtime_enable(&pdev->dev);
 
 	return 0;
-out:
+
+err_domain:
+	irq_domain_remove(data->domain);
+err_clk:
 	clk_disable_unprepare(data->ipg_clk);
 	return ret;
 }
