@@ -1424,6 +1424,37 @@ int main(int argc, char **argv)
 
 	setbuf(stdout, NULL);
 
+	/*
+	 * The page cache caps folio order at MAX_PAGECACHE_ORDER, which
+	 * xas_split_alloc() puts below the PMD order on arm64 with 64K pages.
+	 * A PMD-sized page cache folio is then impossible, so the kernel
+	 * refuses these collapses by design and there is nothing to test.
+	 *
+	 * The cap is one global, so it rules out every file mapping, not just
+	 * shmem: shmem_huge_global_enabled() drops the PMD order from what it
+	 * allows, and file_thp_enabled() refuses a regular file whose mapping
+	 * cannot hold a PMD folio.
+	 *
+	 * The per-order shmem_enabled control below is what makes the cap
+	 * readable: it is created for the orders in THP_ORDERS_ALL_FILE_DEFAULT,
+	 * which is the cap and nothing else, so whether the PMD order has one
+	 * answers for a regular file as much as for shmem.
+	 */
+	if (!(thp_shmem_supported_orders() & (1UL << hpage_pmd_order))) {
+		if (shmem_ops) {
+			ksft_print_msg("no PMD-order page cache folio: skipping shmem\n");
+			shmem_ops = NULL;
+		}
+		if (read_only_file_ops) {
+			ksft_print_msg("no PMD-order page cache folio: skipping file\n");
+			read_only_file_ops = NULL;
+			read_write_file_read_ops = NULL;
+			read_write_file_write_ops = NULL;
+		}
+		if (!anon_ops && !shmem_ops && !read_only_file_ops)
+			ksft_exit_skip("Nothing left to collapse into\n");
+	}
+
 	default_settings.khugepaged.max_ptes_none = hpage_pmd_nr - 1;
 	default_settings.khugepaged.max_ptes_swap = hpage_pmd_nr / 8;
 	default_settings.khugepaged.max_ptes_shared = hpage_pmd_nr / 2;
