@@ -1144,7 +1144,9 @@ static int arcmsr_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		arcmsr_free_io_queue(acb);
 	error = arcmsr_alloc_ccb_pool(acb);
 	if(error){
-		goto unmap_pci_region;
+		if (acb->adapter_type == ACB_ADAPTER_TYPE_F)
+			arcmsr_free_io_queue(acb);
+		goto free_ccb_pool;
 	}
 	error = scsi_add_host(host, &pdev->dev);
 	if(error){
