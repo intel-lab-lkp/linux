@@ -2423,20 +2423,12 @@ static long mshv_ioctl_process_pt_flags(void __user *user_arg, u64 *pt_flags,
 		    args.pt_isolation >= MSHV_PT_ISOLATION_COUNT)
 			return -EINVAL;
 
-		if (args.pt_num_cpu_fbanks != MSHV_NUM_CPU_FEATURES_BANKS ||
+		if (args.pt_num_cpu_fbanks > MSHV_NUM_CPU_FEATURES_BANKS ||
 		    mshv_field_nonzero(args, pt_rsvd) ||
 		    mshv_field_nonzero(args, pt_rsvd1))
 			return -EINVAL;
 
-		/*
-		 * Note this assumes MSHV_NUM_CPU_FEATURES_BANKS will never
-		 * change and equals HV_PARTITION_PROCESSOR_FEATURES_BANKS
-		 * (i.e. 2).
-		 *
-		 * Further banks (index >= 2) will be modifiable as 'early'
-		 * properties via the set partition property hypercall.
-		 */
-		for (i = 0; i < HV_PARTITION_PROCESSOR_FEATURES_BANKS; i++)
+		for (i = 0; i < args.pt_num_cpu_fbanks; i++)
 			disabled_procs->as_uint64[i] = args.pt_cpu_fbanks[i];
 
 #if IS_ENABLED(CONFIG_X86_64)
