@@ -403,8 +403,35 @@ static void cwriter_read(struct pkvm_protected_reg *region, u64 offset, u64 *rea
 	*read = readq_relaxed(its->base + GITS_CWRITER);
 }
 
+static void ctlr_read(struct pkvm_protected_reg *region, u64 offset, u64 *read)
+{
+	struct its_priv_state *its = region->priv;
+	*read = readl_relaxed(its->base + GITS_CTLR);
+}
+
+static void ctlr_write(struct pkvm_protected_reg *region, u64 offset, u64 value)
+{
+	struct its_priv_state *its = region->priv;
+	bool is_quiescent, is_enabled;
+	u32 ctlr;
+
+	ctlr = readl_relaxed(its->base + GITS_CTLR);
+	is_quiescent = !!(ctlr & GITS_CTLR_QUIESCENT);
+	is_enabled = !!(ctlr & GITS_CTLR_ENABLE);
+
+	/*
+	 * If it's disabled and not in quiescent state and it tries to enable
+	 * it, bail out.
+	 */
+	if (!is_enabled && (value & GITS_CTLR_ENABLE) && !is_quiescent)
+		return;
+
+	writel_relaxed(value, its->base + GITS_CTLR);
+}
+
 static struct its_handler its_handlers[] = {
 	ITS_HANDLER(GITS_CWRITER, sizeof(u64), cwriter_write, cwriter_read),
+	ITS_HANDLER(GITS_CTLR, sizeof(u32), ctlr_write, ctlr_read),
 	{},
 };
 
