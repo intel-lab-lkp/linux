@@ -1756,6 +1756,11 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 		goto put_and_exit; /* OOM, release back memory */
 #endif
 
+	if (sk->sk_state == TCP_CLOSE) {
+		tcp_v4_send_reset(newsk, skb, SK_RST_REASON_TCP_STATE);
+		goto put_and_exit;
+	}
+
 	if (__inet_inherit_port(sk, newsk) < 0)
 		goto put_and_exit;
 	*own_req = inet_ehash_nolisten(newsk, req_to_sk(req_unhash),
