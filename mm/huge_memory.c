@@ -3589,9 +3589,6 @@ static void remap_page(struct folio *folio, unsigned long nr, int flags)
 {
 	int i = 0;
 
-	/* If unmap_folio() uses try_to_migrate() on file, remove this check */
-	if (!folio_test_anon(folio))
-		return;
 	for (;;) {
 		remove_migration_ptes(folio, folio, TTU_RMAP_LOCKED | flags);
 		i += folio_nr_pages(folio);
@@ -3934,18 +3931,22 @@ static unsigned int folio_cache_ref_count(const struct folio *folio)
 	return folio_nr_pages(folio);
 }
 
-static int __folio_freeze_split_unmapped_anon(struct folio *folio, unsigned int new_order,
-					      struct page *split_at, bool do_lru,
-					      struct list_head *list, enum split_type split_type)
+static int __folio_freeze_split_unmap_anon(struct folio *folio, unsigned int new_order,
+					   struct page *split_at, bool do_lru, bool unmap,
+					   struct list_head *list, enum split_type split_type)
 {
 	struct folio *end_folio = folio_next(folio);
 	struct swap_cluster_info *ci = NULL;
 	struct folio *new_folio;
 	int old_order = folio_order(folio);
+	enum ttu_flags ttu_flags = 0;
 	struct list_lru_one *lru;
 	struct lruvec *lruvec;
 	bool dequeue_deferred;
 	int ret = 0;
+
+	if (unmap)
+		unmap_folio(folio);
 
 	local_irq_disable();
 
@@ -3971,8 +3972,8 @@ static int __folio_freeze_split_unmapped_anon(struct folio *folio, unsigned int 
 			list_lru_unlock(lru);
 			rcu_read_unlock();
 		}
-		local_irq_enable();
-		return -EAGAIN;
+		ret = -EAGAIN;
+		goto out_no_split;
 	}
 
 	if (dequeue_deferred) {
@@ -4023,15 +4024,21 @@ static int __folio_freeze_split_unmapped_anon(struct folio *folio, unsigned int 
 		lruvec_unlock(lruvec);
 	if (ci)
 		swap_cluster_unlock(ci);
+out_no_split:
 	local_irq_enable();
+	if (unmap) {
+		if (!ret && !folio_is_device_private(folio))
+			ttu_flags = TTU_USE_SHARED_ZEROPAGE;
+		remap_page(folio, 1 << old_order, ttu_flags);
+	}
 
 	return ret;
 }
 
-static int __folio_freeze_split_unmapped_file(struct folio *folio, unsigned int new_order,
-					      struct page *split_at, struct xa_state *xas,
-					      struct address_space *mapping, bool do_lru,
-					      struct list_head *list, enum split_type split_type)
+static int __folio_freeze_split_unmap_file(struct folio *folio, unsigned int new_order,
+					   struct page *split_at, struct xa_state *xas,
+					   struct address_space *mapping, bool do_lru,
+					   struct list_head *list, enum split_type split_type)
 {
 	struct folio *end_folio = folio_next(folio);
 	struct folio *new_folio, *next;
@@ -4050,6 +4057,8 @@ static int __folio_freeze_split_unmapped_file(struct folio *folio, unsigned int 
 	end = DIV_ROUND_UP(i_size_read(mapping->host), PAGE_SIZE);
 	if (shmem_mapping(mapping))
 		end = shmem_fallocend(mapping->host, end);
+
+	unmap_folio(folio);
 
 	xas_lock_irq(xas);
 
@@ -4175,7 +4184,6 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 	struct anon_vma *anon_vma = NULL;
 	int old_order = folio_order(folio);
 	struct folio *new_folio, *next;
-	enum ttu_flags ttu_flags = 0;
 	int ret;
 
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_locked(folio), folio);
@@ -4263,20 +4271,13 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 		goto out_unlock;
 	}
 
-	unmap_folio(folio);
-
 	if (!is_anon) {
-		ret = __folio_freeze_split_unmapped_file(folio, new_order, split_at, &xas, mapping,
+		ret = __folio_freeze_split_unmap_file(folio, new_order, split_at, &xas, mapping,
 							 true, list, split_type);
 	} else {
-		ret = __folio_freeze_split_unmapped_anon(folio, new_order, split_at, true,
-							 list, split_type);
+		ret = __folio_freeze_split_unmap_anon(folio, new_order, split_at, true,
+						      true, list, split_type);
 	}
-
-	if (!ret && is_anon && !folio_is_device_private(folio))
-		ttu_flags = TTU_USE_SHARED_ZEROPAGE;
-
-	remap_page(folio, 1 << old_order, ttu_flags);
 
 	/*
 	 * Drop the mapping while the inode is still pinned. @folio stays
@@ -4360,8 +4361,8 @@ int folio_split_unmapped(struct folio *folio, unsigned int new_order)
 	if (folio_expected_ref_count(folio) != folio_ref_count(folio) - 1)
 		return -EAGAIN;
 
-	return __folio_freeze_split_unmapped_anon(folio, new_order, &folio->page,
-						  false, NULL, SPLIT_TYPE_UNIFORM);
+	return __folio_freeze_split_unmap_anon(folio, new_order, &folio->page, false,
+					       false, NULL, SPLIT_TYPE_UNIFORM);
 }
 
 /*
