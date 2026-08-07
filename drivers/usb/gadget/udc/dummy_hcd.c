@@ -2564,6 +2564,7 @@ static int dummy_setup(struct usb_hcd *hcd)
 
 	dum = *((void **)dev_get_platdata(hcd->self.controller));
 	hcd->self.sg_tablesize = ~0;
+	hcd->self.no_sg_constraint = 1;
 	if (usb_hcd_is_primary_hcd(hcd)) {
 		dum->hs_hcd = hcd_to_dummy_hcd(hcd);
 		dum->hs_hcd->dum = dum;
