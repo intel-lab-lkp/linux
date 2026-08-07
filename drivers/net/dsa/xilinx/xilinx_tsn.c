@@ -4,16 +4,23 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/clk.h>
 #include <linux/if_bridge.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
+#include <linux/mdio.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_mdio.h>
+#include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <net/dsa.h>
 
 #include "xilinx_tsn.h"
+
+#define TSN_MDIO_MAX_FREQ_HZ		2500000
+#define TSN_MDIO_READY_TIMEOUT_US	20000
 
 static void sw_iow(struct xlnx_tsn *sw, u32 off, u32 val)
 {
@@ -95,6 +102,190 @@ static int xlnx_tsn_set_port_state(struct xlnx_tsn *sw, int port,
 	return 0;
 }
 
+static int xlnx_tsn_mdio_wait_ready(struct xlnx_tsn_mac *m)
+{
+	u32 val;
+
+	return readl_poll_timeout(m->regs + TSN_MDIO_MCR_OFFSET, val,
+				  val & TSN_MDIO_MCR_READY, 1,
+				  TSN_MDIO_READY_TIMEOUT_US);
+}
+
+static int xlnx_tsn_mdio_read(struct mii_bus *bus, int phy_id, int reg)
+{
+	struct xlnx_tsn_mac *m = bus->priv;
+	int ret;
+
+	ret = xlnx_tsn_mdio_wait_ready(m);
+	if (ret < 0)
+		return ret;
+
+	mac_iow(m, TSN_MDIO_MCR_OFFSET,
+		FIELD_PREP(TSN_MDIO_MCR_PHYAD_MASK, phy_id) |
+		FIELD_PREP(TSN_MDIO_MCR_REGAD_MASK, reg) |
+		TSN_MDIO_MCR_INITIATE | TSN_MDIO_MCR_OP_READ);
+
+	ret = xlnx_tsn_mdio_wait_ready(m);
+	if (ret < 0)
+		return ret;
+
+	return FIELD_GET(TSN_MDIO_MRD_MASK,
+			 mac_ior(m, TSN_MDIO_MRD_OFFSET));
+}
+
+static int xlnx_tsn_mdio_write(struct mii_bus *bus, int phy_id, int reg,
+			       u16 val)
+{
+	struct xlnx_tsn_mac *m = bus->priv;
+	int ret;
+
+	ret = xlnx_tsn_mdio_wait_ready(m);
+	if (ret < 0)
+		return ret;
+
+	mac_iow(m, TSN_MDIO_MWD_OFFSET, val);
+	mac_iow(m, TSN_MDIO_MCR_OFFSET,
+		FIELD_PREP(TSN_MDIO_MCR_PHYAD_MASK, phy_id) |
+		FIELD_PREP(TSN_MDIO_MCR_REGAD_MASK, reg) |
+		TSN_MDIO_MCR_INITIATE | TSN_MDIO_MCR_OP_WRITE);
+
+	return xlnx_tsn_mdio_wait_ready(m);
+}
+
+/* Round up so the MDC frequency stays at or below TSN_MDIO_MAX_FREQ_HZ,
+ * then clamp to the 6-bit field maximum so the value stays within the
+ * field and does not corrupt TSN_MDIO_MC_MDIOEN.
+ */
+static u32 xlnx_tsn_mdio_clk_div(struct xlnx_tsn *sw, unsigned long host_hz)
+{
+	u32 div;
+
+	if (!host_hz) {
+		dev_warn(sw->dev,
+			 "s_axi clock rate unknown; clamping MDIO divisor to max\n");
+		return TSN_MDIO_MC_CLOCK_DIVIDE_MAX;
+	}
+
+	div = DIV_ROUND_UP(host_hz, TSN_MDIO_MAX_FREQ_HZ * 2) - 1;
+
+	/* HW ignores MDIO Enable when Clock Divide is 0 */
+	if (!div)
+		div = 1;
+
+	if (div > TSN_MDIO_MC_CLOCK_DIVIDE_MAX) {
+		dev_warn(sw->dev,
+			 "MDIO divisor %u exceeds max %u, clamping\n",
+			 div, TSN_MDIO_MC_CLOCK_DIVIDE_MAX);
+		div = TSN_MDIO_MC_CLOCK_DIVIDE_MAX;
+	}
+
+	return div;
+}
+
+static int xlnx_tsn_mdio_register_one(struct xlnx_tsn *sw, int port,
+				      const char *child_name,
+				      unsigned long host_hz)
+{
+	struct xlnx_tsn_mac *m = &sw->mac[port];
+	struct device_node *mdio_np;
+	struct mii_bus *bus;
+	int ret;
+
+	mdio_np = of_get_child_by_name(sw->dev->of_node, child_name);
+	if (!mdio_np)
+		return 0;
+
+	bus = devm_mdiobus_alloc(sw->dev);
+	if (!bus) {
+		of_node_put(mdio_np);
+		return -ENOMEM;
+	}
+
+	snprintf(bus->id, MII_BUS_ID_SIZE, "%s:%s",
+		 dev_name(sw->dev), child_name);
+	bus->name = "Xilinx TSN MDIO";
+	bus->priv = m;
+	bus->parent = sw->dev;
+	bus->read = xlnx_tsn_mdio_read;
+	bus->write = xlnx_tsn_mdio_write;
+
+	mac_iow(m, TSN_MDIO_MC_OFFSET,
+		xlnx_tsn_mdio_clk_div(sw, host_hz) | TSN_MDIO_MC_MDIOEN);
+
+	ret = xlnx_tsn_mdio_wait_ready(m);
+	if (ret) {
+		dev_err(sw->dev, "%s: MDIO controller not ready: %d\n",
+			child_name, ret);
+		goto err_put_np;
+	}
+
+	ret = of_mdiobus_register(bus, mdio_np);
+	if (ret) {
+		dev_err(sw->dev, "%s: failed to register MDIO bus: %d\n",
+			child_name, ret);
+		goto err_put_np;
+	}
+
+	m->mii_bus = bus;
+	of_node_put(mdio_np);
+	return 0;
+
+err_put_np:
+	of_node_put(mdio_np);
+	return ret;
+}
+
+static void xlnx_tsn_mdio_unregister_all(struct xlnx_tsn *sw)
+{
+	int port;
+
+	for (port = XLNX_TSN_PORT_MAC1; port <= XLNX_TSN_PORT_MAC2; port++) {
+		struct xlnx_tsn_mac *m = &sw->mac[port];
+
+		if (m->mii_bus) {
+			mdiobus_unregister(m->mii_bus);
+			m->mii_bus = NULL;
+		}
+
+		/* clear the enable bit even when no bus was registered (failed probe) */
+		mac_iow(m, TSN_MDIO_MC_OFFSET, 0);
+	}
+}
+
+static int xlnx_tsn_mdio_register_all(struct xlnx_tsn *sw)
+{
+	unsigned long host_hz;
+	struct clk *s_axi;
+	int ret;
+
+	/* per-MAC MDIO divisor comes from the wrapper node's s_axi
+	 * clock
+	 */
+	s_axi = clk_get(sw->dev->parent, "s_axi");
+	if (IS_ERR(s_axi))
+		return dev_err_probe(sw->dev, PTR_ERR(s_axi),
+				     "failed to get s_axi clock\n");
+
+	host_hz = clk_get_rate(s_axi);
+	clk_put(s_axi);
+
+	ret = xlnx_tsn_mdio_register_one(sw, XLNX_TSN_PORT_MAC1, "mdio-mac1",
+					 host_hz);
+	if (ret)
+		goto err_unregister;
+
+	ret = xlnx_tsn_mdio_register_one(sw, XLNX_TSN_PORT_MAC2, "mdio-mac2",
+					 host_hz);
+	if (ret)
+		goto err_unregister;
+
+	return 0;
+
+err_unregister:
+	xlnx_tsn_mdio_unregister_all(sw);
+	return ret;
+}
+
 static enum dsa_tag_protocol xlnx_tsn_get_tag_protocol(struct dsa_switch *ds,
 						       int port,
 						       enum dsa_tag_protocol mp)
@@ -160,13 +351,15 @@ static int xlnx_tsn_setup(struct dsa_switch *ds)
 			return ret;
 	}
 
-	return 0;
+	return xlnx_tsn_mdio_register_all(sw);
 }
 
 static void xlnx_tsn_teardown(struct dsa_switch *ds)
 {
 	struct xlnx_tsn *sw = ds->priv;
 	struct dsa_port *dp;
+
+	xlnx_tsn_mdio_unregister_all(sw);
 
 	dsa_switch_for_each_user_port(dp, ds)
 		xlnx_tsn_set_port_state(sw, dp->index, TSN_PORT_STATE_DISABLED);
@@ -207,16 +400,20 @@ static int xlnx_tsn_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	sw->dev = dev;
+	sw->mac[XLNX_TSN_PORT_MAC1].sw = sw;
+	sw->mac[XLNX_TSN_PORT_MAC2].sw = sw;
 
 	ret = xlnx_tsn_map_reg(pdev, "switch", &sw->sw_base);
 	if (ret)
 		return ret;
 
-	ret = xlnx_tsn_map_reg(pdev, "mac1", &sw->mac_base[XLNX_TSN_PORT_MAC1]);
+	ret = xlnx_tsn_map_reg(pdev, "mac1",
+			       &sw->mac[XLNX_TSN_PORT_MAC1].regs);
 	if (ret)
 		return ret;
 
-	ret = xlnx_tsn_map_reg(pdev, "mac2", &sw->mac_base[XLNX_TSN_PORT_MAC2]);
+	ret = xlnx_tsn_map_reg(pdev, "mac2",
+			       &sw->mac[XLNX_TSN_PORT_MAC2].regs);
 	if (ret)
 		return ret;
 
