@@ -13,6 +13,8 @@
 #include <linux/export.h>
 #include <linux/hardirq.h>
 #include <linux/efi.h>
+#include <linux/memblock.h>
+#include <linux/crash_dump.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/kexec.h>
@@ -22,6 +24,7 @@
 #include <asm/cpuid/api.h>
 #include <hyperv/hvhdk.h>
 #include <asm/mshyperv.h>
+#include <asm/e820/api.h>
 #include <asm/desc.h>
 #include <asm/idtentry.h>
 #include <asm/irq_regs.h>
@@ -496,6 +499,75 @@ EXPORT_SYMBOL_GPL(hv_get_hypervisor_version);
  * Reserved vectors hard coded in the hypervisor. If used outside, the hypervisor
  * will either crash or hang or attempt to break into debugger.
  */
+bool mshv_loader_new = true;
+
+static int hv_resvd_ranges[HV_MAX_RESVD_RANGES] = {
+					[0 ... HV_MAX_RESVD_RANGES - 1] = -1};
+
+/*
+ * Parse eg "hyperv_resvd=3,7,20" where 3, 7, and 20 are indexes into the e820
+ * table for ranges that are reserved by the loader for the hypervisor
+ */
+static int __init hv_parse_hyperv_resvd(char *arg)
+{
+	int idx, max = ARRAY_SIZE(hv_resvd_ranges);
+	int i = 0;
+
+	mshv_loader_new = false;
+
+	if (is_kdump_kernel())
+		return 0;
+
+	if (hv_resvd_ranges[0] != -1) {
+		pr_err("Hyper-V: multiple hyperv_resvd not supported\n");
+		return 0;
+	}
+
+	while (get_option(&arg, &idx)) {
+		if (i >= max) {
+			pr_err("Hyper-V: resvd ranges tbl full %d\n", idx);
+			break;
+		}
+
+		hv_resvd_ranges[i++] = idx;
+	}
+
+	return 0;
+}
+early_param("hyperv_resvd", hv_parse_hyperv_resvd);
+
+/*
+ * Reserve memory that the hypervisor is using early on. The ranges are marked
+ * reserved by a custom bootloader, change that to usable and reserve that
+ * range. Note, the bootloader sanitizes the e820 before passing on here.
+ */
+static void __init hv_resv_mshv_memory(void)
+{
+	u64 start, end, size;
+	int i, idx, max = ARRAY_SIZE(hv_resvd_ranges);
+
+	for (i = 0; i < max && hv_resvd_ranges[i] != -1; i++) {
+		idx = hv_resvd_ranges[i];
+		if (idx < 0 || idx >= e820_table->nr_entries) {
+			pr_info("Hyper-V: invalid resvd idx %d\n", idx);
+			continue;
+		}
+
+		start = e820_table->entries[idx].addr;
+		size = e820_table->entries[idx].size;
+		end = start + size - 1;
+
+		memblock_reserve(start, size);
+		e820_table->entries[idx].type = E820_TYPE_RAM;
+		pr_info("Hyper-V reserve [mem %#018Lx-%#018Lx]\n", start, end);
+
+		hv_mshv_res[i].name = "Hypervisor Code and Data";
+		hv_mshv_res[i].flags = IORESOURCE_BUSY | IORESOURCE_SYSTEM_RAM;
+		hv_mshv_res[i].start = start;
+		hv_mshv_res[i].end = end;
+	}
+}
+
 static void hv_reserve_irq_vectors(void)
 {
 	#define HYPERV_DBG_FASTFAIL_VECTOR	0x29
@@ -547,8 +619,14 @@ static void __init ms_hyperv_init_platform(void)
 
 	hv_identify_partition_type();
 
-	if (hv_root_partition())
+	if (hv_root_partition()) {
+		/* very first thing, reserve/log exclusive hypervisor memory */
+		if (mshv_loader_new)
+			hv_dump_mshv_memory();
+		else
+			hv_resv_mshv_memory();
 		hv_reserve_irq_vectors();
+	}
 
 	if (cc_platform_has(CC_ATTR_SNP_SECURE_AVIC))
 		ms_hyperv.hints |= HV_DEPRECATING_AEOI_RECOMMENDED;

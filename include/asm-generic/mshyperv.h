@@ -212,6 +212,13 @@ int hv_common_cpu_init(unsigned int cpu);
 int hv_common_cpu_die(unsigned int cpu);
 void hv_identify_partition_type(void);
 
+#define HV_MAX_RESVD_RANGES 32
+extern struct resource hv_mshv_res[HV_MAX_RESVD_RANGES];
+extern u32 ranges_nr;
+
+void __init hv_dump_mshv_memory(void);
+void __init hv_mark_resources(void);
+
 /**
  * hv_cpu_number_to_vp_number() - Map CPU to VP.
  * @cpu_number: CPU number in Linux terms

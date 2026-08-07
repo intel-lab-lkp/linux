@@ -26,6 +26,10 @@
 #include <linux/kmsg_dump.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
+#include <linux/memblock.h>
+#include <linux/crash_dump.h>
+#include <linux/kstrtox.h>
+#include <linux/string.h>
 #include <linux/dma-map-ops.h>
 #include <linux/set_memory.h>
 #include <hyperv/hvhdk.h>
@@ -863,3 +867,81 @@ const char *hv_result_to_string(u64 status)
 	return "Unknown";
 }
 EXPORT_SYMBOL_GPL(hv_result_to_string);
+
+struct resource hv_mshv_res[HV_MAX_RESVD_RANGES];
+u32 ranges_nr;
+
+/*
+ * Parse "hyperv_resvd_new=<size>!<address>,<size>!<address>,...", specifying a
+ * list of memory ranges that are reserved by the loader for the hypervisor.
+ */
+static int __init hv_parse_hyperv_resvd_new(char *arg)
+{
+	int i = 0;
+
+	if (is_kdump_kernel())
+		return 0;
+
+	while (arg && *arg) {
+		unsigned long long region_start, region_sz;
+		char *range, *addr_str;
+
+		if (i >= HV_MAX_RESVD_RANGES) {
+			pr_err("Hyper-V: too many hyperv_resvd_new ranges specified\n");
+			return 0;
+		}
+
+		/* Each range is "<size>!<address>", ranges separated by ','. */
+		range = strsep(&arg, ",");
+		addr_str = strchr(range, '!');
+		if (!addr_str) {
+			pr_err("Hyper-V: invalid format for hyperv_resvd_new: %s\n", range);
+			return 0;
+		}
+		*addr_str++ = '\0';
+
+		if (kstrtoull(range, 16, &region_sz) || !region_sz ||
+		    kstrtoull(addr_str, 16, &region_start) || !region_start) {
+			pr_err("Hyper-V: invalid format for hyperv_resvd_new\n");
+			return 0;
+		}
+
+		memblock_reserve(region_start, region_sz);
+
+		hv_mshv_res[i].name = "Hypervisor Code and Data";
+		hv_mshv_res[i].flags = IORESOURCE_BUSY | IORESOURCE_SYSTEM_RAM;
+		hv_mshv_res[i].start = region_start;
+		hv_mshv_res[i].end = region_start + region_sz - 1;
+
+		++i;
+	}
+
+	ranges_nr = i;
+
+	return 0;
+}
+early_param("hyperv_resvd_new", hv_parse_hyperv_resvd_new);
+
+/*
+ * Log memory ranges that the hypervisor uses. The ranges are marked
+ * by a custom bootloader.
+ */
+void __init hv_dump_mshv_memory(void)
+{
+	u64 start, end;
+	int i;
+
+	for (i = 0; i < ranges_nr; i++) {
+		start = hv_mshv_res[i].start;
+		end = hv_mshv_res[i].end;
+		pr_info("Hyper-V reserve [mem %#018Lx-%#018Lx]\n", start, end);
+	}
+}
+
+void __init hv_mark_resources(void)
+{
+	int i, max = ARRAY_SIZE(hv_mshv_res);
+
+	for (i = 0; i < max && hv_mshv_res[i].end; i++)
+		insert_resource(&iomem_resource, &hv_mshv_res[i]);
+}
