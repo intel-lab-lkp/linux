@@ -217,7 +217,7 @@ static inline void free(void *ptr)
 		platform_ops.free(ptr);
 }
 
-static inline void exit(void)
+static inline void __noreturn exit(void)
 {
 	if (platform_ops.exit)
 		platform_ops.exit();

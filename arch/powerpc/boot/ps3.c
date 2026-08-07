@@ -45,7 +45,7 @@ static void ps3_console_write(const char *buf, int len)
 {
 }
 
-static void ps3_exit(void)
+static void __noreturn ps3_exit(void)
 {
 	printf("ps3_exit\n");
 
