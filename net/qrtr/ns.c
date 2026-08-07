@@ -212,6 +212,7 @@ static void lookup_notify(struct sockaddr_qrtr *to, struct qrtr_server *srv,
 		pr_err("failed to send lookup notification\n");
 }
 
+/* Announce the list of servers registered on the local node */
 static int announce_servers(struct sockaddr_qrtr *sq)
 {
 	struct qrtr_server *srv;
@@ -349,15 +350,8 @@ static int say_hello(struct sockaddr_qrtr *dest)
 	return ret;
 }
 
-/* Announce the list of servers registered on the local node */
 static int ctrl_cmd_hello(struct sockaddr_qrtr *sq)
 {
-	int ret;
-
-	ret = say_hello(sq);
-	if (ret < 0)
-		return ret;
-
 	return announce_servers(sq);
 }
 
