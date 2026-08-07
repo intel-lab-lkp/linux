@@ -5,9 +5,11 @@
  * Copyright (C) 2026 Advanced Micro Devices, Inc.
  */
 
+#include <linux/bitops.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
 #include <linux/if_ether.h>
+#include <linux/if_vlan.h>
 #include <linux/kernel.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
@@ -22,16 +24,32 @@
 
 #define DRIVER_NAME			"xilinx_tsn_ep"
 
+#define TSN_DMA_CH_INVALID		0xFFU
+#define TSN_MAX_TX_QUEUE		8
+#define TSN_MAX_RX_QUEUE		16
+
+#define TSN_MAX_VLAN_FRAME_SIZE		(ETH_DATA_LEN + VLAN_ETH_HLEN + \
+					 ETH_FCS_LEN)
+
 /**
  * struct xlnx_tsn_ep - EP MAC private data, embedded in net_device priv area
  * @ndev: the conduit netdev ("ep")
  * @dev: backing device
  * @regs: EP MAC register window
+ * @num_tx_queues: number of TX DMA channels (one per priority)
+ * @num_rx_queues: number of RX DMA channels
+ * @tx_dma_chan_map: logical TX queue index -> physical DMA channel number
+ * @max_frm_size: maximum frame size accepted on RX
  */
 struct xlnx_tsn_ep {
 	struct net_device *ndev;
 	struct device *dev;
 	void __iomem *regs;
+
+	u32 num_tx_queues;
+	u32 num_rx_queues;
+	u32 tx_dma_chan_map[TSN_MAX_TX_QUEUE];
+	u32 max_frm_size;
 };
 
 static netdev_tx_t ep_start_xmit(struct sk_buff *skb, struct net_device *ndev)
@@ -72,15 +90,116 @@ static const struct ethtool_ops ep_ethtool_ops = {
 	.get_drvinfo	= ep_get_drvinfo,
 };
 
+/*
+ * Parse the "tx-queues-config" child of the EP node. The logical queue
+ * index is taken from the "queue<N>" node name, so the mapping does not
+ * depend on the order the child nodes appear in the device tree.
+ */
+static int ep_parse_tx_queue_config(struct xlnx_tsn_ep *ep,
+				    struct device_node *txcfg_np)
+{
+	DECLARE_BITMAP(chan_seen, TSN_MAX_TX_QUEUE) = {};
+	DECLARE_BITMAP(queue_seen, TSN_MAX_TX_QUEUE) = {};
+	unsigned int count = 0;
+	int ret;
+
+	for_each_child_of_node_scoped(txcfg_np, qnode) {
+		u32 chan, queue;
+
+		if (!str_has_prefix(qnode->name, "queue") ||
+		    kstrtou32(qnode->name + strlen("queue"), 10, &queue) ||
+		    queue >= ep->num_tx_queues)
+			return dev_err_probe(ep->dev, -EINVAL,
+					     "tx-config: invalid queue node %pOFn (have %u queues)\n",
+					     qnode, ep->num_tx_queues);
+
+		if (test_and_set_bit(queue, queue_seen))
+			return dev_err_probe(ep->dev, -EINVAL,
+					     "tx-config: queue %u described twice\n",
+					     queue);
+
+		ret = of_property_read_u32(qnode, "xlnx,dma-channel-num", &chan);
+		if (ret)
+			return dev_err_probe(ep->dev, ret,
+					     "tx-config: queue %u missing xlnx,dma-channel-num\n",
+					     queue);
+
+		if (chan >= ep->num_tx_queues)
+			return dev_err_probe(ep->dev, -EINVAL,
+					     "tx-config: queue %u channel %u has no matching tx_chan (have %u)\n",
+					     queue, chan, ep->num_tx_queues);
+
+		if (test_and_set_bit(chan, chan_seen))
+			return dev_err_probe(ep->dev, -EINVAL,
+					     "tx-config: channel %u already assigned to another queue\n",
+					     chan);
+
+		ep->tx_dma_chan_map[queue] = chan;
+		count++;
+	}
+
+	if (count != ep->num_tx_queues)
+		return dev_err_probe(ep->dev, -EINVAL,
+				     "tx-config: described %u queues but expected %u\n",
+				     count, ep->num_tx_queues);
+
+	return 0;
+}
+
+static int ep_count_dma_queues(struct device *dev, u32 *out_tx, u32 *out_rx)
+{
+	u32 tx = 0, rx = 0;
+	int n, i;
+
+	n = of_property_count_strings(dev->of_node, "dma-names");
+	if (n < 0)
+		return dev_err_probe(dev, n, "failed to read dma-names\n");
+
+	for (i = 0; i < n; i++) {
+		const char *name;
+
+		if (of_property_read_string_index(dev->of_node, "dma-names",
+						  i, &name))
+			continue;
+		if (str_has_prefix(name, "tx_chan"))
+			tx++;
+		else if (str_has_prefix(name, "rx_chan"))
+			rx++;
+	}
+
+	if (!tx || tx > TSN_MAX_TX_QUEUE)
+		return dev_err_probe(dev, -EINVAL,
+				     "invalid TX queue count (%u, max %u)\n",
+				     tx, TSN_MAX_TX_QUEUE);
+
+	if (!rx || rx > TSN_MAX_RX_QUEUE)
+		return dev_err_probe(dev, -EINVAL,
+				     "invalid RX queue count (%u, max %u)\n",
+				     rx, TSN_MAX_RX_QUEUE);
+
+	*out_tx = tx;
+	*out_rx = rx;
+
+	return 0;
+}
+
 static int xlnx_tsn_ep_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct device_node *txcfg_np;
 	struct net_device *ndev;
 	struct xlnx_tsn_ep *ep;
 	u8 mac_addr[ETH_ALEN];
+	u32 num_tx, num_rx;
 	int ret;
+	int i;
 
-	ndev = alloc_netdev(sizeof(*ep), "ep", NET_NAME_UNKNOWN, ether_setup);
+	ret = ep_count_dma_queues(dev, &num_tx, &num_rx);
+	if (ret)
+		return ret;
+
+	ndev = alloc_netdev_mqs(sizeof(*ep), "ep", NET_NAME_UNKNOWN,
+				ether_setup, num_tx, num_rx);
 	if (!ndev)
 		return -ENOMEM;
 
@@ -92,12 +211,29 @@ static int xlnx_tsn_ep_probe(struct platform_device *pdev)
 	ep = netdev_priv(ndev);
 	ep->ndev = ndev;
 	ep->dev = dev;
+	ep->num_tx_queues = num_tx;
+	ep->num_rx_queues = num_rx;
+	ep->max_frm_size = TSN_MAX_VLAN_FRAME_SIZE;
+
+	for (i = 0; i < TSN_MAX_TX_QUEUE; i++)
+		ep->tx_dma_chan_map[i] = TSN_DMA_CH_INVALID;
 
 	ep->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(ep->regs)) {
 		ret = PTR_ERR(ep->regs);
 		goto err_free_ndev;
 	}
+
+	txcfg_np = of_get_child_by_name(dev->of_node, "tx-queues-config");
+	if (!txcfg_np) {
+		ret = dev_err_probe(dev, -EINVAL,
+				    "missing tx-queues-config node\n");
+		goto err_free_ndev;
+	}
+	ret = ep_parse_tx_queue_config(ep, txcfg_np);
+	of_node_put(txcfg_np);
+	if (ret)
+		goto err_free_ndev;
 
 	ret = of_get_mac_address(dev->of_node, mac_addr);
 	if (ret == -EPROBE_DEFER) {
