@@ -981,8 +981,10 @@ filldir:
 
 	if (!err)
 		private->end_in_iterate = true;
-	else
+	else if (err > 0)
 		err = 0;
+	else
+		goto out;
 
 	private->curr_pos = actor->pos = ie_pos;
 out:
@@ -999,12 +1001,13 @@ out:
 		kfree(cnir);
 	}
 
-	if (err) {
+	if (err > 0) {
 		if (private) {
 			private->curr_pos = actor->pos;
-			private->end_in_iterate = true;
 		}
 		err = 0;
+	} else if (err < 0 && private) {
+		private->curr_pos = actor->pos;
 	}
 	ntfs_index_ctx_put(ictx);
 	kfree(name);
