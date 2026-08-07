@@ -1675,6 +1675,10 @@ static struct scx_sched *find_parent_sched(struct cgroup *cgrp)
 
 	lockdep_assert_held(&scx_sched_lock);
 
+	/* no SCX sched */
+	if (!parent)
+		return ERR_PTR(-ENODEV);
+
 	/* can't attach twice to the same cgroup */
 	if (parent->cgrp == cgrp)
 		return ERR_PTR(-EBUSY);
