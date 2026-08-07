@@ -174,6 +174,31 @@ static int xlnx_tsn_set_port_state(struct xlnx_tsn *sw, int port,
 	return 0;
 }
 
+static enum tsn_port_state xlnx_tsn_get_port_state(struct xlnx_tsn *sw,
+						   int port)
+{
+	u32 mask, chg_bit, reg;
+
+	if (xlnx_tsn_port_state_bits(port, &mask, &chg_bit))
+		return TSN_PORT_STATE_DISABLED;
+
+	reg = sw_ior(sw, TSN_PORT_STATE_CTRL_OFFSET);
+	return (reg & mask) >> __ffs(mask);
+}
+
+static int xlnx_tsn_port_state_cycle(struct xlnx_tsn *sw, int port,
+				     enum tsn_port_state state)
+{
+	enum tsn_port_state saved = xlnx_tsn_get_port_state(sw, port);
+	int err;
+
+	err = xlnx_tsn_set_port_state(sw, port, state);
+	if (err)
+		return err;
+
+	return xlnx_tsn_set_port_state(sw, port, saved);
+}
+
 static int xlnx_tsn_mdio_wait_ready(struct xlnx_tsn_mac *m)
 {
 	u32 val;
@@ -495,17 +520,56 @@ static int xlnx_tsn_port_set_mac_address(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+/* Enable or disable the hardware address learning engine globally.
+ * Standalone ports do not learn. Enable when a port joins a bridge,
+ * disable when the last one leaves. The sub-qualifier bits below are
+ * inert while learning is disabled. Caller holds indirect_lock.
+ */
+static void xlnx_tsn_set_global_learning(struct xlnx_tsn *sw, bool on)
+{
+	u32 reg = sw_ior(sw, TSN_SW_ADDR_LEARN_OFFSET);
+
+	if (on)
+		reg &= ~TSN_SW_ADDR_LEARN_DISABLE;
+	else
+		reg |= TSN_SW_ADDR_LEARN_DISABLE;
+	sw_iow(sw, TSN_SW_ADDR_LEARN_OFFSET, reg);
+}
+
 static int xlnx_tsn_port_bridge_join(struct dsa_switch *ds, int port,
 				     struct dsa_bridge bridge,
 				     bool *tx_fwd_offload,
 				     struct netlink_ext_ack *extack)
 {
+	struct xlnx_tsn *sw = ds->priv;
+
+	scoped_guard(mutex, &sw->indirect_lock)
+		xlnx_tsn_set_global_learning(sw, true);
+
 	/* The switch fabric replicates flooded frames per egress port
 	 * on its own, so the bridge does not need to clone-and-send.
 	 */
 	*tx_fwd_offload = true;
 
 	return 0;
+}
+
+static void xlnx_tsn_port_bridge_leave(struct dsa_switch *ds, int port,
+				       struct dsa_bridge bridge)
+{
+	struct xlnx_tsn *sw = ds->priv;
+	struct dsa_port *dp;
+
+	dsa_switch_for_each_user_port(dp, ds) {
+		if (dp->index == port)
+			continue;
+
+		if (dp->bridge)
+			return;
+	}
+
+	scoped_guard(mutex, &sw->indirect_lock)
+		xlnx_tsn_set_global_learning(sw, false);
 }
 
 static void xlnx_tsn_port_stp_state_set(struct dsa_switch *ds, int port,
@@ -537,6 +601,217 @@ static void xlnx_tsn_port_stp_state_set(struct dsa_switch *ds, int port,
 	}
 
 	xlnx_tsn_set_port_state(sw, port, hw_state);
+}
+
+/* The CAM status enable bit reads 1 when the block is ready to accept the
+ * next operation.
+ */
+static int xlnx_tsn_cam_wait_ready(struct xlnx_tsn *sw)
+{
+	u32 reg;
+
+	return readl_poll_timeout(sw->sw_base + TSN_CAM_STATUS_OFFSET, reg,
+				  reg & TSN_CAM_STATUS_READY, TSN_SW_POLL_DELAY_US,
+				  TSN_SW_POLL_TIMEOUT_US);
+}
+
+/* The CAM control enable bit self-clears when the operation completes. */
+static int xlnx_tsn_cam_wait_done(struct xlnx_tsn *sw)
+{
+	u32 reg;
+
+	return readl_poll_timeout(sw->sw_base + TSN_CAM_CTRL_OFFSET, reg,
+				  !(reg & TSN_CAM_OP_ENABLE),
+				  TSN_SW_POLL_DELAY_US, TSN_SW_POLL_TIMEOUT_US);
+}
+
+static void xlnx_tsn_cam_load_key(struct xlnx_tsn *sw,
+				  const unsigned char *addr, u16 vid)
+{
+	sw_iow(sw, TSN_CAM_KEY1_OFFSET,
+	       ((u32)addr[0] << 24) | ((u32)addr[1] << 16) |
+	       ((u32)addr[2] << 8) | addr[3]);
+	sw_iow(sw, TSN_CAM_KEY2_OFFSET,
+	       ((u32)addr[4] << 8) | addr[5] |
+	       FIELD_PREP(TSN_CAM_VLAN, vid));
+}
+
+/* Look up a (MAC, VID) key and return its current egress port list, or 0
+ * if the entry is absent. Caller holds indirect_lock.
+ */
+static int xlnx_tsn_cam_read_portlist(struct xlnx_tsn *sw,
+				      const unsigned char *addr, u16 vid,
+				      u8 *portlist)
+{
+	u32 ctrl;
+	int ret;
+
+	ret = xlnx_tsn_cam_wait_ready(sw);
+	if (ret)
+		return ret;
+
+	xlnx_tsn_cam_load_key(sw, addr, vid);
+	sw_iow(sw, TSN_CAM_CTRL_OFFSET,
+	       FIELD_PREP(TSN_CAM_OP_MASK, TSN_CAM_OP_READ) | TSN_CAM_OP_ENABLE);
+
+	ret = xlnx_tsn_cam_wait_done(sw);
+	if (ret)
+		return ret;
+
+	ctrl = sw_ior(sw, TSN_CAM_CTRL_OFFSET);
+	if (!(ctrl & TSN_CAM_FOUND)) {
+		*portlist = 0;
+		return 0;
+	}
+
+	*portlist = FIELD_GET(TSN_CAM_PORT_LIST,
+			      sw_ior(sw, TSN_CAM_PORT_ACT_OFFSET));
+	return 0;
+}
+
+/* Add (add=true) or delete (add=false) the (MAC, VID) entry carrying the
+ * given port list. Caller holds indirect_lock.
+ */
+static int xlnx_tsn_cam_write(struct xlnx_tsn *sw, const unsigned char *addr,
+			      u16 vid, u8 portlist, bool add)
+{
+	int ret;
+
+	ret = xlnx_tsn_cam_wait_ready(sw);
+	if (ret)
+		return ret;
+
+	xlnx_tsn_cam_load_key(sw, addr, vid);
+	sw_iow(sw, TSN_CAM_TV1_OFFSET, 0);
+	sw_iow(sw, TSN_CAM_TV2_OFFSET, 0);
+	sw_iow(sw, TSN_CAM_PORT_ACT_OFFSET,
+	       FIELD_PREP(TSN_CAM_PORT_LIST, portlist));
+	sw_iow(sw, TSN_CAM_CTRL_OFFSET,
+	       FIELD_PREP(TSN_CAM_OP_MASK, add ? TSN_CAM_OP_ADD : TSN_CAM_OP_DELETE) |
+	       TSN_CAM_OP_ENABLE);
+
+	return xlnx_tsn_cam_wait_done(sw);
+}
+
+static void xlnx_tsn_port_fast_age(struct dsa_switch *ds, int port)
+{
+	struct xlnx_tsn *sw = ds->priv;
+	int err;
+
+	err = xlnx_tsn_port_state_cycle(sw, port, TSN_PORT_STATE_FLUSH);
+	if (err)
+		dev_err(sw->dev, "port %d: fast age failed (%d)\n", port, err);
+}
+
+static int xlnx_tsn_port_fdb_add(struct dsa_switch *ds, int port,
+				 const unsigned char *addr, u16 vid,
+				 struct dsa_db db)
+{
+	struct xlnx_tsn *sw = ds->priv;
+	u8 portlist;
+	int ret;
+
+	if (!vid)
+		vid = TSN_SW_DEFAULT_VID;
+
+	guard(mutex)(&sw->indirect_lock);
+	ret = xlnx_tsn_cam_read_portlist(sw, addr, vid, &portlist);
+	if (!ret) {
+		portlist |= TSN_PORT_BIT(port);
+		ret = xlnx_tsn_cam_write(sw, addr, vid, portlist, true);
+	}
+
+	return ret;
+}
+
+static int xlnx_tsn_port_fdb_del(struct dsa_switch *ds, int port,
+				 const unsigned char *addr, u16 vid,
+				 struct dsa_db db)
+{
+	struct xlnx_tsn *sw = ds->priv;
+	u8 portlist;
+	int ret;
+
+	if (!vid)
+		vid = TSN_SW_DEFAULT_VID;
+
+	guard(mutex)(&sw->indirect_lock);
+	ret = xlnx_tsn_cam_read_portlist(sw, addr, vid, &portlist);
+	if (!ret) {
+		if (!portlist)
+			return 0;
+
+		/* Drop the entry once no port references it. Otherwise
+		 * rewrite it with the updated port list.
+		 */
+		portlist &= ~TSN_PORT_BIT(port);
+		ret = xlnx_tsn_cam_write(sw, addr, vid, portlist, portlist != 0);
+	}
+
+	return ret;
+}
+
+static int xlnx_tsn_port_fdb_dump(struct dsa_switch *ds, int port,
+				  dsa_fdb_dump_cb_t *cb, void *data)
+{
+	struct xlnx_tsn *sw = ds->priv;
+	unsigned char addr[ETH_ALEN];
+	u32 base, ctrl, key1, key2;
+	int ret = 0;
+	u16 vid;
+	u32 i;
+
+	/* Learnt entries live in a per-MAC-port read-key region. The CPU
+	 * port has no such region.
+	 */
+	if (port == XLNX_TSN_CPU_PORT)
+		return 0;
+
+	guard(mutex)(&sw->indirect_lock);
+
+	if (port == XLNX_TSN_PORT_MAC2)
+		base = TSN_CAM_MAC2_READ_KEY_BASE;
+	else
+		base = 0;
+
+	/* Learnt entries occupy non-consecutive slots, so scan the whole
+	 * region and report each slot marked found.
+	 */
+	for (i = 0; i < TSN_CAM_READ_KEY_COUNT; i++) {
+		ret = xlnx_tsn_cam_wait_ready(sw);
+		if (ret)
+			return ret;
+
+		sw_iow(sw, TSN_CAM_CTRL_OFFSET,
+		       FIELD_PREP(TSN_CAM_READ_KEY_ADDR, base + i) |
+		       FIELD_PREP(TSN_CAM_OP_MASK, TSN_CAM_OP_READ_KEY) |
+		       TSN_CAM_OP_ENABLE);
+
+		ret = xlnx_tsn_cam_wait_done(sw);
+		if (ret)
+			return ret;
+
+		ctrl = sw_ior(sw, TSN_CAM_CTRL_OFFSET);
+		if (!(ctrl & TSN_CAM_FOUND))
+			continue;
+
+		key1 = sw_ior(sw, TSN_CAM_KEY1_OFFSET);
+		key2 = sw_ior(sw, TSN_CAM_KEY2_OFFSET);
+		addr[0] = key1 >> 24;
+		addr[1] = key1 >> 16;
+		addr[2] = key1 >> 8;
+		addr[3] = key1;
+		addr[4] = key2 >> 8;
+		addr[5] = key2;
+		vid = FIELD_GET(TSN_CAM_VLAN, key2);
+		if (vid == TSN_SW_DEFAULT_VID)
+			vid = 0;
+
+		ret = cb(addr, vid, false, data);
+		if (ret)
+			return ret;
+	}
+	return ret;
 }
 
 static void xlnx_tsn_phylink_get_caps(struct dsa_switch *ds, int port,
@@ -643,7 +918,7 @@ static int xlnx_tsn_setup(struct dsa_switch *ds)
 	struct dsa_port *cpu_dp = dsa_to_port(ds, XLNX_TSN_CPU_PORT);
 	struct xlnx_tsn *sw = ds->priv;
 	struct dsa_port *dp;
-	u32 mgmt;
+	u32 mgmt, reg;
 	int ret;
 
 	if (!dsa_is_user_port(ds, XLNX_TSN_PORT_MAC1) ||
@@ -655,6 +930,22 @@ static int xlnx_tsn_setup(struct dsa_switch *ds)
 		return -ENODEV;
 
 	sw->conduit = cpu_dp->conduit;
+
+	/* Pre-arm the learning sub-qualifiers for when a port joins a bridge:
+	 * learn untagged frames under their ingress native VID, and allow
+	 * learning on VIDs with no membership entry while the bridge is
+	 * VLAN-unaware. Both bits are inert while global learning is disabled.
+	 */
+	reg = sw_ior(sw, TSN_SW_ADDR_LEARN_OFFSET);
+	reg |= TSN_SW_ADDR_LEARN_DISABLE | TSN_SW_ADDR_LEARN_UNTAGGED_EN |
+	       TSN_SW_ADDR_LEARN_NO_VLAN_EN;
+	sw_iow(sw, TSN_SW_ADDR_LEARN_OFFSET, reg);
+
+	/* On a CAM miss flood unknown tagged unicast frames to all ports. */
+	reg = sw_ior(sw, TSN_SW_CTRL_OFFSET);
+	reg &= ~TSN_SW_CTRL_UCAST_MISS_MASK;
+	reg |= FIELD_PREP(TSN_SW_CTRL_UCAST_MISS_MASK, TSN_SW_CTRL_UCAST_MISS_FLOOD);
+	sw_iow(sw, TSN_SW_CTRL_OFFSET, reg);
 
 	/* Route CPU-originated bridge-group control frames (STP, LLDP) to
 	 * the single wire port whose MAC-nibble field matches the frame's
@@ -743,7 +1034,12 @@ static const struct dsa_switch_ops xlnx_tsn_switch_ops = {
 	.teardown		= xlnx_tsn_teardown,
 	.port_set_mac_address	= xlnx_tsn_port_set_mac_address,
 	.port_bridge_join	= xlnx_tsn_port_bridge_join,
+	.port_bridge_leave	= xlnx_tsn_port_bridge_leave,
 	.port_stp_state_set	= xlnx_tsn_port_stp_state_set,
+	.port_fdb_add		= xlnx_tsn_port_fdb_add,
+	.port_fdb_del		= xlnx_tsn_port_fdb_del,
+	.port_fdb_dump		= xlnx_tsn_port_fdb_dump,
+	.port_fast_age		= xlnx_tsn_port_fast_age,
 	.port_hwtstamp_get	= xlnx_tsn_port_hwtstamp_get,
 	.port_hwtstamp_set	= xlnx_tsn_port_hwtstamp_set,
 	.get_ts_info		= xlnx_tsn_get_ts_info,
@@ -778,6 +1074,9 @@ static int xlnx_tsn_probe(struct platform_device *pdev)
 	sw->dev = dev;
 	sw->mac[XLNX_TSN_PORT_MAC1].sw = sw;
 	sw->mac[XLNX_TSN_PORT_MAC2].sw = sw;
+	ret = devm_mutex_init(dev, &sw->indirect_lock);
+	if (ret)
+		return ret;
 
 	ret = xlnx_tsn_map_reg(pdev, "switch", &sw->sw_base);
 	if (ret)

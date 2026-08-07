@@ -63,11 +63,93 @@
 #define TSN_SW_MGMT_QUEUING_OFFSET		0x00054
 #define TSN_SW_MGMT_QUEUING_EP_SA_EGRESS	BIT(4)
 
-/* readl_poll_timeout() parameters (in microseconds): poll until
- * the port-state change-commit bit self-clears.
+/* Shared readl_poll_timeout() parameters (in microseconds) used at
+ * two call sites: the port-state change-commit bit and the CAM
+ * operation enable bit. Both self-clear when the operation completes.
  */
 #define TSN_SW_POLL_DELAY_US		10
 #define TSN_SW_POLL_TIMEOUT_US		5000
+
+/* Stream-destination-lookup CAM: maps a (destination MAC, VLAN ID) key
+ * to an egress port list, backing the bridge FDB. Access is indirect:
+ * load the key, value, and port-list registers, write the opcode, then
+ * set the Enable Operation bit in the control register. Poll CAM Init
+ * Done in the status register to 1 before each operation to confirm the
+ * block is ready. Enable Operation self-clears when the operation
+ * finishes.
+ */
+#define TSN_CAM_CTRL_OFFSET		0x01000
+#define TSN_CAM_STATUS_OFFSET		0x01004
+#define TSN_CAM_KEY1_OFFSET		0x01008
+#define TSN_CAM_KEY2_OFFSET		0x0100c
+#define TSN_CAM_TV1_OFFSET		0x01010
+#define TSN_CAM_TV2_OFFSET		0x01014
+#define TSN_CAM_PORT_ACT_OFFSET		0x01018
+
+/* Control register: set to start an operation, self-clears when done. */
+#define TSN_CAM_OP_ENABLE		BIT(0)
+/* Status register: reads 1 when the CAM is ready for the next operation. */
+#define TSN_CAM_STATUS_READY		BIT(0)
+#define TSN_CAM_OP_MASK			GENMASK(2, 1)
+#define TSN_CAM_OP_READ_KEY		0x0
+#define TSN_CAM_OP_ADD			0x1
+#define TSN_CAM_OP_DELETE		0x2
+#define TSN_CAM_OP_READ			0x3
+#define TSN_CAM_FOUND			BIT(7)
+#define TSN_CAM_VLAN			GENMASK(27, 16)
+#define TSN_CAM_PORT_LIST		GENMASK(10, 8)
+#define TSN_CAM_READ_KEY_ADDR		GENMASK(19, 8)
+#define TSN_CAM_MAC2_READ_KEY_BASE	0x800
+#define TSN_CAM_READ_KEY_COUNT		2048
+
+/* HW reset-default native VID; DSA's "no VLAN" (vid 0) maps onto it. */
+#define TSN_SW_DEFAULT_VID		1
+
+/* Switch Control Register: switch-wide control fields. */
+#define TSN_SW_CTRL_OFFSET		0x00004
+/* Per-port native-VLAN untag enables: strip the tag on egress when the
+ * frame VID equals the egress port's native VID. Only the wire ports are
+ * untagged; the endpoint port is left tagged so the host keeps the VID for
+ * software classification.
+ */
+#define TSN_SW_CTRL_MAC1_NATIVE_UNTAG_EN	BIT(18)
+#define TSN_SW_CTRL_MAC2_NATIVE_UNTAG_EN	BIT(19)
+/* Action for an ingress frame whose port is not in its VLAN's member
+ * list: forward to the processor or discard. Pinned to discard. This only
+ * matters once a VID's Port-List-Valid bit is set, which happens only
+ * while VLAN filtering is on.
+ */
+#define TSN_SW_CTRL_MEMBER_VIOL_MASK		GENMASK(9, 8)
+#define TSN_SW_CTRL_MEMBER_VIOL_DISCARD		0x1
+
+/* Forwarding action for a tagged unicast or multicast frame that misses
+ * both the CAM and the VLAN membership list: flood, to processor, to MAC,
+ * or discard.
+ */
+#define TSN_SW_CTRL_UCAST_MISS_MASK		GENMASK(1, 0)
+#define TSN_SW_CTRL_MCAST_MISS_MASK		GENMASK(3, 2)
+#define TSN_SW_CTRL_UCAST_MISS_FLOOD		0x1
+#define TSN_SW_CTRL_MCAST_MISS_FLOOD		0x1
+#define TSN_SW_CTRL_MISS_DISCARD		0x3
+
+/* Hardware Address Learning Control: switch-wide learning behaviour. */
+#define TSN_SW_ADDR_LEARN_OFFSET		0x00048
+/* Disable the global learning engine; set to 1 while every user port is
+ * standalone, cleared to 0 when at least one port joins a bridge. The
+ * sub-qualifier bits below are inert while this bit is set.
+ */
+#define TSN_SW_ADDR_LEARN_DISABLE		BIT(0)
+/* Learn the source MAC of untagged and priority-tagged frames against the
+ * ingress port's native VID; the reset default excludes them from learning.
+ */
+#define TSN_SW_ADDR_LEARN_UNTAGGED_EN		BIT(1)
+/* Permit learning on a VID that has no member entry programmed in the VLAN
+ * membership memory; the reset default only learns already-configured VIDs.
+ */
+#define TSN_SW_ADDR_LEARN_NO_VLAN_EN		BIT(3)
+
+/* Map a DSA port index to its bit in a switch port list. */
+#define TSN_PORT_BIT(port)		BIT(port)
 
 enum tsn_port_state {
 	TSN_PORT_STATE_DISABLED = 0,
@@ -75,6 +157,10 @@ enum tsn_port_state {
 	TSN_PORT_STATE_LISTENING,
 	TSN_PORT_STATE_LEARNING,
 	TSN_PORT_STATE_FORWARDING,
+	/* Not an STP state. Writing it flushes the port's dynamic learnt
+	 * entries and leaves static FDB entries in place.
+	 */
+	TSN_PORT_STATE_FLUSH,
 };
 
 /* Per-MAC MDIO controller register window, sitting at +0x500 inside
@@ -218,6 +304,8 @@ struct xlnx_tsn_mac {
  * @nb: netdev notifier that handles NETDEV_REGISTER on each swpN
  *	to set its final MAC, and NETDEV_CHANGEADDR on the conduit
  *	to refresh the shared prefix
+ * @indirect_lock: serialises the CAM and VLAN-membership indirect
+ *		   register sequences
  * @mac: per-MAC state, indexed by user-port number (index 0 unused;
  *	 MAC1 at [1], MAC2 at [2])
  * @ptp_timer_irq: 1 PPS / RTC-overflow interrupt
@@ -239,6 +327,7 @@ struct xlnx_tsn {
 	struct net_device *conduit;
 	u8 mac_prefix[ETH_ALEN];
 	struct notifier_block nb;
+	struct mutex indirect_lock; /* serialises CAM indirect access */
 	struct xlnx_tsn_mac mac[XLNX_TSN_NUM_PORTS];
 	int ptp_timer_irq;
 	struct ptp_clock *ptp_clock;
