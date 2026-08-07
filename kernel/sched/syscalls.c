@@ -503,6 +503,7 @@ int __sched_setscheduler(struct task_struct *p,
 	int queue_flags = DEQUEUE_SAVE | DEQUEUE_MOVE | DEQUEUE_NOCLOCK;
 	struct rq *rq;
 	bool cpuset_locked = false;
+	bool keep_policy = policy < 0;
 
 	/* The pi code expects interrupts enabled */
 	BUG_ON(pi && in_interrupt());
@@ -570,6 +571,10 @@ recheck:
 	 */
 	rq = task_rq_lock(p, &rf);
 	update_rq_clock(rq);
+
+	/* Preserve reset_on_fork changes made while the rq lock was not held. */
+	if (keep_policy)
+		reset_on_fork = p->sched_reset_on_fork;
 
 	/*
 	 * Changing the policy of the stop threads its a very bad idea:
