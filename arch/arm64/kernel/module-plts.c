@@ -10,6 +10,9 @@
 #include <linux/moduleloader.h>
 #include <linux/sort.h>
 
+#include <asm/cpufeature.h>
+#include <asm/text-patching.h>
+
 static struct plt_entry __get_adrp_add_pair(u64 dst, u64 pc,
 					    enum aarch64_insn_register reg)
 {
@@ -23,14 +26,45 @@ static struct plt_entry __get_adrp_add_pair(u64 dst, u64 pc,
 	return (struct plt_entry){ cpu_to_le32(adrp), cpu_to_le32(add) };
 }
 
+static bool plt_target_has_landing_pad(u64 dst)
+{
+	u32 insn;
+
+	if (!system_supports_bti_kernel())
+		return true;
+
+	if (aarch64_insn_read((void *)dst, &insn))
+		return false;
+
+	if (!aarch64_insn_is_hint(insn))
+		return false;
+
+	switch (insn & 0xFE0) {
+	case AARCH64_INSN_HINT_BTIC:
+	case AARCH64_INSN_HINT_BTIJ:
+	case AARCH64_INSN_HINT_BTIJC:
+	case AARCH64_INSN_HINT_PACIASP:
+	case AARCH64_INSN_HINT_PACIBSP:
+		return true;
+	}
+
+	return false;
+}
+
 struct plt_entry get_plt_entry(u64 dst, void *pc)
 {
+	enum aarch64_insn_branch_type type;
 	struct plt_entry plt;
-	static u32 br;
+	u32 br;
 
-	if (!br)
-		br = aarch64_insn_gen_branch_reg(AARCH64_INSN_REG_16,
-						 AARCH64_INSN_BRANCH_NOLINK);
+	/*
+	 * Livepatch modules can branch to static functions without landing
+	 * pads, in which case RET is needed.
+	 */
+	type = plt_target_has_landing_pad(dst) ? AARCH64_INSN_BRANCH_NOLINK
+					       : AARCH64_INSN_BRANCH_RETURN;
+
+	br = aarch64_insn_gen_branch_reg(AARCH64_INSN_REG_16, type);
 
 	plt = __get_adrp_add_pair(dst, (u64)pc, AARCH64_INSN_REG_16);
 	plt.br = cpu_to_le32(br);
