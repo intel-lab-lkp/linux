@@ -43,7 +43,6 @@ struct hfi2_devrsrcs;
 #include "mad.h"
 #include "qsfp.h"
 #include "platform.h"
-#include "affinity.h"
 #include "msix.h"
 #include "cport.h"
 #ifdef CONFIG_HFI_L8SIM
