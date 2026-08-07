@@ -139,7 +139,7 @@ int intel_gsc_fw_get_binary_info(struct intel_uc_fw *gsc_fw, const void *data, s
 	 * --------------------------------------------------
 	 */
 
-	min_size = layout->boot1.offset + layout->boot1.size;
+	min_size = (size_t)layout->boot1.offset + layout->boot1.size;
 	if (size < min_size) {
 		gt_err(gt, "GSC FW too small for boot section! %zu < %zu\n",
 		       size, min_size);
@@ -195,7 +195,14 @@ int intel_gsc_fw_get_binary_info(struct intel_uc_fw *gsc_fw, const void *data, s
 		return -EINVAL;
 	}
 
-	min_size += sizeof(*cpd_entry) * cpd_header->num_of_entries;
+	if (cpd_header->header_length < sizeof(struct intel_gsc_cpd_header_v2)) {
+		gt_err(gt, "invalid CPD header length in GSC bin: %u < %zu!\n",
+		       cpd_header->header_length, sizeof(*cpd_header));
+		return -EINVAL;
+	}
+
+	min_size = bpdt_entry->sub_partition_offset + cpd_header->header_length +
+		   sizeof(*cpd_entry) * cpd_header->num_of_entries;
 	if (layout->boot1.size < min_size) {
 		gt_err(gt, "GSC FW boot section too small for CPD entries: %u < %zu\n",
 		       layout->boot1.size, min_size);
@@ -205,7 +212,21 @@ int intel_gsc_fw_get_binary_info(struct intel_uc_fw *gsc_fw, const void *data, s
 	cpd_entry = (void *)cpd_header + cpd_header->header_length;
 	for (i = 0; i < cpd_header->num_of_entries; i++, cpd_entry++) {
 		if (strcmp(cpd_entry->name, "RBEP.man") == 0) {
-			manifest = (void *)cpd_header + cpd_entry_offset(cpd_entry);
+			u32 man_off = cpd_entry_offset(cpd_entry);
+
+			if (man_off < cpd_header->header_length) {
+				gt_err(gt, "GSC FW manifest offset points into CPD header: %u < %u\n",
+				       man_off, cpd_header->header_length);
+				return -EINVAL;
+			}
+
+			if (man_off + sizeof(struct intel_gsc_manifest_header) >
+			    layout->boot1.size - bpdt_entry->sub_partition_offset) {
+				gt_err(gt, "GSC FW boot section too small for manifest: %u < %zu\n",
+				       layout->boot1.size, man_off + sizeof(*manifest));
+				return -ENODATA;
+			}
+			manifest = (void *)cpd_header + man_off;
 			intel_uc_fw_version_from_gsc_manifest(&gsc->release,
 							      manifest);
 			gsc->security_version = manifest->security_version;
