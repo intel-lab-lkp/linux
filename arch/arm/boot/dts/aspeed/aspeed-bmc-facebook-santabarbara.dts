@@ -641,6 +641,19 @@
 &i2c6 {
 	status = "okay";
 
+	gpio@22 {
+		compatible = "nxp,pca9555";
+		reg = <0x22>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-parent = <&sgpiom0>;
+		interrupts = <150 IRQ_TYPE_LEVEL_LOW>;
+		gpio-line-names =
+			"PRSNT_MODULE0_LEAK_CABLE_R_N","",
+			"","","","","","",
+			"","","","","","","","";
+	};
+
 	// Rainbow0 FRU
 	eeprom@52 {
 		compatible = "atmel,24c256";
@@ -865,6 +878,19 @@
 
 &i2c8 {
 	status = "okay";
+
+	gpio@22 {
+		compatible = "nxp,pca9555";
+		reg = <0x22>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-parent = <&sgpiom0>;
+		interrupts = <154 IRQ_TYPE_LEVEL_LOW>;
+		gpio-line-names =
+			"PRSNT_MODULE2_LEAK_CABLE_R_N","",
+			"","","","","","",
+			"","","","","","","","";
+	};
 
 	// Rainbow2 FRU
 	eeprom@52 {
@@ -1106,7 +1132,20 @@
 &i2c10 {
 	status = "okay";
 
-	// Rainbow3 FRU
+	gpio@22 {
+		compatible = "nxp,pca9555";
+		reg = <0x22>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-parent = <&sgpiom0>;
+		interrupts = <158 IRQ_TYPE_LEVEL_LOW>;
+		gpio-line-names =
+			"PRSNT_MODULE1_LEAK_CABLE_R_N","",
+			"","","","","","",
+			"","","","","","","","";
+	};
+
+	// Rainbow1 FRU
 	eeprom@52 {
 		compatible = "atmel,24c256";
 		reg = <0x52>;
@@ -1588,7 +1627,20 @@
 &i2c13 {
 	status = "okay";
 
-	// Rainbow1 FRU
+	gpio@22 {
+		compatible = "nxp,pca9555";
+		reg = <0x22>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-parent = <&sgpiom0>;
+		interrupts = <162 IRQ_TYPE_LEVEL_LOW>;
+		gpio-line-names =
+			"PRSNT_MODULE3_LEAK_CABLE_R_N","",
+			"","","","","","",
+			"","","","","","","","";
+	};
+
+	// Rainbow3 FRU
 	eeprom@52 {
 		compatible = "atmel,24c256";
 		reg = <0x52>;
