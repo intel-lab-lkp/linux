@@ -1060,13 +1060,6 @@ static int xpsgtr_probe(struct platform_device *pdev)
 					    xpsgtr_status_read);
 	}
 
-	/* Register the PHY provider. */
-	provider = devm_of_phy_provider_register(&pdev->dev, xpsgtr_xlate);
-	if (IS_ERR(provider)) {
-		dev_err(&pdev->dev, "registering provider failed\n");
-		return PTR_ERR(provider);
-	}
-
 	gtr_dev->saved_regs = devm_kmalloc(gtr_dev->dev,
 					   sizeof(save_reg_address),
 					   GFP_KERNEL);
@@ -1080,6 +1073,14 @@ static int xpsgtr_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		pm_runtime_disable(gtr_dev->dev);
 		return ret;
+	}
+
+	provider = devm_of_phy_provider_register(&pdev->dev, xpsgtr_xlate);
+	if (IS_ERR(provider)) {
+		dev_err(&pdev->dev, "registering provider failed\n");
+		pm_runtime_put(gtr_dev->dev);
+		pm_runtime_disable(gtr_dev->dev);
+		return PTR_ERR(provider);
 	}
 
 	return 0;
