@@ -223,7 +223,16 @@ static void fusb302_debugfs_init(struct fusb302_chip *chip)
 
 static void fusb302_debugfs_exit(struct fusb302_chip *chip)
 {
+	int i;
+
 	debugfs_remove(chip->dentry);
+
+	mutex_lock(&chip->logbuffer_lock);
+	for (i = 0; i < LOG_BUFFER_ENTRIES; i++) {
+		kfree(chip->logbuffer[i]);
+		chip->logbuffer[i] = NULL;
+	}
+	mutex_unlock(&chip->logbuffer_lock);
 }
 
 #else
@@ -1784,8 +1793,8 @@ tcpm_unregister_port:
 fwnode_put:
 	fwnode_handle_put(chip->tcpc_dev.fwnode);
 destroy_workqueue:
-	fusb302_debugfs_exit(chip);
 	destroy_workqueue(chip->wq);
+	fusb302_debugfs_exit(chip);
 
 	return ret;
 }
