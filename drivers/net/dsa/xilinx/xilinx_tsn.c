@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/dsa/xlnx_tsn.h>
 #include <net/dsa.h>
+#include <net/switchdev.h>
 
 #include "xilinx_tsn.h"
 
@@ -804,7 +805,7 @@ static int xlnx_tsn_port_fdb_dump(struct dsa_switch *ds, int port,
 		addr[4] = key2 >> 8;
 		addr[5] = key2;
 		vid = FIELD_GET(TSN_CAM_VLAN, key2);
-		if (vid == TSN_SW_DEFAULT_VID)
+		if (!sw->vlan_aware && vid == TSN_SW_DEFAULT_VID)
 			vid = 0;
 
 		ret = cb(addr, vid, false, data);
@@ -812,6 +813,297 @@ static int xlnx_tsn_port_fdb_dump(struct dsa_switch *ds, int port,
 			return ret;
 	}
 	return ret;
+}
+
+/* The VLAN-membership control enable bit self-clears once the indirect
+ * read or write completes.
+ */
+static int xlnx_tsn_vlan_wait_done(struct xlnx_tsn *sw)
+{
+	u32 reg;
+
+	return readl_poll_timeout(sw->sw_base + TSN_VLAN_CTRL_OFFSET, reg,
+				  !(reg & TSN_VLAN_EN), TSN_SW_POLL_DELAY_US,
+				  TSN_SW_POLL_TIMEOUT_US);
+}
+
+/* Caller holds indirect_lock. */
+static int xlnx_tsn_vlan_read(struct xlnx_tsn *sw, u16 vid, u32 *data)
+{
+	int ret;
+
+	sw_iow(sw, TSN_VLAN_CTRL_OFFSET,
+	       FIELD_PREP(TSN_VLAN_CTRL_VID_MASK, vid) | TSN_VLAN_ACCESS_READ | TSN_VLAN_EN);
+	ret = xlnx_tsn_vlan_wait_done(sw);
+	if (ret)
+		return ret;
+
+	*data = sw_ior(sw, TSN_VLAN_DATA_OFFSET);
+	return 0;
+}
+
+/* Caller holds indirect_lock. */
+static int xlnx_tsn_vlan_write(struct xlnx_tsn *sw, u16 vid, u32 data)
+{
+	sw_iow(sw, TSN_VLAN_DATA_OFFSET, data);
+	sw_iow(sw, TSN_VLAN_CTRL_OFFSET,
+	       FIELD_PREP(TSN_VLAN_CTRL_VID_MASK, vid) | TSN_VLAN_ACCESS_WRITE | TSN_VLAN_EN);
+
+	return xlnx_tsn_vlan_wait_done(sw);
+}
+
+static void xlnx_tsn_set_native_vid(struct xlnx_tsn *sw, int port, u16 vid)
+{
+	u32 reg;
+
+	switch (port) {
+	case XLNX_TSN_CPU_PORT:
+		reg = sw_ior(sw, TSN_EP_NATIVE_VLAN_OFFSET);
+		reg = (reg & ~TSN_NATIVE_EP_VLAN_MASK) |
+		      FIELD_PREP(TSN_NATIVE_EP_VLAN_MASK, vid);
+		sw_iow(sw, TSN_EP_NATIVE_VLAN_OFFSET, reg);
+		break;
+	case XLNX_TSN_PORT_MAC1:
+		reg = sw_ior(sw, TSN_MAC_NATIVE_VLAN_OFFSET);
+		reg = (reg & ~TSN_NATIVE_MAC1_VLAN_MASK) |
+		      FIELD_PREP(TSN_NATIVE_MAC1_VLAN_MASK, vid);
+		sw_iow(sw, TSN_MAC_NATIVE_VLAN_OFFSET, reg);
+		break;
+	case XLNX_TSN_PORT_MAC2:
+		reg = sw_ior(sw, TSN_MAC_NATIVE_VLAN_OFFSET);
+		reg = (reg & ~TSN_NATIVE_MAC2_VLAN_MASK) |
+		      FIELD_PREP(TSN_NATIVE_MAC2_VLAN_MASK, vid);
+		sw_iow(sw, TSN_MAC_NATIVE_VLAN_OFFSET, reg);
+		break;
+	}
+}
+
+/* Enable or disable native-VLAN egress untagging for a wire port.
+ * The endpoint port always sends frames tagged toward the host, so
+ * it is not handled here.
+ */
+static void xlnx_tsn_set_native_untag(struct xlnx_tsn *sw, int port, bool en)
+{
+	u32 bit, reg;
+
+	switch (port) {
+	case XLNX_TSN_PORT_MAC1:
+		bit = TSN_SW_CTRL_MAC1_NATIVE_UNTAG_EN;
+		break;
+	case XLNX_TSN_PORT_MAC2:
+		bit = TSN_SW_CTRL_MAC2_NATIVE_UNTAG_EN;
+		break;
+	default:
+		return;
+	}
+
+	reg = sw_ior(sw, TSN_SW_CTRL_OFFSET);
+	if (en)
+		reg |= bit;
+	else
+		reg &= ~bit;
+	sw_iow(sw, TSN_SW_CTRL_OFFSET, reg);
+}
+
+/* Write a port's native VID and egress-untag setting to hardware.
+ * While VLAN filtering is off, every port uses the reset-default
+ * native VID and stays tagged, so committed VLANs have no effect
+ * until the bridge goes VLAN-aware. Caller holds indirect_lock.
+ */
+static void xlnx_tsn_apply_pvid(struct xlnx_tsn *sw, int port)
+{
+	u16 vid = sw->vlan_aware ? sw->pvid[port] : TSN_SW_DEFAULT_VID;
+	bool untag = sw->vlan_aware && sw->pvid_untagged[port];
+
+	xlnx_tsn_set_native_vid(sw, port, vid);
+	xlnx_tsn_set_native_untag(sw, port, untag);
+}
+
+/* Restrict learning to VIDs that already have a membership entry.
+ * When on, frames with an unregistered VID are not learned, preventing
+ * a spurious CAM entry that would bypass the membership check on a
+ * later hit. When off, learning is allowed on any VID, as required
+ * while the bridge is VLAN-unaware. Caller holds indirect_lock.
+ */
+static void xlnx_tsn_set_vlan_only_learning(struct xlnx_tsn *sw, bool on)
+{
+	u32 reg = sw_ior(sw, TSN_SW_ADDR_LEARN_OFFSET);
+
+	if (on)
+		reg &= ~TSN_SW_ADDR_LEARN_NO_VLAN_EN;
+	else
+		reg |= TSN_SW_ADDR_LEARN_NO_VLAN_EN;
+	sw_iow(sw, TSN_SW_ADDR_LEARN_OFFSET, reg);
+}
+
+static int xlnx_tsn_port_vlan_filtering(struct dsa_switch *ds, int port,
+					bool vlan_filtering,
+					struct netlink_ext_ack *extack)
+{
+	struct xlnx_tsn *sw = ds->priv;
+	struct dsa_port *dp;
+	unsigned long bit;
+	u32 reg, data;
+	int ret;
+
+	guard(mutex)(&sw->indirect_lock);
+
+	/* Flip Port-List-Valid on every configured VID: set it to enforce
+	 * membership, clear it so VLANs added while filtering was off stay
+	 * inert.
+	 */
+	for_each_set_bit(bit, sw->cfg_vids, VLAN_N_VID) {
+		ret = xlnx_tsn_vlan_read(sw, bit, &data);
+		if (ret)
+			return ret;
+
+		if (vlan_filtering)
+			data |= TSN_VLAN_PORT_LIST_VALID;
+		else
+			data &= ~TSN_VLAN_PORT_LIST_VALID;
+
+		ret = xlnx_tsn_vlan_write(sw, bit, data);
+		if (ret)
+			return ret;
+	}
+
+	sw->vlan_aware = vlan_filtering;
+
+	/* Miss policy for unicast and multicast. It only kicks in when the
+	 * CAM misses and the VID has no membership entry either. So flood the
+	 * unregistered ones while VLAN-unaware, and drop them once filtering
+	 * is on.
+	 */
+	reg = sw_ior(sw, TSN_SW_CTRL_OFFSET);
+	reg &= ~(TSN_SW_CTRL_UCAST_MISS_MASK | TSN_SW_CTRL_MCAST_MISS_MASK);
+	if (vlan_filtering) {
+		reg |= FIELD_PREP(TSN_SW_CTRL_UCAST_MISS_MASK, TSN_SW_CTRL_MISS_DISCARD) |
+		       FIELD_PREP(TSN_SW_CTRL_MCAST_MISS_MASK, TSN_SW_CTRL_MISS_DISCARD);
+	} else {
+		reg |= FIELD_PREP(TSN_SW_CTRL_UCAST_MISS_MASK, TSN_SW_CTRL_UCAST_MISS_FLOOD) |
+		       FIELD_PREP(TSN_SW_CTRL_MCAST_MISS_MASK, TSN_SW_CTRL_MCAST_MISS_FLOOD);
+	}
+	sw_iow(sw, TSN_SW_CTRL_OFFSET, reg);
+
+	xlnx_tsn_set_vlan_only_learning(sw, vlan_filtering);
+
+	/* Apply the native VID and egress-untag settings saved while
+	 * filtering was off, or restore defaults when filtering is turned
+	 * off. VLANs added while filtering is already on are applied
+	 * directly by port_vlan_add().
+	 */
+	dsa_switch_for_each_user_port(dp, ds)
+		xlnx_tsn_apply_pvid(sw, dp->index);
+
+	/* The learning-control bits latch only when a port passes through
+	 * blocking, so cycle each port to make the new setting take hold.
+	 * The transition does not drop learnt entries, so flush them too -
+	 * they were keyed on the old native VID and are now stale.
+	 */
+	dsa_switch_for_each_user_port(dp, ds) {
+		ret = xlnx_tsn_port_state_cycle(sw, dp->index,
+						TSN_PORT_STATE_BLOCKING);
+		if (ret)
+			return ret;
+
+		ret = xlnx_tsn_port_state_cycle(sw, dp->index,
+						TSN_PORT_STATE_FLUSH);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int xlnx_tsn_port_vlan_add(struct dsa_switch *ds, int port,
+				  const struct switchdev_obj_port_vlan *vlan,
+				  struct netlink_ext_ack *extack)
+{
+	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
+	bool pvid = vlan->flags & BRIDGE_VLAN_INFO_PVID;
+	struct xlnx_tsn *sw = ds->priv;
+	u32 data;
+	int ret;
+
+	guard(mutex)(&sw->indirect_lock);
+
+	/* The hardware strips the tag on egress only for a wire port's native
+	 * VLAN. Reject an untagged request for any other VID. The CPU port is
+	 * exempt as it always trunks tagged toward the host.
+	 */
+	if (port != XLNX_TSN_CPU_PORT && untagged && !pvid &&
+	    vlan->vid != sw->pvid[port]) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "untagged egress is only supported for the port PVID");
+		return -EINVAL;
+	}
+
+	ret = xlnx_tsn_vlan_read(sw, vlan->vid, &data);
+	if (ret)
+		return ret;
+
+	data |= TSN_PORT_BIT(port);
+	if (sw->vlan_aware)
+		data |= TSN_VLAN_PORT_LIST_VALID;
+	else
+		data &= ~TSN_VLAN_PORT_LIST_VALID;
+	ret = xlnx_tsn_vlan_write(sw, vlan->vid, data);
+	if (ret)
+		return ret;
+
+	set_bit(vlan->vid, sw->cfg_vids);
+
+	/* The CPU port needs membership only. */
+	if (port == XLNX_TSN_CPU_PORT)
+		return 0;
+
+	if (pvid) {
+		sw->pvid[port] = vlan->vid;
+		sw->pvid_untagged[port] = untagged;
+		xlnx_tsn_apply_pvid(sw, port);
+	}
+
+	if (vlan->vid == sw->pvid[port] &&
+	    sw->pvid_untagged[port] != untagged) {
+		sw->pvid_untagged[port] = untagged;
+		xlnx_tsn_apply_pvid(sw, port);
+	}
+
+	return 0;
+}
+
+static int xlnx_tsn_port_vlan_del(struct dsa_switch *ds, int port,
+				  const struct switchdev_obj_port_vlan *vlan)
+{
+	struct xlnx_tsn *sw = ds->priv;
+	bool last_member;
+	u32 data;
+	int ret;
+
+	guard(mutex)(&sw->indirect_lock);
+	ret = xlnx_tsn_vlan_read(sw, vlan->vid, &data);
+	if (ret)
+		return ret;
+
+	data &= ~TSN_PORT_BIT(port);
+	last_member = !(data & TSN_VLAN_PORT_LIST_MASK);
+	if (last_member)
+		data &= ~TSN_VLAN_PORT_LIST_VALID;
+
+	ret = xlnx_tsn_vlan_write(sw, vlan->vid, data);
+	if (ret)
+		return ret;
+
+	if (last_member)
+		clear_bit(vlan->vid, sw->cfg_vids);
+
+	if (sw->pvid[port] == vlan->vid) {
+		sw->pvid[port] = TSN_SW_DEFAULT_VID;
+		sw->pvid_untagged[port] = false;
+		xlnx_tsn_apply_pvid(sw, port);
+	}
+
+	return 0;
 }
 
 static void xlnx_tsn_phylink_get_caps(struct dsa_switch *ds, int port,
@@ -900,10 +1192,9 @@ static void xlnx_tsn_mac_link_up(struct phylink_config *config,
 	}
 	mac_iow(m, TSN_SPEED_CFG_OFFSET, speed_cfg);
 
-	rcw1 = mac_ior(m, TSN_RCW1_OFFSET) | TSN_RCW1_RX_EN;
+	rcw1 = mac_ior(m, TSN_RCW1_OFFSET) | TSN_RCW1_RX_EN | TSN_RCW1_VLAN_EN;
+	tc = mac_ior(m, TSN_TC_OFFSET) | TSN_TC_TX_EN | TSN_TC_VLAN_EN;
 	mac_iow(m, TSN_RCW1_OFFSET, rcw1);
-
-	tc = mac_ior(m, TSN_TC_OFFSET) | TSN_TC_TX_EN;
 	mac_iow(m, TSN_TC_OFFSET, tc);
 }
 
@@ -919,7 +1210,7 @@ static int xlnx_tsn_setup(struct dsa_switch *ds)
 	struct xlnx_tsn *sw = ds->priv;
 	struct dsa_port *dp;
 	u32 mgmt, reg;
-	int ret;
+	int port, ret;
 
 	if (!dsa_is_user_port(ds, XLNX_TSN_PORT_MAC1) ||
 	    !dsa_is_user_port(ds, XLNX_TSN_PORT_MAC2))
@@ -941,11 +1232,25 @@ static int xlnx_tsn_setup(struct dsa_switch *ds)
 	       TSN_SW_ADDR_LEARN_NO_VLAN_EN;
 	sw_iow(sw, TSN_SW_ADDR_LEARN_OFFSET, reg);
 
-	/* On a CAM miss flood unknown tagged unicast frames to all ports. */
+	/* On a CAM miss flood unknown tagged unicast frames to all ports.
+	 * Also drop tagged frames whose ingress port is not in the VLAN
+	 * member list. The membership check only bites once VLANs exist.
+	 */
 	reg = sw_ior(sw, TSN_SW_CTRL_OFFSET);
-	reg &= ~TSN_SW_CTRL_UCAST_MISS_MASK;
-	reg |= FIELD_PREP(TSN_SW_CTRL_UCAST_MISS_MASK, TSN_SW_CTRL_UCAST_MISS_FLOOD);
+	reg &= ~(TSN_SW_CTRL_UCAST_MISS_MASK | TSN_SW_CTRL_MEMBER_VIOL_MASK);
+	reg |= FIELD_PREP(TSN_SW_CTRL_UCAST_MISS_MASK, TSN_SW_CTRL_UCAST_MISS_FLOOD) |
+	       FIELD_PREP(TSN_SW_CTRL_MEMBER_VIOL_MASK, TSN_SW_CTRL_MEMBER_VIOL_DISCARD);
 	sw_iow(sw, TSN_SW_CTRL_OFFSET, reg);
+
+	/* Every port uses the default native VID until VLAN filtering is
+	 * enabled. Seed the PVID shadow and program the native VID
+	 * registers to match.
+	 */
+	scoped_guard(mutex, &sw->indirect_lock)
+		for (port = XLNX_TSN_CPU_PORT; port < XLNX_TSN_NUM_PORTS; port++) {
+			sw->pvid[port] = TSN_SW_DEFAULT_VID;
+			xlnx_tsn_apply_pvid(sw, port);
+		}
 
 	/* Route CPU-originated bridge-group control frames (STP, LLDP) to
 	 * the single wire port whose MAC-nibble field matches the frame's
@@ -1040,6 +1345,9 @@ static const struct dsa_switch_ops xlnx_tsn_switch_ops = {
 	.port_fdb_del		= xlnx_tsn_port_fdb_del,
 	.port_fdb_dump		= xlnx_tsn_port_fdb_dump,
 	.port_fast_age		= xlnx_tsn_port_fast_age,
+	.port_vlan_filtering	= xlnx_tsn_port_vlan_filtering,
+	.port_vlan_add		= xlnx_tsn_port_vlan_add,
+	.port_vlan_del		= xlnx_tsn_port_vlan_del,
 	.port_hwtstamp_get	= xlnx_tsn_port_hwtstamp_get,
 	.port_hwtstamp_set	= xlnx_tsn_port_hwtstamp_set,
 	.get_ts_info		= xlnx_tsn_get_ts_info,
@@ -1101,6 +1409,11 @@ static int xlnx_tsn_probe(struct platform_device *pdev)
 
 	/* The fabric offloads a single bridge across the user ports. */
 	ds->max_num_bridges = 1;
+
+	/* The switch fabric is a single VLAN domain shared by all ports, so
+	 * VLAN filtering is configured switch-wide rather than per port.
+	 */
+	ds->vlan_filtering_is_global = true;
 
 	platform_set_drvdata(pdev, sw);
 

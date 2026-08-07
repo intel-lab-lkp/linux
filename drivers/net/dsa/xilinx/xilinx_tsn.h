@@ -8,6 +8,7 @@
 #include <linux/bitfield.h>
 #include <linux/bits.h>
 #include <linux/if_ether.h>
+#include <linux/if_vlan.h>
 #include <linux/io.h>
 #include <linux/net_tstamp.h>
 #include <linux/notifier.h>
@@ -64,8 +65,9 @@
 #define TSN_SW_MGMT_QUEUING_EP_SA_EGRESS	BIT(4)
 
 /* Shared readl_poll_timeout() parameters (in microseconds) used at
- * two call sites: the port-state change-commit bit and the CAM
- * operation enable bit. Both self-clear when the operation completes.
+ * three call sites: the port-state change-commit bit, the CAM
+ * operation enable bit, and the VLAN-memory operation enable bit.
+ * All three self-clear when the hardware completes the operation.
  */
 #define TSN_SW_POLL_DELAY_US		10
 #define TSN_SW_POLL_TIMEOUT_US		5000
@@ -101,6 +103,28 @@
 #define TSN_CAM_READ_KEY_ADDR		GENMASK(19, 8)
 #define TSN_CAM_MAC2_READ_KEY_BASE	0x800
 #define TSN_CAM_READ_KEY_COUNT		2048
+
+/* Port VLAN membership memory: per-VID egress port list, accessed
+ * indirectly through a control/data register pair. The control
+ * register's enable bit self-clears when the read or write completes.
+ */
+#define TSN_VLAN_CTRL_OFFSET		0x01100
+#define TSN_VLAN_DATA_OFFSET		0x01104
+#define TSN_VLAN_CTRL_VID_MASK		GENMASK(27, 16)
+#define TSN_VLAN_ACCESS_READ		0
+#define TSN_VLAN_ACCESS_WRITE		BIT(1)
+#define TSN_VLAN_EN			BIT(0)
+#define TSN_VLAN_PORT_LIST_VALID	BIT(3)
+#define TSN_VLAN_PORT_LIST_MASK		GENMASK(2, 0)
+
+/* Per-port native (PVID) registers: the endpoint port at +0x40, the two
+ * MAC ports packed into +0x44 (MAC1 in the low half, MAC2 in the high).
+ */
+#define TSN_EP_NATIVE_VLAN_OFFSET	0x00040
+#define TSN_MAC_NATIVE_VLAN_OFFSET	0x00044
+#define TSN_NATIVE_EP_VLAN_MASK		GENMASK(11, 0)
+#define TSN_NATIVE_MAC1_VLAN_MASK	GENMASK(11, 0)
+#define TSN_NATIVE_MAC2_VLAN_MASK	GENMASK(27, 16)
 
 /* HW reset-default native VID; DSA's "no VLAN" (vid 0) maps onto it. */
 #define TSN_SW_DEFAULT_VID		1
@@ -183,12 +207,17 @@ enum tsn_port_state {
 
 #define TSN_MDIO_MRD_MASK		GENMASK(15, 0)
 
-/* Per-MAC receive / transmit / speed configuration registers. */
+/* Per-MAC receive / transmit / speed configuration registers. Setting
+ * the VLAN enable bit makes the MAC accept full-size VLAN-tagged frames
+ * without treating the extra 4 bytes as an oversize error.
+ */
 #define TSN_RCW1_OFFSET			0x00000404
 #define TSN_RCW1_RX_EN			BIT(28)
+#define TSN_RCW1_VLAN_EN		BIT(27)
 
 #define TSN_TC_OFFSET			0x00000408
 #define TSN_TC_TX_EN			BIT(28)
+#define TSN_TC_VLAN_EN			BIT(27)
 
 #define TSN_SPEED_CFG_OFFSET		0x00000410
 #define TSN_SPEED_CFG_MASK		GENMASK(31, 30)
@@ -304,6 +333,15 @@ struct xlnx_tsn_mac {
  * @nb: netdev notifier that handles NETDEV_REGISTER on each swpN
  *	to set its final MAC, and NETDEV_CHANGEADDR on the conduit
  *	to refresh the shared prefix
+ * @vlan_aware: true once bridge VLAN filtering is on. Until then the
+ *		native VID, egress untag, and membership enforcement are
+ *		all held back.
+ * @pvid: per-port bridge PVID shadow, written to the native VID register
+ *	  while @vlan_aware; defaults to TSN_SW_DEFAULT_VID
+ * @pvid_untagged: per-port flag tracking whether the PVID egresses
+ *		   untagged; drives the native-VLAN untag enable
+ * @cfg_vids: VIDs with a membership entry in the VLAN-membership memory,
+ *	      used to walk and update Port-List-Valid when @vlan_aware changes
  * @indirect_lock: serialises the CAM and VLAN-membership indirect
  *		   register sequences
  * @mac: per-MAC state, indexed by user-port number (index 0 unused;
@@ -327,7 +365,11 @@ struct xlnx_tsn {
 	struct net_device *conduit;
 	u8 mac_prefix[ETH_ALEN];
 	struct notifier_block nb;
-	struct mutex indirect_lock; /* serialises CAM indirect access */
+	bool vlan_aware;
+	u16 pvid[XLNX_TSN_NUM_PORTS];
+	bool pvid_untagged[XLNX_TSN_NUM_PORTS];
+	DECLARE_BITMAP(cfg_vids, VLAN_N_VID);
+	struct mutex indirect_lock; /* serialises CAM + VLAN-memory access */
 	struct xlnx_tsn_mac mac[XLNX_TSN_NUM_PORTS];
 	int ptp_timer_irq;
 	struct ptp_clock *ptp_clock;
