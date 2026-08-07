@@ -73,6 +73,7 @@ void amdxdna_pm_fini(struct amdxdna_dev *xdna)
 {
 	struct device *dev = xdna->ddev.dev;
 
+	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_get_noresume(dev);
 	pm_runtime_forbid(dev);
 }
