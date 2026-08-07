@@ -53,6 +53,8 @@ void kvm_arch_destroy_vm(struct kvm *kvm)
 {
 	kvm_destroy_vcpus(kvm);
 
+	kfree(srcu_dereference_check(kvm->arch.pmu_event_filter, &kvm->srcu, 1));
+
 	kvm_riscv_aia_destroy_vm(kvm);
 }
 
@@ -187,6 +189,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_MP_STATE:
 	case KVM_CAP_IMMEDIATE_EXIT:
 	case KVM_CAP_SET_GUEST_DEBUG:
+	case KVM_CAP_PMU_EVENT_FILTER:
 		r = 1;
 		break;
 	case KVM_CAP_NR_VCPUS:
@@ -265,7 +268,71 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
 	}
 }
 
+#define KVM_PMU_EVENT_FILTER_MAX_EVENTS	256
+
+static int kvm_riscv_vm_ioctl_set_pmu_event_filter(struct kvm *kvm,
+						   void __user *argp)
+{
+	struct kvm_pmu_event_filter __user *user_filter = argp;
+	struct kvm_pmu_event_filter *filter, tmp;
+	size_t size;
+	int r = 0;
+
+	if (copy_from_user(&tmp, user_filter, sizeof(tmp)))
+		return -EFAULT;
+
+	if (tmp.action != KVM_PMU_EVENT_ALLOW &&
+	    tmp.action != KVM_PMU_EVENT_DENY)
+		return -EINVAL;
+
+	if (tmp.flags)
+		return -EINVAL;
+
+	if (tmp.pad)
+		return -EINVAL;
+
+	if (tmp.nevents > KVM_PMU_EVENT_FILTER_MAX_EVENTS)
+		return -E2BIG;
+
+	size = struct_size(filter, events, tmp.nevents);
+	filter = kzalloc(size, GFP_KERNEL_ACCOUNT);
+	if (!filter)
+		return -ENOMEM;
+
+	filter->action = tmp.action;
+	filter->nevents = tmp.nevents;
+	filter->flags = tmp.flags;
+
+	if (copy_from_user(filter->events, user_filter->events,
+			   flex_array_size(filter, events, filter->nevents))) {
+		r = -EFAULT;
+		goto cleanup;
+	}
+
+	mutex_lock(&kvm->lock);
+	filter = rcu_replace_pointer(kvm->arch.pmu_event_filter, filter,
+				     mutex_is_locked(&kvm->lock));
+	mutex_unlock(&kvm->lock);
+	synchronize_srcu_expedited(&kvm->srcu);
+
+cleanup:
+	kfree(filter);
+	return r;
+}
+
 int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 {
-	return -EINVAL;
+	struct kvm *kvm = filp->private_data;
+	void __user *argp = (void __user *)arg;
+	int r;
+
+	switch (ioctl) {
+	case KVM_SET_PMU_EVENT_FILTER:
+		r = kvm_riscv_vm_ioctl_set_pmu_event_filter(kvm, argp);
+		break;
+	default:
+		r = -EINVAL;
+	}
+
+	return r;
 }

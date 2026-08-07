@@ -737,6 +737,32 @@ out:
 	return 0;
 }
 
+static bool kvm_riscv_pmu_event_allowed(struct kvm *kvm, unsigned long eidx)
+{
+	struct kvm_pmu_event_filter *filter;
+	bool in_list = false;
+	unsigned int i;
+
+	/* Reserved high bits must not bypass the filter. */
+	eidx &= SBI_PMU_EVENT_IDX_MASK;
+
+	filter = srcu_dereference(kvm->arch.pmu_event_filter, &kvm->srcu);
+	if (!filter)
+		return true;
+
+	for (i = 0; i < filter->nevents; i++) {
+		if ((unsigned long)filter->events[i] == eidx) {
+			in_list = true;
+			break;
+		}
+	}
+
+	/* ALLOW: permit only listed events; DENY: reject them. */
+	if (filter->action == KVM_PMU_EVENT_ALLOW)
+		return in_list;
+	return !in_list;
+}
+
 int kvm_riscv_vcpu_pmu_ctr_cfg_match(struct kvm_vcpu *vcpu, unsigned long ctr_base,
 				     unsigned long ctr_mask, unsigned long flags,
 				     unsigned long eidx, u64 evtdata,
@@ -773,6 +799,11 @@ int kvm_riscv_vcpu_pmu_ctr_cfg_match(struct kvm_vcpu *vcpu, unsigned long ctr_ba
 	event_code = get_event_code(eidx);
 	is_fevent = kvm_pmu_is_fw_event(eidx);
 	if (is_fevent && event_code >= SBI_PMU_FW_MAX) {
+		sbiret = SBI_ERR_NOT_SUPPORTED;
+		goto out;
+	}
+
+	if (!kvm_riscv_pmu_event_allowed(vcpu->kvm, eidx)) {
 		sbiret = SBI_ERR_NOT_SUPPORTED;
 		goto out;
 	}

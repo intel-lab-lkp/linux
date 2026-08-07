@@ -96,6 +96,9 @@ struct kvm_arch {
 
 	/* KVM_CAP_RISCV_MP_STATE_RESET */
 	bool mp_state_reset;
+
+	/* KVM_SET_PMU_EVENT_FILTER */
+	struct kvm_pmu_event_filter __rcu *pmu_event_filter;
 };
 
 struct kvm_cpu_trap {
