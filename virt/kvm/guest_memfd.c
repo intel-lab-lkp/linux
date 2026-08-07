@@ -8,6 +8,7 @@
 #include <linux/mempolicy.h>
 #include <linux/pseudo_fs.h>
 #include <linux/pagemap.h>
+#include <linux/swap.h>
 
 #include "kvm_mm.h"
 #include "guest_memfd.h"
@@ -542,11 +543,26 @@ static int kvm_gmem_mas_preallocate(struct ma_state *mas, u64 attributes,
 	return mas_preallocate(mas, xa_mk_value(attributes), GFP_KERNEL);
 }
 
+static bool __folio_safe_for_conversion(struct folio *folio,
+					enum lru_cache_drained *drained)
+{
+	const int filemap_get_folios_refcount = 1;
+
+	if (folio_maybe_dma_pinned(folio) || folio_mapped(folio))
+		return false;
+
+	lru_cache_drain_for_folio(folio, filemap_get_folios_refcount,
+				  drained);
+
+	return folio_ref_count(folio) ==
+	       folio_nr_pages(folio) + filemap_get_folios_refcount;
+}
+
 static bool kvm_gmem_is_safe_for_conversion(struct inode *inode, pgoff_t start,
 					    size_t nr_pages, pgoff_t *err_index)
 {
+	enum lru_cache_drained drained = LRU_CACHE_NOT_DRAINED;
 	struct address_space *mapping = inode->i_mapping;
-	const int filemap_get_folios_refcount = 1;
 	pgoff_t last = start + nr_pages - 1;
 	struct folio_batch fbatch;
 	bool safe = true;
@@ -560,9 +576,8 @@ static bool kvm_gmem_is_safe_for_conversion(struct inode *inode, pgoff_t start,
 		for (i = 0; i < folio_batch_count(&fbatch); ++i) {
 			struct folio *folio = fbatch.folios[i];
 
-			if (folio_ref_count(folio) !=
-			    folio_nr_pages(folio) + filemap_get_folios_refcount) {
-				safe = false;
+			safe = __folio_safe_for_conversion(folio, &drained);
+			if (!safe) {
 				*err_index = max(start, folio->index);
 				break;
 			}
