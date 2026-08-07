@@ -2155,7 +2155,7 @@ int cppc_set_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls)
 	struct cpc_register_resource *desired_reg, *min_perf_reg, *max_perf_reg;
 	int pcc_ss_id = per_cpu(cpu_pcc_subspace_idx, cpu);
 	struct cppc_pcc_data *pcc_ss_data = NULL;
-	bool regs_in_pcc;
+	bool desired_pcc, min_pcc, max_pcc, regs_in_pcc;
 	int ret = 0;
 
 	if (!cpc_desc) {
@@ -2166,8 +2166,29 @@ int cppc_set_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls)
 	desired_reg = &cpc_desc->cpc_regs[DESIRED_PERF];
 	min_perf_reg = &cpc_desc->cpc_regs[MIN_PERF];
 	max_perf_reg = &cpc_desc->cpc_regs[MAX_PERF];
-	regs_in_pcc = CPC_IN_PCC(desired_reg) || CPC_IN_PCC(min_perf_reg) ||
-		      CPC_IN_PCC(max_perf_reg);
+	desired_pcc = cpc_is_writable(desired_reg) && CPC_IN_PCC(desired_reg);
+	min_pcc = perf_ctrls->min_perf && cpc_is_writable(min_perf_reg) &&
+		  CPC_IN_PCC(min_perf_reg);
+	max_pcc = perf_ctrls->max_perf && cpc_is_writable(max_perf_reg) &&
+		  CPC_IN_PCC(max_perf_reg);
+	regs_in_pcc = desired_pcc || min_pcc || max_pcc;
+
+	/* Do not stage PCC data if a fallible non-PCC write has failed. */
+	if (cpc_is_writable(desired_reg) && !desired_pcc) {
+		ret = cpc_write(cpu, desired_reg, perf_ctrls->desired_perf);
+		if (ret)
+			return ret;
+	}
+	if (perf_ctrls->min_perf && cpc_is_writable(min_perf_reg) && !min_pcc) {
+		ret = cpc_write(cpu, min_perf_reg, perf_ctrls->min_perf);
+		if (ret)
+			return ret;
+	}
+	if (perf_ctrls->max_perf && cpc_is_writable(max_perf_reg) && !max_pcc) {
+		ret = cpc_write(cpu, max_perf_reg, perf_ctrls->max_perf);
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * This is Phase-I where we want to write to CPC registers
@@ -2190,30 +2211,37 @@ int cppc_set_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls)
 				return ret;
 			}
 		}
-		/*
-		 * Update the pending_write to make sure a PCC CMD_READ will not
-		 * arrive and steal the channel during the switch to write lock
-		 */
-		pcc_ss_data->pending_pcc_write_cmd = true;
-		cpc_desc->write_cmd_id = pcc_ss_data->pcc_write_cnt;
-		cpc_desc->write_cmd_status = 0;
 	}
 
-	if (CPC_SUPPORTED(desired_reg))
-		cpc_write(cpu, desired_reg, perf_ctrls->desired_perf);
+	if (desired_pcc) {
+		ret = cpc_write(cpu, desired_reg, perf_ctrls->desired_perf);
+		if (ret)
+			goto out_pcc_read_unlock;
+	}
 
 	/*
 	 * Only write if min_perf and max_perf not zero. Some drivers pass zero
 	 * value to min and max perf, but they don't mean to set the zero value,
 	 * they just don't want to write to those registers.
 	 */
-	if (perf_ctrls->min_perf && CPC_SUPPORTED(min_perf_reg))
-		cpc_write(cpu, min_perf_reg, perf_ctrls->min_perf);
-	if (perf_ctrls->max_perf && CPC_SUPPORTED(max_perf_reg))
-		cpc_write(cpu, max_perf_reg, perf_ctrls->max_perf);
+	if (min_pcc) {
+		ret = cpc_write(cpu, min_perf_reg, perf_ctrls->min_perf);
+		if (ret)
+			goto out_pcc_read_unlock;
+	}
+	if (max_pcc) {
+		ret = cpc_write(cpu, max_perf_reg, perf_ctrls->max_perf);
+		if (ret)
+			goto out_pcc_read_unlock;
+	}
 
-	if (regs_in_pcc)
+	if (regs_in_pcc) {
+		/* Block a PCC read until the staged payload has been submitted. */
+		pcc_ss_data->pending_pcc_write_cmd = true;
+		cpc_desc->write_cmd_id = pcc_ss_data->pcc_write_cnt;
+		cpc_desc->write_cmd_status = 0;
 		up_read(&pcc_ss_data->pcc_lock);	/* END Phase-I */
+	}
 	/*
 	 * This is Phase-II where we transfer the ownership of PCC to Platform
 	 *
@@ -2272,8 +2300,13 @@ int cppc_set_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls)
 				   cpc_desc->write_cmd_id != pcc_ss_data->pcc_write_cnt);
 
 		/* send_pcc_cmd updates the status in case of failure */
-		ret = cpc_desc->write_cmd_status;
+		if (!ret)
+			ret = cpc_desc->write_cmd_status;
 	}
+	return ret;
+
+out_pcc_read_unlock:
+	up_read(&pcc_ss_data->pcc_lock);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(cppc_set_perf);
