@@ -6,8 +6,8 @@
 
 #include <linux/irqchip/arm-gic-v3.h>
 
-void its_emulate_forward_req(struct pkvm_protected_reg *region, u64 offset, bool write, u64 *reg,
-			     u8 reg_size)
+static void its_emulate_forward_req(struct pkvm_protected_reg *region, u64 offset, bool write,
+				    u64 *reg, u8 reg_size)
 {
 	void __iomem *addr = __hyp_va(PFN_PHYS(region->pfn) + offset);
 

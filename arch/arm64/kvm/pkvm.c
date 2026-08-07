@@ -71,7 +71,7 @@ static int __init register_its_emulated_region(void)
 		 */
 		kvm_nvhe_sym(pkvm_protected_regs)[i].pfn = PHYS_PFN(res.start);
 		kvm_nvhe_sym(pkvm_protected_regs)[i].cb =
-			lm_alias(&kvm_nvhe_sym(its_emulate_forward_req));
+			lm_alias(&kvm_nvhe_sym(pkvm_its_emulate_handler));
 		kvm_nvhe_sym(pkvm_protected_regs)[i].nr_pages =
 			PFN_DOWN(min_t(u64, resource_size(&res), PAGE_ALIGN_DOWN(GITS_TRANSLATER)));
 
@@ -312,8 +312,28 @@ static void __init _kvm_host_prot_finalize(void *arg)
 		WRITE_ONCE(*err, -EINVAL);
 }
 
+#define ITS_PAGES	(2UL)
+
+static int pkvm_init_its_emulation(phys_addr_t dev_addr, struct its_host_state *host)
+{
+	size_t priv_state_sz = ITS_PAGES << PAGE_SHIFT;
+	void *priv_state;
+	int ret;
+
+	priv_state = alloc_pages_exact(priv_state_sz, GFP_ATOMIC);
+	if (!priv_state)
+		return -ENOMEM;
+
+	ret = kvm_call_hyp_nvhe(__pkvm_its_emulate_setup, dev_addr, host, priv_state, ITS_PAGES);
+	if (ret)
+		free_pages_exact(priv_state, priv_state_sz);
+
+	return ret;
+}
+
 static int __init pkvm_drop_host_privileges(void)
 {
+	unsigned long its_flags;
 	int ret = 0;
 
 	/*
@@ -321,8 +341,10 @@ static int __init pkvm_drop_host_privileges(void)
 	 * once the host stage 2 is installed.
 	 */
 	static_branch_enable(&kvm_protected_mode_initialized);
+
+	its_emulate_acquire_locks(&its_flags);
 	on_each_cpu(_kvm_host_prot_finalize, &ret, 1);
-	return ret;
+	return its_emulate_release_locks(ret, &its_flags, pkvm_init_its_emulation);
 }
 
 static int __init finalize_pkvm(void)
