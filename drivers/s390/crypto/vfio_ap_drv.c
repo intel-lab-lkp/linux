@@ -26,9 +26,21 @@ MODULE_LICENSE("GPL v2");
 struct ap_matrix_dev *matrix_dev;
 debug_info_t *vfio_ap_dbf_info;
 
+#define VFIO_AP_DRV_FEATURES	"guest_matrix hotplug ap_config migratable"
+#define SE_GUEST_FEATURES	"guest_matrix hotplug ap_config"
+
 static ssize_t features_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return sysfs_emit(buf, "guest_matrix hotplug ap_config\n");
+	/*
+	 * If the system running is an SE guest, it will support a different
+	 * set of features; for example, it will not support live guest
+	 * migration
+	 */
+	if (ap_is_se_guest())
+		return sysfs_emit(buf, "%s\n", SE_GUEST_FEATURES);
+
+	/* Return all features supported by the vfio_ap device driver */
+	return sysfs_emit(buf, "%s\n", VFIO_AP_DRV_FEATURES);
 }
 static DEVICE_ATTR_RO(features);
 
