@@ -43,6 +43,16 @@ static LIST_HEAD(memory_tiers);
  */
 static LIST_HEAD(default_memory_types);
 static struct node_memory_type_map node_memory_types[MAX_NUMNODES];
+
+/*
+ * nr_tier_slots and tier_slot_ids are written with memory_tier_lock and
+ * read locklessly. nr_tier_slots is monotonically increasing.
+ */
+static int nr_tier_slots;
+static int tier_slot_ids[MAX_NUMNODES]   = {[0 ... MAX_NUMNODES - 1] = -1,};
+static int node_tier_slots[MAX_NUMNODES] = {[0 ... MAX_NUMNODES - 1] = -1,};
+static nodemask_t tier_nodemasks[MAX_NUMNODES];
+
 struct memory_dev_type *default_dram_type;
 nodemask_t default_dram_nodes __initdata = NODE_MASK_NONE;
 
@@ -271,6 +281,65 @@ static struct memory_tier *__node_get_memory_tier(int node)
 	 */
 	return rcu_dereference_check(pgdat->memtier,
 				     lockdep_is_held(&memory_tier_lock));
+}
+
+/* Caller must hold memory_tier_lock */
+static int tier_id_slot(int tier_id)
+{
+	int slot, free_slot = -1;
+
+	for (slot = 0; slot < nr_node_ids; slot++) {
+		if (tier_slot_ids[slot] == tier_id)
+			return slot;
+		if (tier_slot_ids[slot] == -1 && free_slot == -1) {
+			free_slot = slot;
+			tier_slot_ids[slot] = tier_id;
+		}
+	}
+
+	return free_slot;
+}
+
+static void establish_tier_slots(void)
+{
+	int old_nr_tier_slots = mt_nr_tier_slots();
+	int highest_slot = old_nr_tier_slots;
+
+	lockdep_assert_held_once(&memory_tier_lock);
+
+	for (int slot = 0; slot < old_nr_tier_slots; slot++)
+		nodes_clear(tier_nodemasks[slot]);
+
+	for (int nid = 0; nid < nr_node_ids; nid++) {
+		struct memory_tier *memtier = NULL;
+		int slot = -1;
+
+		if (node_state(nid, N_MEMORY))
+			memtier = __node_get_memory_tier(nid);
+		if (memtier) {
+			slot = tier_id_slot(memtier->dev.id);
+			highest_slot = max(highest_slot, slot + 1);
+		}
+
+		WRITE_ONCE(node_tier_slots[nid], slot);
+
+		if (slot != -1)
+			node_set(nid, tier_nodemasks[slot]);
+	}
+	WRITE_ONCE(nr_tier_slots, highest_slot);
+}
+
+int mt_nr_tier_slots(void)
+{
+	return READ_ONCE(nr_tier_slots);
+}
+
+int nid_tier_slot(int nid)
+{
+	if (nid < 0 || nid >= MAX_NUMNODES)
+		return -1;
+
+	return READ_ONCE(node_tier_slots[nid]);
 }
 
 #ifdef CONFIG_NUMA_MIGRATION
@@ -729,6 +798,7 @@ static int __init memory_tier_late_init(void)
 	}
 
 	establish_demotion_targets();
+	establish_tier_slots();
 	put_online_mems();
 
 	return 0;
@@ -878,6 +948,14 @@ int mt_calc_adistance(int node, int *adist)
 }
 EXPORT_SYMBOL_GPL(mt_calc_adistance);
 
+const nodemask_t *mt_tier_nodes(int slot)
+{
+	if (slot < 0)
+		return NULL;
+
+	return &tier_nodemasks[slot];
+}
+
 static int __meminit memtier_hotplug_callback(struct notifier_block *self,
 					      unsigned long action, void *_arg)
 {
@@ -887,15 +965,19 @@ static int __meminit memtier_hotplug_callback(struct notifier_block *self,
 	switch (action) {
 	case NODE_REMOVED_LAST_MEMORY:
 		mutex_lock(&memory_tier_lock);
-		if (clear_node_memory_tier(nn->nid))
+		if (clear_node_memory_tier(nn->nid)) {
 			establish_demotion_targets();
+			establish_tier_slots();
+		}
 		mutex_unlock(&memory_tier_lock);
 		break;
 	case NODE_ADDED_FIRST_MEMORY:
 		mutex_lock(&memory_tier_lock);
 		memtier = set_node_memory_tier(nn->nid);
-		if (!IS_ERR(memtier))
+		if (!IS_ERR(memtier)) {
 			establish_demotion_targets();
+			establish_tier_slots();
+		}
 		mutex_unlock(&memory_tier_lock);
 		break;
 	}
