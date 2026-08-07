@@ -2166,10 +2166,8 @@ static void destroy_partition(struct mshv_partition *partition)
 		if (mshv_partition_encrypted(partition)) {
 			hlist_for_each_entry_safe(region, n,
 						  &partition->pt_mem_regions,
-						  hnode) {
-				hlist_del(&region->hnode);
-				mshv_region_put(region);
-			}
+						  hnode)
+				mshv_region_unmap(region);
 
 			ret = destroy_snp_partition_state(partition);
 			if (ret) {
