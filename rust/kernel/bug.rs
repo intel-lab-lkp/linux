@@ -123,9 +123,10 @@ macro_rules! warn_on {
         const _COND_STR: &str = file!();
 
         if cond {
-            const WARN_ON_FLAGS: u32 = $crate::bug::bugflag_taint($crate::bindings::TAINT_WARN);
-
-            $crate::warn_flags!(_COND_STR, WARN_ON_FLAGS);
+            $crate::warn_flags!(
+                _COND_STR,
+                $crate::bug::bugflag_taint($crate::bindings::TAINT_WARN)
+            );
         }
         cond
     }};
