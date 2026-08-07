@@ -1136,8 +1136,8 @@ static void sonypi_acpi_remove(struct platform_device *pdev)
 }
 
 static const struct acpi_device_id sonypi_device_ids[] = {
-	{"SNY6001", 0},
-	{"", 0},
+	{ .id = "SNY6001" },
+	{ }
 };
 
 static struct platform_driver sonypi_acpi_driver = {

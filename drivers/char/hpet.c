@@ -1004,8 +1004,8 @@ static int hpet_acpi_probe(struct platform_device *pdev)
 }
 
 static const struct acpi_device_id hpet_device_ids[] = {
-	{"PNP0103", 0},
-	{"", 0},
+	{ .id = "PNP0103" },
+	{ }
 };
 
 static struct platform_driver hpet_acpi_driver = {
