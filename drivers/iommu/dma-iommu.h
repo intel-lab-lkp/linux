@@ -23,8 +23,6 @@ int iommu_dma_sw_map_msi(struct iommu_domain *domain,
 			 struct device *dev, phys_addr_t msi_addr,
 			 size_t required_size, dma_addr_t *msi_iova,
 			 unsigned int *msi_shift);
-int iommu_dma_sw_msi(struct iommu_domain *domain, struct msi_desc *desc,
-		     phys_addr_t msi_addr);
 
 extern bool iommu_dma_forcedac;
 
@@ -61,12 +59,6 @@ static inline int iommu_dma_sw_map_msi(struct iommu_domain *domain,
 				       struct device *dev, phys_addr_t msi_addr,
 				       size_t required_size, dma_addr_t *msi_iova,
 				       unsigned int *msi_shift)
-{
-	return -ENODEV;
-}
-
-static inline int iommu_dma_sw_msi(struct iommu_domain *domain,
-				   struct msi_desc *desc, phys_addr_t msi_addr)
 {
 	return -ENODEV;
 }
