@@ -458,11 +458,9 @@ void nf_conntrack_helper_unregister(struct nf_conntrack_helper *me)
 	/* This helper is going away, disable it. */
 	rcu_assign_pointer(me->help, NULL);
 
-	/* Make sure every nothing is still using the helper unless its a
-	 * connection in the hash.
+	/* This is best effort, helper might win race to create an
+	 * expectation but it still depends on the master conntrack.
 	 */
-	synchronize_rcu();
-
 	nf_ct_expect_iterate_destroy(expect_iter_me, me);
 
 	if (refcount_dec_and_test(&me->ct_refcnt))
