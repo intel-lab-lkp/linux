@@ -14,6 +14,7 @@
 #include <asm/stage2_pgtable.h>
 
 #include <hyp/fault.h>
+#include <hyp/adjust_pc.h>
 
 #include <nvhe/arm-smccc.h>
 #include <nvhe/gfp.h>
@@ -752,6 +753,50 @@ static void host_inject_mem_abort(struct kvm_cpu_context *host_ctxt)
 	inject_host_exception(esr);
 }
 
+static bool handle_host_mmio_trap(struct kvm_cpu_context *host_ctxt, u64 esr, u64 addr)
+{
+	u64 offset, reg_value = 0, start, end;
+	u8 reg_size, reg_index;
+	bool write;
+	int i;
+
+	for (i = 0; i < num_protected_reg; i++) {
+		if (!pkvm_protected_regs[i].pfn || !pkvm_protected_regs[i].nr_pages ||
+		    !pkvm_protected_regs[i].cb)
+			continue;
+
+		start = PFN_PHYS(pkvm_protected_regs[i].pfn);
+		end = start + PFN_PHYS(pkvm_protected_regs[i].nr_pages);
+		reg_size = BIT((esr & ESR_ELx_SAS) >> ESR_ELx_SAS_SHIFT);
+
+		if (start > addr || addr + reg_size > end)
+			continue;
+
+		reg_index = (esr & ESR_ELx_SRT_MASK) >> ESR_ELx_SRT_SHIFT;
+		write = (esr & ESR_ELx_WNR) == ESR_ELx_WNR;
+		offset = addr - start;
+
+		if (write && reg_index != 31)
+			reg_value = host_ctxt->regs.regs[reg_index];
+
+		pkvm_protected_regs[i].cb(&pkvm_protected_regs[i], offset, write,
+					  &reg_value, reg_size);
+
+		if (!write && reg_index != 31)
+			host_ctxt->regs.regs[reg_index] = reg_value;
+
+		kvm_skip_host_instr();
+		return true;
+	}
+
+	return false;
+}
+
+static bool is_dabt(u64 esr)
+{
+	return (ESR_ELx_EC(esr) == ESR_ELx_EC_DABT_LOW) && (esr & ESR_ELx_ISV);
+}
+
 void handle_host_mem_abort(struct kvm_cpu_context *host_ctxt)
 {
 	struct kvm_vcpu_fault_info fault;
@@ -773,6 +818,10 @@ void handle_host_mem_abort(struct kvm_cpu_context *host_ctxt)
 	 */
 	BUG_ON(!(fault.hpfar_el2 & HPFAR_EL2_NS));
 	addr = FIELD_GET(HPFAR_EL2_FIPA, fault.hpfar_el2) << 12;
+
+	if (is_dabt(esr) && !addr_is_memory(addr) &&
+	    handle_host_mmio_trap(host_ctxt, esr, addr | (fault.far_el2 & FAR_MASK)))
+		return;
 
 	switch (host_stage2_idmap(addr)) {
 	case -EPERM:
