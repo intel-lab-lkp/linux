@@ -221,4 +221,13 @@ config NET_DSA_TAG_YT921X
 	  Say Y or M if you want to enable support for tagging frames for
 	  Motorcomm YT921x switches.
 
+config NET_DSA_TAG_XLNX_TSN
+	tristate "Tag driver for AMD/Xilinx TSN Endpoint Ethernet MAC"
+	help
+	  Say Y or M if you want to enable support for the AMD/Xilinx TSN
+	  Endpoint Ethernet MAC IP. The IP does not insert an in-band CPU
+	  tag; port classification is conveyed via metadata_dst attached on
+	  RX by the EP MAC driver, and PTP TX frames are intercepted in the
+	  xmit hook to be steered into the per-MAC PTP TX register window.
+
 endif
