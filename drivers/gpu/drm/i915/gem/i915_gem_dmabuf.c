@@ -10,6 +10,8 @@
 
 #include <asm/smp.h>
 
+#include <drm/drm_cache.h>
+
 #include "gem/i915_gem_dmabuf.h"
 #include "i915_drv.h"
 #include "i915_gem_object.h"
@@ -249,16 +251,24 @@ static int i915_gem_object_get_pages_dmabuf(struct drm_i915_gem_object *obj)
 	 * DG1 is special here since it still snoops transactions even with
 	 * CACHE_NONE. This is not the case with other HAS_SNOOP platforms. We
 	 * might need to revisit this as we add new discrete platforms.
-	 *
-	 * XXX: Consider doing a vmap flush or something, where possible.
-	 * Currently we just do a heavy handed wbinvd_on_all_cpus() here since
-	 * the underlying sg_table might not even point to struct pages, so we
-	 * can't just call drm_clflush_sg or similar, like we do elsewhere in
-	 * the driver.
 	 */
 	if (i915_gem_object_can_bypass_llc(obj) ||
-	    (!HAS_LLC(i915) && !IS_DG1(i915)))
-		wbinvd_on_all_cpus();
+	    (!HAS_LLC(i915) && !IS_DG1(i915))) {
+		struct dma_buf *dma_buf = obj->base.import_attach->dmabuf;
+		struct iosys_map map;
+		int vmap_ret;
+
+		/* We already hold the dma_resv lock via the imported obj. */
+		vmap_ret = dma_buf_vmap(dma_buf, &map);
+		if (!vmap_ret && !map.is_iomem) {
+			drm_clflush_virt_range(map.vaddr, obj->base.size);
+			dma_buf_vunmap(dma_buf, &map);
+		} else {
+			if (!vmap_ret)
+				dma_buf_vunmap(dma_buf, &map);
+			wbinvd_on_all_cpus();
+		}
+	}
 
 	__i915_gem_object_set_pages(obj, sgt);
 
