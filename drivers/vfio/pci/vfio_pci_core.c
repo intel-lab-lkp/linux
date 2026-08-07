@@ -1332,11 +1332,13 @@ static int vfio_pci_ioctl_reset(struct vfio_pci_core_device *vdev,
 	 */
 	vfio_pci_set_power_state(vdev, PCI_D0);
 
-	vfio_pci_dma_buf_move(vdev, true);
-	ret = pci_try_reset_function(vdev->pdev);
-	if (__vfio_pci_memory_enabled(vdev))
-		vfio_pci_dma_buf_move(vdev, false);
+	/*
+	 * Drop the lock before entering the PCI core.
+	 * The PCI core will re-acquire it via our .reset_prepare hook.
+	 */
 	up_write(&vdev->memory_lock);
+
+	ret = pci_try_reset_function(vdev->pdev);
 
 	return ret;
 }
@@ -2418,8 +2420,33 @@ out_unlock:
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_sriov_configure);
 
+static void vfio_pci_core_reset_prepare(struct pci_dev *pdev)
+{
+	struct vfio_pci_core_device *vdev = dev_get_drvdata(&pdev->dev);
+
+	if (vdev) {
+		down_write(&vdev->memory_lock);
+		vfio_pci_set_power_state(vdev, PCI_D0);
+		vfio_pci_zap_bars(vdev);
+		vfio_pci_dma_buf_move(vdev, true);
+	}
+}
+
+static void vfio_pci_core_reset_done(struct pci_dev *pdev)
+{
+	struct vfio_pci_core_device *vdev = dev_get_drvdata(&pdev->dev);
+
+	if (vdev) {
+		if (__vfio_pci_memory_enabled(vdev))
+			vfio_pci_dma_buf_move(vdev, false);
+		up_write(&vdev->memory_lock);
+	}
+}
+
 const struct pci_error_handlers vfio_pci_core_err_handlers = {
 	.error_detected = vfio_pci_core_aer_err_detected,
+	.reset_prepare = vfio_pci_core_reset_prepare,
+	.reset_done = vfio_pci_core_reset_done,
 };
 EXPORT_SYMBOL_GPL(vfio_pci_core_err_handlers);
 
@@ -2561,55 +2588,52 @@ static int vfio_pci_dev_set_hot_reset(struct vfio_device_set *dev_set,
 
 		if (!owned) {
 			ret = -EINVAL;
-			break;
+			goto err_out;
 		}
+	}
 
+	/* Zap, and set power state */
+	list_for_each_entry(vdev, &dev_set->device_list, vdev.dev_set_list) {
 		/*
-		 * Take the memory write lock for each device and zap BAR
-		 * mappings to prevent the user accessing the device while in
-		 * reset.  Locking multiple devices is prone to deadlock,
+		 * Take the memory write lock for each device, zap BAR
+		 * mappings, and restore power state before reset.
+		 * Locking multiple devices is prone to deadlock,
 		 * runaway and unwind if we hit contention.
 		 */
 		if (!down_write_trylock(&vdev->memory_lock)) {
 			ret = -EBUSY;
-			break;
+
+			/*
+			 * We failed to lock THIS device. We must step back one
+			 * device so err_undo only unlocks devices that succeeded.
+			 */
+			if (!list_entry_is_head(vdev, &dev_set->device_list, vdev.dev_set_list)) {
+				vdev = list_prev_entry(vdev, vdev.dev_set_list);
+				goto err_undo;
+			}
+			goto err_out;
 		}
 
-		vfio_pci_dma_buf_move(vdev, true);
 		vfio_pci_zap_bars(vdev);
-	}
-
-	if (!list_entry_is_head(vdev,
-				&dev_set->device_list, vdev.dev_set_list)) {
-		vdev = list_prev_entry(vdev, vdev.dev_set_list);
-		goto err_undo;
-	}
-
-	/*
-	 * The pci_reset_bus() will reset all the devices in the bus.
-	 * The power state can be non-D0 for some of the devices in the bus.
-	 * For these devices, the pci_reset_bus() will internally set
-	 * the power state to D0 without vfio driver involvement.
-	 * For the devices which have NoSoftRst-, the reset function can
-	 * cause the PCI config space reset without restoring the original
-	 * state (saved locally in 'vdev->pm_save').
-	 */
-	list_for_each_entry(vdev, &dev_set->device_list, vdev.dev_set_list)
 		vfio_pci_set_power_state(vdev, PCI_D0);
+	}
 
+	/* Drop locks before crossing into PCI core */
+	list_for_each_entry(vdev, &dev_set->device_list, vdev.dev_set_list)
+		up_write(&vdev->memory_lock);
+
+	/* PCI core handles the reset and calls .reset hooks */
 	ret = pci_reset_bus(pdev);
 
-	vdev = list_last_entry(&dev_set->device_list,
-			       struct vfio_pci_core_device, vdev.dev_set_list);
+	goto err_out;
 
 err_undo:
+	/* Unwind locks cleanly for devices we successfully locked */
 	list_for_each_entry_from_reverse(vdev, &dev_set->device_list,
-					 vdev.dev_set_list) {
-		if (vdev->vdev.open_count && __vfio_pci_memory_enabled(vdev))
-			vfio_pci_dma_buf_move(vdev, false);
+					 vdev.dev_set_list)
 		up_write(&vdev->memory_lock);
-	}
 
+err_out:
 	list_for_each_entry(vdev, &dev_set->device_list, vdev.dev_set_list)
 		pm_runtime_put(&vdev->pdev->dev);
 
