@@ -55,7 +55,13 @@ static noinstr irqentry_state_t arm64_enter_from_kernel_mode(struct pt_regs *reg
 static void noinstr arm64_exit_to_kernel_mode(struct pt_regs *regs,
 					      irqentry_state_t state)
 {
-	local_irq_disable();
+	/*
+	 * Only irqentry_exit_to_kernel_mode_preempt() needs interrupts masked,
+	 * and it returns early when regs had them disabled. Skipping the
+	 * disable avoids clobbering a PMR the irqflags API does not expect.
+	 */
+	if (!regs_irqs_disabled(regs))
+		local_irq_disable();
 	irqentry_exit_to_kernel_mode_preempt(regs, state);
 	local_daif_mask();
 	mte_check_tfsr_exit();
