@@ -1010,7 +1010,7 @@ static inline void hrtick_schedule_exit(struct rq *rq)
 	}
 
 	if (rq->hrtick_sched & HRTICK_SCHED_REARM_HRTIMER)
-		__hrtimer_rearm_deferred();
+		hrtimer_rearm_deferred_paused();
 
 	rq->hrtick_sched = HRTICK_SCHED_NONE;
 }
