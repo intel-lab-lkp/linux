@@ -556,7 +556,7 @@ static int vp_vdpa_dev_add(struct vdpa_mgmt_dev *v_mdev, const char *name,
 						&vp_vdpa->vring[i].notify_pa);
 		if (!vp_vdpa->vring[i].notify) {
 			ret = -EINVAL;
-			dev_warn(&pdev->dev, "Fail to map vq notify %d\n", i);
+			dev_err(&pdev->dev, "Fail to map vq notify %d\n", i);
 			goto err;
 		}
 	}
