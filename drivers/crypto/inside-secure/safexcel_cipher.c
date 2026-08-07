@@ -407,17 +407,17 @@ static int safexcel_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	struct safexcel_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
 	struct safexcel_crypto_priv *priv = ctx->base.priv;
 	struct crypto_authenc_keys keys;
-	struct crypto_aes_ctx aes;
-	int err = -EINVAL, i;
+	struct crypto_aes_ctx aes __cleanup(aes_zeroize_ctx);
+	int err, i;
 	const char *alg;
 
 	if (unlikely(crypto_authenc_extractkeys(&keys, key, len)))
-		goto badkey;
+		return -EINVAL;
 
 	if (ctx->mode == CONTEXT_CONTROL_CRYPTO_MODE_CTR_LOAD) {
 		/* Must have at least space for the nonce here */
 		if (unlikely(keys.enckeylen < CTR_RFC3686_NONCE_SIZE))
-			goto badkey;
+			return -EINVAL;
 		/* last 4 bytes of key are the nonce! */
 		ctx->nonce = *(u32 *)(keys.enckey + keys.enckeylen -
 				      CTR_RFC3686_NONCE_SIZE);
@@ -430,25 +430,25 @@ static int safexcel_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	case SAFEXCEL_DES:
 		err = verify_aead_des_key(ctfm, keys.enckey, keys.enckeylen);
 		if (unlikely(err))
-			goto badkey;
+			return err;
 		break;
 	case SAFEXCEL_3DES:
 		err = verify_aead_des3_key(ctfm, keys.enckey, keys.enckeylen);
 		if (unlikely(err))
-			goto badkey;
+			return err;
 		break;
 	case SAFEXCEL_AES:
 		err = aes_expandkey(&aes, keys.enckey, keys.enckeylen);
 		if (unlikely(err))
-			goto badkey;
+			return err;
 		break;
 	case SAFEXCEL_SM4:
 		if (unlikely(keys.enckeylen != SM4_KEY_SIZE))
-			goto badkey;
+			return -EINVAL;
 		break;
 	default:
 		dev_err(priv->dev, "aead: unsupported cipher algorithm\n");
-		goto badkey;
+		return -EINVAL;
 	}
 
 	if (priv->flags & EIP197_TRC_CACHE && ctx->base.ctxr_dma) {
@@ -486,24 +486,19 @@ static int safexcel_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 		break;
 	default:
 		dev_err(priv->dev, "aead: unsupported hash algorithm\n");
-		goto badkey;
+		return -EINVAL;
 	}
 
 	if (safexcel_hmac_setkey(&ctx->base, keys.authkey, keys.authkeylen,
 				 alg, ctx->state_sz))
-		goto badkey;
+		return -EINVAL;
 
 	/* Now copy the keys into the context */
 	for (i = 0; i < keys.enckeylen / sizeof(u32); i++)
 		ctx->key[i] = cpu_to_le32(((u32 *)keys.enckey)[i]);
 	ctx->key_len = keys.enckeylen;
 
-	memzero_explicit(&keys, sizeof(keys));
 	return 0;
-
-badkey:
-	memzero_explicit(&keys, sizeof(keys));
-	return err;
 }
 
 static int safexcel_context_control(struct safexcel_cipher_ctx *ctx,
