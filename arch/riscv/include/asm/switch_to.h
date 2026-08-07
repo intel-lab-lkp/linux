@@ -21,13 +21,17 @@ extern void __fstate_restore(struct task_struct *restore_from);
 
 static inline void __fstate_clean(struct pt_regs *regs)
 {
+	preempt_disable();
 	regs->status = (regs->status & ~SR_FS) | SR_FS_CLEAN;
+	preempt_enable();
 }
 
 static inline void fstate_off(struct task_struct *task,
 			      struct pt_regs *regs)
 {
+	preempt_disable();
 	regs->status = (regs->status & ~SR_FS) | SR_FS_OFF;
+	preempt_enable();
 }
 
 static inline void fstate_save(struct task_struct *task,
