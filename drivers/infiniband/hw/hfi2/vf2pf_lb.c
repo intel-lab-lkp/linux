@@ -107,7 +107,6 @@ static int lb_do_rcv(struct hfi2_devdata *dd, int thread)
 	u64 rhf, rhe;
 	bool bad;
 	void *buf;
-	u32 len;
 
 	if (!lbd ||
 	    ((lbd->flags & VF2PF_LB_FL_SHUTDOWN) && thread != LB_IN_SHUTDOWN))
@@ -138,7 +137,6 @@ static int lb_do_rcv(struct hfi2_devdata *dd, int thread)
 			    "%s: head=%04x tail=%04x rhf=%016llx rhe=%016llx\n",
 			    __func__, rhqoff, tail, rhf, rhe);
 #endif
-		len = rhf_pkt_len(rhf); /* in bytes */
 		bad = true;
 		if (rhe & RHF_ERROR_SMASK)
 			goto drop;
@@ -153,10 +151,15 @@ static int lb_do_rcv(struct hfi2_devdata *dd, int thread)
 			      (rhqoff + rhf_hdrq_offset(rhf)) * sizeof(u32) +
 			      sizeof(struct vf2pf_lb_hdr);
 #ifdef VF2PF_LB_DEBUG
-		dd_dev_info(dd, "LB_PKT @ %p idx=%u off=%u\n", buf,
-			    rhf_egr_index(rhf), rhf_egr_buf_offset(rhf));
-		print_hex_dump(KERN_INFO, "LB_PKT ", DUMP_PREFIX_OFFSET, 16, 1,
-			       buf, len - sizeof(struct vf2pf_lb_hdr), false);
+		{
+			u32 len = rhf_pkt_len(rhf); /* in bytes */
+
+			dd_dev_info(dd, "LB_PKT @ %p idx=%u off=%u\n", buf,
+				    rhf_egr_index(rhf), rhf_egr_buf_offset(rhf));
+			print_hex_dump(KERN_INFO, "LB_PKT ", DUMP_PREFIX_OFFSET,
+				       16, 1, buf,
+				       len - sizeof(struct vf2pf_lb_hdr), false);
+		}
 #endif
 
 		/* divert responses now (do not use WQ) */
