@@ -86,19 +86,31 @@ static struct vgic_irq *vgic_get_lpi(struct kvm *kvm, u32 intid)
  */
 struct vgic_irq *vgic_get_irq(struct kvm *kvm, u32 intid)
 {
-	/* Non-private IRQs are not yet implemented for GICv5 */
-	if (vgic_is_v5(kvm))
-		return NULL;
+	enum kvm_device_type type = kvm->arch.vgic.vgic_model;
 
 	/* SPIs */
-	if (intid >= VGIC_NR_PRIVATE_IRQS &&
-	    intid < (kvm->arch.vgic.nr_spis + VGIC_NR_PRIVATE_IRQS)) {
-		intid = array_index_nospec(intid, kvm->arch.vgic.nr_spis + VGIC_NR_PRIVATE_IRQS);
-		return &kvm->arch.vgic.spis[intid - VGIC_NR_PRIVATE_IRQS];
+	if (__irq_is_spi(type, intid)) {
+		switch (type) {
+		case KVM_DEV_TYPE_ARM_VGIC_V5:
+			intid = vgic_v5_get_hwirq_id(intid);
+
+			if (intid >= kvm->arch.vgic.nr_spis)
+				return NULL;
+
+			intid = array_index_nospec(intid, kvm->arch.vgic.nr_spis);
+			return &kvm->arch.vgic.spis[intid];
+		default: {
+			u32 max_intid = kvm->arch.vgic.nr_spis + VGIC_NR_PRIVATE_IRQS;
+
+			if (intid < max_intid) {
+				intid = array_index_nospec(intid, max_intid);
+				return &kvm->arch.vgic.spis[intid - VGIC_NR_PRIVATE_IRQS];
+			}
+		}}
 	}
 
 	/* LPIs */
-	if (irq_is_lpi(kvm, intid))
+	if (__irq_is_lpi(type, intid))
 		return vgic_get_lpi(kvm, intid);
 
 	return NULL;
