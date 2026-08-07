@@ -1191,8 +1191,6 @@ void *kho_restore_vmalloc(const struct kho_vmalloc *preservation)
 
 			for (int j = 0; j < contig_pages; j++)
 				pages[idx++] = page + j;
-
-			phys += contig_pages * PAGE_SIZE;
 		}
 
 		page = kho_restore_pages(virt_to_phys(chunk), 1);
