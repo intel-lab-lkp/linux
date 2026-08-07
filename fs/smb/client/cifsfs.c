@@ -1413,8 +1413,13 @@ static loff_t cifs_remap_file_range(struct file *src_file, loff_t off,
 	 */
 	lock_two_nondirectories(target_inode, src_inode);
 
-	if (len == 0)
+	if (len == 0) {
+		if (off >= i_size_read(src_inode)) {
+			rc = -EINVAL;
+			goto unlock;
+		}
 		len = src_inode->i_size - off;
+	}
 
 	cifs_dbg(FYI, "clone range\n");
 
