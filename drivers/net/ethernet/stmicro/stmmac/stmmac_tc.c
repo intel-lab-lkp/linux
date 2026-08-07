@@ -1218,6 +1218,7 @@ static void stmmac_qdisc_restore_dt_config(struct stmmac_priv *priv)
 	/* reset to the dt configured algorithm. */
 	priv->qdisc.enable = false;
 	stmmac_set_tx_queue_weight(priv);
+	stmmac_mac_config_tx_queues_prio(priv);
 	stmmac_prog_mtl_tx_algorithms(priv, priv->hw,
 				      priv->plat->tx_sched_algorithm);
 }
@@ -1321,17 +1322,19 @@ static void stmmac_reset_tc_mqprio(struct net_device *ndev,
 	netdev_reset_tc(ndev);
 	netif_set_real_num_tx_queues(ndev, priv->plat->tx_queues_to_use);
 	stmmac_fpe_map_preemption_class(priv, ndev, extack, 0);
+	stmmac_qdisc_restore_dt_config(priv);
 }
 
 static int tc_setup_dwmac510_mqprio(struct stmmac_priv *priv,
 				    struct tc_mqprio_qopt_offload *mqprio)
 {
 	struct netlink_ext_ack *extack = mqprio->extack;
+	struct plat_stmmacenet_data *pdata = priv->plat;
 	struct tc_mqprio_qopt *qopt = &mqprio->qopt;
 	u32 offset, count, num_stack_tx_queues = 0;
 	struct net_device *ndev = priv->dev;
 	u32 num_tc = qopt->num_tc;
-	int err;
+	int i, tc, err;
 
 	if (!num_tc) {
 		stmmac_reset_tc_mqprio(ndev, extack);
@@ -1360,6 +1363,23 @@ static int tc_setup_dwmac510_mqprio(struct stmmac_priv *priv,
 					      mqprio->preemptible_tcs);
 	if (err)
 		goto err_reset_tc;
+
+	/* Queues not mapped to any TC default to the lowest priority */
+	for (i = 0; i < pdata->tx_queues_to_use; i++) {
+		priv->qdisc.prio[i] = 0;
+		stmmac_tx_queue_prio(priv, priv->hw, 0, i);
+	}
+
+	for (tc = 0; tc < num_tc; tc++) {
+		for (i = qopt->offset[tc];
+		     i < qopt->offset[tc] + qopt->count[tc]; i++) {
+			priv->qdisc.prio[i] = tc;
+			stmmac_tx_queue_prio(priv, priv->hw, tc, i);
+		}
+	}
+	stmmac_prog_mtl_tx_algorithms(priv, priv->hw, MTL_TX_ALGORITHM_SP);
+	priv->qdisc.algo = MTL_TX_ALGORITHM_SP;
+	priv->qdisc.enable = true;
 
 	return 0;
 
