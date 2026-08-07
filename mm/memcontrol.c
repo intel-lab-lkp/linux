@@ -4421,6 +4421,35 @@ static void mem_cgroup_css_free(struct cgroup_subsys_state *css)
 	mem_cgroup_free(memcg);
 }
 
+static inline unsigned long page_counter_max_or_scale(unsigned long val,
+						      int slot)
+{
+	return val == PAGE_COUNTER_MAX ? PAGE_COUNTER_MAX :
+					 mt_scale_by_tier(val, slot);
+}
+
+static void memcg_scale_tier_limits(struct mem_cgroup *memcg)
+{
+	unsigned long min = READ_ONCE(memcg->memory.min);
+	unsigned long low = READ_ONCE(memcg->memory.low);
+	unsigned long high = READ_ONCE(memcg->memory.high);
+	unsigned long max = READ_ONCE(memcg->memory.max);
+	int nr_tier_slots = mt_nr_tier_slots();
+
+	for (int slot = 0; slot < nr_tier_slots; slot++) {
+		unsigned long new_min = page_counter_max_or_scale(min, slot);
+		unsigned long new_low = page_counter_max_or_scale(low, slot);
+		unsigned long new_high = page_counter_max_or_scale(high, slot);
+		unsigned long new_max = page_counter_max_or_scale(max, slot);
+		struct page_counter *tier = &memcg->tier[slot];
+
+		page_counter_set_min(tier, new_min);
+		page_counter_set_low(tier, new_low);
+		page_counter_set_high(tier, new_high);
+		xchg(&tier->max, new_max);
+	}
+}
+
 /**
  * mem_cgroup_css_reset - reset the states of a mem_cgroup
  * @css: the target css
@@ -4454,6 +4483,8 @@ static void mem_cgroup_css_reset(struct cgroup_subsys_state *css)
 	page_counter_set_high(&memcg->memory, PAGE_COUNTER_MAX);
 	memcg1_soft_limit_reset(memcg);
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
+	if (mem_cgroup_tiered_limits())
+		memcg_scale_tier_limits(memcg);
 	memcg_wb_domain_size_changed(memcg);
 }
 
@@ -4797,6 +4828,21 @@ static ssize_t memory_peak_write(struct kernfs_open_file *of, char *buf,
 			  &memcg->memory_peaks);
 }
 
+#ifdef CONFIG_NUMA
+void establish_memcg_tier_limits(void)
+{
+	struct mem_cgroup *memcg;
+
+	if (!mem_cgroup_tiered_limits())
+		return;
+
+	for_each_mem_cgroup_tree(memcg, NULL) {
+		if (memcg != root_mem_cgroup)
+			memcg_scale_tier_limits(memcg);
+	}
+}
+#endif
+
 #undef OFP_PEAK_UNSET
 
 static int memory_min_show(struct seq_file *m, void *v)
@@ -4818,6 +4864,8 @@ static ssize_t memory_min_write(struct kernfs_open_file *of,
 		return err;
 
 	page_counter_set_min(&memcg->memory, min);
+	if (mem_cgroup_tiered_limits())
+		memcg_scale_tier_limits(memcg);
 
 	return nbytes;
 }
@@ -4841,6 +4889,8 @@ static ssize_t memory_low_write(struct kernfs_open_file *of,
 		return err;
 
 	page_counter_set_low(&memcg->memory, low);
+	if (mem_cgroup_tiered_limits())
+		memcg_scale_tier_limits(memcg);
 
 	return nbytes;
 }
@@ -4866,6 +4916,8 @@ static ssize_t memory_high_write(struct kernfs_open_file *of,
 		return err;
 
 	page_counter_set_high(&memcg->memory, high);
+	if (mem_cgroup_tiered_limits())
+		memcg_scale_tier_limits(memcg);
 
 	if (of->file->f_flags & O_NONBLOCK)
 		goto out;
@@ -4925,6 +4977,8 @@ static ssize_t memory_max_write(struct kernfs_open_file *of,
 		return err;
 
 	xchg(&memcg->memory.max, max);
+	if (mem_cgroup_tiered_limits())
+		memcg_scale_tier_limits(memcg);
 
 	if (of->file->f_flags & O_NONBLOCK)
 		goto out;

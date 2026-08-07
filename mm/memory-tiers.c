@@ -810,6 +810,7 @@ static int __init memory_tier_late_init(void)
 
 	establish_demotion_targets();
 	establish_tier_slots();
+	establish_memcg_tier_limits();
 	put_online_mems();
 
 	return 0;
@@ -967,6 +968,16 @@ const nodemask_t *mt_tier_nodes(int slot)
 	return &tier_nodemasks[slot];
 }
 
+unsigned long mt_scale_by_tier(unsigned long val, int slot)
+{
+	unsigned long total_capacity = totalram_pages();
+
+	if (slot < 0 || !total_capacity)
+		return 0;
+
+	return mult_frac(val, READ_ONCE(tier_capacity[slot]), total_capacity);
+}
+
 static int __meminit memtier_hotplug_callback(struct notifier_block *self,
 					      unsigned long action, void *_arg)
 {
@@ -979,6 +990,7 @@ static int __meminit memtier_hotplug_callback(struct notifier_block *self,
 		if (clear_node_memory_tier(nn->nid)) {
 			establish_demotion_targets();
 			establish_tier_slots();
+			establish_memcg_tier_limits();
 		}
 		mutex_unlock(&memory_tier_lock);
 		break;
@@ -988,6 +1000,7 @@ static int __meminit memtier_hotplug_callback(struct notifier_block *self,
 		if (!IS_ERR(memtier)) {
 			establish_demotion_targets();
 			establish_tier_slots();
+			establish_memcg_tier_limits();
 		}
 		mutex_unlock(&memory_tier_lock);
 		break;

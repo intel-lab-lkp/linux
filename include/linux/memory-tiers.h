@@ -55,6 +55,7 @@ struct memory_dev_type *mt_find_alloc_memory_type(int adist,
 						  struct list_head *memory_types);
 void mt_put_memory_types(struct list_head *memory_types);
 const nodemask_t *mt_tier_nodes(int slot);
+unsigned long mt_scale_by_tier(unsigned long val, int slot);
 #ifdef CONFIG_NUMA_MIGRATION
 int next_demotion_node(int node, const nodemask_t *allowed_mask);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);
@@ -168,6 +169,11 @@ static inline int nid_tier_slot(int nid)
 static inline const nodemask_t *mt_tier_nodes(int slot)
 {
 	return NULL;
+}
+
+static inline unsigned long mt_scale_by_tier(unsigned long val, int slot)
+{
+	return val;
 }
 #endif	/* CONFIG_NUMA */
 #endif  /* _LINUX_MEMORY_TIERS_H */

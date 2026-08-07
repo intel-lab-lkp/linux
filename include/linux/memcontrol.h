@@ -537,10 +537,16 @@ static inline bool mem_cgroup_tiered_limits(void)
 {
 	return static_branch_unlikely(&memcg_tiered_limits_key);
 }
+
+void establish_memcg_tier_limits(void);
 #else
 static inline bool mem_cgroup_tiered_limits(void)
 {
 	return false;
+}
+
+static inline void establish_memcg_tier_limits(void)
+{
 }
 #endif
 
@@ -1100,6 +1106,10 @@ static inline bool mem_cgroup_disabled(void)
 static inline bool mem_cgroup_tiered_limits(void)
 {
 	return false;
+}
+
+static inline void establish_memcg_tier_limits(void)
+{
 }
 
 static inline void memcg_memory_event(struct mem_cgroup *memcg,
