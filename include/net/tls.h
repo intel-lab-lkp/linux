@@ -211,10 +211,11 @@ enum tls_context_flags {
 	 * to be atomic.
 	 */
 	TLS_TX_SYNC_SCHED = 1,
-	/* tls_dev_del was called for the RX side, device state was released,
-	 * but tls_ctx->netdev might still be kept, because TX-side driver
-	 * resources might not be released yet. Used to prevent the second
-	 * tls_dev_del call in tls_device_down if it happens simultaneously.
+	/* tls_dev_del was called for the RX side: the NIC currently holds no
+	 * RX offload context. Set whenever that context is released (socket
+	 * teardown, tls_device_down, or during a rekey before re-add) and
+	 * cleared when tls_dev_add re-establishes it. Readers use it to avoid
+	 * a double tls_dev_del and to suppress resync while the NIC has no key.
 	 */
 	TLS_RX_DEV_CLOSED = 2,
 	/* Flag for TX HW context deleted during failed rekey.
@@ -321,6 +322,7 @@ struct tlsdev_ops {
 	int (*tls_dev_resync)(struct net_device *netdev,
 			      struct sock *sk, u32 seq, u8 *rcd_sn,
 			      enum tls_offload_ctx_dir direction);
+	void (*tls_dev_rx_rekey_fixup)(struct sk_buff *skb);
 };
 
 enum tls_offload_sync_type {
@@ -349,6 +351,15 @@ struct tls_offload_context_rx {
 	u8 resync_nh_reset:1;
 	/* CORE_NEXT_HINT-only member, but use the hole here */
 	u8 resync_nh_do_now:1;
+	/* tls_dev_add deferred until old key is freed */
+	u8 dev_add_pending:1;
+	struct {
+		struct crypto_aead *old_aead_recv; /* old key AEAD cipher */
+		char old_iv[TLS_MAX_IV_SIZE + TLS_MAX_SALT_SIZE]; /* old key IV */
+		char old_rec_seq[TLS_MAX_REC_SEQ_SIZE]; /* old key TLS record seq */
+		u32 old_nic_boundary; /* TCP seq: NIC switched to next key */
+		void (*rekey_fixup)(struct sk_buff *skb);
+	} rekey;
 	union {
 		/* TLS_OFFLOAD_SYNC_TYPE_DRIVER_REQ */
 		struct {
