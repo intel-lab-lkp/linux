@@ -2898,6 +2898,74 @@ static int __init mshv_init_vmm_caps(struct device *dev)
 	return 0;
 }
 
+#if defined(CONFIG_X86_64) && IS_ENABLED(CONFIG_CRASH_DUMP)
+static void mshv_panic_unlock_snp(struct mshv_partition *vm)
+{
+	struct mshv_mem_region *memreg;
+	int ret;
+
+	hlist_for_each_entry(memreg, &vm->pt_mem_regions, hnode) {
+		mshv_region_unmap(memreg);
+		ret = mshv_region_share(memreg);
+		if (ret)
+			pt_err(vm, "Unlock snp failed. ret:0x%x gfn:%llx numpfns:%lld\n",
+			       ret, memreg->start_gfn, memreg->nr_pages);
+	}
+}
+
+static int mshv_root_panic_cb(struct notifier_block *this, unsigned long event,
+			      void *ptr)
+{
+	int i, done = 0;
+	struct mshv_partition *pt;
+	struct device *dev = NULL;
+
+	hash_for_each_rcu(mshv_root.pt_htable, i, pt, pt_hnode) {
+		if (!mshv_partition_encrypted(pt))
+			continue;
+
+		done = 1;
+		mshv_panic_unlock_snp(pt);
+		dev = pt->pt_module_dev;
+	}
+	if (done && dev)
+		dev_info(dev, "SNP pages are unlocked for panic\n");
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block mshv_root_panic_blk = {
+	.notifier_call = mshv_root_panic_cb,
+};
+
+/*
+ * If mshv devirt setup failed during boot, or the feature itself is not
+ * available, allow the system to at least collect linux root vmcore. For
+ * that, snp guest pages must be made readable in the panic path so kexec can
+ * collect them.
+ */
+static void mshv_crashdump_init(void)
+{
+	if (hv_crash_enabled)
+		return;
+
+	atomic_notifier_chain_register(&panic_notifier_list,
+				       &mshv_root_panic_blk);
+}
+
+static void mshv_crashdump_deinit(void)
+{
+	if (hv_crash_enabled)
+		return;
+
+	atomic_notifier_chain_unregister(&panic_notifier_list,
+					 &mshv_root_panic_blk);
+}
+#else
+static void mshv_crashdump_init(void) {}
+static void mshv_crashdump_deinit(void) {}
+#endif
+
 static int __init mshv_parent_partition_init(void)
 {
 	int ret;
@@ -2957,6 +3025,8 @@ static int __init mshv_parent_partition_init(void)
 
 	hv_setup_mshv_handler(mshv_isr);
 
+	mshv_crashdump_init();
+
 	return 0;
 
 exit_debugfs:
@@ -2972,6 +3042,7 @@ device_deregister:
 
 static void __exit mshv_parent_partition_exit(void)
 {
+	mshv_crashdump_deinit();
 	hv_setup_mshv_handler(NULL);
 	mshv_port_table_fini();
 	mshv_debugfs_exit();
