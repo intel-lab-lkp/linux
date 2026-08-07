@@ -6223,6 +6223,7 @@ M:	patches@opensource.cirrus.com
 L:	patches@opensource.cirrus.com
 S:	Supported
 F:	Documentation/devicetree/bindings/clock/cirrus,cs2600*
+F:	drivers/clk/cirrus/*
 F:	include/dt-bindings/clock/cirrus,cs2600*
 
 CIRRUS LOGIC HAPTIC DRIVERS
