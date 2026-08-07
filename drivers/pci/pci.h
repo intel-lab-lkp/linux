@@ -1265,6 +1265,7 @@ static inline int of_pci_get_equalization_presets(struct device *dev,
 struct of_changeset;
 
 #ifdef CONFIG_PCI_DYNAMIC_OF_NODES
+void of_pci_verify_node(struct pci_dev *pdev);
 void of_pci_make_dev_node(struct pci_dev *pdev);
 void of_pci_remove_node(struct pci_dev *pdev);
 int of_pci_add_properties(struct pci_dev *pdev, struct of_changeset *ocs,
@@ -1275,6 +1276,7 @@ int of_pci_add_host_bridge_properties(struct pci_host_bridge *bridge,
 				      struct of_changeset *ocs,
 				      struct device_node *np);
 #else
+static inline void of_pci_verify_node(struct pci_dev *pdev) { }
 static inline void of_pci_make_dev_node(struct pci_dev *pdev) { }
 static inline void of_pci_remove_node(struct pci_dev *pdev) { }
 static inline void of_pci_make_host_bridge_node(struct pci_host_bridge *bridge) { }

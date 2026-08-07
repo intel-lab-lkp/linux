@@ -663,6 +663,33 @@ void of_pci_remove_node(struct pci_dev *pdev)
 	of_node_put(np);
 }
 
+void of_pci_verify_node(struct pci_dev *pdev)
+{
+	struct device_node *np = pci_device_to_OF_node(pdev);
+
+	/* If there's no pre-existing node, there's nothing to check */
+	if (!np)
+		return;
+
+	/*
+	 * Check a pre-existing devicetree node for errors.  The PCI
+	 * enumeration process gathered a lot of information about
+	 * the device, and ideally it matches what the devicetree
+	 * node says.
+	 */
+	if (pci_is_bridge(pdev))
+		return;
+
+	/*
+	 * Currently we just verify that non-bridges don't contain a
+	 * device_type = "pci" property.
+	 */
+	if (!of_node_is_type(np, "pci"))
+		return;
+
+	dev_err(&pdev->dev, "\"pci\" device_type NOT VALID for PCI endpoint\n");
+}
+
 void of_pci_make_dev_node(struct pci_dev *pdev)
 {
 	struct device_node *ppnode, *np = NULL;
