@@ -907,6 +907,8 @@ found:
 fail_max_buses:
 	dev->sriov = NULL;
 	dev->is_physfn = 0;
+	if (iov->dev != dev)
+		pci_dev_put(iov->dev);
 failed:
 	for (i = 0; i < PCI_SRIOV_NUM_BARS; i++) {
 		res = &dev->resource[pci_resource_num_from_vf_bar(i)];
