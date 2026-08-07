@@ -147,9 +147,9 @@ static void cmci_set_threshold(int bank, int thresh)
 	raw_spin_unlock_irqrestore(&cmci_discover_lock, flags);
 }
 
-void mce_intel_handle_storm(int bank, bool on)
+void mce_intel_handle_storm(int bank, bool in_storm_mode)
 {
-	if (on)
+	if (in_storm_mode)
 		cmci_set_threshold(bank, CMCI_STORM_THRESHOLD);
 	else
 		cmci_set_threshold(bank, cmci_threshold[bank]);

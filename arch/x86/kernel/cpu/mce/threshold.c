@@ -70,14 +70,14 @@ void mce_set_storm_mode(bool storm)
 	__this_cpu_write(storm_desc.poll_mode, storm);
 }
 
-static void mce_handle_storm(unsigned int bank, bool on)
+static void mce_handle_storm(unsigned int bank, bool in_storm_mode)
 {
 	switch (boot_cpu_data.x86_vendor) {
 	case X86_VENDOR_INTEL:
-		mce_intel_handle_storm(bank, on);
+		mce_intel_handle_storm(bank, in_storm_mode);
 		break;
 	case X86_VENDOR_AMD:
-		mce_amd_handle_storm(bank, on);
+		mce_amd_handle_storm(bank, in_storm_mode);
 		break;
 	}
 }
