@@ -1722,7 +1722,11 @@ const struct snd_kcontrol_new *snd_usb_feature_unit_ctl = &usb_feature_unit_ctl;
  */
 static size_t append_ctl_name(struct snd_kcontrol *kctl, const char *str)
 {
-	return strlcat(kctl->id.name, str, sizeof(kctl->id.name));
+	size_t len = strlen(kctl->id.name);
+
+	strscpy(kctl->id.name + len, str, sizeof(kctl->id.name) - len);
+
+	return len + strlen(str);
 }
 
 /*
@@ -2090,7 +2094,7 @@ static void build_connector_control(struct usb_mixer_interface *mixer,
 	}
 
 	if (check_mapped_name(map, kctl->id.name, sizeof(kctl->id.name)))
-		strlcat(kctl->id.name, " Jack", sizeof(kctl->id.name));
+		append_ctl_name(kctl, " Jack");
 	else
 		get_connector_control_name(mixer, term, is_input, kctl->id.name,
 					   sizeof(kctl->id.name));
