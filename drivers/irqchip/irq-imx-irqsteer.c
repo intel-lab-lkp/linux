@@ -236,6 +236,10 @@ static int imx_irqsteer_probe(struct platform_device *pdev)
 	if (irqsteer_has_chanctrl(data->devtype_data))
 		writel_relaxed(BIT(data->channel), data->regs + CHANCTRL);
 
+	/* mask all interrupts before setting up the chained handlers */
+	for (i = 0; i < data->reg_num; i++)
+		writel_relaxed(0, data->regs + CHANMASK(i, data->reg_num));
+
 	data->domain = irq_domain_create_linear(dev_fwnode(&pdev->dev), data->reg_num * 32,
 						&imx_irqsteer_domain_ops, data);
 	if (!data->domain) {
@@ -278,6 +282,11 @@ static void imx_irqsteer_remove(struct platform_device *pdev)
 {
 	struct irqsteer_data *irqsteer_data = platform_get_drvdata(pdev);
 	int hwirq, i;
+
+	/* mask all interrupts so a stale line cannot storm on the next probe */
+	for (i = 0; i < irqsteer_data->reg_num; i++)
+		writel_relaxed(0, irqsteer_data->regs +
+			       CHANMASK(i, irqsteer_data->reg_num));
 
 	for (i = 0; i < irqsteer_data->irq_count; i++) {
 		if (!irqsteer_data->irq[i])
