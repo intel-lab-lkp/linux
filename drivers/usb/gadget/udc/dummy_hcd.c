@@ -1504,11 +1504,13 @@ top:
 				req->req.status = 0;
 				*status = 0;
 			} else if (to_host) {
+				/*
+				 * Host requested fewer bytes than the gadget
+				 * request currently has pending. This is a
+				 * normal bounded IN transfer, not overflow.
+				 */
 				req->req.status = 0;
-				if (dev_len > host_len)
-					*status = -EOVERFLOW;
-				else
-					*status = 0;
+				*status = 0;
 			} else {
 				*status = 0;
 				if (host_len > dev_len)
