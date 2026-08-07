@@ -3881,12 +3881,10 @@ int folio_check_splittable(struct folio *folio, unsigned int new_order,
 	VM_WARN_ON_FOLIO(!folio_test_locked(folio), folio);
 	/*
 	 * Folios that just got truncated cannot get split. Signal to the
-	 * caller that there was a race.
-	 *
-	 * TODO: this will also currently refuse folios without a mapping in the
-	 * swapcache (shmem or to-be-anon folios).
+	 * caller that there was a race. A mappingless swap cache folio
+	 * has no page cache entries to update, so it is fine to split.
 	 */
-	if (!folio->mapping && !is_anon)
+	if (!folio->mapping && !is_swapcache)
 		return -EBUSY;
 
 	/* order-1 is not supported for anonymous THP. */
@@ -3931,11 +3929,12 @@ static unsigned int folio_cache_ref_count(const struct folio *folio)
 	return folio_nr_pages(folio);
 }
 
-static int __folio_freeze_split_unmap_anon(struct folio *folio, unsigned int new_order,
-					   struct page *split_at, bool do_lru, bool unmap,
-					   struct list_head *list, enum split_type split_type)
+static int __folio_freeze_split_unmap(struct folio *folio, unsigned int new_order,
+				      struct page *split_at, bool do_lru, bool anon_unmap,
+				      struct list_head *list, enum split_type split_type)
 {
 	struct folio *end_folio = folio_next(folio);
+	bool is_anon = folio_test_anon(folio);
 	struct swap_cluster_info *ci = NULL;
 	struct folio *new_folio;
 	int old_order = folio_order(folio);
@@ -3953,7 +3952,7 @@ static int __folio_freeze_split_unmap_anon(struct folio *folio, unsigned int new
 	 * similar to folio_lock_anon_vma_read() except the write lock is
 	 * taken to serialize against parallel split or collapse.
 	 */
-	if (unmap) {
+	if (anon_unmap) {
 		anon_vma = folio_get_anon_vma(folio);
 		if (!anon_vma)
 			return -EBUSY;
@@ -3966,7 +3965,7 @@ static int __folio_freeze_split_unmap_anon(struct folio *folio, unsigned int new
 		goto out_unlock;
 	}
 
-	if (unmap)
+	if (anon_unmap)
 		unmap_folio(folio);
 
 	local_irq_disable();
@@ -3977,8 +3976,11 @@ static int __folio_freeze_split_unmap_anon(struct folio *folio, unsigned int new
 	 * a 0-ref folio, it assumes it beat folio_put() to the list
 	 * lock and must clean up the LRU state - the same dequeue we
 	 * will do below as part of the split.
+	 *
+	 * Only anon folios are ever queued on the deferred split list,
+	 * so non-anon folios (mappingless swapcache) never need dequeuing.
 	 */
-	dequeue_deferred = old_order > 1;
+	dequeue_deferred = old_order > 1 && is_anon;
 	if (dequeue_deferred) {
 		struct mem_cgroup *memcg;
 
@@ -4047,13 +4049,13 @@ static int __folio_freeze_split_unmap_anon(struct folio *folio, unsigned int new
 		swap_cluster_unlock(ci);
 out_no_split:
 	local_irq_enable();
-	if (unmap) {
+	if (anon_unmap) {
 		if (!ret && !folio_is_device_private(folio))
 			ttu_flags = TTU_USE_SHARED_ZEROPAGE;
 		remap_page(folio, 1 << old_order, ttu_flags);
 	}
 out_unlock:
-	if (anon_vma) {
+	if (anon_unmap) {
 		anon_vma_unlock_write(anon_vma);
 		put_anon_vma(anon_vma);
 	}
@@ -4257,6 +4259,7 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 		struct page *split_at, struct page *lock_at,
 		struct list_head *list, enum split_type split_type)
 {
+	bool is_swapcache = folio_test_swapcache(folio);
 	struct folio *end_folio = folio_next(folio);
 	bool is_anon = folio_test_anon(folio);
 	int old_order = folio_order(folio);
@@ -4283,8 +4286,11 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 	}
 
 	if (is_anon)
-		ret = __folio_freeze_split_unmap_anon(folio, new_order, split_at, true,
-						      true, list, split_type);
+		ret = __folio_freeze_split_unmap(folio, new_order, split_at, true,
+						 true, list, split_type);
+	else if (is_swapcache)
+		ret = __folio_freeze_split_unmap(folio, new_order, split_at, true,
+						 false, list, split_type);
 	else
 		ret = __folio_freeze_split_unmap_file(folio, new_order, split_at,
 						      true, list, split_type);
@@ -4344,8 +4350,8 @@ int folio_split_unmapped(struct folio *folio, unsigned int new_order)
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_large(folio), folio);
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_anon(folio), folio);
 
-	return __folio_freeze_split_unmap_anon(folio, new_order, &folio->page, false,
-					       false, NULL, SPLIT_TYPE_UNIFORM);
+	return __folio_freeze_split_unmap(folio, new_order, &folio->page, false,
+					  false, NULL, SPLIT_TYPE_UNIFORM);
 }
 
 /*
