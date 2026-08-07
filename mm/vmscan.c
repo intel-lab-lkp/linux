@@ -4923,7 +4923,9 @@ retry:
 
 		if (!folio_evictable(folio)) {
 			list_del(&folio->lru);
+			spin_lock_irq(&lruvec->lru_lock);
 			folio_putback_lru(folio);
+			spin_unlock_irq(&lruvec->lru_lock);
 			continue;
 		}
 
