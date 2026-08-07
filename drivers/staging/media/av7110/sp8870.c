@@ -68,7 +68,8 @@ static int sp8870_writereg(struct sp8870_state *state, u16 reg, u16 data)
 
 	err = i2c_transfer(state->i2c, &msg, 1);
 	if (err != 1) {
-		dprintk("writereg error (err == %i, reg == 0x%02x, data == 0x%02x)\n", err, reg, data);
+		dprintk("writereg error (err == %i, reg == 0x%02x, data == 0x%02x)\n",
+			err, reg, data);
 		return -EREMOTEIO;
 	}
 
@@ -135,7 +136,7 @@ static int sp8870_firmware_upload(struct sp8870_state *state, const struct firmw
 		if (err != 1) {
 			pr_err("%s(): firmware upload failed!\n", __func__);
 			pr_err("%s(): i2c error (err == %i)\n", __func__, err);
-			return err;
+			return err < 0 ? err : -EREMOTEIO;
 		}
 		fw_pos += tx_len;
 	}
@@ -315,7 +316,6 @@ static int sp8870_init(struct dvb_frontend *fe)
 	sp8870_wake_up(state);
 	if (state->initialised)
 		return 0;
-	state->initialised = 1;
 
 	dprintk("initialising frontend...\n");
 
@@ -352,6 +352,8 @@ static int sp8870_init(struct dvb_frontend *fe)
 	/* bit 0x010: enable data valid signal */
 	sp8870_writereg(state, 0x0D00, 0x010);
 	sp8870_writereg(state, 0x0D01, 0x000);
+
+	state->initialised = 1;
 
 	return 0;
 }
@@ -401,7 +403,7 @@ static int sp8870_read_ber(struct dvb_frontend *fe, u32 *ber)
 	if (ret < 0)
 		return -EIO;
 
-	tmp = ret << 6;
+	tmp |= ret << 6;
 	if (tmp >= 0x3FFF0)
 		tmp = ~0;
 
@@ -511,7 +513,8 @@ static int sp8870_set_frontend(struct dvb_frontend *fe)
 		if (valid) {
 			if (trials > 1) {
 				pr_info("%s(): firmware lockup!!!\n", __func__);
-				pr_info("%s(): recovered after %i trial(s))\n",  __func__, trials - 1);
+				pr_info("%s(): recovered after %i trial(s))\n",
+					__func__, trials - 1);
 				lockups++;
 			}
 		}
@@ -530,7 +533,8 @@ static int sp8870_sleep(struct dvb_frontend *fe)
 	return sp8870_writereg(state, 0xC18, 0x000);
 }
 
-static int sp8870_get_tune_settings(struct dvb_frontend *fe, struct dvb_frontend_tune_settings *fesettings)
+static int sp8870_get_tune_settings(struct dvb_frontend *fe,
+				    struct dvb_frontend_tune_settings *fesettings)
 {
 	fesettings->min_delay_ms = 350;
 	fesettings->step_size = 0;
