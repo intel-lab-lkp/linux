@@ -70,8 +70,8 @@ static int hiface_chip_create(struct usb_interface *intf,
 	else
 		strscpy(card->shortname, "M2Tech generic audio", sizeof(card->shortname));
 
-	strlcat(card->longname, card->shortname, sizeof(card->longname));
-	len = strlcat(card->longname, " at ", sizeof(card->longname));
+	len = scnprintf(card->longname, sizeof(card->longname), "%s at ",
+			card->shortname);
 	if (len < sizeof(card->longname))
 		usb_make_path(device, card->longname + len,
 			      sizeof(card->longname) - len);
