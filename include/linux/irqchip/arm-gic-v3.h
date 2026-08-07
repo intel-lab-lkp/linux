@@ -657,6 +657,45 @@ static inline bool gic_enable_sre(void)
 	return !!(val & ICC_SRE_EL1_SRE);
 }
 
+/*
+ * The ITS_BASER structure - contains memory information, cached
+ * value of BASER register configuration and ITS page size.
+ */
+struct its_baser {
+	void		*base;
+
+	/*
+	 * The table used when emulation is in place and indirect layout is
+	 * configured.
+	 */
+	void		*base_snapshot;
+	u64		val;
+	u32		order;
+	u32		psz;
+};
+
+struct its_host_state {
+	struct its_baser	tables[GITS_BASER_NR_REGS];
+
+	/* The command queue used after the emulation is in place */
+	void			*cmd_host_copy;
+
+	/* The command queue configured by the ITS driver at boot */
+	void			*cmd_original;
+	void			*cmd_write;
+	size_t			cmdq_len;
+};
+
+/*
+ * Callback used to initialize the emulation. It is expected to allocate memory for the private
+ * state of the emulation and receive as arguments copy of the host ITS driver state along
+ * with the address of the ITS.
+ */
+typedef int (*its_emulate_setup)(phys_addr_t its_phys_base, struct its_host_state *host);
+
+void its_emulate_acquire_locks(unsigned long *flags);
+int its_emulate_release_locks(int ret_pkvm_finalize, unsigned long *flags, its_emulate_setup cb);
+
 #endif
 
 #endif
