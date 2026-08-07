@@ -86,7 +86,7 @@ where
     type CallbackTarget<'b> = Self;
 
     unsafe extern "C" fn run(ptr: *mut bindings::hrtimer) -> bindings::hrtimer_restart {
-        // `HrTimer` is `repr(C)`
+        // `HrTimer` is `repr(transparent)`
         let timer_ptr = ptr.cast::<HrTimer<T>>();
 
         // SAFETY: By the safety requirement of this function, `timer_ptr`
