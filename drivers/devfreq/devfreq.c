@@ -28,6 +28,7 @@
 #include <linux/hrtimer.h>
 #include <linux/of.h>
 #include <linux/pm_qos.h>
+#include <linux/seq_buf.h>
 #include <linux/units.h>
 
 #define CREATE_TRACE_POINTS
@@ -1661,9 +1662,10 @@ static ssize_t trans_stat_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
 	struct devfreq *df = to_devfreq(dev);
-	ssize_t len = 0;
-	int i, j;
 	unsigned int max_state;
+	struct seq_buf s;
+	ssize_t len;
+	int i, j;
 
 	if (!df->profile)
 		return -EINVAL;
@@ -1671,6 +1673,8 @@ static ssize_t trans_stat_show(struct device *dev,
 
 	if (max_state == 0)
 		return sysfs_emit(buf, "Not Supported.\n");
+
+	seq_buf_init(&s, buf, PAGE_SIZE);
 
 	mutex_lock(&df->lock);
 	if (!df->stop_polling &&
@@ -1680,47 +1684,39 @@ static ssize_t trans_stat_show(struct device *dev,
 	}
 	mutex_unlock(&df->lock);
 
-	len += sysfs_emit_at(buf, len, "     From  :   To\n");
-	len += sysfs_emit_at(buf, len, "           :");
-	for (i = 0; i < max_state; i++) {
-		if (len >= PAGE_SIZE - 1)
-			break;
-		len += sysfs_emit_at(buf, len, "%10lu",
-				     df->freq_table[i]);
-	}
+	seq_buf_printf(&s, "     From  :   To\n");
+	seq_buf_printf(&s, "           :");
+	for (i = 0; i < max_state; i++)
+		seq_buf_printf(&s, "%10lu", df->freq_table[i]);
 
-	if (len >= PAGE_SIZE - 1)
-		return PAGE_SIZE - 1;
-	len += sysfs_emit_at(buf, len, "   time(ms)\n");
+	seq_buf_printf(&s, "   time(ms)\n");
 
 	for (i = 0; i < max_state; i++) {
-		if (len >= PAGE_SIZE - 1)
-			break;
 		if (df->freq_table[i] == df->previous_freq)
-			len += sysfs_emit_at(buf, len, "*");
+			seq_buf_printf(&s, "*");
 		else
-			len += sysfs_emit_at(buf, len, " ");
-		if (len >= PAGE_SIZE - 1)
-			break;
-		len += sysfs_emit_at(buf, len, "%10lu:", df->freq_table[i]);
+			seq_buf_printf(&s, " ");
+		seq_buf_printf(&s, "%10lu:", df->freq_table[i]);
 		for (j = 0; j < max_state; j++) {
-			if (len >= PAGE_SIZE - 1)
-				break;
-			len += sysfs_emit_at(buf, len, "%10u",
-				df->stats.trans_table[(i * max_state) + j]);
+			seq_buf_printf(&s, "%10u",
+				       df->stats.trans_table[(i * max_state) + j]);
 		}
-		if (len >= PAGE_SIZE - 1)
-			break;
-		len += sysfs_emit_at(buf, len, "%10llu\n", (u64)
-				     jiffies64_to_msecs(df->stats.time_in_state[i]));
+		seq_buf_printf(&s, "%10llu\n", (u64)
+			       jiffies64_to_msecs(df->stats.time_in_state[i]));
 	}
 
-	if (len < PAGE_SIZE - 1)
-		len += sysfs_emit_at(buf, len, "Total transition : %u\n",
-				     df->stats.total_trans);
-	if (len >= PAGE_SIZE - 1) {
-		pr_warn_once("devfreq transition table exceeds PAGE_SIZE. Disabling\n");
-		return -EFBIG;
+	seq_buf_printf(&s, "Total transition : %u\n", df->stats.total_trans);
+	len = seq_buf_used(&s);
+	/*
+	 * If an overflow occurs, seq_buf_used() can return a value greater
+	 * than PAGE_SIZE. Clamp the return length to PAGE_SIZE - 1 and
+	 * ensure a null-terminator is written to prevent the sysfs
+	 * "bad count" or out-of-bounds warning.
+	 */
+	if (seq_buf_has_overflowed(&s)) {
+		pr_warn_ratelimited("devfreq transition table truncated due to PAGE_SIZE limit\n");
+		len = PAGE_SIZE - 1;
+		buf[len] = '\0';
 	}
 
 	return len;
