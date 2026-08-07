@@ -672,7 +672,8 @@ out_free_doorbells:
 
 /*
  * Claim and populate a VMTE (optionally making a new L2 VMT valid), create VPE
- * doorbells, allocate VPET and populate for each VPE.
+ * doorbells, allocate VPET and populate for each VPE. Finally, we also init the
+ * vIRS, which means allocating and making the virtual SPI IST valid.
  *
  * Note: We do need to put the cart before the horse here. The VPE doorbells are
  * our conduit for communication with the IRS, which means we need to have those
@@ -750,6 +751,11 @@ int vgic_v5_init(struct kvm *kvm)
 		if (ret)
 			goto err;
 	}
+
+	/* Init IRS (and alloc SPI IST) */
+	ret = kvm_vgic_v5_irs_init(kvm, kvm->arch.vgic.nr_spis);
+	if (ret)
+		goto err;
 
 	return 0;
 
