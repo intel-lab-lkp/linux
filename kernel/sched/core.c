@@ -7069,9 +7069,13 @@ static void __sched notrace __schedule(int sched_mode)
 	bool is_switch = false;
 	unsigned long *switch_count;
 	unsigned long prev_state;
+	unsigned int kcov_paused;
 	struct rq_flags rf;
 	struct rq *rq;
 	int cpu;
+
+	/* KCOV: sched/ is uninstrumented but the __schedule() callees are not. */
+	kcov_paused = kcov_pause(current);
 
 	/* Trace preemptions consistently with task switches */
 	trace_sched_entry_tp(sched_mode == SM_PREEMPT);
@@ -7239,6 +7243,7 @@ keep_resched:
 		raw_spin_rq_unlock_irq(rq);
 	}
 	trace_sched_exit_tp(is_switch);
+	kcov_resume(current, kcov_paused);
 }
 
 void __noreturn do_task_dead(void)
