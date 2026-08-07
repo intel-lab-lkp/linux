@@ -284,6 +284,26 @@ static int fix_hyp_pgtable_refcnt(void)
 				&walker);
 }
 
+static int donate_protected_mmio_regions(void)
+{
+	int ret;
+	int i;
+
+	for (i = 0; i < num_protected_reg; i++) {
+		ret = __pkvm_host_donate_hyp_mmio(hyp_pfn_to_phys(pkvm_protected_regs[i].pfn),
+						  pkvm_protected_regs[i].nr_pages << PAGE_SHIFT);
+		if (ret)
+			goto err_setup;
+	}
+
+	return 0;
+err_setup:
+	while (--i >= 0)
+		__pkvm_hyp_donate_host_mmio(hyp_pfn_to_phys(pkvm_protected_regs[i].pfn),
+					    pkvm_protected_regs[i].nr_pages << PAGE_SHIFT);
+	return ret;
+}
+
 void __noreturn __pkvm_init_finalise(void)
 {
 	struct kvm_cpu_context *host_ctxt = host_data_ptr(host_ctxt);
@@ -321,6 +341,10 @@ void __noreturn __pkvm_init_finalise(void)
 		goto out;
 
 	ret = fix_host_ownership();
+	if (ret)
+		goto out;
+
+	ret = donate_protected_mmio_regions();
 	if (ret)
 		goto out;
 
