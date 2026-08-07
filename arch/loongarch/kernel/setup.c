@@ -20,6 +20,7 @@
 #include <linux/initrd.h>
 #include <linux/ioport.h>
 #include <linux/kexec.h>
+#include <linux/kexec_handover.h>
 #include <linux/crash_dump.h>
 #include <linux/root_dev.h>
 #include <linux/console.h>
@@ -279,6 +280,45 @@ static void __init arch_reserve_crashkernel(void)
 
 	reserve_crashkernel_generic(crash_size, crash_base, low_size, high);
 }
+
+#ifdef CONFIG_KEXEC_HANDOVER
+/*
+ * On a KHO kexec boot the previous kernel registered a handover blob in the EFI
+ * configuration table under LINUX_EFI_KHO_TABLE_GUID (see
+ * arch/loongarch/kernel/machine_kexec_file.c).  Scan the configuration table
+ * for it, read the KHO state FDT and scratch addresses, and hand them to the
+ * KHO core.  fw_arg2 is the EFI system table physical address.
+ *
+ * This runs from setup_arch(), after efi_init() and before memblock_init(),
+ * which is where the generic reader early_init_dt_check_kho() would call
+ * kho_populate().
+ */
+static void __init kho_populate_from_efi(void)
+{
+	efi_system_table_t *st;
+	efi_config_table_t *ct;
+	struct linux_efi_kho_data *kho;
+	unsigned long i;
+
+	if (!fw_arg2)
+		return;
+
+	st = (efi_system_table_t *)TO_CACHE(fw_arg2);
+	ct = (efi_config_table_t *)TO_CACHE((unsigned long)st->tables);
+
+	for (i = 0; i < st->nr_tables; i++) {
+		if (efi_guidcmp(ct[i].guid, LINUX_EFI_KHO_TABLE_GUID))
+			continue;
+
+		kho = (struct linux_efi_kho_data *)TO_CACHE((unsigned long)ct[i].table);
+		kho_populate(kho->fdt_addr, kho->fdt_size,
+			     kho->scratch_addr, kho->scratch_size);
+		break;
+	}
+}
+#else
+static void __init kho_populate_from_efi(void) { }
+#endif
 
 static void __init fdt_setup(void)
 {
@@ -599,6 +639,7 @@ void __init setup_arch(char **cmdline_p)
 
 	init_environ();
 	efi_init();
+	kho_populate_from_efi();
 	fdt_setup();
 	memblock_init();
 	pagetable_init();

@@ -6,6 +6,7 @@
  */
 #include <linux/compiler.h>
 #include <linux/cpu.h>
+#include <linux/efi.h>
 #include <linux/kexec.h>
 #include <linux/crash_dump.h>
 #include <linux/delay.h>
@@ -283,6 +284,21 @@ void machine_kexec(struct kimage *image)
 	pr_notice("System table addr: 0x%lx\n", systable_ptr);
 	pr_notice("We will call new kernel at 0x%lx\n", start_addr);
 	pr_notice("Bye ...\n");
+
+#ifdef CONFIG_KEXEC_HANDOVER
+	/*
+	 * KHO: switch the EFI system table to the extended configuration table
+	 * built in kho_load_data(), which carries the LINUX_EFI_KHO_TABLE_GUID
+	 * entry the next kernel reads to find the KHO handover blob.
+	 */
+	if (internal->efi_tables_mem) {
+		efi_system_table_t *st =
+			(efi_system_table_t *)TO_CACHE(systable_ptr);
+
+		st->tables    = internal->efi_tables_mem;
+		st->nr_tables = internal->efi_tables_cnt;
+	}
+#endif
 
 	/* Make reboot code buffer available to the boot CPU. */
 	flush_cache_all();

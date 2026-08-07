@@ -10,6 +10,7 @@
 
 #define pr_fmt(fmt) "kexec_file: " fmt
 
+#include <linux/efi.h>
 #include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/kexec.h>
@@ -18,6 +19,7 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/vmalloc.h>
+#include <asm/addrspace.h>
 #include <asm/bootinfo.h>
 
 const struct kexec_file_ops * const kexec_file_loaders[] = {
@@ -31,6 +33,13 @@ int arch_kimage_file_post_load_cleanup(struct kimage *image)
 	vfree(image->elf_headers);
 	image->elf_headers = NULL;
 	image->elf_headers_sz = 0;
+
+#ifdef CONFIG_KEXEC_HANDOVER
+	kfree(image->arch.kho_data);
+	image->arch.kho_data = NULL;
+	kvfree(image->arch.efi_tables);
+	image->arch.efi_tables = NULL;
+#endif
 
 	return kexec_image_post_load_cleanup_default(image);
 }
@@ -54,6 +63,121 @@ static void cmdline_add_initrd(struct kimage *image, unsigned long *cmdline_tmpl
 		initrd, image->initrd_buf_len);
 	*cmdline_tmplen += initrd_strlen;
 }
+
+#ifdef CONFIG_KEXEC_HANDOVER
+/*
+ * Hand the KHO state to the next kernel through a dedicated EFI configuration
+ * table entry.
+ *
+ * LoongArch has no boot FDT: the efistub passes the EFI system table and the
+ * command line to the core kernel directly.  So instead of the arm64 /chosen
+ * FDT path, build a small handover blob (struct linux_efi_kho_data) holding the
+ * KHO state FDT and scratch addresses, register it in the EFI configuration
+ * table under LINUX_EFI_KHO_TABLE_GUID, and let the next kernel read it and
+ * call kho_populate() directly.
+ *
+ * Both the blob and the extended configuration table are loaded as kexec
+ * segments; machine_kexec() switches st->tables to the new table before jumping.
+ *
+ * image->kho.fdt and image->kho.scratch are filled in by kho_fill_kimage()
+ * before the arch loader runs, so they are valid here.
+ */
+static int kho_load_data(struct kimage *image)
+{
+	struct linux_efi_kho_data *kho;
+	efi_system_table_t *st;
+	efi_config_table_t *ct, *new_ct;
+	size_t old_sz, new_sz;
+	struct kexec_buf kbuf = {
+		.image		= image,
+		.buf_min	= 0,
+		.buf_max	= ULONG_MAX,
+		.top_down	= true,
+	};
+	int ret;
+
+	if (!image->kho.fdt || !image->kho.scratch)
+		return 0;
+
+	if (!fw_arg2) {
+		pr_err("KHO requires an EFI boot, no EFI system table found\n");
+		return -EINVAL;
+	}
+
+	/* Build the handover blob and load it as a kexec segment. */
+	kho = kzalloc(sizeof(*kho), GFP_KERNEL);
+	if (!kho)
+		return -ENOMEM;
+
+	kho->fdt_addr     = image->kho.fdt;
+	kho->fdt_size     = PAGE_SIZE;
+	kho->scratch_addr = image->kho.scratch->mem;
+	kho->scratch_size = image->kho.scratch->memsz;
+
+	kbuf.buffer	= kho;
+	kbuf.bufsz	= sizeof(*kho);
+	kbuf.memsz	= sizeof(*kho);
+	kbuf.buf_align	= sizeof(u64);
+	kbuf.mem	= KEXEC_BUF_MEM_UNKNOWN;
+
+	ret = kexec_add_buffer(&kbuf);
+	if (ret) {
+		kfree(kho);
+		return ret;
+	}
+	image->arch.kho_data	 = kho;
+	image->arch.kho_data_mem = kbuf.mem;
+
+	kexec_dprintk("Loaded KHO handover blob at 0x%lx bufsz=0x%lx memsz=0x%lx\n",
+		      image->arch.kho_data_mem, kbuf.bufsz, kbuf.memsz);
+	kexec_dprintk("KHO fdt at 0x%llx, scratch at 0x%llx size 0x%llx\n",
+		      kho->fdt_addr, kho->scratch_addr, kho->scratch_size);
+
+	/*
+	 * Build a new EFI configuration table with a LINUX_EFI_KHO_TABLE_GUID
+	 * entry appended, pointing at the handover blob, and load it as a kexec
+	 * segment.  machine_kexec() updates st->tables / st->nr_tables to point
+	 * to it before jumping.
+	 *
+	 * fw_arg2 is the EFI system table physical address passed by the
+	 * firmware/bootloader.  Use it directly because image->arch.systable_ptr
+	 * is set later in machine_kexec_prepare(), which runs after this.
+	 */
+	st = (efi_system_table_t *)TO_CACHE(fw_arg2);
+	ct = (efi_config_table_t *)TO_CACHE((unsigned long)st->tables);
+	old_sz = st->nr_tables * sizeof(efi_config_table_t);
+	new_sz = old_sz + sizeof(efi_config_table_t);
+
+	new_ct = kvmalloc(new_sz, GFP_KERNEL);
+	if (!new_ct)
+		return -ENOMEM;
+
+	memcpy(new_ct, ct, old_sz);
+	new_ct[st->nr_tables].guid  = LINUX_EFI_KHO_TABLE_GUID;
+	new_ct[st->nr_tables].table = (void *)image->arch.kho_data_mem;
+
+	kbuf.buffer	= new_ct;
+	kbuf.bufsz	= new_sz;
+	kbuf.memsz	= new_sz;
+	kbuf.buf_align	= sizeof(void *);
+	kbuf.mem	= KEXEC_BUF_MEM_UNKNOWN;
+
+	ret = kexec_add_buffer(&kbuf);
+	if (ret) {
+		kvfree(new_ct);
+		return ret;
+	}
+	image->arch.efi_tables	   = new_ct;
+	image->arch.efi_tables_mem = kbuf.mem;
+	image->arch.efi_tables_cnt = st->nr_tables + 1;
+
+	kexec_dprintk("Loaded EFI config table at 0x%lx bufsz=0x%lx memsz=0x%lx nr_tables=%lu\n",
+		      image->arch.efi_tables_mem, kbuf.bufsz, kbuf.memsz,
+		      image->arch.efi_tables_cnt);
+
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_CRASH_DUMP
 
@@ -219,6 +343,13 @@ int load_other_segments(struct kimage *image,
 		/* Add the initrd=start,size parameter to the command line */
 		cmdline_add_initrd(image, &cmdline_tmplen, modified_cmdline, initrd_load_addr);
 	}
+
+#ifdef CONFIG_KEXEC_HANDOVER
+	/* Load the KHO handover blob and the extended EFI configuration table */
+	ret = kho_load_data(image);
+	if (ret)
+		goto out_err;
+#endif
 
 	if (cmdline_len + cmdline_tmplen > COMMAND_LINE_SIZE) {
 		pr_err("Appending command line exceeds COMMAND_LINE_SIZE\n");

@@ -39,6 +39,13 @@ struct kimage_arch {
 	unsigned long efi_boot;
 	unsigned long cmdline_ptr;
 	unsigned long systable_ptr;
+#ifdef CONFIG_KEXEC_HANDOVER
+	void *kho_data;			/* KHO handover blob buffer (virtual) */
+	unsigned long kho_data_mem;	/* physical address of the KHO handover blob */
+	void *efi_tables;		/* new EFI config table buffer (virtual) */
+	unsigned long efi_tables_mem;	/* physical address of new EFI config table */
+	unsigned long efi_tables_cnt;	/* number of entries in new EFI config table */
+#endif
 };
 
 struct kimage;
