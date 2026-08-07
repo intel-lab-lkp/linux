@@ -5862,7 +5862,7 @@ static int virtnet_rq_bind_xsk_pool(struct virtnet_info *vi, struct receive_queu
 
 	rq->xsk_pool = pool;
 
-	virtnet_rx_resume(vi, rq, true);
+	virtnet_rx_resume(vi, rq, qindex < vi->curr_queue_pairs);
 
 	if (pool)
 		return 0;
@@ -5973,10 +5973,11 @@ err_sq:
 err_rq:
 	xsk_pool_dma_unmap(pool, 0);
 err_xsk_map:
-	virtqueue_unmap_single_attrs(rq->vq, hdr_dma, vi->hdr_len,
+	virtqueue_unmap_single_attrs(sq->vq, hdr_dma, vi->hdr_len,
 				     DMA_TO_DEVICE, 0);
 err_free_buffs:
 	kvfree(rq->xsk_buffs);
+	rq->xsk_buffs = NULL;
 	return err;
 }
 
@@ -5988,7 +5989,12 @@ static int virtnet_xsk_pool_disable(struct net_device *dev, u16 qid)
 	struct send_queue *sq;
 	int err;
 
-	if (qid >= vi->curr_queue_pairs)
+	/* rq/sq are sized by max_queue_pairs.  Allow cleanup even if
+	 * curr_queue_pairs has shrunk below qid (e.g. after XDP detach),
+	 * otherwise disable fails, leaks mappings/xsk_buffs, and leaves
+	 * dangling rq/sq->xsk_pool pointers to a soon-to-be-freed pool.
+	 */
+	if (qid >= vi->max_queue_pairs)
 		return -EINVAL;
 
 	sq = &vi->sq[qid];
@@ -5999,11 +6005,17 @@ static int virtnet_xsk_pool_disable(struct net_device *dev, u16 qid)
 	err = virtnet_rq_bind_xsk_pool(vi, rq, NULL);
 	err |= virtnet_sq_bind_xsk_pool(vi, sq, NULL);
 
-	xsk_pool_dma_unmap(pool, 0);
+	if (pool)
+		xsk_pool_dma_unmap(pool, 0);
 
-	virtqueue_unmap_single_attrs(sq->vq, sq->xsk_hdr_dma_addr,
-				     vi->hdr_len, DMA_TO_DEVICE, 0);
+	if (sq->xsk_hdr_dma_addr) {
+		virtqueue_unmap_single_attrs(sq->vq, sq->xsk_hdr_dma_addr,
+					     vi->hdr_len, DMA_TO_DEVICE, 0);
+		sq->xsk_hdr_dma_addr = 0;
+	}
+
 	kvfree(rq->xsk_buffs);
+	rq->xsk_buffs = NULL;
 
 	return err;
 }
