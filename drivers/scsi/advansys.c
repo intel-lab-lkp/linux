@@ -4169,7 +4169,7 @@ static void AdvBuildCarrierFreelist(struct adv_dvc_var *adv_dvc)
 		adv_dvc->carrier[i].carr_va = cpu_to_le32(carr_offset);
 		adv_dvc->carrier[i].areq_vpa = 0;
 		next_offset = carr_offset + sizeof(ADV_CARR_T);
-		if (i == carr_num)
+		if (i == carr_num - 1)
 			next_offset = ~0;
 		adv_dvc->carrier[i].next_vpa = cpu_to_le32(next_offset);
 	}
