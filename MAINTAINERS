@@ -11475,6 +11475,12 @@ L:	linux-rdma@vger.kernel.org
 S:	Supported
 F:	drivers/infiniband/hw/hfi1
 
+HFI2 DRIVER
+M:	Dennis Dalessandro <dennis.dalessandro@cornelisnetworks.com>
+L:	linux-rdma@vger.kernel.org
+S:	Supported
+F:	drivers/infiniband/hw/hfi2
+
 HFS FILESYSTEM
 M:	Viacheslav Dubeyko <slava@dubeyko.com>
 M:	John Paul Adrian Glaubitz <glaubitz@physik.fu-berlin.de>
