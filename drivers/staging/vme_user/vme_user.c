@@ -213,7 +213,7 @@ static ssize_t vme_user_read(struct file *file, char __user *buf, size_t count,
 	image_size = vme_get_size(image[minor].resource);
 
 	/* Ensure we are starting at a valid location */
-	if ((*ppos < 0) || (*ppos > (image_size - 1))) {
+	if ((*ppos < 0) || (*ppos >= image_size)) {
 		mutex_unlock(&image[minor].mutex);
 		return 0;
 	}
@@ -255,7 +255,7 @@ static ssize_t vme_user_write(struct file *file, const char __user *buf,
 	image_size = vme_get_size(image[minor].resource);
 
 	/* Ensure we are starting at a valid location */
-	if ((*ppos < 0) || (*ppos > (image_size - 1))) {
+	if ((*ppos < 0) || (*ppos >= image_size)) {
 		mutex_unlock(&image[minor].mutex);
 		return 0;
 	}
