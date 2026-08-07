@@ -4945,7 +4945,11 @@ void wake_up_new_task(struct task_struct *p)
 {
 	struct rq_flags rf;
 	struct rq *rq;
+	unsigned int kcov_paused;
 	int wake_flags = WF_FORK;
+
+	/* KCOV: sched/ is uninstrumented but the wakeup callees are not. */
+	kcov_paused = kcov_pause(current);
 
 	raw_spin_lock_irqsave(&p->pi_lock, rf.flags);
 	WRITE_ONCE(p->__state, TASK_RUNNING);
@@ -4976,6 +4980,7 @@ void wake_up_new_task(struct task_struct *p)
 		rq_repin_lock(rq, &rf);
 	}
 	task_rq_unlock(rq, p, &rf);
+	kcov_resume(current, kcov_paused);
 }
 
 #ifdef CONFIG_PREEMPT_NOTIFIERS
