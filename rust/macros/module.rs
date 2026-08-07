@@ -479,6 +479,7 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
     let ident_init = format_ident!("__{ident}_init");
     let ident_exit = format_ident!("__{ident}_exit");
     let ident_initcall = format_ident!("__{ident}_initcall");
+    let ident_modname = format_ident!("__{ident}_modname");
     let initcall_section = ".initcall6.init";
 
     let global_asm = format!(
@@ -589,6 +590,21 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
                 #[cfg(not(MODULE))]
                 #[cfg(CONFIG_HAVE_ARCH_PREL32_RELOCATIONS)]
                 ::core::arch::global_asm!(#global_asm);
+
+                #[cfg(not(MODULE))]
+                #[repr(C)]
+                struct InitcallModname {
+                    initcall_fn: extern "C" fn() -> ::kernel::ffi::c_int,
+                    modname: *const ::kernel::ffi::c_char,
+                }
+
+                #[cfg(not(MODULE))]
+                #[used(compiler)]
+                #[link_section = ".initcall.modnames"]
+                static #ident_modname: InitcallModname = InitcallModname {
+                    initcall_fn: #ident_init,
+                    modname: #name_cstr.as_ptr().cast(),
+                };
 
                 #[cfg(not(MODULE))]
                 #[no_mangle]
