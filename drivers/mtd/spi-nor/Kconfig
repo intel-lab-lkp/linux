@@ -17,8 +17,17 @@ config MTD_SPI_NOR_USE_4K_SECTORS
 	  on the usage this feature may provide performance gain in comparison
 	  to erasing whole blocks (32/64 KiB).
 	  Changing a small part of the flash's contents is usually faster with
-	  small sectors. On the other hand erasing should be faster when using
-	  64 KiB block instead of 16 × 4 KiB sectors.
+	  small sectors.
+
+	  Say Y here to report 4096 B (if flash supports it) as mtd->erasesize
+	  to tools and upper layers.
+
+	  This is also useful when partition alignment or filesystem
+	  requirements call for a small erase size.
+
+	  Internally the driver still uses multiple erase sizes when performing
+	  erase operations, selecting the largest suitable size for each step
+	  to maintain erase performance on large regions.
 
 	  Please note that some tools/drivers/filesystems may not work with
 	  4096 B erase size (e.g. UBIFS requires 15 KiB as a minimum).

@@ -1227,20 +1227,17 @@ static bool spi_nor_has_uniform_erase(const struct spi_nor *nor)
 
 static void spi_nor_set_4byte_opcodes(struct spi_nor *nor)
 {
+	struct spi_nor_erase_map *map = &nor->params->erase_map;
+	struct spi_nor_erase_type *erase;
+	int i;
+
 	nor->read_opcode = spi_nor_convert_3to4_read(nor->read_opcode);
 	nor->program_opcode = spi_nor_convert_3to4_program(nor->program_opcode);
 	nor->erase_opcode = spi_nor_convert_3to4_erase(nor->erase_opcode);
 
-	if (!spi_nor_has_uniform_erase(nor)) {
-		struct spi_nor_erase_map *map = &nor->params->erase_map;
-		struct spi_nor_erase_type *erase;
-		int i;
-
-		for (i = 0; i < SNOR_ERASE_TYPE_MAX; i++) {
-			erase = &map->erase_type[i];
-			erase->opcode =
-				spi_nor_convert_3to4_erase(erase->opcode);
-		}
+	for (i = 0; i < SNOR_ERASE_TYPE_MAX; i++) {
+		erase = &map->erase_type[i];
+		erase->opcode = spi_nor_convert_3to4_erase(erase->opcode);
 	}
 }
 
@@ -1538,6 +1535,35 @@ int spi_nor_erase_sector(struct spi_nor *nor, u32 addr)
 }
 
 /**
+ * spi_nor_erase_one() - erase a single sector at the given address
+ * @nor:	pointer to a 'struct spi_nor'
+ * @addr:	offset in the serial flash memory
+ *
+ * Return: 0 on success, -errno otherwise.
+ */
+static int spi_nor_erase_one(struct spi_nor *nor, u64 addr)
+{
+	int ret;
+
+	ret = spi_nor_lock_device(nor);
+	if (ret)
+		return ret;
+
+	ret = spi_nor_write_enable(nor);
+	if (ret) {
+		spi_nor_unlock_device(nor);
+		return ret;
+	}
+
+	ret = spi_nor_erase_sector(nor, addr);
+	spi_nor_unlock_device(nor);
+	if (ret)
+		return ret;
+
+	return spi_nor_wait_till_ready(nor);
+}
+
+/**
  * spi_nor_div_by_erase_size() - calculate remainder and update new dividend
  * @erase:	pointer to a structure that describes a SPI NOR erase type
  * @dividend:	dividend value
@@ -1551,6 +1577,62 @@ static u64 spi_nor_div_by_erase_size(const struct spi_nor_erase_type *erase,
 	/* JEDEC JESD216B Standard imposes erase sizes to be power of 2. */
 	*remainder = (u32)dividend & erase->size_mask;
 	return dividend >> erase->size_shift;
+}
+
+/**
+ * spi_nor_find_smallest_erase_type() - find the smallest erase type in a mask
+ * @map:	the erase map of the SPI NOR
+ * @erase_mask:	bitmask of erase types to consider
+ *
+ * Erase types are ordered by size, with the smallest erase type at index 0.
+ *
+ * Return: pointer to the smallest active erase type, NULL otherwise.
+ */
+static const struct spi_nor_erase_type *
+spi_nor_find_smallest_erase_type(const struct spi_nor_erase_map *map,
+				 u8 erase_mask)
+{
+	int i;
+
+	for (i = 0; i < SNOR_ERASE_TYPE_MAX; i++) {
+		if (erase_mask & BIT(i) && map->erase_type[i].size)
+			return &map->erase_type[i];
+	}
+
+	return NULL;
+}
+
+/**
+ * spi_nor_is_uniform_erasable() - check if a uniform erase request is valid
+ * @nor:	pointer to a 'struct spi_nor'
+ * @instr:	pointer to 'struct erase_info'
+ *
+ * Verify that the requested address and length are aligned to the smallest
+ * supported erase size in the uniform region.
+ *
+ * Return: true if the range can be erased, false otherwise.
+ */
+static bool spi_nor_is_uniform_erasable(const struct spi_nor *nor,
+					struct erase_info *instr)
+{
+	const struct spi_nor_erase_map *map = &nor->params->erase_map;
+	const struct spi_nor_erase_type *erase;
+	u32 rem;
+
+	erase = spi_nor_find_smallest_erase_type(map,
+						 map->uniform_region.erase_mask);
+	if (unlikely(!erase))
+		return false;
+
+	spi_nor_div_by_erase_size(erase, instr->addr, &rem);
+	if (rem)
+		return false;
+
+	spi_nor_div_by_erase_size(erase, instr->len, &rem);
+	if (rem)
+		return false;
+
+	return true;
 }
 
 /**
@@ -1602,6 +1684,39 @@ spi_nor_find_best_erase_type(const struct spi_nor_erase_map *map,
 	}
 
 	return NULL;
+}
+
+/**
+ * spi_nor_erase_uniform() - erase a range on a uniform flash
+ * @nor:	pointer to a 'struct spi_nor'
+ * @addr:	offset in the serial flash memory
+ * @len:	number of bytes to erase
+ *
+ * Return: 0 on success, -errno otherwise.
+ */
+static int spi_nor_erase_uniform(struct spi_nor *nor, u64 addr, u32 len)
+{
+	const struct spi_nor_erase_map *map = &nor->params->erase_map;
+	const struct spi_nor_erase_region *region = &map->uniform_region;
+	const struct spi_nor_erase_type *erase;
+	int ret;
+
+	while (len) {
+		erase = spi_nor_find_best_erase_type(map, region, addr, len);
+		if (unlikely(!erase))
+			return -EINVAL;
+
+		nor->erase_opcode = erase->opcode;
+
+		ret = spi_nor_erase_one(nor, addr);
+		if (ret)
+			return ret;
+
+		addr += erase->size;
+		len -= erase->size;
+	}
+
+	return 0;
 }
 
 /**
@@ -1736,22 +1851,7 @@ static int spi_nor_erase_multi_sectors(struct spi_nor *nor, u64 addr, u32 len)
 			dev_vdbg(nor->dev, "erase_cmd->size = 0x%08x, erase_cmd->opcode = 0x%02x, erase_cmd->count = %u\n",
 				 cmd->size, cmd->opcode, cmd->count);
 
-			ret = spi_nor_lock_device(nor);
-			if (ret)
-				goto destroy_erase_cmd_list;
-
-			ret = spi_nor_write_enable(nor);
-			if (ret) {
-				spi_nor_unlock_device(nor);
-				goto destroy_erase_cmd_list;
-			}
-
-			ret = spi_nor_erase_sector(nor, addr);
-			spi_nor_unlock_device(nor);
-			if (ret)
-				goto destroy_erase_cmd_list;
-
-			ret = spi_nor_wait_till_ready(nor);
+			ret = spi_nor_erase_one(nor, addr);
 			if (ret)
 				goto destroy_erase_cmd_list;
 
@@ -1823,7 +1923,7 @@ static int spi_nor_erase(struct mtd_info *mtd, struct erase_info *instr)
 	struct spi_nor *nor = mtd_to_spi_nor(mtd);
 	u8 n_dice = nor->params->n_dice;
 	bool multi_die_erase = false;
-	u32 addr, len, rem;
+	u32 addr, len;
 	size_t die_size;
 	int ret;
 
@@ -1831,8 +1931,7 @@ static int spi_nor_erase(struct mtd_info *mtd, struct erase_info *instr)
 			(long long)instr->len);
 
 	if (spi_nor_has_uniform_erase(nor)) {
-		div_u64_rem(instr->len, mtd->erasesize, &rem);
-		if (rem)
+		if (!spi_nor_is_uniform_erasable(nor, instr))
 			return -EINVAL;
 	}
 
@@ -1858,38 +1957,12 @@ static int spi_nor_erase(struct mtd_info *mtd, struct erase_info *instr)
 		if (ret)
 			goto erase_err;
 
-	/* REVISIT in some cases we could speed up erasing large regions
-	 * by using SPINOR_OP_SE instead of SPINOR_OP_BE_4K.  We may have set up
-	 * to use "small sector erase", but that's not always optimal.
-	 */
-
-	/* "sector"-at-a-time erase */
 	} else if (spi_nor_has_uniform_erase(nor)) {
-		while (len) {
-			ret = spi_nor_lock_device(nor);
-			if (ret)
-				goto erase_err;
+		ret = spi_nor_erase_uniform(nor, addr, len);
+		if (ret)
+			goto erase_err;
 
-			ret = spi_nor_write_enable(nor);
-			if (ret) {
-				spi_nor_unlock_device(nor);
-				goto erase_err;
-			}
-
-			ret = spi_nor_erase_sector(nor, addr);
-			spi_nor_unlock_device(nor);
-			if (ret)
-				goto erase_err;
-
-			ret = spi_nor_wait_till_ready(nor);
-			if (ret)
-				goto erase_err;
-
-			addr += mtd->erasesize;
-			len -= mtd->erasesize;
-		}
-
-	/* erase multiple sectors */
+	/* erase multiple sectors on non-uniform flashes */
 	} else {
 		ret = spi_nor_erase_multi_sectors(nor, addr, len);
 		if (ret)
@@ -2652,8 +2725,7 @@ static int spi_nor_select_pp(struct spi_nor *nor,
  * spi_nor_select_uniform_erase() - select optimum uniform erase type
  * @map:		the erase map of the SPI NOR
  *
- * Once the optimum uniform sector erase command is found, disable all the
- * other.
+ * Select the optimum uniform sector erase type.
  *
  * Return: pointer to erase type on success, NULL otherwise.
  */
@@ -2697,11 +2769,6 @@ spi_nor_select_uniform_erase(struct spi_nor_erase_map *map)
 			/* keep iterating to find the wanted_size */
 	}
 
-	if (!erase)
-		return NULL;
-
-	/* Disable all other Sector Erase commands. */
-	map->uniform_region.erase_mask = BIT(erase - map->erase_type);
 	return erase;
 }
 
@@ -2712,14 +2779,6 @@ static int spi_nor_select_erase(struct spi_nor *nor)
 	struct mtd_info *mtd = &nor->mtd;
 	int i;
 
-	/*
-	 * The previous implementation handling Sector Erase commands assumed
-	 * that the SPI flash memory has an uniform layout then used only one
-	 * of the supported erase sizes for all Sector Erase commands.
-	 * So to be backward compatible, the new implementation also tries to
-	 * manage the SPI flash memory as uniform with a single erase sector
-	 * size, when possible.
-	 */
 	if (spi_nor_has_uniform_erase(nor)) {
 		erase = spi_nor_select_uniform_erase(map);
 		if (!erase)
