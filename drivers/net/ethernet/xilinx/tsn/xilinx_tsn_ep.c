@@ -5,6 +5,7 @@
  * Copyright (C) 2026 Advanced Micro Devices, Inc.
  */
 
+#include <linux/bitfield.h>
 #include <linux/bitops.h>
 #include <linux/circ_buf.h>
 #include <linux/dma/xilinx_dma.h>
@@ -41,6 +42,17 @@
 
 #define TX_BD_NUM_DEFAULT		64
 #define RX_BD_NUM_DEFAULT		128
+
+/*
+ * The DMA descriptor sideband status word packs TID/TDEST/TUSER together;
+ * TUSER occupies the low byte, TID/TDEST sit in the upper bits.
+ */
+#define TSN_TUSER_MASK			GENMASK(7, 0)
+/* TUSER Input Port ID field (bits [5:4] of the TUSER field) */
+#define TSN_TUSER_PORT_ID_MASK		GENMASK(5, 4)
+#define TSN_TUSER_PORT_EP		0x0
+#define TSN_TUSER_PORT_MAC1		0x1
+#define TSN_TUSER_PORT_MAC2		0x2
 
 /**
  * struct skbuf_dma_descriptor - skb container for each in-flight DMA descriptor
@@ -113,6 +125,147 @@ static inline struct skbuf_dma_descriptor *
 ep_get_desc(struct xlnx_tsn_ep_dma_chan *xchan, int idx)
 {
 	return xchan->skb_ring[idx];
+}
+
+static void ep_dma_rx_cb(void *data, const struct dmaengine_result *result);
+
+static void ep_rx_submit_desc(struct xlnx_tsn_ep_dma_chan *xchan)
+{
+	struct dma_async_tx_descriptor *dma_rx_desc;
+	struct skbuf_dma_descriptor *skbuf_dma;
+	struct xlnx_tsn_ep *ep = xchan->ep;
+	struct sk_buff *skb;
+	dma_addr_t addr;
+
+	skbuf_dma = ep_get_desc(xchan, xchan->ring_head & (RX_BD_NUM_DEFAULT - 1));
+	if (!skbuf_dma)
+		return;
+
+	skb = dev_alloc_skb(ep->max_frm_size);
+	if (!skb)
+		return;
+
+	sg_init_table(skbuf_dma->sgl, 1);
+	addr = dma_map_single(xchan->dma_dev, skb->data, ep->max_frm_size,
+			      DMA_FROM_DEVICE);
+	if (unlikely(dma_mapping_error(xchan->dma_dev, addr))) {
+		if (net_ratelimit())
+			dev_warn(ep->dev, "DMA mapping error on RX submit\n");
+
+		goto err_free_skb;
+	}
+	sg_dma_address(skbuf_dma->sgl) = addr;
+	sg_dma_len(skbuf_dma->sgl) = ep->max_frm_size;
+	dma_rx_desc = dmaengine_prep_slave_sg(xchan->chan, skbuf_dma->sgl,
+					      1, DMA_DEV_TO_MEM,
+					      DMA_PREP_INTERRUPT);
+	if (!dma_rx_desc)
+		goto err_unmap_skb;
+
+	skbuf_dma->skb = skb;
+	skbuf_dma->dma_address = sg_dma_address(skbuf_dma->sgl);
+	skbuf_dma->desc = dma_rx_desc;
+	dma_rx_desc->callback_param = xchan;
+	dma_rx_desc->callback_result = ep_dma_rx_cb;
+	xchan->ring_head++;
+	dmaengine_submit(dma_rx_desc);
+
+	return;
+
+err_unmap_skb:
+	dma_unmap_single(xchan->dma_dev, addr, ep->max_frm_size, DMA_FROM_DEVICE);
+err_free_skb:
+	dev_kfree_skb(skb);
+}
+
+static void ep_dma_rx_cb(void *data, const struct dmaengine_result *result)
+{
+	struct xlnx_tsn_ep_dma_chan *xchan = data;
+	struct skbuf_dma_descriptor *skbuf_dma;
+	size_t meta_len, meta_max_len, rx_len;
+	struct xlnx_tsn_ep *ep = xchan->ep;
+	struct net_device *ndev = ep->ndev;
+	struct sk_buff *skb;
+	u32 port_id, tuser;
+	u32 *metadata;
+	int i, avail;
+
+	skbuf_dma = ep_get_desc(xchan, xchan->ring_tail & (RX_BD_NUM_DEFAULT - 1));
+	xchan->ring_tail++;
+	skb = skbuf_dma->skb;
+	skbuf_dma->skb = NULL;
+
+	dma_unmap_single(xchan->dma_dev, skbuf_dma->dma_address,
+			 ep->max_frm_size, DMA_FROM_DEVICE);
+
+	if (result->result != DMA_TRANS_NOERROR) {
+		if (net_ratelimit())
+			dev_warn(ep->dev, "RX DMA transfer error %d\n",
+				 result->result);
+
+		dev_kfree_skb_any(skb);
+		DEV_STATS_INC(ndev, rx_dropped);
+		DEV_STATS_INC(ndev, rx_errors);
+		goto submit_new;
+	}
+
+	metadata = dmaengine_desc_get_metadata_ptr(skbuf_dma->desc,
+						   &meta_len,
+						   &meta_max_len);
+	if (IS_ERR_OR_NULL(metadata)) {
+		if (net_ratelimit())
+			dev_warn(ep->dev, "Failed to get RX metadata pointer\n");
+
+		dev_kfree_skb_any(skb);
+		DEV_STATS_INC(ndev, rx_dropped);
+		DEV_STATS_INC(ndev, rx_errors);
+		goto submit_new;
+	}
+
+	/* MCDMA metadata: [0] = status, [1] = sideband (TID/TDEST/TUSER), [2..] = app */
+	tuser = metadata[1] & TSN_TUSER_MASK;
+	rx_len = ep->max_frm_size - result->residue;
+
+	if (rx_len > ep->max_frm_size || rx_len < ETH_HLEN) {
+		if (net_ratelimit())
+			dev_warn(ep->dev, "Invalid RX length %zu (max=%u, min=%u)\n",
+				 rx_len, ep->max_frm_size, ETH_HLEN);
+
+		dev_kfree_skb_any(skb);
+		DEV_STATS_INC(ndev, rx_dropped);
+		DEV_STATS_INC(ndev, rx_errors);
+		goto submit_new;
+	}
+
+	port_id = FIELD_GET(TSN_TUSER_PORT_ID_MASK, tuser);
+	if (port_id != TSN_TUSER_PORT_MAC1 && port_id != TSN_TUSER_PORT_MAC2) {
+		if (net_ratelimit())
+			dev_dbg(ep->dev, "RX dropping unexpected TUSER port_id=%u\n",
+				port_id);
+
+		dev_kfree_skb_any(skb);
+		DEV_STATS_INC(ndev, rx_dropped);
+		goto submit_new;
+	}
+
+	skb_put(skb, rx_len);
+	skb->dev = ndev;
+	skb->protocol = eth_type_trans(skb, ndev);
+	skb->ip_summed = CHECKSUM_NONE;
+	__netif_rx(skb);
+
+	DEV_STATS_INC(ndev, rx_packets);
+	DEV_STATS_ADD(ndev, rx_bytes, rx_len);
+
+submit_new:
+	if (READ_ONCE(ep->closing))
+		return;
+
+	avail = CIRC_SPACE(xchan->ring_head, xchan->ring_tail,
+			   RX_BD_NUM_DEFAULT);
+	for (i = 0; i < avail; i++)
+		ep_rx_submit_desc(xchan);
+	dma_async_issue_pending(xchan->chan);
 }
 
 static netdev_tx_t ep_start_xmit(struct sk_buff *skb, struct net_device *ndev)
@@ -229,8 +382,18 @@ static void ep_free_dma_chan(struct xlnx_tsn_ep_dma_chan *chan)
 	if (!chan)
 		return;
 
-	if (chan->chan)
+	if (chan->chan) {
+		/* Drain the in-flight completion callback, then synchronize in
+		 * case that callback re-armed a descriptor before it observed
+		 * ep->closing. xilinx_dma_tx_submit() clears chan->terminating
+		 * on every submit, so a single terminate does not cover a
+		 * re-arm. The final terminate is a barrier before the channel
+		 * memory is freed.
+		 */
 		dmaengine_terminate_sync(chan->chan);
+		dmaengine_synchronize(chan->chan);
+		dmaengine_terminate_sync(chan->chan);
+	}
 
 	if (chan->is_tx) {
 		while (chan->ring_tail != chan->ring_head) {
@@ -291,7 +454,7 @@ static int ep_init_dmaengine(struct xlnx_tsn_ep *ep)
 {
 	int tx_allocated = 0, rx_allocated = 0;
 	char name[16];
-	int i, ret;
+	int i, j, ret;
 
 	ep->tx_chans = kcalloc(ep->num_tx_queues, sizeof(*ep->tx_chans),
 			       GFP_KERNEL);
@@ -327,6 +490,12 @@ static int ep_init_dmaengine(struct xlnx_tsn_ep *ep)
 			goto err_free_chans;
 		}
 		rx_allocated++;
+	}
+
+	for (i = 0; i < ep->num_rx_queues; i++) {
+		for (j = 0; j < RX_BD_NUM_DEFAULT - 1; j++)
+			ep_rx_submit_desc(ep->rx_chans[i]);
+		dma_async_issue_pending(ep->rx_chans[i]->chan);
 	}
 
 	return 0;
