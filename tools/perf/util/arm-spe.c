@@ -2033,6 +2033,9 @@ int arm_spe_process_auxtrace_info(union perf_event *event,
 		/* Default nanoseconds period not supported */
 		spe->synth_opts.period_type = PERF_ITRACE_PERIOD_INSTRUCTIONS;
 		spe->synth_opts.period = 1;
+
+		if (session->itrace_synth_opts)
+			spe->synth_opts.dont_overlap = session->itrace_synth_opts->dont_overlap;
 	}
 
 	if (spe->synth_opts.period_type != PERF_ITRACE_PERIOD_INSTRUCTIONS) {
@@ -2043,6 +2046,20 @@ int arm_spe_process_auxtrace_info(union perf_event *event,
 	if (spe->synth_opts.period > 1)
 		ui__warning("Arm SPE has a hardware-based sampling period.\n\n"
 			    "--itrace periods > 1i downsample by an interval of n SPE samples rather than n instructions.\n");
+
+	if (spe->synth_opts.dont_overlap) {
+		/*
+		 * The 'instructions' event is the most comprehensive,
+		 * synthesize it exclusively.
+		 */
+		spe->synth_opts.flc = false;
+		spe->synth_opts.llc = false;
+		spe->synth_opts.tlb = false;
+		spe->synth_opts.branches = false;
+		spe->synth_opts.remote_access = false;
+		spe->synth_opts.mem = false;
+		spe->synth_opts.instructions = true;
+	}
 
 	err = arm_spe_synth_events(spe, session);
 	if (err)

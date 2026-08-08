@@ -80,6 +80,7 @@ enum itrace_period_type {
  * @intr_events: whether to synthesize interrupt events
  * @errors: whether to synthesize decoder error events
  * @dont_decode: whether to skip decoding entirely
+ * @dont_overlap: whether to deduplicate overlapping events
  * @log: write a decoding log
  * @calls: limit branch samples to calls (can be combined with @returns)
  * @returns: limit branch samples to returns (can be combined with @calls)
@@ -128,6 +129,7 @@ struct itrace_synth_opts {
 	bool			intr_events;
 	bool			errors;
 	bool			dont_decode;
+	bool			dont_overlap;
 	bool			log;
 	bool			calls;
 	bool			returns;

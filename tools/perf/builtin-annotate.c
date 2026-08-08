@@ -873,6 +873,14 @@ int cmd_annotate(int argc, const char **argv)
 	annotate.session = perf_session__new(&data, &annotate.tool);
 	if (IS_ERR(annotate.session))
 		return PTR_ERR(annotate.session);
+	/*
+	 * Hardware tracing (e.g.: ARM SPE) may generate overlapping events
+	 * per instruction. When data type profiling is enabled, enable
+	 * dont_overlap to deduplicate them to avoid skewed stats, but only
+	 * if user hasn't specified itrace options (respect user override).
+	 */
+	if (annotate.data_type && !itrace_synth_opts.set)
+		itrace_synth_opts.dont_overlap = true;
 
 	annotate.session->itrace_synth_opts = &itrace_synth_opts;
 
