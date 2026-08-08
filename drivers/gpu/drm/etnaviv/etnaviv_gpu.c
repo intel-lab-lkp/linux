@@ -1981,6 +1981,8 @@ static int etnaviv_gpu_platform_probe(struct platform_device *pdev)
 	err = component_add(dev, &gpu_ops);
 	if (err < 0) {
 		dev_err(dev, "failed to register component: %d\n", err);
+		pm_runtime_dont_use_autosuspend(dev);
+		pm_runtime_disable(dev);
 		return err;
 	}
 
@@ -1992,6 +1994,7 @@ static void etnaviv_gpu_platform_remove(struct platform_device *pdev)
 	struct etnaviv_gpu *gpu = dev_get_drvdata(&pdev->dev);
 
 	component_del(&pdev->dev, &gpu_ops);
+	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
 	mutex_destroy(&gpu->lock);
