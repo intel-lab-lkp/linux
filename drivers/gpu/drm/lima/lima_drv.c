@@ -434,6 +434,7 @@ static int lima_pdev_probe(struct platform_device *pdev)
 	return 0;
 
 err_out3:
+	pm_runtime_dont_use_autosuspend(ldev->dev);
 	pm_runtime_disable(ldev->dev);
 	lima_devfreq_fini(ldev);
 err_out2:
@@ -456,6 +457,7 @@ static void lima_pdev_remove(struct platform_device *pdev)
 
 	/* stop autosuspend to make sure device is in active state */
 	pm_runtime_set_autosuspend_delay(ldev->dev, -1);
+	pm_runtime_dont_use_autosuspend(ldev->dev);
 	pm_runtime_disable(ldev->dev);
 
 	lima_devfreq_fini(ldev);
