@@ -407,6 +407,7 @@ static void adjust_reg_index_state(struct type_state *state,
  * to the source struct's field offset.
  */
 static int propagate_load_reg_state(struct type_state *state,
+				    struct data_loc_info *dloc,
 				    struct disasm_line *dl, int dreg,
 				    struct annotated_op_loc *src,
 				    int reg_offset, const char *insn_name)
@@ -416,6 +417,8 @@ static int propagate_load_reg_state(struct type_state *state,
 	Dwarf_Die type_die;
 	u32 insn_offset = dl->al.offset;
 	int sreg = src->reg1;
+	int fbreg = dloc->fbreg;
+	int fboff = 0;
 
 	if (!has_reg_type(state, dreg))
 		return -1;
@@ -423,7 +426,52 @@ static int propagate_load_reg_state(struct type_state *state,
 	tsr = &state->regs[dreg];
 	tsr->copied_from = -1;
 
+	if (dloc->fb_cfa) {
+		u64 ip = dloc->ms->sym->start + dl->al.offset;
+		u64 pc = map__rip_2objdump(dloc->ms->map, ip);
+
+		if (die_get_cfa(dloc->di->dbg, pc, &fbreg, &fboff) < 0)
+			fbreg = -1;
+	}
+
 retry:
+	/* Check stack variables with offset */
+	if (sreg == fbreg || sreg == state->stack_reg) {
+		struct type_state_stack *stack;
+		int offset = sreg == fbreg ? reg_offset - fboff : reg_offset;
+
+		stack = find_stack_state(state, offset);
+		if (stack == NULL) {
+			return -1;
+		} else if (!stack->compound) {
+			tsr->type = stack->type;
+			tsr->kind = stack->kind;
+			tsr->offset = stack->ptr_offset;
+			tsr->imm_value = stack->imm_value;
+			tsr->ok = true;
+		} else if (die_get_member_type(&stack->type,
+					       offset - stack->offset,
+					       &type_die)) {
+			tsr->type = type_die;
+			tsr->kind = TSR_KIND_TYPE;
+			tsr->offset = 0;
+			tsr->imm_value = 0;
+			tsr->ok = true;
+		} else {
+			return -1;
+		}
+
+		if (sreg == fbreg) {
+			pr_debug_dtp("%s [%x] -%#x(stack) -> reg%d",
+				     insn_name, insn_offset, -offset, dreg);
+		} else {
+			pr_debug_dtp("%s [%x] %#x(reg%d) -> reg%d",
+				     insn_name, insn_offset, offset, sreg, dreg);
+		}
+		pr_debug_type_name(&tsr->type, tsr->kind);
+		return 0;
+	}
+
 	if (!has_reg_type(state, sreg) || !state->regs[sreg].ok)
 		return -1;
 
@@ -460,6 +508,7 @@ retry:
 }
 
 static void update_load_insn_state(struct type_state *state,
+				   struct data_loc_info *dloc,
 				   struct disasm_line *dl,
 				   struct annotated_op_loc *src,
 				   struct annotated_op_loc *dst)
@@ -472,7 +521,7 @@ static void update_load_insn_state(struct type_state *state,
 		goto out_err_adjust;
 
 	/* Handle the first destination register */
-	if (propagate_load_reg_state(state, dl, dst->reg1, src,
+	if (propagate_load_reg_state(state, dloc, dl, dst->reg1, src,
 				     reg_offset, insn_name))
 		goto out_err_adjust;
 
@@ -481,7 +530,7 @@ static void update_load_insn_state(struct type_state *state,
 		int reg_size = arm64__reg_size(dl->ops.target.raw);
 
 		if (reg_size < 0 ||
-		    propagate_load_reg_state(state, dl, dst->reg2, src,
+		    propagate_load_reg_state(state, dloc, dl, dst->reg2, src,
 					     reg_offset + reg_size, insn_name))
 			goto out_err_adjust;
 	}
@@ -496,6 +545,100 @@ out_err_adjust:
 	if (dst->multi_regs && has_reg_type(state, dst->reg2))
 		invalidate_reg_state(&state->regs[dst->reg2]);
 	goto out_adjust;
+}
+
+/*
+ * For store insns: propagate type from @sreg to the memory location
+ * referenced by @dreg, applying @reg_offset to the destination memory offset.
+ */
+static int propagate_store_reg_state(struct type_state *state,
+				     struct data_loc_info *dloc,
+				     struct disasm_line *dl, int sreg, int dreg,
+				     int reg_offset, const char *insn_name)
+{
+	struct type_state_reg *tsr;
+	u32 insn_offset = dl->al.offset;
+	int fbreg = dloc->fbreg;
+	int fboff = 0;
+
+	if (!has_reg_type(state, sreg) || !state->regs[sreg].ok)
+		return -1;
+
+	if (dloc->fb_cfa) {
+		u64 ip = dloc->ms->sym->start + dl->al.offset;
+		u64 pc = map__rip_2objdump(dloc->ms->map, ip);
+
+		if (die_get_cfa(dloc->di->dbg, pc, &fbreg, &fboff) < 0)
+			fbreg = -1;
+	}
+
+	/* Check stack variables with offset */
+	if (dreg == fbreg || dreg == state->stack_reg) {
+		struct type_state_stack *stack;
+		int offset = dreg == fbreg ? reg_offset - fboff : reg_offset;
+
+		tsr = &state->regs[sreg];
+
+		stack = find_stack_state(state, offset);
+		if (stack) {
+			if (!stack->compound)
+				set_stack_state(stack, offset, tsr->kind, &tsr->type,
+						tsr->offset, tsr->imm_value);
+			/*
+			 * If it's a compound type, it means attempting to
+			 * write to a member value of the compound type without
+			 * changing the compound type itself, so do nothing.
+			 */
+		} else {
+			findnew_stack_state(state, offset, tsr->kind, &tsr->type,
+					    tsr->offset, tsr->imm_value);
+		}
+
+		if (dreg == fbreg) {
+			pr_debug_dtp("%s [%x] reg%d -> -%#x(stack)",
+				     insn_name, insn_offset, sreg, -offset);
+		} else {
+			pr_debug_dtp("%s [%x] reg%d -> %#x(reg%d)",
+				     insn_name, insn_offset, sreg, offset, dreg);
+		}
+		if (tsr->offset != 0) {
+			pr_debug_dtp(" reg%d offset %#x ->",
+				     sreg, tsr->offset);
+		}
+		pr_debug_type_name(&tsr->type, tsr->kind);
+	}
+	/*
+	 * Ignore other transfers since it'd set a value in a struct
+	 * and won't change the type.
+	 */
+
+	return 0;
+}
+
+static void update_store_insn_state(struct type_state *state,
+				    struct data_loc_info *dloc,
+				    struct disasm_line *dl,
+				    struct annotated_op_loc *src,
+				    struct annotated_op_loc *dst)
+{
+	int reg_offset = get_reg_index_offset(dst);
+	const char *insn_name = src->multi_regs ? "stp" : "str";
+
+	/* Handle the first source register */
+	propagate_store_reg_state(state, dloc, dl, src->reg1, dst->reg1,
+				  reg_offset, insn_name);
+
+	/* Handle the second source register (stp only) */
+	if (src->multi_regs) {
+		int reg_size = arm64__reg_size(dl->ops.source.raw);
+
+		if (reg_size >= 0)
+			propagate_store_reg_state(state, dloc, dl, src->reg2,
+						  dst->reg1, reg_offset + reg_size,
+						  insn_name);
+	}
+
+	adjust_reg_index_state(state, dst, insn_name, dl->al.offset);
 }
 
 static void update_insn_state_arm64(struct type_state *state,
@@ -574,18 +717,10 @@ static void update_insn_state_arm64(struct type_state *state,
 
 	/* Memory to register transfers */
 	if (!strncmp(dl->ins.name, "ld", 2))
-		update_load_insn_state(state, dl, src, dst);
+		update_load_insn_state(state, dloc, dl, src, dst);
 	/* Register to memory transfers */
-	else if (!strncmp(dl->ins.name, "st", 2)) {
-		/*
-		 * Ignore transfers since it'd set a value in a struct
-		 * and won't change the type.
-		 *
-		 * Needs to update the pre-index and post-index addressing
-		 * modes for the destination register.
-		 */
-		adjust_reg_index_state(state, dst, "str", insn_offset);
-	}
+	else if (!strncmp(dl->ins.name, "st", 2))
+		update_store_insn_state(state, dloc, dl, src, dst);
 }
 #endif
 
