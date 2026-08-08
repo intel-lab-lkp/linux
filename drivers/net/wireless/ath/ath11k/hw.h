@@ -231,6 +231,10 @@ struct ath11k_hw_params {
 	bool cfr_support;
 	u32 cfr_num_stream_bufs;
 	u32 cfr_stream_buf_size;
+	/* run the ahb shutdown() teardown; only WCN6750 needs it, to stop
+	 * DMA before the SMMU is torn down at reboot/shutdown
+	 */
+	bool shutdown_teardown;
 };
 
 struct ath11k_hw_ops {

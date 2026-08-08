@@ -1288,6 +1288,17 @@ static void ath11k_ahb_shutdown(struct platform_device *pdev)
 	 * remove() is invoked during rmmod & shutdown() during
 	 * system reboot/shutdown.
 	 */
+
+	/* The teardown below is only needed on WCN6750 (stop DMA before the
+	 * SMMU is torn down). It was registered for all AHB targets, but on
+	 * the IPQ SoCs it stops the WCSS Q6 firmware and leaves shared state
+	 * that hangs the boot ROM during DDR training on the next warm reset;
+	 * they never had a shutdown() teardown before and the SoC reset
+	 * re-initializes the WCSS from scratch, so skip it there.
+	 */
+	if (!ab->hw_params.shutdown_teardown)
+		return;
+
 	ath11k_ahb_remove_prepare(ab);
 
 	if (!(test_bit(ATH11K_FLAG_REGISTERED, &ab->dev_flags)))
