@@ -1094,15 +1094,17 @@ char *resource_string(char *buf, char *end, struct resource *res,
 	/* 32-bit res (sizeof==4): 10 chars in dec, 10 in hex ("0x" + 8)
 	 * 64-bit res (sizeof==8): 20 chars in dec, 18 in hex ("0x" + 16) */
 #define RSRC_BUF_SIZE		((2 * sizeof(resource_size_t)) + 4)
+#define RSRC_STR_SIZE		sizeof(" (xxxx.xxx MiB)")
 #define FLAG_BUF_SIZE		(2 * sizeof(res->flags))
-#define DECODED_BUF_SIZE	sizeof("[mem - 64bit pref window disabled]")
-#define RAW_BUF_SIZE		sizeof("[mem - flags 0x]")
-	char sym[MAX(2*RSRC_BUF_SIZE + DECODED_BUF_SIZE,
-		     2*RSRC_BUF_SIZE + FLAG_BUF_SIZE + RAW_BUF_SIZE)];
+#define DECODED_BUF_SIZE	sizeof("[mem - () 64bit pref window disabled]")
+#define RAW_BUF_SIZE		sizeof("[mem - () flags 0x]")
+	char sym[MAX(2*RSRC_BUF_SIZE + RSRC_STR_SIZE + DECODED_BUF_SIZE,
+		     2*RSRC_BUF_SIZE + RSRC_STR_SIZE + FLAG_BUF_SIZE + RAW_BUF_SIZE)];
 
 	char *p = sym, *pend = sym + sizeof(sym);
 	bool decode = fmt[0] == 'R';
 	const struct printf_spec *specp;
+	char size_buf[32];
 
 	if (check_pointer(&buf, end, res, spec))
 		return buf;
@@ -1133,6 +1135,14 @@ char *resource_string(char *buf, char *end, struct resource *res,
 		p = number(p, pend, resource_size(res), *specp);
 	} else {
 		p = hex_range(p, pend, res->start, res->end, *specp);
+	}
+	if (res->flags & IORESOURCE_MEM) {
+		*p++ = ' ';
+		*p++ = '(';
+		string_get_size(resource_size(res), 1, STRING_UNITS_2,
+				size_buf, sizeof(size_buf));
+		p = string_nocheck(p, pend, size_buf, str_spec);
+		*p++ = ')';
 	}
 	if (decode) {
 		if (res->flags & IORESOURCE_MEM_64)
