@@ -204,7 +204,6 @@ max6621_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	struct max6621_data *data = dev_get_drvdata(dev);
 	u32 regval;
 	int reg;
-	s8 temp;
 	int ret;
 
 	switch (type) {
@@ -225,8 +224,8 @@ max6621_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			 * The temperature is given in two's complement and 8
 			 * bits is used for the register conversion.
 			 */
-			temp = (regval >> MAX6621_REG_TEMP_SHIFT);
-			*val = temp * 1000L;
+			*val = (sign_extend32(regval, 15) >>
+				MAX6621_REG_TEMP_SHIFT) * 1000L;
 
 			break;
 		case hwmon_temp_offset:
@@ -239,8 +238,8 @@ max6621_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			if (ret)
 				return ret;
 
-			*val = (regval >> MAX6621_REG_TEMP_SHIFT) *
-			       1000L;
+			*val = (sign_extend32(regval, 15) >>
+				MAX6621_REG_TEMP_SHIFT) * 1000L;
 
 			break;
 		case hwmon_temp_crit:
@@ -254,7 +253,7 @@ max6621_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			if (ret)
 				return ret;
 
-			*val = regval * 1000L;
+			*val = sign_extend32(regval, 15) * 1000L;
 
 			break;
 		case hwmon_temp_crit_alarm:
