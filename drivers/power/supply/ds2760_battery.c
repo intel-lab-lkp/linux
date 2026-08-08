@@ -723,9 +723,13 @@ static void w1_ds2760_remove_slave(struct w1_slave *sl)
 {
 	struct ds2760_device_info *di = sl->family_data;
 
+	if (!di)
+		return;
+
 	unregister_pm_notifier(&di->pm_notifier);
 	cancel_delayed_work_sync(&di->monitor_work);
-	destroy_workqueue(di->monitor_wqueue);
+	if (di->monitor_wqueue)
+		destroy_workqueue(di->monitor_wqueue);
 }
 
 #ifdef CONFIG_OF
