@@ -15,6 +15,7 @@ I2C Bus Drivers
    i2c-amd-mp2
    i2c-diolan-u2c
    i2c-i801
+   i2c-imc-skylake
    i2c-ismt
    i2c-mlxcpld
    i2c-nforce2
