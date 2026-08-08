@@ -1064,6 +1064,7 @@ err_engine:
 err_irq:
 	cancel_work_sync(&dd->done_task);
 err_get:
+	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_disable(dev);
 err_res:
 	dd = NULL;
@@ -1084,6 +1085,7 @@ static void omap_des_remove(struct platform_device *pdev)
 
 	cancel_work_sync(&dd->done_task);
 	omap_des_dma_cleanup(dd);
+	pm_runtime_dont_use_autosuspend(dd->dev);
 	pm_runtime_disable(dd->dev);
 }
 
