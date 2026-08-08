@@ -370,6 +370,7 @@ static int stm32_rng_init(struct hwrng *rng)
 
 static void stm32_rng_remove(struct platform_device *ofdev)
 {
+	pm_runtime_dont_use_autosuspend(&ofdev->dev);
 	pm_runtime_disable(&ofdev->dev);
 }
 
@@ -592,7 +593,14 @@ static int stm32_rng_probe(struct platform_device *ofdev)
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_enable(dev);
 
-	return devm_hwrng_register(dev, &priv->rng);
+	ret = devm_hwrng_register(dev, &priv->rng);
+	if (ret) {
+		pm_runtime_dont_use_autosuspend(dev);
+		pm_runtime_disable(dev);
+		return ret;
+	}
+
+	return 0;
 }
 
 static struct platform_driver stm32_rng_driver = {
