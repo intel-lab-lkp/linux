@@ -20,6 +20,7 @@
 #include <linux/ioport.h>
 #include <linux/cache.h>
 #include <linux/slab.h>
+#include <linux/string_helpers.h>
 #include "pci.h"
 
 static void pci_std_update_resource(struct pci_dev *dev, int resno)
@@ -431,6 +432,7 @@ int pci_reassign_resource(struct pci_dev *dev, int resno,
 	const char *res_name = pci_resource_name(dev, resno);
 	unsigned long flags;
 	resource_size_t new_size;
+	char size_buf[32];
 	int ret;
 
 	if (res->flags & IORESOURCE_PCI_FIXED)
@@ -444,19 +446,20 @@ int pci_reassign_resource(struct pci_dev *dev, int resno,
 		return -EINVAL;
 	}
 
+	string_get_size(addsize, 1, STRING_UNITS_2, size_buf, sizeof(size_buf));
 	new_size = resource_size(res) + addsize;
 	ret = _pci_assign_resource(dev, resno, new_size, min_align);
 	if (ret) {
 		res->flags = flags;
-		pci_info(dev, "%s %pR: failed to expand by %#llx\n",
-			 res_name, res, (unsigned long long) addsize);
+		pci_info(dev, "%s %pR: failed to expand by %#llx (%s)\n",
+			 res_name, res, (unsigned long long) addsize, size_buf);
 		return ret;
 	}
 
 	res->flags &= ~IORESOURCE_UNSET;
 	res->flags &= ~IORESOURCE_STARTALIGN;
-	pci_info(dev, "%s %pR: reassigned; expanded by %#llx\n",
-		 res_name, res, (unsigned long long) addsize);
+	pci_info(dev, "%s %pR: reassigned; expanded by %#llx (%s)\n",
+		 res_name, res, (unsigned long long) addsize, size_buf);
 	if (resno < PCI_BRIDGE_RESOURCES)
 		pci_update_resource(dev, resno);
 

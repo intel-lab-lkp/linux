@@ -28,6 +28,7 @@
 #include <linux/limits.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
+#include <linux/string_helpers.h>
 #include <linux/acpi.h>
 #include "pci.h"
 
@@ -427,6 +428,7 @@ static void reassign_resources_sorted(struct list_head *realloc_head,
 	struct resource *res;
 	const char *res_name;
 	resource_size_t add_size, align;
+	char size_buf[32];
 	int idx;
 
 	list_for_each_entry_safe(add_res, tmp, realloc_head, list) {
@@ -460,10 +462,14 @@ static void reassign_resources_sorted(struct list_head *realloc_head,
 		} else if (add_size > 0 || !IS_ALIGNED(res->start, align)) {
 			res->flags |= add_res->flags &
 				 (IORESOURCE_STARTALIGN|IORESOURCE_SIZEALIGN);
-			if (pci_reassign_resource(dev, idx, add_size, align))
-				pci_info(dev, "%s %pR: failed to add optional %llx\n",
+			if (pci_reassign_resource(dev, idx, add_size, align)) {
+				string_get_size(add_size, 1, STRING_UNITS_2,
+                                        size_buf, sizeof(size_buf));
+				pci_info(dev, "%s %pR: failed to add optional %#llx (%s)\n",
 					 res_name, res,
-					 (unsigned long long) add_size);
+					 (unsigned long long) add_size,
+					 size_buf);
+			}
 		}
 out:
 		list_del(&add_res->list);
@@ -1076,6 +1082,7 @@ static void pbus_size_io(struct pci_bus *bus, resource_size_t add_size,
 	resource_size_t size = 0, size0 = 0, size1 = 0;
 	resource_size_t children_add_size = 0;
 	resource_size_t min_align, align;
+	char size_buf[32];
 
 	if (!b_res)
 		return;
@@ -1138,11 +1145,14 @@ static void pbus_size_io(struct pci_bus *bus, resource_size_t add_size,
 	b_res->flags |= IORESOURCE_STARTALIGN;
 	if (bus->self && size1 > size0 && realloc_head) {
 		b_res->flags &= ~IORESOURCE_DISABLED;
+		add_size = size1 - size0;
 		pci_dev_res_add_to_list(realloc_head, bus->self, b_res,
-					size1 - size0, min_align);
-		pci_info(bus->self, "bridge window %pR to %pR add_size %llx\n",
+					add_size, min_align);
+		string_get_size(add_size, 1, STRING_UNITS_2,
+                                size_buf, sizeof(size_buf));
+		pci_info(bus->self, "bridge window %pR to %pR add_size %#llx (%s)\n",
 			 b_res, &bus->busn_res,
-			 (unsigned long long) size1 - size0);
+			 (unsigned long long) add_size, size_buf);
 	}
 }
 
@@ -1284,6 +1294,7 @@ static void pbus_size_mem(struct pci_bus *bus, struct resource *b_res,
 	resource_size_t aligns[28] = {}; /* Alignments from 1MB to 128TB */
 	int order, max_order;
 	resource_size_t children_add_size = 0;
+	char size_buf[32], align_buf[32];
 	resource_size_t add_align = 0;
 
 	if (!b_res)
@@ -1378,10 +1389,14 @@ static void pbus_size_mem(struct pci_bus *bus, struct resource *b_res,
 		add_size = size1 > size0 ? size1 - size0 : 0;
 		pci_dev_res_add_to_list(realloc_head, bus->self, b_res,
 					add_size, add_align);
-		pci_info(bus->self, "bridge window %pR to %pR add_size %llx add_align %llx\n",
+		string_get_size(add_size, 1, STRING_UNITS_2, size_buf,
+				sizeof(size_buf));
+		string_get_size(add_align, 1, STRING_UNITS_2, align_buf,
+				sizeof(align_buf));
+		pci_info(bus->self, "bridge window %pR to %pR add_size %#llx (%s) add_align %#llx (%s)\n",
 			   b_res, &bus->busn_res,
-			   (unsigned long long) add_size,
-			   (unsigned long long) add_align);
+			   (unsigned long long) add_size, size_buf,
+			   (unsigned long long) add_align, align_buf);
 	}
 }
 
@@ -1857,6 +1872,7 @@ static void adjust_bridge_window(struct pci_dev *bridge, struct resource *res,
 {
 	resource_size_t add_size, size = resource_size(res);
 	struct pci_dev_resource *dev_res;
+	char size_buf[32];
 
 	if (resource_assigned(res))
 		return;
@@ -1866,8 +1882,10 @@ static void adjust_bridge_window(struct pci_dev *bridge, struct resource *res,
 
 	if (new_size > size) {
 		add_size = new_size - size;
-		pci_dbg(bridge, "bridge window %pR extended by %pa\n", res,
-			&add_size);
+		string_get_size(add_size, 1, STRING_UNITS_2,
+				size_buf, sizeof(size_buf));
+		pci_dbg(bridge, "bridge window %pR extended by %pa (%s)\n", res,
+			&add_size, size_buf);
 	} else if (new_size < size) {
 		int idx = pci_resource_num(bridge, res);
 
@@ -1900,8 +1918,10 @@ static void adjust_bridge_window(struct pci_dev *bridge, struct resource *res,
 		add_size = size - new_size;
 		if (add_size < dev_res->add_size) {
 			dev_res->add_size -= add_size;
-			pci_dbg(bridge, "bridge window %pR optional size shrunken by %pa\n",
-				res, &add_size);
+			string_get_size(add_size, 1, STRING_UNITS_2,
+					size_buf, sizeof(size_buf));
+			pci_dbg(bridge, "bridge window %pR optional size shrunken by %pa (%s)\n",
+				res, &add_size, size_buf);
 		} else {
 			pci_dbg(bridge, "bridge window %pR optional size removed\n",
 				res);
