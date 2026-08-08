@@ -190,12 +190,6 @@ static void l2tp_eth_adjust_mtu(struct l2tp_tunnel *tunnel,
 	unsigned int overhead = 0;
 	u32 mtu;
 
-	/* if the encap is UDP, account for UDP header size */
-	if (tunnel->encap == L2TP_ENCAPTYPE_UDP) {
-		overhead += sizeof(struct udphdr);
-		dev->needed_headroom += sizeof(struct udphdr);
-	}
-
 	if (tunnel->l3_overhead == 0) {
 		/* L3 Overhead couldn't be identified, this could be
 		 * because the socket's address family was not IPv4
@@ -203,10 +197,8 @@ static void l2tp_eth_adjust_mtu(struct l2tp_tunnel *tunnel,
 		 */
 		return;
 	}
-	/* Adjust MTU, factor overhead - underlay L3, overlay L2 hdr
-	 * UDP overhead, if any, was already factored in above.
-	 */
-	overhead += session->hdr_len + ETH_HLEN + tunnel->l3_overhead;
+	/* Calculate required overhead */
+	overhead = ETH_HLEN + l2tp_session_overhead(session, tunnel);
 
 	mtu = l2tp_tunnel_dst_mtu(tunnel) - overhead;
 	if (mtu < dev->min_mtu || mtu > dev->max_mtu)
@@ -214,7 +206,7 @@ static void l2tp_eth_adjust_mtu(struct l2tp_tunnel *tunnel,
 	else
 		dev->mtu = mtu;
 
-	dev->needed_headroom += session->hdr_len;
+	dev->needed_headroom = l2tp_session_skb_headroom(session, tunnel);
 }
 
 static int l2tp_eth_create(struct net *net, struct l2tp_tunnel *tunnel,
