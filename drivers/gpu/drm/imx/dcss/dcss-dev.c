@@ -240,6 +240,7 @@ void dcss_dev_destroy(struct dcss_dev *dcss)
 
 	of_node_put(dcss->of_port);
 
+	pm_runtime_dont_use_autosuspend(dcss->dev);
 	pm_runtime_disable(dcss->dev);
 
 	dcss_submodules_stop(dcss);
