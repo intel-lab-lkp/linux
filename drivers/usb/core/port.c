@@ -96,7 +96,9 @@ static ssize_t disable_show(struct device *dev,
 		goto out_hdev_lock;
 	}
 
-	usb_hub_port_status(hub, port1, &portstatus, &unused);
+	rc = usb_hub_port_status(hub, port1, &portstatus, &unused);
+	if (rc < 0)
+		goto out_hdev_lock;
 	disabled = !usb_port_is_power_on(hub, portstatus);
 
  out_hdev_lock:
