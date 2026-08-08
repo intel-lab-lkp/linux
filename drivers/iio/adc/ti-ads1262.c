@@ -26,6 +26,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 #include <linux/types.h>
+#include <linux/units.h>
 
 #include <asm/byteorder.h>
 
@@ -148,6 +149,7 @@ enum {
 	ADS1262_DR_14400_SPS,
 	ADS1262_DR_19200_SPS,
 	ADS1262_DR_38400_SPS,
+	ADS1262_DR_COUNT,
 };
 
 enum {
@@ -173,6 +175,11 @@ struct ads1262_chip_info {
 	const char *name;
 };
 
+struct ads1262_channel {
+	u8 data_rate;
+	int samp_freqs[ADS1262_DR_COUNT][2];
+};
+
 struct ads1262 {
 	struct spi_device *spi;
 	struct regmap *regmap;
@@ -183,11 +190,46 @@ struct ads1262 {
 	/* Protects channel state */
 	struct mutex chan_lock;
 	unsigned int num_channels;
+	struct ads1262_channel *channels;
 	struct completion drdy;
 
 	/* Protects transfer buffers and concurrent SPI transfers */
 	struct mutex xfer_lock;
 };
+
+static const u32 ads1262_data_rate_div[] = {
+	[ADS1262_DR_2_5_SPS]	= 8 * 64 * 5760,
+	[ADS1262_DR_5_SPS]	= 8 * 64 * 2880,
+	[ADS1262_DR_10_SPS]	= 8 * 64 * 1440,
+	[ADS1262_DR_16_6_SPS]	= 8 * 64 * 864,
+	[ADS1262_DR_20_SPS]	= 8 * 64 * 720,
+	[ADS1262_DR_50_SPS]	= 8 * 64 * 288,
+	[ADS1262_DR_60_SPS]	= 8 * 64 * 240,
+	[ADS1262_DR_100_SPS]	= 8 * 64 * 144,
+	[ADS1262_DR_400_SPS]	= 8 * 64 * 36,
+	[ADS1262_DR_1200_SPS]	= 8 * 64 * 12,
+	[ADS1262_DR_2400_SPS]	= 8 * 64 * 6,
+	[ADS1262_DR_4800_SPS]	= 8 * 64 * 3,
+	[ADS1262_DR_7200_SPS]	= 8 * 64 * 2,
+	[ADS1262_DR_14400_SPS]	= 8 * 64 * 1,
+	[ADS1262_DR_19200_SPS]	= 8 * 48 * 1,
+	[ADS1262_DR_38400_SPS]	= 8 * 24 * 1,
+};
+
+static int ads1262_find_two(const int (*array)[2], size_t num_elements, int val,
+			    int val2)
+{
+	int i;
+
+	for (i = 0; i < num_elements; i++) {
+		if (val == array[i][0] && val2 == array[i][1])
+			break;
+	}
+	if (i == num_elements)
+		return -EINVAL;
+
+	return i;
+}
 
 static int ads1262_dev_cmd(struct ads1262 *st, u8 opcode)
 {
@@ -316,10 +358,18 @@ static int ads1262_wait_for_conversion(struct ads1262 *st)
 static int ads1262_channel_enable(struct ads1262 *st,
 				  const struct iio_chan_spec *spec)
 {
+	struct ads1262_channel *chan = &st->channels[spec->scan_index];
+	int ret;
 	u8 val;
 
 	guard(mutex)(&st->xfer_lock);
 	guard(mutex)(&st->chan_lock);
+
+	val = FIELD_PREP(ADS1262_MODE2_DR_MASK, chan->data_rate);
+	ret = regmap_update_bits(st->regmap, ADS1262_MODE2_REG,
+				 ADS1262_MODE2_DR_MASK, val);
+	if (ret)
+		return ret;
 
 	val = FIELD_PREP(ADS1262_INPMUX_MUXN_MASK, spec->channel2) |
 	      FIELD_PREP(ADS1262_INPMUX_MUXP_MASK, spec->channel);
@@ -372,6 +422,8 @@ static int ads1262_read_raw(struct iio_dev *indio_dev,
 			    struct iio_chan_spec const *chan, int *val,
 			    int *val2, long mask)
 {
+	struct ads1262 *st = iio_priv(indio_dev);
+	struct ads1262_channel *chan_data = &st->channels[chan->scan_index];
 	__be32 raw;
 	int ret;
 
@@ -383,6 +435,65 @@ static int ads1262_read_raw(struct iio_dev *indio_dev,
 		*val = sign_extend32(be32_to_cpu(raw), ADS1262_ADC1_RESOLUTION - 1);
 
 		return IIO_VAL_INT;
+
+	case IIO_CHAN_INFO_SAMP_FREQ: {
+		guard(mutex)(&st->chan_lock);
+
+		*val = chan_data->samp_freqs[chan_data->data_rate][0];
+		*val2 = chan_data->samp_freqs[chan_data->data_rate][1];
+
+		return IIO_VAL_INT_PLUS_MICRO;
+	}
+
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static int ads1262_read_avail(struct iio_dev *indio_dev,
+			      struct iio_chan_spec const *chan, const int **vals,
+			      int *type, int *length, long mask)
+{
+	struct ads1262 *st = iio_priv(indio_dev);
+	struct ads1262_channel *chan_data = &st->channels[chan->scan_index];
+
+	switch (mask) {
+	case IIO_CHAN_INFO_SAMP_FREQ:
+		*type = IIO_VAL_INT_PLUS_MICRO;
+		*vals = (const int *)chan_data->samp_freqs;
+		*length = ARRAY_SIZE(chan_data->samp_freqs) * 2;
+		return IIO_AVAIL_LIST;
+
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static int ads1262_write_raw(struct iio_dev *indio_dev,
+			     struct iio_chan_spec const *chan, int val,
+			     int val2, long mask)
+{
+	struct ads1262 *st = iio_priv(indio_dev);
+	struct ads1262_channel *chan_data = &st->channels[chan->scan_index];
+	int ret;
+
+	IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
+	if (IIO_DEV_ACQUIRE_FAILED(claim))
+		return -EBUSY;
+
+	guard(mutex)(&st->chan_lock);
+
+	switch (mask) {
+	case IIO_CHAN_INFO_SAMP_FREQ:
+		ret = ads1262_find_two(chan_data->samp_freqs,
+				       ARRAY_SIZE(chan_data->samp_freqs),
+				       val, val2);
+		if (ret < 0)
+			return -EINVAL;
+
+		chan_data->data_rate = ret;
+
+		return 0;
 
 	default:
 		return -EOPNOTSUPP;
@@ -404,6 +515,8 @@ static int ads1262_debugfs_reg_access(struct iio_dev *indio_dev, unsigned int re
 
 static const struct iio_info ads1262_iio_info = {
 	.read_raw = ads1262_read_raw,
+	.read_avail = ads1262_read_avail,
+	.write_raw = ads1262_write_raw,
 	.debugfs_reg_access = ads1262_debugfs_reg_access,
 };
 
@@ -575,6 +688,36 @@ static const struct regmap_bus ads1262_regmap_bus = {
 	.max_raw_write = ADS1262_MAX_REGMAP_WRITE,
 };
 
+static void ads1262_populate_samp_freqs(struct ads1262 *st,
+					struct ads1262_channel *chan)
+{
+	int freq_Hz, freq_rem;
+	u64 freq_uHz;
+
+	for (unsigned int i = 0; i < ARRAY_SIZE(chan->samp_freqs); i++) {
+		freq_uHz = div_u64(mul_u32_u32(st->clk_rate, MICRO),
+				   ads1262_data_rate_div[i]);
+		freq_Hz = div_u64_rem(freq_uHz, MICRO, &freq_rem);
+
+		chan->samp_freqs[i][0] = freq_Hz;
+		chan->samp_freqs[i][1] = freq_rem;
+	}
+}
+
+static int ads1262_populate_tables(struct iio_dev *indio_dev)
+{
+	struct ads1262 *st = iio_priv(indio_dev);
+	struct ads1262_channel *chan;
+
+	for (unsigned int i = 0; i < st->num_channels; i++) {
+		chan = &st->channels[i];
+
+		ads1262_populate_samp_freqs(st, chan);
+	}
+
+	return 0;
+}
+
 static int ads1262_gpio_setup(struct ads1262 *st)
 {
 	struct device *dev = &st->spi->dev;
@@ -661,6 +804,11 @@ static int ads1262_parse_channels(struct iio_dev *indio_dev)
 	if (st->num_channels > ADS1262_MAX_CHANNEL_COUNT)
 		return dev_err_probe(dev, -EINVAL, "too many channels\n");
 
+	st->channels = devm_kcalloc(dev, st->num_channels, sizeof(*st->channels),
+				    GFP_KERNEL);
+	if (!st->channels)
+		return -ENOMEM;
+
 	/* Account for the timestamp channel */
 	num_specs = st->num_channels + 1;
 	specs = devm_kcalloc(dev, num_specs, sizeof(*specs), GFP_KERNEL);
@@ -680,6 +828,8 @@ static int ads1262_parse_channels(struct iio_dev *indio_dev)
 		if (__test_and_set_bit(reg, &used_regs))
 			return dev_err_probe(dev, -EINVAL, "%s: duplicated channel reg\n",
 					     fwnode_get_name(node));
+
+		st->channels[reg].data_rate = ADS1262_DR_20_SPS;
 
 		specs[reg].scan_index = reg;
 		specs[reg].scan_type = (struct iio_scan_type) {
@@ -701,7 +851,10 @@ static int ads1262_parse_channels(struct iio_dev *indio_dev)
 		if (specs[reg].channel != ADS1262_INPMUX_TEMP)
 			specs[reg].indexed = true;
 
-		specs[reg].info_mask_separate = BIT(IIO_CHAN_INFO_RAW);
+		specs[reg].info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
+						BIT(IIO_CHAN_INFO_SAMP_FREQ);
+		specs[reg].info_mask_separate_available =
+				BIT(IIO_CHAN_INFO_SAMP_FREQ);
 	}
 
 	specs[num_specs - 1] = IIO_CHAN_SOFT_TIMESTAMP(num_specs - 1);
@@ -783,6 +936,10 @@ static int ads1262_spi_probe(struct spi_device *spi)
 		return ret;
 
 	ret = ads1262_gpio_setup(st);
+	if (ret)
+		return ret;
+
+	ret = ads1262_populate_tables(indio_dev);
 	if (ret)
 		return ret;
 
