@@ -1219,6 +1219,7 @@ static void stmmac_qdisc_restore_dt_config(struct stmmac_priv *priv)
 	priv->qdisc.enable = false;
 	netif_set_real_num_tx_queues(priv->dev, priv->plat->tx_queues_to_use);
 	stmmac_set_tx_queue_weight(priv);
+	stmmac_mac_config_tx_queues_prio(priv);
 	stmmac_prog_mtl_tx_algorithms(priv, priv->hw,
 				      priv->plat->tx_sched_algorithm);
 }
@@ -1345,8 +1346,16 @@ static void stmmac_reset_tc_mqprio(struct net_device *ndev,
 	struct stmmac_priv *priv = netdev_priv(ndev);
 
 	netdev_reset_tc(ndev);
-	netif_set_real_num_tx_queues(ndev, priv->plat->tx_queues_to_use);
 	stmmac_fpe_map_preemption_class(priv, ndev, extack, 0);
+
+	if (priv->qdisc.enable && priv->qdisc.algo == MTL_TX_ALGORITHM_SP) {
+		stmmac_qdisc_restore_dt_config(priv);
+	} else {
+		u8 bands = priv->qdisc.enable ? priv->qdisc.bands
+					      : priv->plat->tx_queues_to_use;
+
+		netif_set_real_num_tx_queues(ndev, bands);
+	}
 }
 
 static int tc_setup_dwmac510_mqprio(struct stmmac_priv *priv,
@@ -1357,11 +1366,22 @@ static int tc_setup_dwmac510_mqprio(struct stmmac_priv *priv,
 	u32 offset, count, num_stack_tx_queues = 0;
 	struct net_device *ndev = priv->dev;
 	u32 num_tc = qopt->num_tc;
-	int err;
+	int i, tc, err;
 
 	if (!num_tc) {
 		stmmac_reset_tc_mqprio(ndev, extack);
 		return 0;
+	}
+
+	if (!priv->dma_cap.dcben)
+		return -EOPNOTSUPP;
+
+	/* Forcing strict priority conflicts with the CBS algorithm of AVB
+	 * queues, so reject the offload when any queue is configured as AVB.
+	 */
+	for (i = 0; i < priv->plat->tx_queues_to_use; i++) {
+		if (priv->plat->tx_queues_cfg[i].mode_to_use == MTL_QUEUE_AVB)
+			return -EOPNOTSUPP;
 	}
 
 	err = netdev_set_num_tc(ndev, num_tc);
@@ -1372,6 +1392,15 @@ static int tc_setup_dwmac510_mqprio(struct stmmac_priv *priv,
 		offset = qopt->offset[tc];
 		count = qopt->count[tc];
 		num_stack_tx_queues += count;
+
+		if (offset + count > priv->plat->tx_queues_to_use)
+			goto err_reset_tc;
+
+		/* The offload switches the MTL scheduler to strict priority,
+		 * which only supports a 1:1 TC to TX queue mapping.
+		 */
+		if (count > 1)
+			goto err_reset_tc;
 
 		err = netdev_set_tc_queue(ndev, tc, count, offset);
 		if (err)
@@ -1386,6 +1415,28 @@ static int tc_setup_dwmac510_mqprio(struct stmmac_priv *priv,
 					      mqprio->preemptible_tcs);
 	if (err)
 		goto err_reset_tc;
+
+	for (i = 0; i < priv->plat->tx_queues_to_use; i++) {
+		u32 prio = 0;
+
+		for (tc = 0; tc < num_tc; tc++) {
+			int p;
+
+			if (qopt->offset[tc] != i)
+				continue;
+
+			for (p = 0; p < ARRAY_SIZE(qopt->prio_tc_map); p++)
+				if (qopt->prio_tc_map[p] == tc)
+					prio |= BIT(p);
+			break;
+		}
+
+		priv->qdisc.prio[i] = prio;
+		stmmac_tx_queue_prio(priv, priv->hw, prio, i);
+	}
+	stmmac_prog_mtl_tx_algorithms(priv, priv->hw, MTL_TX_ALGORITHM_SP);
+	priv->qdisc.algo = MTL_TX_ALGORITHM_SP;
+	priv->qdisc.enable = true;
 
 	return 0;
 
