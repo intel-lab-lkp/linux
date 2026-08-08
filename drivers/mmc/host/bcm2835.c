@@ -715,6 +715,17 @@ static void bcm2835_finish_data(struct bcm2835_host *host)
 
 	data = host->data;
 
+	/*
+	 * host->data can already be NULL here: bcm2835_dma_complete_work()
+	 * calls this unconditionally from a workqueue, but the same
+	 * transfer may already have completed via the interrupt/status-poll
+	 * path (bcm2835_finish_data() -> bcm2835_transfer_complete(), which
+	 * sets host->data = NULL) before the deferred DMA-completion
+	 * callback runs.
+	 */
+	if (!data)
+		return;
+
 	host->hcfg &= ~(SDHCFG_DATA_IRPT_EN | SDHCFG_BLOCK_IRPT_EN);
 	writel(host->hcfg, host->ioaddr + SDHCFG);
 
