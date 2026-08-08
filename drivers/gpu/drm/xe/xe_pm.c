@@ -518,6 +518,7 @@ static void xe_pm_runtime_fini(struct xe_device *xe)
 	if (IS_SRIOV_VF(xe))
 		return;
 
+	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_get_sync(dev);
 	pm_runtime_forbid(dev);
 }
