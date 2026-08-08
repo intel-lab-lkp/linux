@@ -120,6 +120,7 @@ void run_test(int reclaim_period_ms, bool disable_nx_huge_pages,
 		} else {
 			TEST_ASSERT(r == -1 && errno == EPERM,
 				    "This process should not have permission to disable NX huge pages");
+			kvm_vm_free(vm);
 			return;
 		}
 	}
