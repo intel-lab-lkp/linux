@@ -530,6 +530,35 @@ void __sched rt_mutex_postunlock(struct rt_wake_q_head *wqh)
 	rt_mutex_wake_up_q(wqh);
 }
 
+/**
+ * rt_mutex_task_owner - Get the lock owner a task is blocked on
+ * @task: Task to inspect.
+ *
+ * Caller must hold an RCU read lock. The owner value is a snapshot read
+ * without exclusion, so it may become stale immediately. Use only for
+ * best-effort diagnostics (e.g., hung task detection).
+ *
+ * Return: The task_struct owning the lock, or NULL if not blocked.
+ */
+struct task_struct *rt_mutex_task_owner(struct task_struct *task)
+{
+        struct task_struct *owner = NULL;
+        struct rt_mutex_base *lock;
+        unsigned long flags;
+
+	lockdep_assert(rcu_read_lock_held());
+
+        raw_spin_lock_irqsave(&task->pi_lock, flags);
+        lock = task_blocked_on_lock(task);
+
+        if (lock)
+                owner = rt_mutex_owner(lock);
+        raw_spin_unlock_irqrestore(&task->pi_lock, flags);
+
+        return owner;
+}
+EXPORT_SYMBOL(rt_mutex_task_owner);
+
 #ifdef CONFIG_DEBUG_RT_MUTEXES
 void rt_mutex_debug_task_free(struct task_struct *task)
 {

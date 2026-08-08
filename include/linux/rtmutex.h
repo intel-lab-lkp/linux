@@ -53,6 +53,8 @@ static inline struct task_struct *rt_mutex_owner(struct rt_mutex_base *lock)
 
 	return (struct task_struct *) (owner & ~RT_MUTEX_HAS_WAITERS);
 }
+
+extern struct task_struct *rt_mutex_task_owner(struct task_struct *task);
 #endif
 extern void rt_mutex_base_init(struct rt_mutex_base *rtb);
 

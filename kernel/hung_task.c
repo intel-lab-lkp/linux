@@ -27,6 +27,7 @@
 #include <linux/sys_info.h>
 
 #include <trace/events/sched.h>
+#include <linux/rtmutex.h>
 
 /*
  * The number of tasks checked:
@@ -139,8 +140,18 @@ static void debug_show_blocker(struct task_struct *task, unsigned long timeout)
 	struct task_struct *g, *t;
 	unsigned long owner, blocker, blocker_type;
 	const char *rwsem_blocked_by, *rwsem_blocked_as;
+	bool is_rtmutex = false;
 
 	RCU_LOCKDEP_WARN(!rcu_read_lock_held(), "No rcu lock held");
+
+#if defined(CONFIG_RT_MUTEXES)
+	owner = (unsigned long)rt_mutex_task_owner(task);
+	if (owner) {
+		is_rtmutex = true;
+		blocker_type = -1;
+		goto found;
+	}
+#endif
 
 	blocker = READ_ONCE(task->blocker);
 	if (!blocker)
@@ -149,11 +160,12 @@ static void debug_show_blocker(struct task_struct *task, unsigned long timeout)
 	blocker_type = hung_task_get_blocker_type(blocker);
 
 	switch (blocker_type) {
-	case BLOCKER_TYPE_MUTEX:
-		owner = mutex_get_owner(hung_task_blocker_to_lock(blocker));
-		break;
 	case BLOCKER_TYPE_SEM:
 		owner = sem_last_holder(hung_task_blocker_to_lock(blocker));
+		break;
+#ifndef CONFIG_PREEMPT_RT
+	case BLOCKER_TYPE_MUTEX:
+		owner = mutex_get_owner(hung_task_blocker_to_lock(blocker));
 		break;
 	case BLOCKER_TYPE_RWSEM_READER:
 	case BLOCKER_TYPE_RWSEM_WRITER:
@@ -165,6 +177,7 @@ static void debug_show_blocker(struct task_struct *task, unsigned long timeout)
 					hung_task_blocker_to_lock(blocker)) ?
 					"reader" : "writer";
 		break;
+#endif
 	default:
 		WARN_ON_ONCE(1);
 		return;
@@ -190,6 +203,7 @@ static void debug_show_blocker(struct task_struct *task, unsigned long timeout)
 		return;
 	}
 
+found:
 	/* Ensure the owner information is correct. */
 	for_each_process_thread(g, t) {
 		if ((unsigned long)t != owner)
@@ -209,6 +223,12 @@ static void debug_show_blocker(struct task_struct *task, unsigned long timeout)
 			pr_err("INFO: task %s:%d <%s> blocked on an rw-semaphore likely owned by task %s:%d <%s>\n",
 			       task->comm, task->pid, rwsem_blocked_as, t->comm,
 			       t->pid, rwsem_blocked_by);
+			break;
+		default:
+			if (is_rtmutex) {
+				pr_err("INFO: task %s:%d is blocked on a rtmutex likely owned by task %s:%d.\n",
+						task->comm, task->pid, t->comm, t->pid);
+			}
 			break;
 		}
 		/* Avoid duplicated task dump, skip if the task is also hung. */

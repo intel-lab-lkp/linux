@@ -1317,7 +1317,6 @@ config BOOTPARAM_HUNG_TASK_PANIC
 config DETECT_HUNG_TASK_BLOCKER
 	bool "Dump Hung Tasks Blocker"
 	depends on DETECT_HUNG_TASK
-	depends on !PREEMPT_RT
 	default y
 	help
 	  Say Y here to show the blocker task's stacktrace who acquires
