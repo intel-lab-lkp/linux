@@ -23,6 +23,7 @@
  *          Alon Levy
  */
 
+#include <linux/overflow.h>
 #include <linux/pci.h>
 #include <linux/uaccess.h>
 
@@ -386,12 +387,26 @@ int qxl_alloc_surf_ioctl(struct drm_device *dev, void *data, struct drm_file *fi
 	struct drm_qxl_alloc_surf *param = data;
 	int handle;
 	int ret;
-	int size, actual_stride;
+	int actual_stride;
+	size_t size;
 	struct qxl_surface surf;
 
 	/* work out size allocate bo with handle */
+	if (param->stride == INT_MIN)
+		return -EINVAL;
 	actual_stride = param->stride < 0 ? -param->stride : param->stride;
-	size = actual_stride * param->height + actual_stride;
+	if (!actual_stride || !param->width || !param->height)
+		return -EINVAL;
+	/*
+	 * size = actual_stride * (height + 1), evaluated in a type that cannot
+	 * wrap, then bounded so it survives the int parameter of
+	 * qxl_gem_object_create().
+	 */
+	if (check_mul_overflow((size_t)actual_stride,
+			       (size_t)param->height + 1, &size))
+		return -EINVAL;
+	if (size > INT_MAX)
+		return -EINVAL;
 
 	surf.format = param->format;
 	surf.width = param->width;
