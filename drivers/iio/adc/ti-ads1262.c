@@ -962,6 +962,27 @@ static irqreturn_t ads1262_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static int ads1262_common_mode_setup(struct ads1262 *st)
+{
+	struct device *dev = &st->spi->dev;
+	char name[sizeof("aincom")];
+	int ret;
+
+	for (unsigned int i = 0; i <= ADS1262_INPMUX_AINCOM; i++) {
+		if (i < ADS1262_INPMUX_AINCOM)
+			scnprintf(name, sizeof(name), "ain%u", i);
+		else
+			scnprintf(name, sizeof(name), "aincom");
+
+		ret = devm_regulator_get_enable_optional(dev, name);
+		if (ret < 0 && ret != -ENODEV)
+			return dev_err_probe(dev, ret,
+					     "failed to get common mode supply: %s\n", name);
+	}
+
+	return 0;
+}
+
 static int ads1262_regulator_enable(struct regulator_dev *rdev)
 {
 	struct ads1262 *st = rdev_get_drvdata(rdev);
@@ -1794,6 +1815,10 @@ static int ads1262_spi_probe(struct spi_device *spi)
 		return dev_err_probe(dev, ret, "failed to configure device\n");
 
 	ret = ads1262_register_regulators(st);
+	if (ret)
+		return ret;
+
+	ret = ads1262_common_mode_setup(st);
 	if (ret)
 		return ret;
 
