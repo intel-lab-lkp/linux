@@ -1116,8 +1116,10 @@ static int zynqmp_dma_probe(struct platform_device *pdev)
 	}
 	if (!pm_runtime_enabled(zdev->dev)) {
 		ret = zynqmp_dma_runtime_resume(zdev->dev);
-		if (ret)
+		if (ret) {
+			pm_runtime_dont_use_autosuspend(zdev->dev);
 			return ret;
+		}
 	}
 
 	ret = zynqmp_dma_chan_probe(zdev, pdev);
@@ -1152,6 +1154,7 @@ free_chan_resources:
 err_disable_pm:
 	if (!pm_runtime_enabled(zdev->dev))
 		zynqmp_dma_runtime_suspend(zdev->dev);
+	pm_runtime_dont_use_autosuspend(zdev->dev);
 	pm_runtime_disable(zdev->dev);
 	return ret;
 }
@@ -1172,6 +1175,7 @@ static void zynqmp_dma_remove(struct platform_device *pdev)
 	zynqmp_dma_chan_remove(zdev->chan);
 	if (pm_runtime_active(zdev->dev))
 		zynqmp_dma_runtime_suspend(zdev->dev);
+	pm_runtime_dont_use_autosuspend(zdev->dev);
 	pm_runtime_disable(zdev->dev);
 }
 
