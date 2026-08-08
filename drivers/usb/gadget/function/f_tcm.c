@@ -862,6 +862,7 @@ static int usbg_submit_command(struct f_uas *, struct usb_request *);
 static void uasp_cmd_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_uas *fu = req->context;
+	int ret;
 
 	if (req->status == -ESHUTDOWN)
 		return;
@@ -871,7 +872,9 @@ static void uasp_cmd_complete(struct usb_ep *ep, struct usb_request *req)
 		return;
 	}
 
-	usbg_submit_command(fu, req);
+	ret = usbg_submit_command(fu, req);
+	if (ret)
+		usb_ep_queue(fu->ep_cmd, req, GFP_ATOMIC);
 }
 
 static int uasp_alloc_stream_res(struct f_uas *fu, struct uas_stream *stream)
@@ -1382,6 +1385,27 @@ static int usbg_submit_command(struct f_uas *fu, struct usb_request *req)
 		return -EINVAL;
 	}
 
+	cmd_iu = (struct command_iu *)iu;
+
+	if (req->actual < offsetof(struct command_iu, cdb)) {
+		pr_err("Wrong length for UAS command IU\n");
+		return -EINVAL;
+	}
+
+	if (iu->iu_id == IU_ID_COMMAND) {
+		cmd_len = (cmd_iu->len & ~0x3) + 16;
+		if (cmd_len > USBG_MAX_CMD ||
+		    req->actual < offsetof(struct command_iu, cdb) + cmd_len) {
+			pr_err("Wrong length for UAS command IU\n");
+			return -EINVAL;
+		}
+	} else if (iu->iu_id == IU_ID_TASK_MGMT) {
+		if (req->actual < sizeof(struct task_mgmt_iu)) {
+			pr_err("Wrong length for UAS task management IU\n");
+			return -EINVAL;
+		}
+	}
+
 	scsi_tag = be16_to_cpup(&iu->tag);
 	cmd = usbg_get_cmd(fu, tv_nexus, scsi_tag);
 	if (IS_ERR(cmd)) {
@@ -1397,8 +1421,6 @@ static int usbg_submit_command(struct f_uas *fu, struct usb_request *req)
 	cmd->tmr_rsp = RC_RESPONSE_UNKNOWN;
 	cmd->flags = 0;
 	cmd->data_len = 0;
-
-	cmd_iu = (struct command_iu *)iu;
 
 	/* Command and Task Management IUs share the same LUN offset */
 	cmd->unpacked_lun = scsilun_to_int(&cmd_iu->lun);
@@ -1434,11 +1456,6 @@ static int usbg_submit_command(struct f_uas *fu, struct usb_request *req)
 	}
 
 	cmd_len = (cmd_iu->len & ~0x3) + 16;
-	if (cmd_len > USBG_MAX_CMD) {
-		target_free_tag(tv_nexus->tvn_se_sess, &cmd->se_cmd);
-		hash_del(&stream->node);
-		return -EINVAL;
-	}
 	memcpy(cmd->cmd_buf, cmd_iu->cdb, cmd_len);
 
 	switch (cmd_iu->prio_attr & 0x7) {
