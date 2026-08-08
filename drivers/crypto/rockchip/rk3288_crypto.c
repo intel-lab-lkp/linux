@@ -150,14 +150,17 @@ static int rk_crypto_pm_init(struct rk_crypto_info *rkdev)
 	pm_runtime_set_autosuspend_delay(rkdev->dev, 2000);
 
 	err = pm_runtime_set_suspended(rkdev->dev);
-	if (err)
+	if (err) {
+		pm_runtime_dont_use_autosuspend(rkdev->dev);
 		return err;
+	}
 	pm_runtime_enable(rkdev->dev);
 	return err;
 }
 
 static void rk_crypto_pm_exit(struct rk_crypto_info *rkdev)
 {
+	pm_runtime_dont_use_autosuspend(rkdev->dev);
 	pm_runtime_disable(rkdev->dev);
 }
 
