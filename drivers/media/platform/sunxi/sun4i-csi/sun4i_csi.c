@@ -255,13 +255,15 @@ static int sun4i_csi_probe(struct platform_device *pdev)
 	ret = v4l2_async_nf_register(&csi->notifier);
 	if (ret) {
 		dev_err(csi->dev, "Couldn't register our notifier.\n");
-		goto err_unregister_media;
+		goto err_clean_notifier;
 	}
 
 	pm_runtime_enable(&pdev->dev);
 
 	return 0;
 
+err_clean_notifier:
+	v4l2_async_nf_cleanup(&csi->notifier);
 err_unregister_media:
 	media_device_unregister(&csi->mdev);
 	sun4i_csi_dma_unregister(csi);
