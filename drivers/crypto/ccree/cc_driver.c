@@ -565,6 +565,7 @@ post_debugfs_err:
 post_regs_err:
 	fini_cc_regs(new_drvdata);
 post_pm_err:
+	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_put_noidle(dev);
 	pm_runtime_disable(dev);
 	pm_runtime_set_suspended(dev);
@@ -592,6 +593,7 @@ static void cleanup_cc_resources(struct platform_device *plat_dev)
 	cc_fips_fini(drvdata);
 	cc_debugfs_fini(drvdata);
 	fini_cc_regs(drvdata);
+	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_put_noidle(dev);
 	pm_runtime_disable(dev);
 	pm_runtime_set_suspended(dev);
