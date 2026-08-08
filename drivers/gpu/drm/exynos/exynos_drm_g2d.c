@@ -1523,6 +1523,7 @@ static int g2d_probe(struct platform_device *pdev)
 	return 0;
 
 err_put_clk:
+	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_disable(dev);
 err_destroy_workqueue:
 	destroy_workqueue(g2d->g2d_workq);
