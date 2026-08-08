@@ -6443,28 +6443,45 @@ static int stmmac_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 			   void *type_data)
 {
 	struct stmmac_priv *priv = netdev_priv(ndev);
+	int ret;
+
+	ret = pm_runtime_resume_and_get(priv->device);
+	if (ret < 0)
+		return ret;
 
 	switch (type) {
 	case TC_QUERY_CAPS:
-		return stmmac_tc_query_caps(priv, priv, type_data);
+		ret = stmmac_tc_query_caps(priv, priv, type_data);
+		break;
 	case TC_SETUP_QDISC_MQPRIO:
-		return stmmac_tc_setup_mqprio(priv, priv, type_data);
+		ret = stmmac_tc_setup_mqprio(priv, priv, type_data);
+		break;
 	case TC_SETUP_BLOCK:
-		return flow_block_cb_setup_simple(type_data,
-						  &stmmac_block_cb_list,
-						  stmmac_setup_tc_block_cb,
-						  priv, priv, true);
+		ret = flow_block_cb_setup_simple(type_data,
+						 &stmmac_block_cb_list,
+						 stmmac_setup_tc_block_cb,
+						 priv, priv, true);
+		break;
 	case TC_SETUP_QDISC_CBS:
-		return stmmac_tc_setup_cbs(priv, priv, type_data);
+		ret = stmmac_tc_setup_cbs(priv, priv, type_data);
+		break;
 	case TC_SETUP_QDISC_TAPRIO:
-		return stmmac_tc_setup_taprio(priv, priv, type_data);
+		ret = stmmac_tc_setup_taprio(priv, priv, type_data);
+		break;
 	case TC_SETUP_QDISC_ETF:
-		return stmmac_tc_setup_etf(priv, priv, type_data);
+		ret = stmmac_tc_setup_etf(priv, priv, type_data);
+		break;
 	case TC_SETUP_QDISC_ETS:
-		return stmmac_tc_setup_ets(priv, priv, type_data);
+		ret = stmmac_tc_setup_ets(priv, priv, type_data);
+		break;
 	default:
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
+		break;
 	}
+
+	pm_runtime_put(priv->device);
+
+	return ret;
 }
 
 static u16 stmmac_select_queue(struct net_device *dev, struct sk_buff *skb,
