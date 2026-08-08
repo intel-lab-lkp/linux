@@ -139,16 +139,13 @@ static int hts221_check_whoami(struct hts221_hw *hw)
 	int err, data;
 
 	err = regmap_read(hw->regmap, HTS221_REG_WHOAMI_ADDR, &data);
-	if (err < 0) {
-		dev_err(hw->dev, "failed to read whoami register\n");
-		return err;
-	}
+	if (err < 0)
+		return dev_err_probe(hw->dev, err,
+				     "failed to read whoami register\n");
 
-	if (data != HTS221_REG_WHOAMI_VAL) {
-		dev_err(hw->dev, "wrong whoami {%02x vs %02x}\n",
-			data, HTS221_REG_WHOAMI_VAL);
-		return -ENODEV;
-	}
+	if (data != HTS221_REG_WHOAMI_VAL)
+		dev_info(hw->dev,
+			 "unexpected whoami 0x%02x, continuing\n", data);
 
 	return 0;
 }
