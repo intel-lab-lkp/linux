@@ -2691,6 +2691,7 @@ err_engine1:
 		dma_release_channel(cryp->dma_lch_out);
 err_dma:
 err_rst:
+	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_disable(dev);
 	pm_runtime_put_noidle(dev);
 
@@ -2722,6 +2723,7 @@ static void stm32_cryp_remove(struct platform_device *pdev)
 	if (cryp->dma_lch_out)
 		dma_release_channel(cryp->dma_lch_out);
 
+	pm_runtime_dont_use_autosuspend(cryp->dev);
 	pm_runtime_disable(cryp->dev);
 	pm_runtime_put_noidle(cryp->dev);
 
