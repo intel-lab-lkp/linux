@@ -5,6 +5,7 @@
  * Copyright (c) 2020 Western Digital Corporation or its affiliates.
  */
 
+#include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/sched/task_stack.h>
@@ -87,8 +88,23 @@ static bool sbi_cpu_is_stopped(unsigned int cpuid)
 {
 	int rc;
 	unsigned long hartid = cpuid_to_hartid_map(cpuid);
+	unsigned long start, end;
 
-	rc = sbi_hsm_hart_get_status(hartid);
+	/*
+	 * The core that is being hotplugged down might still
+	 * be processing SBI ecall hotplug down.
+	 * So, try again a few times.
+	 */
+
+	start = jiffies;
+	end = start + msecs_to_jiffies(100);
+	do {
+		rc = sbi_hsm_hart_get_status(hartid);
+		if (rc == SBI_HSM_STATE_STOPPED)
+			break;
+
+		usleep_range(100, 1000);
+	} while (time_before(jiffies, end));
 
 	if (rc != SBI_HSM_STATE_STOPPED) {
 		pr_warn("HART%lu isn't stopped; status %d\n", hartid, rc);
