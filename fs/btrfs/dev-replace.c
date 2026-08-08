@@ -240,6 +240,7 @@ static int btrfs_init_dev_replace_tgtdev(struct btrfs_fs_info *fs_info,
 	struct block_device *bdev;
 	u64 devid = BTRFS_DEV_REPLACE_DEVID;
 	int ret = 0;
+	bool device_allocated = false;
 
 	*device_out = NULL;
 	if (srcdev->fs_devices->seeding) {
@@ -287,6 +288,7 @@ static int btrfs_init_dev_replace_tgtdev(struct btrfs_fs_info *fs_info,
 		ret = PTR_ERR(device);
 		goto error;
 	}
+	device_allocated = true;
 
 	ret = lookup_bdev(device_path, &device->devt);
 	if (ret)
@@ -327,6 +329,8 @@ static int btrfs_init_dev_replace_tgtdev(struct btrfs_fs_info *fs_info,
 	return 0;
 
 error:
+	if (device_allocated)
+		btrfs_free_device(device);
 	bdev_fput(bdev_file);
 	return ret;
 }
