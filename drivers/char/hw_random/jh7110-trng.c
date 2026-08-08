@@ -335,12 +335,18 @@ static int starfive_trng_probe(struct platform_device *pdev)
 
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, 100);
-	pm_runtime_enable(&pdev->dev);
+	ret = devm_pm_runtime_enable(&pdev->dev);
+	if (ret) {
+		reset_control_assert(trng->rst);
+		clk_disable_unprepare(trng->ahb);
+		clk_disable_unprepare(trng->hclk);
+
+		return dev_err_probe(&pdev->dev, ret,
+				     "Failed to enable runtime PM\n");
+	}
 
 	ret = devm_hwrng_register(&pdev->dev, &trng->rng);
 	if (ret) {
-		pm_runtime_disable(&pdev->dev);
-
 		reset_control_assert(trng->rst);
 		clk_disable_unprepare(trng->ahb);
 		clk_disable_unprepare(trng->hclk);
