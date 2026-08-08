@@ -381,14 +381,17 @@ static int sl3516_ce_pm_init(struct sl3516_ce_dev *ce)
 	pm_runtime_set_autosuspend_delay(ce->dev, 2000);
 
 	err = pm_runtime_set_suspended(ce->dev);
-	if (err)
+	if (err) {
+		pm_runtime_dont_use_autosuspend(ce->dev);
 		return err;
+	}
 	pm_runtime_enable(ce->dev);
 	return err;
 }
 
 static void sl3516_ce_pm_exit(struct sl3516_ce_dev *ce)
 {
+	pm_runtime_dont_use_autosuspend(ce->dev);
 	pm_runtime_disable(ce->dev);
 }
 
