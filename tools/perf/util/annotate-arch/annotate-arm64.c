@@ -359,7 +359,7 @@ static int extract_op_location_arm64(const struct arch *arch,
 
 #ifdef HAVE_LIBDW_SUPPORT
 static void update_insn_state_arm64(struct type_state *state,
-				    struct data_loc_info *dloc, Dwarf_Die *cu_die __maybe_unused,
+				    struct data_loc_info *dloc, Dwarf_Die *cu_die,
 				    struct disasm_line *dl)
 {
 	struct annotated_insn_loc loc;
@@ -378,6 +378,8 @@ static void update_insn_state_arm64(struct type_state *state,
 		struct symbol *func = dl->ops.target.sym;
 		const char *call_name;
 		u64 call_addr;
+		struct type_state_reg *tsr;
+		Dwarf_Die type_die;
 
 		call_name = func ? func->name : dl->ops.target.name;
 		pr_debug_dtp("call [%x] %s\n", insn_offset, call_name ?: "<unknown>");
@@ -394,6 +396,20 @@ static void update_insn_state_arm64(struct type_state *state,
 			if (reg->lifetime_active && call_addr < reg->lifetime_end)
 				continue;
 			invalidate_reg_state(reg);
+		}
+
+		/* Update register with the return type (if any) */
+		if (call_name && die_find_func_rettype(cu_die, call_name, &type_die)) {
+			tsr = &state->regs[state->ret_reg];
+			tsr->copied_from = -1;
+			tsr->type = type_die;
+			tsr->kind = TSR_KIND_TYPE;
+			tsr->offset = 0;
+			tsr->ok = true;
+
+			pr_debug_dtp("call [%x] return -> reg%d",
+				     insn_offset, state->ret_reg);
+			pr_debug_type_name(&type_die, tsr->kind);
 		}
 		return;
 	}
