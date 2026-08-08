@@ -966,6 +966,7 @@ static irqreturn_t adxl380_irq_handler(int irq, void  *p)
 	if (ret)
 		return IRQ_HANDLED;
 
+	fifo_entries = min(fifo_entries, ADXL380_FIFO_SAMPLES);
 	fifo_entries = rounddown(fifo_entries, st->fifo_set_size);
 	ret = regmap_noinc_read(st->regmap, ADXL380_FIFO_DATA, &st->fifo_buf,
 				sizeof(*st->fifo_buf) * fifo_entries);
