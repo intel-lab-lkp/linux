@@ -356,6 +356,16 @@ static void sun4i_csi_stop_streaming(struct vb2_queue *vq)
 	v4l2_subdev_call(csi->src_subdev, video, s_stream, 0);
 	sun4i_csi_capture_stop(csi);
 
+	/*
+	 * Disable the frame done interrupt and wait for the handler to
+	 * finish. A frame may complete right as capture is stopped, so an
+	 * interrupt can still be pending here; without this the handler could
+	 * run after the device is powered down (pm_runtime_put() on release)
+	 * and access registers on a gated block.
+	 */
+	writel(0, csi->regs + CSI_INT_EN_REG);
+	synchronize_irq(csi->irq);
+
 	/* Release all active buffers */
 	spin_lock_irqsave(&csi->qlock, flags);
 	return_all_buffers(csi, VB2_BUF_STATE_ERROR);
@@ -440,6 +450,7 @@ int sun4i_csi_dma_register(struct sun4i_csi *csi, int irq)
 		dev_err(csi->dev, "Couldn't register our interrupt\n");
 		goto err_unregister_device;
 	}
+	csi->irq = irq;
 
 	return 0;
 
