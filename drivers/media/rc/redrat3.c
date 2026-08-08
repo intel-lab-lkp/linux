@@ -1120,6 +1120,8 @@ static int redrat3_dev_probe(struct usb_interface *intf,
 
 led_free:
 	led_classdev_unregister(&rr3->led);
+	rc_unregister_device(rr3->rc);
+	rc_free_device(rr3->rc);
 redrat_free:
 	redrat3_delete(rr3, rr3->udev);
 
