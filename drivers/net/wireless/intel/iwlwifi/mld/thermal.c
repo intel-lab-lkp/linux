@@ -234,7 +234,7 @@ unlock:
 	return ret;
 }
 
-static  struct thermal_zone_device_ops tzone_ops = {
+static const struct thermal_zone_device_ops tzone_ops = {
 	.get_temp = iwl_mld_tzone_get_temp,
 	.set_trip_temp = iwl_mld_tzone_set_trip_temp,
 };

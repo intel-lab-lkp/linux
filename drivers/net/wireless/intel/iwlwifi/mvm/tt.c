@@ -643,7 +643,7 @@ static int iwl_mvm_tzone_set_trip_temp(struct thermal_zone_device *device,
 	return iwl_mvm_send_temp_report_ths_cmd(mvm);
 }
 
-static  struct thermal_zone_device_ops tzone_ops = {
+static const struct thermal_zone_device_ops tzone_ops = {
 	.get_temp = iwl_mvm_tzone_get_temp,
 	.set_trip_temp = iwl_mvm_tzone_set_trip_temp,
 };
