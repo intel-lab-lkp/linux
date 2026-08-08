@@ -3654,6 +3654,7 @@ static int __init d40_probe(struct platform_device *pdev)
 		regulator_disable(base->lcpa_regulator);
 		regulator_put(base->lcpa_regulator);
 	}
+	pm_runtime_dont_use_autosuspend(base->dev);
 	pm_runtime_disable(base->dev);
 
  report_failure:
