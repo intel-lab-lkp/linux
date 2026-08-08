@@ -1525,12 +1525,13 @@ static int bot_submit_command(struct f_uas *fu,
 	struct tcm_usbg_nexus *tv_nexus;
 	u32 cmd_len;
 
-	if (cbw->Signature != cpu_to_le32(US_BULK_CB_SIGN)) {
-		pr_err("Wrong signature on CBW\n");
+	if (len != US_BULK_CB_WRAP_LEN) {
+		pr_err("Wrong length for CBW\n");
 		return -EINVAL;
 	}
-	if (len != 31) {
-		pr_err("Wrong length for CBW\n");
+
+	if (cbw->Signature != cpu_to_le32(US_BULK_CB_SIGN)) {
+		pr_err("Wrong signature on CBW\n");
 		return -EINVAL;
 	}
 
