@@ -384,14 +384,24 @@ static void mana_hwc_comp_event(void *ctx, struct gdma_queue *q_self)
 
 static void mana_hwc_destroy_cq(struct gdma_context *gc, struct hwc_cq *hwc_cq)
 {
-	kfree(hwc_cq->comp_buf);
-
-	if (hwc_cq->gdma_cq)
-		mana_gd_destroy_queue(gc, hwc_cq->gdma_cq);
-
+	/* Destroy the EQ before the CQ.  mana_gd_destroy_queue() on the EQ
+	 * deregisters its IRQ and waits out in-flight handlers, fencing all
+	 * EQE dispatch — both the completion path and HWC init/reconfig
+	 * events.  Freeing the CQ first would leave the EQ live and able to
+	 * dispatch an event that dereferences hwc->cq->gdma_cq (e.g.
+	 * mana_hwc_init_event_handler()) after it has been freed.
+	 */
 	if (hwc_cq->gdma_eq)
 		mana_gd_destroy_queue(gc, hwc_cq->gdma_eq);
 
+	/* comp_buf is reached only by mana_hwc_comp_event(), invoked from
+	 * the now-fenced EQ handler, so it is safe to free once the EQ and
+	 * CQ are gone.
+	 */
+	if (hwc_cq->gdma_cq)
+		mana_gd_destroy_queue(gc, hwc_cq->gdma_cq);
+
+	kfree(hwc_cq->comp_buf);
 	kfree(hwc_cq);
 }
 
