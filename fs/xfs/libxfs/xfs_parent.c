@@ -156,6 +156,8 @@ xfs_parent_da_args_init(
 	xfs_ino_t		owner,
 	const struct xfs_name	*parent_name)
 {
+	int			local;
+
 	args->geo = child->i_mount->m_attr_geo;
 	args->whichfork = XFS_ATTR_FORK;
 	args->attr_filter = XFS_ATTR_PARENT;
@@ -168,6 +170,17 @@ xfs_parent_da_args_init(
 	args->value = rec;
 	args->valuelen = sizeof(struct xfs_parent_rec);
 	xfs_attr_sethash(args);
+
+	/*
+	 * xfs_da_grow_inode_int() subtracts every block it allocates from
+	 * args->total, which is unsigned, so the zero left here by
+	 * kmem_cache_zalloc() wraps to ~0U as soon as the attr fork grows once.
+	 * Derive it the way xfs_attr_set() does instead.  A parent pointer's
+	 * value is a struct xfs_parent_rec, so the entry is always local, which
+	 * is what the ASSERT records.
+	 */
+	args->total = xfs_attr_calc_size(args, &local);
+	ASSERT(local);
 }
 
 /* Make sure the incore state is ready for a parent pointer query/update. */
