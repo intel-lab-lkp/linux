@@ -1210,6 +1210,108 @@ static int tc_setup_etf(struct stmmac_priv *priv,
 	return 0;
 }
 
+/* Max quantum value supported by the MTL DWRR scheduler */
+#define MTL_TXQ_WEIGHT_QUANTUM_MAX	0x1312d0
+
+static void stmmac_qdisc_restore_dt_config(struct stmmac_priv *priv)
+{
+	/* reset to the dt configured algorithm. */
+	priv->qdisc.enable = false;
+	netif_set_real_num_tx_queues(priv->dev, priv->plat->tx_queues_to_use);
+	stmmac_set_tx_queue_weight(priv);
+	stmmac_prog_mtl_tx_algorithms(priv, priv->hw,
+				      priv->plat->tx_sched_algorithm);
+}
+
+static int tc_setup_ets_sched(struct stmmac_priv *priv,
+			      struct tc_ets_qopt_offload *qopt)
+{
+	struct tc_ets_qopt_offload_replace_params *p = &qopt->replace_params;
+	struct plat_stmmacenet_data *pdata = priv->plat;
+	int err, i;
+
+	if (!priv->dma_cap.dcben)
+		return -EOPNOTSUPP;
+
+	if (qopt->parent != TC_H_ROOT)
+		return -EOPNOTSUPP;
+
+	if (p->bands > pdata->tx_queues_to_use)
+		return -EOPNOTSUPP;
+
+	for (i = 0; i < pdata->tx_queues_to_use; i++) {
+		if (pdata->tx_queues_cfg[i].mode_to_use == MTL_QUEUE_AVB)
+			return -EOPNOTSUPP;
+	}
+
+	for (i = 0; i < p->bands; i++) {
+		if (!p->quanta[i])
+			return -EOPNOTSUPP;
+
+		if (p->quanta[i] > MTL_TXQ_WEIGHT_QUANTUM_MAX)
+			return -EOPNOTSUPP;
+	}
+
+	err = netif_set_real_num_tx_queues(priv->dev, p->bands);
+	if (err)
+		return err;
+
+	for (i = 0; i < pdata->tx_queues_to_use; i++) {
+		u32 quantum = i < p->bands ? p->quanta[i] : 0;
+
+		priv->qdisc.quanta[i] = quantum;
+		stmmac_set_mtl_tx_queue_weight(priv, priv->hw, quantum, i);
+	}
+
+	stmmac_prog_mtl_tx_algorithms(priv, priv->hw, MTL_TX_ALGORITHM_DWRR);
+	priv->qdisc.algo = MTL_TX_ALGORITHM_DWRR;
+	priv->qdisc.handle = qopt->handle;
+	priv->qdisc.bands = p->bands;
+	priv->qdisc.enable = true;
+
+	return 0;
+}
+
+static int tc_setup_ets_destroy(struct stmmac_priv *priv,
+				struct tc_ets_qopt_offload *qopt)
+{
+	if (qopt->parent != TC_H_ROOT ||
+	    qopt->handle != priv->qdisc.handle)
+		return -EOPNOTSUPP;
+
+	if (!priv->qdisc.enable ||
+	    priv->qdisc.algo != MTL_TX_ALGORITHM_DWRR)
+		return -EOPNOTSUPP;
+
+	stmmac_qdisc_restore_dt_config(priv);
+
+	return 0;
+}
+
+static int tc_setup_ets(struct stmmac_priv *priv,
+			struct tc_ets_qopt_offload *qopt)
+{
+	switch (qopt->command) {
+	case TC_ETS_REPLACE:
+		return tc_setup_ets_sched(priv, qopt);
+	case TC_ETS_DESTROY:
+		return tc_setup_ets_destroy(priv, qopt);
+	case TC_ETS_GRAFT:
+		break;
+	case TC_ETS_STATS:
+		if (qopt->parent == TC_H_ROOT &&
+		    qopt->handle == priv->qdisc.handle &&
+		    priv->qdisc.enable &&
+		    priv->qdisc.algo == MTL_TX_ALGORITHM_DWRR)
+			break;
+		fallthrough;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 static int tc_query_caps(struct stmmac_priv *priv,
 			 struct tc_query_caps_base *base)
 {
@@ -1308,6 +1410,7 @@ const struct stmmac_tc_ops dwmac4_tc_ops = {
 	.setup_cls = tc_setup_cls,
 	.setup_taprio = tc_setup_taprio_without_fpe,
 	.setup_etf = tc_setup_etf,
+	.setup_ets = tc_setup_ets,
 	.query_caps = tc_query_caps,
 	.setup_mqprio = tc_setup_mqprio_unimplemented,
 };
@@ -1319,6 +1422,7 @@ const struct stmmac_tc_ops dwmac510_tc_ops = {
 	.setup_cls = tc_setup_cls,
 	.setup_taprio = tc_setup_taprio,
 	.setup_etf = tc_setup_etf,
+	.setup_ets = tc_setup_ets,
 	.query_caps = tc_query_caps,
 	.setup_mqprio = tc_setup_dwmac510_mqprio,
 };

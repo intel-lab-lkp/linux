@@ -3419,14 +3419,22 @@ static void stmmac_set_rings_length(struct stmmac_priv *priv)
  *  @priv: driver private structure
  *  Description: It is used for setting TX queues weight
  */
-static void stmmac_set_tx_queue_weight(struct stmmac_priv *priv)
+void stmmac_set_tx_queue_weight(struct stmmac_priv *priv)
 {
-	u8 tx_queues_count = priv->plat->tx_queues_to_use;
+	struct plat_stmmacenet_data *pdata = priv->plat;
+	u8 tx_queues_count = pdata->tx_queues_to_use;
 	u32 weight;
 	u8 queue;
 
 	for (queue = 0; queue < tx_queues_count; queue++) {
-		weight = priv->plat->tx_queues_cfg[queue].weight;
+		if (pdata->tx_queues_cfg[queue].mode_to_use == MTL_QUEUE_AVB)
+			continue;
+
+		if (priv->qdisc.enable &&
+		    priv->qdisc.algo == MTL_TX_ALGORITHM_DWRR)
+			weight = priv->qdisc.quanta[queue];
+		else
+			weight = pdata->tx_queues_cfg[queue].weight;
 		stmmac_set_mtl_tx_queue_weight(priv, priv->hw, weight, queue);
 	}
 }
@@ -3570,9 +3578,15 @@ static void stmmac_mtl_configuration(struct stmmac_priv *priv)
 				priv->plat->rx_sched_algorithm);
 
 	/* Configure MTL TX algorithms */
-	if (tx_queues_count > 1)
-		stmmac_prog_mtl_tx_algorithms(priv, priv->hw,
-				priv->plat->tx_sched_algorithm);
+	if (tx_queues_count > 1) {
+		u8 tx_sched_algo;
+
+		if (priv->qdisc.enable)
+			tx_sched_algo = priv->qdisc.algo;
+		else
+			tx_sched_algo = priv->plat->tx_sched_algorithm;
+		stmmac_prog_mtl_tx_algorithms(priv, priv->hw, tx_sched_algo);
+	}
 
 	/* Configure CBS in AVB TX queues */
 	if (tx_queues_count > 1)
@@ -3738,7 +3752,11 @@ static int stmmac_hw_setup(struct net_device *dev)
 
 	/* Configure real RX and TX queues */
 	netif_set_real_num_rx_queues(dev, priv->plat->rx_queues_to_use);
-	netif_set_real_num_tx_queues(dev, priv->plat->tx_queues_to_use);
+	if (priv->qdisc.enable && priv->qdisc.algo == MTL_TX_ALGORITHM_DWRR)
+		netif_set_real_num_tx_queues(dev, priv->qdisc.bands);
+	else
+		netif_set_real_num_tx_queues(dev,
+					     priv->plat->tx_queues_to_use);
 
 	/* Start the ball rolling... */
 	stmmac_start_all_dma(priv);
@@ -6437,6 +6455,8 @@ static int stmmac_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 		return stmmac_tc_setup_taprio(priv, priv, type_data);
 	case TC_SETUP_QDISC_ETF:
 		return stmmac_tc_setup_etf(priv, priv, type_data);
+	case TC_SETUP_QDISC_ETS:
+		return stmmac_tc_setup_ets(priv, priv, type_data);
 	default:
 		return -EOPNOTSUPP;
 	}

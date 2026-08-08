@@ -205,7 +205,10 @@ int dwmac5_fpe_map_preemption_class(struct net_device *ndev,
 {
 	u32 val, offset, count, queue_weight, preemptible_txqs = 0;
 	struct stmmac_priv *priv = netdev_priv(ndev);
+	struct plat_stmmacenet_data *pdata = priv->plat;
 	int num_tc = netdev_get_num_tc(ndev);
+	u32 sched_algo;
+	bool ets;
 
 	if (!pclass)
 		goto update_mapping;
@@ -216,6 +219,11 @@ int dwmac5_fpe_map_preemption_class(struct net_device *ndev,
 	 * "The number of Tx DMA channels is equal to the number of Tx queues,
 	 * and is direct one-to-one mapping."
 	 */
+
+	sched_algo = priv->qdisc.enable ? priv->qdisc.algo
+					: pdata->tx_sched_algorithm;
+	ets = priv->qdisc.enable && sched_algo == MTL_TX_ALGORITHM_DWRR;
+
 	for (u32 tc = 0; tc < num_tc; tc++) {
 		count = ndev->tc_to_txq[tc].count;
 		offset = ndev->tc_to_txq[tc].offset;
@@ -227,16 +235,20 @@ int dwmac5_fpe_map_preemption_class(struct net_device *ndev,
 		if (count == 1)
 			continue;
 
-		if (priv->plat->tx_sched_algorithm == MTL_TX_ALGORITHM_SP) {
+		if (sched_algo == MTL_TX_ALGORITHM_SP) {
 			NL_SET_ERR_MSG_MOD(extack, ALG_ERR_MSG);
 			return -EINVAL;
 		}
 
-		queue_weight = priv->plat->tx_queues_cfg[offset].weight;
+		queue_weight = ets ? priv->qdisc.quanta[offset]
+				   : pdata->tx_queues_cfg[offset].weight;
 
 		for (u32 i = 1; i < count; i++) {
-			if (priv->plat->tx_queues_cfg[offset + i].weight !=
-			    queue_weight) {
+			u32 weight;
+
+			weight = ets ? priv->qdisc.quanta[offset + i]
+				     : pdata->tx_queues_cfg[offset + i].weight;
+			if (weight != queue_weight) {
 				NL_SET_ERR_MSG_FMT_MOD(extack, WEIGHT_ERR_MSG,
 						       queue_weight, tc);
 				return -EINVAL;
