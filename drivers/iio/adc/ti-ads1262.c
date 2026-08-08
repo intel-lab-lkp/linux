@@ -34,6 +34,9 @@
 #include <asm/byteorder.h>
 
 #include <linux/iio/iio.h>
+#include <linux/iio/trigger.h>
+#include <linux/iio/trigger_consumer.h>
+#include <linux/iio/triggered_buffer.h>
 
 #define ADS1262_OPCODE_NOP			0x00
 #define ADS1262_OPCODE_RESET			0x06
@@ -225,6 +228,7 @@ struct ads1262_channel {
 struct ads1262 {
 	struct spi_device *spi;
 	struct regmap *regmap;
+	struct iio_trigger *trig;
 	struct gpio_desc *reset_gpiod;
 	struct gpio_desc *start_gpiod;
 	unsigned long clk_rate;
@@ -241,8 +245,16 @@ struct ads1262 {
 	bool need_avss_uV;
 	bool bipolar_supply;
 
+	IIO_DECLARE_BUFFER_WITH_TS(__be32, scan_buffer,
+				   ADS1262_MAX_CHANNEL_COUNT);
+
 	/* Protects transfer buffers and concurrent SPI transfers */
 	struct mutex xfer_lock;
+	struct spi_message msg;
+	struct spi_transfer xfer;
+
+	u8 tx[11] __aligned(IIO_DMA_MINALIGN);
+	u8 rx[11] __aligned(IIO_DMA_MINALIGN);
 };
 
 static const u32 ads1262_data_rate_div[] = {
@@ -708,10 +720,242 @@ static const struct iio_info ads1262_iio_info = {
 	.debugfs_reg_access = ads1262_debugfs_reg_access,
 };
 
+static int ads1262_buffer_preenable(struct iio_dev *indio_dev)
+{
+	struct ads1262 *st = iio_priv(indio_dev);
+	unsigned int weight;
+	unsigned long i;
+	int ret;
+
+	weight = bitmap_weight(indio_dev->active_scan_mask,
+			       iio_get_masklength(indio_dev));
+
+	if (weight > 1) {
+		/*
+		 * Multiple channels use software sequencing: a single
+		 * contiguous transfer rewrites the per-channel configuration
+		 * registers in two (non-contiguous) groups.
+		 *
+		 * Group 1: write protocol (2 bytes) + MODE0, MODE1, MODE2,
+		 * INPMUX (4 registers).
+		 *
+		 * Group 2: write protocol (2 bytes) + IDACMUX, IDACMAG,
+		 * REFMUX (3 registers).
+		 *
+		 * Total: 11 bytes
+		 */
+		st->xfer.len = 11;
+	} else {
+		/*
+		 * A single channel is read by command (RDATA1), so the transfer
+		 * holds the command byte plus the 4 conversion bytes.
+		 *
+		 * Total: 5 bytes
+		 */
+		st->xfer.len = 5;
+
+		/*
+		 * When only one channel is enabled, we can't really avoid SPI
+		 * activity from happening when the auxiliary ADC is in use,
+		 * thus we have to read from the data-holding register (command
+		 * mode).
+		 */
+		memset(st->tx, 0, st->xfer.len);
+		st->tx[0] = ADS1262_OPCODE_RDATA1;
+
+		i = find_first_bit(indio_dev->active_scan_mask,
+				   iio_get_masklength(indio_dev));
+		ret = ads1262_channel_enable(st, &indio_dev->channels[i]);
+		if (ret)
+			return ret;
+	}
+
+	ret = ads1262_set_runmode(st, ADS1262_RUNMODE_CONTINUOUS);
+	if (ret)
+		return ret;
+
+	ret = spi_optimize_message(st->spi, &st->msg);
+	if (ret)
+		return ret;
+
+	ret = ads1262_dev_start(st);
+	if (ret) {
+		spi_unoptimize_message(&st->msg);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int ads1262_buffer_postdisable(struct iio_dev *indio_dev)
+{
+	struct ads1262 *st = iio_priv(indio_dev);
+	unsigned int weight;
+
+	ads1262_dev_stop(st);
+	spi_unoptimize_message(&st->msg);
+
+	weight = bitmap_weight(indio_dev->active_scan_mask,
+			       iio_get_masklength(indio_dev));
+	if (weight > 1) {
+		regcache_drop_region(st->regmap, ADS1262_MODE0_REG,
+				     ADS1262_INPMUX_REG);
+		regcache_drop_region(st->regmap, ADS1262_IDACMUX_REG,
+				     ADS1262_REFMUX_REG);
+	}
+
+	return 0;
+}
+
+static const struct iio_buffer_setup_ops ads1262_buffer_ops = {
+	.preenable = ads1262_buffer_preenable,
+	.postdisable = ads1262_buffer_postdisable,
+};
+
+static int ads1262_enable_and_read_last(struct ads1262 *st,
+					const struct iio_chan_spec *spec,
+					__be32 *val)
+{
+	struct ads1262_channel *chan;
+	int ret;
+
+	lockdep_assert_held(&st->xfer_lock);
+
+	if (spec) {
+		guard(mutex)(&st->chan_lock);
+
+		chan = &st->channels[spec->scan_index];
+
+		/* Group 1: MODE0, MODE1, MODE2, INPMUX */
+		st->tx[0] = ADS1262_MODE0_REG | ADS1262_OPCODE_WREG;
+		st->tx[1] = ADS1262_INPMUX_REG - ADS1262_MODE0_REG;
+		st->tx[2] = FIELD_PREP(ADS1262_MODE0_INPUT_CHOP_MASK, chan->input_chop) |
+			    FIELD_PREP(ADS1262_MODE0_IDAC_CHOP_MASK, chan->idac_chop) |
+			    FIELD_PREP(ADS1262_MODE0_RUNMODE_MASK, ADS1262_RUNMODE_CONTINUOUS) |
+			    FIELD_PREP(ADS1262_MODE0_REFREV_MASK, chan->ref_reversal);
+		st->tx[3] = FIELD_PREP(ADS1262_MODE1_FILTER_MASK, ADS1262_FILTER_FIR);
+		st->tx[4] = FIELD_PREP(ADS1262_MODE2_DR_MASK, chan->data_rate) |
+			    FIELD_PREP(ADS1262_MODE2_GAIN_MASK, chan->gain);
+		st->tx[5] = FIELD_PREP(ADS1262_INPMUX_MUXP_MASK, spec->channel) |
+			    FIELD_PREP(ADS1262_INPMUX_MUXN_MASK, spec->channel2);
+
+		/* Group 2: IDACMUX, IDACMAG, REFMUX */
+		st->tx[6] = ADS1262_IDACMUX_REG | ADS1262_OPCODE_WREG;
+		st->tx[7] = ADS1262_REFMUX_REG - ADS1262_IDACMUX_REG;
+		st->tx[8] = FIELD_PREP(ADS1262_IDACMUX_MUX1_MASK, chan->idac_mux[0]) |
+			    FIELD_PREP(ADS1262_IDACMUX_MUX2_MASK, chan->idac_mux[1]);
+		st->tx[9] = FIELD_PREP(ADS1262_IDACMAG_MAG1_MASK, chan->idac_mag[0]) |
+			    FIELD_PREP(ADS1262_IDACMAG_MAG2_MASK, chan->idac_mag[1]);
+		st->tx[10] = FIELD_PREP(ADS1262_REFMUX_RMUXP_MASK, chan->ref_p) |
+			     FIELD_PREP(ADS1262_REFMUX_RMUXN_MASK, chan->ref_n);
+	} else {
+		memset(st->tx, 0, sizeof(st->tx));
+	}
+
+	ret = spi_sync(st->spi, &st->msg);
+	if (ret)
+		return ret;
+
+	memcpy(val, st->rx, sizeof(*val));
+
+	return 0;
+}
+
+static int ads1262_fill_buffer_mult(struct iio_dev *indio_dev)
+{
+	struct ads1262 *st = iio_priv(indio_dev);
+	unsigned int chan;
+	__be32 val;
+	int i = -1;
+	int ret;
+
+	/*
+	 * This routine enables and reads channels in a full-duplex fashion.
+	 *
+	 * When a channel is enabled, the previous conversion is clocked out of
+	 * the shift data register on the same transfer (Section 9.4.7.1). This
+	 * allows for low latency software sequencing but forbids any
+	 * communication with the chip in-between or data corruption may occur,
+	 * hence the need to take the xfer_lock for the whole operation.
+	 */
+	guard(mutex)(&st->xfer_lock);
+
+	iio_for_each_active_channel(indio_dev, chan) {
+		ret = ads1262_enable_and_read_last(st, &indio_dev->channels[chan],
+						   &val);
+		if (ret)
+			return ret;
+
+		/*
+		 * After writing to the channel configuration registers, the
+		 * conversion-cycle is restarted and the data registers are
+		 * cleared. This means we have to reinit the completion after
+		 * enabling to avoid reading stale data.
+		 */
+		reinit_completion(&st->drdy);
+
+		if (i > -1)
+			st->scan_buffer[i] = val;
+		i++;
+
+		ret = ads1262_wait_for_conversion(st);
+		if (ret)
+			return ret;
+	}
+
+	return ads1262_enable_and_read_last(st, NULL, &st->scan_buffer[i]);
+}
+
+static int ads1262_fill_buffer_one(struct iio_dev *indio_dev)
+{
+	struct ads1262 *st = iio_priv(indio_dev);
+	int ret;
+
+	guard(mutex)(&st->xfer_lock);
+
+	ret = spi_sync(st->spi, &st->msg);
+	if (ret)
+		return ret;
+
+	/* In command mode the conversion data is found at offset 1 */
+	memcpy(st->scan_buffer, &st->rx[1], sizeof(*st->scan_buffer));
+
+	return 0;
+}
+
+static irqreturn_t ads1262_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *indio_dev = pf->indio_dev;
+	struct ads1262 *st = iio_priv(indio_dev);
+	s64 ts = pf->timestamp;
+	unsigned int weight;
+	int ret;
+
+	weight = bitmap_weight(indio_dev->active_scan_mask,
+			       iio_get_masklength(indio_dev));
+
+	if (weight == 1)
+		ret = ads1262_fill_buffer_one(indio_dev);
+	else
+		ret = ads1262_fill_buffer_mult(indio_dev);
+	if (ret)
+		goto out_notify_done;
+
+	iio_push_to_buffers_with_ts(indio_dev, st->scan_buffer,
+				    sizeof(st->scan_buffer), ts);
+
+out_notify_done:
+	iio_trigger_notify_done(indio_dev->trig);
+
+	return IRQ_HANDLED;
+}
+
 static irqreturn_t ads1262_irq_handler(int irq, void *dev_id)
 {
 	struct ads1262 *st = dev_id;
 
+	iio_trigger_poll(st->trig);
 	complete(&st->drdy);
 
 	return IRQ_HANDLED;
@@ -1414,6 +1658,10 @@ static int ads1262_spi_probe(struct spi_device *spi)
 	st->spi = spi;
 	init_completion(&st->drdy);
 
+	st->xfer.tx_buf = st->tx;
+	st->xfer.rx_buf = st->rx;
+	spi_message_init_with_transfers(&st->msg, &st->xfer, 1);
+
 	ret = devm_mutex_init(dev, &st->chan_lock);
 	if (ret)
 		return ret;
@@ -1458,6 +1706,22 @@ static int ads1262_spi_probe(struct spi_device *spi)
 	ret = ads1262_dev_configure(st);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to configure device\n");
+
+	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
+					      iio_pollfunc_store_time,
+					      ads1262_trigger_handler,
+					      &ads1262_buffer_ops);
+	if (ret)
+		return ret;
+
+	st->trig = devm_iio_trigger_alloc(dev, "%s-dev%d-drdy", info->name,
+					  iio_device_id(indio_dev));
+	if (!st->trig)
+		return -ENOMEM;
+	iio_trigger_set_drvdata(st->trig, st);
+	ret = devm_iio_trigger_register(dev, st->trig);
+	if (ret)
+		return ret;
 
 	/*
 	 * REVISIT: This chip has software polling capabilities, which could be
