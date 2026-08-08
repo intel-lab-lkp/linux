@@ -373,10 +373,12 @@ void kasan_quarantine_remove_cache(struct kmem_cache *cache)
 		if (qlist_empty(&global_quarantine[i]))
 			continue;
 		qlist_move_cache(&global_quarantine[i], &to_free, cache);
-		/* Scanning whole quarantine can take a while. */
-		raw_spin_unlock_irqrestore(&quarantine_lock, flags);
-		cond_resched();
-		raw_spin_lock_irqsave(&quarantine_lock, flags);
+		if (need_resched()) {
+			/* Scanning whole quarantine can take a while. */
+			raw_spin_unlock_irqrestore(&quarantine_lock, flags);
+			cond_resched();
+			raw_spin_lock_irqsave(&quarantine_lock, flags);
+		}
 	}
 	raw_spin_unlock_irqrestore(&quarantine_lock, flags);
 
