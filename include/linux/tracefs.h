@@ -75,6 +75,7 @@ struct eventfs_entry {
 	const char			*name;
 	eventfs_callback		callback;
 	eventfs_release			release;
+	bool				read_only;
 };
 
 struct eventfs_inode;
@@ -86,6 +87,8 @@ struct eventfs_inode *eventfs_create_events_dir(const char *name, struct dentry 
 struct eventfs_inode *eventfs_create_dir(const char *name, struct eventfs_inode *parent,
 					 const struct eventfs_entry *entries,
 					 int size, void *data);
+
+int eventfs_create_events_ro_copy(const char *name, struct eventfs_inode *ei);
 
 void eventfs_remove_events_dir(struct eventfs_inode *ei);
 void eventfs_remove_dir(struct eventfs_inode *ei);
