@@ -371,6 +371,7 @@ static void amd_mp2_pci_remove(struct pci_dev *pci_dev)
 {
 	struct amd_mp2_dev *privdata = pci_get_drvdata(pci_dev);
 
+	pm_runtime_dont_use_autosuspend(&pci_dev->dev);
 	pm_runtime_forbid(&pci_dev->dev);
 	pm_runtime_get_noresume(&pci_dev->dev);
 
