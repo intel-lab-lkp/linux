@@ -18,7 +18,7 @@
 
 #include "kselftest.h"
 
-#define NR_TESTS	9
+#define NR_TESTS	10
 
 static const char * const dev_files[] = {
 	"/dev/zero", "/dev/null", "/dev/urandom",
@@ -294,23 +294,67 @@ out:
 	return ret;
 }
 
+bool expect_cachestat_errno(int fd, struct cachestat_range *csr, struct cachestat *cs,
+	unsigned int flags, int expected_errno, const char *desc)
+{
+	int sys_ret;
+
+	errno = 0;
+
+	sys_ret = syscall(__NR_cachestat, fd, csr, cs, flags);
+
+	if (sys_ret == -1 && errno == expected_errno) {
+		ksft_print_msg("cachestat test success for %s\n", desc);
+	} else {
+		ksft_print_msg("cachestat test fail : %s: ret=%d, errno=%d expected_errno=%d\n",
+			desc, sys_ret, errno, expected_errno);
+		return false;
+	}
+
+	return true;
+}
+
+bool test_cachestat_faults(void)
+{
+	bool ret = true;
+	struct cachestat cs = {0};
+	struct cachestat_range cr = {0, 0};
+	// Test that the cachestat syscall fails with a bad file descriptor
+	ret &= expect_cachestat_errno(-1, &cr, &cs, 0, EBADF, "bad file descriptor");
+
+	// Fails with a NULL cacherange
+	ret &= expect_cachestat_errno(0, NULL, &cs, 0, EFAULT, "NULL range");
+	// Fails with a NULL result
+	ret &= expect_cachestat_errno(0, &cr, NULL, 0, EFAULT, "NULL result");
+	// Fails with invalid user space address
+	ret &= expect_cachestat_errno(0, (struct cachestat_range *)0x1, &cs,
+		0, EFAULT, "invalid range address");
+	// Fails with invalid user space address
+	ret &= expect_cachestat_errno(0, &cr, (struct cachestat *)0x1, 0,
+		EFAULT, "invalid result address");
+	// Fails with invalid flag
+	ret &= expect_cachestat_errno(0, &cr, &cs, 1, EINVAL, "invalid flags");
+
+	return ret;
+}
+
 int main(void)
 {
 	int ret;
 
 	ksft_print_header();
 
+	errno = 0;
 	ret = syscall(__NR_cachestat, -1, NULL, NULL, 0);
 	if (ret == -1 && errno == ENOSYS)
 		ksft_exit_skip("cachestat syscall not available\n");
-
+	ret = 0;
 	ksft_set_plan(NR_TESTS);
 
-	if (ret == -1 && errno == EBADF) {
-		ksft_test_result_pass("bad file descriptor recognized\n");
-		ret = 0;
+	if (test_cachestat_faults()) {
+		ksft_test_result_pass("cachestat syscall fault tests passed\n");
 	} else {
-		ksft_test_result_fail("bad file descriptor ignored\n");
+		ksft_test_result_fail("cachestat syscall fault tests failed\n");
 		ret = 1;
 	}
 
