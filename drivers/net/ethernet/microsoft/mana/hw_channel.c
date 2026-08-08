@@ -83,6 +83,19 @@ static void mana_hwc_handle_resp(struct hw_channel_context *hwc, u32 resp_len,
 	struct hwc_caller_ctx *ctx;
 	int err;
 
+	/* Defence in depth: the sole caller, mana_hwc_rx_event_handler(),
+	 * already rejects msg_id >= hwc->num_inflight_msg with the value it
+	 * passes here by value, so this cannot be reached out of range.  Keep
+	 * the guard at the indexing site so the bitmap and caller_ctx array
+	 * are never indexed without a bound in view.
+	 */
+	if (msg_id >= hwc->num_inflight_msg) {
+		dev_err(hwc->dev, "hwc_rx: msg_id %u >= max %u\n",
+			msg_id, hwc->num_inflight_msg);
+		mana_hwc_post_rx_wqe(hwc->rxq, rx_req);
+		return;
+	}
+
 	if (!test_bit(msg_id, hwc->inflight_msg_res.map)) {
 		dev_err(hwc->dev, "hwc_rx: invalid msg_id = %u\n", msg_id);
 		mana_hwc_post_rx_wqe(hwc->rxq, rx_req);
@@ -90,6 +103,18 @@ static void mana_hwc_handle_resp(struct hw_channel_context *hwc, u32 resp_len,
 	}
 
 	ctx = hwc->caller_ctx + msg_id;
+
+	/* Reject responses larger than the RX DMA buffer — the SGE
+	 * limits what hardware can DMA, so an oversized resp_len
+	 * indicates a firmware bug.  Fail rather than silently
+	 * truncating.
+	 */
+	if (resp_len > rx_req->buf_len) {
+		dev_err(hwc->dev, "HWC RX: resp_len %u > buf_len %u\n",
+			resp_len, rx_req->buf_len);
+		resp_len = 0;
+	}
+
 	err = mana_hwc_verify_resp_msg(ctx, resp_msg, resp_len);
 	if (err)
 		goto out;
@@ -237,18 +262,39 @@ static void mana_hwc_init_event_handler(void *ctx, struct gdma_queue *q_self,
 	}
 }
 
+/* An RX WQE whose SGE the handler cannot trust is deliberately not
+ * reposted: reposting a slot we may have mis-identified could double-post
+ * a buffer the device still owns.  Each such leak permanently lowers the
+ * RQ's posted depth, so once the whole depth is gone the channel can no
+ * longer receive responses.  Make that terminal state explicit -- log it
+ * once and shorten the command timeout so callers fail fast -- rather than
+ * letting every later command drain its full timeout against a dead RQ.
+ */
+static void mana_hwc_rx_leak_wqe(struct hw_channel_context *hwc)
+{
+	if (++hwc->rx_leaked_wqe == hwc->rxq->queue_depth) {
+		dev_err(hwc->dev,
+			"HWC RX: RQ exhausted after %u leaked WQEs; channel unusable\n",
+			hwc->rx_leaked_wqe);
+		hwc->hwc_timeout = 1;
+	}
+}
+
 static void mana_hwc_rx_event_handler(void *ctx, u32 gdma_rxq_id,
 				      const struct hwc_rx_oob *rx_oob)
 {
 	struct hw_channel_context *hwc = ctx;
 	struct hwc_wq *hwc_rxq = hwc->rxq;
 	struct hwc_work_request *rx_req;
+	struct gdma_wqe oob_snapshot;
 	struct gdma_resp_hdr *resp;
 	struct gdma_wqe *dma_oob;
 	struct gdma_queue *rq;
 	struct gdma_sge *sge;
 	u64 rq_base_addr;
 	u64 rx_req_idx;
+	u64 sge_addr;
+	u32 oob_div4;
 	u16 msg_id;
 	u8 *wqe;
 
@@ -259,28 +305,76 @@ static void mana_hwc_rx_event_handler(void *ctx, u32 gdma_rxq_id,
 	wqe = mana_gd_get_wqe_ptr(rq, rx_oob->wqe_offset / GDMA_WQE_BU_SIZE);
 	dma_oob = (struct gdma_wqe *)wqe;
 
-	sge = (struct gdma_sge *)(wqe + 8 + dma_oob->inline_oob_size_div4 * 4);
+	/* inline_oob_size_div4 lives in device-accessible RQ memory (shared
+	 * and host-writable in a confidential VM), so snapshot it once and
+	 * validate and use only the snapshot.  It is a bit-field, which
+	 * READ_ONCE() cannot take the size of, so read the u32 flags word it
+	 * shares through the union and extract the field from the local copy.
+	 * The driver programs INLINE_OOB_SMALL_SIZE for every HWC RQ WQE via
+	 * mana_gd_post_work_request(), so the only valid value is
+	 * INLINE_OOB_SMALL_SIZE / 4, which puts the SGE at wqe + 16 inside
+	 * this WQE's own BU.  Reject anything else -- the slot cannot be
+	 * trusted, so leak this RX WQE rather than repost the wrong one.
+	 */
+	oob_snapshot.flags = READ_ONCE(dma_oob->flags);
+	oob_div4 = oob_snapshot.inline_oob_size_div4;
+	if (oob_div4 != INLINE_OOB_SMALL_SIZE / 4) {
+		dev_err(hwc->dev, "HWC RX: unexpected inline_oob_size_div4=%u\n",
+			oob_div4);
+		mana_hwc_rx_leak_wqe(hwc);
+		return;
+	}
+	sge = (struct gdma_sge *)(wqe + 8 + oob_div4 * 4);
 
-	/* Select the RX work request for virtual address and for reposting. */
+	/* Recover the originating RX slot from the SGE address.  Snapshot it
+	 * once, for the same shared-memory reason: of the three terms only
+	 * sge_addr comes from device memory; rq_base_addr and
+	 * max_resp_msg_size are driver-private.  An in-range but wrong SGE
+	 * would otherwise truncate onto a neighbouring slot, letting us read
+	 * a stale response that could complete the wrong, reused in-flight
+	 * request.  Require the index in range AND the address to exactly
+	 * match the value the driver posted for that slot.
+	 */
+	sge_addr = READ_ONCE(sge->address);
 	rq_base_addr = hwc_rxq->msg_buf->mem_info.dma_handle;
-	rx_req_idx = (sge->address - rq_base_addr) / hwc->max_resp_msg_size;
+	rx_req_idx = (sge_addr - rq_base_addr) / hwc->max_resp_msg_size;
 
-	if (rx_req_idx >= hwc_rxq->msg_buf->num_reqs) {
-		dev_err(hwc->dev, "HWC RX: wrong rx_req_idx=%llu, num_reqs=%u\n",
-			rx_req_idx, hwc_rxq->msg_buf->num_reqs);
+	if (rx_req_idx >= hwc_rxq->queue_depth) {
+		/* Cannot identify the slot, so we cannot safely repost this
+		 * WQE; leak it.  An out-of-range index means a corrupted SGE
+		 * from hardware or host tampering.
+		 */
+		dev_err(hwc->dev, "HWC RX: SGE idx %llu out of range\n",
+			rx_req_idx);
+		mana_hwc_rx_leak_wqe(hwc);
 		return;
 	}
 
 	rx_req = &hwc_rxq->msg_buf->reqs[rx_req_idx];
+	if (sge_addr != (u64)rx_req->buf_sge_addr) {
+		/* In-range index but the address does not match what the
+		 * driver posted for that slot; the same unrecoverable case,
+		 * so leak this WQE rather than repost the wrong one.
+		 */
+		dev_err(hwc->dev, "HWC RX: invalid SGE address %llx (idx=%llu)\n",
+			sge_addr, rx_req_idx);
+		mana_hwc_rx_leak_wqe(hwc);
+		return;
+	}
+
 	resp = (struct gdma_resp_hdr *)rx_req->buf_va;
 
-	/* Read msg_id once from DMA buffer to prevent TOCTOU:
-	 * DMA memory is shared/unencrypted in CVMs - host can
-	 * modify it between reads.
+	/* Read msg_id once from the DMA buffer to prevent TOCTOU: DMA memory
+	 * is shared/unencrypted in CVMs, so the host can modify it between
+	 * reads.  A short response is not rejected here; it is handed to
+	 * mana_hwc_handle_resp() below, whose mana_hwc_verify_resp_msg()
+	 * fails it with -EPROTO and completes the waiting sender, so one
+	 * malformed response cannot stall the whole channel.
 	 */
 	msg_id = READ_ONCE(resp->response.hwc_msg_id);
 	if (msg_id >= hwc->num_inflight_msg) {
 		dev_err(hwc->dev, "HWC RX: wrong msg_id=%u\n", msg_id);
+		mana_hwc_post_rx_wqe(hwc_rxq, rx_req);
 		return;
 	}
 
