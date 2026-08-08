@@ -542,6 +542,7 @@ static int imx_clk_scu_probe(struct platform_device *pdev)
 		ret = pm_runtime_resume_and_get(dev);
 		if (ret) {
 			pm_genpd_remove_device(dev);
+			pm_runtime_dont_use_autosuspend(dev);
 			pm_runtime_disable(dev);
 			return ret;
 		}
@@ -550,6 +551,9 @@ static int imx_clk_scu_probe(struct platform_device *pdev)
 	hw = __imx_clk_scu(dev, clk->name, clk->parents, clk->num_parents,
 			   clk->rsrc, clk->clk_type);
 	if (IS_ERR(hw)) {
+		if (!(clk->rsrc == IMX_SC_R_A35 || clk->rsrc == IMX_SC_R_A53 ||
+		      clk->rsrc == IMX_SC_R_A72))
+			pm_runtime_dont_use_autosuspend(dev);
 		pm_runtime_disable(dev);
 		return PTR_ERR(hw);
 	}
