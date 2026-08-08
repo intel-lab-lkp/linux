@@ -165,6 +165,47 @@ static u64 netc_timer_cur_time_read(struct netc_timer *priv)
 	return netc_timer_rd64(priv, NETC_TMR_CUR_TIME_L);
 }
 
+/**
+ * netc_timer_get_current_time - read the current PTP time from the NETC Timer
+ * @pdev: PCI device of the NETC Timer
+ *
+ * Reads the 64-bit current time register (TMR_CUR_TIME) from the NETC Timer
+ * device associated with @pdev. Returns 0 if the Timer driver has not yet
+ * probed or has already been removed.
+ *
+ * Context: Process context only. Acquires the device mutex via device_lock(),
+ *          which may sleep. Must not be called from atomic context, softirq,
+ *          BH, or while holding a spinlock.
+ *
+ * Return: Current PTP time in nanoseconds, or 0 if the timer is unavailable.
+ */
+u64 netc_timer_get_current_time(struct pci_dev *pdev)
+{
+	struct netc_timer *priv;
+	unsigned long flags;
+	u64 cur_time = 0;
+
+	/* Serialize against driver unbind: the remove() callback runs under
+	 * the device lock, so holding it here ensures that priv remains valid
+	 * for the entire duration of the register read.
+	 */
+	device_lock(&pdev->dev);
+
+	priv = pci_get_drvdata(pdev);
+	if (!priv)
+		goto unlock_device;
+
+	spin_lock_irqsave(&priv->lock, flags);
+	cur_time = netc_timer_cur_time_read(priv);
+	spin_unlock_irqrestore(&priv->lock, flags);
+
+unlock_device:
+	device_unlock(&pdev->dev);
+
+	return cur_time;
+}
+EXPORT_SYMBOL_GPL(netc_timer_get_current_time);
+
 static void netc_timer_alarm_write(struct netc_timer *priv,
 				   u64 alarm, int index)
 {
@@ -798,6 +839,7 @@ static int netc_timer_pci_probe(struct pci_dev *pdev)
 		goto release_mem_regions;
 	}
 
+	spin_lock_init(&priv->lock);
 	pci_set_drvdata(pdev, priv);
 
 	return 0;
@@ -968,7 +1010,6 @@ static int netc_timer_probe(struct pci_dev *pdev,
 	priv->caps = netc_timer_ptp_caps;
 	priv->oclk_prsc = NETC_TMR_DEFAULT_PRSC;
 	priv->pps_channel = NETC_TMR_INVALID_CHANNEL;
-	spin_lock_init(&priv->lock);
 	snprintf(priv->irq_name, sizeof(priv->irq_name), "ptp-netc %s",
 		 pci_name(pdev));
 
