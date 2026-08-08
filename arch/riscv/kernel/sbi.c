@@ -10,6 +10,7 @@
 #include <linux/mm.h>
 #include <linux/pm.h>
 #include <linux/reboot.h>
+#include <linux/string.h>
 #include <asm/sbi.h>
 #include <asm/smp.h>
 #include <asm/tlbflush.h>
@@ -519,10 +520,15 @@ static void sbi_srst_reset(unsigned long type, unsigned long reason)
 static int sbi_srst_reboot(struct notifier_block *this,
 			   unsigned long mode, void *cmd)
 {
+	unsigned long reason = SBI_SRST_RESET_REASON_NONE;
+
+	if (cmd && !strcmp(cmd, RISCV_EMERGENCY_RESTART_REASON))
+		reason = SBI_SRST_RESET_REASON_SYS_FAILURE;
+
 	sbi_srst_reset((mode == REBOOT_WARM || mode == REBOOT_SOFT) ?
 		       SBI_SRST_RESET_TYPE_WARM_REBOOT :
 		       SBI_SRST_RESET_TYPE_COLD_REBOOT,
-		       SBI_SRST_RESET_REASON_NONE);
+		       reason);
 	return NOTIFY_DONE;
 }
 

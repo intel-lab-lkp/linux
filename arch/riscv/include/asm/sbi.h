@@ -121,6 +121,8 @@ enum sbi_srst_reset_reason {
 	SBI_SRST_RESET_REASON_SYS_FAILURE,
 };
 
+#define RISCV_EMERGENCY_RESTART_REASON "system-failure"
+
 enum sbi_ext_susp_fid {
 	SBI_EXT_SUSP_SYSTEM_SUSPEND = 0,
 };
