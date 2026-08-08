@@ -325,8 +325,29 @@ static struct sk_buff *hsr_fill_tag(struct sk_buff *skb,
 	return skb;
 }
 
-/* If the original frame was an HSR tagged frame, just clone it to be sent
- * unchanged. Otherwise, create a private frame especially tagged for 'port'.
+/* Clone an skb and make the clone's data private, so that per-egress
+ * writes cannot corrupt the original skb or other clones of it.
+ * Returns NULL on allocation failure.
+ */
+static struct sk_buff *hsr_clone_private(struct sk_buff *skb)
+{
+	struct sk_buff *clone;
+
+	clone = skb_clone(skb, GFP_ATOMIC);
+	if (!clone)
+		return NULL;
+	if (skb_cow(clone, 0)) {
+		kfree_skb(clone);
+		return NULL;
+	}
+
+	return clone;
+}
+
+/* If the original frame was an HSR tagged frame, return a private clone
+ * of it with the path id updated for 'port'. Otherwise, return a private
+ * clone for hardware tag insertion, or create a private frame especially
+ * tagged for 'port'.
  */
 struct sk_buff *hsr_create_tagged_frame(struct hsr_frame_info *frame,
 					struct hsr_port *port)
@@ -336,14 +357,18 @@ struct sk_buff *hsr_create_tagged_frame(struct hsr_frame_info *frame,
 	int movelen;
 
 	if (frame->skb_hsr) {
-		struct hsr_ethhdr *hsr_ethhdr =
-			(struct hsr_ethhdr *)skb_mac_header(frame->skb_hsr);
+		struct hsr_ethhdr *hsr_ethhdr;
+
+		skb = hsr_clone_private(frame->skb_hsr);
+		if (!skb)
+			return NULL;
 
 		/* set the lane id properly */
+		hsr_ethhdr = (struct hsr_ethhdr *)skb_mac_header(skb);
 		hsr_set_path_id(frame, hsr_ethhdr, port);
-		return skb_clone(frame->skb_hsr, GFP_ATOMIC);
+		return skb;
 	} else if (port->dev->features & NETIF_F_HW_HSR_TAG_INS) {
-		return skb_clone(frame->skb_std, GFP_ATOMIC);
+		return hsr_clone_private(frame->skb_std);
 	}
 
 	/* Create the new skb with enough headroom to fit the HSR tag */
@@ -377,17 +402,23 @@ struct sk_buff *prp_create_tagged_frame(struct hsr_frame_info *frame,
 	struct sk_buff *skb;
 
 	if (frame->skb_prp) {
-		struct prp_rct *trailer = skb_get_PRP_rct(frame->skb_prp);
+		struct prp_rct *trailer;
 
+		skb = hsr_clone_private(frame->skb_prp);
+		if (!skb)
+			return NULL;
+
+		trailer = skb_get_PRP_rct(skb);
 		if (trailer) {
 			prp_set_lan_id(trailer, port);
 		} else {
 			WARN_ONCE(!trailer, "errored PRP skb");
+			kfree_skb(skb);
 			return NULL;
 		}
-		return skb_clone(frame->skb_prp, GFP_ATOMIC);
+		return skb;
 	} else if (port->dev->features & NETIF_F_HW_HSR_TAG_INS) {
-		return skb_clone(frame->skb_std, GFP_ATOMIC);
+		return hsr_clone_private(frame->skb_std);
 	}
 
 	skb = skb_copy_expand(frame->skb_std, skb_headroom(frame->skb_std),
