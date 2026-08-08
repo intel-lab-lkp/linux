@@ -1807,6 +1807,24 @@ nouveau_uvmm_ioctl_vm_bind(struct drm_device *dev,
 	if (unlikely(!nouveau_cli_uvmm_locked(cli)))
 		return -ENOSYS;
 
+	if (unlikely(req->op_count > NOUVEAU_VM_BIND_MAX_OPS)) {
+		NV_PRINTK(err, cli, "vm_bind op count exceeds limit: %d max %d\n",
+			  req->op_count, NOUVEAU_VM_BIND_MAX_OPS);
+		return -EINVAL;
+	}
+
+	if (unlikely(req->wait_count > NOUVEAU_MAX_SYNCS)) {
+		NV_PRINTK(err, cli, "vm_bind wait count exceeds limit: %d max %d\n",
+			  req->wait_count, NOUVEAU_MAX_SYNCS);
+		return -EINVAL;
+	}
+
+	if (unlikely(req->sig_count > NOUVEAU_MAX_SYNCS)) {
+		NV_PRINTK(err, cli, "vm_bind sig count exceeds limit: %d max %d\n",
+			  req->sig_count, NOUVEAU_MAX_SYNCS);
+		return -EINVAL;
+	}
+
 	ret = nouveau_uvmm_vm_bind_ucopy(&args, req);
 	if (ret)
 		return ret;

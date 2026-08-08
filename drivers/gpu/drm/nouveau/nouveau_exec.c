@@ -389,6 +389,18 @@ nouveau_exec_ioctl_exec(struct drm_device *dev,
 		return nouveau_abi16_put(abi16, -EINVAL);
 	}
 
+	if (unlikely(req->wait_count > NOUVEAU_MAX_SYNCS)) {
+		NV_PRINTK(err, cli, "exec wait count exceeds limit: %d max %d\n",
+			  req->wait_count, NOUVEAU_MAX_SYNCS);
+		return nouveau_abi16_put(abi16, -EINVAL);
+	}
+
+	if (unlikely(req->sig_count > NOUVEAU_MAX_SYNCS)) {
+		NV_PRINTK(err, cli, "exec sig count exceeds limit: %d max %d\n",
+			  req->sig_count, NOUVEAU_MAX_SYNCS);
+		return nouveau_abi16_put(abi16, -EINVAL);
+	}
+
 	ret = nouveau_exec_ucopy(&args, req);
 	if (ret)
 		goto out;

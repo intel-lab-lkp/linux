@@ -220,6 +220,14 @@ struct drm_nouveau_gem_cpu_fini {
 	__u32 handle;
 };
 
+/*
+ * NOUVEAU_MAX_SYNCS - maximum number of sync objects per ioctl
+ *
+ * The maximum value EXEC and VM_BIND accept in their wait_count and
+ * sig_count fields.
+ */
+#define NOUVEAU_MAX_SYNCS 1024
+
 /**
  * struct drm_nouveau_sync - sync object
  *
@@ -331,6 +339,16 @@ struct drm_nouveau_vm_bind_op {
 	 */
 	__u64 range;
 };
+
+/*
+ * NOUVEAU_VM_BIND_MAX_OPS - maximum number of &drm_nouveau_vm_bind_ops
+ *
+ * The maximum value VM_BIND accepts in its op_count field. There is no
+ * semantic limit on the number of operations a bind may carry; this bound
+ * exists only to keep the copy-in allocation finite and is far above any
+ * batch size a client is expected to submit.
+ */
+#define NOUVEAU_VM_BIND_MAX_OPS 65536
 
 /**
  * struct drm_nouveau_vm_bind - structure for DRM_IOCTL_NOUVEAU_VM_BIND
