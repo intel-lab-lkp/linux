@@ -130,6 +130,9 @@ void layout_symtab(struct module *mod, struct load_info *info)
 
 	/* Compute total space required for the core symbols' strtab. */
 	for (ndst = i = 0; i < nsrc; i++) {
+		if (is_mapping_symbol(&info->strtab[src[i].st_name]))
+			continue;
+
 		if (i == 0 || is_livepatch_module(mod) ||
 		    is_core_symbol(src + i, info->sechdrs, info->hdr->e_shnum,
 				   info->index.pcpu)) {
@@ -198,6 +201,10 @@ void add_kallsyms(struct module *mod, const struct load_info *info)
 	src = kallsyms->symtab;
 	for (ndst = i = 0; i < kallsyms->num_symtab; i++) {
 		kallsyms->typetab[i] = elf_type(src + i, info);
+
+		if (is_mapping_symbol(&kallsyms->strtab[src[i].st_name]))
+			continue;
+
 		if (i == 0 || is_livepatch_module(mod) ||
 		    is_core_symbol(src + i, info->sechdrs, info->hdr->e_shnum,
 				   info->index.pcpu)) {
