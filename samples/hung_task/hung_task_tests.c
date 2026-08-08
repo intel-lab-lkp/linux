@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * hung_task_tests.c - Sample code for testing hung tasks with mutex,
- * semaphore, etc.
+ * semaphore, rwsem, and rtmutex.
  *
  * Usage: Load this module and read `<debugfs>/hung_task/mutex`,
  *        `<debugfs>/hung_task/semaphore`, `<debugfs>/hung_task/rw_semaphore_read`,
- *        `<debugfs>/hung_task/rw_semaphore_write`, etc., with 2 or more processes.
+ *        `<debugfs>/hung_task/rw_semaphore_write`, and `<debugfs>/hung_task/rtmutex`,
+ *        with 2 or more processes.
  *
  * This is for testing kernel hung_task error messages with various locking
- * mechanisms (e.g., mutex, semaphore, rw_semaphore_read, rw_semaphore_write, etc.).
+ * mechanisms (e.g., mutex, semaphore, rw_semaphore_read, rw_semaphore_write,
+ * and rtmutex).
  * Note that this may freeze your system or cause a panic. Use only for testing purposes.
  */
 
@@ -17,6 +19,7 @@
 #include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/rtmutex.h>
 #include <linux/semaphore.h>
 #include <linux/rwsem.h>
 
@@ -25,10 +28,16 @@
 #define HUNG_TASK_SEM_FILE		"semaphore"
 #define HUNG_TASK_RWSEM_READ_FILE	"rw_semaphore_read"
 #define HUNG_TASK_RWSEM_WRITE_FILE	"rw_semaphore_write"
+#ifdef CONFIG_RT_MUTEXES
+#define HUNG_TASK_RTMUTEX_FILE		"rtmutex"
+#endif
 #define SLEEP_SECOND			256
 
 static const char dummy_string[] = "This is a dummy string.";
 static DEFINE_MUTEX(dummy_mutex);
+#ifdef CONFIG_RT_MUTEXES
+static DEFINE_RT_MUTEX(dummy_rtmutex);
+#endif
 static DEFINE_SEMAPHORE(dummy_sem, 1);
 static DECLARE_RWSEM(dummy_rwsem);
 static struct dentry *hung_task_dir;
@@ -50,6 +59,28 @@ static ssize_t read_dummy_mutex(struct file *file, char __user *user_buf,
 	return simple_read_from_buffer(user_buf, count, ppos, dummy_string,
 				       sizeof(dummy_string));
 }
+
+#ifdef CONFIG_RT_MUTEXES
+/* RT mutex-based read function */
+static ssize_t read_dummy_rtmutex(struct file *file, char __user *user_buf,
+				  size_t count, loff_t *ppos)
+{
+	/* Check if data is already read */
+	if (*ppos >= sizeof(dummy_string))
+		return 0;
+
+	/* Second task waits on rtmutex, entering uninterruptible sleep */
+	rt_mutex_lock(&dummy_rtmutex);
+
+	/* First task sleeps here, interruptible */
+	msleep_interruptible(SLEEP_SECOND * 1000);
+
+	rt_mutex_unlock(&dummy_rtmutex);
+
+	return simple_read_from_buffer(user_buf, count, ppos, dummy_string,
+				       sizeof(dummy_string));
+}
+#endif
 
 /* Semaphore-based read function */
 static ssize_t read_dummy_semaphore(struct file *file, char __user *user_buf,
@@ -116,6 +147,13 @@ static const struct file_operations hung_task_mutex_fops = {
 	.read = read_dummy_mutex,
 };
 
+#ifdef CONFIG_RT_MUTEXES
+/* File operations for rtmutex */
+static const struct file_operations hung_task_rtmutex_fops = {
+	.read = read_dummy_rtmutex,
+};
+#endif
+
 /* File operations for semaphore */
 static const struct file_operations hung_task_sem_fops = {
 	.read = read_dummy_semaphore,
@@ -137,9 +175,13 @@ static int __init hung_task_tests_init(void)
 	if (IS_ERR(hung_task_dir))
 		return PTR_ERR(hung_task_dir);
 
-	/* Create debugfs files for mutex and semaphore tests */
+	/* Create debugfs files for lock tests */
 	debugfs_create_file(HUNG_TASK_MUTEX_FILE, 0400, hung_task_dir, NULL,
 			    &hung_task_mutex_fops);
+#ifdef CONFIG_RT_MUTEXES
+	debugfs_create_file(HUNG_TASK_RTMUTEX_FILE, 0400, hung_task_dir, NULL,
+			    &hung_task_rtmutex_fops);
+#endif
 	debugfs_create_file(HUNG_TASK_SEM_FILE, 0400, hung_task_dir, NULL,
 			    &hung_task_sem_fops);
 	debugfs_create_file(HUNG_TASK_RWSEM_READ_FILE, 0400, hung_task_dir, NULL,

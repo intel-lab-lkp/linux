@@ -318,7 +318,7 @@ config SAMPLE_HUNG_TASK
 	depends on DETECT_HUNG_TASK && DEBUG_FS
 	help
 	  Build a module that provides debugfs files (e.g., mutex, semaphore,
-	  rw_semaphore_read, rw_semaphore_write) under <debugfs>/hung_task.
+	  rw_semaphore_read, rw_semaphore_write, rtmutex) under <debugfs>/hung_task.
 	  Reading these files with multiple processes triggers hung task
 	  detection by holding locks for a long time (256 seconds).
 
