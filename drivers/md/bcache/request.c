@@ -24,6 +24,7 @@
 #define CUTOFF_CACHE_READA	90
 
 struct kmem_cache *bch_search_cache;
+struct kmem_cache *bch_bypass_cache;
 
 static CLOSURE_CALLBACK(bch_data_insert_start);
 
@@ -852,28 +853,41 @@ static void bch_bypass_write_start(struct cached_dev *dc, sector_t sector, unsig
 		unsigned long pg_idx = bypass_chunk_to_page(chunk);
 		unsigned long pg_off = bypass_chunk_to_offset(chunk);
 		struct bch_bypass_page *pg = &dc->bypass_pages[pg_idx];
-		u32 *new_counts;
-		u32 *dup_counts = NULL;
+		struct bch_bypass_counts *new_counts;
+		struct bch_bypass_counts *dup_counts = NULL;
+		struct bch_bypass_counts *counts;
 		unsigned long flags;
 
 		spin_lock_irqsave(&pg->lock, flags);
-		if (!pg->counts) {
+		counts = rcu_dereference_protected(pg->counts, lockdep_is_held(&pg->lock));
+		if (!counts) {
 			spin_unlock_irqrestore(&pg->lock, flags);
 			new_counts = mempool_alloc(&dc->bypass_mempool, GFP_NOIO);
-			memset(new_counts, 0, PAGE_SIZE);
+			memset(new_counts->counts, 0, PAGE_SIZE);
+			new_counts->dc = dc;
 			spin_lock_irqsave(&pg->lock, flags);
-			if (pg->counts)
+			counts = rcu_dereference_protected(pg->counts, lockdep_is_held(&pg->lock));
+			if (counts) {
 				dup_counts = new_counts;
-			else
-				pg->counts = new_counts;
+			} else {
+				counts = new_counts;
+				rcu_assign_pointer(pg->counts, counts);
+			}
 		}
-		pg->counts[pg_off]++;
+		WRITE_ONCE(counts->counts[pg_off], counts->counts[pg_off] + 1);
 		pg->active++;
 		spin_unlock_irqrestore(&pg->lock, flags);
 
 		if (dup_counts)
 			mempool_free(dup_counts, &dc->bypass_mempool);
 	}
+}
+
+static void bch_bypass_counts_free_rcu(struct rcu_head *rcu)
+{
+	struct bch_bypass_counts *counts = container_of(rcu, struct bch_bypass_counts, rcu);
+
+	mempool_free(counts, &counts->dc->bypass_mempool);
 }
 
 static void bch_bypass_write_end(struct cached_dev *dc, sector_t sector, unsigned int sectors)
@@ -890,25 +904,27 @@ static void bch_bypass_write_end(struct cached_dev *dc, sector_t sector, unsigne
 		unsigned long pg_idx = bypass_chunk_to_page(chunk);
 		unsigned long pg_off = bypass_chunk_to_offset(chunk);
 		struct bch_bypass_page *pg = &dc->bypass_pages[pg_idx];
-		u32 *counts = NULL;
+		struct bch_bypass_counts *counts = NULL;
+		struct bch_bypass_counts *current_counts;
 		unsigned long flags;
 
 		spin_lock_irqsave(&pg->lock, flags);
-		if (WARN_ON_ONCE(!pg->counts || !pg->counts[pg_off])) {
+		current_counts = rcu_dereference_protected(pg->counts, lockdep_is_held(&pg->lock));
+		if (WARN_ON_ONCE(!current_counts || !current_counts->counts[pg_off])) {
 			spin_unlock_irqrestore(&pg->lock, flags);
 			continue;
 		}
 
-		pg->counts[pg_off]--;
+		WRITE_ONCE(current_counts->counts[pg_off], current_counts->counts[pg_off] - 1);
 		pg->active--;
 		if (!pg->active) {
-			counts = pg->counts;
-			pg->counts = NULL;
+			counts = current_counts;
+			rcu_assign_pointer(pg->counts, NULL);
 		}
 		spin_unlock_irqrestore(&pg->lock, flags);
 
 		if (counts)
-			mempool_free(counts, &dc->bypass_mempool);
+			call_rcu(&counts->rcu, bch_bypass_counts_free_rcu);
 	}
 }
 
@@ -924,20 +940,19 @@ static bool bch_has_active_bypass_writes(struct cached_dev *dc, sector_t sector,
 	if (WARN_ON_ONCE(end_pg_idx >= dc->bypass_num_pages))
 		return false;
 
+	rcu_read_lock();
 	for (chunk = start_chunk; chunk <= end_chunk; chunk++) {
 		unsigned long pg_idx = bypass_chunk_to_page(chunk);
 		unsigned long pg_off = bypass_chunk_to_offset(chunk);
 		struct bch_bypass_page *pg = &dc->bypass_pages[pg_idx];
-		unsigned long flags;
+		struct bch_bypass_counts *current_counts = rcu_dereference(pg->counts);
 
-		spin_lock_irqsave(&pg->lock, flags);
-		if (pg->counts && pg->counts[pg_off] > 0) {
+		if (current_counts && READ_ONCE(current_counts->counts[pg_off]) > 0) {
 			has_active = true;
-			spin_unlock_irqrestore(&pg->lock, flags);
 			break;
 		}
-		spin_unlock_irqrestore(&pg->lock, flags);
 	}
+	rcu_read_unlock();
 
 	return has_active;
 }
@@ -1458,6 +1473,7 @@ void bch_flash_dev_request_init(struct bcache_device *d)
 
 void bch_request_exit(void)
 {
+	kmem_cache_destroy(bch_bypass_cache);
 	kmem_cache_destroy(bch_search_cache);
 }
 
@@ -1465,6 +1481,10 @@ int __init bch_request_init(void)
 {
 	bch_search_cache = KMEM_CACHE(search, 0);
 	if (!bch_search_cache)
+		return -ENOMEM;
+
+	bch_bypass_cache = KMEM_CACHE(bch_bypass_counts, 0);
+	if (!bch_bypass_cache)
 		return -ENOMEM;
 
 	return 0;

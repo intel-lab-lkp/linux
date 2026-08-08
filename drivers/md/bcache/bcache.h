@@ -299,10 +299,18 @@ enum stop_on_failure {
 	BCH_CACHED_DEV_STOP_MODE_MAX,
 };
 
+extern struct kmem_cache *bch_bypass_cache;
+
+struct bch_bypass_counts {
+	struct rcu_head		rcu;
+	struct cached_dev	*dc;
+	u32			counts[PAGE_SIZE / sizeof(u32)];
+};
+
 struct bch_bypass_page {
-	u32		*counts;
-	unsigned int	active;
-	spinlock_t	lock;
+	struct bch_bypass_counts __rcu *counts;
+	unsigned int		active;
+	spinlock_t		lock;
 };
 
 struct cached_dev {

@@ -1350,9 +1350,12 @@ void bch_cached_dev_release(struct kobject *kobj)
 		unsigned long i;
 
 		for (i = 0; i < dc->bypass_num_pages; i++) {
-			if (dc->bypass_pages[i].counts)
-				mempool_free(dc->bypass_pages[i].counts, &dc->bypass_mempool);
+			struct bch_bypass_counts *counts =
+				rcu_dereference_protected(dc->bypass_pages[i].counts, 1);
+			if (counts)
+				mempool_free(counts, &dc->bypass_mempool);
 		}
+		rcu_barrier();
 		kvfree(dc->bypass_pages);
 		mempool_exit(&dc->bypass_mempool);
 	}
@@ -1433,7 +1436,7 @@ static int bch_cached_dev_bypass_init(struct cached_dev *dc, sector_t sectors)
 	for (i = 0; i < dc->bypass_num_pages; i++)
 		spin_lock_init(&dc->bypass_pages[i].lock);
 
-	if (mempool_init_kmalloc_pool(&dc->bypass_mempool, 16, PAGE_SIZE)) {
+	if (mempool_init_slab_pool(&dc->bypass_mempool, 16, bch_bypass_cache)) {
 		kvfree(dc->bypass_pages);
 		dc->bypass_pages = NULL;
 		return -ENOMEM;
