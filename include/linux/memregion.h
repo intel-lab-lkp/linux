@@ -58,7 +58,7 @@ static inline bool cpu_cache_has_invalidate_memregion(void)
 
 static inline int cpu_cache_invalidate_memregion(phys_addr_t start, size_t len)
 {
-	WARN_ON_ONCE("CPU cache invalidation required");
+	WARN_ONCE(1, "CPU cache invalidation required");
 	return -ENXIO;
 }
 #endif
