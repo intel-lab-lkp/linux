@@ -565,7 +565,8 @@ static bool amdgpu_bo_validate_size(struct amdgpu_device *adev,
 
 	if (!man) {
 		if (domain & AMDGPU_GEM_DOMAIN_GTT)
-			WARN_ON_ONCE("GTT domain requested but GTT mem manager uninitialized");
+			WARN_ONCE(1,
+				  "GTT domain requested but GTT mem manager uninitialized");
 		return false;
 	}
 
