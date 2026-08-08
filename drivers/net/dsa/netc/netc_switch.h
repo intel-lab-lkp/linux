@@ -9,6 +9,7 @@
 #include <linux/dsa/tag_netc.h>
 #include <linux/fsl/netc_global.h>
 #include <linux/fsl/ntmp.h>
+#include <linux/mutex.h>
 #include <linux/of_device.h>
 #include <linux/of_net.h>
 #include <linux/pci.h>
@@ -87,6 +88,44 @@ enum netc_host_reason {
 	NETC_HR_PTP_TRAP   = 9,
 };
 
+/* One-step Sync serialization context.
+ *
+ * Its lifetime is decoupled from the devm-allocated netc_port. An in-flight
+ * one-step Sync skb keeps a reference on this context via its skb destructor,
+ * so the context outlives the port teardown until the conduit frees the last
+ * in-flight skb after TX completion. Once the port is disabled, @active is
+ * cleared and the work stops touching any devm memory (netc_port/netc_switch)
+ * or the unregistered user netdev or the tagger_data.
+ */
+struct netc_onestep {
+	struct netc_port *np;
+	struct kref refcnt;
+	/* Process-context lock: serializes the deferred TX work against port
+	 * teardown, so the work never touches the devm-allocated netc_port /
+	 * netc_switch or the unregistered user netdev after teardown. Held
+	 * across netc_get_phc_time(), which may sleep, hence a mutex.
+	 */
+	struct mutex work_lock;
+	/* Serialize access to in_flight and queue */
+	spinlock_t queue_lock;
+	bool active;	/* set when port is enabled, under @work_lock */
+	/* In-flight slot: true while one one-step Sync frame is programmed
+	 * into the shared SINGLE_STEP register and being transmitted. Only one
+	 * frame may be in flight at a time, so the next queued frame is sent
+	 * only after the current one completes TX (its skb destructor kicks
+	 * the work). Accessed under queue_lock, from both the softirq xmit
+	 * path and the process-context work.
+	 */
+	bool in_flight;
+	/* Pending one-step Sync frames. Enqueued from the softirq xmit path and
+	 * dequeued by the process-context work; the list is serialized by
+	 * queue_lock together with @in_flight.
+	 */
+	struct sk_buff_head queue;
+	struct work_struct work;	/* drains @queue */
+	struct work_struct destroy_work; /* frees the context in process ctx */
+};
+
 struct netc_port {
 	void __iomem *iobase;
 	struct netc_switch *switch_priv;
@@ -106,6 +145,8 @@ struct netc_port {
 	spinlock_t tstamp_lock;
 	/* skb queue for two-step timestamp frames */
 	struct sk_buff_head skb_txtstamp_queue;
+	/* one-step Sync serialization context (ref-counted, kzalloc'd) */
+	struct netc_onestep *onestep;
 	int ptp_tx_type;
 	int ptp_rx_filter;
 	u32 ptp_ipft_eid[NETC_PTP_MAX];
@@ -212,6 +253,7 @@ static inline void netc_del_vlan_entry(struct netc_vlan_entry *entry)
 }
 
 int netc_switch_platform_probe(struct netc_switch *priv);
+void netc_mac_port_wr(struct netc_port *np, u32 reg, u32 val);
 
 /* ethtool APIs */
 void netc_port_get_pause_stats(struct dsa_switch *ds, int port,
@@ -243,5 +285,11 @@ void netc_port_twostep_tstamp_handler(struct dsa_switch *ds, int port,
 bool netc_port_rxtstamp(struct dsa_switch *ds, int port, struct sk_buff *skb,
 			unsigned int type);
 void netc_port_txtstamp(struct dsa_switch *ds, int port, struct sk_buff *skb);
+void netc_onestep_put(struct netc_onestep *onestep);
+void netc_port_purge_onestep_queue(struct netc_onestep *onestep,
+				   bool clear_flight);
+void netc_port_onestep_work(struct work_struct *work);
+void netc_port_onestep_sync_enqueue(struct dsa_switch *ds, int port,
+				    struct sk_buff *skb);
 
 #endif

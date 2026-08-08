@@ -74,6 +74,7 @@ static int netc_connect_tag_protocol(struct dsa_switch *ds,
 		return -EPROTONOSUPPORT;
 
 	tagger_data = ds->tagger_data;
+	tagger_data->onestep_sync_enqueue = netc_port_onestep_sync_enqueue;
 	tagger_data->twostep_tstamp_handler = netc_port_twostep_tstamp_handler;
 
 	return 0;
@@ -94,7 +95,7 @@ static void netc_port_rmw(struct netc_port *np, u32 reg,
 	netc_port_wr(np, reg, new);
 }
 
-static void netc_mac_port_wr(struct netc_port *np, u32 reg, u32 val)
+void netc_mac_port_wr(struct netc_port *np, u32 reg, u32 val)
 {
 	if (is_netc_pseudo_port(np))
 		return;
@@ -252,6 +253,21 @@ static void netc_get_switch_capabilities(struct netc_switch *priv)
 	priv->num_bp = FIELD_GET(BPCAPR_NUM_BP, val);
 }
 
+static void netc_free_user_ports(struct netc_switch *priv)
+{
+	struct dsa_switch *ds = priv->ds;
+	struct dsa_port *dp;
+
+	dsa_switch_for_each_user_port(dp, ds) {
+		struct netc_port *np = NETC_PORT(ds, dp->index);
+
+		if (np->onestep) {
+			netc_onestep_put(np->onestep);
+			np->onestep = NULL;
+		}
+	}
+}
+
 static int netc_init_all_ports(struct netc_switch *priv)
 {
 	struct device *dev = priv->dev;
@@ -292,13 +308,13 @@ static int netc_init_all_ports(struct netc_switch *priv)
 
 		err = netc_port_get_info_from_dt(np, dp->dn, dev);
 		if (err)
-			return err;
+			goto free_user_ports;
 
 		if (dsa_port_is_user(dp)) {
 			err = netc_port_create_mdio_bus(np, dp->dn);
 			if (err) {
 				dev_err(dev, "Failed to create MDIO bus\n");
-				return err;
+				goto free_user_ports;
 			}
 
 			/* The ipft_hf_eid is initialized to an invalid entry
@@ -314,11 +330,16 @@ static int netc_init_all_ports(struct netc_switch *priv)
 			 */
 			err = netc_port_ptp_init(np);
 			if (err)
-				return err;
+				goto free_user_ports;
 		}
 	}
 
 	return 0;
+
+free_user_ports:
+	netc_free_user_ports(priv);
+
+	return err;
 }
 
 static void netc_init_ntmp_tbl_versions(struct netc_switch *priv)
@@ -941,7 +962,7 @@ static int netc_setup(struct dsa_switch *ds)
 
 	err = netc_init_ntmp_user(priv);
 	if (err)
-		goto put_ptp_timer;
+		goto free_user_ports;
 
 	INIT_HLIST_HEAD(&priv->fdb_list);
 	mutex_init(&priv->fdbt_lock);
@@ -980,6 +1001,8 @@ free_lock_and_ntmp_user:
 	mutex_destroy(&priv->fdbt_lock);
 	mutex_destroy(&priv->vft_lock);
 	netc_free_ntmp_user(priv);
+free_user_ports:
+	netc_free_user_ports(priv);
 put_ptp_timer:
 	pci_dev_put(priv->tmr_dev);
 
@@ -1005,6 +1028,19 @@ static void netc_free_ports_resources(struct netc_switch *priv)
 			continue;
 
 		netc_port_purge_txtstamp_queue(np);
+
+		/* dsa_tree_teardown() calls dsa_tree_teardown_ports() before
+		 * dsa_tree_teardown_switches(), so netc_port_disable() is
+		 * executed before netc_teardown() and purges onestep->queue,
+		 * so here we only need to drop the port's owner reference.
+		 * In-flight one-step skbs still hold references via the
+		 * destructor; the context (and its work) is freed only after
+		 * the conduit frees the last in-flight skb. By then np may
+		 * be gone, but the work no longer dereferences np because
+		 * onestep->active has been cleared.
+		 */
+		netc_onestep_put(np->onestep);
+		np->onestep = NULL;
 	}
 }
 
@@ -1559,6 +1595,7 @@ static int netc_port_enable(struct dsa_switch *ds, int port,
 			    struct phy_device *phy)
 {
 	struct netc_port *np = NETC_PORT(ds, port);
+	struct netc_onestep *onestep = np->onestep;
 	int err;
 
 	if (np->enable)
@@ -1571,6 +1608,12 @@ static int netc_port_enable(struct dsa_switch *ds, int port,
 		return err;
 	}
 
+	if (onestep) {
+		mutex_lock(&onestep->work_lock);
+		onestep->active = true;
+		mutex_unlock(&onestep->work_lock);
+	}
+
 	np->enable = true;
 
 	return 0;
@@ -1579,6 +1622,7 @@ static int netc_port_enable(struct dsa_switch *ds, int port,
 static void netc_port_disable(struct dsa_switch *ds, int port)
 {
 	struct netc_port *np = NETC_PORT(ds, port);
+	struct netc_onestep *onestep = np->onestep;
 
 	/* When .port_disable() is called, .port_enable() may not have been
 	 * called. In this case, both the prepare_count and enable_count of
@@ -1587,6 +1631,13 @@ static void netc_port_disable(struct dsa_switch *ds, int port)
 	 */
 	if (!np->enable)
 		return;
+
+	if (onestep) {
+		mutex_lock(&onestep->work_lock);
+		onestep->active = false;
+		netc_port_purge_onestep_queue(onestep, true);
+		mutex_unlock(&onestep->work_lock);
+	}
 
 	clk_disable_unprepare(np->ref_clk);
 	np->enable = false;
