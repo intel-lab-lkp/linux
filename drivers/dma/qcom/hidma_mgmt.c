@@ -168,7 +168,11 @@ static int hidma_mgmt_probe(struct platform_device *pdev)
 	pm_runtime_set_autosuspend_delay(&pdev->dev, HIDMA_AUTOSUSPEND_TIMEOUT);
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_active(&pdev->dev);
-	pm_runtime_enable(&pdev->dev);
+
+	rc = devm_pm_runtime_enable(&pdev->dev);
+	if (rc)
+		return rc;
+
 	pm_runtime_get_sync(&pdev->dev);
 
 	virtaddr = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
@@ -310,7 +314,6 @@ static int hidma_mgmt_probe(struct platform_device *pdev)
 	return 0;
 out:
 	pm_runtime_put_sync_suspend(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
 	return rc;
 }
 
