@@ -253,6 +253,7 @@ static int at91_twi_probe(struct platform_device *pdev)
 
 	rc = i2c_add_numbered_adapter(&dev->adapter);
 	if (rc) {
+		pm_runtime_dont_use_autosuspend(dev->dev);
 		pm_runtime_disable(dev->dev);
 		pm_runtime_set_suspended(dev->dev);
 
@@ -270,6 +271,7 @@ static void at91_twi_remove(struct platform_device *pdev)
 
 	i2c_del_adapter(&dev->adapter);
 
+	pm_runtime_dont_use_autosuspend(dev->dev);
 	pm_runtime_disable(dev->dev);
 	pm_runtime_set_suspended(dev->dev);
 }
