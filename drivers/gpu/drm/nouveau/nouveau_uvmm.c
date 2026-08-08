@@ -1929,6 +1929,12 @@ nouveau_uvmm_ioctl_vm_init(struct drm_device *dev,
 		goto out_unlock;
 	}
 
+	/* Check that a GPU VA space isn't already set up for the client. */
+	if (cli->uvmm.ptr) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
 	uvmm = kzalloc_obj(*uvmm);
 	if (!uvmm) {
 		ret = -ENOMEM;
