@@ -492,6 +492,9 @@ struct search {
 	struct block_device	*orig_bdev;
 	unsigned long		start_time;
 
+	sector_t		bypass_sector;
+	unsigned int		bypass_sectors;
+
 	struct btree_op		op;
 	struct data_insert_op	iop;
 };
@@ -763,10 +766,15 @@ static inline struct search *search_alloc(struct bio *bio,
 
 /* Cached devices */
 
+static void bch_bypass_write_end(struct cached_dev *dc, sector_t sector, unsigned int sectors);
+
 static CLOSURE_CALLBACK(cached_dev_bio_complete)
 {
 	closure_type(s, struct search, cl);
 	struct cached_dev *dc = container_of(s->d, struct cached_dev, disk);
+
+	if (s->iop.bypass && op_is_write(bio_op(s->orig_bio)))
+		bch_bypass_write_end(dc, s->bypass_sector, s->bypass_sectors);
 
 	cached_dev_put(dc);
 	search_free(&cl->work);
@@ -830,6 +838,110 @@ static CLOSURE_CALLBACK(cached_dev_cache_miss_done)
 	closure_put(&d->cl);
 }
 
+static void bch_bypass_write_start(struct cached_dev *dc, sector_t sector, unsigned int sectors)
+{
+	unsigned long start_chunk = sector_to_bypass_chunk(sector);
+	unsigned long end_chunk = sector_to_bypass_chunk(sector + sectors - 1);
+	unsigned long end_pg_idx = bypass_chunk_to_page(end_chunk);
+	unsigned long chunk;
+
+	if (WARN_ON_ONCE(end_pg_idx >= dc->bypass_num_pages))
+		return;
+
+	for (chunk = start_chunk; chunk <= end_chunk; chunk++) {
+		unsigned long pg_idx = bypass_chunk_to_page(chunk);
+		unsigned long pg_off = bypass_chunk_to_offset(chunk);
+		struct bch_bypass_page *pg = &dc->bypass_pages[pg_idx];
+		u32 *new_counts;
+		u32 *dup_counts = NULL;
+		unsigned long flags;
+
+		spin_lock_irqsave(&pg->lock, flags);
+		if (!pg->counts) {
+			spin_unlock_irqrestore(&pg->lock, flags);
+			new_counts = mempool_alloc(&dc->bypass_mempool, GFP_NOIO);
+			memset(new_counts, 0, PAGE_SIZE);
+			spin_lock_irqsave(&pg->lock, flags);
+			if (pg->counts)
+				dup_counts = new_counts;
+			else
+				pg->counts = new_counts;
+		}
+		pg->counts[pg_off]++;
+		pg->active++;
+		spin_unlock_irqrestore(&pg->lock, flags);
+
+		if (dup_counts)
+			mempool_free(dup_counts, &dc->bypass_mempool);
+	}
+}
+
+static void bch_bypass_write_end(struct cached_dev *dc, sector_t sector, unsigned int sectors)
+{
+	unsigned long start_chunk = sector_to_bypass_chunk(sector);
+	unsigned long end_chunk = sector_to_bypass_chunk(sector + sectors - 1);
+	unsigned long end_pg_idx = bypass_chunk_to_page(end_chunk);
+	unsigned long chunk;
+
+	if (WARN_ON_ONCE(end_pg_idx >= dc->bypass_num_pages))
+		return;
+
+	for (chunk = start_chunk; chunk <= end_chunk; chunk++) {
+		unsigned long pg_idx = bypass_chunk_to_page(chunk);
+		unsigned long pg_off = bypass_chunk_to_offset(chunk);
+		struct bch_bypass_page *pg = &dc->bypass_pages[pg_idx];
+		u32 *counts = NULL;
+		unsigned long flags;
+
+		spin_lock_irqsave(&pg->lock, flags);
+		if (WARN_ON_ONCE(!pg->counts || !pg->counts[pg_off])) {
+			spin_unlock_irqrestore(&pg->lock, flags);
+			continue;
+		}
+
+		pg->counts[pg_off]--;
+		pg->active--;
+		if (!pg->active) {
+			counts = pg->counts;
+			pg->counts = NULL;
+		}
+		spin_unlock_irqrestore(&pg->lock, flags);
+
+		if (counts)
+			mempool_free(counts, &dc->bypass_mempool);
+	}
+}
+
+static bool bch_has_active_bypass_writes(struct cached_dev *dc, sector_t sector,
+					 unsigned int sectors)
+{
+	unsigned long start_chunk = sector_to_bypass_chunk(sector);
+	unsigned long end_chunk = sector_to_bypass_chunk(sector + sectors - 1);
+	unsigned long end_pg_idx = bypass_chunk_to_page(end_chunk);
+	unsigned long chunk;
+	bool has_active = false;
+
+	if (WARN_ON_ONCE(end_pg_idx >= dc->bypass_num_pages))
+		return false;
+
+	for (chunk = start_chunk; chunk <= end_chunk; chunk++) {
+		unsigned long pg_idx = bypass_chunk_to_page(chunk);
+		unsigned long pg_off = bypass_chunk_to_offset(chunk);
+		struct bch_bypass_page *pg = &dc->bypass_pages[pg_idx];
+		unsigned long flags;
+
+		spin_lock_irqsave(&pg->lock, flags);
+		if (pg->counts && pg->counts[pg_off] > 0) {
+			has_active = true;
+			spin_unlock_irqrestore(&pg->lock, flags);
+			break;
+		}
+		spin_unlock_irqrestore(&pg->lock, flags);
+	}
+
+	return has_active;
+}
+
 static CLOSURE_CALLBACK(cached_dev_read_done)
 {
 	closure_type(s, struct search, cl);
@@ -864,7 +976,9 @@ static CLOSURE_CALLBACK(cached_dev_read_done)
 	bio_complete(s);
 
 	if (s->iop.bio &&
-	    !test_bit(CACHE_SET_STOPPING, &s->iop.c->flags)) {
+	    !test_bit(CACHE_SET_STOPPING, &s->iop.c->flags) &&
+	    !bch_has_active_bypass_writes(dc, s->iop.bio->bi_iter.bi_sector,
+					  bio_sectors(s->iop.bio))) {
 		BUG_ON(!s->iop.replace);
 		closure_call(&s->iop.cl, bch_data_insert, NULL, cl);
 	}
@@ -975,7 +1089,13 @@ static CLOSURE_CALLBACK(cached_dev_write_complete)
 	struct cached_dev *dc = container_of(s->d, struct cached_dev, disk);
 
 	up_read_non_owner(&dc->writeback_lock);
-	cached_dev_bio_complete(&cl->work);
+
+	if (s->iop.bypass) {
+		closure_call(&s->iop.cl, bch_data_insert, NULL, cl);
+		continue_at(cl, cached_dev_bio_complete, NULL);
+	} else {
+		cached_dev_bio_complete(&cl->work);
+	}
 }
 
 static void cached_dev_write(struct cached_dev *dc, struct search *s)
@@ -1018,6 +1138,10 @@ static void cached_dev_write(struct cached_dev *dc, struct search *s)
 		s->iop.bio = s->orig_bio;
 		bio_get(s->iop.bio);
 
+		s->bypass_sector = bio->bi_iter.bi_sector;
+		s->bypass_sectors = bio_sectors(bio);
+		bch_bypass_write_start(dc, s->bypass_sector, s->bypass_sectors);
+
 		if (bio_op(bio) == REQ_OP_DISCARD &&
 		    !bdev_max_discard_sectors(dc->bdev))
 			goto insert_data;
@@ -1058,7 +1182,8 @@ static void cached_dev_write(struct cached_dev *dc, struct search *s)
 	}
 
 insert_data:
-	closure_call(&s->iop.cl, bch_data_insert, NULL, cl);
+	if (!s->iop.bypass)
+		closure_call(&s->iop.cl, bch_data_insert, NULL, cl);
 	continue_at(cl, cached_dev_write_complete, NULL);
 }
 
