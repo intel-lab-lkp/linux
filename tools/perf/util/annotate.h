@@ -494,12 +494,21 @@ int annotate_check_args(void);
 
 int arch__dwarf_regnum(const struct arch *arch, const char *str);
 
+enum annotated_addr_mode {
+	PERF_ADDR_MODE_NONE = 0,
+
+	PERF_ADDR_MODE_SIGNED_OFFSET,
+	PERF_ADDR_MODE_PRE_INDEX,
+	PERF_ADDR_MODE_POST_INDEX,
+};
+
 /**
  * struct annotated_op_loc - Location info of instruction operand
  * @reg1: First register in the operand
  * @reg2: Second register in the operand
  * @offset: Memory access offset in the operand
  * @segment: Segment selector register
+ * @addr_mode: Addressing mode, only valid if @mem_ref is true
  * @mem_ref: Whether the operand accesses memory
  * @multi_regs: Whether the second register is used
  * @imm: Whether the operand is an immediate value (in offset)
@@ -509,6 +518,7 @@ struct annotated_op_loc {
 	int reg2;
 	int offset;
 	u8 segment;
+	u8 addr_mode;
 	bool mem_ref;
 	bool multi_regs;
 	bool imm;
