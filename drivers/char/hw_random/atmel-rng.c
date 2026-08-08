@@ -150,6 +150,7 @@ static int atmel_trng_probe(struct platform_device *pdev)
 
 	ret = devm_hwrng_register(&pdev->dev, &trng->rng);
 	if (ret) {
+		pm_runtime_dont_use_autosuspend(&pdev->dev);
 		pm_runtime_disable(&pdev->dev);
 		pm_runtime_set_suspended(&pdev->dev);
 #ifndef CONFIG_PM
@@ -165,6 +166,7 @@ static void atmel_trng_remove(struct platform_device *pdev)
 	struct atmel_trng *trng = platform_get_drvdata(pdev);
 
 	atmel_trng_cleanup(trng);
+	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 	pm_runtime_set_suspended(&pdev->dev);
 }
