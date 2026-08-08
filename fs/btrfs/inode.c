@@ -938,6 +938,13 @@ again:
 		compress_level = inode->defrag_compress_level;
 	} else if (inode->prop_compress) {
 		compress_type = inode->prop_compress;
+		/*
+		 * If level not specified (i.e. is 0), use the fs default. If
+		 * compress_type is different, keep the level anyway and let
+		 * the rest of the code clamp it.
+		 */
+		if (inode->prop_compress_level)
+			compress_level = inode->prop_compress_level;
 	}
 
 	/* Compression level is applied here. */
@@ -2326,6 +2333,13 @@ static int run_delalloc_inline(struct btrfs_inode *inode, struct folio *locked_f
 			compress_level = inode->defrag_compress_level;
 		} else if (inode->prop_compress) {
 			compress_type = inode->prop_compress;
+			/*
+			 * If level not specified (i.e. is 0), use the fs default. If
+			 * compress_type is different, keep the level anyway and let
+			 * the rest of the code clamp it.
+			 */
+			if (inode->prop_compress_level)
+				compress_level = inode->prop_compress_level;
 		}
 		cb = btrfs_compress_bio(inode, 0, blocksize, compress_type, compress_level, 0);
 		if (IS_ERR(cb)) {
