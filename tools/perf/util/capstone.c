@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <dlfcn.h>
@@ -29,6 +30,10 @@
 #define CS_MODE_RISCV32  1
 #define CS_MODE_RISCV64  2
 #define CS_MODE_RISCVC   4
+#endif
+
+#if CS_VERSION_MAJOR < 4
+#define ARM64_GRP_BRANCH_RELATIVE  7
 #endif
 
 #ifdef LIBCAPSTONE_DLOPEN
@@ -225,6 +230,12 @@ static int capstone_init(uint16_t e_machine, csh *cs_handle, bool is64, bool is_
 		 * on x86 by investigating instruction details.
 		 */
 		perf_cs_option(*cs_handle, CS_OPT_DETAIL, CS_OPT_ON);
+	} else if (arch == CS_ARCH_ARM64) {
+		/*
+		 * Same as x86: arm64 needs instruction details to resolve
+		 * symbolic addresses.
+		 */
+		perf_cs_option(*cs_handle, CS_OPT_DETAIL, CS_OPT_ON);
 	}
 
 	return 0;
@@ -299,10 +310,6 @@ static void print_capstone_detail(struct cs_insn *insn, char *buf, size_t len,
 	struct map *map = args->ms->map;
 	struct symbol *sym;
 
-	/* TODO: support more architectures */
-	if (!arch__is_x86(args->arch))
-		return;
-
 	if (insn->detail == NULL)
 		return;
 
@@ -352,6 +359,116 @@ static void print_capstone_detail(struct cs_insn *insn, char *buf, size_t len,
 		map__put(found_map);
 		break;
 	}
+}
+
+static int print_default_format(struct cs_insn *insn, char *buf, size_t len)
+{
+	return scnprintf(buf, len, "       %-7s %s",
+			 insn->mnemonic, insn->op_str);
+}
+
+static void format_capstone_insn_x86(struct cs_insn *insn, char *buf,
+				     size_t len, struct annotate_args *args,
+				     u64 addr)
+{
+	int printed;
+
+	printed = print_default_format(insn, buf, len);
+	buf += printed;
+	len -= printed;
+
+	print_capstone_detail(insn, buf, len, args, addr);
+}
+
+static bool is_pc_relative_insn(struct cs_insn *insn)
+{
+	int i;
+
+	if (insn->id == ARM64_INS_ADR || insn->id == ARM64_INS_ADRP)
+		return true;
+
+	if (insn->detail == NULL)
+		return false;
+
+	for (i = 0; i < insn->detail->groups_count; i++) {
+		if (insn->detail->groups[i] == ARM64_GRP_JUMP ||
+		    insn->detail->groups[i] == ARM64_GRP_CALL ||
+		    insn->detail->groups[i] == ARM64_GRP_BRANCH_RELATIVE)
+			return true;
+	}
+
+	return false;
+}
+
+static void format_capstone_insn_arm64(struct cs_insn *insn, char *buf,
+				       size_t len, struct annotate_args *args)
+{
+	struct map *map = args->ms->map;
+	struct symbol *sym;
+	char *last_imm, *endptr;
+	u64 orig_addr, addr;
+	struct map *found_map = NULL;
+
+	print_default_format(insn, buf, len);
+	/*
+	 * Adjust instructions to keep the existing behavior with objdump.
+	 *
+	 * Example conversion:
+	 * From: b #0xffff8000800114c8
+	 * To:   b ffff8000800114c8 <el0t_64_sync+0x108>
+	 */
+	if (is_pc_relative_insn(insn)) {
+		/* Extract last immediate value as address */
+		last_imm = strrchr(buf, '#');
+		if (!last_imm)
+			return;
+
+		orig_addr = strtoull(last_imm + 1, &endptr, 16);
+		if (endptr == last_imm + 1)
+			return;
+
+		addr = map__objdump_2mem(map, orig_addr);
+
+		/* Relocate map that contains the address */
+		if (dso__kernel(map__dso(map))) {
+			found_map = maps__find(map__kmaps(map), addr);
+			if (found_map == NULL)
+				return;
+			map = found_map;
+		}
+
+		/* Convert it to map-relative address for search */
+		addr = map__map_ip(map, addr);
+
+		sym = map__find_symbol(map, addr);
+		if (sym == NULL) {
+			map__put(found_map);
+			return;
+		}
+
+		/* Symbolize the resolved address */
+		len = len - (last_imm - buf);
+		if (addr == sym->start) {
+			scnprintf(last_imm, len, "%"PRIx64" <%s>",
+				  orig_addr, sym->name);
+		} else {
+			scnprintf(last_imm, len, "%"PRIx64" <%s+%#"PRIx64">",
+				  orig_addr, sym->name, addr - sym->start);
+		}
+		map__put(found_map);
+	}
+}
+
+static void format_capstone_insn(struct cs_insn *insn, char *buf, size_t len,
+				 struct annotate_args *args, u64 addr)
+{
+	/* TODO: support more architectures */
+	if (arch__is_x86(args->arch))
+		format_capstone_insn_x86(insn, buf, len, args, addr);
+	else if (arch__is_arm64(args->arch))
+		format_capstone_insn_arm64(insn, buf, len, args);
+	else
+		print_default_format(insn, buf, len);
 }
 
 struct find_file_offset_data {
@@ -446,14 +563,9 @@ int symbol__disassemble_capstone(const char *filename, struct symbol *sym,
 
 	free_count = count = perf_cs_disasm(handle, buf, buf_len, start, buf_len, &insn);
 	for (i = 0, offset = 0; i < count; i++) {
-		int printed;
-
-		printed = scnprintf(disasm_buf, sizeof(disasm_buf),
-				    "       %-7s %s",
-				    insn[i].mnemonic, insn[i].op_str);
-		print_capstone_detail(&insn[i], disasm_buf + printed,
-				      sizeof(disasm_buf) - printed, args,
-				      start + offset);
+		format_capstone_insn(&insn[i], disasm_buf,
+				     sizeof(disasm_buf), args,
+				     start + offset);
 
 		args->offset = offset;
 		args->line = disasm_buf;
