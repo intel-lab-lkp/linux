@@ -2377,6 +2377,9 @@ static void ni_usb_detach(struct gpib_board *board)
 		mutex_lock(&ni_priv->control_transfer_lock);
 		mutex_lock(&ni_priv->interrupt_transfer_lock);
 		ni_usb_cleanup_urbs(ni_priv);
+		mutex_unlock(&ni_priv->interrupt_transfer_lock);
+		mutex_unlock(&ni_priv->control_transfer_lock);
+		mutex_unlock(&ni_priv->bulk_transfer_lock);
 		ni_usb_free_private(ni_priv);
 	}
 	mutex_unlock(&ni_usb_hotplug_lock);
