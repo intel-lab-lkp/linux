@@ -64,7 +64,7 @@ struct bmc150_accel_data {
 	struct bmc150_accel_trigger triggers[BMC150_ACCEL_TRIGGERS];
 	struct mutex mutex;
 	u8 fifo_mode, watermark;
-	s16 buffer[8];
+	IIO_DECLARE_BUFFER_WITH_TS(s16, buffer, 3);
 	/*
 	 * Ensure there is sufficient space and correct alignment for
 	 * the timestamp if enabled
