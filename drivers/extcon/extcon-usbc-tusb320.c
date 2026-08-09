@@ -203,11 +203,11 @@ static int tusb320l_get_revision(struct tusb320_priv *priv, unsigned int *revisi
 	return regmap_read(priv->regmap, TUSB320L_REGA0_REVISION, revision);
 }
 
-static struct tusb320_ops tusb320_ops = {
+static const struct tusb320_ops tusb320_ops = {
 	.set_mode = tusb320_set_mode,
 };
 
-static struct tusb320_ops tusb320l_ops = {
+static const struct tusb320_ops tusb320l_ops = {
 	.set_mode = tusb320l_set_mode,
 	.get_revision = tusb320l_get_revision,
 };
