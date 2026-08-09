@@ -492,6 +492,7 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 	u32 data_dir;
 	void __user *sg_user[HBA_MAX_SG_EMBEDDED];
 	void *sg_list[HBA_MAX_SG_EMBEDDED];
+	dma_addr_t sg_addr[HBA_MAX_SG_EMBEDDED];
 	u32 sg_count[HBA_MAX_SG_EMBEDDED];
 	u32 sg_indx = 0;
 	u32 byte_count = 0;
@@ -517,6 +518,7 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 	}
 
 	memset(sg_list, 0, sizeof(sg_list)); /* cleanup may take issue */
+	memset(sg_addr, 0, sizeof(sg_addr)); /* mark all entries unmapped */
 	if(copy_from_user(&fibsize, &user_srb->count,sizeof(u32))){
 		dprintk((KERN_DEBUG"aacraid: Could not copy data size from user\n"));
 		rcode = -EFAULT;
@@ -690,6 +692,7 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 			}
 			addr = dma_map_single(&dev->pdev->dev, p, sg_count[i],
 					      data_dir);
+			sg_addr[i] = addr;
 			hbacmd->sge[i].addr_hi = cpu_to_le32((u32)(addr>>32));
 			hbacmd->sge[i].addr_lo = cpu_to_le32(
 						(u32)(addr & 0xffffffff));
@@ -752,7 +755,7 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 				}
 				addr = dma_map_single(&dev->pdev->dev, p,
 						      sg_count[i], data_dir);
-
+				sg_addr[i] = addr;
 				psg->sg[i].addr[0] = cpu_to_le32(addr & 0xffffffff);
 				psg->sg[i].addr[1] = cpu_to_le32(addr>>32);
 				byte_count += sg_count[i];
@@ -808,7 +811,7 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 				}
 				addr = dma_map_single(&dev->pdev->dev, p,
 						      sg_count[i], data_dir);
-
+				sg_addr[i] = addr;
 				psg->sg[i].addr[0] = cpu_to_le32(addr & 0xffffffff);
 				psg->sg[i].addr[1] = cpu_to_le32(addr>>32);
 				byte_count += sg_count[i];
@@ -865,7 +868,7 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 				addr = dma_map_single(&dev->pdev->dev, p,
 						      usg->sg[i].count,
 						      data_dir);
-
+				sg_addr[i] = addr;
 				psg->sg[i].addr = cpu_to_le32(addr & 0xffffffff);
 				byte_count += usg->sg[i].count;
 				psg->sg[i].count = cpu_to_le32(sg_count[i]);
@@ -905,7 +908,7 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 				}
 				addr = dma_map_single(&dev->pdev->dev, p,
 						      sg_count[i], data_dir);
-
+				sg_addr[i] = addr;
 				psg->sg[i].addr = cpu_to_le32(addr);
 				byte_count += sg_count[i];
 				psg->sg[i].count = cpu_to_le32(sg_count[i]);
@@ -986,8 +989,12 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 cleanup:
 	kfree(user_srbcmd);
 	if (rcode != -ERESTARTSYS) {
-		for (i = 0; i <= sg_indx; i++)
+		for (i = 0; i <= sg_indx; i++) {
+			if (sg_addr[i])
+				dma_unmap_single(&dev->pdev->dev, sg_addr[i],
+						 sg_count[i], data_dir);
 			kfree(sg_list[i]);
+		}
 		aac_fib_complete(srbfib);
 		aac_fib_free(srbfib);
 	}
