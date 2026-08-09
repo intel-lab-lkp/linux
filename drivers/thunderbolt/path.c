@@ -397,6 +397,14 @@ static int __tb_path_deactivate_hop(struct tb_port *port, int hop_index,
 	if (ret)
 		return ret;
 
+	/*
+	 * This adapter has already been seen to leave the pending bit set
+	 * for good, so there is nothing to wait for. The hop is disabled
+	 * by the write above either way, which is what the caller needs.
+	 */
+	if (port->no_drain_status)
+		return 0;
+
 	/* Wait until it is drained */
 	timeout = ktime_add_ms(ktime_get(), 500);
 	do {
@@ -429,6 +437,15 @@ static int __tb_path_deactivate_hop(struct tb_port *port, int hop_index,
 
 		usleep_range(10, 20);
 	} while (ktime_before(ktime_get(), timeout));
+
+	/*
+	 * Some host interface adapters latch the pending bit and never
+	 * clear it again, and there is nothing the connection manager can
+	 * do about that from here. Report it once and stop spending the
+	 * timeout on this adapter on every teardown from now on.
+	 */
+	if (tb_port_is_nhi(port))
+		port->no_drain_status = true;
 
 	return -ETIMEDOUT;
 }
