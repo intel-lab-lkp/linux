@@ -857,12 +857,10 @@ static int cc2520_register(struct cc2520_private *priv)
 	dev_vdbg(&priv->spi->dev, "registered cc2520\n");
 	ret = ieee802154_register_hw(priv->hw);
 	if (ret)
-		goto err_free_device;
+		goto err_ret;
 
 	return 0;
 
-err_free_device:
-	ieee802154_free_hw(priv->hw);
 err_ret:
 	return ret;
 }
@@ -1116,19 +1114,7 @@ static int cc2520_probe(struct spi_device *spi)
 	if (ret)
 		goto err_hw_init;
 
-	/* Set up fifop interrupt */
-	ret = devm_request_irq(&spi->dev,
-			       gpiod_to_irq(fifop),
-			       cc2520_fifop_isr,
-			       IRQF_TRIGGER_RISING,
-			       dev_name(&spi->dev),
-			       priv);
-	if (ret) {
-		dev_err(&spi->dev, "could not get fifop irq\n");
-		goto err_hw_init;
-	}
-
-	/* Set up sfd interrupt */
+	/* SFD completes synchronous TX; install before cc2520_register(). */
 	ret = devm_request_irq(&spi->dev,
 			       gpiod_to_irq(sfd),
 			       cc2520_sfd_isr,
@@ -1142,13 +1128,29 @@ static int cc2520_probe(struct spi_device *spi)
 
 	ret = cc2520_register(priv);
 	if (ret)
-		goto err_hw_init;
+		goto err_free_hw;
+
+	/* FIFOP arms the RX work; install after cc2520_register(). */
+	ret = devm_request_irq(&spi->dev,
+			       gpiod_to_irq(fifop),
+			       cc2520_fifop_isr,
+			       IRQF_TRIGGER_RISING,
+			       dev_name(&spi->dev),
+			       priv);
+	if (ret) {
+		dev_err(&spi->dev, "could not get fifop irq\n");
+		goto err_unregister;
+	}
 
 	return 0;
 
+err_unregister:
+	ieee802154_unregister_hw(priv->hw);
+err_free_hw:
+	if (priv->hw)
+		ieee802154_free_hw(priv->hw);
 err_hw_init:
 	mutex_destroy(&priv->buffer_mutex);
-	flush_work(&priv->fifop_irqwork);
 	return ret;
 }
 
@@ -1156,11 +1158,10 @@ static void cc2520_remove(struct spi_device *spi)
 {
 	struct cc2520_private *priv = spi_get_drvdata(spi);
 
-	mutex_destroy(&priv->buffer_mutex);
-	flush_work(&priv->fifop_irqwork);
-
+	disable_work_sync(&priv->fifop_irqwork);
 	ieee802154_unregister_hw(priv->hw);
 	ieee802154_free_hw(priv->hw);
+	mutex_destroy(&priv->buffer_mutex);
 }
 
 static const struct spi_device_id cc2520_ids[] = {
