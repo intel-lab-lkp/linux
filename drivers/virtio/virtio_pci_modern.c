@@ -715,10 +715,11 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	info->msix_vector = msix_vec;
 
 	/* create the vring */
-	vq = vring_create_virtqueue(index, num,
-				    SMP_CACHE_BYTES, &vp_dev->vdev,
-				    true, true, ctx,
-				    notify, callback, name);
+	vq = vring_create_virtqueue_map(index, num,
+					SMP_CACHE_BYTES, &vp_dev->vdev,
+					true, true, ctx,
+					notify, callback, name,
+					vp_dev->vdev.vmap);
 	if (!vq)
 		return ERR_PTR(-ENOMEM);
 
@@ -1288,6 +1289,14 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 	vp_dev->avq_index = vp_avq_index;
 	vp_dev->isr = mdev->isr;
 	vp_dev->vdev.id = mdev->id;
+
+	/*
+	 * The mapping token every virtqueue of this device is created with.
+	 * This is the same value vring_create_virtqueue() would derive from
+	 * vdev->dev.parent, kept here so that a transport feature can replace
+	 * it in one place.
+	 */
+	vp_dev->vdev.vmap.dma_dev = &pci_dev->dev;
 
 	spin_lock_init(&vp_dev->admin_vq.lock);
 	return 0;
