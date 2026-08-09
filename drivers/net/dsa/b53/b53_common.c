@@ -332,6 +332,21 @@ static void b53_set_eap_mode(struct b53_device *dev, int port, int mode)
 {
 	u64 eap_conf;
 
+	/*
+	 * Northstar devices (SoCs with BCM53011 / BCM53012) have 3 Ethernet
+	 * controllers connected to 3 switch ports: 5 (IMP1), 7 and 8 (IMP0).
+	 * Each of those ports can be used as CPU one as all support Broadcom
+	 * header but ports 5 and 7 have some limitations.
+	 *
+	 * Setting EAP_MODE_SIMPLIFIED with port 5/7 used as CPU port breaks
+	 * standalone ports, see:
+	 * https://lore.kernel.org/netdev/ce4d9b7b-aaf6-4796-94fb-8c3d6a1dcd4d@gmail.com/
+	 */
+	if (is5301x(dev) && !dsa_is_cpu_port(dev->ds, B53_CPU_PORT)) {
+		dev_warn_once(dev->dev, "skipping EAP setup because of not using CPU port 8\n");
+		return;
+	}
+
 	if (is5325(dev) || is5365(dev) || dev->chip_id == BCM5389_DEVICE_ID)
 		return;
 
