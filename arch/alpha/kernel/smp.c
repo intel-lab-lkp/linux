@@ -669,7 +669,20 @@ ipi_flush_tlb_page(void *x)
 	struct flush_tlb_page_struct *data = x;
 	struct mm_struct * mm = data->mm;
 
-	if (mm == current->active_mm && !asn_locked())
+	/*
+	 * tbi() acts on the address space context currently loaded on this
+	 * CPU, so it reaches MM's translations only when a thread of MM is
+	 * really running here.  current->active_mm is not sufficient: under
+	 * lazy TLB an idle or kernel task keeps MM as its active_mm while a
+	 * different ASN is loaded in the PCB, so the tbi() invalidates the
+	 * wrong context and the stale entry survives.  Nothing forces the
+	 * old ASN to be retired afterwards either, mm->context[cpu] still
+	 * being valid, so the resuming thread can reuse it.
+	 *
+	 * Otherwise fall back to invalidating the context, which forces a
+	 * fresh ASN at the next switch whatever is loaded now.
+	 */
+	if (mm == current->mm && !asn_locked())
 		flush_tlb_current_page(mm, data->vma, data->addr);
 	else
 		flush_tlb_other(mm);
