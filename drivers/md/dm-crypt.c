@@ -1674,6 +1674,8 @@ decrease_order:
 		if (!pages) {
 			crypt_free_buffer_pages(cc, clone);
 			bio_put(clone);
+			if (unlikely(gfp_mask & __GFP_DIRECT_RECLAIM))
+				mutex_unlock(&cc->bio_alloc_lock);
 			gfp_mask |= __GFP_DIRECT_RECLAIM;
 			order = 0;
 			goto retry;
