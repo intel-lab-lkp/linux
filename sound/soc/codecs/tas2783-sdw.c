@@ -912,6 +912,26 @@ static void tas2783_fw_ready(const struct firmware *fmw, void *context)
 				"FW download failed: %d", ret);
 			break;
 		}
+
+		/*
+		 * The firmware image is written with sdw_nwrite_no_pm(), which
+		 * bypasses the regmap cache. The cache therefore keeps holding
+		 * the stale reg_defaults entries for every register the
+		 * firmware owns, and the regcache_sync() done on resume writes
+		 * those defaults back out over the firmware tuning. That wipes
+		 * the per-amp configuration, including the channel assignment,
+		 * and leaves the speakers silent until the next full re-init.
+		 *
+		 * Drop the firmware-owned registers from the cache so nothing
+		 * stale can ever be synced over them. This is safe because a
+		 * suspend deep enough to lose device state also takes the
+		 * peripheral UNATTACHED, which clears hw_init and triggers a
+		 * full firmware re-download on re-attach.
+		 */
+		if (file->length)
+			regcache_drop_region(tas_dev->regmap, file->dest_addr,
+					     file->dest_addr + file->length - 1);
+
 		cur_file++;
 	}
 	mutex_unlock(&tas_dev->pde_lock);
