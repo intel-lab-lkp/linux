@@ -111,7 +111,7 @@ struct init_config {
 	u32			latency_adj;    /* latency adjustment in ms */
 	struct clk_list_info	clk_list;       /* List of frequencies available in system */
 	struct drm_device	*ddev;
-	struct xrs_action_ops	*actions;
+	const struct xrs_action_ops	*actions;
 };
 
 /*

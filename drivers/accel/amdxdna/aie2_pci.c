@@ -285,7 +285,7 @@ static int aie2_xrs_set_dft_dpm_level(struct drm_device *ddev, u32 dpm_level)
 	return aie2_pm_set_dpm(ndev, dpm_level);
 }
 
-static struct xrs_action_ops aie2_xrs_actions = {
+static const struct xrs_action_ops aie2_xrs_actions = {
 	.load = aie2_xrs_load,
 	.unload = aie2_xrs_unload,
 	.set_dft_dpm_level = aie2_xrs_set_dft_dpm_level,
