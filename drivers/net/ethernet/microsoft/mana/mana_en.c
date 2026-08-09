@@ -2427,12 +2427,18 @@ static void mana_deinit_txq(struct mana_port_context *apc, struct mana_txq *txq)
 
 static void mana_destroy_txq(struct mana_port_context *apc)
 {
+	struct gdma_context *gc = apc->ac->gdma_dev->gdma_context;
 	struct napi_struct *napi;
 	int i;
 
 	if (!apc->tx_qp)
 		return;
 
+	/* Pass 1: quiesce each CQ on the device and clear its cq_table slot.
+	 * Taking one grace period below for the whole port avoids up to
+	 * apc->num_queues serialized synchronize_rcu() calls (one per CQ in
+	 * mana_gd_destroy_cq()) under RTNL on every teardown.
+	 */
 	for (i = 0; i < apc->num_queues; i++) {
 		if (!apc->tx_qp[i])
 			continue;
@@ -2448,8 +2454,24 @@ static void mana_destroy_txq(struct mana_port_context *apc)
 			apc->tx_qp[i]->txq.napi_initialized = false;
 		}
 
-		if (apc->tx_qp[i]->tx_object != INVALID_MANA_HANDLE)
-			mana_destroy_wq_obj(apc, GDMA_SQ, apc->tx_qp[i]->tx_object);
+		if (apc->tx_qp[i]->tx_object != INVALID_MANA_HANDLE) {
+			mana_destroy_wq_obj(apc, GDMA_SQ,
+					    apc->tx_qp[i]->tx_object);
+			apc->tx_qp[i]->tx_object = INVALID_MANA_HANDLE;
+		}
+
+		if (apc->tx_qp[i]->tx_cq.gdma_cq)
+			mana_gd_unpublish_cq(gc, apc->tx_qp[i]->tx_cq.gdma_cq);
+	}
+
+	synchronize_rcu();
+
+	/* Pass 2: the slots are clear, so mana_gd_destroy_cq() skips its own
+	 * grace period; free the CQ, the TXQ and the queue pair.
+	 */
+	for (i = 0; i < apc->num_queues; i++) {
+		if (!apc->tx_qp[i])
+			continue;
 
 		mana_deinit_cq(apc, &apc->tx_qp[i]->tx_cq);
 
@@ -2496,6 +2518,7 @@ static int mana_create_txq(struct mana_port_context *apc,
 	struct mana_obj_spec cq_spec;
 	struct gdma_queue_spec spec;
 	struct gdma_context *gc;
+	struct gdma_queue __rcu **cq_table;
 	struct mana_txq *txq;
 	struct mana_cq *cq;
 	u32 txq_size;
@@ -2596,12 +2619,18 @@ static int mana_create_txq(struct mana_port_context *apc,
 
 		cq->gdma_id = cq->gdma_cq->id;
 
-		if (WARN_ON(cq->gdma_id >= gc->max_num_cqs)) {
+		/* No rcu_read_lock(): mana_create_txq runs under RTNL during
+		 * netdev bring-up, inside the netdev lifetime that
+		 * mana_remove() drains before the base cq_table can be freed.
+		 * See gdma_context::cq_table in gdma.h for why "true" is sound.
+		 */
+		cq_table = rcu_dereference_protected(gc->cq_table, true);
+		if (WARN_ON(!cq_table || cq->gdma_id >= gc->max_num_cqs)) {
 			err = -EINVAL;
 			goto out;
 		}
 
-		gc->cq_table[cq->gdma_id] = cq->gdma_cq;
+		rcu_assign_pointer(cq_table[cq->gdma_id], cq->gdma_cq);
 
 		mana_create_txq_debugfs(apc, i);
 
@@ -2621,24 +2650,19 @@ out:
 	return err;
 }
 
-static void mana_destroy_rxq(struct mana_port_context *apc,
+/* Quiesce an RXQ's CQ on the device and clear its cq_table slot, without
+ * waiting for a grace period.  Split out of mana_destroy_rxq() so a batch
+ * teardown (mana_destroy_rxqs()) can quiesce every RXQ and then take a
+ * single synchronize_rcu() instead of one per RXQ.
+ */
+static void mana_quiesce_rxq(struct mana_port_context *apc,
 			     struct mana_rxq *rxq, bool napi_initialized)
-
 {
 	struct gdma_context *gc = apc->ac->gdma_dev->gdma_context;
-	struct mana_recv_buf_oob *rx_oob;
-	struct device *dev = gc->dev;
-	struct napi_struct *napi;
-	struct page *page;
-	int i;
-
-	if (!rxq)
-		return;
+	struct napi_struct *napi = &rxq->rx_cq.napi;
 
 	debugfs_remove_recursive(rxq->mana_rx_debugfs);
 	rxq->mana_rx_debugfs = NULL;
-
-	napi = &rxq->rx_cq.napi;
 
 	if (napi_initialized) {
 		napi_synchronize(napi);
@@ -2650,8 +2674,27 @@ static void mana_destroy_rxq(struct mana_port_context *apc,
 	if (xdp_rxq_info_is_reg(&rxq->xdp_rxq))
 		xdp_rxq_info_unreg(&rxq->xdp_rxq);
 
-	if (rxq->rxobj != INVALID_MANA_HANDLE)
+	if (rxq->rxobj != INVALID_MANA_HANDLE) {
 		mana_destroy_wq_obj(apc, GDMA_RQ, rxq->rxobj);
+		rxq->rxobj = INVALID_MANA_HANDLE;
+	}
+
+	if (rxq->rx_cq.gdma_cq)
+		mana_gd_unpublish_cq(gc, rxq->rx_cq.gdma_cq);
+}
+
+/* Free an RXQ once its cq_table slot has been cleared and a grace period
+ * has elapsed (see mana_quiesce_rxq()).  mana_deinit_cq() ->
+ * mana_gd_destroy_cq() finds the slot already NULL and skips its own
+ * synchronize_rcu().
+ */
+static void mana_free_rxq(struct mana_port_context *apc, struct mana_rxq *rxq)
+{
+	struct gdma_context *gc = apc->ac->gdma_dev->gdma_context;
+	struct mana_recv_buf_oob *rx_oob;
+	struct device *dev = gc->dev;
+	struct page *page;
+	int i;
 
 	mana_deinit_cq(apc, &rxq->rx_cq);
 
@@ -2683,6 +2726,23 @@ static void mana_destroy_rxq(struct mana_port_context *apc,
 		mana_gd_destroy_queue(gc, rxq->gdma_rq);
 
 	kvfree(rxq);
+}
+
+static void mana_destroy_rxq(struct mana_port_context *apc,
+			     struct mana_rxq *rxq, bool napi_initialized)
+
+{
+	if (!rxq)
+		return;
+
+	mana_quiesce_rxq(apc, rxq, napi_initialized);
+
+	/* Wait for in-flight EQ handlers that may have loaded the old CQ
+	 * pointer via rcu_dereference() before freeing.
+	 */
+	synchronize_rcu();
+
+	mana_free_rxq(apc, rxq);
 }
 
 static int mana_fill_rx_oob(struct mana_recv_buf_oob *rx_oob, u32 mem_key,
@@ -2821,6 +2881,7 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 	struct gdma_queue_spec spec;
 	struct mana_cq *cq = NULL;
 	struct gdma_context *gc;
+	struct gdma_queue __rcu **cq_table;
 	u32 cq_size, rq_size;
 	struct mana_rxq *rxq;
 	int err;
@@ -2905,12 +2966,18 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 	if (err)
 		goto out;
 
-	if (WARN_ON(cq->gdma_id >= gc->max_num_cqs)) {
+	/* No rcu_read_lock(): mana_create_rxq runs under RTNL during netdev
+	 * bring-up, inside the netdev lifetime that mana_remove() drains
+	 * before the base cq_table can be freed.  See gdma_context::cq_table
+	 * in gdma.h for why "true" is sound.
+	 */
+	cq_table = rcu_dereference_protected(gc->cq_table, true);
+	if (WARN_ON(!cq_table || cq->gdma_id >= gc->max_num_cqs)) {
 		err = -EINVAL;
 		goto out;
 	}
 
-	gc->cq_table[cq->gdma_id] = cq->gdma_cq;
+	rcu_assign_pointer(cq_table[cq->gdma_id], cq->gdma_cq);
 
 	netif_napi_add_weight_locked(ndev, &cq->napi, mana_poll, 1);
 
@@ -2987,16 +3054,31 @@ static void mana_destroy_rxqs(struct mana_port_context *apc)
 	struct mana_rxq *rxq;
 	u32 rxq_idx;
 
-	if (apc->rxqs) {
+	if (!apc->rxqs)
+		return;
 
-		for (rxq_idx = 0; rxq_idx < apc->num_queues; rxq_idx++) {
-			rxq = apc->rxqs[rxq_idx];
-			if (!rxq)
-				continue;
+	/* Pass 1: quiesce every RXQ's CQ and clear its cq_table slot. */
+	for (rxq_idx = 0; rxq_idx < apc->num_queues; rxq_idx++) {
+		rxq = apc->rxqs[rxq_idx];
+		if (!rxq)
+			continue;
 
-			mana_destroy_rxq(apc, rxq, true);
-			apc->rxqs[rxq_idx] = NULL;
-		}
+		mana_quiesce_rxq(apc, rxq, true);
+	}
+
+	/* One grace period for the whole port instead of one per RXQ. */
+	synchronize_rcu();
+
+	/* Pass 2: the slots are clear, so mana_gd_destroy_cq() skips its own
+	 * grace period; free each RXQ.
+	 */
+	for (rxq_idx = 0; rxq_idx < apc->num_queues; rxq_idx++) {
+		rxq = apc->rxqs[rxq_idx];
+		if (!rxq)
+			continue;
+
+		mana_free_rxq(apc, rxq);
+		apc->rxqs[rxq_idx] = NULL;
 	}
 }
 
