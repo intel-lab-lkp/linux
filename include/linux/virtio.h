@@ -44,12 +44,15 @@ struct virtqueue {
 };
 
 struct vduse_vq_group;
+struct virtio_dmb;
 
 union virtio_map {
 	/* Device that performs DMA */
 	struct device *dma_dev;
 	/* VDUSE specific virtqueue group for doing map */
 	struct vduse_vq_group *group;
+	/* Device Memory Buffer holding the virtqueues and their buffers */
+	struct virtio_dmb *dmb;
 };
 
 int virtqueue_add_outbuf(struct virtqueue *vq,

@@ -96,6 +96,13 @@ struct virtqueue_info {
  * @set_vq_affinity: set the affinity for a virtqueue (optional).
  * @get_vq_affinity: get the affinity for a virtqueue (optional).
  * @get_shm_region: get a shared memory region based on the index.
+ * @get_dmb_shm_id: get the shared memory id of the Device Memory Buffer
+ *	(optional).
+ *	vdev: the device
+ *	id: where to store the shared memory id
+ *	Returns 0 on success or error status
+ *	Only valid once VIRTIO_F_DMB has been negotiated.  A transport that
+ *	does not implement this must not accept VIRTIO_F_DMB.
  * @disable_vq_and_reset: reset a queue individually (optional).
  *	vq: the virtqueue
  *	Returns 0 on success or error status
@@ -135,6 +142,7 @@ struct virtio_config_ops {
 						 int index);
 	bool (*get_shm_region)(struct virtio_device *vdev,
 			       struct virtio_shm_region *region, u8 id);
+	int (*get_dmb_shm_id)(struct virtio_device *vdev, u16 *id);
 	int (*disable_vq_and_reset)(struct virtqueue *vq);
 	int (*enable_vq_after_reset)(struct virtqueue *vq);
 };
