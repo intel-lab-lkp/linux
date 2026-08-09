@@ -364,6 +364,36 @@ static void vp_modern_avq_cleanup(struct virtio_device *vdev)
 	}
 }
 
+/*
+ * The proposal makes accepting VIRTIO_F_DMB conditional on accepting
+ * VIRTIO_F_ORDER_PLATFORM where the device offers it.  Without it the barriers
+ * the ring emits order accesses only as seen by a device that can be assumed
+ * to run on identical CPUs in an SMP configuration, which a device whose
+ * region is not ordinary host memory is not.  Accepting
+ * VIRTIO_F_ORDER_PLATFORM is otherwise only a SHOULD, so nothing else couples
+ * the two.
+ *
+ * The offer is read back from the device rather than taken from the feature
+ * word vp_transport_features() is given, because that word is what the driver
+ * still wants rather than what the device offered.  The two differ exactly
+ * where this has to hold: virtio_dev_probe() calls finalize_features() a
+ * second time when a driver's validate() changed the set, and a validate()
+ * that declined VIRTIO_F_ORDER_PLATFORM leaves the bit absent from the word
+ * as well, which would read as an offer that never happened.  virtio_balloon
+ * declines VIRTIO_F_ACCESS_PLATFORM from validate() today, so the shape is
+ * not hypothetical.
+ */
+static bool vp_dmb_ordering_ok(struct virtio_device *vdev)
+{
+	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
+
+	if (__virtio_test_bit(vdev, VIRTIO_F_ORDER_PLATFORM))
+		return true;
+
+	return !(vp_modern_get_features(&vp_dev->mdev) &
+		 BIT_ULL(VIRTIO_F_ORDER_PLATFORM));
+}
+
 static void vp_transport_features(struct virtio_device *vdev, u64 features)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
@@ -378,6 +408,27 @@ static void vp_transport_features(struct virtio_device *vdev, u64 features)
 
 	if (features & BIT_ULL(VIRTIO_F_ADMIN_VQ))
 		__virtio_set_bit(vdev, VIRTIO_F_ADMIN_VQ);
+
+	/*
+	 * VIRTIO_F_DMB is only defined together with
+	 * VIRTIO_F_ACCESS_PLATFORM, so accept it only when the driver accepts
+	 * that too.  vring_transport_features() has already run, so the bit in
+	 * vdev is the one the driver accepts rather than the one the device
+	 * offered, and the proposal words the requirement against what the
+	 * driver accepts.  VIRTIO_F_ORDER_PLATFORM is required where the device
+	 * offers it, for the reason vp_dmb_ordering_ok() gives.
+	 * VIRTIO_F_VERSION_1 is required because the core locates and releases
+	 * the region from virtio_features_ok(), which returns before it gets
+	 * that far for a device without VERSION_1, so accepting the feature
+	 * without it would leave the feature negotiated and the region never
+	 * built.
+	 */
+	if (IS_ENABLED(CONFIG_VIRTIO_DMB) &&
+	    (features & BIT_ULL(VIRTIO_F_DMB)) &&
+	    __virtio_test_bit(vdev, VIRTIO_F_ACCESS_PLATFORM) &&
+	    (features & BIT_ULL(VIRTIO_F_VERSION_1)) &&
+	    vp_dmb_ordering_ok(vdev))
+		__virtio_set_bit(vdev, VIRTIO_F_DMB);
 }
 
 static int __vp_check_common_size_one_feature(struct virtio_device *vdev, u32 fbit,
@@ -411,6 +462,9 @@ static int vp_check_common_size(struct virtio_device *vdev)
 		return -EINVAL;
 
 	if (vp_check_common_size_one_feature(vdev, VIRTIO_F_ADMIN_VQ, admin_queue_num))
+		return -EINVAL;
+
+	if (vp_check_common_size_one_feature(vdev, VIRTIO_F_DMB, dmb_shm_id))
 		return -EINVAL;
 
 	return 0;
@@ -878,6 +932,15 @@ static bool vp_get_shm_region(struct virtio_device *vdev,
 	return true;
 }
 
+static int vp_get_dmb_shm_id(struct virtio_device *vdev, u16 *id)
+{
+	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
+
+	*id = vp_modern_get_dmb_shm_id(&vp_dev->mdev);
+
+	return 0;
+}
+
 /*
  * virtio_pci_admin_has_dev_parts - Checks whether the device parts
  * functionality is supported
@@ -1241,6 +1304,7 @@ static const struct virtio_config_ops virtio_pci_config_nodev_ops = {
 	.set_vq_affinity = vp_set_vq_affinity,
 	.get_vq_affinity = vp_get_vq_affinity,
 	.get_shm_region  = vp_get_shm_region,
+	.get_dmb_shm_id = vp_get_dmb_shm_id,
 	.disable_vq_and_reset = vp_modern_disable_vq_and_reset,
 	.enable_vq_after_reset = vp_modern_enable_vq_after_reset,
 };
@@ -1261,6 +1325,7 @@ static const struct virtio_config_ops virtio_pci_config_ops = {
 	.set_vq_affinity = vp_set_vq_affinity,
 	.get_vq_affinity = vp_get_vq_affinity,
 	.get_shm_region  = vp_get_shm_region,
+	.get_dmb_shm_id = vp_get_dmb_shm_id,
 	.disable_vq_and_reset = vp_modern_disable_vq_and_reset,
 	.enable_vq_after_reset = vp_modern_enable_vq_after_reset,
 };
