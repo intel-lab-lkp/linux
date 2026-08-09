@@ -448,26 +448,33 @@ int tb_path_deactivate_hop(struct tb_port *port, int hop_index)
 	return __tb_path_deactivate_hop(port, hop_index, true);
 }
 
-static void __tb_path_deactivate_hops(struct tb_path *path, int first_hop)
+static int __tb_path_deactivate_hops(struct tb_path *path, int first_hop)
 {
-	int i, res;
+	int i, res, ret = 0;
 
 	for (i = first_hop; i < path->path_length; i++) {
 		res = __tb_path_deactivate_hop(path->hops[i].in_port,
 					       path->hops[i].in_hop_index,
 					       path->clear_fc);
-		if (res && res != -ENODEV)
+		if (res && res != -ENODEV) {
 			tb_port_warn(path->hops[i].in_port,
 				     "hop deactivation failed for hop %d, index %d\n",
 				     i, path->hops[i].in_hop_index);
+			if (!ret)
+				ret = res;
+		}
 	}
+
+	return ret;
 }
 
-void tb_path_deactivate(struct tb_path *path)
+int tb_path_deactivate(struct tb_path *path)
 {
+	int ret;
+
 	if (!path->activated) {
 		tb_WARN(path->tb, "trying to deactivate an inactive path\n");
-		return;
+		return -EINVAL;
 	}
 	tb_dbg(path->tb,
 	       "deactivating %s path from %llx:%u to %llx:%u\n",
@@ -475,9 +482,11 @@ void tb_path_deactivate(struct tb_path *path)
 	       path->hops[0].in_port->port,
 	       tb_route(path->hops[path->path_length - 1].out_port->sw),
 	       path->hops[path->path_length - 1].out_port->port);
-	__tb_path_deactivate_hops(path, 0);
+	ret = __tb_path_deactivate_hops(path, 0);
 	__tb_path_deallocate_nfc(path, 0);
 	path->activated = false;
+
+	return ret;
 }
 
 /**

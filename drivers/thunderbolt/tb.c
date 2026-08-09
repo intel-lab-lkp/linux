@@ -1719,15 +1719,16 @@ static void tb_discover_tunnels(struct tb *tb)
 	}
 }
 
-static void tb_deactivate_and_free_tunnel(struct tb_tunnel *tunnel)
+static int tb_deactivate_and_free_tunnel(struct tb_tunnel *tunnel)
 {
 	struct tb_port *src_port, *dst_port;
 	struct tb *tb;
+	int ret;
 
 	if (!tunnel)
-		return;
+		return 0;
 
-	tb_tunnel_deactivate(tunnel);
+	ret = tb_tunnel_deactivate(tunnel);
 	list_del(&tunnel->list);
 
 	tb = tunnel->tb;
@@ -1767,6 +1768,8 @@ static void tb_deactivate_and_free_tunnel(struct tb_tunnel *tunnel)
 	}
 
 	tb_tunnel_put(tunnel);
+
+	return ret;
 }
 
 /*
@@ -2365,14 +2368,15 @@ err_clx:
 	return ret;
 }
 
-static void __tb_disconnect_xdomain_paths(struct tb *tb, struct tb_xdomain *xd,
-					  int transmit_path, int transmit_ring,
-					  int receive_path, int receive_ring)
+static int __tb_disconnect_xdomain_paths(struct tb *tb, struct tb_xdomain *xd,
+					 int transmit_path, int transmit_ring,
+					 int receive_path, int receive_ring)
 {
 	struct tb_cm *tcm = tb_priv(tb);
 	struct tb_port *nhi_port, *dst_port;
 	struct tb_tunnel *tunnel, *n;
 	struct tb_switch *sw;
+	int res, ret = 0;
 
 	sw = tb_to_switch(xd->dev.parent);
 	dst_port = tb_port_at(xd->route, sw);
@@ -2385,8 +2389,11 @@ static void __tb_disconnect_xdomain_paths(struct tb *tb, struct tb_xdomain *xd,
 			continue;
 
 		if (tb_tunnel_match_dma(tunnel, transmit_path, transmit_ring,
-					receive_path, receive_ring))
-			tb_deactivate_and_free_tunnel(tunnel);
+					receive_path, receive_ring)) {
+			res = tb_deactivate_and_free_tunnel(tunnel);
+			if (res && !ret)
+				ret = res;
+		}
 	}
 
 	/*
@@ -2395,20 +2402,24 @@ static void __tb_disconnect_xdomain_paths(struct tb *tb, struct tb_xdomain *xd,
 	 * the same host router USB4 downstream port.
 	 */
 	tb_enable_clx(sw);
+
+	return ret;
 }
 
 static int tb_disconnect_xdomain_paths(struct tb *tb, struct tb_xdomain *xd,
 				       int transmit_path, int transmit_ring,
 				       int receive_path, int receive_ring)
 {
+	int ret = 0;
+
 	if (!xd->is_unplugged) {
 		mutex_lock(&tb->lock);
-		__tb_disconnect_xdomain_paths(tb, xd, transmit_path,
-					      transmit_ring, receive_path,
-					      receive_ring);
+		ret = __tb_disconnect_xdomain_paths(tb, xd, transmit_path,
+						    transmit_ring, receive_path,
+						    receive_ring);
 		mutex_unlock(&tb->lock);
 	}
-	return 0;
+	return ret;
 }
 
 /* hotplug handling */

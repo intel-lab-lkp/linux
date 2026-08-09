@@ -137,7 +137,7 @@ struct tb_tunnel *tb_tunnel_alloc_usb3(struct tb *tb, struct tb_port *up,
 
 void tb_tunnel_put(struct tb_tunnel *tunnel);
 int tb_tunnel_activate(struct tb_tunnel *tunnel);
-void tb_tunnel_deactivate(struct tb_tunnel *tunnel);
+int tb_tunnel_deactivate(struct tb_tunnel *tunnel);
 
 /**
  * tb_tunnel_is_active() - Is tunnel fully activated

@@ -2454,10 +2454,16 @@ err:
 /**
  * tb_tunnel_deactivate() - deactivate a tunnel
  * @tunnel: Tunnel to deactivate
+ *
+ * Deactivates all paths of the tunnel. This always runs to completion,
+ * even if a path fails to deactivate.
+ *
+ * Return: %0 on success, or the first error seen while deactivating the
+ * paths.
  */
-void tb_tunnel_deactivate(struct tb_tunnel *tunnel)
+int tb_tunnel_deactivate(struct tb_tunnel *tunnel)
 {
-	int i;
+	int i, res, ret = 0;
 
 	tb_tunnel_dbg(tunnel, "deactivating\n");
 
@@ -2465,14 +2471,19 @@ void tb_tunnel_deactivate(struct tb_tunnel *tunnel)
 		tunnel->activate(tunnel, false);
 
 	for (i = 0; i < tunnel->npaths; i++) {
-		if (tunnel->paths[i] && tunnel->paths[i]->activated)
-			tb_path_deactivate(tunnel->paths[i]);
+		if (tunnel->paths[i] && tunnel->paths[i]->activated) {
+			res = tb_path_deactivate(tunnel->paths[i]);
+			if (res && !ret)
+				ret = res;
+		}
 	}
 
 	if (tunnel->post_deactivate)
 		tunnel->post_deactivate(tunnel);
 
 	tb_tunnel_set_active(tunnel, false);
+
+	return ret;
 }
 
 /**
