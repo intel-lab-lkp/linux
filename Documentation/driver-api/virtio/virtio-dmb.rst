@@ -444,14 +444,19 @@ queue with ``tx_fifo_errors``, ``tx_dropped`` and a rate-limited
 ``virtnet_open()`` every fill runs on whichever CPU brought the link up, so
 they all share one home area.  Areas give preference, never reservation.
 
-Second, a receive queue that cannot refill spends softirq time without
-making progress.  ``try_fill_recv()`` reports failure, ``virtnet_receive()``
-returns the full budget to force a repoll, and ``virtnet_poll()`` therefore
-never completes NAPI.  There is no delayed worker behind that: commit
+Second, a receive queue that holds no buffers and cannot refill spends
+softirq time without making progress.  ``try_fill_recv()`` reports failure
+for the ``-ENOMEM`` such a queue gets, ``virtnet_receive()`` returns the
+full budget to force a repoll, and ``virtnet_poll()`` therefore never
+completes NAPI.  There is no delayed worker behind that: commit
 1e7b90aa7988 ("virtio-net: remove unused delayed refill worker") removed it
 deliberately, "since we switched to retry refilling receive buffer in NAPI
 poll instead of delayed worker".  The repoll always recovers once capacity
-is released, and it burns a CPU until then.
+is released, and it burns a CPU until then.  That is the only recovery a
+queue with nothing posted can have, because the device cannot signal a used
+buffer on it.  A queue that does hold buffers gets ``-ENOSPC`` instead,
+completes NAPI, and is woken by its own completions, so it stops cleanly;
+the errno section below has the whole rule.
 
 What the driver does
 ====================
@@ -530,12 +535,34 @@ suspend for the whole system.
 The region's length bounds how much virtqueue data can be in flight at
 once.  Running out of room is therefore an ordinary condition and not an
 error: a mapping fails and the driver applies the back-pressure it
-already has for a full queue.  The errno is whichever the ring already
-reports for a failed mapping, which is ``-ENOMEM`` from a split ring and
-from a packed indirect table, and ``-EIO`` from a packed ring using
-direct descriptors.  A driver must therefore treat any error from
-``virtqueue_add_*()`` as back-pressure, and must not treat a particular
-errno as the only indication of exhaustion.
+already has for a full queue.  Which errno the ring reports for it
+depends on whether the failing virtqueue has a chain outstanding:
+
+* ``-ENOSPC`` when it has.  This is the value a full ring already
+  reports, and it means what it means there: capacity that a completion
+  on this virtqueue will return.  A caller may stop the queue and wait,
+  because the completion it waits for provably exists.
+
+* ``-ENOMEM`` when it has not.  Nothing is outstanding to free capacity,
+  so there is no completion to wait for, and the caller must retry rather
+  than stop.  A shortage the caller cannot wait out is reported the same
+  way whatever its origin, which is also what a failed
+  ``dma_map_page()`` on an ordinary device reports.
+
+The distinction matters because the two demand opposite responses, and a
+caller that stops on the second never restarts.  ``virtio_blk`` already
+keys on exactly this: ``-ENOSPC`` stops the hardware queue, which
+``virtblk_done()`` restarts on any completion, while ``-ENOMEM`` leaves it
+running for the block layer to re-run after a delay.  For a virtio_net
+receive fill the split is the same one: a queue holding buffers stops
+cleanly and its own completions wake it, and a queue holding none keeps
+the NAPI repoll described above, which costs softirq time but recovers
+without needing an interrupt the device cannot send.
+
+A driver must still treat any error from ``virtqueue_add_*()`` as
+back-pressure and must not treat a particular errno as the only
+indication of exhaustion.  A mapping failure no longer produces
+``-EIO``, on any ring layout.
 
 Under this feature the virtqueue data path calls no DMA mapping function
 at all, so no bus address is ever passed to the device and the

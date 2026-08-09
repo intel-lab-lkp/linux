@@ -337,6 +337,13 @@ static inline bool virtqueue_is_packed(const struct vring_virtqueue *vq)
 	       vq->layout == VQ_LAYOUT_PACKED_IN_ORDER;
 }
 
+/* Descriptors this virtqueue's ring holds, whatever its layout. */
+static inline u32 vring_num(const struct vring_virtqueue *vq)
+{
+	return virtqueue_is_packed(vq) ? vq->packed.vring.num :
+					 vq->split.vring.num;
+}
+
 static inline bool virtqueue_is_in_order(const struct vring_virtqueue *vq)
 {
 	return vq->layout == VQ_LAYOUT_SPLIT_IN_ORDER ||
@@ -491,6 +498,35 @@ static int vring_mapping_error(const struct vring_virtqueue *vq,
 		return dma_mapping_error(vring_dma_dev(vq), addr);
 }
 
+/*
+ * The errno a failed mapping reports to the caller.
+ *
+ * A map implementation owns a bounded pool that belongs to this device, so a
+ * failure to map into it while this virtqueue has a descriptor chain
+ * outstanding means capacity that this virtqueue's own completions will
+ * return: -ENOSPC, the value a full ring reports, which a caller that waits
+ * for a completion already answers correctly.  With nothing outstanding there is no
+ * such guarantee -- the pool may be held entirely by other virtqueues, or by
+ * structural allocations no completion frees -- and a shortage the caller
+ * cannot wait out is -ENOMEM whatever its origin.  That is the precondition
+ * include/linux/blk_types.h states for BLK_STS_DEV_RESOURCE, which
+ * virtio_blk maps -ENOSPC to.
+ *
+ * num_free != vring_num() is this tree's own definition of a non-empty ring;
+ * both teardown paths assert the equality as the definition of an empty one.
+ * All four virtqueue_add_*() paths decrement num_free after their mapping
+ * loop, below the last goto to their unmap_release label, so the value read
+ * here counts chains already published and not the one being built.  A
+ * refactor that moved either would break this silently.
+ */
+static int vring_map_errno(const struct vring_virtqueue *vq)
+{
+	if (vq->vq.vdev->map && vq->vq.num_free != vring_num(vq))
+		return -ENOSPC;
+
+	return -ENOMEM;
+}
+
 /* Map one sg entry. */
 static int vring_map_one_sg(const struct vring_virtqueue *vq, struct scatterlist *sg,
 			    enum dma_data_direction direction, dma_addr_t *addr,
@@ -510,6 +546,12 @@ static int vring_map_one_sg(const struct vring_virtqueue *vq, struct scatterlist
 		if (dev_WARN_ONCE(&vq->vq.vdev->dev,
 				  vring_mapping_error(vq, *addr),
 				  "premapped buffer holds no valid mapping\n"))
+			/*
+			 * Deliberately not vring_map_errno(): no capacity is
+			 * involved, the caller published an invalid address,
+			 * and reporting that as back-pressure would have the
+			 * caller wait for a completion that will not fix it.
+			 */
 			return -ENOMEM;
 
 		return 0;
@@ -538,7 +580,7 @@ static int vring_map_one_sg(const struct vring_virtqueue *vq, struct scatterlist
 					 direction, attr);
 
 	if (vring_mapping_error(vq, *addr))
-		return -ENOMEM;
+		return vring_map_errno(vq);
 
 	return 0;
 }
@@ -677,6 +719,7 @@ static inline int virtqueue_add_split(struct vring_virtqueue *vq,
 	unsigned int total_in_len = 0;
 	int head;
 	bool indirect;
+	int err;
 
 	START_USE(vq);
 
@@ -739,8 +782,9 @@ static inline int virtqueue_add_split(struct vring_virtqueue *vq,
 			if (++sg_count != total_sg)
 				flags |= VRING_DESC_F_NEXT;
 
-			if (vring_map_one_sg(vq, sg, DMA_TO_DEVICE, &addr, &len,
-					     premapped, attr))
+			err = vring_map_one_sg(vq, sg, DMA_TO_DEVICE, &addr,
+					       &len, premapped, attr);
+			if (err)
 				goto unmap_release;
 
 			/* Note that we trust indirect descriptor
@@ -759,8 +803,9 @@ static inline int virtqueue_add_split(struct vring_virtqueue *vq,
 			if (++sg_count != total_sg)
 				flags |= VRING_DESC_F_NEXT;
 
-			if (vring_map_one_sg(vq, sg, DMA_FROM_DEVICE, &addr, &len,
-					     premapped, attr))
+			err = vring_map_one_sg(vq, sg, DMA_FROM_DEVICE, &addr,
+					       &len, premapped, attr);
+			if (err)
 				goto unmap_release;
 
 			/* Note that we trust indirect descriptor
@@ -777,8 +822,10 @@ static inline int virtqueue_add_split(struct vring_virtqueue *vq,
 		dma_addr_t addr = vring_map_single(
 			vq, desc, total_sg * sizeof(struct vring_desc),
 			DMA_TO_DEVICE);
-		if (vring_mapping_error(vq, addr))
+		if (vring_mapping_error(vq, addr)) {
+			err = vring_map_errno(vq);
 			goto unmap_release;
+		}
 
 		virtqueue_add_desc_split(vq, vq->split.vring.desc,
 					 vq->split.desc_extra,
@@ -850,7 +897,7 @@ unmap_release:
 		kfree(desc);
 
 	END_USE(vq);
-	return -ENOMEM;
+	return err;
 }
 
 static bool virtqueue_kick_prepare_split(struct vring_virtqueue *vq)
@@ -1665,6 +1712,17 @@ unmap_release:
 	kfree(desc);
 
 	END_USE(vq);
+
+	/*
+	 * Not vring_map_errno(), unlike the three add paths a driver can
+	 * reach.  This value never leaves virtio_ring: both callers treat
+	 * anything but -ENOMEM as final and return it, and use -ENOMEM as
+	 * the signal to retry the same chain with direct descriptors.  The
+	 * direct attempt maps the same scatterlist and reports the errno for
+	 * it, so a caller still learns that the pool is exhausted -- while a
+	 * chain that failed only because the indirect table did not fit is
+	 * still published, which is what it can be.
+	 */
 	return -ENOMEM;
 }
 
@@ -1739,9 +1797,10 @@ static inline int virtqueue_add_packed(struct vring_virtqueue *vq,
 		for (sg = sgs[n]; sg; sg = sg_next(sg)) {
 			dma_addr_t addr;
 
-			if (vring_map_one_sg(vq, sg, n < out_sgs ?
-					     DMA_TO_DEVICE : DMA_FROM_DEVICE,
-					     &addr, &len, premapped, attr))
+			err = vring_map_one_sg(vq, sg, n < out_sgs ?
+					       DMA_TO_DEVICE : DMA_FROM_DEVICE,
+					       &addr, &len, premapped, attr);
+			if (err)
 				goto unmap_release;
 
 			flags = cpu_to_le16(vq->packed.avail_used_flags |
@@ -1823,7 +1882,7 @@ unmap_release:
 	}
 
 	END_USE(vq);
-	return -EIO;
+	return err;
 }
 
 static inline int virtqueue_add_packed_in_order(struct vring_virtqueue *vq,
@@ -1900,9 +1959,10 @@ static inline int virtqueue_add_packed_in_order(struct vring_virtqueue *vq,
 			if (n >= out_sgs)
 				flags |= cpu_to_le16(VRING_DESC_F_WRITE);
 
-			if (vring_map_one_sg(vq, sg, n < out_sgs ?
-					     DMA_TO_DEVICE : DMA_FROM_DEVICE,
-					     &addr, &len, premapped, attr))
+			err = vring_map_one_sg(vq, sg, n < out_sgs ?
+					       DMA_TO_DEVICE : DMA_FROM_DEVICE,
+					       &addr, &len, premapped, attr);
+			if (err)
 				goto unmap_release;
 
 			flags |= cpu_to_le16(vq->packed.avail_used_flags);
@@ -1979,7 +2039,7 @@ unmap_release:
 	}
 
 	END_USE(vq);
-	return -EIO;
+	return err;
 }
 
 static bool virtqueue_kick_prepare_packed(struct vring_virtqueue *vq)
@@ -2868,9 +2928,10 @@ static inline int virtqueue_add(struct virtqueue *_vq,
  *
  * Returns zero or a negative error (ie. ENOSPC, ENOMEM, EIO).
  *
- * NB: ENOSPC is a special code that is only returned on an attempt to add a
- * buffer to a full VQ. It indicates that some buffers are outstanding and that
- * the operation can be retried after some buffers have been used.
+ * NB: ENOSPC indicates that some buffers are outstanding and that the
+ * operation can be retried after some buffers have been used. A full VQ
+ * reports it, and so does a failure to map into a bounded pool a map
+ * implementation owns while this virtqueue has a chain outstanding.
  */
 int virtqueue_add_sgs(struct virtqueue *_vq,
 		      struct scatterlist *sgs[],
@@ -3623,8 +3684,7 @@ unsigned int virtqueue_get_vring_size(const struct virtqueue *_vq)
 
 	const struct vring_virtqueue *vq = to_vvq(_vq);
 
-	return virtqueue_is_packed(vq) ? vq->packed.vring.num :
-				      vq->split.vring.num;
+	return vring_num(vq);
 }
 EXPORT_SYMBOL_GPL(virtqueue_get_vring_size);
 
