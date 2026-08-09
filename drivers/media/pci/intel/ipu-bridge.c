@@ -298,9 +298,18 @@ static u32 ipu_bridge_parse_rotation(struct acpi_device *adev,
 {
 	const struct dmi_system_id *dmi_id;
 
-	dmi_id = dmi_first_match(upside_down_sensor_dmi_ids);
-	if (dmi_id && acpi_dev_hid_match(adev, dmi_id->driver_data))
-		return 180;
+	/*
+	 * A machine can have more than one sensor whose rotation must be
+	 * overridden (e.g. both the front and the rear camera), listed as
+	 * one entry per sensor sharing the same DMI match.
+	 * dmi_first_match() only ever returns the first matching entry, so
+	 * walk the whole table and match each candidate against the
+	 * sensor's ACPI HID.
+	 */
+	for (dmi_id = dmi_first_match(upside_down_sensor_dmi_ids); dmi_id;
+	     dmi_id = dmi_first_match(dmi_id + 1))
+		if (acpi_dev_hid_match(adev, dmi_id->driver_data))
+			return 180;
 
 	switch (ssdb->degree) {
 	case IPU_SENSOR_ROTATION_NORMAL:
