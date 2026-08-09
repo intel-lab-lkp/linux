@@ -114,6 +114,8 @@ PDF和LaTeX构建
 ``sudo``。PDF 依赖通过 ``mactex`` cask 提供；如果只构建 HTML 文档，请使用
 ``--no-pdf``。macOS 用户建议使用默认的 Python 虚拟环境，因为 PyYAML 会从
 ``Documentation/sphinx/requirements.txt`` 安装，而不是通过 Homebrew 安装。
+脚本还会检查 GNU Make 4.0 或更高版本；如果 Homebrew 将其安装为 ``gmake``，
+请使用 ``gmake htmldocs``，而不是 ``make htmldocs``。
 
 Sphinx构建
 ==========

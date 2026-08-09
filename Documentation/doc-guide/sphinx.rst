@@ -136,7 +136,9 @@ commands are printed without ``sudo``. The PDF dependencies are provided by
 the ``mactex`` cask; use ``--no-pdf`` when only building HTML documentation.
 The default virtualenv mode is recommended on macOS because PyYAML is
 installed from ``Documentation/sphinx/requirements.txt`` rather than from a
-Homebrew formula.
+Homebrew formula. The script also checks for GNU Make 4.0 or newer; when
+Homebrew provides it as ``gmake``, use ``gmake htmldocs`` instead of
+``make htmldocs``.
 
 Installing Sphinx Minimal Version
 ---------------------------------
