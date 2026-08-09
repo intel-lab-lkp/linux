@@ -234,16 +234,17 @@ static int iterate_object_props(struct btrfs_root *root,
 			if (!handler)
 				goto next_dir_item;
 
-			if (data_len > value_buf_len) {
+			if (data_len >= value_buf_len) {
 				kfree(value_buf);
-				value_buf_len = data_len;
-				value_buf = kmalloc(data_len, GFP_NOFS);
+				value_buf_len = data_len + 1;
+				value_buf = kmalloc(value_buf_len, GFP_NOFS);
 				if (!value_buf) {
 					ret = -ENOMEM;
 					goto out;
 				}
 			}
 			read_extent_buffer(leaf, value_buf, data_ptr, data_len);
+			value_buf[data_len] = '\0';
 
 			iterator(ctx, handler, value_buf, data_len);
 next_dir_item:
