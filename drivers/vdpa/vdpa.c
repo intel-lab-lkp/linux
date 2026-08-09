@@ -548,7 +548,7 @@ out:
 
 /*
  * Bitmask for all per-device features: feature bits VIRTIO_TRANSPORT_F_START
- * through VIRTIO_TRANSPORT_F_END are unset, i.e. 0xfffffc000fffffff for
+ * through VIRTIO_TRANSPORT_F_END are unset, i.e. 0xfffff8000fffffff for
  * all 64bit features. If the features are extended beyond 64 bits, or new
  * "holes" are reserved for other type of features than per-device, this
  * macro would have to be updated.
