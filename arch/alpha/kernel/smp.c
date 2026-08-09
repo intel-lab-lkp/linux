@@ -696,7 +696,15 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 
 	preempt_disable();
 
-	if (mm == current->active_mm) {
+	/*
+	 * As in ipi_flush_tlb_page(): the targeted tbi() reaches MM's
+	 * translations only when a thread of MM is current, so test
+	 * current->mm.  Otherwise - lazily borrowing MM, or not running it
+	 * at all - clear mm->context[cpu] so a fresh ASN is taken at the
+	 * next switch.  smp_call_function() below does not call back into
+	 * this CPU, so this is the only chance to retire what it holds.
+	 */
+	if (mm == current->mm) {
 		flush_tlb_current_page(mm, vma, addr);
 		if (atomic_read(&mm->mm_users) <= 1) {
 			int cpu, this_cpu = smp_processor_id();
@@ -709,6 +717,8 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 			preempt_enable();
 			return;
 		}
+	} else {
+		flush_tlb_other(mm);
 	}
 
 	data.vma = vma;
