@@ -649,6 +649,13 @@ flush_tlb_mm(struct mm_struct *mm)
 			preempt_enable();
 			return;
 		}
+	} else {
+		/*
+		 * smp_call_function() below does not call back into this
+		 * CPU, so this is the only chance to retire what it holds
+		 * for MM.  The UP implementation already does this.
+		 */
+		flush_tlb_other(mm);
 	}
 
 	smp_call_function(ipi_flush_tlb_mm, mm, 1);
