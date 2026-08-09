@@ -461,7 +461,7 @@ static int ntfs_fs_reconfigure(struct fs_context *fc)
 	}
 
 	sync_filesystem(sb);
-	swap(sbi->options, fc->fs_private);
+	memcpy(sbi->options, fc->fs_private, sizeof(*sbi->options));
 
 	return 0;
 }
