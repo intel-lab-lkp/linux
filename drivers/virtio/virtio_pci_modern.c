@@ -19,6 +19,7 @@
 #define VIRTIO_PCI_NO_LEGACY
 #define VIRTIO_RING_NO_LEGACY
 #include "virtio_pci_common.h"
+#include "virtio_dmb.h"
 
 #define VIRTIO_AVQ_SGS_MAX	4
 
@@ -803,8 +804,23 @@ static int vp_modern_find_vqs(struct virtio_device *vdev, unsigned int nvqs,
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	struct virtqueue *vq;
-	int rc = vp_find_vqs(vdev, nvqs, vqs, vqs_info, desc);
+	int rc;
 
+	/*
+	 * Before vp_find_vqs(), so that no virtqueue exists yet: the ring
+	 * allocations it makes are ordinary claims and cannot land in the
+	 * range this withholds.
+	 *
+	 * nvqs counts the virtqueues the driver asked for.  vp_find_vqs()
+	 * creates one more when the device offers an administration
+	 * virtqueue, and that one draws on the guarantee like any other -- its
+	 * only response to a refusal is a cpu_relax() spin -- so count it here
+	 * rather than leave it as the one virtqueue without a floor.
+	 */
+	virtio_dmb_note_vqs(vdev, nvqs +
+			    virtio_has_feature(vdev, VIRTIO_F_ADMIN_VQ));
+
+	rc = vp_find_vqs(vdev, nvqs, vqs, vqs_info, desc);
 	if (rc)
 		return rc;
 

@@ -302,15 +302,18 @@ So a device must offer at least::
                 + sum over virtqueues of
                     [ ring_pages(num) + num * slots(max_request) ]
                     * PAGE_SIZE
+                + reserved * PAGE_SIZE
 
   where the leading PAGE_SIZE covers the bytes ahead of the pool, and is
   a whole page because a device cannot know the guest's page size and so
   cannot know whether its region base is aligned to one,
   slots(max_request) is the largest slots(request) value from the
   formula above the driver can produce for one request on that queue,
-  and ring_pages(num) is the pages one virtqueue's Descriptor, Driver and
+  ring_pages(num) is the pages one virtqueue's Descriptor, Driver and
   Device Areas occupy: ceil(vring_size(num, align) / PAGE_SIZE) for a
-  split ring, and ceil(num * 16 / PAGE_SIZE) + 2 for a packed one
+  split ring, and ceil(num * 16 / PAGE_SIZE) + 2 for a packed one,
+  and reserved is the range withheld from ordinary claims, described
+  under "The withheld range" below
 
 A device that also offers an administration virtqueue pays for it out of
 the same region: its virtqueue areas are allocated through the same path,
@@ -391,6 +394,13 @@ the ones it goes on to use: ``virtnet_find_vqs()`` creates
   floor_slots = rings + Q * B_rx + tx_min + ctrl   multi-queue works: one
                                                    receive buffer per queue
   work_slots  = rings + rx_fill + tx_min + ctrl    receive rings full
+  reserved    = min(32 + V - 1, pages / 2)     withheld, and zero below 256
+                                               pages; a short last pool
+                                               area can add to it, see
+                                               below.  The V there counts
+                                               an administration virtqueue
+                                               too where a device has one
+  region_slots = work_slots + reserved         what a device must offer
 
 Every term above assumes ``VIRTIO_F_INDIRECT_DESC``, which is what the
 ``+ 3`` and the ``ctrl`` table account for.  Without it a chain occupies one
@@ -402,25 +412,33 @@ so ``rx_fill`` and not ``floor_slots`` is the working figure.  For a split
 ring, x86_64, 4 KiB pages, ``MAX_SKB_FRAGS`` 17, mergeable receive buffers
 and ``C = 1``:
 
-=====  =====  =======  =========  ============  ==========
-Q      num    rings    rx_fill    work_slots    work MiB
-=====  =====  =======  =========  ============  ==========
-1      256    6        256        287           1.1
-4      256    18       1024       1127          4.4
-8      256    34       2048       2247          8.8
-8      1024   119      8192       8476          33.1
-16     1024   231      16384      16940         66.2
-32     1024   455      32768      33868         132.3
-64     1024   903      65536      67724         264.5
-=====  =====  =======  =========  ============  ==========
+=====  =====  =======  =========  ============  ==========  ========  ========
+Q      num    rings    rx_fill    work_slots    work MiB    reserved  region
+=====  =====  =======  =========  ============  ==========  ========  ========
+1      256    6        256        287           1.1         34        321
+4      256    18       1024       1127          4.4         40        1167
+8      256    34       2048       2247          8.8         48        2295
+8      1024   119      8192       8476          33.1        48        8524
+16     1024   231      16384      16940         66.2        64        17004
+32     1024   455      32768      33868         132.3       96        33964
+64     1024   903      65536      67724         264.5       160       67884
+=====  =====  =======  =========  ============  ==========  ========  ========
 
-Two things to take from it.  ``rx_fill`` dominates: it is 65536 slots of the
-67724 sixty-four queue pairs come to, so sizing a region for multiple queues
-is "how many receive buffers will be posted" to within three and a quarter
-percent, and the virtqueue rings are the smaller part of what is left -- 903
-slots against ``tx_min``'s 1280.  And the pool areas of the previous
-subsection do not appear at all, because they cost guest memory rather than
-region pages.
+``region`` is ``region_slots``, the figure to offer; ``work MiB`` is
+``work_slots`` in mebibytes and excludes ``reserved``.  The
+sixty-four-queue-pair row is 265.2 MiB of region against the 264.5
+``work_slots`` alone comes to.
+
+Three things to take from it.  ``rx_fill`` dominates: it is 65536 slots of
+the 67884 a sixty-four-queue-pair region comes to, so sizing a region for
+multiple queues is "how many receive buffers will be posted" to within three
+and a half percent, and the virtqueue rings are the smaller part of what is
+left -- 903 slots against ``tx_min``'s 1280.  ``reserved`` is small and grows
+with the virtqueue count rather than with the region -- 160 slots at
+sixty-four queue pairs, under a quarter of one percent -- but it is not
+optional, because it is withheld rather than merely spent.  And the pool
+areas of the previous subsection do not appear at all, because they cost
+guest memory rather than region pages.
 
 The receive buffer mode is a twenty-fold multiplier the device cannot
 predict.  A driver that negotiates any of ``VIRTIO_NET_F_GUEST_TSO4``,
@@ -432,6 +450,83 @@ which is 160.8 MiB instead of 8.8.  A device offering guest segmentation
 offload without ``MRG_RXBUF`` must size for that.  Offering ``MRG_RXBUF``
 is the better answer.
 
+The withheld range
+------------------
+
+Part of the pool is withheld from ordinary claims so that a virtqueue
+whose ring is empty can publish a chain whatever the others have mapped::
+
+  reserved = 0                            if pages < 256
+           = min(32 + V - 1, pages / 2)   otherwise, plus the last pool
+                                          area's page count where that
+                                          area is short enough to split
+                                          the range -- see below
+
+One page for each of the ``V`` virtqueues, and a chain's allowance of 32
+pages on top, less the one page already counted for whichever virtqueue
+draws the chain.  A virtqueue may draw on the range only while its ring is
+empty, and only for one chain of up to 32 pages, which the ring asks for by
+setting ``VIRTIO_MAP_ATTR_RESERVE`` on the mapping.  That is the case worth
+protecting: a virtqueue with nothing published has no completion of its own
+to be woken by, because the device cannot signal a used buffer on a queue
+with no buffers posted, so it depends entirely on its owner retrying.  A
+virtqueue that has published a chain does not need the guarantee, and does
+not get it.
+
+Both terms follow from that restriction.  Because a running virtqueue
+cannot draw, the range is contended only by the virtqueues that have
+published nothing; there are at most ``V`` of those, and what each of them
+needs is the one page that takes its ring from empty to non-empty.  The 31
+pages left over, plus that virtqueue's own one, are then a whole chain for
+whichever of them is publishing more than a single page.
+
+So the guarantee is: every virtqueue can obtain one page that no running
+virtqueue can take, and one virtqueue at a time can obtain a whole chain.
+For virtio_net that is the whole of it at any queue count, because a
+mergeable receive buffer is one slot and a linear transmit is one slot: the
+resident draw is ``2 * Q + 5`` pages against the ``31 + V`` withheld, and
+``2 * Q + 5 <= 2 * Q + 32`` holds for every ``Q``.  What is *not*
+guaranteed is ``V`` simultaneous multi-page first chains.  A second
+virtqueue whose first chain needs more than its one page competes for the
+32 and, losing, gets ``-ENOMEM`` -- the value it got before the range
+existed, and one every caller answers by retrying later rather than by
+waiting for a completion it has not got.  Sizing the range for ``V`` whole
+chains instead would withhold ``32 * V``, which on a small region is a
+fixed fraction of the pool and is capacity the transmit path then does not
+have; that trades a rare mapping failure for a permanent shortage, so the
+quantity is deliberately not the product of the two worst cases.
+
+The range is the tail of the pool, and an allocation has to lie inside one
+pool area, so a whole chain needs 32 of the withheld pages contiguous within
+one area and not merely free.  Where the last pool area is shorter than 32
+pages the range straddles the boundary below it, and where the piece above
+that boundary and the piece below are both shorter than a chain, the range
+is widened by the short area's length so that the piece below it is a whole
+``31 + V`` pages.  That costs under 32 pages and only where ``pages`` is just
+above a multiple of ``area_pages``; no row of the table above reaches it, and
+neither does any region whose page count is a multiple of ``area_pages`` or at
+least 32 above one.
+
+The guarantee holds for every virtqueue on any pool of 256 pages or more, and
+below that the range is inert altogether, because it would withhold more than
+it protects.  Above ninety-seven virtqueues the half-of-the-pool bound is the
+later of the two conditions, and the pool has to be ``62 + 2 * V`` pages or
+more instead.  Every row of the table above is far clear of both: the
+tightest is 287 pages against the 68 three virtqueues need.  That bound is
+not a policy, only what keeps the ordinary range non-empty; where it does
+bind, the pool has fewer pages than the virtqueues alone want and the
+guarantee covers as many of them as it has pages for.
+
+This is a floor and not a fair share.  A single busy virtqueue may still
+use everything outside the withheld range: on a 16 MiB region with eight
+queue pairs and depth-1024 rings that is 3928 of 4095 pages, the region
+less the 48 withheld and the 119 the virtqueue areas hold.  The range is
+sized from every virtqueue the transport creates, which is the driver's
+count plus an administration virtqueue where the device offers one, and
+which over-counts a device that offers more queue pairs than the driver
+uses; over-counting withholds one page per unused virtqueue and never
+denies capacity.
+
 An undersized multi-queue region fails in two ways, and both are
 properties of the network driver's existing behaviour rather than of the
 region.
@@ -439,12 +534,16 @@ region.
 First, cross-queue starvation.  ``virtnet_open()`` pre-fills the receive
 queues in index order and discards the result, so queue 0 takes what it
 needs before queue 1 asks.  A region that cannot hold every queue's fill
-leaves the later queues with no buffers at all; the device's receive
-steering then drops whatever it sends to them, and transmit fails on every
-queue with ``tx_fifo_errors``, ``tx_dropped`` and a rate-limited
-``Unexpected TXQ`` message.  Pool areas do not help: at
-``virtnet_open()`` every fill runs on whichever CPU brought the link up, so
-they all share one home area.  Areas give preference, never reservation.
+leaves the later queues with far fewer buffers than the earlier ones; the
+device's receive steering then drops most of what it sends to them, and
+transmit fails on those queues with ``tx_fifo_errors``, ``tx_dropped`` and
+a rate-limited ``Unexpected TXQ`` message.  Pool areas do not help: at
+``virtnet_open()`` every fill runs on whichever CPU brought the link up,
+so they all share one home area, and areas give preference rather than
+reservation.  The withheld range bounds how bad this gets -- no virtqueue
+is left unable to publish anything at all -- but one buffer per queue is a
+floor for forward progress, not a working receive ring.  Sizing the region
+for ``region_slots`` is what avoids it.
 
 Second, a receive queue that holds no buffers and cannot refill spends
 softirq time without making progress.  ``try_fill_recv()`` reports failure
@@ -624,6 +723,14 @@ The claimed range also appears in ``/proc/iomem`` as
 appears nowhere else at all.  The three counts appear again in
 ``dmb/pages``, ``dmb/areas`` and ``dmb/area_pages`` below.
 
+A second line follows when the driver creates its virtqueues, because the
+count they come to is not known any earlier::
+
+  virtio_net virtio5: device memory buffer withholds 48 of 4095 pages for 17 virtqueues
+
+That is the withheld range of the previous section, and the virtqueue count
+it was sized from.  It appears again in ``dmb/reserved_pages``.
+
 With ``CONFIG_VIRTIO_DEBUG`` the state of the region is also available
 under the device's virtio debugfs directory, in ``dmb/``.  The directory
 exists only while the device has a region, so a device that did not
@@ -643,11 +750,20 @@ they accept may change or go away.
   ``area_pages`` divides ``pages``.  Both are fixed when the region is
   installed and are the same two values the probe-time message prints.
 
+``reserved_pages``
+  how many pages are withheld from ordinary claims so that a virtqueue whose
+  ring is empty can publish a chain.  Zero until the driver asks for its
+  virtqueues, and zero for good on a pool too small for the mechanism to
+  mean anything.  Not subtracted from ``pages``: the withheld pages are
+  part of the pool and are counted in ``used_pages`` when a virtqueue draws
+  on them.
+
 ``used_pages``
-  how many of them are allocated.  One counter maintained across all areas
-  rather than a sum of per-area figures read at different moments, so it
-  never reports a torn total; it is raised just outside the area lock, so a
-  read taken during a claim or a release can lag the bitmap by that claim.
+  how many of the pool's pages are allocated.  One counter maintained
+  across all areas rather than a sum of per-area figures read at different
+  moments, so it never reports a torn total; it is raised just outside the
+  area lock, so a read taken during a claim or a release can lag the bitmap
+  by that claim.
 
 ``used_pages_hiwater``
   the largest ``used_pages`` has been.  This, rather than a sample of

@@ -204,6 +204,19 @@ config VIRTIO_DMB
 
 	  If unsure, say Y.
 
+config VIRTIO_DMB_KUNIT_TEST
+	bool "Device Memory Buffer allocator tests" if !KUNIT_ALL_TESTS
+	depends on VIRTIO_DMB && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Tests for the geometry of the range the allocator withholds so that
+	  a virtqueue with an empty ring can publish its first descriptor
+	  chain, and for what becomes of a region when a negotiation drops
+	  the feature.  Neither case arises on a device anyone is likely to
+	  build, so a test rather than a measurement is what keeps both true.
+
+	  If unsure, say N.
+
 config VIRTIO_RTC
 	tristate "Virtio RTC driver"
 	depends on VIRTIO

@@ -527,10 +527,44 @@ static int vring_map_errno(const struct vring_virtqueue *vq)
 	return -ENOMEM;
 }
 
+/*
+ * Whether this mapping may draw on capacity a bounded map implementation
+ * withholds, and account it against the chain's allowance if so.
+ *
+ * Only while the ring is empty, which is exactly the window in which this
+ * virtqueue has no completion of its own to be woken by: the device cannot
+ * signal a used buffer on a queue with no buffers posted.  Every
+ * virtqueue_add_*() path decrements num_free after its mapping loop, so the
+ * test is true for every mapping of a chain going into an empty ring and
+ * false for every mapping after it, with nothing to keep in step.
+ *
+ * @chain_pages accumulates within one virtqueue_add_*() call and dies with
+ * it.  It is charged whether or not the mapping later fails, and a chain that
+ * fails half way therefore over-counts its own allowance and nothing else, so
+ * no bookkeeping can leak.
+ */
+static unsigned long vring_map_reserve_attr(const struct vring_virtqueue *vq,
+					    unsigned int *chain_pages,
+					    size_t size)
+{
+	unsigned int pages = DIV_ROUND_UP(size, PAGE_SIZE);
+
+	if (*chain_pages + pages > VIRTIO_MAP_RESERVE_PAGES)
+		return 0;
+
+	if (vq->vq.num_free != vring_num(vq))
+		return 0;
+
+	*chain_pages += pages;
+
+	return VIRTIO_MAP_ATTR_RESERVE;
+}
+
 /* Map one sg entry. */
 static int vring_map_one_sg(const struct vring_virtqueue *vq, struct scatterlist *sg,
 			    enum dma_data_direction direction, dma_addr_t *addr,
-			    u32 *len, bool premapped, unsigned long attr)
+			    u32 *len, bool premapped, unsigned long attr,
+			    unsigned int *chain_pages)
 {
 	if (premapped) {
 		*addr = sg_dma_address(sg);
@@ -577,7 +611,9 @@ static int vring_map_one_sg(const struct vring_virtqueue *vq, struct scatterlist
 	 */
 	*addr = virtqueue_map_page_attrs(&vq->vq, sg_page(sg),
 					 sg->offset, sg->length,
-					 direction, attr);
+					 direction,
+					 attr | vring_map_reserve_attr(vq, chain_pages,
+								       sg->length));
 
 	if (vring_mapping_error(vq, *addr))
 		return vring_map_errno(vq);
@@ -587,13 +623,15 @@ static int vring_map_one_sg(const struct vring_virtqueue *vq, struct scatterlist
 
 static dma_addr_t vring_map_single(const struct vring_virtqueue *vq,
 				   void *cpu_addr, size_t size,
-				   enum dma_data_direction direction)
+				   enum dma_data_direction direction,
+				   unsigned int *chain_pages)
 {
 	if (!vq->use_map_api)
 		return (dma_addr_t)virt_to_phys(cpu_addr);
 
-	return virtqueue_map_single_attrs(&vq->vq, cpu_addr,
-					  size, direction, 0);
+	return virtqueue_map_single_attrs(&vq->vq, cpu_addr, size, direction,
+					  vring_map_reserve_attr(vq, chain_pages,
+								 size));
 }
 
 static void virtqueue_init(struct vring_virtqueue *vq, u32 num)
@@ -717,6 +755,7 @@ static inline int virtqueue_add_split(struct vring_virtqueue *vq,
 	unsigned int i, n, avail, descs_used, err_idx, sg_count = 0;
 	/* Total length for in-order */
 	unsigned int total_in_len = 0;
+	unsigned int chain_pages = 0;
 	int head;
 	bool indirect;
 	int err;
@@ -783,7 +822,8 @@ static inline int virtqueue_add_split(struct vring_virtqueue *vq,
 				flags |= VRING_DESC_F_NEXT;
 
 			err = vring_map_one_sg(vq, sg, DMA_TO_DEVICE, &addr,
-					       &len, premapped, attr);
+					       &len, premapped, attr,
+				       &chain_pages);
 			if (err)
 				goto unmap_release;
 
@@ -804,7 +844,8 @@ static inline int virtqueue_add_split(struct vring_virtqueue *vq,
 				flags |= VRING_DESC_F_NEXT;
 
 			err = vring_map_one_sg(vq, sg, DMA_FROM_DEVICE, &addr,
-					       &len, premapped, attr);
+					       &len, premapped, attr,
+				       &chain_pages);
 			if (err)
 				goto unmap_release;
 
@@ -821,7 +862,8 @@ static inline int virtqueue_add_split(struct vring_virtqueue *vq,
 		/* Now that the indirect table is filled in, map it. */
 		dma_addr_t addr = vring_map_single(
 			vq, desc, total_sg * sizeof(struct vring_desc),
-			DMA_TO_DEVICE);
+			DMA_TO_DEVICE,
+			&chain_pages);
 		if (vring_mapping_error(vq, addr)) {
 			err = vring_map_errno(vq);
 			goto unmap_release;
@@ -1601,6 +1643,7 @@ static int virtqueue_add_indirect_packed(struct vring_virtqueue *vq,
 	struct vring_packed_desc *desc;
 	struct scatterlist *sg;
 	unsigned int i, n, err_idx, len, total_in_len = 0;
+	unsigned int chain_pages = 0;
 	u16 head;
 	dma_addr_t addr;
 
@@ -1624,7 +1667,8 @@ static int virtqueue_add_indirect_packed(struct vring_virtqueue *vq,
 		for (sg = sgs[n]; sg; sg = sg_next(sg)) {
 			if (vring_map_one_sg(vq, sg, n < out_sgs ?
 					     DMA_TO_DEVICE : DMA_FROM_DEVICE,
-					     &addr, &len, premapped, attr))
+					     &addr, &len, premapped, attr,
+				       &chain_pages))
 				goto unmap_release;
 
 			desc[i].flags = cpu_to_le16(n < out_sgs ?
@@ -1647,7 +1691,8 @@ static int virtqueue_add_indirect_packed(struct vring_virtqueue *vq,
 	/* Now that the indirect table is filled in, map it. */
 	addr = vring_map_single(vq, desc,
 			total_sg * sizeof(struct vring_packed_desc),
-			DMA_TO_DEVICE);
+			DMA_TO_DEVICE,
+			&chain_pages);
 	if (vring_mapping_error(vq, addr))
 		goto unmap_release;
 
@@ -1740,6 +1785,7 @@ static inline int virtqueue_add_packed(struct vring_virtqueue *vq,
 	struct vring_packed_desc *desc;
 	struct scatterlist *sg;
 	unsigned int i, n, c, descs_used, err_idx, len;
+	unsigned int chain_pages = 0;
 	__le16 head_flags, flags;
 	u16 head, id, prev, curr, avail_used_flags;
 	int err;
@@ -1799,7 +1845,8 @@ static inline int virtqueue_add_packed(struct vring_virtqueue *vq,
 
 			err = vring_map_one_sg(vq, sg, n < out_sgs ?
 					       DMA_TO_DEVICE : DMA_FROM_DEVICE,
-					       &addr, &len, premapped, attr);
+					       &addr, &len, premapped, attr,
+				       &chain_pages);
 			if (err)
 				goto unmap_release;
 
@@ -1899,6 +1946,7 @@ static inline int virtqueue_add_packed_in_order(struct vring_virtqueue *vq,
 	struct vring_packed_desc *desc;
 	struct scatterlist *sg;
 	unsigned int i, n, sg_count, err_idx, total_in_len = 0;
+	unsigned int chain_pages = 0;
 	__le16 head_flags, flags;
 	u16 head, avail_used_flags;
 	bool avail_wrap_counter;
@@ -1961,7 +2009,8 @@ static inline int virtqueue_add_packed_in_order(struct vring_virtqueue *vq,
 
 			err = vring_map_one_sg(vq, sg, n < out_sgs ?
 					       DMA_TO_DEVICE : DMA_FROM_DEVICE,
-					       &addr, &len, premapped, attr);
+					       &addr, &len, premapped, attr,
+				       &chain_pages);
 			if (err)
 				goto unmap_release;
 
@@ -3880,9 +3929,15 @@ dma_addr_t virtqueue_map_page_attrs(const struct virtqueue *_vq,
 					   page, offset, size,
 					   dir, attrs);
 
+	/*
+	 * Strip the bits virtio owns before the DMA API sees them: it defines
+	 * DMA_ATTR_* over the same word, and a bit outside that set has no
+	 * defined meaning there.  A map implementation is the only reader of
+	 * them.
+	 */
 	return dma_map_page_attrs(vring_dma_dev(vq),
 				  page, offset, size,
-				  dir, attrs);
+				  dir, attrs & ~VIRTIO_MAP_ATTR_MASK);
 }
 EXPORT_SYMBOL_GPL(virtqueue_map_page_attrs);
 
@@ -3907,7 +3962,8 @@ void virtqueue_unmap_page_attrs(const struct virtqueue *_vq,
 				      map_handle, size, dir, attrs);
 	else
 		dma_unmap_page_attrs(vring_dma_dev(vq), map_handle,
-				     size, dir, attrs);
+				     size, dir,
+				     attrs & ~VIRTIO_MAP_ATTR_MASK);
 }
 EXPORT_SYMBOL_GPL(virtqueue_unmap_page_attrs);
 

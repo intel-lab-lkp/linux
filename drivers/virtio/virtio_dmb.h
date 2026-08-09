@@ -11,6 +11,7 @@ struct virtio_device;
 
 int virtio_dmb_init(struct virtio_device *vdev);
 void virtio_dmb_destroy(struct virtio_device *vdev);
+void virtio_dmb_note_vqs(struct virtio_device *vdev, unsigned int nvqs);
 
 #else
 
@@ -20,6 +21,11 @@ static inline int virtio_dmb_init(struct virtio_device *vdev)
 }
 
 static inline void virtio_dmb_destroy(struct virtio_device *vdev)
+{
+}
+
+static inline void virtio_dmb_note_vqs(struct virtio_device *vdev,
+				       unsigned int nvqs)
 {
 }
 

@@ -3,6 +3,7 @@
 #define _LINUX_VIRTIO_CONFIG_H
 
 #include <linux/err.h>
+#include <linux/bits.h>
 #include <linux/bug.h>
 #include <linux/virtio.h>
 #include <linux/virtio_byteorder.h>
@@ -218,6 +219,38 @@ struct virtio_map_ops {
 	int (*mapping_error)(union virtio_map map, dma_addr_t map_handle);
 	size_t (*max_mapping_size)(union virtio_map map);
 };
+
+/*
+ * Pages one virtqueue at a time is guaranteed to be able to map through a map
+ * implementation with a bounded pool, whatever the other virtqueues of the
+ * device have mapped.  Enough for one page-granular descriptor chain at the
+ * default CONFIG_MAX_SKB_FRAGS: a network receive buffer in the non-mergeable
+ * case is MAX_SKB_FRAGS + 2 scatterlist entries plus an indirect table, which
+ * is 20 pages where a page is 4 KiB and MAX_SKB_FRAGS is 17.  A chain larger
+ * than this -- a raised CONFIG_MAX_SKB_FRAGS, or entries spanning more than a
+ * page each -- draws on the reserve for as much of itself as fits and is not
+ * guaranteed.  Neither is a second chain of more than one page concurrent
+ * with the first: what every virtqueue is guaranteed is the single page that
+ * takes its ring from empty to non-empty.  Both hold on any pool of eight
+ * times this many pages or more, which is where an implementation withholds
+ * anything at all; below that there is no range and no guarantee.
+ */
+#define VIRTIO_MAP_RESERVE_PAGES	32u
+
+/*
+ * map_page() attrs bits owned by virtio rather than by the DMA API.
+ * DMA_ATTR_* occupies bits 1 to 13 today; these sit above it, and
+ * virtqueue_map_page_attrs() masks them off before any dma_map_*() call, so
+ * the DMA API never sees one.  The gap is deliberate headroom rather than a
+ * partition: whoever grows either range has to check the other.
+ *
+ * VIRTIO_MAP_ATTR_RESERVE: this mapping is part of the first descriptor chain
+ * a virtqueue is publishing, and an implementation with a bounded pool should
+ * satisfy it from capacity withheld for that purpose if it has no other.
+ * An implementation that ignores the bit behaves exactly as before.
+ */
+#define VIRTIO_MAP_ATTR_RESERVE		BIT(24)
+#define VIRTIO_MAP_ATTR_MASK		VIRTIO_MAP_ATTR_RESERVE
 
 /* If driver didn't advertise the feature, it will never appear. */
 void virtio_check_driver_offered_feature(const struct virtio_device *vdev,
