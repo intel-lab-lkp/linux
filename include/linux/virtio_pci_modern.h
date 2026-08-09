@@ -162,4 +162,5 @@ int vp_modern_get_queue_reset(struct virtio_pci_modern_device *mdev, u16 index);
 void vp_modern_set_queue_reset(struct virtio_pci_modern_device *mdev, u16 index);
 u16 vp_modern_avq_num(struct virtio_pci_modern_device *mdev);
 u16 vp_modern_avq_index(struct virtio_pci_modern_device *mdev);
+u16 vp_modern_get_dmb_shm_id(struct virtio_pci_modern_device *mdev);
 #endif

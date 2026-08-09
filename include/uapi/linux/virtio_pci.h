@@ -193,6 +193,15 @@ struct virtio_pci_modern_common_cfg {
 
 	__le16 admin_queue_index;	/* read-only */
 	__le16 admin_queue_num;		/* read-only */
+
+	/*
+	 * Reports the shmid of the Device Memory Buffer region.  The feature
+	 * is a specification proposal before the virtio Technical Committee,
+	 * and both this offset and the VIRTIO_F_DMB feature bit are
+	 * provisional: neither has been allocated, so a device must not rely
+	 * on either until they have been.
+	 */
+	__le16 dmb_shm_id;		/* read-only */
 };
 
 /* Fields in VIRTIO_PCI_CAP_PCI_CFG: */
@@ -235,6 +244,7 @@ struct virtio_pci_cfg_cap {
 #define VIRTIO_PCI_COMMON_Q_RESET	58
 #define VIRTIO_PCI_COMMON_ADM_Q_IDX	60
 #define VIRTIO_PCI_COMMON_ADM_Q_NUM	62
+#define VIRTIO_PCI_COMMON_DMB_SHM_ID	64
 
 #endif /* VIRTIO_PCI_NO_MODERN */
 
