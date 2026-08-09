@@ -1361,7 +1361,7 @@ static bool __cancel_engine(struct intel_engine_cs *engine)
 static struct intel_engine_cs *active_engine(struct intel_context *ce)
 {
 	struct intel_engine_cs *engine = NULL;
-	struct i915_request *rq;
+	struct i915_request *rq, *prev;
 
 	if (intel_context_has_inflight(ce))
 		return intel_context_inflight(ce);
@@ -1375,7 +1375,8 @@ static struct intel_engine_cs *active_engine(struct intel_context *ce)
 	 * (and onto a new timeline->requests list).
 	 */
 	rcu_read_lock();
-	list_for_each_entry_reverse(rq, &ce->timeline->requests, link) {
+	rq = list_last_entry(&ce->timeline->requests, typeof(*rq), link);
+	while (!list_entry_is_head(rq, &ce->timeline->requests, link)) {
 		bool found;
 
 		/* timeline is already completed upto this point? */
@@ -1387,9 +1388,14 @@ static struct intel_engine_cs *active_engine(struct intel_context *ce)
 		if (likely(rcu_access_pointer(rq->timeline) == ce->timeline))
 			found = i915_request_active_engine(rq, &engine);
 
+		/* Cache the cursor before the put, which may release rq. */
+		if (!found)
+			prev = list_prev_entry(rq, link);
 		i915_request_put(rq);
 		if (found)
 			break;
+
+		rq = prev;
 	}
 	rcu_read_unlock();
 
