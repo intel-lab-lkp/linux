@@ -96,6 +96,8 @@ struct tas2783_prv {
 	u8 rca_binaryname[64];
 	u8 dev_name[32];
 	bool hw_init;
+	/* take one channel instead of mirroring; applied at hw_params */
+	bool rx_single_ch;
 	/* wq for firmware download */
 	wait_queue_head_t fw_wait;
 	bool fw_dl_task_done;
@@ -590,6 +592,84 @@ static s32 tas2783_amp_putvol(struct snd_kcontrol *kcontrol,
 	return snd_soc_put_volsw(kcontrol, ucontrol);
 }
 
+/*
+ * UDMPU23 Cluster Index selects which channel of the incoming stream this amp
+ * renders. The driver only ever sets it from tas2783_reg_default[] as 0x0, and
+ * never per device, so in a two-amp aggregated setup both amps come up on the
+ * same cluster and render the same channel -- on the HP OmniBook X Flip 14
+ * (board 8EA1) that means both speakers play the left channel and right-channel
+ * content is inaudible. The firmware blobs do encode a per-amp channel in page-0
+ * config registers (0x80000a differs 2a/1a between the two blobs), but the SDCA
+ * cluster index overrides it, so the split has to be set here.
+ *
+ * Unlike rt1316/rt1318, the selection CANNOT be pushed to the device. The amp
+ * answers COMMAND_IGNORED (-ENODATA) to a UDMPU23 Cluster Index write in every
+ * state tried -- streaming, idle, and with the SDCA function verified actually
+ * powered on (PDE23 Actual Power State == ON), as a 4-byte MBQ write, as a
+ * plain single-byte write, after clearing the latched Entity-0 status bits, and
+ * on the Next rank of a dual-ranked control. A genuine device read of the same
+ * control (sdw_read_no_pm) also returns -ENODATA, which is the tell: the control
+ * is not merely write-protected, it is not implemented on this part. Mainline
+ * master carries no channel assignment for tas2783 either, so there is nothing
+ * upstream to backport.
+ *
+ * So the split is done on the host side instead, where it costs no device
+ * access at all. sdw_compute_slave_ports() walks the slaves of a stream and
+ * advances the payload block offset by one channel per slave port -- but only
+ * if the slave asked for fewer channels than the stream carries. A slave whose
+ * ch_mask covers every channel of the stream is treated as "mirror mode" and
+ * the offset is reset for the next slave, which is precisely what this driver
+ * used to request: snd_sdw_params_to_config() hands both amps ch_mask 0x3 on a
+ * 2-channel stream, so both were given the same block offset and both rendered
+ * the same (left) samples. Confirmed on the wire: DP1_CHANNELEN 0x03 and
+ * DP1_OFFSETCTRL1 0x41 read identically on the two amps during playback.
+ *
+ * Asking for a single channel per amp drops the pair out of mirror mode, and
+ * the core then assigns consecutive block offsets in the order the amps call
+ * sdw_stream_add_slave() -- i.e. dai_link codec order, which on this board is
+ * amp 0x9 (spk_l_endpoint, group_position 0) then amp 0xC (spk_r, position 1).
+ *
+ * Note carefully what this control can and cannot do. It selects *whether* this
+ * amp takes a single channel or mirrors the whole stream; it does NOT and cannot
+ * select *which* channel. sdw_compute_slave_ports() advances the payload offset
+ * by "port_bo += bps * hweight32(p_rt->ch_mask)" -- the popcount of the mask
+ * only, never which bit is set -- so BIT(0) and BIT(1) are indistinguishable to
+ * the allocator, and the side an amp ends up rendering is fixed by its position
+ * in the slave iteration order. Setting this switch on both amps of a pair, with
+ * the same ch_mask on both, still produces a correct stereo split; the machine
+ * driver's codec order is what assigns the sides.
+ *
+ * Off preserves the old mirror behaviour, so an unconfigured card behaves
+ * exactly as before and the split is opt-in from UCM.
+ */
+static int tas2783_rx_single_ch_get(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct tas2783_prv *tas_dev =
+		snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = tas_dev->rx_single_ch;
+
+	return 0;
+}
+
+static int tas2783_rx_single_ch_put(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct tas2783_prv *tas_dev =
+		snd_soc_component_get_drvdata(component);
+	bool val = !!ucontrol->value.integer.value[0];
+
+	if (tas_dev->rx_single_ch == val)
+		return 0;
+
+	tas_dev->rx_single_ch = val;
+
+	return 1;
+}
+
 static const struct snd_kcontrol_new tas2783_snd_controls[] = {
 	SOC_SINGLE_RANGE_EXT_TLV("Amp Volume", TAS2783_AMP_LEVEL,
 				 1, 0, 20, 0, tas2783_amp_getvol,
@@ -597,6 +677,9 @@ static const struct snd_kcontrol_new tas2783_snd_controls[] = {
 	SOC_SINGLE_RANGE_EXT_TLV("Speaker Volume", TAS2783_DVC_LVL,
 				 0, 0, 200, 1, tas2783_digital_getvol,
 				 tas2783_digital_putvol, tas2781_dvc_tlv),
+	SOC_SINGLE_BOOL_EXT("RX Single Channel Switch", 0,
+			    tas2783_rx_single_ch_get,
+			    tas2783_rx_single_ch_put),
 };
 
 static s32 tas2783_validate_calibdata(struct tas2783_prv *tas_dev,
@@ -991,6 +1074,23 @@ static s32 tas_sdw_hw_params(struct snd_pcm_substream *substream,
 		port_config.num = 1;
 	else
 		port_config.num = 2;
+
+	/*
+	 * Claim a single channel of the stream so the bus drops this amp out of
+	 * "mirror mode" and gives it its own payload block offset instead of the
+	 * same one as its pair. Which channel that turns out to be is decided by
+	 * slave iteration order, not by the mask -- see the comment above
+	 * tas2783_rx_single_ch_get().
+	 */
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
+	    stream_config.ch_count > 1 && tas_dev->rx_single_ch) {
+		stream_config.ch_count = 1;
+		port_config.ch_mask = BIT(0);
+	}
+
+	dev_dbg(tas_dev->dev, "port %u: single_ch=%u ch_count=%d ch_mask=%#x\n",
+		port_config.num, tas_dev->rx_single_ch,
+		stream_config.ch_count, port_config.ch_mask);
 
 	ret = sdw_stream_add_slave(sdw_peripheral,
 				   &stream_config, &port_config, 1, sdw_stream);
