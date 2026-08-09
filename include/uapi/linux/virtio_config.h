@@ -52,7 +52,7 @@
  * rest are per-device feature bits.
  */
 #define VIRTIO_TRANSPORT_F_START	28
-#define VIRTIO_TRANSPORT_F_END		42
+#define VIRTIO_TRANSPORT_F_END		45
 
 #ifndef VIRTIO_CONFIG_NO_LEGACY
 /* Do we get callbacks when the ring is completely used, even if we've
@@ -119,5 +119,20 @@
  * This feature indicates that the device support administration virtqueues.
  */
 #define VIRTIO_F_ADMIN_VQ		41
+
+/*
+ * This feature indicates that the device offers a Device Memory Buffer: a
+ * shared memory region, owned by the device, that holds the virtqueues and
+ * the buffers they reference.  When this feature is negotiated, every address
+ * that the driver places in a virtqueue is an offset into the Device Memory
+ * Buffer region rather than a physical address or a bus address.  The device
+ * is thereby confined to memory the driver has published in that region.
+ *
+ * The feature is a specification proposal before the virtio Technical
+ * Committee, not a ratified feature.  The number below is provisional: the
+ * committee has allocated none for it, and it will change if the committee
+ * allocates a different one.  Do not treat it as a stable interface yet.
+ */
+#define VIRTIO_F_DMB			44
 
 #endif /* _UAPI_LINUX_VIRTIO_CONFIG_H */
