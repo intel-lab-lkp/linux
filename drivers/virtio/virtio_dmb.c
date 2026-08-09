@@ -20,10 +20,12 @@
  */
 
 #include <linux/align.h>
+#include <linux/atomic.h>
 #include <linux/bitmap.h>
 #include <linux/bits.h>
 #include <linux/cache.h>
 #include <linux/cpumask.h>
+#include <linux/debugfs.h>
 #include <linux/dma-mapping.h>
 #include <linux/export.h>
 #include <linux/highmem.h>
@@ -126,7 +128,12 @@ struct virtio_dmb_area {
  * @area_slots: slots one area covers, a power of two; the last area covers
  *	fewer when @nslots is not a multiple of it
  * @area_shift: ilog2(@area_slots), so slot >> @area_shift names its area
+ * @total_used: slots allocated across every area, exact; CONFIG_VIRTIO_DEBUG
+ * @used_hiwater: the largest @total_used has been since the last reset through
+ *	debugfs, or since init; CONFIG_VIRTIO_DEBUG
+ * @alloc_failed: buffer mappings the pool had no room for; CONFIG_VIRTIO_DEBUG
  * @shm_id: shared memory id the device reported for the region
+ * @debugfs_dir: directory holding this region's debugfs files
  */
 struct virtio_dmb {
 	struct virtio_device	*vdev;
@@ -145,7 +152,20 @@ struct virtio_dmb {
 	unsigned int		 nareas;
 	unsigned int		 area_slots;
 	unsigned int		 area_shift;
+#ifdef CONFIG_VIRTIO_DEBUG
+	/*
+	 * Exact occupancy for the two debugfs files, kept outside the area
+	 * locks.  A production build has neither: summing the per-area counts
+	 * would need every lock, and the hot path is what this file exists to
+	 * make cheap.  kernel/dma/swiotlb.c draws the same line at
+	 * CONFIG_DEBUG_FS.
+	 */
+	atomic_long_t		 total_used;
+	atomic_long_t		 used_hiwater;
+	atomic_long_t		 alloc_failed;
+#endif
 	u16			 shm_id;
+	struct dentry		*debugfs_dir;
 };
 
 /* First slot of area @i. */
@@ -210,6 +230,61 @@ static size_t virtio_dmb_max_mapping(const struct virtio_dmb *dmb)
 	return max_t(size_t, min(eighth, half_area), PAGE_SIZE);
 }
 
+#ifdef CONFIG_VIRTIO_DEBUG
+
+/*
+ * Exact global occupancy, kept outside every area lock.
+ *
+ * Summing the per-area counts would be imprecise, because no two of them are
+ * read under the same lock, and taking every lock to read one debugfs file
+ * would put a whole-pool serialisation back into a file whose only purpose is
+ * to observe.  An atomic add-return instead yields a value @total_used
+ * genuinely held, so raising the high-water mark to the largest such value
+ * makes both figures exact rather than approximate: two racing claims each
+ * observe a distinct real total and the larger wins.
+ *
+ * This is kernel/dma/swiotlb.c's inc_used_and_hiwater()/dec_used() pair, for
+ * the same reason and with the same empty stubs when the option is off.
+ */
+static void virtio_dmb_inc_used(struct virtio_dmb *dmb, unsigned int nr)
+{
+	long old_hiwater, new_used;
+
+	new_used = atomic_long_add_return(nr, &dmb->total_used);
+	old_hiwater = atomic_long_read(&dmb->used_hiwater);
+	do {
+		if (new_used <= old_hiwater)
+			break;
+	} while (!atomic_long_try_cmpxchg(&dmb->used_hiwater, &old_hiwater,
+					 new_used));
+}
+
+static void virtio_dmb_dec_used(struct virtio_dmb *dmb, unsigned int nr)
+{
+	atomic_long_sub(nr, &dmb->total_used);
+}
+
+static void virtio_dmb_inc_alloc_failed(struct virtio_dmb *dmb)
+{
+	atomic_long_inc(&dmb->alloc_failed);
+}
+
+#else /* !CONFIG_VIRTIO_DEBUG */
+
+static void virtio_dmb_inc_used(struct virtio_dmb *dmb, unsigned int nr)
+{
+}
+
+static void virtio_dmb_dec_used(struct virtio_dmb *dmb, unsigned int nr)
+{
+}
+
+static void virtio_dmb_inc_alloc_failed(struct virtio_dmb *dmb)
+{
+}
+
+#endif /* CONFIG_VIRTIO_DEBUG */
+
 /*
  * Claim @nr contiguous slots from area @i, or -ENOMEM when that one area
  * cannot satisfy the request.  Takes and drops that area's lock and touches
@@ -254,6 +329,12 @@ static long virtio_dmb_area_claim(struct virtio_dmb *dmb, unsigned int i,
 
 	spin_unlock_irqrestore(&area->lock, flags);
 
+	/*
+	 * Outside the lock, which is where swiotlb_search_pool_area() does it
+	 * too: it touches no area state, so holding one buys nothing.
+	 */
+	virtio_dmb_inc_used(dmb, nr);
+
 	return slot;
 
 not_found:
@@ -271,7 +352,9 @@ not_found:
  * buffer, and repolls instead.  Reporting it at any level a working device
  * would print would therefore be a log flood, and it is the only signal an
  * undersized region produces at all, so it is reported through dynamic debug
- * where it costs nothing until somebody asks for it.
+ * where it costs nothing until somebody asks for it.  The map_page() caller
+ * counts it as well, so that a debug build offers a sampled reader as well as
+ * a log.
  *
  * Next fit within one area, from a hint that advances past each claim and
  * rewinds to each release, beginning in the area belonging to the running CPU
@@ -389,6 +472,18 @@ static void virtio_dmb_release(struct virtio_dmb *dmb, unsigned int slot,
 	bitmap_clear(dmb->bitmap, slot, nr);
 	area->used -= nr;
 	area->index = slot - virtio_dmb_area_base(dmb, a);
+
+	spin_unlock_irqrestore(&area->lock, flags);
+
+	/*
+	 * Outside the lock, and deliberately not below the label: the guard
+	 * above rejects a range that is not wholly allocated, and only slots
+	 * that were counted in are counted out, so the total tracks the bitmap
+	 * rather than the caller's arithmetic.
+	 */
+	virtio_dmb_dec_used(dmb, nr);
+
+	return;
 
 out:
 	spin_unlock_irqrestore(&area->lock, flags);
@@ -717,8 +812,22 @@ static dma_addr_t virtio_dmb_op_map_page(union virtio_map map,
 
 	nr = virtio_dmb_slots(size);
 	ret = virtio_dmb_claim(dmb, nr);
-	if (ret < 0)
+	if (ret < 0) {
+		/*
+		 * Counted here rather than in virtio_dmb_claim(), which
+		 * virtio_dmb_op_alloc() reaches as well.  A virtqueue area
+		 * that does not fit is a step of vring_alloc_queue_split()'s
+		 * search for a size that does, so counting it would have a
+		 * correctly sized region boot with a failure for every
+		 * attempt but the last, in the one file whose purpose is to
+		 * answer whether the region is too small for the traffic.  A
+		 * request over the per-mapping cap is not counted either: the
+		 * cap is what max_mapping_size() advertises, so exceeding it
+		 * is a caller bug rather than a property of the region.
+		 */
+		virtio_dmb_inc_alloc_failed(dmb);
 		return DMA_MAPPING_ERROR;
+	}
 	slot = ret;
 
 	virtio_dmb_record(dmb, slot, nr, size, src);
@@ -860,6 +969,105 @@ static const struct virtio_map_ops virtio_dmb_map_ops = {
 	.max_mapping_size	= virtio_dmb_op_max_mapping_size,
 };
 
+#ifdef CONFIG_VIRTIO_DEBUG
+
+static int virtio_dmb_used_get(void *data, u64 *val)
+{
+	struct virtio_dmb *dmb = data;
+
+	*val = atomic_long_read(&dmb->total_used);
+
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(virtio_dmb_used_fops, virtio_dmb_used_get, NULL,
+			 "%llu\n");
+
+static int virtio_dmb_hiwater_get(void *data, u64 *val)
+{
+	struct virtio_dmb *dmb = data;
+
+	*val = atomic_long_read(&dmb->used_hiwater);
+
+	return 0;
+}
+
+static int virtio_dmb_hiwater_set(void *data, u64 val)
+{
+	struct virtio_dmb *dmb = data;
+
+	/* Restarting the measurement is the only meaningful write. */
+	if (val)
+		return -EINVAL;
+
+	/*
+	 * Restart from what is allocated now rather than from zero, so that
+	 * the file never reports a peak below the occupancy it is read
+	 * alongside.
+	 */
+	atomic_long_set(&dmb->used_hiwater,
+			atomic_long_read(&dmb->total_used));
+
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(virtio_dmb_hiwater_fops, virtio_dmb_hiwater_get,
+			 virtio_dmb_hiwater_set, "%llu\n");
+
+static int virtio_dmb_alloc_failed_get(void *data, u64 *val)
+{
+	struct virtio_dmb *dmb = data;
+
+	*val = atomic_long_read(&dmb->alloc_failed);
+
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(virtio_dmb_alloc_failed_fops,
+			 virtio_dmb_alloc_failed_get, NULL, "%llu\n");
+
+/*
+ * The files go under the device's existing virtio debugfs directory, and exist
+ * only while the device has a region.  They describe one, so their presence is
+ * also the answer to whether the device is using the feature.
+ *
+ * Every file is served through DEFINE_DEBUGFS_ATTRIBUTE, either directly or by
+ * a debugfs_create_*() helper that uses it, so each read takes a reference
+ * that debugfs_remove_recursive() waits for.  That is what lets the caller
+ * free the state these files point at once the directory is gone.
+ */
+static void virtio_dmb_debugfs_init(struct virtio_dmb *dmb)
+{
+	struct dentry *dir;
+
+	dir = debugfs_create_dir("dmb", dmb->vdev->debugfs_dir);
+	dmb->debugfs_dir = dir;
+
+	debugfs_create_u32("pages", 0400, dir, &dmb->nslots);
+	debugfs_create_u32("areas", 0400, dir, &dmb->nareas);
+	debugfs_create_u32("area_pages", 0400, dir, &dmb->area_slots);
+	debugfs_create_file("used_pages", 0400, dir, dmb,
+			    &virtio_dmb_used_fops);
+	debugfs_create_file("used_pages_hiwater", 0600, dir, dmb,
+			    &virtio_dmb_hiwater_fops);
+	debugfs_create_file("alloc_failed", 0400, dir, dmb,
+			    &virtio_dmb_alloc_failed_fops);
+}
+
+static void virtio_dmb_debugfs_exit(struct virtio_dmb *dmb)
+{
+	debugfs_remove_recursive(dmb->debugfs_dir);
+}
+
+#else /* !CONFIG_VIRTIO_DEBUG */
+
+static void virtio_dmb_debugfs_init(struct virtio_dmb *dmb)
+{
+}
+
+static void virtio_dmb_debugfs_exit(struct virtio_dmb *dmb)
+{
+}
+
+#endif /* CONFIG_VIRTIO_DEBUG */
+
 /*
  * Whether the device still has virtqueues.  vqs_list_lock is what protects
  * that list against a concurrent adder.  No caller here can race one, because
@@ -929,6 +1137,7 @@ void virtio_dmb_destroy(struct virtio_device *vdev)
 	vdev->map = dmb->prev_map;
 	vdev->vmap = dmb->prev_vmap;
 
+	virtio_dmb_debugfs_exit(dmb);
 	memunmap(dmb->map_va);
 	if (dmb->map_claimed)
 		release_mem_region(dmb->map_phys, dmb->map_len);
@@ -1277,6 +1486,8 @@ int virtio_dmb_init(struct virtio_device *vdev)
 	dmb->nareas = nareas;
 	dmb->area_slots = area_slots;
 	dmb->area_shift = ilog2(area_slots);
+
+	virtio_dmb_debugfs_init(dmb);
 
 	/* Published last: until now nothing routes a mapping here. */
 	dmb->prev_map = vdev->map;

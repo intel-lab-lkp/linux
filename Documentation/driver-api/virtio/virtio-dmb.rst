@@ -255,8 +255,10 @@ The last area is short unless ``area_pages`` divides ``pages``.  A region
 small enough for one area to cover behaves exactly as a single lock over
 the whole pool does, which includes every region up to 2 MiB on a 4 KiB
 page, and more than that on a guest with few possible CPUs.
-Both values are printed at probe time, so a device implementer can read
-back what a guest derived from the region it offered.
+Both values are printed at probe time and are readable under
+``CONFIG_VIRTIO_DEBUG`` in ``dmb/areas`` and ``dmb/area_pages``, so a
+device implementer can read back what a guest derived from the region it
+offered.
 
 A device cannot influence the count and should not try to: it is derived
 from the guest's page size, cacheline size and possible-CPU count, none of
@@ -619,7 +621,51 @@ a guest with three or more possible CPUs; a guest with one or two derives
 fewer, larger areas from the same region.
 The claimed range also appears in ``/proc/iomem`` as
 ``virtio-dmb``, but only where the claim was granted, and the ``shmid``
-appears nowhere else at all.
+appears nowhere else at all.  The three counts appear again in
+``dmb/pages``, ``dmb/areas`` and ``dmb/area_pages`` below.
+
+With ``CONFIG_VIRTIO_DEBUG`` the state of the region is also available
+under the device's virtio debugfs directory, in ``dmb/``.  The directory
+exists only while the device has a region, so a device that did not
+negotiate the feature has no ``dmb/`` at all.  These files are
+diagnostics and not ABI: their names, their contents and the one write
+they accept may change or go away.
+
+``pages``
+  how many pages the allocator can hand out.
+
+``areas``
+  how many pool areas the pool is divided into.
+
+``area_pages``
+  how many pages one pool area covers.  ``areas`` is
+  ``ceil(pages / area_pages)``, so the last area covers fewer unless
+  ``area_pages`` divides ``pages``.  Both are fixed when the region is
+  installed and are the same two values the probe-time message prints.
+
+``used_pages``
+  how many of them are allocated.  One counter maintained across all areas
+  rather than a sum of per-area figures read at different moments, so it
+  never reports a torn total; it is raised just outside the area lock, so a
+  read taken during a claim or a release can lag the bitmap by that claim.
+
+``used_pages_hiwater``
+  the largest ``used_pages`` has been.  This, rather than a sample of
+  ``used_pages``, is what a region should be sized against: a burst
+  that fills the region between two samples leaves no other trace.
+  Writing ``0`` restarts the measurement from the current occupancy.
+
+``alloc_failed``
+  how many buffer mappings the pool had no room for.  Because running
+  out of room is an ordinary condition it is not logged above debug
+  level, so this is the cheapest indication that a region is too small
+  for what is running on it: a non-zero value means the pool could not
+  fit a mapping the workload asked for, either because it is smaller
+  than the workload needs or because no single pool area held a long
+  enough run of free pages.  A virtqueue area that did not fit is not
+  counted here, since it is logged instead, and neither is a mapping
+  refused for exceeding the per-mapping cap, which ``max_mapping_size``
+  advertises.
 
 Notes for kernel code
 =====================
