@@ -780,6 +780,13 @@ flush_icache_user_page(struct vm_area_struct *vma, struct page *page,
 			preempt_enable();
 			return;
 		}
+	} else {
+		/*
+		 * As in flush_tlb_mm(): smp_call_function() does not call
+		 * back into this CPU, and this function is used precisely
+		 * when operating on another process's mappings.
+		 */
+		flush_tlb_other(mm);
 	}
 
 	smp_call_function(ipi_flush_icache_page, mm, 1);
