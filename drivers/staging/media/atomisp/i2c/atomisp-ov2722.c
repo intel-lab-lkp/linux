@@ -599,39 +599,14 @@ static int ov2722_s_power(struct v4l2_subdev *sd, int on)
 	return ret;
 }
 
-/* TODO: remove it. */
-static int ov2722_startup(struct v4l2_subdev *sd)
-{
-	struct ov2722_device *dev = to_ov2722_sensor(sd);
-	struct i2c_client *client = v4l2_get_subdevdata(sd);
-	int ret = 0;
-
-	ret = ov2722_write_reg(client, OV2722_8BIT,
-			       OV2722_SW_RESET, 0x01);
-	if (ret) {
-		dev_err(&client->dev, "ov2722 reset err.\n");
-		return ret;
-	}
-
-	ret = ov2722_write_reg_array(client, dev->res->regs);
-	if (ret) {
-		dev_err(&client->dev, "ov2722 write register err.\n");
-		return ret;
-	}
-
-	return ret;
-}
-
 static int ov2722_set_fmt(struct v4l2_subdev *sd,
 			  struct v4l2_subdev_state *sd_state,
 			  struct v4l2_subdev_format *format)
 {
 	struct v4l2_mbus_framefmt *fmt = &format->format;
 	struct ov2722_device *dev = to_ov2722_sensor(sd);
-	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct ov2722_resolution *res;
 	struct camera_mipi_info *ov2722_info = NULL;
-	int ret = 0;
 
 	if (format->pad)
 		return -EINVAL;
@@ -662,38 +637,8 @@ static int ov2722_set_fmt(struct v4l2_subdev *sd,
 	dev->pixels_per_line = dev->res->pixels_per_line;
 	dev->lines_per_frame = dev->res->lines_per_frame;
 
-	ret = ov2722_startup(sd);
-	if (ret) {
-		int i = 0;
-
-		dev_err(&client->dev, "ov2722 startup err, retry to power up\n");
-		for (i = 0; i < OV2722_POWER_UP_RETRY_NUM; i++) {
-			dev_err(&client->dev,
-				"ov2722 retry to power up %d/%d times, result: ",
-				i + 1, OV2722_POWER_UP_RETRY_NUM);
-			power_down(sd);
-			ret = power_up(sd);
-			if (ret) {
-				dev_err(&client->dev, "power up failed, continue\n");
-				continue;
-			}
-			ret = ov2722_startup(sd);
-			if (ret) {
-				dev_err(&client->dev, " startup FAILED!\n");
-			} else {
-				dev_err(&client->dev, " startup SUCCESS!\n");
-				break;
-			}
-		}
-		if (ret) {
-			dev_err(&client->dev, "ov2722 startup err\n");
-			goto err;
-		}
-	}
-
-err:
 	mutex_unlock(&dev->input_lock);
-	return ret;
+	return 0;
 }
 
 static int ov2722_get_fmt(struct v4l2_subdev *sd,
@@ -746,6 +691,26 @@ static int ov2722_detect(struct i2c_client *client)
 	return 0;
 }
 
+static int ov2722_startup_registers(struct v4l2_subdev *sd)
+{
+	struct ov2722_device *dev = to_ov2722_sensor(sd);
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	int ret;
+
+	ret = ov2722_write_reg(client, OV2722_8BIT,
+			       OV2722_SW_RESET, 0x01);
+	if (ret) {
+		dev_err(&client->dev, "ov2722 reset err.\n");
+		return ret;
+	}
+
+	ret = ov2722_write_reg_array(client, dev->res->regs);
+	if (ret)
+		dev_err(&client->dev, "ov2722 write register err.\n");
+
+	return ret;
+}
+
 static int ov2722_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct ov2722_device *dev = to_ov2722_sensor(sd);
@@ -754,10 +719,42 @@ static int ov2722_s_stream(struct v4l2_subdev *sd, int enable)
 
 	mutex_lock(&dev->input_lock);
 
+	if (enable) {
+		ret = ov2722_startup_registers(sd);
+		if (ret) {
+			int i;
+
+			dev_err(&client->dev, "ov2722 startup err, retry to power up\n");
+			for (i = 0; i < OV2722_POWER_UP_RETRY_NUM; i++) {
+				dev_err(&client->dev,
+					"ov2722 retry to power up %d/%d times, result: ",
+					i + 1, OV2722_POWER_UP_RETRY_NUM);
+				power_down(sd);
+				ret = power_up(sd);
+				if (ret) {
+					dev_err(&client->dev, "power up failed, continue\n");
+					continue;
+				}
+				ret = ov2722_startup_registers(sd);
+				if (ret) {
+					dev_err(&client->dev, " startup FAILED!\n");
+				} else {
+					dev_err(&client->dev, " startup SUCCESS!\n");
+					break;
+				}
+			}
+			if (ret) {
+				dev_err(&client->dev, "ov2722 startup err\n");
+				goto unlock;
+			}
+		}
+	}
+
 	ret = ov2722_write_reg(client, OV2722_8BIT, OV2722_SW_STREAM,
 			       enable ? OV2722_START_STREAMING :
 			       OV2722_STOP_STREAMING);
 
+unlock:
 	mutex_unlock(&dev->input_lock);
 	return ret;
 }
