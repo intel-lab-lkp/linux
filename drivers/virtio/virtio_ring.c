@@ -499,6 +499,19 @@ static int vring_map_one_sg(const struct vring_virtqueue *vq, struct scatterlist
 	if (premapped) {
 		*addr = sg_dma_address(sg);
 		*len = sg_dma_len(sg);
+
+		/*
+		 * The caller mapped this itself, so the map it used is the
+		 * only thing that can judge the result.  Ask it rather than
+		 * skipping the check the mapped path performs: a caller that
+		 * ignored a failed mapping would otherwise publish the
+		 * reserved error value to the device.
+		 */
+		if (dev_WARN_ONCE(&vq->vq.vdev->dev,
+				  vring_mapping_error(vq, *addr),
+				  "premapped buffer holds no valid mapping\n"))
+			return -ENOMEM;
+
 		return 0;
 	}
 
@@ -2910,6 +2923,14 @@ EXPORT_SYMBOL_GPL(virtqueue_add_outbuf);
  * @data: the token identifying the buffer.
  * @gfp: how to do memory allocations (if necessary).
  *
+ * Each entry of @sg must carry an address the caller obtained for this
+ * virtqueue: from the DMA API when virtqueue_dma_dev() returns a device, and
+ * from virtqueue_map_page_attrs() when it returns NULL, because the device
+ * then interprets every address published to it in its own terms.  Only an
+ * address the map itself rejects is caught here; an address from any other
+ * source is indistinguishable from a valid one and reaches the device
+ * unchanged.
+ *
  * Caller must ensure we don't call this with other virtqueue operations
  * at the same time (except where noted).
  *
@@ -3008,6 +3029,14 @@ EXPORT_SYMBOL_GPL(virtqueue_add_inbuf_ctx);
  * @ctx: extra context for the token
  * @gfp: how to do memory allocations (if necessary).
  *
+ * Each entry of @sg must carry an address the caller obtained for this
+ * virtqueue: from the DMA API when virtqueue_dma_dev() returns a device, and
+ * from virtqueue_map_page_attrs() when it returns NULL, because the device
+ * then interprets every address published to it in its own terms.  Only an
+ * address the map itself rejects is caught here; an address from any other
+ * source is indistinguishable from a valid one and reaches the device
+ * unchanged.
+ *
  * Caller must ensure we don't call this with other virtqueue operations
  * at the same time (except where noted).
  *
@@ -3025,10 +3054,17 @@ int virtqueue_add_inbuf_premapped(struct virtqueue *vq,
 EXPORT_SYMBOL_GPL(virtqueue_add_inbuf_premapped);
 
 /**
- * virtqueue_dma_dev - get the dma dev
+ * virtqueue_dma_dev - get the device to use for DMA API calls
  * @_vq: the struct virtqueue we're talking about.
  *
- * Returns the dma dev. That can been used for dma api.
+ * A NULL return means this virtqueue publishes no DMA addresses: either it
+ * needs no mapping at all, or the device supplies its own virtio_map_ops and
+ * interprets every address published to it in its own terms.  A caller that
+ * maps buffers itself must therefore check for NULL before using the DMA API
+ * on this virtqueue's behalf, and use virtqueue_map_page_attrs() when it is,
+ * which maps through whichever of the two the device uses.
+ *
+ * Return: the device to use for DMA API calls, or NULL when there is none.
  */
 struct device *virtqueue_dma_dev(struct virtqueue *_vq)
 {
