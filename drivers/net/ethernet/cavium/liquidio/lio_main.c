@@ -914,11 +914,14 @@ static bool fw_type_is_auto(void)
  */
 static void octeon_pci_flr(struct octeon_device *oct)
 {
+	struct pci_dev *bridge = pci_upstream_bridge(oct->pci_dev);
 	int rc;
 
-	pci_save_state(oct->pci_dev);
-
+	if (bridge)
+		pci_cfg_access_lock(bridge);
 	pci_cfg_access_lock(oct->pci_dev);
+
+	pci_save_state(oct->pci_dev);
 
 	/* Quiesce the device completely */
 	pci_write_config_word(oct->pci_dev, PCI_COMMAND,
@@ -930,9 +933,10 @@ static void octeon_pci_flr(struct octeon_device *oct)
 		dev_err(&oct->pci_dev->dev, "Error %d resetting PCI function %d\n",
 			rc, oct->pf_num);
 
-	pci_cfg_access_unlock(oct->pci_dev);
-
 	pci_restore_state(oct->pci_dev);
+	pci_cfg_access_unlock(oct->pci_dev);
+	if (bridge)
+		pci_cfg_access_unlock(bridge);
 }
 
 /**
