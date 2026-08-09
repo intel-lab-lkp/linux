@@ -181,6 +181,34 @@ do {								\
 #define check_mmu_context()  do { } while(0)
 #endif
 
+/*
+ * check_mmu_context() clears asn_lock and acts on need_new_asn, but it runs
+ * only as the tail of switch_to(), which a newly forked task never reaches:
+ * it resumes at ret_from_fork instead.  asn_lock is left set and the task
+ * goes on to run user space with it set and interrupts enabled, so a
+ * shootdown IPI arriving in that window takes the deferred path and the
+ * need_new_asn handshake meant to cover it never runs.
+ *
+ * finish_task_switch() calls this hook with preemption disabled on the CPU
+ * that ran switch_mm(), which covers that case.  Running it when switch_to()
+ * has already done the work is harmless: check_mmu_context() clears
+ * need_new_asn as it goes.
+ *
+ * kthread_use_mm() and sched_force_init_mm() also call this hook, outside
+ * the scheduler's preemption-disabled switch tail.  check_mmu_context() acts
+ * on per-CPU state, so it can only complete this bookkeeping while still on
+ * the CPU that ran switch_mm(); preemptible() tests that directly.  Where
+ * those paths leave preemption enabled the CPU may already have changed and
+ * nothing is done; where preemption is disabled across the switch, or not
+ * configured at all, no migration is possible and running it is correct.
+ */
+#define finish_arch_post_lock_switch finish_arch_post_lock_switch
+static inline void finish_arch_post_lock_switch(void)
+{
+	if (!preemptible())
+		check_mmu_context();
+}
+
 __EXTERN_INLINE void
 ev5_activate_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm)
 {
