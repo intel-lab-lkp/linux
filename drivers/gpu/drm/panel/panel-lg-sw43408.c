@@ -207,8 +207,8 @@ static int sw43408_backlight_init(struct sw43408_panel *ctx)
 	struct device *dev = &ctx->link->dev;
 	const struct backlight_properties props = {
 		.type = BACKLIGHT_PLATFORM,
-		.brightness = 255,
-		.max_brightness = 255,
+		.brightness = 256,
+		.max_brightness = 818,
 	};
 
 	ctx->base.backlight = devm_backlight_device_register(dev, dev_name(dev), dev,
