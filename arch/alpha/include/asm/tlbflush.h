@@ -87,7 +87,14 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 {
 	struct mm_struct *mm = vma->vm_mm;
 
-	if (mm == current->active_mm)
+	/*
+	 * tbi() acts on the address space context currently loaded, so it
+	 * reaches MM's translations only when a thread of MM is current.
+	 * Under lazy TLB an idle or kernel task keeps MM as its active_mm
+	 * with a different ASN loaded, and a targeted tbi() would then
+	 * invalidate the wrong context.
+	 */
+	if (mm == current->mm)
 		flush_tlb_current_page(mm, vma, addr);
 	else
 		flush_tlb_other(mm);
