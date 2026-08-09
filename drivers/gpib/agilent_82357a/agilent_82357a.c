@@ -1426,6 +1426,9 @@ static void agilent_82357a_detach(struct gpib_board *board)
 		mutex_lock(&a_priv->interrupt_alloc_lock);
 		agilent_82357a_cleanup_urbs(a_priv);
 		agilent_82357a_release_urbs(a_priv);
+		mutex_unlock(&a_priv->interrupt_alloc_lock);
+		mutex_unlock(&a_priv->bulk_alloc_lock);
+		mutex_unlock(&a_priv->control_alloc_lock);
 		agilent_82357a_free_private(board);
 	}
 	mutex_unlock(&agilent_82357a_hotplug_lock);
