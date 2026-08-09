@@ -131,6 +131,13 @@ It supports two optional parameters:
 ``--no-virtualenv``
 	Use OS packaging for Sphinx instead of Python virtual environment.
 
+On macOS, the script uses Homebrew for system dependencies. Homebrew
+commands are printed without ``sudo``. The PDF dependencies are provided by
+the ``mactex`` cask; use ``--no-pdf`` when only building HTML documentation.
+The default virtualenv mode is recommended on macOS because PyYAML is
+installed from ``Documentation/sphinx/requirements.txt`` rather than from a
+Homebrew formula.
+
 Installing Sphinx Minimal Version
 ---------------------------------
 

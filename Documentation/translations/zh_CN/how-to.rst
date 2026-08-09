@@ -102,6 +102,12 @@ Linux 发行版和简单地使用 Linux 命令行，那么可以迅速开始了�
 开头的命令。**请注意**，最新版本 Sphinx 的文档编译速度有极大提升，强烈建议
 您通过 pip/pypi 安装最新版本 Sphinx。
 
+如果您使用 macOS，脚本会使用 Homebrew 输出安装命令，Homebrew 命令不需要
+sudo。PDF 构建所需的 MacTeX 通过 Homebrew cask 安装；如果只构建 HTML 文档，
+可以执行 ``./tools/docs/sphinx-pre-install --no-pdf``。macOS 用户建议使用默认
+的 Python 虚拟环境，因为 PyYAML 会从 ``Documentation/sphinx/requirements.txt``
+安装，而不是通过 Homebrew 安装。
+
 如果您处于一个多用户环境中，为了避免对其他人造成影响，建议您配置单用户
 sphinx 虚拟环境，即只需要执行::
 

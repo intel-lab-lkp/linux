@@ -110,6 +110,11 @@ PDF和LaTeX构建
 
 	使用Sphinx的系统打包，而不是Python虚拟环境。
 
+在 macOS 上，该脚本使用 Homebrew 安装系统依赖，输出的 Homebrew 命令不需要
+``sudo``。PDF 依赖通过 ``mactex`` cask 提供；如果只构建 HTML 文档，请使用
+``--no-pdf``。macOS 用户建议使用默认的 Python 虚拟环境，因为 PyYAML 会从
+``Documentation/sphinx/requirements.txt`` 安装，而不是通过 Homebrew 安装。
+
 Sphinx构建
 ==========
 
