@@ -5028,7 +5028,7 @@ static int be_ndo_bridge_getlink(struct sk_buff *skb, u32 pid, u32 seq,
 					       adapter->if_handle, &hsw_mode,
 					       NULL);
 		if (status)
-			return 0;
+			return be_cmd_status(status);
 
 		if (hsw_mode == PORT_FWD_TYPE_PASSTHRU)
 			return 0;
