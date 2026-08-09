@@ -423,6 +423,13 @@ static int tas2783_sdca_mbq_size(struct device *dev, u32 reg)
 	case SDW_SDCA_CTL(1, TAS2783_SDCA_ENT_FU23, 0x01, 0):
 	case SDW_SDCA_CTL(1, TAS2783_SDCA_ENT_FU23, 0x01, 1):
 	case SDW_SDCA_CTL(1, TAS2783_SDCA_ENT_OT25, 0x04, 0):
+	/*
+	 * Entity 0 Function Status. regmap_sdw_mbq_poll_busy() only polls the
+	 * Function Busy bit if ->readable_reg() accepts this address; without
+	 * it the core drops into a bare fsleep(cfg.timeout_us) and, with that
+	 * left at 0, retries a deferred transaction instantly and fails.
+	 */
+	case SDW_SDCA_CTL(1, 0, SDCA_CTL_ENTITY_0_FUNCTION_STATUS, 0):
 		return 1;
 
 	case SDW_SDCA_CTL(1, TAS2783_SDCA_ENT_IT26, 0x10, 0):
@@ -505,6 +512,8 @@ static bool tas2783_volatile_register(struct device *dev, u32 reg)
 	case 0x400 ... 0x440: /* Data port 4. */
 	case 0x500 ... 0x540: /* Data port 5. */
 	case 0x800001:
+	/* Function Status is a live status word; never let the cache hold it. */
+	case SDW_SDCA_CTL(1, 0, SDCA_CTL_ENTITY_0_FUNCTION_STATUS, 0):
 		return true;
 
 	default:
@@ -525,8 +534,36 @@ static const struct regmap_config tas_regmap = {
 	.use_single_write = true,
 };
 
+/*
+ * The amp answers COMMAND_IGNORED (-ENODATA) to a UDMPU23 Cluster Index write,
+ * which in SDCA terms means the Function deferred the transaction. Declaring it
+ * deferrable stops regmap-sdw-mbq warning about it and documents the intent;
+ * the poll-and-retry in regmap_sdw_mbq_write() runs either way.
+ */
+static bool tas2783_sdca_deferrable(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case SDW_SDCA_CTL(1, TAS2783_SDCA_ENT_UDMPU23,
+			  TAS2783_SDCA_CTL_UDMPU_CLUSTER, 0):
+		return true;
+
+	default:
+		return false;
+	}
+}
+
 static const struct regmap_sdw_mbq_cfg tas2783_mbq_cfg = {
 	.mbq_size = tas2783_sdca_mbq_size,
+	.deferrable = tas2783_sdca_deferrable,
+	/*
+	 * NB: regmap_sdw_mbq_poll_busy() passes these to read_poll_timeout() as
+	 * (sleep_us, timeout_us) -- i.e. timeout_us is the poll interval and
+	 * retry_us the overall deadline, the opposite of what the kerneldoc on
+	 * struct regmap_sdw_mbq_cfg says. Values below follow the code, which
+	 * is what actually runs (checked against mainline master too).
+	 */
+	.timeout_us = 1000,
+	.retry_us = 100000,
 };
 
 static s32 tas2783_digital_getvol(struct snd_kcontrol *kcontrol,
