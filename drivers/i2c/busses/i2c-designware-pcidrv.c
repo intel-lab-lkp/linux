@@ -300,6 +300,7 @@ static void i2c_dw_pci_remove(struct pci_dev *pdev)
 
 	i2c_dw_disable(dev);
 
+	pm_runtime_dont_use_autosuspend(device);
 	pm_runtime_forbid(device);
 	pm_runtime_get_noresume(device);
 
