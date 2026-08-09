@@ -195,6 +195,7 @@ config VIRTIO_DMB
 	help
 	  Support devices that place their virtqueues and buffers in a shared
 	  memory region they own, rather than in memory the driver allocates.
+	  See Documentation/driver-api/virtio/virtio-dmb.rst.
 
 	  Enabling this adds a page allocator and per-page bookkeeping, both
 	  of which are set up only for a device that negotiates the feature.

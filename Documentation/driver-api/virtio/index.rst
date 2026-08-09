@@ -9,3 +9,4 @@ Virtio
 
    virtio
    writing_virtio_drivers
+   virtio-dmb
