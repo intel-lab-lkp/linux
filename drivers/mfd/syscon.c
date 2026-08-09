@@ -10,6 +10,7 @@
 
 #include <linux/cleanup.h>
 #include <linux/clk.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/hwspinlock.h>
 #include <linux/list.h>
@@ -193,6 +194,39 @@ static struct regmap *device_node_get_regmap(struct device_node *np,
 	return syscon->regmap;
 }
 
+static struct syscon *
+of_syscon_register_regmap_internal(struct device_node *np,
+				   struct regmap *regmap)
+{
+	struct syscon *entry, *syscon = NULL;
+
+	if (!np || !regmap)
+		return ERR_PTR(-EINVAL);
+
+	syscon = kzalloc_obj(*syscon);
+	if (!syscon)
+		return ERR_PTR(-ENOMEM);
+
+	/* check if syscon entry already exists */
+	mutex_lock(&syscon_list_lock);
+
+	list_for_each_entry(entry, &syscon_list, list)
+		if (entry->np == np) {
+			mutex_unlock(&syscon_list_lock);
+			kfree(syscon);
+			return ERR_PTR(-EEXIST);
+		}
+
+	syscon->regmap = regmap;
+	syscon->np = of_node_get(np);
+
+	/* register the regmap in syscon list */
+	list_add_tail(&syscon->list, &syscon_list);
+	mutex_unlock(&syscon_list_lock);
+
+	return syscon;
+}
+
 /**
  * of_syscon_register_regmap() - Register regmap for specified device node
  * @np: Device tree node
@@ -206,40 +240,49 @@ static struct regmap *device_node_get_regmap(struct device_node *np,
  */
 int of_syscon_register_regmap(struct device_node *np, struct regmap *regmap)
 {
-	struct syscon *entry, *syscon = NULL;
-	int ret;
-
-	if (!np || !regmap)
-		return -EINVAL;
-
-	syscon = kzalloc_obj(*syscon);
-	if (!syscon)
-		return -ENOMEM;
-
-	/* check if syscon entry already exists */
-	mutex_lock(&syscon_list_lock);
-
-	list_for_each_entry(entry, &syscon_list, list)
-		if (entry->np == np) {
-			ret = -EEXIST;
-			goto err_unlock;
-		}
-
-	syscon->regmap = regmap;
-	syscon->np = np;
-
-	/* register the regmap in syscon list */
-	list_add_tail(&syscon->list, &syscon_list);
-	mutex_unlock(&syscon_list_lock);
-
-	return 0;
-
-err_unlock:
-	mutex_unlock(&syscon_list_lock);
-	kfree(syscon);
-	return ret;
+	return PTR_ERR_OR_ZERO(of_syscon_register_regmap_internal(np, regmap));
 }
 EXPORT_SYMBOL_GPL(of_syscon_register_regmap);
+
+static void devm_of_syscon_register_regmap_release(void *data)
+{
+	struct syscon *syscon = data;
+
+	mutex_lock(&syscon_list_lock);
+	list_del(&syscon->list);
+	mutex_unlock(&syscon_list_lock);
+
+	of_node_put(syscon->np);
+	kfree(syscon);
+}
+
+/**
+ * devm_of_syscon_register_regmap() - Register a managed external syscon regmap
+ * @dev: Device that owns the regmap
+ * @np: Device tree node associated with the regmap
+ * @regmap: Pointer to the externally created regmap
+ *
+ * Register an externally created regmap object with syscon and remove it when
+ * @dev is unbound. Consumers must stop using the regmap before the provider is
+ * unbound, for example by establishing a managed device link to @dev.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int devm_of_syscon_register_regmap(struct device *dev,
+				   struct device_node *np,
+				   struct regmap *regmap)
+{
+	struct syscon *syscon;
+
+	syscon = of_syscon_register_regmap_internal(np, regmap);
+	if (IS_ERR(syscon))
+		return PTR_ERR(syscon);
+
+	return devm_add_action_or_reset(dev,
+					devm_of_syscon_register_regmap_release,
+					syscon);
+}
+EXPORT_SYMBOL_GPL(devm_of_syscon_register_regmap);
 
 /**
  * device_node_to_regmap() - Get or create a regmap for specified device node
