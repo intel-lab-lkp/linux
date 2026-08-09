@@ -3994,14 +3994,13 @@ static int amdgpu_ras_recovery_fini(struct amdgpu_device *adev)
 	if (con->page_retirement_thread)
 		kthread_stop(con->page_retirement_thread);
 
+	cancel_work_sync(&con->recovery_work);
+	cancel_delayed_work_sync(&con->page_retirement_dwork);
+
 	atomic_set(&con->page_retirement_req_cnt, 0);
 	atomic_set(&con->poison_creation_count, 0);
 
 	mutex_destroy(&con->page_rsv_lock);
-
-	cancel_work_sync(&con->recovery_work);
-
-	cancel_delayed_work_sync(&con->page_retirement_dwork);
 
 	amdgpu_ras_ecc_log_fini(&con->umc_ecc_log);
 
@@ -4751,6 +4750,8 @@ int amdgpu_ras_fini(struct amdgpu_device *adev)
 	if (!adev->ras_enabled || !con)
 		return 0;
 
+	cancel_delayed_work_sync(&con->ras_counte_delay_work);
+
 	amdgpu_ras_critical_region_fini(adev);
 	mutex_destroy(&con->critical_region_lock);
 
@@ -4784,8 +4785,6 @@ int amdgpu_ras_fini(struct amdgpu_device *adev)
 
 	if (AMDGPU_RAS_GET_FEATURES(con->features))
 		amdgpu_ras_disable_all_features(adev, 0);
-
-	cancel_delayed_work_sync(&con->ras_counte_delay_work);
 
 	amdgpu_ras_set_context(adev, NULL);
 	kfree(con);
