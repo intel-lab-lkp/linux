@@ -482,6 +482,7 @@ int ocfs2_begin_local_alloc_recovery(struct ocfs2_super *osb,
 	struct buffer_head *alloc_bh = NULL;
 	struct inode *inode = NULL;
 	struct ocfs2_dinode *alloc;
+	struct ocfs2_local_alloc *la;
 
 	trace_ocfs2_begin_local_alloc_recovery(slot_num);
 
@@ -513,6 +514,16 @@ int ocfs2_begin_local_alloc_recovery(struct ocfs2_super *osb,
 	memcpy((*alloc_copy), alloc_bh->b_data, alloc_bh->b_size);
 
 	alloc = (struct ocfs2_dinode *) alloc_bh->b_data;
+	la = OCFS2_LOCAL_ALLOC(alloc);
+
+	if ((la->la_size == 0) ||
+		(le16_to_cpu(la->la_size) > ocfs2_local_alloc_size(inode->i_sb))) {
+		mlog(ML_ERROR, "Local alloc size is invalid (la_size = %u)\n",
+			le16_to_cpu(la->la_size));
+		status = -EINVAL;
+		goto bail;
+	}
+
 	ocfs2_clear_local_alloc(alloc);
 
 	ocfs2_compute_meta_ecc(osb->sb, alloc_bh->b_data, &alloc->i_check);
