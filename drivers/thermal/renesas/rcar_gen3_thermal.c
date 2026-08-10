@@ -527,8 +527,11 @@ static int rcar_gen3_thermal_probe(struct platform_device *pdev)
 	priv->info = of_device_get_match_data(dev);
 	platform_set_drvdata(pdev, priv);
 
-	if (rcar_gen3_thermal_request_irqs(priv, pdev))
+	ret = rcar_gen3_thermal_request_irqs(priv, pdev);
+	if (ret == -ENXIO)
 		priv->ops.set_trips = NULL;
+	else if (ret)
+		return ret;
 
 	pm_runtime_enable(dev);
 	pm_runtime_get_sync(dev);
