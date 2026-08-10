@@ -122,8 +122,25 @@ err_unregister_subdev:
 	return ret;
 }
 
+static void sun4i_csi_notify_unbind(struct v4l2_async_notifier *notifier,
+				    struct v4l2_subdev *subdev,
+				    struct v4l2_async_connection *asd)
+{
+	struct sun4i_csi *csi = container_of(notifier, struct sun4i_csi,
+					     notifier);
+
+	/*
+	 * The remote subdev is being freed. Drop our cached pointer so that a
+	 * subsequent sun4i_csi_start_streaming() does not issue a
+	 * v4l2_subdev_call() on the now dangling source subdev. The call is
+	 * NULL-guarded and returns -ENODEV, so streaming fails cleanly.
+	 */
+	csi->src_subdev = NULL;
+}
+
 static const struct v4l2_async_notifier_operations sun4i_csi_notify_ops = {
 	.bound		= sun4i_csi_notify_bound,
+	.unbind		= sun4i_csi_notify_unbind,
 	.complete	= sun4i_csi_notify_complete,
 };
 
