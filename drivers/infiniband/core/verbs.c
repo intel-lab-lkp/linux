@@ -2040,6 +2040,7 @@ int ib_get_eth_speed(struct ib_device *dev, u32 port_num, u16 *speed, u8 *width)
 	u32 netdev_speed;
 	struct net_device *netdev;
 	struct ethtool_link_ksettings lksettings = {};
+	char name[IFNAMSIZ];
 
 	if (rdma_port_get_link_layer(dev, port_num) != IB_LINK_LAYER_ETHERNET)
 		return -EINVAL;
@@ -2049,7 +2050,15 @@ int ib_get_eth_speed(struct ib_device *dev, u32 port_num, u16 *speed, u8 *width)
 		return -ENODEV;
 
 	rtnl_lock();
+	if (READ_ONCE(netdev->reg_state) != NETREG_REGISTERED) {
+		dev_put(netdev);
+		rtnl_unlock();
+		return -ENODEV;
+	}
+
 	rc = __ethtool_get_link_ksettings(netdev, &lksettings);
+	if (rc)
+		strscpy(name, netdev->name, sizeof(name));
 	rtnl_unlock();
 
 	dev_put(netdev);
@@ -2060,7 +2069,7 @@ int ib_get_eth_speed(struct ib_device *dev, u32 port_num, u16 *speed, u8 *width)
 		netdev_speed = SPEED_1000;
 		if (rc)
 			pr_warn("%s speed is unknown, defaulting to %u\n",
-				netdev->name, netdev_speed);
+				name, netdev_speed);
 	}
 
 	ib_get_width_and_speed(netdev_speed, lksettings.lanes,
