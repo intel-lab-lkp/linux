@@ -225,6 +225,7 @@ struct ntb_transport_qp {
 	u32 direct_peer_session;
 	enum ntb_direct_state direct_state;
 	bool direct_tx_failed;
+	struct mutex direct_quiesce_lock; /* Serialize direct teardown */
 	void *rx_buff;
 	unsigned int rx_index;
 	unsigned int rx_max_entry;
@@ -569,6 +570,19 @@ static bool ntb_direct_tx_idle(struct ntb_transport_qp *qp)
 	return qp->direct_tx_issue == qp->direct_tx_cons;
 }
 
+static bool ntb_direct_peer_restarted(struct ntb_transport_qp *qp)
+{
+	struct ntb_direct_shared *shared = qp->direct_shared;
+	u32 peer_session = qp->direct_peer_session;
+	u32 session;
+
+	if (!shared || !peer_session)
+		return false;
+
+	session = READ_ONCE(shared->session);
+	return session && session != peer_session;
+}
+
 static bool ntb_direct_rx_drained(struct ntb_transport_qp *qp)
 {
 	struct ntb_direct_shared *shared = qp->direct_shared;
@@ -610,6 +624,8 @@ static bool ntb_direct_control_pending(struct ntb_transport_qp *qp)
 	return READ_ONCE(shared->session) != peer_session ||
 	       READ_ONCE(shared->quiesce) == session;
 }
+
+static void ntb_direct_tx_terminate(struct ntb_transport_qp *qp);
 
 static void ntb_direct_control_publish_locked(struct ntb_transport_qp *qp)
 {
@@ -664,9 +680,13 @@ static bool ntb_direct_control_progress(struct ntb_transport_qp *qp)
 
 		if (qp->direct_state == NTB_DIRECT_HANDSHAKE && peer_session) {
 			qp->direct_peer_session = peer_session;
-		} else if (qp->direct_state == NTB_DIRECT_ACTIVE && peer_session &&
+		} else if ((qp->direct_state == NTB_DIRECT_ACTIVE ||
+			    qp->direct_state == NTB_DIRECT_QUIESCING) &&
+			   peer_session &&
 			   peer_session != qp->direct_peer_session) {
 			qp->direct_state = NTB_DIRECT_QUIESCING;
+			cleanup = qp->client_ready;
+			goto out;
 		}
 
 		if (quiesce == qp->direct_session &&
@@ -714,12 +734,27 @@ static void ntb_direct_session_start(struct ntb_transport_qp *qp)
 	qp->direct_state = NTB_DIRECT_HANDSHAKE;
 }
 
+static void ntb_direct_begin_quiesce(struct ntb_transport_qp *qp)
+{
+	if (!ntb_direct_link_capable(qp))
+		return;
+
+	guard(spinlock_bh)(&qp->direct_lock);
+	if (qp->direct_state == NTB_DIRECT_HANDSHAKE)
+		qp->direct_state = qp->direct_peer_session ?
+			NTB_DIRECT_QUIESCING : NTB_DIRECT_QUIESCED;
+	else if (qp->direct_state == NTB_DIRECT_ACTIVE)
+		qp->direct_state = NTB_DIRECT_QUIESCING;
+}
+
 static void ntb_direct_quiesce(struct ntb_transport_qp *qp)
 {
-	bool done;
+	bool link_down, peer_reset, terminate, done;
 
 	if (!ntb_direct_link_capable(qp))
 		return;
+
+	guard(mutex)(&qp->direct_quiesce_lock);
 
 	scoped_guard(spinlock_bh, &qp->direct_lock) {
 		if (qp->direct_state == NTB_DIRECT_DOWN ||
@@ -734,7 +769,16 @@ static void ntb_direct_quiesce(struct ntb_transport_qp *qp)
 			return;
 		}
 		qp->direct_state = NTB_DIRECT_QUIESCING;
+		link_down = ntb_link_is_up(qp->ndev, NULL, NULL) != 1;
+		peer_reset = ntb_direct_peer_restarted(qp);
+		terminate = qp->direct_tx_failed || link_down || peer_reset;
 	}
+	if (terminate)
+		ntb_direct_tx_terminate(qp);
+
+	/* A peer starts a new session only after draining the old boundary. */
+	if (link_down || peer_reset)
+		goto quiesced;
 
 	/*
 	 * Keep the mappings until the peer acknowledges the final boundaries,
@@ -743,16 +787,31 @@ static void ntb_direct_quiesce(struct ntb_transport_qp *qp)
 	for (;;) {
 		ntb_direct_control_progress(qp);
 
-		scoped_guard(spinlock_bh, &qp->direct_lock)
+		scoped_guard(spinlock_bh, &qp->direct_lock) {
+			peer_reset = ntb_direct_peer_restarted(qp);
+			terminate = qp->direct_tx_failed || peer_reset;
 			done = ntb_direct_tx_idle(qp) &&
 			       ntb_direct_tx_acked(qp) &&
 			       ntb_direct_rx_drained(qp);
-		if (done || ntb_link_is_up(qp->ndev, NULL, NULL) != 1)
+		}
+
+		if (terminate) {
+			ntb_direct_tx_terminate(qp);
+			if (peer_reset)
+				goto quiesced;
+			continue;
+		}
+		if (ntb_link_is_up(qp->ndev, NULL, NULL) != 1) {
+			ntb_direct_tx_terminate(qp);
+			break;
+		}
+		if (done)
 			break;
 
 		msleep(NTB_DIRECT_TEARDOWN_RETRY_INTERVAL_MS);
 	}
 
+quiesced:
 	guard(spinlock_bh)(&qp->direct_lock);
 	qp->direct_state = NTB_DIRECT_QUIESCED;
 }
@@ -1521,6 +1580,7 @@ static void ntb_transport_link_cleanup(struct ntb_transport_ctx *nt)
 	for (i = 0; i < nt->qp_count; i++)
 		if (qp_bitmap_alloc & BIT_ULL(i)) {
 			qp = &nt->qp_vec[i];
+			ntb_direct_begin_quiesce(qp);
 			ntb_qp_link_cleanup(qp);
 			cancel_work_sync(&qp->link_cleanup);
 			cancel_delayed_work_sync(&qp->link_work);
@@ -1828,6 +1888,7 @@ static int ntb_transport_init_queue(struct ntb_transport_ctx *nt,
 	spin_lock_init(&qp->ntb_tx_free_q_lock);
 	spin_lock_init(&qp->ntb_tx_offl_q_lock);
 	spin_lock_init(&qp->direct_lock);
+	mutex_init(&qp->direct_quiesce_lock);
 
 	INIT_LIST_HEAD(&qp->rx_post_q);
 	INIT_LIST_HEAD(&qp->rx_pend_q);
@@ -3007,6 +3068,118 @@ unmap:
 	return rc;
 }
 
+static void ntb_direct_tx_stop(struct ntb_transport_qp *qp)
+{
+	struct dma_chan *chan = qp->direct_dma_chan;
+	int rc;
+
+	/* Do not release mappings until the DMA channel is confirmed stopped. */
+	do {
+		rc = dmaengine_terminate_sync(chan);
+		if (rc) {
+			dev_err_ratelimited(&qp->ndev->dev,
+					    "QP%u direct DMA termination failed: %d\n",
+					    qp->qp_num, rc);
+			msleep(NTB_DIRECT_TEARDOWN_RETRY_INTERVAL_MS);
+		}
+	} while (rc);
+}
+
+/*
+ * A CPU MMIO completion could pass an earlier DMA payload. Once the failed
+ * channel is stopped, publish terminal completions through that channel too.
+ */
+static bool ntb_direct_tx_publish_error(struct ntb_transport_qp *qp,
+					struct ntb_queue_entry *entry,
+					u32 idx)
+{
+	struct dma_async_tx_descriptor *completion;
+	struct dma_slave_config config = {
+		.direction = DMA_MEM_TO_DEV,
+		.dst_addr = entry->direct_cpl_addr,
+	};
+	struct dma_chan *chan = qp->direct_dma_chan;
+	dma_cookie_t cookie;
+	enum dma_status status;
+	dma_addr_t src;
+
+	qp->direct_tx_cpl[idx] = NTB_DIRECT_CPL_ERROR;
+	dma_wmb();
+	src = qp->direct_tx_cpl_dma + idx * sizeof(u32);
+
+	while (!ntb_direct_peer_restarted(qp) &&
+	       ntb_link_is_up(qp->ndev, NULL, NULL) == 1) {
+		completion = dmaengine_prep_config_single_safe(chan, src, sizeof(u32),
+							       DMA_MEM_TO_DEV,
+							       DMA_CTRL_ACK |
+							       DMA_PREP_INTERRUPT,
+							       &config);
+		if (completion) {
+			cookie = dmaengine_submit(completion);
+			if (!dma_submit_error(cookie)) {
+				dma_async_issue_pending(chan);
+				status = dma_sync_wait(chan, cookie);
+				if (status == DMA_COMPLETE)
+					return true;
+			}
+		}
+
+		ntb_direct_tx_stop(qp);
+		dev_err_ratelimited(&qp->ndev->dev,
+				    "QP%u direct DMA error completion failed; retrying\n",
+				    qp->qp_num);
+		msleep(NTB_DIRECT_TEARDOWN_RETRY_INTERVAL_MS);
+	}
+
+	return false;
+}
+
+static void ntb_direct_tx_terminate(struct ntb_transport_qp *qp)
+{
+	struct dma_chan *chan = qp->direct_dma_chan;
+	struct ntb_queue_entry *entry;
+	struct device *dma_dev;
+	bool notify = false;
+	u32 idx;
+
+	lockdep_assert_held(&qp->direct_quiesce_lock);
+	WARN_ON_ONCE(ntb_direct_tx_enabled(qp));
+
+	if (!chan)
+		return;
+
+	dma_dev = dmaengine_get_dma_device(chan);
+	ntb_direct_tx_stop(qp);
+
+	/*
+	 * QUIESCING blocks new submissions, and terminate_sync() has drained all
+	 * callbacks, so this function exclusively owns the issued queue.
+	 * Therefore, qp->direct_lock is not needed while draining it.
+	 */
+	while (!ntb_direct_tx_idle(qp)) {
+		idx = ntb_direct_ring_idx(qp, qp->direct_tx_cons);
+		entry = list_first_entry(&qp->direct_tx_q,
+					 struct ntb_queue_entry, entry);
+
+		notify |= ntb_direct_tx_publish_error(qp, entry, idx);
+
+		list_del(&entry->entry);
+		qp->direct_tx_cons++;
+
+		dma_unmap_single(dma_dev, entry->direct_dma_addr, entry->len,
+				 DMA_TO_DEVICE);
+		entry->errors++;
+		if (qp->tx_handler)
+			qp->tx_handler(qp, qp->cb_data, entry->cb_data, -EIO);
+		ntb_list_add(&qp->ntb_tx_free_q_lock, &entry->entry,
+			     &qp->tx_free_q);
+	}
+	qp->direct_tx_failed = false;
+
+	if (notify && ntb_link_is_up(qp->ndev, NULL, NULL) == 1)
+		ntb_transport_notify_peer(qp);
+}
+
 static int ntb_process_tx(struct ntb_transport_qp *qp,
 			  struct ntb_queue_entry *entry)
 {
@@ -3287,9 +3460,12 @@ void ntb_transport_free_queue(struct ntb_transport_qp *qp)
 
 	pdev = qp->ndev->pdev;
 
+	ntb_direct_begin_quiesce(qp);
 	cancel_work_sync(&qp->link_cleanup);
 	cancel_delayed_work_sync(&qp->link_work);
 	ntb_direct_quiesce(qp);
+	if (qp->direct_dma_chan)
+		dmaengine_synchronize(qp->direct_dma_chan);
 	qp->active = false;
 
 	if (qp->tx_offload_thread) {
@@ -3525,22 +3701,37 @@ EXPORT_SYMBOL_GPL(ntb_transport_link_up);
  */
 void ntb_transport_link_down(struct ntb_transport_qp *qp)
 {
+	bool direct;
 	int val;
 
 	if (!qp)
 		return;
 
 	qp->client_ready = false;
+	direct = ntb_direct_link_capable(qp);
+	if (direct) {
+		ntb_direct_begin_quiesce(qp);
+		disable_work_sync(&qp->link_cleanup);
+		cancel_delayed_work_sync(&qp->link_work);
+	}
 	ntb_direct_quiesce(qp);
 
 	val = ntb_spad_read(qp->ndev, QP_LINKS);
 
 	ntb_peer_spad_write(qp->ndev, PIDX, QP_LINKS, val & ~BIT(qp->qp_num));
 
-	if (qp->link_is_up)
-		ntb_send_link_down(qp);
-	else
+	if (qp->link_is_up) {
+		/* An established direct session uses QUIESCE as link-down. */
+		if (direct && ntb_direct_tx_acked(qp))
+			ntb_qp_link_down_reset(qp);
+		else
+			ntb_send_link_down(qp);
+	} else {
 		cancel_delayed_work_sync(&qp->link_work);
+	}
+
+	if (direct)
+		enable_work(&qp->link_cleanup);
 }
 EXPORT_SYMBOL_GPL(ntb_transport_link_down);
 
