@@ -977,11 +977,12 @@ void lruvec_stat_mod_folio(struct folio *folio, enum node_stat_item idx,
 			     int val)
 {
 	struct mem_cgroup *memcg;
+	struct mem_cgroup_per_node *mz;
 	pg_data_t *pgdat = folio_pgdat(folio);
 	struct lruvec *lruvec;
 
 	rcu_read_lock();
-	memcg = folio_memcg(folio);
+	memcg = folio_memcg_check(folio);
 	/* Untracked pages have no memcg, no lruvec. Update only the node */
 	if (!memcg) {
 		rcu_read_unlock();
@@ -989,7 +990,18 @@ void lruvec_stat_mod_folio(struct folio *folio, enum node_stat_item idx,
 		return;
 	}
 
-	lruvec = mem_cgroup_lruvec(memcg, pgdat);
+	mz = memcg->nodeinfo[pgdat->node_id];
+	if (unlikely(!mz)) {
+		/*
+		 * nodeinfo[nid] is NULL when a node is onlined after the
+		 * memcg was created. Fall back to node-level accounting.
+		 */
+		rcu_read_unlock();
+		mod_node_page_state(pgdat, idx, val);
+		return;
+	}
+
+	lruvec = &mz->lruvec;
 	mod_lruvec_state(lruvec, idx, val);
 	rcu_read_unlock();
 }
@@ -1320,6 +1332,8 @@ static void __invalidate_reclaim_iterators(struct mem_cgroup *from,
 
 	for_each_node(nid) {
 		mz = from->nodeinfo[nid];
+		if (!mz)
+			continue;
 		iter = &mz->iter;
 		cmpxchg(&iter->position, dead_memcg, NULL);
 	}
