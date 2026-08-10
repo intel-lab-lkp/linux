@@ -96,12 +96,6 @@ static const uint32_t ipu_plane_rgb_formats[] = {
 	DRM_FORMAT_BGRA8888,
 	DRM_FORMAT_BGRX8888,
 	DRM_FORMAT_RGB565,
-	DRM_FORMAT_RGB565_A8,
-	DRM_FORMAT_BGR565_A8,
-	DRM_FORMAT_RGB888_A8,
-	DRM_FORMAT_BGR888_A8,
-	DRM_FORMAT_RGBX8888_A8,
-	DRM_FORMAT_BGRX8888_A8,
 };
 
 static const uint64_t ipu_format_modifiers[] = {
