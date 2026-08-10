@@ -16,7 +16,9 @@ description:
 
 properties:
   compatible:
-    const: qcom,ipq806x-usb-phy-ss
+    oneOf:
+      - const: qcom,ipq806x-usb-phy-ss
+      - const: qcom,msm8974-usb-phy-ss
 
   "#phy-cells":
     const: 0
