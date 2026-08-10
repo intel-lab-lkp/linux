@@ -75,6 +75,16 @@ config DEVFREQ_GOV_PASSIVE
 
 comment "DEVFREQ Drivers"
 
+config ARM_AIROHA_DEVFREQ
+	tristate "Scaling support for Airoha SoC"
+	depends on ARCH_AIROHA || COMPILE_TEST
+	select DEVFREQ_GOV_PASSIVE
+	help
+	  This adds the DEVFREQ driver for the Airoha SoC.
+
+	  The driver register with the cpufreq notifier and find the right frequency
+	  based on the required OPP set in DT.
+
 config ARM_EXYNOS_BUS_DEVFREQ
 	tristate "ARM Exynos Generic Memory Bus DEVFREQ Driver"
 	depends on ARCH_EXYNOS || COMPILE_TEST
