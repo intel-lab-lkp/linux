@@ -1164,12 +1164,18 @@ static int kvm_loongarch_cpucfg_set_attr(struct kvm_vcpu *vcpu,
 		if (val & ~valid)
 			return -EINVAL;
 
-		/* All vCPUs need set the same PV features */
-		if ((kvm->arch.pv_features & LOONGARCH_PV_FEAT_UPDATED)
-				&& ((kvm->arch.pv_features & valid) != val))
-			return -EINVAL;
-		kvm->arch.pv_features = val | LOONGARCH_PV_FEAT_UPDATED;
-		return 0;
+		/* Atomically install val; the cmpxchg serializes concurrent setters. */
+		for (;;) {
+			unsigned long old, new;
+
+			old = READ_ONCE(kvm->arch.pv_features);
+			if ((old & LOONGARCH_PV_FEAT_UPDATED) &&
+			    ((old & valid) != val))
+				return -EINVAL;
+			new = val | LOONGARCH_PV_FEAT_UPDATED;
+			if (cmpxchg(&kvm->arch.pv_features, old, new) == old)
+				return 0;
+		}
 	default:
 		return -ENXIO;
 	}
