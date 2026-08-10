@@ -247,6 +247,7 @@ struct __attribute__ ((__packed__)) vmcb_control_area {
 
 #define SVM_MISC2_ENABLE_V_LBR	BIT_ULL(0)
 #define SVM_MISC2_ENABLE_V_VMLOAD_VMSAVE	BIT_ULL(1)
+#define SVM_MISC2_ENABLE_V_PMC	BIT_ULL(3)
 
 #define SVM_TSC_RATIO_RSVD	0xffffff0000000000ULL
 #define SVM_TSC_RATIO_MIN	0x0000000000000001ULL

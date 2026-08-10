@@ -179,6 +179,9 @@ module_param(vnmi, bool, 0444);
 
 module_param(enable_mediated_pmu, bool, 0444);
 
+bool vpmc = true;
+module_param(vpmc, bool, 0444);
+
 static bool __ro_after_init svm_gp_erratum_intercept = true;
 
 static u8 rsm_ins_bytes[] = "\x0f\xaa";
@@ -1266,6 +1269,9 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
 		sev_init_vmcb(svm, init_event);
 
 	svm_hv_init_vmcb(vmcb);
+
+	if (kvm_vcpu_has_mediated_pmu_caps(vcpu, KVM_MEDIATED_PMU_CAP_HW_SWITCHED))
+		control->misc_ctl2 |= SVM_MISC2_ENABLE_V_PMC;
 
 	kvm_make_request(KVM_REQ_RECALC_INTERCEPTS, vcpu);
 
@@ -3563,6 +3569,30 @@ static void dump_vmcb(struct kvm_vcpu *vcpu)
 	       "excp_from:", save->last_excp_from,
 	       "excp_to:", save->last_excp_to);
 
+	if (kvm_vcpu_has_mediated_pmu_caps(vcpu, KVM_MEDIATED_PMU_CAP_HW_SWITCHED)) {
+		pr_err("%-15s %016llx %-13s %016llx\n",
+		       "perf_ctl0:", save->pmc[0].perf_ctl,
+		       "perf_ctr0:", save->pmc[0].perf_ctr);
+		pr_err("%-15s %016llx %-13s %016llx\n",
+		       "perf_ctl1:", save->pmc[1].perf_ctl,
+		       "perf_ctr1:", save->pmc[1].perf_ctr);
+		pr_err("%-15s %016llx %-13s %016llx\n",
+		       "perf_ctl2:", save->pmc[2].perf_ctl,
+		       "perf_ctr2:", save->pmc[2].perf_ctr);
+		pr_err("%-15s %016llx %-13s %016llx\n",
+		       "perf_ctl3:", save->pmc[3].perf_ctl,
+		       "perf_ctr3:", save->pmc[3].perf_ctr);
+		pr_err("%-15s %016llx %-13s %016llx\n",
+		       "perf_ctl4:", save->pmc[4].perf_ctl,
+		       "perf_ctr4:", save->pmc[4].perf_ctr);
+		pr_err("%-15s %016llx %-13s %016llx\n",
+		       "perf_ctl5:", save->pmc[5].perf_ctl,
+		       "perf_ctr5:", save->pmc[5].perf_ctr);
+		pr_err("%-15s %016llx %-13s %016llx\n",
+		       "perf_cntr_global_control:", save->perf_cntr_global_control,
+		       "perf_cntr_global_status:", save->perf_cntr_global_status);
+	}
+
 	if (is_sev_es_guest(vcpu)) {
 		struct sev_es_save_area *vmsa = (struct sev_es_save_area *)save;
 
@@ -4452,6 +4482,14 @@ static noinstr void svm_vcpu_enter_exit(struct kvm_vcpu *vcpu, unsigned enter_fl
 
 	amd_clear_divider();
 
+	/*
+	 * On #VMEXIT, PerfCntrGlobalCtl goes back to its reset state since
+	 * its save slot is of Swap Type C. All enable bits are set but PMC
+	 * virtualization requires them to be cleared before VMRUN.
+	 */
+	if (kvm_vcpu_has_mediated_pmu_caps(vcpu, KVM_MEDIATED_PMU_CAP_HW_SWITCHED))
+		wrmsrq(MSR_AMD64_PERF_CNTR_GLOBAL_CTL, 0);
+
 	if (is_sev_es_guest(vcpu))
 		__svm_sev_es_vcpu_run(svm, enter_flags,
 				      sev_es_host_save_area(sd));
@@ -5289,6 +5327,9 @@ static void svm_vm_destroy(struct kvm *kvm)
 
 static int svm_vm_init(struct kvm *kvm)
 {
+	if (vpmc)
+		kvm_set_mediated_pmu_caps(kvm, KVM_MEDIATED_PMU_CAP_HW_SWITCHED);
+
 	sev_vm_init(kvm);
 
 	if (!pause_filter_count || !pause_filter_thresh)
@@ -5734,6 +5775,16 @@ static __init int svm_hardware_setup(void)
 
 	if (!enable_pmu)
 		pr_info("PMU virtualization is disabled\n");
+
+	/*
+	 * PMC virtualization does not raise host PMIs that need to be injected.
+	 * Instead, it requires VNMI or AVIC for guest PMI delivery. AVIC can,
+	 * however, get inhibited so make VNMI the hard requirement.
+	 */
+	vpmc = vpmc && vnmi && enable_mediated_pmu &&
+	       cpu_feature_enabled(X86_FEATURE_PERFCTR_VIRT);
+	if (vpmc)
+		pr_info("PMC virtualization supported\n");
 
 	svm_set_cpu_caps();
 
