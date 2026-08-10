@@ -134,8 +134,8 @@ void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding)
 	 */
 	synchronize_net();
 
-	if (binding->list.next)
-		list_del(&binding->list);
+	if (binding->sock_priv)
+		xa_erase(&binding->sock_priv->bindings, binding->id);
 
 	xa_for_each(&binding->bound_rxqs, xa_idx, rxq) {
 		const struct pp_memory_provider_params mp_params = {
@@ -193,6 +193,7 @@ net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
 	struct dma_buf *dmabuf;
 	unsigned int sg_idx, i;
 	unsigned long virtual;
+	void *res;
 	int err;
 
 	if (!dma_dev) {
@@ -325,7 +326,13 @@ net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
 	if (err < 0)
 		goto err_free_chunks;
 
-	list_add(&binding->list, &priv->bindings);
+	binding->sock_priv = priv;
+	res = xa_store(&priv->bindings, binding->id, binding, GFP_KERNEL);
+	if (xa_is_err(res)) {
+		err = xa_err(res);
+		xa_erase(&net_devmem_dmabuf_bindings, binding->id);
+		goto err_free_chunks;
+	}
 
 	return binding;
 
