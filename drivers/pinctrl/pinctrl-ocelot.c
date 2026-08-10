@@ -2369,6 +2369,8 @@ static int ocelot_gpiochip_register(struct platform_device *pdev,
 	gc->label = "ocelot-gpio";
 
 	irq = platform_get_irq_optional(pdev, 0);
+	if (irq < 0 && irq != -ENXIO)
+		return irq;
 	if (irq > 0) {
 		girq = &gc->irq;
 		gpio_irq_chip_set_chip(girq, &ocelot_irqchip);
