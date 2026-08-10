@@ -357,6 +357,89 @@ static bool noncont_cat_feature_check(const struct resctrl_test *test)
 	return resource_info_file_exists(test->resource, "sparse_masks");
 }
 
+/*
+ * L3_CBM_VALIDATE - Verify L3 CBM write validation.
+ *
+ * A full CBM must be accepted. An empty CBM is valid only when min_cbm_bits
+ * is zero. Masks with bits outside cbm_mask or fewer than min_cbm_bits must
+ * be rejected.
+ */
+static int cbm_validate_run_test(const struct resctrl_test *test,
+				 const struct user_params *uparams)
+{
+	unsigned int min_cbm_bits, contiguous_bits;
+	unsigned long long invalid_mask;
+	unsigned int count_of_bits;
+	unsigned long full_mask;
+	unsigned int start;
+	char schemata[64];
+	int ret;
+
+	ret = get_full_cbm(test->resource, &full_mask);
+	if (ret)
+		return ret;
+
+	ret = resource_info_unsigned_get(test->resource, "min_cbm_bits",
+					 &min_cbm_bits);
+	if (ret)
+		return ret;
+
+	count_of_bits = count_bits(full_mask);
+
+	/* A valid full CBM must be accepted. */
+	snprintf(schemata, sizeof(schemata), "%lx", full_mask);
+	if (write_schemata("", schemata, uparams->cpu, test->resource)) {
+		ksft_print_msg("Valid CBM 0x%lx was rejected\n", full_mask);
+		return KSFT_FAIL;
+	}
+
+	ret = write_schemata("", "0", uparams->cpu, test->resource);
+	if (min_cbm_bits && !ret) {
+		ksft_print_msg("Empty CBM was accepted, must be rejected\n");
+		return KSFT_FAIL;
+	}
+	if (!min_cbm_bits && ret) {
+		ksft_print_msg("Empty CBM was rejected, must be accepted\n");
+		return KSFT_FAIL;
+	}
+
+	/* A mask with a bit outside cbm_mask must be rejected. */
+	invalid_mask = (unsigned long long)full_mask | (1ULL << count_of_bits);
+	snprintf(schemata, sizeof(schemata), "%llx", invalid_mask);
+	if (!write_schemata("", schemata, uparams->cpu, test->resource)) {
+		ksft_print_msg("Out-of-range CBM 0x%llx was accepted, must be rejected\n",
+			       invalid_mask);
+		return KSFT_FAIL;
+	}
+
+	/*
+	 * When min_cbm_bits is greater than one, a non-empty mask with fewer
+	 * bits must be rejected.
+	 */
+	if (min_cbm_bits > 1) {
+		contiguous_bits = count_contiguous_bits(full_mask, &start);
+		if (contiguous_bits < min_cbm_bits) {
+			ksft_print_msg("Full CBM has %u contiguous bits, fewer than "
+				       "min_cbm_bits=%u\n",
+				       contiguous_bits, min_cbm_bits);
+			return KSFT_FAIL;
+		}
+
+		invalid_mask = create_bit_mask(start, min_cbm_bits - 1);
+		snprintf(schemata, sizeof(schemata), "%llx", invalid_mask);
+		if (!write_schemata("", schemata, uparams->cpu,
+				    test->resource)) {
+			ksft_print_msg("CBM 0x%llx with too few bits was accepted\n",
+				       invalid_mask);
+			return KSFT_FAIL;
+		}
+	}
+
+	ksft_print_msg("Pass: L3 CBM writes were validated correctly\n");
+
+	return 0;
+}
+
 struct resctrl_test l3_cat_test = {
 	.name = "L3_CAT",
 	.group = "CAT",
@@ -364,6 +447,14 @@ struct resctrl_test l3_cat_test = {
 	.feature_check = test_resource_feature_check,
 	.run_test = cat_run_test,
 	.cleanup = cat_test_cleanup,
+};
+
+struct resctrl_test l3_cbm_validate_test = {
+	.name = "L3_CBM_VALIDATE",
+	.group = "CAT",
+	.resource = "L3",
+	.feature_check = test_resource_feature_check,
+	.run_test = cbm_validate_run_test,
 };
 
 struct resctrl_test l3_noncont_cat_test = {
