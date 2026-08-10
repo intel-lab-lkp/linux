@@ -440,6 +440,192 @@ static int cbm_validate_run_test(const struct resctrl_test *test,
 	return 0;
 }
 
+/*
+ * L3_BIT_USAGE - Verify info/L3/bit_usage reflects the allocation.
+ *
+ * bit_usage annotates each cache portion. 'X' and 'S' mean software uses the
+ * portion, while 'H' and '0' mean it does not. With only the root group
+ * present, bit_usage must track the root CBM bit-for-bit.
+ */
+static bool bit_used_by_sw(char c)
+{
+	return c == 'X' || c == 'S';
+}
+
+static bool bit_unused_by_sw(char c)
+{
+	return c == 'H' || c == '0';
+}
+
+static bool bit_usage_valid(char c)
+{
+	return bit_used_by_sw(c) || bit_unused_by_sw(c);
+}
+
+static int bit_usage_for_domain(const char *resource, int domain_id,
+				char *out, size_t out_len)
+{
+	char path[PATH_MAX], *line = NULL, *saveptr;
+	char *usage, *endptr, *id;
+	size_t line_len = 0;
+	long parsed_id;
+	ssize_t bytes;
+	FILE *fp;
+	int ret;
+
+	snprintf(path, sizeof(path), "%s/%s/bit_usage", INFO_PATH, resource);
+	fp = fopen(path, "r");
+	if (!fp) {
+		ksft_perror("Error opening bit_usage");
+		return -errno;
+	}
+
+	bytes = getline(&line, &line_len, fp);
+	fclose(fp);
+	if (bytes < 0) {
+		ksft_print_msg("Error reading bit_usage\n");
+		free(line);
+		return -EIO;
+	}
+
+	ret = -ENOENT;
+	for (id = strtok_r(line, "=;\n", &saveptr); id;
+	     id = strtok_r(NULL, "=;\n", &saveptr)) {
+		usage = strtok_r(NULL, "=;\n", &saveptr);
+		if (!usage)
+			break;
+
+		errno = 0;
+		parsed_id = strtol(id, &endptr, 10);
+		if (errno || *endptr || parsed_id != domain_id)
+			continue;
+
+		ret = snprintf(out, out_len, "%s", usage);
+		if (ret < 0 || (size_t)ret >= out_len)
+			ret = -ENOSPC;
+		else
+			ret = 0;
+		goto out;
+	}
+
+	ksft_print_msg("No bit_usage entry for domain %d\n", domain_id);
+out:
+	free(line);
+	return ret;
+}
+
+static int bit_usage_check_mask(const struct resctrl_test *test, int cpu,
+				unsigned long mask, unsigned int count_of_bits)
+{
+	char usage[sizeof(unsigned long) * 8 + 1];
+	char schemata[64];
+	unsigned int i;
+	int domain_id;
+	int ret;
+
+	snprintf(schemata, sizeof(schemata), "%lx", mask);
+	ret = write_schemata("", schemata, cpu, test->resource);
+	if (ret) {
+		ksft_print_msg("Failed to set CBM 0x%lx\n", mask);
+		return ret;
+	}
+
+	ret = get_domain_id(test->resource, cpu, &domain_id);
+	if (ret < 0)
+		return ret;
+
+	ret = bit_usage_for_domain(test->resource, domain_id, usage,
+				   sizeof(usage));
+	if (ret)
+		return ret;
+
+	if (strlen(usage) != count_of_bits) {
+		ksft_print_msg("bit_usage \"%s\" has %zu chars, expected %u\n",
+			       usage, strlen(usage), count_of_bits);
+		return KSFT_FAIL;
+	}
+
+	for (i = 0; i < count_of_bits; i++) {
+		bool in_cbm;
+		int bit;
+		char c;
+
+		bit = count_of_bits - 1 - i;
+		in_cbm = (mask >> bit) & 1;
+		c = usage[i];
+
+		if (!bit_usage_valid(c)) {
+			ksft_print_msg("Invalid bit_usage character '%c' for CBM 0x%lx\n",
+				       c, mask);
+			return KSFT_FAIL;
+		}
+		if (in_cbm != bit_used_by_sw(c)) {
+			ksft_print_msg("CBM 0x%lx portion %d shows '%c', %s allocation\n",
+				       mask, bit, c, in_cbm ? "in" : "not in");
+			return KSFT_FAIL;
+		}
+	}
+
+	return 0;
+}
+
+static int bit_usage_run_test(const struct resctrl_test *test,
+			      const struct user_params *uparams)
+{
+	unsigned int count_of_bits, min_cbm_bits, partial_bits;
+	unsigned long full_mask, high_mask, masks[3];
+	unsigned int nr_masks = 1;
+	unsigned int i;
+	int ret;
+
+	ret = get_full_cbm(test->resource, &full_mask);
+	if (ret)
+		return ret;
+
+	ret = resource_info_unsigned_get(test->resource, "min_cbm_bits",
+					 &min_cbm_bits);
+	if (ret)
+		return ret;
+
+	count_of_bits = count_bits(full_mask);
+
+	/* Every cache portion. */
+	masks[0] = full_mask;
+
+	if (count_of_bits > min_cbm_bits) {
+		partial_bits = count_of_bits / 2;
+		partial_bits = max(partial_bits, min_cbm_bits);
+
+		/* Lowest valid partial allocation. */
+		masks[nr_masks++] = create_bit_mask(0, partial_bits);
+
+		if (partial_bits) {
+			/* Highest valid partial allocation. */
+			high_mask = create_bit_mask(count_of_bits - partial_bits,
+						    partial_bits);
+			if (high_mask != masks[nr_masks - 1])
+				masks[nr_masks++] = high_mask;
+		}
+	}
+
+	for (i = 0; i < nr_masks; i++) {
+		ret = bit_usage_check_mask(test, uparams->cpu, masks[i],
+					   count_of_bits);
+		if (ret)
+			return ret;
+	}
+
+	ksft_print_msg("Pass: bit_usage reflects the allocation\n");
+
+	return 0;
+}
+
+static bool bit_usage_feature_check(const struct resctrl_test *test)
+{
+	return test_resource_feature_check(test) &&
+	       resource_info_file_exists(test->resource, "bit_usage");
+}
+
 struct resctrl_test l3_cat_test = {
 	.name = "L3_CAT",
 	.group = "CAT",
@@ -455,6 +641,14 @@ struct resctrl_test l3_cbm_validate_test = {
 	.resource = "L3",
 	.feature_check = test_resource_feature_check,
 	.run_test = cbm_validate_run_test,
+};
+
+struct resctrl_test l3_bit_usage_test = {
+	.name = "L3_BIT_USAGE",
+	.group = "CAT",
+	.resource = "L3",
+	.feature_check = bit_usage_feature_check,
+	.run_test = bit_usage_run_test,
 };
 
 struct resctrl_test l3_noncont_cat_test = {
