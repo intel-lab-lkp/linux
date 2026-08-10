@@ -34,6 +34,8 @@ required:
   - compatible
   - reg
   - interrupts
+  - clocks
+  - clock-names
 
 additionalProperties: false
 
@@ -43,5 +45,7 @@ examples:
         compatible = "xlnx,usb2-device-4.00.a";
         interrupts = <0x0 0x39 0x1>;
         reg = <0xee000000 0xc00>;
+        clocks = <&dummy>;
+        clock-names = "s_axi_aclk";
         xlnx,has-builtin-dma;
     };
