@@ -497,6 +497,22 @@ static void ipu_di_config_clock(struct ipu_di *di,
 		clk_get_rate(di->clk_di),
 		clk == di->clk_di ? "DI" : "IPU",
 		clk_get_rate(di->clk_di_pixel) / (clkgen0 >> 4));
+
+	/*
+	 * With CLKMODE_SYNC the encoder programs the pixel clock after us, so
+	 * there is nothing to check yet. Otherwise the rate is final, and a
+	 * wrong one only shows up later as a "flip_done timed out".
+	 */
+	if (!(sig->clkflags & IPU_DI_CLKMODE_SYNC)) {
+		unsigned long rate = clk_get_rate(di->clk_di_pixel) /
+				     (clkgen0 >> 4);
+
+		if (abs((long)(rate - sig->mode.pixelclock)) >
+		    sig->mode.pixelclock / 100)
+			dev_err(di->ipu->dev,
+				"DI%d: cannot generate %luHz pixel clock, got %luHz\n",
+				di->id, sig->mode.pixelclock, rate);
+	}
 }
 
 /*
