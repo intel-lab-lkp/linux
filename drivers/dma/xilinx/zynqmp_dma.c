@@ -729,6 +729,11 @@ static irqreturn_t zynqmp_dma_irq_handler(int irq, void *data)
 	u32 isr, imr, status;
 	irqreturn_t ret = IRQ_NONE;
 
+	PM_RUNTIME_ACQUIRE_IF_ACTIVE(chan->dev, pm);
+	if (IS_ENABLED(CONFIG_PM) && pm_runtime_enabled(chan->dev) &&
+	    PM_RUNTIME_ACQUIRE_ERR(&pm))
+		return IRQ_NONE;
+
 	isr = readl(chan->regs + ZYNQMP_DMA_ISR);
 	imr = readl(chan->regs + ZYNQMP_DMA_IMR);
 	status = isr & ~imr;
