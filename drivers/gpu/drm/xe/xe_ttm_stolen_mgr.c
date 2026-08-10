@@ -180,12 +180,22 @@ extern struct resource intel_graphics_stolen_res;
 static u64 detect_stolen(struct xe_device *xe, struct xe_ttm_stolen_mgr *mgr)
 {
 #ifdef CONFIG_X86
+	u64 stolen_size, wopcm_size;
+
 	/* Map into GGTT */
 	mgr->io_base = pci_resource_start(to_pci_dev(xe->drm.dev), 2);
 
 	/* Stolen memory is x86 only */
 	mgr->stolen_base = intel_graphics_stolen_res.start;
-	return resource_size(&intel_graphics_stolen_res);
+	stolen_size = resource_size(&intel_graphics_stolen_res);
+
+	/* Carve out the top of DSM as it contains the reserved WOPCM region */
+	wopcm_size = get_wopcm_size(xe);
+	if (drm_WARN_ON(&xe->drm, !wopcm_size))
+		return 0;
+
+	xe_assert(xe, stolen_size >= wopcm_size);
+	return stolen_size - wopcm_size;
 #else
 	return 0;
 #endif
