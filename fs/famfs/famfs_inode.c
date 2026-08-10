@@ -29,6 +29,9 @@
 
 #define FAMFS_DEFAULT_MODE	0755
 
+static const struct inode_operations famfs_file_inode_operations;
+static const struct inode_operations famfs_dir_inode_operations;
+
 static struct inode *
 famfs_get_inode(
 	struct super_block *sb,
@@ -55,11 +58,11 @@ famfs_get_inode(
 		init_special_inode(inode, mode, dev);
 		break;
 	case S_IFREG:
-		inode->i_op = NULL /* famfs_file_inode_operations */;
+		inode->i_op = &famfs_file_inode_operations;
 		inode->i_fop = NULL /* &famfs_file_operations */;
 		break;
 	case S_IFDIR:
-		inode->i_op = NULL /* famfs_dir_inode_operations */;
+		inode->i_op = &famfs_dir_inode_operations;
 		inode->i_fop = &simple_dir_operations;
 
 		/* Directory inodes start off with i_nlink == 2 (for ".") */
@@ -72,6 +75,286 @@ famfs_get_inode(
 	}
 	return inode;
 }
+
+/***************************************************************************
+ * famfs inode_operations
+ */
+
+static int
+famfs_setattr(
+	struct mnt_idmap *idmap,
+	struct dentry *dentry,
+	struct iattr *iattr)
+{
+	struct inode *inode = d_inode(dentry);
+	struct famfs_fs_info *fsi = inode->i_sb->s_fs_info;
+
+	/* Resizing a famfs file (its size is pinned to the fmap) */
+	if ((iattr->ia_valid & ATTR_SIZE) &&
+	    !famfs_opt_enabled(fsi, FAMFS_OPT_TRUNCATE) &&
+	    iattr->ia_size != i_size_read(inode))
+		return -EPERM;
+	if ((iattr->ia_valid & ATTR_MODE) &&
+	    !famfs_opt_enabled(fsi, FAMFS_OPT_CHMOD))
+		return -EPERM;
+	if ((iattr->ia_valid & (ATTR_UID | ATTR_GID)) &&
+	    !famfs_opt_enabled(fsi, FAMFS_OPT_CHOWN))
+		return -EPERM;
+	if ((iattr->ia_valid & (ATTR_ATIME | ATTR_MTIME)) &&
+	    !famfs_opt_enabled(fsi, FAMFS_OPT_UTIMES))
+		return -EPERM;
+
+	return simple_setattr(idmap, dentry, iattr);
+}
+
+static const struct inode_operations famfs_file_inode_operations = {
+	/* All generic */
+	.setattr	   = famfs_setattr,
+	.getattr	   = simple_getattr,
+};
+
+/*
+ * Internal inode creation helper, shared by ->create, ->mkdir, ->mknod and
+ * ->symlink. Each of those callers is responsible for its own FAMFS_OPT_*
+ * permission check before getting here.
+ */
+static int
+famfs_mknod(
+	struct mnt_idmap *idmap,
+	struct inode *dir,
+	struct dentry *dentry,
+	umode_t mode,
+	dev_t dev)
+{
+	struct famfs_fs_info *fsi = dir->i_sb->s_fs_info;
+	struct inode *inode;
+
+	if (fsi->deverror)
+		return -ENODEV;
+
+	inode = famfs_get_inode(dir->i_sb, dir, mode, dev);
+	if (!inode)
+		return -ENOSPC;
+
+	d_make_persistent(dentry, inode);
+	/* Adding an entry updates the parent directory's mtime/ctime */
+	inode_set_mtime_to_ts(dir, inode_set_ctime_current(dir));
+
+	return 0;
+}
+
+static struct dentry *
+famfs_mkdir(
+	struct mnt_idmap *idmap,
+	struct inode *dir,
+	struct dentry *dentry,
+	umode_t mode)
+{
+	struct famfs_fs_info *fsi = dir->i_sb->s_fs_info;
+	int rc;
+
+	if (fsi->deverror)
+		return ERR_PTR(-ENODEV);
+	if (!famfs_opt_enabled(fsi, FAMFS_OPT_MKDIR))
+		return ERR_PTR(-EPERM);
+
+	rc = famfs_mknod(&nop_mnt_idmap, dir, dentry, mode | S_IFDIR, 0);
+	if (rc)
+		return ERR_PTR(rc);
+
+	inc_nlink(dir);
+
+	return ERR_PTR(0);
+}
+
+static int
+famfs_create(
+	struct mnt_idmap *idmap,
+	struct inode *dir,
+	struct dentry *dentry,
+	umode_t mode,
+	bool excl)
+{
+	struct famfs_fs_info *fsi = dir->i_sb->s_fs_info;
+
+	if (fsi->deverror)
+		return -ENODEV;
+	if (!famfs_opt_enabled(fsi, FAMFS_OPT_CREATE))
+		return -EPERM;
+
+	return famfs_mknod(&nop_mnt_idmap, dir, dentry, mode | S_IFREG, 0);
+}
+
+static int
+famfs_mknod_op(
+	struct mnt_idmap *idmap,
+	struct inode *dir,
+	struct dentry *dentry,
+	umode_t mode,
+	dev_t dev)
+{
+	struct famfs_fs_info *fsi = dir->i_sb->s_fs_info;
+
+	if (!famfs_opt_enabled(fsi, FAMFS_OPT_MKNOD))
+		return -EPERM;
+
+	return famfs_mknod(idmap, dir, dentry, mode, dev);
+}
+
+static int
+famfs_symlink(
+	struct mnt_idmap *idmap,
+	struct inode *dir,
+	struct dentry *dentry,
+	const char *symname)
+{
+	struct famfs_fs_info *fsi = dir->i_sb->s_fs_info;
+	struct inode *inode;
+	int len, rc;
+
+	if (fsi->deverror)
+		return -ENODEV;
+	if (!famfs_opt_enabled(fsi, FAMFS_OPT_SYMLINK))
+		return -EPERM;
+
+	inode = famfs_get_inode(dir->i_sb, dir, S_IFLNK | 0777, 0);
+	if (!inode)
+		return -ENOSPC;
+
+	len = strlen(symname) + 1;
+	rc = page_symlink(inode, symname, len);
+	if (rc) {
+		iput(inode);
+		return rc;
+	}
+
+	d_make_persistent(dentry, inode);
+	inode_set_mtime_to_ts(dir, inode_set_ctime_current(dir));
+
+	return 0;
+}
+
+static int
+famfs_link(
+	struct dentry *old_dentry,
+	struct inode *dir,
+	struct dentry *dentry)
+{
+	struct famfs_fs_info *fsi = dir->i_sb->s_fs_info;
+
+	if (!famfs_opt_enabled(fsi, FAMFS_OPT_LINK))
+		return -EPERM;
+
+	return simple_link(old_dentry, dir, dentry);
+}
+
+static int
+famfs_unlink(struct inode *dir, struct dentry *dentry)
+{
+	struct inode *inode = d_inode(dentry);
+	struct famfs_fs_info *fsi = dir->i_sb->s_fs_info;
+
+	/* A file with an fmap may only be unlinked when explicitly enabled */
+	if (inode->i_private && !famfs_opt_enabled(fsi, FAMFS_OPT_UNLINK))
+		return -EPERM;
+
+	return simple_unlink(dir, dentry);
+}
+
+static int famfs_rmdir(struct inode *dir, struct dentry *dentry)
+{
+	struct famfs_fs_info *fsi = dir->i_sb->s_fs_info;
+
+	if (!famfs_opt_enabled(fsi, FAMFS_OPT_RMDIR))
+		return -EPERM;
+
+	return simple_rmdir(dir, dentry);
+}
+
+static int
+famfs_rename(
+	struct mnt_idmap *idmap,
+	struct inode *old_dir,
+	struct dentry *old_dentry,
+	struct inode *new_dir,
+	struct dentry *new_dentry,
+	unsigned int flags)
+{
+	struct famfs_fs_info *fsi = old_dir->i_sb->s_fs_info;
+	struct inode *target = d_inode(new_dentry);
+
+	if (!famfs_opt_enabled(fsi, FAMFS_OPT_RENAME))
+		return -EPERM;
+
+	/*
+	 * Renaming over an existing target removes it, so require the same
+	 * policy gate that unlink()/rmdir() would. RENAME_EXCHANGE swaps the
+	 * two entries rather than removing the target, so it is exempt.
+	 */
+	if (target && !(flags & RENAME_EXCHANGE)) {
+		if (S_ISDIR(target->i_mode)) {
+			if (!famfs_opt_enabled(fsi, FAMFS_OPT_RMDIR))
+				return -EPERM;
+		} else if (target->i_private &&
+			   !famfs_opt_enabled(fsi, FAMFS_OPT_UNLINK)) {
+			return -EPERM;
+		}
+	}
+
+	return simple_rename(idmap, old_dir, old_dentry, new_dir, new_dentry,
+			     flags);
+}
+
+static const struct inode_operations famfs_dir_inode_operations = {
+	.create		= famfs_create,
+	.lookup		= simple_lookup,
+	.link		= famfs_link,
+	.unlink		= famfs_unlink,
+	.symlink	= famfs_symlink,
+	.mkdir		= famfs_mkdir,
+	.mknod		= famfs_mknod_op,
+	.rmdir		= famfs_rmdir,
+	.rename		= famfs_rename,
+};
+
+/*****************************************************************************
+ * famfs super_operations
+ *
+ * TODO: implement a famfs_statfs() that shows size, free and available space,
+ * etc.
+ */
+
+/*
+ * famfs_show_options() - Display the mount options in /proc/mounts.
+ */
+static int
+famfs_show_options(struct seq_file *m, struct dentry *root)
+{
+	struct famfs_fs_info *fsi = root->d_sb->s_fs_info;
+
+	if (fsi->mount_opts.mode != FAMFS_DEFAULT_MODE)
+		seq_printf(m, ",mode=%o", fsi->mount_opts.mode);
+
+	return 0;
+}
+
+static void
+famfs_evict_inode(struct inode *inode)
+{
+	inode->i_private = NULL;
+	dax_break_layout_final(inode);
+	truncate_inode_pages_final(&inode->i_data);
+	clear_inode(inode);
+}
+
+static const struct super_operations famfs_super_ops = {
+	.statfs		= simple_statfs,
+	.drop_inode	= inode_just_drop,
+	.show_options	= famfs_show_options,
+	.evict_inode    = famfs_evict_inode,
+};
+
+/*****************************************************************************/
 
 /*
  * famfs dax_operations (for famfs-mode dax)
@@ -312,7 +595,7 @@ famfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_blocksize		= PAGE_SIZE;
 	sb->s_blocksize_bits	= PAGE_SHIFT;
 	sb->s_magic		= FAMFS_SUPER_MAGIC;
-	sb->s_op		= NULL /* famfs_super_ops */;
+	sb->s_op		= &famfs_super_ops;
 	sb->s_time_gran		= 1;
 }
 

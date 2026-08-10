@@ -70,6 +70,12 @@ struct famfs_fs_info {
 	struct rw_semaphore       devlist_sem;
 };
 
+/* This stub will be replaced in a later commit
+ * Note: the opt parameter is intentionally unused, and will be used by
+ * the replacement function when that commit lands
+ */
+#define famfs_opt_enabled(fsi, opt) (fsi != 0)
+
 int famfs_lookup_daxdev(const char *pathname, dev_t *devno);
 int famfs_devlist_alloc(struct famfs_fs_info *fsi);
 int famfs_install_daxdev(struct famfs_fs_info *fsi, struct super_block *sb,
