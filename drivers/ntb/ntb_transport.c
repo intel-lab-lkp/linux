@@ -104,6 +104,11 @@ module_param(use_direct_dma, bool, 0644);
 MODULE_PARM_DESC(use_direct_dma,
 		 "Use PCI endpoint DMA to transfer directly to peer RX buffers");
 
+static bool direct_dma_poll;
+module_param(direct_dma_poll, bool, 0444);
+MODULE_PARM_DESC(direct_dma_poll,
+		 "Poll direct-DMA RX completion state once per jiffy");
+
 static unsigned int direct_dma_func;
 module_param(direct_dma_func, uint, 0644);
 MODULE_PARM_DESC(direct_dma_func,
@@ -234,6 +239,7 @@ struct ntb_transport_qp {
 	dma_cookie_t last_cookie;
 	struct work_struct rxc_db_work;
 	struct delayed_work direct_rx_retry;
+	struct delayed_work rxc_poll;
 
 	void (*event_handler)(void *data, int status);
 	struct delayed_work link_work;
@@ -835,6 +841,8 @@ EXPORT_SYMBOL_GPL(ntb_transport_rx_queue_size);
 
 static void ntb_transport_rxc_db(struct work_struct *work);
 static void ntb_direct_rx_retry_work(struct work_struct *work);
+static void ntb_transport_rxc_poll(struct work_struct *work);
+static bool ntb_direct_rx_can_complete(struct ntb_transport_qp *qp);
 static void ntb_direct_rx_reclaim(struct ntb_transport_qp *qp);
 static const struct ntb_ctx_ops ntb_transport_ops;
 static struct ntb_client ntb_transport_client;
@@ -1523,6 +1531,7 @@ static void ntb_qp_link_down_reset(struct ntb_transport_qp *qp)
 	if (ntb_direct_link_capable(qp)) {
 		qp->active = false;
 		cancel_delayed_work_sync(&qp->direct_rx_retry);
+		cancel_delayed_work_sync(&qp->rxc_poll);
 		cancel_work_sync(&qp->rxc_db_work);
 		/* Catch a retry armed while draining RX work. */
 		cancel_delayed_work_sync(&qp->direct_rx_retry);
@@ -1808,8 +1817,11 @@ static void ntb_qp_link_work(struct work_struct *work)
 		if (qp->event_handler)
 			qp->event_handler(qp->cb_data, qp->link_is_up);
 
-		if (qp->active)
+		if (qp->active) {
+			if (direct_dma_poll && ntb_direct_rx_can_complete(qp))
+				queue_delayed_work(system_dfl_wq, &qp->rxc_poll, 1);
 			queue_work(system_dfl_wq, &qp->rxc_db_work);
+		}
 	} else if (nt->link_is_up)
 		schedule_delayed_work(&qp->link_work,
 				      msecs_to_jiffies(NTB_LINK_DOWN_TIMEOUT));
@@ -1900,6 +1912,7 @@ static int ntb_transport_init_queue(struct ntb_transport_ctx *nt,
 
 	INIT_WORK(&qp->rxc_db_work, ntb_transport_rxc_db);
 	INIT_DELAYED_WORK(&qp->direct_rx_retry, ntb_direct_rx_retry_work);
+	INIT_DELAYED_WORK(&qp->rxc_poll, ntb_transport_rxc_poll);
 
 	return 0;
 }
@@ -2627,6 +2640,25 @@ clear_db:
 		     READ_ONCE(qp->direct_state) == NTB_DIRECT_HANDSHAKE))
 			queue_work(system_dfl_wq, &qp->rxc_db_work);
 	}
+}
+
+static void ntb_transport_rxc_poll(struct work_struct *work)
+{
+	struct ntb_transport_qp *qp =
+		container_of(work, struct ntb_transport_qp, rxc_poll.work);
+	bool completion, control;
+
+	if (!qp->active || !ntb_direct_rx_can_complete(qp))
+		return;
+
+	control = ntb_direct_control_pending(qp);
+	completion = ntb_direct_rx_completion_word(qp);
+
+	if (completion || control)
+		queue_work(system_dfl_wq, &qp->rxc_db_work);
+
+	/* keep checking completion and control state */
+	queue_delayed_work(system_dfl_wq, &qp->rxc_poll, 1);
 }
 
 static void ntb_tx_copy_callback(void *data,
@@ -3517,6 +3549,7 @@ void ntb_transport_free_queue(struct ntb_transport_qp *qp)
 
 	ntb_db_set_mask(qp->ndev, qp_bit);
 	cancel_delayed_work_sync(&qp->direct_rx_retry);
+	cancel_delayed_work_sync(&qp->rxc_poll);
 	cancel_work_sync(&qp->rxc_db_work);
 	/* Catch a retry armed while draining RX work. */
 	cancel_delayed_work_sync(&qp->direct_rx_retry);
