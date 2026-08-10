@@ -1217,6 +1217,7 @@ void kvm_initialize_cpu_caps(void)
 		VENDOR_F(VGIF),
 		VENDOR_F(VNMI),
 		VENDOR_F(SVME_ADDR_CHK),
+		VENDOR_F(PERFCTR_VIRT),
 	);
 
 	kvm_cpu_cap_init(CPUID_8000_001F_EAX,

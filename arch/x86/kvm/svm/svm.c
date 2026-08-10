@@ -5583,6 +5583,10 @@ static __init void svm_set_cpu_caps(void)
 		if (vnmi)
 			kvm_cpu_cap_set(X86_FEATURE_VNMI);
 
+		/* Nested AVIC is not supported, so VNMI must be enabled */
+		if (vpmc && vnmi)
+			kvm_cpu_cap_set(X86_FEATURE_PERFCTR_VIRT);
+
 		/* Nested VM can receive #VMEXIT instead of triggering #GP */
 		kvm_cpu_cap_set(X86_FEATURE_SVME_ADDR_CHK);
 	}

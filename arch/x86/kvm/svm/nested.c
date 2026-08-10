@@ -605,6 +605,7 @@ static void __nested_copy_vmcb_save_to_cache(struct vmcb_save_area_cached *to,
 	to->g_pat = from->g_pat;
 
 	svm_copy_lbrs(to, from);
+	svm_copy_pmcs(to, from);
 }
 
 void nested_copy_vmcb_save_to_cache(struct vcpu_svm *svm,
@@ -741,6 +742,17 @@ static bool nested_vmcb12_has_lbrv(struct kvm_vcpu *vcpu)
 		(to_svm(vcpu)->nested.ctl.misc_ctl2 & SVM_MISC2_ENABLE_V_LBR);
 }
 
+static bool nested_vmcb12_has_vpmc(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * Since nested AVIC is not supported, L2 PMIs can only be delivered
+	 * via VNMI, so make it a hard requirement.
+	 */
+	return guest_cpu_cap_has(vcpu, X86_FEATURE_PERFCTR_VIRT) &&
+		nested_vnmi_enabled(to_svm(vcpu)) &&
+		(to_svm(vcpu)->nested.ctl.misc_ctl2 & SVM_MISC2_ENABLE_V_PMC);
+}
+
 static void nested_vmcb02_prepare_save(struct vcpu_svm *svm)
 {
 	struct vmcb_ctrl_area_cached *control = &svm->nested.ctl;
@@ -823,6 +835,11 @@ static void nested_vmcb02_prepare_save(struct vcpu_svm *svm)
 	}
 	vmcb_mark_dirty(vmcb02, VMCB_LBR);
 	svm_update_lbrv(&svm->vcpu);
+
+	if (nested_vmcb12_has_vpmc(vcpu))
+		svm_copy_pmcs(&vmcb02->save, save);
+	else if (kvm_vcpu_has_mediated_pmu_caps(vcpu, KVM_MEDIATED_PMU_CAP_HW_SWITCHED))
+		svm_copy_pmcs(&vmcb02->save, &vmcb01->save);
 }
 
 static inline bool is_evtinj_soft(u32 evtinj)
@@ -863,7 +880,6 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm)
 
 	/* Enter Guest-Mode */
 	enter_guest_mode(vcpu);
-	svm_pmu_handle_nested_transition(svm);
 
 	/*
 	 * Filled at exit: exit_code, exit_info_1, exit_info_2, exit_int_info,
@@ -986,6 +1002,10 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm)
 
 	/* SVM_MISC2_ENABLE_V_LBR is controlled by svm_update_lbrv() */
 
+	/* L0 uses hardware-switched mode for both vmcb01 and vmcb02 */
+	if (kvm_vcpu_has_mediated_pmu_caps(vcpu, KVM_MEDIATED_PMU_CAP_HW_SWITCHED))
+		vmcb02->control.misc_ctl2 |= SVM_MISC2_ENABLE_V_PMC;
+
 	if (!nested_vmcb_needs_vls_intercept(svm))
 		vmcb02->control.misc_ctl2 |= SVM_MISC2_ENABLE_V_VMLOAD_VMSAVE;
 
@@ -1064,6 +1084,9 @@ int enter_svm_guest_mode(struct kvm_vcpu *vcpu, u64 vmcb12_gpa, bool from_vmrun)
 	svm_switch_vmcb(svm, &svm->nested.vmcb02);
 	nested_vmcb02_prepare_control(svm);
 	nested_vmcb02_prepare_save(svm);
+
+	if (!nested_vmcb12_has_vpmc(vcpu))
+		svm_pmu_handle_nested_transition(svm);
 
 	ret = nested_svm_load_cr3(&svm->vcpu, svm->nested.save.cr3,
 				  nested_npt_enabled(svm), from_vmrun);
@@ -1228,6 +1251,9 @@ void svm_copy_vmrun_state(struct vmcb_save_area *to_save,
 		svm_copy_lbrs(to_save, from_save);
 		to_save->dbgctl &= ~DEBUGCTL_RESERVED_BITS;
 	}
+
+	if (kvm_cpu_cap_has(X86_FEATURE_PERFCTR_VIRT))
+		svm_copy_pmcs(to_save, from_save);
 }
 
 void svm_copy_vmloadsave_state(struct vmcb *to_vmcb, struct vmcb *from_vmcb)
@@ -1300,6 +1326,9 @@ static int nested_svm_vmexit_update_vmcb12(struct kvm_vcpu *vcpu)
 	if (nested_vmcb12_has_lbrv(vcpu))
 		svm_copy_lbrs(&vmcb12->save, &vmcb02->save);
 
+	if (nested_vmcb12_has_vpmc(vcpu))
+		svm_copy_pmcs(&vmcb12->save, &vmcb02->save);
+
 	vmcb12->control.event_inj	  = 0;
 	vmcb12->control.event_inj_err	  = 0;
 	vmcb12->control.int_ctl           = svm->nested.ctl.int_ctl;
@@ -1325,7 +1354,9 @@ void nested_svm_vmexit(struct vcpu_svm *svm)
 
 	/* Exit Guest-Mode */
 	leave_guest_mode(vcpu);
-	svm_pmu_handle_nested_transition(svm);
+
+	if (!nested_vmcb12_has_vpmc(vcpu))
+		svm_pmu_handle_nested_transition(svm);
 
 	svm->nested.vmcb12_gpa = 0;
 
@@ -1380,6 +1411,10 @@ void nested_svm_vmexit(struct vcpu_svm *svm)
 	}
 
 	svm_update_lbrv(vcpu);
+
+	if (!nested_vmcb12_has_vpmc(vcpu) &&
+	    kvm_vcpu_has_mediated_pmu_caps(vcpu, KVM_MEDIATED_PMU_CAP_HW_SWITCHED))
+		svm_copy_pmcs(&vmcb01->save, &vmcb02->save);
 
 	if (vnmi) {
 		if (vmcb02->control.int_ctl & V_NMI_BLOCKING_MASK)
@@ -1545,7 +1580,8 @@ void svm_leave_nested(struct kvm_vcpu *vcpu)
 		 * into PMU state from arbitrary contexts (e.g. to avoid using
 		 * stale state).
 		 */
-		__svm_pmu_handle_nested_transition(svm, true);
+		if (!nested_vmcb12_has_vpmc(vcpu))
+			__svm_pmu_handle_nested_transition(svm, true);
 
 		svm_switch_vmcb(svm, &svm->vmcb01);
 
@@ -2073,6 +2109,9 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 		vmcb_set_gpat(svm->vmcb, kvm_state->hdr.svm.gpat);
 
 	nested_vmcb02_prepare_control(svm);
+
+	if (!nested_vmcb12_has_vpmc(vcpu))
+		svm_pmu_handle_nested_transition(svm);
 
 	/*
 	 * Any previously restored state (e.g. KVM_SET_SREGS) would mark fields

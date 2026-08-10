@@ -175,6 +175,12 @@ struct vmcb_save_area_cached {
 	u64 br_to;
 	u64 last_excp_from;
 	u64 last_excp_to;
+	struct {
+		u64 perf_ctl;
+		u64 perf_ctr;
+	} pmc[6];
+	u64 perf_cntr_global_status;
+	u64 perf_cntr_global_control;
 };
 
 struct vmcb_ctrl_area_cached {
@@ -804,6 +810,18 @@ do {								\
 	(to)->br_to		= (from)->br_to;		\
 	(to)->last_excp_from	= (from)->last_excp_from;	\
 	(to)->last_excp_to	= (from)->last_excp_to;		\
+} while (0)
+
+#define svm_copy_pmcs(to, from)							\
+do {										\
+	int i;									\
+										\
+	(to)->perf_cntr_global_control = (from)->perf_cntr_global_control;	\
+	(to)->perf_cntr_global_status  = (from)->perf_cntr_global_status;	\
+	for (i = 0; i < kvm_pmu_cap.num_counters_gp; i++) {			\
+		(to)->pmc[i].perf_ctl = (from)->pmc[i].perf_ctl;		\
+		(to)->pmc[i].perf_ctr = (from)->pmc[i].perf_ctr;		\
+	}									\
 } while (0)
 
 void svm_vcpu_free_msrpm(void *msrpm);
