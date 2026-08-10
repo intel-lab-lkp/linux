@@ -1130,7 +1130,7 @@ static int uvc_parse_standard_control(struct uvc_device *dev,
 		 * so limit usage of this separate namespace to streaming output
 		 * terminals.
 		 */
-		if (type & UVC_TT_STREAMING)
+		if (type == UVC_TT_STREAMING)
 			id |= UVC_TERM_OUTPUT;
 
 		term = uvc_alloc_new_entity(dev, type | UVC_TERM_OUTPUT,
