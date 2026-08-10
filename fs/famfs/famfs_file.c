@@ -323,6 +323,305 @@ famfs_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 
 /*********************************************************************
+ * iomap_operations
+ *
+ * This stuff uses the iomap (dax-related) helpers to resolve file offsets to
+ * offsets within a dax device.
+ */
+
+static ssize_t famfs_file_invalid(struct inode *inode);
+
+/* Check the health of a daxdev table slot */
+static int
+famfs_dax_err(struct famfs_daxdev *dd)
+{
+	if (!dd->valid) {
+		pr_debug("%s: daxdev=%s invalid\n", __func__, dd->name);
+		return -EIO;
+	}
+	if (dd->dax_err) {
+		pr_debug("%s: daxdev=%s dax_err\n", __func__, dd->name);
+		return -EIO;
+	}
+	if (dd->error) {
+		pr_debug("%s: daxdev=%s memory error\n", __func__, dd->name);
+		return -EHWPOISON;
+	}
+	return 0;
+}
+
+/*
+ * famfs_daxdev_from_index() - resolve an extent's dev_index to a health-checked
+ * dax_device from the table. On success returns the dax_device and sets
+ * *errp = 0; on failure returns NULL and sets *errp (< 0).
+ */
+static struct dax_device *
+famfs_daxdev_from_index(struct famfs_fs_info *fsi, u64 dev_index, int *errp)
+{
+	struct famfs_dax_devlist *devlist = fsi->dax_devlist;
+	struct famfs_daxdev *dd;
+	int rc;
+
+	if (!devlist || dev_index >= devlist->nslots) {
+		pr_debug("%s: dev_index %llu out of range\n",
+			__func__, dev_index);
+		*errp = -EIO;
+		return NULL;
+	}
+	dd = &devlist->devlist[dev_index];
+	rc = famfs_dax_err(dd);
+	if (rc) {
+		*errp = rc;
+		return NULL;
+	}
+	*errp = 0;
+	return dd->devp;
+}
+
+static int
+famfs_meta_to_dax_offset_interleaved(
+	struct inode *inode,
+	struct iomap *iomap,
+	loff_t file_offset,
+	loff_t len)
+{
+	struct famfs_fs_info  *fsi = inode->i_sb->s_fs_info;
+	struct famfs_file_meta *meta = inode->i_private;
+	loff_t local_offset = file_offset;
+	int rc;
+	int i;
+
+	if (fsi->deverror || famfs_file_invalid(inode))
+		goto err_out;
+
+	/* This function is only for extent_type FAMFS_IOC_EXT_INTERLEAVE */
+	if (meta->fm_extent_type != FAMFS_IOC_EXT_INTERLEAVE) {
+		pr_debug("%s: bad extent type\n", __func__);
+		goto err_out;
+	}
+
+	iomap->offset = file_offset;
+
+	for (i = 0; i < meta->fm_niext; i++) {
+		struct famfs_meta_interleaved_ext *fei = &meta->ie[i];
+		u64 chunk_size = fei->fie_chunk_size;
+		u64 nstrips = fei->fie_nstrips;
+		u64 ext_size = fei->fie_nbytes;
+
+		ext_size = min_t(u64, ext_size, meta->file_size);
+
+		if (ext_size == 0)
+			goto err_out;
+
+		/* Is the data is in this striped extent? */
+		if (local_offset < ext_size) {
+			u64 chunk_num       = local_offset / chunk_size;
+			u64 chunk_offset    = local_offset % chunk_size;
+			u64 stripe_num      = chunk_num / nstrips;
+			u64 strip_num       = chunk_num % nstrips;
+			u64 chunk_remainder = chunk_size - chunk_offset;
+			u64 strip_offset    = chunk_offset + (stripe_num * chunk_size);
+			struct famfs_meta_simple_ext *strip = &fei->ie_strips[strip_num];
+			struct dax_device *daxdev;
+
+			/*
+			 * MAP_CREATE only checks that the strips' combined
+			 * length covers the file, not that each strip is large
+			 * enough for the chunks striped onto it. Guard against a
+			 * malformed fmap with an undersized strip so we never
+			 * resolve to a dax offset past the strip's extent.
+			 */
+			if (strip_offset >= strip->ext_len)
+				goto err_out;
+
+			daxdev = famfs_daxdev_from_index(fsi, strip->dev_index, &rc);
+			if (!daxdev) {
+				meta->error = true;
+				return rc;
+			}
+
+			iomap->addr    = strip->ext_offset + strip_offset;
+			iomap->offset  = file_offset;
+			iomap->length  = min_t(loff_t, len, chunk_remainder);
+			iomap->length  = min_t(loff_t, iomap->length,
+					       strip->ext_len - strip_offset);
+			iomap->dax_dev = daxdev;
+			iomap->type    = IOMAP_MAPPED;
+
+			return 0;
+		}
+		local_offset -= ext_size; /* offset is beyond this striped extent */
+	}
+
+ err_out:
+	/*
+	 * We fell out the end of the extent list (access past EOF) or the file
+	 * is invalid. Return -EIO: iomap requires a non-zero-length mapping on
+	 * success (iomap_iter_done() warns on length == 0), so signal the error
+	 * rather than returning a zero-length IOMAP_MAPPED.
+	 */
+	pr_debug("%s: could not resolve file_offset %lld (past EOF?)\n",
+		 __func__, (long long)file_offset);
+
+	iomap->addr    = 0; /* there is no valid dax device offset */
+	iomap->offset  = file_offset; /* file offset */
+	iomap->length  = 0;
+	iomap->dax_dev = famfs_daxdev_from_index(fsi, 0, &rc);
+	iomap->type    = IOMAP_MAPPED;
+
+	return -EIO;
+}
+
+/**
+ * famfs_meta_to_dax_offset() - Resolve (file, offset, len) to (daxdev, offset, len)
+ *
+ * This function is called by famfs_iomap_begin() to resolve an offset in a
+ * file to an offset in a dax device. This is upcalled from dax from calls to
+ * both  * dax_iomap_fault() and dax_iomap_rw(). Dax finishes the job resolving
+ * a fault to a specific physical page (the fault case) or doing a memcpy
+ * variant (the rw case)
+ *
+ * Pages can be PTE (4k), PMD (2MiB) or (theoretically) PuD (1GiB)
+ * (these sizes are for X86; may vary on other cpu architectures
+ *
+ * @inode:  The file where the fault occurred
+ * @iomap:       To be filled in to indicate where to find the right memory,
+ *               relative  to a dax device.
+ * @file_offset: Within the file where the fault occurred (will be page boundary)
+ * @len:         The length of the faulted mapping (will be a page multiple)
+ *               (will be trimmed in *iomap if it's disjoint in the extent list)
+ *
+ * Return values: 0. (info is returned in a modified @iomap struct)
+ */
+static int
+famfs_meta_to_dax_offset(
+	struct inode *inode,
+	struct iomap *iomap,
+	loff_t file_offset,
+	loff_t len)
+{
+	struct famfs_fs_info  *fsi = inode->i_sb->s_fs_info;
+	struct famfs_file_meta *meta = inode->i_private;
+	loff_t local_offset = file_offset;
+	int rc;
+	int i;
+
+	if (fsi->deverror || famfs_file_invalid(inode))
+		goto err_out;
+
+	if (meta->fm_extent_type == FAMFS_IOC_EXT_INTERLEAVE)
+		return famfs_meta_to_dax_offset_interleaved(inode,
+					iomap, file_offset, len);
+
+	if (meta->fm_extent_type != FAMFS_IOC_EXT_SIMPLE)
+		goto err_out;
+
+	iomap->offset = file_offset;
+
+	for (i = 0; i < meta->fm_nextents; i++) {
+		loff_t dax_ext_offset = meta->se[i].ext_offset;
+		loff_t dax_ext_len    = meta->se[i].ext_len;
+
+		if ((dax_ext_offset == 0) &&
+		    (meta->file_type != FAMFS_SUPERBLOCK))
+			pr_warn("%s: zero offset on non-superblock file!!\n",
+				__func__);
+
+		/* local_offset is the offset minus the size of extents skipped
+		 * so far; If local_offset < dax_ext_len, the data of interest
+		 * starts in this extent
+		 */
+		if (local_offset < dax_ext_len) {
+			loff_t ext_len_remainder = dax_ext_len - local_offset;
+			struct dax_device *daxdev;
+
+			daxdev = famfs_daxdev_from_index(fsi,
+						meta->se[i].dev_index, &rc);
+			if (!daxdev) {
+				meta->error = true;
+				return rc;
+			}
+
+			/*
+			 * OK, we found the file metadata extent where this
+			 * data begins
+			 * @local_offset      - The offset within the current
+			 *                      extent
+			 * @ext_len_remainder - Remaining length of ext after
+			 *                      skipping local_offset
+			 * Outputs:
+			 * iomap->addr:   the offset within the dax device where
+			 *                the  data starts
+			 * iomap->offset: the file offset
+			 * iomap->length: the valid length resolved here
+			 */
+			iomap->addr    = dax_ext_offset + local_offset;
+			iomap->offset  = file_offset;
+			iomap->length  = min_t(loff_t, len, ext_len_remainder);
+			iomap->dax_dev = daxdev;
+			iomap->type    = IOMAP_MAPPED;
+
+			return 0;
+		}
+		local_offset -= dax_ext_len; /* Get ready for the next extent */
+	}
+
+ err_out:
+	/*
+	 * We fell out the end of the extent list (access past EOF) or the file
+	 * is in an invalid state. Return -EIO: iomap requires a non-zero-length
+	 * mapping on success (iomap_iter_done() warns on length == 0), so signal
+	 * the error rather than returning a zero-length IOMAP_MAPPED. dax turns
+	 * this into a short read/write or a SIGBUS.
+	 */
+	pr_debug("%s: could not resolve file_offset %lld (past EOF?)\n",
+		 __func__, (long long)file_offset);
+
+	iomap->addr    = 0; /* there is no valid dax device offset */
+	iomap->offset  = file_offset; /* file offset */
+	iomap->length  = 0;
+	iomap->dax_dev = famfs_daxdev_from_index(fsi, 0, &rc);
+	iomap->type    = IOMAP_MAPPED;
+
+	return -EIO;
+}
+
+/**
+ * famfs_iomap_begin() - Handler for iomap_begin upcall from dax
+ *
+ * This function is pretty simple because files are
+ * * never partially allocated
+ * * never have holes (never sparse)
+ * * never "allocate on write"
+ *
+ * @inode:  inode for the file being accessed
+ * @offset: offset within the file
+ * @length: Length being accessed at offset
+ * @flags:
+ * @iomap:  iomap struct to be filled in, resolving (offset, length) to
+ *          (daxdev, offset, len)
+ * @srcmap:
+ */
+static int
+famfs_iomap_begin(
+	struct inode *inode,
+	loff_t offset,
+	loff_t length,
+	unsigned int flags,
+	struct iomap *iomap,
+	struct iomap *srcmap)
+{
+	return famfs_meta_to_dax_offset(inode, iomap, offset, length);
+}
+
+/* Note: We never need a special set of write_iomap_ops because famfs never
+ * performs allocation on write.
+ */
+const struct iomap_ops famfs_iomap_ops = {
+	.iomap_begin		= famfs_iomap_begin,
+};
+
+/*********************************************************************
  * vm_operations
  */
 static vm_fault_t
@@ -350,7 +649,7 @@ __famfs_filemap_fault(
 		file_update_time(vmf->vma->vm_file);
 	}
 
-	ret = dax_iomap_fault(vmf, order, &pfn, NULL, NULL /*&famfs_iomap_ops */);
+	ret = dax_iomap_fault(vmf, order, &pfn, NULL, &famfs_iomap_ops);
 	if (ret & VM_FAULT_NEEDDSYNC)
 		ret = dax_finish_sync_fault(vmf, order, pfn);
 
@@ -471,7 +770,7 @@ famfs_dax_read_iter(struct kiocb *iocb, struct iov_iter	*to)
 		return rc;
 	}
 
-	rc = dax_iomap_rw(iocb, to, NULL /*&famfs_iomap_ops */);
+	rc = dax_iomap_rw(iocb, to, &famfs_iomap_ops);
 	inode_unlock_shared(inode);
 
 	if (rc > 0)
@@ -507,7 +806,7 @@ famfs_dax_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 	kiocb_modified(iocb); /* mtime/ctime + strip set[e]uid */
 
-	rc = dax_iomap_rw(iocb, from, NULL /*&famfs_iomap_ops*/);
+	rc = dax_iomap_rw(iocb, from, &famfs_iomap_ops);
 	inode_unlock(inode);
 	return rc;
 }
