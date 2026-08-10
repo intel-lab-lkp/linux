@@ -5156,22 +5156,14 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 
 	/*
 	 * Check the ep0 maxpacket guess and correct it if necessary.
-	 * maxp0 is the value stored in the device descriptor;
-	 * i is the value it encodes (logarithmic for SuperSpeed or greater).
 	 */
 	i = maxp0;
-	if (udev->speed >= USB_SPEED_SUPER) {
-		if (maxp0 <= 16)
-			i = 1 << maxp0;
-		else
-			i = 0;		/* Invalid */
-	}
 	if (usb_endpoint_maxp(&udev->ep0.desc) == i) {
 		;	/* Initial ep0 maxpacket guess is right */
-	} else if (((udev->speed == USB_SPEED_FULL ||
-				udev->speed == USB_SPEED_HIGH) &&
-			(i == 8 || i == 16 || i == 32 || i == 64)) ||
-			(udev->speed >= USB_SPEED_SUPER && i > 0)) {
+	} else if (udev->speed >= USB_SPEED_SUPER && i == 9) {
+		;	/* Logarithmic encoding of 512 */
+	} else if ((udev->speed == USB_SPEED_FULL || udev->speed == USB_SPEED_HIGH)
+			&& (i == 8 || i == 16 || i == 32 || i == 64)) {
 		/* Initial guess is wrong; use the descriptor's value */
 		if (udev->speed == USB_SPEED_FULL)
 			dev_dbg(&udev->dev, "ep0 maxpacket = %d\n", i);
@@ -5182,8 +5174,11 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 	} else {
 		/* Initial guess is wrong and descriptor's value is invalid */
 		dev_err(&udev->dev, "Invalid ep0 maxpacket: %d\n", maxp0);
-		retval = -EMSGSIZE;
-		goto fail;
+		if (udev->speed < USB_SPEED_SUPER) {
+			retval = -EMSGSIZE;
+			goto fail;
+		}
+		/* else: bogus USB 3.0 descriptors exist, we use 512 anyway */
 	}
 
 	descr = usb_get_device_descriptor(udev);
