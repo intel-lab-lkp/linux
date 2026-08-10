@@ -1152,6 +1152,8 @@ free_chan_resources:
 err_disable_pm:
 	if (!pm_runtime_enabled(zdev->dev))
 		zynqmp_dma_runtime_suspend(zdev->dev);
+	else
+		pm_runtime_put_sync(zdev->dev);
 	pm_runtime_disable(zdev->dev);
 	return ret;
 }
