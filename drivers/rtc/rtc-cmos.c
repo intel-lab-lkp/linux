@@ -1436,7 +1436,9 @@ static int __init cmos_platform_probe(struct platform_device *pdev)
 	else
 		resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	irq = platform_get_irq_optional(pdev, 0);
-	if (irq < 0) {
+	if (irq < 0 && irq != -ENXIO)
+		return irq;
+	if (irq == -ENXIO) {
 		irq = -1;
 #ifdef CONFIG_X86
 		/*
