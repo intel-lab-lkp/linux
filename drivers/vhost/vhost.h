@@ -29,6 +29,7 @@ struct vhost_work {
 
 struct vhost_worker;
 struct vhost_dev;
+struct vhost_msg_node;
 
 struct vhost_worker_ops {
 	int (*create)(struct vhost_worker *worker, struct vhost_dev *dev,
@@ -163,7 +164,12 @@ struct vhost_virtqueue {
 	/* Ring endianness requested by userspace for cross-endian support. */
 	bool user_be;
 #endif
+	/* Protected by dev->iotlb_lock. */
+	u8 iotlb_miss_state;
 	u32 busyloop_timeout;
+	/* Protected by dev->iotlb_lock. */
+	u64 iotlb_miss_seq;
+	struct vhost_msg_node *iotlb_miss_node;
 };
 
 struct vhost_msg_node {
