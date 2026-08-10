@@ -653,7 +653,8 @@ static irqreturn_t ntb_transport_isr(int irq, void *dev)
 {
 	struct ntb_transport_qp *qp = dev;
 
-	tasklet_schedule(&qp->rxc_db_work);
+	if (qp->client_ready)
+		tasklet_schedule(&qp->rxc_db_work);
 
 	return IRQ_HANDLED;
 }
@@ -1132,6 +1133,9 @@ static void ntb_qp_link_work(struct work_struct *work)
 	struct pci_dev *pdev = qp->ndev->pdev;
 	struct ntb_transport_ctx *nt = qp->transport;
 	int val;
+
+	if (!qp->client_ready)
+		return;
 
 	WARN_ON(!nt->link_is_up);
 
@@ -2182,6 +2186,8 @@ void ntb_transport_free_queue(struct ntb_transport_qp *qp)
 
 	pdev = qp->ndev->pdev;
 
+	cancel_work_sync(&qp->link_cleanup);
+	cancel_delayed_work_sync(&qp->link_work);
 	qp->active = false;
 
 	if (qp->tx_offload_thread) {
@@ -2229,6 +2235,8 @@ void ntb_transport_free_queue(struct ntb_transport_qp *qp)
 	ntb_db_set_mask(qp->ndev, qp_bit);
 	tasklet_kill(&qp->rxc_db_work);
 
+	/* Catch cleanup queued while draining RX processing. */
+	cancel_work_sync(&qp->link_cleanup);
 	cancel_delayed_work_sync(&qp->link_work);
 
 	qp->cb_data = NULL;
