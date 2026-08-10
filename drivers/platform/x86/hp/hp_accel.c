@@ -309,6 +309,8 @@ static int lis3lv02d_probe(struct platform_device *device)
 
 	/* obtain IRQ number of our device from ACPI */
 	ret = platform_get_irq_optional(device, 0);
+	if (ret < 0 && ret != -ENXIO)
+		return ret;
 	if (ret > 0)
 		lis3_dev.irq = ret;
 
