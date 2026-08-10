@@ -322,6 +322,7 @@ static const struct drm_connector_funcs imx_tve_connector_funcs = {
 static const struct drm_connector_helper_funcs imx_tve_connector_helper_funcs = {
 	.get_modes = imx_tve_connector_get_modes,
 	.mode_valid = imx_tve_connector_mode_valid,
+	.detect_ctx = drm_connector_helper_detect_from_ddc,
 };
 
 static const struct drm_encoder_helper_funcs imx_tve_encoder_helper_funcs = {
