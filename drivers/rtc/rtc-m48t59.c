@@ -404,15 +404,17 @@ static int m48t59_rtc_probe(struct platform_device *pdev)
 	 * the mode without IRQ.
 	 */
 	m48t59->irq = platform_get_irq_optional(pdev, 0);
-	if (m48t59->irq <= 0)
-		m48t59->irq = NO_IRQ;
+	if (m48t59->irq < 0 && m48t59->irq != -ENXIO)
+		return m48t59->irq;
 
-	if (m48t59->irq != NO_IRQ) {
+	if (m48t59->irq > 0) {
 		ret = devm_request_irq(&pdev->dev, m48t59->irq,
 				m48t59_rtc_interrupt, IRQF_SHARED,
 				"rtc-m48t59", &pdev->dev);
 		if (ret)
 			return ret;
+	} else {
+		m48t59->irq = NO_IRQ;
 	}
 
 	m48t59->rtc = devm_rtc_allocate_device(&pdev->dev);
