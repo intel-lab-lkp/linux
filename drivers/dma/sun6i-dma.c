@@ -720,10 +720,10 @@ static struct dma_async_tx_descriptor *sun6i_dma_prep_slave_sg(
 	struct sun6i_dma_dev *sdev = to_sun6i_dma_dev(chan->device);
 	struct sun6i_vchan *vchan = to_sun6i_vchan(chan);
 	struct dma_slave_config *sconfig = &vchan->cfg;
-	struct sun6i_dma_lli *v_lli, *prev = NULL;
+	struct sun6i_dma_lli *v_lli, *v_next, *prev = NULL;
 	struct sun6i_desc *txd;
 	struct scatterlist *sg;
-	dma_addr_t p_lli;
+	dma_addr_t p_lli, p_next;
 	u32 lli_cfg;
 	int i, ret;
 
@@ -789,8 +789,11 @@ static struct dma_async_tx_descriptor *sun6i_dma_prep_slave_sg(
 
 err_lli_free:
 	for (p_lli = txd->p_lli, v_lli = txd->v_lli; v_lli;
-	     p_lli = v_lli->p_lli_next, v_lli = v_lli->v_lli_next)
+	     p_lli = p_next, v_lli = v_next) {
+		v_next = v_lli->v_lli_next;
+		p_next = v_lli->p_lli_next;
 		dma_pool_free(sdev->pool, v_lli, p_lli);
+	}
 	kfree(txd);
 	return NULL;
 }
@@ -806,9 +809,9 @@ static struct dma_async_tx_descriptor *sun6i_dma_prep_dma_cyclic(
 	struct sun6i_dma_dev *sdev = to_sun6i_dma_dev(chan->device);
 	struct sun6i_vchan *vchan = to_sun6i_vchan(chan);
 	struct dma_slave_config *sconfig = &vchan->cfg;
-	struct sun6i_dma_lli *v_lli, *prev = NULL;
+	struct sun6i_dma_lli *v_lli, *v_next, *prev = NULL;
 	struct sun6i_desc *txd;
-	dma_addr_t p_lli;
+	dma_addr_t p_lli, p_next;
 	u32 lli_cfg;
 	unsigned int i, periods = buf_len / period_len;
 	int ret;
@@ -870,8 +873,11 @@ static struct dma_async_tx_descriptor *sun6i_dma_prep_dma_cyclic(
 
 err_lli_free:
 	for (p_lli = txd->p_lli, v_lli = txd->v_lli; v_lli;
-	     p_lli = v_lli->p_lli_next, v_lli = v_lli->v_lli_next)
+	     p_lli = p_next, v_lli = v_next) {
+		v_next = v_lli->v_lli_next;
+		p_next = v_lli->p_lli_next;
 		dma_pool_free(sdev->pool, v_lli, p_lli);
+	}
 	kfree(txd);
 	return NULL;
 }
