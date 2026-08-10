@@ -17,6 +17,7 @@
 #define HSUSB_PHY_CTRL_REG		(0x10)
 
 /* PHY_CTRL_REG */
+#define HSUSB_CLAMP_MPM_DPSE_DMSE_EN_N	BIT(26)
 #define HSUSB_CTRL_DMSEHV_CLAMP		BIT(24)
 #define HSUSB_CTRL_USB2_SUSPEND		BIT(23)
 #define HSUSB_CTRL_UTMI_CLK_EN		BIT(21)
@@ -27,8 +28,12 @@
 #define HSUSB_CTRL_ID_HV_CLAMP		BIT(9)
 #define HSUSB_CTRL_OTGSESSVLD_CLAMP	BIT(8)
 #define HSUSB_CTRL_CLAMP_EN		BIT(7)
+#define HSUSB_CTRL_CLAMP_MPM_DPSE_DMSE	BIT(26)
 #define HSUSB_CTRL_RETENABLEN		BIT(1)
 #define HSUSB_CTRL_POR			BIT(0)
+
+/* PHY parameter override register (eye diagram tuning) */
+#define HSUSB_PARAMETER_OVERRIDE_X_REG	(0x14)
 
 /* QSCRATCH_GENERAL_CFG */
 #define HSUSB_GCFG_XHCI_REV		BIT(2)
@@ -115,6 +120,8 @@
 #define LATCH_SLEEP				40
 #define LATCH_TIMEOUT				100
 
+struct phy_drvdata;
+
 struct usb_phy {
 	void __iomem		*base;
 	struct device		*dev;
@@ -123,11 +130,14 @@ struct usb_phy {
 	u32			rx_eq;
 	u32			tx_deamp_3_5db;
 	u32			mpll;
+	const struct phy_drvdata *drvdata;
 };
 
 struct phy_drvdata {
 	struct phy_ops	ops;
 	u32		clk_rate;
+	u32		hs_tune_val;
+	u32		fsel;
 };
 
 /**
@@ -273,7 +283,8 @@ static int qcom_ipq806x_usb_hs_phy_init(struct phy *phy)
 		HSUSB_CTRL_RETENABLEN  | HSUSB_CTRL_COMMONONN |
 		HSUSB_CTRL_OTGSESSVLD_CLAMP | HSUSB_CTRL_ID_HV_CLAMP |
 		HSUSB_CTRL_UTMI_OTG_VBUS_VALID | HSUSB_CTRL_UTMI_CLK_EN |
-		HSUSB_CTRL_CLAMP_EN | 0x70;
+		HSUSB_CTRL_CLAMP_EN | HSUSB_CLAMP_MPM_DPSE_DMSE_EN_N |
+		phy_dwc3->drvdata->fsel;
 
 	/* use core clock if external reference is not present */
 	if (!phy_dwc3->xo_clk)
@@ -282,8 +293,13 @@ static int qcom_ipq806x_usb_hs_phy_init(struct phy *phy)
 	writel(val, phy_dwc3->base + HSUSB_PHY_CTRL_REG);
 	usleep_range(2000, 2200);
 
-	/* Disable (bypass) VBUS and ID filters */
+	/* Set XHCI_REV bit (2) to 1 - XHCI version 1.0 */
 	writel(HSUSB_GCFG_XHCI_REV, phy_dwc3->base + QSCRATCH_GENERAL_CFG);
+
+	if (phy_dwc3->drvdata->hs_tune_val)
+		usb_phy_write_readback(phy_dwc3, HSUSB_PARAMETER_OVERRIDE_X_REG,
+				       0x03ffffff,
+				       phy_dwc3->drvdata->hs_tune_val);
 
 	return 0;
 }
@@ -458,6 +474,18 @@ static const struct phy_drvdata qcom_ipq806x_usb_hs_drvdata = {
 		.owner		= THIS_MODULE,
 	},
 	.clk_rate = 60000000,
+	.fsel = 0x70,
+};
+
+static const struct phy_drvdata qcom_msm8974_usb_hs_drvdata = {
+	.ops = {
+		.init		= qcom_ipq806x_usb_hs_phy_init,
+		.exit		= qcom_ipq806x_usb_hs_phy_exit,
+		.owner		= THIS_MODULE,
+	},
+	.clk_rate = 60000000,
+	.hs_tune_val = 0x00d191a4,
+	.fsel = 0x30,
 };
 
 static const struct phy_drvdata qcom_ipq806x_usb_ss_drvdata = {
@@ -474,6 +502,8 @@ static const struct of_device_id qcom_ipq806x_usb_phy_table[] = {
 	  .data = &qcom_ipq806x_usb_hs_drvdata },
 	{ .compatible = "qcom,ipq806x-usb-phy-ss",
 	  .data = &qcom_ipq806x_usb_ss_drvdata },
+	{ .compatible = "qcom,msm8974-usb-phy-hs",
+	  .data = &qcom_msm8974_usb_hs_drvdata },
 	{ /* Sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, qcom_ipq806x_usb_phy_table);
@@ -492,6 +522,7 @@ static int qcom_ipq806x_usb_phy_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	data = of_device_get_match_data(&pdev->dev);
+	phy_dwc3->drvdata = data;
 
 	phy_dwc3->dev = &pdev->dev;
 
