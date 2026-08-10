@@ -4,7 +4,9 @@
  * Copyright (c) 2022 Microchip Technology Inc. and its subsidiaries.
  */
 
+#include <linux/lcm.h>
 #include <linux/types.h>
+#include <linux/minmax.h>
 
 #include "vcap_api_private.h"
 
@@ -2106,12 +2108,63 @@ static u32 vcap_set_rule_id(struct vcap_rule_internal *ri)
 	return ri->data.id;
 }
 
+static void vcap_move_from_block(u32 base_addr,
+				 struct vcap_rule_internal *block_first,
+				 struct vcap_rule_internal *block_last,
+				 int block_lcm, struct vcap_rule_move *move)
+{
+	int unaligned_offset;
+
+	if (!block_first || !block_last)
+		return;
+
+	move->addr = block_last->addr;
+	move->count = block_first->addr + block_first->size - block_last->addr;
+	/* Integer division rounds toward zero. We want to round toward +inf
+	 * for the positive case (insertion) to ensure enough room.
+	 */
+	unaligned_offset = (block_first->addr + block_first->size) - base_addr;
+	if (unaligned_offset > 0)
+		move->offset =
+			((unaligned_offset + (block_lcm - 1)) / block_lcm) *
+			block_lcm;
+	else
+		move->offset = (unaligned_offset / block_lcm) * block_lcm;
+}
+
+static void vcap_move_rules_sw(struct vcap_admin *admin,
+			       struct vcap_rule_internal *pos,
+			       struct vcap_rule_move const *move)
+{
+	if (move->count == 0 || move->offset == 0)
+		return;
+
+	list_for_each_entry_continue(pos, &admin->rules, list)
+		pos->addr -= move->offset;
+}
+
+static int vcap_find_move_block_lcm(struct vcap_admin *admin,
+				    struct vcap_rule_internal *pos)
+{
+	int block_lcm = 1;
+
+	list_for_each_entry_continue(pos, &admin->rules, list) {
+		block_lcm = lcm(block_lcm, pos->size);
+		if (pos->size <= 2)
+			break;
+	}
+
+	return block_lcm;
+}
+
 static int vcap_insert_rule(struct vcap_rule_internal *ri,
 			    struct vcap_rule_move *move)
 {
+	struct vcap_rule_internal *duprule, *iter, *block_first = NULL,
+						   *block_last;
 	int sw_count = ri->vctrl->vcaps[ri->admin->vtype].sw_count;
-	struct vcap_rule_internal *duprule, *iter, *elem = NULL;
 	struct vcap_admin *admin = ri->admin;
+	int block_lcm;
 	u32 addr;
 
 	ri->sort_key = vcap_sort_key(sw_count, ri->size, ri->data.user,
@@ -2124,12 +2177,12 @@ static int vcap_insert_rule(struct vcap_rule_internal *ri,
 	 */
 	list_for_each_entry(iter, &admin->rules, list) {
 		if (ri->sort_key < iter->sort_key) {
-			elem = iter;
+			block_first = iter;
 			break;
 		}
 	}
 
-	if (!elem) {
+	if (!block_first) {
 		ri->addr = vcap_next_rule_addr(admin->last_used_addr, ri);
 		admin->last_used_addr = ri->addr;
 
@@ -2142,10 +2195,13 @@ static int vcap_insert_rule(struct vcap_rule_internal *ri,
 		return 0;
 	}
 
-	/* Reuse the space of the current rule */
-	addr = elem->addr + elem->size;
+	block_last = list_last_entry(&admin->rules, typeof(*ri), list);
+
+	/* Reuse the space and padding of the current rule */
+	addr = admin->last_valid_addr + 1;
+	if (!list_is_first(&block_first->list, &admin->rules))
+		addr = list_prev_entry(block_first, list)->addr;
 	ri->addr = vcap_next_rule_addr(addr, ri);
-	addr = ri->addr;
 
 	/* Add a copy of the rule to the VCAP list */
 	duprule = vcap_dup_rule(ri, ri->state == VCAP_RS_DISABLED);
@@ -2153,29 +2209,34 @@ static int vcap_insert_rule(struct vcap_rule_internal *ri,
 		return PTR_ERR(duprule);
 
 	/* Add before the current entry */
-	list_add_tail(&duprule->list, &elem->list);
+	list_add_tail(&duprule->list, &block_first->list);
 
-	/* Update the current rule */
-	elem->addr = vcap_next_rule_addr(addr, elem);
-	addr = elem->addr;
+	/* Collect block move info in struct move, to update VCAP HW later */
+	block_lcm = vcap_find_move_block_lcm(admin, duprule);
+	vcap_move_from_block(ri->addr, block_first, block_last, block_lcm,
+			     move);
 
-	/* Update the address in the remaining rules in the list */
-	list_for_each_entry_continue(elem, &admin->rules, list) {
-		elem->addr = vcap_next_rule_addr(addr, elem);
-		addr = elem->addr;
+	if ((int)block_last->addr - move->offset < admin->first_valid_addr) {
+		pr_err("%s:%d: No room for rule size: %u, %u\n", __func__,
+		       __LINE__, duprule->size, admin->first_valid_addr);
+		list_del(&duprule->list);
+		vcap_free_rule(&duprule->data);
+		return -ENOSPC;
 	}
 
-	/* Update the move info */
-	move->addr = admin->last_used_addr;
-	move->count = ri->addr - addr;
-	move->offset = admin->last_used_addr - addr;
-	admin->last_used_addr = addr;
+	/* Apply move to SW */
+	vcap_move_rules_sw(admin, duprule, move);
+	admin->last_used_addr =
+		list_last_entry(&admin->rules, typeof(*ri), list)->addr;
 	return 0;
 }
 
 static void vcap_move_rules(struct vcap_rule_internal *ri,
 			    struct vcap_rule_move *move)
 {
+	if (move->count == 0 || move->offset == 0)
+		return;
+
 	ri->vctrl->ops->move(ri->ndev, ri->admin, move->addr,
 			 move->offset, move->count);
 }
@@ -2285,8 +2346,7 @@ int vcap_add_rule(struct vcap_rule *rule)
 		       __func__, __LINE__, ret);
 		goto out;
 	}
-	if (move.count > 0)
-		vcap_move_rules(ri, &move);
+	vcap_move_rules(ri, &move);
 
 	/* Set the counter to zero */
 	ret = vcap_write_counter(ri, &ctr);
@@ -2501,59 +2561,52 @@ out:
 }
 EXPORT_SYMBOL_GPL(vcap_mod_rule);
 
-/* Return the alignment offset for a new rule address */
-static int vcap_valid_rule_move(struct vcap_rule_internal *el, int offset)
-{
-	return (el->addr + offset) % el->size;
-}
-
-/* Update the rule address with an offset */
-static void vcap_adjust_rule_addr(struct vcap_rule_internal *el, int offset)
-{
-	el->addr += offset;
-}
-
 /* Rules needs to be moved to fill the gap of the deleted rule */
 static int vcap_fill_rule_gap(struct vcap_rule_internal *ri)
 {
+	struct vcap_rule_internal *block_first = NULL, *block_last = NULL;
 	struct vcap_admin *admin = ri->admin;
-	struct vcap_rule_internal *elem;
-	struct vcap_rule_move move;
-	int gap = 0, offset = 0;
+	struct net_device *ndev = ri->ndev;
+	struct vcap_rule_move move = {};
+	int block_lcm, addr;
 
-	/* If the first rule is deleted: Move other rules to the top */
-	if (list_is_first(&ri->list, &admin->rules))
-		offset = admin->last_valid_addr + 1 - ri->addr - ri->size;
+	if (!list_is_last(&ri->list, &admin->rules)) {
+		block_first = list_next_entry(ri, list);
+		block_last = list_last_entry(&admin->rules, typeof(*ri), list);
+	}
 
-	/* Locate gaps between odd size rules and adjust the move */
-	elem = ri;
-	list_for_each_entry_continue(elem, &admin->rules, list)
-		gap += vcap_valid_rule_move(elem, ri->size);
+	addr = admin->last_valid_addr + 1;
+	if (!list_is_first(&ri->list, &admin->rules))
+		addr = list_prev_entry(ri, list)->addr;
 
-	/* Update the address in the remaining rules in the list */
-	elem = ri;
-	list_for_each_entry_continue(elem, &admin->rules, list)
-		vcap_adjust_rule_addr(elem, ri->size + gap + offset);
+	block_lcm = vcap_find_move_block_lcm(admin, ri);
+	vcap_move_from_block(addr, block_first, block_last, block_lcm, &move);
 
-	/* Update the move info */
-	move.addr = admin->last_used_addr;
-	move.count = ri->addr - admin->last_used_addr - gap;
-	move.offset = -(ri->size + gap + offset);
+	/* Apply move to SW representation */
+	vcap_move_rules_sw(admin, ri, &move);
 
-	/* Do the actual move operation */
+	/* Initialize space used by ri, as it may not be overwritten by move */
+	ri->vctrl->ops->init(ndev, admin, ri->addr, ri->size);
+
+	/* Apply move to HW. The VCAP move command automatically disables
+	 * (initializes) the source addresses, so no separate init is needed
+	 * for the vacated positions.
+	 */
 	vcap_move_rules(ri, &move);
 
-	return gap + offset;
+	if (block_last)
+		return block_last->addr;
+
+	return addr;
 }
 
 /* Delete rule in a VCAP instance */
 int vcap_del_rule(struct vcap_control *vctrl, struct net_device *ndev, u32 id)
 {
-	struct vcap_rule_internal *ri, *elem;
+	struct vcap_rule_internal *ri;
 	struct vcap_admin *admin;
-	int gap = 0, err;
+	int err;
 
-	/* This will later also handle rule moving */
 	if (!ndev)
 		return -ENODEV;
 	err = vcap_api_check(vctrl);
@@ -2566,22 +2619,11 @@ int vcap_del_rule(struct vcap_control *vctrl, struct net_device *ndev, u32 id)
 
 	admin = ri->admin;
 
-	if (ri->addr > admin->last_used_addr)
-		gap = vcap_fill_rule_gap(ri);
+	admin->last_used_addr = vcap_fill_rule_gap(ri);
 
 	/* Delete the rule from the list of rules and the cache */
 	list_del(&ri->list);
-	vctrl->ops->init(ndev, admin, admin->last_used_addr, ri->size + gap);
 	vcap_free_rule(&ri->data);
-
-	/* Update the last used address, set to default when no rules */
-	if (list_empty(&admin->rules)) {
-		admin->last_used_addr = admin->last_valid_addr + 1;
-	} else {
-		elem = list_last_entry(&admin->rules, struct vcap_rule_internal,
-				       list);
-		admin->last_used_addr = elem->addr;
-	}
 
 	vcap_unlock(admin);
 	return err;

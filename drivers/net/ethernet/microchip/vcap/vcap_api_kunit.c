@@ -1576,7 +1576,7 @@ static void vcap_api_rule_insert_in_order_test(struct kunit *test)
 		.lookups = 4,
 		.last_valid_addr = 3071,
 		.first_valid_addr = 0,
-		.last_used_addr = 800,
+		.last_used_addr = 804,
 		.cache = {
 			.keystream = keydata,
 			.maskstream = mskdata,
@@ -1584,15 +1584,28 @@ static void vcap_api_rule_insert_in_order_test(struct kunit *test)
 		},
 	};
 
+	struct vcap_rule_internal ri0 = {
+		.data = {
+			.id = 2001,
+		},
+		.addr = 804,
+		.size = 12,
+		.sort_key = vcap_sort_key(12, 12, 0, 0),
+		.admin = &admin,
+		.counter_id = 2002,
+		.vctrl = &test_vctrl,
+	};
+
 	vcap_test_api_init(&admin);
+	list_add_tail(&ri0.list, &admin.rules);
 
 	/* Create rules with different sizes and check that they are placed
 	 * at the correct address in the VCAP according to size
 	 */
-	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 10, 500, 12, 780);
-	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 20, 400, 6, 774);
-	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 30, 300, 3, 771);
-	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 40, 200, 2, 768);
+	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 10, 500, 12, 792);
+	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 20, 400, 6, 786);
+	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 30, 300, 3, 783);
+	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 40, 200, 2, 780);
 
 	vcap_del_rule(&test_vctrl, &test_netdev, 200);
 	vcap_del_rule(&test_vctrl, &test_netdev, 300);
@@ -1614,7 +1627,7 @@ static void vcap_api_rule_insert_reverse_order_test(struct kunit *test)
 		.lookups = 4,
 		.last_valid_addr = 3071,
 		.first_valid_addr = 0,
-		.last_used_addr = 800,
+		.last_used_addr = 804,
 		.cache = {
 			.keystream = keydata,
 			.maskstream = mskdata,
@@ -1622,40 +1635,54 @@ static void vcap_api_rule_insert_reverse_order_test(struct kunit *test)
 		},
 	};
 	struct vcap_rule_internal *elem;
-	u32 exp_addr[] = {780, 774, 771, 768, 767};
+	u32 exp_addr[] = {804, 792, 786, 783, 780};
 	int idx;
 
+	/* Existing X12 rule at last_used_addr */
+	struct vcap_rule_internal ri0 = {
+		.data = {
+			.id = 2001,
+		},
+		.addr = 804,
+		.size = 12,
+		.sort_key = vcap_sort_key(12, 12, 0, 0),
+		.admin = &admin,
+		.counter_id = 2002,
+		.vctrl = &test_vctrl,
+	};
+
 	vcap_test_api_init(&admin);
+	list_add_tail(&ri0.list, &admin.rules);
 
 	/* Create rules with different sizes and check that they are placed
 	 * at the correct address in the VCAP according to size
 	 */
-	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 20, 200, 2, 798);
+	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 20, 200, 2, 802);
 	KUNIT_EXPECT_EQ(test, 0, test_move_offset);
 	KUNIT_EXPECT_EQ(test, 0, test_move_count);
 	KUNIT_EXPECT_EQ(test, 0, test_move_addr);
 
-	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 30, 300, 3, 795);
-	KUNIT_EXPECT_EQ(test, 6, test_move_offset);
-	KUNIT_EXPECT_EQ(test, 3, test_move_count);
-	KUNIT_EXPECT_EQ(test, 798, test_move_addr);
+	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 30, 300, 3, 801);
+	KUNIT_EXPECT_EQ(test, 4, test_move_offset);
+	KUNIT_EXPECT_EQ(test, 2, test_move_count);
+	KUNIT_EXPECT_EQ(test, 802, test_move_addr);
 
-	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 40, 400, 6, 792);
+	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 40, 400, 6, 798);
 	KUNIT_EXPECT_EQ(test, 6, test_move_offset);
 	KUNIT_EXPECT_EQ(test, 6, test_move_count);
-	KUNIT_EXPECT_EQ(test, 792, test_move_addr);
+	KUNIT_EXPECT_EQ(test, 798, test_move_addr);
 
-	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 50, 500, 12, 780);
-	KUNIT_EXPECT_EQ(test, 18, test_move_offset);
+	test_vcap_xn_rule_creator(test, 10000, VCAP_USER_QOS, 50, 500, 12, 792);
+	KUNIT_EXPECT_EQ(test, 12, test_move_offset);
 	KUNIT_EXPECT_EQ(test, 12, test_move_count);
-	KUNIT_EXPECT_EQ(test, 786, test_move_addr);
+	KUNIT_EXPECT_EQ(test, 792, test_move_addr);
 
 	idx = 0;
 	list_for_each_entry(elem, &admin.rules, list) {
 		KUNIT_EXPECT_EQ(test, exp_addr[idx], elem->addr);
 		++idx;
 	}
-	KUNIT_EXPECT_EQ(test, 768, admin.last_used_addr);
+	KUNIT_EXPECT_EQ(test, 780, admin.last_used_addr);
 
 	vcap_del_rule(&test_vctrl, &test_netdev, 500);
 	vcap_del_rule(&test_vctrl, &test_netdev, 400);
@@ -1775,7 +1802,7 @@ static void vcap_api_rule_remove_in_middle_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, 768, test_move_addr);
 	KUNIT_EXPECT_EQ(test, -6, test_move_offset);
 	KUNIT_EXPECT_EQ(test, 6, test_move_count);
-	KUNIT_EXPECT_EQ(test, 768, test_init_start);
+	KUNIT_EXPECT_EQ(test, 774, test_init_start);
 	KUNIT_EXPECT_EQ(test, 6, test_init_count);
 	KUNIT_EXPECT_EQ(test, 774, admin.last_used_addr);
 
@@ -1785,8 +1812,8 @@ static void vcap_api_rule_remove_in_middle_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, 774, test_move_addr);
 	KUNIT_EXPECT_EQ(test, -4, test_move_offset);
 	KUNIT_EXPECT_EQ(test, 2, test_move_count);
-	KUNIT_EXPECT_EQ(test, 774, test_init_start);
-	KUNIT_EXPECT_EQ(test, 4, test_init_count);
+	KUNIT_EXPECT_EQ(test, 777, test_init_start);
+	KUNIT_EXPECT_EQ(test, 3, test_init_count);
 	KUNIT_EXPECT_EQ(test, 778, admin.last_used_addr);
 
 	test_init_rule_deletion();
@@ -1795,8 +1822,8 @@ static void vcap_api_rule_remove_in_middle_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, 778, test_move_addr);
 	KUNIT_EXPECT_EQ(test, -20, test_move_offset);
 	KUNIT_EXPECT_EQ(test, 2, test_move_count);
-	KUNIT_EXPECT_EQ(test, 778, test_init_start);
-	KUNIT_EXPECT_EQ(test, 20, test_init_count);
+	KUNIT_EXPECT_EQ(test, 780, test_init_start);
+	KUNIT_EXPECT_EQ(test, 12, test_init_count);
 	KUNIT_EXPECT_EQ(test, 798, admin.last_used_addr);
 
 	test_init_rule_deletion();
@@ -1856,11 +1883,11 @@ static void vcap_api_rule_remove_in_front_test(struct kunit *test)
 	ret = vcap_del_rule(&test_vctrl, &test_netdev, 400);
 	KUNIT_EXPECT_EQ(test, 0, ret);
 	KUNIT_EXPECT_EQ(test, 786, test_move_addr);
-	KUNIT_EXPECT_EQ(test, -8, test_move_offset);
+	KUNIT_EXPECT_EQ(test, -6, test_move_offset);
 	KUNIT_EXPECT_EQ(test, 6, test_move_count);
-	KUNIT_EXPECT_EQ(test, 786, test_init_start);
-	KUNIT_EXPECT_EQ(test, 8, test_init_count);
-	KUNIT_EXPECT_EQ(test, 794, admin.last_used_addr);
+	KUNIT_EXPECT_EQ(test, 792, test_init_start);
+	KUNIT_EXPECT_EQ(test, 6, test_init_count);
+	KUNIT_EXPECT_EQ(test, 792, admin.last_used_addr);
 
 	vcap_del_rule(&test_vctrl, &test_netdev, 200);
 	vcap_del_rule(&test_vctrl, &test_netdev, 300);
