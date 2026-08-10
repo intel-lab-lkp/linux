@@ -3952,6 +3952,44 @@ static int ixgbe_get_pfa_module_tlv(struct ixgbe_hw *hw, u16 *module_tlv,
 }
 
 /**
+ * ixgbe_get_link_default_override - Get link default override from NVM
+ * @hw: pointer to hardware structure
+ * @ldo: pointer to link default override struct to populate
+ *
+ * Read the Link Default Override TLV from the NVM PFA and return
+ * the per-port override configuration.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int ixgbe_get_link_default_override(struct ixgbe_hw *hw,
+				    struct ixgbe_link_default_override_tlv *ldo)
+{
+	struct ixgbe_adapter *adapter = hw->back;
+	u16 tlv, tlv_len;
+	u32 tlv_start;
+	u8 pf_func;
+	int err;
+
+	err = ixgbe_get_pfa_module_tlv(hw, &tlv, &tlv_len,
+				       IXGBE_E610_SR_LINK_DEFAULT_OVERRIDE_PTR);
+	if (err)
+		return err;
+
+	pf_func = PCI_FUNC(adapter->pdev->devfn);
+
+	tlv_start = tlv + IXGBE_E610_SR_PFA_TLV_HDR_SIZE +
+		    pf_func * IXGBE_E610_SR_PFA_LINK_OVERRIDE_WORDS;
+
+	if (tlv_start + IXGBE_E610_SR_PFA_LINK_OVERRIDE_WORDS >
+	    tlv + IXGBE_E610_SR_PFA_TLV_HDR_SIZE + tlv_len)
+		return -ERANGE;
+
+	return ixgbe_read_ee_aci_buffer_e610(hw, tlv_start,
+					     IXGBE_E610_SR_PFA_LINK_OVERRIDE_WORDS,
+					     (u16 *)ldo);
+}
+
+/**
  * ixgbe_read_pba_string_e610 - Read PBA string from NVM
  * @hw: pointer to hardware structure
  * @pba_num: stores the part number string from the NVM
