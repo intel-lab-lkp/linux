@@ -200,6 +200,9 @@ static void mt7915_unregister_thermal(struct mt7915_phy *phy)
 {
 	struct wiphy *wiphy = phy->mt76->hw->wiphy;
 
+	if (phy->tzone)
+		devm_thermal_of_zone_unregister(phy->dev->mt76.dev, phy->tzone);
+
 	if (!phy->cdev)
 		return;
 
@@ -213,6 +216,7 @@ static int mt7915_thermal_init(struct mt7915_phy *phy)
 	struct thermal_cooling_device *cdev;
 	struct device *hwmon;
 	const char *name;
+	int ret;
 
 	name = devm_kasprintf(&wiphy->dev, GFP_KERNEL, "mt7915_%s",
 			      wiphy_name(wiphy));
@@ -238,8 +242,8 @@ static int mt7915_thermal_init(struct mt7915_phy *phy)
 	if (IS_ERR(phy->tzone)) {
 		if (PTR_ERR(phy->tzone) != -ENODEV)
 			dev_warn(phy->dev->mt76.dev,
-				 "failed to register thermal zone: %ld\n",
-				 PTR_ERR(phy->tzone));
+				 "failed to register thermal zone %d: %ld\n",
+				 phy->mt76->band_idx, PTR_ERR(phy->tzone));
 		phy->tzone = NULL;
 	}
 
@@ -248,7 +252,11 @@ static int mt7915_thermal_init(struct mt7915_phy *phy)
 
 	hwmon = devm_hwmon_device_register_with_groups(&wiphy->dev, name, phy,
 						       mt7915_hwmon_groups);
-	return PTR_ERR_OR_ZERO(hwmon);
+	ret = PTR_ERR_OR_ZERO(hwmon);
+	if (ret)
+		mt7915_unregister_thermal(phy);
+
+	return ret;
 }
 
 static void mt7915_led_set_config(struct led_classdev *led_cdev,
