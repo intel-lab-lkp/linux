@@ -340,6 +340,25 @@ static void of_gpio_set_polarity_by_property(const struct device_node *np,
 	}
 }
 
+/*
+ * The legacy SPI chip select binding below is keyed on a property name that
+ * other subsystems reuse for the same purpose, notably NAND controllers (see
+ * Documentation/devicetree/bindings/mtd/nand-controller.yaml), whose chip
+ * selects carry no SPI polarity semantics. Device tree has no bus type
+ * marker, so go by what the peripheral advertises about itself: properties
+ * of an SPI peripheral are namespaced with "spi-".
+ */
+static bool of_gpio_child_is_spi_peripheral(const struct device_node *child)
+{
+	struct property *pp;
+
+	for_each_property_of_node(child, pp)
+		if (str_has_prefix(pp->name, "spi-"))
+			return true;
+
+	return false;
+}
+
 static void of_gpio_flags_quirks(const struct device_node *np,
 				 const char *propname,
 				 enum of_gpio_flags *flags,
@@ -374,6 +393,11 @@ static void of_gpio_flags_quirks(const struct device_node *np,
 			if (ret)
 				continue;
 			if (cs == index) {
+				bool active_high;
+
+				if (!of_gpio_child_is_spi_peripheral(child))
+					break;
+
 				/*
 				 * SPI children have active low chip selects
 				 * by default. This can be specified negatively
@@ -386,8 +410,8 @@ static void of_gpio_flags_quirks(const struct device_node *np,
 				 * conflict and the "spi-cs-high" flag will
 				 * take precedence.
 				 */
-				bool active_high = of_property_read_bool(child,
-								"spi-cs-high");
+				active_high = of_property_read_bool(child,
+								    "spi-cs-high");
 				of_gpio_quirk_polarity(child, active_high,
 						       flags);
 				break;
