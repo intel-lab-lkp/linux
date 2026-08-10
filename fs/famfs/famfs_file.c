@@ -290,6 +290,76 @@ out:
 }
 
 /**
+ * famfs_daxdev_open() - FAMFSIOC_DAXDEV_OPEN ioctl handler
+ * @file: any file in the famfs mount (the table is per-superblock)
+ * @arg:  ptr to struct famfs_ioc_daxdev in user space
+ *
+ * Register a devdax device (identified by path) into the mount's daxdev table
+ * at the caller-specified index, so files whose extents reference that index
+ * can be mapped. The path is resolved by famfs_lookup_daxdev() - the same
+ * helper the mount uses for the primary daxdev - so every slot is resolved
+ * identically. Registering exposes raw device memory, so it requires
+ * CAP_SYS_RAWIO.
+ */
+static int
+famfs_daxdev_open(struct file *file, void __user *arg)
+{
+	struct super_block *sb = file_inode(file)->i_sb;
+	struct famfs_fs_info *fsi = sb->s_fs_info;
+	struct famfs_ioc_daxdev dd;
+	dev_t devno;
+	int rc;
+
+	char *path __free(kfree) = NULL;
+
+	if (!capable(CAP_SYS_RAWIO))
+		return -EPERM;
+
+	if (copy_from_user(&dd, arg, sizeof(dd)))
+		return -EFAULT;
+
+	/* @flags is reserved; reject non-zero so it stays available */
+	if (dd.flags)
+		return -EINVAL;
+
+	/*
+	 * If this daxdev index is already populated there is nothing to do.
+	 * The index is cluster-invariant, so a valid slot already names this
+	 * device; skip the path resolution entirely. install_daxdev() rechecks
+	 * ->valid under the write lock, so this is purely an optimization.
+	 */
+	scoped_guard(rwsem_read, &fsi->devlist_sem) {
+		if (dd.daxdev_index >= fsi->dax_devlist->nslots)
+			return -EINVAL;
+		if (fsi->dax_devlist->devlist[dd.daxdev_index].valid)
+			return 0;
+	}
+
+	if (dd.daxdev_path_len == 0 || dd.daxdev_path_len >= PATH_MAX)
+		return -EINVAL;
+
+	/* +1 so the terminating NUL is included within the bound */
+	path = strndup_user((const char __user *)(uintptr_t)dd.daxdev_path,
+			    dd.daxdev_path_len + 1);
+	if (IS_ERR(path))
+		return PTR_ERR(no_free_ptr(path));
+
+	rc = famfs_lookup_daxdev(path, &devno);
+	if (rc)
+		return rc;
+
+	/*
+	 * The daxdev table is allocated at mount time (for the slot-0 primary),
+	 * so it is always present here; no need to allocate it.
+	 */
+	rc = famfs_install_daxdev(fsi, sb, dd.daxdev_index, devno, path);
+	if (rc)
+		pr_debug("%s: failed to install daxdev index %llu (%s)\n",
+		       __func__, dd.daxdev_index, path);
+	return rc;
+}
+
+/**
  * famfs_file_ioctl() - Top-level famfs file ioctl handler
  * @file: the file
  * @cmd:  ioctl opcode
@@ -308,6 +378,10 @@ famfs_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case FAMFSIOC_NOP:
 		rc = 0;
+		break;
+
+	case FAMFSIOC_DAXDEV_OPEN:
+		rc = famfs_daxdev_open(file, (void __user *)arg);
 		break;
 
 	case FAMFSIOC_MAP_CREATE:
