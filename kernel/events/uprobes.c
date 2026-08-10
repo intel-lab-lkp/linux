@@ -1748,6 +1748,10 @@ void * __weak arch_uretprobe_trampoline(unsigned long *psize)
 	return &insn;
 }
 
+void __weak arch_uretprobe_restore_return_address(unsigned long orig_ret_vaddr, struct pt_regs *regs)
+{
+}
+
 static struct xol_area *__create_xol_area(unsigned long vaddr)
 {
 	struct mm_struct *mm = current->mm;
@@ -2659,6 +2663,7 @@ void uprobe_handle_trampoline(struct pt_regs *regs)
 		valid = !next_chain || arch_uretprobe_is_alive(next_chain, RP_CHECK_RET, regs);
 
 		instruction_pointer_set(regs, ri->orig_ret_vaddr);
+		arch_uretprobe_restore_return_address(ri->orig_ret_vaddr, regs);
 		do {
 			/* pop current instance from the stack of pending return instances,
 			 * as it's not pending anymore: we just fixed up original

@@ -139,6 +139,13 @@ arch_uretprobe_hijack_return_addr(unsigned long trampoline_vaddr,
 	return ra;
 }
 
+void
+arch_uretprobe_restore_return_address(unsigned long orig_ret_vaddr,
+				  struct pt_regs *regs)
+{
+	regs->ra = orig_ret_vaddr;
+}
+
 int arch_uprobe_exception_notify(struct notifier_block *self,
 				 unsigned long val, void *data)
 {
