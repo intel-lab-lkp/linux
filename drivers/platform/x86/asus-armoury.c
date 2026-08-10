@@ -93,6 +93,7 @@ struct asus_armoury_priv {
 
 	u32 mini_led_dev_id;
 	u32 gpu_mux_dev_id;
+	u32 dgpu_disable_dev_id;
 };
 
 static struct asus_armoury_priv asus_armoury = {
@@ -452,8 +453,8 @@ static ssize_t gpu_mux_mode_current_value_store(struct kobject *kobj,
 	if (err)
 		return err;
 
-	if (armoury_has_devstate(ASUS_WMI_DEVID_DGPU)) {
-		err = armoury_get_devstate(NULL, &result, ASUS_WMI_DEVID_DGPU);
+	if (asus_armoury.dgpu_disable_dev_id) {
+		err = armoury_get_devstate(NULL, &result, asus_armoury.dgpu_disable_dev_id);
 		if (err)
 			return err;
 		if (result && !optimus) {
@@ -507,7 +508,8 @@ static ssize_t dgpu_disable_current_value_store(struct kobject *kobj,
 	}
 
 	scoped_guard(mutex, &asus_armoury.egpu_mutex) {
-		err = armoury_set_devstate(attr, disable ? 1 : 0, NULL, ASUS_WMI_DEVID_DGPU);
+		err = armoury_set_devstate(attr, disable ? 1 : 0, NULL,
+					   asus_armoury.dgpu_disable_dev_id);
 		if (err)
 			return err;
 	}
@@ -516,7 +518,7 @@ static ssize_t dgpu_disable_current_value_store(struct kobject *kobj,
 
 	return count;
 }
-ASUS_WMI_SHOW_INT(dgpu_disable_current_value, ASUS_WMI_DEVID_DGPU);
+ASUS_WMI_SHOW_INT(dgpu_disable_current_value, asus_armoury.dgpu_disable_dev_id);
 ASUS_ATTR_GROUP_BOOL(dgpu_disable, "dgpu_disable", "Disable the dGPU");
 
 /* Values map for eGPU activation requests. */
@@ -790,7 +792,6 @@ ASUS_ATTR_GROUP_INT_VALUE_ONLY_RO(nv_base_tgp, ATTR_NV_BASE_TGP, ASUS_WMI_DEVID_
 static const struct asus_attr_group armoury_attr_groups[] = {
 	{ &egpu_connected_attr_group, ASUS_WMI_DEVID_EGPU_CONNECTED },
 	{ &egpu_enable_attr_group, ASUS_WMI_DEVID_EGPU },
-	{ &dgpu_disable_attr_group, ASUS_WMI_DEVID_DGPU },
 	{ &apu_mem_attr_group, ASUS_WMI_DEVID_APU_MEM },
 
 	{ &ppt_pl1_spl_attr_group, ASUS_WMI_DEVID_PPT_PL1_SPL },
@@ -934,6 +935,21 @@ static int asus_fw_attr_add(void)
 		}
 	}
 
+	asus_armoury.dgpu_disable_dev_id = 0;
+	if (armoury_has_devstate(ASUS_WMI_DEVID_DGPU))
+		asus_armoury.dgpu_disable_dev_id = ASUS_WMI_DEVID_DGPU;
+	else if (armoury_has_devstate(ASUS_WMI_DEVID_GPU_MODE))
+		asus_armoury.dgpu_disable_dev_id = ASUS_WMI_DEVID_GPU_MODE;
+
+	if (asus_armoury.dgpu_disable_dev_id) {
+		err = sysfs_create_group(&asus_armoury.fw_attr_kset->kobj,
+					 &dgpu_disable_attr_group);
+		if (err) {
+			pr_err("Failed to create sysfs-group for dgpu_disable\n");
+			goto err_remove_gpu_mux_group;
+		}
+	}
+
 	for (i = 0; i < ARRAY_SIZE(armoury_attr_groups); i++) {
 		if (!armoury_has_devstate(armoury_attr_groups[i].wmi_devid))
 			continue;
@@ -971,6 +987,9 @@ err_remove_groups:
 			sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj,
 					   armoury_attr_groups[i].attr_group);
 	}
+	if (asus_armoury.dgpu_disable_dev_id)
+		sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj, &dgpu_disable_attr_group);
+err_remove_gpu_mux_group:
 	if (asus_armoury.gpu_mux_dev_id)
 		sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj, &gpu_mux_mode_attr_group);
 err_remove_mini_led_group:
@@ -1142,6 +1161,9 @@ static void __exit asus_fw_exit(void)
 			sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj,
 					   armoury_attr_groups[i].attr_group);
 	}
+
+	if (asus_armoury.dgpu_disable_dev_id)
+		sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj, &dgpu_disable_attr_group);
 
 	if (asus_armoury.gpu_mux_dev_id)
 		sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj, &gpu_mux_mode_attr_group);
