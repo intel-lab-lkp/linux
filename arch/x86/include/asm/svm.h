@@ -338,7 +338,12 @@ struct vmcb_save_area {
 	u8 cpl;
 	u8 reserved_0xcc[4];
 	u64 efer;
-	u8 reserved_0xd8[112];
+	u8 reserved_0xd8[8];
+	struct {
+		u64 perf_ctl;
+		u64 perf_ctr;
+	} __packed pmc[6];
+	u8 reserved_0x140[8];
 	u64 cr4;
 	u64 cr3;
 	u64 cr0;
@@ -346,7 +351,9 @@ struct vmcb_save_area {
 	u64 dr6;
 	u64 rflags;
 	u64 rip;
-	u8 reserved_0x180[88];
+	u8 reserved_0x180[72];
+	u64 perf_cntr_global_status;
+	u64 perf_cntr_global_control;
 	u64 rsp;
 	u64 s_cet;
 	u64 ssp;
@@ -575,6 +582,7 @@ static inline void __unused_size_checks(void)
 	BUILD_BUG_RESERVED_OFFSET(vmcb_save_area, 0xa0);
 	BUILD_BUG_RESERVED_OFFSET(vmcb_save_area, 0xcc);
 	BUILD_BUG_RESERVED_OFFSET(vmcb_save_area, 0xd8);
+	BUILD_BUG_RESERVED_OFFSET(vmcb_save_area, 0x140);
 	BUILD_BUG_RESERVED_OFFSET(vmcb_save_area, 0x180);
 	BUILD_BUG_RESERVED_OFFSET(vmcb_save_area, 0x248);
 	BUILD_BUG_RESERVED_OFFSET(vmcb_save_area, 0x298);
