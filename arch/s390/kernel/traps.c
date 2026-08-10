@@ -24,6 +24,7 @@
 #include <linux/entry-common.h>
 #include <linux/kmsan.h>
 #include <linux/bug.h>
+#include <linux/panic.h>
 #include <asm/entry-percpu.h>
 #include <asm/asm-extable.h>
 #include <asm/irqflags.h>
@@ -31,6 +32,7 @@
 #include <asm/vtime.h>
 #include <asm/fpu.h>
 #include <asm/fault.h>
+#include <asm/processor.h>
 #include "entry.h"
 
 static inline void __user *get_trap_ip(struct pt_regs *regs)
@@ -273,6 +275,11 @@ static void monitor_event_exception(struct pt_regs *regs)
 		die(regs, "monitor event");
 		break;
 	}
+}
+
+void arch_do_panic(void)
+{
+	disabled_wait();
 }
 
 void kernel_stack_invalid(struct pt_regs *regs)
