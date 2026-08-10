@@ -18,6 +18,7 @@
 #include <linux/cma.h>
 #endif
 #include <linux/zswap.h>
+#include <linux/trace.h>
 #include <asm/page.h>
 #include "internal.h"
 
@@ -108,6 +109,8 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	show_val_kb(m, "Slab:           ", sreclaimable + sunreclaim);
 	show_val_kb(m, "SReclaimable:   ", sreclaimable);
 	show_val_kb(m, "SUnreclaim:     ", sunreclaim);
+	seq_printf(m, "Ftrace:         %8lu kB\n",
+		   ftrace_buffer_total_size() >> 10);
 	seq_printf(m, "KernelStack:    %8lu kB\n",
 		   global_node_page_state(NR_KERNEL_STACK_KB));
 #ifdef CONFIG_SHADOW_CALL_STACK

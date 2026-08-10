@@ -5769,6 +5769,36 @@ tracing_total_entries_read(struct file *filp, char __user *ubuf,
 	return simple_read_from_buffer(ubuf, cnt, ppos, buf, r);
 }
 
+static unsigned long trace_array_buffer_size(struct array_buffer *buf)
+{
+	unsigned long size = 0;
+	int cpu;
+
+	if (!buf->buffer)
+		return 0;
+
+	for_each_tracing_cpu(cpu)
+		size += ring_buffer_size(buf->buffer, cpu);
+
+	return size;
+}
+
+unsigned long ftrace_buffer_total_size(void)
+{
+	struct trace_array *tr;
+	unsigned long size = 0;
+
+	guard(mutex)(&trace_types_lock);
+	list_for_each_entry(tr, &ftrace_trace_arrays, list) {
+		size += trace_array_buffer_size(&tr->array_buffer);
+#ifdef CONFIG_TRACER_SNAPSHOT
+		size += trace_array_buffer_size(&tr->snapshot_buffer);
+#endif
+	}
+
+	return size;
+}
+
 #define LAST_BOOT_HEADER ((void *)1)
 
 static void *l_next(struct seq_file *m, void *v, loff_t *pos)

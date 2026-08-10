@@ -53,6 +53,7 @@ int trace_array_init_printk(struct trace_array *tr);
 void trace_array_put(struct trace_array *tr);
 struct trace_array *trace_array_get_by_name(const char *name, const char *systems);
 int trace_array_destroy(struct trace_array *tr);
+unsigned long ftrace_buffer_total_size(void);
 
 /* For osnoise tracer */
 int osnoise_arch_register(void);
@@ -89,6 +90,10 @@ static inline struct trace_array *trace_array_get_by_name(const char *name, cons
 	return NULL;
 }
 static inline int trace_array_destroy(struct trace_array *tr)
+{
+	return 0;
+}
+static inline unsigned long ftrace_buffer_total_size(void)
 {
 	return 0;
 }
