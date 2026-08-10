@@ -130,6 +130,24 @@ void kvm_pmu_ops_update(const struct kvm_pmu_ops *pmu_ops)
 #undef __KVM_X86_PMU_OP
 }
 
+static void kvm_pmu_get_vendor_state(struct kvm_vcpu *vcpu, u32 msr)
+{
+	if (!kvm_vcpu_has_mediated_pmu_caps(vcpu, KVM_MEDIATED_PMU_CAP_HW_SWITCHED))
+		return;
+
+	if (kvm_pmu_call(get_vendor_state)(vcpu, msr))
+		kvm_pmu_warn_vendor_state(msr);
+}
+
+static void kvm_pmu_set_vendor_state(struct kvm_vcpu *vcpu, u32 msr)
+{
+	if (!kvm_vcpu_has_mediated_pmu_caps(vcpu, KVM_MEDIATED_PMU_CAP_HW_SWITCHED))
+		return;
+
+	if (kvm_pmu_call(set_vendor_state)(vcpu, msr))
+		kvm_pmu_warn_vendor_state(msr);
+}
+
 void kvm_init_pmu_capability(struct kvm_pmu_ops *pmu_ops)
 {
 	bool is_intel = boot_cpu_data.x86_vendor == X86_VENDOR_INTEL;
@@ -198,6 +216,27 @@ void kvm_handle_guest_mediated_pmi(void)
 		return;
 
 	kvm_make_request(KVM_REQ_PMI, vcpu);
+}
+
+static __always_inline u32 fixed_counter_msr(u32 idx)
+{
+	return kvm_pmu_ops.FIXED_COUNTER_BASE + idx * kvm_pmu_ops.MSR_STRIDE;
+}
+
+static __always_inline u32 gp_counter_msr(u32 idx)
+{
+	return kvm_pmu_ops.GP_COUNTER_BASE + idx * kvm_pmu_ops.MSR_STRIDE;
+}
+
+static __always_inline u32 gp_eventsel_msr(u32 idx)
+{
+	return kvm_pmu_ops.GP_EVENTSEL_BASE + idx * kvm_pmu_ops.MSR_STRIDE;
+}
+
+static __always_inline u32 pmc_counter_msr(struct kvm_pmc *pmc)
+{
+	return pmc_is_gp(pmc) ? gp_counter_msr(pmc->idx) :
+				fixed_counter_msr(pmc->idx - KVM_FIXED_PMC_BASE_IDX);
 }
 
 static inline void __kvm_perf_overflow(struct kvm_pmc *pmc, bool in_pmi)
@@ -553,18 +592,23 @@ static void kvm_mediated_pmu_refresh_event_filter(struct kvm_pmc *pmc)
 {
 	bool allowed = pmc_is_locally_enabled(pmc) && pmc_is_event_allowed(pmc);
 	struct kvm_pmu *pmu = pmc_to_pmu(pmc);
+	struct kvm_vcpu *vcpu = pmc->vcpu;
 
 	if (pmc_is_gp(pmc)) {
 		pmc->eventsel_hw &= ~ARCH_PERFMON_EVENTSEL_ENABLE;
 		if (allowed)
 			pmc->eventsel_hw |= pmc->eventsel &
 					    ARCH_PERFMON_EVENTSEL_ENABLE;
+
+		kvm_pmu_set_vendor_state(vcpu, gp_eventsel_msr(pmc->idx));
 	} else {
 		u64 mask = intel_fixed_bits_by_idx(pmc->idx - KVM_FIXED_PMC_BASE_IDX, 0xf);
 
 		pmu->fixed_ctr_ctrl_hw &= ~mask;
 		if (allowed)
 			pmu->fixed_ctr_ctrl_hw |= pmu->fixed_ctr_ctrl & mask;
+
+		kvm_pmu_set_vendor_state(vcpu, kvm_pmu_ops.FIXED_COUNTER_CTRL);
 	}
 }
 
@@ -772,6 +816,8 @@ int kvm_pmu_rdpmc(struct kvm_vcpu *vcpu, unsigned idx, u64 *data)
 	    kvm_is_cr0_bit_set(vcpu, X86_CR0_PE))
 		return 1;
 
+	kvm_pmu_get_vendor_state(vcpu, pmc_counter_msr(pmc));
+
 	*data = pmc_read_counter(pmc) & mask;
 	return 0;
 }
@@ -855,10 +901,12 @@ int kvm_pmu_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	switch (msr) {
 	case MSR_CORE_PERF_GLOBAL_STATUS:
 	case MSR_AMD64_PERF_CNTR_GLOBAL_STATUS:
+		kvm_pmu_get_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_STATUS);
 		msr_info->data = pmu->global_status;
 		break;
 	case MSR_AMD64_PERF_CNTR_GLOBAL_CTL:
 	case MSR_CORE_PERF_GLOBAL_CTRL:
+		kvm_pmu_get_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_CTRL);
 		msr_info->data = pmu->global_ctrl;
 		break;
 	case MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_CLR:
@@ -898,6 +946,7 @@ int kvm_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			return 1;
 
 		pmu->global_status = data;
+		kvm_pmu_set_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_STATUS);
 		break;
 	case MSR_AMD64_PERF_CNTR_GLOBAL_CTL:
 		data &= ~pmu->global_ctrl_rsvd;
@@ -917,6 +966,8 @@ int kvm_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		 */
 		if (kvm_vcpu_has_mediated_pmu(vcpu))
 			kvm_pmu_call(write_global_ctrl)(data);
+
+		kvm_pmu_set_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_CTRL);
 		break;
 	case MSR_CORE_PERF_GLOBAL_OVF_CTRL:
 		/*
@@ -927,12 +978,18 @@ int kvm_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			return 1;
 		fallthrough;
 	case MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_CLR:
-		if (!msr_info->host_initiated)
+		if (!msr_info->host_initiated) {
+			kvm_pmu_get_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_STATUS);
 			pmu->global_status &= ~data;
+			kvm_pmu_set_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_STATUS);
+		}
 		break;
 	case MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_SET:
-		if (!msr_info->host_initiated)
+		if (!msr_info->host_initiated) {
+			kvm_pmu_get_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_STATUS);
 			pmu->global_status |= data & ~pmu->global_status_rsvd;
+			kvm_pmu_set_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_STATUS);
+		}
 		break;
 	default:
 		kvm_pmu_mark_pmc_in_use(vcpu, msr_info->index);
@@ -1019,6 +1076,8 @@ void kvm_pmu_refresh(struct kvm_vcpu *vcpu)
 
 	if (kvm_vcpu_has_mediated_pmu(vcpu))
 		kvm_pmu_call(write_global_ctrl)(pmu->global_ctrl);
+
+	kvm_pmu_set_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_CTRL);
 
 	bitmap_set(pmu->all_valid_pmc_idx, 0, pmu->nr_arch_gp_counters);
 	bitmap_set(pmu->all_valid_pmc_idx, KVM_FIXED_PMC_BASE_IDX,
@@ -1142,6 +1201,9 @@ static void kvm_pmu_trigger_event(struct kvm_vcpu *vcpu,
 	if (bitmap_empty(event_pmcs, X86_PMC_IDX_MAX))
 		return;
 
+	kvm_pmu_get_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_CTRL);
+	kvm_pmu_get_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_STATUS);
+
 	if (!kvm_pmu_has_perf_global_ctrl(pmu))
 		bitmap_copy(bitmap, event_pmcs, X86_PMC_IDX_MAX);
 	else if (!bitmap_and(bitmap, event_pmcs,
@@ -1150,11 +1212,17 @@ static void kvm_pmu_trigger_event(struct kvm_vcpu *vcpu,
 
 	idx = srcu_read_lock(&vcpu->kvm->srcu);
 	kvm_for_each_pmc(pmu, pmc, i, bitmap) {
+		kvm_pmu_get_vendor_state(vcpu, pmc_counter_msr(pmc));
+
 		if (!pmc_is_event_allowed(pmc) || !cpl_is_matched(pmc))
 			continue;
 
 		kvm_pmu_incr_counter(pmc);
+		kvm_pmu_set_vendor_state(vcpu, pmc_counter_msr(pmc));
 	}
+
+	kvm_pmu_set_vendor_state(vcpu, kvm_pmu_ops.PERF_GLOBAL_STATUS);
+
 	srcu_read_unlock(&vcpu->kvm->srcu, idx);
 }
 
@@ -1313,21 +1381,6 @@ cleanup:
 	return r;
 }
 
-static __always_inline u32 fixed_counter_msr(u32 idx)
-{
-	return kvm_pmu_ops.FIXED_COUNTER_BASE + idx * kvm_pmu_ops.MSR_STRIDE;
-}
-
-static __always_inline u32 gp_counter_msr(u32 idx)
-{
-	return kvm_pmu_ops.GP_COUNTER_BASE + idx * kvm_pmu_ops.MSR_STRIDE;
-}
-
-static __always_inline u32 gp_eventsel_msr(u32 idx)
-{
-	return kvm_pmu_ops.GP_EVENTSEL_BASE + idx * kvm_pmu_ops.MSR_STRIDE;
-}
-
 static void kvm_pmu_load_guest_pmcs(struct kvm_vcpu *vcpu)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
@@ -1363,6 +1416,10 @@ void kvm_mediated_pmu_load(struct kvm_vcpu *vcpu)
 	lockdep_assert_irqs_disabled();
 
 	perf_load_guest_context();
+
+	/* Guest PMU state is restored by hardware */
+	if (kvm_vcpu_has_mediated_pmu_caps(vcpu, KVM_MEDIATED_PMU_CAP_HW_SWITCHED))
+		return;
 
 	/*
 	 * Explicitly clear PERF_GLOBAL_CTRL, as "loading" the guest's context
@@ -1422,6 +1479,12 @@ void kvm_mediated_pmu_put(struct kvm_vcpu *vcpu)
 		return;
 
 	lockdep_assert_irqs_disabled();
+
+	/* Guest PMU state is saved by hardware */
+	if (kvm_vcpu_has_mediated_pmu_caps(vcpu, KVM_MEDIATED_PMU_CAP_HW_SWITCHED)) {
+		perf_put_guest_context();
+		return;
+	}
 
 	/*
 	 * Defer handling of PERF_GLOBAL_CTRL to vendor code.  On Intel, it's

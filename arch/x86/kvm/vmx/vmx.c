@@ -7383,7 +7383,8 @@ static void vmx_refresh_guest_perf_global_control(struct kvm_vcpu *vcpu)
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 
-	if (msr_write_intercepted(vmx, MSR_CORE_PERF_GLOBAL_CTRL))
+	if (kvm_vcpu_has_mediated_pmu_caps(vcpu, KVM_MEDIATED_PMU_CAP_HW_SWITCHED) ||
+	    msr_write_intercepted(vmx, MSR_CORE_PERF_GLOBAL_CTRL))
 		return;
 
 	if (!cpu_has_save_perf_global_ctrl()) {

@@ -50,8 +50,10 @@ struct kvm_pmu_ops {
 	const int MIN_NR_GP_COUNTERS;
 
 	const u32 PERF_GLOBAL_CTRL;
+	const u32 PERF_GLOBAL_STATUS;
 	const u32 GP_EVENTSEL_BASE;
 	const u32 GP_COUNTER_BASE;
+	const u32 FIXED_COUNTER_CTRL;
 	const u32 FIXED_COUNTER_BASE;
 	const u32 MSR_STRIDE;
 };
@@ -109,6 +111,11 @@ do {									\
 		     ((caps) & ~KVM_MEDIATED_PMU_CAP_VALID));		\
 	(kvm)->arch.mediated_pmu_caps &= ~(caps);			\
 } while (0)
+
+static inline void kvm_pmu_warn_vendor_state(u32 msr)
+{
+	WARN_ONCE(1, "accessing unsupported vendor save slot for MSR 0x%x\n", msr);
+}
 
 /*
  * KVM tracks all counters in 64-bit bitmaps, with general purpose counters
