@@ -291,8 +291,32 @@ void ipu_plane_disable_deferred(struct drm_plane *plane)
 	}
 }
 
+static unsigned int ipu_plane_blend_modes(int dp_flow)
+{
+	if (dp_flow == IPU_DP_FLOW_SYNC_BG || dp_flow == IPU_DP_FLOW_SYNC_FG)
+		return BIT(DRM_MODE_BLEND_PIXEL_NONE) |
+		       BIT(DRM_MODE_BLEND_COVERAGE);
+
+	return BIT(DRM_MODE_BLEND_PIXEL_NONE);
+}
+
+static unsigned int ipu_plane_default_blend_mode(int dp_flow)
+{
+	if (dp_flow == IPU_DP_FLOW_SYNC_BG || dp_flow == IPU_DP_FLOW_SYNC_FG)
+		return DRM_MODE_BLEND_COVERAGE;
+
+	return DRM_MODE_BLEND_PIXEL_NONE;
+}
+
+static bool ipu_plane_use_pixel_alpha(struct drm_plane_state *state)
+{
+	return state->fb->format->has_alpha &&
+	       state->pixel_blend_mode != DRM_MODE_BLEND_PIXEL_NONE;
+}
+
 static void ipu_plane_state_reset(struct drm_plane *plane)
 {
+	struct ipu_plane *ipu_plane = to_ipu_plane(plane);
 	struct ipu_plane_state *ipu_state;
 
 	if (plane->state) {
@@ -304,8 +328,12 @@ static void ipu_plane_state_reset(struct drm_plane *plane)
 
 	ipu_state = kzalloc_obj(*ipu_state);
 
-	if (ipu_state)
+	if (ipu_state) {
 		__drm_atomic_helper_plane_reset(plane, &ipu_state->base);
+		/* the helper defaults to premultiplied, which the DP lacks */
+		ipu_state->base.pixel_blend_mode =
+			ipu_plane_default_blend_mode(ipu_plane->dp_flow);
+	}
 }
 
 static struct drm_plane_state *
@@ -593,8 +621,8 @@ static void ipu_plane_atomic_update(struct drm_plane *plane,
 	case IPU_DP_FLOW_SYNC_BG:
 		if (new_state->normalized_zpos == 1) {
 			ipu_dp_set_global_alpha(ipu_plane->dp,
-						!fb->format->has_alpha, 0xff,
-						true);
+						!ipu_plane_use_pixel_alpha(new_state),
+						0xff, true);
 		} else {
 			ipu_dp_set_global_alpha(ipu_plane->dp, true, 0, true);
 		}
@@ -602,8 +630,8 @@ static void ipu_plane_atomic_update(struct drm_plane *plane,
 	case IPU_DP_FLOW_SYNC_FG:
 		if (new_state->normalized_zpos == 1) {
 			ipu_dp_set_global_alpha(ipu_plane->dp,
-						!fb->format->has_alpha, 0xff,
-						false);
+						!ipu_plane_use_pixel_alpha(new_state),
+						0xff, false);
 		}
 		break;
 	}
@@ -927,6 +955,11 @@ struct ipu_plane *ipu_plane_init(struct drm_device *dev, struct ipu_soc *ipu,
 						     primary_zpos + 1, 0,
 						     primary_zpos + 1);
 	}
+	if (ret)
+		return ERR_PTR(ret);
+
+	ret = drm_plane_create_blend_mode_property(&ipu_plane->base,
+						   ipu_plane_blend_modes(dp));
 	if (ret)
 		return ERR_PTR(ret);
 
