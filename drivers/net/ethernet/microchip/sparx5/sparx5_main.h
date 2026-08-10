@@ -136,6 +136,10 @@ enum sparx5_feature {
 
 #define SPARX5_MAX_PTP_ID	512
 
+/* Must be maximum values across all L3 enabled platforms */
+#define SPARX5_ROUTER_LEG_N_VMID 511
+#define SPARX5_ARP_TBL_SIZE 2048
+
 struct sparx5;
 
 struct sparx5_calendar_data {
@@ -320,6 +324,8 @@ struct sparx5_consts {
 	u32 qres_max_prio_idx;   /* Maximum QRES prio index */
 	u32 qres_max_colour_idx; /* Maximum QRES colour index */
 	u32 tod_pin;             /* PTP TOD pin */
+	u32 vmid_cnt;            /* Number of router leg VMID's */
+	u32 arp_tbl_cnt;         /* Number of ARP table entries */
 	const struct sparx5_vcap_inst *vcaps_cfg;
 	const struct vcap_info *vcaps;
 	const struct vcap_statistics *vcap_stats;
@@ -434,6 +440,8 @@ struct sparx5 {
 	/* Common root for debugfs */
 	struct dentry *debugfs_root;
 	const struct sparx5_match_data *data;
+	/* L3 Forwarding */
+	struct sparx5_router *router;
 };
 
 /* sparx5_main.c */
@@ -502,6 +510,39 @@ int sparx5_vlan_vid_add(struct sparx5_port *port, u16 vid, bool pvid,
 			bool untagged);
 int sparx5_vlan_vid_del(struct sparx5_port *port, u16 vid);
 void sparx5_vlan_port_apply(struct sparx5 *sparx5, struct sparx5_port *port);
+
+/* sparx5_router.c */
+int sparx5_rr_router_init(struct sparx5 *sparx5);
+void sparx5_rr_router_deinit(struct sparx5 *sparx5);
+
+struct sparx5_rr_hw_route {
+	u32 vrule_id;
+	bool vrule_id_valid;
+};
+
+struct sparx5_router {
+	struct sparx5 *sparx5;
+	struct notifier_block fib_nb;
+	struct notifier_block netevent_nb;
+	struct notifier_block inetaddr_nb;
+	struct notifier_block inetaddr_valid_nb;
+	struct notifier_block netdevice_nb;
+	struct notifier_block inet6addr_nb;
+	struct notifier_block inet6addr_valid_nb;
+	struct sparx5_rr_hw_route link_local; /* Trap all link-local traffic. */
+	struct net_device *port_dev; /* For VCAP API. */
+
+	struct mutex lock; /* Global router lock for all shared data. */
+
+	struct workqueue_struct *sparx5_router_owq;
+
+	atomic_t legs_count;
+	struct list_head leg_list;
+	/* Track allocated router leg indices in hw */
+	DECLARE_BITMAP(vmid_mask, SPARX5_ROUTER_LEG_N_VMID);
+	/* Track allocated arp table indices in hw */
+	DECLARE_BITMAP(arp_tbl_mask, SPARX5_ARP_TBL_SIZE);
+};
 
 /* sparx5_calendar.c */
 int sparx5_calendar_init(struct sparx5 *sparx5);
