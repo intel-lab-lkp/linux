@@ -1317,8 +1317,10 @@ void print_numa_stats(struct seq_file *m, int node, unsigned long tsf,
 static void sched_show_numa(struct task_struct *p, struct seq_file *m)
 {
 #ifdef CONFIG_NUMA_BALANCING
-	if (p->mm)
-		P(mm->numa_scan_seq);
+	struct mm_struct *mm = READ_ONCE(p->mm);
+
+	if (mm)
+		__PS("mm->numa_scan_seq", mm->numa_scan_seq);
 
 	P(numa_pages_migrated);
 	P(numa_preferred_nid);
