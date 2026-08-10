@@ -1241,6 +1241,13 @@ void kill_anon_super(struct super_block *sb)
 }
 EXPORT_SYMBOL(kill_anon_super);
 
+void kill_char_super(struct super_block *sb)
+{
+	generic_shutdown_super(sb);
+	kill_super_notify(sb);
+}
+EXPORT_SYMBOL(kill_char_super);
+
 int set_anon_super_fc(struct super_block *sb, struct fs_context *fc)
 {
 	return set_anon_super(sb, NULL);
