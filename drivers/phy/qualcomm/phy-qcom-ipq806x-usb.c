@@ -142,6 +142,11 @@ struct phy_drvdata {
 	u32		clk_rate;
 	u32		hs_tune_val;
 	u32		fsel;
+	u32		tx_amplitude;
+	u32		tx_full_swing;
+	u32		los_level;
+	u32		los_bias;
+	bool		set_deemph_6db;
 };
 
 /**
@@ -322,7 +327,7 @@ static int qcom_ipq806x_usb_ss_phy_init(struct phy *phy)
 {
 	struct usb_phy *phy_dwc3 = phy_get_drvdata(phy);
 	int ret;
-	u32 data;
+	u32 data, mask;
 
 	ret = clk_prepare_enable(phy_dwc3->xo_clk);
 	if (ret)
@@ -414,7 +419,7 @@ static int qcom_ipq806x_usb_ss_phy_init(struct phy *phy)
 	data &= ~TX_OVRD_DRV_LO_PREEMPH_MASK;
 	data |= TX_OVRD_DRV_LO_PREEMPH(phy_dwc3->tx_deamp_3_5db);
 	data &= ~TX_OVRD_DRV_LO_AMPLITUDE_MASK;
-	data |= 0x6E;
+	data |= phy_dwc3->drvdata->tx_amplitude;
 	data |= TX_OVRD_DRV_LO_EN;
 	ret = usb_ss_write_phycreg(phy_dwc3,
 				   SSPHY_CTRL_TX_OVRD_DRV_LO(0), data);
@@ -433,18 +438,22 @@ static int qcom_ipq806x_usb_ss_phy_init(struct phy *phy)
 	 * TX_DEEMPH_3_5DB [13:8] set based on SoC version
 	 * LOS_BIAS [7:3] to 9
 	 */
-	data = readl(phy_dwc3->base + SSUSB_PHY_PARAM_CTRL_1);
+	mask = PHY_PARAM_CTRL1_TX_FULL_SWING_MASK |
+	       PHY_PARAM_CTRL1_TX_DEEMPH_3_5DB_MASK |
+	       PHY_PARAM_CTRL1_LOS_LEVEL_MASK |
+	       PHY_PARAM_CTRL1_LOS_BIAS_MASK;
 
-	data &= ~PHY_PARAM_CTRL1_MASK;
+	data = PHY_PARAM_CTRL1_TX_FULL_SWING(phy_dwc3->drvdata->tx_full_swing) |
+	       PHY_PARAM_CTRL1_TX_DEEMPH_3_5DB(phy_dwc3->tx_deamp_3_5db) |
+	       PHY_PARAM_CTRL1_LOS_LEVEL(phy_dwc3->drvdata->los_level) |
+	       PHY_PARAM_CTRL1_LOS_BIAS(phy_dwc3->drvdata->los_bias);
 
-	data |= PHY_PARAM_CTRL1_TX_FULL_SWING(0x6e) |
-		PHY_PARAM_CTRL1_TX_DEEMPH_6DB(0x20) |
-		PHY_PARAM_CTRL1_TX_DEEMPH_3_5DB(phy_dwc3->tx_deamp_3_5db) |
-		PHY_PARAM_CTRL1_LOS_LEVEL(0x9) |
-		PHY_PARAM_CTRL1_LOS_BIAS(0x0);
+	if (phy_dwc3->drvdata->set_deemph_6db) {
+		mask |= PHY_PARAM_CTRL1_TX_DEEMPH_6DB_MASK;
+		data |= PHY_PARAM_CTRL1_TX_DEEMPH_6DB(0x20);
+	}
 
-	usb_phy_write_readback(phy_dwc3, SSUSB_PHY_PARAM_CTRL_1,
-			       PHY_PARAM_CTRL1_MASK, data);
+	usb_phy_write_readback(phy_dwc3, SSUSB_PHY_PARAM_CTRL_1, mask, data);
 
 err_phy_trans:
 	return ret;
@@ -500,6 +509,26 @@ static const struct phy_drvdata qcom_ipq806x_usb_ss_drvdata = {
 		.owner		= THIS_MODULE,
 	},
 	.clk_rate = 125000000,
+	.tx_amplitude = 0x6e,
+	.tx_full_swing = 0x6e,
+	.los_level = 0x9,
+	.los_bias = 0x0,
+	.set_deemph_6db = true,
+};
+
+/* MSM8974: values from the vendor phy-msm-ssusb driver */
+static const struct phy_drvdata qcom_msm8974_usb_ss_drvdata = {
+	.ops = {
+		.init		= qcom_ipq806x_usb_ss_phy_init,
+		.exit		= qcom_ipq806x_usb_ss_phy_exit,
+		.owner		= THIS_MODULE,
+	},
+	.clk_rate = 125000000,
+	.tx_amplitude = 0x7f,
+	.tx_full_swing = 0x7f,
+	.los_level = 0x9,
+	.los_bias = 0x5,
+	.set_deemph_6db = false,
 };
 
 static const struct of_device_id qcom_ipq806x_usb_phy_table[] = {
@@ -509,6 +538,8 @@ static const struct of_device_id qcom_ipq806x_usb_phy_table[] = {
 	  .data = &qcom_ipq806x_usb_ss_drvdata },
 	{ .compatible = "qcom,msm8974-usb-phy-hs",
 	  .data = &qcom_msm8974_usb_hs_drvdata },
+	{ .compatible = "qcom,msm8974-usb-phy-ss",
+	  .data = &qcom_msm8974_usb_ss_drvdata },
 	{ /* Sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, qcom_ipq806x_usb_phy_table);
