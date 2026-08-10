@@ -22,9 +22,14 @@ properties:
   "#phy-cells":
     const: 1
     description: |
-      Argument is mode to operate in. Supported modes are:
-        - PHY_TYPE_DPHY
-        - PHY_TYPE_CPHY
+      The block contains a MIPI transmitter and a MIPI receiver, which
+      can be referenced independently. The argument selects one of
+      them:
+        - PHY_TYPE_DSI: the transmitter, for a MIPI DSI host
+        - PHY_TYPE_CSI: the receiver, for a MIPI CSI-2 host
+        - PHY_TYPE_DPHY: the transmitter in D-PHY mode; equivalent to
+          PHY_TYPE_DSI and kept for existing device trees
+        - PHY_TYPE_CPHY: the transmitter in C-PHY mode
       See include/dt-bindings/phy/phy.h for constants.
 
   clocks:
