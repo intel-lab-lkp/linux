@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/phy/qcom,ipq806x-usb-phy-hs.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Qualcomm ipq806x usb DWC3 HS PHY CONTROLLER
+title: Qualcomm ipq806x/msm8974 usb DWC3 HS PHY CONTROLLER
 
 maintainers:
   - Ansuel Smith <ansuelsmth@gmail.com>
@@ -16,7 +16,9 @@ description:
 
 properties:
   compatible:
-    const: qcom,ipq806x-usb-phy-hs
+    enum:
+      - qcom,ipq806x-usb-phy-hs
+      - qcom,msm8974-usb-phy-hs
 
   "#phy-cells":
     const: 0
