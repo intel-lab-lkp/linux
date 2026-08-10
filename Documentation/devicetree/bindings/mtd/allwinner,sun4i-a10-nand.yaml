@@ -79,6 +79,15 @@ patternProperties:
           minimum: 0
           maximum: 1
 
+      allwinner,randomized-oob:
+        type: boolean
+        description:
+          Use the Allwinner randomized normal-page OOB format. This enables
+          the controller page randomizer, stores the bad block marker through
+          it instead of compensating the marker so that it remains plain on
+          flash, and selects the controller-specific protected user-data
+          placement used by Allwinner NAND firmware.
+
     unevaluatedProperties: false
 
 required:
