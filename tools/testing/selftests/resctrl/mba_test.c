@@ -23,7 +23,7 @@ static int mba_init(const struct resctrl_test *test,
 {
 	int ret;
 
-	ret = initialize_read_mem_bw_imc();
+	ret = initialize_read_mem_bw_mc();
 	if (ret)
 		return ret;
 
@@ -73,7 +73,7 @@ static int mba_measure(const struct user_params *uparams,
 	return measure_read_mem_bw(uparams, param, bm_pid);
 }
 
-static bool show_mba_info(unsigned long *bw_imc, unsigned long *bw_resc)
+static bool show_mba_info(unsigned long *bw_mc, unsigned long *bw_resc)
 {
 	unsigned int allocation;
 	bool ret = false;
@@ -83,27 +83,27 @@ static bool show_mba_info(unsigned long *bw_imc, unsigned long *bw_resc)
 	/* Memory bandwidth from 100% down to 10% */
 	for (allocation = 0; allocation < ALLOCATION_MAX / ALLOCATION_STEP;
 	     allocation++) {
-		unsigned long sum_bw_imc = 0, sum_bw_resc = 0;
-		long avg_bw_imc, avg_bw_resc;
+		unsigned long sum_bw_mc = 0, sum_bw_resc = 0;
+		long avg_bw_mc, avg_bw_resc;
 		int avg_diff_per;
 		float avg_diff;
 
 		for (runs = NUM_OF_RUNS * allocation;
 		     runs < NUM_OF_RUNS * allocation + NUM_OF_RUNS ; runs++) {
-			sum_bw_imc += bw_imc[runs];
+			sum_bw_mc += bw_mc[runs];
 			sum_bw_resc += bw_resc[runs];
 		}
 
-		avg_bw_imc = sum_bw_imc / NUM_OF_RUNS;
+		avg_bw_mc = sum_bw_mc / NUM_OF_RUNS;
 		avg_bw_resc = sum_bw_resc / NUM_OF_RUNS;
-		if (avg_bw_imc < THROTTLE_THRESHOLD || avg_bw_resc < THROTTLE_THRESHOLD) {
+		if (avg_bw_mc < THROTTLE_THRESHOLD || avg_bw_resc < THROTTLE_THRESHOLD) {
 			ksft_print_msg("Bandwidth below threshold (%d MiB). Dropping results from MBA schemata %u.\n",
 				       THROTTLE_THRESHOLD,
 				       ALLOCATION_MIN + ALLOCATION_STEP * allocation);
 			continue;
 		}
 
-		avg_diff = (float)labs(avg_bw_resc - avg_bw_imc) / avg_bw_imc;
+		avg_diff = (float)labs(avg_bw_resc - avg_bw_mc) / avg_bw_mc;
 		avg_diff_per = (int)(avg_diff * 100);
 
 		ksft_print_msg("%s Check MBA diff within %d%% for schemata %u\n",
@@ -113,7 +113,7 @@ static bool show_mba_info(unsigned long *bw_imc, unsigned long *bw_resc)
 			       ALLOCATION_MIN + ALLOCATION_STEP * allocation);
 
 		ksft_print_msg("avg_diff_per: %d%%\n", avg_diff_per);
-		ksft_print_msg("avg_bw_imc: %lu\n", avg_bw_imc);
+		ksft_print_msg("avg_bw_mc: %lu\n", avg_bw_mc);
 		ksft_print_msg("avg_bw_resc: %lu\n", avg_bw_resc);
 		if (avg_diff_per > MAX_DIFF_PERCENT)
 			ret = true;
@@ -130,7 +130,7 @@ static bool show_mba_info(unsigned long *bw_imc, unsigned long *bw_resc)
 static int check_results(void)
 {
 	unsigned long bw_resc[NUM_OF_RUNS * ALLOCATION_MAX / ALLOCATION_STEP];
-	unsigned long bw_imc[NUM_OF_RUNS * ALLOCATION_MAX / ALLOCATION_STEP];
+	unsigned long bw_mc[NUM_OF_RUNS * ALLOCATION_MAX / ALLOCATION_STEP];
 	char *token_array[8], output[] = RESULT_FILE_NAME, temp[512];
 	int runs;
 	FILE *fp;
@@ -152,8 +152,8 @@ static int check_results(void)
 			token = strtok(NULL, ":\t");
 		}
 
-		/* Field 3 is perf imc value */
-		bw_imc[runs] = strtoul(token_array[3], NULL, 0);
+		/* Field 3 is perf mc value */
+		bw_mc[runs] = strtoul(token_array[3], NULL, 0);
 		/* Field 5 is resctrl value */
 		bw_resc[runs] = strtoul(token_array[5], NULL, 0);
 		runs++;
@@ -161,7 +161,7 @@ static int check_results(void)
 
 	fclose(fp);
 
-	return show_mba_info(bw_imc, bw_resc);
+	return show_mba_info(bw_mc, bw_resc);
 }
 
 static void mba_test_cleanup(void)

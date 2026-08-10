@@ -15,21 +15,21 @@
 #define NUM_OF_RUNS		5
 
 static int
-show_bw_info(unsigned long *bw_imc, unsigned long *bw_resc, size_t span)
+show_bw_info(unsigned long *bw_mc, unsigned long *bw_resc, size_t span)
 {
-	unsigned long sum_bw_imc = 0, sum_bw_resc = 0;
-	long avg_bw_imc = 0, avg_bw_resc = 0;
+	unsigned long sum_bw_mc = 0, sum_bw_resc = 0;
+	long avg_bw_mc = 0, avg_bw_resc = 0;
 	int runs, ret, avg_diff_per;
 	float avg_diff = 0;
 
 	for (runs = 0; runs < NUM_OF_RUNS; runs++) {
-		sum_bw_imc += bw_imc[runs];
+		sum_bw_mc += bw_mc[runs];
 		sum_bw_resc += bw_resc[runs];
 	}
 
-	avg_bw_imc = sum_bw_imc / NUM_OF_RUNS;
+	avg_bw_mc = sum_bw_mc / NUM_OF_RUNS;
 	avg_bw_resc = sum_bw_resc / NUM_OF_RUNS;
-	avg_diff = (float)labs(avg_bw_resc - avg_bw_imc) / avg_bw_imc;
+	avg_diff = (float)labs(avg_bw_resc - avg_bw_mc) / avg_bw_mc;
 	avg_diff_per = (int)(avg_diff * 100);
 
 	ret = avg_diff_per > MAX_DIFF_PERCENT;
@@ -38,7 +38,7 @@ show_bw_info(unsigned long *bw_imc, unsigned long *bw_resc, size_t span)
 	ksft_print_msg("avg_diff_per: %d%%\n", avg_diff_per);
 	if (span)
 		ksft_print_msg("Span (MB): %zu\n", span / MB);
-	ksft_print_msg("avg_bw_imc: %lu\n", avg_bw_imc);
+	ksft_print_msg("avg_bw_mc: %lu\n", avg_bw_mc);
 	ksft_print_msg("avg_bw_resc: %lu\n", avg_bw_resc);
 
 	return ret;
@@ -46,7 +46,7 @@ show_bw_info(unsigned long *bw_imc, unsigned long *bw_resc, size_t span)
 
 static int check_results(size_t span)
 {
-	unsigned long bw_imc[NUM_OF_RUNS], bw_resc[NUM_OF_RUNS];
+	unsigned long bw_mc[NUM_OF_RUNS], bw_resc[NUM_OF_RUNS];
 	char temp[1024], *token_array[8];
 	char output[] = RESULT_FILE_NAME;
 	int runs, ret;
@@ -72,11 +72,11 @@ static int check_results(size_t span)
 		}
 
 		bw_resc[runs] = strtoul(token_array[5], NULL, 0);
-		bw_imc[runs] = strtoul(token_array[3], NULL, 0);
+		bw_mc[runs] = strtoul(token_array[3], NULL, 0);
 		runs++;
 	}
 
-	ret = show_bw_info(bw_imc, bw_resc, span);
+	ret = show_bw_info(bw_mc, bw_resc, span);
 
 	fclose(fp);
 
@@ -89,7 +89,7 @@ static int mbm_init(const struct resctrl_test *test,
 {
 	int ret;
 
-	ret = initialize_read_mem_bw_imc();
+	ret = initialize_read_mem_bw_mc();
 	if (ret)
 		return ret;
 

@@ -49,7 +49,7 @@
 
 /*
  * Memory bandwidth (in MiB) below which the bandwidth comparisons
- * between iMC and resctrl are considered unreliable. For example RAS
+ * between MC and resctrl are considered unreliable. For example RAS
  * features or memory performance features that generate memory traffic
  * may drive accesses that are counted differently by performance counters
  * and MBM respectively, for instance generating "overhead" traffic which
@@ -182,7 +182,7 @@ unsigned char *alloc_buffer(size_t buf_size, bool memflush);
 void mem_flush(unsigned char *buf, size_t buf_size);
 void fill_cache_read(unsigned char *buf, size_t buf_size, bool once);
 ssize_t get_fill_buf_size(int cpu_no, const char *cache_type);
-int initialize_read_mem_bw_imc(void);
+int initialize_read_mem_bw_mc(void);
 int measure_read_mem_bw(const struct user_params *uparams,
 			struct resctrl_val_param *param, pid_t bm_pid);
 void initialize_mem_bw_resctrl(const struct resctrl_val_param *param,
