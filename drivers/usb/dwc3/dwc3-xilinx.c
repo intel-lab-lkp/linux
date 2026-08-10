@@ -42,12 +42,19 @@
 #define XLNX_USB_FPD_POWER_PRSNT		0x80
 #define FPD_POWER_PRSNT_OPTION			BIT(0)
 
+struct dwc3_xlnx;
+
+struct dwc3_xlnx_platdata {
+	int (*init)(struct dwc3_xlnx *priv_data);
+	void (*exit)(struct dwc3_xlnx *priv_data);
+};
+
 struct dwc3_xlnx {
 	int				num_clocks;
 	struct clk_bulk_data		*clks;
 	struct device			*dev;
 	void __iomem			*regs;
-	int				(*pltfm_init)(struct dwc3_xlnx *data);
+	const struct dwc3_xlnx_platdata	*plat;
 	struct phy			*usb3_phy;
 };
 
@@ -237,14 +244,22 @@ err:
 	return ret;
 }
 
+static const struct dwc3_xlnx_platdata zynqmp_platdata = {
+	.init = dwc3_xlnx_init_zynqmp,
+};
+
+static const struct dwc3_xlnx_platdata versal_platdata = {
+	.init = dwc3_xlnx_init_versal,
+};
+
 static const struct of_device_id dwc3_xlnx_of_match[] = {
 	{
 		.compatible = "xlnx,zynqmp-dwc3",
-		.data = &dwc3_xlnx_init_zynqmp,
+		.data = &zynqmp_platdata,
 	},
 	{
 		.compatible = "xlnx,versal-dwc3",
-		.data = &dwc3_xlnx_init_versal,
+		.data = &versal_platdata,
 	},
 	{ /* Sentinel */ }
 };
@@ -291,8 +306,11 @@ static int dwc3_xlnx_probe(struct platform_device *pdev)
 	if (IS_ERR(regs))
 		return dev_err_probe(dev, PTR_ERR(regs), "failed to map registers\n");
 
-	priv_data->pltfm_init = device_get_match_data(dev);
-	if (!priv_data->pltfm_init)
+	priv_data->plat = device_get_match_data(dev);
+	if (!priv_data->plat)
+		return dev_err_probe(dev, -ENODEV, "missing platform match data\n");
+
+	if (!priv_data->plat->init)
 		return dev_err_probe(dev, -ENODEV,
 				     "missing platform init handler\n");
 
@@ -311,7 +329,7 @@ static int dwc3_xlnx_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = priv_data->pltfm_init(priv_data);
+	ret = priv_data->plat->init(priv_data);
 	if (ret)
 		goto err_clk_put;
 
