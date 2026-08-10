@@ -1553,6 +1553,11 @@ error_vm:
 		pasid = 0;
 	}
 
+	if (fpriv->prt_va &&
+	    !WARN_ON(amdgpu_bo_reserve(fpriv->vm.root.bo, true))) {
+		amdgpu_vm_bo_del(adev, fpriv->prt_va);
+		amdgpu_bo_unreserve(fpriv->vm.root.bo);
+	}
 	amdgpu_vm_fini(adev, &fpriv->vm);
 
 error_pasid:
