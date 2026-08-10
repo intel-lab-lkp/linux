@@ -98,4 +98,34 @@ struct c2c_fmt {
 void c2c_fmt_free(struct perf_hpp_fmt *fmt);
 bool c2c_fmt_equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b);
 
+/*
+ * Everything the function view browser needs from the c2c command, passed in
+ * by the caller so the browser does not reference command-private state.
+ */
+struct c2c_function_view_args {
+	/* Source cacheline histograms to build the hierarchy from. */
+	struct c2c_hists	*cl_hists;
+	/* --coalesce field list, used to require iaddr. */
+	const char		*cl_sort;
+	/* Do not cap long symbol names. */
+	bool			 symbol_full;
+	/* Open the cacheline detail view for @he. */
+	int			(*browse_cacheline)(struct hist_entry *he);
+};
+
+/*
+ * The TUI browser is only built with SLANG support. The stub below keeps the
+ * header self-contained for NO_SLANG builds, as util/hist.h does for its own
+ * TUI entry points.
+ */
+#ifdef HAVE_SLANG_SUPPORT
+int perf_c2c__browse_function_view(struct c2c_function_view_args *args);
+#else
+static inline int
+perf_c2c__browse_function_view(struct c2c_function_view_args *args __maybe_unused)
+{
+	return 0;
+}
+#endif
+
 #endif /* __PERF_UTIL_C2C_H */
