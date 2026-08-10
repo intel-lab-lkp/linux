@@ -1081,6 +1081,7 @@ void print_rt_rq(struct seq_file *m, int cpu, struct rt_rq *rt_rq)
 void print_dl_rq(struct seq_file *m, int cpu, struct dl_rq *dl_rq)
 {
 	struct dl_bw *dl_bw;
+	struct root_domain *rd;
 
 	SEQ_printf(m, "\n");
 	SEQ_printf(m, "dl_rq[%d]:\n", cpu);
@@ -1089,9 +1090,14 @@ void print_dl_rq(struct seq_file *m, int cpu, struct dl_rq *dl_rq)
 	SEQ_printf(m, "  .%-30s: %lu\n", #x, (unsigned long)(dl_rq->x))
 
 	PU(dl_nr_running);
-	dl_bw = &cpu_rq(cpu)->rd->dl_bw;
-	SEQ_printf(m, "  .%-30s: %lld\n", "dl_bw->bw", dl_bw->bw);
-	SEQ_printf(m, "  .%-30s: %lld\n", "dl_bw->total_bw", dl_bw->total_bw);
+	rcu_read_lock();
+	rd = READ_ONCE(cpu_rq(cpu)->rd);
+	if (rd) {
+		dl_bw = &rd->dl_bw;
+		SEQ_printf(m, "  .%-30s: %lld\n", "dl_bw->bw", dl_bw->bw);
+		SEQ_printf(m, "  .%-30s: %lld\n", "dl_bw->total_bw", dl_bw->total_bw);
+	}
+	rcu_read_unlock();
 
 #undef PU
 }
