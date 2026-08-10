@@ -1084,13 +1084,18 @@ static void ntb_transport_link_work(struct work_struct *work)
 			goto out1;
 	}
 
-	nt->link_is_up = true;
+	nt->link_is_up = false;
+	for (i = 0; i < nt->qp_count; i++) {
+		rc = ntb_transport_setup_qp_mw(nt, i);
+		if (rc)
+			goto out1;
+		ntb_transport_setup_qp_peer_msi(nt, i);
+	}
 
+	/* Publish the link only after every QP has been set up. */
+	nt->link_is_up = true;
 	for (i = 0; i < nt->qp_count; i++) {
 		struct ntb_transport_qp *qp = &nt->qp_vec[i];
-
-		ntb_transport_setup_qp_mw(nt, i);
-		ntb_transport_setup_qp_peer_msi(nt, i);
 
 		if (qp->client_ready)
 			schedule_delayed_work(&qp->link_work, 0);
@@ -1099,6 +1104,13 @@ static void ntb_transport_link_work(struct work_struct *work)
 	return;
 
 out1:
+	for (i = 0; i < nt->qp_count; i++) {
+		struct ntb_transport_qp *qp = &nt->qp_vec[i];
+
+		qp->rx_buff = NULL;
+		qp->remote_rx_info = NULL;
+	}
+
 	for (i = 0; i < nt->mw_count; i++)
 		ntb_free_mw(nt, i);
 
