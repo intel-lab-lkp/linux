@@ -559,6 +559,11 @@ static void ceph_set_page_fscache(struct page *page)
 	folio_start_private_2(page_folio(page)); /* [DEPRECATED] */
 }
 
+static void ceph_folio_wait_fscache(struct folio *folio)
+{
+	folio_wait_private_2(folio); /* [DEPRECATED] */
+}
+
 static void ceph_fscache_write_terminated(void *priv, ssize_t error)
 {
 	struct inode *inode = priv;
@@ -577,6 +582,10 @@ static void ceph_fscache_write_to_cache(struct inode *inode, u64 off, u64 len, b
 }
 #else
 static inline void ceph_set_page_fscache(struct page *page)
+{
+}
+
+static inline void ceph_folio_wait_fscache(struct folio *folio)
 {
 }
 
@@ -802,6 +811,9 @@ static int write_folio_nounlock(struct folio *folio,
 
 	if (wlen < len)
 		len = wlen;
+
+	/* wait for a cache write left pending by a previously failed attempt */
+	ceph_folio_wait_fscache(folio);
 
 	folio_start_writeback(folio);
 	if (caching)
