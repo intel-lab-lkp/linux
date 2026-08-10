@@ -160,8 +160,8 @@ static void tlb_deinitialize(struct bonding *bond)
 
 static long long compute_gap(struct slave *slave)
 {
-	return (s64) (slave->speed << 20) - /* Convert to Megabit per sec */
-	       (s64) (SLAVE_TLB_INFO(slave).load << 3); /* Bytes to bits */
+	return ((s64)slave->speed << 20) - /* Mbit/s -> bit/s */
+	       ((s64)SLAVE_TLB_INFO(slave).load << 3); /* Byte/s -> bit/s */
 }
 
 static struct slave *tlb_get_least_loaded_slave(struct bonding *bond)
