@@ -100,9 +100,15 @@ DEVICE(nokia, NOKIA_IDS);
 	{ USB_DEVICE(0x09d7, 0x0100) }	/* NovAtel FlexPack GPS */
 DEVICE_N(novatel_gps, NOVATEL_IDS, 3);
 
-/* OWON electronic test and measurement equipment driver */
+/* OWON electronic test and measurement equipment driver.
+ * OWON uses the same VID:PID (0x5345:0x1234) for multiple device families
+ * (HDS, VDS, SDS, PDS). Match on the Physical Interface Device class (0x05)
+ * used by the HDS200 series to avoid binding devices that use a different
+ * interface class (e.g. vendor-specific 0xff) and may require different
+ * handling.
+ */
 #define OWON_IDS()			\
-	{ USB_DEVICE(0x5345, 0x1234) } /* HDS200 oscilloscopes and others */
+	{ USB_DEVICE_AND_INTERFACE_INFO(0x5345, 0x1234, 0x05, 0x00, 0x00) }
 DEVICE(owon, OWON_IDS);
 
 /* Siemens USB/MPI adapter */
