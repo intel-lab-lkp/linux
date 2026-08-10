@@ -13,9 +13,50 @@
 #define RESULT_FILE_NAME	"result_mba"
 #define NUM_OF_RUNS		5
 #define MAX_DIFF_PERCENT	15
+
+/* Intel MBA is specified as a percentage: 10%, 20% ... 100%. */
 #define ALLOCATION_MAX		100
 #define ALLOCATION_MIN		10
 #define ALLOCATION_STEP		10
+
+/*
+ * AMD MBA is not a percentage but an absolute memory bandwidth value. The
+ * test sweeps the bandwidth from 4 GB/s to 40 GB/s in steps of 4 GB/s,
+ * which the hardware represents in units of 1/8 GB/s (i.e. 4 GB/s -> 32,
+ * 8 GB/s -> 64, ... 40 GB/s -> 320).
+ */
+#define AMD_ALLOCATION_MAX	320
+#define AMD_ALLOCATION_MIN	32
+#define AMD_ALLOCATION_STEP	32
+
+/* Number of MBA schemata allocations to sweep (same for both vendors). */
+#define NUM_OF_ALLOCS		(ALLOCATION_MAX / ALLOCATION_STEP)
+
+/*
+ * The fixed-size result arrays in check_results() and the aggregation loop in
+ * show_mba_info() are sized and driven by NUM_OF_ALLOCS, so each vendor's sweep
+ * must produce exactly NUM_OF_ALLOCS allocations. Enforce this at build time so
+ * that changing a vendor's min/max/step can never overflow those arrays.
+ */
+_Static_assert((ALLOCATION_MAX - ALLOCATION_MIN) / ALLOCATION_STEP + 1 == NUM_OF_ALLOCS,
+	       "Intel MBA sweep must yield NUM_OF_ALLOCS allocations");
+_Static_assert((AMD_ALLOCATION_MAX - AMD_ALLOCATION_MIN) / AMD_ALLOCATION_STEP + 1 == NUM_OF_ALLOCS,
+	       "AMD MBA sweep must yield NUM_OF_ALLOCS allocations");
+
+static unsigned int mba_alloc_min(void)
+{
+	return get_vendor() == ARCH_AMD ? AMD_ALLOCATION_MIN : ALLOCATION_MIN;
+}
+
+static unsigned int mba_alloc_max(void)
+{
+	return get_vendor() == ARCH_AMD ? AMD_ALLOCATION_MAX : ALLOCATION_MAX;
+}
+
+static unsigned int mba_alloc_step(void)
+{
+	return get_vendor() == ARCH_AMD ? AMD_ALLOCATION_STEP : ALLOCATION_STEP;
+}
 
 static int mba_init(const struct resctrl_test *test,
 		    const struct user_params *uparams,
@@ -33,15 +74,17 @@ static int mba_init(const struct resctrl_test *test,
 }
 
 /*
- * Change schemata percentage from 100 to 10%. Write schemata to specified
- * con_mon grp, mon_grp in resctrl FS.
+ * Sweep the MBA schemata from the minimum to the maximum allocation. On
+ * Intel the allocation is a percentage (10% .. 100%); on AMD it is an
+ * absolute memory bandwidth value (4 GB/s .. 40 GB/s). Write schemata to
+ * the specified con_mon grp, mon_grp in resctrl FS.
  * For each allocation, run 5 times in order to get average values.
  */
 static int mba_setup(const struct resctrl_test *test,
 		     const struct user_params *uparams,
 		     struct resctrl_val_param *p)
 {
-	static unsigned int allocation = ALLOCATION_MIN;
+	static unsigned int allocation;
 	static int runs_per_allocation;
 	char allocation_str[64];
 	int ret;
@@ -53,16 +96,20 @@ static int mba_setup(const struct resctrl_test *test,
 	if (runs_per_allocation++ != 0)
 		return 0;
 
-	if (allocation > ALLOCATION_MAX)
+	/* Set the initial allocation once the vendor is known. */
+	if (allocation == 0)
+		allocation = mba_alloc_min();
+
+	if (allocation > mba_alloc_max())
 		return END_OF_TESTS;
 
-	sprintf(allocation_str, "%d", allocation);
+	sprintf(allocation_str, "%u", allocation);
 
 	ret = write_schemata(p->ctrlgrp, allocation_str, uparams->cpu, test->resource);
 	if (ret < 0)
 		return ret;
 
-	allocation += ALLOCATION_STEP;
+	allocation += mba_alloc_step();
 
 	return 0;
 }
@@ -75,14 +122,15 @@ static int mba_measure(const struct user_params *uparams,
 
 static bool show_mba_info(unsigned long *bw_mc, unsigned long *bw_resc)
 {
+	unsigned int alloc_min = mba_alloc_min();
+	unsigned int alloc_step = mba_alloc_step();
 	unsigned int allocation;
 	bool ret = false;
 	int runs;
 
 	ksft_print_msg("Results are displayed in (MB)\n");
-	/* Memory bandwidth from 100% down to 10% */
-	for (allocation = 0; allocation < ALLOCATION_MAX / ALLOCATION_STEP;
-	     allocation++) {
+	/* Memory bandwidth for each of the swept MBA allocations */
+	for (allocation = 0; allocation < NUM_OF_ALLOCS; allocation++) {
 		unsigned long sum_bw_mc = 0, sum_bw_resc = 0;
 		long avg_bw_mc, avg_bw_resc;
 		int avg_diff_per;
@@ -99,7 +147,7 @@ static bool show_mba_info(unsigned long *bw_mc, unsigned long *bw_resc)
 		if (avg_bw_mc < THROTTLE_THRESHOLD || avg_bw_resc < THROTTLE_THRESHOLD) {
 			ksft_print_msg("Bandwidth below threshold (%d MiB). Dropping results from MBA schemata %u.\n",
 				       THROTTLE_THRESHOLD,
-				       ALLOCATION_MIN + ALLOCATION_STEP * allocation);
+				       alloc_min + alloc_step * allocation);
 			continue;
 		}
 
@@ -110,7 +158,7 @@ static bool show_mba_info(unsigned long *bw_mc, unsigned long *bw_resc)
 			       avg_diff_per > MAX_DIFF_PERCENT ?
 			       "Fail:" : "Pass:",
 			       MAX_DIFF_PERCENT,
-			       ALLOCATION_MIN + ALLOCATION_STEP * allocation);
+			       alloc_min + alloc_step * allocation);
 
 		ksft_print_msg("avg_diff_per: %d%%\n", avg_diff_per);
 		ksft_print_msg("avg_bw_mc: %lu\n", avg_bw_mc);
@@ -129,8 +177,8 @@ static bool show_mba_info(unsigned long *bw_mc, unsigned long *bw_resc)
 
 static int check_results(void)
 {
-	unsigned long bw_resc[NUM_OF_RUNS * ALLOCATION_MAX / ALLOCATION_STEP];
-	unsigned long bw_mc[NUM_OF_RUNS * ALLOCATION_MAX / ALLOCATION_STEP];
+	unsigned long bw_resc[NUM_OF_RUNS * NUM_OF_ALLOCS];
+	unsigned long bw_mc[NUM_OF_RUNS * NUM_OF_ALLOCS];
 	char *token_array[8], output[] = RESULT_FILE_NAME, temp[512];
 	int runs;
 	FILE *fp;
@@ -146,6 +194,11 @@ static int check_results(void)
 	while (fgets(temp, sizeof(temp), fp)) {
 		char *token = strtok(temp, ":\t");
 		int fields = 0;
+
+		if (runs >= NUM_OF_RUNS * NUM_OF_ALLOCS) {
+			ksft_print_msg("Got more results than expected\n");
+			break;
+		}
 
 		while (token) {
 			token_array[fields++] = token;
