@@ -76,6 +76,231 @@ famfs_get_inode(
 /*
  * famfs dax_operations (for famfs-mode dax)
  */
+static void famfs_set_daxdev_err(struct famfs_fs_info *fsi,
+				 struct dax_device *dax_devp);
+
+static int
+famfs_dax_notify_failure(
+	struct dax_device *dax_dev,
+	u64 offset,
+	u64 len,
+	int mf_flags)
+{
+	struct super_block *sb = dax_holder(dax_dev);
+	struct famfs_fs_info *fsi = sb->s_fs_info;
+
+	pr_err("%s: offset=%lld len=%llu flags=%x\n", __func__,
+	       offset, len, mf_flags);
+
+	/*
+	 * Record the error on the specific daxdev and, near-term, shut the
+	 * mount down: famfs_set_daxdev_err() also sets fsi->deverror so
+	 * subsequent famfs operations fail. The resolver's per-daxdev
+	 * famfs_dax_err() check remains and can make this finer later.
+	 */
+	famfs_set_daxdev_err(fsi, dax_dev);
+
+	return 0;
+}
+
+static const struct dax_holder_operations famfs_dax_holder_ops = {
+	.notify_failure		= famfs_dax_notify_failure,
+};
+
+/*
+ * Allocate the daxdev table on first use (idempotent via cmpxchg).
+ */
+int
+famfs_devlist_alloc(struct famfs_fs_info *fsi)
+{
+	struct famfs_dax_devlist *devlist;
+
+	if (fsi->dax_devlist)
+		return 0;
+
+	devlist = kcalloc(1, sizeof(*devlist), GFP_KERNEL);
+	if (!devlist)
+		return -ENOMEM;
+
+	devlist->nslots = FAMFS_MAX_DAXDEVS;
+	devlist->devlist = kcalloc(FAMFS_MAX_DAXDEVS, sizeof(struct famfs_daxdev),
+				   GFP_KERNEL);
+	if (!devlist->devlist) {
+		kfree(devlist);
+		return -ENOMEM;
+	}
+
+	/* If another thread allocated it first, drop ours */
+	if (cmpxchg(&fsi->dax_devlist, NULL, devlist) != NULL) {
+		kfree(devlist->devlist);
+		kfree(devlist);
+	}
+
+	return 0;
+}
+
+/*
+ * famfs_install_daxdev() - exclusively acquire a resolved daxdev and publish
+ * it in the table at @index. Slot 0 is the mount primary; slots 1..n come from
+ * the daxdev-open ioctl.
+ *
+ * Serializes with concurrent installers under devlist_sem and rechecks
+ * ->valid, so re-registering an already-installed slot is idempotent. A daxdev
+ * is entered in the table only once it has been exclusively acquired via
+ * fs_dax_get() (with the super_block as the holder); on failure the
+ * dax_dev_find() reference is released and the slot is left invalid. @name may
+ * be NULL (the ioctl path passes no pathname).
+ */
+int
+famfs_install_daxdev(
+	struct famfs_fs_info *fsi,
+	struct super_block *sb,
+	u64 index,
+	dev_t devno,
+	const char *name)
+{
+	struct famfs_daxdev *daxdev;
+	int rc = 0;
+
+	if (index >= fsi->dax_devlist->nslots) {
+		pr_debug("%s: index(%llu) >= nslots(%d)\n",
+		       __func__, index, fsi->dax_devlist->nslots);
+		return -EINVAL;
+	}
+
+	scoped_guard(rwsem_write, &fsi->devlist_sem) {
+		daxdev = &fsi->dax_devlist->devlist[index];
+
+		/* Installed already by a concurrent (or repeated) open */
+		if (daxdev->valid)
+			return 0;
+
+		/*
+		 * A prior attempt already determined this daxdev cannot be
+		 * exclusively acquired (see the fs_dax_get() failure handling
+		 * below). Don't thrash on fs_dax_get(); fail fast.
+		 */
+		if (daxdev->dax_err)
+			return -EIO;
+
+		daxdev->devp = dax_dev_find(devno);
+		if (!daxdev->devp) {
+			pr_debug("%s: device %u:%u not found or not dax\n",
+				__func__, MAJOR(devno), MINOR(devno));
+			return -ENODEV;
+		}
+
+		rc = fs_dax_get(daxdev->devp, sb, &famfs_dax_holder_ops);
+		if (rc) {
+			/*
+			 * Distinguish a lost race from a real failure. -EBUSY
+			 * with the daxdev already held by *this* super_block
+			 * means a concurrent acquire won and will publish the
+			 * slot valid: not an error, and must not be cached as
+			 * dax_err. Any other failure is permanent for this
+			 * mount, so record dax_err to stop re-acquiring it.
+			 */
+			if (!(rc == -EBUSY && dax_holder(daxdev->devp) == sb)) {
+				pr_debug("%s: fs_dax_get(%u:%u) failed rc=%d\n",
+				       __func__, MAJOR(devno), MINOR(devno), rc);
+				daxdev->dax_err = true;
+			}
+			put_dax(daxdev->devp);
+			daxdev->devp = NULL;
+			return rc;
+		}
+
+		daxdev->devno = devno;
+		if (name) {
+			daxdev->name = kstrdup(name, GFP_KERNEL);
+			if (!daxdev->name) {
+				fs_put_dax(daxdev->devp, sb);
+				put_dax(daxdev->devp);
+				daxdev->devp = NULL;
+				return -ENOMEM;
+			}
+		}
+
+		wmb(); /* All other fields must be visible before valid */
+		daxdev->valid = 1;
+	}
+
+	return 0;
+}
+
+/*
+ * Release every daxdev in the table and free it. Detach the table under
+ * devlist_sem so a notify_failure racing teardown either runs first against
+ * the live table or observes dax_devlist == NULL and bails.
+ */
+static
+void famfs_devlist_free(
+	struct famfs_fs_info *fsi,
+	struct super_block *sb)
+{
+	struct famfs_dax_devlist *devlist __free(kfree) = NULL;
+	int i;
+
+	scoped_guard(rwsem_write, &fsi->devlist_sem) {
+		devlist = fsi->dax_devlist;
+		fsi->dax_devlist = NULL;
+	}
+
+	if (!devlist || !devlist->devlist)
+		return;
+
+	for (i = 0; i < devlist->nslots; i++) {
+		struct famfs_daxdev *dd = &devlist->devlist[i];
+
+		if (!dd->valid)
+			continue;
+
+		if (dd->devp) {
+			if (!dd->dax_err)
+				fs_put_dax(dd->devp, sb);
+			put_dax(dd->devp);
+		}
+		kfree(dd->name);
+	}
+	kfree(devlist->devlist);
+}
+
+/*
+ * Record a memory error on the daxdev matching @dax_devp. Searches the table
+ * under the write lock (which serializes against famfs_devlist_free()).
+ */
+static void
+famfs_set_daxdev_err(
+	struct famfs_fs_info *fsi,
+	struct dax_device *dax_devp)
+{
+	int i;
+
+	scoped_guard(rwsem_write, &fsi->devlist_sem) {
+		if (!fsi->dax_devlist)
+			return;
+		for (i = 0; i < fsi->dax_devlist->nslots; i++) {
+			struct famfs_daxdev *dd = &fsi->dax_devlist->devlist[i];
+
+			if (!dd->valid || dd->devp != dax_devp)
+				continue;
+
+			dd->error = true;
+			/*
+			 * Near-term policy: any daxdev memory error shuts down
+			 * the whole mount. Finer per-daxdev handling (via
+			 * famfs_dax_err() in the resolver) already exists and
+			 * can supersede this later.
+			 */
+			fsi->deverror = true;
+			pr_err("%s: memory error on daxdev %s (%d)\n",
+			       __func__, dd->name, i);
+			return;
+		}
+	}
+	pr_debug("%s: memory error on unrecognized daxdev\n", __func__);
+}
+
 /*****************************************************************************
  * fs_context_operations
  */
@@ -157,6 +382,18 @@ famfs_get_tree(struct fs_context *fc)
 		pr_debug("%s: initializing new superblock for %s\n",
 			__func__, fc->source);
 		famfs_fill_super(sb, fc);
+	}
+
+	/* Install the primary daxdev (from the mount device) at slot 0 */
+	err = famfs_devlist_alloc(fsi);
+	if (err)
+		goto deactivate_out;
+
+	err = famfs_install_daxdev(fsi, sb, 0, daxdevno, fc->source);
+	if (err) {
+		pr_err("%s: failed to install primary daxdev %s\n",
+		       __func__, fc->source);
+		goto deactivate_out;
 	}
 
 	inode = famfs_get_inode(sb, NULL, S_IFDIR | fsi->mount_opts.mode, 0);
@@ -247,6 +484,7 @@ famfs_init_fs_context(struct fs_context *fc)
 	if (!fsi)
 		return -ENOMEM;
 
+	init_rwsem(&fsi->devlist_sem);
 	fsi->mount_opts.mode = FAMFS_DEFAULT_MODE;
 	fc->s_fs_info        = fsi;
 	fc->ops              = &famfs_context_ops;
@@ -257,6 +495,8 @@ static void
 famfs_kill_sb(struct super_block *sb)
 {
 	struct famfs_fs_info *fsi = sb->s_fs_info;
+
+	famfs_devlist_free(fsi, sb);
 
 	kill_char_super(sb);
 
