@@ -417,10 +417,9 @@ static void sn65dsi83_reset_work(struct work_struct *ws)
 
 	/* Reset the pipe */
 	ret = sn65dsi83_reset_pipe(ctx);
-	if (ret) {
+	if (ret)
 		dev_err(ctx->dev, "reset pipe failed %pe\n", ERR_PTR(ret));
-		return;
-	}
+
 	if (ctx->irq)
 		enable_irq(ctx->irq);
 
