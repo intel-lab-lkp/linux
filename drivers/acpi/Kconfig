@@ -55,6 +55,7 @@ config ACPI_GENERIC_GSI
 
 config ACPI_SYSTEM_POWER_STATES_SUPPORT
 	bool
+	select ACPI_S2IDLE if SUSPEND
 
 config ACPI_CCA_REQUIRED
 	bool
@@ -112,6 +113,19 @@ config ACPI_SLEEP
 	depends on SUSPEND || HIBERNATION
 	depends on ACPI_SYSTEM_POWER_STATES_SUPPORT
 	default y
+
+config ACPI_S2IDLE
+	bool "ACPI suspend-to-idle support"
+	depends on SUSPEND
+	help
+	  This option enables the core ACPI framework for the suspend-to-idle
+	  (S2Idle) power state. This state is software-driven and does not
+	  require platform firmware sleep states (S3/S4).
+
+	  It is automatically selected by platforms with
+	  CONFIG_ACPI_SYSTEM_POWER_STATES_SUPPORT (like x86), but can also
+	  be enabled independently by other ACPI platforms (e.g., ARM64) to
+	  gain support for low-power idle and ACPI wakeup events.
 
 config ACPI_REV_OVERRIDE_POSSIBLE
 	bool "Allow supported ACPI revision to be overridden"
