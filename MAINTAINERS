@@ -12098,6 +12098,8 @@ F:	arch/x86/include/asm/mshyperv.h
 F:	arch/x86/include/asm/trace/hyperv.h
 F:	arch/x86/kernel/cpu/mshyperv.c
 F:	drivers/clocksource/hyperv_timer.c
+F:	drivers/firmware/efi/libstub/*-efi-mshv.c
+F:	drivers/firmware/efi/libstub/efi-mshv*
 F:	drivers/hid/hid-hyperv.c
 F:	drivers/hv/
 F:	drivers/input/serio/hyperv-keyboard.c
