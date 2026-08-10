@@ -670,7 +670,8 @@ static int hmm_do_fault(struct mm_struct *mm,
 		ret = handle_mm_fault(vma, addr, fault_flags, NULL);
 
 		if (ret & (VM_FAULT_COMPLETED | VM_FAULT_RETRY)) {
-			*hmm_vma_walk->locked = false;
+			if (hmm_vma_walk->locked)	/* needed by sparse */
+				*hmm_vma_walk->locked = false;
 			return HMM_FAULT_UNLOCKED;
 		}
 
