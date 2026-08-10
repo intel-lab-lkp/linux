@@ -73,6 +73,23 @@
 #define PARF_BDF_TO_SID_TABLE_N			0x2000
 #define PARF_BDF_TO_SID_CFG			0x2c00
 
+/*
+ * ECAM blocker range registers. The blocked range has a write pair
+ * (WR_BASE/WR_LIMIT) and a read pair (RD_BASE/RD_LIMIT); each address is
+ * split into a low (32-bit) and a HI (upper 32-bit) register.
+ */
+#define PARF_BLOCK_SLV_AXI_WR_BASE		0x360
+#define PARF_BLOCK_SLV_AXI_WR_BASE_HI		0x364
+#define PARF_BLOCK_SLV_AXI_WR_LIMIT		0x368
+#define PARF_BLOCK_SLV_AXI_WR_LIMIT_HI		0x36c
+#define PARF_BLOCK_SLV_AXI_RD_BASE		0x370
+#define PARF_BLOCK_SLV_AXI_RD_BASE_HI		0x374
+#define PARF_BLOCK_SLV_AXI_RD_LIMIT		0x378
+#define PARF_BLOCK_SLV_AXI_RD_LIMIT_HI		0x37c
+
+#define PARF_ECAM_BASE				0x380
+#define PARF_ECAM_BASE_HI			0x384
+
 /* ELBI registers */
 #define ELBI_SYS_CTRL				0x04
 #define ELBI_SYS_STTS				0x08
@@ -90,6 +107,7 @@
 
 /* PARF_SYS_CTRL register fields */
 #define MAC_PHY_POWERDOWN_IN_P2_D_MUX_EN	BIT(29)
+#define ECAM_BLOCKER_EN				BIT(26)
 #define MST_WAKEUP_EN				BIT(13)
 #define SLV_WAKEUP_EN				BIT(12)
 #define MSTR_ACLK_CGC_DIS			BIT(10)
@@ -1382,6 +1400,37 @@ static void qcom_pcie_configure_ports(struct qcom_pcie *pcie)
 		dw_pcie_program_t_power_on(pcie->pci, port->l1ss_t_power_on);
 }
 
+static void qcom_pcie_init_ecam_blocker(struct qcom_pcie *pcie)
+{
+	struct dw_pcie *pci = pcie->pci;
+
+	/* ECAM base must match the DBI base address */
+	writel(lower_32_bits(pci->dbi_phys_addr), pcie->parf + PARF_ECAM_BASE);
+	writel(upper_32_bits(pci->dbi_phys_addr), pcie->parf + PARF_ECAM_BASE_HI);
+
+	writel(0, pcie->parf + PARF_BLOCK_SLV_AXI_WR_BASE);
+	writel(0, pcie->parf + PARF_BLOCK_SLV_AXI_WR_BASE_HI);
+	writel(U32_MAX, pcie->parf + PARF_BLOCK_SLV_AXI_WR_LIMIT);
+	writel(U32_MAX, pcie->parf + PARF_BLOCK_SLV_AXI_WR_LIMIT_HI);
+
+	writel(0, pcie->parf + PARF_BLOCK_SLV_AXI_RD_BASE);
+	writel(0, pcie->parf + PARF_BLOCK_SLV_AXI_RD_BASE_HI);
+	writel(U32_MAX, pcie->parf + PARF_BLOCK_SLV_AXI_RD_LIMIT);
+	writel(U32_MAX, pcie->parf + PARF_BLOCK_SLV_AXI_RD_LIMIT_HI);
+}
+
+static void qcom_pcie_enable_ecam_blocker(struct qcom_pcie *pcie)
+{
+	u32 sys_ctrl;
+
+	sys_ctrl = readl(pcie->parf + PARF_SYS_CTRL);
+	sys_ctrl |= ECAM_BLOCKER_EN;
+	writel(sys_ctrl, pcie->parf + PARF_SYS_CTRL);
+
+	/* Flush the write so the blocker is enabled before this function returns */
+	readl(pcie->parf + PARF_SYS_CTRL);
+}
+
 static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
@@ -1421,6 +1470,8 @@ static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
 	dw_pcie_remove_ext_capability(pcie->pci, PCI_EXT_CAP_ID_DPC);
 
 	qcom_pcie_configure_ports(pcie);
+
+	qcom_pcie_init_ecam_blocker(pcie);
 
 	qcom_pcie_perst_deassert(pcie);
 
@@ -1878,6 +1929,9 @@ static irqreturn_t qcom_pcie_global_irq_thread(int irq, void *data)
 
 	if (test_and_clear_bit(INT_ALL_LINK_DOWN, &status)) {
 		dev_dbg(dev, "Received Link down event\n");
+
+		qcom_pcie_enable_ecam_blocker(pcie);
+
 		for_each_pci_bridge(port, pp->bridge->bus) {
 			if (pci_pcie_type(port) == PCI_EXP_TYPE_ROOT_PORT)
 				pci_host_handle_link_down(port);
