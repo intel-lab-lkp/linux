@@ -309,6 +309,7 @@ static u32 drv_read(struct acpi_cpufreq_data *data, const struct cpumask *mask)
 	struct acpi_processor_performance *perf = to_perf_data(data);
 	struct drv_cmd cmd = {
 		.reg = &perf->control_register,
+		.val = 0,
 		.func.read = data->cpu_freq_read,
 	};
 	int err;
