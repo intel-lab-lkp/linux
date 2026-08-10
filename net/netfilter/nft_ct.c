@@ -885,7 +885,8 @@ static void nft_ct_timeout_obj_eval(struct nft_object *obj,
 	if (priv->l4proto != pkt->tprot)
 		return;
 
-	if (!ct || nf_ct_is_template(ct) || nf_ct_is_confirmed(ct))
+	if (!ct || nf_ct_is_template(ct) || nf_ct_is_confirmed(ct) ||
+	    priv->l4proto != nf_ct_protonum(ct))
 		return;
 
 	timeout = nf_ct_timeout_find(ct);
