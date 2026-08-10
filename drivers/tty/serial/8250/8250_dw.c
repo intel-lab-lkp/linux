@@ -18,6 +18,7 @@
 #include <linux/io.h>
 #include <linux/lockdep.h>
 #include <linux/module.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
@@ -77,6 +78,7 @@ struct dw8250_data {
 	unsigned int		skip_autocfg:1;
 	unsigned int		uart_16550_compatible:1;
 	unsigned int		in_idle:1;
+	unsigned int		in_init_state:1;
 
 	u8			no_int_count;
 };
@@ -461,8 +463,15 @@ static int dw8250_handle_irq(struct uart_port *p)
 static void
 dw8250_do_pm(struct uart_port *port, unsigned int state, unsigned int old)
 {
-	if (!state)
+	struct dw8250_data *d = to_dw8250_data(port->private_data);
+
+	if (!state) {
 		pm_runtime_get_sync(port->dev);
+		if (d->in_init_state) {
+			d->in_init_state = false;
+			pinctrl_pm_select_default_state(port->dev);
+		}
+	}
 
 	serial8250_do_pm(port, state, old);
 
@@ -769,6 +778,8 @@ static int dw8250_probe(struct platform_device *pdev)
 	data->data.line = serial8250_register_8250_port(up);
 	if (data->data.line < 0)
 		return data->data.line;
+
+	data->in_init_state = pinctrl_keep_init_state(dev);
 
 	platform_set_drvdata(pdev, data);
 
