@@ -123,6 +123,11 @@ struct famfs_dax_devlist {
  *               point, or if other "shutdown" conditions exist
  * @dax_devlist: Table of backing daxdevs (slot 0 is the mount primary)
  * @devlist_sem: Serializes installs into, and teardown of, @dax_devlist
+ * @stats_sem:   Protects the statfs accounting counters below
+ * @total_capacity: Sum of installed daxdev sizes, in bytes (grows as daxdevs
+ *               are added)
+ * @used_capacity:  Sum of installed fmap sizes, in bytes (grows as MAP_CREATE
+ *               attaches fmaps; this is device bytes consumed, not file size)
  */
 struct famfs_fs_info {
 	struct famfs_mount_opts   mount_opts;
@@ -130,6 +135,9 @@ struct famfs_fs_info {
 	bool                      deverror;
 	struct famfs_dax_devlist *dax_devlist;
 	struct rw_semaphore       devlist_sem;
+	struct rw_semaphore       stats_sem;
+	u64                       total_capacity;
+	u64                       used_capacity;
 };
 
 /*

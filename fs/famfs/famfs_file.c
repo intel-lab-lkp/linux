@@ -282,6 +282,11 @@ famfs_file_init_dax(struct file *file, void __user *arg)
 	}
 	inode_unlock(inode);
 
+	/* Account the mapped device bytes for statfs (only on success) */
+	if (!rc) {
+		scoped_guard(rwsem_write, &fsi->stats_sem)
+			fsi->used_capacity += extent_total;
+	}
 out:
 	kvfree(fmap_buf);
 	if (meta)

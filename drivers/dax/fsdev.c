@@ -104,6 +104,25 @@ static size_t fsdev_dax_recovery_write(struct dax_device *dax_dev, pgoff_t pgoff
 	return _copy_from_iter_flushcache(addr, bytes, i);
 }
 
+/**
+ * dax_fsdev_size() - total size in bytes of an fsdev dax device
+ * @dax_dev: the dax device (must be bound to this driver)
+ *
+ * Returns the size cached at probe time (sum of all ranges); it cannot change
+ * while the driver is bound. Only valid for fsdev dax devices - callers
+ * ensure that (e.g. fs_dax_get() enforces DAXDRV_FSDEV_TYPE). Returns 0 if the
+ * device is not alive.
+ */
+u64 dax_fsdev_size(struct dax_device *dax_dev)
+{
+	struct dev_dax *dev_dax = dax_get_private(dax_dev);
+
+	if (!dev_dax)
+		return 0;
+	return dev_dax->cached_size;
+}
+EXPORT_SYMBOL_GPL(dax_fsdev_size);
+
 static const struct dax_operations dev_dax_ops = {
 	.direct_access = fsdev_dax_direct_access,
 	.zero_page_range = fsdev_dax_zero_page_range,

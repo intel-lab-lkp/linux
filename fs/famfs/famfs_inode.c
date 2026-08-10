@@ -24,6 +24,7 @@
 #include <linux/iomap.h>
 #include <linux/path.h>
 #include <linux/namei.h>
+#include <linux/statfs.h>
 
 #include "famfs_internal.h"
 
@@ -348,8 +349,38 @@ famfs_evict_inode(struct inode *inode)
 	clear_inode(inode);
 }
 
+/*
+ * famfs_statfs() - report device capacity and consumption so 'df' works.
+ * @total_capacity is the sum of installed daxdev sizes; @used_capacity is the
+ * sum of device bytes mapped by fmaps (superblock + log + data files). Free is
+ * the difference - an approximation of the userspace allocator's free space
+ * (it ignores allocator gaps / reserved regions), which is fine for df.
+ */
+static int
+famfs_statfs(struct dentry *dentry, struct kstatfs *buf)
+{
+	struct famfs_fs_info *fsi = dentry->d_sb->s_fs_info;
+	u64 total, used, free;
+
+	scoped_guard(rwsem_read, &fsi->stats_sem) {
+		total = fsi->total_capacity;
+		used  = fsi->used_capacity;
+	}
+	free = total > used ? total - used : 0;
+
+	buf->f_type    = FAMFS_SUPER_MAGIC;
+	buf->f_bsize   = PAGE_SIZE;
+	buf->f_frsize  = PAGE_SIZE;
+	buf->f_blocks  = total >> PAGE_SHIFT;
+	buf->f_bfree   = free  >> PAGE_SHIFT;
+	buf->f_bavail  = free  >> PAGE_SHIFT;	/* no root reservation */
+	buf->f_namelen = NAME_MAX;
+	buf->f_fsid    = u64_to_fsid(huge_encode_dev(dentry->d_sb->s_dev));
+	return 0;
+}
+
 static const struct super_operations famfs_super_ops = {
-	.statfs		= simple_statfs,
+	.statfs		= famfs_statfs,
 	.drop_inode	= inode_just_drop,
 	.show_options	= famfs_show_options,
 	.evict_inode    = famfs_evict_inode,
@@ -444,6 +475,7 @@ famfs_install_daxdev(
 	const char *name)
 {
 	struct famfs_daxdev *daxdev;
+	struct dax_device *devp = NULL;
 	int rc = 0;
 
 	if (index >= fsi->dax_devlist->nslots) {
@@ -507,6 +539,15 @@ famfs_install_daxdev(
 
 		wmb(); /* All other fields must be visible before valid */
 		daxdev->valid = 1;
+		devp = daxdev->devp;
+	}
+
+	/* Freshly installed: add its capacity to the statfs accounting */
+	if (devp) {
+		u64 sz = dax_fsdev_size(devp);
+
+		scoped_guard(rwsem_write, &fsi->stats_sem)
+			fsi->total_capacity += sz;
 	}
 
 	return 0;
@@ -769,6 +810,7 @@ famfs_init_fs_context(struct fs_context *fc)
 		return -ENOMEM;
 
 	init_rwsem(&fsi->devlist_sem);
+	init_rwsem(&fsi->stats_sem);
 	atomic64_set(&fsi->opts, FAMFS_OPT_DEFAULT);
 	fsi->mount_opts.mode = FAMFS_DEFAULT_MODE;
 	fc->s_fs_info        = fsi;
@@ -802,15 +844,10 @@ static struct file_system_type famfs_fs_type = {
 /******************************************************************************
  * Module stuff
  */
-#define FAMFS_MODULE_INCOMPLETE 1
-
 static int __init
 init_famfs_fs(void)
 {
 	int rc;
-
-	if (FAMFS_MODULE_INCOMPLETE)
-		return -ENODEV;
 
 	rc = register_filesystem(&famfs_fs_type);
 
