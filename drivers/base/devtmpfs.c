@@ -72,14 +72,25 @@ static struct file_system_type internal_fs_type = {
 	.kill_sb = kill_anon_super,
 };
 
-/* Simply take a ref on the existing mount */
+/* Take a ref on the existing mount and reconfigure to apply mount options. */
 static int devtmpfs_get_tree(struct fs_context *fc)
 {
 	struct super_block *sb = mnt->mnt_sb;
+	int err;
 
 	atomic_inc(&sb->s_active);
 	down_write(&sb->s_umount);
 	fc->root = dget(sb->s_root);
+
+	if (fc->ops->reconfigure) {
+		err = fc->ops->reconfigure(fc);
+		if (err) {
+			dput(fc->root);
+			fc->root = NULL;
+			deactivate_locked_super(sb);
+			return err;
+		}
+	}
 	return 0;
 }
 
