@@ -1160,6 +1160,81 @@ int mt7925_mcu_chip_config(struct mt792x_dev *dev, const char *cmd)
 				 &req, sizeof(req), false);
 }
 
+int mt7925_mcu_chip_config_query(struct mt792x_dev *dev, const char *cmd,
+				 u8 *resp_type, void *resp, u16 resp_size)
+{
+	u16 len = strlen(cmd);
+	struct {
+		u8 _rsv[4];
+		__le16 tag;
+		__le16 len;
+		struct mt76_connac_config config;
+	} __packed req = {
+		.tag = cpu_to_le16(UNI_CHIP_CONFIG_CHIP_CFG),
+		.len = cpu_to_le16(sizeof(req) - 4),
+		.config = {
+			.resp_type = 0,
+			.type = CHIP_CONFIG_TYPE_ASCII,
+			.data_size = cpu_to_le16(len),
+		},
+	};
+	const u16 hdr_len = sizeof(struct tlv) +
+			    offsetof(struct mt76_connac_config, data);
+	struct mt76_connac_config *cfg;
+	struct sk_buff *skb;
+	int ret;
+
+	if (!len || len >= sizeof(req.config.data))
+		return -EINVAL;
+
+	memcpy(req.config.data, cmd, len);
+
+	ret = mt76_mcu_send_and_get_msg(&dev->mt76, MCU_UNI_QUERY(CHIP_CONFIG),
+					&req, sizeof(req), true, &skb);
+	if (ret)
+		return ret;
+
+	/* skip the fixed field of the event, the TLVs follow it */
+	if (skb->len < 4) {
+		ret = -EINVAL;
+		goto out;
+	}
+	skb_pull(skb, 4);
+
+	ret = -ENOENT;
+	while (skb->len >= sizeof(struct tlv)) {
+		struct tlv *tlv = (struct tlv *)skb->data;
+		u16 tlv_len = le16_to_cpu(tlv->len);
+		u16 data_size;
+
+		if (tlv_len < sizeof(*tlv) || tlv_len > skb->len)
+			break;
+
+		if (le16_to_cpu(tlv->tag) != UNI_CHIP_CONFIG_CHIP_CFG) {
+			skb_pull(skb, tlv_len);
+			continue;
+		}
+
+		if (tlv_len < hdr_len)
+			break;
+
+		cfg = (struct mt76_connac_config *)tlv->data;
+		data_size = le16_to_cpu(cfg->data_size);
+		if (data_size > tlv_len - hdr_len)
+			break;
+
+		*resp_type = cfg->resp_type;
+		ret = min_t(u16, data_size, resp_size);
+		memcpy(resp, cfg->data, ret);
+		break;
+	}
+
+out:
+	dev_kfree_skb(skb);
+
+	return ret;
+}
+
 int mt7925_mcu_set_deep_sleep(struct mt792x_dev *dev, bool enable)
 {
 	char cmd[16];
@@ -3772,7 +3847,8 @@ int mt7925_mcu_fill_message(struct mt76_dev *mdev, struct sk_buff *skb,
 			uni_txd->option = MCU_CMD_UNI_EXT_ACK;
 
 		if (cmd == MCU_UNI_CMD(HIF_CTRL) ||
-		    cmd == MCU_UNI_CMD(CHIP_CONFIG))
+		    cmd == MCU_UNI_CMD(CHIP_CONFIG) ||
+		    cmd == MCU_UNI_QUERY(CHIP_CONFIG))
 			uni_txd->option &= ~MCU_CMD_ACK;
 
 		if (mcu_cmd == MCU_UNI_CMD_TESTMODE_CTRL ||

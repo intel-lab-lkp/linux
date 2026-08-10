@@ -286,6 +286,34 @@ static int mt7925_chip_reset(void *data, u64 val)
 
 DEFINE_DEBUGFS_ATTRIBUTE(fops_reset, NULL, mt7925_chip_reset, "%lld\n");
 
+static int
+mt7925_coex_info(struct seq_file *s, void *data)
+{
+#define MT7925_CHIP_CONFIG_RESP_SIZE	320
+	struct mt792x_dev *dev = dev_get_drvdata(s->private);
+	u8 resp[MT7925_CHIP_CONFIG_RESP_SIZE], resp_type;
+	int i, ret;
+
+	mt792x_mutex_acquire(dev);
+	ret = mt7925_mcu_chip_config_query(dev, "coexBwcGetModeInfo 0",
+					   &resp_type, resp, sizeof(resp));
+	mt792x_mutex_release(dev);
+
+	if (ret < 0)
+		return ret;
+
+	if (!ret)
+		seq_puts(s, "no reply\n");
+	else if (resp_type == CHIP_CONFIG_TYPE_ASCII)
+		seq_printf(s, "%.*s\n", ret, resp);
+	else
+		for (i = 0; i < ret; i += 16)
+			seq_printf(s, "%04x: %*ph\n", i,
+				   min_t(int, 16, ret - i), resp + i);
+
+	return 0;
+}
+
 int mt7925_init_debugfs(struct mt792x_dev *dev)
 {
 	struct dentry *dir;
@@ -309,6 +337,8 @@ int mt7925_init_debugfs(struct mt792x_dev *dev)
 	debugfs_create_file("idle-timeout", 0600, dir, dev,
 			    &fops_pm_idle_timeout);
 	debugfs_create_file("chip_reset", 0600, dir, dev, &fops_reset);
+	debugfs_create_devm_seqfile(dev->mt76.dev, "coex_info", dir,
+				    mt7925_coex_info);
 	debugfs_create_devm_seqfile(dev->mt76.dev, "runtime_pm_stats", dir,
 				    mt792x_pm_stats);
 	debugfs_create_file("deep-sleep", 0600, dir, dev, &fops_ds);
