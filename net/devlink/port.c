@@ -708,7 +708,10 @@ static int devlink_port_function_validate(struct devlink_port *devlink_port,
 					  struct netlink_ext_ack *extack)
 {
 	const struct devlink_port_ops *ops = devlink_port->ops;
+	enum devlink_port_fn_opstate opstate;
+	enum devlink_port_fn_state state;
 	struct nlattr *attr;
+	int err;
 
 	if (tb[DEVLINK_PORT_FUNCTION_ATTR_HW_ADDR] &&
 	    !ops->port_fn_hw_addr_set) {
@@ -721,6 +724,20 @@ static int devlink_port_function_validate(struct devlink_port *devlink_port,
 				    "Function does not support state setting");
 		return -EOPNOTSUPP;
 	}
+	if (devlink_port->attrs.flavour == DEVLINK_PORT_FLAVOUR_PCI_SF &&
+	    ops->port_fn_state_get && !tb[DEVLINK_PORT_FN_ATTR_STATE]) {
+		err = ops->port_fn_state_get(devlink_port, &state,
+					     &opstate, extack);
+		if (err)
+			return err;
+
+		if (state == DEVLINK_PORT_FN_STATE_ACTIVE) {
+			NL_SET_ERR_MSG(extack,
+				       "port function parameters can't be configured when port is up");
+			return -EINVAL;
+		}
+	}
+
 	attr = tb[DEVLINK_PORT_FN_ATTR_CAPS];
 	if (attr) {
 		struct nla_bitfield32 caps;
