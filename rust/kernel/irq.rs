@@ -19,6 +19,12 @@ mod request;
 pub use flags::Flags;
 
 pub use request::{
-    Handler, IrqRequest, IrqReturn, Registration, ThreadedHandler, ThreadedIrqReturn,
-    ThreadedRegistration,
+    Handler,
+    IrqRequest,
+    IrqRequestAnchor,
+    IrqReturn,
+    Registration,
+    ThreadedHandler,
+    ThreadedIrqReturn,
+    ThreadedRegistration, //
 };

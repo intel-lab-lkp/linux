@@ -44,17 +44,31 @@ pub trait Handler: Sync {
     fn handle(&self) -> IrqReturn;
 }
 
+/// Marker trait for the anchor stored in an [`IrqRequest`].
+///
+/// Bus-specific IRQ sources can implement this for a reference to their allocation type, so that
+/// the [`Registration`] that stores the request keeps the allocation alive. The default `()`
+/// imposes no constraint beyond the device lifetime.
+pub trait IrqRequestAnchor: Send + Sync {}
+
+impl IrqRequestAnchor for () {}
+
 /// A request for an IRQ line for a given device.
+///
+/// The anchor `A` is stored in the [`Registration`] built from this request. When `A` is a
+/// reference to a bus-specific allocation, the borrow prevents the allocation from being dropped
+/// before the handler is freed.
 ///
 /// # Invariants
 ///
 /// - `ìrq` is the number of an interrupt source of `dev`.
 /// - `irq` has not been registered yet; this is consumed by [`Registration::new()`].
-pub struct IrqRequest<'a> {
+pub struct IrqRequest<'a, A: IrqRequestAnchor = ()> {
     irq: u32,
     /// Proves the device is bound at registration time and ties `'a` to the device's bound
     /// lifetime, ensuring the [`Registration`] cannot outlive it.
     _dev: PhantomData<&'a Device<Bound>>,
+    anchor: A,
 }
 
 impl<'a> IrqRequest<'a> {
@@ -63,12 +77,32 @@ impl<'a> IrqRequest<'a> {
     /// # Safety
     ///
     /// - `irq` should be a valid IRQ number for `dev`.
+    #[inline]
     pub(crate) unsafe fn new(_dev: &'a Device<Bound>, irq: u32) -> Self {
+        // SAFETY: Caller guarantees `irq` is valid for `dev`.
+        unsafe { Self::new_anchored(_dev, irq, ()) }
+    }
+}
+
+impl<'a, A: IrqRequestAnchor> IrqRequest<'a, A> {
+    /// Creates a new IRQ request with an anchor to a bus-specific resource allocation.
+    ///
+    /// # Safety
+    ///
+    /// `irq` must be a valid IRQ number for `dev`.
+    #[inline]
+    pub(crate) unsafe fn new_anchored(_dev: &'a Device<Bound>, irq: u32, anchor: A) -> Self {
         // INVARIANT: `irq` is a valid IRQ number for `dev`.
         IrqRequest {
             irq,
             _dev: PhantomData,
+            anchor,
         }
+    }
+
+    /// Returns a reference to the anchor.
+    pub fn anchor(&self) -> &A {
+        &self.anchor
     }
 
     /// Returns the IRQ number of an [`IrqRequest`].
@@ -154,8 +188,8 @@ impl<'a> IrqRequest<'a> {
 ///
 /// * We own an irq handler registered via `request_irq` whose cookie is a pointer to `Self`.
 #[pin_data(PinnedDrop)]
-pub struct Registration<'a, T: Handler> {
-    request: IrqRequest<'a>,
+pub struct Registration<'a, T: Handler, A: IrqRequestAnchor = ()> {
+    request: IrqRequest<'a, A>,
 
     #[pin]
     handler: T,
@@ -166,7 +200,7 @@ pub struct Registration<'a, T: Handler> {
     _pin: PhantomPinned,
 }
 
-impl<'a, T: Handler> Registration<'a, T> {
+impl<'a, T: Handler, A: IrqRequestAnchor + 'a> Registration<'a, T, A> {
     /// Registers the IRQ handler with the system for the given IRQ number.
     ///
     /// # Safety
@@ -174,7 +208,7 @@ impl<'a, T: Handler> Registration<'a, T> {
     /// Callers must not `mem::forget()` the returned [`Registration`] or otherwise prevent its
     /// [`Drop`] implementation from running.
     pub unsafe fn new(
-        request: IrqRequest<'a>,
+        request: IrqRequest<'a, A>,
         flags: Flags,
         name: &'static CStr,
         handler: impl PinInit<T, Error> + 'a,
@@ -199,7 +233,7 @@ impl<'a, T: Handler> Registration<'a, T> {
                 to_result(unsafe {
                     bindings::request_irq(
                         request.irq,
-                        Some(handle_irq_callback::<T>),
+                        Some(handle_irq_callback::<T, A>),
                         flags.into_inner(),
                         name.as_char_ptr(),
                         this.as_ptr().cast::<c_void>(),
@@ -223,7 +257,7 @@ impl<'a, T: Handler> Registration<'a, T> {
 }
 
 #[pinned_drop]
-impl<T: Handler> PinnedDrop for Registration<'_, T> {
+impl<T: Handler, A: IrqRequestAnchor> PinnedDrop for Registration<'_, T, A> {
     fn drop(self: Pin<&mut Self>) {
         // SAFETY: The cookie was set to a pointer to `Self` in `Registration::new()`. This blocks
         // until all in-flight handlers complete, so no references to `self` remain after this
@@ -240,9 +274,12 @@ impl<T: Handler> PinnedDrop for Registration<'_, T> {
 /// # Safety
 ///
 /// This function should be only used as the callback in `request_irq`.
-unsafe extern "C" fn handle_irq_callback<T: Handler>(_irq: i32, ptr: *mut c_void) -> c_uint {
-    let ptr = ptr.cast_const().cast::<Registration<'_, T>>();
-    // SAFETY: `ptr` is a pointer to `Registration<'_, T>` set in `Registration::new()`.
+unsafe extern "C" fn handle_irq_callback<T: Handler, A: IrqRequestAnchor>(
+    _irq: i32,
+    ptr: *mut c_void,
+) -> c_uint {
+    let ptr = ptr.cast_const().cast::<Registration<'_, T, A>>();
+    // SAFETY: `ptr` is a pointer to `Registration<'_, T, A>` set in `Registration::new()`.
     let registration = unsafe { &*ptr };
 
     T::handle(&registration.handler) as c_uint
@@ -371,8 +408,8 @@ pub trait ThreadedHandler: Sync {
 /// * We own an irq handler registered via `request_threaded_irq` whose cookie is a pointer to
 ///   `Self`.
 #[pin_data(PinnedDrop)]
-pub struct ThreadedRegistration<'a, T: ThreadedHandler> {
-    request: IrqRequest<'a>,
+pub struct ThreadedRegistration<'a, T: ThreadedHandler, A: IrqRequestAnchor = ()> {
+    request: IrqRequest<'a, A>,
 
     #[pin]
     handler: T,
@@ -383,7 +420,7 @@ pub struct ThreadedRegistration<'a, T: ThreadedHandler> {
     _pin: PhantomPinned,
 }
 
-impl<'a, T: ThreadedHandler> ThreadedRegistration<'a, T> {
+impl<'a, T: ThreadedHandler, A: IrqRequestAnchor + 'a> ThreadedRegistration<'a, T, A> {
     /// Registers the IRQ handler with the system for the given IRQ number.
     ///
     /// # Safety
@@ -391,7 +428,7 @@ impl<'a, T: ThreadedHandler> ThreadedRegistration<'a, T> {
     /// Callers must not `mem::forget()` the returned [`ThreadedRegistration`] or otherwise prevent
     /// its [`Drop`] implementation from running.
     pub unsafe fn new(
-        request: IrqRequest<'a>,
+        request: IrqRequest<'a, A>,
         flags: Flags,
         name: &'static CStr,
         handler: impl PinInit<T, Error> + 'a,
@@ -416,8 +453,8 @@ impl<'a, T: ThreadedHandler> ThreadedRegistration<'a, T> {
                 to_result(unsafe {
                     bindings::request_threaded_irq(
                         request.irq,
-                        Some(handle_threaded_irq_callback::<T>),
-                        Some(thread_fn_callback::<T>),
+                        Some(handle_threaded_irq_callback::<T, A>),
+                        Some(thread_fn_callback::<T, A>),
                         flags.into_inner(),
                         name.as_char_ptr(),
                         this.as_ptr().cast::<c_void>(),
@@ -441,7 +478,7 @@ impl<'a, T: ThreadedHandler> ThreadedRegistration<'a, T> {
 }
 
 #[pinned_drop]
-impl<T: ThreadedHandler> PinnedDrop for ThreadedRegistration<'_, T> {
+impl<T: ThreadedHandler, A: IrqRequestAnchor> PinnedDrop for ThreadedRegistration<'_, T, A> {
     fn drop(self: Pin<&mut Self>) {
         // SAFETY: The cookie was set to a pointer to `Self` in `ThreadedRegistration::new()`. This
         // blocks until all in-flight handlers complete, so no references to `self` remain after
@@ -458,12 +495,12 @@ impl<T: ThreadedHandler> PinnedDrop for ThreadedRegistration<'_, T> {
 /// # Safety
 ///
 /// This function should be only used as the callback in `request_threaded_irq`.
-unsafe extern "C" fn handle_threaded_irq_callback<T: ThreadedHandler>(
+unsafe extern "C" fn handle_threaded_irq_callback<T: ThreadedHandler, A: IrqRequestAnchor>(
     _irq: i32,
     ptr: *mut c_void,
 ) -> c_uint {
-    let ptr = ptr.cast_const().cast::<ThreadedRegistration<'_, T>>();
-    // SAFETY: `ptr` is a pointer to `ThreadedRegistration<'_, T>` set in
+    let ptr = ptr.cast_const().cast::<ThreadedRegistration<'_, T, A>>();
+    // SAFETY: `ptr` is a pointer to `ThreadedRegistration<'_, T, A>` set in
     // `ThreadedRegistration::new()`.
     let registration = unsafe { &*ptr };
 
@@ -473,9 +510,12 @@ unsafe extern "C" fn handle_threaded_irq_callback<T: ThreadedHandler>(
 /// # Safety
 ///
 /// This function should be only used as the callback in `request_threaded_irq`.
-unsafe extern "C" fn thread_fn_callback<T: ThreadedHandler>(_irq: i32, ptr: *mut c_void) -> c_uint {
-    let ptr = ptr.cast_const().cast::<ThreadedRegistration<'_, T>>();
-    // SAFETY: `ptr` is a pointer to `ThreadedRegistration<'_, T>` set in
+unsafe extern "C" fn thread_fn_callback<T: ThreadedHandler, A: IrqRequestAnchor>(
+    _irq: i32,
+    ptr: *mut c_void,
+) -> c_uint {
+    let ptr = ptr.cast_const().cast::<ThreadedRegistration<'_, T, A>>();
+    // SAFETY: `ptr` is a pointer to `ThreadedRegistration<'_, T, A>` set in
     // `ThreadedRegistration::new()`.
     let registration = unsafe { &*ptr };
 
