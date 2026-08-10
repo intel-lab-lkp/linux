@@ -108,21 +108,29 @@ void serial_test_get_branch_snapshot(void)
 
 	trigger_module_test_read(100);
 
-	if (skel->bss->total_entries < 16) {
+	/* Reaching the snapshot helper costs a few entries: about 7 on x86_64
+	 * and about 14 on arm64, whose BPF trampoline branches more. Bound it
+	 * so that a regression shows up here.
+	 *
+	 * Derive the buffer minimum from the two limits it depends on, so the
+	 * arms cannot drift apart.
+	 */
+#if defined(__aarch64__)
+#define WASTED_ENTRIES_MAX	18
+#else
+#define WASTED_ENTRIES_MAX	10
+#endif
+#define TEST1_HITS_MIN		7
+#define TOTAL_ENTRIES_MIN	(WASTED_ENTRIES_MAX - 1 + TEST1_HITS_MIN)
+
+	if (skel->bss->total_entries < TOTAL_ENTRIES_MIN) {
 		/* too few entries for the hit/waste test */
 		test__skip();
 		goto cleanup;
 	}
 
-	ASSERT_GT(skel->bss->test1_hits, 6, "find_looptest_in_lbr");
-
-	/* Given we stop LBR in software, we will waste a few entries.
-	 * But we should try to waste as few as possible entries. We are at
-	 * about 7 on x86_64 systems.
-	 * Add a check for < 10 so that we get heads-up when something
-	 * changes and wastes too many entries.
-	 */
-	ASSERT_LT(skel->bss->wasted_entries, 10, "check_wasted_entries");
+	ASSERT_GT(skel->bss->test1_hits, TEST1_HITS_MIN - 1, "find_looptest_in_lbr");
+	ASSERT_LT(skel->bss->wasted_entries, WASTED_ENTRIES_MAX, "check_wasted_entries");
 
 cleanup:
 	get_branch_snapshot__destroy(skel);
