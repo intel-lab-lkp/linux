@@ -9,6 +9,8 @@
 #include <linux/types.h>
 #include <linux/bitmap.h>
 #include <linux/perf/arm_pmu.h>
+#include <linux/perf/arm_pmuv3.h>
+#include <asm/daifflags.h>
 #include "arm_brbe.h"
 
 #define BRBFCR_EL1_BRANCH_FILTERS (BRBFCR_EL1_DIRECT   | \
@@ -250,10 +252,13 @@ static bool valid_brbidr(u64 brbidr)
 	return valid_brbe_format(brbe_format) && valid_brbe_cc(brbe_cc) && valid_brbe_nr(brbe_nr);
 }
 
-static bool valid_brbe_version(int brbe_version)
+static __always_inline bool valid_brbe_version(void)
 {
-	return brbe_version == ID_AA64DFR0_EL1_BRBE_IMP ||
-	       brbe_version == ID_AA64DFR0_EL1_BRBE_BRBE_V1P1;
+	u64 aa64dfr0 = read_sysreg_s(SYS_ID_AA64DFR0_EL1);
+	int brbe = cpuid_feature_extract_unsigned_field(aa64dfr0, ID_AA64DFR0_EL1_BRBE_SHIFT);
+
+	return brbe == ID_AA64DFR0_EL1_BRBE_IMP ||
+	       brbe == ID_AA64DFR0_EL1_BRBE_BRBE_V1P1;
 }
 
 static void select_brbe_bank(int bank)
@@ -270,6 +275,20 @@ static void select_brbe_bank(int bank)
 	 */
 	isb();
 }
+
+static inline void __brbe_advance(int *bank, int *idx, int nr_hw)
+{
+	if (++(*idx) >= BRBE_BANK_MAX_ENTRIES &&
+	    *bank * BRBE_BANK_MAX_ENTRIES + *idx < nr_hw) {
+		*idx = 0;
+		select_brbe_bank(++(*bank));
+	}
+}
+
+#define for_each_brbe_entry(idx, nr_hw)					\
+	for (int __bank = (select_brbe_bank(0), 0), idx = 0;		\
+	     __bank * BRBE_BANK_MAX_ENTRIES + idx < (nr_hw);		\
+	     __brbe_advance(&__bank, &idx, (nr_hw)))
 
 static bool __read_brbe_regset(struct brbe_regset *entry, int idx)
 {
@@ -474,11 +493,9 @@ unsigned int brbe_num_branch_records(const struct arm_pmu *armpmu)
 
 void brbe_probe(struct arm_pmu *armpmu)
 {
-	u64 brbidr, aa64dfr0 = read_sysreg_s(SYS_ID_AA64DFR0_EL1);
-	u32 brbe;
+	u64 brbidr;
 
-	brbe = cpuid_feature_extract_unsigned_field(aa64dfr0, ID_AA64DFR0_EL1_BRBE_SHIFT);
-	if (!valid_brbe_version(brbe))
+	if (!valid_brbe_version())
 		return;
 
 	brbidr = read_sysreg_s(SYS_BRBIDR0_EL1);
@@ -575,7 +592,7 @@ static void brbe_set_perf_entry_type(struct perf_branch_entry *entry, u64 brbinf
 	}
 }
 
-static int brbinf_get_perf_priv(u64 brbinf)
+static int brbinf_get_perf_priv(u64 brbinf, const struct perf_event *event)
 {
 	int brbe_el = brbinf_get_el(brbinf);
 
@@ -589,11 +606,13 @@ static int brbinf_get_perf_priv(u64 brbinf)
 			return PERF_BR_PRIV_KERNEL;
 		return PERF_BR_PRIV_HV;
 	default:
-		pr_warn_once("%d - unknown branch privilege captured\n", brbe_el);
+		if (event)
+			pr_warn_once("%d - unknown branch privilege captured\n", brbe_el);
 		return PERF_BR_PRIV_UNKNOWN;
 	}
 }
 
+/* @event is NULL for the snapshot: no software filter, and no printing. */
 static bool perf_entry_from_brbe_regset(int index, struct perf_branch_entry *entry,
 					const struct perf_event *event)
 {
@@ -618,10 +637,10 @@ static bool perf_entry_from_brbe_regset(int index, struct perf_branch_entry *ent
 
 	brbe_set_perf_entry_type(entry, brbinf);
 
-	if (!branch_sample_no_cycles(event))
+	if (!event || !branch_sample_no_cycles(event))
 		entry->cycles = brbinf_get_cycles(brbinf);
 
-	if (!branch_sample_no_flags(event)) {
+	if (!event || !branch_sample_no_flags(event)) {
 		/* Mispredict info is available for source only and complete branch records. */
 		if (!brbe_record_is_target_only(brbinf)) {
 			entry->mispred = brbinf_get_mispredict(brbinf);
@@ -633,7 +652,7 @@ static bool perf_entry_from_brbe_regset(int index, struct perf_branch_entry *ent
 		 * nor it is being supported in the kernel. Just warn here once
 		 * if TME related information shows up rather unexpectedly.
 		 */
-		if (brbinf_get_lastfailed(brbinf) || brbinf_get_in_tx(brbinf))
+		if (event && (brbinf_get_lastfailed(brbinf) || brbinf_get_in_tx(brbinf)))
 			pr_warn_once("Unknown transaction states\n");
 	}
 
@@ -642,7 +661,7 @@ static bool perf_entry_from_brbe_regset(int index, struct perf_branch_entry *ent
 	 * branch records.
 	 */
 	if (!brbe_record_is_source_only(brbinf))
-		entry->priv = brbinf_get_perf_priv(brbinf);
+		entry->priv = brbinf_get_perf_priv(brbinf, event);
 
 	return true;
 }
@@ -774,32 +793,94 @@ void brbe_read_filtered_entries(struct perf_branch_stack *branch_stack,
 {
 	struct arm_pmu *cpu_pmu = to_arm_pmu(event->pmu);
 	int nr_hw = brbe_num_branch_records(cpu_pmu);
-	int nr_banks = DIV_ROUND_UP(nr_hw, BRBE_BANK_MAX_ENTRIES);
 	int nr_filtered = 0;
 	u64 branch_sample_type = event->attr.branch_sample_type;
 	DECLARE_BITMAP(event_type_mask, PERF_BR_ARM64_MAX);
 
 	prepare_event_branch_type_mask(branch_sample_type, event_type_mask);
 
-	for (int bank = 0; bank < nr_banks; bank++) {
-		int nr_remaining = nr_hw - (bank * BRBE_BANK_MAX_ENTRIES);
-		int nr_this_bank = min(nr_remaining, BRBE_BANK_MAX_ENTRIES);
+	for_each_brbe_entry(i, nr_hw) {
+		struct perf_branch_entry *pbe = &branch_stack->entries[nr_filtered];
 
-		select_brbe_bank(bank);
+		if (!perf_entry_from_brbe_regset(i, pbe, event))
+			break;
 
-		for (int i = 0; i < nr_this_bank; i++) {
-			struct perf_branch_entry *pbe = &branch_stack->entries[nr_filtered];
+		if (!filter_branch_record(pbe, branch_sample_type, event_type_mask))
+			continue;
 
-			if (!perf_entry_from_brbe_regset(i, pbe, event))
-				goto done;
+		nr_filtered++;
+	}
 
-			if (!filter_branch_record(pbe, branch_sample_type, event_type_mask))
-				continue;
+	branch_stack->nr = nr_filtered;
+}
 
-			nr_filtered++;
+int brbe_snapshot_branch_stack(struct perf_branch_entry *entries, unsigned int cnt)
+{
+	u64 brbidr, brbfcr, brbcr, pmcr;
+	int nr_hw, nr_copied = 0;
+	bool paused_here = false;
+	unsigned long flags;
+
+	/* Called with migration disabled, so this is the CPU read below. */
+	if (!valid_brbe_version())
+		return 0;
+
+	flags = raw_local_daif_save();
+
+	brbcr = read_sysreg_s(SYS_BRBCR_EL1);
+	brbfcr = read_sysreg_s(SYS_BRBFCR_EL1);
+
+	/*
+	 * PAUSED is only ever set behind our back, so finding it set is final.
+	 * likely() keeps this inline; a taken branch costs a record.
+	 */
+	if (likely(brbcr && !(brbfcr & BRBFCR_EL1_PAUSED))) {
+		/*
+		 * Stop the counters so a freeze cannot set PAUSED behind the
+		 * value read below; the D19.3 conditions need a PMOVSCLR_EL0
+		 * bit, which a stopped counter cannot set.
+		 */
+		pmcr = read_pmcr();
+		write_pmcr(pmcr & ~ARMV8_PMU_PMCR_E);
+		isb();
+
+		brbfcr = read_sysreg_s(SYS_BRBFCR_EL1);
+		paused_here = !(brbfcr & BRBFCR_EL1_PAUSED);
+
+		write_sysreg_s(brbfcr | BRBFCR_EL1_PAUSED, SYS_BRBFCR_EL1);
+		isb();
+	}
+
+	trace_hardirqs_off();
+
+	/* Records outlive brbe_disable(). */
+	if (brbcr) {
+		brbidr = read_sysreg_s(SYS_BRBIDR0_EL1);
+		nr_hw = min_t(int, FIELD_GET(BRBIDR0_EL1_NUMREC_MASK, brbidr),
+			      BRBIDR0_EL1_NUMREC_64);
+
+		for_each_brbe_entry(i, nr_hw) {
+			if (nr_copied >= cnt)
+				break;
+
+			if (!perf_entry_from_brbe_regset(i, &entries[nr_copied], NULL))
+				break;
+
+			nr_copied++;
 		}
 	}
 
-done:
-	branch_stack->nr = nr_filtered;
+	if (paused_here) {
+		/* Branches were missed, so discard rather than leave a hole. */
+		brbe_invalidate();
+
+		/* Unpause first; a paused BRBE cannot freeze on overflow. */
+		write_sysreg_s(brbfcr, SYS_BRBFCR_EL1);
+		isb();
+		write_pmcr(pmcr);
+	}
+
+	local_daif_restore(flags);
+
+	return nr_copied;
 }
