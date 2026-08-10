@@ -918,9 +918,19 @@ static int amdgpu_uvd_cs_msg(struct amdgpu_uvd_cs_ctx *ctx,
 
 	case 2:
 		/* it's a destroy msg, free the handle */
-		for (i = 0; i < adev->uvd.max_handles; ++i)
-			atomic_cmpxchg(&adev->uvd.handles[i], handle, 0);
 		amdgpu_bo_kunmap(bo);
+
+		for (i = 0; i < adev->uvd.max_handles; ++i) {
+			if (atomic_read(&adev->uvd.handles[i]) != handle)
+				continue;
+
+			if (adev->uvd.filp[i] != ctx->parser->filp) {
+				DRM_ERROR("UVD handle collision detected!\n");
+				return -EINVAL;
+			}
+
+			atomic_cmpxchg(&adev->uvd.handles[i], handle, 0);
+		}
 		return 0;
 
 	default:
