@@ -71,6 +71,7 @@ from jobserver import JobserverExec         # pylint: disable=C0413,C0411,E0401
 #
 VENV_DEFAULT = "sphinx_latest"
 MIN_PYTHON_VERSION = PythonVersion("3.7").version
+MIN_MAKE_VERSION = PythonVersion("4.0").version
 PAPER = ["", "a4", "letter"]
 
 TARGETS = {
@@ -96,6 +97,46 @@ class SphinxBuilder:
     Handles a sphinx-build target, adding needed arguments to build
     with the Kernel.
     """
+
+    @staticmethod
+    def get_make_version(cmd):
+        """Return the GNU Make version, or None for another make."""
+        if not cmd:
+            return None
+
+        try:
+            result = subprocess.run(
+                [cmd, "--version"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+        match = re.search(
+            r"^GNU Make\s+([0-9]+(?:\.[0-9]+)*)", result.stdout, re.MULTILINE
+        )
+        if not match:
+            return None
+
+        return PythonVersion.parse_version(match.group(1))
+
+    def get_make(self):
+        """Select the first GNU Make 4.0 or newer in preference order."""
+        candidates = [
+            self.env.get("MAKE"),
+            shutil.which("gmake"),
+            shutil.which("make"),
+        ]
+
+        for cmd in candidates:
+            version = self.get_make_version(cmd)
+            if version and version >= MIN_MAKE_VERSION:
+                return cmd
+
+        sys.exit("GNU Make 4.0 or newer is required")
 
     def get_path(self, path, use_cwd=False, abs_path=False):
         """
@@ -569,9 +610,10 @@ class SphinxBuilder:
         texinfo directory.
         """
 
+        make = self.get_make()
         for output_dir in output_dirs:
             try:
-                subprocess.run(["make", "info"], cwd=output_dir, check=True)
+                subprocess.run([make, "info"], cwd=output_dir, check=True)
             except subprocess.CalledProcessError as e:
                 sys.exit(f"Error generating info docs: {e}")
 
@@ -787,12 +829,11 @@ class SphinxBuilder:
 
         if rustdoc and target in ["htmldocs", "epubdocs"]:
             print("Building rust docs")
-            if "MAKE" in self.env:
-                cmd = [self.env["MAKE"]]
-            else:
-                cmd = ["make", "LLVM=1"]
-
-            cmd += [ "rustdoc"]
+            make = self.get_make()
+            cmd = [make]
+            if make != self.env.get("MAKE"):
+                cmd.append("LLVM=1")
+            cmd.append("rustdoc")
             if self.verbose:
                 print(" ".join(cmd))
 
