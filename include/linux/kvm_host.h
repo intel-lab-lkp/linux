@@ -801,6 +801,7 @@ struct kvm {
 	/* Used to wait for completion of MMU notifiers.  */
 	spinlock_t mn_invalidate_lock;
 	unsigned long mn_active_invalidate_count;
+	unsigned long mn_invalidate_seq;
 	struct rcuwait mn_memslots_update_rcuwait;
 
 	/* For management / invalidation of gfn_to_pfn_caches */
