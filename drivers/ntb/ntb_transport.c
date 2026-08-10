@@ -206,6 +206,11 @@ struct ntb_transport_qp {
 	unsigned int direct_ring_entries;
 	/* Serialize direct session, TX ring, and RX publication state. */
 	spinlock_t direct_lock;
+	/*
+	 * rxc_db_work owns the direct RX queue and counters while active; teardown
+	 * accesses them only after cancel_work_sync().
+	 */
+	struct list_head direct_rx_q;
 	u32 *direct_rx_cpl;
 	dma_addr_t direct_rx_cpl_dma;
 	u32 *direct_tx_cpl;
@@ -224,6 +229,7 @@ struct ntb_transport_qp {
 	unsigned int rx_alloc_entry;
 	dma_cookie_t last_cookie;
 	struct work_struct rxc_db_work;
+	struct delayed_work direct_rx_retry;
 
 	void (*event_handler)(void *data, int status);
 	struct delayed_work link_work;
@@ -524,6 +530,7 @@ static bool ntb_direct_layout(struct ntb_transport_ctx *nt)
 #define NTB_QP_DEF_NUM_ENTRIES	100
 #define NTB_LINK_DOWN_TIMEOUT	10
 #define NTB_DIRECT_TEARDOWN_RETRY_INTERVAL_MS	10
+#define NTB_DIRECT_RX_RETRY_INTERVAL_MS	10
 
 static bool ntb_direct_rx_mode(struct ntb_transport_qp *qp)
 {
@@ -764,6 +771,8 @@ unsigned int ntb_transport_rx_queue_size(struct ntb_transport_qp *qp)
 EXPORT_SYMBOL_GPL(ntb_transport_rx_queue_size);
 
 static void ntb_transport_rxc_db(struct work_struct *work);
+static void ntb_direct_rx_retry_work(struct work_struct *work);
+static void ntb_direct_rx_reclaim(struct ntb_transport_qp *qp);
 static const struct ntb_ctx_ops ntb_transport_ops;
 static struct ntb_client ntb_transport_client;
 static int ntb_async_tx_submit(struct ntb_transport_qp *qp,
@@ -1447,6 +1456,15 @@ static void ntb_qp_link_context_reset(struct ntb_transport_qp *qp)
 
 static void ntb_qp_link_down_reset(struct ntb_transport_qp *qp)
 {
+	if (ntb_direct_link_capable(qp)) {
+		qp->active = false;
+		cancel_delayed_work_sync(&qp->direct_rx_retry);
+		cancel_work_sync(&qp->rxc_db_work);
+		/* Catch a retry armed while draining RX work. */
+		cancel_delayed_work_sync(&qp->direct_rx_retry);
+		ntb_direct_rx_reclaim(qp);
+	}
+
 	ntb_qp_link_context_reset(qp);
 	if (qp->remote_rx_info)
 		qp->remote_rx_info->entry = qp->rx_max_entry - 1;
@@ -1811,8 +1829,10 @@ static int ntb_transport_init_queue(struct ntb_transport_ctx *nt,
 	INIT_LIST_HEAD(&qp->rx_free_q);
 	INIT_LIST_HEAD(&qp->tx_free_q);
 	INIT_LIST_HEAD(&qp->tx_offl_q);
+	INIT_LIST_HEAD(&qp->direct_rx_q);
 
 	INIT_WORK(&qp->rxc_db_work, ntb_transport_rxc_db);
+	INIT_DELAYED_WORK(&qp->direct_rx_retry, ntb_direct_rx_retry_work);
 
 	return 0;
 }
@@ -2219,6 +2239,195 @@ err:
 	qp->rx_memcpy++;
 }
 
+static bool ntb_direct_rx_enabled(struct ntb_transport_qp *qp)
+{
+	return READ_ONCE(qp->direct_state) == NTB_DIRECT_ACTIVE &&
+	       ntb_direct_rx_mode(qp);
+}
+
+static bool ntb_direct_rx_can_complete(struct ntb_transport_qp *qp)
+{
+	enum ntb_direct_state state = READ_ONCE(qp->direct_state);
+
+	return (state == NTB_DIRECT_ACTIVE || state == NTB_DIRECT_QUIESCING) &&
+	       ntb_direct_rx_mode(qp);
+}
+
+static int ntb_direct_rx_publish(struct ntb_transport_qp *qp,
+				 struct ntb_queue_entry *entry)
+{
+	struct ntb_direct_pub __iomem *pub;
+	struct device *dma_dev;
+	dma_addr_t dma_addr;
+	u32 head, idx;
+	int rc = 0;
+
+	dma_dev = qp->transport->direct_dma_dev;
+	dma_addr = dma_map_single(dma_dev, entry->buf, entry->len,
+				  DMA_FROM_DEVICE);
+	if (dma_mapping_error(dma_dev, dma_addr))
+		return -EIO;
+
+	scoped_guard(spinlock_bh, &qp->direct_lock) {
+		if (!ntb_direct_rx_enabled(qp)) {
+			rc = -EOPNOTSUPP;
+			goto unmap;
+		}
+
+		head = qp->direct_rx_prod;
+		if (ntb_direct_ring_used(head, qp->direct_rx_cons) >=
+		    qp->direct_ring_entries - 1) {
+			rc = -ENOSPC;
+			goto unmap;
+		}
+
+		idx = ntb_direct_ring_idx(qp, head);
+		entry->direct_dma_addr = dma_addr;
+		list_add_tail(&entry->entry, &qp->direct_rx_q);
+
+		WRITE_ONCE(qp->direct_rx_cpl[idx], 0);
+		/* Publish the slot only after its completion target is clear. */
+		dma_wmb();
+		pub = &qp->peer_direct_shared->pub[idx];
+		iowrite32(lower_32_bits(dma_addr), &pub->addr_lo);
+		iowrite32(upper_32_bits(dma_addr), &pub->addr_hi);
+		iowrite32(entry->len, &pub->len);
+		iowrite32(head + 1, &qp->peer_direct_shared->pub_head);
+		WRITE_ONCE(qp->direct_rx_prod, head + 1);
+	}
+
+	return 0;
+
+unmap:
+	dma_unmap_single(dma_dev, dma_addr, entry->len, DMA_FROM_DEVICE);
+
+	return rc;
+}
+
+static void ntb_direct_rx_retry_work(struct work_struct *work)
+{
+	struct ntb_transport_qp *qp =
+		container_of(to_delayed_work(work), struct ntb_transport_qp,
+			     direct_rx_retry);
+
+	queue_work(system_dfl_wq, &qp->rxc_db_work);
+}
+
+static void ntb_direct_rx_replenish(struct ntb_transport_qp *qp)
+{
+	struct ntb_queue_entry *entry;
+	int rc;
+
+	while ((entry = ntb_list_rm(&qp->ntb_rx_q_lock, &qp->rx_pend_q))) {
+		rc = ntb_direct_rx_publish(qp, entry);
+		if (!rc)
+			continue;
+
+		ntb_list_add(&qp->ntb_rx_q_lock, &entry->entry,
+			     &qp->rx_pend_q);
+		if (rc == -EIO) {
+			dev_warn_ratelimited(&qp->ndev->pdev->dev,
+					     "qp %d: failed to map direct RX buffer; retrying\n",
+					     qp->qp_num);
+			/* Avoid hot-looping rxc_db_work on a persistent failure. */
+			mod_delayed_work(system_dfl_wq, &qp->direct_rx_retry,
+					 msecs_to_jiffies(NTB_DIRECT_RX_RETRY_INTERVAL_MS));
+		}
+		break;
+	}
+}
+
+static u32 ntb_direct_rx_completion_word(struct ntb_transport_qp *qp)
+{
+	u32 cons, prod, idx;
+
+	cons = READ_ONCE(qp->direct_rx_cons);
+	prod = READ_ONCE(qp->direct_rx_prod);
+	if (!ntb_direct_ring_used(prod, cons))
+		return 0;
+
+	idx = ntb_direct_ring_idx(qp, cons);
+	return READ_ONCE(qp->direct_rx_cpl[idx]);
+}
+
+static bool ntb_direct_rx_complete_one(struct ntb_transport_qp *qp)
+{
+	struct ntb_queue_entry *entry;
+	struct device *dma_dev;
+	void *cb_data;
+	bool notify;
+	int cb_len;
+	u32 word;
+
+	word = ntb_direct_rx_completion_word(qp);
+	if (!word)
+		return false;
+
+	entry = list_first_entry_or_null(&qp->direct_rx_q,
+					 struct ntb_queue_entry, entry);
+	if (WARN_ON_ONCE(!entry))
+		return false;
+
+	/* The completion DMA follows the payload on the same channel. */
+	dma_rmb();
+	list_del(&entry->entry);
+	WRITE_ONCE(qp->direct_rx_cons, READ_ONCE(qp->direct_rx_cons) + 1);
+
+	dma_dev = qp->transport->direct_dma_dev;
+	dma_unmap_single(dma_dev, entry->direct_dma_addr, entry->len,
+			 DMA_FROM_DEVICE);
+	cb_data = entry->cb_data;
+
+	if (word == NTB_DIRECT_CPL_ERROR) {
+		cb_len = -EIO;
+	} else if (word > INT_MAX || word > entry->len) {
+		qp->rx_err_oflow++;
+		cb_len = -EIO;
+	} else {
+		qp->rx_bytes += word;
+		qp->rx_pkts++;
+		cb_len = word;
+	}
+
+	notify = qp->client_ready && qp->rx_handler;
+	if (notify)
+		ntb_list_add(&qp->ntb_rx_q_lock, &entry->entry, &qp->rx_free_q);
+	else
+		ntb_list_add(&qp->ntb_rx_q_lock, &entry->entry, &qp->rx_pend_q);
+
+	if (notify)
+		qp->rx_handler(qp, qp->cb_data, cb_data, cb_len);
+
+	return true;
+}
+
+static void ntb_direct_rx_complete(struct ntb_transport_qp *qp)
+{
+	unsigned int count;
+
+	for (count = 0; count < qp->direct_ring_entries; count++)
+		if (!ntb_direct_rx_complete_one(qp))
+			break;
+}
+
+static void ntb_direct_rx_reclaim(struct ntb_transport_qp *qp)
+{
+	struct ntb_queue_entry *entry;
+	struct device *dma_dev;
+	LIST_HEAD(reclaim);
+
+	dma_dev = qp->transport->direct_dma_dev;
+	list_splice_init(&qp->direct_rx_q, &reclaim);
+
+	list_for_each_entry(entry, &reclaim, entry) {
+		dma_unmap_single(dma_dev, entry->direct_dma_addr, entry->len,
+				 DMA_FROM_DEVICE);
+	}
+
+	guard(spinlock_irqsave)(&qp->ntb_rx_q_lock);
+	list_splice_tail(&reclaim, &qp->rx_pend_q);
+}
+
 static int ntb_process_rxc(struct ntb_transport_qp *qp)
 {
 	struct ntb_payload_header *hdr;
@@ -2304,6 +2513,12 @@ static void ntb_transport_rxc_db(struct work_struct *work)
 		ntb_direct_control_progress(qp);
 	if (!qp->active)
 		goto clear_db;
+	if (ntb_direct_rx_can_complete(qp)) {
+		ntb_direct_rx_complete(qp);
+		if (ntb_direct_rx_enabled(qp))
+			ntb_direct_rx_replenish(qp);
+		goto clear_db;
+	}
 
 	/* Limit the number of packets processed in a single interrupt to
 	 * provide fairness to others
@@ -2886,11 +3101,15 @@ void ntb_transport_free_queue(struct ntb_transport_qp *qp)
 	qp_bit = BIT_ULL(qp->qp_num);
 
 	ntb_db_set_mask(qp->ndev, qp_bit);
+	cancel_delayed_work_sync(&qp->direct_rx_retry);
 	cancel_work_sync(&qp->rxc_db_work);
+	/* Catch a retry armed while draining RX work. */
+	cancel_delayed_work_sync(&qp->direct_rx_retry);
 
 	/* Catch cleanup queued while draining RX processing. */
 	cancel_work_sync(&qp->link_cleanup);
 	cancel_delayed_work_sync(&qp->link_work);
+	ntb_direct_rx_reclaim(qp);
 	ntb_qp_link_context_reset(qp);
 
 	qp->cb_data = NULL;
