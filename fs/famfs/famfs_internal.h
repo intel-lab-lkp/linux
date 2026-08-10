@@ -15,7 +15,51 @@
 #include <linux/bits.h>
 #include <linux/build_bug.h>
 
+#include <linux/famfs_ioctl.h>
+
 extern const struct file_operations famfs_file_operations;
+
+/*
+ * Internal sanity bound on a FAMFSIOC_MAP_CREATE fmap message. The ABI does
+ * not advertise a maximum (the message is self-describing); this only guards
+ * the copy-in against an unreasonable allocation. Oversize is rejected with
+ * -EFBIG.
+ */
+#define FAMFS_FMAP_MSG_MAX (4 * 1024 * 1024)
+
+struct famfs_meta_simple_ext {
+	u64 dev_index;
+	u64 ext_offset;
+	u64 ext_len;
+};
+
+struct famfs_meta_interleaved_ext {
+	u64 fie_nstrips;
+	u64 fie_chunk_size;
+	u64 fie_nbytes;
+	struct famfs_meta_simple_ext *ie_strips;
+};
+
+/*
+ * Each famfs dax file has this hanging from its inode->i_private.
+ */
+struct famfs_file_meta {
+	bool                   error;
+	enum famfs_file_type   file_type;
+	size_t                 file_size;
+	enum famfs_ioc_ext_type fm_extent_type;
+	u64                    dev_bitmap; /* referenced daxdev indices */
+	union { /* This will make code a bit more readable */
+		struct {
+			size_t         fm_nextents;
+			struct famfs_meta_simple_ext  *se;
+		};
+		struct {
+			size_t         fm_niext;
+			struct famfs_meta_interleaved_ext *ie;
+		};
+	};
+};
 
 struct famfs_mount_opts {
 	umode_t mode;
@@ -82,5 +126,7 @@ int famfs_lookup_daxdev(const char *pathname, dev_t *devno);
 int famfs_devlist_alloc(struct famfs_fs_info *fsi);
 int famfs_install_daxdev(struct famfs_fs_info *fsi, struct super_block *sb,
 			 u64 index, dev_t devno, const char *name);
+
+void famfs_meta_free(struct famfs_file_meta *map);
 
 #endif /* FAMFS_INTERNAL_H */

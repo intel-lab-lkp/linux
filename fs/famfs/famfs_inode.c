@@ -341,6 +341,7 @@ famfs_show_options(struct seq_file *m, struct dentry *root)
 static void
 famfs_evict_inode(struct inode *inode)
 {
+	famfs_meta_free((struct famfs_file_meta *)inode->i_private);
 	inode->i_private = NULL;
 	dax_break_layout_final(inode);
 	truncate_inode_pages_final(&inode->i_data);
