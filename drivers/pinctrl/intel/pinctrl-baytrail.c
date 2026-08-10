@@ -1533,6 +1533,8 @@ static int byt_gpio_probe(struct intel_pinctrl *vg)
 
 	/* set up interrupts  */
 	irq = platform_get_irq_optional(pdev, 0);
+	if (irq < 0 && irq != -ENXIO)
+		return irq;
 	if (irq > 0) {
 		struct gpio_irq_chip *girq;
 
