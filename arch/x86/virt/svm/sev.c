@@ -19,6 +19,7 @@
 #include <linux/iommu.h>
 #include <linux/amd-iommu.h>
 #include <linux/nospec.h>
+#include <linux/workqueue.h>
 
 #include <asm/sev.h>
 #include <asm/processor.h>
@@ -124,8 +125,17 @@ static void *rmp_bookkeeping __ro_after_init;
 
 static u64 probed_rmp_base, probed_rmp_size;
 
-static cpumask_var_t rmpopt_cpumask;
-static phys_addr_t rmpopt_pa_start;
+static cpumask_var_t rmpopt_cpumask, rmpopt_follower_mask;
+static u64 rmpopt_pa_start, rmpopt_pa_end;
+
+enum rmpopt_op_type {
+	RMPOPT_OP_VERIFY_AND_REPORT_STATUS,
+	RMPOPT_OP_REPORT_STATUS
+};
+
+static struct workqueue_struct *rmpopt_wq;
+static struct delayed_work rmpopt_delayed_work;
+static DEFINE_MUTEX(rmpopt_wq_mutex);
 
 static LIST_HEAD(snp_leaked_pages_list);
 static DEFINE_SPINLOCK(snp_leaked_pages_list_lock);
@@ -562,11 +572,28 @@ static void snp_cleanup_rmpopt(void)
 {
 	int cpu;
 
+	guard(mutex)(&rmpopt_wq_mutex);
+
+	/*
+	 * rmpopt_wq is non-NULL only after RMPOPT has been fully set up: the
+	 * workqueue and cpumasks are allocated and the RMPOPT_BASE MSRs are
+	 * programmed.  snp_setup_rmpopt() resets it to NULL if any of those
+	 * steps fail, so a NULL rmpopt_wq means nothing was set up and there is
+	 * nothing to tear down.
+	 */
+	if (!rmpopt_wq)
+		return;
+
+	cancel_delayed_work_sync(&rmpopt_delayed_work);
+	destroy_workqueue(rmpopt_wq);
+
 	for_each_cpu(cpu, rmpopt_cpumask)
 		wrmsrq_on_cpu(cpu, MSR_AMD64_RMPOPT_BASE, 0);
 
 	free_cpumask_var(rmpopt_cpumask);
-	rmpopt_pa_start = 0;
+	free_cpumask_var(rmpopt_follower_mask);
+	rmpopt_pa_start = rmpopt_pa_end = 0;
+	rmpopt_wq = NULL;
 }
 
 void snp_shutdown(void)
@@ -598,6 +625,77 @@ static bool rmpopt_capable(void)
 	       cc_platform_has(CC_ATTR_HOST_SEV_SNP);
 }
 
+/*
+ * RMPOPT optimizations skip RMP checks at 1GB granularity if this range of
+ * memory does not contain any SNP guest memory.
+ *
+ * @pa is a system physical address; RMPOPT operates on the containing 1GB.
+ */
+static void rmpopt(u64 pa)
+{
+	u64 pa_start = ALIGN_DOWN(pa, SZ_1G);
+	enum rmpopt_op_type op = RMPOPT_OP_VERIFY_AND_REPORT_STATUS;
+
+	/*
+	 * RMPOPT (F2 0F 01 FC): RAX = 1GB-aligned SPA, RCX = op type, CF set if
+	 * the range was optimized (result unused on this path).
+	 *
+	 * Binutils does not support the RMPOPT mnemonic yet, so the instruction
+	 * is encoded with .byte.
+	 */
+	asm volatile(".byte 0xf2, 0x0f, 0x01, 0xfc"
+		     :: "a" (pa_start), "c" (op)
+		     : "memory", "cc");
+}
+
+/* on_each_cpu() callback: optimize the whole RMPOPT range on this CPU. */
+static void rmpopt_scan_range(void *arg)
+{
+	u64 pa;
+
+	for (pa = rmpopt_pa_start; pa < rmpopt_pa_end; pa += SZ_1G)
+		rmpopt(pa);
+}
+
+static void rmpopt_work_handler(struct work_struct *work)
+{
+	int this_cpu;
+
+	/*
+	 * RMPOPT scans the RMP table, stores the result of the scan in the
+	 * reserved processor memory. The RMP scan is the most expensive
+	 * part. If a second RMPOPT occurs, it can skip the expensive scan
+	 * if they can see a cached result in the reserved processor memory.
+	 *
+	 * Run RMPOPT on one CPU first (the leader), then on every other primary
+	 * thread (the followers).  A follower skips the expensive RMP scan by
+	 * reusing the cached scan results the leader produced.
+	 *
+	 * migrate_disable() pins this work to the current CPU so it stays the
+	 * leader for the whole leader loop: this_cpu remains valid and the
+	 * RMPOPT instruction runs on it.
+	 */
+	migrate_disable();
+	this_cpu = smp_processor_id();
+
+	cpumask_andnot(rmpopt_follower_mask, rmpopt_cpumask,
+		       topology_sibling_cpumask(this_cpu));
+
+	rmpopt_scan_range(NULL);
+
+	migrate_enable();
+
+	/*
+	 * Followers: one IPI per remaining core, each optimizing the whole
+	 * range.  Each runs with interrupts disabled, but only issues cache-hit
+	 * RMPOPTs (the leader populated the scan cache above), so the window is
+	 * short.  cpus_read_lock() is intentionally not held: CPU hotplug is
+	 * disabled the entire time SNP is active (see snp_prepare()), and this
+	 * work only runs while SNP is active, so the follower set stays valid.
+	 */
+	on_each_cpu_mask(rmpopt_follower_mask, rmpopt_scan_range, NULL, true);
+}
+
 void snp_setup_rmpopt(void)
 {
 	u64 rmpopt_base;
@@ -606,8 +704,46 @@ void snp_setup_rmpopt(void)
 	if (!rmpopt_capable())
 		return;
 
+	guard(mutex)(&rmpopt_wq_mutex);
+
+	/*
+	 * On re-initialization after a legacy SNP shutdown (SNP_SHUTDOWN_EX
+	 * with x86_snp_shutdown=0), snp_shutdown() and thus snp_cleanup_rmpopt()
+	 * are skipped, so the workqueue, delayed work, cpumask and per-CPU
+	 * RMPOPT_BASE MSRs are still set up and valid (SnpEn stayed set and
+	 * CPU hotplug stayed disabled).  Rather than re-doing the setup, which
+	 * would leak the existing state, just re-queue the optimization pass
+	 * to re-optimize any memory the previous SNP session de-optimized.
+	 */
+	if (rmpopt_wq) {
+		queue_delayed_work(rmpopt_wq, &rmpopt_delayed_work, 0);
+		return;
+	}
+
+	/*
+	 * Create an RMPOPT-specific workqueue to avoid scheduling
+	 * RMPOPT workitem on the global system workqueue.
+	 */
+	rmpopt_wq = alloc_workqueue("rmpopt_wq", WQ_UNBOUND, 1);
+	if (!rmpopt_wq) {
+		pr_err("Failed to allocate RMPOPT workqueue\n");
+		return;
+	}
+
+	INIT_DELAYED_WORK(&rmpopt_delayed_work, rmpopt_work_handler);
+
 	if (!zalloc_cpumask_var(&rmpopt_cpumask, GFP_KERNEL)) {
 		pr_err("Failed to allocate RMPOPT cpumask\n");
+		destroy_workqueue(rmpopt_wq);
+		rmpopt_wq = NULL;
+		return;
+	}
+
+	if (!zalloc_cpumask_var(&rmpopt_follower_mask, GFP_KERNEL)) {
+		pr_err("Failed to allocate RMPOPT follower cpumask\n");
+		free_cpumask_var(rmpopt_cpumask);
+		destroy_workqueue(rmpopt_wq);
+		rmpopt_wq = NULL;
 		return;
 	}
 
@@ -629,6 +765,23 @@ void snp_setup_rmpopt(void)
 	 */
 	for_each_cpu(cpu, rmpopt_cpumask)
 		wrmsrq_on_cpu(cpu, MSR_AMD64_RMPOPT_BASE, rmpopt_base);
+
+	rmpopt_pa_end = ALIGN(PFN_PHYS(max_pfn), SZ_1G);
+
+	/* Limit memory scanning to 2TB of RAM */
+	if ((rmpopt_pa_end - rmpopt_pa_start) > SZ_2T) {
+		pr_info("RMPOPT coverage limited to 2TB; memory above 0x%llx not optimized\n",
+			rmpopt_pa_start + SZ_2T);
+		rmpopt_pa_end = rmpopt_pa_start + SZ_2T;
+	}
+
+	/*
+	 * Once all per-CPU RMPOPT tables have been configured, enable RMPOPT
+	 * optimizations on all physical memory.
+	 */
+	queue_delayed_work(rmpopt_wq, &rmpopt_delayed_work, 0);
+
+	pr_info("RMPOPT optimizations enabled\n");
 }
 EXPORT_SYMBOL_FOR_MODULES(snp_setup_rmpopt, "ccp");
 
