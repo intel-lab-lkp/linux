@@ -3816,18 +3816,14 @@ static void adapter_uninit(struct AdapterCtlBlk *acb)
 	unsigned long flags;
 	DC395x_LOCK_IO(acb->scsi_host, flags);
 
-	/* remove timers */
-	if (timer_pending(&acb->waiting_timer))
-		timer_delete(&acb->waiting_timer);
-	if (timer_pending(&acb->selto_timer))
-		timer_delete(&acb->selto_timer);
-
 	adapter_uninit_chip(acb);
 	adapter_remove_and_free_all_devices(acb);
 	DC395x_UNLOCK_IO(acb->scsi_host, flags);
 
 	if (acb->irq_level)
 		free_irq(acb->irq_level, acb);
+	/* waiting_timer self-rearms and takes host_lock: sync outside lock. */
+	timer_shutdown_sync(&acb->waiting_timer);
 	if (acb->io_port_base)
 		release_region(acb->io_port_base, acb->io_port_len);
 
