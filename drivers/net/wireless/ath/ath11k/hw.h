@@ -231,6 +231,13 @@ struct ath11k_hw_params {
 	bool cfr_support;
 	u32 cfr_num_stream_bufs;
 	u32 cfr_stream_buf_size;
+	/*
+	 * Run the ahb shutdown() teardown (stop DMA before the SMMU is torn
+	 * down at reboot/shutdown). Only set where the teardown is required;
+	 * where it is not, running it would stop the firmware and leave shared
+	 * state that hangs the following warm reset.
+	 */
+	bool shutdown_teardown;
 };
 
 struct ath11k_hw_ops {

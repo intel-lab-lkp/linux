@@ -1288,6 +1288,16 @@ static void ath11k_ahb_shutdown(struct platform_device *pdev)
 	 * remove() is invoked during rmmod & shutdown() during
 	 * system reboot/shutdown.
 	 */
+
+	/*
+	 * Only run the teardown where hw_params requests it. Where it is not
+	 * required, stopping the firmware here would leave shared state that
+	 * hangs the following warm reset, so skip it and let the SoC reset
+	 * re-initialize the hardware from scratch instead.
+	 */
+	if (!ab->hw_params.shutdown_teardown)
+		return;
+
 	ath11k_ahb_remove_prepare(ab);
 
 	if (!(test_bit(ATH11K_FLAG_REGISTERED, &ab->dev_flags)))

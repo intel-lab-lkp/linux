@@ -41,6 +41,7 @@ MODULE_PARM_DESC(ftm_mode, "Boots up in factory test mode");
 static const struct ath11k_hw_params ath11k_hw_params[] = {
 	{
 		.hw_rev = ATH11K_HW_IPQ8074,
+		.shutdown_teardown = false,
 		.name = "ipq8074 hw2.0",
 		.fw = {
 			.dir = "IPQ8074/hw2.0",
@@ -130,6 +131,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 	},
 	{
 		.hw_rev = ATH11K_HW_IPQ6018_HW10,
+		.shutdown_teardown = false,
 		.name = "ipq6018 hw1.0",
 		.fw = {
 			.dir = "IPQ6018/hw1.0",
@@ -218,6 +220,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 	{
 		.name = "qca6390 hw2.0",
 		.hw_rev = ATH11K_HW_QCA6390_HW20,
+		.shutdown_teardown = false,
 		.fw = {
 			.dir = "QCA6390/hw2.0",
 			.board_size = 256 * 1024,
@@ -310,6 +313,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 	{
 		.name = "qcn9074 hw1.0",
 		.hw_rev = ATH11K_HW_QCN9074_HW10,
+		.shutdown_teardown = false,
 		.fw = {
 			.dir = "QCN9074/hw1.0",
 			.board_size = 256 * 1024,
@@ -396,6 +400,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 	{
 		.name = "wcn6855 hw2.0",
 		.hw_rev = ATH11K_HW_WCN6855_HW20,
+		.shutdown_teardown = false,
 		.fw = {
 			.dir = "WCN6855/hw2.0",
 			.board_size = 256 * 1024,
@@ -488,6 +493,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 	{
 		.name = "wcn6855 hw2.1",
 		.hw_rev = ATH11K_HW_WCN6855_HW21,
+		.shutdown_teardown = false,
 		.fw = {
 			.dir = "WCN6855/hw2.1",
 			.board_size = 256 * 1024,
@@ -578,6 +584,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 	{
 		.name = "wcn6750 hw1.0",
 		.hw_rev = ATH11K_HW_WCN6750_HW10,
+		.shutdown_teardown = true,
 		.fw = {
 			.dir = "WCN6750/hw1.0",
 			.board_size = 256 * 1024,
@@ -662,6 +669,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 	},
 	{
 		.hw_rev = ATH11K_HW_IPQ5018_HW10,
+		.shutdown_teardown = false,
 		.name = "ipq5018 hw1.0",
 		.fw = {
 			.dir = "IPQ5018/hw1.0",
@@ -748,6 +756,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 	{
 		.name = "qca2066 hw2.1",
 		.hw_rev = ATH11K_HW_QCA2066_HW21,
+		.shutdown_teardown = false,
 		.fw = {
 			.dir = "QCA2066/hw2.1",
 			.board_size = 256 * 1024,
@@ -839,6 +848,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 	{
 		.name = "qca6698aq hw2.1",
 		.hw_rev = ATH11K_HW_QCA6698AQ_HW21,
+		.shutdown_teardown = false,
 		.fw = {
 			.dir = "QCA6698AQ/hw2.1",
 			.board_size = 256 * 1024,
