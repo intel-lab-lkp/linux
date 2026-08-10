@@ -1925,7 +1925,7 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 
 	if (write && (lo->lo_flags & LO_FLAGS_READ_ONLY)) {
 		ret = -EIO;
-		goto failed;
+		goto out;
 	}
 
 	/* We can block in this context, so ignore REQ_NOWAIT. */
@@ -1949,11 +1949,12 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 	if (cmd_blkcg_css)
 		kthread_associate_blkcg(NULL);
 
-	if (cmd_memcg_css) {
+	if (cmd_memcg_css)
 		set_active_memcg(old_memcg);
+out:
+	if (cmd_memcg_css)
 		css_put(cmd_memcg_css);
-	}
- failed:
+
 	/* complete non-aio request */
 	if (ret != -EIOCBQUEUED) {
 		if (ret == -EOPNOTSUPP)
