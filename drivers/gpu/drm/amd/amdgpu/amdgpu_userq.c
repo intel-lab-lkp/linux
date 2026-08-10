@@ -259,6 +259,14 @@ int amdgpu_userq_input_va_validate(struct amdgpu_device *adev,
 	if (!va_map)
 		return -EINVAL;
 
+	/*
+	 * A PRT mapping has no backing BO and so can't carry the eviction
+	 * fence which amdgpu_userq_gem_va_unmap_validate() waits on. Reject it
+	 * here, otherwise that helper dereferences a NULL bo on GEM unmap.
+	 */
+	if (!va_map->bo_va->base.bo)
+		return -EINVAL;
+
 	/* Lookup guarantees start_page is mapped; ensure full span is covered. */
 	if ((end_addr >> AMDGPU_GPU_PAGE_SHIFT) <= va_map->last) {
 		va_map->bo_va->userq_va_mapped = true;
