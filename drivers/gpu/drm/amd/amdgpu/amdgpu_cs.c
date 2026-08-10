@@ -1416,6 +1416,16 @@ static void amdgpu_cs_parser_fini(struct amdgpu_cs_parser *parser)
 				amdgpu_vm_bo_invalidate(bo, false);
 			}
 		}
+
+		/*
+		 * Release the ranges still live on the error paths;
+		 * amdgpu_cs_submit() already freed and cleared them when it
+		 * got far enough to check them for invalidation.
+		 */
+		amdgpu_bo_list_for_each_userptr_entry(e, parser->bo_list) {
+			amdgpu_hmm_range_free(e->range);
+			e->range = NULL;
+		}
 		amdgpu_bo_list_put(parser->bo_list);
 	}
 
