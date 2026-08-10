@@ -518,6 +518,24 @@ class MissingCheckers(AncillaryMethods):
         a decent coverage.
         """
 
+        if sys.platform == "darwin":
+            sw_vers = self.which("sw_vers")
+            if sw_vers:
+                try:
+                    result = self.run(
+                        [sw_vers, "-productVersion"],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    )
+                    version = result.stdout.strip()
+                    if version:
+                        return f"macOS {version}"
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    pass
+
+            return "macOS"
+
         system_release = ""
 
         if self.which("lsb_release"):
@@ -715,6 +733,93 @@ class SphinxDependencyChecker(MissingCheckers):
                 "\thttps://askubuntu.com/questions/1158894/imagemagick-still-broken-using-with-usr-bin-convert"
 
         return self.get_install_progs(progs, "apt-get install")
+
+    def give_macos_hints(self):
+        """Provide package installation hints for macOS using Homebrew."""
+        progs = {
+            "Pod::Usage":    "perl",
+            "convert":       "imagemagick",
+            "dot":           "graphviz",
+            "ensurepip":     "python",
+            "python-sphinx": "sphinx-doc",
+            "rsvg-convert":   "librsvg",
+            "xelatex":        "mactex-no-gui",
+            "latexmk":        "mactex-no-gui",
+        }
+
+        if self.pdf:
+            font_dirs = [
+                os.path.expanduser("~/Library/Fonts"),
+                "/Library/Fonts",
+                "/System/Library/Fonts",
+            ]
+            pdf_fonts = {
+                "font-dejavu": ["DejaVuSans.ttf"],
+                "font-noto-sans-cjk": ["NotoSansCJK.ttc"],
+            }
+
+            for package, names in pdf_fonts.items():
+                files = [
+                    os.path.join(font_dir, name)
+                    for font_dir in font_dirs
+                    for name in names
+                ]
+                self.check_missing_file(files, package, DepManager.PDF_MANDATORY)
+
+        install = self.deps.check_missing(progs)
+
+        if self.verbose_warn_install:
+            self.deps.warn_install()
+
+        if not install:
+            return None
+
+        formulae = set()
+        casks = set()
+        notes = []
+        for package in install.split():
+            if package == "yaml":
+                notes.append(
+                    "PyYAML is not provided as a Homebrew formula. Use the "
+                    "default virtualenv mode so it is installed from "
+                    "Documentation/sphinx/requirements.txt."
+                )
+                continue
+
+            if package == "mactex-no-gui" or package.startswith("font-"):
+                casks.add(package)
+            else:
+                formulae.add(package)
+
+        commands = []
+        if formulae:
+            commands.append("\tbrew install " + " ".join(sorted(formulae)))
+        if casks:
+            commands.append("\tbrew install --cask " + " ".join(sorted(casks)))
+
+        if not commands:
+            self.distro_msg = "\n".join(notes)
+            return None
+
+        if not self.which("brew"):
+            notes.append(
+                "Homebrew is needed to install the missing dependencies. "
+                "Install it from https://brew.sh/ and re-run this script."
+            )
+            self.distro_msg = "\n".join(notes)
+            return None
+
+        if "mactex-no-gui" in casks:
+            notes.append(
+                "After installing MacTeX, restart the terminal or run:\n"
+                "\teval \"$(/usr/libexec/path_helper)\"\n"
+                "before re-running this script."
+            )
+
+        if notes:
+            self.distro_msg = "\n".join(notes)
+
+        return "\nYou should run:\n" + "\n".join(commands)
 
     def give_redhat_hints(self):
         """
@@ -1138,6 +1243,8 @@ class SphinxDependencyChecker(MissingCheckers):
             re.compile("Kali"):                       self.give_debian_hints,
             re.compile("Mint"):                       self.give_debian_hints,
 
+            re.compile("macOS"):                      self.give_macos_hints,
+
             re.compile("openSUSE"):                   self.give_opensuse_hints,
 
             re.compile("Mageia"):                     self.give_mageia_hints,
@@ -1458,7 +1565,11 @@ class SphinxDependencyChecker(MissingCheckers):
         self.check_program("dot", DepManager.SYSTEM_OPTIONAL)
         self.check_program("convert", DepManager.SYSTEM_OPTIONAL)
 
-        self.check_python_module("yaml")
+        # PyYAML is installed from Documentation/sphinx/requirements.txt in
+        # the virtualenv recommended on macOS. Homebrew does not provide a
+        # PyYAML formula, so do not ask for a nonexistent brew package here.
+        if not (sys.platform == "darwin" and self.virtualenv and self.need_pip):
+            self.check_python_module("yaml")
 
         if self.pdf:
             self.check_program("xelatex", DepManager.PDF_MANDATORY)
