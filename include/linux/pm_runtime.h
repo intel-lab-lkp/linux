@@ -610,6 +610,13 @@ DEFINE_GUARD(pm_runtime_active, struct device *,
 DEFINE_GUARD(pm_runtime_active_auto, struct device *,
 	     pm_runtime_get_sync(_T), pm_runtime_put_autosuspend(_T));
 /*
+ * Do not use directly -- the destructor calls pm_runtime_put()
+ * unconditionally, which underflows if no reference was acquired.
+ * Use only via the _try variant below.
+ */
+DEFINE_GUARD(pm_runtime_if_active, struct device *,
+	     pm_runtime_get_if_active(_T), pm_runtime_put(_T));
+/*
  * Use the following guards with ACQUIRE()/ACQUIRE_ERR().
  *
  * The difference between the "_try" and "_try_enabled" variants is that the
@@ -624,6 +631,8 @@ DEFINE_GUARD_COND(pm_runtime_active_auto, _try,
 		  pm_runtime_get_active(_T, RPM_TRANSPARENT), _RET == 0)
 DEFINE_GUARD_COND(pm_runtime_active_auto, _try_enabled,
 		  pm_runtime_resume_and_get(_T), _RET == 0)
+DEFINE_GUARD_COND(pm_runtime_if_active, _try,
+		  pm_runtime_get_if_active(_T) ?: -EAGAIN, _RET == 1)
 
 /* ACQUIRE() wrapper macros for the guards defined above. */
 
@@ -638,6 +647,9 @@ DEFINE_GUARD_COND(pm_runtime_active_auto, _try_enabled,
 
 #define PM_RUNTIME_ACQUIRE_IF_ENABLED_AUTOSUSPEND(_dev, _var)	\
 	ACQUIRE(pm_runtime_active_auto_try_enabled, _var)(_dev)
+
+#define PM_RUNTIME_ACQUIRE_IF_ACTIVE(_dev, _var)	\
+	ACQUIRE(pm_runtime_if_active_try, _var)(_dev)
 
 /*
  * ACQUIRE_ERR() wrapper macro for guard pm_runtime_active.
