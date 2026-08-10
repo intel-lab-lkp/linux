@@ -127,6 +127,20 @@ void topology_clear_scale_freq_source(enum scale_freq_source source,
 }
 EXPORT_SYMBOL_GPL(topology_clear_scale_freq_source);
 
+bool topology_scale_freq_source(enum scale_freq_source source, unsigned int cpu)
+{
+	struct scale_freq_data *sfd;
+	bool ret;
+
+	rcu_read_lock_sched();
+	sfd = rcu_dereference_sched(*per_cpu_ptr(&sft_data, cpu));
+	ret = (sfd && sfd->source == source);
+	rcu_read_unlock_sched();
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(topology_scale_freq_source);
+
 void topology_scale_freq_tick(void)
 {
 	struct scale_freq_data *sfd = rcu_dereference_sched(*this_cpu_ptr(&sft_data));
