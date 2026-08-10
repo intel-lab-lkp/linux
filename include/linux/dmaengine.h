@@ -5,6 +5,7 @@
 #ifndef LINUX_DMAENGINE_H
 #define LINUX_DMAENGINE_H
 
+#include <linux/bitops.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/uio.h>
@@ -399,7 +400,11 @@ enum dma_slave_buswidth {
 	DMA_SLAVE_BUSWIDTH_32_BYTES = 32,
 	DMA_SLAVE_BUSWIDTH_64_BYTES = 64,
 	DMA_SLAVE_BUSWIDTH_128_BYTES = 128,
+	DMA_SLAVE_BUSWIDTH_MAX
 };
+
+#define DECLARE_DMA_BUS_WIDTHS(name) \
+	DECLARE_BITMAP(name, DMA_SLAVE_BUSWIDTH_MAX)
 
 /**
  * struct dma_slave_config - dma slave channel runtime config
@@ -495,10 +500,12 @@ enum dma_residue_granularity {
 
 /**
  * struct dma_slave_caps - expose capabilities of a slave channel only
- * @src_addr_widths: bit mask of src addr widths the channel supports.
+ * @src_bus_widths: bitmap of source bus widths the channel supports.
  *	Width is specified in bytes, e.g. for a channel supporting
- *	a width of 4 the mask should have BIT(4) set.
- * @dst_addr_widths: bit mask of dst addr widths the channel supports
+ *	a width of 4 the bitmap should have bit 4 set.
+ * @src_addr_widths: legacy bit mask of source bus widths the channel supports.
+ * @dst_bus_widths: bitmap of destination bus widths the channel supports.
+ * @dst_addr_widths: legacy bit mask of destination bus widths the channel supports.
  * @directions: bit mask of slave directions the channel supports.
  *	Since the enum dma_transfer_direction is not defined as bit flag for
  *	each type, the dma controller should set BIT(<TYPE>) and same
@@ -517,8 +524,14 @@ enum dma_residue_granularity {
  * resubmitted multiple times
  */
 struct dma_slave_caps {
-	u32 src_addr_widths;
-	u32 dst_addr_widths;
+	struct {
+		DECLARE_DMA_BUS_WIDTHS(src_bus_widths);
+		u32 src_addr_widths;
+	};
+	struct {
+		DECLARE_DMA_BUS_WIDTHS(dst_bus_widths);
+		u32 dst_addr_widths;
+	};
 	u32 directions;
 	u32 min_burst;
 	u32 max_burst;
@@ -811,10 +824,12 @@ struct dma_filter {
  * @dev: struct device reference for dma mapping api
  * @owner: owner module (automatically set based on the provided dev)
  * @chan_ida: unique channel ID
- * @src_addr_widths: bit mask of src addr widths the device supports
+ * @src_bus_widths: bitmap of source bus widths the device supports.
  *	Width is specified in bytes, e.g. for a device supporting
- *	a width of 4 the mask should have BIT(4) set.
- * @dst_addr_widths: bit mask of dst addr widths the device supports
+ *	a width of 4 the bitmap should have bit 4 set.
+ * @src_addr_widths: legacy bit mask of source bus widths the device supports.
+ * @dst_bus_widths: bitmap of destination bus widths the device supports.
+ * @dst_addr_widths: legacy bit mask of destination bus widths the device supports.
  * @directions: bit mask of slave directions the device supports.
  *	Since the enum dma_transfer_direction is not defined as bit flag for
  *	each type, the dma controller should set BIT(<TYPE>) and same
@@ -896,8 +911,14 @@ struct dma_device {
 	struct module *owner;
 	struct ida chan_ida;
 
-	u32 src_addr_widths;
-	u32 dst_addr_widths;
+	struct {
+		DECLARE_DMA_BUS_WIDTHS(src_bus_widths);
+		u32 src_addr_widths;
+	};
+	struct {
+		DECLARE_DMA_BUS_WIDTHS(dst_bus_widths);
+		u32 dst_addr_widths;
+	};
 	u32 directions;
 	u32 min_burst;
 	u32 max_burst;
@@ -1809,6 +1830,211 @@ static inline struct device *dmaengine_get_dma_device(struct dma_chan *chan)
 		return &chan->dev->device;
 
 	return chan->device->dev;
+}
+
+static inline enum dma_slave_buswidth
+__dma_slave_caps_get_width_min(const unsigned long *bus_widths)
+{
+	enum dma_slave_buswidth width = find_first_bit(bus_widths,
+						       DMA_SLAVE_BUSWIDTH_MAX);
+
+	if (width == DMA_SLAVE_BUSWIDTH_MAX)
+		return DMA_SLAVE_BUSWIDTH_UNDEFINED;
+
+	return width;
+}
+
+/**
+ * dma_slave_caps_get_src_width_min - get the minimum source bus width
+ * @caps: DMA slave capabilities
+ *
+ * Return: the minimum supported source bus width, or
+ * %DMA_SLAVE_BUSWIDTH_UNDEFINED if no source bus width is advertised.
+ */
+static inline enum dma_slave_buswidth
+dma_slave_caps_get_src_width_min(const struct dma_slave_caps *caps)
+{
+	return __dma_slave_caps_get_width_min(caps->src_bus_widths);
+}
+
+/**
+ * dma_slave_caps_get_dst_width_min - get the minimum destination bus width
+ * @caps: DMA slave capabilities
+ *
+ * Return: the minimum supported destination bus width, or
+ * %DMA_SLAVE_BUSWIDTH_UNDEFINED if no destination bus width is advertised.
+ */
+static inline enum dma_slave_buswidth
+dma_slave_caps_get_dst_width_min(const struct dma_slave_caps *caps)
+{
+	return __dma_slave_caps_get_width_min(caps->dst_bus_widths);
+}
+
+/**
+ * dma_slave_caps_copy_src_widths - copy source bus width capabilities
+ * @caps: DMA slave capabilities
+ * @bus_widths: destination bitmap declared with DECLARE_DMA_BUS_WIDTHS()
+ */
+static inline void
+dma_slave_caps_copy_src_widths(const struct dma_slave_caps *caps,
+			       unsigned long *bus_widths)
+{
+	bitmap_copy(bus_widths, caps->src_bus_widths, DMA_SLAVE_BUSWIDTH_MAX);
+}
+
+/**
+ * dma_slave_caps_copy_dst_widths - copy destination bus width capabilities
+ * @caps: DMA slave capabilities
+ * @bus_widths: destination bitmap declared with DECLARE_DMA_BUS_WIDTHS()
+ */
+static inline void
+dma_slave_caps_copy_dst_widths(const struct dma_slave_caps *caps,
+			       unsigned long *bus_widths)
+{
+	bitmap_copy(bus_widths, caps->dst_bus_widths, DMA_SLAVE_BUSWIDTH_MAX);
+}
+
+/**
+ * dma_slave_caps_intersect_widths - intersect destination and source widths
+ * @dst_caps: DMA slave capabilities providing destination bus widths
+ * @src_caps: DMA slave capabilities providing source bus widths
+ * @bus_widths: destination bitmap declared with DECLARE_DMA_BUS_WIDTHS()
+ *
+ * Return: true if the resulting bitmap contains at least one common bus width,
+ * false otherwise.
+ */
+static inline bool
+dma_slave_caps_intersect_widths(const struct dma_slave_caps *dst_caps,
+				const struct dma_slave_caps *src_caps,
+				unsigned long *bus_widths)
+{
+	return bitmap_and(bus_widths, dst_caps->dst_bus_widths,
+			  src_caps->src_bus_widths, DMA_SLAVE_BUSWIDTH_MAX);
+}
+
+/**
+ * dma_slave_caps_clear_src_width - clear a source bus width capability
+ * @caps: DMA slave capabilities
+ * @width: source bus width to clear
+ */
+static inline void
+dma_slave_caps_clear_src_width(struct dma_slave_caps *caps,
+			       enum dma_slave_buswidth width)
+{
+	__clear_bit(width, caps->src_bus_widths);
+	if (width < DMA_SLAVE_BUSWIDTH_32_BYTES)
+		caps->src_addr_widths &= ~BIT(width);
+}
+
+/**
+ * dma_slave_caps_clear_dst_width - clear a destination bus width capability
+ * @caps: DMA slave capabilities
+ * @width: destination bus width to clear
+ */
+static inline void
+dma_slave_caps_clear_dst_width(struct dma_slave_caps *caps,
+			       enum dma_slave_buswidth width)
+{
+	__clear_bit(width, caps->dst_bus_widths);
+	if (width < DMA_SLAVE_BUSWIDTH_32_BYTES)
+		caps->dst_addr_widths &= ~BIT(width);
+}
+
+static inline int __dma_set_bus_widths(unsigned long *bus_widths,
+				       const enum dma_slave_buswidth *widths,
+				       unsigned int n_widths)
+{
+	for (unsigned int i = 0; i < n_widths; i++) {
+		switch (widths[i]) {
+		case DMA_SLAVE_BUSWIDTH_UNDEFINED:
+		case DMA_SLAVE_BUSWIDTH_1_BYTE:
+		case DMA_SLAVE_BUSWIDTH_2_BYTES:
+		case DMA_SLAVE_BUSWIDTH_3_BYTES:
+		case DMA_SLAVE_BUSWIDTH_4_BYTES:
+		case DMA_SLAVE_BUSWIDTH_8_BYTES:
+		case DMA_SLAVE_BUSWIDTH_16_BYTES:
+		case DMA_SLAVE_BUSWIDTH_32_BYTES:
+		case DMA_SLAVE_BUSWIDTH_64_BYTES:
+		case DMA_SLAVE_BUSWIDTH_128_BYTES:
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		__set_bit(widths[i], bus_widths);
+	}
+
+	return 0;
+}
+
+/**
+ * dma_set_src_bus_widths - set supported source bus widths for a DMA device
+ * @device: DMA device
+ * @widths: array of supported source bus widths
+ * @n_widths: number of entries in @widths
+ *
+ * Return: 0 on success, -EINVAL if @widths contains an invalid bus width.
+ */
+static inline int dma_set_src_bus_widths(struct dma_device *device,
+					 const enum dma_slave_buswidth *widths,
+					 unsigned int n_widths)
+{
+	int ret;
+
+	ret = __dma_set_bus_widths(device->src_bus_widths, widths, n_widths);
+	if (ret)
+		return ret;
+
+	device->src_addr_widths = bitmap_read(device->src_bus_widths, 0, 32);
+	return 0;
+}
+
+/**
+ * dma_set_dst_bus_widths - set supported destination bus widths for a DMA device
+ * @device: DMA device
+ * @widths: array of supported destination bus widths
+ * @n_widths: number of entries in @widths
+ *
+ * Return: 0 on success, -EINVAL if @widths contains an invalid bus width.
+ */
+static inline int dma_set_dst_bus_widths(struct dma_device *device,
+					 const enum dma_slave_buswidth *widths,
+					 unsigned int n_widths)
+{
+	int ret;
+
+	ret = __dma_set_bus_widths(device->dst_bus_widths, widths, n_widths);
+	if (ret)
+		return ret;
+
+	device->dst_addr_widths = bitmap_read(device->dst_bus_widths, 0, 32);
+	return 0;
+}
+
+/**
+ * dma_set_src_bus_width - set a single supported source bus width
+ * @device: DMA device
+ * @width: supported source bus width
+ *
+ * Return: 0 on success, -EINVAL if @width is invalid.
+ */
+static inline int dma_set_src_bus_width(struct dma_device *device,
+					enum dma_slave_buswidth width)
+{
+	return dma_set_src_bus_widths(device, &width, 1);
+}
+
+/**
+ * dma_set_dst_bus_width - set a single supported destination bus width
+ * @device: DMA device
+ * @width: supported destination bus width
+ *
+ * Return: 0 on success, -EINVAL if @width is invalid.
+ */
+static inline int dma_set_dst_bus_width(struct dma_device *device,
+					enum dma_slave_buswidth width)
+{
+	return dma_set_dst_bus_widths(device, &width, 1);
 }
 
 #endif /* DMAENGINE_H */
