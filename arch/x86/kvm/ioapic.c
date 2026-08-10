@@ -474,9 +474,6 @@ static int ioapic_service(struct kvm_ioapic *ioapic, int irq, bool line_status)
 	irqe.shorthand = APIC_DEST_NOSHORT;
 	irqe.msi_redir_hint = false;
 
-	if (irqe.trig_mode == IOAPIC_EDGE_TRIG)
-		ioapic->irr_delivered |= 1 << irq;
-
 	if (irq == RTC_GSI && line_status) {
 		/*
 		 * pending_eoi cannot ever become negative (see
@@ -491,8 +488,12 @@ static int ioapic_service(struct kvm_ioapic *ioapic, int irq, bool line_status)
 	} else
 		ret = kvm_irq_delivery_to_apic(ioapic->kvm, NULL, &irqe);
 
-	if (ret && irqe.trig_mode == IOAPIC_LEVEL_TRIG)
-		entry->fields.remote_irr = 1;
+	if (ret > 0) {
+		if (irqe.trig_mode == IOAPIC_EDGE_TRIG)
+			ioapic->irr_delivered |= 1 << irq;
+		else if (irqe.trig_mode == IOAPIC_LEVEL_TRIG)
+			entry->fields.remote_irr = 1;
+	}
 
 	return ret;
 }
