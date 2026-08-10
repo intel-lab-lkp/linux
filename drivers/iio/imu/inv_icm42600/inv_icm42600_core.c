@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/kernel.h>
+#include <linux/limits.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/pm_runtime.h>
@@ -510,9 +511,18 @@ static int inv_icm42600_setup(struct inv_icm42600_state *st,
 	if (ret)
 		return ret;
 	if (val != hw->whoami) {
-		dev_err(dev, "invalid whoami %#02x expected %#02x (%s)\n",
-			val, hw->whoami, hw->name);
-		return -ENODEV;
+		/*
+		 * SPI interface has no ack mechanism.
+		 * 0xFF or 0x00 whoami means no response from the device.
+		 */
+		if (val == U8_MAX || val == 0)
+			return dev_err_probe(dev, -ENODEV,
+					     "invalid whoami %#04x expected %#04x (%s)\n",
+					     val, hw->whoami, hw->name);
+
+		dev_info(dev,
+			 "device id %#04x is not the %#04x associated with the FW-specified device (%s), probably using a valid fallback compatible\n",
+			 val, hw->whoami, hw->name);
 	}
 	st->name = hw->name;
 
