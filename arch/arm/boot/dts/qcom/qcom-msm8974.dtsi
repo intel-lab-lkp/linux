@@ -713,6 +713,53 @@
 			#size-cells = <0>;
 		};
 
+		usb3: usb@f9200000 {
+			compatible = "qcom,msm8974-dwc3", "qcom,snps-dwc3";
+			reg = <0xf9200000 0xfc000>;
+			interrupts = <GIC_SPI 131 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 180 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 133 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "dwc_usb3", "pwr_event",
+					  "hs_phy_irq";
+			clocks = <&gcc GCC_SYS_NOC_USB3_AXI_CLK>,
+				 <&gcc GCC_USB30_MASTER_CLK>,
+				 <&gcc GCC_USB30_SLEEP_CLK>,
+				 <&gcc GCC_USB30_MOCK_UTMI_CLK>;
+			clock-names = "cfg_noc", "core", "sleep", "mock_utmi";
+			assigned-clocks = <&gcc GCC_USB30_MOCK_UTMI_CLK>,
+					  <&gcc GCC_USB30_MASTER_CLK>;
+			assigned-clock-rates = <60000000>, <125000000>;
+			resets = <&gcc GCC_USB_30_BCR>;
+			phys = <&usb3_hs_phy>, <&usb3_ss_phy>;
+			phy-names = "usb2-phy", "usb3-phy";
+			snps,dis_u2_susphy_quirk;
+			snps,dis_enblslpm_quirk;
+			status = "disabled";
+		};
+
+		usb3_hs_phy: phy@f92f8800 {
+			compatible = "qcom,msm8974-usb-phy-hs";
+			reg = <0xf92f8800 0x30>;
+			clocks = <&gcc GCC_USB30_MOCK_UTMI_CLK>,
+				 <&rpmcc RPM_SMD_XO_CLK_SRC>;
+			clock-names = "ref", "xo";
+			#phy-cells = <0>;
+			status = "disabled";
+		};
+
+		usb3_ss_phy: phy@f92f8830 {
+			compatible = "qcom,msm8974-usb-phy-ss",
+				     "qcom,ipq806x-usb-phy-ss";
+			reg = <0xf92f8830 0x30>;
+			clocks = <&gcc GCC_USB30_MASTER_CLK>,
+				 <&rpmcc RPM_SMD_DIFF_CLK>;
+			clock-names = "ref", "xo";
+			#phy-cells = <0>;
+			qcom,rx-eq = <3>;
+			qcom,tx-deamp-3_5db = <22>;
+			status = "disabled";
+		};
+
 		usb: usb@f9a55000 {
 			compatible = "qcom,ci-hdrc";
 			reg = <0xf9a55000 0x200>,
