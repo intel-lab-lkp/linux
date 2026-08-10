@@ -19,6 +19,7 @@
 #include <net/page_pool/helpers.h>
 #include <linux/bnxt/hsi.h>
 #include "bnxt.h"
+#include "bnxt_mpc.h"
 #include "bnxt_xdp.h"
 
 DEFINE_STATIC_KEY_FALSE(bnxt_xdp_locking_key);
@@ -410,7 +411,8 @@ static int bnxt_xdp_set(struct bnxt *bp, struct bpf_prog *prog)
 	if (!tc)
 		tc = 1;
 	rc = bnxt_check_rings(bp, bp->tx_nr_rings_per_tc, bp->rx_nr_rings,
-			      true, tc, tx_xdp);
+			      true, tc, tx_xdp, bnxt_mpc_tx_rings_in_use(bp),
+			      bnxt_mpc_cp_rings_in_use(bp));
 	if (rc) {
 		netdev_warn(dev, "Unable to reserve enough TX rings to support XDP.\n");
 		return rc;
