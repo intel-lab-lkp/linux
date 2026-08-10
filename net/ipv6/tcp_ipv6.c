@@ -1400,6 +1400,7 @@ static struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *
 	int l3index;
 #endif
 	struct flowi6 fl6;
+	int ret;
 
 	if (skb->protocol == htons(ETH_P_IP))
 		return tcp_v4_syn_recv_sock(sk, skb, req, dst,
@@ -1512,7 +1513,10 @@ static struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *
 		goto put_and_exit; /* OOM */
 #endif
 
-	if (__inet_inherit_port(sk, newsk) < 0)
+	ret = __inet_inherit_port(sk, newsk);
+	if (ret == -ENOENT)
+		goto send_reset_and_exit;
+	else if (ret < 0)
 		goto put_and_exit;
 	*own_req = inet_ehash_nolisten(newsk, req_to_sk(req_unhash),
 				       &found_dup_sk);
@@ -1547,6 +1551,8 @@ exit_nonewsk:
 exit:
 	tcp_listendrop(sk);
 	return NULL;
+send_reset_and_exit:
+	req->rsk_ops->send_reset(newsk, skb, SK_RST_REASON_TCP_STATE);
 put_and_exit:
 	inet_csk_prepare_forced_close(newsk);
 	tcp_done(newsk);
