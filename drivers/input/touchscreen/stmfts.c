@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
-// STMicroelectronics FTS Touchscreen device driver
-//
-// Copyright (c) 2017 Samsung Electronics Co., Ltd.
-// Copyright (c) 2017 Andi Shyti <andi@etezian.org>
+/* STMicroelectronics FTS Touchscreen device driver
+ *
+ * Copyright 2017 Samsung Electronics Co., Ltd.
+ * Copyright 2017 Andi Shyti <andi@etezian.org>
+ * Copyright David Heidelberg <david@ixit.cz>
+ * Copyright Petr Hodina <petr.hodina@protonmail.com>
+ */
 
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
@@ -13,6 +16,7 @@
 #include <linux/irq.h>
 #include <linux/leds.h>
 #include <linux/module.h>
+#include <linux/of_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 
@@ -35,6 +39,7 @@
 #define STMFTS_FULL_FORCE_CALIBRATION		0xa2
 #define STMFTS_MS_CX_TUNING			0xa3
 #define STMFTS_SS_CX_TUNING			0xa4
+#define STMFTS5_SET_SCAN_MODE			0xa0
 
 /* events */
 #define STMFTS_EV_NO_EVENT			0x00
@@ -52,12 +57,32 @@
 #define STMFTS_EV_STATUS			0x16
 #define STMFTS_EV_DEBUG				0xdb
 
+/* events FTS5 */
+#define STMFTS5_EV_CONTROLLER_READY		0x03
+/* FTM5 event IDs (full byte, not masked) */
+#define STMFTS5_EV_MULTI_TOUCH_ENTER		0x13
+#define STMFTS5_EV_MULTI_TOUCH_MOTION		0x23
+#define STMFTS5_EV_MULTI_TOUCH_LEAVE		0x33
+#define STMFTS5_EV_STATUS_UPDATE		0x43
+#define STMFTS5_EV_USER_REPORT			0x53
+#define STMFTS5_EV_DEBUG			0xe3
+#define STMFTS5_EV_ERROR			0xf3
+
 /* multi touch related event masks */
 #define STMFTS_MASK_EVENT_ID			0x0f
 #define STMFTS_MASK_TOUCH_ID			0xf0
 #define STMFTS_MASK_LEFT_EVENT			0x0f
 #define STMFTS_MASK_X_MSB			0x0f
 #define STMFTS_MASK_Y_LSB			0xf0
+#define STMFTS5_MASK_TOUCH_TYPE			0x0f
+
+/* touch type classifications */
+#define STMFTS_TOUCH_TYPE_INVALID		0x00
+#define STMFTS_TOUCH_TYPE_FINGER		0x01
+#define STMFTS_TOUCH_TYPE_GLOVE			0x02
+#define STMFTS_TOUCH_TYPE_STYLUS		0x03
+#define STMFTS_TOUCH_TYPE_PALM			0x04
+#define STMFTS_TOUCH_TYPE_HOVER			0x05
 
 /* key related event masks */
 #define STMFTS_MASK_KEY_NO_TOUCH		0x00
@@ -76,9 +101,12 @@ static const struct regulator_bulk_data stmfts_supplies[] = {
 };
 
 struct stmfts_data {
+	const struct stmfts_chip_ops *ops;
+
 	struct i2c_client *client;
 	struct input_dev *input;
 	struct gpio_desc *reset_gpio;
+	struct gpio_desc *mode_switch_gpio;
 	struct led_classdev led_cdev;
 	struct mutex mutex;
 
@@ -105,7 +133,19 @@ struct stmfts_data {
 	bool use_key;
 	bool led_status;
 	bool hover_enabled;
+	bool stylus_enabled;
 	bool running;
+};
+
+struct stmfts_chip_ops {
+	int  (*configure)(struct stmfts_data *sdata);
+	void (*power_off)(struct stmfts_data *sdata);
+	int  (*setup_input)(struct stmfts_data *sdata);
+	int  (*input_open)(struct input_dev *dev);
+	void (*input_close)(struct input_dev *dev);
+	void (*parse_events)(struct stmfts_data *sdata);
+	int  (*set_hover)(struct stmfts_data *sdata, bool enable);
+	int  (*runtime_resume)(struct stmfts_data *sdata);
 };
 
 static int stmfts_brightness_set(struct led_classdev *led_cdev,
@@ -170,6 +210,7 @@ static int stmfts_read_events(struct stmfts_data *sdata)
 	return ret == ARRAY_SIZE(msgs) ? 0 : -EIO;
 }
 
+/* FTS4 event handling functions */
 static void stmfts_report_contact_event(struct stmfts_data *sdata,
 					const u8 event[])
 {
@@ -203,6 +244,104 @@ static void stmfts_report_contact_release(struct stmfts_data *sdata,
 	input_mt_report_slot_inactive(sdata->input);
 
 	input_sync(sdata->input);
+}
+
+/* FTS5 event handling functions */
+static void stmfts5_report_contact_event(struct stmfts_data *sdata,
+					 const u8 event[])
+{
+	u8 area;
+	u8 maj;
+	u8 min;
+	/* FTM5 event format:
+	 * event[0] = event ID (0x13/0x23)
+	 * event[1] = touch type (low 4 bits) | touch ID (high 4 bits)
+	 * event[2] = X LSB
+	 * event[3] = X MSB (low 4 bits) | Y MSB (high 4 bits)
+	 * event[4] = Y LSB
+	 * event[5] = pressure
+	 * event[6] = major (low 4 bits) | minor (high 4 bits)
+	 * event[7] = minor (high 2 bits)
+	 */
+	u8 touch_id = (event[1] & STMFTS_MASK_TOUCH_ID) >> 4;
+	u8 touch_type = event[1] & STMFTS5_MASK_TOUCH_TYPE;
+	int x, y, distance;
+	unsigned int tool = MT_TOOL_FINGER;
+
+	/* Parse coordinates with better precision */
+	x = (((int)event[3] & STMFTS_MASK_X_MSB) << 8) | event[2];
+	y = ((int)event[4] << 4) | ((event[3] & STMFTS_MASK_Y_LSB) >> 4);
+
+	/* Parse pressure - ensure non-zero for active touch */
+	area = event[5];
+	if (area <= 0 && touch_type != STMFTS_TOUCH_TYPE_HOVER) {
+		/* Should not happen for contact events. Set minimum pressure
+		 * to prevent touch from being dropped
+		 */
+		dev_warn_once(&sdata->client->dev,
+			      "zero pressure on contact event, slot %d\n", touch_id);
+		area = 1;
+	}
+
+	/* Parse touch area with improved bit extraction */
+	maj = (((event[0] & 0x0C) << 2) | ((event[6] & 0xF0) >> 4));
+	min = (((event[7] & 0xC0) >> 2) | (event[6] & 0x0F));
+
+	/* Distance is 0 for touching, max for hovering */
+	distance = 0;
+
+	/* Classify touch type and set appropriate tool and parameters */
+	switch (touch_type) {
+	case STMFTS_TOUCH_TYPE_STYLUS:
+		if (sdata->stylus_enabled) {
+			tool = MT_TOOL_PEN;
+			break;
+		}
+		fallthrough; /* Report as finger if stylus not enabled */
+
+	case STMFTS_TOUCH_TYPE_FINGER:
+	case STMFTS_TOUCH_TYPE_GLOVE:
+		tool = MT_TOOL_FINGER;
+		break;
+
+	case STMFTS_TOUCH_TYPE_PALM:
+		/* Palm touch - report but can be filtered by userspace */
+		tool = MT_TOOL_PALM;
+		break;
+
+	case STMFTS_TOUCH_TYPE_HOVER:
+		tool = MT_TOOL_FINGER;
+		area = 0;
+		distance = 255;
+		break;
+
+	case STMFTS_TOUCH_TYPE_INVALID:
+	default:
+		dev_warn(&sdata->client->dev,
+			 "invalid touch type %d for slot %d\n",
+			 touch_type, touch_id);
+		return;
+	}
+
+	input_mt_slot(sdata->input, touch_id);
+	input_mt_report_slot_state(sdata->input, tool, true);
+
+	input_report_abs(sdata->input, ABS_MT_POSITION_X, x);
+	input_report_abs(sdata->input, ABS_MT_POSITION_Y, y);
+	input_report_abs(sdata->input, ABS_MT_TOUCH_MAJOR, maj);
+	input_report_abs(sdata->input, ABS_MT_TOUCH_MINOR, min);
+	input_report_abs(sdata->input, ABS_MT_PRESSURE, area);
+	input_report_abs(sdata->input, ABS_MT_DISTANCE, distance);
+}
+
+static void stmfts5_report_contact_release(struct stmfts_data *sdata,
+					   const u8 event[])
+{
+	/* FTM5 format: touch ID is in high 4 bits of event[1] */
+	u8 touch_id = (event[1] & STMFTS_MASK_TOUCH_ID) >> 4;
+
+	input_mt_slot(sdata->input, touch_id);
+	input_mt_report_slot_inactive(sdata->input);
 }
 
 static void stmfts_report_hover_event(struct stmfts_data *sdata,
@@ -297,6 +436,49 @@ static void stmfts_parse_events(struct stmfts_data *sdata)
 	}
 }
 
+static void stmfts5_parse_events(struct stmfts_data *sdata)
+{
+	for (int i = 0; i < STMFTS_STACK_DEPTH; i++) {
+		u8 *event = &sdata->data[i * STMFTS_EVENT_SIZE];
+
+		switch (event[0]) {
+		case STMFTS5_EV_CONTROLLER_READY:
+			complete(&sdata->cmd_done);
+			fallthrough;
+
+		case STMFTS_EV_NO_EVENT:
+		case STMFTS5_EV_STATUS_UPDATE:
+		case STMFTS5_EV_USER_REPORT:
+		case STMFTS5_EV_DEBUG:
+			goto sync;
+
+		case STMFTS5_EV_MULTI_TOUCH_ENTER:
+		case STMFTS5_EV_MULTI_TOUCH_MOTION:
+			stmfts5_report_contact_event(sdata, event);
+			break;
+
+		case STMFTS5_EV_MULTI_TOUCH_LEAVE:
+			stmfts5_report_contact_release(sdata, event);
+			break;
+
+		case STMFTS5_EV_ERROR:
+			dev_warn(&sdata->client->dev,
+				 "error code: 0x%x%x%x%x%x%x",
+				 event[6], event[5], event[4],
+				 event[3], event[2], event[1]);
+			break;
+
+		default:
+			dev_err(&sdata->client->dev,
+				"unknown FTS5 event %#02x\n", event[0]);
+		}
+	}
+
+sync:
+	input_mt_sync_frame(sdata->input);
+	input_sync(sdata->input);
+}
+
 static irqreturn_t stmfts_irq_handler(int irq, void *dev)
 {
 	struct stmfts_data *sdata = dev;
@@ -309,7 +491,7 @@ static irqreturn_t stmfts_irq_handler(int irq, void *dev)
 		dev_err(&sdata->client->dev,
 			"failed to read events: %d\n", err);
 	else
-		stmfts_parse_events(sdata);
+		sdata->ops->parse_events(sdata);
 
 	return IRQ_HANDLED;
 }
@@ -327,6 +509,19 @@ static int stmfts_command(struct stmfts_data *sdata, const u8 cmd)
 	if (!wait_for_completion_timeout(&sdata->cmd_done,
 					 msecs_to_jiffies(1000)))
 		return -ETIMEDOUT;
+
+	return 0;
+}
+
+static int stmfts5_set_scan_mode(struct stmfts_data *sdata, const u8 val)
+{
+	u8 scan_mode_cmd[3] = { STMFTS5_SET_SCAN_MODE, 0x00, val };
+	int err;
+
+	err = i2c_master_send(sdata->client, scan_mode_cmd,
+			      sizeof(scan_mode_cmd));
+	if (err != sizeof(scan_mode_cmd))
+		return err < 0 ? err : -EIO;
 
 	return 0;
 }
@@ -370,6 +565,27 @@ static int stmfts_input_open(struct input_dev *dev)
 	return 0;
 }
 
+static int stmfts5_input_open(struct input_dev *dev)
+{
+	struct stmfts_data *sdata = input_get_drvdata(dev);
+	int err;
+
+	err = pm_runtime_resume_and_get(&sdata->client->dev);
+	if (err)
+		return err;
+
+	err = stmfts5_set_scan_mode(sdata, 0xff);
+	if (err) {
+		pm_runtime_put_sync(&sdata->client->dev);
+		return err;
+	}
+
+	scoped_guard(mutex, &sdata->mutex)
+		sdata->running = true;
+
+	return 0;
+}
+
 static void stmfts_input_close(struct input_dev *dev)
 {
 	struct stmfts_data *sdata = input_get_drvdata(dev);
@@ -399,6 +615,22 @@ static void stmfts_input_close(struct input_dev *dev)
 			dev_warn(&sdata->client->dev,
 				 "failed to disable touchkey: %d\n", err);
 	}
+
+	pm_runtime_put_sync(&sdata->client->dev);
+}
+
+static void stmfts5_input_close(struct input_dev *dev)
+{
+	struct stmfts_data *sdata = input_get_drvdata(dev);
+	int err;
+
+	err = stmfts5_set_scan_mode(sdata, 0x00);
+	if (err)
+		dev_warn(&sdata->client->dev,
+			 "failed to disable touchscreen: %d\n", err);
+
+	scoped_guard(mutex, &sdata->mutex)
+		sdata->running = false;
 
 	pm_runtime_put_sync(&sdata->client->dev);
 }
@@ -487,10 +719,8 @@ static ssize_t stmfts_sysfs_hover_enable_write(struct device *dev,
 	guard(mutex)(&sdata->mutex);
 
 	if (hover != sdata->hover_enabled) {
-		if (sdata->running) {
-			err = i2c_smbus_write_byte(sdata->client,
-						   value ? STMFTS_SS_HOVER_SENSE_ON :
-							   STMFTS_SS_HOVER_SENSE_OFF);
+		if (sdata->running && sdata->ops->set_hover) {
+			err = sdata->ops->set_hover(sdata, hover);
 			if (err)
 				return err;
 		}
@@ -556,6 +786,10 @@ static int stmfts_configure(struct stmfts_data *sdata)
 {
 	int err;
 
+	err = stmfts_read_system_info(sdata);
+	if (err)
+		return err;
+
 	err = stmfts_command(sdata, STMFTS_SYSTEM_RESET);
 	if (err)
 		return err;
@@ -601,15 +835,11 @@ static int stmfts_power_on(struct stmfts_data *sdata)
 	if (sdata->reset_gpio)
 		stmfts_reset(sdata);
 
-	err = stmfts_read_system_info(sdata);
-	if (err)
-		goto err_disable_regulators;
-
 	enable_irq(sdata->client->irq);
 
 	msleep(50);
 
-	err = stmfts_configure(sdata);
+	err = sdata->ops->configure(sdata);
 	if (err)
 		goto err_disable_irq;
 
@@ -623,9 +853,29 @@ static int stmfts_power_on(struct stmfts_data *sdata)
 
 err_disable_irq:
 	disable_irq(sdata->client->irq);
-err_disable_regulators:
 	regulator_bulk_disable(ARRAY_SIZE(stmfts_supplies), sdata->supplies);
 	return err;
+}
+
+static int stmfts5_configure(struct stmfts_data *sdata)
+{
+	u8 event[STMFTS_EVENT_SIZE];
+	int err;
+
+	/* Verify I2C communication */
+	err = i2c_smbus_read_i2c_block_data(sdata->client,
+					    STMFTS_READ_ALL_EVENT,
+					    sizeof(event), event);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+
+static void stmfts5_chip_power_off(struct stmfts_data *sdata)
+{
+	i2c_smbus_write_byte(sdata->client, STMFTS_SLEEP_IN);
+	msleep(20);
 }
 
 static void stmfts_power_off(void *data)
@@ -637,7 +887,59 @@ static void stmfts_power_off(void *data)
 	if (sdata->reset_gpio)
 		gpiod_set_value_cansleep(sdata->reset_gpio, 1);
 
+	if (sdata->ops->power_off)
+		sdata->ops->power_off(sdata);
+
 	regulator_bulk_disable(ARRAY_SIZE(stmfts_supplies), sdata->supplies);
+}
+
+static int stmfts_setup_input(struct stmfts_data *sdata)
+{
+	struct device *dev = &sdata->client->dev;
+
+	input_set_abs_params(sdata->input, ABS_MT_ORIENTATION, 0, 255, 0, 0);
+	input_set_abs_params(sdata->input, ABS_DISTANCE, 0, 255, 0, 0);
+
+	sdata->use_key = device_property_read_bool(dev, "touch-key-connected");
+	if (sdata->use_key) {
+		input_set_capability(sdata->input, EV_KEY, KEY_MENU);
+		input_set_capability(sdata->input, EV_KEY, KEY_BACK);
+	}
+
+	return input_mt_init_slots(sdata->input, STMFTS_MAX_FINGERS,
+				   INPUT_MT_DIRECT);
+}
+
+static int stmfts5_setup_input(struct stmfts_data *sdata)
+{
+	struct device *dev = &sdata->client->dev;
+
+	sdata->mode_switch_gpio = devm_gpiod_get_optional(dev, "mode-switch",
+							  GPIOD_OUT_HIGH);
+	if (IS_ERR(sdata->mode_switch_gpio))
+		return dev_err_probe(dev, PTR_ERR(sdata->mode_switch_gpio),
+				     "Failed to get GPIO 'switch'\n");
+
+	/* Set resolution for accurate calibration */
+	if (!input_abs_get_res(sdata->input, ABS_MT_POSITION_X)) {
+		input_abs_set_res(sdata->input, ABS_MT_POSITION_X, 10);
+		input_abs_set_res(sdata->input, ABS_MT_POSITION_Y, 10);
+	}
+
+	input_set_abs_params(sdata->input, ABS_MT_DISTANCE, 0, 255, 0, 0);
+
+	/* Enable stylus support if requested */
+	sdata->stylus_enabled = device_property_read_bool(dev, "stylus-enabled");
+
+	return input_mt_init_slots(sdata->input, STMFTS_MAX_FINGERS,
+				   INPUT_MT_DIRECT);
+}
+
+static int stmfts_set_hover(struct stmfts_data *sdata, bool enable)
+{
+	return i2c_smbus_write_byte(sdata->client,
+				    enable ? STMFTS_SS_HOVER_SENSE_ON :
+					     STMFTS_SS_HOVER_SENSE_OFF);
 }
 
 static int stmfts_enable_led(struct stmfts_data *sdata)
@@ -685,6 +987,8 @@ static int stmfts_probe(struct i2c_client *client)
 	mutex_init(&sdata->mutex);
 	init_completion(&sdata->cmd_done);
 
+	sdata->ops = of_device_get_match_data(dev);
+
 	err = devm_regulator_bulk_get_const(dev,
 					    ARRAY_SIZE(stmfts_supplies),
 					    stmfts_supplies,
@@ -703,8 +1007,8 @@ static int stmfts_probe(struct i2c_client *client)
 
 	sdata->input->name = STMFTS_DEV_NAME;
 	sdata->input->id.bustype = BUS_I2C;
-	sdata->input->open = stmfts_input_open;
-	sdata->input->close = stmfts_input_close;
+	sdata->input->open = sdata->ops->input_open;
+	sdata->input->close = sdata->ops->input_close;
 
 	input_set_capability(sdata->input, EV_ABS, ABS_MT_POSITION_X);
 	input_set_capability(sdata->input, EV_ABS, ABS_MT_POSITION_Y);
@@ -712,18 +1016,9 @@ static int stmfts_probe(struct i2c_client *client)
 
 	input_set_abs_params(sdata->input, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);
 	input_set_abs_params(sdata->input, ABS_MT_TOUCH_MINOR, 0, 255, 0, 0);
-	input_set_abs_params(sdata->input, ABS_MT_ORIENTATION, 0, 255, 0, 0);
 	input_set_abs_params(sdata->input, ABS_MT_PRESSURE, 0, 255, 0, 0);
-	input_set_abs_params(sdata->input, ABS_DISTANCE, 0, 255, 0, 0);
 
-	sdata->use_key = device_property_read_bool(dev, "touch-key-connected");
-	if (sdata->use_key) {
-		input_set_capability(sdata->input, EV_KEY, KEY_MENU);
-		input_set_capability(sdata->input, EV_KEY, KEY_BACK);
-	}
-
-	err = input_mt_init_slots(sdata->input,
-				  STMFTS_MAX_FINGERS, INPUT_MT_DIRECT);
+	err = sdata->ops->setup_input(sdata);
 	if (err)
 		return err;
 
@@ -794,17 +1089,61 @@ static int stmfts_runtime_suspend(struct device *dev)
 	return ret;
 }
 
+static int stmfts_chip_runtime_resume(struct stmfts_data *sdata)
+{
+	return i2c_smbus_write_byte(sdata->client, STMFTS_SLEEP_OUT);
+}
+
+static int stmfts5_chip_runtime_resume(struct stmfts_data *sdata)
+{
+	struct i2c_client *client = sdata->client;
+	struct device *dev = &client->dev;
+	u8 int_enable_cmd[4] = { 0xB6, 0x00, 0x2C, 0x01 };
+	int err;
+
+	err = i2c_smbus_write_byte(client, STMFTS_SLEEP_OUT);
+	if (err)
+		return err;
+
+	msleep(20);
+
+	/* Perform capacitance tuning after wakeup */
+	err = i2c_smbus_write_byte(client, STMFTS_MS_CX_TUNING);
+	if (err)
+		dev_warn(dev, "MS_CX_TUNING failed: %d\n", err);
+	msleep(20);
+
+	err = i2c_smbus_write_byte(client, STMFTS_SS_CX_TUNING);
+	if (err)
+		dev_warn(dev, "SS_CX_TUNING failed: %d\n", err);
+	msleep(20);
+
+	/* Force calibration */
+	err = i2c_smbus_write_byte(client, STMFTS_FULL_FORCE_CALIBRATION);
+	if (err)
+		dev_warn(dev, "FORCE_CALIBRATION failed: %d\n", err);
+	msleep(50);
+
+	/* Enable controller interrupts */
+	err = i2c_master_send(client, int_enable_cmd, sizeof(int_enable_cmd));
+	if (err != sizeof(int_enable_cmd))
+		return err < 0 ? err : -EIO;
+
+	msleep(20);
+
+	return 0;
+}
+
 static int stmfts_runtime_resume(struct device *dev)
 {
 	struct stmfts_data *sdata = dev_get_drvdata(dev);
-	struct i2c_client *client = sdata->client;
-	int ret;
+	int err;
 
-	ret = i2c_smbus_write_byte(client, STMFTS_SLEEP_OUT);
-	if (ret)
-		dev_err(dev, "failed to resume device: %d\n", ret);
+	err = sdata->ops->runtime_resume(sdata);
+	if (err)
+		dev_err(dev, "failed to resume device: %d\n", err);
 
-	return ret;
+	return err;
 }
 
 static int stmfts_suspend(struct device *dev)
@@ -829,8 +1168,29 @@ static const struct dev_pm_ops stmfts_pm_ops = {
 };
 
 #ifdef CONFIG_OF
+static const struct stmfts_chip_ops stmfts4_ops = {
+	.configure	= stmfts_configure,
+	.setup_input	= stmfts_setup_input,
+	.input_open	= stmfts_input_open,
+	.input_close	= stmfts_input_close,
+	.parse_events	= stmfts_parse_events,
+	.set_hover	= stmfts_set_hover,
+	.runtime_resume	= stmfts_chip_runtime_resume,
+};
+
+static const struct stmfts_chip_ops stmfts5_ops = {
+	.configure	= stmfts5_configure,
+	.power_off	= stmfts5_chip_power_off,
+	.setup_input	= stmfts5_setup_input,
+	.input_open	= stmfts5_input_open,
+	.input_close	= stmfts5_input_close,
+	.parse_events	= stmfts5_parse_events,
+	.runtime_resume	= stmfts5_chip_runtime_resume,
+};
+
 static const struct of_device_id stmfts_of_match[] = {
-	{ .compatible = "st,stmfts", },
+	{ .compatible = "st,stmfts",	.data = &stmfts4_ops },
+	{ .compatible = "st,stmfts5",	.data = &stmfts5_ops },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, stmfts_of_match);
@@ -858,5 +1218,7 @@ static struct i2c_driver stmfts_driver = {
 module_i2c_driver(stmfts_driver);
 
 MODULE_AUTHOR("Andi Shyti <andi.shyti@samsung.com>");
+MODULE_AUTHOR("David Heidelberg <david@ixit.cz>");
+MODULE_AUTHOR("Petr Hodina <petr.hodina@protonmail.com>");
 MODULE_DESCRIPTION("STMicroelectronics FTS Touch Screen");
 MODULE_LICENSE("GPL");
