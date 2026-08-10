@@ -436,16 +436,14 @@ static ssize_t current_password_store(struct kobject *kobj,
 				      const char *buf, size_t count)
 {
 	struct tlmi_pwd_setting *setting = to_tlmi_pwd_setting(kobj);
-	size_t pwdlen;
+	size_t pwdlen = strchrnul(buf, '\n') - buf;
 
-	pwdlen = strlen(buf);
 	/* pwdlen == 0 is allowed to clear the password */
 	if (pwdlen && ((pwdlen < setting->minlen) || (pwdlen > setting->maxlen)))
 		return -EINVAL;
 
-	strscpy(setting->password, buf, setting->maxlen);
-	/* Strip out CR if one is present, setting password won't work if it is present */
-	strreplace(setting->password, '\n', '\0');
+	memcpy(setting->password, buf, pwdlen);
+	setting->password[pwdlen] = '\0';
 	return count;
 }
 
