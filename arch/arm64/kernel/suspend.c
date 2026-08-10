@@ -117,14 +117,11 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 	 * updates to mdscr register (saved and restored along with
 	 * general purpose registers) from kernel debuggers.
 	 *
-	 * Strictly speaking the trace_hardirqs_off() here is superfluous,
-	 * hardirqs should be firmly off by now. This really ought to use
-	 * something like raw_local_daif_save().
-	 *
 	 * This also unmasks interrupts in PMR in order to reliably
 	 * resume if we're using pseudo-NMIs.
 	 */
-	flags = local_daif_save();
+	lockdep_assert_irqs_disabled();
+	flags = raw_local_daif_save();
 
 	/*
 	 * Function graph tracer state gets inconsistent when the kernel

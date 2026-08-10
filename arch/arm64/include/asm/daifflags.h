@@ -18,8 +18,7 @@
 #define DAIF_MASK		(PSR_D_BIT | PSR_A_BIT | PSR_I_BIT | PSR_F_BIT)
 
 
-/* mask/save/unmask/restore all exceptions, including interrupts. */
-static __always_inline void local_daif_mask(void)
+static __always_inline void raw_local_daif_mask(void)
 {
 	WARN_ON(system_has_prio_mask_debugging() &&
 		(read_sysreg_s(SYS_ICC_PMR_EL1) == (GIC_PRIO_IRQOFF |
@@ -34,6 +33,12 @@ static __always_inline void local_daif_mask(void)
 	/* Don't really care for a dsb here, we don't intend to enable IRQs */
 	if (system_uses_irq_prio_masking())
 		gic_write_pmr(GIC_PRIO_IRQON | GIC_PRIO_PSR_I_SET);
+}
+
+/* mask/save/unmask/restore all exceptions, including interrupts. */
+static __always_inline void local_daif_mask(void)
+{
+	raw_local_daif_mask();
 
 	trace_hardirqs_off();
 }
@@ -53,18 +58,29 @@ static __always_inline unsigned long local_daif_save_flags(void)
 	return flags;
 }
 
-static __always_inline unsigned long local_daif_save(void)
+static __always_inline unsigned long raw_local_daif_save(void)
 {
 	unsigned long flags;
 
 	flags = local_daif_save_flags();
 
-	local_daif_mask();
+	raw_local_daif_mask();
 
 	return flags;
 }
 
-static __always_inline void local_daif_restore(unsigned long flags)
+static __always_inline unsigned long local_daif_save(void)
+{
+	unsigned long flags;
+
+	flags = raw_local_daif_save();
+
+	trace_hardirqs_off();
+
+	return flags;
+}
+
+static __always_inline void __local_daif_restore(unsigned long flags, bool trace)
 {
 	bool irq_disabled = flags & PSR_I_BIT;
 
@@ -72,7 +88,8 @@ static __always_inline void local_daif_restore(unsigned long flags)
 		(read_sysreg(daif) & (PSR_I_BIT | PSR_F_BIT)) != (PSR_I_BIT | PSR_F_BIT));
 
 	if (!irq_disabled) {
-		trace_hardirqs_on();
+		if (trace)
+			trace_hardirqs_on();
 
 		if (system_uses_irq_prio_masking()) {
 			gic_write_pmr(GIC_PRIO_IRQON);
@@ -116,8 +133,18 @@ static __always_inline void local_daif_restore(unsigned long flags)
 
 	write_sysreg(flags, daif);
 
-	if (irq_disabled)
+	if (irq_disabled && trace)
 		trace_hardirqs_off();
+}
+
+static __always_inline void local_daif_restore(unsigned long flags)
+{
+	__local_daif_restore(flags, true);
+}
+
+static __always_inline void raw_local_daif_restore(unsigned long flags)
+{
+	__local_daif_restore(flags, false);
 }
 
 /*
