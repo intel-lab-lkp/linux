@@ -1020,20 +1020,42 @@ bool cma_release(struct cma *cma, const struct page *pages,
 		 unsigned long count)
 {
 	struct cma_memrange *cmr;
-	unsigned long ret = 0;
+	unsigned long skipped = 0;
 	unsigned long i, pfn;
+	unsigned long base_pfn;
+	unsigned long run_start = 0;
+	unsigned long run_len = 0;
 
 	cmr = find_cma_memrange(cma, pages, count);
 	if (!cmr)
 		return false;
 
-	pfn = page_to_pfn(pages);
-	for (i = 0; i < count; i++, pfn++)
-		ret += !put_page_testzero(pfn_to_page(pfn));
+	base_pfn = page_to_pfn(pages);
+	pfn = base_pfn;
+	for (i = 0; i < count; i++, pfn++) {
+		if (put_page_testzero(pfn_to_page(pfn))) {
+			/* Add it to the batch. */
+			if (run_len == 0)
+				run_start = pfn;
+			run_len++;
+		} else {
+			/*
+			 * This page is still in use! Free the freeable
+			 * pages encountered so far, but skip this page.
+			 */
+			if (run_len) {
+				__cma_release_frozen(cma, cmr,
+						     pfn_to_page(run_start),
+						     run_len);
+				run_len = 0;
+			}
+			skipped++;
+		}
+	}
+	if (run_len)
+		__cma_release_frozen(cma, cmr, pfn_to_page(run_start), run_len);
 
-	WARN(ret, "%lu pages are still in use!\n", ret);
-
-	__cma_release_frozen(cma, cmr, pages, count);
+	WARN(skipped, "%lu pages are still in use!\n", skipped);
 
 	return true;
 }
