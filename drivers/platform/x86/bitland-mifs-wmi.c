@@ -50,6 +50,7 @@ enum bitland_mifs_function {
 	WMI_FN_FN_LOCK			= 11,
 	WMI_FN_TP_LOCK			= 12,
 	WMI_FN_FAN_SPEEDS		= 13,
+	WMI_FN_AMBIENT_LIGHT		= 15,
 	WMI_FN_RGB_KB_MODE		= 16,
 	WMI_FN_RGB_KB_COLOR		= 17,
 	WMI_FN_RGB_KB_BRIGHTNESS	= 18,
@@ -83,6 +84,7 @@ enum bitland_mifs_event_id {
 	WMI_EVENT_FNLOCK_STATE		= 7,
 	WMI_EVENT_KBD_MODE		= 8,
 	WMI_EVENT_CAPSLOCK_STATE	= 9,
+	WMI_EVENT_AMBIENTLIGHT_STATE	= 10,
 	WMI_EVENT_CALCULATOR_START	= 11,
 	WMI_EVENT_BROWSER_START		= 12,
 	WMI_EVENT_NUMLOCK_STATE		= 13,
@@ -143,6 +145,7 @@ enum bitland_notifier_actions {
 	BITLAND_NOTIFY_KBD_BRIGHTNESS,
 	BITLAND_NOTIFY_PLATFORM_PROFILE,
 	BITLAND_NOTIFY_HWMON,
+	BITLAND_NOTIFY_SYSFS_STATE,
 };
 
 struct bitland_fan_notify_data {
@@ -568,6 +571,139 @@ static ssize_t kb_mode_store(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
+static int bitland_state_get(struct bitland_mifs_wmi_data *data, u8 function)
+{
+	struct bitland_mifs_input input = {
+		.reserved1 = 0,
+		.operation = WMI_METHOD_GET,
+		.reserved2 = 0,
+	};
+	struct bitland_mifs_output res;
+	int ret;
+
+	input.function = function;
+
+	ret = bitland_mifs_wmi_call(data, &input, &res);
+	if (ret)
+		return ret;
+
+	return res.data[0];
+}
+
+/* Switch states: 0:OFF, 1:ON */
+static ssize_t ambient_light_show(struct device *dev, struct device_attribute *attr,
+				  char *buf)
+{
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	int state;
+
+	state = bitland_state_get(data, WMI_FN_AMBIENT_LIGHT);
+	if (state < 0)
+		return state;
+
+	return sysfs_emit(buf, "%d\n", state);
+}
+
+static ssize_t ambient_light_store(struct device *dev, struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	struct bitland_mifs_input input = {
+		.reserved1 = 0,
+		.operation = WMI_METHOD_SET,
+		.reserved2 = 0,
+		.function = WMI_FN_AMBIENT_LIGHT,
+	};
+	bool val;
+	int ret;
+
+	if (kstrtobool(buf, &val))
+		return -EINVAL;
+
+	input.payload[0] = val;
+
+	ret = bitland_mifs_wmi_call(data, &input, NULL);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static ssize_t fn_lock_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	int state;
+
+	state = bitland_state_get(data, WMI_FN_FN_LOCK);
+	if (state < 0)
+		return state;
+
+	return sysfs_emit(buf, "%d\n", state);
+}
+
+static ssize_t fn_lock_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	struct bitland_mifs_input input = {
+		.reserved1 = 0,
+		.operation = WMI_METHOD_SET,
+		.reserved2 = 0,
+		.function = WMI_FN_FN_LOCK,
+	};
+	bool val;
+	int ret;
+
+	if (kstrtobool(buf, &val))
+		return -EINVAL;
+
+	input.payload[0] = val;
+
+	ret = bitland_mifs_wmi_call(data, &input, NULL);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static ssize_t tp_lock_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	int state;
+
+	state = bitland_state_get(data, WMI_FN_TP_LOCK);
+	if (state < 0)
+		return state;
+
+	return sysfs_emit(buf, "%d\n", state);
+}
+
+static ssize_t tp_lock_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	struct bitland_mifs_input input = {
+		.reserved1 = 0,
+		.operation = WMI_METHOD_SET,
+		.reserved2 = 0,
+		.function = WMI_FN_TP_LOCK,
+	};
+	bool val;
+	int ret;
+
+	if (kstrtobool(buf, &val))
+		return -EINVAL;
+
+	input.payload[0] = val;
+
+	ret = bitland_mifs_wmi_call(data, &input, NULL);
+	if (ret)
+		return ret;
+	return count;
+}
+
 /* Fan Boost: 0:Normal, 1:Max Speed */
 static ssize_t fan_boost_store(struct device *dev,
 			       struct device_attribute *attr, const char *buf,
@@ -599,11 +735,17 @@ static ssize_t fan_boost_store(struct device *dev,
 static const DEVICE_ATTR_RW(gpu_mode);
 static const DEVICE_ATTR_RW(kb_mode);
 static const DEVICE_ATTR_WO(fan_boost);
+static const DEVICE_ATTR_RW(ambient_light);
+static const DEVICE_ATTR_RW(fn_lock);
+static const DEVICE_ATTR_RW(tp_lock);
 
 static const struct attribute *const laptop_attrs[] = {
 	&dev_attr_gpu_mode.attr,
 	&dev_attr_kb_mode.attr,
 	&dev_attr_fan_boost.attr,
+	&dev_attr_ambient_light.attr,
+	&dev_attr_fn_lock.attr,
+	&dev_attr_tp_lock.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(laptop);
@@ -652,6 +794,11 @@ static int bitland_notifier_callback(struct notifier_block *nb,
 
 		hwmon_notify_event(data_ctx->hwmon_dev, hwmon_fan,
 				   hwmon_fan_input, fan_info->channel);
+		break;
+	case BITLAND_NOTIFY_SYSFS_STATE:
+		const char *attr = data;
+
+		sysfs_notify(&data_ctx->wdev->dev.kobj, NULL, attr);
 		break;
 	}
 
@@ -798,8 +945,6 @@ static void bitland_mifs_wmi_notify(struct wmi_device *wdev,
 		break;
 
 	case WMI_EVENT_AIRPLANE_MODE:
-	case WMI_EVENT_TOUCHPAD_STATE:
-	case WMI_EVENT_FNLOCK_STATE:
 	case WMI_EVENT_KBD_MODE:
 	case WMI_EVENT_CAPSLOCK_STATE:
 	case WMI_EVENT_NUMLOCK_STATE:
@@ -809,6 +954,23 @@ static void bitland_mifs_wmi_notify(struct wmi_device *wdev,
 		/* These events are informational or handled by firmware */
 		dev_dbg(&wdev->dev, "State change event: id=%d value=%d\n",
 			event->event_id, event->value_low);
+		break;
+	case WMI_EVENT_AMBIENTLIGHT_STATE:
+		blocking_notifier_call_chain(&bitland_notifier_list,
+					     BITLAND_NOTIFY_SYSFS_STATE,
+					     "ambient_light");
+		break;
+
+	case WMI_EVENT_TOUCHPAD_STATE:
+		blocking_notifier_call_chain(&bitland_notifier_list,
+					     BITLAND_NOTIFY_SYSFS_STATE,
+					     "tp_lock");
+		break;
+
+	case WMI_EVENT_FNLOCK_STATE:
+		blocking_notifier_call_chain(&bitland_notifier_list,
+					     BITLAND_NOTIFY_SYSFS_STATE,
+					     "fn_lock");
 		break;
 
 	default:
