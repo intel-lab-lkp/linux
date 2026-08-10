@@ -876,6 +876,34 @@ void kvm_record_guest_s2_mapping(struct kvm_s2_mmu *mmu, gpa_t canonical_ipa,
 	interval_tree_insert(&mapping->canonical, &kvm->arch.mmu.guest_s2_mappings);
 }
 
+void kvm_remove_guest_s2_mappings(struct kvm_s2_mmu *mmu, gpa_t nipa,
+				  size_t size)
+{
+	struct kvm *kvm = kvm_s2_mmu_to_kvm(mmu);
+	struct interval_tree_node *node, *next;
+	struct kvm_guest_s2_mapping *mapping;
+	gpa_t nipa_end = nipa + size - 1;
+
+	/*
+	 * Guest s2 tracking interval trees are only accessed while holding the
+	 * mmu_lock, hence we don't have to take guest_s2_tracking_lock if the
+	 * mmu_lock is held for write.
+	 */
+	lockdep_assert_held_write(&kvm_s2_mmu_to_kvm(mmu)->mmu_lock);
+
+	node = interval_tree_iter_first(&mmu->guest_s2_mappings, nipa, nipa_end);
+	while (node) {
+		next = interval_tree_iter_next(node, nipa, nipa_end);
+		mapping = container_of(node, struct kvm_guest_s2_mapping,
+				       nested);
+		interval_tree_remove(&mapping->nested, &mmu->guest_s2_mappings);
+		interval_tree_remove(&mapping->canonical,
+				     &kvm->arch.mmu.guest_s2_mappings);
+		kfree(mapping);
+		node = next;
+	}
+}
+
 void kvm_init_nested_s2_mmu(struct kvm_s2_mmu *mmu)
 {
 	/* CnP being set denotes an invalid entry */
