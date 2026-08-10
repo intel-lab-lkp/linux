@@ -507,8 +507,7 @@ efct_xport_detach(struct efct_xport *xport)
 	efct_scsi_del_device(efct);
 
 	/*Shutdown FC Statistics timer*/
-	if (timer_pending(&xport->stats_timer))
-		timer_delete(&xport->stats_timer);
+	timer_shutdown_sync(&xport->stats_timer);
 
 	efct_hw_teardown(&efct->hw);
 
