@@ -40,6 +40,11 @@
 #define STK3310_REG_PS_DATA_LSB			0x12
 #define STK3310_REG_ALS_DATA_MSB		0x13
 #define STK3310_REG_ALS_DATA_LSB		0x14
+#define STK36C61_REG_RED_DATA_MSB		0x15
+#define STK36C61_REG_GREEN_DATA_MSB		0x17
+#define STK36C61_REG_BLUE_DATA_MSB		0x19
+#define STK36C61_REG_CLEAR_DATA_MSB		0x1B
+#define STK36C61_REG_CLEAR_DATA_LSB		0x1C
 #define STK3310_REG_ID				0x3E
 #define STK3310_MAX_REG				0x80
 
@@ -54,6 +59,7 @@
 #define STK3311S34_CHIP_ID_VAL			0x1E
 #define STK3311X_CHIP_ID_VAL			0x12
 #define STK3335_CHIP_ID_VAL			0x51
+#define STK36C61_CHIP_ID_VAL			0x95
 #define STK3310_PSINT_EN			0x01
 #define STK3310_PS_MAX_VAL			0xFFFF
 
@@ -102,6 +108,7 @@ static const u8 stk3310_chip_ids[] = {
 	STK3311X_CHIP_ID_VAL,
 	STK3311_CHIP_ID_VAL,
 	STK3335_CHIP_ID_VAL,
+	STK36C61_CHIP_ID_VAL,
 };
 
 /* Estimate maximum proximity values with regard to measurement scale. */
@@ -202,9 +209,26 @@ static const struct iio_chan_spec_ext_info stk3310_ext_info[] = {
 	.ext_info = stk3310_ext_info,			\
 }
 
+#define STK36C61_INTENSITY_CHANNEL(_mod, _reg) {	\
+	.type = IIO_INTENSITY,				\
+	.modified = 1,					\
+	.channel2 = IIO_MOD_LIGHT_##_mod,		\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),	\
+	.address = _reg,				\
+}
+
 static const struct iio_chan_spec stk3310_channels[] = {
 	STK3310_LIGHT_CHANNEL,
 	STK3310_PROXIMITY_CHANNEL,
+};
+
+static const struct iio_chan_spec stk36c61_channels[] = {
+	STK3310_LIGHT_CHANNEL,
+	STK3310_PROXIMITY_CHANNEL,
+	STK36C61_INTENSITY_CHANNEL(RED, STK36C61_REG_RED_DATA_MSB),
+	STK36C61_INTENSITY_CHANNEL(GREEN, STK36C61_REG_GREEN_DATA_MSB),
+	STK36C61_INTENSITY_CHANNEL(BLUE, STK36C61_REG_BLUE_DATA_MSB),
+	STK36C61_INTENSITY_CHANNEL(CLEAR, STK36C61_REG_CLEAR_DATA_MSB),
 };
 
 /**
@@ -223,6 +247,12 @@ static const struct stk3310_chip_info stk3310_chip_info = {
 	.name = STK3310_DRIVER_NAME,
 	.channels = stk3310_channels,
 	.num_channels = ARRAY_SIZE(stk3310_channels),
+};
+
+static const struct stk3310_chip_info stk36c61_chip_info = {
+	.name = "stk36c61",
+	.channels = stk36c61_channels,
+	.num_channels = ARRAY_SIZE(stk36c61_channels),
 };
 
 static IIO_CONST_ATTR(in_illuminance_scale_available, STK3310_SCALE_AVAILABLE);
@@ -400,7 +430,8 @@ static int stk3310_read_raw(struct iio_dev *indio_dev,
 	struct stk3310_data *data = iio_priv(indio_dev);
 	struct i2c_client *client = data->client;
 
-	if (chan->type != IIO_LIGHT && chan->type != IIO_PROXIMITY)
+	if (chan->type != IIO_LIGHT && chan->type != IIO_PROXIMITY &&
+	    chan->type != IIO_INTENSITY)
 		return -EINVAL;
 
 	switch (mask) {
@@ -419,8 +450,10 @@ static int stk3310_read_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_INT_TIME:
 		if (chan->type == IIO_LIGHT)
 			ret = regmap_field_read(data->reg_als_it, &index);
-		else
+		else if (chan->type == IIO_PROXIMITY)
 			ret = regmap_field_read(data->reg_ps_it, &index);
+		else
+			return -EINVAL;
 		if (ret < 0)
 			return ret;
 
@@ -430,8 +463,10 @@ static int stk3310_read_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_SCALE:
 		if (chan->type == IIO_LIGHT)
 			ret = regmap_field_read(data->reg_als_gain, &index);
-		else
+		else if (chan->type == IIO_PROXIMITY)
 			ret = regmap_field_read(data->reg_ps_gain, &index);
+		else
+			return -EINVAL;
 		if (ret < 0)
 			return ret;
 
@@ -567,6 +602,7 @@ static bool stk3310_is_volatile_reg(struct device *dev, unsigned int reg)
 	switch (reg) {
 	case STK3310_REG_ALS_DATA_MSB:
 	case STK3310_REG_ALS_DATA_LSB:
+	case STK36C61_REG_RED_DATA_MSB ... STK36C61_REG_CLEAR_DATA_LSB:
 	case STK3310_REG_PS_DATA_LSB:
 	case STK3310_REG_PS_DATA_MSB:
 	case STK3310_REG_FLAG:
@@ -801,6 +837,7 @@ static const struct i2c_device_id stk3310_i2c_id[] = {
 	{ .name = "STK3310", .driver_data = (kernel_ulong_t)&stk3310_chip_info },
 	{ .name = "STK3311", .driver_data = (kernel_ulong_t)&stk3310_chip_info },
 	{ .name = "STK3335", .driver_data = (kernel_ulong_t)&stk3310_chip_info },
+	{ .name = "STK36C61", .driver_data = (kernel_ulong_t)&stk36c61_chip_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, stk3310_i2c_id);
@@ -819,6 +856,7 @@ static const struct of_device_id stk3310_of_match[] = {
 	{ .compatible = "sensortek,stk3310", .data = &stk3310_chip_info },
 	{ .compatible = "sensortek,stk3311", .data = &stk3310_chip_info },
 	{ .compatible = "sensortek,stk3335", .data = &stk3310_chip_info },
+	{ .compatible = "sensortek,stk36c61", .data = &stk36c61_chip_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, stk3310_of_match);
