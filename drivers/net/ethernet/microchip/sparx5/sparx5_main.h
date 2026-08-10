@@ -529,9 +529,12 @@ struct sparx5_router {
 	struct notifier_block netdevice_nb;
 	struct notifier_block inet6addr_nb;
 	struct notifier_block inet6addr_valid_nb;
+	struct rhashtable neigh_ht;
+	struct rhashtable fib_ht;
 	struct sparx5_rr_hw_route link_local; /* Trap all link-local traffic. */
 	struct net_device *port_dev; /* For VCAP API. */
 
+	struct list_head fib_list; /* All fib entries, for teardown */
 	struct mutex lock; /* Global router lock for all shared data. */
 
 	struct workqueue_struct *sparx5_router_owq;
