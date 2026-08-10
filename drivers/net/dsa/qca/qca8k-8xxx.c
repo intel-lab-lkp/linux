@@ -160,6 +160,11 @@ qca8k_set_page(struct qca8k_priv *priv, u16 page)
 	return 0;
 }
 
+static bool qca8k_mgmt_eth_disabled(const struct qca8k_priv *priv)
+{
+	return priv->switch_id == QCA8K_ID_QCA8327;
+}
+
 static void qca8k_rw_reg_ack_handler(struct dsa_switch *ds, struct sk_buff *skb)
 {
 	struct qca8k_mgmt_eth_data *mgmt_eth_data;
@@ -316,6 +321,9 @@ static int qca8k_read_eth(struct qca8k_priv *priv, u32 reg, u32 *val, int len)
 	bool ack;
 	int ret;
 
+	if (qca8k_mgmt_eth_disabled(priv))
+		return -ENXIO;
+
 	skb = qca8k_alloc_mdio_header(MDIO_READ, reg, NULL,
 				      QCA8K_ETHERNET_MDIO_PRIORITY, len);
 	if (!skb)
@@ -367,6 +375,9 @@ static int qca8k_write_eth(struct qca8k_priv *priv, u32 reg, u32 *val, int len)
 	struct sk_buff *skb;
 	bool ack;
 	int ret;
+
+	if (qca8k_mgmt_eth_disabled(priv))
+		return -ENXIO;
 
 	skb = qca8k_alloc_mdio_header(MDIO_WRITE, reg, val,
 				      QCA8K_ETHERNET_MDIO_PRIORITY, len);
@@ -629,6 +640,9 @@ qca8k_phy_eth_command(struct qca8k_priv *priv, bool read, int phy,
 	struct net_device *mgmt_conduit;
 	int ret, ret1;
 	bool ack;
+
+	if (qca8k_mgmt_eth_disabled(priv))
+		return -ENXIO;
 
 	if (regnum >= QCA8K_MDIO_MASTER_MAX_REG)
 		return -EINVAL;
