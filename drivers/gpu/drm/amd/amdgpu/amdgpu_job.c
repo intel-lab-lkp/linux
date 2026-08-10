@@ -24,6 +24,7 @@
 #include <linux/kthread.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
+#include <linux/pm_runtime.h>
 
 #include <drm/drm_drv.h>
 
@@ -184,9 +185,44 @@ static enum drm_gpu_sched_stat amdgpu_job_timedout(struct drm_sched_job *s_job)
 		if (r)
 			dev_err(adev->dev, "GPU Recovery Failed: %d\n", r);
 	} else {
-		drm_sched_suspend_timeout(&ring->sched);
-		if (amdgpu_sriov_vf(adev))
+		if (amdgpu_sriov_vf(adev)) {
+			drm_sched_suspend_timeout(&ring->sched);
 			adev->virt.tdr_debug = true;
+		} else {
+			/* Declare the device as wedged if it's not already. */
+			struct drm_gpu_scheduler *sched;
+			struct amdgpu_ring *ring;
+			struct amdgpu_fence *guilty_fence;
+			int i;
+
+			if (!atomic_xchg(&adev->wedged.flag, 1)) {
+				pm_runtime_get_sync(adev->dev);
+
+				pci_clear_master(adev->pdev);
+
+				drm_dev_wedged_event(&adev->ddev, DRM_WEDGE_RECOVERY_REBIND |
+						DRM_WEDGE_RECOVERY_BUS_RESET, NULL);
+			}
+
+			guilty_fence = to_amdgpu_job(s_job)->hw_fence;
+
+			for (i = 0; i < AMDGPU_MAX_RINGS; ++i) {
+				ring = adev->rings[i];
+
+				if (!amdgpu_ring_sched_ready(ring))
+					continue;
+
+				sched = &ring->sched;
+
+				/* Stop the scheduler to prevent anybody else from touching the ring buffer. */
+				drm_sched_wqueue_stop(sched);
+
+				amdgpu_fence_driver_force_completion(ring, &guilty_fence->base);
+
+				/* Start the scheduler again */
+				drm_sched_wqueue_start(sched);
+			}
+		}
 	}
 
 exit:
@@ -451,7 +487,8 @@ static struct dma_fence *amdgpu_job_run(struct drm_sched_job *sched_job)
 
 	/* Skip job if VRAM is lost and never resubmit gangs */
 	if (job->generation != amdgpu_vm_generation(adev, job->vm) ||
-	    (job->job_run_counter && job->gang_submit))
+	    (job->job_run_counter && job->gang_submit) ||
+	    amdgpu_device_is_wedged(adev))
 		dma_fence_set_error(finished, -ECANCELED);
 
 	if (finished->error < 0) {

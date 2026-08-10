@@ -975,6 +975,39 @@ static int amdgpu_debugfs_fence_info_show(struct seq_file *m, void *unused)
 }
 
 /*
+ * amdgpu_debugfs_wedge - enable/disable "wedged" device framework.
+ *
+ * When enabled, gpu auto recovery will be disabled and the device has to
+ * be reset manually (equivalent to amdgpu.gpu_recovery=0).
+ *
+ * Read will return if the device is currently wedged.
+ */
+static int amdgpu_device_wedged_get(void *data, u64 *val)
+{
+	struct amdgpu_device *adev = (struct amdgpu_device *)data;
+	*val = amdgpu_device_is_wedged(adev);
+	return 0;
+}
+static int amdgpu_device_wedged_set(void *data, u64 val)
+{
+	struct amdgpu_device *adev = (struct amdgpu_device *)data;
+
+	if (amdgpu_device_is_wedged(adev))
+		return -EINVAL;
+
+	if (val)
+		amdgpu_gpu_recovery = 0;
+	else
+		amdgpu_gpu_recovery = adev->wedged.boot_gpu_recovery;
+
+	return 0;
+}
+
+
+DEFINE_DEBUGFS_ATTRIBUTE(amdgpu_debugfs_wedge_fops, amdgpu_device_wedged_get, amdgpu_device_wedged_set,
+			 "%lld\n");
+
+/*
  * amdgpu_debugfs_gpu_recover - manually trigger a gpu reset & recover
  *
  * Manually trigger a gpu reset at the next fence wait.
@@ -1039,6 +1072,8 @@ void amdgpu_debugfs_fence_init(struct amdgpu_device *adev)
 		INIT_WORK(&adev->reset_work, amdgpu_debugfs_reset_work);
 		debugfs_create_file("amdgpu_gpu_recover", 0444, root, adev,
 				    &amdgpu_debugfs_gpu_recover_fops);
+		debugfs_create_file("amdgpu_wedge", 0644, root, adev,
+				    &amdgpu_debugfs_wedge_fops);
 	}
 #endif
 }

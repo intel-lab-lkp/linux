@@ -2997,10 +2997,15 @@ long amdgpu_drm_ioctl(struct file *filp,
 		      unsigned int cmd, unsigned long arg)
 {
 	struct drm_file *file_priv = filp->private_data;
+	struct amdgpu_device *adev;
 	struct drm_device *dev;
 	long ret;
 
 	dev = file_priv->minor->dev;
+	adev = drm_to_adev(dev);
+	if (amdgpu_device_is_wedged(adev))
+		return -ENODEV;
+
 	ret = pm_runtime_get_sync(dev->dev);
 	if (ret < 0)
 		goto out;
