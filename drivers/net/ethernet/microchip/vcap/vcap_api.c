@@ -2389,6 +2389,19 @@ out:
 }
 EXPORT_SYMBOL_GPL(vcap_add_rule);
 
+/* Validate and add rule to a VCAP instance */
+int vcap_val_add_rule(struct vcap_rule *rule, u16 l3_proto)
+{
+	int err;
+
+	err = vcap_val_rule(rule, l3_proto);
+	if (err)
+		return err;
+
+	return vcap_add_rule(rule);
+}
+EXPORT_SYMBOL_GPL(vcap_val_add_rule);
+
 /* Allocate a new rule with the provided arguments */
 struct vcap_rule *vcap_alloc_rule(struct vcap_control *vctrl,
 				  struct net_device *ndev, int vcap_chain_id,
@@ -3559,6 +3572,18 @@ int vcap_rule_mod_action_u32(struct vcap_rule *rule,
 	return vcap_rule_mod_action(rule, action, VCAP_FIELD_U32, &data);
 }
 EXPORT_SYMBOL_GPL(vcap_rule_mod_action_u32);
+
+/* Modify a bit action with value in the rule */
+int vcap_rule_mod_action_bit(struct vcap_rule *rule,
+			     enum vcap_action_field action,
+			     enum vcap_bit val)
+{
+	struct vcap_client_actionfield_data data = {};
+
+	vcap_rule_set_action_bitsize(&data.u1, val);
+	return vcap_rule_mod_action(rule, action, VCAP_FIELD_BIT, &data);
+}
+EXPORT_SYMBOL_GPL(vcap_rule_mod_action_bit);
 
 /* Drop keys in a keylist and any keys that are not supported by the keyset */
 int vcap_filter_rule_keys(struct vcap_rule *rule,
