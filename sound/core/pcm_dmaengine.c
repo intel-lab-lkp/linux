@@ -409,14 +409,16 @@ int snd_dmaengine_pcm_refine_runtime_hwparams(
 	struct dma_chan *chan)
 {
 	struct dma_slave_caps dma_caps;
-	u32 addr_widths = BIT(DMA_SLAVE_BUSWIDTH_1_BYTE) |
-			  BIT(DMA_SLAVE_BUSWIDTH_2_BYTES) |
-			  BIT(DMA_SLAVE_BUSWIDTH_4_BYTES);
+	DECLARE_DMA_BUS_WIDTHS(bus_widths) = {};
 	snd_pcm_format_t i;
 	int ret = 0;
 
 	if (!hw || !chan || !dma_data)
 		return -EINVAL;
+
+	__set_bit(DMA_SLAVE_BUSWIDTH_1_BYTE, bus_widths);
+	__set_bit(DMA_SLAVE_BUSWIDTH_2_BYTES, bus_widths);
+	__set_bit(DMA_SLAVE_BUSWIDTH_4_BYTES, bus_widths);
 
 	ret = dma_get_slave_caps(chan, &dma_caps);
 	if (ret == 0) {
@@ -426,9 +428,9 @@ int snd_dmaengine_pcm_refine_runtime_hwparams(
 			hw->info |= SNDRV_PCM_INFO_BATCH;
 
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-			addr_widths = dma_caps.dst_addr_widths;
+			dma_slave_caps_copy_dst_widths(&dma_caps, bus_widths);
 		else
-			addr_widths = dma_caps.src_addr_widths;
+			dma_slave_caps_copy_src_widths(&dma_caps, bus_widths);
 	}
 
 	/*
@@ -460,7 +462,7 @@ int snd_dmaengine_pcm_refine_runtime_hwparams(
 			case 24:
 			case 32:
 			case 64:
-				if (addr_widths & (1 << (bits / 8)))
+				if (test_bit(bits / 8, bus_widths))
 					hw->formats |= pcm_format_to_bits(i);
 				break;
 			default:
