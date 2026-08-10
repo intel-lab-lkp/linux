@@ -315,7 +315,7 @@ void amdgpu_gart_unbind(struct amdgpu_device *adev, uint64_t offset,
 	uint64_t flags = 0;
 	int idx;
 
-	if (!adev->gart.ptr)
+	if (!adev->gart.ptr || amdgpu_device_is_wedged(adev))
 		return;
 
 	if (!drm_dev_enter(adev_to_drm(adev), &idx))
