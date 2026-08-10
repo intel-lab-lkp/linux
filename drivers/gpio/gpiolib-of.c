@@ -359,6 +359,17 @@ static bool of_gpio_child_is_spi_peripheral(const struct device_node *child)
 	return false;
 }
 
+/*
+ * A minimal SPI peripheral may carry no "spi-" property at all, so also let
+ * the controller identify the bus. spi-controller.yaml constrains the
+ * controller nodename to ^spi(@.*|-[0-9]+)?$, which makes the name the one
+ * bus marker a controller is required to have.
+ */
+static bool of_gpio_node_is_spi_controller(const struct device_node *np)
+{
+	return of_node_name_prefix(np, "spi");
+}
+
 static void of_gpio_flags_quirks(const struct device_node *np,
 				 const char *propname,
 				 enum of_gpio_flags *flags,
@@ -395,7 +406,8 @@ static void of_gpio_flags_quirks(const struct device_node *np,
 			if (cs == index) {
 				bool active_high;
 
-				if (!of_gpio_child_is_spi_peripheral(child))
+				if (!of_gpio_child_is_spi_peripheral(child) &&
+				    !of_gpio_node_is_spi_controller(np))
 					break;
 
 				/*
