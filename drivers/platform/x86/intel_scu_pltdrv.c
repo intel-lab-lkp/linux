@@ -22,8 +22,14 @@ static int intel_scu_platform_probe(struct platform_device *pdev)
 	struct intel_scu_ipc_data scu_data = {};
 	struct intel_scu_ipc_dev *scu;
 	const struct resource *res;
+	int ret;
 
-	scu_data.irq = platform_get_irq_optional(pdev, 0);
+	ret = platform_get_irq_optional(pdev, 0);
+	if (ret < 0 && ret != -ENXIO)
+		return ret;
+	if (ret > 0)
+		scu_data.irq = ret;
+
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
 		return -ENOMEM;
