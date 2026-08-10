@@ -12,10 +12,23 @@
 #define FAMFS_INTERNAL_H
 
 #include <linux/rwsem.h>
+#include <linux/atomic.h>
 #include <linux/bits.h>
 #include <linux/build_bug.h>
 
 #include <linux/famfs_ioctl.h>
+
+/*
+ * Default operation-permission bitmap (see FAMFS_OPT_* in the uapi header).
+ * This preserves famfs's historical behavior: file/dir creation, the fmap
+ * ioctl, data writes, and the non-resize setattr components are permitted;
+ * unlink of mapped files, link, symlink, mknod, rmdir, rename and truncate
+ * are denied until enabled via FAMFSIOC_SET_OPTS.
+ */
+#define FAMFS_OPT_DEFAULT	(FAMFS_OPT_CREATE | FAMFS_OPT_MKDIR | \
+				 FAMFS_OPT_CHMOD | FAMFS_OPT_CHOWN | \
+				 FAMFS_OPT_UTIMES | FAMFS_OPT_WRITE | \
+				 FAMFS_OPT_MAP_CREATE)
 
 extern const struct file_operations famfs_file_operations;
 
@@ -104,6 +117,8 @@ struct famfs_dax_devlist {
  * @famfs_fs_info
  *
  * @mount_opts:  The mount options
+ * @opts:        Operation-permission bitmap (FAMFS_OPT_*), adjusted at runtime
+ *               via the FAMFSIOC_{GET,SET,CLEAR}_OPTS ioctls
  * @deverror:    True if the dax device has called our notify_failure entry
  *               point, or if other "shutdown" conditions exist
  * @dax_devlist: Table of backing daxdevs (slot 0 is the mount primary)
@@ -111,16 +126,23 @@ struct famfs_dax_devlist {
  */
 struct famfs_fs_info {
 	struct famfs_mount_opts   mount_opts;
+	atomic64_t                opts;
 	bool                      deverror;
 	struct famfs_dax_devlist *dax_devlist;
 	struct rw_semaphore       devlist_sem;
 };
 
-/* This stub will be replaced in a later commit
- * Note: the opt parameter is intentionally unused, and will be used by
- * the replacement function when that commit lands
+/*
+ * famfs_opt_enabled() - is operation permission @opt enabled for this mount?
+ *
+ * @opt is a single FAMFS_OPT_* bit; returns true if that operation is
+ * permitted. The bitmap is read locklessly (updated via atomic RMW by the
+ * FAMFSIOC_{SET,CLEAR}_OPTS ioctls).
  */
-#define famfs_opt_enabled(fsi, opt) (fsi != 0)
+static inline bool famfs_opt_enabled(struct famfs_fs_info *fsi, u64 opt)
+{
+	return !!(atomic64_read(&fsi->opts) & opt);
+}
 
 int famfs_lookup_daxdev(const char *pathname, dev_t *devno);
 int famfs_devlist_alloc(struct famfs_fs_info *fsi);

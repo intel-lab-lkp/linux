@@ -360,6 +360,53 @@ famfs_daxdev_open(struct file *file, void __user *arg)
 }
 
 /**
+ * famfs_get_opts() - FAMFSIOC_GET_OPTS: return the permission bitmap
+ */
+static long
+famfs_get_opts(struct famfs_fs_info *fsi, void __user *arg)
+{
+	struct famfs_ioc_opts o = { .opts = atomic64_read(&fsi->opts) };
+
+	if (copy_to_user(arg, &o, sizeof(o)))
+		return -EFAULT;
+
+	return 0;
+}
+
+/*
+ * famfs_modify_opts() - FAMFSIOC_SET_OPTS / FAMFSIOC_CLEAR_OPTS
+ * @set: true to enable (OR in) the requested bits, false to disable (mask out)
+ *
+ * The caller supplies a mask of FAMFS_OPT_* bits; the resulting bitmap is
+ * returned. Requires CAP_SYS_ADMIN since it changes mount-wide policy.
+ */
+static long
+famfs_modify_opts(
+	struct famfs_fs_info *fsi,
+	void __user *arg,
+	bool set)
+{
+	struct famfs_ioc_opts o;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+	if (copy_from_user(&o, arg, sizeof(o)))
+		return -EFAULT;
+	if (o.opts & ~FAMFS_OPT_ALL)
+		return -EINVAL;
+
+	if (set)
+		o.opts = atomic64_fetch_or(o.opts, &fsi->opts) | o.opts;
+	else
+		o.opts = atomic64_fetch_and(~o.opts, &fsi->opts) & ~o.opts;
+
+	if (copy_to_user(arg, &o, sizeof(o)))
+		return -EFAULT;
+
+	return 0;
+}
+
+/**
  * famfs_file_ioctl() - Top-level famfs file ioctl handler
  * @file: the file
  * @cmd:  ioctl opcode
@@ -378,6 +425,18 @@ famfs_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case FAMFSIOC_NOP:
 		rc = 0;
+		break;
+
+	case FAMFSIOC_GET_OPTS:
+		rc = famfs_get_opts(fsi, (void __user *)arg);
+		break;
+
+	case FAMFSIOC_SET_OPTS:
+		rc = famfs_modify_opts(fsi, (void __user *)arg, true);
+		break;
+
+	case FAMFSIOC_CLEAR_OPTS:
+		rc = famfs_modify_opts(fsi, (void __user *)arg, false);
 		break;
 
 	case FAMFSIOC_DAXDEV_OPEN:

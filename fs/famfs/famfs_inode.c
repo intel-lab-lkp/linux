@@ -769,6 +769,7 @@ famfs_init_fs_context(struct fs_context *fc)
 		return -ENOMEM;
 
 	init_rwsem(&fsi->devlist_sem);
+	atomic64_set(&fsi->opts, FAMFS_OPT_DEFAULT);
 	fsi->mount_opts.mode = FAMFS_DEFAULT_MODE;
 	fc->s_fs_info        = fsi;
 	fc->ops              = &famfs_context_ops;
