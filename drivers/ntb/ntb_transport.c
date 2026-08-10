@@ -3787,9 +3787,18 @@ unsigned int ntb_transport_max_size(struct ntb_transport_qp *qp)
 	unsigned int max_size;
 	unsigned int copy_align;
 	struct dma_chan *rx_chan, *tx_chan;
+	struct device *dma_dev;
 
 	if (!qp)
 		return 0;
+
+	if (ntb_transport_link_query(qp) && ntb_direct_tx_enabled(qp)) {
+		dma_dev = dmaengine_get_dma_device(qp->direct_dma_chan);
+		max_size = min_t(size_t, dma_get_max_seg_size(dma_dev),
+				 dma_max_mapping_size(dma_dev));
+
+		return min_t(unsigned int, max_size, INT_MAX);
+	}
 
 	rx_chan = qp->rx_dma_chan;
 	tx_chan = qp->tx_dma_chan;
