@@ -389,6 +389,26 @@ static void tcf_bpf_cleanup(struct tc_action *act)
 	tcf_bpf_cfg_cleanup(&tmp);
 }
 
+static size_t tcf_bpf_get_fill_size(const struct tc_action *act)
+{
+	struct tcf_bpf *prog = to_bpf(act);
+	size_t size = nla_total_size(sizeof(struct tc_act_bpf));
+
+	if (tcf_bpf_is_ebpf(prog)) {
+		/* TCA_ACT_BPF_NAME */
+		size += nla_total_size(ACT_BPF_NAME_LEN + 1);
+		size += nla_total_size(sizeof(u32)); /* TCA_ACT_BPF_ID */
+		size += nla_total_size(BPF_TAG_SIZE); /* TCA_ACT_BPF_TAG */
+	} else {
+		size += nla_total_size(sizeof(u16)); /* TCA_ACT_BPF_OPS_LEN */
+		/* TCA_ACT_BPF_OPS */
+		size += nla_total_size(prog->bpf_num_ops *
+				       sizeof(struct sock_filter));
+	}
+
+	return size;
+}
+
 static struct tc_action_ops act_bpf_ops __read_mostly = {
 	.kind		=	"bpf",
 	.id		=	TCA_ID_BPF,
@@ -397,6 +417,7 @@ static struct tc_action_ops act_bpf_ops __read_mostly = {
 	.dump		=	tcf_bpf_dump,
 	.cleanup	=	tcf_bpf_cleanup,
 	.init		=	tcf_bpf_init,
+	.get_fill_size	=	tcf_bpf_get_fill_size,
 	.size		=	sizeof(struct tcf_bpf),
 };
 MODULE_ALIAS_NET_ACT("bpf");
