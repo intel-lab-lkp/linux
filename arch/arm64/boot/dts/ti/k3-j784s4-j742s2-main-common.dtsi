@@ -1002,6 +1002,7 @@
 		interrupts = <GIC_SPI 182 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&k3_clks 241 2>;
 		power-domains = <&k3_pds 241 TI_SCI_PD_EXCLUSIVE>;
+		sram = <&main_navss_sram>;
 	};
 
 	vpu1: video-codec@4220000 {
@@ -1010,6 +1011,7 @@
 		interrupts = <GIC_SPI 183 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&k3_clks 242 2>;
 		power-domains = <&k3_pds 242 TI_SCI_PD_EXCLUSIVE>;
+		sram = <&main_navss_sram>;
 	};
 
 	main_sdhci0: mmc@4f80000 {
