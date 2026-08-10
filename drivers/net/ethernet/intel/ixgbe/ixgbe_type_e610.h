@@ -29,6 +29,19 @@
 #define IXGBE_E610_SR_NETLIST_BANK_PTR		0x46
 #define IXGBE_E610_SR_NETLIST_BANK_SIZE		0x47
 
+/* Link Default Override TLV in PFA */
+#define IXGBE_E610_SR_LINK_DEFAULT_OVERRIDE_PTR	0x134
+#define IXGBE_E610_SR_PFA_LINK_OVERRIDE_WORDS	10
+#define IXGBE_E610_SR_PFA_TLV_HDR_SIZE		2
+
+#define IXGBE_LINK_OVERRIDE_PORT_DIS		BIT(2)
+
+struct ixgbe_link_default_override_tlv {
+	u16 link_options;
+	u16 phy_options;
+	u16 phy_types[8];
+};
+
 /* The OROM version topology */
 #define IXGBE_OROM_VER_PATCH_MASK		GENMASK_ULL(7, 0)
 #define IXGBE_OROM_VER_BUILD_MASK		GENMASK_ULL(23, 8)
