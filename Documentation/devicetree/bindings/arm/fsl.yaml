@@ -1711,6 +1711,12 @@ properties:
           - const: toradex,vf500-colibri_vf50
           - const: fsl,vf500
 
+      - description: Toradex Colibri VF50 Module on Iris Carrier Board
+        items:
+          - const: toradex,vf500-colibri_vf50-on-iris
+          - const: toradex,vf500-colibri_vf50
+          - const: fsl,vf500
+
       - description: VF610 based Boards
         items:
           - enum:
@@ -1722,6 +1728,12 @@ properties:
       - description: Toradex Colibri VF61 Module on Colibri Evaluation Board
         items:
           - const: toradex,vf610-colibri_vf61-on-eval
+          - const: toradex,vf610-colibri_vf61
+          - const: fsl,vf610
+
+      - description: Toradex Colibri VF61 Module on Iris Carrier Board
+        items:
+          - const: toradex,vf610-colibri_vf61-on-iris
           - const: toradex,vf610-colibri_vf61
           - const: fsl,vf610
 
