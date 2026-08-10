@@ -379,6 +379,11 @@ static int amd_isp_probe(struct platform_device *pdev)
 		goto error_unregister_sw_node;
 
 	adev = ACPI_COMPANION(&pdev->dev);
+	if (!adev) {
+		ret = -ENODEV;
+		goto error_unregister_notifier;
+	}
+
 	/* initialize root amd_camera_node */
 	adev->driver_data = (void *)pinfo->swnodes[0];
 
@@ -388,6 +393,8 @@ static int amd_isp_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, isp4_platform);
 	return 0;
 
+error_unregister_notifier:
+	bus_unregister_notifier(&i2c_bus_type, &isp4_platform->i2c_nb);
 error_unregister_sw_node:
 	software_node_unregister_node_group(isp4_platform->pinfo->swnodes);
 	return ret;
