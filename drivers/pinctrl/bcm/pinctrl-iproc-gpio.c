@@ -873,6 +873,8 @@ static int iproc_gpio_probe(struct platform_device *pdev)
 
 	/* optional GPIO interrupt support */
 	irq = platform_get_irq_optional(pdev, 0);
+	if (irq < 0 && irq != -ENXIO)
+		return irq;
 	if (irq > 0) {
 		struct gpio_irq_chip *girq;
 
