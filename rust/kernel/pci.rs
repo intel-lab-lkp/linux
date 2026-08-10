@@ -51,7 +51,6 @@ pub use self::io::{
 pub use self::irq::{
     IrqType,
     IrqTypes,
-    IrqVector,
     IrqVectorRegistration, //
 };
 
