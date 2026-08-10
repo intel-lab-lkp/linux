@@ -7001,8 +7001,20 @@ static int ixgbe_sw_init(struct ixgbe_adapter *adapter,
 	if (hw->mac.ops.init_swfw_sync)
 		hw->mac.ops.init_swfw_sync(hw);
 
-	if (hw->mac.type == ixgbe_mac_e610)
+	if (hw->mac.type == ixgbe_mac_e610) {
+		struct ixgbe_link_default_override_tlv ldo = {};
+		int err;
+
 		mutex_init(&hw->aci.lock);
+
+		err = ixgbe_get_link_default_override(hw, &ldo);
+		if (!err && (ldo.link_options & IXGBE_LINK_OVERRIDE_PORT_DIS)) {
+			adapter->flags2 |=
+				IXGBE_FLAG2_TOTAL_PORT_SHUTDOWN_ENA |
+				IXGBE_FLAG2_LINK_DOWN_ON_CLOSE;
+			e_dev_info("Total Port Shutdown enabled\n");
+		}
+	}
 
 #ifdef IXGBE_FCOE
 	/* FCoE support exists, always init the FCoE lock */
