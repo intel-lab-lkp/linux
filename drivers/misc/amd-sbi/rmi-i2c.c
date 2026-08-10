@@ -86,12 +86,12 @@ static int sbrmi_common_probe(struct device *dev, struct regmap *regmap, uint8_t
 	return create_misc_rmi_device(data, dev);
 }
 
-static struct regmap_config sbrmi_regmap_config = {
+static const struct regmap_config sbrmi_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 };
 
-static struct regmap_config sbrmi_regmap_config_ext = {
+static const struct regmap_config sbrmi_regmap_config_ext = {
 	.reg_bits = 16,
 	.val_bits = 8,
 	.reg_format_endian = REGMAP_ENDIAN_LITTLE,
