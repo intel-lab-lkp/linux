@@ -2167,6 +2167,11 @@ int kvm_s390_handle_vsie(struct kvm_vcpu *vcpu)
 		return kvm_s390_inject_program_int(vcpu, PGM_ADDRESSING);
 	scb_o = (struct kvm_s390_sie_block *)phys_to_virt(scb_hpa);
 
+	if (scb_o->icpua >= KVM_S390_MAX_VSIE_VCPUS) {
+		rc = kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
+		goto out_unpin;
+	}
+
 	if (!use_ssca(vcpu->kvm, scb_o)) {
 		/* get the vsie_page with pinned scb_o */
 		vsie_page = get_vsie_page(vcpu, scb_addr);
