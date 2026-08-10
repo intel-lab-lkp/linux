@@ -384,6 +384,7 @@
 #define X86_FEATURE_VMCBCLEAN		(15*32+ 5) /* "vmcb_clean" VMCB clean bits support */
 #define X86_FEATURE_FLUSHBYASID		(15*32+ 6) /* "flushbyasid" Flush-by-ASID support */
 #define X86_FEATURE_DECODEASSISTS	(15*32+ 7) /* "decodeassists" Decode Assists support */
+#define X86_FEATURE_PERFCTR_VIRT	(15*32+ 8) /* PMC virtualization support */
 #define X86_FEATURE_PAUSEFILTER		(15*32+10) /* "pausefilter" Filtered pause intercept */
 #define X86_FEATURE_PFTHRESHOLD		(15*32+12) /* "pfthreshold" Pause filter threshold */
 #define X86_FEATURE_AVIC		(15*32+13) /* "avic" Virtual Interrupt Controller */
