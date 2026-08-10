@@ -43,6 +43,23 @@ static void sun4i_csi_capture_stop(struct sun4i_csi *csi)
 	writel(0, csi->regs + CSI_CPT_CTRL_REG);
 }
 
+static void sun4i_csi_disable_irq(struct sun4i_csi *csi)
+{
+	/*
+	 * Disable the frame done interrupt and wait for the handler to
+	 * finish. A frame may complete right as capture is stopped, so an
+	 * interrupt can still be pending here; without this the handler could
+	 * run after the device is powered down (pm_runtime_put() on release)
+	 * and access registers on a gated block.
+	 *
+	 * Read the register back to flush the posted write so the disable has
+	 * reached the device before synchronize_irq() waits for the handler.
+	 */
+	writel(0, csi->regs + CSI_INT_EN_REG);
+	readl(csi->regs + CSI_INT_EN_REG);
+	synchronize_irq(csi->irq);
+}
+
 static int sun4i_csi_queue_setup(struct vb2_queue *vq,
 				 unsigned int *nbuffers,
 				 unsigned int *nplanes,
@@ -330,6 +347,7 @@ static int sun4i_csi_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 err_disable_device:
 	sun4i_csi_capture_stop(csi);
+	sun4i_csi_disable_irq(csi);
 
 err_disable_pipeline:
 	video_device_pipeline_stop(&csi->vdev);
@@ -355,6 +373,7 @@ static void sun4i_csi_stop_streaming(struct vb2_queue *vq)
 
 	v4l2_subdev_call(csi->src_subdev, video, s_stream, 0);
 	sun4i_csi_capture_stop(csi);
+	sun4i_csi_disable_irq(csi);
 
 	/* Release all active buffers */
 	spin_lock_irqsave(&csi->qlock, flags);
@@ -440,6 +459,7 @@ int sun4i_csi_dma_register(struct sun4i_csi *csi, int irq)
 		dev_err(csi->dev, "Couldn't register our interrupt\n");
 		goto err_unregister_device;
 	}
+	csi->irq = irq;
 
 	return 0;
 
