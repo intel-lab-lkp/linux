@@ -59,7 +59,7 @@ famfs_get_inode(
 		break;
 	case S_IFREG:
 		inode->i_op = &famfs_file_inode_operations;
-		inode->i_fop = NULL /* &famfs_file_operations */;
+		inode->i_fop = &famfs_file_operations;
 		break;
 	case S_IFDIR:
 		inode->i_op = &famfs_dir_inode_operations;
