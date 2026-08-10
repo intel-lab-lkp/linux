@@ -1647,6 +1647,17 @@ static void sparx5_rr_nexthop_neigh_update(struct sparx5 *sparx5,
 	sparx5_rr_arp_tbl_hw_addr_apply(sparx5, mac, vmid, grp_idx + nh_offset);
 }
 
+static void
+sparx5_rr_nexthops_update_notify(struct sparx5 *sparx5,
+				 struct sparx5_rr_neigh_entry *neigh_entry,
+				 bool entry_connected)
+{
+	struct sparx5_rr_nexthop *nh;
+
+	list_for_each_entry(nh, &neigh_entry->nexthop_list, neigh_list_node)
+		sparx5_rr_nexthop_neigh_update(sparx5, nh, entry_connected);
+}
+
 static int sparx5_rr_neigh_entry_hw_apply(struct sparx5 *sparx5,
 					  struct sparx5_rr_neigh_entry *entry)
 {
@@ -2419,6 +2430,107 @@ err_fib6:
 	return NOTIFY_BAD;
 }
 
+static void sparx5_rr_neigh_event_work(struct work_struct *work)
+{
+	struct sparx5_rr_netevent_work *net_work =
+		container_of(work, struct sparx5_rr_netevent_work, work);
+	unsigned char hwaddr[ETH_ALEN] __aligned(2);
+	struct sparx5 *sparx5 = net_work->sparx5;
+	struct neighbour *n = net_work->neigh;
+	struct sparx5_rr_neigh_key key = { };
+	struct sparx5_rr_neigh_entry *entry;
+	bool entry_connected;
+	u8 nud_state, dead;
+
+	sparx5_rr_nb2neigh_key(n, &key);
+
+	/* Frames with link-local dip are trapped, so ignore the neighbour. */
+	if (key.iaddr.version == SPARX5_IPV6 &&
+	    ipv6_addr_type(&key.iaddr.ipv6) & IPV6_ADDR_LINKLOCAL)
+		goto out;
+
+	/* If n changes after this read section, we will get another neigh
+	 * event, which is processed after the current one.
+	 */
+	read_lock_bh(&n->lock);
+	ether_addr_copy(hwaddr, n->ha);
+	nud_state = n->nud_state;
+	dead = n->dead;
+	read_unlock_bh(&n->lock);
+
+	mutex_lock(&sparx5->router->lock);
+
+	entry_connected = nud_state & NUD_VALID && !dead;
+	entry = sparx5_rr_neigh_entry_lookup(sparx5, &key);
+	if (!entry_connected && !entry)
+		goto out_mutex;
+
+	if (!entry) {
+		entry = sparx5_rr_neigh_entry_create(sparx5, &key);
+		if (IS_ERR(entry))
+			goto out_mutex;
+	}
+
+	if (entry->connected && entry_connected &&
+	    ether_addr_equal(entry->hwaddr, hwaddr))
+		goto out_mutex;
+
+	ether_addr_copy(entry->hwaddr, hwaddr);
+	sparx5_rr_neigh_entry_update(sparx5, entry, entry_connected);
+	sparx5_rr_nexthops_update_notify(sparx5, entry, entry_connected);
+	if (!entry_connected)
+		sparx5_rr_neigh_entry_put(sparx5, entry);
+
+out_mutex:
+	mutex_unlock(&sparx5->router->lock);
+out:
+	neigh_release(n);
+	kfree(net_work);
+}
+
+/* Handle neighbour update events. Used to manage neigh_entries. Called in
+ * atomic context, with rcu_read_lock().
+ */
+static int sparx5_rr_netevent_event(struct notifier_block *nb,
+				    unsigned long event, void *ptr)
+{
+	struct sparx5_rr_netevent_work *net_work;
+	struct sparx5_router *router;
+	struct sparx5_port *port;
+	struct neighbour *n;
+
+	router = container_of(nb, struct sparx5_router, netevent_nb);
+
+	switch (event) {
+	case NETEVENT_NEIGH_UPDATE:
+		n = ptr;
+
+		if (!net_eq(dev_net(n->dev), &init_net))
+			return NOTIFY_DONE;
+
+		if (n->tbl->family != AF_INET && n->tbl->family != AF_INET6)
+			return NOTIFY_DONE;
+
+		port = sparx5_port_dev_lower_find(n->dev);
+		if (!port)
+			return NOTIFY_DONE;
+
+		net_work = kzalloc_obj(*net_work, GFP_ATOMIC);
+		if (!net_work)
+			return NOTIFY_BAD;
+
+		INIT_WORK(&net_work->work, sparx5_rr_neigh_event_work);
+		net_work->sparx5 = router->sparx5;
+		net_work->neigh = neigh_clone(n);
+		net_work->event = event;
+		sparx5_rr_schedule_work(router->sparx5, &net_work->work);
+
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_DONE;
+};
+
 static void sparx5_rr_leg_base_mac_set(struct sparx5 *sparx5,
 				       unsigned char mac[ETH_ALEN])
 {
@@ -2813,10 +2925,15 @@ int sparx5_rr_router_init(struct sparx5 *sparx5)
 		 ANA_ACL_VCAP_S2_MISC_CTRL_ACL_RT_SEL, sparx5,
 		 ANA_ACL_VCAP_S2_MISC_CTRL);
 
+	r->netevent_nb.notifier_call = sparx5_rr_netevent_event;
+	err = register_netevent_notifier(&r->netevent_nb);
+	if (err)
+		goto err_workqueue_destroy;
+
 	r->fib_nb.notifier_call = sparx5_rr_fib_event;
 	err = register_fib_notifier(&init_net, &r->fib_nb, NULL, NULL);
 	if (err)
-		goto err_workqueue_destroy;
+		goto err_unreg_netevent_notifier;
 
 	r->inetaddr_nb.notifier_call = sparx5_rr_inetaddr_event;
 	err = register_inetaddr_notifier(&r->inetaddr_nb);
@@ -2855,6 +2972,8 @@ err_unreg_inet_notifier:
 	unregister_inetaddr_notifier(&r->inetaddr_nb);
 err_unreg_fib_notifier:
 	unregister_fib_notifier(&init_net, &r->fib_nb);
+err_unreg_netevent_notifier:
+	unregister_netevent_notifier(&r->netevent_nb);
 err_workqueue_destroy:
 	destroy_workqueue(r->sparx5_router_owq);
 	sparx5_rr_fib_flush(sparx5);
@@ -2890,6 +3009,7 @@ void sparx5_rr_router_deinit(struct sparx5 *sparx5)
 	unregister_inetaddr_validator_notifier(&router->inetaddr_valid_nb);
 	unregister_inetaddr_notifier(&router->inetaddr_nb);
 	unregister_fib_notifier(&init_net, &router->fib_nb);
+	unregister_netevent_notifier(&router->netevent_nb);
 	destroy_workqueue(router->sparx5_router_owq);
 	sparx5_rr_fib_flush(sparx5);
 	sparx5_rr_router_legs_flush(sparx5);
