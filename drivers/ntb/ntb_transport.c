@@ -554,7 +554,7 @@ static bool ntb_direct_tx_mode(struct ntb_transport_qp *qp)
 
 static bool ntb_direct_link_capable(struct ntb_transport_qp *qp)
 {
-	return ntb_direct_rx_mode(qp) || ntb_direct_tx_mode(qp);
+	return ntb_direct_layout(qp->transport);
 }
 
 static void ntb_transport_notify_peer(struct ntb_transport_qp *qp)
@@ -2058,6 +2058,11 @@ static int ntb_transport_probe(struct ntb_client *self, struct ntb_dev *ndev)
 	else if (use_direct_dma)
 		dev_info(&ndev->dev,
 			 "not enough scratchpads for direct DMA negotiation\n");
+	if (nt->direct_dma_dev) {
+		nt->direct_features = NTB_DIRECT_FEAT_RX;
+		if (nt->qp_count && nt->qp_vec[0].direct_dma_chan)
+			nt->direct_features |= NTB_DIRECT_FEAT_TX;
+	}
 
 	mutex_init(&nt->link_event_lock);
 	INIT_DELAYED_WORK(&nt->link_work, ntb_transport_link_work);
