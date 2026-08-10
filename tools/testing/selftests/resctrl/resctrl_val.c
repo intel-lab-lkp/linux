@@ -10,7 +10,7 @@
  */
 #include "resctrl.h"
 
-#define UNCORE_IMC		"uncore_imc"
+#define UNCORE_IMC		"uncore_imc_"
 #define READ_FILE_NAME		"cas_count_read"
 #define DYN_PMU_PATH		"/sys/bus/event_source/devices"
 #define SCALE			0.00006103515625
@@ -238,24 +238,29 @@ static int num_of_mem_controllers(void)
 	char mc_dir[512], *temp;
 	unsigned int count = 0;
 	struct dirent *ep;
+	char *sysfs_name;
 	int ret;
 	DIR *dp;
+
+	if (get_vendor() == ARCH_INTEL) {
+		sysfs_name = UNCORE_IMC;
+	} else {
+		ksft_print_msg("Unsupported vendor\n");
+		return -1;
+	}
 
 	dp = opendir(DYN_PMU_PATH);
 	if (dp) {
 		while ((ep = readdir(dp))) {
-			temp = strstr(ep->d_name, UNCORE_IMC);
+			temp = strstr(ep->d_name, sysfs_name);
 			if (!temp)
 				continue;
 
 			/*
 			 * mc counters are named as "uncore_imc_<n>", hence
-			 * increment the pointer to point to <n>. Note that
-			 * sizeof(UNCORE_IMC) would count for null character as
-			 * well and hence the last underscore character in
-			 * uncore_imc'_' need not be counted.
+			 * increment the pointer to point to <n>.
 			 */
-			temp = temp + sizeof(UNCORE_IMC);
+			temp = temp + strlen(sysfs_name);
 
 			/*
 			 * Some directories under "DYN_PMU_PATH" could have
