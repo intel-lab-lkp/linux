@@ -12,6 +12,7 @@
 #include <linux/sched.h>
 #include <linux/srcu.h>
 #include <linux/wait.h>
+#include <linux/workqueue.h>
 #include <linux/hashtable.h>
 #include <linux/dev_printk.h>
 #include <linux/build_bug.h>
@@ -128,6 +129,7 @@ struct mshv_partition {
 	 */
 	struct completion async_hypercall;
 	u64 async_hypercall_status;
+	struct delayed_work destroy_work;
 
 	spinlock_t	  pt_irqfds_lock;
 	struct hlist_head pt_irqfds_list;
@@ -377,6 +379,11 @@ int mshv_region_get(struct mshv_mem_region *region);
 bool mshv_region_handle_gfn_fault(struct mshv_mem_region *region, u64 gfn);
 void mshv_region_movable_fini(struct mshv_mem_region *region);
 bool mshv_region_movable_init(struct mshv_mem_region *region);
+
+int hv_call_set_partition_property(u64 partition_id, u64 property_code,
+				   u64 property_value,
+				   void (*completion_handler)(void *, u64 *),
+				   void *completion_data);
 
 #ifdef HV_SUPPORTS_SEV_SNP_GUESTS
 int hv_call_import_isolated_pages(u64 partition_id, u64 *pages,
