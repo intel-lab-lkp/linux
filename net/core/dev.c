@@ -5174,10 +5174,11 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		u16 index = skb_get_rx_queue(skb);
 
 		if (unlikely(index >= dev->real_num_rx_queues)) {
-			WARN_ONCE(dev->real_num_rx_queues > 1,
-				  "%s received packet on queue %u, but number "
-				  "of RX queues is %u\n",
-				  dev->name, index, dev->real_num_rx_queues);
+			if (dev->real_num_rx_queues > 1)
+				netdev_warn_once(dev,
+						 "received packet on queue %u, but number "
+						 "of RX queues is %u\n",
+						 index, dev->real_num_rx_queues);
 			goto done;
 		}
 		rxqueue += index;
@@ -5491,11 +5492,11 @@ static struct netdev_rx_queue *netif_get_rxqueue(struct sk_buff *skb)
 		u16 index = skb_get_rx_queue(skb);
 
 		if (unlikely(index >= dev->real_num_rx_queues)) {
-			WARN_ONCE(dev->real_num_rx_queues > 1,
-				  "%s received packet on queue %u, but number "
-				  "of RX queues is %u\n",
-				  dev->name, index, dev->real_num_rx_queues);
-
+			if (dev->real_num_rx_queues > 1)
+				netdev_warn_once(dev,
+						 "received packet on queue %u, but number "
+						 "of RX queues is %u\n",
+						 index, dev->real_num_rx_queues);
 			return rxqueue; /* Return first rxqueue */
 		}
 		rxqueue += index;
