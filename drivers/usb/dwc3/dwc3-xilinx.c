@@ -121,6 +121,20 @@ static int dwc3_xlnx_init_versal(struct dwc3_xlnx *priv_data)
 	return 0;
 }
 
+static void dwc3_xlnx_exit_zynqmp(struct dwc3_xlnx *priv_data)
+{
+	phy_power_off(priv_data->usb3_phy);
+
+	if (priv_data->usb_resets_released) {
+		reset_control_assert(priv_data->usb_hibrst);
+		reset_control_assert(priv_data->usb_crst);
+		reset_control_assert(priv_data->usb_apbrst);
+		priv_data->usb_resets_released = false;
+	}
+
+	phy_exit(priv_data->usb3_phy);
+}
+
 static int dwc3_xlnx_init_zynqmp(struct dwc3_xlnx *priv_data)
 {
 	struct device		*dev = priv_data->dev;
@@ -257,6 +271,7 @@ err:
 
 static const struct dwc3_xlnx_platdata zynqmp_platdata = {
 	.init = dwc3_xlnx_init_zynqmp,
+	.exit = dwc3_xlnx_exit_zynqmp,
 };
 
 static const struct dwc3_xlnx_platdata versal_platdata = {
@@ -346,11 +361,11 @@ static int dwc3_xlnx_probe(struct platform_device *pdev)
 
 	ret = dwc3_set_swnode(dev);
 	if (ret)
-		goto err_clk_put;
+		goto err_pltfm_exit;
 
 	ret = of_platform_populate(np, NULL, NULL, dev);
 	if (ret)
-		goto err_clk_put;
+		goto err_pltfm_exit;
 
 	pm_runtime_set_active(dev);
 	ret = devm_pm_runtime_enable(dev);
@@ -367,7 +382,9 @@ static int dwc3_xlnx_probe(struct platform_device *pdev)
 err_pm_set_suspended:
 	of_platform_depopulate(dev);
 	pm_runtime_set_suspended(dev);
-
+err_pltfm_exit:
+	if (priv_data->plat->exit)
+		priv_data->plat->exit(priv_data);
 err_clk_put:
 	clk_bulk_disable_unprepare(priv_data->num_clocks, priv_data->clks);
 
@@ -380,6 +397,9 @@ static void dwc3_xlnx_remove(struct platform_device *pdev)
 	struct device		*dev = &pdev->dev;
 
 	of_platform_depopulate(dev);
+
+	if (priv_data->plat->exit)
+		priv_data->plat->exit(priv_data);
 
 	clk_bulk_disable_unprepare(priv_data->num_clocks, priv_data->clks);
 	priv_data->num_clocks = 0;
