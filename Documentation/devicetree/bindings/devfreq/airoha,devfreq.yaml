@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/devfreq/airoha,devfreq.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Airoha SoC Subsystem Devfreq
+
+maintainers:
+  - Christian Marangi <ansuelsmth@gmail.com>
+
+description:
+  Airoha SoC contains multiple subsystem that are scaled to a
+  specific OPP taking the CPU clock as reference. Such sybsystem
+  can enter idle or performance state based on the system load
+  and power consumption conditions.
+
+  Example of such subsystem are GSW (Gigabit Switch), NPU (Custom
+  Risc Co-Processor for Network acceleration), SOE (Crypto Module) BUS...
+
+properties:
+  compatible:
+    const: airoha,devfreq
+
+  clocks:
+    maxItems: 1
+
+  operating-points-v2:
+    description:
+      OPP table of the related subsystem supported rates that referenced
+      clocks will be scaled to.
+
+required:
+  - compatible
+  - clocks
+  - operating-points-v2
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/en7523-clk.h>
+
+    npu_opp_table: opp-table-npu {
+        compatible = "operating-points-v2";
+
+        npu_low: opp-400000000 {
+           opp-hz = /bits/ 64 <400000000>;
+        };
+
+        npu_high: opp-720000000 {
+           opp-hz = /bits/ 64 <720000000>;
+        };
+    };
+
+    emi_opp_table: opp-table-emi {
+        compatible = "operating-points-v2";
+
+        emi_low: opp-400000000 {
+            opp-hz = /bits/ 64 <400000000>;
+        };
+
+        emi_high: opp-540000000 {
+           opp-hz = /bits/ 64 <540000000>;
+        };
+    };
+
+    bus_opp_table: opp-table-bus {
+        compatible = "operating-points-v2";
+
+        bus_low: opp-200000000 {
+           opp-hz = /bits/ 64 <200000000>;
+        };
+
+        bus_high: opp-300000000 {
+           opp-hz = /bits/ 64 <300000000>;
+        };
+    };
+
+    gsw_opp_table: opp-table-gsw {
+        compatible = "operating-points-v2";
+
+        gsw_low: opp-200000000 {
+            opp-hz = /bits/ 64 <200000000>;
+        };
+
+        gsw_high: opp-500000000 {
+           opp-hz = /bits/ 64 <500000000>;
+        };
+    };
+
+    npu-devfreq {
+        compatible = "airoha,devfreq";
+        operating-points-v2 = <&npu_opp_table>;
+        clocks = <&scuclk EN7523_CLK_NPU>;
+    };
+
+    emi-devfreq {
+        compatible = "airoha,devfreq";
+        operating-points-v2 = <&emi_opp_table>;
+        clocks = <&scuclk EN7523_CLK_EMI>;
+    };
+
+    bus-devfreq {
+        compatible = "airoha,devfreq";
+        operating-points-v2 = <&bus_opp_table>;
+        clocks = <&scuclk EN7523_CLK_BUS>;
+    };
+
+    gsw-devfreq {
+        compatible = "airoha,devfreq";
+        operating-points-v2 = <&gsw_opp_table>;
+        clocks = <&scuclk EN7523_CLK_GSW>;
+    };
