@@ -137,6 +137,7 @@ static const struct iio_gain_sel_pair bu27034_gains[] = {
 #define BU27034_MEAS_MODE_200MS		2
 #define BU27034_MEAS_MODE_400MS		4
 
+#define BU27034_INT_TIME_MIN 55000
 static const struct iio_itime_sel_mul bu27034_itimes[] = {
 	GAIN_SCALE_ITIME_US(400000, BU27034_MEAS_MODE_400MS, 8),
 	GAIN_SCALE_ITIME_US(200000, BU27034_MEAS_MODE_200MS, 4),
@@ -1162,6 +1163,15 @@ static int bu27034_buffer_thread(void *arg)
 	data = iio_priv(idev);
 
 	wait_ms = bu27034_get_int_time(data);
+
+	/*
+	 * If reading the integration time fails, default to the minimum so we
+	 * don't lose samples. This may waste CPU cycles, but as a hardening
+	 * against theoretical, once-in-a-blue-moon error, this should be Ok.
+	 */
+	if (wait_ms < 0)
+		wait_ms = BU27034_INT_TIME_MIN;
+
 	wait_ms /= 1000;
 
 	wait_ms -= BU27034_MEAS_WAIT_PREMATURE_MS;
