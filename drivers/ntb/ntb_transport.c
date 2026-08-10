@@ -139,6 +139,8 @@ struct ntb_queue_entry {
 	int errors;
 	unsigned int tx_index;
 	unsigned int rx_index;
+	dma_addr_t direct_dma_addr;
+	dma_addr_t direct_cpl_addr;
 
 	struct ntb_transport_qp *qp;
 	union {
@@ -193,6 +195,8 @@ struct ntb_transport_qp {
 	struct ntb_direct_shared *direct_shared;
 	struct ntb_direct_shared __iomem *peer_direct_shared;
 	unsigned int direct_ring_entries;
+	u32 *direct_rx_cpl;
+	dma_addr_t direct_rx_cpl_dma;
 	u32 *direct_tx_cpl;
 	dma_addr_t direct_tx_cpl_dma;
 	u32 direct_rx_prod;
@@ -505,6 +509,23 @@ static bool ntb_direct_layout(struct ntb_transport_ctx *nt)
 #define QP_TO_MW(nt, qp)	((qp) % nt->mw_count)
 #define NTB_QP_DEF_NUM_ENTRIES	100
 #define NTB_LINK_DOWN_TIMEOUT	10
+
+/**
+ * ntb_transport_rx_queue_size - Query the RX queue depth
+ * @qp: NTB transport layer queue to be queried
+ *
+ * Return: Number of RX buffers the client should allocate
+ */
+unsigned int ntb_transport_rx_queue_size(struct ntb_transport_qp *qp)
+{
+	if (!qp)
+		return 0;
+
+	return qp->transport->direct_dma_dev ?
+		max(NTB_QP_DEF_NUM_ENTRIES, qp->direct_ring_entries - 1) :
+		NTB_QP_DEF_NUM_ENTRIES;
+}
+EXPORT_SYMBOL_GPL(ntb_transport_rx_queue_size);
 
 static void ntb_transport_rxc_db(struct work_struct *work);
 static const struct ntb_ctx_ops ntb_transport_ops;
@@ -1179,6 +1200,10 @@ static void ntb_qp_link_context_reset(struct ntb_transport_qp *qp)
 	qp->tx_err_no_buf = 0;
 	qp->tx_memcpy = 0;
 	qp->tx_async = 0;
+	qp->direct_rx_prod = 0;
+	qp->direct_rx_cons = 0;
+	qp->direct_tx_issue = 0;
+	qp->direct_tx_cons = 0;
 }
 
 static void ntb_qp_link_down_reset(struct ntb_transport_qp *qp)
@@ -2343,6 +2368,23 @@ static bool ntb_dma_filter_fn(struct dma_chan *chan, void *node)
 	return dev_to_node(&chan->dev->device) == (int)(unsigned long)node;
 }
 
+static void ntb_direct_free_queue(struct ntb_transport_qp *qp)
+{
+	size_t cpl_size = array_size(qp->direct_ring_entries, sizeof(u32));
+
+	if (qp->direct_tx_cpl) {
+		dma_free_coherent(dmaengine_get_dma_device(qp->direct_dma_chan),
+				  cpl_size,
+				  qp->direct_tx_cpl, qp->direct_tx_cpl_dma);
+		qp->direct_tx_cpl = NULL;
+	}
+	if (qp->direct_rx_cpl) {
+		dma_free_coherent(qp->transport->direct_dma_dev, cpl_size,
+				  qp->direct_rx_cpl, qp->direct_rx_cpl_dma);
+		qp->direct_rx_cpl = NULL;
+	}
+}
+
 /**
  * ntb_transport_create_queue - Create a new NTB transport layer queue
  * @data: pointer for callback data
@@ -2368,7 +2410,9 @@ ntb_transport_create_queue(void *data, struct device *client_dev,
 	struct ntb_transport_qp *qp;
 	u64 qp_bit;
 	unsigned int free_queue;
+	unsigned int tx_entries;
 	dma_cap_mask_t dma_mask;
+	size_t direct_cpl_size;
 	int node;
 	int i;
 
@@ -2415,6 +2459,28 @@ ntb_transport_create_queue(void *data, struct device *client_dev,
 		qp->rx_dma_chan = NULL;
 	}
 
+	if (nt->direct_dma_dev) {
+		direct_cpl_size = array_size(qp->direct_ring_entries,
+					     sizeof(*qp->direct_rx_cpl));
+		qp->direct_rx_cpl =
+			dma_alloc_coherent(nt->direct_dma_dev, direct_cpl_size,
+					   &qp->direct_rx_cpl_dma, GFP_KERNEL);
+		if (!qp->direct_rx_cpl)
+			goto err1;
+	}
+
+	if (qp->direct_dma_chan) {
+		direct_cpl_size = array_size(qp->direct_ring_entries,
+					     sizeof(*qp->direct_tx_cpl));
+
+		qp->direct_tx_cpl =
+			dma_alloc_coherent(dmaengine_get_dma_device(qp->direct_dma_chan),
+					   direct_cpl_size,
+					   &qp->direct_tx_cpl_dma, GFP_KERNEL);
+		if (!qp->direct_tx_cpl)
+			goto err1;
+	}
+
 	qp->tx_mw_dma_addr = 0;
 	if (qp->tx_dma_chan) {
 		qp->tx_mw_dma_addr =
@@ -2434,7 +2500,7 @@ ntb_transport_create_queue(void *data, struct device *client_dev,
 	dev_dbg(&pdev->dev, "Using %s memcpy for RX\n",
 		qp->rx_dma_chan ? "DMA" : "CPU");
 
-	for (i = 0; i < NTB_QP_DEF_NUM_ENTRIES; i++) {
+	for (i = 0; i < ntb_transport_rx_queue_size(qp); i++) {
 		entry = kzalloc_node(sizeof(*entry), GFP_KERNEL, node);
 		if (!entry)
 			goto err1;
@@ -2443,9 +2509,12 @@ ntb_transport_create_queue(void *data, struct device *client_dev,
 		ntb_list_add(&qp->ntb_rx_q_lock, &entry->entry,
 			     &qp->rx_free_q);
 	}
-	qp->rx_alloc_entry = NTB_QP_DEF_NUM_ENTRIES;
+	qp->rx_alloc_entry = i;
 
-	for (i = 0; i < qp->tx_max_entry; i++) {
+	tx_entries = qp->tx_max_entry;
+	if (qp->direct_dma_chan)
+		tx_entries = max(tx_entries, qp->direct_ring_entries - 1);
+	for (i = 0; i < tx_entries; i++) {
 		entry = kzalloc_node(sizeof(*entry), GFP_KERNEL, node);
 		if (!entry)
 			goto err2;
@@ -2480,6 +2549,7 @@ err2:
 	while ((entry = ntb_list_rm(&qp->ntb_tx_free_q_lock, &qp->tx_free_q)))
 		kfree(entry);
 err1:
+	ntb_direct_free_queue(qp);
 	qp->rx_alloc_entry = 0;
 	while ((entry = ntb_list_rm(&qp->ntb_rx_q_lock, &qp->rx_free_q)))
 		kfree(entry);
@@ -2590,6 +2660,8 @@ void ntb_transport_free_queue(struct ntb_transport_qp *qp)
 
 	while ((entry = ntb_list_rm(&qp->ntb_tx_offl_q_lock, &qp->tx_offl_q)))
 		kfree(entry);
+
+	ntb_direct_free_queue(qp);
 
 	qp->transport->qp_bitmap_free |= qp_bit;
 

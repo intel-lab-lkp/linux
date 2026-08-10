@@ -47,7 +47,6 @@ struct ntb_netdev {
 };
 
 #define	NTB_TX_TIMEOUT_MS	1000
-#define	NTB_RXQ_SIZE		100
 
 static void ntb_netdev_update_carrier(struct ntb_netdev *dev)
 {
@@ -82,10 +81,11 @@ static void ntb_netdev_queue_rx_drain(struct ntb_netdev_queue *queue)
 static int ntb_netdev_queue_rx_fill(struct net_device *ndev,
 				    struct ntb_netdev_queue *queue)
 {
+	unsigned int rxq_size = ntb_transport_rx_queue_size(queue->qp);
 	struct sk_buff *skb;
 	int rc, i;
 
-	for (i = 0; i < NTB_RXQ_SIZE; i++) {
+	for (i = 0; i < rxq_size; i++) {
 		skb = netdev_alloc_skb(ndev, ndev->mtu + ETH_HLEN);
 		if (!skb)
 			return -ENOMEM;
