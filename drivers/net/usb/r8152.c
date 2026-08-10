@@ -792,6 +792,7 @@ enum rtl8152_flags {
 	IN_PRE_RESET,
 	PROBED_WITH_NO_ERRORS,
 	PROBE_SHOULD_RETRY,
+	RTL8152_SYSTEM_SUSPEND,
 };
 
 #define DEVICE_ID_LENOVO_USB_C_TRAVEL_HUB		0x721e
@@ -1370,9 +1371,12 @@ static
 int get_registers(struct r8152 *tp, u16 value, u16 index, u16 size, void *data)
 {
 	int ret;
+	gfp_t gfp;
 	void *tmp;
 
-	tmp = kmalloc(size, GFP_KERNEL);
+	gfp = test_bit(RTL8152_SYSTEM_SUSPEND, &tp->flags) ? GFP_NOIO :
+							     GFP_KERNEL;
+	tmp = kmalloc(size, gfp);
 	if (!tmp)
 		return -ENOMEM;
 
@@ -1394,9 +1398,12 @@ static
 int set_registers(struct r8152 *tp, u16 value, u16 index, u16 size, void *data)
 {
 	int ret;
+	gfp_t gfp;
 	void *tmp;
 
-	tmp = kmemdup(data, size, GFP_KERNEL);
+	gfp = test_bit(RTL8152_SYSTEM_SUSPEND, &tp->flags) ? GFP_NOIO :
+							     GFP_KERNEL;
+	tmp = kmemdup(data, size, gfp);
 	if (!tmp)
 		return -ENOMEM;
 
@@ -8693,6 +8700,9 @@ static int rtl8152_system_resume(struct r8152 *tp)
 		usb_submit_urb(tp->intr_urb, GFP_NOIO);
 	}
 
+	clear_bit(RTL8152_SYSTEM_SUSPEND, &tp->flags);
+	smp_mb__after_atomic();
+
 	return 0;
 }
 
@@ -8757,6 +8767,9 @@ out1:
 static int rtl8152_system_suspend(struct r8152 *tp)
 {
 	struct net_device *netdev = tp->netdev;
+
+	set_bit(RTL8152_SYSTEM_SUSPEND, &tp->flags);
+	smp_mb__after_atomic();
 
 	netif_device_detach(netdev);
 
