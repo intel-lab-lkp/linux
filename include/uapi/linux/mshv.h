@@ -36,6 +36,7 @@ enum {
 
 enum {
 	MSHV_PT_ISOLATION_NONE,
+	MSHV_PT_ISOLATION_SNP,
 	MSHV_PT_ISOLATION_COUNT,
 };
 
@@ -219,6 +220,101 @@ struct mshv_gpap_access_bitmap {
 	__u64 bitmap_ptr;
 };
 
+enum {
+	MSHV_GPA_HOST_ACCESS_BIT_ACQUIRE,
+	MSHV_GPA_HOST_ACCESS_BIT_READABLE,
+	MSHV_GPA_HOST_ACCESS_BIT_WRITABLE,
+	MSHV_GPA_HOST_ACCESS_BIT_LARGE_PAGE,
+	MSHV_GPA_HOST_ACCESS_BIT_COUNT
+};
+
+#define MSHV_GPA_HOST_ACCESS_FLAGS_MASK \
+	((1 << MSHV_GPA_HOST_ACCESS_BIT_COUNT) - 1)
+
+struct mshv_modify_gpa_host_access {
+	__u8 flags;
+	__u8 rsvd[7];
+	__u64 page_count;
+	__u64 guest_pfns[];
+};
+
+enum {
+	MSHV_ISOLATED_PAGE_NORMAL,
+	MSHV_ISOLATED_PAGE_VMSA,
+	MSHV_ISOLATED_PAGE_ZERO,
+	MSHV_ISOLATED_PAGE_UNMEASURED,
+	MSHV_ISOLATED_PAGE_SECRETS,
+	MSHV_ISOLATED_PAGE_CPUID,
+	MSHV_ISOLATED_PAGE_COUNT
+};
+
+struct mshv_import_isolated_pages {
+	__u8 page_type;
+	__u8 rsvd[7];
+	__u64 page_count;
+	__u64 guest_pfns[];
+};
+
+struct mshv_issue_psp_guest_request {
+	__u64 req_gpa;
+	__u64 rsp_gpa;
+};
+
+struct mshv_sev_snp_ap_create {
+	__u64 vp_id;
+	__u64 vmsa_gpa;
+};
+
+union mshv_snp_guest_policy {
+	struct {
+		__u64 minor_version : 8;
+		__u64 major_version : 8;
+		__u64 smt_allowed : 1;
+		__u64 vmpls_required : 1;
+		__u64 migration_agent_allowed : 1;
+		__u64 debug_allowed : 1;
+		__u64 reserved : 44;
+	} __attribute__((packed));
+	__u64 as_uint64;
+};
+
+struct mshv_snp_id_block {
+	__u8 launch_digest[48];
+	__u8 family_id[16];
+	__u8 image_id[16];
+	__u32 version;
+	__u32 guest_svn;
+	union mshv_snp_guest_policy policy;
+} __attribute__((packed));
+
+struct mshv_snp_id_auth_info {
+	__u32 id_key_algorithm;
+	__u32 auth_key_algorithm;
+	__u8 reserved0[56];
+	__u8 id_block_signature[512];
+	__u8 id_key[1028];
+	__u8 reserved1[60];
+	__u8 id_key_signature[512];
+	__u8 author_key[1028];
+} __attribute__((packed));
+
+struct mshv_psp_launch_finish_data {
+	struct mshv_snp_id_block id_block;
+	struct mshv_snp_id_auth_info id_auth_info;
+	__u8 host_data[32];
+	__u8 id_block_enabled;
+	__u8 author_key_enabled;
+} __attribute__((packed));
+
+union mshv_partition_complete_isolated_import_data {
+	__u64 reserved;
+	struct mshv_psp_launch_finish_data psp_parameters;
+} __attribute__((packed));
+
+struct mshv_complete_isolated_import {
+	union mshv_partition_complete_isolated_import_data import_data;
+};
+
 /**
  * struct mshv_root_hvcall - arguments for MSHV_ROOT_HVCALL
  * @code: Hypercall code (HVCALL_*)
@@ -254,6 +350,11 @@ struct mshv_root_hvcall {
 #define MSHV_GET_GPAP_ACCESS_BITMAP	_IOWR(MSHV_IOCTL, 0x06, struct mshv_gpap_access_bitmap)
 /* Generic hypercall */
 #define MSHV_ROOT_HVCALL		_IOWR(MSHV_IOCTL, 0x07, struct mshv_root_hvcall)
+#define MSHV_MODIFY_GPA_HOST_ACCESS	_IOW(MSHV_IOCTL, 0x09, struct mshv_modify_gpa_host_access)
+#define MSHV_IMPORT_ISOLATED_PAGES	_IOW(MSHV_IOCTL, 0x0A, struct mshv_import_isolated_pages)
+#define MSHV_COMPLETE_ISOLATED_IMPORT	_IOW(MSHV_IOCTL, 0xF4, struct mshv_complete_isolated_import)
+#define MSHV_ISSUE_PSP_GUEST_REQUEST	_IOW(MSHV_IOCTL, 0xF5, struct mshv_issue_psp_guest_request)
+#define MSHV_SEV_SNP_AP_CREATE		_IOW(MSHV_IOCTL, 0xF6, struct mshv_sev_snp_ap_create)
 
 /*
  ********************************
