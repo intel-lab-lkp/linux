@@ -18,15 +18,31 @@ maintainers:
 
 allOf:
   - $ref: ../dma-controller.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - amd,versal2-dma-1.0
+              - amd,versal-net-dma-1.0
+    then:
+      required:
+        - resets
+    else:
+      properties:
+        resets: false
 
 properties:
   "#dma-cells":
     const: 1
 
   compatible:
-    enum:
-      - amd,versal2-dma-1.0
-      - xlnx,zynqmp-dma-1.0
+    oneOf:
+      - const: amd,versal2-dma-1.0
+      - const: xlnx,zynqmp-dma-1.0
+      - items:
+          - const: amd,versal-net-dma-1.0
+          - const: xlnx,zynqmp-dma-1.0
 
   reg:
     description: memory map for gdma/adma module access
@@ -57,6 +73,9 @@ properties:
     maxItems: 1
 
   power-domains:
+    maxItems: 1
+
+  resets:
     maxItems: 1
 
   dma-coherent: true
