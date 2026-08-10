@@ -1497,8 +1497,10 @@ static int keembay_gpiochip_probe(struct keembay_pinctrl *kpc,
 		int irq;
 
 		irq = platform_get_irq_optional(pdev, i);
-		if (irq <= 0)
+		if (irq == -ENXIO)
 			continue;
+		if (irq < 0)
+			return irq;
 
 		girq->parents[i]	= irq;
 		kmb_irq->line	= girq->parents[i];
