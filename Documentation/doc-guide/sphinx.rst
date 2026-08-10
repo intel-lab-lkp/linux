@@ -147,7 +147,9 @@ documentation. After installing MacTeX, restart the terminal or run
 ``eval "$(/usr/libexec/path_helper)"`` so its command-line tools are visible.
 The default virtualenv mode is recommended on macOS because PyYAML is
 installed from ``Documentation/sphinx/requirements.txt`` rather than from a
-Homebrew formula.
+Homebrew formula. The script also checks for GNU Make 4.0 or newer; when
+Homebrew provides it as ``gmake``, use ``gmake htmldocs`` instead of
+``make htmldocs``.
 
 Installing Sphinx Minimal Version
 ---------------------------------

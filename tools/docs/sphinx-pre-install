@@ -40,6 +40,7 @@ from kdoc.python_version import PythonVersion
 
 RECOMMENDED_VERSION = PythonVersion("3.4.3").version
 MIN_PYTHON_VERSION = PythonVersion("3.7").version
+MIN_MAKE_VERSION = PythonVersion("4.0").version
 
 
 class DepManager:
@@ -307,6 +308,44 @@ class MissingCheckers(AncillaryMethods):
         self.deps.add_package(prog, dtype)
 
         return None
+
+    def get_make_version(self, cmd):
+        """Get the GNU Make version, or None if cmd is not GNU Make."""
+        if not cmd:
+            return None
+
+        try:
+            result = self.run(
+                [cmd, "--version"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+        match = re.search(
+            r"^GNU Make\s+([0-9]+(?:\.[0-9]+)*)", result.stdout, re.MULTILINE
+        )
+        if not match:
+            return None
+
+        return PythonVersion.parse_version(match.group(1))
+
+    def check_make(self):
+        """Check for GNU Make 4.0 or newer."""
+        candidates = (
+            os.environ.get("MAKE"),
+            self.which("gmake"),
+            self.which("make"),
+        )
+
+        for make in candidates:
+            version = self.get_make_version(make)
+            if version and version >= MIN_MAKE_VERSION:
+                return
+
+        self.deps.add_package("make", DepManager.SYSTEM_MANDATORY)
 
     def check_perl_module(self, prog, dtype):
         """
@@ -1559,7 +1598,7 @@ class SphinxDependencyChecker(MissingCheckers):
         # Check for needed programs/tools
         self.check_perl_module("Pod::Usage", DepManager.SYSTEM_MANDATORY)
 
-        self.check_program("make", DepManager.SYSTEM_MANDATORY)
+        self.check_make()
         self.check_program("which", DepManager.SYSTEM_MANDATORY)
 
         self.check_program("dot", DepManager.SYSTEM_OPTIONAL)
