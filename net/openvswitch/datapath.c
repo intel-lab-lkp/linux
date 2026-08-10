@@ -480,6 +480,8 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 	}
 
 	skb_len = min(skb->len, cutlen);
+	if (!skb_frags_readable(skb))
+		skb_len = min_t(size_t, skb_len, skb_headlen(skb));
 	if (nla_attr_size(skb_len) > USHRT_MAX) {
 		err = -EFBIG;
 		goto out;
