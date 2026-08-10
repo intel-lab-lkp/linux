@@ -55,6 +55,7 @@
 #include <linux/export.h>
 #include <linux/interrupt.h>
 #include <linux/kthread.h>
+#include <linux/limits.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
@@ -263,6 +264,61 @@ enum {
 	DESC_DONE_FLAG = BIT(0),
 	LINK_DOWN_FLAG = BIT(1),
 };
+
+/* RX publications are pushed into the sender's local copy. */
+struct ntb_direct_pub {
+	u32 addr_lo;
+	u32 addr_hi;
+	u32 len;
+};
+
+/* During a session, the peer writes this area and the local CPU reads it. */
+struct ntb_direct_shared {
+	/* Peer session ID and the peer's ack of the local session. */
+	u32 session;
+	u32 session_ack;
+
+	/*
+	 * Tearing down a direct-DMA session must keep RX mappings valid until
+	 * completions for all in-flight transfers have been consumed. Each peer
+	 * publishes its final issued TX boundary, followed by a session-tagged
+	 * quiesce marker, using CPU MMIO writes to the peer's memory window.
+	 * The marker may arrive before earlier DMA writes because the CPU and
+	 * DMA paths may use different PCIe ordering domains. Quiesce is
+	 * therefore acknowledged only after completions through the published
+	 * boundary have been consumed:
+	 * - quiesce_issue: exclusive boundary of the peer's issued TX work that
+	 *                  local RX must consume.
+	 * - quiesce: local session ID written by the peer after quiesce_issue,
+	 *            validating that boundary for the current session.
+	 * - quiesce_ack: local session ID confirming that the peer consumed
+	 *                local TX through its final boundary.
+	 */
+	u32 quiesce_issue;
+	u32 quiesce;
+	u32 quiesce_ack;
+
+	/* Base address of the peer's RX completion array. */
+	u32 cpl_addr_lo;
+	u32 cpl_addr_hi;
+
+	/* Exclusive producer boundary for the peer RX publications below. */
+	u32 pub_head;
+
+	/* Peer RX buffer publications in ring order. */
+	struct ntb_direct_pub pub[];
+};
+
+/* Bound per-QP completion arrays and software queue allocations. */
+#define NTB_DIRECT_MAX_RING_ENTRIES	4096
+
+/* Zero is pending, U32_MAX is an error, and other values are lengths. */
+#define NTB_DIRECT_CPL_ERROR		U32_MAX
+
+static inline size_t ntb_direct_shared_size(unsigned int entries)
+{
+	return struct_size_t(struct ntb_direct_shared, pub, entries);
+}
 
 struct ntb_payload_header {
 	unsigned int ver;
