@@ -14,6 +14,7 @@
 #include <linux/dev_printk.h>
 #include <linux/device.h>
 #include <linux/device/devres.h>
+#include <linux/dmi.h>
 #include <linux/err.h>
 #include <linux/hwmon.h>
 #include <linux/init.h>
@@ -153,6 +154,11 @@ struct bitland_fan_notify_data {
 	u16 speed;
 };
 
+struct bitland_mifs_quirk {
+	bool no_full_speed;
+	bool skip_ac_type;	/* EC always returns 0 for AC type */
+};
+
 struct bitland_mifs_wmi_data {
 	struct wmi_device *wdev;
 	struct mutex lock;		/* Protects WMI calls */
@@ -162,6 +168,28 @@ struct bitland_mifs_wmi_data {
 	struct device *hwmon_dev;
 	struct device *pp_dev;
 	enum platform_profile_option saved_profile;
+	struct bitland_mifs_quirk *quirk;
+};
+
+static struct bitland_mifs_quirk bitland_quirk_mrid6 = {
+	.no_full_speed = true,
+	.skip_ac_type = true,
+};
+
+static const struct dmi_system_id bitland_quirks[] = {
+	{
+		/*
+		 * MECHREVO MRID6: does not implement WMI_PP_FULL_SPEED,
+		 * its top profile is WMI_PP_PERFORMANCE; WMI_FN_SYSTEM_AC_TYPE
+		 * always returns 0, so the adapter type check is meaningless.
+		 */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "MECHREVO"),
+			DMI_MATCH(DMI_BOARD_NAME, "MRID6"),
+		},
+		.driver_data = (void *)&bitland_quirk_mrid6,
+	},
+	{}
 };
 
 static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
@@ -209,7 +237,10 @@ static int laptop_profile_get(struct device *dev,
 		*profile = PLATFORM_PROFILE_BALANCED;
 		break;
 	case WMI_PP_PERFORMANCE:
-		*profile = PLATFORM_PROFILE_BALANCED_PERFORMANCE;
+		if (data->quirk && data->quirk->no_full_speed)
+			*profile = PLATFORM_PROFILE_PERFORMANCE;
+		else
+			*profile = PLATFORM_PROFILE_BALANCED_PERFORMANCE;
 		break;
 	case WMI_PP_QUIET:
 		*profile = PLATFORM_PROFILE_LOW_POWER;
@@ -235,6 +266,10 @@ static int bitland_check_performance_capability(struct bitland_mifs_wmi_data *da
 	/* Full-speed/performance mode requires DC power (not USB-C) */
 	if (!power_supply_is_system_supplied())
 		return -EOPNOTSUPP;
+
+	/* Some ECs never report a meaningful AC type (always 0), skip it */
+	if (data->quirk && data->quirk->skip_ac_type)
+		return 0;
 
 	ret = bitland_mifs_wmi_call(data, &input, &output);
 	if (ret)
@@ -267,6 +302,8 @@ static int laptop_profile_set(struct device *dev,
 		val = WMI_PP_BALANCED;
 		break;
 	case PLATFORM_PROFILE_BALANCED_PERFORMANCE:
+		if (data->quirk && data->quirk->no_full_speed)
+			return -EOPNOTSUPP;
 		ret = bitland_check_performance_capability(data);
 		if (ret)
 			return ret;
@@ -276,7 +313,10 @@ static int laptop_profile_set(struct device *dev,
 		ret = bitland_check_performance_capability(data);
 		if (ret)
 			return ret;
-		val = WMI_PP_FULL_SPEED;
+		if (data->quirk && data->quirk->no_full_speed)
+			val = WMI_PP_PERFORMANCE;
+		else
+			val = WMI_PP_FULL_SPEED;
 		break;
 	default:
 		return -EOPNOTSUPP;
@@ -289,11 +329,17 @@ static int laptop_profile_set(struct device *dev,
 
 static int platform_profile_probe(void *drvdata, unsigned long *choices)
 {
+	struct bitland_mifs_wmi_data *data = drvdata;
+
 	set_bit(PLATFORM_PROFILE_LOW_POWER, choices);
 	set_bit(PLATFORM_PROFILE_BALANCED, choices);
-	set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE, choices);
-	set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
-
+	if (data->quirk && data->quirk->no_full_speed) {
+		/* No separate balanced-performance tier; performance is the top mode */
+		set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
+	} else {
+		set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE, choices);
+		set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
+	}
 	return 0;
 }
 
@@ -815,6 +861,7 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 		.default_label = ":" LED_FUNCTION_KBD_BACKLIGHT,
 		.devname_mandatory = true,
 	};
+	const struct dmi_system_id *match;
 	int ret;
 
 	drv_data = devm_kzalloc(&wdev->dev, sizeof(*drv_data), GFP_KERNEL);
@@ -828,6 +875,11 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 		return ret;
 
 	dev_set_drvdata(&wdev->dev, drv_data);
+
+	/* Apply machine-specific quirks */
+	match = dmi_first_match(bitland_quirks);
+	if (match && match->driver_data)
+		drv_data->quirk = match->driver_data;
 
 	if (dev_type == BITLAND_WMI_EVENT) {
 		/* Register input device for hotkeys */
