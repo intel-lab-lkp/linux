@@ -36,8 +36,10 @@ void *ife_encode(struct sk_buff *skb, u16 metalen)
 	/* OUTERHDR:TOTMETALEN:{TLVHDR:Metadatum:TLVHDR..}:ORIGDATA
 	 * where ORIGDATA = original ethernet header ...
 	 */
+	unsigned int hdrlen = skb_at_tc_ingress(skb) ?
+			      skb->mac_len : skb->dev->hard_header_len;
 	int hdrm = metalen + IFE_METAHDRLEN;
-	int total_push = hdrm + skb->dev->hard_header_len;
+	int total_push = hdrm + hdrlen;
 	struct ifeheadr *ifehdr;
 	struct ethhdr *iethh;	/* inner ether header */
 	int skboff = 0;
@@ -50,9 +52,9 @@ void *ife_encode(struct sk_buff *skb, u16 metalen)
 	iethh = (struct ethhdr *) skb->data;
 
 	__skb_push(skb, total_push);
-	memcpy(skb->data, iethh, skb->dev->hard_header_len);
+	memcpy(skb->data, iethh, hdrlen);
 	skb_reset_mac_header(skb);
-	skboff += skb->dev->hard_header_len;
+	skboff += hdrlen;
 
 	/* total metadata length */
 	ifehdr = (struct ifeheadr *) (skb->data + skboff);
@@ -65,16 +67,18 @@ EXPORT_SYMBOL_GPL(ife_encode);
 
 void *ife_decode(struct sk_buff *skb, u16 *metalen)
 {
+	unsigned int hdrlen = skb_at_tc_ingress(skb) ?
+			      skb->mac_len : skb->dev->hard_header_len;
 	struct ifeheadr *ifehdr;
 	int total_pull;
 	u16 ifehdrln;
 
-	if (!pskb_may_pull(skb, skb->dev->hard_header_len + IFE_METAHDRLEN))
+	if (!pskb_may_pull(skb, hdrlen + IFE_METAHDRLEN))
 		return NULL;
 
-	ifehdr = (struct ifeheadr *) (skb->data + skb->dev->hard_header_len);
+	ifehdr = (struct ifeheadr *)(skb->data + hdrlen);
 	ifehdrln = ntohs(ifehdr->metalen);
-	total_pull = skb->dev->hard_header_len + ifehdrln;
+	total_pull = hdrlen + ifehdrln;
 
 	if (unlikely(ifehdrln < 2))
 		return NULL;
@@ -82,7 +86,7 @@ void *ife_decode(struct sk_buff *skb, u16 *metalen)
 	if (unlikely(!pskb_may_pull(skb, total_pull + ETH_HLEN)))
 		return NULL;
 
-	ifehdr = (struct ifeheadr *)(skb->data + skb->dev->hard_header_len);
+	ifehdr = (struct ifeheadr *)(skb->data + hdrlen);
 	skb_set_mac_header(skb, total_pull);
 	__skb_pull(skb, total_pull);
 	*metalen = ifehdrln - IFE_METAHDRLEN;

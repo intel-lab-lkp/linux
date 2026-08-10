@@ -723,7 +723,7 @@ static int tcf_ife_decode(struct sk_buff *skb, const struct tc_action *a,
 	tcf_lastuse_update(&ife->tcf_tm);
 
 	if (skb_at_tc_ingress(skb))
-		skb_push(skb, skb->dev->hard_header_len);
+		skb_push(skb, skb->mac_len);
 
 	tlv_data = ife_decode(skb, &metalen);
 	if (unlikely(!tlv_data)) {
@@ -826,7 +826,7 @@ drop:
 	}
 
 	if (skb_at_tc_ingress(skb))
-		skb_push(skb, skb->dev->hard_header_len);
+		skb_push(skb, skb->mac_len);
 
 	ife_meta = ife_encode(skb, metalen);
 	if (!ife_meta)
@@ -856,7 +856,7 @@ drop:
 	oethh->h_proto = htons(p->eth_type);
 
 	if (skb_at_tc_ingress(skb))
-		skb_pull(skb, skb->dev->hard_header_len);
+		skb_pull(skb, skb->mac_len);
 
 	return action;
 }
