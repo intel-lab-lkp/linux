@@ -61,8 +61,9 @@ static int gic_next_event(unsigned long delta, struct clock_event_device *evt)
 	if (cpu == raw_smp_processor_id()) {
 		write_gic_vl_compare(cnt);
 	} else {
-		write_gic_vl_other(mips_cm_vp_id(cpu));
+		mips_cm_lock_other_cpu(cpu, CM_GCR_Cx_OTHER_BLOCK_LOCAL);
 		write_gic_vo_compare(cnt);
+		mips_cm_unlock_other();
 	}
 	res = ((int)(gic_read_count() - cnt) >= 0) ? -ETIME : 0;
 	return res;
