@@ -523,7 +523,15 @@ int amdgpu_userq_signal_ioctl(struct drm_device *dev, void *data,
 		goto put_queue;
 
 	/* We are here means UQ is active, make sure the eviction fence is valid */
-	amdgpu_userq_ensure_ev_fence(&fpriv->userq_mgr, &fpriv->evf_mgr);
+	r = amdgpu_userq_ensure_ev_fence(&fpriv->userq_mgr, &fpriv->evf_mgr);
+	if (r) {
+		/* The fence is not initialized yet, so unwind it by hand */
+		amdgpu_userq_fence_put_fence_drv_array(fence);
+		amdgpu_userq_fence_driver_put(fence->fence_drv);
+		kvfree(fence->fence_drv_array);
+		kfree(fence);
+		goto put_queue;
+	}
 
 	/* Create the new fence */
 	amdgpu_userq_fence_init(queue, fence, wptr);

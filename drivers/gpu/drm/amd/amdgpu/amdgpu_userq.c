@@ -448,12 +448,16 @@ static void amdgpu_userq_cleanup(struct amdgpu_usermode_queue *queue)
  * Ensures that a valid and not yet signaled eviction fence is attached to the
  * usermode queue before any queue operations proceed. If it is signalled, then
  * rearm a new eviction fence.
+ *
+ * Returns 0 with @uq_mgr->userq_mutex held, or -ENOMEM with the mutex released
+ * when the restore worker could not rearm the fence.
  */
-void
+int
 amdgpu_userq_ensure_ev_fence(struct amdgpu_userq_mgr *uq_mgr,
 			     struct amdgpu_eviction_fence_mgr *evf_mgr)
 {
 	struct dma_fence *ev_fence;
+	int seq, prev_seq = -1;
 
 retry:
 	/* Flush any pending resume work to create ev_fence */
@@ -463,7 +467,16 @@ retry:
 	ev_fence = amdgpu_evf_mgr_get_fence(evf_mgr);
 	if (dma_fence_is_signaled(ev_fence)) {
 		dma_fence_put(ev_fence);
+		seq = atomic_read(&evf_mgr->ev_fence_seq);
 		mutex_unlock(&uq_mgr->userq_mutex);
+		/*
+		 * The sequence number is only bumped by a successful rearm, so
+		 * if the flush above ran the worker without moving it then the
+		 * restore failed and looping again would never terminate.
+		 */
+		if (seq == prev_seq)
+			return -ENOMEM;
+		prev_seq = seq;
 		/*
 		 * Looks like there was no pending resume work,
 		 * add one now to create a valid eviction fence
@@ -472,6 +485,8 @@ retry:
 		goto retry;
 	}
 	dma_fence_put(ev_fence);
+
+	return 0;
 }
 
 
@@ -747,7 +762,9 @@ amdgpu_userq_create(struct drm_file *filp, union drm_amdgpu_userq *args)
 	if (r)
 		goto clean_mqd;
 
-	amdgpu_userq_ensure_ev_fence(&fpriv->userq_mgr, &fpriv->evf_mgr);
+	r = amdgpu_userq_ensure_ev_fence(&fpriv->userq_mgr, &fpriv->evf_mgr);
+	if (r)
+		goto erase_doorbell;
 
 	/* don't map the queue if scheduling is halted */
 	if (!adev->userq_halt_for_enforce_isolation ||

@@ -164,8 +164,8 @@ void amdgpu_userq_mgr_fini(struct amdgpu_userq_mgr *userq_mgr);
 
 void amdgpu_userq_evict(struct amdgpu_userq_mgr *uq_mgr);
 
-void amdgpu_userq_ensure_ev_fence(struct amdgpu_userq_mgr *userq_mgr,
-				  struct amdgpu_eviction_fence_mgr *evf_mgr);
+int amdgpu_userq_ensure_ev_fence(struct amdgpu_userq_mgr *userq_mgr,
+				 struct amdgpu_eviction_fence_mgr *evf_mgr);
 
 u32 amdgpu_userq_get_supported_ip_mask(struct amdgpu_device *adev);
 bool amdgpu_userq_enabled(struct drm_device *dev);
