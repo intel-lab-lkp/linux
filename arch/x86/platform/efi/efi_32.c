@@ -84,7 +84,11 @@ int __init efi_setup_page_tables(unsigned long pa_memmap, unsigned num_pages)
 	return 0;
 }
 
-void __init efi_map_region_fixed(efi_memory_desc_t *md) {}
+int __init efi_map_region_fixed(efi_memory_desc_t *md)
+{
+	return 0;
+}
+
 void __init parse_efi_setup(u64 phys_addr, u32 data_len) {}
 
 efi_status_t efi_call_svam(efi_runtime_services_t * const *,

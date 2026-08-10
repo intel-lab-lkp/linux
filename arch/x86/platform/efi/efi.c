@@ -735,8 +735,14 @@ static void __init kexec_enter_virtual_mode(void)
 	* Map efi regions which were passed via setup_data. The virt_addr is a
 	* fixed addr which was used in first kernel of a kexec boot.
 	*/
-	for_each_efi_memory_desc(md)
-		efi_map_region_fixed(md); /* FIXME: add error handling */
+	for_each_efi_memory_desc(md) {
+		if (efi_map_region_fixed(md)) {
+			pr_err("Failed to map fixed EFI region\n");
+			clear_bit(EFI_RUNTIME_SERVICES, &efi.flags);
+			return;
+		}
+
+	}
 
 	/*
 	 * Unregister the early EFI memmap from efi_init() and install
