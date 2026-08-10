@@ -4957,6 +4957,9 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	/* Prevent swapoff from happening to us. */
 	si = get_swap_device(entry);
 	if (IS_ERR_OR_NULL(si)) {
+		/* A malformed entry never becomes valid, so don't retry it. */
+		if (IS_ERR(si))
+			ret = VM_FAULT_SIGBUS;
 		si = NULL;
 		goto out;
 	}
