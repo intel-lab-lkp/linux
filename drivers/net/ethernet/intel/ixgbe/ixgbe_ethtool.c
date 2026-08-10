@@ -3852,6 +3852,19 @@ static int ixgbe_set_priv_flags(struct net_device *netdev, u32 priv_flags)
 		}
 	}
 
+	/* Do not allow any change to link-down-on-close when Total Port
+	 * Shutdown is enabled - the flag is managed by TPS exclusively.
+	 */
+	if (adapter->flags2 & IXGBE_FLAG2_TOTAL_PORT_SHUTDOWN_ENA) {
+		bool cur = !!(adapter->flags2 & IXGBE_FLAG2_LINK_DOWN_ON_CLOSE);
+		bool req = !!(priv_flags & IXGBE_PRIV_LINK_DOWN_ON_CLOSE);
+
+		if (req != cur) {
+			e_warn(probe, "Setting link-down-on-close not supported on this port\n");
+			return -EOPNOTSUPP;
+		}
+	}
+
 	flags2 &= ~IXGBE_FLAG2_LINK_DOWN_ON_CLOSE;
 	if (priv_flags & IXGBE_PRIV_LINK_DOWN_ON_CLOSE) {
 		if (adapter->hw.mac.type == ixgbe_mac_e610) {
