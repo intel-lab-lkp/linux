@@ -6265,7 +6265,7 @@ static int handle_encls(struct kvm_vcpu *vcpu)
 }
 #endif /* CONFIG_X86_SGX_KVM */
 
-static int handle_bus_lock_vmexit(struct kvm_vcpu *vcpu)
+int handle_bus_lock_vmexit(struct kvm_vcpu *vcpu)
 {
 	/*
 	 * Hardware may or may not set the BUS_LOCK_DETECTED flag on BUS_LOCK

@@ -379,6 +379,7 @@ bool __vmx_vcpu_run(struct vcpu_vmx *vmx, unsigned int flags);
 void vmx_ept_load_pdptrs(struct kvm_vcpu *vcpu);
 
 void vmx_set_intercept_for_msr(struct kvm_vcpu *vcpu, u32 msr, int type, bool set);
+int handle_bus_lock_vmexit(struct kvm_vcpu *vcpu);
 
 static inline void vmx_disable_intercept_for_msr(struct kvm_vcpu *vcpu,
 						 u32 msr, int type)
