@@ -213,6 +213,8 @@ struct ntb_transport_qp {
 	struct list_head direct_rx_q;
 	u32 *direct_rx_cpl;
 	dma_addr_t direct_rx_cpl_dma;
+	/* Entries on the direct RX/TX queues own their DMA mappings. */
+	struct list_head direct_tx_q;
 	u32 *direct_tx_cpl;
 	dma_addr_t direct_tx_cpl_dma;
 	u32 direct_rx_prod;
@@ -222,6 +224,7 @@ struct ntb_transport_qp {
 	u32 direct_session;
 	u32 direct_peer_session;
 	enum ntb_direct_state direct_state;
+	bool direct_tx_failed;
 	void *rx_buff;
 	unsigned int rx_index;
 	unsigned int rx_max_entry;
@@ -707,6 +710,7 @@ static void ntb_direct_session_start(struct ntb_transport_qp *qp)
 	guard(spinlock_bh)(&qp->direct_lock);
 	qp->direct_session = session;
 	qp->direct_peer_session = 0;
+	qp->direct_tx_failed = false;
 	qp->direct_state = NTB_DIRECT_HANDSHAKE;
 }
 
@@ -1452,6 +1456,7 @@ static void ntb_qp_link_context_reset(struct ntb_transport_qp *qp)
 	qp->direct_session = 0;
 	qp->direct_peer_session = 0;
 	qp->direct_state = NTB_DIRECT_DOWN;
+	qp->direct_tx_failed = false;
 }
 
 static void ntb_qp_link_down_reset(struct ntb_transport_qp *qp)
@@ -1830,6 +1835,7 @@ static int ntb_transport_init_queue(struct ntb_transport_ctx *nt,
 	INIT_LIST_HEAD(&qp->tx_free_q);
 	INIT_LIST_HEAD(&qp->tx_offl_q);
 	INIT_LIST_HEAD(&qp->direct_rx_q);
+	INIT_LIST_HEAD(&qp->direct_tx_q);
 
 	INIT_WORK(&qp->rxc_db_work, ntb_transport_rxc_db);
 	INIT_DELAYED_WORK(&qp->direct_rx_retry, ntb_direct_rx_retry_work);
@@ -2743,6 +2749,15 @@ err:
 	return -ENXIO;
 }
 
+static unsigned int
+ntb_transport_mw_tx_free_entry(struct ntb_transport_qp *qp)
+{
+	unsigned int head = qp->tx_index;
+	unsigned int tail = qp->remote_rx_info->entry;
+
+	return tail >= head ? tail - head : qp->tx_max_entry + tail - head;
+}
+
 static void ntb_async_tx(struct ntb_transport_qp *qp,
 			 struct ntb_queue_entry *entry)
 {
@@ -2756,7 +2771,7 @@ static void ntb_async_tx(struct ntb_transport_qp *qp,
 	hdr = offset + qp->tx_max_frame - sizeof(struct ntb_payload_header);
 	entry->tx_hdr = hdr;
 
-	WARN_ON_ONCE(!ntb_transport_tx_free_entry(qp));
+	WARN_ON_ONCE(!ntb_transport_mw_tx_free_entry(qp));
 	WRITE_ONCE(qp->tx_index, (qp->tx_index + 1) % qp->tx_max_entry);
 
 	iowrite32(entry->len, &hdr->len);
@@ -2780,10 +2795,229 @@ err:
 	qp->tx_memcpy++;
 }
 
+static bool ntb_direct_tx_enabled(struct ntb_transport_qp *qp)
+{
+	return ntb_direct_tx_mode(qp) &&
+	       READ_ONCE(qp->direct_state) == NTB_DIRECT_ACTIVE;
+}
+
+static int ntb_direct_tx_publication(struct ntb_transport_qp *qp, u32 issue,
+				     dma_addr_t *dst, dma_addr_t *cpl_dst,
+				     unsigned int *len)
+{
+	struct ntb_direct_shared *shared = qp->direct_shared;
+	struct ntb_direct_pub *pub;
+	u32 head, idx, used;
+
+	lockdep_assert_held(&qp->direct_lock);
+
+	head = READ_ONCE(shared->pub_head);
+	used = ntb_direct_ring_used(head, issue);
+	if (!used)
+		return -ENOSPC;
+	if (used > qp->direct_ring_entries - 1)
+		return -EPROTO;
+
+	/* pub_head is written after the publication slot. */
+	dma_rmb();
+	idx = ntb_direct_ring_idx(qp, issue);
+	pub = &shared->pub[idx];
+
+	*dst = (u64)READ_ONCE(pub->addr_hi) << 32 |
+	       READ_ONCE(pub->addr_lo);
+	*cpl_dst = ((u64)READ_ONCE(shared->cpl_addr_hi) << 32 |
+		     READ_ONCE(shared->cpl_addr_lo)) + idx * sizeof(u32);
+	*len = READ_ONCE(pub->len);
+
+	return 0;
+}
+
+static void ntb_direct_tx_complete(struct ntb_transport_qp *qp,
+				   struct ntb_queue_entry *entry)
+{
+	int cb_len;
+
+	cb_len = entry->errors ? -EIO : entry->len;
+	if (!entry->errors) {
+		qp->tx_bytes += entry->len;
+		qp->tx_pkts++;
+	}
+
+	if (qp->tx_handler)
+		qp->tx_handler(qp, qp->cb_data, entry->cb_data, cb_len);
+	ntb_list_add(&qp->ntb_tx_free_q_lock, &entry->entry, &qp->tx_free_q);
+
+	if (ntb_link_is_up(qp->ndev, NULL, NULL) == 1)
+		ntb_transport_notify_peer(qp);
+}
+
+static bool ntb_direct_tx_fail(struct ntb_transport_qp *qp)
+{
+	bool cleanup = !qp->direct_tx_failed && qp->client_ready;
+
+	lockdep_assert_held(&qp->direct_lock);
+
+	qp->direct_tx_failed = true;
+	qp->direct_state = NTB_DIRECT_QUIESCING;
+
+	return cleanup;
+}
+
+static void ntb_direct_tx_callback(void *data,
+				   const struct dmaengine_result *res)
+{
+	struct ntb_queue_entry *entry = data;
+	struct ntb_transport_qp *qp = entry->qp;
+	struct device *dma_dev = dmaengine_get_dma_device(qp->direct_dma_chan);
+	bool error;
+
+	error = res && res->result != DMA_TRANS_NOERROR;
+	if (error) {
+		bool cleanup;
+
+		scoped_guard(spinlock_bh, &qp->direct_lock) {
+			entry->errors++;
+			cleanup = ntb_direct_tx_fail(qp);
+		}
+
+		ntb_direct_control_progress(qp);
+		if (cleanup && ntb_link_is_up(qp->ndev, NULL, NULL) == 1)
+			schedule_work(&qp->link_cleanup);
+		return;
+	}
+
+	dma_unmap_single(dma_dev, entry->direct_dma_addr, entry->len,
+			 DMA_TO_DEVICE);
+
+	/* The channel filter excludes out-of-order completion. */
+	scoped_guard(spinlock_bh, &qp->direct_lock)
+		list_del(&entry->entry);
+
+	ntb_direct_tx_complete(qp, entry);
+
+	scoped_guard(spinlock_bh, &qp->direct_lock)
+		qp->direct_tx_cons++;
+}
+
+static int ntb_direct_tx_submit(struct ntb_transport_qp *qp,
+				struct ntb_queue_entry *entry)
+{
+	struct dma_async_tx_descriptor *payload, *completion;
+	struct dma_chan *chan = qp->direct_dma_chan;
+	struct device *dma_dev = dmaengine_get_dma_device(chan);
+	struct dma_slave_config config = {};
+	dma_addr_t cpl_dma_addr, cpl_dst, dma_addr, dst;
+	unsigned int published_len;
+	bool schedule_cleanup = false;
+	bool terminate = false;
+	u32 issue, idx;
+	int rc;
+
+	if (entry->len > INT_MAX)
+		return -EMSGSIZE;
+
+	dma_addr = dma_map_single(dma_dev, entry->buf, entry->len,
+				  DMA_TO_DEVICE);
+	if (dma_mapping_error(dma_dev, dma_addr))
+		return -EIO;
+
+	scoped_guard(spinlock_bh, &qp->direct_lock) {
+		if (!ntb_direct_tx_enabled(qp)) {
+			rc = -ENOLINK;
+			goto unmap;
+		}
+
+		issue = qp->direct_tx_issue;
+		if (ntb_direct_ring_used(issue, qp->direct_tx_cons) >=
+		    qp->direct_ring_entries - 1) {
+			rc = -ENOSPC;
+			goto unmap;
+		}
+
+		rc = ntb_direct_tx_publication(qp, issue, &dst, &cpl_dst,
+					       &published_len);
+		if (rc)
+			goto unmap;
+		if (entry->len > published_len) {
+			rc = -EMSGSIZE;
+			goto unmap;
+		}
+
+		idx = ntb_direct_ring_idx(qp, issue);
+		entry->direct_dma_addr = dma_addr;
+		entry->direct_cpl_addr = cpl_dst;
+		qp->direct_tx_cpl[idx] = entry->len;
+		dma_wmb();
+
+		config.direction = DMA_MEM_TO_DEV;
+		config.dst_addr = dst;
+		payload = dmaengine_prep_config_single_safe(chan, dma_addr,
+							    entry->len,
+							    DMA_MEM_TO_DEV,
+							    DMA_CTRL_ACK,
+							    &config);
+
+		if (!payload) {
+			rc = -EIO;
+			goto unmap;
+		}
+
+		rc = dma_submit_error(dmaengine_submit(payload));
+		if (rc)
+			goto unmap;
+
+		list_add_tail(&entry->entry, &qp->direct_tx_q);
+		qp->direct_tx_issue = issue + 1;
+
+		config.dst_addr = cpl_dst;
+		cpl_dma_addr = qp->direct_tx_cpl_dma + idx * sizeof(u32);
+		completion = dmaengine_prep_config_single_safe(chan,
+							       cpl_dma_addr,
+							       sizeof(u32),
+							       DMA_MEM_TO_DEV,
+							       DMA_CTRL_ACK |
+							       DMA_PREP_INTERRUPT,
+							       &config);
+		if (!completion) {
+			schedule_cleanup = ntb_direct_tx_fail(qp);
+			terminate = true;
+		} else {
+			completion->callback_result = ntb_direct_tx_callback;
+			completion->callback_param = entry;
+
+			if (dma_submit_error(dmaengine_submit(completion))) {
+				schedule_cleanup = ntb_direct_tx_fail(qp);
+				terminate = true;
+			} else {
+				dma_async_issue_pending(chan);
+			}
+		}
+	}
+
+	if (terminate) {
+		dmaengine_terminate_async(chan);
+		if (schedule_cleanup && ntb_link_is_up(qp->ndev, NULL, NULL) == 1)
+			schedule_work(&qp->link_cleanup);
+	}
+
+	return 0;
+
+unmap:
+	dma_unmap_single(dma_dev, dma_addr, entry->len, DMA_TO_DEVICE);
+	return rc;
+}
+
 static int ntb_process_tx(struct ntb_transport_qp *qp,
 			  struct ntb_queue_entry *entry)
 {
-	if (!ntb_transport_tx_free_entry(qp)) {
+	if (entry->len && ntb_direct_tx_mode(qp)) {
+		if (!ntb_direct_tx_enabled(qp))
+			return -ENOLINK;
+
+		return ntb_direct_tx_submit(qp, entry);
+	}
+
+	if (!ntb_transport_mw_tx_free_entry(qp)) {
 		qp->tx_ring_full++;
 		return -EAGAIN;
 	}
@@ -3377,10 +3611,29 @@ EXPORT_SYMBOL_GPL(ntb_transport_max_size);
 
 unsigned int ntb_transport_tx_free_entry(struct ntb_transport_qp *qp)
 {
-	unsigned int head = qp->tx_index;
-	unsigned int tail = qp->remote_rx_info->entry;
+	u32 available, capacity, used;
 
-	return tail >= head ? tail - head : qp->tx_max_entry + tail - head;
+	if (ntb_direct_tx_mode(qp)) {
+		guard(spinlock_bh)(&qp->direct_lock);
+		if (!ntb_direct_tx_enabled(qp))
+			return 0;
+
+		capacity = qp->direct_ring_entries - 1;
+		used = ntb_direct_ring_used(qp->direct_tx_issue,
+					    qp->direct_tx_cons);
+		if (used >= capacity)
+			return 0;
+
+		available =
+			ntb_direct_ring_used(READ_ONCE(qp->direct_shared->pub_head),
+					     qp->direct_tx_issue);
+		if (available > capacity)
+			return 0;
+
+		return min(available, capacity - used);
+	}
+
+	return ntb_transport_mw_tx_free_entry(qp);
 }
 EXPORT_SYMBOL_GPL(ntb_transport_tx_free_entry);
 
