@@ -1511,7 +1511,8 @@ static void futex_cleanup_end(struct task_struct *tsk, int state)
 	mutex_unlock(&tsk->futex.exit_mutex);
 }
 
-void futex_exec_release(struct task_struct *tsk)
+void futex_exec_release_begin(struct task_struct *tsk)
+	__acquires(&tsk->futex.exit_mutex)
 {
 	/*
 	 * The state handling is done for consistency, but in the case of
@@ -1522,6 +1523,11 @@ void futex_exec_release(struct task_struct *tsk)
 	 */
 	futex_cleanup_begin(tsk);
 	futex_cleanup(tsk);
+}
+
+void futex_exec_release_end(struct task_struct *tsk)
+	__releases(&tsk->futex.exit_mutex)
+{
 	/*
 	 * Reset the state to FUTEX_STATE_OK. The task is alive and about
 	 * exec a new binary.

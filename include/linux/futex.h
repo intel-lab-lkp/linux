@@ -72,7 +72,10 @@ static inline void futex_init_task(struct task_struct *tsk)
 
 void futex_exit_recursive(struct task_struct *tsk);
 void futex_exit_release(struct task_struct *tsk);
-void futex_exec_release(struct task_struct *tsk);
+void futex_exec_release_begin(struct task_struct *tsk)
+	__acquires(&tsk->futex.exit_mutex);
+void futex_exec_release_end(struct task_struct *tsk)
+	__releases(&tsk->futex.exit_mutex);
 
 long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 	      u32 __user *uaddr2, u32 val2, u32 val3);
@@ -90,7 +93,8 @@ static inline int futex_hash_free(struct mm_struct *mm) { return 0; }
 static inline void futex_init_task(struct task_struct *tsk) { }
 static inline void futex_exit_recursive(struct task_struct *tsk) { }
 static inline void futex_exit_release(struct task_struct *tsk) { }
-static inline void futex_exec_release(struct task_struct *tsk) { }
+static inline void futex_exec_release_begin(struct task_struct *tsk) { }
+static inline void futex_exec_release_end(struct task_struct *tsk) { }
 static inline long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 			    u32 __user *uaddr2, u32 val2, u32 val3)
 {

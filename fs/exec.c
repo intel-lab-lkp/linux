@@ -65,6 +65,7 @@
 #include <linux/io_uring.h>
 #include <linux/syscall_user_dispatch.h>
 #include <linux/coredump.h>
+#include <linux/futex.h>
 #include <linux/time_namespace.h>
 #include <linux/user_events.h>
 #include <linux/rseq.h>
@@ -857,8 +858,10 @@ static int exec_mmap(struct linux_binprm *bprm)
 	exec_mm_release(tsk, old_mm);
 
 	ret = down_write_killable(&tsk->signal->exec_update_lock);
-	if (ret)
+	if (ret) {
+		futex_exec_release_end(tsk);
 		return ret;
+	}
 
 	if (old_mm) {
 		/*
@@ -869,6 +872,7 @@ static int exec_mmap(struct linux_binprm *bprm)
 		ret = mmap_read_lock_killable(old_mm);
 		if (ret) {
 			up_write(&tsk->signal->exec_update_lock);
+			futex_exec_release_end(tsk);
 			return ret;
 		}
 	}
@@ -896,6 +900,7 @@ static int exec_mmap(struct linux_binprm *bprm)
 		local_irq_enable();
 	lru_gen_add_mm(mm);
 	task_unlock(tsk);
+	futex_exec_release_end(tsk);
 	lru_gen_use_mm(mm);
 	if (old_mm) {
 		mmap_read_unlock(old_mm);

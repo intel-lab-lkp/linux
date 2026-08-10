@@ -465,6 +465,13 @@ static int attach_to_pi_owner(u32 __user *uaddr, u32 uval, union futex_key *key,
 		return ret;
 	}
 
+	if (IS_ENABLED(CONFIG_MMU) && futex_key_is_private(key) &&
+	    READ_ONCE(p->mm) != key->private.mm) {
+		raw_spin_unlock_irq(&p->pi_lock);
+		put_task_struct(p);
+		return -ESRCH;
+	}
+
 	__attach_to_pi_owner(p, key, ps);
 	raw_spin_unlock_irq(&p->pi_lock);
 
