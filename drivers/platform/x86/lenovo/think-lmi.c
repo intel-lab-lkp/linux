@@ -1347,6 +1347,8 @@ static ssize_t save_settings_store(struct kobject *kobj, struct kobj_attribute *
 					goto out;
 			}
 			ret = tlmi_save_bios_settings("");
+			if (ret)
+				goto out;
 		} else { /* old non-opcode based authentication method (deprecated) */
 			if (tlmi_priv.pwd_admin->pwd_enabled && tlmi_priv.pwd_admin->password[0]) {
 				auth_str = kasprintf(GFP_KERNEL, "%s,%s,%s;",
@@ -1363,6 +1365,8 @@ static ssize_t save_settings_store(struct kobject *kobj, struct kobj_attribute *
 				ret = tlmi_save_bios_settings(auth_str);
 			else
 				ret = tlmi_save_bios_settings("");
+			if (ret)
+				goto out;
 		}
 		tlmi_priv.save_required = false;
 		tlmi_priv.reboot_required = true;
