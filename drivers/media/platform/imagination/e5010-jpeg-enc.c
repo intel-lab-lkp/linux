@@ -1501,6 +1501,13 @@ static int e5010_runtime_resume(struct device *dev)
 		return ret;
 	}
 
+	ret = e5010_init_device(e5010);
+	if (ret) {
+		dev_err(dev, "Failed to re-enable e5010 device\n");
+		clk_disable_unprepare(e5010->clk);
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -1532,12 +1539,6 @@ static int e5010_resume(struct device *dev)
 	ret = pm_runtime_force_resume(dev);
 	if (ret < 0)
 		return ret;
-
-	ret = e5010_init_device(e5010);
-	if (ret) {
-		dev_err(dev, "Failed to re-enable e5010 device\n");
-		return ret;
-	}
 
 	v4l2_m2m_resume(e5010->m2m_dev);
 
