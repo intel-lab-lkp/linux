@@ -31,13 +31,35 @@
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>
 
-#define VIDEO_NUM_DEVICES	256
+#define VIDEO_MIN_NUM_DEVICES	256
+#define VIDEO_MAX_NUM_DEVICES	4096
 #define VIDEO_NAME              "video4linux"
 
 #define dprintk(fmt, arg...) do {					\
 		printk(KERN_DEBUG pr_fmt("%s: " fmt),			\
 		       __func__, ##arg);				\
 } while (0)
+
+static unsigned int video_nr_devices = VIDEO_MIN_NUM_DEVICES;
+
+#ifndef CONFIG_VIDEO_FIXED_MINOR_RANGES
+static int param_set_video_nr_devices(const char *val,
+				      const struct kernel_param *kp)
+{
+	return param_set_uint_minmax(val, kp, VIDEO_MIN_NUM_DEVICES,
+				     VIDEO_MAX_NUM_DEVICES);
+}
+
+static const struct kernel_param_ops param_ops_video_nr_devices = {
+	.set = param_set_video_nr_devices,
+	.get = param_get_uint,
+};
+
+module_param_cb(video_nr_devices, &param_ops_video_nr_devices,
+		&video_nr_devices, 0444);
+
+MODULE_PARM_DESC(video_nr_devices, "Maximum number of V4L2 devices (256-4096)");
+#endif
 
 /*
  *	sysfs stuff
@@ -98,9 +120,14 @@ static struct dentry *v4l2_debugfs_root_dir;
 /*
  *	Active devices
  */
-static struct video_device *video_devices[VIDEO_NUM_DEVICES];
+#ifdef CONFIG_VIDEO_FIXED_MINOR_RANGES
+static struct video_device *video_devices[VIDEO_MIN_NUM_DEVICES];
+static DECLARE_BITMAP(devnode_nums[VFL_TYPE_MAX], VIDEO_MIN_NUM_DEVICES);
+#else
+static struct video_device **video_devices;
+static DECLARE_BITMAP(devnode_nums[VFL_TYPE_MAX], VIDEO_MAX_NUM_DEVICES);
+#endif
 static DEFINE_MUTEX(videodev_lock);
-static DECLARE_BITMAP(devnode_nums[VFL_TYPE_MAX], VIDEO_NUM_DEVICES);
 
 /* Device node utility functions */
 
@@ -504,7 +531,7 @@ static const struct file_operations v4l2_fops = {
  * in the video_device array, but it was able to obtain a minor number.
  *
  * This means that we can always obtain a free stream index number since
- * the worst case scenario is that there are VIDEO_NUM_DEVICES - 1 slots in
+ * the worst case scenario is that there are video_nr_devices - 1 slots in
  * use of the video_device array.
  *
  * Returns a free index number.
@@ -513,19 +540,19 @@ static int get_index(struct video_device *vdev)
 {
 	/* This can be static since this function is called with the global
 	   videodev_lock held. */
-	static DECLARE_BITMAP(used, VIDEO_NUM_DEVICES);
+	static DECLARE_BITMAP(used, VIDEO_MAX_NUM_DEVICES);
 	int i;
 
-	bitmap_zero(used, VIDEO_NUM_DEVICES);
+	bitmap_zero(used, VIDEO_MAX_NUM_DEVICES);
 
-	for (i = 0; i < VIDEO_NUM_DEVICES; i++) {
+	for (i = 0; i < video_nr_devices; i++) {
 		if (video_devices[i] != NULL &&
 		    video_devices[i]->v4l2_dev == vdev->v4l2_dev) {
 			__set_bit(video_devices[i]->index, used);
 		}
 	}
 
-	return find_first_zero_bit(used, VIDEO_NUM_DEVICES);
+	return find_first_zero_bit(used, video_nr_devices);
 }
 
 #define SET_VALID_IOCTL(ops, cmd, op) \
@@ -915,7 +942,7 @@ int __video_register_device(struct video_device *vdev,
 	int i = 0;
 	int ret;
 	int minor_offset = 0;
-	int minor_cnt = VIDEO_NUM_DEVICES;
+	int minor_cnt = video_nr_devices;
 	const char *name_base;
 
 	/* A minor value of -1 marks this video device as never
@@ -1020,10 +1047,10 @@ int __video_register_device(struct video_device *vdev,
 #else
 	/* The device node number and minor numbers are independent, so
 	   we just find the first free minor number. */
-	for (i = 0; i < VIDEO_NUM_DEVICES; i++)
+	for (i = 0; i < video_nr_devices; i++)
 		if (video_devices[i] == NULL)
 			break;
-	if (i == VIDEO_NUM_DEVICES) {
+	if (i == video_nr_devices) {
 		mutex_unlock(&videodev_lock);
 		pr_err("could not get a free minor\n");
 		return -ENFILE;
@@ -1032,7 +1059,7 @@ int __video_register_device(struct video_device *vdev,
 	vdev->minor = i + minor_offset;
 	vdev->num = nr;
 
-	if (WARN_ON(vdev->minor >= VIDEO_NUM_DEVICES)) {
+	if (WARN_ON(vdev->minor >= video_nr_devices)) {
 		mutex_unlock(&videodev_lock);
 		return -EINVAL;
 	}
@@ -1241,7 +1268,7 @@ static int __init videodev_init(void)
 	int ret;
 
 	pr_info("Linux video capture interface: v2.00\n");
-	ret = register_chrdev_region(dev, VIDEO_NUM_DEVICES, VIDEO_NAME);
+	ret = register_chrdev_region(dev, video_nr_devices, VIDEO_NAME);
 	if (ret < 0) {
 		pr_warn("videodev: unable to get major %d\n",
 				VIDEO_MAJOR);
@@ -1250,10 +1277,20 @@ static int __init videodev_init(void)
 
 	ret = class_register(&video_class);
 	if (ret < 0) {
-		unregister_chrdev_region(dev, VIDEO_NUM_DEVICES);
+		unregister_chrdev_region(dev, video_nr_devices);
 		pr_warn("video_dev: class_register failed\n");
 		return -EIO;
 	}
+
+#ifndef CONFIG_VIDEO_FIXED_MINOR_RANGES
+	video_devices = kzalloc_objs(*video_devices, video_nr_devices);
+	if (!video_devices) {
+		class_unregister(&video_class);
+		unregister_chrdev_region(dev, video_nr_devices);
+		pr_warn("video_dev: failed to allocate video_devices\n");
+		return -ENOMEM;
+	}
+#endif
 
 	return 0;
 }
@@ -1262,8 +1299,11 @@ static void __exit videodev_exit(void)
 {
 	dev_t dev = MKDEV(VIDEO_MAJOR, 0);
 
+#ifndef CONFIG_VIDEO_FIXED_MINOR_RANGES
+	kvfree(video_devices);
+#endif
 	class_unregister(&video_class);
-	unregister_chrdev_region(dev, VIDEO_NUM_DEVICES);
+	unregister_chrdev_region(dev, video_nr_devices);
 	debugfs_remove_recursive(v4l2_debugfs_root_dir);
 	v4l2_debugfs_root_dir = NULL;
 }
