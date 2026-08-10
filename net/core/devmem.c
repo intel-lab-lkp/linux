@@ -371,6 +371,26 @@ struct net_devmem_dmabuf_binding *net_devmem_lookup_dmabuf(u32 id)
 	return binding;
 }
 
+bool netdev_has_dmabuf_binding(struct net_device *dev, struct device *dma_dev)
+{
+	struct net_devmem_dmabuf_binding *binding;
+	unsigned long id;
+	bool found = false;
+
+	rcu_read_lock();
+	xa_for_each(&net_devmem_dmabuf_bindings, id, binding) {
+		if (READ_ONCE(binding->dev) == dev &&
+		    (!dma_dev || binding->attachment->dev == dma_dev)) {
+			found = true;
+			break;
+		}
+	}
+	rcu_read_unlock();
+
+	return found;
+}
+EXPORT_SYMBOL_GPL(netdev_has_dmabuf_binding);
+
 void net_devmem_get_net_iov(struct net_iov *niov)
 {
 	net_devmem_dmabuf_binding_get(net_devmem_iov_binding(niov));
