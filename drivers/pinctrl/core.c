@@ -1640,6 +1640,9 @@ int pinctrl_init_done(struct device *dev)
 	if (pins->p->state != pins->init_state)
 		return 0; /* Not at init anyway */
 
+	if (pins->keep_init)
+		return 0; /* Driver explicitly requested to stay in init state */
+
 	if (IS_ERR(pins->default_state))
 		return 0; /* No default state */
 
@@ -1677,6 +1680,23 @@ int pinctrl_select_default_state(struct device *dev)
 	return pinctrl_select_bound_state(dev, dev->pins->default_state);
 }
 EXPORT_SYMBOL_GPL(pinctrl_select_default_state);
+
+/**
+ * pinctrl_keep_init_state() - mark pinctrl handle to stay in init state after probe
+ * @dev: device to keep init state for
+ *
+ * Return: true if the device has a valid init state and keep_init flag was set,
+ *         false otherwise.
+ */
+bool pinctrl_keep_init_state(struct device *dev)
+{
+	if (!dev->pins || IS_ERR(dev->pins->init_state))
+		return false;
+
+	dev->pins->keep_init = true;
+	return true;
+}
+EXPORT_SYMBOL_GPL(pinctrl_keep_init_state);
 
 #ifdef CONFIG_PM
 

@@ -32,6 +32,7 @@ struct pinctrl;
  * @init_state: the state at probe time, if found
  * @sleep_state: the state at suspend time, if found
  * @idle_state: the state at idle (runtime suspend) time, if found
+ * @keep_init: flag indicating if init state should persist after probe
  */
 struct dev_pin_info {
 	struct pinctrl *p;
@@ -41,6 +42,7 @@ struct dev_pin_info {
 	struct pinctrl_state *sleep_state;
 	struct pinctrl_state *idle_state;
 #endif
+	bool keep_init:1;
 };
 
 extern int pinctrl_init_done(struct device *dev);

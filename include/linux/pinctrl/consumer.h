@@ -47,6 +47,7 @@ int pinctrl_select_state(struct pinctrl *p, struct pinctrl_state *s);
 struct pinctrl * __must_check devm_pinctrl_get(struct device *dev);
 void devm_pinctrl_put(struct pinctrl *p);
 int pinctrl_select_default_state(struct device *dev);
+bool pinctrl_keep_init_state(struct device *dev);
 
 #ifdef CONFIG_PM
 int pinctrl_pm_select_default_state(struct device *dev);
@@ -150,6 +151,11 @@ static inline void devm_pinctrl_put(struct pinctrl *p)
 static inline int pinctrl_select_default_state(struct device *dev)
 {
 	return 0;
+}
+
+static inline bool pinctrl_keep_init_state(struct device *dev)
+{
+	return false;
 }
 
 static inline int pinctrl_pm_select_default_state(struct device *dev)

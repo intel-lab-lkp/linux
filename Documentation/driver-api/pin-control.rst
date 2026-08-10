@@ -1172,7 +1172,8 @@ Possible standard state names are: "default", "init", "sleep" and "idle".
 
 - if ``init`` and ``default`` are defined in the device tree, the "init"
   state is selected before the driver probe and the "default" state is
-  selected after the driver probe.
+  selected after the driver probe, unless the driver explicitly opts out
+  by calling ``pinctrl_keep_init_state()`` during probe.
 
 - the ``sleep`` and ``idle`` states are for power management and can only
   be selected with the PM API bellow.
@@ -1233,9 +1234,10 @@ operation and going to sleep, moving from the ``PINCTRL_STATE_DEFAULT`` to
 current in sleep mode.
 
 Another case is when the pinctrl needs to switch to a certain mode during
-probe and then revert to the default state at the end of probe. For example
-a PINMUX may need to be configured as a GPIO during probe. In this case, use
-``PINCTRL_STATE_INIT`` to switch state before probe, then move to
+probe and then revert to the default state at the end of probe (or remain
+in the init state until activated if ``pinctrl_keep_init_state()`` is called).
+For example a PINMUX may need to be configured as a GPIO during probe. In this
+case, use ``PINCTRL_STATE_INIT`` to switch state before probe, then move to
 ``PINCTRL_STATE_DEFAULT`` at the end of probe for normal operation.
 
 A driver may request a certain control state to be activated, usually just the
