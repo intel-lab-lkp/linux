@@ -50,6 +50,15 @@
 		};
 	};
 
+	pwr_c_3p3: regulator-pwr-c-3p3 {
+		compatible = "regulator-fixed";
+		regulator-name = "pwr_c_3p3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
 	vreg_boost: vreg-boost {
 		compatible = "regulator-fixed";
 
@@ -476,4 +485,56 @@
 	v1p8-supply = <&pm8941_l6>;
 	extcon = <&smbb>;
 	qcom,init-seq = /bits/ 8 <0x1 0x63>;
+};
+
+&usb3 {
+	dr_mode = "host";
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	status = "okay";
+
+	/* TI TUSB8040A four port hub */
+	hub_2_0: hub@1 {
+		compatible = "usb451,8043";
+		reg = <1>;
+		peer-hub = <&hub_3_0>;
+		reset-gpios = <&pm8941_gpios 6 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&pwr_c_3p3>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* Prolific PL2775 USB-SATA bridge on the DN0 port */
+		device@1 {
+			compatible = "usb67b,2775";
+			reg = <1>;
+			reset-gpios = <&pm8941_gpios 10 GPIO_ACTIVE_LOW>;
+			vdd-supply = <&pwr_c_3p3>;
+		};
+
+		/* ASIX AX88179 USB-GbE controller on the DN2 port */
+		ethernet@3 {
+			compatible = "usbb95,1790";
+			reg = <3>;
+			reset-gpios = <&pm8941_gpios 9 GPIO_ACTIVE_LOW>;
+			vdd-supply = <&pwr_c_3p3>;
+		};
+	};
+
+	hub_3_0: hub@2 {
+		compatible = "usb451,8041";
+		reg = <2>;
+		peer-hub = <&hub_2_0>;
+		reset-gpios = <&pm8941_gpios 6 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&pwr_c_3p3>;
+	};
+};
+
+&usb3_hs_phy {
+	status = "okay";
+};
+
+&usb3_ss_phy {
+	status = "okay";
 };
