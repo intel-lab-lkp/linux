@@ -9,6 +9,7 @@
 #include <net/ip6_fib.h>
 #include <net/ip6_checksum.h>
 #include <net/netfilter/ipv6/nf_reject.h>
+#include <net/dst_metadata.h>
 #include <linux/netfilter_ipv6.h>
 #include <linux/netfilter_bridge.h>
 
@@ -439,6 +440,14 @@ void nf_send_unreach6(struct net *net, struct sk_buff *skb_in,
 
 	if (hooknum == NF_INET_LOCAL_OUT && skb_in->dev == NULL)
 		skb_in->dev = net->loopback_dev;
+
+	/* Inet ingress runs before IPv6 initializes IP6CB. */
+	if (hooknum == NF_INET_INGRESS) {
+		memset(IP6CB(skb_in), 0, sizeof(*IP6CB(skb_in)));
+		IP6CB(skb_in)->iif = skb_valid_dst(skb_in) ?
+				     ip6_dst_idev(skb_dst(skb_in))->dev->ifindex :
+				     skb_in->dev->ifindex;
+	}
 
 	if (!skb_dst(skb_in) && nf_reject6_fill_skb_dst(skb_in) < 0)
 		return;
