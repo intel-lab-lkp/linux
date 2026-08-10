@@ -266,6 +266,18 @@ macro_rules! container_of {
 #[doc(hidden)]
 pub fn assert_same_type<T>(_: T, _: T) {}
 
+/// Marks the given expressions as used.
+///
+/// This avoids "unused" warnings in kernel configurations that do not otherwise use them.
+#[macro_export]
+macro_rules! mark_used {
+    ($($e:expr),* $(,)?) => {
+        if false {
+            $( _ = $e; )*
+        }
+    };
+}
+
 /// Helper for `.rs.S` files.
 #[doc(hidden)]
 #[macro_export]

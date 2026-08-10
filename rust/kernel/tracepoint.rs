@@ -38,9 +38,8 @@ macro_rules! declare_trace {
 
             #[cfg(not(CONFIG_TRACEPOINTS))]
             {
-                // If tracepoints are disabled, insert a trivial use of each argument
-                // to avoid unused argument warnings.
-                $( let _unused = $argname; )*
+                // If tracepoints are disabled, the arguments are unused.
+                $crate::mark_used!($($argname),*);
             }
         }
     )*}

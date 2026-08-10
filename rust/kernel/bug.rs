@@ -55,9 +55,7 @@ macro_rules! warn_flags {
     ($file:expr, $flags:expr) => {
         const FLAGS: u32 = $crate::bindings::BUGFLAG_WARNING | $flags;
 
-        if false {
-            _ = $file;
-        }
+        $crate::mark_used!($file);
 
         // SAFETY:
         // - `flags` and `size` are all compile-time constants, preventing
@@ -83,9 +81,7 @@ macro_rules! warn_flags {
 #[cfg(all(CONFIG_BUG, CONFIG_UML))]
 macro_rules! warn_flags {
     ($file:expr, $flags:expr) => {
-        if false {
-            _ = $file;
-        }
+        $crate::mark_used!($file);
 
         // SAFETY: It is always safe to call `warn_slowpath_fmt()`
         // with a valid null-terminated string.
@@ -106,10 +102,7 @@ macro_rules! warn_flags {
 #[cfg(all(CONFIG_BUG, any(CONFIG_LOONGARCH, CONFIG_ARM)))]
 macro_rules! warn_flags {
     ($file:expr, $flags:expr) => {
-        if false {
-            _ = $file;
-            _ = $flags;
-        }
+        $crate::mark_used!($file, $flags);
 
         // SAFETY: It is always safe to call `WARN_ON()`.
         unsafe { $crate::bindings::WARN_ON(true) }
@@ -121,10 +114,7 @@ macro_rules! warn_flags {
 #[cfg(any(testlib, not(CONFIG_BUG)))]
 macro_rules! warn_flags {
     ($file:expr, $flags:expr) => {
-        if false {
-            _ = $file;
-            _ = $flags;
-        }
+        $crate::mark_used!($file, $flags);
     };
 }
 
