@@ -166,8 +166,11 @@ void kvm_init_pmu_capability(struct kvm_pmu_ops *pmu_ops)
 	    !pmu_ops->is_mediated_pmu_supported(&kvm_host_pmu))
 		enable_mediated_pmu = false;
 
-	if (!enable_mediated_pmu)
+	if (!enable_mediated_pmu) {
 		pmu_ops->write_global_ctrl = NULL;
+		pmu_ops->get_vendor_state = NULL;
+		pmu_ops->set_vendor_state = NULL;
+	}
 
 	if (!enable_pmu) {
 		memset(&kvm_pmu_cap, 0, sizeof(kvm_pmu_cap));

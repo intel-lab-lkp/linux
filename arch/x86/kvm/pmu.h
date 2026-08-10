@@ -42,6 +42,8 @@ struct kvm_pmu_ops {
 	void (*mediated_load)(struct kvm_vcpu *vcpu);
 	void (*mediated_put)(struct kvm_vcpu *vcpu);
 	void (*write_global_ctrl)(u64 global_ctrl);
+	int (*get_vendor_state)(struct kvm_vcpu *vcpu, u32 msr);
+	int (*set_vendor_state)(struct kvm_vcpu *vcpu, u32 msr);
 
 	const u64 EVENTSEL_EVENT;
 	const int MAX_NR_GP_COUNTERS;
