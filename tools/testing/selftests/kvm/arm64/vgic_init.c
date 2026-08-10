@@ -5,6 +5,7 @@
  * Copyright (C) 2020, Red Hat, Inc.
  */
 #include <linux/kernel.h>
+#include <linux/sizes.h>
 #include <sys/syscall.h>
 #include <asm/kvm.h>
 #include <asm/kvm_para.h>
@@ -13,11 +14,22 @@
 
 #include "test_util.h"
 #include "kvm_util.h"
+#include "gic.h"
 #include "processor.h"
+#include "ucall_common.h"
 #include "vgic.h"
 #include "gic_v3.h"
 
 #define NR_VCPUS		4
+
+/* Keep the redistributor range outside the default guest memory slot. */
+#define REDIST_TEST_REGION0_BASE	GICR_BASE_GPA
+#define REDIST_TEST_REGION1_BASE	\
+	(REDIST_TEST_REGION0_BASE + 2 * KVM_VGIC_V3_REDIST_SIZE)
+#define REDIST_TEST_DIST_BASE	\
+	(REDIST_TEST_REGION1_BASE + KVM_VGIC_V3_REDIST_SIZE)
+#define REDIST_TEST_REGION2_BASE	\
+	(REDIST_TEST_DIST_BASE + KVM_VGIC_V3_DIST_SIZE)
 
 #define REG_OFFSET(vcpu, offset) (((u64)vcpu << 32) | offset)
 
@@ -65,6 +77,16 @@ static void guest_code(void)
 	GUEST_DONE();
 }
 
+static void guest_read_second_redist(void)
+{
+	u64 typer = readq((void *)(unsigned long)(REDIST_TEST_REGION0_BASE +
+						   KVM_VGIC_V3_REDIST_SIZE +
+						   GICR_TYPER));
+
+	GUEST_ASSERT_EQ(GICR_TYPER_CPU_NUMBER(typer), 1);
+	GUEST_DONE();
+}
+
 /* we don't want to assert on run execution, hence that helper */
 static int run_vcpu(struct kvm_vcpu *vcpu)
 {
@@ -73,12 +95,13 @@ static int run_vcpu(struct kvm_vcpu *vcpu)
 
 static struct vm_gic vm_gic_create_with_vcpus(u32 gic_dev_type,
 					      u32 nr_vcpus,
+					      void (*guest_fn)(void),
 					      struct kvm_vcpu *vcpus[])
 {
 	struct vm_gic v;
 
 	v.gic_dev_type = gic_dev_type;
-	v.vm = vm_create_with_vcpus(nr_vcpus, guest_code, vcpus);
+	v.vm = vm_create_with_vcpus(nr_vcpus, guest_fn, vcpus);
 	v.gic_fd = kvm_create_device(v.vm, gic_dev_type);
 
 	return v;
@@ -240,38 +263,40 @@ static void subtest_v3_redist_regions(struct vm_gic *v)
 				    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 	TEST_ASSERT(ret && errno == EINVAL, "redist region attr value with count== 0");
 
-	addr = REDIST_REGION_ATTR_ADDR(2, 0x200000, 0, 1);
+	addr = REDIST_REGION_ATTR_ADDR(2, REDIST_TEST_REGION0_BASE, 0, 1);
 	ret = __kvm_device_attr_set(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 				    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 	TEST_ASSERT(ret && errno == EINVAL,
 		    "attempt to register the first rdist region with index != 0");
 
-	addr = REDIST_REGION_ATTR_ADDR(2, 0x201000, 0, 1);
+	addr = REDIST_REGION_ATTR_ADDR(2, REDIST_TEST_REGION0_BASE + 0x1000,
+				       0, 1);
 	ret = __kvm_device_attr_set(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 				    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 	TEST_ASSERT(ret && errno == EINVAL, "rdist region with misaligned address");
 
-	addr = REDIST_REGION_ATTR_ADDR(2, 0x200000, 0, 0);
+	addr = REDIST_REGION_ATTR_ADDR(2, REDIST_TEST_REGION0_BASE, 0, 0);
 	kvm_device_attr_set(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 			    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 
-	addr = REDIST_REGION_ATTR_ADDR(2, 0x200000, 0, 1);
+	addr = REDIST_REGION_ATTR_ADDR(2, REDIST_TEST_REGION0_BASE, 0, 1);
 	ret = __kvm_device_attr_set(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 				    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 	TEST_ASSERT(ret && errno == EINVAL, "register an rdist region with already used index");
 
-	addr = REDIST_REGION_ATTR_ADDR(1, 0x210000, 0, 2);
+	addr = REDIST_REGION_ATTR_ADDR(1, REDIST_TEST_REGION0_BASE + 0x10000,
+				       0, 2);
 	ret = __kvm_device_attr_set(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 				    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 	TEST_ASSERT(ret && errno == EINVAL,
 		    "register an rdist region overlapping with another one");
 
-	addr = REDIST_REGION_ATTR_ADDR(1, 0x240000, 0, 2);
+	addr = REDIST_REGION_ATTR_ADDR(1, REDIST_TEST_REGION1_BASE, 0, 2);
 	ret = __kvm_device_attr_set(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 				    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 	TEST_ASSERT(ret && errno == EINVAL, "register redist region with index not +1");
 
-	addr = REDIST_REGION_ATTR_ADDR(1, 0x240000, 0, 1);
+	addr = REDIST_REGION_ATTR_ADDR(1, REDIST_TEST_REGION1_BASE, 0, 1);
 	kvm_device_attr_set(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 			    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 
@@ -288,7 +313,7 @@ static void subtest_v3_redist_regions(struct vm_gic *v)
 	TEST_ASSERT(ret && errno == E2BIG,
 		    "register redist region with top address beyond IPA range");
 
-	addr = 0x260000;
+	addr = REDIST_TEST_DIST_BASE;
 	ret = __kvm_device_attr_set(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 				    KVM_VGIC_V3_ADDR_TYPE_REDIST, &addr);
 	TEST_ASSERT(ret && errno == EINVAL,
@@ -296,19 +321,19 @@ static void subtest_v3_redist_regions(struct vm_gic *v)
 
 	/*
 	 * Now there are 2 redist regions:
-	 * region 0 @ 0x200000 2 redists
-	 * region 1 @ 0x240000 1 redist
+	 * region 0 has 2 redistributors
+	 * region 1 has 1 redistributor
 	 * Attempt to read their characteristics
 	 */
 
 	addr = REDIST_REGION_ATTR_ADDR(0, 0, 0, 0);
-	expected_addr = REDIST_REGION_ATTR_ADDR(2, 0x200000, 0, 0);
+	expected_addr = REDIST_REGION_ATTR_ADDR(2, REDIST_TEST_REGION0_BASE, 0, 0);
 	ret = __kvm_device_attr_get(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 				    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 	TEST_ASSERT(!ret && addr == expected_addr, "read characteristics of region #0");
 
 	addr = REDIST_REGION_ATTR_ADDR(0, 0, 0, 1);
-	expected_addr = REDIST_REGION_ATTR_ADDR(1, 0x240000, 0, 1);
+	expected_addr = REDIST_REGION_ATTR_ADDR(1, REDIST_TEST_REGION1_BASE, 0, 1);
 	ret = __kvm_device_attr_get(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 				    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 	TEST_ASSERT(!ret && addr == expected_addr, "read characteristics of region #1");
@@ -318,11 +343,11 @@ static void subtest_v3_redist_regions(struct vm_gic *v)
 				    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 	TEST_ASSERT(ret && errno == ENOENT, "read characteristics of non existing region");
 
-	addr = 0x260000;
+	addr = REDIST_TEST_DIST_BASE;
 	kvm_device_attr_set(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 			    KVM_VGIC_V3_ADDR_TYPE_DIST, &addr);
 
-	addr = REDIST_REGION_ATTR_ADDR(1, 0x260000, 0, 2);
+	addr = REDIST_REGION_ATTR_ADDR(1, REDIST_TEST_DIST_BASE, 0, 2);
 	ret = __kvm_device_attr_set(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 				    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 	TEST_ASSERT(ret && errno == EINVAL, "register redist region colliding with dist");
@@ -338,7 +363,7 @@ static void test_vgic_then_vcpus(u32 gic_dev_type)
 	struct vm_gic v;
 	int ret, i;
 
-	v = vm_gic_create_with_vcpus(gic_dev_type, 1, vcpus);
+	v = vm_gic_create_with_vcpus(gic_dev_type, 1, guest_code, vcpus);
 
 	subtest_dist_rdist(&v);
 
@@ -359,7 +384,8 @@ static void test_vcpus_then_vgic(u32 gic_dev_type)
 	struct vm_gic v;
 	int ret;
 
-	v = vm_gic_create_with_vcpus(gic_dev_type, NR_VCPUS, vcpus);
+	v = vm_gic_create_with_vcpus(gic_dev_type, NR_VCPUS, guest_code,
+				     vcpus);
 
 	subtest_dist_rdist(&v);
 
@@ -403,6 +429,29 @@ static void test_v2_uaccess_cpuif_no_vcpus(void)
 	vm_gic_destroy(&v);
 }
 
+static void run_vcpu_expect_done(struct kvm_vcpu *vcpu)
+{
+	struct ucall uc;
+
+	vcpu_run(vcpu);
+
+	switch (get_ucall(vcpu, &uc)) {
+	case UCALL_DONE:
+		return;
+	case UCALL_ABORT:
+		REPORT_GUEST_ASSERT(uc);
+		break;
+	case UCALL_NONE:
+		if (vcpu->run->exit_reason == KVM_EXIT_MMIO)
+			TEST_FAIL("Unexpected MMIO exit at 0x%llx",
+				  vcpu->run->mmio.phys_addr);
+		fallthrough;
+	default:
+		TEST_FAIL("Unexpected ucall %lu, exit_reason %u",
+			  uc.cmd, vcpu->run->exit_reason);
+	}
+}
+
 static void test_v3_new_redist_regions(void)
 {
 	struct kvm_vcpu *vcpus[NR_VCPUS];
@@ -411,7 +460,8 @@ static void test_v3_new_redist_regions(void)
 	u64 addr;
 	int ret;
 
-	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
+	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS,
+				     guest_code, vcpus);
 	subtest_v3_redist_regions(&v);
 	kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
 			    KVM_DEV_ARM_VGIC_CTRL_INIT, NULL);
@@ -420,12 +470,13 @@ static void test_v3_new_redist_regions(void)
 	TEST_ASSERT(ret == -ENXIO, "running without sufficient number of rdists");
 	vm_gic_destroy(&v);
 
-	/* step2 */
+	/* Step 2: adding enough redistributors after KVM_RUN is rejected. */
 
-	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
+	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS,
+				     guest_code, vcpus);
 	subtest_v3_redist_regions(&v);
 
-	addr = REDIST_REGION_ATTR_ADDR(1, 0x280000, 0, 2);
+	addr = REDIST_REGION_ATTR_ADDR(1, REDIST_TEST_REGION2_BASE, 0, 2);
 	kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 			    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 
@@ -434,9 +485,10 @@ static void test_v3_new_redist_regions(void)
 
 	vm_gic_destroy(&v);
 
-	/* step 3 */
+	/* Step 3: retry the failed region setup and exercise an existing rdist. */
 
-	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
+	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS,
+				     guest_read_second_redist, vcpus);
 	subtest_v3_redist_regions(&v);
 
 	ret = __kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
@@ -444,15 +496,17 @@ static void test_v3_new_redist_regions(void)
 	TEST_ASSERT(ret && errno == EFAULT,
 		    "register a third region allowing to cover the 4 vcpus");
 
-	addr = REDIST_REGION_ATTR_ADDR(1, 0x280000, 0, 2);
+	addr = REDIST_REGION_ATTR_ADDR(1, REDIST_TEST_REGION2_BASE, 0, 2);
 	kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
 			    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
 
+	virt_map(v.vm, REDIST_TEST_REGION0_BASE, REDIST_TEST_REGION0_BASE,
+		 vm_calc_num_guest_pages(v.vm->mode,
+					 2 * KVM_VGIC_V3_REDIST_SIZE));
 	kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
 			    KVM_DEV_ARM_VGIC_CTRL_INIT, NULL);
 
-	ret = run_vcpu(vcpus[3]);
-	TEST_ASSERT(!ret, "vcpu run");
+	run_vcpu_expect_done(vcpus[0]);
 
 	vm_gic_destroy(&v);
 }
@@ -608,7 +662,8 @@ static void test_v3_redist_ipa_range_check_at_vcpu_run(void)
 	int ret, i;
 	u64 addr;
 
-	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, 1, vcpus);
+	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, 1,
+				     guest_code, vcpus);
 
 	/* Set space for 3 redists, we have 1 vcpu, so this succeeds. */
 	addr = max_phys_size - (3 * 2 * 0x10000);
@@ -641,7 +696,8 @@ static void test_v3_its_region(void)
 	u64 addr;
 	int its_fd, ret;
 
-	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
+	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS,
+				     guest_code, vcpus);
 	its_fd = kvm_create_device(v.vm, KVM_DEV_TYPE_ARM_VGIC_ITS);
 
 	addr = 0x401000;
@@ -684,7 +740,8 @@ static void test_v3_nassgicap(void)
 	u32 typer2;
 	int ret;
 
-	vm = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
+	vm = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS,
+				      guest_code, vcpus);
 	kvm_device_attr_get(vm.gic_fd, KVM_DEV_ARM_VGIC_GRP_DIST_REGS,
 			    GICD_TYPER2, &typer2);
 	has_nassgicap = typer2 & GICD_TYPER2_nASSGIcap;
