@@ -17,6 +17,76 @@
 #include "famfs_internal.h"
 
 /*********************************************************************
+ * vm_operations
+ */
+static vm_fault_t
+__famfs_filemap_fault(
+	struct vm_fault *vmf,
+	unsigned int order,
+	bool write_fault)
+{
+	struct inode *inode = file_inode(vmf->vma->vm_file);
+	struct super_block *sb = inode->i_sb;
+	struct famfs_fs_info *fsi = sb->s_fs_info;
+	vm_fault_t ret;
+	unsigned long pfn;
+
+	if (fsi->deverror)
+		return VM_FAULT_SIGBUS;
+
+	if (!IS_DAX(file_inode(vmf->vma->vm_file))) {
+		pr_err("%s: file not marked IS_DAX!!\n", __func__);
+		return VM_FAULT_SIGBUS;
+	}
+
+	if (write_fault) {
+		sb_start_pagefault(inode->i_sb);
+		file_update_time(vmf->vma->vm_file);
+	}
+
+	ret = dax_iomap_fault(vmf, order, &pfn, NULL, NULL /*&famfs_iomap_ops */);
+	if (ret & VM_FAULT_NEEDDSYNC)
+		ret = dax_finish_sync_fault(vmf, order, pfn);
+
+	if (write_fault)
+		sb_end_pagefault(inode->i_sb);
+
+	return ret;
+}
+
+static inline bool
+famfs_is_write_fault(struct vm_fault *vmf)
+{
+	return (vmf->flags & FAULT_FLAG_WRITE) &&
+	       (vmf->vma->vm_flags & VM_SHARED);
+}
+
+static vm_fault_t
+famfs_filemap_fault(struct vm_fault *vmf)
+{
+	return __famfs_filemap_fault(vmf, 0, famfs_is_write_fault(vmf));
+}
+
+static vm_fault_t
+famfs_filemap_huge_fault(struct vm_fault *vmf, unsigned int order)
+{
+	return __famfs_filemap_fault(vmf, order, famfs_is_write_fault(vmf));
+}
+
+static vm_fault_t
+famfs_filemap_mkwrite(struct vm_fault *vmf)
+{
+	return __famfs_filemap_fault(vmf, 0, true);
+}
+
+const struct vm_operations_struct famfs_file_vm_ops = {
+	.fault		= famfs_filemap_fault,
+	.huge_fault	= famfs_filemap_huge_fault,
+	.page_mkwrite	= famfs_filemap_mkwrite,
+	.pfn_mkwrite	= famfs_filemap_mkwrite,
+};
+
+/*********************************************************************
  * file_operations
  */
 
@@ -120,14 +190,51 @@ famfs_dax_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	return rc;
 }
 
+static int
+famfs_file_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	struct inode *inode = file_inode(file);
+	struct super_block *sb = inode->i_sb;
+	struct famfs_fs_info *fsi = sb->s_fs_info;
+	ssize_t rc;
+
+	if (fsi->deverror)
+		return -ENODEV;
+
+	/*
+	 * Gate shared-writable mappings on FAMFS_OPT_WRITE. Reject a mapping
+	 * that is already writable, and strip VM_MAYWRITE from a read-only
+	 * shared mapping so a later mprotect(PROT_WRITE) cannot upgrade it.
+	 * This is best effort: it does not revoke mappings that already exist.
+	 */
+	if ((vma->vm_flags & VM_SHARED) &&
+	    !famfs_opt_enabled(fsi, FAMFS_OPT_WRITE)) {
+		if (vma->vm_flags & VM_WRITE)
+			return -EPERM;
+		vm_flags_clear(vma, VM_MAYWRITE);
+	}
+
+	rc = famfs_file_invalid(inode);
+	if (rc)
+		return (int)rc;
+
+	file_accessed(file);
+	vma->vm_ops = &famfs_file_vm_ops;
+	vm_flags_set(vma, VM_HUGEPAGE);
+	return 0;
+}
+
 const struct file_operations famfs_file_operations = {
 	.owner             = THIS_MODULE,
+
+	/* fmap metadata is immutable after MAP_CREATE, so MAP_SYNC is free */
+	.fop_flags	   = FOP_MMAP_SYNC,
 
 	/* Custom famfs operations */
 	.write_iter	   = famfs_dax_write_iter,
 	.read_iter	   = famfs_dax_read_iter,
 	.unlocked_ioctl    = NULL /*famfs_file_ioctl*/,
-	.mmap		   = NULL /* famfs_file_mmap */,
+	.mmap		   = famfs_file_mmap,
 
 	/* Force PMD alignment for mmap */
 	.get_unmapped_area = thp_get_unmapped_area,
