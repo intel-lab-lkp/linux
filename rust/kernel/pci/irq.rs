@@ -36,6 +36,16 @@ impl IrqType {
             IrqType::MsiX => bindings::PCI_IRQ_MSIX,
         }
     }
+
+    /// Construct from raw value.
+    #[inline]
+    const fn from_raw(raw: u32) -> Self {
+        match raw {
+            bindings::PCI_IRQ_MSIX => IrqType::MsiX,
+            bindings::PCI_IRQ_MSI => IrqType::Msi,
+            _ => IrqType::Intx,
+        }
+    }
 }
 
 /// Set of IRQ types that can be used for PCI interrupt allocation.
@@ -97,6 +107,13 @@ impl<'a> IrqVectorRegistration<'a> {
     #[inline]
     pub fn vector_count(&self) -> usize {
         self.count.get()
+    }
+
+    /// Returns the interrupt type the PCI core selected for this allocation.
+    #[inline]
+    pub fn irq_type(&self) -> IrqType {
+        // SAFETY: `self.dev.as_raw()` is a valid pointer to a `struct pci_dev`.
+        IrqType::from_raw(unsafe { bindings::pci_irq_type(self.dev.as_raw()) })
     }
 
     /// Resolves the vector at `index` to an [`IrqRequest`].
