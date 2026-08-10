@@ -534,6 +534,9 @@ static int __sev_guest_init(struct kvm *kvm, struct kvm_sev_cmd *argp,
 	if (snp_active)
 		sev->vmsa_features |= SVM_SEV_FEAT_SNP_ACTIVE;
 
+	if (es_active)
+		kvm_clr_mediated_pmu_caps(kvm, KVM_MEDIATED_PMU_CAP_HW_SWITCHED);
+
 	ret = sev_asid_new(sev, vm_type);
 	if (ret)
 		goto e_no_asid;
