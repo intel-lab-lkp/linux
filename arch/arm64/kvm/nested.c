@@ -48,6 +48,7 @@ void kvm_init_nested(struct kvm *kvm)
 	kvm->arch.nested_mmus = NULL;
 	kvm->arch.nested_mmus_size = 0;
 	atomic_set(&kvm->arch.vncr_map_count, 0);
+	spin_lock_init(&kvm->arch.guest_s2_tracking_lock);
 }
 
 static int init_nested_s2_mmu(struct kvm *kvm, struct kvm_s2_mmu *mmu)
