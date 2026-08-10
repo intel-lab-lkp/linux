@@ -561,7 +561,7 @@ static int qcom_ipq806x_usb_phy_probe(struct platform_device *pdev)
 				     &phy_dwc3->rx_eq))
 		phy_dwc3->rx_eq = SSPHY_RX_EQ_VALUE;
 
-	if (device_property_read_u32(&pdev->dev, "qcom,tx-deamp_3_5db",
+	if (device_property_read_u32(&pdev->dev, "qcom,tx-deamp-3_5db",
 				     &phy_dwc3->tx_deamp_3_5db))
 		phy_dwc3->tx_deamp_3_5db = SSPHY_TX_DEEMPH_3_5DB;
 
