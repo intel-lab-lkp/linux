@@ -715,6 +715,16 @@ enum kvm_only_cpuid_leafs {
 	NKVMCAPINTS = NR_KVM_CPU_CAPS - NCAPINTS,
 };
 
+/*
+ * Track how the guest PMU state is saved and restored, as this can be done
+ * either by software or, if capable, by hardware. When hardware manages the
+ * guest PMU state, the state resides in a vendor save area.
+ */
+#define KVM_MEDIATED_PMU_CAP_HW_SWITCHED	BIT(0)
+#define KVM_MEDIATED_PMU_CAP_HW_FILTERED	BIT(1)
+#define KVM_MEDIATED_PMU_CAP_VALID		(KVM_MEDIATED_PMU_CAP_HW_SWITCHED	| \
+						 KVM_MEDIATED_PMU_CAP_HW_FILTERED)
+
 struct kvm_vcpu_arch {
 	/*
 	 * rip and regs accesses must go through
@@ -1284,6 +1294,7 @@ struct kvm_arch {
 	bool bus_lock_detection_enabled;
 	bool enable_pmu;
 	bool created_mediated_pmu;
+	u32 mediated_pmu_caps;
 
 	u32 notify_window;
 	u32 notify_vmexit_flags;

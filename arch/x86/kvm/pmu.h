@@ -88,6 +88,26 @@ static inline bool kvm_vcpu_has_mediated_pmu(struct kvm_vcpu *vcpu)
 	return enable_mediated_pmu && vcpu_to_pmu(vcpu)->version;
 }
 
+static inline bool kvm_vcpu_has_mediated_pmu_caps(struct kvm_vcpu *vcpu, u32 caps)
+{
+	return kvm_vcpu_has_mediated_pmu(vcpu) &&
+	       !!(vcpu->kvm->arch.mediated_pmu_caps & caps);
+}
+
+#define kvm_set_mediated_pmu_caps(kvm, caps)				\
+do {									\
+	BUILD_BUG_ON(!__builtin_constant_p(caps) ||			\
+		     ((caps) & ~KVM_MEDIATED_PMU_CAP_VALID));		\
+	(kvm)->arch.mediated_pmu_caps |= (caps);			\
+} while (0)
+
+#define kvm_clr_mediated_pmu_caps(kvm, caps)				\
+do {									\
+	BUILD_BUG_ON(!__builtin_constant_p(caps) ||			\
+		     ((caps) & ~KVM_MEDIATED_PMU_CAP_VALID));		\
+	(kvm)->arch.mediated_pmu_caps &= ~(caps);			\
+} while (0)
+
 /*
  * KVM tracks all counters in 64-bit bitmaps, with general purpose counters
  * mapped to bits 31:0 and fixed counters mapped to 63:32, e.g. fixed counter 0
