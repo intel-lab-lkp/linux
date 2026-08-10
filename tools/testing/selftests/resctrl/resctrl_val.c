@@ -11,6 +11,7 @@
 #include "resctrl.h"
 
 #define UNCORE_IMC		"uncore_imc_"
+#define AMD_UMC			"amd_umc_"
 #define READ_FILE_NAME		"cas_count_read"
 #define DYN_PMU_PATH		"/sys/bus/event_source/devices"
 #define SCALE			0.00006103515625
@@ -99,12 +100,8 @@ static int open_perf_read_event(int i, int cpu_no)
 		perf_event_open(&mc_counters_config[i].pe, -1, cpu_no, -1,
 				PERF_FLAG_FD_CLOEXEC);
 
-	if (mc_counters_config[i].fd == -1) {
-		fprintf(stderr, "Error opening leader %llx\n",
-			mc_counters_config[i].pe.config);
-
-		return -1;
-	}
+	if (mc_counters_config[i].fd == -1)
+		return -errno;
 
 	return 0;
 }
@@ -183,16 +180,14 @@ out_close:
 	return ret;
 }
 
-/* Get type and config of an MC counter's read event. */
-static int read_from_mc_dir(char *mc_dir, unsigned int *count)
+/* Get the perf "type" of a memory controller counter. Shared by all vendors. */
+static int get_mc_counter_type(const char *mc_dir, unsigned int *type)
 {
 	char mc_counter_type[PATH_MAX];
-	unsigned int type;
 	int path_len;
 	FILE *fp;
 	int ret;
 
-	/* Get type of MC counter */
 	path_len = snprintf(mc_counter_type, sizeof(mc_counter_type),
 			    "%s%s", mc_dir, "type");
 	if (path_len >= sizeof(mc_counter_type)) {
@@ -206,12 +201,29 @@ static int read_from_mc_dir(char *mc_dir, unsigned int *count)
 
 		return -1;
 	}
-	ret = fscanf(fp, "%u", &type);
+	ret = fscanf(fp, "%u", type);
 	fclose(fp);
 	if (ret <= 0) {
 		ksft_perror("Could not get MC type");
 		return -1;
 	}
+
+	return 0;
+}
+
+/*
+ * Intel: get type and config of an iMC counter's read event. The read event
+ * and umask are discovered from the PMU's sysfs event files.
+ */
+static int read_from_intel_mc_dir(char *mc_dir, unsigned int *count)
+{
+	unsigned int type;
+	int ret;
+
+	ret = get_mc_counter_type(mc_dir, &type);
+	if (ret)
+		return ret;
+
 	ret = parse_mc_read_bw_events(mc_dir, type, count);
 	if (ret) {
 		ksft_print_msg("Unable to parse bandwidth event and umask\n");
@@ -222,12 +234,40 @@ static int read_from_mc_dir(char *mc_dir, unsigned int *count)
 }
 
 /*
- * A system can have 'n' number of MC (Memory Controller)
- * counters, get that 'n'. Discover the properties of the available
- * counters in support of needed performance measurement via perf.
- * For each MC counter get it's type and config. Also obtain each
- * counter's event and umask for the memory read events that will be
- * measured.
+ * AMD: get type and config of a UMC counter's read event. The UMC PMU does
+ * not expose the CAS command events via sysfs, so program them directly:
+ * Number of CAS commands sent for reads: EventCode = 0x0a, umask = 0x1
+ */
+static int read_from_amd_mc_dir(char *mc_dir, unsigned int *count)
+{
+	unsigned int type;
+	int ret;
+
+	ret = get_mc_counter_type(mc_dir, &type);
+	if (ret)
+		return ret;
+
+	if (*count >= MAX_MCS) {
+		ksft_print_msg("Maximum MC count exceeded\n");
+		return -1;
+	}
+
+	mc_counters_config[*count].type = type;
+	mc_counters_config[*count].event = 0xa;
+	mc_counters_config[*count].umask = 0x1;
+	*count += 1;
+
+	return 0;
+}
+
+/*
+ * A system can have 'n' number of MC (Memory Controller) counters, get
+ * that 'n'. On Intel the memory controller is called Integrated Memory
+ * Controller (iMC) and on AMD it is called Unified Memory Controller (UMC).
+ * Discover the properties of the available counters in support of needed
+ * performance measurement via perf. For each MC counter get it's type and
+ * config. Also obtain each counter's event and umask for the memory read
+ * events that will be measured.
  *
  * Enumerate all these details into an array of structures.
  *
@@ -235,6 +275,7 @@ static int read_from_mc_dir(char *mc_dir, unsigned int *count)
  */
 static int num_of_mem_controllers(void)
 {
+	int (*read_mc_dir)(char *mc_dir, unsigned int *count);
 	char mc_dir[512], *temp;
 	unsigned int count = 0;
 	struct dirent *ep;
@@ -244,6 +285,10 @@ static int num_of_mem_controllers(void)
 
 	if (get_vendor() == ARCH_INTEL) {
 		sysfs_name = UNCORE_IMC;
+		read_mc_dir = read_from_intel_mc_dir;
+	} else if (get_vendor() == ARCH_AMD) {
+		sysfs_name = AMD_UMC;
+		read_mc_dir = read_from_amd_mc_dir;
 	} else {
 		ksft_print_msg("Unsupported vendor\n");
 		return -1;
@@ -257,8 +302,9 @@ static int num_of_mem_controllers(void)
 				continue;
 
 			/*
-			 * mc counters are named as "uncore_imc_<n>", hence
-			 * increment the pointer to point to <n>.
+			 * MC counters are named as "uncore_imc_<n>" on Intel
+			 * and "amd_umc_<n>" on AMD, hence increment the pointer
+			 * to point to <n>.
 			 */
 			temp = temp + strlen(sysfs_name);
 
@@ -270,7 +316,7 @@ static int num_of_mem_controllers(void)
 			if (temp[0] >= '0' && temp[0] <= '9') {
 				sprintf(mc_dir, "%s/%s/", DYN_PMU_PATH,
 					ep->d_name);
-				ret = read_from_mc_dir(mc_dir, &count);
+				ret = read_mc_dir(mc_dir, &count);
 				if (ret) {
 					closedir(dp);
 
@@ -280,7 +326,9 @@ static int num_of_mem_controllers(void)
 		}
 		closedir(dp);
 		if (count == 0) {
-			ksft_print_msg("Unable to find MC counters\n");
+			ksft_print_msg("Unable to find memory controller counters\n");
+			if (get_vendor() == ARCH_AMD)
+				ksft_print_msg("Try loading amd_uncore module\n");
 
 			return -1;
 		}
@@ -326,15 +374,40 @@ static void perf_close_mc_read_mem_bw(void)
  */
 static int perf_open_mc_read_mem_bw(int cpu_no)
 {
-	int mc, ret;
+	int mc, ret, opened = 0;
 
 	for (mc = 0; mc < mcs; mc++)
 		mc_counters_config[mc].fd = -1;
 
 	for (mc = 0; mc < mcs; mc++) {
 		ret = open_perf_read_event(mc, cpu_no);
-		if (ret)
-			goto close_fds;
+		if (!ret) {
+			opened++;
+			continue;
+		}
+
+		/*
+		 * On AMD each memory controller (UMC) has its own PMU that is
+		 * tied to a specific NUMA node, unlike Intel where opening an
+		 * iMC event on the benchmark CPU always resolves to the local
+		 * memory controllers. A UMC PMU can only be opened from a CPU
+		 * that belongs to the same node and returns -ENODEV otherwise.
+		 * The benchmark runs on a single CPU, so skip the UMCs that
+		 * belong to remote nodes and measure only the memory
+		 * controllers local to the benchmark. This matches what
+		 * mbm_local_bytes accounts for on the resctrl side.
+		 */
+		if (ret == -ENODEV && get_vendor() == ARCH_AMD)
+			continue;
+
+		ksft_print_msg("Error opening memory bandwidth performance counter: %s\n",
+			       strerror(-ret));
+		goto close_fds;
+	}
+
+	if (!opened) {
+		ksft_print_msg("Could not open any memory controller counters\n");
+		goto close_fds;
 	}
 
 	return 0;
@@ -354,14 +427,20 @@ static void do_mc_read_mem_bw_test(void)
 {
 	int mc;
 
-	for (mc = 0; mc < mcs; mc++)
+	for (mc = 0; mc < mcs; mc++) {
+		if (mc_counters_config[mc].fd == -1)
+			continue;
 		read_mem_bw_ioctl_perf_event_ioc_reset_enable(mc);
+	}
 
 	sleep(1);
 
 	/* Stop counters after a second to get results. */
-	for (mc = 0; mc < mcs; mc++)
+	for (mc = 0; mc < mcs; mc++) {
+		if (mc_counters_config[mc].fd == -1)
+			continue;
 		read_mem_bw_ioctl_perf_event_ioc_disable(mc);
+	}
 }
 
 /*
@@ -387,6 +466,10 @@ static int get_read_mem_bw_mc(float *bw_mc)
 		struct membw_read_format measurement;
 		struct mc_counter_config *r =
 			&mc_counters_config[mc];
+
+		/* Skip memory controllers that were not opened (remote node). */
+		if (r->fd == -1)
+			continue;
 
 		if (read(r->fd, &measurement, sizeof(measurement)) == -1) {
 			ksft_perror("Couldn't get read bandwidth through MC");
