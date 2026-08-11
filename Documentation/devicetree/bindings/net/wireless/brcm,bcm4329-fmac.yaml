@@ -57,6 +57,13 @@ properties:
           - pci14e4,4434  # BCM4388
           - pci14e4,449d  # BCM43752
 
+  nvmem-cells:
+    maxItems: 1
+    description: Reference to an nvmem node for the MAC address
+
+  nvmem-cell-names:
+    const: mac-address
+
   reg:
     description: SDIO function number for the device (for most cases
       this will be 1) or PCI device identifier.
