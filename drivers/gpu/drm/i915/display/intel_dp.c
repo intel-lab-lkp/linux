@@ -125,6 +125,7 @@ bool intel_dp_is_edp(struct intel_dp *intel_dp)
 
 static void intel_dp_unset_edid(struct intel_dp *intel_dp);
 static int intel_dp_hdmi_sink_max_frl(struct intel_dp *intel_dp);
+static bool intel_dp_is_hdmi_2_1_sink(struct intel_dp *intel_dp);
 
 /* Is link rate UHBR and thus 128b/132b? */
 bool intel_dp_is_uhbr(const struct intel_crtc_state *crtc_state)
@@ -1179,8 +1180,58 @@ static int frl_required_bw(int clock, int bpc,
 	return clock * bpc * 3;
 }
 
+static int frl_required_bw_dsc(int target_clock, int comp_bpp_x16)
+{
+	return DIV_ROUND_UP(target_clock * comp_bpp_x16, 16);
+}
+
+static bool
+intel_dp_pcon_dsc_fits_frl_bw(struct intel_dp *intel_dp,
+			      const struct drm_display_mode *mode,
+			      int bpc, enum intel_output_format sink_format,
+			      int max_frl_bw)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+	const struct drm_display_info *info = &connector->base.display_info;
+	int min_dsc_bpp, max_dsc_bpp;
+	int num_slices, slice_width;
+	int hdmi_max_chunk_bytes;
+	int pcon_max_slices, pcon_max_slice_width;
+
+	/* PCON and HDMI sink must both support DSC 1.2 */
+	if (!info->hdmi.dsc_cap.v_1p2 ||
+	    !drm_dp_pcon_enc_is_dsc_1_2(intel_dp->pcon_dsc_dpcd))
+		return false;
+
+	pcon_max_slices = drm_dp_pcon_dsc_max_slices(intel_dp->pcon_dsc_dpcd);
+	pcon_max_slice_width = drm_dp_pcon_dsc_max_slice_width(intel_dp->pcon_dsc_dpcd);
+
+	num_slices = intel_hdmi_dsc_get_num_slices(mode, sink_format,
+						   pcon_max_slices,
+						   pcon_max_slice_width,
+						   info->hdmi.dsc_cap.max_slices,
+						   info->hdmi.dsc_cap.clk_per_slice);
+	if (!num_slices)
+		return false;
+
+	slice_width = DIV_ROUND_UP(mode->hdisplay, num_slices);
+
+	intel_hdmi_dsc_get_min_max_bpp(sink_format, bpc, info->hdmi.dsc_cap.all_bpp,
+				       &min_dsc_bpp, &max_dsc_bpp);
+
+	/* Use the lowest allowed compressed bpp for the best-case bandwidth */
+	hdmi_max_chunk_bytes = info->hdmi.dsc_cap.total_chunk_kbytes * 1024;
+	if (!intel_hdmi_dsc_bpp_fits_chunk_bytes(min_dsc_bpp, num_slices, slice_width,
+						 hdmi_max_chunk_bytes))
+		return false;
+
+	return frl_required_bw_dsc(mode->clock, min_dsc_bpp * 16) <= max_frl_bw;
+}
+
 static enum drm_mode_status
-intel_dp_frl_bw_valid(struct intel_dp *intel_dp, int target_clock,
+intel_dp_frl_bw_valid(struct intel_dp *intel_dp,
+		      const struct drm_display_mode *mode,
+		      int target_clock,
 		      int bpc, enum intel_output_format sink_format,
 		      bool respect_downstream_limits)
 {
@@ -1199,11 +1250,19 @@ intel_dp_frl_bw_valid(struct intel_dp *intel_dp, int target_clock,
 	/* converting bw from Gbps to Kbps*/
 	max_frl_bw = max_frl_bw * 1000000;
 
-	/* #FIXME check bandwidth with DSC if both PCON and HDMI sink support DSC */
-	if (target_bw > max_frl_bw)
-		return MODE_CLOCK_HIGH;
+	if (target_bw <= max_frl_bw)
+		return MODE_OK;
 
-	return MODE_OK;
+	/*
+	 * Uncompressed transport doesn't fit; if both PCON and HDMI sink
+	 * support DSC, check whether DSC compression brings it within limits.
+	 */
+	if (intel_dp_is_hdmi_2_1_sink(intel_dp) &&
+	    intel_dp_pcon_dsc_fits_frl_bw(intel_dp, mode, bpc, sink_format,
+					  max_frl_bw))
+		return MODE_OK;
+
+	return MODE_CLOCK_HIGH;
 }
 
 static bool
@@ -1215,13 +1274,14 @@ intel_dp_pcon_sink_support_frl(struct intel_dp *intel_dp)
 
 static enum drm_mode_status
 intel_dp_hdmi_bw_valid(struct intel_dp *intel_dp,
+		       const struct drm_display_mode *mode,
 		       int target_clock, int bpc,
 		       enum intel_output_format sink_format,
 		       bool respect_downstream_limits)
 {
 	if (intel_dp_pcon_sink_support_frl(intel_dp))
-		return intel_dp_frl_bw_valid(intel_dp, target_clock, bpc,
-					     sink_format,
+		return intel_dp_frl_bw_valid(intel_dp, mode,
+					     target_clock, bpc, sink_format,
 					     respect_downstream_limits);
 
 	return intel_dp_tmds_clock_valid(intel_dp, target_clock, bpc, sink_format,
@@ -1241,7 +1301,8 @@ intel_dp_mode_valid_downstream(struct intel_connector *connector,
 	    target_clock > intel_dp->dfp.max_dotclock)
 		return MODE_CLOCK_HIGH;
 
-	return intel_dp_hdmi_bw_valid(intel_dp, target_clock, bpc, sink_format, true);
+	return intel_dp_hdmi_bw_valid(intel_dp, mode, target_clock, bpc,
+				      sink_format, true);
 }
 
 static enum drm_mode_status
@@ -1651,7 +1712,8 @@ static int intel_dp_hdmi_compute_bpc(struct intel_dp *intel_dp,
 	for (; bpc >= 8; bpc -= 2) {
 		if (intel_hdmi_bpc_possible(crtc_state, bpc,
 					    intel_dp_has_hdmi_sink(intel_dp)) &&
-		    intel_dp_hdmi_bw_valid(intel_dp, clock, bpc, crtc_state->sink_format,
+		    intel_dp_hdmi_bw_valid(intel_dp, &crtc_state->hw.adjusted_mode,
+					   clock, bpc, crtc_state->sink_format,
 					   respect_downstream_limits) == MODE_OK)
 			return bpc;
 	}
