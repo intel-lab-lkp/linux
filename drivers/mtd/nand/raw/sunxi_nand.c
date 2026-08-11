@@ -2032,6 +2032,15 @@ static void sunxi_nand_detach_chip(struct nand_chip *nand)
 	sunxi_nand->user_data_bytes = NULL;
 }
 
+static int sunxi_nfc_ecc_steps(struct mtd_info *mtd, unsigned int step_size)
+{
+	if (!step_size || mtd->writesize < step_size ||
+	    mtd->writesize % step_size)
+		return -EINVAL;
+
+	return mtd->writesize / step_size;
+}
+
 static int sunxi_nfc_maximize_user_data(struct nand_chip *nand, uint32_t oobsize,
 					int ecc_bytes, int nsectors)
 {
@@ -2078,7 +2087,9 @@ static int sunxi_nand_hw_ecc_ctrl_init(struct nand_chip *nand,
 		int bytes = mtd->oobsize;
 
 		ecc->size = 1024;
-		nsectors = mtd->writesize / ecc->size;
+		nsectors = sunxi_nfc_ecc_steps(mtd, ecc->size);
+		if (nsectors < 0)
+			return nsectors;
 
 		if (!nfc->caps->reg_user_data_len) {
 			/*
@@ -2163,7 +2174,9 @@ static int sunxi_nand_hw_ecc_ctrl_init(struct nand_chip *nand,
 	/* HW ECC always work with even numbers of ECC bytes */
 	ecc->bytes = ALIGN(ecc->bytes, 2);
 
-	nsectors = mtd->writesize / ecc->size;
+	nsectors = sunxi_nfc_ecc_steps(mtd, ecc->size);
+	if (nsectors < 0)
+		return nsectors;
 
 	/*
 	 * The rationale for variable data length is to prioritize maximum ECC
