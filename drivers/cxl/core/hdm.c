@@ -1084,6 +1084,18 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 		cxld->interleave_ways, cxld->interleave_granularity);
 
 	if (!cxled) {
+		/*
+		 * The Target List register only holds
+		 * ARRAY_SIZE(target_list.target_id) entries, so a switch
+		 * decoder cannot interleave across more ports than that.
+		 */
+		if (cxld->interleave_ways > ARRAY_SIZE(target_list.target_id)) {
+			dev_warn(&port->dev,
+				 "decoder%d.%d: Interleave ways: %d exceeds target list size\n",
+				 port->id, cxld->id, cxld->interleave_ways);
+			return -ENXIO;
+		}
+
 		lo = readl(hdm + CXL_HDM_DECODER0_TL_LOW(which));
 		hi = readl(hdm + CXL_HDM_DECODER0_TL_HIGH(which));
 		target_list.value = (hi << 32) + lo;
