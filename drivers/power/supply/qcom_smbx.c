@@ -374,6 +374,7 @@ enum smb_generation {
 
 #define AICL_RERUN_TIME_CFG				0x661
 #define AICL_RERUN_TIME_MASK				GENMASK(1, 0)
+#define AICL_RERUN_TIME_3_SECS				0
 
 #define STAT_CFG					0x690
 #define STAT_SW_OVERRIDE_VALUE_BIT			BIT(7)
@@ -1383,6 +1384,14 @@ static int smb_probe(struct platform_device *pdev)
 		return dev_err_probe(chip->dev, rc, "Couldn't set wake irq\n");
 
 	platform_set_drvdata(pdev, chip);
+
+	rc = regmap_write_bits(chip->regmap,
+			       chip->base + AICL_RERUN_TIME_CFG,
+			       AICL_RERUN_TIME_MASK,
+			       AICL_RERUN_TIME_3_SECS);
+	if (rc < 0)
+		return dev_err_probe(chip->dev, rc,
+				     "could not set AICL rerun time\n");
 
 	if (chip->gen == SMB5) {
 		rc = regmap_update_bits(chip->regmap,
