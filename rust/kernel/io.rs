@@ -9,6 +9,8 @@ use core::{
     mem::MaybeUninit, //
 };
 
+use macros::macro_export_scoped;
+
 use crate::{
     bindings,
     prelude::*,
@@ -1673,8 +1675,7 @@ where
 /// let nested: Mmio<'_, u32> = io_project!(whole, .field);
 /// # Ok::<(), Error>(()) }
 /// ```
-#[macro_export]
-#[doc(hidden)]
+#[macro_export_scoped]
 macro_rules! io_project {
     ($io:expr, $($proj:tt)*) => {{
         #[allow(unused)]
@@ -1688,8 +1689,6 @@ macro_rules! io_project {
         unsafe { view.project_view(ptr) }
     }};
 }
-#[doc(inline)]
-pub use crate::io_project;
 
 /// Read from I/O memory.
 ///
@@ -1707,15 +1706,12 @@ pub use crate::io_project;
 /// let field: u32 = kernel::io::io_read!(mmio, [try: 2].field);
 /// # Ok::<(), Error>(()) }
 /// ```
-#[macro_export]
-#[doc(hidden)]
+#[macro_export_scoped]
 macro_rules! io_read {
     ($io:expr, $($proj:tt)*) => {
-        $crate::io::Io::read_val($crate::io_project!($io, $($proj)*))
+        $crate::io::Io::read_val($crate::io::io_project!($io, $($proj)*))
     };
 }
-#[doc(inline)]
-pub use crate::io_read;
 
 /// Writes to I/O memory.
 ///
@@ -1734,21 +1730,18 @@ pub use crate::io_read;
 /// kernel::io::io_write!(mmio, [try: 2].field, 10);
 /// # Ok::<(), Error>(()) }
 /// ```
-#[macro_export]
-#[doc(hidden)]
+#[macro_export_scoped]
 macro_rules! io_write {
     (@parse [$io:expr] [$($proj:tt)*] [, $val:expr]) => {
-        $crate::io::Io::write_val($crate::io_project!($io, $($proj)*), $val)
+        $crate::io::Io::write_val($crate::io::io_project!($io, $($proj)*), $val)
     };
     (@parse [$io:expr] [$($proj:tt)*] [.$field:tt $($rest:tt)*]) => {
-        $crate::io_write!(@parse [$io] [$($proj)* .$field] [$($rest)*])
+        $crate::io::io_write!(@parse [$io] [$($proj)* .$field] [$($rest)*])
     };
     (@parse [$io:expr] [$($proj:tt)*] [[$flavor:ident: $index:expr] $($rest:tt)*]) => {
-        $crate::io_write!(@parse [$io] [$($proj)* [$flavor: $index]] [$($rest)*])
+        $crate::io::io_write!(@parse [$io] [$($proj)* [$flavor: $index]] [$($rest)*])
     };
     ($io:expr, $($rest:tt)*) => {
-        $crate::io_write!(@parse [$io] [] [$($rest)*])
+        $crate::io::io_write!(@parse [$io] [] [$($rest)*])
     };
 }
-#[doc(inline)]
-pub use crate::io_write;
