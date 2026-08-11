@@ -92,6 +92,17 @@ struct panthor_mmu {
 		 * TLB/cache flushes.
 		 */
 		struct list_head lru_list;
+
+		/**
+		 * @cleanup_list: List containing VMs waiting for cleanup.
+		 *
+		 * This list is used to keep track of VMs that got released but
+		 * couldn't be evicted from their AS slot because the HW hanged.
+		 * In that case, we add the VM to the list, and wait for the next
+		 * post_reset, at which point we're sure the HW is idle and the
+		 * VM resources can go away.
+		 */
+		struct list_head cleanup_list;
 	} as;
 
 	/** @vm: VMs management fields */
@@ -107,6 +118,12 @@ struct panthor_mmu {
 
 		/** @vm.wq: Workqueue used for the VM_BIND queues. */
 		struct workqueue_struct *wq;
+
+		/**
+		 * @vm.cleanup_work: Used to cleanup the VMs that are in
+		 * panthor_mmu::as::cleanup_list.
+		 */
+		struct work_struct cleanup_work;
 	} vm;
 };
 
@@ -2002,6 +2019,35 @@ void panthor_mmu_suspend(struct panthor_device *ptdev)
 	panthor_mmu_irq_suspend(&ptdev->mmu->irq);
 }
 
+static void mmu_post_reset_cleanup(struct panthor_device *ptdev)
+{
+	guard(mutex)(&ptdev->mmu->as.slots_lock);
+
+	/* Now that the reset is effective, we can assume that none of the
+	 * AS slots are setup, and clear the faulty flags too.
+	 */
+	ptdev->mmu->as.alloc_mask = 0;
+	ptdev->mmu->as.faulty_mask = 0;
+
+	for (u32 i = 0; i < ARRAY_SIZE(ptdev->mmu->as.slots); i++) {
+		struct panthor_as *as = ptdev->mmu->as.slots[i].as;
+
+		if (!as)
+			continue;
+
+		panthor_as_release_hw_slot_locked(as);
+
+		/* FIXME: We shouldn't drop the no-unmap restriction if
+		 * we're in the unplug path and the device wasn't properly
+		 * stopped with a SOFT_RESET.
+		 */
+		atomic_and(~PANTHOR_AS_FORBID_UNMAP, &as->restrictions);
+	}
+
+	if (!list_empty(&ptdev->mmu->as.cleanup_list))
+		queue_work(panthor_cleanup_wq, &ptdev->mmu->vm.cleanup_work);
+}
+
 /**
  * panthor_mmu_resume() - Resume the MMU logic
  * @ptdev: Device.
@@ -2013,11 +2059,7 @@ void panthor_mmu_suspend(struct panthor_device *ptdev)
  */
 void panthor_mmu_resume(struct panthor_device *ptdev)
 {
-	mutex_lock(&ptdev->mmu->as.slots_lock);
-	ptdev->mmu->as.alloc_mask = 0;
-	ptdev->mmu->as.faulty_mask = 0;
-	mutex_unlock(&ptdev->mmu->as.slots_lock);
-
+	mmu_post_reset_cleanup(ptdev);
 	panthor_mmu_irq_resume(&ptdev->mmu->irq);
 }
 
@@ -2055,22 +2097,7 @@ void panthor_mmu_post_reset(struct panthor_device *ptdev)
 {
 	struct panthor_vm *vm;
 
-	mutex_lock(&ptdev->mmu->as.slots_lock);
-
-	/* Now that the reset is effective, we can assume that none of the
-	 * AS slots are setup, and clear the faulty flags too.
-	 */
-	ptdev->mmu->as.alloc_mask = 0;
-	ptdev->mmu->as.faulty_mask = 0;
-
-	for (u32 i = 0; i < ARRAY_SIZE(ptdev->mmu->as.slots); i++) {
-		struct panthor_as *as = ptdev->mmu->as.slots[i].as;
-
-		if (as)
-			panthor_as_release_hw_slot_locked(as);
-	}
-
-	mutex_unlock(&ptdev->mmu->as.slots_lock);
+	mmu_post_reset_cleanup(ptdev);
 
 	panthor_mmu_irq_resume(&ptdev->mmu->irq);
 
@@ -2083,57 +2110,25 @@ void panthor_mmu_post_reset(struct panthor_device *ptdev)
 	mutex_unlock(&ptdev->mmu->vm.lock);
 }
 
-static void panthor_vm_release(struct kref *kref)
+static void vm_cleanup(struct panthor_vm *vm)
 {
-	struct panthor_vm *vm = container_of(kref, struct panthor_vm, refcount);
 	struct panthor_as *as = vm->as;
 	struct panthor_device *ptdev = container_of(as->base.drm, struct panthor_device, base);
 
-	/* Make sure the page table behind this VM doesn't participate in reclaim
-	 * after that point, since we're about to release everything anyway.
-	 */
-	mutex_lock(&ptdev->base.gem_lru_mutex);
-	list_del_init(&as->reclaim.lru_node);
-	mutex_unlock(&ptdev->base.gem_lru_mutex);
+	if (!(atomic_read(&as->restrictions) & PANTHOR_AS_FORBID_UNMAP)) {
+		/* Unmap everything in case some BOs were still mapped. */
+		drm_WARN_ON(&ptdev->base,
+			    panthor_vm_unmap_range(vm, as->base.mm_start, as->base.mm_range));
+	}
 
-	/* Unmap everything in case some BOs were still mapped. */
-	drm_WARN_ON(&ptdev->base,
-		    panthor_vm_unmap_range(vm, as->base.mm_start, as->base.mm_range));
-
-	mutex_lock(&vm->heaps.lock);
-	if (drm_WARN_ON(&ptdev->base, vm->heaps.pool))
-		panthor_heap_pool_destroy(vm->heaps.pool);
-	mutex_unlock(&vm->heaps.lock);
+	scoped_guard(mutex, &vm->heaps.lock) {
+		if (drm_WARN_ON(&ptdev->base, vm->heaps.pool))
+			panthor_heap_pool_destroy(vm->heaps.pool);
+	}
 	mutex_destroy(&vm->heaps.lock);
-
-	mutex_lock(&ptdev->mmu->vm.lock);
-	list_del(&vm->node);
-	/* Restore the scheduler state so we can call drm_sched_entity_destroy()
-	 * and drm_sched_fini(). If get there, that means we have no job left
-	 * and no new jobs can be queued, so we can start the scheduler without
-	 * risking interfering with the reset.
-	 */
-	if (ptdev->mmu->vm.reset_in_progress)
-		panthor_vm_start(vm);
-	mutex_unlock(&ptdev->mmu->vm.lock);
 
 	drm_sched_entity_destroy(&vm->entity);
 	drm_sched_fini(&vm->sched);
-
-	mutex_lock(&vm->as->op_lock);
-	mutex_lock(&ptdev->mmu->as.slots_lock);
-	if (as->hw_slot.id >= 0) {
-		int cookie;
-
-		if (drm_dev_enter(&ptdev->base, &cookie)) {
-			panthor_mmu_as_disable(ptdev, as->hw_slot.id, false);
-			drm_dev_exit(cookie);
-		}
-
-		panthor_as_release_hw_slot_locked(as);
-	}
-	mutex_unlock(&ptdev->mmu->as.slots_lock);
-	mutex_unlock(&vm->as->op_lock);
 
 	if (vm->dummy)
 		drm_gem_object_put(&vm->dummy->base);
@@ -2141,6 +2136,88 @@ static void panthor_vm_release(struct kref *kref)
 	drm_mm_takedown(&vm->mm);
 	drm_gpuvm_put(&as->base);
 	kfree(vm);
+}
+
+static bool vm_prep_for_cleanup(struct panthor_vm *vm)
+{
+	struct panthor_as *as = vm->as;
+	struct panthor_device *ptdev = container_of(as->base.drm, struct panthor_device, base);
+	bool ready_for_cleanup;
+	int cookie, ret;
+
+	/* First we forbid any kind of use on the VM that's about to be
+	 * released. UNMAP will be restored later if we manage to evict
+	 * the page table from its AS slot.
+	 */
+	atomic_or(PANTHOR_AS_FORBID_USE |
+		  PANTHOR_AS_FORBID_MAP |
+		  PANTHOR_AS_FORBID_UNMAP,
+		  &vm->as->restrictions);
+
+	/* Make sure the page table behind this VM doesn't participate in reclaim
+	 * after that point, since we're about to release everything anyway.
+	 */
+	scoped_guard(mutex, &ptdev->base.gem_lru_mutex)
+		list_del_init(&as->reclaim.lru_node);
+
+	scoped_guard(mutex, &ptdev->mmu->vm.lock) {
+		/* Remove the VM from the list early, so it can't be seen by the VM list
+		 * walkers after that point.
+		 */
+		list_del(&vm->node);
+
+		/* Restore the scheduler state so we can call drm_sched_entity_destroy()
+		 * and drm_sched_fini(). If get there, that means we have no job left
+		 * and no new jobs can be queued, so we can start the scheduler without
+		 * risking interfering with the reset.
+		 */
+		if (ptdev->mmu->vm.reset_in_progress)
+			panthor_vm_start(vm);
+	}
+
+	if (!drm_dev_enter(&ptdev->base, &cookie)) {
+		guard(mutex)(&ptdev->mmu->as.slots_lock);
+
+		/* We're in the unplug path and can't recover from
+		 * that, so we just forcibly evict the pgtable. The
+		 * no-unmap restriction will leak resources if
+		 * we can't guarantee the HW stopped.
+		 */
+		if (as->hw_slot.id >= 0)
+			panthor_as_release_hw_slot_locked(as);
+
+		return true;
+	}
+
+	scoped_guard(mutex, &ptdev->mmu->as.slots_lock) {
+		if (as->hw_slot.id >= 0) {
+			ret = panthor_mmu_as_disable(ptdev, as->hw_slot.id, false);
+			if (!ret) {
+				panthor_as_release_hw_slot_locked(as);
+			} else {
+				list_add_tail(&vm->node, &ptdev->mmu->as.cleanup_list);
+				panthor_device_schedule_reset(ptdev);
+			}
+		}
+
+		/* Page table is no longer resident, we can relax the no-unmap
+		 * restriction.
+		 */
+		ready_for_cleanup = as->hw_slot.id < 0;
+		if (ready_for_cleanup)
+			atomic_and(~PANTHOR_AS_FORBID_UNMAP, &as->restrictions);
+	}
+
+	drm_dev_exit(cookie);
+	return ready_for_cleanup;
+}
+
+static void panthor_vm_release(struct kref *kref)
+{
+	struct panthor_vm *vm = container_of(kref, struct panthor_vm, refcount);
+
+	if (vm_prep_for_cleanup(vm))
+		vm_cleanup(vm);
 }
 
 /**
@@ -2758,7 +2835,11 @@ static void panthor_as_free(struct drm_gpuvm *gpuvm)
 {
 	struct panthor_as *as = container_of(gpuvm, struct panthor_as, base);
 
-	if (as->pt.ops)
+	/* If we get to that point and we're still not allowed to unmap,
+	 * this means the HW is still running and has a access to the page
+	 * table, so we just leak it to avoid UAF.
+	 */
+	if (as->pt.ops && !(atomic_read(&as->restrictions) & PANTHOR_AS_FORBID_UNMAP))
 		free_io_pgtable_ops(as->pt.ops);
 
 	mutex_destroy(&as->op_lock);
@@ -3473,6 +3554,13 @@ void panthor_mmu_unplug(struct panthor_device *ptdev)
 	}
 	mutex_unlock(&ptdev->mmu->as.slots_lock);
 
+	/* Make sure pending VM cleanups are processed before leaving. Those
+	 * cleanups might schedule vm_bind_job cleanups, so keep this
+	 * flush_work() before the final flush_workqueue(panthor_cleanup_wq).
+	 */
+	flush_work(&ptdev->mmu->vm.cleanup_work);
+	drm_WARN_ON(&ptdev->base, !list_empty(&ptdev->mmu->as.cleanup_list));
+
 	/* Ensure any pending job cleanup work are executed before returning,
 	 * otherwise those might access objects that are gone if the work is
 	 * executed after other components are unplugged.
@@ -3488,6 +3576,27 @@ static void panthor_mmu_release_wq(struct drm_device *ddev, void *res)
 static void panthor_mmu_info_init(struct panthor_device *ptdev)
 {
 	ptdev->mmu_info.page_size_bitmap = SZ_4K | SZ_2M;
+}
+
+static void mmu_cleanup_vms_work(struct work_struct *work)
+{
+	struct panthor_mmu *mmu =
+		container_of(work, struct panthor_mmu, vm.cleanup_work);
+	struct panthor_vm *vm, *tmp;
+	LIST_HEAD(cleanup_list);
+
+	/* Collect the VMs to cleanup first. */
+	scoped_guard(mutex, &mmu->as.slots_lock) {
+		list_for_each_entry_safe(vm, tmp, &mmu->as.cleanup_list, node) {
+			if (vm->as->hw_slot.id < 0)
+				list_move_tail(&vm->node, &cleanup_list);
+		}
+	}
+
+	list_for_each_entry_safe(vm, tmp, &cleanup_list, node) {
+		list_del(&vm->node);
+		vm_cleanup(vm);
+	}
 }
 
 /**
@@ -3508,7 +3617,9 @@ int panthor_mmu_init(struct panthor_device *ptdev)
 	if (!mmu)
 		return -ENOMEM;
 
+	INIT_WORK(&mmu->vm.cleanup_work, mmu_cleanup_vms_work);
 	INIT_LIST_HEAD(&mmu->as.lru_list);
+	INIT_LIST_HEAD(&mmu->as.cleanup_list);
 
 	ret = drmm_mutex_init(&ptdev->base, &mmu->as.slots_lock);
 	if (ret)
