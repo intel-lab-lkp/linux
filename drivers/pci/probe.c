@@ -838,6 +838,17 @@ void __pcie_update_link_speed(struct pci_bus *bus,
 			      reason,
 			      FIELD_GET(PCI_EXP_LNKSTA_NLW, linksta),
 			      linksta & PCI_EXP_LNKSTA_LINK_STATUS_MASK);
+
+	/*
+	 * Re-evaluate DEV3_CTL.14-Bit Tag Requester Enable on this bridge
+	 * and its subordinate bus.  Any time bus->flit_mode is updated, the
+	 * link has just changed state; if flit mode is no longer active, the
+	 * bridge and downstream devices must drop that enable before
+	 * further TLPs are issued, or the requester (the bridge) will tag
+	 * config/MMIO requests with 14-bit tags that the completer can no
+	 * longer echo back in non-flit mode.
+	 */
+	pci_bridge_refresh_14bit_tag(bus->self);
 }
 
 void pcie_update_link_speed(struct pci_bus *bus,

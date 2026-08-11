@@ -684,6 +684,8 @@ void __pcie_update_link_speed(struct pci_bus *bus,
 
 void pcie_update_link_speed(struct pci_bus *bus, enum pcie_link_change_reason reason);
 
+void pci_bridge_refresh_14bit_tag(struct pci_dev *bridge);
+
 /* Single Root I/O Virtualization */
 struct pci_sriov {
 	int		pos;		/* Capability position */
