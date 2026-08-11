@@ -522,17 +522,6 @@ alternative_else_nop_endif
 #endif
 
 	/*
-	 * Emit a 64-bit absolute little endian symbol reference in a way that
-	 * ensures that it will be resolved at build time, even when building a
-	 * PIE binary. This requires cooperation from the linker script, which
-	 * must emit the lo32/hi32 halves individually.
-	 */
-	.macro	le64sym, sym
-	.long	\sym\()_lo32
-	.long	\sym\()_hi32
-	.endm
-
-	/*
 	 * mov_q - move an immediate constant into a 64-bit register using
 	 *         between 2 and 4 movz/movk instructions (depending on the
 	 *         magnitude and sign of the operand)
