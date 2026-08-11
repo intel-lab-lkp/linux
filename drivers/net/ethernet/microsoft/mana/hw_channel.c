@@ -262,7 +262,15 @@ static void mana_hwc_init_event_handler(void *ctx, struct gdma_queue *q_self,
 			break;
 
 		case HWC_INIT_DATA_MAX_NUM_CQS:
-			gd->gdma_context->max_num_cqs = val;
+			/* Store, don't apply: mana_hwc_establish_channel()
+			 * commits this to gc->max_num_cqs once, together
+			 * with sizing cq_table, so a spoofed post-init event
+			 * cannot inflate the bound past the allocation.
+			 * WRITE_ONCE() pairs with the READ_ONCE() there:
+			 * this store runs in EQ interrupt context,
+			 * concurrently with that process-context read.
+			 */
+			WRITE_ONCE(hwc->hwc_init_max_num_cqs, val);
 			break;
 
 		case HWC_INIT_DATA_PDID:
@@ -868,6 +876,8 @@ static int mana_hwc_establish_channel(struct gdma_context *gc, u16 *q_depth,
 	struct gdma_queue *eq = hwc->cq->gdma_eq;
 	struct gdma_queue *cq = hwc->cq->gdma_cq;
 	struct gdma_queue __rcu **cq_table;
+	u32 num_cqs;
+	u32 cq_id;
 	int err;
 
 	init_completion(&hwc->hwc_init_eqe_comp);
@@ -902,15 +912,29 @@ static int mana_hwc_establish_channel(struct gdma_context *gc, u16 *q_depth,
 	*max_req_msg_size = hwc->hwc_init_max_req_msg_size;
 	*max_resp_msg_size = hwc->hwc_init_max_resp_msg_size;
 
-	/* Both were set in mana_hwc_init_event_handler(). */
-	if (WARN_ON(cq->id >= gc->max_num_cqs))
+	/* Snapshot the device-reported CQ count and CQ id into locals and
+	 * use only the locals below, so the same value that sizes cq_table
+	 * also bounds and indexes it -- even across the sleeping vcalloc().
+	 * Both fields are written by mana_hwc_init_event_handler() from EQ
+	 * interrupt context: hwc_init_max_num_cqs under WRITE_ONCE() (paired
+	 * here), and cq->id as an ordinary store.  READ_ONCE() keeps each
+	 * read tear-free and, crucially, non-reloadable, so a spoofed
+	 * post-init event cannot make the WARN_ON() pass against one value
+	 * while the allocation or the index uses another.
+	 */
+	num_cqs = READ_ONCE(hwc->hwc_init_max_num_cqs);
+	cq_id = READ_ONCE(cq->id);
+
+	if (WARN_ON(cq_id >= num_cqs))
 		return -EPROTO;
 
-	cq_table = vcalloc(gc->max_num_cqs, sizeof(*cq_table));
+	cq_table = vcalloc(num_cqs, sizeof(*cq_table));
 	if (!cq_table)
 		return -ENOMEM;
 
-	rcu_assign_pointer(cq_table[cq->id], cq);
+	gc->max_num_cqs = num_cqs;
+
+	rcu_assign_pointer(cq_table[cq_id], cq);
 	/* Publish the fully-initialised table last; pairs with the
 	 * rcu_dereference(gc->cq_table) in mana_gd_process_eqe().
 	 */
