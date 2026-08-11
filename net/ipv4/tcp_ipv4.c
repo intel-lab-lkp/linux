@@ -1730,8 +1730,12 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 	sk_setup_caps(newsk, dst);
 
 #if IS_ENABLED(CONFIG_IPV6)
-	if (opt_child_init)
+	if (opt_child_init) {
 		opt_child_init(newsk, sk);
+	} else {
+		newinet->pinet6 = NULL;
+		newinet->ipv6_fl_list = NULL;
+	}
 #endif
 	tcp_ca_openreq_child(newsk, dst);
 

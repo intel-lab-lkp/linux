@@ -479,6 +479,9 @@ void inet6_cleanup_sock(struct sock *sk)
 	struct sk_buff *skb;
 	struct ipv6_txoptions *opt;
 
+	if (!np)
+		return;
+
 	/* Release rx options */
 
 	skb = xchg(&np->pktoptions, NULL);
