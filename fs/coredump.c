@@ -799,7 +799,7 @@ static bool coredump_sock_request(struct core_name *cn, struct coredump_params *
 		.size		= sizeof(struct coredump_req),
 		.mask		= COREDUMP_KERNEL | COREDUMP_USERSPACE |
 				  COREDUMP_REJECT | COREDUMP_WAIT |
-				  COREDUMP_HEADER,
+				  COREDUMP_HEADER | COREDUMP_SPARSE,
 		.size_ack	= sizeof(struct coredump_ack),
 	};
 	struct coredump_ack ack = {};
@@ -850,6 +850,12 @@ static bool coredump_sock_request(struct core_name *cn, struct coredump_params *
 
 	/* Framing only applies to a coredump the kernel writes. */
 	if ((ack.mask & COREDUMP_HEADER) && !(ack.mask & COREDUMP_KERNEL)) {
+		coredump_sock_mark(cprm->file, COREDUMP_MARK_CONFLICTING);
+		return false;
+	}
+
+	/* Zero frames only exist inside a framed stream. */
+	if ((ack.mask & COREDUMP_SPARSE) && !(ack.mask & COREDUMP_HEADER)) {
 		coredump_sock_mark(cprm->file, COREDUMP_MARK_CONFLICTING);
 		return false;
 	}
@@ -1229,6 +1235,11 @@ static bool dump_framed(const struct coredump_params *cprm)
 	return cprm->mask & COREDUMP_HEADER;
 }
 
+static bool dump_sparse(const struct coredump_params *cprm)
+{
+	return cprm->mask & COREDUMP_SPARSE;
+}
+
 /* Describe the next @len bytes of the coredump. Returns the header size. */
 static size_t dump_frame_init(struct coredump_params *cprm,
 			      enum coredump_frame_type type, u64 len)
@@ -1292,10 +1303,31 @@ static int __dump_emit(struct coredump_params *cprm, const void *addr, int nr)
 	return dump_write_iter(cprm, &iter, nr);
 }
 
+/* Hand the server the length of the hole instead of the hole itself. */
+static int dump_skip_frame(struct coredump_params *cprm, size_t nr)
+{
+	struct kvec kvec;
+	struct iov_iter iter;
+	size_t hdr;
+
+	if (dump_interrupted())
+		return 0;
+
+	hdr = dump_frame_init(cprm, COREDUMP_FRAME_ZERO, nr);
+	kvec.iov_base = cprm->frame;
+	kvec.iov_len = hdr;
+	iov_iter_kvec(&iter, ITER_SOURCE, &kvec, 1, hdr);
+
+	return dump_write_iter(cprm, &iter, nr);
+}
+
 static int __dump_skip(struct coredump_params *cprm, size_t nr)
 {
 	static char zeroes[PAGE_SIZE];
 	struct file *file = cprm->file;
+
+	if (dump_sparse(cprm))
+		return dump_skip_frame(cprm, nr);
 
 	if (file->f_mode & FMODE_LSEEK) {
 		if (dump_interrupted() || vfs_llseek(file, nr, SEEK_CUR) < 0)
