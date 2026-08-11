@@ -243,7 +243,12 @@ static int get_cpumask_from_cache(struct device_node *cache,
 		return -ENOENT;
 	}
 
-	return mpam_get_cpumask_from_cache_id(cache_id, cache_level, affinity);
+	err = mpam_get_cpumask_from_cache_id(cache_id, cache_level, affinity);
+	if (err)
+		/* Don't leave a partially-filled mask for the caller to misuse */
+		cpumask_clear(affinity);
+
+	return err;
 }
 
 static int mpam_dt_count_msc(void)
