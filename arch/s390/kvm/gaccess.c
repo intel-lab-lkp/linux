@@ -1507,6 +1507,7 @@ static int _do_shadow_crste(struct kvm_s390_mmu_cache *mc, struct gmap *sg, gpa_
 static int _gaccess_do_shadow(struct kvm_s390_mmu_cache *mc, struct gmap *sg,
 			      unsigned long saddr, struct pgtwalk *w)
 {
+	struct kvm_memory_slot *slot;
 	struct guest_fault *entries;
 	int flags, i, hl, gl, l, rc;
 	union crste *table, *host;
@@ -1551,8 +1552,17 @@ static int _gaccess_do_shadow(struct kvm_s390_mmu_cache *mc, struct gmap *sg,
 			return -EAGAIN;
 	}
 
+retry:
 	rc = dat_entry_walk(NULL, entries[LEVEL_MEM].gfn, sg->parent->asce, DAT_WALK_LEAF,
 			    TABLE_TYPE_PAGE_TABLE, &host, &ptep_h);
+	if (rc == -ENOENT) {
+		slot = gfn_to_memslot(sg->kvm, entries[LEVEL_MEM].gfn);
+		if (!slot)
+			return PGM_ADDRESSING;
+		rc = gmap_link(mc, sg->parent, entries + LEVEL_MEM, slot);
+		if (!rc)
+			goto retry;
+	}
 	if (rc)
 		return rc;
 
