@@ -65,8 +65,7 @@ impl<T, const ID: u64> ListArcField<T, ID> {
 }
 
 /// Defines getters for a [`ListArcField`].
-#[macro_export]
-#[doc(hidden)]
+#[macros::macro_export_scoped]
 macro_rules! define_list_arc_field_getter {
     ($pub:vis fn $name:ident(&self $(<$id:tt>)?) -> &$typ:ty { $field:ident }
      $($rest:tt)*
@@ -94,4 +93,3 @@ macro_rules! define_list_arc_field_getter {
 
     () => {};
 }
-pub use define_list_arc_field_getter;

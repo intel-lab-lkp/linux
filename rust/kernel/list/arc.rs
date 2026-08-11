@@ -81,8 +81,7 @@ pub unsafe trait TryNewListArc<const ID: u64 = 0>: ListArcSafe<ID> {
 /// The `tracked_by` strategy is usually used by deferring to a field of type
 /// [`AtomicTracker`]. However, it is also possible to defer the tracking to another struct
 /// using also using this macro.
-#[macro_export]
-#[doc(hidden)]
+#[macros::macro_export_scoped]
 macro_rules! impl_list_arc_safe {
     (impl$({$($generics:tt)*})? ListArcSafe<$num:tt> for $t:ty { untracked; } $($rest:tt)*) => {
         impl$(<$($generics)*>)? $crate::list::ListArcSafe<$num> for $t {
@@ -127,7 +126,6 @@ macro_rules! impl_list_arc_safe {
 
     () => {};
 }
-pub use impl_list_arc_safe;
 
 /// A wrapper around [`Arc`] that's guaranteed unique for the given id.
 ///
