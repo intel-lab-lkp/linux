@@ -185,7 +185,7 @@ enum { /* tag_Package_Definition */
 #define INCLUDE_MULTI_FUNC_GPS(_Adapter) \
 	(GET_HAL_DATA(_Adapter)->MultiFunc & RT_MULTI_FUNC_GPS)
 
-/*  rtl8723a_hal_init.c */
+/*  rtl8723b_hal_init.c */
 s32 rtl8723b_FirmwareDownload(struct adapter *padapter, bool  bUsedWoWLANFw);
 void rtl8723b_FirmwareSelfReset(struct adapter *padapter);
 void rtl8723b_InitializeFirmwareVars(struct adapter *padapter);
