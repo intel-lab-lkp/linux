@@ -91,6 +91,16 @@ void panthor_device_unplug(struct panthor_device *ptdev)
 	 */
 	mutex_unlock(&ptdev->unplug.lock);
 
+	/* Unplug triggered by a device removal might race with the deferred
+	 * one queued by the reset work. The function covers this concurrent
+	 * unplug situation, but if we can disable the work before its
+	 * execution, that's still better.
+	 */
+	disable_work(&ptdev->unplug.work);
+
+	/* Make sure we're not interrupted by resets while we're unplugging. */
+	disable_work_sync(&ptdev->reset.work);
+
 	/* Now, try to cleanly shutdown the GPU before the device resources
 	 * get reclaimed.
 	 */
@@ -112,6 +122,13 @@ void panthor_device_unplug(struct panthor_device *ptdev)
 	 * panthor_device_unplug() callers.
 	 */
 	complete_all(&ptdev->unplug.done);
+}
+
+static void panthor_device_unplug_work(struct work_struct *work)
+{
+	struct panthor_device *ptdev = container_of(work, struct panthor_device, unplug.work);
+
+	panthor_device_unplug(ptdev);
 }
 
 static void panthor_device_reset_cleanup(struct drm_device *ddev, void *data)
@@ -148,8 +165,9 @@ static void panthor_device_reset_work(struct work_struct *work)
 	drm_dev_exit(cookie);
 
 	if (ret) {
-		panthor_device_unplug(ptdev);
+		disable_work(&ptdev->reset.work);
 		drm_err(&ptdev->base, "Failed to boot MCU after reset, making device unusable.");
+		queue_work(ptdev->reset.wq, &ptdev->unplug.work);
 	}
 }
 
@@ -206,6 +224,7 @@ int panthor_device_init(struct panthor_device *ptdev)
 	 */
 	*dummy_page_virt = 1;
 
+	INIT_WORK(&ptdev->unplug.work, panthor_device_unplug_work);
 	INIT_WORK(&ptdev->reset.work, panthor_device_reset_work);
 	disable_work(&ptdev->reset.work);
 	ptdev->reset.wq = alloc_ordered_workqueue("panthor-reset-wq", 0);
