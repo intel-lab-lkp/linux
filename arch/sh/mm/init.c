@@ -72,13 +72,22 @@ static pte_t *__get_pte_phys(unsigned long addr)
 	return pte_offset_kernel(pmd, addr);
 }
 
+static void print_bad_pte(pte_t pte)
+{
+#ifdef CONFIG_X2TLB
+	printk("bad pte %p(%08lx%08lx).\n", &pte, pte.pte_high, pte.pte_low);
+#else
+	printk("bad pte %08lx.\n", pte_val(pte));
+#endif
+}
+
 static void set_pte_phys(unsigned long addr, unsigned long phys, pgprot_t prot)
 {
 	pte_t *pte;
 
 	pte = __get_pte_phys(addr);
 	if (!pte_none(*pte)) {
-		pte_ERROR(*pte);
+		print_bad_pte(*pte);
 		return;
 	}
 
