@@ -13,6 +13,7 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/pcie-dwc.h>
 #include <linux/perf_event.h>
 #include <linux/pci.h>
@@ -20,6 +21,7 @@
 #include <linux/smp.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
 
 #define DWC_PCIE_EVENT_CNT_CTL			0x8
 
@@ -103,12 +105,15 @@ struct dwc_pcie_pmu {
 static int dwc_pcie_pmu_hp_state;
 static struct list_head dwc_pcie_dev_info_head =
 				LIST_HEAD_INIT(dwc_pcie_dev_info_head);
+static DEFINE_MUTEX(dwc_pcie_dev_info_lock);
+static struct work_struct dwc_pcie_pmu_work;
 static bool notify;
 
 struct dwc_pcie_dev_info {
 	struct platform_device *plat_dev;
 	struct pci_dev *pdev;
 	struct list_head dev_node;
+	bool removed;
 };
 
 static ssize_t cpumask_show(struct device *dev,
@@ -593,6 +598,8 @@ static struct dwc_pcie_dev_info *dwc_pcie_find_dev_info(struct pci_dev *pdev)
 {
 	struct dwc_pcie_dev_info *dev_info;
 
+	lockdep_assert_held(&dwc_pcie_dev_info_lock);
+
 	list_for_each_entry(dev_info, &dwc_pcie_dev_info_head, dev_node)
 		if (dev_info->pdev == pdev)
 			return dev_info;
@@ -634,7 +641,6 @@ static u16 dwc_pcie_des_cap(struct pci_dev *pdev)
 static void dwc_pcie_unregister_dev(struct dwc_pcie_dev_info *dev_info)
 {
 	platform_device_unregister(dev_info->plat_dev);
-	list_del(&dev_info->dev_node);
 	kfree(dev_info);
 }
 
@@ -644,23 +650,90 @@ static int dwc_pcie_register_dev(struct pci_dev *pdev)
 	struct dwc_pcie_dev_info *dev_info;
 	u32 sbdf;
 
-	sbdf = (pci_domain_nr(pdev->bus) << 16) | PCI_DEVID(pdev->bus->number, pdev->devfn);
-	plat_dev = platform_device_register_simple("dwc_pcie_pmu", sbdf, NULL, 0);
-	if (IS_ERR(plat_dev))
-		return PTR_ERR(plat_dev);
-
 	dev_info = kzalloc_obj(*dev_info);
-	if (!dev_info) {
-		platform_device_unregister(plat_dev);
+	if (!dev_info)
 		return -ENOMEM;
-	}
 
-	/* Cache platform device to handle pci device hotplug */
+	sbdf = (pci_domain_nr(pdev->bus) << 16) |
+	       PCI_DEVID(pdev->bus->number, pdev->devfn);
+	plat_dev = platform_device_register_data(&pdev->dev, "dwc_pcie_pmu",
+						 sbdf, NULL, 0);
+	if (IS_ERR(plat_dev)) {
+		kfree(dev_info);
+		return PTR_ERR(plat_dev);
+	}
 	dev_info->plat_dev = plat_dev;
 	dev_info->pdev = pdev;
-	list_add(&dev_info->dev_node, &dwc_pcie_dev_info_head);
+
+	mutex_lock(&dwc_pcie_dev_info_lock);
+	list_add_tail(&dev_info->dev_node, &dwc_pcie_dev_info_head);
+	mutex_unlock(&dwc_pcie_dev_info_lock);
 
 	return 0;
+}
+
+static void dwc_pcie_quiesce_dev(struct dwc_pcie_dev_info *dev_info)
+{
+	struct dwc_pcie_pmu *pcie_pmu;
+
+	pcie_pmu = platform_get_drvdata(dev_info->plat_dev);
+	if (!pcie_pmu)
+		return;
+
+	/* Stop config-space accesses before PCI host resources are released. */
+	platform_set_drvdata(dev_info->plat_dev, NULL);
+	devm_release_action(&dev_info->plat_dev->dev, dwc_pcie_unregister_pmu,
+			    pcie_pmu);
+	devm_release_action(&dev_info->plat_dev->dev,
+			    dwc_pcie_pmu_remove_cpuhp_instance,
+			    &pcie_pmu->cpuhp_node);
+}
+
+static int dwc_pcie_reconcile_devices(void)
+{
+	LIST_HEAD(removed_devices);
+	struct dwc_pcie_dev_info *dev_info, *tmp;
+	struct pci_dev *pdev = NULL;
+	int error = 0;
+	int ret;
+
+	pci_lock_rescan_remove();
+	mutex_lock(&dwc_pcie_dev_info_lock);
+	list_for_each_entry_safe(dev_info, tmp, &dwc_pcie_dev_info_head, dev_node)
+		if (dev_info->removed)
+			list_move_tail(&dev_info->dev_node, &removed_devices);
+	mutex_unlock(&dwc_pcie_dev_info_lock);
+
+	list_for_each_entry_safe(dev_info, tmp, &removed_devices, dev_node) {
+		list_del(&dev_info->dev_node);
+		dwc_pcie_unregister_dev(dev_info);
+	}
+
+	for_each_pci_dev(pdev) {
+		if (!dwc_pcie_des_cap(pdev))
+			continue;
+
+		mutex_lock(&dwc_pcie_dev_info_lock);
+		dev_info = dwc_pcie_find_dev_info(pdev);
+		mutex_unlock(&dwc_pcie_dev_info_lock);
+		if (dev_info)
+			continue;
+
+		ret = dwc_pcie_register_dev(pdev);
+		if (ret) {
+			pci_warn(pdev, "failed to register DWC PCIe PMU: %d\n", ret);
+			if (!error)
+				error = ret;
+		}
+	}
+	pci_unlock_rescan_remove();
+
+	return error;
+}
+
+static void dwc_pcie_update_devices(struct work_struct *work)
+{
+	dwc_pcie_reconcile_devices();
 }
 
 static int dwc_pcie_pmu_notifier(struct notifier_block *nb,
@@ -674,14 +747,19 @@ static int dwc_pcie_pmu_notifier(struct notifier_block *nb,
 	case BUS_NOTIFY_ADD_DEVICE:
 		if (!dwc_pcie_des_cap(pdev))
 			return NOTIFY_DONE;
-		if (dwc_pcie_register_dev(pdev))
-			return NOTIFY_BAD;
+		schedule_work(&dwc_pcie_pmu_work);
 		break;
 	case BUS_NOTIFY_DEL_DEVICE:
+		mutex_lock(&dwc_pcie_dev_info_lock);
 		dev_info = dwc_pcie_find_dev_info(pdev);
+		if (dev_info) {
+			dwc_pcie_quiesce_dev(dev_info);
+			dev_info->removed = true;
+		}
+		mutex_unlock(&dwc_pcie_dev_info_lock);
 		if (!dev_info)
 			return NOTIFY_DONE;
-		dwc_pcie_unregister_dev(dev_info);
+		schedule_work(&dwc_pcie_pmu_work);
 		break;
 	}
 
@@ -702,18 +780,14 @@ static int dwc_pcie_pmu_probe(struct platform_device *plat_dev)
 	int ret;
 
 	sbdf = plat_dev->id;
-	pdev = pci_get_domain_bus_and_slot(sbdf >> 16, PCI_BUS_NUM(sbdf & 0xffff),
-					   sbdf & 0xff);
-	if (!pdev) {
-		pr_err("No pdev found for the sbdf 0x%x\n", sbdf);
+	if (!plat_dev->dev.parent || plat_dev->dev.parent->bus != &pci_bus_type)
 		return -ENODEV;
-	}
 
+	pdev = to_pci_dev(plat_dev->dev.parent);
 	vsec = dwc_pcie_des_cap(pdev);
 	if (!vsec)
 		return -ENODEV;
 
-	pci_dev_put(pdev);
 	name = devm_kasprintf(&plat_dev->dev, GFP_KERNEL, "dwc_rootport_%x", sbdf);
 	if (!name)
 		return -ENOMEM;
@@ -766,6 +840,8 @@ static int dwc_pcie_pmu_probe(struct platform_device *plat_dev)
 	if (ret)
 		return ret;
 
+	platform_set_drvdata(plat_dev, pcie_pmu);
+
 	return 0;
 }
 
@@ -815,7 +891,11 @@ static int dwc_pcie_pmu_offline_cpu(unsigned int cpu, struct hlist_node *cpuhp_n
 
 static struct platform_driver dwc_pcie_pmu_driver = {
 	.probe = dwc_pcie_pmu_probe,
-	.driver = {.name = "dwc_pcie_pmu",},
+	.driver = {
+		.name = "dwc_pcie_pmu",
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
+		.suppress_bind_attrs = true,
+	},
 };
 
 static void dwc_pcie_cleanup_devices(void)
@@ -823,32 +903,21 @@ static void dwc_pcie_cleanup_devices(void)
 	struct dwc_pcie_dev_info *dev_info, *tmp;
 
 	list_for_each_entry_safe(dev_info, tmp, &dwc_pcie_dev_info_head, dev_node) {
+		list_del(&dev_info->dev_node);
 		dwc_pcie_unregister_dev(dev_info);
 	}
 }
 
 static int __init dwc_pcie_pmu_init(void)
 {
-	struct pci_dev *pdev = NULL;
 	int ret;
-
-	for_each_pci_dev(pdev) {
-		if (!dwc_pcie_des_cap(pdev))
-			continue;
-
-		ret = dwc_pcie_register_dev(pdev);
-		if (ret) {
-			pci_dev_put(pdev);
-			goto err_cleanup;
-		}
-	}
 
 	ret = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
 				      "perf/dwc_pcie_pmu:online",
 				      dwc_pcie_pmu_online_cpu,
 				      dwc_pcie_pmu_offline_cpu);
 	if (ret < 0)
-		goto err_cleanup;
+		return ret;
 
 	dwc_pcie_pmu_hp_state = ret;
 
@@ -856,19 +925,26 @@ static int __init dwc_pcie_pmu_init(void)
 	if (ret)
 		goto err_remove_cpuhp;
 
+	INIT_WORK(&dwc_pcie_pmu_work, dwc_pcie_update_devices);
 	ret = bus_register_notifier(&pci_bus_type, &dwc_pcie_pmu_nb);
 	if (ret)
 		goto err_unregister_driver;
 	notify = true;
+	ret = dwc_pcie_reconcile_devices();
+	if (ret)
+		goto err_unregister_notifier;
 
 	return 0;
 
+err_unregister_notifier:
+	bus_unregister_notifier(&pci_bus_type, &dwc_pcie_pmu_nb);
+	notify = false;
+	cancel_work_sync(&dwc_pcie_pmu_work);
+	dwc_pcie_cleanup_devices();
 err_unregister_driver:
 	platform_driver_unregister(&dwc_pcie_pmu_driver);
 err_remove_cpuhp:
 	cpuhp_remove_multi_state(dwc_pcie_pmu_hp_state);
-err_cleanup:
-	dwc_pcie_cleanup_devices();
 	return ret;
 }
 
@@ -876,6 +952,7 @@ static void __exit dwc_pcie_pmu_exit(void)
 {
 	if (notify)
 		bus_unregister_notifier(&pci_bus_type, &dwc_pcie_pmu_nb);
+	cancel_work_sync(&dwc_pcie_pmu_work);
 	dwc_pcie_cleanup_devices();
 	platform_driver_unregister(&dwc_pcie_pmu_driver);
 	cpuhp_remove_multi_state(dwc_pcie_pmu_hp_state);
