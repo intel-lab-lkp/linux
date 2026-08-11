@@ -21,6 +21,7 @@
    :maxdepth: 1
 
    msg_zerocopy
+   driver
    napi
    vxlan
    netif-msg
@@ -76,7 +77,6 @@ Todolist:
 *   dctcp
 *   devmem
 *   dns_resolver
-*   driver
 *   eql
 *   fib_trie
 *   filter
