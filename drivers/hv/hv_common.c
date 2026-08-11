@@ -21,6 +21,7 @@
 #include <linux/panic_notifier.h>
 #include <linux/ptrace.h>
 #include <linux/random.h>
+#include <linux/rhashtable.h>
 #include <linux/efi.h>
 #include <linux/kdebug.h>
 #include <linux/kmsg_dump.h>
@@ -78,6 +79,27 @@ static struct ctl_table_header *hv_ctl_table_hdr;
 u8 * __percpu *hv_synic_eventring_tail;
 EXPORT_SYMBOL_GPL(hv_synic_eventring_tail);
 
+#ifdef CONFIG_HYPERV_PVIOMMU
+struct hv_pci_busdata {
+	int pci_domain_nr;
+	u32 logical_dev_id_prefix;
+	struct rhash_head node;
+	struct rcu_head rcu;
+};
+
+static struct rhashtable hv_pci_bus_ht;
+static bool hv_pci_bus_ht_initialized;
+
+static const struct rhashtable_params hv_pci_bus_ht_params = {
+	.key_len		= sizeof_field(struct hv_pci_busdata,
+					       pci_domain_nr),
+	.key_offset		= offsetof(struct hv_pci_busdata,
+					   pci_domain_nr),
+	.head_offset		= offsetof(struct hv_pci_busdata, node),
+};
+
+#endif
+
 /*
  * Hyper-V specific initialization and shutdown code that is
  * common across all architectures.  Called from architecture
@@ -86,6 +108,13 @@ EXPORT_SYMBOL_GPL(hv_synic_eventring_tail);
 
 void __init hv_common_free(void)
 {
+#ifdef CONFIG_HYPERV_PVIOMMU
+	if (hv_pci_bus_ht_initialized) {
+		rhashtable_destroy(&hv_pci_bus_ht);
+		hv_pci_bus_ht_initialized = false;
+	}
+#endif
+
 	unregister_sysctl_table(hv_ctl_table_hdr);
 	hv_ctl_table_hdr = NULL;
 
@@ -315,6 +344,9 @@ u8 __init get_vtl(void)
 int __init hv_common_init(void)
 {
 	int i;
+#ifdef CONFIG_HYPERV_PVIOMMU
+	int ret;
+#endif
 	union hv_hypervisor_version_info version;
 
 	/* Get information about the Microsoft Hypervisor version */
@@ -393,6 +425,15 @@ int __init hv_common_init(void)
 
 	for (i = 0; i < nr_cpu_ids; i++)
 		hv_vp_index[i] = VP_INVAL;
+
+#ifdef CONFIG_HYPERV_PVIOMMU
+	ret = rhashtable_init(&hv_pci_bus_ht, &hv_pci_bus_ht_params);
+	if (ret) {
+		hv_common_free();
+		return ret;
+	}
+	hv_pci_bus_ht_initialized = true;
+#endif
 
 	return 0;
 }
@@ -863,3 +904,85 @@ const char *hv_result_to_string(u64 status)
 	return "Unknown";
 }
 EXPORT_SYMBOL_GPL(hv_result_to_string);
+
+#ifdef CONFIG_HYPERV_PVIOMMU
+/*
+ * Logical device ID registry shared between the vPCI bus driver
+ * (pci-hyperv) and the para-virtualized IOMMU driver. The vPCI driver
+ * registers the per-bus logical device ID prefix at bus probe time, and
+ * the pvIOMMU driver looks it up to build the full logical device ID used
+ * in IOMMU hypercalls.
+ */
+int hv_iommu_register_pci_bus(int pci_domain_nr, u32 logical_dev_id_prefix)
+{
+	struct hv_pci_busdata *bus, *new;
+	int ret = 0;
+
+	new = kzalloc_obj(*new, GFP_KERNEL);
+	if (!new)
+		return -ENOMEM;
+
+	new->pci_domain_nr = pci_domain_nr;
+	new->logical_dev_id_prefix = logical_dev_id_prefix;
+
+	bus = rhashtable_lookup_get_insert_fast(&hv_pci_bus_ht, &new->node,
+						hv_pci_bus_ht_params);
+	if (IS_ERR(bus)) {
+		ret = PTR_ERR(bus);
+	} else if (bus) {
+		if (bus->logical_dev_id_prefix != logical_dev_id_prefix) {
+			pr_err("stale registration for PCI domain %d (old prefix 0x%08x, new 0x%08x)\n",
+			       pci_domain_nr, bus->logical_dev_id_prefix,
+			       logical_dev_id_prefix);
+			ret = -EEXIST;
+		}
+	} else {
+		goto out;
+	}
+
+	kfree(new);
+out:
+	return ret;
+}
+EXPORT_SYMBOL_FOR_MODULES(hv_iommu_register_pci_bus, "pci-hyperv");
+
+void hv_iommu_unregister_pci_bus(int pci_domain_nr)
+{
+	struct hv_pci_busdata *bus;
+	bool removed = false;
+
+	rcu_read_lock();
+	bus = rhashtable_lookup(&hv_pci_bus_ht, &pci_domain_nr,
+				hv_pci_bus_ht_params);
+	if (bus)
+		removed = !rhashtable_remove_fast(&hv_pci_bus_ht, &bus->node,
+						  hv_pci_bus_ht_params);
+	rcu_read_unlock();
+
+	if (removed)
+		kfree_rcu(bus, rcu);
+}
+EXPORT_SYMBOL_FOR_MODULES(hv_iommu_unregister_pci_bus, "pci-hyperv");
+
+/*
+ * Look up the logical device ID prefix registered for @pci_domain_nr.
+ * Returns 0 on success with *prefix filled in; -ENODEV if no entry is
+ * registered for that PCI domain.
+ */
+int hv_iommu_lookup_logical_dev_id(int pci_domain_nr, u32 *prefix)
+{
+	struct hv_pci_busdata *bus;
+	int ret = -ENODEV;
+
+	rcu_read_lock();
+	bus = rhashtable_lookup(&hv_pci_bus_ht, &pci_domain_nr,
+				hv_pci_bus_ht_params);
+	if (bus) {
+		*prefix = bus->logical_dev_id_prefix;
+		ret = 0;
+	}
+	rcu_read_unlock();
+
+	return ret;
+}
+#endif /* CONFIG_HYPERV_PVIOMMU */
