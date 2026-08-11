@@ -61,16 +61,10 @@
 //! undefined symbols and linker errors, it is not developer friendly to debug, so it is recommended
 //! to avoid it and prefer other two assertions where possible.
 
-#[doc(inline)]
-pub use crate::{
-    build_assert_macro as build_assert,
-    build_error,
-    const_assert,
-    static_assert, //
-};
-
 #[doc(hidden)]
 pub use build_error::build_error as build_error_fn;
+
+use macros::macro_export_scoped;
 
 /// Static assert (i.e. compile-time assert).
 ///
@@ -105,8 +99,7 @@ pub use build_error::build_error as build_error_fn;
 /// static_assert!(f(40) == 42);
 /// static_assert!(f(40) == 42, "f(x) must add 2 to the given input.");
 /// ```
-#[macro_export]
-#[doc(hidden)]
+#[macro_export_scoped]
 macro_rules! static_assert {
     ($condition:expr $(,$arg:literal)?) => {
         const _: () = ::core::assert!($condition $(,$arg)?);
@@ -134,8 +127,7 @@ macro_rules! static_assert {
 ///     const_assert!(size_of::<T>() > 0, "T cannot be ZST");
 /// }
 /// ```
-#[macro_export]
-#[doc(hidden)]
+#[macro_export_scoped]
 macro_rules! const_assert {
     ($condition:expr $(,$arg:literal)?) => {
         const { ::core::assert!($condition $(,$arg)?) };
@@ -159,8 +151,7 @@ macro_rules! const_assert {
 /// assert_eq!(foo(usize::MAX - 1), usize::MAX); // OK.
 /// // foo(usize::MAX); // Fails to compile.
 /// ```
-#[macro_export]
-#[doc(hidden)]
+#[macro_export_scoped]
 macro_rules! build_error {
     () => {{
         $crate::build_assert::build_error_fn("")
@@ -203,9 +194,8 @@ macro_rules! build_error {
 ///
 /// const _: () = const_bar(2);
 /// ```
-#[macro_export]
-#[doc(hidden)]
-macro_rules! build_assert_macro {
+#[macros::macro_export_scoped]
+macro_rules! build_assert {
     ($cond:expr $(,)?) => {{
         if !$cond {
             $crate::build_assert::build_error_fn(concat!("assertion failed: ", stringify!($cond)));

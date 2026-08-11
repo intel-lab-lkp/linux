@@ -5,13 +5,9 @@
 pub mod projection;
 pub use crate::project_pointer as project;
 
-use core::mem::{
-    align_of,
-    size_of, //
-};
 use core::num::NonZero;
 
-use crate::const_assert;
+use crate::prelude::*;
 
 /// Type representing an alignment, which is always a power of two.
 ///

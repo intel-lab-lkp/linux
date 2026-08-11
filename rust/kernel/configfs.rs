@@ -511,7 +511,7 @@ pub trait GroupOperations {
     /// NOTE: "drop" in the name of this function is not related to the Rust drop term. Rather, the
     /// name is inherited from the callback name in the underlying C code.
     fn drop_item(&self, _child: ArcBorrow<'_, Group<Self::Child>>) {
-        kernel::build_error!(kernel::error::VTABLE_DEFAULT_ERROR)
+        build_error!(kernel::error::VTABLE_DEFAULT_ERROR)
     }
 }
 
@@ -660,7 +660,7 @@ pub trait AttributeOperations<const ID: u64 = 0> {
     /// Implementations should parse the value from `page` and update internal
     /// state to reflect the parsed value.
     fn store(_data: &Self::Data, _page: &[u8]) -> Result {
-        kernel::build_error!(kernel::error::VTABLE_DEFAULT_ERROR)
+        build_error!(kernel::error::VTABLE_DEFAULT_ERROR)
     }
 }
 

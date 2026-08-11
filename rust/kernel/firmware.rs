@@ -283,7 +283,7 @@ impl<const N: usize> ModInfoBuilder<N> {
     pub const fn push(self, s: &str) -> Self {
         // Check whether there has been an initial call to `next_entry()`.
         if N != 0 && self.n == 0 {
-            crate::build_error!("Must call next_entry() before push().");
+            build_error!("Must call next_entry() before push().");
         }
 
         self.push_internal(s.as_bytes())
@@ -327,7 +327,7 @@ impl<const N: usize> ModInfoBuilder<N> {
         if this.n == N {
             this.buf
         } else {
-            crate::build_error!("Length mismatch.");
+            build_error!("Length mismatch.");
         }
     }
 }
