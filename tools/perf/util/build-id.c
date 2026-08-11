@@ -599,7 +599,7 @@ static char *build_id_cache__find_debug(const char *sbuild_id,
 		dirname = dirbuf;
 	}
 
-	len = __symbol__join_symfs(debugfile, PATH_MAX, dirname);
+	len = path__join(debugfile, PATH_MAX, symbol_conf.symfs, dirname);
 	snprintf(debugfile + len, PATH_MAX - len, "%.2s/%s.debug", sbuild_id,
 		 sbuild_id + 2);
 
