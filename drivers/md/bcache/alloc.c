@@ -120,7 +120,12 @@ void bch_rescale_priorities(struct cache_set *c, int sectors)
 
 static inline bool can_inc_bucket_gen(struct bucket *b)
 {
-	return bucket_gc_gen(b) < BUCKET_GC_GEN_MAX;
+	/*
+	 * A bucket may be allocated for a btree node. When the node is freed,
+	 * make_btree_freeing_key() increments the bucket generation once more
+	 * without going through this check. Leave room for that increment.
+	 */
+	return bucket_gc_gen(b) < BUCKET_GC_GEN_MAX - 1;
 }
 
 bool bch_can_invalidate_bucket(struct cache *ca, struct bucket *b)
