@@ -1285,8 +1285,15 @@ void nvme_passthru_end(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u32 effects,
 		}
 	}
 	if (effects & (NVME_CMD_EFFECTS_NIC | NVME_CMD_EFFECTS_NCC)) {
+		/*
+		 * The host asked for this change, so let the rescan adopt the
+		 * new namespace geometry even if the disk is open.  Only an
+		 * unsolicited change is refused, see nvme_update_ns_info_block().
+		 */
+		set_bit(NVME_CTRL_SELF_RESCAN, &ctrl->flags);
 		nvme_queue_scan(ctrl);
 		flush_work(&ctrl->scan_work);
+		clear_bit(NVME_CTRL_SELF_RESCAN, &ctrl->flags);
 	}
 	if (ns)
 		return;
@@ -2384,6 +2391,17 @@ static bool nvme_invalid_lba_sz(u64 nsze, signed int shift, sector_t *capacity)
 	return check_shl_overflow(nsze, shift, capacity);
 }
 
+/*
+ * Openers of a multipath namespace go to the head disk; the per-path disk is
+ * hidden and never has any.
+ */
+static unsigned int nvme_ns_openers(struct nvme_ns *ns)
+{
+	if (nvme_ns_head_multipath(ns->head))
+		return disk_openers(ns->head->disk);
+	return disk_openers(ns->disk);
+}
+
 static int nvme_update_ns_info_block(struct nvme_ns *ns,
 		struct nvme_ns_info *info)
 {
@@ -2433,6 +2451,28 @@ static int nvme_update_ns_info_block(struct nvme_ns *ns,
 			"invalid LBA data size %u, skipping namespace\n",
 			id->lbaf[lbaf].ds);
 		ret = -ENODEV;
+		goto out;
+	}
+
+	/*
+	 * Changing the LBA format or the metadata size reinterprets everything
+	 * the host has already cached, queued or handed to the integrity code
+	 * for this namespace, and freezing the queue does not cover any of it:
+	 * page cache contents, bios batched on a plug and the deferred
+	 * integrity verify work all outlive the freeze.  If such a change
+	 * arrives unsolicited while the namespace is in use, refuse it and let
+	 * the caller take the namespace offline rather than adopt a geometry
+	 * that describes something else than what the host is holding.
+	 */
+	if (nvme_ns_openers(ns) &&
+	    !test_bit(NVME_CTRL_SELF_RESCAN, &ns->ctrl->flags) &&
+	    (ns->head->lba_shift != id->lbaf[lbaf].ds ||
+	     ns->head->ms != le16_to_cpu(id->lbaf[lbaf].ms))) {
+		dev_err(ns->ctrl->device,
+			"unsolicited format change on in-use nsid %u (lba_shift %u -> %u, ms %u -> %u)\n",
+			info->nsid, ns->head->lba_shift, id->lbaf[lbaf].ds,
+			ns->head->ms, le16_to_cpu(id->lbaf[lbaf].ms));
+		ret = NVME_SC_INVALID_NS | NVME_STATUS_DNR;
 		goto out;
 	}
 
