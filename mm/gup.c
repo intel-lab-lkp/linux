@@ -833,12 +833,13 @@ static inline bool can_follow_write_pte(pte_t pte, struct page *page,
  */
 static long follow_page_pte_commit(struct vm_area_struct *vma,
 		unsigned long address, struct folio *folio, struct page *page,
-		pte_t pte, unsigned int flags, struct page **pages)
+		pte_t pte, unsigned long nr, unsigned int flags,
+		struct page **pages)
 {
 	long ret;
 
 	/* try_grab_folio() does nothing unless FOLL_GET or FOLL_PIN is set. */
-	ret = try_grab_folio(folio, 1, flags);
+	ret = try_grab_folio(folio, nr, flags);
 	if (unlikely(ret))
 		return ret;
 
@@ -850,7 +851,7 @@ static long follow_page_pte_commit(struct vm_area_struct *vma,
 	if (flags & FOLL_PIN) {
 		ret = arch_make_folio_accessible(folio);
 		if (ret) {
-			gup_put_folio(folio, 1, flags);
+			gup_put_folio(folio, nr, flags);
 			return ret;
 		}
 	}
@@ -866,7 +867,7 @@ static long follow_page_pte_commit(struct vm_area_struct *vma,
 		folio_mark_accessed(folio);
 	}
 
-	gup_fill_pages(vma, address, page, 1, pages);
+	gup_fill_pages(vma, address, page, nr, pages);
 
 	return 0;
 }
@@ -917,6 +918,35 @@ static long follow_one_pte(struct vm_area_struct *vma, unsigned long address,
 }
 
 /*
+ * Return how many PTEs map consecutive pages of the same folio and can be
+ * committed as one run. Always at least 1.
+ *
+ * The write-fault and unshare checks in follow_one_pte() are per PTE, but a
+ * writable run needs no repeat: a writable anon page is exclusive. A read-only
+ * run under FOLL_WRITE or FOLL_PIN does need the per-page check, so it stays
+ * one page at a time.
+ */
+static unsigned long follow_pte_batch(struct vm_area_struct *vma,
+		unsigned long address, unsigned long walk_end,
+		struct folio *folio, pte_t *ptep, pte_t *batch_pte, unsigned int flags)
+{
+	unsigned long max;
+
+	if (!folio_test_large(folio))
+		return 1;
+	if (!pte_write(*batch_pte) && (flags & (FOLL_WRITE | FOLL_PIN)))
+		return 1;
+
+	max = (walk_end - address) >> PAGE_SHIFT;
+	if (max <= 1)
+		return 1;
+
+	/* Merge young/dirty across batch so folio_mark_dirty sees any dirty. */
+	return folio_pte_batch_flags(folio, vma, ptep, batch_pte, max,
+				     FPB_RESPECT_WRITE | FPB_MERGE_YOUNG_DIRTY);
+}
+
+/*
  * Walk the PTEs from the start address to the end of this page table or VMA,
  * whichever comes first, and commit every page found.
  *
@@ -947,12 +977,24 @@ static long follow_page_pte(struct vm_area_struct *vma,
 
 		ret = follow_one_pte(vma, address, ptep, pte, flags, &page);
 		if (!ret && page) {
-			ret = follow_page_pte_commit(vma, address,
-						     page_folio(page), page,
-						     pte, flags,
+			struct folio *folio = page_folio(page);
+			unsigned long batch;
+
+			pte_t batch_pte = pte;
+
+			batch = follow_pte_batch(vma, address, walk_end, folio,
+						 ptep, &batch_pte, flags);
+			ret = follow_page_pte_commit(vma, address, folio, page,
+						     batch_pte, batch, flags,
 						     pages ? pages + nr : NULL);
 			if (!ret) {
-				nr++;
+				nr += batch;
+				/*
+				 * The loop's own increment covers one PTE; skip
+				 * the rest of the batch.
+				 */
+				ptep += batch - 1;
+				address += (batch - 1) * PAGE_SIZE;
 				continue;
 			}
 		}
