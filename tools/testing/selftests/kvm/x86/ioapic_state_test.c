@@ -7,12 +7,18 @@
 #include "kvm_util.h"
 #include "processor.h"
 #include "test_util.h"
+#include "ucall_common.h"
 
 #define TEST_IOAPIC_PIN		16
 #define TEST_VECTOR		0x50
 #define NO_SUCH_APIC_ID		0xfe
 #define TEST_IOAPIC_EDGE_TRIG	0
 #define TEST_IOAPIC_LEVEL_TRIG	1
+#define IOAPIC_DEFAULT_GPA	0xfec00000ULL
+#define IOAPIC_REG_SELECT	0x00
+#define IOAPIC_REG_WINDOW	0x10
+#define IOAPIC_RTE_LOW(pin)	(0x10 + 2 * (pin))
+#define IOAPIC_RTE_TRIG_MODE	BIT(15)
 
 static void get_ioapic(struct kvm_vm *vm, struct kvm_irqchip *irqchip)
 {
@@ -51,6 +57,19 @@ static void set_ioapic_entry(struct kvm_vm *vm, bool level_triggered,
 	irqchip.chip.ioapic.redirtbl[TEST_IOAPIC_PIN].fields.remote_irr = 0;
 
 	set_ioapic(vm, &irqchip);
+}
+
+static void enable_lapic(struct kvm_vcpu *vcpu)
+{
+	struct kvm_lapic_state lapic;
+	u64 apicbase;
+
+	apicbase = vcpu_get_msr(vcpu, MSR_IA32_APICBASE);
+	vcpu_set_msr(vcpu, MSR_IA32_APICBASE,
+		     apicbase | MSR_IA32_APICBASE_ENABLE);
+	vcpu_ioctl(vcpu, KVM_GET_LAPIC, &lapic);
+	*(u32 *)(lapic.regs + APIC_SPIV) |= APIC_SPIV_APIC_ENABLED;
+	vcpu_ioctl(vcpu, KVM_SET_LAPIC, &lapic);
 }
 
 static int kvm_irq_line_status(struct kvm_vm *vm, int level)
@@ -98,19 +117,12 @@ static void test_no_remote_irr_for_undelivered_level_interrupt(void)
 
 static void test_duplicate_edge_interrupt_preserves_delivery_state(void)
 {
-	struct kvm_lapic_state lapic;
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
-	u64 apicbase;
 	int status;
 
 	vm = vm_create_with_one_vcpu(&vcpu, NULL);
-	apicbase = vcpu_get_msr(vcpu, MSR_IA32_APICBASE);
-	vcpu_set_msr(vcpu, MSR_IA32_APICBASE,
-		     apicbase | MSR_IA32_APICBASE_ENABLE);
-	vcpu_ioctl(vcpu, KVM_GET_LAPIC, &lapic);
-	*(u32 *)(lapic.regs + APIC_SPIV) |= APIC_SPIV_APIC_ENABLED;
-	vcpu_ioctl(vcpu, KVM_SET_LAPIC, &lapic);
+	enable_lapic(vcpu);
 
 	set_ioapic_entry(vm, false, vcpu->id);
 
@@ -130,10 +142,49 @@ static void test_duplicate_edge_interrupt_preserves_delivery_state(void)
 	kvm_vm_free(vm);
 }
 
+static void guest_switch_ioapic_pin_to_level(void)
+{
+	u32 *ioapic = (u32 *)IOAPIC_DEFAULT_GPA;
+
+	WRITE_ONCE(ioapic[IOAPIC_REG_SELECT / sizeof(u32)],
+		   IOAPIC_RTE_LOW(TEST_IOAPIC_PIN));
+	WRITE_ONCE(ioapic[IOAPIC_REG_WINDOW / sizeof(u32)],
+		   TEST_VECTOR | IOAPIC_RTE_TRIG_MODE);
+
+	GUEST_DONE();
+}
+
+static void test_edge_to_level_clears_delivery_state(void)
+{
+	struct kvm_vcpu *vcpu;
+	struct kvm_vm *vm;
+	int status;
+
+	vm = vm_create_with_one_vcpu(&vcpu, guest_switch_ioapic_pin_to_level);
+	enable_lapic(vcpu);
+	virt_map(vm, IOAPIC_DEFAULT_GPA, IOAPIC_DEFAULT_GPA, 1);
+
+	set_ioapic_entry(vm, false, vcpu->id);
+
+	status = kvm_irq_line_status(vm, 1);
+	TEST_ASSERT(status > 0,
+		    "Expected edge interrupt delivery, got %d", status);
+
+	assert_ioapic_pin_irr(vm, false);
+
+	vcpu_run(vcpu);
+	TEST_ASSERT_EQ(get_ucall(vcpu, NULL), UCALL_DONE);
+
+	assert_ioapic_pin_irr(vm, true);
+
+	kvm_vm_free(vm);
+}
+
 int main(void)
 {
 	test_no_remote_irr_for_undelivered_level_interrupt();
 	test_duplicate_edge_interrupt_preserves_delivery_state();
+	test_edge_to_level_clears_delivery_state();
 
 	return 0;
 }
