@@ -150,16 +150,45 @@ static void test_sync_vmsa(u32 type, u64 policy)
 	kvm_vm_free(vm);
 }
 
+static bool is_range_nonzero(const u8 *buf, size_t len)
+{
+	size_t i;
+
+	for (i = 0; i < len; i++)
+		if (buf[i])
+			return true;
+
+	return false;
+}
+
 static void test_sev(void *guest_code, u32 type, u64 policy)
 {
+	struct sev_launch_measure_blob blob;
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 	struct ucall uc;
 
 	vm = vm_sev_create_with_one_vcpu(type, guest_code, &vcpu);
 
-	/* TODO: Validate the measurement is as expected. */
-	vm_sev_launch(vm, policy, NULL);
+	/*
+	 * Capture and sanity check the launch measurement.  A full
+	 * attestation-style validation (recomputing the expected value) isn't
+	 * possible here as userspace does not possess the transport keys the
+	 * PSP uses to derive the measurement.  At minimum, the firmware must
+	 * hand back a non-zero measurement and a non-zero nonce (the blob
+	 * length is validated by vm_sev_launch()).  SNP does not return a
+	 * measurement through this path, so skip it.
+	 */
+	if (is_sev_snp_vm(vm)) {
+		vm_sev_launch(vm, policy, NULL);
+	} else {
+		memset(&blob, 0, sizeof(blob));
+		vm_sev_launch(vm, policy, (u8 *)&blob);
+		TEST_ASSERT(is_range_nonzero(blob.measurement, sizeof(blob.measurement)),
+			    "SEV launch measurement is unexpectedly all zeros");
+		TEST_ASSERT(is_range_nonzero(blob.mnonce, sizeof(blob.mnonce)),
+			    "SEV launch measurement nonce is unexpectedly all zeros");
+	}
 
 	for (;;) {
 		vcpu_run(vcpu);

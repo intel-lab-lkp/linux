@@ -108,9 +108,16 @@ void sev_vm_launch_measure(struct kvm_vm *vm, u8 *measurement)
 	struct kvm_sev_launch_measure launch_measure;
 	struct kvm_sev_guest_status guest_status;
 
-	launch_measure.len = 256;
+	launch_measure.len = sizeof(struct sev_launch_measure_blob);
 	launch_measure.uaddr = (__u64)measurement;
 	vm_sev_ioctl(vm, KVM_SEV_LAUNCH_MEASURE, &launch_measure);
+
+	/*
+	 * '.len' is an in/out field; the firmware reports back the actual size
+	 * of the measurement blob, which must match the layout described by
+	 * struct sev_launch_measure_blob.
+	 */
+	TEST_ASSERT_EQ(launch_measure.len, sizeof(struct sev_launch_measure_blob));
 
 	vm_sev_ioctl(vm, KVM_SEV_GUEST_STATUS, &guest_status);
 	TEST_ASSERT_EQ(guest_status.state, SEV_GUEST_STATE_LAUNCH_SECRET);
@@ -191,7 +198,7 @@ void vm_sev_launch(struct kvm_vm *vm, u64 policy, u8 *measurement)
 	sev_vm_launch(vm, policy);
 
 	if (!measurement)
-		measurement = alloca(256);
+		measurement = alloca(sizeof(struct sev_launch_measure_blob));
 
 	sev_vm_launch_measure(vm, measurement);
 

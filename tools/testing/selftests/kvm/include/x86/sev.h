@@ -31,6 +31,18 @@ enum sev_guest_state {
 
 #define GHCB_MSR_TERM_REQ	0x100
 
+/*
+ * Layout of the blob returned by KVM_SEV_LAUNCH_MEASURE, per the SEV API
+ * specification, section 6.5.2: a measurement (HMAC-SHA256) followed by the
+ * nonce used to derive it.  Deriving the buffer and field sizes from this
+ * struct keeps callers layout-agnostic; only this definition needs to change
+ * if the measurement ABI is ever extended.
+ */
+struct sev_launch_measure_blob {
+	u8 measurement[32];
+	u8 mnonce[16];
+};
+
 static inline bool is_sev_snp_vm(struct kvm_vm *vm)
 {
 	return vm->type == KVM_X86_SNP_VM;
