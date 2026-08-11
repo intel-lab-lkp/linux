@@ -43,6 +43,25 @@ struct eventfd_ctx {
 	int id;
 };
 
+static inline void eventfd_wake_up_locked_poll(struct wait_queue_head *wqh,
+					       __poll_t mask)
+{
+	lockdep_assert_held(&wqh->lock);
+
+#ifdef CONFIG_EPOLL_LOCKLESS
+	/*
+	 * Eventfd context of the two-variable protocol:
+	 *
+	 * W(B) updates ctx->count in the caller, then the callback performs
+	 * R(A) on epitem->notified.
+	 *
+	 * W(B) -> smp_mb() -> R(A)
+	 */
+	smp_mb();
+#endif
+	wake_up_locked_poll(wqh, mask);
+}
+
 /**
  * eventfd_signal_mask - Increment the event counter
  * @ctx: [in] Pointer to the eventfd context.
@@ -73,7 +92,7 @@ void eventfd_signal_mask(struct eventfd_ctx *ctx, __poll_t mask)
 	if (ctx->count < ULLONG_MAX)
 		ctx->count++;
 	if (waitqueue_active(&ctx->wqh))
-		wake_up_locked_poll(&ctx->wqh, EPOLLIN | mask);
+		eventfd_wake_up_locked_poll(&ctx->wqh, EPOLLIN | mask);
 	current->in_eventfd = 0;
 	spin_unlock_irqrestore(&ctx->wqh.lock, flags);
 }
@@ -204,7 +223,7 @@ int eventfd_ctx_remove_wait_queue(struct eventfd_ctx *ctx, wait_queue_entry_t *w
 	eventfd_ctx_do_read(ctx, cnt);
 	__remove_wait_queue(&ctx->wqh, wait);
 	if (*cnt != 0 && waitqueue_active(&ctx->wqh))
-		wake_up_locked_poll(&ctx->wqh, EPOLLOUT);
+		eventfd_wake_up_locked_poll(&ctx->wqh, EPOLLOUT);
 	spin_unlock_irqrestore(&ctx->wqh.lock, flags);
 
 	return *cnt != 0 ? 0 : -EAGAIN;
@@ -235,7 +254,7 @@ static ssize_t eventfd_read(struct kiocb *iocb, struct iov_iter *to)
 	eventfd_ctx_do_read(ctx, &ucnt);
 	current->in_eventfd = 1;
 	if (waitqueue_active(&ctx->wqh))
-		wake_up_locked_poll(&ctx->wqh, EPOLLOUT);
+		eventfd_wake_up_locked_poll(&ctx->wqh, EPOLLOUT);
 	current->in_eventfd = 0;
 	spin_unlock_irq(&ctx->wqh.lock);
 	if (unlikely(copy_to_iter(&ucnt, sizeof(ucnt), to) != sizeof(ucnt)))
@@ -271,7 +290,7 @@ static ssize_t eventfd_write(struct file *file, const char __user *buf, size_t c
 		ctx->count += ucnt;
 		current->in_eventfd = 1;
 		if (waitqueue_active(&ctx->wqh))
-			wake_up_locked_poll(&ctx->wqh, EPOLLIN);
+			eventfd_wake_up_locked_poll(&ctx->wqh, EPOLLIN);
 		current->in_eventfd = 0;
 	}
 	spin_unlock_irq(&ctx->wqh.lock);
@@ -308,6 +327,9 @@ static const struct file_operations eventfd_fops = {
 	.read_iter	= eventfd_read,
 	.write		= eventfd_write,
 	.llseek		= noop_llseek,
+#ifdef CONFIG_EPOLL_LOCKLESS
+	.fop_flags	= FOP_EPOLL_LOCKLESS,
+#endif
 };
 
 /**

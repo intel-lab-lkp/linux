@@ -1896,6 +1896,17 @@ config EVENTFD
 
 	  If unsure, say Y.
 
+config EPOLL_LOCKLESS
+	bool "Optimize epoll wakeup fast-path" if EXPERT
+	depends on EVENTFD && EPOLL
+	default n
+	help
+	  Enables a lockless fast-path in ep_poll_callback for files that
+	  declare FOP_EPOLL_LOCKLESS (currently only eventfd), reducing
+	  ep->lock contention under concurrent workloads.
+
+	  If unsure, say N.
+
 config SHMEM
 	bool "Use full shmem filesystem" if EXPERT
 	default y

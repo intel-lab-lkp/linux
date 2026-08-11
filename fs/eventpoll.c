@@ -285,6 +285,14 @@ struct epitem {
 
 	/* The structure that describe the interested events and the source fd */
 	struct epoll_event event;
+
+#ifdef CONFIG_EPOLL_LOCKLESS
+	/* Set after queueing, cleared before dequeueing from the ready path. */
+	bool notified;
+
+	/* True if the file opts into the lockless wakeup fast path. */
+	bool lockless_wake;
+#endif
 };
 
 /*
@@ -619,6 +627,82 @@ static inline bool ep_events_available(struct eventpoll *ep)
 	return !list_empty_careful(&ep->rdllist) || ep_is_scanning(ep) ||
 		read_seqcount_retry(&ep->seq, seq);
 }
+
+#ifdef CONFIG_EPOLL_LOCKLESS
+/*
+ * Eventpoll lockless callback fast-path: two-variable communication.
+ * Files opt in by setting FOP_EPOLL_LOCKLESS, declaring that their
+ * wakeup orders W(B) before the callback's R(A) with a full barrier and
+ * that their ->poll() is a pure level read.
+ *
+ *   A = epi->notified
+ *   B = file readiness (e.g. eventfd count)
+ *
+ *   scanner context: W(A = false) -> smp_mb() -> dequeue -> R(B)
+ *   writer  context: W(B)         -> smp_mb() -> R(A)
+ *
+ * Therefore R(B) == old and R(A) == true cannot both occur.
+ */
+static inline void ep_set_notified(struct epitem *epi)
+{
+	if (epi->lockless_wake)
+		WRITE_ONCE(epi->notified, true);
+}
+
+static inline void ep_prepare_repoll(struct epitem *epi)
+{
+	if (!epi->lockless_wake)
+		return;
+
+	/*
+	 * Stop callbacks from skipping before the scanner drops its ready-list
+	 * ownership. Keep the full barrier between W(A = false) and R(B); the
+	 * actual dequeue may happen between the barrier and the readiness read.
+	 */
+	WRITE_ONCE(epi->notified, false);
+	/* Scanner context: W(A = false) -> smp_mb() -> R(B). */
+	smp_mb();
+}
+
+static inline bool ep_callback_can_skip(struct epitem *epi, __poll_t pollflags)
+{
+	__poll_t events;
+
+	if (!epi->lockless_wake)
+		return false;
+
+	/* 
+	 * poll_wait waiters woken by this callback, so they must take slow path.
+	 */
+	if (waitqueue_active(&epi->ep->poll_wait))
+		return false;
+
+	events = READ_ONCE(epi->event.events);
+	if (events & (EPOLLEXCLUSIVE | EPOLLET | EPOLLONESHOT))
+		return false;
+
+	if (pollflags & POLLFREE)
+		return false;
+
+	if (pollflags && !(pollflags & events))
+		return false;
+
+	/*
+	 * Writer context: W(B) -> smp_mb() -> R(A).
+	 *
+	 * Once notified, the scanner's ep_done_scan() wakes ep->wq, so epoll_wait()
+	 * callers are covered and we can skip ep->lock.
+	 */
+	return READ_ONCE(epi->notified);
+}
+#else
+static inline void ep_set_notified(struct epitem *epi) { }
+static inline void ep_prepare_repoll(struct epitem *epi) { }
+static inline bool ep_callback_can_skip(struct epitem *epi, __poll_t pollflags)
+{
+	return false;
+}
+#endif
 
 #ifdef CONFIG_NET_RX_BUSY_POLL
 /**
@@ -1007,6 +1091,7 @@ static void ep_done_scan(struct eventpoll *ep,
 			 * reverses the iteration order into FIFO.
 			 */
 			list_add(&epi->rdllink, &ep->rdllist);
+			ep_set_notified(epi);
 			ep_pm_stay_awake(epi);
 		}
 	}
@@ -1303,8 +1388,11 @@ static __poll_t __ep_eventpoll_poll(struct file *file, poll_table *wait, int dep
 	mutex_lock_nested(&ep->mtx, depth);
 	ep_start_scan(ep, &scan_batch);
 	list_for_each_entry_safe(epi, tmp, &scan_batch, rdllink) {
+		/* Clear notified before a possible removal from txlist. */
+		ep_prepare_repoll(epi);
 		if (ep_item_poll(epi, &pt, depth + 1)) {
 			res = EPOLLIN | EPOLLRDNORM;
+			ep_set_notified(epi);
 			break;
 		} else {
 			/*
@@ -1497,6 +1585,9 @@ static int ep_poll_callback(wait_queue_entry_t *wait, unsigned mode, int sync, v
 	unsigned long flags;
 	int ewake = 0;
 
+	if (ep_callback_can_skip(epi, pollflags))
+		return 1;
+
 	spin_lock_irqsave(&ep->lock, flags);
 
 	ep_set_busy_poll_napi_id(epi);
@@ -1529,11 +1620,13 @@ static int ep_poll_callback(wait_queue_entry_t *wait, unsigned mode, int sync, v
 		if (!epi_on_ovflist(epi)) {
 			epi->ovflist_next = READ_ONCE(ep->ovflist);
 			WRITE_ONCE(ep->ovflist, epi);
+			ep_set_notified(epi);
 			ep_pm_stay_awake_rcu(epi);
 		}
 	} else if (!ep_is_linked(epi)) {
 		/* In the usual case, add event to ready list. */
 		list_add_tail(&epi->rdllink, &ep->rdllist);
+		ep_set_notified(epi);
 		ep_pm_stay_awake_rcu(epi);
 	}
 
@@ -1840,6 +1933,10 @@ static struct epitem *ep_alloc_epitem(struct eventpoll *ep,
 	epi->ffd = *tf;
 	epi->event = *event;
 	epi_clear_ovflist(epi);
+#ifdef CONFIG_EPOLL_LOCKLESS
+	epi->lockless_wake =
+		(tf->file->f_op->fop_flags & FOP_EPOLL_LOCKLESS) != 0;
+#endif
 
 	return epi;
 }
@@ -1956,6 +2053,7 @@ static int ep_insert(struct ep_ctl_ctx *ctx, struct eventpoll *ep,
 
 	if (revents && !ep_is_linked(epi)) {
 		list_add_tail(&epi->rdllink, &ep->rdllist);
+		ep_set_notified(epi);
 		ep_pm_stay_awake(epi);
 
 		if (waitqueue_active(&ep->wq))
@@ -1992,7 +2090,7 @@ static int ep_modify(struct eventpoll *ep, struct epitem *epi,
 	 * otherwise we might miss an event that happens between the
 	 * f_op->poll() call and the new event set registering.
 	 */
-	epi->event.events = event->events; /* need barrier below */
+	WRITE_ONCE(epi->event.events, event->events); /* need barrier below */
 	epi->event.data = event->data; /* protected by mtx */
 	if (epi->event.events & EPOLLWAKEUP) {
 		if (!ep_has_wakeup_source(epi))
@@ -2031,6 +2129,7 @@ static int ep_modify(struct eventpoll *ep, struct epitem *epi,
 		spin_lock_irq(&ep->lock);
 		if (!ep_is_linked(epi)) {
 			list_add_tail(&epi->rdllink, &ep->rdllist);
+			ep_set_notified(epi);
 			ep_pm_stay_awake(epi);
 
 			/* Notify waiting tasks that events are available */
@@ -2084,6 +2183,12 @@ static int ep_deliver_event(struct eventpoll *ep, struct epitem *epi,
 		__pm_relax(ws);
 	}
 
+	/*
+	 * Clear notified while epi is still on txlist. A callback that
+	 * races with the following dequeue must take the slow path and
+	 * publish the event through ovflist.
+	 */
+	ep_prepare_repoll(epi);
 	list_del_init(&epi->rdllink);
 
 	/*
@@ -2104,13 +2209,15 @@ static int ep_deliver_event(struct eventpoll *ep, struct epitem *epi,
 		 * attempt.
 		 */
 		list_add(&epi->rdllink, scan_batch);
+		ep_set_notified(epi);
 		ep_pm_stay_awake(epi);
 		return -EFAULT;
 	}
 	*uevents = next;
 
 	if (epi->event.events & EPOLLONESHOT) {
-		epi->event.events &= EP_PRIVATE_BITS;
+		WRITE_ONCE(epi->event.events,
+				READ_ONCE(epi->event.events) & EP_PRIVATE_BITS);
 	} else if (!(epi->event.events & EPOLLET)) {
 		/*
 		 * Level-triggered: re-queue so the next epoll_wait()
@@ -2120,6 +2227,7 @@ static int ep_deliver_event(struct eventpoll *ep, struct epitem *epi,
 		 * during scans.
 		 */
 		list_add_tail(&epi->rdllink, &ep->rdllist);
+		ep_set_notified(epi);
 		ep_pm_stay_awake(epi);
 	}
 	return 1;
@@ -2138,8 +2246,16 @@ static int ep_send_events(struct eventpoll *ep,
 	 * timely exit without the chance of finding more events available and
 	 * fetching repeatedly.
 	 */
-	if (fatal_signal_pending(current))
+	if (fatal_signal_pending(current)) {
+#ifdef CONFIG_EPOLL_LOCKLESS
+		spin_lock_irq(&ep->lock);
+		list_for_each_entry(epi, &ep->rdllist, rdllink)
+			if (epi->lockless_wake)
+				WRITE_ONCE(epi->notified, false);
+		spin_unlock_irq(&ep->lock);
+#endif
 		return -EINTR;
+	}
 
 	init_poll_funcptr(&pt, NULL);
 

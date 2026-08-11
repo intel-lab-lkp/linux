@@ -1979,6 +1979,10 @@ struct file_operations {
 #define FOP_ASYNC_LOCK		((__force fop_flags_t)(1 << 6))
 /* File system supports uncached read/write buffered IO */
 #define FOP_DONTCACHE		((__force fop_flags_t)(1 << 7))
+#ifdef CONFIG_EPOLL_LOCKLESS
+/* File opts into epoll's lockless callback fast path */
+#define FOP_EPOLL_LOCKLESS	((__force fop_flags_t)(1 << 8))
+#endif
 
 /* Wrap a directory iterator that needs exclusive inode access */
 int wrap_directory_iterator(struct file *, struct dir_context *,
