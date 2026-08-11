@@ -4074,6 +4074,12 @@ void panthor_sched_unplug(struct panthor_device *ptdev)
 		sched->pm.has_ref = false;
 	}
 	mutex_unlock(&sched->lock);
+
+	/* Ensure any pending group release work are executed before returning,
+	 * otherwise those might access objects that are gone if the work is
+	 * executed after other components are unplugged.
+	 */
+	flush_workqueue(panthor_cleanup_wq);
 }
 
 static void panthor_sched_fini(struct drm_device *ddev, void *res)
