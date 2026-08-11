@@ -156,44 +156,29 @@ pub fn module(input: TokenStream) -> TokenStream {
 /// associated constant bool for each method in the trait that is set to true if
 /// the implementer has overridden the associated method.
 ///
-/// For a trait method to be optional, it must have a default implementation.
-/// This is also the case for traits annotated with `#[vtable]`, but in this
-/// case the default implementation will never be executed. The reason for this
-/// is that the functions will be called through function pointers installed in
-/// C side vtables. When an optional method is not implemented on a `#[vtable]`
-/// trait, a `NULL` entry is installed in the vtable. Thus the default
-/// implementation is never called. Since these traits are not designed to be
-/// used on the Rust side, it should not be possible to call the default
-/// implementation. This is done to ensure that we call the vtable methods
-/// through the C vtable, and not through the Rust vtable. Therefore, the
-/// default implementation should call `build_error!`, which prevents
-/// calls to this function at compile time:
-///
-/// ```compile_fail
-/// # // Intentionally missing `use`s to simplify `rusttest`.
-/// build_error!(VTABLE_DEFAULT_ERROR)
-/// ```
-///
-/// Note that you might need to import [`kernel::error::VTABLE_DEFAULT_ERROR`].
+/// For a trait method to be optional for normal traits, it must have a default implementation.
+/// However, for many users of `#[vtable]`, the functions will be called through function pointers
+/// installed in C side vtables. When an optional method is not implemented on a `#[vtable]` trait,
+/// a `NULL` entry is installed in the vtable; thus the default implementation is never called. If
+/// this is the case, `#[optional]` can be applied on the optional method. Methods annotated as such
+/// do not need to be implemented nor need a default implementation. Calling these methods on types
+/// that do not implement them will fail to build using the `build_error!` mechanism.
 ///
 /// This macro should not be used when all functions are required.
 ///
 /// # Examples
 ///
 /// ```
-/// use kernel::error::VTABLE_DEFAULT_ERROR;
 /// use kernel::prelude::*;
 ///
 /// // Declares a `#[vtable]` trait
 /// #[vtable]
 /// pub trait Operations: Send + Sync + Sized {
-///     fn foo(&self) -> Result<()> {
-///         build_error!(VTABLE_DEFAULT_ERROR)
-///     }
+///     #[optional]
+///     fn foo(&self) -> Result<()>;
 ///
-///     fn bar(&self) -> Result<()> {
-///         build_error!(VTABLE_DEFAULT_ERROR)
-///     }
+///     #[optional]
+///     fn bar(&self) -> Result<()>;
 /// }
 ///
 /// struct Foo;
@@ -210,8 +195,6 @@ pub fn module(input: TokenStream) -> TokenStream {
 /// assert_eq!(<Foo as Operations>::HAS_FOO, true);
 /// assert_eq!(<Foo as Operations>::HAS_BAR, false);
 /// ```
-///
-/// [`kernel::error::VTABLE_DEFAULT_ERROR`]: ../kernel/error/constant.VTABLE_DEFAULT_ERROR.html
 #[proc_macro_attribute]
 pub fn vtable(attr: TokenStream, input: TokenStream) -> TokenStream {
     parse_macro_input!(attr as syn::parse::Nothing);
