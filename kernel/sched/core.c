@@ -4253,6 +4253,9 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	guard(preempt)();
 	int cpu, success = 0;
 
+	/* Instrumented callees would leak coverage into current. */
+	guard(kcov_pause)();
+
 	wake_flags |= WF_TTWU;
 
 	if (p == current) {
