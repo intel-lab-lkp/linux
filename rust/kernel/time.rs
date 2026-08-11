@@ -39,6 +39,10 @@ pub const NSEC_PER_MSEC: i64 = bindings::NSEC_PER_MSEC as i64;
 /// The number of nanoseconds per second.
 pub const NSEC_PER_SEC: i64 = bindings::NSEC_PER_SEC as i64;
 
+/// The C side `MAX_JIFFY_OFFSET`, i.e. `((LONG_MAX >> 1) - 1)`, which the kernel
+/// treats as an infinite timeout.
+const MAX_JIFFY_OFFSET: isize = (isize::MAX >> 1) - 1;
+
 /// The time unit of Linux kernel. One jiffy equals (1/HZ) second.
 pub type Jiffies = crate::ffi::c_ulong;
 
@@ -569,6 +573,51 @@ impl Delta {
         }
     }
 
+    /// Convert this span to a [`Delta<Jiffy>`] suitable for use as a timeout.
+    ///
+    /// Unless the result saturates, the value is rounded up to the next whole
+    /// jiffy, so the resulting timeout is never shorter than `self` (as
+    /// [`msecs_to_jiffies()`] does).
+    ///
+    /// The result saturates at zero jiffies for a negative span, i.e. an
+    /// immediate timeout, and at the kernel's [`MAX_JIFFY_OFFSET`] for a span
+    /// that is too large, which the C side treats as an infinite timeout.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::time::Delta;
+    ///
+    /// // A negative span is an immediate timeout.
+    /// assert_eq!(Delta::from_millis(-1).to_jiffies_timeout().as_jiffies(), 0);
+    ///
+    /// // A span shorter than a jiffy still waits, i.e. the timeout is never
+    /// // shorter than the span.
+    /// assert!(Delta::from_nanos(1).to_jiffies_timeout().as_jiffies() >= 1);
+    /// ```
+    ///
+    /// [`msecs_to_jiffies()`]: srctree/include/linux/jiffies.h
+    /// [`MAX_JIFFY_OFFSET`]: srctree/include/linux/jiffies.h
+    #[inline]
+    pub fn to_jiffies_timeout(self) -> Delta<Jiffy> {
+        let msecs = self.as_millis_ceil();
+
+        // CAST: `msecs` is clamped to `0..=c_uint::MAX`, so it is non-negative and
+        // fits in `c_uint`.
+        let msecs = msecs.clamp(0, i64::from(crate::ffi::c_uint::MAX)) as crate::ffi::c_uint;
+
+        // SAFETY: `__msecs_to_jiffies()` is always safe to call.
+        let jiffies = unsafe { bindings::__msecs_to_jiffies(msecs) };
+
+        // `__msecs_to_jiffies()` only saturates when its argument is negative as an
+        // `int`: with `HZ=1000` it returns `msecs` as-is, which exceeds
+        // `MAX_JIFFY_OFFSET` on 32 bit.
+        let jiffies = jiffies.min(MAX_JIFFY_OFFSET as crate::ffi::c_ulong);
+
+        // CAST: `jiffies` is clamped to `MAX_JIFFY_OFFSET`, which is `<= isize::MAX`.
+        Delta::<Jiffy>::from_jiffies(jiffies as isize)
+    }
+
     /// Return `self % dividend` where `dividend` is in nanoseconds.
     ///
     /// The kernel doesn't have any emulation for `s64 % s64` on 32 bit platforms, so this is
@@ -620,5 +669,22 @@ mod tests {
             Delta::from_nanos(i64::MIN).as_millis_ceil(),
             MIN_MILLIS_CEIL
         );
+    }
+
+    #[test]
+    fn to_jiffies_timeout_saturates() {
+        // `__msecs_to_jiffies()` does not clamp its result for every `HZ` configuration,
+        // e.g. with `HZ=1000` it returns the millisecond value as-is, which exceeds
+        // `MAX_JIFFY_OFFSET` on 32 bit.
+        let max = Delta::from_millis(i64::from(i32::MAX)).to_jiffies_timeout();
+        assert!(max.as_jiffies() <= MAX_JIFFY_OFFSET);
+
+        // An overlong span is an infinite timeout.
+        let overlong = Delta::from_nanos(i64::MAX).to_jiffies_timeout();
+        assert_eq!(overlong.as_jiffies(), MAX_JIFFY_OFFSET);
+
+        // A negative span is an immediate timeout, however long it is.
+        let negative = Delta::from_nanos(i64::MIN).to_jiffies_timeout();
+        assert_eq!(negative.as_jiffies(), 0);
     }
 }
