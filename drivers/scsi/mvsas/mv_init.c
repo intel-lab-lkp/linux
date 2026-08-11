@@ -588,15 +588,16 @@ static void mvs_pci_remove(struct pci_dev *pdev)
 	core_nr = ((struct mvs_prv_info *)sha->lldd_ha)->n_host;
 	mvi = ((struct mvs_prv_info *)sha->lldd_ha)->mvi[0];
 
-#ifdef CONFIG_SCSI_MVSAS_TASKLET
-	tasklet_kill(&((struct mvs_prv_info *)sha->lldd_ha)->mv_tasklet);
-#endif
-
 	sas_unregister_ha(sha);
 	sas_remove_host(mvi->shost);
 
 	MVS_CHIP_DISP->interrupt_disable(mvi);
 	free_irq(mvi->pdev->irq, sha);
+#ifdef CONFIG_SCSI_MVSAS_TASKLET
+	/* drain after free_irq(): the tasklet re-enables the IRQ on exit */
+	tasklet_kill(&((struct mvs_prv_info *)sha->lldd_ha)->mv_tasklet);
+	MVS_CHIP_DISP->interrupt_disable(mvi);
+#endif
 	for (i = 0; i < core_nr; i++) {
 		mvi = ((struct mvs_prv_info *)sha->lldd_ha)->mvi[i];
 		mvs_free(mvi);
