@@ -1415,11 +1415,13 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 	cpus_write_lock();
 
 	/*
-	 * Keep at least one housekeeping cpu onlined to avoid generating
-	 * an empty sched_domain span.
+	 * Keep at least one HK_TYPE_DOMAIN CPU online during regular hotplug
+	 * to avoid generating an empty sched_domain span.
 	 */
-	if (cpumask_any_and(cpu_online_mask,
-			    housekeeping_cpumask(HK_TYPE_DOMAIN)) >= nr_cpu_ids) {
+	if (!tasks_frozen &&
+	    cpumask_any_and_but(cpu_online_mask,
+				housekeeping_cpumask(HK_TYPE_DOMAIN),
+				cpu) >= nr_cpu_ids) {
 		ret = -EBUSY;
 		goto out;
 	}
