@@ -344,8 +344,9 @@ static void validate_extent_state(const struct extent_io_tree *tree,
 
 	blocksize = btrfs_extent_io_tree_to_fs_info(tree)->sectorsize;
 	ASSERT(IS_ALIGNED(state->start, blocksize) &&
-	       IS_ALIGNED(state->end + 1, blocksize),
-	       "unaligned extent state, blocksize=%u start=%llu end=%llu state=0x%x",
+	       IS_ALIGNED(state->end + 1, blocksize) &&
+	       state->end > state->start,
+	       "invalid extent state, blocksize=%u start=%llu end=%llu state=0x%x",
 	       blocksize, state->start, state->end, state->state);
 }
 

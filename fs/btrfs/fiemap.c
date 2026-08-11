@@ -843,13 +843,17 @@ out_unlock:
 	btrfs_unlock_extent(&inode->io_tree, range_start, range_end - 1, &cached_state);
 
 	if (ret == BTRFS_FIEMAP_FLUSH_CACHE) {
+		const u64 orig_start = start;
+		const u64 orig_len = len;
+
 		btrfs_release_path(path);
 		ret = flush_fiemap_cache(fieinfo, &cache);
 		if (ret)
 			goto out;
-		len -= cache.next_search_offset - start;
-		start = cache.next_search_offset;
-		goto restart;
+		start = min(orig_start + orig_len, cache.next_search_offset);
+		len = orig_start + orig_len - start;
+		if (len)
+			goto restart;
 	} else if (ret < 0) {
 		goto out;
 	}
