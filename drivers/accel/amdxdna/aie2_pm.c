@@ -94,7 +94,7 @@ int aie2_pm_set_mode(struct amdxdna_dev_hdl *ndev, enum amdxdna_power_mode_type 
 	case POWER_MODE_TURBO:
 		if (ndev->hwctx_num) {
 			XDNA_ERR(xdna, "Can not set turbo when there is active hwctx");
-			return -EINVAL;
+			return -EBUSY;
 		}
 
 		clk_gating = AIE2_CLK_GATING_DISABLE;
