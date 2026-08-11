@@ -282,6 +282,14 @@ struct panthor_device {
 		 * any BO attached to an active VM, ...).
 		 */
 		bool leak_active_resources;
+
+		/**
+		 * @fake_failure: When true, pretend the SOFT_RESET in the unplug path failed.
+		 *
+		 * This is important to check that we're doing the right thing in this very
+		 * unlikely case.
+		 */
+		bool fake_failure;
 	} unplug;
 
 	/** @reset: Reset related fields. */
