@@ -417,6 +417,10 @@ static int dwc_pcie_pmu_validate_group(struct perf_event *event)
 		if (dwc_pcie_pmu_validate_add_lane_event(leader, val_lane_events))
 			return -ENOSPC;
 
+	/* A new group leader cannot have any siblings yet. */
+	if (event == leader)
+		return 0;
+
 	for_each_sibling_event(sibling, leader) {
 		type = DWC_PCIE_EVENT_TYPE(sibling);
 		if (type == DWC_PCIE_TIME_BASE_EVENT) {
@@ -452,9 +456,11 @@ static int dwc_pcie_pmu_event_init(struct perf_event *event)
 	if (event->cpu < 0 || event->attach_state & PERF_ATTACH_TASK)
 		return -EINVAL;
 
-	for_each_sibling_event(sibling, event->group_leader) {
-		if (sibling->pmu != event->pmu && !is_software_event(sibling))
-			return -EINVAL;
+	if (event != event->group_leader) {
+		for_each_sibling_event(sibling, event->group_leader) {
+			if (sibling->pmu != event->pmu && !is_software_event(sibling))
+				return -EINVAL;
+		}
 	}
 
 	if (type < 0 || type >= DWC_PCIE_EVENT_TYPE_MAX)
