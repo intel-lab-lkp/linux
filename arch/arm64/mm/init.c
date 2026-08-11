@@ -339,8 +339,12 @@ void __init arch_setup_zero_pages(void)
 void __init arch_mm_preinit(void)
 {
 	unsigned int flags = SWIOTLB_VERBOSE;
+	/* pKVM uses restricted-dma-pool */
+	bool cc_guest = is_realm_world();
 
-	if (max_pfn <= PFN_DOWN(arm64_dma_phys_limit)) {
+	if (cc_guest) {
+		swiotlb_mark_default_cc_shared();
+	} else if (max_pfn <= PFN_DOWN(arm64_dma_phys_limit)) {
 		/*
 		 * If no bouncing needed for ZONE_DMA, reduce the swiotlb
 		 * buffer for kmalloc() bouncing to 1MB per 1GB of RAM.

@@ -163,6 +163,8 @@ static void __init pv_init(void)
 	if (!is_prot_virt_guest())
 		return;
 
+	swiotlb_mark_default_cc_shared();
+
 	virtio_set_mem_acc_cb(virtio_require_restricted_mem_acc);
 
 	/* make sure bounce buffers are shared */

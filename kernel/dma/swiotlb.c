@@ -290,7 +290,7 @@ unsigned long swiotlb_size_or_default(void)
 	return default_nslabs << IO_TLB_SHIFT;
 }
 
-void __init swiotlb_adjust_size(unsigned long size)
+void swiotlb_adjust_size(unsigned long size)
 {
 	/*
 	 * If swiotlb parameter has not been specified, give a chance to
@@ -356,24 +356,15 @@ static void swiotlb_mark_pool_used(struct io_tlb_pool *pool)
 void __init swiotlb_update_mem_attributes(void)
 {
 	struct io_tlb_pool *mem = &io_tlb_default_mem.defpool;
-	unsigned long bytes;
-
-	/*
-	 * if platform support memory encryption, swiotlb buffers are
-	 * shared by default.
-	 */
-	if (cc_platform_has(CC_ATTR_MEM_ENCRYPT))
-		io_tlb_default_mem.cc_shared = true;
-	else
-		io_tlb_default_mem.cc_shared = false;
 
 	if (!mem->nslabs || mem->late_alloc)
 		return;
-	bytes = PAGE_ALIGN(mem->nslabs << IO_TLB_SHIFT);
 
 	if (io_tlb_default_mem.cc_shared) {
 		int ret;
+		unsigned long bytes;
 
+		bytes = PAGE_ALIGN(mem->nslabs << IO_TLB_SHIFT);
 		ret = set_memory_decrypted((unsigned long)mem->vaddr,
 					   bytes >> PAGE_SHIFT);
 		if (ret) {
@@ -464,6 +455,42 @@ static void __init *swiotlb_memblock_alloc(unsigned long nslabs,
 	return tlb;
 }
 
+void __init swiotlb_mark_default_cc_shared(void)
+{
+	io_tlb_default_mem.cc_shared = true;
+}
+
+static void swiotlb_adjust_cc_attributes(void)
+{
+	unsigned long size;
+	phys_addr_t total_mem = memblock_phys_mem_size();
+
+	/*
+	 * For SEV and TDX and CCA, all DMA has to occur via
+	 * shared/unencrypted pages. Kernel uses SWIOTLB to make this
+	 * happen without changing device drivers. However, depending on
+	 * the workload being run, the default 64MB of SWIOTLB may not be
+	 * enough and SWIOTLB may run out of buffers for DMA, resulting in
+	 * I/O errors and/or performance degradation especially with high
+	 * I/O workloads.
+	 *
+	 * Adjust the default size of SWIOTLB using a percentage of guest
+	 * memory for SWIOTLB buffers. Also, as the SWIOTLB bounce buffer
+	 * memory is allocated from low memory, ensure that the adjusted
+	 * size is within the limits of low available memory.
+	 *
+	 * The percentage of guest memory used here for SWIOTLB buffers is
+	 * more of an approximation of the static adjustment which 64MB for
+	 * <1G, and ~128M to 256M for 1G-to-4G, i.e., the 6%
+	 */
+	size = total_mem * 6 / 100;
+	size = clamp_val(size, IO_TLB_DEFAULT_SIZE, SZ_1G);
+	swiotlb_adjust_size(size);
+
+	if (!IS_ENABLED(CONFIG_SWIOTLB_DYNAMIC))
+		pr_info("Consider enabling CONFIG_SWIOTLB_DYNAMIC for memory-encrypted systems\n");
+}
+
 /*
  * Statically reserve bounce buffer space and initialize bounce buffer data
  * structures for the software IO TLB used to implement the DMA API.
@@ -477,8 +504,14 @@ void __init swiotlb_init_remap(bool addressing_limit, unsigned int flags,
 	size_t alloc_size;
 	void *tlb;
 
-	if (!addressing_limit && !swiotlb_force_bounce)
+	/*
+	 * A shared pool is required for DMA on memory-encrypted systems even
+	 * when all devices are otherwise able to address memory directly.
+	 */
+	if (!addressing_limit && !swiotlb_force_bounce &&
+	    !io_tlb_default_mem.cc_shared)
 		return;
+
 	if (swiotlb_force_disable)
 		return;
 
@@ -492,6 +525,9 @@ void __init swiotlb_init_remap(bool addressing_limit, unsigned int flags,
 	else
 		io_tlb_default_mem.phys_limit = ARCH_LOW_ADDRESS_LIMIT;
 #endif
+
+	if (io_tlb_default_mem.cc_shared)
+		swiotlb_adjust_cc_attributes();
 
 	if (!default_nareas)
 		swiotlb_adjust_nareas(num_possible_cpus());
@@ -547,7 +583,7 @@ int swiotlb_init_late(size_t size, gfp_t gfp_mask,
 		int (*remap)(void *tlb, unsigned long nslabs))
 {
 	struct io_tlb_pool *mem = &io_tlb_default_mem.defpool;
-	unsigned long nslabs = ALIGN(size >> IO_TLB_SHIFT, IO_TLB_SEGSIZE);
+	unsigned long nslabs;
 	unsigned int order, area_order, slot_order;
 	bool leak_pages = false;
 	unsigned int nareas;
@@ -560,6 +596,15 @@ int swiotlb_init_late(size_t size, gfp_t gfp_mask,
 
 	if (swiotlb_force_disable)
 		return 0;
+
+	/* Apply the shared-pool default sizing before deriving nslabs. */
+	if (io_tlb_default_mem.cc_shared &&
+	    size == swiotlb_size_or_default()) {
+		swiotlb_adjust_cc_attributes();
+		size = swiotlb_size_or_default();
+	}
+
+	nslabs = ALIGN(size >> IO_TLB_SHIFT, IO_TLB_SEGSIZE);
 
 	io_tlb_default_mem.force_bounce = swiotlb_force_bounce;
 
