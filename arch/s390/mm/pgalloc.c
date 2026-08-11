@@ -69,14 +69,19 @@ int crst_table_upgrade(struct mm_struct *mm, unsigned long end)
 	if (asce_limit == _REGION2_SIZE) {
 		p4d = crst_table_alloc(mm);
 		if (unlikely(!p4d))
-			goto err_p4d;
+			return -ENOMEM;
 		crst_table_init(p4d, _REGION2_ENTRY_EMPTY);
 		pagetable_p4d_ctor(virt_to_ptdesc(p4d));
 	}
 	if (end > _REGION1_SIZE) {
 		pgd = crst_table_alloc(mm);
-		if (unlikely(!pgd))
-			goto err_pgd;
+		if (unlikely(!pgd)) {
+			if (p4d) {
+				pagetable_dtor(virt_to_ptdesc(p4d));
+				crst_table_free(mm, p4d);
+			}
+			return -ENOMEM;
+		}
 		crst_table_init(pgd, _REGION1_ENTRY_EMPTY);
 		pagetable_pgd_ctor(virt_to_ptdesc(pgd));
 	}
@@ -106,12 +111,6 @@ int crst_table_upgrade(struct mm_struct *mm, unsigned long end)
 	on_each_cpu(__crst_table_upgrade, mm, 0);
 
 	return 0;
-
-err_pgd:
-	pagetable_dtor(virt_to_ptdesc(p4d));
-	crst_table_free(mm, p4d);
-err_p4d:
-	return -ENOMEM;
 }
 
 unsigned long *page_table_alloc_noprof(struct mm_struct *mm)
