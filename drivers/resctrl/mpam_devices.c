@@ -260,7 +260,7 @@ static int mpam_dt_count_msc(void)
 }
 
 static int mpam_dt_parse_resource(struct mpam_msc *msc, struct device_node *np,
-				  u32 ris_idx)
+				  u64 ris_idx)
 {
 	int err = 0;
 	u32 class_id = 0;
@@ -712,7 +712,7 @@ static int mpam_ris_get_affinity(struct mpam_msc *msc, cpumask_t *affinity,
 	return 0;
 }
 
-static int mpam_ris_create_locked(struct mpam_msc *msc, u8 ris_idx,
+static int mpam_ris_create_locked(struct mpam_msc *msc, u64 ris_idx,
 				  enum mpam_class_types type, u8 class_id,
 				  int component_id)
 {
@@ -799,7 +799,7 @@ static void mpam_ris_destroy(struct mpam_msc_ris *ris)
 		mpam_vmsc_destroy(vmsc);
 }
 
-int mpam_ris_create(struct mpam_msc *msc, u8 ris_idx,
+int mpam_ris_create(struct mpam_msc *msc, u64 ris_idx,
 		    enum mpam_class_types type, u8 class_id, int component_id)
 {
 	int err;
