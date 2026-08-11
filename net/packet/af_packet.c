@@ -3961,10 +3961,9 @@ packet_setsockopt(struct socket *sock, int level, int optname, sockptr_t optval,
 	{
 		int val;
 
-		if (optlen < sizeof(val))
-			return -EINVAL;
-		if (copy_from_sockptr(&val, optval, sizeof(val)))
-			return -EFAULT;
+		ret = copy_safe_from_sockptr(&val, sizeof(val), optval, optlen);
+		if (ret)
+			return ret;
 
 		packet_sock_flag_set(po, PACKET_SOCK_AUXDATA, val);
 		return 0;
@@ -3973,10 +3972,9 @@ packet_setsockopt(struct socket *sock, int level, int optname, sockptr_t optval,
 	{
 		int val;
 
-		if (optlen < sizeof(val))
-			return -EINVAL;
-		if (copy_from_sockptr(&val, optval, sizeof(val)))
-			return -EFAULT;
+		ret = copy_safe_from_sockptr(&val, sizeof(val), optval, optlen);
+		if (ret)
+			return ret;
 
 		packet_sock_flag_set(po, PACKET_SOCK_ORIGDEV, val);
 		return 0;
@@ -3988,10 +3986,9 @@ packet_setsockopt(struct socket *sock, int level, int optname, sockptr_t optval,
 
 		if (sock->type != SOCK_RAW)
 			return -EINVAL;
-		if (optlen < sizeof(val))
-			return -EINVAL;
-		if (copy_from_sockptr(&val, optval, sizeof(val)))
-			return -EFAULT;
+		ret = copy_safe_from_sockptr(&val, sizeof(val), optval, optlen);
+		if (ret)
+			return ret;
 
 		if (optname == PACKET_VNET_HDR_SZ) {
 			if (val && val != sizeof(struct virtio_net_hdr) &&
