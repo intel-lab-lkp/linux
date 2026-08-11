@@ -876,11 +876,17 @@ int crypto4xx_build_pd(struct crypto_async_request *req,
 		}
 	}
 
+	pd->pd_ctl_len.w = 0x00400000 | (assoclen + datalen);
+	pd_uinfo->state = PD_ENTRY_INUSE | (is_busy ? PD_ENTRY_BUSY : 0);
+
+	/* make the pd_ctl_len and pd_uinfo->state writes above visible to
+	 * the device before the HOST_READY handover write below, so the
+	 * device never fetches a descriptor with stale length/state bits
+	 */
+	dma_wmb();
 	pd->pd_ctl.w = PD_CTL_HOST_READY |
 		((crypto_tfm_alg_type(req->tfm) == CRYPTO_ALG_TYPE_AEAD) ?
 			PD_CTL_HASH_FINAL : 0);
-	pd->pd_ctl_len.w = 0x00400000 | (assoclen + datalen);
-	pd_uinfo->state = PD_ENTRY_INUSE | (is_busy ? PD_ENTRY_BUSY : 0);
 
 	wmb();
 	/* write any value to push engine to read a pd */
@@ -1031,6 +1037,11 @@ static void crypto4xx_bh_tasklet_cb(unsigned long data)
 		     ((READ_ONCE(pd->pd_ctl.w) &
 		       (PD_CTL_PE_DONE | PD_CTL_HOST_READY)) ==
 		       PD_CTL_PE_DONE)) {
+			/* order the PE_DONE flag read above before reading
+			 * the descriptor status and output data written by
+			 * the device
+			 */
+			dma_rmb();
 			crypto4xx_pd_done(core_dev->dev, tail);
 			tail = crypto4xx_put_pd_to_pdr(core_dev->dev, tail);
 		} else {
