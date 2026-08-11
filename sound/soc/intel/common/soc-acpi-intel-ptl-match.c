@@ -92,6 +92,21 @@ static const struct snd_soc_acpi_endpoint spk_r_endpoint = {
 	.group_id = 1,
 };
 
+/* Endpoints for 4-channel CS35L56 configurations (e.g. ASUS ZenBook UX5406AA) */
+static const struct snd_soc_acpi_endpoint spk_3_endpoint = {
+	.num = 0,
+	.aggregated = 1,
+	.group_position = 2,
+	.group_id = 1,
+};
+
+static const struct snd_soc_acpi_endpoint spk_4_endpoint = {
+	.num = 0,
+	.aggregated = 1,
+	.group_position = 3,
+	.group_id = 1,
+};
+
 static const struct snd_soc_acpi_endpoint jack_dmic_endpoints[] = {
 	/* Jack Endpoint */
 	{
@@ -181,6 +196,26 @@ static const struct snd_soc_acpi_adr_device cs35l56_2_lr_adr[] = {
 		.num_endpoints = 1,
 		.endpoints = &spk_r_endpoint,
 		.name_prefix = "AMP2"
+	}
+};
+
+/*
+ * ASUS ZenBook S14 UX5406AA (Panther Lake) has 4x CS35L56 amps:
+ * 2 amps on SoundWire link 1 (unique_id 2 and 3)
+ * 2 amps on SoundWire link 2 (unique_id 0 and 1)
+ */
+static const struct snd_soc_acpi_adr_device cs35l56_1_lr_adr[] = {
+	{
+		.adr = 0x00013201fa355601ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_3_endpoint,
+		.name_prefix = "AMP3"
+	},
+	{
+		.adr = 0x00013301fa355601ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_4_endpoint,
+		.name_prefix = "AMP4"
 	}
 };
 
@@ -311,6 +346,30 @@ static const struct snd_soc_acpi_link_adr ptl_cs42l43_agg_l3_cs35l56_l2[] = {
 		.mask = BIT(2),
 		.num_adr = ARRAY_SIZE(cs35l56_2_lr_adr),
 		.adr_d = cs35l56_2_lr_adr,
+	},
+	{}
+};
+
+/*
+ * ASUS ZenBook S14 UX5406AA: CS42L43 on link 3, CS35L56 x4 on links 1 and 2.
+ * Link 1 carries AMP3 (uid=2) and AMP4 (uid=3).
+ * Link 2 carries AMP1 (uid=0) and AMP2 (uid=1).
+ */
+static const struct snd_soc_acpi_link_adr ptl_cs42l43_agg_l3_cs35l56_l12[] = {
+	{
+		.mask = BIT(3),
+		.num_adr = ARRAY_SIZE(cs42l43_3_agg_adr),
+		.adr_d = cs42l43_3_agg_adr,
+	},
+	{
+		.mask = BIT(2),
+		.num_adr = ARRAY_SIZE(cs35l56_2_lr_adr),
+		.adr_d = cs35l56_2_lr_adr,
+	},
+	{
+		.mask = BIT(1),
+		.num_adr = ARRAY_SIZE(cs35l56_1_lr_adr),
+		.adr_d = cs35l56_1_lr_adr,
 	},
 	{}
 };
@@ -509,6 +568,14 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_ptl_sdw_machines[] = {
 		.machine_check = snd_soc_acpi_intel_sdca_is_device_rt712_vb,
 		.sof_tplg_filename = "sof-ptl-rt712-l3-rt1320-l2.tplg",
 		.get_function_tplg_files = sof_sdw_get_tplg_files,
+	},
+	{
+		/* ASUS ZenBook S14 UX5406AA (Panther Lake): 4x CS35L56 */
+		/* on links 1+2, CS42L43 on link 3 */
+		.link_mask = BIT(1) | BIT(2) | BIT(3),
+		.links = ptl_cs42l43_agg_l3_cs35l56_l12,
+		.drv_name = "sof_sdw",
+		.sof_tplg_filename = "sof-ptl-cs42l43-agg-l3-cs35l56-l2.tplg",
 	},
 	{
 		.link_mask = BIT(2) | BIT(3),
