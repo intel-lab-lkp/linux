@@ -1666,9 +1666,11 @@ __set_dm_plane_colorop_shaper(struct drm_plane_state *plane_state,
 	struct dc_transfer_func *tf = &dc_plane_state->cm.shaper_func;
 	const struct drm_color_lut32 *shaper_lut;
 	struct drm_device *dev = colorop->dev;
-	bool enabled = false;
 	u32 shaper_size;
 	int i = 0, ret = 0;
+
+	tf->type = TF_TYPE_BYPASS;
+	dc_plane_state->cm.flags.bits.shaper_enable = 0;
 
 	/* 1D Curve - SHAPER TF: find state */
 	old_colorop = colorop;
@@ -1703,7 +1705,7 @@ __set_dm_plane_colorop_shaper(struct drm_plane_state *plane_state,
 		ret = __set_output_tf(tf, 0, 0, false);
 		if (ret)
 			return ret;
-		enabled = true;
+		dc_plane_state->cm.flags.bits.shaper_enable = 1;
 	}
 
 	if (lut_state && !lut_state->bypass) {
@@ -1719,15 +1721,8 @@ __set_dm_plane_colorop_shaper(struct drm_plane_state *plane_state,
 			ret = __set_output_tf_32(tf, shaper_lut, shaper_size, false);
 			if (ret)
 				return ret;
-			enabled = true;
+			dc_plane_state->cm.flags.bits.shaper_enable = 1;
 		}
-	}
-
-	if (!enabled) {
-		tf->type = TF_TYPE_BYPASS;
-		dc_plane_state->cm.flags.bits.shaper_enable = 0;
-	} else {
-		dc_plane_state->cm.flags.bits.shaper_enable = 1;
 	}
 
 	return 0;
