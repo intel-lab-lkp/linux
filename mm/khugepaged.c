@@ -2696,6 +2696,7 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 		if (xa_is_value(folio)) {
 			swap += 1 << xas_get_order(&xas);
 			if (swap > max_ptes_swap) {
+				folio = NULL;
 				result = SCAN_EXCEED_SWAP_PTE;
 				count_vm_event(THP_SCAN_EXCEED_SWAP_PTE);
 				break;
