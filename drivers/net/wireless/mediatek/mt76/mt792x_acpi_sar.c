@@ -114,6 +114,7 @@ mt792x_asar_acpi_read_mtds(struct mt792x_dev *dev, u8 **table, u8 version)
 {
 	int len, ret, sarlen, prelen, tblcnt;
 	bool enable;
+	u8 nr_tbl;
 
 	ret = mt792x_acpi_read(dev, MT792x_ACPI_MTDS, table, &len);
 	if (ret)
@@ -122,12 +123,10 @@ mt792x_asar_acpi_read_mtds(struct mt792x_dev *dev, u8 **table, u8 version)
 	/* Table content validation */
 	switch (version) {
 	case 1:
-		enable = ((struct mt792x_asar_dyn *)*table)->enable;
 		sarlen = sizeof(struct mt792x_asar_dyn_limit);
 		prelen = sizeof(struct mt792x_asar_dyn);
 		break;
 	case 2:
-		enable = ((struct mt792x_asar_dyn_v2 *)*table)->enable;
 		sarlen = sizeof(struct mt792x_asar_dyn_limit_v2);
 		prelen = sizeof(struct mt792x_asar_dyn_v2);
 		break;
@@ -135,8 +134,19 @@ mt792x_asar_acpi_read_mtds(struct mt792x_dev *dev, u8 **table, u8 version)
 		return -EINVAL;
 	}
 
+	if (len < prelen || (len - prelen) % sarlen)
+		return -EINVAL;
+
+	if (version == 1) {
+		enable = ((struct mt792x_asar_dyn *)*table)->enable;
+		nr_tbl = ((struct mt792x_asar_dyn *)*table)->nr_tbl;
+	} else {
+		enable = ((struct mt792x_asar_dyn_v2 *)*table)->enable;
+		nr_tbl = ((struct mt792x_asar_dyn_v2 *)*table)->nr_tbl;
+	}
+
 	tblcnt = (len - prelen) / sarlen;
-	if (!enable ||
+	if (!enable || tblcnt != nr_tbl ||
 	    tblcnt > MT792x_ASAR_MAX_DYN || tblcnt < MT792x_ASAR_MIN_DYN)
 		return -EINVAL;
 
@@ -148,6 +158,7 @@ static int
 mt792x_asar_acpi_read_mtgs(struct mt792x_dev *dev, u8 **table, u8 version)
 {
 	int len, ret, sarlen, prelen, tblcnt;
+	u8 nr_tbl;
 
 	ret = mt792x_acpi_read(dev, MT792x_ACPI_MTGS, table, &len);
 	if (ret)
@@ -167,8 +178,17 @@ mt792x_asar_acpi_read_mtgs(struct mt792x_dev *dev, u8 **table, u8 version)
 		return -EINVAL;
 	}
 
+	if (len < prelen || (len - prelen) % sarlen)
+		return -EINVAL;
+
+	if (version == 1)
+		nr_tbl = ((struct mt792x_asar_geo *)*table)->nr_tbl;
+	else
+		nr_tbl = ((struct mt792x_asar_geo_v2 *)*table)->nr_tbl;
+
 	tblcnt = (len - prelen) / sarlen;
-	if (tblcnt > MT792x_ASAR_MAX_GEO || tblcnt < MT792x_ASAR_MIN_GEO)
+	if (tblcnt != nr_tbl ||
+	    tblcnt > MT792x_ASAR_MAX_GEO || tblcnt < MT792x_ASAR_MIN_GEO)
 		return -EINVAL;
 
 	return 0;
