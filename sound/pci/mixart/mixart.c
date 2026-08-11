@@ -274,7 +274,7 @@ snd_mixart_add_ref_pipe(struct snd_mixart *chip, int pcm_number, int capture,
 			int j;
 			struct mixart_flowinfo *flowinfo;
 			struct mixart_bufferinfo *bufferinfo;
-			
+
 			/* we don't yet know the format, so config 16 bit pcm audio for instance */
 			buf->sgroup_req.stream_info[i].size_max_byte_frame = 1024;
 			buf->sgroup_req.stream_info[i].size_max_sample_frame = 256;
@@ -627,7 +627,7 @@ static int snd_mixart_hw_params(struct snd_pcm_substream *subs,
 		if( subs->stream == SNDRV_PCM_STREAM_CAPTURE ) {
 			i += MIXART_PLAYBACK_STREAMS; /* in array capture is behind playback */
 		}
-		
+
 		bufferinfo = (struct mixart_bufferinfo *)chip->mgr->bufferinfo.area;
 		bufferinfo[i].buffer_address = subs->runtime->dma_addr;
 		bufferinfo[i].available_length = subs->runtime->dma_bytes;
@@ -1059,19 +1059,8 @@ int snd_mixart_create_pcm(struct snd_mixart* chip)
  */
 static int snd_mixart_free(struct mixart_mgr *mgr)
 {
-	unsigned int i;
-
-	for (i = 0; i < mgr->num_cards; i++) {
-		if (mgr->chip[i])
-			snd_card_free(mgr->chip[i]->card);
-	}
-
 	/* stop mailbox */
 	snd_mixart_exit_mailbox(mgr);
-
-	/* release irq  */
-	if (mgr->irq >= 0)
-		free_irq(mgr->irq, mgr);
 
 	/* reset board if some firmware was loaded */
 	if(mgr->dsp_loaded) {
@@ -1079,25 +1068,6 @@ static int snd_mixart_free(struct mixart_mgr *mgr)
 		dev_dbg(&mgr->pci->dev, "reset miXart !\n");
 	}
 
-	/* release the i/o ports */
-	for (i = 0; i < 2; ++i)
-		iounmap(mgr->mem[i].virt);
-
-	pci_release_regions(mgr->pci);
-
-	/* free flowarray */
-	if(mgr->flowinfo.area) {
-		snd_dma_free_pages(&mgr->flowinfo);
-		mgr->flowinfo.area = NULL;
-	}
-	/* free bufferarray */
-	if(mgr->bufferinfo.area) {
-		snd_dma_free_pages(&mgr->bufferinfo);
-		mgr->bufferinfo.area = NULL;
-	}
-
-	pci_disable_device(mgr->pci);
-	kfree(mgr);
 	return 0;
 }
 
@@ -1146,11 +1116,11 @@ static const struct snd_info_entry_ops snd_mixart_proc_ops_BA1 = {
 };
 
 
-static void snd_mixart_proc_read(struct snd_info_entry *entry, 
+static void snd_mixart_proc_read(struct snd_info_entry *entry,
                                  struct snd_info_buffer *buffer)
 {
-	struct snd_mixart *chip = entry->private_data;        
-	u32 ref; 
+	struct snd_mixart *chip = entry->private_data;
+	u32 ref;
 
 	snd_iprintf(buffer, "Digigram miXart (alsa card %d)\n\n", chip->chip_idx);
 
@@ -1164,7 +1134,7 @@ static void snd_mixart_proc_read(struct snd_info_entry *entry,
 		default:                             snd_iprintf(buffer, "\tUNKNOWN!\n\n"); break;
 		}
 
-		snd_iprintf(buffer, "- system load -\n");	 
+		snd_iprintf(buffer, "- system load -\n");
 
 		/* get perf reference */
 
@@ -1175,8 +1145,8 @@ static void snd_mixart_proc_read(struct snd_info_entry *entry,
 			u32 streaming = 100 * readl_be( MIXART_MEM( chip->mgr, MIXART_PSEUDOREG_PERF_STREAM_LOAD_OFFSET)) / ref;
 			u32 interr    = 100 * readl_be( MIXART_MEM( chip->mgr, MIXART_PSEUDOREG_PERF_INTERR_LOAD_OFFSET)) / ref;
 
-			snd_iprintf(buffer, "\tstreaming          : %d\n", streaming);
 			snd_iprintf(buffer, "\tmailbox            : %d\n", mailbox);
+			snd_iprintf(buffer, "\tstreaming          : %d\n", streaming);
 			snd_iprintf(buffer, "\tinterrupts handling : %d\n\n", interr);
 		}
 	} /* endif elf loaded */
@@ -1192,7 +1162,7 @@ static void snd_mixart_proc_init(struct snd_mixart *chip)
 
 	if (! snd_card_proc_new(chip->card, "mixart_BA0", &entry)) {
 		entry->content = SNDRV_INFO_CONTENT_DATA;
-		entry->private_data = chip->mgr;	
+		entry->private_data = chip->mgr;
 		entry->c.ops = &snd_mixart_proc_ops_BA0;
 		entry->size = MIXART_BA0_SIZE;
 	}
@@ -1228,7 +1198,7 @@ static int snd_mixart_probe(struct pci_dev *pci,
 	}
 
 	/* enable PCI device */
-	err = pci_enable_device(pci);
+	err = pcim_enable_device(pci);
 	if (err < 0)
 		return err;
 	pci_set_master(pci);
@@ -1237,46 +1207,29 @@ static int snd_mixart_probe(struct pci_dev *pci,
 	if (dma_set_mask(&pci->dev, DMA_BIT_MASK(32)) < 0) {
 		dev_err(&pci->dev,
 			"architecture does not support 32bit PCI busmaster DMA\n");
-		pci_disable_device(pci);
 		return -ENXIO;
 	}
 
 	/*
 	 */
-	mgr = kzalloc_obj(*mgr);
-	if (! mgr) {
-		pci_disable_device(pci);
+	mgr = devm_kzalloc(&pci->dev, sizeof(*mgr), GFP_KERNEL);
+	if (!mgr)
 		return -ENOMEM;
-	}
 
 	mgr->pci = pci;
-	mgr->irq = -1;
 
-	/* resource assignment */
-	err = pci_request_regions(pci, CARD_NAME);
-	if (err < 0) {
-		kfree(mgr);
-		pci_disable_device(pci);
-		return err;
-	}
 	for (i = 0; i < 2; i++) {
 		mgr->mem[i].phys = pci_resource_start(pci, i);
-		mgr->mem[i].virt = pci_ioremap_bar(pci, i);
-		if (!mgr->mem[i].virt) {
-			dev_err(&pci->dev, "unable to remap resource 0x%lx\n",
-			       mgr->mem[i].phys);
-			snd_mixart_free(mgr);
-			return -EBUSY;
-		}
+		mgr->mem[i].virt = pcim_iomap_region(pci, i, CARD_NAME);
+		if (IS_ERR(mgr->mem[i].virt))
+			return PTR_ERR(mgr->mem[i].virt);
 	}
 
-	if (request_threaded_irq(pci->irq, snd_mixart_interrupt,
+	if (devm_request_threaded_irq(&pci->dev, pci->irq, snd_mixart_interrupt,
 				 snd_mixart_threaded_irq, IRQF_SHARED,
-				 KBUILD_MODNAME, mgr)) {
-		dev_err(&pci->dev, "unable to grab IRQ %d\n", pci->irq);
-		snd_mixart_free(mgr);
+				 KBUILD_MODNAME, mgr))
 		return -EBUSY;
-	}
+
 	mgr->irq = pci->irq;
 
 	/* init mailbox  */
@@ -1303,7 +1256,7 @@ static int snd_mixart_probe(struct pci_dev *pci,
 		else
 			idx = index[dev] + i;
 		snprintf(tmpid, sizeof(tmpid), "%s-%d", id[dev] ? id[dev] : "MIXART", i);
-		err = snd_card_new(&pci->dev, idx, tmpid, THIS_MODULE,
+		err = snd_devm_card_new(&pci->dev, idx, tmpid, THIS_MODULE,
 				   0, &card);
 
 		if (err < 0) {
@@ -1321,7 +1274,6 @@ static int snd_mixart_probe(struct pci_dev *pci,
 
 		err = snd_mixart_create(mgr, card, i);
 		if (err < 0) {
-			snd_card_free(card);
 			snd_mixart_free(mgr);
 			return err;
 		}
@@ -1344,8 +1296,7 @@ static int snd_mixart_probe(struct pci_dev *pci,
 	/* create array of streaminfo */
 	size = PAGE_ALIGN( (MIXART_MAX_STREAM_PER_CARD * MIXART_MAX_CARDS *
 			    sizeof(struct mixart_flowinfo)) );
-	if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev,
-				size, &mgr->flowinfo) < 0) {
+	if (snd_devm_alloc_pages(&pci->dev, SNDRV_DMA_TYPE_DEV, size)) {
 		snd_mixart_free(mgr);
 		return -ENOMEM;
 	}
@@ -1355,8 +1306,7 @@ static int snd_mixart_probe(struct pci_dev *pci,
 	/* create array of bufferinfo */
 	size = PAGE_ALIGN( (MIXART_MAX_STREAM_PER_CARD * MIXART_MAX_CARDS *
 			    sizeof(struct mixart_bufferinfo)) );
-	if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev,
-				size, &mgr->bufferinfo) < 0) {
+	if (snd_devm_alloc_pages(&pci->dev, SNDRV_DMA_TYPE_DEV, size)) {
 		snd_mixart_free(mgr);
 		return -ENOMEM;
 	}
