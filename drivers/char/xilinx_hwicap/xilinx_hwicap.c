@@ -660,9 +660,17 @@ static int hwicap_setup(struct platform_device *pdev, int id,
 		goto failed;
 	}
 
-	device_create(&icap_class, dev, devt, NULL, "%s%d", DRIVER_NAME, id);
+	retval = PTR_ERR_OR_ZERO(device_create(&icap_class, dev, devt, NULL,
+					       "%s%d", DRIVER_NAME, id));
+	if (retval) {
+		dev_err(dev, "device_create() failed: %d\n", retval);
+		goto failed_cdev;
+	}
+
 	return 0;		/* success */
 
+ failed_cdev:
+	cdev_del(&drvdata->cdev);
  failed:
 	mutex_lock(&icap_sem);
 	probed_devices[id] = 0;
