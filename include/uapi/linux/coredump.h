@@ -14,6 +14,8 @@
  * @COREDUMP_HEADER: send the coredump as a sequence of frames instead of
  *                   as a plain byte stream, see struct coredump_frame_header;
  *                   requires COREDUMP_KERNEL
+ * @COREDUMP_SPARSE: describe the holes in the coredump as zero frames
+ *                   instead of transferring them; requires COREDUMP_HEADER
  */
 enum {
 	COREDUMP_KERNEL		= (1ULL << 0),
@@ -21,6 +23,7 @@ enum {
 	COREDUMP_REJECT		= (1ULL << 2),
 	COREDUMP_WAIT		= (1ULL << 3),
 	COREDUMP_HEADER		= (1ULL << 4),
+	COREDUMP_SPARSE		= (1ULL << 5),
 };
 
 /**
@@ -109,10 +112,13 @@ enum coredump_mark {
  * enum coredump_frame_type - Type of a coredump frame
  *
  * @COREDUMP_FRAME_DATA: the header is followed by ->len bytes of data
+ * @COREDUMP_FRAME_ZERO: the header stands for ->len zero bytes and is not
+ *                       followed by any data
  * @__COREDUMP_FRAME_MAX: the maximum coredump frame type value
  */
 enum coredump_frame_type {
 	COREDUMP_FRAME_DATA	= 0U,
+	COREDUMP_FRAME_ZERO	= 1U,
 	__COREDUMP_FRAME_MAX	= (1U << 31),
 };
 
@@ -126,8 +132,10 @@ enum coredump_frame_type {
  *
  * If the coredump server raises COREDUMP_HEADER in coredump_ack->mask the
  * kernel doesn't send the coredump as a plain byte stream. It sends a
- * sequence of frames instead. A struct coredump_frame_header is followed by
- * @len bytes of actual coredump data.
+ * sequence of frames instead. A COREDUMP_FRAME_DATA frame is followed by
+ * @len bytes of actual coredump data. A COREDUMP_FRAME_ZERO frame is
+ * followed by nothing and stands for @len zero bytes. A server that didn't
+ * raise COREDUMP_SPARSE never sees a zero frame.
  *
  * The @size member is set to the size of struct coredump_frame_header the
  * kernel knows and lets the header grow later. It comes first so it can be
@@ -139,7 +147,8 @@ enum coredump_frame_type {
  * interpreted. No flags are defined yet. Userspace must refuse a frame
  * carrying a flag it doesn't know.
  *
- * COREDUMP_HEADER must be combined with COREDUMP_KERNEL.
+ * COREDUMP_HEADER must be combined with COREDUMP_KERNEL, and
+ * COREDUMP_SPARSE with COREDUMP_HEADER.
  */
 struct coredump_frame_header {
 	__u32 size;
