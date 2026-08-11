@@ -1057,13 +1057,11 @@ int netdev_nl_bind_rx_doit(struct sk_buff *skb, struct genl_info *info)
 		goto err_genlmsg_free;
 	}
 
-	mutex_lock(&priv->lock);
-
 	err = 0;
 	netdev = netdev_get_by_index_lock(genl_info_net(info), ifindex);
 	if (!netdev) {
 		err = -ENODEV;
-		goto err_unlock_sock;
+		goto err_genlmsg_free;
 	}
 	if (!netif_device_present(netdev))
 		err = -ENODEV;
@@ -1118,8 +1116,6 @@ int netdev_nl_bind_rx_doit(struct sk_buff *skb, struct genl_info *info)
 
 	netdev_unlock(netdev);
 
-	mutex_unlock(&priv->lock);
-
 	return err < 0 ? err : 0;
 
 err_unbind:
@@ -1128,8 +1124,6 @@ err_rxq_bitmap:
 	bitmap_free(rxq_bitmap);
 err_unlock:
 	netdev_unlock(netdev);
-err_unlock_sock:
-	mutex_unlock(&priv->lock);
 err_genlmsg_free:
 	nlmsg_free(rsp);
 	return err;
@@ -1201,12 +1195,10 @@ int netdev_nl_bind_tx_doit(struct sk_buff *skb, struct genl_info *info)
 		goto err_genlmsg_free;
 	}
 
-	mutex_lock(&priv->lock);
-
 	netdev = netdev_get_by_index_lock(genl_info_net(info), ifindex);
 	if (!netdev) {
 		err = -ENODEV;
-		goto err_unlock_sock;
+		goto err_genlmsg_free;
 	}
 
 	if (!netif_device_present(netdev)) {
@@ -1251,7 +1243,6 @@ int netdev_nl_bind_tx_doit(struct sk_buff *skb, struct genl_info *info)
 	if (bind_dev != netdev)
 		netdev_unlock(bind_dev);
 	netdev_unlock(netdev);
-	mutex_unlock(&priv->lock);
 
 	return genlmsg_reply(rsp, info);
 
@@ -1260,8 +1251,6 @@ err_unlock_bind_dev:
 		netdev_unlock(bind_dev);
 err_unlock_netdev:
 	netdev_unlock(netdev);
-err_unlock_sock:
-	mutex_unlock(&priv->lock);
 err_genlmsg_free:
 	nlmsg_free(rsp);
 	return err;
@@ -1438,19 +1427,17 @@ err_genlmsg_free:
 
 void netdev_nl_sock_priv_init(struct netdev_nl_sock *priv)
 {
-	INIT_LIST_HEAD(&priv->bindings);
-	mutex_init(&priv->lock);
+	xa_init(&priv->bindings);
 }
 
 void netdev_nl_sock_priv_destroy(struct netdev_nl_sock *priv)
 {
 	struct net_devmem_dmabuf_binding *binding;
-	struct net_devmem_dmabuf_binding *temp;
 	netdevice_tracker dev_tracker;
 	struct net_device *dev;
+	unsigned long xa_idx;
 
-	mutex_lock(&priv->lock);
-	list_for_each_entry_safe(binding, temp, &priv->bindings, list) {
+	xa_for_each(&priv->bindings, xa_idx, binding) {
 		mutex_lock(&binding->lock);
 		dev = binding->dev;
 		if (!dev) {
@@ -1466,7 +1453,7 @@ void netdev_nl_sock_priv_destroy(struct netdev_nl_sock *priv)
 		netdev_unlock(dev);
 		netdev_put(dev, &dev_tracker);
 	}
-	mutex_unlock(&priv->lock);
+	xa_destroy(&priv->bindings);
 }
 
 static int netdev_genl_netdevice_event(struct notifier_block *nb,

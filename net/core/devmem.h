@@ -49,10 +49,10 @@ struct net_devmem_dmabuf_binding {
 	 */
 	struct percpu_ref ref;
 
-	/* The list of bindings currently active. Used for netlink to notify us
+	/* The socket priv this binding belongs to. Used for netlink to notify us
 	 * of the user dropping the bind.
 	 */
-	struct list_head list;
+	struct netdev_nl_sock *sock_priv;
 
 	/* rxq's this binding is active on. */
 	struct xarray bound_rxqs;
