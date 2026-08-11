@@ -679,7 +679,7 @@ static void otx2_pfvf_mbox_destroy(struct otx2_nic *pf)
 	}
 
 	if (mbox->mbox.hwbase && !is_cn20k(pf->pdev))
-		iounmap(mbox->mbox.hwbase);
+		iounmap((void __iomem *)mbox->mbox.hwbase);
 	else
 		qmem_free(&pf->pdev->dev, pf->pfvf_mbox_addr);
 
