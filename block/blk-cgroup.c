@@ -604,9 +604,11 @@ restart:
 			__clear_bit(pol->plid, q->blkcg_pols);
 	}
 
-	q->root_blkg = NULL;
+	WRITE_ONCE(q->root_blkg, NULL);
 	spin_unlock_irq(&q->queue_lock);
 
+	/* Order q->root_blkg store before wake_up_var()'s waitqueue check */
+	smp_mb();
 	wake_up_var(&q->root_blkg);
 }
 
