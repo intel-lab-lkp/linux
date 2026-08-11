@@ -796,9 +796,9 @@ The perf only accesses the head pointer ``perf_event_mmap_page::aux_head``
 in snapshot mode and doesn’t touch tail pointer ``aux_tail``, this is
 because the AUX ring buffer can overflow in free run mode, the tail
 pointer is useless in this case.  Alternatively, the callback
-``auxtrace_record::find_snapshot()`` is introduced for making the decision
-of whether the AUX ring buffer has been wrapped around or not, at the
-end it fixes up the AUX buffer's head which are used to calculate the
+``auxtrace_record::snapshot_has_wrapped()`` is introduced for making the
+decision of whether the AUX ring buffer has been wrapped around or not, at the
+end Perf fixes up the AUX buffer's head which are used to calculate the
 trace data size.
 
 As we know, the buffers' deployment can be per-thread mode, per-CPU
