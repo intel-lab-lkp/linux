@@ -8,6 +8,7 @@
 #include <linux/sizes.h>
 
 #include <test_util.h>
+#include <guest_modes.h>
 #include <kvm_util.h>
 #include <processor.h>
 #include <pthread.h>
@@ -219,6 +220,8 @@ static void test_pre_fault_memory(unsigned long vm_type, bool private)
 
 int main(int argc, char *argv[])
 {
+	guest_modes_append_default();
+
 	TEST_REQUIRE(kvm_check_cap(KVM_CAP_PRE_FAULT_MEMORY));
 
 	test_pre_fault_memory(0, false);
