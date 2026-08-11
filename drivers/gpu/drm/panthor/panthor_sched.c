@@ -1705,6 +1705,9 @@ static bool cs_slot_process_irq_locked(struct panthor_device *ptdev,
 
 	lockdep_assert_held(&ptdev->scheduler->lock);
 
+	if (cs_id >= ptdev->scheduler->cs_slot_count)
+		return false;
+
 	cs_iface = panthor_fw_get_cs_iface(ptdev, csg_id, cs_id);
 	req = cs_iface->input->req;
 	ack = cs_iface->output->ack;
