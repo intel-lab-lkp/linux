@@ -520,11 +520,7 @@ static int mn_hlist_invalidate_range_start(
 		if (ops->invalidate_range_start) {
 			int _ret;
 
-			if (!mmu_notifier_range_blockable(range))
-				non_block_start();
 			_ret = ops->invalidate_range_start(subscription, range);
-			if (!mmu_notifier_range_blockable(range))
-				non_block_end();
 			if (_ret) {
 				pr_info("%pS callback failed with %d in %sblockable context.\n",
 					ops->invalidate_range_start, _ret,
@@ -591,14 +587,9 @@ mn_hlist_invalidate_end(struct mmu_notifier_subscriptions *subscriptions,
 	id = srcu_read_lock(&srcu);
 	hlist_for_each_entry_srcu(subscription, &subscriptions->list, hlist,
 				 srcu_read_lock_held(&srcu)) {
-		if (subscription->ops->invalidate_range_end) {
-			if (!mmu_notifier_range_blockable(range))
-				non_block_start();
+		if (subscription->ops->invalidate_range_end)
 			subscription->ops->invalidate_range_end(subscription,
 								range);
-			if (!mmu_notifier_range_blockable(range))
-				non_block_end();
-		}
 	}
 	srcu_read_unlock(&srcu, id);
 }
