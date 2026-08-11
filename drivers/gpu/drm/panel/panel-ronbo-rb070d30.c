@@ -198,7 +198,7 @@ static int rb070d30_panel_dsi_probe(struct mipi_dsi_device *dsi)
 	dsi->format = MIPI_DSI_FMT_RGB888;
 	dsi->lanes = 4;
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (ret < 0) {
 		drm_panel_remove(&ctx->panel);
 		return ret;
@@ -210,8 +210,6 @@ static int rb070d30_panel_dsi_probe(struct mipi_dsi_device *dsi)
 static void rb070d30_panel_dsi_remove(struct mipi_dsi_device *dsi)
 {
 	struct rb070d30_panel *ctx = mipi_dsi_get_drvdata(dsi);
-
-	mipi_dsi_detach(dsi);
 	drm_panel_remove(&ctx->panel);
 }
 

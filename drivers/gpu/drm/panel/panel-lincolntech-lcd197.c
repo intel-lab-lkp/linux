@@ -221,7 +221,7 @@ static int lincoln_lcd197_panel_probe(struct mipi_dsi_device *dsi)
 		return err;
 
 	drm_panel_add(&lcd->panel);
-	err = mipi_dsi_attach(dsi);
+	err = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (err)
 		drm_panel_remove(&lcd->panel);
 
@@ -231,12 +231,6 @@ static int lincoln_lcd197_panel_probe(struct mipi_dsi_device *dsi)
 static void lincoln_lcd197_panel_remove(struct mipi_dsi_device *dsi)
 {
 	struct lincoln_lcd197_panel *lcd = mipi_dsi_get_drvdata(dsi);
-	int err;
-
-	err = mipi_dsi_detach(dsi);
-	if (err < 0)
-		dev_err(&dsi->dev, "failed to detach from DSI host: %d\n", err);
-
 	drm_panel_remove(&lcd->panel);
 }
 

@@ -434,7 +434,7 @@ static int otm8009a_probe(struct mipi_dsi_device *dsi)
 
 	drm_panel_add(&ctx->panel);
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (ret < 0) {
 		dev_err(dev, "mipi_dsi_attach failed. Is host ready?\n");
 		drm_panel_remove(&ctx->panel);
@@ -447,8 +447,6 @@ static int otm8009a_probe(struct mipi_dsi_device *dsi)
 static void otm8009a_remove(struct mipi_dsi_device *dsi)
 {
 	struct otm8009a *ctx = mipi_dsi_get_drvdata(dsi);
-
-	mipi_dsi_detach(dsi);
 	drm_panel_remove(&ctx->panel);
 }
 

@@ -90,14 +90,12 @@ static int summit_probe(struct mipi_dsi_device *dsi)
 
 	drm_panel_add(&s_data->panel);
 
-	return mipi_dsi_attach(dsi);
+	return devm_mipi_dsi_attach(&dsi->dev, dsi);
 }
 
 static void summit_remove(struct mipi_dsi_device *dsi)
 {
 	struct summit_data *s_data = mipi_dsi_get_drvdata(dsi);
-
-	mipi_dsi_detach(dsi);
 	drm_panel_remove(&s_data->panel);
 }
 

@@ -202,7 +202,7 @@ static int lxd_m9189_probe(struct mipi_dsi_device *dsi)
 
 	drm_panel_add(&m9189->panel);
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (ret < 0) {
 		dev_err_probe(dev, ret, "Failed to attach to DSI host\n");
 		drm_panel_remove(&m9189->panel);
@@ -215,12 +215,6 @@ static int lxd_m9189_probe(struct mipi_dsi_device *dsi)
 static void lxd_m9189_remove(struct mipi_dsi_device *dsi)
 {
 	struct m9189_panel *m9189 = mipi_dsi_get_drvdata(dsi);
-	int ret;
-
-	ret = mipi_dsi_detach(dsi);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to detach from DSI host: %d\n", ret);
-
 	drm_panel_remove(&m9189->panel);
 }
 

@@ -267,7 +267,7 @@ static int r63353_panel_probe(struct mipi_dsi_device *dsi)
 
 	drm_panel_add(&panel->base);
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (ret < 0) {
 		dev_err(dev, "mipi_dsi_attach failed: %d\n", ret);
 		drm_panel_remove(&panel->base);
@@ -281,12 +281,6 @@ static void r63353_panel_remove(struct mipi_dsi_device *dsi)
 {
 	struct r63353_panel *rpanel = mipi_dsi_get_drvdata(dsi);
 	struct device *dev = &dsi->dev;
-	int ret;
-
-	ret = mipi_dsi_detach(dsi);
-	if (ret < 0)
-		dev_err(dev, "Failed to detach from host (%d)\n", ret);
-
 	drm_panel_remove(&rpanel->base);
 }
 

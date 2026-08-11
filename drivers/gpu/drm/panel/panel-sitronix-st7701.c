@@ -1347,7 +1347,7 @@ static int st7701_dsi_probe(struct mipi_dsi_device *dsi)
 	dsi->format = st7701->desc->format;
 	dsi->lanes = st7701->desc->lanes;
 
-	err = mipi_dsi_attach(dsi);
+	err = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (err)
 		return dev_err_probe(&dsi->dev, err, "Failed to init MIPI DSI\n");
 
@@ -1381,7 +1381,6 @@ static int st7701_spi_probe(struct spi_device *spi)
 
 static void st7701_dsi_remove(struct mipi_dsi_device *dsi)
 {
-	mipi_dsi_detach(dsi);
 }
 
 static const struct of_device_id st7701_dsi_of_match[] = {

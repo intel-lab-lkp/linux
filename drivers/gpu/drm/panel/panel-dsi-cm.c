@@ -561,7 +561,7 @@ static int dsicm_probe(struct mipi_dsi_device *dsi)
 
 	drm_panel_add(&ddata->panel);
 
-	r = mipi_dsi_attach(dsi);
+	r = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (r < 0)
 		goto err_dsi_attach;
 
@@ -582,8 +582,6 @@ static void dsicm_remove(struct mipi_dsi_device *dsi)
 	struct panel_drv_data *ddata = mipi_dsi_get_drvdata(dsi);
 
 	dev_dbg(&dsi->dev, "remove\n");
-
-	mipi_dsi_detach(dsi);
 
 	drm_panel_remove(&ddata->panel);
 
