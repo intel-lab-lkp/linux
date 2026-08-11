@@ -907,9 +907,6 @@ static int acp_card_max98388_init(struct snd_soc_pcm_runtime *rtd)
 	struct acp_card_drvdata *drvdata = card->drvdata;
 	int ret;
 
-	if (drvdata->amp_codec_id != MAX98388)
-		return -EINVAL;
-
 	ret = snd_soc_dapm_new_controls(dapm, max98388_widgets,
 					ARRAY_SIZE(max98388_widgets));
 
