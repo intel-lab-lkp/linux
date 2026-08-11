@@ -293,7 +293,10 @@ static inline bool mem_is_zero(const void *s, size_t n)
 	return !memchr_inv(s, 0, n);
 }
 
+/* mm/util.c */
 extern void kfree_const(const void *x);
+
+DEFINE_FREE(kfree_const, void *, if (!IS_ERR_OR_NULL(_T)) kfree_const(_T))
 
 extern char *kstrdup(const char *s, gfp_t gfp) __malloc;
 extern const char *kstrdup_const(const char *s, gfp_t gfp);
