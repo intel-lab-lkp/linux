@@ -280,7 +280,7 @@ static int mpam_dt_parse_resource(struct mpam_msc *msc, struct device_node *np,
 		type = MPAM_CLASS_CACHE;
 
 	} else if (of_device_is_compatible(parent, "cache")) {
-		cache = parent;
+		cache = of_node_get(parent);
 		type = MPAM_CLASS_CACHE;
 	} else if (of_device_is_compatible(np, "arm,mpam-memory")) {
 		memory = of_parse_phandle(np, "arm,mpam-device", 0);
@@ -290,7 +290,7 @@ static int mpam_dt_parse_resource(struct mpam_msc *msc, struct device_node *np,
 		}
 		type = MPAM_CLASS_MEMORY;
 	} else if (of_device_is_compatible(np, "arm,mpam-memory-controller-msc")) {
-		memory = parent;
+		memory = of_node_get(parent);
 		type = MPAM_CLASS_MEMORY;
 	} else {
 		/*
