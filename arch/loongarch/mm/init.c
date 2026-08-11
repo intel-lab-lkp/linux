@@ -203,7 +203,7 @@ void __init __set_fixmap(enum fixed_addresses idx,
 
 	ptep = populate_kernel_pte(addr);
 	if (!pte_none(ptep_get(ptep))) {
-		pte_ERROR(*ptep);
+		pr_err("bad pte %016lx\n", pte_val(*ptep));
 		return;
 	}
 
