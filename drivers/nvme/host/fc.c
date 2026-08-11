@@ -3601,6 +3601,9 @@ fail_ctrl:
 	nvme_uninit_ctrl(&ctrl->ctrl);
 
 out_put_ctrl:
+	/* nvme_add_ctrl() failures skip the clear in fail_ctrl: above */
+	ctrl->ctrl.opts = NULL;
+
 	/* Remove core ctrl ref. */
 	nvme_put_ctrl(&ctrl->ctrl);
 
