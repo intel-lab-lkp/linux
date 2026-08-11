@@ -69,10 +69,12 @@ pub struct Completion {
     inner: Opaque<bindings::completion>,
 }
 
-// SAFETY: `Completion` is safe to be send to any task.
+// SAFETY: `Completion` has no task affinity, and moving an owning pointer to another task preserves
+// the pinning of the underlying `struct completion`.
 unsafe impl Send for Completion {}
 
-// SAFETY: `Completion` is safe to be accessed concurrently.
+// SAFETY: The C completion API protects accesses to `done` and the wait queue with `wait.lock`, so
+// the operations exposed through shared references may be called concurrently.
 unsafe impl Sync for Completion {}
 
 impl Completion {
