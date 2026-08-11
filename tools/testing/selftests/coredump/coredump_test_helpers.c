@@ -13,6 +13,7 @@
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -59,6 +60,156 @@ void crashing_child(void)
 	i = *(volatile int *)NULL;
 }
 
+void crashing_child_sparse(size_t size)
+{
+	char *p;
+
+	/*
+	 * Touch the first page only. The whole mapping is dumped because
+	 * it has been written to, but all of it save that one page is a
+	 * hole.
+	 */
+	p = mmap(NULL, size, PROT_READ | PROT_WRITE,
+		 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+	if (p != MAP_FAILED)
+		p[0] = 'x';
+
+	/* crash on purpose */
+	*(volatile int *)NULL = 0;
+}
+
+/* Read @len bytes off the socket, writing them at @offset if @fd_out >= 0. */
+static ssize_t recv_frame_bytes(int fd_coredump, __u64 len, int fd_out,
+				off_t offset)
+{
+	ssize_t received = 0;
+
+	while (len) {
+		char buffer[PAGE_SIZE];
+		size_t chunk = len < sizeof(buffer) ? len : sizeof(buffer);
+		ssize_t ret;
+
+		ret = recv(fd_coredump, buffer, chunk, MSG_WAITALL);
+		if (ret <= 0) {
+			fprintf(stderr, "%s: short read %zd: %m\n",
+				__func__, ret);
+			return -1;
+		}
+
+		if (fd_out >= 0 &&
+		    pwrite(fd_out, buffer, ret, offset + received) != ret) {
+			fprintf(stderr, "%s: pwrite failed: %m\n", __func__);
+			return -1;
+		}
+
+		received += ret;
+		len -= ret;
+	}
+
+	return received;
+}
+
+ssize_t recv_coredump_frames(int fd_coredump, int fd_core_file,
+			     off_t *coredump_size)
+{
+	ssize_t received = 0;
+	off_t size = 0;
+
+	for (;;) {
+		struct coredump_frame_header frame = {};
+		size_t known;
+		ssize_t ret;
+
+		/* Peek the header size the way read_coredump_req() does. */
+		ret = recv(fd_coredump, &frame, sizeof(frame.size),
+			   MSG_PEEK | MSG_WAITALL);
+		if (ret == 0)
+			break;
+		if (ret != sizeof(frame.size)) {
+			fprintf(stderr, "%s: short frame peek %zd: %m\n",
+				__func__, ret);
+			return -1;
+		}
+
+		if (frame.size < COREDUMP_FRAME_HEADER_SIZE_VER0) {
+			fprintf(stderr, "%s: header size %u below minimum %u\n",
+				__func__, frame.size,
+				COREDUMP_FRAME_HEADER_SIZE_VER0);
+			return -1;
+		}
+
+		/* Consume as much of the header as we know about. */
+		known = frame.size < sizeof(frame) ? frame.size : sizeof(frame);
+		ret = recv(fd_coredump, &frame, known, MSG_WAITALL);
+		if (ret != (ssize_t)known) {
+			fprintf(stderr, "%s: short frame read %zd: %m\n",
+				__func__, ret);
+			return -1;
+		}
+		received += ret;
+
+		/*
+		 * A flag changes what the frame means, so refuse one we
+		 * don't know rather than guess.
+		 */
+		if (frame.flags) {
+			fprintf(stderr, "%s: unknown header flags 0x%llx\n",
+				__func__, (unsigned long long)frame.flags);
+			return -1;
+		}
+
+		/* Discard any part of the header we have no use for. */
+		ret = recv_frame_bytes(fd_coredump, frame.size - known, -1, 0);
+		if (ret < 0)
+			return -1;
+		received += ret;
+
+		/* Frames are sent in order and they don't leave gaps. */
+		if (frame.offset != (__u64)size) {
+			fprintf(stderr, "%s: frame at %llu, expected %llu\n",
+				__func__, (unsigned long long)frame.offset,
+				(unsigned long long)size);
+			return -1;
+		}
+
+		switch (frame.type) {
+		case COREDUMP_FRAME_ZERO:
+			/* A hole. It comes with no data and needs none. */
+			break;
+		case COREDUMP_FRAME_DATA:
+			ret = recv_frame_bytes(fd_coredump, frame.len,
+					       fd_core_file, size);
+			if (ret < 0)
+				return -1;
+			received += ret;
+			break;
+		default:
+			fprintf(stderr, "%s: unknown frame type %u\n",
+				__func__, frame.type);
+			return -1;
+		}
+
+		size += frame.len;
+	}
+
+	/*
+	 * Nothing is written for a hole, so grow the file to the size the
+	 * frames describe in case the coredump ended in one.
+	 */
+	if (ftruncate(fd_core_file, size) < 0) {
+		fprintf(stderr, "%s: ftruncate to %llu failed: %m\n",
+			__func__, (unsigned long long)size);
+		return -1;
+	}
+
+	if (coredump_size)
+		*coredump_size = size;
+
+	fprintf(stderr, "Received %zd bytes for a coredump of %llu bytes\n",
+		received, (unsigned long long)size);
+	return received;
+}
+
 int create_detached_tmpfs(void)
 {
 	int fd_context, fd_tmpfs;
@@ -101,6 +252,7 @@ int create_and_listen_unix_socket(const char *path)
 	return fd;
 
 out:
+	fprintf(stderr, "%s: %s: %m\n", __func__, path);
 	if (fd >= 0)
 		close(fd);
 	return -1;
@@ -279,8 +431,10 @@ bool send_coredump_ack(int fd, const struct coredump_req *req,
 	large_ack.ack.mask = mask;
 	large_ack.ack.size = size_ack;
 	ret = send(fd, &large_ack, size_ack, MSG_NOSIGNAL);
-	if (ret != size_ack)
+	if (ret != size_ack) {
+		fprintf(stderr, "%s: short send %zd: %m\n", __func__, ret);
 		return false;
+	}
 
 	fprintf(stderr, "Sent coredump ack with size %zu and mask 0x%llx\n",
 		size_ack, (unsigned long long)mask);

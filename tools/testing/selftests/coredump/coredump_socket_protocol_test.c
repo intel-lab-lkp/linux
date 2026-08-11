@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include <elf.h>
 #include <sys/stat.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
@@ -1571,6 +1572,384 @@ out:
 	}
 
 	wait_and_check_coredump_server(pid_coredump_server, _metadata, self);
+}
+
+/*
+ * Reassemble a framed coredump and check that what comes out is an ELF
+ * core file. The frames themselves are validated by recv_coredump_frames().
+ */
+TEST_F(coredump, socket_request_sparse)
+{
+	unsigned char ehdr[EI_NIDENT + sizeof(Elf64_Half)];
+	int fd_core_file, pidfd, status;
+	pid_t pid, pid_coredump_server;
+	struct pidfd_info info = {};
+	int ipc_sockets[2];
+	Elf64_Half e_type;
+	struct stat st;
+	char c;
+
+	ASSERT_EQ(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, ipc_sockets), 0);
+	ASSERT_TRUE(set_core_pattern("@@/tmp/coredump.socket"));
+
+	pid_coredump_server = fork();
+	ASSERT_GE(pid_coredump_server, 0);
+	if (pid_coredump_server == 0) {
+		int fd_server = -1, fd_coredump = -1, fd_peer_pidfd = -1;
+		int fd_file = -1;
+		int exit_code = EXIT_FAILURE;
+		struct coredump_req req = {};
+
+		close(ipc_sockets[0]);
+
+		fd_server = create_and_listen_unix_socket("/tmp/coredump.socket");
+		if (fd_server < 0)
+			goto out;
+
+		if (write_nointr(ipc_sockets[1], "1", 1) < 0)
+			goto out;
+
+		close(ipc_sockets[1]);
+
+		fd_coredump = accept4(fd_server, NULL, NULL, SOCK_CLOEXEC);
+		if (fd_coredump < 0)
+			goto out;
+
+		fd_peer_pidfd = get_peer_pidfd(fd_coredump);
+		if (fd_peer_pidfd < 0)
+			goto out;
+
+		fd_file = creat("/tmp/coredump.file", 0644);
+		if (fd_file < 0)
+			goto out;
+
+		if (!read_coredump_req(fd_coredump, &req))
+			goto out;
+
+		if (!check_coredump_req(&req))
+			goto out;
+
+		if (!send_coredump_ack(fd_coredump, &req,
+				       COREDUMP_KERNEL | COREDUMP_HEADER |
+				       COREDUMP_SPARSE | COREDUMP_WAIT, 0))
+			goto out;
+
+		if (!read_marker(fd_coredump, COREDUMP_MARK_REQACK))
+			goto out;
+
+		if (recv_coredump_frames(fd_coredump, fd_file, NULL) < 0)
+			goto out;
+
+		exit_code = EXIT_SUCCESS;
+out:
+		if (fd_file >= 0)
+			close(fd_file);
+		if (fd_peer_pidfd >= 0)
+			close(fd_peer_pidfd);
+		if (fd_coredump >= 0)
+			close(fd_coredump);
+		if (fd_server >= 0)
+			close(fd_server);
+		_exit(exit_code);
+	}
+	self->pid_coredump_server = pid_coredump_server;
+
+	EXPECT_EQ(close(ipc_sockets[1]), 0);
+	ASSERT_EQ(read_nointr(ipc_sockets[0], &c, 1), 1);
+	EXPECT_EQ(close(ipc_sockets[0]), 0);
+
+	pid = fork();
+	ASSERT_GE(pid, 0);
+	if (pid == 0)
+		crashing_child();
+
+	pidfd = sys_pidfd_open(pid, 0);
+	ASSERT_GE(pidfd, 0);
+
+	waitpid(pid, &status, 0);
+	ASSERT_TRUE(WIFSIGNALED(status));
+	ASSERT_TRUE(WCOREDUMP(status));
+
+	ASSERT_TRUE(get_pidfd_info(pidfd, &info));
+	ASSERT_GT((info.mask & PIDFD_INFO_COREDUMP), 0);
+	ASSERT_GT((info.coredump_mask & PIDFD_COREDUMPED), 0);
+
+	wait_and_check_coredump_server(pid_coredump_server, _metadata, self);
+
+	ASSERT_EQ(stat("/tmp/coredump.file", &st), 0);
+	ASSERT_GT(st.st_size, (off_t)sizeof(ehdr));
+
+	/* What the frames reassemble into has to be an ELF core file. */
+	fd_core_file = open("/tmp/coredump.file", O_RDONLY | O_CLOEXEC);
+	ASSERT_GE(fd_core_file, 0);
+	ASSERT_EQ(read_nointr(fd_core_file, ehdr, sizeof(ehdr)), sizeof(ehdr));
+	EXPECT_EQ(close(fd_core_file), 0);
+
+	/* e_type sits right behind e_ident in both ELF32 and ELF64. */
+	ASSERT_EQ(memcmp(ehdr, ELFMAG, SELFMAG), 0);
+	memcpy(&e_type, ehdr + EI_NIDENT, sizeof(e_type));
+	ASSERT_EQ(e_type, ET_CORE);
+}
+
+/*
+ * Crash a child with a mostly-unpopulated mapping and reassemble its
+ * framed coredump, reporting what crossed the socket and the coredump
+ * size the frames describe.
+ */
+static void test_framed_hole(struct __test_metadata *const _metadata,
+			     FIXTURE_DATA(coredump) *self, __u64 ack_mask,
+			     ssize_t *received, off_t *coredump_size)
+{
+	int pidfd, status;
+	pid_t pid, pid_coredump_server;
+	struct pidfd_info info = {};
+	int ipc_sockets[2];
+	int pipefds[2];
+	char c;
+
+	ASSERT_EQ(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, ipc_sockets), 0);
+	ASSERT_EQ(pipe(pipefds), 0);
+	ASSERT_TRUE(set_core_pattern("@@/tmp/coredump.socket"));
+
+	pid_coredump_server = fork();
+	ASSERT_GE(pid_coredump_server, 0);
+	if (pid_coredump_server == 0) {
+		int fd_server = -1, fd_coredump = -1, fd_peer_pidfd = -1;
+		int fd_file = -1;
+		int exit_code = EXIT_FAILURE;
+		struct coredump_req req = {};
+		off_t size = 0;
+		ssize_t ret;
+
+		close(ipc_sockets[0]);
+		close(pipefds[0]);
+
+		fd_server = create_and_listen_unix_socket("/tmp/coredump.socket");
+		if (fd_server < 0)
+			goto out;
+
+		if (write_nointr(ipc_sockets[1], "1", 1) < 0)
+			goto out;
+
+		close(ipc_sockets[1]);
+
+		fd_coredump = accept4(fd_server, NULL, NULL, SOCK_CLOEXEC);
+		if (fd_coredump < 0)
+			goto out;
+
+		fd_peer_pidfd = get_peer_pidfd(fd_coredump);
+		if (fd_peer_pidfd < 0)
+			goto out;
+
+		/*
+		 * The reassembled coredump is bigger than the mapping the
+		 * child made, so keep it on the detached tmpfs and sparse.
+		 */
+		fd_file = open_coredump_tmpfile(self->fd_tmpfs_detached);
+		if (fd_file < 0)
+			goto out;
+
+		if (!read_coredump_req(fd_coredump, &req))
+			goto out;
+
+		if (!check_coredump_req(&req))
+			goto out;
+
+		if (!send_coredump_ack(fd_coredump, &req, ack_mask, 0))
+			goto out;
+
+		if (!read_marker(fd_coredump, COREDUMP_MARK_REQACK))
+			goto out;
+
+		ret = recv_coredump_frames(fd_coredump, fd_file, &size);
+		if (ret < 0)
+			goto out;
+
+		if (write_nointr(pipefds[1], &ret, sizeof(ret)) != sizeof(ret))
+			goto out;
+		if (write_nointr(pipefds[1], &size, sizeof(size)) != sizeof(size))
+			goto out;
+
+		exit_code = EXIT_SUCCESS;
+out:
+		close(pipefds[1]);
+		if (fd_file >= 0)
+			close(fd_file);
+		if (fd_peer_pidfd >= 0)
+			close(fd_peer_pidfd);
+		if (fd_coredump >= 0)
+			close(fd_coredump);
+		if (fd_server >= 0)
+			close(fd_server);
+		_exit(exit_code);
+	}
+	self->pid_coredump_server = pid_coredump_server;
+
+	EXPECT_EQ(close(ipc_sockets[1]), 0);
+	EXPECT_EQ(close(pipefds[1]), 0);
+	ASSERT_EQ(read_nointr(ipc_sockets[0], &c, 1), 1);
+	EXPECT_EQ(close(ipc_sockets[0]), 0);
+
+	pid = fork();
+	ASSERT_GE(pid, 0);
+	if (pid == 0)
+		crashing_child_sparse(SPARSE_MAPPING_SIZE);
+
+	pidfd = sys_pidfd_open(pid, 0);
+	ASSERT_GE(pidfd, 0);
+
+	waitpid(pid, &status, 0);
+	ASSERT_TRUE(WIFSIGNALED(status));
+	ASSERT_TRUE(WCOREDUMP(status));
+
+	ASSERT_TRUE(get_pidfd_info(pidfd, &info));
+	ASSERT_GT((info.mask & PIDFD_INFO_COREDUMP), 0);
+	ASSERT_GT((info.coredump_mask & PIDFD_COREDUMPED), 0);
+
+	ASSERT_EQ(read_nointr(pipefds[0], received, sizeof(*received)),
+		  sizeof(*received));
+	ASSERT_EQ(read_nointr(pipefds[0], coredump_size, sizeof(*coredump_size)),
+		  sizeof(*coredump_size));
+	EXPECT_EQ(close(pipefds[0]), 0);
+
+	wait_and_check_coredump_server(pid_coredump_server, _metadata, self);
+
+	/* The mapping is in the coredump, holes included. */
+	ASSERT_GT(*coredump_size, (off_t)SPARSE_MAPPING_SIZE);
+}
+
+/*
+ * A mapping that has been written to is dumped whole, including the parts
+ * of it that were never faulted in. With COREDUMP_SPARSE the holes stay
+ * off the wire.
+ */
+TEST_F(coredump, socket_request_sparse_hole)
+{
+	off_t coredump_size = 0;
+	ssize_t received = 0;
+
+	test_framed_hole(_metadata, self,
+			 COREDUMP_KERNEL | COREDUMP_HEADER |
+			 COREDUMP_SPARSE | COREDUMP_WAIT,
+			 &received, &coredump_size);
+
+	/* The holes didn't have to go over the socket. */
+	ASSERT_LT(received, coredump_size / 8);
+}
+
+/*
+ * COREDUMP_HEADER alone frames the stream but elides nothing: the holes
+ * cross the socket as data frames.
+ */
+TEST_F(coredump, socket_request_header_hole)
+{
+	off_t coredump_size = 0;
+	ssize_t received = 0;
+
+	test_framed_hole(_metadata, self,
+			 COREDUMP_KERNEL | COREDUMP_HEADER | COREDUMP_WAIT,
+			 &received, &coredump_size);
+
+	/* Framing alone elides nothing, so everything crossed the socket. */
+	ASSERT_GT(received, coredump_size);
+}
+
+/* Ack @ack_mask, expect the kernel to refuse it as conflicting. */
+static void test_conflicting_ack(struct __test_metadata *const _metadata,
+				 FIXTURE_DATA(coredump) *self, __u64 ack_mask)
+{
+	int pidfd, status;
+	pid_t pid, pid_coredump_server;
+	struct pidfd_info info = {};
+	int ipc_sockets[2];
+	char c;
+
+	ASSERT_EQ(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, ipc_sockets), 0);
+	ASSERT_TRUE(set_core_pattern("@@/tmp/coredump.socket"));
+
+	pid_coredump_server = fork();
+	ASSERT_GE(pid_coredump_server, 0);
+	if (pid_coredump_server == 0) {
+		int fd_server = -1, fd_coredump = -1, fd_peer_pidfd = -1;
+		int exit_code = EXIT_FAILURE;
+		struct coredump_req req = {};
+
+		close(ipc_sockets[0]);
+
+		fd_server = create_and_listen_unix_socket("/tmp/coredump.socket");
+		if (fd_server < 0)
+			goto out;
+
+		if (write_nointr(ipc_sockets[1], "1", 1) < 0)
+			goto out;
+
+		close(ipc_sockets[1]);
+
+		fd_coredump = accept4(fd_server, NULL, NULL, SOCK_CLOEXEC);
+		if (fd_coredump < 0)
+			goto out;
+
+		fd_peer_pidfd = get_peer_pidfd(fd_coredump);
+		if (fd_peer_pidfd < 0)
+			goto out;
+
+		if (!read_coredump_req(fd_coredump, &req))
+			goto out;
+
+		if (!check_coredump_req(&req))
+			goto out;
+
+		if (!send_coredump_ack(fd_coredump, &req, ack_mask, 0))
+			goto out;
+
+		if (!read_marker(fd_coredump, COREDUMP_MARK_CONFLICTING))
+			goto out;
+
+		exit_code = EXIT_SUCCESS;
+out:
+		if (fd_peer_pidfd >= 0)
+			close(fd_peer_pidfd);
+		if (fd_coredump >= 0)
+			close(fd_coredump);
+		if (fd_server >= 0)
+			close(fd_server);
+		_exit(exit_code);
+	}
+	self->pid_coredump_server = pid_coredump_server;
+
+	EXPECT_EQ(close(ipc_sockets[1]), 0);
+	ASSERT_EQ(read_nointr(ipc_sockets[0], &c, 1), 1);
+	EXPECT_EQ(close(ipc_sockets[0]), 0);
+
+	pid = fork();
+	ASSERT_GE(pid, 0);
+	if (pid == 0)
+		crashing_child();
+
+	pidfd = sys_pidfd_open(pid, 0);
+	ASSERT_GE(pidfd, 0);
+
+	waitpid(pid, &status, 0);
+	ASSERT_TRUE(WIFSIGNALED(status));
+	ASSERT_FALSE(WCOREDUMP(status));
+
+	ASSERT_TRUE(get_pidfd_info(pidfd, &info));
+	ASSERT_GT((info.mask & PIDFD_INFO_COREDUMP), 0);
+	ASSERT_GT((info.coredump_mask & PIDFD_COREDUMPED), 0);
+
+	wait_and_check_coredump_server(pid_coredump_server, _metadata, self);
+}
+
+/* COREDUMP_HEADER frames a coredump the kernel writes, nothing else. */
+TEST_F(coredump, socket_request_header_without_kernel)
+{
+	test_conflicting_ack(_metadata, self, COREDUMP_USERSPACE | COREDUMP_HEADER);
+}
+
+/* A zero frame can't exist outside a framed stream. */
+TEST_F(coredump, socket_request_sparse_without_header)
+{
+	test_conflicting_ack(_metadata, self, COREDUMP_KERNEL | COREDUMP_SPARSE);
 }
 
 TEST_HARNESS_MAIN
