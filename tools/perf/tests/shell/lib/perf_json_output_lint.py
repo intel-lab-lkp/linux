@@ -64,6 +64,7 @@ def check_json_output(expected_items):
       'metric-threshold': lambda x: x in ['unknown', 'good', 'less good', 'nearly bad', 'bad'],
       'metricgroup': lambda x: True,
       'node': lambda x: True,
+      'pmu': lambda x: True,
       'pcnt-running': lambda x: isfloat(x),
       'socket': lambda x: True,
       'thread': lambda x: True,
@@ -99,8 +100,10 @@ def check_json_output(expected_items):
 try:
   if args.no_args or args.system_wide or args.event:
     expected_items = [5, 7]
-  elif args.interval or args.per_thread or args.system_wide_no_aggr:
+  elif args.interval or args.per_thread:
     expected_items = [6, 8]
+  elif args.system_wide_no_aggr:
+    expected_items = [6, 7, 8, 9]
   elif args.per_core or args.per_socket or args.per_node or args.per_die or args.per_cluster or args.per_cache:
     expected_items = [7, 9]
   elif args.metric_only:
