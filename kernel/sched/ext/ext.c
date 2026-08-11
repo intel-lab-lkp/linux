@@ -4332,7 +4332,9 @@ static void process_deferred_reenq_users(struct rq *rq)
 		/* see schedule_dsq_reenq() */
 		smp_mb();
 
-		BUG_ON(dsq->id & SCX_DSQ_FLAG_BUILTIN);
+		/* destroy_dsq() may race and invalidate @dsq; skip */
+		if (unlikely(dsq->id & SCX_DSQ_FLAG_BUILTIN))
+			continue;
 		reenq_user(rq, dsq, reenq_flags);
 	}
 }
