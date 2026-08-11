@@ -3291,7 +3291,7 @@ skip_load_parent:
 		if (!check_if_attr(rec, lrh) || dlen < SIZEOF_RESIDENT ||
 		    !IS_ALIGNED(asize, 8) ||
 		    Add2Ptr(attr2, asize) > Add2Ptr(lrh, rec_len) ||
-		    dlen > record_size - used) {
+		    asize > record_size - used) {
 			goto dirty_vol;
 		}
 
