@@ -2211,15 +2211,14 @@ void kvm_s390_clear_float_irqs(struct kvm *kvm)
 static int get_all_floating_irqs(struct kvm *kvm, u8 __user *usrbuf, u64 len)
 {
 	struct kvm_s390_gisa_interrupt *gi = &kvm->arch.gisa_int;
+	struct kvm_s390_irq *buf __free(kvfree) = NULL;
 	struct kvm_s390_interrupt_info *inti;
 	struct kvm_s390_float_interrupt *fi;
-	struct kvm_s390_irq *buf;
 	struct kvm_s390_irq *irq;
+	unsigned int tmp = 0;
 	int max_irqs;
-	int ret = 0;
 	int n = 0;
 	int i;
-	unsigned long flags;
 
 	if (len > KVM_S390_FLIC_MAX_BUFFER || len == 0)
 		return -EINVAL;
@@ -2235,14 +2234,48 @@ static int get_all_floating_irqs(struct kvm *kvm, u8 __user *usrbuf, u64 len)
 
 	max_irqs = len / sizeof(struct kvm_s390_irq);
 
+	fi = &kvm->arch.float_int;
+	scoped_guard(spinlock_irqsave, &fi->lock) {
+		for (i = 0; i < FIRQ_LIST_COUNT; i++) {
+			list_for_each_entry(inti, &fi->lists[i], list) {
+				/* signal userspace to try again */
+				if (n == max_irqs)
+					return -ENOMEM;
+				inti_to_irq(inti, &buf[n]);
+				n++;
+			}
+		}
+		if (test_bit(IRQ_PEND_EXT_SERVICE, &fi->pending_irqs) ||
+		    test_bit(IRQ_PEND_EXT_SERVICE_EV, &fi->pending_irqs)) {
+			/* signal userspace to try again */
+			if (n == max_irqs)
+				return -ENOMEM;
+			irq = (struct kvm_s390_irq *)&buf[n];
+			irq->type = KVM_S390_INT_SERVICE;
+			irq->u.ext = fi->srv_signal;
+			n++;
+		}
+		if (test_bit(IRQ_PEND_MCHK_REP, &fi->pending_irqs)) {
+			/* signal userspace to try again */
+			if (n == max_irqs)
+				return -ENOMEM;
+			irq = (struct kvm_s390_irq *)&buf[n];
+			irq->type = KVM_S390_MCHK;
+			irq->u.mchk = fi->mchk;
+			n++;
+		}
+	}
 	if (gi->origin && gisa_get_ipm(gi->origin)) {
 		for (i = 0; i <= MAX_ISC; i++) {
 			if (n == max_irqs) {
+				/* restore removed bits if returning failure */
+				__atomic_or(tmp, (void *)&gi->origin->ipm);
 				/* signal userspace to try again */
-				ret = -ENOMEM;
-				goto out_nolock;
+				return -ENOMEM;
 			}
 			if (gisa_tac_ipm_gisc(gi->origin, i)) {
+				/* set aside the bits we cleared */
+				tmp |= 1 << (31 - i);
 				irq = (struct kvm_s390_irq *) &buf[n];
 				irq->type = KVM_S390_INT_IO(1, 0, 0, 0);
 				irq->u.io.io_int_word = isc_to_int_word(i);
@@ -2250,53 +2283,15 @@ static int get_all_floating_irqs(struct kvm *kvm, u8 __user *usrbuf, u64 len)
 			}
 		}
 	}
-	fi = &kvm->arch.float_int;
-	spin_lock_irqsave(&fi->lock, flags);
-	for (i = 0; i < FIRQ_LIST_COUNT; i++) {
-		list_for_each_entry(inti, &fi->lists[i], list) {
-			if (n == max_irqs) {
-				/* signal userspace to try again */
-				ret = -ENOMEM;
-				goto out;
-			}
-			inti_to_irq(inti, &buf[n]);
-			n++;
-		}
-	}
-	if (test_bit(IRQ_PEND_EXT_SERVICE, &fi->pending_irqs) ||
-	    test_bit(IRQ_PEND_EXT_SERVICE_EV, &fi->pending_irqs)) {
-		if (n == max_irqs) {
-			/* signal userspace to try again */
-			ret = -ENOMEM;
-			goto out;
-		}
-		irq = (struct kvm_s390_irq *) &buf[n];
-		irq->type = KVM_S390_INT_SERVICE;
-		irq->u.ext = fi->srv_signal;
-		n++;
-	}
-	if (test_bit(IRQ_PEND_MCHK_REP, &fi->pending_irqs)) {
-		if (n == max_irqs) {
-				/* signal userspace to try again */
-				ret = -ENOMEM;
-				goto out;
-		}
-		irq = (struct kvm_s390_irq *) &buf[n];
-		irq->type = KVM_S390_MCHK;
-		irq->u.mchk = fi->mchk;
-		n++;
-}
 
-out:
-	spin_unlock_irqrestore(&fi->lock, flags);
-out_nolock:
-	if (!ret && n > 0) {
-		if (copy_to_user(usrbuf, buf, sizeof(struct kvm_s390_irq) * n))
-			ret = -EFAULT;
+	if (n > 0 && copy_to_user(usrbuf, buf, sizeof(struct kvm_s390_irq) * n)) {
+		/* restore removed bits if returning failure */
+		if (tmp)
+			__atomic_or(tmp, (void *)&gi->origin->ipm);
+		return -EFAULT;
 	}
-	vfree(buf);
 
-	return ret < 0 ? ret : n;
+	return n;
 }
 
 static int flic_ais_mode_get_all(struct kvm *kvm, struct kvm_device_attr *attr)
