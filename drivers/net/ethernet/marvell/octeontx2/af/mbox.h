@@ -1908,18 +1908,20 @@ struct fib_entry {
 		__be32 gw;
 		__be32 gw6[4];
 	};
-	u16 port_id;
+	u32 port_id;
 	u8 nud_state;
 	u8 rsvd3;
 	u8 mac[ETH_ALEN];
 	u16 rsvd4; /* explicit tail padding */
 };
 
+#define RVU_SW_L3_ENTRY_MAX 12
+
 struct fib_notify_req {
 	struct  mbox_msghdr hdr;
 	u16 cnt;
 	u16 rsvd[3]; /* explicit padding for entry[] 8-byte alignment */
-	struct fib_entry entry[16];
+	struct fib_entry entry[RVU_SW_L3_ENTRY_MAX];
 };
 
 struct fl_tuple {
@@ -1992,7 +1994,7 @@ struct af2swdev_notify_req {
 		struct {
 			u8 cnt;
 			u8 rsvd[7]; /* explicit padding before fib_entry[] */
-			struct fib_entry entry[12];
+			struct fib_entry entry[RVU_SW_L3_ENTRY_MAX];
 		};
 
 		struct {
