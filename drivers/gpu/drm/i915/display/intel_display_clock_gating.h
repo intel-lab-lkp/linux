@@ -9,5 +9,6 @@
 struct intel_display;
 
 void intel_display_init_clock_gating(struct intel_display *display);
+void intel_display_restore_clock_gating(struct intel_display *display);
 
 #endif /* __INTEL_DISPLAY_CLOCK_GATING_H__ */
