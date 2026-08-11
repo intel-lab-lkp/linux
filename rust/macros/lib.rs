@@ -20,6 +20,7 @@ mod fmt;
 mod for_lt;
 mod helpers;
 mod kunit;
+mod macro_export_scoped;
 mod module;
 mod paste;
 mod vtable;
@@ -318,6 +319,30 @@ pub fn fmt(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn concat_idents(input: TokenStream) -> TokenStream {
     concat_idents::concat_idents(parse_macro_input!(input)).into()
+}
+
+/// Export a macro publicly, but from the current module instead of crate root.
+///
+/// # Examples
+///
+/// ```
+/// mod foo {
+///     #[kernel::macros::macro_export_scoped]
+///     macro_rules! my_macro {
+///         () => {}
+///     }
+/// }
+///
+/// foo::my_macro!();
+/// ```
+#[doc(hidden)]
+#[proc_macro_attribute]
+#[allow(non_snake_case)]
+pub fn macro_export_scoped(attr: TokenStream, input: TokenStream) -> TokenStream {
+    parse_macro_input!(attr as syn::parse::Nothing);
+    macro_export_scoped::macro_export_scoped(parse_macro_input!(input))
+        .unwrap_or_else(|e| e.into_compile_error())
+        .into()
 }
 
 /// Paste identifiers together.
