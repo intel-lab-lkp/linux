@@ -176,6 +176,12 @@ u64 btrfs_get_alloc_profile(struct btrfs_fs_info *fs_info, u64 orig_flags)
 			flags |= fs_info->avail_metadata_alloc_bits;
 	} while (read_seqretry(&fs_info->profiles_lock, seq));
 
+	/* Degrade to a less redundant, but still redundant, RAID1 profile if possible. */
+	if (flags & BTRFS_BLOCK_GROUP_RAID1C4)
+		flags |= BTRFS_BLOCK_GROUP_RAID1C3 | BTRFS_BLOCK_GROUP_RAID1;
+	else if (flags & BTRFS_BLOCK_GROUP_RAID1C3)
+		flags |= BTRFS_BLOCK_GROUP_RAID1;
+
 	return btrfs_reduce_alloc_profile(fs_info, flags);
 }
 
