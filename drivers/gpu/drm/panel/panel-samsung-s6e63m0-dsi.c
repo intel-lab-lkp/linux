@@ -105,7 +105,7 @@ static int s6e63m0_dsi_probe(struct mipi_dsi_device *dsi)
 	if (ret)
 		return ret;
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (ret < 0)
 		s6e63m0_remove(dev);
 
@@ -114,7 +114,6 @@ static int s6e63m0_dsi_probe(struct mipi_dsi_device *dsi)
 
 static void s6e63m0_dsi_remove(struct mipi_dsi_device *dsi)
 {
-	mipi_dsi_detach(dsi);
 	s6e63m0_remove(&dsi->dev);
 }
 
