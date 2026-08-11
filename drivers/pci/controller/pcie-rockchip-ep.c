@@ -860,6 +860,7 @@ static int rockchip_pcie_ep_probe(struct platform_device *pdev)
 	}
 
 	ep->epc = epc;
+	platform_set_drvdata(pdev, ep);
 	epc_set_drvdata(epc, ep);
 
 	err = rockchip_pcie_ep_get_resources(rockchip, ep);
@@ -899,12 +900,32 @@ err_exit_ob_mem:
 	return err;
 }
 
+static void rockchip_pcie_ep_remove(struct platform_device *pdev)
+{
+	struct rockchip_pcie_ep *ep = platform_get_drvdata(pdev);
+	struct rockchip_pcie *rockchip = &ep->rockchip;
+
+	if (rockchip->perst_gpio) {
+		ep->perst_asserted = true;
+		disable_irq(ep->perst_irq);
+	}
+
+	/* Disable, not cancel like .stop(): a racing .start() cannot re-arm it. */
+	disable_delayed_work_sync(&ep->link_training);
+
+	rockchip_pcie_write(rockchip,
+			    PCIE_CLIENT_CONF_DISABLE |
+			    PCIE_CLIENT_LINK_TRAIN_DISABLE,
+			    PCIE_CLIENT_CONFIG);
+}
+
 static struct platform_driver rockchip_pcie_ep_driver = {
 	.driver = {
 		.name = "rockchip-pcie-ep",
 		.of_match_table = rockchip_pcie_ep_of_match,
 	},
 	.probe = rockchip_pcie_ep_probe,
+	.remove = rockchip_pcie_ep_remove,
 };
 
 builtin_platform_driver(rockchip_pcie_ep_driver);
