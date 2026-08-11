@@ -164,6 +164,9 @@ struct scan_control {
 	/* Incremented by the number of inactive pages that were scanned */
 	unsigned long nr_scanned;
 
+	/* Number of pages that were scanned from isolate_lru_folios() */
+	unsigned long nr_isolate_scanned;
+
 	/* Number of pages freed so far during a call to shrink_zones() */
 	unsigned long nr_reclaimed;
 
@@ -1673,7 +1676,6 @@ static __always_inline void update_lru_sizes(struct lruvec *lruvec,
  * @nr_to_scan:	The number of eligible pages to look through on the list.
  * @lruvec:	The LRU vector to pull pages from.
  * @dst:	The temp list to put pages on to.
- * @nr_scanned:	The number of pages that were scanned.
  * @sc:		The scan_control struct for this reclaim session
  * @lru:	LRU list id for isolating
  *
@@ -1681,8 +1683,7 @@ static __always_inline void update_lru_sizes(struct lruvec *lruvec,
  */
 static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
 		struct lruvec *lruvec, struct list_head *dst,
-		unsigned long *nr_scanned, struct scan_control *sc,
-		enum lru_list lru)
+		struct scan_control *sc, enum lru_list lru)
 {
 	struct list_head *src = &lruvec->lists[lru];
 	unsigned long nr_taken = 0;
@@ -1766,7 +1767,7 @@ move:
 			skipped += nr_skipped[zid];
 		}
 	}
-	*nr_scanned = total_scan;
+	sc->nr_isolate_scanned = total_scan;
 	trace_mm_vmscan_lru_isolate(sc->reclaim_idx, sc->order, nr_to_scan,
 				    total_scan, skipped, nr_taken, lru);
 	update_lru_sizes(lruvec, lru, nr_zone_taken);
@@ -2014,8 +2015,8 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 
 	lruvec_lock_irq(lruvec);
 
-	nr_taken = isolate_lru_folios(nr_to_scan, lruvec, &folio_list,
-				     &nr_scanned, sc, lru);
+	nr_taken = isolate_lru_folios(nr_to_scan, lruvec, &folio_list, sc, lru);
+	nr_scanned = sc->nr_isolate_scanned;
 
 	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, nr_taken);
 	item = PGSCAN_KSWAPD + reclaimer_offset(sc);
@@ -2071,7 +2072,6 @@ static void shrink_active_list(unsigned long nr_to_scan,
 			       enum lru_list lru)
 {
 	unsigned long nr_taken;
-	unsigned long nr_scanned;
 	vm_flags_t vm_flags;
 	LIST_HEAD(l_hold);	/* The folios which were snipped off */
 	LIST_HEAD(l_active);
@@ -2085,12 +2085,11 @@ static void shrink_active_list(unsigned long nr_to_scan,
 
 	lruvec_lock_irq(lruvec);
 
-	nr_taken = isolate_lru_folios(nr_to_scan, lruvec, &l_hold,
-				     &nr_scanned, sc, lru);
+	nr_taken = isolate_lru_folios(nr_to_scan, lruvec, &l_hold, sc, lru);
 
 	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, nr_taken);
 
-	mod_lruvec_state(lruvec, PGREFILL, nr_scanned);
+	mod_lruvec_state(lruvec, PGREFILL, sc->nr_isolate_scanned);
 
 	lruvec_unlock_irq(lruvec);
 
@@ -5920,10 +5919,21 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 		for_each_evictable_lru(lru) {
 			if (nr[lru]) {
 				nr_to_scan = min(nr[lru], SWAP_CLUSTER_MAX);
-				nr[lru] -= nr_to_scan;
 
+				sc->nr_isolate_scanned = 0;
 				nr_reclaimed += shrink_list(lru, nr_to_scan,
 							    lruvec, sc);
+				/*
+				 * isolate_lru_folios() may scan far more
+				 * than nr_to_scan when the LRU holds
+				 * ineligible folios (zone-skip) or large
+				 * folios. Charge that overshoot against the
+				 * remaining quota (clamped by min() so it
+				 * cannot go negative) so the next iteration
+				 * does not rescan the same skipped folios.
+				 */
+				nr[lru] -= min(nr[lru],
+					       max(nr_to_scan, sc->nr_isolate_scanned));
 			}
 		}
 
