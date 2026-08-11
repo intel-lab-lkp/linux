@@ -406,6 +406,10 @@ int panthor_device_mmap_io(struct panthor_device *ptdev,
 int panthor_device_resume(struct device *dev);
 int panthor_device_suspend(struct device *dev);
 
+#ifdef CONFIG_DEBUG_FS
+void panthor_device_debugfs_init(struct drm_minor *minor);
+#endif
+
 static inline int panthor_device_resume_and_get(struct panthor_device *ptdev)
 {
 	int ret = pm_runtime_resume_and_get(ptdev->base.dev);

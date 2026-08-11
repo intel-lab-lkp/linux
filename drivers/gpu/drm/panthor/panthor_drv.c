@@ -1764,14 +1764,6 @@ static const struct file_operations panthor_drm_driver_fops = {
 	.fop_flags = FOP_UNSIGNED_OFFSET,
 };
 
-#ifdef CONFIG_DEBUG_FS
-static void panthor_debugfs_init(struct drm_minor *minor)
-{
-	panthor_mmu_debugfs_init(minor);
-	panthor_gem_debugfs_init(minor);
-}
-#endif
-
 /*
  * PanCSF driver version:
  * - 1.0 - initial interface
@@ -1807,7 +1799,7 @@ static const struct drm_driver panthor_drm_driver = {
 	.gem_prime_import_sg_table = panthor_gem_prime_import_sg_table,
 	.gem_prime_import = panthor_gem_prime_import,
 #ifdef CONFIG_DEBUG_FS
-	.debugfs_init = panthor_debugfs_init,
+	.debugfs_init = panthor_device_debugfs_init,
 #endif
 };
 

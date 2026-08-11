@@ -13,6 +13,7 @@
 #include <linux/reset.h>
 
 #include <drm/drm_drv.h>
+#include <drm/drm_file.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
 
@@ -646,3 +647,11 @@ int panthor_device_suspend(struct device *dev)
 	atomic_set(&ptdev->pm.state, PANTHOR_DEVICE_PM_STATE_SUSPENDED);
 	return 0;
 }
+
+#ifdef CONFIG_DEBUG_FS
+void panthor_device_debugfs_init(struct drm_minor *minor)
+{
+	panthor_mmu_debugfs_init(minor);
+	panthor_gem_debugfs_init(minor);
+}
+#endif
