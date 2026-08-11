@@ -617,6 +617,8 @@ static int ipv6_flowlabel_get(struct sock *sk, struct in6_flowlabel_req *freq,
 	struct ipv6_fl_socklist *sfl, *sfl1 = NULL;
 	struct ip6_flowlabel *fl, *fl1 = NULL;
 	struct net *net = sock_net(sk);
+	bool cap_net_admin = false;
+	int dup_count = 0;
 	int err;
 
 	if (freq->flr_flags & IPV6_FL_F_REFLECT) {
@@ -652,10 +654,14 @@ static int ipv6_flowlabel_get(struct sock *sk, struct in6_flowlabel_req *freq,
 					rcu_read_unlock();
 					goto done;
 				}
-				fl1 = sfl->fl;
-				if (!atomic_inc_not_zero(&fl1->users))
-					fl1 = NULL;
-				break;
+				if (!fl1) {
+					fl1 = sfl->fl;
+					if (!atomic_inc_not_zero(&fl1->users))
+						fl1 = NULL;
+					cap_net_admin = capable(CAP_NET_ADMIN);
+				}
+				if (++dup_count >= FL_MAX_PER_SOCK || cap_net_admin)
+					break;
 			}
 		}
 		rcu_read_unlock();
@@ -678,6 +684,10 @@ recheck:
 
 			err = -ENOMEM;
 			if (!sfl1)
+				goto release;
+			/* sockopt_lock_sock() serializes the count and fl_link(). */
+			err = -ENOBUFS;
+			if (dup_count >= FL_MAX_PER_SOCK && !cap_net_admin)
 				goto release;
 			if (fl->linger > fl1->linger)
 				fl1->linger = fl->linger;
