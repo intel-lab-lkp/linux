@@ -19,6 +19,7 @@ use crate::{
     },
     prelude::*,
     sync::aref::AlwaysRefCounted,
+    sysfs::AttributeGroups,
     types::Opaque,
     usb::endpoint::HostEndpoint,
     ThisModule, //
@@ -26,10 +27,13 @@ use crate::{
 use core::{
     marker::PhantomData,
     mem::{
-        offset_of,
-        MaybeUninit, //
+        offset_of, //
+        MaybeUninit,
     },
-    ptr::NonNull,
+    ptr::{
+        self,
+        NonNull, //
+    },
     slice, //
 };
 
@@ -64,6 +68,11 @@ unsafe impl<T: Driver> driver::RegistrationOps for Adapter<T> {
             (*udrv.get()).probe = Some(Self::probe_callback);
             (*udrv.get()).disconnect = Some(Self::disconnect_callback);
             (*udrv.get()).id_table = T::ID_TABLE.as_ptr();
+            (*udrv.get()).dev_groups = if let Some(dev_group) = T::DEVICE_GROUPS {
+                dev_group.as_ptr()
+            } else {
+                ptr::null_mut()
+            };
         }
 
         // SAFETY: `udrv` is guaranteed to be a valid `DriverType`.
@@ -319,6 +328,91 @@ pub trait Driver {
 
     /// The table of device ids supported by the driver.
     const ID_TABLE: IdTable<Self::IdInfo>;
+
+    /// The sysfs attribute groups to create for interfaces bound to this driver.
+    ///
+    /// Defaults to `None`, i.e. the driver exposes no attributes of its own.
+    /// Build the value with [`attribute_list!`](crate::attribute_list), which
+    /// declares the necessary `static`s and evaluates to a
+    /// `&'static AttributeGroups`. Only a single group is supported.
+    ///
+    /// The files appear in the sysfs directory of each bound USB *interface*, not
+    /// of the USB device, for instance `/sys/bus/usb/devices/1-1:1.0/`. Because
+    /// `dev_groups` belongs to the driver rather than to one device, every
+    /// interface this driver binds to gets the same set of files, and there is no
+    /// way to hide an individual attribute for some interfaces.
+    ///
+    /// # Registration window
+    ///
+    /// The array is stored in `struct usb_driver::dev_groups`, which usbcore
+    /// forwards to the embedded `struct device_driver`. The driver core creates
+    /// the files only after [`Driver::probe`] has returned successfully and
+    /// removes them before [`Driver::disconnect`] runs, so an attribute callback
+    /// always finds live private data on the interface. That is what makes it
+    /// sound for the callbacks to recover it at all. Groups installed anywhere
+    /// that is populated earlier, such as a `device_type`, would expose the files
+    /// from `device_add` onwards, before `probe` had stored anything.
+    ///
+    /// # `Sync`
+    ///
+    /// Attribute callbacks receive a shared reference to the private data, and
+    /// two readers on separate file descriptors can be inside a `show` for the
+    /// same interface at once, so [`Self::Data`] has to be `Sync` for a driver
+    /// that sets this to `Some`. The bound is deliberately not stated here: it
+    /// comes from `AttributeOperations::Data`, so it is checked at the
+    /// `attribute_list!` call site rather than being imposed on every driver,
+    /// including the ones that leave this as `None`.
+    ///
+    /// # The `'static` in `Self::Data<'static>`
+    ///
+    /// The reference is `'static`, so `'static` is the only lifetime this type
+    /// can name. The value a callback is handed at runtime is the
+    /// `Self::Data<'bound>` that [`Driver::probe`] returned for the current
+    /// binding, so the tag names a different instantiation of the GAT than the
+    /// one that exists, and the attribute code reads the private data as a
+    /// `Self::Data<'static>`. Variance turns `'static` into `'bound`, not the
+    /// reverse, so nothing recovers the difference.
+    ///
+    /// Only set this to `Some` when [`Self::Data`] does not borrow from `'bound`,
+    /// i.e. when every instantiation is the same owning type. A `Data` holding
+    /// `&'bound` references can leak them out of an attribute callback with a
+    /// longer lifetime than they have, and nothing here catches it.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// const BLINK: u64 = 0;
+    ///
+    /// // No `'bound` borrows, so `Data<'static>` is the type that exists.
+    /// struct MyData { blinking: AtomicBool }
+    ///
+    /// impl usb::Driver for MyDriver {
+    ///     type Data<'bound> = MyData;
+    ///
+    ///     const DEVICE_GROUPS: Option<&'static AttributeGroups<Self::Data<'static>>> =
+    ///         Some(kernel::attribute_list!(
+    ///             data: MyData,
+    ///             ops: MyDriver,
+    ///             attributes: BLINK,
+    ///         ));
+    ///
+    ///     // ... ID_TABLE, probe, disconnect
+    /// }
+    ///
+    /// impl kernel::sysfs::AttributeOperations<BLINK> for MyDriver {
+    ///     type Data = MyData;
+    ///
+    ///     fn show(
+    ///         data: Pin<&MyData>,
+    ///         _dev: &Device<Bound>,
+    ///         buf: &mut [u8; PAGE_SIZE],
+    ///     ) -> Result<usize> {
+    ///         // Format into `buf` and return the byte count.
+    ///         Ok(0)
+    ///     }
+    /// }
+    /// ```
+    const DEVICE_GROUPS: Option<&'static AttributeGroups<Self::Data<'static>>> = None;
 
     /// USB driver probe.
     ///

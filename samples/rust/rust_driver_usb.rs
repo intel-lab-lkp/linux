@@ -3,6 +3,9 @@
 
 //! Rust USB driver sample.
 
+const ATTR1: u64 = 0;
+const ATTR2: u64 = 1;
+
 use kernel::{
     device::{
         self,
@@ -10,11 +13,22 @@ use kernel::{
     },
     prelude::*,
     sync::aref::ARef,
+    sysfs::AttributeOperations,
     usb, //
 };
 
 struct SampleDriver {
     _intf: ARef<usb::Interface>,
+}
+
+#[vtable]
+impl AttributeOperations<ATTR1> for SampleDriver {
+    type Data = Self;
+}
+
+#[vtable]
+impl AttributeOperations<ATTR2> for SampleDriver {
+    type Data = Self;
 }
 
 kernel::usb_device_table!(
