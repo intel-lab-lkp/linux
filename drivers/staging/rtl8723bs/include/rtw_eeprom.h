@@ -100,8 +100,8 @@ struct eeprom_priv {
 
 	u8 mac_addr[6];	/* PermanentAddress */
 
-	u16 	channel_plan;
-	u16 	CustomerID;
+	u16	channel_plan;
+	u16	CustomerID;
 
 	u8 efuse_eeprom_data[EEPROM_MAX_SIZE]; /* 92C:256bytes, 88E:512bytes, we use union set (512bytes) */
 	u8 adjuseVoltageVal;
@@ -110,7 +110,7 @@ struct eeprom_priv {
 	u8 EEPROMRFGainVal;
 
 	u8 sdio_setting;
-	u32 	ocr;
+	u32	ocr;
 	u8 cis0[eeprom_cis0_sz];
 	u8 cis1[eeprom_cis1_sz];
 };
