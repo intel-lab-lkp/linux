@@ -198,6 +198,30 @@ int atomic_notifier_chain_unregister(struct atomic_notifier_head *nh,
 EXPORT_SYMBOL_GPL(atomic_notifier_chain_unregister);
 
 /**
+ *	atomic_notifier_chain_unregister_expedited - Remove notifier from an atomic notifier chain
+ *	@nh: Pointer to head of the atomic notifier chain
+ *	@n: Entry to remove from notifier chain
+ *
+ *	Removes a notifier from an atomic notifier chain and forcefully
+ *	accelerates the RCU grace period.
+ *
+ *	Return: 0 on success, or -ENOENT on failure.
+ */
+int atomic_notifier_chain_unregister_expedited(struct atomic_notifier_head *nh,
+		struct notifier_block *n)
+{
+	unsigned long flags;
+	int ret;
+
+	spin_lock_irqsave(&nh->lock, flags);
+	ret = notifier_chain_unregister(&nh->head, n);
+	spin_unlock_irqrestore(&nh->lock, flags);
+	synchronize_rcu_expedited();
+	return ret;
+}
+EXPORT_SYMBOL_GPL(atomic_notifier_chain_unregister_expedited);
+
+/**
  *	atomic_notifier_call_chain - Call functions in an atomic notifier chain
  *	@nh: Pointer to head of the atomic notifier chain
  *	@val: Value passed unmodified to notifier function

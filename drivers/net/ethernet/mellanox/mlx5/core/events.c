@@ -436,7 +436,7 @@ int mlx5_notifier_unregister(struct mlx5_core_dev *dev, struct notifier_block *n
 {
 	struct mlx5_events *events = dev->priv.events;
 
-	return atomic_notifier_chain_unregister(&events->fw_nh, nb);
+	return atomic_notifier_chain_unregister_expedited(&events->fw_nh, nb);
 }
 EXPORT_SYMBOL(mlx5_notifier_unregister);
 

@@ -343,7 +343,7 @@ int mlx5_irq_detach_nb(struct mlx5_irq *irq, struct notifier_block *nb)
 {
 	int err = 0;
 
-	err = atomic_notifier_chain_unregister(&irq->nh, nb);
+	err = atomic_notifier_chain_unregister_expedited(&irq->nh, nb);
 	mlx5_irq_put(irq);
 	return err;
 }
