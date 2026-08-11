@@ -1029,7 +1029,8 @@ static ssize_t file_read(struct dso *dso, struct machine *machine,
 
 	if (dso__data(dso)->fd < 0) {
 		dso__data(dso)->status = DSO_DATA_STATUS_ERROR;
-		ret = -errno;
+		/* fd already carries the negated errno from __open_dso() */
+		ret = dso__data(dso)->fd;
 		goto out;
 	}
 
