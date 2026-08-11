@@ -6270,6 +6270,7 @@ void workqueue_set_min_active(struct workqueue_struct *wq, int min_active)
 	wq_adjust_max_active(wq);
 	mutex_unlock(&wq->mutex);
 }
+EXPORT_SYMBOL_GPL(workqueue_set_min_active);
 
 /**
  * current_work - retrieve %current task's work struct
