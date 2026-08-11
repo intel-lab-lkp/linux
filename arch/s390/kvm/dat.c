@@ -28,23 +28,26 @@
 #include <asm/tlb.h>
 #include "dat.h"
 
-int kvm_s390_mmu_cache_topup(struct kvm_s390_mmu_cache *mc)
+int _kvm_s390_mmu_cache_topup(struct kvm_s390_mmu_cache *mc, bool extended)
 {
+	size_t n_crsts = extended ? KVM_S390_MMU_CACHE_N_CRSTS_MAX : KVM_S390_MMU_CACHE_N_CRSTS;
+	size_t n_pts = extended ? KVM_S390_MMU_CACHE_N_PTS_MAX : KVM_S390_MMU_CACHE_N_PTS;
+	size_t n_rmaps = extended ? KVM_S390_MMU_CACHE_N_RMAPS_MAX : KVM_S390_MMU_CACHE_N_RMAPS;
 	void *o;
 
-	for ( ; mc->n_crsts < KVM_S390_MMU_CACHE_N_CRSTS; mc->n_crsts++) {
+	for ( ; mc->n_crsts < n_crsts; mc->n_crsts++) {
 		o = (void *)__get_free_pages(GFP_KERNEL_ACCOUNT | __GFP_COMP, CRST_ALLOC_ORDER);
 		if (!o)
 			return -ENOMEM;
 		mc->crsts[mc->n_crsts] = o;
 	}
-	for ( ; mc->n_pts < KVM_S390_MMU_CACHE_N_PTS; mc->n_pts++) {
+	for ( ; mc->n_pts < n_pts; mc->n_pts++) {
 		o = (void *)__get_free_page(GFP_KERNEL_ACCOUNT);
 		if (!o)
 			return -ENOMEM;
 		mc->pts[mc->n_pts] = o;
 	}
-	for ( ; mc->n_rmaps < KVM_S390_MMU_CACHE_N_RMAPS; mc->n_rmaps++) {
+	for ( ; mc->n_rmaps < n_rmaps; mc->n_rmaps++) {
 		o = kzalloc_obj(struct vsie_rmap, GFP_KERNEL_ACCOUNT);
 		if (!o)
 			return -ENOMEM;

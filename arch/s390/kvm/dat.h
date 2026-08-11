@@ -479,13 +479,20 @@ struct vsie_rmap {
 
 static_assert(sizeof(struct vsie_rmap) == 2 * sizeof(long));
 
+/* Used when performing normal top-ups */
 #define KVM_S390_MMU_CACHE_N_CRSTS	6
 #define KVM_S390_MMU_CACHE_N_PTS	2
 #define KVM_S390_MMU_CACHE_N_RMAPS	16
+
+/* Used to perform special extended top-ups */
+#define KVM_S390_MMU_CACHE_N_CRSTS_MAX	32
+#define KVM_S390_MMU_CACHE_N_PTS_MAX	8
+#define KVM_S390_MMU_CACHE_N_RMAPS_MAX	16
+
 struct kvm_s390_mmu_cache {
-	void *crsts[KVM_S390_MMU_CACHE_N_CRSTS];
-	void *pts[KVM_S390_MMU_CACHE_N_PTS];
-	void *rmaps[KVM_S390_MMU_CACHE_N_RMAPS];
+	void *crsts[KVM_S390_MMU_CACHE_N_CRSTS_MAX];
+	void *pts[KVM_S390_MMU_CACHE_N_PTS_MAX];
+	void *rmaps[KVM_S390_MMU_CACHE_N_RMAPS_MAX];
 	short int n_crsts;
 	short int n_pts;
 	short int n_rmaps;
@@ -555,7 +562,17 @@ int dat_get_cmma(union asce asce, gfn_t *start, unsigned int *count, u8 *values,
 int dat_set_cmma_bits(struct kvm_s390_mmu_cache *mc, union asce asce, gfn_t gfn,
 		      unsigned long count, unsigned long mask, const uint8_t *bits);
 
-int kvm_s390_mmu_cache_topup(struct kvm_s390_mmu_cache *mc);
+int _kvm_s390_mmu_cache_topup(struct kvm_s390_mmu_cache *mc, bool extended);
+
+static inline int kvm_s390_mmu_cache_topup(struct kvm_s390_mmu_cache *mc)
+{
+	return _kvm_s390_mmu_cache_topup(mc, false);
+}
+
+static inline int kvm_s390_mmu_cache_extended_topup(struct kvm_s390_mmu_cache *mc)
+{
+	return _kvm_s390_mmu_cache_topup(mc, true);
+}
 
 #define GFP_KVM_S390_MMU_CACHE (GFP_ATOMIC | __GFP_ACCOUNT | __GFP_NOWARN)
 
