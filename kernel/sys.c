@@ -1114,6 +1114,7 @@ COMPAT_SYSCALL_DEFINE1(times, struct compat_tms __user *, tbuf)
 SYSCALL_DEFINE2(setpgid, pid_t, pid, pid_t, pgid)
 {
 	struct task_struct *p;
+	struct task_struct *real_parent;
 	struct task_struct *group_leader = current->group_leader;
 	struct pid *pids[PIDTYPE_MAX] = { 0 };
 	struct pid *pgrp;
@@ -1141,7 +1142,8 @@ SYSCALL_DEFINE2(setpgid, pid_t, pid, pid_t, pgid)
 	if (!thread_group_leader(p))
 		goto out;
 
-	if (same_thread_group(p->real_parent, group_leader)) {
+	real_parent = rcu_dereference(p->real_parent);
+	if (same_thread_group(real_parent, group_leader)) {
 		err = -EPERM;
 		if (task_session(p) != task_session(group_leader))
 			goto out;
