@@ -844,7 +844,7 @@ static int ili9882t_probe(struct mipi_dsi_device *dsi)
 
 	mipi_dsi_set_drvdata(dsi, ili);
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (ret)
 		drm_panel_remove(&ili->base);
 
@@ -854,11 +854,6 @@ static int ili9882t_probe(struct mipi_dsi_device *dsi)
 static void ili9882t_remove(struct mipi_dsi_device *dsi)
 {
 	struct ili9882t *ili = mipi_dsi_get_drvdata(dsi);
-	int ret;
-
-	ret = mipi_dsi_detach(dsi);
-	if (ret < 0)
-		dev_err(&dsi->dev, "failed to detach from DSI host: %d\n", ret);
 
 	if (ili->base.dev)
 		drm_panel_remove(&ili->base);
