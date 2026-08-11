@@ -166,13 +166,13 @@ static void mpam_free_garbage(void)
 
 /* Called recursively to walk the list of caches from a particular CPU */
 static void __mpam_get_cpumask_from_cache_id(int cpu, struct device_node *cache_node,
-					     unsigned long cache_id,
+					     u32 cache_id,
 					     u32 cache_level,
 					     cpumask_t *affinity)
 {
 	int err;
 	u32 iter_level;
-	unsigned long iter_cache_id;
+	u32 iter_cache_id;
 	struct device_node *iter_node __free(device_node) = of_find_next_cache_node(cache_node);
 
 	if (!iter_node)
@@ -187,7 +187,7 @@ static void __mpam_get_cpumask_from_cache_id(int cpu, struct device_node *cache_
 	 * during device_initcall(). Use cache_of_calculate_id().
 	 */
 	iter_cache_id = cache_of_calculate_id(iter_node);
-	if (iter_cache_id == ~0UL)
+	if (iter_cache_id == U32_MAX)
 		return;
 
 	if (iter_level == cache_level && iter_cache_id == cache_id)
@@ -202,7 +202,7 @@ static void __mpam_get_cpumask_from_cache_id(int cpu, struct device_node *cache_
  * The cacheinfo structures are only populated when CPUs are online.
  * This helper walks the device tree to include offline CPUs too.
  */
-int mpam_get_cpumask_from_cache_id(unsigned long cache_id, u32 cache_level,
+int mpam_get_cpumask_from_cache_id(u32 cache_id, u32 cache_level,
 				   cpumask_t *affinity)
 {
 	int cpu;
@@ -229,7 +229,7 @@ static int get_cpumask_from_cache(struct device_node *cache,
 {
 	int err;
 	u32 cache_level;
-	unsigned long cache_id;
+	u32 cache_id;
 
 	err = of_property_read_u32(cache, "cache-level", &cache_level);
 	if (err) {
@@ -238,7 +238,7 @@ static int get_cpumask_from_cache(struct device_node *cache,
 	}
 
 	cache_id = cache_of_calculate_id(cache);
-	if (cache_id == ~0UL) {
+	if (cache_id == U32_MAX) {
 		pr_err("Failed to calculate cache-id from cache node\n");
 		return -ENOENT;
 	}
@@ -264,7 +264,7 @@ static int mpam_dt_parse_resource(struct mpam_msc *msc, struct device_node *np,
 {
 	int err = 0;
 	u32 class_id = 0;
-	unsigned long component_id = 0;
+	u32 component_id = 0;
 	struct device *dev = &msc->pdev->dev;
 	enum mpam_class_types type = MPAM_CLASS_UNKNOWN;
 	struct device_node *cache __free(device_node) = NULL;
@@ -308,7 +308,7 @@ static int mpam_dt_parse_resource(struct mpam_msc *msc, struct device_node *np,
 			return err;
 		}
 		component_id = cache_of_calculate_id(cache);
-		if (component_id == ~0) {
+		if (component_id == U32_MAX) {
 			dev_err_once(dev, "Failed to calculate cache-id\n");
 			return -ENOENT;
 		}
