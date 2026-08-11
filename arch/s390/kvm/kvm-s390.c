@@ -5444,6 +5444,8 @@ long kvm_arch_vcpu_unlocked_ioctl(struct file *filp, unsigned int ioctl,
 	void __user *argp = (void __user *)arg;
 	int rc;
 
+	guard(srcu)(&vcpu->kvm->srcu);
+
 	switch (ioctl) {
 	case KVM_S390_IRQ: {
 		struct kvm_s390_irq s390irq;
