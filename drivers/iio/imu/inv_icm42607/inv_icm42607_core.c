@@ -664,9 +664,8 @@ static int inv_icm42607_suspend(struct device *dev)
 	return 0;
 }
 
-static int inv_icm42607_resume(struct device *dev)
+static int inv_icm42607_resume_core(struct inv_icm42607_state *st)
 {
-	struct inv_icm42607_state *st = dev_get_drvdata(dev);
 	int ret;
 
 	ret = inv_icm42607_enable_vddio_reg(st);
@@ -675,11 +674,28 @@ static int inv_icm42607_resume(struct device *dev)
 
 	/* Sync the regcache again after regulator shutdown. */
 	regcache_mark_dirty(st->map);
-	ret = regcache_sync(st->map);
-	if (ret)
-		return ret;
 
-	return pm_runtime_force_resume(dev);
+	return regcache_sync(st->map);
+}
+
+static int inv_icm42607_resume(struct device *dev)
+{
+	struct inv_icm42607_state *st = dev_get_drvdata(dev);
+	int resume_ret;
+	int ret;
+
+	ret = inv_icm42607_resume_core(st);
+
+	resume_ret = pm_runtime_force_resume(dev);
+	if (ret) {
+		if (resume_ret)
+			dev_warn(dev, "Failed to restore runtime PM state: %d\n",
+				 resume_ret);
+
+		return ret;
+	}
+
+	return resume_ret;
 }
 
 static int inv_icm42607_runtime_suspend(struct device *dev)
