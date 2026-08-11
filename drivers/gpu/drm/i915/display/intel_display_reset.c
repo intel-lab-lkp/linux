@@ -8,7 +8,6 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_print.h>
 
-#include "intel_clock_gating.h"
 #include "intel_cx0_phy.h"
 #include "intel_display_core.h"
 #include "intel_display_driver.h"
@@ -73,6 +72,17 @@ void intel_display_reset_prepare(struct intel_display *display)
 	state->acquire_ctx = ctx;
 }
 
+bool intel_display_reset_reinit(struct intel_display *display)
+{
+	if (!display->restore.modeset_state)
+		return false;
+
+	intel_pps_unlock_regs_wa(display);
+	intel_display_driver_init_hw(display);
+
+	return true;
+}
+
 void intel_display_reset_finish(struct intel_display *display, bool test_only)
 {
 	struct drm_modeset_acquire_ctx *ctx = &display->restore.reset_ctx;
@@ -94,12 +104,9 @@ void intel_display_reset_finish(struct intel_display *display, bool test_only)
 		}
 	} else {
 		/*
-		 * The display has been reset as well,
-		 * so need a full re-initialization.
+		 * The display has been reset as well, so complete the
+		 * re-initialization started by intel_display_reset_reinit().
 		 */
-		intel_pps_unlock_regs_wa(display);
-		intel_display_driver_init_hw(display);
-		intel_clock_gating_init(display->drm);
 		intel_cx0_pll_power_save_wa(display);
 		intel_hpd_init(display);
 
