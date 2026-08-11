@@ -26,6 +26,8 @@
 static void free_ipc(struct work_struct *unused);
 static DECLARE_WORK(free_ipc_work, free_ipc);
 
+#define FREE_IPC_WAIT_JIFFIES 5
+
 static struct ucounts *inc_ipc_namespaces(struct user_namespace *ns)
 {
 	return inc_ucount(ns, current_euid(), UCOUNT_IPC_NAMESPACES);
@@ -49,12 +51,19 @@ static struct ipc_namespace *create_ipc_ns(struct user_namespace *user_ns,
 	if (!ucounts) {
 		/*
 		 * IPC namespaces are freed asynchronously, by free_ipc_work.
-		 * If frees were pending, flush_work will wait, and
-		 * return true. Fail the allocation if no frees are pending.
+		 * If there is in flight free_ipc_work, we'll wait for it to
+		 * make progress otherwise fail immediately.
 		 */
-		if (flush_work(&free_ipc_work))
-			goto again;
-		goto fail;
+		if (!work_busy(&free_ipc_work))
+			goto fail;
+
+		schedule_timeout_interruptible(FREE_IPC_WAIT_JIFFIES);
+		if (signal_pending(current)) {
+			err = -ERESTARTSYS;
+			goto fail;
+		}
+
+		goto again;
 	}
 
 	err = -ENOMEM;
