@@ -81,6 +81,11 @@
 	nvmem-cell-names = "mac-address";
 };
 
+&gmac2 {
+	nvmem-cells = <&et0macaddr 0>;
+	nvmem-cell-names = "mac-address";
+};
+
 &pcie_bridge0 {
 	wifi@0,0 {
 		compatible = "brcm,bcm4366-fmac", "brcm,bcm4329-fmac";
@@ -136,7 +141,7 @@
 		};
 
 		port@5 {
-			label = "cpu";
+			status = "disabled";
 		};
 
 		port@7 {
@@ -144,7 +149,7 @@
 		};
 
 		port@8 {
-			status = "disabled";
+			label = "cpu";
 		};
 	};
 };
