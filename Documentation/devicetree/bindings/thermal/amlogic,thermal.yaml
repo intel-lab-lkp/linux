@@ -23,6 +23,7 @@ properties:
           - const: amlogic,g12a-thermal
       - enum:
           - amlogic,a1-cpu-thermal
+          - amlogic,a9-thermal
           - amlogic,t7-thermal
 
   reg:
@@ -32,7 +33,13 @@ properties:
     maxItems: 1
 
   clocks:
-    maxItems: 1
+    minItems: 1
+    maxItems: 2
+
+  clock-names:
+    items:
+      - const: core
+      - const: pclk
 
   power-domains:
     maxItems: 1
@@ -51,6 +58,10 @@ properties:
       - items:
           - description: phandle to the secure monitor
           - description: sensor index to get specific calibration data
+
+  amlogic,hw-reset-temp:
+    description: The hardware-controlled reset temperature value.
+    $ref: /schemas/types.yaml#/definitions/uint32
 
 required:
   - compatible
@@ -72,6 +83,21 @@ allOf:
     else:
       required:
         - amlogic,secure-monitor
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - amlogic,a9-thermal
+    then:
+      required:
+        - clock-names
+    else:
+      properties:
+        clocks:
+          maxItems: 1
+        clock-names: false
 
 unevaluatedProperties: false
 
