@@ -1183,6 +1183,29 @@ int svc_generic_rpcbind_set(struct net *net,
 }
 EXPORT_SYMBOL_GPL(svc_generic_rpcbind_set);
 
+/*
+ * Undo the [program, version] registrations that this svc_register() call
+ * already made, stopping at version @nvers of program @nprog.
+ *
+ * Note that rpcbind matches RPCBPROC_UNSET on [program, version, netid] and
+ * ignores the address, so this clears the netid rather than the one port.
+ * That is the granularity svc_delete_xprt() unregisters at as well.
+ */
+static void svc_unwind_register(const struct svc_serv *serv, struct net *net,
+				const int family, const unsigned short proto,
+				unsigned int nprog, unsigned int nvers)
+{
+	unsigned int p, i;
+
+	for (p = 0; p <= nprog; p++) {
+		struct svc_program *progp = &serv->sv_programs[p];
+		unsigned int last = p < nprog ? progp->pg_nvers : nvers;
+
+		for (i = 0; i < last; i++)
+			progp->pg_rpcbind_set(net, progp, i, family, proto, 0);
+	}
+}
+
 /**
  * svc_register - register an RPC service with the local portmapper
  * @serv: svc_serv struct for the service to register
@@ -1191,7 +1214,8 @@ EXPORT_SYMBOL_GPL(svc_generic_rpcbind_set);
  * @proto: transport protocol number to advertise
  * @port: port to advertise
  *
- * Service is registered for any address in the passed-in protocol family
+ * Service is registered for any address in the passed-in protocol family.
+ * A @port of 0 unregisters instead, and then every program is attempted.
  */
 int svc_register(const struct svc_serv *serv, struct net *net,
 		 const int family, const unsigned short proto,
@@ -1216,6 +1240,11 @@ int svc_register(const struct svc_serv *serv, struct net *net,
 				printk(KERN_WARNING "svc: failed to register "
 					"%sv%u RPC service (errno %d).\n",
 					progp->pg_name, i, -ret);
+				if (port) {
+					svc_unwind_register(serv, net, family,
+							    proto, p, i);
+					return ret;
+				}
 				if (!error)
 					error = ret;
 				break;
