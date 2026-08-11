@@ -1702,7 +1702,23 @@ static inline int drv_net_setup_tc(struct ieee80211_local *local,
 
 	might_sleep();
 
+	/*
+	 * An AP_VLAN interface created without a matching, same-address
+	 * AP interface present never gets sdata->bss populated (see the
+	 * interface-add validation in iface.c, which links bss only
+	 * opportunistically and does not require it). Such an sdata is
+	 * not safe to pass through get_bss_sdata(): container_of() on a
+	 * NULL sdata->bss yields a small invalid pointer, which the
+	 * tracepoint below then dereferences to read the interface name,
+	 * causing a crash.
+	 */
+	if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN && !sdata->bss)
+		return -EIO;
+
 	sdata = get_bss_sdata(sdata);
+	if (!check_sdata_in_driver(sdata))
+		return -EIO;
+
 	trace_drv_net_setup_tc(local, sdata, type);
 	if (local->ops->net_setup_tc)
 		ret = local->ops->net_setup_tc(&local->hw, &sdata->vif, dev,
