@@ -265,7 +265,7 @@ try:
 	}
 
 	if (!msg->require_resp) {
-		ret = -EIO;
+		ret = 0;
 		goto out;
 	}
 
