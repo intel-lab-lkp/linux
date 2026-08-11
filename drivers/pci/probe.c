@@ -2334,11 +2334,23 @@ static void pci_dev3_init(struct pci_dev *pdev)
 {
 	u16 cap = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_DEV3);
 	u32 val = 0;
+	int err;
 
 	if (!cap)
 		return;
 	pci_read_config_dword(pdev, cap + PCI_DEV3_STA, &val);
 	pdev->fm_enabled = !!(val & PCI_DEV3_STA_SEGMENT);
+
+	/*
+	 * Save buffer for DEV3_CTL only.  Every field in DEV3_STA is
+	 * read-only status reported by hardware, so there is nothing there
+	 * to restore.
+	 */
+	err = pci_add_ext_cap_save_buffer(pdev, PCI_EXT_CAP_ID_DEV3,
+					  sizeof(u32));
+	if (err)
+		pci_warn(pdev,
+			 "unable to preallocate Device 3 save buffer\n");
 }
 
 /**
