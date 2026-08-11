@@ -194,12 +194,21 @@ static const struct geni_i2c_clk_fld geni_i2c_clk_map_32mhz[] = {
 	{}
 };
 
+static const struct geni_i2c_clk_fld geni_i2c_clk_map_32mhz_fwcore[] = {
+	{ I2C_MAX_STANDARD_MODE_FREQ, 12, 9, 10, 25 },
+	{ I2C_MAX_FAST_MODE_FREQ, 4, 3, 9, 18 },
+	{ I2C_MAX_FAST_MODE_PLUS_FREQ, 1, 6, 15, 29 },
+	{}
+};
+
 static int geni_i2c_clk_map_idx(struct geni_i2c_dev *gi2c)
 {
 	const struct geni_i2c_clk_fld *itr;
+	bool is_minicore = FIELD_GET(GEN_USE_MINICORES,
+				     readl_relaxed(gi2c->se.base + SE_HW_PARAM_2));
 
 	if (clk_get_rate(gi2c->se.clk) == 32 * HZ_PER_MHZ)
-		itr = geni_i2c_clk_map_32mhz;
+		itr = is_minicore ? geni_i2c_clk_map_32mhz : geni_i2c_clk_map_32mhz_fwcore;
 	else
 		itr = geni_i2c_clk_map_19p2mhz;
 
@@ -1046,6 +1055,13 @@ static int geni_i2c_init(struct geni_i2c_dev *gi2c)
 		return ret;
 	}
 
+	ret = geni_i2c_clk_map_idx(gi2c);
+	if (ret) {
+		return dev_err_probe(gi2c->se.dev, ret, "Invalid clk frequency %d Hz\n",
+				     gi2c->clk_freq_out);
+		goto err;
+	}
+
 	proto = geni_se_read_proto(&gi2c->se);
 	if (proto == GENI_SE_INVALID_PROTO) {
 		ret = geni_load_se_firmware(&gi2c->se, GENI_SE_I2C);
@@ -1108,11 +1124,6 @@ static int geni_i2c_resources_init(struct geni_se *se)
 	ret = geni_se_resources_init(&gi2c->se);
 	if (ret)
 		return ret;
-
-	ret = geni_i2c_clk_map_idx(gi2c);
-	if (ret)
-		return dev_err_probe(gi2c->se.dev, ret, "Invalid clk frequency %d Hz\n",
-				     gi2c->clk_freq_out);
 
 	return geni_icc_set_bw_ab(&gi2c->se, GENI_DEFAULT_BW, GENI_DEFAULT_BW,
 				  Bps_to_icc(gi2c->clk_freq_out));
