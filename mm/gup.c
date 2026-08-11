@@ -868,12 +868,57 @@ static long follow_page_pte_commit(struct vm_area_struct *vma,
 	return 0;
 }
 
+/*
+ * Resolve one present PTE to the page it maps. Returns no page and no error
+ * when the PTE cannot be followed but the caller may fault it in, and a
+ * negative errno when the caller must report the failure.
+ */
+static long follow_one_pte(struct vm_area_struct *vma, unsigned long address,
+		pte_t *ptep, pte_t pte, unsigned int flags, struct page **pagep)
+{
+	struct page *page;
+
+	*pagep = NULL;
+
+	if (!pte_present(pte))
+		return 0;
+	if (pte_protnone(pte) && !gup_can_follow_protnone(vma, flags))
+		return 0;
+
+	page = vm_normal_page(vma, address, pte);
+
+	/*
+	 * We only care about anon pages in can_follow_write_pte().
+	 */
+	if ((flags & FOLL_WRITE) && !can_follow_write_pte(pte, page, vma, flags))
+		return 0;
+
+	if (unlikely(!page)) {
+		if (flags & FOLL_DUMP) {
+			/* Avoid special (like zero) pages in core dumps */
+			return -EFAULT;
+		}
+		if (!is_zero_pfn(pte_pfn(pte)))
+			return follow_pfn_pte(vma, address, ptep, flags);
+		page = pte_page(pte);
+	}
+
+	if (!pte_write(pte) && gup_must_unshare(vma, flags, page))
+		return -EMLINK;
+
+	VM_WARN_ON_ONCE_PAGE((flags & FOLL_PIN) && PageAnon(page) &&
+			     !PageAnonExclusive(page), page);
+
+	*pagep = page;
+	return 0;
+}
+
 static long follow_page_pte(struct vm_area_struct *vma,
 		unsigned long address, pmd_t *pmd, unsigned int flags,
 		struct page **pages)
 {
 	struct mm_struct *mm = vma->vm_mm;
-	struct folio *folio;
+	bool need_no_page_table = false;
 	struct page *page;
 	spinlock_t *ptl;
 	pte_t *ptep, pte;
@@ -883,59 +928,26 @@ static long follow_page_pte(struct vm_area_struct *vma,
 	if (!ptep)
 		return no_page_table(vma, flags, address);
 	pte = ptep_get(ptep);
-	if (!pte_present(pte))
-		goto no_page;
-	if (pte_protnone(pte) && !gup_can_follow_protnone(vma, flags))
-		goto no_page;
 
-	page = vm_normal_page(vma, address, pte);
-
-	/*
-	 * We only care about anon pages in can_follow_write_pte().
-	 */
-	if ((flags & FOLL_WRITE) &&
-	    !can_follow_write_pte(pte, page, vma, flags)) {
-		ret = 0;
-		goto out;
+	ret = follow_one_pte(vma, address, ptep, pte, flags, &page);
+	if (!ret && page) {
+		ret = follow_page_pte_commit(vma, address, page_folio(page),
+					     page, pte, flags, pages);
+		if (!ret)
+			ret = 1;
+	} else if (!ret && pte_none(pte)) {
+		/*
+		 * no_page_table() may look up the page cache, so it cannot run
+		 * under the PTE lock.
+		 */
+		need_no_page_table = true;
 	}
 
-	if (unlikely(!page)) {
-		if (flags & FOLL_DUMP) {
-			/* Avoid special (like zero) pages in core dumps */
-			ret = -EFAULT;
-			goto out;
-		}
-
-		if (is_zero_pfn(pte_pfn(pte))) {
-			page = pte_page(pte);
-		} else {
-			ret = follow_pfn_pte(vma, address, ptep, flags);
-			goto out;
-		}
-	}
-	folio = page_folio(page);
-
-	if (!pte_write(pte) && gup_must_unshare(vma, flags, page)) {
-		ret = -EMLINK;
-		goto out;
-	}
-
-	VM_WARN_ON_ONCE_PAGE((flags & FOLL_PIN) && PageAnon(page) &&
-			     !PageAnonExclusive(page), page);
-
-	ret = follow_page_pte_commit(vma, address, folio, page, pte, flags,
-				     pages);
-	if (ret)
-		goto out;
-	ret = 1;
-out:
 	pte_unmap_unlock(ptep, ptl);
+
+	if (need_no_page_table)
+		return no_page_table(vma, flags, address);
 	return ret;
-no_page:
-	pte_unmap_unlock(ptep, ptl);
-	if (!pte_none(pte))
-		return 0;
-	return no_page_table(vma, flags, address);
 }
 
 static long follow_pmd_mask(struct vm_area_struct *vma,
