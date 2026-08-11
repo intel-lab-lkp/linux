@@ -25,7 +25,7 @@ pub use ordering::{Acquire, Full, Relaxed, Release};
 
 pub(crate) use internal::{AtomicArithmeticOps, AtomicBasicOps, AtomicExchangeOps};
 
-use crate::build_error;
+use crate::build_assert::build_error;
 use internal::AtomicRepr;
 use ordering::OrderingType;
 
