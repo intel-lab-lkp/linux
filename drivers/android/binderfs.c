@@ -431,7 +431,7 @@ static int binderfs_binder_ctl_create(struct super_block *sb)
 
 	dentry = d_alloc_name(root, "binder-control");
 	if (!dentry)
-		goto out;
+		goto out_with_minor;
 
 	inode->i_private = device;
 	info->control_dentry = dentry;
@@ -439,6 +439,11 @@ static int binderfs_binder_ctl_create(struct super_block *sb)
 	dput(dentry);
 
 	return 0;
+
+out_with_minor:
+	mutex_lock(&binderfs_minors_mutex);
+	ida_free(&binderfs_minors, minor);
+	mutex_unlock(&binderfs_minors_mutex);
 
 out:
 	kfree(device);
