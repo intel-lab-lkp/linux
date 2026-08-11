@@ -947,8 +947,13 @@ drm_atomic_add_pipeline_colorops(struct drm_atomic_commit *state,
  * drm_atomic_colorop_check - check new colorop state
  * @new_colorop_state: new colorop state to check
  *
- * Ensure that the colorop in @new_colorop_state belongs to an active color
- * pipeline, i.e. it's in the chain of colorops set to the color_pipeline
+ * Check that a colorop whose TYPE requires a data blob has one when it's
+ * enabled, i.e. userspace can't clear (or never set) the DATA property while
+ * taking the colorop out of bypass, since drivers would have nothing to
+ * program.
+ *
+ * Also ensure that the colorop in @new_colorop_state belongs to an active
+ * color pipeline, i.e. it's in the chain of colorops set to the color_pipeline
  * property of current, old or new plane state.
  *
  * Userspace is allowed to finalize colorop's settings in the same commit that
@@ -971,6 +976,19 @@ static int drm_atomic_colorop_check(const struct drm_colorop_state *new_colorop_
 
 	if (state->duplicated)
 		return 0;
+
+	/*
+	 * Reject if colorop TYPE requires a DATA but set bypass to false and
+	 * no blob submitted
+	 */
+	if (new_colorop_state->colorop->data_property &&
+	    !new_colorop_state->bypass && !new_colorop_state->data) {
+		drm_dbg_atomic(new_colorop_state->colorop->dev,
+			       "[COLOROP:%d:%d] enabled without a DATA blob\n",
+			       new_colorop_state->colorop->base.id,
+			       new_colorop_state->colorop->type);
+		return -EINVAL;
+	}
 
 	/* Not a plane colorop */
 	if (!plane)
