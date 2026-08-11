@@ -269,7 +269,8 @@ int io_uring_cmd(struct io_kiocb *req, unsigned int issue_flags)
 	}
 
 	ret = file->f_op->uring_cmd(ioucmd, issue_flags);
-	if (ioucmd->flags & IORING_URING_CMD_MULTISHOT) {
+	if ((ioucmd->flags & IORING_URING_CMD_MULTISHOT) &&
+	    (req->flags & REQ_F_APOLL_MULTISHOT)) {
 		if (ret >= 0)
 			return IOU_ISSUE_SKIP_COMPLETE;
 	}
