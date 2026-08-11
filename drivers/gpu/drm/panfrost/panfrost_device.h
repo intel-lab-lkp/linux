@@ -350,4 +350,7 @@ panfrost_device_started(struct panfrost_device *pfdev)
 	return pfdev->js;
 }
 
+#ifdef CONFIG_DEBUG_FS
+void panfrost_reset_debugfs_init(struct drm_minor *minor);
+#endif // CONFIG_DEBUG_FS
 #endif
