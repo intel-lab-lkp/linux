@@ -752,8 +752,7 @@ static void talitos_error(struct device *dev, u32 isr, u32 isr_lo)
 #define DEF_TALITOS1_INTERRUPT(name, ch_done_mask, ch_err_mask, tlet)	       \
 static irqreturn_t talitos1_interrupt_##name(int irq, void *data)	       \
 {									       \
-	struct device *dev = data;					       \
-	struct talitos_private *priv = dev_get_drvdata(dev);		       \
+	struct talitos_private *priv = data;				       \
 	u32 isr, isr_lo;						       \
 	unsigned long flags;						       \
 									       \
@@ -766,7 +765,7 @@ static irqreturn_t talitos1_interrupt_##name(int irq, void *data)	       \
 									       \
 	if (unlikely(isr & ch_err_mask || isr_lo & TALITOS1_IMR_LO_INIT)) {    \
 		spin_unlock_irqrestore(&priv->reg_lock, flags);		       \
-		talitos_error(dev, isr & ch_err_mask, isr_lo);		       \
+		talitos_error(priv->dev, isr & ch_err_mask, isr_lo);	       \
 	}								       \
 	else {								       \
 		if (likely(isr & ch_done_mask)) {			       \
@@ -787,8 +786,7 @@ DEF_TALITOS1_INTERRUPT(4ch, TALITOS1_ISR_4CHDONE, TALITOS1_ISR_4CHERR, 0)
 #define DEF_TALITOS2_INTERRUPT(name, ch_done_mask, ch_err_mask, tlet)	       \
 static irqreturn_t talitos2_interrupt_##name(int irq, void *data)	       \
 {									       \
-	struct device *dev = data;					       \
-	struct talitos_private *priv = dev_get_drvdata(dev);		       \
+	struct talitos_private *priv = data;				       \
 	u32 isr, isr_lo;						       \
 	unsigned long flags;						       \
 									       \
@@ -801,7 +799,7 @@ static irqreturn_t talitos2_interrupt_##name(int irq, void *data)	       \
 									       \
 	if (unlikely(isr & ch_err_mask || isr_lo)) {			       \
 		spin_unlock_irqrestore(&priv->reg_lock, flags);		       \
-		talitos_error(dev, isr & ch_err_mask, isr_lo);		       \
+		talitos_error(priv->dev, isr & ch_err_mask, isr_lo);	       \
 	}								       \
 	else {								       \
 		if (likely(isr & ch_done_mask)) {			       \
@@ -3362,7 +3360,7 @@ static int talitos_probe_irq(struct platform_device *ofdev)
 
 	if (is_sec1) {
 		err = request_irq(priv->irq[0], talitos1_interrupt_4ch, 0,
-				  dev_driver_string(dev), dev);
+				  dev_driver_string(dev), priv);
 		goto primary_out;
 	}
 
@@ -3373,18 +3371,18 @@ static int talitos_probe_irq(struct platform_device *ofdev)
 	/* get the primary irq line */
 	if (priv->irq[1] < 0) {
 		err = request_irq(priv->irq[0], talitos2_interrupt_4ch, 0,
-				  dev_driver_string(dev), dev);
+				  dev_driver_string(dev), priv);
 		goto primary_out;
 	}
 
 	err = request_irq(priv->irq[0], talitos2_interrupt_ch0_2, 0,
-			  dev_driver_string(dev), dev);
+			  dev_driver_string(dev), priv);
 	if (err)
 		goto primary_out;
 
 	/* get the secondary irq line */
 	err = request_irq(priv->irq[1], talitos2_interrupt_ch1_3, 0,
-			  dev_driver_string(dev), dev);
+			  dev_driver_string(dev), priv);
 	if (err) {
 		dev_err(dev, "failed to request secondary irq\n");
 		priv->irq[1] = 0;
