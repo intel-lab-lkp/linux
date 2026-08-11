@@ -602,14 +602,21 @@ bool panfrost_exception_needs_reset(const struct panfrost_device *pfdev,
 
 void panfrost_device_reset(struct panfrost_device *pfdev, bool enable_job_int)
 {
-	guard(rwsem_read)(&pfdev->reset.lock);
+	guard(rwsem_write)(&pfdev->reset.lock);
 
+	/* Pre-reset */
+	panfrost_perfcnt_reset(pfdev);
+
+	/* Do the actual device reset */
 	panfrost_gpu_soft_reset(pfdev);
 	panfrost_gpu_power_on(pfdev);
+
+	/* Post-reset */
 	panfrost_mmu_reset(pfdev);
 	panfrost_jm_reset_interrupts(pfdev);
 	if (enable_job_int)
 		panfrost_jm_enable_interrupts(pfdev);
+	panfrost_perfcnt_postreset(pfdev);
 }
 
 #ifdef CONFIG_DEBUG_FS
