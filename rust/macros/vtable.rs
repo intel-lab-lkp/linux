@@ -9,7 +9,10 @@ use proc_macro2::{
     Ident,
     TokenStream, //
 };
-use quote::ToTokens;
+use quote::{
+    quote,
+    ToTokens, //
+};
 use syn::{
     parse_quote,
     Error,
@@ -40,12 +43,18 @@ fn handle_trait(mut item: ItemTrait) -> Result<ItemTrait> {
 
             // We don't know on the implementation-site whether a method is required or provided
             // so we have to generate a const for all methods.
+            // However, hide it for required methods as it will always be true.
+            let doc = if fn_item.default.is_some() {
+                let comment =
+                    format!("Indicates if the `{name}` method is overridden by the implementor.");
+                quote!(#[doc = #comment])
+            } else {
+                quote!(#[doc(hidden)])
+            };
             let cfg_attrs = crate::helpers::gather_cfg_attrs(&fn_item.attrs);
-            let comment =
-                format!("Indicates if the `{name}` method is overridden by the implementor.");
             gen_items.push(parse_quote! {
                 #(#cfg_attrs)*
-                #[doc = #comment]
+                #doc
                 const #gen_const_name: bool = false;
             });
         }
