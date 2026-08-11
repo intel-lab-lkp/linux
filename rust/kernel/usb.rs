@@ -33,6 +33,7 @@ use core::{
     slice, //
 };
 
+pub mod control;
 pub mod endpoint;
 
 /// An adapter for the registration of USB drivers.
