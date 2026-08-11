@@ -2158,7 +2158,7 @@ static int mpam_msc_setup_error_irq(struct mpam_msc *msc)
  * corresponding cache may also be powered off. By making accesses from
  * one of those CPUs, we ensure we don't access a cache that's powered off.
  */
-static int update_msc_accessibility(struct mpam_msc *msc)
+static void update_msc_accessibility(struct mpam_msc *msc)
 {
 	struct device *dev = &msc->pdev->dev;
 	struct device_node *parent;
@@ -2174,29 +2174,22 @@ static int update_msc_accessibility(struct mpam_msc *msc)
 			acpi_pptt_get_cpus_from_container(affinity_id,
 							  &msc->accessibility);
 
-		return 0;
+		return;
 	}
 
 	/* Where an MSC can be accessed from depends on the path to of_node. */
 	parent = of_get_parent(msc->pdev->dev.of_node);
 	if (parent == of_root) {
 		cpumask_copy(&msc->accessibility, cpu_possible_mask);
-		err = 0;
 	} else {
-		if (of_device_is_compatible(parent, "cache")) {
-			err = get_cpumask_from_cache(parent,
-						     &msc->accessibility);
-		} else if (of_device_is_compatible(parent, "memory")) {
+		if (of_device_is_compatible(parent, "cache"))
+			get_cpumask_from_cache(parent, &msc->accessibility);
+		else if (of_device_is_compatible(parent, "memory"))
 			cpumask_copy(&msc->accessibility, cpu_possible_mask);
-			err = 0;
-		} else {
-			err = -EINVAL;
+		else
 			dev_err_once(dev, "Cannot determine accessibility of MSC.\n");
-		}
 	}
 	of_node_put(parent);
-
-	return err;
 }
 
 /*
