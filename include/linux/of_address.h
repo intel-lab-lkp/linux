@@ -60,9 +60,6 @@ extern const __be32 *of_translate_dma_region(struct device_node *dev, const __be
 
 #ifdef CONFIG_OF_ADDRESS
 extern u64 of_translate_address(struct device_node *np, const __be32 *addr);
-extern int of_address_to_resource(struct device_node *dev, int index,
-				  struct resource *r);
-extern void __iomem *of_iomap(struct device_node *device, int index);
 void __iomem *of_io_request_and_map(struct device_node *device,
 				    int index, const char *name);
 
