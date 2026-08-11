@@ -26,9 +26,14 @@
 
 #include "gt/intel_gt.h"
 
+#include "mock_gem_device.h"
+
+#include <drm/drm_print.h>
+
 static int intel_fw_table_check(const struct intel_forcewake_range *ranges,
 				unsigned int num_ranges,
-				bool is_watertight)
+				bool is_watertight,
+				struct drm_i915_private *i915)
 {
 	unsigned int i;
 	s32 prev;
@@ -36,22 +41,25 @@ static int intel_fw_table_check(const struct intel_forcewake_range *ranges,
 	for (i = 0, prev = -1; i < num_ranges; i++, ranges++) {
 		/* Check that the table is watertight */
 		if (is_watertight && (prev + 1) != (s32)ranges->start) {
-			pr_err("%s: entry[%d]:(%x, %x) is not watertight to previous (%x)\n",
-			       __func__, i, ranges->start, ranges->end, prev);
+			drm_err(&i915->drm,
+				"%s: entry[%d]:(%x, %x) is not watertight to previous (%x)\n",
+				__func__, i, ranges->start, ranges->end, prev);
 			return -EINVAL;
 		}
 
 		/* Check that the table never goes backwards */
 		if (prev >= (s32)ranges->start) {
-			pr_err("%s: entry[%d]:(%x, %x) is less than the previous (%x)\n",
-			       __func__, i, ranges->start, ranges->end, prev);
+			drm_err(&i915->drm,
+				"%s: entry[%d]:(%x, %x) is less than the previous (%x)\n",
+				__func__, i, ranges->start, ranges->end, prev);
 			return -EINVAL;
 		}
 
 		/* Check that the entry is valid */
 		if (ranges->start >= ranges->end) {
-			pr_err("%s: entry[%d]:(%x, %x) has negative length\n",
-			       __func__, i, ranges->start, ranges->end);
+			drm_err(&i915->drm,
+				"%s: entry[%d]:(%x, %x) has negative length\n",
+				__func__, i, ranges->start, ranges->end);
 			return -EINVAL;
 		}
 
@@ -61,7 +69,7 @@ static int intel_fw_table_check(const struct intel_forcewake_range *ranges,
 	return 0;
 }
 
-static int intel_shadow_table_check(void)
+static int intel_shadow_table_check(struct drm_i915_private *i915)
 {
 	struct {
 		const struct i915_mmio_range *regs;
@@ -82,20 +90,23 @@ static int intel_shadow_table_check(void)
 		range = range_lists[j].regs;
 		for (i = 0, prev = -1; i < range_lists[j].size; i++, range++) {
 			if (range->end < range->start) {
-				pr_err("%s: range[%d]:(%06x-%06x) has end before start\n",
-				       __func__, i, range->start, range->end);
+				drm_err(&i915->drm,
+					"%s: range[%d]:(%06x-%06x) has end before start\n",
+					__func__, i, range->start, range->end);
 				return -EINVAL;
 			}
 
 			if (prev >= (s32)range->start) {
-				pr_err("%s: range[%d]:(%06x-%06x) is before end of previous (%06x)\n",
-				       __func__, i, range->start, range->end, prev);
+				drm_err(&i915->drm,
+					"%s: range[%d]:(%06x-%06x) is before end of previous (%06x)\n",
+					__func__, i, range->start, range->end, prev);
 				return -EINVAL;
 			}
 
 			if (range->start % 4) {
-				pr_err("%s: range[%d]:(%06x-%06x) has non-dword-aligned start\n",
-				       __func__, i, range->start, range->end);
+				drm_err(&i915->drm,
+					"%s: range[%d]:(%06x-%06x) has non-dword-aligned start\n",
+					__func__, i, range->start, range->end);
 				return -EINVAL;
 			}
 
@@ -108,6 +119,7 @@ static int intel_shadow_table_check(void)
 
 int intel_uncore_mock_selftests(void)
 {
+	struct drm_i915_private *i915;
 	struct {
 		const struct intel_forcewake_range *ranges;
 		unsigned int num_ranges;
@@ -123,15 +135,27 @@ int intel_uncore_mock_selftests(void)
 	};
 	int err, i;
 
+	i915 = mock_gem_device();
+	if (IS_ERR(i915))
+		return PTR_ERR(i915);
+
 	for (i = 0; i < ARRAY_SIZE(fw); i++) {
 		err = intel_fw_table_check(fw[i].ranges,
 					   fw[i].num_ranges,
-					   fw[i].is_watertight);
+					   fw[i].is_watertight,
+					   i915);
 		if (err)
-			return err;
+			goto out;
 	}
 
-	err = intel_shadow_table_check();
+	err = intel_shadow_table_check(i915);
+	if (err)
+		goto out;
+
+	err = 0;
+
+out:
+	mock_destroy_device(i915);
 	if (err)
 		return err;
 
@@ -172,7 +196,8 @@ static int live_forcewake_ops(void *arg)
 
 	/* vlv/chv with their pcu behave differently wrt reads */
 	if (IS_VALLEYVIEW(gt->i915) || IS_CHERRYVIEW(gt->i915)) {
-		pr_debug("PCU fakes forcewake badly; skipping\n");
+		drm_dbg(&gt->i915->drm,
+			"PCU fakes forcewake badly; skipping\n");
 		return 0;
 	}
 
@@ -192,8 +217,9 @@ static int live_forcewake_ops(void *arg)
 		if (IS_GRAPHICS_VER(gt->i915, r->min_graphics_ver, r->max_graphics_ver))
 			break;
 	if (!r->name) {
-		pr_debug("Forcewaked register not known for %s; skipping\n",
-			 intel_platform_name(INTEL_INFO(gt->i915)->platform));
+		drm_dbg(&gt->i915->drm,
+			"Forcewaked register not known for %s; skipping\n",
+			intel_platform_name(INTEL_INFO(gt->i915)->platform));
 		return 0;
 	}
 
@@ -225,8 +251,9 @@ static int live_forcewake_ops(void *arg)
 			if (!domain->wake_count)
 				continue;
 
-			pr_err("fw_domain %s still active, aborting test!\n",
-			       intel_uncore_forcewake_domain_to_str(domain->id));
+			drm_err(&gt->i915->drm,
+				"fw_domain %s still active, aborting test!\n",
+				intel_uncore_forcewake_domain_to_str(domain->id));
 			err = -EINVAL;
 			goto out_rpm;
 		}
@@ -245,23 +272,26 @@ static int live_forcewake_ops(void *arg)
 			err = wait_ack_clear(domain, FORCEWAKE_KERNEL);
 			preempt_enable();
 			if (err) {
-				pr_err("Failed to clear fw_domain %s\n",
-				       intel_uncore_forcewake_domain_to_str(domain->id));
+				drm_err(&gt->i915->drm,
+					"Failed to clear fw_domain %s\n",
+					intel_uncore_forcewake_domain_to_str(domain->id));
 				goto out_rpm;
 			}
 		}
 
 		if (!val) {
-			pr_err("%s:%s was zero while fw was held!\n",
-			       engine->name, r->name);
+			drm_err(&engine->i915->drm,
+				"%s:%s was zero while fw was held!\n",
+				engine->name, r->name);
 			err = -EINVAL;
 			goto out_rpm;
 		}
 
 		/* We then expect the read to return 0 outside of the fw */
 		if (wait_for(readl(reg) == 0, 100)) {
-			pr_err("%s:%s=%0x, fw_domains 0x%x still up after 100ms!\n",
-			       engine->name, r->name, readl(reg), fw_domains);
+			drm_err(&engine->i915->drm,
+				"%s:%s=%0x, fw_domains 0x%x still up after 100ms!\n",
+				engine->name, r->name, readl(reg), fw_domains);
 			err = -ETIMEDOUT;
 			goto out_rpm;
 		}
@@ -279,7 +309,8 @@ static int live_fw_table(void *arg)
 	/* Confirm the table we load is still valid */
 	return intel_fw_table_check(gt->uncore->fw_domains_table,
 				    gt->uncore->fw_domains_table_entries,
-				    GRAPHICS_VER(gt->i915) >= 9);
+				    GRAPHICS_VER(gt->i915) >= 9,
+				    gt->i915);
 }
 
 int intel_uncore_live_selftests(struct drm_i915_private *i915)
