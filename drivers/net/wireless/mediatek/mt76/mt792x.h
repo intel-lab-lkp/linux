@@ -33,6 +33,7 @@
 #define MT792x_CHIP_CAP_REGD_EN BIT(5)
 #define MT792x_CHIP_CAP_MLO_EN BIT(8)
 #define MT792x_CHIP_CAP_MLO_EML_EN BIT(9)
+#define MT792x_CHIP_CAP_AXIDMA_EN BIT(16)
 
 /* NOTE: used to map mt76_rates. idx may change if firmware expands table */
 #define MT792x_BASIC_RATES_TBL	14
@@ -342,6 +343,13 @@ struct mt792x_dev {
 	struct ieee80211_vif *nan_vif;
 	const struct ieee80211_iface_combination *iface_combinations;
 	int n_iface_combinations;
+
+	struct {
+		void *va;
+		dma_addr_t dma_addr;
+		u32 size;
+		bool reused;
+	} cached_cal;
 };
 
 static inline struct mt792x_bss_conf *
