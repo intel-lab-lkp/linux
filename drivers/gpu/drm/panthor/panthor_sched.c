@@ -252,6 +252,15 @@ struct panthor_scheduler {
 		 * This list is evaluated in the @sync_upd_work work.
 		 */
 		struct list_head waiting;
+
+		/**
+		 * @user_owned: List of groups that have a valid user handle.
+		 *
+		 * All groups are inserted in this list at creation time through their
+		 * panthor_group;:user_node, and evicted from this list when
+		 * panthor_group_destroy() is called.
+		 */
+		struct list_head user_owned;
 	} groups;
 
 	/**
@@ -588,15 +597,6 @@ struct panthor_group {
 	int csg_id;
 
 	/**
-	 * @destroyed: True when the group has been destroyed.
-	 *
-	 * If a group is destroyed it becomes useless: no further jobs can be submitted
-	 * to its queues. We simply wait for all references to be dropped so we can
-	 * release the group object.
-	 */
-	bool destroyed;
-
-	/**
 	 * @timedout: True when a timeout occurred on any of the queues owned by
 	 * this group.
 	 *
@@ -705,6 +705,17 @@ struct panthor_group {
 	 * panthor_group::groups::waiting list.
 	 */
 	struct list_head wait_node;
+
+	/**
+	 * @user_node: Used to insert the group in the panthor_scheduler::groups::user_owned list.
+	 *
+	 * When the group is created, it's inserted in panthor_scheduler::groups::user_owned,
+	 * and when panthor_group_destroy, the group is remove from this list.
+	 *
+	 * When the device is unplugged, all groups that remain in this list must have an extra
+	 * put_group() called on them to release the reference owned by the per-file group pool.
+	 */
+	struct list_head user_node;
 };
 
 struct panthor_job_profiling_data {
@@ -967,6 +978,7 @@ static void group_release(struct kref *kref)
 	struct panthor_device *ptdev = group->ptdev;
 
 	drm_WARN_ON(&ptdev->base, group->csg_id >= 0);
+	drm_WARN_ON(&ptdev->base, !list_empty(&group->user_node));
 	drm_WARN_ON(&ptdev->base, !list_empty(&group->run_node));
 	drm_WARN_ON(&ptdev->base, !list_empty(&group->wait_node));
 
@@ -1082,7 +1094,7 @@ group_can_run(struct panthor_group *group)
 {
 	return group->state != PANTHOR_CS_GROUP_TERMINATED &&
 	       group->state != PANTHOR_CS_GROUP_UNKNOWN_STATE &&
-	       !group->destroyed && group->fatal_queues == 0 &&
+	       !list_empty(&group->user_node) && group->fatal_queues == 0 &&
 	       !group->timedout;
 }
 
@@ -2403,7 +2415,7 @@ tick_ctx_apply(struct panthor_scheduler *sched, struct panthor_sched_tick_ctx *c
 			 * re-evaluate as soon as possible and get rid of
 			 * this dangling group.
 			 */
-			if (group->destroyed)
+			if (list_empty(&group->user_node))
 				ctx->immediate_tick = true;
 			group_put(group);
 		}
@@ -3691,6 +3703,7 @@ int panthor_group_create(struct panthor_file *pfile,
 	group->tiler_core_mask = group_args->tiler_core_mask;
 	group->priority = group_args->priority;
 
+	INIT_LIST_HEAD(&group->user_node);
 	INIT_LIST_HEAD(&group->wait_node);
 	INIT_LIST_HEAD(&group->run_node);
 	INIT_WORK(&group->term_work, group_term_work);
@@ -3764,6 +3777,7 @@ int panthor_group_create(struct panthor_file *pfile,
 		mutex_lock(&sched->lock);
 		list_add_tail(&group->run_node,
 			      &sched->groups.idle[group->priority]);
+		list_add_tail(&group->user_node, &sched->groups.user_owned);
 		mutex_unlock(&sched->lock);
 	}
 	mutex_unlock(&sched->reset.lock);
@@ -3801,7 +3815,7 @@ int panthor_group_destroy(struct panthor_file *pfile, u32 group_handle)
 
 	mutex_lock(&sched->reset.lock);
 	mutex_lock(&sched->lock);
-	group->destroyed = true;
+	list_del_init(&group->user_node);
 	if (group->csg_id >= 0) {
 		sched_queue_delayed_work(sched, tick, 0);
 	} else if (!atomic_read(&sched->reset.in_progress)) {
@@ -4167,6 +4181,7 @@ int panthor_sched_init(struct panthor_device *ptdev)
 		INIT_LIST_HEAD(&sched->groups.idle[prio]);
 	}
 	INIT_LIST_HEAD(&sched->groups.waiting);
+	INIT_LIST_HEAD(&sched->groups.user_owned);
 
 	ret = drmm_mutex_init(&ptdev->base, &sched->reset.lock);
 	if (ret)
