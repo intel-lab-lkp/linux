@@ -50,8 +50,6 @@
 #define CMD_SET_TYPE(cmd, t) ((cmd)->data[1] |= ((t) << 28))
 
 /* Reserved IOVA ranges */
-#define MSI_RANGE_START		(0xfee00000)
-#define MSI_RANGE_END		(0xfeefffff)
 #define HT_RANGE_START		(0xfd00000000ULL)
 #define HT_RANGE_END		(0xffffffffffULL)
 
@@ -3097,8 +3095,9 @@ static void amd_iommu_get_resv_regions(struct device *dev,
 		list_add_tail(&region->list, head);
 	}
 
-	region = iommu_alloc_resv_region(MSI_RANGE_START,
-					 MSI_RANGE_END - MSI_RANGE_START + 1,
+	region = iommu_alloc_resv_region(X86_IOMMU_MSI_RANGE_START,
+					 X86_IOMMU_MSI_RANGE_END -
+					 X86_IOMMU_MSI_RANGE_START + 1,
 					 0, IOMMU_RESV_MSI, GFP_KERNEL);
 	if (!region)
 		return;

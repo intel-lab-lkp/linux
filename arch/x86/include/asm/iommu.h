@@ -6,6 +6,9 @@
 
 #include <asm/e820/api.h>
 
+#define X86_IOMMU_MSI_RANGE_START        0xfee00000
+#define X86_IOMMU_MSI_RANGE_END          0xfeefffff
+
 extern int force_iommu, no_iommu;
 extern int iommu_detected;
 extern int iommu_merge;
