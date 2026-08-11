@@ -153,15 +153,14 @@ impl VmaRef {
     /// we must only assume that the leaf level is cleared.
     #[inline]
     pub fn zap_vma_range(&self, address: usize, size: usize) {
-        let (end, did_overflow) = address.overflowing_add(size);
-        if did_overflow || address < self.start() || self.end() < end {
+        if !self.contains_range(address, size) {
             // TODO: call WARN_ONCE once Rust version of it is added
             return;
         }
 
         // SAFETY: By the type invariants, the caller has read access to this VMA, which is
         // sufficient for this method call. This method has no requirements on the vma flags. The
-        // address range is checked to be within the vma.
+        // address range is checked to be within the vma via `contains_range`.
         unsafe { bindings::zap_vma_range(self.as_ptr(), address, size) };
     }
 
