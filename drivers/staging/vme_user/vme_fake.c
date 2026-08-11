@@ -1226,6 +1226,7 @@ err_master:
 		kfree(master_image);
 	}
 
+	tasklet_kill(&fake_device->int_tasklet);
 	kfree(fake_device);
 err_driver:
 	kfree(fake_bridge);
@@ -1290,6 +1291,8 @@ static void __exit fake_exit(void)
 		list_del(pos);
 		kfree(master_image);
 	}
+
+	tasklet_kill(&bridge->int_tasklet);
 
 	kfree(fake_bridge->driver_priv);
 
