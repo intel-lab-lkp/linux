@@ -314,7 +314,7 @@ static void mlx5_wc_post_nop(struct mlx5_wc_sq *sq, unsigned int *offset,
 	/* ensure doorbell record is visible to device before ringing the
 	 * doorbell
 	 */
-	wmb();
+	dma_wmb();
 
 	mlx5_iowrite64_copy(sq, mmio_wqe, sizeof(mmio_wqe), *offset);
 
