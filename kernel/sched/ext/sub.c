@@ -2085,6 +2085,13 @@ static void scx_cgroup_task_migrated(struct cgroup_task_migrate_ctx *ctx)
 		return;
 
 	rq = task_rq_lock(p, &rf);
+
+	if (scx_get_task_state(p) == SCX_TASK_DEAD) {
+		/* sched_ext_dead() raced us */
+		task_rq_unlock(rq, p, &rf);
+		return;
+	}
+
 	scx_rehome_task(to, p);
 	task_rq_unlock(rq, p, &rf);
 }
