@@ -126,6 +126,7 @@ struct img_hash_dev {
 
 	spinlock_t		lock;
 	int			err;
+	int			irq;
 	struct tasklet_struct	done_task;
 	struct tasklet_struct	dma_task;
 
@@ -979,16 +980,16 @@ static int img_hash_probe(struct platform_device *pdev)
 	hdev->bus_addr = hash_res->start;
 	hdev->hash_clk = hash_clk;
 	hdev->sys_clk = sys_clk;
+	hdev->irq = irq;
 
-	err = devm_request_irq(dev, irq, img_irq_handler, 0,
-			       dev_name(dev), hdev);
+	err = request_irq(hdev->irq, img_irq_handler, 0, dev_name(dev), hdev);
 	if (err)
 		goto res_err;
 	dev_dbg(dev, "using IRQ channel %d\n", irq);
 
 	err = img_hash_dma_init(hdev);
 	if (err)
-		goto res_err;
+		goto err_irq;
 
 	dev_dbg(dev, "using %s for DMA transfers\n",
 		dma_chan_name(hdev->dma_lch));
@@ -1009,6 +1010,8 @@ err_algs:
 	list_del(&hdev->list);
 	spin_unlock(&img_hash.lock);
 	dma_release_channel(hdev->dma_lch);
+err_irq:
+	free_irq(hdev->irq, hdev);
 res_err:
 	tasklet_kill(&hdev->done_task);
 	tasklet_kill(&hdev->dma_task);
@@ -1027,6 +1030,7 @@ static void img_hash_remove(struct platform_device *pdev)
 
 	img_unregister_algs(hdev);
 
+	free_irq(hdev->irq, hdev);
 	tasklet_kill(&hdev->done_task);
 	tasklet_kill(&hdev->dma_task);
 
