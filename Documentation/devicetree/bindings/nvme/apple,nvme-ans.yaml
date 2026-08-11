@@ -16,6 +16,7 @@ properties:
       - items:
           - const: apple,t6020-nvme-ans2
           - const: apple,t8103-nvme-ans2
+      - const: apple,t8132-nvme-ans2
       - items:
           - enum:
               # Do not add additional SoC to this list.
@@ -23,16 +24,6 @@ properties:
               - apple,t8112-nvme-ans2
               - apple,t6000-nvme-ans2
           - const: apple,nvme-ans2
-
-  reg:
-    items:
-      - description: NVMe and NVMMU registers
-      - description: ANS2 co-processor control registers
-
-  reg-names:
-    items:
-      - const: nvme
-      - const: ans
 
   resets:
     maxItems: 1
@@ -68,25 +59,53 @@ properties:
 
       The SART address filter is documented in iommu/apple,sart.yaml.
 
-if:
-  properties:
-    compatible:
-      contains:
-        enum:
-          - apple,t6000-nvme-ans2
-          - apple,t6020-nvme-ans2
-then:
-  properties:
-    power-domains:
-      minItems: 3
-    power-domain-names:
-      minItems: 3
-else:
-  properties:
-    power-domains:
-      maxItems: 2
-    power-domain-names:
-      maxItems: 2
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: apple,t8132-nvme-ans2
+    then:
+      properties:
+        reg:
+          items:
+            - description: NVMMU registers
+            - description: NVMe registers
+            - description: ANS2 co-processor control registers
+        reg-names:
+          items:
+            - const: nvmmu
+            - const: nvme
+            - const: ans
+    else:
+      properties:
+        reg:
+          items:
+            - description: NVMe and NVMMU registers
+            - description: ANS2 co-processor control registers
+        reg-names:
+          items:
+            - const: nvme
+            - const: ans
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - apple,t6000-nvme-ans2
+              - apple,t6020-nvme-ans2
+    then:
+      properties:
+        power-domains:
+          minItems: 3
+        power-domain-names:
+          minItems: 3
+    else:
+      properties:
+        power-domains:
+          maxItems: 2
+        power-domain-names:
+          maxItems: 2
 
 required:
   - compatible
