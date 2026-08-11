@@ -1690,6 +1690,7 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 	int l3index;
 #endif
 	struct ip_options_rcu *inet_opt;
+	int ret;
 
 	if (sk_acceptq_is_full(sk))
 		goto exit_overflow;
@@ -1756,8 +1757,12 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 		goto put_and_exit; /* OOM, release back memory */
 #endif
 
-	if (__inet_inherit_port(sk, newsk) < 0)
+	ret = __inet_inherit_port(sk, newsk);
+	if (unlikely(ret < 0)) {
+		if (ret == -ENOENT)
+			goto send_reset_and_exit;
 		goto put_and_exit;
+	}
 	*own_req = inet_ehash_nolisten(newsk, req_to_sk(req_unhash),
 				       &found_dup_sk);
 	if (likely(*own_req)) {
@@ -1784,6 +1789,8 @@ exit_nonewsk:
 exit:
 	tcp_listendrop(sk);
 	return NULL;
+send_reset_and_exit:
+	tcp_v4_send_reset(sk, skb, SK_RST_REASON_TCP_STATE);
 put_and_exit:
 	newinet->inet_opt = NULL;
 	inet_csk_prepare_forced_close(newsk);
