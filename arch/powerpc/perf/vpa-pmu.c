@@ -145,6 +145,7 @@ static void vpa_pmu_read(struct perf_event *event)
 	final_data = new_data - prev_data;
 
 	local64_add(final_data, &event->count);
+	local64_set(&event->hw.prev_count, new_data);
 }
 
 static void vpa_pmu_del(struct perf_event *event, int flags)
