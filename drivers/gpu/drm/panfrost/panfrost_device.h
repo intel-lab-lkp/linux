@@ -253,6 +253,8 @@ int panfrost_device_init(struct panfrost_device *pfdev);
 void panfrost_device_fini(struct panfrost_device *pfdev);
 void panfrost_device_reset(struct panfrost_device *pfdev, bool enable_job_int);
 
+void panfrost_try_suspend_device(struct panfrost_device *pfdev);
+
 extern const struct dev_pm_ops panfrost_pm_ops;
 
 enum drm_panfrost_exception_type {
@@ -340,6 +342,12 @@ panfrost_device_schedule_reset(struct panfrost_device *pfdev)
 {
 	atomic_set(&pfdev->reset.pending, 1);
 	queue_work(pfdev->reset.wq, &pfdev->reset.work);
+}
+
+static inline bool
+panfrost_device_started(struct panfrost_device *pfdev)
+{
+	return pfdev->js;
 }
 
 #endif

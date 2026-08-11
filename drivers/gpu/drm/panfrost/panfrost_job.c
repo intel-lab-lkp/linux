@@ -446,7 +446,9 @@ void panfrost_jm_suspend_irq(struct panfrost_device *pfdev)
 	set_bit(PANFROST_COMP_BIT_JOB, pfdev->is_suspended);
 
 	job_write(pfdev, JOB_INT_MASK, 0);
-	synchronize_irq(pfdev->js->irq);
+
+	if (pfdev->js)
+		synchronize_irq(pfdev->js->irq);
 }
 
 static void panfrost_job_handle_err(struct panfrost_device *pfdev,
@@ -869,7 +871,6 @@ int panfrost_jm_init(struct panfrost_device *pfdev)
 	js = devm_kzalloc(pfdev->base.dev, sizeof(*js), GFP_KERNEL);
 	if (!js)
 		return -ENOMEM;
-	pfdev->js = js;
 
 	INIT_WORK(&pfdev->reset.work, panfrost_reset_work);
 	spin_lock_init(&js->job_lock);
@@ -903,6 +904,8 @@ int panfrost_jm_init(struct panfrost_device *pfdev)
 			goto err_sched;
 		}
 	}
+
+	pfdev->js = js;
 
 	panfrost_jm_reset_interrupts(pfdev);
 	panfrost_jm_enable_interrupts(pfdev);

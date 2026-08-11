@@ -8,7 +8,6 @@
 struct panfrost_device;
 
 int panfrost_gpu_init(struct panfrost_device *pfdev);
-void panfrost_gpu_fini(struct panfrost_device *pfdev);
 
 u32 panfrost_gpu_get_latest_flush_id(struct panfrost_device *pfdev);
 
