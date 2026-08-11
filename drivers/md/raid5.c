@@ -7827,6 +7827,8 @@ static int raid5_set_limits(struct mddev *mddev)
 	 * 2 * (datadisks) * chunksize where 'n' is the number of raid devices.
 	 */
 	data_disks = conf->previous_raid_disks - conf->max_degraded;
+	if (data_disks <= 0)
+		return -EINVAL;
 
 	/*
 	 * We can only discard a whole stripe. It doesn't make sense to
