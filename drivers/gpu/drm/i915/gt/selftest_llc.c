@@ -6,6 +6,8 @@
 #include "selftest_llc.h"
 #include "intel_rps.h"
 
+#include <drm/drm_print.h>
+
 static int gen6_verify_ring_freq(struct intel_llc *llc)
 {
 	struct drm_i915_private *i915 = llc_to_gt(llc)->i915;
@@ -23,6 +25,7 @@ static int gen6_verify_ring_freq(struct intel_llc *llc)
 	     gpu_freq <= consts.max_gpu_freq;
 	     gpu_freq++) {
 		struct intel_rps *rps = &llc_to_gt(llc)->rps;
+		u32 scaler = GRAPHICS_VER(i915) >= 9 ? GEN9_FREQ_SCALER : 1;
 
 		unsigned int ia_freq, ring_freq, found;
 		u32 val;
@@ -32,28 +35,31 @@ static int gen6_verify_ring_freq(struct intel_llc *llc)
 		val = gpu_freq;
 		if (snb_pcode_read(llc_to_gt(llc)->uncore, GEN6_PCODE_READ_MIN_FREQ_TABLE,
 				   &val, NULL)) {
-			pr_err("Failed to read freq table[%d], range [%d, %d]\n",
-			       gpu_freq, consts.min_gpu_freq, consts.max_gpu_freq);
+			drm_err(&i915->drm,
+				"Failed to read freq table[%d], range [%d, %d]\n",
+				gpu_freq, consts.min_gpu_freq, consts.max_gpu_freq);
 			err = -ENXIO;
 			break;
 		}
 
 		found = (val >> 0) & 0xff;
 		if (found != ia_freq) {
-			pr_err("Min freq table(%d/[%d, %d]):%dMHz did not match expected CPU freq, found %d, expected %d\n",
-			       gpu_freq, consts.min_gpu_freq, consts.max_gpu_freq,
-			       intel_gpu_freq(rps, gpu_freq * (GRAPHICS_VER(i915) >= 9 ? GEN9_FREQ_SCALER : 1)),
-			       found, ia_freq);
+			drm_err(&i915->drm,
+				"Min freq table(%d/[%d, %d]):%dMHz did not match expected CPU freq, found %d, expected %d\n",
+				gpu_freq, consts.min_gpu_freq, consts.max_gpu_freq,
+				intel_gpu_freq(rps, gpu_freq * scaler),
+				found, ia_freq);
 			err = -EINVAL;
 			break;
 		}
 
 		found = (val >> 8) & 0xff;
 		if (found != ring_freq) {
-			pr_err("Min freq table(%d/[%d, %d]):%dMHz did not match expected ring freq, found %d, expected %d\n",
-			       gpu_freq, consts.min_gpu_freq, consts.max_gpu_freq,
-			       intel_gpu_freq(rps, gpu_freq * (GRAPHICS_VER(i915) >= 9 ? GEN9_FREQ_SCALER : 1)),
-			       found, ring_freq);
+			drm_err(&i915->drm,
+				"Min freq table(%d/[%d, %d]):%dMHz did not match expected ring freq, found %d, expected %d\n",
+				gpu_freq, consts.min_gpu_freq, consts.max_gpu_freq,
+				intel_gpu_freq(rps, gpu_freq * scaler),
+				found, ring_freq);
 			err = -EINVAL;
 			break;
 		}
