@@ -924,8 +924,36 @@ static int img_hash_probe(struct platform_device *pdev)
 	struct img_hash_dev *hdev;
 	struct device *dev = &pdev->dev;
 	struct resource *hash_res;
-	int	irq;
+	void __iomem *cpu_addr;
+	void __iomem *io_base;
+	struct clk *hash_clk;
+	struct clk *sys_clk;
+	int irq;
 	int err;
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0)
+		return irq;
+
+	io_base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(io_base))
+		return PTR_ERR(io_base);
+
+	cpu_addr = devm_platform_get_and_ioremap_resource(pdev, 1, &hash_res);
+	if (IS_ERR(cpu_addr))
+		return PTR_ERR(cpu_addr);
+
+	hash_clk = devm_clk_get_enabled(&pdev->dev, "hash");
+	if (IS_ERR(hash_clk)) {
+		dev_err(dev, "clock initialization failed.\n");
+		return PTR_ERR(hash_clk);
+	}
+
+	sys_clk = devm_clk_get_enabled(&pdev->dev, "sys");
+	if (IS_ERR(sys_clk)) {
+		dev_err(dev, "clock initialization failed.\n");
+		return PTR_ERR(sys_clk);
+	}
 
 	hdev = devm_kzalloc(dev, sizeof(*hdev), GFP_KERNEL);
 	if (hdev == NULL)
@@ -945,45 +973,18 @@ static int img_hash_probe(struct platform_device *pdev)
 	crypto_init_queue(&hdev->queue, IMG_HASH_QUEUE_LENGTH);
 
 	/* Register bank */
-	hdev->io_base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(hdev->io_base)) {
-		err = PTR_ERR(hdev->io_base);
-		goto res_err;
-	}
-
+	hdev->io_base = io_base;
 	/* Write port (DMA or CPU) */
-	hdev->cpu_addr = devm_platform_get_and_ioremap_resource(pdev, 1, &hash_res);
-	if (IS_ERR(hdev->cpu_addr)) {
-		err = PTR_ERR(hdev->cpu_addr);
-		goto res_err;
-	}
+	hdev->cpu_addr = cpu_addr;
 	hdev->bus_addr = hash_res->start;
-
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0) {
-		err = irq;
-		goto res_err;
-	}
+	hdev->hash_clk = hash_clk;
+	hdev->sys_clk = sys_clk;
 
 	err = devm_request_irq(dev, irq, img_irq_handler, 0,
 			       dev_name(dev), hdev);
 	if (err)
 		goto res_err;
 	dev_dbg(dev, "using IRQ channel %d\n", irq);
-
-	hdev->hash_clk = devm_clk_get_enabled(&pdev->dev, "hash");
-	if (IS_ERR(hdev->hash_clk)) {
-		dev_err(dev, "clock initialization failed.\n");
-		err = PTR_ERR(hdev->hash_clk);
-		goto res_err;
-	}
-
-	hdev->sys_clk = devm_clk_get_enabled(&pdev->dev, "sys");
-	if (IS_ERR(hdev->sys_clk)) {
-		dev_err(dev, "clock initialization failed.\n");
-		err = PTR_ERR(hdev->sys_clk);
-		goto res_err;
-	}
 
 	err = img_hash_dma_init(hdev);
 	if (err)
