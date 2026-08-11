@@ -1627,18 +1627,16 @@ static void crypt_free_buffer_pages(struct crypt_config *cc, struct bio *clone);
  * In order to reduce allocation overhead, we try to allocate compound pages in
  * the first pass. If they are not available, we fall back to the mempool.
  */
-static struct bio *crypt_alloc_buffer(struct dm_crypt_io *io, unsigned int size)
+static struct bio *crypt_alloc_buffer_try(struct dm_crypt_io *io,
+					  unsigned int size, gfp_t gfp_mask,
+					  unsigned int order, bool *retry)
 {
 	struct crypt_config *cc = io->cc;
 	struct bio *clone;
 	unsigned int nr_iovecs = (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
-	gfp_t gfp_mask = GFP_NOWAIT | __GFP_HIGHMEM;
 	unsigned int remaining_size;
-	unsigned int order = MAX_PAGE_ORDER;
 
-retry:
-	if (unlikely(gfp_mask & __GFP_DIRECT_RECLAIM))
-		mutex_lock(&cc->bio_alloc_lock);
+	*retry = false;
 
 	clone = bio_alloc_bioset(cc->dev->bdev, nr_iovecs, io->base_bio->bi_opf,
 				 GFP_NOIO, &cc->bs);
@@ -1674,9 +1672,8 @@ decrease_order:
 		if (!pages) {
 			crypt_free_buffer_pages(cc, clone);
 			bio_put(clone);
-			gfp_mask |= __GFP_DIRECT_RECLAIM;
-			order = 0;
-			goto retry;
+			*retry = true;
+			return NULL;
 		}
 
 have_pages:
@@ -1692,10 +1689,32 @@ have_pages:
 		clone = NULL;
 	}
 
-	if (unlikely(gfp_mask & __GFP_DIRECT_RECLAIM))
-		mutex_unlock(&cc->bio_alloc_lock);
-
 	return clone;
+}
+
+static struct bio *crypt_alloc_buffer(struct dm_crypt_io *io, unsigned int size)
+{
+	struct crypt_config *cc = io->cc;
+	struct bio *clone;
+	gfp_t gfp_mask = GFP_NOWAIT | __GFP_HIGHMEM;
+	unsigned int order = MAX_PAGE_ORDER;
+	bool retry;
+
+	for (;;) {
+		if (unlikely(gfp_mask & __GFP_DIRECT_RECLAIM))
+			mutex_lock(&cc->bio_alloc_lock);
+
+		clone = crypt_alloc_buffer_try(io, size, gfp_mask, order, &retry);
+
+		if (unlikely(gfp_mask & __GFP_DIRECT_RECLAIM))
+			mutex_unlock(&cc->bio_alloc_lock);
+
+		if (!retry)
+			return clone;
+
+		gfp_mask |= __GFP_DIRECT_RECLAIM;
+		order = 0;
+	}
 }
 
 static void crypt_free_buffer_pages(struct crypt_config *cc, struct bio *clone)
