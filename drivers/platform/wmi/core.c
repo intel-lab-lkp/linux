@@ -1290,7 +1290,7 @@ static int wmi_add_device(struct platform_device *pdev, struct wmi_device *wdev)
  */
 static int parse_wdg(struct device *wmi_bus_dev, struct platform_device *pdev)
 {
-	struct acpi_device *device = ACPI_COMPANION(&pdev->dev);
+	struct acpi_device *device;
 	struct acpi_buffer out = {ACPI_ALLOCATE_BUFFER, NULL};
 	const struct guid_block *gblock;
 	bool event_data_available;
@@ -1299,6 +1299,10 @@ static int parse_wdg(struct device *wmi_bus_dev, struct platform_device *pdev)
 	acpi_status status;
 	u32 i, total;
 	int retval;
+
+	device = ACPI_COMPANION(&pdev->dev);
+	if (!device)
+		return -ENODEV;
 
 	status = acpi_evaluate_object(device->handle, "_WDG", NULL, &out);
 	if (ACPI_FAILURE(status))
