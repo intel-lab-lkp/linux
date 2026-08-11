@@ -1643,6 +1643,7 @@ static int interrupt_init_v1_hw(struct hisi_hba *hisi_hba)
 					irq, rc);
 				return rc;
 			}
+			hisi_sas_track_irq(hisi_hba, irq, phy);
 		}
 	}
 
@@ -1659,6 +1660,7 @@ static int interrupt_init_v1_hw(struct hisi_hba *hisi_hba)
 				irq, rc);
 			return rc;
 		}
+		hisi_sas_track_irq(hisi_hba, irq, &hisi_hba->cq[i]);
 	}
 
 	idx = (hisi_hba->n_phy * HISI_SAS_PHY_INT_NR) + hisi_hba->queue_count;
@@ -1674,6 +1676,7 @@ static int interrupt_init_v1_hw(struct hisi_hba *hisi_hba)
 				irq, rc);
 			return rc;
 		}
+		hisi_sas_track_irq(hisi_hba, irq, hisi_hba);
 	}
 
 	hisi_hba->cq_nvecs = hisi_hba->queue_count;

@@ -2621,6 +2621,7 @@ int hisi_sas_probe(struct platform_device *pdev,
 
 err_out_hw_init:
 	sas_unregister_ha(sha);
+	hisi_sas_free_irqs(hisi_hba);
 err_out_register_ha:
 	scsi_remove_host(shost);
 err_out_ha:
@@ -2629,6 +2630,27 @@ err_out_ha:
 	return rc;
 }
 EXPORT_SYMBOL_GPL(hisi_sas_probe);
+
+/* Record a successfully requested IRQ; freed by hisi_sas_free_irqs(). */
+void hisi_sas_track_irq(struct hisi_hba *hisi_hba, unsigned int irq, void *dev_id)
+{
+	if (WARN_ON_ONCE(hisi_hba->nr_irqs >= HISI_SAS_MAX_IRQS))
+		return;
+	hisi_hba->devm_irqs[hisi_hba->nr_irqs].irq = irq;
+	hisi_hba->devm_irqs[hisi_hba->nr_irqs].dev_id = dev_id;
+	hisi_hba->nr_irqs++;
+}
+
+/* Release recorded IRQs in reverse order, before hisi_hba is freed. */
+void hisi_sas_free_irqs(struct hisi_hba *hisi_hba)
+{
+	int i;
+
+	for (i = hisi_hba->nr_irqs - 1; i >= 0; i--)
+		devm_free_irq(hisi_hba->dev, hisi_hba->devm_irqs[i].irq,
+			      hisi_hba->devm_irqs[i].dev_id);
+	hisi_hba->nr_irqs = 0;
+}
 
 void hisi_sas_remove(struct platform_device *pdev)
 {
@@ -2640,6 +2662,8 @@ void hisi_sas_remove(struct platform_device *pdev)
 
 	sas_unregister_ha(sha);
 	sas_remove_host(shost);
+
+	hisi_sas_free_irqs(hisi_hba);
 
 	hisi_sas_free(hisi_hba);
 	scsi_host_put(shost);

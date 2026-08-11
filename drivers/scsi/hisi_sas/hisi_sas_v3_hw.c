@@ -2635,6 +2635,7 @@ static int interrupt_init_v3_hw(struct hisi_hba *hisi_hba)
 		dev_err(dev, "could not request phy interrupt, rc=%d\n", rc);
 		return -ENOENT;
 	}
+	hisi_sas_track_irq(hisi_hba, pci_irq_vector(pdev, IRQ_PHY_UP_DOWN_INDEX), hisi_hba);
 
 	rc = devm_request_irq(dev, pci_irq_vector(pdev, IRQ_CHL_INDEX),
 			      int_chnl_int_v3_hw, 0,
@@ -2643,6 +2644,7 @@ static int interrupt_init_v3_hw(struct hisi_hba *hisi_hba)
 		dev_err(dev, "could not request chnl interrupt, rc=%d\n", rc);
 		return -ENOENT;
 	}
+	hisi_sas_track_irq(hisi_hba, pci_irq_vector(pdev, IRQ_CHL_INDEX), hisi_hba);
 
 	rc = devm_request_irq(dev, pci_irq_vector(pdev, IRQ_AXI_INDEX),
 			      fatal_axi_int_v3_hw, 0,
@@ -2651,6 +2653,7 @@ static int interrupt_init_v3_hw(struct hisi_hba *hisi_hba)
 		dev_err(dev, "could not request fatal interrupt, rc=%d\n", rc);
 		return -ENOENT;
 	}
+	hisi_sas_track_irq(hisi_hba, pci_irq_vector(pdev, IRQ_AXI_INDEX), hisi_hba);
 
 	if (hisi_sas_intr_conv)
 		dev_info(dev, "Enable interrupt converge\n");
@@ -2673,6 +2676,7 @@ static int interrupt_init_v3_hw(struct hisi_hba *hisi_hba)
 				i, rc);
 			return -ENOENT;
 		}
+		hisi_sas_track_irq(hisi_hba, cq->irq_no, cq);
 		cq->irq_mask = pci_irq_get_affinity(pdev, i + BASE_VECTORS_V3_HW);
 		if (!cq->irq_mask) {
 			dev_err(dev, "could not get cq%d irq affinity!\n", i);
@@ -5068,6 +5072,7 @@ hisi_sas_v3_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 err_out_unregister_ha:
 	sas_unregister_ha(sha);
+	hisi_sas_free_irqs(hisi_hba);
 err_out_remove_host:
 	scsi_remove_host(shost);
 err_out_free_host:
@@ -5075,23 +5080,6 @@ err_out_free_host:
 	scsi_host_put(shost);
 err_out:
 	return rc;
-}
-
-static void
-hisi_sas_v3_destroy_irqs(struct pci_dev *pdev, struct hisi_hba *hisi_hba)
-{
-	int i;
-
-	devm_free_irq(&pdev->dev, pci_irq_vector(pdev, IRQ_PHY_UP_DOWN_INDEX), hisi_hba);
-	devm_free_irq(&pdev->dev, pci_irq_vector(pdev, IRQ_CHL_INDEX), hisi_hba);
-	devm_free_irq(&pdev->dev, pci_irq_vector(pdev, IRQ_AXI_INDEX), hisi_hba);
-	for (i = 0; i < hisi_hba->cq_nvecs; i++) {
-		struct hisi_sas_cq *cq = &hisi_hba->cq[i];
-		int nr = hisi_sas_intr_conv ? BASE_VECTORS_V3_HW :
-					      BASE_VECTORS_V3_HW + i;
-
-		devm_free_irq(&pdev->dev, pci_irq_vector(pdev, nr), cq);
-	}
 }
 
 static void hisi_sas_v3_remove(struct pci_dev *pdev)
@@ -5109,7 +5097,7 @@ static void hisi_sas_v3_remove(struct pci_dev *pdev)
 	flush_workqueue(hisi_hba->wq);
 	sas_remove_host(shost);
 
-	hisi_sas_v3_destroy_irqs(pdev, hisi_hba);
+	hisi_sas_free_irqs(hisi_hba);
 	hisi_sas_free(hisi_hba);
 	scsi_host_put(shost);
 }

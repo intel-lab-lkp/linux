@@ -30,6 +30,14 @@
 
 #define HISI_SAS_MAX_PHYS	9
 #define HISI_SAS_MAX_QUEUES	32
+
+/* Maximum number of devm-requested IRQs recorded per hisi_hba. */
+#define HISI_SAS_MAX_IRQS	(HISI_SAS_MAX_PHYS * 3 + HISI_SAS_MAX_QUEUES + 2)
+
+struct hisi_sas_irq_entry {
+	unsigned int irq;
+	void *dev_id;
+};
 #define HISI_SAS_QUEUE_SLOTS	4096
 #define HISI_SAS_MAX_ITCT_ENTRIES 1024
 #define HISI_SAS_MAX_DEVICES HISI_SAS_MAX_ITCT_ENTRIES
@@ -468,6 +476,8 @@ struct hisi_hba {
 	u32 intr_coal_count; /* Interrupt count to coalesce */
 
 	int cq_nvecs;
+	struct hisi_sas_irq_entry devm_irqs[HISI_SAS_MAX_IRQS];
+	int nr_irqs;
 
 	/* bist */
 	enum sas_linkrate debugfs_bist_linkrate;
@@ -680,6 +690,9 @@ extern void hisi_sas_slot_task_free(struct hisi_hba *hisi_hba,
 extern void hisi_sas_init_mem(struct hisi_hba *hisi_hba);
 extern void hisi_sas_rst_work_handler(struct work_struct *work);
 extern void hisi_sas_sync_rst_work_handler(struct work_struct *work);
+void hisi_sas_track_irq(struct hisi_hba *hisi_hba, unsigned int irq,
+			void *dev_id);
+void hisi_sas_free_irqs(struct hisi_hba *hisi_hba);
 extern void hisi_sas_phy_oob_ready(struct hisi_hba *hisi_hba, int phy_no);
 extern bool hisi_sas_notify_phy_event(struct hisi_sas_phy *phy,
 				enum hisi_sas_phy_event event);

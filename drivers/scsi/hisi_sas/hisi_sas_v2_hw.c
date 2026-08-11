@@ -3343,6 +3343,7 @@ static int interrupt_init_v2_hw(struct hisi_hba *hisi_hba)
 			rc = -ENOENT;
 			goto err_out;
 		}
+		hisi_sas_track_irq(hisi_hba, irq, hisi_hba);
 	}
 
 	for (phy_no = 0; phy_no < hisi_hba->n_phy; phy_no++) {
@@ -3357,6 +3358,7 @@ static int interrupt_init_v2_hw(struct hisi_hba *hisi_hba)
 			rc = -ENOENT;
 			goto err_out;
 		}
+		hisi_sas_track_irq(hisi_hba, irq, phy);
 	}
 
 	for (fatal_no = 0; fatal_no < HISI_SAS_FATAL_INT_NR; fatal_no++) {
@@ -3369,6 +3371,7 @@ static int interrupt_init_v2_hw(struct hisi_hba *hisi_hba)
 			rc = -ENOENT;
 			goto err_out;
 		}
+		hisi_sas_track_irq(hisi_hba, irq, hisi_hba);
 	}
 
 	for (queue_no = 0; queue_no < hisi_hba->cq_nvecs; queue_no++) {
@@ -3385,6 +3388,7 @@ static int interrupt_init_v2_hw(struct hisi_hba *hisi_hba)
 			rc = -ENOENT;
 			goto err_out;
 		}
+		hisi_sas_track_irq(hisi_hba, cq->irq_no, cq);
 		cq->irq_mask = irq_get_affinity_mask(cq->irq_no);
 	}
 err_out:
