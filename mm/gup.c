@@ -695,7 +695,8 @@ static long follow_huge_pud(struct vm_area_struct *vma,
 
 	*page_mask = HPAGE_PUD_NR - 1;
 
-	gup_fill_pages(vma, addr, page, 1, pages);
+	if (pages)
+		pages[0] = page;
 
 	return 1;
 }
@@ -760,7 +761,8 @@ static long follow_huge_pmd(struct vm_area_struct *vma,
 	page += (addr & ~HPAGE_PMD_MASK) >> PAGE_SHIFT;
 	*page_mask = HPAGE_PMD_NR - 1;
 
-	gup_fill_pages(vma, addr, page, 1, pages);
+	if (pages)
+		pages[0] = page;
 
 	return 1;
 }
@@ -991,6 +993,14 @@ static long follow_pmd_mask(struct vm_area_struct *vma,
 	}
 	ret = follow_huge_pmd(vma, address, pmd, flags, page_mask, pages);
 	spin_unlock(ptl);
+
+	/*
+	 * The ref is already held, so the page cannot go away: fill the
+	 * array and flush caches without the pmd lock.
+	 */
+	if (ret > 0 && pages)
+		gup_fill_pages(vma, address, pages[0], ret, pages);
+
 	return ret;
 }
 
@@ -1012,6 +1022,12 @@ static long follow_pud_mask(struct vm_area_struct *vma,
 		ptl = pud_lock(mm, pudp);
 		ret = follow_huge_pud(vma, address, pudp, flags, page_mask, pages);
 		spin_unlock(ptl);
+		/*
+		 * The ref is already held, so the page cannot go away: fill
+		 * the array and flush caches without the lock.
+		 */
+		if (ret > 0 && pages)
+			gup_fill_pages(vma, address, pages[0], ret, pages);
 		if (ret)
 			return ret;
 		return no_page_table(vma, flags, address);
