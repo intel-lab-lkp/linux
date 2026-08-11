@@ -732,6 +732,7 @@ static void mana_gd_process_eqe(struct gdma_queue *eq)
 	union gdma_eqe_info eqe_info;
 	enum gdma_eqe_type type;
 	struct gdma_event event;
+	struct gdma_queue __rcu **cq_table;
 	struct gdma_queue *cq;
 	struct gdma_eqe *eqe;
 	u32 cq_id;
@@ -743,11 +744,30 @@ static void mana_gd_process_eqe(struct gdma_queue *eq)
 	switch (type) {
 	case GDMA_EQE_COMPLETION:
 		cq_id = eqe->details[0] & 0xFFFFFF;
+		cq_table = rcu_dereference(gc->cq_table);
+		if (WARN_ON_ONCE(!cq_table))
+			break;
+
+		/* Pair with the rcu_assign_pointer(gc->cq_table) release in
+		 * mana_hwc_establish_channel(), which publishes the table
+		 * after storing gc->max_num_cqs.  The rmb keeps this bound
+		 * read ordered after the table load, so a shrinking
+		 * re-establish cannot pair a stale, larger max_num_cqs with a
+		 * newly published, smaller table and index out of bounds.
+		 */
+		smp_rmb();
 		if (WARN_ON_ONCE(cq_id >= gc->max_num_cqs))
 			break;
 
-		cq = gc->cq_table[cq_id];
-		if (WARN_ON_ONCE(!cq || cq->type != GDMA_CQ || cq->id != cq_id))
+		cq = rcu_dereference(cq_table[cq_id]);
+		/* A NULL entry is expected while a concurrent teardown
+		 * (e.g. ifdown or an MTU change) has unpublished this CQ but
+		 * not yet freed it; the completion is stale, so drop it
+		 * quietly rather than warning.
+		 */
+		if (!cq)
+			break;
+		if (WARN_ON_ONCE(cq->type != GDMA_CQ || cq->id != cq_id))
 			break;
 
 		if (cq->cq.callback)
@@ -1050,18 +1070,47 @@ static void mana_gd_create_cq(const struct gdma_queue_spec *spec,
 	queue->cq.callback = spec->cq.callback;
 }
 
+bool mana_gd_unpublish_cq(struct gdma_context *gc, struct gdma_queue *queue)
+{
+	struct gdma_queue __rcu **cq_table;
+	u32 id = queue->id;
+
+	/* No rcu_read_lock() here: unpublish runs only on the
+	 * CQ-destroy/teardown path, where the base cq_table is stable.  See
+	 * the lifecycle note on gdma_context::cq_table in gdma.h for why the
+	 * "true" predicate is sound.
+	 */
+	cq_table = rcu_dereference_protected(gc->cq_table, true);
+	if (!cq_table || id >= gc->max_num_cqs)
+		return false;
+
+	/* Clear the slot only if it still refers to this queue.  The
+	 * Ethernet two-pass teardown unpublishes the same index twice, a
+	 * grace period apart, and a CQ that legitimately recycled this id in
+	 * between (e.g. a new RDMA CQ via mana_ib_install_cq_cb()) must not
+	 * have its fresh entry wiped by the second pass.
+	 */
+	if (rcu_access_pointer(cq_table[id]) != queue)
+		return false;
+
+	rcu_assign_pointer(cq_table[id], NULL);
+	return true;
+}
+
 static void mana_gd_destroy_cq(struct gdma_context *gc,
 			       struct gdma_queue *queue)
 {
-	u32 id = queue->id;
-
-	if (id >= gc->max_num_cqs)
+	/* A batched teardown may already have cleared the slot and taken the
+	 * grace period; then there is nothing left to wait for.
+	 */
+	if (!mana_gd_unpublish_cq(gc, queue))
 		return;
 
-	if (!gc->cq_table[id])
-		return;
-
-	gc->cq_table[id] = NULL;
+	/* Wait for in-flight EQ handlers that may have loaded the old
+	 * pointer via rcu_dereference() to finish before the caller
+	 * frees the CQ memory.
+	 */
+	synchronize_rcu();
 }
 
 int mana_gd_create_hwc_queue(struct gdma_dev *gd,

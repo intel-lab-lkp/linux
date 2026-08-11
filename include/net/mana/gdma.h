@@ -418,7 +418,36 @@ struct gdma_context {
 
 	/* This maps a CQ index to the queue structure. */
 	unsigned int		max_num_cqs;
-	struct gdma_queue	**cq_table;
+	/* max_num_cqs above is the size of cq_table and an upper bound on
+	 * valid CQ indices for the table's lifetime.  cq_table == NULL is the
+	 * "table torn down" signal, so every cq_table[id] access must guard
+	 * with both !cq_table (gone) and id >= max_num_cqs (out of bounds).
+	 *
+	 * Both the base pointer and each entry are RCU-managed.  The fast
+	 * path (mana_gd_process_eqe) reads the base via rcu_dereference()
+	 * under rcu_read_lock(), so the table is freed with
+	 * rcu_assign_pointer(NULL) + synchronize_rcu() and an in-flight
+	 * reader can never observe freed memory.
+	 *
+	 * The slow paths -- mana_gd_destroy_cq() and the CQ install/remove
+	 * callers (mana_create_txq/_rxq, mana_ib_install/remove_cq_cb) --
+	 * instead read the base with rcu_dereference_protected(cq_table,
+	 * true).  The bare "true" asserts teardown/bring-up ordering, not a
+	 * lock: the base table is allocated in mana_hwc_establish_channel()
+	 * and replaced+freed only by mana_hwc_destroy_channel() (via
+	 * mana_gd_cleanup_device()) and the create-time reinit.  The reinit
+	 * runs before either consumer is probed, and cleanup_device() runs
+	 * after mana_remove() / mana_rdma_remove() have detached the ports
+	 * under RTNL and drained the IB device, so no install/remove caller
+	 * is running when the base is freed.  This is an ordering argument
+	 * about when cleanup_device() runs: suspend and shutdown keep the
+	 * netdev registered, so it does not rely on unregister_netdevice()
+	 * having run on every path.  mana_hwc_destroy_channel() itself reads
+	 * cq_table (mana_hwc_destroy_cq()) before it replaces and vfree()s
+	 * the base, so that access is ordered ahead of the free by program
+	 * order.
+	 */
+	struct gdma_queue	__rcu * __rcu *cq_table;
 
 	/* Protect eq_test_event and test_event_eq_id  */
 	struct mutex		eq_test_event_mutex;
@@ -495,6 +524,12 @@ int mana_gd_create_mana_wq_cq(struct gdma_dev *gd,
 			      struct gdma_queue **queue_ptr);
 
 void mana_gd_destroy_queue(struct gdma_context *gc, struct gdma_queue *queue);
+
+/* Clear a CQ's cq_table slot without waiting for a grace period.  Batched
+ * teardown paths clear several slots and then take a single synchronize_rcu();
+ * single-CQ callers use mana_gd_destroy_cq() instead, which also waits.
+ */
+bool mana_gd_unpublish_cq(struct gdma_context *gc, struct gdma_queue *queue);
 
 int mana_gd_poll_cq(struct gdma_queue *cq, struct gdma_comp *comp, int num_cqe);
 
