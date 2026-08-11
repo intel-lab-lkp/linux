@@ -2971,12 +2971,14 @@ static int adapter_indicators_set(struct kvm *kvm,
 				  struct s390_io_adapter *adapter,
 				  struct kvm_s390_adapter_int *adapter_int)
 {
-	unsigned long bit;
-	int summary_set, idx;
 	struct s390_map_info *ind_info, *summary_info;
-	void *map;
 	struct page *ind_page, *summary_page;
 	unsigned long flags;
+	unsigned long bit;
+	int summary_set;
+	void *map;
+
+	guard(srcu)(&kvm->srcu);
 
 	ind_page = NULL;
 
@@ -2987,21 +2989,20 @@ static int adapter_indicators_set(struct kvm *kvm,
 		ind_page = pin_map_page(kvm, adapter_int->ind_addr, 0);
 		if (!ind_page)
 			return -1;
-		idx = srcu_read_lock(&kvm->srcu);
 		map = page_address(ind_page);
 		bit = get_ind_bit(adapter_int->ind_addr,
 				  adapter_int->ind_offset, adapter->swap);
 		set_bit(bit, map);
-		mark_page_dirty(kvm, adapter_int->ind_gaddr >> PAGE_SHIFT);
 		set_page_dirty_lock(ind_page);
-		srcu_read_unlock(&kvm->srcu, idx);
 		unpin_user_page(ind_page);
 	} else {
 		map = page_address(ind_info->page);
 		bit = get_ind_bit(ind_info->addr, adapter_int->ind_offset, adapter->swap);
 		set_bit(bit, map);
 		spin_unlock_irqrestore(&adapter->maps_lock, flags);
+		set_page_dirty_lock(ind_info->page);
 	}
+	mark_page_dirty(kvm, gpa_to_gfn(adapter_int->ind_gaddr));
 
 	spin_lock_irqsave(&adapter->maps_lock, flags);
 	summary_info = get_map_info(adapter, adapter_int->summary_addr);
@@ -3010,14 +3011,11 @@ static int adapter_indicators_set(struct kvm *kvm,
 		summary_page = pin_map_page(kvm, adapter_int->summary_addr, 0);
 		if (WARN_ON_ONCE(!summary_page))
 			return -1;
-		idx = srcu_read_lock(&kvm->srcu);
 		map = page_address(summary_page);
 		bit = get_ind_bit(adapter_int->summary_addr,
 				  adapter_int->summary_offset, adapter->swap);
 		summary_set = test_and_set_bit(bit, map);
-		mark_page_dirty(kvm, adapter_int->summary_gaddr >> PAGE_SHIFT);
 		set_page_dirty_lock(summary_page);
-		srcu_read_unlock(&kvm->srcu, idx);
 		unpin_user_page(summary_page);
 	} else {
 		map = page_address(summary_info->page);
@@ -3025,7 +3023,9 @@ static int adapter_indicators_set(struct kvm *kvm,
 				  adapter->swap);
 		summary_set = test_and_set_bit(bit, map);
 		spin_unlock_irqrestore(&adapter->maps_lock, flags);
+		set_page_dirty_lock(summary_info->page);
 	}
+	mark_page_dirty(kvm, gpa_to_gfn(adapter_int->summary_gaddr));
 
 	return summary_set ? 0 : 1;
 }
@@ -3035,37 +3035,51 @@ static int adapter_indicators_set_fast(struct kvm *kvm,
 				       struct kvm_s390_adapter_int *adapter_int,
 				       int setbit)
 {
-	unsigned long bit;
-	int summary_set;
 	struct s390_map_info *ind_info, *summary_info;
+	int summary_set = -1;
+	unsigned long bit;
 	void *map;
 
-	spin_lock(&adapter->maps_lock);
-	ind_info = get_map_info(adapter, adapter_int->ind_addr);
-	if (!ind_info) {
-		spin_unlock(&adapter->maps_lock);
-		return -EWOULDBLOCK;
+	guard(srcu)(&kvm->srcu);
+
+	scoped_guard(spinlock, &adapter->maps_lock) {
+		ind_info = get_map_info(adapter, adapter_int->ind_addr);
+		if (!ind_info)
+			return -EWOULDBLOCK;
+
+		map = page_address(ind_info->page);
+		bit = get_ind_bit(ind_info->addr, adapter_int->ind_offset, adapter->swap);
+		if (setbit)
+			set_bit(bit, map);
+
+		summary_info = get_map_info(adapter, adapter_int->summary_addr);
+		if (!summary_info)
+			goto out;
+
+		map = page_address(summary_info->page);
+		bit = get_ind_bit(summary_info->addr, adapter_int->summary_offset,
+				  adapter->swap);
+		/* If setbit then set summary bit. Else if falling back to the slow path */
+		/* with setbit==0 then clear the summary bit so the slow path re-injects */
+		if (setbit)
+			summary_set = test_and_set_bit(bit, map);
+		else
+			summary_set = test_and_clear_bit(bit, map);
 	}
-	map = page_address(ind_info->page);
-	bit = get_ind_bit(ind_info->addr, adapter_int->ind_offset, adapter->swap);
-	if (setbit)
-		set_bit(bit, map);
-	summary_info = get_map_info(adapter, adapter_int->summary_addr);
-	if (!summary_info) {
-		spin_unlock(&adapter->maps_lock);
-		return -EWOULDBLOCK;
+
+out:
+	if (setbit) {
+		mark_page_dirty(kvm, gpa_to_gfn(adapter_int->ind_gaddr));
+		set_page_dirty_lock(ind_info->page);
 	}
-	map = page_address(summary_info->page);
-	bit = get_ind_bit(summary_info->addr, adapter_int->summary_offset,
-			  adapter->swap);
-	/* If setbit then set summary bit. Else if falling back to the slow path */
-	/* with setbit==0 then clear the summary bit so the slow path re-injects */
-	if (setbit)
-		summary_set = test_and_set_bit(bit, map);
-	else
-		summary_set = test_and_clear_bit(bit, map);
-	spin_unlock(&adapter->maps_lock);
-	return summary_set ? 0 : 1;
+
+	if (summary_set >= 0) {
+		mark_page_dirty(kvm, gpa_to_gfn(adapter_int->summary_gaddr));
+		set_page_dirty_lock(summary_info->page);
+		return !summary_set;
+	}
+
+	return -EWOULDBLOCK;
 }
 
 /*
