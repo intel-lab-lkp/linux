@@ -99,6 +99,7 @@ MODULE_DESCRIPTION("Asus HID Keyboard and TouchPad");
 #define QUIRK_ROG_CLAYMORE_II_KEYBOARD	BIT(12)
 #define QUIRK_ROG_ALLY_XPAD		BIT(13)
 #define QUIRK_HID_FN_LOCK		BIT(14)
+#define QUIRK_ZENBOOK_DUO_KEYBOARD	BIT(15)
 
 #define I2C_KEYBOARD_QUIRKS			(QUIRK_FIX_NOTEBOOK_REPORT | \
 						 QUIRK_NO_INIT_REPORTS | \
@@ -143,6 +144,7 @@ struct asus_drvdata {
 	unsigned long battery_next_query;
 	struct work_struct fn_lock_sync_work;
 	bool fn_lock;
+	struct delayed_work reinit_work;
 };
 
 static int asus_report_battery(struct asus_drvdata *, u8 *, int);
@@ -1191,6 +1193,22 @@ static int __maybe_unused asus_reset_resume(struct hid_device *hdev)
 	return 0;
 }
 
+static void asus_reinit_work(struct work_struct *work)
+{
+	struct asus_drvdata *drvdata = container_of(work, struct asus_drvdata,
+						    reinit_work.work);
+	int ret;
+
+	/*
+	 * The Zenbook Duo keyboard drops out of hotkey mode when the
+	 * touchpad on its sibling USB interface is configured after us.
+	 * Re-send the handshake once the dust has settled.
+	 */
+	ret = asus_kbd_init(drvdata->hdev, FEATURE_KBD_REPORT_ID);
+	if (ret < 0)
+		hid_warn(drvdata->hdev, "Asus re-init failed: %d\n", ret);
+}
+
 static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	struct hid_report_enum *rep_enum;
@@ -1288,7 +1306,16 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			is_vendor = true;
 	}
 
-	ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
+	/*
+	 * The Zenbook Duo keyboard hotkey interface only exposes vendor
+	 * usage collections, which do not count as input applications.
+	 * Force hid-input to bind so the hotkeys reach userspace.
+	 */
+	if (drvdata->quirks & QUIRK_ZENBOOK_DUO_KEYBOARD)
+		ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT |
+					 HID_CONNECT_HIDINPUT_FORCE);
+	else
+		ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
 	if (ret) {
 		hid_err(hdev, "Asus hw start failed: %d\n", ret);
 		return ret;
@@ -1308,6 +1335,13 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	    (asus_has_report_id(hdev, FEATURE_KBD_REPORT_ID)) &&
 		(asus_kbd_register_leds(hdev)))
 		hid_warn(hdev, "Failed to initialize backlight.\n");
+
+	if (is_vendor && (drvdata->quirks & QUIRK_ZENBOOK_DUO_KEYBOARD) &&
+	    hdev->bus == BUS_USB) {
+		INIT_DELAYED_WORK(&drvdata->reinit_work, asus_reinit_work);
+		schedule_delayed_work(&drvdata->reinit_work,
+				      msecs_to_jiffies(2000));
+	}
 
 	/*
 	 * For ROG keyboards, skip rename for consistency and ->input check as
@@ -1345,6 +1379,9 @@ static void asus_remove(struct hid_device *hdev)
 {
 	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
 	unsigned long flags;
+
+	if (drvdata->quirks & QUIRK_ZENBOOK_DUO_KEYBOARD)
+		cancel_delayed_work_sync(&drvdata->reinit_work);
 
 	if (drvdata->kbd_backlight) {
 		asus_hid_unregister_listener(&drvdata->kbd_backlight->listener);
@@ -1384,6 +1421,51 @@ static const __u8 *asus_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 		hid_info(hdev, "Fixing up Asus T100 keyb report descriptor\n");
 		rdesc[74] &= ~HID_MAIN_ITEM_CONSTANT;
 	}
+	/*
+	 * The Zenbook Duo keyboard uses the same bogus single-usage (0x76)
+	 * vendor input report as the T100CHI family, on both its USB and
+	 * Bluetooth interfaces. Rewrite the usage into a usage range so the
+	 * hotkey codes map to their key definitions.
+	 */
+	if (drvdata->quirks & QUIRK_ZENBOOK_DUO_KEYBOARD) {
+		static const __u8 bogus[] = {
+			0xa1, 0x01,		/* Collection (Application)  */
+			0x85, 0x5a,		/*  Report ID (0x5a)         */
+			0x09, 0x76,		/*  Usage (0x76)             */
+			0x15, 0x00,		/*  Logical Minimum (0)      */
+			0x26, 0xff, 0x00,	/*  Logical Maximum (255)    */
+			0x75, 0x08,		/*  Report Size (8)          */
+			0x95, 0x05,		/*  Report Count (5)         */
+			0x81, 0x02,		/*  Input (Data,Var,Abs)     */
+		};
+		__u8 *new_rdesc;
+		unsigned int i;
+
+		for (i = 0; *rsize >= sizeof(bogus) && i <= *rsize - sizeof(bogus); i++) {
+			if (memcmp(rdesc + i, bogus, sizeof(bogus)) != 0)
+				continue;
+
+			new_rdesc = devm_kzalloc(&hdev->dev, *rsize + 3, GFP_KERNEL);
+			if (!new_rdesc)
+				return rdesc;
+
+			hid_info(hdev, "Fixing up Zenbook Duo keyboard report descriptor\n");
+			memcpy(new_rdesc, rdesc, i + 4);
+			/* Usage (76h) -> Usage Minimum (00h), Usage Maximum (FFh) */
+			new_rdesc[i + 4] = 0x19;
+			new_rdesc[i + 5] = 0x00;
+			new_rdesc[i + 6] = 0x2a;
+			new_rdesc[i + 7] = 0xff;
+			new_rdesc[i + 8] = 0x00;
+			memcpy(new_rdesc + i + 9, rdesc + i + 6, *rsize - (i + 6));
+			/* Input (Data,Var,Abs) -> Input (Data,Arr,Abs) */
+			new_rdesc[i + 19] = 0x00;
+			*rsize += 3;
+			rdesc = new_rdesc;
+			break;
+		}
+	}
+
 	/* For the T100CHI/T90CHI keyboard dock */
 	if (drvdata->quirks & (QUIRK_T100CHI | QUIRK_T90CHI)) {
 		int rsize_orig;
@@ -1534,6 +1616,16 @@ static const struct hid_device_id asus_devices[] = {
 	  QUIRK_USE_KBD_BACKLIGHT | QUIRK_ROG_NKEY_KEYBOARD },
 	{ HID_DEVICE(BUS_USB, HID_GROUP_GENERIC,
 		USB_VENDOR_ID_ASUSTEK, USB_DEVICE_ID_ASUSTEK_T101HA_KEYBOARD) },
+	/*
+	 * The Zenbook Duo keyboard also binds by group so that
+	 * hid-multitouch.c keeps handling the touchpad interfaces.
+	 */
+	{ HID_DEVICE(BUS_USB, HID_GROUP_GENERIC,
+		USB_VENDOR_ID_ASUSTEK, USB_DEVICE_ID_ASUSTEK_ZENBOOK_DUO_KEYBOARD),
+	  QUIRK_USE_KBD_BACKLIGHT | QUIRK_ZENBOOK_DUO_KEYBOARD },
+	{ HID_DEVICE(BUS_BLUETOOTH, HID_GROUP_GENERIC,
+		USB_VENDOR_ID_ASUSTEK, USB_DEVICE_ID_ASUSTEK_ZENBOOK_DUO_KEYBOARD_BT),
+	  QUIRK_ZENBOOK_DUO_KEYBOARD },
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, asus_devices);
