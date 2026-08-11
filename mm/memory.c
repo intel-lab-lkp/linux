@@ -46,6 +46,7 @@
 #include <linux/sched/numa_balancing.h>
 #include <linux/sched/task.h>
 #include <linux/hugetlb.h>
+#include <linux/mm_types.h>
 #include <linux/mman.h>
 #include <linux/swap.h>
 #include <linux/highmem.h>
@@ -518,46 +519,6 @@ static bool is_bad_page_map_ratelimited(void)
 		resume = jiffies + 60 * HZ;
 	return false;
 }
-
-static void ptval_bytes_to_hex_str(char *buf, size_t buf_size, const void *entry, size_t entry_size)
-{
-	if (WARN_ON_ONCE(buf_size < entry_size * 2 + 1)) {
-		snprintf(buf, buf_size, "overflow");
-		return;
-	}
-
-	switch (entry_size) {
-	case sizeof(u32):
-		snprintf(buf, buf_size, "%08x", *(const u32 *)entry);
-		break;
-	case sizeof(u64):
-		snprintf(buf, buf_size, "%016llx", *(const u64 *)entry);
-		break;
-#if defined(__SIZEOF_INT128__)
-	case sizeof(u128):
-		snprintf(buf, buf_size, "%016llx%016llx",
-			 (unsigned long long)(*(const u128 *)entry >> 64),
-			 (unsigned long long)*(const u128 *)entry);
-		break;
-#endif
-	default:
-		snprintf(buf, buf_size, "unsupported");
-		break;
-	}
-}
-
-#define ptval_to_str(buf, val)								\
-	do {										\
-		auto __val = (val);							\
-											\
-		ptval_bytes_to_hex_str((buf), sizeof(buf), &__val, sizeof(__val));	\
-	} while (0)
-
-#if defined(__SIZEOF_INT128__)
-#define PTVAL_STR_MAX	(32 + 1) /* Max 128-bit value in hex + NUL */
-#else
-#define PTVAL_STR_MAX	(16 + 1) /* Max 64-bit value in hex + NUL */
-#endif
 
 static void __print_bad_page_map_pgtable(struct mm_struct *mm, unsigned long addr)
 {
