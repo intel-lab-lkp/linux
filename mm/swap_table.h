@@ -30,6 +30,7 @@ struct swap_memcg_table {
  * PFN:      |SWAP_COUNT|Z|------ PFN -------|10| - Cached slot
  * Pointer:  |----------- Pointer ----------|100| - (Unused)
  * Bad:      |------------- 1 -------------|1000| - Bad slot
+ * Hibern:   |    0     |------- 1 -------|10000| - Hibernation slot
  *
  * COUNT is `SWP_TB_COUNT_BITS` long, Z is the `SWP_TB_ZERO_FLAG` bit,
  * and together they form the `SWP_TB_FLAGS_BITS` wide flags field.
@@ -54,6 +55,10 @@ struct swap_memcg_table {
  *   aligned pointers.
  *
  * - Bad: Swap slot is reserved, protects swap header or holes on swap devices.
+ *
+ * - Hibern: Swap slot is reserved by hibernation for the suspend image, and
+ *   must never enter the swap cache. The count field is kept 0 so it never
+ *   reads as a slot in use.
  */
 
 /* NULL Entry, all 0 */
@@ -80,6 +85,9 @@ struct swap_memcg_table {
 
 /* Bad slot: ends with 0b1000 and rests of bits are all 1 */
 #define SWP_TB_BAD		((~0UL) << 3)
+
+/* Hibernation slot: ends with 0b10000, no count, rests of bits are all 1 */
+#define SWP_TB_HIB		(((~0UL) << 4) & ~SWP_TB_COUNT_MASK)
 
 /* Macro for shadow offset calculation */
 #define SWAP_COUNT_SHIFT	SWP_TB_FLAGS_BITS
@@ -164,6 +172,11 @@ static inline bool swp_tb_is_shadow(unsigned long swp_tb)
 static inline bool swp_tb_is_bad(unsigned long swp_tb)
 {
 	return swp_tb == SWP_TB_BAD;
+}
+
+static inline bool swp_tb_is_hibernation(unsigned long swp_tb)
+{
+	return swp_tb == SWP_TB_HIB;
 }
 
 static inline bool swp_tb_is_countable(unsigned long swp_tb)
