@@ -29,6 +29,7 @@
 #define STACK_MAGIC	0xdeadbeef
 
 struct pci_dev;
+struct drm_device;
 struct drm_i915_private;
 
 struct i915_selftest {
@@ -84,6 +85,7 @@ int __intel_gt_live_setup(void *data);
 int __intel_gt_live_teardown(int err, void *data);
 
 int __i915_subtests(const char *caller,
+		    const struct drm_device *drm,
 		    int (*setup)(void *data),
 		    int (*teardown)(int err, void *data),
 		    const struct i915_subtest *st,
@@ -91,12 +93,14 @@ int __i915_subtests(const char *caller,
 		    void *data);
 #define i915_subtests(T, data) \
 	__i915_subtests(__func__, \
+		    NULL, \
 			__i915_nop_setup, __i915_nop_teardown, \
 			T, ARRAY_SIZE(T), data)
 #define i915_live_subtests(T, data) ({ \
 	typecheck(struct drm_i915_private *, data); \
 	(data)->gt[0]->uc.guc.submission_state.sched_disable_delay_ms = 0; \
 	__i915_subtests(__func__, \
+			&(data)->drm, \
 			__i915_live_setup, __i915_live_teardown, \
 			T, ARRAY_SIZE(T), data); \
 })
@@ -104,6 +108,7 @@ int __i915_subtests(const char *caller,
 	typecheck(struct intel_gt *, data); \
 	(data)->uc.guc.submission_state.sched_disable_delay_ms = 0; \
 	__i915_subtests(__func__, \
+			&(data)->i915->drm, \
 			__intel_gt_live_setup, __intel_gt_live_teardown, \
 			T, ARRAY_SIZE(T), data); \
 })
