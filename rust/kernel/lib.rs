@@ -126,6 +126,8 @@ pub mod soc;
 pub mod std_vendor;
 pub mod str;
 pub mod sync;
+#[cfg(CONFIG_SYSFS)]
+pub mod sysfs;
 pub mod task;
 pub mod time;
 pub mod tracepoint;
