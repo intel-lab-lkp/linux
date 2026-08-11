@@ -6,6 +6,7 @@
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/sched/coredump.h>
+#include <uapi/linux/coredump.h>
 #include <asm/siginfo.h>
 
 #ifdef CONFIG_COREDUMP
@@ -28,7 +29,11 @@ struct coredump_params {
 	int cpu;
 	/* COREDUMP_* options negotiated with the coredump server. */
 	u64 mask;
+	/* Frame header scratch, NULL unless the coredump is framed. */
+	struct coredump_frame_header *frame;
+	/* Bytes handed to the file, frame headers included. */
 	loff_t written;
+	/* Offset in the coredump, frame headers excluded. */
 	loff_t pos;
 	loff_t to_skip;
 	int vma_count;
