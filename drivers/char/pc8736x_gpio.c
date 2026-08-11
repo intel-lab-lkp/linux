@@ -321,12 +321,17 @@ static int __init pc8736x_gpio_init(void)
 
 	pc8736x_init_shadow();
 
-	/* ignore minor errs, and succeed */
 	cdev_init(&pc8736x_gpio_cdev, &pc8736x_gpio_fileops);
-	cdev_add(&pc8736x_gpio_cdev, devid, PC8736X_GPIO_CT);
+	rc = cdev_add(&pc8736x_gpio_cdev, devid, PC8736X_GPIO_CT);
+	if (rc) {
+		dev_err(&pdev->dev, "cdev_add failed: %d\n", rc);
+		goto undo_chrdev_region;
+	}
 
 	return 0;
 
+undo_chrdev_region:
+	unregister_chrdev_region(devid, PC8736X_GPIO_CT);
 undo_request_region:
 	release_region(pc8736x_gpio_base, PC8736X_GPIO_RANGE);
 undo_platform_dev_add:
