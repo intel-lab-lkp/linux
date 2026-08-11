@@ -191,12 +191,8 @@ amdxdna_gem_destroy_obj(struct amdxdna_gem_obj *abo)
 	kfree(abo);
 }
 
-/*
- * Obtains a kernel virtual address on the BO (usually of small size).
- * The mapping is established on the first call and stays valid until
- * amdxdna_gem_vunmap() is called.
- */
-void *amdxdna_gem_vmap(struct amdxdna_gem_obj *abo)
+/* Returns the error instead of logging it. */
+static void *__amdxdna_gem_vmap(struct amdxdna_gem_obj *abo)
 {
 	struct iosys_map map = IOSYS_MAP_INIT_VADDR(NULL);
 	int ret;
@@ -210,11 +206,26 @@ void *amdxdna_gem_vmap(struct amdxdna_gem_obj *abo)
 	if (!abo->mem.kva) {
 		ret = drm_gem_vmap(to_gobj(abo), &map);
 		if (ret)
-			XDNA_ERR(abo->client->xdna, "Vmap bo failed, ret %d", ret);
-		else
-			abo->mem.kva = map.vaddr;
+			return ERR_PTR(ret);
+		abo->mem.kva = map.vaddr;
 	}
 	return abo->mem.kva;
+}
+
+/*
+ * Obtains a kernel virtual address on the BO (usually of small size).
+ * The mapping is established on the first call and stays valid until
+ * amdxdna_gem_vunmap() is called.
+ */
+void *amdxdna_gem_vmap(struct amdxdna_gem_obj *abo)
+{
+	void *kva = __amdxdna_gem_vmap(abo);
+
+	if (IS_ERR(kva)) {
+		XDNA_ERR(abo->client->xdna, "Vmap bo failed, ret %ld", PTR_ERR(kva));
+		return NULL;
+	}
+	return kva;
 }
 
 /*
