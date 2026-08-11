@@ -95,6 +95,7 @@ void drm_sched_rq_init(struct drm_sched_rq *rq)
 	INIT_LIST_HEAD(&rq->entities);
 	rq->rb_tree_root = RB_ROOT_CACHED;
 	rq->head_prio = DRM_SCHED_PRIORITY_INVALID;
+	rq->min_vruntime = 0;
 }
 
 /*
@@ -117,28 +118,6 @@ static const unsigned int vruntime_shift[] = {
 	[DRM_SCHED_PRIORITY_LOW]    = 7,
 };
 
-static ktime_t
-drm_sched_rq_get_min_vruntime(struct drm_sched_rq *rq)
-{
-	ktime_t vruntime = 0;
-	struct rb_node *rb;
-
-	lockdep_assert_held(&rq->lock);
-
-	rb = rb_first_cached(&rq->rb_tree_root);
-	if (rb) {
-		struct drm_sched_entity *entity =
-			rb_entry(rb, typeof(*entity), rb_tree_node);
-		struct drm_sched_entity_stats *stats = entity->stats;
-
-		spin_lock(&stats->lock);
-		vruntime = stats->vruntime;
-		spin_unlock(&stats->lock);
-	}
-
-	return vruntime;
-}
-
 static void
 drm_sched_entity_save_vruntime(struct drm_sched_entity *entity,
 			       ktime_t min_vruntime)
@@ -148,7 +127,7 @@ drm_sched_entity_save_vruntime(struct drm_sched_entity *entity,
 
 	spin_lock(&stats->lock);
 	vruntime = stats->vruntime;
-	if (min_vruntime && vruntime > min_vruntime)
+	if (ktime_after(vruntime, min_vruntime))
 		vruntime = ktime_sub(vruntime, min_vruntime);
 	else
 		vruntime = 0;
@@ -271,8 +250,8 @@ drm_sched_rq_add_entity(struct drm_sched_entity *entity)
 		list_add_tail(&entity->list, &rq->entities);
 	}
 
-	ts = drm_sched_rq_get_min_vruntime(rq);
-	ts = drm_sched_entity_restore_vruntime(entity, ts, rq->head_prio);
+	ts = drm_sched_entity_restore_vruntime(entity, rq->min_vruntime,
+					       rq->head_prio);
 	drm_sched_rq_update_tree_locked(entity, rq, ts);
 
 	spin_unlock(&rq->lock);
@@ -318,6 +297,7 @@ void drm_sched_rq_pop_entity(struct drm_sched_entity *entity)
 {
 	struct drm_sched_job *next_job;
 	struct drm_sched_rq *rq;
+	ktime_t ts;
 
 	/*
 	 * Update the entity's location in the min heap according to
@@ -326,18 +306,17 @@ void drm_sched_rq_pop_entity(struct drm_sched_entity *entity)
 	spin_lock(&entity->lock);
 	rq = entity->rq;
 	spin_lock(&rq->lock);
+
+	ts = drm_sched_entity_update_vruntime(entity);
+	if (ktime_after(ts, rq->min_vruntime))
+		rq->min_vruntime = ts;
+
 	next_job = drm_sched_entity_queue_peek(entity);
 	if (next_job) {
-		ktime_t ts;
-
-		ts = drm_sched_entity_update_vruntime(entity);
 		drm_sched_rq_update_tree_locked(entity, rq, ts);
 	} else {
-		ktime_t min_vruntime;
-
 		drm_sched_rq_remove_tree_locked(entity, rq);
-		min_vruntime = drm_sched_rq_get_min_vruntime(rq);
-		drm_sched_entity_save_vruntime(entity, min_vruntime);
+		drm_sched_entity_save_vruntime(entity, rq->min_vruntime);
 	}
 	spin_unlock(&rq->lock);
 	spin_unlock(&entity->lock);
