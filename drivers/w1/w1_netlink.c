@@ -23,9 +23,9 @@ struct w1_cb_block {
 	u16 maxlen;
 	/* pointers to building up the reply message */
 	struct cn_msg *first_cn; /* fixed once the structure is populated */
-	struct cn_msg *cn; /* advances as cn_msg is appeneded */
-	struct w1_netlink_msg *msg; /* advances as w1_netlink_msg is appened */
-	struct w1_netlink_cmd *cmd; /* advances as cmds are appened */
+	struct cn_msg *cn; /* advances as cn_msg is appended */
+	struct w1_netlink_msg *msg; /* advances as w1_netlink_msg is appended */
+	struct w1_netlink_cmd *cmd; /* advances as cmds are appended */
 	struct w1_netlink_msg *cur_msg; /* currently message being processed */
 	/* copy of the original request follows */
 	struct cn_msg request_cn;
@@ -49,8 +49,8 @@ struct w1_cb_node {
  * @block: block to calculate
  *
  * Calculates the current message length including possible multiple
- * cn_msg and data, excludes the first sizeof(struct cn_msg).  Direclty
- * compariable to maxlen and usable to send the message.
+ * cn_msg and data, excludes the first sizeof(struct cn_msg).  Directly
+ * comparable to maxlen and usable to send the message.
  */
 static u16 w1_reply_len(struct w1_cb_block *block)
 {
@@ -581,7 +581,7 @@ static void w1_cn_callback(struct cn_msg *cn, struct netlink_skb_parms *nsp)
 		int size;
 		int reply_size = sizeof(*cn) + cn->len + slave_len;
 		if (cn->flags & W1_CN_BUNDLE) {
-			/* bundling duplicats some of the messages */
+			/* bundling duplicates some of the messages */
 			reply_size += 2 * cmd_count * (sizeof(struct cn_msg) +
 				sizeof(struct w1_netlink_msg) +
 				sizeof(struct w1_netlink_cmd));
