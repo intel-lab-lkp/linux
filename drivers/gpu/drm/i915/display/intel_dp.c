@@ -4420,10 +4420,17 @@ intel_dp_pcon_dsc_enc_bpp(struct intel_dp *intel_dp,
 	int hdmi_max_chunk_bytes =
 		info->hdmi.dsc_cap.total_chunk_kbytes * 1024;
 	int bpc = crtc_state->pipe_bpp / 3;
+	int clock = crtc_state->hw.adjusted_mode.clock;
+	int max_frl_bw, max_frl_bpp;
+
+	max_frl_bw = min(intel_dp->dfp.pcon_max_frl_bw,
+			 intel_dp_hdmi_sink_max_frl(intel_dp)) * 1000000;
+
+	max_frl_bpp = clock ? max_frl_bw / clock : 0;
 
 	return intel_hdmi_dsc_get_bpp(pcon_fractional_bpp, slice_width,
 				      num_slices, output_format, bpc, hdmi_all_bpp,
-				      hdmi_max_chunk_bytes);
+				      hdmi_max_chunk_bytes, max_frl_bpp);
 }
 
 void

@@ -3451,19 +3451,25 @@ get_dsc_compressed_bpp(int num_slices, int slice_width, int hdmi_max_chunk_bytes
  * @bpc: bits per color
  * @hdmi_all_bpp: sink supports decoding of 1/16th bpp setting
  * @hdmi_max_chunk_bytes: max bytes in a line of chunks supported by sink
+ * @max_link_dsc_bpp: max compressed bpp the link bandwidth can carry, or 0 if not limited
  *
  * @return: compressed bits_per_pixel in step of 1/16 of bits_per_pixel
  */
 int
 intel_hdmi_dsc_get_bpp(int src_fractional_bpp, int slice_width, int num_slices,
 		       enum intel_output_format output_format, int bpc,
-		       bool hdmi_all_bpp, int hdmi_max_chunk_bytes)
+		       bool hdmi_all_bpp, int hdmi_max_chunk_bytes,
+		       int max_link_dsc_bpp)
 {
 	int max_dsc_bpp, min_dsc_bpp;
 	int dsc_bpp_x16;
 
 	intel_hdmi_dsc_get_min_max_bpp(output_format, bpc, hdmi_all_bpp,
 				       &min_dsc_bpp, &max_dsc_bpp);
+
+	/* Limit the bpp to what the link bandwidth can carry */
+	if (max_link_dsc_bpp)
+		max_dsc_bpp = min(max_dsc_bpp, max_link_dsc_bpp);
 
 	dsc_bpp_x16 = get_dsc_compressed_bpp(num_slices, slice_width,
 					     hdmi_max_chunk_bytes,
