@@ -570,6 +570,13 @@ int panthor_device_resume(struct device *dev)
 			    DRM_PANTHOR_USER_MMIO_OFFSET, 0, 1);
 	atomic_set(&ptdev->pm.state, PANTHOR_DEVICE_PM_STATE_ACTIVE);
 	mutex_unlock(&ptdev->pm.mmio_lock);
+
+	/* A reset might have been queued while we were resuming. Make sure
+	 * it's not lost by rescheduling it.
+	 */
+	if (atomic_read(&ptdev->reset.pending))
+		queue_work(ptdev->reset.wq, &ptdev->reset.work);
+
 	return 0;
 
 err_suspend_devfreq:
