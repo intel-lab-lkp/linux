@@ -179,7 +179,16 @@ static struct sk_buff *dsa_xmit_ll(struct sk_buff *skb, struct net_device *dev,
 			dsa_header[2] &= ~0x10;
 		}
 	} else {
+		u16 queue = skb_get_queue_mapping(skb) & 0x7;
 		u16 vid;
+
+		/* The PRI field is 3 bits. According to the documentation the
+		 * 2 highest bits specify the egress queue in From_CPU DSA
+		 * tagged frames. On devices with 8 queues it's possible to
+		 * send to the 8 queues, which means the 3 bits are used.
+		 */
+		if (dp->ds->num_tx_queues == 4)
+			queue <<= 1;
 
 		vid = br_dev ? MV88E6XXX_VID_BRIDGED : MV88E6XXX_VID_STANDALONE;
 
@@ -191,7 +200,7 @@ static struct sk_buff *dsa_xmit_ll(struct sk_buff *skb, struct net_device *dev,
 
 		dsa_header[0] = (cmd << 6) | tag_dev;
 		dsa_header[1] = tag_port << 3;
-		dsa_header[2] = vid >> 8;
+		dsa_header[2] = (queue << 5) | vid >> 8;
 		dsa_header[3] = vid & 0xff;
 	}
 
