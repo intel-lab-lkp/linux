@@ -156,11 +156,18 @@ static void panthor_device_reset_work(struct work_struct *work)
 	panthor_sched_pre_reset(ptdev);
 	panthor_fw_pre_reset(ptdev, true);
 	panthor_mmu_pre_reset(ptdev);
+
+	/* Reset the pending bit just before the SOFT_RESET to catch any reset
+	 * condition happening in the post reset path. If we're in such a bad
+	 * state we can't even resume the FW, we will bail out and unplug
+	 * anyway, at which point the reset work is disabled, which should
+	 * prevent an infinite reset loop.
+	 */
+	atomic_set(&ptdev->reset.pending, 0);
 	panthor_hw_soft_reset(ptdev);
 	panthor_hw_l2_power_on(ptdev);
 	panthor_mmu_post_reset(ptdev);
 	ret = panthor_fw_post_reset(ptdev);
-	atomic_set(&ptdev->reset.pending, 0);
 	panthor_sched_post_reset(ptdev, ret != 0);
 	drm_dev_exit(cookie);
 
