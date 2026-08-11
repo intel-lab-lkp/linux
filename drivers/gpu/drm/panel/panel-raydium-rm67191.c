@@ -592,7 +592,7 @@ static int rad_panel_probe(struct mipi_dsi_device *dsi)
 
 	drm_panel_add(&panel->panel);
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (ret)
 		drm_panel_remove(&panel->panel);
 
@@ -602,12 +602,6 @@ static int rad_panel_probe(struct mipi_dsi_device *dsi)
 static void rad_panel_remove(struct mipi_dsi_device *dsi)
 {
 	struct rad_panel *rad = mipi_dsi_get_drvdata(dsi);
-	struct device *dev = &dsi->dev;
-	int ret;
-
-	ret = mipi_dsi_detach(dsi);
-	if (ret)
-		dev_err(dev, "Failed to detach from host (%d)\n", ret);
 
 	drm_panel_remove(&rad->panel);
 }
