@@ -307,10 +307,12 @@ static int cbs_enable_offload(struct net_device *dev, struct cbs_sched_data *q,
 	cbs.locredit = opt->locredit;
 	cbs.idleslope = opt->idleslope;
 	cbs.sendslope = opt->sendslope;
+	cbs.extack = extack;
 
 	err = ops->ndo_setup_tc(dev, TC_SETUP_QDISC_CBS, &cbs);
 	if (err < 0) {
-		NL_SET_ERR_MSG(extack, "Specified device failed to setup cbs hardware offload");
+		NL_SET_ERR_MSG_WEAK(extack,
+				    "Specified device failed to setup cbs hardware offload");
 		return err;
 	}
 

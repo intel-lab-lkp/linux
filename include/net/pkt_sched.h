@@ -150,6 +150,7 @@ struct tc_cbs_qopt_offload {
 	s32 locredit;
 	s32 idleslope;
 	s32 sendslope;
+	struct netlink_ext_ack *extack;
 };
 
 struct tc_etf_qopt_offload {
