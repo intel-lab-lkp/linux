@@ -610,6 +610,7 @@
 	firmware {
 		scm: scm {
 			compatible = "qcom,scm-sm8150", "qcom,scm";
+			qcom,dload-mode = <&tcsr 0x13000>;
 			#reset-cells = <1>;
 		};
 	};
@@ -2174,6 +2175,11 @@
 			compatible = "qcom,tcsr-mutex";
 			reg = <0x0 0x01f40000 0x0 0x20000>;
 			#hwlock-cells = <1>;
+		};
+
+		tcsr: syscon@1fc0000 {
+			compatible = "qcom,sm8150-tcsr", "syscon";
+			reg = <0x0 0x01fc0000 0x0 0x30000>;
 		};
 
 		tcsr_regs_1: syscon@1f60000 {
