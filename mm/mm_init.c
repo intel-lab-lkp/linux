@@ -681,7 +681,7 @@ static __meminit void pageblock_migratetype_init_range(unsigned long pfn,
 	const unsigned long end = pfn + nr_pages;
 
 	for (pfn = pageblock_align(pfn); pfn < end; pfn += pageblock_nr_pages) {
-		enum migratetype mt = kho_scratch_migratetype(pfn, migratetype);
+		enum migratetype mt = kho_bootmem_migratetype(pfn, migratetype);
 
 		init_pageblock_migratetype(pfn_to_page(pfn), mt, false);
 		if (!atomic && IS_ALIGNED(pfn, PAGES_PER_SECTION))
@@ -764,7 +764,7 @@ static void __meminit __init_deferred_page(unsigned long pfn, int nid)
 
 	if (pageblock_aligned(pfn)) {
 		enum migratetype mt =
-			kho_scratch_migratetype(pfn, MIGRATE_MOVABLE);
+			kho_bootmem_migratetype(pfn, MIGRATE_MOVABLE);
 		init_pageblock_migratetype(pfn_to_page(pfn), mt, false);
 	}
 }
@@ -924,7 +924,7 @@ void __meminit memmap_init_range(unsigned long size, int nid, unsigned long zone
 		 * over the place during system boot.
 		 */
 		if (pageblock_aligned(pfn)) {
-			enum migratetype mt = kho_scratch_migratetype(pfn, migratetype);
+			enum migratetype mt = kho_bootmem_migratetype(pfn, migratetype);
 
 			init_pageblock_migratetype(page, mt, isolate_pageblock);
 			cond_resched();
