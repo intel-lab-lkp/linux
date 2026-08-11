@@ -1390,7 +1390,12 @@ static int rockchip_usb2phy_probe(struct platform_device *pdev)
 	phy_cfgs = device_get_match_data(dev);
 	rphy->chg_state = USB_CHG_STATE_UNDEFINED;
 	rphy->chg_type = POWER_SUPPLY_TYPE_UNKNOWN;
-	rphy->irq = platform_get_irq_optional(pdev, 0);
+	ret = platform_get_irq_optional(pdev, 0);
+	if (ret < 0 && ret != -ENXIO)
+		return dev_err_probe(dev, ret, "failed to get IRQ resource\n");
+	if (ret > 0)
+		rphy->irq = ret;
+
 	platform_set_drvdata(pdev, rphy);
 
 	if (!phy_cfgs)
