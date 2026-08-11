@@ -824,21 +824,18 @@ static void xhci_giveback_urb_in_irq(struct xhci_hcd *xhci,
 	usb_hcd_giveback_urb(hcd, urb, status);
 }
 
-static void xhci_unmap_td_bounce_buffer(struct xhci_hcd *xhci,
-		struct xhci_ring *ring, struct xhci_td *td)
+static void xhci_unmap_one_bounce_buffer(struct xhci_hcd *xhci,
+		struct xhci_ring *ring, struct xhci_td *td,
+		struct xhci_segment *seg)
 {
 	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
-	struct xhci_segment *seg = td->bounce_seg;
 	struct urb *urb = td->urb;
 	size_t len;
-
-	if (!ring || !seg || !urb)
-		return;
 
 	if (usb_urb_dir_out(urb)) {
 		dma_unmap_single(dev, seg->bounce_dma, ring->bounce_buf_len,
 				 DMA_TO_DEVICE);
-		return;
+		goto done;
 	}
 
 	dma_unmap_single(dev, seg->bounce_dma, ring->bounce_buf_len,
@@ -854,8 +851,35 @@ static void xhci_unmap_td_bounce_buffer(struct xhci_hcd *xhci,
 		memcpy(urb->transfer_buffer + seg->bounce_offs, seg->bounce_buf,
 		       seg->bounce_len);
 	}
+done:
 	seg->bounce_len = 0;
 	seg->bounce_offs = 0;
+}
+
+static void xhci_unmap_td_bounce_buffer(struct xhci_hcd *xhci,
+		struct xhci_ring *ring, struct xhci_td *td)
+{
+	struct xhci_segment *seg;
+	unsigned int i;
+
+	if (!ring || !td->bounce_seg || !td->urb)
+		return;
+
+	/*
+	 * A TD that spans more than two ring segments crosses several link
+	 * TRBs, and may have been aligned with a bounce buffer at each of
+	 * them. Every bounce buffer lives on the segment whose link TRB it
+	 * was needed for, so walk all segments the TD covers, starting at
+	 * the first one that was bounced.
+	 */
+	seg = td->bounce_seg;
+	for (i = 0; i < ring->num_segs; i++) {
+		if (seg->bounce_len)
+			xhci_unmap_one_bounce_buffer(xhci, ring, td, seg);
+		if (seg == td->end_seg)
+			break;
+		seg = seg->next;
+	}
 }
 
 static void xhci_td_cleanup(struct xhci_hcd *xhci, struct xhci_td *td,
@@ -3685,8 +3709,15 @@ int xhci_queue_bulk_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 						  &trb_buff_len,
 						  ring->enq_seg)) {
 					send_addr = ring->enq_seg->bounce_dma;
-					/* assuming TD won't span 2 segs */
-					td->bounce_seg = ring->enq_seg;
+					/*
+					 * A TD spanning several segments can be
+					 * bounced once per segment boundary it
+					 * crosses. Remember the first bounced
+					 * segment, the rest are found by walking
+					 * the TD's segments on completion.
+					 */
+					if (!td->bounce_seg)
+						td->bounce_seg = ring->enq_seg;
 				}
 			}
 		}
