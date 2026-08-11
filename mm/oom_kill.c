@@ -376,10 +376,55 @@ static void select_bad_process(struct oom_control *oc)
 	}
 }
 
+#define OOM_TOP_CONSUMERS	5
+
+struct oom_top_consumer {
+	pid_t		pid;
+	uid_t		uid;
+	unsigned long	rss;
+	char		comm[TASK_COMM_LEN];
+};
+
+struct oom_dump_context {
+	struct oom_control	*oc;
+	struct oom_top_consumer	top[OOM_TOP_CONSUMERS];
+	int			top_count;
+};
+
+static void oom_top_consumer_add(struct oom_top_consumer *top, int *count,
+				 pid_t pid, uid_t uid, unsigned long rss,
+				 const char *comm)
+{
+	int i, pos = *count;
+
+	for (i = 0; i < *count; i++) {
+		if (rss > top[i].rss) {
+			pos = i;
+			break;
+		}
+	}
+
+	if (pos >= OOM_TOP_CONSUMERS)
+		return;
+
+	for (i = min(*count, OOM_TOP_CONSUMERS - 1); i > pos; i--)
+		top[i] = top[i - 1];
+
+	top[pos].pid = pid;
+	top[pos].uid = uid;
+	top[pos].rss = rss;
+	strscpy(top[pos].comm, comm, sizeof(top[pos].comm));
+
+	if (*count < OOM_TOP_CONSUMERS)
+		(*count)++;
+}
+
 static int dump_task(struct task_struct *p, void *arg)
 {
-	struct oom_control *oc = arg;
+	struct oom_dump_context *ctx = arg;
+	struct oom_control *oc = ctx->oc;
 	struct task_struct *task;
+	unsigned long rss;
 
 	if (oom_unkillable_task(p))
 		return 0;
@@ -397,13 +442,18 @@ static int dump_task(struct task_struct *p, void *arg)
 		return 0;
 	}
 
+	rss = get_mm_rss_sum(task->mm);
 	pr_info("[%7d] %5d %5d %8lu %8lu %8lu %8lu %9lu %8ld %8lu         %5hd %s\n",
 		task->pid, from_kuid(&init_user_ns, task_uid(task)),
-		task->tgid, task->mm->total_vm, get_mm_rss_sum(task->mm),
+		task->tgid, task->mm->total_vm, rss,
 		get_mm_counter_sum(task->mm, MM_ANONPAGES), get_mm_counter_sum(task->mm, MM_FILEPAGES),
 		get_mm_counter_sum(task->mm, MM_SHMEMPAGES), mm_pgtables_bytes(task->mm),
 		get_mm_counter_sum(task->mm, MM_SWAPENTS),
 		task->signal->oom_score_adj, task->comm);
+
+	oom_top_consumer_add(ctx->top, &ctx->top_count, task->pid,
+			     from_kuid(&init_user_ns, task_uid(task)),
+			     rss, task->comm);
 	task_unlock(task);
 
 	return 0;
@@ -418,14 +468,20 @@ static int dump_task(struct task_struct *p, void *arg)
  * are not shown.
  * State information includes task's pid, uid, tgid, vm size, rss,
  * pgtables_bytes, swapents, oom_score_adj value, and name.
+ *
+ * After the full task list, a summary of the top OOM_TOP_CONSUMERS memory
+ * consumers by RSS is printed to aid quick diagnosis without manual log
+ * post-processing.
  */
 static void dump_tasks(struct oom_control *oc)
 {
+	struct oom_dump_context ctx = { .oc = oc };
+
 	pr_info("Tasks state (memory values in pages):\n");
 	pr_info("[  pid  ]   uid  tgid total_vm      rss rss_anon rss_file rss_shmem pgtables_bytes swapents oom_score_adj name\n");
 
 	if (is_memcg_oom(oc))
-		mem_cgroup_scan_tasks(oc->memcg, dump_task, oc);
+		mem_cgroup_scan_tasks(oc->memcg, dump_task, &ctx);
 	else {
 		struct task_struct *p;
 		int i = 0;
@@ -435,9 +491,21 @@ static void dump_tasks(struct oom_control *oc)
 			/* Avoid potential softlockup warning */
 			if ((++i & 1023) == 0)
 				touch_softlockup_watchdog();
-			dump_task(p, oc);
+			dump_task(p, &ctx);
 		}
 		rcu_read_unlock();
+	}
+
+	if (ctx.top_count > 0) {
+		int i;
+
+		pr_info("Top %d memory consumers by RSS (pages):\n",
+			ctx.top_count);
+		pr_info("  #  [  pid  ]   uid      rss  name\n");
+		for (i = 0; i < ctx.top_count; i++)
+			pr_info("  %d  [%7d] %5d %8lu  %s\n",
+				i + 1, ctx.top[i].pid, ctx.top[i].uid,
+				ctx.top[i].rss, ctx.top[i].comm);
 	}
 }
 
