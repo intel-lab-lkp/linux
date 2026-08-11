@@ -1704,12 +1704,20 @@ static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
 		nr_pages = folio_nr_pages(folio);
 		total_scan += nr_pages;
 
-		/* Using max_nr_skipped to prevent hard LOCKUP*/
-		if (max_nr_skipped < SWAP_CLUSTER_MAX_SKIPPED &&
-		    (folio_zonenum(folio) > sc->reclaim_idx)) {
+		/*
+		 * Using max_nr_skipped to prevent hard LOCKUP.
+		 * Once the cap is hit, stop rather than force-isolating:
+		 * reclaiming ineligible folios only inflates nr_reclaimed
+		 * into a false progress.
+		 */
+		if (folio_zonenum(folio) > sc->reclaim_idx) {
 			nr_skipped[folio_zonenum(folio)] += nr_pages;
-			move_to = &folios_skipped;
 			max_nr_skipped++;
+			if (max_nr_skipped >= SWAP_CLUSTER_MAX_SKIPPED) {
+				list_move(&folio->lru, &folios_skipped);
+				break;
+			}
+			move_to = &folios_skipped;
 			goto move;
 		}
 
