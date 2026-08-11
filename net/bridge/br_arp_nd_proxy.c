@@ -468,7 +468,7 @@ void br_do_suppress_nd(struct sk_buff *skb, struct net_bridge *br,
 		return;
 	}
 
-	n = neigh_lookup(&nd_tbl, &msg->target, vlandev);
+	n = neigh_lookup(nd_table(dev_net(vlandev)), &msg->target, vlandev);
 	if (n) {
 		struct net_bridge_fdb_entry *f;
 
