@@ -1906,10 +1906,10 @@ amdgpu_dm_plane_set_colorop_properties(struct drm_plane_state *plane_state,
 	bool has_3dlut = adev->dm.dc->caps.color.dpp.hw_3d_lut || adev->dm.dc->caps.color.mpc.preblend;
 	int ret;
 
-	/* 1D Curve - DEGAM TF */
-	if (!colorop)
+	if (drm_WARN_ON(dev, !colorop))
 		return -EINVAL;
 
+	/* 1D Curve - DEGAM TF */
 	ret = __set_dm_plane_colorop_degamma(plane_state, dc_plane_state, colorop);
 	if (ret)
 		return ret;
@@ -2080,8 +2080,8 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 		dc_plane_state->input_csc_color_matrix.enable_adjustment = false;
 	}
 
-	if (!amdgpu_dm_plane_set_colorop_properties(plane_state, dc_plane_state))
-		return 0;
+	if (plane_state->color_pipeline)
+		return amdgpu_dm_plane_set_colorop_properties(plane_state, dc_plane_state);
 
 	return amdgpu_dm_plane_set_color_properties(plane_state, dc_plane_state);
 }
