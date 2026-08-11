@@ -813,13 +813,18 @@ static int cxl_einj_inject(void *data, u64 type)
 DEFINE_DEBUGFS_ATTRIBUTE(cxl_einj_inject_fops, NULL, cxl_einj_inject,
 			 "0x%llx\n");
 
-static void cxl_debugfs_create_dport_dir(struct cxl_dport *dport)
+static void remove_debugfs(void *dentry)
+{
+	debugfs_remove_recursive(dentry);
+}
+
+static int cxl_debugfs_create_dport_dir(struct cxl_dport *dport)
 {
 	struct cxl_port *parent = parent_port_of(dport->port);
 	struct dentry *dir;
 
 	if (!einj_cxl_is_initialized())
-		return;
+		return 0;
 
 	/*
 	 * Protocol error injection is only available for CXL 2.0+ root ports
@@ -827,12 +832,15 @@ static void cxl_debugfs_create_dport_dir(struct cxl_dport *dport)
 	 */
 	if (!dport->rch &&
 	    !(dev_is_pci(dport->dport_dev) && parent && is_cxl_root(parent)))
-		return;
+		return 0;
 
 	dir = cxl_debugfs_create_dir(dev_name(dport->dport_dev));
 
 	debugfs_create_file("einj_inject", 0200, dir, dport,
 			    &cxl_einj_inject_fops);
+
+	return devm_add_action_or_reset(dport_to_host(dport), remove_debugfs,
+					dir);
 }
 
 static int cxl_port_add(struct cxl_port *port,
@@ -1240,7 +1248,9 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 	if (dev_is_pci(dport_dev))
 		dport->link_latency = cxl_pci_get_latency(to_pci_dev(dport_dev));
 
-	cxl_debugfs_create_dport_dir(dport);
+	rc = cxl_debugfs_create_dport_dir(dport);
+	if (rc)
+		return ERR_PTR(rc);
 
 	if (!dport->rch)
 		devm_cxl_dport_ras_setup(dport);
