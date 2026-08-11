@@ -61,9 +61,6 @@ struct dbg_reg_def_t dbg_reg_def[DBG_MAX_REG_NUM] = {
 	 * detail.
 	 */
 	{ "pstate", 4, offsetof(struct pt_regs, pstate)
-#ifdef CONFIG_CPU_BIG_ENDIAN
-							+ 4
-#endif
 	},
 	{ "v0", 16, -1 },
 	{ "v1", 16, -1 },
