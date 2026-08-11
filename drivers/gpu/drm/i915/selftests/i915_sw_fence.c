@@ -26,7 +26,11 @@
 #include <linux/delay.h>
 #include <linux/prime_numbers.h>
 
+#include <drm/drm_print.h>
+
+#include "../i915_drv.h"
 #include "../i915_selftest.h"
+#include "mock_gem_device.h"
 
 static int
 fence_notify(struct i915_sw_fence *fence, enum i915_sw_fence_notify state)
@@ -95,6 +99,7 @@ static int test_self(void *arg)
 
 static int test_dag(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	struct i915_sw_fence *A, *B, *C;
 	int ret = -EINVAL;
 
@@ -107,7 +112,7 @@ static int test_dag(void *arg)
 		return -ENOMEM;
 
 	if (i915_sw_fence_await_sw_fence_gfp(A, A, GFP_KERNEL) != -EINVAL) {
-		pr_err("recursive cycle not detected (AA)\n");
+		drm_err(&i915->drm, "recursive cycle not detected (AA)\n");
 		goto err_A;
 	}
 
@@ -119,7 +124,7 @@ static int test_dag(void *arg)
 
 	i915_sw_fence_await_sw_fence_gfp(A, B, GFP_KERNEL);
 	if (i915_sw_fence_await_sw_fence_gfp(B, A, GFP_KERNEL) != -EINVAL) {
-		pr_err("single depth cycle not detected (BAB)\n");
+		drm_err(&i915->drm, "single depth cycle not detected (BAB)\n");
 		goto err_B;
 	}
 
@@ -130,19 +135,19 @@ static int test_dag(void *arg)
 	}
 
 	if (i915_sw_fence_await_sw_fence_gfp(B, C, GFP_KERNEL) == -EINVAL) {
-		pr_err("invalid cycle detected\n");
+		drm_err(&i915->drm, "invalid cycle detected\n");
 		goto err_C;
 	}
 	if (i915_sw_fence_await_sw_fence_gfp(C, B, GFP_KERNEL) != -EINVAL) {
-		pr_err("single depth cycle not detected (CBC)\n");
+		drm_err(&i915->drm, "single depth cycle not detected (CBC)\n");
 		goto err_C;
 	}
 	if (i915_sw_fence_await_sw_fence_gfp(C, A, GFP_KERNEL) != -EINVAL) {
-		pr_err("cycle not detected (BA, CB, AC)\n");
+		drm_err(&i915->drm, "cycle not detected (BA, CB, AC)\n");
 		goto err_C;
 	}
 	if (i915_sw_fence_await_sw_fence_gfp(A, C, GFP_KERNEL) == -EINVAL) {
-		pr_err("invalid cycle detected\n");
+		drm_err(&i915->drm, "invalid cycle detected\n");
 		goto err_C;
 	}
 
@@ -152,15 +157,15 @@ static int test_dag(void *arg)
 
 	ret = 0;
 	if (!i915_sw_fence_done(C)) {
-		pr_err("fence C not done\n");
+		drm_err(&i915->drm, "fence C not done\n");
 		ret = -EINVAL;
 	}
 	if (!i915_sw_fence_done(B)) {
-		pr_err("fence B not done\n");
+		drm_err(&i915->drm, "fence B not done\n");
 		ret = -EINVAL;
 	}
 	if (!i915_sw_fence_done(A)) {
-		pr_err("fence A not done\n");
+		drm_err(&i915->drm, "fence A not done\n");
 		ret = -EINVAL;
 	}
 err_C:
@@ -174,6 +179,7 @@ err_A:
 
 static int test_AB(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	struct i915_sw_fence *A, *B;
 	int ret;
 
@@ -191,7 +197,8 @@ static int test_AB(void *arg)
 	if (ret < 0)
 		goto err_B;
 	if (ret == 0) {
-		pr_err("Incorrectly reported fence A was complete before await\n");
+		drm_err(&i915->drm,
+			"Incorrectly reported fence A was complete before await\n");
 		ret = -EINVAL;
 		goto err_B;
 	}
@@ -203,12 +210,12 @@ static int test_AB(void *arg)
 
 	i915_sw_fence_commit(B);
 	if (!i915_sw_fence_done(B)) {
-		pr_err("Fence B is not done\n");
+		drm_err(&i915->drm, "Fence B is not done\n");
 		goto err_B;
 	}
 
 	if (!i915_sw_fence_done(A)) {
-		pr_err("Fence A is not done\n");
+		drm_err(&i915->drm, "Fence A is not done\n");
 		goto err_B;
 	}
 
@@ -222,6 +229,7 @@ err_A:
 
 static int test_ABC(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	struct i915_sw_fence *A, *B, *C;
 	int ret;
 
@@ -246,7 +254,8 @@ static int test_ABC(void *arg)
 	if (ret < 0)
 		goto err_C;
 	if (ret == 0) {
-		pr_err("Incorrectly reported fence B was complete before await\n");
+		drm_err(&i915->drm,
+			"Incorrectly reported fence B was complete before await\n");
 		goto err_C;
 	}
 
@@ -254,25 +263,27 @@ static int test_ABC(void *arg)
 	if (ret < 0)
 		goto err_C;
 	if (ret == 0) {
-		pr_err("Incorrectly reported fence C was complete before await\n");
+		drm_err(&i915->drm,
+			"Incorrectly reported fence C was complete before await\n");
 		goto err_C;
 	}
 
 	ret = -EINVAL;
 	i915_sw_fence_commit(A);
 	if (i915_sw_fence_done(A)) {
-		pr_err("Fence A completed early\n");
+		drm_err(&i915->drm, "Fence A completed early\n");
 		goto err_C;
 	}
 
 	i915_sw_fence_commit(B);
 	if (i915_sw_fence_done(B)) {
-		pr_err("Fence B completed early\n");
+		drm_err(&i915->drm, "Fence B completed early\n");
 		goto err_C;
 	}
 
 	if (i915_sw_fence_done(A)) {
-		pr_err("Fence A completed early (after signaling B)\n");
+		drm_err(&i915->drm,
+			"Fence A completed early (after signaling B)\n");
 		goto err_C;
 	}
 
@@ -280,15 +291,15 @@ static int test_ABC(void *arg)
 
 	ret = 0;
 	if (!i915_sw_fence_done(C)) {
-		pr_err("Fence C not done\n");
+		drm_err(&i915->drm, "Fence C not done\n");
 		ret = -EINVAL;
 	}
 	if (!i915_sw_fence_done(B)) {
-		pr_err("Fence B not done\n");
+		drm_err(&i915->drm, "Fence B not done\n");
 		ret = -EINVAL;
 	}
 	if (!i915_sw_fence_done(A)) {
-		pr_err("Fence A not done\n");
+		drm_err(&i915->drm, "Fence A not done\n");
 		ret = -EINVAL;
 	}
 err_C:
@@ -302,6 +313,7 @@ err_A:
 
 static int test_AB_C(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	struct i915_sw_fence *A, *B, *C;
 	int ret = -EINVAL;
 
@@ -343,28 +355,28 @@ static int test_AB_C(void *arg)
 
 	ret = 0;
 	if (i915_sw_fence_done(A)) {
-		pr_err("Fence A completed early\n");
+		drm_err(&i915->drm, "Fence A completed early\n");
 		ret = -EINVAL;
 	}
 
 	if (i915_sw_fence_done(B)) {
-		pr_err("Fence B completed early\n");
+		drm_err(&i915->drm, "Fence B completed early\n");
 		ret = -EINVAL;
 	}
 
 	i915_sw_fence_commit(C);
 	if (!i915_sw_fence_done(C)) {
-		pr_err("Fence C not done\n");
+		drm_err(&i915->drm, "Fence C not done\n");
 		ret = -EINVAL;
 	}
 
 	if (!i915_sw_fence_done(B)) {
-		pr_err("Fence B not done\n");
+		drm_err(&i915->drm, "Fence B not done\n");
 		ret = -EINVAL;
 	}
 
 	if (!i915_sw_fence_done(A)) {
-		pr_err("Fence A not done\n");
+		drm_err(&i915->drm, "Fence A not done\n");
 		ret = -EINVAL;
 	}
 
@@ -379,6 +391,7 @@ err_A:
 
 static int test_C_AB(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	struct i915_sw_fence *A, *B, *C;
 	int ret;
 
@@ -424,17 +437,17 @@ static int test_C_AB(void *arg)
 	i915_sw_fence_commit(B);
 
 	if (!i915_sw_fence_done(A)) {
-		pr_err("Fence A not done\n");
+		drm_err(&i915->drm, "Fence A not done\n");
 		ret = -EINVAL;
 	}
 
 	if (!i915_sw_fence_done(B)) {
-		pr_err("Fence B not done\n");
+		drm_err(&i915->drm, "Fence B not done\n");
 		ret = -EINVAL;
 	}
 
 	if (!i915_sw_fence_done(C)) {
-		pr_err("Fence C not done\n");
+		drm_err(&i915->drm, "Fence C not done\n");
 		ret = -EINVAL;
 	}
 
@@ -449,6 +462,7 @@ err_A:
 
 static int test_chain(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	int nfences = 4096;
 	struct i915_sw_fence **fences;
 	int ret, i;
@@ -483,14 +497,14 @@ static int test_chain(void *arg)
 	for (i = nfences; --i; ) {
 		if (i915_sw_fence_done(fences[i])) {
 			if (ret == 0)
-				pr_err("Fence[%d] completed early\n", i);
+				drm_err(&i915->drm, "Fence[%d] completed early\n", i);
 			ret = -EINVAL;
 		}
 	}
 	i915_sw_fence_commit(fences[0]);
 	for (i = 0; ret == 0 && i < nfences; i++) {
 		if (!i915_sw_fence_done(fences[i])) {
-			pr_err("Fence[%d] is not done\n", i);
+			drm_err(&i915->drm, "Fence[%d] is not done\n", i);
 			ret = -EINVAL;
 		}
 	}
@@ -522,6 +536,7 @@ static void task_ipc(struct work_struct *work)
 
 static int test_ipc(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	struct task_ipc ipc;
 	struct workqueue_struct *wq;
 	int ret = 0;
@@ -553,7 +568,8 @@ static int test_ipc(void *arg)
 
 	usleep_range(1000, 2000);
 	if (READ_ONCE(ipc.value)) {
-		pr_err("worker updated value before i915_sw_fence was signaled\n");
+		drm_err(&i915->drm,
+			"worker updated value before i915_sw_fence was signaled\n");
 		ret = -EINVAL;
 	}
 
@@ -561,7 +577,8 @@ static int test_ipc(void *arg)
 	i915_sw_fence_wait(ipc.out);
 
 	if (!READ_ONCE(ipc.value)) {
-		pr_err("worker signaled i915_sw_fence before value was posted\n");
+		drm_err(&i915->drm,
+			"worker signaled i915_sw_fence before value was posted\n");
 		ret = -EINVAL;
 	}
 
@@ -578,13 +595,15 @@ err_work:
 
 static int test_timer(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	unsigned long target, delay;
 	struct timed_fence tf;
 
 	preempt_disable();
 	timed_fence_init(&tf, target = jiffies);
 	if (!i915_sw_fence_done(&tf.fence)) {
-		pr_err("Fence with immediate expiration not signaled\n");
+		drm_err(&i915->drm,
+			"Fence with immediate expiration not signaled\n");
 		goto err;
 	}
 	preempt_enable();
@@ -594,7 +613,9 @@ static int test_timer(void *arg)
 		preempt_disable();
 		timed_fence_init(&tf, target = jiffies + delay);
 		if (i915_sw_fence_done(&tf.fence)) {
-			pr_err("Fence with future expiration (%lu jiffies) already signaled\n", delay);
+			drm_err(&i915->drm,
+				"Fence with future expiration (%lu jiffies) already signaled\n",
+				delay);
 			goto err;
 		}
 		preempt_enable();
@@ -603,12 +624,13 @@ static int test_timer(void *arg)
 
 		preempt_disable();
 		if (!i915_sw_fence_done(&tf.fence)) {
-			pr_err("Fence not signaled after wait\n");
+			drm_err(&i915->drm, "Fence not signaled after wait\n");
 			goto err;
 		}
 		if (time_before(jiffies, target)) {
-			pr_err("Fence signaled too early, target=%lu, now=%lu\n",
-			       target, jiffies);
+			drm_err(&i915->drm,
+				"Fence signaled too early, target=%lu, now=%lu\n",
+				target, jiffies);
 			goto err;
 		}
 		preempt_enable();
@@ -668,6 +690,7 @@ wrap_dma_fence(struct dma_fence *dma, unsigned long delay)
 
 static int test_dma_fence(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	struct i915_sw_fence *timeout = NULL, *not = NULL;
 	unsigned long delay = i915_selftest.timeout_jiffies;
 	unsigned long end, sleep;
@@ -692,7 +715,7 @@ static int test_dma_fence(void *arg)
 
 	err = -EINVAL;
 	if (i915_sw_fence_done(timeout) || i915_sw_fence_done(not)) {
-		pr_err("Fences immediately signaled\n");
+		drm_err(&i915->drm, "Fences immediately signaled\n");
 		goto err;
 	}
 
@@ -702,25 +725,26 @@ static int test_dma_fence(void *arg)
 	sleep = jiffies_to_usecs(delay) / 3;
 	usleep_range(sleep, 2 * sleep);
 	if (time_after(jiffies, end)) {
-		pr_debug("Slept too long, delay=%lu, (target=%lu, now=%lu) skipping\n",
-			 delay, end, jiffies);
+		drm_dbg(&i915->drm,
+			"Slept too long, delay=%lu, (target=%lu, now=%lu) skipping\n",
+			delay, end, jiffies);
 		goto skip;
 	}
 
 	if (i915_sw_fence_done(timeout) || i915_sw_fence_done(not)) {
-		pr_err("Fences signaled too early\n");
+		drm_err(&i915->drm, "Fences signaled too early\n");
 		goto err;
 	}
 
 	if (!wait_event_timeout(timeout->wait,
 				i915_sw_fence_done(timeout),
 				2 * (end - jiffies) + 1)) {
-		pr_err("Timeout fence unsignaled!\n");
+		drm_err(&i915->drm, "Timeout fence unsignaled!\n");
 		goto err;
 	}
 
 	if (i915_sw_fence_done(not)) {
-		pr_err("No timeout fence signaled!\n");
+		drm_err(&i915->drm, "No timeout fence signaled!\n");
 		goto err;
 	}
 
@@ -728,7 +752,7 @@ skip:
 	dma_fence_signal(dma);
 
 	if (!i915_sw_fence_done(timeout) || !i915_sw_fence_done(not)) {
-		pr_err("Fences unsignaled\n");
+		drm_err(&i915->drm, "Fences unsignaled\n");
 		goto err;
 	}
 
@@ -750,6 +774,9 @@ err:
 
 int i915_sw_fence_mock_selftests(void)
 {
+	struct drm_i915_private *i915;
+	int err;
+
 	static const struct i915_subtest tests[] = {
 		SUBTEST(test_self),
 		SUBTEST(test_dag),
@@ -763,5 +790,12 @@ int i915_sw_fence_mock_selftests(void)
 		SUBTEST(test_dma_fence),
 	};
 
-	return i915_subtests(tests, NULL);
+	i915 = mock_gem_device();
+	if (IS_ERR(i915))
+		return PTR_ERR(i915);
+
+	err = i915_subtests(tests, i915);
+	mock_destroy_device(i915);
+
+	return err;
 }

@@ -24,8 +24,12 @@
 #include <linux/prime_numbers.h>
 #include <linux/prandom.h>
 
+#include <drm/drm_print.h>
+
+#include "i915_drv.h"
 #include "i915_selftest.h"
 #include "i915_utils.h"
+#include "mock_gem_device.h"
 
 #define PFN_BIAS (1 << 10)
 
@@ -39,6 +43,7 @@ typedef unsigned int (*npages_fn_t)(unsigned long n,
 				    struct rnd_state *rnd);
 
 static noinline int expect_pfn_sg(struct pfn_table *pt,
+				  struct drm_i915_private *i915,
 				  npages_fn_t npages_fn,
 				  struct rnd_state *rnd,
 				  const char *who,
@@ -53,14 +58,16 @@ static noinline int expect_pfn_sg(struct pfn_table *pt,
 		unsigned int npages = npages_fn(n, pt->st.nents, rnd);
 
 		if (page_to_pfn(page) != pfn) {
-			pr_err("%s: %s left pages out of order, expected pfn %lu, found pfn %lu (using for_each_sg)\n",
-			       __func__, who, pfn, page_to_pfn(page));
+			drm_err(&i915->drm,
+				"%s: %s left pages out of order, expected pfn %lu, found pfn %lu (using for_each_sg)\n",
+				__func__, who, pfn, page_to_pfn(page));
 			return -EINVAL;
 		}
 
 		if (sg->length != npages * PAGE_SIZE) {
-			pr_err("%s: %s copied wrong sg length, expected size %lu, found %u (using for_each_sg)\n",
-			       __func__, who, npages * PAGE_SIZE, sg->length);
+			drm_err(&i915->drm,
+				"%s: %s copied wrong sg length, expected size %lu, found %u (using for_each_sg)\n",
+				__func__, who, npages * PAGE_SIZE, sg->length);
 			return -EINVAL;
 		}
 
@@ -70,8 +77,9 @@ static noinline int expect_pfn_sg(struct pfn_table *pt,
 		pfn += npages;
 	}
 	if (pfn != pt->end) {
-		pr_err("%s: %s finished on wrong pfn, expected %lu, found %lu\n",
-		       __func__, who, pt->end, pfn);
+		drm_err(&i915->drm,
+			"%s: %s finished on wrong pfn, expected %lu, found %lu\n",
+			__func__, who, pt->end, pfn);
 		return -EINVAL;
 	}
 
@@ -79,6 +87,7 @@ static noinline int expect_pfn_sg(struct pfn_table *pt,
 }
 
 static noinline int expect_pfn_sg_page_iter(struct pfn_table *pt,
+					    struct drm_i915_private *i915,
 					    const char *who,
 					    unsigned long timeout)
 {
@@ -90,8 +99,9 @@ static noinline int expect_pfn_sg_page_iter(struct pfn_table *pt,
 		struct page *page = sg_page_iter_page(&sgiter);
 
 		if (page != pfn_to_page(pfn)) {
-			pr_err("%s: %s left pages out of order, expected pfn %lu, found pfn %lu (using for_each_sg_page)\n",
-			       __func__, who, pfn, page_to_pfn(page));
+			drm_err(&i915->drm,
+				"%s: %s left pages out of order, expected pfn %lu, found pfn %lu (using for_each_sg_page)\n",
+				__func__, who, pfn, page_to_pfn(page));
 			return -EINVAL;
 		}
 
@@ -101,8 +111,9 @@ static noinline int expect_pfn_sg_page_iter(struct pfn_table *pt,
 		pfn++;
 	}
 	if (pfn != pt->end) {
-		pr_err("%s: %s finished on wrong pfn, expected %lu, found %lu\n",
-		       __func__, who, pt->end, pfn);
+		drm_err(&i915->drm,
+			"%s: %s finished on wrong pfn, expected %lu, found %lu\n",
+			__func__, who, pt->end, pfn);
 		return -EINVAL;
 	}
 
@@ -110,6 +121,7 @@ static noinline int expect_pfn_sg_page_iter(struct pfn_table *pt,
 }
 
 static noinline int expect_pfn_sgtiter(struct pfn_table *pt,
+				       struct drm_i915_private *i915,
 				       const char *who,
 				       unsigned long timeout)
 {
@@ -120,8 +132,9 @@ static noinline int expect_pfn_sgtiter(struct pfn_table *pt,
 	pfn = pt->start;
 	for_each_sgt_page(page, sgt, &pt->st) {
 		if (page != pfn_to_page(pfn)) {
-			pr_err("%s: %s left pages out of order, expected pfn %lu, found pfn %lu (using for_each_sgt_page)\n",
-			       __func__, who, pfn, page_to_pfn(page));
+			drm_err(&i915->drm,
+				"%s: %s left pages out of order, expected pfn %lu, found pfn %lu (using for_each_sgt_page)\n",
+				__func__, who, pfn, page_to_pfn(page));
 			return -EINVAL;
 		}
 
@@ -131,8 +144,9 @@ static noinline int expect_pfn_sgtiter(struct pfn_table *pt,
 		pfn++;
 	}
 	if (pfn != pt->end) {
-		pr_err("%s: %s finished on wrong pfn, expected %lu, found %lu\n",
-		       __func__, who, pt->end, pfn);
+		drm_err(&i915->drm,
+			"%s: %s finished on wrong pfn, expected %lu, found %lu\n",
+			__func__, who, pt->end, pfn);
 		return -EINVAL;
 	}
 
@@ -140,6 +154,7 @@ static noinline int expect_pfn_sgtiter(struct pfn_table *pt,
 }
 
 static int expect_pfn_sgtable(struct pfn_table *pt,
+			      struct drm_i915_private *i915,
 			      npages_fn_t npages_fn,
 			      struct rnd_state *rnd,
 			      const char *who,
@@ -147,15 +162,15 @@ static int expect_pfn_sgtable(struct pfn_table *pt,
 {
 	int err;
 
-	err = expect_pfn_sg(pt, npages_fn, rnd, who, timeout);
+	err = expect_pfn_sg(pt, i915, npages_fn, rnd, who, timeout);
 	if (err)
 		return err;
 
-	err = expect_pfn_sg_page_iter(pt, who, timeout);
+	err = expect_pfn_sg_page_iter(pt, i915, who, timeout);
 	if (err)
 		return err;
 
-	err = expect_pfn_sgtiter(pt, who, timeout);
+	err = expect_pfn_sgtiter(pt, i915, who, timeout);
 	if (err)
 		return err;
 
@@ -275,8 +290,9 @@ static const npages_fn_t npages_funcs[] = {
 	NULL,
 };
 
-static int igt_sg_alloc(void *ignored)
+static int igt_sg_alloc(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	IGT_TIMEOUT(end_time);
 	const unsigned long max_order = 20; /* approximating a 4GiB object */
 	struct rnd_state prng;
@@ -305,7 +321,7 @@ static int igt_sg_alloc(void *ignored)
 
 				prandom_seed_state(&prng,
 						   i915_selftest.random_seed);
-				err = expect_pfn_sgtable(&pt, *npages, &prng,
+				err = expect_pfn_sgtable(&pt, i915, *npages, &prng,
 							 "sg_alloc_table",
 							 end_time);
 				sg_free_table(&pt.st);
@@ -322,8 +338,9 @@ static int igt_sg_alloc(void *ignored)
 	return 0;
 }
 
-static int igt_sg_trim(void *ignored)
+static int igt_sg_trim(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	IGT_TIMEOUT(end_time);
 	const unsigned long max = PAGE_SIZE; /* not prime! */
 	struct pfn_table pt;
@@ -348,13 +365,14 @@ static int igt_sg_trim(void *ignored)
 			if (i915_sg_trim(&pt.st)) {
 				if (pt.st.orig_nents != prime ||
 				    pt.st.nents != prime) {
-					pr_err("i915_sg_trim failed (nents %u, orig_nents %u), expected %lu\n",
-					       pt.st.nents, pt.st.orig_nents, prime);
+					drm_err(&i915->drm,
+						"i915_sg_trim failed (nents %u, orig_nents %u), expected %lu\n",
+						pt.st.nents, pt.st.orig_nents, prime);
 					err = -EINVAL;
 				} else {
 					prandom_seed_state(&prng,
 							   i915_selftest.random_seed);
-					err = expect_pfn_sgtable(&pt,
+					err = expect_pfn_sgtable(&pt, i915,
 								 *npages, &prng,
 								 "i915_sg_trim",
 								 end_time);
@@ -379,6 +397,15 @@ int scatterlist_mock_selftests(void)
 		SUBTEST(igt_sg_alloc),
 		SUBTEST(igt_sg_trim),
 	};
+	struct drm_i915_private *i915;
+	int err;
 
-	return i915_subtests(tests, NULL);
+	i915 = mock_gem_device();
+	if (!i915)
+		return -ENOMEM;
+
+	err = i915_subtests(tests, i915);
+	mock_destroy_device(i915);
+
+	return err;
 }
