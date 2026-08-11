@@ -175,7 +175,8 @@ void arch_cpu_idle_enter(void)
 
 	/* Kick in AMU update but only if one has not happened already */
 	if (housekeeping_cpu(cpu, HK_TYPE_TICK) &&
-	    time_is_before_jiffies(per_cpu(cpu_amu_samples.last_scale_update, cpu)))
+	    time_is_before_jiffies(per_cpu(cpu_amu_samples.last_scale_update, cpu)) &&
+	    topology_is_scale_freq_source(SCALE_FREQ_SOURCE_ARCH, cpu))
 		amu_scale_freq_tick();
 }
 
