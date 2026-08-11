@@ -200,6 +200,12 @@ struct hw_channel_context {
 	u32 pf_dest_vrcq_id;
 	u32 hwc_timeout;
 
+	/* Count of RX WQEs deliberately not reposted after an untrusted SGE
+	 * (see mana_hwc_rx_leak_wqe()); once it reaches the RQ depth the
+	 * channel can no longer receive responses.
+	 */
+	u32 rx_leaked_wqe;
+
 	struct hwc_caller_ctx *caller_ctx;
 };
 
