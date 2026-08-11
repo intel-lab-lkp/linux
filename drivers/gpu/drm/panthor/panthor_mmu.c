@@ -1787,17 +1787,27 @@ panthor_vm_pool_get_vm(struct panthor_vm_pool *pool, u32 handle)
  */
 void panthor_vm_pool_destroy(struct panthor_file *pfile)
 {
+	struct panthor_device *ptdev = pfile->ptdev;
 	struct panthor_vm *vm;
 	unsigned long i;
+	int cookie;
 
 	if (!pfile->vms)
 		return;
 
-	xa_for_each(&pfile->vms->xa, i, vm)
-		panthor_vm_destroy(vm);
+	/* If device is gone VMs have been destroyed already, and the XArray
+	 * contains pointers to objects that have been freed.
+	 */
+	if (drm_dev_enter(&ptdev->base, &cookie)) {
+		xa_for_each(&pfile->vms->xa, i, vm)
+			panthor_vm_destroy(vm);
+
+		drm_dev_exit(cookie);
+	}
 
 	if (pfile->vms->dummy)
 		drm_gem_object_put(&pfile->vms->dummy->base);
+
 	xa_destroy(&pfile->vms->xa);
 	kfree(pfile->vms);
 }
@@ -2040,7 +2050,7 @@ void panthor_mmu_suspend(struct panthor_device *ptdev)
 	panthor_mmu_irq_suspend(&ptdev->mmu->irq);
 }
 
-static void mmu_post_reset_cleanup(struct panthor_device *ptdev)
+static void mmu_post_reset_cleanup(struct panthor_device *ptdev, bool on_unplug)
 {
 	guard(mutex)(&ptdev->mmu->as.slots_lock);
 
@@ -2058,11 +2068,12 @@ static void mmu_post_reset_cleanup(struct panthor_device *ptdev)
 
 		panthor_as_release_hw_slot_locked(as);
 
-		/* FIXME: We shouldn't drop the no-unmap restriction if
-		 * we're in the unplug path and the device wasn't properly
-		 * stopped with a SOFT_RESET.
+		/* If this is an unplug situation and leak_active_resources is
+		 * true, we have to keep the no-unmap restriction to force a
+		 * resource leak.
 		 */
-		atomic_and(~PANTHOR_AS_FORBID_UNMAP, &as->restrictions);
+		if (!on_unplug || !ptdev->unplug.leak_active_resources)
+			atomic_and(~PANTHOR_AS_FORBID_UNMAP, &as->restrictions);
 	}
 
 	if (!list_empty(&ptdev->mmu->as.cleanup_list))
@@ -2080,7 +2091,7 @@ static void mmu_post_reset_cleanup(struct panthor_device *ptdev)
  */
 void panthor_mmu_resume(struct panthor_device *ptdev)
 {
-	mmu_post_reset_cleanup(ptdev);
+	mmu_post_reset_cleanup(ptdev, false);
 	panthor_mmu_irq_resume(&ptdev->mmu->irq);
 }
 
@@ -2118,7 +2129,7 @@ void panthor_mmu_post_reset(struct panthor_device *ptdev)
 {
 	struct panthor_vm *vm;
 
-	mmu_post_reset_cleanup(ptdev);
+	mmu_post_reset_cleanup(ptdev, false);
 
 	panthor_mmu_irq_resume(&ptdev->mmu->irq);
 
@@ -2197,7 +2208,18 @@ static bool vm_prep_for_cleanup(struct panthor_vm *vm)
 	}
 
 	if (!drm_dev_enter(&ptdev->base, &cookie)) {
+		/* Device is gone, take the unplug lock to make sure
+		 * panthor_device_stop_before_unplug() has run and
+		 * ::leak_active_resources is valid.
+		 */
+		guard(mutex)(&ptdev->unplug.lock);
 		guard(mutex)(&ptdev->mmu->as.slots_lock);
+
+		/* If we're not asked to leak resources, drop the
+		 * no-unmap restriction.
+		 */
+		if (!ptdev->unplug.leak_active_resources)
+			atomic_and(~PANTHOR_AS_FORBID_UNMAP, &as->restrictions);
 
 		/* We're in the unplug path and can't recover from
 		 * that, so we just forcibly evict the pgtable. The
@@ -3552,6 +3574,41 @@ panthor_mmu_reclaim_priv_bos(struct panthor_device *ptdev,
 	return freed;
 }
 
+void panthor_mmu_freeze_before_unplug(struct panthor_device *ptdev)
+{
+	struct panthor_vm *vm;
+
+	guard(mutex)(&ptdev->mmu->vm.lock);
+	guard(mutex)(&ptdev->mmu->as.slots_lock);
+	list_for_each_entry(vm, &ptdev->mmu->vm.list, node) {
+		/* We intentionally don't use panthor_vm_restrict_usage_locked() here
+		 * because we don't want the AS eviction to happen, otherwise we
+		 * won't be able to know which VMs were active at the time the
+		 * unplug happened. Unmap is forbidden to make sure any modification
+		 * to the VM is blocked after that point. This way, if the reset
+		 * fails, we're able to flag VMs that need to leak their resources.
+		 */
+		atomic_or(PANTHOR_AS_FORBID_USE |
+			  PANTHOR_AS_FORBID_MAP |
+			  PANTHOR_AS_FORBID_UNMAP,
+			  &vm->as->restrictions);
+	}
+}
+
+static struct panthor_vm *
+pop_user_owned_vm(struct panthor_device *ptdev)
+{
+	struct panthor_vm *vm;
+
+	guard(mutex)(&ptdev->mmu->vm.lock);
+	vm = list_first_entry_or_null(&ptdev->mmu->vm.user_owned,
+				      struct panthor_vm, user_node);
+	if (vm)
+		list_del_init(&vm->user_node);
+
+	return vm;
+}
+
 /**
  * panthor_mmu_unplug() - Unplug the MMU logic
  * @ptdev: Device.
@@ -3564,17 +3621,18 @@ void panthor_mmu_unplug(struct panthor_device *ptdev)
 	if (!IS_ENABLED(CONFIG_PM) || pm_runtime_active(ptdev->base.dev))
 		panthor_mmu_irq_suspend(&ptdev->mmu->irq);
 
-	mutex_lock(&ptdev->mmu->as.slots_lock);
-	for (u32 i = 0; i < ARRAY_SIZE(ptdev->mmu->as.slots); i++) {
-		struct panthor_as *as = ptdev->mmu->as.slots[i].as;
+	mmu_post_reset_cleanup(ptdev, true);
 
-		if (as) {
-			drm_WARN_ON(&ptdev->base,
-				    panthor_mmu_as_disable(ptdev, i, false));
-			panthor_as_release_hw_slot_locked(as);
-		}
+	/* Collect non-destroyed user VMs so we can return the ref owned by the
+	 * XArray. If we don't do that, we leak all user VMs that were still
+	 * alive at the point drm_dev_unplug() was called, because
+	 * panthor_ioctl_vm_destroy() bails out early if the device is
+	 * unplugged.
+	 */
+	for (struct panthor_vm *vm = pop_user_owned_vm(ptdev); vm;
+	     vm = pop_user_owned_vm(ptdev)) {
+		panthor_vm_destroy(vm);
 	}
-	mutex_unlock(&ptdev->mmu->as.slots_lock);
 
 	/* Make sure pending VM cleanups are processed before leaving. Those
 	 * cleanups might schedule vm_bind_job cleanups, so keep this
@@ -3582,6 +3640,8 @@ void panthor_mmu_unplug(struct panthor_device *ptdev)
 	 */
 	flush_work(&ptdev->mmu->vm.cleanup_work);
 	drm_WARN_ON(&ptdev->base, !list_empty(&ptdev->mmu->as.cleanup_list));
+	drm_WARN_ON(&ptdev->base, !list_empty(&ptdev->mmu->vm.list));
+	drm_WARN_ON(&ptdev->base, !list_empty(&ptdev->mmu->vm.user_owned));
 
 	/* Ensure any pending job cleanup work are executed before returning,
 	 * otherwise those might access objects that are gone if the work is

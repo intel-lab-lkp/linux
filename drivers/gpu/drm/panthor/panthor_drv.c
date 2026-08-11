@@ -1025,11 +1025,21 @@ static int panthor_ioctl_vm_destroy(struct drm_device *ddev, void *data,
 {
 	struct panthor_file *pfile = file->driver_priv;
 	struct drm_panthor_vm_destroy *args = data;
+	int cookie, ret;
 
-	if (args->pad)
-		return -EINVAL;
+	if (!drm_dev_enter(ddev, &cookie))
+		return -ENODEV;
 
-	return panthor_vm_pool_destroy_vm(pfile->vms, args->id);
+	if (args->pad) {
+		ret = -EINVAL;
+		goto out_dev_exit;
+	}
+
+	ret = panthor_vm_pool_destroy_vm(pfile->vms, args->id);
+
+out_dev_exit:
+	drm_dev_exit(cookie);
+	return ret;
 }
 
 #define PANTHOR_BO_FLAGS		(DRM_PANTHOR_BO_NO_MMAP | \
@@ -1219,11 +1229,21 @@ static int panthor_ioctl_group_destroy(struct drm_device *ddev, void *data,
 {
 	struct panthor_file *pfile = file->driver_priv;
 	struct drm_panthor_group_destroy *args = data;
+	int cookie, ret;
 
-	if (args->pad)
-		return -EINVAL;
+	if (!drm_dev_enter(ddev, &cookie))
+		return -ENODEV;
 
-	return panthor_group_destroy(pfile, args->group_handle);
+	if (args->pad) {
+		ret = -EINVAL;
+		goto out_dev_exit;
+	}
+
+	ret = panthor_group_destroy(pfile, args->group_handle);
+
+out_dev_exit:
+	drm_dev_exit(cookie);
+	return ret;
 }
 
 static int panthor_ioctl_group_create(struct drm_device *ddev, void *data,
@@ -1232,27 +1252,36 @@ static int panthor_ioctl_group_create(struct drm_device *ddev, void *data,
 	struct panthor_file *pfile = file->driver_priv;
 	struct drm_panthor_group_create *args = data;
 	struct drm_panthor_queue_create *queue_args;
-	int ret;
+	int cookie, ret;
 
-	if (!args->queues.count || args->queues.count > MAX_CS_PER_CSG)
-		return -EINVAL;
+	if (!drm_dev_enter(ddev, &cookie))
+		return -ENODEV;
+
+	if (!args->queues.count || args->queues.count > MAX_CS_PER_CSG) {
+		ret = -EINVAL;
+		goto out_dev_exit;
+	}
 
 	ret = PANTHOR_UOBJ_GET_ARRAY(queue_args, &args->queues);
 	if (ret)
-		return ret;
+		goto out_dev_exit;
 
 	ret = group_priority_permit(file, args->priority);
 	if (ret)
-		goto out;
+		goto out_free_args;
 
 	ret = panthor_group_create(pfile, args, queue_args, file->client_id);
 	if (ret < 0)
-		goto out;
+		goto out_free_args;
+
 	args->group_handle = ret;
 	ret = 0;
 
-out:
+out_free_args:
 	kvfree(queue_args);
+
+out_dev_exit:
+	drm_dev_exit(cookie);
 	return ret;
 }
 
@@ -1261,8 +1290,15 @@ static int panthor_ioctl_group_get_state(struct drm_device *ddev, void *data,
 {
 	struct panthor_file *pfile = file->driver_priv;
 	struct drm_panthor_group_get_state *args = data;
+	int cookie, ret;
 
-	return panthor_group_get_state(pfile, args);
+	if (!drm_dev_enter(ddev, &cookie))
+		return -ENODEV;
+
+	ret = panthor_group_get_state(pfile, args);
+
+	drm_dev_exit(cookie);
+	return ret;
 }
 
 static int panthor_ioctl_tiler_heap_create(struct drm_device *ddev, void *data,
@@ -1272,11 +1308,16 @@ static int panthor_ioctl_tiler_heap_create(struct drm_device *ddev, void *data,
 	struct drm_panthor_tiler_heap_create *args = data;
 	struct panthor_heap_pool *pool;
 	struct panthor_vm *vm;
-	int ret;
+	int cookie, ret;
+
+	if (!drm_dev_enter(ddev, &cookie))
+		return -ENODEV;
 
 	vm = panthor_vm_pool_get_vm(pfile->vms, args->vm_id);
-	if (!vm)
-		return -EINVAL;
+	if (!vm) {
+		ret = -EINVAL;
+		goto out_dev_exit;
+	}
 
 	pool = panthor_vm_get_heap_pool(vm, true);
 	if (IS_ERR(pool)) {
@@ -1305,6 +1346,9 @@ out_put_heap_pool:
 
 out_put_vm:
 	panthor_vm_put(vm);
+
+out_dev_exit:
+	drm_dev_exit(cookie);
 	return ret;
 }
 
@@ -1315,14 +1359,21 @@ static int panthor_ioctl_tiler_heap_destroy(struct drm_device *ddev, void *data,
 	struct drm_panthor_tiler_heap_destroy *args = data;
 	struct panthor_heap_pool *pool;
 	struct panthor_vm *vm;
-	int ret;
+	int cookie, ret;
 
-	if (args->pad)
-		return -EINVAL;
+	if (!drm_dev_enter(ddev, &cookie))
+		return -ENODEV;
+
+	if (args->pad) {
+		ret = -EINVAL;
+		goto out_dev_exit;
+	}
 
 	vm = panthor_vm_pool_get_vm(pfile->vms, args->handle >> 16);
-	if (!vm)
-		return -EINVAL;
+	if (!vm) {
+		ret = -EINVAL;
+		goto out_dev_exit;
+	}
 
 	pool = panthor_vm_get_heap_pool(vm, false);
 	if (IS_ERR(pool)) {
@@ -1335,6 +1386,9 @@ static int panthor_ioctl_tiler_heap_destroy(struct drm_device *ddev, void *data,
 
 out_put_vm:
 	panthor_vm_put(vm);
+
+out_dev_exit:
+	drm_dev_exit(cookie);
 	return ret;
 }
 
@@ -1466,10 +1520,16 @@ static int panthor_ioctl_vm_get_state(struct drm_device *ddev, void *data,
 	struct panthor_file *pfile = file->driver_priv;
 	struct drm_panthor_vm_get_state *args = data;
 	struct panthor_vm *vm;
+	int cookie, ret;
+
+	if (!drm_dev_enter(ddev, &cookie))
+		return -ENODEV;
 
 	vm = panthor_vm_pool_get_vm(pfile->vms, args->vm_id);
-	if (!vm)
-		return -EINVAL;
+	if (!vm) {
+		ret = -EINVAL;
+		goto out_dev_exit;
+	}
 
 	if (panthor_vm_is_unusable(vm))
 		args->state = DRM_PANTHOR_VM_STATE_UNUSABLE;
@@ -1477,7 +1537,11 @@ static int panthor_ioctl_vm_get_state(struct drm_device *ddev, void *data,
 		args->state = DRM_PANTHOR_VM_STATE_USABLE;
 
 	panthor_vm_put(vm);
-	return 0;
+	ret = 0;
+
+out_dev_exit:
+	drm_dev_exit(cookie);
+	return ret;
 }
 
 static int panthor_ioctl_bo_set_label(struct drm_device *ddev, void *data,
