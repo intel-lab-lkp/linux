@@ -1845,14 +1845,16 @@ void sched_init_dl_servers(void)
 	struct rq *rq;
 	struct sched_dl_entity *dl_se;
 
-	for_each_online_cpu(cpu) {
+	for_each_possible_cpu(cpu) {
 		u64 runtime =  50 * NSEC_PER_MSEC;
 		u64 period = 1000 * NSEC_PER_MSEC;
+		bool online = cpu_online(cpu);
 
 		rq = cpu_rq(cpu);
 
 		guard(rq_lock_irq)(rq);
-		update_rq_clock(rq);
+		if (online)
+			update_rq_clock(rq);
 
 		dl_se = &rq->fair_server;
 
@@ -1862,7 +1864,8 @@ void sched_init_dl_servers(void)
 
 		dl_se->dl_server = 1;
 		dl_se->dl_defer = 1;
-		setup_new_dl_entity(dl_se);
+		if (online)
+			setup_new_dl_entity(dl_se);
 
 #ifdef CONFIG_SCHED_CLASS_EXT
 		dl_se = &rq->ext_server;
@@ -1873,7 +1876,8 @@ void sched_init_dl_servers(void)
 
 		dl_se->dl_server = 1;
 		dl_se->dl_defer = 1;
-		setup_new_dl_entity(dl_se);
+		if (online)
+			setup_new_dl_entity(dl_se);
 
 		/*
 		 * No BPF scheduler is loaded at boot, so the ext_server has no
@@ -1918,14 +1922,18 @@ int dl_server_apply_params(struct sched_dl_entity *dl_se, u64 runtime, u64 perio
 	guard(raw_spinlock)(&dl_b->lock);
 
 	cpus = dl_bw_cpus(cpu);
-	cap = dl_bw_capacity(cpu);
 
-	if (__dl_overflow(dl_b, cap, old_bw, new_bw))
-		return -EBUSY;
+	if (!init || cpu_active(cpu)) {
+		cap = dl_bw_capacity(cpu);
+
+		if (__dl_overflow(dl_b, cap, old_bw, new_bw))
+			return -EBUSY;
+	}
 
 	if (init) {
 		__add_rq_bw(new_bw, &rq->dl);
-		__dl_add(dl_b, new_bw, cpus);
+		if (cpu_active(cpu))
+			__dl_add(dl_b, new_bw, cpus);
 		dl_se->dl_bw_attached = 1;
 	} else if (dl_se->dl_bw_attached) {
 		__dl_sub(dl_b, dl_se->dl_bw, cpus);
