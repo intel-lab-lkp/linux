@@ -66,3 +66,4 @@ merge
 prctl_thp_disable
 rmap
 folio_split_race_test
+pagewalk_race_test

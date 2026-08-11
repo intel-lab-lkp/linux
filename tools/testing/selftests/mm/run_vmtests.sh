@@ -398,6 +398,8 @@ fi
 
 CATEGORY="pagemap" run_test ./pagemap_ioctl
 
+CATEGORY="pagewalk" run_test ./pagewalk_race_test
+
 CATEGORY="pfnmap" run_test ./pfnmap
 
 # COW tests
