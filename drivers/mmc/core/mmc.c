@@ -2144,8 +2144,55 @@ static int _mmc_suspend(struct mmc_host *host, enum mmc_poweroff_type pm_type)
 
 	mmc_claim_host(host);
 
-	if (mmc_card_suspended(host->card))
-		goto out;
+	if (mmc_card_suspended(host->card)) {
+		/*
+		 * Nothing to do for a redundant suspend call. Otherwise, the
+		 * card can only still be marked suspended here because the
+		 * keep-power fast path below left it powered and merely
+		 * deselected -- reselect it and continue into the normal
+		 * power-off sequence below, since shutdown, unbind and
+		 * undervoltage need mmc_power_off() regardless of how the
+		 * card got here.
+		 */
+		if (pm_type == MMC_POWEROFF_SUSPEND ||
+		    !(host->pm_flags & MMC_PM_KEEP_POWER))
+			goto out;
+
+		/*
+		 * Firmware may have accessed the card while it stayed
+		 * powered through suspend, leaving it in a state the kernel
+		 * can no longer assume it knows. Reset the host to its
+		 * initial bus state first, same as _mmc_resume() does before
+		 * touching the card, so mmc_select_card() below is talking
+		 * at a clock/timing every card is guaranteed to decode
+		 * rather than whatever mode was negotiated before suspend.
+		 */
+		mmc_set_clock(host, host->f_init);
+		mmc_set_initial_state(host);
+
+		if (!mmc_host_is_spi(host))
+			err = mmc_select_card(host->card);
+
+		if (err) {
+			/*
+			 * The card still isn't responding even after the
+			 * reset above -- it may genuinely be gone. Nothing
+			 * else below needs a responsive card except
+			 * mmc_power_off() itself, which is host/regulator
+			 * side only, so cut power directly instead of
+			 * leaving the card's supply on indefinitely (and
+			 * pm_flags/suspended state stuck retrying this same
+			 * failing select on every later call).
+			 */
+			mmc_power_off(host);
+			host->pm_flags &= ~MMC_PM_KEEP_POWER;
+			mmc_card_set_suspended(host->card);
+			goto out;
+		}
+
+		mmc_card_clr_suspended(host->card);
+		host->pm_flags &= ~MMC_PM_KEEP_POWER;
+	}
 
 	/*
 	 * For the undervoltage case, we care more about device integrity.
@@ -2155,6 +2202,33 @@ static int _mmc_suspend(struct mmc_host *host, enum mmc_poweroff_type pm_type)
 		err = _mmc_flush_cache(host);
 		if (err)
 			goto out;
+	}
+
+	/*
+	 * Keep the card powered across an actual suspend; shutdown, unbind
+	 * and undervoltage still need the normal power-off path below,
+	 * since they aren't guaranteed a subsequent _mmc_resume().
+	 *
+	 * Check pm_caps, not pm_flags: unlike SDIO, (e)MMC has no
+	 * per-function driver to request this via
+	 * sdio_set_host_pm_flags(), so it's a fixed platform trait here.
+	 *
+	 * Require MMC_CAP2_RESET_AT_RESUME too: without it, _mmc_resume()
+	 * has no way to bring the host back to a state mmc_init_card() can
+	 * use, since mmc_power_up() no-ops when power_mode is already
+	 * MMC_POWER_ON. Keeping power without also resetting at resume is
+	 * not a safe combination for this driver.
+	 */
+	if (pm_type == MMC_POWEROFF_SUSPEND &&
+	    (host->pm_caps & MMC_PM_KEEP_POWER) &&
+	    (host->caps2 & MMC_CAP2_RESET_AT_RESUME)) {
+		if (!mmc_host_is_spi(host))
+			err = mmc_deselect_cards(host);
+		if (!err) {
+			host->pm_flags |= MMC_PM_KEEP_POWER;
+			mmc_card_set_suspended(host->card);
+		}
+		goto out;
 	}
 
 	if (mmc_card_can_poweroff_notify(host->card) &&
@@ -2217,9 +2291,29 @@ static int _mmc_resume(struct mmc_host *host)
 	if (!mmc_card_suspended(host->card))
 		goto out;
 
+	/*
+	 * Firmware or other hardware may have accessed the card while it
+	 * stayed powered through suspend, leaving it in a state the kernel
+	 * can no longer assume it knows. Reset the host to its initial bus
+	 * state like _mmc_hw_reset() does for a non-power-cycle reset,
+	 * before mmc_init_card() re-identifies the card.
+	 *
+	 * Check pm_flags, not the MMC_CAP2_RESET_AT_RESUME capability
+	 * directly: pm_flags only ends up set here when _mmc_suspend()
+	 * actually took the keep-power fast path this cycle, which is the
+	 * only time power_mode is guaranteed to still be MMC_POWER_ON (and
+	 * so the only time this reset is both necessary and safe to do
+	 * before mmc_power_up() touches the bus).
+	 */
+	if (host->pm_flags & MMC_PM_KEEP_POWER) {
+		mmc_set_clock(host, host->f_init);
+		mmc_set_initial_state(host);
+	}
+
 	mmc_power_up(host, host->card->ocr);
 	err = mmc_init_card(host, host->card->ocr, host->card);
 	mmc_card_clr_suspended(host->card);
+	host->pm_flags &= ~MMC_PM_KEEP_POWER;
 
 out:
 	mmc_release_host(host);
