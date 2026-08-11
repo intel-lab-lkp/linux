@@ -35,7 +35,7 @@ Pressure interface
 ==================
 
 Pressure information for each resource is exported through the
-respective file in /proc/pressure/ -- cpu, memory, and io.
+respective file in /proc/pressure/ -- cpu, cpu_prio, memory, and io.
 
 The format is as such::
 
@@ -63,6 +63,25 @@ as well as medium and long term trends. The total absolute stall time
 (in us) is tracked and exported as well, to allow detection of latency
 spikes which wouldn't necessarily make a dent in the time averages,
 or to average trends over custom time frames.
+
+cpu_prio pressure
+-----------------
+
+/proc/pressure/cpu_prio reports CPU pressure experienced specifically
+by high priority tasks, using the same "some"/"full" definitions as
+above but restricted to tasks whose (static) priority is at or below
+CONFIG_PSI_TASK_PRIO_THLD (a Kconfig-tunable threshold, defaulting to
+118). This makes it possible to observe CPU contention affecting
+latency-sensitive workloads independently of, and without being
+diluted by, the overall CPU pressure reported by /proc/pressure/cpu.
+
+Just like regular CPU pressure, cpu_prio "full" is undefined at the
+system level (it is always reported as zero in
+/proc/pressure/cpu_prio), but it is meaningful at the cgroup level,
+where it represents the share of time in which every high-priority
+task in the cgroup is stalled on the CPU, i.e. no high-priority task
+in that cgroup is able to run. See "Cgroup2 interface" below for the
+corresponding cpu_prio.pressure file.
 
 Monitoring for pressure thresholds
 ==================================
@@ -181,8 +200,8 @@ Cgroup2 interface
 In a system with a CONFIG_CGROUPS=y kernel and the cgroup2 filesystem
 mounted, pressure stall information is also tracked for tasks grouped
 into cgroups. Each subdirectory in the cgroupfs mountpoint contains
-cpu.pressure, memory.pressure, and io.pressure files; the format is
-the same as the /proc/pressure/ files.
+cpu.pressure, cpu_prio.pressure, memory.pressure, and io.pressure
+files; the format is the same as the /proc/pressure/ files.
 
 Per-cgroup psi monitors can be specified and used the same way as
 system-wide ones.

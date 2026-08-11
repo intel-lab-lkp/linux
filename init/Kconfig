@@ -760,6 +760,24 @@ config PSI_DEFAULT_DISABLED
 
 	  Say N if unsure.
 
+config PSI_TASK_PRIO_THLD
+	int "Priority threshold for PSI cpu_prio"
+	default 118
+	depends on PSI
+	help
+	  Tasks whose (static) priority value is less than or equal to
+	  this threshold are considered "high priority" for the purpose
+	  of the /proc/pressure/cpu_prio pressure stall metric.
+
+	  This metric tracks how much walltime high priority tasks are
+	  stalled waiting for CPU, which can be used to detect CPU
+	  contention affecting latency-sensitive workloads.
+
+	  The default value corresponds to tasks which are latency-sensitive.
+
+	  If unsure, leave at the default value.
+
+
 endmenu # "CPU/Task time and stats accounting"
 
 config CPU_ISOLATION

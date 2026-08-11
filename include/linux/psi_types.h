@@ -15,6 +15,7 @@ enum psi_task_count {
 	NR_IOWAIT,
 	NR_MEMSTALL,
 	NR_RUNNING,
+	NR_HIGH_PRIO_RUNNING,
 	/*
 	 * For IO and CPU stalls the presence of running/oncpu tasks
 	 * in the domain means a partial rather than a full stall.
@@ -25,23 +26,32 @@ enum psi_task_count {
 	 * threads and memstall ones.
 	 */
 	NR_MEMSTALL_RUNNING,
-	NR_PSI_TASK_COUNTS = 4,
+	NR_PSI_TASK_COUNTS = 5,
 };
+
+#ifdef CONFIG_PSI_TASK_PRIO_THLD
+#define PSI_TASK_PRIO_THLD CONFIG_PSI_TASK_PRIO_THLD
+#else
+#define PSI_TASK_PRIO_THLD 118
+#endif
 
 /* Task state bitmasks */
 #define TSK_IOWAIT	(1 << NR_IOWAIT)
 #define TSK_MEMSTALL	(1 << NR_MEMSTALL)
 #define TSK_RUNNING	(1 << NR_RUNNING)
+#define TSK_HIGH_PRIO_RUNNING  (1 << NR_HIGH_PRIO_RUNNING)
 #define TSK_MEMSTALL_RUNNING	(1 << NR_MEMSTALL_RUNNING)
 
 /* Only one task can be scheduled, no corresponding task count */
 #define TSK_ONCPU	(1 << NR_PSI_TASK_COUNTS)
+#define TSK_HIGH_PRIO_ONCPU   (1 << (NR_PSI_TASK_COUNTS + 1))
 
 /* Resources that workloads could be stalled on */
 enum psi_res {
 	PSI_IO,
 	PSI_MEM,
 	PSI_CPU,
+	PSI_CPU_HIGH_PRIO,
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 	PSI_IRQ,
 #endif
@@ -61,6 +71,8 @@ enum psi_states {
 	PSI_MEM_FULL,
 	PSI_CPU_SOME,
 	PSI_CPU_FULL,
+	PSI_CPU_HIGH_PRIO_TASK_SOME,
+	PSI_CPU_HIGH_PRIO_TASK_FULL,
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 	PSI_IRQ_FULL,
 #endif
@@ -74,6 +86,9 @@ enum psi_states {
 
 /* Flag whether to re-arm avgs_work, see details in get_recent_times() */
 #define PSI_STATE_RESCHEDULE	(1 << (NR_PSI_STATES + 1))
+
+/* Use one bit in the state mask to track TSK_HIGH_PRIO_ONCPU */
+#define PSI_HIGH_PRIO_ONCPU	(1 << (NR_PSI_STATES + 2))
 
 enum psi_aggregators {
 	PSI_AVGS = 0,

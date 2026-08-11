@@ -85,7 +85,7 @@ void set_user_nice(struct task_struct *p, long nice)
 		return;
 	}
 
-	scoped_guard (sched_change, p, DEQUEUE_SAVE) {
+	scoped_guard (sched_change, p, DEQUEUE_SAVE | DEQUEUE_PSI) {
 		p->static_prio = NICE_TO_PRIO(nice);
 		set_load_weight(p, true);
 		old_prio = p->prio;
@@ -500,7 +500,7 @@ int __sched_setscheduler(struct task_struct *p,
 	struct balance_callback *head;
 	struct rq_flags rf;
 	int reset_on_fork;
-	int queue_flags = DEQUEUE_SAVE | DEQUEUE_MOVE | DEQUEUE_NOCLOCK;
+	int queue_flags = DEQUEUE_SAVE | DEQUEUE_MOVE | DEQUEUE_NOCLOCK | DEQUEUE_PSI;
 	struct rq *rq;
 	bool cpuset_locked = false;
 

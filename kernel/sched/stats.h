@@ -128,7 +128,8 @@ static inline void psi_enqueue(struct task_struct *p, int flags)
 		return;
 
 	/* Same runqueue, nothing changed for psi */
-	if (flags & ENQUEUE_RESTORE)
+	/* If change scheduler or priority (ENQUEUE_PSI), still update psi */
+	if ((flags & ENQUEUE_RESTORE) && !(flags & ENQUEUE_PSI))
 		return;
 
 	/* psi_sched_switch() will handle the flags */
@@ -145,15 +146,21 @@ static inline void psi_enqueue(struct task_struct *p, int flags)
 	} else if (flags & ENQUEUE_MIGRATED) {
 		/* CPU migration of runnable task */
 		set = TSK_RUNNING;
+		if (p->prio <= PSI_TASK_PRIO_THLD)
+			set |= TSK_HIGH_PRIO_RUNNING;
 		if (p->in_memstall)
 			set |= TSK_MEMSTALL | TSK_MEMSTALL_RUNNING;
+
 	} else {
 		/* Wakeup of new or sleeping task */
 		if (p->in_iowait)
 			clear |= TSK_IOWAIT;
 		set = TSK_RUNNING;
+		if (p->prio <= PSI_TASK_PRIO_THLD)
+			set |= TSK_HIGH_PRIO_RUNNING;
 		if (p->in_memstall)
 			set |= TSK_MEMSTALL_RUNNING;
+
 	}
 
 	psi_task_change(p, clear, set);
@@ -165,7 +172,8 @@ static inline void psi_dequeue(struct task_struct *p, int flags)
 		return;
 
 	/* Same runqueue, nothing changed for psi */
-	if (flags & DEQUEUE_SAVE)
+	/* If change scheduler or priority (DEQUEUE_PSI), still update psi */
+	if ((flags & DEQUEUE_SAVE) && !(flags & DEQUEUE_PSI))
 		return;
 
 	/*

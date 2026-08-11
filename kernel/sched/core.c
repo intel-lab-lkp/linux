@@ -7624,7 +7624,7 @@ void rt_mutex_post_schedule(void)
 void rt_mutex_setprio(struct task_struct *p, struct task_struct *pi_task)
 {
 	int prio, oldprio, queue_flag =
-		DEQUEUE_SAVE | DEQUEUE_MOVE | DEQUEUE_NOCLOCK;
+		DEQUEUE_SAVE | DEQUEUE_MOVE | DEQUEUE_NOCLOCK | DEQUEUE_PSI;
 	const struct sched_class *prev_class, *next_class;
 	struct rq_flags rf;
 	struct rq *rq;

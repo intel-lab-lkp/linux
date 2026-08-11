@@ -243,6 +243,7 @@ void __init psi_init(void)
 static u32 test_states(unsigned int *tasks, u32 state_mask)
 {
 	const bool oncpu = state_mask & PSI_ONCPU;
+	const bool oncpu_high_prio = state_mask & PSI_HIGH_PRIO_ONCPU;
 
 	if (tasks[NR_IOWAIT]) {
 		state_mask |= BIT(PSI_IO_SOME);
@@ -258,6 +259,12 @@ static u32 test_states(unsigned int *tasks, u32 state_mask)
 
 	if (tasks[NR_RUNNING] > oncpu)
 		state_mask |= BIT(PSI_CPU_SOME);
+
+	if (tasks[NR_HIGH_PRIO_RUNNING] > oncpu_high_prio)
+		state_mask |= BIT(PSI_CPU_HIGH_PRIO_TASK_SOME);
+
+	if (tasks[NR_HIGH_PRIO_RUNNING] && !oncpu_high_prio)
+		state_mask |= BIT(PSI_CPU_HIGH_PRIO_TASK_FULL);
 
 	if (tasks[NR_RUNNING] && !oncpu)
 		state_mask |= BIT(PSI_CPU_FULL);
@@ -784,10 +791,16 @@ static void record_times(struct psi_group_cpu *groupc, u64 now)
 		groupc->times[PSI_CPU_SOME] += delta;
 		if (groupc->state_mask & (1 << PSI_CPU_FULL))
 			groupc->times[PSI_CPU_FULL] += delta;
+		if (groupc->state_mask & (1 << PSI_CPU_HIGH_PRIO_TASK_SOME)) {
+			groupc->times[PSI_CPU_HIGH_PRIO_TASK_SOME] += delta;
+			if (groupc->state_mask & (1 << PSI_CPU_HIGH_PRIO_TASK_FULL))
+				groupc->times[PSI_CPU_HIGH_PRIO_TASK_FULL] += delta;
+		}
 	}
 
 	if (groupc->state_mask & (1 << PSI_NONIDLE))
 		groupc->times[PSI_NONIDLE] += delta;
+
 }
 
 #define for_each_group(iter, group) \
@@ -813,11 +826,24 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	if (unlikely(clear & TSK_ONCPU)) {
 		state_mask = 0;
 		clear &= ~TSK_ONCPU;
+		if (unlikely(clear & TSK_HIGH_PRIO_ONCPU))
+			clear &= ~TSK_HIGH_PRIO_ONCPU;
 	} else if (unlikely(set & TSK_ONCPU)) {
 		state_mask = PSI_ONCPU;
 		set &= ~TSK_ONCPU;
+		if (unlikely(set & TSK_HIGH_PRIO_ONCPU)) {
+			state_mask |= PSI_HIGH_PRIO_ONCPU;
+			set &= ~TSK_HIGH_PRIO_ONCPU;
+		}
 	} else {
-		state_mask = groupc->state_mask & PSI_ONCPU;
+		state_mask = groupc->state_mask & (PSI_ONCPU | PSI_HIGH_PRIO_ONCPU);
+		if (unlikely(clear & TSK_HIGH_PRIO_ONCPU)) {
+			state_mask &= ~PSI_HIGH_PRIO_ONCPU;
+			clear &= ~TSK_HIGH_PRIO_ONCPU;
+		} else if (unlikely(set & TSK_HIGH_PRIO_ONCPU)) {
+			state_mask |= PSI_HIGH_PRIO_ONCPU;
+			set &= ~TSK_HIGH_PRIO_ONCPU;
+		}
 	}
 
 	/*
@@ -934,7 +960,12 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 	now = cpu_clock(cpu);
 
 	if (next->pid) {
-		psi_flags_change(next, 0, TSK_ONCPU);
+		int set = TSK_ONCPU;
+
+		if (next->prio <= PSI_TASK_PRIO_THLD)
+			set |= TSK_HIGH_PRIO_ONCPU;
+
+		psi_flags_change(next, 0, set);
 		/*
 		 * Set TSK_ONCPU on @next's cgroups. If @next shares any
 		 * ancestors with @prev, those will already have @prev's
@@ -947,13 +978,16 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 				common = group;
 				break;
 			}
-			psi_group_change(group, cpu, 0, TSK_ONCPU, now, true);
+			psi_group_change(group, cpu, 0, set, now, true);
 		}
 	}
 
 	if (prev->pid) {
 		int clear = TSK_ONCPU, set = 0;
 		bool wake_clock = true;
+
+		if (prev->prio <= PSI_TASK_PRIO_THLD)
+			clear |= TSK_HIGH_PRIO_ONCPU;
 
 		/*
 		 * When we're going to sleep, psi_dequeue() lets us
@@ -963,6 +997,9 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		 */
 		if (sleep) {
 			clear |= TSK_RUNNING;
+			if (prev->prio <= PSI_TASK_PRIO_THLD)
+				clear |= TSK_HIGH_PRIO_RUNNING;
+
 			if (prev->in_memstall)
 				clear |= TSK_MEMSTALL_RUNNING;
 			if (prev->in_iowait)
@@ -995,6 +1032,16 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		 */
 		if ((prev->psi_flags ^ next->psi_flags) & ~TSK_ONCPU) {
 			clear &= ~TSK_ONCPU;
+			/*
+			 * Both usual and high-prio "ONCPU" bits are handled up to
+			 * the common ancestor already, above that only propagate
+			 * a change in high-prio ONCPU if next differs from prev.
+			 */
+			if (next->prio <= PSI_TASK_PRIO_THLD) {
+				clear &= ~TSK_HIGH_PRIO_ONCPU;
+				if (!(prev->prio <= PSI_TASK_PRIO_THLD))
+					set |= TSK_HIGH_PRIO_ONCPU;
+			}
 			for_each_group(group, common)
 				psi_group_change(group, cpu, clear, set, now, wake_clock);
 		}
@@ -1280,7 +1327,8 @@ int psi_show(struct seq_file *m, struct psi_group *group, enum psi_res res)
 		int w;
 
 		/* CPU FULL is undefined at the system level */
-		if (!(group == &psi_system && res == PSI_CPU && full)) {
+		if (!(group == &psi_system &&
+		      (res == PSI_CPU || res == PSI_CPU_HIGH_PRIO) && full)) {
 			for (w = 0; w < 3; w++)
 				avg[w] = group->avg[res * 2 + full][w];
 			total = div_u64(group->total[PSI_AVGS][res * 2 + full],
@@ -1550,6 +1598,11 @@ static int psi_cpu_show(struct seq_file *m, void *v)
 	return psi_show(m, &psi_system, PSI_CPU);
 }
 
+static int psi_cpu_prio_show(struct seq_file *m, void *v)
+{
+	return psi_show(m, &psi_system, PSI_CPU_HIGH_PRIO);
+}
+
 static int psi_io_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, psi_io_show, NULL);
@@ -1563,6 +1616,11 @@ static int psi_memory_open(struct inode *inode, struct file *file)
 static int psi_cpu_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, psi_cpu_show, NULL);
+}
+
+static int psi_cpu_prio_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, psi_cpu_prio_show, NULL);
 }
 
 static ssize_t psi_write(struct file *file, const char __user *user_buf,
@@ -1638,6 +1696,12 @@ static ssize_t psi_cpu_write(struct file *file, const char __user *user_buf,
 	return psi_write(file, user_buf, nbytes, PSI_CPU);
 }
 
+static ssize_t psi_cpu_prio_write(struct file *file, const char __user *user_buf,
+				  size_t nbytes, loff_t *ppos)
+{
+	return psi_write(file, user_buf, nbytes, PSI_CPU_HIGH_PRIO);
+}
+
 static __poll_t psi_fop_poll(struct file *file, poll_table *wait)
 {
 	struct seq_file *seq = file->private_data;
@@ -1680,6 +1744,15 @@ static const struct proc_ops psi_cpu_proc_ops = {
 	.proc_release	= psi_fop_release,
 };
 
+static const struct proc_ops psi_cpu_prio_proc_ops = {
+	.proc_open	= psi_cpu_prio_open,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_write	= psi_cpu_prio_write,
+	.proc_poll	= psi_fop_poll,
+	.proc_release	= psi_fop_release,
+};
+
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 static int psi_irq_show(struct seq_file *m, void *v)
 {
@@ -1714,6 +1787,7 @@ static int __init psi_proc_init(void)
 		proc_create("pressure/io", 0666, NULL, &psi_io_proc_ops);
 		proc_create("pressure/memory", 0666, NULL, &psi_memory_proc_ops);
 		proc_create("pressure/cpu", 0666, NULL, &psi_cpu_proc_ops);
+		proc_create("pressure/cpu_prio", 0666, NULL, &psi_cpu_prio_proc_ops);
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 		proc_create("pressure/irq", 0666, NULL, &psi_irq_proc_ops);
 #endif

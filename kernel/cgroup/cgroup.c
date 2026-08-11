@@ -3989,6 +3989,14 @@ static int cgroup_cpu_pressure_show(struct seq_file *seq, void *v)
 	return psi_show(seq, psi, PSI_CPU);
 }
 
+static int cgroup_cpu_prio_pressure_show(struct seq_file *seq, void *v)
+{
+	struct cgroup *cgrp = seq_css(seq)->cgroup;
+	struct psi_group *psi = cgroup_psi(cgrp);
+
+	return psi_show(seq, psi, PSI_CPU_HIGH_PRIO);
+}
+
 static ssize_t pressure_write(struct kernfs_open_file *of, char *buf,
 			      size_t nbytes, enum psi_res res)
 {
@@ -4071,6 +4079,13 @@ static ssize_t cgroup_cpu_pressure_write(struct kernfs_open_file *of,
 					  loff_t off)
 {
 	return pressure_write(of, buf, nbytes, PSI_CPU);
+}
+
+static ssize_t cgroup_cpu_prio_pressure_write(struct kernfs_open_file *of,
+					      char *buf, size_t nbytes,
+					      loff_t off)
+{
+	return pressure_write(of, buf, nbytes, PSI_CPU_HIGH_PRIO);
 }
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
@@ -5569,6 +5584,14 @@ static struct cftype cgroup_psi_files[] = {
 		.file_offset = offsetof(struct cgroup, psi_files[PSI_CPU]),
 		.seq_show = cgroup_cpu_pressure_show,
 		.write = cgroup_cpu_pressure_write,
+		.poll = cgroup_pressure_poll,
+		.release = cgroup_pressure_release,
+	},
+	{
+		.name = "cpu_prio.pressure",
+		.file_offset = offsetof(struct cgroup, psi_files[PSI_CPU_HIGH_PRIO]),
+		.seq_show = cgroup_cpu_prio_pressure_show,
+		.write = cgroup_cpu_prio_pressure_write,
 		.poll = cgroup_pressure_poll,
 		.release = cgroup_pressure_release,
 	},
