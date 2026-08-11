@@ -568,6 +568,27 @@ static u16 vlan_get_tci(const struct sk_buff *skb, struct net_device *dev)
 	return ntohs(vh->h_vlan_TCI);
 }
 
+static bool packet_get_vlan_tci_tpid(const struct sk_buff *skb,
+				     struct net_device *dev,
+				     u16 *tci, u16 *tpid)
+{
+	if (skb_vlan_tag_present(skb)) {
+		*tci = skb_vlan_tag_get(skb);
+		*tpid = ntohs(skb->vlan_proto);
+		return true;
+	}
+
+	if (unlikely(dev && eth_type_vlan(skb->protocol))) {
+		*tci = vlan_get_tci(skb, dev);
+		*tpid = ntohs(skb->protocol);
+		return true;
+	}
+
+	*tci = 0;
+	*tpid = 0;
+	return false;
+}
+
 static __be16 vlan_get_protocol_dgram(const struct sk_buff *skb)
 {
 	__be16 proto = skb->protocol;
@@ -997,20 +1018,19 @@ static void prb_fill_vlan_info(struct tpacket_kbdq_core *pkc,
 			struct tpacket3_hdr *ppd)
 {
 	struct packet_sock *po = container_of(pkc, struct packet_sock, rx_ring.prb_bdqc);
+	struct net_device *dev = NULL;
+	u16 tci, tpid;
 
-	if (skb_vlan_tag_present(pkc->skb)) {
-		ppd->hv1.tp_vlan_tci = skb_vlan_tag_get(pkc->skb);
-		ppd->hv1.tp_vlan_tpid = ntohs(pkc->skb->vlan_proto);
+	if (po->sk.sk_type == SOCK_DGRAM)
+		dev = pkc->skb->dev;
+
+	if (packet_get_vlan_tci_tpid(pkc->skb, dev, &tci, &tpid))
 		ppd->tp_status = TP_STATUS_VLAN_VALID | TP_STATUS_VLAN_TPID_VALID;
-	} else if (unlikely(po->sk.sk_type == SOCK_DGRAM && eth_type_vlan(pkc->skb->protocol))) {
-		ppd->hv1.tp_vlan_tci = vlan_get_tci(pkc->skb, pkc->skb->dev);
-		ppd->hv1.tp_vlan_tpid = ntohs(pkc->skb->protocol);
-		ppd->tp_status = TP_STATUS_VLAN_VALID | TP_STATUS_VLAN_TPID_VALID;
-	} else {
-		ppd->hv1.tp_vlan_tci = 0;
-		ppd->hv1.tp_vlan_tpid = 0;
+	else
 		ppd->tp_status = TP_STATUS_AVAILABLE;
-	}
+
+	ppd->hv1.tp_vlan_tci = tci;
+	ppd->hv1.tp_vlan_tpid = tpid;
 }
 
 static void prb_run_all_ft_ops(struct tpacket_kbdq_core *pkc,
@@ -2247,6 +2267,7 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 		       struct packet_type *pt, struct net_device *orig_dev)
 {
 	enum skb_drop_reason drop_reason = SKB_CONSUMED;
+	struct net_device *vlan_dev = NULL;
 	struct sock *sk = NULL;
 	struct packet_sock *po;
 	struct sockaddr_ll *sll;
@@ -2262,6 +2283,7 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 	__u32 ts_status;
 	unsigned int slot_id = 0;
 	int vnet_hdr_sz = 0;
+	u16 tci, tpid;
 
 	/* struct tpacket{2,3}_hdr is aligned to a multiple of TPACKET_ALIGNMENT.
 	 * We may add members to them until current aligned size without forcing
@@ -2436,18 +2458,12 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 		h.h2->tp_net = netoff;
 		h.h2->tp_sec = ts.tv_sec;
 		h.h2->tp_nsec = ts.tv_nsec;
-		if (skb_vlan_tag_present(skb)) {
-			h.h2->tp_vlan_tci = skb_vlan_tag_get(skb);
-			h.h2->tp_vlan_tpid = ntohs(skb->vlan_proto);
+		if (sk->sk_type == SOCK_DGRAM)
+			vlan_dev = skb->dev;
+		if (packet_get_vlan_tci_tpid(skb, vlan_dev, &tci, &tpid))
 			status |= TP_STATUS_VLAN_VALID | TP_STATUS_VLAN_TPID_VALID;
-		} else if (unlikely(sk->sk_type == SOCK_DGRAM && eth_type_vlan(skb->protocol))) {
-			h.h2->tp_vlan_tci = vlan_get_tci(skb, skb->dev);
-			h.h2->tp_vlan_tpid = ntohs(skb->protocol);
-			status |= TP_STATUS_VLAN_VALID | TP_STATUS_VLAN_TPID_VALID;
-		} else {
-			h.h2->tp_vlan_tci = 0;
-			h.h2->tp_vlan_tpid = 0;
-		}
+		h.h2->tp_vlan_tci = tci;
+		h.h2->tp_vlan_tpid = tpid;
 		memset(h.h2->tp_padding, 0, sizeof(h.h2->tp_padding));
 		hdrlen = sizeof(*h.h2);
 		break;
@@ -3547,7 +3563,9 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	}
 
 	if (packet_sock_flag(pkt_sk(sk), PACKET_SOCK_AUXDATA)) {
+		struct net_device *vlan_dev = NULL;
 		struct tpacket_auxdata aux;
+		u16 tci, tpid;
 
 		aux.tp_status = TP_STATUS_USER;
 		if (skb->ip_summed == CHECKSUM_PARTIAL)
@@ -3562,29 +3580,22 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 		aux.tp_snaplen = skb->len;
 		aux.tp_mac = 0;
 		aux.tp_net = skb_network_offset(skb);
-		if (skb_vlan_tag_present(skb)) {
-			aux.tp_vlan_tci = skb_vlan_tag_get(skb);
-			aux.tp_vlan_tpid = ntohs(skb->vlan_proto);
-			aux.tp_status |= TP_STATUS_VLAN_VALID | TP_STATUS_VLAN_TPID_VALID;
-		} else if (unlikely(sock->type == SOCK_DGRAM && eth_type_vlan(skb->protocol))) {
+		rcu_read_lock();
+		if (unlikely(sock->type == SOCK_DGRAM &&
+			     !skb_vlan_tag_present(skb) &&
+			     eth_type_vlan(skb->protocol))) {
 			struct sockaddr_ll *sll = &PACKET_SKB_CB(skb)->sa.ll;
-			struct net_device *dev;
 
-			rcu_read_lock();
-			dev = dev_get_by_index_rcu(sock_net(sk), sll->sll_ifindex);
-			if (dev) {
-				aux.tp_vlan_tci = vlan_get_tci(skb, dev);
-				aux.tp_vlan_tpid = ntohs(skb->protocol);
-				aux.tp_status |= TP_STATUS_VLAN_VALID | TP_STATUS_VLAN_TPID_VALID;
-			} else {
-				aux.tp_vlan_tci = 0;
-				aux.tp_vlan_tpid = 0;
-			}
-			rcu_read_unlock();
-		} else {
-			aux.tp_vlan_tci = 0;
-			aux.tp_vlan_tpid = 0;
+			vlan_dev = dev_get_by_index_rcu(sock_net(sk),
+							sll->sll_ifindex);
 		}
+		if (packet_get_vlan_tci_tpid(skb, vlan_dev, &tci, &tpid))
+			aux.tp_status |= TP_STATUS_VLAN_VALID |
+					 TP_STATUS_VLAN_TPID_VALID;
+		rcu_read_unlock();
+
+		aux.tp_vlan_tci = tci;
+		aux.tp_vlan_tpid = tpid;
 		put_cmsg(msg, SOL_PACKET, PACKET_AUXDATA, sizeof(aux), &aux);
 	}
 
