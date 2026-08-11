@@ -442,12 +442,20 @@ static unsigned int ttm_pool_shrink(int nid, unsigned long num_to_free)
 	LIST_HEAD(dispose);
 	struct ttm_pool_type *pt;
 	unsigned int num_pages;
+	int empty = 0;
 
 	down_read(&pool_shrink_rwsem);
 	spin_lock(&shrinker_lock);
-	pt = list_first_entry(&shrinker_list, typeof(*pt), shrinker_list);
-	list_move_tail(&pt->shrinker_list, &shrinker_list);
+	if ((shrinker_list.prev == &shrinker_list) && (shrinker_list.next == &shrinker_list)) {
+		empty = 1;
+	} else {
+		pt = list_first_entry(&shrinker_list, typeof(*pt), shrinker_list);
+		list_move_tail(&pt->shrinker_list, &shrinker_list);
+	}
 	spin_unlock(&shrinker_lock);
+
+	if (empty)
+		return 0;
 
 	num_pages = list_lru_walk_node(&pt->pages, nid, pool_move_to_dispose_list, &dispose, &num_to_free);
 	num_pages *= 1 << pt->order;
@@ -1137,6 +1145,18 @@ long ttm_pool_backup(struct ttm_pool *pool, struct ttm_tt *tt,
 }
 
 /**
+ * ttm_pool_synchronize_shrinkers - Wait for all running shrinkers to complete.
+ *
+ * This is useful to guarantee that all shrinker invocations have seen an
+ * update, before freeing memory, similar to rcu.
+ */
+static void ttm_pool_synchronize_shrinkers(void)
+{
+	down_write(&pool_shrink_rwsem);
+	up_write(&pool_shrink_rwsem);
+}
+
+/**
  * ttm_pool_init - Initialize a pool
  *
  * @pool: the pool to initialize
@@ -1146,10 +1166,13 @@ long ttm_pool_backup(struct ttm_pool *pool, struct ttm_tt *tt,
  *
  * Initialize the pool and its pool types.
  */
-void ttm_pool_init(struct ttm_pool *pool, struct device *dev,
+int ttm_pool_init(struct ttm_pool *pool, struct device *dev,
 		   int nid, unsigned int alloc_flags)
 {
-	unsigned int i, j;
+	unsigned int i, j, k;
+	int ret;
+	struct ttm_pool_type *initialized[TTM_NUM_CACHING_TYPES * NR_PAGE_ORDERS];
+	unsigned int n_initialized = 0;
 
 	WARN_ON(!dev && ttm_pool_uses_dma_alloc(pool));
 
@@ -1166,23 +1189,28 @@ void ttm_pool_init(struct ttm_pool *pool, struct device *dev,
 			if (pt != &pool->caching[i].orders[j])
 				continue;
 
-			ttm_pool_type_init(pt, pool, i, j);
+			ret = ttm_pool_type_init(pt, pool, i, j);
+			if (ret)
+				goto error;
+
+			initialized[n_initialized++] = pt;
 		}
 	}
+
+	return 0;
+
+error:
+	for (k = 0; k < n_initialized; ++k)
+		ttm_pool_type_fini(initialized[k]);
+
+	ttm_pool_synchronize_shrinkers();
+
+	for (k = 0; k < n_initialized; ++k)
+		list_lru_destroy(&initialized[k]->pages);
+
+	return ret;
 }
 EXPORT_SYMBOL(ttm_pool_init);
-
-/**
- * ttm_pool_synchronize_shrinkers - Wait for all running shrinkers to complete.
- *
- * This is useful to guarantee that all shrinker invocations have seen an
- * update, before freeing memory, similar to rcu.
- */
-static void ttm_pool_synchronize_shrinkers(void)
-{
-	down_write(&pool_shrink_rwsem);
-	up_write(&pool_shrink_rwsem);
-}
 
 /**
  * ttm_pool_fini - Cleanup a pool
