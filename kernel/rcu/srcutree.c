@@ -124,6 +124,72 @@ static inline bool srcu_invl_snp_seq(unsigned long s)
 }
 
 /*
+ * A standing spare srcu_node array. The size of the allocation depends
+ * only on rcu_num_nodes, which is fixed once rcu_init_geometry() has run,
+ * so one preallocated array fits every srcu_struct in the system.
+ *
+ * This exists because srcu_gp_end() may need to allocate the array when
+ * a size transition is triggered by contention, and srcu_gp_end() runs
+ * on the same workqueue for every srcu_struct — including grace periods
+ * awaited from OOM/reclaim contexts (e.g. the OOM reaper via an
+ * mmu_notifier). Blocking there in GFP_KERNEL reclaim can deadlock: the
+ * reclaim may be waiting on the very OOM reaper whose grace period is
+ * queued behind this allocation.
+ *
+ * The allocation is therefore attempted with the caller's own flags
+ * (GFP_NOWAIT on the grace-period path), and the spare is raided only
+ * when that fails — i.e. under the memory pressure the spare exists
+ * for. The spare is replenished from a clean context on system_wq.
+ * Nothing on the grace-period path ever blocks in reclaim.
+ */
+static struct srcu_node *srcu_spare_nodes;
+
+static void srcu_spare_replenish_wq(struct work_struct *work)
+{
+	struct srcu_node *spare, *expect = NULL;
+
+	if (READ_ONCE(srcu_spare_nodes))
+		return;		/* Already refilled. */
+
+	spare = kzalloc_objs(*spare, rcu_num_nodes, GFP_KERNEL);
+	if (!spare)
+		return;
+	if (!try_cmpxchg(&srcu_spare_nodes, &expect, spare))
+		kfree(spare);	/* Someone else refilled it first. */
+}
+static DECLARE_WORK(srcu_spare_replenish_work, srcu_spare_replenish_wq);
+
+static struct srcu_node *srcu_alloc_nodes(gfp_t gfp_flags)
+{
+	struct srcu_node *node;
+
+	/*
+	 * Try the caller's own flags first, raiding the spare only if that
+	 * fails. For init_srcu_struct() the flags are GFP_KERNEL in the
+	 * caller's own task, where blocking is permitted: such a caller
+	 * only ever reaches the spare under genuine OOM, rather than
+	 * consuming it on any transient pressure. From srcu_gp_end() the
+	 * flags are GFP_NOWAIT, so nothing on the grace-period workqueue
+	 * ever blocks in reclaim, and the spare is the fallback it exists
+	 * to provide. If the spare is also gone (already raided, not yet
+	 * replenished), fail: srcu_gp_end() retries the size transition
+	 * on a later grace period.
+	 */
+	node = kzalloc_objs(*node, rcu_num_nodes, gfp_flags);
+	if (node)
+		return node;
+
+	/*
+	 * Kick the replenisher whether or not the raid succeeds: the
+	 * replenisher does not retry a failed allocation itself, so this
+	 * is what retries the refill on each pressure event.
+	 */
+	node = xchg(&srcu_spare_nodes, NULL);
+	schedule_work(&srcu_spare_replenish_work);
+	return node;
+}
+
+/*
  * Allocated and initialize SRCU combining tree.  Returns @true if
  * allocation succeeded and @false otherwise.
  */
@@ -139,8 +205,7 @@ static bool init_srcu_struct_nodes(struct srcu_struct *ssp, gfp_t gfp_flags)
 
 	/* Initialize geometry if it has not already been initialized. */
 	rcu_init_geometry();
-	ssp->srcu_sup->node = kzalloc_objs(*ssp->srcu_sup->node, rcu_num_nodes,
-					   gfp_flags);
+	ssp->srcu_sup->node = srcu_alloc_nodes(gfp_flags);
 	if (!ssp->srcu_sup->node)
 		return false;
 
@@ -1006,7 +1071,7 @@ static void srcu_gp_end(struct srcu_struct *ssp)
 	/* Transition to big if needed. */
 	if (ss_state != SRCU_SIZE_SMALL && ss_state != SRCU_SIZE_BIG) {
 		if (ss_state == SRCU_SIZE_ALLOC)
-			init_srcu_struct_nodes(ssp, GFP_KERNEL);
+			init_srcu_struct_nodes(ssp, GFP_NOWAIT);
 		else
 			smp_store_release(&sup->srcu_size_state, ss_state + 1);
 	}
@@ -2109,6 +2174,20 @@ void __init srcu_init(void)
 			convert_to_big = SRCU_SIZING_NONE | SRCU_SIZING_CONTEND;
 			pr_info("%s: Setting srcu_struct sizes based on contention.\n", __func__);
 		}
+	}
+
+	/*
+	 * Prime the spare node array if lazy (contention-triggered) size
+	 * transitions are possible, so that srcu_gp_end() never needs to
+	 * allocate. Early-boot GFP_KERNEL is implicitly non-blocking
+	 * (gfp_allowed_mask strips __GFP_RECLAIM until much later), and
+	 * failure here is harmless: the GFP_NOWAIT fallback and replenish
+	 * worker remain.
+	 */
+	if (SRCU_SIZING_IS_CONTEND() || SRCU_SIZING_IS_TORTURE()) {
+		rcu_init_geometry();
+		srcu_spare_nodes = kzalloc_objs(*srcu_spare_nodes,
+						rcu_num_nodes, GFP_KERNEL);
 	}
 
 	/*
