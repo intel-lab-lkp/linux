@@ -4,6 +4,8 @@
 
 //! Helpers for implementing list traits safely.
 
+use macros::macro_export_scoped;
+
 /// Declares that this type has a [`ListLinks<ID>`] field.
 ///
 /// This trait is only used to help implement [`ListItem`] safely. If [`ListItem`] is implemented
@@ -28,8 +30,7 @@ pub unsafe trait HasListLinks<const ID: u64 = 0> {
 }
 
 /// Implements the [`HasListLinks`] trait for the given type.
-#[macro_export]
-#[doc(hidden)]
+#[macro_export_scoped]
 macro_rules! impl_has_list_links {
     ($(impl$({$($generics:tt)*})?
        HasListLinks$(<$id:tt>)?
@@ -55,7 +56,6 @@ macro_rules! impl_has_list_links {
         }
     )*};
 }
-pub use impl_has_list_links;
 
 /// Declares that the [`ListLinks<ID>`] field in this struct is inside a
 /// [`ListLinksSelfPtr<T, ID>`].
@@ -74,8 +74,7 @@ where
 }
 
 /// Implements the [`HasListLinks`] and [`HasSelfPtr`] traits for the given type.
-#[macro_export]
-#[doc(hidden)]
+#[macro_export_scoped]
 macro_rules! impl_has_list_links_self_ptr {
     ($(impl$({$($generics:tt)*})?
        HasSelfPtr<$item_type:ty $(, $id:tt)?>
@@ -98,7 +97,6 @@ macro_rules! impl_has_list_links_self_ptr {
         }
     )*};
 }
-pub use impl_has_list_links_self_ptr;
 
 /// Implements the [`ListItem`] trait for the given type.
 ///
@@ -182,8 +180,7 @@ pub use impl_has_list_links_self_ptr;
 ///     }
 /// }
 /// ```
-#[macro_export]
-#[doc(hidden)]
+#[macro_export_scoped]
 macro_rules! impl_list_item {
     (
         $(impl$({$($generics:tt)*})? ListItem<$num:tt> for $self:ty {
@@ -358,4 +355,3 @@ macro_rules! impl_list_item {
         }
     )*};
 }
-pub use impl_list_item;
