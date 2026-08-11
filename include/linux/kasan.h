@@ -183,6 +183,7 @@ bool __kasan_slab_pre_free(struct kmem_cache *s, void *object,
 			unsigned long ip);
 /**
  * kasan_slab_pre_free - Check whether freeing a slab object is safe.
+ * @kcache: Cache the object belongs to.
  * @object: Object to be freed.
  *
  * This function checks whether freeing the given object is safe. It may
@@ -192,11 +193,11 @@ bool __kasan_slab_pre_free(struct kmem_cache *s, void *object,
  *
  * @Return true if freeing the object is unsafe; false otherwise.
  */
-static __always_inline bool kasan_slab_pre_free(struct kmem_cache *s,
+static __always_inline bool kasan_slab_pre_free(struct kmem_cache *kcache,
 						void *object)
 {
 	if (kasan_enabled())
-		return __kasan_slab_pre_free(s, object, _RET_IP_);
+		return __kasan_slab_pre_free(kcache, object, _RET_IP_);
 	return false;
 }
 
@@ -204,9 +205,11 @@ bool __kasan_slab_free(struct kmem_cache *s, void *object, bool init,
 		       bool still_accessible, bool no_quarantine);
 /**
  * kasan_slab_free - Poison, initialize, and quarantine a slab object.
+ * @kcache: Cache the object belongs to.
  * @object: Object to be freed.
  * @init: Whether to initialize the object.
  * @still_accessible: Whether the object contents are still accessible.
+ * @no_quarantine: Whether to take ownership of the object to quarantine it.
  *
  * This function informs that a slab object has been freed and is not
  * supposed to be accessed anymore, except when @still_accessible is set
@@ -226,14 +229,14 @@ bool __kasan_slab_free(struct kmem_cache *s, void *object, bool init,
  *
  * @Return true if KASAN took ownership of the object; false otherwise.
  */
-static __always_inline bool kasan_slab_free(struct kmem_cache *s,
+static __always_inline bool kasan_slab_free(struct kmem_cache *kcache,
 					    void *object, bool init,
 					    bool still_accessible,
 					    bool no_quarantine)
 {
 	if (kasan_enabled())
-		return __kasan_slab_free(s, object, init, still_accessible,
-					 no_quarantine);
+		return __kasan_slab_free(kcache, object, init,
+					 still_accessible, no_quarantine);
 	return false;
 }
 
