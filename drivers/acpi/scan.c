@@ -2350,6 +2350,11 @@ static int acpi_bus_attach(struct acpi_device *device, void *first_pass)
 	acpi_bus_get_status(device);
 	/* Skip devices that are not ready for enumeration (e.g. not present) */
 	if (!acpi_dev_ready_for_enumeration(device)) {
+		/*
+		 * Drop power resource references acquired during initial
+		 * power state initialization before parking the device.
+		 */
+		acpi_power_transition(device, ACPI_STATE_D3_COLD);
 		device->flags.initialized = false;
 		acpi_device_clear_enumerated(device);
 		device->flags.power_manageable = 0;
