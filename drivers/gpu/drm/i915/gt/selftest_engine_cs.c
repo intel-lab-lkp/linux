@@ -10,6 +10,7 @@
 #include "intel_rps.h"
 
 #include "i915_selftest.h"
+#include "selftests/mock_gem_device.h"
 #include "selftests/igt_flush_test.h"
 
 #define COUNT 5
@@ -207,7 +208,7 @@ out:
 		if (err)
 			break;
 
-		pr_info("%s: MI_BB_START cycles: %u\n",
+		drm_info(&gt->i915->drm, "%s: MI_BB_START cycles: %u\n",
 			engine->name, trifilter(cycles));
 	}
 	if (perf_end(gt, wakeref))
@@ -365,7 +366,7 @@ out:
 		if (err)
 			break;
 
-		pr_info("%s: 16K MI_NOOP cycles: %u\n",
+		drm_info(&gt->i915->drm, "%s: 16K MI_NOOP cycles: %u\n",
 			engine->name, trifilter(cycles));
 	}
 	if (perf_end(gt, wakeref))
@@ -389,6 +390,7 @@ int intel_engine_cs_perf_selftests(struct drm_i915_private *i915)
 
 static int intel_mmio_bases_check(void *arg)
 {
+	struct drm_i915_private *i915 = arg;
 	int i, j;
 
 	for (i = 0; i < ARRAY_SIZE(intel_engines); i++) {
@@ -400,7 +402,8 @@ static int intel_mmio_bases_check(void *arg)
 			u32 base = info->mmio_bases[j].base;
 
 			if (ver >= prev) {
-				pr_err("%s(%s, class:%d, instance:%d): mmio base for graphics ver %u is before the one for ver %u\n",
+				drm_err(&i915->drm,
+					"%s(%s, class:%d, instance:%d): mmio base for graphics ver %u is before the one for ver %u\n",
 				       __func__,
 				       intel_engine_class_repr(info->class),
 				       info->class, info->instance,
@@ -412,7 +415,8 @@ static int intel_mmio_bases_check(void *arg)
 				break;
 
 			if (!base) {
-				pr_err("%s(%s, class:%d, instance:%d): invalid mmio base (%x) for graphics ver %u at entry %u\n",
+				drm_err(&i915->drm,
+					"%s(%s, class:%d, instance:%d): invalid mmio base (%x) for graphics ver %u at entry %u\n",
 				       __func__,
 				       intel_engine_class_repr(info->class),
 				       info->class, info->instance,
@@ -423,7 +427,8 @@ static int intel_mmio_bases_check(void *arg)
 			prev = ver;
 		}
 
-		pr_debug("%s: min graphics version supported for %s%d is %u\n",
+		drm_dbg(&i915->drm,
+			"%s: min graphics version supported for %s%d is %u\n",
 			 __func__,
 			 intel_engine_class_repr(info->class),
 			 info->instance,
@@ -438,6 +443,15 @@ int intel_engine_cs_mock_selftests(void)
 	static const struct i915_subtest tests[] = {
 		SUBTEST(intel_mmio_bases_check),
 	};
+	struct drm_i915_private *i915;
+	int err;
 
-	return i915_subtests(tests, NULL);
+	i915 = mock_gem_device();
+	if (!i915)
+		return -ENOMEM;
+
+	err = i915_subtests(tests, i915);
+	mock_destroy_device(i915);
+
+	return err;
 }
