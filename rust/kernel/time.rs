@@ -530,6 +530,21 @@ impl Delta {
 
     /// Return the smallest number of milliseconds greater than or equal
     /// to the value in the [`Delta`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::time::Delta;
+    ///
+    /// // Whole milliseconds are returned as-is.
+    /// assert_eq!(Delta::from_millis(2).as_millis_ceil(), 2);
+    /// assert_eq!(Delta::from_nanos(1_000_000).as_millis_ceil(), 1);
+    /// assert_eq!(Delta::from_nanos(-1_000_000).as_millis_ceil(), -1);
+    ///
+    /// // Anything else is rounded towards positive infinity.
+    /// assert_eq!(Delta::from_nanos(1_000_001).as_millis_ceil(), 2);
+    /// assert_eq!(Delta::from_nanos(-1_000_001).as_millis_ceil(), -1);
+    /// ```
     #[inline]
     pub fn as_millis_ceil(self) -> i64 {
         // Only positive values need to be rounded up: truncating division already
@@ -578,5 +593,32 @@ impl Delta {
                 value: i64::from(rem),
             }
         }
+    }
+}
+
+#[cfg(CONFIG_RUST_TIME_KUNIT_TEST)]
+#[macros::kunit_tests(rust_kernel_time)]
+mod tests {
+    use super::*;
+
+    /// `i64::MAX` nanoseconds in milliseconds, rounded towards positive infinity.
+    const MAX_MILLIS_CEIL: i64 = 9_223_372_036_855;
+
+    /// `i64::MIN` nanoseconds in milliseconds, rounded towards positive infinity.
+    const MIN_MILLIS_CEIL: i64 = -9_223_372_036_854;
+
+    #[test]
+    fn as_millis_ceil_extremes() {
+        // The rounding bias must survive near `i64::MAX`.
+        assert_eq!(
+            Delta::from_nanos(i64::MAX).as_millis_ceil(),
+            MAX_MILLIS_CEIL
+        );
+
+        // No bias is applied to negative values, so `i64::MIN` cannot overflow.
+        assert_eq!(
+            Delta::from_nanos(i64::MIN).as_millis_ceil(),
+            MIN_MILLIS_CEIL
+        );
     }
 }
