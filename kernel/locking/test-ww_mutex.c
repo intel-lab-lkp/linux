@@ -644,6 +644,7 @@ static int stress(struct ww_class *class, int nlocks, int nthreads, unsigned int
 static int run_tests(struct ww_class *class)
 {
 	int ncpus = num_online_cpus();
+	int cycle_ncpus = min_t(int, ncpus, WQ_MAX_ACTIVE - 1);
 	int ret, i;
 
 	ret = test_mutex(class);
@@ -664,7 +665,17 @@ static int run_tests(struct ww_class *class)
 			return ret;
 	}
 
-	ret = test_cycle(class, ncpus);
+	/*
+	 * test_cycle_work() has a linear dependency which requires
+	 * all kernel threads to be run-able at once. With N CPUs and
+	 * N + 1 worker threads, deadlock may happen. Hence, adjust
+	 * min_active. Raise max first, min_active is clamped to it.
+	 * Cap N so that N + 1 doesn't exceed WQ_MAX_ACTIVE.
+	 */
+	workqueue_set_max_active(wq, cycle_ncpus + 1);
+	workqueue_set_min_active(wq, cycle_ncpus + 1);
+
+	ret = test_cycle(class, cycle_ncpus);
 	if (ret)
 		return ret;
 
