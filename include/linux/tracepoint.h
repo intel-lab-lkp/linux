@@ -508,10 +508,10 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
  * the ASCII strings they represent.
  *
  * The @str used must be a constant string and persistent as it would not
- * make sense to show a string that no longer exists. But it is still fine
- * to be used with modules, because when modules are unloaded, if they
- * had tracepoints, the ring buffers are cleared too. As long as the string
- * does not change during the life of the module, it is fine to use
+ * make sense to show a string that no longer exists. For modules, the string
+ * mapping is exported while the module is loaded. When the module is unloaded,
+ * its trace buffers are cleared before the mapping is removed. As long as the
+ * string does not change during the life of the module, it is fine to use
  * tracepoint_string() within a module.
  */
 #define tracepoint_string(str)						\

@@ -23,5 +23,10 @@ grep -q ": (irq) .* trace_printk" trace
 
 grep -q "This is a %s that will use trace_bprintk" printk_formats
 grep -q "(irq) This is a static string that will use trace_bputs" printk_formats
+grep -q "tracepoint_string_test_module_string_1" printk_formats
+grep -q "tracepoint_string_test_module_string_2" printk_formats
 
 rmmod trace-printk ||:
+
+! grep -q "tracepoint_string_test_module_string_1" printk_formats
+! grep -q "tracepoint_string_test_module_string_2" printk_formats

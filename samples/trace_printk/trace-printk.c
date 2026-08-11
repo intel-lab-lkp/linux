@@ -2,6 +2,7 @@
 #include <linux/module.h>
 #include <linux/kthread.h>
 #include <linux/irq_work.h>
+#include <linux/tracepoint.h>
 
 /* Must not be static to force gcc to consider these non constant */
 char *trace_printk_test_global_str =
@@ -30,6 +31,9 @@ static void trace_printk_irq_work(struct irq_work *work)
 static int __init trace_printk_init(void)
 {
 	init_irq_work(&irqwork, trace_printk_irq_work);
+
+	(void)tracepoint_string("tracepoint_string_test_module_string_1");
+	(void)tracepoint_string("tracepoint_string_test_module_string_2");
 
 	trace_printk("This is a static string that will use trace_bputs\n");
 	trace_printk(trace_printk_test_global_str);
