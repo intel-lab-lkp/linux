@@ -125,6 +125,7 @@ enum mv88e6xxx_edsa_support {
 };
 
 struct mv88e6xxx_ops;
+struct mv88e6xxx_qav_info;
 
 struct mv88e6xxx_info {
 	enum mv88e6xxx_family family;
@@ -176,6 +177,9 @@ struct mv88e6xxx_info {
 
 	/* Supports PTP */
 	bool ptp_support;
+
+	/* 802.1Qav credit based shaping */
+	const struct mv88e6xxx_qav_info *qav;
 
 	/* Internal PHY start index. 0 means that internal PHYs range starts at
 	 * port 0, 1 means internal PHYs range starts at port 1, etc
@@ -305,6 +309,9 @@ struct mv88e6xxx_port {
 
 	/* MacAuth Bypass control flag */
 	bool mab;
+
+	/* Queues with CBS currently enabled. */
+	u8 cbs_active_queues;
 };
 
 enum mv88e6xxx_region_id {
@@ -607,6 +614,8 @@ struct mv88e6xxx_ops {
 				   size_t size);
 
 	int (*port_egress_rate_limiting)(struct mv88e6xxx_chip *chip, int port);
+	int (*port_set_scheduling_mode)(struct mv88e6xxx_chip *chip, int port,
+					u8 mode);
 	int (*port_pause_limit)(struct mv88e6xxx_chip *chip, int port, u8 in,
 				u8 out);
 	int (*port_disable_learn_limit)(struct mv88e6xxx_chip *chip, int port);
@@ -764,6 +773,10 @@ struct mv88e6xxx_avb_ops {
 	int (*tai_read)(struct mv88e6xxx_chip *chip, int addr, u16 *data,
 			int len);
 	int (*tai_write)(struct mv88e6xxx_chip *chip, int addr, u16 data);
+
+	/* Access port-scoped 802.1Qav registers */
+	int (*port_qav_write)(struct mv88e6xxx_chip *chip, int port, int addr,
+			      u16 data);
 };
 
 struct mv88e6xxx_ptp_ops {
@@ -797,6 +810,13 @@ struct mv88e6xxx_tcam_ops {
 	int (*entry_add)(struct mv88e6xxx_chip *chip,
 			 struct mv88e6xxx_tcam_entry *entry, u8 idx);
 	int (*flush_tcam)(struct mv88e6xxx_chip *chip);
+};
+
+struct mv88e6xxx_qav_info {
+	u16 rate_unit; /* in kbps */
+	u16 rate_mask; /* QPri Rate valid bits mask */
+	u16 hilimit_mask; /* QPri HiLimit bits mask*/
+	u8 queue_mask; /* supported queues bitmask */
 };
 
 static inline bool mv88e6xxx_has_stu(struct mv88e6xxx_chip *chip)

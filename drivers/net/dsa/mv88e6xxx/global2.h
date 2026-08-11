@@ -186,6 +186,9 @@
 #define MV88E6352_G2_AVB_CMD_BLOCK_MASK		0x00e0
 #define MV88E6352_G2_AVB_CMD_ADDR_MASK		0x001f
 
+#define MV88E6XXX_PORT_QAV_CFG_RATE(queue)	(((queue) & 0x7) << 1)
+#define MV88E6XXX_PORT_QAV_CFG_HILIMIT(queue)	((((queue) & 0x7) << 1) + 1)
+
 /* Offset 0x17: AVB Data Register */
 #define MV88E6352_G2_AVB_DATA		0x17
 

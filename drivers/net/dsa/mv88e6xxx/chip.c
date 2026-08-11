@@ -32,6 +32,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/phylink.h>
 #include <net/dsa.h>
+#include <net/pkt_sched.h>
 
 #include "chip.h"
 #include "devlink.h"
@@ -5024,6 +5025,7 @@ static const struct mv88e6xxx_ops mv88e6240_ops = {
 	.port_set_ether_type = mv88e6351_port_set_ether_type,
 	.port_set_jumbo_size = mv88e6165_port_set_jumbo_size,
 	.port_egress_rate_limiting = mv88e6097_port_egress_rate_limiting,
+	.port_set_scheduling_mode = mv88e6352_port_set_scheduling_mode,
 	.port_pause_limit = mv88e6097_port_pause_limit,
 	.port_disable_learn_limit = mv88e6xxx_port_disable_learn_limit,
 	.port_disable_pri_override = mv88e6xxx_port_disable_pri_override,
@@ -5307,6 +5309,7 @@ static const struct mv88e6xxx_ops mv88e6341_ops = {
 	.port_set_ether_type = mv88e6351_port_set_ether_type,
 	.port_set_jumbo_size = mv88e6165_port_set_jumbo_size,
 	.port_egress_rate_limiting = mv88e6097_port_egress_rate_limiting,
+	.port_set_scheduling_mode = mv88e6352_port_set_scheduling_mode,
 	.port_pause_limit = mv88e6097_port_pause_limit,
 	.port_disable_learn_limit = mv88e6xxx_port_disable_learn_limit,
 	.port_disable_pri_override = mv88e6xxx_port_disable_pri_override,
@@ -5465,6 +5468,7 @@ static const struct mv88e6xxx_ops mv88e6352_ops = {
 	.port_set_ether_type = mv88e6351_port_set_ether_type,
 	.port_set_jumbo_size = mv88e6165_port_set_jumbo_size,
 	.port_egress_rate_limiting = mv88e6097_port_egress_rate_limiting,
+	.port_set_scheduling_mode = mv88e6352_port_set_scheduling_mode,
 	.port_pause_limit = mv88e6097_port_pause_limit,
 	.port_disable_learn_limit = mv88e6xxx_port_disable_learn_limit,
 	.port_disable_pri_override = mv88e6xxx_port_disable_pri_override,
@@ -5534,6 +5538,7 @@ static const struct mv88e6xxx_ops mv88e6390_ops = {
 	.port_get_cmode = mv88e6352_port_get_cmode,
 	.port_set_cmode = mv88e6390_port_set_cmode,
 	.port_setup_message_port = mv88e6xxx_setup_message_port,
+	.port_set_scheduling_mode = mv88e6390_port_set_scheduling_mode,
 	.stats_snapshot = mv88e6390_g1_stats_snapshot,
 	.stats_set_histogram = mv88e6390_g1_stats_set_histogram,
 	.stats_get_sset_count = mv88e6320_stats_get_sset_count,
@@ -5598,6 +5603,7 @@ static const struct mv88e6xxx_ops mv88e6390x_ops = {
 	.port_get_cmode = mv88e6352_port_get_cmode,
 	.port_set_cmode = mv88e6390x_port_set_cmode,
 	.port_setup_message_port = mv88e6xxx_setup_message_port,
+	.port_set_scheduling_mode = mv88e6390_port_set_scheduling_mode,
 	.stats_snapshot = mv88e6390_g1_stats_snapshot,
 	.stats_set_histogram = mv88e6390_g1_stats_set_histogram,
 	.stats_get_sset_count = mv88e6320_stats_get_sset_count,
@@ -5654,6 +5660,7 @@ static const struct mv88e6xxx_ops mv88e6393x_ops = {
 	.port_set_ether_type = mv88e6393x_port_set_ether_type,
 	.port_set_jumbo_size = mv88e6165_port_set_jumbo_size,
 	.port_egress_rate_limiting = mv88e6097_port_egress_rate_limiting,
+	.port_set_scheduling_mode = mv88e6390_port_set_scheduling_mode,
 	.port_pause_limit = mv88e6390_port_pause_limit,
 	.port_disable_learn_limit = mv88e6xxx_port_disable_learn_limit,
 	.port_disable_pri_override = mv88e6xxx_port_disable_pri_override,
@@ -5694,6 +5701,27 @@ static const struct mv88e6xxx_ops mv88e6393x_ops = {
 	.phylink_get_caps = mv88e6393x_phylink_get_caps,
 	.pcs_ops = &mv88e6393x_pcs_ops,
 	.tcam_ops = &mv88e6393_tcam_ops,
+};
+
+static const struct mv88e6xxx_qav_info mv88e6352_qav_info = {
+	.rate_unit = 32,
+	.rate_mask = GENMASK(14, 0),
+	.hilimit_mask = GENMASK(14, 0),
+	.queue_mask = GENMASK(3, 0),
+};
+
+static const struct mv88e6xxx_qav_info mv88e6341_qav_info = {
+	.rate_unit = 64,
+	.rate_mask = GENMASK(15, 0),
+	.hilimit_mask = GENMASK(13, 0),
+	.queue_mask = GENMASK(3, 0),
+};
+
+static const struct mv88e6xxx_qav_info mv88e6390_qav_info = {
+	.rate_unit = 64,
+	.rate_mask = GENMASK(15, 0),
+	.hilimit_mask = GENMASK(13, 0),
+	.queue_mask = GENMASK(7, 0),
 };
 
 static const struct mv88e6xxx_info mv88e6xxx_table[] = {
@@ -6260,6 +6288,7 @@ static const struct mv88e6xxx_info mv88e6xxx_table[] = {
 		.multi_chip = true,
 		.edsa_support = MV88E6XXX_EDSA_SUPPORTED,
 		.ptp_support = true,
+		.qav = &mv88e6352_qav_info,
 		.ops = &mv88e6240_ops,
 	},
 
@@ -6397,6 +6426,7 @@ static const struct mv88e6xxx_info mv88e6xxx_table[] = {
 		.multi_chip = true,
 		.edsa_support = MV88E6XXX_EDSA_SUPPORTED,
 		.ptp_support = true,
+		.qav = &mv88e6341_qav_info,
 		.ops = &mv88e6341_ops,
 	},
 
@@ -6477,6 +6507,7 @@ static const struct mv88e6xxx_info mv88e6xxx_table[] = {
 		.multi_chip = true,
 		.edsa_support = MV88E6XXX_EDSA_SUPPORTED,
 		.ptp_support = true,
+		.qav = &mv88e6352_qav_info,
 		.ops = &mv88e6352_ops,
 	},
 	[MV88E6361] = {
@@ -6534,6 +6565,7 @@ static const struct mv88e6xxx_info mv88e6xxx_table[] = {
 		.multi_chip = true,
 		.edsa_support = MV88E6XXX_EDSA_UNDOCUMENTED,
 		.ptp_support = true,
+		.qav = &mv88e6390_qav_info,
 		.ops = &mv88e6390_ops,
 	},
 	[MV88E6390X] = {
@@ -6561,6 +6593,7 @@ static const struct mv88e6xxx_info mv88e6xxx_table[] = {
 		.multi_chip = true,
 		.edsa_support = MV88E6XXX_EDSA_UNDOCUMENTED,
 		.ptp_support = true,
+		.qav = &mv88e6390_qav_info,
 		.ops = &mv88e6390x_ops,
 	},
 
@@ -6589,6 +6622,7 @@ static const struct mv88e6xxx_info mv88e6xxx_table[] = {
 		.pvt = true,
 		.multi_chip = true,
 		.ptp_support = true,
+		.qav = &mv88e6390_qav_info,
 		.ops = &mv88e6393x_ops,
 	},
 };
@@ -7210,6 +7244,112 @@ static int mv88e6xxx_crosschip_lag_leave(struct dsa_switch *ds, int sw_index,
 	return err_sync ? : err_pvt;
 }
 
+static int mv88e6xxx_setup_tc_cbs(struct dsa_switch *ds, int port,
+				  struct tc_cbs_qopt_offload *cbs)
+{
+	const struct mv88e6xxx_avb_ops *avb_ops;
+	struct mv88e6xxx_chip *chip = ds->priv;
+	const struct mv88e6xxx_qav_info *qav;
+	const struct mv88e6xxx_ops *ops;
+	int hilimit_reg;
+	int rate_reg;
+	u8 queue_bit;
+	u32 rate = 0;
+	u16 hilimit;
+	int err;
+
+	ops = chip->info->ops;
+	avb_ops = ops->avb_ops;
+	qav = chip->info->qav;
+
+	if (!qav || !avb_ops || !avb_ops->port_qav_write ||
+	    !ops->port_set_scheduling_mode)
+		return -EOPNOTSUPP;
+
+	if (!dsa_is_user_port(ds, port))
+		return -EOPNOTSUPP;
+
+	if (!(qav->queue_mask & BIT(cbs->queue))) {
+		NL_SET_ERR_MSG_MOD(cbs->extack, "CBS not supported on queue");
+		return -EOPNOTSUPP;
+	}
+
+	queue_bit = BIT(cbs->queue);
+	rate_reg = MV88E6XXX_PORT_QAV_CFG_RATE(cbs->queue);
+	hilimit_reg = MV88E6XXX_PORT_QAV_CFG_HILIMIT(cbs->queue);
+
+	if (cbs->enable) {
+		if (cbs->hicredit <= 0 ||
+		    cbs->hicredit > qav->hilimit_mask) {
+			NL_SET_ERR_MSG_MOD(cbs->extack,
+					   "hicredit out of range");
+			return -ERANGE;
+		}
+
+		rate = DIV_ROUND_UP(cbs->idleslope, qav->rate_unit);
+		if (rate > qav->rate_mask) {
+			NL_SET_ERR_MSG_MOD(cbs->extack,
+					   "idleslope out of range");
+			return -ERANGE;
+		}
+		/* avoid using zero rate */
+		rate = max_t(u16, rate, 1);
+	}
+
+	mv88e6xxx_reg_lock(chip);
+
+	if (!cbs->enable) {
+		err = mv88e6xxx_port_qav_write(chip, port, rate_reg, 0);
+		if (err)
+			goto unlock;
+
+		if (!(chip->ports[port].cbs_active_queues & ~queue_bit)) {
+			err = mv88e6xxx_port_set_scheduling_mode(chip, port, 0);
+			if (err)
+				goto unlock;
+		}
+		chip->ports[port].cbs_active_queues &= ~queue_bit;
+		goto unlock;
+	}
+
+	hilimit = cbs->hicredit & qav->hilimit_mask;
+	err = mv88e6xxx_port_qav_write(chip, port, hilimit_reg, hilimit);
+	if (err)
+		goto unlock;
+
+	err = mv88e6xxx_port_qav_write(chip, port, rate_reg, rate);
+	if (err)
+		goto unlock;
+
+	if (!chip->ports[port].cbs_active_queues) {
+		u8 sched_mode = chip->info->num_tx_queues - 1;
+
+		err = mv88e6xxx_port_set_scheduling_mode(chip, port,
+							 sched_mode);
+		if (err) {
+			mv88e6xxx_port_qav_write(chip, port, rate_reg, 0);
+			goto unlock;
+		}
+	}
+	chip->ports[port].cbs_active_queues |= queue_bit;
+
+unlock:
+	mv88e6xxx_reg_unlock(chip);
+
+	return err;
+}
+
+static int mv88e6xxx_port_setup_tc(struct dsa_switch *ds, int port,
+				   enum tc_setup_type type, void *type_data)
+{
+	switch (type) {
+	case TC_SETUP_QDISC_CBS:
+		return mv88e6xxx_setup_tc_cbs(ds, port, type_data);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
 static const struct phylink_mac_ops mv88e6xxx_phylink_mac_ops = {
 	.mac_select_pcs		= mv88e6xxx_mac_select_pcs,
 	.mac_prepare		= mv88e6xxx_mac_prepare,
@@ -7269,6 +7409,7 @@ static const struct dsa_switch_ops mv88e6xxx_switch_ops = {
 	.port_hwtstamp_get	= mv88e6xxx_port_hwtstamp_get,
 	.port_txtstamp		= mv88e6xxx_port_txtstamp,
 	.port_rxtstamp		= mv88e6xxx_port_rxtstamp,
+	.port_setup_tc		= mv88e6xxx_port_setup_tc,
 	.cls_flower_add		= mv88e6xxx_cls_flower_add,
 	.cls_flower_del         = mv88e6xxx_cls_flower_del,
 	.get_ts_info		= mv88e6xxx_get_ts_info,

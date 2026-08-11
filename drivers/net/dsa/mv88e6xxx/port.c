@@ -1323,6 +1323,51 @@ int mv88e6097_port_egress_rate_limiting(struct mv88e6xxx_chip *chip, int port)
 				    0x0001);
 }
 
+int mv88e6352_port_set_scheduling_mode(struct mv88e6xxx_chip *chip, int port,
+				       u8 mode)
+{
+	u16 reg;
+	int err;
+
+	if (mode > 3)
+		return -EINVAL;
+
+	err = mv88e6xxx_port_read(chip, port, MV88E6XXX_PORT_EGRESS_RATE_CTL2,
+				  &reg);
+	if (err)
+		return err;
+
+	reg &= ~MV88E6XXX_PORT_EGRESS_RATE_CTL2_SCHEDULE_MASK;
+	reg |= mode << MV88E6XXX_PORT_EGRESS_RATE_CTL2_SCHEDULE_SHIFT;
+
+	return mv88e6xxx_port_write(chip, port,
+				    MV88E6XXX_PORT_EGRESS_RATE_CTL2, reg);
+}
+
+int mv88e6390_port_set_scheduling_mode(struct mv88e6xxx_chip *chip, int port,
+				       u8 mode)
+{
+	u16 reg;
+	int err;
+
+	if (mode > MV88E6390_PORT_QUEUE_CTL_SCHEDULE_MASK)
+		return -EINVAL;
+
+	reg = MV88E6390_PORT_QUEUE_CTL_UPDATE |
+	      (MV88E6390_PORT_QUEUE_CTL_SCHEDULE <<
+	       MV88E6390_PORT_QUEUE_CTL_PTR_SHIFT) |
+	      (mode & MV88E6390_PORT_QUEUE_CTL_SCHEDULE_MASK);
+
+	err = mv88e6xxx_port_write(chip, port, MV88E6390_PORT_QUEUE_CTL,
+				   reg);
+	if (err)
+		return err;
+
+	return mv88e6xxx_port_wait_bit(chip, port, MV88E6390_PORT_QUEUE_CTL,
+				       __bf_shf(MV88E6390_PORT_QUEUE_CTL_UPDATE)
+				       , 0);
+}
+
 /* Offset 0x0B: Port Association Vector */
 
 int mv88e6xxx_port_set_assoc_vector(struct mv88e6xxx_chip *chip, int port,
@@ -1726,4 +1771,22 @@ int mv88e6393x_port_set_policy(struct mv88e6xxx_chip *chip, int port,
 	reg |= (val << shift) & mask;
 
 	return mv88e6393x_port_policy_write(chip, port, ptr, reg);
+}
+
+int mv88e6xxx_port_qav_write(struct mv88e6xxx_chip *chip, int port, int addr,
+			     u16 data)
+{
+	if (!chip->info->ops->avb_ops->port_qav_write)
+		return -EOPNOTSUPP;
+
+	return chip->info->ops->avb_ops->port_qav_write(chip, port, addr, data);
+}
+
+int mv88e6xxx_port_set_scheduling_mode(struct mv88e6xxx_chip *chip, int port,
+				       u8 mode)
+{
+	if (!chip->info->ops->port_set_scheduling_mode)
+		return -EOPNOTSUPP;
+
+	return chip->info->ops->port_set_scheduling_mode(chip, port, mode);
 }
