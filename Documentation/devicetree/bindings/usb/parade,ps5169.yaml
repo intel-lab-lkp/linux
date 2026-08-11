@@ -1,0 +1,193 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/parade,ps5169.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Parade PS5169 USB Type-C linear redriver
+
+maintainers:
+  - Esteban Urrutia <esteuwu@proton.me>
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - const: parade,ps5170
+          - const: parade,ps5169
+      - const: parade,ps5169
+
+  reg:
+    maxItems: 1
+
+  vcc-supply:
+    description: 1.8V power supply
+
+  reset-gpios:
+    maxItems: 1
+
+  orientation-switch: true
+  retimer-switch: true
+
+  parade,dp-eq-db:
+    description:
+      Equalization for DP channels.
+      For example, <6 5> denotes an equalization of 6.5 dB.
+    oneOf:
+      - items:
+          - enum: [ 2, 8, 10 ]
+          - const: 0
+      - items:
+          - enum: [ 5, 6, 7, 8, 9 ]
+          - const: 5
+
+  parade,usb-rx-eq-db:
+    description:
+      Equalization for USB receive channels.
+      For example, <5 2> denotes an equalization of 5.2 dB.
+    oneOf:
+      - items:
+          - enum: [ 5, 11 ]
+          - const: 2
+      - items:
+          - enum: [ 6, 7, 8 ]
+          - const: 0
+      - items:
+          - const: 8
+          - const: 8
+      - items:
+          - const: 9
+          - const: 6
+      - items:
+          - const: 10
+          - const: 4
+
+  parade,usb-tx-eq-db:
+    description:
+      Equalization for USB transmit channels.
+      For example, <6 5> denotes an equalization of 6.5 dB.
+    oneOf:
+      - items:
+          - enum: [ 2, 8, 10 ]
+          - const: 0
+      - items:
+          - enum: [ 5, 6, 7, 8, 9 ]
+          - const: 5
+
+  parade,fine-tune-lfps-swing:
+    type: boolean
+    description:
+      Set a 50 ohm termination for USB receive channels.
+      Usage of this property is design-specific.
+
+  parade,dp-set-gain:
+    type: boolean
+    description:
+      Set a -0.9 dB gain for DP channels.
+
+  parade,usb-rx-set-gain:
+    type: boolean
+    description:
+      Set a -0.9 dB gain for USB receive channels.
+
+  parade,usb-tx-set-gain:
+    type: boolean
+    description:
+      Set a -0.9 dB gain for USB transmit channels.
+
+  ports:
+    $ref: /schemas/graph.yaml#/properties/ports
+    properties:
+      port@0:
+        $ref: /schemas/graph.yaml#/properties/port
+        description: Super Speed (SS) Output endpoint to the Type-C connector
+
+      port@1:
+        $ref: /schemas/graph.yaml#/properties/port
+        description: Super Speed (SS) Input endpoint from the Super-Speed PHY
+        unevaluatedProperties: false
+
+      port@2:
+        $ref: /schemas/graph.yaml#/properties/port
+        description:
+          Sideband Use (SBU) AUX lines endpoint to the Type-C connector for the purpose of
+          handling altmode muxing and orientation switching.
+
+required:
+  - compatible
+  - reg
+  - vcc-supply
+  - reset-gpios
+  - orientation-switch
+  - retimer-switch
+
+allOf:
+  - $ref: usb-switch.yaml#
+  - $ref: usb-switch-ports.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: parade,ps5170
+    then:
+      properties:
+        ports:
+          required:
+            - port@2
+
+    else:
+      properties:
+        ports:
+          properties:
+            # PS5169 only performs AUX channel monitoring and doesn't have an integrated AUX switch
+            port@2: false
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        typec-retimer@30 {
+            compatible = "parade,ps5169";
+            reg = <0x30>;
+
+            vcc-supply = <&vreg_s10b_1p8>;
+            reset-gpios = <&tlmm 54 GPIO_ACTIVE_LOW>;
+
+            orientation-switch;
+            retimer-switch;
+
+            parade,dp-eq-db     = <2 0>; /* 2   dB */
+            parade,usb-rx-eq-db = <5 2>; /* 5.2 dB */
+            parade,usb-tx-eq-db = <2 0>; /* 2   dB */
+
+            parade,fine-tune-lfps-swing;
+
+            ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                port@0 {
+                    reg = <0>;
+                    usb_con_ss: endpoint {
+                        remote-endpoint = <&typec_con_ss>;
+                    };
+                };
+
+                port@1 {
+                    reg = <1>;
+                    phy_con_ss: endpoint {
+                        remote-endpoint = <&usb_phy_ss>;
+                    };
+                };
+
+                /* PS5169 doesn't have an integrated AUX switch, so no port@2 */
+            };
+        };
+    };
+...
