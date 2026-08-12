@@ -416,7 +416,7 @@ static ssize_t sched_server_write_common(struct file *filp, const char __user *u
 			return  -EINVAL;
 		}
 
-		if (!cpu_online(cpu_of(rq)))
+		if (!cpu_active(cpu_of(rq)))
 			return -EBUSY;
 
 		update_rq_clock(rq);

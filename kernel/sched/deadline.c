@@ -1928,8 +1928,10 @@ int dl_server_apply_params(struct sched_dl_entity *dl_se, u64 runtime, u64 perio
 		__dl_add(dl_b, new_bw, cpus);
 		dl_se->dl_bw_attached = 1;
 	} else if (dl_se->dl_bw_attached) {
-		__dl_sub(dl_b, dl_se->dl_bw, cpus);
-		__dl_add(dl_b, new_bw, cpus);
+		if (cpu_active(cpu)) {
+			__dl_sub(dl_b, dl_se->dl_bw, cpus);
+			__dl_add(dl_b, new_bw, cpus);
+		}
 
 		dl_rq_change_utilization(rq, dl_se, new_bw);
 	}
