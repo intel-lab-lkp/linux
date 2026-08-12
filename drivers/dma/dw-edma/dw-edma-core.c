@@ -28,6 +28,10 @@
 /* Empirically chosen progress interval. */
 #define DW_EDMA_LL_PROGRESS_INTERVAL	4
 #define DW_EDMA_LL_RECHECK_DELAY_MS		30
+#define DW_EDMA_ENGINE_QUIESCE_TIMEOUT_MS	250
+#define DW_EDMA_ENGINE_RESET_FAST_ATTEMPTS	5
+#define DW_EDMA_ENGINE_RESET_RETRY_DELAY_MS	5000
+#define DW_EDMA_MAX_DIR_CH			MAX(HDMA_MAX_WR_CH, HDMA_MAX_RD_CH)
 
 static inline
 struct dw_edma_desc *vd2dw_edma_desc(struct virt_dma_desc *vd)
@@ -185,6 +189,22 @@ dw_edma_set_request(struct dw_edma_chan *chan, enum dw_edma_request request)
 	chan->request = request;
 }
 
+static void
+dw_edma_engine_recovery_schedule(struct dw_edma_engine_recovery *rec,
+				 unsigned long delay)
+{
+	if (unlikely(READ_ONCE(rec->dw->teardown)))
+		return;
+
+	queue_delayed_work(rec->dw->wq, &rec->work, delay);
+}
+
+static void
+dw_edma_engine_recovery_queue(struct dw_edma_engine_recovery *rec)
+{
+	dw_edma_engine_recovery_schedule(rec, 0);
+}
+
 static void dw_hdma_set_callback_result(struct virt_dma_desc *vd,
 					enum dmaengine_tx_result result)
 {
@@ -237,6 +257,7 @@ static void dw_edma_core_reset_ll(struct dw_edma_chan *chan)
 
 	chan->ll_head = 0;
 	chan->ll_done = 0;
+	chan->ll_recovery_pending = false;
 	/* Drop stale CB bits before reusing the circular LL ring. */
 	for (i = 0; i < chan->ll_max; i++)
 		dw_edma_core_ll_clear(chan, i);
@@ -401,7 +422,7 @@ static int dw_edma_start_transfer(struct dw_edma_chan *chan)
 		return 1;
 	}
 
-	if (dw_edma_abort_is_pending(chan))
+	if (chan->ll_recovering || dw_edma_abort_is_pending(chan))
 		return 0;
 
 	if (!chan->ll_valid)
@@ -556,8 +577,10 @@ static bool dw_edma_ll_consume_progress(struct dw_edma_chan *chan, int idx)
 	WARN_ON_ONCE(done);
 
 out:
-	if (advanced)
+	if (advanced) {
 		dw_edma_ll_recheck_cancel(chan);
+		chan->ll_recovery_pending = false;
+	}
 
 	return advanced;
 }
@@ -711,6 +734,7 @@ static void dw_edma_core_ch_doorbell(struct dw_edma_chan *chan)
 static bool dw_edma_core_ch_maybe_doorbell(struct dw_edma_chan *chan)
 {
 	if (chan->non_ll ||
+	    chan->ll_recovering ||
 	    chan->status != EDMA_ST_BUSY ||
 	    !dw_edma_ll_pending(chan) ||
 	    dw_edma_abort_is_pending(chan))
@@ -788,6 +812,292 @@ static void dw_edma_ll_recheck_work(struct work_struct *work)
 
 	chan->ll_recheck_at = 0;
 	dw_edma_core_ch_maybe_doorbell(chan);
+}
+
+static bool
+dw_edma_engine_recovery_needed(struct dw_edma_engine_recovery *rec)
+{
+	struct dw_edma *dw = rec->dw;
+	u16 off = rec->dir == EDMA_DIR_WRITE ? 0 : dw->wr_ch_cnt;
+	u16 cnt = rec->dir == EDMA_DIR_WRITE ? dw->wr_ch_cnt : dw->rd_ch_cnt;
+	struct dw_edma_chan *chan;
+	bool found = false;
+	bool needed;
+	u16 i;
+
+	for (i = 0; i < cnt; i++) {
+		chan = &dw->chan[off + i];
+		scoped_guard(spinlock_irqsave, &chan->vc.lock) {
+			needed = chan->ll_recovery_pending && chan->configured &&
+				 !chan->non_ll &&
+				 chan->status != EDMA_ST_PAUSE;
+			if (needed && chan->request == EDMA_REQ_NONE &&
+			    dw_edma_ll_reconcile_and_refill(chan))
+				dw_edma_core_ch_maybe_doorbell(chan);
+			needed = needed && chan->ll_recovery_pending &&
+				 dw_edma_ll_pending(chan);
+			if (!needed)
+				chan->ll_recovery_pending = false;
+		}
+		found |= needed;
+	}
+
+	return found;
+}
+
+static bool
+dw_edma_engine_recovery_incomplete(struct dw_edma_engine_recovery *rec)
+{
+	bool needed = dw_edma_engine_recovery_needed(rec);
+
+	/* A timed-out reset may still disable the engine before the retry. */
+	return needed || rec->fails;
+}
+
+static void
+dw_edma_engine_recovery_release(struct dw_edma_engine_recovery *rec)
+{
+	struct dw_edma *dw = rec->dw;
+	u16 off = rec->dir == EDMA_DIR_WRITE ? 0 : dw->wr_ch_cnt;
+	u16 cnt = rec->dir == EDMA_DIR_WRITE ? dw->wr_ch_cnt : dw->rd_ch_cnt;
+	struct dw_edma_chan *chan;
+	u16 i;
+
+	rec->fails = 0;
+
+	for (i = 0; i < cnt; i++) {
+		chan = &dw->chan[off + i];
+		guard(spinlock_irqsave)(&chan->vc.lock);
+		chan->ll_recovering = false;
+
+		if (!READ_ONCE(dw->teardown) &&
+		    chan->configured && !chan->non_ll &&
+		    chan->request == EDMA_REQ_NONE &&
+		    chan->status != EDMA_ST_PAUSE) {
+			dw_edma_start_transfer(chan);
+			chan->status = dw_edma_ll_pending(chan) ?
+				       EDMA_ST_BUSY : EDMA_ST_IDLE;
+			dw_edma_core_ch_maybe_doorbell(chan);
+		}
+	}
+
+	WRITE_ONCE(rec->active, false);
+}
+
+static void
+dw_edma_engine_recovery_drain_irqs(struct dw_edma_engine_recovery *rec)
+{
+	struct dw_edma *dw = rec->dw;
+	struct device *dev = dw->chip->dev;
+	u16 off = rec->dir == EDMA_DIR_WRITE ? 0 : dw->wr_ch_cnt;
+	u16 cnt = rec->dir == EDMA_DIR_WRITE ? dw->wr_ch_cnt : dw->rd_ch_cnt;
+	struct dw_edma_chan *chan;
+	u16 i;
+
+	/* Drain events observed before the engine context changes. */
+	for (i = 0; i < dw->nr_irqs; i++) {
+		if (bitmap_empty(rec->dir == EDMA_DIR_WRITE ?
+				 dw->irq[i].wr_mask : dw->irq[i].rd_mask, cnt))
+			continue;
+
+		synchronize_irq(dw->chip->ops->irq_vector(dev, i));
+	}
+
+	for (i = 0; i < cnt; i++) {
+		chan = &dw->chan[off + i];
+		flush_work(&chan->irq_work);
+	}
+}
+
+static void dw_edma_engine_recovery_work(struct work_struct *work)
+{
+	struct dw_edma_engine_recovery *rec =
+		container_of(to_delayed_work(work),
+			     struct dw_edma_engine_recovery, work);
+	struct dw_edma *dw = rec->dw;
+	const char *dir_name = str_write_read(rec->dir == EDMA_DIR_WRITE);
+	u16 off = rec->dir == EDMA_DIR_WRITE ? 0 : dw->wr_ch_cnt;
+	u16 cnt = rec->dir == EDMA_DIR_WRITE ? dw->wr_ch_cnt : dw->rd_ch_cnt;
+	unsigned long timeout =
+		jiffies + msecs_to_jiffies(DW_EDMA_ENGINE_QUIESCE_TIMEOUT_MS);
+	struct dw_edma_chan *chan;
+	bool configured_ll;
+	bool busy;
+	u16 i;
+
+	/*
+	 * Recovery resets a whole direction. The legacy eDMA register map does
+	 * not support partial ownership, while unrolled eDMA partial ownership
+	 * and delegation are direction-granular. Native HDMA permits per-channel
+	 * ownership, but does not provide direction recovery operations.
+	 */
+	if (unlikely(READ_ONCE(dw->teardown)))
+		return;
+
+	if (!dw_edma_engine_recovery_incomplete(rec)) {
+		if (READ_ONCE(rec->active))
+			dw_edma_engine_recovery_release(rec);
+		return;
+	}
+
+	WRITE_ONCE(rec->active, true);
+
+	/* Gate each channel before inspecting or resetting the direction. */
+	for (i = 0; i < cnt; i++) {
+		chan = &dw->chan[off + i];
+		guard(spinlock_irqsave)(&chan->vc.lock);
+		chan->ll_recovering = true;
+	}
+
+	/*
+	 * Gated channels stop at their first unpublished element. Wait for that
+	 * point before resetting; otherwise a restart could skip the remainder
+	 * of an in-flight element.
+	 */
+	do {
+		busy = false;
+		for (i = 0; i < cnt; i++) {
+			chan = &dw->chan[off + i];
+			scoped_guard(spinlock_irqsave, &chan->vc.lock)
+				configured_ll = chan->configured && !chan->non_ll;
+			if (configured_ll &&
+			    dw_edma_core_ch_status(chan) == DMA_IN_PROGRESS)
+				busy = true;
+		}
+		if (!busy)
+			break;
+		fsleep(1000);
+	} while (time_before(jiffies, timeout));
+
+	/* Progress after queueing makes this recovery request obsolete. */
+	if (!dw_edma_engine_recovery_incomplete(rec)) {
+		dw_edma_engine_recovery_release(rec);
+		return;
+	}
+
+	if (busy) {
+		DECLARE_BITMAP(busy_mask, DW_EDMA_MAX_DIR_CH) = { 0 };
+		u32 tsz[DW_EDMA_MAX_DIR_CH];
+		bool moving = false;
+
+		/*
+		 * A transfer_size change or a transition out of DMA_IN_PROGRESS
+		 * shows movement after the first sample. Retry while producers
+		 * remain gated. If neither occurs, treat the channel as frozen
+		 * within one element.
+		 */
+		for (i = 0; i < cnt; i++) {
+			chan = &dw->chan[off + i];
+			scoped_guard(spinlock_irqsave, &chan->vc.lock)
+				configured_ll = chan->configured && !chan->non_ll;
+			if (configured_ll &&
+			    dw_edma_core_ch_status(chan) == DMA_IN_PROGRESS) {
+				__set_bit(i, busy_mask);
+				tsz[i] = dw_edma_core_ch_transfer_size(chan);
+			}
+		}
+		fsleep(1000);
+		for_each_set_bit(i, busy_mask, cnt) {
+			chan = &dw->chan[off + i];
+			if (dw_edma_core_ch_status(chan) != DMA_IN_PROGRESS ||
+			    tsz[i] != dw_edma_core_ch_transfer_size(chan))
+				moving = true;
+		}
+		if (!dw_edma_engine_recovery_incomplete(rec)) {
+			dw_edma_engine_recovery_release(rec);
+			return;
+		}
+		if (moving) {
+			dev_warn_ratelimited(dw->chip->dev,
+					     "%s engine quiesce timed out with transfers still progressing, retrying\n",
+					     dir_name);
+			dw_edma_engine_recovery_queue(rec);
+			return;
+		}
+
+		dev_warn(dw->chip->dev,
+			 "%s engine reset with a channel frozen mid-element\n",
+			 dir_name);
+	}
+
+	if (!dw_edma_engine_recovery_incomplete(rec)) {
+		dw_edma_engine_recovery_release(rec);
+		return;
+	}
+
+	/*
+	 * Let a terminal ABORT finish its normal channel cleanup before a
+	 * direction-wide reset. It may also make recovery unnecessary.
+	 */
+	dw_edma_engine_recovery_drain_irqs(rec);
+	if (!dw_edma_engine_recovery_incomplete(rec)) {
+		dw_edma_engine_recovery_release(rec);
+		return;
+	}
+
+	if (!dw->core->engine_reset(dw, rec->dir)) {
+		unsigned long delay = 0;
+
+		/*
+		 * Keep channels gated and do not re-enable the engine unless
+		 * ENGINE_EN clears.
+		 */
+		if (++rec->fails >= DW_EDMA_ENGINE_RESET_FAST_ATTEMPTS)
+			delay = msecs_to_jiffies(DW_EDMA_ENGINE_RESET_RETRY_DELAY_MS);
+		if (rec->fails == DW_EDMA_ENGINE_RESET_FAST_ATTEMPTS)
+			dev_err(dw->chip->dev,
+				"%s engine did not drain after %u attempts; retrying every %u ms\n",
+				dir_name, rec->fails,
+				DW_EDMA_ENGINE_RESET_RETRY_DELAY_MS);
+		dw_edma_engine_recovery_schedule(rec, delay);
+		return;
+	}
+
+	if (rec->fails)
+		dev_warn(dw->chip->dev, "%s engine drained after %u retries\n",
+			 dir_name, rec->fails);
+
+	/* Drain an event that raced with the engine reset. */
+	dw_edma_engine_recovery_drain_irqs(rec);
+
+	/*
+	 * Keep the engine disabled until every LL channel context is rebuilt.
+	 * On the tested integration, re-enabling a preserved context resumed an
+	 * old element without a doorbell, causing an IOMMU fault and stalling the
+	 * engine again. Reset each ring so it starts from a fresh context, and
+	 * complete remote LL publication before re-enabling the direction.
+	 */
+	for (i = 0; i < cnt; i++) {
+		bool stop;
+
+		chan = &dw->chan[off + i];
+		guard(spinlock_irqsave)(&chan->vc.lock);
+
+		if (chan->non_ll)
+			continue;
+
+		/* Honor EDMA_REQ_STOP and EDMA_REQ_PAUSE instead of republishing. */
+		stop = chan->request == EDMA_REQ_STOP;
+		if (stop)
+			dw_edma_terminate_all_descs(chan);
+
+		dw_edma_core_reset_ll(chan);
+		dw_edma_core_ll_sync(chan);
+
+		if (stop) {
+			dw_edma_set_request(chan, EDMA_REQ_NONE);
+			chan->status = EDMA_ST_IDLE;
+		} else if (chan->request == EDMA_REQ_PAUSE) {
+			dw_edma_set_request(chan, EDMA_REQ_NONE);
+			chan->status = EDMA_ST_PAUSE;
+		}
+	}
+
+	dw->core->engine_enable(dw, rec->dir);
+	dw_edma_engine_recovery_release(rec);
+
+	dev_warn(dw->chip->dev, "%s engine was reset to recover a stalled channel\n",
+		 dir_name);
 }
 
 static void dw_edma_device_caps(struct dma_chan *dchan,
@@ -1991,6 +2301,13 @@ int dw_edma_probe(struct dw_edma_chip *chip)
 	for (i = 0; i < ARRAY_SIZE(dw->event_lock_per_dir); i++)
 		spin_lock_init(&dw->event_lock_per_dir[i]);
 
+	for (i = 0; i < ARRAY_SIZE(dw->eng_recovery); i++) {
+		dw->eng_recovery[i].dw = dw;
+		dw->eng_recovery[i].dir = i;
+		INIT_DELAYED_WORK(&dw->eng_recovery[i].work,
+				  dw_edma_engine_recovery_work);
+	}
+
 	/*
 	 * chip->ll_*_cnt describes the channels exposed by this instance. Keep
 	 * the usable hardware counts separate for partial ownership checks.
@@ -2108,6 +2425,10 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 	 */
 	WRITE_ONCE(dw->teardown, true);
 	dma_async_device_unregister(&dw->dma);
+
+	/* A recovery worker can re-enable the engine. */
+	disable_delayed_work_sync(&dw->eng_recovery[0].work);
+	disable_delayed_work_sync(&dw->eng_recovery[1].work);
 
 	/*
 	 * Drain channel work that may have passed the teardown gate before
