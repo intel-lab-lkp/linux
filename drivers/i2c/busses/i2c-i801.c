@@ -1698,6 +1698,8 @@ static void i801_remove(struct pci_dev *dev)
 
 	platform_device_unregister(priv->tco_pdev);
 
+	pm_runtime_dont_use_autosuspend(&dev->dev);
+
 	/* if acpi_reserved is set then usage_count is incremented already */
 	if (!priv->acpi_reserved)
 		pm_runtime_get_noresume(&dev->dev);
