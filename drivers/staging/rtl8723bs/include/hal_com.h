@@ -94,16 +94,16 @@ void rtw_hal_data_deinit(struct adapter *padapter);
 u8 /* return the final channel plan decision */
 hal_com_config_channel_plan(
 struct adapter *padapter,
-u8 	hw_channel_plan,	/* channel plan from HW (efuse/eeprom) */
-u8 	sw_channel_plan,	/* channel plan from SW (registry/module param) */
-u8 	def_channel_plan,	/* channel plan used when the former two is invalid */
+u8	hw_channel_plan,	/* channel plan from HW (efuse/eeprom) */
+u8	sw_channel_plan,	/* channel plan from SW (registry/module param) */
+u8	def_channel_plan,	/* channel plan used when the former two is invalid */
 bool		AutoLoadFail
 	);
 
 bool
 HAL_IsLegalChannel(
 struct adapter *Adapter,
-u32 		Channel
+u32		Channel
 	);
 
 u8 MRateToHwRate(u8 rate);
