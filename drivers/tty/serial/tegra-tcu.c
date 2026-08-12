@@ -190,7 +190,7 @@ static int tegra_tcu_probe(struct platform_device *pdev)
 	tcu->rx_client.dev = &pdev->dev;
 	tcu->rx_client.rx_callback = tegra_tcu_receive;
 
-	tcu->tx = mbox_request_channel_byname(&tcu->tx_client, "tx");
+	tcu->tx = devm_mbox_request_channel_byname(dev, &tcu->tx_client, "tx");
 	if (IS_ERR(tcu->tx))
 		return dev_err_probe(dev, PTR_ERR(tcu->tx),
 				     "failed to get tx mailbox\n");
@@ -216,10 +216,9 @@ static int tegra_tcu_probe(struct platform_device *pdev)
 	tcu->driver.nr = 1;
 
 	err = uart_register_driver(&tcu->driver);
-	if (err) {
-		dev_err_probe(dev, err, "failed to register UART driver\n");
-		goto free_tx;
-	}
+	if (err)
+		return dev_err_probe(dev, err,
+				     "failed to register UART driver\n");
 
 	/* setup the port */
 	port = &tcu->port;
@@ -260,8 +259,6 @@ remove_uart_port:
 	uart_remove_one_port(&tcu->driver, &tcu->port);
 unregister_uart:
 	uart_unregister_driver(&tcu->driver);
-free_tx:
-	mbox_free_channel(tcu->tx);
 
 	return err;
 }
@@ -276,7 +273,6 @@ static void tegra_tcu_remove(struct platform_device *pdev)
 	mbox_free_channel(tcu->rx);
 	uart_remove_one_port(&tcu->driver, &tcu->port);
 	uart_unregister_driver(&tcu->driver);
-	mbox_free_channel(tcu->tx);
 }
 
 static const struct of_device_id tegra_tcu_match[] = {
