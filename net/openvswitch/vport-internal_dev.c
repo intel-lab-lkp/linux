@@ -11,6 +11,7 @@
 #include <linux/skbuff.h>
 
 #include <net/dst.h>
+#include <net/netdev_lock.h>
 #include <net/xfrm.h>
 #include <net/rtnetlink.h>
 
@@ -27,6 +28,12 @@ static struct vport_ops ovs_internal_vport_ops;
 static struct internal_dev *internal_dev_priv(struct net_device *netdev)
 {
 	return netdev_priv(netdev);
+}
+
+static int internal_dev_init(struct net_device *netdev)
+{
+	netdev_lockdep_set_classes(netdev);
+	return 0;
 }
 
 /* Called with rcu_read_lock_bh. */
@@ -69,6 +76,7 @@ static void internal_dev_getinfo(struct net_device *netdev,
 }
 
 static const struct ethtool_ops internal_dev_ethtool_ops = {
+	.op_needs_rtnl	= ETHTOOL_OP_NEEDS_RTNL_GLINK,
 	.get_drvinfo	= internal_dev_getinfo,
 	.get_link	= ethtool_op_get_link,
 };
@@ -81,6 +89,7 @@ static void internal_dev_destructor(struct net_device *dev)
 }
 
 static const struct net_device_ops internal_dev_netdev_ops = {
+	.ndo_init = internal_dev_init,
 	.ndo_open = internal_dev_open,
 	.ndo_stop = internal_dev_stop,
 	.ndo_start_xmit = internal_dev_xmit,
@@ -106,6 +115,7 @@ static void do_setup(struct net_device *netdev)
 	netdev->needs_free_netdev = true;
 	netdev->priv_destructor = NULL;
 	netdev->ethtool_ops = &internal_dev_ethtool_ops;
+	netdev->request_ops_lock = true;
 	netdev->rtnl_link_ops = &internal_dev_link_ops;
 
 	netdev->features = NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_HIGHDMA |
