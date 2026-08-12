@@ -1215,22 +1215,20 @@ static bool get_fallback_config(const struct test_config_table *expected_table,
 	struct kunit *test = expected_table->test;
 	const struct link_config_set *config_set =
 		get_fallback_configs_for_output_type(test, output_type);
+	const struct intel_dp_link_config *config;
 	int i;
 
 	i = lookup_config(config_set, target_config);
 	KUNIT_ASSERT_GE(test, i, 0);
 
-	for (i--; i >= 0; i--) {
-		const struct intel_dp_link_config *config =
-			&config_set->entries[i];
+	if (!i)
+		return false;
 
-		assert_config_is_supported(expected_table, config);
-		*fallback_config = *config;
+	config = &config_set->entries[i - 1];
+	assert_config_is_supported(expected_table, config);
+	*fallback_config = *config;
 
-		return true;
-	}
-
-	return false;
+	return true;
 }
 
 static bool get_target_config(const struct test_config_table *expected_table,
@@ -1240,19 +1238,17 @@ static bool get_target_config(const struct test_config_table *expected_table,
 	struct kunit *test = expected_table->test;
 	const struct link_config_set *config_set =
 		get_target_configs_for_output_type(test, output_type);
-	int i;
+	const struct intel_dp_link_config *config;
+	int i = config_set->size - 1;
 
-	for (i = config_set->size - 1; i >= 0; i--) {
-		const struct intel_dp_link_config *config =
-			&config_set->entries[i];
+	if (i < 0)
+		return false;
 
-		assert_config_is_supported(expected_table, config);
-		*target = *config;
+	config = &config_set->entries[i];
+	assert_config_is_supported(expected_table, config);
+	*target = *config;
 
-		return true;
-	}
-
-	return false;
+	return true;
 }
 
 static void test_fallback_seq(struct kunit *test,
