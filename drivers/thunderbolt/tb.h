@@ -26,6 +26,8 @@
 #define QUIRK_NO_CLX					BIT(1)
 /* Need to keep power on while USB4 port is in redrive mode */
 #define QUIRK_KEEP_POWER_IN_DP_REDRIVE			BIT(2)
+/* Pending Packets bit of the host interface adapter never clears */
+#define QUIRK_STUCK_PENDING				BIT(3)
 
 /**
  * struct tb_nvm - Structure holding NVM information
@@ -273,6 +275,7 @@ struct tb_bandwidth_group {
  * @max_bw: Maximum possible bandwidth through this adapter if set to
  *	    non-zero.
  * @redrive: For DP IN, if true the adapter is in redrive mode.
+ * @pending_stuck: Pending bit did not clear, so it is not waited on again
  *
  * In USB4 terminology this structure represents an adapter (protocol or
  * lane adapter).
@@ -302,6 +305,7 @@ struct tb_port {
 	struct list_head group_list;
 	unsigned int max_bw;
 	bool redrive;
+	bool pending_stuck;
 };
 
 /**

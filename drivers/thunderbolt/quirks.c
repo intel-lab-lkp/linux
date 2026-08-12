@@ -52,6 +52,12 @@ static void quirk_block_rpm_in_redrive(struct tb_switch *sw)
 	tb_sw_dbg(sw, "preventing runtime PM in DP redrive mode\n");
 }
 
+static void quirk_stuck_pending(struct tb_switch *sw)
+{
+	sw->quirks |= QUIRK_STUCK_PENDING;
+	tb_sw_dbg(sw, "host interface adapter pending bit does not clear\n");
+}
+
 struct tb_quirk {
 	u16 hw_vendor_id;
 	u16 hw_device_id;
@@ -114,6 +120,8 @@ static const struct tb_quirk tb_quirks[] = {
 	{ 0x0438, 0x0209, 0x0000, 0x0000, quirk_clx_disable },
 	{ 0x0438, 0x020a, 0x0000, 0x0000, quirk_clx_disable },
 	{ 0x0438, 0x020b, 0x0000, 0x0000, quirk_clx_disable },
+	/* ASM4242 never clears the Pending Packets bit of its NHI adapter */
+	{ 0x174c, 0x2428, 0x0000, 0x0000, quirk_stuck_pending },
 };
 
 /**

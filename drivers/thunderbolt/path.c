@@ -397,6 +397,10 @@ static int __tb_path_deactivate_hop(struct tb_port *port, int hop_index,
 	if (ret)
 		return ret;
 
+	/* It never clears on this adapter, so the wait would time out again. */
+	if (port->pending_stuck)
+		return -ETIMEDOUT;
+
 	/* Wait until it is drained */
 	timeout = ktime_add_ms(ktime_get(), 500);
 	do {
@@ -429,6 +433,10 @@ static int __tb_path_deactivate_hop(struct tb_port *port, int hop_index,
 
 		usleep_range(10, 20);
 	} while (ktime_before(ktime_get(), timeout));
+
+	/* Remember it only on an adapter known to latch it. */
+	if (tb_port_is_nhi(port) && (port->sw->quirks & QUIRK_STUCK_PENDING))
+		port->pending_stuck = true;
 
 	return -ETIMEDOUT;
 }
