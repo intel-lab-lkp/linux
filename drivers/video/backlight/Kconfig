@@ -226,6 +226,16 @@ config BACKLIGHT_LOCOMO
 	  If you have a Sharp Zaurus SL-5500 (Collie) or SL-5600 (Poodle) say y to
 	  enable the LCD/backlight driver.
 
+config BACKLIGHT_OCP8178
+	tristate "OCP8178 Backlight Driver"
+	depends on GPIOLIB
+	help
+	  If you have an Orient Chip OCP8178, say Y to enable the backlight
+	  driver.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called ocp8178_bl.
+
 config BACKLIGHT_OMAP1
 	tristate "OMAP1 PWL-based LCD Backlight"
 	depends on ARCH_OMAP1 || COMPILE_TEST
