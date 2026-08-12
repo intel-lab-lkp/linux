@@ -920,9 +920,23 @@ static int ionic_lif_rxq_init(struct ionic_lif *lif, struct ionic_qcq *qcq)
 	};
 	int err;
 
+	q->partner = NULL;
+
+	/* Only normal RX queues have matching TX queue partners,
+	 * skip partner pairing for hwstamp RX queue.
+	 */
+	if (q->index >= lif->nxqs)
+		goto skip_partner;
+
+	if (WARN_ON_ONCE(!lif->txqcqs ||
+	    q->index >= lif->ionic->ntxqs_per_lif ||
+	    !lif->txqcqs[q->index]))
+		return -EINVAL;
+
 	q->partner = &lif->txqcqs[q->index]->q;
 	q->partner->partner = q;
 
+skip_partner:
 	if (!lif->xdp_prog ||
 	    (lif->xdp_prog->aux && lif->xdp_prog->aux->xdp_has_frags))
 		ctx.cmd.q_init.flags |= cpu_to_le16(IONIC_QINIT_F_SG);
