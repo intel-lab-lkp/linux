@@ -12,6 +12,8 @@ struct venus_inst;
 struct venus_core;
 
 bool venus_helper_check_codec(struct venus_inst *inst, u32 v4l2_pixfmt);
+void venus_helper_get_frame_sizes(struct venus_inst *inst, u32 v4l2_pixfmt,
+				  struct v4l2_frmsize_stepwise *fsize);
 struct vb2_v4l2_buffer *venus_helper_find_buf(struct venus_inst *inst,
 					      unsigned int type, u32 idx);
 void venus_helper_change_dpb_owner(struct venus_inst *inst,

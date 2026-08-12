@@ -12,14 +12,14 @@ u32 hfi_parser(struct venus_core *core, struct venus_inst *inst,
 #define WHICH_CAP_MAX	1
 #define WHICH_CAP_STEP	2
 
-static inline u32 get_cap(struct venus_inst *inst, u32 type, u32 which)
+static inline u32 get_codec_cap(struct venus_core *core, u32 codec, u32 domain,
+				u32 type, u32 which)
 {
-	struct venus_core *core = inst->core;
 	struct hfi_capability *cap = NULL;
 	struct hfi_plat_caps *caps;
 	unsigned int i;
 
-	caps = venus_caps_by_codec(core, inst->hfi_codec, inst->session_type);
+	caps = venus_caps_by_codec(core, codec, domain);
 	if (!caps)
 		return 0;
 
@@ -45,6 +45,12 @@ static inline u32 get_cap(struct venus_inst *inst, u32 type, u32 which)
 	}
 
 	return 0;
+}
+
+static inline u32 get_cap(struct venus_inst *inst, u32 type, u32 which)
+{
+	return get_codec_cap(inst->core, inst->hfi_codec, inst->session_type,
+			     type, which);
 }
 
 static inline u32 cap_min(struct venus_inst *inst, u32 type)

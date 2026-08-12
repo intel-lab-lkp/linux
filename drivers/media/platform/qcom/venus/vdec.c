@@ -512,12 +512,7 @@ static int vdec_enum_framesizes(struct file *file, void *fh,
 
 	fsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
 
-	fsize->stepwise.min_width = frame_width_min(inst);
-	fsize->stepwise.max_width = frame_width_max(inst);
-	fsize->stepwise.step_width = frame_width_step(inst);
-	fsize->stepwise.min_height = frame_height_min(inst);
-	fsize->stepwise.max_height = frame_height_max(inst);
-	fsize->stepwise.step_height = frame_height_step(inst);
+	venus_helper_get_frame_sizes(inst, fsize->pixel_format, &fsize->stepwise);
 
 	return 0;
 }
