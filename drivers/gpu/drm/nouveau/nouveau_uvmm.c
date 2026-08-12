@@ -1008,7 +1008,7 @@ nouveau_uvmm_validate_range(struct nouveau_uvmm *uvmm, u64 addr, u64 range)
 	if (addr & ~PAGE_MASK)
 		return -EINVAL;
 
-	if (range & ~PAGE_MASK)
+	if (!range || range & ~PAGE_MASK)
 		return -EINVAL;
 
 	if (!drm_gpuvm_range_valid(&uvmm->base, addr, range))
