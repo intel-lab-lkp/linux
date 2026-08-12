@@ -213,8 +213,8 @@ struct hal_com_data {
 	u8 bDisableSWChannelPlan; /*  flag of disable software change channel plan */
 
 	bool		EepromOrEfuse;
-	u8 		EfuseUsedPercentage;
-	u16 			EfuseUsedBytes;
+	u8		EfuseUsedPercentage;
+	u16			EfuseUsedBytes;
 	struct efuse_hal		EfuseHal;
 
 	/* 3 [2.4G] */
@@ -364,22 +364,22 @@ struct hal_com_data {
 
 	enum rt_ampdu_burst	AMPDUBurstMode; /* 92C maybe not use, but for compile successfully */
 
-	u32 		sdio_himr;
-	u32 		sdio_hisr;
+	u32		sdio_himr;
+	u32		sdio_hisr;
 
 	/*  SDIO Tx FIFO related. */
 	/*  HIQ, MID, LOW, PUB free pages; padapter->xmitpriv.free_txpg */
-	u8 	SdioTxFIFOFreePage[SDIO_TX_FREE_PG_QUEUE];
+	u8	SdioTxFIFOFreePage[SDIO_TX_FREE_PG_QUEUE];
 	spinlock_t		SdioTxFIFOFreePageLock;
-	u8 	SdioTxOQTMaxFreeSpace;
-	u8 	SdioTxOQTFreeSpace;
+	u8	SdioTxOQTMaxFreeSpace;
+	u8	SdioTxOQTFreeSpace;
 
 
 	/*  SDIO Rx FIFO related. */
-	u8 	SdioRxFIFOCnt;
-	u16 		SdioRxFIFOSize;
+	u8	SdioRxFIFOCnt;
+	u16		SdioRxFIFOSize;
 
-	u32 		sdio_tx_max_len[SDIO_MAX_TX_QUEUE];/*  H, N, L, used for sdio tx aggregation max length per queue */
+	u32		sdio_tx_max_len[SDIO_MAX_TX_QUEUE];/*  H, N, L, used for sdio tx aggregation max length per queue */
 
 	struct dm_priv dmpriv;
 	struct dm_odm_t		odmpriv;
