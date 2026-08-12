@@ -60,6 +60,7 @@ static int uniphier_efuse_probe(struct platform_device *pdev)
 
 static const struct of_device_id uniphier_efuse_of_match[] = {
 	{ .compatible = "socionext,uniphier-efuse",},
+	{ .compatible = "ti,am62p-efuse",},
 	{/* sentinel */},
 };
 MODULE_DEVICE_TABLE(of, uniphier_efuse_of_match);
