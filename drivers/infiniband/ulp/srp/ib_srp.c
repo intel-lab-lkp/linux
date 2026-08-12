@@ -144,6 +144,8 @@ static void srp_rename_dev(struct ib_device *device, void *client_data);
 static void srp_recv_done(struct ib_cq *cq, struct ib_wc *wc);
 static void srp_handle_qp_err(struct ib_cq *cq, struct ib_wc *wc,
 		const char *opname);
+static void srp_inv_rkey_err_done(struct ib_cq *cq, struct ib_wc *wc);
+static void srp_reg_mr_err_done(struct ib_cq *cq, struct ib_wc *wc);
 static int srp_ib_cm_handler(struct ib_cm_id *cm_id,
 			     const struct ib_cm_event *event);
 static int srp_rdma_cm_handler(struct rdma_cm_id *cm_id,
@@ -604,6 +606,8 @@ static int srp_create_ch_ib(struct srp_rdma_ch *ch)
 	ch->qp = qp;
 	ch->recv_cq = recv_cq;
 	ch->send_cq = send_cq;
+	ch->reg_cqe.done = srp_reg_mr_err_done;
+	ch->inv_cqe.done = srp_inv_rkey_err_done;
 
 	if (dev->use_fast_reg) {
 		if (ch->fr_pool)
@@ -1159,8 +1163,7 @@ static void srp_inv_rkey_err_done(struct ib_cq *cq, struct ib_wc *wc)
 	srp_handle_qp_err(cq, wc, "INV RKEY");
 }
 
-static int srp_inv_rkey(struct srp_request *req, struct srp_rdma_ch *ch,
-		u32 rkey)
+static int srp_inv_rkey(struct srp_rdma_ch *ch, u32 rkey)
 {
 	struct ib_send_wr wr = {
 		.opcode		    = IB_WR_LOCAL_INV,
@@ -1170,8 +1173,7 @@ static int srp_inv_rkey(struct srp_request *req, struct srp_rdma_ch *ch,
 		.ex.invalidate_rkey = rkey,
 	};
 
-	wr.wr_cqe = &req->reg_cqe;
-	req->reg_cqe.done = srp_inv_rkey_err_done;
+	wr.wr_cqe = &ch->inv_cqe;
 	return ib_post_send(ch->qp, &wr, NULL);
 }
 
@@ -1193,7 +1195,7 @@ static void srp_unmap_data(struct scsi_cmnd *scmnd,
 		struct srp_fr_desc **pfr;
 
 		for (i = req->nmdesc, pfr = req->fr_list; i > 0; i--, pfr++) {
-			res = srp_inv_rkey(req, ch, (*pfr)->mr->rkey);
+			res = srp_inv_rkey(ch, (*pfr)->mr->rkey);
 			if (res < 0) {
 				shost_printk(KERN_ERR, target->scsi_host, PFX
 				  "Queueing INV WR for rkey %#x failed (%d)\n",
@@ -1470,11 +1472,9 @@ static int srp_map_finish_fr(struct srp_map_state *state,
 
 	WARN_ON_ONCE(desc->mr->length == 0);
 
-	req->reg_cqe.done = srp_reg_mr_err_done;
-
 	wr.wr.next = NULL;
 	wr.wr.opcode = IB_WR_REG_MR;
-	wr.wr.wr_cqe = &req->reg_cqe;
+	wr.wr.wr_cqe = &ch->reg_cqe;
 	wr.wr.num_sge = 0;
 	wr.wr.send_flags = 0;
 	wr.mr = desc->mr;
