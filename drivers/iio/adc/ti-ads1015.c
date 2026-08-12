@@ -40,8 +40,6 @@
 #define ADS1015_LO_THRESH_REG	0x02
 #define ADS1015_HI_THRESH_REG	0x03
 
-#define ADS1015_CFG_MOD_SHIFT	8
-
 #define ADS1015_CFG_COMP_QUE_MASK	GENMASK(1, 0)
 #define ADS1015_CFG_COMP_LAT_MASK	BIT(2)
 #define ADS1015_CFG_COMP_POL_MASK	BIT(3)
@@ -915,16 +913,14 @@ static void ads1015_get_channels_config(struct i2c_client *client)
 	}
 }
 
-static int ads1015_set_conv_mode(struct ads1015_data *data, int mode)
+static void ads1015_power_off(void *data)
 {
-	return regmap_update_bits(data->regmap, ADS1015_CFG_REG,
-				  ADS1015_CFG_MOD_MASK,
-				  mode << ADS1015_CFG_MOD_SHIFT);
-}
+	struct ads1015_data *st = data;
 
-static void ads1015_power_off(void *st)
-{
-	ads1015_set_conv_mode(st, ADS1015_SINGLESHOT);
+	regmap_update_bits(st->regmap, ADS1015_CFG_REG,
+			   ADS1015_CFG_MOD_MASK,
+			   FIELD_PREP(ADS1015_CFG_MOD_MASK,
+				      ADS1015_SINGLESHOT));
 }
 
 static int ads1015_probe(struct i2c_client *client)
@@ -1025,7 +1021,10 @@ static int ads1015_probe(struct i2c_client *client)
 			return ret;
 	}
 
-	ret = ads1015_set_conv_mode(data, ADS1015_CONTINUOUS);
+	ret = regmap_update_bits(data->regmap, ADS1015_CFG_REG,
+				  ADS1015_CFG_MOD_MASK,
+				  FIELD_PREP(ADS1015_CFG_MOD_MASK,
+					     ADS1015_CONTINUOUS));
 	if (ret)
 		return ret;
 
@@ -1055,7 +1054,10 @@ static int ads1015_runtime_suspend(struct device *dev)
 	struct iio_dev *indio_dev = i2c_get_clientdata(to_i2c_client(dev));
 	struct ads1015_data *data = iio_priv(indio_dev);
 
-	return ads1015_set_conv_mode(data, ADS1015_SINGLESHOT);
+	return regmap_update_bits(data->regmap, ADS1015_CFG_REG,
+				  ADS1015_CFG_MOD_MASK,
+				  FIELD_PREP(ADS1015_CFG_MOD_MASK,
+					     ADS1015_SINGLESHOT));
 }
 
 static int ads1015_runtime_resume(struct device *dev)
@@ -1064,7 +1066,10 @@ static int ads1015_runtime_resume(struct device *dev)
 	struct ads1015_data *data = iio_priv(indio_dev);
 	int ret;
 
-	ret = ads1015_set_conv_mode(data, ADS1015_CONTINUOUS);
+	ret = regmap_update_bits(data->regmap, ADS1015_CFG_REG,
+				  ADS1015_CFG_MOD_MASK,
+				  FIELD_PREP(ADS1015_CFG_MOD_MASK,
+					     ADS1015_CONTINUOUS));
 	if (!ret)
 		data->conv_invalid = true;
 
