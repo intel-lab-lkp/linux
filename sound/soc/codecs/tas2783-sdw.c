@@ -97,6 +97,7 @@ struct tas2783_prv {
 	u8 rca_binaryname[64];
 	u8 dev_name[32];
 	bool hw_init;
+	bool first_hw_init;
 	/* wq for firmware download */
 	wait_queue_head_t fw_wait;
 	bool fw_dl_task_done;
@@ -833,15 +834,16 @@ static void tas2783_fw_ready(const struct firmware *fmw, void *context)
 			file->vendor_id, file->file_id,
 			file->version, file->length,
 			file->dest_addr, file->fw_data);
-
-		ret = sdw_nwrite_no_pm(tas_dev->sdw_peripheral,
-				       file->dest_addr,
-				       file->length,
-				       file->fw_data);
-		if (ret < 0) {
-			dev_err(tas_dev->dev,
-				"FW download failed: %d", ret);
-			break;
+		if (!tas_dev->first_hw_init || file->dest_addr < 0xc60000) {
+			ret = sdw_nwrite_no_pm(tas_dev->sdw_peripheral,
+					       file->dest_addr,
+					       file->length,
+					       file->fw_data);
+			if (ret < 0) {
+				dev_err(tas_dev->dev,
+					"FW download failed: %d", ret);
+				break;
+			}
 		}
 		cur_file++;
 	}
@@ -852,6 +854,10 @@ static void tas2783_fw_ready(const struct firmware *fmw, void *context)
 		ret = -EINVAL;
 	} else {
 		tas2783_update_calibdata(tas_dev);
+		/* Mark the AMP firmware download as complete. */
+		regmap_write(tas_dev->regmap, TASDEV_REG_SDW(0, 0, 0x07),
+			     0x22);
+		tas_dev->first_hw_init = true;
 	}
 
 out:
@@ -1153,7 +1159,6 @@ static s32 tas2783_sdca_dev_resume(struct device *dev)
 		regcache_mark_dirty(tas_dev->regmap);
 		return ret;
 	}
-
 	return 0;
 }
 
@@ -1222,25 +1227,28 @@ static s32 tas_fw_load(struct tas2783_prv *tas_dev, struct sdw_slave *slave)
 static s32 tas_io_init(struct device *dev, struct sdw_slave *slave)
 {
 	struct tas2783_prv *tas_dev = dev_get_drvdata(dev);
-	s32 ret;
+	s32 ret, val;
 
 	if (tas_dev->hw_init)
 		return 0;
+	regmap_read(tas_dev->regmap, TASDEV_REG_SDW(0, 0, 0x07), &val);
+	/* Check if the AMP is in reset status. */
+	if (val == 0x20) {
 
-	tas_dev->fw_dl_success = false;
+		tas_dev->fw_dl_success = false;
 
-	ret = regmap_write(tas_dev->regmap, TAS2783_SW_RESET, 0x1);
-	if (ret) {
-		dev_err(dev, "sw reset failed, err=%d", ret);
-		return ret;
-	}
-	usleep_range(2000, 2200);
+		ret = regmap_write(tas_dev->regmap, TAS2783_SW_RESET, 0x1);
+		if (ret) {
+			dev_err(dev, "sw reset failed, err=%d", ret);
+			return ret;
+		}
+		usleep_range(2000, 2200);
 
-	tas_dev->fw_use_fallback = false;
-	ret = tas_fw_load(tas_dev, slave);
-	if (!ret && tas_dev->fw_use_fallback)
+		tas_dev->fw_use_fallback = false;
 		ret = tas_fw_load(tas_dev, slave);
-
+		if (!ret && tas_dev->fw_use_fallback)
+			ret = tas_fw_load(tas_dev, slave);
+	}
 	if (!ret) {
 		if (tas_dev->sa_func_data)
 			ret = sdca_regmap_write_init(dev, tas_dev->regmap,
@@ -1248,7 +1256,6 @@ static s32 tas_io_init(struct device *dev, struct sdw_slave *slave)
 		else
 			ret = regmap_multi_reg_write(tas_dev->regmap, tas2783_init_seq,
 						     ARRAY_SIZE(tas2783_init_seq));
-
 		if (ret)
 			dev_err(tas_dev->dev,
 				"init writes failed, err=%d", ret);
@@ -1428,6 +1435,7 @@ static s32 tas_sdw_probe(struct sdw_slave *peripheral,
 	tas_dev->dev = dev;
 	tas_dev->sdw_peripheral = peripheral;
 	tas_dev->hw_init = false;
+	tas_dev->first_hw_init = false;
 	mutex_init(&tas_dev->calib_lock);
 	mutex_init(&tas_dev->pde_lock);
 
