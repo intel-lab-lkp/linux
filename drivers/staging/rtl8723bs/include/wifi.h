@@ -329,10 +329,10 @@ static inline int IsFrameTypeCtrl(unsigned char *pframe)
  */
 struct ieee80211_ht_addt_info {
 	unsigned char control_chan;
-	unsigned char 	ht_param;
+	unsigned char	ht_param;
 	__le16	operation_mode;
 	__le16	stbc_param;
-	unsigned char 	basic_set[16];
+	unsigned char	basic_set[16];
 } __packed;
 
 
@@ -357,19 +357,19 @@ struct HT_info_element {
 } __packed;
 
 struct AC_param {
-	unsigned char 	ACI_AIFSN;
-	unsigned char 	CW;
+	unsigned char	ACI_AIFSN;
+	unsigned char	CW;
 	__le16	TXOP_limit;
 } __packed;
 
 struct WMM_para_element {
-	unsigned char 	QoS_info;
-	unsigned char 	reserved;
+	unsigned char	QoS_info;
+	unsigned char	reserved;
 	struct AC_param	ac_param[4];
 } __packed;
 
 struct ADDBA_request {
-	unsigned char 	dialog_token;
+	unsigned char	dialog_token;
 	__le16	BA_para_set;
 	__le16	BA_timeout_value;
 	__le16	BA_starting_seqctrl;
