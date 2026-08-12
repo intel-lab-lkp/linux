@@ -449,18 +449,13 @@ static int hix5hd2_i2c_probe(struct platform_device *pdev)
 
 	pm_runtime_set_autosuspend_delay(priv->dev, MSEC_PER_SEC);
 	pm_runtime_use_autosuspend(priv->dev);
-	pm_runtime_set_active(priv->dev);
-	pm_runtime_enable(priv->dev);
+	ret = devm_pm_runtime_set_active_enabled(priv->dev);
+	if (ret)
+		return ret;
 
 	ret = i2c_add_adapter(&priv->adap);
 	if (ret < 0)
-		goto err_runtime;
-
-	return ret;
-
-err_runtime:
-	pm_runtime_disable(priv->dev);
-	pm_runtime_set_suspended(priv->dev);
+		return ret;
 
 	return ret;
 }
@@ -470,8 +465,6 @@ static void hix5hd2_i2c_remove(struct platform_device *pdev)
 	struct hix5hd2_i2c_priv *priv = platform_get_drvdata(pdev);
 
 	i2c_del_adapter(&priv->adap);
-	pm_runtime_disable(priv->dev);
-	pm_runtime_set_suspended(priv->dev);
 }
 
 static int hix5hd2_i2c_runtime_suspend(struct device *dev)
