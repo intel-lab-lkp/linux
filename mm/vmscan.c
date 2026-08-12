@@ -282,6 +282,13 @@ static inline bool is_exec_file_folio(const struct folio *folio,
 	return vma_flags_test(vma_flags, VMA_EXEC_BIT) && folio_is_file_lru(folio);
 }
 
+/* See get_type_to_scan(): these values always select FILE or ANON */
+static inline bool is_extreme_swappiness(int swappiness)
+{
+	return swappiness <= MIN_SWAPPINESS + 1 ||
+	       swappiness >= MAX_SWAPPINESS;
+}
+
 static void set_task_reclaim_state(struct task_struct *task,
 				   struct reclaim_state *rs)
 {
@@ -5086,8 +5093,11 @@ static bool should_run_aging(struct lruvec *lruvec, unsigned long max_seq,
 	if (evictable_min_seq(min_seq, swappiness) + MIN_NR_GENS > max_seq)
 		return true;
 
-	/* try to avoid aging, do gentle reclaim at the default priority */
-	if (sc->priority == DEF_PRIORITY)
+	/*
+	 * Try to avoid aging by doing gentle reclaim at the default
+	 * priority. Skip gentle reclaim for extreme swappiness.
+	 */
+	if (sc->priority == DEF_PRIORITY && !is_extreme_swappiness(swappiness))
 		return false;
 
 	/* better to run aging even though eviction is still possible */
