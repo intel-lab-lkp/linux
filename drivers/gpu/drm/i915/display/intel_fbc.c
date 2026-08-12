@@ -1521,11 +1521,14 @@ __intel_fbc_prepare_dirty_rect(const struct intel_plane_state *plane_state,
 			       const struct intel_crtc_state *crtc_state)
 {
 	struct intel_plane *plane = to_intel_plane(plane_state->uapi.plane);
+	struct intel_display *display = to_intel_display(plane_state);
 	struct intel_fbc *fbc = plane->fbc;
 	struct drm_rect *fbc_dirty_rect = &fbc->state.dirty_rect;
 	int width = drm_rect_width(&plane_state->uapi.src) >> 16;
+	int height = drm_rect_height(&plane_state->uapi.src) >> 16;
 	const struct drm_rect *damage = &plane_state->damage;
 	int y_offset = plane_state->view.color_plane[0].y;
+	int y_end = y_offset + height;
 
 	lockdep_assert_held(&fbc->lock);
 
@@ -1535,11 +1538,41 @@ __intel_fbc_prepare_dirty_rect(const struct intel_plane_state *plane_state,
 		return;
 	}
 
-	if (drm_rect_visible(damage))
-		*fbc_dirty_rect = *damage;
-	else
+	if (drm_rect_visible(damage)) {
+		int y1, y2;
+
+		if (plane_state->hw.rotation & DRM_MODE_ROTATE_180) {
+			/* Under 180 degree rotation, coordinate system is inverted */
+			int inv_y1 = height - damage->y2;
+			int inv_y2 = height - damage->y1;
+
+			y1 = clamp(y_offset + inv_y1, y_offset, y_end);
+			y2 = clamp(y_offset + inv_y2, y_offset, y_end);
+		} else {
+			y1 = clamp(damage->y1, y_offset, y_end);
+			y2 = clamp(damage->y2, y_offset, y_end);
+		}
+
+		/*
+		 * Clamp dirty rect to the valid FB range [y_offset, y_end].
+		 * Per Bspec:
+		 *   start_line >= y_offset
+		 *   end_line <= y_offset + plane_height
+		 */
+		if (y1 != damage->y1 || y2 != damage->y2)
+			drm_dbg_kms(display->drm,
+				    "[PLANE:%d:%s] FBC dirty rect out of range: y1=%d y2=%d clamped to y1=%d y2=%d (y_offset=%d y_end=%d)\n",
+				    plane->base.base.id, plane->base.name,
+				    damage->y1, damage->y2, y1, y2, y_offset, y_end);
+
+		fbc_dirty_rect->x1 = damage->x1;
+		fbc_dirty_rect->x2 = damage->x2;
+		fbc_dirty_rect->y1 = y1;
+		fbc_dirty_rect->y2 = y2;
+	} else {
 		/* dirty rect must cover at least one line */
 		*fbc_dirty_rect = DRM_RECT_INIT(0, y_offset, width, 1);
+	}
 }
 
 void
