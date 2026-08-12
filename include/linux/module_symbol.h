@@ -7,8 +7,8 @@ enum ksym_flags {
 	KSYM_FLAG_GPL_ONLY	= 1 << 0,
 };
 
-/* This ignores the intensely annoying "mapping symbols" found in ELF files. */
-static inline bool is_mapping_symbol(const char *str)
+/* This ignores the intensely annoying "local or mapping symbols" found in ELF files. */
+static inline bool is_local_mapping_symbol(const char *str)
 {
 	if (str[0] == '.' && str[1] == 'L')
 		return true;
