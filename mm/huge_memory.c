@@ -4406,11 +4406,10 @@ int folio_split_unmapped(struct folio *folio, unsigned int new_order)
  *    GUP pins, will result in the folio not getting split; instead, the caller
  *    will receive an -EAGAIN.
  *
- * 4) @new_order > 1, usually. Order-1 is not supported for anon or swapcache
- *    folios: anon folios need subpage 2 for _deferred_list, which order-1
- *    folios lack, and a swapcache folio may become anon once faulted in.
- *    File-backed order-1 folios are supported, since they do not use
- *    _deferred_list.
+ * 4) @new_order != 1 for anon or swapcache. Anon folios need subpage 2 for
+ *    _deferred_list, which order-1 folios lack, and a swapcache folio may
+ *    become anon once faulted in. File-backed order-1 folios are supported,
+ *    since they do not use _deferred_list.
  *
  * After splitting, the caller's folio reference will be transferred to @page,
  * resulting in a raised refcount of @page after this call. The other pages may
@@ -4438,7 +4437,7 @@ int folio_split_unmapped(struct folio *folio, unsigned int new_order)
  * with the folio. Splitting to order 0 is compatible with all folios.
  */
 int __split_huge_page_to_list_to_order(struct page *page, struct list_head *list,
-				     unsigned int new_order)
+				       unsigned int new_order)
 {
 	struct folio *folio = page_folio(page);
 
