@@ -575,3 +575,498 @@ static inline u64 armv8pt_sw_bit(unsigned int bitnr)
 	}
 }
 #define pt_sw_bit armv8pt_sw_bit
+
+/* --- iommu */
+#include <linux/generic_pt/iommu.h>
+#include <linux/iommu.h>
+
+#define pt_iommu_table pt_iommu_armv8
+
+/* The common struct is in the per-format common struct */
+static inline struct pt_common *common_from_iommu(struct pt_iommu *iommu_table)
+{
+	return &container_of(iommu_table, struct pt_iommu_table, iommu)
+			->armpt.common;
+}
+
+static inline struct pt_iommu *iommu_from_common(struct pt_common *common)
+{
+	return &container_of(common, struct pt_iommu_table, armpt.common)->iommu;
+}
+
+static inline int armv8pt_iommu_set_prot(struct pt_common *common,
+					 struct pt_write_attrs *attrs,
+					 unsigned int iommu_prot)
+{
+	bool is_s1 = !pt_feature(common, PT_FEAT_ARMV8_S2);
+	u64 pte = 0;
+
+	if (is_s1) {
+		u64 ap = 0;
+
+		if (!(iommu_prot & IOMMU_WRITE) && (iommu_prot & IOMMU_READ))
+			ap |= ARMV8PT_AP_RDONLY;
+		if (!(iommu_prot & IOMMU_PRIV))
+			ap |= ARMV8PT_AP_UNPRIV;
+		pte = ARMV8PT_FMT_nG | FIELD_PREP(ARMV8PT_FMT_AP, ap);
+
+		if (iommu_prot & IOMMU_MMIO)
+			pte |= FIELD_PREP(ARMV8PT_FMT_ATTRINDX,
+					  ARMV8PT_MAIR_ATTR_IDX_DEV);
+		else if (iommu_prot & IOMMU_CACHE)
+			pte |= FIELD_PREP(ARMV8PT_FMT_ATTRINDX,
+					  ARMV8PT_MAIR_ATTR_IDX_CACHE);
+		else
+			pte |= FIELD_PREP(ARMV8PT_FMT_ATTRINDX,
+					  ARMV8PT_MAIR_ATTR_IDX_NC);
+	} else {
+		u64 s2ap = 0;
+
+		if (iommu_prot & IOMMU_READ)
+			s2ap |= ARMV8PT_S2AP_READ;
+		if (iommu_prot & IOMMU_WRITE)
+			s2ap |= ARMV8PT_S2AP_WRITE;
+		pte = FIELD_PREP(ARMV8PT_FMT_S2AP, s2ap);
+
+		if (iommu_prot & IOMMU_MMIO)
+			pte |= FIELD_PREP(ARMV8PT_FMT_S2MEMATTR,
+					  ARMV8PT_MEMATTR_DEV);
+		else if ((iommu_prot & IOMMU_CACHE) &&
+			 pt_feature(common, PT_FEAT_ARMV8_S2FWB))
+			pte |= FIELD_PREP(ARMV8PT_FMT_S2MEMATTR,
+					  ARMV8PT_MEMATTR_FWB_WB);
+		else if (iommu_prot & IOMMU_CACHE)
+			pte |= FIELD_PREP(ARMV8PT_FMT_S2MEMATTR,
+					  ARMV8PT_MEMATTR_OIWB);
+		else
+			pte |= FIELD_PREP(ARMV8PT_FMT_S2MEMATTR,
+					  ARMV8PT_MEMATTR_NC);
+	}
+
+	/*
+	 * For DBM the writable entry starts out dirty to avoid the HW doing
+	 * memory accesses to dirty it. We can just leave the DBM bit
+	 * permanently set with no cost.
+	 */
+	if (pt_feature(common, PT_FEAT_ARMV8_DBM) && (iommu_prot & IOMMU_WRITE))
+		pte |= ARMV8PT_FMT_DBM;
+
+	/* Tables D8-52/53: with LPA2 bits [9:8] are OA[51:50], not SH */
+	if (!pt_feature(common, PT_FEAT_ARMV8_LPA2)) {
+		if (iommu_prot & IOMMU_CACHE)
+			pte |= FIELD_PREP(ARMV8PT_FMT_SH, ARMV8PT_SH_IS);
+		else
+			pte |= FIELD_PREP(ARMV8PT_FMT_SH, ARMV8PT_SH_OS);
+	}
+
+	if (iommu_prot & IOMMU_NOEXEC)
+		pte |= ARMV8PT_FMT_PXN;
+
+	pte |= ARMV8PT_FMT_AF;
+
+	attrs->descriptor_bits = pte;
+	return 0;
+}
+#define pt_iommu_set_prot armv8pt_iommu_set_prot
+
+static inline unsigned int armv8pt_max_top_level(unsigned int tgsz_lg2,
+						 unsigned int features)
+{
+	if (tgsz_lg2 == SZLG2_64K)
+		return ARML1;
+	if (tgsz_lg2 == SZLG2_4K && (features & BIT(PT_FEAT_ARMV8_LPA2)))
+		return ARMLn1;
+	return ARML0;
+}
+
+/*
+ * Debugging validation of the S2 initial lookup level against D8.2.
+ *
+ *   Table D8-8: "Effective minimum value of T0SZ" (R_DTLMN)
+ *   Table D8-9: "Implications of the effective minimum T0SZ value
+ *                on the initial stage 2 lookup level" (R_TDJSG)
+ *
+ * ARM initial lookup level = 3 - top_level. Table D8-9 constrains the
+ * shallowest allowed initial lookup level per PA size and granule:
+ *
+ *   4K:  ARM level 0 (top_level 3) requires PA >= 44
+ *   16K: ARM level 1 (top_level 2) requires PA >= 42
+ *   64K: ARM level 1 (top_level 2) requires PA >= 44
+ *
+ * The valid level set grows monotonically with PA size, so checking
+ * against IAS (vasz_lg2 <= PA size) is conservative.
+ *
+ * R_SRKBC: 4K granule at ARM level 3 (single entry level) requires
+ * FEAT_TTST.
+ */
+static inline void armv8pt_s2_validate_level(unsigned int top_level,
+					     unsigned int tgsz_lg2,
+					     unsigned int vasz_lg2, bool lpa2)
+{
+	unsigned int max_top_level;
+
+	switch (tgsz_lg2) {
+	case SZLG2_4K:
+		if (lpa2)
+			max_top_level =
+				vasz_lg2 >= 52 ?
+					ARMLn1 :
+					(vasz_lg2 >= 44 ? ARML0 : ARML1);
+		else
+			max_top_level = vasz_lg2 >= 44 ? ARML0 : ARML1;
+		break;
+	case SZLG2_16K: /* ARM level 1 requires PA >= 42 */
+		max_top_level = vasz_lg2 >= 42 ? ARML1 : ARML2;
+		break;
+	case SZLG2_64K: /* ARM level 1 requires PA >= 44 */
+		max_top_level = vasz_lg2 >= 44 ? ARML1 : ARML2;
+		break;
+	default:
+		return;
+	}
+
+	PT_WARN_ON(top_level > max_top_level);
+}
+
+/*
+ * It is a bug for a caller to pass in an illegal combination of features and
+ * tgsz.
+ */
+static inline bool armv8pt_validate_features(const struct pt_common *common,
+					     unsigned int tgsz_lg2)
+{
+	/* TTBR1 is S1 only */
+	if (pt_feature(common, PT_FEAT_ARMV8_S2) &&
+	    pt_feature(common, PT_FEAT_ARMV8_TTBR1))
+		return false;
+
+	/* S2FWB is S2 only */
+	if (pt_feature(common, PT_FEAT_ARMV8_S2FWB) &&
+	    !pt_feature(common, PT_FEAT_ARMV8_S2))
+		return false;
+
+	/* LPA2 (DS=1) is only valid for 4K and 16K granules */
+	if (pt_feature(common, PT_FEAT_ARMV8_LPA2) &&
+	    tgsz_lg2 == SZLG2_64K)
+		return false;
+
+	/* LPA is only valid for the 64K granule */
+	if (pt_feature(common, PT_FEAT_ARMV8_LPA) &&
+	    tgsz_lg2 != SZLG2_64K)
+		return false;
+
+	/* LVA is only valid for 64K granule Stage 1 */
+	if (pt_feature(common, PT_FEAT_ARMV8_LVA) &&
+	    (tgsz_lg2 != SZLG2_64K ||
+	     pt_feature(common, PT_FEAT_ARMV8_S2)))
+		return false;
+
+	return true;
+}
+
+static inline int armv8pt_oasz_to_ps(unsigned int oasz_lg2)
+{
+	/* Stream Table Entry: S2PS section, Context Descriptor: IPS section */
+	switch (oasz_lg2) {
+	case 32:
+		return 0;
+	case 36:
+		return 1;
+	case 40:
+		return 2;
+	case 42:
+		return 3;
+	case 44:
+		return 4;
+	case 48:
+		return 5;
+	case 52:
+		return 6;
+	default:
+		return -1;
+	}
+}
+
+static inline int armv8pt_iommu_fmt_init(struct pt_iommu_armv8 *iommu_table,
+					 const struct pt_iommu_armv8_cfg *cfg)
+{
+	struct pt_armv8 *armv8pt = &iommu_table->armpt;
+	unsigned int vasz_lg2 = cfg->common.hw_max_vasz_lg2;
+	unsigned int oasz_lg2 = cfg->common.hw_max_oasz_lg2;
+	unsigned int tgsz_lg2 = cfg->tgsz_lg2;
+	unsigned int max_top_level;
+	unsigned int levels;
+
+	if (tgsz_lg2 != SZLG2_4K && tgsz_lg2 != SZLG2_16K &&
+	    tgsz_lg2 != SZLG2_64K)
+		return -EOPNOTSUPP;
+
+	armv8pt->tgsz_lg2 = tgsz_lg2;
+	max_top_level =
+		armv8pt_max_top_level(tgsz_lg2, armv8pt->common.features);
+
+	if (WARN_ON(!armv8pt_validate_features(&armv8pt->common, tgsz_lg2)))
+		return -EOPNOTSUPP;
+	if (WARN_ON(vasz_lg2 <= tgsz_lg2))
+		return -EINVAL;
+
+	/* R_QQQSJ: Limit the OA to what the format supports */
+	if (pt_feature(&armv8pt->common, PT_FEAT_ARMV8_LPA2) ||
+	    pt_feature(&armv8pt->common, PT_FEAT_ARMV8_LPA))
+		armv8pt->common.max_oasz_lg2 = min(52, oasz_lg2);
+	else
+		armv8pt->common.max_oasz_lg2 = min(48, oasz_lg2);
+
+	if (armv8pt_oasz_to_ps(armv8pt->common.max_oasz_lg2) < 0)
+		return -EOPNOTSUPP;
+
+	if (WARN_ON(armv8pt->common.max_oasz_lg2 > PT_MAX_OUTPUT_ADDRESS_LG2))
+		return -EOPNOTSUPP;
+
+	/*
+	 * Limit the VA/IPA to what the format supports:
+	 *  - LPA2: 52-bit VA for 4K/16K (S1 and S2)
+	 *  - LVA:  52-bit VA for 64K S1
+	 *  - LPA:  52-bit IPA for 64K S2
+	 */
+	if (pt_feature(&armv8pt->common, PT_FEAT_ARMV8_LPA2) ||
+	    pt_feature(&armv8pt->common, PT_FEAT_ARMV8_LVA) ||
+	    (pt_feature(&armv8pt->common, PT_FEAT_ARMV8_S2) &&
+	     pt_feature(&armv8pt->common, PT_FEAT_ARMV8_LPA)))
+		armv8pt->common.max_vasz_lg2 = min(52, vasz_lg2);
+	else
+		armv8pt->common.max_vasz_lg2 = min(48, vasz_lg2);
+	vasz_lg2 = armv8pt->common.max_vasz_lg2;
+
+	levels = DIV_ROUND_UP(vasz_lg2 - tgsz_lg2,
+			      tgsz_lg2 - ilog2(PT_ITEM_WORD_SIZE));
+	if (levels > max_top_level + 1)
+		return -EINVAL;
+
+	/*
+	 * R_SRKBC: For the 4KB granule, an initial lookup level of 3 is
+	 * only supported if FEAT_TTST is implemented. See Table D8-9 and
+	 * Table D8-24. FEAT_TTST is not supported.
+	 */
+	if (pt_feature(&armv8pt->common, PT_FEAT_ARMV8_S2) &&
+	    tgsz_lg2 == SZLG2_4K && levels == 1)
+		return -EINVAL;
+
+	/*
+	 * D8.2.2: Always use the S2 concatenated tables feature (I_TDMHR)
+	 * to fold a top level of up to 16 tables into the next lower
+	 * level. Since FEAT_TTST is not supported single level cannot be
+	 * selected here either. Notice that there are a number of cases
+	 * in the spec that require concatenated tables (eg R_DXBSH),
+	 * since this always uses them it is OK. See commit 4dcac8407fe1
+	 * ("iommu/io-pgtable-arm: Fix stage-2 concatenation with 16K")
+	 */
+	if (!pt_feature(&armv8pt->common, PT_FEAT_DYNAMIC_TOP) &&
+	    pt_feature(&armv8pt->common, PT_FEAT_ARMV8_S2) && levels > 1) {
+		unsigned int topsz_lg2 =
+			vasz_lg2 - (tgsz_lg2 + (tgsz_lg2 - ilog2(sizeof(u64))) *
+						       (levels - 1));
+		if (topsz_lg2 <= ilog2(16))
+			levels--;
+	}
+
+	if (pt_feature(&armv8pt->common, PT_FEAT_ARMV8_S2))
+		armv8pt_s2_validate_level(levels - 1, tgsz_lg2, vasz_lg2,
+					  pt_feature(&armv8pt->common,
+						     PT_FEAT_ARMV8_LPA2));
+	pt_top_set_level(&armv8pt->common, levels - 1);
+	return 0;
+}
+#define pt_iommu_fmt_init armv8pt_iommu_fmt_init
+
+static inline void
+armv8pt_iommu_fmt_hw_info(struct pt_iommu_armv8 *table,
+			  const struct pt_range *top_range,
+			  struct pt_iommu_armv8_hw_info *info)
+{
+	struct pt_common *common = &table->armpt.common;
+	unsigned int tgsz_lg2 = table->armpt.tgsz_lg2;
+
+#ifdef __BIG_ENDIAN
+	info->endi = 1;
+#else
+	info->endi = 0;
+#endif
+
+	info->ttb = virt_to_phys(top_range->top_table);
+	WARN_ON(info->ttb & ~PT_TOP_PHYS_MASK);
+
+	/* D24.2.210 T0SZ: The region size is 2^(64-T0SZ) bytes. */
+	info->tsz = 64 - common->max_vasz_lg2;
+
+	/*
+	 * Context Descriptor TG0/TG1 use different encodings
+	 * Stream Table Entry S2TG is the same as TG0
+	 */
+	if (pt_feature(common, PT_FEAT_ARMV8_TTBR1)) {
+		switch (tgsz_lg2) {
+		case SZLG2_4K:
+			info->tg = 2;
+			break;
+		case SZLG2_16K:
+			info->tg = 1;
+			break;
+		case SZLG2_64K:
+			info->tg = 3;
+			break;
+		}
+	} else {
+		switch (tgsz_lg2) {
+		case SZLG2_4K:
+			info->tg = 0;
+			break;
+		case SZLG2_16K:
+			info->tg = 2;
+			break;
+		case SZLG2_64K:
+			info->tg = 1;
+			break;
+		}
+	}
+
+	info->ps = armv8pt_oasz_to_ps(common->max_oasz_lg2);
+	info->ds = pt_feature(common, PT_FEAT_ARMV8_LPA2);
+
+	if (pt_feature(common, PT_FEAT_DMA_INCOHERENT)) {
+		info->sh = ARMV8PT_SH_OS;
+		info->irgn = ARMV8PT_RGN_NC;
+		info->orgn = ARMV8PT_RGN_NC;
+	} else {
+		info->sh = ARMV8PT_SH_IS;
+		info->irgn = ARMV8PT_RGN_WBWA;
+		info->orgn = ARMV8PT_RGN_WBWA;
+	}
+
+	if (pt_feature(common, PT_FEAT_ARMV8_S2)) {
+		/*
+		 * STE S2SL0/S2SL2: Starting level in VTCR_EL2.SL0/SL2
+		 * encoding. Table from D24.2.210 SL0:
+		 *
+		 * 4K:  top_level  ARMLx    S2SL0  S2SL2
+		 *      1          ARML2    0      0
+		 *      2          ARML1    1      0
+		 *      3          ARML0    2      0
+		 *      4          ARMLn1   0      1      (FEAT_LPA2)
+		 *
+		 * 16K/64K:
+		 *      0          ARML3    0
+		 *      1          ARML2    1
+		 *      2          ARML1    2
+		 */
+		info->s2.sl2 = 0;
+		if (tgsz_lg2 == SZLG2_4K) {
+			if (top_range->top_level == ARMLn1) {
+				info->s2.sl0 = 0;
+				info->s2.sl2 = 1;
+			} else {
+				info->s2.sl0 = top_range->top_level - 1;
+			}
+		} else {
+			info->s2.sl0 = top_range->top_level;
+		}
+	} else {
+		info->s1.tbix = 0;
+		if (pt_feature(common, PT_FEAT_ARMV8_TTBR1)) {
+			info->s1.epd0 = 1;
+			info->s1.epd1 = 0;
+		} else {
+			info->s1.epd0 = 0;
+			info->s1.epd1 = 1;
+		}
+
+		/*
+		 * MAIR value for S1 page tables. Matches what io-pgtable-arm
+		 * used.
+		 */
+		info->s1.mair =
+			FIELD_PREP(ARMV8PT_MAIR_ITEM
+					   << (ARMV8PT_MAIR_ATTR_IDX_NC * 8),
+				   ARMV8PT_MAIR_ATTR_NC) |
+			FIELD_PREP(ARMV8PT_MAIR_ITEM
+					   << (ARMV8PT_MAIR_ATTR_IDX_CACHE * 8),
+				   ARMV8PT_MAIR_ATTR_WBRWA) |
+			FIELD_PREP(ARMV8PT_MAIR_ITEM
+					   << (ARMV8PT_MAIR_ATTR_IDX_DEV * 8),
+				   ARMV8PT_MAIR_ATTR_DEVICE) |
+			FIELD_PREP(
+				ARMV8PT_MAIR_ITEM
+					<< (ARMV8PT_MAIR_ATTR_IDX_INC_OCACHE *
+					    8),
+				ARMV8PT_MAIR_ATTR_INC_OWBRWA);
+	}
+}
+#define pt_iommu_fmt_hw_info armv8pt_iommu_fmt_hw_info
+
+#if defined(GENERIC_PT_KUNIT)
+static const struct pt_iommu_armv8_cfg armv8_kunit_fmt_cfgs[] = {
+	/* 4K granule */
+	[0] = { .tgsz_lg2 = 12,
+		.common.features = BIT(PT_FEAT_ARMV8_DBM),
+		.common.hw_max_oasz_lg2 = 48,
+		.common.hw_max_vasz_lg2 = 48 },
+	[1] = { .tgsz_lg2 = 12,
+		.common.features = BIT(PT_FEAT_ARMV8_S2),
+		.common.hw_max_oasz_lg2 = 48,
+		.common.hw_max_vasz_lg2 = 48 },
+	[2] = { .tgsz_lg2 = 12,
+		.common.features = BIT(PT_FEAT_ARMV8_TTBR1),
+		.common.hw_max_oasz_lg2 = 48,
+		.common.hw_max_vasz_lg2 = 48 },
+	/* 16K granule */
+	[3] = { .tgsz_lg2 = 14,
+		.common.features = BIT(PT_FEAT_ARMV8_DBM),
+		.common.hw_max_oasz_lg2 = 48,
+		.common.hw_max_vasz_lg2 = 48 },
+	/*
+	 * See R_DXBSH: 16K granule + 48-bit S2 is required to start at level 1
+	 * with 2 concatenated tables.
+	 */
+	[4] = { .tgsz_lg2 = 14,
+		.common.features = BIT(PT_FEAT_ARMV8_S2),
+		.common.hw_max_oasz_lg2 = 48,
+		.common.hw_max_vasz_lg2 = 48 },
+	[5] = { .tgsz_lg2 = 14,
+		.common.features = BIT(PT_FEAT_ARMV8_TTBR1),
+		.common.hw_max_oasz_lg2 = 48,
+		.common.hw_max_vasz_lg2 = 48 },
+	/* 64K granule */
+	[6] = { .tgsz_lg2 = 16,
+		.common.features = BIT(PT_FEAT_ARMV8_DBM),
+		.common.hw_max_oasz_lg2 = 48,
+		.common.hw_max_vasz_lg2 = 48 },
+	[7] = { .tgsz_lg2 = 16,
+		.common.features = BIT(PT_FEAT_ARMV8_S2),
+		.common.hw_max_oasz_lg2 = 48,
+		.common.hw_max_vasz_lg2 = 48 },
+	[8] = { .tgsz_lg2 = 16,
+		.common.features = BIT(PT_FEAT_ARMV8_TTBR1),
+		.common.hw_max_oasz_lg2 = 48,
+		.common.hw_max_vasz_lg2 = 48 },
+	/* S2 concatenated table configurations at smaller IPA sizes */
+	[9] = { .tgsz_lg2 = 12,
+		.common.features = BIT(PT_FEAT_ARMV8_S2),
+		.common.hw_max_oasz_lg2 = 40,
+		.common.hw_max_vasz_lg2 = 40 },
+	[10] = { .tgsz_lg2 = 12,
+		 .common.features = BIT(PT_FEAT_ARMV8_S2),
+		 .common.hw_max_oasz_lg2 = 42,
+		 .common.hw_max_vasz_lg2 = 42 },
+	[11] = { .tgsz_lg2 = 14,
+		 .common.features = BIT(PT_FEAT_ARMV8_S2),
+		 .common.hw_max_oasz_lg2 = 40,
+		 .common.hw_max_vasz_lg2 = 40 },
+};
+#define kunit_fmt_cfgs armv8_kunit_fmt_cfgs
+enum {
+	KUNIT_FMT_FEATURES = BIT(PT_FEAT_ARMV8_TTBR1) | BIT(PT_FEAT_ARMV8_S2) |
+			     BIT(PT_FEAT_ARMV8_DBM) | BIT(PT_FEAT_ARMV8_S2FWB) |
+			     BIT(PT_FEAT_DYNAMIC_TOP) | BIT(PT_FEAT_ARMV8_LPA) |
+			     BIT(PT_FEAT_ARMV8_LPA2) | BIT(PT_FEAT_ARMV8_LVA)
+};
+#endif
+#endif
