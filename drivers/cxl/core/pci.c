@@ -685,6 +685,14 @@ static int __cxl_endpoint_decoder_reset_detected(struct device *dev, void *data)
 
 	cxlhdm = dev_get_drvdata(&port->dev);
 	hdm = cxlhdm->regs.hdm_decoder;
+
+	/*
+	 * Devices that describe their HDM ranges with the DVSEC range
+	 * registers have no HDM decoder registers to consult.
+	 */
+	if (!hdm)
+		return 0;
+
 	ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(cxld->id));
 
 	return !FIELD_GET(CXL_HDM_DECODER0_CTRL_COMMITTED, ctrl);
