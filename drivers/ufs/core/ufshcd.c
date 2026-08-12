@@ -9515,18 +9515,6 @@ static enum scsi_timeout_action ufshcd_eh_timed_out(struct scsi_cmnd *scmd)
 		return SCSI_EH_NOT_HANDLED;
 	}
 
-	/*
-	 * Handle the timeout directly to prevent a deadlock between
-	 * ufshcd_set_dev_pwr_mode() and ufshcd_err_handler().
-	 */
-	ufshcd_link_recovery(hba);
-	dev_info(hba->dev, "%s() finished; outstanding_tasks = %#lx.\n",
-		 __func__, hba->outstanding_tasks);
-
-	/*
-	 * ufshcd_link_recovery() may already have completed @scmd, e.g. via
-	 * the existing MCQ force-completion path.
-	 */
 	if (!test_bit(SCMD_STATE_COMPLETE, &scmd->state)) {
 		if (!hba->mcq_enabled) {
 			unsigned long flags;
@@ -10063,6 +10051,7 @@ static int ufshcd_set_dev_pwr_mode(struct ufs_hba *hba,
 		if (ret > 0) {
 			if (scsi_sense_valid(&sshdr))
 				scsi_print_sense_hdr(sdp, NULL, &sshdr);
+			ufshcd_link_recovery(hba);
 			ret = -EIO;
 		}
 	} else {
