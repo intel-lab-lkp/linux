@@ -11,7 +11,7 @@
  *
  */
 
-#ifdef CONFIG_KVM_MMIO
+#if defined(CONFIG_KVM_MMIO) && !defined(KVM_NO_MMIO)
 
 #include <linux/list.h>
 
