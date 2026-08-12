@@ -151,18 +151,6 @@
 			nvmem-cells = <&et0macaddr 1>;
 			nvmem-cell-names = "mac-address";
 		};
-
-		port@5 {
-			label = "cpu";
-		};
-
-		port@7 {
-			label = "cpu";
-		};
-
-		port@8 {
-			label = "cpu";
-		};
 	};
 };
 

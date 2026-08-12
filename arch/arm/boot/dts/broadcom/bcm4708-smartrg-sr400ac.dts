@@ -160,10 +160,6 @@
 			nvmem-cell-names = "mac-address";
 		};
 
-		port@5 {
-			label = "cpu";
-		};
-
 		port@7 {
 			status = "disabled";
 		};

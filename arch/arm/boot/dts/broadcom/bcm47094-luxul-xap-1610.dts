@@ -97,10 +97,6 @@
 			label = "lan";
 		};
 
-		port@5 {
-			label = "cpu";
-		};
-
 		port@7 {
 			status = "disabled";
 		};

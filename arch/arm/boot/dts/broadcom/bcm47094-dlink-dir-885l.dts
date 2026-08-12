@@ -167,9 +167,5 @@
 		port@7 {
 			status = "disabled";
 		};
-
-		port@8 {
-			label = "cpu";
-		};
 	};
 };

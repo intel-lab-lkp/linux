@@ -205,7 +205,6 @@
 		};
 
 		port@8 {
-			label = "cpu";
 			phy-mode = "rgmii";
 		};
 	};

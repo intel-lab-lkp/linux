@@ -137,8 +137,6 @@
 		};
 
 		port@5 {
-			label = "cpu";
-
 			fixed-link {
 				speed = <1000>;
 				full-duplex;
