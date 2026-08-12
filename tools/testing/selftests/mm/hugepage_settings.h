@@ -70,6 +70,7 @@ int thp_read_string(const char *name, const char * const strings[]);
 void thp_write_string(const char *name, const char *val);
 unsigned long thp_read_num(const char *name);
 void thp_write_num(const char *name, unsigned long num);
+void thp_update_num(const char *name, unsigned long num);
 
 void thp_write_settings(struct thp_settings *settings);
 void thp_read_settings(struct thp_settings *settings);
@@ -82,6 +83,8 @@ static inline void thp_save_settings(void)
 {
 	hugepage_save_settings(/* thp = */ true, /* hugetlb = */ false);
 }
+
+bool khugepaged_full_pass(unsigned int timeout_s);
 
 void thp_set_read_ahead_path(char *path);
 unsigned long thp_supported_orders(void);
