@@ -3593,14 +3593,15 @@ fail_ctrl:
 	cancel_work_sync(&ctrl->ctrl.reset_work);
 	cancel_delayed_work_sync(&ctrl->connect_work);
 
-	ctrl->ctrl.opts = NULL;
-
 	if (ctrl->ctrl.admin_tagset)
 		nvme_remove_admin_tag_set(&ctrl->ctrl);
 	/* initiate nvme ctrl ref counting teardown */
 	nvme_uninit_ctrl(&ctrl->ctrl);
 
 out_put_ctrl:
+	/* the caller frees opts when we return an error */
+	ctrl->ctrl.opts = NULL;
+
 	/* Remove core ctrl ref. */
 	nvme_put_ctrl(&ctrl->ctrl);
 
