@@ -89,6 +89,9 @@ static bool is_kept_symbol(struct module *mod, const struct load_info *info,
 	    !src->st_name)
 		return false;
 
+	if (is_local_mapping_symbol(&info->strtab[src->st_name]))
+		return false;
+
 #ifdef CONFIG_KALLSYMS_ALL
 	if (src->st_shndx == info->index.pcpu)
 		return true;
