@@ -77,7 +77,9 @@ config ARM_SMMU_V3
 	tristate "ARM Ltd. System MMU Version 3 (SMMUv3) Support"
 	depends on ARM64
 	select IOMMU_API
-	select IOMMU_IO_PGTABLE_LPAE
+	select GENERIC_PT
+	select IOMMU_PT
+	select IOMMU_PT_ARMV8
 	select GENERIC_MSI_IRQ
 	select IOMMUFD_DRIVER if IOMMUFD
 	help
