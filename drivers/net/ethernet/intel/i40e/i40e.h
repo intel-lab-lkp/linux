@@ -101,7 +101,6 @@ enum i40e_state {
 	__I40E_GLOBAL_RESET_REQUESTED,
 	__I40E_EMP_RESET_INTR_RECEIVED,
 	__I40E_SUSPENDED,
-	__I40E_PTP_TX_IN_PROGRESS,
 	__I40E_BAD_EEPROM,
 	__I40E_DOWN_REQUESTED,
 	__I40E_FD_FLUSH_REQUESTED,
@@ -675,6 +674,8 @@ struct i40e_pf {
 	u32 tx_hwtstamp_skipped;
 	u32 rx_hwtstamp_cleared;
 	u32 latch_event_flags;
+	/* Protects ptp_tx_skb, which also indicates the slot state. */
+	spinlock_t ptp_tx_lock;
 	spinlock_t ptp_rx_lock; /* Used to protect Rx timestamp registers. */
 	unsigned long latch_events[4];
 	bool ptp_tx;
