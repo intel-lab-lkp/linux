@@ -107,7 +107,7 @@ void spu_forget(struct spu_context *ctx)
 	 * want this context to be rescheduled on release.
 	 */
 	mutex_lock(&ctx->state_mutex);
-	if (ctx->state != SPU_STATE_SAVED)
+	while (ctx->state != SPU_STATE_SAVED)
 		spu_deactivate(ctx);
 
 	mm = ctx->owner;
@@ -150,7 +150,7 @@ int spu_acquire_saved(struct spu_context *ctx)
 	if (ret)
 		return ret;
 
-	if (ctx->state != SPU_STATE_SAVED) {
+	while (ctx->state != SPU_STATE_SAVED) {
 		set_bit(SPU_SCHED_WAS_ACTIVE, &ctx->sched_flags);
 		spu_deactivate(ctx);
 	}
