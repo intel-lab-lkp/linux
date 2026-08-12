@@ -82,9 +82,9 @@ void ppc4xx_trng_probe(struct crypto4xx_core_device *core_dev)
 		return;
 	}
 
-	dev->trng_base = of_iomap(trng, 0);
+	dev->trng_base = devm_of_iomap(core_dev->device, trng, 0, NULL);
 	of_node_put(trng);
-	if (!dev->trng_base)
+	if (IS_ERR(dev->trng_base))
 		goto err_out;
 
 	rng = kzalloc_obj(*rng);
@@ -108,9 +108,7 @@ void ppc4xx_trng_probe(struct crypto4xx_core_device *core_dev)
 	return;
 
 err_out:
-	iounmap(dev->trng_base);
 	kfree(rng);
-	dev->trng_base = NULL;
 	core_dev->trng = NULL;
 }
 
@@ -121,7 +119,6 @@ void ppc4xx_trng_remove(struct crypto4xx_core_device *core_dev)
 
 		devm_hwrng_unregister(core_dev->device, core_dev->trng);
 		ppc4xx_trng_enable(dev, false);
-		iounmap(dev->trng_base);
 		kfree(core_dev->trng);
 	}
 }
