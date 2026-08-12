@@ -325,4 +325,14 @@ config NVIDIA_TEGRA410_C2C_PMU
 	  Enable perf support for counters in NVIDIA C2C interface of NVIDIA
 	  Tegra410 SoC.
 
+config RASPBERRYPI_AXI_PMU
+	tristate "Raspberry Pi AXI PMU support"
+	depends on ARCH_BCM2835 || ARCH_BRCMSTB || COMPILE_TEST
+	select RASPBERRYPI_FIRMWARE if ARCH_BCM2835
+	help
+	  Support for the AXI Performance Monitoring Unit (PMU) found on Broadcom
+	  SoCs used in Raspberry Pi platforms (BCM2835, BCM2836, BCM2837, BCM2711).
+
+	  If compiled as a module, it will be called rpi_axi_pmu.
+
 endmenu
