@@ -340,29 +340,145 @@ struct ceph_inode_xattr {
 	int should_free_val;
 };
 
-/*
- * Ceph dentry state
+/**
+ * Ceph-specific dentry data (for `dentry.d_fsdata`).  Call
+ * ceph_dentry() to obtain the #ceph_dentry_info pointer from a
+ * #dentry.
  */
 struct ceph_dentry_info {
+	/**
+	 * A pointer back to the #dentry owning this object.
+	 */
 	struct dentry *dentry;
+
+	/**
+	 * The #ceph_mds_session that issued the lease; holds a
+	 * reference that must be freed with ceph_put_mds_session().
+	 * May be NULL.
+	 */
 	struct ceph_mds_session *lease_session;
+
+	/**
+	 * List hook; depending on the flags, it may be in
+	 * ceph_mds_client.dentry_leases,
+	 * ceph_mds_client.dentry_dir_leases or in
+	 * __dentry_leases_walk().dispose (or in no list at all if
+	 * this #list_head is empty).
+	 */
 	struct list_head lease_list;
+
+	/**
+	 * Hook for `ceph_fs_client.async_unlink_conflict`, protected
+	 * by `ceph_fs_client.async_unlink_conflict_lock`.
+	 */
 	struct hlist_node hnode;
+
+	/**
+	 * Bit mask of CEPH_DENTRY_*
+	 */
 	unsigned long flags;
+
+	/**
+	 * Snapshot of the parent directory's
+	 * `ceph_inode_info.i_shared_gen` taken when this dentry was
+	 * last validated against the directory lease.  When the
+	 * directory's `i_shared_gen` moves on, all cached dentries
+	 * below it (including this one's #offset) are stale.
+	 */
 	int lease_shared_gen;
+
+	/**
+	 * Snapshot of the issuing `ceph_mds_session.s_cap_gen` taken
+	 * when the (single-dentry) lease was granted.  The lease is
+	 * only valid while this matches the session's current
+	 * generation; a session reconnect bumps `s_cap_gen` and thus
+	 * invalidates all of its leases.  Zero means "no valid
+	 * lease".
+	 */
 	u32 lease_gen;
+
+	/**
+	 * The lease sequence number as received from the MDS
+	 * (`ceph_mds_reply_lease.seq`).  It is echoed back to the MDS
+	 * in lease RENEW/REVOKE_ACK messages.
+	 */
 	u32 lease_seq;
-	unsigned long lease_renew_after, lease_renew_from;
+
+	/**
+	 * Jiffies timestamp: the earliest time at which a proactive
+	 * lease renewal should be initiated (roughly half the lease
+	 * TTL).  Zero while a renewal is already in flight (see
+	 * #lease_renew_from).
+	 */
+	unsigned long lease_renew_after;
+
+	/**
+	 * Jiffies timestamp recorded when a lease renewal request was
+	 * sent; the new TTL and #lease_renew_after are computed
+	 * relative to it once the reply arrives.  Zero when no
+	 * renewal is pending.
+	 */
+	unsigned long lease_renew_from;
+
+	/**
+	 * Jiffies timestamp whose meaning depends on which lease this
+	 * dentry holds: for a single-dentry lease it is the expiry
+	 * time (TTL); for a directory lease it is when the dir lease
+	 * was last touched (compared against
+	 * `ceph_lease_walk_control.dir_lease_ttl`).
+	 */
 	unsigned long time;
+
+	/**
+	 * This dentry's position (an encoded file position; see
+	 * ceph_make_fpos()) within its parent directory's readdir
+	 * stream, used to preserve readdir ordering when serving
+	 * entries from cached dentries.  Zero if unknown/invalid.
+	 */
 	u64 offset;
 };
 
+/**
+ * Second-chance ("referenced") bit for the dentry-lease shrinker: set
+ * when an already-listed dentry is touched again, so the walker
+ * spares it for another round instead of disposing of it (a
+ * clock/LRU-style approximation).
+ */
 #define CEPH_DENTRY_REFERENCED		(1 << 0)
+
+/**
+ * `ceph_dentry_info.lease_list` is on the
+ * `ceph_mds_client.dentry_leases` list.
+ */
 #define CEPH_DENTRY_LEASE_LIST		(1 << 1)
+
+/**
+ * `ceph_dentry_info.lease_list` is on the
+ * __dentry_leases_walk().dispose list.
+ */
 #define CEPH_DENTRY_SHRINK_LIST		(1 << 2)
+
+/**
+ * This dentry is the primary link to its inode (as opposed to a
+ * remote/hard link).  Reflected from #CEPH_LEASE_PRIMARY_LINK in the
+ * MDS lease mask.
+ */
 #define CEPH_DENTRY_PRIMARY_LINK	(1 << 3)
+
+/**
+ * An asynchronous unlink is in flight for this dentry.  While set,
+ * the dentry is on the `ceph_fs_client.async_unlink_conflict` hash
+ * (via `ceph_dentry_info.hnode`); other operations on a conflicting
+ * name must wait for the bit to clear
+ * (ceph_wait_on_conflict_unlink()).
+ */
 #define CEPH_DENTRY_ASYNC_UNLINK_BIT	(4)
 #define CEPH_DENTRY_ASYNC_UNLINK	(1 << CEPH_DENTRY_ASYNC_UNLINK_BIT)
+
+/**
+ * An asynchronous create is in flight for this dentry; waiters block
+ * on the bit until the create completes.
+ */
 #define CEPH_DENTRY_ASYNC_CREATE_BIT	(5)
 #define CEPH_DENTRY_ASYNC_CREATE	(1 << CEPH_DENTRY_ASYNC_CREATE_BIT)
 
