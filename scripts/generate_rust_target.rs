@@ -198,6 +198,7 @@ fn main() {
         ts.push("arch", "x86_64");
         if cfg.rustc_version_atleast(1, 98, 0) {
             ts.push("rustc-abi", "softfloat");
+            ts.push("supports-fentry", true);
         } else if cfg.rustc_version_atleast(1, 86, 0) {
             ts.push("rustc-abi", "x86-softfloat");
         }
@@ -240,6 +241,7 @@ fn main() {
         ts.push("arch", "x86");
         if cfg.rustc_version_atleast(1, 98, 0) {
             ts.push("rustc-abi", "softfloat");
+            ts.push("supports-fentry", true);
         } else if cfg.rustc_version_atleast(1, 86, 0) {
             ts.push("rustc-abi", "x86-softfloat");
         }

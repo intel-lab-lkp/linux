@@ -832,9 +832,11 @@ endif # KBUILD_EXTMOD
 # Defaults to vmlinux, but the arch makefile usually adds further targets
 all: vmlinux
 
-# The arch Makefiles can override CC_FLAGS_FTRACE. We may also append it later.
+# The arch Makefiles can override CC_FLAGS_FTRACE or RUSTC_FLAGS_FTRACE.
+# We may also append them later.
 ifdef CONFIG_FUNCTION_TRACER
   CC_FLAGS_FTRACE := -pg
+  RUSTC_FLAGS_FTRACE :=
 endif
 
 ifdef CONFIG_TRACEPOINTS
@@ -1053,10 +1055,26 @@ ifdef CONFIG_HAVE_FENTRY
     CC_FLAGS_FTRACE	+= -mfentry
     CC_FLAGS_USING	+= -DCC_USING_FENTRY
   endif
+  ifdef CONFIG_FTRACE_MCOUNT_USE_CC
+    # Support for mcount record/nop is not gated by rustc version for all architectures.
+    ifdef CONFIG_HAVE_NOP_MCOUNT
+      ifeq ($(call rustc-option-yn, -Zinstrument-mcount=fentry-nop-record),y)
+        RUSTC_FLAGS_FTRACE += -Zinstrument-mcount=fentry-nop-record
+      endif
+    else
+      ifeq ($(call rustc-option-yn, -Zinstrument-mcount=fentry-record),y)
+        RUSTC_FLAGS_FTRACE += -Zinstrument-mcount=fentry-record
+      endif
+    endif
+  else
+      RUSTC_FLAGS_FTRACE += $(if $(call rustc-min-version,109800),-Zinstrument-mcount=fentry,)
+  endif
 endif
 export CC_FLAGS_FTRACE
+export RUSTC_FLAGS_FTRACE
 KBUILD_CFLAGS	+= $(CC_FLAGS_FTRACE) $(CC_FLAGS_USING)
 KBUILD_AFLAGS	+= $(CC_FLAGS_USING)
+KBUILD_RUSTFLAGS += $(RUSTC_FLAGS_FTRACE)
 endif
 
 # We trigger additional mismatches with less inlining
