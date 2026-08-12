@@ -2392,15 +2392,23 @@ void sched_init_numa(int offline_node)
 			}
 		}
 	}
-	rcu_assign_pointer(sched_domains_numa_masks, masks);
 
 	/* Compute default topology size */
 	for (i = 0; sched_domain_topology[i].mask; i++);
 
 	tl = kzalloc((i + nr_levels + 1) *
 			sizeof(struct sched_domain_topology_level), GFP_KERNEL);
-	if (!tl)
+	if (!tl) {
+		for (i = 0; i < nr_levels; i++) {
+			for_each_node(j)
+				kfree(masks[i][j]);
+			kfree(masks[i]);
+		}
+		kfree(masks);
 		return;
+	}
+
+	rcu_assign_pointer(sched_domains_numa_masks, masks);
 
 	/*
 	 * Copy the default topology bits..
