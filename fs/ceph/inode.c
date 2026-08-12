@@ -1176,7 +1176,7 @@ int ceph_fill_inode(struct inode *inode, struct page *locked_page,
 	if (new_version ||
 	    (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
 		u64 size = le64_to_cpu(info->size);
-		s64 old_pool = ci->i_layout.pool_id;
+		u32 old_pool = ci->i_layout.pool_id;
 		struct ceph_string *old_ns;
 
 		ceph_file_layout_from_legacy(&ci->i_layout, &info->layout);

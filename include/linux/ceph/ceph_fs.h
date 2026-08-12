@@ -69,7 +69,7 @@ struct ceph_file_layout {
 	u32 stripe_unit;   /* stripe unit, in bytes */
 	u32 stripe_count;  /* over this many objects */
 	u32 object_size;   /* until objects are this big */
-	s64 pool_id;        /* rados pool id */
+	u32 pool_id;        /* rados pool id */
 	struct ceph_string __rcu *pool_ns; /* rados pool namespace */
 };
 
