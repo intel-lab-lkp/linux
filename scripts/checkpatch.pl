@@ -644,7 +644,8 @@ our $allocFunctions = qr{(?x:
 		kmemdup(?:_nul)?) |
 	(?:\w+)?alloc_skb(?:_ip_align)? |
 				# dev_alloc_skb/netdev_alloc_skb, et al
-	dma_alloc_coherent
+	dma_alloc_coherent |
+	devres_alloc(?:_node)?
 )};
 
 our $signature_tags = qr{(?xi:
