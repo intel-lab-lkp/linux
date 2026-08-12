@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/axentia,tse850-pcm5142.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Axentia TSE-850 audio complex
+
+maintainers:
+  - Peter Rosin <peda@axentia.se>
+
+description: |
+  The TSE-850 is an FM Transmitter Station Equipment, designed to generate
+  baseband signals for FM, mainly the DARC subcarrier, but other signals
+  are also possible.
+
+  The schematics explaining the gpios are as follows::
+
+                 loop1 relays
+     IN1 +---o  +------------+  o---+ OUT1
+              \                /
+               +              +
+               |   /          |
+               +--o  +--.     |
+               |  add   |     |
+               |        V     |
+               |      .---.   |
+     DAC +----------->|Sum|---+
+               |      '---'   |
+               |              |
+               +              +
+     IN2 +---o--+------------+--o---+ OUT2
+                 loop2 relays
+
+  The 'loop1' gpio pin controls two relays, which are either in loop
+  position, meaning that input and output are directly connected, or
+  they are in mixer position, meaning that the signal is passed through
+  the 'Sum' mixer. Similarly for 'loop2'.
+
+  In the above, the 'loop1' relays are inactive, thus feeding IN1 to the
+  mixer (if 'add' is active) and feeding the mixer output to OUT1. The
+  'loop2' relays are active, short-cutting the TSE-850 from channel 2.
+  IN1, IN2, OUT1 and OUT2 are TSE-850 connectors and DAC is the PCB name
+  of the (filtered) output from the PCM5142 codec.
+
+properties:
+  compatible:
+    const: axentia,tse850-pcm5142
+
+  axentia,cpu-dai:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      The phandle of the cpu dai.
+
+  axentia,audio-codec:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      The phandle of the PCM5142 codec.
+
+  axentia,add-gpios:
+    maxItems: 1
+    description:
+      gpio specifier that controls the mixer.
+
+  axentia,loop1-gpios:
+    maxItems: 1
+    description:
+      gpio specifier that controls loop relays on channel 1.
+
+  axentia,loop2-gpios:
+    maxItems: 1
+    description:
+      gpio specifier that controls loop relays on channel 2.
+
+  axentia,ana-supply:
+    description:
+      Regulator that supplies the output amplifier. Must support voltages in
+      the 2V - 20V range, in 1V steps.
+
+required:
+  - compatible
+  - axentia,cpu-dai
+  - axentia,audio-codec
+  - axentia,add-gpios
+  - axentia,loop1-gpios
+  - axentia,loop2-gpios
+  - axentia,ana-supply
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/pwm/pwm.h>
+
+    sound {
+        compatible = "axentia,tse850-pcm5142";
+        axentia,cpu-dai = <&ssc0>;
+        axentia,audio-codec = <&codec>;
+        axentia,add-gpios = <&pioA 8 GPIO_ACTIVE_LOW>;
+        axentia,loop1-gpios = <&pioA 10 GPIO_ACTIVE_LOW>;
+        axentia,loop2-gpios = <&pioA 11 GPIO_ACTIVE_LOW>;
+        axentia,ana-supply = <&regulator_ana>;
+    };
