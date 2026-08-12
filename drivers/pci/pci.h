@@ -1092,6 +1092,22 @@ enum pci_acs_p2pdma_state {
 	PCI_ACS_P2PDMA_NOT_SUPPORTED,	/* no usable peer-to-peer route */
 };
 
+/* Provider rank classes, ordered from most to least preferable. */
+enum pci_p2pdma_rank_type {
+	PCI_P2PDMA_RANK_DIRECT,
+	PCI_P2PDMA_RANK_HMAT_BANDWIDTH,
+	PCI_P2PDMA_RANK_HMAT_LATENCY,
+	PCI_P2PDMA_RANK_DISTANCE,
+};
+
+struct pci_p2pdma_rank {
+	enum pci_p2pdma_rank_type type;
+	u32 bandwidth;
+	u32 latency;
+	int distance;
+	bool latency_valid;
+};
+
 #if IS_ENABLED(CONFIG_KUNIT)
 bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags,
 			   enum pci_acs_scope scope);
@@ -1103,6 +1119,11 @@ enum pci_p2pdma_map_type calc_map_type_and_dist(struct pci_dev *provider,
 						int *dist, bool verbose);
 int pci_host_bridge_pxm(struct pci_dev *pdev);
 bool cpu_supports_p2pdma(void);
+int pci_p2pdma_rank_many(struct pci_dev *provider, struct device **clients,
+			 int num_clients, bool verbose,
+			 struct pci_p2pdma_rank *rank);
+int pci_p2pdma_rank_cmp(const struct pci_p2pdma_rank *a,
+			const struct pci_p2pdma_rank *b);
 #endif
 #ifdef CONFIG_PCI_QUIRKS
 int pci_dev_specific_acs_enabled(struct pci_dev *dev, u16 acs_flags,

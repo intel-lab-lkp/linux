@@ -70,22 +70,6 @@ struct pci_p2pdma_pagemap {
 	struct p2pdma_provider *mem;
 };
 
-/* Provider rank classes, ordered from most to least preferable. */
-enum pci_p2pdma_rank_type {
-	PCI_P2PDMA_RANK_DIRECT,
-	PCI_P2PDMA_RANK_HMAT_BANDWIDTH,
-	PCI_P2PDMA_RANK_HMAT_LATENCY,
-	PCI_P2PDMA_RANK_DISTANCE,
-};
-
-struct pci_p2pdma_rank {
-	enum pci_p2pdma_rank_type type;
-	u32 bandwidth;
-	u32 latency;
-	int distance;
-	bool latency_valid;
-};
-
 static struct pci_p2pdma_pagemap *to_p2p_pgmap(struct dev_pagemap *pgmap)
 {
 	return container_of(pgmap, struct pci_p2pdma_pagemap, pgmap);
@@ -1016,7 +1000,7 @@ calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
 }
 EXPORT_SYMBOL_IF_KUNIT(calc_map_type_and_dist);
 
-static int
+VISIBLE_IF_KUNIT int
 pci_p2pdma_rank_cmp(const struct pci_p2pdma_rank *a,
 		    const struct pci_p2pdma_rank *b)
 {
@@ -1039,13 +1023,14 @@ pci_p2pdma_rank_cmp(const struct pci_p2pdma_rank *a,
 
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(pci_p2pdma_rank_cmp);
 
 /*
  * P2P bandwidth is limited by the slowest direction and client path, while
  * the largest latency bounds the worst path. Only compare a metric when every
  * host-bridge path supplies both its read and write values.
  */
-static int
+VISIBLE_IF_KUNIT int
 pci_p2pdma_rank_many(struct pci_dev *provider, struct device **clients,
 		     int num_clients, bool verbose,
 		     struct pci_p2pdma_rank *rank)
@@ -1124,6 +1109,7 @@ pci_p2pdma_rank_many(struct pci_dev *provider, struct device **clients,
 
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(pci_p2pdma_rank_many);
 
 /**
  * pci_p2pdma_distance_many - Determine the cumulative distance between
