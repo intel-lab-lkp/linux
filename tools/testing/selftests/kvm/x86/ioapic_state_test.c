@@ -3,7 +3,9 @@
  * Regression tests for in-kernel I/O APIC state.
  */
 
+#include "apic.h"
 #include "kvm_util.h"
+#include "processor.h"
 #include "test_util.h"
 
 #define TEST_IOAPIC_PIN		16
@@ -51,6 +53,19 @@ static void set_ioapic_entry(struct kvm_vm *vm, bool level_triggered,
 	set_ioapic(vm, &irqchip);
 }
 
+static void enable_lapic(struct kvm_vcpu *vcpu)
+{
+	struct kvm_lapic_state lapic;
+	u64 apicbase;
+
+	apicbase = vcpu_get_msr(vcpu, MSR_IA32_APICBASE);
+	vcpu_set_msr(vcpu, MSR_IA32_APICBASE,
+		     apicbase | MSR_IA32_APICBASE_ENABLE);
+	vcpu_ioctl(vcpu, KVM_GET_LAPIC, &lapic);
+	*(u32 *)(lapic.regs + APIC_SPIV) |= APIC_SPIV_APIC_ENABLED;
+	vcpu_ioctl(vcpu, KVM_SET_LAPIC, &lapic);
+}
+
 static int kvm_irq_line_status(struct kvm_vm *vm, int level)
 {
 	struct kvm_irq_level irq = {
@@ -60,6 +75,16 @@ static int kvm_irq_line_status(struct kvm_vm *vm, int level)
 
 	vm_ioctl(vm, KVM_IRQ_LINE_STATUS, &irq);
 	return irq.status;
+}
+
+static void assert_ioapic_pin_irr(struct kvm_vm *vm, bool expected)
+{
+	struct kvm_irqchip irqchip;
+
+	get_ioapic(vm, &irqchip);
+	TEST_ASSERT(!!(irqchip.chip.ioapic.irr & (1 << TEST_IOAPIC_PIN)) == expected,
+		    "Expected IOAPIC IRR for pin %u to be %u, got 0x%x",
+		    TEST_IOAPIC_PIN, expected, irqchip.chip.ioapic.irr);
 }
 
 static void test_no_remote_irr_for_undelivered_level_interrupt(void)
@@ -84,9 +109,37 @@ static void test_no_remote_irr_for_undelivered_level_interrupt(void)
 	kvm_vm_free(vm);
 }
 
+static void test_duplicate_edge_interrupt_preserves_delivery_state(void)
+{
+	struct kvm_vcpu *vcpu;
+	struct kvm_vm *vm;
+	int status;
+
+	vm = vm_create_with_one_vcpu(&vcpu, NULL);
+	enable_lapic(vcpu);
+
+	set_ioapic_entry(vm, false, vcpu->id);
+
+	status = kvm_irq_line_status(vm, 1);
+	TEST_ASSERT(status > 0,
+		    "Expected edge interrupt delivery, got %d", status);
+
+	assert_ioapic_pin_irr(vm, false);
+
+	status = kvm_irq_line_status(vm, 1);
+	TEST_ASSERT(!status,
+		    "Expected duplicate edge interrupt to be coalesced, got %d",
+		    status);
+
+	assert_ioapic_pin_irr(vm, false);
+
+	kvm_vm_free(vm);
+}
+
 int main(void)
 {
 	test_no_remote_irr_for_undelivered_level_interrupt();
+	test_duplicate_edge_interrupt_preserves_delivery_state();
 
 	return 0;
 }
