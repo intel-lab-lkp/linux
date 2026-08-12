@@ -393,10 +393,25 @@ static void rtw89_traffic_stats_accu(struct rtw89_dev *rtwdev,
 	}
 }
 
-void rtw89_get_default_chandef(struct cfg80211_chan_def *chandef)
+void rtw89_get_default_chandef(struct rtw89_dev *rtwdev,
+			       struct cfg80211_chan_def *chandef)
 {
-	cfg80211_chandef_create(chandef, &rtw89_channels_2ghz[0],
-				NL80211_CHAN_NO_HT);
+	u8 support_bands = rtwdev->chip->support_bands;
+	struct ieee80211_channel *default_channel;
+
+	if (support_bands & BIT(NL80211_BAND_2GHZ) &&
+	    !test_bit(RTW89_QUIRK_DISABLE_2GHZ, rtwdev->quirks)) {
+		default_channel = &rtw89_channels_2ghz[0];
+	} else if (support_bands & BIT(NL80211_BAND_5GHZ)) {
+		default_channel = &rtw89_channels_5ghz[0];
+	} else if (support_bands & BIT(NL80211_BAND_6GHZ)) {
+		default_channel = &rtw89_channels_6ghz[0];
+	} else {
+		rtw89_err(rtwdev, "Failed to get default channel, no band supported\n");
+		return;
+	}
+
+	cfg80211_chandef_create(chandef, default_channel, NL80211_CHAN_NO_HT);
 }
 
 void rtw89_get_channel_params(const struct cfg80211_chan_def *chandef,

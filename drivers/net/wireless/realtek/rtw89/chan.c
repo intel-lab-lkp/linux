@@ -297,7 +297,7 @@ static void rtw89_config_default_chandef(struct rtw89_dev *rtwdev)
 {
 	struct cfg80211_chan_def chandef = {0};
 
-	rtw89_get_default_chandef(&chandef);
+	rtw89_get_default_chandef(rtwdev, &chandef);
 	__rtw89_config_entity_chandef(rtwdev, RTW89_CHANCTX_0, &chandef);
 }
 
