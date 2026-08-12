@@ -125,6 +125,12 @@
 
 #define DW_IC_ENABLE_ENABLE			BIT(0)
 #define DW_IC_ENABLE_ABORT			BIT(1)
+/*
+ * On controllers synthesised with the Multiple SAR feature (e.g. Marvell
+ * CN20K), the primary slave address register (IC_SAR) only acknowledges bus
+ * traffic when this bit is set. It is reserved on single-SAR controllers.
+ */
+#define DW_IC_ENABLE_SAR_EN			BIT(19)
 
 #define DW_IC_STATUS_ACTIVITY			BIT(0)
 #define DW_IC_STATUS_TFE			BIT(2)
