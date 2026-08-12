@@ -815,6 +815,9 @@ spu_activate_top:
  *
  * Remove the highest priority context on the runqueue and return it
  * to the caller.  Returns %NULL if no runnable context was found.
+ *
+ * The context is returned with a reference held on behalf of the caller,
+ * which has to drop it using put_spu_context() once it is done with it.
  */
 static struct spu_context *grab_runnable_context(int prio, int node)
 {
@@ -830,6 +833,7 @@ static struct spu_context *grab_runnable_context(int prio, int node)
 			/* XXX(hch): check for affinity here as well */
 			if (__node_allowed(ctx, node)) {
 				__spu_del_from_rq(ctx);
+				get_spu_context(ctx);
 				goto found;
 			}
 		}
@@ -860,6 +864,7 @@ static int __spu_deactivate(struct spu_context *ctx, int force, int max_prio)
 					   interruptible */
 					mutex_lock(&ctx->state_mutex);
 				}
+				put_spu_context(new);
 			}
 		}
 	}
@@ -933,8 +938,10 @@ static noinline void spusched_tick(struct spu_context *ctx)
 out:
 	spu_release(ctx);
 
-	if (new)
+	if (new) {
 		spu_schedule(spu, new);
+		put_spu_context(new);
+	}
 }
 
 /**
