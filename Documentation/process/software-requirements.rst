@@ -33,20 +33,20 @@ you probably do not need to concern yourself with pcmciautils.
 ====================== ===============  ========================================
 bash                   4.2              bash --version
 bc                     1.06.95          bc --version
-bindgen (optional)     0.71.1           bindgen --version
+bindgen [#f1]_         0.71.1           bindgen --version
 binutils               2.30             ld -v
 bison                  2.0              bison --version
 btrfs-progs            0.18             btrfs --version
-Clang/LLVM (optional)  17.0.1           clang --version
+Clang/LLVM [#f2]_      17.0.1           clang --version
 e2fsprogs              1.41.4           e2fsck -V
 flex                   2.5.35           flex --version
 gdb                    7.2              gdb --version
-GNU awk (optional)     5.1.0            gawk --version
+GNU awk [#f3]_         5.1.0            gawk --version
 GNU C                  8.1              gcc --version
 GNU make               4.0              make --version
 GNU tar                1.28             tar --version
 GRUB                   0.93             grub --version || grub-install --version
-gtags (optional)       6.6.5            gtags --version
+gtags [#f4]_           6.6.5            gtags --version
 ip-route2              6.14.0           ip -V
 iptables               1.4.2            iptables -V
 jfsutils               1.1.3            fsck.jfs -V
@@ -54,7 +54,7 @@ kmod                   13               kmod -V
 liblzma                5.8.1            lzma -V
 lzop                   1.04             lzop -V
 mcelog                 0.6              mcelog --version
-mkimage (optional)     2017.01          mkimage --version
+mkimage [#f5]_         2017.01          mkimage --version
 nfs-utils              1.0.5            showmount --version
 openssl & libcrypto    1.0.0            openssl version
 pahole                 1.26             pahole --version
@@ -63,8 +63,8 @@ PPP                    2.4.0            pppd --version
 procps                 3.2.0            ps --version
 Python                 3.9.x            python3 --version
 quota-tools            3.09             quota -V
-Rust (optional)        1.85.0           rustc --version
-Sphinx\ [#f1]_         3.4.3            sphinx-build --version
+Rust [#f6]_            1.85.0           rustc --version
+Sphinx\ [#f7]_         3.4.3            sphinx-build --version
 squashfs-tools         4.0              mksquashfs -version
 udev                   081              udevadm --version
 util-linux             2.10o            mount --version
@@ -72,7 +72,13 @@ xfsprogs               2.6.0            xfs_db -V
 xz                     5.8.1            xz -V
 ====================== ===============  ========================================
 
-.. [#f1] Sphinx is needed only to build the Kernel documentation
+.. [#f1] bindgen is needed to generate Rust bindings
+.. [#f2] Clang/LLVM is an alternative to GNU C (gcc)
+.. [#f3] awk is needed with CONFIG_BUILTIN_MODULE_RANGES set
+.. [#f4] gtags is there to generate tag files through ``make gtags``
+.. [#f5] mkimage is used when building a Flat Image Tree (FIT)
+.. [#f6] Rust is only required when enabled
+.. [#f7] Sphinx is needed only to build the Kernel documentation
 
 Kernel compilation
 ******************
