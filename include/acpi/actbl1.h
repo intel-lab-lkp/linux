@@ -2003,7 +2003,8 @@ enum acpi_hmat_type {
 	ACPI_HMAT_TYPE_PROXIMITY = 0,	/* Memory proximity domain attributes */
 	ACPI_HMAT_TYPE_LOCALITY = 1,	/* System locality latency and bandwidth information */
 	ACPI_HMAT_TYPE_CACHE = 2,	/* Memory side cache information */
-	ACPI_HMAT_TYPE_RESERVED = 3	/* 3 and greater are reserved */
+	ACPI_HMAT_TYPE_P2P_LATENCY = 3,	/* PCIe P2P latency and bandwidth information */
+	ACPI_HMAT_TYPE_RESERVED = 4	/* 4 and greater are reserved */
 };
 
 struct acpi_hmat_structure {
@@ -2107,6 +2108,30 @@ struct acpi_hmat_cache {
 #define ACPI_HMAT_CP_NONE   (0)
 #define ACPI_HMAT_CP_WB     (1)
 #define ACPI_HMAT_CP_WT     (2)
+
+/* 3: PCIe P2P Latency and Bandwidth Information */
+
+struct acpi_hmat_p2p_latency {
+	struct acpi_hmat_structure header;
+	u8 flags;
+	u8 data_type;
+	u16 reserved1;
+	u32 number_of_initiator_Pds;
+	u32 number_of_target_Pds;
+	u32 reserved2;
+	u64 entry_base_unit;
+};
+
+/* Masks for Flags field above */
+
+#define ACPI_HMAT_P2P_NON_UIO   (1)	/* Bit 0: Entries apply to non-UIO traffic */
+#define ACPI_HMAT_P2P_UIO       (1<<1)	/* Bit 1: Entries apply to UIO traffic */
+
+/*
+ * The data_type field reuses the ACPI_HMAT_ACCESS/READ/WRITE_LATENCY and
+ * ACPI_HMAT_ACCESS/READ/WRITE_BANDWIDTH values defined for the System
+ * Locality Latency and Bandwidth Information Structure above.
+ */
 
 /*******************************************************************************
  *
