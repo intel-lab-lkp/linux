@@ -4832,18 +4832,42 @@ static int get_tier_idx(struct lruvec *lruvec, int type)
 static int get_type_to_scan(struct lruvec *lruvec, int swappiness)
 {
 	struct ctrl_pos sp, pv = {};
+	int anon_gain, file_gain;
 
 	if (swappiness <= MIN_SWAPPINESS + 1)
 		return LRU_GEN_FILE;
 
 	if (swappiness >= MAX_SWAPPINESS)
 		return LRU_GEN_ANON;
+
+	/*
+	 * Apply a quadratic boost based on the distance from the neutral
+	 * balance point (swappiness = MAX_SWAPPINESS / 2).
+	 *
+	 * A linear weight is easily overwhelmed by historical refault cost
+	 * when swappiness deviates from neutral. The quadratic scaling
+	 * amplifies the weight of the preferred type smoothly.
+	 */
+	if (swappiness < MAX_SWAPPINESS / 2) {
+		int delta = (MAX_SWAPPINESS / 2) - swappiness;
+		int boost = (delta * delta) >> 4;
+
+		anon_gain = swappiness;
+		file_gain = (MAX_SWAPPINESS - swappiness) + boost;
+	} else {
+		int delta = swappiness - (MAX_SWAPPINESS / 2);
+		int boost = (delta * delta) >> 4;
+
+		anon_gain = swappiness + boost;
+		file_gain = MAX_SWAPPINESS - swappiness;
+	}
+
 	/*
 	 * Compare the sum of all tiers of anon with that of file to determine
 	 * which type to scan.
 	 */
-	read_ctrl_pos(lruvec, LRU_GEN_ANON, MAX_NR_TIERS, swappiness, &sp);
-	read_ctrl_pos(lruvec, LRU_GEN_FILE, MAX_NR_TIERS, MAX_SWAPPINESS - swappiness, &pv);
+	read_ctrl_pos(lruvec, LRU_GEN_ANON, MAX_NR_TIERS, anon_gain, &sp);
+	read_ctrl_pos(lruvec, LRU_GEN_FILE, MAX_NR_TIERS, file_gain, &pv);
 
 	return positive_ctrl_err(&sp, &pv);
 }
