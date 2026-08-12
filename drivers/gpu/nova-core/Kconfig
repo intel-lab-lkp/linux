@@ -15,3 +15,21 @@ config NOVA_CORE
 	  This driver is work in progress and may not be functional.
 
 	  If M is selected, the module will be called nova-core.
+
+config NOVA_CORE_KEEP_GSP_LOGS
+	bool "Retain the GSP-RM log buffers after the GPU is gone"
+	depends on NOVA_CORE
+	depends on DEBUG_FS
+	help
+	  The GSP-RM log buffers are exposed through debugfs for as long as the
+	  GPU they belong to is bound to the driver. They are of most interest
+	  when the GSP fails to boot, but that is also when the driver tears
+	  everything down again, so the buffers are removed before anyone gets
+	  a chance to read them.
+
+	  Say Y here to copy the buffers into memory owned by the module once
+	  the GPU goes away, and expose the copies under a "retained" directory
+	  that stays until the module is unloaded. Buffers the GSP never wrote
+	  to are skipped; the rest cost 64 KiB each, for up to 192 KiB per GPU.
+
+	  If unsure, say N.

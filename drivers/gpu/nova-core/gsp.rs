@@ -3,6 +3,8 @@
 mod boot;
 mod hal;
 
+#[cfg(CONFIG_NOVA_CORE_KEEP_GSP_LOGS)]
+use kernel::sync::aref::ARef;
 use kernel::{
     debugfs,
     device,
@@ -133,15 +135,157 @@ impl LogBuffer {
 
         Ok(obj)
     }
+
+    /// Copies the contents of this buffer into memory that does not belong to the device.
+    ///
+    /// A buffer the GSP never wrote to yields an empty vector, as it holds nothing worth keeping.
+    #[cfg(CONFIG_NOVA_CORE_KEEP_GSP_LOGS)]
+    fn snapshot(&self) -> Result<KVec<u8>> {
+        // Offset 0 holds the "put" pointer, which the GSP advances as it appends entries. It is
+        // still zero if nothing was ever logged.
+        let put = io_project!(self.0, [build: ..size_of::<u64>()]).try_cast::<u64>()?;
+        if put.read_val() == 0 {
+            return Ok(KVec::new());
+        }
+
+        let mut snapshot = KVec::zeroed(LOG_BUFFER_SIZE, GFP_KERNEL)?;
+        io_project!(self.0, [build: ..]).copy_to_slice(&mut snapshot);
+
+        Ok(snapshot)
+    }
 }
 
 struct LogBuffers {
+    /// Device the buffers belong to. Also names their debugfs directory.
+    #[cfg(CONFIG_NOVA_CORE_KEEP_GSP_LOGS)]
+    dev: ARef<device::Device>,
     /// Init log buffer.
     loginit: LogBuffer,
     /// Interrupts log buffer.
     logintr: LogBuffer,
     /// RM log buffer.
     logrm: LogBuffer,
+}
+
+/// Copies of the log buffers of a GPU that is no longer around.
+#[cfg(CONFIG_NOVA_CORE_KEEP_GSP_LOGS)]
+struct RetainedLogBuffers {
+    /// Device the buffers came from.
+    dev: ARef<device::Device>,
+    /// Contents of the init log buffer, empty if it was never written to.
+    loginit: KVec<u8>,
+    /// Contents of the interrupts log buffer, empty if it was never written to.
+    logintr: KVec<u8>,
+    /// Contents of the RM log buffer, empty if it was never written to.
+    logrm: KVec<u8>,
+}
+
+/// Log buffers of GPUs that are gone, and the debugfs entries exposing them.
+///
+/// The copies live under a `retained` directory of their own instead of next to the entries of
+/// the GPUs that are actually bound, so that a device coming back does not find its name taken.
+#[cfg(CONFIG_NOVA_CORE_KEEP_GSP_LOGS)]
+pub(crate) struct RetainedLogs {
+    /// Parent directory of all copies, created together with the first one.
+    dir: Option<debugfs::Dir>,
+    /// One entry per GPU.
+    gpus: KVec<Pin<KBox<debugfs::Scope<RetainedLogBuffers>>>>,
+}
+
+#[cfg(CONFIG_NOVA_CORE_KEEP_GSP_LOGS)]
+impl RetainedLogs {
+    /// Creates an empty set of retained log buffers.
+    pub(crate) const fn new() -> Self {
+        Self {
+            dir: None,
+            gpus: KVec::new(),
+        }
+    }
+
+    /// Releases every copy and the directory holding them.
+    pub(crate) fn clear(&mut self) {
+        self.gpus.clear();
+        self.dir = None;
+    }
+}
+
+#[cfg(CONFIG_NOVA_CORE_KEEP_GSP_LOGS)]
+impl LogBuffers {
+    /// Preserves whatever the GSP logged, so it can still be read once the GPU is gone.
+    ///
+    /// The buffers are DMA allocations of the device and cannot outlive it, so their contents are
+    /// copied into memory owned by the module and exposed through fresh debugfs entries. Those
+    /// live until the module is unloaded.
+    fn retain(&self) -> Result {
+        let logs = RetainedLogBuffers {
+            dev: self.dev.clone(),
+            loginit: self.loginit.snapshot()?,
+            logintr: self.logintr.snapshot()?,
+            logrm: self.logrm.snapshot()?,
+        };
+
+        if logs.loginit.is_empty() && logs.logintr.is_empty() && logs.logrm.is_empty() {
+            return Ok(());
+        }
+
+        let mut retained = crate::RETAINED_LOGS.lock();
+
+        // An earlier run of the same device may have left a copy behind. Its directory carries
+        // the name about to be used again, and its logs are the older ones, so drop it first.
+        retained
+            .gpus
+            .retain(|gpu| gpu.dev.name() != self.dev.name());
+
+        let dir = match retained.dir.clone() {
+            Some(dir) => dir,
+            None => {
+                #[allow(static_mut_refs)]
+                // SAFETY: `DEBUGFS_ROOT` is set before driver registration and cleared after
+                // driver unregistration. This runs while a device is still bound, or on the way
+                // out of a failed probe, so the driver is registered and nothing can be modifying
+                // it.
+                let root: &debugfs::Dir = unsafe { crate::DEBUGFS_ROOT.as_ref() }.ok_or(ENODEV)?;
+
+                let dir = root.subdir(c"retained");
+                retained.dir = Some(dir.clone());
+
+                dir
+            }
+        };
+
+        let scope = KBox::pin_init(
+            dir.scope(logs, self.dev.name(), |logs, dir| {
+                if !logs.loginit.is_empty() {
+                    dir.read_binary_file(c"loginit", &logs.loginit);
+                }
+                if !logs.logintr.is_empty() {
+                    dir.read_binary_file(c"logintr", &logs.logintr);
+                }
+                if !logs.logrm.is_empty() {
+                    dir.read_binary_file(c"logrm", &logs.logrm);
+                }
+            }),
+            GFP_KERNEL,
+        )?;
+
+        retained.gpus.push(scope, GFP_KERNEL)?;
+
+        dev_info!(
+            self.dev,
+            "GSP-RM log buffers retained until the module is unloaded\n"
+        );
+
+        Ok(())
+    }
+}
+
+#[cfg(CONFIG_NOVA_CORE_KEEP_GSP_LOGS)]
+impl Drop for LogBuffers {
+    fn drop(&mut self) {
+        if let Err(e) = self.retain() {
+            dev_warn!(self.dev, "failed to retain GSP-RM log buffers: {:?}\n", e);
+        }
+    }
 }
 
 /// GSP runtime data.
@@ -191,6 +335,8 @@ impl Gsp {
                 },
                 logs <- {
                     let log_buffers = LogBuffers {
+                        #[cfg(CONFIG_NOVA_CORE_KEEP_GSP_LOGS)]
+                        dev: dev.into(),
                         loginit,
                         logintr,
                         logrm,
