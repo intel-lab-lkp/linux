@@ -72,3 +72,16 @@ config SMB_SERVER_KERBEROS5
 	bool "Support for Kerberos 5"
 	depends on SMB_SERVER
 	default y
+
+config SMB_SERVER_KUNIT_TEST
+	tristate "KUnit tests for SMB3 server helpers" if !KUNIT_ALL_TESTS
+	depends on SMB_SERVER && KUNIT && SHMEM
+	default KUNIT_ALL_TESTS
+
+	help
+	  KUnit tests for ksmbd server helpers such as the DACL access
+	  check in smb_check_perm_dacl().  This option is only useful
+	  for kernel developers; enable it together with CONFIG_KUNIT.
+
+	  For more information on KUnit and unit tests in the kernel,
+	  please read Documentation/dev-tools/kunit/index.rst.
