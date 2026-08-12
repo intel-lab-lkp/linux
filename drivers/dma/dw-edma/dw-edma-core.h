@@ -210,6 +210,9 @@ struct dw_edma_core_ops {
 	int (*ll_cur_idx)(struct dw_edma_chan *chan);
 	/* Called with dw_edma_event_lock(chan) held. */
 	void (*ll_irq_clear)(struct dw_edma_chan *chan);
+	/* Reset one direction, clear its IRQ status, and leave it disabled. */
+	bool (*engine_reset)(struct dw_edma *dw, enum dw_edma_dir dir);
+	void (*engine_enable)(struct dw_edma *dw, enum dw_edma_dir dir);
 	/* Called with dw_edma_event_lock(chan) held for an LL channel. */
 	void (*ch_doorbell)(struct dw_edma_chan *chan);
 	void (*ch_enable)(struct dw_edma_chan *chan);
@@ -371,6 +374,8 @@ static inline void dw_edma_core_do_ch_doorbell(struct dw_edma_chan *chan)
 static inline void dw_edma_core_ch_enable(struct dw_edma_chan *chan)
 {
 	chan->dw->core->ch_enable(chan);
+	if (chan->dw->core->engine_enable)
+		chan->dw->core->engine_enable(chan->dw, chan->dir);
 }
 
 static inline
