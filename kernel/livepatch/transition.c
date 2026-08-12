@@ -223,7 +223,7 @@ static int klp_check_stack_func(struct klp_func *func, unsigned long *entries,
 		 */
 		ops = klp_find_ops(func->old_func);
 
-		if (list_is_singular(&ops->func_stack)) {
+		if (list_is_last(&func->stack_node, &ops->func_stack)) {
 			/* original function */
 			func_addr = (unsigned long)func->old_func;
 			func_size = func->old_size;
