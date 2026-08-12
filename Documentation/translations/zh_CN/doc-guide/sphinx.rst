@@ -110,6 +110,22 @@ PDF和LaTeX构建
 
 	使用Sphinx的系统打包，而不是Python虚拟环境。
 
+macOS 默认使用不区分文件名大小写的 APFS 卷，而内核源码树中存在仅大小写
+不同的文件。克隆源码前，请用 ``diskutil apfs list`` 找到 APFS 容器标识符，
+将下面的 ``diskX`` 替换为该标识符，并创建一个额外的大小写敏感卷::
+
+	diskutil apfs addVolume diskX APFSX Linux
+
+在 macOS 上，该脚本使用 Homebrew 安装系统依赖，输出的 Homebrew 命令不需要
+``sudo``。PDF 工具链由 ``mactex-no-gui`` cask 提供，所需的 DejaVu 和 Noto CJK
+字体则通过 Homebrew font cask 安装；如果只构建 HTML 文档，请使用 ``--no-pdf``。
+安装 MacTeX 后，请重新启动终端，或运行
+``eval "$(/usr/libexec/path_helper)"`` 使命令行工具可见。macOS 用户建议使用
+默认的 Python 虚拟环境，因为 PyYAML 会从
+``Documentation/sphinx/requirements.txt`` 安装，而不是通过 Homebrew 安装。
+该脚本还会检查 GNU Make 4.0 或更高版本；如果 Homebrew 将其安装为
+``gmake``，请使用 ``gmake htmldocs``，而不是 ``make htmldocs``。
+
 Sphinx构建
 ==========
 
@@ -409,4 +425,3 @@ Documentation/doc-guide/kernel-doc.rst 。
    <line x1="180" y1="370" x2="500" y2="50" stroke="black" stroke-width="15px"/>
    <polygon points="585 0 525 25 585 50" transform="rotate(135 525 25)"/>
    </svg>
-
