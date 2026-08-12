@@ -9515,33 +9515,17 @@ static enum scsi_timeout_action ufshcd_eh_timed_out(struct scsi_cmnd *scmd)
 		return SCSI_EH_NOT_HANDLED;
 	}
 
-	/*
-	 * Handle the timeout directly to prevent a deadlock between
-	 * ufshcd_set_dev_pwr_mode() and ufshcd_err_handler().
-	 */
-	ufshcd_link_recovery(hba);
-	dev_info(hba->dev, "%s() finished; outstanding_tasks = %#lx.\n",
-		 __func__, hba->outstanding_tasks);
+	if (!hba->mcq_enabled) {
+		struct request *rq = scsi_cmd_to_rq(scmd);
 
-	/*
-	 * ufshcd_link_recovery() may already have completed @scmd, e.g. via
-	 * the existing MCQ force-completion path.
-	 */
-	if (!test_bit(SCMD_STATE_COMPLETE, &scmd->state)) {
-		if (!hba->mcq_enabled) {
-			unsigned long flags;
-			struct request *rq = scsi_cmd_to_rq(scmd);
-
-			spin_lock_irqsave(&hba->outstanding_lock, flags);
+		scoped_guard(spinlock_irqsave, &hba->outstanding_lock)
 			__clear_bit(rq->tag, &hba->outstanding_reqs);
-			spin_unlock_irqrestore(&hba->outstanding_lock, flags);
-		}
-
-		set_host_byte(scmd, DID_TIME_OUT);
-		if (ufshcd_is_scsi_cmd(scmd))
-			ufshcd_release_scsi_cmd(hba, scmd);
-		scsi_done(scmd);
 	}
+
+	set_host_byte(scmd, DID_TIME_OUT);
+	if (ufshcd_is_scsi_cmd(scmd))
+		ufshcd_release_scsi_cmd(hba, scmd);
+	scsi_done(scmd);
 
 	return SCSI_EH_DONE;
 }
@@ -10056,9 +10040,13 @@ static int ufshcd_set_dev_pwr_mode(struct ufs_hba *hba,
 		sdev_printk(KERN_WARNING, sdp,
 			    "START_STOP failed for power mode: %d, result %x\n",
 			    pwr_mode, ret);
+
+		ufshcd_link_recovery(hba);
+
 		if (ret > 0) {
 			if (scsi_sense_valid(&sshdr))
 				scsi_print_sense_hdr(sdp, NULL, &sshdr);
+
 			ret = -EIO;
 		}
 	} else {
