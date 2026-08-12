@@ -1056,14 +1056,19 @@ static irqreturn_t mma8452_interrupt(int irq, void *p)
 	struct iio_dev *indio_dev = p;
 	struct mma8452_data *data = iio_priv(indio_dev);
 	irqreturn_t ret = IRQ_NONE;
+	int pm_status;
 	int src;
+
+	pm_status = pm_runtime_get_if_active(&data->client->dev);
+	if (pm_status == 0)
+		return IRQ_NONE; /* device is powered down */
 
 	src = i2c_smbus_read_byte_data(data->client, MMA8452_INT_SRC);
 	if (src < 0)
-		return IRQ_NONE;
+		goto out;
 
 	if (!(src & (data->chip_info->enabled_events | MMA8452_INT_DRDY)))
-		return IRQ_NONE;
+		goto out;
 
 	if (src & MMA8452_INT_DRDY) {
 		iio_trigger_poll_nested(indio_dev->trig);
@@ -1088,6 +1093,10 @@ static irqreturn_t mma8452_interrupt(int irq, void *p)
 		mma8452_transient_interrupt(indio_dev);
 		ret = IRQ_HANDLED;
 	}
+
+out:
+	if (pm_status > 0)
+		pm_runtime_put_autosuspend(&data->client->dev);
 
 	return ret;
 }
@@ -1690,7 +1699,7 @@ static int mma8452_probe(struct i2c_client *client)
 			dev_info(dev, "invalid irq type, setting default active low\n");
 			irq_flags = IRQF_TRIGGER_LOW;
 		}
-		irq_flags |= IRQF_ONESHOT;
+		irq_flags |= IRQF_ONESHOT | IRQF_SHARED;
 		ret = request_threaded_irq(client->irq, NULL, mma8452_interrupt,
 					   irq_flags, client->name, indio_dev);
 		if (ret)
