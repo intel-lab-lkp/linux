@@ -3931,7 +3931,7 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 	/* prevent cold/hot inversion if the type is evictable */
 	for (zone = 0; zone < MAX_NR_ZONES; zone++) {
 		struct list_head *head = &lrugen->folios[old_gen][type][zone];
-		unsigned long delta = 0;
+		unsigned long protected[MAX_NR_TIERS] = {}, delta = 0;
 
 		while (!list_empty(head)) {
 			struct folio *folio = lru_to_folio(head);
@@ -3953,8 +3953,7 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 			if (refs + workingset != BIT(LRU_REFS_WIDTH) + 1) {
 				int tier = lru_tier_from_refs(refs, workingset);
 
-				WRITE_ONCE(lrugen->protected[hist][type][tier],
-					   lrugen->protected[hist][type][tier] + nr_pages);
+				protected[tier] += nr_pages;
 			}
 
 			if (!--remaining)
@@ -3964,6 +3963,9 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 			   lrugen->nr_pages[old_gen][type][zone] - delta);
 		WRITE_ONCE(lrugen->nr_pages[target_gen][type][zone],
 			   lrugen->nr_pages[target_gen][type][zone] + delta);
+		for (int tier = 0; tier < MAX_NR_TIERS; tier++)
+			WRITE_ONCE(lrugen->protected[hist][type][tier],
+				   lrugen->protected[hist][type][tier] + protected[tier]);
 		if (!remaining)
 			return false;
 	}
