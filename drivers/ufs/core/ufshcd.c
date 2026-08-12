@@ -9537,13 +9537,9 @@ static enum scsi_timeout_action ufshcd_eh_timed_out(struct scsi_cmnd *scmd)
 			spin_unlock_irqrestore(&hba->outstanding_lock, flags);
 		}
 
-		if (ufshcd_is_scsi_cmd(scmd)) {
-			set_host_byte(scmd, DID_REQUEUE);
+		set_host_byte(scmd, DID_TIME_OUT);
+		if (ufshcd_is_scsi_cmd(scmd))
 			ufshcd_release_scsi_cmd(hba, scmd);
-		} else {
-			set_host_byte(scmd, DID_TIME_OUT);
-		}
-
 		scsi_done(scmd);
 	}
 
