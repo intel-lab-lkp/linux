@@ -7,6 +7,7 @@
 #define _CRYPTO_SHA1_H
 
 #include <linux/types.h>
+#include <linux/string.h>
 
 #define SHA1_DIGEST_SIZE        20
 #define SHA1_BLOCK_SIZE         64
@@ -105,6 +106,22 @@ struct hmac_sha1_ctx {
 	struct sha1_ctx sha_ctx;
 	struct sha1_block_state ostate;
 };
+
+/**
+ * hmac_sha1_zeroize_ctx() - Zeroize a hmac_sha1_ctx structure
+ * @ctx: The location of the context that should be zeroized
+ *
+ * This function explicitly fills the hmac_sha1_ctx with zeroes. For
+ * example, it can be used with __cleanup() for local hmac_sha1_ctx
+ * structures on the stack, so that their content is not leaked via the
+ * stack when the context is left. Note: This is only required when not
+ * using hmac_sha1_final() that already zeroizes the structure at the
+ * end.
+ */
+static inline void hmac_sha1_zeroize_ctx(struct hmac_sha1_ctx *ctx)
+{
+	memzero_explicit(ctx, sizeof(*ctx));
+}
 
 /**
  * hmac_sha1_preparekey() - Prepare a key for HMAC-SHA1
