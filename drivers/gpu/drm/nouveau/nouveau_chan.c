@@ -370,27 +370,6 @@ nouveau_channel_init(struct nouveau_channel *chan, u32 vram, u32 gart)
 	if (ret)
 		return ret;
 
-	if (chan->user.oclass >= FERMI_CHANNEL_GPFIFO) {
-		DEFINE_RAW_FLEX(struct nvif_event_v0, args, data,
-				sizeof(struct nvif_chan_event_v0));
-		struct nvif_chan_event_v0 *host =
-				(struct nvif_chan_event_v0 *)args->data;
-
-		host->version = 0;
-		host->type = NVIF_CHAN_EVENT_V0_KILLED;
-
-		ret = nvif_event_ctor(&chan->user, "abi16ChanKilled", chan->chid,
-				      nouveau_channel_killed, false,
-				      args, __struct_size(args), &chan->kill);
-		if (ret == 0)
-			ret = nvif_event_allow(&chan->kill);
-		if (ret) {
-			NV_ERROR(drm, "Failed to request channel kill "
-				      "notification: %d\n", ret);
-			return ret;
-		}
-	}
-
 	/* allocate dma objects to cover all allowed vram, and gart */
 	if (device->info.family < NV_DEVICE_INFO_V0_FERMI) {
 		if (device->info.family >= NV_DEVICE_INFO_V0_TESLA) {
@@ -494,7 +473,39 @@ nouveau_channel_init(struct nouveau_channel *chan, u32 vram, u32 gart)
 	}
 
 	/* initialise synchronisation */
-	return nouveau_fence(drm)->context_new(chan);
+	ret = nouveau_fence(drm)->context_new(chan);
+	if (ret)
+		return ret;
+
+	/*
+	 * Subscribe to the channel-kill event last.  The handler
+	 * dereferences chan->fence, and the fence context is only complete
+	 * once context_new() has returned: the backends assign chan->fence
+	 * from kzalloc() before nouveau_fence_context_new() initialises the
+	 * lock and the pending list, so an event arriving in between would
+	 * find a non-NULL but unusable context and walk a NULL list head.
+	 */
+	if (chan->user.oclass >= FERMI_CHANNEL_GPFIFO) {
+		DEFINE_RAW_FLEX(struct nvif_event_v0, args, data,
+				sizeof(struct nvif_chan_event_v0));
+		struct nvif_chan_event_v0 *host =
+				(struct nvif_chan_event_v0 *)args->data;
+
+		host->version = 0;
+		host->type = NVIF_CHAN_EVENT_V0_KILLED;
+
+		ret = nvif_event_ctor(&chan->user, "abi16ChanKilled", chan->chid,
+				      nouveau_channel_killed, false,
+				      args, __struct_size(args), &chan->kill);
+		if (ret == 0)
+			ret = nvif_event_allow(&chan->kill);
+		if (ret) {
+			NV_ERROR(drm, "Failed to request channel kill notification: %d\n", ret);
+			return ret;
+		}
+	}
+
+	return 0;
 }
 
 int
