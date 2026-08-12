@@ -612,7 +612,6 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 	if (ret == -EAGAIN)
 		goto out_disable_device;
 
-	vdev->reset_works = !ret;
 	pci_save_state(pdev);
 	vdev->pci_saved_state = pci_store_saved_state(pdev);
 	if (!vdev->pci_saved_state)
@@ -769,7 +768,7 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 	if (pci_load_and_free_saved_state(pdev, &vdev->pci_saved_state)) {
 		pci_info(pdev, "%s: Couldn't reload saved state\n", __func__);
 
-		if (!vdev->reset_works)
+		if (!pci_reset_supported(pdev))
 			goto out;
 
 		pci_save_state(pdev);
@@ -788,7 +787,7 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 	 * We can not use the "try" reset interface here, which will
 	 * overwrite the previously restored configuration information.
 	 */
-	if (vdev->reset_works) {
+	if (pci_reset_supported(pdev)) {
 		bridge = pci_upstream_bridge(pdev);
 		if (bridge && !pci_dev_trylock(bridge))
 			goto out_restore_state;
@@ -1100,7 +1099,7 @@ static int vfio_pci_ioctl_get_info(struct vfio_pci_core_device *vdev,
 
 	info.flags = VFIO_DEVICE_FLAGS_PCI;
 
-	if (vdev->reset_works)
+	if (pci_reset_supported(vdev->pdev))
 		info.flags |= VFIO_DEVICE_FLAGS_RESET;
 
 	info.num_regions = VFIO_PCI_NUM_REGIONS + vdev->num_regions;
@@ -1329,7 +1328,7 @@ static int vfio_pci_ioctl_reset(struct vfio_pci_core_device *vdev,
 {
 	int ret;
 
-	if (!vdev->reset_works)
+	if (!pci_reset_supported(vdev->pdev))
 		return -EINVAL;
 
 	vfio_pci_zap_and_down_write_memory_lock(vdev);

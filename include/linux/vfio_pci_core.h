@@ -121,7 +121,6 @@ struct vfio_pci_core_device {
 	/* Flags only modified on setup/release - bitfield ok */
 	bool			has_dyn_msix:1;
 	bool			pci_2_3:1;
-	bool			reset_works:1;
 	bool			extended_caps:1;
 	bool			has_vga:1;
 	bool			nointx:1;
