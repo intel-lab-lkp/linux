@@ -1328,17 +1328,23 @@ int i40e_ptp_hwtstamp_set(struct net_device *netdev,
 	struct i40e_pf *pf = np->vsi->back;
 	int err;
 
-	if (!test_bit(I40E_FLAG_PTP_ENA, pf->flags))
-		return -EOPNOTSUPP;
+	mutex_lock(&pf->ptp_config_lock);
+
+	if (!test_bit(I40E_FLAG_PTP_ENA, pf->flags)) {
+		err = -EOPNOTSUPP;
+		goto unlock;
+	}
 
 	err = i40e_ptp_set_timestamp_mode(pf, config);
 	if (err)
-		return err;
+		goto unlock;
 
 	/* save these settings for future reference */
 	pf->tstamp_config = *config;
 
-	return 0;
+unlock:
+	mutex_unlock(&pf->ptp_config_lock);
+	return err;
 }
 
 /**
@@ -1558,6 +1564,8 @@ void i40e_ptp_stop(struct i40e_pf *pf)
 	struct sk_buff *skb;
 	u32 regval;
 
+	mutex_lock(&pf->ptp_config_lock);
+
 	spin_lock_irqsave(&pf->ptp_tx_lock, flags);
 	clear_bit(I40E_FLAG_PTP_ENA, pf->flags);
 	pf->ptp_tx = false;
@@ -1566,6 +1574,7 @@ void i40e_ptp_stop(struct i40e_pf *pf)
 	spin_unlock_irqrestore(&pf->ptp_tx_lock, flags);
 
 	pf->ptp_rx = false;
+	mutex_unlock(&pf->ptp_config_lock);
 
 	if (skb)
 		dev_kfree_skb_any(skb);
