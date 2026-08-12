@@ -427,6 +427,7 @@ struct ceph_mds_request {
 	struct completion r_safe_completion;
 	ceph_mds_request_callback_t r_callback;
 	struct list_head  r_unsafe_item;  /* per-session unsafe list item */
+	struct list_head  r_aux_item;     /* auxiliary local list item */
 
 	long long	  r_dir_release_cnt;
 	long long	  r_dir_ordered_cnt;
