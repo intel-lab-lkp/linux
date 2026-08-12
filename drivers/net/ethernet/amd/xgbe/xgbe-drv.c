@@ -1980,13 +1980,14 @@ static int xgbe_set_features(struct net_device *netdev,
 {
 	struct xgbe_prv_data *pdata = netdev_priv(netdev);
 	struct xgbe_hw_if *hw_if = &pdata->hw_if;
-	netdev_features_t rxhash, rxcsum, rxvlan, rxvlan_filter;
+	netdev_features_t rxhash, rxcsum, rxvlan, rxvlan_filter, rxall;
 	int ret = 0;
 
 	rxhash = pdata->netdev_features & NETIF_F_RXHASH;
 	rxcsum = pdata->netdev_features & NETIF_F_RXCSUM;
 	rxvlan = pdata->netdev_features & NETIF_F_HW_VLAN_CTAG_RX;
 	rxvlan_filter = pdata->netdev_features & NETIF_F_HW_VLAN_CTAG_FILTER;
+	rxall = pdata->netdev_features & NETIF_F_RXALL;
 
 	if ((features & NETIF_F_RXHASH) && !rxhash)
 		ret = hw_if->enable_rss(pdata);
@@ -2016,6 +2017,10 @@ static int xgbe_set_features(struct net_device *netdev,
 		hw_if->enable_rx_vlan_filtering(pdata);
 	else if (!(features & NETIF_F_HW_VLAN_CTAG_FILTER) && rxvlan_filter)
 		hw_if->disable_rx_vlan_filtering(pdata);
+
+	if ((features & NETIF_F_RXALL) != rxall)
+		XGMAC_IOWRITE_BITS(pdata, MAC_RCR, DCRCC,
+				   !!(features & NETIF_F_RXALL));
 
 	pdata->netdev_features = features;
 

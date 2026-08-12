@@ -241,7 +241,8 @@ int xgbe_config_netdev(struct xgbe_prv_data *pdata)
 			      NETIF_F_GRO |
 			      NETIF_F_HW_VLAN_CTAG_RX |
 			      NETIF_F_HW_VLAN_CTAG_TX |
-			      NETIF_F_HW_VLAN_CTAG_FILTER;
+			      NETIF_F_HW_VLAN_CTAG_FILTER |
+			      NETIF_F_RXALL;
 
 	if (pdata->hw_feat.rss)
 		netdev->hw_features |= NETIF_F_RXHASH;
@@ -270,6 +271,8 @@ int xgbe_config_netdev(struct xgbe_prv_data *pdata)
 				 NETIF_F_TSO6;
 
 	netdev->features |= netdev->hw_features;
+	/* disable RXALL by default */
+	netdev->features &= ~NETIF_F_RXALL;
 	pdata->netdev_features = netdev->features;
 
 	netdev->priv_flags |= IFF_UNICAST_FLT;
