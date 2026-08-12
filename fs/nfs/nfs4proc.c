@@ -2302,6 +2302,7 @@ static int nfs4_handle_delegation_recall_error(struct nfs_server *server, struct
 		case -EAGAIN:
 		case -ESTALE:
 		case -ETIMEDOUT:
+		case -ERESTARTSYS:
 			break;
 		case -NFS4ERR_BADSESSION:
 		case -NFS4ERR_BADSLOT:
