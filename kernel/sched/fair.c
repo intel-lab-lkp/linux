@@ -962,6 +962,33 @@ static int vruntime_eligible(struct cfs_rq *cfs_rq, u64 vruntime)
 #endif
 }
 
+static int curr_eligible(struct cfs_rq *cfs_rq)
+{
+	struct sched_entity *curr = cfs_rq->curr;
+	s64 key, avg = cfs_rq->sum_w_vruntime;
+	long load = cfs_rq->sum_weight;
+	unsigned long weight = avg_vruntime_weight(cfs_rq, curr->load.weight);
+
+	key = entity_key(cfs_rq, curr);
+	avg += key * weight;
+	load += weight;
+
+#ifdef CONFIG_64BIT
+#ifdef CONFIG_ARCH_SUPPORTS_INT128
+	return avg >= (__int128)key * load;
+#else
+	s64 rhs;
+
+	if (check_mul_overflow(key, load, &rhs))
+		return key <= 0;
+
+	return avg >= rhs;
+#endif
+#else
+	return avg >= key * load;
+#endif
+}
+
 int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	return vruntime_eligible(cfs_rq, se->vruntime);
@@ -1196,7 +1223,7 @@ static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq, bool protect)
 		return cfs_rq->next;
 	}
 
-	if (curr && (!curr->on_rq || !entity_eligible(cfs_rq, curr)))
+	if (curr && (!curr->on_rq || !curr_eligible(cfs_rq)))
 		curr = NULL;
 
 	if (curr && protect && protect_slice(curr))
