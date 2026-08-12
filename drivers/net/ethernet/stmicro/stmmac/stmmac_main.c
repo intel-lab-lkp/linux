@@ -4371,16 +4371,20 @@ static void stmmac_flush_tx_descriptors(struct stmmac_priv *priv, int queue)
 	stmmac_set_queue_tx_tail_ptr(priv, tx_q, queue, tx_q->cur_tx);
 }
 
-static void stmmac_set_gso_types(struct stmmac_priv *priv, bool tso)
+static void stmmac_set_gso_types(struct stmmac_priv *priv,
+				 netdev_features_t features)
 {
-	if (!tso) {
-		priv->gso_enabled_types = 0;
-	} else {
-		/* Manage oversized TCP frames for GMAC4 device */
-		priv->gso_enabled_types = SKB_GSO_TCPV4 | SKB_GSO_TCPV6;
-		if (priv->plat->core_type == DWMAC_CORE_GMAC4)
-			priv->gso_enabled_types |= SKB_GSO_UDP_L4;
-	}
+	unsigned int gso_types = 0;
+
+	if (features & NETIF_F_TSO)
+		gso_types |= SKB_GSO_TCPV4;
+	if (features & NETIF_F_TSO6)
+		gso_types |= SKB_GSO_TCPV6;
+	/* Manage oversized UDP frames for GMAC4 devices */
+	if (features & NETIF_F_GSO_UDP_L4)
+		gso_types |= SKB_GSO_UDP_L4;
+
+	WRITE_ONCE(priv->gso_enabled_types, gso_types);
 }
 
 static void stmmac_set_gso_features(struct net_device *ndev)
@@ -4416,7 +4420,7 @@ static void stmmac_set_gso_features(struct net_device *ndev)
 	if (priv->plat->core_type == DWMAC_CORE_GMAC4)
 		ndev->hw_features |= NETIF_F_GSO_UDP_L4;
 
-	stmmac_set_gso_types(priv, true);
+	stmmac_set_gso_types(priv, ndev->hw_features);
 
 	dev_info(priv->device, "TSO feature enabled\n");
 }
@@ -4766,7 +4770,7 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 		stmmac_stop_sw_lpi(priv);
 
 	if (skb_is_gso(skb) &&
-	    skb_shinfo(skb)->gso_type & priv->gso_enabled_types)
+	    (skb_shinfo(skb)->gso_type & READ_ONCE(priv->gso_enabled_types)))
 		return stmmac_tso_xmit(skb, dev);
 
 	if (priv->est && priv->est->enable &&
@@ -6198,7 +6202,7 @@ static int stmmac_set_features(struct net_device *netdev,
 			stmmac_enable_sph(priv, priv->ioaddr, sph_en, chan);
 	}
 
-	stmmac_set_gso_types(priv, features & NETIF_F_TSO);
+	stmmac_set_gso_types(priv, features);
 
 	if (features & NETIF_F_HW_VLAN_CTAG_RX)
 		priv->hw->hw_vlan_en = true;
