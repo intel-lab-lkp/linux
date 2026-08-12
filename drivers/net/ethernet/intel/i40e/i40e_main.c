@@ -7,6 +7,7 @@
 #include <linux/if_bridge.h>
 #include <linux/if_macvlan.h>
 #include <linux/module.h>
+#include <linux/wait_bit.h>
 #include <net/pkt_cls.h>
 #include <net/xdp_sock_drv.h>
 
@@ -10816,7 +10817,8 @@ static int i40e_reset(struct i40e_pf *pf)
 	if (ret) {
 		dev_info(&pf->pdev->dev, "PF reset failed, %d\n", ret);
 		set_bit(__I40E_RESET_FAILED, pf->state);
-		clear_bit(__I40E_RESET_RECOVERY_PENDING, pf->state);
+		clear_and_wake_up_bit(__I40E_RESET_RECOVERY_PENDING,
+				      pf->state);
 	} else {
 		pf->pfr_count++;
 	}
@@ -11109,7 +11111,7 @@ end_unlock:
 end_core_reset:
 	clear_bit(__I40E_RESET_FAILED, pf->state);
 clear_recovery:
-	clear_bit(__I40E_RESET_RECOVERY_PENDING, pf->state);
+	clear_and_wake_up_bit(__I40E_RESET_RECOVERY_PENDING, pf->state);
 	clear_bit(__I40E_TIMEOUT_RECOVERY_PENDING, pf->state);
 }
 
@@ -16192,8 +16194,8 @@ static void i40e_remove(struct pci_dev *pdev)
 		disable_work_sync(&pf->service_task);
 
 	/* Wait for any reset owner before tearing down device resources. */
-	while (test_and_set_bit(__I40E_RESET_RECOVERY_PENDING, pf->state))
-		usleep_range(1000, 2000);
+	wait_on_bit_lock(pf->state, __I40E_RESET_RECOVERY_PENDING,
+			 TASK_UNINTERRUPTIBLE);
 	set_bit(__I40E_IN_REMOVE, pf->state);
 
 	i40e_dbg_pf_exit(pf);
