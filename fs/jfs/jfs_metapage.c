@@ -573,6 +573,7 @@ static int metapage_read_folio(struct file *fp, struct folio *folio)
 	int xlen;
 	unsigned int len;
 	int offset;
+	int ret = 0;
 
 	BUG_ON(!folio_test_locked(folio));
 	page_start = folio_pos(folio) >> inode->i_blkbits;
@@ -583,8 +584,11 @@ static int metapage_read_folio(struct file *fp, struct folio *folio)
 		pblock = metapage_get_blocks(inode, page_start + block_offset,
 					     &xlen);
 		if (pblock) {
-			if (!folio->private)
-				insert_metapage(folio, NULL);
+			if (!folio->private) {
+				ret = insert_metapage(folio, NULL);
+				if (ret)
+					break;
+			}
 			inc_io(folio);
 			if (bio)
 				submit_bio(bio);
@@ -607,7 +611,7 @@ static int metapage_read_folio(struct file *fp, struct folio *folio)
 	else
 		folio_unlock(folio);
 
-	return 0;
+	return ret;
 }
 
 static bool metapage_release_folio(struct folio *folio, gfp_t gfp_mask)
