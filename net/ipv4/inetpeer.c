@@ -192,7 +192,8 @@ struct inet_peer *inet_getpeer(struct inet_peer_base *base,
 	gc_cnt = 0;
 	p = lookup(daddr, base, seq, gc_stack, &gc_cnt, &parent, &pp);
 	if (!p) {
-		p = kmem_cache_alloc(peer_cachep, GFP_ATOMIC);
+		if ((u64)base->total < 2ULL * READ_ONCE(inet_peer_threshold))
+			p = kmem_cache_alloc(peer_cachep, GFP_ATOMIC);
 		if (p) {
 			p->daddr = *daddr;
 			p->dtime = (__u32)jiffies;
@@ -248,7 +249,7 @@ bool inet_peer_xrlim_allow(struct inet_peer *peer, int timeout)
 	bool rc = false;
 
 	if (!peer)
-		return true;
+		return false;
 
 	token = otoken = READ_ONCE(peer->rate_tokens);
 	now = jiffies;
