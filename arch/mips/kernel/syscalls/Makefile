@@ -13,9 +13,7 @@ quiet_cmd_syshdr = SYSHDR  $@
 
 quiet_cmd_sysnr = SYSNR   $@
       cmd_sysnr = $(CONFIG_SHELL) $(sysnr) \
-		  --prefix $(sysnr_pfx_$(basetarget))_Linux_ \
-		  --abis $(sysnr_abis_$(basetarget)) \
-		  $< $@
+		  --prefix $(sysnr_pfx_$(basetarget))_Linux_ $< $@
 
 quiet_cmd_systbl = SYSTBL  $@
       cmd_systbl = $(CONFIG_SHELL) $(systbl) $< $@
