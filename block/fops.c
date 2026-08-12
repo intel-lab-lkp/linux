@@ -726,6 +726,7 @@ static ssize_t blkdev_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	bool atomic = iocb->ki_flags & IOCB_ATOMIC;
 	loff_t size = bdev_nr_bytes(bdev);
 	size_t shorted = 0;
+	bool dio_fua_done = false;
 	ssize_t ret;
 
 	if (bdev_read_only(bdev))
@@ -763,9 +764,13 @@ static ssize_t blkdev_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 	if (iocb->ki_flags & IOCB_DIRECT) {
 		ret = blkdev_direct_write(iocb, from);
-		if (ret >= 0 && iov_iter_count(from))
+		if (ret >= 0 && iov_iter_count(from)) {
 			ret = direct_write_fallback(iocb, from, ret,
 					blkdev_buffered_write(iocb, from));
+		} else if (ret > 0 && iocb_is_dsync(iocb)) {
+			/* FUA from dio_bio_write_op() already made it durable */
+			dio_fua_done = true;
+		}
 	} else {
 		/*
 		 * Take i_rwsem and invalidate_lock to avoid racing with
@@ -777,7 +782,7 @@ static ssize_t blkdev_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		inode_unlock_shared(bd_inode);
 	}
 
-	if (ret > 0)
+	if (ret > 0 && !dio_fua_done)
 		ret = generic_write_sync(iocb, ret);
 	iov_iter_reexpand(from, iov_iter_count(from) + shorted);
 	return ret;
