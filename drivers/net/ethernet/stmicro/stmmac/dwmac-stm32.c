@@ -557,6 +557,12 @@ static int stm32_dwmac_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	/* Default TX Q0 to use TSO and rest TXQ for TBS */
+	if (dwmac->ops->is_mp2) {
+		for (int i = 1; i < plat_dat->tx_queues_to_use; i++)
+			plat_dat->tx_queues_cfg[i].tbs_en = 1;
+	}
+
 	plat_dat->flags |= STMMAC_FLAG_EN_TX_LPI_CLK_PHY_CAP;
 	plat_dat->bsp_priv = dwmac;
 	plat_dat->suspend = stm32_dwmac_suspend;
