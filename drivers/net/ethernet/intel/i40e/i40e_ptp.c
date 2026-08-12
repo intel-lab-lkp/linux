@@ -728,14 +728,17 @@ void i40e_ptp_rx_hang(struct i40e_pf *pf)
  **/
 void i40e_ptp_tx_hang(struct i40e_pf *pf)
 {
+	unsigned long flags;
 	struct sk_buff *skb;
 
 	if (!test_bit(I40E_FLAG_PTP_ENA, pf->flags) || !pf->ptp_tx)
 		return;
 
+	spin_lock_irqsave(&pf->ptp_tx_lock, flags);
+
 	/* Nothing to do if we're not already waiting for a timestamp */
-	if (!test_bit(__I40E_PTP_TX_IN_PROGRESS, pf->state))
-		return;
+	if (!pf->ptp_tx_skb)
+		goto out_unlock;
 
 	/* We already have a handler routine which is run when we are notified
 	 * of a Tx timestamp in the hardware. If we don't get an interrupt
@@ -744,12 +747,16 @@ void i40e_ptp_tx_hang(struct i40e_pf *pf)
 	if (time_is_before_jiffies(pf->ptp_tx_start + HZ)) {
 		skb = pf->ptp_tx_skb;
 		pf->ptp_tx_skb = NULL;
-		clear_bit_unlock(__I40E_PTP_TX_IN_PROGRESS, pf->state);
+		spin_unlock_irqrestore(&pf->ptp_tx_lock, flags);
 
-		/* Free the skb after we clear the bitlock */
+		/* Free the skb after releasing the lock. */
 		dev_kfree_skb_any(skb);
 		pf->tx_hwtstamp_timeouts++;
+		return;
 	}
+
+out_unlock:
+	spin_unlock_irqrestore(&pf->ptp_tx_lock, flags);
 }
 
 /**
@@ -763,17 +770,21 @@ void i40e_ptp_tx_hang(struct i40e_pf *pf)
 void i40e_ptp_tx_hwtstamp(struct i40e_pf *pf)
 {
 	struct skb_shared_hwtstamps shhwtstamps;
-	struct sk_buff *skb = pf->ptp_tx_skb;
 	struct i40e_hw *hw = &pf->hw;
+	unsigned long flags;
+	struct sk_buff *skb;
 	u32 hi, lo;
 	u64 ns;
 
 	if (!test_bit(I40E_FLAG_PTP_ENA, pf->flags) || !pf->ptp_tx)
 		return;
 
-	/* don't attempt to timestamp if we don't have an skb */
-	if (!pf->ptp_tx_skb)
-		return;
+	spin_lock_irqsave(&pf->ptp_tx_lock, flags);
+
+	/* Take ownership of the skb before another cleanup path can free it. */
+	skb = pf->ptp_tx_skb;
+	if (!skb)
+		goto out_unlock;
 
 	lo = rd32(hw, I40E_PRTTSYN_TXTIME_L);
 	hi = rd32(hw, I40E_PRTTSYN_TXTIME_H);
@@ -781,17 +792,21 @@ void i40e_ptp_tx_hwtstamp(struct i40e_pf *pf)
 	ns = (((u64)hi) << 32) | lo;
 	i40e_ptp_convert_to_hwtstamp(&shhwtstamps, ns);
 
-	/* Clear the bit lock as soon as possible after reading the register,
-	 * and prior to notifying the stack via skb_tstamp_tx(). Otherwise
-	 * applications might wake up and attempt to request another transmit
-	 * timestamp prior to the bit lock being cleared.
+	/* Mark the slot available as soon as possible after reading the
+	 * register and before notifying the stack via skb_tstamp_tx().
+	 * Otherwise, applications might wake up and request another transmit
+	 * timestamp before the slot is available.
 	 */
 	pf->ptp_tx_skb = NULL;
-	clear_bit_unlock(__I40E_PTP_TX_IN_PROGRESS, pf->state);
+	spin_unlock_irqrestore(&pf->ptp_tx_lock, flags);
 
 	/* Notify the stack and free the skb after we've unlocked */
 	skb_tstamp_tx(skb, &shhwtstamps);
 	dev_kfree_skb_any(skb);
+	return;
+
+out_unlock:
+	spin_unlock_irqrestore(&pf->ptp_tx_lock, flags);
 }
 
 /**
@@ -1539,19 +1554,21 @@ void i40e_ptp_stop(struct i40e_pf *pf)
 {
 	struct i40e_vsi *main_vsi = i40e_pf_get_main_vsi(pf);
 	struct i40e_hw *hw = &pf->hw;
+	unsigned long flags;
+	struct sk_buff *skb;
 	u32 regval;
 
+	spin_lock_irqsave(&pf->ptp_tx_lock, flags);
 	clear_bit(I40E_FLAG_PTP_ENA, pf->flags);
 	pf->ptp_tx = false;
+	skb = pf->ptp_tx_skb;
+	pf->ptp_tx_skb = NULL;
+	spin_unlock_irqrestore(&pf->ptp_tx_lock, flags);
+
 	pf->ptp_rx = false;
 
-	if (pf->ptp_tx_skb) {
-		struct sk_buff *skb = pf->ptp_tx_skb;
-
-		pf->ptp_tx_skb = NULL;
-		clear_bit_unlock(__I40E_PTP_TX_IN_PROGRESS, pf->state);
+	if (skb)
 		dev_kfree_skb_any(skb);
-	}
 
 	if (pf->ptp_clock) {
 		ptp_clock_unregister(pf->ptp_clock);
