@@ -48,6 +48,12 @@ enum dw_edma_irq_event {
 	DW_EDMA_IRQ_ABORT	= BIT(3),
 };
 
+enum dw_edma_ll_event {
+	DW_EDMA_LL_EVENT_NONE,
+	DW_EDMA_LL_EVENT_PROGRESS,
+	DW_EDMA_LL_EVENT_STOP,
+};
+
 struct dw_edma_chan;
 struct dw_edma_chunk;
 
@@ -69,6 +75,10 @@ struct dw_edma_desc {
 	size_t				start_burst;
 	size_t				nburst;
 	struct dw_edma_burst            burst[] __counted_by(nburst);
+};
+
+struct dw_edma_ll_snapshot {
+	enum dw_edma_ll_event		event;
 };
 
 struct dw_edma_chan {
@@ -98,6 +108,16 @@ struct dw_edma_chan {
 	 */
 	u32				ll_head;
 	u32				ll_done;
+
+	/*
+	 * LL event recorded by the hard IRQ handler. The event lock
+	 * serializes its capture with a new hardware run; vc.lock serializes
+	 * its consumption with LL state.
+	 */
+	struct dw_edma_ll_snapshot	ll_irq;
+	/* Native HDMA lock storage. */
+	spinlock_t			event_lock_per_chan;
+	spinlock_t			*event_lock;	/* Selected event lock */
 
 	u32				ll_max;		/* Data entries */
 	struct dw_edma_region		ll_region;	/* Linked list */
@@ -148,6 +168,8 @@ struct dw_edma {
 	struct workqueue_struct		*wq;
 
 	raw_spinlock_t			lock;		/* Protect v0 shared registers */
+	/* Per-direction lock storage for the eDMA interrupt registers. */
+	spinlock_t			event_lock_per_dir[2];
 
 	struct dw_edma_chip             *chip;
 
@@ -171,7 +193,9 @@ struct dw_edma_core_ops {
 	void (*ll_link)(struct dw_edma_chan *chan, u32 idx, bool cb, u64 addr);
 	void (*ll_clear)(struct dw_edma_chan *chan, u32 idx);
 	int (*ll_cur_idx)(struct dw_edma_chan *chan);
+	/* Called with dw_edma_event_lock(chan) held. */
 	void (*ll_irq_clear)(struct dw_edma_chan *chan);
+	/* Called with dw_edma_event_lock(chan) held for an LL channel. */
 	void (*ch_doorbell)(struct dw_edma_chan *chan);
 	void (*ch_enable)(struct dw_edma_chan *chan);
 	void (*ch_config)(struct dw_edma_chan *chan);
@@ -213,6 +237,19 @@ static inline
 struct dw_edma_chan *dchan2dw_edma_chan(struct dma_chan *dchan)
 {
 	return vc2dw_edma_chan(to_virt_chan(dchan));
+}
+
+/*
+ * Lock ordering:
+ *
+ *   chan->vc.lock -> dw_edma_event_lock(chan)
+ *
+ * Interrupt providers invoke the dw_edma_handler_t callback with the event
+ * lock held. The callback must not take vc.lock.
+ */
+static inline spinlock_t *dw_edma_event_lock(struct dw_edma_chan *chan)
+{
+	return chan->event_lock;
 }
 
 /*
