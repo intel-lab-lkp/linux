@@ -350,6 +350,22 @@
 	status = "okay";
 };
 
+&usbphy0 {
+	status = "okay";
+};
+
+&usb2_0 {
+	status = "okay";
+};
+
+&usbphy1 {
+	status = "okay";
+};
+
+&usb2_1 {
+	status = "okay";
+};
+
 &usbphy2 {
 	status = "okay";
 };
