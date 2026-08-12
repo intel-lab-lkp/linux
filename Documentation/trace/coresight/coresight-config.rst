@@ -202,6 +202,11 @@ Move to the params directory to examine and adjust parameters::
     # cat value
     0x3a98
 
+Updating a parameter requires root. Reading one does not, unless the parameter
+can hold a kernel address, in which case its 'value' is readable by root only.
+The preloaded 'gen_etrig' feature is such a case: its
+``features/gen_etrig/params/address/value`` defaults to the address of panic().
+
 Parameters adjusted in this way are reflected in all device instances that have
 loaded the feature.
 

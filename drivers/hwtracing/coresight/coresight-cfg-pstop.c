@@ -19,6 +19,7 @@ static struct cscfg_parameter_desc gen_etrig_params[] = {
 	{
 		.name = "address",
 		.value = (u64)panic,
+		.sensitive = true,
 	},
 };
 

@@ -304,14 +304,38 @@ static ssize_t cscfg_param_value_store(struct config_item *item,
 }
 CONFIGFS_ATTR(cscfg_param_, value);
 
+/*
+ * A parameter marked sensitive can hold a kernel address, so its value gets
+ * the same attribute with the world-readable bits dropped. Writing already
+ * required root. Open coded rather than CONFIGFS_ATTR_PERM(), as that macro
+ * derives the show/store names from the prefix and would need forwarders.
+ */
+static struct configfs_attribute cscfg_param_attr_value_sensitive = {
+	.ca_name	= "value",
+	.ca_mode	= 0600,
+	.ca_owner	= THIS_MODULE,
+	.show		= cscfg_param_value_show,
+	.store		= cscfg_param_value_store,
+};
+
 static struct configfs_attribute *cscfg_param_view_attrs[] = {
 	&cscfg_param_attr_value,
+	NULL,
+};
+
+static struct configfs_attribute *cscfg_param_sensitive_view_attrs[] = {
+	&cscfg_param_attr_value_sensitive,
 	NULL,
 };
 
 static const struct config_item_type cscfg_param_view_type = {
 	.ct_owner = THIS_MODULE,
 	.ct_attrs = cscfg_param_view_attrs,
+};
+
+static const struct config_item_type cscfg_param_sensitive_view_type = {
+	.ct_owner = THIS_MODULE,
+	.ct_attrs = cscfg_param_sensitive_view_attrs,
 };
 
 /*
@@ -335,6 +359,8 @@ static int cscfg_create_params_group_items(struct cscfg_feature_desc *feat_desc,
 		param_item->param_idx = i;
 		config_group_init_type_name(&param_item->group,
 					    feat_desc->params_desc[i].name,
+					    feat_desc->params_desc[i].sensitive ?
+					    &cscfg_param_sensitive_view_type :
 					    &cscfg_param_view_type);
 		configfs_add_default_group(&param_item->group, params_group);
 	}

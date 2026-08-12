@@ -46,10 +46,13 @@
  *
  * @name:  Name of parameter.
  * @value: Initial or default value.
+ * @sensitive: Value may be a kernel address, so restrict reads of it to
+ *	       callers permitted to see kernel pointers.
  */
 struct cscfg_parameter_desc {
 	const char *name;
 	u64 value;
+	bool sensitive;
 };
 
 /**
