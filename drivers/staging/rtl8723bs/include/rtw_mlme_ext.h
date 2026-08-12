@@ -322,7 +322,7 @@ struct mlme_ext_info {
 
 /*  The channel information about this channel including joining, scanning, and power constraints. */
 struct rt_channel_info {
-	u8 		ChannelNum;		/*  The channel number. */
+	u8		ChannelNum;		/*  The channel number. */
 	enum rt_scan_type	ScanType;		/*  Scan type such as passive or active scan. */
 };
 
@@ -390,7 +390,7 @@ struct mlme_ext_priv {
 	struct timer_list		link_timer;
 	struct timer_list		sa_query_timer;
 	/* struct timer_list		ADDBA_timer; */
-	u16 		chan_scan_time;
+	u16		chan_scan_time;
 	unsigned long last_scan_time;
 	u8 scan_abort;
 	u8 tx_rate; /*  TXRATE when USERATE is set. */
