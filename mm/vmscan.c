@@ -5097,6 +5097,7 @@ static bool lru_gen_imbalanced(struct lruvec *lruvec, unsigned long max_seq,
 {
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 	unsigned long young = 0, old = 0, lag = 0;
+	unsigned long inactive_ratio, gb;
 	DEFINE_MIN_SEQ(lruvec);
 
 	/* we still have enough generations to reclaim */
@@ -5119,7 +5120,13 @@ static bool lru_gen_imbalanced(struct lruvec *lruvec, unsigned long max_seq,
 	if (min_seq[!type] + MAX_NR_GENS == max_seq + 1)
 		lag += lruvec_gen_size(lrugen, !type, min_seq[!type]);
 
-	return young > old * MAX_NR_GENS && (lag < MAX_LRU_BATCH ||
+	/*
+	 * Borrow the adaptive ratio from inactive_is_low(), and scale
+	 * it by sqrt(MAX_NR_GENS) to make aging less aggressive
+	 */
+	gb = (young + old) >> (30 - PAGE_SHIFT);
+	inactive_ratio = gb ? int_sqrt(10 * gb * MAX_NR_GENS) : MAX_NR_GENS;
+	return young > old * inactive_ratio && (lag < MAX_LRU_BATCH ||
 	       (is_extreme_swappiness(swappiness) && sc->priority > 2));
 }
 
