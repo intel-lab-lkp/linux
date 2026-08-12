@@ -260,6 +260,29 @@ void synchronize_srcu(struct srcu_struct *ssp)
 }
 EXPORT_SYMBOL_GPL(synchronize_srcu);
 
+/**
+ * try_synchronize_srcu - inline grace period for a reader-free srcu_struct
+ * @ssp: srcu_struct with which to synchronize.
+ *
+ * If @ssp provably has no readers in either epoch, provide the
+ * synchronize_srcu() guarantee to the caller immediately, without
+ * sleeping. Returns true on success; on failure the caller must fall
+ * back to synchronize_srcu().
+ *
+ * On !SMP a reader can only be mid-critical-section if it was
+ * preempted (or is running in an interrupt which preempted us), in
+ * which case its nesting count is visibly non-zero. Both counts being
+ * zero therefore proves that no reader exists, and any reader which
+ * begins after this function returns will, by program order on this
+ * sole CPU, observe every store the caller made before calling it.
+ */
+bool try_synchronize_srcu(struct srcu_struct *ssp)
+{
+	return !READ_ONCE(ssp->srcu_lock_nesting[0]) &&
+	       !READ_ONCE(ssp->srcu_lock_nesting[1]);
+}
+EXPORT_SYMBOL_GPL(try_synchronize_srcu);
+
 /*
  * get_state_synchronize_srcu - Provide an end-of-grace-period cookie
  */

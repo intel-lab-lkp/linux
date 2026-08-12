@@ -1581,6 +1581,76 @@ void synchronize_srcu(struct srcu_struct *ssp)
 EXPORT_SYMBOL_GPL(synchronize_srcu);
 
 /**
+ * try_synchronize_srcu - inline grace period for a reader-free srcu_struct
+ * @ssp: srcu_struct with which to synchronize.
+ *
+ * If @ssp provably has no readers in either epoch, provide the
+ * synchronize_srcu() guarantee to the caller immediately: without
+ * sleeping, without a trip through the SRCU workqueue, and without
+ * advancing the grace-period sequence. Returns true on success; on
+ * failure the caller must fall back to synchronize_srcu() or
+ * synchronize_srcu_expedited().
+ *
+ * This serves dedicated srcu_struct structures whose read-side critical
+ * sections are short, atomic, and usually absent — where even an
+ * expedited grace period costs two trips through the workqueue and an
+ * unconditional sleep of the caller, three orders of magnitude more
+ * than the check below.
+ *
+ * Only readers of the srcu_read_lock() and srcu_read_lock_nmisafe()
+ * flavors are compatible with this proof; if the _fast() flavors have
+ * ever been used on @ssp, this function always returns false.
+ */
+bool try_synchronize_srcu(struct srcu_struct *ssp)
+{
+	unsigned long unlocks0, unlocks1;
+	unsigned long rdm0, rdm1;
+
+	check_init_srcu_struct(ssp);
+
+	/*
+	 * Order the caller's prior stores before the counter reads below.
+	 * Pairs (store-buffering pattern) with the smp_mb() in
+	 * __srcu_read_lock(): any reader whose lock increment is not
+	 * observed by the sums below is guaranteed to observe, within its
+	 * critical section, every store the caller made before calling
+	 * this function.
+	 */
+	smp_mb();
+
+	unlocks0 = srcu_readers_unlock_idx(ssp, 0, &rdm0);
+	unlocks1 = srcu_readers_unlock_idx(ssp, 1, &rdm1);
+
+	/*
+	 * Reader flavors which elide the read-side smp_mb() that the
+	 * pairing above depends on cannot be proven absent this way;
+	 * they need a real grace period.
+	 */
+	if ((rdm0 | rdm1) & SRCU_READ_FLAVOR_SLOWGP)
+		return false;
+
+	/*
+	 * As in srcu_readers_active_idx_check(): ensure that a lock is
+	 * always counted if the corresponding unlock is counted, so that
+	 * a reader racing with these sums can only inflate the lock sum
+	 * and force the (safe) fallback. Summing both epochs means no
+	 * index flip is needed: a stable equality proves there was a
+	 * moment in this function at which no readers existed at all.
+	 */
+	smp_mb();
+
+	if (!srcu_readers_lock_idx(ssp, 0, false, unlocks0))
+		return false;
+	if (!srcu_readers_lock_idx(ssp, 1, false, unlocks1))
+		return false;
+
+	/* Order the caller's subsequent accesses after the proof. */
+	smp_mb();
+	return true;
+}
+EXPORT_SYMBOL_GPL(try_synchronize_srcu);
+
+/**
  * get_state_synchronize_srcu - Provide an end-of-grace-period cookie
  * @ssp: srcu_struct to provide cookie for.
  *
