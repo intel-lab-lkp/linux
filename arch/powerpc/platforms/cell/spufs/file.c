@@ -2028,8 +2028,7 @@ static ssize_t spufs_wbox_info_read(struct file *file, char __user *buf,
 	spin_unlock(&ctx->csa.register_lock);
 	spu_release_saved(ctx);
 
-	return simple_read_from_buffer(buf, len, pos, &data,
-				count * sizeof(u32));
+	return simple_read_from_buffer(buf, len, pos, &data, count);
 }
 
 static const struct file_operations spufs_wbox_info_fops = {
