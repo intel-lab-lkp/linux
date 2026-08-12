@@ -64,7 +64,7 @@ static void rtw_usb_reg_sec(struct rtw_dev *rtwdev, u32 addr, __le32 *data)
 				 RTW_USB_CMD_REQ, RTW_USB_CMD_WRITE,
 				 t_reg, 0, data, t_len, 500);
 
-	if (status != t_len && status != -ENODEV)
+	if (status != t_len && status != -ENODEV && !rtwusb->switching_mode)
 		rtw_err(rtwdev, "%s: reg 0x%x, usb write %u fail, status: %d\n",
 			__func__, t_reg, t_len, status);
 }
@@ -90,7 +90,7 @@ static u32 rtw_usb_read(struct rtw_dev *rtwdev, u32 addr, u16 len)
 	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0),
 			      RTW_USB_CMD_REQ, RTW_USB_CMD_READ, addr,
 			      RTW_USB_VENQT_CMD_IDX, data, len, 1000);
-	if (ret < 0 && ret != -ENODEV && count++ < 4)
+	if (ret < 0 && ret != -ENODEV && !rtwusb->switching_mode && count++ < 4)
 		rtw_err(rtwdev, "read register 0x%x failed with %d\n",
 			addr, ret);
 
@@ -140,7 +140,7 @@ static void rtw_usb_write(struct rtw_dev *rtwdev, u32 addr, u32 val, int len)
 	ret = usb_control_msg(udev, usb_sndctrlpipe(udev, 0),
 			      RTW_USB_CMD_REQ, RTW_USB_CMD_WRITE,
 			      addr, 0, data, len, 500);
-	if (ret < 0 && ret != -ENODEV && count++ < 4)
+	if (ret < 0 && ret != -ENODEV && !rtwusb->switching_mode && count++ < 4)
 		rtw_err(rtwdev, "write register 0x%x failed with %d\n",
 			addr, ret);
 
@@ -1098,6 +1098,7 @@ static int rtw_usb_switch_mode_old(struct rtw_dev *rtwdev)
 			rtw_write8(rtwdev, REG_ACLK_MON, 0x1);
 			rtw_write8(rtwdev, 0x3d, 0x3);
 			/* usb disconnect */
+			rtwusb->switching_mode = true;
 			rtw_write8(rtwdev, REG_SYS_PW_CTRL + 1, 0x80);
 			return 1;
 		}
@@ -1111,6 +1112,7 @@ static int rtw_usb_switch_mode_old(struct rtw_dev *rtwdev)
 
 static int rtw_usb_switch_mode_new(struct rtw_dev *rtwdev)
 {
+	struct rtw_usb *rtwusb = rtw_get_usb_priv(rtwdev);
 	enum usb_device_speed cur_speed;
 	u8 id = rtwdev->chip->id;
 	bool can_switch;
@@ -1150,6 +1152,11 @@ static int rtw_usb_switch_mode_new(struct rtw_dev *rtwdev)
 
 	rtw_write32(rtwdev, REG_PAD_CTRL2, pad_ctrl2);
 	rtw_write8(rtwdev, REG_PAD_CTRL2 + 1, 4);
+
+	/* From here the chip powers off its MAC and re-enumerates, so it can
+	 * leave the bus while a control transfer is still in flight.
+	 */
+	rtwusb->switching_mode = true;
 
 	rtw_write16_set(rtwdev, REG_SYS_PW_CTRL, BIT_APFM_OFFMAC);
 	usleep_range(1000, 1001);

@@ -85,6 +85,9 @@ struct rtw_usb {
 	struct sk_buff_head rx_free_queue;
 	struct work_struct rx_work;
 	struct work_struct rx_urb_work;
+
+	/* the chip is re-enumerating, control transfers are expected to fail */
+	bool switching_mode;
 };
 
 static inline struct rtw_usb_tx_data *rtw_usb_get_tx_data(struct sk_buff *skb)
