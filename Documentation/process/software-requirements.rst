@@ -47,9 +47,12 @@ GNU make               4.0              make --version
 GNU tar                1.28             tar --version
 GRUB                   0.93             grub --version || grub-install --version
 gtags (optional)       6.6.5            gtags --version
+ip-route2              6.14.0           ip -V
 iptables               1.4.2            iptables -V
 jfsutils               1.1.3            fsck.jfs -V
 kmod                   13               kmod -V
+liblzma                5.8.1            lzma -V
+lzop                   1.04             lzop -V
 mcelog                 0.6              mcelog --version
 mkimage (optional)     2017.01          mkimage --version
 nfs-utils              1.0.5            showmount --version
@@ -66,6 +69,7 @@ squashfs-tools         4.0              mksquashfs -version
 udev                   081              udevadm --version
 util-linux             2.10o            mount --version
 xfsprogs               2.6.0            xfs_db -V
+xz                     5.8.1            xz -V
 ====================== ===============  ========================================
 
 .. [#f1] Sphinx is needed only to build the Kernel documentation
