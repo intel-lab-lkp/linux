@@ -188,6 +188,13 @@ static int lp5860_init_dt(struct lp5860 *lp)
 	return 0;
 }
 
+static void lp5860_disable_action(void *data)
+{
+	struct lp5860 *lp = data;
+
+	lp5860_chip_enable(lp, LP5860_CHIP_DISABLE);
+}
+
 int lp5860_device_init(struct device *dev)
 {
 	struct lp5860 *lp = dev_get_drvdata(dev);
@@ -197,37 +204,24 @@ int lp5860_device_init(struct device *dev)
 	if (ret)
 		return ret;
 
+	ret = devm_add_action_or_reset(dev, lp5860_disable_action, lp);
+	if (ret)
+		return ret;
+
 	/*
 	 * Set to 8-bit PWM data without VSYNC.
 	 * Data is sent out for display instantly after received.
 	 */
-	mutex_lock(&lp->lock);
-	ret = regmap_update_bits(lp->regmap, LP5860_REG_DEV_INITIAL, LP5860_MODE_MASK,
-				 LP5860_MODE_1 << LP5860_MODE_SHIFT);
-	if (ret)
-		goto err_disable;
-	mutex_unlock(&lp->lock);
+	scoped_guard(mutex, &lp->lock) {
+		ret = regmap_update_bits(lp->regmap, LP5860_REG_DEV_INITIAL, LP5860_MODE_MASK,
+					 LP5860_MODE_1 << LP5860_MODE_SHIFT);
+		if (ret)
+			return ret;
+	}
 
-	ret = lp5860_init_dt(lp);
-	if (ret)
-		goto err_disable;
-
-	return 0;
-
-err_disable:
-	mutex_unlock(&lp->lock);
-	lp5860_chip_enable(lp, LP5860_CHIP_DISABLE);
-	return ret;
+	return lp5860_init_dt(lp);
 }
 EXPORT_SYMBOL_GPL(lp5860_device_init);
-
-void lp5860_device_remove(struct device *dev)
-{
-	struct lp5860 *lp = dev_get_drvdata(dev);
-
-	lp5860_chip_enable(lp, LP5860_CHIP_DISABLE);
-}
-EXPORT_SYMBOL_GPL(lp5860_device_remove);
 
 MODULE_AUTHOR("Steffen Trumtrar <kernel@pengutronix.de>");
 MODULE_DESCRIPTION("TI LP5860 RGB LED core driver");
