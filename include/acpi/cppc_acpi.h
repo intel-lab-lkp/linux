@@ -208,6 +208,14 @@ extern int cppc_get_auto_sel(int cpu, bool *enable);
 extern int cppc_set_auto_sel(int cpu, bool enable);
 extern int cppc_get_perf_limited(int cpu, u64 *perf_limited);
 extern int cppc_set_perf_limited(int cpu, u64 bits_to_clear);
+extern int cppc_get_resource_priority_count(int cpu, int *count);
+extern int cppc_get_resource_priority_resources(int cpu, int index,
+						u32 *resources, int *num_resources);
+extern int cppc_get_res_priority_enable(int cpu, int index, bool *enable);
+extern int cppc_set_res_priority_enable(int cpu, int index, bool enable);
+extern int cppc_get_res_priority_count(int cpu, int index, u64 *count);
+extern int cppc_get_res_priority(int cpu, int index, u64 *priority);
+extern int cppc_set_res_priority(int cpu, int index, u64 priority);
 extern int amd_get_highest_perf(unsigned int cpu, u32 *highest_perf);
 extern int amd_get_boost_ratio_numerator(unsigned int cpu, u64 *numerator);
 extern int amd_detect_prefcore(bool *detected);
@@ -310,6 +318,35 @@ static inline int cppc_get_perf_limited(int cpu, u64 *perf_limited)
 	return -EOPNOTSUPP;
 }
 static inline int cppc_set_perf_limited(int cpu, u64 bits_to_clear)
+{
+	return -EOPNOTSUPP;
+}
+static inline int cppc_get_resource_priority_count(int cpu, int *count)
+{
+	return -EOPNOTSUPP;
+}
+static inline int cppc_get_resource_priority_resources(int cpu, int index,
+						       u32 *resources, int *num_resources)
+{
+	return -EOPNOTSUPP;
+}
+static inline int cppc_get_res_priority_enable(int cpu, int index, bool *enable)
+{
+	return -EOPNOTSUPP;
+}
+static inline int cppc_set_res_priority_enable(int cpu, int index, bool enable)
+{
+	return -EOPNOTSUPP;
+}
+static inline int cppc_get_res_priority_count(int cpu, int index, u64 *count)
+{
+	return -EOPNOTSUPP;
+}
+static inline int cppc_get_res_priority(int cpu, int index, u64 *priority)
+{
+	return -EOPNOTSUPP;
+}
+static inline int cppc_set_res_priority(int cpu, int index, u64 priority)
 {
 	return -EOPNOTSUPP;
 }
