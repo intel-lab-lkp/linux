@@ -9,6 +9,7 @@
  */
 
 #define pr_fmt(fmt) "pci-p2pdma: " fmt
+#include <linux/acpi.h>
 #include <linux/ctype.h>
 #include <linux/dma-map-ops.h>
 #include <linux/pci-p2pdma.h>
@@ -733,6 +734,57 @@ static bool host_bridge_whitelist(struct pci_dev *a, struct pci_dev *b,
 	return false;
 }
 
+#ifdef CONFIG_ACPI
+static int pci_host_bridge_pxm(struct pci_dev *pdev)
+{
+	struct pci_host_bridge *host = pci_find_host_bridge(pdev->bus);
+	struct acpi_device *adev;
+	const char *uid_str;
+	u32 uid;
+
+	adev = to_acpi_device_node(host->dev.fwnode);
+	if (!adev)
+		return -ENODEV;
+
+	uid_str = acpi_device_uid(adev);
+	if (!uid_str || kstrtou32(uid_str, 0, &uid))
+		return -ENODEV;
+
+	return acpi_get_genport_proximity_domain(uid);
+}
+#else
+static int pci_host_bridge_pxm(struct pci_dev *pdev)
+{
+	return -ENODEV;
+}
+#endif
+
+/*
+ * Check whether platform firmware describes, via an HMAT PCIe P2P Latency and
+ * Bandwidth Information Structure, a reachable ordered (non-UIO) P2P path from
+ * the client's host bridge to the provider's host bridge. When it does, the
+ * platform vouches for cross-host-bridge P2P even if the root complex is not
+ * in the static whitelist.
+ *
+ * The client is the requester of the P2P transactions and the provider is the
+ * completer, so the client's host bridge is the HMAT initiator and the
+ * provider's host bridge is the HMAT target. UIO-only paths are described by
+ * firmware but are not (yet) used to authorize ordered DMA.
+ */
+static bool host_bridge_hmat_p2p(struct pci_dev *provider, struct pci_dev *client)
+{
+	struct access_coordinate coord;
+	int init_pxm, targ_pxm;
+
+	init_pxm = pci_host_bridge_pxm(client);
+	targ_pxm = pci_host_bridge_pxm(provider);
+	if (init_pxm < 0 || targ_pxm < 0)
+		return false;
+
+	return acpi_get_p2p_coordinates(init_pxm, targ_pxm, HMAT_P2P_NON_UIO,
+					&coord) == 0;
+}
+
 static unsigned long map_types_idx(struct pci_dev *client)
 {
 	return (pci_domain_nr(client->bus) << 16) | pci_dev_id(client);
@@ -890,9 +942,10 @@ check_paths_acs:
 
 map_through_host_bridge:
 	if (!cpu_supports_p2pdma() &&
+	    !host_bridge_hmat_p2p(provider, client) &&
 	    !host_bridge_whitelist(provider, client, verbose)) {
 		if (verbose)
-			pci_warn(client, "cannot be used for peer-to-peer DMA as the client and provider (%s) do not share an upstream bridge or whitelisted host bridge\n",
+			pci_warn(client, "cannot be used for peer-to-peer DMA as the client and provider (%s) do not share an upstream bridge, whitelisted host bridge, or HMAT-described P2P path\n",
 				 pci_name(provider));
 		map_type = PCI_P2PDMA_MAP_NOT_SUPPORTED;
 	}
