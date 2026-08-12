@@ -188,7 +188,7 @@ static int s6d16d0_probe(struct mipi_dsi_device *dsi)
 
 	drm_panel_add(&s6->panel);
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (ret < 0)
 		drm_panel_remove(&s6->panel);
 
@@ -198,8 +198,6 @@ static int s6d16d0_probe(struct mipi_dsi_device *dsi)
 static void s6d16d0_remove(struct mipi_dsi_device *dsi)
 {
 	struct s6d16d0 *s6 = mipi_dsi_get_drvdata(dsi);
-
-	mipi_dsi_detach(dsi);
 	drm_panel_remove(&s6->panel);
 }
 
