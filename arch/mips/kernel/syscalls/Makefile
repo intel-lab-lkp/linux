@@ -14,8 +14,7 @@ quiet_cmd_syshdr = SYSHDR  $@
 quiet_cmd_sysnr = SYSNR   $@
       cmd_sysnr = $(CONFIG_SHELL) $(sysnr) \
 		  --prefix $(sysnr_pfx_$(basetarget))_Linux_ \
-		  --abis $(sysnr_abis_$(basetarget)) \
-		  $< $@
+		  --abis $(abis_$*) $< $@
 
 quiet_cmd_systbl = SYSTBL  $@
       cmd_systbl = $(CONFIG_SHELL) $(systbl) $< $@
@@ -26,6 +25,12 @@ $(uapi)/unistd_%.h: $(src)/syscall_%.tbl $(syshdr) FORCE
 sysnr_pfx_unistd_nr_n32 := N32
 sysnr_pfx_unistd_nr_n64 := 64
 sysnr_pfx_unistd_nr_o32 := O32
+
+abis := common
+
+abis_n32 := $(abis),32
+abis_o32 := $(abis),32
+abis_n64 := $(abis),64
 
 $(kapi)/unistd_nr_%.h: $(src)/syscall_%.tbl $(sysnr) FORCE
 	$(call if_changed,sysnr)
