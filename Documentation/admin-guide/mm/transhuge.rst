@@ -389,14 +389,14 @@ is not defined within a valid ``thp_anon``, its policy will default to
 Similarly to ``transparent_hugepage``, you can control the hugepage
 allocation policy for the internal shmem mount by using the kernel parameter
 ``transparent_hugepage_shmem=<policy>``, where ``<policy>`` is one of the
-seven valid policies for shmem (``always``, ``within_size``, ``advise``,
+six valid policies for shmem (``always``, ``within_size``, ``advise``,
 ``never``, ``deny``, and ``force``).
 
 Similarly to ``transparent_hugepage_shmem``, you can control the default
 hugepage allocation policy for the tmpfs mount by using the kernel parameter
 ``transparent_hugepage_tmpfs=<policy>``, where ``<policy>`` is one of the
-four valid policies for tmpfs (``always``, ``within_size``, ``advise``,
-``never``). The tmpfs mount default policy is ``never``.
+six valid policies for tmpfs (``always``, ``within_size``, ``advise``,
+``never``, ``deny``, and ``force``). The tmpfs mount default policy is ``never``.
 
 Additionally, Kconfig options are available to set the default hugepage
 policies for shmem (``CONFIG_TRANSPARENT_HUGEPAGE_SHMEM_HUGE_*``) and tmpfs
