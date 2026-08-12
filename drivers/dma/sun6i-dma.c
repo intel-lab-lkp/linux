@@ -215,7 +215,7 @@ struct sun6i_dma_dev {
 
 static struct device *chan2dev(struct dma_chan *chan)
 {
-	return &chan->dev->device;
+	return &chan->chan_dev->device;
 }
 
 static inline struct sun6i_dma_dev *to_sun6i_dma_dev(struct dma_device *d)

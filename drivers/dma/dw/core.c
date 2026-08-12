@@ -43,7 +43,7 @@
 
 static struct device *chan2dev(struct dma_chan *chan)
 {
-	return &chan->dev->device;
+	return &chan->chan_dev->device;
 }
 
 static struct dw_desc *dwc_first_active(struct dw_dma_chan *dwc)

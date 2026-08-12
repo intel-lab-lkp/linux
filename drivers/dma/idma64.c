@@ -27,7 +27,7 @@
 
 static struct device *chan2dev(struct dma_chan *chan)
 {
-	return &chan->dev->device;
+	return &chan->chan_dev->device;
 }
 
 /* ---------------------------------------------------------------------- */

@@ -91,7 +91,7 @@ static irqreturn_t ls1x_dma_irq_handler(int irq, void *data);
 
 static inline struct device *chan2dev(struct dma_chan *chan)
 {
-	return &chan->dev->device;
+	return &chan->chan_dev->device;
 }
 
 static inline int ls1x_dma_query(struct ls1x_dma_chan *chan,

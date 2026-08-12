@@ -326,7 +326,7 @@ static inline struct at_xdmac_chan *to_at_xdmac_chan(struct dma_chan *dchan)
 
 static struct device *chan2dev(struct dma_chan *chan)
 {
-	return &chan->dev->device;
+	return &chan->chan_dev->device;
 }
 
 static inline struct at_xdmac *to_at_xdmac(struct dma_device *ddev)

@@ -136,7 +136,7 @@ static struct loongson2_cmc_dma_desc *to_lmdma_desc(struct virt_dma_desc *vdesc)
 
 static struct device *chan2dev(struct loongson2_cmc_dma_chan *lchan)
 {
-	return &lchan->vchan.chan.dev->device;
+	return &lchan->vchan.chan.chan_dev->device;
 }
 
 static u32 loongson2_cmc_dma_read(struct loongson2_cmc_dma_dev *lddev, u32 reg, u32 id)

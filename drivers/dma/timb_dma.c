@@ -93,7 +93,7 @@ struct timb_dma {
 
 static struct device *chan2dev(struct dma_chan *chan)
 {
-	return &chan->dev->device;
+	return &chan->chan_dev->device;
 }
 static struct device *chan2dmadev(struct dma_chan *chan)
 {

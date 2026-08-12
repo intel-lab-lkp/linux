@@ -121,12 +121,12 @@ struct axi_dma_chan_config {
 
 static inline struct device *dchan2dev(struct dma_chan *dchan)
 {
-	return &dchan->dev->device;
+	return &dchan->chan_dev->device;
 }
 
 static inline struct device *chan2dev(struct axi_dma_chan *chan)
 {
-	return &chan->vc.chan.dev->device;
+	return &chan->vc.chan.chan_dev->device;
 }
 
 static inline struct axi_dma_desc *vd_to_axi_desc(struct virt_dma_desc *vd)

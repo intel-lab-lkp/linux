@@ -163,7 +163,7 @@ static inline struct ls2x_dma_priv *to_ldma_priv(struct dma_device *ddev)
 
 static struct device *chan2dev(struct dma_chan *chan)
 {
-	return &chan->dev->device;
+	return &chan->chan_dev->device;
 }
 
 static void ls2x_dma_desc_free(struct virt_dma_desc *vdesc)

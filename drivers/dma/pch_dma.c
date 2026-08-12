@@ -152,7 +152,7 @@ static inline struct pch_dma *to_pd(struct dma_device *ddev)
 
 static inline struct device *chan2dev(struct dma_chan *chan)
 {
-	return &chan->dev->device;
+	return &chan->chan_dev->device;
 }
 
 static inline

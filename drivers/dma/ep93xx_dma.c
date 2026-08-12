@@ -252,7 +252,7 @@ struct ep93xx_edma_data {
 
 static inline struct device *chan2dev(struct ep93xx_dma_chan *edmac)
 {
-	return &edmac->chan.dev->device;
+	return &edmac->chan.chan_dev->device;
 }
 
 static struct ep93xx_dma_chan *to_ep93xx_dma_chan(struct dma_chan *chan)

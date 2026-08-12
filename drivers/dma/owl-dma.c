@@ -294,7 +294,7 @@ static inline struct owl_dma *to_owl_dma(struct dma_device *dd)
 
 static struct device *chan2dev(struct dma_chan *chan)
 {
-	return &chan->dev->device;
+	return &chan->chan_dev->device;
 }
 
 static inline struct owl_dma_vchan *to_owl_vchan(struct dma_chan *chan)

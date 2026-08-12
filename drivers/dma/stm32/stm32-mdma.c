@@ -278,7 +278,7 @@ static struct stm32_mdma_desc *to_stm32_mdma_desc(struct virt_dma_desc *vdesc)
 
 static struct device *chan2dev(struct stm32_mdma_chan *chan)
 {
-	return &chan->vchan.chan.dev->device;
+	return &chan->vchan.chan.chan_dev->device;
 }
 
 static struct device *mdma2dev(struct stm32_mdma_device *mdma_dev)

@@ -383,7 +383,7 @@ static inline struct at_dma *to_at_dma(struct dma_device *ddev)
 
 static struct device *chan2dev(struct dma_chan *chan)
 {
-	return &chan->dev->device;
+	return &chan->chan_dev->device;
 }
 
 #if defined(VERBOSE_DEBUG)
