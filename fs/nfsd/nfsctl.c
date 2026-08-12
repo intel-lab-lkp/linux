@@ -484,8 +484,7 @@ static ssize_t write_pool_threads(struct file *file, char *buf, size_t size)
 		 * file, sorry.  Report zero threads.
 		 */
 		mutex_unlock(&nfsd_mutex);
-		strcpy(buf, "0\n");
-		return strlen(buf);
+		return strscpy(buf, "0\n", SIMPLE_TRANSACTION_LIMIT);
 	}
 
 	nthreads = kzalloc_objs(int, npools);
@@ -524,13 +523,14 @@ static ssize_t write_pool_threads(struct file *file, char *buf, size_t size)
 
 	mesg = buf;
 	size = SIMPLE_TRANSACTION_LIMIT;
-	for (i = 0; i < npools && size > 0; i++) {
-		snprintf(mesg, size, "%d%c", nthreads[i], (i == npools-1 ? '\n' : ' '));
-		len = strlen(mesg);
+	for (i = 0; i < npools; i++) {
+		len = scnprintf(mesg, size, "%d ", nthreads[i]);
 		size -= len;
 		mesg += len;
 	}
 	rv = mesg - buf;
+	if (rv != SIMPLE_TRANSACTION_LIMIT - 1)
+		msg[-1] = '\n';
 out_free:
 	kfree(nthreads);
 	mutex_unlock(&nfsd_mutex);
