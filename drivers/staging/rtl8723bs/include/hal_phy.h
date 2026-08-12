@@ -63,9 +63,9 @@ enum SwChnlCmdID {
 
 struct SwChnlCmd {
 	enum SwChnlCmdID	CmdID;
-	u32 			Para1;
-	u32 			Para2;
-	u32 			msDelay;
+	u32			Para1;
+	u32			Para2;
+	u32			msDelay;
 };
 
 /*--------------------------Exported Function prototype---------------------*/
