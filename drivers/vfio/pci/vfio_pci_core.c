@@ -896,6 +896,17 @@ static int vfio_pci_count_devs(struct pci_dev *pdev, void *data)
 	return 0;
 }
 
+/*
+ * PCI walk callback to check for SR-IOV PFs with active VFs.  VFs are not
+ * enumerated when determining affected devices and may be owned by separate
+ * userspace processes from the PF.  It's therefore the user's responsibility
+ * to teardown VFs for any affected PF before performing a hot-reset.
+ */
+static int vfio_pci_dev_has_vfs(struct pci_dev *pdev, void *data)
+{
+	return pci_num_vf(pdev) ? -EBUSY : 0;
+}
+
 struct vfio_pci_fill_info {
 	struct vfio_device *vdev;
 	struct vfio_pci_dependent_device *devices;
@@ -2599,7 +2610,7 @@ static int vfio_pci_dev_set_hot_reset(struct vfio_device_set *dev_set,
 	list_for_each_entry(vdev, &dev_set->device_list, vdev.dev_set_list)
 		vfio_pci_set_power_state(vdev, PCI_D0);
 
-	ret = pci_reset_bus(pdev);
+	ret = pci_reset_bus_cond(pdev, vfio_pci_dev_has_vfs, NULL);
 
 	vdev = list_last_entry(&dev_set->device_list,
 			       struct vfio_pci_core_device, vdev.dev_set_list);
@@ -2662,7 +2673,7 @@ static void vfio_pci_dev_set_try_reset(struct vfio_device_set *dev_set)
 	if (vfio_pci_dev_set_pm_runtime_get(dev_set))
 		return;
 
-	if (!pci_reset_bus(pdev))
+	if (!pci_reset_bus_cond(pdev, vfio_pci_dev_has_vfs, NULL))
 		reset_done = true;
 
 	list_for_each_entry(cur, &dev_set->device_list, vdev.dev_set_list) {

@@ -772,6 +772,9 @@ struct vfio_pci_hot_reset_info {
  * Mixed usage of legacy groups and cdevs across the set of affected
  * devices is not supported.
  *
+ * Hot reset of SR-IOV PFs with active VFs is not supported, SR-IOV
+ * should first be disabled on any affected PF.
+ *
  * Return: 0 on success, -errno on failure.
  */
 struct vfio_pci_hot_reset {
