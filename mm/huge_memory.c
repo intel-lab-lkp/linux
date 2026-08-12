@@ -4097,8 +4097,6 @@ out_unlock:
  *             smallest order of the after-split folios (non-uniform split)
  * @split_at: in non-uniform split, the folio containing @split_at is split
  *            until its order becomes @new_order
- * @do_lru: if true, add after-split folios to @list if non NULL, otherwise to
- *          the LRU list
  * @list: after-split folios will be put on it if non NULL
  * @split_type: perform uniform split or not (non-uniform split)
  *
@@ -4110,8 +4108,8 @@ out_unlock:
  * is returned, @folio might be split but not to @new_order)
  */
 static int __folio_split_unmap_and_freeze_file(struct folio *folio, unsigned int new_order,
-					       struct page *split_at, bool do_lru,
-					       struct list_head *list, enum split_type split_type)
+					       struct page *split_at, struct list_head *list,
+					       enum split_type split_type)
 {
 	struct address_space *mapping = folio->mapping;
 	XA_STATE(xas, &mapping->i_pages, folio->index);
@@ -4206,9 +4204,7 @@ static int __folio_split_unmap_and_freeze_file(struct folio *folio, unsigned int
 	}
 
 	/* lock lru list/PageCompound, ref frozen by page_ref_freeze */
-	if (do_lru)
-		lruvec = folio_lruvec_lock(folio);
-
+	lruvec = folio_lruvec_lock(folio);
 	ret = __split_frozen_folio(folio, new_order, split_at, &xas,
 				   mapping, split_type);
 
@@ -4226,8 +4222,7 @@ static int __folio_split_unmap_and_freeze_file(struct folio *folio, unsigned int
 		folio_ref_unfreeze(new_folio,
 				   folio_cache_ref_count(new_folio) + 1);
 
-		if (do_lru)
-			lru_add_split_folio(folio, new_folio, lruvec, list);
+		lru_add_split_folio(folio, new_folio, lruvec, list);
 
 		/* Add the new folio to the page cache. */
 		if (new_folio->index < end) {
@@ -4253,9 +4248,7 @@ static int __folio_split_unmap_and_freeze_file(struct folio *folio, unsigned int
 	 * and its caller can see stale page cache entries.
 	 */
 	folio_ref_unfreeze(folio, folio_cache_ref_count(folio) + 1);
-
-	if (do_lru)
-		lruvec_unlock(lruvec);
+	lruvec_unlock(lruvec);
 fail:
 	/*
 	 * If we want to use try_to_migrate() on file in unmap_folio,
@@ -4339,7 +4332,7 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 						     false, list, split_type);
 	else
 		ret = __folio_split_unmap_and_freeze_file(folio, new_order, split_at,
-							  true, list, split_type);
+							  list, split_type);
 
 	/*
 	 * Unlock all after-split folios except the one containing
