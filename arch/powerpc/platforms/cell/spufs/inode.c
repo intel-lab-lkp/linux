@@ -713,6 +713,7 @@ static int spufs_get_tree(struct fs_context *fc)
 
 static void spufs_free_fc(struct fs_context *fc)
 {
+	kfree(fc->fs_private);
 	kfree(fc->s_fs_info);
 }
 
