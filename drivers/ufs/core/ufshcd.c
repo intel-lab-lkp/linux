@@ -5949,28 +5949,13 @@ static int ufshcd_poll(struct Scsi_Host *shost, unsigned int queue_num)
 
 static bool ufshcd_mcq_force_compl_one(struct request *rq, void *priv)
 {
-	struct scsi_cmnd *cmd = blk_mq_rq_to_pdu(rq);
 	struct scsi_device *sdev = rq->q->queuedata;
 	struct Scsi_Host *shost = sdev->host;
 	struct ufs_hba *hba = shost_priv(shost);
 	struct ufs_hw_queue *hwq = ufshcd_mcq_req_to_hwq(hba, rq);
 
-	if (blk_mq_is_reserved_rq(rq) || !hwq)
-		return true;
-
-	ufshcd_mcq_compl_all_cqes_lock(hba, hwq);
-
-	/*
-	 * For those cmds of which the cqes are not present in the cq, complete
-	 * them explicitly.
-	 */
-	scoped_guard(spinlock_irqsave, &hwq->cq_lock) {
-		if (!test_bit(SCMD_STATE_COMPLETE, &cmd->state)) {
-			set_host_byte(cmd, DID_REQUEUE);
-			ufshcd_release_scsi_cmd(hba, cmd);
-			scsi_done(cmd);
-		}
-	}
+	if (hwq)
+		ufshcd_mcq_compl_all_cqes_lock(hba, hwq);
 
 	return true;
 }
@@ -5997,7 +5982,7 @@ static bool ufshcd_mcq_compl_one(struct request *rq, void *priv)
  * @hba: per adapter instance
  * @force_compl: This flag is set to true when invoked
  * from ufshcd_host_reset_and_restore() in which case it requires special
- * handling because the host controller has been reset by ufshcd_hba_stop().
+ * handling because the host controller has been disabled by ufshcd_hba_stop().
  */
 static void ufshcd_mcq_compl_pending_transfer(struct ufs_hba *hba,
 					      bool force_compl)
