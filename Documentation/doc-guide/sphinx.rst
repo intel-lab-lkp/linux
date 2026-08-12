@@ -131,6 +131,24 @@ It supports two optional parameters:
 ``--no-virtualenv``
 	Use OS packaging for Sphinx instead of Python virtual environment.
 
+macOS uses a case-insensitive APFS volume by default, but the kernel tree
+contains file names that differ only in case. Before cloning the tree, use
+``diskutil apfs list`` to find the APFS container identifier, replace
+``diskX`` below with that identifier, and create an additional case-sensitive
+volume with::
+
+	diskutil apfs addVolume diskX APFSX Linux
+
+On macOS, the script uses Homebrew for system dependencies. Homebrew
+commands are printed without ``sudo``. The PDF toolchain is provided by the
+``mactex-no-gui`` cask, while the required DejaVu and Noto CJK fonts are
+installed from Homebrew font casks; use ``--no-pdf`` when only building HTML
+documentation. After installing MacTeX, restart the terminal or run
+``eval "$(/usr/libexec/path_helper)"`` so its command-line tools are visible.
+The default virtualenv mode is recommended on macOS because PyYAML is
+installed from ``Documentation/sphinx/requirements.txt`` rather than from a
+Homebrew formula.
+
 Installing Sphinx Minimal Version
 ---------------------------------
 
