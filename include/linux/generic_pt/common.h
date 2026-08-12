@@ -194,6 +194,8 @@ enum {
 	PT_FEAT_ARMV8_LVA,
 	/* Use the Stage 2 format instead of Stage 1 */
 	PT_FEAT_ARMV8_S2,
+	/* Use Dirty Bit Modifier, necessary for IOMMU dirty tracking */
+	PT_FEAT_ARMV8_DBM,
 	/* For S2 uses the Force Write Back coding of the S2MEMATTR */
 	PT_FEAT_ARMV8_S2FWB,
 };

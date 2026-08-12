@@ -97,6 +97,7 @@ enum {
 	/* 4K/16K FEAT_LPA2 (DS=1): OA[51:50] in bits[9:8], Figures D8-14/15 */
 	ARMV8PT_FMT_OA52_LPA2 = GENMASK_ULL(9, 8),
 
+	ARMV8PT_FMT_DBM = BIT_ULL(51),
 	ARMV8PT_FMT_CONTIG = BIT_ULL(52),
 	ARMV8PT_FMT_UXN = BIT_ULL(53),
 	ARMV8PT_FMT_PXN = BIT_ULL(54),
@@ -420,9 +421,9 @@ static inline bool armv8pt_install_table(struct pt_state *pts,
 static inline void armv8pt_attr_from_entry(const struct pt_state *pts,
 					   struct pt_write_attrs *attrs)
 {
-	u64 mask = ARMV8PT_FMT_AF | ARMV8PT_FMT_UXN | ARMV8PT_FMT_PXN |
-		   ARMV8PT_FMT_ATTRINDX | ARMV8PT_FMT_AP | ARMV8PT_FMT_nG |
-		   ARMV8PT_FMT_S2MEMATTR | ARMV8PT_FMT_S2AP;
+	u64 mask = ARMV8PT_FMT_AF | ARMV8PT_FMT_DBM | ARMV8PT_FMT_UXN |
+		   ARMV8PT_FMT_PXN | ARMV8PT_FMT_ATTRINDX | ARMV8PT_FMT_AP |
+		   ARMV8PT_FMT_nG | ARMV8PT_FMT_S2MEMATTR | ARMV8PT_FMT_S2AP;
 
 	/* Tables D8-52/53: with LPA2 bits [9:8] are OA[51:50], not SH */
 	if (!pts_feature(pts, PT_FEAT_ARMV8_LPA2))
@@ -441,6 +442,101 @@ static inline void armv8pt_clear_entries(struct pt_state *pts,
 		WRITE_ONCE(*tablep, 0);
 }
 #define pt_clear_entries armv8pt_clear_entries
+
+/*
+ * Call fn over all the items in an entry. If the entry is contiguous this
+ * iterates over the entire contiguous entry, including items preceding
+ * pts->va. always_inline avoids an indirect function call.
+ */
+static __always_inline bool armv8pt_reduce_contig(const struct pt_state *pts,
+						  bool (*fn)(u64 *tablep,
+							     u64 entry))
+{
+	u64 *tablep = pt_cur_table(pts, u64);
+
+	if (pts->entry & ARMV8PT_FMT_CONTIG) {
+		unsigned int num_contig_lg2 = armv8pt_contig_count_lg2(pts);
+		u64 *end;
+
+		tablep += log2_set_mod(pts->index, 0, num_contig_lg2);
+		end = tablep + log2_to_int(num_contig_lg2);
+		for (; tablep != end; tablep++)
+			if (fn(tablep, READ_ONCE(*tablep)))
+				return true;
+		return false;
+	}
+	return fn(tablep + pts->index, pts->entry);
+}
+
+static inline bool armv8pt_check_is_dirty_s1(u64 *tablep, u64 entry)
+{
+	return (entry & (ARMV8PT_FMT_DBM |
+			 FIELD_PREP(ARMV8PT_FMT_AP, ARMV8PT_AP_RDONLY))) ==
+	       ARMV8PT_FMT_DBM;
+}
+
+static bool armv8pt_clear_dirty_s1(u64 *tablep, u64 entry)
+{
+	WRITE_ONCE(*tablep,
+		   entry | FIELD_PREP(ARMV8PT_FMT_AP, ARMV8PT_AP_RDONLY));
+	return false;
+}
+
+static inline bool armv8pt_check_is_dirty_s2(u64 *tablep, u64 entry)
+{
+	const u64 DIRTY = ARMV8PT_FMT_DBM |
+			  FIELD_PREP(ARMV8PT_FMT_S2AP, ARMV8PT_S2AP_WRITE);
+
+	return (entry & DIRTY) == DIRTY;
+}
+
+static bool armv8pt_clear_dirty_s2(u64 *tablep, u64 entry)
+{
+	WRITE_ONCE(*tablep, entry & ~(u64)FIELD_PREP(ARMV8PT_FMT_S2AP,
+						     ARMV8PT_S2AP_WRITE));
+	return false;
+}
+
+static inline bool armv8pt_entry_is_write_dirty(const struct pt_state *pts)
+{
+	if (!pts_feature(pts, PT_FEAT_ARMV8_S2))
+		return armv8pt_reduce_contig(pts, armv8pt_check_is_dirty_s1);
+	else
+		return armv8pt_reduce_contig(pts, armv8pt_check_is_dirty_s2);
+}
+#define pt_entry_is_write_dirty armv8pt_entry_is_write_dirty
+
+static inline void armv8pt_entry_make_write_clean(struct pt_state *pts)
+{
+	if (!pts_feature(pts, PT_FEAT_ARMV8_S2))
+		armv8pt_reduce_contig(pts, armv8pt_clear_dirty_s1);
+	else
+		armv8pt_reduce_contig(pts, armv8pt_clear_dirty_s2);
+}
+#define pt_entry_make_write_clean armv8pt_entry_make_write_clean
+
+static inline bool armv8pt_entry_make_write_dirty(struct pt_state *pts)
+{
+	u64 *tablep = pt_cur_table(pts, u64) + pts->index;
+	u64 new = pts->entry;
+
+	if (!(pts->entry & ARMV8PT_FMT_DBM))
+		return false;
+
+	if (!pts_feature(pts, PT_FEAT_ARMV8_S2))
+		new &= ~FIELD_PREP(ARMV8PT_FMT_AP, ARMV8PT_AP_RDONLY);
+	else
+		new |= FIELD_PREP(ARMV8PT_FMT_S2AP, ARMV8PT_S2AP_WRITE);
+
+	return try_cmpxchg64(tablep, &pts->entry, new);
+}
+#define pt_entry_make_write_dirty armv8pt_entry_make_write_dirty
+
+static inline bool armv8pt_dirty_supported(struct pt_common *common)
+{
+	return pt_feature(common, PT_FEAT_ARMV8_DBM);
+}
+#define pt_dirty_supported armv8pt_dirty_supported
 
 static inline unsigned int armv8pt_max_sw_bit(struct pt_common *common)
 {
