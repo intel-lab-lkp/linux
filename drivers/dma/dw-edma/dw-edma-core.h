@@ -120,9 +120,14 @@ struct dw_edma_chan {
 	struct dw_edma_ll_snapshot	ll_irq;
 	/* ABORT is terminal and remains pending across LL state changes. */
 	bool				abort_pending;
+	/* One-shot eDMA restart credit, protected by event_lock. */
+	bool				ll_restart_armed;
 	/* Native HDMA lock storage. */
 	spinlock_t			event_lock_per_chan;
 	spinlock_t			*event_lock;	/* Selected event lock */
+
+	struct delayed_work		ll_recheck_work;
+	unsigned long			ll_recheck_at;
 
 	u32				ll_max;		/* Data entries */
 	struct dw_edma_region		ll_region;	/* Linked list */
@@ -171,6 +176,8 @@ struct dw_edma {
 	 * WQ_UNBOUND lets different channels run on different CPUs.
 	 */
 	struct workqueue_struct		*wq;
+
+	bool				teardown;	/* Gate asynchronous hardware access */
 
 	raw_spinlock_t			lock;		/* Protect v0 shared registers */
 	/* Per-direction lock storage for the eDMA interrupt registers. */
