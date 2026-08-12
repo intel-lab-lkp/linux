@@ -1660,6 +1660,13 @@ int drm_mode_atomic_ioctl(struct drm_device *dev,
 		return -EINVAL;
 	}
 
+	if ((arg->flags & DRM_MODE_ATOMIC_RESET) &&
+			(arg->flags & DRM_MODE_PAGE_FLIP_ASYNC)) {
+		drm_dbg_atomic(dev,
+			       "commit failed: reset cannot be combined with async flip\n");
+		return -EINVAL;
+	}
+
 	state = drm_atomic_commit_alloc(dev);
 	if (!state)
 		return -ENOMEM;
@@ -1674,6 +1681,12 @@ retry:
 	copied_props = 0;
 	fence_state = NULL;
 	num_fences = 0;
+
+	if (arg->flags & DRM_MODE_ATOMIC_RESET) {
+		ret = drm_atomic_commit_fill_with_defaults(state);
+		if (ret)
+			goto out;
+	}
 
 	for (i = 0; i < arg->count_objs; i++) {
 		uint32_t obj_id, count_props;
