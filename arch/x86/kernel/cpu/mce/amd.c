@@ -864,12 +864,15 @@ static void amd_deferred_error_interrupt(void)
 
 void mce_amd_handle_storm(unsigned int bank, bool on)
 {
-	threshold_restart_bank(bank, on);
+	threshold_restart_bank(bank, !on);
 }
 
 static void amd_reset_thr_limit(unsigned int bank)
 {
-	threshold_restart_bank(bank, true);
+	struct mca_storm_desc *storm = this_cpu_ptr(&storm_desc);
+	bool intr_en = !storm->banks[bank].in_storm_mode;
+
+	threshold_restart_bank(bank, intr_en);
 }
 
 /*
