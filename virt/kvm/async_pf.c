@@ -19,9 +19,18 @@
 
 static struct kmem_cache *async_pf_cache;
 
-int kvm_async_pf_init(void)
+int kvm_async_pf_init(const char *cache_name)
 {
-	async_pf_cache = KMEM_CACHE(kvm_async_pf, 0);
+	char *full_cache_name;
+
+	full_cache_name = kasprintf(GFP_KERNEL, "%s_async_pf", cache_name);
+	if (!full_cache_name)
+		return -ENOMEM;
+
+	async_pf_cache = kmem_cache_create(full_cache_name,
+					   sizeof(struct kvm_async_pf), 0,
+					   SLAB_ACCOUNT, NULL);
+	kfree(full_cache_name);
 
 	if (!async_pf_cache)
 		return -ENOMEM;
