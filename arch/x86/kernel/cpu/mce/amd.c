@@ -862,9 +862,9 @@ static void amd_deferred_error_interrupt(void)
 	machine_check_poll(MCP_TIMESTAMP, &this_cpu_ptr(&mce_amd_data)->dfr_intr_banks);
 }
 
-void mce_amd_handle_storm(unsigned int bank, bool on)
+void mce_amd_handle_storm(unsigned int bank, bool in_storm_mode)
 {
-	threshold_restart_bank(bank, !on);
+	threshold_restart_bank(bank, !in_storm_mode);
 }
 
 static void amd_reset_thr_limit(unsigned int bank)
