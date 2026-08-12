@@ -452,11 +452,36 @@ impl Device {
     }
 }
 
+/// A guard that keeps the device's I/O and memory resources enabled.
+///
+/// # Invariants
+///
+/// The device's enable count was incremented once for this guard; dropping the guard decrements
+/// it again.
+pub struct DeviceEnableGuard<'a> {
+    dev: &'a Device<device::Bound>,
+}
+
+impl Drop for DeviceEnableGuard<'_> {
+    fn drop(&mut self) {
+        // SAFETY: `self.dev.as_raw()` is a valid pointer to a `struct pci_dev`, and by the type
+        // invariant this guard holds one increment of the device's enable count.
+        unsafe { bindings::pci_disable_device(self.dev.as_raw()) };
+    }
+}
+
 impl<'a> Device<device::Core<'a>> {
-    /// Enable memory resources for this device.
-    pub fn enable_device_mem(&self) -> Result {
+    /// Enable I/O and memory resources for this device.
+    ///
+    /// The device stays enabled for the lifetime of the returned guard; dropping the guard
+    /// disables the device again. The guard borrows the device's bound scope, so it cannot
+    /// outlive the driver binding.
+    pub fn enable_device(&self) -> Result<DeviceEnableGuard<'_>> {
         // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
-        to_result(unsafe { bindings::pci_enable_device_mem(self.as_raw()) })
+        to_result(unsafe { bindings::pci_enable_device(self.as_raw()) })?;
+
+        // INVARIANT: `pci_enable_device()` succeeded, so the enable count was incremented once.
+        Ok(DeviceEnableGuard { dev: self })
     }
 
     /// Enable bus-mastering for this device.

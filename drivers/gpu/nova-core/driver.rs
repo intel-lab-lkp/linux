@@ -30,6 +30,8 @@ pub(crate) struct NovaCore<'bound> {
     bar: pci::Bar<'bound, BAR0_SIZE>,
     #[allow(clippy::type_complexity)]
     _reg: auxiliary::Registration<'bound, ForLt!(())>,
+    // Declared last so the device stays enabled until everything above is torn down.
+    _enable: pci::DeviceEnableGuard<'bound>,
 }
 
 pub(crate) struct NovaCoreDriver;
@@ -75,7 +77,7 @@ impl pci::Driver for NovaCoreDriver {
         pin_init::pin_init_scope(move || {
             dev_dbg!(pdev, "Probe Nova Core GPU driver.\n");
 
-            pdev.enable_device_mem()?;
+            let enable = pdev.enable_device()?;
             pdev.set_master();
 
             Ok(try_pin_init!(NovaCore {
@@ -95,6 +97,7 @@ impl pci::Driver for NovaCoreDriver {
                     crate::MODULE_NAME,
                     (),
                 )?,
+                _enable: enable,
             }))
         })
     }
