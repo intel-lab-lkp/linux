@@ -10,9 +10,19 @@ Description:
 			- hpage_pmd_size
 			- khugepaged
 			- shmem_enabled
+			- shrink_underused
 			- use_zero_page
 			- subdirectories of the form hugepages-<size>kB, where <size>
 			  is the page size of the hugepages supported by the kernel/CPU
 			  combination.
 
 		See Documentation/admin-guide/mm/transhuge.rst for details.
+
+What:		/sys/kernel/mm/transparent_hugepage/shrink_underused
+Date:		Sep 2024
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	Reading and writing this file controls whether khugepaged
+		splits underused transparent huge pages (THPs) under memory
+		pressure.  A THP is considered underused when its number of
+		zero-filled pages is above max_ptes_none.  Enabled by default;
+		writing 0 disables the splitting and 1 enables it.
