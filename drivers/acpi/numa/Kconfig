@@ -13,3 +13,16 @@ config ACPI_HMAT
 	 register memory initiators with their targets, and export
 	 performance attributes through the node's sysfs device if
 	 provided.
+
+config ACPI_HMAT_KUNIT_TEST
+	bool "KUnit tests for ACPI HMAT P2P matrices" if !KUNIT_ALL_TESTS
+	depends on ACPI_HMAT && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit coverage for parsing and querying the PCIe P2P
+	  Latency and Bandwidth Information Structure, including directional
+	  matrix indexing, traffic classes, normalization, and unreachable
+	  entries.
+
+	  For more information on KUnit and unit tests in general, refer to
+	  the KUnit documentation in Documentation/dev-tools/kunit/.

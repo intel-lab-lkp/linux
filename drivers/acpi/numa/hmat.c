@@ -10,6 +10,7 @@
 
 #define pr_fmt(fmt) "acpi/hmat: " fmt
 
+#include <kunit/visibility.h>
 #include <linux/acpi.h>
 #include <linux/bitops.h>
 #include <linux/device.h>
@@ -25,6 +26,8 @@
 #include <linux/sysfs.h>
 #include <linux/dax.h>
 #include <linux/memory-tiers.h>
+
+#include "hmat_test.h"
 
 static u8 hmat_revision;
 static int hmat_disable __initdata;
@@ -238,11 +241,12 @@ EXPORT_SYMBOL_GPL(acpi_get_genport_proximity_domain);
  * boot and is never modified afterwards, so runtime readers below walk it
  * without holding target_lock.
  */
-static struct memory_p2p_locality *find_p2p_locality(int initiator, int target)
+static struct memory_p2p_locality *
+find_p2p_locality(struct list_head *localities, int initiator, int target)
 {
 	struct memory_p2p_locality *loc;
 
-	list_for_each_entry(loc, &p2p_localities, node)
+	list_for_each_entry(loc, localities, node)
 		if (loc->initiator == initiator && loc->target == target)
 			return loc;
 	return NULL;
@@ -252,6 +256,23 @@ static bool p2p_coord_populated(const struct access_coordinate *coord)
 {
 	return coord->read_bandwidth || coord->write_bandwidth ||
 	       coord->read_latency || coord->write_latency;
+}
+
+VISIBLE_IF_KUNIT int
+hmat_get_p2p_coordinates(struct list_head *localities, int initiator_pxm,
+			 int target_pxm, enum hmat_p2p_class class,
+			 struct access_coordinate *coord)
+{
+	struct memory_p2p_locality *loc;
+
+	loc = find_p2p_locality(localities, initiator_pxm, target_pxm);
+	if (!loc)
+		return -ENOENT;
+	if (!(loc->valid & BIT(class)) || !p2p_coord_populated(&loc->coord[class]))
+		return -ENODATA;
+
+	*coord = loc->coord[class];
+	return 0;
 }
 
 /**
@@ -269,19 +290,10 @@ int acpi_get_p2p_coordinates(int initiator_pxm, int target_pxm,
 			     enum hmat_p2p_class class,
 			     struct access_coordinate *coord)
 {
-	struct memory_p2p_locality *loc;
-
-	loc = find_p2p_locality(initiator_pxm, target_pxm);
-	if (!loc)
-		return -ENOENT;
-	if (!(loc->valid & BIT(class)) || !p2p_coord_populated(&loc->coord[class]))
-		return -ENODATA;
-
-	*coord = loc->coord[class];
-	return 0;
+	return hmat_get_p2p_coordinates(&p2p_localities, initiator_pxm,
+					 target_pxm, class, coord);
 }
 EXPORT_SYMBOL_GPL(acpi_get_p2p_coordinates);
-
 static __init void alloc_memory_initiator(unsigned int cpu_pxm)
 {
 	struct memory_initiator *initiator;
@@ -394,7 +406,7 @@ static __init const char *hmat_data_type_suffix(u8 type)
 	}
 }
 
-static u32 hmat_normalize(u16 entry, u64 base, u8 type)
+static u32 hmat_normalize_revision(u16 entry, u64 base, u8 type, u8 revision)
 {
 	u32 value;
 
@@ -411,11 +423,11 @@ static u32 hmat_normalize(u16 entry, u64 base, u8 type)
 	 * picosenonds to nanoseconds if revision 2.
 	 */
 	value = entry * base;
-	if (hmat_revision == 1) {
+	if (revision == 1) {
 		if (value < 10)
 			return 0;
 		value = DIV_ROUND_UP(value, 10);
-	} else if (hmat_revision == 2) {
+	} else if (revision == 2) {
 		switch (type) {
 		case ACPI_HMAT_ACCESS_LATENCY:
 		case ACPI_HMAT_READ_LATENCY:
@@ -427,6 +439,11 @@ static u32 hmat_normalize(u16 entry, u64 base, u8 type)
 		}
 	}
 	return value;
+}
+
+static u32 hmat_normalize(u16 entry, u64 base, u8 type)
+{
+	return hmat_normalize_revision(entry, base, type, hmat_revision);
 }
 
 static void hmat_update_target_access(struct memory_target *target,
@@ -599,20 +616,20 @@ static void hmat_update_p2p_access(struct access_coordinate *coord,
 	}
 }
 
-static __init void hmat_update_p2p(int initiator, int target, u8 flags,
-				   u8 type, u32 value)
+static __init void hmat_update_p2p(struct list_head *localities, int initiator,
+				   int target, u8 flags, u8 type, u32 value)
 {
 	struct memory_p2p_locality *loc;
 	enum hmat_p2p_class class;
 
-	loc = find_p2p_locality(initiator, target);
+	loc = find_p2p_locality(localities, initiator, target);
 	if (!loc) {
 		loc = kzalloc_obj(*loc);
 		if (!loc)
 			return;
 		loc->initiator = initiator;
 		loc->target = target;
-		list_add_tail(&loc->node, &p2p_localities);
+		list_add_tail(&loc->node, localities);
 	}
 
 	for (class = 0; class < HMAT_P2P_MAX; class++) {
@@ -625,10 +642,10 @@ static __init void hmat_update_p2p(int initiator, int target, u8 flags,
 	}
 }
 
-static __init int hmat_parse_p2p_latency(union acpi_subtable_headers *header,
-					 const unsigned long end)
+VISIBLE_IF_KUNIT int __init
+hmat_parse_p2p(struct acpi_hmat_p2p_latency *p2p, u8 revision,
+	       struct list_head *localities)
 {
-	struct acpi_hmat_p2p_latency *p2p = (void *)header;
 	unsigned int init, targ, total_size, ipds, tpds;
 	u32 *inits, *targs, value;
 	u16 *entries;
@@ -661,18 +678,25 @@ static __init int hmat_parse_p2p_latency(union acpi_subtable_headers *header,
 	entries = (u16 *)(targs + tpds);
 	for (init = 0; init < ipds; init++) {
 		for (targ = 0; targ < tpds; targ++) {
-			value = hmat_normalize(entries[init * tpds + targ],
-					       p2p->entry_base_unit, type);
+			value = hmat_normalize_revision(entries[init * tpds + targ],
+						p2p->entry_base_unit, type,
+						revision);
 			pr_debug("  Initiator-Target[%u-%u]:%u%s\n",
 				 inits[init], targs[targ], value,
 				 hmat_data_type_suffix(type));
 
-			hmat_update_p2p(inits[init], targs[targ], flags,
-					type, value);
+			hmat_update_p2p(localities, inits[init], targs[targ],
+					flags, type, value);
 		}
 	}
 
 	return 0;
+}
+
+static __init int hmat_parse_p2p_latency(union acpi_subtable_headers *header,
+					 const unsigned long end)
+{
+	return hmat_parse_p2p((void *)header, hmat_revision, &p2p_localities);
 }
 
 static __init int hmat_parse_cache(union acpi_subtable_headers *header,
@@ -1198,11 +1222,21 @@ static struct notifier_block hmat_adist_nb __meminitdata = {
 	.priority = 100,
 };
 
+VISIBLE_IF_KUNIT void __init
+hmat_free_p2p_localities(struct list_head *localities)
+{
+	struct memory_p2p_locality *loc, *next;
+
+	list_for_each_entry_safe(loc, next, localities, node) {
+		list_del(&loc->node);
+		kfree(loc);
+	}
+}
+
 static __init void hmat_free_structures(void)
 {
 	struct memory_target *target, *tnext;
 	struct memory_locality *loc, *lnext;
-	struct memory_p2p_locality *ploc, *pnext;
 	struct memory_initiator *initiator, *inext;
 	struct target_cache *tcache, *cnext;
 
@@ -1235,10 +1269,7 @@ static __init void hmat_free_structures(void)
 		kfree(loc);
 	}
 
-	list_for_each_entry_safe(ploc, pnext, &p2p_localities, node) {
-		list_del(&ploc->node);
-		kfree(ploc);
-	}
+	hmat_free_p2p_localities(&p2p_localities);
 }
 
 static __init int hmat_init(void)
