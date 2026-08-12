@@ -126,9 +126,11 @@ struct dw_edma_chan {
 	spinlock_t			event_lock_per_chan;
 	spinlock_t			*event_lock;	/* Selected event lock */
 
+	/* Per-channel stall and recovery state. */
 	struct delayed_work		ll_recheck_work;
 	unsigned long			ll_recheck_at;
-	/* Per-channel recovery state. */
+	unsigned long			ll_stall_since;
+	bool				ll_stall_valid;
 	bool				ll_recovery_pending;
 	bool				ll_recovering;
 

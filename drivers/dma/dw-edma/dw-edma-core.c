@@ -257,6 +257,7 @@ static void dw_edma_core_reset_ll(struct dw_edma_chan *chan)
 
 	chan->ll_head = 0;
 	chan->ll_done = 0;
+	chan->ll_stall_valid = false;
 	chan->ll_recovery_pending = false;
 	/* Drop stale CB bits before reusing the circular LL ring. */
 	for (i = 0; i < chan->ll_max; i++)
@@ -300,6 +301,52 @@ static u32 dw_edma_core_get_free_num(struct dw_edma_chan *chan)
 static bool dw_edma_ll_pending(struct dw_edma_chan *chan)
 {
 	return chan->ll_head != chan->ll_done;
+}
+
+static bool dw_edma_engine_recovery_supported(struct dw_edma *dw)
+{
+	/*
+	 * DWC PCIe Controller Databook 6.10a-lca06, "Legacy DMA and HDMA
+	 * Software Compatibility":
+	 *
+	 * "HDMA does not implement engine enable, that is
+	 * DMA_[WRITE|READ]_ENGINE_EN_OFF.DMA_[WRITE|READ]_ENGINE field."
+	 */
+	if (dw->chip->mf == EDMA_MF_HDMA_COMPAT)
+		return false;
+
+	return dw->core->engine_reset && dw->core->engine_enable &&
+	       dw->core->ch_transfer_size;
+}
+
+/*
+ * Called with vc.lock held for a stopped channel with LL work pending. Queue
+ * direction recovery if repeated doorbells show no progress for one recheck
+ * interval.
+ */
+static void dw_edma_ll_stall_check(struct dw_edma_chan *chan)
+{
+	struct dw_edma_engine_recovery *rec;
+
+	if (unlikely(READ_ONCE(chan->dw->teardown)))
+		return;
+
+	if (!dw_edma_engine_recovery_supported(chan->dw))
+		return;
+
+	if (!chan->ll_stall_valid) {
+		chan->ll_stall_valid = true;
+		chan->ll_stall_since = jiffies;
+		return;
+	}
+
+	if (time_before(jiffies, chan->ll_stall_since +
+			msecs_to_jiffies(DW_EDMA_LL_RECHECK_DELAY_MS)))
+		return;
+
+	rec = &chan->dw->eng_recovery[chan->dir];
+	chan->ll_recovery_pending = true;
+	dw_edma_engine_recovery_queue(rec);
 }
 
 static u32 dw_edma_core_ch_transfer_size(struct dw_edma_chan *chan)
@@ -579,6 +626,7 @@ static bool dw_edma_ll_consume_progress(struct dw_edma_chan *chan, int idx)
 out:
 	if (advanced) {
 		dw_edma_ll_recheck_cancel(chan);
+		chan->ll_stall_valid = false;
 		chan->ll_recovery_pending = false;
 	}
 
@@ -767,8 +815,10 @@ static bool dw_edma_core_ch_maybe_doorbell(struct dw_edma_chan *chan)
 		}
 	}
 
+	dw_edma_ll_stall_check(chan);
 	dw_edma_core_ch_doorbell(chan);
-	if (!dw_edma_ll_has_hdma_stop_event(chan))
+	if (!dw_edma_ll_has_hdma_stop_event(chan) &&
+	    !chan->ll_recovery_pending)
 		dw_edma_ll_recheck_schedule(chan);
 
 	return false;
