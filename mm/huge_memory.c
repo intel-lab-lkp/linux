@@ -3940,6 +3940,25 @@ static unsigned int folio_cache_ref_count(const struct folio *folio)
 	return folio_nr_pages(folio);
 }
 
+/**
+ * __folio_split_unmap_and_freeze() - split an anon or swap cache folio
+ * @folio: folio to split, must be locked
+ * @new_order: the order of the after-split folios (uniform split), or the
+ *             smallest order of the after-split folios (non-uniform split)
+ * @split_at: in non-uniform split, the folio containing @split_at is split
+ *            until its order becomes @new_order
+ * @do_lru: if true, add after-split folios to @list if non NULL, otherwise to
+ *          the LRU list
+ * @anon_unmap: if true, unmap @folio before the split and remap it after
+ * @list: after-split folios will be put on it if non NULL
+ * @split_type: perform uniform split or not (non-uniform split)
+ *
+ * Helper for splitting an anon or swap cache folio. It unmaps @folio (unless
+ * @anon_unmap is false), freezes its refcount, and performs the split, updates
+ * the swap cache entries. Split folios are unfrozen and remapped.
+ *
+ * Return: 0 on success, otherwise an error number is returned.
+ */
 static int __folio_split_unmap_and_freeze(struct folio *folio, unsigned int new_order,
 					  struct page *split_at, bool do_lru, bool anon_unmap,
 					  struct list_head *list, enum split_type split_type)
@@ -4071,6 +4090,25 @@ out_unlock:
 	return ret;
 }
 
+/**
+ * __folio_split_unmap_and_freeze_file() - split a file-backed folio
+ * @folio: folio to split, must be locked and file-backed
+ * @new_order: the order of the after-split folios (uniform split), or the
+ *             smallest order of the after-split folios (non-uniform split)
+ * @split_at: in non-uniform split, the folio containing @split_at is split
+ *            until its order becomes @new_order
+ * @do_lru: if true, add after-split folios to @list if non NULL, otherwise to
+ *          the LRU list
+ * @list: after-split folios will be put on it if non NULL
+ * @split_type: perform uniform split or not (non-uniform split)
+ *
+ * Helper for splitting a file-backed folio. It unmaps @folio, freezes its
+ * refcount, and perform the split, updates the page cache entries. Split
+ * folios are unfrozen but not remapped, they are faulted back in on demand.
+ *
+ * Return: 0 on success, otherwise an error number is returned. (if -ENOMEM
+ * is returned, @folio might be split but not to @new_order)
+ */
 static int __folio_split_unmap_and_freeze_file(struct folio *folio, unsigned int new_order,
 					       struct page *split_at, bool do_lru,
 					       struct list_head *list, enum split_type split_type)
