@@ -351,6 +351,8 @@ void vsock_insert_connected(struct vsock_sock *vsk)
 	struct list_head *list = vsock_connected_sockets(
 		&vsk->remote_addr, &vsk->local_addr);
 
+	vsk->ever_connected = true;
+
 	spin_lock_bh(&vsock_table_lock);
 	__vsock_insert_connected(list, vsk);
 	spin_unlock_bh(&vsock_table_lock);
@@ -1814,14 +1816,14 @@ static int vsock_connect(struct socket *sock, struct sockaddr_unsized *addr,
 		 * Note that allowing to "reset" an already established socket
 		 * here is racy and insecure.
 		 */
-		if (sk->sk_state == TCP_ESTABLISHED)
+		if (vsk->ever_connected)
 			break;
 
 		/* If connection was _not_ established and a signal/timeout came
 		 * to be, we want the socket's state reset. User space may want
 		 * to retry.
 		 *
-		 * sk_state != TCP_ESTABLISHED implies that socket is not on
+		 * !ever_connected implies that socket is not on
 		 * vsock_connected_table. We keep the binding and the transport
 		 * assigned.
 		 */
@@ -1849,8 +1851,10 @@ static int vsock_connect(struct socket *sock, struct sockaddr_unsized *addr,
 
 	if (sk->sk_err) {
 		err = -sk->sk_err;
-		sk->sk_state = TCP_CLOSE;
-		sock->state = SS_UNCONNECTED;
+		if (!vsk->ever_connected) {
+			sk->sk_state = TCP_CLOSE;
+			sock->state = SS_UNCONNECTED;
+		}
 	} else {
 		err = 0;
 	}

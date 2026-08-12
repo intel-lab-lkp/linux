@@ -63,6 +63,8 @@ struct vsock_sock {
 	struct delayed_work pending_work;
 	struct delayed_work close_work;
 	bool close_work_scheduled;
+	/* Set once the connection completed; never cleared. */
+	bool ever_connected;
 	u32 peer_shutdown;
 	bool sent_request;
 	bool ignore_connecting_rst;
