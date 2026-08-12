@@ -142,17 +142,19 @@ static struct pci_bus *pci_do_find_bus(struct pci_bus *bus, unsigned char busnr)
  */
 struct pci_bus *pci_find_bus(int domain, int busnr)
 {
-	struct pci_bus *bus = NULL;
-	struct pci_bus *tmp_bus;
+	struct pci_bus *bus;
+	struct pci_bus *tmp_bus = NULL;
 
-	while ((bus = pci_find_next_bus(bus)) != NULL)  {
-		if (pci_domain_nr(bus) != domain)
-			continue;
-		tmp_bus = pci_do_find_bus(bus, busnr);
-		if (tmp_bus)
-			return tmp_bus;
+	down_read(&pci_bus_sem);
+	list_for_each_entry(bus, &pci_root_buses, node) {
+		if (pci_domain_nr(bus) == domain) {
+			tmp_bus = pci_do_find_bus(bus, busnr);
+			if (tmp_bus)
+				break;
+		}
 	}
-	return NULL;
+	up_read(&pci_bus_sem);
+	return tmp_bus;
 }
 EXPORT_SYMBOL(pci_find_bus);
 
