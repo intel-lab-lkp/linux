@@ -20,9 +20,7 @@
 
 #include "platform.h"
 
-static struct device ps3_system_bus = {
-	.init_name = "ps3_system",
-};
+static struct device *ps3_system_bus;
 
 /* FIXME: need device usage counters! */
 static struct {
@@ -486,8 +484,8 @@ static int __init ps3_system_bus_init(void)
 
 	mutex_init(&usage_hack.mutex);
 
-	result = device_register(&ps3_system_bus);
-	BUG_ON(result);
+	ps3_system_bus = root_device_register("ps3_system");
+	BUG_ON(IS_ERR(ps3_system_bus));
 
 	result = bus_register(&ps3_system_bus_type);
 	BUG_ON(result);
@@ -744,7 +742,7 @@ int ps3_system_bus_device_register(struct ps3_system_bus_device *dev)
 	static unsigned int dev_lpm_count;
 
 	if (!dev->core.parent)
-		dev->core.parent = &ps3_system_bus;
+		dev->core.parent = ps3_system_bus;
 	dev->core.bus = &ps3_system_bus_type;
 	dev->core.release = ps3_system_bus_release_device;
 
