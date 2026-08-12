@@ -377,8 +377,17 @@ static void ioapic_write_indirect(struct kvm_ioapic *ioapic, u32 val)
 		 * as edge-triggered. This behavior is used to simulate an
 		 * explicit EOI on IOAPICs that don't have the EOI register.
 		 */
-		if (e->fields.trig_mode == IOAPIC_EDGE_TRIG)
+		if (e->fields.trig_mode == IOAPIC_EDGE_TRIG) {
 			e->fields.remote_irr = 0;
+		} else {
+			/*
+			 * irr_delivered tracks edge-triggered interrupts that
+			 * have already been delivered.  Clear stale edge-triggered
+			 * delivery state when the entry is configured for
+			 * level-triggered interrupts.
+			 */
+			ioapic->irr_delivered &= ~(1 << index);
+		}
 
 		mask_after = e->fields.mask;
 		if (mask_before != mask_after)
