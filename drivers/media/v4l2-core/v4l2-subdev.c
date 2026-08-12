@@ -97,7 +97,18 @@ static int subdev_open(struct file *file)
 	struct video_device *vdev = video_devdata(file);
 	struct v4l2_subdev *sd = vdev_to_v4l2_subdev(vdev);
 	struct v4l2_subdev_fh *subdev_fh;
+	struct v4l2_device *v4l2_dev;
 	int ret;
+
+	/*
+	 * v4l2_device_unregister_subdev() clears sd->v4l2_dev and unregisters
+	 * the entity before it unregisters the device node, so an open() that
+	 * races with the sub-device going away lands here with those pointers
+	 * already gone.
+	 */
+	v4l2_dev = READ_ONCE(sd->v4l2_dev);
+	if (!v4l2_dev)
+		return -ENODEV;
 
 	subdev_fh = kzalloc_obj(*subdev_fh);
 	if (subdev_fh == NULL)
@@ -112,15 +123,23 @@ static int subdev_open(struct file *file)
 	v4l2_fh_init(&subdev_fh->vfh, vdev);
 	v4l2_fh_add(&subdev_fh->vfh, file);
 
-	if (sd->v4l2_dev->mdev && sd->entity.graph_obj.mdev->dev) {
-		struct module *owner;
+	if (v4l2_dev->mdev) {
+		struct media_device *mdev = READ_ONCE(sd->entity.graph_obj.mdev);
 
-		owner = sd->entity.graph_obj.mdev->dev->driver->owner;
-		if (!try_module_get(owner)) {
-			ret = -EBUSY;
+		if (!mdev) {
+			ret = -ENODEV;
 			goto err;
 		}
-		subdev_fh->owner = owner;
+
+		if (mdev->dev) {
+			struct module *owner = mdev->dev->driver->owner;
+
+			if (!try_module_get(owner)) {
+				ret = -EBUSY;
+				goto err;
+			}
+			subdev_fh->owner = owner;
+		}
 	}
 
 	if (sd->internal_ops && sd->internal_ops->open) {
