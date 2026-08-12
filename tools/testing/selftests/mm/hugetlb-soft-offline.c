@@ -99,6 +99,23 @@ static int set_enable_soft_offline(int value)
 	return 0;
 }
 
+static int get_enable_soft_offline(void)
+{
+	FILE *fp = fopen("/proc/sys/vm/enable_soft_offline", "r");
+	int value = -1;
+
+	if (!fp) {
+		ksft_perror(EPREFIX "failed to read enable_soft_offline");
+		return -1;
+	}
+	if (fscanf(fp, "%d", &value) != 1) {
+		ksft_perror(EPREFIX "failed to parse enable_soft_offline");
+		value = -1;
+	}
+	fclose(fp);
+	return value;
+}
+
 static int create_hugetlbfs_file(struct statfs *file_stat)
 {
 	int fd;
@@ -185,6 +202,8 @@ static void test_soft_offline_common(int enable_soft_offline)
 
 int main(int argc, char **argv)
 {
+	int orig;
+
 	ksft_print_header();
 
 	if (!hugetlb_setup_default(8))
@@ -192,8 +211,13 @@ int main(int argc, char **argv)
 
 	ksft_set_plan(2);
 
+	orig = get_enable_soft_offline();
+
 	test_soft_offline_common(1);
 	test_soft_offline_common(0);
+
+	if (orig >= 0)
+		set_enable_soft_offline(orig);
 
 	ksft_finished();
 }
