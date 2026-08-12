@@ -18,7 +18,7 @@ use crate::{
     bindings,
     error::{code::EINVAL, to_result, Result},
     mm::MmWithUser,
-    page::Page,
+    page::{Page, PAGE_SIZE},
     types::Opaque,
 };
 
@@ -90,6 +90,36 @@ impl VmaRef {
         // SAFETY: By the type invariants, the caller holds at least the mmap read lock, so this
         // access is not a data race.
         unsafe { (*self.as_ptr()).__bindgen_anon_1.__bindgen_anon_1.vm_end }
+    }
+
+    /// Return the virtual address range `[vm_start, vm_end)` of this
+    /// VMA as a [`Range<usize>`], giving callers access to all the
+    /// standard range methods (`len()`, `contains()`, iteration, etc.).
+    #[inline]
+    pub fn range(&self) -> core::ops::Range<usize> {
+        self.start()..self.end()
+    }
+
+    /// True if `[addr, addr + size)` lies in `[vm_start, vm_end)`;
+    /// returns false on overflow.
+    #[inline]
+    pub fn contains_range(&self, addr: usize, size: usize) -> bool {
+        let Some(end) = addr.checked_add(size) else {
+            return false;
+        };
+        self.start() <= addr && end <= self.end()
+    }
+
+    /// True if `addr` is `PAGE_SIZE`-aligned.
+    #[inline]
+    pub fn is_page_aligned(addr: usize) -> bool {
+        addr % PAGE_SIZE == 0
+    }
+
+    /// True if `addr` and `size` are both page-aligned.
+    #[inline]
+    pub fn is_page_aligned_range(addr: usize, size: usize) -> bool {
+        Self::is_page_aligned(addr) && Self::is_page_aligned(size)
     }
 
     /// Zap pages in the given page range.
