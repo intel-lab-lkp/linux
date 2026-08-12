@@ -226,6 +226,8 @@ enum key_fields {
 	NPC_TYPE_ICMP,
 	NPC_CODE_ICMP,
 	NPC_TCP_FLAGS,
+	NPC_GTPU_TEID,
+	NPC_GTPC_TEID,
 	NPC_HEADER_FIELDS_MAX,
 	NPC_CHAN = NPC_HEADER_FIELDS_MAX, /* Valid when Rx */
 	NPC_PF_FUNC, /* Valid when Tx */
