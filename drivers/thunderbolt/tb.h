@@ -27,6 +27,9 @@
 /* Need to keep power on while USB4 port is in redrive mode */
 #define QUIRK_KEEP_POWER_IN_DP_REDRIVE			BIT(2)
 
+/* How long a hop is given to drain when a path is deactivated */
+#define TB_PENDING_TIMEOUT				500 /* ms */
+
 /**
  * struct tb_nvm - Structure holding NVM information
  * @dev: Owner of the NVM
@@ -273,6 +276,8 @@ struct tb_bandwidth_group {
  * @max_bw: Maximum possible bandwidth through this adapter if set to
  *	    non-zero.
  * @redrive: For DP IN, if true the adapter is in redrive mode.
+ * @pp_timeout_msec: How long a hop of this adapter is given to drain when a
+ *		     path is deactivated. %0 means a single read.
  *
  * In USB4 terminology this structure represents an adapter (protocol or
  * lane adapter).
@@ -302,6 +307,7 @@ struct tb_port {
 	struct list_head group_list;
 	unsigned int max_bw;
 	bool redrive;
+	unsigned int pp_timeout_msec;
 };
 
 /**

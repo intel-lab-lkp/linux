@@ -703,6 +703,7 @@ static int tb_init_port(struct tb_port *port)
 	int cap;
 
 	INIT_LIST_HEAD(&port->list);
+	port->pp_timeout_msec = TB_PENDING_TIMEOUT;
 
 	/* Control adapter does not have configuration space */
 	if (!port->port)
