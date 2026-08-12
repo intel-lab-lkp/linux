@@ -161,6 +161,23 @@ static atomic_t addr_str_seq = ATOMIC_INIT(0);
 
 struct page *ceph_zero_page;		/* used in certain error cases */
 
+static void ceph_addr_clear_scope(const struct ceph_entity_addr *addr)
+{
+	if (addr->in_addr.ss_family == AF_INET6) {
+		struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)&addr->in_addr;
+		in6->sin6_scope_id = 0;
+	}
+}
+
+bool ceph_addr_equal_no_scope(const struct ceph_entity_addr *lhs,
+			      const struct ceph_entity_addr *rhs)
+{
+	struct ceph_entity_addr lhs_copy = *lhs, rhs_copy = *rhs;
+	ceph_addr_clear_scope(&lhs_copy);
+	ceph_addr_clear_scope(&rhs_copy);
+	return memcmp(&lhs_copy, &rhs_copy, sizeof(lhs_copy)) == 0;
+}
+
 const char *ceph_pr_addr(const struct ceph_entity_addr *addr)
 {
 	int i;
@@ -1222,19 +1239,46 @@ void ceph_addr_set_port(struct ceph_entity_addr *addr, int p)
 static int ceph_pton(const char *str, size_t len, struct ceph_entity_addr *addr,
 		char delim, const char **ipend)
 {
-	memset(&addr->in_addr, 0, sizeof(addr->in_addr));
+	const char *delim_p;
+	char *copy;
+	struct sockaddr_storage stor = { 0 };
+	int ret;
 
-	if (in4_pton(str, len, (u8 *)&((struct sockaddr_in *)&addr->in_addr)->sin_addr.s_addr, delim, ipend)) {
-		put_unaligned(AF_INET, &addr->in_addr.ss_family);
-		return 0;
+	delim_p = memchr(str, delim, len);
+	if (delim_p)
+		/* delimiter was found - stop parsing there */
+		len = delim_p - str;
+
+	delim_p = memchr(str, ':', len);
+	if (delim_p != NULL && memchr(delim_p + 1, ':', str + len - delim_p - 1) == NULL)
+		/* a single colon was found - stop parsing there
+		 * because the caller wants to parse the port
+		 * number
+		 */
+		len = delim_p - str;
+
+	/* the input string might not be null terminated, so copy it
+	 * to a null-terminated string
+	 */
+	copy = kstrndup(str, len, GFP_KERNEL);
+	if (!copy)
+		return -ENOMEM;
+
+	ret = inet_pton_with_scope(current->nsproxy->net_ns, AF_UNSPEC, copy, NULL, &stor);
+	kfree(copy);
+
+	if (!ret) {
+		/* ceph_entity_addr might be misaligned, so we have to
+		 * parse to a stack variable first
+		 */
+		memcpy(&addr->in_addr, &stor, sizeof(stor));
+
+		/* return the end of the parsed portion to the caller on success */
+		if (ipend)
+			*ipend = str + len;
 	}
 
-	if (in6_pton(str, len, (u8 *)&((struct sockaddr_in6 *)&addr->in_addr)->sin6_addr.s6_addr, delim, ipend)) {
-		put_unaligned(AF_INET6, &addr->in_addr.ss_family);
-		return 0;
-	}
-
-	return -EINVAL;
+	return ret;
 }
 
 /*
@@ -1303,7 +1347,7 @@ static int ceph_parse_server_name(const char *name, size_t namelen,
 	int ret;
 
 	ret = ceph_pton(name, namelen, addr, delim, ipend);
-	if (ret)
+	if (ret == -EINVAL)
 		ret = ceph_dns_resolve_name(name, namelen, addr, delim, ipend);
 
 	return ret;

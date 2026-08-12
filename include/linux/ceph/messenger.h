@@ -570,6 +570,12 @@ bool ceph_con_v2_opened(struct ceph_connection *con);
 void ceph_con_v2_reset_session(struct ceph_connection *con);
 void ceph_con_v2_reset_protocol(struct ceph_connection *con);
 
+/**
+ * Check whether the two addresses are equal, but ignore different
+ * IPv6 scope identifiers.
+ */
+bool ceph_addr_equal_no_scope(const struct ceph_entity_addr *lhs,
+			      const struct ceph_entity_addr *rhs);
 
 extern const char *ceph_pr_addr(const struct ceph_entity_addr *addr);
 

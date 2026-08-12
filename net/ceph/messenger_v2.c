@@ -2618,7 +2618,7 @@ static int process_server_ident(struct ceph_connection *con,
 	     global_id, global_seq, features, required_features, flags, cookie);
 
 	/* is this who we intended to talk to? */
-	if (memcmp(&addr, &con->peer_addr, sizeof(con->peer_addr))) {
+	if (!ceph_addr_equal_no_scope(&addr, &con->peer_addr)) {
 		pr_err("bad peer addr/nonce, want %s/%u, got %s/%u\n",
 		       ceph_pr_addr(&con->peer_addr),
 		       le32_to_cpu(con->peer_addr.nonce),

@@ -755,8 +755,7 @@ static int process_banner(struct ceph_connection *con)
 	 * end may not yet know their ip address, so if it's 0.0.0.0, give
 	 * them the benefit of the doubt.
 	 */
-	if (memcmp(&con->peer_addr, &con->v1.actual_peer_addr,
-		   sizeof(con->peer_addr)) != 0 &&
+	if (!ceph_addr_equal_no_scope(&con->peer_addr, &con->v1.actual_peer_addr) &&
 	    !(ceph_addr_is_blank(&con->v1.actual_peer_addr) &&
 	      con->v1.actual_peer_addr.nonce == con->peer_addr.nonce)) {
 		pr_warn("wrong peer, want %s/%u, got %s/%u\n",
