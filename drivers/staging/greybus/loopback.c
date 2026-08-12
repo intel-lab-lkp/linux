@@ -14,15 +14,10 @@
 #include <linux/slab.h>
 #include <linux/kthread.h>
 #include <linux/delay.h>
-#include <linux/random.h>
-#include <linux/sizes.h>
-#include <linux/cdev.h>
-#include <linux/fs.h>
 #include <linux/kfifo.h>
 #include <linux/debugfs.h>
 #include <linux/list_sort.h>
 #include <linux/spinlock.h>
-#include <linux/workqueue.h>
 #include <linux/atomic.h>
 #include <linux/pm_runtime.h>
 #include <linux/greybus.h>
