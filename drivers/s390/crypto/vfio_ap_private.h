@@ -117,6 +117,7 @@ struct ap_matrix_mdev {
 	struct ap_matrix matrix;
 	struct ap_matrix shadow_apcb;
 	struct kvm *kvm;
+	struct file *kvm_file;
 	crypto_hook pqap_hook;
 	struct mdev_device *mdev;
 	struct ap_queue_table qtable;

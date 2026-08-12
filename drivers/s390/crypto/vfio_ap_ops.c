@@ -8,6 +8,7 @@
  *	      Halil Pasic <pasic@linux.ibm.com>
  *	      Pierre Morel <pmorel@linux.ibm.com>
  */
+#include "linux/cleanup.h"
 #include <linux/string.h>
 #include <linux/vfio.h>
 #include <linux/device.h>
@@ -1822,12 +1823,25 @@ static const struct attribute_group *vfio_ap_mdev_attr_groups[] = {
  * @matrix_mdev: a mediated matrix device
  * @kvm: reference to KVM instance
  *
- * Return: 0 if no other mediated matrix device has a reference to @kvm;
- * otherwise, returns an -EPERM.
+ * Returns: 0 if the reference to kvm is successfully retrieved from @kvm_file
+ * and set into @matrix_mdev; otherwise, returns:
+ *	-ENOENT if a reference to kvm could not be retrieved from @kvm_file
+ *	-EPERM if another mediated matrix device already has a reference to the same kvm instance
  */
 static int vfio_ap_mdev_set_kvm(struct ap_matrix_mdev *matrix_mdev,
-				struct kvm *kvm)
+				struct file **kvm_file)
 {
+	struct file *kvm_file_ref __free(fput) = NULL;
+	struct kvm *kvm;
+
+	kvm_file_ref = get_file_active(kvm_file);
+	if (!kvm_file_ref)
+		return -ENOENT;
+
+	kvm = kvm_file_ref->private_data;
+	if (!kvm)
+		return -ENOENT;
+
 	if (kvm->arch.crypto.crycbd) {
 		get_update_locks_for_kvm(kvm);
 		if (kvm->arch.crypto.pqap_hook) {
@@ -1836,10 +1850,11 @@ static int vfio_ap_mdev_set_kvm(struct ap_matrix_mdev *matrix_mdev,
 		}
 		kvm->arch.crypto.pqap_hook = &matrix_mdev->pqap_hook;
 
-		kvm_get_kvm(kvm);
 		matrix_mdev->kvm = kvm;
 		vfio_ap_mdev_update_guest_apcb(matrix_mdev);
 		release_update_locks_for_kvm(kvm);
+
+		matrix_mdev->kvm_file = no_free_ptr(kvm_file_ref);
 	}
 
 	return 0;
@@ -1878,9 +1893,10 @@ static void vfio_ap_mdev_dma_unmap(struct vfio_device *vdev, u64 iova,
  */
 static void vfio_ap_mdev_unset_kvm(struct ap_matrix_mdev *matrix_mdev)
 {
+	struct file *kvm_file = matrix_mdev->kvm_file;
 	struct kvm *kvm = matrix_mdev->kvm;
 
-	if (kvm && kvm->arch.crypto.crycbd) {
+	if (kvm_file && kvm && kvm->arch.crypto.crycbd) {
 		get_update_locks_for_kvm(kvm);
 		kvm->arch.crypto.pqap_hook = NULL;
 
@@ -1889,7 +1905,7 @@ static void vfio_ap_mdev_unset_kvm(struct ap_matrix_mdev *matrix_mdev)
 		matrix_mdev->kvm = NULL;
 
 		release_update_locks_for_kvm(kvm);
-		kvm_put_kvm(kvm);
+		fput(kvm_file);
 	}
 }
 
@@ -2053,7 +2069,7 @@ static int vfio_ap_mdev_open_device(struct vfio_device *vdev)
 	if (!vdev->kvm)
 		return -EINVAL;
 
-	return vfio_ap_mdev_set_kvm(matrix_mdev, vdev->kvm);
+	return vfio_ap_mdev_set_kvm(matrix_mdev, &vdev->kvm);
 }
 
 static void vfio_ap_mdev_close_device(struct vfio_device *vdev)
