@@ -6551,7 +6551,7 @@ static int panel_simple_dsi_probe(struct mipi_dsi_device *dsi)
 	dsi->format = desc->format;
 	dsi->lanes = desc->lanes;
 
-	err = mipi_dsi_attach(dsi);
+	err = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (err) {
 		struct panel_simple *panel = mipi_dsi_get_drvdata(dsi);
 
@@ -6563,12 +6563,6 @@ static int panel_simple_dsi_probe(struct mipi_dsi_device *dsi)
 
 static void panel_simple_dsi_remove(struct mipi_dsi_device *dsi)
 {
-	int err;
-
-	err = mipi_dsi_detach(dsi);
-	if (err < 0)
-		dev_err(&dsi->dev, "failed to detach from DSI host: %d\n", err);
-
 	panel_simple_remove(&dsi->dev);
 }
 

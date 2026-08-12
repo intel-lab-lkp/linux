@@ -3251,7 +3251,7 @@ static int jadard_dsi_probe(struct mipi_dsi_device *dsi)
 	jadard->dsi = dsi;
 	jadard->desc = desc;
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(&dsi->dev, dsi);
 	if (ret < 0)
 		drm_panel_remove(&jadard->panel);
 
@@ -3261,8 +3261,6 @@ static int jadard_dsi_probe(struct mipi_dsi_device *dsi)
 static void jadard_dsi_remove(struct mipi_dsi_device *dsi)
 {
 	struct jadard *jadard = mipi_dsi_get_drvdata(dsi);
-
-	mipi_dsi_detach(dsi);
 	drm_panel_remove(&jadard->panel);
 }
 
