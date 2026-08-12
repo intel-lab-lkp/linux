@@ -105,6 +105,20 @@ enum vop2_afbc_format {
 #define VOP2_MAX_DCLK_RATE		600000000UL
 
 /*
+ * All video ports fetch their scanout data over a single AXI clock.  The
+ * hardware buffers that data in an internal FIFO which is drained at the
+ * pixel rate, so a mode whose pixel rate outruns the fill rate underruns the
+ * FIFO, which the hardware reports as POST_BUF_EMPTY and which shows up as a
+ * corrupted image.  Raise the AXI clock for modes that need it.
+ *
+ * The requirement follows the pixel rate rather than the interface clock: a
+ * YCbCr 4:2:0 link halves dclk but not the rate at which the video port
+ * consumes pixels.
+ */
+#define VOP2_ACLK_RATE_HIGH		750000000UL
+#define VOP2_HIGH_BW_PIXCLK_KHZ		1000000
+
+/*
  * bus-format types.
  */
 struct drm_bus_format_enum_list {
@@ -1008,6 +1022,32 @@ static bool vop2_gamma_lut_in_use(struct vop2 *vop2, struct vop2_video_port *vp)
 	return gamma_en_vp_id != nr_vps && gamma_en_vp_id != vp->id;
 }
 
+/*
+ * Pick the AXI clock rate that satisfies every video port that is scanning
+ * out.  Taking the maximum over the active ports rather than counting them
+ * means a port being disabled can never drop the rate below what a port that
+ * is still scanning needs.
+ */
+static void vop2_update_aclk_rate(struct vop2 *vop2)
+{
+	unsigned long rate = vop2->aclk_rate_normal;
+	struct drm_crtc *crtc;
+
+	if (vop2->version != VOP_VERSION_RK3588)
+		return;
+
+	drm_for_each_crtc(crtc, vop2->drm) {
+		if (!crtc->state->active)
+			continue;
+
+		if (crtc->state->adjusted_mode.crtc_clock > VOP2_HIGH_BW_PIXCLK_KHZ &&
+		    rate < VOP2_ACLK_RATE_HIGH)
+			rate = VOP2_ACLK_RATE_HIGH;
+	}
+
+	clk_set_rate(vop2->aclk, rate);
+}
+
 static void vop2_crtc_atomic_disable(struct drm_crtc *crtc,
 				     struct drm_atomic_commit *state)
 {
@@ -1052,6 +1092,8 @@ static void vop2_crtc_atomic_disable(struct drm_crtc *crtc,
 
 	if (!vop2->enable_count)
 		vop2_disable(vop2);
+
+	vop2_update_aclk_rate(vop2);
 
 	vop2_unlock(vop2);
 
@@ -1779,6 +1821,8 @@ static void vop2_crtc_atomic_enable(struct drm_crtc *crtc,
 		drm_mode_vrefresh(mode), vcstate->output_type, vp->id);
 
 	vop2_lock(vop2);
+
+	vop2_update_aclk_rate(vop2);
 
 	ret = clk_prepare_enable(vp->dclk);
 	if (ret < 0) {
@@ -2874,6 +2918,8 @@ static int vop2_bind(struct device *dev, struct device *master, void *data)
 	if (IS_ERR(vop2->aclk))
 		return dev_err_probe(drm->dev, PTR_ERR(vop2->aclk),
 				     "failed to get aclk source\n");
+
+	vop2->aclk_rate_normal = clk_get_rate(vop2->aclk);
 
 	vop2->pclk = devm_clk_get_optional(vop2->dev, "pclk_vop");
 	if (IS_ERR(vop2->pclk))
