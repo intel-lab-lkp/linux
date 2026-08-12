@@ -1152,12 +1152,38 @@ static inline int acpi_mrrm_max_mem_region(void)
 
 #endif	/* !CONFIG_ACPI */
 
+/*
+ * PCIe peer-to-peer traffic classes described by an HMAT PCIe P2P Latency
+ * and Bandwidth Information Structure (ACPI_HMAT_TYPE_P2P_LATENCY).
+ */
+enum hmat_p2p_class {
+	HMAT_P2P_NON_UIO,	/* Ordered (non-UIO) P2P traffic */
+	HMAT_P2P_UIO,		/* PCIe Unordered I/O (UIO) P2P traffic */
+	HMAT_P2P_MAX,
+};
+
 #ifdef CONFIG_ACPI_HMAT
 int hmat_get_extended_linear_cache_size(struct resource *backing_res, int nid,
 					resource_size_t *size);
+int acpi_get_genport_proximity_domain(u32 uid);
+int acpi_get_p2p_coordinates(int initiator_pxm, int target_pxm,
+			     enum hmat_p2p_class class,
+			     struct access_coordinate *coord);
 #else
 static inline int hmat_get_extended_linear_cache_size(struct resource *backing_res,
 						      int nid, resource_size_t *size)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int acpi_get_genport_proximity_domain(u32 uid)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int acpi_get_p2p_coordinates(int initiator_pxm, int target_pxm,
+					   enum hmat_p2p_class class,
+					   struct access_coordinate *coord)
 {
 	return -EOPNOTSUPP;
 }
