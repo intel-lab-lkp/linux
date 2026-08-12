@@ -928,6 +928,11 @@ static int ads1015_set_conv_mode(struct ads1015_data *data, int mode)
 				  mode << ADS1015_CFG_MOD_SHIFT);
 }
 
+static void ads1015_power_off(void *st)
+{
+	ads1015_set_conv_mode(st, ADS1015_SINGLESHOT);
+}
+
 static int ads1015_probe(struct i2c_client *client)
 {
 	const struct ads1015_chip_data *chip;
@@ -948,7 +953,9 @@ static int ads1015_probe(struct i2c_client *client)
 	data = iio_priv(indio_dev);
 	i2c_set_clientdata(client, indio_dev);
 
-	mutex_init(&data->lock);
+	ret = devm_mutex_init(dev, &data->lock);
+	if (ret)
+		return ret;
 
 	indio_dev->name = ADS1015_DRV_NAME;
 	indio_dev->modes = INDIO_DIRECT_MODE;
@@ -1029,40 +1036,23 @@ static int ads1015_probe(struct i2c_client *client)
 
 	data->conv_invalid = true;
 
-	ret = pm_runtime_set_active(dev);
+	ret = devm_add_action_or_reset(dev, ads1015_power_off, data);
 	if (ret)
 		return ret;
+
 	pm_runtime_set_autosuspend_delay(dev, ADS1015_SLEEP_DELAY_MS);
 	pm_runtime_use_autosuspend(dev);
-	pm_runtime_enable(dev);
 
-	ret = iio_device_register(indio_dev);
-	if (ret < 0) {
-		pm_runtime_disable(dev);
-		pm_runtime_set_suspended(dev);
+	ret = devm_pm_runtime_set_active_enabled(dev);
+	if (ret)
+		return ret;
+
+	ret = devm_iio_device_register(dev, indio_dev);
+	if (ret)
 		return dev_err_probe(dev, ret,
 				     "Failed to register IIO device\n");
-	}
 
 	return 0;
-}
-
-static void ads1015_remove(struct i2c_client *client)
-{
-	struct iio_dev *indio_dev = i2c_get_clientdata(client);
-	struct ads1015_data *data = iio_priv(indio_dev);
-	int ret;
-
-	iio_device_unregister(indio_dev);
-
-	pm_runtime_disable(&client->dev);
-	pm_runtime_set_suspended(&client->dev);
-
-	/* power down single shot mode */
-	ret = ads1015_set_conv_mode(data, ADS1015_SINGLESHOT);
-	if (ret)
-		dev_warn(&client->dev, "Failed to power down (%pe)\n",
-			 ERR_PTR(ret));
 }
 
 static int ads1015_runtime_suspend(struct device *dev)
@@ -1147,7 +1137,6 @@ static struct i2c_driver ads1015_driver = {
 		.pm = pm_ptr(&ads1015_pm_ops),
 	},
 	.probe		= ads1015_probe,
-	.remove		= ads1015_remove,
 	.id_table	= ads1015_id,
 };
 
