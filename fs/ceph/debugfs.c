@@ -87,12 +87,12 @@ static int mdsc_show(struct seq_file *s, void *p)
 	struct ceph_fs_client *fsc = s->private;
 	struct ceph_mds_client *mdsc = fsc->mdsc;
 	struct ceph_mds_request *req;
-	struct rb_node *rp;
+	unsigned long idx;
 	char *path;
 
 	mutex_lock(&mdsc->mutex);
-	for (rp = rb_first(&mdsc->request_tree); rp; rp = rb_next(rp)) {
-		req = rb_entry(rp, struct ceph_mds_request, r_node);
+	idx = 0;
+	xa_for_each(&mdsc->request_tree, idx, req) {
 
 		if (req->r_request && req->r_session)
 			seq_printf(s, "%lld\tmds%d\t", req->r_tid,
