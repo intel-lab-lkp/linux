@@ -172,6 +172,12 @@ static u32 dw_hdma_v0_core_status_int(struct dw_edma_chan *chan)
 	return GET_CH_32(dw, chan->dir, chan->id, int_stat);
 }
 
+static bool dw_hdma_v0_core_ch_abort_int_pending(struct dw_edma_chan *chan)
+{
+	return FIELD_GET(HDMA_V0_ABORT_INT_MASK,
+			 dw_hdma_v0_core_status_int(chan));
+}
+
 static irqreturn_t
 dw_hdma_v0_core_handle_int(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
 			   dw_edma_handler_t handler)
@@ -210,6 +216,7 @@ dw_hdma_v0_core_handle_int(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
 
 			if (FIELD_GET(HDMA_V0_ABORT_INT_MASK, val)) {
 				events |= DW_EDMA_IRQ_ABORT;
+				dw_edma_abort_event_mark(chan);
 				dw_hdma_v0_core_clear_abort_int(chan);
 			}
 
@@ -430,6 +437,7 @@ static const struct dw_edma_core_ops dw_hdma_v0_core = {
 	.ch_quiesce = dw_hdma_v0_core_ch_quiesce,
 	.ch_count = dw_hdma_v0_core_ch_count,
 	.ch_status = dw_hdma_v0_core_ch_status,
+	.ch_abort_int_pending = dw_hdma_v0_core_ch_abort_int_pending,
 	.handle_int = dw_hdma_v0_core_handle_int,
 	.non_ll_start = dw_hdma_v0_core_non_ll_start,
 	.ll_data = dw_hdma_v0_core_ll_data,
