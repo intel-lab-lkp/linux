@@ -331,7 +331,7 @@ config RASPBERRYPI_AXI_PMU
 	select RASPBERRYPI_FIRMWARE if ARCH_BCM2835
 	help
 	  Support for the AXI Performance Monitoring Unit (PMU) found on Broadcom
-	  SoCs used in Raspberry Pi platforms (BCM2835, BCM2836, BCM2837, BCM2711).
+	  SoCs used in Raspberry Pi platforms (BCM2835, BCM2836, BCM2837, BCM2711, BCM2712).
 
 	  If compiled as a module, it will be called rpi_axi_pmu.
 
