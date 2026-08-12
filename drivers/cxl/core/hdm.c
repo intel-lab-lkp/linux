@@ -1163,6 +1163,10 @@ static int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 
 	cxl_settle_decoders(cxlhdm);
 
+	/* The commit cursor is rebuilt from hardware below */
+	scoped_guard(rwsem_write, &cxl_rwsem.region)
+		port->commit_end = -1;
+
 	for (i = 0; i < cxlhdm->decoder_count; i++) {
 		int rc, target_count = cxlhdm->target_count;
 		struct cxl_decoder *cxld;
