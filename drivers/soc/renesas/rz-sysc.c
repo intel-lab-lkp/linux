@@ -5,6 +5,7 @@
  * Copyright (C) 2024 Renesas Electronics Corp.
  */
 
+#include <linux/auxiliary_bus.h>
 #include <linux/bitfield.h>
 #include <linux/cleanup.h>
 #include <linux/io.h>
@@ -84,6 +85,22 @@ static int rz_sysc_soc_init(struct rz_sysc *sysc, const struct of_device_id *mat
 	return 0;
 }
 
+static int rz_sysc_pwrrdy_pwrseq_init(struct device *dev, struct regmap *regmap,
+				      const struct rz_sysc_init_data *data)
+{
+	const struct rz_sysc_soc_id_init_data *soc_data = data->soc_id_init_data;
+	struct auxiliary_device *adev;
+
+	if (!soc_data->pwrrdy_pwrseq)
+		return 0;
+
+	adev = devm_auxiliary_device_create(dev, "pwrseq-pwrrdy", regmap);
+	if (!adev)
+		return -ENODEV;
+
+	return 0;
+}
+
 static const struct of_device_id rz_sysc_match[] = {
 #ifdef CONFIG_SYSC_R9A08G045
 	{ .compatible = "renesas,r9a08g045-sysc", .data = &rzg3s_sysc_init_data },
@@ -148,6 +165,10 @@ static int rz_sysc_probe(struct platform_device *pdev)
 	regmap = devm_regmap_init_mmio(dev, sysc->base, regmap_cfg);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
+
+	ret = rz_sysc_pwrrdy_pwrseq_init(dev, regmap, match->data);
+	if (ret)
+		return ret;
 
 	return of_syscon_register_regmap(dev->of_node, regmap);
 }
