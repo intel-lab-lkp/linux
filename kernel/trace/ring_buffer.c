@@ -6988,22 +6988,34 @@ EXPORT_SYMBOL_GPL(ring_buffer_swap_cpu);
  * Returns:
  *  The page allocated, or ERR_PTR
  */
-struct buffer_data_read_page *
-ring_buffer_alloc_read_page(struct trace_buffer *buffer, int cpu)
+struct buffer_data_read_page *ring_buffer_alloc_read_page(struct trace_buffer *buffer, int cpu,
+							  struct buffer_data_read_page *prev)
 {
+	struct buffer_data_read_page *bpage = prev;
 	struct ring_buffer_per_cpu *cpu_buffer;
-	struct buffer_data_read_page *bpage = NULL;
 	unsigned long flags;
+	unsigned int order;
 
 	if (!cpumask_test_cpu(cpu, buffer->cpumask))
 		return ERR_PTR(-ENODEV);
 
-	bpage = kzalloc_obj(*bpage);
-	if (!bpage)
-		return ERR_PTR(-ENOMEM);
-
-	bpage->order = buffer->subbuf_order;
+	order = buffer->subbuf_order;
 	cpu_buffer = buffer->buffers[cpu];
+
+	if (!bpage) {
+		bpage = kzalloc_obj(*bpage);
+		if (!bpage)
+			return ERR_PTR(-ENOMEM);
+	} else {
+		if (bpage->order == order)
+			return bpage;
+
+		free_pages((unsigned long)bpage->data, bpage->order);
+		bpage->data = NULL;
+	}
+
+	bpage->order = order;
+
 	local_irq_save(flags);
 	arch_spin_lock(&cpu_buffer->lock);
 
@@ -7020,7 +7032,9 @@ ring_buffer_alloc_read_page(struct trace_buffer *buffer, int cpu)
 	} else {
 		bpage->data = alloc_cpu_data(cpu, bpage->order);
 		if (!bpage->data) {
-			kfree(bpage);
+			if (!prev)
+				kfree(bpage);
+
 			return ERR_PTR(-ENOMEM);
 		}
 	}
@@ -7041,12 +7055,21 @@ void ring_buffer_free_read_page(struct trace_buffer *buffer, int cpu,
 				struct buffer_data_read_page *data_page)
 {
 	struct ring_buffer_per_cpu *cpu_buffer;
-	struct buffer_data_page *dpage = data_page->data;
-	struct page *page = virt_to_page(dpage);
+	struct buffer_data_page *dpage;
 	unsigned long flags;
+	struct page *page;
 
 	if (!buffer || !buffer->buffers || !buffer->buffers[cpu])
 		return;
+
+	if (!data_page)
+		return;
+
+	dpage = data_page->data;
+	if (!dpage)
+		goto out;
+
+	page = virt_to_page(dpage);
 
 	cpu_buffer = buffer->buffers[cpu];
 
@@ -7311,6 +7334,18 @@ void *ring_buffer_read_page_data(struct buffer_data_read_page *page)
 	return page->data;
 }
 EXPORT_SYMBOL_GPL(ring_buffer_read_page_data);
+
+/**
+ * ring_buffer_read_page_size - get size of the read page.
+ * @page:  the page to get the size from
+ *
+ * Returns size of the page in bytes.
+ */
+unsigned int ring_buffer_read_page_size(struct buffer_data_read_page *page)
+{
+	return PAGE_SIZE << page->order;
+}
+EXPORT_SYMBOL_GPL(ring_buffer_read_page_size);
 
 /**
  * ring_buffer_subbuf_size_get - get size of the sub buffer.
