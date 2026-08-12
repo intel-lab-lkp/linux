@@ -682,7 +682,8 @@ config NUMA_MIGRATION
 	  demotion for memory tiering.
 
 config MIGRATION
-	bool
+	bool "Enable page migration" if MEMORY_FAILURE	
+	default y if MEMORY_FAILURE
 	depends on MMU
 
 config DEVICE_MIGRATION
