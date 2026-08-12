@@ -72,12 +72,17 @@
 };
 
 &ehci0 {
-	dr_mode = "host";
+	dr_mode = "otg";
 	status = "okay";
 };
 
 &ehci1 {
 	dr_mode = "host";
+	status = "okay";
+};
+
+&hsusb0 {
+	dr_mode = "otg";
 	status = "okay";
 };
 
@@ -133,7 +138,7 @@
 };
 
 &ohci0 {
-	dr_mode = "host";
+	dr_mode = "otg";
 	status = "okay";
 };
 
