@@ -44,7 +44,7 @@ static LIST_HEAD(maple_sentq);
 static DEFINE_MUTEX(maple_wlist_lock);
 
 static struct maple_driver maple_unsupported_device;
-static struct device maple_bus;
+static struct device *maple_bus;
 static int subdevice_map[MAPLE_PORTS];
 static unsigned long *maple_sendbuf, *maple_sendptr, *maple_lastptr;
 static unsigned long maple_pnp_time;
@@ -229,7 +229,7 @@ static struct maple_device *maple_alloc_dev(int port, int unit)
 		return NULL;
 	}
 	mdev->dev.bus = &maple_bus_type;
-	mdev->dev.parent = &maple_bus;
+	mdev->dev.parent = maple_bus;
 	init_waitqueue_head(&mdev->maple_wait);
 	return mdev;
 }
@@ -761,10 +761,6 @@ static int maple_match_bus_driver(struct device *devptr,
 	return 0;
 }
 
-static void maple_bus_release(struct device *dev)
-{
-}
-
 static struct maple_driver maple_unsupported_device = {
 	.drv = {
 		.name = "maple_unsupported_device",
@@ -779,11 +775,6 @@ static const struct bus_type maple_bus_type = {
 	.match = maple_match_bus_driver,
 };
 
-static struct device maple_bus = {
-	.init_name = "maple",
-	.release = maple_bus_release,
-};
-
 static int __init maple_bus_init(void)
 {
 	int retval, i;
@@ -791,9 +782,11 @@ static int __init maple_bus_init(void)
 
 	__raw_writel(0, MAPLE_ENABLE);
 
-	retval = device_register(&maple_bus);
-	if (retval)
+	maple_bus = root_device_register("maple");
+	if (IS_ERR(maple_bus)) {
+		retval = PTR_ERR(maple_bus);
 		goto cleanup;
+	}
 
 	retval = bus_register(&maple_bus_type);
 	if (retval)
@@ -806,22 +799,21 @@ static int __init maple_bus_init(void)
 	/* allocate memory for maple bus dma */
 	retval = maple_get_dma_buffer();
 	if (retval) {
-		dev_err(&maple_bus, "failed to allocate DMA buffers\n");
+		dev_err(maple_bus, "failed to allocate DMA buffers\n");
 		goto cleanup_basic;
 	}
 
 	/* set up DMA interrupt handler */
 	retval = maple_set_dma_interrupt_handler();
 	if (retval) {
-		dev_err(&maple_bus, "bus failed to grab maple "
-			"DMA IRQ\n");
+		dev_err(maple_bus, "bus failed to grab maple DMA IRQ\n");
 		goto cleanup_dma;
 	}
 
 	/* set up VBLANK interrupt handler */
 	retval = maple_set_vblank_interrupt_handler();
 	if (retval) {
-		dev_err(&maple_bus, "bus failed to grab VBLANK IRQ\n");
+		dev_err(maple_bus, "bus failed to grab VBLANK IRQ\n");
 		goto cleanup_irq;
 	}
 
@@ -855,7 +847,7 @@ static int __init maple_bus_init(void)
 	maple_pnp_time = jiffies + HZ;
 	/* prepare initial queue */
 	maple_send();
-	dev_info(&maple_bus, "bus core now registered\n");
+	dev_info(maple_bus, "bus core now registered\n");
 
 	return 0;
 
@@ -878,7 +870,7 @@ cleanup_bus:
 	bus_unregister(&maple_bus_type);
 
 cleanup_device:
-	device_unregister(&maple_bus);
+	root_device_unregister(maple_bus);
 
 cleanup:
 	printk(KERN_ERR "Maple bus registration failed\n");
