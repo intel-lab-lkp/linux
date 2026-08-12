@@ -123,6 +123,11 @@
 #define TSR2_SHIFT      2
 #define TSR3_SHIFT      6
 
+#define OFFSET_SIGN_BIT 7
+#define OFFSET_MINIMUM  -128
+#define OFFSET_MAXIMUM  127
+#define OFFSET_MASK     0xFF
+
 struct pcf85363 {
 	struct rtc_device	*rtc;
 	struct regmap		*regmap;
@@ -359,6 +364,45 @@ static irqreturn_t pcf85363_rtc_handle_irq(int irq, void *dev_id)
 	return handled ? IRQ_HANDLED : IRQ_NONE;
 }
 
+/*
+ * Read the current RTC offset from the CTRL_OFFSET
+ * register. This value is an 8-bit signed 2's complement
+ * value that corrects osciallator drift.
+ */
+static int pcf85363_read_offset(struct device *dev, long *offset)
+{
+	struct pcf85363 *pcf85363 = dev_get_drvdata(dev);
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(pcf85363->regmap, CTRL_OFFSET, &val);
+
+	if (ret)
+		return ret;
+
+	*offset = sign_extend32(val & OFFSET_MASK, OFFSET_SIGN_BIT);
+
+	return 0;
+}
+
+/*
+ * Write an oscillator offset correction value to
+ * the CTRL_OFFSET register. The valid range is
+ * -128 to 127 (8-bit signed), typically used to fine
+ * tune accuracy.
+ */
+static int pcf85363_set_offset(struct device *dev, long offset)
+{
+	struct pcf85363 *pcf85363 = dev_get_drvdata(dev);
+
+	if (offset < OFFSET_MINIMUM || offset > OFFSET_MAXIMUM) {
+		dev_warn(dev, "Offset out of range: %ld\n", offset);
+		return -ERANGE;
+	}
+
+	return regmap_write(pcf85363->regmap, CTRL_OFFSET, offset & OFFSET_MASK);
+}
+
 static int pcf85363_rtc_ioctl(struct device *dev,
 			      unsigned int cmd, unsigned long arg)
 {
@@ -396,6 +440,8 @@ static const struct rtc_class_ops rtc_ops = {
 	.read_alarm	= pcf85363_rtc_read_alarm,
 	.set_alarm	= pcf85363_rtc_set_alarm,
 	.alarm_irq_enable = pcf85363_rtc_alarm_irq_enable,
+	.read_offset = pcf85363_read_offset,
+	.set_offset = pcf85363_set_offset,
 };
 
 static int pcf85363_nvram_read(void *priv, unsigned int offset, void *val,
