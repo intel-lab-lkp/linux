@@ -343,6 +343,8 @@ int usbip_list(int argc, char *argv[])
 	};
 
 	bool parsable = false;
+	char *remote_host = NULL;
+	int action = 0;
 	int opt;
 	int ret = -1;
 
@@ -360,18 +362,35 @@ int usbip_list(int argc, char *argv[])
 			parsable = true;
 			break;
 		case 'r':
-			ret = list_exported_devices(optarg, parsable);
-			goto out;
+			if (!action) {
+				action = opt;
+				remote_host = optarg;
+			}
+			break;
 		case 'l':
-			ret = list_devices(parsable);
-			goto out;
 		case 'd':
-			ret = list_gadget_devices(parsable);
-			goto out;
+			if (!action)
+				action = opt;
+			break;
 		default:
 			goto err_out;
 		}
 	}
+
+	switch (action) {
+	case 'r':
+		ret = list_exported_devices(remote_host, parsable);
+		break;
+	case 'l':
+		ret = list_devices(parsable);
+		break;
+	case 'd':
+		ret = list_gadget_devices(parsable);
+		break;
+	default:
+		goto err_out;
+	}
+	goto out;
 
 err_out:
 	usbip_list_usage();
