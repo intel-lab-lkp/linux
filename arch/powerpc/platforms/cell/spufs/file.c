@@ -349,7 +349,10 @@ static vm_fault_t spufs_ps_fault(struct vm_fault *vmf,
 		spu_context_nospu_trace(spufs_ps_fault__sleep, ctx);
 		err = spufs_wait(ctx->run_wq, ctx->state == SPU_STATE_RUNNABLE);
 		spu_context_trace(spufs_ps_fault__wake, ctx, ctx->spu);
+		if (!err)
+			spu_release(ctx);
 		mmap_read_lock(current->mm);
+		goto refault;
 	} else {
 		area = ctx->spu->problem_phys + ps_offs;
 		ret = vmf_insert_pfn(vmf->vma, vmf->address,
