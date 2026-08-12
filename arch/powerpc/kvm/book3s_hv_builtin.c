@@ -594,11 +594,10 @@ void kvmppc_guest_entry_inject_int(struct kvm_vcpu *vcpu)
 		}
 	}
 
-	if (vcpu->arch.doorbell_request) {
+	if (atomic_dec_if_positive(&vcpu->arch.doorbell_request) >= 0) {
 		mtspr(SPRN_DPDES, 1);
 		vcpu->arch.vcore->dpdes = 1;
 		smp_wmb();
-		vcpu->arch.doorbell_request = 0;
 	}
 }
 

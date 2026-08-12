@@ -15,6 +15,7 @@
  * by Alexander Graf <agraf@suse.de>.
  */
 
+#include "asm/guest-state-buffer.h"
 #include <linux/kvm_host.h>
 #include <linux/kernel.h>
 #include <linux/err.h>
@@ -881,7 +882,7 @@ static bool kvmppc_doorbell_pending(struct kvm_vcpu *vcpu)
 	int thr;
 	struct kvmppc_vcore *vc;
 
-	if (vcpu->arch.doorbell_request)
+	if (atomic_read(&vcpu->arch.doorbell_request))
 		return true;
 	if (cpu_has_feature(CPU_FTR_ARCH_300))
 		return false;
@@ -1557,17 +1558,16 @@ static int kvmppc_emulate_doorbell_instr(struct kvm_vcpu *vcpu)
 		tvcpu = kvmppc_find_vcpu(kvm, vcpu->vcpu_id - thr + arg);
 		if (!tvcpu)
 			break;
-		if (!tvcpu->arch.doorbell_request) {
-			tvcpu->arch.doorbell_request = 1;
+		if (atomic_inc_return(&tvcpu->arch.doorbell_request) >= 1)
 			kvmppc_fast_vcpu_kick_hv(tvcpu);
-		}
 		break;
 	case OP_31_XOP_MSGCLRP:
 		arg = kvmppc_get_gpr(vcpu, rb);
 		if (((arg >> 27) & 0x1f) != PPC_DBELL_SERVER)
 			break;
-		vcpu->arch.vcore->dpdes = 0;
-		vcpu->arch.doorbell_request = 0;
+
+		if (atomic_dec_return(&vcpu->arch.doorbell_request) <= 0)
+			vcpu->arch.vcore->dpdes = 0;
 		break;
 	case OP_31_XOP_MFSPR:
 		switch (get_sprn(inst)) {
@@ -2313,7 +2313,7 @@ static int kvmppc_get_one_reg_hv(struct kvm_vcpu *vcpu, u64 id,
 		 * On POWER8, doorbell_request is 0.
 		 */
 		if (cpu_has_feature(CPU_FTR_ARCH_300))
-			*val = get_reg_val(id, vcpu->arch.doorbell_request);
+			*val = get_reg_val(id, atomic_read(&vcpu->arch.doorbell_request));
 		else
 			*val = get_reg_val(id, vcpu->arch.vcore->dpdes);
 		break;
@@ -2565,7 +2565,7 @@ static int kvmppc_set_one_reg_hv(struct kvm_vcpu *vcpu, u64 id,
 		break;
 	case KVM_REG_PPC_DPDES:
 		if (cpu_has_feature(CPU_FTR_ARCH_300))
-			vcpu->arch.doorbell_request = set_reg_val(id, *val) & 1;
+			atomic_inc(&vcpu->arch.doorbell_request);
 		else
 			vcpu->arch.vcore->dpdes = set_reg_val(id, *val);
 		break;
@@ -4253,10 +4253,6 @@ static int kvmhv_vcpu_entry_nestedv2(struct kvm_vcpu *vcpu, u64 time_limit,
 	int trap;
 	long rc;
 
-	if (vcpu->arch.doorbell_request) {
-		vcpu->arch.doorbell_request = 0;
-		kvmppc_set_dpdes(vcpu, 1);
-	}
 
 	io = &vcpu->arch.nestedv2_io;
 
@@ -4264,6 +4260,10 @@ static int kvmhv_vcpu_entry_nestedv2(struct kvm_vcpu *vcpu, u64 time_limit,
 	kvmppc_msr_hard_disable_set_facilities(vcpu, msr);
 	if (lazy_irq_pending())
 		return 0;
+
+	/* Set DPDES if any doorbell is requested */
+	if (atomic_read(&vcpu->arch.doorbell_request) > 0)
+		kvmppc_set_dpdes(vcpu, 1);
 
 	rc = kvmhv_nestedv2_flush_vcpu(vcpu, time_limit);
 	if (rc < 0)
@@ -4297,6 +4297,17 @@ static int kvmhv_vcpu_entry_nestedv2(struct kvm_vcpu *vcpu, u64 time_limit,
 		return -EINVAL;
 
 	timer_rearm_host_dec(*tb);
+
+	/* Check if privileged door bell was requested and handled */
+	if (atomic_read(&vcpu->arch.doorbell_request) > 0) {
+		/* In case PHYP doesn't return updated dpdes in output gsb */
+		if (vcpu->arch.vcore->dpdes)
+			kvmhv_nestedv2_cached_reload(vcpu,
+						     KVMPPC_GSID_DPDES);
+		/* if dpdes was handled then reduce the doorbell count */
+		if (!vcpu->arch.vcore->dpdes)
+			atomic_dec(&vcpu->arch.doorbell_request);
+	}
 
 	/* Record context switch and guest_run_time data */
 	if (kvmhv_get_l2_counters_status())
@@ -4356,9 +4367,7 @@ static int kvmhv_vcpu_entry_p9_nested(struct kvm_vcpu *vcpu, u64 time_limit, uns
 	 * enables us to receive doorbells when H_ENTER_NESTED is
 	 * in progress for this vCPU
 	 */
-
-	if (vcpu->arch.doorbell_request)
-		vcpu->arch.doorbell_request = 0;
+	atomic_set(&vcpu->arch.doorbell_request, 0);
 
 	/*
 	 * When setting DEC, we must always deal with irq_work_raise

@@ -610,10 +610,9 @@ int kvmhv_vcpu_entry_p9(struct kvm_vcpu *vcpu, u64 time_limit, unsigned long lpc
 
 	if (vc->pcr)
 		mtspr(SPRN_PCR, vc->pcr | PCR_MASK);
-	if (vcpu->arch.doorbell_request) {
-		vcpu->arch.doorbell_request = 0;
+
+	if (atomic_dec_if_positive(&vcpu->arch.doorbell_request) >= 0)
 		mtspr(SPRN_DPDES, 1);
-	}
 
 	if (dawr_enabled()) {
 		if (vcpu->arch.dawr0 != host_dawr0)
@@ -838,7 +837,7 @@ tm_return_to_guest:
 
 	dpdes = mfspr(SPRN_DPDES);
 	if (dpdes)
-		vcpu->arch.doorbell_request = 1;
+		atomic_inc(&vcpu->arch.doorbell_request);
 
 	vc->vtb = mfspr(SPRN_VTB);
 
