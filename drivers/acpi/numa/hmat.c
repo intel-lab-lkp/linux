@@ -10,6 +10,7 @@
 
 #define pr_fmt(fmt) "acpi/hmat: " fmt
 
+#include <kunit/static_stub.h>
 #include <kunit/visibility.h>
 #include <linux/acpi.h>
 #include <linux/bitops.h>
@@ -290,6 +291,9 @@ int acpi_get_p2p_coordinates(int initiator_pxm, int target_pxm,
 			     enum hmat_p2p_class class,
 			     struct access_coordinate *coord)
 {
+	KUNIT_STATIC_STUB_REDIRECT(acpi_get_p2p_coordinates, initiator_pxm,
+				   target_pxm, class, coord);
+
 	return hmat_get_p2p_coordinates(&p2p_localities, initiator_pxm,
 					 target_pxm, class, coord);
 }

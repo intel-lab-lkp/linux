@@ -9,6 +9,7 @@
  */
 
 #define pr_fmt(fmt) "pci-p2pdma: " fmt
+#include <kunit/static_stub.h>
 #include <linux/acpi.h>
 #include <linux/ctype.h>
 #include <linux/dma-map-ops.h>
@@ -613,8 +614,10 @@ static void seq_buf_print_bus_devfn(struct seq_buf *buf, struct pci_dev *pdev)
 	seq_buf_printf(buf, "%s;", pci_name(pdev));
 }
 
-static bool cpu_supports_p2pdma(void)
+VISIBLE_IF_KUNIT bool cpu_supports_p2pdma(void)
 {
+	KUNIT_STATIC_STUB_REDIRECT(cpu_supports_p2pdma);
+
 #ifdef CONFIG_X86
 	struct cpuinfo_x86 *c = &cpu_data(0);
 
@@ -625,6 +628,7 @@ static bool cpu_supports_p2pdma(void)
 
 	return false;
 }
+EXPORT_SYMBOL_IF_KUNIT(cpu_supports_p2pdma);
 
 static const struct pci_p2pdma_whitelist_entry {
 	unsigned short vendor;
@@ -751,12 +755,14 @@ static bool host_bridge_whitelist(struct pci_dev *a, struct pci_dev *b,
 }
 
 #ifdef CONFIG_ACPI
-static int pci_host_bridge_pxm(struct pci_dev *pdev)
+VISIBLE_IF_KUNIT int pci_host_bridge_pxm(struct pci_dev *pdev)
 {
 	struct pci_host_bridge *host = pci_find_host_bridge(pdev->bus);
 	struct acpi_device *adev;
 	const char *uid_str;
 	u32 uid;
+
+	KUNIT_STATIC_STUB_REDIRECT(pci_host_bridge_pxm, pdev);
 
 	adev = to_acpi_device_node(host->dev.fwnode);
 	if (!adev)
@@ -769,11 +775,14 @@ static int pci_host_bridge_pxm(struct pci_dev *pdev)
 	return acpi_get_genport_proximity_domain(uid);
 }
 #else
-static int pci_host_bridge_pxm(struct pci_dev *pdev)
+VISIBLE_IF_KUNIT int pci_host_bridge_pxm(struct pci_dev *pdev)
 {
+	KUNIT_STATIC_STUB_REDIRECT(pci_host_bridge_pxm, pdev);
+
 	return -ENODEV;
 }
 #endif
+EXPORT_SYMBOL_IF_KUNIT(pci_host_bridge_pxm);
 
 /*
  * Check whether platform firmware describes, via an HMAT PCIe P2P Latency and
@@ -810,10 +819,6 @@ static unsigned long map_types_idx(struct pci_dev *client)
 	return (pci_domain_nr(client->bus) << 16) | pci_dev_id(client);
 }
 
-static enum pci_p2pdma_map_type
-__calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
-		int *dist, bool verbose, struct access_coordinate *hmat_coord);
-
 /*
  * Calculate the P2PDMA mapping type and distance between two PCI devices.
  *
@@ -849,13 +854,6 @@ __calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
  * ordered HMAT path. Return PCI_P2PDMA_MAP_NOT_SUPPORTED when none of those
  * sources permits the path.
  */
-VISIBLE_IF_KUNIT enum pci_p2pdma_map_type
-calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
-		int *dist, bool verbose)
-{
-	return __calc_map_type_and_dist(provider, client, dist, verbose, NULL);
-}
-
 static enum pci_p2pdma_map_type
 __calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
 		int *dist, bool verbose, struct access_coordinate *hmat_coord)
@@ -1008,6 +1006,13 @@ done:
 			 xa_mk_value(map_type), GFP_ATOMIC);
 	rcu_read_unlock();
 	return map_type;
+}
+
+VISIBLE_IF_KUNIT enum pci_p2pdma_map_type
+calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
+		int *dist, bool verbose)
+{
+	return __calc_map_type_and_dist(provider, client, dist, verbose, NULL);
 }
 EXPORT_SYMBOL_IF_KUNIT(calc_map_type_and_dist);
 

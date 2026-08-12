@@ -241,6 +241,19 @@ config PCI_ACS_KUNIT_TEST
 
 	  If unsure, say N.
 
+config PCI_P2PDMA_HMAT_KUNIT_TEST
+	tristate "KUnit tests for PCI P2PDMA HMAT routing" if !KUNIT_ALL_TESTS
+	depends on PCI_P2PDMA && ACPI_HMAT && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit coverage for authorizing cross-host-bridge P2P DMA
+	  through ordered HMAT paths.
+
+	  For more information on KUnit and unit tests in general, refer to
+	  the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
 config PCI_LABEL
 	def_bool y if (DMI || ACPI)
 	select NLS
