@@ -1,0 +1,178 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright (C) 2026 SiFive, Inc.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/access-controllers/sifive,wgchecker2.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: SiFive WorldGuard Checker
+
+maintainers:
+  - Yu-Chien Peter Lin <peter.lin@sifive.com>
+
+description: |
+  The RISC-V Worlds ISA extension defines World IDs (WIDs) as architectural
+  identifiers that tag each system transaction with its originating context.
+  System integrators assign WIDs to execution contexts such as privilege
+  modes, trusted execution environments, or other isolation boundaries.
+
+  The SiFive WorldGuard Checker is a hardware firewall positioned in the
+  system interconnect fabric. It supports up to 32 WIDs and inspects every
+  transaction, evaluating the WID against access control policies encoded
+  in checker slots for each protected resource. Transactions from
+  unauthorized WIDs are blocked and reported as bus errors, interrupts, or
+  both.
+
+  This enables spatial partitioning of memory regions and memory-mapped
+  devices across execution contexts. Different address ranges can enforce
+  distinct policies, allowing isolated workloads to coexist with
+  hardware-enforced protection.
+
+  The wgChecker acts as an access-controller provider as defined in the
+  access-controllers framework. Protected devices are consumers that
+  declare their access policy via the access-controllers property.
+
+allOf:
+  - $ref: /schemas/access-controllers/access-controllers.yaml#
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - qemu,wgchecker2
+      - const: sifive,wgchecker2
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+    description:
+      Interrupt line asserted when a WID access violation is detected and
+      interrupt reporting is enabled in the slot configuration (IR or IW
+      bits set).
+
+  "#access-controller-cells":
+    const: 1
+    description: |
+      Specifies the partition identifier to reference a partition child
+      node that defines the access control region, WID permissions, and
+      access failure configuration. The special ID 0xFFFFFFFF indicates
+      unprotected mode, granting unrestricted access to the device.
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "^partition@[0-9a-f]+$":
+    type: object
+    additionalProperties: false
+
+    properties:
+      reg:
+        maximum: 0xFFFFFFFE
+        description:
+          Partition identifier. Must be unique within the wgChecker node.
+          The value 0xFFFFFFFF is reserved for unprotected mode and must
+          not be used.
+
+      sifive,wg-region:
+        $ref: /schemas/types.yaml#/definitions/uint32-array
+        description:
+          Protected memory region encoded as a base address and size.
+        items:
+          - description: Upper 32 bits of the base address
+          - description: Lower 32 bits of the base address
+          - description: Upper 32 bits of the region size
+          - description: Lower 32 bits of the region size
+
+      sifive,slot-permissions:
+        $ref: /schemas/types.yaml#/definitions/uint64
+        description: |
+          64-bit WID permission bitmap. Each WID N uses two consecutive bits:
+            - bit[2*N]  : Read  permission for WID N
+            - bit[2*N+1]: Write permission for WID N
+          Set bits grant access.
+
+      sifive,slot-config:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        maximum: 0x1F
+        description: |
+          Access failure configuration flags for this slot:
+            bit[0] (ER): report read  violations as bus errors
+            bit[1] (EW): report write violations as bus errors
+            bit[2] (IR): report read  violations via interrupt
+            bit[3] (IW): report write violations via interrupt
+            bit[4] (L) : lock this slot against further modification
+          Bits[5:31] are reserved and must be zero.
+
+    required:
+      - reg
+      - sifive,wg-region
+      - sifive,slot-permissions
+      - sifive,slot-config
+
+required:
+  - compatible
+  - reg
+  - "#address-cells"
+  - "#size-cells"
+  - "#access-controller-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    // Example 1: Peripheral device protection
+
+    access-controller@c1000 {
+        compatible = "qemu,wgchecker2", "sifive,wgchecker2";
+        reg = <0xc1000 0x1000>;
+        #access-controller-cells = <1>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        interrupts = <80 4>;
+
+        partition@0 {
+            reg = <0>;
+            sifive,wg-region = <0x0 0x000c0000 0x0 0x00001000>;
+            sifive,slot-permissions = <0x0 0x000000c3>;
+            sifive,slot-config = <0x0f>;
+        };
+    };
+
+  - |
+    // Example 2: DRAM partitioning with multiple regions
+
+    access-controller@40000000 {
+        compatible = "qemu,wgchecker2", "sifive,wgchecker2";
+        reg = <0x40000000 0x1000>;
+        #access-controller-cells = <1>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        interrupts = <82 4>;
+
+        partition@0 {
+            reg = <0>;
+            sifive,wg-region = <0x0 0x80000000 0x0 0x40000000>;
+            sifive,slot-permissions = <0x0 0x000000cf>;
+            sifive,slot-config = <0x0f>;
+        };
+
+        partition@1 {
+            reg = <1>;
+            sifive,wg-region = <0x0 0xc0000000 0x0 0x01000000>;
+            sifive,slot-permissions = <0x0 0x000000cc>;
+            sifive,slot-config = <0x0f>;
+        };
+
+        partition@2 {
+            reg = <2>;
+            sifive,wg-region = <0x0 0xc1000000 0x0 0x3f000000>;
+            sifive,slot-permissions = <0x0 0x000000cf>;
+            sifive,slot-config = <0x0f>;
+        };
+    };
