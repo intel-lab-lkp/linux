@@ -334,6 +334,7 @@ static void gpu_i2c_remove(struct pci_dev *pdev)
 	struct gpu_i2c_dev *i2cd = pci_get_drvdata(pdev);
 
 	pm_runtime_get_noresume(i2cd->dev);
+	pm_runtime_dont_use_autosuspend(i2cd->dev);
 	i2c_del_adapter(&i2cd->adapter);
 	pci_free_irq_vectors(pdev);
 }
