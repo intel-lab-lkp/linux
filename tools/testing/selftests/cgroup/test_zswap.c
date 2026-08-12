@@ -578,7 +578,7 @@ static int test_no_kmem_bypass(const char *root)
 		return KSFT_SKIP;
 	}
 	if (access(PATH_ZSWAP_STORED_PAGES, R_OK)) {
-		ksft_print_msg("mount debugfs at /sys/kernel/debug\n");
+		ksft_print_msg("debugfs not mounted at /sys/kernel/debug\n");
 		return KSFT_SKIP;
 	}
 	values = mmap(0, sizeof(struct no_kmem_bypass_child_args), PROT_READ |
