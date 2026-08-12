@@ -89,22 +89,21 @@ static inline void mem_dump_obj(void *object) {}
 
 /*
  * Since detected data corruption should stop operation on the affected
- * structures. Return value must be checked and sanely acted on by caller.
+ * structures. Return value should be checked and sanely acted on by caller if
+ * possible.
  */
-static inline __must_check bool check_data_corruption(bool v) { return v; }
-#define CHECK_DATA_CORRUPTION(condition, addr, fmt, ...)		 \
-	check_data_corruption(({					 \
-		bool corruption = unlikely(condition);			 \
-		if (corruption) {					 \
-			if (addr)					 \
-				mem_dump_obj(addr);			 \
-			if (IS_ENABLED(CONFIG_BUG_ON_DATA_CORRUPTION)) { \
-				pr_err(fmt, ##__VA_ARGS__);		 \
-				BUG();					 \
-			} else						 \
-				WARN(1, fmt, ##__VA_ARGS__);		 \
-		}							 \
-		corruption;						 \
-	}))
+#define CHECK_DATA_CORRUPTION(condition, addr, fmt, ...) ({	 \
+	bool corruption = unlikely(condition);			 \
+	if (corruption) {					 \
+		if (addr)					 \
+			mem_dump_obj(addr);			 \
+		if (IS_ENABLED(CONFIG_BUG_ON_DATA_CORRUPTION)) { \
+			pr_err(fmt, ##__VA_ARGS__);		 \
+			BUG();					 \
+		} else						 \
+			WARN(1, fmt, ##__VA_ARGS__);		 \
+	}							 \
+	corruption;						 \
+})
 
 #endif	/* _LINUX_BUG_H */
