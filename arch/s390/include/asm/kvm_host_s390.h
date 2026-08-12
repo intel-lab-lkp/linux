@@ -29,6 +29,7 @@
 
 #define KVM_HAVE_MMU_RWLOCK
 #define KVM_MAX_VCPUS 255
+#define KVM_NO_MMIO
 
 #define KVM_INTERNAL_MEM_SLOTS 1
 
