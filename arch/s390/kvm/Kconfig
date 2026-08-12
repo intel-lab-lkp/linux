@@ -53,4 +53,33 @@ config KVM_S390_UCONTROL
 
 	  If unsure, say N.
 
+config KVM_ARM64
+	def_tristate y
+	prompt "KVM support for hardware accelerated arm64 guests"
+	depends on HAS_IOMEM
+	depends on KVM
+	select GUEST_PERF_EVENTS if PERF_EVENTS
+	select HAVE_KVM_CPU_RELAX_INTERCEPT
+	select HAVE_KVM_IRQCHIP
+	select HAVE_KVM_VCPU_RUN_PID_CHANGE
+	select IRQ_BYPASS_MANAGER
+	select KVM_COMMON
+	select KVM_MMIO
+	select KVM_VFIO
+	select SCHED_INFO
+	select XARRAY_MULTI
+	help
+	  Enable support for hosting paravirtualized, hardware-accelerated
+	  arm64 virtual machines on s390 systems using the Start ARM Execution
+	  (SAE) instruction. This requires hardware models that support the Arm
+	  execution facility (AEF).
+
+	  The module provides a character device named /dev/kvm-arm64 to expose
+	  the hardware capabilities.
+
+	  To compile this driver as a module, choose M here. The module will
+	  be called kvm-arm64.
+
+	  If unsure, say N.
+
 endif # VIRTUALIZATION
