@@ -766,6 +766,32 @@ void b53_disable_port(struct dsa_switch *ds, int port)
 }
 EXPORT_SYMBOL(b53_disable_port);
 
+static struct dsa_port *b53_preferred_default_local_cpu_port(struct dsa_switch *ds)
+{
+	struct b53_device *dev = ds->priv;
+	struct dsa_port *cpu_dp;
+
+	/*
+	 * Northstar SoCs devices have 3 Ethernet controllers and 3 CPU ports:
+	 * 5 (IMP1), 7, 8 (IMP0). This design was meant for dual IMP setups when
+	 * WAN traffic goes to port 5 and LAN traffic goes to port 8.
+	 *
+	 * While all 3 ports support Broadcom header, ports 5 and 7 have their
+	 * limitations. Features that relay on trapping to CPU (e.g. EAP, STP)
+	 * won't work when using those as CPU ones.
+	 *
+	 * Prefer CPU port 8 if available.
+	 */
+	if (is5301x(dev)) {
+		cpu_dp = dsa_to_port(ds, B53_CPU_PORT);
+
+		if (dsa_port_is_cpu(cpu_dp))
+			return cpu_dp;
+	}
+
+	return NULL;
+}
+
 void b53_brcm_hdr_setup(struct dsa_switch *ds, int port)
 {
 	struct b53_device *dev = ds->priv;
@@ -2724,6 +2750,7 @@ static const struct dsa_switch_ops b53_switch_ops = {
 	.port_setup		= b53_setup_port,
 	.port_enable		= b53_enable_port,
 	.port_disable		= b53_disable_port,
+	.preferred_default_local_cpu_port = b53_preferred_default_local_cpu_port,
 	.support_eee		= b53_support_eee,
 	.set_mac_eee		= b53_set_mac_eee,
 	.set_ageing_time	= b53_set_ageing_time,
