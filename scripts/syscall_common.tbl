@@ -45,6 +45,7 @@
 434	common	pidfd_open			sys_pidfd_open
 435	clone3	clone3				sys_clone3
 435	__clone3	clone3			__sys_clone3
+435     alpha  	clone3                          alpha_clone3
 436	common	close_range			sys_close_range
 437	common	openat2				sys_openat2
 438	common	pidfd_getfd			sys_pidfd_getfd
