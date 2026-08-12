@@ -313,8 +313,12 @@ static bool dw_edma_core_enable_ll_irq(struct dw_edma_desc *desc, u32 i,
 	if (chan->ll_head == chan->ll_max - 1)
 		return true;
 
-	/* Add periodic progress points only while this descriptor does not fit. */
-	if (desc->nburst - i <= free)
+	/*
+	 * Add periodic progress points only while this descriptor does not fit
+	 * in the current free space or more issued work follows it.
+	 */
+	if (desc->nburst - i <= free &&
+	    list_is_last(&desc->vd.node, &chan->vc.desc_issued))
 		return false;
 
 	return (chan->ll_head + 1) % DW_EDMA_LL_PROGRESS_INTERVAL == 0;
@@ -381,35 +385,42 @@ static int dw_edma_start_transfer(struct dw_edma_chan *chan)
 {
 	struct dw_edma_desc *desc;
 	struct virt_dma_desc *vd;
-
-	if (!chan->non_ll) {
-		if (dw_edma_abort_is_pending(chan))
-			return 0;
-		if (!chan->ll_valid)
-			dw_edma_core_reset_ll(chan);
-	}
-
-	vd = vchan_next_desc(&chan->vc);
-	if (!vd)
-		return 0;
-
-	desc = vd2dw_edma_desc(vd);
-	if (!desc)
-		return 0;
+	int ret = 0;
 
 	if (chan->non_ll) {
+		vd = vchan_next_desc(&chan->vc);
+		if (!vd)
+			return 0;
+
 		guard(spinlock_irqsave)(dw_edma_event_lock(chan));
 
 		if (dw_edma_abort_latch_locked(chan))
 			return 0;
 
-		dw_edma_core_start(desc);
+		dw_edma_core_start(vd2dw_edma_desc(vd));
 		return 1;
 	}
 
-	dw_edma_core_start(desc);
+	if (dw_edma_abort_is_pending(chan))
+		return 0;
 
-	return 1;
+	if (!chan->ll_valid)
+		dw_edma_core_reset_ll(chan);
+
+	list_for_each_entry(vd, &chan->vc.desc_issued, node) {
+		if (!dw_edma_core_get_free_num(chan))
+			break;
+
+		desc = vd2dw_edma_desc(vd);
+		/* A fully published descriptor may still be pending in hardware. */
+		if (desc->start_burst == desc->nburst)
+			continue;
+
+		dw_edma_core_start(desc);
+		ret = 1;
+	}
+
+	return ret;
 }
 
 static void dw_edma_terminate_vdesc(struct virt_dma_desc *vd)
@@ -900,6 +911,7 @@ static int dw_edma_device_pause(struct dma_chan *dchan)
 static int dw_edma_device_resume(struct dma_chan *dchan)
 {
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
+	bool active;
 	int err = 0;
 
 	guard(spinlock_irqsave)(&chan->vc.lock);
@@ -911,9 +923,10 @@ static int dw_edma_device_resume(struct dma_chan *dchan)
 	} else if (chan->request != EDMA_REQ_NONE) {
 		err = -EPERM;
 	} else {
-		chan->status = EDMA_ST_BUSY;
-		if (!dw_edma_start_transfer(chan))
-			chan->status = EDMA_ST_IDLE;
+		active = dw_edma_start_transfer(chan);
+		if (!chan->non_ll)
+			active = dw_edma_ll_pending(chan);
+		chan->status = active ? EDMA_ST_BUSY : EDMA_ST_IDLE;
 		dw_edma_core_ch_maybe_doorbell_or_recheck(chan);
 	}
 
@@ -974,9 +987,11 @@ static void dw_edma_device_issue_pending(struct dma_chan *dchan)
 	unsigned long flags;
 
 	spin_lock_irqsave(&chan->vc.lock, flags);
+	/* Only LL channels can accept work while already running. */
 	if (chan->configured && vchan_issue_pending(&chan->vc) &&
 	    chan->request == EDMA_REQ_NONE &&
-	    chan->status == EDMA_ST_IDLE) {
+	    (chan->non_ll ? chan->status == EDMA_ST_IDLE :
+			    chan->status != EDMA_ST_PAUSE)) {
 		if (!chan->non_ll && !dw_edma_ll_pending(chan))
 			dw_edma_ll_snapshot_discard(chan);
 		chan->status = EDMA_ST_BUSY;
