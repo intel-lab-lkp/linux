@@ -2125,12 +2125,17 @@ void br_multicast_del_port(struct net_bridge_port *port)
 {
 	struct net_bridge *br = port->br;
 	struct net_bridge_port_group *pg;
-	struct hlist_node *n;
 
-	/* Take care of the remaining groups, only perm ones should be left */
+	/* Take care of the remaining groups, only perm ones should be left.
+	 * Deleting one can delete others on this same port->mglist, so
+	 * always restart from the head.
+	 */
 	spin_lock_bh(&br->multicast_lock);
-	hlist_for_each_entry_safe(pg, n, &port->mglist, mglist)
+	while (!hlist_empty(&port->mglist)) {
+		pg = hlist_entry(port->mglist.first,
+				 struct net_bridge_port_group, mglist);
 		br_multicast_find_del_pg(br, pg);
+	}
 	spin_unlock_bh(&br->multicast_lock);
 	flush_work(&br->mcast_gc_work);
 	br_multicast_port_ctx_deinit(&port->multicast_ctx);
@@ -2186,11 +2191,23 @@ static void __br_multicast_disable_port_ctx(struct net_bridge_mcast_port *pmctx)
 	struct hlist_node *n;
 	bool del = false;
 
-	hlist_for_each_entry_safe(pg, n, &pmctx->port->mglist, mglist)
-		if (!(pg->flags & MDB_PG_FLAGS_PERMANENT) &&
-		    (!br_multicast_port_ctx_is_vlan(pmctx) ||
-		     pg->key.addr.vid == pmctx->vlan->vid))
-			br_multicast_find_del_pg(pmctx->port->br, pg);
+	/* br_multicast_find_del_pg() can delete further entries of this same
+	 * port->mglist, so the node latched in @n may be unlinked by the loop
+	 * body. Port groups are only freed by the GC work under multicast_lock,
+	 * so @n is still valid here; if it left the list, restart.
+	 */
+restart:
+	hlist_for_each_entry_safe(pg, n, &pmctx->port->mglist, mglist) {
+		if ((pg->flags & MDB_PG_FLAGS_PERMANENT) ||
+		    (br_multicast_port_ctx_is_vlan(pmctx) &&
+		     pg->key.addr.vid != pmctx->vlan->vid))
+			continue;
+
+		br_multicast_find_del_pg(pmctx->port->br, pg);
+
+		if (n && hlist_unhashed(n))
+			goto restart;
+	}
 
 	del |= br_ip4_multicast_rport_del(pmctx);
 	timer_delete(&pmctx->ip4_mc_router_timer);
