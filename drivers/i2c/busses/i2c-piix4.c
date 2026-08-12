@@ -136,6 +136,18 @@ static const struct dmi_system_id piix4_dmi_ibm[] = {
 	{ }
 };
 
+/* Allowlist for boards where ACPI reserves SMBus I/O in _CRS without active AML access */
+static const struct dmi_system_id piix4_dmi_acpi_allowlist[] = {
+	{
+		.ident = "GIGABYTE X870 EAGLE WIFI7",
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "Gigabyte Technology Co., Ltd."),
+			DMI_MATCH(DMI_BOARD_NAME, "X870 EAGLE WIFI7"),
+		},
+	},
+	{ }
+};
+
 /*
  * SB800 globals
  */
@@ -403,8 +415,11 @@ static int piix4_setup_sb800(struct pci_dev *PIIX4_dev,
 	if (retval)
 		return retval;
 
-	if (acpi_check_region(piix4_smba, SMBIOSIZE, piix4_driver.name))
-		return -ENODEV;
+	if (acpi_check_region(piix4_smba, SMBIOSIZE, piix4_driver.name)) {
+		if (!dmi_check_system(piix4_dmi_acpi_allowlist)) {
+			return -ENODEV;
+		}
+	}
 
 	if (!request_region(piix4_smba, SMBIOSIZE, piix4_driver.name)) {
 		dev_err(&PIIX4_dev->dev, "SMBus region 0x%x already in use!\n",
