@@ -459,6 +459,13 @@ static void dw_edma_finish_termination(struct dw_edma_chan *chan)
 	chan->status = EDMA_ST_IDLE;
 }
 
+/* Must be called with vc.lock held after the channel has stopped. */
+static void dw_edma_finish_pause(struct dw_edma_chan *chan)
+{
+	dw_edma_set_request(chan, EDMA_REQ_NONE);
+	chan->status = EDMA_ST_PAUSE;
+}
+
 /*
  * Must be called with vc.lock held. Consume an LL progress boundary,
  * advance ll_done and complete descriptors covered by the consumed range.
@@ -692,8 +699,9 @@ static void dw_edma_core_ch_doorbell(struct dw_edma_chan *chan)
  */
 static bool dw_edma_core_ch_maybe_doorbell(struct dw_edma_chan *chan)
 {
-	if (chan->non_ll || chan->request != EDMA_REQ_NONE ||
-	    chan->status != EDMA_ST_BUSY || !dw_edma_ll_pending(chan) ||
+	if (chan->non_ll ||
+	    chan->status != EDMA_ST_BUSY ||
+	    !dw_edma_ll_pending(chan) ||
 	    dw_edma_abort_is_pending(chan))
 		return false;
 
@@ -704,9 +712,25 @@ static bool dw_edma_core_ch_maybe_doorbell(struct dw_edma_chan *chan)
 	if (dw_edma_core_ch_status(chan) == DMA_IN_PROGRESS)
 		return true;
 
-	dw_edma_ll_reconcile_and_refill(chan);
-	if (!dw_edma_ll_pending(chan))
-		return false;
+	/*
+	 * Normal work may refill a stopped tail. STOP and PAUSE freeze the
+	 * producer boundary, so only kick entries published before the request.
+	 */
+	if (chan->request == EDMA_REQ_NONE) {
+		dw_edma_ll_reconcile_and_refill(chan);
+		if (!dw_edma_ll_pending(chan))
+			return false;
+	} else {
+		dw_edma_ll_reconcile_stopped(chan);
+		if (!dw_edma_ll_pending(chan)) {
+			if (chan->request == EDMA_REQ_STOP)
+				dw_edma_finish_termination(chan);
+			else
+				dw_edma_finish_pause(chan);
+
+			return false;
+		}
+	}
 
 	dw_edma_core_ch_doorbell(chan);
 	if (!dw_edma_ll_has_hdma_stop_event(chan))
@@ -752,8 +776,7 @@ static void dw_edma_ll_recheck_work(struct work_struct *work)
 	}
 
 	chan->ll_recheck_at = 0;
-	if (chan->request == EDMA_REQ_NONE)
-		dw_edma_core_ch_maybe_doorbell(chan);
+	dw_edma_core_ch_maybe_doorbell(chan);
 }
 
 static void dw_edma_device_caps(struct dma_chan *dchan,
@@ -845,6 +868,16 @@ dw_edma_device_get_config(struct dma_chan *dchan,
 	return &chan->config;
 }
 
+/* Must be called with vc.lock held. */
+static void dw_edma_request_pause(struct dw_edma_chan *chan)
+{
+	dw_edma_set_request(chan, EDMA_REQ_PAUSE);
+	if (!chan->non_ll && !dw_edma_ll_pending(chan))
+		dw_edma_finish_pause(chan);
+	else
+		dw_edma_core_ch_maybe_doorbell_or_recheck(chan);
+}
+
 static int dw_edma_device_pause(struct dma_chan *dchan)
 {
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
@@ -859,7 +892,7 @@ static int dw_edma_device_pause(struct dma_chan *dchan)
 	else if (chan->request != EDMA_REQ_NONE)
 		err = -EPERM;
 	else
-		dw_edma_set_request(chan, EDMA_REQ_PAUSE);
+		dw_edma_request_pause(chan);
 
 	return err;
 }
@@ -887,35 +920,52 @@ static int dw_edma_device_resume(struct dma_chan *dchan)
 	return err;
 }
 
+/* Must be called with vc.lock held. */
+static bool dw_edma_may_be_active(struct dw_edma_chan *chan)
+{
+	if (chan->non_ll)
+		return dw_edma_core_ch_status(chan) == DMA_IN_PROGRESS;
+
+	if (!dw_edma_ll_pending(chan))
+		return false;
+
+	/*
+	 * eDMA can report STOPPED while a doorbell-triggered start is
+	 * still pending. Native HDMA has a dedicated STOP event.
+	 */
+	return !dw_edma_ll_has_hdma_stop_event(chan) ||
+	       dw_edma_core_ch_status(chan) == DMA_IN_PROGRESS;
+}
+
 static int dw_edma_device_terminate_all(struct dma_chan *dchan)
 {
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
-	int err = 0;
 
 	guard(spinlock_irqsave)(&chan->vc.lock);
 
 	if (!chan->configured) {
 		dw_edma_terminate_all_descs(chan);
+		chan->request = EDMA_REQ_NONE;
 	} else if (chan->status == EDMA_ST_PAUSE) {
+		/* A paused channel has already stopped. */
 		dw_edma_finish_termination(chan);
-	} else if (chan->status == EDMA_ST_IDLE) {
-		dw_edma_finish_termination(chan);
-	} else if (dw_edma_core_ch_status(chan) == DMA_COMPLETE) {
+	} else if (dw_edma_may_be_active(chan)) {
 		/*
-		 * The channel is in a false BUSY state, probably didn't
-		 * receive or lost an interrupt
+		 * Keep published entries intact until an IRQ sample confirms
+		 * that the channel stopped. An outstanding EDMA_REQ_PAUSE is
+		 * replaced by EDMA_REQ_STOP.
+		 */
+		dw_edma_set_request(chan, EDMA_REQ_STOP);
+		dw_edma_core_ch_maybe_doorbell_or_recheck(chan);
+	} else {
+		/*
+		 * No LL entry is hardware-owned, or non-LL status confirms that
+		 * the one programmed burst is not running.
 		 */
 		dw_edma_finish_termination(chan);
-	} else if (chan->request > EDMA_REQ_PAUSE) {
-		err = -EPERM;
-	} else {
-		dw_edma_set_request(chan, EDMA_REQ_STOP);
 	}
-	if (chan->status == EDMA_ST_IDLE &&
-	    !dw_edma_abort_is_pending(chan))
-		dw_edma_set_request(chan, EDMA_REQ_NONE);
 
-	return err;
+	return 0;
 }
 
 static void dw_edma_device_issue_pending(struct dma_chan *dchan)
@@ -1256,8 +1306,7 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 		}
 
 		if (chan->request == EDMA_REQ_PAUSE) {
-			dw_edma_set_request(chan, EDMA_REQ_NONE);
-			chan->status = EDMA_ST_PAUSE;
+			dw_edma_finish_pause(chan);
 			break;
 		}
 
@@ -1300,8 +1349,7 @@ static void dw_edma_ll_interrupt(struct dw_edma_chan *chan)
 		break;
 
 	case EDMA_REQ_PAUSE:
-		dw_edma_set_request(chan, EDMA_REQ_NONE);
-		chan->status = EDMA_ST_PAUSE;
+		dw_edma_finish_pause(chan);
 		break;
 
 	case EDMA_REQ_STOP:
@@ -1598,19 +1646,27 @@ static void dw_edma_wait_termination(struct dma_chan *dchan)
 	/*
 	 * A STOP may be deferred to a later interrupt while the channel is still
 	 * running. Wait until that handler completes the termination.
+	 *
+	 * dmaengine_synchronize() cannot report an error. Returning while
+	 * EDMA_REQ_STOP remains pending would let callers release transfer
+	 * resources even though hardware access cannot be ruled out. Warn
+	 * periodically, but keep waiting.
 	 */
-	while (time_before(jiffies, timeout)) {
+	for (;;) {
 		scoped_guard(spinlock_irqsave, &chan->vc.lock)
 			stopping = chan->request == EDMA_REQ_STOP;
 
 		if (!stopping)
 			return;
 
+		if (time_after_eq(jiffies, timeout)) {
+			dev_warn(chan->dw->chip->dev,
+				 "timeout waiting for channel termination; still waiting\n");
+			timeout = jiffies + msecs_to_jiffies(5000);
+		}
+
 		fsleep(1000);
 	}
-
-	dev_warn(chan->dw->chip->dev,
-		 "timeout waiting for channel termination\n");
 }
 
 static void dw_edma_device_synchronize(struct dma_chan *dchan)
