@@ -490,6 +490,31 @@ struct mbox_chan *mbox_request_channel(struct mbox_client *cl, int index)
 }
 EXPORT_SYMBOL_GPL(mbox_request_channel);
 
+static void devm_mbox_free_channel(void *data)
+{
+	struct mbox_chan *chan = data;
+
+	mbox_free_channel(chan);
+}
+
+struct mbox_chan *devm_mbox_request_channel(struct device *dev,
+					    struct mbox_client *cl, int index)
+{
+	struct mbox_chan *chan;
+	int ret;
+
+	chan = mbox_request_channel(cl, index);
+	if (IS_ERR(chan))
+		return chan;
+
+	ret = devm_add_action_or_reset(dev, devm_mbox_free_channel, chan);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return chan;
+}
+EXPORT_SYMBOL_GPL(devm_mbox_request_channel);
+
 struct mbox_chan *mbox_request_channel_byname(struct mbox_client *cl,
 					      const char *name)
 {
@@ -503,6 +528,25 @@ struct mbox_chan *mbox_request_channel_byname(struct mbox_client *cl,
 	return mbox_request_channel(cl, index);
 }
 EXPORT_SYMBOL_GPL(mbox_request_channel_byname);
+
+struct mbox_chan *devm_mbox_request_channel_byname(struct device *dev,
+						   struct mbox_client *cl,
+						   const char *name)
+{
+	struct mbox_chan *chan;
+	int ret;
+
+	chan = mbox_request_channel_byname(cl, name);
+	if (IS_ERR(chan))
+		return chan;
+
+	ret = devm_add_action_or_reset(dev, devm_mbox_free_channel, chan);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return chan;
+}
+EXPORT_SYMBOL_GPL(devm_mbox_request_channel_byname);
 
 /**
  * mbox_free_channel - The client relinquishes control of a mailbox
