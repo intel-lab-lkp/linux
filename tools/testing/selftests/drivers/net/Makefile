@@ -19,6 +19,7 @@ TEST_PROGS := \
 	netpoll_basic.py \
 	ping.py \
 	psp.py \
+	ptp.py \
 	queues.py \
 	ring_reconfig.py \
 	shaper.py \
