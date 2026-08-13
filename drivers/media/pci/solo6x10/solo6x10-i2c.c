@@ -25,7 +25,7 @@
 u8 solo_i2c_readbyte(struct solo_dev *solo_dev, int id, u8 addr, u8 off)
 {
 	struct i2c_msg msgs[2];
-	u8 data;
+	u8 data = 0;
 
 	msgs[0].flags = 0;
 	msgs[0].addr = addr;
