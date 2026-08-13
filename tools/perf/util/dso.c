@@ -1029,7 +1029,9 @@ static ssize_t file_read(struct dso *dso, struct machine *machine,
 
 	if (dso__data(dso)->fd < 0) {
 		dso__data(dso)->status = DSO_DATA_STATUS_ERROR;
-		ret = -errno;
+		/* fd is always negative here: -errno or -1, never 0 */
+		ret = dso__data(dso)->fd;
+		assert(ret < 0);
 		goto out;
 	}
 
@@ -1151,8 +1153,10 @@ static int file_size(struct dso *dso, struct machine *machine)
 	try_to_open_dso(dso, machine);
 
 	if (dso__data(dso)->fd < 0) {
-		ret = -errno;
 		dso__data(dso)->status = DSO_DATA_STATUS_ERROR;
+		/* fd is always negative here: -errno or -1, never 0 */
+		ret = dso__data(dso)->fd;
+		assert(ret < 0);
 		goto out;
 	}
 
