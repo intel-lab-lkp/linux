@@ -553,6 +553,11 @@ static struct key_restriction *asymmetric_lookup_restriction(
 				ret = ERR_CAST(key);
 				goto out;
 			}
+			if (!key_is_positive(key)) {
+				key_put(key);
+				ret = ERR_PTR(-ENOKEY);
+				goto out;
+			}
 		}
 
 		ret = asymmetric_restriction_alloc(link_fn, key);
