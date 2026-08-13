@@ -21,7 +21,8 @@ int panthor_mmu_init(struct panthor_device *ptdev);
 void panthor_mmu_unplug(struct panthor_device *ptdev);
 void panthor_mmu_pre_reset(struct panthor_device *ptdev);
 void panthor_mmu_post_reset(struct panthor_device *ptdev);
-void panthor_mmu_suspend(struct panthor_device *ptdev);
+void panthor_mmu_pre_suspend(struct panthor_device *ptdev);
+void panthor_mmu_post_suspend(struct panthor_device *ptdev);
 void panthor_mmu_resume(struct panthor_device *ptdev);
 
 int panthor_vm_map_bo_range(struct panthor_vm *vm, struct panthor_gem_object *bo,

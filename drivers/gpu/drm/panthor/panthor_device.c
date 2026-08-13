@@ -512,9 +512,10 @@ static int panthor_device_resume_hw_components(struct panthor_device *ptdev)
 	if (!ret)
 		return 0;
 
-	panthor_mmu_suspend(ptdev);
+	panthor_mmu_pre_suspend(ptdev);
 	panthor_gpu_suspend(ptdev);
 	panthor_pwr_suspend(ptdev);
+	panthor_mmu_post_suspend(ptdev);
 	return ret;
 }
 
@@ -643,9 +644,10 @@ int panthor_device_suspend(struct device *dev)
 		 */
 		panthor_sched_suspend(ptdev);
 		panthor_fw_suspend(ptdev);
-		panthor_mmu_suspend(ptdev);
+		panthor_mmu_pre_suspend(ptdev);
 		panthor_gpu_suspend(ptdev);
 		panthor_pwr_suspend(ptdev);
+		panthor_mmu_post_suspend(ptdev);
 		drm_dev_exit(cookie);
 	}
 
