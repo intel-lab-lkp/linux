@@ -4012,6 +4012,22 @@ struct mem_cgroup *mem_cgroup_from_private_id(unsigned short id)
 	return obj_cgroup_memcg(objcg);
 }
 
+/**
+ * mem_cgroup_from_private_id - look up an online memcg from a memcg id
+ *                              and get a reference.
+ * @id: the memcg id to look up
+ */
+struct mem_cgroup *mem_cgroup_from_private_id_online(unsigned short id)
+{
+	struct obj_cgroup *objcg;
+
+	objcg = xa_load(&mem_cgroup_private_ids, id);
+	if (!objcg)
+		return NULL;
+
+	return get_mem_cgroup_from_objcg(objcg);
+}
+
 static struct mem_cgroup *mem_cgroup_take_from_private_id(unsigned short id, unsigned int n)
 {
 	struct obj_cgroup *objcg;
@@ -5248,11 +5264,9 @@ int mem_cgroup_swapin_charge_folio(struct folio *folio, unsigned short id,
 	if (mem_cgroup_disabled())
 		return 0;
 
-	rcu_read_lock();
-	memcg = mem_cgroup_from_private_id(id);
-	if (!memcg || !css_tryget_online(&memcg->css))
+	memcg = mem_cgroup_from_private_id_online(id);
+	if (!memcg)
 		memcg = get_mem_cgroup_from_mm(mm);
-	rcu_read_unlock();
 
 	ret = charge_memcg(folio, memcg, gfp);
 

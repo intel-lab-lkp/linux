@@ -827,6 +827,7 @@ static inline unsigned short mem_cgroup_private_id(struct mem_cgroup *memcg)
 	return memcg->id;
 }
 struct mem_cgroup *mem_cgroup_from_private_id(unsigned short id);
+struct mem_cgroup *mem_cgroup_from_private_id_online(unsigned short id);
 
 static inline u64 mem_cgroup_id(struct mem_cgroup *memcg)
 {
