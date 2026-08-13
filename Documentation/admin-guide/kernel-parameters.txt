@@ -196,6 +196,11 @@ Kernel parameters
 			ACPI firmware problems, as the system might behave erratically
 			after having encountered a fatal ACPI error.
 
+	acpi.skip_ids=	[ACPI] Skip enumeration of ACPI devices whose HID[:UID]
+			matches an entry in the given comma-separated list
+			(up to 16 entries).
+			Format: HID[:UID][,HID[:UID]...]
+
 	acpi_enforce_resources=	[ACPI]
 			{ strict | lax | no }
 			Check for resource conflicts between native drivers

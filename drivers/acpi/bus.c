@@ -38,6 +38,15 @@ struct acpi_device *acpi_root;
 struct proc_dir_entry *acpi_root_dir;
 EXPORT_SYMBOL(acpi_root_dir);
 
+#define ACPI_MAX_SKIP_IDS	16 /* Arbitrary limit. */
+
+static char *acpi_skip_ids[ACPI_MAX_SKIP_IDS];
+static int acpi_skip_num;
+module_param_array_named(skip_ids, acpi_skip_ids, charp,
+		&acpi_skip_num, 0444);
+MODULE_PARM_DESC(skip_ids,
+		"Skip binding ACPI drivers to devices with matching _HID[:_UID]");
+
 #ifdef CONFIG_X86
 #ifdef CONFIG_ACPI_CUSTOM_DSDT
 static inline int set_copy_dsdt(const struct dmi_system_id *id)
@@ -1003,6 +1012,9 @@ static bool __acpi_match_device(const struct acpi_device *device,
 {
 	const struct acpi_device_id *id;
 	struct acpi_hardware_id *hwid;
+	struct acpi_device_info *info = NULL;
+	bool ret = false;
+	int i;
 
 	/*
 	 * If the device is not present, it is unnecessary to load device
@@ -1011,8 +1023,42 @@ static bool __acpi_match_device(const struct acpi_device *device,
 	if (!device || !device->status.present)
 		return false;
 
+	if (acpi_skip_num) {
+		acpi_status status;
+
+		status = acpi_get_object_info(device->handle, &info);
+		if (ACPI_FAILURE(status))
+			info = NULL;
+	}
+
 	list_for_each_entry(hwid, &device->pnp.ids, list) {
-		/* First, check the ACPI/PNP IDs provided by the caller. */
+		/* First, check whether device ACPI ID is in the skip list. */
+		for (i = 0; i < acpi_skip_num; i++) {
+			char with_uid[MAX_ACPI_DEVICE_NAME_LEN];
+			u32 uid;
+
+			if (!strcasecmp(acpi_skip_ids[i], hwid->id)) {
+				ret = false;
+				goto out;
+			}
+
+			if (!info || !(info->valid & ACPI_VALID_UID))
+				continue;
+
+			if (kstrtou32(info->unique_id.string, 0, &uid))
+				snprintf(with_uid, sizeof(with_uid), "%s:%s",
+					 hwid->id, info->unique_id.string);
+			else
+				snprintf(with_uid, sizeof(with_uid), "%s:%02x",
+					 hwid->id, uid);
+
+			if (!strcasecmp(acpi_skip_ids[i], with_uid)) {
+				ret = false;
+				goto out;
+			}
+		}
+
+		/* Second, check the ACPI/PNP IDs provided by the caller. */
 		if (acpi_ids) {
 			for (id = acpi_ids; id->id[0] || id->cls; id++) {
 				if (id->id[0] && !strcmp((char *)id->id, hwid->id))
@@ -1026,12 +1072,18 @@ static bool __acpi_match_device(const struct acpi_device *device,
 		 * Next, check ACPI_DT_NAMESPACE_HID and try to match the
 		 * "compatible" property if found.
 		 */
-		if (!strcmp(ACPI_DT_NAMESPACE_HID, hwid->id))
-			return acpi_of_match_device(device, of_ids, of_id);
+		if (!strcmp(ACPI_DT_NAMESPACE_HID, hwid->id)) {
+			ret = acpi_of_match_device(device, of_ids, of_id);
+			goto out;
+		}
 	}
-	return false;
+
+out:
+	kfree(info);
+	return ret;
 
 out_acpi_match:
+	kfree(info);
 	if (acpi_id)
 		*acpi_id = id;
 	return true;
