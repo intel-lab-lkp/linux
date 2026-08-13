@@ -655,7 +655,7 @@ static int brcmstb_i2c_probe(struct platform_device *pdev)
 	brcmstb_i2c_enable_disable_irq(dev, INT_DISABLE);
 
 	/* register the ISR handler */
-	if (dev->irq >= 0) {
+	if (dev->irq > 0) {
 		rc = devm_request_irq(&pdev->dev, dev->irq, brcmstb_i2c_isr,
 				      IRQF_SHARED,
 				      int_name ? int_name : pdev->name,
@@ -697,7 +697,7 @@ static int brcmstb_i2c_probe(struct platform_device *pdev)
 
 	dev_info(dev->device, "%s@%dhz registered in %s mode\n",
 		 int_name ? int_name : " ", dev->clk_freq_hz,
-		 (dev->irq >= 0) ? "interrupt" : "polling");
+		 (dev->irq > 0) ? "interrupt" : "polling");
 
 	return 0;
 }
