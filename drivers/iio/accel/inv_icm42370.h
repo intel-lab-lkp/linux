@@ -17,6 +17,7 @@
 #include <linux/iio/common/inv_sensors_timestamp.h>
 #include <linux/iio/iio.h>
 
+#include "inv_icm42370_buffer.h"
 
 #define INV_ICM42370_SENSOR_CONF_INIT { -1, -1, -1, -1 }
 
@@ -45,6 +46,8 @@
 #define INV_ICM42370_REG_INT_STATUS 0x3A
 #define INV_ICM42370_REG_TEMP_CONFIG0 0x34
 #define INV_ICM42370_REG_INTF_CONFIG0 0x35
+#define INV_ICM42370_REG_FIFO_COUNT 0x3D
+#define INV_ICM42370_REG_FIFO_DATA 0x3F
 #define INV_ICM42370_REG_WHO_AM_I 0x75
 #define INV_ICM42370_REG_BLK_SEL_W 0x79
 #define INV_ICM42370_REG_MADDR_W 0x7A
@@ -199,6 +202,7 @@ enum inv_icm42370_accel_scan {
 	INV_ICM42370_ACCEL_SCAN_Y,
 	INV_ICM42370_ACCEL_SCAN_Z,
 	INV_ICM42370_ACCEL_SCAN_TEMP,
+	INV_ICM42370_ACCEL_SCAN_TIMESTAMP,
 };
 
 enum inv_icm42370_sensor_mode {
@@ -286,6 +290,7 @@ struct inv_icm42370_conf {
  * @indio_accel:	accelerometer IIO device.
  * @timestamp:		interrupt timestamp.
  * @orientation:	sensor chip orientation relative to main hardware.
+ * @fifo:		FIFO state and configuration.
  * @chip:		chip identifier.
  * @conf:		chip sensors configurations.
  * @filter:		sensor filter.
@@ -303,6 +308,7 @@ struct inv_icm42370_data {
 	struct iio_dev *indio_accel;
 	s64 timestamp;
 	struct iio_mount_matrix orientation;
+	struct inv_icm42370_fifo fifo;
 	enum inv_icm42370_chip chip;
 	struct inv_icm42370_conf conf;
 	enum inv_icm42370_filter filter;

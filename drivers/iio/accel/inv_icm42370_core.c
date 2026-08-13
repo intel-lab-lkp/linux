@@ -20,10 +20,25 @@
 #include <linux/types.h>
 #include <linux/units.h>
 
+#include <linux/iio/buffer.h>
 #include <linux/iio/common/inv_sensors_timestamp.h>
 #include <linux/iio/iio.h>
+#include <linux/iio/kfifo_buf.h>
 
 #include "inv_icm42370.h"
+#include "inv_icm42370_buffer.h"
+
+#define INV_ICM42370_SCAN_MASK_ACCEL_3AXIS				\
+	(BIT(INV_ICM42370_ACCEL_SCAN_X) |				\
+	BIT(INV_ICM42370_ACCEL_SCAN_Y) |				\
+	BIT(INV_ICM42370_ACCEL_SCAN_Z))
+
+#define INV_ICM42370_SCAN_MASK_TEMP	BIT(INV_ICM42370_ACCEL_SCAN_TEMP)
+
+static bool inv_icm42370_is_noinc_reg(struct device *dev, unsigned int reg)
+{
+	return reg == INV_ICM42370_REG_FIFO_DATA;
+}
 
 #define INV_ICM42370_SUSPEND_DELAY_MS 2000
 
@@ -32,6 +47,7 @@ const struct regmap_config inv_icm42370_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = 0x7E,
+	.readable_noinc_reg = inv_icm42370_is_noinc_reg,
 };
 EXPORT_SYMBOL_NS_GPL(inv_icm42370_regmap_config, "IIO_ICM42370");
 
@@ -57,6 +73,7 @@ static const struct iio_chan_spec inv_icm42370_accel_channels[] = {
 	INV_ICM42370_ACCEL_CHAN(IIO_MOD_Z, INV_ICM42370_ACCEL_SCAN_Z,
 				inv_icm42370_accel_ext_infos),
 	INV_ICM42370_TEMP_CHAN(INV_ICM42370_ACCEL_SCAN_TEMP),
+	IIO_CHAN_SOFT_TIMESTAMP(INV_ICM42370_ACCEL_SCAN_TIMESTAMP),
 };
 
 /* IIO format int + nano */
@@ -73,6 +90,18 @@ static const int inv_icm42370_accel_scale[] = {
 	/* +/- 2G => 2*2*9.80665 / (2**15) m/s-2 */
 	[2 * INV_ICM42370_ACCEL_FS_2G] = 0,
 	[2 * INV_ICM42370_ACCEL_FS_2G + 1] = 598550,
+};
+
+/*
+ * IIO buffer layout: must match channel scan types.
+ * Accel: 3 x s16 BE (6 bytes), Temp: 1 x s16 native (2 bytes) = 8 bytes data.
+ * Timestamp: s64 at 8-byte aligned offset.
+ */
+struct inv_icm42370_accel_buffer {
+	struct inv_icm42370_fifo_sensor_data accel;
+	s16 temp;
+
+	s64 timestamp __aligned(8);
 };
 
 /**
@@ -431,6 +460,7 @@ static irqreturn_t inv_icm42370_irq_timestamp(int irq, void *_data)
 static irqreturn_t inv_icm42370_irq_handler(int irq, void *_data)
 {
 	struct inv_icm42370_data *data = _data;
+	struct device *dev = regmap_get_device(data->map);
 	unsigned int status;
 	int ret;
 
@@ -439,6 +469,21 @@ static irqreturn_t inv_icm42370_irq_handler(int irq, void *_data)
 	ret = regmap_read(data->map, INV_ICM42370_REG_INT_STATUS, &status);
 	if (ret)
 		return IRQ_HANDLED;
+
+	if (status & INV_ICM42370_INT_STATUS_FIFO_FULL)
+		dev_warn_ratelimited(dev, "FIFO full data lost!\n");
+
+	if (status & (INV_ICM42370_INT_STATUS_FIFO_THS |
+		      INV_ICM42370_INT_STATUS_FIFO_FULL)) {
+		ret = inv_icm42370_buffer_fifo_read(data, 0);
+		if (ret) {
+			dev_err_ratelimited(dev, "FIFO read error %d\n", ret);
+			return IRQ_HANDLED;
+		}
+		ret = inv_icm42370_buffer_fifo_parse(data);
+		if (ret)
+			dev_err_ratelimited(dev, "FIFO parsing error %d\n", ret);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -503,6 +548,27 @@ static int inv_icm42370_irq_init(struct inv_icm42370_data *data, int irq,
 	return devm_request_threaded_irq(dev, irq, inv_icm42370_irq_timestamp,
 					 inv_icm42370_irq_handler, irq_type,
 					 "inv_icm42370", data);
+}
+
+static int inv_icm42370_timestamp_setup(struct inv_icm42370_data *data)
+{
+	u8 val;
+	int ret;
+
+	ret = inv_icm42370_mreg_read(data, INV_ICM42370_MREG1,
+				     INV_ICM42370_REG_TMST_CONFIG1, &val);
+	if (ret)
+		return ret;
+
+	/*
+	 * Disable FIFO timestamp to produce 8-byte Packet 1.
+	 * Host-side timestamps are interpolated from the IRQ timestamp
+	 * and ODR period via inv_sensors_timestamp.
+	 */
+	val &= ~INV_ICM42370_TMST_CONFIG_TMST_EN;
+
+	return inv_icm42370_mreg_write(data, INV_ICM42370_MREG1,
+				       INV_ICM42370_REG_TMST_CONFIG1, val);
 }
 
 /*
@@ -990,6 +1056,8 @@ static int inv_icm42370_accel_write_odr(struct iio_dev *indio_dev, int val,
 	if (ret)
 		return ret;
 
+	inv_icm42370_buffer_update_fifo_period(data);
+
 	return 0;
 }
 
@@ -1037,6 +1105,40 @@ static int inv_icm42370_accel_write_raw(struct iio_dev *indio_dev,
 	default:
 		return -EINVAL;
 	}
+}
+
+/* enable accelerometer sensor and FIFO write */
+static int inv_icm42370_accel_update_scan_mode(struct iio_dev *indio_dev,
+					       const unsigned long *scan_mask)
+{
+	struct inv_icm42370_data *st = iio_priv(indio_dev);
+	struct inv_icm42370_conf conf = INV_ICM42370_SENSOR_CONF_INIT;
+	unsigned int fifo_en = 0;
+	unsigned int sleep_accel = 0;
+	int ret;
+
+	guard(mutex)(&st->lock);
+
+	if (*scan_mask & INV_ICM42370_SCAN_MASK_ACCEL_3AXIS) {
+		/* enable accel sensor */
+		conf.mode = st->conf.mode;
+		conf.filter = st->filter;
+
+		ret = inv_icm42370_set_accel_conf(st, &conf, &sleep_accel);
+		if (ret)
+			goto out;
+
+		fifo_en |= INV_ICM42370_SENSOR_ACCEL;
+	}
+
+	/* update data FIFO write */
+	ret = inv_icm42370_buffer_set_fifo_en(st, fifo_en | st->fifo.en);
+
+out:
+	if (sleep_accel)
+		msleep(sleep_accel);
+
+	return ret;
 }
 
 /**
@@ -1161,15 +1263,54 @@ static int inv_icm42370_accel_read_raw(struct iio_dev *indio_dev,
 	}
 }
 
+static int inv_icm42370_accel_hwfifo_set_watermark(struct iio_dev *indio_dev,
+						   unsigned int val)
+{
+	struct inv_icm42370_data *st = iio_priv(indio_dev);
+	int ret;
+
+	guard(mutex)(&st->lock);
+
+	st->fifo.watermark.accel = val;
+	ret = inv_icm42370_buffer_update_watermark(st);
+
+	return ret;
+}
+
+static int inv_icm42370_accel_hwfifo_flush(struct iio_dev *indio_dev,
+					   unsigned int count)
+{
+	struct inv_icm42370_data *st = iio_priv(indio_dev);
+	int ret;
+
+	if (count == 0)
+		return 0;
+
+	mutex_lock(&st->lock);
+
+	ret = inv_icm42370_buffer_hwfifo_flush(st, count);
+	if (!ret)
+		ret = st->fifo.nb.accel;
+
+	mutex_unlock(&st->lock);
+
+	return ret;
+}
+
 static const struct iio_info inv_icm42370_info = {
 	.read_raw = inv_icm42370_accel_read_raw,
 	.write_raw = inv_icm42370_accel_write_raw,
+	.update_scan_mode = inv_icm42370_accel_update_scan_mode,
+	.hwfifo_set_watermark = inv_icm42370_accel_hwfifo_set_watermark,
+	.hwfifo_flush_to_buffer = inv_icm42370_accel_hwfifo_flush,
 };
 
 struct iio_dev *inv_icm42370_accel_init(struct iio_dev *indio_dev,
 					struct inv_icm42370_data *data)
 {
+	struct device *dev = regmap_get_device(data->map);
 	struct inv_sensors_timestamp_chip ts_chip;
+	int ret;
 
 	data->scales = inv_icm42370_accel_scale;
 	data->scales_len = ARRAY_SIZE(inv_icm42370_accel_scale);
@@ -1187,11 +1328,62 @@ struct iio_dev *inv_icm42370_accel_init(struct iio_dev *indio_dev,
 
 	indio_dev->name = "inv_icm42370";
 	indio_dev->info = &inv_icm42370_info;
-	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->modes = INDIO_DIRECT_MODE | INDIO_ALL_BUFFER_MODES;
 	indio_dev->channels = inv_icm42370_accel_channels;
 	indio_dev->num_channels = ARRAY_SIZE(inv_icm42370_accel_channels);
 
+	ret = devm_iio_kfifo_buffer_setup(dev, indio_dev,
+					  &inv_icm42370_buffer_ops);
+	if (ret)
+		return ERR_PTR(ret);
+
 	return indio_dev;
+}
+
+int inv_icm42370_accel_parse_fifo(struct iio_dev *indio_dev)
+{
+	struct inv_icm42370_data *data = iio_priv(indio_dev);
+	struct inv_sensors_timestamp *ts = &data->ts;
+	ssize_t i, size;
+	unsigned int no;
+	const void *accel, *timestamp;
+	const s8 *temp;
+	unsigned int odr;
+	s64 ts_val;
+	struct inv_icm42370_accel_buffer buffer = {};
+
+	for (i = 0, no = 0; i < data->fifo.count; i += size, ++no) {
+		size = inv_icm42370_fifo_decode_packet(&data->fifo.data[i],
+				&accel, &temp, &timestamp, &odr);
+		if (size <= 0)
+			return size;
+
+		if (accel == NULL || !inv_icm42370_fifo_is_data_valid(accel))
+			continue;
+
+		if (odr & INV_ICM42370_SENSOR_ACCEL)
+			inv_sensors_timestamp_apply_odr(ts, data->fifo.period,
+							data->fifo.nb.total, no);
+
+		memcpy(&buffer.accel, accel, sizeof(buffer.accel));
+
+		/*
+		 * FIFO 8-bit temp has sensitivity ~2 LSB/°C.
+		 * Register 16-bit temp has sensitivity 128 LSB/°C.
+		 * Scale factor: 128 / 2 = 64.
+		 * This lets the IIO scale (1000/128) and offset (3200) work
+		 * correctly for both register reads and FIFO data.
+		 */
+		if (temp)
+			buffer.temp = (s16)*temp * 64;
+		else
+			buffer.temp = (s16)INV_ICM42370_DATA_INVALID;
+
+		ts_val = inv_sensors_timestamp_pop(ts);
+		iio_push_to_buffers_with_timestamp(indio_dev, &buffer, ts_val);
+	}
+
+	return 0;
 }
 
 /**
@@ -1242,6 +1434,10 @@ int inv_icm42370_core_probe(struct regmap *regmap, int chip, int irq,
 
 	data = iio_priv(indio_dev);
 
+	data->fifo.data = devm_kzalloc(dev, INV_ICM42370_FIFO_SIZE_MAX, GFP_KERNEL);
+	if (!data->fifo.data)
+		return -ENOMEM;
+
 	ret = devm_mutex_init(dev, &data->lock);
 	if (ret)
 		return dev_err_probe(dev, ret, "unable to initialize mutex\n");
@@ -1266,6 +1462,14 @@ int inv_icm42370_core_probe(struct regmap *regmap, int chip, int irq,
 		dev_err(dev, "failed to retrieve mounting matrix %d\n", ret);
 		return ret;
 	}
+
+	ret = inv_icm42370_timestamp_setup(data);
+	if (ret)
+		return ret;
+
+	ret = inv_icm42370_buffer_init(data);
+	if (ret)
+		return ret;
 
 	data->indio_accel = inv_icm42370_accel_init(indio_dev, data);
 	if (IS_ERR(data->indio_accel))
