@@ -884,35 +884,49 @@ error:
 	return -ENOMEM;
 }
 
+/* ndev->mtu is updated only once the new set is live (mana_publish_qset), so
+ * a failed allocation leaves the queues and the advertised MTU untouched.
+ */
 static int mana_change_mtu(struct net_device *ndev, int new_mtu)
 {
 	struct mana_port_context *mpc = netdev_priv(ndev);
-	unsigned int old_mtu = ndev->mtu;
+	struct mana_port_context *scratch;
+	struct mana_qset newq, oldq;
 	int err;
 
-	/* Pre-allocate buffers to prevent failure in mana_attach later */
-	err = mana_pre_alloc_rxbufs(mpc, new_mtu, mpc->num_queues);
-	if (err) {
-		netdev_err(ndev, "Insufficient memory for new MTU\n");
-		return err;
+	/* Port is down: no queues to rebuild, just record the new MTU.
+	 * mana_open() will size the RX buffers accordingly.
+	 */
+	if (!mpc->port_is_up) {
+		mpc->configured_mtu = new_mtu;
+		WRITE_ONCE(ndev->mtu, new_mtu);
+		return 0;
 	}
 
-	err = mana_detach(ndev, false);
+	scratch = mana_qset_scratch_alloc(mpc);
+	if (!scratch)
+		return -ENOMEM;
+
+	err = mana_alloc_qset(scratch, mpc->num_queues, mpc->rx_queue_size,
+			      mpc->tx_queue_size, mpc->priv_flags, new_mtu,
+			      &newq);
+	if (err)
+		goto free_scratch; /* current qset and ndev->mtu untouched */
+
+	err = mana_publish_qset(mpc, &newq, &oldq);
 	if (err) {
-		netdev_err(ndev, "mana_detach failed: %d\n", err);
-		goto out;
+		mana_free_qset(scratch, &newq);
+		goto free_scratch;
 	}
 
-	WRITE_ONCE(ndev->mtu, new_mtu);
+	mana_free_qset(scratch, &oldq);
 
-	err = mana_attach(ndev);
-	if (err) {
-		netdev_err(ndev, "mana_attach failed: %d\n", err);
-		WRITE_ONCE(ndev->mtu, old_mtu);
-	}
-
-out:
-	mana_pre_dealloc_rxbufs(mpc);
+free_scratch:
+	/* After the caller-side cleanup above, so the EQ pool outlives the
+	 * CQs that reference it.
+	 */
+	mana_publish_close_if_needed(mpc);
+	mana_qset_scratch_free(scratch);
 	return err;
 }
 
@@ -3089,7 +3103,8 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 	rxq->rxq_idx = rxq_idx;
 	rxq->rxobj = INVALID_MANA_HANDLE;
 
-	mana_get_rxbuf_cfg(apc, ndev->mtu, &rxq->datasize, &rxq->alloc_size,
+	mana_get_rxbuf_cfg(apc, apc->configured_mtu, &rxq->datasize,
+			   &rxq->alloc_size,
 			   &rxq->headroom, &rxq->frag_count);
 	/* Create page pool for RX queue */
 	err = mana_create_page_pool(rxq, gc);
@@ -3928,6 +3943,7 @@ static void mana_qset_snapshot(const struct mana_port_context *ctx,
 	out->rx_queue_size	= ctx->rx_queue_size;
 	out->tx_queue_size	= ctx->tx_queue_size;
 	out->priv_flags		= ctx->priv_flags;
+	out->mtu		= ctx->configured_mtu;
 	out->mana_eqs_debugfs	= ctx->mana_eqs_debugfs;
 }
 
@@ -3949,6 +3965,7 @@ static void mana_qset_install(struct mana_port_context *ctx,
 	ctx->rx_queue_size	= qset->rx_queue_size;
 	ctx->tx_queue_size	= qset->tx_queue_size;
 	ctx->priv_flags		= qset->priv_flags;
+	ctx->configured_mtu	= qset->mtu;
 	ctx->mana_eqs_debugfs	= qset->mana_eqs_debugfs;
 }
 
@@ -4011,7 +4028,7 @@ void mana_qset_scratch_free(struct mana_port_context *scratch)
  */
 int mana_alloc_qset(struct mana_port_context *scratch, unsigned int num_queues,
 		    unsigned int rx_queue_size, unsigned int tx_queue_size,
-		    u32 priv_flags, struct mana_qset *out)
+		    u32 priv_flags, int mtu, struct mana_qset *out)
 {
 	struct net_device *ndev = scratch->ndev;
 	int err;
@@ -4022,6 +4039,12 @@ int mana_alloc_qset(struct mana_port_context *scratch, unsigned int num_queues,
 	scratch->rx_queue_size	= rx_queue_size;
 	scratch->tx_queue_size	= tx_queue_size;
 	scratch->priv_flags	= priv_flags;
+
+	/* mana_get_rxbuf_cfg() reads this when sizing RX buffers, so the
+	 * new set is built for the requested MTU without disturbing the
+	 * running set.
+	 */
+	scratch->configured_mtu	= mtu;
 
 	err = mana_init_port_context(scratch);
 	if (err)
@@ -4237,6 +4260,11 @@ int mana_publish_qset(struct mana_port_context *apc, struct mana_qset *newq,
 	if (err)
 		goto rollback;
 
+	/* The new set is serving traffic, so advertise its MTU. A no-op unless
+	 * the caller is changing it.
+	 */
+	WRITE_ONCE(ndev->mtu, apc->configured_mtu);
+
 	/* Pair with the queue-state stores above: a datapath reader that sees
 	 * the gate open must also see the queue set it is about to index.
 	 */
@@ -4288,6 +4316,8 @@ rollback:
 		mana_publish_give_up(apc);
 		return err;
 	}
+
+	WRITE_ONCE(ndev->mtu, apc->configured_mtu);
 
 	/* Same pairing as the success path: the restored queue set has to be
 	 * visible before the gate reopens on it.
@@ -4508,6 +4538,7 @@ static int mana_probe_port(struct mana_context *ac, int port_idx,
 	apc->port_handle = INVALID_MANA_HANDLE;
 	apc->pf_filter_handle = INVALID_MANA_HANDLE;
 	apc->port_idx = port_idx;
+	apc->configured_mtu = ndev->mtu;
 	apc->link_cfg_error = 1;
 	apc->cqe_coalescing_enable = 0;
 	apc->cqe8_coalescing_enable = 0;
