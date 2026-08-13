@@ -5460,11 +5460,12 @@ u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
 {
 	void *orig_data, *orig_data_end, *hard_start;
 	struct netdev_rx_queue *rxqueue;
-	bool orig_bcast, orig_host;
+	bool orig_bcast = false, orig_host = false;
+	__be16 orig_eth_type = 0;
 	u32 mac_len, frame_sz;
-	__be16 orig_eth_type;
 	struct ethhdr *eth;
 	u32 metalen, act;
+	bool has_eth;
 	int off;
 
 	/* The XDP program wants to see the packet starting at the MAC
@@ -5490,10 +5491,21 @@ u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
 
 	orig_data_end = xdp->data_end;
 	orig_data = xdp->data;
-	eth = (struct ethhdr *)xdp->data;
-	orig_host = ether_addr_equal_64bits(eth->h_dest, skb->dev->dev_addr);
-	orig_bcast = is_multicast_ether_addr_64bits(eth->h_dest);
-	orig_eth_type = eth->h_proto;
+
+	/* xdp->data only points at an Ethernet header if this skb actually
+	 * carries one.  Devices with a different link layer (mac_len == 0
+	 * for ARPHRD_NONE/TUNNEL/RAWIP/PPP/..., IPOIB_ENCAP_LEN for IPoIB)
+	 * have nothing to inspect here, and must not have skb->mac_header
+	 * relocated by the ETH_HLEN fixup below.
+	 */
+	has_eth = mac_len == ETH_HLEN;
+	if (has_eth) {
+		eth = (struct ethhdr *)xdp->data;
+		orig_host = ether_addr_equal_64bits(eth->h_dest,
+						    skb->dev->dev_addr);
+		orig_bcast = is_multicast_ether_addr_64bits(eth->h_dest);
+		orig_eth_type = eth->h_proto;
+	}
 
 	act = bpf_prog_run_xdp(xdp_prog, xdp);
 
@@ -5525,14 +5537,16 @@ u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
 		skb->data_len = 0;
 
 	/* check if XDP changed eth hdr such SKB needs update */
-	eth = (struct ethhdr *)xdp->data;
-	if ((orig_eth_type != eth->h_proto) ||
-	    (orig_host != ether_addr_equal_64bits(eth->h_dest,
-						  skb->dev->dev_addr)) ||
-	    (orig_bcast != is_multicast_ether_addr_64bits(eth->h_dest))) {
-		__skb_push(skb, ETH_HLEN);
-		skb->pkt_type = PACKET_HOST;
-		skb->protocol = eth_type_trans(skb, skb->dev);
+	if (has_eth) {
+		eth = (struct ethhdr *)xdp->data;
+		if ((orig_eth_type != eth->h_proto) ||
+		    (orig_host != ether_addr_equal_64bits(eth->h_dest,
+							  skb->dev->dev_addr)) ||
+		    (orig_bcast != is_multicast_ether_addr_64bits(eth->h_dest))) {
+			__skb_push(skb, ETH_HLEN);
+			skb->pkt_type = PACKET_HOST;
+			skb->protocol = eth_type_trans(skb, skb->dev);
+		}
 	}
 
 	/* Redirect/Tx gives L2 packet, code that will reuse skb must __skb_pull
