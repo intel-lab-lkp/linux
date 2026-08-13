@@ -15,6 +15,7 @@
 #include <linux/iommu.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
+#include <linux/overflow.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -962,6 +963,48 @@ void acpi_configure_pmsi_domain(struct device *dev)
 }
 
 #ifdef CONFIG_IOMMU_API
+static bool iort_node_array_valid(struct acpi_iort_node *node, u32 offset,
+				  u32 count, size_t elem_size,
+				  size_t min_offset, const char *name)
+{
+	size_t bytes;
+
+	/* An empty array has no elements to access, regardless of its offset. */
+	if (!count)
+		return true;
+
+	if (!offset || offset < min_offset || offset > node->length) {
+		pr_err(FW_BUG "Invalid %s offset in IORT node %p\n", name,
+		       node);
+		return false;
+	}
+
+	if (check_mul_overflow(count, elem_size, &bytes) ||
+	    bytes > node->length - offset) {
+		pr_err(FW_BUG "Invalid %s array in IORT node %p\n", name,
+		       node);
+		return false;
+	}
+
+	return true;
+}
+
+static bool iort_rmr_node_valid(struct acpi_iort_node *node)
+{
+	struct acpi_iort_rmr *rmr;
+
+	if (node->length < sizeof(*node) + sizeof(*rmr)) {
+		pr_err(FW_BUG "Truncated RMR node in IORT table\n");
+		return false;
+	}
+
+	rmr = (struct acpi_iort_rmr *)node->node_data;
+	return iort_node_array_valid(node, rmr->rmr_offset, rmr->rmr_count,
+				     sizeof(struct acpi_iort_rmr_desc),
+				     sizeof(*node) + sizeof(*rmr),
+				     "RMR descriptor");
+}
+
 static void iort_rmr_free(struct device *dev,
 			  struct iommu_resv_region *region)
 {
@@ -1152,11 +1195,21 @@ static void iort_node_get_rmr_info(struct acpi_iort_node *node,
 	u32 num_sids = 0;
 	int i;
 
+	if (!iort_rmr_node_valid(node))
+		return;
+
 	if (!node->mapping_offset || !node->mapping_count) {
 		pr_err(FW_BUG "Invalid ID mapping, skipping RMR node %p\n",
 		       node);
 		return;
 	}
+
+	if (!iort_node_array_valid(node, node->mapping_offset,
+				   node->mapping_count,
+				   sizeof(struct acpi_iort_id_mapping),
+				   sizeof(*node) + sizeof(*rmr),
+				   "ID mapping"))
+		return;
 
 	rmr = (struct acpi_iort_rmr *)node->node_data;
 	if (!rmr->rmr_offset || !rmr->rmr_count)
