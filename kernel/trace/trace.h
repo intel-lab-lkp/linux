@@ -748,7 +748,6 @@ struct ftrace_buffer_info {
 	struct trace_iterator	iter;
 	void			*spare;
 	unsigned int		spare_cpu;
-	unsigned int		spare_size;
 	unsigned int		read;
 };
 

@@ -6976,34 +6976,52 @@ EXPORT_SYMBOL_GPL(ring_buffer_swap_cpu);
  * ring_buffer_alloc_read_page - allocate a page to read from buffer
  * @buffer: the buffer to allocate for.
  * @cpu: the cpu buffer to allocate.
+ * @prev: The previous page to be repurposed (can be NULL).
  *
- * This function is used in conjunction with ring_buffer_read_page.
+ * This function is used in conjunction with ring_buffer_read_page().
  * When reading a full page from the ring buffer, these functions
  * can be used to speed up the process. The calling function should
  * allocate a few pages first with this function. Then when it
  * needs to get pages from the ring buffer, it passes the result
- * of this function into ring_buffer_read_page, which will swap
+ * of this function into ring_buffer_read_page(), which will swap
  * the page that was allocated, with the read page of the buffer.
+ *
+ * If @prev is provided, and it has a different order than the current
+ * subbuffer order, its payload will be freed and re-allocated. If it
+ * already matches the order, it is simply returned.
  *
  * Returns:
  *  The page allocated, or ERR_PTR
  */
-struct buffer_data_read_page *
-ring_buffer_alloc_read_page(struct trace_buffer *buffer, int cpu)
+struct buffer_data_read_page *ring_buffer_alloc_read_page(struct trace_buffer *buffer, int cpu,
+							  struct buffer_data_read_page *prev)
 {
 	struct ring_buffer_per_cpu *cpu_buffer;
-	struct buffer_data_read_page *bpage = NULL;
+	struct buffer_data_read_page *bpage;
 	unsigned long flags;
+	unsigned int order;
 
 	if (!cpumask_test_cpu(cpu, buffer->cpumask))
 		return ERR_PTR(-ENODEV);
 
-	bpage = kzalloc_obj(*bpage);
-	if (!bpage)
-		return ERR_PTR(-ENOMEM);
+	order = buffer->subbuf_order;
 
-	bpage->order = buffer->subbuf_order;
+	if (prev && prev->order == order) {
+		return prev;
+	} else if (prev) {
+		/* We can reuse prev, but we discard the payload */
+		free_pages((unsigned long)prev->data, prev->order);
+		prev->data = NULL;
+		bpage = prev;
+	} else {
+		bpage = kzalloc_obj(*bpage);
+		if (!bpage)
+			return ERR_PTR(-ENOMEM);
+	}
+
+	bpage->order = order;
 	cpu_buffer = buffer->buffers[cpu];
+
 	local_irq_save(flags);
 	arch_spin_lock(&cpu_buffer->lock);
 
@@ -7020,7 +7038,9 @@ ring_buffer_alloc_read_page(struct trace_buffer *buffer, int cpu)
 	} else {
 		bpage->data = alloc_cpu_data(cpu, bpage->order);
 		if (!bpage->data) {
-			kfree(bpage);
+			if (!prev)
+				kfree(bpage);
+
 			return ERR_PTR(-ENOMEM);
 		}
 	}
@@ -7041,12 +7061,21 @@ void ring_buffer_free_read_page(struct trace_buffer *buffer, int cpu,
 				struct buffer_data_read_page *data_page)
 {
 	struct ring_buffer_per_cpu *cpu_buffer;
-	struct buffer_data_page *dpage = data_page->data;
-	struct page *page = virt_to_page(dpage);
+	struct buffer_data_page *dpage;
 	unsigned long flags;
+	struct page *page;
 
 	if (!buffer || !buffer->buffers || !buffer->buffers[cpu])
 		return;
+
+	if (!data_page)
+		return;
+
+	dpage = data_page->data;
+	if (!dpage)
+		goto out;
+
+	page = virt_to_page(dpage);
 
 	cpu_buffer = buffer->buffers[cpu];
 
@@ -7311,6 +7340,18 @@ void *ring_buffer_read_page_data(struct buffer_data_read_page *page)
 	return page->data;
 }
 EXPORT_SYMBOL_GPL(ring_buffer_read_page_data);
+
+/**
+ * ring_buffer_read_page_size - get size of the read page.
+ * @page:  the page to get the size from
+ *
+ * Returns size of the page in bytes.
+ */
+unsigned int ring_buffer_read_page_size(struct buffer_data_read_page *page)
+{
+	return PAGE_SIZE << page->order;
+}
+EXPORT_SYMBOL_GPL(ring_buffer_read_page_size);
 
 /**
  * ring_buffer_subbuf_size_get - get size of the sub buffer.
