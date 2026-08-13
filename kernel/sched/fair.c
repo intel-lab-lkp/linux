@@ -7681,6 +7681,22 @@ static void hrtick_start_fair(struct rq *rq, struct task_struct *p)
 	hrtick_start(rq, (scale * delta) / 1024);
 }
 
+void __hrtick_rearm_fair(struct rq *rq, struct task_struct *p)
+{
+	rq->hrtick_rearm_fair = false;
+
+	if (!hrtick_enabled_fair(rq))
+		return;
+
+	if (hrtick_active(rq))
+		return;
+
+	if (p->sched_class != &fair_sched_class)
+		return;
+
+	hrtick_start_fair(rq, p);
+}
+
 /*
  * Called on enqueue to start the hrtick when h_nr_queued becomes more than 1.
  */
@@ -14858,8 +14874,19 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 		entity_tick(cfs_rq, se, queued);
 	}
 
-	if (queued)
+	if (queued) {
+		/*
+		 * Fair hrtick is one-shot. If this hrtick-triggered
+		 * reschedule picks the same task again, set_next_task_fair()
+		 * will be skipped. Mark that path for a possible restart, but
+		 * avoid delayed-dequeue cases where queued entities are not all
+		 * runnable.
+		 */
+		rq->hrtick_rearm_fair = hrtick_enabled_fair(rq) &&
+					rq->cfs.h_nr_runnable > 1 &&
+					rq->cfs.h_nr_runnable == rq->cfs.h_nr_queued;
 		return;
+	}
 
 	if (static_branch_unlikely(&sched_numa_balancing))
 		task_tick_numa(rq, curr);

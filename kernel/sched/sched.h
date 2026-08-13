@@ -1313,6 +1313,7 @@ struct rq {
 	ktime_t			hrtick_time;
 	ktime_t			hrtick_delay;
 	unsigned int		hrtick_sched;
+	bool			hrtick_rearm_fair;
 #endif
 
 #ifdef CONFIG_SCHEDSTATS
@@ -2745,6 +2746,18 @@ static inline void set_next_task(struct rq *rq, struct task_struct *next)
 	next->sched_class->set_next_task(rq, next, false);
 }
 
+#ifdef CONFIG_SCHED_HRTICK
+void __hrtick_rearm_fair(struct rq *rq, struct task_struct *p);
+
+static inline void hrtick_rearm_fair(struct rq *rq, struct task_struct *p)
+{
+	if (rq->hrtick_rearm_fair)
+		__hrtick_rearm_fair(rq, p);
+}
+#else
+static inline void hrtick_rearm_fair(struct rq *rq, struct task_struct *p) { }
+#endif
+
 static inline void
 __put_prev_set_next_dl_server(struct rq *rq,
 			      struct task_struct *prev,
@@ -2763,8 +2776,14 @@ static inline void put_prev_set_next_task(struct rq *rq,
 
 	__put_prev_set_next_dl_server(rq, prev, next);
 
-	if (next == prev)
+	if (next == prev) {
+		/*
+		 * Same-task repicks skip class callbacks. Restart fair hrtick
+		 * if the queued tick path marked it as needed.
+		 */
+		hrtick_rearm_fair(rq, next);
 		return;
+	}
 
 	prev->sched_class->put_prev_task(rq, prev, next);
 	next->sched_class->set_next_task(rq, next, true);

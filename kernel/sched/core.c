@@ -1013,12 +1013,14 @@ static inline void hrtick_schedule_exit(struct rq *rq)
 		__hrtimer_rearm_deferred();
 
 	rq->hrtick_sched = HRTICK_SCHED_NONE;
+	rq->hrtick_rearm_fair = false;
 }
 
 static void hrtick_rq_init(struct rq *rq)
 {
 	INIT_CSD(&rq->hrtick_csd, __hrtick_start, rq);
 	rq->hrtick_sched = HRTICK_SCHED_NONE;
+	rq->hrtick_rearm_fair = false;
 	hrtimer_setup(&rq->hrtick_timer, hrtick, CLOCK_MONOTONIC,
 		      HRTIMER_MODE_REL_HARD | HRTIMER_MODE_LAZY_REARM);
 }
