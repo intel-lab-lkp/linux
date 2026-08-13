@@ -722,6 +722,39 @@ static int mana_set_channels(struct net_device *ndev,
 		goto clear_flag;
 	}
 
+	/* A reduction keeps its queues configured identically, so carry them
+	 * over and retire only the tail: no DMA ring, no hardware WQ object,
+	 * and no old+new peak.
+	 */
+	if (new_count < apc->num_queues) {
+		struct mana_qset tailq;
+
+		err = mana_split_qset(apc, scratch, new_count, &newq, &tailq);
+		if (err)
+			goto free_scratch; /* current qset untouched */
+
+		err = mana_publish_qset(apc, &newq, &oldq);
+		if (err) {
+			/* The old set is live again; drop only the containers
+			 * built above, never the queues they point at.
+			 */
+			mana_discard_split(&newq, &tailq);
+			goto free_scratch;
+		}
+
+		/* @oldq holds the original arrays and steering table. Every
+		 * queue they referenced is now owned by either the published
+		 * set or the tail, so only the containers are freed here.
+		 */
+		kfree(oldq.tx_qp);
+		kfree(oldq.rxqs);
+		kfree(oldq.indir_table);
+		kfree(oldq.rxobj_table);
+
+		mana_free_qset(apc, scratch, &tailq);
+		goto free_scratch;
+	}
+
 	err = mana_alloc_qset(apc, scratch, new_count, apc->rx_queue_size,
 			      apc->tx_queue_size, apc->priv_flags,
 			      apc->configured_mtu, apc->bpf_prog, &newq);
