@@ -18,6 +18,7 @@ struct panthor_vma;
 struct panthor_mmu;
 
 int panthor_mmu_init(struct panthor_device *ptdev);
+void panthor_mmu_freeze_before_unplug(struct panthor_device *ptdev);
 void panthor_mmu_unplug(struct panthor_device *ptdev);
 void panthor_mmu_pre_reset(struct panthor_device *ptdev);
 void panthor_mmu_post_reset(struct panthor_device *ptdev);

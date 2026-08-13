@@ -62,8 +62,34 @@ static int panthor_init_power(struct device *dev)
 	return devm_pm_domain_attach_list(dev, NULL, &pd_list);
 }
 
+static int panthor_device_stop_before_unplug(struct panthor_device *ptdev)
+{
+	int ret;
+
+	/* Make sure any further modification to the existing VMs are blocked
+	 * before proceeding with the SOFT_RESET.
+	 */
+	panthor_mmu_freeze_before_unplug(ptdev);
+
+	/* Core clock should be enough to issue a reset. */
+	ret = clk_prepare_enable(ptdev->clks.core);
+	if (ret)
+		return ret;
+
+	/* A successful soft-reset should guarantee that all components of the
+	 * HW are off, meaning we can proceed with the rest of the unplug
+	 * procedure.
+	 */
+	ret = panthor_hw_soft_reset(ptdev);
+
+	clk_disable_unprepare(ptdev->clks.core);
+	return ret;
+}
+
 void panthor_device_unplug(struct panthor_device *ptdev)
 {
+	int ret;
+
 	/* This function can be called from two different path: the reset work
 	 * and the platform device remove callback. drm_dev_unplug() doesn't
 	 * deal with concurrent callers, so we have to protect drm_dev_unplug()
@@ -90,6 +116,16 @@ void panthor_device_unplug(struct panthor_device *ptdev)
 	 */
 	drm_dev_unplug(&ptdev->base);
 
+	/* Do anything we can to stop the HW. If we can't guarantee that the HW
+	 * is fully stopped, we also can't guarantee the resources it had access
+	 * to won't be touched after the device is gone (clocks and regulators
+	 * can be shared, and the HW might still be running behind our back).
+	 */
+	ret = panthor_device_stop_before_unplug(ptdev);
+	if (drm_WARN(&ptdev->base, ret,
+		     "Couldn't stop the device, this might lead to resource leaks"))
+		ptdev->unplug.leak_active_resources = true;
+
 	/* We do the rest of the unplug with the unplug lock released,
 	 * future callers will wait on ptdev->unplug.done anyway.
 	 */
@@ -111,13 +147,6 @@ void panthor_device_unplug(struct panthor_device *ptdev)
 	panthor_gem_shrinker_unplug(ptdev);
 	panthor_gpu_unplug(ptdev);
 	panthor_pwr_unplug(ptdev);
-
-	pm_runtime_dont_use_autosuspend(ptdev->base.dev);
-	pm_runtime_put_sync_suspend(ptdev->base.dev);
-
-	/* If PM is disabled, we need to call the suspend handler manually. */
-	if (!IS_ENABLED(CONFIG_PM))
-		panthor_device_suspend(ptdev->base.dev);
 
 	/* Report the unplug operation as done to unblock concurrent
 	 * panthor_device_unplug() callers.

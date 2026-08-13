@@ -267,6 +267,21 @@ struct panthor_device {
 
 		/** @work: Unplug work. */
 		struct work_struct work;
+
+		/**
+		 * @leak_active_resources: Sub-components should leak resources HW has
+		 * access to.
+		 *
+		 * This is set to true when we can guarantee the HW has been fully stopped
+		 * in the unplug path. In that case, we'd rather leak resource than return
+		 * them to the system with the risk that they might be accessed by the
+		 * HW behind our back.
+		 *
+		 * This is particularly important for any piece of memory used by the GPU
+		 * (MMU page tables, FW sections, group resources shared with the FW,
+		 * any BO attached to an active VM, ...).
+		 */
+		bool leak_active_resources;
 	} unplug;
 
 	/** @reset: Reset related fields. */

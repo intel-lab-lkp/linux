@@ -3049,10 +3049,15 @@ static void update_fdinfo_stats(struct panthor_job *job)
 void panthor_fdinfo_gather_group_samples(struct panthor_file *pfile)
 {
 	struct panthor_group_pool *gpool = pfile->groups;
+	struct panthor_device *ptdev = pfile->ptdev;
 	struct panthor_group *group;
 	unsigned long i;
+	int cookie;
 
 	if (IS_ERR_OR_NULL(gpool))
+		return;
+
+	if (!drm_dev_enter(&ptdev->base, &cookie))
 		return;
 
 	xa_lock(&gpool->xa);
@@ -3064,6 +3069,8 @@ void panthor_fdinfo_gather_group_samples(struct panthor_file *pfile)
 		group->fdinfo.data.time = 0;
 	}
 	xa_unlock(&gpool->xa);
+
+	drm_dev_exit(cookie);
 }
 
 static bool queue_check_job_completion(struct panthor_queue *queue)
@@ -3897,14 +3904,23 @@ int panthor_group_pool_create(struct panthor_file *pfile)
 void panthor_group_pool_destroy(struct panthor_file *pfile)
 {
 	struct panthor_group_pool *gpool = pfile->groups;
+	struct panthor_device *ptdev = pfile->ptdev;
 	struct panthor_group *group;
 	unsigned long i;
+	int cookie;
 
 	if (IS_ERR_OR_NULL(gpool))
 		return;
 
-	xa_for_each(&gpool->xa, i, group)
-		panthor_group_destroy(pfile, i);
+	/* If device is gone groups have been destroyed already, and the XArray
+	 * contains pointers to objects that have been freed.
+	 */
+	if (drm_dev_enter(&ptdev->base, &cookie)) {
+		xa_for_each(&gpool->xa, i, group)
+			panthor_group_destroy(pfile, i);
+
+		drm_dev_exit(cookie);
+	}
 
 	xa_destroy(&gpool->xa);
 	kfree(gpool);
@@ -3923,11 +3939,16 @@ panthor_fdinfo_gather_group_mem_info(struct panthor_file *pfile,
 				     struct drm_memory_stats *stats)
 {
 	struct panthor_group_pool *gpool = pfile->groups;
+	struct panthor_device *ptdev = pfile->ptdev;
 	struct panthor_group *group;
 	unsigned long i;
+	int cookie;
+
+	if (!drm_dev_enter(&ptdev->base, &cookie))
+		return;
 
 	if (IS_ERR_OR_NULL(gpool))
-		return;
+		goto out_dev_exit;
 
 	xa_lock(&gpool->xa);
 	xa_for_each_marked(&gpool->xa, i, group, GROUP_REGISTERED) {
@@ -3936,6 +3957,9 @@ panthor_fdinfo_gather_group_mem_info(struct panthor_file *pfile,
 			stats->active += group->fdinfo.kbo_sizes;
 	}
 	xa_unlock(&gpool->xa);
+
+out_dev_exit:
+	drm_dev_exit(cookie);
 }
 
 static void job_release(struct kref *ref)
@@ -4081,23 +4105,76 @@ void panthor_job_update_resvs(struct drm_exec *exec, struct drm_sched_job *sched
 void panthor_sched_unplug(struct panthor_device *ptdev)
 {
 	struct panthor_scheduler *sched = ptdev->scheduler;
+	struct panthor_group *group, *tmp_group;
+	LIST_HEAD(groups);
 
 	disable_delayed_work_sync(&sched->tick_work);
 	disable_work_sync(&sched->fw_events_work);
 	disable_work_sync(&sched->sync_upd_work);
 
 	mutex_lock(&sched->lock);
+
+	/* Do a pass on the on-slot groups, and schedule termination. */
+	for (u32 i = 0; i < sched->csg_slot_count; i++) {
+		struct panthor_csg_slot *csg_slot = &sched->csg_slots[i];
+		struct panthor_group *group = csg_slot->group;
+
+		if (!group)
+			continue;
+
+		group_get(group);
+		group->state = PANTHOR_CS_GROUP_TERMINATED;
+		group_unbind_locked(group);
+		list_del_init(&group->wait_node);
+		group_queue_work(group, term);
+
+		group_put(group);
+	}
+
+	/* Now take care of the non-resident groups. */
+	for (u32 i = 0; i < ARRAY_SIZE(sched->groups.runnable); i++)
+		list_splice_init(&sched->groups.runnable[i], &groups);
+
+	for (u32 i = 0; i < ARRAY_SIZE(sched->groups.idle); i++)
+		list_splice_init(&sched->groups.idle[i], &groups);
+
+	list_for_each_entry_safe(group, tmp_group, &groups, run_node) {
+		list_del_init(&group->run_node);
+		list_del_init(&group->wait_node);
+		group_queue_work(group, term);
+	}
+
+	/* All groups that still have a user handle need a group_put()
+	 * because after drm_dev_unplug() has been called those handles
+	 * can't be released through the GROUP_DESTROY IOCTL anymore.
+	 */
+	list_for_each_entry_safe(group, tmp_group, &sched->groups.user_owned, user_node) {
+		list_del_init(&group->user_node);
+		group_put(group);
+	}
+
 	if (sched->pm.has_ref) {
 		pm_runtime_put(ptdev->base.dev);
 		sched->pm.has_ref = false;
 	}
 	mutex_unlock(&sched->lock);
 
+	/* Ensure all term work are done. */
+	flush_workqueue(sched->wq);
+
 	/* Ensure any pending group release work are executed before returning,
 	 * otherwise those might access objects that are gone if the work is
 	 * executed after other components are unplugged.
 	 */
 	flush_workqueue(panthor_cleanup_wq);
+
+	/* After we've flushed the workqueues, all lists should be empty. */
+	drm_WARN_ON(&ptdev->base, !list_empty(&sched->groups.user_owned));
+	for (u32 i = 0; i < ARRAY_SIZE(sched->groups.runnable); i++)
+		drm_WARN_ON(&ptdev->base, !list_empty(&sched->groups.runnable[i]));
+
+	for (u32 i = 0; i < ARRAY_SIZE(sched->groups.idle); i++)
+		drm_WARN_ON(&ptdev->base, !list_empty(&sched->groups.idle[i]));
 }
 
 static void panthor_sched_fini(struct drm_device *ddev, void *res)
