@@ -384,14 +384,17 @@ static void mana_hwc_comp_event(void *ctx, struct gdma_queue *q_self)
 
 static void mana_hwc_destroy_cq(struct gdma_context *gc, struct hwc_cq *hwc_cq)
 {
-	kfree(hwc_cq->comp_buf);
-
-	if (hwc_cq->gdma_cq)
-		mana_gd_destroy_queue(gc, hwc_cq->gdma_cq);
-
+	/* Destroy the EQ first: it deregisters the IRQ and drains in-flight
+	 * handlers, so none can touch the CQ after it is freed.
+	 */
 	if (hwc_cq->gdma_eq)
 		mana_gd_destroy_queue(gc, hwc_cq->gdma_eq);
 
+	/* Safe to free now that the EQ handler is fenced. */
+	if (hwc_cq->gdma_cq)
+		mana_gd_destroy_queue(gc, hwc_cq->gdma_cq);
+
+	kfree(hwc_cq->comp_buf);
 	kfree(hwc_cq);
 }
 
