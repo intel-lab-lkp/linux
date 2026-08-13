@@ -1133,6 +1133,13 @@ struct amdgpu_device {
 	 */
 	bool gpu_recovery_allowed;
 
+	/* Set to 1 when the device has been declared wedged following a
+	 * hang: it no longer accepts new work and pending fences have been
+	 * force-signalled. Reset to 0 once the device is reset back to a
+	 * working state.
+	 */
+	atomic_t wedge_status;
+
 	/* KFD
 	 * Must be last --ends in a flexible-array member.
 	 */
@@ -1608,4 +1615,10 @@ void amdgpu_device_set_uid(struct amdgpu_uid *uid_info,
 			   uint64_t uid);
 uint64_t amdgpu_device_get_uid(struct amdgpu_uid *uid_info,
 			       enum amdgpu_uid_type type, uint8_t inst);
+
+static inline bool amdgpu_device_is_wedged(struct amdgpu_device *adev)
+{
+	return atomic_read(&adev->wedge_status);
+}
+
 #endif

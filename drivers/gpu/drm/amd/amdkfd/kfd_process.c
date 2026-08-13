@@ -2399,8 +2399,12 @@ struct kfd_process_device *kfd_process_device_data_by_id(struct kfd_process *p, 
 		for (i = 0; i < p->n_pdds; i++) {
 			struct kfd_process_device *pdd = p->pdds[i];
 
-			if (pdd->user_gpu_id == gpu_id)
+			if (pdd->user_gpu_id == gpu_id) {
+				if (amdgpu_device_is_wedged(pdd->dev->adev))
+					return NULL;
+
 				return pdd;
+			}
 		}
 	}
 	return NULL;

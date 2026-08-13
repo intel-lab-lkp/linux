@@ -4042,6 +4042,8 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	}
 
 	adev->gpu_recovery_allowed = true;
+	if (atomic_xchg(&adev->wedge_status, 0))
+		pm_runtime_put_autosuspend(adev->dev);
 
 fence_driver_init:
 	/* Fence driver */
@@ -5750,6 +5752,8 @@ end_reset:
 		dev_info(adev->dev, "GPU reset end with ret = %d\n", r);
 
 	atomic_set(&adev->reset_domain->reset_res, r);
+	if (atomic_xchg(&adev->wedge_status, 0))
+		pm_runtime_put_autosuspend(adev->dev);
 
 	if (!r) {
 		struct amdgpu_task_info *ti = NULL;
