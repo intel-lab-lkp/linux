@@ -569,7 +569,24 @@ int panthor_device_resume(struct device *dev)
 	unmap_mapping_range(ptdev->base.anon_inode->i_mapping,
 			    DRM_PANTHOR_USER_MMIO_OFFSET, 0, 1);
 	atomic_set(&ptdev->pm.state, PANTHOR_DEVICE_PM_STATE_ACTIVE);
+
+	/* The smp_mb__after_atomic() is here to make sure the pm.state update
+	 * is flushed before we check the reset.pending bit, otherwise,
+	 * according to Sashiko, there's a with the checks that exist in
+	 * panthor_device_schedule_reset().
+	 * Not sure how real this is, because the try_cmpxchg_release() in
+	 * the mutex_unlock() path also acts as a barrier, but it's not a
+	 * fast-path anyway, so better safe than sorry.
+	 */
+	smp_mb__after_atomic();
 	mutex_unlock(&ptdev->pm.mmio_lock);
+
+	/* A reset might have been queued while we were resuming. Make sure
+	 * it's not lost by rescheduling it.
+	 */
+	if (atomic_read(&ptdev->reset.pending))
+		queue_work(ptdev->reset.wq, &ptdev->reset.work);
+
 	return 0;
 
 err_suspend_devfreq:
