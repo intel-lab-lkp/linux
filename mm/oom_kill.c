@@ -268,9 +268,9 @@ static enum oom_constraint constrained_alloc(struct oom_control *oc)
 	if (!oc->zonelist)
 		return CONSTRAINT_NONE;
 	/*
-	 * Reach here only when __GFP_NOFAIL is used. So, we should avoid
-	 * to kill current.We have to random task kill in this case.
-	 * Hopefully, CONSTRAINT_THISNODE...but no way to handle it, now.
+	 * __GFP_THISNODE means the allocation is restricted to a single node.
+	 * There is no dedicated constraint type for this case, so return
+	 * CONSTRAINT_NONE and let the normal OOM handling proceed.
 	 */
 	if (oc->gfp_mask & __GFP_THISNODE)
 		return CONSTRAINT_NONE;
