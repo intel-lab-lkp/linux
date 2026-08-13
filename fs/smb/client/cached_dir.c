@@ -598,10 +598,17 @@ done:
 }
 
 /*
- * Invalidate all cached dirs when a TCON has been reset
- * due to a session loss.
+ * Invalidate all cached dirs on a TCON, moving them to the dying list
+ * for the laundromat to clean up.
+ *
+ * @close_handles: if true, the connection is still live (e.g. remount),
+ * so leave cfid->is_open set and let smb2_close_cached_fid() send
+ * SMB2_close to release the server-side directory handle and lease.  If
+ * false (the session-loss teardown case), mark the cfids closed so the
+ * doomed SMB2_close is skipped -- the server has already dropped them.
  */
-void invalidate_all_cached_dirs(struct cifs_tcon *tcon, bool sync)
+void invalidate_all_cached_dirs(struct cifs_tcon *tcon, bool sync,
+				bool close_handles)
 {
 	struct cached_fids *cfids = tcon->cfids;
 	struct cached_fid *cfid, *q;
@@ -610,15 +617,16 @@ void invalidate_all_cached_dirs(struct cifs_tcon *tcon, bool sync)
 		return;
 
 	/*
-	 * Mark all the cfids as closed, and move them to the cfids->dying list.
-	 * They'll be cleaned up by laundromat.  Take a reference to each cfid
-	 * during this process.
+	 * Move all the cfids to the cfids->dying list.  They'll be cleaned
+	 * up by laundromat.  Take a reference to each cfid during this
+	 * process.
 	 */
 	spin_lock(&cfids->cfid_list_lock);
 	list_for_each_entry_safe(cfid, q, &cfids->entries, entry) {
 		list_move(&cfid->entry, &cfids->dying);
 		cfids->num_entries--;
-		cfid->is_open = false;
+		if (!close_handles)
+			cfid->is_open = false;
 		cfid->on_list = false;
 		if (cfid->has_lease) {
 			/*
@@ -635,6 +643,73 @@ void invalidate_all_cached_dirs(struct cifs_tcon *tcon, bool sync)
 	mod_delayed_work(cfid_put_wq, &cfids->laundromat_work, 0);
 	if (sync)
 		flush_delayed_work(&cfids->laundromat_work);
+}
+
+/*
+ * Invalidate cached directory entries across all tcons under a
+ * superblock.  Count the tcons first so the pointer array can be
+ * allocated with GFP_KERNEL outside tlink_tree_lock: allocating
+ * per-tcon under the spinlock would force GFP_ATOMIC and, on failure,
+ * silently leave some tcons with stale leases after a nolease remount.
+ * References are then taken under tlink_tree_lock and the cached dirs
+ * closed outside the spinlock since that can sleep.  Holding a tc_count
+ * reference prevents the tcon from being freed by tlink_expire_delayed()
+ * between dropping the spinlock and the call.
+ *
+ * Called on remount while the connection is live (e.g. switching to
+ * nolease), so pass close_handles=true to actually release the
+ * server-side directory handles and their leases.
+ */
+void invalidate_all_cached_dirs_sb(struct cifs_sb_info *cifs_sb)
+{
+	struct rb_root *root = &cifs_sb->tlink_tree;
+	struct rb_node *node;
+	struct cifs_tcon *tcon;
+	struct tcon_link *tlink;
+	struct cifs_tcon **tcons;
+	unsigned int i, n = 0, count = 0;
+
+	spin_lock(&cifs_sb->tlink_tree_lock);
+	for (node = rb_first(root); node; node = rb_next(node)) {
+		tlink = rb_entry(node, struct tcon_link, tl_rbnode);
+		if (!IS_ERR(tlink_tcon(tlink)))
+			count++;
+	}
+	spin_unlock(&cifs_sb->tlink_tree_lock);
+
+	if (!count)
+		return;
+
+	/*
+	 * Best effort: if the snapshot array can't be allocated, skip the
+	 * eviction.  New opens still honor the updated nolease via the
+	 * tcon->no_lease propagation done by the caller.
+	 */
+	tcons = kcalloc(count, sizeof(*tcons), GFP_KERNEL);
+	if (!tcons)
+		return;
+
+	/* n < count bounds the walk to the snapshot size if tcons are added */
+	spin_lock(&cifs_sb->tlink_tree_lock);
+	for (node = rb_first(root); node && n < count; node = rb_next(node)) {
+		tlink = rb_entry(node, struct tcon_link, tl_rbnode);
+		tcon = tlink_tcon(tlink);
+		if (IS_ERR(tcon))
+			continue;
+		spin_lock(&tcon->tc_lock);
+		++tcon->tc_count;
+		trace_smb3_tcon_ref(tcon->debug_id, tcon->tc_count,
+				    netfs_trace_tcon_ref_get_cached_inval_sb);
+		spin_unlock(&tcon->tc_lock);
+		tcons[n++] = tcon;
+	}
+	spin_unlock(&cifs_sb->tlink_tree_lock);
+
+	for (i = 0; i < n; i++) {
+		invalidate_all_cached_dirs(tcons[i], true, true);
+		cifs_put_tcon(tcons[i], netfs_trace_tcon_ref_put_cached_inval_sb);
+	}
+	kfree(tcons);
 }
 
 static void
