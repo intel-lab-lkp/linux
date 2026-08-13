@@ -975,9 +975,13 @@ static int amdgpu_debugfs_fence_info_show(struct seq_file *m, void *unused)
 }
 
 /*
- * amdgpu_debugfs_gpu_recover - manually trigger a gpu reset & recover
+ * amdgpu_debugfs_gpu_recover - manually trigger a gpu reset & recover,
+ * and control whether this device is allowed to auto-recover from a hang.
  *
- * Manually trigger a gpu reset at the next fence wait.
+ * Read triggers a gpu reset at the next fence wait.
+ *
+ * Write 0/1 to disable/enable auto GPU recovery for this device
+ * (equivalent to amdgpu.gpu_recovery=0, but scoped to this device only).
  */
 static int gpu_recover_get(void *data, u64 *val)
 {
@@ -1001,8 +1005,17 @@ static int gpu_recover_get(void *data, u64 *val)
 	return 0;
 }
 
+static int gpu_recover_set(void *data, u64 val)
+{
+	struct amdgpu_device *adev = (struct amdgpu_device *)data;
+
+	adev->gpu_recovery_allowed = !!val;
+
+	return 0;
+}
+
 DEFINE_SHOW_ATTRIBUTE(amdgpu_debugfs_fence_info);
-DEFINE_DEBUGFS_ATTRIBUTE(amdgpu_debugfs_gpu_recover_fops, gpu_recover_get, NULL,
+DEFINE_DEBUGFS_ATTRIBUTE(amdgpu_debugfs_gpu_recover_fops, gpu_recover_get, gpu_recover_set,
 			 "%lld\n");
 
 static void amdgpu_debugfs_reset_work(struct work_struct *work)
@@ -1037,7 +1050,7 @@ void amdgpu_debugfs_fence_init(struct amdgpu_device *adev)
 	if (!amdgpu_sriov_vf(adev)) {
 
 		INIT_WORK(&adev->reset_work, amdgpu_debugfs_reset_work);
-		debugfs_create_file("amdgpu_gpu_recover", 0444, root, adev,
+		debugfs_create_file("amdgpu_gpu_recover", 0644, root, adev,
 				    &amdgpu_debugfs_gpu_recover_fops);
 	}
 #endif

@@ -4041,6 +4041,8 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 		}
 	}
 
+	adev->gpu_recovery_allowed = true;
+
 fence_driver_init:
 	/* Fence driver */
 	r = amdgpu_fence_driver_sw_init(adev);
@@ -4837,6 +4839,9 @@ bool amdgpu_device_should_recover_gpu(struct amdgpu_device *adev)
 {
 
 	if (amdgpu_gpu_recovery == 0)
+		goto disabled;
+
+	if (!adev->gpu_recovery_allowed)
 		goto disabled;
 
 	/* Skip soft reset check in fatal error mode */

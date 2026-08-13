@@ -1126,6 +1126,13 @@ struct amdgpu_device {
 
 	struct amdgpu_uma_carveout_info uma_info;
 
+	/* Whether this device is allowed to attempt GPU recovery on a hang.
+	 * Defaults to true; can be turned off per-device (e.g. via the
+	 * amdgpu_gpu_recover debugfs file) independently of the global
+	 * amdgpu.gpu_recovery module parameter.
+	 */
+	bool gpu_recovery_allowed;
+
 	/* KFD
 	 * Must be last --ends in a flexible-array member.
 	 */
