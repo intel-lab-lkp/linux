@@ -2944,6 +2944,161 @@ pnfs_layout_reresolve_deviceid_byclid(struct nfs_client *clp,
 	}
 }
 
+struct pnfs_deviceid_ref_args {
+	const struct pnfs_layoutdriver_type *ld;
+	const struct nfs4_deviceid *id;
+	struct list_head *result;
+	bool found;
+};
+
+static int pnfs_layout_deviceid_referenced_byserver(
+		struct nfs_server *server, void *data)
+{
+	struct pnfs_deviceid_ref_args *args = data;
+	struct pnfs_layout_hdr *lo;
+	struct inode *inode;
+
+	if (server->pnfs_curr_ld != args->ld)
+		return 0;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(lo, &server->layouts, plh_layouts) {
+		inode = lo->plh_inode;
+		if (!inode)
+			continue;
+		spin_lock(&inode->i_lock);
+		if (lo->plh_inode == inode && pnfs_layout_is_valid(lo) &&
+		    args->ld->layout_references_deviceid(lo, args->id))
+			args->found = true;
+		spin_unlock(&inode->i_lock);
+		if (args->found)
+			break;
+	}
+	rcu_read_unlock();
+	return args->found;
+}
+
+/*
+ * pnfs_layout_deviceid_referenced_byclid - does any live layout of
+ * @clp's servers using @ld still reference deviceid @id?
+ */
+bool
+pnfs_layout_deviceid_referenced_byclid(struct nfs_client *clp,
+				const struct pnfs_layoutdriver_type *ld,
+				const struct nfs4_deviceid *id)
+{
+	struct pnfs_deviceid_ref_args args = {
+		.ld = ld,
+		.id = id,
+	};
+
+	if (!ld->layout_references_deviceid)
+		return false;
+
+	nfs_client_for_each_server(clp,
+			pnfs_layout_deviceid_referenced_byserver, &args);
+	return args.found;
+}
+
+static int pnfs_layout_collect_deviceid_refs_byserver(
+		struct nfs_server *server, void *data)
+{
+	struct pnfs_deviceid_ref_args *args = data;
+	struct nfs4_deviceid_ref *ref;
+	struct pnfs_layout_hdr *lo;
+	struct inode *inode;
+	bool matched;
+
+	if (server->pnfs_curr_ld != args->ld)
+		return 0;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(lo, &server->layouts, plh_layouts) {
+		inode = lo->plh_inode;
+		if (!inode ||
+		    test_bit(NFS_LAYOUT_INODE_FREEING, &lo->plh_flags))
+			continue;
+
+		ref = kzalloc_obj(*ref, GFP_ATOMIC);
+		if (!ref)
+			break;	/* act on what was collected */
+
+		spin_lock(&inode->i_lock);
+		matched = lo->plh_inode == inode && pnfs_layout_is_valid(lo) &&
+			  args->ld->layout_references_deviceid(lo, args->id);
+		if (matched) {
+			/* a valid layout's lsegs hold hdr references, so
+			 * this cannot become the last reference
+			 */
+			pnfs_get_layout_hdr(lo);
+			ref->lo = lo;
+			nfs4_stateid_copy(&ref->stateid, &lo->plh_stateid);
+			ref->cred = get_cred(lo->plh_lc_cred);
+		}
+		spin_unlock(&inode->i_lock);
+
+		if (!matched) {
+			kfree(ref);
+			continue;
+		}
+		/* the pinned hdr does not hold the inode: grab it (and
+		 * keep the superblock active) for use across RPCs
+		 */
+		ref->inode = nfs_igrab_and_active(inode);
+		if (!ref->inode) {
+			pnfs_put_layout_hdr(lo);
+			put_cred(ref->cred);
+			kfree(ref);
+			continue;
+		}
+		list_add_tail(&ref->node, args->result);
+	}
+	rcu_read_unlock();
+	return 0;
+}
+
+/*
+ * pnfs_layout_collect_deviceid_refs - collect live layouts
+ * referencing a deviceid
+ *
+ * Collect every valid layout of @clp's servers using @ld whose
+ * layout_references_deviceid hook matches @id onto @result as
+ * nfs4_deviceid_ref entries safe to use across sleeping RPCs.
+ * Release with pnfs_layout_put_deviceid_refs().
+ */
+void
+pnfs_layout_collect_deviceid_refs(struct nfs_client *clp,
+				const struct pnfs_layoutdriver_type *ld,
+				const struct nfs4_deviceid *id,
+				struct list_head *result)
+{
+	struct pnfs_deviceid_ref_args args = {
+		.ld = ld,
+		.id = id,
+		.result = result,
+	};
+
+	if (!ld->layout_references_deviceid)
+		return;
+
+	nfs_client_for_each_server(clp,
+			pnfs_layout_collect_deviceid_refs_byserver, &args);
+}
+
+void
+pnfs_layout_put_deviceid_refs(struct list_head *result)
+{
+	struct nfs4_deviceid_ref *ref, *tmp;
+
+	list_for_each_entry_safe(ref, tmp, result, node) {
+		list_del(&ref->node);
+		put_cred(ref->cred);
+		pnfs_put_layout_hdr(ref->lo);
+		nfs_iput_and_deactive(ref->inode);
+		kfree(ref);
+	}
+}
+
 /* Check if we have we have a valid layout but if there isn't an intersection
  * between the request and the pgio->pg_lseg, put this pgio->pg_lseg away.
  */

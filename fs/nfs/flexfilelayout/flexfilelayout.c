@@ -2505,6 +2505,22 @@ next:
 	}
 }
 
+/* Called under @lo's inode i_lock. */
+static bool ff_layout_references_deviceid(struct pnfs_layout_hdr *lo,
+					  const struct nfs4_deviceid *id)
+{
+	struct nfs4_flexfile_layout *flo = FF_LAYOUT_FROM_HDR(lo);
+	struct nfs4_ff_layout_mirror *mirror;
+	u32 dss_id;
+
+	list_for_each_entry(mirror, &flo->mirrors, mirrors)
+		for (dss_id = 0; dss_id < mirror->dss_count; dss_id++)
+			if (memcmp(&mirror->dss[dss_id].devid, id,
+				   sizeof(*id)) == 0)
+				return true;
+	return false;
+}
+
 /*
  * The server changed the mapping for deviceid @id (CB_NOTIFY_DEVICEID
  * CHANGE).  Un-pin every stripe device node resolved from @id in @lo's
@@ -3141,6 +3157,7 @@ static struct pnfs_layoutdriver_type flexfilelayout_type = {
 	.get_ds_info		= ff_layout_get_ds_info,
 	.free_deviceid_node	= ff_layout_free_deviceid_node,
 	.reresolve_deviceid	= ff_layout_reresolve_deviceid,
+	.layout_references_deviceid = ff_layout_references_deviceid,
 	.read_pagelist		= ff_layout_read_pagelist,
 	.write_pagelist		= ff_layout_write_pagelist,
 	.alloc_deviceid_node    = ff_layout_alloc_deviceid_node,
