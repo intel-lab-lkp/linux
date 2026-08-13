@@ -91,7 +91,7 @@ static int vpa_pmu_event_init(struct perf_event *event)
 	return 0;
 }
 
-static unsigned long get_counter_data(struct perf_event *event)
+static unsigned long get_counter_data(struct kvm_vcpu *vcpu, struct perf_event *event)
 {
 	unsigned int config = event->attr.config;
 	u64 data;
@@ -99,19 +99,19 @@ static unsigned long get_counter_data(struct perf_event *event)
 	switch (config) {
 	case L1_TO_L2_CS_LAT:
 		if (event->attach_state & PERF_ATTACH_TASK)
-			data = kvmhv_get_l1_to_l2_cs_time_vcpu();
+			data = vcpu->arch.l1_to_l2_cs;
 		else
 			data = kvmhv_get_l1_to_l2_cs_time();
 		break;
 	case L2_TO_L1_CS_LAT:
 		if (event->attach_state & PERF_ATTACH_TASK)
-			data = kvmhv_get_l2_to_l1_cs_time_vcpu();
+			data = vcpu->arch.l2_to_l1_cs;
 		else
 			data = kvmhv_get_l2_to_l1_cs_time();
 		break;
 	case L2_RUNTIME_AGG:
 		if (event->attach_state & PERF_ATTACH_TASK)
-			data = kvmhv_get_l2_runtime_agg_vcpu();
+			data = vcpu->arch.l2_runtime_agg;
 		else
 			data = kvmhv_get_l2_runtime_agg();
 		break;
@@ -126,21 +126,33 @@ static unsigned long get_counter_data(struct perf_event *event)
 static int vpa_pmu_add(struct perf_event *event, int flags)
 {
 	u64 data;
+	struct kvm_vcpu *vcpu;
 
+	vcpu = local_paca->kvm_hstate.kvm_vcpu;
+	if (!vcpu)
+		goto out;
+
+	event->pmu_private = vcpu;
 	kvmhv_set_l2_counters_status(smp_processor_id(), true);
 
-	data = get_counter_data(event);
+	data = get_counter_data(vcpu, event);
 	local64_set(&event->hw.prev_count, data);
 
+out:
 	return 0;
 }
 
 static void vpa_pmu_read(struct perf_event *event)
 {
 	u64 prev_data, new_data, final_data;
+	struct kvm_vcpu *vcpu;
+
+	vcpu = (struct kvm_vcpu *) event->pmu_private;
+	if (!vcpu)
+		return;
 
 	prev_data = local64_read(&event->hw.prev_count);
-	new_data = get_counter_data(event);
+	new_data = get_counter_data(vcpu, event);
 	final_data = new_data - prev_data;
 
 	local64_add(final_data, &event->count);
