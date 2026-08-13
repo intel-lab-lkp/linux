@@ -310,7 +310,12 @@ static int mana_gd_query_hwc_timeout(struct pci_dev *pdev, u32 *timeout_val)
 	if (err || resp.hdr.status)
 		return err ? err : -EPROTO;
 
-	*timeout_val = resp.timeout_ms;
+	/* A zero timeout would make every HWC command time out immediately
+	 * and latch the channel (see the HWC_DATA_CFG_HWC_TIMEOUT handler).
+	 * Ignore a zero from the device and keep the caller's positive value.
+	 */
+	if (resp.timeout_ms)
+		*timeout_val = resp.timeout_ms;
 
 	return 0;
 }
