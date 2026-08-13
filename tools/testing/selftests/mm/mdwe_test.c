@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include "kselftest_harness.h"
+
 #ifdef __aarch64__
 #include <asm/hwcap.h>
 #endif
@@ -13,8 +15,6 @@
 #include <sys/prctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
-#include "kselftest_harness.h"
 
 #ifndef __aarch64__
 # define PROT_BTI	0

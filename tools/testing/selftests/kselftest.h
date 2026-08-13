@@ -58,6 +58,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/utsname.h>
+#include <stdint.h>
 #endif
 
 #ifndef ARRAY_SIZE
@@ -80,6 +81,48 @@
 			      : "0" (level), "2" (count))
 #endif
 #endif /* end arch */
+
+#if !defined(NOLIBC) && !defined(__GLIBC__)
+#ifdef __LP64__
+typedef int64_t __fsword_t;
+#else
+typedef int32_t __fsword_t;
+#endif
+
+/*
+ * for a workaround to avoid struct conflict under
+ * musl-libc (<sys/prctl.h> v.s. <linux/prctl.h>)
+ */
+#include <sys/prctl.h>
+#ifndef _LINUX_PRCTL_H
+#define _LINUX_PRCTL_H
+#endif
+
+#ifndef PR_SET_MDWE
+#define PR_SET_MDWE 65
+#endif
+
+#ifndef PR_MDWE_REFUSE_EXEC_GAIN
+#define PR_MDWE_REFUSE_EXEC_GAIN (1UL << 0)
+#endif
+
+#ifndef PR_MDWE_NO_INHERIT
+#define PR_MDWE_NO_INHERIT (1UL << 1)
+#endif
+
+#ifndef PR_GET_MDWE
+#define PR_GET_MDWE 66
+#endif
+
+#ifndef PR_SET_MEMORY_MERGE
+#define PR_SET_MEMORY_MERGE 67
+#endif
+
+#ifndef PR_GET_MEMORY_MERGE
+#define PR_GET_MEMORY_MERGE 68
+#endif
+
+#endif
 
 /* define kselftest exit codes */
 #define KSFT_PASS  0

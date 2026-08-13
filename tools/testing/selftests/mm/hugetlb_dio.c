@@ -22,12 +22,9 @@
 #include "kselftest.h"
 #include "hugepage_settings.h"
 
-#ifndef STATX_DIOALIGN
-#define STATX_DIOALIGN		0x00002000U
-#endif
-
 static int get_dio_alignment(int fd)
 {
+#ifdef STATX_DIOALIGN
 	struct statx stx;
 	int ret;
 
@@ -43,6 +40,9 @@ static int get_dio_alignment(int fd)
 		return 1;
 
 	return stx.stx_dio_offset_align;
+#else
+	return -1;
+#endif
 }
 
 static bool check_dio_alignment(unsigned int start_off,

@@ -197,7 +197,7 @@ clean: $(if $(TEST_GEN_MODS_DIR),clean_mods_dir)
 	$(CLEAN)
 
 # Build with _GNU_SOURCE by default
-CFLAGS += -D_GNU_SOURCE=
+CFLAGS += -D_GNU_SOURCE= -D_LARGEFILE64_SOURCE
 
 # Additional include paths needed by kselftest.h and local headers
 CFLAGS += -I${top_srcdir}/tools/testing/selftests
