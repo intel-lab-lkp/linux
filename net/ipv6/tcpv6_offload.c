@@ -57,7 +57,8 @@ static __always_inline struct sk_buff *tcp6_gro_receive(struct list_head *head,
 	if (!th)
 		goto flush;
 
-	if (unlikely(skb->dev->features & NETIF_F_GRO_FRAGLIST))
+	if (unlikely((skb->dev->features & NETIF_F_GRO_FRAGLIST) &&
+		     !(skb->dev->features & NETIF_F_GRO_HW)))
 		tcp6_check_fraglist_gro(head, skb, th);
 
 	return tcp_gro_receive(head, skb, th);
