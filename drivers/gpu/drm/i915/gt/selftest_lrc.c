@@ -1956,6 +1956,15 @@ static int live_pphwsp_runtime(void *arg)
 	int err = 0;
 
 	/*
+	 * On Gen12 (TGL/DG2) a hardware timestamp updating mechanism
+	 * could write a smaller than previously value to the register,
+	 * so CTX_TIMESTAMP would appear to go backwards, causing
+	 * sporadic underflow detections.
+	 */
+	if (GRAPHICS_VER(gt->i915) == 12)
+		return 0;
+
+	/*
 	 * Check that cumulative context runtime as stored in the pphwsp[16]
 	 * is monotonic.
 	 */
