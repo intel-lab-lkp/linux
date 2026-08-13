@@ -648,10 +648,11 @@ static int mana_set_coalesce(struct net_device *ndev,
 	return 0;
 }
 
-/* mana_set_channels - change the number of queues on a port
- *
- * Returns -EBUSY if RDMA holds the vport with EQs sized to the
- * current num_queues.
+/* A count change leaves every surviving queue configured as it was, so
+ * neither direction rebuilds: a reduction retires the tail, an increase
+ * builds only the queues added. On failure the existing queues keep running
+ * and the requested value is never replaced by a fallback. The vport is never
+ * torn down, so RDMA cannot take it mid-reconfiguration.
  */
 static int mana_set_channels(struct net_device *ndev,
 			     struct ethtool_channels *channels)
