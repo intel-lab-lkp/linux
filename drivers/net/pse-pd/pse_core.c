@@ -1143,11 +1143,15 @@ void pse_controller_unregister(struct pse_controller_dev *pcdev)
 		disable_irq(pcdev->irq);
 	cancel_work_sync(&pcdev->ntf_work);
 	pse_flush_pw_ds(pcdev);
-	pse_release_pis(pcdev);
-	kfifo_free(&pcdev->ntf_fifo);
+	/* Unlink before freeing pcdev->pi: of_pse_control_get() walks the
+	 * list under pse_list_mutex and dereferences pcdev->pi[] via
+	 * of_pse_match_pi(), so a lookup must never reach a freed array.
+	 */
 	mutex_lock(&pse_list_mutex);
 	list_del(&pcdev->list);
 	mutex_unlock(&pse_list_mutex);
+	pse_release_pis(pcdev);
+	kfifo_free(&pcdev->ntf_fifo);
 }
 EXPORT_SYMBOL_GPL(pse_controller_unregister);
 
