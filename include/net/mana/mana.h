@@ -102,7 +102,10 @@ struct mana_stats_rx {
 	u64 pkt_len0_err;
 	u64 coalesced_cqe[MANA_CQE_COAL_PKTS_8 - 1];
 	struct u64_stats_sync syncp;
-};
+	/* Per-port array indexed by queue, so keep entries on separate cache
+	 * lines: queues polled on different CPUs would bounce a shared one.
+	 */
+} ____cacheline_aligned_in_smp;
 
 struct mana_stats_tx {
 	u64 packets;
@@ -117,7 +120,8 @@ struct mana_stats_tx {
 	u64 csum_partial;
 	u64 mana_map_err;
 	struct u64_stats_sync syncp;
-};
+	/* Per-queue array entry, same cache line reasoning as the RX side. */
+} ____cacheline_aligned_in_smp;
 
 struct mana_txq {
 	struct gdma_queue *gdma_sq;
@@ -146,14 +150,14 @@ struct mana_txq {
 	/* Value of mana_context.reset_gen when this queue was created. */
 	u32 reset_gen;
 
-	/* Set once this queue has been unpublished and is on its way out.
-	 * Its completions must not touch flow control any more: net_txq is
-	 * shared with the queue that replaced it at the same index, and a
-	 * draining queue always looks like it has room.
+	/* Unpublished and draining. Its completions must leave flow control
+	 * alone: net_txq is shared with its replacement, and a draining queue
+	 * always looks like it has room.
 	 */
 	bool retiring;
 
-	struct mana_stats_tx stats;
+	/* Points into apc->txq_stats[], which outlives the queue. */
+	struct mana_stats_tx *stats;
 };
 
 /* skb data and frags dma mappings */
@@ -415,7 +419,8 @@ struct mana_rxq {
 
 	u32 buf_index;
 
-	struct mana_stats_rx stats;
+	/* Points into apc->rxq_stats[], which outlives the queue. */
+	struct mana_stats_rx *stats;
 
 	struct bpf_prog __rcu *bpf_prog;
 	struct xdp_rxq_info xdp_rxq;
@@ -616,6 +621,13 @@ struct mana_port_context {
 	/* Create num_queues EQs, SQs, SQ-CQs, RQs and RQ-CQs, respectively. */
 	unsigned int max_queues;
 	unsigned int num_queues;
+
+	/* Per-queue counters, max_queues entries each. Allocated at probe and
+	 * freed at remove, never on queue teardown, so a reconfiguration does
+	 * not reset them.
+	 */
+	struct mana_stats_rx *rxq_stats;
+	struct mana_stats_tx *txq_stats;
 
 	unsigned int rx_queue_size;
 	unsigned int tx_queue_size;
