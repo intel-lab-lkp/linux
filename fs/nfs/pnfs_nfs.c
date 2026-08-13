@@ -15,6 +15,8 @@
 
 #include "nfs4session.h"
 #include "internal.h"
+#include <linux/hash.h>
+#include <linux/jhash.h>
 #include "pnfs.h"
 #include "netns.h"
 #include "nfs4trace.h"
@@ -577,8 +579,10 @@ same_sockaddr(struct sockaddr *addr1, struct sockaddr *addr2)
 }
 
 /*
- * Checks if 'dsaddrs1' contains a subset of 'dsaddrs2'. If it does,
- * declare a match.
+ * Checks if 'dsaddrs1' and 'dsaddrs2' contain the same set of
+ * addresses.  If they do, declare a match.  Equal element counts
+ * plus a subset test give set equality (neither side can hold
+ * duplicates: each list decodes one device's multipath addresses).
  */
 static bool
 _same_data_server_addrs_locked(const struct list_head *dsaddrs1,
@@ -587,6 +591,10 @@ _same_data_server_addrs_locked(const struct list_head *dsaddrs1,
 	struct nfs4_pnfs_ds_addr *da1, *da2;
 	struct sockaddr *sa1, *sa2;
 	bool match = false;
+
+	if (list_count_nodes((struct list_head *)dsaddrs1) !=
+	    list_count_nodes((struct list_head *)dsaddrs2))
+		return false;
 
 	list_for_each_entry(da1, dsaddrs1, da_node) {
 		sa1 = (struct sockaddr *)&da1->da_addr;
@@ -604,19 +612,64 @@ _same_data_server_addrs_locked(const struct list_head *dsaddrs1,
 }
 
 /*
+ * Hash exactly the fields same_sockaddr() compares: family, address
+ * bytes and port.  The v6 scope id is deliberately left out -- it
+ * only discriminates link-local addresses, and hashing it would be
+ * harmless but pointless: unequal link-local addresses that share a
+ * bucket are still separated by the comparator.
+ */
+static u32
+nfs4_ds_addr_hash(const struct sockaddr *sa)
+{
+	u32 h = sa->sa_family;
+
+	switch (sa->sa_family) {
+	case AF_INET: {
+		const struct sockaddr_in *a = (const struct sockaddr_in *)sa;
+
+		h = jhash(&a->sin_addr.s_addr, sizeof(a->sin_addr.s_addr), h);
+		h = jhash(&a->sin_port, sizeof(a->sin_port), h);
+		break;
+	}
+	case AF_INET6: {
+		const struct sockaddr_in6 *a = (const struct sockaddr_in6 *)sa;
+
+		h = jhash(&a->sin6_addr, sizeof(a->sin6_addr), h);
+		h = jhash(&a->sin6_port, sizeof(a->sin6_port), h);
+		break;
+	}
+	}
+	return h;
+}
+
+/*
+ * Bucket index for a DS's address set.  Per-address hashes combine
+ * by addition so the multipath list order cannot change the bucket,
+ * matching the order-independent set comparison above.
+ */
+static u32
+nfs4_ds_addrs_hash(const struct list_head *dsaddrs)
+{
+	const struct nfs4_pnfs_ds_addr *da;
+	u32 h = 0;
+
+	list_for_each_entry(da, dsaddrs, da_node)
+		h += nfs4_ds_addr_hash((const struct sockaddr *)&da->da_addr);
+	return hash_32(h, NFS4_DS_CACHE_HASH_BITS);
+}
+
+/*
  * Lookup DS by addresses.  nfs4_data_server_lock is held
  */
 static struct nfs4_pnfs_ds *
 _data_server_lookup_locked(const struct nfs_net *nn, const struct list_head *dsaddrs)
 {
 	struct nfs4_pnfs_ds *ds;
+	u32 bucket = nfs4_ds_addrs_hash(dsaddrs);
 
-	for (int i = 0; i < NFS4_DS_CACHE_HASH_SIZE; i++)
-		hlist_for_each_entry(ds, &nn->nfs4_data_server_cache[i],
-				     ds_node)
-			if (_same_data_server_addrs_locked(&ds->ds_addrs,
-							   dsaddrs))
-				return ds;
+	hlist_for_each_entry(ds, &nn->nfs4_data_server_cache[bucket], ds_node)
+		if (_same_data_server_addrs_locked(&ds->ds_addrs, dsaddrs))
+			return ds;
 	return NULL;
 }
 
@@ -751,7 +804,9 @@ nfs4_pnfs_ds_add(const struct net *net, struct list_head *dsaddrs, gfp_t gfp_fla
 		INIT_HLIST_NODE(&ds->ds_node);
 		ds->ds_net = net;
 		ds->ds_clp = NULL;
-		hlist_add_head(&ds->ds_node, &nn->nfs4_data_server_cache[0]);
+		hlist_add_head(&ds->ds_node,
+			&nn->nfs4_data_server_cache[
+				nfs4_ds_addrs_hash(&ds->ds_addrs)]);
 		dprintk("%s add new data server %s\n", __func__,
 			ds->ds_remotestr);
 	} else {
