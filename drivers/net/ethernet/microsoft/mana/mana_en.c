@@ -3496,6 +3496,38 @@ static void mana_rss_table_init(struct mana_port_context *apc)
 			ethtool_rxfh_indir_default(i, apc->num_queues);
 }
 
+/* Whether @apc's indirection table can be carried to a set of @num_queues,
+ * rather than rebuilt from the driver default.
+ *
+ * Only a user table ("ethtool -X") is kept; a driver one is rebuilt to spread
+ * over the new count. ethtool_check_max_channel() already refuses a reduction
+ * that leaves a user table pointing past the last queue, so the bounds check
+ * below only guards rebuild paths that bypass ethtool.
+ *
+ * @lost reports a table that cannot be carried instead of calling
+ * ethtool_rxfh_indir_lost() here, since the swap may still fail and leave the
+ * port on queues where the table still applies. False when none was set.
+ */
+static bool mana_rss_table_keep(struct mana_port_context *apc,
+				unsigned int num_queues, bool *lost)
+{
+	u32 i;
+
+	*lost = false;
+
+	if (!netif_is_rxfh_configured(apc->ndev))
+		return false;
+
+	for (i = 0; i < apc->indir_table_sz; i++) {
+		if (apc->indir_table[i] >= num_queues) {
+			*lost = true;
+			return false;
+		}
+	}
+
+	return true;
+}
+
 int mana_disable_vport_rx(struct mana_port_context *apc)
 {
 	return mana_cfg_vport_steering(apc, TRI_STATE_FALSE, false, false,
@@ -3766,6 +3798,7 @@ int mana_alloc_queues(struct net_device *ndev)
 {
 	struct mana_port_context *apc = netdev_priv(ndev);
 	struct gdma_dev *gd = apc->ac->gdma_dev;
+	bool indir_lost;
 	int err;
 
 	err = mana_create_vport(apc, ndev);
@@ -3811,7 +3844,18 @@ int mana_alloc_queues(struct net_device *ndev)
 		goto destroy_rxq;
 	}
 
-	mana_rss_table_init(apc);
+	/* Keep a user-configured RSS table across a rebuild; the entries are
+	 * queue indices, so they stay meaningful as long as the queue count
+	 * is unchanged. Only a driver-generated table is regenerated here.
+	 *
+	 * Nothing to roll back to here, so report the loss as soon as it is
+	 * decided and keep the table and the core's view of it in step.
+	 */
+	if (!mana_rss_table_keep(apc, apc->num_queues, &indir_lost)) {
+		if (indir_lost)
+			ethtool_rxfh_indir_lost(ndev);
+		mana_rss_table_init(apc);
+	}
 
 	err = mana_config_rss(apc, TRI_STATE_TRUE, true, true);
 	if (err) {
@@ -4068,11 +4112,15 @@ static void mana_qset_snapshot(const struct mana_port_context *ctx,
 	out->priv_flags		= ctx->priv_flags;
 	out->mtu		= ctx->configured_mtu;
 	out->bpf_prog		= ctx->bpf_prog;
+
+	/* A set taken from a live context has nothing pending; the builders
+	 * set this after snapshotting if they had to drop the user's table.
+	 */
+	out->rxfh_indir_lost	= false;
 }
 
-/* Install @qset's fields onto @ctx. The vport (port_handle,
- * vport_use_count) and the port-level debugfs dir are deliberately not
- * touched: they outlive any individual queue set.
+/* The vport (port_handle, vport_use_count) and the port-level debugfs dir are
+ * not touched: they outlive any individual queue set.
  */
 static void mana_qset_install(struct mana_port_context *ctx,
 			      const struct mana_qset *qset)
@@ -4150,6 +4198,7 @@ int mana_alloc_qset(struct mana_port_context *apc,
 		    struct mana_qset *out)
 {
 	struct net_device *ndev = scratch->ndev;
+	bool indir_lost;
 	int err;
 
 	ASSERT_RTNL();
@@ -4193,9 +4242,19 @@ int mana_alloc_qset(struct mana_port_context *apc,
 	if (err)
 		goto cleanup_rxq;
 
-	mana_rss_table_init(scratch);
+	/* Carry a user-configured RSS table over to the new set. The entries
+	 * are queue indices, so mana_config_rss() in mana_publish_qset() maps
+	 * them onto the new set's RX objects. A driver-generated table is
+	 * rebuilt instead, so it covers every queue of the new set.
+	 */
+	if (mana_rss_table_keep(apc, num_queues, &indir_lost))
+		memcpy(scratch->indir_table, apc->indir_table,
+		       apc->indir_table_sz * sizeof(*apc->indir_table));
+	else
+		mana_rss_table_init(scratch);
 
 	mana_qset_snapshot(scratch, out);
+	out->rxfh_indir_lost = indir_lost;
 	return 0;
 
 cleanup_rxq:
@@ -4406,6 +4465,15 @@ int mana_publish_qset(struct mana_port_context *apc, struct mana_qset *newq,
 	mana_start_txqs(apc);
 	if (carrier_ok)
 		netif_carrier_on(ndev);
+
+	/* The set that could not carry the user's indirection table is the one
+	 * serving traffic now, so the table really is gone. Reporting it here
+	 * rather than while the set was being built keeps a failed swap from
+	 * clearing IFF_RXFH_CONFIGURED on a port that kept its old queues, and
+	 * with them a table that is still valid and still programmed.
+	 */
+	if (newq->rxfh_indir_lost)
+		ethtool_rxfh_indir_lost(ndev);
 
 	return 0;
 

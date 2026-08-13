@@ -731,6 +731,13 @@ struct mana_qset {
 	 */
 	int			mtu;
 	struct bpf_prog		*bpf_prog;
+
+	/* The user's RSS indirection table could not be carried onto this set,
+	 * so a default one was generated for it. mana_publish_qset() tells the
+	 * core once this set is live; until then the port is still running on
+	 * a set where the user's table applies.
+	 */
+	bool			rxfh_indir_lost;
 };
 
 netdev_tx_t mana_start_xmit(struct sk_buff *skb, struct net_device *ndev);
