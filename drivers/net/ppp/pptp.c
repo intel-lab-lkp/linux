@@ -317,16 +317,18 @@ static int pptp_rcv_core(struct sock *sk, struct sk_buff *skb)
 	payload = skb->data + headersize;
 	/* check for expected sequence number */
 	if (seq < opt->seq_recv + 1 || WRAPPED(opt->seq_recv, seq)) {
-		if ((payload[0] == PPP_ALLSTATIONS) && (payload[1] == PPP_UI) &&
-				(PPP_PROTOCOL(payload) == PPP_LCP) &&
-				((payload[4] == PPP_LCP_ECHOREQ) || (payload[4] == PPP_LCP_ECHOREP)))
+		if (payload_len >= PPP_HDRLEN + 1 &&
+		    payload[0] == PPP_ALLSTATIONS && payload[1] == PPP_UI &&
+		    PPP_PROTOCOL(payload) == PPP_LCP &&
+		    (payload[4] == PPP_LCP_ECHOREQ || payload[4] == PPP_LCP_ECHOREP))
 			goto allow_packet;
 	} else {
 		opt->seq_recv = seq;
 allow_packet:
 		skb_pull(skb, headersize);
 
-		if (payload[0] == PPP_ALLSTATIONS && payload[1] == PPP_UI) {
+		if (payload_len >= 2 &&
+		    payload[0] == PPP_ALLSTATIONS && payload[1] == PPP_UI) {
 			/* chop off address/control */
 			if (skb->len < 3)
 				goto drop;
