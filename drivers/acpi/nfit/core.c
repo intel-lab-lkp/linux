@@ -987,7 +987,14 @@ static bool add_platform_cap(struct acpi_nfit_desc *acpi_desc,
 	struct device *dev = acpi_desc->dev;
 	u32 mask;
 
-	mask = (1 << (pcap->highest_capability + 1)) - 1;
+	if (pcap->header.length < sizeof(*pcap))
+		return false;
+
+	if (pcap->highest_capability >= 31)
+		mask = U32_MAX;
+	else
+		mask = (1U << (pcap->highest_capability + 1)) - 1;
+
 	acpi_desc->platform_cap = pcap->capabilities & mask;
 	dev_dbg(dev, "cap: %#x\n", acpi_desc->platform_cap);
 	return true;
