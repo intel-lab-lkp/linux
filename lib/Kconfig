@@ -52,6 +52,14 @@ config PACKING_KUNIT_TEST
 
 	  When in doubt, say N.
 
+config REFCOUNT_TRACE_FINAL_PUT
+	bool "Trace final puts on multiple refcount implementations"
+	depends on TRACEPOINTS && DEBUG_KERNEL
+	help
+	  Trace when a refcount implementation considers refcounted object dead.
+
+	  If unsure, say N.
+
 config BITREVERSE
 	tristate
 
