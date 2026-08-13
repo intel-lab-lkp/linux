@@ -1334,9 +1334,14 @@ asmlinkage long syscall_trace_enter(struct pt_regs *regs)
 	if (unlikely(test_thread_flag(TIF_SYSCALL_TRACEPOINT)))
 		trace_sys_enter(regs, regs->regs[2]);
 
-	audit_syscall_entry(current_thread_info()->syscall,
-			    regs->regs[4], regs->regs[5],
-			    regs->regs[6], regs->regs[7]);
+	{
+		unsigned long args[6];
+
+		syscall_get_arguments(current, regs, args);
+		audit_syscall_entry(current_thread_info()->syscall,
+				    args[0], args[1], args[2], args[3],
+				    args[4], args[5]);
+	}
 
 	/*
 	 * Negative syscall numbers are mistaken for rejected syscalls, but
