@@ -11,6 +11,8 @@
 
 #include <linux/pci-epf.h>
 
+struct device;
+struct dma_chan;
 struct pci_epc;
 
 enum pci_epc_interface_type {
@@ -176,6 +178,11 @@ struct pci_epc_aux_resource {
  * @get_aux_resources_count: ops to get the number of controller-owned
  *                           auxiliary resources
  * @get_aux_resources: ops to retrieve controller-owned auxiliary resources
+ * @delegate_dma_chan: ops to delegate a controller-owned DMA channel to the
+ *                     host
+ * @reclaim_dma_chan: ops to reclaim a previously delegated DMA channel.
+ *		      The callback quiesces the channel or its provider-defined
+ *		      sharing group when requested.
  * @owner: the module owner containing the ops
  */
 struct pci_epc_ops {
@@ -212,6 +219,10 @@ struct pci_epc_ops {
 	int	(*get_aux_resources)(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 				     struct pci_epc_aux_resource *resources,
 				     int num_resources);
+	int	(*delegate_dma_chan)(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+				     struct dma_chan *chan);
+	void	(*reclaim_dma_chan)(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+				    struct dma_chan *chan, bool quiesce);
 	struct module *owner;
 };
 
@@ -445,6 +456,10 @@ int pci_epc_get_aux_resources_count(struct pci_epc *epc, u8 func_no,
 int pci_epc_get_aux_resources(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 			      struct pci_epc_aux_resource *resources,
 			      int num_resources);
+int pci_epc_delegate_dma_chan(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			      struct dma_chan *chan);
+void pci_epc_reclaim_dma_chan(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			      struct dma_chan *chan, bool quiesce);
 enum pci_barno
 pci_epc_get_first_free_bar(const struct pci_epc_features *epc_features);
 enum pci_barno pci_epc_get_next_free_bar(const struct pci_epc_features

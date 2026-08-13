@@ -237,6 +237,76 @@ int pci_epc_get_aux_resources(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 EXPORT_SYMBOL_GPL(pci_epc_get_aux_resources);
 
 /**
+ * pci_epc_delegate_dma_chan() - delegate an EPC-owned DMA channel to the host
+ * @epc: EPC device
+ * @func_no: function number
+ * @vfunc_no: virtual function number
+ * @chan: DMA engine channel reserved by the endpoint function
+ *
+ * Some EPC backends integrate DMA channels that can be exposed to the host.
+ * This helper asks the backend to hand a channel already reserved through
+ * dmaengine to the host and place it in a state where the host driver may
+ * program it through the exposed register window.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if the backend does not support DMA channel
+ * delegation, or another -errno on failure.
+ */
+int pci_epc_delegate_dma_chan(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			      struct dma_chan *chan)
+{
+	int ret;
+
+	if (!pci_epc_function_is_valid(epc, func_no, vfunc_no))
+		return -EINVAL;
+
+	if (!chan)
+		return -EINVAL;
+
+	if (!epc->ops->delegate_dma_chan || !epc->ops->reclaim_dma_chan)
+		return -EOPNOTSUPP;
+
+	mutex_lock(&epc->lock);
+	ret = epc->ops->delegate_dma_chan(epc, func_no, vfunc_no, chan);
+	mutex_unlock(&epc->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(pci_epc_delegate_dma_chan);
+
+/**
+ * pci_epc_reclaim_dma_chan() - reclaim a delegated EPC-owned DMA channel
+ * @epc: EPC device
+ * @func_no: function number used when delegating @chan
+ * @vfunc_no: virtual function number used when delegating @chan
+ * @chan: delegated DMA engine channel
+ * @quiesce: quiesce affected hardware before reclaiming the channel
+ *
+ * Reclaim a channel previously delegated to the host. Set @quiesce for channels
+ * that may have been exposed to host programming. Bind failure paths that are
+ * unwinding local reservations before exposure may leave it clear.
+ *
+ * Some providers share enable and interrupt controls among channels. The
+ * caller must retain every delegated member of that sharing group and prevent
+ * further peer programming before requesting reclaim.
+ *
+ * Reclaim is best-effort because it runs from teardown paths that cannot be
+ * aborted. The backend always consumes the delegation and reports any quiesce
+ * failure itself. The caller retains the DMA engine channel reservation and
+ * releases it after this function returns.
+ */
+void pci_epc_reclaim_dma_chan(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			      struct dma_chan *chan, bool quiesce)
+{
+	if (!epc || !chan || !epc->ops->reclaim_dma_chan)
+		return;
+
+	mutex_lock(&epc->lock);
+	epc->ops->reclaim_dma_chan(epc, func_no, vfunc_no, chan, quiesce);
+	mutex_unlock(&epc->lock);
+}
+EXPORT_SYMBOL_GPL(pci_epc_reclaim_dma_chan);
+
+/**
  * pci_epc_stop() - stop the PCI link
  * @epc: the link of the EPC device that has to be stopped
  *
