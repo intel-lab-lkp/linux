@@ -127,7 +127,9 @@ int syscall_trace_enter(struct pt_regs *regs)
 			    UPT_SYSCALL_ARG1(&regs->regs),
 			    UPT_SYSCALL_ARG2(&regs->regs),
 			    UPT_SYSCALL_ARG3(&regs->regs),
-			    UPT_SYSCALL_ARG4(&regs->regs));
+			    UPT_SYSCALL_ARG4(&regs->regs),
+			    UPT_SYSCALL_ARG5(&regs->regs),
+			    UPT_SYSCALL_ARG6(&regs->regs));
 
 	if (test_thread_flag(TIF_SYSCALL_TRACEPOINT))
 		trace_sys_enter(regs, UPT_SYSCALL_NR(&regs->regs));
