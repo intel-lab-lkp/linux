@@ -60,6 +60,22 @@ properties:
   power-domains:
     maxItems: 1
 
+  qcom,qup-multi-owner:
+    type: boolean
+    description:
+      Indicates that the QUP-based controller is shared with one or more
+      other system processors and must not be assumed to have exclusive
+      ownership by the operating system.
+
+      The associated GPIOs must not be reconfigured into a sleep state
+      during runtime suspend, as doing so may disrupt transactions
+      initiated by another owner of the controller.
+
+      Each owner is responsible for maintaining any resource votes
+      required for operation of the shared controller (for example clocks,
+      power domains, interconnect bandwidth, or other platform-specific
+      resources)
+
   reg:
     maxItems: 1
 
