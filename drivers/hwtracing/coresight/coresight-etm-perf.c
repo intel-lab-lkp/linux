@@ -548,8 +548,13 @@ static void etm_event_start(struct perf_event *event, int flags)
 
 	if (flags & PERF_EF_RESUME) {
 		path = etm_event_get_ctxt_path(ctxt);
-		if (etm_event_resume(path) < 0)
-			goto fail;
+		/*
+		 * Don't mark the event stopped on failure: the AUX transaction
+		 * from the initial start is still live and etm_event_stop()
+		 * bails out early on PERF_HES_STOPPED, leaking it and the path.
+		 * etm_event_resume() already reports the error.
+		 */
+		etm_event_resume(path);
 		return;
 	}
 
