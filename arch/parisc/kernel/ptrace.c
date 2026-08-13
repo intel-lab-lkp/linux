@@ -362,14 +362,17 @@ long do_syscall_trace_enter(struct pt_regs *regs)
 #ifdef CONFIG_64BIT
 	if (!is_compat_task())
 		audit_syscall_entry(regs->gr[20], regs->gr[26], regs->gr[25],
-				    regs->gr[24], regs->gr[23]);
+				    regs->gr[24], regs->gr[23],
+				    regs->gr[22], regs->gr[21]);
 	else
 #endif
 		audit_syscall_entry(regs->gr[20] & 0xffffffff,
 			regs->gr[26] & 0xffffffff,
 			regs->gr[25] & 0xffffffff,
 			regs->gr[24] & 0xffffffff,
-			regs->gr[23] & 0xffffffff);
+			regs->gr[23] & 0xffffffff,
+			regs->gr[22] & 0xffffffff,
+			regs->gr[21] & 0xffffffff);
 
 	/*
 	 * Sign extend the syscall number to 64bit since it may have been
