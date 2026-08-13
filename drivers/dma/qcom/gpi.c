@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  * Copyright (c) 2020, Linaro Limited
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <dt-bindings/dma/qcom-gpi.h>
@@ -66,6 +67,14 @@
 /* DMA TRE */
 #define TRE_DMA_LEN		GENMASK(23, 0)
 #define TRE_DMA_IMMEDIATE_LEN	GENMASK(3, 0)
+
+/* Lock TRE */
+#define TRE_LOCK		BIT(0)
+#define TRE_MINOR_TYPE		GENMASK(19, 16)
+#define TRE_MAJOR_TYPE		GENMASK(23, 20)
+
+/* Unlock TRE */
+#define TRE_UNLOCK		BIT(8)
 
 /* Register offsets from gpi-top */
 #define GPII_n_CH_k_CNTXT_0_OFFS(n, k)	(0x20000 + (0x4000 * (n)) + (0x80 * (k)))
@@ -492,6 +501,8 @@ struct gchan {
 	u32 dir;
 	struct gpi_ring ch_ring;
 	void *config;
+	bool multi_owner;   /* controller is shared; insert lock/unlock TREs */
+	bool lock_pending;  /* LOCK TRE has been inserted, UNLOCK not yet emitted */
 };
 
 struct gpii {
@@ -518,7 +529,7 @@ struct gpii {
 	bool ieob_set;
 };
 
-#define MAX_TRE 3
+#define MAX_TRE 5
 
 struct gpi_desc {
 	struct virt_dma_desc vd;
@@ -1605,6 +1616,7 @@ static int
 gpi_peripheral_config(struct dma_chan *chan, struct dma_slave_config *config)
 {
 	struct gchan *gchan = to_gchan(chan);
+	struct gpi_i2c_config *i2c_cfg;
 	void *new_config;
 
 	if (!config->peripheral_config)
@@ -1617,6 +1629,17 @@ gpi_peripheral_config(struct dma_chan *chan, struct dma_slave_config *config)
 	gchan->config = new_config;
 	memcpy(gchan->config, config->peripheral_config, config->peripheral_size);
 
+	/*
+	 * Latch the multi_owner flag from the initial config call so the GPI
+	 * driver can autonomously insert LOCK/UNLOCK TREs without the client
+	 * having to track transfer boundaries.
+	 */
+	if (gchan->protocol == QCOM_GPI_I2C) {
+		i2c_cfg = gchan->config;
+		if (i2c_cfg->set_config)
+			gchan->multi_owner = i2c_cfg->multi_owner;
+	}
+
 	return 0;
 }
 
@@ -1627,9 +1650,32 @@ static int gpi_create_i2c_tre(struct gchan *chan, struct gpi_desc *desc,
 	struct gpi_i2c_config *i2c = chan->config;
 	struct device *dev = chan->gpii->gpi_dev->dev;
 	unsigned int tre_idx = 0;
+	bool is_last = !!(flags & DMA_PREP_INTERRUPT);
 	dma_addr_t address;
 	struct gpi_tre *tre;
 	unsigned int i;
+
+	/*
+	 * Insert a LOCK TRE before the first transfer of a multi-owner
+	 * transaction.  The GPI driver detects the transaction start
+	 * autonomously: if multi_owner is set and no lock has been issued
+	 * since the last unlock (lock_pending == false), this is the first
+	 * descriptor in a new transaction.
+	 */
+	if (chan->multi_owner && !chan->lock_pending) {
+		tre = &desc->tre[tre_idx];
+		tre_idx++;
+
+		tre->dword[0] = 0;
+		tre->dword[1] = 0;
+		tre->dword[2] = 0;
+		tre->dword[3] = u32_encode_bits(1, TRE_LOCK);
+		tre->dword[3] |= u32_encode_bits(1, TRE_FLAGS_IEOB);
+		tre->dword[3] |= u32_encode_bits(0, TRE_MINOR_TYPE);
+		tre->dword[3] |= u32_encode_bits(3, TRE_MAJOR_TYPE);
+
+		chan->lock_pending = true;
+	}
 
 	/* first create config tre if applicable */
 	if (i2c->set_config) {
@@ -1690,6 +1736,35 @@ static int gpi_create_i2c_tre(struct gchan *chan, struct gpi_desc *desc,
 
 		if (!(flags & DMA_PREP_INTERRUPT))
 			tre->dword[3] |= u32_encode_bits(1, TRE_FLAGS_BEI);
+
+		/*
+		 * Chain the DMA TRE to the UNLOCK TRE when this is the last
+		 * descriptor in the transaction (DMA_PREP_INTERRUPT set) and
+		 * the channel is in multi-owner mode.
+		 */
+		if (chan->multi_owner && is_last && i2c->op != I2C_READ)
+			tre->dword[3] |= u32_encode_bits(1, TRE_FLAGS_CHAIN);
+	}
+
+	/*
+	 * Insert an UNLOCK TRE after the last write transfer of a multi-owner
+	 * transaction.  DMA_PREP_INTERRUPT marks the final descriptor in the
+	 * batch; reads carry their own completion event so the unlock follows
+	 * the write leg of each read message.
+	 */
+	if (chan->multi_owner && is_last && i2c->op != I2C_READ) {
+		tre = &desc->tre[tre_idx];
+		tre_idx++;
+
+		tre->dword[0] = 0;
+		tre->dword[1] = 0;
+		tre->dword[2] = 0;
+		tre->dword[3] = u32_encode_bits(1, TRE_UNLOCK);
+		tre->dword[3] |= u32_encode_bits(1, TRE_FLAGS_IEOB);
+		tre->dword[3] |= u32_encode_bits(1, TRE_MINOR_TYPE);
+		tre->dword[3] |= u32_encode_bits(3, TRE_MAJOR_TYPE);
+
+		chan->lock_pending = false;
 	}
 
 	for (i = 0; i < tre_idx; i++)

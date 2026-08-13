@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2020, Linaro Limited
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef QCOM_GPI_DMA_H
@@ -68,6 +69,8 @@ enum i2c_op {
  * @rx_len: receive length for buffer
  * @op: i2c cmd
  * @multi_msg: is part of multi i2c r-w msgs
+ * @multi_owner: controller is shared with another system processor;
+ *               the GPI driver will insert lock/unlock TREs automatically
  */
 struct gpi_i2c_config {
 	u8 set_config;
@@ -81,6 +84,7 @@ struct gpi_i2c_config {
 	u32 rx_len;
 	enum i2c_op op;
 	bool multi_msg;
+	bool multi_owner;
 };
 
 #endif /* QCOM_GPI_DMA_H */
