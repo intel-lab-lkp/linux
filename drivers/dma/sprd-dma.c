@@ -270,9 +270,16 @@ static int sprd_dma_enable(struct sprd_dma_dev *sdev)
 	 * The ashb_clk is optional and only for AGCP DMA controller, so we
 	 * need add one condition to check if the ashb_clk need enable.
 	 */
-	if (!IS_ERR(sdev->ashb_clk))
+	if (!IS_ERR(sdev->ashb_clk)) {
 		ret = clk_prepare_enable(sdev->ashb_clk);
+		if (ret)
+			goto disable_clk;
+	}
 
+	return 0;
+
+disable_clk:
+	clk_disable_unprepare(sdev->clk);
 	return ret;
 }
 
