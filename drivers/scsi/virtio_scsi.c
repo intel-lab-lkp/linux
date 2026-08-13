@@ -976,11 +976,11 @@ static int virtscsi_probe(struct virtio_device *vdev)
 	}
 #endif
 
+	virtio_device_ready(vdev);
+
 	err = scsi_add_host(shost, &vdev->dev);
 	if (err)
 		goto scsi_add_host_failed;
-
-	virtio_device_ready(vdev);
 
 	for (int i = 0; i < VIRTIO_SCSI_EVENT_LEN; i++)
 		INIT_WORK(&vscsi->event_list[i].work, virtscsi_handle_event);
@@ -991,7 +991,7 @@ static int virtscsi_probe(struct virtio_device *vdev)
 	return 0;
 
 scsi_add_host_failed:
-	vdev->config->del_vqs(vdev);
+	virtscsi_remove_vqs(vdev);
 virtscsi_init_failed:
 	scsi_host_put(shost);
 	return err;
