@@ -73,20 +73,21 @@ struct net_shaper {
  * Each shaper is uniquely identified within the device with a 'handle'
  * comprising the shaper scope and a scope-specific id.
  *
- * Driver ops vs uAPI
- * ------------------
+ * **Driver ops vs uAPI**
+ *
  * Members of the driver ops mirror the Netlink uAPI but driver calls do not
  * map 1:1 to user calls. Drivers need to be careful when assuming that calls
  * disallowed at the uAPI level will never be made at the driver level.
  * The shaper core performs automatic reparenting and cleanup, generating
  * additional calls. Notably:
- *  - @group calls in the driver facing API may have nodes as leaves (user is
- *    only allowed to construct groups with queues as leaves)
- *  - @group calls may update leaf's parent if the parent is about
- *    to be removed (re-parenting nodes explicitly is not supported in the uAPI)
  *
- * Implicit creation
- * -----------------
+ * - @group calls in the driver facing API may have nodes as leaves (user is
+ *   only allowed to construct groups with queues as leaves)
+ * - @group calls may update leaf's parent if the parent is about
+ *   to be removed (re-parenting nodes explicitly is not supported in the uAPI)
+ *
+ * **Implicit creation**
+ *
  * Shapers are created implicitly, meaning that @set and @group operations
  * are called both for existing and new shapers. The driver has to infer
  * whether the operation is an update or a creation by tracking the handles.
