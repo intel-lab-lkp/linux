@@ -557,7 +557,7 @@ cifs_ses_add_channel(struct cifs_ses *ses,
 	ctx->ignore_signature = ses->server->ignore_signature;
 	ctx->leaf_fullpath = ses->server->leaf_fullpath;
 	ctx->rootfs = ses->server->noblockcnt;
-	ctx->retrans = ses->server->retrans;
+	ctx->retrans = READ_ONCE(ses->server->retrans);
 
 	/*
 	 * This will be used for encoding/decoding user/domain/pw
