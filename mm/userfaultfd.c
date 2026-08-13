@@ -1700,7 +1700,8 @@ retry:
 		}
 
 		si = get_swap_device(entry);
-		if (unlikely(!si)) {
+		if (IS_ERR_OR_NULL(si)) {
+			si = NULL;
 			ret = -EAGAIN;
 			goto out;
 		}
