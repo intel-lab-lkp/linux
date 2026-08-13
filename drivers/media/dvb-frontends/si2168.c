@@ -11,6 +11,9 @@
 
 static const struct dvb_frontend_ops si2168_ops;
 
+#define SI2168_NEW_FIRMWARE_RECORD_SIZE 17
+#define SI2168_OLD_FIRMWARE_RECORD_SIZE 8
+
 static void cmd_init(struct si2168_cmd *cmd, const u8 *buf, int wlen, int rlen)
 {
 	memcpy(cmd->args, buf, wlen);
@@ -459,11 +462,15 @@ static int si2168_init(struct dvb_frontend *fe)
 	dev_info(&client->dev, "downloading firmware from file '%s'\n",
 			dev->firmware_name);
 
-	if ((fw->size % 17 == 0) && (fw->data[0] > 5)) {
+	if (fw->size &&
+	    fw->size % SI2168_NEW_FIRMWARE_RECORD_SIZE == 0 &&
+	    fw->data[0] > 5) {
 		/* firmware is in the new format */
-		for (remaining = fw->size; remaining > 0; remaining -= 17) {
+		for (remaining = fw->size; remaining > 0;
+		     remaining -= SI2168_NEW_FIRMWARE_RECORD_SIZE) {
 			len = fw->data[fw->size - remaining];
-			if (len > SI2168_ARGLEN) {
+			if (len > SI2168_ARGLEN ||
+			    len >= SI2168_NEW_FIRMWARE_RECORD_SIZE) {
 				ret = -EINVAL;
 				break;
 			}
@@ -473,10 +480,13 @@ static int si2168_init(struct dvb_frontend *fe)
 			if (ret)
 				break;
 		}
-	} else if (fw->size % 8 == 0) {
+	} else if (fw->size &&
+		   fw->size % SI2168_OLD_FIRMWARE_RECORD_SIZE == 0) {
 		/* firmware is in the old format */
-		for (remaining = fw->size; remaining > 0; remaining -= 8) {
-			cmd_init(&cmd, &fw->data[fw->size - remaining], 8, 1);
+		for (remaining = fw->size; remaining > 0;
+		     remaining -= SI2168_OLD_FIRMWARE_RECORD_SIZE) {
+			cmd_init(&cmd, &fw->data[fw->size - remaining],
+				 SI2168_OLD_FIRMWARE_RECORD_SIZE, 1);
 			ret = si2168_cmd_execute(client, &cmd);
 			if (ret)
 				break;
