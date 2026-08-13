@@ -1100,7 +1100,8 @@ asmlinkage int syscall_trace_enter(struct pt_regs *regs)
 
 	audit_syscall_entry(regs->u_regs[UREG_G1], regs->u_regs[UREG_I0],
 			    regs->u_regs[UREG_I1], regs->u_regs[UREG_I2],
-			    regs->u_regs[UREG_I3]);
+			    regs->u_regs[UREG_I3], regs->u_regs[UREG_I4],
+			    regs->u_regs[UREG_I5]);
 
 	return ret;
 }
