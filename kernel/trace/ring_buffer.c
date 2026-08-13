@@ -6957,11 +6957,11 @@ ring_buffer_alloc_read_page(struct trace_buffer *buffer, int cpu)
 	if (!bpage)
 		return ERR_PTR(-ENOMEM);
 
-	bpage->order = buffer->subbuf_order;
 	cpu_buffer = buffer->buffers[cpu];
 	local_irq_save(flags);
 	arch_spin_lock(&cpu_buffer->lock);
 
+	bpage->order = buffer->subbuf_order;
 	if (cpu_buffer->free_page) {
 		bpage->data = cpu_buffer->free_page;
 		cpu_buffer->free_page = NULL;
@@ -7010,13 +7010,13 @@ void ring_buffer_free_read_page(struct trace_buffer *buffer, int cpu,
 	 * is different from the subbuffer order of the buffer -
 	 * we can't reuse it
 	 */
-	if (page_ref_count(page) > 1 || data_page->order != buffer->subbuf_order)
+	if (page_ref_count(page) > 1)
 		goto out;
 
 	local_irq_save(flags);
 	arch_spin_lock(&cpu_buffer->lock);
 
-	if (!cpu_buffer->free_page) {
+	if (data_page->order == buffer->subbuf_order && !cpu_buffer->free_page) {
 		cpu_buffer->free_page = dpage;
 		dpage = NULL;
 	}
@@ -7094,14 +7094,14 @@ int ring_buffer_read_page(struct trace_buffer *buffer,
 	if (!data_page || !data_page->data)
 		return -1;
 
-	if (data_page->order != buffer->subbuf_order)
-		return -1;
-
 	dpage = data_page->data;
 	if (!dpage)
 		return -1;
 
 	guard(raw_spinlock_irqsave)(&cpu_buffer->reader_lock);
+
+	if (data_page->order != buffer->subbuf_order)
+		return -1;
 
 	reader = rb_get_reader_page(cpu_buffer);
 	if (!reader)
@@ -7350,6 +7350,27 @@ int ring_buffer_subbuf_order_set(struct trace_buffer *buffer, int order)
 	/* Make sure all commits have finished */
 	synchronize_rcu();
 
+	/* Flush any cached free_page allocated with old_order */
+	for_each_buffer_cpu(buffer, cpu) {
+		struct buffer_data_page *old_free;
+		unsigned long flags;
+
+		if (!cpumask_test_cpu(cpu, buffer->cpumask))
+			continue;
+
+		cpu_buffer = buffer->buffers[cpu];
+
+		local_irq_save(flags);
+		arch_spin_lock(&cpu_buffer->lock);
+		old_free = cpu_buffer->free_page;
+		cpu_buffer->free_page = NULL;
+		arch_spin_unlock(&cpu_buffer->lock);
+		local_irq_restore(flags);
+
+		if (old_free)
+			free_pages((unsigned long)old_free, old_order);
+	}
+
 	buffer->subbuf_order = order;
 	buffer->subbuf_size = psize - BUF_PAGE_HDR_SIZE;
 
@@ -7431,8 +7452,10 @@ int ring_buffer_subbuf_order_set(struct trace_buffer *buffer, int order)
 		cpu_buffer->nr_pages = cpu_buffer->nr_pages_to_update;
 		cpu_buffer->nr_pages_to_update = 0;
 
+		arch_spin_lock(&cpu_buffer->lock);
 		old_free_data_page = cpu_buffer->free_page;
 		cpu_buffer->free_page = NULL;
+		arch_spin_unlock(&cpu_buffer->lock);
 
 		rb_head_page_activate(cpu_buffer);
 
