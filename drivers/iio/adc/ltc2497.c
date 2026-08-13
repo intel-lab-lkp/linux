@@ -85,28 +85,33 @@ static int ltc2497_result_and_measure(struct ltc2497core_driverdata *ddata,
 	}
 
 	/*
-	 * Parts with the internal PTAT sensor (LTC2499) latch their converter
-	 * configuration via a second command byte and only re-evaluate it when
-	 * that byte has EN2 set; a single byte, or a second byte with EN2 = 0,
-	 * means "keep previous". A one-byte channel select therefore cannot pull
-	 * the device back out of temperature mode, so a voltage read after a
-	 * temperature read would keep returning the PTAT result. Always drive the
-	 * second byte with EN2 set on these parts: IM = 1 for a temperature read,
-	 * EN2 alone (IM = 0) to (re)select an external input. FA = FB = 0 keeps
-	 * the power-on simultaneous 50/60Hz rejection, whose worst-case
-	 * conversion time the driver's wait already covers.
+	 * Parts with a second config byte (LTC2499: internal PTAT sensor and/or
+	 * the 2x speed mode) latch their converter configuration from that byte
+	 * and only re-evaluate it when EN2 is set; a single byte, or a second
+	 * byte with EN2 = 0, means "keep previous". A one-byte channel select
+	 * therefore cannot pull the device back out of temperature mode, so a
+	 * voltage read after a temperature read would keep returning the PTAT
+	 * result. Always drive the second byte with EN2 set on these parts:
+	 *   - temperature read: IM = 1 (SPD is ignored by the part in
+	 *     temperature mode and is left 0 here);
+	 *   - voltage read: IM = 0 (external input), plus SPD when 2x is
+	 *     selected.
+	 * FA = FB = 0 keeps the power-on simultaneous 50/60Hz rejection, whose
+	 * worst-case conversion time the driver's wait already covers.
 	 *
 	 * The two bytes are assembled in the DMA-safe st->data buffer rather than
 	 * on the stack, so the pointer handed to i2c_master_send() stays valid on
 	 * adapters that DMA the transfer (e.g. with CONFIG_VMAP_STACK).
 	 */
-	if (ddata->chip_info->has_temp) {
+	if (ddata->chip_info->has_temp || ddata->chip_info->has_speed_mode) {
 		if (address == LTC2497_TEMP_ADDR) {
 			st->data.d8[0] = LTC2497_ENABLE | LTC2497_CONFIG_DEFAULT;
 			st->data.d8[1] = LTC2499_EN2 | LTC2499_IM;
 		} else {
 			st->data.d8[0] = LTC2497_ENABLE | address;
 			st->data.d8[1] = LTC2499_EN2;
+			if (ddata->sped_2x)
+				st->data.d8[1] |= LTC2499_SPD;
 		}
 
 		ret = i2c_master_send(st->client, (char *)st->data.d8, 2);
@@ -172,6 +177,7 @@ static const struct ltc2497_chip_info ltc2497_info[] = {
 		.resolution = 24,
 		.name = "ltc2499",
 		.has_temp = true,
+		.has_speed_mode = true,
 	},
 };
 
