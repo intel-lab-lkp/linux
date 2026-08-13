@@ -4,6 +4,7 @@
 
 #include <crypto/hash.h>
 #include <linux/types.h>
+#include <linux/string.h>
 
 #define MD5_DIGEST_SIZE		16
 #define MD5_HMAC_BLOCK_SIZE	64
@@ -107,6 +108,20 @@ struct hmac_md5_ctx {
 	struct md5_ctx hash_ctx;
 	struct md5_block_state ostate;
 };
+
+/**
+ * hmac_md5_zeroize_ctx() - Zeroize an hmac_md5_ctx structure
+ * @ctx: The location of the context that should be zeroized
+ *
+ * This function explicitly fills the hmac_md5_ctx with zeroes. For
+ * example, use it with __cleanup() for local hmac_md5_ctx structures
+ * on the stack, so that their content is not leaked when the context is
+ * left. Note: This is only required when not using hmac_md5_final().
+ */
+static inline void hmac_md5_zeroize_ctx(struct hmac_md5_ctx *ctx)
+{
+	memzero_explicit(ctx, sizeof(*ctx));
+}
 
 /**
  * hmac_md5_preparekey() - Prepare a key for HMAC-MD5
