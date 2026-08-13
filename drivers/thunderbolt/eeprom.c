@@ -348,6 +348,11 @@ static int tb_drom_parse_entry_generic(struct tb_switch *sw,
 		const struct tb_drom_entry_desc *desc =
 			(const struct tb_drom_entry_desc *)entry;
 
+		if (header->len < sizeof(*desc)) {
+			tb_sw_warn(sw, "USB4 product descriptor entry is too short\n");
+			return -EIO;
+		}
+
 		if (!sw->vendor && !sw->device) {
 			sw->vendor = desc->idVendor;
 			sw->device = desc->idProduct;
