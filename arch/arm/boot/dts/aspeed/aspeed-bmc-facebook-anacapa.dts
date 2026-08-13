@@ -1,4 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "aspeed-bmc-facebook-anacapa-evt1.dts"
+#include "aspeed-bmc-facebook-anacapa-evt2.dts"
 
