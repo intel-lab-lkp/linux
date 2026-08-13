@@ -108,6 +108,14 @@ nouveau_gem_object_open(struct drm_gem_object *gem, struct drm_file *file_priv)
 	if (vmm->vmm.object.oclass < NVIF_CLASS_VMM_NV50)
 		return 0;
 
+	/*
+	 * Opening the object binds it through the legacy per-VMA path below.
+	 * Disable VM_BIND for this client, as nouveau_gem_ioctl_new() does, so
+	 * a later NOUVEAU_VM_INIT cannot switch the client to uvmm and leave
+	 * nouveau_gem_object_close() unable to tear this VMA down.
+	 */
+	nouveau_cli_disable_uvmm_noinit(cli);
+
 	if (nvbo->no_share && uvmm &&
 	    drm_gpuvm_resv(&uvmm->base) != nvbo->bo.base.resv)
 		return -EPERM;
