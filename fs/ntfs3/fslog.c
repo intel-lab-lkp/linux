@@ -3288,10 +3288,10 @@ skip_load_parent:
 		asize = le32_to_cpu(attr2->size);
 		used = le32_to_cpu(rec->used);
 
-		if (!check_if_attr(rec, lrh) || dlen < SIZEOF_RESIDENT ||
+		if (!check_if_attr(rec, lrh) || asize < SIZEOF_RESIDENT ||
 		    !IS_ALIGNED(asize, 8) ||
 		    Add2Ptr(attr2, asize) > Add2Ptr(lrh, rec_len) ||
-		    dlen > record_size - used) {
+		    asize > record_size - used) {
 			goto dirty_vol;
 		}
 
