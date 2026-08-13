@@ -2708,26 +2708,30 @@ pnfs_mark_matching_lsegs_return(struct pnfs_layout_hdr *lo,
 	return -ENOENT;
 }
 
-static void
-pnfs_mark_layout_for_return(struct inode *inode,
-			    const struct pnfs_layout_range *range)
+void pnfs_error_mark_layout_for_return(struct inode *inode,
+				       struct pnfs_layout_segment *lseg)
 {
 	struct pnfs_layout_hdr *lo;
 	bool return_now = false;
+	struct pnfs_layout_range range = {
+		.iomode = lseg->pls_range.iomode,
+		.offset = 0,
+		.length = NFS4_MAX_UINT64,
+	};
 
 	spin_lock(&inode->i_lock);
 	lo = NFS_I(inode)->layout;
-	if (!pnfs_layout_is_valid(lo)) {
+	if (!pnfs_layout_is_valid(lo) || !pnfs_is_valid_lseg(lseg)) {
 		spin_unlock(&inode->i_lock);
 		return;
 	}
-	pnfs_set_plh_return_info(lo, range->iomode, 0);
+	pnfs_set_plh_return_info(lo, range.iomode, 0);
 	/*
 	 * mark all matching lsegs so that we are sure to have no live
 	 * segments at hand when sending layoutreturn. See pnfs_put_lseg()
 	 * for how it works.
 	 */
-	if (pnfs_mark_matching_lsegs_return(lo, &lo->plh_return_segs, range, 0) != -EBUSY) {
+	if (pnfs_mark_matching_lsegs_return(lo, &lo->plh_return_segs, &range, 0) != -EBUSY) {
 		const struct cred *cred;
 		nfs4_stateid stateid;
 		enum pnfs_iomode iomode;
@@ -2741,18 +2745,6 @@ pnfs_mark_layout_for_return(struct inode *inode,
 		spin_unlock(&inode->i_lock);
 		nfs_commit_inode(inode, 0);
 	}
-}
-
-void pnfs_error_mark_layout_for_return(struct inode *inode,
-				       struct pnfs_layout_segment *lseg)
-{
-	struct pnfs_layout_range range = {
-		.iomode = lseg->pls_range.iomode,
-		.offset = 0,
-		.length = NFS4_MAX_UINT64,
-	};
-
-	pnfs_mark_layout_for_return(inode, &range);
 }
 EXPORT_SYMBOL_GPL(pnfs_error_mark_layout_for_return);
 
