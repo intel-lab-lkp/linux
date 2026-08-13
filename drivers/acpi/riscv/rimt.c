@@ -31,6 +31,45 @@ static DEFINE_SPINLOCK(rimt_fwnode_lock);
 /* Root pointer to the mapped RIMT table */
 static struct acpi_table_header *rimt_table;
 
+static bool rimt_table_valid(void)
+{
+	struct acpi_table_rimt *rimt = (struct acpi_table_rimt *)rimt_table;
+	size_t node_bytes;
+
+	if (!rimt || rimt->header.length < sizeof(*rimt))
+		return false;
+
+	if (!rimt->num_nodes)
+		return true;
+
+	if (rimt->node_offset < sizeof(*rimt) ||
+	    rimt->node_offset > rimt->header.length -
+				 sizeof(struct acpi_rimt_node))
+		return false;
+
+	node_bytes = rimt->header.length - rimt->node_offset;
+	return rimt->num_nodes <=
+		node_bytes / sizeof(struct acpi_rimt_node);
+}
+
+static bool rimt_node_valid(struct acpi_rimt_node *node,
+			    struct acpi_rimt_node *end)
+{
+	size_t remaining;
+
+	if ((u8 *)node >= (u8 *)end)
+		return false;
+
+	remaining = (u8 *)end - (u8 *)node;
+	if (remaining < sizeof(*node) || node->length < sizeof(*node) ||
+	    node->length > remaining) {
+		pr_err(FW_BUG "Invalid RIMT node length\n");
+		return false;
+	}
+
+	return true;
+}
+
 /**
  * rimt_set_fwnode() - Create rimt_fwnode and use it to register
  *		       iommu data in the rimt_fwnode_list
@@ -153,19 +192,21 @@ static struct acpi_rimt_node *rimt_scan_node(enum acpi_rimt_node_type type,
 	struct acpi_table_rimt *rimt;
 	int i;
 
-	if (!rimt_table)
+	if (!rimt_table_valid())
 		return NULL;
 
 	/* Get the first RIMT node */
 	rimt = (struct acpi_table_rimt *)rimt_table;
+	if (!rimt->num_nodes)
+		return NULL;
+
 	rimt_node = ACPI_ADD_PTR(struct acpi_rimt_node, rimt,
 				 rimt->node_offset);
 	rimt_end = ACPI_ADD_PTR(struct acpi_rimt_node, rimt_table,
 				rimt_table->length);
 
 	for (i = 0; i < rimt->num_nodes; i++) {
-		if (WARN_TAINT(rimt_node >= rimt_end, TAINT_FIRMWARE_WORKAROUND,
-			       "RIMT node pointer overflows, bad table!\n"))
+		if (!rimt_node_valid(rimt_node, rimt_end))
 			return NULL;
 
 		if (rimt_node->type == type &&
@@ -524,5 +565,11 @@ void __init riscv_acpi_rimt_init(void)
 		}
 
 		return;
+	}
+
+	if (!rimt_table_valid()) {
+		pr_err(FW_BUG "Invalid RIMT table layout\n");
+		acpi_put_table(rimt_table);
+		rimt_table = NULL;
 	}
 }
