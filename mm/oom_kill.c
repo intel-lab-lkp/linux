@@ -94,27 +94,27 @@ static bool oom_cpuset_eligible(struct task_struct *start,
 	bool ret = false;
 	const nodemask_t *mask = oc->nodemask;
 
-	rcu_read_lock();
-	for_each_thread(start, tsk) {
-		if (mask) {
-			/*
-			 * If this is a mempolicy constrained oom, tsk's
-			 * cpuset is irrelevant.  Only return true if its
-			 * mempolicy intersects current, otherwise it may be
-			 * needlessly killed.
-			 */
-			ret = mempolicy_in_oom_domain(tsk, mask);
-		} else {
-			/*
-			 * This is not a mempolicy constrained oom, so only
-			 * check the mems of tsk's cpuset.
-			 */
-			ret = cpuset_mems_allowed_intersects(current, tsk);
+	scoped_guard(rcu) {
+		for_each_thread(start, tsk) {
+			if (mask) {
+				/*
+				 * If this is a mempolicy constrained oom, tsk's
+				 * cpuset is irrelevant.  Only return true if its
+				 * mempolicy intersects current, otherwise it may be
+				 * needlessly killed.
+				 */
+				ret = mempolicy_in_oom_domain(tsk, mask);
+			} else {
+				/*
+				 * This is not a mempolicy constrained oom, so only
+				 * check the mems of tsk's cpuset.
+				 */
+				ret = cpuset_mems_allowed_intersects(current, tsk);
+			}
+			if (ret)
+				break;
 		}
-		if (ret)
-			break;
 	}
-	rcu_read_unlock();
 
 	return ret;
 }
@@ -368,11 +368,11 @@ static void select_bad_process(struct oom_control *oc)
 	else {
 		struct task_struct *p;
 
-		rcu_read_lock();
-		for_each_process(p)
-			if (oom_evaluate_task(p, oc))
-				break;
-		rcu_read_unlock();
+		scoped_guard(rcu) {
+			for_each_process(p)
+				if (oom_evaluate_task(p, oc))
+					break;
+		}
 	}
 }
 
@@ -430,14 +430,14 @@ static void dump_tasks(struct oom_control *oc)
 		struct task_struct *p;
 		int i = 0;
 
-		rcu_read_lock();
-		for_each_process(p) {
-			/* Avoid potential softlockup warning */
-			if ((++i & 1023) == 0)
-				touch_softlockup_watchdog();
-			dump_task(p, oc);
+		scoped_guard(rcu) {
+			for_each_process(p) {
+				/* Avoid potential softlockup warning */
+				if ((++i & 1023) == 0)
+					touch_softlockup_watchdog();
+				dump_task(p, oc);
+			}
 		}
-		rcu_read_unlock();
 	}
 }
 
@@ -894,17 +894,17 @@ static bool task_will_free_mem(struct task_struct *task)
 	 * are dying as well to make sure that a) nobody pins its mm and
 	 * b) the task is also reapable by the oom reaper.
 	 */
-	rcu_read_lock();
-	for_each_process(p) {
-		if (!process_shares_mm(p, mm))
-			continue;
-		if (same_thread_group(task, p))
-			continue;
-		ret = __task_will_free_mem(p);
-		if (!ret)
-			break;
+	scoped_guard(rcu) {
+		for_each_process(p) {
+			if (!process_shares_mm(p, mm))
+				continue;
+			if (same_thread_group(task, p))
+				continue;
+			ret = __task_will_free_mem(p);
+			if (!ret)
+				break;
+		}
 	}
-	rcu_read_unlock();
 
 	return ret;
 }
@@ -960,29 +960,29 @@ static void __oom_kill_process(struct task_struct *victim, const char *message)
 	 * That thread will now get access to memory reserves since it has a
 	 * pending fatal signal.
 	 */
-	rcu_read_lock();
-	for_each_process(p) {
-		if (!process_shares_mm(p, mm))
-			continue;
-		if (same_thread_group(p, victim))
-			continue;
-		if (is_global_init(p)) {
-			can_oom_reap = false;
-			mm_flags_set(MMF_OOM_SKIP, mm);
-			pr_info("oom killer %d (%s) has mm pinned by %d (%s)\n",
-					task_pid_nr(victim), victim->comm,
-					task_pid_nr(p), p->comm);
-			continue;
+	scoped_guard(rcu) {
+		for_each_process(p) {
+			if (!process_shares_mm(p, mm))
+				continue;
+			if (same_thread_group(p, victim))
+				continue;
+			if (is_global_init(p)) {
+				can_oom_reap = false;
+				mm_flags_set(MMF_OOM_SKIP, mm);
+				pr_info("oom killer %d (%s) has mm pinned by %d (%s)\n",
+						task_pid_nr(victim), victim->comm,
+						task_pid_nr(p), p->comm);
+				continue;
+			}
+			/*
+			 * No kthread_use_mm() user needs to read from the userspace so
+			 * we are ok to reap it.
+			 */
+			if (unlikely(p->flags & PF_KTHREAD))
+				continue;
+			do_send_sig_info(SIGKILL, SEND_SIG_PRIV, p, PIDTYPE_TGID);
 		}
-		/*
-		 * No kthread_use_mm() user needs to read from the userspace so
-		 * we are ok to reap it.
-		 */
-		if (unlikely(p->flags & PF_KTHREAD))
-			continue;
-		do_send_sig_info(SIGKILL, SEND_SIG_PRIV, p, PIDTYPE_TGID);
 	}
-	rcu_read_unlock();
 
 	if (can_oom_reap)
 		queue_oom_reaper(victim);
