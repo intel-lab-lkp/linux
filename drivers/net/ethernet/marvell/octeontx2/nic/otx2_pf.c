@@ -1980,6 +1980,16 @@ int otx2_open(struct net_device *netdev)
 	if (err)
 		goto err_free_mem;
 
+	/* TODO: otx2_mqprio_up() failure here aborts the entire ndo_open()
+	 * path even though mqprio_rate_limit and the rate cache remain set.
+	 * Routine ip link set up or driver reset with active mqprio offload
+	 * can leave the interface stuck down until the qdisc is removed and
+	 * reapplied.
+	 */
+	err = otx2_mqprio_up(pf);
+	if (err)
+		goto err_free_hw;
+
 	/* Register NAPI handler */
 	for (qidx = 0; qidx < pf->hw.cint_cnt; qidx++) {
 		cq_poll = &qset->napi[qidx];
@@ -2140,6 +2150,7 @@ err_free_cints:
 	free_irq(vec, pf);
 err_disable_napi:
 	otx2_disable_napi(pf);
+err_free_hw:
 	otx2_free_hw_resources(pf);
 err_free_mem:
 	otx2_free_queue_mem(qset);
@@ -2845,6 +2856,12 @@ static int otx2_xdp_setup(struct otx2_nic *pf, struct bpf_prog *prog)
 	struct net_device *dev = pf->netdev;
 	bool if_up = netif_running(pf->netdev);
 	struct bpf_prog *old_prog;
+
+	if (prog && pf->mqprio.rate_limit) {
+		netdev_err(dev,
+			   "XDP: cannot attach while mqprio bandwidth offload is active\n");
+		return -EOPNOTSUPP;
+	}
 
 	if (prog && dev->mtu > MAX_XDP_MTU) {
 		netdev_warn(dev, "Jumbo frames not yet supported with XDP\n");
