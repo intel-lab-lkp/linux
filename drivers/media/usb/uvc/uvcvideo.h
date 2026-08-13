@@ -559,10 +559,11 @@ struct uvc_status_streaming {
 	u8	button;
 } __packed;
 
+#define UVC_STATUS_CONTROL_LEN 11
 struct uvc_status_control {
 	u8	bSelector;
 	u8	bAttribute;
-	u8	bValue[11];
+	u8	bValue[UVC_STATUS_CONTROL_LEN];
 } __packed;
 
 struct uvc_status {

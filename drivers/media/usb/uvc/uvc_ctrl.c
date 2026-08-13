@@ -2158,7 +2158,9 @@ void uvc_ctrl_status_event(struct uvc_video_chain *chain,
 	list_for_each_entry(mapping, &ctrl->info.mappings, list) {
 		s32 value;
 
-		if (uvc_ctrl_mapping_is_compound(mapping))
+		if (uvc_ctrl_mapping_is_compound(mapping) ||
+		    DIV_ROUND_UP(mapping->offset + mapping->size, 8) >
+		    UVC_STATUS_CONTROL_LEN)
 			value = 0;
 		else
 			value = uvc_mapping_get_s32(mapping, UVC_GET_CUR, data);
