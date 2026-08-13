@@ -829,6 +829,7 @@ static int geni_i2c_gpi_xfer(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[], i
 	peripheral.clk_div = itr->clk_div;
 	peripheral.set_config = 1;
 	peripheral.multi_msg = false;
+	peripheral.multi_owner = gi2c->se.multi_owner;
 
 	trace_geni_i2c_bus_setup(gi2c->se.dev, gi2c->clk_freq_out,
 				 itr->clk_div, itr->t_high_cnt,
@@ -1066,7 +1067,11 @@ static int geni_i2c_init(struct geni_i2c_dev *gi2c)
 	}
 
 	if (fifo_disable) {
-		/* FIFO is disabled, so we can only use GPI DMA */
+		/*
+		 * FIFO is disabled, so only GPI DMA can be used.
+		 * In multi-owner configurations, the SE may be shared between subsystems,
+		 * with each subsystem owning a separate GPII.
+		 */
 		gi2c->gpi_mode = true;
 		ret = setup_gpi_dma(gi2c);
 		if (ret)
@@ -1075,6 +1080,11 @@ static int geni_i2c_init(struct geni_i2c_dev *gi2c)
 		dev_dbg(gi2c->se.dev, "Using GPI DMA mode for I2C\n");
 	} else {
 		gi2c->gpi_mode = false;
+
+		if (gi2c->se.multi_owner)
+			return dev_err_probe(gi2c->se.dev, -EINVAL,
+					     "I2C sharing not supported in non-GSI mode\n");
+
 		tx_depth = geni_se_get_tx_fifo_depth(&gi2c->se);
 
 		/* I2C Master Hub Serial Elements doesn't have the HW_PARAM_0 register */
@@ -1143,6 +1153,11 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_info(dev, "Bus frequency not specified, default to 100kHz.\n");
 		gi2c->clk_freq_out = I2C_MAX_STANDARD_MODE_FREQ;
+	}
+
+	if (device_property_present(&pdev->dev, "qcom,qup-multi-owner")) {
+		gi2c->se.multi_owner = true;
+		dev_dbg(&pdev->dev, "I2C controller is shared with another system processor\n");
 	}
 
 	if (has_acpi_companion(dev))
