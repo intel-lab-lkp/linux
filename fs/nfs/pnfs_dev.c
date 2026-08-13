@@ -181,6 +181,22 @@ __nfs4_find_get_deviceid(struct nfs_server *server,
 	return d;
 }
 
+/*
+ * Bumped when a CB_NOTIFY_DEVICEID CHANGE is processed.  A GETDEVICEINFO
+ * reply fetched across a change may carry the pre-change mapping; the
+ * epoch lets nfs4_find_get_deviceid() detect that and refetch.  The
+ * counter is ordered by nfs4_deviceid_lock: the notification handler
+ * bumps it before unhashing the stale entry under the lock, so an
+ * insert serialized after the unhash observes the new epoch.
+ */
+static atomic_t nfs4_deviceid_change_epoch = ATOMIC_INIT(0);
+
+void
+nfs4_deviceid_bump_change_epoch(void)
+{
+	atomic_inc(&nfs4_deviceid_change_epoch);
+}
+
 struct nfs4_deviceid_node *
 nfs4_find_get_deviceid(struct nfs_server *server,
 		const struct nfs4_deviceid *id, const struct cred *cred,
@@ -188,11 +204,14 @@ nfs4_find_get_deviceid(struct nfs_server *server,
 {
 	long hash = nfs4_deviceid_hash(id);
 	struct nfs4_deviceid_node *d, *new;
+	int epoch;
 
+retry:
 	d = __nfs4_find_get_deviceid(server, id, hash);
 	if (d)
 		goto found;
 
+	epoch = atomic_read(&nfs4_deviceid_change_epoch);
 	new = nfs4_get_device_info(server, id, cred, gfp_mask);
 	if (!new) {
 		trace_nfs4_find_deviceid(server, id, -ENOENT);
@@ -200,6 +219,12 @@ nfs4_find_get_deviceid(struct nfs_server *server,
 	}
 
 	spin_lock(&nfs4_deviceid_lock);
+	if (atomic_read(&nfs4_deviceid_change_epoch) != epoch) {
+		/* a mapping changed while we fetched; ours may be stale */
+		spin_unlock(&nfs4_deviceid_lock);
+		server->pnfs_curr_ld->free_deviceid_node(new);
+		goto retry;
+	}
 	d = __nfs4_find_get_deviceid(server, id, hash);
 	if (d) {
 		spin_unlock(&nfs4_deviceid_lock);
