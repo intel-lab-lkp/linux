@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# "Broadcom Facetime HD camera driver
+#
+config VIDEO_FACETIMEHD
+	tristate "Broadcom Facetime HD camera"
+	select VIDEOBUF2_CORE
+	select VIDEOBUF2_DMA_SG
+	select VIDEO_DEV
+	help
+	  This adds support for the Apple Facetime HD camera using the Broadcom
+	  PCIe controller (14e4:1570) found on Macbooks from around 2013-2017.
