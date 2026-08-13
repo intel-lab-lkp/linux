@@ -1,6 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * SPDX-License-Identifier: GPL-2.0-only
- *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2015 Sven Schnelle <svens@stackframe.org>
@@ -24,9 +23,9 @@ struct buf_ctx {
 
 static int iommu_allocator_init(struct fthd_private *dev_priv)
 {
-        dev_priv->iommu = kzalloc(sizeof(struct resource), GFP_KERNEL);
+	dev_priv->iommu = kzalloc_obj(struct resource, GFP_KERNEL);
 	if (!dev_priv->iommu)
-	    return -ENOMEM;
+		return -ENOMEM;
 
 	dev_priv->iommu->start = 0;
 	dev_priv->iommu->end = 4095;
@@ -41,17 +40,17 @@ struct iommu_obj *iommu_allocate_sgtable(struct fthd_private *dev_priv, struct s
 	int ret, i, pos;
 	int total_len = 0, dma_length;
 	dma_addr_t dma_addr;
-	
-	for(i = 0; i < sgtable->nents; i++)
+
+	for (i = 0; i < sgtable->nents; i++)
 		total_len += sg_dma_len(sgtable->sgl + i);
-	
+
 	if (!total_len)
 		return NULL;
 
 	total_len += 4095;
 	total_len /= 4096;
-	
-	obj = kzalloc(sizeof(struct iommu_obj), GFP_KERNEL);
+
+	obj = kzalloc_obj(struct iommu_obj, GFP_KERNEL);
 	if (!obj)
 		return NULL;
 
@@ -60,7 +59,7 @@ struct iommu_obj *iommu_allocate_sgtable(struct fthd_private *dev_priv, struct s
 				1, NULL, NULL);
 	if (ret) {
 		dev_err(&dev_priv->pdev->dev,
-			"Failed to allocate resource (size: %d, start: %Ld, end: %Ld)\n",
+			"Failed to allocate resource (size: %d, start: %lld, end: %lld)\n",
 			total_len, root->start, root->end);
 		kfree(obj);
 		obj = NULL;
@@ -71,14 +70,14 @@ struct iommu_obj *iommu_allocate_sgtable(struct fthd_private *dev_priv, struct s
 	obj->size = total_len;
 
 	pos = 0x9000 + obj->offset * 4;
-	for(i = 0; i < sgtable->nents; i++) {
+	for (i = 0; i < sgtable->nents; i++) {
 		sg = sgtable->sgl + i;
 		WARN_ON(sg->offset);
 		dma_addr = sg_dma_address(sg);
 		WARN_ON(dma_addr & 0xfff);
 		dma_addr >>= 12;
-		
-		for(dma_length = 0; dma_length < sg_dma_len(sg); dma_length += 0x1000) {
+
+		for (dma_length = 0; dma_length < sg_dma_len(sg); dma_length += 0x1000) {
 		  //			pr_debug("IOMMU %08x -> %08llx (dma length %d)\n", pos, dma_addr, dma_length);
 			FTHD_S2_REG_WRITE(dma_addr++, pos);
 			pos += 4;
@@ -92,12 +91,13 @@ struct iommu_obj *iommu_allocate_sgtable(struct fthd_private *dev_priv, struct s
 void iommu_free(struct fthd_private *dev_priv, struct iommu_obj *obj)
 {
 	int i;
+
 	pr_debug("freeing %p\n", obj);
 
 	if (!obj)
 		return;
-	
- 	for (i = obj->offset; i < obj->offset + obj->size; i++)
+
+	for (i = obj->offset; i < obj->offset + obj->size; i++)
 		FTHD_S2_REG_WRITE(0, 0x9000 + i * 4);
 
 	release_resource(&obj->base);
@@ -113,7 +113,8 @@ static void iommu_allocator_destroy(struct fthd_private *dev_priv)
 int fthd_buffer_init(struct fthd_private *dev_priv)
 {
 	int i;
-	for(i = 0; i < 0x1000; i++)
+
+	for (i = 0; i < 0x1000; i++)
 		FTHD_S2_REG_WRITE(0, 0x9000 + i * 4);
 
 	return iommu_allocator_init(dev_priv);

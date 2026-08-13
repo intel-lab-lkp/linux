@@ -1,6 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * SPDX-License-Identifier: GPL-2.0-only
- *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2015 Sven Schnelle <svens@stackframe.org>
@@ -28,6 +27,7 @@ struct fthd_fmt {
 };
 
 struct fthd_private;
+
 extern int fthd_v4l2_register(struct fthd_private *dev_priv);
 extern void fthd_v4l2_unregister(struct fthd_private *dev_priv);
 

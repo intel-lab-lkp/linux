@@ -1,6 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * SPDX-License-Identifier: GPL-2.0-only
- *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2014 Patrik Jakobsson (patrik.r.jakobsson@gmail.com)
@@ -11,6 +10,7 @@
 #define _FTHD_HW_H
 
 #include <linux/pci.h>
+#include "fthd_drv.h"
 
 /* Used after most PCI Link IO writes */
 static inline void fthd_hw_pci_post(struct fthd_private *dev_priv)
