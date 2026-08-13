@@ -153,6 +153,8 @@ struct dw_edma_chip {
 #if IS_REACHABLE(CONFIG_DW_EDMA)
 int dw_edma_probe(struct dw_edma_chip *chip);
 int dw_edma_remove(struct dw_edma_chip *chip);
+int dw_edma_delegate_chan(struct dma_chan *chan);
+void dw_edma_reclaim_chan(struct dma_chan *chan, bool quiesce);
 #else
 static inline int dw_edma_probe(struct dw_edma_chip *chip)
 {
@@ -162,6 +164,15 @@ static inline int dw_edma_probe(struct dw_edma_chip *chip)
 static inline int dw_edma_remove(struct dw_edma_chip *chip)
 {
 	return 0;
+}
+
+static inline int dw_edma_delegate_chan(struct dma_chan *chan)
+{
+	return -ENODEV;
+}
+
+static inline void dw_edma_reclaim_chan(struct dma_chan *chan, bool quiesce)
+{
 }
 #endif /* CONFIG_DW_EDMA */
 
