@@ -756,7 +756,7 @@ int mana_detach(struct net_device *ndev, bool from_close);
 struct mana_port_context *mana_qset_scratch_alloc(struct mana_port_context *apc);
 void mana_qset_scratch_free(struct mana_port_context *scratch);
 int mana_alloc_qset(struct mana_port_context *apc,
-		    struct mana_port_context *scratch, unsigned int num_queues,
+		    struct mana_port_context *scratch,
 		    unsigned int rx_queue_size, unsigned int tx_queue_size,
 		    u32 priv_flags, int mtu, struct bpf_prog *bpf_prog,
 		    struct mana_qset *out);
@@ -764,11 +764,16 @@ int mana_split_qset(struct mana_port_context *apc,
 		    struct mana_port_context *scratch, unsigned int new_count,
 		    struct mana_qset *out_new, struct mana_qset *out_tail);
 void mana_discard_split(struct mana_qset *newq, struct mana_qset *tailq);
+int mana_grow_qset(struct mana_port_context *apc,
+		   struct mana_port_context *scratch, unsigned int new_count,
+		   struct mana_qset *out_new, struct mana_qset *out_fresh);
+void mana_discard_grow(struct mana_qset *newq);
 int mana_publish_qset(struct mana_port_context *apc, struct mana_qset *newq,
 		      struct mana_qset *out_old);
 void mana_publish_close_if_needed(struct mana_port_context *apc);
 void mana_free_qset(struct mana_port_context *apc,
 		    struct mana_port_context *scratch, struct mana_qset *qset);
+void mana_qset_debugfs_publish(struct mana_port_context *apc);
 
 void mana_dim_change(struct mana_cq *cq, bool enable);
 
