@@ -236,6 +236,7 @@ static int bcma_host_soc_probe(struct platform_device *pdev)
 	return err;
 
 err_unmap_mmio:
+	bcma_unregister_cores(bus);
 	iounmap(bus->mmio);
 	return err;
 }

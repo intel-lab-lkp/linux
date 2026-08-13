@@ -477,8 +477,9 @@ int bcma_bus_register(struct bcma_bus *bus)
 	}
 
 	/* Register found cores */
-	bcma_register_devices(bus);
-
+	err = bcma_register_devices(bus);
+	if (err)
+		return err;
 	bcma_info(bus, "Bus registered\n");
 
 	return 0;
