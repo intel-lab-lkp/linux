@@ -739,7 +739,7 @@ static acpi_status __init acpi_processor_ids_walk(acpi_handle handle,
 		break;
 
 	case ACPI_TYPE_DEVICE:
-		status = acpi_evaluate_integer(handle, "_UID", NULL, &uid);
+		status = acpi_evaluate_integer(handle, METHOD_NAME__UID, NULL, &uid);
 		if (ACPI_FAILURE(status))
 			goto err;
 		break;
