@@ -795,7 +795,6 @@ static int lesser_ns_open_thread_fn(void *arg)
 static int test_cgcore_lesser_ns_open(const char *root)
 {
 	static char stack[65536];
-	const uid_t test_euid = 65534;	/* usually nobody, any !root is fine */
 	int ret = KSFT_FAIL;
 	char *cg_test_a = NULL, *cg_test_b = NULL;
 	char *cg_test_a_procs = NULL, *cg_test_b_procs = NULL;
@@ -823,10 +822,6 @@ static int test_cgcore_lesser_ns_open(const char *root)
 		goto cleanup;
 
 	if (cg_enter_current(cg_test_b))
-		goto cleanup;
-
-	if (chown(cg_test_a_procs, test_euid, -1) ||
-	    chown(cg_test_b_procs, test_euid, -1))
 		goto cleanup;
 
 	targ.path = cg_test_b_procs;
