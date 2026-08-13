@@ -148,6 +148,48 @@ typedef acpi_status (*iort_find_node_callback)
 /* Root pointer to the mapped IORT table */
 static struct acpi_table_header *iort_table;
 
+static bool iort_table_valid(struct acpi_table_iort *iort)
+{
+	size_t node_bytes;
+
+	if (!iort || iort->header.length < sizeof(*iort))
+		return false;
+
+	if (!iort->node_count)
+		return true;
+
+	if (iort->node_offset < sizeof(*iort) ||
+	    iort->node_offset > iort->header.length -
+				      sizeof(struct acpi_iort_node))
+		return false;
+
+	node_bytes = iort->header.length - iort->node_offset;
+	return iort->node_count <=
+		node_bytes / sizeof(struct acpi_iort_node);
+}
+
+static bool iort_node_valid(struct acpi_iort_node *node,
+			    struct acpi_iort_node *end)
+{
+	size_t remaining;
+
+	if (WARN_TAINT(node >= end, TAINT_FIRMWARE_WORKAROUND,
+		       "IORT node pointer overflows, bad table!\n"))
+		return false;
+
+	remaining = (u8 *)end - (u8 *)node;
+	if (WARN_TAINT(remaining < sizeof(*node), TAINT_FIRMWARE_WORKAROUND,
+		       "IORT node header is truncated, bad table!\n"))
+		return false;
+
+	if (WARN_TAINT(node->length < sizeof(*node) ||
+		       node->length > remaining, TAINT_FIRMWARE_WORKAROUND,
+		       "IORT node length overflows, bad table!\n"))
+		return false;
+
+	return true;
+}
+
 static LIST_HEAD(iort_msi_chip_list);
 static DEFINE_SPINLOCK(iort_msi_chip_lock);
 
@@ -237,14 +279,16 @@ static struct acpi_iort_node *iort_scan_node(enum acpi_iort_node_type type,
 
 	/* Get the first IORT node */
 	iort = (struct acpi_table_iort *)iort_table;
+	if (!iort_table_valid(iort) || !iort->node_count)
+		return NULL;
+
 	iort_node = ACPI_ADD_PTR(struct acpi_iort_node, iort,
 				 iort->node_offset);
 	iort_end = ACPI_ADD_PTR(struct acpi_iort_node, iort_table,
 				iort_table->length);
 
 	for (i = 0; i < iort->node_count; i++) {
-		if (WARN_TAINT(iort_node >= iort_end, TAINT_FIRMWARE_WORKAROUND,
-			       "IORT node pointer overflows, bad table!\n"))
+		if (!iort_node_valid(iort_node, iort_end))
 			return NULL;
 
 		if (iort_node->type == type &&
@@ -1168,6 +1212,8 @@ static void iort_find_rmrs(struct acpi_iort_node *iommu, struct device *dev,
 		return;
 
 	iort = (struct acpi_table_iort *)iort_table;
+	if (!iort_table_valid(iort) || !iort->node_count)
+		return;
 
 	iort_node = ACPI_ADD_PTR(struct acpi_iort_node, iort,
 				 iort->node_offset);
@@ -1175,8 +1221,7 @@ static void iort_find_rmrs(struct acpi_iort_node *iommu, struct device *dev,
 				iort_table->length);
 
 	for (i = 0; i < iort->node_count; i++) {
-		if (WARN_TAINT(iort_node >= iort_end, TAINT_FIRMWARE_WORKAROUND,
-			       "IORT node pointer overflows, bad table!\n"))
+		if (!iort_node_valid(iort_node, iort_end))
 			return;
 
 		if (iort_node->type == ACPI_IORT_NODE_RMR)
@@ -2054,6 +2099,8 @@ static void __init iort_init_platform_devices(void)
 	 * have different struct types
 	 */
 	iort = (struct acpi_table_iort *)iort_table;
+	if (!iort_table_valid(iort) || !iort->node_count)
+		return;
 
 	/* Get the first IORT node */
 	iort_node = ACPI_ADD_PTR(struct acpi_iort_node, iort,
@@ -2062,10 +2109,8 @@ static void __init iort_init_platform_devices(void)
 				iort_table->length);
 
 	for (i = 0; i < iort->node_count; i++) {
-		if (iort_node >= iort_end) {
-			pr_err("iort node pointer overflows, bad table\n");
+		if (!iort_node_valid(iort_node, iort_end))
 			return;
-		}
 
 		iort_enable_acs(iort_node);
 
@@ -2132,12 +2177,14 @@ phys_addr_t __init acpi_iort_dma_get_max_cpu_address(void)
 				(struct acpi_table_header **)&iort);
 	if (ACPI_FAILURE(status))
 		return limit;
+	if (!iort_table_valid(iort) || !iort->node_count)
+		goto out;
 
 	node = ACPI_ADD_PTR(struct acpi_iort_node, iort, iort->node_offset);
 	end = ACPI_ADD_PTR(struct acpi_iort_node, iort, iort->header.length);
 
 	for (i = 0; i < iort->node_count; i++) {
-		if (node >= end)
+		if (!iort_node_valid(node, end))
 			break;
 
 		switch (node->type) {
@@ -2162,6 +2209,7 @@ phys_addr_t __init acpi_iort_dma_get_max_cpu_address(void)
 		}
 		node = ACPI_ADD_PTR(struct acpi_iort_node, node, node->length);
 	}
+out:
 	acpi_put_table(&iort->header);
 	return limit;
 }
