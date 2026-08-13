@@ -15,13 +15,16 @@
 
 #include "smc_inet.h"
 #include "smc.h"
+#include "smc_close.h"
 
 static int smc_inet_init_sock(struct sock *sk);
+static void smc_inet_destroy_sock(struct sock *sk);
 
 static struct proto smc_inet_prot = {
 	.name		= "INET_SMC",
 	.owner		= THIS_MODULE,
 	.init		= smc_inet_init_sock,
+	.destroy	= smc_inet_destroy_sock,
 	.hash		= smc_hash_sk,
 	.unhash		= smc_unhash_sk,
 	.release_cb	= smc_release_cb,
@@ -68,6 +71,7 @@ static struct proto smc_inet6_prot = {
 	.name		= "INET6_SMC",
 	.owner		= THIS_MODULE,
 	.init		= smc_inet_init_sock,
+	.destroy	= smc_inet_destroy_sock,
 	.hash		= smc_hash_sk,
 	.unhash		= smc_unhash_sk,
 	.release_cb	= smc_release_cb,
@@ -109,11 +113,30 @@ static struct inet_protosw smc_inet6_protosw = {
 static int smc_inet_init_sock(struct sock *sk)
 {
 	struct net *net = sock_net(sk);
+	struct smc_sock *smc = smc_sk(sk);
+
+	/*
+	 * The smc_sock slab is SLAB_TYPESAFE_BY_RCU and recycled objects
+	 * are not zeroed. .destroy may run even if .init never completed,
+	 * so make sure smc_clcsock_release() sees a valid clcsock.
+	 */
+	smc->clcsock = NULL;
 
 	/* init common smc sock */
 	smc_sk_init(net, sk, IPPROTO_SMC);
 	/* create clcsock */
 	return smc_create_clcsk(net, sk, sk->sk_family);
+}
+
+static void smc_inet_destroy_sock(struct sock *sk)
+{
+	/*
+	 * If inet_create()/inet6_create() fail after .init has created the
+	 * internal TCP sock (e.g. rejected by a cgroup BPF program),
+	 * sk_common_release() ends up here. Release the TCP sock, otherwise
+	 * it leaks on every failed IPPROTO_SMC socket() call.
+	 */
+	smc_clcsock_release(smc_sk(sk));
 }
 
 int __init smc_inet_init(void)
