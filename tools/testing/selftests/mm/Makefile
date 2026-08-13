@@ -185,6 +185,9 @@ TEST_FILES += run_vmtests.sh
 # required by charge_reserved_hugetlb.sh
 TEST_FILES += write_hugetlb_memory.sh
 
+TEST_GEN_PROGS += nommu_mmap_test
+TEST_GEN_PROGS += nommu_mremap_test
+
 include ../lib.mk
 
 $(TEST_GEN_PROGS): vm_util.c hugepage_settings.c
