@@ -39,7 +39,7 @@
 DEFINE_PER_CPU(struct kprobe *, current_kprobe) = NULL;
 DEFINE_PER_CPU(struct kprobe_ctlblk, kprobe_ctlblk);
 
-static void __kprobes
+static void noinstr
 post_kprobe_handler(struct kprobe *, struct kprobe_ctlblk *, struct pt_regs *);
 
 void *alloc_insn_page(void)
@@ -170,7 +170,7 @@ void __kprobes arch_remove_kprobe(struct kprobe *p)
 	}
 }
 
-static void __kprobes save_previous_kprobe(struct kprobe_ctlblk *kcb)
+static void noinstr save_previous_kprobe(struct kprobe_ctlblk *kcb)
 {
 	kcb->prev_kprobe.kp = kprobe_running();
 	kcb->prev_kprobe.status = kcb->kprobe_status;
@@ -184,7 +184,7 @@ static void __kprobes save_previous_kprobe(struct kprobe_ctlblk *kcb)
 	kcb->prev_kprobe.saved_irqflag = kcb->saved_irqflag;
 }
 
-static void __kprobes restore_previous_kprobe(struct kprobe_ctlblk *kcb)
+static void noinstr restore_previous_kprobe(struct kprobe_ctlblk *kcb)
 {
 	__this_cpu_write(current_kprobe, kcb->prev_kprobe.kp);
 	kcb->kprobe_status = kcb->prev_kprobe.status;
@@ -197,7 +197,7 @@ static void __kprobes restore_previous_kprobe(struct kprobe_ctlblk *kcb)
 	kcb->saved_irqflag = kcb->prev_kprobe.saved_irqflag;
 }
 
-static void __kprobes set_current_kprobe(struct kprobe *p)
+static void noinstr set_current_kprobe(struct kprobe *p)
 {
 	__this_cpu_write(current_kprobe, p);
 }
@@ -207,23 +207,23 @@ static void __kprobes set_current_kprobe(struct kprobe *p)
  * simple and avoid nesting exceptions. Interrupts do have to be disabled since
  * the kprobe state is per-CPU and doesn't get migrated.
  */
-static void __kprobes kprobes_save_local_irqflag(struct kprobe_ctlblk *kcb,
-						struct pt_regs *regs)
+static void noinstr kprobes_save_local_irqflag(struct kprobe_ctlblk *kcb,
+					       struct pt_regs *regs)
 {
 	kcb->saved_irqflag = regs->pstate & DAIF_MASK;
 	regs->pstate |= DAIF_MASK;
 }
 
-static void __kprobes kprobes_restore_local_irqflag(struct kprobe_ctlblk *kcb,
-						struct pt_regs *regs)
+static void noinstr kprobes_restore_local_irqflag(struct kprobe_ctlblk *kcb,
+						  struct pt_regs *regs)
 {
 	regs->pstate &= ~DAIF_MASK;
 	regs->pstate |= kcb->saved_irqflag;
 }
 
-static void __kprobes setup_singlestep(struct kprobe *p,
-				       struct pt_regs *regs,
-				       struct kprobe_ctlblk *kcb, int reenter)
+static void noinstr setup_singlestep(struct kprobe *p,
+				     struct pt_regs *regs,
+				     struct kprobe_ctlblk *kcb, int reenter)
 {
 	unsigned long slot;
 
@@ -248,9 +248,9 @@ static void __kprobes setup_singlestep(struct kprobe *p,
 	}
 }
 
-static int __kprobes reenter_kprobe(struct kprobe *p,
-				    struct pt_regs *regs,
-				    struct kprobe_ctlblk *kcb)
+static int noinstr reenter_kprobe(struct kprobe *p,
+				  struct pt_regs *regs,
+				  struct kprobe_ctlblk *kcb)
 {
 	switch (kcb->kprobe_status) {
 	case KPROBE_HIT_SSDONE:
@@ -278,7 +278,7 @@ static int __kprobes reenter_kprobe(struct kprobe *p,
 	return 1;
 }
 
-static void __kprobes
+static void noinstr
 post_kprobe_handler(struct kprobe *cur, struct kprobe_ctlblk *kcb, struct pt_regs *regs)
 {
 	/* return addr restore if non-branching insn */

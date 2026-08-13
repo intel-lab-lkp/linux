@@ -336,11 +336,11 @@ static inline unsigned long regs_get_kernel_argument(struct pt_regs *regs,
 struct task_struct;
 int valid_user_regs(struct user_pt_regs *regs, struct task_struct *task);
 
-static inline unsigned long instruction_pointer(struct pt_regs *regs)
+static __always_inline unsigned long instruction_pointer(struct pt_regs *regs)
 {
 	return regs->pc;
 }
-static inline void instruction_pointer_set(struct pt_regs *regs,
+static __always_inline void instruction_pointer_set(struct pt_regs *regs,
 		unsigned long val)
 {
 	regs->pc = val;

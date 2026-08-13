@@ -384,17 +384,17 @@ static inline void kprobe_ftrace_kill(void) {}
 struct kprobe *get_kprobe(void *addr);
 
 /* kprobe_running() will just return the current_kprobe on this CPU */
-static inline struct kprobe *kprobe_running(void)
+static __always_inline struct kprobe *kprobe_running(void)
 {
 	return __this_cpu_read(current_kprobe);
 }
 
-static inline void reset_current_kprobe(void)
+static __always_inline void reset_current_kprobe(void)
 {
 	__this_cpu_write(current_kprobe, NULL);
 }
 
-static inline struct kprobe_ctlblk *get_kprobe_ctlblk(void)
+static __always_inline struct kprobe_ctlblk *get_kprobe_ctlblk(void)
 {
 	return this_cpu_ptr(&kprobe_ctlblk);
 }
@@ -449,7 +449,7 @@ static inline struct kprobe *get_kprobe(void *addr)
 {
 	return NULL;
 }
-static inline struct kprobe *kprobe_running(void)
+static __always_inline struct kprobe *kprobe_running(void)
 {
 	return NULL;
 }
