@@ -209,7 +209,11 @@ static void mana_hwc_init_event_handler(void *ctx, struct gdma_queue *q_self,
 			break;
 
 		case HWC_INIT_DATA_MAX_NUM_CQS:
-			gd->gdma_context->max_num_cqs = val;
+			/* Store only; establish_channel() commits it to
+			 * max_num_cqs once, so a later event cannot grow the
+			 * bound past the allocation.  Pairs with its READ_ONCE().
+			 */
+			WRITE_ONCE(hwc->hwc_init_max_num_cqs, val);
 			break;
 
 		case HWC_INIT_DATA_PDID:
@@ -783,6 +787,8 @@ static int mana_hwc_establish_channel(struct gdma_context *gc, u16 *q_depth,
 	struct gdma_queue *eq = hwc->cq->gdma_eq;
 	struct gdma_queue *cq = hwc->cq->gdma_cq;
 	struct gdma_queue __rcu **cq_table;
+	u32 num_cqs;
+	u32 cq_id;
 	int err;
 
 	init_completion(&hwc->hwc_init_eqe_comp);
@@ -810,17 +816,32 @@ static int mana_hwc_establish_channel(struct gdma_context *gc, u16 *q_depth,
 	*max_req_msg_size = hwc->hwc_init_max_req_msg_size;
 	*max_resp_msg_size = hwc->hwc_init_max_resp_msg_size;
 
-	/* Both were set in mana_hwc_init_event_handler(). */
-	if (WARN_ON(cq->id >= gc->max_num_cqs))
-		return -EPROTO;
+	/* Snapshot the device-reported count and id once, so the same value
+	 * sizes, bounds and indexes cq_table even across the sleeping
+	 * vcalloc() and a concurrent init event.
+	 */
+	num_cqs = READ_ONCE(hwc->hwc_init_max_num_cqs);
+	cq_id = READ_ONCE(cq->id);
 
-	cq_table = vcalloc(gc->max_num_cqs, sizeof(*cq_table));
+	/* Both operands come from untrusted HWC bootstrap events; a missing
+	 * MAX_NUM_CQS leaves num_cqs at 0.  Reject rather than WARN_ON() so a
+	 * malformed device response cannot panic a panic_on_warn guest.
+	 */
+	if (cq_id >= num_cqs) {
+		dev_err_ratelimited(hwc->dev,
+				    "HWC: bad CQ id %u >= max %u\n",
+				    cq_id, num_cqs);
+		return -EPROTO;
+	}
+
+	cq_table = vcalloc(num_cqs, sizeof(*cq_table));
 	if (!cq_table)
 		return -ENOMEM;
 
-	/* Publish the initialised table; pairs with smp_load_acquire()
-	 * in mana_gd_get_cq().
+	/* Publish the bound and the initialised table together; the release
+	 * pairs with smp_load_acquire() in mana_gd_get_cq().
 	 */
+	gc->max_num_cqs = num_cqs;
 	smp_store_release(&gc->cq_table, cq_table);
 
 	/* Publish the HWC CQ now that the table is in place. */
