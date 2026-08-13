@@ -350,7 +350,7 @@ int __kprobes kprobe_fault_handler(struct pt_regs *regs, unsigned int fsr)
 	return 0;
 }
 
-int __kprobes
+int noinstr
 kprobe_brk_handler(struct pt_regs *regs, unsigned long esr)
 {
 	struct kprobe *p, *cur_kprobe;
@@ -394,7 +394,7 @@ kprobe_brk_handler(struct pt_regs *regs, unsigned long esr)
 	return DBG_HOOK_HANDLED;
 }
 
-int __kprobes
+int noinstr
 kprobe_ss_brk_handler(struct pt_regs *regs, unsigned long esr)
 {
 	struct kprobe_ctlblk *kcb = get_kprobe_ctlblk();
@@ -413,7 +413,7 @@ kprobe_ss_brk_handler(struct pt_regs *regs, unsigned long esr)
 	return DBG_HOOK_ERROR;
 }
 
-int __kprobes
+int noinstr
 kretprobe_brk_handler(struct pt_regs *regs, unsigned long esr)
 {
 	if (regs->pc != (unsigned long)__kretprobe_trampoline)

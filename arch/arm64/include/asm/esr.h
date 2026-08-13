@@ -437,7 +437,7 @@
 #ifndef __ASSEMBLER__
 #include <asm/types.h>
 
-static inline unsigned long esr_brk_comment(unsigned long esr)
+static __always_inline unsigned long esr_brk_comment(unsigned long esr)
 {
 	return esr & ESR_ELx_BRK64_ISS_COMMENT_MASK;
 }

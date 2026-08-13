@@ -207,7 +207,7 @@ void do_el1_softstep(unsigned long esr, struct pt_regs *regs)
 }
 NOKPROBE_SYMBOL(do_el1_softstep);
 
-static int call_el1_break_hook(struct pt_regs *regs, unsigned long esr)
+static int noinstr call_el1_break_hook(struct pt_regs *regs, unsigned long esr)
 {
 	if (esr_brk_comment(esr) == BUG_BRK_IMM)
 		return bug_brk_handler(regs, esr);
@@ -245,7 +245,6 @@ static int call_el1_break_hook(struct pt_regs *regs, unsigned long esr)
 
 	return DBG_HOOK_ERROR;
 }
-NOKPROBE_SYMBOL(call_el1_break_hook);
 
 /*
  * We have already unmasked interrupts and enabled preemption
@@ -261,14 +260,13 @@ void do_el0_brk64(unsigned long esr, struct pt_regs *regs)
 	send_user_sigtrap(TRAP_BRKPT);
 }
 
-void do_el1_brk64(unsigned long esr, struct pt_regs *regs)
+void noinstr do_el1_brk64(unsigned long esr, struct pt_regs *regs)
 {
 	if (call_el1_break_hook(regs, esr) == DBG_HOOK_HANDLED)
 		return;
 
 	die("Oops - BRK", regs, esr);
 }
-NOKPROBE_SYMBOL(do_el1_brk64);
 
 #ifdef CONFIG_COMPAT
 void do_bkpt32(unsigned long esr, struct pt_regs *regs)
