@@ -65,7 +65,8 @@ static inline void syscall_enter_audit(struct pt_regs *regs, long syscall)
 		unsigned long args[6];
 
 		syscall_get_arguments(current, regs, args);
-		audit_syscall_entry(syscall, args[0], args[1], args[2], args[3]);
+		audit_syscall_entry(syscall, args[0], args[1], args[2], args[3],
+				    args[4], args[5]);
 	}
 }
 

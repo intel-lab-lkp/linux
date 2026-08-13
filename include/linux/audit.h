@@ -324,7 +324,8 @@ extern void __audit_free(struct task_struct *task);
 extern void __audit_uring_entry(u8 op);
 extern void __audit_uring_exit(int success, long code);
 extern void __audit_syscall_entry(int major, unsigned long a0, unsigned long a1,
-				  unsigned long a2, unsigned long a3);
+				  unsigned long a2, unsigned long a3,
+				  unsigned long a4, unsigned long a5);
 extern void __audit_syscall_exit(int ret_success, long ret_value);
 extern void __audit_getname(struct filename *name);
 extern void __audit_inode(struct filename *name, const struct dentry *dentry,
@@ -375,10 +376,11 @@ static inline void audit_uring_exit(int success, long code)
 }
 static inline void audit_syscall_entry(int major, unsigned long a0,
 				       unsigned long a1, unsigned long a2,
-				       unsigned long a3)
+				       unsigned long a3, unsigned long a4,
+				       unsigned long a5)
 {
 	if (unlikely(audit_context()))
-		__audit_syscall_entry(major, a0, a1, a2, a3);
+		__audit_syscall_entry(major, a0, a1, a2, a3, a4, a5);
 }
 static inline void audit_syscall_exit(void *pt_regs)
 {
@@ -613,7 +615,8 @@ static inline void audit_uring_exit(int success, long code)
 { }
 static inline void audit_syscall_entry(int major, unsigned long a0,
 				       unsigned long a1, unsigned long a2,
-				       unsigned long a3)
+				       unsigned long a3, unsigned long a4,
+				       unsigned long a5)
 { }
 static inline void audit_syscall_exit(void *pt_regs)
 { }

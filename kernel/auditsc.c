@@ -728,6 +728,8 @@ static int audit_filter_rules(struct task_struct *tsk,
 		case AUDIT_ARG1:
 		case AUDIT_ARG2:
 		case AUDIT_ARG3:
+		case AUDIT_ARG4:
+		case AUDIT_ARG5:
 			if (ctx)
 				result = audit_comparator(ctx->argv[f->type-AUDIT_ARG0], f->op, f->val);
 			break;
@@ -1674,11 +1676,13 @@ static void audit_log_exit(void)
 						    AUDITSC_SUCCESS),
 					 context->return_code);
 		audit_log_format(ab,
-				 " a0=%lx a1=%lx a2=%lx a3=%lx items=%d",
+				 " a0=%lx a1=%lx a2=%lx a3=%lx a4=%lx a5=%lx items=%d",
 				 context->argv[0],
 				 context->argv[1],
 				 context->argv[2],
 				 context->argv[3],
+				 context->argv[4],
+				 context->argv[5],
 				 context->name_count);
 		audit_log_task_info(ab);
 		audit_log_key(ab, context->filterkey);
@@ -1970,10 +1974,12 @@ out:
 /**
  * __audit_syscall_entry - fill in an audit record at syscall entry
  * @major: major syscall type (function)
- * @a1: additional syscall register 1
- * @a2: additional syscall register 2
- * @a3: additional syscall register 3
- * @a4: additional syscall register 4
+ * @a0: additional syscall register 1
+ * @a1: additional syscall register 2
+ * @a2: additional syscall register 3
+ * @a3: additional syscall register 4
+ * @a4: additional syscall register 5
+ * @a5: additional syscall register 6
  *
  * Fill in audit context at syscall entry.  This only happens if the
  * audit context was created when the task was created and the state or
@@ -1983,8 +1989,9 @@ out:
  * will only be written if another part of the kernel requests that it
  * be written).
  */
-void __audit_syscall_entry(int major, unsigned long a1, unsigned long a2,
-			   unsigned long a3, unsigned long a4)
+void __audit_syscall_entry(int major, unsigned long a0, unsigned long a1,
+			   unsigned long a2, unsigned long a3,
+			   unsigned long a4, unsigned long a5)
 {
 	struct audit_context *context = audit_context();
 	enum audit_state     state;
@@ -2012,10 +2019,12 @@ void __audit_syscall_entry(int major, unsigned long a1, unsigned long a2,
 
 	context->arch	    = syscall_get_arch(current);
 	context->major      = major;
-	context->argv[0]    = a1;
-	context->argv[1]    = a2;
-	context->argv[2]    = a3;
-	context->argv[3]    = a4;
+	context->argv[0]    = a0;
+	context->argv[1]    = a1;
+	context->argv[2]    = a2;
+	context->argv[3]    = a3;
+	context->argv[4]    = a4;
+	context->argv[5]    = a5;
 	context->context = AUDIT_CTX_SYSCALL;
 	context->current_state  = state;
 	ktime_get_coarse_real_ts64(&context->stamp.ctime);
