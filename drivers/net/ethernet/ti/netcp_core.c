@@ -2271,6 +2271,7 @@ static int netcp_probe(struct platform_device *pdev)
 	return 0;
 
 probe_quit_interface:
+	of_node_put(child);
 	list_for_each_entry_safe(netcp_intf, netcp_tmp,
 				 &netcp_device->interface_head,
 				 interface_list) {
