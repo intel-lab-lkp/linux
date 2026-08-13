@@ -648,6 +648,8 @@ static int brcmstb_i2c_probe(struct platform_device *pdev)
 
 	/* Get the interrupt number */
 	dev->irq = platform_get_irq_optional(pdev, 0);
+	if (dev->irq < 0 && dev->irq != -ENXIO)
+		return dev->irq;
 
 	/* disable the bsc interrupt line */
 	brcmstb_i2c_enable_disable_irq(dev, INT_DISABLE);
