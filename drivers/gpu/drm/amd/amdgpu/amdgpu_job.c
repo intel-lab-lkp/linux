@@ -92,6 +92,7 @@ static enum drm_gpu_sched_stat amdgpu_job_timedout(struct drm_sched_job *s_job)
 	struct drm_wedge_task_info *info = NULL;
 	struct amdgpu_task_info *ti = NULL;
 	struct amdgpu_device *adev = ring->adev;
+	bool can_reset = amdgpu_gpu_recovery && adev->gpu_recovery_allowed;
 	int idx, r;
 
 	if (!drm_dev_enter(adev_to_drm(adev), &idx)) {
@@ -111,7 +112,7 @@ static enum drm_gpu_sched_stat amdgpu_job_timedout(struct drm_sched_job *s_job)
 	if (!amdgpu_sriov_vf(adev))
 		amdgpu_job_core_dump(adev, job);
 
-	if (amdgpu_gpu_recovery &&
+	if (can_reset &&
 	    amdgpu_ring_is_reset_type_supported(ring, AMDGPU_RESET_TYPE_SOFT_RECOVERY) &&
 	    amdgpu_ring_soft_recovery(ring, job->vmid, s_job->s_fence->parent)) {
 		dev_err(adev->dev, "ring %s timeout, but soft recovered\n",
@@ -130,7 +131,7 @@ static enum drm_gpu_sched_stat amdgpu_job_timedout(struct drm_sched_job *s_job)
 	}
 
 	/* attempt a per ring reset */
-	if (amdgpu_gpu_recovery &&
+	if (can_reset &&
 	    amdgpu_ring_is_reset_type_supported(ring, AMDGPU_RESET_TYPE_PER_QUEUE) &&
 	    ring->funcs->reset) {
 		dev_err(adev->dev, "Starting %s ring reset\n",
@@ -152,7 +153,7 @@ static enum drm_gpu_sched_stat amdgpu_job_timedout(struct drm_sched_job *s_job)
 	}
 
 	/* Attempt an IP block soft reset, if supported. */
-	if (amdgpu_gpu_recovery &&
+	if (can_reset &&
 	    amdgpu_ring_is_reset_type_supported(ring, AMDGPU_RESET_TYPE_IP_BLOCK_SOFT_RESET)) {
 		r = amdgpu_device_ip_soft_reset(ring, job->hw_fence);
 		if (!r) {
