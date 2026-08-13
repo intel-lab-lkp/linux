@@ -37,6 +37,7 @@
 
 #include <linux/uaccess.h>
 #include <linux/uio.h>
+#include <linux/major.h>
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
 #include <asm/mmu_context.h>
@@ -856,6 +857,22 @@ static int validate_mmap_request(struct file *file,
 	return 0;
 }
 
+static int is_file_anonymous(struct file *file)
+{
+	if (!file)
+		return 1;
+
+	if (file->f_path.dentry && file->f_path.dentry->d_inode) {
+		struct inode *inode = file->f_path.dentry->d_inode;
+		/* if the device is /dev/zero */
+		if (S_ISCHR(inode->i_mode) &&
+		    imajor(inode) == MEM_MAJOR && iminor(inode) == 5)
+			return 1;
+	}
+
+	return 0;
+}
+
 /*
  * we've determined that we can make the mapping, now translate what we
  * now know into VMA flags
@@ -869,7 +886,11 @@ static vm_flags_t determine_vm_flags(struct file *file,
 
 	vm_flags = calc_vm_prot_bits(prot, 0) | calc_vm_flag_bits(file, flags);
 
-	if (!file) {
+	/* private and file mapping will be marked anonymous later (do_mmap_private()).
+	 * and /dev/zero is marked by them at .mmap_prepare,
+	 * which should be _before_ this point.
+	 */
+	if (is_file_anonymous(file)) {
 		/*
 		 * MAP_ANONYMOUS. MAP_SHARED is mapped to MAP_PRIVATE, because
 		 * there is no fork().
@@ -921,6 +942,29 @@ static int do_mmap_shared_file(struct vm_area_struct *vma)
 	 * opposed to tried but failed) so we can only give a suitable error as
 	 * it's not possible to make a private copy if MAP_SHARED was given */
 	return -ENODEV;
+}
+
+static ssize_t nommu_read_iter(struct file *file, void *buf,
+			       size_t count, loff_t *pos)
+{
+	struct iov_iter iter;
+	ssize_t ret;
+	size_t done = 0;
+
+	while (done < count) {
+		struct kvec iov = {
+			.iov_base = buf + done,
+			.iov_len = min_t(size_t, count - done, MAX_RW_COUNT),
+		};
+
+		iov_iter_kvec(&iter, ITER_DEST, &iov, 1, iov.iov_len);
+		ret = vfs_iter_read(file, &iter, pos, 0);
+		if (ret <= 0)
+			return done ? done : ret;
+		done += ret;
+	}
+
+	return done;
 }
 
 /*
@@ -993,7 +1037,7 @@ static int do_mmap_private(struct vm_area_struct *vma,
 		fpos = vma->vm_pgoff;
 		fpos <<= PAGE_SHIFT;
 
-		ret = kernel_read(vma->vm_file, base, len, &fpos);
+		ret = nommu_read_iter(vma->vm_file, base, len, &fpos);
 		if (ret < 0)
 			goto error_free;
 
@@ -1079,6 +1123,28 @@ unsigned long do_mmap(struct file *file,
 		region->vm_file = get_file(file);
 		vma->vm_file = get_file(file);
 	}
+
+	/* call mmap_prepare function if any */
+	if (!(flags & MAP_SHARED) && !(capabilities & NOMMU_MAP_DIRECT) &&
+	    (vma->vm_file && vma->vm_file->f_op->mmap_prepare)) {
+		struct vm_area_desc desc;
+
+		vma->vm_start = addr;
+		vma->vm_end = addr + len;
+
+		compat_set_desc_from_vma(&desc, vma->vm_file, vma);
+		ret = vma->vm_file->f_op->mmap_prepare(&desc);
+		/* private ramfs/romfs mappings fails with -ENOSYS so,
+		 * fall back to copied mapping.
+		 */
+		if (ret && ret != -ENOSYS)
+			goto error_mmap_prepare;
+
+		ret = __compat_vma_mmap(&desc, vma);
+		if (ret)
+			goto error_mmap_prepare;
+	}
+
 
 	down_write(&nommu_region_sem);
 
@@ -1196,7 +1262,7 @@ unsigned long do_mmap(struct file *file,
 	add_nommu_region(region);
 
 	/* clear anonymous mappings that don't ask for uninitialized data */
-	if (vma_is_anonymous(vma) &&
+	if (is_file_anonymous(vma->vm_file) &&
 	    (!IS_ENABLED(CONFIG_MMAP_ALLOW_UNINITIALIZED) ||
 	     !(flags & MAP_UNINITIALIZED)))
 		memset((void *)region->vm_start, 0,
@@ -1246,6 +1312,18 @@ sharing_violation:
 	pr_warn("Attempt to share mismatched mappings\n");
 	ret = -EINVAL;
 	goto error;
+
+error_mmap_prepare:
+	if (region->vm_file)
+		fput(region->vm_file);
+	kmem_cache_free(vm_region_jar, region);
+	if (vma->vm_file)
+		fput(vma->vm_file);
+	vm_area_free(vma);
+
+	pr_warn("mmap_prepare failed for %lu byte allocation from process %d\n",
+			len, current->pid);
+	return ret;
 
 error_getting_vma:
 	kmem_cache_free(vm_region_jar, region);

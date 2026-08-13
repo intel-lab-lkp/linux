@@ -500,11 +500,10 @@ static ssize_t read_zero(struct file *file, char __user *buf,
 
 static int mmap_zero_prepare(struct vm_area_desc *desc)
 {
-#ifndef CONFIG_MMU
-	return -ENOSYS;
-#endif
+#ifdef CONFIG_MMU
 	if (vma_desc_test(desc, VMA_SHARED_BIT))
 		return shmem_zero_setup_desc(desc);
+#endif
 
 	/*
 	 * This is a highly unique situation where we mark a MAP_PRIVATE mapping
