@@ -128,6 +128,8 @@ struct kvm_arch {
 	struct kvm_phyid_map  *phyid_map;
 	/* Enabled PV features */
 	unsigned long pv_features;
+	/* Serializes pv_features updates */
+	spinlock_t pv_features_lock;
 	/* Supported KVM features */
 	unsigned long kvm_features;
 
