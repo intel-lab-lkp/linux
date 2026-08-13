@@ -1360,6 +1360,22 @@ static int asus_start_multitouch(struct hid_device *hdev)
 	return 0;
 }
 
+static int asus_initialize_reports(struct hid_device *hdev)
+{
+	int ret;
+
+	for (int r = 0; r < ARRAY_SIZE(asus_report_id_init); r++) {
+		if (asus_has_report_id(hdev, asus_report_id_init[r])) {
+			ret = asus_kbd_init(hdev, asus_report_id_init[r]);
+			if (ret < 0)
+				hid_warn(hdev, "Failed to initialize 0x%x: %d.\n",
+					 asus_report_id_init[r], ret);
+		}
+	}
+
+	return 0;
+}
+
 static int __maybe_unused asus_resume(struct hid_device *hdev)
 {
 	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
@@ -1378,11 +1394,20 @@ static int __maybe_unused asus_resume(struct hid_device *hdev)
 static int __maybe_unused asus_reset_resume(struct hid_device *hdev)
 {
 	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
+	int ret;
+
+	ret = asus_initialize_reports(hdev);
+	if (ret) {
+		hid_err(hdev, "Asus initialize reports failed: %d\n", ret);
+		goto asus_reset_resume_err;
+	}
 
 	if (drvdata->tp)
 		return asus_start_multitouch(hdev);
 
 	return 0;
+asus_reset_resume_err:
+	return ret;
 }
 
 static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
@@ -1493,13 +1518,10 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return ret;
 	}
 
-	for (int r = 0; r < ARRAY_SIZE(asus_report_id_init); r++) {
-		if (asus_has_report_id(hdev, asus_report_id_init[r])) {
-			ret = asus_kbd_init(hdev, asus_report_id_init[r]);
-			if (ret < 0)
-				hid_warn(hdev, "Failed to initialize 0x%x: %d.\n",
-					 asus_report_id_init[r], ret);
-		}
+	ret = asus_initialize_reports(hdev);
+	if (ret) {
+		hid_err(hdev, "Asus initialize reports failed: %d\n", ret);
+		goto err_stop_hw;
 	}
 
 	/* Laptops keyboard backlight is always at 0x5a */
