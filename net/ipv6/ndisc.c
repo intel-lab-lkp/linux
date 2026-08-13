@@ -1087,8 +1087,17 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 		u8 old_flags = neigh->flags;
 		struct net *net = dev_net(dev);
 
-		if (READ_ONCE(neigh->nud_state) & NUD_FAILED)
-			goto out;
+		if (READ_ONCE(neigh->nud_state) & NUD_FAILED) {
+			/* Update a FAILED entry when accept_untracked_na is
+			 * enabled, under the same conditions used to create a
+			 * new STALE entry (cf. IPv4 arp_process()).
+			 */
+			if (lladdr && idev && READ_ONCE(idev->cnf.forwarding) &&
+			    accept_untracked_na(idev, saddr))
+				new_state = NUD_STALE;
+			else
+				goto out;
+		}
 
 		/*
 		 * Don't update the neighbor cache entry on a proxy NA from
