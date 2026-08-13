@@ -7398,7 +7398,9 @@ static bool btrfs_extent_readonly(struct btrfs_fs_info *fs_info, u64 bytenr)
 	bool readonly = false;
 
 	block_group = btrfs_lookup_block_group(fs_info, bytenr);
-	if (!block_group || block_group->ro)
+	if (!block_group || block_group->ro ||
+	    test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP,
+		     &block_group->runtime_flags))
 		readonly = true;
 	if (block_group)
 		btrfs_put_block_group(block_group);

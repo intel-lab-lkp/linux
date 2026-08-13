@@ -4639,6 +4639,9 @@ static noinline int find_free_extent(struct btrfs_root *root,
 			down_read(&space_info->groups_sem);
 			if (list_empty(&block_group->list) ||
 			    block_group->ro ||
+			    (test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP,
+				      &block_group->runtime_flags) &&
+			     (ffe_ctl->is_data || ffe_ctl->for_treelog)) ||
 			    (block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED)) {
 				/*
 				 * someone is removing this block group,
@@ -4674,7 +4677,10 @@ search:
 		ffe_ctl->hinted = false;
 		/* If the block group is read-only, we can skip it entirely. */
 		if (unlikely(block_group->ro ||
-			     (block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED))) {
+		     (test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP,
+			       &block_group->runtime_flags) &&
+		      (ffe_ctl->is_data || ffe_ctl->for_treelog)) ||
+		     (block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED))) {
 			if (ffe_ctl->for_treelog)
 				btrfs_clear_treelog_bg(block_group);
 			if (ffe_ctl->for_data_reloc)
@@ -4776,14 +4782,16 @@ have_block_group:
 		ret = btrfs_add_reserved_bytes(block_group, ffe_ctl->ram_bytes,
 					       ffe_ctl->num_bytes,
 					       ffe_ctl->delalloc,
-					       ffe_ctl->loop >= LOOP_WRONG_SIZE_CLASS);
+					       ffe_ctl->loop >= LOOP_WRONG_SIZE_CLASS,
+					       !ffe_ctl->is_data && !ffe_ctl->for_treelog);
 		if (ret == -EAGAIN) {
 			btrfs_add_free_space_unused(block_group,
 					ffe_ctl->found_offset,
 					ffe_ctl->num_bytes);
 			goto loop;
 		}
-		btrfs_inc_block_group_reservations(block_group);
+		if (ffe_ctl->is_data)
+			btrfs_inc_block_group_reservations(block_group);
 
 		/* we are all good, lets return */
 		ins->objectid = ffe_ctl->search_start;
@@ -4897,14 +4905,13 @@ again:
 	ffe_ctl.empty_size = empty_size;
 	ffe_ctl.flags = flags;
 	ffe_ctl.delalloc = delalloc;
+	ffe_ctl.is_data = is_data;
 	ffe_ctl.hint_byte = hint_byte;
 	ffe_ctl.for_treelog = for_treelog;
 	ffe_ctl.for_data_reloc = for_data_reloc;
 
 	ret = find_free_extent(root, ins, &ffe_ctl);
-	if (!ret && !is_data) {
-		btrfs_dec_block_group_reservations(fs_info, ins->objectid);
-	} else if (ret == -ENOSPC) {
+	if (ret == -ENOSPC) {
 		if (!final_tried && ins->offset) {
 			num_bytes = min(num_bytes >> 1, ins->offset);
 			num_bytes = round_down(num_bytes,

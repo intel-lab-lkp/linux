@@ -40,6 +40,7 @@ struct find_free_extent_ctl {
 	bool use_cluster;
 
 	bool delalloc;
+	bool is_data;
 	bool have_caching_bg;
 	bool orig_have_caching_bg;
 

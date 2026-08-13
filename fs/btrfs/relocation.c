@@ -173,11 +173,16 @@ struct reloc_control {
 
 	u64 search_start;
 	u64 extents_found;
+	int setup_result;
 
 	enum reloc_stage stage;
 	bool create_reloc_tree;
 	bool merge_reloc_tree;
 	bool found_file_extent;
+	bool fenced_setup;
+	bool setup_pending;
+	bool block_group_ro;
+	bool reloc_ctl_set;
 
 	refcount_t refs;
 };
@@ -3507,14 +3512,24 @@ next:
 	return ret;
 }
 
+static void __set_reloc_control(struct reloc_control *rc)
+{
+	struct btrfs_fs_info *fs_info = rc->extent_root->fs_info;
+
+	lockdep_assert_held(&fs_info->reloc_mutex);
+	spin_lock(&fs_info->reloc_ctl_lock);
+	ASSERT(!fs_info->reloc_ctl || fs_info->reloc_ctl == rc);
+	fs_info->reloc_ctl = rc;
+	rc->reloc_ctl_set = true;
+	spin_unlock(&fs_info->reloc_ctl_lock);
+}
+
 static void set_reloc_control(struct reloc_control *rc)
 {
 	struct btrfs_fs_info *fs_info = rc->extent_root->fs_info;
 
 	mutex_lock(&fs_info->reloc_mutex);
-	spin_lock(&fs_info->reloc_ctl_lock);
-	fs_info->reloc_ctl = rc;
-	spin_unlock(&fs_info->reloc_ctl_lock);
+	__set_reloc_control(rc);
 	mutex_unlock(&fs_info->reloc_mutex);
 }
 
@@ -3524,18 +3539,137 @@ static void unset_reloc_control(struct reloc_control *rc)
 
 	mutex_lock(&fs_info->reloc_mutex);
 	spin_lock(&fs_info->reloc_ctl_lock);
-	fs_info->reloc_ctl = NULL;
+	if (rc->reloc_ctl_set) {
+		ASSERT(fs_info->reloc_ctl == rc);
+		fs_info->reloc_ctl = NULL;
+		rc->reloc_ctl_set = false;
+	} else {
+		ASSERT(fs_info->reloc_ctl != rc);
+	}
 	spin_unlock(&fs_info->reloc_ctl_lock);
 	mutex_unlock(&fs_info->reloc_mutex);
+}
+
+static void complete_relocation_setup(struct reloc_control *rc, int result)
+{
+	ASSERT(rc->setup_pending);
+	WRITE_ONCE(rc->setup_result, result);
+	WRITE_ONCE(rc->setup_pending, false);
+	btrfs_bg_reloc_setup_abort(rc->block_group);
+	put_reloc_control(rc);
+}
+
+void btrfs_finish_relocation_setup(struct btrfs_transaction *trans)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct reloc_control *rc;
+	int ret;
+
+	lockdep_assert_held(&fs_info->reloc_mutex);
+
+	spin_lock(&fs_info->trans_lock);
+	rc = trans->reloc_setup;
+	trans->reloc_setup = NULL;
+	spin_unlock(&fs_info->trans_lock);
+	if (!rc)
+		return;
+
+	ret = btrfs_bg_reloc_setup_finish(rc->block_group);
+	if (!ret) {
+		WRITE_ONCE(rc->block_group_ro, true);
+		__set_reloc_control(rc);
+	}
+	complete_relocation_setup(rc, ret);
+}
+
+void btrfs_abort_relocation_setup(struct btrfs_transaction *trans, int error)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct reloc_control *rc;
+
+	spin_lock(&fs_info->trans_lock);
+	rc = trans->reloc_setup;
+	trans->reloc_setup = NULL;
+	spin_unlock(&fs_info->trans_lock);
+	if (!rc)
+		return;
+
+	complete_relocation_setup(rc, error ?: -EIO);
+}
+
+static int bind_relocation_setup(struct btrfs_trans_handle *trans,
+				 struct reloc_control *rc,
+				 struct btrfs_transaction **transaction)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct btrfs_transaction *cur_trans = trans->transaction;
+	int ret = 0;
+
+	mutex_lock(&fs_info->ro_block_group_mutex);
+	spin_lock(&fs_info->trans_lock);
+	if (TRANS_ABORTED(cur_trans)) {
+		ret = cur_trans->aborted;
+	} else if (cur_trans != fs_info->running_transaction ||
+		   cur_trans->state != TRANS_STATE_RUNNING ||
+		   test_bit(BTRFS_TRANS_DIRTY_BG_RUN, &cur_trans->flags)) {
+		ret = -EAGAIN;
+	} else if (cur_trans->reloc_setup) {
+		ret = -EBUSY;
+	} else {
+		ASSERT(rc->setup_pending);
+		WRITE_ONCE(rc->setup_result, -EINPROGRESS);
+		refcount_inc(&rc->refs);
+		cur_trans->reloc_setup = rc;
+		refcount_inc(&cur_trans->use_count);
+		*transaction = cur_trans;
+	}
+	spin_unlock(&fs_info->trans_lock);
+	mutex_unlock(&fs_info->ro_block_group_mutex);
+
+	return ret;
+}
+
+static int reconcile_relocation_setup(struct btrfs_transaction *trans,
+				      struct reloc_control *rc,
+				      int commit_ret)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	bool cancel = false;
+	bool wait = false;
+	int setup_ret;
+
+	spin_lock(&fs_info->trans_lock);
+	if (trans->reloc_setup == rc &&
+	    trans->state < TRANS_STATE_COMMIT_PREP) {
+		trans->reloc_setup = NULL;
+		cancel = true;
+	} else if (READ_ONCE(rc->setup_result) == -EINPROGRESS) {
+		wait = true;
+	}
+	spin_unlock(&fs_info->trans_lock);
+
+	if (cancel)
+		complete_relocation_setup(rc, commit_ret ?: -EIO);
+	else if (wait)
+		wait_event(trans->commit_wait,
+			   READ_ONCE(trans->state) >= TRANS_STATE_COMPLETED);
+
+	setup_ret = READ_ONCE(rc->setup_result);
+	ASSERT(setup_ret != -EINPROGRESS);
+	btrfs_put_transaction(trans);
+
+	return commit_ret ?: setup_ret;
 }
 
 static noinline_for_stack
 int prepare_to_relocate(struct reloc_control *rc)
 {
+	struct btrfs_fs_info *fs_info = rc->extent_root->fs_info;
 	struct btrfs_trans_handle *trans;
+	struct btrfs_transaction *transaction = NULL;
 	int ret;
 
-	rc->block_rsv = btrfs_alloc_block_rsv(rc->extent_root->fs_info,
+	rc->block_rsv = btrfs_alloc_block_rsv(fs_info,
 					      BTRFS_BLOCK_RSV_TEMP);
 	if (!rc->block_rsv)
 		return -ENOMEM;
@@ -3546,32 +3680,93 @@ int prepare_to_relocate(struct reloc_control *rc)
 	rc->nodes_relocated = 0;
 	rc->merging_rsv_size = 0;
 	rc->reserved_bytes = 0;
-	rc->block_rsv->size = rc->extent_root->fs_info->nodesize *
-			      RELOCATION_RESERVED_NODES;
-	ret = btrfs_block_rsv_refill(rc->extent_root->fs_info,
+	rc->block_rsv->size = fs_info->nodesize * RELOCATION_RESERVED_NODES;
+
+	if (!rc->fenced_setup) {
+		ret = btrfs_block_rsv_refill(fs_info,
+					     rc->block_rsv, rc->block_rsv->size,
+					     BTRFS_RESERVE_FLUSH_ALL);
+		if (ret)
+			return ret;
+
+		rc->create_reloc_tree = true;
+		set_reloc_control(rc);
+
+		trans = btrfs_join_transaction(rc->extent_root);
+		if (IS_ERR(trans)) {
+			unset_reloc_control(rc);
+			/*
+			 * The extent tree is not a ref-cow tree and has no reloc
+			 * root to clean up. Callers free the block reserve.
+			 */
+			return PTR_ERR(trans);
+		}
+
+		ret = btrfs_commit_transaction(trans);
+		if (ret)
+			unset_reloc_control(rc);
+		return ret;
+	}
+
+	if (!rc->setup_pending) {
+		ret = btrfs_bg_reloc_setup_start(rc->block_group,
+						 rc->block_group_ro);
+		if (ret)
+			return ret;
+		WRITE_ONCE(rc->setup_pending, true);
+		WRITE_ONCE(rc->block_group_ro, false);
+	} else {
+		ASSERT(!rc->block_group_ro);
+	}
+
+	btrfs_wait_block_group_reservations(rc->block_group);
+	btrfs_wait_nocow_writers(rc->block_group);
+	btrfs_wait_ordered_roots(fs_info, U64_MAX, rc->block_group);
+
+	ret = btrfs_block_rsv_refill(fs_info,
 				     rc->block_rsv, rc->block_rsv->size,
 				     BTRFS_RESERVE_FLUSH_ALL);
 	if (ret)
-		return ret;
+		goto abort_setup;
 
+	/* The transaction tail publishes reloc_ctl with the new commit roots. */
 	rc->create_reloc_tree = true;
-	set_reloc_control(rc);
+	for (;;) {
+		u64 transid;
 
-	trans = btrfs_join_transaction(rc->extent_root);
-	if (IS_ERR(trans)) {
-		unset_reloc_control(rc);
-		/*
-		 * extent tree is not a ref_cow tree and has no reloc_root to
-		 * cleanup.  And callers are responsible to free the above
-		 * block rsv.
-		 */
-		return PTR_ERR(trans);
+		trans = btrfs_join_transaction(rc->extent_root);
+		if (IS_ERR(trans)) {
+			ret = PTR_ERR(trans);
+			goto abort_setup;
+		}
+		transid = trans->transid;
+
+		ret = bind_relocation_setup(trans, rc, &transaction);
+		if (ret == -EAGAIN) {
+			btrfs_end_transaction(trans);
+			ret = btrfs_wait_for_commit(fs_info, transid);
+			if (ret)
+				goto abort_setup;
+			continue;
+		}
+		if (ret) {
+			btrfs_end_transaction(trans);
+			goto abort_setup;
+		}
+		break;
 	}
 
 	ret = btrfs_commit_transaction(trans);
-	if (ret)
+	ret = reconcile_relocation_setup(transaction, rc, ret);
+	if (ret && rc->reloc_ctl_set)
 		unset_reloc_control(rc);
+	return ret;
 
+abort_setup:
+	ASSERT(rc->setup_pending);
+	WRITE_ONCE(rc->setup_result, ret);
+	WRITE_ONCE(rc->setup_pending, false);
+	btrfs_bg_reloc_setup_abort(rc->block_group);
 	return ret;
 }
 
@@ -3935,6 +4130,14 @@ static const char *stage_to_string(enum reloc_stage stage)
 	if (stage == UPDATE_DATA_PTRS)
 		return "update data pointers";
 	return "unknown";
+}
+
+bool btrfs_relocation_uses_fenced_setup(const struct btrfs_block_group *bg)
+{
+	const u64 mixed = BTRFS_BLOCK_GROUP_DATA | BTRFS_BLOCK_GROUP_METADATA;
+
+	return (bg->flags & mixed) == mixed && !btrfs_is_zoned(bg->fs_info) &&
+	       !should_relocate_using_remap_tree(bg);
 }
 
 static int add_remap_tree_entries(struct btrfs_trans_handle *trans, struct btrfs_path *path,
@@ -5404,7 +5607,6 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start,
 	struct inode *inode;
 	struct btrfs_path *path = NULL;
 	int ret;
-	bool bg_is_ro = false;
 
 	if (unlikely(!extent_root)) {
 		btrfs_err(fs_info,
@@ -5455,15 +5657,24 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start,
 	rc->extent_root = extent_root;
 	/* Block group ref now owned by rc, put_reloc_control() will drop it. */
 	rc->block_group = bg;
+	rc->fenced_setup = btrfs_relocation_uses_fenced_setup(bg);
 
 	ret = reloc_chunk_start(fs_info);
 	if (ret < 0)
 		goto out_put_rc;
 
-	ret = btrfs_inc_block_group_ro(rc->block_group, true);
-	if (ret)
-		goto out;
-	bg_is_ro = true;
+	if (rc->fenced_setup) {
+		/* Keep non-metadata writers out until the setup tail marks RO. */
+		ret = btrfs_bg_reloc_setup_start(rc->block_group, false);
+		if (ret)
+			goto out;
+		WRITE_ONCE(rc->setup_pending, true);
+	} else {
+		ret = btrfs_inc_block_group_ro(rc->block_group, true);
+		if (ret)
+			goto out;
+		rc->block_group_ro = true;
+	}
 
 	path = btrfs_alloc_path();
 	if (!path) {
@@ -5494,12 +5705,14 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start,
 	if (verbose)
 		describe_relocation(rc->block_group);
 
-	btrfs_wait_block_group_reservations(rc->block_group);
-	btrfs_wait_nocow_writers(rc->block_group);
-	btrfs_wait_ordered_roots(fs_info, U64_MAX, rc->block_group);
+	if (!rc->fenced_setup) {
+		btrfs_wait_block_group_reservations(rc->block_group);
+		btrfs_wait_nocow_writers(rc->block_group);
+		btrfs_wait_ordered_roots(fs_info, U64_MAX, rc->block_group);
 
-	ret = btrfs_zone_finish(rc->block_group);
-	WARN_ON(ret && ret != -EAGAIN);
+		ret = btrfs_zone_finish(rc->block_group);
+		WARN_ON(ret && ret != -EAGAIN);
+	}
 
 	if (should_relocate_using_remap_tree(bg)) {
 		if (bg->remap_bytes != 0) {
@@ -5521,8 +5734,15 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start,
 	}
 
 out:
-	if (ret && bg_is_ro)
+	if (rc->setup_pending) {
+		ASSERT(ret);
+		WRITE_ONCE(rc->setup_pending, false);
+		btrfs_bg_reloc_setup_abort(rc->block_group);
+	}
+	if (ret && rc->block_group_ro) {
 		btrfs_dec_block_group_ro(rc->block_group);
+		rc->block_group_ro = false;
+	}
 	if (!btrfs_fs_incompat(fs_info, REMAP_TREE))
 		iput(rc->data_inode);
 	btrfs_free_path(path);

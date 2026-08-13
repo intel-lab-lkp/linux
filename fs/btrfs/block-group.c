@@ -21,6 +21,7 @@
 #include "fs.h"
 #include "accessors.h"
 #include "extent-tree.h"
+#include "relocation.h"
 
 static struct kmem_cache *block_group_cache;
 static struct kmem_cache *free_space_ctl_cache;
@@ -363,7 +364,8 @@ struct btrfs_block_group *btrfs_inc_nocow_writers(struct btrfs_fs_info *fs_info,
 		return NULL;
 
 	spin_lock(&bg->lock);
-	if (bg->ro)
+	if (bg->ro || test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP,
+			       &bg->runtime_flags))
 		can_nocow = false;
 	else
 		atomic_inc(&bg->nocow_writers);
@@ -419,7 +421,8 @@ void btrfs_wait_block_group_reservations(struct btrfs_block_group *bg)
 {
 	struct btrfs_space_info *space_info = bg->space_info;
 
-	ASSERT(bg->ro);
+	ASSERT(bg->ro || test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP,
+				  &bg->runtime_flags));
 
 	if (!(bg->flags & BTRFS_BLOCK_GROUP_DATA))
 		return;
@@ -1434,7 +1437,8 @@ struct btrfs_trans_handle *btrfs_start_trans_remove_block_group(
  * data in this block group. That check should be done by relocation routine,
  * not this function.
  */
-static int inc_block_group_ro(struct btrfs_block_group *cache, bool force)
+static int __inc_block_group_ro(struct btrfs_block_group *cache, bool force,
+				bool reloc_setup)
 {
 	struct btrfs_space_info *sinfo = cache->space_info;
 	u64 num_bytes;
@@ -1442,6 +1446,11 @@ static int inc_block_group_ro(struct btrfs_block_group *cache, bool force)
 
 	spin_lock(&sinfo->lock);
 	spin_lock(&cache->lock);
+	if (!reloc_setup && test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP,
+				     &cache->runtime_flags)) {
+		ret = -EAGAIN;
+		goto out;
+	}
 
 	if (cache->swap_extents) {
 		ret = -ETXTBSY;
@@ -1502,6 +1511,54 @@ out:
 		btrfs_dump_space_info(cache->space_info, 0, false);
 	}
 	return ret;
+}
+
+static int inc_block_group_ro(struct btrfs_block_group *cache, bool force)
+{
+	return __inc_block_group_ro(cache, force, false);
+}
+
+int btrfs_bg_reloc_setup_start(struct btrfs_block_group *cache, bool drop_ro)
+{
+	struct btrfs_fs_info *fs_info = cache->fs_info;
+	struct btrfs_space_info *sinfo = cache->space_info;
+	int ret = 0;
+
+	ASSERT(!btrfs_is_zoned(fs_info));
+
+	mutex_lock(&fs_info->ro_block_group_mutex);
+	spin_lock(&sinfo->lock);
+	spin_lock(&cache->lock);
+	if (test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP, &cache->runtime_flags) ||
+	    cache->ro != (drop_ro ? 1 : 0)) {
+		ret = -EAGAIN;
+		goto out;
+	}
+
+	set_bit(BLOCK_GROUP_FLAG_RELOC_SETUP, &cache->runtime_flags);
+	if (drop_ro) {
+		cache->ro = 0;
+		sinfo->bytes_readonly -= btrfs_block_group_available_space(cache);
+		list_del_init(&cache->ro_list);
+	}
+out:
+	spin_unlock(&cache->lock);
+	spin_unlock(&sinfo->lock);
+	mutex_unlock(&fs_info->ro_block_group_mutex);
+	return ret;
+}
+
+int btrfs_bg_reloc_setup_finish(struct btrfs_block_group *cache)
+{
+	ASSERT(test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP, &cache->runtime_flags));
+	return __inc_block_group_ro(cache, false, true);
+}
+
+void btrfs_bg_reloc_setup_abort(struct btrfs_block_group *cache)
+{
+	ASSERT(test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP, &cache->runtime_flags));
+	clear_and_wake_up_bit(BLOCK_GROUP_FLAG_RELOC_SETUP,
+			      &cache->runtime_flags);
 }
 
 static bool clean_pinned_extents(struct btrfs_trans_handle *trans,
@@ -1945,6 +2002,7 @@ static int btrfs_reclaim_block_group(struct btrfs_block_group *bg, int *reclaime
 	u64 reserved;
 	u64 old_total;
 	int ret = 0;
+	bool marked_ro = false;
 
 	/* Don't race with allocators so take the groups_sem */
 	down_write(&space_info->groups_sem);
@@ -2018,15 +2076,19 @@ static int btrfs_reclaim_block_group(struct btrfs_block_group *bg, int *reclaime
 		return 0;
 	}
 
-	ret = inc_block_group_ro(bg, false);
+	if (!btrfs_relocation_uses_fenced_setup(bg)) {
+		ret = inc_block_group_ro(bg, false);
+		if (!ret)
+			marked_ro = true;
+	}
 	up_write(&space_info->groups_sem);
 	if (ret < 0)
 		return ret;
 
 	/*
 	 * The amount of bytes reclaimed corresponds to the sum of the
-	 * "used" and "reserved" counters. We have set the block group
-	 * to RO above, which prevents reservations from happening but
+	 * "used" and "reserved" counters. Relocation prevents new data
+	 * reservations before it drains existing reservations, but
 	 * we may have existing reservations for which allocation has
 	 * not yet been done - btrfs_update_block_group() was not yet
 	 * called, which is where we will transfer a reserved extent's
@@ -2048,7 +2110,8 @@ static int btrfs_reclaim_block_group(struct btrfs_block_group *bg, int *reclaime
 	trace_btrfs_reclaim_block_group(bg);
 	ret = btrfs_relocate_chunk(fs_info, bg->start, false);
 	if (ret) {
-		btrfs_dec_block_group_ro(bg);
+		if (marked_ro)
+			btrfs_dec_block_group_ro(bg);
 		btrfs_err(fs_info, "error relocating chunk %llu",
 			  bg->start);
 		used = 0;
@@ -3131,7 +3194,7 @@ int btrfs_inc_block_group_ro(struct btrfs_block_group *cache,
 	struct btrfs_root *root = btrfs_block_group_root(fs_info);
 	u64 alloc_flags;
 	int ret;
-	bool dirty_bg_running;
+	bool retry;
 
 	if (unlikely(!root)) {
 		btrfs_err(fs_info, "missing block group root");
@@ -3145,9 +3208,18 @@ int btrfs_inc_block_group_ro(struct btrfs_block_group *cache,
 	 * Thus here we skip all chunk allocations.
 	 */
 	if (sb_rdonly(fs_info->sb)) {
-		mutex_lock(&fs_info->ro_block_group_mutex);
-		ret = inc_block_group_ro(cache, false);
-		mutex_unlock(&fs_info->ro_block_group_mutex);
+		do {
+			mutex_lock(&fs_info->ro_block_group_mutex);
+			retry = test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP,
+					 &cache->runtime_flags);
+			if (!retry)
+				ret = inc_block_group_ro(cache, false);
+			mutex_unlock(&fs_info->ro_block_group_mutex);
+			if (retry)
+				ret = wait_on_bit(&cache->runtime_flags,
+						  BLOCK_GROUP_FLAG_RELOC_SETUP,
+						  TASK_INTERRUPTIBLE);
+		} while (retry && !ret);
 		return ret;
 	}
 
@@ -3156,7 +3228,7 @@ int btrfs_inc_block_group_ro(struct btrfs_block_group *cache,
 		if (IS_ERR(trans))
 			return PTR_ERR(trans);
 
-		dirty_bg_running = false;
+		retry = false;
 
 		/*
 		 * We're not allowed to set block groups readonly after the dirty
@@ -3164,7 +3236,19 @@ int btrfs_inc_block_group_ro(struct btrfs_block_group *cache,
 		 * back off and let this transaction commit.
 		 */
 		mutex_lock(&fs_info->ro_block_group_mutex);
-		if (test_bit(BTRFS_TRANS_DIRTY_BG_RUN, &trans->transaction->flags)) {
+		if (test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP,
+			     &cache->runtime_flags)) {
+			mutex_unlock(&fs_info->ro_block_group_mutex);
+			btrfs_end_transaction(trans);
+
+			ret = wait_on_bit(&cache->runtime_flags,
+					  BLOCK_GROUP_FLAG_RELOC_SETUP,
+					  TASK_INTERRUPTIBLE);
+			if (ret)
+				return ret;
+			retry = true;
+		} else if (test_bit(BTRFS_TRANS_DIRTY_BG_RUN,
+				    &trans->transaction->flags)) {
 			u64 transid = trans->transid;
 
 			mutex_unlock(&fs_info->ro_block_group_mutex);
@@ -3173,9 +3257,9 @@ int btrfs_inc_block_group_ro(struct btrfs_block_group *cache,
 			ret = btrfs_wait_for_commit(fs_info, transid);
 			if (ret)
 				return ret;
-			dirty_bg_running = true;
+			retry = true;
 		}
-	} while (dirty_bg_running);
+	} while (retry);
 
 	if (do_chunk_alloc) {
 		/*
@@ -3411,7 +3495,9 @@ again:
 		}
 		retries++;
 
-		if (block_group->ro)
+		if (block_group->ro ||
+		    test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP,
+			     &block_group->runtime_flags))
 			goto out_free;
 
 		ret = create_free_space_inode(trans, block_group, path);
@@ -3981,6 +4067,7 @@ int btrfs_update_block_group(struct btrfs_trans_handle *trans,
  *              @num_bytes except for the compress path.
  * @num_bytes:	The number of bytes in question
  * @delalloc:   The blocks are allocated for the delalloc write
+ * @allow_reloc_setup: Allow ordinary metadata into a relocation setup target.
  *
  * This is called by the allocator when it reserves space. If this is a
  * reservation and the block group has become read only we cannot make the
@@ -3988,7 +4075,8 @@ int btrfs_update_block_group(struct btrfs_trans_handle *trans,
  */
 int btrfs_add_reserved_bytes(struct btrfs_block_group *cache,
 			     u64 ram_bytes, u64 num_bytes, bool delalloc,
-			     bool force_wrong_size_class)
+			     bool force_wrong_size_class,
+			     bool allow_reloc_setup)
 {
 	struct btrfs_space_info *space_info = cache->space_info;
 	enum btrfs_block_group_size_class size_class;
@@ -3996,7 +4084,9 @@ int btrfs_add_reserved_bytes(struct btrfs_block_group *cache,
 
 	spin_lock(&space_info->lock);
 	spin_lock(&cache->lock);
-	if (cache->ro) {
+	if (cache->ro ||
+	    (!allow_reloc_setup &&
+	     test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP, &cache->runtime_flags))) {
 		ret = -EAGAIN;
 		goto out_error;
 	}
@@ -4832,7 +4922,7 @@ bool btrfs_inc_block_group_swap_extents(struct btrfs_block_group *bg)
 	bool ret = true;
 
 	spin_lock(&bg->lock);
-	if (bg->ro)
+	if (bg->ro || test_bit(BLOCK_GROUP_FLAG_RELOC_SETUP, &bg->runtime_flags))
 		ret = false;
 	else
 		bg->swap_extents++;

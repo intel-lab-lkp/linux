@@ -4936,6 +4936,7 @@ void btrfs_cleanup_one_transaction(struct btrfs_transaction *cur_trans)
 	}
 
 	btrfs_destroy_delayed_refs(cur_trans);
+	btrfs_abort_relocation_setup(cur_trans, cur_trans->aborted);
 
 	cur_trans->state = TRANS_STATE_COMMIT_START;
 	wake_up(&fs_info->transaction_blocked_wait);

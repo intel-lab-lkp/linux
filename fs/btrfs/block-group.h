@@ -95,6 +95,8 @@ enum btrfs_block_group_flags {
 	BLOCK_GROUP_FLAG_NEW,
 	BLOCK_GROUP_FLAG_FULLY_REMAPPED,
 	BLOCK_GROUP_FLAG_STRIPE_REMOVAL_PENDING,
+	/* Block data, tree-log and NOCOW admission during relocation setup. */
+	BLOCK_GROUP_FLAG_RELOC_SETUP,
 };
 
 enum btrfs_caching_type {
@@ -364,6 +366,9 @@ void btrfs_create_pending_block_groups(struct btrfs_trans_handle *trans);
 int btrfs_inc_block_group_ro(struct btrfs_block_group *cache,
 			     bool do_chunk_alloc);
 void btrfs_dec_block_group_ro(struct btrfs_block_group *cache);
+int btrfs_bg_reloc_setup_start(struct btrfs_block_group *cache, bool drop_ro);
+int btrfs_bg_reloc_setup_finish(struct btrfs_block_group *cache);
+void btrfs_bg_reloc_setup_abort(struct btrfs_block_group *cache);
 int btrfs_start_dirty_block_groups(struct btrfs_trans_handle *trans);
 int btrfs_write_dirty_block_groups(struct btrfs_trans_handle *trans);
 int btrfs_setup_space_cache(struct btrfs_trans_handle *trans);
@@ -371,7 +376,8 @@ int btrfs_update_block_group(struct btrfs_trans_handle *trans,
 			     u64 bytenr, u64 num_bytes, bool alloc);
 int btrfs_add_reserved_bytes(struct btrfs_block_group *cache,
 			     u64 ram_bytes, u64 num_bytes, bool delalloc,
-			     bool force_wrong_size_class);
+			     bool force_wrong_size_class,
+			     bool allow_reloc_setup);
 void btrfs_free_reserved_bytes(struct btrfs_block_group *cache, u64 num_bytes,
 			       bool is_delalloc);
 int btrfs_chunk_alloc(struct btrfs_trans_handle *trans,

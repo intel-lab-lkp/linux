@@ -173,6 +173,7 @@ void btrfs_put_transaction(struct btrfs_transaction *transaction)
 			btrfs_put_block_group(cache);
 		}
 		WARN_ON(!list_empty(&transaction->dev_update_list));
+		WARN_ON(transaction->reloc_setup);
 		kfree(transaction);
 	}
 }
@@ -379,6 +380,7 @@ loop:
 	INIT_LIST_HEAD(&cur_trans->dev_update_list);
 	INIT_LIST_HEAD(&cur_trans->switch_commits);
 	INIT_LIST_HEAD(&cur_trans->dirty_bgs);
+	cur_trans->reloc_setup = NULL;
 	INIT_LIST_HEAD(&cur_trans->io_bgs);
 	INIT_LIST_HEAD(&cur_trans->dropped_roots);
 	mutex_init(&cur_trans->cache_write_mutex);
@@ -2552,6 +2554,8 @@ int btrfs_commit_transaction(struct btrfs_trans_handle *trans)
 	clear_bit(BTRFS_FS_LOG2_ERR, &fs_info->flags);
 
 	btrfs_trans_release_chunk_metadata(trans);
+	/* Resolve the relocation setup before transaction N+1 can start. */
+	btrfs_finish_relocation_setup(cur_trans);
 
 	/*
 	 * Before changing the transaction state to TRANS_STATE_UNBLOCKED and

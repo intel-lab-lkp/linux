@@ -23,6 +23,7 @@ struct btrfs_fs_info;
 struct btrfs_root_item;
 struct btrfs_root;
 struct btrfs_path;
+struct reloc_control;
 
 /*
  * Signal that a direct IO write is in progress, to avoid deadlock for sync
@@ -77,6 +78,8 @@ struct btrfs_transaction {
 	struct list_head dev_update_list;
 	struct list_head switch_commits;
 	struct list_head dirty_bgs;
+	/* Protected by fs_info->trans_lock. */
+	struct reloc_control *reloc_setup;
 
 	/*
 	 * There is no explicit lock which protects io_bgs, rather its
