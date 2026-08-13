@@ -875,7 +875,7 @@ static int u32_change(struct net *net, struct sk_buff *in_skb,
 		      struct netlink_ext_ack *extack)
 {
 	struct tc_u_common *tp_c = tp->data;
-	struct tc_u_hnode *ht;
+	struct tc_u_hnode *ht, *ht_down;
 	struct tc_u_knode *n;
 	struct tc_u32_sel *s;
 	struct nlattr *opt = tca[TCA_OPTIONS];
@@ -1193,6 +1193,9 @@ static int u32_change(struct net *net, struct sk_buff *in_skb,
 
 errunbind:
 	u32_unbind_filter(tp, n, tb);
+	ht_down = rtnl_dereference(n->ht_down);
+	if (ht_down && refcount_dec_and_test(&ht_down->refcnt))
+		kfree(ht_down);
 
 #ifdef CONFIG_CLS_U32_MARK
 	free_percpu(n->pcpu_success);
