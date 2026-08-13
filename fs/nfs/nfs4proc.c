@@ -10442,6 +10442,36 @@ out_put_clp:
 }
 
 /*
+ * Ask the server whether a deviceID exists, surfacing the raw status
+ * (nfs4_get_device_info() swallows it).  A one-page reply buffer is
+ * enough for the answer: a device too large for it fails with
+ * something other than -ENOENT, which still proves existence.
+ */
+static int nfs4_deviceid_validate(struct nfs_server *server,
+		const struct pnfs_layoutdriver_type *ld,
+		const struct nfs4_deviceid *id, const struct cred *cred)
+{
+	struct pnfs_device pdev;
+	struct page *page;
+	int status;
+
+	page = alloc_page(GFP_KERNEL);
+	if (!page)
+		return -ENOMEM;
+
+	memset(&pdev, 0, sizeof(pdev));
+	memcpy(&pdev.dev_id, id, sizeof(pdev.dev_id));
+	pdev.layout_type = ld->id;
+	pdev.pages = &page;
+	pdev.pglen = PAGE_SIZE;
+	pdev.maxcount = PAGE_SIZE - nfs41_maxgetdevinfo_overhead;
+
+	status = nfs4_proc_getdeviceinfo(server, &pdev, cred);
+	__free_page(page);
+	return status;
+}
+
+/*
  * A CB_NOTIFY_DEVICEID DELETE named a deviceID that live layouts still
  * referenced -- a conformant server never does this (RFC 8881 Section
  * 20.12), so run the Section 18.40.4 recovery: TEST_STATEID each
@@ -10449,16 +10479,21 @@ out_put_clp:
  * invalid, free the lsegs, FREE_STATEID).  If every referring layout
  * turned out revoked, the delete is confirmed by the revocations and
  * the cached device is dropped.  A layout the server still considers
- * valid means the delete cannot be trusted; leave the device cached.
+ * valid means the delete cannot be trusted: verify it with
+ * GETDEVICEINFO.  The device really being gone under a valid layout
+ * means the server is faulty -- recover by re-establishing the client
+ * ID (Section 18.40.4 prescribes EXCHANGE_ID).  Any other answer
+ * (including the device existing: an erroneous DELETE) keeps the
+ * cached device.
  */
 static void nfs4_deviceid_delete_recover(struct nfs_client *clp,
 		const struct pnfs_layoutdriver_type *ld,
 		const struct nfs4_deviceid *id)
 {
 	LIST_HEAD(layouts);
-	struct nfs4_deviceid_ref *ref;
+	struct nfs4_deviceid_ref *ref, *confirm = NULL;
 	bool revoked = false;
-	bool referenced = false;
+	int status;
 
 	pnfs_layout_collect_deviceid_refs(clp, ld, id, &layouts);
 
@@ -10466,13 +10501,13 @@ static void nfs4_deviceid_delete_recover(struct nfs_client *clp,
 		struct pnfs_layout_hdr *lo = ref->lo;
 		struct inode *inode = ref->inode;
 		LIST_HEAD(head);
-		int status;
 
 		status = nfs41_test_stateid(NFS_SERVER(inode), &ref->stateid,
 					    ref->cred);
 		switch (status) {
 		case NFS_OK:
-			referenced = true;
+			if (!confirm)
+				confirm = ref;
 			break;
 		case -NFS4ERR_ADMIN_REVOKED:
 		case -NFS4ERR_DELEG_REVOKED:
@@ -10494,10 +10529,18 @@ static void nfs4_deviceid_delete_recover(struct nfs_client *clp,
 			break;
 		}
 	}
-	pnfs_layout_put_deviceid_refs(&layouts);
 
-	if (revoked && !referenced)
+	if (confirm) {
+		status = nfs4_deviceid_validate(NFS_SERVER(confirm->inode),
+						ld, id, confirm->cred);
+		if (status == -ENOENT) {
+			nfs4_schedule_lease_recovery(clp);
+			nfs4_delete_deviceid(ld, clp, id);
+		}
+	} else if (revoked) {
 		nfs4_delete_deviceid(ld, clp, id);
+	}
+	pnfs_layout_put_deviceid_refs(&layouts);
 }
 
 void nfs4_deviceid_delete_recover_run(struct nfs_client *clp)
