@@ -705,9 +705,20 @@ int nfit_spa_type(struct acpi_nfit_system_address *spa)
 
 static size_t sizeof_spa(struct acpi_nfit_system_address *spa)
 {
+	size_t legacy_size = offsetof(struct acpi_nfit_system_address,
+				      location_cookie);
+	size_t size = spa->header.length;
+
+	if (size == sizeof(*spa))
+		return size;
+
+	if (size != legacy_size)
+		return 0;
+
 	if (spa->flags & ACPI_NFIT_LOCATION_COOKIE_VALID)
-		return sizeof(*spa);
-	return sizeof(*spa) - 8;
+		return 0;
+
+	return size;
 }
 
 static bool add_spa(struct acpi_nfit_desc *acpi_desc,
@@ -716,23 +727,26 @@ static bool add_spa(struct acpi_nfit_desc *acpi_desc,
 {
 	struct device *dev = acpi_desc->dev;
 	struct nfit_spa *nfit_spa;
+	size_t size = sizeof_spa(spa);
 
-	if (spa->header.length != sizeof_spa(spa))
+	if (!size)
 		return false;
 
 	list_for_each_entry(nfit_spa, &prev->spas, list) {
-		if (memcmp(nfit_spa->spa, spa, sizeof_spa(spa)) == 0) {
+		if (sizeof_spa(nfit_spa->spa) != size)
+			continue;
+
+		if (memcmp(nfit_spa->spa, spa, size) == 0) {
 			list_move_tail(&nfit_spa->list, &acpi_desc->spas);
 			return true;
 		}
 	}
 
-	nfit_spa = devm_kzalloc(dev, sizeof(*nfit_spa) + sizeof_spa(spa),
-			GFP_KERNEL);
+	nfit_spa = devm_kzalloc(dev, sizeof(*nfit_spa) + size, GFP_KERNEL);
 	if (!nfit_spa)
 		return false;
 	INIT_LIST_HEAD(&nfit_spa->list);
-	memcpy(nfit_spa->spa, spa, sizeof_spa(spa));
+	memcpy(nfit_spa->spa, spa, size);
 	list_add_tail(&nfit_spa->list, &acpi_desc->spas);
 	dev_dbg(dev, "spa index: %d type: %s\n",
 			spa->range_index,
