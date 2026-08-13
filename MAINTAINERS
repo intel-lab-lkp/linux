@@ -13561,6 +13561,14 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/media/i2c/isil,isl79987.yaml
 F:	drivers/media/i2c/isl7998x.c
 
+INVENSENSE ICM-42370-P ACCELEROMETER
+M:	Kanak Shilledar <kanak.shilledar@axis.com>
+M:	Henrik Grimler <henrik.grimler@axis.com>
+L:	kernel@axis.com
+S:	Maintained
+W:	https://invensense.tdk.com/
+F:	Documentation/devicetree/bindings/iio/accel/invensense,icm42370p.yaml
+
 INVENSENSE ICM-426xx IMU DRIVER
 M:	Jean-Baptiste Maneyrol <jean-baptiste.maneyrol@tdk.com>
 L:	linux-iio@vger.kernel.org
