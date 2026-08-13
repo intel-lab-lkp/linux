@@ -197,6 +197,42 @@ static const struct acpi_device_id pcc_device_ids[] = {
 };
 MODULE_DEVICE_TABLE(acpi, pcc_device_ids);
 
+/*
+ * On the CF-33 the bezel A1/A2 buttons are wired to a separate ACPI device
+ * (MAT003C, ACPI path \_SB.TBTN) rather than the main Hotkey (MAT0019/HKEY)
+ * device the rest of this driver talks to. TBTN implements its own
+ * HINF/HIND/SQTY/SINF method quartet, structurally a clone of HKEY's, but
+ * SQTY only reports a single SIFR element (a button-availability flag) --
+ * it has none of HKEY's brightness/battery/backlight state, so it can't be
+ * probed via acpi_pcc_hotkey_probe(), which requires the full SINF block.
+ * Register a second, minimal platform_driver for it instead.
+ */
+#define METHOD_TBTN_QUERY	"HINF"
+#define TBTN_NOTIFY		0x80
+
+static const struct acpi_device_id tbtn_device_ids[] = {
+	{ "MAT003C", 0},
+	{ "", 0},
+};
+MODULE_DEVICE_TABLE(acpi, tbtn_device_ids);
+
+struct tbtn_acpi {
+	acpi_handle		handle;
+	struct input_dev	*input_dev;
+};
+
+static int tbtn_probe(struct platform_device *pdev);
+static void tbtn_remove(struct platform_device *pdev);
+
+static struct platform_driver acpi_tbtn_driver = {
+	.probe = tbtn_probe,
+	.remove = tbtn_remove,
+	.driver = {
+		.name = "Panasonic Tablet Buttons",
+		.acpi_match_table = tbtn_device_ids,
+	},
+};
+
 #ifdef CONFIG_PM_SLEEP
 static int acpi_pcc_hotkey_resume(struct device *dev);
 #endif
@@ -961,6 +997,112 @@ static void acpi_pcc_hotkey_notify(acpi_handle handle, u32 event, void *data)
 	}
 }
 
+/*
+ * TBTN's HINF dequeues one raw scancode from a small EC-side FIFO (0 if
+ * empty) and re-Notify()s itself if more than one entry was pending, so a
+ * single evaluate-and-report per notification is sufficient here -- unlike
+ * HKEY, TBTN's codes never set the high bit, since press and release are
+ * distinct scancodes rather than one code plus an up/down flag.
+ */
+static void tbtn_report_key(struct tbtn_acpi *tbtn, unsigned int code)
+{
+	static const struct {
+		unsigned int code;
+		unsigned int keycode;
+		bool down;
+	} keymap[] = {
+		{ 0x38, KEY_PROG2, true },  /* A1 press */
+		{ 0x39, KEY_PROG2, false }, /* A1 release */
+		{ 0x42, KEY_PROG3, true },  /* A2 press */
+		{ 0x43, KEY_PROG3, false }, /* A2 release */
+	};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(keymap); i++) {
+		if (keymap[i].code != code)
+			continue;
+		input_report_key(tbtn->input_dev, keymap[i].keycode, keymap[i].down);
+		input_sync(tbtn->input_dev);
+		return;
+	}
+
+	pr_info("Unknown TBTN hotkey event: 0x%02x\n", code);
+}
+
+static void tbtn_notify(acpi_handle handle, u32 event, void *data)
+{
+	struct tbtn_acpi *tbtn = data;
+	unsigned long long result;
+	acpi_status status;
+
+	if (event != TBTN_NOTIFY)
+		return;
+
+	status = acpi_evaluate_integer(tbtn->handle, METHOD_TBTN_QUERY,
+				       NULL, &result);
+	if (ACPI_FAILURE(status)) {
+		pr_err("TBTN: error getting hotkey status\n");
+		return;
+	}
+
+	if (result)
+		tbtn_report_key(tbtn, result);
+}
+
+static int tbtn_probe(struct platform_device *pdev)
+{
+	struct acpi_device *device = ACPI_COMPANION(&pdev->dev);
+	struct tbtn_acpi *tbtn;
+	struct input_dev *input_dev;
+	int error;
+
+	if (!device)
+		return -ENODEV;
+
+	tbtn = devm_kzalloc(&pdev->dev, sizeof(*tbtn), GFP_KERNEL);
+	if (!tbtn)
+		return -ENOMEM;
+
+	tbtn->handle = device->handle;
+	device->driver_data = tbtn;
+
+	input_dev = devm_input_allocate_device(&pdev->dev);
+	if (!input_dev)
+		return -ENOMEM;
+
+	input_dev->name = "Panasonic Tablet Buttons";
+	input_dev->phys = "panasonic/tbtn0";
+	input_dev->id.bustype = BUS_HOST;
+	input_dev->id.vendor = 0x0001;
+	input_dev->id.product = 0x0002;
+	input_dev->id.version = 0x0100;
+	input_set_capability(input_dev, EV_KEY, KEY_PROG2);
+	input_set_capability(input_dev, EV_KEY, KEY_PROG3);
+
+	error = input_register_device(input_dev);
+	if (error) {
+		pr_err("TBTN: unable to register input device\n");
+		return error;
+	}
+
+	tbtn->input_dev = input_dev;
+
+	error = acpi_dev_install_notify_handler(device, ACPI_DEVICE_NOTIFY,
+						tbtn_notify, tbtn);
+	if (error)
+		return error;
+
+	return 0;
+}
+
+static void tbtn_remove(struct platform_device *pdev)
+{
+	struct acpi_device *device = ACPI_COMPANION(&pdev->dev);
+
+	acpi_dev_remove_notify_handler(device, ACPI_DEVICE_NOTIFY, tbtn_notify);
+	device->driver_data = NULL;
+}
+
 static void pcc_optd_notify(acpi_handle handle, u32 event, void *data)
 {
 	if (event != ACPI_NOTIFY_EJECT_REQUEST)
@@ -1221,4 +1363,28 @@ static void acpi_pcc_hotkey_remove(struct platform_device *pdev)
 	kfree(pcc);
 }
 
-module_platform_driver(acpi_pcc_driver);
+static int __init panasonic_module_init(void)
+{
+	int error;
+
+	error = platform_driver_register(&acpi_pcc_driver);
+	if (error)
+		return error;
+
+	error = platform_driver_register(&acpi_tbtn_driver);
+	if (error) {
+		platform_driver_unregister(&acpi_pcc_driver);
+		return error;
+	}
+
+	return 0;
+}
+
+static void __exit panasonic_module_exit(void)
+{
+	platform_driver_unregister(&acpi_tbtn_driver);
+	platform_driver_unregister(&acpi_pcc_driver);
+}
+
+module_init(panasonic_module_init);
+module_exit(panasonic_module_exit);
