@@ -464,6 +464,14 @@ int gpiod_get_direction(struct gpio_desc *desc)
 	if (!guard.gc)
 		return -ENODEV;
 
+	/*
+	 * Callers of the public API cannot know whether the controller
+	 * implements .get_direction(), so bail out quietly instead of
+	 * letting gpiochip_get_direction() WARN on them.
+	 */
+	if (!guard.gc->get_direction)
+		return -EOPNOTSUPP;
+
 	offset = gpiod_hwgpio(desc);
 	flags = READ_ONCE(desc->flags);
 
