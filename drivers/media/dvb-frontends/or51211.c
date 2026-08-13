@@ -17,6 +17,7 @@
  * or /lib/firmware (depending on configuration of firmware hotplug).
  */
 #define OR51211_DEFAULT_FIRMWARE "dvb-fe-or51211.fw"
+#define OR51211_FIRMWARE_MIN_SIZE (393 + 8125)
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -98,6 +99,9 @@ static int or51211_load_firmware (struct dvb_frontend* fe,
 	int i;
 
 	dprintk("Firmware is %zu bytes\n", fw->size);
+
+	if (fw->size < OR51211_FIRMWARE_MIN_SIZE)
+		return -EINVAL;
 
 	/* Get eprom data */
 	tudata[0] = 17;
