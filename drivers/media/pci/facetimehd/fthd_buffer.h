@@ -1,6 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * SPDX-License-Identifier: GPL-2.0-only
- *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2015 Sven Schnelle <svens@stackframe.org>
@@ -10,7 +9,8 @@
 #define FTHD_BUFFER_H
 
 #include <linux/scatterlist.h>
-#include "fthd_buffer.h"
+
+struct fthd_private;
 
 enum fthd_buffer_state {
 	BUF_FREE,
@@ -29,14 +29,14 @@ struct dma_descriptor {
 	u32 count;
 	u32 pool;
 	u64 tag;
-} __attribute__((packed));
+} __packed;
 
 struct dma_descriptor_list {
 	u32 field0;
-    	u32 count;
+	u32 count;
 	struct dma_descriptor desc[4];
 	char unknown[216];
-} __attribute__((packed));
+} __packed;
 
 struct iommu_obj {
 	struct resource base;
@@ -68,6 +68,6 @@ extern int fthd_buffer_init(struct fthd_private *dev_priv);
 extern void fthd_buffer_exit(struct fthd_private *dev_priv);
 extern void fthd_buffer_return_handler(struct fthd_private *dev_priv, u32 offset, int size);
 extern void fthd_buffer_queued_handler(struct fthd_private *dev_priv, u32 offset);
-extern struct iommu_obj *iommu_allocate_sgtable(struct fthd_private *dev_priv, struct sg_table *);
+extern struct iommu_obj *iommu_allocate_sgtable(struct fthd_private *dev_priv, struct sg_table *sgtable);
 extern void iommu_free(struct fthd_private *dev_priv, struct iommu_obj *obj);
 #endif

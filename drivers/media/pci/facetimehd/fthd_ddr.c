@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * FacetimeHD camera driver
  *
@@ -17,13 +18,7 @@
  *
  */
 
-#include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
 #include <linux/prandom.h>
-#else
-#include <linux/random.h>
-#endif
-
 #include "fthd_drv.h"
 #include "fthd_hw.h"
 #include "fthd_ddr.h"
@@ -302,12 +297,11 @@ static int fthd_ddr_calibrate_one_re_fifo(struct fthd_private *dev_priv,
 		*rden_byte1 = bl_start[1];
 	}
 
-	if (*rden_byte0 > 63) {
+	if (*rden_byte0 > 63)
 		*rden_byte0 = 63;
-	}
-	if (*rden_byte1 > 63) {
+
+	if (*rden_byte1 > 63)
 		*rden_byte1 = 63;
-	}
 
 	return 0;
 }
@@ -429,13 +423,14 @@ static int fthd_ddr_calibrate_rd_dqs(struct fthd_private *dev_priv,
 	u32 pass_end[16]; // u32 var_f0[16];
 	int fail_sum, i, j, bit;
 	s32 setting;
-	printk(KERN_CONT "\n");
+
+	dev_info(&dev_priv->pdev->dev, "Calibrating RD DQS: ");
 
 	for (bit = 0; bit < 16; bit++) {
 		pass_start[bit] = 64;
 		pass_end[bit] = 64;
 
-		printk(KERN_CONT "%.2d: ", bit);
+		pr_cont("%.2d: ", bit);
 
 		/* Start looking for start of pass */
 		for (i = 0; i < 63; i++) {
@@ -446,9 +441,9 @@ static int fthd_ddr_calibrate_rd_dqs(struct fthd_private *dev_priv,
 				fail_sum += fails[i + j] & (1 << bit);
 
 			if (fail_sum) {
-				printk(KERN_CONT ".");
+				pr_cont(".");
 			} else {
-				printk(KERN_CONT "O");
+				pr_cont("O");
 
 				pass_start[bit] = i;
 				break;
@@ -461,9 +456,9 @@ static int fthd_ddr_calibrate_rd_dqs(struct fthd_private *dev_priv,
 				if (pass_end[bit] == 64)
 					pass_end[bit] = i;
 
-				printk(KERN_CONT ".");
+				pr_cont(".");
 			} else {
-				printk(KERN_CONT "O");
+				pr_cont("O");
 			}
 		}
 
@@ -478,7 +473,7 @@ static int fthd_ddr_calibrate_rd_dqs(struct fthd_private *dev_priv,
 			setting = 63;
 		settings[bit] = setting;
 
-		printk(KERN_CONT " : start=%d end=%d len=%d new=%d\n", pass_start[bit],
+		pr_cont(" : start=%d end=%d len=%d new=%d\n", pass_start[bit],
 		       pass_end[bit], pass_len[bit], settings[bit]);
 	}
 

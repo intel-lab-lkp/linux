@@ -1,6 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * SPDX-License-Identifier: GPL-2.0-only
- *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2014 Patrik Jakobsson (patrik.r.jakobsson@gmail.com)
@@ -22,9 +21,9 @@ int isp_mem_init(struct fthd_private *dev_priv)
 {
 	struct resource *root = &dev_priv->pdev->resource[FTHD_PCI_S2_MEM];
 
-        dev_priv->mem = kzalloc(sizeof(struct resource), GFP_KERNEL);
+	dev_priv->mem = kzalloc_obj(struct resource, GFP_KERNEL);
 	if (!dev_priv->mem)
-	    return -ENOMEM;
+		return -ENOMEM;
 
 	dev_priv->mem->start = root->start;
 	dev_priv->mem->end = root->end;
@@ -48,7 +47,7 @@ struct isp_mem_obj *isp_mem_create(struct fthd_private *dev_priv,
 	struct resource *root = dev_priv->mem;
 	int ret;
 
-	obj = kzalloc(sizeof(struct isp_mem_obj), GFP_KERNEL);
+	obj = kzalloc_obj(struct isp_mem_obj, GFP_KERNEL);
 	if (!obj)
 		return NULL;
 
@@ -58,7 +57,7 @@ struct isp_mem_obj *isp_mem_create(struct fthd_private *dev_priv,
 				PAGE_SIZE, NULL, NULL);
 	if (ret) {
 		dev_err(&dev_priv->pdev->dev,
-			"Failed to allocate resource (size: %Ld, start: %Ld, end: %Ld)\n",
+			"Failed to allocate resource (size: %lld, start: %lld, end: %lld)\n",
 			size, root->start, root->end);
 		kfree(obj);
 		obj = NULL;
@@ -93,7 +92,7 @@ static int isp_acpi_set_power(struct fthd_private *dev_priv, int power)
 
 
 	handle = ACPI_HANDLE(&dev_priv->pdev->dev);
-	if(!handle) {
+	if (!handle) {
 		dev_err(&dev_priv->pdev->dev,
 			"Failed to get S2 CMPE ACPI handle\n");
 		ret = -ENODEV;
@@ -118,7 +117,7 @@ static int isp_acpi_set_power(struct fthd_private *dev_priv, int power)
 
 	if (result->type != ACPI_TYPE_INTEGER || result->integer.value != 0) {
 		dev_err(&dev_priv->pdev->dev,
-			"Invalid ACPI response (len: %Ld)\n", buffer.length);
+			"Invalid ACPI response (len: %lld)\n", buffer.length);
 		ret = -EINVAL;
 	}
 
@@ -180,7 +179,8 @@ static void isp_free_channel_info(struct fthd_private *priv)
 {
 	struct fw_channel *chan;
 	int i;
-	for(i = 0; i < priv->num_channels; i++) {
+
+	for (i = 0; i < priv->num_channels; i++) {
 		chan = priv->channels[i];
 		if (!chan)
 			continue;
@@ -196,7 +196,8 @@ static void isp_free_channel_info(struct fthd_private *priv)
 static struct fw_channel *isp_get_chan_index(struct fthd_private *priv, const char *name)
 {
 	int i;
-	for(i = 0; i < priv->num_channels; i++) {
+
+	for (i = 0; i < priv->num_channels; i++) {
 		if (!strcasecmp(priv->channels[i]->name, name))
 			return priv->channels[i];
 	}
@@ -212,16 +213,16 @@ static int isp_fill_channel_info(struct fthd_private *dev_priv, int offset, int 
 	if (!num_channels)
 		return -EINVAL;
 
-	dev_priv->channels = kzalloc(num_channels * sizeof(struct fw_channel *), GFP_KERNEL);
+	dev_priv->channels = kzalloc_objs(struct fw_channel *, num_channels, GFP_KERNEL);
 	if (!dev_priv->channels)
 		goto out;
 
 	dev_priv->num_channels = num_channels;
 
-	for(i = 0; i < num_channels; i++) {
+	for (i = 0; i < num_channels; i++) {
 		FTHD_S2_MEMCPY_FROMIO(&info, offset + i * 256, sizeof(info));
 
-		chan = kzalloc(sizeof(struct fw_channel), GFP_KERNEL);
+		chan = kzalloc_obj(struct fw_channel, GFP_KERNEL);
 		if (!chan)
 			goto out;
 
@@ -274,11 +275,11 @@ static int fthd_isp_cmd(struct fthd_private *dev_priv, enum fthd_isp_cmds comman
 
 	memset(&cmd, 0, sizeof(cmd));
 
-	if (response_len) {
+	if (response_len)
 		len = max(request_len, *response_len);
-	} else {
+	else
 		len = request_len;
-	}
+
 	len += sizeof(struct isp_cmd_hdr);
 
 	pr_debug("sending cmd %d to firmware\n", command);
@@ -311,7 +312,7 @@ static int fthd_isp_cmd(struct fthd_private *dev_priv, enum fthd_isp_cmds comman
 		goto out;
 	}
 
-        ret = fthd_channel_wait_ready(dev_priv, dev_priv->channel_io, entry, 2000);
+	ret = fthd_channel_wait_ready(dev_priv, dev_priv->channel_io, entry, 2000);
 	if (ret) {
 		if (response_len)
 			*response_len = 0;
@@ -323,8 +324,9 @@ static int fthd_isp_cmd(struct fthd_private *dev_priv, enum fthd_isp_cmds comman
 	request_size = FTHD_S2_MEM_READ(entry + FTHD_RINGBUF_REQUEST_SIZE);
 	response_size = FTHD_S2_MEM_READ(entry + FTHD_RINGBUF_RESPONSE_SIZE);
 
-	/* XXX: response size in the ringbuf is zero after command completion, how is buffer size
-	        verification done? */
+	/* XXX: response size in the ringbuf is zero after command completion,
+	 * how is buffer size verification done?
+	 */
 	if (response_len && *response_len)
 		FTHD_S2_MEMCPY_FROMIO(buf, (address & ~3) + sizeof(struct isp_cmd_hdr),
 				     *response_len);
@@ -349,11 +351,11 @@ int fthd_isp_debug_cmd(struct fthd_private *dev_priv, enum fthd_isp_cmds command
 
 	memset(&cmd, 0, sizeof(cmd));
 
-	if (response_len) {
+	if (response_len)
 		len = max(request_len, *response_len);
-	} else {
+	else
 		len = request_len;
-	}
+
 	len += sizeof(struct isp_cmd_hdr);
 
 	pr_debug("sending debug cmd %d to firmware\n", command);
@@ -380,7 +382,7 @@ int fthd_isp_debug_cmd(struct fthd_private *dev_priv, enum fthd_isp_cmds command
 		goto out;
 	}
 
-        ret = fthd_channel_wait_ready(dev_priv, dev_priv->channel_debug, entry, 20000);
+	ret = fthd_channel_wait_ready(dev_priv, dev_priv->channel_debug, entry, 20000);
 	if (ret) {
 		if (response_len)
 			*response_len = 0;
@@ -392,8 +394,9 @@ int fthd_isp_debug_cmd(struct fthd_private *dev_priv, enum fthd_isp_cmds command
 	request_size = FTHD_S2_MEM_READ(entry + FTHD_RINGBUF_REQUEST_SIZE);
 	response_size = FTHD_S2_MEM_READ(entry + FTHD_RINGBUF_RESPONSE_SIZE);
 
-	/* XXX: response size in the ringbuf is zero after command completion, how is buffer size
-	        verification done? */
+	/* XXX: response size in the ringbuf is zero after command completion,
+	 * how is buffer size verification done?
+	 */
 	if (response_len && *response_len)
 		FTHD_S2_MEMCPY_FROMIO(buf, (address & ~3) + sizeof(struct isp_cmd_hdr),
 				     *response_len);
@@ -418,6 +421,7 @@ int fthd_isp_cmd_start(struct fthd_private *dev_priv)
 int fthd_isp_cmd_channel_start(struct fthd_private *dev_priv)
 {
 	struct isp_cmd_channel_start cmd;
+
 	pr_debug("sending channel start cmd to firmware\n");
 
 	cmd.channel = 0;
@@ -530,7 +534,7 @@ int fthd_isp_cmd_set_loadfile(struct fthd_private *dev_priv)
 
 	memset(&cmd, 0, sizeof(cmd));
 
-	switch(dev_priv->sensor_id1) {
+	switch (dev_priv->sensor_id1) {
 	case 0x164:
 		filename = "facetimehd/8221_01XX.dat";
 		break;
@@ -547,7 +551,7 @@ int fthd_isp_cmd_set_loadfile(struct fthd_private *dev_priv)
 			break;
 		}
 
-		switch(dev_priv->sensor_id0) {
+		switch (dev_priv->sensor_id0) {
 		case 4:
 			filename = "facetimehd/1874_01XX.dat";
 			break;
@@ -557,7 +561,7 @@ int fthd_isp_cmd_set_loadfile(struct fthd_private *dev_priv)
 		}
 		break;
 	case 0x9774:
-		switch(dev_priv->sensor_id0) {
+		switch (dev_priv->sensor_id0) {
 		case 4:
 			filename = "facetimehd/1674_01XX.dat";
 			break;
@@ -582,8 +586,10 @@ int fthd_isp_cmd_set_loadfile(struct fthd_private *dev_priv)
 
 	/* The set file is allowed to be missing but we don't get calibration */
 	ret = request_firmware(&fw, filename, &dev_priv->pdev->dev);
-	if (ret)
+	if (ret) {
+		pr_info("Firmware set file %s not found, no calibration possible\n", filename);
 		return 0;
+	}
 
 	/* Firmware memory is preallocated at init time */
 	BUG_ON(dev_priv->set_file);
@@ -650,10 +656,11 @@ int fthd_isp_cmd_channel_camera_config(struct fthd_private *dev_priv)
 	struct isp_cmd_channel_camera_config cmd;
 	int ret, len, i;
 	char prefix[16];
+
 	pr_debug("sending ch camera config\n");
 
 	memset(&cmd, 0, sizeof(cmd));
-	for(i = 0; i < dev_priv->sensor_count; i++) {
+	for (i = 0; i < dev_priv->sensor_count; i++) {
 		cmd.channel = i;
 
 		len = sizeof(cmd);
@@ -667,7 +674,8 @@ int fthd_isp_cmd_channel_camera_config(struct fthd_private *dev_priv)
 		 * native width and height (e.g. 1280x720 on MacBookPro,
 		 * 848x588 on the 12-inch MacBook). Record sensor 0's size so
 		 * the V4L2 layer can advertise the real resolution instead of
-		 * a hardcoded one. */
+		 * a hardcoded one.
+		 */
 		if (i == 0) {
 			unsigned int w = cmd.data[0] | (cmd.data[1] << 8);
 			unsigned int h = cmd.data[2] | (cmd.data[3] << 8);
@@ -1148,7 +1156,8 @@ int fthd_start_channel(struct fthd_private *dev_priv, int channel)
 	/* Crop the full sensor area. The 12-inch MacBook (MacBook8,1, sensor
 	 * 1675) reports an 848x588 sensor via CISP_CMD_CH_CAMERA_CONFIG_GET;
 	 * the old hardcoded 1280x720 crop exceeds that array and makes the
-	 * sensor interface throw SIF errors. Use the negotiated format size. */
+	 * sensor interface throw SIF errors. Use the negotiated format size.
+	 */
 	x1 = 0;
 	x2 = dev_priv->fmt.fmt.width;
 
@@ -1157,7 +1166,7 @@ int fthd_start_channel(struct fthd_private *dev_priv, int channel)
 	if (ret)
 		return ret;
 
-	switch(dev_priv->fmt.fmt.pixelformat) {
+	switch (dev_priv->fmt.fmt.pixelformat) {
 	case V4L2_PIX_FMT_YUYV:
 		pixelformat = 1;
 		break;
