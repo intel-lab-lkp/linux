@@ -681,7 +681,6 @@
 	};
 
 	tps65219: pmic@30 {
-		bootph-all;
 		compatible = "ti,tps65219";
 		reg = <0x30>;
 		buck1-supply = <&vsys_5v0>;
@@ -709,6 +708,7 @@
 				regulator-max-microvolt = <850000>;
 				regulator-boot-on;
 				regulator-always-on;
+				bootph-all;
 			};
 
 			buck2_reg: buck2 {
@@ -717,6 +717,7 @@
 				regulator-max-microvolt = <1800000>;
 				regulator-boot-on;
 				regulator-always-on;
+				bootph-all;
 			};
 
 			buck3_reg: buck3 {
@@ -725,6 +726,7 @@
 				regulator-max-microvolt = <1200000>;
 				regulator-boot-on;
 				regulator-always-on;
+				bootph-all;
 			};
 
 			ldo1_reg: ldo1 {
@@ -739,6 +741,7 @@
 				regulator-allow-bypass;
 				regulator-boot-on;
 				regulator-always-on;
+				bootph-all;
 			};
 
 			ldo2_reg: ldo2 {
@@ -747,6 +750,7 @@
 				regulator-max-microvolt = <850000>;
 				regulator-boot-on;
 				regulator-always-on;
+				bootph-all;
 			};
 
 			ldo3_reg: ldo3 {
@@ -755,6 +759,7 @@
 				regulator-max-microvolt = <1800000>;
 				regulator-boot-on;
 				regulator-always-on;
+				bootph-all;
 			};
 
 			ldo4_reg: ldo4 {
@@ -763,6 +768,7 @@
 				regulator-max-microvolt = <2500000>;
 				regulator-boot-on;
 				regulator-always-on;
+				bootph-all;
 			};
 		};
 	};
