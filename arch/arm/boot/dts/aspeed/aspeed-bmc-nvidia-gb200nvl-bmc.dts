@@ -145,8 +145,10 @@
 	flash@0 {
 		status = "okay";
 		compatible = "jedec,spi-nor";
+		reg = <0>;
 		label = "bmc";
 		spi-max-frequency = <50000000>;
+		spi-rx-bus-width = <2>;
 		partitions {
 			compatible = "fixed-partitions";
 			#address-cells = <1>;
@@ -180,9 +182,12 @@
 
 	// Data SPI is 64MB in size
 	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
 		status = "okay";
 		label = "config";
 		spi-max-frequency = <50000000>;
+		spi-rx-bus-width = <2>;
 		partitions {
 			compatible = "fixed-partitions";
 			#address-cells = <1>;

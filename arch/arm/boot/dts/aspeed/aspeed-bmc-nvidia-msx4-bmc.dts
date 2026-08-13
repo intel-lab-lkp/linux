@@ -56,17 +56,22 @@
 
 	flash@0 {
 		compatible = "jedec,spi-nor";
+		reg = <0>;
 		label = "bmc";
 		status = "okay";
+		spi-max-frequency = <50000000>;
+		spi-rx-bus-width = <2>;
 		#include "openbmc-flash-layout-128.dtsi"
 	};
 
 	flash@1 {
 		compatible = "jedec,spi-nor";
+		reg = <1>;
 		label = "alt-bmc";
 		spi-tx-bus-width = <1>;
 		spi-rx-bus-width = <1>;
 		status = "okay";
+		spi-max-frequency = <50000000>;
 		#include "openbmc-flash-layout-128-alt.dtsi"
 	};
 };
