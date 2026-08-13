@@ -114,8 +114,15 @@ xfs_buf_free(
 		vfree(bp->b_addr);
 	else if (bp->b_flags & _XBF_KMEM)
 		kfree(bp->b_addr);
-	else if (bp->b_addr)
-		folio_put(virt_to_folio(bp->b_addr));
+	else if (bp->b_addr) {
+		struct folio *folio = virt_to_folio(bp->b_addr);
+
+		if (bp->b_flags & _XBF_PAGES)
+			mod_node_page_state(folio_pgdat(folio),
+					NR_KERNEL_MISC_RECLAIMABLE,
+					-folio_nr_pages(folio));
+		folio_put(folio);
+	}
 
 	call_rcu(&bp->b_rcu, xfs_buf_free_callback);
 }
@@ -132,6 +139,9 @@ xfs_buf_alloc_folio(
 	if (!folio)
 		return -ENOMEM;
 	bp->b_addr = folio_address(folio);
+	bp->b_flags |= _XBF_PAGES;
+	mod_node_page_state(folio_pgdat(folio), NR_KERNEL_MISC_RECLAIMABLE,
+			folio_nr_pages(folio));
 	trace_xfs_buf_backing_folio(bp, _RET_IP_);
 	return 0;
 }
@@ -427,7 +437,7 @@ xfs_buf_find_lock(
 			return -ENOENT;
 		}
 		ASSERT((bp->b_flags & _XBF_DELWRI_Q) == 0);
-		bp->b_flags &= _XBF_KMEM;
+		bp->b_flags &= (_XBF_PAGES | _XBF_KMEM);
 		bp->b_ops = NULL;
 	}
 	return 0;
