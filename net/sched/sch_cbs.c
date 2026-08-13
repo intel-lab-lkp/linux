@@ -335,7 +335,7 @@ static void cbs_set_port_rate(struct net_device *dev, struct cbs_sched_data *q)
 		speed = ecmd.base.speed;
 
 skip:
-	port_rate = speed * 1000 * BYTES_PER_KBIT;
+	port_rate = (s64)speed * 1000 * BYTES_PER_KBIT;
 
 	atomic64_set(&q->port_rate, port_rate);
 	netdev_dbg(dev, "cbs: set %s's port_rate to: %lld, linkspeed: %d\n",
@@ -392,6 +392,10 @@ static int cbs_change(struct Qdisc *sch, struct nlattr *opt,
 	}
 
 	qopt = nla_data(tb[TCA_CBS_PARMS]);
+	if (qopt->idleslope < 0) {
+		NL_SET_ERR_MSG(extack, "Idleslope must not be negative");
+		return -EINVAL;
+	}
 
 	if (!qopt->offload) {
 		cbs_set_port_rate(dev, q);
@@ -405,8 +409,8 @@ static int cbs_change(struct Qdisc *sch, struct nlattr *opt,
 	/* Everything went OK, save the parameters used. */
 	WRITE_ONCE(q->hicredit, qopt->hicredit);
 	WRITE_ONCE(q->locredit, qopt->locredit);
-	WRITE_ONCE(q->idleslope, qopt->idleslope * BYTES_PER_KBIT);
-	WRITE_ONCE(q->sendslope, qopt->sendslope * BYTES_PER_KBIT);
+	WRITE_ONCE(q->idleslope, (s64)qopt->idleslope * BYTES_PER_KBIT);
+	WRITE_ONCE(q->sendslope, (s64)qopt->sendslope * BYTES_PER_KBIT);
 	WRITE_ONCE(q->offload, qopt->offload);
 
 	return 0;
