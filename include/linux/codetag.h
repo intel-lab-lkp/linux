@@ -52,6 +52,10 @@ struct codetag_type_desc {
 #endif
 };
 
+/* module_load() return values */
+#define CODETAG_MODULE_LOAD	0	/* module loads with its tags */
+#define CODETAG_MODULE_EXCLUDED	1	/* module loads without its tags */
+
 struct codetag_iterator {
 	struct codetag_type *cttype;
 	struct codetag_module *cmod;

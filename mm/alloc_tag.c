@@ -975,9 +975,13 @@ static int load_module(struct module *mod, struct codetag *start, struct codetag
 	struct alloc_tag *stop_tag;
 	struct alloc_tag *tag;
 
+	/* Profiling disabled: load the module but exclude its tags. */
+	if (!mem_profiling_support)
+		return CODETAG_MODULE_EXCLUDED;
+
 	/* percpu counters for core allocations are already statically allocated */
 	if (!mod)
-		return 0;
+		return CODETAG_MODULE_LOAD;
 
 	start_tag = ct_to_alloc_tag(start);
 	stop_tag = ct_to_alloc_tag(stop);
@@ -1000,7 +1004,7 @@ static int load_module(struct module *mod, struct codetag *start, struct codetag
 		 */
 		kmemleak_ignore_percpu(tag->counters);
 	}
-	return 0;
+	return CODETAG_MODULE_LOAD;
 }
 
 static void replace_module(struct module *mod, struct module *new_mod)

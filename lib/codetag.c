@@ -238,9 +238,10 @@ static int codetag_module_init(struct codetag_type *cttype, struct module *mod)
 	}
 	up_write(&cttype->mod_lock);
 
-	if (err < 0) {
+	if (err) {
+		/* Error or excluded: cmod is dropped, free it. */
 		kfree(cmod);
-		return err;
+		return err < 0 ? err : 0;
 	}
 
 	return 0;
@@ -388,7 +389,8 @@ void codetag_unload_module(struct module *mod)
 			++cttype->content_id;
 		}
 		up_write(&cttype->mod_lock);
-		if (found && cttype->desc.free_section_mem)
+		/* an excluded module may still hold section memory */
+		if (cttype->desc.free_section_mem)
 			cttype->desc.free_section_mem(mod, true);
 	}
 	mutex_unlock(&codetag_lock);
