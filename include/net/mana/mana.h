@@ -589,7 +589,7 @@ struct mana_port_context {
 
 	/* Indirection Table for RX & TX. The values are queue indexes */
 	u32 *indir_table;
-	u32 indir_table_sz;
+	u32			indir_table_sz;
 
 	/* Indirection table containing RxObject Handles */
 	mana_handle_t *rxobj_table;
@@ -715,11 +715,12 @@ struct mana_qset {
 	unsigned int		tx_queue_size;
 	u32			priv_flags;
 
-	/* MTU the RX buffers of this set were sized for. It feeds
-	 * mana_get_rxbuf_cfg(), so it is part of the queue-set
+	/* MTU and XDP program the RX buffers of this set were sized for.
+	 * Both feed mana_get_rxbuf_cfg(), so they are part of the queue-set
 	 * configuration and must be swapped atomically with the queues.
 	 */
 	int			mtu;
+	struct bpf_prog		*bpf_prog;
 
 	/* Per-queue-set debugfs root ("EQs"). Owned by the qset: it is
 	 * recreated by mana_create_eq() for each new set and torn down
@@ -738,15 +739,16 @@ int mana_alloc_queues(struct net_device *ndev);
 int mana_attach(struct net_device *ndev);
 int mana_detach(struct net_device *ndev, bool from_close);
 
-/* Pre-allocate + swap reconfiguration. Allocation and teardown run against a
- * scratch context, so the live port context is mutated only inside
- * mana_publish_qset() with TX disabled. Both sets share a port-owned EQ pool.
+/* Pre-allocate + swap reconfiguration path (prototype). Allocation and
+ * teardown run against a scratch context so the live port context is only
+ * mutated inside mana_publish_qset(), with TX disabled.
  */
 struct mana_port_context *mana_qset_scratch_alloc(struct mana_port_context *apc);
 void mana_qset_scratch_free(struct mana_port_context *scratch);
 int mana_alloc_qset(struct mana_port_context *scratch, unsigned int num_queues,
 		    unsigned int rx_queue_size, unsigned int tx_queue_size,
-		    u32 priv_flags, int mtu, struct mana_qset *out);
+		    u32 priv_flags, int mtu, struct bpf_prog *bpf_prog,
+		    struct mana_qset *out);
 int mana_publish_qset(struct mana_port_context *apc, struct mana_qset *newq,
 		      struct mana_qset *out_old);
 void mana_publish_close_if_needed(struct mana_port_context *apc);
