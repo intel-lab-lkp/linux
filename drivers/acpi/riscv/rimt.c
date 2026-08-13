@@ -12,8 +12,10 @@
 #include <linux/device/driver.h>
 #include <linux/iommu.h>
 #include <linux/list.h>
+#include <linux/overflow.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/string.h>
 #include "init.h"
 
 struct rimt_fwnode {
@@ -70,6 +72,99 @@ static bool rimt_node_valid(struct acpi_rimt_node *node,
 	return true;
 }
 
+static bool rimt_node_has_data(struct acpi_rimt_node *node, size_t data_size)
+{
+	if (node->length < sizeof(*node) ||
+	    data_size > node->length - sizeof(*node)) {
+		pr_err(FW_BUG "Truncated RIMT node type %u\n", node->type);
+		return false;
+	}
+
+	return true;
+}
+
+static bool rimt_node_array_valid(struct acpi_rimt_node *node, u32 offset,
+				  u32 count, size_t elem_size,
+				  size_t min_offset, const char *name)
+{
+	size_t bytes;
+
+	if (!count)
+		return true;
+
+	if (offset < min_offset || offset > node->length ||
+	    check_mul_overflow(count, elem_size, &bytes) ||
+	    bytes > node->length - offset) {
+		pr_err(FW_BUG "Invalid %s in RIMT node type %u\n", name,
+		       node->type);
+		return false;
+	}
+
+	return true;
+}
+
+static bool rimt_node_data_valid(struct acpi_rimt_node *node)
+{
+	size_t data_offset = sizeof(*node);
+
+	switch (node->type) {
+	case ACPI_RIMT_NODE_TYPE_IOMMU: {
+		struct acpi_rimt_iommu *iommu;
+
+		if (!rimt_node_has_data(node, sizeof(*iommu)))
+			return false;
+
+		iommu = (struct acpi_rimt_iommu *)node->node_data;
+		return rimt_node_array_valid(node, iommu->interrupt_wire_offset,
+					     iommu->num_interrupt_wires,
+					     sizeof(struct acpi_rimt_iommu_wire_gsi),
+					     data_offset + sizeof(*iommu),
+					     "interrupt wire array");
+	}
+	case ACPI_RIMT_NODE_TYPE_PCIE_ROOT_COMPLEX: {
+		struct acpi_rimt_pcie_rc *pci_rc;
+
+		if (!rimt_node_has_data(node, sizeof(*pci_rc)))
+			return false;
+
+		pci_rc = (struct acpi_rimt_pcie_rc *)node->node_data;
+		return rimt_node_array_valid(node, pci_rc->id_mapping_offset,
+					     pci_rc->num_id_mappings,
+					     sizeof(struct acpi_rimt_id_mapping),
+					     data_offset + sizeof(*pci_rc),
+					     "ID mapping array");
+	}
+	case ACPI_RIMT_NODE_TYPE_PLAT_DEVICE: {
+		struct acpi_rimt_platform_device *plat;
+		size_t name_end;
+
+		if (!rimt_node_has_data(node, sizeof(*plat)))
+			return false;
+
+		plat = (struct acpi_rimt_platform_device *)node->node_data;
+		if (!rimt_node_array_valid(node, plat->id_mapping_offset,
+					   plat->num_id_mappings,
+					   sizeof(struct acpi_rimt_id_mapping),
+					   data_offset + sizeof(*plat),
+					   "ID mapping array"))
+			return false;
+
+		name_end = plat->num_id_mappings ? plat->id_mapping_offset :
+						     node->length;
+		if (name_end <= data_offset + sizeof(*plat) ||
+		    !memchr(plat->device_name, '\0',
+			    name_end - data_offset - sizeof(*plat))) {
+			pr_err(FW_BUG "Invalid device name in RIMT node\n");
+			return false;
+		}
+
+		return true;
+	}
+	default:
+		return false;
+	}
+}
+
 /**
  * rimt_set_fwnode() - Create rimt_fwnode and use it to register
  *		       iommu data in the rimt_fwnode_list
@@ -106,6 +201,9 @@ static acpi_status rimt_match_node_callback(struct acpi_rimt_node *node,
 {
 	acpi_status status = AE_NOT_FOUND;
 	struct device *dev = context;
+
+	if (!rimt_node_data_valid(node))
+		return status;
 
 	if (node->type == ACPI_RIMT_NODE_TYPE_IOMMU) {
 		struct acpi_rimt_iommu *iommu_node = (struct acpi_rimt_iommu *)&node->node_data;
@@ -285,6 +383,9 @@ static bool rimt_pcie_rc_supports_ats(struct acpi_rimt_node *node)
 {
 	struct acpi_rimt_pcie_rc *pci_rc;
 
+	if (!rimt_node_data_valid(node))
+		return false;
+
 	pci_rc = (struct acpi_rimt_pcie_rc *)node->node_data;
 	return pci_rc->flags & ACPI_RIMT_PCIE_ATS_SUPPORTED;
 }
@@ -340,6 +441,9 @@ static struct acpi_rimt_node *rimt_node_get_id(struct acpi_rimt_node *node,
 	struct acpi_rimt_id_mapping *map;
 	struct acpi_rimt_node *parent;
 
+	if (index < 0 || !rimt_node_data_valid(node))
+		return NULL;
+
 	if (node->type == ACPI_RIMT_NODE_TYPE_PCIE_ROOT_COMPLEX) {
 		pci_node = (struct acpi_rimt_pcie_rc *)&node->node_data;
 		id_mapping_offset = pci_node->id_mapping_offset;
@@ -390,6 +494,9 @@ static struct acpi_rimt_node *rimt_node_map_id(struct acpi_rimt_node *node,
 		struct acpi_rimt_id_mapping *map;
 		int i, rc = 0;
 		u32 map_id = id;
+
+		if (!rimt_node_data_valid(node))
+			goto fail_map;
 
 		if (RIMT_TYPE_MASK(node->type) & type_mask) {
 			if (id_out)
