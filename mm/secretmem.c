@@ -108,7 +108,18 @@ out:
 	return ret;
 }
 
+static void secretmem_open(struct vm_area_struct *vma)
+{
+	/*
+	 * dup_mmap() clears VM_LOCKED before calling ->open().  Prevent an
+	 * inherited, uncharged mapping from being expanded by mremap().
+	 */
+	if (!vma_test(vma, VMA_LOCKED_BIT))
+		vma_set_flags(vma, VMA_DONTEXPAND_BIT);
+}
+
 static const struct vm_operations_struct secretmem_vm_ops = {
+	.open = secretmem_open,
 	.fault = secretmem_fault,
 };
 

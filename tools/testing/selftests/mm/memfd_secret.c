@@ -84,6 +84,61 @@ static void test_mlock_limit(int fd)
 	pass("mlock limit is respected\n");
 }
 
+static void test_mremap_after_fork(void)
+{
+	void *mem, *remapped;
+	pid_t pid, waited;
+	int fd, status;
+
+	fd = memfd_secret(0);
+	if (fd < 0) {
+		fail("memfd_secret failed: %s\n", strerror(errno));
+		return;
+	}
+
+	if (ftruncate(fd, page_size * 2)) {
+		fail("ftruncate failed: %s\n", strerror(errno));
+		goto close_fd;
+	}
+
+	mem = mmap(NULL, page_size, prot, mode, fd, 0);
+	if (mem == MAP_FAILED) {
+		fail("unable to mmap secret memory: %s\n", strerror(errno));
+		goto close_fd;
+	}
+
+	pid = fork();
+	if (pid < 0) {
+		fail("fork failed: %s\n", strerror(errno));
+		goto unmap;
+	}
+
+	if (pid == 0) {
+		remapped = mremap(mem, page_size, page_size * 2,
+				  MREMAP_MAYMOVE);
+		if (remapped != MAP_FAILED) {
+			munmap(remapped, page_size * 2);
+			_exit(KSFT_FAIL);
+		}
+		_exit(errno == EFAULT ? KSFT_PASS : KSFT_FAIL);
+	}
+
+	do {
+		waited = waitpid(pid, &status, 0);
+	} while (waited < 0 && errno == EINTR);
+
+	if (waited == pid && WIFEXITED(status) &&
+	    WEXITSTATUS(status) == KSFT_PASS)
+		pass("mremap expansion after fork is blocked\n");
+	else
+		fail("mremap expansion after fork was not blocked\n");
+
+unmap:
+	munmap(mem, page_size);
+close_fd:
+	close(fd);
+}
+
 static void test_vmsplice(int fd, const char *desc)
 {
 	ssize_t transferred;
@@ -297,7 +352,7 @@ static void prepare(void)
 				   strerror(errno));
 }
 
-#define NUM_TESTS 6
+#define NUM_TESTS 7
 
 int main(int argc, char *argv[])
 {
@@ -320,6 +375,7 @@ int main(int argc, char *argv[])
 		ksft_exit_fail_msg("ftruncate failed: %s\n", strerror(errno));
 
 	test_mlock_limit(fd);
+	test_mremap_after_fork();
 	test_file_apis(fd);
 	/*
 	 * We have to run the first vmsplice test before any secretmem page was
