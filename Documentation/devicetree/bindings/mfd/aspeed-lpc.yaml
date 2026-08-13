@@ -35,6 +35,13 @@ description:
   configuration, therefore the host portion of the controller is exposed as a
   syscon as a means to arbitrate access.
 
+  On SoCs that expose more than one LPC controller instance, it is possible to
+  assign a fixed index to a given instance (and thus to downstream devices
+  such as KCS channels that must be uniquely identified system-wide) by
+  defining an "lpcN" alias for it in the /aliases device tree node. If no such
+  alias is present, the SoC is treated as having a single LPC controller
+  instance.
+
 properties:
   compatible:
     items:
