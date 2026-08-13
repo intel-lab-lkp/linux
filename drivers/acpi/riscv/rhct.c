@@ -10,6 +10,44 @@
 #include <linux/acpi.h>
 #include <linux/bits.h>
 
+static bool rhct_table_valid(struct acpi_table_rhct *rhct)
+{
+	size_t node_bytes;
+
+	if (!rhct || rhct->header.length < sizeof(*rhct))
+		return false;
+
+	if (!rhct->node_count)
+		return true;
+
+	if (rhct->node_offset < sizeof(*rhct) ||
+	    rhct->node_offset > rhct->header.length -
+				 sizeof(struct acpi_rhct_node_header))
+		return false;
+
+	node_bytes = rhct->header.length - rhct->node_offset;
+	return rhct->node_count <=
+		node_bytes / sizeof(struct acpi_rhct_node_header);
+}
+
+static bool rhct_node_valid(struct acpi_rhct_node_header *node,
+			    struct acpi_rhct_node_header *end)
+{
+	size_t remaining;
+
+	if ((u8 *)node >= (u8 *)end)
+		return false;
+
+	remaining = (u8 *)end - (u8 *)node;
+	if (remaining < sizeof(*node) || node->length < sizeof(*node) ||
+	    node->length > remaining) {
+		pr_err(FW_BUG "Invalid RHCT node length\n");
+		return false;
+	}
+
+	return true;
+}
+
 static struct acpi_table_rhct *acpi_get_rhct(void)
 {
 	static struct acpi_table_header *rhct;
@@ -45,6 +83,7 @@ int acpi_get_riscv_isa(struct acpi_table_header *table, unsigned int cpu, const 
 	struct acpi_table_rhct *rhct;
 	u32 *hart_info_node_offset;
 	u32 acpi_cpu_id;
+	unsigned int i;
 	int ret;
 
 	BUG_ON(acpi_disabled);
@@ -61,28 +100,39 @@ int acpi_get_riscv_isa(struct acpi_table_header *table, unsigned int cpu, const 
 		rhct = (struct acpi_table_rhct *)table;
 	}
 
-	end = ACPI_ADD_PTR(struct acpi_rhct_node_header, rhct, rhct->header.length);
+	if (!rhct_table_valid(rhct))
+		return -EINVAL;
+	if (!rhct->node_count)
+		return -ENOENT;
 
-	for (node = ACPI_ADD_PTR(struct acpi_rhct_node_header, rhct, rhct->node_offset);
-	     node < end;
-	     node = ACPI_ADD_PTR(struct acpi_rhct_node_header, node, node->length)) {
+	node = ACPI_ADD_PTR(struct acpi_rhct_node_header, rhct,
+			    rhct->node_offset);
+	end = ACPI_ADD_PTR(struct acpi_rhct_node_header, rhct,
+			   rhct->header.length);
+
+	for (i = 0; i < rhct->node_count; i++) {
+		if (!rhct_node_valid(node, end))
+			return -EINVAL;
+
 		if (node->type == ACPI_RHCT_NODE_TYPE_HART_INFO) {
 			hart_info = ACPI_ADD_PTR(struct acpi_rhct_hart_info, node, size_hdr);
 			hart_info_node_offset = ACPI_ADD_PTR(u32, hart_info, size_hartinfo);
-			if (acpi_cpu_id != hart_info->uid)
-				continue;
-
-			for (int i = 0; i < hart_info->num_offsets; i++) {
-				ref_node = ACPI_ADD_PTR(struct acpi_rhct_node_header,
-							rhct, hart_info_node_offset[i]);
-				if (ref_node->type == ACPI_RHCT_NODE_TYPE_ISA_STRING) {
-					isa_node = ACPI_ADD_PTR(struct acpi_rhct_isa_string,
-								ref_node, size_hdr);
-					*isa = isa_node->isa;
-					return 0;
+			if (acpi_cpu_id == hart_info->uid) {
+				for (int j = 0; j < hart_info->num_offsets; j++) {
+					ref_node = ACPI_ADD_PTR(struct acpi_rhct_node_header,
+								rhct, hart_info_node_offset[j]);
+					if (ref_node->type == ACPI_RHCT_NODE_TYPE_ISA_STRING) {
+						isa_node = ACPI_ADD_PTR(struct acpi_rhct_isa_string,
+									ref_node, size_hdr);
+						*isa = isa_node->isa;
+						return 0;
+					}
 				}
 			}
 		}
+
+		node = ACPI_ADD_PTR(struct acpi_rhct_node_header, node,
+				    node->length);
 	}
 
 	return -1;
@@ -141,6 +191,7 @@ void acpi_get_cbo_block_size(struct acpi_table_header *table, u32 *cbom_size,
 	struct acpi_rhct_node_header *node, *end;
 	struct acpi_rhct_hart_info *hart_info;
 	struct acpi_table_rhct *rhct;
+	unsigned int i;
 
 	if (acpi_disabled)
 		return;
@@ -162,14 +213,25 @@ void acpi_get_cbo_block_size(struct acpi_table_header *table, u32 *cbom_size,
 	if (cbop_size)
 		*cbop_size = 0;
 
-	end = ACPI_ADD_PTR(struct acpi_rhct_node_header, rhct, rhct->header.length);
-	for (node = ACPI_ADD_PTR(struct acpi_rhct_node_header, rhct, rhct->node_offset);
-	     node < end;
-	     node = ACPI_ADD_PTR(struct acpi_rhct_node_header, node, node->length)) {
+	if (!rhct_table_valid(rhct) || !rhct->node_count)
+		return;
+
+	node = ACPI_ADD_PTR(struct acpi_rhct_node_header, rhct,
+			    rhct->node_offset);
+	end = ACPI_ADD_PTR(struct acpi_rhct_node_header, rhct,
+			   rhct->header.length);
+
+	for (i = 0; i < rhct->node_count; i++) {
+		if (!rhct_node_valid(node, end))
+			return;
+
 		if (node->type == ACPI_RHCT_NODE_TYPE_HART_INFO) {
 			hart_info = ACPI_ADD_PTR(struct acpi_rhct_hart_info, node, size_hdr);
 			acpi_parse_hart_info_cmo_node(rhct, hart_info, cbom_size,
 						      cboz_size, cbop_size);
 		}
+
+		node = ACPI_ADD_PTR(struct acpi_rhct_node_header, node,
+				    node->length);
 	}
 }
