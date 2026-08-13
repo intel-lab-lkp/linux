@@ -40,8 +40,16 @@
 
 /*
  * Device ID RCU cache. A device ID is unique per server and layout type.
+ *
+ * 256 buckets keep chains short for pNFS striping deployments with
+ * hundreds to ~1000 distinct deviceIDs (load factor ~4 at 1000) at a
+ * fixed cost of 2KB.  The hash folds every deviceID byte through
+ * x = x * 37 + byte; 37 is odd, so the low-bit mask distributes
+ * deviceIDs differing in any single byte perfectly at any
+ * power-of-two table size -- bucket count, not the hash, is the
+ * scaling lever.
  */
-#define NFS4_DEVICE_ID_HASH_BITS	5
+#define NFS4_DEVICE_ID_HASH_BITS	8
 #define NFS4_DEVICE_ID_HASH_SIZE	(1 << NFS4_DEVICE_ID_HASH_BITS)
 #define NFS4_DEVICE_ID_HASH_MASK	(NFS4_DEVICE_ID_HASH_SIZE - 1)
 
