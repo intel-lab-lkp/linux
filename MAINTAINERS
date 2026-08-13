@@ -5405,6 +5405,13 @@ F:	drivers/net/phy/bcm*.[ch]
 F:	drivers/net/phy/broadcom.c
 F:	include/linux/brcmphy.h
 
+BROADCOM FACETIMEHD CAMERA DRIVER
+M:	Patrik Jakobsson <patrik.r.jakobsson@gmail.com>
+M:	Jack Flusche <jackflusche@gmail.com>
+L:	linux-media@vger.kernel.org
+S:	Maintained
+F:	drivers/media/pci/facetimehd/
+
 BROADCOM GENET ETHERNET DRIVER
 M:	Doug Berger <opendmb@gmail.com>
 M:	Florian Fainelli <florian.fainelli@broadcom.com>
