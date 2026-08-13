@@ -848,6 +848,14 @@ static void *reserve_module_tags(struct module *mod, unsigned long size,
 		return ERR_PTR(-EINVAL);
 
 	/*
+	 * Profiling may have been disabled by a concurrent module load.
+	 * Return -EAGAIN so the loader retries with profiling off, laying
+	 * the section out as ordinary module memory.
+	 */
+	if (!mem_profiling_support)
+		return ERR_PTR(-EAGAIN);
+
+	/*
 	 * align is always power of 2, so we can use IS_ALIGNED and ALIGN.
 	 * align 0 or 1 means no alignment, to simplify set to 1.
 	 */

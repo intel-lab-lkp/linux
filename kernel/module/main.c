@@ -1728,11 +1728,8 @@ static void __layout_sections(struct module *mod, struct load_info *info, bool i
 			 * preallocated contiguous memory.
 			 */
 			if (codetag_needs_module_section(mod, sname, s->sh_size)) {
-				/*
-				 * s->sh_entsize won't be used but populate the
-				 * type field to avoid confusion.
-				 */
-				s->sh_entsize = ((unsigned long)(type) & SH_ENTSIZE_TYPE_MASK)
+				s->sh_entsize = ((unsigned long)MOD_MEM_CODETAG
+						 & SH_ENTSIZE_TYPE_MASK)
 						<< SH_ENTSIZE_TYPE_SHIFT;
 				continue;
 			}
@@ -2815,11 +2812,10 @@ static int move_module(struct module *mod, struct load_info *info)
 			continue;
 
 		sname = info->secstrings + shdr->sh_name;
-		/*
-		 * Load codetag sections separately as they might still be used
-		 * after module unload.
-		 */
-		if (codetag_needs_module_section(mod, sname, shdr->sh_size)) {
+
+		enum mod_mem_type type = shdr->sh_entsize >> SH_ENTSIZE_TYPE_SHIFT;
+
+		if (type == MOD_MEM_CODETAG) {
 			dest = codetag_alloc_module_section(mod, sname, shdr->sh_size,
 					arch_mod_section_prepend(mod, i), shdr->sh_addralign);
 			if (WARN_ON(!dest)) {
@@ -2832,7 +2828,6 @@ static int move_module(struct module *mod, struct load_info *info)
 			}
 			codetag_section_found = true;
 		} else {
-			enum mod_mem_type type = shdr->sh_entsize >> SH_ENTSIZE_TYPE_SHIFT;
 			unsigned long offset = shdr->sh_entsize & SH_ENTSIZE_OFFSET_MASK;
 
 			dest = mod->mem[type].base + offset;

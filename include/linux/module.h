@@ -328,6 +328,17 @@ enum mod_mem_type {
 	MOD_INVALID = -1,
 };
 
+/*
+ * If CONFIG_CODE_TAGGING is on, modules get a .codetag section.
+ * codetag_needs_module_section() says where it goes: the usual
+ * mod->mem[], or off to the codetag region.
+ *
+ * Mark the codetag-region ones with MOD_MEM_NUM_TYPES.
+ * It's just past the real types, so it doesn't index into mod->mem[]
+ * and for_each_mod_mem_type() skips it.
+ */
+#define MOD_MEM_CODETAG	MOD_MEM_NUM_TYPES
+
 #define mod_mem_type_is_init(type)	\
 	((type) == MOD_INIT_TEXT ||	\
 	 (type) == MOD_INIT_DATA ||	\
