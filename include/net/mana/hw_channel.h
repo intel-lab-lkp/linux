@@ -200,6 +200,11 @@ struct hw_channel_context {
 	u32 pf_dest_vrcq_id;
 	u32 hwc_timeout;
 
+	/* RX WQEs dropped after an untrusted SGE; at RQ depth the channel
+	 * can no longer receive.
+	 */
+	u32 rx_leaked_wqe;
+
 	struct hwc_caller_ctx *caller_ctx;
 };
 
