@@ -111,9 +111,8 @@ MODULE_PARM_DESC(runpm, "disable (0), force enable (1), optimus only default (-1
 static int nouveau_runtime_pm = -1;
 module_param_named(runpm, nouveau_runtime_pm, int, 0400);
 
-static struct drm_driver driver_stub;
-static struct drm_driver driver_pci;
-static struct drm_driver driver_platform;
+static const struct drm_driver driver_legacy_kms;
+static const struct drm_driver driver_atomic_kms;
 
 #ifdef CONFIG_DEBUG_FS
 struct dentry *nouveau_debugfs_root;
@@ -727,8 +726,7 @@ nouveau_drm_device_del(struct nouveau_drm *drm)
 }
 
 static struct nouveau_drm *
-nouveau_drm_device_new(const struct drm_driver *drm_driver, struct device *parent,
-		       struct nvkm_device *device)
+nouveau_drm_device_new(struct device *parent, struct nvkm_device *device)
 {
 	static const struct nvif_mclass
 	mmus[] = {
@@ -737,16 +735,21 @@ nouveau_drm_device_new(const struct drm_driver *drm_driver, struct device *paren
 		{ NVIF_CLASS_MMU_NV04 , -1 },
 		{}
 	};
+	const struct drm_driver *driver;
 	struct nouveau_drm *drm;
 	int ret;
+
+	if (nouveau_atomic)
+		driver = &driver_atomic_kms;
+	else
+		driver = &driver_legacy_kms;
 
 	drm = kzalloc_obj(*drm);
 	if (!drm)
 		return ERR_PTR(-ENOMEM);
 
 	drm->nvkm = device;
-
-	drm->dev = drm_dev_alloc(drm_driver, parent);
+	drm->dev = drm_dev_alloc(driver, parent);
 	if (IS_ERR(drm->dev)) {
 		ret = PTR_ERR(drm->dev);
 		kfree(drm);
@@ -874,16 +877,13 @@ static int nouveau_drm_probe(struct pci_dev *pdev,
 		return ret;
 
 	/* Remove conflicting drivers (vesafb, efifb etc). */
-	ret = aperture_remove_conflicting_pci_devices(pdev, driver_pci.name);
+	ret = aperture_remove_conflicting_pci_devices(pdev, DRIVER_NAME);
 	if (ret)
 		goto fail_nvkm;
 
 	pci_set_master(pdev);
 
-	if (nouveau_atomic)
-		driver_pci.driver_features |= DRIVER_ATOMIC;
-
-	drm = nouveau_drm_device_new(&driver_pci, &pdev->dev, device);
+	drm = nouveau_drm_device_new(&pdev->dev, device);
 	if (IS_ERR(drm)) {
 		ret = PTR_ERR(drm);
 		goto fail_nvkm;
@@ -1360,35 +1360,54 @@ nouveau_driver_fops = {
 	.fop_flags = FOP_UNSIGNED_OFFSET,
 };
 
-static struct drm_driver
-driver_stub = {
-	.driver_features = DRIVER_GEM |
-			   DRIVER_SYNCOBJ | DRIVER_SYNCOBJ_TIMELINE |
-			   DRIVER_MODESET |
-			   DRIVER_RENDER,
-	.open = nouveau_drm_open,
-	.postclose = nouveau_drm_postclose,
-
-#if defined(CONFIG_DEBUG_FS)
-	.debugfs_init = nouveau_drm_debugfs_init,
+#ifdef CONFIG_DEBUG_FS
+#define NOUVEAU_DEBUGFS_OPS .debugfs_init = nouveau_drm_debugfs_init,
+#else
+#define NOUVEAU_DEBUGFS_OPS
 #endif
 
-	.ioctls = nouveau_ioctls,
-	.num_ioctls = ARRAY_SIZE(nouveau_ioctls),
-	.fops = &nouveau_driver_fops,
+#define NOUVEAU_DRIVER_OPS                                              \
+	.open = nouveau_drm_open,                                       \
+	.postclose = nouveau_drm_postclose,                             \
+                                                                        \
+	NOUVEAU_DEBUGFS_OPS						\
+                                                                        \
+	.ioctls = nouveau_ioctls,                                       \
+	.num_ioctls = ARRAY_SIZE(nouveau_ioctls),                       \
+	.fops = &nouveau_driver_fops,                                   \
+                                                                        \
+	.gem_prime_import_sg_table = nouveau_gem_prime_import_sg_table, \
+                                                                        \
+	.dumb_create = nouveau_display_dumb_create,                     \
+	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,                 \
+                                                                        \
+	DRM_FBDEV_TTM_DRIVER_OPS,                                       \
+                                                                        \
+	.name = DRIVER_NAME,                                            \
+	.desc = DRIVER_DESC,                                            \
+	.major = DRIVER_MAJOR,                                          \
+	.minor = DRIVER_MINOR,                                          \
+	.patchlevel = DRIVER_PATCHLEVEL
 
-	.gem_prime_import_sg_table = nouveau_gem_prime_import_sg_table,
+static const struct drm_driver
+driver_legacy_kms = {
+	.driver_features = DRIVER_GEM
+			 | DRIVER_SYNCOBJ
+			 | DRIVER_SYNCOBJ_TIMELINE
+			 | DRIVER_MODESET
+			 | DRIVER_RENDER,
+	NOUVEAU_DRIVER_OPS,
+};
 
-	.dumb_create = nouveau_display_dumb_create,
-	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,
-
-	DRM_FBDEV_TTM_DRIVER_OPS,
-
-	.name = DRIVER_NAME,
-	.desc = DRIVER_DESC,
-	.major = DRIVER_MAJOR,
-	.minor = DRIVER_MINOR,
-	.patchlevel = DRIVER_PATCHLEVEL,
+static const struct drm_driver
+driver_atomic_kms = {
+	.driver_features = DRIVER_GEM
+			 | DRIVER_SYNCOBJ
+			 | DRIVER_SYNCOBJ_TIMELINE
+			 | DRIVER_MODESET
+			 | DRIVER_RENDER
+			 | DRIVER_ATOMIC,
+	NOUVEAU_DRIVER_OPS,
 };
 
 static struct pci_device_id
@@ -1457,7 +1476,7 @@ nouveau_platform_device_create(const struct nvkm_device_tegra_func *func,
 	if (err)
 		goto err_free;
 
-	drm = nouveau_drm_device_new(&driver_platform, &pdev->dev, *pdevice);
+	drm = nouveau_drm_device_new(&pdev->dev, *pdevice);
 	if (IS_ERR(drm)) {
 		err = PTR_ERR(drm);
 		goto err_free;
@@ -1481,9 +1500,6 @@ static int __init
 nouveau_drm_init(void)
 {
 	int ret;
-
-	driver_pci = driver_stub;
-	driver_platform = driver_stub;
 
 	nouveau_display_options();
 
