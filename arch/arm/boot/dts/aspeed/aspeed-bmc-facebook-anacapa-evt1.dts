@@ -1062,7 +1062,6 @@
 
 // BIOS Flash
 &spi2 {
-	reg = <0x1e631000 0xc4>, <0x50000000 0x8000000>;
 	pinctrl-0 = <&pinctrl_spi2_default>;
 
 	pinctrl-names = "default";
