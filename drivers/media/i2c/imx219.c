@@ -23,11 +23,13 @@
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 
+#include <media/mipi-csi2.h>
 #include <media/v4l2-cci.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-mediabus.h>
+#include <media/v4l2-subdev.h>
 
 /* Chip ID */
 #define IMX219_REG_CHIP_ID		CCI_REG16(0x0000)
@@ -429,6 +431,24 @@ static inline u32 imx219_get_rate_factor(struct v4l2_subdev_state *state)
 	return (bin_h & bin_v) == IMX219_BINNING_X2_ANALOG ? 2 : 1;
 }
 
+static u8 imx219_get_data_type_by_code(__u32 code)
+{
+	switch (code) {
+	case MEDIA_BUS_FMT_SRGGB8_1X8:
+	case MEDIA_BUS_FMT_SGRBG8_1X8:
+	case MEDIA_BUS_FMT_SGBRG8_1X8:
+	case MEDIA_BUS_FMT_SBGGR8_1X8:
+		return MIPI_CSI2_DT_RAW8;
+
+	case MEDIA_BUS_FMT_SRGGB10_1X10:
+	case MEDIA_BUS_FMT_SGRBG10_1X10:
+	case MEDIA_BUS_FMT_SGBRG10_1X10:
+	case MEDIA_BUS_FMT_SBGGR10_1X10:
+	default:
+		return MIPI_CSI2_DT_RAW10;
+	}
+}
+
 /* -----------------------------------------------------------------------------
  * Controls
  */
@@ -537,6 +557,37 @@ static const struct v4l2_ctrl_ops imx219_ctrl_ops = {
 static unsigned long imx219_get_pixel_rate(struct imx219 *imx219)
 {
 	return (imx219->lanes == 2) ? IMX219_PIXEL_RATE : IMX219_PIXEL_RATE_4LANE;
+}
+
+static int imx219_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+				 struct v4l2_mbus_frame_desc *fd)
+{
+	struct v4l2_mbus_framefmt *format;
+	struct v4l2_subdev_state *state;
+	u32 bpp;
+
+	if (pad != 0)
+		return -EINVAL;
+
+	state = v4l2_subdev_lock_and_get_active_state(sd);
+	if (!state)
+		return -EINVAL;
+
+	format = v4l2_subdev_state_get_format(state, pad);
+	bpp = imx219_get_format_bpp(format);
+
+	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2;
+	fd->num_entries = 1;
+	fd->entry[0].pixelcode = format->code;
+	fd->entry[0].stream = 0;
+	fd->entry[0].flags = V4L2_MBUS_FRAME_DESC_FL_LEN_MAX;
+	fd->entry[0].length = (format->width * format->height * bpp) / 8;
+	fd->entry[0].bus.csi2.vc = 0;
+	fd->entry[0].bus.csi2.dt = imx219_get_data_type_by_code(format->code);
+
+	v4l2_subdev_unlock_state(state);
+
+	return 0;
 }
 
 /* Initialize control handlers */
@@ -994,6 +1045,7 @@ static const struct v4l2_subdev_pad_ops imx219_pad_ops = {
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = imx219_set_pad_format,
 	.get_selection = imx219_get_selection,
+	.get_frame_desc = imx219_get_frame_desc,
 	.enum_frame_size = imx219_enum_frame_size,
 	.enable_streams = imx219_enable_streams,
 	.disable_streams = imx219_disable_streams,
