@@ -1196,7 +1196,7 @@ unsigned long do_mmap(struct file *file,
 	add_nommu_region(region);
 
 	/* clear anonymous mappings that don't ask for uninitialized data */
-	if (!vma->vm_file &&
+	if (vma_is_anonymous(vma) &&
 	    (!IS_ENABLED(CONFIG_MMAP_ALLOW_UNINITIALIZED) ||
 	     !(flags & MAP_UNINITIALIZED)))
 		memset((void *)region->vm_start, 0,
@@ -1328,7 +1328,7 @@ static int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 
 	/* we're only permitted to split anonymous regions (these should have
 	 * only a single usage on the region) */
-	if (vma->vm_file)
+	if (!vma_is_anonymous(vma))
 		return -ENOMEM;
 
 	mm = vma->vm_mm;
@@ -1484,7 +1484,7 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len, struct list
 	}
 
 	/* we're allowed to split an anonymous VMA but not a file-backed one */
-	if (vma->vm_file) {
+	if (!vma_is_anonymous(vma)) {
 		do {
 			if (start > vma->vm_start)
 				return -EINVAL;
@@ -1617,7 +1617,7 @@ static unsigned long do_mremap(unsigned long addr,
 		/* like do_munmap(), we're allowed to shrink an anonymous VMA but not
 		 * a file-backed one
 		 */
-		if (vma->vm_file)
+		if (!vma_is_anonymous(vma))
 			return (unsigned long) -EINVAL;
 
 		/* vmi_shrink_vma() needs from/to pointers to be removed,
