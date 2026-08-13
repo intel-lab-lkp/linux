@@ -107,11 +107,14 @@ struct panthor_mmu {
 
 	/** @vm: VMs management fields */
 	struct {
-		/** @vm.lock: Lock protecting access to list. */
+		/** @vm.lock: Lock protecting access to list and user_owned. */
 		struct mutex lock;
 
 		/** @vm.list: List containing all VMs. */
 		struct list_head list;
+
+		/** @vm.list: List containing VMs with a valid handle. */
+		struct list_head user_owned;
 
 		/** @vm.reset_in_progress: True if a reset is in progress. */
 		bool reset_in_progress;
@@ -426,6 +429,9 @@ struct panthor_vm {
 
 	/** @node: Used to insert the VM in the panthor_mmu::vm::list. */
 	struct list_head node;
+
+	/* @user_node: Used to insert the VM in the panthor_mmu::vm::user_owned list. */
+	struct list_head user_node;
 
 	/** @for_mcu: True if this is the MCU VM. */
 	bool for_mcu;
@@ -1669,10 +1675,19 @@ int panthor_vm_pool_create_vm(struct panthor_device *ptdev,
 	drm_gem_object_get(&pool->dummy->base);
 	vm->dummy = pool->dummy;
 
+	/* Insert in the list before xa_alloc() so we can't race with
+	 * panthor_vm_pool_destroy_vm() have the VM inserted in the
+	 * user_owned list after it's been destroyed.
+	 */
+	scoped_guard(mutex, &ptdev->mmu->vm.lock)
+		list_add_tail(&vm->user_node, &ptdev->mmu->vm.user_owned);
+
 	ret = xa_alloc(&pool->xa, &id, vm,
 		       XA_LIMIT(1, PANTHOR_MAX_VMS_PER_FILE), GFP_KERNEL);
 
 	if (ret) {
+		scoped_guard(mutex, &ptdev->mmu->vm.lock)
+			list_del_init(&vm->user_node);
 		panthor_vm_put(vm);
 		return ret;
 	}
@@ -1727,13 +1742,19 @@ static void panthor_vm_destroy(struct panthor_vm *vm)
  */
 int panthor_vm_pool_destroy_vm(struct panthor_vm_pool *pool, u32 handle)
 {
+	struct panthor_device *ptdev;
 	struct panthor_vm *vm;
 
 	vm = xa_erase(&pool->xa, handle);
+	if (!vm)
+		return -EINVAL;
+
+	ptdev = container_of(vm->as->base.drm, struct panthor_device, base);
+	scoped_guard(mutex, &ptdev->mmu->vm.lock)
+		list_del_init(&vm->user_node);
 
 	panthor_vm_destroy(vm);
-
-	return vm ? 0 : -EINVAL;
+	return 0;
 }
 
 /**
@@ -1773,7 +1794,7 @@ void panthor_vm_pool_destroy(struct panthor_file *pfile)
 		return;
 
 	xa_for_each(&pfile->vms->xa, i, vm)
-		panthor_vm_destroy(vm);
+		panthor_vm_pool_destroy_vm(pfile->vms, i);
 
 	if (pfile->vms->dummy)
 		drm_gem_object_put(&pfile->vms->dummy->base);
@@ -3152,6 +3173,7 @@ panthor_vm_create(struct panthor_device *ptdev, bool for_mcu,
 		goto err_put_as;
 	}
 
+	INIT_LIST_HEAD(&vm->user_node);
 	vm->user_va_range = kernel_va_start;
 	vm->as = as;
 	mutex_init(&vm->heaps.lock);
@@ -3672,6 +3694,7 @@ int panthor_mmu_init(struct panthor_device *ptdev)
 		return ret;
 
 	INIT_LIST_HEAD(&mmu->vm.list);
+	INIT_LIST_HEAD(&mmu->vm.user_owned);
 	ret = drmm_mutex_init(&ptdev->base, &mmu->vm.lock);
 	if (ret)
 		return ret;
