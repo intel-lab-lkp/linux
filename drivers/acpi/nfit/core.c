@@ -882,9 +882,16 @@ static bool add_bdw(struct acpi_nfit_desc *acpi_desc,
 
 static size_t sizeof_idt(struct acpi_nfit_interleave *idt)
 {
+	size_t size;
+
 	if (idt->header.length < sizeof(*idt))
 		return 0;
-	return sizeof(*idt) + sizeof(u32) * idt->line_count;
+
+	size = struct_size(idt, line_offset, idt->line_count);
+	if (size > idt->header.length)
+		return 0;
+
+	return size;
 }
 
 static bool add_idt(struct acpi_nfit_desc *acpi_desc,
@@ -921,9 +928,16 @@ static bool add_idt(struct acpi_nfit_desc *acpi_desc,
 
 static size_t sizeof_flush(struct acpi_nfit_flush_address *flush)
 {
+	size_t size;
+
 	if (flush->header.length < sizeof(*flush))
 		return 0;
-	return struct_size(flush, hint_address, flush->hint_count);
+
+	size = struct_size(flush, hint_address, flush->hint_count);
+	if (size > flush->header.length)
+		return 0;
+
+	return size;
 }
 
 static bool add_flush(struct acpi_nfit_desc *acpi_desc,
