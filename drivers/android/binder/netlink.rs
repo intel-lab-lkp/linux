@@ -13,7 +13,7 @@ use kernel::{
 };
 
 pub static BINDER_NL_FAMILY: Family = Family::const_new(
-    &crate::THIS_MODULE,
+    kernel::module::this_module::<crate::LocalModule>(),
     kernel::uapi::BINDER_FAMILY_NAME,
     kernel::uapi::BINDER_FAMILY_VERSION,
     &BINDER_NL_FAMILY_MCGRPS,
