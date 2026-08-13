@@ -559,36 +559,51 @@ static void put_nommu_region(struct vm_region *region)
 	__put_nommu_region(region);
 }
 
+static void add_vma_to_mapping(struct vm_area_struct *vma)
+{
+	struct address_space *mapping;
+
+	if (!vma->vm_file)
+		return;
+
+	mapping = vma->vm_file->f_mapping;
+	i_mmap_lock_write(mapping);
+	flush_dcache_mmap_lock(mapping);
+	vma_interval_tree_insert(vma, &mapping->i_mmap);
+	flush_dcache_mmap_unlock(mapping);
+	i_mmap_unlock_write(mapping);
+}
+
+static void remove_vma_from_mapping(struct vm_area_struct *vma)
+{
+	struct address_space *mapping;
+
+	if (!vma->vm_file)
+		return;
+
+	mapping = vma->vm_file->f_mapping;
+	i_mmap_lock_write(mapping);
+	flush_dcache_mmap_lock(mapping);
+	vma_interval_tree_remove(vma, &mapping->i_mmap);
+	flush_dcache_mmap_unlock(mapping);
+	i_mmap_unlock_write(mapping);
+}
+
 static void setup_vma_to_mm(struct vm_area_struct *vma, struct mm_struct *mm)
 {
 	vma->vm_mm = mm;
 
 	/* add the VMA to the mapping */
-	if (vma->vm_file) {
-		struct address_space *mapping = vma->vm_file->f_mapping;
-
-		i_mmap_lock_write(mapping);
-		flush_dcache_mmap_lock(mapping);
-		vma_interval_tree_insert(vma, &mapping->i_mmap);
-		flush_dcache_mmap_unlock(mapping);
-		i_mmap_unlock_write(mapping);
-	}
+	if (vma->vm_file)
+		add_vma_to_mapping(vma);
 }
 
 static void cleanup_vma_from_mm(struct vm_area_struct *vma)
 {
 	vma->vm_mm->map_count--;
 	/* remove the VMA from the mapping */
-	if (vma->vm_file) {
-		struct address_space *mapping;
-		mapping = vma->vm_file->f_mapping;
-
-		i_mmap_lock_write(mapping);
-		flush_dcache_mmap_lock(mapping);
-		vma_interval_tree_remove(vma, &mapping->i_mmap);
-		flush_dcache_mmap_unlock(mapping);
-		i_mmap_unlock_write(mapping);
-	}
+	if (vma->vm_file)
+		remove_vma_from_mapping(vma);
 }
 
 /*
@@ -1351,6 +1366,8 @@ static int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	if (new->vm_ops && new->vm_ops->open)
 		new->vm_ops->open(new);
 
+	remove_vma_from_mapping(vma);
+
 	down_write(&nommu_region_sem);
 	delete_nommu_region(vma->vm_region);
 	if (new_below) {
@@ -1363,6 +1380,11 @@ static int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	add_nommu_region(vma->vm_region);
 	add_nommu_region(new->vm_region);
 	up_write(&nommu_region_sem);
+
+	if (new->vm_file) {
+		vma->vm_file = get_file(vma->vm_file);
+		new->vm_file = get_file(new->vm_file);
+	}
 
 	setup_vma_to_mm(vma, mm);
 	setup_vma_to_mm(new, mm);
@@ -1386,16 +1408,20 @@ static int vmi_shrink_vma(struct vma_iterator *vmi,
 		      unsigned long from, unsigned long to)
 {
 	struct vm_region *region;
+	bool has_mapping = !!vma->vm_file;
+
+	if (has_mapping)
+		remove_vma_from_mapping(vma);
 
 	/* adjust the VMA's pointers, which may reposition it in the MM's tree
 	 * and list */
 	if (from > vma->vm_start) {
 		if (vma_iter_clear_gfp(vmi, from, vma->vm_end, GFP_KERNEL))
-			return -ENOMEM;
+			goto restore_mapping;
 		vma->vm_end = from;
 	} else {
 		if (vma_iter_clear_gfp(vmi, vma->vm_start, to, GFP_KERNEL))
-			return -ENOMEM;
+			goto restore_mapping;
 		vma->vm_start = to;
 	}
 
@@ -1415,7 +1441,15 @@ static int vmi_shrink_vma(struct vma_iterator *vmi,
 	up_write(&nommu_region_sem);
 
 	free_page_series(from, to);
+	if (has_mapping)
+		add_vma_to_mapping(vma);
+
 	return 0;
+
+restore_mapping:
+	if (has_mapping)
+		add_vma_to_mapping(vma);
+	return -ENOMEM;
 }
 
 /*
@@ -1544,6 +1578,9 @@ static unsigned long do_mremap(unsigned long addr,
 			unsigned long flags, unsigned long new_addr)
 {
 	struct vm_area_struct *vma;
+	int ret;
+
+	VMA_ITERATOR(vmi, current->mm, addr);
 
 	/* insanity checks first */
 	old_len = PAGE_ALIGN(old_len);
@@ -1567,11 +1604,75 @@ static unsigned long do_mremap(unsigned long addr,
 	if (is_nommu_shared_mapping(vma->vm_flags))
 		return (unsigned long) -EPERM;
 
-	if (new_len > vma->vm_region->vm_end - vma->vm_region->vm_start)
+	/* vm_region->vm_top != vm_region->vm_end when sysctl_nr_trim_pages is 0 (default: 1) */
+	if (new_len > vma->vm_region->vm_top - vma->vm_region->vm_start)
 		return (unsigned long) -ENOMEM;
 
 	/* all checks complete - do it */
-	vma->vm_end = vma->vm_start + new_len;
+	if (new_len == old_len)
+		return vma->vm_start;
+
+	/* shrink only happens addr + new_len and old_len are in different pages */
+	if (new_len < old_len) {
+		/* like do_munmap(), we're allowed to shrink an anonymous VMA but not
+		 * a file-backed one
+		 */
+		if (vma->vm_file)
+			return (unsigned long) -EINVAL;
+
+		/* vmi_shrink_vma() needs from/to pointers to be removed,
+		 * (mainly used in munmap) so, specify them.
+		 */
+		ret = vmi_shrink_vma(&vmi, vma, addr + new_len, addr + old_len);
+		if (ret < 0)
+			return (unsigned long) ret;
+	} else {
+		/* growth path: grow up to vm_top should be handled here. */
+		unsigned long old_end = vma->vm_end;
+		unsigned long end = vma->vm_start + new_len;
+		unsigned long grow_len = end - old_end;
+
+		/*
+		 * Initialize the newly exposed portion before making it visible
+		 * through the VMA or i_mmap.
+		 */
+
+		/* read contents of extended map from file, or zero-filled if !vm_file */
+		if (vma->vm_file) {
+			loff_t fpos;
+
+			fpos = (loff_t)vma->vm_pgoff << PAGE_SHIFT;
+			fpos += old_end - vma->vm_start;
+
+			ret = nommu_read_iter(vma->vm_file, (void *)old_end,
+					      grow_len, &fpos);
+			if (ret < 0)
+				return (unsigned long)ret;
+
+			if (ret < grow_len)
+				memset((char *)old_end + ret, 0, grow_len - ret);
+		} else {
+			memset((void *)old_end, 0, grow_len);
+		}
+
+		/* The backing contents are ready. Now update the VMA bookkeeping. */
+		remove_vma_from_mapping(vma);
+
+		vma->vm_end = end;
+		ret = vma_iter_store_gfp(&vmi, vma, GFP_KERNEL);
+		if (ret) {
+			vma->vm_end = old_end;
+			add_vma_to_mapping(vma);
+			return (unsigned long)ret;
+		}
+
+		/* vm_top remains unchanged; only the logical end grows. */
+		down_write(&nommu_region_sem);
+		vma->vm_region->vm_end = end;
+		up_write(&nommu_region_sem);
+
+		add_vma_to_mapping(vma);
+	}
 	return vma->vm_start;
 }
 
