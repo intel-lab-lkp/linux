@@ -248,6 +248,23 @@ struct ally_config {
 	struct ally_joystick_resp_curve right_curve;
 };
 
+/* XInput force-feedback report (output report 0x0d, gamepad interface) */
+struct ff_data {
+	u8 enable;
+	u8 magnitude_left;
+	u8 magnitude_right;
+	u8 magnitude_strong;
+	u8 magnitude_weak;
+	u8 pulse_sustain_10ms;
+	u8 pulse_release_10ms;
+	u8 loop_count;
+} __packed;
+
+struct ff_report {
+	u8 report_id;
+	struct ff_data ff;
+} __packed;
+
 struct ally_handheld {
 	/* All read/write to IN interfaces must lock */
 	struct mutex intf_mutex;
@@ -255,6 +272,13 @@ struct ally_handheld {
 
 	struct input_dev *ally_x_input;
 	struct hid_device *ally_x_hdev;
+
+	struct ff_report ff_packet;
+	struct work_struct ff_work;
+	/* Serializes ff_packet and update_ff between play_effect and ff_work */
+	spinlock_t ff_lock;
+	bool ff_work_initialized;
+	bool update_ff;
 
 	struct hid_device *keyboard_hdev;
 	struct input_dev *keyboard_input;
@@ -370,9 +394,13 @@ enum ally_command_codes {
 	CMD_SET_ANTI_DEADZONE           = 0x18,
 };
 
+/* XInput rumble magnitudes use the hardware's 0..100 intensity range. */
+#define ALLY_FF_MAX_INTENSITY 100
+
 static const u8 ALLY_FORCE_FEEDBACK_OFF[] = {
 	0x0D, 0x0F, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0xEB
 };
+static_assert(sizeof(struct ff_report) == sizeof(ALLY_FORCE_FEEDBACK_OFF));
 
 /*
  * The ROG Ally device presents multiple USB interfaces (keyboard, mouse, gamepad,
@@ -2254,6 +2282,59 @@ static bool ally_x_raw_event(struct input_dev *input, struct hid_device *hdev,
 	return true;
 }
 
+static void ally_x_ff_work_fn(struct work_struct *work)
+{
+	struct ally_handheld *ally =
+		container_of(work, struct ally_handheld, ff_work);
+	struct hid_device *hdev = NULL;
+	struct ff_report report;
+	bool update = false;
+	int ret;
+
+	scoped_guard(spinlock_irqsave, &ally->ff_lock) {
+		if (ally->update_ff) {
+			report = ally->ff_packet;
+			ally->update_ff = false;
+			update = true;
+			hdev = ally->ally_x_hdev;
+		}
+	}
+
+	if (!update || !hdev)
+		return;
+
+	ret = ally_gamepad_send_packet(ally, hdev, (u8 *)&report, sizeof(report));
+	if (ret < 0)
+		hid_err(hdev, "Failed to send force-feedback: %d\n", ret);
+}
+
+static int ally_x_play_effect(struct input_dev *idev, void *data,
+			     struct ff_effect *effect)
+{
+	struct ally_handheld *ally = &ally_drvdata;
+
+	if (effect->type != FF_RUMBLE)
+		return 0;
+
+	/*
+	 * Both the flag and the queueing must happen under ff_lock: removal
+	 * clears the flag under the same lock before cancel_work_sync(), so an
+	 * unlocked test here could queue work again after the cancel.
+	 */
+	scoped_guard(spinlock_irqsave, &ally->ff_lock) {
+		ally->ff_packet.ff.magnitude_strong =
+			effect->u.rumble.strong_magnitude * ALLY_FF_MAX_INTENSITY / 65535;
+		ally->ff_packet.ff.magnitude_weak =
+			effect->u.rumble.weak_magnitude * ALLY_FF_MAX_INTENSITY / 65535;
+		ally->update_ff = true;
+
+		if (ally->ff_work_initialized)
+			schedule_work(&ally->ff_work);
+	}
+
+	return 0;
+}
+
 static struct input_dev *ally_x_alloc_input_dev(struct hid_device *hdev)
 {
 	struct input_dev *input_dev = devm_input_allocate_device(&hdev->dev);
@@ -2307,6 +2388,16 @@ static int ally_x_setup_input(struct hid_device *hdev, struct ally_handheld *all
 	input_set_capability(input, EV_KEY, KEY_F18);
 	input_set_capability(input, EV_KEY, BTN_TRIGGER_HAPPY);
 	input_set_capability(input, EV_KEY, BTN_TRIGGER_HAPPY1);
+
+	memcpy(&ally->ff_packet, ALLY_FORCE_FEEDBACK_OFF, sizeof(ally->ff_packet));
+	spin_lock_init(&ally->ff_lock);
+	INIT_WORK(&ally->ff_work, ally_x_ff_work_fn);
+	ally->ff_work_initialized = true;
+
+	input_set_capability(input, EV_FF, FF_RUMBLE);
+	ret = input_ff_create_memless(input, NULL, ally_x_play_effect);
+	if (ret)
+		hid_warn(hdev, "Failed to create force-feedback: %d\n", ret);
 
 	ret = input_register_device(input);
 	if (ret) {
@@ -2460,6 +2551,9 @@ static void hid_asus_ally_remove(struct hid_device *hdev, struct ally_handheld *
 
 	scoped_guard(mutex, &ally_data_mutex) {
 		if (ally->ally_x_hdev == hdev) {
+			scoped_guard(spinlock_irqsave, &ally->ff_lock)
+				ally->ff_work_initialized = false;
+			cancel_work_sync(&ally->ff_work);
 			ally->ally_x_input = NULL;
 			ally->ally_x_hdev = NULL;
 		}
