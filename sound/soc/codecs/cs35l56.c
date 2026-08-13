@@ -87,6 +87,7 @@ static int cs35l56_dsp_event(struct snd_soc_dapm_widget *w,
 static void cs35l56_wait_dsp_ready(struct cs35l56_private *cs35l56)
 {
 	/* Wait for patching to complete */
+	flush_work(&cs35l56->deferred_component_init_work);
 	flush_work(&cs35l56->dsp_work);
 }
 
@@ -1356,6 +1357,30 @@ VISIBLE_IF_KUNIT int cs35l56_set_fw_name(struct snd_soc_component *component)
 }
 EXPORT_SYMBOL_IF_KUNIT(cs35l56_set_fw_name);
 
+static void cs35l56_deferred_component_init_work(struct work_struct *work)
+{
+	struct cs35l56_private *cs35l56 = container_of(work,
+						       struct cs35l56_private,
+						       deferred_component_init_work);
+	int ret;
+
+	if (!wait_for_completion_timeout(&cs35l56->init_completion,
+					 msecs_to_jiffies(5000))) {
+		dev_err(cs35l56->base.dev, "%s: init_completion timed out\n", __func__);
+		return;
+	}
+
+	ret = cs35l56_set_fw_name(cs35l56->component);
+	if (ret)
+		return;
+
+	ret = cs35l56_set_fw_suffix(cs35l56);
+	if (ret)
+		return;
+
+	queue_work(cs35l56->dsp_wq, &cs35l56->dsp_work);
+}
+
 static int _cs35l56_component_probe(struct snd_soc_component *component)
 {
 	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
@@ -1365,24 +1390,11 @@ static int _cs35l56_component_probe(struct snd_soc_component *component)
 
 	BUILD_BUG_ON(ARRAY_SIZE(cs35l56_tx_input_texts) != ARRAY_SIZE(cs35l56_tx_input_values));
 
-	if (!wait_for_completion_timeout(&cs35l56->init_completion,
-					 msecs_to_jiffies(5000))) {
-		dev_err(cs35l56->base.dev, "%s: init_completion timed out\n", __func__);
-		return -ENODEV;
-	}
-
 	cs35l56->dsp.part = kasprintf(GFP_KERNEL, "cs35l%02x", cs35l56->base.type);
 	if (!cs35l56->dsp.part)
 		return -ENOMEM;
 
 	cs35l56->component = component;
-	ret = cs35l56_set_fw_name(component);
-	if (ret)
-		return ret;
-
-	ret = cs35l56_set_fw_suffix(cs35l56);
-	if (ret)
-		return ret;
 
 	wm_adsp2_component_probe(&cs35l56->dsp, component);
 
@@ -1430,7 +1442,7 @@ static int _cs35l56_component_probe(struct snd_soc_component *component)
 	if (IS_ENABLED(CONFIG_SND_SOC_CS35L56_CAL_DEBUGFS))
 		cs35l56_create_cal_debugfs(&cs35l56->base, &cs35l56_cal_debugfs_fops);
 
-	queue_work(cs35l56->dsp_wq, &cs35l56->dsp_work);
+	queue_work(cs35l56->dsp_wq, &cs35l56->deferred_component_init_work);
 
 	return 0;
 }
@@ -1439,6 +1451,7 @@ static void cs35l56_component_remove(struct snd_soc_component *component)
 {
 	struct cs35l56_private *cs35l56 = snd_soc_component_get_drvdata(component);
 
+	cancel_work_sync(&cs35l56->deferred_component_init_work);
 	cancel_work_sync(&cs35l56->dsp_work);
 
 	cs35l56_remove_cal_debugfs(&cs35l56->base);
@@ -1475,12 +1488,12 @@ static int cs35l56_set_bias_level(struct snd_soc_component *component,
 	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
 
 	switch (level) {
-	case SND_SOC_BIAS_STANDBY:
+	case SND_SOC_BIAS_PREPARE:
 		/*
 		 * Wait for patching to complete when transitioning from
-		 * BIAS_OFF to BIAS_STANDBY
+		 * BIAS_STANDBY.
 		 */
-		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_OFF)
+		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_STANDBY)
 			cs35l56_wait_dsp_ready(cs35l56);
 
 		break;
@@ -1527,7 +1540,7 @@ int cs35l56_system_suspend(struct device *dev)
 	dev_dbg(dev, "system_suspend\n");
 
 	if (cs35l56->component)
-		flush_work(&cs35l56->dsp_work);
+		cs35l56_wait_dsp_ready(cs35l56);
 
 	/*
 	 * The interrupt line is normally shared, but after we start suspending
@@ -1686,6 +1699,8 @@ static int cs35l56_dsp_init(struct cs35l56_private *cs35l56)
 	if (!cs35l56->dsp_wq)
 		return -ENOMEM;
 
+	INIT_WORK(&cs35l56->deferred_component_init_work,
+		  cs35l56_deferred_component_init_work);
 	INIT_WORK(&cs35l56->dsp_work, cs35l56_dsp_work);
 
 	dsp = &cs35l56->dsp;
