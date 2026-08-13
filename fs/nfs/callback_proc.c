@@ -391,19 +391,34 @@ __be32 nfs4_callback_devicenotify(void *argp, void *resp,
 				continue;
 		}
 		/*
-		 * Unhash the cached device first so re-resolution cannot
-		 * re-pin the stale node, then re-point any references
-		 * pinned under live layouts (RFC 8881 Section 12.2.10).
-		 * The epoch bump lets an in-flight GETDEVICEINFO detect
-		 * that its reply may predate the change.
+		 * CHANGE: unhash the cached device first so re-resolution
+		 * cannot re-pin the stale node, then re-point any
+		 * references pinned under live layouts (RFC 8881 Section
+		 * 12.2.10).  The epoch bump lets an in-flight
+		 * GETDEVICEINFO detect that its reply may predate the
+		 * change.
+		 *
+		 * DELETE: a deviceID still referenced by a live layout
+		 * must never be deleted (Section 20.12), so a referenced
+		 * one may be racing layout revocation -- defer to the
+		 * state manager for the Section 18.40.4 recovery (this
+		 * thread cannot issue the fore-channel RPCs it needs).
+		 * Unreferenced: "no harm is done" -- drop the cached
+		 * device as before.
 		 */
-		if (dev->cbd_notify_type == NOTIFY_DEVICEID4_CHANGE)
+		if (dev->cbd_notify_type == NOTIFY_DEVICEID4_CHANGE) {
 			nfs4_deviceid_bump_change_epoch();
-		nfs4_delete_deviceid(ld, cps->clp, &dev->cbd_dev_id);
-		if (dev->cbd_notify_type == NOTIFY_DEVICEID4_CHANGE)
+			nfs4_delete_deviceid(ld, cps->clp, &dev->cbd_dev_id);
 			pnfs_layout_reresolve_deviceid_byclid(cps->clp, ld,
 							&dev->cbd_dev_id,
 							dev->cbd_immediate);
+		} else if (pnfs_layout_deviceid_referenced_byclid(cps->clp,
+						ld, &dev->cbd_dev_id)) {
+			pnfs_deviceid_delete_mark(cps->clp, ld,
+						  &dev->cbd_dev_id);
+		} else {
+			nfs4_delete_deviceid(ld, cps->clp, &dev->cbd_dev_id);
+		}
 	}
 	pnfs_put_layoutdriver(ld);
 out:
