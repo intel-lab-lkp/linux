@@ -963,14 +963,18 @@ static void *add_table(struct acpi_nfit_desc *acpi_desc,
 	struct device *dev = acpi_desc->dev;
 	struct acpi_nfit_header *hdr;
 	void *err = ERR_PTR(-ENOMEM);
+	size_t table_len;
 
 	if (table >= end)
 		return NULL;
+	table_len = end - table;
+	if (table_len < sizeof(*hdr))
+		return NULL;
 
 	hdr = table;
-	if (!hdr->length) {
-		dev_warn(dev, "found a zero length table '%d' parsing nfit\n",
-			hdr->type);
+	if (hdr->length < sizeof(*hdr) || hdr->length > table_len) {
+		dev_warn(dev, "invalid table length %u for type %u parsing nfit\n",
+			 hdr->length, hdr->type);
 		return NULL;
 	}
 
