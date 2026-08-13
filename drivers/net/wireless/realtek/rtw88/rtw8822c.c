@@ -3,6 +3,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/bitops.h>
 #include "main.h"
 #include "coex.h"
 #include "fw.h"
@@ -277,18 +278,15 @@ static u32 rtw8822c_get_path_read_addr(u8 path)
 	return base_addr;
 }
 
-static bool rtw8822c_dac_iq_check(struct rtw_dev *rtwdev, s32 value_s32)
+static bool rtw8822c_dac_iq_check(struct rtw_dev *rtwdev, s32 value)
 {
-	u32 value = (u32)value_s32;
-	bool ret = true;
 
-	if ((value >= 0x200 && (0x400 - value) > 0x64) ||
-	    (value < 0x200 && value > 0x64)) {
-		ret = false;
+	if (value > 100 || value < -100) {
 		rtw_dbg(rtwdev, RTW_DBG_RFK, "[DACK] Error overflow\n");
+		return false;
 	}
 
-	return ret;
+	return true;
 }
 
 static void rtw8822c_dac_cal_iq_sample(struct rtw_dev *rtwdev, s32 *iv, s32 *qv)
@@ -299,8 +297,8 @@ static void rtw8822c_dac_cal_iq_sample(struct rtw_dev *rtwdev, s32 *iv, s32 *qv)
 	while (i < DACK_SN_8822C && cnt < 10000) {
 		cnt++;
 		temp = rtw_read32_mask(rtwdev, 0x2dbc, 0x3fffff);
-		iv[i] = (s32)((temp & 0x3ff000) >> 12);
-		qv[i] = (s32)(temp & 0x3ff);
+		iv[i] = sign_extend32((temp & 0x3ff000) >> 12, 9);
+		qv[i] = sign_extend32(temp & 0x3ff, 9);
 
 		if (rtw8822c_dac_iq_check(rtwdev, iv[i]) &&
 		    rtw8822c_dac_iq_check(rtwdev, qv[i]))
@@ -352,11 +350,11 @@ static void rtw8822c_dac_cal_iq_search(struct rtw_dev *rtwdev,
 
 		if (i_delta > 5 || q_delta > 5) {
 			temp = rtw_read32_mask(rtwdev, 0x2dbc, 0x3fffff);
-			iv[0] = (s32)((temp & 0x3ff000) >> 12);
-			qv[0] = (s32)(temp & 0x3ff);
+			iv[0] = sign_extend32((temp & 0x3ff000) >> 12, 9);
+			qv[0] = sign_extend32(temp & 0x3ff, 9);
 			temp = rtw_read32_mask(rtwdev, 0x2dbc, 0x3fffff);
-			iv[DACK_SN_8822C - 1] = (s32)((temp & 0x3ff000) >> 12);
-			qv[DACK_SN_8822C - 1] = (s32)(temp & 0x3ff);
+			iv[DACK_SN_8822C - 1] = sign_extend32((temp & 0x3ff000) >> 12, 9);
+			qv[DACK_SN_8822C - 1] = sign_extend32(temp & 0x3ff, 9);
 		} else {
 			break;
 		}
