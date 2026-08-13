@@ -4,8 +4,8 @@
 #include "aspeed-bmc-facebook-anacapa-evt1.dts"
 
 / {
-	model = "Facebook Anacapa BMC";
 	compatible = "facebook,anacapa-bmc-evt2", "aspeed,ast2600";
+	model = "Facebook Anacapa BMC";
 };
 
 &{/aliases} {
@@ -31,6 +31,7 @@
 	flash@0 {
 		vcc-supply = <&p3v3_bmc_aux>;
 	};
+
 	flash@1 {
 		vcc-supply = <&p3v3_bmc_aux>;
 	};
@@ -46,27 +47,7 @@
 // MB - PDB
 &i2c8 {
 	i2c-mux@72 {
-		i2c8mux0ch0: i2c@0 {
-			power-monitor@42 {
-				compatible = "lltc,ltc4287";
-				reg = <0x42>;
-				shunt-resistor-micro-ohms = <150>;
-			};
-			power-monitor@43 {
-				compatible = "lltc,ltc4287";
-				reg = <0x43>;
-				shunt-resistor-micro-ohms = <150>;
-			};
-			power-monitor@44 {
-				compatible = "lltc,ltc4287";
-				reg = <0x44>;
-				shunt-resistor-micro-ohms = <250>;
-			};
-			power-monitor@45 {
-				compatible = "lltc,ltc4287";
-				reg = <0x45>;
-				shunt-resistor-micro-ohms = <250>;
-			};
+		i2c@0 {
 			gpio@24 {
 				gpio-line-names =
 					"RPDB_EAM2_PRSNT_MOS_N_R", "RPDB_EAM3_PRSNT_MOS_N_R",
@@ -79,23 +60,33 @@
 					"RPDB_FAN7_PRSNT_N_R", "RPDB_FAN8_PRSNT_N_R",
 					"", "";
 			};
-		};
-		i2c8mux0ch1: i2c@1 {
-			power-monitor@40 {
+
+			power-monitor@42 {
 				compatible = "lltc,ltc4287";
-				reg = <0x40>;
+				reg = <0x42>;
 				shunt-resistor-micro-ohms = <150>;
 			};
-			power-monitor@41 {
+
+			power-monitor@43 {
 				compatible = "lltc,ltc4287";
-				reg = <0x41>;
+				reg = <0x43>;
 				shunt-resistor-micro-ohms = <150>;
 			};
+
+			power-monitor@44 {
+				compatible = "lltc,ltc4287";
+				reg = <0x44>;
+				shunt-resistor-micro-ohms = <250>;
+			};
+
 			power-monitor@45 {
 				compatible = "lltc,ltc4287";
 				reg = <0x45>;
 				shunt-resistor-micro-ohms = <250>;
 			};
+		};
+
+		i2c@1 {
 			gpio@24 {
 				gpio-line-names =
 					"LPDB_P50V_FAN0_R2_PG","LPDB_P50V_FAN1_R2_PG",
@@ -107,18 +98,36 @@
 					"","",
 					"","";
 			};
+
+			power-monitor@40 {
+				compatible = "lltc,ltc4287";
+				reg = <0x40>;
+				shunt-resistor-micro-ohms = <150>;
+			};
+
+			power-monitor@41 {
+				compatible = "lltc,ltc4287";
+				reg = <0x41>;
+				shunt-resistor-micro-ohms = <150>;
+			};
+
+			power-monitor@45 {
+				compatible = "lltc,ltc4287";
+				reg = <0x45>;
+				shunt-resistor-micro-ohms = <250>;
+			};
 		};
 	};
 };
 
 // SCM
 &i2c9 {
-
 	// SCM FRU
 	// | DC-SCM Rev        | Slave address of eeprom  |
 	// |-------------------|--------------------------|
 	// | Rev B             | 0x50                     |
 	// | Rev C/D/E/F/above | 0x51                     |
+
 	eeprom@51 {
 		compatible = "atmel,24c128";
 		reg = <0x51>;
@@ -128,6 +137,7 @@
 // R Bridge Board
 &i2c10 {
 	multi-master;
+
 	mctp@10 {
 		compatible = "mctp-i2c-controller";
 		reg = <(0x10 | I2C_OWN_SLAVE_ADDRESS)>;
@@ -139,30 +149,37 @@
 		i2c10mux0ch1: i2c@1 {
 			mctp-controller;
 			// BE NIC FRU
+
 			eeprom@50 {
 				compatible = "atmel,24c32";
 				reg = <0x50>;
 			};
 		};
+
 		i2c10mux0ch2: i2c@2 {
 			mctp-controller;
 			// BE NIC FRU
+
 			eeprom@50 {
 				compatible = "atmel,24c32";
 				reg = <0x50>;
 			};
 		};
+
 		i2c10mux0ch3: i2c@3 {
 			mctp-controller;
 			// BE NIC FRU
+
 			eeprom@50 {
 				compatible = "atmel,24c32";
 				reg = <0x50>;
 			};
 		};
+
 		i2c10mux0ch4: i2c@4 {
 			mctp-controller;
 			// BE NIC FRU
+
 			eeprom@50 {
 				compatible = "atmel,24c32";
 				reg = <0x50>;
@@ -174,6 +191,7 @@
 // L Bridge Board
 &i2c11 {
 	multi-master;
+
 	mctp@10 {
 		compatible = "mctp-i2c-controller";
 		reg = <(0x10 | I2C_OWN_SLAVE_ADDRESS)>;
@@ -185,38 +203,47 @@
 		i2c11mux0ch0: i2c@0 {
 			mctp-controller;
 			// FE NIC FRU
+
 			eeprom@50 {
 				compatible = "atmel,24c32";
 				reg = <0x50>;
 			};
 		};
+
 		i2c11mux0ch1: i2c@1 {
 			mctp-controller;
 			// BE NIC FRU
+
 			eeprom@50 {
 				compatible = "atmel,24c32";
 				reg = <0x50>;
 			};
 		};
+
 		i2c11mux0ch2: i2c@2 {
 			mctp-controller;
 			// BE NIC FRU
+
 			eeprom@50 {
 				compatible = "atmel,24c32";
 				reg = <0x50>;
 			};
 		};
+
 		i2c11mux0ch3: i2c@3 {
 			mctp-controller;
 			// BE NIC FRU
+
 			eeprom@50 {
 				compatible = "atmel,24c32";
 				reg = <0x50>;
 			};
 		};
+
 		i2c11mux0ch4: i2c@4 {
 			mctp-controller;
 			// BE NIC FRU
+
 			eeprom@50 {
 				compatible = "atmel,24c32";
 				reg = <0x50>;
@@ -228,7 +255,7 @@
 // MB
 &i2c13 {
 	i2c-mux@70 {
-		i2c13mux0ch7: i2c@7 {
+		i2c@7 {
 			// NFC adaptor board FRU
 			eeprom@50 {
 				compatible = "atmel,24c128";
@@ -239,7 +266,6 @@
 };
 
 &sgpiom0 {
-	ngpios = <128>;
 	bus-frequency = <2000000>;
 	gpio-line-names =
 	/*in - out */
@@ -403,6 +429,7 @@
 	"AMC_FAIL", "HPM_CPLD_RISCV_RST",
 	"S0_ON", "";
 
+	ngpios = <128>;
+
 	status = "okay";
 };
-

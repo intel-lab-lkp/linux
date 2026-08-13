@@ -6,15 +6,10 @@
 #include <dt-bindings/i2c/i2c.h>
 
 / {
-	model = "Facebook Anacapa BMC";
 	compatible = "facebook,anacapa-bmc-evt1", "aspeed,ast2600";
+	model = "Facebook Anacapa BMC";
 
 	aliases {
-		serial0 = &uart1;
-		serial1 = &uart2;
-		serial2 = &uart3;
-		serial3 = &uart4;
-		serial4 = &uart5;
 		i2c16 = &i2c0mux0ch0;
 		i2c17 = &i2c0mux0ch1;
 		i2c18 = &i2c0mux0ch2;
@@ -59,6 +54,11 @@
 		i2c57 = &i2c13mux0ch5;
 		i2c58 = &i2c13mux0ch6;
 		i2c59 = &i2c13mux0ch7;
+		serial0 = &uart1;
+		serial1 = &uart2;
+		serial2 = &uart3;
+		serial3 = &uart4;
+		serial4 = &uart5;
 	};
 
 	chosen {
@@ -68,93 +68,96 @@
 	iio-hwmon {
 		compatible = "iio-hwmon";
 		io-channels = <&adc0 0>, <&adc0 1>, <&adc0 2>, <&adc0 3>,
-				  <&adc0 4>, <&adc0 5>, <&adc0 6>, <&adc0 7>,
-				  <&adc1 2>;
+			      <&adc0 4>, <&adc0 5>, <&adc0 6>, <&adc0 7>,
+			      <&adc1 2>;
 	};
 
 	leds {
 		compatible = "gpio-leds";
 
 		led-0 {
-			label = "bmc_heartbeat_amber";
 			gpios = <&gpio0 ASPEED_GPIO(P, 7) GPIO_ACTIVE_LOW>;
+			label = "bmc_heartbeat_amber";
 			linux,default-trigger = "heartbeat";
 		};
 
 		led-1 {
-			label = "fp_id_amber";
 			default-state = "off";
 			gpios = <&gpio0 ASPEED_GPIO(B, 5) GPIO_ACTIVE_HIGH>;
+			label = "fp_id_amber";
 		};
 	};
 
 	memory@80000000 {
-		device_type = "memory";
 		reg = <0x80000000 0x80000000>;
-	};
-
-	reserved-memory {
-		#address-cells = <1>;
-		#size-cells = <1>;
-		ranges;
-
-		video_engine_memory: video {
-			size = <0x02c00000>;
-			alignment = <0x00100000>;
-			compatible = "shared-dma-pool";
-			reusable;
-		};
-
-		gfx_memory: framebuffer {
-			size = <0x01000000>;
-			alignment = <0x01000000>;
-			compatible = "shared-dma-pool";
-			reusable;
-		};
+		device_type = "memory";
 	};
 
 	p3v3_bmc_aux: regulator-p3v3-bmc-aux {
 		compatible = "regulator-fixed";
-		regulator-name = "p3v3_bmc_aux";
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
 		regulator-always-on;
+		regulator-max-microvolt = <3300000>;
+		regulator-min-microvolt = <3300000>;
+		regulator-name = "p3v3_bmc_aux";
 	};
 
-	spi_gpio: spi {
+	reserved-memory {
+		ranges;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		gfx_memory: framebuffer {
+			compatible = "shared-dma-pool";
+			alignment = <0x01000000>;
+			reusable;
+			size = <0x01000000>;
+		};
+
+		video_engine_memory: video {
+			compatible = "shared-dma-pool";
+			alignment = <0x00100000>;
+			reusable;
+			size = <0x02c00000>;
+		};
+	};
+
+	spi {
 		compatible = "spi-gpio";
 		#address-cells = <1>;
+		cs-gpios = <&gpio0 ASPEED_GPIO(Z, 0) GPIO_ACTIVE_LOW>;
+
+		miso-gpios = <&gpio0 ASPEED_GPIO(Z, 5) GPIO_ACTIVE_HIGH>;
+		mosi-gpios = <&gpio0 ASPEED_GPIO(Z, 4) GPIO_ACTIVE_HIGH>;
+		num-chipselects = <1>;
+		sck-gpios = <&gpio0 ASPEED_GPIO(Z, 3) GPIO_ACTIVE_HIGH>;
 		#size-cells = <0>;
 
-		sck-gpios = <&gpio0 ASPEED_GPIO(Z, 3) GPIO_ACTIVE_HIGH>;
-		mosi-gpios = <&gpio0 ASPEED_GPIO(Z, 4) GPIO_ACTIVE_HIGH>;
-		miso-gpios = <&gpio0 ASPEED_GPIO(Z, 5) GPIO_ACTIVE_HIGH>;
-		cs-gpios = <&gpio0 ASPEED_GPIO(Z, 0) GPIO_ACTIVE_LOW>;
-		num-chipselects = <1>;
 		status = "okay";
 
 		tpm@0 {
 			compatible = "infineon,slb9670", "tcg,tpm_tis-spi";
-			spi-max-frequency = <33000000>;
 			reg = <0>;
+			spi-max-frequency = <33000000>;
 		};
 	};
 };
 
 &adc0 {
-	aspeed,int-vref-microvolt = <2500000>;
-	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_adc0_default &pinctrl_adc1_default
-		&pinctrl_adc2_default &pinctrl_adc3_default
-		&pinctrl_adc4_default &pinctrl_adc5_default
-		&pinctrl_adc6_default &pinctrl_adc7_default>;
+		    &pinctrl_adc2_default &pinctrl_adc3_default
+		    &pinctrl_adc4_default &pinctrl_adc5_default
+		    &pinctrl_adc6_default &pinctrl_adc7_default>;
+	pinctrl-names = "default";
+	aspeed,int-vref-microvolt = <2500000>;
+
 	status = "okay";
 };
 
 &adc1 {
-	aspeed,int-vref-microvolt = <2500000>;
-	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_adc10_default>;
+	pinctrl-names = "default";
+	aspeed,int-vref-microvolt = <2500000>;
+
 	status = "okay";
 };
 
@@ -166,24 +169,27 @@
 	status = "okay";
 
 	flash@0 {
-		status = "okay";
-		m25p,fast-read;
 		label = "bmc";
 		spi-max-frequency = <50000000>;
+		m25p,fast-read;
+
+		status = "okay";
 #include "openbmc-flash-layout-128.dtsi"
 	};
 
 	flash@1 {
-		status = "okay";
-		m25p,fast-read;
 		label = "alt-bmc";
 		spi-max-frequency = <50000000>;
+		m25p,fast-read;
+
+		status = "okay";
 	};
 };
 
 &gfx {
-	status = "okay";
 	memory-region = <&gfx_memory>;
+
+	status = "okay";
 };
 
 &gpio0 {
@@ -310,24 +316,27 @@
 		compatible = "nxp,pca9546";
 		reg = <0x70>;
 		#address-cells = <1>;
-		#size-cells = <0>;
 		i2c-mux-idle-disconnect;
+		#size-cells = <0>;
 
 		i2c0mux0ch0: i2c@0 {
 			reg = <0>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c0mux0ch1: i2c@1 {
 			reg = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c0mux0ch2: i2c@2 {
 			reg = <2>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c0mux0ch3: i2c@3 {
 			reg = <3>;
 			#address-cells = <1>;
@@ -350,24 +359,27 @@
 		compatible = "nxp,pca9546";
 		reg = <0x70>;
 		#address-cells = <1>;
-		#size-cells = <0>;
 		i2c-mux-idle-disconnect;
+		#size-cells = <0>;
 
 		i2c1mux0ch0: i2c@0 {
 			reg = <0>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c1mux0ch1: i2c@1 {
 			reg = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c1mux0ch2: i2c@2 {
 			reg = <2>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c1mux0ch3: i2c@3 {
 			reg = <3>;
 			#address-cells = <1>;
@@ -384,44 +396,51 @@
 		compatible = "nxp,pca9548";
 		reg = <0x70>;
 		#address-cells = <1>;
-		#size-cells = <0>;
 		i2c-mux-idle-disconnect;
+		#size-cells = <0>;
 
 		i2c4mux0ch0: i2c@0 {
 			reg = <0>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c4mux0ch1: i2c@1 {
 			reg = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c4mux0ch2: i2c@2 {
 			reg = <2>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c4mux0ch3: i2c@3 {
 			reg = <3>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c4mux0ch4: i2c@4 {
 			reg = <4>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c4mux0ch5: i2c@5 {
 			reg = <5>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c4mux0ch6: i2c@6 {
 			reg = <6>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c4mux0ch7: i2c@7 {
 			reg = <7>;
 			#address-cells = <1>;
@@ -449,8 +468,6 @@
 // SCM
 &i2c7 {
 	status = "okay";
-
-
 };
 
 // MB - PDB
@@ -461,8 +478,8 @@
 		compatible = "nxp,pca9546";
 		reg = <0x72>;
 		#address-cells = <1>;
-		#size-cells = <0>;
 		i2c-mux-idle-disconnect;
+		#size-cells = <0>;
 
 		i2c8mux0ch0: i2c@0 {
 			reg = <0>;
@@ -478,11 +495,8 @@
 			gpio@22 {
 				compatible = "nxp,pca9555";
 				reg = <0x22>;
-				gpio-controller;
 				#gpio-cells = <2>;
-
-				interrupt-parent = <&sgpiom0>;
-				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
+				gpio-controller;
 
 				gpio-line-names =
 					"RPDB_FAN_FULL_SPEED_R_N", "RPDB_I2C_TEMP75_U8_ALERT_R_N",
@@ -495,16 +509,16 @@
 					"RPDB_I2C_P12V_STBY_VRM_ALERT_R_N",
 					"RPDB_PGD_P3V3_STBY_PWRGD_R",
 					"RPDB_P12V_STBY_VRM_PWRGD_BUF_R";
+				interrupt-parent = <&sgpiom0>;
+
+				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
 			};
 
 			gpio@24 {
 				compatible = "nxp,pca9555";
 				reg = <0x24>;
-				gpio-controller;
 				#gpio-cells = <2>;
-
-				interrupt-parent = <&sgpiom0>;
-				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
+				gpio-controller;
 
 				gpio-line-names =
 					"RPDB_EAM2_PRSNT_MOS_N_R", "RPDB_EAM3_PRSNT_MOS_N_R",
@@ -516,6 +530,9 @@
 					"", "RPDB_FAN2_PRSNT_N_R",
 					"RPDB_FAN3_PRSNT_N_R", "RPDB_FAN4_PRSNT_N_R",
 					"", "";
+				interrupt-parent = <&sgpiom0>;
+
+				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
 			};
 
 			// R-PDB FRU
@@ -524,6 +541,7 @@
 				reg = <0x50>;
 			};
 		};
+
 		i2c8mux0ch1: i2c@1 {
 			reg = <1>;
 			#address-cells = <1>;
@@ -532,11 +550,8 @@
 			gpio@22 {
 				compatible = "nxp,pca9555";
 				reg = <0x22>;
-				gpio-controller;
 				#gpio-cells = <2>;
-
-				interrupt-parent = <&sgpiom0>;
-				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
+				gpio-controller;
 
 				gpio-line-names =
 					"LPDB_FAN_FULL_SPEED_R_N","LPDB_I2C_TEMP75_U8_ALERT_R_N",
@@ -547,16 +562,16 @@
 					"LPDB_ALERT_P50V_HSC5_R_N","LPDB_I2C_P12V_SW_VRM_ALERT_R_N",
 					"LPDB_EAM0_PRSNT_MOS_N_R","LPDB_EAM1_PRSNT_MOS_N_R",
 					"LPDB_PWRGD_P50V_HSC5_SYS_R","";
+				interrupt-parent = <&sgpiom0>;
+
+				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
 			};
 
 			gpio@24 {
 				compatible = "nxp,pca9555";
 				reg = <0x24>;
-				gpio-controller;
 				#gpio-cells = <2>;
-
-				interrupt-parent = <&sgpiom0>;
-				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
+				gpio-controller;
 
 				gpio-line-names =
 					"LPDB_P50V_FAN1_R2_PG","LPDB_P50V_FAN2_R2_PG",
@@ -567,6 +582,9 @@
 					"","",
 					"","",
 					"","";
+				interrupt-parent = <&sgpiom0>;
+
+				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
 			};
 
 			// L-PDB FRU
@@ -575,11 +593,13 @@
 				reg = <0x50>;
 			};
 		};
+
 		i2c8mux0ch2: i2c@2 {
 			reg = <2>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c8mux0ch3: i2c@3 {
 			reg = <3>;
 			#address-cells = <1>;
@@ -613,34 +633,39 @@
 		compatible = "nxp,pca9548";
 		reg = <0x71>;
 		#address-cells = <1>;
-		#size-cells = <0>;
 		i2c-mux-idle-disconnect;
+		#size-cells = <0>;
 
 		i2c10mux0ch0: i2c@0 {
 			reg = <0>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c10mux0ch1: i2c@1 {
 			reg = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c10mux0ch2: i2c@2 {
 			reg = <2>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c10mux0ch3: i2c@3 {
 			reg = <3>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c10mux0ch4: i2c@4 {
 			reg = <4>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c10mux0ch5: i2c@5 {
 			reg = <5>;
 			#address-cells = <1>;
@@ -649,8 +674,8 @@
 			gpio@22 {
 				compatible = "nxp,pca9555";
 				reg = <0x22>;
-				gpio-controller;
 				#gpio-cells = <2>;
+				gpio-controller;
 
 				gpio-line-names =
 					"","",
@@ -669,11 +694,13 @@
 				reg = <0x52>;
 			};
 		};
+
 		i2c10mux0ch6: i2c@6 {
 			reg = <6>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c10mux0ch7: i2c@7 {
 			reg = <7>;
 			#address-cells = <1>;
@@ -690,34 +717,39 @@
 		compatible = "nxp,pca9548";
 		reg = <0x71>;
 		#address-cells = <1>;
-		#size-cells = <0>;
 		i2c-mux-idle-disconnect;
+		#size-cells = <0>;
 
 		i2c11mux0ch0: i2c@0 {
 			reg = <0>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c11mux0ch1: i2c@1 {
 			reg = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c11mux0ch2: i2c@2 {
 			reg = <2>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c11mux0ch3: i2c@3 {
 			reg = <3>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c11mux0ch4: i2c@4 {
 			reg = <4>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c11mux0ch5: i2c@5 {
 			reg = <5>;
 			#address-cells = <1>;
@@ -726,8 +758,8 @@
 			gpio@22 {
 				compatible = "nxp,pca9555";
 				reg = <0x22>;
-				gpio-controller;
 				#gpio-cells = <2>;
+				gpio-controller;
 
 				gpio-line-names =
 					"","",
@@ -746,11 +778,13 @@
 				reg = <0x52>;
 			};
 		};
+
 		i2c11mux0ch6: i2c@6 {
 			reg = <6>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c11mux0ch7: i2c@7 {
 			reg = <7>;
 			#address-cells = <1>;
@@ -772,24 +806,27 @@
 		compatible = "nxp,pca9548";
 		reg = <0x70>;
 		#address-cells = <1>;
-		#size-cells = <0>;
 		i2c-mux-idle-disconnect;
+		#size-cells = <0>;
 
 		i2c13mux0ch0: i2c@0 {
 			reg = <0>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c13mux0ch1: i2c@1 {
 			reg = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c13mux0ch2: i2c@2 {
 			reg = <2>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c13mux0ch3: i2c@3 {
 			reg = <3>;
 			#address-cells = <1>;
@@ -801,6 +838,7 @@
 				ti,mode = /bits/ 8 <1>;
 			};
 		};
+
 		i2c13mux0ch4: i2c@4 {
 			reg = <4>;
 			#address-cells = <1>;
@@ -812,16 +850,19 @@
 				reg = <0x51>;
 			};
 		};
+
 		i2c13mux0ch5: i2c@5 {
 			reg = <5>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c13mux0ch6: i2c@6 {
 			reg = <6>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+
 		i2c13mux0ch7: i2c@7 {
 			reg = <7>;
 			#address-cells = <1>;
@@ -831,10 +872,10 @@
 				compatible = "nxp,nxp-nci-i2c";
 				reg = <0x28>;
 
-				interrupt-parent = <&sgpiom0>;
-				interrupts = <156 IRQ_TYPE_LEVEL_HIGH>;
-
 				enable-gpios = <&sgpiom0 241 GPIO_ACTIVE_HIGH>;
+				interrupt-parent = <&sgpiom0>;
+
+				interrupts = <156 IRQ_TYPE_LEVEL_HIGH>;
 			};
 		};
 	};
@@ -851,11 +892,13 @@
 
 &kcs2 {
 	aspeed,lpc-io-reg = <0xca8>;
+
 	status = "okay";
 };
 
 &kcs3 {
 	aspeed,lpc-io-reg = <0xca2>;
+
 	status = "okay";
 };
 
@@ -864,14 +907,14 @@
 };
 
 &mac2 {
-	status = "okay";
-	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_ncsi3_default>;
+	pinctrl-names = "default";
 	use-ncsi;
+
+	status = "okay";
 };
 
 &sgpiom0 {
-	ngpios = <128>;
 	bus-frequency = <2000000>;
 	gpio-line-names =
 	/*in - out - in - out */
@@ -1011,22 +1054,28 @@
 	"FM_PWRGD_CPU0_PWROK", "",
 	"wS5_PWR_Ready", "",
 	"wS0_ON_N", "PWRGD_P1V0_AUX";
+
+	ngpios = <128>;
+
 	status = "okay";
 };
 
 // BIOS Flash
 &spi2 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_spi2_default>;
-	status = "okay";
 	reg = <0x1e631000 0xc4>, <0x50000000 0x8000000>;
+	pinctrl-0 = <&pinctrl_spi2_default>;
+
+	pinctrl-names = "default";
+
+	status = "okay";
 
 	flash@0 {
 		compatible = "jedec,spi-nor";
 		label = "pnor";
 		spi-max-frequency = <12000000>;
-		spi-tx-bus-width = <2>;
 		spi-rx-bus-width = <2>;
+		spi-tx-bus-width = <2>;
+
 		status = "okay";
 	};
 };
@@ -1058,22 +1107,25 @@
 };
 
 &vhub {
-	status = "okay";
 	pinctrl-names = "default";
+
+	status = "okay";
 };
 
 &video {
-	status = "okay";
 	memory-region = <&video_engine_memory>;
+
+	status = "okay";
 };
 
 &wdt1 {
-	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_wdtrst1_default>;
-	aspeed,reset-type = "soc";
-	aspeed,external-signal;
-	aspeed,ext-push-pull;
+	pinctrl-names = "default";
 	aspeed,ext-active-high;
 	aspeed,ext-pulse-duration = <256>;
+	aspeed,ext-push-pull;
+	aspeed,external-signal;
+	aspeed,reset-type = "soc";
+
 	status = "okay";
 };

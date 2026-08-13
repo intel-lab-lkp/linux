@@ -4,14 +4,14 @@
 #include "aspeed-bmc-facebook-anacapa-evt2.dts"
 
 / {
-	model = "Facebook Anacapa BMC";
 	compatible = "facebook,anacapa-bmc-dvt", "aspeed,ast2600";
+	model = "Facebook Anacapa BMC";
 };
 
 // MB - PDB
 &i2c8 {
 	i2c-mux@72 {
-		i2c8mux0ch0: i2c@0 {
+		i2c@0 {
 			gpio@22 {
 				gpio-line-names =
 					"RPDB_FAN_FULL_SPEED_R_N", "RPDB_I2C_TMP432_U8_ALERT_R_N",
@@ -25,6 +25,7 @@
 					"RPDB_PGD_P3V3_STBY_PWRGD_R",
 					"RPDB_P12V_STBY_VRM_PWRGD_BUF_R";
 			};
+
 			gpio@24 {
 				gpio-line-names =
 					"RPDB_EAM2_PRSNT_MOS_N_R", "RPDB_EAM3_PRSNT_MOS_N_R",
@@ -37,23 +38,25 @@
 					"RPDB_FAN7_PRSNT_N_R", "RPDB_FAN8_PRSNT_N_R",
 					"", "";
 			};
+
 			gpio@38 {
 				compatible = "nxp,pca9554";
 				reg = <0x38>;
-				gpio-controller;
 				#gpio-cells = <2>;
-
-				interrupt-parent = <&sgpiom0>;
-				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
+				gpio-controller;
 
 				gpio-line-names =
 					"RPDB_P50V_FUSE2_TVS1", "RPDB_P50V_FUSE2_TVS2",
 					"RPDB_P50V_FUSE3_TVS1", "RPDB_P50V_FUSE3_TVS2",
 					"RPDB_P50V_FUSE4_TVS1", "",
 					"", "";
+
+				interrupt-parent = <&sgpiom0>;
+				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
 			};
 		};
-		i2c8mux0ch1: i2c@1 {
+
+		i2c@1 {
 			gpio@22 {
 				gpio-line-names =
 					"LPDB_FAN_FULL_SPEED_R_N", "LPDB_I2C_TEMP75_U8_ALERT_R_N",
@@ -65,6 +68,7 @@
 					"LPDB_EAM0_PRSNT_MOS_N_R", "LPDB_EAM1_PRSNT_MOS_N_R",
 					"LPDB_PWRGD_P50V_HSC5_SYS_R", "BARKLIP_PRSNT_N_R3";
 			};
+
 			gpio@24 {
 				gpio-line-names =
 					"LPDB_P50V_FAN0_R2_PG", "LPDB_P50V_FAN1_R2_PG",
@@ -76,27 +80,27 @@
 					"", "",
 					"", "LPDB_PG_P3V3_R";
 			};
+
 			gpio@38 {
 				compatible = "nxp,pca9554";
 				reg = <0x38>;
-				gpio-controller;
 				#gpio-cells = <2>;
-
-				interrupt-parent = <&sgpiom0>;
-				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
+				gpio-controller;
 
 				gpio-line-names =
 					"LPDB_P50V_FUSE0_TVS1", "LPDB_P50V_FUSE0_TVS2",
 					"LPDB_P50V_FUSE1_TVS1", "LPDB_P50V_FUSE1_TVS2",
 					"LPDB_P50V_FUSE5_TVS1", "",
 					"", "";
+
+				interrupt-parent = <&sgpiom0>;
+				interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
 			};
 		};
 	};
 };
 
 &sgpiom0 {
-	ngpios = <128>;
 	bus-frequency = <2000000>;
 	gpio-line-names =
 	/*in - out */
@@ -260,6 +264,7 @@
 	"AMC_FAIL", "HPM_CPLD_RISCV_RST",
 	"S0_ON", "";
 
+	ngpios = <128>;
+
 	status = "okay";
 };
-
