@@ -105,6 +105,20 @@ enum vop2_afbc_format {
 #define VOP2_MAX_DCLK_RATE		600000000UL
 
 /*
+ * All video ports fetch their scanout data over a single AXI clock.  The
+ * hardware buffers that data in an internal FIFO which is drained at the
+ * pixel rate, so a mode whose pixel rate outruns the fill rate underruns the
+ * FIFO, which the hardware reports as POST_BUF_EMPTY and which shows up as a
+ * corrupted image.  Raise the AXI clock for modes that need it.
+ *
+ * The requirement follows the pixel rate rather than the interface clock: a
+ * YCbCr 4:2:0 link halves dclk but not the rate at which the video port
+ * consumes pixels.
+ */
+#define VOP2_ACLK_RATE_HIGH		750000000UL
+#define VOP2_HIGH_BW_PIXCLK_KHZ		1000000
+
+/*
  * bus-format types.
  */
 struct drm_bus_format_enum_list {
@@ -1008,6 +1022,72 @@ static bool vop2_gamma_lut_in_use(struct vop2 *vop2, struct vop2_video_port *vp)
 	return gamma_en_vp_id != nr_vps && gamma_en_vp_id != vp->id;
 }
 
+static struct drm_private_state *
+vop2_aclk_create_state(struct drm_private_obj *obj)
+{
+	struct vop2_aclk_state *state;
+
+	state = kzalloc_obj(*state);
+	if (!state)
+		return ERR_PTR(-ENOMEM);
+
+	return &state->base;
+}
+
+static struct drm_private_state *
+vop2_aclk_duplicate_state(struct drm_private_obj *obj)
+{
+	struct vop2_aclk_state *state;
+
+	state = kmemdup(obj->state, sizeof(*state), GFP_KERNEL);
+	if (!state)
+		return NULL;
+
+	__drm_atomic_helper_private_obj_duplicate_state(obj, &state->base);
+
+	return &state->base;
+}
+
+static void vop2_aclk_destroy_state(struct drm_private_obj *obj,
+				    struct drm_private_state *state)
+{
+	kfree(to_vop2_aclk_state(state));
+}
+
+static const struct drm_private_state_funcs vop2_aclk_state_funcs = {
+	.atomic_create_state = vop2_aclk_create_state,
+	.atomic_duplicate_state = vop2_aclk_duplicate_state,
+	.atomic_destroy_state = vop2_aclk_destroy_state,
+};
+
+/* The rate that satisfies every video port, never below the platform's own. */
+static unsigned long vop2_aclk_rate(struct vop2 *vop2,
+				    const struct vop2_aclk_state *aclk_state)
+{
+	unsigned long rate = vop2->aclk_rate_normal;
+	unsigned int i;
+
+	for (i = 0; i < vop2->data->nr_vps; i++)
+		rate = max(rate, aclk_state->vp_rate[i]);
+
+	return rate;
+}
+
+static void vop2_apply_aclk_rate(struct vop2 *vop2, struct drm_atomic_commit *state)
+{
+	struct drm_private_state *priv_state;
+
+	if (vop2->version != VOP_VERSION_RK3588)
+		return;
+
+	priv_state = drm_atomic_get_new_private_obj_state(state, &vop2->aclk_obj);
+	if (!priv_state)
+		return;
+
+	clk_set_rate(vop2->aclk,
+		     vop2_aclk_rate(vop2, to_vop2_aclk_state(priv_state)));
+}
+
 static void vop2_crtc_atomic_disable(struct drm_crtc *crtc,
 				     struct drm_atomic_commit *state)
 {
@@ -1052,6 +1132,8 @@ static void vop2_crtc_atomic_disable(struct drm_crtc *crtc,
 
 	if (!vop2->enable_count)
 		vop2_disable(vop2);
+
+	vop2_apply_aclk_rate(vop2, state);
 
 	vop2_unlock(vop2);
 
@@ -1780,6 +1862,8 @@ static void vop2_crtc_atomic_enable(struct drm_crtc *crtc,
 
 	vop2_lock(vop2);
 
+	vop2_apply_aclk_rate(vop2, state);
+
 	ret = clk_prepare_enable(vp->dclk);
 	if (ret < 0) {
 		drm_err(vop2->drm, "failed to enable dclk for video port%d - %d\n",
@@ -1992,6 +2076,20 @@ static int vop2_crtc_atomic_check(struct drm_crtc *crtc,
 	ret = vop2_crtc_atomic_check_gamma(vp, crtc, state, crtc_state);
 	if (ret)
 		return ret;
+
+	if (vp->vop2->version == VOP_VERSION_RK3588) {
+		struct drm_private_state *priv_state;
+
+		priv_state = drm_atomic_get_private_obj_state(state,
+							      &vp->vop2->aclk_obj);
+		if (IS_ERR(priv_state))
+			return PTR_ERR(priv_state);
+
+		to_vop2_aclk_state(priv_state)->vp_rate[vp->id] =
+			crtc_state->active &&
+			crtc_state->adjusted_mode.crtc_clock > VOP2_HIGH_BW_PIXCLK_KHZ ?
+			VOP2_ACLK_RATE_HIGH : 0;
+	}
 
 	drm_atomic_crtc_state_for_each_plane(plane, crtc_state)
 		nplanes++;
@@ -2875,6 +2973,8 @@ static int vop2_bind(struct device *dev, struct device *master, void *data)
 		return dev_err_probe(drm->dev, PTR_ERR(vop2->aclk),
 				     "failed to get aclk source\n");
 
+	vop2->aclk_rate_normal = clk_get_rate(vop2->aclk);
+
 	vop2->pclk = devm_clk_get_optional(vop2->dev, "pclk_vop");
 	if (IS_ERR(vop2->pclk))
 		return dev_err_probe(drm->dev, PTR_ERR(vop2->pclk),
@@ -2944,6 +3044,11 @@ static int vop2_bind(struct device *dev, struct device *master, void *data)
 
 	rockchip_drm_dma_init_device(vop2->drm, vop2->dev);
 
+	ret = drm_atomic_private_obj_init(vop2->drm, &vop2->aclk_obj,
+					  &vop2_aclk_state_funcs);
+	if (ret)
+		goto err_crtcs;
+
 	pm_runtime_enable(&pdev->dev);
 
 	return 0;
@@ -2959,6 +3064,8 @@ static void vop2_unbind(struct device *dev, struct device *master, void *data)
 	struct vop2 *vop2 = dev_get_drvdata(dev);
 
 	pm_runtime_disable(dev);
+
+	drm_atomic_private_obj_fini(&vop2->aclk_obj);
 
 	if (vop2->rgb)
 		rockchip_rgb_fini(vop2->rgb);
