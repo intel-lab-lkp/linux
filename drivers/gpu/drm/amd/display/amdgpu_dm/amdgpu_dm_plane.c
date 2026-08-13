@@ -1923,14 +1923,18 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 	if (res)
 		return res;
 
-	/* TODO: Check which blend modes are supported in DCE-generation
-	 * planes, i.e. DC_PLANE_TYPE_DCE_RGB/UNDERLAY and expose blend mode
-	 * property accordingly.
+	/* Blend mode support varies on DCE generations according to HW caps
+	 * and number of planes per CRTC. However, as current driver
+	 * implementation only creates one primary and one cursor plane per
+	 * CRTC for DCE (overlay is only created if
+	 * DC_PLANE_TYPE_DCN_UNIVERSAL), the primary plane blend mode ends up
+	 * being always PIXEL_NONE across DCE versions.
 	 */
-	if ((plane->type == DRM_PLANE_TYPE_OVERLAY ||
-	     plane->type == DRM_PLANE_TYPE_PRIMARY) &&
-	    plane_cap && plane_cap->per_pixel_alpha &&
-	    plane_cap->type == DC_PLANE_TYPE_DCN_UNIVERSAL) {
+	if (plane_cap && plane_cap->type != DC_PLANE_TYPE_DCN_UNIVERSAL) {
+		drm_plane_create_blend_mode_property(plane, BIT(DRM_MODE_BLEND_PIXEL_NONE));
+	} else if ((plane->type == DRM_PLANE_TYPE_OVERLAY ||
+		    plane->type == DRM_PLANE_TYPE_PRIMARY) &&
+		   plane_cap && plane_cap->per_pixel_alpha) {
 		unsigned int blend_caps = BIT(DRM_MODE_BLEND_PIXEL_NONE) |
 					  BIT(DRM_MODE_BLEND_PREMULTI) |
 					  BIT(DRM_MODE_BLEND_COVERAGE);
