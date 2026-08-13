@@ -938,14 +938,6 @@ static int u32_change(struct net *net, struct sk_buff *in_skb,
 		err = u32_replace_hw_knode(tp, new, userflags, extack);
 		if (err) {
 			u32_unbind_filter(tp, new, tb);
-
-			if (tb[TCA_U32_LINK]) {
-				struct tc_u_hnode *ht_old;
-
-				ht_old = rtnl_dereference(n->ht_down);
-				if (ht_old)
-					refcount_inc(&ht_old->refcnt);
-			}
 			__u32_destroy_key(new);
 			return err;
 		}
