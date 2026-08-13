@@ -139,8 +139,11 @@ static int i2c_pca_pf_probe(struct platform_device *pdev)
 
 	irq = platform_get_irq_optional(pdev, 0);
 	/* If irq is 0, we do polling. */
-	if (irq < 0)
+	if (irq < 0) {
+		if (irq != -ENXIO)
+			return irq;
 		irq = 0;
+	}
 
 	i2c = devm_kzalloc(&pdev->dev, sizeof(*i2c), GFP_KERNEL);
 	if (!i2c)
