@@ -22,6 +22,7 @@
  *
  */
 
+#include <asm-generic/errno-base.h>
 #include <linux/fs.h>
 #include <linux/buffer_head.h>
 #include <linux/filelock.h>
@@ -160,6 +161,9 @@ static int ext4_readdir(struct file *file, struct dir_context *ctx)
 	}
 
 	if (ext4_has_inline_data(inode)) {
+		if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA))
+			return -EINVAL;
+
 		int has_inline_data = 1;
 		err = ext4_read_inline_dir(file, ctx,
 					   &has_inline_data);
