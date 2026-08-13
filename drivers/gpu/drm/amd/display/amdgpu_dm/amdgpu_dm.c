@@ -5270,6 +5270,9 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state)
 
 		dm_new_crtc_state = to_dm_crtc_state(new_crtc_state);
 		dm_old_crtc_state = to_dm_crtc_state(old_crtc_state);
+		/* DPMS-off leaves the connector routed to a streamless CRTC. */
+		if (!dm_new_crtc_state->stream)
+			continue;
 
 		scaling_changed = is_scaling_state_different(dm_new_con_state,
 							     dm_old_con_state);
