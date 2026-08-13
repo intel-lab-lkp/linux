@@ -618,7 +618,7 @@ void memcg1_commit_charge(struct folio *folio, struct mem_cgroup *memcg)
  */
 void __memcg1_swapout(struct folio *folio, struct swap_cluster_info *ci)
 {
-	struct mem_cgroup *memcg, *swap_memcg;
+	struct mem_cgroup *memcg;
 	struct obj_cgroup *objcg;
 	unsigned int nr_entries;
 
@@ -638,31 +638,26 @@ void __memcg1_swapout(struct folio *folio, struct swap_cluster_info *ci)
 	if (!objcg)
 		return;
 
-	rcu_read_lock();
-	memcg = obj_cgroup_memcg(objcg);
 	/*
 	 * In case the memcg owning these pages has been offlined and doesn't
 	 * have an ID allocated to it anymore, charge the closest online
-	 * ancestor for the swap instead and transfer the memory+swap charge.
+	 * ancestor for the swap instead.
 	 */
+	memcg = get_mem_cgroup_from_objcg(objcg);
 	nr_entries = folio_nr_pages(folio);
-	swap_memcg = mem_cgroup_private_id_get_online(memcg, nr_entries);
-	mod_memcg_state(swap_memcg, MEMCG_SWAP, nr_entries);
+	mod_memcg_state(memcg, MEMCG_SWAP, nr_entries);
+
+	/* we have a reference to it, so we should get exact memcg itself */
+	mem_cgroup_private_id_get_online(memcg, nr_entries);
 
 	__swap_cgroup_set(ci, swp_cluster_offset(folio->swap), nr_entries,
-			  mem_cgroup_private_id(swap_memcg));
+			  mem_cgroup_private_id(memcg));
 
 	folio_unqueue_deferred_split(folio);
 	folio->memcg_data = 0;
 
 	if (!obj_cgroup_is_root(objcg))
 		page_counter_uncharge(&memcg->memory, nr_entries);
-
-	if (memcg != swap_memcg) {
-		if (!mem_cgroup_is_root(swap_memcg))
-			page_counter_charge(&swap_memcg->memsw, nr_entries);
-		page_counter_uncharge(&memcg->memsw, nr_entries);
-	}
 
 	/*
 	 * The caller must hold the swap cluster lock with IRQ off. It is
@@ -675,7 +670,7 @@ void __memcg1_swapout(struct folio *folio, struct swap_cluster_info *ci)
 	preempt_enable_nested();
 	memcg1_check_events(memcg, folio_nid(folio));
 
-	rcu_read_unlock();
+	mem_cgroup_put(memcg);
 	obj_cgroup_put(objcg);
 }
 
