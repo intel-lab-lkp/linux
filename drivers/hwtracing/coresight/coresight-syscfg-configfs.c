@@ -281,7 +281,14 @@ static ssize_t cscfg_param_value_show(struct config_item *item, char *page)
 {
 	struct cscfg_fs_param *param_item = container_of(to_config_group(item),
 							 struct cscfg_fs_param, group);
-	u64 value = param_item->feat_desc->params_desc[param_item->param_idx].value;
+	struct cscfg_parameter_desc *param_desc =
+		&param_item->feat_desc->params_desc[param_item->param_idx];
+	u64 value = param_desc->value;
+
+	/* The kernel address should print with the "%pK" specifier */
+	if (!strcmp(param_desc->name, "address"))
+		return scnprintf(page, PAGE_SIZE, "0x%pK\n",
+				 (void *)(unsigned long)value);
 
 	return scnprintf(page, PAGE_SIZE, "0x%llx\n", value);
 }
