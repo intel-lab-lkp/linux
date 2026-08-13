@@ -410,6 +410,99 @@ static inline unsigned int cluster_offset(struct swap_info_struct *si,
 	return cluster_index(si, ci) * SWAPFILE_CLUSTER;
 }
 
+struct swap_cluster_tables {
+	struct swap_table *table;
+#ifdef CONFIG_MEMCG
+	struct swap_memcg_table *memcg_table;
+#endif
+#if !SWAP_TABLE_HAS_ZEROFLAG
+	unsigned long *zero_bitmap;
+#endif
+};
+
+static void swap_cluster_tables_free(struct swap_cluster_tables *tables)
+{
+#ifdef CONFIG_MEMCG
+	kfree(tables->memcg_table);
+	tables->memcg_table = NULL;
+#endif
+
+#if !SWAP_TABLE_HAS_ZEROFLAG
+	kfree(tables->zero_bitmap);
+	tables->zero_bitmap = NULL;
+#endif
+
+	if (!tables->table)
+		return;
+
+	if (SWP_TABLE_USE_PAGE)
+		folio_put(virt_to_folio(tables->table));
+	else
+		kmem_cache_free(swap_table_cachep, tables->table);
+	tables->table = NULL;
+}
+
+static int swap_cluster_tables_alloc(struct swap_cluster_tables *tables,
+				     gfp_t gfp)
+{
+	struct folio *folio;
+
+	if (SWP_TABLE_USE_PAGE) {
+		folio = folio_alloc(gfp | __GFP_ZERO, 0);
+		if (folio)
+			tables->table = folio_address(folio);
+	} else {
+		tables->table = kmem_cache_zalloc(swap_table_cachep, gfp);
+	}
+	if (!tables->table)
+		return -ENOMEM;
+
+#ifdef CONFIG_MEMCG
+	if (!mem_cgroup_disabled()) {
+		tables->memcg_table = kzalloc_obj(*tables->memcg_table, gfp);
+		if (!tables->memcg_table)
+			goto free_tables;
+	}
+#endif
+
+#if !SWAP_TABLE_HAS_ZEROFLAG
+	tables->zero_bitmap = bitmap_zalloc(SWAPFILE_CLUSTER, gfp);
+	if (!tables->zero_bitmap)
+		goto free_tables;
+#endif
+
+	return 0;
+
+#if defined(CONFIG_MEMCG) || !SWAP_TABLE_HAS_ZEROFLAG
+free_tables:
+	swap_cluster_tables_free(tables);
+	return -ENOMEM;
+#endif
+}
+
+static void swap_cluster_tables_install(struct swap_cluster_info *ci,
+					struct swap_cluster_tables *tables)
+{
+	lockdep_assert_held(&ci->lock);
+	VM_WARN_ON_ONCE(ci->flags || !cluster_is_empty(ci));
+	VM_WARN_ON_ONCE(rcu_access_pointer(ci->table));
+
+#ifdef CONFIG_MEMCG
+	VM_WARN_ON_ONCE(ci->memcg_table);
+	ci->memcg_table = tables->memcg_table;
+	tables->memcg_table = NULL;
+#endif
+
+#if !SWAP_TABLE_HAS_ZEROFLAG
+	VM_WARN_ON_ONCE(ci->zero_bitmap);
+	ci->zero_bitmap = tables->zero_bitmap;
+	tables->zero_bitmap = NULL;
+#endif
+
+	rcu_assign_pointer(ci->table, tables->table);
+	tables->table = NULL;
+}
+
 static void swap_cluster_free_table_folio_rcu_cb(struct rcu_head *head)
 {
 	struct folio *folio;
@@ -444,50 +537,6 @@ static void swap_cluster_free_table(struct swap_cluster_info *ci)
 
 	call_rcu(&(folio_page(virt_to_folio(table), 0)->rcu_head),
 		 swap_cluster_free_table_folio_rcu_cb);
-}
-
-static int swap_cluster_alloc_table(struct swap_cluster_info *ci, gfp_t gfp)
-{
-	struct swap_table *table = NULL;
-	struct folio *folio;
-
-	/* The cluster must be empty and not on any list during allocation. */
-	VM_WARN_ON_ONCE(ci->flags || !cluster_is_empty(ci));
-	if (rcu_access_pointer(ci->table))
-		return 0;
-
-	if (SWP_TABLE_USE_PAGE) {
-		folio = folio_alloc(gfp | __GFP_ZERO, 0);
-		if (folio)
-			table = folio_address(folio);
-	} else {
-		table = kmem_cache_zalloc(swap_table_cachep, gfp);
-	}
-	if (!table)
-		return -ENOMEM;
-
-	rcu_assign_pointer(ci->table, table);
-
-#ifdef CONFIG_MEMCG
-	if (!mem_cgroup_disabled()) {
-		VM_WARN_ON_ONCE(ci->memcg_table);
-		ci->memcg_table = kzalloc_obj(*ci->memcg_table, gfp);
-		if (!ci->memcg_table) {
-			swap_cluster_free_table(ci);
-			return -ENOMEM;
-		}
-	}
-#endif
-
-#if !SWAP_TABLE_HAS_ZEROFLAG
-	VM_WARN_ON_ONCE(ci->zero_bitmap);
-	ci->zero_bitmap = bitmap_zalloc(SWAPFILE_CLUSTER, gfp);
-	if (!ci->zero_bitmap) {
-		swap_cluster_free_table(ci);
-		return -ENOMEM;
-	}
-#endif
-	return 0;
 }
 
 /*
@@ -527,6 +576,7 @@ static struct swap_cluster_info *
 swap_cluster_populate(struct swap_info_struct *si,
 			 struct swap_cluster_info *ci)
 {
+	struct swap_cluster_tables tables = {};
 	int ret;
 
 	/*
@@ -538,9 +588,12 @@ swap_cluster_populate(struct swap_info_struct *si,
 		lockdep_assert_held(&si->global_cluster_lock);
 	lockdep_assert_held(&ci->lock);
 
-	if (!swap_cluster_alloc_table(ci, __GFP_HIGH | __GFP_NOMEMALLOC |
-					  __GFP_NOWARN))
+	ret = swap_cluster_tables_alloc(&tables, __GFP_HIGH | __GFP_NOMEMALLOC |
+					       __GFP_NOWARN);
+	if (!ret) {
+		swap_cluster_tables_install(ci, &tables);
 		return ci;
+	}
 
 	/*
 	 * Try a sleep allocation. Each isolated free cluster may cause
@@ -552,8 +605,8 @@ swap_cluster_populate(struct swap_info_struct *si,
 		spin_unlock(&si->global_cluster_lock);
 	local_unlock(&percpu_swap_cluster.lock);
 
-	ret = swap_cluster_alloc_table(ci, __GFP_HIGH | __GFP_NOMEMALLOC |
-					   GFP_KERNEL);
+	ret = swap_cluster_tables_alloc(&tables, __GFP_HIGH | __GFP_NOMEMALLOC |
+						GFP_KERNEL);
 
 	/*
 	 * Back to atomic context. We might have migrated to a new CPU with a
@@ -568,11 +621,19 @@ swap_cluster_populate(struct swap_info_struct *si,
 		spin_lock(&si->global_cluster_lock);
 	spin_lock(&ci->lock);
 
+	/* Nothing except this helper should populate an isolated cluster. */
+	if (WARN_ON_ONCE(cluster_table_is_alloced(ci))) {
+		swap_cluster_tables_free(&tables);
+		return ci;
+	}
+
 	if (ret) {
 		move_cluster(si, ci, &si->free_clusters, CLUSTER_FLAG_FREE);
 		spin_unlock(&ci->lock);
 		return NULL;
 	}
+
+	swap_cluster_tables_install(ci, &tables);
 	return ci;
 }
 
@@ -788,6 +849,7 @@ static int swap_cluster_setup_bad_slot(struct swap_info_struct *si,
 				       struct swap_cluster_info *cluster_info,
 				       unsigned int offset, bool mask)
 {
+	struct swap_cluster_tables tables = {};
 	unsigned int ci_off = offset % SWAPFILE_CLUSTER;
 	unsigned long idx = offset / SWAPFILE_CLUSTER;
 	struct swap_cluster_info *ci;
@@ -812,9 +874,14 @@ static int swap_cluster_setup_bad_slot(struct swap_info_struct *si,
 
 	ci = cluster_info + idx;
 	/* Need to allocate swap table first for initial bad slot marking. */
-	if (!ci->count && swap_cluster_alloc_table(ci, GFP_KERNEL))
-		return -ENOMEM;
+	if (!ci->count) {
+		ret = swap_cluster_tables_alloc(&tables, GFP_KERNEL);
+		if (ret)
+			return ret;
+	}
 	spin_lock(&ci->lock);
+	if (tables.table)
+		swap_cluster_tables_install(ci, &tables);
 	/* Check for duplicated bad swap slots. */
 	if (__swap_table_xchg(ci, ci_off, SWP_TB_BAD) != SWP_TB_NULL) {
 		pr_warn("Duplicated bad slot offset %d\n", offset);
