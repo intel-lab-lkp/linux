@@ -130,7 +130,7 @@ static int fuse_setup_measure_verity(unsigned long arg, struct iovec *iov)
 	if (copy_from_user(&digest_size, &uarg->digest_size, sizeof(digest_size)))
 		return -EFAULT;
 
-	if (digest_size > SIZE_MAX - sizeof(struct fsverity_digest))
+	if ((size_t)digest_size > SIZE_MAX - sizeof(struct fsverity_digest))
 		return -EINVAL;
 
 	iov->iov_len = sizeof(struct fsverity_digest) + digest_size;
