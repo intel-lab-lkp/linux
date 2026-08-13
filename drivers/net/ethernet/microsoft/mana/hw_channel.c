@@ -747,6 +747,13 @@ static int mana_hwc_establish_channel(struct gdma_context *gc, u16 *q_depth,
 
 	init_completion(&hwc->hwc_init_eqe_comp);
 
+	/* Set before setup_hwc() activates the device's DMA into our buffers,
+	 * so a later failure still tears the HWC down instead of freeing
+	 * buffers the device may write to.  Do not tear down here: that would
+	 * double the timeout and mask the error.
+	 */
+	hwc->setup_active = true;
+
 	err = mana_smc_setup_hwc(&gc->shm_channel, false,
 				 eq->mem_info.dma_handle,
 				 cq->mem_info.dma_handle,
@@ -837,6 +844,16 @@ int mana_hwc_create_channel(struct gdma_context *gc)
 	u16 q_depth_max;
 	int err;
 
+	/* A previous teardown may have failed and left the old context
+	 * reachable.  Retry it before building a new channel; if it still
+	 * fails, return an error so mana_serv_reset() does a full PCI rescan.
+	 */
+	if (gd->driver_data) {
+		mana_hwc_destroy_channel(gc);
+		if (gd->driver_data)
+			return -ETIMEDOUT;
+	}
+
 	hwc = kzalloc_obj(*hwc);
 	if (!hwc)
 		return -ENOMEM;
@@ -894,18 +911,40 @@ void mana_hwc_destroy_channel(struct gdma_context *gc)
 	if (!hwc)
 		return;
 
-	/* gc->max_num_cqs is set in mana_hwc_init_event_handler(). If it's
-	 * non-zero, the HWC worked and we should tear down the HWC here.
+	/* Only tear down if setup_hwc() activated the device.  If teardown
+	 * fails the device may still DMA into these buffers, so leak them
+	 * rather than free, and keep setup_active set.
 	 */
-	if (gc->max_num_cqs > 0)
-		mana_smc_teardown_hwc(&gc->shm_channel, false);
+	if (hwc->setup_active) {
+		int td_err = mana_smc_teardown_hwc(&gc->shm_channel, false);
 
-	if (hwc->txq)
-		mana_hwc_destroy_wq(hwc, hwc->txq);
+		if (td_err) {
+			dev_err(gc->dev,
+				"HWC teardown failed: %d, leaking resources\n",
+				td_err);
+			/* The device may still DMA into these buffers, so
+			 * leak them.  Still fence the interrupt path: drop
+			 * the EQ from the handler list and unpublish the CQ,
+			 * and NULL them so a later retry does not touch the
+			 * leaked queues again.
+			 */
+			if (hwc->cq && hwc->cq->gdma_eq) {
+				mana_gd_destroy_eq(gc, false, hwc->cq->gdma_eq);
+				hwc->cq->gdma_eq = NULL;
+			}
+			if (hwc->cq && hwc->cq->gdma_cq) {
+				mana_gd_unpublish_cq(gc, hwc->cq->gdma_cq);
+				hwc->cq->gdma_cq = NULL;
+			}
+			return;
+		}
 
-	if (hwc->rxq)
-		mana_hwc_destroy_wq(hwc, hwc->rxq);
+		hwc->setup_active = false;
+	}
 
+	/* Tear down the CQ/EQ first so no interrupt handler can touch the
+	 * RQ/TXQ buffers after this point.
+	 */
 	if (hwc->cq)
 		mana_hwc_destroy_cq(hwc->gdma_dev->gdma_context, hwc->cq);
 
@@ -913,6 +952,12 @@ void mana_hwc_destroy_channel(struct gdma_context *gc)
 	 * slot, so it is not left dangling.
 	 */
 	gc->max_num_cqs = 0;
+
+	if (hwc->txq)
+		mana_hwc_destroy_wq(hwc, hwc->txq);
+
+	if (hwc->rxq)
+		mana_hwc_destroy_wq(hwc, hwc->rxq);
 
 	kfree(hwc->caller_ctx);
 	hwc->caller_ctx = NULL;

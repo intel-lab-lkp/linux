@@ -205,6 +205,12 @@ struct hw_channel_context {
 	 */
 	u32 rx_leaked_wqe;
 
+	/* True once setup_hwc() may have activated the device's DMA into the
+	 * HWC buffers: set before the setup command, cleared after teardown
+	 * succeeds.
+	 */
+	bool setup_active;
+
 	struct hwc_caller_ctx *caller_ctx;
 };
 

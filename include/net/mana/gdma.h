@@ -509,6 +509,12 @@ int mana_gd_create_mana_wq_cq(struct gdma_dev *gd,
 
 void mana_gd_destroy_queue(struct gdma_context *gc, struct gdma_queue *queue);
 
+/* Flush (optional), deregister the IRQ for, and disable an EQ, without
+ * freeing its queue memory.
+ */
+void mana_gd_destroy_eq(struct gdma_context *gc, bool flush_events,
+			struct gdma_queue *queue);
+
 /* Add a CQ to cq_table so the EQ handler can dispatch to it.  Returns
  * -EINVAL if the id is out of range or already in use.
  */

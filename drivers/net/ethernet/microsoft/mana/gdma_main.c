@@ -976,8 +976,8 @@ out:
 	return err;
 }
 
-static void mana_gd_destroy_eq(struct gdma_context *gc, bool flush_evenets,
-			       struct gdma_queue *queue)
+void mana_gd_destroy_eq(struct gdma_context *gc, bool flush_evenets,
+			struct gdma_queue *queue)
 {
 	int err;
 
