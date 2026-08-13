@@ -9,6 +9,7 @@ struct super_block;
 struct file_system_type;
 struct iomap;
 struct iomap_ops;
+struct inode;
 struct linux_binprm;
 struct path;
 struct mount;
@@ -138,6 +139,8 @@ extern bool super_trylock_shared(struct super_block *sb);
 struct super_block *user_get_super(dev_t, bool excl);
 void put_super(struct super_block *sb);
 extern bool mount_capable(struct fs_context *);
+void __init super_init(void);
+int super_defer_iput(struct inode *inode);
 
 /*
  * Prepare superblock for changing its read-only state (i.e., either remount

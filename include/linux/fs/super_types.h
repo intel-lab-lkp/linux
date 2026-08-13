@@ -255,6 +255,12 @@ struct super_block {
 	 */
 	struct list_lru				s_dentry_lru;
 	struct list_lru				s_inode_lru;
+	/* Protects s_deferred_iputs and s_deferred_iput_shutdown. */
+	spinlock_t				s_deferred_iput_lock;
+	/* Inodes whose final iput was deferred from PF_MEMALLOC context. */
+	struct list_head			s_deferred_iputs;
+	struct work_struct			s_deferred_iput_work;
+	bool					s_deferred_iput_shutdown;
 	struct rcu_head				rcu;
 	struct work_struct			destroy_work;
 

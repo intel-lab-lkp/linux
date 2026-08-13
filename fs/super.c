@@ -37,6 +37,7 @@
 #include <linux/user_namespace.h>
 #include <linux/fs_context.h>
 #include <linux/fserror.h>
+#include <linux/workqueue.h>
 #include <uapi/linux/mount.h>
 #include "internal.h"
 
@@ -45,12 +46,96 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who,
 
 static LIST_HEAD(super_blocks);
 static DEFINE_SPINLOCK(sb_lock);
+static struct workqueue_struct *super_deferred_iput_wq __ro_after_init;
 
 static char *sb_writers_name[SB_FREEZE_LEVELS] = {
 	"sb_writers",
 	"sb_pagefaults",
 	"sb_internal",
 };
+
+/*
+ * sb->s_deferred_iput_lock protects sb->s_deferred_iputs and inode->i_lru
+ * while the inode is queued there.
+ */
+static void super_deferred_iput_work(struct work_struct *work)
+{
+	struct super_block *sb = container_of(work, struct super_block,
+					      s_deferred_iput_work);
+	LIST_HEAD(pending);
+
+	for (;;) {
+		spin_lock(&sb->s_deferred_iput_lock);
+		list_splice_init(&sb->s_deferred_iputs, &pending);
+		spin_unlock(&sb->s_deferred_iput_lock);
+
+		if (list_empty(&pending))
+			break;
+
+		while (!list_empty(&pending)) {
+			struct inode *inode;
+
+			inode = list_first_entry(&pending, struct inode, i_lru);
+			list_del_init(&inode->i_lru);
+			iput(inode);
+			cond_resched();
+		}
+	}
+}
+
+static void __init super_deferred_iput_wq_init(void)
+{
+	super_deferred_iput_wq = alloc_workqueue("super_deferred_iput",
+						 WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
+	if (!super_deferred_iput_wq)
+		panic("Failed to allocate super deferred iput workqueue\n");
+}
+
+void __init super_init(void)
+{
+	super_deferred_iput_wq_init();
+}
+
+static void super_deferred_iput_init(struct super_block *sb)
+{
+	spin_lock_init(&sb->s_deferred_iput_lock);
+	INIT_LIST_HEAD(&sb->s_deferred_iputs);
+	INIT_WORK(&sb->s_deferred_iput_work, super_deferred_iput_work);
+	sb->s_deferred_iput_shutdown = false;
+}
+
+static void super_deferred_iput_shutdown(struct super_block *sb)
+{
+	bool empty;
+
+	spin_lock(&sb->s_deferred_iput_lock);
+	sb->s_deferred_iput_shutdown = true;
+	spin_unlock(&sb->s_deferred_iput_lock);
+
+	flush_work(&sb->s_deferred_iput_work);
+
+	spin_lock(&sb->s_deferred_iput_lock);
+	empty = list_empty(&sb->s_deferred_iputs);
+	spin_unlock(&sb->s_deferred_iput_lock);
+	WARN_ON_ONCE(!empty);
+}
+
+int super_defer_iput(struct inode *inode)
+{
+	struct super_block *sb = inode->i_sb;
+	int ret = -ESHUTDOWN;
+
+	spin_lock(&sb->s_deferred_iput_lock);
+	if (!sb->s_deferred_iput_shutdown) {
+		list_add_tail(&inode->i_lru, &sb->s_deferred_iputs);
+		/* Queue under the lock so shutdown cannot miss this work. */
+		queue_work(super_deferred_iput_wq, &sb->s_deferred_iput_work);
+		ret = 0;
+	}
+	spin_unlock(&sb->s_deferred_iput_lock);
+
+	return ret;
+}
 
 static inline void __super_lock(struct super_block *sb, bool excl)
 {
@@ -363,6 +448,7 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags,
 	mutex_init(&s->s_sync_lock);
 	INIT_LIST_HEAD(&s->s_inodes);
 	spin_lock_init(&s->s_inode_list_lock);
+	super_deferred_iput_init(s);
 	INIT_LIST_HEAD(&s->s_inodes_wb);
 	spin_lock_init(&s->s_inode_wblist_lock);
 	fserror_mount(s);
@@ -474,6 +560,12 @@ void deactivate_locked_super(struct super_block *s)
 	struct file_system_type *fs = s->s_type;
 	if (atomic_dec_and_test(&s->s_active)) {
 		shrinker_free(s->s_shrink);
+		/*
+		 * The shrinker can leave final inode references queued for
+		 * processing outside reclaim. Drain them before
+		 * filesystem-specific shutdown starts.
+		 */
+		super_deferred_iput_shutdown(s);
 		fs->kill_sb(s);
 
 		kill_super_notify(s);

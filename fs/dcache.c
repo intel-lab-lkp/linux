@@ -3511,6 +3511,7 @@ void __init vfs_caches_init(void)
 {
 	filename_init();
 	dcache_init();
+	super_init();
 	inode_init();
 	files_init();
 	files_maxfiles_init();
