@@ -103,7 +103,7 @@ where
     type CallbackTarget<'a> = Pin<&'a mut T>;
 
     unsafe extern "C" fn run(ptr: *mut bindings::hrtimer) -> bindings::hrtimer_restart {
-        // `HrTimer` is `repr(C)`
+        // `HrTimer` is `repr(transparent)`
         let timer_ptr = ptr.cast::<super::HrTimer<T>>();
 
         // SAFETY: By C API contract `ptr` is the pointer we passed when

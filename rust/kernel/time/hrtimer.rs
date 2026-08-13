@@ -415,8 +415,12 @@ pub type HrTimerInstant<T> = Instant<<<T as HasHrTimer<T>>::TimerMode as HrTimer
 /// # Invariants
 ///
 /// * `self.timer` is initialized by `bindings::hrtimer_setup`.
+// `repr(transparent)` is not merely about layout. `HrTimerCallbackContext` acquires a
+// `&HrTimer<T>` while a `&mut HrTimer<T>` may exist, which is sound only because every byte of
+// this type sits inside `Opaque`. Being transparent rejects a second field at compile time,
+// but it does not enforce that the remaining field stays `Opaque`.
 #[pin_data]
-#[repr(C)]
+#[repr(transparent)]
 pub struct HrTimer<T> {
     #[pin]
     timer: Opaque<bindings::hrtimer>,
