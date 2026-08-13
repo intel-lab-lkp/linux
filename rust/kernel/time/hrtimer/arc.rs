@@ -8,16 +8,102 @@ use super::HrTimerHandle;
 use super::HrTimerMode;
 use super::HrTimerPointer;
 use super::RawHrTimerCallback;
-use crate::sync::Arc;
-use crate::sync::ArcBorrow;
+use crate::alloc::Flags;
+use crate::error::{Error, Result};
+use crate::init::InPlaceInit;
+use crate::sync::{Arc, ArcBorrow, UniqueArc};
+use core::pin::Pin;
+use pin_init::PinInit;
 
-/// A handle for an `Arc<HasHrTimer<T>>` returned by a call to
-/// [`HrTimerPointer::start`].
+/// A wrapper around [`Arc`] that's guaranteed unique.
+///
+/// The `HrTimerArc` type can be thought of as a special reference to a refcounted object that owns
+/// the permission to arm the [`HrTimer`] stored in the refcounted object. By ensuring that each
+/// object has only one `HrTimerArc` reference, the owner of that reference is assured exclusive
+/// access to the arming operation. When a timer is started, the returned [`ArcHrTimerHandle`] takes
+/// ownership of the `HrTimerArc` reference.
+///
+/// While this `HrTimerArc` is unique, there still might exist normal [`Arc`] references to the
+/// object. Use [`HrTimerArc::clone_arc`] to obtain one.
+///
+/// # Invariants
+///
+/// * Each reference counted object has at most one `HrTimerArc`.
+pub struct HrTimerArc<T>
+where
+    T: HasHrTimer<T>,
+{
+    arc: Arc<T>,
+}
+
+impl<T> HrTimerArc<T>
+where
+    T: HasHrTimer<T>,
+{
+    /// Use the given pin-initializer to pin-initialize a `T` inside of a new `HrTimerArc`.
+    #[inline]
+    pub fn pin_init<E>(init: impl PinInit<T, E>, flags: Flags) -> Result<Self>
+    where
+        Error: From<E>,
+    {
+        Ok(Self::from(UniqueArc::pin_init(init, flags)?))
+    }
+
+    /// Clone an [`Arc`] from this `HrTimerArc`.
+    ///
+    /// The returned [`Arc`] can be used to access the object, but not to arm its timer.
+    #[inline]
+    pub fn clone_arc(&self) -> Arc<T> {
+        self.arc.clone()
+    }
+}
+
+impl<T> From<Pin<UniqueArc<T>>> for HrTimerArc<T>
+where
+    T: HasHrTimer<T>,
+{
+    /// Convert a pinned [`UniqueArc`] into a [`HrTimerArc`].
+    #[inline]
+    fn from(unique: Pin<UniqueArc<T>>) -> Self {
+        // INVARIANT: We have a `UniqueArc`, so there is no `HrTimerArc` for this object.
+        Self {
+            arc: Arc::from(unique),
+        }
+    }
+}
+
+impl<T> HrTimerPointer for HrTimerArc<T>
+where
+    T: 'static,
+    T: Send + Sync,
+    T: HasHrTimer<T>,
+    T: for<'a> HrTimerCallback<Pointer<'a> = Self>,
+{
+    type TimerMode = <T as HasHrTimer<T>>::TimerMode;
+    type TimerHandle = ArcHrTimerHandle<T>;
+
+    fn start(
+        self,
+        expires: <<T as HasHrTimer<T>>::TimerMode as HrTimerMode>::Expires,
+    ) -> ArcHrTimerHandle<T> {
+        // SAFETY:
+        //  - We keep `self` alive by wrapping it in a handle below.
+        //  - Since we generate the pointer passed to `start` from a valid
+        //    reference, it is a valid pointer.
+        unsafe { T::start(Arc::as_ptr(&self.arc), expires) };
+        ArcHrTimerHandle { inner: self }
+    }
+}
+
+/// A handle for a [`HrTimerArc`] returned by a call to [`HrTimerPointer::start`].
+///
+/// This handle owns the [`HrTimerArc`] reference for the object, so the timer cannot be armed
+/// again while this handle exists.
 pub struct ArcHrTimerHandle<T>
 where
     T: HasHrTimer<T>,
 {
-    pub(crate) inner: Arc<T>,
+    pub(crate) inner: HrTimerArc<T>,
 }
 
 // SAFETY: We implement drop below, and we cancel the timer in the drop
@@ -27,7 +113,7 @@ where
     T: HasHrTimer<T>,
 {
     fn cancel(&mut self) -> bool {
-        let self_ptr = Arc::as_ptr(&self.inner);
+        let self_ptr = Arc::as_ptr(&self.inner.arc);
 
         // SAFETY: As we obtained `self_ptr` from a valid reference above, it
         // must point to a valid `T`.
@@ -48,30 +134,7 @@ where
     }
 }
 
-impl<T> HrTimerPointer for Arc<T>
-where
-    T: 'static,
-    T: Send + Sync,
-    T: HasHrTimer<T>,
-    T: for<'a> HrTimerCallback<Pointer<'a> = Self>,
-{
-    type TimerMode = <T as HasHrTimer<T>>::TimerMode;
-    type TimerHandle = ArcHrTimerHandle<T>;
-
-    fn start(
-        self,
-        expires: <<T as HasHrTimer<T>>::TimerMode as HrTimerMode>::Expires,
-    ) -> ArcHrTimerHandle<T> {
-        // SAFETY:
-        //  - We keep `self` alive by wrapping it in a handle below.
-        //  - Since we generate the pointer passed to `start` from a valid
-        //    reference, it is a valid pointer.
-        unsafe { T::start(Arc::as_ptr(&self), expires) };
-        ArcHrTimerHandle { inner: self }
-    }
-}
-
-impl<T> RawHrTimerCallback for Arc<T>
+impl<T> RawHrTimerCallback for HrTimerArc<T>
 where
     T: 'static,
     T: HasHrTimer<T>,

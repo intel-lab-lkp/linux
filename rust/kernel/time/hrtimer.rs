@@ -172,12 +172,12 @@
 //! #     sync::{
 //! #         atomic::{ordering, Atomic},
 //! #         completion::Completion,
-//! #         Arc, ArcBorrow,
+//! #         ArcBorrow,
 //! #     },
 //! #     time::{
 //! #         hrtimer::{
-//! #             RelativeMode, HrTimer, HrTimerCallback, HrTimerPointer, HrTimerRestart,
-//! #             HasHrTimer, HrTimerCallbackContext
+//! #             RelativeMode, HrTimer, HrTimerArc, HrTimerCallback, HrTimerPointer,
+//! #             HrTimerRestart, HasHrTimer, HrTimerCallbackContext
 //! #         },
 //! #         Delta, Monotonic,
 //! #     },
@@ -204,7 +204,7 @@
 //! }
 //!
 //! impl HrTimerCallback for ArcIntrusiveHrTimer {
-//!     type Pointer<'a> = Arc<Self>;
+//!     type Pointer<'a> = HrTimerArc<Self>;
 //!
 //!     fn run(
 //!         this: ArcBorrow<'_, Self>,
@@ -229,11 +229,12 @@
 //!     }
 //! }
 //!
-//! let has_timer = Arc::pin_init(ArcIntrusiveHrTimer::new(), GFP_KERNEL)?;
-//! let _handle = has_timer.clone().start(Delta::from_micros(200));
+//! let has_timer = HrTimerArc::pin_init(ArcIntrusiveHrTimer::new(), GFP_KERNEL)?;
+//! let shared = has_timer.clone_arc();
+//! let _handle = has_timer.start(Delta::from_micros(200));
 //!
-//! while has_timer.flag.load(ordering::Relaxed) != 5 {
-//!     has_timer.cond.wait_for_completion();
+//! while shared.flag.load(ordering::Relaxed) != 5 {
+//!     shared.cond.wait_for_completion();
 //! }
 //!
 //! pr_info!("Counted to 5\n");
@@ -589,18 +590,17 @@ impl<T> HrTimer<T> {
 /// `Self` must be [`Sync`] because it is passed to timer callbacks in another
 /// thread of execution (hard or soft interrupt context).
 ///
-/// Starting a timer returns a [`HrTimerHandle`] that can be used to manipulate
-/// the timer. Note that it is OK to call the start function repeatedly, and
-/// that more than one [`HrTimerHandle`] associated with a [`HrTimerPointer`] may
-/// exist. A timer can be manipulated through any of the handles, and a handle
-/// may represent a cancelled timer.
+/// Starting a timer consumes `Self` and returns a [`HrTimerHandle`] that can be
+/// used to manipulate the timer. As a timer in the **started** or **running**
+/// state cannot be started again, at most one [`HrTimerHandle`] for a timer
+/// exists at a time. A handle may represent a cancelled timer.
 pub trait HrTimerPointer: Sync + Sized {
     /// The operational mode associated with this timer.
     ///
     /// This defines how the expiration value is interpreted.
     type TimerMode: HrTimerMode;
 
-    /// A handle representing a started or restarted timer.
+    /// A handle representing a started timer.
     ///
     /// If the timer is running or if the timer callback is executing when the
     /// handle is dropped, the drop method of [`HrTimerHandle`] should not return
@@ -610,8 +610,7 @@ pub trait HrTimerPointer: Sync + Sized {
     /// leak the handle.
     type TimerHandle: HrTimerHandle;
 
-    /// Start the timer with expiry after `expires` time units. If the timer was
-    /// already running, it is restarted with the new expiry time.
+    /// Start the timer with expiry after `expires` time units.
     fn start(self, expires: <Self::TimerMode as HrTimerMode>::Expires) -> Self::TimerHandle;
 }
 
@@ -1110,7 +1109,7 @@ macro_rules! impl_has_hr_timer {
 }
 
 mod arc;
-pub use arc::ArcHrTimerHandle;
+pub use arc::{ArcHrTimerHandle, HrTimerArc};
 mod pin;
 pub use pin::PinHrTimerHandle;
 mod pin_mut;
