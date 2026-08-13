@@ -1217,7 +1217,7 @@ static char *__ipr_format_res_path(u8 *res_path, char *buffer, int len)
 
 	*p = '\0';
 	p += scnprintf(p, buffer + len - p, "%02X", res_path[0]);
-	for (i = 1; res_path[i] != 0xff && i < IPR_RES_PATH_BYTES; i++)
+	for (i = 1; i < IPR_RES_PATH_BYTES && res_path[i] != 0xff; i++)
 		p += scnprintf(p, buffer + len - p, "-%02X", res_path[i]);
 
 	return buffer;
