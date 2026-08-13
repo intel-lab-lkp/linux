@@ -752,12 +752,12 @@ static int amdgpu_virt_read_exchange_data_from_mem(struct amdgpu_device *adev, u
 {
 	uint32_t dataexchange_offset =
 		adev->virt.crit_regn_tbl[AMD_SRIOV_MSG_DATAEXCHANGE_TABLE_ID].offset;
-	uint32_t dataexchange_size =
-		adev->virt.crit_regn_tbl[AMD_SRIOV_MSG_DATAEXCHANGE_TABLE_ID].size_kb << 10;
+	u64 dataexchange_size =
+		(u64)adev->virt.crit_regn_tbl[AMD_SRIOV_MSG_DATAEXCHANGE_TABLE_ID].size_kb << 10;
 	uint64_t pos = 0;
 
 	dev_info(adev->dev,
-			"Got data exchange info from dynamic crit_region_table at offset 0x%x with size of 0x%x bytes.\n",
+			"Got data exchange info from dynamic crit_region_table at offset 0x%x with size of 0x%llx bytes.\n",
 			dataexchange_offset, dataexchange_size);
 
 	if (!IS_ALIGNED(dataexchange_offset, 4) || !IS_ALIGNED(dataexchange_size, 4)) {
@@ -804,7 +804,8 @@ void amdgpu_virt_init_data_exchange(struct amdgpu_device *adev)
 		/* got through this logic in early init stage to get necessary flags, e.g. rlcg_acc related*/
 		if (adev->virt.req_init_data_ver == GPU_CRIT_REGION_V2) {
 			pfvf_data =
-				kzalloc(adev->virt.crit_regn_tbl[AMD_SRIOV_MSG_DATAEXCHANGE_TABLE_ID].size_kb << 10,
+				kzalloc((u64)adev->virt.crit_regn_tbl
+					[AMD_SRIOV_MSG_DATAEXCHANGE_TABLE_ID].size_kb << 10,
 					GFP_KERNEL);
 			if (!pfvf_data) {
 				dev_err(adev->dev, "Failed to allocate memory for pfvf_data\n");
@@ -1161,7 +1162,7 @@ int amdgpu_virt_init_critical_region(struct amdgpu_device *adev)
 	/* reserved memory starts from crit region base offset with the size of 5MB */
 	amdgpu_ttm_init_vram_resv(adev, AMDGPU_RESV_FW_VRAM_USAGE,
 				  adev->virt.crit_regn.offset,
-				  adev->virt.crit_regn.size_kb << 10, true);
+				  (u64)adev->virt.crit_regn.size_kb << 10, true);
 	dev_info(adev->dev,
 		"critical region v%d requested to reserve memory start at %08llx with %llu KB.\n",
 			init_data_hdr->version,
@@ -1181,14 +1182,14 @@ int amdgpu_virt_get_dynamic_data_info(struct amdgpu_device *adev,
 	int data_id, uint8_t *binary, u32 *size)
 {
 	uint32_t data_offset = 0;
-	uint32_t data_size = 0;
+	u64 data_size = 0;
 	enum amd_sriov_msg_table_id_enum data_table_id = data_id;
 
 	if (data_table_id >= AMD_SRIOV_MSG_MAX_TABLE_ID)
 		return -EINVAL;
 
 	data_offset = adev->virt.crit_regn_tbl[data_table_id].offset;
-	data_size = adev->virt.crit_regn_tbl[data_table_id].size_kb << 10;
+	data_size = (u64)adev->virt.crit_regn_tbl[data_table_id].size_kb << 10;
 
 	/* Validate on input params */
 	if (!binary || !size || *size < (uint64_t)data_size)
@@ -1200,7 +1201,7 @@ int amdgpu_virt_get_dynamic_data_info(struct amdgpu_device *adev,
 	*size = (uint64_t)data_size;
 
 	dev_dbg(adev->dev,
-		"Got %s info from dynamic crit_region_table at offset 0x%x with size of 0x%x bytes.\n",
+		"Got %s info from dynamic crit_region_table at offset 0x%x with size of 0x%llx bytes.\n",
 		amdgpu_virt_dynamic_crit_table_name[data_id], data_offset, data_size);
 
 	return 0;
