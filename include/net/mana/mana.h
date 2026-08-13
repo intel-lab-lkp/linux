@@ -581,7 +581,12 @@ struct mana_port_context {
 
 	u8 mac_addr[ETH_ALEN];
 
+	/* EQ pool, owned by the port rather than a queue set: EQs are bound to
+	 * MSI-X vectors, which a swap must not double-book. Sized to
+	 * max_queues; num_eqs is how many exist.
+	 */
 	struct mana_eq *eqs;
+	unsigned int num_eqs;
 	struct dentry *mana_eqs_debugfs;
 
 	enum TRI_STATE rss_state;
@@ -702,18 +707,11 @@ struct mana_port_context {
 	u32 steer_cqe_coalescing;
 };
 
-/* struct mana_qset - a self-contained snapshot of the queue-related
- * fields inside mana_port_context that can be swapped atomically.
- *
- * Prototype for the "pre-allocate + swap" reconfiguration path (as
- * suggested by netdev maintainers): a new qset is allocated while the
- * current one keeps serving traffic, then apc's queue fields are
- * atomically switched to the new set and the old set is torn down.
- * The vport (port_handle / vport_use_count) is *not* touched, so RDMA
- * can never race in during reconfiguration.
+/* The queue-related fields of mana_port_context that can be swapped as a
+ * unit. The vport (port_handle, vport_use_count) is not part of it and is
+ * never touched by a swap.
  */
 struct mana_qset {
-	struct mana_eq		*eqs;
 	struct mana_tx_qp	**tx_qp;
 	struct mana_rxq		**rxqs;
 
@@ -733,13 +731,6 @@ struct mana_qset {
 	 */
 	int			mtu;
 	struct bpf_prog		*bpf_prog;
-
-	/* Per-queue-set debugfs root ("EQs"). Owned by the qset: it is
-	 * recreated by mana_create_eq() for each new set and torn down
-	 * with that set, so it must travel with the qset rather than
-	 * staying on apc.
-	 */
-	struct dentry		*mana_eqs_debugfs;
 };
 
 netdev_tx_t mana_start_xmit(struct sk_buff *skb, struct net_device *ndev);
@@ -751,13 +742,14 @@ int mana_alloc_queues(struct net_device *ndev);
 int mana_attach(struct net_device *ndev);
 int mana_detach(struct net_device *ndev, bool from_close);
 
-/* Pre-allocate + swap reconfiguration path (prototype). Allocation and
- * teardown run against a scratch context so the live port context is only
- * mutated inside mana_publish_qset(), with TX disabled.
+/* Pre-allocate + swap reconfiguration. Allocation and teardown run against a
+ * scratch context, so the live port context is mutated only inside
+ * mana_publish_qset() with TX disabled. Both sets share a port-owned EQ pool.
  */
 struct mana_port_context *mana_qset_scratch_alloc(struct mana_port_context *apc);
 void mana_qset_scratch_free(struct mana_port_context *scratch);
-int mana_alloc_qset(struct mana_port_context *scratch, unsigned int num_queues,
+int mana_alloc_qset(struct mana_port_context *apc,
+		    struct mana_port_context *scratch, unsigned int num_queues,
 		    unsigned int rx_queue_size, unsigned int tx_queue_size,
 		    u32 priv_flags, int mtu, struct bpf_prog *bpf_prog,
 		    struct mana_qset *out);
