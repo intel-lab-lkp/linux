@@ -3320,6 +3320,11 @@ mpi3mr_transport_smp_handler(struct bsg_job *job, struct Scsi_Host *shost,
 	dprint_transport_info(mrioc,
 	    "SMP request completed with ioc_status(0x%04x)\n", ioc_status);
 
+	if (ioc_status != MPI3_IOCSTATUS_SUCCESS) {
+		rc = -EIO;
+		goto unmap_in;
+	}
+
 	dprint_transport_info(mrioc,
 		    "SMP request - reply data transfer size(%d)\n",
 		    le16_to_cpu(mpi_reply.response_data_length));
