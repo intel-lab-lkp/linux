@@ -730,16 +730,13 @@ static int mana_set_channels(struct net_device *ndev,
 
 	err = mana_publish_qset(apc, &newq, &oldq);
 	if (err) {
-		mana_free_qset(scratch, &newq);
+		mana_free_qset(apc, scratch, &newq);
 		goto free_scratch;
 	}
 
-	mana_free_qset(scratch, &oldq);
+	mana_free_qset(apc, scratch, &oldq);
 
 free_scratch:
-	/* After the caller-side cleanup above, so the EQ pool outlives the
-	 * CQs that reference it.
-	 */
 	mana_publish_close_if_needed(apc);
 	mana_qset_scratch_free(scratch);
 clear_flag:
@@ -831,11 +828,11 @@ static int mana_set_ringparam(struct net_device *ndev,
 	if (err) {
 		NL_SET_ERR_MSG_FMT(extack, "failed to change ring params: %d",
 				   err);
-		mana_free_qset(scratch, &newq);
+		mana_free_qset(apc, scratch, &newq);
 		goto free_scratch;
 	}
 
-	mana_free_qset(scratch, &oldq);
+	mana_free_qset(apc, scratch, &oldq);
 
 free_scratch:
 	/* After the caller-side cleanup above, so the EQ pool outlives the
@@ -925,11 +922,11 @@ static int mana_set_priv_flags(struct net_device *ndev, u32 priv_flags)
 
 	err = mana_publish_qset(apc, &newq, &oldq);
 	if (err) {
-		mana_free_qset(scratch, &newq);
+		mana_free_qset(apc, scratch, &newq);
 		goto free_scratch;
 	}
 
-	mana_free_qset(scratch, &oldq);
+	mana_free_qset(apc, scratch, &oldq);
 
 free_scratch:
 	mana_publish_close_if_needed(apc);

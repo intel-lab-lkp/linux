@@ -756,7 +756,8 @@ int mana_alloc_qset(struct mana_port_context *apc,
 int mana_publish_qset(struct mana_port_context *apc, struct mana_qset *newq,
 		      struct mana_qset *out_old);
 void mana_publish_close_if_needed(struct mana_port_context *apc);
-void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset);
+void mana_free_qset(struct mana_port_context *apc,
+		    struct mana_port_context *scratch, struct mana_qset *qset);
 
 void mana_dim_change(struct mana_cq *cq, bool enable);
 
