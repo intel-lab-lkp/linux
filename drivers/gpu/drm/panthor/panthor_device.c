@@ -4,6 +4,7 @@
 /* Copyright 2023 Collabora ltd. */
 /* Copyright 2025 ARM Limited. All rights reserved. */
 
+#include <linux/debugfs.h>
 #include <linux/clk.h>
 #include <linux/mm.h>
 #include <linux/platform_device.h>
@@ -81,6 +82,8 @@ static int panthor_device_stop_before_unplug(struct panthor_device *ptdev)
 	 * procedure.
 	 */
 	ret = panthor_hw_soft_reset(ptdev);
+	if (!ret && ptdev->unplug.fake_failure)
+		ret = -EIO;
 
 	clk_disable_unprepare(ptdev->clks.core);
 	return ret;
@@ -690,8 +693,33 @@ int panthor_device_suspend(struct device *dev)
 }
 
 #ifdef CONFIG_DEBUG_FS
+static int panthor_device_fake_unplug_failure_get(void *data, u64 *val)
+{
+	struct panthor_device *ptdev = data;
+
+	*val = ptdev->unplug.fake_failure ? 1 : 0;
+	return 0;
+}
+
+static int panthor_device_fake_unplug_failure_set(void *data, u64 val)
+{
+	struct panthor_device *ptdev = data;
+
+	ptdev->unplug.fake_failure = val ? true : false;
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(panthor_device_fake_unplug_failure_fops,
+			 panthor_device_fake_unplug_failure_get,
+			 panthor_device_fake_unplug_failure_set, "%llu\n");
+
 void panthor_device_debugfs_init(struct drm_minor *minor)
 {
+	struct panthor_device *ptdev = container_of(minor->dev, struct panthor_device, base);
+
+	debugfs_create_file("fake_unplug_failure", 0644,
+			    minor->debugfs_root, ptdev,
+			    &panthor_device_fake_unplug_failure_fops);
 	panthor_mmu_debugfs_init(minor);
 	panthor_gem_debugfs_init(minor);
 }
