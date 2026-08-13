@@ -304,6 +304,17 @@ nouveau_svmm_fini(struct nouveau_svmm **psvmm)
 {
 	struct nouveau_svmm *svmm = *psvmm;
 	if (svmm) {
+		struct nouveau_svm *svm = svmm->vmm->cli->drm->svm;
+
+		/* The fault handler caches svmm pointers looked up under
+		 * svm->mutex and then dereferences them after dropping it,
+		 * across blocking faults.  The instance has already been
+		 * unlinked (nouveau_svmm_part), so no new fault can resolve to
+		 * this svmm; drain the handler to release any in-flight
+		 * reference before the svmm is freed.
+		 */
+		flush_work(&svm->buffer[0].work);
+
 		mutex_lock(&svmm->mutex);
 		svmm->vmm = NULL;
 		mutex_unlock(&svmm->mutex);
