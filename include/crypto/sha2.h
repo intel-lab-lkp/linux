@@ -7,6 +7,7 @@
 #define _CRYPTO_SHA2_H
 
 #include <linux/types.h>
+#include <linux/string.h>
 
 #define SHA224_DIGEST_SIZE	28
 #define SHA224_BLOCK_SIZE	64
@@ -219,6 +220,20 @@ struct hmac_sha224_ctx {
 };
 
 /**
+ * hmac_sha224_zeroize_ctx() - Zeroize an hmac_sha224_ctx structure
+ * @ctx: The location of the context that should be zeroized
+ *
+ * This function explicitly fills the hmac_sha224_ctx with zeroes. For
+ * example, use it with __cleanup() for local hmac_sha224_ctx structures
+ * on the stack, so that their content is not leaked when the context is
+ * left. Note: This is only required when not using hmac_sha224_final().
+ */
+static inline void hmac_sha224_zeroize_ctx(struct hmac_sha224_ctx *ctx)
+{
+	memzero_explicit(ctx, sizeof(*ctx));
+}
+
+/**
  * hmac_sha224_preparekey() - Prepare a key for HMAC-SHA224
  * @key: (output) the key structure to initialize
  * @raw_key: the raw HMAC-SHA224 key
@@ -421,6 +436,20 @@ struct hmac_sha256_key {
 struct hmac_sha256_ctx {
 	struct __hmac_sha256_ctx ctx;
 };
+
+/**
+ * hmac_sha256_zeroize_ctx() - Zeroize an hmac_sha256_ctx structure
+ * @ctx: The location of the context that should be zeroized
+ *
+ * This function explicitly fills the hmac_sha256_ctx with zeroes. For
+ * example, use it with __cleanup() for local hmac_sha256_ctx structures
+ * on the stack, so that their content is not leaked when the context is
+ * left. Note: This is only required when not using hmac_sha256_final().
+ */
+static inline void hmac_sha256_zeroize_ctx(struct hmac_sha256_ctx *ctx)
+{
+	memzero_explicit(ctx, sizeof(*ctx));
+}
 
 /**
  * hmac_sha256_preparekey() - Prepare a key for HMAC-SHA256
@@ -632,6 +661,20 @@ struct hmac_sha384_ctx {
 };
 
 /**
+ * hmac_sha384_zeroize_ctx() - Zeroize an hmac_sha384_ctx structure
+ * @ctx: The location of the context that should be zeroized
+ *
+ * This function explicitly fills the hmac_sha384_ctx with zeroes. For
+ * example, use it with __cleanup() for local hmac_sha384_ctx structures
+ * on the stack, so that their content is not leaked when the context is
+ * left. Note: This is only required when not using hmac_sha384_final().
+ */
+static inline void hmac_sha384_zeroize_ctx(struct hmac_sha384_ctx *ctx)
+{
+	memzero_explicit(ctx, sizeof(*ctx));
+}
+
+/**
  * hmac_sha384_preparekey() - Prepare a key for HMAC-SHA384
  * @key: (output) the key structure to initialize
  * @raw_key: the raw HMAC-SHA384 key
@@ -805,6 +848,20 @@ struct hmac_sha512_key {
 struct hmac_sha512_ctx {
 	struct __hmac_sha512_ctx ctx;
 };
+
+/**
+ * hmac_sha512_zeroize_ctx() - Zeroize an hmac_sha512_ctx structure
+ * @ctx: The location of the context that should be zeroized
+ *
+ * This function explicitly fills the hmac_sha512_ctx with zeroes. For
+ * example, use it with __cleanup() for local hmac_sha512_ctx structures
+ * on the stack, so that their content is not leaked when the context is
+ * left. Note: This is only required when not using hmac_sha512_final().
+ */
+static inline void hmac_sha512_zeroize_ctx(struct hmac_sha512_ctx *ctx)
+{
+	memzero_explicit(ctx, sizeof(*ctx));
+}
 
 /**
  * hmac_sha512_preparekey() - Prepare a key for HMAC-SHA512
