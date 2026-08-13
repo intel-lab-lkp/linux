@@ -113,14 +113,9 @@ impl IdPool {
     }
 
     /// Constructs a new [`IdPool`] with space for a specific number of bits.
-    ///
-    /// A capacity below [`MAX_INLINE_LEN`] is adjusted to [`MAX_INLINE_LEN`].
-    ///
-    /// [`MAX_INLINE_LEN`]: BitmapVec::MAX_INLINE_LEN
     #[inline]
     pub fn with_capacity(num_ids: NonZero<usize>, flags: Flags) -> Result<Self, AllocError> {
-        let num_ids = usize::max(num_ids.get(), BitmapVec::MAX_INLINE_LEN);
-        let map = BitmapVec::new(num_ids, flags)?;
+        let map = BitmapVec::new(num_ids.get(), flags)?;
         Ok(Self { map })
     }
 
