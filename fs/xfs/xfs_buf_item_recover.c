@@ -638,6 +638,9 @@ xlog_recover_do_inode_buffer(
 	int				inodes_per_buf;
 	xfs_agino_t			*logged_nextp;
 	xfs_agino_t			*buffer_nextp;
+	size_t				buf_size;
+	size_t				iov_len;
+	size_t				rel_off;
 
 	trace_xfs_log_recover_buf_inode_buf(mp->m_log, buf_f);
 
@@ -688,17 +691,48 @@ xlog_recover_do_inode_buffer(
 		if (next_unlinked_offset < reg_buf_offset)
 			continue;
 
+		buf_size = BBTOB(bp->b_length);
+		if (XFS_IS_CORRUPT(mp, reg_buf_bytes > buf_size ||
+			   reg_buf_offset > buf_size - reg_buf_bytes)) {
+			xfs_alert(mp,
+	"Bad inode buffer log bitmap region (off %d, len %d, buf_size %zu).",
+				reg_buf_offset, reg_buf_bytes, buf_size);
+			return -EFSCORRUPTED;
+		}
+
+		if (XFS_IS_CORRUPT(mp,
+				item->ri_buf[item_index].iov_base == NULL)) {
+			xfs_alert(mp, "NULL inode buffer log record.");
+			return -EFSCORRUPTED;
+		}
+
+		iov_len = item->ri_buf[item_index].iov_len;
+		if (XFS_IS_CORRUPT(mp, iov_len < reg_buf_bytes)) {
+			xfs_alert(mp,
+	"Bad inode buffer log record length (iov_len %zu, region len %d).",
+				iov_len, reg_buf_bytes);
+			return -EFSCORRUPTED;
+		}
+
 		ASSERT(item->ri_buf[item_index].iov_base != NULL);
 		ASSERT((item->ri_buf[item_index].iov_len % XFS_BLF_CHUNK) == 0);
 		ASSERT((reg_buf_offset + reg_buf_bytes) <= BBTOB(bp->b_length));
 
+		rel_off = next_unlinked_offset - reg_buf_offset;
+		if (XFS_IS_CORRUPT(mp, rel_off > iov_len ||
+			   sizeof(xfs_agino_t) > iov_len - rel_off)) {
+			xfs_alert(mp,
+	"Bad inode buffer log record offset (rel_off %zu, iov_len %zu).",
+				rel_off, iov_len);
+			return -EFSCORRUPTED;
+		}
+
 		/*
 		 * The current logged region contains a copy of the
 		 * current di_next_unlinked field.  Extract its value
-		 * and copy it to the buffer copy.
+		 * and copy it to the on disk inode buffer.
 		 */
-		logged_nextp = item->ri_buf[item_index].iov_base +
-				next_unlinked_offset - reg_buf_offset;
+		logged_nextp = item->ri_buf[item_index].iov_base + rel_off;
 		if (XFS_IS_CORRUPT(mp, *logged_nextp == 0)) {
 			xfs_alert(mp,
 		"Bad inode buffer log record (ptr = "PTR_FMT", bp = "PTR_FMT"). "
