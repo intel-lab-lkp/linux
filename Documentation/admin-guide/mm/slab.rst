@@ -49,7 +49,8 @@ Possible debug options are::
 			Sorry SLAB legacy issues)
 	Z		Red zoning
 	P		Poisoning (object and padding)
-	U		User tracking (free and alloc)
+	U		User tracking (free and alloc, plus one previous
+			completed object lifetime)
 	T		Trace (please only use on single slabs)
 	A		Enable failslab filter mark for the cache
 	O		Switch debugging off for caches that would have
@@ -245,9 +246,19 @@ into the syslog:
 	cpu> pid=<pid of the process>
      INFO: Freed in <kernel function> age=<jiffies since free> cpu=<freed by cpu>
 	pid=<pid of the process>
+     INFO: Previous object lifetime:
+     INFO: Allocated in <kernel function> age=<jiffies since alloc> cpu=<allocated by
+	cpu> pid=<pid of the process>
+     INFO: Freed in <kernel function> age=<jiffies since free> cpu=<freed by cpu>
+	pid=<pid of the process>
 
    (Object allocation / free information is only available if SLAB_STORE_USER is
    set for the slab. slab_debug sets that option)
+
+   If an object with a completed allocation/free pair is reused, user tracking
+   also retains that pair as the previous object lifetime. This address history
+   can help diagnose stale references after reuse, but it does not establish
+   semantic ownership or identify a use-after-free root cause by itself.
 
 2. The object contents if an object was involved.
 
