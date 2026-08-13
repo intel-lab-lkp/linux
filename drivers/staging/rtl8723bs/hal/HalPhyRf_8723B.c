@@ -1554,7 +1554,7 @@ void PHY_IQCalibrate_8723B(
 		rOFDM0_RxIQExtAnta
 	};
 /* 	u32 		Path_SEL_BB = 0; */
-	u32 		GNT_BT_default;
+	u32		GNT_BT_default;
 
 	if (!ODM_CheckPowerStatus(padapter))
 		return;
@@ -1745,7 +1745,7 @@ void PHY_IQCalibrate_8723B(
 void PHY_LCCalibrate_8723B(struct dm_odm_t *pDM_Odm)
 {
 	bool		bSingleTone = false, bCarrierSuppression = false;
-	u32 		timeout = 2000, timecount = 0;
+	u32		timeout = 2000, timecount = 0;
 
 	if (!(pDM_Odm->SupportAbility & ODM_RF_CALIBRATION))
 		return;
