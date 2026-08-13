@@ -8,6 +8,7 @@
 
 #include <linux/types.h>
 #include <linux/crypto.h>
+#include <linux/string.h>
 
 #define AES_MIN_KEY_SIZE	16
 #define AES_MAX_KEY_SIZE	32
@@ -124,6 +125,19 @@ struct crypto_aes_ctx {
 	u32 key_dec[AES_MAX_KEYLENGTH_U32];
 	u32 key_length;
 };
+
+/**
+ * aes_zeroize_ctx - Clear a crypto_aes_ctx structure
+ * @ctx: The location of the context that should be zeroized
+ *
+ * This function explicitly fills the crypto_aes_ctx with zeroes. For
+ * example, use it with __cleanup() for local crypto_aes_ctx structures on
+ * the stack to avoid that their content is leaked when the context is left.
+ */
+static inline void aes_zeroize_ctx(struct crypto_aes_ctx *ctx)
+{
+	memzero_explicit(ctx, sizeof(*ctx));
+}
 
 /*
  * validate key length for AES algorithms
