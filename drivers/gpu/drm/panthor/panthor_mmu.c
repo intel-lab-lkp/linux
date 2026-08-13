@@ -3365,6 +3365,12 @@ void panthor_mmu_unplug(struct panthor_device *ptdev)
 		}
 	}
 	mutex_unlock(&ptdev->mmu->as.slots_lock);
+
+	/* Ensure any pending job cleanup work are executed before returning,
+	 * otherwise those might access objects that are gone if the work is
+	 * executed after other components are unplugged.
+	 */
+	flush_workqueue(panthor_cleanup_wq);
 }
 
 static void panthor_mmu_release_wq(struct drm_device *ddev, void *res)
