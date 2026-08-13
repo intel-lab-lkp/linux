@@ -648,7 +648,7 @@ void __memcg1_swapout(struct folio *folio, struct swap_cluster_info *ci)
 	mod_memcg_state(memcg, MEMCG_SWAP, nr_entries);
 
 	/* we have a reference to it, so we should get exact memcg itself */
-	mem_cgroup_private_id_get_online(memcg, nr_entries);
+	mem_cgroup_private_id_get(memcg, nr_entries);
 
 	__swap_cgroup_set(ci, swp_cluster_offset(folio->swap), nr_entries,
 			  mem_cgroup_private_id(memcg));

@@ -3985,23 +3985,13 @@ static inline void mem_cgroup_private_id_put(struct mem_cgroup *memcg, unsigned 
 	__mem_cgroup_private_id_put(memcg->id_objcg, memcg->id, n);
 }
 
-struct mem_cgroup *mem_cgroup_private_id_get_online(struct mem_cgroup *memcg, unsigned int n)
+void mem_cgroup_private_id_get(struct mem_cgroup *memcg, unsigned int n)
 {
+	bool success;
 	struct obj_cgroup *objcg = memcg->id_objcg;
 
-	while (!refcount_add_not_zero(n, &objcg->id_ref)) {
-		/*
-		 * The root cgroup cannot be destroyed, so it's refcount must
-		 * always be >= 1.
-		 */
-		if (WARN_ON_ONCE(mem_cgroup_is_root(memcg))) {
-			VM_BUG_ON(1);
-			break;
-		}
-		memcg = parent_mem_cgroup(memcg);
-		objcg = memcg->id_objcg;
-	}
-	return memcg;
+	success = refcount_add_not_zero(n, &objcg->id_ref);
+	VM_WARN_ON(!success);
 }
 
 /**
@@ -5673,7 +5663,7 @@ int __mem_cgroup_try_charge_swap(struct folio *folio)
 	mod_memcg_state(memcg, MEMCG_SWAP, nr_pages);
 
 	/* we have a reference to it, so we should get exact memcg itself */
-	mem_cgroup_private_id_get_online(memcg, nr_pages);
+	mem_cgroup_private_id_get(memcg, nr_pages);
 
 	ci = swap_cluster_get_and_lock(folio);
 	__swap_cgroup_set(ci, swp_cluster_offset(folio->swap), nr_pages,
