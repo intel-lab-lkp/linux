@@ -9,15 +9,15 @@
 //!
 //! States:
 //!
-//! - Stopped: initialized but not started, or cancelled, or not restarted.
-//! - Started: initialized and started or restarted.
+//! - Stopped: initialized but not started, cancelled, or the callback returned
+//!   `NoRestart`.
+//! - Started: initialized and started, or the callback returned `Restart`.
 //! - Running: executing the callback.
 //!
 //! Operations:
 //!
 //! * Start
 //! * Cancel
-//! * Restart
 //!
 //! Events:
 //!
@@ -42,11 +42,7 @@
 //! --------->|    Stopped      |                 |      Started     +---------->|     Running     |
 //!           |                 |     Cancel      |                  |           |                 |
 //!           |                 |<----------------+                  |           |                 |
-//!           +-----------------+                 +---------------+--+           +-----------------+
-//!                                                     ^         |
-//!                                                     |         |
-//!                                                     +---------+
-//!                                                      Restart
+//!           +-----------------+                 +------------------+           +-----------------+
 //! ```
 //!
 //!
@@ -60,16 +56,13 @@
 //! by the `cancel` operation. A timer that is cancelled enters the **stopped**
 //! state.
 //!
-//! A `cancel` or `restart` operation on a timer in the **running** state takes
-//! effect after the handler has returned and the timer has transitioned
-//! out of the **running** state.
+//! A `cancel` operation on a timer in the **running** state takes effect after
+//! the handler has returned and the timer has transitioned out of the
+//! **running** state.
 //!
-//! A `restart` operation on a timer in the **stopped** state is equivalent to a
-//! `start` operation.
-//!
-//! When a type implements both `HrTimerPointer` and `Clone`, it is possible to
-//! issue the `start` operation while the timer is in the **started** state. In
-//! this case the `start` operation is equivalent to the `restart` operation.
+//! The `start` operation consumes the pointer it is called on, so a timer in the
+//! **started** or **running** state cannot be started again. It has to be
+//! **cancelled** first.
 //!
 //! # Examples
 //!
@@ -253,8 +246,8 @@
 //! #     },
 //! #     time::{
 //! #         hrtimer::{
-//! #             ScopedHrTimerPointer, HrTimer, HrTimerCallback, HrTimerPointer, HrTimerRestart,
-//! #             HasHrTimer, RelativeMode, HrTimerCallbackContext
+//! #             ScopedHrTimerPointer, HrTimer, HrTimerCallback, HrTimerPin, HrTimerPointer,
+//! #             HrTimerRestart, HasHrTimer, RelativeMode, HrTimerCallbackContext
 //! #         },
 //! #         Delta, Monotonic,
 //! #     },
@@ -282,7 +275,7 @@
 //! }
 //!
 //! impl HrTimerCallback for IntrusiveHrTimer {
-//!     type Pointer<'a> = Pin<&'a Self>;
+//!     type Pointer<'a> = HrTimerPin<'a, Self>;
 //!
 //!     fn run(this: Pin<&Self>, _ctx: HrTimerCallbackContext<'_, Self>) -> HrTimerRestart {
 //!         pr_info!("Timer called\n");
@@ -301,9 +294,12 @@
 //! }
 //!
 //! stack_pin_init!( let has_timer = IntrusiveHrTimer::new() );
-//! has_timer.as_ref().start_scoped(Delta::from_micros(200), || {
-//!     while has_timer.flag.load(ordering::Relaxed) != 1 {
-//!         has_timer.cond.wait_for_completion();
+//! let timer_pin = HrTimerPin::new(has_timer);
+//! let shared = timer_pin.as_ref();
+//!
+//! timer_pin.start_scoped(Delta::from_micros(200), || {
+//!     while shared.flag.load(ordering::Relaxed) != 1 {
+//!         shared.cond.wait_for_completion();
 //!     }
 //! });
 //!
@@ -618,7 +614,8 @@ pub trait HrTimerPointer: Sync + Sized {
 /// [`HrTimerHandle`] returned by `start` would be unsound. This is the case for
 /// stack allocated timers.
 ///
-/// Typical implementers are pinned references such as [`Pin<&T>`].
+/// Typical implementers are [`HrTimerPin`] and pinned references such as
+/// [`Pin<&mut T>`].
 ///
 /// # Safety
 ///
@@ -640,8 +637,7 @@ pub unsafe trait UnsafeHrTimerPointer: Sync + Sized {
     /// until the timer is stopped and the callback has completed.
     type TimerHandle: HrTimerHandle;
 
-    /// Start the timer after `expires` time units. If the timer was already
-    /// running, it is restarted at the new expiry time.
+    /// Start the timer after `expires` time units.
     ///
     /// # Safety
     ///
@@ -1111,7 +1107,7 @@ macro_rules! impl_has_hr_timer {
 mod arc;
 pub use arc::{ArcHrTimerHandle, HrTimerArc};
 mod pin;
-pub use pin::PinHrTimerHandle;
+pub use pin::{HrTimerPin, PinHrTimerHandle};
 mod pin_mut;
 pub use pin_mut::PinMutHrTimerHandle;
 // `box` is a reserved keyword, so prefix with `t` for timer
