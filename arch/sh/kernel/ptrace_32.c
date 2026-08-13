@@ -467,7 +467,8 @@ asmlinkage long do_syscall_trace_enter(struct pt_regs *regs)
 		trace_sys_enter(regs, regs->regs[0]);
 
 	audit_syscall_entry(regs->regs[3], regs->regs[4], regs->regs[5],
-			    regs->regs[6], regs->regs[7]);
+			    regs->regs[6], regs->regs[7],
+			    regs->regs[0], regs->regs[1]);
 
 	return 0;
 }
