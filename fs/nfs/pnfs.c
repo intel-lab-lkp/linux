@@ -2876,6 +2876,74 @@ pnfs_layout_return_unused_byclid(struct nfs_client *clp,
 			&range);
 }
 
+struct pnfs_reresolve_deviceid_args {
+	const struct pnfs_layoutdriver_type *ld;
+	const struct nfs4_deviceid *id;
+	bool immediate;
+	struct list_head put_list;
+};
+
+static int pnfs_layout_reresolve_deviceid_byserver(struct nfs_server *server,
+						   void *data)
+{
+	struct pnfs_reresolve_deviceid_args *args = data;
+	struct pnfs_layout_hdr *lo;
+	struct inode *inode;
+
+	if (server->pnfs_curr_ld != args->ld)
+		return 0;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(lo, &server->layouts, plh_layouts) {
+		inode = lo->plh_inode;
+		if (!inode)
+			continue;
+		spin_lock(&inode->i_lock);
+		if (lo->plh_inode == inode && pnfs_layout_is_valid(lo))
+			args->ld->reresolve_deviceid(lo, args->id,
+						     args->immediate,
+						     &args->put_list);
+		spin_unlock(&inode->i_lock);
+	}
+	rcu_read_unlock();
+	return 0;
+}
+
+/*
+ * pnfs_layout_reresolve_deviceid_byclid - re-point live layouts at a
+ * changed deviceid mapping (CB_NOTIFY_DEVICEID CHANGE)
+ *
+ * Walk every layout of @clp's servers using @ld and invoke the driver's
+ * reresolve_deviceid hook for @id.  The hook runs under each layout
+ * inode's i_lock and defers its device node puts to the put_list, which
+ * is drained here once all locks are dropped (the final put can sleep).
+ */
+void
+pnfs_layout_reresolve_deviceid_byclid(struct nfs_client *clp,
+				      const struct pnfs_layoutdriver_type *ld,
+				      const struct nfs4_deviceid *id,
+				      bool immediate)
+{
+	struct pnfs_reresolve_deviceid_args args = {
+		.ld = ld,
+		.id = id,
+		.immediate = immediate,
+		.put_list = LIST_HEAD_INIT(args.put_list),
+	};
+	struct nfs4_deviceid_node *node, *tmp;
+
+	if (!ld->reresolve_deviceid)
+		return;
+
+	nfs_client_for_each_server(clp,
+			pnfs_layout_reresolve_deviceid_byserver, &args);
+
+	list_for_each_entry_safe(node, tmp, &args.put_list, put_list) {
+		list_del(&node->put_list);
+		nfs4_put_deviceid_node(node);
+	}
+}
+
 /* Check if we have we have a valid layout but if there isn't an intersection
  * between the request and the pgio->pg_lseg, put this pgio->pg_lseg away.
  */

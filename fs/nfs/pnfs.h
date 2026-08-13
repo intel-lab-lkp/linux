@@ -170,6 +170,17 @@ struct pnfs_layoutdriver_type {
 	struct nfs4_deviceid_node * (*alloc_deviceid_node)
 			(struct nfs_server *server, struct pnfs_device *pdev,
 			gfp_t gfp_flags);
+	/*
+	 * Re-resolve any of @lo's references to the changed deviceid @id
+	 * (CB_NOTIFY_DEVICEID CHANGE).  Called under @lo's inode i_lock;
+	 * must not sleep.  Device node references given up here must be
+	 * collected on @put_list (via node->put_list) for the caller to
+	 * put once all locks are dropped.
+	 */
+	void (*reresolve_deviceid)(struct pnfs_layout_hdr *lo,
+				   const struct nfs4_deviceid *id,
+				   bool immediate,
+				   struct list_head *put_list);
 
 	int (*prepare_layoutreturn) (struct nfs4_layoutreturn_args *);
 
@@ -353,6 +364,10 @@ void pnfs_error_mark_layout_for_return(struct inode *inode,
 				       struct pnfs_layout_segment *lseg);
 void pnfs_layout_return_unused_byclid(struct nfs_client *clp,
 				      enum pnfs_iomode iomode);
+void pnfs_layout_reresolve_deviceid_byclid(struct nfs_client *clp,
+				const struct pnfs_layoutdriver_type *ld,
+				const struct nfs4_deviceid *id,
+				bool immediate);
 int pnfs_layout_handle_reboot(struct nfs_client *clp);
 
 /* nfs4_deviceid_flags */
@@ -373,6 +388,10 @@ struct nfs4_deviceid_node {
 	struct nfs4_deviceid		deviceid;
 	struct rcu_head			rcu;
 	atomic_t			ref;
+	/* deferred-put linkage for in-place re-resolve; owned by whoever
+	 * exchanged this node out of its pinning pointer
+	 */
+	struct list_head		put_list;
 };
 
 struct nfs4_deviceid_node *
