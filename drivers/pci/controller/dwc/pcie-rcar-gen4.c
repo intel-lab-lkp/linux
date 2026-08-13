@@ -487,6 +487,8 @@ static int rcar_gen4_pcie_ep_pre_init(struct dw_pcie_ep *ep)
 	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
 	int ret;
 
+	writel(0, rcar->base + PCIEDMAINTSTSEN);
+
 	ret = rcar_gen4_pcie_common_init(rcar);
 	if (ret)
 		return ret;
@@ -571,7 +573,7 @@ static int rcar_gen4_add_dw_pcie_ep(struct rcar_gen4_pcie *rcar)
 
 	ret = dw_pcie_ep_init(ep);
 	if (ret) {
-		rcar_gen4_pcie_ep_deinit(rcar);
+		rcar_gen4_pcie_common_deinit(rcar);
 		return ret;
 	}
 
