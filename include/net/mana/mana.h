@@ -633,6 +633,13 @@ struct mana_port_context {
 	 */
 	bool channel_changing;
 
+	/* mana_publish_qset() could neither publish the new set nor restore the
+	 * old one. Vport RX is already off; the port still has to be closed,
+	 * which mana_publish_close_if_needed() does once the caller has
+	 * released the set that failed.
+	 */
+	bool publish_dead_end;
+
 	/* Net shaper handle*/
 	struct net_shaper_handle handle;
 
@@ -729,6 +736,9 @@ void mana_qset_scratch_free(struct mana_port_context *scratch);
 int mana_alloc_qset(struct mana_port_context *scratch, unsigned int num_queues,
 		    unsigned int rx_queue_size, unsigned int tx_queue_size,
 		    u32 priv_flags, struct mana_qset *out);
+int mana_publish_qset(struct mana_port_context *apc, struct mana_qset *newq,
+		      struct mana_qset *out_old);
+void mana_publish_close_if_needed(struct mana_port_context *apc);
 void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset);
 
 void mana_dim_change(struct mana_cq *cq, bool enable);

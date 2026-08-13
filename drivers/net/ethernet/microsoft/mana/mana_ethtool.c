@@ -659,42 +659,88 @@ static int mana_set_channels(struct net_device *ndev,
 {
 	struct mana_port_context *apc = netdev_priv(ndev);
 	unsigned int new_count = channels->combined_count;
-	unsigned int old_count = apc->num_queues;
+	struct mana_port_context *scratch;
+	struct mana_qset newq, oldq;
 	int err;
 
-	/* Set channel_changing to block RDMA from grabbing the vport
-	 * during the detach/attach window. mana_cfg_vport() checks
-	 * this flag under vport_mutex and returns -EBUSY if set.
+	if (new_count < 1 || new_count > apc->max_queues) {
+		netdev_err(ndev, "Invalid combined_count %u (max %u)\n",
+			   new_count, apc->max_queues);
+		return -EINVAL;
+	}
+
+	if (new_count == apc->num_queues)
+		return 0;
+
+	/* Down: no queues to swap, so record the count and resize the arrays
+	 * indexed by it. apc->rxqs has to grow here because mana_open() goes
+	 * straight to mana_alloc_queues() without rebuilding the port context.
+	 *
+	 * RDMA can own the vport while the port is down and derives an EQ from
+	 * apc->eqs[] modulo apc->num_queues, so refuse while it is in use.
 	 */
 	mutex_lock(&apc->vport_mutex);
-	if (!apc->port_is_up && apc->vport_use_count) {
+	if (!apc->port_is_up) {
+		struct mana_rxq **rxqs;
+
+		if (apc->vport_use_count) {
+			mutex_unlock(&apc->vport_mutex);
+			return -EBUSY;
+		}
+
+		rxqs = kzalloc_objs(struct mana_rxq *, new_count);
+		if (!rxqs) {
+			mutex_unlock(&apc->vport_mutex);
+			return -ENOMEM;
+		}
+
+		kfree(apc->rxqs);
+		apc->rxqs = rxqs;
+		apc->num_queues = new_count;
+		mutex_unlock(&apc->vport_mutex);
+		return 0;
+	}
+
+	/* Block RDMA from acquiring the vport for the duration.
+	 *
+	 * No vport_use_count test here, unlike the branch above: bringing the
+	 * port up takes the vport itself, so the count is always non-zero. That
+	 * reference is also what makes the swap safe - RAW QPs, the only users
+	 * of apc->eqs[] modulo apc->num_queues, cannot exist while the ethernet
+	 * port owns it.
+	 */
+	if (apc->channel_changing) {
 		mutex_unlock(&apc->vport_mutex);
 		return -EBUSY;
 	}
 	apc->channel_changing = true;
 	mutex_unlock(&apc->vport_mutex);
 
-	err = mana_pre_alloc_rxbufs(apc, ndev->mtu, new_count);
-	if (err) {
-		netdev_err(ndev, "Insufficient memory for new allocations");
+	scratch = mana_qset_scratch_alloc(apc);
+	if (!scratch) {
+		err = -ENOMEM;
 		goto clear_flag;
 	}
 
-	err = mana_detach(ndev, false);
+	err = mana_alloc_qset(scratch, new_count, apc->rx_queue_size,
+			      apc->tx_queue_size, apc->priv_flags, &newq);
+	if (err)
+		goto free_scratch; /* current qset untouched, nothing to undo */
+
+	err = mana_publish_qset(apc, &newq, &oldq);
 	if (err) {
-		netdev_err(ndev, "mana_detach failed: %d\n", err);
-		goto out;
+		mana_free_qset(scratch, &newq);
+		goto free_scratch;
 	}
 
-	apc->num_queues = new_count;
-	err = mana_attach(ndev);
-	if (err) {
-		apc->num_queues = old_count;
-		netdev_err(ndev, "mana_attach failed: %d\n", err);
-	}
+	mana_free_qset(scratch, &oldq);
 
-out:
-	mana_pre_dealloc_rxbufs(apc);
+free_scratch:
+	/* After the caller-side cleanup above, so the EQ pool outlives the
+	 * CQs that reference it.
+	 */
+	mana_publish_close_if_needed(apc);
+	mana_qset_scratch_free(scratch);
 clear_flag:
 	mutex_lock(&apc->vport_mutex);
 	apc->channel_changing = false;
