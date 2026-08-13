@@ -1315,6 +1315,7 @@ static struct device_node *rswitch_get_port_node(struct rswitch_device *rdev)
 	for_each_available_child_of_node(ports, port) {
 		err = of_property_read_u32(port, "reg", &index);
 		if (err < 0) {
+			of_node_put(port);
 			port = NULL;
 			goto out;
 		}
