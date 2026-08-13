@@ -185,6 +185,17 @@ static int etm_event_init(struct perf_event *event)
 		goto out;
 	}
 
+	/*
+	 * Excluding both kernel and user space is not a configuration the
+	 * tracers can express: etm_parse_event_config() and
+	 * etm4_parse_event_config() overwrite ETM_MODE_EXCL_KERN with
+	 * ETM_MODE_EXCL_USER, which ends up tracing the kernel instead.
+	 */
+	if (event->attr.exclude_kernel && event->attr.exclude_user) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	ret = etm_addr_filters_alloc(event);
 	if (ret)
 		goto out;
