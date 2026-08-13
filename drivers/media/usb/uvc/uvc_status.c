@@ -245,7 +245,6 @@ static void uvc_status_complete(struct urb *urb)
 	}
 
 	/* Resubmit the URB. */
-	urb->interval = dev->int_ep->desc.bInterval;
 	ret = usb_submit_urb(urb, GFP_ATOMIC);
 	if (ret < 0)
 		dev_err(&dev->intf->dev,

@@ -2196,7 +2196,6 @@ static void uvc_ctrl_status_event_work(struct work_struct *work)
 		return;
 
 	/* Resubmit the URB. */
-	w->urb->interval = dev->int_ep->desc.bInterval;
 	ret = usb_submit_urb(w->urb, GFP_KERNEL);
 	if (ret < 0)
 		dev_err(&dev->intf->dev,
