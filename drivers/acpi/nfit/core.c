@@ -817,12 +817,20 @@ EXPORT_SYMBOL_GPL(nfit_get_smbios_id);
  */
 static size_t sizeof_dcr(struct acpi_nfit_control_region *dcr)
 {
+	size_t size;
+
 	if (dcr->header.length < offsetof(struct acpi_nfit_control_region,
 				window_size))
 		return 0;
 	if (dcr->windows)
-		return sizeof(*dcr);
-	return offsetof(struct acpi_nfit_control_region, window_size);
+		size = sizeof(*dcr);
+	else
+		size = offsetof(struct acpi_nfit_control_region, window_size);
+
+	if (size > dcr->header.length)
+		return 0;
+
+	return size;
 }
 
 static bool add_dcr(struct acpi_nfit_desc *acpi_desc,
