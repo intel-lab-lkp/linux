@@ -171,3 +171,31 @@ hrtimers-based high-resolution clock implementation, so the hrtimers
 code got a healthy amount of testing and use in practice.
 
 	Thomas Gleixner, Ingo Molnar
+
+
+Expiry modes and PREEMPT_RT
+---------------------------
+
+The default expiry context on PREEMPT_RT and the role of the ktimersd
+thread are documented in :doc:`/core-api/real-time/differences`
+(Timers).  Those details are not repeated here.
+
+The per-CPU ``ktimers/%u`` thread (referred to as ktimersd in that
+document) runs at the lowest ``SCHED_FIFO`` priority via
+``sched_set_fifo_low()``.  That priority is fixed: the callback does
+not inherit the priority of the task that armed the timer.  A
+``SCHED_FIFO`` task running at priority 99 that starts an unmarked
+timer still expires on ``ktimers/%u`` (lowest ``SCHED_FIFO`` priority),
+not at priority 99.
+Priority inheritance on PREEMPT_RT is used for the cancel handshake,
+not for the arming path; see the "Spin until ready" section of the same
+document.
+
+``hrtimer_setup_sleeper_on_stack()`` (used by ``clock_nanosleep()`` and similar)
+is an exception: when armed by an RT or DEADLINE task it is marked
+``HRTIMER_MODE_HARD``, so the wakeup runs in hardirq context and does
+not go through ``ktimers/%u``.
+
+If callback work must run at the owning task's RT priority, either
+mark the timer ``HRTIMER_MODE_HARD`` (and keep the callback
+hardirq-safe) or wake a dedicated kthread from the callback.
