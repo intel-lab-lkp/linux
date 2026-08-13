@@ -494,7 +494,11 @@ static long i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (arg > INT_MAX / 10)
 			return -EINVAL;
 
+#ifdef CONFIG_I2C_DYNAMIC_TIMEOUT
+		client->adapter->user_timeout = msecs_to_jiffies(arg * 10);
+#else
 		client->adapter->timeout = msecs_to_jiffies(arg * 10);
+#endif
 		break;
 	default:
 		/* NOTE:  returning a fault code here could cause trouble
