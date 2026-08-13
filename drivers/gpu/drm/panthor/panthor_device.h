@@ -264,6 +264,9 @@ struct panthor_device {
 		 * operation is done.
 		 */
 		struct completion done;
+
+		/** @work: Unplug work. */
+		struct work_struct work;
 	} unplug;
 
 	/** @reset: Reset related fields. */
