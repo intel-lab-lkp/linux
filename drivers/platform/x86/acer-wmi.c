@@ -403,6 +403,7 @@ struct quirk_entry {
 	u8 turbo;
 	u8 cpu_fans;
 	u8 gpu_fans;
+	u8 hwmon;
 	u8 predator_v4;
 	u8 pwm;
 };
@@ -420,6 +421,9 @@ static void __init set_quirks(void)
 	if (quirks->turbo)
 		interface->capability |= ACER_CAP_TURBO_OC | ACER_CAP_TURBO_LED
 					 | ACER_CAP_TURBO_FAN;
+
+	if (quirks->hwmon)
+		interface->capability |= ACER_CAP_HWMON;
 
 	if (quirks->predator_v4)
 		interface->capability |= ACER_CAP_PLATFORM_PROFILE |
