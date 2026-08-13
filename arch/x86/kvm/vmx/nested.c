@@ -3453,7 +3453,7 @@ static bool nested_get_vmcs12_pages(struct kvm_vcpu *vcpu)
 		 * state which can lead to a load of wrong PDPTRs.
 		 */
 		if (CC(!load_pdptrs(vcpu, vcpu->arch.cr3)))
-			return false;
+			goto fail;
 	}
 
 
@@ -3469,7 +3469,7 @@ static bool nested_get_vmcs12_pages(struct kvm_vcpu *vcpu)
 			vcpu->run->internal.suberror =
 				KVM_INTERNAL_ERROR_EMULATION;
 			vcpu->run->internal.ndata = 0;
-			return false;
+			goto fail;
 		}
 	}
 
@@ -3525,6 +3525,20 @@ static bool nested_get_vmcs12_pages(struct kvm_vcpu *vcpu)
 		exec_controls_clearbit(vmx, CPU_BASED_USE_MSR_BITMAPS);
 
 	return true;
+
+fail:
+	/*
+	 * Re-arm the request so that KVM retries the mapping instead of running
+	 * L2 with a stale vmcs02.  Bailing here leaves the vCPU in guest mode
+	 * with vmcs02 loaded and its APIC-access, virtual-APIC and posted
+	 * interrupt descriptor addresses still pointing at the host pages that
+	 * were mapped for the *previous* nested VM-Enter, which have since been
+	 * unmapped and unpinned by nested_put_vmcs12_pages().  KVM returns to
+	 * userspace without leaving guest mode, so if userspace resumes the
+	 * vCPU, VM-Enter succeeds and hardware accesses those stale HPAs.
+	 */
+	kvm_make_request(KVM_REQ_GET_NESTED_STATE_PAGES, vcpu);
+	return false;
 }
 
 static bool vmx_get_nested_state_pages(struct kvm_vcpu *vcpu)
