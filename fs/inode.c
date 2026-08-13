@@ -18,6 +18,7 @@
 #include <linux/mount.h>
 #include <linux/posix_acl.h>
 #include <linux/ratelimit.h>
+#include <linux/sched.h>
 #include <linux/list_lru.h>
 #include <linux/iversion.h>
 #include <linux/rw_hint.h>
@@ -35,7 +36,7 @@
  * inode->i_lock protects:
  *   inode->i_state, inode->i_hash, __iget(), inode->i_io_list
  * Inode LRU list locks protect:
- *   inode->i_sb->s_inode_lru, inode->i_lru
+ *   inode->i_sb->s_inode_lru, inode->i_lru when on the inode LRU
  * inode->i_sb->s_inode_list_lock protects:
  *   inode->i_sb->s_inodes, inode->i_sb_list
  * bdi->wb.list_lock protects:
@@ -2019,6 +2020,43 @@ static void iput_final(struct inode *inode)
 	evict(inode);
 }
 
+/* Like iput(), but defer sync_lazytime(). Used in reclaim paths. */
+static void iput_memalloc(struct inode *inode)
+{
+	spin_lock(&inode->i_lock);
+	if (unlikely((inode_state_read(inode) & I_DIRTY_TIME) &&
+		     inode->i_nlink)) {
+		int ret;
+
+		if (atomic_add_unless(&inode->i_count, -1, 1)) {
+			spin_unlock(&inode->i_lock);
+			return;
+		}
+
+		inode_lru_list_del(inode);
+		spin_unlock(&inode->i_lock);
+
+		ret = super_defer_iput(inode);
+		if (!ret)
+			return;
+
+		/*
+		 * The superblock is no longer accepting deferred iputs.
+		 * This shouldn't happen.
+		 */
+		WARN_ON_ONCE(ret == -ESHUTDOWN);
+		spin_lock(&inode->i_lock);
+		inode_state_clear(inode, I_DIRTY_TIME);
+	}
+
+	if (!atomic_dec_and_test(&inode->i_count)) {
+		spin_unlock(&inode->i_lock);
+		return;
+	}
+
+	iput_final(inode);
+}
+
 /**
  *	iput	- put an inode
  *	@inode: inode to put
@@ -2046,6 +2084,11 @@ retry:
 
 	if (atomic_add_unless(&inode->i_count, -1, 1))
 		return;
+
+	if (unlikely(current->flags & PF_MEMALLOC)) {
+		iput_memalloc(inode);
+		return;
+	}
 
 	if (inode->i_nlink && sync_lazytime(inode))
 		goto retry;
