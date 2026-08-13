@@ -3821,6 +3821,8 @@ out_led_triggers:
 	if (!phydev->is_on_sfp_module)
 		phy_led_triggers_unregister(phydev);
 
+	phydev->state = PHY_DOWN;
+
 out_ports:
 	phy_sfp_release(phydev);
 	phy_cleanup_ports(phydev);
@@ -3828,6 +3830,7 @@ out_ports:
 out_reset:
 	/* Re-assert the reset signal on error */
 	phy_device_reset(phydev, 1);
+	phydev->drv = NULL;
 
 	return err;
 }
