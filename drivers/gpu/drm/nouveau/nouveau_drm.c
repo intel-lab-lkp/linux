@@ -745,7 +745,7 @@ nouveau_drm_device_new(struct device *parent, struct nvkm_device *device)
 		else
 			driver = &driver_legacy_kms;
 	} else {
-		if (nouveau_atomic)
+		if (nouveau_atomic != -1)
 			dev_warn(parent, "Atomic modesetting not supported (needs nv50+)\n");
 
 		driver = &driver_legacy_kms;
