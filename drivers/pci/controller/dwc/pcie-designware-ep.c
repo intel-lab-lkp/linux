@@ -858,6 +858,22 @@ dw_pcie_ep_find_bar_rsvd_region(struct dw_pcie_ep *ep,
 	return NULL;
 }
 
+static bool dw_pcie_ep_has_edma_ll_resources(struct dw_edma_chip *edma,
+					     u16 ll_wr_cnt, u16 ll_rd_cnt)
+{
+	unsigned int i;
+
+	for (i = 0; i < ll_wr_cnt; i++)
+		if (!edma->ll_region_wr[i].sz)
+			return false;
+
+	for (i = 0; i < ll_rd_cnt; i++)
+		if (!edma->ll_region_rd[i].sz)
+			return false;
+
+	return true;
+}
+
 static int dw_pcie_ep_check_edma_vfunc(u8 vfunc_no)
 {
 	/*
@@ -877,14 +893,30 @@ dw_pcie_ep_get_aux_resources_count(struct pci_epc *epc, u8 func_no,
 	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
 	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
 	struct dw_edma_chip *edma = &pci->edma;
+	u16 ll_wr_cnt, ll_rd_cnt;
+	int count = 0;
+	int ret;
 
 	if (!pci->edma_reg_size)
 		return 0;
 
-	if (edma->db_offset == ~0)
+	ret = dw_pcie_ep_check_edma_vfunc(vfunc_no);
+	if (ret)
+		return ret;
+
+	if (!edma->dw)
 		return 0;
 
-	return 1;
+	ll_wr_cnt = edma->ll_wr_cnt;
+	ll_rd_cnt = edma->ll_rd_cnt;
+
+	if (dw_pcie_ep_has_edma_ll_resources(edma, ll_wr_cnt, ll_rd_cnt))
+		count += 1 + 2 * (ll_wr_cnt + ll_rd_cnt);
+
+	if (edma->db_offset != ~0)
+		count++;
+
+	return count;
 }
 
 static int
@@ -897,14 +929,34 @@ dw_pcie_ep_get_aux_resources(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	const struct pci_epc_bar_rsvd_region *rsvd;
 	struct dw_edma_chip *edma = &pci->edma;
 	enum pci_barno dma_ctrl_bar = NO_BAR;
-	resource_size_t db_offset = edma->db_offset;
+	resource_size_t db_offset;
 	resource_size_t dma_ctrl_bar_offset = 0;
 	resource_size_t dma_reg_size;
-	int count;
+	u16 ll_wr_cnt, ll_rd_cnt;
+	bool has_ll;
+	unsigned int i;
+	int count, ret;
 
-	count = dw_pcie_ep_get_aux_resources_count(epc, func_no, vfunc_no);
-	if (count < 0)
-		return count;
+	if (!pci->edma_reg_size)
+		return 0;
+
+	ret = dw_pcie_ep_check_edma_vfunc(vfunc_no);
+	if (ret)
+		return ret;
+
+	if (!edma->dw)
+		return 0;
+
+	/* Keep the bounds check and fill on the same provider view. */
+	ll_wr_cnt = edma->ll_wr_cnt;
+	ll_rd_cnt = edma->ll_rd_cnt;
+	db_offset = edma->db_offset;
+	has_ll = dw_pcie_ep_has_edma_ll_resources(edma, ll_wr_cnt,
+						  ll_rd_cnt);
+
+	count = db_offset != ~0;
+	if (has_ll)
+		count += 1 + 2 * (ll_wr_cnt + ll_rd_cnt);
 
 	if (num_resources < count)
 		return -ENOSPC;
@@ -921,6 +973,80 @@ dw_pcie_ep_get_aux_resources(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	if (rsvd && rsvd->size < dma_reg_size)
 		dma_reg_size = rsvd->size;
 
+	count = 0;
+	if (has_ll) {
+		resources[count++] = (struct pci_epc_aux_resource) {
+			.type = PCI_EPC_AUX_DMA_CTRL_MMIO,
+			.phys_addr = pci->edma_reg_phys,
+			.size = dma_reg_size,
+			.bar = dma_ctrl_bar,
+			.bar_offset = dma_ctrl_bar_offset,
+			.u.dma_ctrl = {
+				.reg_layout = PCI_EPC_AUX_DMA_REG_LAYOUT_DW_EDMA,
+				.reg_layout_data = edma->mf,
+				.ep_to_rc_ch_cnt = ll_wr_cnt,
+				.rc_to_ep_ch_cnt = ll_rd_cnt,
+			},
+		};
+
+		for (i = 0; i < ll_wr_cnt; i++) {
+			struct dw_edma_region *ll = &edma->ll_region_wr[i];
+			u16 desc_mem_id = i;
+
+			resources[count++] = (struct pci_epc_aux_resource) {
+				.type = PCI_EPC_AUX_DMA_CHAN,
+				.bar = NO_BAR,
+				.u.dma_chan = {
+					.dma_dev = edma->dev,
+					.chan_id = i,
+					.dir = PCI_EPC_AUX_DMA_EP_TO_RC,
+					.hw_ch = i,
+					.desc_mem_id = desc_mem_id,
+				},
+			};
+
+			resources[count++] = (struct pci_epc_aux_resource) {
+				.type = PCI_EPC_AUX_DMA_DESC_MEM,
+				.phys_addr = ll->paddr,
+				.size = ll->sz,
+				.bar = NO_BAR,
+				.u.dma_desc = {
+					.id = desc_mem_id,
+				},
+			};
+		}
+
+		for (i = 0; i < ll_rd_cnt; i++) {
+			struct dw_edma_region *ll = &edma->ll_region_rd[i];
+			u16 desc_mem_id = ll_wr_cnt + i;
+
+			resources[count++] = (struct pci_epc_aux_resource) {
+				.type = PCI_EPC_AUX_DMA_CHAN,
+				.bar = NO_BAR,
+				.u.dma_chan = {
+					.dma_dev = edma->dev,
+					.chan_id = ll_wr_cnt + i,
+					.dir = PCI_EPC_AUX_DMA_RC_TO_EP,
+					.hw_ch = i,
+					.desc_mem_id = desc_mem_id,
+				},
+			};
+
+			resources[count++] = (struct pci_epc_aux_resource) {
+				.type = PCI_EPC_AUX_DMA_DESC_MEM,
+				.phys_addr = ll->paddr,
+				.size = ll->sz,
+				.bar = NO_BAR,
+				.u.dma_desc = {
+					.id = desc_mem_id,
+				},
+			};
+		}
+	}
+
+	if (db_offset == ~0)
+		return 0;
+
 	/*
 	 * For interrupt-emulation doorbells, report a standalone resource
 	 * instead of bundling it into the DMA controller MMIO resource.
@@ -929,7 +1055,7 @@ dw_pcie_ep_get_aux_resources(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 				  sizeof(u32), dma_reg_size))
 		return -EINVAL;
 
-	resources[0] = (struct pci_epc_aux_resource) {
+	resources[count] = (struct pci_epc_aux_resource) {
 		.type = PCI_EPC_AUX_DOORBELL_MMIO,
 		.phys_addr = pci->edma_reg_phys + db_offset,
 		.size = sizeof(u32),
