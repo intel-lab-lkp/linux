@@ -151,6 +151,7 @@ static int pseries_pci_sriov_enable(struct pci_dev *pdev, u16 num_vfs)
 	if (rc) {
 		dev_err(&pdev->dev, "Failure to enable sriov: %x\n", rc);
 		kfree(pdn->pe_num_map);
+		pdn->pe_num_map = NULL;
 	} else {
 		pci_vf_drivers_autoprobe(pdev, false);
 	}
@@ -172,6 +173,7 @@ static int pseries_pcibios_sriov_disable(struct pci_dev *pdev)
 	pdn = pci_get_pdn(pdev);
 	/* Releasing pe_num_map */
 	kfree(pdn->pe_num_map);
+	pdn->pe_num_map = NULL;
 	/* Release PCI data */
 	remove_sriov_vf_pdns(pdev);
 	pci_vf_drivers_autoprobe(pdev, true);
