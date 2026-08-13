@@ -1799,6 +1799,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 
 	dev_dstats_rx_add(vxlan->dev, skb->len);
 	vxlan_vnifilter_count(vxlan, vni, vninode, VXLAN_VNI_STATS_RX, skb->len);
+	skb_unset_transport_header(skb);
 	gro_cells_receive(&vxlan->gro_cells, skb);
 
 	rcu_read_unlock();

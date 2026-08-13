@@ -377,10 +377,12 @@ static void geneve_rx(struct geneve_dev *geneve, struct geneve_sock *gs,
 
 	/* Skip the additional GRO stage when hints are in use. */
 	len = skb->len;
-	if (skb->encapsulation)
+	if (skb->encapsulation) {
 		err = netif_rx(skb);
-	else
+	} else {
+		skb_unset_transport_header(skb);
 		err = gro_cells_receive(&geneve->gro_cells, skb);
+	}
 	if (likely(err == NET_RX_SUCCESS))
 		dev_dstats_rx_add(geneve->dev, len);
 

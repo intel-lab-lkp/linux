@@ -726,6 +726,7 @@ static int ipip6_rcv(struct sk_buff *skb)
 
 		dev_sw_netstats_rx_add(tunnel->dev, skb->len);
 
+		skb_unset_transport_header(skb);
 		netif_rx(skb);
 
 		return 0;

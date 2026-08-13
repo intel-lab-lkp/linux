@@ -2358,6 +2358,7 @@ static bool amt_multicast_data_handler(struct amt_dev *amt, struct sk_buff *skb)
 
 	skb->pkt_type = PACKET_MULTICAST;
 	skb->ip_summed = CHECKSUM_NONE;
+	skb_unset_transport_header(skb);
 	len = skb->len;
 	err = gro_cells_receive(&amt->gro_cells, skb);
 	if (likely(err == NET_RX_SUCCESS))

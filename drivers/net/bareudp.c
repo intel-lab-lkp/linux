@@ -192,6 +192,8 @@ static int bareudp_udp_encap_recv(struct sock *sk, struct sk_buff *skb)
 		}
 	}
 
+	skb_unset_transport_header(skb);
+
 	len = skb->len;
 	err = gro_cells_receive(&bareudp->gro_cells, skb);
 	if (likely(err == NET_RX_SUCCESS))

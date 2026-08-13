@@ -95,6 +95,7 @@ static int pfcp_encap_recv(struct sock *sk, struct sk_buff *skb)
 	skb_reset_mac_header(skb);
 	skb->dev = pfcp->dev;
 
+	skb_unset_transport_header(skb);
 	gro_cells_receive(&pfcp->gro_cells, skb);
 
 	return 0;

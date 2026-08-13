@@ -744,6 +744,7 @@ resume_decapped:
 			skb_dst_drop(skb);
 		if (async)
 			dev_put(dev);
+		skb_unset_transport_header(skb);
 		gro_cells_receive(&gro_cells, skb);
 		rcu_read_unlock();
 		return 0;
