@@ -333,6 +333,9 @@ struct gdma_queue {
 	u32 tail;
 	struct list_head entry;
 
+	/* For kfree_rcu(): CQs are looked up locklessly from the EQ handler. */
+	struct rcu_head rcu;
+
 	/* Extra fields specific to EQ/CQ. */
 	union {
 		struct {
@@ -352,6 +355,12 @@ struct gdma_queue {
 			void *context;
 
 			struct gdma_queue *parent; /* For CQ/EQ relationship */
+
+			/* Keep the CQ alive while the EQ handler runs its
+			 * callback; teardown waits on @free.
+			 */
+			refcount_t refcount;
+			struct completion free;
 		} cq;
 	};
 };
@@ -418,7 +427,11 @@ struct gdma_context {
 
 	/* This maps a CQ index to the queue structure. */
 	unsigned int		max_num_cqs;
-	struct gdma_queue	**cq_table;
+	/* Entries are published/cleared by CQ create/destroy and read
+	 * locklessly by the EQ handler under RCU.  max_num_cqs is the table
+	 * size; NULL means the table is torn down.
+	 */
+	struct gdma_queue __rcu	**cq_table;
 
 	/* Protect eq_test_event and test_event_eq_id  */
 	struct mutex		eq_test_event_mutex;
@@ -495,6 +508,14 @@ int mana_gd_create_mana_wq_cq(struct gdma_dev *gd,
 			      struct gdma_queue **queue_ptr);
 
 void mana_gd_destroy_queue(struct gdma_context *gc, struct gdma_queue *queue);
+
+/* Add a CQ to cq_table so the EQ handler can dispatch to it.  Returns
+ * -EINVAL if the id is out of range or already in use.
+ */
+int mana_gd_publish_cq(struct gdma_context *gc, struct gdma_queue *queue);
+
+/* Remove a CQ from cq_table and wait for the EQ handler to stop using it. */
+void mana_gd_unpublish_cq(struct gdma_context *gc, struct gdma_queue *queue);
 
 int mana_gd_poll_cq(struct gdma_queue *cq, struct gdma_comp *comp, int num_cqe);
 

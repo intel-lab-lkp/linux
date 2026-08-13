@@ -2596,12 +2596,10 @@ static int mana_create_txq(struct mana_port_context *apc,
 
 		cq->gdma_id = cq->gdma_cq->id;
 
-		if (WARN_ON(cq->gdma_id >= gc->max_num_cqs)) {
+		if (WARN_ON(mana_gd_publish_cq(gc, cq->gdma_cq))) {
 			err = -EINVAL;
 			goto out;
 		}
-
-		gc->cq_table[cq->gdma_id] = cq->gdma_cq;
 
 		mana_create_txq_debugfs(apc, i);
 
@@ -2905,12 +2903,10 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 	if (err)
 		goto out;
 
-	if (WARN_ON(cq->gdma_id >= gc->max_num_cqs)) {
+	if (WARN_ON(mana_gd_publish_cq(gc, cq->gdma_cq))) {
 		err = -EINVAL;
 		goto out;
 	}
-
-	gc->cq_table[cq->gdma_id] = cq->gdma_cq;
 
 	netif_napi_add_weight_locked(ndev, &cq->napi, mana_poll, 1);
 
