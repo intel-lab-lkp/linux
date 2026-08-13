@@ -2535,6 +2535,23 @@ static void ff_layout_reresolve_deviceid(struct pnfs_layout_hdr *lo,
 				xchg(&mirror->dss[dss_id].mirror_ds, NULL));
 			if (IS_ERR_OR_NULL(old))
 				continue;
+			/*
+			 * ndc_immediate: the server is enforcing the change
+			 * now and pending I/O may not complete.  Mark the
+			 * old node unavailable so anyone still holding a
+			 * reference stops selecting it; I/O the server
+			 * rejects is re-driven onto the new mapping by the
+			 * existing DS error handling.
+			 *
+			 * Only stale vintages are unhashed: a node still
+			 * hashed was fetched after the stale cache entry
+			 * was removed and already carries the new mapping
+			 * (it can be exchanged out here by a walk that
+			 * lost a race with the re-resolve, or with the
+			 * walk of a later CHANGE); don't mark it.
+			 */
+			if (immediate && hlist_unhashed(&old->id_node.node))
+				nfs4_mark_deviceid_unavailable(&old->id_node);
 			list_add(&old->id_node.put_list, head);
 		}
 	}
