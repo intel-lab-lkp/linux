@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/rcupdate.h>
+#include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/perf_event.h>
 #include "../mm/slab.h"
@@ -103,6 +104,38 @@ static void test_first_word(struct kunit *test)
 	validate_slab_cache(s);
 	KUNIT_EXPECT_EQ(test, 2, slab_errors);
 
+	kmem_cache_destroy(s);
+}
+
+static void test_store_user_previous_lifetime(struct kunit *test)
+{
+	struct kmem_cache *s;
+	void *p;
+	void *q;
+
+	s = test_kmem_cache_create("TestSlub_prev_lifetime", 64,
+				   SLAB_STORE_USER | SLAB_NO_MERGE);
+	migrate_disable();
+	p = kmem_cache_alloc(s, GFP_KERNEL);
+	if (!p) {
+		KUNIT_FAIL(test, "failed to allocate the first object");
+		goto out_enable;
+	}
+	KUNIT_EXPECT_FALSE(test, slab_test_has_previous_lifetime(s, p));
+
+	kmem_cache_free(s, p);
+	q = kmem_cache_alloc(s, GFP_KERNEL);
+	if (q != p) {
+		KUNIT_FAIL(test, "freed object was not immediately reused");
+		if (q)
+			kmem_cache_free(s, q);
+		goto out_enable;
+	}
+	KUNIT_EXPECT_TRUE(test, slab_test_has_previous_lifetime(s, q));
+
+	kmem_cache_free(s, q);
+out_enable:
+	migrate_enable();
 	kmem_cache_destroy(s);
 }
 
@@ -395,6 +428,7 @@ static struct kunit_case test_cases[] = {
 #ifndef CONFIG_KASAN
 	KUNIT_CASE(test_next_pointer),
 	KUNIT_CASE(test_first_word),
+	KUNIT_CASE(test_store_user_previous_lifetime),
 	KUNIT_CASE(test_clobber_50th_byte),
 #endif
 
@@ -419,3 +453,4 @@ kunit_test_suite(test_suite);
 
 MODULE_DESCRIPTION("Kunit tests for slub allocator");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS("EXPORTED_FOR_KUNIT_TESTING");

@@ -518,6 +518,10 @@ bool slab_in_kunit_test(void);
 static inline bool slab_in_kunit_test(void) { return false; }
 #endif
 
+#if IS_ENABLED(CONFIG_SLUB_KUNIT_TEST)
+bool slab_test_has_previous_lifetime(struct kmem_cache *s, void *object);
+#endif
+
 /*
  * slub is about to manipulate internal object metadata.  This memory lies
  * outside the range of the allocated object, so accessing it would normally

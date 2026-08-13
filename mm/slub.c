@@ -46,6 +46,7 @@
 #include <linux/prandom.h>
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
+#include <kunit/visibility.h>
 #include <linux/sort.h>
 #include <linux/irq_work.h>
 #include <linux/kprobes.h>
@@ -1147,6 +1148,15 @@ void print_tracking(struct kmem_cache *s, void *object)
 	print_track("Allocated", prev_alloc, pr_time);
 	print_track("Freed", get_track(s, object, TRACK_PREV_FREE), pr_time);
 }
+
+#if IS_ENABLED(CONFIG_SLUB_KUNIT_TEST)
+bool slab_test_has_previous_lifetime(struct kmem_cache *s, void *object)
+{
+	return get_track(s, object, TRACK_PREV_ALLOC)->addr &&
+	       get_track(s, object, TRACK_PREV_FREE)->addr;
+}
+EXPORT_SYMBOL_IF_KUNIT(slab_test_has_previous_lifetime);
+#endif
 
 static void print_slab_info(const struct slab *slab)
 {
