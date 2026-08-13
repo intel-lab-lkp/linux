@@ -60,6 +60,16 @@ config REFCOUNT_TRACE_FINAL_PUT
 
 	  If unsure, say N.
 
+config REFCOUNT_TRACE_KUNIT_TEST
+	tristate "refcount trace kunit test" if !KUNIT_ALL_TESTS
+	depends on REFCOUNT_TRACE_FINAL_PUT && KUNIT && TRACEPOINTS
+	default KUNIT_ALL_TESTS
+	help
+	  This option enables the KUnit test suite for the refcount_final_put
+	  tracepoint.
+
+	  If unsure, say N.
+
 config BITREVERSE
 	tristate
 
