@@ -454,6 +454,44 @@ log_test_xfail()
 	RET=$ksft_xfail retmsg= log_test "$@"
 }
 
+# Log test result with expected return value
+log_test_expected()
+{
+	local rc=$1
+	local expected=$2
+	local msg="$3"
+
+	if [ "${rc}" -eq "${expected}" ]; then
+		nsuccess=$((nsuccess+1))
+		printf "TEST: %-60s  [ OK ]\n" "${msg}"
+	elif [ "${rc}" -eq "${ksft_skip}" ]; then
+		[[ "$ret" -eq 0 ]] && ret="$ksft_skip"
+		nskip=$((nskip+1))
+		printf "TEST: %-60s  [SKIP]\n" "${msg}"
+	elif [ "${rc}" -eq "${ksft_xfail}" ]; then
+		nxfail=$((nxfail+1))
+		printf "TEST: %-60s  [XFAIL]\n" "${msg}"
+	else
+		ret=$(ksft_exit_status_merge "$ret" "$ksft_fail")
+		nfail=$((nfail+1))
+		printf "TEST: %-60s  [FAIL]\n" "${msg}"
+		if [ "$VERBOSE" = "1" ]; then
+			echo "    rc=$rc, expected $expected"
+		fi
+
+		pause_on_fail
+	fi
+
+	if [ "${PAUSE}" = "yes" ]; then
+		echo
+		echo "hit enter to continue, 'q' to quit"
+		read -r a
+		[ "$a" = "q" ] && exit 1
+	fi
+
+	[ "$VERBOSE" = "1" ] && echo
+}
+
 log_info()
 {
 	local msg=$1
