@@ -109,8 +109,10 @@ static int leds_gmc_probe(struct platform_device *pdev)
 
 		subled[i].color_index = led_cdev->color;
 
-		/* Configure the LED intensity to its maximum */
-		subled[i].intensity = max_brightness;
+		ret = device_property_read_u32(led_cdev->dev, "default-intensity",
+					       &subled[i].intensity);
+		if (ret || subled[i].intensity > max_brightness)
+			subled[i].intensity = max_brightness;
 	}
 
 	/* Initialise the multicolor's LED class device */
