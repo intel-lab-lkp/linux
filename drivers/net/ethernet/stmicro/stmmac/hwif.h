@@ -229,6 +229,15 @@ struct stmmac_dma_ops {
 			   bool en, u32 chan);
 	int (*enable_tbs)(struct stmmac_priv *priv, void __iomem *ioaddr,
 			  bool en, u32 chan);
+	/* Ordered datapath teardown */
+	int (*tx_dma_stopped)(struct stmmac_priv *priv, void __iomem *ioaddr,
+			      u32 chan);
+	int (*tx_mtl_drain)(struct stmmac_priv *priv, void __iomem *ioaddr,
+			    u32 queue);
+	int (*rx_mtl_drain)(struct stmmac_priv *priv, void __iomem *ioaddr,
+			    u32 queue);
+	int (*rx_dma_stopped)(struct stmmac_priv *priv, void __iomem *ioaddr,
+			      u32 chan);
 };
 
 #define stmmac_dma_init(__priv, __args...) \
@@ -289,6 +298,14 @@ struct stmmac_dma_ops {
 	stmmac_do_void_callback(__priv, dma, enable_sph, __priv, __args)
 #define stmmac_enable_tbs(__priv, __args...) \
 	stmmac_do_callback(__priv, dma, enable_tbs, __priv, __args)
+#define stmmac_tx_dma_stopped(__priv, __args...) \
+	stmmac_do_callback(__priv, dma, tx_dma_stopped, __priv, __args)
+#define stmmac_tx_mtl_drain(__priv, __args...) \
+	stmmac_do_callback(__priv, dma, tx_mtl_drain, __priv, __args)
+#define stmmac_rx_mtl_drain(__priv, __args...) \
+	stmmac_do_callback(__priv, dma, rx_mtl_drain, __priv, __args)
+#define stmmac_rx_dma_stopped(__priv, __args...) \
+	stmmac_do_callback(__priv, dma, rx_dma_stopped, __priv, __args)
 
 struct mac_device_info;
 struct net_device;

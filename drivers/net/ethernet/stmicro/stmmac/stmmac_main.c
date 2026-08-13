@@ -2570,6 +2570,52 @@ static void stmmac_stop_all_dma(struct stmmac_priv *priv)
 }
 
 /**
+ * stmmac_datapath_teardown - ordered datapath teardown as per IP specification
+ * @priv: driver private structure
+ * Description:
+ * When teardown ops are available, follow the databook ordered teardown
+ * sequence.
+ * Follows the legacy stop + MAC disable for variants without the feature.
+ */
+static void stmmac_datapath_teardown(struct stmmac_priv *priv)
+{
+	u32 rx_channels_count = priv->plat->rx_queues_to_use;
+	u32 tx_channels_count = priv->plat->tx_queues_to_use;
+	u32 chan;
+
+	/* Stop all TX DMA channels */
+	for (chan = 0; chan < tx_channels_count; chan++)
+		stmmac_stop_tx_dma(priv, chan);
+
+	/* Wait for every TX DMA channel to report itself stopped */
+	if (priv->hw->dma->tx_dma_stopped)
+		for (chan = 0; chan < tx_channels_count; chan++)
+			stmmac_tx_dma_stopped(priv, priv->ioaddr, chan);
+
+	/* Wait for the MTL TX queues to finish pushing into the MAC */
+	if (priv->hw->dma->tx_mtl_drain)
+		for (chan = 0; chan < tx_channels_count; chan++)
+			stmmac_tx_mtl_drain(priv, priv->ioaddr, chan);
+
+	/* Disable the MAC TX and RX */
+	stmmac_mac_set(priv, priv->ioaddr, false);
+
+	/* Wait for the MTL RX queues to drain into the RX DMA */
+	if (priv->hw->dma->rx_mtl_drain)
+		for (chan = 0; chan < rx_channels_count; chan++)
+			stmmac_rx_mtl_drain(priv, priv->ioaddr, chan);
+
+	/* Stop all RX DMA channels */
+	for (chan = 0; chan < rx_channels_count; chan++)
+		stmmac_stop_rx_dma(priv, chan);
+
+	/* Wait for every RX DMA channel to report itself stopped */
+	if (priv->hw->dma->rx_dma_stopped)
+		for (chan = 0; chan < rx_channels_count; chan++)
+			stmmac_rx_dma_stopped(priv, priv->ioaddr, chan);
+}
+
+/**
  *  stmmac_dma_operation_mode - HW DMA operation mode
  *  @priv: driver private structure
  *  Description: it is used for configuring the DMA operation mode register in
@@ -4238,9 +4284,6 @@ static void __stmmac_release(struct net_device *dev)
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u8 chan;
 
-	/* Stop and disconnect the PHY */
-	phylink_stop(priv->phylink);
-
 	stmmac_disable_all_queues(priv);
 
 	for (chan = 0; chan < priv->plat->tx_queues_to_use; chan++)
@@ -4251,8 +4294,11 @@ static void __stmmac_release(struct net_device *dev)
 	/* Free the IRQ lines */
 	stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
 
-	/* Stop TX/RX DMA and clear the descriptors */
-	stmmac_stop_all_dma(priv);
+	/* Has to run before mac_link_down() disables the MAC. */
+	stmmac_datapath_teardown(priv);
+
+	/* Stop and disconnect the PHY */
+	phylink_stop(priv->phylink);
 
 	/* Release and free the Rx/Tx resources */
 	free_dma_desc_resources(priv, &priv->dma_conf);
@@ -7109,14 +7155,11 @@ void stmmac_xdp_release(struct net_device *dev)
 	/* Free the IRQ lines */
 	stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
 
-	/* Stop TX/RX DMA channels */
-	stmmac_stop_all_dma(priv);
+	/* Stop the MAC and the TX/RX DMA channels */
+	stmmac_datapath_teardown(priv);
 
 	/* Release and free the Rx/Tx resources */
 	free_dma_desc_resources(priv, &priv->dma_conf);
-
-	/* Disable the MAC Rx/Tx */
-	stmmac_mac_set(priv, priv->ioaddr, false);
 
 	/* set trans_start so we don't get spurious
 	 * watchdogs during reset
@@ -8195,17 +8238,15 @@ int stmmac_suspend(struct device *dev)
 		timer_delete_sync(&priv->eee_ctrl_timer);
 	}
 
-	/* Stop TX/RX DMA */
-	stmmac_stop_all_dma(priv);
-
-	stmmac_legacy_serdes_power_down(priv);
-
 	/* Enable Power down mode by programming the PMT regs */
 	if (priv->wolopts) {
+		stmmac_stop_all_dma(priv);
+		stmmac_legacy_serdes_power_down(priv);
 		stmmac_pmt(priv, priv->hw, priv->wolopts);
 		priv->irq_wake = 1;
 	} else {
-		stmmac_mac_set(priv, priv->ioaddr, false);
+		stmmac_datapath_teardown(priv);
+		stmmac_legacy_serdes_power_down(priv);
 		pinctrl_pm_select_sleep_state(priv->device);
 	}
 

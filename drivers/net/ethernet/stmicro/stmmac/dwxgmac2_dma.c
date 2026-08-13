@@ -4,6 +4,7 @@
  * stmmac XGMAC support.
  */
 
+#include <linux/bitfield.h>
 #include <linux/iopoll.h>
 #include "stmmac.h"
 #include "dwxgmac2.h"
@@ -251,6 +252,9 @@ static void dwxgmac2_dma_start_tx(struct stmmac_priv *priv,
 {
 	u32 value;
 
+	/* TPS is latched once set, so clear it on every Tx DMA start. */
+	writel(XGMAC_TPS, ioaddr + XGMAC_DMA_CH_STATUS(chan));
+
 	value = readl(ioaddr + XGMAC_DMA_CH_TX_CONTROL(chan));
 	value |= XGMAC_TXST;
 	writel(value, ioaddr + XGMAC_DMA_CH_TX_CONTROL(chan));
@@ -278,6 +282,9 @@ static void dwxgmac2_dma_start_rx(struct stmmac_priv *priv,
 				  void __iomem *ioaddr, u32 chan)
 {
 	u32 value;
+
+	/* RPS is latched once set, so clear it on every Rx DMA start. */
+	writel(XGMAC_RPS, ioaddr + XGMAC_DMA_CH_STATUS(chan));
 
 	value = readl(ioaddr + XGMAC_DMA_CH_RX_CONTROL(chan));
 	value |= XGMAC_RXST;
@@ -582,6 +589,77 @@ static int dwxgmac2_enable_tbs(struct stmmac_priv *priv, void __iomem *ioaddr,
 	return 0;
 }
 
+static int dwxgmac2_tx_dma_stopped(struct stmmac_priv *priv,
+				   void __iomem *ioaddr, u32 chan)
+{
+	u32 value;
+	int ret;
+
+	ret = readl_poll_timeout(ioaddr + XGMAC_DMA_CH_STATUS(chan), value,
+				 value & XGMAC_TPS, 100, 10000);
+	if (ret)
+		netdev_warn(priv->dev, "Tx DMA channel %u stop timeout\n",
+			    chan);
+
+	return ret;
+}
+
+static int dwxgmac2_tx_mtl_drain(struct stmmac_priv *priv,
+				 void __iomem *ioaddr, u32 queue)
+{
+	u32 value;
+	int ret;
+
+	/* Wait until the queue is empty and its read controller is no longer
+	 * pulling a frame out towards the MAC.
+	 */
+	ret = readl_poll_timeout(ioaddr + XGMAC_MTL_TXQ_DEBUG(queue), value,
+				 !(value & XGMAC_TXQSTS) &&
+				 FIELD_GET(XGMAC_TRCSTS, value) !=
+				 XGMAC_TRCSTS_READ,
+				 100, 10000);
+	if (ret)
+		netdev_warn(priv->dev, "MTL Tx queue %u drain timeout\n",
+			    queue);
+
+	return ret;
+}
+
+static int dwxgmac2_rx_mtl_drain(struct stmmac_priv *priv,
+				 void __iomem *ioaddr, u32 queue)
+{
+	u32 value;
+	int ret;
+
+	/* Wait until no packet is left in the queue and the queue reports
+	 * itself empty.
+	 */
+	ret = readl_poll_timeout(ioaddr + XGMAC_MTL_RXQ_DEBUG(queue), value,
+				 !FIELD_GET(XGMAC_PRXQ, value) &&
+				 !FIELD_GET(XGMAC_RXQSTS, value),
+				 100, 10000);
+	if (ret)
+		netdev_warn(priv->dev, "MTL Rx queue %u drain timeout\n",
+			    queue);
+
+	return ret;
+}
+
+static int dwxgmac2_rx_dma_stopped(struct stmmac_priv *priv,
+				   void __iomem *ioaddr, u32 chan)
+{
+	u32 value;
+	int ret;
+
+	ret = readl_poll_timeout(ioaddr + XGMAC_DMA_CH_STATUS(chan), value,
+				 value & XGMAC_RPS, 100, 10000);
+	if (ret)
+		netdev_warn(priv->dev, "Rx DMA channel %u stop timeout\n",
+			    chan);
+
+	return ret;
+}
+
 const struct stmmac_dma_ops dwxgmac210_dma_ops = {
 	.reset = dwxgmac2_dma_reset,
 	.init = dwxgmac2_dma_init,
@@ -610,4 +688,8 @@ const struct stmmac_dma_ops dwxgmac210_dma_ops = {
 	.set_bfsize = dwxgmac2_set_bfsize,
 	.enable_sph = dwxgmac2_enable_sph,
 	.enable_tbs = dwxgmac2_enable_tbs,
+	.tx_dma_stopped = dwxgmac2_tx_dma_stopped,
+	.tx_mtl_drain = dwxgmac2_tx_mtl_drain,
+	.rx_mtl_drain = dwxgmac2_rx_mtl_drain,
+	.rx_dma_stopped = dwxgmac2_rx_dma_stopped,
 };
