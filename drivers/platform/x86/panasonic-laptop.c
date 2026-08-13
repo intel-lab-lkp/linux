@@ -127,6 +127,7 @@
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/input/sparse-keymap.h>
+#include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -256,14 +257,80 @@ struct pcc_acpi {
 /*
  * On some Panasonic models the volume up / down / mute keys send duplicate
  * keypress events over the PS/2 kbd interface, filter these out.
+ *
+ * On the CF-33 the bezel "Rotation Lock" button also signals over this same
+ * interface, instead of via an ACPI notify like the other hotkeys. It does
+ * so by injecting scancodes that alias the real Left-GUI/Meta key
+ * (e0 5b make / e0 db break), interleaved with a bare byte (0x65 / 0xe5)
+ * that no physical key on this keyboard uses. Left unfiltered this shows up
+ * as a bogus LEFTMETA+F14 combo. We recognize and swallow the whole
+ * sequence and emit a single debounced KEY_ROTATE_LOCK_TOGGLE instead; any
+ * byte that breaks the expected pattern is treated as a genuine key and
+ * replayed unfiltered.
  */
+enum rot_lock_state {
+	ROT_IDLE,
+	ROT_WAIT_65,
+	ROT_WAIT_E5,
+	ROT_WAIT_E0B,
+	ROT_WAIT_DB,
+};
+
 static bool panasonic_i8042_filter(unsigned char data, unsigned char str,
 				   struct serio *port, void *context)
 {
+	struct pcc_acpi *pcc = context;
 	static bool extended;
+	static enum rot_lock_state rstate = ROT_IDLE;
+	static unsigned long last_toggle;
+	const unsigned long debounce = msecs_to_jiffies(600);
 
 	if (str & I8042_STR_AUXDATA)
 		return false;
+
+	switch (rstate) {
+	case ROT_WAIT_65:
+		if (data == 0x65) {
+			rstate = ROT_WAIT_E5;
+			if (pcc && pcc->input_dev &&
+			    time_after(jiffies, last_toggle + debounce)) {
+				input_report_key(pcc->input_dev,
+						  KEY_ROTATE_LOCK_TOGGLE, 1);
+				input_sync(pcc->input_dev);
+				input_report_key(pcc->input_dev,
+						  KEY_ROTATE_LOCK_TOGGLE, 0);
+				input_sync(pcc->input_dev);
+				last_toggle = jiffies;
+			}
+			return true;
+		}
+		/* Not our sequence: replay the buffered genuine Left-GUI make. */
+		rstate = ROT_IDLE;
+		serio_interrupt(port, 0xe0, 0);
+		serio_interrupt(port, 0x5b, 0);
+		break;
+	case ROT_WAIT_E5:
+		if (data == 0xe5) {
+			rstate = ROT_WAIT_E0B;
+			return true;
+		}
+		rstate = ROT_IDLE;
+		break;
+	case ROT_WAIT_E0B:
+		if (data == 0xe0) {
+			rstate = ROT_WAIT_DB;
+			return true;
+		}
+		rstate = ROT_IDLE;
+		break;
+	case ROT_WAIT_DB:
+		rstate = ROT_IDLE;
+		if (data == 0xdb)
+			return true;
+		break;
+	case ROT_IDLE:
+		break;
+	}
 
 	if (data == 0xe0) {
 		extended = true;
@@ -276,6 +343,19 @@ static bool panasonic_i8042_filter(unsigned char data, unsigned char str,
 		case 0x2e: /* e0 2e / e0 ae, Volume Down press / release */
 		case 0x30: /* e0 30 / e0 b0, Volume Up press / release */
 			return true;
+		case 0x5b: /* e0 5b, possible start of rotate-lock sequence */
+			if (data == 0x5b) {
+				rstate = ROT_WAIT_65;
+				return true;
+			}
+			/*
+			 * data == 0xdb: genuine Left-GUI/Meta break code.
+			 * The rotate-lock sequence only ever begins with
+			 * the make code, so this is a real key release,
+			 * not our sequence; the code below replays it
+			 * untouched.
+			 */
+			fallthrough;
 		default:
 			/*
 			 * Report the previously filtered e0 before continuing
@@ -944,6 +1024,9 @@ static int acpi_pcc_init_input(struct pcc_acpi *pcc)
 		goto err_free_dev;
 	}
 
+	/* Synthesized by panasonic_i8042_filter(), not part of the ACPI keymap. */
+	input_set_capability(input_dev, EV_KEY, KEY_ROTATE_LOCK_TOGGLE);
+
 	error = input_register_device(input_dev);
 	if (error) {
 		pr_err("Unable to register input device\n");
@@ -1090,7 +1173,7 @@ static int acpi_pcc_hotkey_probe(struct platform_device *pdev)
 		pcc->platform = NULL;
 	}
 
-	i8042_install_filter(panasonic_i8042_filter, NULL);
+	i8042_install_filter(panasonic_i8042_filter, pcc);
 	return 0;
 
 out_platform:
