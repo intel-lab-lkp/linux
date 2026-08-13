@@ -700,8 +700,9 @@ __cmpxchg_acquire(void *ptr, unsigned long old, unsigned long new,
   ({									 \
      __typeof__(*(ptr)) _o_ = (o);					 \
      __typeof__(*(ptr)) _n_ = (n);					 \
-     (__typeof__(*(ptr))) __cmpxchg((ptr), (unsigned long)_o_,		 \
-				    (unsigned long)_n_, sizeof(*(ptr))); \
+     (__force __typeof__(*(ptr)))					 \
+	__cmpxchg((ptr), (__force unsigned long)_o_,			 \
+		  (__force unsigned long)_n_, sizeof(*(ptr)));		 \
   })
 
 
@@ -709,26 +710,27 @@ __cmpxchg_acquire(void *ptr, unsigned long old, unsigned long new,
   ({									 \
      __typeof__(*(ptr)) _o_ = (o);					 \
      __typeof__(*(ptr)) _n_ = (n);					 \
-     (__typeof__(*(ptr))) __cmpxchg_local((ptr), (unsigned long)_o_,	 \
-				    (unsigned long)_n_, sizeof(*(ptr))); \
+     (__force __typeof__(*(ptr)))					 \
+	__cmpxchg_local((ptr), (__force unsigned long)_o_,		 \
+			(__force unsigned long)_n_, sizeof(*(ptr)));	 \
   })
 
 #define arch_cmpxchg_relaxed(ptr, o, n)					\
 ({									\
 	__typeof__(*(ptr)) _o_ = (o);					\
 	__typeof__(*(ptr)) _n_ = (n);					\
-	(__typeof__(*(ptr))) __cmpxchg_relaxed((ptr),			\
-			(unsigned long)_o_, (unsigned long)_n_,		\
-			sizeof(*(ptr)));				\
+	(__force __typeof__(*(ptr)))					\
+	  __cmpxchg_relaxed((ptr), (__force unsigned long)_o_,		\
+			    (__force unsigned long)_n_, sizeof(*(ptr)));\
 })
 
 #define arch_cmpxchg_acquire(ptr, o, n)					\
 ({									\
 	__typeof__(*(ptr)) _o_ = (o);					\
 	__typeof__(*(ptr)) _n_ = (n);					\
-	(__typeof__(*(ptr))) __cmpxchg_acquire((ptr),			\
-			(unsigned long)_o_, (unsigned long)_n_,		\
-			sizeof(*(ptr)));				\
+	(__force __typeof__(*(ptr)))					\
+	  __cmpxchg_acquire((ptr), (__force unsigned long)_o_,		\
+			    (__force unsigned long)_n_, sizeof(*(ptr)));\
 })
 #ifdef CONFIG_PPC64
 #define arch_cmpxchg64(ptr, o, n)					\
