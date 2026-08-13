@@ -6,12 +6,16 @@
  */
 
 #include <linux/init.h>
+#include <linux/iopoll.h>
 #include <linux/mm.h>
 #include <linux/sched/task_stack.h>
 #include <asm/cpu_ops.h>
 #include <asm/cpu_ops_sbi.h>
 #include <asm/sbi.h>
 #include <asm/smp.h>
+
+#define SBI_HSM_STOP_POLL_US		100
+#define SBI_HSM_STOP_TIMEOUT_US		(100 * USEC_PER_MSEC)
 
 extern char secondary_start_sbi[];
 const struct cpu_operations cpu_ops_sbi;
@@ -85,12 +89,15 @@ static void sbi_cpu_stop(void)
 
 static bool sbi_cpu_is_stopped(unsigned int cpuid)
 {
-	int rc;
+	int rc, ret;
 	unsigned long hartid = cpuid_to_hartid_map(cpuid);
 
-	rc = sbi_hsm_hart_get_status(hartid);
+	ret = read_poll_timeout(sbi_hsm_hart_get_status, rc,
+				rc < 0 || rc == SBI_HSM_STATE_STOPPED,
+				SBI_HSM_STOP_POLL_US, SBI_HSM_STOP_TIMEOUT_US,
+				false, hartid);
 
-	if (rc != SBI_HSM_STATE_STOPPED) {
+	if (ret || rc != SBI_HSM_STATE_STOPPED) {
 		pr_warn("HART%lu isn't stopped; status %d\n", hartid, rc);
 		return false;
 	}
