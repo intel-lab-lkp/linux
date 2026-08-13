@@ -153,9 +153,12 @@ static void rtw8822c_dac_restore_reg(struct rtw_dev *rtwdev,
 	}
 }
 
-static void rtw8822c_rf_minmax_cmp(struct rtw_dev *rtwdev, u32 value,
-				   u32 *min, u32 *max)
+static void rtw8822c_rf_minmax_cmp(struct rtw_dev *rtwdev, s32 value_s32,
+				   s32 *min_s32, s32 *max_s32)
 {
+	u32 value = (u32)value_s32;
+	u32 *min = (u32 *)min_s32;
+	u32 *max = (u32 *)max_s32;
 	if (value >= 0x200) {
 		if (*min >= 0x200) {
 			if (*min > value)
@@ -182,8 +185,10 @@ static void rtw8822c_rf_minmax_cmp(struct rtw_dev *rtwdev, u32 value,
 	}
 }
 
-static void __rtw8822c_dac_iq_sort(struct rtw_dev *rtwdev, u32 *v1, u32 *v2)
+static void __rtw8822c_dac_iq_sort(struct rtw_dev *rtwdev, s32 *v1_s32, s32 *v2_s32)
 {
+	u32 *v1 = (u32 *)v1_s32;
+	u32 *v2 = (u32 *)v2_s32;
 	if (*v1 >= 0x200 && *v2 >= 0x200) {
 		if (*v1 > *v2)
 			swap(*v1, *v2);
@@ -195,7 +200,7 @@ static void __rtw8822c_dac_iq_sort(struct rtw_dev *rtwdev, u32 *v1, u32 *v2)
 	}
 }
 
-static void rtw8822c_dac_iq_sort(struct rtw_dev *rtwdev, u32 *iv, u32 *qv)
+static void rtw8822c_dac_iq_sort(struct rtw_dev *rtwdev, s32 *iv, s32 *qv)
 {
 	u32 i, j;
 
@@ -207,8 +212,9 @@ static void rtw8822c_dac_iq_sort(struct rtw_dev *rtwdev, u32 *iv, u32 *qv)
 	}
 }
 
-static void rtw8822c_dac_iq_offset(struct rtw_dev *rtwdev, u32 *vec, u32 *val)
+static void rtw8822c_dac_iq_offset(struct rtw_dev *rtwdev, s32 *vec_s32, u32 *val)
 {
+	u32 *vec = (u32 *)vec_s32;
 	u32 p, m, t, i;
 
 	m = 0;
@@ -271,8 +277,9 @@ static u32 rtw8822c_get_path_read_addr(u8 path)
 	return base_addr;
 }
 
-static bool rtw8822c_dac_iq_check(struct rtw_dev *rtwdev, u32 value)
+static bool rtw8822c_dac_iq_check(struct rtw_dev *rtwdev, s32 value_s32)
 {
+	u32 value = (u32)value_s32;
 	bool ret = true;
 
 	if ((value >= 0x200 && (0x400 - value) > 0x64) ||
@@ -284,7 +291,7 @@ static bool rtw8822c_dac_iq_check(struct rtw_dev *rtwdev, u32 value)
 	return ret;
 }
 
-static void rtw8822c_dac_cal_iq_sample(struct rtw_dev *rtwdev, u32 *iv, u32 *qv)
+static void rtw8822c_dac_cal_iq_sample(struct rtw_dev *rtwdev, s32 *iv, s32 *qv)
 {
 	u32 temp;
 	int i = 0, cnt = 0;
@@ -292,8 +299,8 @@ static void rtw8822c_dac_cal_iq_sample(struct rtw_dev *rtwdev, u32 *iv, u32 *qv)
 	while (i < DACK_SN_8822C && cnt < 10000) {
 		cnt++;
 		temp = rtw_read32_mask(rtwdev, 0x2dbc, 0x3fffff);
-		iv[i] = (temp & 0x3ff000) >> 12;
-		qv[i] = temp & 0x3ff;
+		iv[i] = (s32)((temp & 0x3ff000) >> 12);
+		qv[i] = (s32)(temp & 0x3ff);
 
 		if (rtw8822c_dac_iq_check(rtwdev, iv[i]) &&
 		    rtw8822c_dac_iq_check(rtwdev, qv[i]))
@@ -302,7 +309,7 @@ static void rtw8822c_dac_cal_iq_sample(struct rtw_dev *rtwdev, u32 *iv, u32 *qv)
 }
 
 static void rtw8822c_dac_cal_iq_search(struct rtw_dev *rtwdev,
-				       u32 *iv, u32 *qv,
+				       s32 *iv, s32 *qv,
 				       u32 *i_value, u32 *q_value)
 {
 	u32 i_max = 0, q_max = 0, i_min = 0, q_min = 0;
@@ -311,13 +318,13 @@ static void rtw8822c_dac_cal_iq_search(struct rtw_dev *rtwdev,
 	int i, cnt = 0;
 
 	do {
-		i_min = iv[0];
-		i_max = iv[0];
-		q_min = qv[0];
-		q_max = qv[0];
+		i_min = (u32)iv[0];
+		i_max = (u32)iv[0];
+		q_min = (u32)qv[0];
+		q_max = (u32)qv[0];
 		for (i = 0; i < DACK_SN_8822C; i++) {
-			rtw8822c_rf_minmax_cmp(rtwdev, iv[i], &i_min, &i_max);
-			rtw8822c_rf_minmax_cmp(rtwdev, qv[i], &q_min, &q_max);
+			rtw8822c_rf_minmax_cmp(rtwdev, iv[i], (s32 *)&i_min, (s32 *)&i_max);
+			rtw8822c_rf_minmax_cmp(rtwdev, qv[i], (s32 *)&q_min, (s32 *)&q_max);
 		}
 
 		if (i_max < 0x200 && i_min < 0x200)
@@ -345,11 +352,11 @@ static void rtw8822c_dac_cal_iq_search(struct rtw_dev *rtwdev,
 
 		if (i_delta > 5 || q_delta > 5) {
 			temp = rtw_read32_mask(rtwdev, 0x2dbc, 0x3fffff);
-			iv[0] = (temp & 0x3ff000) >> 12;
-			qv[0] = temp & 0x3ff;
+			iv[0] = (s32)((temp & 0x3ff000) >> 12);
+			qv[0] = (s32)(temp & 0x3ff);
 			temp = rtw_read32_mask(rtwdev, 0x2dbc, 0x3fffff);
-			iv[DACK_SN_8822C - 1] = (temp & 0x3ff000) >> 12;
-			qv[DACK_SN_8822C - 1] = temp & 0x3ff;
+			iv[DACK_SN_8822C - 1] = (s32)((temp & 0x3ff000) >> 12);
+			qv[DACK_SN_8822C - 1] = (s32)(temp & 0x3ff);
 		} else {
 			break;
 		}
@@ -362,7 +369,7 @@ static void rtw8822c_dac_cal_iq_search(struct rtw_dev *rtwdev,
 static void rtw8822c_dac_cal_rf_mode(struct rtw_dev *rtwdev,
 				     u32 *i_value, u32 *q_value)
 {
-	u32 iv[DACK_SN_8822C], qv[DACK_SN_8822C];
+	s32 iv[DACK_SN_8822C], qv[DACK_SN_8822C];
 	u32 rf_a, rf_b;
 
 	rf_a = rtw_read_rf(rtwdev, RF_PATH_A, 0x0, RFREG_MASK);
