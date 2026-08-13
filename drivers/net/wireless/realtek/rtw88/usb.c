@@ -64,7 +64,7 @@ static void rtw_usb_reg_sec(struct rtw_dev *rtwdev, u32 addr, __le32 *data)
 				 RTW_USB_CMD_REQ, RTW_USB_CMD_WRITE,
 				 t_reg, 0, data, t_len, 500);
 
-	if (status != t_len && status != -ENODEV)
+	if (status != t_len && status != -ENODEV && !rtwusb->switching_mode)
 		rtw_err(rtwdev, "%s: reg 0x%x, usb write %u fail, status: %d\n",
 			__func__, t_reg, t_len, status);
 }
@@ -90,7 +90,7 @@ static u32 rtw_usb_read(struct rtw_dev *rtwdev, u32 addr, u16 len)
 	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0),
 			      RTW_USB_CMD_REQ, RTW_USB_CMD_READ, addr,
 			      RTW_USB_VENQT_CMD_IDX, data, len, 1000);
-	if (ret < 0 && ret != -ENODEV && count++ < 4)
+	if (ret < 0 && ret != -ENODEV && !rtwusb->switching_mode && count++ < 4)
 		rtw_err(rtwdev, "read register 0x%x failed with %d\n",
 			addr, ret);
 
@@ -140,7 +140,7 @@ static void rtw_usb_write(struct rtw_dev *rtwdev, u32 addr, u32 val, int len)
 	ret = usb_control_msg(udev, usb_sndctrlpipe(udev, 0),
 			      RTW_USB_CMD_REQ, RTW_USB_CMD_WRITE,
 			      addr, 0, data, len, 500);
-	if (ret < 0 && ret != -ENODEV && count++ < 4)
+	if (ret < 0 && ret != -ENODEV && !rtwusb->switching_mode && count++ < 4)
 		rtw_err(rtwdev, "write register 0x%x failed with %d\n",
 			addr, ret);
 
@@ -1172,7 +1172,9 @@ static bool rtw_usb3_chip_new(u8 chip_id)
 
 static int rtw_usb_switch_mode(struct rtw_dev *rtwdev)
 {
+	struct rtw_usb *rtwusb = rtw_get_usb_priv(rtwdev);
 	u8 id = rtwdev->chip->id;
+	int ret;
 
 	if (!rtw_usb3_chip_new(id) && !rtw_usb3_chip_old(id))
 		return 0;
@@ -1189,10 +1191,21 @@ static int rtw_usb_switch_mode(struct rtw_dev *rtwdev)
 		return 0;
 	}
 
+	/* From here the chip may power off its MAC and re-enumerate, so it can
+	 * leave the bus while a control transfer is still in flight. Keep the
+	 * mark only if a switch was really started.
+	 */
+	rtwusb->switching_mode = true;
+
 	if (rtw_usb3_chip_old(id))
-		return rtw_usb_switch_mode_old(rtwdev);
+		ret = rtw_usb_switch_mode_old(rtwdev);
 	else
-		return rtw_usb_switch_mode_new(rtwdev);
+		ret = rtw_usb_switch_mode_new(rtwdev);
+
+	if (ret != 1)
+		rtwusb->switching_mode = false;
+
+	return ret;
 }
 
 #define USB_REG_PAGE	0xf4
