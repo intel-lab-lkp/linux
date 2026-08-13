@@ -478,7 +478,7 @@ static struct w83627hf_data *w83627hf_update_device(struct device *dev)
 {
 	struct w83627hf_data *data = dev_get_drvdata(dev);
 	int i, num_temps = (data->type == w83697hf) ? 2 : 3;
-	int num_pwms = (data->type == w83697hf) ? 2 : 3;
+	int num_pwms = (data->type == w83627hf || data->type == w83697hf) ? 2 : 3;
 
 	mutex_lock(&data->update_lock);
 
@@ -506,7 +506,7 @@ static struct w83627hf_data *w83627hf_update_device(struct device *dev)
 			    w83627hf_read_value(data,
 					       W83627HF_REG_FAN_MIN(i));
 		}
-		for (i = 0; i <= 2; i++) {
+		for (i = 0; i < num_pwms; i++) {
 			u8 tmp = w83627hf_read_value(data,
 				W836X7HF_REG_PWM(data->type, i));
 			/* bits 0-3 are reserved  in 627THF */
