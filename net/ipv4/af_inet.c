@@ -1465,40 +1465,26 @@ static struct sk_buff *ipip_gso_segment(struct sk_buff *skb,
 	return inet_gso_segment(skb, features);
 }
 
-struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
+/* Non-zero means tot_len != gro_len OR IP_CE is set: ip_is_fragment() tests
+ * only IP_MF and IP_OFFSET, and IP_DF is masked here, but IP_CE is not.
+ * Recompute after trimming; never assume a trimmed packet has a zero term.
+ */
+static int inet_gro_flush_term(const struct iphdr *iph,
+			       unsigned int gro_len)
 {
-	const struct net_offload *ops;
-	struct sk_buff *pp = NULL;
-	const struct iphdr *iph;
-	struct sk_buff *p;
-	unsigned int hlen;
-	unsigned int off;
-	int flush = 1;
-	int proto;
+	return (u16)((ntohl(*(__be32 *)iph) ^ gro_len) |
+		     (ntohl(*(__be32 *)&iph->id) & ~IP_DF));
+}
 
-	off = skb_gro_offset(skb);
-	hlen = off + sizeof(*iph);
-	iph = skb_gro_header(skb, hlen, off);
-	if (unlikely(!iph))
-		goto out;
-
-	proto = iph->protocol;
-
-	ops = rcu_dereference(inet_offloads[proto]);
-	if (!ops || !ops->callbacks.gro_receive)
-		goto out;
-
-	if (*(u8 *)iph != 0x45)
-		goto out;
-
-	if (ip_is_fragment(iph))
-		goto out;
-
-	if (unlikely(ip_fast_csum((u8 *)iph, 5)))
-		goto out;
-
-	NAPI_GRO_CB(skb)->proto = proto;
-	flush = (u16)((ntohl(*(__be32 *)iph) ^ skb_gro_len(skb)) | (ntohl(*(__be32 *)&iph->id) & ~IP_DF));
+/* The common caller passes a literal 0 for flush, which (with
+ * __always_inline) folds away both updates where it is used below.
+ */
+static __always_inline struct sk_buff *
+inet_gro_receive_finish(struct list_head *head, struct sk_buff *skb,
+			const struct net_offload *ops, const struct iphdr *iph,
+			unsigned int off, int flush)
+{
+	struct sk_buff *pp, *p;
 
 	list_for_each_entry(p, head, list) {
 		struct iphdr *iph2;
@@ -1532,10 +1518,94 @@ struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
 	pp = indirect_call_gro_receive(tcp4_gro_receive, udp4_gro_receive,
 				       ops->callbacks.gro_receive, head, skb);
 
-out:
 	skb_gro_flush_final(skb, pp, flush);
 
 	return pp;
+}
+
+/* Superset gate: a VLAN tag lengthens both the padded frame and the L2 header
+ * so tag depth cancels; gro_len > tot_len and the all-zero scan decide.
+ */
+static noinline struct sk_buff *
+inet_gro_receive_slow(struct list_head *head, struct sk_buff *skb,
+		      const struct net_offload *ops, const struct iphdr *iph,
+		      unsigned int off)
+{
+	unsigned int tot_len = ntohs(iph->tot_len);
+	unsigned int gro_len = skb->len - off;
+
+	if (NAPI_GRO_CB(skb)->encap_mark ||
+	    (skb->dev->features & NETIF_F_RXFCS) ||
+	    gro_len > ETH_ZLEN - ETH_HLEN + ETH_FCS_LEN || gro_len <= tot_len ||
+	    tot_len < sizeof(*iph))
+		goto no_trim;
+
+	/* A linear skb is contiguous through skb->len, so the scan below ends
+	 * at skb->data + skb->len. Keep this test ahead of it.
+	 */
+	if (skb_is_nonlinear(skb))
+		goto no_trim;
+
+	if (!mem_is_zero(skb->data + off + tot_len, gro_len - tot_len))
+		goto no_trim;
+
+	/* Trailing zeros leave a one's-complement sum unchanged, so the
+	 * NAPI_GRO_CB(skb)->csum cached before this call stays valid;
+	 * __skb_trim() cannot reallocate, so iph stays valid.
+	 */
+	__skb_trim(skb, off + tot_len);
+	NAPI_GRO_CB(skb)->frag0_len = skb->len;
+	gro_len = tot_len;
+
+no_trim:
+	return inet_gro_receive_finish(head, skb, ops, iph, off,
+				       inet_gro_flush_term(iph, gro_len));
+}
+
+struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
+{
+	const struct net_offload *ops;
+	const struct iphdr *iph;
+	unsigned int gro_len;
+	unsigned int off;
+	int proto;
+
+	off = skb_gro_offset(skb);
+	iph = skb_gro_header(skb, off + sizeof(*iph), off);
+	if (unlikely(!iph))
+		goto out;
+
+	proto = iph->protocol;
+
+	ops = rcu_dereference(inet_offloads[proto]);
+	if (!ops || !ops->callbacks.gro_receive)
+		goto out;
+
+	if (*(u8 *)iph != 0x45)
+		goto out;
+
+	if (ip_is_fragment(iph))
+		goto out;
+
+	if (unlikely(ip_fast_csum((u8 *)iph, 5)))
+		goto out;
+
+	NAPI_GRO_CB(skb)->proto = proto;
+
+	/* skb_gro_len(skb) without re-reading data_offset; the skb_gro_pull()
+	 * in finish() must stay below this.
+	 */
+	gro_len = skb->len - off;
+
+	if (unlikely(inet_gro_flush_term(iph, gro_len)))
+		return inet_gro_receive_slow(head, skb, ops, iph, off);
+
+	return inet_gro_receive_finish(head, skb, ops, iph, off, 0);
+
+out:
+	skb_gro_flush_final(skb, NULL, 1);
+
+	return NULL;
 }
 EXPORT_INDIRECT_CALLABLE(inet_gro_receive);
 
