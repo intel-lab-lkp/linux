@@ -664,9 +664,6 @@ u8 rtw_init_drv_sw(struct adapter *padapter)
 	/*  add for CONFIG_IEEE80211W, none 11w also can use */
 	spin_lock_init(&padapter->security_key_mutex);
 
-	/*  We don't need to memset padapter->XXX to zero, because adapter is allocated by vzalloc(). */
-	/* memset((unsigned char *)&padapter->securitypriv, 0, sizeof (struct security_priv)); */
-
 	if (_rtw_init_sta_priv(&padapter->stapriv) == _FAIL)
 		goto free_recv_priv;
 
