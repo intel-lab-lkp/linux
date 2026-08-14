@@ -849,8 +849,10 @@ static int mxs_i2c_probe(struct platform_device *pdev)
 
 	/* Do reset to enforce correct startup after pinmuxing */
 	err = mxs_i2c_reset(i2c);
-	if (err)
+	if (err) {
+		dma_release_channel(i2c->dmach);
 		return err;
+	}
 
 	adap = &i2c->adapter;
 	strscpy(adap->name, "MXS I2C adapter", sizeof(adap->name));
@@ -865,6 +867,7 @@ static int mxs_i2c_probe(struct platform_device *pdev)
 	if (err) {
 		writel(MXS_I2C_CTRL0_SFTRST,
 				i2c->regs + MXS_I2C_CTRL0_SET);
+		dma_release_channel(i2c->dmach);
 		return err;
 	}
 
