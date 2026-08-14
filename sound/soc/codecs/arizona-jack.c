@@ -273,9 +273,10 @@ static void arizona_start_mic(struct arizona_priv *info)
 	ret = regmap_update_bits_check(arizona->regmap, ARIZONA_MIC_DETECT_1,
 				       ARIZONA_MICD_ENA, ARIZONA_MICD_ENA,
 				       &change);
-	if (ret < 0) {
+	if (ret < 0)
 		dev_err(arizona->dev, "Failed to enable micd: %d\n", ret);
-	} else if (!change) {
+
+	if (ret < 0 || !change) {
 		regulator_disable(info->micvdd);
 		pm_runtime_put_autosuspend(arizona->dev);
 	}
