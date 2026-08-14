@@ -32,6 +32,19 @@ static struct reserved_mem *reserved_mem __refdata = reserved_mem_array;
 static int total_reserved_mem_cnt = MAX_RESERVED_REGIONS;
 static int reserved_mem_count;
 
+static int reserve_failed_nodes[MAX_RESERVED_REGIONS] __initdata;
+static int reserve_failed_nodes_cnt __initdata;
+
+static bool __init reserved_mem_node_reserve_failed(int node)
+{
+	int i;
+
+	for (i = 0; i < reserve_failed_nodes_cnt; i++)
+		if (reserve_failed_nodes[i] == node)
+			return true;
+	return false;
+}
+
 static int __init early_init_dt_alloc_reserved_memory_arch(phys_addr_t size,
 	phys_addr_t align, phys_addr_t start, phys_addr_t end, bool nomap,
 	phys_addr_t *res_base)
@@ -167,14 +180,19 @@ static int __init __reserved_mem_reserve_reg(unsigned long node,
 	base = b;
 	size = s;
 
-	if (size && early_init_dt_reserve_memory(base, size, nomap) == 0) {
-		fdt_fixup_reserved_mem_node(node, base, size);
-		pr_debug("Reserved memory: reserved region for node '%s': base %pa, size %lu MiB\n",
-			 uname, &base, (unsigned long)(size / SZ_1M));
-	} else {
+	if (!size)
+		return -EINVAL;
+
+	err = early_init_dt_reserve_memory(base, size, nomap);
+	if (err) {
 		pr_err("Reserved memory: failed to reserve memory for node '%s': base %pa, size %lu MiB\n",
 		       uname, &base, (unsigned long)(size / SZ_1M));
+		return err;
 	}
+
+	fdt_fixup_reserved_mem_node(node, base, size);
+	pr_debug("Reserved memory: reserved region for node '%s': base %pa, size %lu MiB\n",
+		 uname, &base, (unsigned long)(size / SZ_1M));
 	return 0;
 }
 
@@ -306,10 +324,14 @@ void __init fdt_scan_reserved_mem_late(void)
 		base = b;
 		size = s;
 
-		if (size) {
-			uname = fdt_get_name(fdt, child, NULL);
-			fdt_init_reserved_mem_node(child, uname, base, size);
-		}
+		if (!size)
+			continue;
+
+		if (reserved_mem_node_reserve_failed(child))
+			continue;
+
+		uname = fdt_get_name(fdt, child, NULL);
+		fdt_init_reserved_mem_node(child, uname, base, size);
 	}
 
 	/* check for overlapping reserved regions */
@@ -357,8 +379,15 @@ int __init fdt_scan_reserved_mem(void)
 		uname = fdt_get_name(fdt, child, NULL);
 
 		err = __reserved_mem_reserve_reg(child, uname);
-		if (!err)
+		if (!err) {
 			count++;
+		} else if (err != -ENOENT) {
+			if (reserve_failed_nodes_cnt < MAX_RESERVED_REGIONS)
+				reserve_failed_nodes[reserve_failed_nodes_cnt++] = child;
+			else
+				pr_err("too many failed regions, '%s' reservation failed\n",
+				       uname);
+		}
 
 		/*
 		 * Save the nodes for the dynamically-placed regions
