@@ -1265,6 +1265,13 @@ extern int perf_event_setup_aux(struct perf_event *event, int nr_pages,
 				long watermark);
 extern void perf_event_release_aux(struct perf_event *event);
 
+/* AUX ring accessors for kernel consumers (no user-space mmap). */
+extern unsigned long perf_event_aux_head(struct perf_event *event);
+extern int perf_event_aux_tail_set(struct perf_event *event,
+				   unsigned long tail);
+extern long perf_event_aux_copy(struct perf_event *event, unsigned long from,
+				unsigned long to, void *buf);
+
 extern void perf_pmu_migrate_context(struct pmu *pmu,
 				     int src_cpu, int dst_cpu);
 extern int perf_event_read_local(struct perf_event *event, u64 *value,

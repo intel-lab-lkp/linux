@@ -26,6 +26,7 @@ Perf ring buffer
     3.1  The relationship between AUX and regular ring buffers
     3.2  AUX events
     3.3  Snapshot mode
+    3.4  Kernel-consumer AUX buffer access
 
 
 1. Introduction
@@ -827,4 +828,57 @@ mode.
          |                 AUX Ring buffer 3     | <- aux_head
          +---------------------------------------+
 
-                Figure 9. Snapshot with system wide mode
+                 Figure 9. Snapshot with system wide mode
+
+3.4 Kernel-consumer AUX buffer access
+-------------------------------------
+
+The AUX ring buffer is normally consumed from user space via mmap()
+on the perf event fd.  Some tracing PMUs (e.g. ARM SPE) write trace
+records directly to the AUX buffer without generating a
+perf_event_overflow() callback for each record.  A kernel consumer
+therefore needs to own and drain the AUX buffer itself rather than
+rely on the overflow path.
+
+The perf core provides five exported functions for in-kernel
+consumers that do not have a user-space mmap:
+
+  - ``perf_event_setup_aux(event, nr_pages, watermark)`` — allocate
+    an AUX ring buffer for a kernel-created perf event.  The event
+    must be created by ``perf_event_create_kernel_counter()``; it
+    must not have a parent or an existing ring buffer.  ``nr_pages``
+    must be a power of two and ``watermark`` must be non-negative
+    (0 selects half the buffer).
+
+  - ``perf_event_release_aux(event)`` — tear down the AUX buffer
+    allocated by ``perf_event_setup_aux()``.  Must be called before
+    ``perf_event_release_kernel()``.  Safe to call on an event that
+    never had an AUX buffer (no-op).  A ring buffer not owned by the
+    kernel AUX API is left attached.
+
+  - ``perf_event_aux_head(event)`` — read the published producer
+    head.  Returns 0 if the event has no ring buffer.
+
+  - ``perf_event_aux_tail_set(event, tail)`` — advance the consumer
+    tail.  The new tail must be within the current ``[old_tail,
+    head]`` window; an out-of-range tail is rejected with ``-EINVAL``.
+
+  - ``perf_event_aux_copy(event, from, to, buf)`` — copy a possibly
+    wrapped AUX interval into a linear buffer.  The ``from``/``to``
+    cursors are absolute and must lie within ``[tail, head]``.
+
+The owner reference is tracked by ``aux_kernel_count`` on the
+``perf_buffer``, separate from the userspace ``aux_mmap_count``.
+``perf_aux_output_begin()`` admits a writer while either owner
+count is non-zero, so a kernel consumer and a userspace consumer
+on different events for the same PMU do not interfere.
+
+A userspace mmap and a kernel ``perf_event_setup_aux()`` on the
+*same* event cannot coexist: the second call finds ``event->rb``
+already set and returns ``-EBUSY``.
+
+Memory ordering follows the same protocol as the userspace AUX
+mmap consumer: ``perf_event_aux_head()`` uses ``smp_rmb()`` to pair
+with the producer's data-write barrier before publishing ``aux_head``,
+and ``perf_event_aux_tail_set()`` uses ``smp_mb()`` to order prior
+data reads before advancing ``aux_tail``.

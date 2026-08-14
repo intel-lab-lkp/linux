@@ -581,6 +581,200 @@ void *perf_get_aux(struct perf_output_handle *handle)
 EXPORT_SYMBOL_GPL(perf_get_aux);
 
 /*
+ * perf_event_aux_head()/perf_event_aux_tail_set()/perf_event_aux_copy() -
+ * AUX ring accessors for kernel consumers (e.g. DAMON's ARM SPE backend).
+ *
+ * The write cursor rb->aux_head is maintained by the PMU driver via
+ * perf_aux_output_end(), which also publishes it to user_page->aux_head;
+ * the consumer cursor lives in user_page->aux_tail (same absolute cursor
+ * domain).  The kernel consumer has no mmap, so these are the counterpart
+ * of the user-space mmap protocol.
+ *
+ * As in the user-space protocol, data visibility is the producer's duty:
+ * the PMU driver must make AUX data visible before calling
+ * perf_aux_output_end(), which then publishes the new head.  Kernel
+ * consumers use the same read- and full-barrier ordering as mmap consumers.
+ */
+
+static bool rb_has_kernel_aux(struct perf_buffer *rb)
+{
+	return rb_has_aux(rb) && refcount_read(&rb->aux_kernel_count);
+}
+
+/**
+ * perf_event_aux_head() - Return the event's absolute AUX write cursor.
+ * @event:	Event with an AUX buffer (perf_event_setup_aux()).
+ *
+ * Returns the current rb->aux_head, or 0 if the event has no ring buffer.
+ */
+unsigned long perf_event_aux_head(struct perf_event *event)
+{
+	struct perf_buffer *rb = ring_buffer_get(event);
+	unsigned long head = 0;
+
+	if (rb && rb_has_kernel_aux(rb)) {
+		head = READ_ONCE(rb->user_page->aux_head);
+		/* Pairs with the producer's AUX-data write barrier. */
+		smp_rmb();
+	}
+	if (rb)
+		ring_buffer_put(rb);
+	return head;
+}
+EXPORT_SYMBOL_GPL(perf_event_aux_head);
+
+/**
+ * perf_event_aux_tail_set() - Advance the event's AUX consumer cursor.
+ * @event:	Event with an AUX buffer.
+ * @tail:	New absolute tail; must be within the current AUX window.
+ *
+ * Frees the consumed space so perf_aux_output_begin() can compute space
+ * again for the PMU writer.  The new tail must refer to a valid position
+ * within the current AUX window (the last ring of produced data); an
+ * out-of-window tail would corrupt the free-space computation in
+ * perf_aux_output_begin() and let the producer overwrite unconsumed data.
+ *
+ * If a non-overwrite buffer becomes full, the producer may be stopped;
+ * advancing the tail alone does not resume it, and the consumer is
+ * responsible for re-enabling the event if needed (as user-space AUX
+ * consumers do).
+ *
+ * Returns 0 on success, -ENOENT if the event has no ring buffer, -EINVAL
+ * on an out-of-range tail.
+ */
+int perf_event_aux_tail_set(struct perf_event *event, unsigned long tail)
+{
+	struct perf_buffer *rb = ring_buffer_get(event);
+	unsigned long advance, aux_size, head, old_tail;
+	int ret = -EINVAL;
+
+	if (!rb)
+		return -ENOENT;
+
+	if (!rb_has_kernel_aux(rb)) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	aux_size = (unsigned long)rb->aux_nr_pages << PAGE_SHIFT;
+	old_tail = READ_ONCE(rb->user_page->aux_tail);
+	/*
+	 * Pairs with the producer's AUX-data write barrier in
+	 * perf_aux_output_end() before it publishes aux_head.
+	 */
+	smp_rmb();
+	head = READ_ONCE(rb->user_page->aux_head);
+	advance = tail - old_tail;
+
+	/* Modular distances keep the check valid when a cursor wraps. */
+	if (head - old_tail <= aux_size && advance <= head - old_tail) {
+		/* Order all prior AUX data reads before releasing the space. */
+		smp_mb();
+		WRITE_ONCE(rb->user_page->aux_tail, tail);
+		ret = 0;
+	}
+
+out:
+	ring_buffer_put(rb);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(perf_event_aux_tail_set);
+
+/**
+ * perf_event_aux_copy() - Copy an AUX window into a linear buffer.
+ * @event:	Event with an AUX buffer.
+ * @from:	Absolute start cursor (inclusive).
+ * @to:		Absolute end cursor (exclusive).
+ * @buf:	Destination; must hold (to - from) bytes.
+ *
+ * Handles wrap-around within the ring.  Returns the number of bytes
+ * copied, or -errno.  The window must not exceed the ring size; this is
+ * enforced below, so a buggy consumer cannot silently read garbage.
+ */
+long perf_event_aux_copy(struct perf_event *event, unsigned long from,
+			 unsigned long to, void *buf)
+{
+	struct perf_buffer *rb = ring_buffer_get(event);
+	unsigned long aux_size, available, head, len, start, tail, tocopy;
+	long ret;
+
+	if (!rb)
+		return -ENOENT;
+
+	if (!rb_has_kernel_aux(rb)) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	/*
+	 * AUX storage may be referenced from both producer and consumer
+	 * contexts (see rb_alloc_aux): a concurrent perf_event_release_aux()
+	 * may free it once the last writer drops the AUX reference.  Keep
+	 * it alive for the duration of the copy.
+	 */
+	if (!refcount_inc_not_zero(&rb->aux_refcount)) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	if (!buf) {
+		ret = -EINVAL;
+		goto out_aux;
+	}
+
+	aux_size = (unsigned long)rb->aux_nr_pages << PAGE_SHIFT;
+	tail = READ_ONCE(rb->user_page->aux_tail);
+	head = READ_ONCE(rb->user_page->aux_head);
+	/* Pairs with the producer's AUX-data write barrier. */
+	smp_rmb();
+	available = head - tail;
+	start = from - tail;
+	len = to - from;
+
+	/*
+	 * Validate modular distances before masking.  The requested window
+	 * must be wholly contained in the current [tail, head] interval;
+	 * this rejects rewound, already-consumed, and future cursors while
+	 * remaining correct across unsigned cursor wrap.
+	 */
+	if (available > aux_size || start > available ||
+	    len > available - start) {
+		ret = -EINVAL;
+		goto out_aux;
+	}
+	if (!len) {
+		ret = 0;
+		goto out_aux;
+	}
+
+	from &= aux_size - 1;
+	to &= aux_size - 1;
+	ret = 0;
+
+	do {
+		tocopy = PAGE_SIZE - offset_in_page(from);
+		if (to > from)
+			tocopy = min(tocopy, to - from);
+		if (!tocopy)
+			break;
+
+		memcpy(buf + ret, rb->aux_pages[from >> PAGE_SHIFT] +
+		       offset_in_page(from), tocopy);
+
+		ret += tocopy;
+		from += tocopy;
+		from &= aux_size - 1;
+	} while (to != from);
+
+out_aux:
+	rb_free_aux(rb);
+out:
+	ring_buffer_put(rb);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(perf_event_aux_copy);
+
+/*
  * Copy out AUX data from an AUX handle.
  */
 long perf_output_copy_aux(struct perf_output_handle *aux_handle,
