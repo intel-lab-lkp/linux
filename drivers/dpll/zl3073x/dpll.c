@@ -281,7 +281,8 @@ zl3073x_dpll_input_pin_ref_sync_set(const struct dpll_pin *dpll_pin,
 		sync_freq = zl3073x_ref_freq_get(sync_ref);
 
 		/* Sync signal must be 8 kHz or less and clock reference
-		 * must be 1 kHz or more and higher than the sync signal.
+		 * must meet the chip's minimum frequency requirement and be
+		 * higher than the sync signal.
 		 */
 		if (sync_freq > 8000) {
 			NL_SET_ERR_MSG(extack,
@@ -289,9 +290,10 @@ zl3073x_dpll_input_pin_ref_sync_set(const struct dpll_pin *dpll_pin,
 			rc = -EINVAL;
 			goto unlock;
 		}
-		if (ref_freq < 1000) {
-			NL_SET_ERR_MSG(extack,
-				       "clock frequency must be 1 kHz or more");
+		if (ref_freq < zldev->info->min_ref_freq) {
+			NL_SET_ERR_MSG_FMT(extack,
+					   "clock frequency must be %u Hz or more",
+					   zldev->info->min_ref_freq);
 			rc = -EINVAL;
 			goto unlock;
 		}

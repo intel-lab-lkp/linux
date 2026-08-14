@@ -42,11 +42,13 @@ enum zl3073x_flags {
  * @id: chip ID
  * @num_channels: number of DPLL channels supported by this variant
  * @flags: chip variant flags
+ * @min_ref_freq: minimum input reference frequency in Hz
  */
 struct zl3073x_chip_info {
 	u16		id;
 	u8		num_channels;
 	unsigned long	flags;
+	u32		min_ref_freq;
 };
 
 /**

@@ -20,9 +20,9 @@
  * @freq: frequency to check
  *
  * The function checks the given frequency is valid for the device. For input
- * pins it checks that the frequency can be factorized using supported base
- * frequencies. For output pins it checks that the frequency divides connected
- * synth frequency without remainder.
+ * pins it checks that the frequency is above the chip's minimum and can be
+ * factorized using supported base frequencies. For output pins it checks that
+ * the frequency divides connected synth frequency without remainder.
  *
  * Return: true if the frequency is valid, false if not.
  */
@@ -35,6 +35,10 @@ zl3073x_pin_check_freq(struct zl3073x_dev *zldev, enum dpll_pin_direction dir,
 
 	if (dir == DPLL_PIN_DIRECTION_INPUT) {
 		int rc;
+
+		/* Check minimum frequency */
+		if (freq < zldev->info->min_ref_freq)
+			goto err_inv_freq;
 
 		/* Check if the frequency can be factorized */
 		rc = zl3073x_ref_freq_factorize(freq, NULL, NULL);
