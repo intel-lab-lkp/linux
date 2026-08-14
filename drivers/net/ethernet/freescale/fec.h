@@ -186,6 +186,7 @@
 #define FEC_RCMR_2		0xfff
 #define FEC_DMA_CFG_1		0xfff
 #define FEC_DMA_CFG_2		0xfff
+#define FEC_QOS_SCHEME		0xfff
 #define FEC_TXIC0		0xfff
 #define FEC_TXIC1		0xfff
 #define FEC_TXIC2		0xfff
@@ -321,6 +322,10 @@ struct bufdesc_ex {
 				RCMR_CMP_CFG(6, 2) | RCMR_CMP_CFG(7, 3))
 #define RCMR_CMP(X)		(((X) == 1) ? RCMR_CMP_1 : RCMR_CMP_2)
 #define FEC_TX_BD_FTYPE(X)	(((X) & 0xf) << 20)
+
+/* FEC_QOS_SCHEME bits */
+#define QOS_RX_FLUSH(X)		(1 << (3 + (X)))	/* RX_FLUSHn, n = 0, 1, 2 */
+#define QOS_RX_FLUSH_MASK	(QOS_RX_FLUSH(0) | QOS_RX_FLUSH(1) | QOS_RX_FLUSH(2))
 
 /* The number of Tx and Rx buffers.  These are allocated from the page
  * pool.  The code may assume these are power of two, so it is best
@@ -499,6 +504,12 @@ struct bufdesc_ex {
 /* Jumbo Frame support */
 #define FEC_QUIRK_JUMBO_FRAME		BIT(25)
 
+/* Receive flushing (QOS Scheme register RX_FLUSHn) may be enabled on more than
+ * one RX queue at a time. Parts without this quirk are subject to erratum
+ * ERR050395 and must limit RX flushing to a single queue.
+ */
+#define FEC_QUIRK_HAS_MULTI_RX_FLUSH	BIT(24)
+
 struct bufdesc_prop {
 	int qid;
 	/* Address of Rx and Tx buffers */
@@ -603,6 +614,9 @@ struct fec_enet_private {
 	struct mutex ptp_clk_mutex;
 	unsigned int num_tx_queues;
 	unsigned int num_rx_queues;
+
+	/* Bitmask of RX queues with receive flushing enabled */
+	u32 rx_flush_mask;
 
 	struct fec_enet_priv_tx_q *tx_queue[FEC_ENET_MAX_TX_QS];
 	struct fec_enet_priv_rx_q *rx_queue[FEC_ENET_MAX_RX_QS];

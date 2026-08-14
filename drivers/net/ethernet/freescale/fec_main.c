@@ -1090,6 +1090,15 @@ static void fec_enet_enable_ring(struct net_device *ndev)
 			       fep->hwp + FEC_RCMR(i));
 	}
 
+	/* Enable receive flushing for the selected queues */
+	if (fep->rx_flush_mask) {
+		u32 val = readl(fep->hwp + FEC_QOS_SCHEME);
+
+		val &= ~QOS_RX_FLUSH_MASK;
+		val |= fep->rx_flush_mask;
+		writel(val, fep->hwp + FEC_QOS_SCHEME);
+	}
+
 	for (i = 0; i < fep->num_tx_queues; i++) {
 		txq = fep->tx_queue[i];
 		writel(txq->bd.dma, fep->hwp + FEC_X_DES_START(i));
@@ -5238,6 +5247,31 @@ fec_probe(struct platform_device *pdev)
 	fep->netdev = ndev;
 	fep->num_rx_queues = num_rx_qs;
 	fep->num_tx_queues = num_tx_qs;
+
+	/* Enable receive flushing on the requested queues. Erratum ERR050395
+	 * restricts flushing to a single queue; only accept more than one queue
+	 * on controllers known to have the erratum fixed.
+	 */
+	for (i = 0; i < of_property_count_u32_elems(np, "fsl,rx-flush-queues"); i++) {
+		u32 q;
+
+		if (of_property_read_u32_index(np, "fsl,rx-flush-queues", i, &q))
+			break;
+		if (q >= num_rx_qs) {
+			dev_warn(&pdev->dev,
+				 "fsl,rx-flush-queues: queue %u exceeds num-rx-queues, ignoring\n",
+				 q);
+			continue;
+		}
+		fep->rx_flush_mask |= QOS_RX_FLUSH(q);
+	}
+	if (hweight32(fep->rx_flush_mask) > 1 &&
+	    !(fep->quirks & FEC_QUIRK_HAS_MULTI_RX_FLUSH)) {
+		dev_err(&pdev->dev,
+			"fsl,rx-flush-queues: RX flush on multiple queues not supported\n");
+		ret = -EINVAL;
+		goto failed_ioremap;
+	}
 
 	/* default enable pause frame auto negotiation */
 	if (fep->quirks & FEC_QUIRK_HAS_GBIT)
