@@ -1125,41 +1125,6 @@ void __ref memmap_init_zone_device(struct zone *zone,
 #endif
 
 /*
- * The zone ranges provided by the architecture do not include ZONE_MOVABLE
- * because it is sized independent of architecture. Unlike the other zones,
- * the starting point for ZONE_MOVABLE is not fixed. It may be different
- * in each node depending on the size of each node and how evenly kernelcore
- * is distributed. This helper function adjusts the zone ranges
- * provided by the architecture for a given node by using the end of the
- * highest usable zone for ZONE_MOVABLE. This preserves the assumption that
- * zones within a node are in order of monotonic increases memory addresses
- */
-static void __init adjust_zone_range_for_zone_movable(int nid,
-					unsigned long zone_type,
-					unsigned long node_end_pfn,
-					unsigned long *zone_start_pfn,
-					unsigned long *zone_end_pfn)
-{
-	/* Only adjust if ZONE_MOVABLE is on this node */
-	if (zone_movable_pfn[nid]) {
-		/* Size ZONE_MOVABLE */
-		if (zone_type == ZONE_MOVABLE) {
-			*zone_start_pfn = zone_movable_pfn[nid];
-			*zone_end_pfn = min(node_end_pfn,
-				arch_zone_highest_possible_pfn[movable_zone]);
-
-		/* Adjust for ZONE_MOVABLE starting within this range */
-		} else if (*zone_start_pfn < zone_movable_pfn[nid] &&
-			   *zone_end_pfn > zone_movable_pfn[nid]) {
-			*zone_end_pfn = zone_movable_pfn[nid];
-
-		/* Check if this whole range is within ZONE_MOVABLE */
-		} else if (*zone_start_pfn >= zone_movable_pfn[nid])
-			*zone_start_pfn = *zone_end_pfn;
-	}
-}
-
-/*
  * Return the number of holes in a range on a node. If nid is MAX_NUMNODES,
  * then all holes in the requested range will be accounted for.
  */
@@ -1208,6 +1173,15 @@ static unsigned long __init zone_absent_pages_in_node(int nid,
 /*
  * Return the number of pages a zone spans in a node, including holes
  * present_pages = zone_spanned_pages_in_node() - zone_absent_pages_in_node()
+ *
+ * The zone ranges provided by the architecture do not include ZONE_MOVABLE
+ * because it is sized independent of architecture. Unlike the other zones,
+ * the starting point for ZONE_MOVABLE is not fixed. It may be different
+ * in each node depending on the size of each node and how evenly kernelcore
+ * is distributed. The zone ranges provided by the architecture are adjusted
+ * for a given node by using the end of the highest usable zone for
+ * ZONE_MOVABLE. This preserves the assumption that zones within a node are
+ * in order of monotonic increases memory addresses
  */
 static unsigned long __init zone_spanned_pages_in_node(int nid,
 					unsigned long zone_type,
@@ -1218,13 +1192,33 @@ static unsigned long __init zone_spanned_pages_in_node(int nid,
 {
 	unsigned long zone_low = arch_zone_lowest_possible_pfn[zone_type];
 	unsigned long zone_high = arch_zone_highest_possible_pfn[zone_type];
+	unsigned long movable_pfn = zone_movable_pfn[nid];
 
 	/* Get the start and end of the zone */
 	*zone_start_pfn = clamp(node_start_pfn, zone_low, zone_high);
 	*zone_end_pfn = clamp(node_end_pfn, zone_low, zone_high);
-	adjust_zone_range_for_zone_movable(nid, zone_type, node_end_pfn,
-					   zone_start_pfn, zone_end_pfn);
 
+	/* Nothing to adjust if ZONE_MOVABLE is not on this node */
+	if (!movable_pfn)
+		goto out;
+
+	/* Size ZONE_MOVABLE */
+	if (zone_type == ZONE_MOVABLE) {
+		*zone_start_pfn = movable_pfn;
+		*zone_end_pfn = min(node_end_pfn,
+			arch_zone_highest_possible_pfn[movable_zone]);
+
+	/* Adjust for ZONE_MOVABLE starting within this range */
+	} else if (*zone_start_pfn < movable_pfn &&
+		   *zone_end_pfn > movable_pfn) {
+		*zone_end_pfn = movable_pfn;
+
+	/* Check if this whole range is within ZONE_MOVABLE */
+	} else if (*zone_start_pfn >= movable_pfn) {
+		*zone_start_pfn = *zone_end_pfn;
+	}
+
+out:
 	/* Check that this node has pages within the zone's required range */
 	if (*zone_end_pfn < node_start_pfn || *zone_start_pfn > node_end_pfn)
 		return 0;
