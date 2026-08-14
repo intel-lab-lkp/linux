@@ -1622,20 +1622,15 @@ static ssize_t ath6kl_bgscan_int_write(struct file *file,
 	struct ath6kl *ar = file->private_data;
 	struct ath6kl_vif *vif;
 	u16 bgscan_int;
-	char buf[32];
-	ssize_t len;
+	int ret;
 
 	vif = ath6kl_vif_first(ar);
 	if (!vif)
 		return -EIO;
 
-	len = min(count, sizeof(buf) - 1);
-	if (copy_from_user(buf, user_buf, len))
-		return -EFAULT;
-
-	buf[len] = '\0';
-	if (kstrtou16(buf, 0, &bgscan_int))
-		return -EINVAL;
+	ret = kstrtou16_from_user(user_buf, count, 0, &bgscan_int);
+	if (ret)
+		return ret;
 
 	if (bgscan_int == 0)
 		bgscan_int = 0xffff;
@@ -1662,20 +1657,15 @@ static ssize_t ath6kl_listen_int_write(struct file *file,
 	struct ath6kl *ar = file->private_data;
 	struct ath6kl_vif *vif;
 	u16 listen_interval;
-	char buf[32];
-	ssize_t len;
+	int ret;
 
 	vif = ath6kl_vif_first(ar);
 	if (!vif)
 		return -EIO;
 
-	len = min(count, sizeof(buf) - 1);
-	if (copy_from_user(buf, user_buf, len))
-		return -EFAULT;
-
-	buf[len] = '\0';
-	if (kstrtou16(buf, 0, &listen_interval))
-		return -EINVAL;
+	ret = kstrtou16_from_user(user_buf, count, 0, &listen_interval);
+	if (ret)
+		return ret;
 
 	if ((listen_interval < 15) || (listen_interval > 3000))
 		return -EINVAL;
