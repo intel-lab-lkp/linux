@@ -1191,14 +1191,12 @@ static irqreturn_t bmc150_accel_trigger_handler(int irq, void *p)
 
 	mutex_lock(&data->mutex);
 	ret = regmap_bulk_read(data->regmap, BMC150_ACCEL_REG_XOUT_L,
-			       data->buffer, AXIS_MAX * 2);
+			       data->scan.channels, AXIS_MAX * 2);
+	if (!ret)
+		iio_push_to_buffers_with_timestamp(indio_dev, &data->scan,
+						   pf->timestamp);
 	mutex_unlock(&data->mutex);
-	if (ret < 0)
-		goto err_read;
 
-	iio_push_to_buffers_with_timestamp(indio_dev, data->buffer,
-					   pf->timestamp);
-err_read:
 	iio_trigger_notify_done(indio_dev->trig);
 
 	return IRQ_HANDLED;
