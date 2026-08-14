@@ -285,9 +285,10 @@ int sctp_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 
 	/* If the rcvr is dead then the association or endpoint
 	 * has been deleted and we can safely drop the chunk
-	 * and refs that we are holding.
+	 * and refs that we are holding.  Same if the transport
+	 * we looked up has been removed in the meantime.
 	 */
-	if (rcvr->dead) {
+	if (rcvr->dead || (t && t->dead)) {
 		sctp_chunk_free(chunk);
 		goto done;
 	}
