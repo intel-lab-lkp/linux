@@ -2204,7 +2204,7 @@ static int netcp_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
 	struct netcp_intf *netcp_intf, *netcp_tmp;
-	struct device_node *child, *interfaces;
+	struct device_node *interfaces;
 	struct netcp_device *netcp_device;
 	struct device *dev = &pdev->dev;
 	struct netcp_module *module;
@@ -2246,7 +2246,7 @@ static int netcp_probe(struct platform_device *pdev)
 		goto probe_quit;
 	}
 
-	for_each_available_child_of_node(interfaces, child) {
+	for_each_available_child_of_node_scoped(interfaces, child) {
 		ret = netcp_create_interface(netcp_device, child);
 		if (ret) {
 			dev_err(dev, "could not create interface(%pOFn)\n",
