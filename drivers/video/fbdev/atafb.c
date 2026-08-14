@@ -3101,6 +3101,11 @@ static int __init atafb_probe(struct platform_device *pdev)
 #endif /* ATAFB_EXT */
 
 //	strcpy(fb_info.mode->name, "Atari Builtin ");
+	/* Parent the fb device properly: without this fb0 registers as a
+	 * virtual sysfs device with no /sys/class/graphics/fb0/device link,
+	 * which makes Xorg's fbdevhw reject it ("No devices detected").
+	 */
+	fb_info.device = &pdev->dev;
 	fb_info.fbops = &atafb_ops;
 	// try to set default (detected; requested) var
 	do_fb_set_var(&atafb_predefined[default_par - 1], 1);
