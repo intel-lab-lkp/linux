@@ -288,6 +288,13 @@ struct drm_device {
 	struct drm_vblank_crtc *vblank;
 
 	/**
+	 * @has_hw_vblank:
+	 *
+	 * Has the driver called drm_vblank_init() to setup hardware vblank support?
+	 */
+	bool has_hw_vblank;
+
+	/**
 	 * @vblank_time_lock:
 	 *
 	 *  Protects vblank count and time updates during vblank enable/disable
