@@ -113,14 +113,19 @@
 #define SN_IRQ_EVENTS_EN_REG			0xE6
 #define  HPD_INSERTION_EN			BIT(1)
 #define  HPD_REMOVAL_EN				BIT(2)
+#define  HPD_REPLUG_EN				BIT(3)
 
 #define SN_AUX_CMD_STATUS_REG			0xF4
 #define  AUX_IRQ_STATUS_AUX_RPLY_TOUT		BIT(3)
 #define  AUX_IRQ_STATUS_AUX_SHORT		BIT(5)
 #define  AUX_IRQ_STATUS_NAT_I2C_FAIL		BIT(6)
 #define SN_IRQ_STATUS_REG			0xF5
+#define  HPD_REPLUG_STATUS			BIT(3)
 #define  HPD_REMOVAL_STATUS			BIT(2)
 #define  HPD_INSERTION_STATUS			BIT(1)
+/* General IRQ status registers, write-1-to-clear */
+#define SN_IRQ_STATUS2_REG			0xF0
+#define SN_IRQ_STATUS3_REG			0xF2
 
 #define MIN_DSI_CLK_FREQ_MHZ	40
 
@@ -1266,7 +1271,7 @@ static void ti_sn_bridge_hpd_enable(struct drm_bridge *bridge)
 
 	if (client->irq) {
 		ret = regmap_set_bits(pdata->regmap, SN_IRQ_EVENTS_EN_REG,
-				      HPD_REMOVAL_EN | HPD_INSERTION_EN);
+				      HPD_REMOVAL_EN | HPD_INSERTION_EN | HPD_REPLUG_EN);
 		if (ret)
 			dev_err(pdata->dev, "Failed to enable HPD events: %d\n", ret);
 	}
@@ -1280,7 +1285,7 @@ static void ti_sn_bridge_hpd_disable(struct drm_bridge *bridge)
 
 	if (client->irq) {
 		ret = regmap_clear_bits(pdata->regmap, SN_IRQ_EVENTS_EN_REG,
-					HPD_REMOVAL_EN | HPD_INSERTION_EN);
+					HPD_REMOVAL_EN | HPD_INSERTION_EN | HPD_REPLUG_EN);
 		if (ret)
 			dev_err(pdata->dev, "Failed to disable HPD events: %d\n", ret);
 	}
@@ -1376,7 +1381,6 @@ static int ti_sn_bridge_parse_dsi_host(struct ti_sn65dsi86 *pdata)
 static irqreturn_t ti_sn_bridge_interrupt(int irq, void *private)
 {
 	struct ti_sn65dsi86 *pdata = private;
-	struct drm_device *dev = pdata->bridge.dev;
 	u8 status;
 	int ret;
 	bool hpd_event;
@@ -1387,23 +1391,35 @@ static irqreturn_t ti_sn_bridge_interrupt(int irq, void *private)
 		return IRQ_NONE;
 	}
 
-	hpd_event = status & (HPD_REMOVAL_STATUS | HPD_INSERTION_STATUS);
+	hpd_event = status & (HPD_REMOVAL_STATUS | HPD_INSERTION_STATUS |
+			      HPD_REPLUG_STATUS);
 
 	dev_dbg(pdata->dev, "(SN_IRQ_STATUS_REG = %#x)\n", status);
 	if (!status)
 		return IRQ_NONE;
 
-	ret = regmap_write(pdata->regmap, SN_IRQ_STATUS_REG, status);
+	/*
+	 * Clear all three IRQ status registers to fully de-assert
+	 * the IRQ pin
+	 */
+	ret  = regmap_write(pdata->regmap, SN_IRQ_STATUS2_REG, 0xFF);
+	ret |= regmap_write(pdata->regmap, SN_IRQ_STATUS3_REG, 0xFF);
+	ret |= regmap_write(pdata->regmap, SN_IRQ_STATUS_REG, status);
 	if (ret) {
 		dev_err(pdata->dev, "Failed to clear IRQ status: %d\n", ret);
 		return IRQ_NONE;
 	}
 
-	/* Only send the HPD event if we are bound with a device. */
+	/* Notify only the DP connector, not all connectors on the device. */
 	mutex_lock(&pdata->hpd_mutex);
-	if (pdata->hpd_enabled && hpd_event)
-		drm_kms_helper_hotplug_event(dev);
-	mutex_unlock(&pdata->hpd_mutex);
+	if (pdata->hpd_enabled && hpd_event && pdata->bridge.hpd_data) {
+		struct drm_connector *connector =
+			(struct drm_connector *)pdata->bridge.hpd_data;
+		mutex_unlock(&pdata->hpd_mutex);
+		drm_connector_helper_hpd_irq_event(connector);
+	} else {
+		mutex_unlock(&pdata->hpd_mutex);
+	}
 
 	return IRQ_HANDLED;
 }
