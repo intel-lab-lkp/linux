@@ -282,7 +282,8 @@ static inline void xe_vm_reactivate_rebind(struct xe_vm *vm)
 int xe_vm_lock_vma(struct drm_exec *exec, struct xe_vma *vma);
 
 int xe_vm_validate_rebind(struct xe_vm *vm, struct drm_exec *exec,
-			  unsigned int num_fences);
+			  unsigned int num_fences,
+			  enum drm_gpuvm_exec_pass pass);
 
 struct dma_fence *xe_vm_bind_kernel_bo(struct xe_vm *vm, struct xe_bo *bo,
 				       struct xe_exec_queue *q, u64 addr,
