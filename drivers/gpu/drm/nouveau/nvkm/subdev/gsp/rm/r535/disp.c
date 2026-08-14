@@ -36,6 +36,8 @@
 
 #include <rm/gpu.h>
 
+#include <nvif/class.h>
+
 #include <nvhw/drf.h>
 
 #include "nvrm/disp.h"
@@ -587,6 +589,16 @@ r535_sor_hdmi = {
 	.audio = r535_sor_hdmi_audio,
 };
 
+static const struct nvkm_ior_func_hdmi
+gb202_sor_hdmi = {
+	.ctrl = r535_sor_hdmi_ctrl,
+	/* The legacy AVI unit is unchanged on GB20x. */
+	.infoframe_avi = gv100_sor_hdmi_infoframe_avi,
+	.infoframe_vsi = gb202_sor_hdmi_infoframe_vsi,
+	.audio = r535_sor_hdmi_audio,
+	.frl_train = r535_sor_frl_train,
+};
+
 static const struct nvkm_ior_func
 r535_sor = {
 	.hdmi = &r535_sor_hdmi,
@@ -595,10 +607,25 @@ r535_sor = {
 	.bl = &r535_sor_bl,
 };
 
+static const struct nvkm_ior_func
+gb202_sor = {
+	.hdmi = &gb202_sor_hdmi,
+	.dp = &r535_sor_dp,
+	.hda = &r535_sor_hda,
+	.bl = &r535_sor_bl,
+};
+
 static int
 r535_sor_new(struct nvkm_disp *disp, int id)
 {
-	return nvkm_ior_new_(&r535_sor, disp, SOR, id, true/*XXX: hda cap*/);
+	const struct nvkm_rm_gpu *gpu = disp->engine.subdev.device->gsp->rm->gpu;
+	const struct nvkm_ior_func *func = &r535_sor;
+
+	/* NVD5.0 (GB20x and later) reorganised the SF HDMI packet units. */
+	if (gpu->disp.class.root >= GB202_DISP)
+		func = &gb202_sor;
+
+	return nvkm_ior_new_(func, disp, SOR, id, true/*XXX: hda cap*/);
 }
 
 static int
