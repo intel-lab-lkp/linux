@@ -93,6 +93,13 @@ static int bnge_func_qrcaps_qcfg(struct bnge_dev *bd)
 		return rc;
 	}
 
+	rc = bnge_hwrm_cfa_adv_flow_mgnt_qcaps(bd);
+	if (rc) {
+		dev_warn(bd->dev, "hwrm query adv flow mgnt failure rc: %d\n",
+			 rc);
+		return rc;
+	}
+
 	rc = bnge_hwrm_vnic_qcaps(bd);
 	if (rc) {
 		dev_err(bd->dev, "vnic caps failure rc: %d\n", rc);
