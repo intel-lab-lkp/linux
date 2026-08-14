@@ -1009,8 +1009,8 @@ static int __bmc150_accel_fifo_flush(struct iio_dev *indio_dev,
 			       &data->fifo_buff[i * 3 + bit],
 			       sizeof(data->scan.channels[0]));
 
-		iio_push_to_buffers_with_timestamp(indio_dev, &data->scan,
-						   tstamp);
+		iio_push_to_buffers_with_ts(indio_dev, &data->scan,
+					    sizeof(data->scan), tstamp);
 
 		tstamp += sample_period;
 	}
@@ -1191,8 +1191,8 @@ static irqreturn_t bmc150_accel_trigger_handler(int irq, void *p)
 	ret = regmap_bulk_read(data->regmap, BMC150_ACCEL_REG_XOUT_L,
 			       data->scan.channels, AXIS_MAX * 2);
 	if (!ret)
-		iio_push_to_buffers_with_timestamp(indio_dev, &data->scan,
-						   pf->timestamp);
+		iio_push_to_buffers_with_ts(indio_dev, &data->scan,
+					    sizeof(data->scan), pf->timestamp);
 	mutex_unlock(&data->mutex);
 
 	iio_trigger_notify_done(indio_dev->trig);
