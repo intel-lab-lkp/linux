@@ -510,6 +510,12 @@ Locking
 .. kernel-doc:: drivers/gpu/drm/drm_gpuvm.c
    :doc: Locking
 
+Two pass locking
+----------------
+
+.. kernel-doc:: drivers/gpu/drm/drm_gpuvm.c
+   :doc: Two pass locking
+
 Examples
 --------
 
