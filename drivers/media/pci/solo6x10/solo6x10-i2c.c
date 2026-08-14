@@ -22,10 +22,11 @@
 
 #include "solo6x10.h"
 
-u8 solo_i2c_readbyte(struct solo_dev *solo_dev, int id, u8 addr, u8 off)
+int solo_i2c_readbyte(struct solo_dev *solo_dev, int id, u8 addr, u8 off,
+		      u8 *data)
 {
 	struct i2c_msg msgs[2];
-	u8 data;
+	int ret;
 
 	msgs[0].flags = 0;
 	msgs[0].addr = addr;
@@ -35,11 +36,15 @@ u8 solo_i2c_readbyte(struct solo_dev *solo_dev, int id, u8 addr, u8 off)
 	msgs[1].flags = I2C_M_RD;
 	msgs[1].addr = addr;
 	msgs[1].len = 1;
-	msgs[1].buf = &data;
+	msgs[1].buf = data;
 
-	i2c_transfer(&solo_dev->i2c_adap[id], msgs, 2);
+	ret = i2c_transfer(&solo_dev->i2c_adap[id], msgs, ARRAY_SIZE(msgs));
+	if (ret == ARRAY_SIZE(msgs))
+		return 0;
+	if (ret < 0)
+		return ret;
 
-	return data;
+	return -EIO;
 }
 
 void solo_i2c_writebyte(struct solo_dev *solo_dev, int id, u8 addr,

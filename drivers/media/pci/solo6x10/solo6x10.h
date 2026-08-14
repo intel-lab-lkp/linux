@@ -333,7 +333,8 @@ void solo_motion_isr(struct solo_dev *solo_dev);
 void solo_video_in_isr(struct solo_dev *solo_dev);
 
 /* i2c read/write */
-u8 solo_i2c_readbyte(struct solo_dev *solo_dev, int id, u8 addr, u8 off);
+int solo_i2c_readbyte(struct solo_dev *solo_dev, int id, u8 addr, u8 off,
+		      u8 *data);
 void solo_i2c_writebyte(struct solo_dev *solo_dev, int id, u8 addr, u8 off,
 			u8 data);
 

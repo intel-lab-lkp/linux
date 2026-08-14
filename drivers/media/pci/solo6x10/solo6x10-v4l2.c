@@ -410,11 +410,14 @@ static int solo_enum_input(struct file *file, void *priv,
 		if (ret < 0)
 			return ret;
 	} else {
+		int ret;
+
 		snprintf(input->name, sizeof(input->name), "Camera %d",
 			 input->index + 1);
 
 		/* We can only check this for normal inputs */
-		if (!tw28_get_video_status(solo_dev, input->index))
+		ret = tw28_get_video_status(solo_dev, input->index);
+		if (ret <= 0)
 			input->status = V4L2_IN_ST_NO_SIGNAL;
 	}
 

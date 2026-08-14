@@ -774,6 +774,7 @@ static int solo_enc_enum_input(struct file *file, void *priv,
 {
 	struct solo_enc_dev *solo_enc = video_drvdata(file);
 	struct solo_dev *solo_dev = solo_enc->solo_dev;
+	int ret;
 
 	if (input->index)
 		return -EINVAL;
@@ -783,7 +784,8 @@ static int solo_enc_enum_input(struct file *file, void *priv,
 	input->type = V4L2_INPUT_TYPE_CAMERA;
 	input->std = solo_enc->vfd->tvnorms;
 
-	if (!tw28_get_video_status(solo_dev, solo_enc->ch))
+	ret = tw28_get_video_status(solo_dev, solo_enc->ch);
+	if (ret <= 0)
 		input->status = V4L2_IN_ST_NO_SIGNAL;
 
 	return 0;

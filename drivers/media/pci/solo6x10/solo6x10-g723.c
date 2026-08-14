@@ -257,8 +257,13 @@ static int snd_solo_capture_volume_get(struct snd_kcontrol *kcontrol,
 {
 	struct solo_dev *solo_dev = snd_kcontrol_chip(kcontrol);
 	u8 ch = value->id.numid - 1;
+	u8 gain;
+	int ret;
 
-	value->value.integer.value[0] = tw28_get_audio_gain(solo_dev, ch);
+	ret = tw28_get_audio_gain(solo_dev, ch, &gain);
+	if (ret)
+		return ret;
+	value->value.integer.value[0] = gain;
 
 	return 0;
 }
@@ -269,14 +274,16 @@ static int snd_solo_capture_volume_put(struct snd_kcontrol *kcontrol,
 	struct solo_dev *solo_dev = snd_kcontrol_chip(kcontrol);
 	u8 ch = value->id.numid - 1;
 	u8 old_val;
+	int ret;
 
-	old_val = tw28_get_audio_gain(solo_dev, ch);
+	ret = tw28_get_audio_gain(solo_dev, ch, &old_val);
+	if (ret)
+		return ret;
 	if (old_val == value->value.integer.value[0])
 		return 0;
 
-	tw28_set_audio_gain(solo_dev, ch, value->value.integer.value[0]);
-
-	return 1;
+	ret = tw28_set_audio_gain(solo_dev, ch, value->value.integer.value[0]);
+	return ret ? ret : 1;
 }
 
 static const struct snd_kcontrol_new snd_solo_capture_volume = {

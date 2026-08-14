@@ -168,17 +168,17 @@ static const u8 tbl_tw2865_pal_template[] = {
 
 #define is_tw286x(__solo, __id) (!((__solo)->tw2815 & (1U << (__id))))
 
-static u8 tw_readbyte(struct solo_dev *solo_dev, int chip_id, u8 tw6x_off,
-		      u8 tw_off)
+static int tw_readbyte(struct solo_dev *solo_dev, int chip_id, u8 tw6x_off,
+		       u8 tw_off, u8 *val)
 {
 	if (is_tw286x(solo_dev, chip_id))
 		return solo_i2c_readbyte(solo_dev, SOLO_I2C_TW,
 					 TW_CHIP_OFFSET_ADDR(chip_id),
-					 tw6x_off);
+					 tw6x_off, val);
 	else
 		return solo_i2c_readbyte(solo_dev, SOLO_I2C_TW,
 					 TW_CHIP_OFFSET_ADDR(chip_id),
-					 tw_off);
+					 tw_off, val);
 }
 
 static void tw_writebyte(struct solo_dev *solo_dev, int chip_id,
@@ -200,9 +200,10 @@ static void tw_write_and_verify(struct solo_dev *solo_dev, u8 addr, u8 off,
 	int i;
 
 	for (i = 0; i < 5; i++) {
-		u8 rval = solo_i2c_readbyte(solo_dev, SOLO_I2C_TW, addr, off);
+		u8 rval;
 
-		if (rval == val)
+		if (!solo_i2c_readbyte(solo_dev, SOLO_I2C_TW, addr, off,
+				       &rval) && rval == val)
 			return;
 
 		solo_i2c_writebyte(solo_dev, SOLO_I2C_TW, addr, off, val);
@@ -582,14 +583,17 @@ static void saa712x_setup(struct solo_dev *dev)
 int solo_tw28_init(struct solo_dev *solo_dev)
 {
 	int i;
+	int ret;
 	u8 value;
 
 	solo_dev->tw28_cnt = 0;
 
 	/* Detect techwell chip type(s) */
 	for (i = 0; i < solo_dev->nr_chans / 4; i++) {
-		value = solo_i2c_readbyte(solo_dev, SOLO_I2C_TW,
-					  TW_CHIP_OFFSET_ADDR(i), 0xFF);
+		ret = solo_i2c_readbyte(solo_dev, SOLO_I2C_TW,
+					TW_CHIP_OFFSET_ADDR(i), 0xFF, &value);
+		if (ret)
+			return ret;
 
 		switch (value >> 3) {
 		case 0x18:
@@ -602,9 +606,11 @@ int solo_tw28_init(struct solo_dev *solo_dev)
 			solo_dev->tw28_cnt++;
 			break;
 		default:
-			value = solo_i2c_readbyte(solo_dev, SOLO_I2C_TW,
-						  TW_CHIP_OFFSET_ADDR(i),
-						  0x59);
+			ret = solo_i2c_readbyte(solo_dev, SOLO_I2C_TW,
+						TW_CHIP_OFFSET_ADDR(i), 0x59,
+						&value);
+			if (ret)
+				return ret;
 			if ((value >> 3) == 0x04) {
 				solo_dev->tw2815 |= 1 << i;
 				solo_dev->tw28_cnt++;
@@ -641,13 +647,17 @@ int solo_tw28_init(struct solo_dev *solo_dev)
 int tw28_get_video_status(struct solo_dev *solo_dev, u8 ch)
 {
 	u8 val, chip_num;
+	int ret;
 
 	/* Get the right chip and on-chip channel */
 	chip_num = ch / 4;
 	ch %= 4;
 
-	val = tw_readbyte(solo_dev, chip_num, TW286x_AV_STAT_ADDR,
-			  TW_AV_STAT_ADDR) & 0x0f;
+	ret = tw_readbyte(solo_dev, chip_num, TW286x_AV_STAT_ADDR,
+			  TW_AV_STAT_ADDR, &val);
+	if (ret)
+		return ret;
+	val &= 0x0f;
 
 	return val & (1 << ch) ? 1 : 0;
 }
@@ -681,6 +691,7 @@ int tw28_set_ctrl_val(struct solo_dev *solo_dev, u32 ctrl, u8 ch,
 {
 	char sval;
 	u8 chip_num;
+	int ret;
 
 	/* Get the right chip and on-chip channel */
 	chip_num = ch / 4;
@@ -696,9 +707,13 @@ int tw28_set_ctrl_val(struct solo_dev *solo_dev, u32 ctrl, u8 ch,
 	case V4L2_CID_SHARPNESS:
 		/* Only 286x has sharpness */
 		if (is_tw286x(solo_dev, chip_num)) {
-			u8 v = solo_i2c_readbyte(solo_dev, SOLO_I2C_TW,
-						 TW_CHIP_OFFSET_ADDR(chip_num),
-						 TW286x_SHARPNESS(chip_num));
+			u8 v;
+
+			ret = solo_i2c_readbyte(solo_dev, SOLO_I2C_TW,
+						TW_CHIP_OFFSET_ADDR(chip_num),
+						TW286x_SHARPNESS(chip_num), &v);
+			if (ret)
+				return ret;
 			v &= 0xf0;
 			v |= val;
 			solo_i2c_writebyte(solo_dev, SOLO_I2C_TW,
@@ -756,6 +771,7 @@ int tw28_get_ctrl_val(struct solo_dev *solo_dev, u32 ctrl, u8 ch,
 		      s32 *val)
 {
 	u8 rval, chip_num;
+	int ret;
 
 	/* Get the right chip and on-chip channel */
 	chip_num = ch / 4;
@@ -768,35 +784,48 @@ int tw28_get_ctrl_val(struct solo_dev *solo_dev, u32 ctrl, u8 ch,
 	case V4L2_CID_SHARPNESS:
 		/* Only 286x has sharpness */
 		if (is_tw286x(solo_dev, chip_num)) {
-			rval = solo_i2c_readbyte(solo_dev, SOLO_I2C_TW,
-						 TW_CHIP_OFFSET_ADDR(chip_num),
-						 TW286x_SHARPNESS(chip_num));
+			ret = solo_i2c_readbyte(solo_dev, SOLO_I2C_TW,
+						TW_CHIP_OFFSET_ADDR(chip_num),
+						TW286x_SHARPNESS(chip_num),
+						&rval);
+			if (ret)
+				return ret;
 			*val = rval & 0x0f;
 		} else
 			*val = 0;
 		break;
 	case V4L2_CID_HUE:
-		rval = tw_readbyte(solo_dev, chip_num, TW286x_HUE_ADDR(ch),
-				   TW_HUE_ADDR(ch));
+		ret = tw_readbyte(solo_dev, chip_num, TW286x_HUE_ADDR(ch),
+				  TW_HUE_ADDR(ch), &rval);
+		if (ret)
+			return ret;
 		if (is_tw286x(solo_dev, chip_num))
 			*val = (s32)((char)rval) + 128;
 		else
 			*val = rval;
 		break;
 	case V4L2_CID_SATURATION:
-		*val = tw_readbyte(solo_dev, chip_num,
-				   TW286x_SATURATIONU_ADDR(ch),
-				   TW_SATURATION_ADDR(ch));
+		ret = tw_readbyte(solo_dev, chip_num,
+				  TW286x_SATURATIONU_ADDR(ch),
+				  TW_SATURATION_ADDR(ch), &rval);
+		if (ret)
+			return ret;
+		*val = rval;
 		break;
 	case V4L2_CID_CONTRAST:
-		*val = tw_readbyte(solo_dev, chip_num,
-				   TW286x_CONTRAST_ADDR(ch),
-				   TW_CONTRAST_ADDR(ch));
+		ret = tw_readbyte(solo_dev, chip_num,
+				  TW286x_CONTRAST_ADDR(ch),
+				  TW_CONTRAST_ADDR(ch), &rval);
+		if (ret)
+			return ret;
+		*val = rval;
 		break;
 	case V4L2_CID_BRIGHTNESS:
-		rval = tw_readbyte(solo_dev, chip_num,
-				   TW286x_BRIGHTNESS_ADDR(ch),
-				   TW_BRIGHTNESS_ADDR(ch));
+		ret = tw_readbyte(solo_dev, chip_num,
+				  TW286x_BRIGHTNESS_ADDR(ch),
+				  TW_BRIGHTNESS_ADDR(ch), &rval);
+		if (ret)
+			return ret;
 		if (is_tw286x(solo_dev, chip_num))
 			*val = (s32)((char)rval) + 128;
 		else
@@ -832,38 +861,45 @@ void tw2815_Set_AudioOutVol(struct solo_dev *solo_dev, unsigned int u_val)
 }
 #endif
 
-u8 tw28_get_audio_gain(struct solo_dev *solo_dev, u8 ch)
+int tw28_get_audio_gain(struct solo_dev *solo_dev, u8 ch, u8 *val)
 {
-	u8 val;
 	u8 chip_num;
+	int ret;
 
 	/* Get the right chip and on-chip channel */
 	chip_num = ch / 4;
 	ch %= 4;
 
-	val = tw_readbyte(solo_dev, chip_num,
+	ret = tw_readbyte(solo_dev, chip_num,
 			  TW286x_AUDIO_INPUT_GAIN_ADDR(ch),
-			  TW_AUDIO_INPUT_GAIN_ADDR(ch));
+			  TW_AUDIO_INPUT_GAIN_ADDR(ch), val);
+	if (ret)
+		return ret;
 
-	return (ch % 2) ? (val >> 4) : (val & 0x0f);
+	*val = (ch % 2) ? (*val >> 4) : (*val & 0x0f);
+	return 0;
 }
 
-void tw28_set_audio_gain(struct solo_dev *solo_dev, u8 ch, u8 val)
+int tw28_set_audio_gain(struct solo_dev *solo_dev, u8 ch, u8 val)
 {
 	u8 old_val;
 	u8 chip_num;
+	int ret;
 
 	/* Get the right chip and on-chip channel */
 	chip_num = ch / 4;
 	ch %= 4;
 
-	old_val = tw_readbyte(solo_dev, chip_num,
-			      TW286x_AUDIO_INPUT_GAIN_ADDR(ch),
-			      TW_AUDIO_INPUT_GAIN_ADDR(ch));
+	ret = tw_readbyte(solo_dev, chip_num,
+			  TW286x_AUDIO_INPUT_GAIN_ADDR(ch),
+			  TW_AUDIO_INPUT_GAIN_ADDR(ch), &old_val);
+	if (ret)
+		return ret;
 
 	val = (old_val & ((ch % 2) ? 0x0f : 0xf0)) |
 		((ch % 2) ? (val << 4) : val);
 
 	tw_writebyte(solo_dev, chip_num, TW286x_AUDIO_INPUT_GAIN_ADDR(ch),
 		     TW_AUDIO_INPUT_GAIN_ADDR(ch), val);
+	return 0;
 }
