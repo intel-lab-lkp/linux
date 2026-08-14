@@ -149,7 +149,7 @@ enum {
 	DQF_PRIVATE
 };
 
-/* Root squash enabled (for v1 quota format) */
+/* Enforce limits also for CAP_SYS_RESOURCE processes */
 #define DQF_ROOT_SQUASH	(1 << DQF_ROOT_SQUASH_B)
 /* Quota stored in a system file */
 #define DQF_SYS_FILE	(1 << DQF_SYS_FILE_B)

@@ -1309,8 +1309,7 @@ static int ignore_hardlimit(struct dquot *dquot)
 	struct mem_dqinfo *info = &sb_dqopt(dquot->dq_sb)->info[dquot->dq_id.type];
 
 	return capable(CAP_SYS_RESOURCE) &&
-	       (info->dqi_format->qf_fmt_id != QFMT_VFS_OLD ||
-		!(info->dqi_flags & DQF_ROOT_SQUASH));
+	       !(info->dqi_flags & DQF_ROOT_SQUASH);
 }
 
 static int dquot_add_inodes(struct dquot *dquot, qsize_t inodes,
@@ -2900,11 +2899,6 @@ int dquot_set_dqinfo(struct super_block *sb, int type, struct qc_info *ii)
 	if (!sb_has_quota_active(sb, type))
 		return -ESRCH;
 	mi = sb_dqopt(sb)->info + type;
-	if (ii->i_fieldmask & QC_FLAGS) {
-		if ((ii->i_flags & QCI_ROOT_SQUASH &&
-		     mi->dqi_format->qf_fmt_id != QFMT_VFS_OLD))
-			return -EINVAL;
-	}
 	spin_lock(&dq_data_lock);
 	if (ii->i_fieldmask & QC_SPC_TIMER)
 		mi->dqi_bgrace = ii->i_spc_timelimit;
