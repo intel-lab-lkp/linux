@@ -340,29 +340,6 @@ void __drm_gem_reset_shadow_plane(struct drm_plane *plane,
 EXPORT_SYMBOL(__drm_gem_reset_shadow_plane);
 
 /**
- * drm_gem_reset_shadow_plane - resets a shadow-buffered plane
- * @plane: the plane
- *
- * This function implements struct &drm_plane_funcs.reset_plane for
- * shadow-buffered planes. It assumes the current plane state to be
- * of type struct drm_shadow_plane and it allocates the new state of
- * this type.
- */
-void drm_gem_reset_shadow_plane(struct drm_plane *plane)
-{
-	struct drm_shadow_plane_state *shadow_plane_state;
-
-	if (plane->state) {
-		drm_gem_destroy_shadow_plane_state(plane, plane->state);
-		plane->state = NULL; /* must be set to NULL here */
-	}
-
-	shadow_plane_state = kzalloc_obj(*shadow_plane_state);
-	__drm_gem_reset_shadow_plane(plane, shadow_plane_state);
-}
-EXPORT_SYMBOL(drm_gem_reset_shadow_plane);
-
-/**
  * drm_gem_begin_shadow_fb_access - prepares shadow framebuffers for CPU access
  * @plane: the plane
  * @plane_state: the plane state of type struct drm_shadow_plane_state
