@@ -436,7 +436,7 @@ spufs_create_context(struct inode *inode, struct dentry *dentry,
 out_aff_unlock:
 	if (affinity)
 		mutex_unlock(&gang->aff_mutex);
-	if (ret && gang)
+	if (ret < 0 && gang)
 		gang->alive--; // can't reach 0
 	return ret;
 }
