@@ -242,12 +242,12 @@ static int aiu_clk_get(struct device *dev)
 	ret = aiu_clk_bulk_get(dev, aiu_i2s_ids, ARRAY_SIZE(aiu_i2s_ids),
 			       &aiu->i2s);
 	if (ret)
-		return dev_err_probe(dev, ret, "Can't get the i2s clocks\n");
+		return ret;
 
 	ret = aiu_clk_bulk_get(dev, aiu_spdif_ids, ARRAY_SIZE(aiu_spdif_ids),
 			       &aiu->spdif);
 	if (ret)
-		return dev_err_probe(dev, ret, "Can't get the spdif clocks\n");
+		return ret;
 
 	return ret;
 }
