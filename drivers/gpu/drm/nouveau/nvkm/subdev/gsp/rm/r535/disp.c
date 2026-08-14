@@ -560,6 +560,21 @@ r535_sor_hdmi_audio(struct nvkm_ior *sor, int head, bool enable)
 }
 
 static void
+gb202_sor_hdmi_audio(struct nvkm_ior *sor, int head, bool enable)
+{
+	struct nvkm_device *device = sor->disp->engine.subdev.device;
+	const u32 hdmi = head * 0x400;
+
+	r535_sor_hdmi_ctrl_audio(sor->asy.outp, enable);
+	r535_sor_hdmi_ctrl_audio_mute(sor->asy.outp, !enable);
+
+	/* General Control (GCP): the unit moved to slot 1 on NVD5.0. */
+	nvkm_mask(device, 0x6f0040 + hdmi, 0x00000001, 0x00000000);
+	nvkm_wr32(device, 0x6f004c + hdmi, !enable ? 0x00000001 : 0x00000010);
+	nvkm_mask(device, 0x6f0040 + hdmi, 0x00000001, 0x00000001);
+}
+
+static void
 r535_sor_hdmi_ctrl(struct nvkm_ior *sor, int head, bool enable, u8 max_ac_packet, u8 rekey)
 {
 	struct nvkm_disp *disp = sor->disp;
@@ -595,7 +610,7 @@ gb202_sor_hdmi = {
 	/* The legacy AVI unit is unchanged on GB20x. */
 	.infoframe_avi = gv100_sor_hdmi_infoframe_avi,
 	.infoframe_vsi = gb202_sor_hdmi_infoframe_vsi,
-	.audio = r535_sor_hdmi_audio,
+	.audio = gb202_sor_hdmi_audio,
 	.frl_train = r535_sor_frl_train,
 };
 
