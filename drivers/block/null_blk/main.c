@@ -521,6 +521,7 @@ static ssize_t nullb_device_power_store(struct config_item *item,
 		if (test_and_clear_bit(NULLB_DEV_FL_UP, &dev->flags)) {
 			dev->power = newp;
 			null_del_dev(dev->nullb);
+			null_free_zoned_dev(dev);
 		}
 		clear_bit(NULLB_DEV_FL_CONFIGURED, &dev->flags);
 	}
