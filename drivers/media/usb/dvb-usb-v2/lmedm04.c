@@ -499,6 +499,7 @@ static int lme2510_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 	struct lme2510_state *st = d->priv;
 	static u8 obuf[64], ibuf[64];
 	int i, read, read_o;
+	int ret = -EINVAL;
 	u16 len;
 	u8 gate;
 
@@ -508,6 +509,17 @@ static int lme2510_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 		read_o = msg[i].flags & I2C_M_RD;
 		read = i + 1 < num && msg[i + 1].flags & I2C_M_RD;
 		read |= read_o;
+		if (read_o) {
+			if (msg[i].len > sizeof(ibuf) - 1)
+				goto unlock;
+		} else if (read) {
+			if (msg[i].len > sizeof(obuf) - 4 ||
+			    msg[i + 1].len > sizeof(ibuf) - 1)
+				goto unlock;
+		} else if (msg[i].len > sizeof(obuf) - 3) {
+			goto unlock;
+		}
+
 		gate = (msg[i].addr == st->i2c_tuner_addr)
 			? (read)	? st->i2c_tuner_gate_r
 					: st->i2c_tuner_gate_w
@@ -522,9 +534,9 @@ static int lme2510_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 		obuf[2] = msg[i].addr << 1;
 
 		if (read) {
-			if (read_o)
+			if (read_o) {
 				len = 3;
-			else {
+			} else {
 				memcpy(&obuf[3], msg[i].buf, msg[i].len);
 				obuf[msg[i].len+3] = msg[i+1].len;
 				len = msg[i].len+4;
@@ -536,8 +548,8 @@ static int lme2510_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 
 		if (lme2510_msg(d, obuf, len, ibuf, 64) < 0) {
 			deb_info(1, "i2c transfer failed.");
-			mutex_unlock(&d->i2c_mutex);
-			return -EAGAIN;
+			ret = -EAGAIN;
+			goto unlock;
 		}
 
 		if (read) {
@@ -550,8 +562,11 @@ static int lme2510_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 		}
 	}
 
+	ret = i;
+
+unlock:
 	mutex_unlock(&d->i2c_mutex);
-	return i;
+	return ret;
 }
 
 static u32 lme2510_i2c_func(struct i2c_adapter *adapter)
