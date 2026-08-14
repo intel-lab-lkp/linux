@@ -1736,6 +1736,85 @@ static void pci_restore_pcie_state(struct pci_dev *dev)
 	pcie_capability_write_word(dev, PCI_EXP_SLTCTL2, cap[i++]);
 }
 
+static int pci_save_dev3_state(struct pci_dev *dev)
+{
+	struct pci_cap_saved_state *save_state;
+	u32 *cap;
+	int pos;
+
+	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_DEV3);
+	if (!pos)
+		return 0;
+
+	save_state = pci_find_saved_ext_cap(dev, PCI_EXT_CAP_ID_DEV3);
+	if (!save_state)
+		return -ENOMEM;
+
+	cap = (u32 *)&save_state->cap.data[0];
+	pci_read_config_dword(dev, pos + PCI_DEV3_CTL, &cap[0]);
+
+	return 0;
+}
+
+static void pci_restore_dev3_state(struct pci_dev *dev)
+{
+	struct pci_cap_saved_state *save_state;
+	u32 *cap, val, dev3_cap, dev3_sta;
+	u16 lnksta2 = 0;
+	bool flit_now;
+	int pos;
+
+	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_DEV3);
+	if (!pos)
+		return;
+
+	save_state = pci_find_saved_ext_cap(dev, PCI_EXT_CAP_ID_DEV3);
+	if (!save_state)
+		return;
+
+	cap = (u32 *)&save_state->cap.data[0];
+	val = cap[0];
+
+	/*
+	 * DEV3_CTL.14-Bit Tag Requester Enable is only meaningful in flit
+	 * mode.  On devices that advertise 14-Bit Tag Requester support,
+	 * sanitize the saved value before writing it back, so that callers
+	 * that issue further TLPs through this device after restore see a
+	 * coherent enable state.  Every other bit of DEV3_CTL (DMWr
+	 * Requester Enable, DMWr Egress Blocking, L0p Enable, Target Link
+	 * Width and any future addition) is written back unchanged.
+	 *
+	 * Only the value written to hardware is adjusted.  The save buffer
+	 * keeps what was saved, so the decision is taken afresh on every
+	 * restore and the originally programmed value is not lost.
+	 */
+	pci_read_config_dword(dev, pos + PCI_DEV3_CAP, &dev3_cap);
+	if (dev3_cap & PCI_DEV3_CAP_14BIT_TAG_REQ) {
+		/*
+		 * Check both LNKSTA2.Flit_Mode (link-level) and
+		 * DEV3_STA.Segment Captured (end-to-end); both must be
+		 * active for 14-bit tags.  Refresh bus->flit_mode and
+		 * dev->fm_enabled in lock-step.
+		 */
+		pci_read_config_dword(dev, pos + PCI_DEV3_STA, &dev3_sta);
+		dev->fm_enabled = !!(dev3_sta & PCI_DEV3_STA_SEGMENT);
+
+		pcie_capability_read_word(dev, PCI_EXP_LNKSTA2, &lnksta2);
+		flit_now = !!(lnksta2 & PCI_EXP_LNKSTA2_FLIT);
+		if (dev->bus)
+			dev->bus->flit_mode = flit_now;
+
+		if ((!dev->fm_enabled || !flit_now) &&
+		    (val & PCI_DEV3_CTL_14BIT_TAG_REQ_EN)) {
+			val &= ~PCI_DEV3_CTL_14BIT_TAG_REQ_EN;
+			pci_info(dev, "clearing 14-Bit Tag Requester Enable: flit mode no longer active (LNKSTA2=%#06x, DEV3_STA=%#010x)\n",
+				 lnksta2, dev3_sta);
+		}
+	}
+
+	pci_write_config_dword(dev, pos + PCI_DEV3_CTL, val);
+}
+
 static int pci_save_pcix_state(struct pci_dev *dev)
 {
 	int pos;
@@ -1789,6 +1868,10 @@ int pci_save_state(struct pci_dev *dev)
 	dev->state_saved = true;
 
 	i = pci_save_pcie_state(dev);
+	if (i != 0)
+		return i;
+
+	i = pci_save_dev3_state(dev);
 	if (i != 0)
 		return i;
 
@@ -1859,6 +1942,7 @@ static void pci_restore_config_space(struct pci_dev *pdev)
 void pci_restore_state(struct pci_dev *dev)
 {
 	pci_restore_pcie_state(dev);
+	pci_restore_dev3_state(dev);
 	pci_restore_pasid_state(dev);
 	pci_restore_pri_state(dev);
 	pci_restore_ats_state(dev);
