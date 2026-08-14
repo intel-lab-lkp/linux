@@ -288,6 +288,22 @@ static inline void zxc_pmu_ack_status(u64 ack)
 	zhaoxin_pmu_disable_all();
 }
 
+static void zhaoxin_pmu_print_debug(int cpu)
+{
+	u64 ctrl, status, fixed;
+
+	rdmsrq(MSR_CORE_PERF_GLOBAL_CTRL, ctrl);
+	rdmsrq(MSR_CORE_PERF_GLOBAL_STATUS, status);
+	rdmsrq(MSR_ARCH_PERFMON_FIXED_CTR_CTRL, fixed);
+
+	pr_info("\n");
+	pr_info("CPU#%d: ctrl:       %016llx\n", cpu, ctrl);
+	pr_info("CPU#%d: status:     %016llx\n", cpu, status);
+	pr_info("CPU#%d: fixed:      %016llx\n", cpu, fixed);
+
+	x86_pmu_print_debug(cpu);
+}
+
 static void zhaoxin_pmu_disable_fixed(struct hw_perf_event *hwc)
 {
 	int idx = hwc->idx - INTEL_PMC_IDX_FIXED;
@@ -479,6 +495,8 @@ static const struct x86_pmu zhaoxin_pmu __initconst = {
 
 	.format_attrs		= zx_arch_formats_attr,
 	.events_sysfs_show	= zhaoxin_event_sysfs_show,
+
+	.print_debug		= zhaoxin_pmu_print_debug,
 };
 
 static const struct { int id; char *name; } zx_arch_events_map[] __initconst = {

@@ -1561,38 +1561,15 @@ static void x86_pmu_start(struct perf_event *event, int flags)
 
 void x86_pmu_print_debug(int cpu)
 {
-	u64 ctrl, status, overflow, pmc_ctrl, pmc_count, prev_left, fixed;
 	unsigned long *cntr_mask, *fixed_cntr_mask;
-	struct event_constraint *pebs_constraints;
+	u64 pmc_ctrl, pmc_count, prev_left;
 	struct cpu_hw_events *cpuc;
-	u64 pebs, debugctl;
 	int idx;
 
 	cpuc = &per_cpu(cpu_hw_events, cpu);
 	cntr_mask = hybrid(cpuc->pmu, cntr_mask);
 	fixed_cntr_mask = hybrid(cpuc->pmu, fixed_cntr_mask);
-	pebs_constraints = hybrid(cpuc->pmu, pebs_constraints);
 
-	if (x86_pmu.version >= 2) {
-		rdmsrq(MSR_CORE_PERF_GLOBAL_CTRL, ctrl);
-		rdmsrq(MSR_CORE_PERF_GLOBAL_STATUS, status);
-		rdmsrq(MSR_CORE_PERF_GLOBAL_OVF_CTRL, overflow);
-		rdmsrq(MSR_ARCH_PERFMON_FIXED_CTR_CTRL, fixed);
-
-		pr_info("\n");
-		pr_info("CPU#%d: ctrl:       %016llx\n", cpu, ctrl);
-		pr_info("CPU#%d: status:     %016llx\n", cpu, status);
-		pr_info("CPU#%d: overflow:   %016llx\n", cpu, overflow);
-		pr_info("CPU#%d: fixed:      %016llx\n", cpu, fixed);
-		if (pebs_constraints) {
-			rdmsrq(MSR_IA32_PEBS_ENABLE, pebs);
-			pr_info("CPU#%d: pebs:       %016llx\n", cpu, pebs);
-		}
-		if (x86_pmu.lbr_nr) {
-			rdmsrq(MSR_IA32_DEBUGCTLMSR, debugctl);
-			pr_info("CPU#%d: debugctl:   %016llx\n", cpu, debugctl);
-		}
-	}
 	pr_info("CPU#%d: active:     %016llx\n", cpu, *(u64 *)cpuc->active_mask);
 
 	for_each_set_bit(idx, cntr_mask, X86_PMC_IDX_MAX) {
