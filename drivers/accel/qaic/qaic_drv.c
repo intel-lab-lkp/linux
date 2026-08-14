@@ -78,6 +78,13 @@ static const struct qaic_device_config aic200_config = {
 	.dbc_bar_idx = 2,
 };
 
+static const struct qaic_device_config aic200vf_config = {
+	.family = FAMILY_AIC200_VF,
+	.bar_mask = BIT(0) | BIT(1) | BIT(2) | BIT(4),
+	.mhi_bar_idx = 1,
+	.dbc_bar_idx = 2,
+};
+
 bool datapath_polling;
 module_param(datapath_polling, bool, 0400);
 MODULE_PARM_DESC(datapath_polling, "Operate the datapath in polling mode");
@@ -762,6 +769,34 @@ static const struct dev_pm_ops qaic_pm_ops = {
 	SYSTEM_SLEEP_PM_OPS(qaic_pm_suspend, qaic_pm_resume)
 };
 
+static int qaic_pci_sriov_configure(struct pci_dev *pdev, int num_vfs)
+{
+	struct qaic_device *qdev = pci_get_drvdata(pdev);
+	int ret;
+
+	/* Qaic device must be online to process VF bringup */
+	if (qdev->dev_state == QAIC_OFFLINE)
+		return -ENODEV;
+
+	if (qdev->dev_state == QAIC_BOOT)
+		return -EBUSY;
+
+	if (num_vfs == 0) {
+		pci_disable_sriov(pdev);
+		return 0;
+	}
+
+	ret = pci_enable_sriov(pdev, num_vfs);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to enable SR-IOV: %d (requested %d VFs, max %d)\n",
+			ret, num_vfs, pci_sriov_get_totalvfs(pdev));
+		return ret;
+	}
+
+	dev_dbg(&pdev->dev, "Successfully enabled %d VFs\n", num_vfs);
+	return num_vfs;
+}
+
 static struct pci_driver qaic_pci_driver = {
 	.name = QAIC_NAME,
 	.id_table = qaic_ids,
@@ -769,6 +804,7 @@ static struct pci_driver qaic_pci_driver = {
 	.remove = qaic_pci_remove,
 	.shutdown = qaic_pci_shutdown,
 	.err_handler = &qaic_pci_err_handler,
+	.sriov_configure = qaic_pci_sriov_configure,
 	.driver = {
 		.pm = pm_sleep_ptr(&qaic_pm_ops),
 	},
