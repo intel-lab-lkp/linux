@@ -3102,6 +3102,21 @@ config HW_BREAKPOINT_KUNIT_TEST
 
 	  If unsure, say N.
 
+config PERF_AUX_KERNEL_KUNIT_TEST
+	bool "Test perf AUX kernel-consumer API" if !KUNIT_ALL_TESTS
+	depends on PERF_EVENTS=y
+	depends on KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Tests for the perf AUX kernel-consumer API functions:
+	  perf_event_setup_aux(), perf_event_release_aux(),
+	  perf_event_aux_head(), perf_event_aux_tail_set(), and
+	  perf_event_aux_copy().  Error-path contract tests work
+	  without hardware; happy-path tests require an AUX-capable
+	  PMU (ARM SPE, Intel PT, etc.).
+
+	  If unsure, say N.
+
 source "lib/crypto/tests/Kconfig"
 
 config SIPHASH_KUNIT_TEST
