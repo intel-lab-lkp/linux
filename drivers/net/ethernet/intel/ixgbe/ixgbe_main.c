@@ -9761,6 +9761,45 @@ static void ixgbe_get_stats64(struct net_device *netdev,
 	stats->rx_missed_errors	= netdev->stats.rx_missed_errors;
 }
 
+static void ixgbe_get_queue_stats_rx(struct net_device *dev, int idx,
+				     struct netdev_queue_stats_rx *stats)
+{
+	struct ixgbe_adapter *adapter = ixgbe_from_netdev(dev);
+	struct ixgbe_ring *ring = READ_ONCE(adapter->rx_ring[idx]);
+	u64 bytes, packets, alloc_rx_page_failed, alloc_rx_buff_failed,
+		csum_err;
+	unsigned int start;
+
+	if (ring) {
+		do {
+			start = u64_stats_fetch_begin(&ring->syncp);
+			bytes = ring->stats.bytes;
+			packets = ring->stats.packets;
+			alloc_rx_page_failed =
+				ring->rx_stats.alloc_rx_page_failed;
+			alloc_rx_buff_failed =
+				ring->rx_stats.alloc_rx_buff_failed;
+			csum_err = ring->rx_stats.csum_err;
+		} while (u64_stats_fetch_retry(&ring->syncp, start));
+	}
+
+	stats->bytes = bytes;
+	stats->packets = packets;
+	stats->alloc_fail = alloc_rx_page_failed + alloc_rx_buff_failed;
+	stats->csum_bad = csum_err;
+}
+
+static void ixgbe_get_base_stats(struct net_device *dev,
+				 struct netdev_queue_stats_rx *rx,
+				 struct netdev_queue_stats_tx *tx)
+{
+	/* ixgbe has no inactive queues */
+	rx->bytes = 0;
+	rx->packets = 0;
+	rx->alloc_fail = 0;
+	rx->csum_bad = 0;
+}
+
 static int ixgbe_ndo_get_vf_stats(struct net_device *netdev, int vf,
 				  struct ifla_vf_stats *vf_stats)
 {
@@ -11118,6 +11157,11 @@ static const struct net_device_ops ixgbe_netdev_ops = {
 	.ndo_hwtstamp_set	= ixgbe_ptp_hwtstamp_set,
 };
 
+static const struct netdev_stat_ops ixgbe_stat_ops = {
+	.get_queue_stats_rx = ixgbe_get_queue_stats_rx,
+	.get_base_stats = ixgbe_get_base_stats,
+};
+
 static void ixgbe_disable_txr_hw(struct ixgbe_adapter *adapter,
 				 struct ixgbe_ring *tx_ring)
 {
@@ -11664,6 +11708,7 @@ static int ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	hw->phy.mdio.mdio_write = ixgbe_mdio_write;
 
 	netdev->netdev_ops = &ixgbe_netdev_ops;
+	netdev->stat_ops = &ixgbe_stat_ops;
 	ixgbe_set_ethtool_ops(netdev);
 	netdev->watchdog_timeo = 5 * HZ;
 	strscpy(netdev->name, pci_name(pdev), sizeof(netdev->name));
