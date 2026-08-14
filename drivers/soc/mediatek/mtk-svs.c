@@ -172,6 +172,11 @@ static DEFINE_SPINLOCK(svs_lock);
 	}
 
 #define svs_dentry_data(name)	{__stringify(name), &svs_##name##_debug_fops}
+
+static void svs_remove_debug_cmds(void *data)
+{
+	debugfs_remove(data);
+}
 #endif
 
 /**
@@ -887,7 +892,7 @@ static int svs_create_debug_cmds(struct svs_platform *svsp)
 		if (IS_ERR(file_entry)) {
 			dev_err(svsp->dev, "cannot create %s/%s: %ld\n",
 				d, svs_entries[i].name, PTR_ERR(file_entry));
-			return PTR_ERR(file_entry);
+			goto err_remove_debugfs;
 		}
 	}
 
@@ -901,7 +906,8 @@ static int svs_create_debug_cmds(struct svs_platform *svsp)
 		if (IS_ERR(svsb_dir)) {
 			dev_err(svsp->dev, "cannot create %s/%s: %ld\n",
 				d, svsb->name, PTR_ERR(svsb_dir));
-			return PTR_ERR(svsb_dir);
+			file_entry = svsb_dir;
+			goto err_remove_debugfs;
 		}
 
 		for (i = 0; i < ARRAY_SIZE(svsb_entries); i++) {
@@ -912,12 +918,17 @@ static int svs_create_debug_cmds(struct svs_platform *svsp)
 				dev_err(svsp->dev, "no %s/%s/%s?: %ld\n",
 					d, svsb->name, svsb_entries[i].name,
 					PTR_ERR(file_entry));
-				return PTR_ERR(file_entry);
+				goto err_remove_debugfs;
 			}
 		}
 	}
 
-	return 0;
+	return devm_add_action_or_reset(svsp->dev, svs_remove_debug_cmds,
+					svs_dir);
+
+err_remove_debugfs:
+	debugfs_remove(svs_dir);
+	return PTR_ERR(file_entry);
 }
 #endif /* CONFIG_DEBUG_FS */
 
