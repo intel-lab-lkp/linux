@@ -1041,6 +1041,7 @@ static int ctr_paes_do_crypt(struct s390_paes_ctx *ctx,
 		memcpy(walk->dst.virt.addr, buf, nbytes);
 		crypto_inc(walk->iv, AES_BLOCK_SIZE);
 		rc = skcipher_walk_done(walk, 0);
+		memzero_explicit(buf, sizeof(buf));
 	}
 
 out:
@@ -1377,7 +1378,7 @@ static inline int __xts_2keys_prep_param(struct s390_pxts_ctx *ctx,
 		memcpy(param->init, pcc_param.xts, 16);
 	}
 
-	memzero_explicit(pcc_param.key, sizeof(pcc_param.key));
+	memzero_explicit(&pcc_param, sizeof(pcc_param));
 	return rc;
 }
 
