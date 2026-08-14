@@ -5,6 +5,8 @@
 
 #include <uapi/linux/iommufd.h>
 
+#include <linux/pci.h>
+
 #include "arm-smmu-v3.h"
 
 void *arm_smmu_hw_info(struct device *dev, u32 *length,
@@ -121,6 +123,17 @@ int arm_smmu_attach_prepare_vmaster(struct arm_smmu_attach_state *state,
 		if (cfg == STRTAB_STE_0_CFG_ABORT ||
 		    cfg == STRTAB_STE_0_CFG_BYPASS)
 			return 0;
+		/*
+		 * Group-wide domain attachment also visits host PCI bridges. Such a
+		 * bridge is not exposed to the VM and therefore has no virtual SID.
+		 */
+		if (dev_is_pci(state->master->dev) &&
+		    pci_is_bridge(to_pci_dev(state->master->dev))) {
+			dev_info_ratelimited(state->master->dev,
+					     "skipping vDEVICE requirement for translated nested domain: cfg=%u ret=%d\n",
+					     cfg, ret);
+			return 0;
+		}
 		return ret;
 	}
 
