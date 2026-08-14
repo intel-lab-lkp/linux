@@ -72,6 +72,12 @@ struct huawei_wmi {
 static struct huawei_wmi *huawei_wmi;
 
 static const struct key_entry huawei_wmi_keymap[] = {
+	{ KE_KEY, 0x0287, { KEY_MICMUTE } },
+	{ KE_KEY, 0x0288, { KEY_CAMERA } },              /* Fn+F8: Camera */
+	{ KE_KEY, 0x028a, { KEY_CONFIG } },              /* Fn+F10: Honor Connect */
+	{ KE_KEY, 0x028b, { KEY_VOICECOMMAND } },        /* Fn+F11: YOYO AI */
+	{ KE_KEY, 0x028e, { KEY_PRINT } },               /* Fn+F12: Screenshot */
+
 	{ KE_KEY,    0x281, { KEY_BRIGHTNESSDOWN } },
 	{ KE_KEY,    0x282, { KEY_BRIGHTNESSUP } },
 	{ KE_KEY,    0x284, { KEY_MUTE } },
