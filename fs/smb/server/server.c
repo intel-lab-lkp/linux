@@ -627,7 +627,9 @@ static int __init ksmbd_server_init(void)
 	if (ret)
 		goto err_proc_cleanup;
 
-	create_proc_shares();
+	ret = create_proc_shares();
+	if (ret)
+		goto err_proc_cleanup;
 
 	ksmbd_server_tcp_callbacks_init();
 
