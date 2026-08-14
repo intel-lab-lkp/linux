@@ -397,7 +397,7 @@ nouveau_connector_destroy(struct drm_connector *connector)
 	struct nouveau_connector *nv_connector = nouveau_connector(connector);
 	nvif_event_dtor(&nv_connector->irq);
 	nvif_event_dtor(&nv_connector->hpd);
-	kfree(nv_connector->edid);
+	drm_edid_free(nv_connector->drm_edid);
 	drm_connector_unregister(connector);
 	drm_connector_cleanup(connector);
 	if (nv_connector->aux.transfer)
@@ -490,8 +490,11 @@ nouveau_connector_of_detect(struct drm_connector *connector)
 		int idx = name ? name[strlen(name) - 1] - 'A' : 0;
 
 		if (nv_encoder->dcb->i2c_index == idx && edid) {
+			drm_edid_free(nv_connector->drm_edid);
+			nv_connector->drm_edid =
+				drm_edid_alloc(edid, EDID_LENGTH);
 			nv_connector->edid =
-				kmemdup(edid, EDID_LENGTH, GFP_KERNEL);
+				drm_edid_raw(nv_connector->drm_edid);
 			return nv_encoder;
 		}
 	}
@@ -546,17 +549,42 @@ nouveau_connector_set_encoder(struct drm_connector *connector,
 	}
 }
 
+struct nouveau_rm_edid {
+	u8 *data;
+	int size;
+};
+
+static int
+nouveau_connector_rm_edid_block(void *context, u8 *buf, unsigned int block,
+				size_t len)
+{
+	struct nouveau_rm_edid *rm = context;
+	size_t offset = (size_t)block * EDID_LENGTH;
+
+	if (offset + len > rm->size)
+		return -EINVAL;
+
+	memcpy(buf, rm->data + offset, len);
+	return 0;
+}
+
 static void
 nouveau_connector_set_edid(struct nouveau_connector *nv_connector,
-			   struct edid *edid)
+			   const struct drm_edid *drm_edid)
 {
-	if (nv_connector->edid != edid) {
-		struct edid *old_edid = nv_connector->edid;
+	if (nv_connector->drm_edid == drm_edid)
+		return;
 
-		drm_connector_update_edid_property(&nv_connector->base, edid);
-		kfree(old_edid);
-		nv_connector->edid = edid;
-	}
+	/* Updates the EDID property and display_info with HF-EEODB-aware
+	 * sizing. The legacy helpers truncate both to what EDID byte 126
+	 * admits, hiding the DisplayID extension blocks that carry every
+	 * timing a DTD can't express (>655.35 MHz).
+	 */
+	drm_edid_connector_update(&nv_connector->base, drm_edid);
+
+	drm_edid_free(nv_connector->drm_edid);
+	nv_connector->drm_edid = drm_edid;
+	nv_connector->edid = drm_edid_raw(drm_edid);
 }
 
 static enum drm_connector_status
@@ -590,19 +618,35 @@ nouveau_connector_detect(struct drm_connector *connector, bool force)
 
 	nv_encoder = nouveau_connector_ddc_detect(connector);
 	if (nv_encoder) {
-		struct edid *new_edid = NULL;
+		const struct drm_edid *new_edid = NULL;
 
 		if (nv_encoder->i2c) {
 			if ((vga_switcheroo_handler_flags() & VGA_SWITCHEROO_CAN_SWITCH_DDC) &&
 			    nv_connector->type == DCB_CONNECTOR_LVDS)
-				new_edid = drm_get_edid_switcheroo(connector, nv_encoder->i2c);
+				new_edid = drm_edid_read_switcheroo(connector, nv_encoder->i2c);
 			else
-				new_edid = drm_get_edid(connector, nv_encoder->i2c);
+				new_edid = drm_edid_read_ddc(connector, nv_encoder->i2c);
 		} else {
-			ret = nvif_outp_edid_get(&nv_encoder->outp, (u8 **)&new_edid);
+			struct nouveau_rm_edid rm = {};
+
+			ret = nvif_outp_edid_get(&nv_encoder->outp, &rm.data);
 			if (ret < 0)
 				return connector_status_disconnected;
+
+			/* ret is RM's true buffer size: an HF-EEODB EDID is
+			 * larger than its byte 126 admits, and RM (which
+			 * owns the DDC pads on GSP boards) reads it whole.
+			 * Serve it through drm's block reader so EEODB
+			 * sizing, block validation, and the debugfs EDID
+			 * override all apply.
+			 */
+			rm.size = ret;
+			new_edid = drm_edid_read_custom(connector,
+							nouveau_connector_rm_edid_block,
+							&rm);
+			kfree(rm.data);
 		}
+
 
 		nouveau_connector_set_edid(nv_connector, new_edid);
 		if (!nv_connector->edid) {
@@ -686,7 +730,7 @@ nouveau_connector_detect_lvds(struct drm_connector *connector, bool force)
 	struct nouveau_drm *drm = nouveau_drm(dev);
 	struct nouveau_connector *nv_connector = nouveau_connector(connector);
 	struct nouveau_encoder *nv_encoder = NULL;
-	struct edid *edid = NULL;
+	const struct drm_edid *edid = NULL;
 	enum drm_connector_status status = connector_status_disconnected;
 
 	nv_encoder = find_encoder(connector, DCB_OUTPUT_LVDS);
@@ -697,7 +741,7 @@ nouveau_connector_detect_lvds(struct drm_connector *connector, bool force)
 	if (!drm->vbios.fp_no_ddc) {
 		status = nouveau_connector_detect(connector, force);
 		if (status == connector_status_connected) {
-			edid = nv_connector->edid;
+			edid = nv_connector->drm_edid;
 			goto out;
 		}
 	}
@@ -712,7 +756,13 @@ nouveau_connector_detect_lvds(struct drm_connector *connector, bool force)
 	 * valid - it's not (rh#613284)
 	 */
 	if (nv_encoder->dcb->lvdsconf.use_acpi_for_edid) {
-		edid = nouveau_acpi_edid(dev, connector);
+		struct edid *raw = nouveau_acpi_edid(dev, connector);
+
+		if (raw) {
+			edid = drm_edid_alloc(raw,
+					      EDID_LENGTH * (1 + raw->extensions));
+			kfree(raw);
+		}
 		if (edid) {
 			status = connector_status_connected;
 			goto out;
@@ -733,9 +783,10 @@ nouveau_connector_detect_lvds(struct drm_connector *connector, bool force)
 	 * stored for the panel stored in them.
 	 */
 	if (!drm->vbios.fp_no_ddc) {
-		edid = (struct edid *)nouveau_bios_embedded_edid(dev);
-		if (edid) {
-			edid = kmemdup(edid, EDID_LENGTH, GFP_KERNEL);
+		const void *embedded = nouveau_bios_embedded_edid(dev);
+
+		if (embedded) {
+			edid = drm_edid_alloc(embedded, EDID_LENGTH);
 			if (edid)
 				status = connector_status_connected;
 		}
@@ -915,7 +966,7 @@ nouveau_connector_detect_depth(struct drm_connector *connector)
 	 */
 	if (nv_connector->edid &&
 	    nv_connector->type == DCB_CONNECTOR_LVDS_SPWG)
-		duallink = ((u8 *)nv_connector->edid)[121] == 2;
+		duallink = ((const u8 *)nv_connector->edid)[121] == 2;
 	else
 		duallink = mode->clock >= bios->fp.duallink_transition_clk;
 
@@ -973,8 +1024,8 @@ nouveau_connector_get_modes(struct drm_connector *connector)
 		nv_connector->native_mode = NULL;
 	}
 
-	if (nv_connector->edid)
-		ret = drm_add_edid_modes(connector, nv_connector->edid);
+	if (nv_connector->drm_edid)
+		ret = drm_edid_connector_add_modes(connector);
 	else
 	if (nv_encoder->dcb->type == DCB_OUTPUT_LVDS &&
 	    (nv_encoder->dcb->lvdsconf.use_straps_for_mode ||
