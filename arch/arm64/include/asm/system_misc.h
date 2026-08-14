@@ -28,6 +28,8 @@ void arm64_notify_die(const char *str, struct pt_regs *regs,
 struct mm_struct;
 extern void __show_regs(struct pt_regs *);
 
+extern void (*arm64_pre_smp_shutdown_hook)(void);
+
 #endif	/* __ASSEMBLER__ */
 
 #endif	/* __ASM_SYSTEM_MISC_H */

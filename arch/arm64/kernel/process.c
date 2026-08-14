@@ -88,8 +88,21 @@ void __noreturn arch_cpu_idle_dead(void)
  * avoid any code or data used by any SW CPU pin loop. The CPU hotplug
  * functionality embodied in smpt_shutdown_nonboot_cpus() to achieve this.
  */
+
+/*
+ * Hook for platform code to perform cleanup after device_shutdown()
+ * but before secondary CPUs are offlined. This runs in the kexec path
+ * from kernel_kexec() after device_shutdown() and cpu_hotplug_enable()
+ * have been called, matching the point at which x86 invokes
+ * machine_ops.shutdown.
+ */
+void (*arm64_pre_smp_shutdown_hook)(void);
+
 void machine_shutdown(void)
 {
+	if (arm64_pre_smp_shutdown_hook)
+		arm64_pre_smp_shutdown_hook();
+
 	smp_shutdown_nonboot_cpus(reboot_cpu);
 }
 
