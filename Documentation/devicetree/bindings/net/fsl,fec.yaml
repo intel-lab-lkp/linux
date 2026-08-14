@@ -162,6 +162,20 @@ properties:
       Should specify the rx queue number, otherwise set rx queue number to 1.
     enum: [1, 2, 3]
 
+  fsl,rx-flush-queues:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 3
+    items:
+      enum: [0, 1, 2]
+    description:
+      List of RX queue indices for which the receive flushing feature (QOS
+      Scheme register RX_FLUSHn) is enabled. When enabled, a frame at the head
+      of the RX FIFO that cannot be forwarded (because its ring has no empty
+      buffer descriptor) is discarded instead of blocking the FIFO. On most
+      controllers erratum ERR050395 restricts flushing to a single queue. If
+      absent, RX flushing is disabled for all queues.
+
   fsl,magic-packet:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
