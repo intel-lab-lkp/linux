@@ -224,8 +224,7 @@ static void rtd1625_gpio_irq_handle(struct irq_desc *desc)
 	struct irq_chip *chip = irq_desc_get_chip(desc);
 	unsigned int irq = irq_desc_get_irq(desc);
 	struct irq_domain *domain = data->domain;
-	unsigned int reg_offset, i, j, val;
-	irq_hw_number_t hwirq;
+	unsigned int reg_offset, j, val;
 	unsigned long status;
 	u32 irq_type;
 	int ret;
@@ -241,7 +240,7 @@ static void rtd1625_gpio_irq_handle(struct irq_desc *desc)
 
 	chained_irq_enter(chip, desc);
 
-	for (i = 0; i < data->info->num_gpios; i += 32) {
+	for (unsigned int i = 0; i < data->info->num_gpios; i += 32) {
 		reg_offset = get_reg_offset(data, i);
 		ret = regmap_read(data->regmap, reg_offset, &val);
 		if (ret) {
@@ -267,7 +266,8 @@ static void rtd1625_gpio_irq_handle(struct irq_desc *desc)
 		}
 
 		for_each_set_bit(j, &status, 32) {
-			hwirq = i + j;
+			irq_hw_number_t hwirq = i + j;
+
 			irq_type = irq_get_trigger_type(irq_find_mapping(domain, hwirq));
 
 			/*
