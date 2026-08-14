@@ -2497,8 +2497,7 @@ static struct iommu_device *amd_iommu_probe_device(struct device *dev)
 		ret = PTR_ERR(dev_data);
 		dev_err(dev, "Failed to initialize - trying to proceed anyway\n");
 		iommu_dev = ERR_PTR(ret);
-		iommu_disable_device_dma(iommu, dev);
-		goto out_err;
+		goto err_deinit;
 	}
 
 	iommu_init_device_caps(dev_data, dev, iommu);
@@ -2511,6 +2510,10 @@ static struct iommu_device *amd_iommu_probe_device(struct device *dev)
 		goto out_err;
 	}
 
+	return iommu_dev;
+
+err_deinit:
+	iommu_disable_device_dma(iommu, dev);
 out_err:
 	return iommu_dev;
 }
