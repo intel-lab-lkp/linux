@@ -627,7 +627,7 @@ static int xgene_pcie_probe(struct platform_device *pdev)
 
 	port = pci_host_bridge_priv(bridge);
 
-	port->node = of_node_get(dn);
+	port->node = dn;
 	port->dev = dev;
 	port->version = XGENE_PCIE_IP_VER_1;
 
