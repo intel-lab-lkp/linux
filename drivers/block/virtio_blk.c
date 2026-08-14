@@ -41,6 +41,10 @@ static unsigned int poll_queues;
 module_param(poll_queues, uint, 0644);
 MODULE_PARM_DESC(poll_queues, "The number of dedicated virtqueues for polling I/O");
 
+static unsigned int max_segments;
+module_param(max_segments, uint, 0644);
+MODULE_PARM_DESC(max_segments, "Override maximum number of segments per request");
+
 static int major;
 static DEFINE_IDA(vd_index_ida);
 
@@ -1266,6 +1270,12 @@ static int virtblk_read_limits(struct virtio_blk *vblk,
 
 	/* Prevent integer overflows and honor max vq size */
 	sg_elems = min_t(u32, sg_elems, VIRTIO_BLK_MAX_SG_ELEMS - 2);
+
+	if (max_segments)
+		sg_elems = min_t(u32, sg_elems, max_segments);
+	else if (!virtio_has_feature(vdev, VIRTIO_RING_F_INDIRECT_DESC))
+		sg_elems = min_t(u32, sg_elems,
+				 virtqueue_get_vring_size(vblk->vqs[0].vq) - 2);
 
 	/* We can handle whatever the host told us to handle. */
 	lim->max_segments = sg_elems;
