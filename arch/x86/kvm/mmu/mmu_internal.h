@@ -95,6 +95,8 @@ struct kvm_mmu_page {
 	};
 
 	bool has_mapped_host_mmio;
+	/* TDP MMU only: no present leaf SPTEs exist in this leaf page table. */
+	bool tdp_mmu_empty_leaf_pt;
 
 	union {
 		/* These two members aren't used for TDP MMU */

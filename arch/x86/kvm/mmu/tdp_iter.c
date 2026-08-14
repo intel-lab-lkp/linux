@@ -23,6 +23,7 @@ static void tdp_iter_refresh_sptep(struct tdp_iter *iter)
 void tdp_iter_restart(struct tdp_iter *iter)
 {
 	iter->yielded = false;
+	iter->skip_child = false;
 	iter->yielded_gfn = iter->next_last_level_gfn;
 	iter->level = iter->root_level;
 
@@ -167,8 +168,10 @@ void tdp_iter_next(struct tdp_iter *iter)
 		return;
 	}
 
-	if (try_step_down(iter))
+	if (!iter->skip_child && try_step_down(iter))
 		return;
+
+	iter->skip_child = false;
 
 	do {
 		if (try_step_side(iter))
@@ -177,3 +180,8 @@ void tdp_iter_next(struct tdp_iter *iter)
 	iter->valid = false;
 }
 
+void tdp_iter_skip_child(struct tdp_iter *iter)
+{
+	WARN_ON_ONCE(iter->yielded);
+	iter->skip_child = true;
+}

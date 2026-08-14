@@ -114,6 +114,11 @@ struct tdp_iter {
 	 * level instead of advancing to the next entry.
 	 */
 	bool yielded;
+	/*
+	 * True if tdp_iter_next() should skip the child page table referenced by
+	 * the current SPTE, instead of descending into it.
+	 */
+	bool skip_child;
 };
 
 /*
@@ -139,5 +144,6 @@ void tdp_iter_start(struct tdp_iter *iter, struct kvm_mmu_page *root,
 		    int min_level, gfn_t next_last_level_gfn, gfn_t gfn_bits);
 void tdp_iter_next(struct tdp_iter *iter);
 void tdp_iter_restart(struct tdp_iter *iter);
+void tdp_iter_skip_child(struct tdp_iter *iter);
 
 #endif /* __KVM_X86_MMU_TDP_ITER_H */

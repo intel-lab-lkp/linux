@@ -238,6 +238,7 @@ static void tdp_mmu_init_sp(struct kvm_mmu_page *sp, tdp_ptep_t sptep,
 	sp->gfn = gfn;
 	sp->ptep = sptep;
 	sp->tdp_mmu_page = true;
+	sp->tdp_mmu_empty_leaf_pt = false;
 
 	trace_kvm_mmu_get_page(sp, true);
 }
@@ -526,6 +527,10 @@ static int __handle_changed_spte(struct kvm *kvm, struct kvm_mmu_page *sp,
 
 	if (is_leaf)
 		check_spte_writable_invariants(new_spte);
+
+	if (is_leaf && !was_leaf && sp->tdp_mmu_page &&
+	    sp->role.level == PG_LEVEL_4K)
+		WRITE_ONCE(sp->tdp_mmu_empty_leaf_pt, false);
 
 	/*
 	 * The only times a SPTE should be changed from a non-present to
@@ -923,6 +928,39 @@ bool kvm_tdp_mmu_zap_possible_nx_huge_page(struct kvm *kvm,
 	return true;
 }
 
+static bool tdp_mmu_range_covers_leaf_pt(struct tdp_iter *iter,
+					 gfn_t start, gfn_t end)
+{
+	struct kvm_mmu_page *sp;
+
+	sp = sptep_to_sp(rcu_dereference(iter->sptep));
+	return sp->gfn >= start &&
+	       sp->gfn + KVM_PAGES_PER_HPAGE(PG_LEVEL_2M) <= end;
+}
+
+static bool tdp_mmu_can_skip_leaf_pt(struct tdp_iter *iter,
+				     gfn_t start, gfn_t end)
+{
+	struct kvm_mmu_page *child_sp;
+
+	if (iter->level != PG_LEVEL_2M ||
+	    !is_shadow_present_pte(iter->old_spte) ||
+	    is_last_spte(iter->old_spte, iter->level))
+		return false;
+
+	if (iter->gfn < start ||
+	    iter->gfn + KVM_PAGES_PER_HPAGE(PG_LEVEL_2M) > end)
+		return false;
+
+	/*
+	 * Skip retained empty 4K leaf page tables without unlinking them, so
+	 * future faults can reuse the paging structure.
+	 */
+	child_sp = spte_to_child_sp(iter->old_spte);
+	return child_sp->role.level == PG_LEVEL_4K &&
+	       READ_ONCE(child_sp->tdp_mmu_empty_leaf_pt);
+}
+
 /*
  * If can_yield is true, will release the MMU lock and reschedule if the
  * scheduler needs the CPU or there is contention on the MMU lock. If this
@@ -934,8 +972,10 @@ static bool tdp_mmu_zap_leafs(struct kvm *kvm, struct kvm_mmu_page *root,
 			      gfn_t start, gfn_t end, bool can_yield, bool flush)
 {
 	struct tdp_iter iter;
+	bool may_skip_leaf_pts;
 
 	end = min(end, tdp_mmu_max_gfn_exclusive());
+	may_skip_leaf_pts = end - start >= KVM_PAGES_PER_HPAGE(PG_LEVEL_2M);
 
 	lockdep_assert_held_write(&kvm->mmu_lock);
 
@@ -948,18 +988,34 @@ static bool tdp_mmu_zap_leafs(struct kvm *kvm, struct kvm_mmu_page *root,
 			continue;
 		}
 
-		if (!is_shadow_present_pte(iter.old_spte) ||
-		    !is_last_spte(iter.old_spte, iter.level))
+		if (may_skip_leaf_pts &&
+		    tdp_mmu_can_skip_leaf_pt(&iter, start, end)) {
+			tdp_iter_skip_child(&iter);
 			continue;
+		}
 
-		tdp_mmu_iter_set_spte(kvm, &iter, SHADOW_NONPRESENT_VALUE);
+		if (is_shadow_present_pte(iter.old_spte) &&
+		    is_last_spte(iter.old_spte, iter.level)) {
+			tdp_mmu_iter_set_spte(kvm, &iter,
+					      SHADOW_NONPRESENT_VALUE);
 
-		/*
-		 * Zappings SPTEs in invalid roots doesn't require a TLB flush,
-		 * see kvm_tdp_mmu_zap_invalidated_roots() for details.
-		 */
-		if (!root->role.invalid)
-			flush = true;
+			/*
+			 * Zappings SPTEs in invalid roots doesn't require a TLB flush,
+			 * see kvm_tdp_mmu_zap_invalidated_roots() for details.
+			 */
+			if (!root->role.invalid)
+				flush = true;
+		}
+
+		if (may_skip_leaf_pts &&
+		    iter.level == PG_LEVEL_4K &&
+		    spte_index(rcu_dereference(iter.sptep)) == SPTE_ENT_PER_PAGE - 1 &&
+		    tdp_mmu_range_covers_leaf_pt(&iter, start, end)) {
+			struct kvm_mmu_page *sp;
+
+			sp = sptep_to_sp(rcu_dereference(iter.sptep));
+			WRITE_ONCE(sp->tdp_mmu_empty_leaf_pt, true);
+		}
 	}
 
 	rcu_read_unlock();
