@@ -526,11 +526,9 @@ static const struct file_operations ima_ascii_measurements_staged_ops = {
 static ssize_t ima_read_policy(char *path)
 {
 	void *data = NULL;
-	char *datap;
-	size_t size;
+	char *datap, *eol, *p;
+	size_t size, linelen;
 	int rc, pathlen = strlen(path);
-
-	char *p;
 
 	/* remove \n */
 	datap = path;
@@ -546,21 +544,49 @@ static ssize_t ima_read_policy(char *path)
 	rc = 0;
 
 	datap = data;
-	while (size > 0 && (p = strsep(&datap, "\n"))) {
+	while (size > 0) {
+		eol = memchr(datap, '\n', size);
+		linelen = eol ? (size_t)(eol - datap) : size;
+
+		if (eol) {
+			/* NUL-terminate the line in place, within bounds. */
+			*eol = '\0';
+			p = datap;
+		} else {
+			/*
+			 * kernel_read_file_from_path() does not NUL-terminate
+			 * the buffer, and it may be exactly i_size bytes long,
+			 * so a string walk off the end is possible.  The final
+			 * line without a trailing newline has no room for a
+			 * terminator; parse a terminated copy instead.
+			 */
+			p = kmemdup_nul(datap, linelen, GFP_KERNEL);
+			if (!p) {
+				rc = -ENOMEM;
+				break;
+			}
+		}
+
 		pr_debug("rule: %s\n", p);
 		rc = ima_parse_add_rule(p);
+		if (!eol)
+			kfree(p);
 		if (rc < 0)
 			break;
-		size -= rc;
+		rc = 0;
+
+		datap += linelen;
+		size -= linelen;
+		if (eol) {
+			datap++;	/* skip the newline */
+			size--;
+		}
 	}
 
 	vfree(data);
 	if (rc < 0)
 		return rc;
-	else if (size)
-		return -EINVAL;
-	else
-		return pathlen;
+	return pathlen;
 }
 
 static ssize_t ima_write_policy(struct file *file, const char __user *buf,
