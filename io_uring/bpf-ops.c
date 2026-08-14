@@ -212,6 +212,13 @@ static void io_eject_bpf(struct io_ring_ctx *ctx)
 	ops->priv = NULL;
 	ctx->bpf_ops = NULL;
 	ctx->loop_step = NULL;
+	/*
+	 * A loop may be sleeping in io_loop_wait() with ->uring_lock
+	 * released. It'll see loop_step == NULL after waking up, but
+	 * nothing wakes it otherwise.
+	 */
+	if (ctx->submitter_task)
+		wake_up_state(ctx->submitter_task, TASK_INTERRUPTIBLE);
 }
 
 static void bpf_io_unreg(void *kdata, struct bpf_link *link)
