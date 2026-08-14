@@ -6,6 +6,7 @@
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/ethtool.h>
 #include <linux/pkt_sched.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
@@ -160,8 +161,15 @@ static void tlb_deinitialize(struct bonding *bond)
 
 static long long compute_gap(struct slave *slave)
 {
-	return (s64) (slave->speed << 20) - /* Convert to Megabit per sec */
-	       (s64) (SLAVE_TLB_INFO(slave).load << 3); /* Bytes to bits */
+	s64 speed;
+
+	if (slave->speed == SPEED_UNKNOWN)
+		speed = 0;
+	else
+		speed = (s64)slave->speed;
+
+	return (speed << 20) - /* Mbit/s -> bit/s */
+	       (SLAVE_TLB_INFO(slave).load << 3); /* Byte/s -> bit/s */
 }
 
 static struct slave *tlb_get_least_loaded_slave(struct bonding *bond)
