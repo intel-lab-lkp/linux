@@ -196,6 +196,8 @@ extern const struct nvkm_ior_func_hda gv100_sor_hda;
 
 void tu102_sor_dp_vcpi(struct nvkm_ior *, int, u8, u8, u16, u16);
 
+void gb202_sor_hdmi_infoframe_vsi(struct nvkm_ior *, int, void *, u32);
+
 int nv50_pior_cnt(struct nvkm_disp *, unsigned long *);
 int nv50_pior_new(struct nvkm_disp *, int);
 void nv50_pior_depth(struct nvkm_ior *, struct nvkm_ior_state *, u32 ctrl);
