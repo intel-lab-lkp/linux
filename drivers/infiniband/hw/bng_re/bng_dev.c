@@ -477,6 +477,11 @@ static void bng_re_remove(struct auxiliary_device *adev)
 	kfree(dev_info);
 }
 
+static void bng_re_shutdown(struct auxiliary_device *adev)
+{
+	bng_re_remove(adev);
+}
+
 static const struct auxiliary_device_id bng_re_id_table[] = {
 	{ .name = BNG_RE_ADEV_NAME ".rdma", },
 	{},
@@ -488,6 +493,7 @@ static struct auxiliary_driver bng_re_driver = {
 	.name = "rdma",
 	.probe = bng_re_probe,
 	.remove = bng_re_remove,
+	.shutdown = bng_re_shutdown,
 	.id_table = bng_re_id_table,
 };
 
