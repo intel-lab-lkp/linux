@@ -511,7 +511,8 @@ static void lis302dl_interrupt_handle_click(struct lis3lv02d *lis3)
 	u8 click_src;
 
 	mutex_lock(&lis3->mutex);
-	lis3->read(lis3, CLICK_SRC, &click_src);
+	if (lis3->read(lis3, CLICK_SRC, &click_src) < 0)
+		goto out;
 
 	if (click_src & CLICK_SINGLE_X) {
 		input_report_key(dev, lis3->mapped_btns[0], 1);
@@ -528,6 +529,7 @@ static void lis302dl_interrupt_handle_click(struct lis3lv02d *lis3)
 		input_report_key(dev, lis3->mapped_btns[2], 0);
 	}
 	input_sync(dev);
+out:
 	mutex_unlock(&lis3->mutex);
 }
 
