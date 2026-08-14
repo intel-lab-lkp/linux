@@ -2156,6 +2156,15 @@ static void kvaser_usb_hydra_read_bulk_callback(struct kvaser_usb *dev,
 
 		cmd_len = kvaser_usb_hydra_cmd_size(cmd);
 
+		/* An extended command carries a device-supplied length; a
+		 * command shorter than the command header would never advance
+		 * @pos and would spin this URB-completion softirq forever.
+		 */
+		if (cmd_len < sizeof(struct kvaser_cmd_header)) {
+			dev_err(&dev->intf->dev, "Format error\n");
+			break;
+		}
+
 		if (pos + cmd_len > len) {
 			/* We got first part of a command */
 			int leftover_bytes;
