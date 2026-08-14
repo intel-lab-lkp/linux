@@ -802,6 +802,12 @@ static int kauditd_send_queue(struct sock *sk, u32 portid,
 		if (skb_hook)
 			(*skb_hook)(skb);
 
+		/*
+		 * auditd wants nlmsg_len to be the payload length, not the
+		 * full length, so break it here at send time.
+		 */
+		nlmsg_hdr(skb)->nlmsg_len = skb->len - NLMSG_HDRLEN;
+
 		/* can we send to anyone via unicast? */
 		if (!sk) {
 			if (err_hook)
@@ -849,7 +855,6 @@ static void kauditd_send_multicast_skb(struct sk_buff *skb)
 {
 	struct sk_buff *copy;
 	struct sock *sock = audit_get_sk(&init_net);
-	struct nlmsghdr *nlh;
 
 	/* NOTE: we are not taking an additional reference for init_net since
 	 *       we don't have to worry about it going away */
@@ -858,20 +863,12 @@ static void kauditd_send_multicast_skb(struct sk_buff *skb)
 		return;
 
 	/*
-	 * The seemingly wasteful skb_copy() rather than bumping the refcount
-	 * using skb_get() is necessary because non-standard mods are made to
-	 * the skb by the original kaudit unicast socket send routine.  The
-	 * existing auditd daemon assumes this breakage.  Fixing this would
-	 * require co-ordinating a change in the established protocol between
-	 * the kaudit kernel subsystem and the auditd userspace code.  There is
-	 * no reason for new multicast clients to continue with this
-	 * non-compliance.
+	 * skb_copy() rather than skb_get(): kauditd_send_queue() breaks
+	 * nlmsg_len for auditd, keep the listeners on a standard message.
 	 */
 	copy = skb_copy(skb, GFP_KERNEL);
 	if (!copy)
 		return;
-	nlh = nlmsg_hdr(copy);
-	nlh->nlmsg_len = skb->len;
 
 	nlmsg_multicast(sock, copy, 0, AUDIT_NLGRP_READLOG, GFP_KERNEL);
 }
@@ -2785,13 +2782,12 @@ int audit_signal_info(int sig, struct task_struct *t)
  */
 static void __audit_log_end(struct sk_buff *skb)
 {
-	struct nlmsghdr *nlh;
-
 	if (audit_rate_check()) {
-		/* setup the netlink header, see the comments in
-		 * kauditd_send_multicast_skb() for length quirks */
-		nlh = nlmsg_hdr(skb);
-		nlh->nlmsg_len = skb->len - NLMSG_HDRLEN;
+		/*
+		 * Records are built without keeping nlmsg_len up to date,
+		 * finalize it here with the full message length.
+		 */
+		nlmsg_end(skb, nlmsg_hdr(skb));
 
 		/* queue the netlink packet */
 		skb_queue_tail(&audit_queue, skb);
