@@ -2302,7 +2302,7 @@ int iwl_mvm_set_sta_pkt_ext(struct iwl_mvm *mvm,
 			iwl_mvm_parse_ppe(mvm, pkt_ext, nss, ru_index_bitmap,
 					  ppe, ppe_pos_bit, true);
 		/* EHT PPE Thresholds doesn't exist - set the API according to
-		 * HE PPE Tresholds
+		 * HE PPE Thresholds
 		 */
 		} else if (link_sta->he_cap.he_cap_elem.phy_cap_info[6] &
 			   IEEE80211_HE_PHY_CAP6_PPE_THRESHOLD_PRESENT) {
@@ -2364,7 +2364,7 @@ int iwl_mvm_set_sta_pkt_ext(struct iwl_mvm *mvm,
 }
 
 /*
- * This function sets the MU EDCA parameters ans returns whether MU EDCA
+ * This function sets the MU EDCA parameters and returns whether MU EDCA
  * is enabled or not
  */
 bool iwl_mvm_set_fw_mu_edca_params(struct iwl_mvm *mvm,
@@ -3617,7 +3617,7 @@ static void iwl_mvm_mei_host_associated(struct iwl_mvm *mvm,
 		break;
 	default:
 		/* auth method / AKM not supported */
-		/* TODO: All the FT vesions of these? */
+		/* TODO: All the FT versions of these? */
 		return;
 	}
 

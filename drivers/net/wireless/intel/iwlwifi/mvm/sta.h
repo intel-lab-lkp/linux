@@ -75,7 +75,7 @@ struct iwl_mvm_vif;
 /**
  * DOC: station table - introduction
  *
- * The station table is a list of data structure that reprensent the stations.
+ * The station table is a list of data structure that represent the stations.
  * In STA/P2P client mode, the driver will hold one station for the AP/ GO.
  * In GO/AP mode, the driver will have as many stations as associated clients.
  * All these stations are reflected in the fw's station table. The driver
@@ -292,7 +292,7 @@ enum iwl_mvm_rxq_notif_type {
 /**
  * struct iwl_mvm_internal_rxq_notif - Internal representation of the data sent
  * in &iwl_rxq_sync_cmd. Should be DWORD aligned.
- * FW is agnostic to the payload, so there are no endianity requirements.
+ * FW is agnostic to the payload, so there are no endianness requirements.
  *
  * @type: value from &iwl_mvm_rxq_notif_type
  * @sync: ctrl path is waiting for all notifications to be received

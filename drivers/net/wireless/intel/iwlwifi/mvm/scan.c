@@ -2226,7 +2226,7 @@ static u16 iwl_mvm_scan_umac_flags(struct iwl_mvm *mvm,
 
 	/*
 	 * Extended dwell is relevant only for low band to start with, as it is
-	 * being used for social channles only (1, 6, 11), so we can check
+	 * being used for social channels only (1, 6, 11), so we can check
 	 * only scan type on low band also for CDB.
 	 */
 	if (iwl_mvm_is_regular_scan(params) &&
