@@ -119,6 +119,7 @@ extern struct mutex pci_rescan_remove_lock;
 bool pcie_cap_has_lnkctl(const struct pci_dev *dev);
 bool pcie_cap_has_lnkctl2(const struct pci_dev *dev);
 bool pcie_cap_has_rtctl(const struct pci_dev *dev);
+bool pcie_path_needs_mrrs_cap(struct pci_dev *dev);
 
 /* Standard Capability finder */
 /**

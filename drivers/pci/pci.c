@@ -5870,14 +5870,14 @@ int pcie_set_readrq(struct pci_dev *dev, int rq)
 		return -EINVAL;
 
 	/*
-	 * If using the "performance" PCIe config, we clamp the read rq
-	 * size to the max packet size to keep the host bridge from
-	 * generating requests larger than we can cope with.
+	 * If using the "performance" PCIe config, clamp the read rq size when
+	 * the path cannot safely accept root-sized completions (intermediate
+	 * bridge or this device has lower MPS than the root port).
 	 */
 	if (pcie_bus_config == PCIE_BUS_PERFORMANCE) {
 		int mps = pcie_get_mps(dev);
 
-		if (mps < rq)
+		if (pcie_path_needs_mrrs_cap(dev) && mps < rq)
 			rq = mps;
 	}
 

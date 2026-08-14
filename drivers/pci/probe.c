@@ -2963,6 +2963,76 @@ static void pcie_write_mps(struct pci_dev *dev, int mps)
 		pci_err(dev, "Failed attempting to set the MPS\n");
 }
 
+/*
+ * Check whether MRRS must be capped to the device's MPS.
+ *
+ * In PCIE_BUS_PERFORMANCE mode, MPS is configured top-down. Completions are
+ * sized by the completer (root complex) up to the root port's MPS. Every
+ * receiver on the path -- each intermediate bridge and the requester itself --
+ * must accept that completion size, so MRRS must be capped whenever
+ * MPS(root port) exceeds MPS of any of those receivers.
+ *
+ * Comparing only ancestor bridge MPS to the endpoint's MPS is not enough:
+ * under top-down configuration every ancestor already has MPS >= the
+ * endpoint, so that check never triggers. Required checks are:
+ *   - intermediate bridge MPS < root port MPS, and
+ *   - requester MPS < root port MPS (needed by pcie_set_readrq() callers
+ *     that request values larger than MPS on direct-attach paths).
+ *
+ * When the path cannot be characterised (unknown root, non-PCIe bridge),
+ * fail closed and keep the cap.
+ *
+ * Note: this assumes no peer-to-peer DMA, which is the standing assumption for
+ * PCIE_BUS_PERFORMANCE mode.
+ */
+bool pcie_path_needs_mrrs_cap(struct pci_dev *dev)
+{
+	struct pci_bus *bus = dev->bus;
+	int root_mps = -1;
+	int min_inter_mps = -1;
+
+	while (bus->parent) {
+		struct pci_dev *bridge = bus->self;
+
+		if (bridge) {
+			int mps;
+
+			if (!pci_is_pcie(bridge))
+				return true;	/* unknown; keep the cap */
+
+			mps = pcie_get_mps(bridge);
+
+			/*
+			 * The bridge directly above the root bus is treated as
+			 * the root port. Everything between the device and
+			 * that bridge must forward completion TLPs.
+			 */
+			if (bus->parent->parent) {
+				if (min_inter_mps < 0 || mps < min_inter_mps)
+					min_inter_mps = mps;
+			} else {
+				root_mps = mps;
+			}
+		}
+		bus = bus->parent;
+	}
+
+	/* No identifiable root port MPS: keep the conservative cap. */
+	if (root_mps < 0)
+		return true;
+
+	if (min_inter_mps >= 0 && min_inter_mps < root_mps)
+		return true;
+
+	/*
+	 * Direct-attach and uniform-vs-root paths still need a cap when this
+	 * device's own MPS is below the root port's -- otherwise drivers
+	 * calling pcie_set_readrq() with a large value can request completions
+	 * larger than the requester can receive.
+	 */
+	return pcie_get_mps(dev) < root_mps;
+}
+
 static void pcie_write_mrrs(struct pci_dev *dev)
 {
 	int rc, mrrs;
@@ -2975,12 +3045,19 @@ static void pcie_write_mrrs(struct pci_dev *dev)
 		return;
 
 	/*
-	 * For max performance, the MRRS must be set to the largest supported
-	 * value.  However, it cannot be configured larger than the MPS the
-	 * device or the bus can support.  This should already be properly
-	 * configured by a prior call to pcie_write_mps().
+	 * Prefer a larger MRRS when completions from the root complex cannot
+	 * exceed what every receiver on the path (bridges and this device)
+	 * can accept. Otherwise cap to the device's MPS.
+	 *
+	 * There is no Max_Read_Request_Size capability field; pcie_mpss is
+	 * used as a conservative upper bound (clamped to the architectural
+	 * 4096B MRRS maximum). Hardware that rejects the value is handled by
+	 * the shrink loop below.
 	 */
-	mrrs = pcie_get_mps(dev);
+	if (pcie_path_needs_mrrs_cap(dev))
+		mrrs = pcie_get_mps(dev);
+	else
+		mrrs = min(128 << dev->pcie_mpss, 4096);
 
 	/*
 	 * MRRS is a R/W register.  Invalid values can be written, but a

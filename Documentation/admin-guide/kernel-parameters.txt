@@ -5150,9 +5150,12 @@ Kernel parameters
 				supported by all devices below the root complex.
 		pcie_bus_perf	Set device MPS to the largest allowable MPS
 				based on its parent bus. Also set MRRS (Max
-				Read Request Size) to the largest supported
-				value (no larger than the MPS that the device
-				or bus can support) for best performance.
+				Read Request Size) appropriately for best
+				performance: raise it above the device MPS when
+				completions from the root complex cannot exceed
+				what every bridge and the device on the path can
+				accept; otherwise keep MRRS capped to the
+				device MPS.
 		pcie_bus_peer2peer	Set every device's MPS to 128B, which
 				every device is guaranteed to support. This
 				configuration allows peer-to-peer DMA between
