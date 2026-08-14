@@ -179,12 +179,14 @@ struct file_dedupe_range_info {
 };
 
 /* from struct btrfs_ioctl_file_extent_same_args */
+#define FILE_DEDUPE_RANGE_REPORT_PROGRESS 0x1
+
 struct file_dedupe_range {
 	__u64 src_offset;	/* in - start of extent in source */
 	__u64 src_length;	/* in - length of extent */
 	__u16 dest_count;	/* in - total elements in info array */
 	__u16 reserved1;	/* must be zero */
-	__u32 reserved2;	/* must be zero */
+	__u32 flags;		/* FILE_DEDUPE_RANGE_* flags; was reserved2 */
 	struct file_dedupe_range_info info[];
 };
 
