@@ -451,6 +451,13 @@ static const struct net_device_ops moxart_netdev_ops = {
 	.ndo_validate_addr	= eth_validate_addr,
 };
 
+static void moxart_irq_dispose_mapping(void *data)
+{
+	unsigned int irq = (unsigned int)(uintptr_t)data;
+
+	irq_dispose_mapping(irq);
+}
+
 static int moxart_mac_probe(struct platform_device *pdev)
 {
 	struct device *p_dev = &pdev->dev;
@@ -459,6 +466,7 @@ static int moxart_mac_probe(struct platform_device *pdev)
 	struct moxart_mac_priv_t *priv;
 	struct resource *res;
 	unsigned int irq;
+	bool irq_requested = false;
 	int ret;
 
 	ndev = alloc_etherdev(sizeof(struct moxart_mac_priv_t));
@@ -471,6 +479,16 @@ static int moxart_mac_probe(struct platform_device *pdev)
 		ret = -EINVAL;
 		goto irq_map_fail;
 	}
+
+	/* Dispose of the IRQ mapping after the devres-managed handler has
+	 * been released: devres runs actions in reverse registration order,
+	 * so registering this before devm_request_irq() guarantees the
+	 * correct order on probe unwind and device removal.
+	 */
+	ret = devm_add_action_or_reset(p_dev, moxart_irq_dispose_mapping,
+				       (void *)(uintptr_t)irq);
+	if (ret)
+		goto irq_map_fail;
 
 	priv = netdev_priv(ndev);
 	priv->ndev = ndev;
@@ -533,6 +551,7 @@ static int moxart_mac_probe(struct platform_device *pdev)
 		netdev_err(ndev, "devm_request_irq failed\n");
 		goto init_fail;
 	}
+	irq_requested = true;
 
 	ndev->netdev_ops = &moxart_netdev_ops;
 	netif_napi_add_weight(ndev, &priv->napi, moxart_rx_poll, RX_DESC_NUM);
@@ -552,6 +571,8 @@ static int moxart_mac_probe(struct platform_device *pdev)
 
 init_fail:
 	netdev_err(ndev, "init failed\n");
+	if (irq_requested)
+		devm_free_irq(p_dev, irq, ndev);
 	moxart_mac_free_memory(ndev);
 irq_map_fail:
 	free_netdev(ndev);
