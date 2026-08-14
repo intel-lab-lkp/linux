@@ -97,7 +97,7 @@ pub mod internal {
 /// fn foo(device: &kernel::drm::Device<Self, kernel::drm::Registered>,
 ///        reg_data: &Self::RegistrationData<'_>,
 ///        data: &mut uapi::argument_type,
-///        file: &kernel::drm::File<Self::File>,
+///        file: &kernel::drm::File<Self>,
 /// ) -> Result<u32>
 /// ```
 /// where `Self` is the drm::drv::Driver implementation these ioctls are being declared within.

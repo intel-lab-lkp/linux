@@ -12,7 +12,8 @@ use kernel::{
         ioctl, //
     },
     prelude::*,
-    sync::aref::ARef, //
+    sync::aref::ARef,
+    types::CovariantForLt, //
 };
 
 use crate::file::File;
@@ -75,7 +76,7 @@ impl auxiliary::Driver for NovaDriver {
 impl drm::Driver for NovaDriver {
     type Data = ();
     type RegistrationData<'a> = ();
-    type File = File;
+    type File = CovariantForLt!(File);
     type Object = gem::Object<NovaObject>;
     type ParentDevice<Ctx: DeviceContext> = auxiliary::Device<Ctx>;
 

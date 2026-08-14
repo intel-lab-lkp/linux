@@ -76,7 +76,7 @@ pub(crate) use impl_aref_for_gem_obj;
 ///
 /// [`Driver`]: drm::Driver
 /// [`DriverFile`]: drm::file::DriverFile
-pub type DriverFile<T> = drm::File<<<T as DriverObject>::Driver as drm::Driver>::File>;
+pub type DriverFile<T> = drm::File<<T as DriverObject>::Driver>;
 
 /// A type alias for retrieving the current [`AllocImpl`] for a given [`DriverObject`].
 ///
@@ -196,11 +196,10 @@ pub trait BaseObject: IntoGEMObject {
 
     /// Creates a new handle for the object associated with a given `File`
     /// (or returns an existing one).
-    fn create_handle<D, F>(&self, file: &drm::File<F>) -> Result<u32>
+    fn create_handle<D>(&self, file: &drm::File<D>) -> Result<u32>
     where
         Self: AllocImpl<Driver = D>,
-        D: drm::Driver<Object = Self, File = F>,
-        F: drm::file::DriverFile<Driver = D>,
+        D: drm::Driver<Object = Self>,
     {
         let mut handle: u32 = 0;
         // SAFETY: The arguments are all valid per the type invariants.
@@ -211,11 +210,10 @@ pub trait BaseObject: IntoGEMObject {
     }
 
     /// Looks up an object by its handle for a given `File`.
-    fn lookup_handle<D, F>(file: &drm::File<F>, handle: u32) -> Result<ARef<Self>>
+    fn lookup_handle<D>(file: &drm::File<D>, handle: u32) -> Result<ARef<Self>>
     where
         Self: AllocImpl<Driver = D> + AlwaysRefCounted,
-        D: drm::Driver<Object = Self, File = F>,
-        F: drm::file::DriverFile<Driver = D>,
+        D: drm::Driver<Object = Self>,
     {
         // SAFETY: The arguments are all valid per the type invariants.
         let ptr = unsafe { bindings::drm_gem_object_lookup(file.as_raw().cast(), handle) };

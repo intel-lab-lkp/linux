@@ -584,7 +584,8 @@ mod tests {
         },
         faux,
         io::Io,
-        page::PAGE_SIZE, //
+        page::PAGE_SIZE,
+        types::CovariantForLt, //
     };
 
     // The bare minimum needed to create a fake drm driver for kunit
@@ -604,10 +605,13 @@ mod tests {
         desc: c"Kunit",
     };
 
-    impl drm::file::DriverFile for KunitFile {
+    impl drm::file::DriverFile<'_> for KunitFile {
         type Driver = KunitDriver;
 
-        fn open(_dev: &drm::Device<KunitDriver>) -> Result<Pin<KBox<Self>>> {
+        fn open(
+            _device: &drm::Device<KunitDriver, drm::Registered>,
+            _reg_data: &(),
+        ) -> Result<Pin<KBox<Self>>> {
             Ok(KBox::new(Self, GFP_KERNEL)?.into())
         }
     }
@@ -629,7 +633,7 @@ mod tests {
     impl drm::Driver for KunitDriver {
         type Data = KunitData;
         type RegistrationData<'a> = ();
-        type File = KunitFile;
+        type File = CovariantForLt!(KunitFile);
         type Object = Object<KunitObject>;
         type ParentDevice<Ctx: device::DeviceContext> = faux::Device<Ctx>;
 

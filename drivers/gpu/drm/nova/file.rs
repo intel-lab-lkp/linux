@@ -3,7 +3,6 @@
 use crate::driver::{NovaDevice, NovaDriver};
 use crate::gem::NovaObject;
 use kernel::{
-    alloc::flags::*,
     auxiliary,
     device::Bound,
     drm::{
@@ -18,10 +17,10 @@ use kernel::{
 
 pub(crate) struct File;
 
-impl drm::file::DriverFile for File {
+impl drm::file::DriverFile<'_> for File {
     type Driver = NovaDriver;
 
-    fn open(_dev: &NovaDevice) -> Result<Pin<KBox<Self>>> {
+    fn open(_device: &NovaDevice<Registered>, _reg_data: &()) -> Result<Pin<KBox<Self>>> {
         Ok(KBox::new(Self, GFP_KERNEL)?.into())
     }
 }
@@ -32,7 +31,7 @@ impl File {
         dev: &NovaDevice<Registered>,
         _reg_data: &(),
         getparam: &mut uapi::drm_nova_getparam,
-        _file: &drm::File<File>,
+        _file: &drm::File<NovaDriver>,
     ) -> Result<u32> {
         let adev: &auxiliary::Device<Bound> = dev.as_ref();
         let pdev: &pci::Device<Bound> = adev.parent().try_into()?;
@@ -52,7 +51,7 @@ impl File {
         dev: &NovaDevice<Registered>,
         _reg_data: &(),
         req: &mut uapi::drm_nova_gem_create,
-        file: &drm::File<File>,
+        file: &drm::File<NovaDriver>,
     ) -> Result<u32> {
         let obj = NovaObject::new(dev, req.size.try_into()?)?;
 
@@ -66,7 +65,7 @@ impl File {
         _dev: &NovaDevice<Registered>,
         _reg_data: &(),
         req: &mut uapi::drm_nova_gem_info,
-        file: &drm::File<File>,
+        file: &drm::File<NovaDriver>,
     ) -> Result<u32> {
         let bo = NovaObject::lookup_handle(file, req.handle)?;
 

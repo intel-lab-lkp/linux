@@ -9,8 +9,17 @@ use crate::{
     device,
     drm,
     error::to_result,
+    interop::list::clist_create,
     prelude::*,
-    sync::aref::ARef, //
+    sync::{
+        aref::ARef,
+        atomic::{
+            Acquire,
+            Release, //
+        },
+        Mutex, //
+    },
+    types::ForLt, //
 };
 use core::ptr::NonNull;
 
@@ -117,8 +126,15 @@ pub trait Driver {
     /// The type used to manage memory for this driver.
     type Object: AllocImpl;
 
-    /// The type used to represent a DRM File (client)
-    type File: drm::file::DriverFile;
+    /// The type used to represent a DRM File (client).
+    ///
+    /// File data may borrow from [`RegistrationData`](Driver::RegistrationData). File data is
+    /// guaranteed to be dropped before registration data, either when the file is closed or
+    /// when the device is unregistered, whichever comes first.
+    ///
+    /// Drivers set this to `CovariantForLt!(MyFileData)` (or `ForLt!` for invariant types)
+    /// and implement [`DriverFile`](drm::file::DriverFile) for their file data type.
+    type File: ForLt + 'static;
 
     /// The bus device type of the parent device that the DRM device is associated with.
     type ParentDevice<Ctx: device::DeviceContext>: device::AsBusDevice<Ctx>;
@@ -221,6 +237,51 @@ impl<T: Driver> Drop for Registration<'_, T> {
         unsafe { bindings::drm_dev_unplug(self.drm.as_raw()) };
         // After drm_dev_unplug(), the SRCU barrier guarantees that all RegistrationGuard critical
         // sections have completed, so no one holds a reference to reg_data anymore.
-        // reg_data is dropped here automatically.
+
+        // Drop all remaining file private data before dropping registration data. This guarantees
+        // that file data (which may borrow from RegistrationData) is always dropped first.
+        let raw = self.drm.as_raw();
+
+        // SAFETY: `filelist_mutex` is initialized by `drm_dev_init()` and remains valid for
+        // the lifetime of the `struct drm_device`.
+        let filelist_mutex = unsafe { Mutex::from_raw(&raw mut (*raw).filelist_mutex) };
+        {
+            let _guard = filelist_mutex.lock();
+
+            // SAFETY: `filelist` is a valid, initialized sentinel `list_head`; the mutex
+            // guard prevents concurrent modification.
+            let filelist = unsafe {
+                clist_create!(
+                    &raw mut (*raw).filelist,
+                    drm::File<T>,
+                    bindings::drm_file,
+                    lhead
+                )
+            };
+
+            for file in filelist.iter() {
+                // SAFETY: `file` is a valid `drm_file` on this device's filelist.
+                let priv_ptr = unsafe { (*file.as_raw()).driver_priv };
+
+                // SAFETY: Setting `driver_priv` to NULL is visible to `postclose_callback()`
+                // through the `filelist_mutex` acquire/release chain in `drm_close_helper()`.
+                unsafe { (*file.as_raw()).driver_priv = core::ptr::null_mut() };
+
+                // SAFETY: `driver_priv` was created by `open_callback()` via `KBox::into_raw` and
+                // has not yet been freed (the file is still in the list, so `postclose_callback()`
+                // has not run).
+                drop(unsafe { KBox::from_raw(priv_ptr.cast::<<T::File as ForLt>::Of<'static>>()) });
+
+                self.drm.open_count.fetch_sub(1, Release);
+            }
+        }
+
+        // Wait for in-flight `postclose_callback()` calls to complete. After `drm_dev_unplug()`, no
+        // new opens can succeed, so `open_count` is monotonically decreasing.
+        self.drm
+            .open_count_wq
+            .wait_event(|| self.drm.open_count.load(Acquire) == 0);
+
+        // `_reg_data` is dropped here automatically, after all file data has been dropped.
     }
 }

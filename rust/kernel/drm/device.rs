@@ -15,11 +15,16 @@ use crate::{
     },
     error::from_err_ptr,
     prelude::*,
-    sync::aref::{
-        ARef,
-        AlwaysRefCounted, //
+    sync::{
+        aref::{
+            ARef,
+            AlwaysRefCounted, //
+        },
+        atomic::Atomic,
+        WaitQueue,
     },
     types::{
+        ForLt,
         NotThreadSafe,
         Opaque, //
     },
@@ -190,7 +195,10 @@ impl<T: drm::Driver> Deref for UnregisteredDevice<T> {
     }
 }
 
-impl<T: drm::Driver> UnregisteredDevice<T> {
+impl<T: drm::Driver> UnregisteredDevice<T>
+where
+    for<'a> <T::File as ForLt>::Of<'a>: drm::file::DriverFile<'a, Driver = T>,
+{
     const fn compute_features() -> u32 {
         let mut features = drm::driver::FEAT_GEM;
 
@@ -203,8 +211,8 @@ impl<T: drm::Driver> UnregisteredDevice<T> {
 
     const VTABLE: bindings::drm_driver = drm_legacy_fields! {
         load: None,
-        open: Some(drm::File::<T::File>::open_callback),
-        postclose: Some(drm::File::<T::File>::postclose_callback),
+        open: Some(drm::File::<T>::open_callback),
+        postclose: Some(drm::File::<T>::postclose_callback),
         unload: None,
         release: Some(Device::<T>::release),
         master_set: None,
@@ -333,6 +341,19 @@ impl<T: drm::Driver> UnregisteredDevice<T> {
         // SAFETY: `raw_drm` is valid; no concurrent access before registration.
         unsafe { (*raw_drm.as_ptr()).registration_data = UnsafeCell::new(NonNull::dangling()) };
 
+        // SAFETY: `raw_drm` is valid; no concurrent access before registration.
+        unsafe { (*raw_drm.as_ptr()).open_count = Atomic::new(0) };
+
+        // SAFETY:
+        // - `raw_drm` is valid; no concurrent access before registration.
+        // - The field is pinned because the Device is pinned (refcounted, allocated by
+        //   `__drm_dev_alloc()`, never moved).
+        // - The init is infallible.
+        let Ok(()) = unsafe {
+            crate::new_waitqueue!("drm_open_count")
+                .__pinned_init(&raw mut (*raw_drm.as_ptr()).open_count_wq)
+        };
+
         // SAFETY: The reference count is one, and now we take ownership of that reference as a
         // `drm::Device`.
         // INVARIANT: We just created the device above, but have yet to call `drm_dev_register`.
@@ -357,6 +378,8 @@ pub struct Device<T: drm::Driver, C: DeviceContext = Normal> {
     dev: Opaque<bindings::drm_device>,
     data: T::Data,
     pub(super) registration_data: UnsafeCell<NonNull<T::RegistrationData<'static>>>,
+    pub(super) open_count: Atomic<i32>,
+    pub(super) open_count_wq: WaitQueue,
     _ctx: PhantomData<C>,
 }
 

@@ -32,7 +32,8 @@ use kernel::{
         Arc,
         Mutex, //
     },
-    time, //
+    time,
+    types::CovariantForLt, //
 };
 
 use crate::{
@@ -206,7 +207,7 @@ const INFO: drm::DriverInfo = drm::DriverInfo {
 impl drm::Driver for TyrDrmDriver {
     type Data = ();
     type RegistrationData<'drm> = TyrDrmRegistrationData<'drm>;
-    type File = TyrDrmFileData;
+    type File = CovariantForLt!(TyrDrmFileData);
     type Object = Bo;
     type ParentDevice<Ctx: DeviceContext> = platform::Device<Ctx>;
 
