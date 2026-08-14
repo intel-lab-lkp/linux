@@ -2106,8 +2106,6 @@ int amd_iommu_clear_gcr3(struct iommu_dev_data *dev_data, ioasid_t pasid)
 	struct gcr3_tbl_info *gcr3_info = &dev_data->gcr3_info;
 	int ret;
 
-	iommu_group_mutex_assert(dev_data->dev);
-
 	ret = update_gcr3(dev_data, pasid, 0, false);
 	if (ret)
 		return ret;
