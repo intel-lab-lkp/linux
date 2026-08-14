@@ -692,6 +692,33 @@ r535_head = {
 	.vblank_put = r535_head_vblank_put,
 };
 
+/* NVD5.0 (GB20x and later) moved the RM head-timing interrupt enable to
+ * the low-latency vector's EN1 block. The event latch is unchanged.
+ */
+static void
+gb202_head_vblank_put(struct nvkm_head *head)
+{
+	struct nvkm_device *device = head->disp->engine.subdev.device;
+
+	nvkm_mask(device, 0x611ef0 + (head->id * 4), 0x00000002, 0x00000000);
+}
+
+static void
+gb202_head_vblank_get(struct nvkm_head *head)
+{
+	struct nvkm_device *device = head->disp->engine.subdev.device;
+
+	nvkm_wr32(device, 0x611800 + (head->id * 4), 0x00000002);
+	nvkm_mask(device, 0x611ef0 + (head->id * 4), 0x00000002, 0x00000002);
+}
+
+static const struct nvkm_head_func
+gb202_head = {
+	.state = r535_head_state,
+	.vblank_get = gb202_head_vblank_get,
+	.vblank_put = gb202_head_vblank_put,
+};
+
 static struct nvkm_conn *
 r535_conn_new(struct nvkm_disp *disp, u32 id)
 {
@@ -1492,6 +1519,20 @@ r535_disp_intr(struct nvkm_inth *inth)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t
+gb202_disp_intr(struct nvkm_inth *inth)
+{
+	struct nvkm_disp *disp = container_of(inth, typeof(*disp), engine.subdev.inth);
+	irqreturn_t ret = r535_disp_intr(inth);
+
+	/* The FE interrupt vectors are message-based on NVD5.0. Re-arm the
+	 * low-latency vector so it fires again for any event that latched
+	 * while we were servicing.
+	 */
+	nvkm_wr32(disp->engine.subdev.device, 0x611f34, 0x00000001);
+	return ret;
+}
+
 static void
 r535_disp_fini(struct nvkm_disp *disp, bool suspend)
 {
@@ -1564,7 +1605,9 @@ r535_disp_oneinit(struct nvkm_disp *disp)
 	struct nvkm_device *device = disp->engine.subdev.device;
 	struct nvkm_gsp *gsp = device->gsp;
 	const struct nvkm_rm_api *rmapi = gsp->rm->api;
+	const struct nvkm_rm_gpu *gpu = gsp->rm->gpu;
 	NV2080_CTRL_INTERNAL_DISPLAY_WRITE_INST_MEM_PARAMS *ctrl;
+	nvkm_inth_func intr_func;
 	unsigned long mask;
 	int ret, i;
 
@@ -1718,7 +1761,12 @@ r535_disp_oneinit(struct nvkm_disp *disp)
 		nvkm_gsp_rm_ctrl_done(&disp->rm.objcom, ctrl);
 
 		for_each_set_bit(i, &disp->head.mask, disp->head.nr) {
-			ret = nvkm_head_new_(&r535_head, disp, i);
+			const struct nvkm_head_func *func = &r535_head;
+
+			if (gpu->disp.class.root >= GB202_DISP)
+				func = &gb202_head;
+
+			ret = nvkm_head_new_(func, disp, i);
 			if (ret)
 				return ret;
 		}
@@ -1762,12 +1810,21 @@ r535_disp_oneinit(struct nvkm_disp *disp)
 	if (ret)
 		return ret;
 
-	ret = nvkm_gsp_intr_stall(gsp, disp->engine.subdev.type, disp->engine.subdev.inst);
+	if (gpu->disp.class.root >= GB202_DISP) {
+		/* GB20x deliver head-timing interrupts on the display's
+		 * separate low-latency vector (interrupt table instance 1).
+		 */
+		ret = nvkm_gsp_intr_stall(gsp, disp->engine.subdev.type, 1);
+		intr_func = gb202_disp_intr;
+	} else {
+		ret = nvkm_gsp_intr_stall(gsp, disp->engine.subdev.type, disp->engine.subdev.inst);
+		intr_func = r535_disp_intr;
+	}
 	if (ret < 0)
 		return ret;
 
 	ret = nvkm_inth_add(&device->vfn->intr, ret, NVKM_INTR_PRIO_NORMAL, &disp->engine.subdev,
-			    r535_disp_intr, &disp->engine.subdev.inth);
+			    intr_func, &disp->engine.subdev.inth);
 	if (ret)
 		return ret;
 
