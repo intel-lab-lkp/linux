@@ -15,9 +15,46 @@
 #include <linux/errno.h>
 #include <linux/version.h>
 #include <linux/cpuhotplug.h>
+#include <linux/kexec.h>
 #include <asm/mshyperv.h>
+#include <asm/system_misc.h>
 
 static bool hyperv_initialized;
+
+/*
+ * Kexec/shutdown handler for ARM64 Hyper-V guests.
+ *
+ * On x86, hv_machine_shutdown() overrides machine_ops.shutdown and
+ * runs after device_shutdown() and cpu_hotplug_enable(). ARM64 uses
+ * the arm64_pre_smp_shutdown_hook to achieve the same ordering.
+ *
+ * hv_kexec_handler() (set by vmbus_drv.c) performs:
+ *   1. vmbus_initiate_unload(false) - sends CHANNELMSG_UNLOAD
+ *   2. cpuhp_remove_state(hyperv_cpuhp_online) - disables SynIC per CPU
+ *
+ * By running after device_shutdown(), PCI drivers (NVMe, MANA) can
+ * send PCI_DELETE_INTERRUPT_MESSAGE and clean up MMIO/interrupt
+ * mappings before VMBus channels are force-closed by UNLOAD.
+ */
+static void (*hv_kexec_handler)(void);
+
+static void hv_machine_shutdown(void)
+{
+	if (kexec_in_progress && hv_kexec_handler)
+		hv_kexec_handler();
+}
+
+void hv_setup_kexec_handler(void (*handler)(void))
+{
+	hv_kexec_handler = handler;
+	arm64_pre_smp_shutdown_hook = hv_machine_shutdown;
+}
+
+void hv_remove_kexec_handler(void)
+{
+	arm64_pre_smp_shutdown_hook = NULL;
+	hv_kexec_handler = NULL;
+}
 
 int hv_get_hypervisor_version(union hv_hypervisor_version_info *info)
 {
