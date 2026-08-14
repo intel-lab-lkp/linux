@@ -63,6 +63,7 @@ SRC_DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(SRC_DIR, LIB_DIR))
 
 from kdoc.python_version import PythonVersion
+from kdoc.gmake_detect import find_gmake
 from kdoc.latex_fonts import LatexFontChecker
 from jobserver import JobserverExec         # pylint: disable=C0413,C0411,E0401
 
@@ -96,6 +97,14 @@ class SphinxBuilder:
     Handles a sphinx-build target, adding needed arguments to build
     with the Kernel.
     """
+
+    def get_make(self):
+        """Select the first GNU Make 4.0 or newer in preference order."""
+        make = find_gmake(self.env.get("MAKE"))
+        if make:
+            return make
+
+        sys.exit("GNU Make 4.0 or newer is required")
 
     def get_path(self, path, use_cwd=False, abs_path=False):
         """
@@ -569,9 +578,10 @@ class SphinxBuilder:
         texinfo directory.
         """
 
+        make = self.get_make()
         for output_dir in output_dirs:
             try:
-                subprocess.run(["make", "info"], cwd=output_dir, check=True)
+                subprocess.run([make, "info"], cwd=output_dir, check=True)
             except subprocess.CalledProcessError as e:
                 sys.exit(f"Error generating info docs: {e}")
 
@@ -787,12 +797,8 @@ class SphinxBuilder:
 
         if rustdoc and target in ["htmldocs", "epubdocs"]:
             print("Building rust docs")
-            if "MAKE" in self.env:
-                cmd = [self.env["MAKE"]]
-            else:
-                cmd = ["make", "LLVM=1"]
-
-            cmd += [ "rustdoc"]
+            make = self.get_make()
+            cmd = [make, "LLVM=1", "rustdoc"]
             if self.verbose:
                 print(" ".join(cmd))
 
