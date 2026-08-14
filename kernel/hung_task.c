@@ -268,7 +268,7 @@ static void hung_task_info(struct task_struct *t, unsigned long timeout,
 		debug_show_blocker(t, timeout);
 
 		if (!hung_task_warnings_printed)
-			pr_info("Future hung task reports are suppressed, see sysctl kernel.hung_task_warnings\n");
+			pr_info("Future hung task reports won't print details about each process, see sysctl kernel.hung_task_warnings\n");
 	}
 
 	touch_nmi_watchdog();
@@ -353,6 +353,10 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 			READ_ONCE(sysctl_hung_task_warnings);
 		return;
 	}
+
+	if (!hung_task_warnings_printed && !hung_task_call_panic)
+		pr_info("hung_task: %lu hung tasks detected, warning budget exhausted\n",
+			this_round_count);
 
 	if (need_warning || hung_task_call_panic) {
 		si_mask |= SYS_INFO_LOCKS;
