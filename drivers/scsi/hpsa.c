@@ -5203,6 +5203,10 @@ static int hpsa_scsi_ioaccel_raid_map(struct ctlr_info *h,
 	/* calculate stripe information for the request */
 	blocks_per_row = le16_to_cpu(map->data_disks_per_row) *
 				le16_to_cpu(map->strip_size);
+	if (blocks_per_row == 0) {
+		hpsa_turn_off_ioaccel_for_device(dev);
+		return IO_ACCEL_INELIGIBLE;
+	}
 	strip_size = le16_to_cpu(map->strip_size);
 #if BITS_PER_LONG == 32
 	tmpdiv = first_block;
