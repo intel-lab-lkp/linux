@@ -725,22 +725,6 @@ static struct iommu_dev_data *iommu_init_device(struct amd_iommu *iommu,
 	return dev_data;
 }
 
-static void iommu_ignore_device(struct amd_iommu *iommu, struct device *dev)
-{
-	struct amd_iommu_pci_seg *pci_seg = iommu->pci_seg;
-	struct dev_table_entry *dev_table = get_dev_table(iommu);
-	int devid, sbdf;
-
-	sbdf = get_device_sbdf_id(dev);
-	if (sbdf < 0)
-		return;
-
-	devid = PCI_SBDF_TO_DEVID(sbdf);
-	pci_seg->rlookup_table[devid] = NULL;
-	memset(&dev_table[devid], 0, sizeof(struct dev_table_entry));
-
-	setup_aliases(iommu, dev);
-}
 
 
 /****************************************************************************
@@ -2191,6 +2175,41 @@ static void dev_update_dte(struct iommu_dev_data *dev_data, bool set)
 }
 
 /*
+ * Invalidate a DTE by clearing the Valid bit first.
+ * Note: Not to be used on a fully probed device with
+ * live dev_data.
+ */
+static void amd_iommu_disable_dte(struct dev_table_entry *ptr)
+{
+	struct dev_table_entry new = {};
+
+	write_dte_lower128(ptr, &new);
+	write_dte_upper128(ptr, &new);
+}
+
+static void iommu_disable_device_dma(struct amd_iommu *iommu, struct device *dev)
+{
+	struct amd_iommu_pci_seg *pci_seg = iommu->pci_seg;
+	struct dev_table_entry *dev_table = get_dev_table(iommu);
+	int devid, sbdf;
+
+	sbdf = get_device_sbdf_id(dev);
+	if (sbdf < 0)
+		return;
+
+	devid = PCI_SBDF_TO_DEVID(sbdf);
+
+	/* Clear the primary DTE */
+	amd_iommu_disable_dte(&dev_table[devid]);
+
+	/* Clone the cleared DTE to all aliases before wiping the rlookup */
+	if (dev_iommu_priv_get(dev))
+		clone_aliases(iommu, dev);
+
+	pci_seg->rlookup_table[devid] = NULL;
+}
+
+/*
  * If domain is SVA capable then initialize GCR3 table. Also if domain is
  * in v2 page table mode then update GCR3[0].
  */
@@ -2478,7 +2497,7 @@ static struct iommu_device *amd_iommu_probe_device(struct device *dev)
 		ret = PTR_ERR(dev_data);
 		dev_err(dev, "Failed to initialize - trying to proceed anyway\n");
 		iommu_dev = ERR_PTR(ret);
-		iommu_ignore_device(iommu, dev);
+		iommu_disable_device_dma(iommu, dev);
 		goto out_err;
 	}
 
