@@ -146,6 +146,15 @@ static int __init early_init_dt_reserve_memory(phys_addr_t base,
 
 		return memblock_mark_nomap(base, size);
 	}
+
+	if (memblock_is_region_reserved(base, size)) {
+		phys_addr_t end = base + size;
+
+		pr_err("Reserved memory: [%pa-%pa] overlaps an existing reservation, ignoring\n",
+		       &base, &end);
+		return -EBUSY;
+	}
+
 	return memblock_reserve(base, size);
 }
 
