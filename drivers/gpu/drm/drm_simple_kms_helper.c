@@ -281,15 +281,37 @@ static const struct drm_plane_helper_funcs drm_simple_kms_plane_helper_funcs = {
 	.atomic_update = drm_simple_kms_plane_atomic_update,
 };
 
+static void drm_simple_kms_plane_destroy_state(struct drm_plane *plane,
+					       struct drm_plane_state *state);
+
 static void drm_simple_kms_plane_reset(struct drm_plane *plane)
 {
 	struct drm_simple_display_pipe *pipe;
 
 	pipe = container_of(plane, struct drm_simple_display_pipe, plane);
-	if (!pipe->funcs || !pipe->funcs->reset_plane)
+	if (!pipe->funcs)
 		return drm_atomic_helper_plane_reset(plane);
 
-	return pipe->funcs->reset_plane(pipe);
+	if (pipe->funcs->create_plane_state) {
+		struct drm_plane_state *state;
+
+		if (plane->state) {
+			drm_simple_kms_plane_destroy_state(plane, plane->state);
+			plane->state = NULL;
+		}
+
+		state = pipe->funcs->create_plane_state(pipe);
+		if (WARN_ON(IS_ERR(state)))
+			return;
+
+		plane->state = state;
+		return;
+	}
+
+	if (pipe->funcs->reset_plane)
+		return pipe->funcs->reset_plane(pipe);
+
+	return drm_atomic_helper_plane_reset(plane);
 }
 
 static struct drm_plane_state *drm_simple_kms_plane_duplicate_state(struct drm_plane *plane)
