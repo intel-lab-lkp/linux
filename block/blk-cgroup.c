@@ -805,8 +805,8 @@ int blkg_conf_open_bdev(struct blkg_conf_ctx *ctx)
 
 	mutex_lock(&bdev->bd_queue->rq_qos_mutex);
 	if (!disk_live(bdev->bd_disk)) {
-		blkdev_put_no_open(bdev);
 		mutex_unlock(&bdev->bd_queue->rq_qos_mutex);
+		blkdev_put_no_open(bdev);
 		return -ENODEV;
 	}
 
