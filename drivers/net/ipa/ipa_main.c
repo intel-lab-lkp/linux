@@ -978,6 +978,7 @@ static void ipa_remove(struct platform_device *pdev)
 			 */
 			dev_err(dev, "Failed to stop modem (%pe), leaking resources\n",
 				ERR_PTR(ret));
+			pm_runtime_put_noidle(dev);
 			return;
 		}
 
