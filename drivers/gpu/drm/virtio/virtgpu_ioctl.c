@@ -261,6 +261,25 @@ static int virtio_gpu_transfer_from_host_ioctl(struct drm_device *dev,
 	if (ret != 0)
 		goto err_put_free;
 
+	if (virtio_gpu_is_shmem(bo) && virtio_gpu_use_dma_api(vgdev->vdev)) {
+		/*
+		 * The sync on completion restores the whole mapping, so an
+		 * earlier transfer has to be done before this one snapshots it.
+		 * Otherwise the snapshot predates anything the CPU wrote once
+		 * that transfer's fence signalled, and the later sync would
+		 * discard it. Nothing can add a fence behind our back here,
+		 * since doing so takes the reservation we already hold.
+		 */
+		long wait = dma_resv_wait_timeout(objs->objs[0]->resv,
+						  DMA_RESV_USAGE_WRITE, true,
+						  MAX_SCHEDULE_TIMEOUT);
+
+		if (wait < 0) {
+			ret = wait;
+			goto err_unlock;
+		}
+	}
+
 	fence = virtio_gpu_fence_alloc(vgdev, vgdev->fence_drv.context, 0);
 	if (!fence) {
 		ret = -ENOMEM;

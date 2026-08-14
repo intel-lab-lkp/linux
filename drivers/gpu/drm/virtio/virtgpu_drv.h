@@ -192,6 +192,9 @@ struct virtio_gpu_vbuffer {
 	struct list_head list;
 
 	uint32_t seqno;
+
+	/* guest-bound transfer whose shmem backing needs a CPU sync */
+	bool sync_for_cpu;
 };
 
 struct virtio_gpu_output {
