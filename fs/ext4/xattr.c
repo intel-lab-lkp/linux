@@ -1362,6 +1362,17 @@ out:
 	return;
 }
 
+/* Undo the locally-owned part of a cached-block reuse. */
+static void ext4_xattr_reuse_undo(handle_t *handle, struct inode *inode,
+				  struct buffer_head *bh)
+{
+	struct ext4_xattr_inode_array *ea_inode_array = NULL;
+
+	ext4_xattr_release_block(handle, inode, bh, &ea_inode_array,
+				 0 /* extra_credits */);
+	ext4_xattr_inode_array_free(ea_inode_array);
+}
+
 /*
  * Find the available free space for EAs. This also returns the total number of
  * bytes used by EA entries.
@@ -2107,6 +2118,39 @@ inserted:
 			mb_cache_entry_touch(ea_block_cache, ce);
 			mb_cache_entry_put(ea_block_cache, ce);
 			ce = NULL;
+			if (!(bs->bh && s->base == bs->bh->b_data) &&
+			    ea_inode) {
+				/*
+				 * The reused block already holds its own
+				 * reference; drop the extra one unless the
+				 * entry went into the old buffer directly.
+				 */
+				error = ext4_xattr_inode_dec_ref(handle,
+								 ea_inode);
+				if (error) {
+					/*
+					 * The decrement may already have run;
+					 * do not retry it: free the charge,
+					 * undo the reuse, and fail the op.
+					 */
+					ext4_error_inode(inode, __func__,
+							 __LINE__, 0,
+							"dec ref error=%d",
+							 error);
+					ext4_xattr_inode_free_quota(inode,
+								    ea_inode,
+								    i_size_read(ea_inode));
+					iput(ea_inode);
+					ea_inode = NULL;
+					if (new_bh != bs->bh)
+						ext4_xattr_reuse_undo(handle,
+								      inode,
+								      new_bh);
+					goto cleanup;
+				}
+				iput(ea_inode);
+				ea_inode = NULL;
+			}
 		} else if (bs->bh && s->base == bs->bh->b_data) {
 			/* We were modifying this block in-place. */
 			ea_bdebug(bs->bh, "keeping this block");
@@ -2143,13 +2187,21 @@ getblk_failed:
 			if (error)
 				goto getblk_failed;
 			if (ea_inode) {
-				/* Drop the extra ref on ea_inode. */
+				/*
+				 * Drop the extra ref on ea_inode; on
+				 * failure the decrement may already have
+				 * run, so just fail and free the block.
+				 */
 				error = ext4_xattr_inode_dec_ref(handle,
 								 ea_inode);
-				if (error)
-					ext4_warning_inode(ea_inode,
-							   "dec ref error=%d",
-							   error);
+				if (error) {
+					ext4_xattr_inode_free_quota(inode,
+								    ea_inode,
+								    i_size_read(ea_inode));
+					iput(ea_inode);
+					ea_inode = NULL;
+					goto getblk_failed;
+				}
 				iput(ea_inode);
 				ea_inode = NULL;
 			}
