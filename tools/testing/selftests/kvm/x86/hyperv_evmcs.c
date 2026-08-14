@@ -18,12 +18,16 @@
 #include "hyperv.h"
 #include "vmx.h"
 
+#define VMLAUNCH_INSN_SIZE 3
+#define VMPTRLD_INSN_SIZE 5
+
 static int ud_count;
+static int ud_insn_skip_size;
 
 static void guest_ud_handler(struct ex_regs *regs)
 {
 	ud_count++;
-	regs->rip += 3; /* VMLAUNCH */
+	regs->rip += ud_insn_skip_size;
 }
 
 static void guest_nmi_handler(struct ex_regs *regs)
@@ -182,10 +186,15 @@ void guest_code(struct vmx_pages *vmx_pages, struct hyperv_test_pages *hv_pages,
 	GUEST_ASSERT(vmreadz(VM_EXIT_REASON) == EXIT_REASON_VMCALL);
 	GUEST_SYNC(11);
 
+	ud_insn_skip_size = VMPTRLD_INSN_SIZE;
+	vmptrld(hv_pages->enlightened_vmcs_gpa);
+	GUEST_ASSERT(ud_count == 1);
+
 	/* Try enlightened vmptrld with an incorrect GPA */
+	ud_insn_skip_size = VMLAUNCH_INSN_SIZE;
 	evmcs_vmptrld(0xdeadbeef, hv_pages->enlightened_vmcs);
 	GUEST_ASSERT(vmlaunch());
-	GUEST_ASSERT(ud_count == 1);
+	GUEST_ASSERT(ud_count == 2);
 	GUEST_DONE();
 }
 
