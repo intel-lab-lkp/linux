@@ -1254,6 +1254,17 @@ perf_event_create_kernel_counter(struct perf_event_attr *attr,
 				 perf_overflow_handler_t callback,
 				 void *context);
 
+/*
+ * AUX ring-buffer support for kernel-created events (no user mmap).
+ * perf_event_setup_aux() allocates the buffer the PMU writes into via
+ * perf_aux_output_begin()/perf_aux_output_end(); the paired
+ * perf_event_release_aux() must be called before
+ * perf_event_release_kernel().
+ */
+extern int perf_event_setup_aux(struct perf_event *event, int nr_pages,
+				long watermark);
+extern void perf_event_release_aux(struct perf_event *event);
+
 extern void perf_pmu_migrate_context(struct pmu *pmu,
 				     int src_cpu, int dst_cpu);
 extern int perf_event_read_local(struct perf_event *event, u64 *value,

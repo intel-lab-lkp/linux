@@ -7122,6 +7122,145 @@ out_put:
 	ring_buffer_put(rb); /* could be last */
 }
 
+/*
+ * perf_event_setup_aux()/perf_event_release_aux() - AUX buffer support for
+ * kernel-created perf events (perf_event_create_kernel_counter()).
+ *
+ * perf_mmap()/perf_mmap_close() build and tear down AUX buffers for
+ * user-space events; kernel consumers (e.g. DAMON's ARM SPE backend) have no
+ * mmap, so they need this symmetric pair to get a buffer the PMU can write
+ * into via perf_aux_output_begin()/perf_aux_output_end().
+ *
+ * The buffer holds an AUX owner reference (aux_kernel_count = 1) so
+ * perf_aux_output_begin() admits writers and so it is torn down here
+ * rather than by perf_mmap_close().  perf_event_release_aux() also detaches
+ * the event's normal ring-buffer reference before the event is released.
+ */
+
+/**
+ * perf_event_setup_aux() - Allocate an AUX ring buffer for an event.
+ * @event:	Kernel-created perf event (must not have an rb yet).
+ * @nr_pages:	AUX buffer size in pages; power of two, >= 1.
+ * @watermark:	AUX watermark; 0 selects the perf default (half the buffer).
+ *
+ * The buffer is non-overwrite streaming (RING_BUFFER_WRITABLE): the PMU
+ * pauses when the buffer is full until the consumer advances the tail.
+ * Must be called before the event is enabled.  The PMU's ->setup_aux()
+ * callback (e.g. arm_spe_pmu_setup_aux) validates the size and maps the
+ * pages for hardware writes.  The ring buffer is allocated with zero
+ * data pages, so PERF_RECORD_AUX events are not recorded; this is
+ * intentional for kernel consumers that drain trace data directly.
+ * Returns 0 on success, -errno otherwise.
+ */
+int perf_event_setup_aux(struct perf_event *event, int nr_pages,
+			 long watermark)
+{
+	struct perf_buffer *rb;
+	int ret;
+
+	if (!is_kernel_event(event) || event->parent ||
+	    !is_power_of_2(nr_pages) || watermark < 0)
+		return -EINVAL;
+
+	mutex_lock(&event->mmap_mutex);
+	if (event->rb) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	rb = rb_alloc(0, 0, event->cpu, 0);
+	if (!rb) {
+		ret = -ENOMEM;
+		goto out_unlock;
+	}
+
+	/* AUX area sits right after the user (control) page. */
+	ret = rb_alloc_aux(rb, event, 1, nr_pages, watermark,
+			   RING_BUFFER_WRITABLE);
+	if (ret)
+		goto err_put;
+
+	/*
+	 * No user-space mmap exists for this buffer; record an in-kernel
+	 * AUX owner (aux_kernel_count) instead so perf_aux_output_begin()
+	 * admits writers and perf_event_release_aux() performs the teardown
+	 * that perf_mmap_close() would otherwise do.
+	 */
+	refcount_set(&rb->aux_kernel_count, 1);
+
+	/* Transfer the allocation reference to the event. */
+	ring_buffer_attach(event, rb);
+	mutex_unlock(&event->mmap_mutex);
+
+	return 0;
+
+err_put:
+	ring_buffer_put(rb);
+out_unlock:
+	mutex_unlock(&event->mmap_mutex);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(perf_event_setup_aux);
+
+/**
+ * perf_event_release_aux() - Tear down an AUX buffer for an event.
+ * @event:	Event with an AUX buffer allocated by perf_event_setup_aux().
+ *
+ * Stops any active AUX writers, frees the AUX pages, and detaches the ring
+ * buffer from the event.  Must be called before perf_event_release_kernel().
+ * Safe to call with a missing rb (no-op).  A ring buffer not allocated by
+ * perf_event_setup_aux() is left attached.
+ *
+ * The caller must quiesce AUX consumers before releasing the buffer;
+ * active AUX references at release time indicate a violated lifetime
+ * contract (see the aux_refcount WARN below).
+ */
+void perf_event_release_aux(struct perf_event *event)
+{
+	struct perf_buffer *rb;
+
+	if (!is_kernel_event(event) || event->parent)
+		return;
+
+	rb = ring_buffer_get(event);
+	if (!rb)
+		return;
+
+	/* Do not detach a ring buffer that this API does not own. */
+	if (!rb_has_aux(rb) || !refcount_read(&rb->aux_kernel_count))
+		goto out_put;
+
+	if (refcount_dec_and_mutex_lock(&rb->aux_kernel_count, &rb->aux_mutex)) {
+		/*
+		 * Stop all AUX events writing to this buffer so the pages
+		 * can be freed; after aux_kernel_count drops to zero they
+		 * won't start any more (see perf_aux_output_begin()).
+		 */
+		perf_pmu_output_stop(event);
+
+		rb_free_aux(rb);
+		WARN_ON_ONCE(refcount_read(&rb->aux_refcount));
+		mutex_unlock(&rb->aux_mutex);
+	}
+
+	/*
+	 * Detach the ring buffer from the event.  This runs even if the
+	 * refcount_dec_and_mutex_lock above lost the race to another
+	 * concurrent release caller; the mmap_mutex serialisation and the
+	 * event->rb == rb check ensure only one caller performs the detach.
+	 */
+	mutex_lock(&event->mmap_mutex);
+	if (event->rb == rb) {
+		ring_buffer_attach(event, NULL);
+		ring_buffer_put(rb); /* drop the event->rb reference */
+	}
+	mutex_unlock(&event->mmap_mutex);
+
+out_put:
+	ring_buffer_put(rb); /* the temporary reference from ring_buffer_get() */
+}
+EXPORT_SYMBOL_GPL(perf_event_release_aux);
+
 static vm_fault_t perf_mmap_pfn_mkwrite(struct vm_fault *vmf)
 {
 	/* The first page is the user control page, others are read-only. */

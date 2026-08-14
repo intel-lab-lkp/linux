@@ -395,14 +395,17 @@ void *perf_aux_output_begin(struct perf_output_handle *handle,
 		goto err;
 
 	/*
-	 * If aux_mmap_count is zero, the aux buffer is in perf_mmap_close(),
-	 * about to get freed, so we leave immediately.
+	 * If no AUX owner remains, the buffer is in perf_mmap_close() or
+	 * perf_event_release_aux(), about to get freed, so we leave
+	 * immediately.  aux_mmap_count tracks user-space mmap owners;
+	 * aux_kernel_count tracks in-kernel owners (perf_event_setup_aux()).
 	 *
-	 * Checking rb::aux_mmap_count and rb::refcount has to be done in
+	 * Checking the AUX owner counts and rb::refcount has to be done in
 	 * the same order, see perf_mmap_close. Otherwise we end up freeing
 	 * aux pages in this path, which is a bug, because in_atomic().
 	 */
-	if (!refcount_read(&rb->aux_mmap_count))
+	if (!refcount_read(&rb->aux_mmap_count) &&
+	    !refcount_read(&rb->aux_kernel_count))
 		goto err;
 
 	if (!refcount_inc_not_zero(&rb->aux_refcount))

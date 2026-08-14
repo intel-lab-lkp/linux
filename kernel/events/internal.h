@@ -48,6 +48,7 @@ struct perf_buffer {
 	int				aux_nr_pages;
 	int				aux_overwrite;
 	refcount_t			aux_mmap_count;
+	refcount_t			aux_kernel_count; /* in-kernel AUX owner */
 	unsigned long			aux_mmap_locked;
 	void				(*free_aux)(void *);
 	refcount_t			aux_refcount;
