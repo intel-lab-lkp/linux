@@ -464,26 +464,42 @@ static ssize_t cfam_reset_store(struct device *dev, struct device_attribute *att
 
 static DEVICE_ATTR(cfam_reset, 0200, NULL, cfam_reset_store);
 
+static umode_t fsi_master_aspeed_attr_is_visible(struct kobject *kobj,
+						 struct attribute *attr, int n)
+{
+	struct fsi_master_aspeed *aspeed = dev_get_drvdata(kobj_to_dev(kobj));
+
+	if (!aspeed || !aspeed->cfam_reset_gpio)
+		return 0;
+
+	return attr->mode;
+}
+
+static struct attribute *fsi_master_aspeed_attrs[] = {
+	&dev_attr_cfam_reset.attr,
+	NULL,
+};
+
+static const struct attribute_group fsi_master_aspeed_group = {
+	.attrs = fsi_master_aspeed_attrs,
+	.is_visible = fsi_master_aspeed_attr_is_visible,
+};
+
+static const struct attribute_group *fsi_master_aspeed_groups[] = {
+	&fsi_master_aspeed_group,
+	NULL,
+};
+
 static int setup_cfam_reset(struct fsi_master_aspeed *aspeed)
 {
 	struct device *dev = aspeed->dev;
 	struct gpio_desc *gpio;
-	int rc;
 
 	gpio = devm_gpiod_get_optional(dev, "cfam-reset", GPIOD_OUT_LOW);
 	if (IS_ERR(gpio))
 		return PTR_ERR(gpio);
-	if (!gpio)
-		return 0;
 
 	aspeed->cfam_reset_gpio = gpio;
-
-	rc = device_create_file(dev, &dev_attr_cfam_reset);
-	if (rc) {
-		devm_gpiod_put(dev, gpio);
-		return rc;
-	}
-
 	return 0;
 }
 
@@ -573,6 +589,7 @@ static int fsi_master_aspeed_probe(struct platform_device *pdev)
 	rc = setup_cfam_reset(aspeed);
 	if (rc) {
 		dev_err(&pdev->dev, "CFAM reset GPIO setup failed\n");
+		goto err_release;
 	}
 
 	writel(0x1, aspeed->base + OPB_CLK_SYNC);
@@ -664,6 +681,7 @@ static struct platform_driver fsi_master_aspeed_driver = {
 	.driver = {
 		.name		= "fsi-master-aspeed",
 		.of_match_table	= fsi_master_aspeed_match,
+		.dev_groups	= fsi_master_aspeed_groups,
 	},
 	.probe	= fsi_master_aspeed_probe,
 	.remove = fsi_master_aspeed_remove,
