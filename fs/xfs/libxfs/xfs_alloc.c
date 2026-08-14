@@ -2501,6 +2501,20 @@ xfs_alloc_min_freelist(
 }
 
 /*
+ * Return the minimum freelist requirement considering a potential allocbt split
+ * from the current allocation. Use this when computing longest free extent for
+ * allocations with minleft set to ensure that the available extent length
+ * accounts for the subsequent allocation's increased AGFL requirement.
+ */
+unsigned int
+xfs_alloc_min_freelist_minleft(
+	struct xfs_mount	*mp,
+	struct xfs_perag	*pag)
+{
+	return __xfs_alloc_min_freelist(mp, pag, 1);
+}
+
+/*
  * Check if the operation we are fixing up the freelist for should go ahead or
  * not. If we are freeing blocks, we always allow it, otherwise the allocation
  * is dependent on whether the size and shape of free space available will
@@ -2517,6 +2531,7 @@ xfs_alloc_space_available(
 	xfs_extlen_t		reservation; /* blocks that are still reserved */
 	int			available;
 	xfs_extlen_t		agflcount;
+	xfs_extlen_t		minleft;
 
 	if (flags & XFS_ALLOC_FLAG_FREEING)
 		return true;
@@ -2533,10 +2548,22 @@ xfs_alloc_space_available(
 	 * Do we have enough free space remaining for the allocation? Don't
 	 * account extra agfl blocks because we are about to defer free them,
 	 * making them unavailable until the current transaction commits.
+	 *
+	 * If minleft is set, this allocation might cause an allocbt split that
+	 * increases the AGFL minimum for the next allocation in the
+	 * transaction. Reserve that space from the available block count
+	 * (without prematurely growing the AGFL) to prevent the subsequent
+	 * allocation from failing due to an increased min_free requirement.
 	 */
+	minleft = args->minleft;
+	if (minleft) {
+		minleft += xfs_alloc_min_freelist_minleft(args->mp, pag) -
+					min_free;
+	}
+
 	agflcount = min_t(xfs_extlen_t, pag->pagf_flcount, min_free);
 	available = (int)(pag->pagf_freeblks + agflcount -
-			  reservation - min_free - args->minleft);
+			  reservation - min_free - minleft);
 	if (available < (int)max(args->total, alloc_len))
 		return false;
 
