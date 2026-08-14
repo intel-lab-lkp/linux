@@ -1292,7 +1292,7 @@ out_free_root:
 		btrfs_put_root(quota_root);
 out:
 	if (ret)
-		btrfs_sysfs_del_qgroups(fs_info);
+		btrfs_free_qgroup_config(fs_info);
 	mutex_unlock(&fs_info->qgroup_ioctl_lock);
 	if (ret && trans)
 		btrfs_end_transaction(trans);
