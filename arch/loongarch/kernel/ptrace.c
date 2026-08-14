@@ -384,9 +384,7 @@ static int lbt_set(struct task_struct *target,
 /*
  * Handle hitting a HW-breakpoint.
  */
-static void ptrace_hbptriggered(struct perf_event *bp,
-				struct perf_sample_data *data,
-				struct pt_regs *regs)
+void arch_hwbp_send_sig(struct perf_event *bp)
 {
 	int i;
 	struct arch_hw_breakpoint *bkpt = counter_arch_bp(bp);
@@ -479,7 +477,7 @@ static struct perf_event *ptrace_hbp_create(unsigned int note_type,
 	attr.bp_type	= type;
 	attr.disabled	= 1;
 
-	bp = register_user_hw_breakpoint(&attr, ptrace_hbptriggered, NULL, tsk);
+	bp = register_user_hw_breakpoint(&attr, perf_arch_hwbp_notify, NULL, tsk);
 	if (IS_ERR(bp))
 		return bp;
 

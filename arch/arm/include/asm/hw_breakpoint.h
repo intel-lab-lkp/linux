@@ -7,6 +7,7 @@
 struct task_struct;
 
 #ifdef CONFIG_HAVE_HW_BREAKPOINT
+#define ARCH_NEED_PERF_HW_NOTIF
 
 struct arch_hw_breakpoint_ctrl {
 		u32 __reserved	: 9,
