@@ -438,7 +438,7 @@ cec_read(struct tda998x_priv *priv, u8 addr)
 	int ret;
 
 	ret = i2c_transfer(priv->hdmi->adapter, msg, ARRAY_SIZE(msg));
-	if (ret < 0) {
+	if (ret != ARRAY_SIZE(msg)) {
 		dev_err(&priv->hdmi->dev, "Error %d reading from cec:0x%x\n",
 			ret, addr);
 		val = 0;
