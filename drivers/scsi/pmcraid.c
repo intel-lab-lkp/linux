@@ -4721,12 +4721,21 @@ static int pmcraid_setup_chrdev(struct pmcraid_instance *pinstance)
 	pinstance->cdev.owner = THIS_MODULE;
 
 	error = cdev_add(&pinstance->cdev, MKDEV(pmcraid_major, minor), 1);
-
-	if (error)
+	if (error) {
 		pmcraid_release_minor(minor);
-	else
-		device_create(&pmcraid_class, NULL, MKDEV(pmcraid_major, minor),
-			      NULL, "%s%u", PMCRAID_DEVFILE, minor);
+		return error;
+	}
+
+	error = PTR_ERR_OR_ZERO(device_create(&pmcraid_class, NULL,
+					      MKDEV(pmcraid_major, minor), NULL,
+					      "%s%u", PMCRAID_DEVFILE, minor));
+	if (error) {
+		pmcraid_err("failed to create device file for minor %d, error %d\n",
+			    minor, error);
+		cdev_del(&pinstance->cdev);
+		pmcraid_release_minor(minor);
+	}
+
 	return error;
 }
 
