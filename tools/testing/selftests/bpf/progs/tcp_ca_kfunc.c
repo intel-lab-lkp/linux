@@ -28,6 +28,8 @@ extern void cubictcp_state(struct sock *sk, u8 new_state) __ksym;
 extern void cubictcp_cwnd_event_tx_start(struct sock *sk) __ksym;
 extern void cubictcp_acked(struct sock *sk, const struct ack_sample *sample) __ksym;
 
+extern u32 tcp_tso_autosize(const struct sock *sk, u32 mss_now, int min_tso_segs) __ksym;
+
 SEC("struct_ops")
 void BPF_PROG(init, struct sock *sk)
 {
@@ -107,6 +109,12 @@ SEC("struct_ops")
 void BPF_PROG(pkts_acked, struct sock *sk, const struct ack_sample *sample)
 {
 	cubictcp_acked(sk, sample);
+}
+
+SEC("struct_ops")
+void BPF_PROG(tso_segs, struct sock *sk, u32 mss_now)
+{
+	return tcp_tso_autosize(sk, mss_now, 1);
 }
 
 SEC(".struct_ops")
