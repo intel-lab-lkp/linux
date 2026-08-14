@@ -65,7 +65,8 @@ rocket_iommu_domain_get(struct rocket_file_priv *rocket_priv)
 void
 rocket_iommu_domain_put(struct rocket_iommu_domain *domain)
 {
-	kref_put(&domain->kref, rocket_iommu_domain_destroy);
+	if (domain)
+		kref_put(&domain->kref, rocket_iommu_domain_destroy);
 }
 
 static int
