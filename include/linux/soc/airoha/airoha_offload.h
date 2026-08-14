@@ -173,6 +173,7 @@ struct airoha_npu {
 		/* protect concurrent npu memory accesses */
 		spinlock_t lock;
 		struct work_struct wdt_work;
+		void *buf; /* mailbox DMA bounce buffer */
 	} cores[NPU_NUM_CORES];
 
 	int irqs[NPU_NUM_IRQ];
