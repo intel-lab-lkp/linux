@@ -1255,14 +1255,23 @@ int nxpwifi_process_vdll_event(struct nxpwifi_private *priv,
 			       struct sk_buff *skb)
 {
 	struct nxpwifi_adapter *adapter = priv->adapter;
-	struct vdll_ind_event *vdll_evt =
-		(struct vdll_ind_event *)(skb->data + sizeof(u32));
-	u16 type = le16_to_cpu(vdll_evt->type);
-	u16 vdll_id = le16_to_cpu(vdll_evt->vdll_id);
-	u32 offset = le32_to_cpu(vdll_evt->offset);
-	u16 block_len = le16_to_cpu(vdll_evt->block_len);
 	struct vdll_dnld_ctrl *ctrl = &adapter->vdll_ctrl;
+	struct vdll_ind_event *vdll_evt;
+	u16 type, vdll_id, block_len;
+	u32 offset;
 	int ret = 0;
+
+	if (skb->len < sizeof(u32) + sizeof(*vdll_evt)) {
+		nxpwifi_dbg(adapter, ERROR,
+			    "VDLL IND: event too short: %u\n", skb->len);
+		return -EINVAL;
+	}
+
+	vdll_evt = (struct vdll_ind_event *)(skb->data + sizeof(u32));
+	type = le16_to_cpu(vdll_evt->type);
+	vdll_id = le16_to_cpu(vdll_evt->vdll_id);
+	offset = le32_to_cpu(vdll_evt->offset);
+	block_len = le16_to_cpu(vdll_evt->block_len);
 
 	switch (type) {
 	case VDLL_IND_TYPE_REQ:
