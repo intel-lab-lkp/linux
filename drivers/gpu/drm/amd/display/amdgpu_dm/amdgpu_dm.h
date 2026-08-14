@@ -1130,9 +1130,10 @@ void amdgpu_dm_apply_delay_after_dpcd_poweroff(struct amdgpu_device *adev,
 
 #if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
 int dm_plane_layer_index_cmp(const void *a, const void *b);
-int fill_plane_color_attributes(const struct drm_plane_state *plane_state,
-				const enum surface_pixel_format format,
-				enum dc_color_space *color_space);
+int fill_plane_color_attributes(struct drm_atomic_commit *state,
+			    const struct drm_plane_state *plane_state,
+			    const enum surface_pixel_format format,
+			    enum dc_color_space *color_space);
 bool modereset_required(struct drm_crtc_state *crtc_state);
 void dm_get_oriented_plane_size(struct drm_plane_state *plane_state,
 				int *src_w, int *src_h);
