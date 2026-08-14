@@ -1044,6 +1044,10 @@ static void srp_remove_target(struct srp_target_port *target)
 	WARN_ON_ONCE(target->state != SRP_TARGET_REMOVED);
 
 	srp_del_scsi_host_attr(target->scsi_host);
+	/*
+	 * The srp_remove_host() call decrements the rport reference count.
+	 * Keep the rport as long as its needed.
+	 */
 	srp_rport_get(target->rport);
 	srp_remove_host(target->scsi_host);
 	scsi_remove_host(target->scsi_host);
