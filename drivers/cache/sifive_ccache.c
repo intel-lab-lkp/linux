@@ -338,12 +338,16 @@ static int __init sifive_ccache_init(void)
 
 	rc = platform_driver_register(&sifive_ccache_driver);
 	if (rc)
-		goto err_unmap;
+		goto err_remove_debugfs;
 
 	of_node_put(np);
 
 	return 0;
 
+err_remove_debugfs:
+#ifdef CONFIG_DEBUG_FS
+	debugfs_remove_recursive(sifive_test);
+#endif
 err_unmap:
 	iounmap(ccache_base);
 err_node_put:
