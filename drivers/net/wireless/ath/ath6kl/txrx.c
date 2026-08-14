@@ -67,10 +67,9 @@ static u8 ath6kl_ibss_map_epid(struct sk_buff *skb, struct net_device *dev,
 	}
 
 	if (ep_map == -1) {
-		ep_map = ar->node_num;
-		ar->node_num++;
-		if (ar->node_num > MAX_NODE_NUM)
+		if (ar->node_num >= MAX_NODE_NUM)
 			return ENDPOINT_UNUSED;
+		ep_map = ar->node_num++;
 	}
 
 	memcpy(ar->node_map[ep_map].mac_addr, eth_hdr->h_dest, ETH_ALEN);
