@@ -1180,7 +1180,8 @@ void t3_link_changed(struct adapter *adapter, int port_id)
 	struct cmac *mac = &pi->mac;
 	struct link_config *lc = &pi->link_config;
 
-	phy->ops->get_link_status(phy, &link_ok, &speed, &duplex, &fc);
+	if (phy->ops->get_link_status(phy, &link_ok, &speed, &duplex, &fc))
+		return;
 
 	if (!lc->link_ok && link_ok) {
 		u32 rx_cfg, rx_hash_high, rx_hash_low;
