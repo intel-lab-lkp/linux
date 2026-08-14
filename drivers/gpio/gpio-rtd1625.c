@@ -107,10 +107,10 @@ static int rtd1625_reg_mask_xlate(struct gpio_regmap *gpio, enum gpio_regmap_ope
 				  unsigned int base, unsigned int offset, unsigned int *reg,
 				  unsigned int *mask)
 {
-	/* Each GPIO has its own dedicated 32-bit register */
 	struct rtd1625_gpio *data = gpio_regmap_get_drvdata(gpio);
-	int val = 0, ret = 0;
+	/* Each GPIO has its own dedicated 32-bit register */
 	*reg = base + offset * 4;
+	int val, ret;
 
 	switch (op) {
 	case GPIO_REGMAP_SET_OP:
@@ -486,7 +486,6 @@ static int rtd1625_gpio_setup_irq(struct platform_device *pdev, struct rtd1625_g
 		return irq;
 
 	num_irqs = (data->info->irq_type_support & IRQ_TYPE_LEVEL_MASK) ? 3 : 2;
-
 	for (unsigned int i = 0; i < num_irqs; i++) {
 		irq = platform_get_irq(pdev, i);
 		if (irq < 0)
