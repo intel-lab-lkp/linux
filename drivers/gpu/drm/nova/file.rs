@@ -20,8 +20,8 @@ pub(crate) struct File;
 impl drm::file::DriverFile<'_> for File {
     type Driver = NovaDriver;
 
-    fn open(_device: &NovaDevice<Registered>, _reg_data: &()) -> Result<Pin<KBox<Self>>> {
-        Ok(KBox::new(Self, GFP_KERNEL)?.into())
+    fn open(_device: &NovaDevice<Registered>, _reg_data: &()) -> impl PinInit<Self, Error> {
+        Ok(Self)
     }
 }
 

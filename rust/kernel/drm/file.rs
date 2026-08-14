@@ -30,12 +30,12 @@ pub trait DriverFile<'a>: Sized {
 
     /// Open a new DRM file, creating the per-file driver data.
     ///
-    /// Called when a client opens the DRM device. The returned file data may borrow from
+    /// Called when a client opens the DRM device. The returned initializer may borrow from
     /// `reg_data` with lifetime `'a`.
     fn open(
         device: &drm::Device<Self::Driver, drm::Registered>,
         reg_data: &'a <Self::Driver as drm::Driver>::RegistrationData<'a>,
-    ) -> Result<Pin<KBox<Self>>>;
+    ) -> impl PinInit<Self, Error>;
 }
 
 /// An open DRM File.
@@ -107,7 +107,8 @@ impl<D: drm::Driver> File<D> {
             unsafe { drm::device::Device::from_raw(raw_dev) };
 
         dev.registration_data_with(|reg_data| {
-            let inner = match <<D::File as ForLt>::Of<'_> as DriverFile<'_>>::open(dev, reg_data) {
+            let init = <<D::File as ForLt>::Of<'_> as DriverFile<'_>>::open(dev, reg_data);
+            let inner = match KBox::try_pin_init(init, GFP_KERNEL) {
                 Err(e) => return e.to_errno(),
                 Ok(i) => i,
             };

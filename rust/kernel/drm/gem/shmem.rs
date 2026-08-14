@@ -611,8 +611,8 @@ mod tests {
         fn open(
             _device: &drm::Device<KunitDriver, drm::Registered>,
             _reg_data: &(),
-        ) -> Result<Pin<KBox<Self>>> {
-            Ok(KBox::new(Self, GFP_KERNEL)?.into())
+        ) -> impl PinInit<Self, Error> {
+            Ok(Self)
         }
     }
 

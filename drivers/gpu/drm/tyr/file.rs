@@ -28,8 +28,8 @@ impl drm::file::DriverFile<'_> for TyrDrmFileData {
     fn open(
         _device: &TyrDrmDevice<Registered>,
         _reg_data: &TyrDrmRegistrationData<'_>,
-    ) -> Result<Pin<KBox<Self>>> {
-        KBox::try_pin_init(try_pin_init!(Self {}), GFP_KERNEL)
+    ) -> impl PinInit<Self, Error> {
+        Ok(Self {})
     }
 }
 
