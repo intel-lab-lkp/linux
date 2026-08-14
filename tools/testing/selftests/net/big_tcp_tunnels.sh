@@ -17,10 +17,24 @@ CLIENT_IP6="2001:db8::1:2"
 CLIENT_IP4_TUN="192.168.2.2"
 CLIENT_IP6_TUN="2001:db8::2:2"
 
-: "${PACKETS_THRESHOLD:=1000}"
-
 # Kselftest framework requirement - SKIP code is 4.
 ksft_skip=4
+
+is_debug() {
+	local config="/proc/config.gz"
+	[ -f "$config" ] || config="/boot/config-$(uname -r)"
+	[ -f "$config" ] || return 1 # No config found; assume non-debug.
+	gzip -dcfq "$config" | grep -qx 'CONFIG_DEBUG_NET=y' || return 1
+}
+
+if [ -z "$PACKETS_THRESHOLD" ]; then
+	if is_debug; then
+		echo 'Debug kernel detected, lowering the default threshold'
+		PACKETS_THRESHOLD=100
+	else
+		PACKETS_THRESHOLD=1000
+	fi
+fi
 
 setup() {
 	ip netns add "$SERVER_NS"
