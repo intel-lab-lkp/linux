@@ -556,6 +556,11 @@ static void act_open_retry_timer(struct timer_list *t)
 
 	cxgbi_sock_get(csk);
 	spin_lock_bh(&csk->lock);
+	if (cxgbi_sock_flag(csk, CTPF_OFFLOAD_DOWN)) {
+		spin_unlock_bh(&csk->lock);
+		cxgbi_sock_put(csk);
+		return;
+	}
 	skb = alloc_wr(sizeof(struct cpl_act_open_req), 0, GFP_ATOMIC);
 	if (!skb)
 		cxgbi_sock_fail_act_open(csk, -ENOMEM);
@@ -585,7 +590,8 @@ static int do_act_open_rpl(struct t3cdev *tdev, struct sk_buff *skb, void *ctx)
 
 	cxgbi_sock_get(csk);
 	spin_lock_bh(&csk->lock);
-	if (rpl->status == CPL_ERR_CONN_EXIST &&
+	if (!cxgbi_sock_flag(csk, CTPF_OFFLOAD_DOWN) &&
+	    rpl->status == CPL_ERR_CONN_EXIST &&
 	    csk->retry_timer.function != act_open_retry_timer) {
 		csk->retry_timer.function = act_open_retry_timer;
 		mod_timer(&csk->retry_timer, jiffies + HZ / 2);

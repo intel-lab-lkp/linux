@@ -107,8 +107,12 @@ void cxgbi_device_portmap_cleanup(struct cxgbi_device *cdev)
 				csk, cdev);
 			spin_lock_bh(&csk->lock);
 			cxgbi_sock_set_flag(csk, CTPF_OFFLOAD_DOWN);
-			cxgbi_sock_closed(csk);
+			if (csk->state == CTP_ACTIVE_OPEN)
+				cxgbi_sock_fail_act_open(csk, -ENODEV);
+			else
+				cxgbi_sock_closed(csk);
 			spin_unlock_bh(&csk->lock);
+			timer_delete_sync(&csk->retry_timer);
 			cxgbi_sock_put(csk);
 		}
 	}

@@ -1001,6 +1001,12 @@ static void csk_act_open_retry_timer(struct timer_list *t)
 	cxgbi_sock_get(csk);
 	spin_lock_bh(&csk->lock);
 
+	if (cxgbi_sock_flag(csk, CTPF_OFFLOAD_DOWN)) {
+		spin_unlock_bh(&csk->lock);
+		cxgbi_sock_put(csk);
+		return;
+	}
+
 	if (t4) {
 		size = sizeof(struct cpl_act_open_req);
 		size6 = sizeof(struct cpl_act_open_req6);
@@ -1075,7 +1081,8 @@ static void do_act_open_rpl(struct cxgbi_device *cdev, struct sk_buff *skb)
 	cxgbi_sock_get(csk);
 	spin_lock_bh(&csk->lock);
 
-	if (status == CPL_ERR_CONN_EXIST &&
+	if (!cxgbi_sock_flag(csk, CTPF_OFFLOAD_DOWN) &&
+	    status == CPL_ERR_CONN_EXIST &&
 	    csk->retry_timer.function != csk_act_open_retry_timer) {
 		csk->retry_timer.function = csk_act_open_retry_timer;
 		mod_timer(&csk->retry_timer, jiffies + HZ / 2);
