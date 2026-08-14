@@ -649,7 +649,7 @@ int rvu_mbox_handler_cgx_stats_rst(struct rvu *rvu, struct msg_req *req,
 	 */
 	if (parent_pf->cgx_users > 1) {
 		dev_info(rvu->dev, "CGX busy, could not reset statistics\n");
-		return 0;
+		return -EBUSY;
 	}
 
 	rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx_idx, &lmac);

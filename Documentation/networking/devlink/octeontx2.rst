@@ -77,3 +77,12 @@ The ``octeontx2 PF`` driver implements the following driver-specific parameters.
      - Set the maximum number of unicast filters that can be programmed for
        the device. This can be used to achieve better device resource
        utilization, avoiding over consumption of unused MCAM table entries.
+   * - ``mac_stats_reset``
+     - bool
+     - runtime
+     - One-shot trigger to reset CGX/RPM MAC hardware statistics.
+       Write true to reset the counters; reading this parameter always returns
+       false. Supported only on CGX/RPM mapped PF netdevs. The reset fails with
+       ``-EBUSY`` when the CGX port is in use by more than one interface, such
+       as when the PF netdev and one or more VF netdevs are active. Other
+       failures return ``-EIO``.
