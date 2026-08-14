@@ -1052,6 +1052,8 @@ struct x86_pmu {
 	int				num_hybrid_pmus;
 	struct x86_hybrid_pmu		*hybrid_pmu;
 	enum intel_cpu_type (*get_hybrid_cpu_type)	(void);
+
+	void (*print_debug)(int cpu);
 };
 
 struct x86_perf_task_context_opt {
@@ -1315,6 +1317,8 @@ void x86_pmu_enable_event(struct perf_event *event);
 int x86_pmu_handle_irq(struct pt_regs *regs);
 
 void x86_pmu_show_pmu_cap(struct pmu *pmu);
+
+void x86_pmu_print_debug(int cpu);
 
 static inline int x86_pmu_num_counters(struct pmu *pmu)
 {

@@ -105,6 +105,8 @@ DEFINE_STATIC_CALL_NULL(x86_pmu_pebs_disable, *x86_pmu.pebs_disable);
 DEFINE_STATIC_CALL_NULL(x86_pmu_pebs_enable_all, *x86_pmu.pebs_enable_all);
 DEFINE_STATIC_CALL_NULL(x86_pmu_pebs_disable_all, *x86_pmu.pebs_disable_all);
 
+DEFINE_STATIC_CALL_NULL(x86_pmu_print_debug, *x86_pmu.print_debug);
+
 /*
  * This one is magic, it will get called even when PMU init fails (because
  * there is no PMU), in which case it should simply return NULL.
@@ -1557,25 +1559,19 @@ static void x86_pmu_start(struct perf_event *event, int flags)
 	perf_event_update_userpage(event);
 }
 
-void perf_event_print_debug(void)
+void x86_pmu_print_debug(int cpu)
 {
 	u64 ctrl, status, overflow, pmc_ctrl, pmc_count, prev_left, fixed;
 	unsigned long *cntr_mask, *fixed_cntr_mask;
 	struct event_constraint *pebs_constraints;
 	struct cpu_hw_events *cpuc;
 	u64 pebs, debugctl;
-	int cpu, idx;
+	int idx;
 
-	guard(irqsave)();
-
-	cpu = smp_processor_id();
 	cpuc = &per_cpu(cpu_hw_events, cpu);
 	cntr_mask = hybrid(cpuc->pmu, cntr_mask);
 	fixed_cntr_mask = hybrid(cpuc->pmu, fixed_cntr_mask);
 	pebs_constraints = hybrid(cpuc->pmu, pebs_constraints);
-
-	if (!*(u64 *)cntr_mask)
-		return;
 
 	if (x86_pmu.version >= 2) {
 		rdmsrq(MSR_CORE_PERF_GLOBAL_CTRL, ctrl);
@@ -1620,6 +1616,24 @@ void perf_event_print_debug(void)
 		pr_info("CPU#%d: fixed-PMC%d count: %016llx\n",
 			cpu, idx, pmc_count);
 	}
+}
+
+void perf_event_print_debug(void)
+{
+	struct cpu_hw_events *cpuc;
+	unsigned long *cntr_mask;
+	int cpu;
+
+	guard(irqsave)();
+
+	cpu = smp_processor_id();
+	cpuc = &per_cpu(cpu_hw_events, cpu);
+	cntr_mask = hybrid(cpuc->pmu, cntr_mask);
+
+	if (!*(u64 *)cntr_mask)
+		return;
+
+	static_call(x86_pmu_print_debug)(cpu);
 }
 
 void x86_pmu_stop(struct perf_event *event, int flags)
@@ -2110,6 +2124,8 @@ static void x86_pmu_static_call_update(void)
 	static_call_update(x86_pmu_pebs_disable, x86_pmu.pebs_disable);
 	static_call_update(x86_pmu_pebs_enable_all, x86_pmu.pebs_enable_all);
 	static_call_update(x86_pmu_pebs_disable_all, x86_pmu.pebs_disable_all);
+
+	static_call_update(x86_pmu_print_debug, x86_pmu.print_debug);
 }
 
 static void _x86_pmu_read(struct perf_event *event)
@@ -2209,6 +2225,9 @@ static int __init init_hw_perf_events(void)
 
 	if (!x86_pmu.update)
 		x86_pmu.update = x86_perf_event_update;
+
+	if (!x86_pmu.print_debug)
+		x86_pmu.print_debug = x86_pmu_print_debug;
 
 	x86_pmu_static_call_update();
 
