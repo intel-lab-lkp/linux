@@ -84,7 +84,6 @@ struct b53_srab_port_priv {
 
 struct b53_srab_priv {
 	void __iomem *regs;
-	void __iomem *mux_config;
 	struct b53_srab_port_priv port_intrs[B53_N_PORTS];
 };
 
@@ -531,7 +530,7 @@ static void b53_srab_intr_set(struct b53_srab_priv *priv, bool set)
 	writel(reg, priv->regs + B53_SRAB_CTRLS);
 }
 
-static void b53_srab_prepare_irq(struct platform_device *pdev)
+static int b53_srab_prepare_irq(struct platform_device *pdev)
 {
 	struct b53_device *dev = platform_get_drvdata(pdev);
 	struct b53_srab_priv *priv = dev->priv;
@@ -551,32 +550,37 @@ static void b53_srab_prepare_irq(struct platform_device *pdev)
 
 		name = kasprintf(GFP_KERNEL, "link_state_p%d", i);
 		if (!name)
-			return;
+			return -ENOMEM;
 
 		port->num = i;
 		port->dev = dev;
 		port->irq = platform_get_irq_byname_optional(pdev, name);
 		kfree(name);
+		if (port->irq == -EPROBE_DEFER)
+			return port->irq;
 	}
 
 	b53_srab_intr_set(priv, true);
+
+	return 0;
 }
 
-static void b53_srab_mux_init(struct platform_device *pdev)
+static int b53_srab_mux_init(struct platform_device *pdev)
 {
 	struct b53_device *dev = platform_get_drvdata(pdev);
 	struct b53_srab_priv *priv = dev->priv;
 	struct b53_srab_port_priv *p;
+	void __iomem *mux_config;
 	unsigned int port;
 	u32 reg, off = 0;
 	int ret;
 
-	if (dev->pdata && dev->pdata->chip_id != BCM58XX_DEVICE_ID)
-		return;
+	if (!dev->pdata || dev->pdata->chip_id != BCM58XX_DEVICE_ID)
+		return 0;
 
-	priv->mux_config = devm_platform_ioremap_resource(pdev, 1);
-	if (IS_ERR(priv->mux_config))
-		return;
+	mux_config = devm_platform_ioremap_resource(pdev, 1);
+	if (IS_ERR(mux_config))
+		return PTR_ERR(mux_config);
 
 	/* Obtain the port mux configuration so we know which lanes
 	 * actually map to SerDes lanes
@@ -584,7 +588,7 @@ static void b53_srab_mux_init(struct platform_device *pdev)
 	for (port = 5; port > 3; port--, off += 4) {
 		p = &priv->port_intrs[port];
 
-		reg = readl(priv->mux_config + B53_MUX_CONFIG_P5 + off);
+		reg = readl(mux_config + B53_MUX_CONFIG_P5 + off);
 		switch (reg & MUX_CONFIG_MASK) {
 		case MUX_CONFIG_SGMII:
 			p->mode = PHY_INTERFACE_MODE_SGMII;
@@ -613,6 +617,8 @@ static void b53_srab_mux_init(struct platform_device *pdev)
 			dev_info(&pdev->dev, "Port %d mode: %s\n",
 				 port, phy_modes(p->mode));
 	}
+
+	return 0;
 }
 
 static int b53_srab_probe(struct platform_device *pdev)
@@ -622,6 +628,7 @@ static int b53_srab_probe(struct platform_device *pdev)
 	const struct of_device_id *of_id = NULL;
 	struct b53_srab_priv *priv;
 	struct b53_device *dev;
+	int err;
 
 	if (dn)
 		of_id = of_match_node(b53_srab_of_match, dn);
@@ -651,10 +658,28 @@ static int b53_srab_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dev);
 
-	b53_srab_prepare_irq(pdev);
-	b53_srab_mux_init(pdev);
+	err = b53_srab_prepare_irq(pdev);
+	if (err)
+		return err;
 
-	return b53_switch_register(dev);
+	err = b53_srab_mux_init(pdev);
+	if (err == -EPROBE_DEFER)
+		goto err_irq;
+
+	if (err)
+		dev_warn(&pdev->dev,
+			 "failed to read port mux config, ports 4 and 5 may be unavailable: %pe\n",
+			 ERR_PTR(err));
+
+	err = b53_switch_register(dev);
+	if (err)
+		goto err_irq;
+
+	return 0;
+
+err_irq:
+	b53_srab_intr_set(priv, false);
+	return err;
 }
 
 static void b53_srab_remove(struct platform_device *pdev)
