@@ -303,7 +303,7 @@ static void aie2_hw_stop(struct amdxdna_dev *xdna)
 	struct amdxdna_dev_hdl *ndev = xdna->dev_handle;
 
 	if (ndev->dev_status <= AIE2_DEV_INIT) {
-		XDNA_ERR(xdna, "device is already stopped");
+		XDNA_DBG(xdna, "device is already stopped");
 		return;
 	}
 
@@ -316,6 +316,12 @@ static void aie2_hw_stop(struct amdxdna_dev *xdna)
 	aie2_smu_fini(ndev);
 	aie2_error_async_events_free(ndev);
 	pci_disable_device(pdev);
+	/*
+	 * The platform powers the NPU down once the firmware is stopped.
+	 * Record D3hot while the device is still reachable, so the noirq
+	 * suspend path does not attempt a stale D0 transition.
+	 */
+	pci_set_power_state(pdev, PCI_D3hot);
 
 	ndev->dev_status = AIE2_DEV_INIT;
 }
@@ -331,6 +337,13 @@ static int aie2_hw_start(struct amdxdna_dev *xdna)
 	if (ndev->dev_status >= AIE2_DEV_START) {
 		XDNA_INFO(xdna, "device is already started");
 		return 0;
+	}
+
+	/* The platform powers the device down when the firmware is stopped. */
+	ret = pci_set_power_state(pdev, PCI_D0);
+	if (ret) {
+		XDNA_ERR(xdna, "failed to power up device, ret %d", ret);
+		return ret;
 	}
 
 	ret = pci_enable_device(pdev);
@@ -442,12 +455,15 @@ disable_dev:
 
 static int aie2_hw_suspend(struct amdxdna_dev *xdna)
 {
+	struct amdxdna_dev_hdl *ndev = xdna->dev_handle;
 	struct amdxdna_client *client;
 
 	list_for_each_entry(client, &xdna->client_list, node)
 		aie2_hwctx_suspend(client);
 
-	aie2_hw_stop(xdna);
+	/* Runtime PM may already have stopped the device. */
+	if (ndev->dev_status > AIE2_DEV_INIT)
+		aie2_hw_stop(xdna);
 
 	return 0;
 }
