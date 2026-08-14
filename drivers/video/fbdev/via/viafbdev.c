@@ -16,7 +16,7 @@
 #define _MASTER_FILE
 #include "global.h"
 
-static char *viafb_name = "Via";
+static const char viafb_name[] = "viafb";
 static u32 pseudo_pal[17];
 
 /* video mode */
@@ -144,7 +144,7 @@ static void viafb_setup_fixinfo(struct fb_fix_screeninfo *fix,
 	struct viafb_par *viaparinfo)
 {
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
-	strcpy(fix->id, viafb_name);
+	strscpy(fix->id, viafb_name, sizeof(fix->id));
 
 	fix->smem_start = viaparinfo->fbmem;
 	fix->smem_len = viaparinfo->fbmem_free;
