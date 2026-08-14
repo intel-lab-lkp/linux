@@ -1524,6 +1524,8 @@ __set_colorop_in_tf_1d_curve(struct dc_plane_state *dc_plane_state,
 	struct dc_transfer_func *tf = &dc_plane_state->in_transfer_func;
 	struct drm_colorop *colorop = colorop_state->colorop;
 	struct drm_device *drm = colorop->dev;
+	struct dc_color_caps *color_caps = NULL;
+	bool is_subsampled_format;
 
 	if (colorop->type != DRM_COLOROP_1D_CURVE)
 		return -EINVAL;
@@ -1537,9 +1539,22 @@ __set_colorop_in_tf_1d_curve(struct dc_plane_state *dc_plane_state,
 	}
 
 	drm_dbg(drm, "Degamma colorop with ID: %d\n", colorop->base.id);
-
 	tf->type = TF_TYPE_PREDEFINED;
+
+	/* Check if format requires post-scale color processing (subsampled formats) */
+	is_subsampled_format = (dc_plane_state->format >= SURFACE_PIXEL_FORMAT_VIDEO_BEGIN &&
+				dc_plane_state->format < SURFACE_PIXEL_FORMAT_SUBSAMPLE_END);
+
 	tf->tf = amdgpu_colorop_tf_to_dc_tf(colorop_state->curve_1d_type);
+
+	if (dc_plane_state->ctx && dc_plane_state->ctx->dc)
+		color_caps = &dc_plane_state->ctx->dc->caps.color;
+
+	if (!mod_color_calculate_degamma_params(color_caps, tf, NULL,
+						is_subsampled_format)) {
+		drm_err(drm, "Failed to calculate degamma params\n");
+		return -EINVAL;
+	}
 
 	return 0;
 }
