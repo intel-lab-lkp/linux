@@ -37,6 +37,7 @@ import os.path
 src_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(src_dir, '../lib/python'))
 from kdoc.python_version import PythonVersion
+from kdoc.gmake_detect import find_gmake
 
 RECOMMENDED_VERSION = PythonVersion("3.4.3").version
 MIN_PYTHON_VERSION = PythonVersion("3.7").version
@@ -307,6 +308,13 @@ class MissingCheckers(AncillaryMethods):
         self.deps.add_package(prog, dtype)
 
         return None
+
+    def check_make(self):
+        """Check for GNU Make 4.0 or newer."""
+        if find_gmake(os.environ.get("MAKE")):
+            return
+
+        self.deps.add_package("make", DepManager.SYSTEM_MANDATORY)
 
     def check_perl_module(self, prog, dtype):
         """
@@ -1559,7 +1567,7 @@ class SphinxDependencyChecker(MissingCheckers):
         # Check for needed programs/tools
         self.check_perl_module("Pod::Usage", DepManager.SYSTEM_MANDATORY)
 
-        self.check_program("make", DepManager.SYSTEM_MANDATORY)
+        self.check_make()
         self.check_program("which", DepManager.SYSTEM_MANDATORY)
 
         self.check_program("dot", DepManager.SYSTEM_OPTIONAL)
