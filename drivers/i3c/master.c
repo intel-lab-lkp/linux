@@ -2619,6 +2619,11 @@ EXPORT_SYMBOL_GPL(i3c_master_do_daa);
 
 #define OF_I3C_REG1_IS_I2C_DEV			BIT(31)
 
+static void of_i3c_master_put_node(void *data)
+{
+	of_node_put(data);
+}
+
 static int
 of_i3c_master_add_i2c_boardinfo(struct i3c_master_controller *master,
 				struct device_node *node, u32 *reg)
@@ -2648,8 +2653,12 @@ of_i3c_master_add_i2c_boardinfo(struct i3c_master_controller *master,
 	/* LVR is encoded in reg[2]. */
 	boardinfo->lvr = reg[2];
 
+	ret = devm_add_action_or_reset(dev, of_i3c_master_put_node,
+				       of_node_get(node));
+	if (ret)
+		return ret;
+
 	list_add_tail(&boardinfo->node, &master->boardinfo.i2c);
-	of_node_get(node);
 
 	return 0;
 }
