@@ -479,9 +479,10 @@ static void pci_read_bridge_mmio_pref(struct pci_dev *dev, struct resource *res,
 	base = (pci_bus_addr_t) base64;
 	limit = (pci_bus_addr_t) limit64;
 
-	if (base != base64) {
-		pci_err(dev, "can't handle bridge window above 4GB (bus address %#010llx)\n",
-			(unsigned long long) base64);
+	if (base != base64 || limit != limit64) {
+		pci_err(dev, "can't handle bridge window above 4GB (bus address %#010llx-%#010llx)\n",
+			(unsigned long long) base64,
+			(unsigned long long) limit64);
 		return;
 	}
 
