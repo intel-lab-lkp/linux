@@ -405,7 +405,7 @@ static int tilcdc_pdev_probe(struct platform_device *pdev)
 		goto unregister_cpufreq_notif;
 	}
 
-	ret = drm_vblank_init(ddev, 1);
+	ret = drm_vblank_init(ddev);
 	if (ret < 0) {
 		drm_err(ddev, "failed to initialize vblank\n");
 		goto unregister_cpufreq_notif;

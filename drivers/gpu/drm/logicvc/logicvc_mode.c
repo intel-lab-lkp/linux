@@ -36,7 +36,7 @@ int logicvc_mode_init(struct logicvc_drm *logicvc)
 	uint32_t preferred_depth;
 	int ret;
 
-	ret = drm_vblank_init(drm_dev, mode_config->num_crtc);
+	ret = drm_vblank_init(drm_dev);
 	if (ret) {
 		drm_err(drm_dev, "Failed to initialize vblank\n");
 		return ret;

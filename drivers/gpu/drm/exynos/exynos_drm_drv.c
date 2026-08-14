@@ -273,7 +273,7 @@ static int exynos_drm_bind(struct device *dev)
 	if (ret)
 		goto err_mode_config_cleanup;
 
-	ret = drm_vblank_init(drm, drm->mode_config.num_crtc);
+	ret = drm_vblank_init(drm);
 	if (ret)
 		goto err_unbind_all;
 

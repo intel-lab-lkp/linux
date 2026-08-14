@@ -574,7 +574,7 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 	 */
 	dma_set_max_seg_size(dma_dev, UINT_MAX);
 
-	ret = drm_vblank_init(drm, MAX_CRTC);
+	ret = drm_vblank_init(drm);
 	if (ret < 0)
 		goto err_component_unbind;
 

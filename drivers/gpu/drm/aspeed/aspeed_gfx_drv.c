@@ -205,7 +205,7 @@ static int aspeed_gfx_load(struct drm_device *drm)
 	if (ret < 0)
 		return ret;
 
-	ret = drm_vblank_init(drm, 1);
+	ret = drm_vblank_init(drm);
 	if (ret < 0) {
 		dev_err(drm->dev, "Failed to initialise vblank\n");
 		return ret;

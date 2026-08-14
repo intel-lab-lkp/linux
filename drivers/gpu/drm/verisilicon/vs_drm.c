@@ -121,7 +121,7 @@ int vs_drm_initialize(struct vs_dc *dc, struct platform_device *pdev)
 		vdrm->crtcs[i] = crtc;
 	}
 
-	ret = drm_vblank_init(drm, dc->identity.display_count);
+	ret = drm_vblank_init(drm);
 	if (ret)
 		return ret;
 

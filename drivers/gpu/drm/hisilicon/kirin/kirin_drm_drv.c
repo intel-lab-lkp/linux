@@ -181,7 +181,7 @@ static int kirin_drm_kms_init(struct drm_device *dev,
 	}
 
 	/* vblank init */
-	ret = drm_vblank_init(dev, dev->mode_config.num_crtc);
+	ret = drm_vblank_init(dev);
 	if (ret) {
 		DRM_ERROR("failed to initialize vblank.\n");
 		goto err_unbind_all;

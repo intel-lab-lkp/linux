@@ -118,7 +118,7 @@ int dc_kms_init(struct dc_drm_device *dc_drm)
 			return ret;
 	}
 
-	ret = drm_vblank_init(drm, DC_DISPLAYS);
+	ret = drm_vblank_init(drm);
 	if (ret) {
 		dev_err(drm->dev, "failed to init vblank support: %d\n", ret);
 		return ret;

@@ -212,7 +212,7 @@ vmw_vkms_init(struct vmw_private *vmw)
 
 	ret = kstrtobool(buffer, &vmw->vkms_enabled);
 	if (!ret && vmw->vkms_enabled) {
-		ret = drm_vblank_init(&vmw->drm, VMWGFX_NUM_DISPLAY_UNITS);
+		ret = drm_vblank_init(&vmw->drm);
 		vmw->vkms_enabled = (ret == 0);
 	}
 

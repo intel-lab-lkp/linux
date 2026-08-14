@@ -122,7 +122,7 @@ static int fsl_dcu_load(struct drm_device *dev, unsigned long flags)
 			return dev_err_probe(dev->dev, ret, "failed to enable pixclk\n");
 	}
 
-	ret = drm_vblank_init(dev, dev->mode_config.num_crtc);
+	ret = drm_vblank_init(dev);
 	if (ret < 0) {
 		dev_err(dev->dev, "failed to initialize vblank\n");
 		goto done_vblank;

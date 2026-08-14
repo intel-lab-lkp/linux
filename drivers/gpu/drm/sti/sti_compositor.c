@@ -145,7 +145,7 @@ static int sti_compositor_bind(struct device *dev,
 		}
 	}
 
-	drm_vblank_init(drm_dev, crtc_id);
+	drm_vblank_init(drm_dev);
 
 	return 0;
 }

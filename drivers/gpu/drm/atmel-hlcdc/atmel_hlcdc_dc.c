@@ -867,7 +867,7 @@ static int atmel_hlcdc_dc_load(struct drm_device *dev)
 
 	pm_runtime_enable(dev->dev);
 
-	ret = drm_vblank_init(dev, 1);
+	ret = drm_vblank_init(dev);
 	if (ret < 0) {
 		drm_err(dev, "failed to initialize vblank\n");
 		goto err_periph_clk_disable;

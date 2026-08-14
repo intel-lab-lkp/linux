@@ -435,7 +435,7 @@ static int imx_lcdc_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return dev_err_probe(drm->dev, ret, "Cannot setup simple display pipe\n");
 
-	ret = drm_vblank_init(drm, drm->mode_config.num_crtc);
+	ret = drm_vblank_init(drm);
 	if (ret < 0)
 		return dev_err_probe(drm->dev, ret, "Failed to initialize vblank\n");
 

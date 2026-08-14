@@ -2809,7 +2809,7 @@ static int dce_v10_0_sw_init(struct amdgpu_ip_block *ip_block)
 	/* XXX: can this be enabled for DC? */
 	adev_to_drm(adev)->vblank_disable_immediate = true;
 
-	r = drm_vblank_init(adev_to_drm(adev), adev->mode_info.num_crtc);
+	r = drm_vblank_init(adev_to_drm(adev));
 	if (r)
 		return r;
 

@@ -297,7 +297,7 @@ struct komeda_kms_dev *komeda_kms_attach(struct komeda_dev *mdev)
 	if (err)
 		goto cleanup_mode_config;
 
-	err = drm_vblank_init(drm, kms->n_crtcs);
+	err = drm_vblank_init(drm);
 	if (err)
 		goto cleanup_mode_config;
 

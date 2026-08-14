@@ -217,8 +217,7 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 	intel_bw_init_hw(display);
 
 	if (HAS_DISPLAY(display)) {
-		ret = drm_vblank_init(display->drm,
-				      INTEL_NUM_PIPES(display));
+		ret = drm_vblank_init(display->drm);
 		if (ret)
 			goto cleanup_opregion;
 	}

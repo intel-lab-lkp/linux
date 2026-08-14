@@ -1348,7 +1348,7 @@ static int ingenic_drm_bind(struct device *dev, bool has_components)
 		goto err_drvdata;
 	}
 
-	ret = drm_vblank_init(drm, 1);
+	ret = drm_vblank_init(drm);
 	if (ret) {
 		dev_err(dev, "Failed calling drm_vblank_init()\n");
 		goto err_drvdata;

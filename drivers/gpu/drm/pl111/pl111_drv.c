@@ -175,7 +175,7 @@ static int pl111_modeset_init(struct drm_device *dev)
 		return ret;
 
 	if (!priv->variant->broken_vblank) {
-		ret = drm_vblank_init(dev, 1);
+		ret = drm_vblank_init(dev);
 		if (ret != 0) {
 			drm_err(dev, "Failed to init vblank\n");
 			goto out_bridge;

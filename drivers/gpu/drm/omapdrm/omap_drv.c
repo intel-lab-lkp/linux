@@ -731,7 +731,7 @@ static int omapdrm_init(struct omap_drm_private *priv, struct device *dev)
 	}
 
 	/* Initialize vblank handling, start with all CRTCs disabled. */
-	ret = drm_vblank_init(ddev, priv->num_pipes);
+	ret = drm_vblank_init(ddev);
 	if (ret) {
 		dev_err(priv->dev, "could not init vblank\n");
 		goto err_cleanup_modeset;

@@ -330,7 +330,7 @@ int hv_drm_mode_config_init(struct hv_drm_device *hv)
 		return ret;
 	}
 
-	ret = drm_vblank_init(dev, 1);
+	ret = drm_vblank_init(dev);
 	if (ret)
 		return ret;
 

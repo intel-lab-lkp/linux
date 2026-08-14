@@ -364,7 +364,7 @@ static int psb_driver_load(struct drm_device *dev, unsigned long flags)
 	acpi_video_register();
 
 	/* Setup vertical blanking handling */
-	ret = drm_vblank_init(dev, dev_priv->num_pipe);
+	ret = drm_vblank_init(dev);
 	if (ret)
 		goto out_err;
 

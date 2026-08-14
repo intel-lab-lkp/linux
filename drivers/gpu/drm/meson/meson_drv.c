@@ -262,7 +262,7 @@ static int meson_drv_bind_master(struct device *dev, bool has_components)
 
 	priv->vsync_irq = platform_get_irq(pdev, 0);
 
-	ret = drm_vblank_init(drm, 1);
+	ret = drm_vblank_init(drm);
 	if (ret)
 		goto free_canvas_vd1_2;
 

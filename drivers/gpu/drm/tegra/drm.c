@@ -1241,7 +1241,7 @@ static int host1x_drm_probe(struct host1x_device *dev)
 	/* syncpoints are used for full 32-bit hardware VBLANK counters */
 	drm->max_vblank_count = 0xffffffff;
 
-	err = drm_vblank_init(drm, drm->mode_config.num_crtc);
+	err = drm_vblank_init(drm);
 	if (err < 0)
 		goto hub;
 

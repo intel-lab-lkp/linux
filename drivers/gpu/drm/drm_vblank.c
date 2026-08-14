@@ -536,18 +536,18 @@ static void drm_vblank_init_release(struct drm_device *dev, void *ptr)
 /**
  * drm_vblank_init - initialize vblank support
  * @dev: DRM device
- * @num_crtcs: number of CRTCs supported by @dev
  *
- * This function initializes vblank support for @num_crtcs display pipelines.
+ * This function initializes vblank support for display pipelines.
  * Cleanup is handled automatically through a cleanup function added with
  * drmm_add_action_or_reset().
  *
  * Returns:
  * Zero on success or a negative error code on failure.
  */
-int drm_vblank_init(struct drm_device *dev, unsigned int num_crtcs)
+int drm_vblank_init(struct drm_device *dev)
 {
 	int ret;
+	unsigned int num_crtcs = dev->mode_config.num_crtc;
 	unsigned int i;
 
 	spin_lock_init(&dev->vbl_lock);

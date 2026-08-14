@@ -89,7 +89,7 @@ static int sprd_drm_bind(struct device *dev)
 	}
 
 	/* vblank init */
-	ret = drm_vblank_init(drm, drm->mode_config.num_crtc);
+	ret = drm_vblank_init(drm);
 	if (ret) {
 		drm_err(drm, "failed to initialize vblank.\n");
 		goto err_unbind_all;

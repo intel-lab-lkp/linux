@@ -174,7 +174,7 @@ static int mcde_modeset_init(struct drm_device *drm)
 	mode_config->min_height = 1;
 	mode_config->max_height = 1080;
 
-	ret = drm_vblank_init(drm, 1);
+	ret = drm_vblank_init(drm);
 	if (ret) {
 		dev_err(drm->dev, "failed to init vblank\n");
 		return ret;

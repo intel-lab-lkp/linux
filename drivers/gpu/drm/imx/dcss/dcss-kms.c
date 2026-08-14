@@ -129,7 +129,7 @@ struct dcss_kms_dev *dcss_kms_attach(struct dcss_dev *dcss)
 
 	dcss_kms_mode_config_init(kms);
 
-	ret = drm_vblank_init(drm, 1);
+	ret = drm_vblank_init(drm);
 	if (ret)
 		goto cleanup_mode_config;
 

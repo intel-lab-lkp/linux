@@ -122,7 +122,7 @@ static int armada_drm_bind(struct device *dev)
 	if (ret)
 		goto err_kms;
 
-	ret = drm_vblank_init(&priv->drm, priv->drm.mode_config.num_crtc);
+	ret = drm_vblank_init(&priv->drm);
 	if (ret)
 		goto err_comp;
 

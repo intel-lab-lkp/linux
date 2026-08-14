@@ -381,7 +381,7 @@ int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev)
 	for (i = 0 ; i < vgdev->num_scanouts; ++i)
 		vgdev_output_init(vgdev, i);
 
-	ret = drm_vblank_init(vgdev->ddev, vgdev->num_scanouts);
+	ret = drm_vblank_init(vgdev->ddev);
 	if (ret)
 		return ret;
 

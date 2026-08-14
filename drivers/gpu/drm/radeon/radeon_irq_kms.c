@@ -314,7 +314,7 @@ int radeon_irq_kms_init(struct radeon_device *rdev)
 	/* Disable vblank irqs aggressively for power-saving */
 	rdev_to_drm(rdev)->vblank_disable_immediate = true;
 
-	r = drm_vblank_init(rdev_to_drm(rdev), rdev->num_crtc);
+	r = drm_vblank_init(rdev_to_drm(rdev));
 	if (r) {
 		return r;
 	}

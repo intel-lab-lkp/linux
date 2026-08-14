@@ -398,7 +398,7 @@ static int hibmc_load(struct drm_device *dev)
 	if (ret)
 		goto err;
 
-	ret = drm_vblank_init(dev, dev->mode_config.num_crtc);
+	ret = drm_vblank_init(dev);
 	if (ret) {
 		drm_err(dev, "failed to initialize vblank: %d\n", ret);
 		goto err;

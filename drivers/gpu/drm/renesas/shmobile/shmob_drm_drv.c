@@ -228,7 +228,7 @@ static int shmob_drm_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = drm_vblank_init(ddev, 1);
+	ret = drm_vblank_init(ddev);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to initialize vblank\n");
 		return ret;

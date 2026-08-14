@@ -296,7 +296,7 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	drmm_kms_helper_poll_init(ddev);
 
 	if (loongson_vblank) {
-		ret = drm_vblank_init(ddev, descp->num_of_crtc);
+		ret = drm_vblank_init(ddev);
 		if (ret)
 			return ret;
 

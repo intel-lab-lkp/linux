@@ -95,7 +95,7 @@ static int sun4i_drv_bind(struct device *dev)
 	}
 
 	/* drm_vblank_init calls kcalloc, which can fail */
-	ret = drm_vblank_init(drm, drm->mode_config.num_crtc);
+	ret = drm_vblank_init(drm);
 	if (ret)
 		goto unbind_all;
 

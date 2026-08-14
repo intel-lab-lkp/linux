@@ -2076,7 +2076,7 @@ int ltdc_load(struct drm_device *ddev)
 		goto err;
 	}
 
-	ret = drm_vblank_init(ddev, NB_CRTC);
+	ret = drm_vblank_init(ddev);
 	if (ret) {
 		drm_err(ddev, "Failed calling drm_vblank_init()\n");
 		goto err;

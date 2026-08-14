@@ -186,7 +186,7 @@ static int rockchip_drm_bind(struct device *dev)
 	if (ret)
 		goto err_unbind_all;
 
-	ret = drm_vblank_init(drm_dev, drm_dev->mode_config.num_crtc);
+	ret = drm_vblank_init(drm_dev);
 	if (ret)
 		goto err_iommu_cleanup;
 

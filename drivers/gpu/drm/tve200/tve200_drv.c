@@ -120,7 +120,7 @@ static int tve200_modeset_init(struct drm_device *dev)
 	dev_info(dev->dev, "attached to panel %s\n",
 		 dev_name(panel->dev));
 
-	ret = drm_vblank_init(dev, 1);
+	ret = drm_vblank_init(dev);
 	if (ret) {
 		dev_err(dev->dev, "failed to init vblank\n");
 		goto out_bridge;

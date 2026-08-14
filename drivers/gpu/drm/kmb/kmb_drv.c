@@ -191,7 +191,7 @@ static int kmb_setup_mode_config(struct drm_device *drm)
 	ret = kmb_dsi_encoder_init(drm, kmb->kmb_dsi);
 	/* Set the CRTC's port so that the encoder component can find it */
 	kmb->crtc.port = of_graph_get_port_by_id(drm->dev->of_node, 0);
-	ret = drm_vblank_init(drm, drm->mode_config.num_crtc);
+	ret = drm_vblank_init(drm);
 	if (ret < 0) {
 		drm_err(drm, "failed to initialize vblank\n");
 		pm_runtime_disable(drm->dev);

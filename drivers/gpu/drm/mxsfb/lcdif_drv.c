@@ -175,7 +175,7 @@ static int lcdif_load(struct drm_device *drm)
 		return ret;
 	}
 
-	ret = drm_vblank_init(drm, drm->mode_config.num_crtc);
+	ret = drm_vblank_init(drm);
 	if (ret < 0) {
 		dev_err(drm->dev, "Failed to initialise vblank\n");
 		return ret;

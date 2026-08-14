@@ -289,7 +289,7 @@ int tidss_modeset_init(struct tidss_device *tidss)
 	if (ret)
 		return ret;
 
-	ret = drm_vblank_init(ddev, tidss->num_crtcs);
+	ret = drm_vblank_init(ddev);
 	if (ret)
 		return ret;
 
