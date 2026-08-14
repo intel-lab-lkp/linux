@@ -1206,6 +1206,10 @@ static int nxpwifi_get_vdll_image(struct nxpwifi_adapter *adapter, u32 vdll_len)
 			nxpwifi_dbg(adapter, ERROR,
 				    "Invalid VDLL length = %d, fw_len=%d\n",
 				    vdll_len, (int)adapter->firmware->size);
+			if (req_fw) {
+				release_firmware(adapter->firmware);
+				adapter->firmware = NULL;
+			}
 			return -EINVAL;
 		}
 		if (req_fw) {
