@@ -391,9 +391,25 @@ int btrfs_fileattr_set(struct mnt_idmap *idmap,
 		inode_flags |= BTRFS_INODE_COMPRESS;
 		inode_flags &= ~BTRFS_INODE_NOCOMPRESS;
 
-		comp = btrfs_compress_type2str(fs_info->compress_type);
-		if (!comp || comp[0] == 0)
-			comp = btrfs_compress_type2str(BTRFS_COMPRESS_ZLIB);
+		/*
+		 * If compression was already enabled, keep the algorithm that
+		 * is recorded in the compression property. Otherwise changing
+		 * an unrelated attribute would reset it to the mount default,
+		 * since FS_IOC_SETFLAGS callers pass back the whole flag set
+		 * they got from FS_IOC_GETFLAGS.
+		 *
+		 * Fall back to the default when compression is being enabled
+		 * by this call, or when the inode has the compress flag set
+		 * but no property, which is possible on filesystems touched by
+		 * kernels that did not keep the two in sync.
+		 */
+		if (old_fsflags & FS_COMPR_FL)
+			comp = btrfs_compress_type2str(inode->prop_compress);
+		if (!comp || comp[0] == 0) {
+			comp = btrfs_compress_type2str(fs_info->compress_type);
+			if (!comp || comp[0] == 0)
+				comp = btrfs_compress_type2str(BTRFS_COMPRESS_ZLIB);
+		}
 	} else {
 		inode_flags &= ~(BTRFS_INODE_COMPRESS | BTRFS_INODE_NOCOMPRESS);
 	}
