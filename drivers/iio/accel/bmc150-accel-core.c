@@ -125,7 +125,6 @@
 #define BMC150_ACCEL_REG_FIFO_CONFIG0		0x30
 #define BMC150_ACCEL_REG_FIFO_CONFIG1		0x3E
 #define BMC150_ACCEL_REG_FIFO_DATA		0x3F
-#define BMC150_ACCEL_FIFO_LENGTH		32
 
 enum bmc150_accel_axis {
 	AXIS_X,
@@ -622,7 +621,6 @@ static int bmc150_accel_get_axis(struct bmc150_accel_data *data,
 	struct device *dev = regmap_get_device(data->regmap);
 	int ret;
 	int axis = chan->scan_index;
-	__le16 raw_val;
 
 	mutex_lock(&data->mutex);
 	ret = bmc150_accel_set_power_state(data, true);
@@ -632,14 +630,14 @@ static int bmc150_accel_get_axis(struct bmc150_accel_data *data,
 	}
 
 	ret = regmap_bulk_read(data->regmap, BMC150_ACCEL_AXIS_TO_REG(axis),
-			       &raw_val, sizeof(raw_val));
+			       &data->regval, sizeof(data->regval));
 	if (ret < 0) {
 		dev_err(dev, "Error reading axis %d\n", axis);
 		bmc150_accel_set_power_state(data, false);
 		mutex_unlock(&data->mutex);
 		return ret;
 	}
-	*val = sign_extend32(le16_to_cpu(raw_val) >> chan->scan_type.shift,
+	*val = sign_extend32(le16_to_cpu(data->regval) >> chan->scan_type.shift,
 			     chan->scan_type.realbits - 1);
 	ret = bmc150_accel_set_power_state(data, false);
 	mutex_unlock(&data->mutex);
@@ -918,7 +916,7 @@ static int bmc150_accel_set_watermark(struct iio_dev *indio_dev, unsigned val)
  * frame data is discarded.
  */
 static int bmc150_accel_fifo_transfer(struct bmc150_accel_data *data,
-				      char *buffer, int samples)
+				      void *buffer, int samples)
 {
 	struct device *dev = regmap_get_device(data->regmap);
 	int sample_length = 3 * 2;
@@ -941,7 +939,6 @@ static int __bmc150_accel_fifo_flush(struct iio_dev *indio_dev,
 	struct device *dev = regmap_get_device(data->regmap);
 	int ret, i;
 	u8 count;
-	u16 buffer[BMC150_ACCEL_FIFO_LENGTH * 3];
 	int64_t tstamp;
 	uint64_t sample_period;
 	unsigned int val;
@@ -993,7 +990,7 @@ static int __bmc150_accel_fifo_flush(struct iio_dev *indio_dev,
 
 	count = min_t(u8, count, BMC150_ACCEL_FIFO_LENGTH);
 
-	ret = bmc150_accel_fifo_transfer(data, (u8 *)buffer, count);
+	ret = bmc150_accel_fifo_transfer(data, data->fifo_buff, count);
 	if (ret)
 		return ret;
 
@@ -1008,7 +1005,8 @@ static int __bmc150_accel_fifo_flush(struct iio_dev *indio_dev,
 
 		j = 0;
 		iio_for_each_active_channel(indio_dev, bit)
-			memcpy(&data->scan.channels[j++], &buffer[i * 3 + bit],
+			memcpy(&data->scan.channels[j++],
+			       &data->fifo_buff[i * 3 + bit],
 			       sizeof(data->scan.channels[0]));
 
 		iio_push_to_buffers_with_timestamp(indio_dev, &data->scan,

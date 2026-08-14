@@ -56,6 +56,8 @@ enum bmc150_accel_trigger_id {
 	BMC150_ACCEL_TRIGGERS,
 };
 
+#define BMC150_ACCEL_FIFO_LENGTH		32
+
 struct bmc150_accel_data {
 	struct regmap *regmap;
 	int irq;
@@ -81,6 +83,10 @@ struct bmc150_accel_data {
 		__le16 channels[3];
 		aligned_s64 ts;
 	} scan __aligned(IIO_DMA_MINALIGN);
+	/* DMA-safe buffers for bulk/raw reads */
+	__le16 fifo_buff[BMC150_ACCEL_FIFO_LENGTH * 3]
+		__aligned(IIO_DMA_MINALIGN);
+	__le16 regval __aligned(IIO_DMA_MINALIGN);
 };
 
 int bmc150_accel_core_probe(struct device *dev, struct regmap *regmap, int irq,
