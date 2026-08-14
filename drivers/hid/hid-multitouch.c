@@ -2261,6 +2261,11 @@ static void mt_on_hid_hw_close(struct hid_device *hdev)
  * So there is no point in adding here any device with MT_CLS_DEFAULT.
  */
 static const struct hid_device_id mt_devices[] = {
+	/* Goodix GXTP7863 Touchpad */
+	{ .driver_data = MT_CLS_DEFAULT,
+	  HID_DEVICE(BUS_I2C, HID_GROUP_ANY,
+		     I2C_VENDOR_ID_GOODIX, I2C_DEVICE_ID_GOODIX_01E0) },
+
 
 	/* 3M panels */
 	{ .driver_data = MT_CLS_3M,
