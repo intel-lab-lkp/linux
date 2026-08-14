@@ -89,6 +89,7 @@ struct f_hidg {
 	/* send report */
 	spinlock_t			write_spinlock;
 	bool				write_pending;
+	struct usb_request		*write_req;
 	wait_queue_head_t		write_queue;
 	struct usb_request		*req;
 
@@ -443,7 +444,16 @@ static void f_hidg_req_complete(struct usb_ep *ep, struct usb_request *req)
 	}
 
 	spin_lock_irqsave(&hidg->write_spinlock, flags);
-	hidg->write_pending = 0;
+	/*
+	 * Only the completion of the request this writer owns may clear the
+	 * flag. usb_ep_disable() gives back whatever is still queued from an
+	 * earlier write(), and letting that clear write_pending lets
+	 * hidg_disable() go on to free a request a writer is still holding.
+	 */
+	if (req == hidg->write_req) {
+		hidg->write_req = NULL;
+		hidg->write_pending = 0;
+	}
 	spin_unlock_irqrestore(&hidg->write_spinlock, flags);
 	wake_up(&hidg->write_queue);
 }
@@ -480,6 +490,7 @@ try_again:
 
 	hidg->write_pending = 1;
 	req = hidg->req;
+	hidg->write_req = req;
 	count  = min_t(unsigned, count, hidg->report_length);
 
 	spin_unlock_irqrestore(&hidg->write_spinlock, flags);
@@ -502,6 +513,8 @@ try_again:
 
 	/* when our function has been disabled by host */
 	if (!hidg->req) {
+		if (hidg->write_req == req)
+			hidg->write_req = NULL;
 		free_ep_req(hidg->in_ep, req);
 		/*
 		 * TODO
@@ -534,6 +547,7 @@ try_again:
 release_write_pending:
 	spin_lock_irqsave(&hidg->write_spinlock, flags);
 	hidg->write_pending = 0;
+	hidg->write_req = NULL;
 	spin_unlock_irqrestore(&hidg->write_spinlock, flags);
 
 	wake_up(&hidg->write_queue);
@@ -1102,6 +1116,7 @@ static int hidg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		spin_lock_irqsave(&hidg->write_spinlock, flags);
 		hidg->req = req_in;
 		hidg->write_pending = 0;
+		hidg->write_req = NULL;
 		spin_unlock_irqrestore(&hidg->write_spinlock, flags);
 
 		wake_up(&hidg->write_queue);
