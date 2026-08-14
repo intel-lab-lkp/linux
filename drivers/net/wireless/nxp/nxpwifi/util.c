@@ -1228,6 +1228,12 @@ int nxpwifi_download_vdll_block(struct nxpwifi_adapter *adapter,
 	u16 msg_len = block_len + S_DS_GEN;
 	int ret = 0;
 
+	if (block_len > NXPWIFI_SIZE_OF_CMD_BUFFER - S_DS_GEN) {
+		nxpwifi_dbg(adapter, ERROR,
+			    "VDLL block does not fit: len: %d\n", block_len);
+		return -EINVAL;
+	}
+
 	skb_trim(ctrl->skb, 0);
 	skb_put_zero(ctrl->skb, msg_len);
 
