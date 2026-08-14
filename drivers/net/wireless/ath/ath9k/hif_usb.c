@@ -566,6 +566,18 @@ static void ath9k_hif_usb_rx_stream(struct hif_device_usb *hif_dev,
 	if (rx_remain_len != 0) {
 		struct sk_buff *remain_skb = hif_dev->remain_skb;
 
+		if (rx_remain_len < hif_dev->rx_pad_len ||
+		    rx_remain_len > len) {
+			dev_kfree_skb_any(remain_skb);
+			hif_dev->remain_skb = NULL;
+			hif_dev->rx_remain_len = 0;
+			hif_dev->rx_transfer_len = 0;
+			hif_dev->rx_pad_len = 0;
+			RX_STAT_INC(hif_dev, skb_dropped);
+			spin_unlock(&hif_dev->rx_lock);
+			return;
+		}
+
 		if (remain_skb) {
 			ptr = (u8 *) remain_skb->data;
 
@@ -579,11 +591,13 @@ static void ath9k_hif_usb_rx_stream(struct hif_device_usb *hif_dev,
 			skb_put(remain_skb, rx_pkt_len);
 
 			skb_pool[pool_index++] = remain_skb;
-			hif_dev->remain_skb = NULL;
-			hif_dev->rx_remain_len = 0;
 		} else {
 			index = rx_remain_len;
 		}
+		hif_dev->remain_skb = NULL;
+		hif_dev->rx_remain_len = 0;
+		hif_dev->rx_transfer_len = 0;
+		hif_dev->rx_pad_len = 0;
 	}
 
 	spin_unlock(&hif_dev->rx_lock);
@@ -595,6 +609,11 @@ static void ath9k_hif_usb_rx_stream(struct hif_device_usb *hif_dev,
 		int chk_idx;
 
 		ptr = (u8 *) skb->data;
+
+		if (len - index < 4) {
+			RX_STAT_INC(hif_dev, skb_dropped);
+			goto invalid_pkt;
+		}
 
 		pkt_len = get_unaligned_le16(ptr + index);
 		pkt_tag = get_unaligned_le16(ptr + index + 2);
@@ -624,6 +643,11 @@ static void ath9k_hif_usb_rx_stream(struct hif_device_usb *hif_dev,
 		index = index + 4 + pkt_len + pad_len;
 
 		if (index > MAX_RX_BUF_SIZE) {
+			if (len < MAX_RX_BUF_SIZE || index > 2 * MAX_RX_BUF_SIZE) {
+				RX_STAT_INC(hif_dev, skb_dropped);
+				goto invalid_pkt;
+			}
+
 			spin_lock(&hif_dev->rx_lock);
 			nskb = __dev_alloc_skb(pkt_len + 32, GFP_ATOMIC);
 			if (!nskb) {
@@ -648,6 +672,11 @@ static void ath9k_hif_usb_rx_stream(struct hif_device_usb *hif_dev,
 			hif_dev->remain_skb = nskb;
 			spin_unlock(&hif_dev->rx_lock);
 		} else {
+			if (index > len) {
+				RX_STAT_INC(hif_dev, skb_dropped);
+				goto invalid_pkt;
+			}
+
 			if (pool_index == MAX_PKT_NUM_IN_TRANSFER) {
 				dev_err(&hif_dev->udev->dev,
 					"ath9k_htc: over RX MAX_PKT_NUM\n");
