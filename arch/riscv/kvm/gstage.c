@@ -174,6 +174,12 @@ int kvm_riscv_gstage_set_pte(struct kvm_gstage *gstage,
 
 	if (pte_val(*ptep) != pte_val(map->pte)) {
 		bool was_invalid = !pte_val(*ptep);
+
+		/* Avoid replacing an existing lower-level table with a leaf mapping. */
+		if (!gstage_pte_leaf(ptep) && !was_invalid &&
+		    gstage_pte_leaf(&map->pte))
+			return -EEXIST;
+
 		set_pte(ptep, map->pte);
 		if (gstage_pte_leaf(ptep) &&
 		    !(was_invalid && riscv_has_extension_unlikely(RISCV_ISA_EXT_SVVPTC)))
@@ -211,12 +217,13 @@ int kvm_riscv_gstage_map_page(struct kvm_gstage *gstage,
 			      struct kvm_gstage_mapping *out_map)
 {
 	bool found_leaf;
+	phys_addr_t huge_page_offset;
 	u32 ptep_level;
 	pgprot_t prot;
 	pte_t *ptep;
 	int ret;
 
-	out_map->addr = gpa;
+	out_map->addr = gpa & PAGE_MASK;
 	out_map->level = 0;
 
 	ret = gstage_page_size_to_level(gstage, page_size, &out_map->level);
@@ -287,7 +294,18 @@ int kvm_riscv_gstage_map_page(struct kvm_gstage *gstage,
 	out_map->pte = pfn_pte(PFN_DOWN(hpa), prot);
 	out_map->pte = pte_mkdirty(out_map->pte);
 
-	return kvm_riscv_gstage_set_pte(gstage, pcache, out_map);
+	ret = kvm_riscv_gstage_set_pte(gstage, pcache, out_map);
+	if (ret == -EEXIST) {
+		huge_page_offset = out_map->addr & (page_size - 1);
+		hpa += huge_page_offset;
+		out_map->level = 0;
+		out_map->pte = pfn_pte(PFN_DOWN(hpa), prot);
+		out_map->pte = pte_mkdirty(out_map->pte);
+
+		ret = kvm_riscv_gstage_set_pte(gstage, pcache, out_map);
+	}
+
+	return ret;
 }
 
 static inline unsigned long make_child_pte(unsigned long huge_pte, int index,
