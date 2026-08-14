@@ -332,27 +332,74 @@ smb_init_no_reconnect(int smb_command, int wct, struct cifs_tcon *tcon,
 	return __smb_init(smb_command, wct, tcon, request_buf, response_buf);
 }
 
-static int validate_t2(struct smb_t2_rsp *pSMB)
+/*
+ * Minimum offset at which parameter/data areas can begin: past the fixed T2
+ * response header (smb_hdr + trans2_resp) and the ByteCount field.
+ */
+#define SMB_T2_MIN_OFFSET  (sizeof(struct smb_t2_rsp) + sizeof(__le16))
+
+/*
+ * min_param_size / min_data_size: when non-zero, verify the offset clears
+ * the fixed T2 header and that offset + struct size fits within the
+ * actually-received frame.  Callers using a small buffer
+ * (MAX_CIFS_SMALL_BUFFER_SIZE) must apply a tighter per-call check; passing
+ * 0, 0 here still catches offsets beyond the allocated buffer.
+ */
+static int validate_t2(struct smb_t2_rsp *pSMB, unsigned int min_param_size,
+		       unsigned int min_data_size)
 {
-	unsigned int total_size;
+	unsigned int total_size, param_off, data_off, data_count, frame_end;
 
 	/* check for plausible wct */
 	if (pSMB->hdr.WordCount < 10)
 		goto vt2_err;
 
-	/* check for parm and data offset going beyond end of smb */
-	if (get_unaligned_le16(&pSMB->t2_rsp.ParameterOffset) > 1024 ||
-	    get_unaligned_le16(&pSMB->t2_rsp.DataOffset) > 1024)
+	param_off = get_unaligned_le16(&pSMB->t2_rsp.ParameterOffset);
+	data_off  = get_unaligned_le16(&pSMB->t2_rsp.DataOffset);
+
+	/* server-supplied offsets must stay within the allocated buffer */
+	if (param_off > CIFSMaxBufSize + MAX_CIFS_HDR_SIZE ||
+	    data_off  > CIFSMaxBufSize + MAX_CIFS_HDR_SIZE)
+		goto vt2_err;
+
+	/*
+	 * Extent of the actually-received frame: Protocol is the first field
+	 * of smb_hdr at offset 0; frame_end matches smbCalcSize() and is the
+	 * number of bytes from Protocol to the end of the received data.
+	 * All offset+count pairs are validated against this, not the max
+	 * buffer size, so a large DataOffset pointing into uninitialised pool
+	 * memory beyond the received frame is rejected even if DataCount=0.
+	 */
+	frame_end = sizeof(struct smb_hdr) +
+		    2 * pSMB->hdr.WordCount + sizeof(__le16) +
+		    get_bcc(&pSMB->hdr);
+
+	/* when the caller will dereference a struct at the offset, also verify
+	 * it clears the fixed T2 header and that the struct fits in the frame.
+	 */
+	if (min_param_size &&
+	    (param_off < SMB_T2_MIN_OFFSET ||
+	     param_off + min_param_size > frame_end))
+		goto vt2_err;
+
+	if (min_data_size &&
+	    (data_off < SMB_T2_MIN_OFFSET ||
+	     data_off + min_data_size > frame_end))
 		goto vt2_err;
 
 	total_size = get_unaligned_le16(&pSMB->t2_rsp.ParameterCount);
-	if (total_size >= 512)
+	if (total_size >= 512 ||
+	    param_off + total_size > frame_end)
+		goto vt2_err;
+
+	data_count = get_unaligned_le16(&pSMB->t2_rsp.DataCount);
+	if (data_off + data_count > frame_end)
 		goto vt2_err;
 
 	/* check that bcc is at least as big as parms + data, and that it is
 	 * less than negotiated smb buffer
 	 */
-	total_size += get_unaligned_le16(&pSMB->t2_rsp.DataCount);
+	total_size += data_count;
 	if (total_size > get_bcc(&pSMB->hdr) ||
 	    total_size >= CIFSMaxBufSize + MAX_CIFS_HDR_SIZE)
 		goto vt2_err;
@@ -1120,7 +1167,8 @@ PsxCreat:
 	}
 
 	cifs_dbg(FYI, "copying inode info\n");
-	rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+	rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0,
+			 sizeof(OPEN_PSX_RSP) + sizeof(FILE_UNIX_BASIC_INFO));
 
 	if (rc || get_bcc(&pSMBr->hdr) < sizeof(OPEN_PSX_RSP)) {
 		rc = smb_EIO2(smb_eio_trace_create_rsp_too_small,
@@ -2360,7 +2408,12 @@ CIFSSMBPosixLock(const unsigned int xid, struct cifs_tcon *tcon,
 		/* lock structure can be returned on get */
 		__u16 data_offset;
 		__u16 data_count;
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		/*
+		 * pSMBr uses a small buffer (MAX_CIFS_SMALL_BUFFER_SIZE = 448 bytes);
+		 * validate_t2(0, 0) only catches offsets beyond the large-buffer
+		 * bound — the tight check against 448 bytes follows below.
+		 */
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, 0);
 
 		if (rc || get_bcc(&pSMBr->hdr) < sizeof(*parm_data)) {
 			rc = smb_EIO2(smb_eio_trace_lock_bcc_too_small,
@@ -2369,6 +2422,12 @@ CIFSSMBPosixLock(const unsigned int xid, struct cifs_tcon *tcon,
 		}
 		data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
 		data_count  = le16_to_cpu(pSMBr->t2.DataCount);
+		if (data_offset < SMB_T2_MIN_OFFSET ||
+		    data_offset + sizeof(struct cifs_posix_lock) >
+		    MAX_CIFS_SMALL_BUFFER_SIZE) {
+			rc = -EIO;
+			goto plk_err_exit;
+		}
 		if (data_count < sizeof(struct cifs_posix_lock)) {
 			rc = smb_EIO2(smb_eio_trace_lock_data_too_small,
 				      data_count, sizeof(struct cifs_posix_lock));
@@ -2927,7 +2986,7 @@ querySymLinkRetry:
 	} else {
 		/* decode response */
 
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, 0);
 		/* BB also check enough total bytes returned */
 		if (rc || get_bcc(&pSMBr->hdr) < 2)
 			rc = smb_EIO2(smb_eio_trace_qsym_bcc_too_small,
@@ -3512,7 +3571,7 @@ queryAclRetry:
 	} else {
 		/* decode response */
 
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, 0);
 		/* BB also check enough total bytes returned */
 		if (rc || get_bcc(&pSMBr->hdr) < 2)
 			rc = smb_EIO2(smb_eio_trace_getacl_bcc_too_small,
@@ -3684,7 +3743,7 @@ GetExtAttrRetry:
 		cifs_dbg(FYI, "error %d in GetExtAttr\n", rc);
 	} else {
 		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(struct file_chattr_info));
 		/* BB also check enough total bytes returned */
 		if (rc || get_bcc(&pSMBr->hdr) < 2)
 			/* If rc should we check for EOPNOSUPP and
@@ -4087,7 +4146,7 @@ QFileInfoRetry:
 	if (rc) {
 		cifs_dbg(FYI, "Send error in QFileInfo = %d\n", rc);
 	} else {		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(FILE_ALL_INFO));
 
 		if (rc) /* BB add auto retry on EOPNOTSUPP? */
 			rc = smb_EIO2(smb_eio_trace_qfileinfo_invalid,
@@ -4176,7 +4235,9 @@ QPathInfoRetry:
 	if (rc) {
 		cifs_dbg(FYI, "Send error in QPathInfo = %d\n", rc);
 	} else {		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0,
+				 legacy ? sizeof(FILE_INFO_STANDARD) :
+					  sizeof(FILE_ALL_INFO));
 
 		if (rc) /* BB add auto retry on EOPNOTSUPP? */
 			rc = smb_EIO2(smb_eio_trace_qpathinfo_invalid,
@@ -4263,7 +4324,7 @@ UnixQFileInfoRetry:
 	if (rc) {
 		cifs_dbg(FYI, "Send error in UnixQFileInfo = %d\n", rc);
 	} else {		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(FILE_UNIX_BASIC_INFO));
 
 		if (rc || get_bcc(&pSMBr->hdr) < sizeof(FILE_UNIX_BASIC_INFO)) {
 			cifs_dbg(VFS, "Malformed FILE_UNIX_BASIC_INFO response. Unix Extensions can be disabled on mount by specifying the nosfu mount option.\n");
@@ -4348,7 +4409,7 @@ UnixQPathInfoRetry:
 	if (rc) {
 		cifs_dbg(FYI, "Send error in UnixQPathInfo = %d\n", rc);
 	} else {		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(FILE_UNIX_BASIC_INFO));
 
 		if (rc || get_bcc(&pSMBr->hdr) < sizeof(FILE_UNIX_BASIC_INFO)) {
 			cifs_dbg(VFS, "Malformed FILE_UNIX_BASIC_INFO response. Unix Extensions can be disabled on mount by specifying the nosfu mount option.\n");
@@ -4381,7 +4442,7 @@ CIFSFindFirst(const unsigned int xid, struct cifs_tcon *tcon,
 	TRANSACTION2_FFIRST_RSP *pSMBr = NULL;
 	T2_FFIRST_RSP_PARMS *parms;
 	struct nls_table *nls_codepage;
-	unsigned int in_len, lnoff;
+	unsigned int in_len, lnoff, data_off;
 	__u16 params, byte_count;
 	int bytes_returned = 0;
 	int name_len, remap;
@@ -4493,7 +4554,7 @@ findFirstRetry:
 		return rc;
 	}
 	/* decode response */
-	rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+	rc = validate_t2((struct smb_t2_rsp *)pSMBr, sizeof(T2_FFIRST_RSP_PARMS), 0);
 	if (rc) {
 		cifs_buf_release(pSMB);
 		return rc;
@@ -4502,8 +4563,8 @@ findFirstRetry:
 	psrch_inf->unicode = !!(pSMBr->hdr.Flags2 & SMBFLG2_UNICODE);
 	psrch_inf->ntwrk_buf_start = (char *)pSMBr;
 	psrch_inf->smallBuf = false;
-	psrch_inf->srch_entries_start = (char *)&pSMBr->hdr.Protocol +
-		le16_to_cpu(pSMBr->t2.DataOffset);
+	data_off = le16_to_cpu(pSMBr->t2.DataOffset);
+	psrch_inf->srch_entries_start = (char *)&pSMBr->hdr.Protocol + data_off;
 
 	parms = (T2_FFIRST_RSP_PARMS *)((char *)&pSMBr->hdr.Protocol +
 					le16_to_cpu(pSMBr->t2.ParameterOffset));
@@ -4513,7 +4574,7 @@ findFirstRetry:
 	psrch_inf->index_of_last_entry = 2 /* skip . and .. */ +
 		psrch_inf->entries_in_buffer;
 	lnoff = le16_to_cpu(parms->LastNameOffset);
-	if (CIFSMaxBufSize < lnoff) {
+	if (lnoff > le16_to_cpu(pSMBr->t2.DataCount)) {
 		cifs_dbg(VFS, "ignoring corrupt resume name\n");
 		psrch_inf->last_entry = NULL;
 	} else {
@@ -4532,7 +4593,7 @@ int CIFSFindNext(const unsigned int xid, struct cifs_tcon *tcon,
 	TRANSACTION2_FNEXT_RSP *pSMBr = NULL;
 	T2_FNEXT_RSP_PARMS *parms;
 	unsigned int name_len, in_len;
-	unsigned int lnoff;
+	unsigned int lnoff, data_off;
 	__u16 params, byte_count;
 	char *response_data;
 	int bytes_returned;
@@ -4607,7 +4668,7 @@ int CIFSFindNext(const unsigned int xid, struct cifs_tcon *tcon,
 	}
 
 	/* decode response */
-	rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+	rc = validate_t2((struct smb_t2_rsp *)pSMBr, sizeof(T2_FNEXT_RSP_PARMS), 0);
 	if (rc) {
 		cifs_buf_release(pSMB);
 		return rc;
@@ -4617,8 +4678,8 @@ int CIFSFindNext(const unsigned int xid, struct cifs_tcon *tcon,
 	response_data = (char *)&pSMBr->hdr.Protocol +
 		le16_to_cpu(pSMBr->t2.ParameterOffset);
 	parms = (T2_FNEXT_RSP_PARMS *)response_data;
-	response_data = (char *)&pSMBr->hdr.Protocol +
-		le16_to_cpu(pSMBr->t2.DataOffset);
+	data_off = le16_to_cpu(pSMBr->t2.DataOffset);
+	response_data = (char *)&pSMBr->hdr.Protocol + data_off;
 
 	if (psrch_inf->smallBuf)
 		cifs_small_buf_release(psrch_inf->ntwrk_buf_start);
@@ -4632,7 +4693,7 @@ int CIFSFindNext(const unsigned int xid, struct cifs_tcon *tcon,
 	psrch_inf->entries_in_buffer = le16_to_cpu(parms->SearchCount);
 	psrch_inf->index_of_last_entry += psrch_inf->entries_in_buffer;
 	lnoff = le16_to_cpu(parms->LastNameOffset);
-	if (CIFSMaxBufSize < lnoff) {
+	if (lnoff > le16_to_cpu(pSMBr->t2.DataCount)) {
 		cifs_dbg(VFS, "ignoring corrupt resume name\n");
 		psrch_inf->last_entry = NULL;
 	} else {
@@ -4751,7 +4812,7 @@ GetInodeNumberRetry:
 		cifs_dbg(FYI, "error %d in QueryInternalInfo\n", rc);
 	} else {
 		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(struct file_internal_info));
 		/* BB also check enough total bytes returned */
 		if (rc || get_bcc(&pSMBr->hdr) < 2)
 			/* If rc should we check for EOPNOSUPP and
@@ -4871,7 +4932,7 @@ getDFSRetry:
 		cifs_dbg(FYI, "Send error in GetDFSRefer = %d\n", rc);
 		goto GetDFSRefExit;
 	}
-	rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+	rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, 0);
 
 	/* BB Also check if enough total bytes returned? */
 	if (rc || get_bcc(&pSMBr->hdr) < 17) {
@@ -4949,7 +5010,7 @@ oldQFSInfoRetry:
 	if (rc) {
 		cifs_dbg(FYI, "Send error in QFSInfo = %d\n", rc);
 	} else {                /* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(FILE_SYSTEM_ALLOC_INFO));
 
 		if (rc || get_bcc(&pSMBr->hdr) < 18)
 			rc = smb_EIO2(smb_eio_trace_oldqfsinfo_bcc_too_small,
@@ -5039,7 +5100,7 @@ QFSInfoRetry:
 	if (rc) {
 		cifs_dbg(FYI, "Send error in QFSInfo = %d\n", rc);
 	} else {		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(FILE_SYSTEM_SIZE_INFO));
 
 		if (rc || get_bcc(&pSMBr->hdr) < 24)
 			rc = smb_EIO2(smb_eio_trace_qfsinfo_bcc_too_small,
@@ -5129,7 +5190,7 @@ QFSAttributeRetry:
 	if (rc) {
 		cifs_dbg(VFS, "Send error in QFSAttributeInfo = %d\n", rc);
 	} else {		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(FILE_SYSTEM_ATTRIBUTE_INFO));
 
 		if (rc || get_bcc(&pSMBr->hdr) < 13) {
 			/* BB also check if enough bytes returned */
@@ -5203,7 +5264,7 @@ QFSDeviceRetry:
 	if (rc) {
 		cifs_dbg(FYI, "Send error in QFSDeviceInfo = %d\n", rc);
 	} else {		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(FILE_SYSTEM_DEVICE_INFO));
 
 		if (rc || get_bcc(&pSMBr->hdr) <
 			  sizeof(FILE_SYSTEM_DEVICE_INFO))
@@ -5277,7 +5338,7 @@ QFSUnixRetry:
 	if (rc) {
 		cifs_dbg(VFS, "Send error in QFSUnixInfo = %d\n", rc);
 	} else {		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(FILE_SYSTEM_UNIX_INFO));
 
 		if (rc || get_bcc(&pSMBr->hdr) < 13) {
 			rc = smb_EIO2(smb_eio_trace_qfsunixinfo_bcc_too_small,
@@ -5362,7 +5423,7 @@ SETFSUnixRetry:
 	if (rc) {
 		cifs_dbg(VFS, "Send error in SETFSUnixInfo = %d\n", rc);
 	} else {		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, 0);
 		if (rc)
 			rc = -EIO;	/* bad smb */
 	}
@@ -5426,7 +5487,7 @@ QFSPosixRetry:
 	if (rc) {
 		cifs_dbg(FYI, "Send error in QFSUnixInfo = %d\n", rc);
 	} else {		/* decode response */
-		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+		rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(FILE_SYSTEM_POSIX_INFO));
 
 		if (rc || get_bcc(&pSMBr->hdr) < 13) {
 			rc = smb_EIO2(smb_eio_trace_qfsposixinfo_bcc_too_small,
@@ -6192,7 +6253,7 @@ QAllEAsRetry:
 	/* BB we need to improve the validity checking
 	of these trans2 responses */
 
-	rc = validate_t2((struct smb_t2_rsp *)pSMBr);
+	rc = validate_t2((struct smb_t2_rsp *)pSMBr, 0, sizeof(struct fealist));
 	if (rc || get_bcc(&pSMBr->hdr) < 4) {
 		rc = smb_EIO2(smb_eio_trace_qalleas_bcc_too_small,
 			      get_bcc(&pSMBr->hdr), 4);
