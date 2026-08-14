@@ -20,6 +20,9 @@
 #include <media/dmxdev.h>
 #include <media/dvb_vb2.h>
 
+/* 64 MiB upper bound for DVB ring buffer allocations */
+#define DVB_BUFFER_SIZE_MAX (64 * 1024 * 1024)
+
 static int debug;
 
 module_param(debug, int, 0644);
@@ -288,6 +291,8 @@ static int dvb_dvr_set_buffer_size(struct dmxdev *dmxdev,
 
 	dprintk("%s\n", __func__);
 
+	if (size > DVB_BUFFER_SIZE_MAX)
+		size = DVB_BUFFER_SIZE_MAX;
 	if (buf->size == size)
 		return 0;
 	if (!size)
@@ -327,6 +332,8 @@ static int dvb_dmxdev_set_buffer_size(struct dmxdev_filter *dmxdevfilter,
 	void *newmem;
 	void *oldmem;
 
+	if (size > DVB_BUFFER_SIZE_MAX)
+		size = DVB_BUFFER_SIZE_MAX;
 	if (buf->size == size)
 		return 0;
 	if (!size)
