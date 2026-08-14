@@ -553,7 +553,6 @@ struct nvme_ns_head {
 	bool			shared;
 	bool			rotational;
 	bool			passthru_err_log_enabled;
-	struct nvme_effects_log *effects;
 	u64			nuse;
 	unsigned		ns_id;
 	int			instance;
@@ -618,6 +617,8 @@ struct nvme_ns {
 	struct list_head siblings;
 	struct kref kref;
 	struct nvme_ns_head *head;
+	/* Command effects log for this controller path. */
+	struct nvme_effects_log *effects;
 
 	unsigned long flags;
 #define NVME_NS_REMOVING		0
