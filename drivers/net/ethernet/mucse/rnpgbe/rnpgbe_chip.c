@@ -66,10 +66,16 @@ int rnpgbe_send_notify(struct mucse_hw *hw,
 		       int mode)
 {
 	int err;
-	/* Keep switch struct to support more modes in the future */
+
 	switch (mode) {
 	case mucse_fw_powerup:
 		err = mucse_mbx_powerup(hw, enable);
+		break;
+	case mucse_fw_portup:
+		err = mucse_mbx_phyup(hw, enable);
+		break;
+	case mucse_fw_link_report_en:
+		err = mucse_mbx_link_report(hw, enable);
 		break;
 	default:
 		err = -EINVAL;
@@ -148,4 +154,33 @@ int rnpgbe_init_hw(struct mucse_hw *hw, int board_type)
 	mucse_init_mbx_params_pf(hw);
 
 	return 0;
+}
+
+/**
+ * rnpgbe_set_link - Set the hardware link state
+ * @hw: hw information structure
+ * @linkup: link on or not
+ *
+ * rnpgbe_set_link setup link status
+ *
+ **/
+void rnpgbe_set_link(struct mucse_hw *hw, bool linkup)
+{
+	u32 value = mucse_hw_rd32(hw, GMAC_CONTROL);
+
+	if (linkup)
+		value |= GMAC_CONTROL_RE;
+	else
+		value &= ~GMAC_CONTROL_RE;
+
+	mucse_hw_wr32(hw, GMAC_CONTROL, value);
+
+	/* Keep the GMAC in receive-all mode while the link is up. The
+	 * chip-level filter does the actual address filtering, but there
+	 * is no ndo_set_rx_mode yet to configure it.
+	 */
+	if (linkup)
+		mucse_hw_wr32(hw, GMAC_FRAME_FILTER, GMAC_RX_ALL);
+	else
+		mucse_hw_wr32(hw, GMAC_FRAME_FILTER, 0);
 }

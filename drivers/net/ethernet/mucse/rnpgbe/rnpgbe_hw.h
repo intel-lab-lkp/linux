@@ -21,8 +21,27 @@
 #define RNPGBE_DMA_TX_STATUS           GENMASK_U32(23, 22)
 #define RNPGBE_DMA_RX_STATUS           GENMASK_U32(21, 20)
 #define RX_AXI_RW_EN                   0x03
+/* RNPGBE_LINK_ST is a driver-owned link-state snapshot consumed by firmware.
+ * M_DEFAULT_ST replaces the complete snapshot, causing firmware
+ * to report the current link state again when it differs from this default.
+ */
+#define M_ST_MASK                      (GENMASK_U32(31, 24) | \
+					GENMASK_U32(11, 8) | BIT(6) | \
+					BIT(4) | BIT(0))
+/* Set the driver-state marker; all other driver status fields start clear. */
+#define M_DEFAULT_ST                   0xa0000000
+/* Driver-reported fields: 25:24 pause, 11:8 speed, 6 LLDP, 4 duplex,
+ * and 0 link up/down. M_DEFAULT_ST resets these fields so firmware reports
+ * the current hardware state again.
+ */
+#define RNPGBE_LINK_ST                 0x000c
 #define RNPGBE_DMA_AXI_EN              0x0010
 #define RNPGBE_TX_MIN_PKT_LEN          33
 
+#define MUCSE_GMAC_OFF(_n)             (0x20000 + (_n))
+#define GMAC_CONTROL_RE                0x00000004
+#define GMAC_CONTROL                   MUCSE_GMAC_OFF(0)
+#define GMAC_RX_ALL                    (BIT(31) | BIT(0))
+#define GMAC_FRAME_FILTER              MUCSE_GMAC_OFF(0x4)
 #define RNPGBE_MAX_QUEUES 8
 #endif /* _RNPGBE_HW_H */
