@@ -5935,11 +5935,21 @@ sub process {
 			    $var !~ /^(?:Clear|Set|TestClear|TestSet|)Page[A-Z]/ &&
 #Ignore ETHTOOL_LINK_MODE_<foo> variants
 			    $var !~ /^ETHTOOL_LINK_MODE_/ &&
-#Ignore SI style variants like nS, mV and dB
+#Ignore SI style variants like mV, uA, kHz, dB, MiB etc.
 #(ie: max_uV, regulator_min_uA_show, RANGE_mA_VALUE)
-			    $var !~ /^(?:[a-z0-9_]*|[A-Z0-9_]*)?_?[a-z][A-Z](?:_[a-z0-9_]+|_[A-Z0-9_]+)?$/ &&
-#Ignore some three character SI units explicitly, like MiB and KHz
-			    $var !~ /^(?:[a-z_]*?)_?(?:[KMGT]iB|[KMGT]?Hz)(?:_[a-z_]+)?$/) {
+#
+#Recognized standard SI unit prefixes (case sensitive):
+#	u - micro (10^-6)	n - nano (10^-9)	m - milli (10^-3)
+#	k - kilo (10^3)		K - kilo (10^3)		M - mega (10^6)
+#	G - giga (10^9)		T - tera (10^12)
+#
+#Recognized units (optionally prefixed by the above):
+#	V - volt		A - ampere		Hz - hertz
+#	Ohm - ohm		C - coulomb		K - kelvin
+#	s - second		W - watt
+#Binary byte units: KiB, MiB, GiB (TiB)
+#Decibel: dB
+			    $var !~ /^(?:[a-z0-9_]*|[A-Z0-9_]*)?_?(?:[unmkKMGT]?(?:V|A|Hz|Ohm|C|K|s|W)|[KMG]iB|dB)(?:_[a-z0-9_]+|_[A-Z0-9_]+)?$/) {
 				while ($var =~ m{\b($Ident)}g) {
 					my $word = $1;
 					next if ($word !~ /[A-Z][a-z]|[a-z][A-Z]/);
