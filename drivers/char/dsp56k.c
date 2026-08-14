@@ -509,12 +509,20 @@ static int __init dsp56k_init_driver(void)
 	err = class_register(&dsp56k_class);
 	if (err)
 		goto out_chrdev;
-	device_create(&dsp56k_class, NULL, MKDEV(DSP56K_MAJOR, 0), NULL,
-		      "dsp56k");
+
+	err = PTR_ERR_OR_ZERO(device_create(&dsp56k_class, NULL,
+					    MKDEV(DSP56K_MAJOR, 0), NULL,
+					    "dsp56k"));
+	if (err) {
+		pr_err("DSP56k driver: Unable to create device\n");
+		goto out_class;
+	}
 
 	printk(banner);
 	goto out;
 
+out_class:
+	class_unregister(&dsp56k_class);
 out_chrdev:
 	unregister_chrdev(DSP56K_MAJOR, "dsp56k");
 out:
