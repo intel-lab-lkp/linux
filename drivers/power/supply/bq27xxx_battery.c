@@ -93,6 +93,9 @@
 
 #define INVALID_REG_ADDR	0xff
 
+/* SMBus block transfers are limited to 32 bytes. */
+#define BQ27XXX_DATA_BLOCK_LEN   32
+
 /*
  * bq27xxx_reg_index - Register names
  *
@@ -833,6 +836,7 @@ static enum power_supply_property bq27z561_props[] = {
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_POWER_AVG,
 	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_MANUFACTURER,
 };
 
@@ -1010,16 +1014,39 @@ static struct bq27xxx_dm_reg bq27621_dm_regs[] = {
 
 #define BQ27XXX_DATA(ref, key, opt) {		\
 	.opts = (opt),				\
-	.unseal_key = key,			\
+	.unseal_key = (key),			\
+	.cmds = &bq27xxx_no_cmds,		\
 	.regs  = ref##_regs,			\
 	.dm_regs = ref##_dm_regs,		\
 	.props = ref##_props,			\
-	.props_size = ARRAY_SIZE(ref##_props) }
+	.props_size = ARRAY_SIZE(ref##_props),  }
+
+#define BQ27XXX_CMDS(ref, key, opt, cptr) {	\
+	.opts = (opt),				\
+	.unseal_key = (key),			\
+	.cmds = (cptr),				\
+	.regs  = ref##_regs,			\
+	.dm_regs = ref##_dm_regs,		\
+	.props = ref##_props,			\
+	.props_size = ARRAY_SIZE(ref##_props),  }
+
+struct bq27xxx_cmds {
+	u16 model_name_cmd;
+};
+
+static const struct bq27xxx_cmds bq27xxx_no_cmds = {
+	.model_name_cmd = 0,
+};
+
+static const struct bq27xxx_cmds bq27z561_cmds = {
+	.model_name_cmd = 0x004A,
+};
 
 static struct {
 	u32 opts;
 	u32 unseal_key;
 	u8 *regs;
+	const struct bq27xxx_cmds *cmds;
 	struct bq27xxx_dm_reg *dm_regs;
 	enum power_supply_property *props;
 	size_t props_size;
@@ -1051,7 +1078,7 @@ static struct {
 	[BQ27426]   = BQ27XXX_DATA(bq27426,   0x80008000, BQ27XXX_O_UTOT | BQ27XXX_O_CFGUP | BQ27XXX_O_RAM),
 	[BQ27441]   = BQ27XXX_DATA(bq27441,   0x80008000, BQ27XXX_O_UTOT | BQ27XXX_O_CFGUP | BQ27XXX_O_RAM),
 	[BQ27621]   = BQ27XXX_DATA(bq27621,   0x80008000, BQ27XXX_O_UTOT | BQ27XXX_O_CFGUP | BQ27XXX_O_RAM),
-	[BQ27Z561]  = BQ27XXX_DATA(bq27z561,  0         , BQ27Z561_O_BITS),
+	[BQ27Z561]  = BQ27XXX_CMDS(bq27z561,  0         , BQ27Z561_O_BITS, &bq27z561_cmds),
 	[BQ28Z610]  = BQ27XXX_DATA(bq28z610,  0         , BQ27Z561_O_BITS),
 	[BQ34Z100]  = BQ27XXX_DATA(bq34z100,  0         , BQ27XXX_O_OTDC | BQ27XXX_O_SOC_SI | \
 							  BQ27XXX_O_HAS_CI | BQ27XXX_O_MUL_CHEM),
@@ -1218,6 +1245,60 @@ static inline int bq27xxx_write_block(struct bq27xxx_device_info *di, int reg_in
 			di->regs[reg_index], reg_index);
 
 	return ret;
+}
+
+static int bq27xxx_mac_read_string(struct bq27xxx_device_info *di, u16 cmd,
+				   char *name_buffer, u8 buf_len)
+{
+	u8 mac_data[BQ27XXX_DATA_BLOCK_LEN + 1];
+	int ret;
+
+	if (!buf_len)
+		return -EINVAL;
+
+	/* Serialize the complete MAC command-response transaction. */
+	guard(mutex)(&di->lock);
+
+	ret = bq27xxx_write(di, BQ27XXX_REG_CTRL, cmd, false);
+	if (ret < 0) {
+		dev_err(di->dev, "failed to issue MAC command: %d\n", ret);
+		return ret;
+	}
+
+	/* 66-us AltManufacturerAccess() wait time, use 1 ms guard */
+	BQ27XXX_MSLEEP(1);
+
+	ret = bq27xxx_read_block(di, BQ27XXX_DM_CLASS, mac_data,
+				 BQ27XXX_DATA_BLOCK_LEN);
+	if (ret < 0) {
+		dev_err(di->dev, "failed to read MAC data block: %d\n", ret);
+		return ret;
+	}
+
+	if (mac_data[0] != (cmd & 0xff) ||
+	    mac_data[1] != (cmd >> 8))
+		return -EPROTO;
+
+	if (!mac_data[2])
+		return -ENODATA;
+
+	mac_data[BQ27XXX_DATA_BLOCK_LEN] = '\0';
+	ret = strscpy(name_buffer, &mac_data[2], buf_len);
+
+	if (ret < 0) {
+		dev_err(di->dev, "failed to copy MAC string: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int bq27xxx_get_model_name(struct bq27xxx_device_info *di, char *name, u8 len)
+{
+	if (!di->cmds || !di->cmds->model_name_cmd)
+		return -EINVAL;
+
+	return bq27xxx_mac_read_string(di, di->cmds->model_name_cmd, name, len);
 }
 
 static int bq27xxx_battery_seal(struct bq27xxx_device_info *di)
@@ -2206,6 +2287,13 @@ static int bq27xxx_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_HEALTH:
 		ret = bq27xxx_battery_read_health(di, val);
 		break;
+	case POWER_SUPPLY_PROP_MODEL_NAME:
+		ret = bq27xxx_get_model_name(di, di->model_name_buf, sizeof(di->model_name_buf));
+		if (ret < 0)
+			break;
+
+		val->strval = di->model_name_buf;
+		break;
 	case POWER_SUPPLY_PROP_MANUFACTURER:
 		val->strval = BQ27XXX_MANUFACTURER;
 		break;
@@ -2243,6 +2331,7 @@ int bq27xxx_battery_setup(struct bq27xxx_device_info *di)
 	di->unseal_key = bq27xxx_chip_data[di->chip].unseal_key;
 	di->dm_regs    = bq27xxx_chip_data[di->chip].dm_regs;
 	di->opts       = bq27xxx_chip_data[di->chip].opts;
+	di->cmds       = bq27xxx_chip_data[di->chip].cmds;
 
 	psy_desc = devm_kzalloc(di->dev, sizeof(*psy_desc), GFP_KERNEL);
 	if (!psy_desc)

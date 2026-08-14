@@ -4,6 +4,9 @@
 
 #include <linux/power_supply.h>
 
+/* S21 Device Name holds up to 20 characters; reserve one byte for NUL. */
+#define BQ27XXX_STR_BUF_LEN      21
+
 enum bq27xxx_chip {
 	BQ27000 = 1, /* bq27000, bq27200 */
 	BQ27010, /* bq27010, bq27210 */
@@ -58,6 +61,8 @@ struct bq27xxx_device_info {
 	const char *name;
 	struct bq27xxx_dm_reg *dm_regs;
 	u32 unseal_key;
+	const struct bq27xxx_cmds *cmds;
+	char model_name_buf[BQ27XXX_STR_BUF_LEN];
 	struct bq27xxx_access_methods bus;
 	struct bq27xxx_reg_cache cache;
 	int charge_design_full;
