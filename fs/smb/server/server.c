@@ -623,7 +623,10 @@ static int __init ksmbd_server_init(void)
 	ret = ksmbd_proc_init();
 	if (ret)
 		goto err_unregister;
-	create_proc_sessions();
+	ret = create_proc_sessions();
+	if (ret)
+		goto err_proc_cleanup;
+
 	create_proc_shares();
 
 	ksmbd_server_tcp_callbacks_init();
