@@ -313,7 +313,7 @@ static vm_fault_t spufs_ps_fault(struct vm_fault *vmf,
 				    unsigned long ps_offs,
 				    unsigned long ps_size)
 {
-	struct spu_context *ctx = vmf->vma->vm_file->private_data;
+	struct spu_context *ctx = SPUFS_I(file_inode(vmf->vma->vm_file))->i_ctx;
 	unsigned long area, offset = vmf->pgoff << PAGE_SHIFT;
 	int err = 0;
 	vm_fault_t ret = VM_FAULT_NOPAGE;
