@@ -1876,12 +1876,22 @@ int devm_i2c_add_adapter(struct device *dev, struct i2c_adapter *adapter)
 }
 EXPORT_SYMBOL_GPL(devm_i2c_add_adapter);
 
+static bool i2c_device_match_fwnode(struct device *dev, const void *data)
+{
+	struct fwnode_handle *fwnode = dev_fwnode(dev);
+
+	if (device_match_fwnode(dev, data))
+		return true;
+
+	return !IS_ERR_OR_NULL(fwnode) && fwnode->secondary == data;
+}
+
 static int i2c_dev_or_parent_fwnode_match(struct device *dev, const void *data)
 {
-	if (device_match_fwnode(dev, data))
+	if (i2c_device_match_fwnode(dev, data))
 		return 1;
 
-	if (dev->parent && device_match_fwnode(dev->parent, data))
+	if (dev->parent && i2c_device_match_fwnode(dev->parent, data))
 		return 1;
 
 	return 0;
@@ -1891,8 +1901,9 @@ static int i2c_dev_or_parent_fwnode_match(struct device *dev, const void *data)
  * i2c_find_adapter_by_fwnode() - find an i2c_adapter for the fwnode
  * @fwnode: &struct fwnode_handle corresponding to the &struct i2c_adapter
  *
- * Look up and return the &struct i2c_adapter corresponding to the @fwnode.
- * If no adapter can be found, or @fwnode is NULL, this returns NULL.
+ * Look up and return the &struct i2c_adapter corresponding to the @fwnode,
+ * including a secondary firmware node. If no adapter can be found, or
+ * @fwnode is NULL, this returns NULL.
  *
  * The user must call put_device(&adapter->dev) once done with the i2c adapter.
  */
@@ -1922,8 +1933,9 @@ EXPORT_SYMBOL(i2c_find_adapter_by_fwnode);
  * @fwnode: &struct fwnode_handle corresponding to the &struct i2c_adapter
  *
  * Look up and return the &struct i2c_adapter corresponding to the @fwnode,
- * and increment the adapter module's use count. If no adapter can be found,
- * or @fwnode is NULL, this returns NULL.
+ * including a secondary firmware node, and increment the adapter module's
+ * use count. If no adapter can be found, or @fwnode is NULL, this returns
+ * NULL.
  *
  * The user must call i2c_put_adapter(adapter) once done with the i2c adapter.
  * Note that this is different from i2c_find_adapter_by_node().
