@@ -62,15 +62,17 @@
  *
  * It is invoked as
  *
- *   fixdep <depfile> <target> <cmdline>
+ *   fixdep <depfile> <target> <cmdline> <prereqs>
  *
  * and will read the dependency file <depfile>
  *
  * The transformed dependency snipped is written to stdout.
  *
- * It first generates a line
+ * It first generates the lines
  *
- *   savedcmd_<target> = <cmdline>
+ *   savedcmd_<target> := <cmdline>
+ *
+ *   make_prereqs_<target> := <prereqs>
  *
  * and then basically copies the .<target>.d file to stdout, in the
  * process filtering out the dependency on autoconf.h and adding
@@ -103,7 +105,7 @@
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: fixdep <depfile> <target> <cmdline>\n");
+	fprintf(stderr, "Usage: fixdep <depfile> <target> <cmdline> <prereqs>\n");
 	exit(1);
 }
 
@@ -409,17 +411,19 @@ static void parse_dep_file(char *p, const char *target)
 
 int main(int argc, char *argv[])
 {
-	const char *depfile, *target, *cmdline;
+	const char *depfile, *target, *cmdline, *prereqs;
 	void *buf;
 
-	if (argc != 4)
+	if (argc != 5)
 		usage();
 
 	depfile = argv[1];
 	target = argv[2];
 	cmdline = argv[3];
+	prereqs = argv[4];
 
 	printf("savedcmd_%s := %s\n\n", target, cmdline);
+	printf("make_prereqs_%s := %s\n\n", target, prereqs);
 
 	buf = read_file(depfile);
 	parse_dep_file(buf, target);
