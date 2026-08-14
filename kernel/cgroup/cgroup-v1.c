@@ -206,13 +206,31 @@ struct cgroup_pidlist {
 void cgroup1_pidlist_destroy_all(struct cgroup *cgrp)
 {
 	struct cgroup_pidlist *l, *tmp_l;
+	LIST_HEAD(orphan);
+
+	/*
+	 * Move pidlists to a local orphan list and mark them as owner-less.
+	 * The destroy work function will see ->owner == NULL and skip freeing.
+	 * We then cancel and free them outside pidlist_mutex to avoid
+	 * flush_workqueue() blocking on the shared workqueue.
+	 */
 
 	mutex_lock(&cgrp->pidlist_mutex);
-	list_for_each_entry_safe(l, tmp_l, &cgrp->pidlists, links)
-		mod_delayed_work(cgroup_pidlist_destroy_wq, &l->destroy_dwork, 0);
+	list_for_each_entry_safe(l, tmp_l, &cgrp->pidlists, links) {
+		list_del(&l->links);
+		WRITE_ONCE(l->owner, NULL);
+		list_add(&l->links, &orphan);
+	}
 	mutex_unlock(&cgrp->pidlist_mutex);
 
-	flush_workqueue(cgroup_pidlist_destroy_wq);
+	list_for_each_entry_safe(l, tmp_l, &orphan, links) {
+		list_del(&l->links);
+		cancel_delayed_work_sync(&l->destroy_dwork);
+		kvfree(l->list);
+		put_pid_ns(l->key.ns);
+		kfree(l);
+	}
+
 	BUG_ON(!list_empty(&cgrp->pidlists));
 }
 
@@ -222,21 +240,26 @@ static void cgroup_pidlist_destroy_work_fn(struct work_struct *work)
 	struct cgroup_pidlist *l = container_of(dwork, struct cgroup_pidlist,
 						destroy_dwork);
 	struct cgroup_pidlist *tofree = NULL;
+	struct cgroup *owner;
 
-	mutex_lock(&l->owner->pidlist_mutex);
+	owner = READ_ONCE(l->owner);
+	if (owner) {
+		mutex_lock(&owner->pidlist_mutex);
 
-	/*
-	 * Destroy iff we didn't get queued again.  The state won't change
-	 * as destroy_dwork can only be queued while locked.
-	 */
-	if (!delayed_work_pending(dwork)) {
-		list_del(&l->links);
-		kvfree(l->list);
-		put_pid_ns(l->key.ns);
-		tofree = l;
+		/*
+		 * Destroy iff we didn't get queued again and we're still
+		 * owned by the cgroup.  If ->owner was cleared by
+		 * cgroup1_pidlist_destroy_all(), it will free us.
+		 */
+		if (READ_ONCE(l->owner) == owner && !delayed_work_pending(dwork)) {
+			list_del(&l->links);
+			kvfree(l->list);
+			put_pid_ns(l->key.ns);
+			tofree = l;
+		}
+
+		mutex_unlock(&owner->pidlist_mutex);
 	}
-
-	mutex_unlock(&l->owner->pidlist_mutex);
 	kfree(tofree);
 }
 
