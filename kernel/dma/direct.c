@@ -356,8 +356,12 @@ struct page *dma_direct_alloc_pages(struct device *dev, size_t size,
 	struct page *page;
 	void *ret;
 
-	if (force_dma_unencrypted(dev) && dma_direct_use_pool(dev, gfp))
-		return dma_direct_alloc_from_pool(dev, size, dma_handle, gfp);
+	if (force_dma_unencrypted(dev) && dma_direct_use_pool(dev, gfp)) {
+		ret = dma_direct_alloc_from_pool(dev, size, dma_handle, gfp);
+		if (!ret)
+			return NULL;
+		return dma_direct_to_page(dev, *dma_handle);
+	}
 
 	page = __dma_direct_alloc_pages(dev, size, gfp, false);
 	if (!page)
