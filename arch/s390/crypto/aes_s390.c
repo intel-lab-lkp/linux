@@ -26,14 +26,14 @@
 #include <linux/module.h>
 #include <linux/cpufeature.h>
 #include <linux/init.h>
-#include <linux/mutex.h>
 #include <linux/fips.h>
+#include <linux/semaphore.h>
 #include <linux/string.h>
 #include <crypto/xts.h>
 #include <asm/cpacf.h>
 
 static u8 *ctrblk;
-static DEFINE_MUTEX(ctrblk_lock);
+static DEFINE_SEMAPHORE(ctrblk_sem, 1);
 
 static cpacf_mask_t km_functions, kmc_functions, kmctr_functions,
 		    kma_functions;
@@ -569,12 +569,13 @@ static int ctr_aes_crypt(struct skcipher_request *req)
 	u8 buf[AES_BLOCK_SIZE], *ctrptr;
 	struct skcipher_walk walk;
 	unsigned int n, nbytes;
-	int ret, locked;
+	bool locked;
+	int ret;
 
 	if (unlikely(!sctx->fc))
 		return fallback_skcipher_crypt(sctx, req, 0);
 
-	locked = mutex_trylock(&ctrblk_lock);
+	locked = down_trylock(&ctrblk_sem) == 0;
 
 	ret = skcipher_walk_virt(&walk, req, false);
 	while (!ret && ((nbytes = walk.nbytes) >= AES_BLOCK_SIZE)) {
@@ -592,7 +593,7 @@ static int ctr_aes_crypt(struct skcipher_request *req)
 		ret = skcipher_walk_done(&walk, nbytes - n);
 	}
 	if (locked)
-		mutex_unlock(&ctrblk_lock);
+		up(&ctrblk_sem);
 	/*
 	 * final block may be < AES_BLOCK_SIZE, copy only nbytes
 	 */
