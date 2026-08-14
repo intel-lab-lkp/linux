@@ -30,6 +30,7 @@ static int pefile_parse_binary(const void *pebuf, unsigned int pelen,
 	const struct data_dirent *dde;
 	const struct section_header *sec;
 	size_t cursor, datalen = pelen;
+	unsigned int loop;
 
 	kenter("");
 
@@ -111,6 +112,14 @@ static int pefile_parse_binary(const void *pebuf, unsigned int pelen,
 	if (ctx->n_sections > (ctx->header_size - cursor) / sizeof(*sec))
 		return -ELIBBAD;
 	ctx->secs = pebuf + cursor;
+
+	/* pefile_digest_pe_contents() hashes each section's raw data using
+	 * these fields directly; reject a section whose data range falls
+	 * outside the image so hashing never reads past the buffer.
+	 */
+	for (loop = 0; loop < ctx->n_sections; loop++)
+		chkaddr(0, ctx->secs[loop].data_addr,
+			ctx->secs[loop].raw_data_size);
 
 	return 0;
 }
