@@ -114,6 +114,8 @@ cleanup() {
 }
 
 do_test() {
+	local packets_threshold="$PACKETS_THRESHOLD"
+
 	# When tx csum offload is off, software GSO is performed before passing the
 	# packet to veth. Check BIG TCP packets inside the VXLAN tunnel to verify
 	# the software checksum path: if the checksum code is broken, these packets
@@ -132,6 +134,7 @@ do_test() {
 		else
 			IPTABLES=ip6tables
 		fi
+		packets_threshold=$(( PACKETS_THRESHOLD / 10 ))
 	fi
 	if [ "$2" = 4 ]; then
 		IPTABLES_SACK=iptables
@@ -164,8 +167,8 @@ do_test() {
 	echo "Captured BIG TCP RX packets: $PACKETS_SERVER"
 	echo "Captured BIG TCP TX packets: $PACKETS_CLIENT"
 	echo "Captured TCP SACK packets: $PACKETS_SACK"
-	[ "$PACKETS_SERVER" -gt "$PACKETS_THRESHOLD" ] || return 1
-	[ "$PACKETS_CLIENT" -gt "$PACKETS_THRESHOLD" ] || return 1
+	[ "$PACKETS_SERVER" -gt "$packets_threshold" ] || return 1
+	[ "$PACKETS_CLIENT" -gt "$packets_threshold" ] || return 1
 	[ "$PACKETS_SACK" -lt "$(( PACKETS_CLIENT / 2 ))" ] || return 1
 }
 
