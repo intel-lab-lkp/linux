@@ -866,6 +866,7 @@ int sgx_encl_mm_add(struct sgx_encl *encl, struct mm_struct *mm)
 
 	ret = __mmu_notifier_register(&encl_mm->mmu_notifier, mm);
 	if (ret) {
+		kref_put(&encl->refcount, sgx_encl_release);
 		kfree(encl_mm);
 		return ret;
 	}
