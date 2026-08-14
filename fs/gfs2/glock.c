@@ -2553,10 +2553,14 @@ static void gfs2_glockfd_seq_stop(struct seq_file *seq, void *iter_ptr)
 {
 	struct gfs2_glockfd_iter *i = seq->private;
 
-	if (i->file)
+	if (i->file) {
 		fput(i->file);
-	if (i->task)
+		i->file = NULL;
+	}
+	if (i->task) {
 		put_task_struct(i->task);
+		i->task = NULL;
+	}
 }
 
 static void gfs2_glockfd_seq_show_flock(struct seq_file *seq,
