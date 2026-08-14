@@ -135,6 +135,7 @@ int disk_register_independent_access_ranges(struct gendisk *disk)
 					   &blk_ia_range_ktype, &iars->kobj,
 					   "%d", i);
 		if (ret) {
+			disk->ia_ranges = NULL;
 			while (--i >= 0)
 				kobject_del(&iars->ia_range[i].kobj);
 			kobject_del(&iars->kobj);
