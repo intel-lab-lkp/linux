@@ -30,6 +30,19 @@ struct ttm_bo_test_case {
 	bool no_wait;
 };
 
+/* Return the last resource in a bulk move sublist, or NULL if empty. */
+static struct ttm_resource *
+ttm_bo_test_pos_last_res(struct ttm_lru_bulk_move_pos *pos)
+{
+	struct ttm_lru_item *lru;
+
+	list_for_each_entry_reverse(lru, &pos->sublist, link)
+		if (ttm_lru_item_is_res(lru))
+			return ttm_lru_item_to_res(lru);
+
+	return NULL;
+}
+
 static const struct ttm_bo_test_case ttm_bo_reserved_cases[] = {
 	{
 		.description = "Cannot be interrupted and sleeps",
@@ -371,7 +384,7 @@ static void ttm_bo_unreserve_bulk(struct kunit *test)
 	ttm_bo_unreserve(bo1);
 
 	pos = &lru_bulk_move.pos[mem_type][bo_priority];
-	KUNIT_ASSERT_PTR_EQ(test, res1, pos->last);
+	KUNIT_ASSERT_PTR_EQ(test, res1, ttm_bo_test_pos_last_res(pos));
 
 	ttm_resource_free(bo1, &res1);
 	ttm_resource_free(bo2, &res2);
@@ -530,14 +543,13 @@ static void ttm_bo_pin_unpin_resource(struct kunit *test)
 	pos = &lru_bulk_move.pos[mem_type][bo_priority];
 
 	KUNIT_ASSERT_EQ(test, bo->pin_count, 1);
-	KUNIT_ASSERT_NULL(test, pos->first);
-	KUNIT_ASSERT_NULL(test, pos->last);
+	KUNIT_ASSERT_NULL(test, ttm_lru_first_res_or_null(&pos->sublist));
 
 	dma_resv_lock(bo->base.resv, NULL);
 	ttm_bo_unpin(bo);
 	dma_resv_unlock(bo->base.resv);
 
-	KUNIT_ASSERT_PTR_EQ(test, res, pos->last);
+	KUNIT_ASSERT_PTR_EQ(test, res, ttm_bo_test_pos_last_res(pos));
 	KUNIT_ASSERT_EQ(test, bo->pin_count, 0);
 
 	ttm_resource_free(bo, &res);
@@ -585,16 +597,14 @@ static void ttm_bo_multiple_pin_one_unpin(struct kunit *test)
 	pos = &lru_bulk_move.pos[mem_type][bo_priority];
 
 	KUNIT_ASSERT_EQ(test, bo->pin_count, 2);
-	KUNIT_ASSERT_NULL(test, pos->first);
-	KUNIT_ASSERT_NULL(test, pos->last);
+	KUNIT_ASSERT_NULL(test, ttm_lru_first_res_or_null(&pos->sublist));
 
 	dma_resv_lock(bo->base.resv, NULL);
 	ttm_bo_unpin(bo);
 	dma_resv_unlock(bo->base.resv);
 
 	KUNIT_ASSERT_EQ(test, bo->pin_count, 1);
-	KUNIT_ASSERT_NULL(test, pos->first);
-	KUNIT_ASSERT_NULL(test, pos->last);
+	KUNIT_ASSERT_NULL(test, ttm_lru_first_res_or_null(&pos->sublist));
 
 	dma_resv_lock(bo->base.resv, NULL);
 	ttm_bo_unpin(bo);

@@ -37,53 +37,6 @@
 #include <drm/drm_print.h>
 #include <drm/drm_util.h>
 
-/* Detach the cursor from the bulk move list */
-static void
-ttm_resource_cursor_clear_bulk(struct ttm_resource_cursor *cursor)
-{
-	lockdep_assert_held(&cursor->man->bdev->lru_lock);
-
-	cursor->bulk = NULL;
-	list_del_init(&cursor->bulk_link);
-}
-
-/* Move the cursor to the end of the bulk move list it's in */
-static void ttm_resource_cursor_move_bulk_tail(struct ttm_lru_bulk_move *bulk,
-					       struct ttm_resource_cursor *cursor)
-{
-	struct ttm_lru_bulk_move_pos *pos;
-
-	lockdep_assert_held(&cursor->man->bdev->lru_lock);
-
-	if (WARN_ON_ONCE(bulk != cursor->bulk)) {
-		list_del_init(&cursor->bulk_link);
-		return;
-	}
-
-	pos = &bulk->pos[cursor->mem_type][cursor->priority];
-	if (pos->last)
-		list_move(&cursor->hitch.link, &pos->last->lru.link);
-	ttm_resource_cursor_clear_bulk(cursor);
-}
-
-/* Move all cursors attached to a bulk move to its end */
-static void ttm_bulk_move_adjust_cursors(struct ttm_lru_bulk_move *bulk)
-{
-	struct ttm_resource_cursor *cursor, *next;
-
-	list_for_each_entry_safe(cursor, next, &bulk->cursor_list, bulk_link)
-		ttm_resource_cursor_move_bulk_tail(bulk, cursor);
-}
-
-/* Remove a cursor from an empty bulk move list */
-static void ttm_bulk_move_drop_cursors(struct ttm_lru_bulk_move *bulk)
-{
-	struct ttm_resource_cursor *cursor, *next;
-
-	list_for_each_entry_safe(cursor, next, &bulk->cursor_list, bulk_link)
-		ttm_resource_cursor_clear_bulk(cursor);
-}
-
 /**
  * ttm_resource_cursor_init() - Initialize a struct ttm_resource_cursor
  * @cursor: The cursor to initialize.
@@ -96,9 +49,11 @@ void ttm_resource_cursor_init(struct ttm_resource_cursor *cursor,
 {
 	cursor->priority = 0;
 	cursor->man = man;
+	cursor->cur_list = NULL;
 	ttm_lru_item_init(&cursor->hitch, TTM_LRU_HITCH);
-	INIT_LIST_HEAD(&cursor->bulk_link);
+	ttm_lru_item_init(&cursor->sublist_hitch, TTM_LRU_HITCH);
 	INIT_LIST_HEAD(&cursor->hitch.link);
+	INIT_LIST_HEAD(&cursor->sublist_hitch.link);
 }
 
 /**
@@ -113,38 +68,126 @@ void ttm_resource_cursor_fini(struct ttm_resource_cursor *cursor)
 {
 	lockdep_assert_held(&cursor->man->bdev->lru_lock);
 	list_del_init(&cursor->hitch.link);
-	ttm_resource_cursor_clear_bulk(cursor);
+	list_del_init(&cursor->sublist_hitch.link);
+	cursor->cur_list = NULL;
 }
 
 /**
  * ttm_lru_bulk_move_init - initialize a bulk move structure
  * @bulk: the structure to init
  *
- * For now just memset the structure to zero.
+ * Initialize the resource sublists and their LRU anchors.
  */
 void ttm_lru_bulk_move_init(struct ttm_lru_bulk_move *bulk)
 {
+	unsigned int i, j;
+
 	memset(bulk, 0, sizeof(*bulk));
-	INIT_LIST_HEAD(&bulk->cursor_list);
+	for (i = 0; i < TTM_NUM_MEM_TYPES; ++i) {
+		for (j = 0; j < TTM_MAX_BO_PRIORITY; ++j) {
+			struct ttm_lru_bulk_move_pos *pos = &bulk->pos[i][j];
+
+			ttm_lru_item_init(&pos->marker, TTM_LRU_BULK);
+			INIT_LIST_HEAD(&pos->sublist);
+		}
+	}
 }
 EXPORT_SYMBOL(ttm_lru_bulk_move_init);
+
+/*
+ * Detach the bulk move from the manager LRU lists so that it can be
+ * freed. Any cursor still traversing a sublist is repointed at the
+ * manager LRU list, and it is verified that the bulk move holds no
+ * resources.
+ */
+static void ttm_bulk_move_drop_cursors(struct ttm_device *bdev,
+					struct ttm_lru_bulk_move *bulk)
+{
+	unsigned int i, j;
+
+	for (i = 0; i < TTM_NUM_MEM_TYPES; ++i) {
+		struct ttm_resource_manager *man = ttm_manager_type(bdev, i);
+
+		for (j = 0; j < TTM_MAX_BO_PRIORITY; ++j) {
+			struct ttm_lru_bulk_move_pos *pos = &bulk->pos[i][j];
+			struct ttm_lru_item *lru, *next;
+
+			list_for_each_entry_safe(lru, next, &pos->sublist, link) {
+				struct ttm_resource_cursor *cursor;
+
+				if (ttm_lru_item_is_res(lru)) {
+					WARN_ON_ONCE(1);
+					continue;
+				}
+				/*
+				 * This cursor descended here; its main hitch
+				 * already sits on the manager list, so just
+				 * detach it from this sublist.
+				 */
+				cursor = container_of(lru, typeof(*cursor),
+						      sublist_hitch);
+				cursor->cur_list = &man->lru[j];
+				list_del_init(&lru->link);
+			}
+			list_splice_tail_init(&pos->sublist, &man->lru[j]);
+			list_del_init(&pos->marker.link);
+		}
+	}
+}
 
 /**
  * ttm_lru_bulk_move_fini - finalize a bulk move structure
  * @bdev: The struct ttm_device
  * @bulk: the structure to finalize
  *
- * Sanity checks that bulk moves don't have any
- * resources left and hence no cursors attached.
+ * Detaches the bulk move from the manager LRU lists so that it can be
+ * freed. Any cursor still traversing the bulk move is repointed at the
+ * manager LRU list, and it is verified that the bulk move holds no
+ * resources.
  */
 void ttm_lru_bulk_move_fini(struct ttm_device *bdev,
 			    struct ttm_lru_bulk_move *bulk)
 {
 	spin_lock(&bdev->lru_lock);
-	ttm_bulk_move_drop_cursors(bulk);
+	ttm_bulk_move_drop_cursors(bdev, bulk);
 	spin_unlock(&bdev->lru_lock);
 }
 EXPORT_SYMBOL(ttm_lru_bulk_move_fini);
+
+/*
+ * Detach any cursor that has descended into pos's sublist so it
+ * resumes walking the manager LRU list, without walking the
+ * (potentially large) sublist itself, which would defeat the point of
+ * a bulk tail move. It suffices to look at the run of cursor hitches
+ * parked immediately after pos's anchor in the manager list, since
+ * that's exactly where a descended cursor's main hitch sits (see
+ * ttm_resource_manager_next()). A hitch whose cursor has since exited
+ * the sublist on its own is skipped rather than ending the run; only
+ * one still parked in a different, still-live sublist marks the
+ * actual end.
+ */
+static void ttm_lru_bulk_move_pos_adjust_cursors(struct ttm_resource_manager *man,
+						 struct ttm_lru_bulk_move_pos *pos,
+						 unsigned int priority)
+{
+	struct ttm_lru_item *lru = &pos->marker;
+
+	list_for_each_entry_continue(lru, &man->lru[priority], link) {
+		struct ttm_resource_cursor *cursor;
+
+		if (lru->type != TTM_LRU_HITCH)
+			break;
+
+		cursor = container_of(lru, typeof(*cursor), hitch);
+		if (cursor->cur_list == &man->lru[priority])
+			continue;
+		if (cursor->cur_list != &pos->sublist)
+			break;
+
+		list_del_init(&cursor->sublist_hitch.link);
+		cursor->cur_list = &man->lru[priority];
+	}
+}
 
 /**
  * ttm_lru_bulk_move_tail - bulk move range of resources to the LRU tail.
@@ -156,24 +199,24 @@ EXPORT_SYMBOL(ttm_lru_bulk_move_fini);
  */
 void ttm_lru_bulk_move_tail(struct ttm_lru_bulk_move *bulk)
 {
-	unsigned i, j;
+	unsigned int i, j;
 
-	ttm_bulk_move_adjust_cursors(bulk);
 	for (i = 0; i < TTM_NUM_MEM_TYPES; ++i) {
 		for (j = 0; j < TTM_MAX_BO_PRIORITY; ++j) {
 			struct ttm_lru_bulk_move_pos *pos = &bulk->pos[i][j];
 			struct ttm_resource_manager *man;
+			struct ttm_resource *first;
 
-			if (!pos->first)
+			first = ttm_lru_first_res_or_null(&pos->sublist);
+			if (!first)
 				continue;
 
-			lockdep_assert_held(&pos->first->bo->bdev->lru_lock);
-			dma_resv_assert_held(pos->first->bo->base.resv);
-			dma_resv_assert_held(pos->last->bo->base.resv);
+			lockdep_assert_held(&first->bo->bdev->lru_lock);
+			dma_resv_assert_held(first->bo->base.resv);
 
-			man = ttm_manager_type(pos->first->bo->bdev, i);
-			list_bulk_move_tail(&man->lru[j], &pos->first->lru.link,
-					    &pos->last->lru.link);
+			man = ttm_manager_type(first->bo->bdev, i);
+			ttm_lru_bulk_move_pos_adjust_cursors(man, pos, j);
+			list_move_tail(&pos->marker.link, &man->lru[j]);
 		}
 	}
 }
@@ -186,74 +229,59 @@ ttm_lru_bulk_move_pos(struct ttm_lru_bulk_move *bulk, struct ttm_resource *res)
 	return &bulk->pos[res->mem_type][res->bo->priority];
 }
 
-/* Return the previous resource on the list (skip over non-resource list items) */
-static struct ttm_resource *ttm_lru_prev_res(struct ttm_resource *cur)
+/* Make sure the bulk move anchor is linked into the manager LRU list */
+static void ttm_lru_bulk_move_link_marker(struct ttm_lru_bulk_move_pos *pos,
+					  struct ttm_resource *res)
 {
-	struct ttm_lru_item *lru = &cur->lru;
+	struct ttm_buffer_object *bo = res->bo;
+	struct ttm_resource_manager *man =
+		ttm_manager_type(bo->bdev, res->mem_type);
 
-	do {
-		lru = list_prev_entry(lru, link);
-	} while (!ttm_lru_item_is_res(lru));
-
-	return ttm_lru_item_to_res(lru);
+	if (list_empty(&pos->marker.link))
+		list_add_tail(&pos->marker.link, &man->lru[bo->priority]);
 }
 
-/* Return the next resource on the list (skip over non-resource list items) */
-static struct ttm_resource *ttm_lru_next_res(struct ttm_resource *cur)
-{
-	struct ttm_lru_item *lru = &cur->lru;
-
-	do {
-		lru = list_next_entry(lru, link);
-	} while (!ttm_lru_item_is_res(lru));
-
-	return ttm_lru_item_to_res(lru);
-}
-
-/* Move the resource to the tail of the bulk move range */
-static void ttm_lru_bulk_move_pos_tail(struct ttm_lru_bulk_move_pos *pos,
-				       struct ttm_resource *res)
-{
-	if (pos->last != res) {
-		if (pos->first == res)
-			pos->first = ttm_lru_next_res(res);
-		list_move(&res->lru.link, &pos->last->lru.link);
-		pos->last = res;
-	}
-}
-
-/* Add the resource to a bulk_move cursor */
+/* Add the resource to a bulk_move sublist */
 static void ttm_lru_bulk_move_add(struct ttm_lru_bulk_move *bulk,
 				  struct ttm_resource *res)
 {
 	struct ttm_lru_bulk_move_pos *pos = ttm_lru_bulk_move_pos(bulk, res);
+	struct ttm_resource *first = ttm_lru_first_res_or_null(&pos->sublist);
+	struct ttm_buffer_object *bo = res->bo;
+	struct ttm_resource_manager *man =
+		ttm_manager_type(bo->bdev, res->mem_type);
 
-	if (!pos->first) {
-		pos->first = res;
-		pos->last = res;
+	if (first) {
+		WARN_ON(first->bo->base.resv != res->bo->base.resv);
 	} else {
-		WARN_ON(pos->first->bo->base.resv != res->bo->base.resv);
-		ttm_lru_bulk_move_pos_tail(pos, res);
+		/*
+		 * Group empty (first activation, or all members were pinned
+		 * or swapped out); re-seed the anchor at the tail so it
+		 * counts as recently used.
+		 */
+		list_move_tail(&pos->marker.link, &man->lru[bo->priority]);
 	}
+	/*
+	 * The resource may still be on another list (manager LRU or
+	 * bdev->unevictable); move it unconditionally to keep group
+	 * membership consistent.
+	 */
+	list_move_tail(&res->lru.link, &pos->sublist);
 }
 
-/* Remove the resource from a bulk_move range */
+/* Remove the resource from its bulk_move sublist */
 static void ttm_lru_bulk_move_del(struct ttm_lru_bulk_move *bulk,
 				  struct ttm_resource *res)
 {
-	struct ttm_lru_bulk_move_pos *pos = ttm_lru_bulk_move_pos(bulk, res);
+	list_del_init(&res->lru.link);
+}
 
-	if (unlikely(WARN_ON(!pos->first || !pos->last) ||
-		     (pos->first == res && pos->last == res))) {
-		pos->first = NULL;
-		pos->last = NULL;
-	} else if (pos->first == res) {
-		pos->first = ttm_lru_next_res(res);
-	} else if (pos->last == res) {
-		pos->last = ttm_lru_prev_res(res);
-	} else {
-		list_move(&res->lru.link, &pos->last->lru.link);
-	}
+/* Move the resource to the tail of its bulk_move sublist */
+static void ttm_lru_bulk_move_pos_tail(struct ttm_lru_bulk_move_pos *pos,
+				       struct ttm_resource *res)
+{
+	ttm_lru_bulk_move_link_marker(pos, res);
+	list_move_tail(&res->lru.link, &pos->sublist);
 }
 
 static bool ttm_resource_is_swapped(struct ttm_resource *res, struct ttm_buffer_object *bo)
@@ -652,28 +680,6 @@ void ttm_resource_manager_debug(struct ttm_resource_manager *man,
 }
 EXPORT_SYMBOL(ttm_resource_manager_debug);
 
-static void
-ttm_resource_cursor_check_bulk(struct ttm_resource_cursor *cursor,
-			       struct ttm_lru_item *next_lru)
-{
-	struct ttm_resource *next = ttm_lru_item_to_res(next_lru);
-	struct ttm_lru_bulk_move *bulk;
-
-	lockdep_assert_held(&cursor->man->bdev->lru_lock);
-
-	bulk = next->bo->bulk_move;
-
-	if (cursor->bulk != bulk) {
-		if (bulk) {
-			list_move_tail(&cursor->bulk_link, &bulk->cursor_list);
-			cursor->mem_type = next->mem_type;
-		} else {
-			list_del_init(&cursor->bulk_link);
-		}
-		cursor->bulk = bulk;
-	}
-}
-
 /**
  * ttm_resource_manager_first() - Start iterating over the resources
  * of a resource manager
@@ -694,7 +700,9 @@ ttm_resource_manager_first(struct ttm_resource_cursor *cursor)
 
 	lockdep_assert_held(&man->bdev->lru_lock);
 
-	list_move(&cursor->hitch.link, &man->lru[cursor->priority]);
+	cursor->priority = 0;
+	cursor->cur_list = &man->lru[cursor->priority];
+	list_move(&cursor->hitch.link, cursor->cur_list);
 	return ttm_resource_manager_next(cursor);
 }
 
@@ -714,20 +722,50 @@ ttm_resource_manager_next(struct ttm_resource_cursor *cursor)
 	lockdep_assert_held(&man->bdev->lru_lock);
 
 	for (;;) {
-		lru = &cursor->hitch;
-		list_for_each_entry_continue(lru, &man->lru[cursor->priority], link) {
+		struct list_head *list = cursor->cur_list;
+		struct ttm_lru_item *hitch;
+		bool in_sublist;
+
+		/* The main hitch stays on the manager list while descended. */
+		in_sublist = list != &man->lru[cursor->priority];
+		hitch = in_sublist ? &cursor->sublist_hitch : &cursor->hitch;
+
+		lru = hitch;
+		list_for_each_entry_continue(lru, list, link) {
 			if (ttm_lru_item_is_res(lru)) {
-				ttm_resource_cursor_check_bulk(cursor, lru);
-				list_move(&cursor->hitch.link, &lru->link);
+				list_move(&hitch->link, &lru->link);
 				return ttm_lru_item_to_res(lru);
 			}
+			if (lru->type == TTM_LRU_BULK) {
+				struct ttm_lru_bulk_move_pos *pos =
+					container_of(lru, typeof(*pos), marker);
+
+				/*
+				 * Keep the main hitch parked right after the
+				 * anchor so a concurrent bulk move of the
+				 * anchor cannot make the walk skip entries.
+				 */
+				list_move(&cursor->hitch.link, &lru->link);
+				list_add(&cursor->sublist_hitch.link,
+					 &pos->sublist);
+				cursor->cur_list = &pos->sublist;
+				goto next_list;
+			}
+		}
+
+		if (in_sublist) {
+			list_del_init(&cursor->sublist_hitch.link);
+			cursor->cur_list = &man->lru[cursor->priority];
+			continue;
 		}
 
 		if (++cursor->priority >= TTM_MAX_BO_PRIORITY)
 			break;
 
-		list_move(&cursor->hitch.link, &man->lru[cursor->priority]);
-		ttm_resource_cursor_clear_bulk(cursor);
+		cursor->cur_list = &man->lru[cursor->priority];
+		list_move(&cursor->hitch.link, cursor->cur_list);
+next_list:
+		;
 	}
 
 	return NULL;
@@ -736,6 +774,8 @@ ttm_resource_manager_next(struct ttm_resource_cursor *cursor)
 /**
  * ttm_lru_first_res_or_null() - Return the first resource on an lru list
  * @head: The list head of the lru list.
+ *
+ * Resources that are members of a bulk move on the list are also considered.
  *
  * Return: Pointer to the first resource on the lru list or NULL if
  * there is none.
@@ -747,6 +787,15 @@ struct ttm_resource *ttm_lru_first_res_or_null(struct list_head *head)
 	list_for_each_entry(lru, head, link) {
 		if (ttm_lru_item_is_res(lru))
 			return ttm_lru_item_to_res(lru);
+		if (lru->type == TTM_LRU_BULK) {
+			struct ttm_lru_bulk_move_pos *pos =
+				container_of(lru, typeof(*pos), marker);
+			struct ttm_resource *res =
+				ttm_lru_first_res_or_null(&pos->sublist);
+
+			if (res)
+				return res;
+		}
 	}
 
 	return NULL;

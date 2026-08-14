@@ -68,7 +68,9 @@ enum ttm_lru_item_type {
 	/** @TTM_LRU_RESOURCE: The resource subclass */
 	TTM_LRU_RESOURCE,
 	/** @TTM_LRU_HITCH: The iterator hitch subclass */
-	TTM_LRU_HITCH
+	TTM_LRU_HITCH,
+	/** @TTM_LRU_BULK: The bulk move sublist anchor subclass */
+	TTM_LRU_BULK
 };
 
 /**
@@ -290,23 +292,23 @@ ttm_lru_item_to_res(struct ttm_lru_item *item)
 }
 
 /**
- * struct ttm_lru_bulk_move_pos
+ * struct ttm_lru_bulk_move_pos - bulk move sublist for a domain/priority
  *
- * @first: first res in the bulk move range
- * @last: last res in the bulk move range
- *
- * Range of resources for a lru bulk move.
+ * @marker: LRU list node linked into the manager's LRU list for the
+ * domain/priority of this range. Acts as an anchor from which the LRU
+ * traversal descends into @sublist.
+ * @sublist: List of resources belonging to this bulk move for the
+ * domain/priority. Resources are threaded here via &ttm_resource.lru,
+ * instead of directly on the manager LRU list.
  */
 struct ttm_lru_bulk_move_pos {
-	struct ttm_resource *first;
-	struct ttm_resource *last;
+	struct ttm_lru_item marker;
+	struct list_head sublist;
 };
 
 /**
- * struct ttm_lru_bulk_move
- * @pos: first/last lru entry for resources in the each domain/priority
- * @cursor_list: The list of cursors currently traversing any of
- * the sublists of @pos. Protected by the ttm device's lru_lock.
+ * struct ttm_lru_bulk_move - bulk move state for a set of resources
+ * @pos: sublist anchor and resources for each domain/priority
  *
  * Container for the current bulk move state. Should be used with
  * ttm_lru_bulk_move_init() and ttm_bo_set_bulk_move().
@@ -316,32 +318,29 @@ struct ttm_lru_bulk_move_pos {
  */
 struct ttm_lru_bulk_move {
 	struct ttm_lru_bulk_move_pos pos[TTM_NUM_MEM_TYPES][TTM_MAX_BO_PRIORITY];
-	struct list_head cursor_list;
 };
 
 /**
- * struct ttm_resource_cursor
+ * struct ttm_resource_cursor - iterator over a resource manager's resources
  * @man: The resource manager currently being iterated over
- * @hitch: A hitch list node inserted before the next resource
- * to iterate over.
- * @bulk_link: A list link for the list of cursors traversing the
- * bulk sublist of @bulk. Protected by the ttm device's lru_lock.
- * @bulk: Pointer to struct ttm_lru_bulk_move whose subrange @hitch is
- * inserted to. NULL if none. Never dereference this pointer since
- * the struct ttm_lru_bulk_move object pointed to might have been
- * freed. The pointer is only for comparison.
- * @mem_type: The memory type of the LRU list being traversed.
- * This field is valid iff @bulk != NULL.
+ * @hitch: A hitch list node marking the position in the manager's LRU
+ * list for @priority. While the cursor has descended into a bulk move
+ * sublist, this node stays parked right after the bulk move anchor so
+ * that traversal of the manager LRU list resumes from the correct place
+ * even if the anchor is concurrently moved by a bulk move.
+ * @sublist_hitch: A hitch list node marking the position within a bulk
+ * move sublist that the cursor has descended into. Only threaded into a
+ * list while @cur_list points at a sublist.
+ * @cur_list: The list currently being traversed. Either the manager's
+ * LRU list for @priority, or a bulk move sublist that the cursor has
+ * descended into.
  * @priority: the current priority
- *
- * Cursor to iterate over the resources in a manager.
  */
 struct ttm_resource_cursor {
 	struct ttm_resource_manager *man;
 	struct ttm_lru_item hitch;
-	struct list_head bulk_link;
-	struct ttm_lru_bulk_move *bulk;
-	unsigned int mem_type;
+	struct ttm_lru_item sublist_hitch;
+	struct list_head *cur_list;
 	unsigned int priority;
 };
 

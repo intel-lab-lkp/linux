@@ -109,11 +109,14 @@ void ttm_bo_set_bulk_move(struct ttm_buffer_object *bo,
 		return;
 
 	spin_lock(&bo->bdev->lru_lock);
-	if (bo->resource)
+	if (bo->resource) {
 		ttm_resource_del_bulk_move(bo->resource, bo);
-	bo->bulk_move = bulk;
-	if (bo->resource)
+		bo->bulk_move = bulk;
 		ttm_resource_add_bulk_move(bo->resource, bo);
+		ttm_resource_move_to_lru_tail(bo->resource);
+	} else {
+		bo->bulk_move = bulk;
+	}
 	spin_unlock(&bo->bdev->lru_lock);
 }
 EXPORT_SYMBOL(ttm_bo_set_bulk_move);
