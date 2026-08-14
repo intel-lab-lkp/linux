@@ -173,12 +173,12 @@ static int __init root_nfs_cat(char *dest, const char *src,
 			       const size_t destlen)
 {
 	size_t len = strlen(dest);
+	size_t remaining = destlen - len;
+	const char *sep = "";
 
 	if (len && dest[len - 1] != ',')
-		if (strlcat(dest, ",", destlen) >= destlen)
-			return -1;
-
-	if (strlcat(dest, src, destlen) >= destlen)
+		sep = ",";
+	if (snprintf(dest + len, remaining, "%s%s", sep, src) >= remaining)
 		return -1;
 	return 0;
 }
