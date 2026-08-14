@@ -398,7 +398,7 @@ u64 drm_vblank_count(struct drm_device *dev, unsigned int pipe)
 	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
 	u64 count;
 
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+	if (drm_WARN_ON(dev, pipe >= dev->mode_config.num_crtc))
 		return 0;
 
 	count = atomic64_read(&vblank->count);
@@ -558,7 +558,6 @@ int drm_vblank_init(struct drm_device *dev, unsigned int num_crtcs)
 		return -ENOMEM;
 
 	dev->has_hw_vblank = true;
-	dev->num_crtcs = num_crtcs;
 
 	for (i = 0; i < num_crtcs; i++) {
 		struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, i);
@@ -645,7 +644,7 @@ void drm_calc_timestamping_constants(struct drm_crtc *crtc,
 	if (!drm_dev_has_vblank(dev))
 		return;
 
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+	if (drm_WARN_ON(dev, pipe >= dev->mode_config.num_crtc))
 		return;
 
 	/* Valid dotclock? */
@@ -729,7 +728,7 @@ drm_crtc_vblank_helper_get_vblank_timestamp_internal(
 	int vpos, hpos, i;
 	int delta_ns, duration_ns;
 
-	if (pipe >= dev->num_crtcs) {
+	if (pipe >= dev->mode_config.num_crtc) {
 		drm_err(dev, "Invalid crtc %u\n", pipe);
 		return false;
 	}
@@ -970,7 +969,7 @@ static u64 drm_vblank_count_and_time(struct drm_device *dev, unsigned int pipe,
 	u64 vblank_count;
 	unsigned int seq;
 
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs)) {
+	if (drm_WARN_ON(dev, pipe >= dev->mode_config.num_crtc)) {
 		*vblanktime = 0;
 		return 0;
 	}
@@ -1227,7 +1226,7 @@ int drm_vblank_get(struct drm_device *dev, unsigned int pipe)
 	if (!drm_dev_has_vblank(dev))
 		return -EINVAL;
 
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+	if (drm_WARN_ON(dev, pipe >= dev->mode_config.num_crtc))
 		return -EINVAL;
 
 	spin_lock_irqsave(&dev->vbl_lock, irqflags);
@@ -1266,7 +1265,7 @@ void drm_vblank_put(struct drm_device *dev, unsigned int pipe)
 	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
 	int vblank_offdelay = vblank->config.offdelay_ms;
 
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+	if (drm_WARN_ON(dev, pipe >= dev->mode_config.num_crtc))
 		return;
 
 	if (drm_WARN_ON(dev, atomic_read(&vblank->refcount) == 0))
@@ -1355,7 +1354,7 @@ void drm_crtc_vblank_off(struct drm_crtc *crtc)
 	ktime_t now;
 	u64 seq;
 
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+	if (drm_WARN_ON(dev, pipe >= dev->mode_config.num_crtc))
 		return;
 
 	/*
@@ -1496,7 +1495,7 @@ void drm_crtc_vblank_on_config(struct drm_crtc *crtc,
 	unsigned int pipe = drm_crtc_index(crtc);
 	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
 
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+	if (drm_WARN_ON(dev, pipe >= dev->mode_config.num_crtc))
 		return;
 
 	spin_lock_irq(&dev->vbl_lock);
@@ -1555,7 +1554,7 @@ static void drm_vblank_restore(struct drm_device *dev, unsigned int pipe)
 	u32 cur_vblank, diff = 1;
 	u32 max_vblank_count = drm_max_vblank_count(dev, pipe);
 
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+	if (drm_WARN_ON(dev, pipe >= dev->mode_config.num_crtc))
 		return;
 
 	assert_spin_locked(&dev->vbl_lock);
@@ -1788,7 +1787,7 @@ int drm_wait_vblank_ioctl(struct drm_device *dev, void *data,
 		pipe = pipe_index;
 	}
 
-	if (pipe >= dev->num_crtcs)
+	if (pipe >= dev->mode_config.num_crtc)
 		return -EINVAL;
 
 	vblank = drm_vblank_crtc(dev, pipe);
@@ -1931,7 +1930,7 @@ bool drm_handle_vblank(struct drm_device *dev, unsigned int pipe)
 	if (drm_WARN_ON_ONCE(dev, !drm_dev_has_vblank(dev)))
 		return false;
 
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+	if (drm_WARN_ON(dev, pipe >= dev->mode_config.num_crtc))
 		return false;
 
 	spin_lock_irqsave(&dev->event_lock, irqflags);

@@ -292,7 +292,7 @@ void gma_irq_postinstall(struct drm_device *dev)
 	PSB_WVDC32(dev_priv->vdc_irq_mask, PSB_INT_ENABLE_R);
 	PSB_WVDC32(0xFFFFFFFF, PSB_HWSTAM);
 
-	for (i = 0; i < dev->num_crtcs; ++i) {
+	for (i = 0; i < dev->mode_config.num_crtc; ++i) {
 		if (dev->vblank[i].enabled)
 			gma_enable_pipestat(dev_priv, i, PIPE_VBLANK_INTERRUPT_ENABLE);
 		else
@@ -350,7 +350,7 @@ void gma_irq_uninstall(struct drm_device *dev)
 
 	PSB_WVDC32(0xFFFFFFFF, PSB_HWSTAM);
 
-	for (i = 0; i < dev->num_crtcs; ++i) {
+	for (i = 0; i < dev->mode_config.num_crtc; ++i) {
 		if (dev->vblank[i].enabled)
 			gma_disable_pipestat(dev_priv, i, PIPE_VBLANK_INTERRUPT_ENABLE);
 	}

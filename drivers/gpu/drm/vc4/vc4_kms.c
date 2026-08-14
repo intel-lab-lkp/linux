@@ -936,7 +936,7 @@ static int vc4_pv_muxing_atomic_check(struct drm_device *dev,
 	 * If the layout changes and doesn't give us that in the future,
 	 * we will need to have something smarter, but it works so far.
 	 */
-	sorted_crtcs = kmalloc_objs(*sorted_crtcs, dev->num_crtcs);
+	sorted_crtcs = kmalloc_objs(*sorted_crtcs, dev->mode_config.num_crtc);
 	if (!sorted_crtcs)
 		return -ENOMEM;
 
@@ -946,7 +946,7 @@ static int vc4_pv_muxing_atomic_check(struct drm_device *dev,
 
 	sort(sorted_crtcs, i, sizeof(*sorted_crtcs), cmp_vc4_crtc_hvs_output, NULL);
 
-	for (i = 0; i < dev->num_crtcs; i++) {
+	for (i = 0; i < dev->mode_config.num_crtc; i++) {
 		struct vc4_crtc_state *old_vc4_crtc_state, *new_vc4_crtc_state;
 		struct drm_crtc_state *old_crtc_state, *new_crtc_state;
 		struct vc4_crtc *vc4_crtc;

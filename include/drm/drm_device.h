@@ -340,9 +340,6 @@ struct drm_device {
 	 */
 	spinlock_t event_lock;
 
-	/** @num_crtcs: Number of CRTCs on this device */
-	unsigned int num_crtcs;
-
 	/** @mode_config: Current mode config */
 	struct drm_mode_config mode_config;
 
