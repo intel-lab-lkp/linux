@@ -1008,7 +1008,7 @@ char *symbol_string(char *buf, char *end, void *ptr,
 
 	return string_nocheck(buf, end, sym, spec);
 #else
-	return special_hex_number(buf, end, value, sizeof(void *));
+	return string_nocheck(buf, end, "(unknown)", spec);
 #endif
 }
 
