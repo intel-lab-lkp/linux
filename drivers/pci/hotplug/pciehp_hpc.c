@@ -302,6 +302,14 @@ int pciehp_check_link_status(struct controller *ctrl)
 	if (ctrl->inband_presence_disabled)
 		pcie_wait_for_presence(pdev);
 
+	/*
+	 * The link is up, but a newly inserted card may have trained it in a
+	 * different mode than the card that was removed left it in.  Drop a
+	 * now stale 14-Bit Tag Requester Enable on the Port before the first
+	 * config read below, which the Port issues as the requester.
+	 */
+	pci_bridge_refresh_14bit_tag(pdev);
+
 	found = pci_bus_check_dev(ctrl->pcie->port->subordinate,
 					PCI_DEVFN(0, 0));
 
