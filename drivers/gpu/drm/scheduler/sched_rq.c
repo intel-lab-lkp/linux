@@ -98,6 +98,7 @@ void drm_sched_rq_init(struct drm_gpu_scheduler *sched,
 	rq->rb_tree_root = RB_ROOT_CACHED;
 	rq->sched = sched;
 	rq->head_prio = DRM_SCHED_PRIORITY_INVALID;
+	rq->min_vruntime = 0;
 }
 
 /*
@@ -120,28 +121,6 @@ static const unsigned int vruntime_shift[] = {
 	[DRM_SCHED_PRIORITY_LOW]    = 7,
 };
 
-static ktime_t
-drm_sched_rq_get_min_vruntime(struct drm_sched_rq *rq)
-{
-	ktime_t vruntime = 0;
-	struct rb_node *rb;
-
-	lockdep_assert_held(&rq->lock);
-
-	rb = rb_first_cached(&rq->rb_tree_root);
-	if (rb) {
-		struct drm_sched_entity *entity =
-			rb_entry(rb, typeof(*entity), rb_tree_node);
-		struct drm_sched_entity_stats *stats = entity->stats;
-
-		spin_lock(&stats->lock);
-		vruntime = stats->vruntime;
-		spin_unlock(&stats->lock);
-	}
-
-	return vruntime;
-}
-
 static void
 drm_sched_entity_save_vruntime(struct drm_sched_entity *entity,
 			       ktime_t min_vruntime)
@@ -151,7 +130,7 @@ drm_sched_entity_save_vruntime(struct drm_sched_entity *entity,
 
 	spin_lock(&stats->lock);
 	vruntime = stats->vruntime;
-	if (min_vruntime && vruntime > min_vruntime)
+	if (ktime_after(vruntime, min_vruntime))
 		vruntime = ktime_sub(vruntime, min_vruntime);
 	else
 		vruntime = 0;
@@ -239,11 +218,6 @@ static ktime_t drm_sched_entity_update_vruntime(struct drm_sched_entity *entity)
 	return runtime;
 }
 
-static ktime_t drm_sched_entity_get_job_ts(struct drm_sched_entity *entity)
-{
-	return drm_sched_entity_update_vruntime(entity);
-}
-
 /**
  * drm_sched_rq_add_entity - add an entity
  * @entity: scheduler entity
@@ -276,13 +250,11 @@ drm_sched_rq_add_entity(struct drm_sched_entity *entity, ktime_t ts)
 		list_add_tail(&entity->list, &rq->entities);
 	}
 
-	if (drm_sched_policy == DRM_SCHED_POLICY_FAIR) {
-		ts = drm_sched_rq_get_min_vruntime(rq);
-		ts = drm_sched_entity_restore_vruntime(entity, ts,
+	if (drm_sched_policy == DRM_SCHED_POLICY_FAIR)
+		ts = drm_sched_entity_restore_vruntime(entity, rq->min_vruntime,
 						       rq->head_prio);
-	} else if (drm_sched_policy == DRM_SCHED_POLICY_RR) {
+	else if (drm_sched_policy == DRM_SCHED_POLICY_RR)
 		ts = entity->rr_ts;
-	}
 
 	drm_sched_rq_update_fifo_locked(entity, rq, ts);
 
@@ -342,6 +314,7 @@ void drm_sched_rq_pop_entity(struct drm_sched_entity *entity)
 {
 	struct drm_sched_rq *rq = entity->rq;
 	struct drm_sched_job *next_job;
+	ktime_t ts;
 
 	lockdep_assert_held(&entity->lock);
 
@@ -351,27 +324,27 @@ void drm_sched_rq_pop_entity(struct drm_sched_entity *entity)
 	 * Update the entity's location in the min heap according to
 	 * the timestamp of the next job, if any.
 	 */
+
+	if (drm_sched_policy == DRM_SCHED_POLICY_FAIR) {
+		ts = drm_sched_entity_update_vruntime(entity);
+		if (ktime_after(ts, rq->min_vruntime))
+			rq->min_vruntime = ts;
+	}
+
 	next_job = drm_sched_entity_queue_peek(entity);
 	if (next_job) {
-		ktime_t ts;
-
-		if (drm_sched_policy == DRM_SCHED_POLICY_FAIR)
-			ts = drm_sched_entity_get_job_ts(entity);
-		else if (drm_sched_policy == DRM_SCHED_POLICY_FIFO)
+		if (drm_sched_policy == DRM_SCHED_POLICY_FIFO)
 			ts = next_job->submit_ts;
-		else
+		else if (drm_sched_policy == DRM_SCHED_POLICY_RR)
 			ts = drm_sched_rq_next_rr_ts(rq, entity);
 
 		drm_sched_rq_update_fifo_locked(entity, rq, ts);
 	} else {
+		if (drm_sched_policy == DRM_SCHED_POLICY_FAIR)
+			drm_sched_entity_save_vruntime(entity,
+						       rq->min_vruntime);
+
 		drm_sched_rq_remove_fifo_locked(entity, rq);
-
-		if (drm_sched_policy == DRM_SCHED_POLICY_FAIR) {
-			ktime_t min_vruntime;
-
-			min_vruntime = drm_sched_rq_get_min_vruntime(rq);
-			drm_sched_entity_save_vruntime(entity, min_vruntime);
-		}
 	}
 
 	spin_unlock(&rq->lock);
