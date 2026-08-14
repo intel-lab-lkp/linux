@@ -96,10 +96,17 @@ struct cmn_pll_fixed_output_clk {
  * struct clk_cmn_pll - CMN PLL hardware specific data
  * @regmap: hardware regmap.
  * @hw: handle between common and hardware-specific interfaces
+ * @div2_hw: fixed /2 clock derived from the CMN PLL output; present on
+ *           every supported SoC, but only IPQ5210 currently parents
+ *           any output clock on it (every output clock except the
+ *           plain fixed-rate xo/sleep clocks, which stay on the main
+ *           PLL); other SoCs' output clocks use hardcoded rates that
+ *           never depend on a parent
  */
 struct clk_cmn_pll {
 	struct regmap *regmap;
 	struct clk_hw hw;
+	struct clk_hw *div2_hw;
 };
 
 #define CLK_PLL_OUTPUT(_id, _name, _rate) {		\
@@ -362,6 +369,7 @@ static int ipq_cmn_pll_register_clks(struct platform_device *pdev)
 	const struct cmn_pll_fixed_output_clk *p, *fixed_clk;
 	struct clk_hw_onecell_data *hw_data;
 	struct device *dev = &pdev->dev;
+	struct clk_cmn_pll *cmn_pll;
 	struct clk_hw *cmn_pll_hw;
 	unsigned int num_clks;
 	struct clk_hw *hw;
@@ -387,6 +395,20 @@ static int ipq_cmn_pll_register_clks(struct platform_device *pdev)
 	cmn_pll_hw = ipq_cmn_pll_clk_hw_register(pdev);
 	if (IS_ERR(cmn_pll_hw))
 		return PTR_ERR(cmn_pll_hw);
+
+	cmn_pll = to_clk_cmn_pll(cmn_pll_hw);
+
+	/*
+	 * The CMN PLL output feeds a shared, physical /2 stage ahead of
+	 * any further per-clock processing (a gated fixed rate, a
+	 * configurable divider, or a rate-select bit). Register it once
+	 * as a fixed-factor clock so the output clock types added by
+	 * later patches can parent on it.
+	 */
+	cmn_pll->div2_hw = devm_clk_hw_register_fixed_factor_parent_hw(dev, "cmn_pll_div2",
+								       cmn_pll_hw, 0, 1, 2);
+	if (IS_ERR(cmn_pll->div2_hw))
+		return PTR_ERR(cmn_pll->div2_hw);
 
 	/* Register the fixed rate output clocks. */
 	for (i = 0; i < num_clks; i++) {
