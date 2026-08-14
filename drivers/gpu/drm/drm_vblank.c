@@ -542,12 +542,31 @@ static void drm_vblank_init_release(struct drm_device *dev, void *ptr)
  * drmm_add_action_or_reset().
  *
  * Returns:
- * Zero on success or a negative error code on failure.
+ * Zero on success or a negative error code on failure. If no CRTCs with vblank
+ * support implemented were found, -ENODEV will be returned.
  */
 int drm_vblank_init(struct drm_device *dev)
 {
 	int ret;
 	struct drm_crtc *crtc;
+	bool found_vbl_crtc = false, found_non_vbl_crtc = false;
+
+	/* Vblank hooks are per-CRTC, not per-device - which is contrary to how
+	 * the vblank core was written. Since hardware that only has vblank
+	 * support on some CRTCs but not all is non-existent and would likely
+	 * lead to UB, ensure that vblank support is all or nothing.
+	 */
+	drm_for_each_crtc(crtc, dev) {
+		if (crtc->funcs->enable_vblank)
+			found_vbl_crtc = true;
+		else
+			found_non_vbl_crtc = true;
+
+		if (drm_WARN_ON(dev, found_vbl_crtc && found_non_vbl_crtc))
+			return -EINVAL;
+	}
+	if (!found_vbl_crtc)
+		return -ENODEV;
 
 	spin_lock_init(&dev->vbl_lock);
 	spin_lock_init(&dev->vblank_time_lock);
