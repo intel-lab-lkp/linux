@@ -561,6 +561,17 @@ struct hfs_bnode *hfs_bmap_alloc(struct hfs_btree *tree)
 			if (byte != 0xff) {
 				for (m = 0x80, i = 0; i < 8; m >>= 1, i++) {
 					if (!(byte & m)) {
+						if (unlikely(!(idx + i))) {
+							pr_warn("(%s): %s (cnid 0x%x) map record invalid or bitmap corruption detected, forcing read-only.\n",
+								tree->sb->s_id,
+								hfs_btree_name(tree->cnid),
+								tree->cnid);
+							pr_warn("Run fsck.hfsplus to repair.\n");
+							tree->sb->s_flags |= SB_RDONLY;
+							kunmap_local(data);
+							hfs_bnode_put(node);
+							return ERR_PTR(-EIO);
+						}
 						idx += i;
 						data[ctx.off] |= m;
 						set_page_dirty(page);
