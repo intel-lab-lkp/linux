@@ -2561,6 +2561,10 @@ static bool rcu_do_batch_check_time(long count, long tlimit,
 	       local_clock() >= tlimit;
 }
 
+#if defined(CONFIG_NET_DEV_REFCNT_TRACKER) && defined(CONFIG_KALLSYMS)
+static noinline void rcu_do_batch(struct rcu_data *rdp);
+#endif
+
 /*
  * Invoke any RCU callbacks that have made it to the end of their grace
  * period.  Throttle as specified by rdp->blimit.

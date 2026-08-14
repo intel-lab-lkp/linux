@@ -11574,6 +11574,14 @@ int netdev_refcnt_read(const struct net_device *dev)
 }
 EXPORT_SYMBOL(netdev_refcnt_read);
 
+#if defined(CONFIG_NET_DEV_REFCNT_TRACKER) && defined(CONFIG_KALLSYMS)
+static void dump_netdev_trace_buffer(const struct net_device *dev);
+static void erase_netdev_trace_buffer(const struct net_device *dev);
+#else
+static inline void dump_netdev_trace_buffer(const struct net_device *dev) { }
+static inline void erase_netdev_trace_buffer(const struct net_device *dev) { }
+#endif
+
 int netdev_unregister_timeout_secs __read_mostly = 10;
 
 #define WAIT_REFS_MIN_MSECS 1
@@ -11651,6 +11659,7 @@ static struct net_device *netdev_wait_allrefs_any(struct list_head *list)
 				pr_emerg("unregister_netdevice: waiting for %s to become free. Usage count = %d\n",
 					 dev->name, netdev_refcnt_read(dev));
 				ref_tracker_dir_print(&dev->refcnt_tracker, 10);
+				dump_netdev_trace_buffer(dev);
 			}
 
 			warning_time = jiffies;
@@ -12051,6 +12060,9 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 
 	dev->priv_len = sizeof_priv;
 
+#if defined(CONFIG_NET_DEV_REFCNT_TRACKER) && defined(CONFIG_KALLSYMS)
+	INIT_LIST_HEAD(&dev->netdev_trace_buffer_list);
+#endif
 	ref_tracker_dir_init(&dev->refcnt_tracker, 128, "netdev");
 #ifdef CONFIG_PCPU_DEV_REFCNT
 	dev->pcpu_refcnt = alloc_percpu(int);
@@ -12149,6 +12161,7 @@ free_all:
 free_pcpu:
 #ifdef CONFIG_PCPU_DEV_REFCNT
 	free_percpu(dev->pcpu_refcnt);
+	erase_netdev_trace_buffer(dev);
 free_dev:
 #endif
 	kvfree(dev);
@@ -12217,6 +12230,7 @@ void free_netdev(struct net_device *dev)
 	free_percpu(dev->pcpu_refcnt);
 	dev->pcpu_refcnt = NULL;
 #endif
+	erase_netdev_trace_buffer(dev);
 	free_percpu(dev->core_stats);
 	dev->core_stats = NULL;
 	free_percpu(dev->xdp_bulkq);
@@ -13219,6 +13233,12 @@ static struct smp_hotplug_thread backlog_threads = {
 	.setup			= backlog_napi_setup,
 };
 
+#if defined(CONFIG_NET_DEV_REFCNT_TRACKER) && defined(CONFIG_KALLSYMS)
+static void __init net_dev_refcnt_tracker_init(void);
+#else
+static void __init net_dev_refcnt_tracker_init(void) { };
+#endif
+
 /*
  *       This is called single threaded during boot, so no need
  *       to take the rtnl semaphore.
@@ -13227,6 +13247,7 @@ static int __init net_dev_init(void)
 {
 	int i, rc = -ENOMEM;
 
+	net_dev_refcnt_tracker_init();
 	BUG_ON(!dev_boot_phase);
 
 	net_dev_struct_check();
@@ -13330,3 +13351,250 @@ out:
 }
 
 subsys_initcall(net_dev_init);
+
+#if defined(CONFIG_NET_DEV_REFCNT_TRACKER) && defined(CONFIG_KALLSYMS)
+
+#define NETDEV_TRACE_BUFFER_SIZE 32768
+static struct netdev_trace_buffer {
+	struct list_head list;
+	atomic_t count;
+	int trimmed_entries;
+	int nr_entries;
+	unsigned long entries[20];
+} netdev_trace_buffer[NETDEV_TRACE_BUFFER_SIZE];
+static LIST_HEAD(netdev_trace_buffer_list);
+static DEFINE_RAW_SPINLOCK(netdev_trace_buffer_lock);
+static bool netdev_trace_buffer_exhausted;
+static unsigned long start_of_handle_softirqs __ro_after_init;
+static unsigned long end_of_handle_softirqs __ro_after_init;
+
+static int netdev_trace_buffer_init(void)
+{
+	int i;
+
+	for (i = 0; i < NETDEV_TRACE_BUFFER_SIZE; i++)
+		list_add_tail(&netdev_trace_buffer[i].list, &netdev_trace_buffer_list);
+	return 0;
+}
+pure_initcall(netdev_trace_buffer_init);
+
+static int trim_netdev_trace(unsigned long *entries, int nr_entries)
+{
+	char buffer[32] = { };
+	char *cp;
+	int i;
+
+	for (i = 0; i < nr_entries; i++) {
+		snprintf(buffer, sizeof(buffer) - 1, "%ps", (void *)entries[i]);
+		cp = strchr(buffer, ' ');
+		if (cp)
+			*cp = '\0';
+		if (buffer[0] == 'p') {
+			if (!strcmp(buffer, "process_one_work"))
+				return i + 1;
+		} else if (buffer[0] == 'k') {
+			if (!strcmp(buffer, "ksys_unshare"))
+				return i + 1;
+		} else if (buffer[0] == 's') {
+			if (!strcmp(buffer, "sock_sendmsg_nosec") ||
+			    !strcmp(buffer, "sock_recvmsg_nosec"))
+				return i + 1;
+		} else if (buffer[0] == 'r') {
+			if (!strcmp(buffer, "rcu_do_batch"))
+				return i + 1;
+		} else if (buffer[0] == '_') {
+			if (!strcmp(buffer, "__sys_bind") ||
+			    !strcmp(buffer, "__sock_release") ||
+			    !strcmp(buffer, "__sys_bpf"))
+				return i + 1;
+		} else {
+			if (!strcmp(buffer, "do_sock_setsockopt"))
+				return i + 1;
+		}
+	}
+	return nr_entries;
+}
+
+static void dump_netdev_trace_buffer(const struct net_device *dev)
+{
+	struct netdev_trace_buffer *ptr, *tmp;
+	int count, balance = 0, pos = 0;
+
+	/* Update trimmed_entries field. Do not modify nr_entries field
+	 * in case save_netdev_trace_buffer() is called again.
+	 */
+	list_for_each_entry_rcu(ptr, &dev->netdev_trace_buffer_list, list,
+				/* list elements can't go away. */ 1) {
+		if (ptr->trimmed_entries == ptr->nr_entries)
+			ptr->trimmed_entries = trim_netdev_trace(ptr->entries, ptr->nr_entries);
+	}
+	/* Merge duplicated entries using trimmed_entries field. */
+	list_for_each_entry_rcu(ptr, &dev->netdev_trace_buffer_list, list,
+				/* list elements can't go away. */ 1) {
+		/* Skip empty entries. */
+		if (!atomic_read(&ptr->count))
+			continue;
+		tmp = ptr;
+		list_for_each_entry_continue_rcu(tmp, &dev->netdev_trace_buffer_list, list) {
+			if (ptr->trimmed_entries != tmp->trimmed_entries ||
+			    memcmp(ptr->entries, tmp->entries,
+				   ptr->trimmed_entries * sizeof(unsigned long)))
+				continue;
+			/* Skip empty entries. */
+			count = atomic_read(&tmp->count);
+			if (!count)
+				continue;
+			/* Move count from non-first entry to first entry. */
+			atomic_add(count, &ptr->count);
+			atomic_sub(count, &tmp->count);
+		}
+	}
+	/* Report all entries for this device. */
+	list_for_each_entry_rcu(ptr, &dev->netdev_trace_buffer_list, list,
+				/* list elements can't go away. */ 1) {
+		/* Skip empty entries. */
+		count = atomic_read(&ptr->count);
+		if (!count)
+			continue;
+		/* Report this entry. It is safe to call cond_resched() because
+		 * this function is called from schedulable context.
+		 */
+		pos++;
+		balance += count;
+		pr_info("Call trace for %s[%d] %+d at\n", dev->name, pos, count);
+		stack_trace_print(ptr->entries, ptr->trimmed_entries, 4);
+		cond_resched();
+	}
+	if (!netdev_trace_buffer_exhausted)
+		pr_info("balance as of %s[%d] is %d\n", dev->name, pos, balance);
+}
+
+static void erase_netdev_trace_buffer(const struct net_device *dev)
+{
+	struct netdev_trace_buffer *ptr;
+	unsigned long flags;
+
+	/* This function is called after free_percpu(dev->pcpu_refcnt) was already
+	 * called, which means that no more __dev_put()/__dev_hold() call can be made.
+	 * Therefore, no more save_netdev_trace_buffer() call will be made, and we can
+	 * safely return list elements to netdev_trace_buffer_list.
+	 */
+	raw_spin_lock_irqsave(&netdev_trace_buffer_lock, flags);
+	while (!list_empty(&dev->netdev_trace_buffer_list)) {
+		ptr = list_first_entry(&dev->netdev_trace_buffer_list, typeof(*ptr), list);
+		list_del(&ptr->list);
+		list_add_tail(&ptr->list, &netdev_trace_buffer_list);
+	}
+	raw_spin_unlock_irqrestore(&netdev_trace_buffer_lock, flags);
+}
+
+void save_netdev_trace_buffer(struct net_device *dev, int delta)
+{
+	struct netdev_trace_buffer *ptr;
+	unsigned long entries[ARRAY_SIZE(ptr->entries)];
+	int nr_entries;
+	unsigned long flags;
+
+	/* This function is not NMI-safe. Give up if called from NMI context. */
+	if (in_nmi())
+		return;
+	/* Get stack traces. */
+	nr_entries = stack_trace_save(entries, ARRAY_SIZE(ptr->entries), 1);
+	/* Trim traces of process context now if called from softirq context, for
+	 * we will easily exhaust netdev_trace_buffer_list if we don't trim traces
+	 * of process context when trying to compare with existing entries.
+	 *
+	 * Avoid kallsyms lookup, by using cached address resolved upon boot.
+	 */
+	if (in_softirq()) {
+		int i;
+
+		for (i = 0; i < nr_entries; i++) {
+			if (entries[i] >= start_of_handle_softirqs &&
+			    entries[i] < end_of_handle_softirqs) {
+				nr_entries = i + 1;
+				break;
+			}
+		}
+	}
+	/* Compare with existing entries at best-effort basis. Since duplicated entries
+	 * created by race condition will be merged when reporting, we don't use lock here.
+	 */
+	list_for_each_entry_rcu(ptr, &dev->netdev_trace_buffer_list, list,
+				/* list elements can't go away. */ 1) {
+		if (0 && ptr->nr_entries == nr_entries &&
+		    !memcmp(ptr->entries, entries, nr_entries * sizeof(unsigned long))) {
+			atomic_add(delta, &ptr->count);
+			return;
+		}
+	}
+	/* Add a new entry. We don't re-compare with existing entries with lock held, for
+	 * duplicated entries created by race condition will be merged when reporting.
+	 * But we use raw spinlock here in case this function is called with some other
+	 * raw spinlock already held.
+	 */
+	raw_spin_lock_irqsave(&netdev_trace_buffer_lock, flags);
+	if (!list_empty(&netdev_trace_buffer_list)) {
+		/* Remove one entry from netdev_trace_buffer_list and initialize it. */
+		ptr = list_first_entry(&netdev_trace_buffer_list, typeof(*ptr), list);
+		list_del(&ptr->list);
+		atomic_set(&ptr->count, delta);
+		ptr->nr_entries = nr_entries;
+		ptr->trimmed_entries = nr_entries;
+		memmove(ptr->entries, entries, nr_entries * sizeof(unsigned long));
+		/* Append it in RCU manner, for readers are lockless. */
+		list_add_tail_rcu(&ptr->list, &dev->netdev_trace_buffer_list);
+	} else {
+		netdev_trace_buffer_exhausted = true;
+	}
+	raw_spin_unlock_irqrestore(&netdev_trace_buffer_lock, flags);
+}
+EXPORT_SYMBOL(save_netdev_trace_buffer);
+
+struct timer_completion_struct {
+	struct timer_list timer;
+	struct completion completion;
+};
+
+/* Resolve address of handle_softirqs() and cache it, in order to avoid looking up
+ * kallsyms every time.
+ */
+static void __init netdev_addr_resolve_func(struct timer_list *timer)
+{
+	unsigned long entries[40];
+	int nr_entries = stack_trace_save(entries, ARRAY_SIZE(entries), 1);
+	char buffer[KSYM_SYMBOL_LEN] = { };
+	unsigned long offset, size;
+	char *cp;
+	int i;
+
+	for (i = 0; i < nr_entries; i++) {
+		sprint_symbol(buffer, entries[i]);
+		if (strncmp(buffer, "handle_softirqs", 15))
+			continue;
+		cp = strchr(buffer, '+');
+		if (!cp || sscanf(cp, "+%lx/%lx", &offset, &size) != 2)
+			continue;
+		start_of_handle_softirqs = entries[i] - offset;
+		end_of_handle_softirqs = start_of_handle_softirqs + size;
+		break;
+	}
+	complete(&container_of(timer, struct timer_completion_struct, timer)->completion);
+}
+
+static void __init net_dev_refcnt_tracker_init(void)
+{
+	struct timer_completion_struct tc;
+
+	timer_setup_on_stack(&tc.timer, netdev_addr_resolve_func, 0);
+	init_completion(&tc.completion);
+	/* Schedule a call to netdev_addr_resolve_func(). */
+	mod_timer(&tc.timer, jiffies);
+	/* Wait for netdev_addr_resolve_func() to be called. */
+	wait_for_completion(&tc.completion);
+	/* Wait for netdev_addr_resolve_func() to complete. */
+	timer_delete_sync(&tc.timer);
+	timer_destroy_on_stack(&tc.timer);
+}
+
+#endif
