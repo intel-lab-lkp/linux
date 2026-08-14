@@ -678,18 +678,9 @@ enum pcie_link_change_reason {
 	PCIE_HOTPLUG,
 };
 
-static inline void __pcie_update_link_speed(struct pci_bus *bus,
-					    enum pcie_link_change_reason reason,
-					    u16 linksta, u16 linksta2)
-{
-	bus->cur_bus_speed = pcie_link_speed[linksta & PCI_EXP_LNKSTA_CLS];
-	bus->flit_mode = (linksta2 & PCI_EXP_LNKSTA2_FLIT) ? 1 : 0;
-
-	trace_pcie_link_event(bus,
-			     reason,
-			     FIELD_GET(PCI_EXP_LNKSTA_NLW, linksta),
-			     linksta & PCI_EXP_LNKSTA_LINK_STATUS_MASK);
-}
+void __pcie_update_link_speed(struct pci_bus *bus,
+			      enum pcie_link_change_reason reason,
+			      u16 linksta, u16 linksta2);
 
 void pcie_update_link_speed(struct pci_bus *bus, enum pcie_link_change_reason reason);
 
