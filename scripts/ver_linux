@@ -8,6 +8,9 @@
 BEGIN {
 	usage = "If some fields are empty or look unusual you may have an old version.\n"
 	usage = usage "Compare to the current minimal requirements in Documentation/process/changes.rst\n"
+	usage = usage "\033[34m BLUE \033[0mmeans there is no required version available,\n"
+	usage = usage "\033[32m GREEN \033[0mmeans the version on your machine is above the requirement,\n"
+	usage = usage "\033[31m RED \033[0mmeans the version on your machine is below the requirement, please update and run again.\n\033[0m"
 	print usage
 
 	system("uname -a")
@@ -17,58 +20,61 @@ BEGIN {
 	libc = "libc[.]so[.][0-9]+$"
 	libcpp = "(libg|stdc)[+]+[.]so([.][0-9]+)+$"
 
-	printversion("bash", version("bash --version"))
-	printversion("bc", version("bc --version"))
-	printversion("bindgen", version("bindgen --version"))
-	printversion("binutils", version("ld -v"))
-	printversion("bison", version("bison --version"))
-	printversion("btrfs-progs", version("btrfs --version"))
-	printversion("Clang", version("clang --version"))
-	printversion("Console-tools", version("loadkeys -V"))
-	printversion("Dynamic linker (ldd)", version("ldd --version"))
-	printversion("e2fsprogs", version("e2fsck -V"))
-	printversion("flex", version("flex --version"))
-	printversion("gdb", version("gdb -version"))
-	printversion("GNU awk", version("gawk --version"))
-	printversion("GNU C", version("gcc -dumpversion"))
-	printversion("GNU make", version("make --version"))
-	printversion("GNU tar", version("tar --version"))
-	printversion("GRUB2", version("grub2-install --version"))
-	printversion("GRUB", version("grub-install --version"))
-	printversion("gtags", version("gtags --version"))
-	printversion("iptables", version("iptables -V"))
-	printversion("Isdn4k-utils", version("isdnctrl"))
-	printversion("jfsutils", version("fsck.jfs -V"))
-	printversion("Kbd", version("loadkeys -V"))
-	printversion("kmod", version("kmod -V"))
+	printf("toolname\t\tcurrent\trequired\tstatus \n")
+	printf("\t\t\tversion\tversion\t\tgood    bad\n")
+
+	printversion("bash", version("bash --version"), "4.2")
+	printversion("bc", version("bc --version"), "1.06.95")
+	printversion("bindgen", version("bindgen --version"), "0.71.1")
+	printversion("binutils", version("ld -v"), "2.30")
+	printversion("bison", version("bison --version"), "2.0")
+	printversion("btrfs-progs", version("btrfs --version"), "0.18")
+	printversion("Clang", version("clang --version"), "17.0.1")
+	printversion("Console-tools", version("loadkeys -V"), "")
+	printversion("Dynamic linker (ldd)", version("ldd --version"), "")
+	printversion("e2fsprogs", version("e2fsck -V"), "1.41.4")
+	printversion("flex", version("flex --version"), "2.5.35")
+	printversion("gdb", version("gdb -version"), "7.2")
+	printversion("GNU awk", version("gawk --version"), "5.1.0")
+	printversion("GNU C", version("gcc -dumpversion"), "8.1")
+	printversion("GNU make", version("make --version"), "4.0")
+	printversion("GNU tar", version("tar --version"), "1.28")
+	printversion("GRUB2", version("grub2-install --version"), "0.93")
+	printversion("GRUB", version("grub-install --version"), "0.93")
+	printversion("gtags", version("gtags --version"), "6.6.5")
+	printversion("iptables", version("iptables -V"), "1.4.2")
+	printversion("Isdn4k-utils", version("isdnctrl"), "")
+	printversion("jfsutils", version("fsck.jfs -V"), "1.1.3")
+	printversion("Kbd", version("loadkeys -V"), "")
+	printversion("kmod", version("kmod -V"), "13")
 
 	while ("ldconfig -p 2>/dev/null" | getline > 0)
 		if ($NF ~ libc || $NF ~ libcpp)
 			if (!seen[ver = version("readlink " $NF)]++)
 				printversion("Linux C" ($NF ~ libcpp? "++" : "") " Library", ver)
 
-	printversion("mcelog", version("mcelog --version"))
-	printversion("mkimage", version("mkimage --version"))
-	printversion("Module-init-tools", version("depmod -V"))
-	printversion("Mount", version("mount --version"))
-	printversion("Net-tools", version("ifconfig --version"))
-	printversion("nfs-utils", version("showmount --version"))
-	printversion("openssl", version("openssl version"))
-	printversion("pahole", version("pahole --version"))
-	printversion("Pcmcia-cs", version("cardmgr -V"))
-	printversion("pcmciautils", version("pccardctl -V"))
-	printversion("PPP", version("pppd --version"))
-	printversion("procps", version("ps --version"))
-	printversion("Python", version("python3 -V"))
-	printversion("quota-tools", version("quota -V"))
-	printversion("Rust", version("rustc --version"))
-	printversion("Sh-utils", version("expr --v"))
-	printversion("Sphinx", version("sphinx-build --version"))
-	printversion("squashfs-tools", version("mksquashfs -version"))
-	printversion("udev", version("udevadm --version"))
-	printversion("util-linux", version("mount --version"))
-	printversion("Wireless-tools", version("iwconfig --version"))
-	printversion("xfsprogs", version("xfs_db -V"))
+	printversion("mcelog", version("mcelog --version"), "0.6 ")
+	printversion("mkimage", version("mkimage --version"), "2017.01")
+	printversion("Module-init-tools", version("depmod -V"), "")
+	printversion("Mount", version("mount --version"), "")
+	printversion("Net-tools", version("ifconfig --version"), "")
+	printversion("nfs-utils", version("showmount --version"), "1.0.5")
+	printversion("openssl", version("openssl version"), "1.0.0")
+	printversion("pahole", version("pahole --version"), "1.26")
+	printversion("Pcmcia-cs", version("cardmgr -V"), "")
+	printversion("pcmciautils", version("pccardctl -V"), "004")
+	printversion("PPP", version("pppd --version"), "2.4.0")
+	printversion("procps", version("ps --version"), "3.2.0")
+	printversion("Python", version("python3 -V"), "3.9.0")
+	printversion("quota-tools", version("quota -V"), "3.09")
+	printversion("Rust", version("rustc --version"), "1.85.0")
+	printversion("Sh-utils", version("expr --v"), "")
+	printversion("Sphinx", version("sphinx-build --version"), "3.4.3")
+	printversion("squashfs-tools", version("mksquashfs -version"), "4.0")
+	printversion("udev", version("udevadm --version"), "081")
+	printversion("util-linux", version("mount --version"), "2.10o")
+	printversion("Wireless-tools", version("iwconfig --version"), "")
+	printversion("xfsprogs", version("xfs_db -V"), "2.6.0")
 
 	while ("sort /proc/modules" | getline > 0) {
 		mods = mods sep $1
@@ -89,9 +95,17 @@ function version(cmd,    ver) {
 	return ver
 }
 
-function printversion(name, value,  ofmt) {
-	if (value != "") {
+function printversion(name, cur_version, req_version,  ofmt) {
+	if (req_version == "") {
 		ofmt = "%-20s\t%s\n"
-		printf(ofmt, name, value)
+		printf(ofmt, name,  cur_version"\t"req_version"\t\t\033[34m###\033[0m")
+	}
+	else if (cur_version >= req_version) {
+		ofmt = "%-20s\t%s\n"
+		printf(ofmt, name,  cur_version"\t"req_version"\t\t\033[32m###\033[0m")
+	}
+	else {
+		ofmt = "%-20s\t%s\n"
+		printf(ofmt, name,  cur_version"\t"req_version"\t\t\t\033[31m###\033[0m")
 	}
 }
