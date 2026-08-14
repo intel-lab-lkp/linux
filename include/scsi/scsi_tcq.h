@@ -29,7 +29,8 @@ static inline struct scsi_cmnd *scsi_host_find_tag(struct Scsi_Host *shost,
 		return NULL;
 
 	hwq = blk_mq_unique_tag_to_hwq(tag);
-	if (hwq < shost->tag_set.nr_hw_queues) {
+	if (hwq < shost->tag_set.nr_hw_queues && shost->tag_set.tags &&
+	    shost->tag_set.tags[hwq]) {
 		req = blk_mq_tag_to_rq(shost->tag_set.tags[hwq],
 					blk_mq_unique_tag_to_tag(tag));
 	}
