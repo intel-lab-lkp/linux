@@ -15,12 +15,59 @@
 
 #include "btree.h"
 
+static bool hfs_bmap_test_bit(struct hfs_bnode *node, u32 node_bit_idx)
+{
+	u16 rec_idx, off, len;
+	u32 byte_offset;
+	u8 byte, mask;
+
+	if (node->this == 0) {
+		if (node->type != HFS_NODE_HEADER) {
+			pr_err("hfs: invalid btree header node\n");
+			return false;
+		}
+		rec_idx = 2;
+	} else {
+		if (node->type != HFS_NODE_MAP) {
+			pr_err("hfs: invalid btree map node\n");
+			return false;
+		}
+		rec_idx = 0;
+	}
+
+	len = hfs_brec_lenoff(node, rec_idx, &off);
+	if (!len)
+		return false;
+
+	byte_offset = node_bit_idx / BITS_PER_BYTE;
+	if (byte_offset >= len)
+		return false;
+
+	byte = hfs_bnode_read_u8(node, off + byte_offset);
+	mask = 1 << (7 - (node_bit_idx % BITS_PER_BYTE));
+
+	return byte & mask;
+}
+
+static const char *hfs_btree_name(u32 cnid)
+{
+	switch (cnid) {
+	case HFS_EXT_CNID:
+		return "Extents Overflow File";
+	case HFS_CAT_CNID:
+		return "Catalog File";
+	default:
+		return "Unknown B-tree";
+	}
+}
+
 /* Get a reference to a B*Tree and do some initial checks */
 struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id, btree_keycmp keycmp)
 {
 	struct hfs_btree *tree;
 	struct hfs_btree_header_rec *head;
 	struct address_space *mapping;
+	struct hfs_bnode *node;
 	struct folio *folio;
 	struct buffer_head *bh;
 	unsigned int size;
@@ -155,6 +202,19 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id, btree_keycmp ke
 	kunmap_local(head);
 	folio_unlock(folio);
 	folio_put(folio);
+
+	node = hfs_bnode_find(tree, 0);
+	if (IS_ERR(node))
+		goto free_inode;
+
+	if (!hfs_bmap_test_bit(node, 0)) {
+		pr_warn("(%s): %s (cnid 0x%x) map record invalid or bitmap corruption detected, forcing read-only.\n",
+			sb->s_id, hfs_btree_name(id), id);
+		pr_warn("Run fsck.hfs to repair.\n");
+		sb->s_flags |= SB_RDONLY;
+	}
+
+	hfs_bnode_put(node);
 	return tree;
 
 fail_folio:
