@@ -82,7 +82,8 @@ static void subflow_req_create_thmac(struct mptcp_subflow_request_sock *subflow_
 	subflow_req->thmac = get_unaligned_be64(hmac);
 }
 
-static struct mptcp_sock *subflow_token_join_request(struct request_sock *req)
+static struct mptcp_sock *subflow_token_join_request(struct request_sock *req,
+						     u8 *reason)
 {
 	struct mptcp_subflow_request_sock *subflow_req = mptcp_subflow_rsk(req);
 	struct mptcp_sock *msk;
@@ -91,12 +92,22 @@ static struct mptcp_sock *subflow_token_join_request(struct request_sock *req)
 	msk = mptcp_token_get_sock(sock_net(req_to_sk(req)), subflow_req->token);
 	if (!msk) {
 		SUBFLOW_REQ_INC_STATS(req, MPTCP_MIB_JOINNOTOKEN);
+		*reason = MPTCP_RST_EMPTCP;
+		return NULL;
+	}
+
+	/* Stop it early if the subflow cannot be accepted */
+	if (!mptcp_can_accept_new_subflow(msk)) {
+		SUBFLOW_REQ_INC_STATS(req, MPTCP_MIB_MPJOINDISALLOWED);
+		*reason = MPTCP_RST_EPROHIBIT;
+		sock_put((struct sock *)msk);
 		return NULL;
 	}
 
 	local_id = mptcp_pm_get_local_id(msk, (struct sock_common *)req);
 	if (local_id < 0) {
 		SUBFLOW_REQ_INC_STATS(req, MPTCP_MIB_MPJOINNOIDFOUND);
+		*reason = MPTCP_RST_EMPTCP;
 		sock_put((struct sock *)msk);
 		return NULL;
 	}
@@ -217,17 +228,19 @@ again:
 			SUBFLOW_REQ_INC_STATS(req, MPTCP_MIB_TOKENFALLBACKINIT);
 
 	} else if (opt_mp_join && listener->request_mptcp) {
+		u8 reason;
+
 		subflow_req->ssn_offset = TCP_SKB_CB(skb)->seq;
 		subflow_req->mp_join = 1;
 		subflow_req->backup = mp_opt.backup;
 		subflow_req->remote_id = mp_opt.join_id;
 		subflow_req->token = mp_opt.token;
 		subflow_req->remote_nonce = mp_opt.nonce;
-		subflow_req->msk = subflow_token_join_request(req);
+		subflow_req->msk = subflow_token_join_request(req, &reason);
 
 		/* Can't fall back to TCP in this case. */
 		if (!subflow_req->msk) {
-			subflow_add_reset_reason(skb, MPTCP_RST_EMPTCP);
+			subflow_add_reset_reason(skb, reason);
 			return -EPERM;
 		}
 

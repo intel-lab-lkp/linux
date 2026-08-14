@@ -80,6 +80,7 @@ unset join_ack_no_mpjoin
 unset join_ack_no_ctx
 unset join_not_established
 unset join_no_id_found
+unset join_disallowed
 
 unset rst_md5sig
 unset rst_dss
@@ -1617,6 +1618,7 @@ chk_join_nr()
 	local ack_no_ctx=${join_ack_no_ctx:-0}
 	local not_established=${join_not_established:-0}
 	local no_id_found=${join_no_id_found:-0}
+	local disallowed=${join_disallowed:-0}
 	local rc=${KSFT_PASS}
 	local count
 	local with_cookie
@@ -1721,6 +1723,13 @@ chk_join_nr()
 		rc=${KSFT_FAIL}
 		print_check "join no id found"
 		fail_test "got $count JOIN[s] no id found expected $no_id_found"
+	fi
+
+	count=$(mptcp_lib_get_counter ${ns1} "MPTcpExtMPJoinDisallowed")
+	if [ -n "$count" ] && [ "$count" != "$disallowed" ]; then
+		rc=${KSFT_FAIL}
+		print_check "join disallowed"
+		fail_test "got $count JOIN[s] disallowed expected $disallowed"
 	fi
 
 	print_results "join Rx" ${rc}
@@ -2202,8 +2211,8 @@ subflows_tests()
 		pm_nl_set_limits $ns2 0 1
 		pm_nl_add_endpoint $ns2 10.0.3.2 flags subflow
 		run_tests $ns1 $ns2 10.0.1.1
-		join_syn_rej=1 \
-			chk_join_nr 1 1 0
+		join_disallowed=1 \
+			chk_join_nr 1 0 0
 	fi
 
 	# subflow
@@ -2232,8 +2241,8 @@ subflows_tests()
 		pm_nl_add_endpoint $ns2 10.0.3.2 flags subflow
 		pm_nl_add_endpoint $ns2 10.0.2.2 flags subflow
 		run_tests $ns1 $ns2 10.0.1.1
-		join_syn_rej=1 \
-			chk_join_nr 2 2 1
+		join_disallowed=1 \
+			chk_join_nr 2 1 1
 	fi
 
 	# single subflow, dev
@@ -4114,8 +4123,8 @@ userspace_tests()
 		pm_nl_set_limits $ns2 1 1
 		pm_nl_add_endpoint $ns2 10.0.3.2 flags subflow
 		run_tests $ns1 $ns2 10.0.1.1
-		join_syn_rej=1 \
-			chk_join_nr 1 1 0
+		join_disallowed=1 \
+			chk_join_nr 1 0 0
 	fi
 
 	# userspace pm type does not send join
@@ -4138,8 +4147,8 @@ userspace_tests()
 		pm_nl_add_endpoint $ns2 10.0.3.2 flags subflow
 		sflags=backup speed=slow \
 			run_tests $ns1 $ns2 10.0.1.1
-		join_syn_rej=1 \
-			chk_join_nr 1 1 0
+		join_disallowed=1 \
+			chk_join_nr 1 0 0
 		chk_prio_nr 0 0 0 0
 	fi
 
