@@ -290,17 +290,13 @@ int meson_card_probe(struct platform_device *pdev)
 
 	ret = meson_card_parse_of_optional(&priv->card, "audio-routing",
 					   snd_soc_of_parse_audio_routing);
-	if (ret) {
-		dev_err(dev, "error while parsing routing\n");
+	if (ret)
 		return ret;
-	}
 
 	ret = meson_card_parse_of_optional(&priv->card, "audio-widgets",
 					   snd_soc_of_parse_audio_simple_widgets);
-	if (ret) {
-		dev_err(dev, "error while parsing widgets\n");
+	if (ret)
 		return ret;
-	}
 
 	ret = meson_card_add_links(&priv->card);
 	if (ret)
