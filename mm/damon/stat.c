@@ -91,16 +91,15 @@ static int damon_stat_sort_regions(struct damon_ctx *c,
 	unsigned int nr_regions = 0;
 	unsigned long total_sz = 0;
 
-	damon_for_each_target(t, c) {
-		/* there is only one target */
-		region_pointers = kmalloc_objs(*region_pointers,
-					       damon_nr_regions(t));
-		if (!region_pointers)
-			return -ENOMEM;
-		damon_for_each_region(r, t) {
-			region_pointers[nr_regions++] = r;
-			total_sz += r->ar.end - r->ar.start;
-		}
+	if (list_empty(&c->adaptive_targets))
+		return -EINVAL;
+	t = list_first_entry(&c->adaptive_targets, struct damon_target, list);
+	region_pointers = kmalloc_objs(*region_pointers, damon_nr_regions(t));
+	if (!region_pointers)
+		return -ENOMEM;
+	damon_for_each_region(r, t) {
+		region_pointers[nr_regions++] = r;
+		total_sz += r->ar.end - r->ar.start;
 	}
 	sort(region_pointers, nr_regions, sizeof(*region_pointers),
 			damon_stat_cmp_regions, NULL);
