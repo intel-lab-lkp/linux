@@ -234,7 +234,7 @@ static void vkms_format_test_yuv_u16_to_argb_u16(struct kunit *test)
 		struct conversion_matrix matrix;
 
 		get_conversion_matrix_to_argb_u16
-			(DRM_FORMAT_NV12, param->encoding, param->range, &matrix);
+			(DRM_FORMAT_NV12, param->encoding, param->range, false, &matrix);
 
 		argb = argb_u16_from_yuv161616(&matrix, color->yuv.y, color->yuv.u,
 					       color->yuv.v);

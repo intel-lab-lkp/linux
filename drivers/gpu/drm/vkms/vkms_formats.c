@@ -895,15 +895,24 @@ static void swap_uv_columns(struct conversion_matrix *matrix)
  * @format: DRM_FORMAT_* value for which to obtain a conversion function (see [drm_fourcc.h])
  * @encoding: DRM_COLOR_* value for which to obtain a conversion matrix
  * @range: DRM_COLOR_*_RANGE value for which to obtain a conversion matrix
+ * @bypass: If true, return an identity (no-op) matrix that passes the samples
+ *          through unchanged, ignoring @encoding and @range. Used when a fixed
+ *          matrix colorop is present but bypassed.
  * @matrix: Pointer to store the value into
  */
 void get_conversion_matrix_to_argb_u16(u32 format,
 				       enum drm_color_encoding encoding,
 				       enum drm_color_range range,
+				       bool bypass,
 				       struct conversion_matrix *matrix)
 {
 	const struct conversion_matrix *matrix_to_copy;
 	bool limited_range;
+
+	if (bypass) {
+		memcpy(matrix, &no_operation, sizeof(no_operation));
+		return;
+	}
 
 	switch (range) {
 	case DRM_COLOR_YCBCR_LIMITED_RANGE:
