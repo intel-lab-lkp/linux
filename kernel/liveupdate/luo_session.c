@@ -290,9 +290,8 @@ static int luo_session_retrieve_fd(struct luo_session *session,
 	if (argp->fd < 0)
 		return argp->fd;
 
-	mutex_lock(&session->mutex);
-	err = luo_retrieve_file(&session->file_set, argp->token, &file);
-	mutex_unlock(&session->mutex);
+	scoped_guard(mutex, &session->mutex)
+		err = luo_retrieve_file(&session->file_set, argp->token, &file);
 	if (err < 0)
 		goto err_put_fd;
 
@@ -482,9 +481,8 @@ int luo_session_create(const char *name, struct file **filep)
 	if (err)
 		goto err_free;
 
-	mutex_lock(&session->mutex);
-	err = luo_session_getfile(session, filep);
-	mutex_unlock(&session->mutex);
+	scoped_guard(mutex, &session->mutex)
+		err = luo_session_getfile(session, filep);
 	if (err)
 		goto err_remove;
 	up_read(&luo_session_serialize_rwsem);
