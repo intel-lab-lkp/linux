@@ -388,14 +388,14 @@ static void __component_match_add(struct device *parent,
 	struct component_match *match = *matchptr;
 
 	if (IS_ERR(match))
-		return;
+		goto err_release;
 
 	if (!match) {
 		match = devres_alloc(devm_component_match_release,
 				     sizeof(*match), GFP_KERNEL);
 		if (!match) {
 			*matchptr = ERR_PTR(-ENOMEM);
-			return;
+			goto err_release;
 		}
 
 		devres_add(parent, match);
@@ -410,7 +410,7 @@ static void __component_match_add(struct device *parent,
 		ret = component_match_realloc(match, new_size);
 		if (ret) {
 			*matchptr = ERR_PTR(ret);
-			return;
+			goto err_release;
 		}
 	}
 
@@ -420,6 +420,11 @@ static void __component_match_add(struct device *parent,
 	match->compare[match->num].data = compare_data;
 	match->compare[match->num].component = NULL;
 	match->num++;
+	return;
+
+err_release:
+	if (release)
+		release(parent, compare_data);
 }
 
 /**
@@ -438,7 +443,8 @@ static void __component_match_add(struct device *parent,
  * The allocated match list in @matchptr is automatically released using devm
  * actions, where upon @release will be called to free any references held by
  * @compare_data, e.g. when @compare_data is a &device_node that must be
- * released with of_node_put().
+ * released with of_node_put(). @release is also called if the match cannot be
+ * added.
  *
  * See also component_match_add() and component_match_add_typed().
  */
