@@ -789,7 +789,7 @@ static int atmel_ac97c_probe(struct platform_device *pdev)
 	retval = snd_card_register(card);
 	if (retval) {
 		dev_dbg(&pdev->dev, "could not register sound card\n");
-		goto err_ac97_bus;
+		goto err_snd_card_register;
 	}
 
 	platform_set_drvdata(pdev, card);
@@ -799,11 +799,12 @@ static int atmel_ac97c_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_snd_card_register:
+	free_irq(irq, chip);
 err_ac97_bus:
+err_request_irq:
 	iounmap(chip->regs);
 err_ioremap:
-	free_irq(irq, chip);
-err_request_irq:
 	snd_card_free(card);
 err_snd_card_new:
 	clk_disable_unprepare(pclk);
@@ -841,10 +842,10 @@ static void atmel_ac97c_remove(struct platform_device *pdev)
 	ac97c_writel(chip, COMR, 0);
 	ac97c_writel(chip, MR,   0);
 
+	free_irq(chip->irq, chip);
 	clk_disable_unprepare(chip->pclk);
 	clk_put(chip->pclk);
 	iounmap(chip->regs);
-	free_irq(chip->irq, chip);
 
 	snd_card_free(card);
 }
