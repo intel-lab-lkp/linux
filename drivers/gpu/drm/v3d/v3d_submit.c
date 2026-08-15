@@ -1571,6 +1571,7 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 		ret = v3d_get_extensions(file_priv, args->extensions, &se, cpu_job);
 		if (ret) {
 			drm_dbg(dev, "Failed to get extensions.\n");
+			v3d_job_deallocate((void *)&cpu_job);
 			goto fail;
 		}
 	}
@@ -1579,12 +1580,14 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 	if (!cpu_job->job_type) {
 		drm_dbg(dev, "CPU job must have a CPU job user extension.\n");
 		ret = -EINVAL;
+		v3d_job_deallocate((void *)&cpu_job);
 		goto fail;
 	}
 
 	if (args->bo_handle_count != cpu_job_bo_handle_count[cpu_job->job_type]) {
 		drm_dbg(dev, "This CPU job was not submitted with the proper number of BOs.\n");
 		ret = -EINVAL;
+		v3d_job_deallocate((void *)&cpu_job);
 		goto fail;
 	}
 
