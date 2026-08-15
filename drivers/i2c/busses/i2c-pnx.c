@@ -643,20 +643,26 @@ static int i2c_pnx_probe(struct platform_device *pdev)
 	}
 #endif
 	alg_data->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(alg_data->clk))
+	if (IS_ERR(alg_data->clk)) {
+		of_node_put(alg_data->adapter.dev.of_node);
 		return PTR_ERR(alg_data->clk);
+	}
 
 	snprintf(alg_data->adapter.name, sizeof(alg_data->adapter.name),
 		 "%s", pdev->name);
 
 	/* Register I/O resource */
 	alg_data->ioaddr = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
-	if (IS_ERR(alg_data->ioaddr))
+	if (IS_ERR(alg_data->ioaddr)) {
+		of_node_put(alg_data->adapter.dev.of_node);
 		return PTR_ERR(alg_data->ioaddr);
+	}
 
 	ret = clk_prepare_enable(alg_data->clk);
-	if (ret)
+	if (ret) {
+		of_node_put(alg_data->adapter.dev.of_node);
 		return ret;
+	}
 
 	freq = clk_get_rate(alg_data->clk);
 
@@ -706,14 +712,17 @@ static int i2c_pnx_probe(struct platform_device *pdev)
 
 out_clock:
 	clk_disable_unprepare(alg_data->clk);
+	of_node_put(alg_data->adapter.dev.of_node);
 	return ret;
 }
 
 static void i2c_pnx_remove(struct platform_device *pdev)
 {
 	struct i2c_pnx_algo_data *alg_data = platform_get_drvdata(pdev);
+	struct device_node *node = alg_data->adapter.dev.of_node;
 
 	i2c_del_adapter(&alg_data->adapter);
+	of_node_put(node);
 	clk_disable_unprepare(alg_data->clk);
 }
 
