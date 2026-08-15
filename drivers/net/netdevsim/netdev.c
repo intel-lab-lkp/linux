@@ -808,6 +808,8 @@ nsim_queue_start(struct net_device *dev, struct netdev_queue_config *qcfg,
 
 	if (ns->rq_reset_mode == 1) {
 		ns->rq[idx]->page_pool = qmem->pp;
+		netif_queue_set_napi(dev, idx, NETDEV_QUEUE_TYPE_RX,
+				     &ns->rq[idx]->napi);
 		napi_enable_locked(&ns->rq[idx]->napi);
 		return 0;
 	}
@@ -826,6 +828,8 @@ nsim_queue_start(struct net_device *dev, struct netdev_queue_config *qcfg,
 	}
 
 	ns->rq[idx] = qmem->rq;
+	netif_queue_set_napi(dev, idx, NETDEV_QUEUE_TYPE_RX,
+			     &ns->rq[idx]->napi);
 	napi_enable_locked(&ns->rq[idx]->napi);
 
 	return 0;
@@ -838,6 +842,7 @@ static int nsim_queue_stop(struct net_device *dev, void *per_queue_mem, int idx)
 
 	netdev_assert_locked(dev);
 
+	netif_queue_set_napi(dev, idx, NETDEV_QUEUE_TYPE_RX, NULL);
 	napi_disable_locked(&ns->rq[idx]->napi);
 
 	if (ns->rq_reset_mode == 1) {
