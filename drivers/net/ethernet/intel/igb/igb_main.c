@@ -4062,6 +4062,8 @@ static int igb_sw_init(struct igb_adapter *adapter)
 	adapter->max_frame_size = netdev->mtu + IGB_ETH_PKT_HDR_PAD;
 	adapter->min_frame_size = ETH_ZLEN + ETH_FCS_LEN;
 
+	/* The netdev watchdog can run as soon as the device is registered. */
+	spin_lock_init(&adapter->ptp_tx_lock);
 	spin_lock_init(&adapter->nfc_lock);
 	spin_lock_init(&adapter->stats64_lock);
 
@@ -6561,10 +6563,11 @@ netdev_tx_t igb_xmit_frame_ring(struct sk_buff *skb,
 
 	if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {
 		struct igb_adapter *adapter = netdev_priv(tx_ring->netdev);
+		unsigned long flags;
 
+		spin_lock_irqsave(&adapter->ptp_tx_lock, flags);
 		if (adapter->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
-		    !test_and_set_bit_lock(__IGB_PTP_TX_IN_PROGRESS,
-					   &adapter->state)) {
+		    !adapter->ptp_tx_skb) {
 			skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 			tx_flags |= IGB_TX_FLAGS_TSTAMP;
 
@@ -6575,6 +6578,7 @@ netdev_tx_t igb_xmit_frame_ring(struct sk_buff *skb,
 		} else {
 			adapter->tx_hwtstamp_skipped++;
 		}
+		spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
 	}
 
 	if (skb_vlan_tag_present(skb)) {
@@ -6603,12 +6607,19 @@ out_drop:
 cleanup_tx_tstamp:
 	if (unlikely(tx_flags & IGB_TX_FLAGS_TSTAMP)) {
 		struct igb_adapter *adapter = netdev_priv(tx_ring->netdev);
+		unsigned long flags;
 
-		dev_kfree_skb_any(adapter->ptp_tx_skb);
-		adapter->ptp_tx_skb = NULL;
-		if (adapter->hw.mac.type == e1000_82576)
-			cancel_work_sync(&adapter->ptp_tx_work);
-		clear_bit_unlock(__IGB_PTP_TX_IN_PROGRESS, &adapter->state);
+		/* ndo_start_xmit runs in atomic context, so the scheduled
+		 * ptp_tx_work cannot be cancelled here. It checks
+		 * ptp_tx_skb under ptp_tx_lock and does nothing once the
+		 * pending timestamp request is cleared.
+		 */
+		spin_lock_irqsave(&adapter->ptp_tx_lock, flags);
+		if (adapter->ptp_tx_skb == skb) {
+			dev_kfree_skb_any(adapter->ptp_tx_skb);
+			adapter->ptp_tx_skb = NULL;
+		}
+		spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
 	}
 
 	return NETDEV_TX_OK;

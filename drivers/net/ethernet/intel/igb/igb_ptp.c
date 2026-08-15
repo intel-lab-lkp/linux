@@ -796,6 +796,21 @@ static int igb_ptp_verify_pin(struct ptp_clock_info *ptp, unsigned int pin,
 	return 0;
 }
 
+/* Requires adapter->ptp_tx_lock held by caller. */
+static void igb_ptp_tx_timeout(struct igb_adapter *adapter)
+{
+	struct e1000_hw *hw = &adapter->hw;
+
+	dev_kfree_skb_any(adapter->ptp_tx_skb);
+	adapter->ptp_tx_skb = NULL;
+	adapter->tx_hwtstamp_timeouts++;
+	/* Clear the tx valid bit in TSYNCTXCTL register to enable
+	 * interrupt
+	 */
+	rd32(E1000_TXSTMPH);
+	dev_warn(&adapter->pdev->dev, "clearing Tx timestamp hang\n");
+}
+
 /**
  * igb_ptp_tx_work
  * @work: pointer to work struct
@@ -808,23 +823,18 @@ static void igb_ptp_tx_work(struct work_struct *work)
 	struct igb_adapter *adapter = container_of(work, struct igb_adapter,
 						   ptp_tx_work);
 	struct e1000_hw *hw = &adapter->hw;
+	unsigned long flags;
 	u32 tsynctxctl;
 
+	spin_lock_irqsave(&adapter->ptp_tx_lock, flags);
+
 	if (!adapter->ptp_tx_skb)
-		return;
+		goto unlock;
 
 	if (time_is_before_jiffies(adapter->ptp_tx_start +
 				   IGB_PTP_TX_TIMEOUT)) {
-		dev_kfree_skb_any(adapter->ptp_tx_skb);
-		adapter->ptp_tx_skb = NULL;
-		clear_bit_unlock(__IGB_PTP_TX_IN_PROGRESS, &adapter->state);
-		adapter->tx_hwtstamp_timeouts++;
-		/* Clear the tx valid bit in TSYNCTXCTL register to enable
-		 * interrupt
-		 */
-		rd32(E1000_TXSTMPH);
-		dev_warn(&adapter->pdev->dev, "clearing Tx timestamp hang\n");
-		return;
+		igb_ptp_tx_timeout(adapter);
+		goto unlock;
 	}
 
 	tsynctxctl = rd32(E1000_TSYNCTXCTL);
@@ -833,6 +843,9 @@ static void igb_ptp_tx_work(struct work_struct *work)
 	else
 		/* reschedule to check later */
 		schedule_work(&adapter->ptp_tx_work);
+
+unlock:
+	spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
 }
 
 static void igb_ptp_overflow_check(struct work_struct *work)
@@ -897,32 +910,45 @@ void igb_ptp_rx_hang(struct igb_adapter *adapter)
  */
 void igb_ptp_tx_hang(struct igb_adapter *adapter)
 {
-	struct e1000_hw *hw = &adapter->hw;
-	bool timeout = time_is_before_jiffies(adapter->ptp_tx_start +
-					      IGB_PTP_TX_TIMEOUT);
+	unsigned long flags;
+
+	spin_lock_irqsave(&adapter->ptp_tx_lock, flags);
 
 	if (!adapter->ptp_tx_skb)
-		return;
+		goto unlock;
 
-	if (!test_bit(__IGB_PTP_TX_IN_PROGRESS, &adapter->state))
-		return;
+	if (time_is_after_jiffies(adapter->ptp_tx_start + IGB_PTP_TX_TIMEOUT))
+		goto unlock;
 
 	/* If we haven't received a timestamp within the timeout, it is
 	 * reasonable to assume that it will never occur, so we can unlock the
 	 * timestamp bit when this occurs.
 	 */
-	if (timeout) {
-		cancel_work_sync(&adapter->ptp_tx_work);
-		dev_kfree_skb_any(adapter->ptp_tx_skb);
-		adapter->ptp_tx_skb = NULL;
-		clear_bit_unlock(__IGB_PTP_TX_IN_PROGRESS, &adapter->state);
-		adapter->tx_hwtstamp_timeouts++;
-		/* Clear the tx valid bit in TSYNCTXCTL register to enable
-		 * interrupt
-		 */
-		rd32(E1000_TXSTMPH);
-		dev_warn(&adapter->pdev->dev, "clearing Tx timestamp hang\n");
-	}
+	igb_ptp_tx_timeout(adapter);
+
+unlock:
+	spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
+}
+
+/**
+ * igb_ptp_clear_tx_tstamp - drop a pending Tx timestamp request
+ * @adapter: private network adapter structure
+ *
+ * Cancel the timestamp retrieval work and free a pending timestamp skb.
+ *
+ * Context: Must be called in sleepable context with ptp_tx_lock not held;
+ *          cancel_work_sync() waits for igb_ptp_tx_work() which takes it.
+ */
+static void igb_ptp_clear_tx_tstamp(struct igb_adapter *adapter)
+{
+	unsigned long flags;
+
+	cancel_work_sync(&adapter->ptp_tx_work);
+
+	spin_lock_irqsave(&adapter->ptp_tx_lock, flags);
+	dev_kfree_skb_any(adapter->ptp_tx_skb);
+	adapter->ptp_tx_skb = NULL;
+	spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
 }
 
 /**
@@ -932,6 +958,8 @@ void igb_ptp_tx_hang(struct igb_adapter *adapter)
  * If we were asked to do hardware stamping and such a time stamp is
  * available, then it must have been for this skb here because we only
  * allow only one such packet into the queue.
+ *
+ * Context: Expects adapter->ptp_tx_lock to be held by caller.
  **/
 static void igb_ptp_tx_hwtstamp(struct igb_adapter *adapter)
 {
@@ -963,15 +991,14 @@ static void igb_ptp_tx_hwtstamp(struct igb_adapter *adapter)
 	shhwtstamps.hwtstamp =
 		ktime_add_ns(shhwtstamps.hwtstamp, adjust);
 
-	/* Clear the lock early before calling skb_tstamp_tx so that
-	 * applications are not woken up before the lock bit is clear. We use
-	 * a copy of the skb pointer to ensure other threads can't change it
-	 * while we're notifying the stack.
+	/* Clear the pending request before calling skb_tstamp_tx so that
+	 * a new timestamp request can be accepted. We use a copy of the skb
+	 * pointer to ensure other threads can't change it while we're
+	 * notifying the stack.
 	 */
 	adapter->ptp_tx_skb = NULL;
-	clear_bit_unlock(__IGB_PTP_TX_IN_PROGRESS, &adapter->state);
 
-	/* Notify the stack and free the skb after we've unlocked */
+	/* Notify the stack and free the skb */
 	skb_tstamp_tx(skb, &shhwtstamps);
 	dev_kfree_skb_any(skb);
 }
@@ -1434,12 +1461,7 @@ void igb_ptp_suspend(struct igb_adapter *adapter)
 	if (adapter->ptp_flags & IGB_PTP_OVERFLOW_CHECK)
 		cancel_delayed_work_sync(&adapter->ptp_overflow_work);
 
-	cancel_work_sync(&adapter->ptp_tx_work);
-	if (adapter->ptp_tx_skb) {
-		dev_kfree_skb_any(adapter->ptp_tx_skb);
-		adapter->ptp_tx_skb = NULL;
-		clear_bit_unlock(__IGB_PTP_TX_IN_PROGRESS, &adapter->state);
-	}
+	igb_ptp_clear_tx_tstamp(adapter);
 }
 
 /**

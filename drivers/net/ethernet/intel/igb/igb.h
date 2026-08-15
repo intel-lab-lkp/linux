@@ -625,6 +625,8 @@ struct igb_adapter {
 	struct ptp_clock_info ptp_caps;
 	struct delayed_work ptp_overflow_work;
 	struct work_struct ptp_tx_work;
+	/* Access to ptp_tx_skb and ptp_tx_start is protected by ptp_tx_lock. */
+	spinlock_t ptp_tx_lock;
 	struct sk_buff *ptp_tx_skb;
 	struct kernel_hwtstamp_config tstamp_config;
 	unsigned long ptp_tx_start;
@@ -714,7 +716,6 @@ enum e1000_state_t {
 	__IGB_TESTING,
 	__IGB_RESETTING,
 	__IGB_DOWN,
-	__IGB_PTP_TX_IN_PROGRESS,
 };
 
 enum igb_boards {
