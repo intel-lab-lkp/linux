@@ -7227,6 +7227,9 @@ keep_resched:
 
 		trace_sched_switch(preempt, prev, next, prev_state);
 
+		if (sched_feat(LB_PROMOTE) && preempt)
+			preempt_active_balance(prev);
+
 		/* Also unlocks the rq: */
 		rq = context_switch(rq, prev, next, &rf);
 	} else {

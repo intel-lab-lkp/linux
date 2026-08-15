@@ -13886,6 +13886,86 @@ out_unlock:
 	return 0;
 }
 
+static DEFINE_PER_CPU(struct balance_callback, preempt_push_head);
+static DEFINE_PER_CPU(int, push_cpu);
+
+static void trigger_preempt_alb(struct rq *rq)
+{
+	unsigned long flags;
+	int active_balance = 0;
+	int src_cpu = rq->cpu;
+	int idle_cpu = per_cpu(push_cpu, src_cpu);
+	struct rq *dst_rq = cpu_rq(idle_cpu);
+
+	preempt_disable();
+	raw_spin_rq_unlock(rq);
+	raw_spin_rq_lock_irqsave(dst_rq, flags);
+	if (dst_rq->active_balance)
+		goto unlock_rq;
+	dst_rq->active_balance = 1;
+	dst_rq->push_cpu = idle_cpu;
+	active_balance = 1;
+
+unlock_rq:
+	raw_spin_rq_unlock_irqrestore(dst_rq, flags);
+	if (active_balance) {
+		stop_one_cpu_nowait(idle_cpu, active_load_balance_cpu_stop, rq,
+				    &dst_rq->active_balance_work);
+	}
+	preempt_enable();
+	raw_spin_rq_lock(rq);
+}
+
+static void queue_preempt_alb_callback(struct rq *rq, int dst_cpu)
+{
+	per_cpu(push_cpu, rq->cpu) = dst_cpu;
+	queue_balance_callback(rq, &per_cpu(preempt_push_head, rq->cpu), trigger_preempt_alb);
+}
+
+void preempt_active_balance(struct task_struct *prev)
+{
+	struct rq *this_rq = this_rq();
+	int this_cpu = smp_processor_id(), cpu;
+	int start = nr_cpu_ids, idle_cpu = nr_cpu_ids;
+	struct sched_domain *sd;
+
+	if (unlikely(prev->sched_class != &fair_sched_class))
+		return;
+
+	if (unlikely(prev->migration_disabled))
+		return;
+
+	cpu = prev->recent_used_cpu;
+	if (cpu != this_cpu && available_idle_cpu(cpu) && !cpu_rq(cpu)->active_balance) {
+		idle_cpu = cpu;
+		goto active_balance;
+	}
+
+	rcu_read_lock();
+
+	sd = rcu_dereference(per_cpu(sd_llc, this_cpu));
+	if (sd)
+		start = cpumask_first_and(sched_domain_span(sd), prev->cpus_ptr);
+	if (start >= nr_cpu_ids)
+		start = cpumask_first(prev->cpus_ptr);
+
+	for_each_cpu_wrap(cpu, prev->cpus_ptr, start) {
+		if (cpu != this_cpu && available_idle_cpu(cpu) && !cpu_rq(cpu)->active_balance) {
+			idle_cpu = cpu;
+			goto unlock;
+		}
+	}
+
+unlock:
+	rcu_read_unlock();
+	if (idle_cpu == nr_cpu_ids)
+		return;
+
+active_balance:
+	list_move_tail(&prev->se.group_node, &this_rq->cfs_tasks);
+	queue_preempt_alb_callback(this_rq, idle_cpu);
+}
+
 /*
  * Scale the max sched_balance_rq interval with the number of CPUs in the system.
  * This trades load-balance latency on larger machines for less cross talk.

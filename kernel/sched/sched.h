@@ -4193,6 +4193,8 @@ extern struct balance_callback *splice_balance_callbacks(struct rq *rq);
 extern void __balance_callbacks(struct rq *rq, struct rq_flags *rf);
 extern void balance_callbacks(struct rq *rq, struct balance_callback *head);
 
+extern void preempt_active_balance(struct task_struct *prev);
+
 /*
  * The 'sched_change' pattern is the safe, easy and slow way of changing a
  * task's scheduling properties. It dequeues a task, such that the scheduler
