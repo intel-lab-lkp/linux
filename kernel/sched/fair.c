@@ -13780,8 +13780,7 @@ static int active_load_balance_cpu_stop(void *data)
 	if (!cpu_active(busiest_cpu) || !cpu_active(target_cpu))
 		goto out_unlock;
 
-	if (unlikely(!busiest_rq->active_balance))
-		goto out_unlock;
+	WARN_ON_ONCE(!busiest_rq->active_balance);
 
 	/* Is there any task to move? */
 	if (busiest_rq->nr_running <= 1)
@@ -13826,13 +13825,13 @@ static int active_load_balance_cpu_stop(void *data)
 	}
 	rcu_read_unlock();
 out_unlock:
-	busiest_rq->active_balance = 0;
 	rq_unlock(busiest_rq, &rf);
 
 	if (p)
 		attach_one_task(target_rq, p);
 
 	local_irq_enable();
+	busiest_rq->active_balance = 0;
 
 	return 0;
 }
