@@ -914,6 +914,9 @@ void igb_ptp_tx_hang(struct igb_adapter *adapter)
 
 	spin_lock_irqsave(&adapter->ptp_tx_lock, flags);
 
+	if (adapter->tstamp_config.tx_type != HWTSTAMP_TX_ON)
+		goto unlock;
+
 	if (!adapter->ptp_tx_skb)
 		goto unlock;
 
@@ -933,19 +936,22 @@ unlock:
 /**
  * igb_ptp_clear_tx_tstamp - drop a pending Tx timestamp request
  * @adapter: private network adapter structure
+ * @disable: whether to disable Tx timestamp admission
  *
  * Cancel the timestamp retrieval work and free a pending timestamp skb.
  *
  * Context: Must be called in sleepable context with ptp_tx_lock not held;
  *          cancel_work_sync() waits for igb_ptp_tx_work() which takes it.
  */
-static void igb_ptp_clear_tx_tstamp(struct igb_adapter *adapter)
+static void igb_ptp_clear_tx_tstamp(struct igb_adapter *adapter, bool disable)
 {
 	unsigned long flags;
 
 	cancel_work_sync(&adapter->ptp_tx_work);
 
 	spin_lock_irqsave(&adapter->ptp_tx_lock, flags);
+	if (disable)
+		adapter->tstamp_config.tx_type = HWTSTAMP_TX_OFF;
 	dev_kfree_skb_any(adapter->ptp_tx_skb);
 	adapter->ptp_tx_skb = NULL;
 	spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
@@ -1250,6 +1256,13 @@ static int igb_ptp_set_timestamp_mode(struct igb_adapter *adapter,
 	regval |= tsync_tx_ctl;
 	wr32(E1000_TSYNCTXCTL, regval);
 
+	/* Drop a possibly pending Tx timestamp request when disabling Tx
+	 * timestamping. It would otherwise block new requests until it is
+	 * flagged as timed out by the watchdog up to 15 seconds later.
+	 */
+	if (!tsync_tx_ctl)
+		igb_ptp_clear_tx_tstamp(adapter, true);
+
 	/* enable/disable RX */
 	regval = rd32(E1000_TSYNCRXCTL);
 	regval &= ~(E1000_TSYNCRXCTL_ENABLED | E1000_TSYNCRXCTL_TYPE_MASK);
@@ -1310,6 +1323,7 @@ int igb_ptp_hwtstamp_set(struct net_device *netdev,
 			 struct netlink_ext_ack *extack)
 {
 	struct igb_adapter *adapter = netdev_priv(netdev);
+	unsigned long flags;
 	int err;
 
 	err = igb_ptp_set_timestamp_mode(adapter, config);
@@ -1317,7 +1331,9 @@ int igb_ptp_hwtstamp_set(struct net_device *netdev,
 		return err;
 
 	/* save these settings for future reference */
+	spin_lock_irqsave(&adapter->ptp_tx_lock, flags);
 	adapter->tstamp_config = *config;
+	spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
 
 	return 0;
 }
@@ -1461,7 +1477,7 @@ void igb_ptp_suspend(struct igb_adapter *adapter)
 	if (adapter->ptp_flags & IGB_PTP_OVERFLOW_CHECK)
 		cancel_delayed_work_sync(&adapter->ptp_overflow_work);
 
-	igb_ptp_clear_tx_tstamp(adapter);
+	igb_ptp_clear_tx_tstamp(adapter, false);
 }
 
 /**

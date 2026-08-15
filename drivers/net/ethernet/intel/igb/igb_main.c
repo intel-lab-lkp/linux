@@ -6565,18 +6565,22 @@ netdev_tx_t igb_xmit_frame_ring(struct sk_buff *skb,
 		struct igb_adapter *adapter = netdev_priv(tx_ring->netdev);
 		unsigned long flags;
 
+		/* A timestamp that was requested while Tx timestamping was
+		 * not enabled can never be delivered, it is not "skipped".
+		 */
 		spin_lock_irqsave(&adapter->ptp_tx_lock, flags);
-		if (adapter->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
-		    !adapter->ptp_tx_skb) {
-			skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
-			tx_flags |= IGB_TX_FLAGS_TSTAMP;
+		if (adapter->tstamp_config.tx_type == HWTSTAMP_TX_ON) {
+			if (!adapter->ptp_tx_skb) {
+				skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+				tx_flags |= IGB_TX_FLAGS_TSTAMP;
 
-			adapter->ptp_tx_skb = skb_get(skb);
-			adapter->ptp_tx_start = jiffies;
-			if (adapter->hw.mac.type == e1000_82576)
-				schedule_work(&adapter->ptp_tx_work);
-		} else {
-			adapter->tx_hwtstamp_skipped++;
+				adapter->ptp_tx_skb = skb_get(skb);
+				adapter->ptp_tx_start = jiffies;
+				if (adapter->hw.mac.type == e1000_82576)
+					schedule_work(&adapter->ptp_tx_work);
+			} else {
+				adapter->tx_hwtstamp_skipped++;
+			}
 		}
 		spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
 	}
