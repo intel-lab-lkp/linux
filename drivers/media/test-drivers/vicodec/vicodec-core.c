@@ -1029,6 +1029,11 @@ static int vidioc_s_fmt(struct vicodec_ctx *ctx, struct v4l2_format *f)
 		return -EINVAL;
 	}
 
+	q_data->visible_width = min(q_data->visible_width,
+				    q_data->coded_width);
+	q_data->visible_height = min(q_data->visible_height,
+				     q_data->coded_height);
+
 	dprintk(ctx->dev,
 		"Setting format for type %d, coded wxh: %dx%d, fourcc: 0x%08x\n",
 		f->type, q_data->coded_width, q_data->coded_height,
