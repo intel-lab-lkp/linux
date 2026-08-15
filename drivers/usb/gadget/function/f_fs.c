@@ -4192,6 +4192,9 @@ static void ffs_func_unbind(struct usb_configuration *c,
 	unsigned count = ffs->eps_count;
 	unsigned long flags;
 
+	/* Keep ffs alive until all post-unbind cleanup is complete. */
+	ffs_data_get(ffs);
+
 	if (ffs->func == func) {
 		ffs_func_eps_disable(func);
 		ffs->func = NULL;
@@ -4225,6 +4228,7 @@ static void ffs_func_unbind(struct usb_configuration *c,
 	func->function.ssp_descriptors = NULL;
 	func->interfaces_nums = NULL;
 
+	ffs_data_put(ffs);
 }
 
 static struct usb_function *ffs_alloc(struct usb_function_instance *fi)
