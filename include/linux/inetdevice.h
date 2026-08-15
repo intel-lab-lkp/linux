@@ -245,8 +245,8 @@ static inline struct in_device *in_dev_get(const struct net_device *dev)
 
 	rcu_read_lock();
 	in_dev = __in_dev_get_rcu(dev);
-	if (in_dev)
-		refcount_inc(&in_dev->refcnt);
+	if (in_dev && !refcount_inc_not_zero(&in_dev->refcnt))
+		in_dev = NULL;
 	rcu_read_unlock();
 	return in_dev;
 }
