@@ -9673,6 +9673,51 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 }
 
 /*
+ * A streamlined version of select_task_rq_fair().
+ * It runs faster than select_task_rq_fair, especially when there are not
+ * many CPUs. It will prioritize selecting an idle CPU in the following order:
+ * 1. prev_cpu
+ * 2. recent_used_cpu
+ * 3. cpu belongs to intersection of sd_llc and cpus_ptr
+ * 4. cpu belongs to cpus_ptr but not belongs to sd_llc
+ * If there is no idle CPU in cpus_ptr, it will select prev_cpu.
+ */
+static int select_task_rq_fair_thin(struct task_struct *p, int prev_cpu, int wake_flags)
+{
+	int recent_used_cpu, target, cpu, start = nr_cpu_ids;
+	struct sched_domain *sd;
+
+	if (likely(available_idle_cpu(prev_cpu)))
+		return prev_cpu;
+
+	recent_used_cpu = p->recent_used_cpu;
+	p->recent_used_cpu = prev_cpu;
+	if (recent_used_cpu != prev_cpu && available_idle_cpu(recent_used_cpu))
+		return recent_used_cpu;
+
+	target = prev_cpu;
+	rcu_read_lock();
+
+	sd = rcu_dereference(per_cpu(sd_llc, target));
+	if (sd)
+		start = cpumask_first_and(sched_domain_span(sd), p->cpus_ptr);
+	if (start >= nr_cpu_ids)
+		start = cpumask_first(p->cpus_ptr);
+
+	for_each_cpu_wrap(cpu, p->cpus_ptr, start) {
+		if (available_idle_cpu(cpu)) {
+			target = cpu;
+			goto unlock;
+		}
+	}
+
+unlock:
+	rcu_read_unlock();
+
+	return target;
+}
+
+/*
  * select_task_rq_fair: Select target runqueue for the waking task in domains
  * that have the relevant SD flag set. In practice, this is SD_BALANCE_WAKE,
  * SD_BALANCE_FORK, or SD_BALANCE_EXEC.
@@ -9692,6 +9737,9 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 	int want_affine = 0;
 	/* SD_flags and WF_flags share the first nibble */
 	int sd_flag = wake_flags & 0xF;
+
+	if (sched_feat(LB_PROMOTE))
+		return select_task_rq_fair_thin(p, prev_cpu, wake_flags);
 
 	/*
 	 * required for stable ->cpus_allowed
@@ -12575,8 +12623,10 @@ static void update_idle_cpu_scan(struct lb_env *env,
 	 * So the write of this hint only occurs during periodic load
 	 * balancing, rather than CPU_NEWLY_IDLE, because the latter
 	 * can fire way more frequently than the former.
+	 * When LB_PROMOTE is enabled, select_task_rq_fair() is no longer
+	 * used, and there is no need to update nr_idle_scan.
 	 */
-	if (!sched_feat(SIS_UTIL) || env->idle == CPU_NEWLY_IDLE)
+	if (!sched_feat(SIS_UTIL) || env->idle == CPU_NEWLY_IDLE || sched_feat(LB_PROMOTE))
 		return;
 
 	sd_share = sd->shared;
