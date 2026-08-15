@@ -2683,6 +2683,7 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 	int present, swap;
 	int node = NUMA_NO_NODE;
 	enum scan_result result = SCAN_SUCCEED;
+	unsigned long pfn;
 
 	present = 0;
 	swap = 0;
@@ -2720,27 +2721,23 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 			 * PMD-sized THP implies that we can only try
 			 * retracting the PTE table.
 			 */
-			folio_put(folio);
 			break;
 		}
 
 		node = folio_nid(folio);
 		if (collapse_scan_abort(node, cc)) {
 			result = SCAN_SCAN_ABORT;
-			folio_put(folio);
 			break;
 		}
 		cc->node_load[node]++;
 
 		if (!folio_test_lru(folio)) {
 			result = SCAN_PAGE_LRU;
-			folio_put(folio);
 			break;
 		}
 
 		if (folio_expected_ref_count(folio) + 1 != folio_ref_count(folio)) {
 			result = SCAN_PAGE_COUNT;
-			folio_put(folio);
 			break;
 		}
 
@@ -2759,7 +2756,14 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 			cond_resched_rcu();
 		}
 	}
+	if (!folio || xa_is_value(folio)) {
+		pfn = -1;
+	} else {
+		pfn = folio_pfn(folio);
+		folio_put(folio);
+	}
 	rcu_read_unlock();
+
 	if (result == SCAN_PTE_MAPPED_HUGEPAGE)
 		cc->progress++;
 	else
@@ -2774,7 +2778,7 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 		}
 	}
 
-	trace_mm_khugepaged_scan_file(mm, folio, file, present, swap, result);
+	trace_mm_khugepaged_scan_file(mm, pfn, file, present, swap, result);
 	return result;
 }
 
