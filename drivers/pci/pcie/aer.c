@@ -1028,13 +1028,15 @@ int cper_severity_to_aer(int cper_severity)
 EXPORT_SYMBOL_GPL(cper_severity_to_aer);
 #endif
 
-void pci_print_aer(struct pci_dev *dev, int aer_severity,
-		   struct aer_capability_regs *aer)
+static void __pci_print_aer(struct pci_dev *dev, int aer_severity,
+			    struct aer_capability_regs *aer,
+			    bool ratelimit_print, const char *level)
 {
 	const char *bus_type, *sev;
 	int tlp_header_valid = 0;
 	u32 status, mask;
 	struct aer_err_info info = {
+		.level = level,
 		.severity = aer_severity,
 		.first_error = PCI_ERR_CAP_FEP(aer->cap_control),
 	};
@@ -1043,12 +1045,10 @@ void pci_print_aer(struct pci_dev *dev, int aer_severity,
 		status = aer->cor_status;
 		mask = aer->cor_mask;
 		sev = "cor";
-		info.level = KERN_WARNING;
 	} else {
 		status = aer->uncor_status;
 		mask = aer->uncor_mask;
 		sev = "uncor";
-		info.level = KERN_ERR;
 		tlp_header_valid = tlp_header_logged(status & ~mask,
 						     aer->cap_control);
 	}
@@ -1067,7 +1067,7 @@ void pci_print_aer(struct pci_dev *dev, int aer_severity,
 	 * For Advisory Non-Fatal Errors, record statistics and tracing
 	 * even if ratelimited
 	 */
-	if (!aer_ratelimit(dev, info.severity))
+	if (!ratelimit_print)
 		goto anfe;
 
 	aer_printk(info.level, dev,
@@ -1094,9 +1094,24 @@ anfe:
 		if (anfe_status) {
 			aer->uncor_status = anfe_status;
 			aer->uncor_mask = 0;
-			pci_print_aer(dev, AER_NONFATAL, aer);
+			__pci_print_aer(dev, AER_NONFATAL, aer,
+					ratelimit_print, level);
 		}
 	}
+}
+
+void pci_print_aer(struct pci_dev *dev, int aer_severity,
+		   struct aer_capability_regs *aer)
+{
+	/*
+	 * Precalculate ratelimit counter and log level so that Advisory
+	 * Non-Fatal Errors are treated like the accompanying Correctable Error
+	 */
+	bool ratelimit_print = aer_ratelimit(dev, aer_severity);
+	const char *level = aer_severity == AER_CORRECTABLE ? KERN_WARNING
+							    : KERN_ERR;
+
+	__pci_print_aer(dev, aer_severity, aer, ratelimit_print, level);
 }
 EXPORT_SYMBOL_GPL(pci_print_aer);
 
