@@ -1185,6 +1185,14 @@ static void quirk_usb_handoff_xhci(struct pci_dev *pdev)
 		dev_warn(&pdev->dev, "xHCI controller failing to respond");
 		goto iounmap;
 	}
+
+	/*
+	 * The OS ownership semaphore must be asserted while the OS owns the
+	 * xHC, even if firmware did not assert the BIOS ownership semaphore.
+	 * Update only the OS ownership byte to avoid racing with firmware.
+	 */
+	writeb(readb(base + ext_cap_offset + 3) | BIT(0),
+	       base + ext_cap_offset + 3);
 	val = readl(base + ext_cap_offset);
 
 	/* Auto handoff never worked for these devices. Force it and continue */
@@ -1195,10 +1203,8 @@ static void quirk_usb_handoff_xhci(struct pci_dev *pdev)
 		writel(val, base + ext_cap_offset);
 	}
 
-	/* If the BIOS owns the HC, signal that the OS wants it, and wait */
+	/* If the BIOS owns the HC, wait for it to hand over control */
 	if (val & XHCI_HC_BIOS_OWNED) {
-		writel(val | XHCI_HC_OS_OWNED, base + ext_cap_offset);
-
 		/* Wait for 1 second with 10 microsecond polling interval */
 		timeout = handshake(base + ext_cap_offset, XHCI_HC_BIOS_OWNED,
 				0, 1000000, 10);
