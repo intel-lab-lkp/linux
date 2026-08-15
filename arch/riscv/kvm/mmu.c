@@ -717,7 +717,7 @@ int kvm_riscv_mmu_map(struct kvm_vcpu *vcpu, struct kvm_memory_slot *memslot,
 	if (hfn == KVM_PFN_ERR_HWPOISON) {
 		send_sig_mceerr(BUS_MCEERR_AR, (void __user *)hva,
 				vma_pageshift, current);
-		return 0;
+		return -EFAULT;
 	}
 	if (is_error_noslot_pfn(hfn))
 		return -EFAULT;
@@ -780,6 +780,49 @@ out_unlock:
 	kvm_release_faultin_page(kvm, page, ret && ret != -EEXIST, writable);
 	write_unlock(&kvm->mmu_lock);
 	return ret;
+}
+
+long kvm_arch_vcpu_pre_fault_memory(struct kvm_vcpu *vcpu,
+				    struct kvm_pre_fault_memory *range)
+{
+	struct kvm_gstage_mapping out_map = { 0 };
+	struct kvm_memory_slot *memslot;
+	unsigned long map_size;
+	unsigned long hva;
+	gpa_t end;
+	gfn_t gfn;
+	int ret;
+
+	gfn = gpa_to_gfn(range->gpa);
+	memslot = kvm_vcpu_gfn_to_memslot(vcpu, gfn);
+	if (!memslot)
+		return -ENOENT;
+
+	hva = gfn_to_hva_memslot_prot(memslot, gfn, NULL);
+	if (kvm_is_error_hva(hva))
+		return -ENOENT;
+
+	for (;;) {
+		if (signal_pending(current))
+			return -EINTR;
+
+		if (kvm_check_request(KVM_REQ_VM_DEAD, vcpu))
+			return -EIO;
+
+		cond_resched();
+		ret = kvm_riscv_mmu_map(vcpu, memslot, range->gpa, hva, false, &out_map);
+		if (ret)
+			return ret;
+
+		if (!pte_val(out_map.pte))
+			continue;
+
+		map_size = PAGE_SIZE << (out_map.level * kvm_riscv_gstage_index_bits);
+		end = out_map.addr + map_size;
+		break;
+	}
+
+	return min_t(u64, range->size, end - range->gpa);
 }
 
 int kvm_riscv_mmu_alloc_pgd(struct kvm *kvm)
