@@ -1066,6 +1066,7 @@ static int ni_isa_attach_common(struct gpib_board *board, const struct gpib_boar
 	// allocate ioports
 	if (!request_region(iobase, atgpib_iosize, "atgpib"))
 		return -EBUSY;
+	nec_priv->iobase = iobase;
 
 	nec_priv->mmiobase = ioport_map(iobase, atgpib_iosize);
 	if (!nec_priv->mmiobase)
@@ -1106,7 +1107,7 @@ static void ni_isa_detach(struct gpib_board *board)
 
 	if (tnt_priv) {
 		nec_priv = &tnt_priv->nec7210_priv;
-		if (nec_priv->iobase)
+		if (nec_priv->mmiobase)
 			tnt4882_board_reset(tnt_priv, board);
 		if (tnt_priv->irq)
 			free_irq(tnt_priv->irq, board);
