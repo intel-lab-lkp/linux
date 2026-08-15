@@ -634,8 +634,10 @@ error_i2c:
 
 	for (--i ; i >= 0; i--) {
 		if (cci->master[i].cci) {
+			struct device_node *node = cci->master[i].adap.dev.of_node;
+
 			i2c_del_adapter(&cci->master[i].adap);
-			of_node_put(cci->master[i].adap.dev.of_node);
+			of_node_put(node);
 		}
 	}
 disable_clocks:
@@ -651,8 +653,10 @@ static void cci_remove(struct platform_device *pdev)
 
 	for (i = 0; i < cci->data->num_masters; i++) {
 		if (cci->master[i].cci) {
+			struct device_node *node = cci->master[i].adap.dev.of_node;
+
 			i2c_del_adapter(&cci->master[i].adap);
-			of_node_put(cci->master[i].adap.dev.of_node);
+			of_node_put(node);
 			cci_halt(cci, i);
 		}
 	}
