@@ -71,17 +71,18 @@ mt7921_regd_channel_update(struct wiphy *wiphy, struct mt792x_dev *dev)
 	}
 }
 
-int mt7921_mcu_regd_update(struct mt792x_dev *dev, u8 *alpha2,
-			   enum environment_cap country_ie_env)
+int __mt7921_mcu_regd_update(struct mt792x_dev *dev, u8 *alpha2,
+			     enum environment_cap country_ie_env)
 {
 	struct mt76_dev *mdev = &dev->mt76;
 	struct ieee80211_hw *hw = mdev->hw;
 	struct wiphy *wiphy = hw->wiphy;
 	int ret = 0;
 
+	lockdep_assert_held(&mdev->mutex);
+
 	dev->regd_in_progress = true;
 
-	mt792x_mutex_acquire(dev);
 	if (!dev->regd_change)
 		goto err;
 
@@ -100,10 +101,21 @@ int mt7921_mcu_regd_update(struct mt792x_dev *dev, u8 *alpha2,
 		goto err;
 
 err:
-	mt792x_mutex_release(dev);
 	dev->regd_change = false;
 	dev->regd_in_progress = false;
 	wake_up(&dev->wait);
+
+	return ret;
+}
+
+int mt7921_mcu_regd_update(struct mt792x_dev *dev, u8 *alpha2,
+			   enum environment_cap country_ie_env)
+{
+	int ret;
+
+	mt792x_mutex_acquire(dev);
+	ret = __mt7921_mcu_regd_update(dev, alpha2, country_ie_env);
+	mt792x_mutex_release(dev);
 
 	return ret;
 }
