@@ -14705,7 +14705,7 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 		goto out;
 
 	if (!get_rd_overloaded(this_rq->rd) ||
-	    this_rq->avg_idle < sd->max_newidle_lb_cost) {
+	    (!sched_feat(LB_PROMOTE) && this_rq->avg_idle < sd->max_newidle_lb_cost)) {
 
 		update_next_balance(sd, &next_balance);
 		goto out;
@@ -14727,7 +14727,8 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 
 		update_next_balance(sd, &next_balance);
 
-		if (this_rq->avg_idle < curr_cost + sd->max_newidle_lb_cost)
+		if (!sched_feat(LB_PROMOTE) &&
+		    this_rq->avg_idle < curr_cost + sd->max_newidle_lb_cost)
 			break;
 
 		if (sd->flags & SD_BALANCE_NEWIDLE) {
