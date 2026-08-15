@@ -671,6 +671,7 @@ static int cpm_i2c_probe(struct platform_device *ofdev)
 out_shut:
 	cpm_i2c_shutdown(cpm);
 out_free:
+	of_node_put(cpm->adap.dev.of_node);
 	kfree(cpm);
 
 	return result;
@@ -679,9 +680,11 @@ out_free:
 static void cpm_i2c_remove(struct platform_device *ofdev)
 {
 	struct cpm_i2c *cpm = platform_get_drvdata(ofdev);
+	struct device_node *node = cpm->adap.dev.of_node;
 
 	i2c_del_adapter(&cpm->adap);
 
+	of_node_put(node);
 	cpm_i2c_shutdown(cpm);
 
 	kfree(cpm);
