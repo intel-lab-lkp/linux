@@ -13,6 +13,8 @@ EXCEPTION
 ARRAY_BOUNDS call trace:|UBSAN: array-index-out-of-bounds
 FAM_BOUNDS call trace:|UBSAN: array-index-out-of-bounds
 PTR_BOUNDS call trace:|UBSAN: array-index-out-of-bounds
+OVERFLOW_SIGNED
+OVERFLOW_UNSIGNED
 CORRUPT_LIST_ADD list_add corruption
 CORRUPT_LIST_DEL list_del corruption
 STACK_GUARD_PAGE_LEADING
@@ -21,11 +23,13 @@ REPORT_STACK_CANARY repeat:2 ok: stack canaries differ
 UNSET_SMEP pinned CR4 bits changed:
 DOUBLE_FAULT
 CORRUPT_PAC
+EFI_RUNTIME_CRASH
 UNALIGNED_LOAD_STORE_WRITE
 SLAB_LINEAR_OVERFLOW
 VMALLOC_LINEAR_OVERFLOW
 #WRITE_AFTER_FREE Corrupts memory on failure
 READ_AFTER_FREE call trace:|Memory correctly poisoned
+KFENCE_READ_AFTER_FREE call trace:|Memory correctly poisoned
 #WRITE_BUDDY_AFTER_FREE Corrupts memory on failure
 READ_BUDDY_AFTER_FREE call trace:|Memory correctly poisoned
 SLAB_INIT_ON_ALLOC Memory appears initialized
@@ -59,6 +63,7 @@ REFCOUNT_DEC_ZERO
 REFCOUNT_DEC_NEGATIVE Negative detected: saturated
 REFCOUNT_DEC_AND_TEST_NEGATIVE Negative detected: saturated
 REFCOUNT_SUB_AND_TEST_NEGATIVE Negative detected: saturated
+REFCOUNT_SUB_AND_TEST_ZERO
 REFCOUNT_INC_ZERO
 REFCOUNT_ADD_ZERO
 REFCOUNT_INC_SATURATED Saturation detected: still saturated
@@ -77,6 +82,8 @@ USERCOPY_SLAB_WHITELIST_FROM
 USERCOPY_STACK_FRAME_TO
 USERCOPY_STACK_FRAME_FROM
 USERCOPY_STACK_BEYOND
+USERCOPY_VMALLOC
+USERCOPY_FOLIO
 USERCOPY_KERNEL
 KSTACK_ERASE OK: the rest of the thread stack is properly erased
 CFI_FORWARD_PROTO
