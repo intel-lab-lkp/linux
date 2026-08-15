@@ -2069,10 +2069,12 @@ static ssize_t move_pages(struct userfaultfd_ctx *ctx, unsigned long dst_start,
 			ret = move_pages_ptes(mm, dst_pmd, src_pmd,
 					      dst_vma, src_vma, dst_addr,
 					      src_addr, src_end - src_addr, mode);
-			if (ret < 0)
+			if (ret < 0) {
 				err = ret;
-			else
+			} else {
+				err = 0;
 				step_size = ret;
+			}
 		}
 
 		cond_resched();
