@@ -2396,6 +2396,15 @@ static int igb_get_ts_info(struct net_device *dev,
 	case e1000_i354:
 	case e1000_i210:
 	case e1000_i211:
+		/* No PTP clock, no hardware timestamping. Advertise what
+		 * igb_ptp_hwtstamp_set() will actually accept.
+		 */
+		if (!(adapter->ptp_flags & IGB_PTP_ENABLED)) {
+			info->so_timestamping =
+				SOF_TIMESTAMPING_TX_SOFTWARE;
+			return 0;
+		}
+
 		info->so_timestamping =
 			SOF_TIMESTAMPING_TX_SOFTWARE |
 			SOF_TIMESTAMPING_TX_HARDWARE |
