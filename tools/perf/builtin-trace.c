@@ -974,21 +974,43 @@ static size_t syscall_arg__scnprintf_getrandom_flags(char *bf, size_t size,
 #define SCA_GETRANDOM_FLAGS syscall_arg__scnprintf_getrandom_flags
 
 #ifdef HAVE_LIBBPF_SUPPORT
-static void syscall_arg_fmt__cache_btf_enum(struct syscall_arg_fmt *arg_fmt, struct btf *btf, char *type)
+static bool btf_is_func_ptr(const struct btf *btf, const struct btf_type *type)
+{
+	while (type) {
+		if (btf_is_ptr(type)) {
+			type = btf__type_by_id(btf, type->type);
+			return type && btf_is_func_proto(type);
+		}
+		if (btf_is_typedef(type) || btf_is_mod(type)) {
+			type = btf__type_by_id(btf, type->type);
+		} else {
+			break;
+		}
+	}
+	return false;
+}
+
+static void syscall_arg_fmt__cache_btf_type(struct syscall_arg_fmt *arg_fmt,
+					    struct btf *btf, char *type)
 {
 	int id;
 
-	type = strstr(type, "enum ");
 	if (type == NULL)
 		return;
 
-	type += 5; // skip "enum " to get the enumeration name
+	if (strstarts(type, "enum "))
+		type += 5;
+	else if (strstarts(type, "struct "))
+		type += 7;
+	else if (strstarts(type, "union "))
+		type += 6;
 
 	id = btf__find_by_name(btf, type);
 	if (id < 0)
 		return;
 
 	arg_fmt->type = btf__type_by_id(btf, id);
+	arg_fmt->type_id = id;
 }
 
 static bool syscall_arg__strtoul_btf_enum(char *bf, size_t size, struct syscall_arg *arg, u64 *val)
@@ -1023,8 +1045,7 @@ static bool syscall_arg__strtoul_btf_type(char *bf, size_t size, struct syscall_
 		return false;
 
 	if (arg->fmt->type == NULL) {
-		// See if this is an enum
-		syscall_arg_fmt__cache_btf_enum(arg->fmt, btf, type);
+		syscall_arg_fmt__cache_btf_type(arg->fmt, btf, type);
 	}
 
 	// Now let's see if we have a BTF type resolved
@@ -1111,8 +1132,7 @@ static size_t trace__btf_scnprintf(struct trace *trace, struct syscall_arg *arg,
 		return 0;
 
 	if (arg_fmt->type == NULL) {
-		// Check if this is an enum and if we have the BTF type for it.
-		syscall_arg_fmt__cache_btf_enum(arg_fmt, trace->btf, type);
+		syscall_arg_fmt__cache_btf_type(arg_fmt, trace->btf, type);
 	}
 
 	// Did we manage to find a BTF type for the syscall/tracepoint argument?
@@ -1123,6 +1143,8 @@ static size_t trace__btf_scnprintf(struct trace *trace, struct syscall_arg *arg,
 		return btf_enum_scnprintf(arg_fmt->type, trace->btf, bf, size, val);
 	else if (btf_is_struct(arg_fmt->type) || btf_is_union(arg_fmt->type))
 		return btf_struct_scnprintf(arg_fmt->type, trace->btf, bf, size, arg);
+	else if (btf_is_func_ptr(trace->btf, arg_fmt->type))
+		return syscall_arg__scnprintf_ksym(bf, size, arg);
 
 	return 0;
 }
@@ -2566,7 +2588,8 @@ static size_t syscall__scnprintf_args(struct syscall *sc, char *bf, size_t size,
 
 			default_scnprintf = sc->arg_fmt[arg.idx].scnprintf;
 
-			if (trace->force_btf || default_scnprintf == NULL || default_scnprintf == SCA_PTR) {
+			if (trace->force_btf || default_scnprintf == NULL ||
+			    default_scnprintf == SCA_PTR || default_scnprintf == SCA_KSYM) {
 				btf_printed = trace__btf_scnprintf(trace, &arg, bf + printed,
 								   size - printed, val, field->type);
 				if (btf_printed) {
