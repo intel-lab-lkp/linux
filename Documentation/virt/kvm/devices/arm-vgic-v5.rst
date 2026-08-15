@@ -35,6 +35,9 @@ Groups:
       populated with the userspace PPI mask. The lower __u64 contains the mask
       for the lower 64 PPIS, with the remaining 64 being in the second __u64.
 
+      Userspace must query this attribute after initializing the VGIC with
+      KVM_DEV_ARM_VGIC_CTRL_INIT.
+
       This is a read-only attribute, and cannot be set. Attempts to set it are
       rejected.
 

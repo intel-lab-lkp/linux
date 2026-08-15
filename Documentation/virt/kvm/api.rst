@@ -921,7 +921,9 @@ The irq_type field has the following values:
 	       in-kernel GICv5: SPI, irq_id between 0 and 65535 (incl.)
 - KVM_ARM_IRQ_TYPE_PPI:
 	       in-kernel GICv2/GICv3: PPI, irq_id between 16 and 31 (incl.)
-	       in-kernel GICv5: PPI, irq_id between 0 and 127 (incl.)
+	       in-kernel GICv5: PPI, irq_id between 0 and 63 (incl.), and
+	       only if present in the mask returned by the
+	       KVM_DEV_ARM_VGIC_USERSPACE_PPIS attribute
 
 (The irq_id field thus corresponds nicely to the IRQ ID in the ARM GIC specs)
 
