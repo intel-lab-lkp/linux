@@ -41,6 +41,8 @@ module_param(debug, bool, 0644);
 #define TRANS_RUNNING		(1 << 1)
 /* Instance is currently aborting */
 #define TRANS_ABORT		(1 << 2)
+/* Instance must not be scheduled while its buffers are being removed */
+#define TRANS_PAUSED		(1 << 3)
 
 
 /* The job queue is not running new jobs */
@@ -309,9 +311,9 @@ static void __v4l2_m2m_try_queue(struct v4l2_m2m_dev *m2m_dev,
 
 	spin_lock_irqsave(&m2m_dev->job_spinlock, flags_job);
 
-	/* If the context is aborted then don't schedule it */
-	if (m2m_ctx->job_flags & TRANS_ABORT) {
-		dprintk("Aborted context\n");
+	/* If the context is aborted or paused then don't schedule it */
+	if (m2m_ctx->job_flags & (TRANS_ABORT | TRANS_PAUSED)) {
+		dprintk("Aborted or paused context\n");
 		goto job_unlock;
 	}
 
@@ -1388,16 +1390,66 @@ int v4l2_m2m_ioctl_create_bufs(struct file *file, void *priv,
 }
 EXPORT_SYMBOL_GPL(v4l2_m2m_ioctl_create_bufs);
 
+/*
+ * Keep @m2m_ctx off the job queue and wait for its in-flight job, if any.
+ *
+ * Only this instance is held back: the buffers about to be removed belong to
+ * its own queues, so no other instance can be reading them. Waiting on this
+ * instance is also what makes the wait safe -- the caller is inside one of its
+ * ioctls, so v4l2_m2m_ctx_release() cannot free it here.
+ */
+static void v4l2_m2m_pause_ctx(struct v4l2_m2m_ctx *m2m_ctx)
+{
+	struct v4l2_m2m_dev *m2m_dev = m2m_ctx->m2m_dev;
+	unsigned long flags;
+
+	spin_lock_irqsave(&m2m_dev->job_spinlock, flags);
+	m2m_ctx->job_flags |= TRANS_PAUSED;
+	if (m2m_ctx->job_flags & TRANS_RUNNING) {
+		spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
+		wait_event(m2m_ctx->finished,
+			   !(m2m_ctx->job_flags & TRANS_RUNNING));
+		return;
+	}
+	if (m2m_ctx->job_flags & TRANS_QUEUED) {
+		list_del(&m2m_ctx->queue);
+		m2m_ctx->job_flags &= ~TRANS_QUEUED;
+	}
+	spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
+}
+
+static void v4l2_m2m_resume_ctx(struct v4l2_m2m_ctx *m2m_ctx)
+{
+	struct v4l2_m2m_dev *m2m_dev = m2m_ctx->m2m_dev;
+	unsigned long flags;
+
+	spin_lock_irqsave(&m2m_dev->job_spinlock, flags);
+	m2m_ctx->job_flags &= ~TRANS_PAUSED;
+	spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
+
+	v4l2_m2m_try_schedule(m2m_ctx);
+}
+
 int v4l2_m2m_ioctl_remove_bufs(struct file *file, void *priv,
 			       struct v4l2_remove_buffers *remove)
 {
 	struct v4l2_fh *fh = file_to_v4l2_fh(file);
 	struct vb2_queue *q = v4l2_m2m_get_vq(fh->m2m_ctx, remove->type);
+	int ret;
 
 	if (q->type != remove->type)
 		return -EINVAL;
 
-	return vb2_core_remove_bufs(q, remove->index, remove->count);
+	/*
+	 * Removal is only allowed for DEQUEUED buffers, but that is exactly
+	 * the state a stateless decoder's reference frame is in while a job
+	 * resolves it by timestamp and reads its memory.
+	 */
+	v4l2_m2m_pause_ctx(fh->m2m_ctx);
+	ret = vb2_core_remove_bufs(q, remove->index, remove->count);
+	v4l2_m2m_resume_ctx(fh->m2m_ctx);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(v4l2_m2m_ioctl_remove_bufs);
 
