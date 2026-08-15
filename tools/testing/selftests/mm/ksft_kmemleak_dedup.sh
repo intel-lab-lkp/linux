@@ -19,24 +19,31 @@
 #
 # Author: Breno Leitao <leitao@debian.org>
 
-ksft_skip=4
+# KTAP output helpers (ktap_test_pass, ktap_test_skip, ktap_test_fail, ...).
+DIR="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=../kselftest/ktap_helpers.sh
+source "${DIR}"/../kselftest/ktap_helpers.sh
+
 KMEMLEAK=/sys/kernel/debug/kmemleak
 VERBOSE_PARAM=/sys/module/kmemleak/parameters/verbose
 MODULE=kmemleak-test
 
+ktap_print_header
+ktap_set_plan 1
+
 skip() {
-	echo "SKIP: $*"
-	exit $ksft_skip
+	ktap_test_skip "$*"
+	ktap_finished
 }
 
 fail() {
-	echo "FAIL: $*"
-	exit 1
+	ktap_test_fail "$*"
+	ktap_finished
 }
 
 pass() {
-	echo "PASS: $*"
-	exit 0
+	ktap_test_pass "$*"
+	ktap_finished
 }
 
 [ "$(id -u)" -eq 0 ] || skip "must run as root"
