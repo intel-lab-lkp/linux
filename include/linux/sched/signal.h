@@ -562,9 +562,21 @@ static inline sigset_t *sigmask_to_save(void)
 	return res;
 }
 
+/*
+ * get_cad_pid() returns a referenced pid.
+ * set_cad_pid() consumes the caller's reference.
+ */
+struct pid *get_cad_pid(void);
+void set_cad_pid(struct pid *pid);
+
 static inline int kill_cad_pid(int sig, int priv)
 {
-	return kill_pid(cad_pid, sig, priv);
+	struct pid *pid = get_cad_pid();
+	int ret;
+
+	ret = kill_pid(pid, sig, priv);
+	put_pid(pid);
+	return ret;
 }
 
 /* These can be the second arg to send_sig_info/send_group_sig_info.  */

@@ -13,7 +13,9 @@
 #include <linux/kexec.h>
 #include <linux/kmod.h>
 #include <linux/kmsg_dump.h>
+#include <linux/pid.h>
 #include <linux/reboot.h>
+#include <linux/spinlock.h>
 #include <linux/suspend.h>
 #include <linux/syscalls.h>
 #include <linux/syscore_ops.h>
@@ -26,6 +28,33 @@
 static int C_A_D = 1;
 struct pid *cad_pid;
 EXPORT_SYMBOL(cad_pid);
+static DEFINE_SPINLOCK(cad_pid_lock);
+
+struct pid *get_cad_pid(void)
+{
+	unsigned long flags;
+	struct pid *pid;
+
+	spin_lock_irqsave(&cad_pid_lock, flags);
+	pid = get_pid(cad_pid);
+	spin_unlock_irqrestore(&cad_pid_lock, flags);
+	return pid;
+}
+EXPORT_SYMBOL_GPL(get_cad_pid);
+
+void set_cad_pid(struct pid *pid)
+{
+	unsigned long flags;
+	struct pid *old_pid;
+
+	spin_lock_irqsave(&cad_pid_lock, flags);
+	old_pid = cad_pid;
+	cad_pid = pid;
+	spin_unlock_irqrestore(&cad_pid_lock, flags);
+
+	put_pid(old_pid);
+}
+EXPORT_SYMBOL_GPL(set_cad_pid);
 
 #if defined(CONFIG_ARM)
 #define DEFAULT_REBOOT_MODE		= REBOOT_HARD

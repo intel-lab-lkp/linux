@@ -767,12 +767,14 @@ static struct ctl_table_root pid_table_root = {
 static int proc_do_cad_pid(const struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos)
 {
-	struct pid *new_pid;
+	struct pid *pid, *new_pid;
 	pid_t tmp_pid;
 	int r;
 	struct ctl_table tmp_table = *table;
 
-	tmp_pid = pid_vnr(cad_pid);
+	pid = get_cad_pid();
+	tmp_pid = pid_vnr(pid);
+	put_pid(pid);
 	tmp_table.data = &tmp_pid;
 
 	r = proc_dointvec(&tmp_table, write, buffer, lenp, ppos);
@@ -783,7 +785,7 @@ static int proc_do_cad_pid(const struct ctl_table *table, int write, void *buffe
 	if (!new_pid)
 		return -ESRCH;
 
-	put_pid(xchg(&cad_pid, new_pid));
+	set_cad_pid(new_pid);
 	return 0;
 }
 
@@ -812,10 +814,14 @@ int register_pidns_sysctls(struct pid_namespace *pidns)
 {
 #ifdef CONFIG_SYSCTL
 	struct ctl_table *tbl;
+	size_t table_size = ARRAY_SIZE(pid_table);
+
+	if (IS_ENABLED(CONFIG_PROC_SYSCTL) && pidns != &init_pid_ns)
+		table_size--;
 
 	setup_sysctl_set(&pidns->set, &pid_table_root, set_is_seen);
 
-	tbl = kmemdup(pid_table, sizeof(pid_table), GFP_KERNEL);
+	tbl = kmemdup(pid_table, table_size * sizeof(*tbl), GFP_KERNEL);
 	if (!tbl)
 		return -ENOMEM;
 	tbl->data = &pidns->pid_max;
@@ -823,7 +829,7 @@ int register_pidns_sysctls(struct pid_namespace *pidns)
 			     PIDS_PER_CPU_DEFAULT * num_possible_cpus()));
 
 	pidns->sysctls = __register_sysctl_table(&pidns->set, "kernel", tbl,
-						 ARRAY_SIZE(pid_table));
+						 table_size);
 	if (!pidns->sysctls) {
 		kfree(tbl);
 		retire_sysctl_set(&pidns->set);

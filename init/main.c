@@ -74,6 +74,7 @@
 #include <linux/kthread.h>
 #include <linux/sched.h>
 #include <linux/sched/init.h>
+#include <linux/sched/signal.h>
 #include <linux/signal.h>
 #include <linux/idr.h>
 #include <linux/kgdb.h>
@@ -1636,7 +1637,7 @@ static noinline void __init kernel_init_freeable(void)
 	 */
 	set_mems_allowed(node_states[N_MEMORY]);
 
-	cad_pid = get_pid(task_pid(current));
+	set_cad_pid(get_pid(task_pid(current)));
 
 	smp_prepare_cpus(setup_max_cpus);
 
