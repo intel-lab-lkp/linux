@@ -6463,6 +6463,7 @@ void fib6_info_hw_flags_set(struct net *net, struct fib6_info *f6i,
 			    bool offload, bool trap, bool offload_failed)
 {
 	u8 fib_notify_on_flag_change;
+	struct fib6_table *table;
 	struct sk_buff *skb;
 	int err;
 
@@ -6491,10 +6492,19 @@ void fib6_info_hw_flags_set(struct net *net, struct fib6_info *f6i,
 	if (!fib_notify_on_flag_change)
 		return;
 
+	table = f6i->fib6_table;
 	skb = nlmsg_new(rt6_nlmsg_size(f6i), GFP_KERNEL);
 	if (!skb) {
 		err = -ENOBUFS;
 		goto errout;
+	}
+
+	spin_lock_bh(&table->tb6_lock);
+	if (!rcu_dereference_protected(f6i->fib6_node,
+				       lockdep_is_held(&table->tb6_lock))) {
+		spin_unlock_bh(&table->tb6_lock);
+		kfree_skb(skb);
+		return;
 	}
 
 	err = rt6_fill_node(net, skb, f6i, NULL, NULL, NULL, 0, RTM_NEWROUTE, 0,
@@ -6502,11 +6512,13 @@ void fib6_info_hw_flags_set(struct net *net, struct fib6_info *f6i,
 	if (err < 0) {
 		/* -EMSGSIZE implies BUG in rt6_nlmsg_size() */
 		WARN_ON(err == -EMSGSIZE);
+		spin_unlock_bh(&table->tb6_lock);
 		kfree_skb(skb);
 		goto errout;
 	}
 
-	rtnl_notify(skb, net, 0, RTNLGRP_IPV6_ROUTE, NULL, GFP_KERNEL);
+	rtnl_notify(skb, net, 0, RTNLGRP_IPV6_ROUTE, NULL, GFP_ATOMIC);
+	spin_unlock_bh(&table->tb6_lock);
 	return;
 
 errout:
