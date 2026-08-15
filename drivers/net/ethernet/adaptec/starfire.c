@@ -634,7 +634,7 @@ static int starfire_init_one(struct pci_dev *pdev,
 	int i, irq, chip_idx = ent->driver_data;
 	struct net_device *dev;
 	u8 addr[ETH_ALEN];
-	long ioaddr;
+	unsigned long ioaddr;
 	void __iomem *base;
 	int drv_flags, io_size;
 	int boguscnt;
