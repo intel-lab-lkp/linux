@@ -2091,8 +2091,13 @@ static int syscall__alloc_arg_fmts(struct syscall *sc, int nr_args)
 }
 
 static const struct syscall_arg_fmt syscall_arg_fmts__by_name[] = {
+	{ .name = "action",	.scnprintf = SCA_KSYM, },
+	{ .name = "callsite",	.scnprintf = SCA_KSYM, },
+	{ .name = "fn",		.scnprintf = SCA_KSYM, },
+	{ .name = "function",	.scnprintf = SCA_KSYM, },
 	{ .name = "msr",	.scnprintf = SCA_X86_MSR,	  .strtoul = STUL_X86_MSR,	   },
 	{ .name = "vector",	.scnprintf = SCA_X86_IRQ_VECTORS, .strtoul = STUL_X86_IRQ_VECTORS, },
+	{ .name = "work",	.scnprintf = SCA_KSYM, },
 };
 
 static int syscall_arg_fmt__cmp(const void *name, const void *fmtp)
@@ -2193,6 +2198,14 @@ syscall_arg_fmt__init_array(struct syscall_arg_fmt *arg, struct tep_format_field
 		    ((len >= 4 && strcmp(field->name + len - 4, "name") == 0) ||
 		     strstr(field->name, "path") != NULL)) {
 			arg->scnprintf = SCA_FILENAME;
+		} else if (strcmp(field->name, "fn") == 0 ||
+			   strcmp(field->name, "function") == 0 ||
+			   strcmp(field->name, "callsite") == 0 ||
+			   strcmp(field->name, "action") == 0 ||
+			   (field->type && (strstr(field->type, "(*)") != NULL ||
+					    strstr(field->type, "_func_t") != NULL ||
+					    strstr(field->type, "_fn") != NULL))) {
+			arg->scnprintf = SCA_KSYM;
 		} else if ((field->flags & TEP_FIELD_IS_POINTER) || strstr(field->name, "addr") ||
 			   field_has_hex_fmt(field, len))
 			arg->scnprintf = SCA_PTR;
