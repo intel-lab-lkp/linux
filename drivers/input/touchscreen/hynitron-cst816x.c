@@ -92,24 +92,19 @@ static int cst816x_i2c_read_register(struct cst816x_priv *priv, u8 reg,
 	return 0;
 }
 
-static u8 cst816x_gest_idx(u8 gest)
+static unsigned int cst816x_gest_idx(u8 gest)
 {
-	u8 index;
-
 	switch (gest) {
 	case 0x01: /* Slide up gesture */
 	case 0x02: /* Slide down gesture */
 	case 0x03: /* Slide left gesture */
 	case 0x04: /* Slide right gesture */
-		index = gest;
-		break;
+		return gest - 1;
 	case 0x0c: /* Long press gesture */
+		return CST816X_NUM_KEYS - 1;
 	default:
-		index = CST816X_NUM_KEYS;
-		break;
+		return CST816X_NUM_KEYS;
 	}
-
-	return index - 1;
 }
 
 static bool cst816x_process_touch(struct cst816x_priv *priv,
@@ -169,6 +164,7 @@ static irqreturn_t cst816x_irq_cb(int irq, void *cookie)
 {
 	struct cst816x_priv *priv = cookie;
 	struct cst816x_touch tch;
+	unsigned int gest_idx;
 
 	if (!cst816x_process_touch(priv, &tch))
 		return IRQ_HANDLED;
@@ -176,9 +172,10 @@ static irqreturn_t cst816x_irq_cb(int irq, void *cookie)
 	input_report_abs(priv->input, ABS_X, tch.abs_x);
 	input_report_abs(priv->input, ABS_Y, tch.abs_y);
 
-	if (tch.gest)
+	gest_idx = cst816x_gest_idx(tch.gest);
+	if (gest_idx < priv->keycodemax)
 		input_report_key(priv->input,
-				 priv->keycode[cst816x_gest_idx(tch.gest)],
+				 priv->keycode[gest_idx],
 				 tch.active);
 
 	input_report_key(priv->input, BTN_TOUCH, tch.active);
