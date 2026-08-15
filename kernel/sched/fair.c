@@ -13807,33 +13807,33 @@ update_next_balance(struct sched_domain *sd, unsigned long *next_balance)
 
 /*
  * active_load_balance_cpu_stop is run by the CPU stopper. It pushes
- * running tasks off the busiest CPU onto idle CPUs. It requires at
+ * one running task off the src CPU onto dst CPU. It requires at
  * least 1 task to be running on each physical CPU where possible, and
  * avoids physical / logical imbalances.
  */
 static int active_load_balance_cpu_stop(void *data)
 {
-	struct rq *busiest_rq = data;
-	int busiest_cpu = cpu_of(busiest_rq);
-	int target_cpu = busiest_rq->push_cpu;
+	struct rq *src_rq = data;
+	int src_cpu = cpu_of(src_rq);
+	int target_cpu = this_rq()->push_cpu;
 	struct rq *target_rq = cpu_rq(target_cpu);
 	struct sched_domain *sd;
 	struct task_struct *p = NULL;
 	struct rq_flags rf;
 
-	rq_lock_irq(busiest_rq, &rf);
+	rq_lock_irq(src_rq, &rf);
 	/*
 	 * Between queueing the stop-work and running it is a hole in which
 	 * CPUs can become inactive. We should not move tasks from or to
 	 * inactive CPUs.
 	 */
-	if (!cpu_active(busiest_cpu) || !cpu_active(target_cpu))
+	if (!cpu_active(src_cpu) || !cpu_active(target_cpu))
 		goto out_unlock;
 
-	WARN_ON_ONCE(!busiest_rq->active_balance);
+	WARN_ON_ONCE(!this_rq()->active_balance);
 
 	/* Is there any task to move? */
-	if (busiest_rq->nr_running <= 1)
+	if (src_rq->nr_running <= 1)
 		goto out_unlock;
 
 	/*
@@ -13841,12 +13841,12 @@ static int active_load_balance_cpu_stop(void *data)
 	 * we need to fix it. Originally reported by
 	 * Bjorn Helgaas on a 128-CPU setup.
 	 */
-	WARN_ON_ONCE(busiest_rq == target_rq);
+	WARN_ON_ONCE(src_rq == target_rq);
 
 	/* Search for an sd spanning us and the target CPU. */
 	rcu_read_lock();
 	for_each_domain(target_cpu, sd) {
-		if (cpumask_test_cpu(busiest_cpu, sched_domain_span(sd)))
+		if (cpumask_test_cpu(src_cpu, sched_domain_span(sd)))
 			break;
 	}
 
@@ -13855,14 +13855,14 @@ static int active_load_balance_cpu_stop(void *data)
 			.sd		= sd,
 			.dst_cpu	= target_cpu,
 			.dst_rq		= target_rq,
-			.src_cpu	= busiest_rq->cpu,
-			.src_rq		= busiest_rq,
+			.src_cpu	= src_rq->cpu,
+			.src_rq		= src_rq,
 			.idle		= CPU_IDLE,
 			.flags		= LBF_ACTIVE_LB,
 		};
 
 		schedstat_inc(sd->alb_count);
-		update_rq_clock(busiest_rq);
+		update_rq_clock(src_rq);
 
 		p = detach_one_task(&env);
 		if (p) {
@@ -13875,13 +13875,13 @@ static int active_load_balance_cpu_stop(void *data)
 	}
 	rcu_read_unlock();
 out_unlock:
-	rq_unlock(busiest_rq, &rf);
+	rq_unlock(src_rq, &rf);
 
 	if (p)
 		attach_one_task(target_rq, p);
 
 	local_irq_enable();
-	busiest_rq->active_balance = 0;
+	this_rq()->active_balance = 0;
 
 	return 0;
 }
