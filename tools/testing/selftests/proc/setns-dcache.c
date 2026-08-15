@@ -17,7 +17,6 @@
  * Test that setns(CLONE_NEWNET) points to new /proc/net content even
  * if old one is in dcache.
  *
- * FIXME /proc/net/unix is under CONFIG_UNIX which can be disabled.
  */
 #undef NDEBUG
 #include <assert.h>
@@ -32,6 +31,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include "kselftest.h"
 
 static pid_t pid = -1;
 
@@ -47,6 +47,9 @@ int main(void)
 	int fd[2];
 	char _ = 0;
 	int nsfd;
+
+	if (access("/proc/net/unix", F_OK) != 0)
+		ksft_exit_skip("CONFIG_UNIX is disabled or /proc/net/unix is missing\n");
 
 	atexit(f);
 
