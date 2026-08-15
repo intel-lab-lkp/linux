@@ -142,3 +142,27 @@ SCHED_FEAT(LATENCY_WARN, false)
  */
 SCHED_FEAT(NI_RANDOM, true)
 SCHED_FEAT(NI_RATE, true)
+
+/*
+ * Embedded platforms commonly use CONFIG_HZ_250, and testing has revealed that
+ * there are numerous instances of unreasonable CPU idle events on such
+ * platforms. Unreasonable CPU idle refers to situations where the CPU enters
+ * an idle state for a duration of time (t), while there are tasks that can run
+ * on the idle CPU and are not limited by cgroup constraints, yet these tasks
+ * remain unscheduled for a duration greater than (t), t > 2.5 ms.
+ *
+ * Testing has shown that over 95% of these events last less than 4 ms, but
+ * there are still some instances of longer durations between 4-5ms, even
+ * occasionally between 5-10 ms. For a real-time system, scheduling delays
+ * greater than 4 ms can lead to performance spikes.
+ *
+ * Enabling this option can effectively reduce the occurrence of unreasonable
+ * CPU idle events on low HZ systems like CONFIG_HZ_250, and completely
+ * eliminate events exceeding 4 ms. Note that the feature only affects fair
+ * tasks.
+ *
+ * Note that enabling this feature will increase sys%, as it uses CPU time that
+ * would have been idle to expedite the scheduling of tasks. There will also be
+ * some CPU overhead involved in searching for suitable tasks.
+ */
+SCHED_FEAT(LB_PROMOTE, false)
