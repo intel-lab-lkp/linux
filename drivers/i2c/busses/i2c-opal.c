@@ -226,8 +226,10 @@ static int i2c_opal_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, adapter);
 	rc = i2c_add_adapter(adapter);
-	if (rc)
+	if (rc) {
 		dev_err(&pdev->dev, "Failed to register the i2c adapter\n");
+		of_node_put(adapter->dev.of_node);
+	}
 
 	return rc;
 }
@@ -235,8 +237,10 @@ static int i2c_opal_probe(struct platform_device *pdev)
 static void i2c_opal_remove(struct platform_device *pdev)
 {
 	struct i2c_adapter *adapter = platform_get_drvdata(pdev);
+	struct device_node *node = adapter->dev.of_node;
 
 	i2c_del_adapter(adapter);
+	of_node_put(node);
 }
 
 static const struct of_device_id i2c_opal_of_match[] = {
