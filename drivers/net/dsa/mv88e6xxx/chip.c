@@ -3769,6 +3769,9 @@ static int mv88e6xxx_mdio_read(struct mii_bus *bus, int phy, int reg)
 	err = chip->info->ops->phy_read(chip, bus, phy, reg, &val);
 	mv88e6xxx_reg_unlock(chip);
 
+	if (err)
+		return err;
+
 	/* Some internal PHYs don't have a model number. */
 	if (reg == MII_PHYSID2 && !(val & 0x3f0) &&
 	    chip->info->family < ARRAY_SIZE(family_prod_id_table)) {
@@ -3777,7 +3780,7 @@ static int mv88e6xxx_mdio_read(struct mii_bus *bus, int phy, int reg)
 			val |= prod_id >> 4;
 	}
 
-	return err ? err : val;
+	return val;
 }
 
 static int mv88e6xxx_mdio_read_c45(struct mii_bus *bus, int phy, int devad,
