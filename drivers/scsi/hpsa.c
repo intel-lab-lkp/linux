@@ -3505,6 +3505,14 @@ static void hpsa_get_enclosure_info(struct ctlr_info *h,
 		goto out;
 	}
 
+	if (id_phys->active_path_number >= ARRAY_SIZE(encl_dev->box)) {
+		dev_warn(&h->pdev->dev,
+			 "%s: invalid active path %u for bdi[0x%x]\n",
+			 __func__, id_phys->active_path_number, bmic_device_index);
+		rc = -1;
+		goto out;
+	}
+
 	encl_dev->box[id_phys->active_path_number] = bssbp->phys_box_on_port;
 	memcpy(&encl_dev->phys_connector[id_phys->active_path_number],
 		bssbp->phys_connector, sizeof(bssbp->phys_connector));
