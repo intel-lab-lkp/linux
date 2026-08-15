@@ -33,7 +33,13 @@ static void lkdtm_VMALLOC_LINEAR_OVERFLOW(void)
 
 	one = vzalloc(PAGE_SIZE);
 	OPTIMIZER_HIDE_VAR(one);
+	if (!one)
+		return;
 	two = vzalloc(PAGE_SIZE);
+	if (!two) {
+		vfree(one);
+		return;
+	}
 
 	pr_info("Attempting vmalloc linear overflow ...\n");
 	memset(one, 0xAA, PAGE_SIZE + __offset);
@@ -349,6 +355,11 @@ static void lkdtm_SLAB_FREE_CROSS(void)
 static void lkdtm_SLAB_FREE_PAGE(void)
 {
 	unsigned long p = __get_free_page(GFP_KERNEL);
+
+	if (!p) {
+		pr_info("Unable to allocate free page\n");
+		return;
+	}
 
 	pr_info("Attempting non-Slab slab free ...\n");
 	kmem_cache_free(NULL, (void *)p);
