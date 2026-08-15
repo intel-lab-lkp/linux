@@ -1741,6 +1741,7 @@ static int ni_pcmcia_attach(struct gpib_board *board, const struct gpib_board_co
 	if (!request_region(curr_dev->resource[0]->start, resource_size(curr_dev->resource[0]),
 			    DRV_NAME))
 		return -ENOMEM;
+	nec_priv->iobase = curr_dev->resource[0]->start;
 
 	nec_priv->mmiobase = ioport_map(curr_dev->resource[0]->start,
 					resource_size(curr_dev->resource[0]));
@@ -1767,14 +1768,14 @@ static void ni_pcmcia_detach(struct gpib_board *board)
 
 	if (tnt_priv) {
 		nec_priv = &tnt_priv->nec7210_priv;
+		if (nec_priv->mmiobase)
+			tnt4882_board_reset(tnt_priv, board);
 		if (tnt_priv->irq)
 			free_irq(tnt_priv->irq, board);
 		if (nec_priv->mmiobase)
 			ioport_unmap(nec_priv->mmiobase);
-		if (nec_priv->iobase) {
-			tnt4882_board_reset(tnt_priv, board);
+		if (nec_priv->iobase)
 			release_region(nec_priv->iobase, pcmcia_gpib_iosize);
-		}
 	}
 	tnt4882_free_private(board);
 }
