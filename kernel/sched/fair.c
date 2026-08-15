@@ -13572,7 +13572,9 @@ more_balance:
 
 		if (env.flags & LBF_NEED_BREAK) {
 			env.flags &= ~LBF_NEED_BREAK;
-			goto more_balance;
+			if (!(env.idle == CPU_NEWLY_IDLE &&
+			      (env.dst_rq->nr_running > 0 || env.dst_rq->ttwu_pending)))
+				goto more_balance;
 		}
 
 		/*
