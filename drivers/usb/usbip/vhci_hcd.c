@@ -1199,7 +1199,6 @@ static int vhci_start(struct usb_hcd *hcd)
 {
 	struct vhci_hcd *vhci_hcd = hcd_to_vhci_hcd(hcd);
 	int id, rhport;
-	int err;
 
 	usbip_dbg_vhci_hc("enter vhci_start\n");
 
@@ -1230,40 +1229,17 @@ static int vhci_start(struct usb_hcd *hcd)
 		return -EINVAL;
 	}
 
-	/* vhci_hcd is now ready to be controlled through sysfs */
-	if (id == 0 && usb_hcd_is_primary_hcd(hcd)) {
-		err = vhci_init_attr_group();
-		if (err) {
-			dev_err(hcd_dev(hcd), "init attr group failed, err = %d\n", err);
-			return err;
-		}
-		err = sysfs_create_group(&hcd_dev(hcd)->kobj, &vhci_attr_group);
-		if (err) {
-			dev_err(hcd_dev(hcd), "create sysfs files failed, err = %d\n", err);
-			vhci_finish_attr_group();
-			return err;
-		}
-		dev_info(hcd_dev(hcd), "created sysfs %s\n", hcd_name(hcd));
-	}
-
 	return 0;
 }
 
 static void vhci_stop(struct usb_hcd *hcd)
 {
 	struct vhci_hcd *vhci_hcd = hcd_to_vhci_hcd(hcd);
-	int id, rhport;
+	int rhport;
 
 	usbip_dbg_vhci_hc("stop VHCI controller\n");
 
-	/* 1. remove the userland interface of vhci_hcd */
-	id = hcd_name_to_id(hcd_name(hcd));
-	if (id == 0 && usb_hcd_is_primary_hcd(hcd)) {
-		sysfs_remove_group(&hcd_dev(hcd)->kobj, &vhci_attr_group);
-		vhci_finish_attr_group();
-	}
-
-	/* 2. shutdown all the ports of vhci_hcd */
+	/* shutdown all the ports of vhci_hcd */
 	for (rhport = 0; rhport < VHCI_HC_PORTS; rhport++) {
 		struct vhci_device *vdev = &vhci_hcd->vdev[rhport];
 
@@ -1405,8 +1381,25 @@ static int vhci_hcd_probe(struct platform_device *pdev)
 	}
 
 	usbip_dbg_vhci_hc("bye\n");
+
+	if (pdev->id == 0) {
+		ret = vhci_init_attr_group();
+		if (ret) {
+			dev_err_probe(&pdev->dev, ret, "init attr group failed\n");
+			goto remove_usb3_hcd;
+		}
+		ret = sysfs_create_group(&pdev->dev.kobj, &vhci_attr_group);
+		if (ret) {
+			dev_err_probe(&pdev->dev, ret, "create sysfs files failed\n");
+			vhci_finish_attr_group();
+			goto remove_usb3_hcd;
+		}
+	}
+
 	return 0;
 
+remove_usb3_hcd:
+	usb_remove_hcd(hcd_ss);
 put_usb3_hcd:
 	usb_put_hcd(hcd_ss);
 remove_usb2_hcd:
@@ -1421,17 +1414,30 @@ put_usb2_hcd:
 static void vhci_hcd_remove(struct platform_device *pdev)
 {
 	struct vhci *vhci = *((void **)dev_get_platdata(&pdev->dev));
+	struct usb_hcd *hcd_hs = vhci_hcd_to_hcd(vhci->vhci_hcd_hs);
+	struct usb_hcd *hcd_ss = vhci_hcd_to_hcd(vhci->vhci_hcd_ss);
+
+	/*
+	 * Remove the userland interface before dropping the hcd references.
+	 * sysfs_remove_group() waits for in-flight attach_store()/detach_store()
+	 * callers to return and rejects new ones, so neither hcd can be reached
+	 * from sysfs by the time it is freed below.
+	 */
+	if (pdev->id == 0) {
+		sysfs_remove_group(&pdev->dev.kobj, &vhci_attr_group);
+		vhci_finish_attr_group();
+	}
 
 	/*
 	 * Disconnects the root hub,
 	 * then reverses the effects of usb_add_hcd(),
 	 * invoking the HCD's stop() methods.
 	 */
-	usb_remove_hcd(vhci_hcd_to_hcd(vhci->vhci_hcd_ss));
-	usb_put_hcd(vhci_hcd_to_hcd(vhci->vhci_hcd_ss));
+	usb_remove_hcd(hcd_ss);
+	usb_put_hcd(hcd_ss);
 
-	usb_remove_hcd(vhci_hcd_to_hcd(vhci->vhci_hcd_hs));
-	usb_put_hcd(vhci_hcd_to_hcd(vhci->vhci_hcd_hs));
+	usb_remove_hcd(hcd_hs);
+	usb_put_hcd(hcd_hs);
 
 	vhci->vhci_hcd_hs = NULL;
 	vhci->vhci_hcd_ss = NULL;
