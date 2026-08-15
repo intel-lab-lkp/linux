@@ -194,6 +194,19 @@ void ieee80211_led_init(struct ieee80211_local *local)
 	}
 }
 
+static void ieee80211_stop_tpt_led_trig(struct ieee80211_local *local)
+{
+	struct tpt_led_trigger *tpt_trig = local->tpt_led_trigger;
+
+	if (!tpt_trig->running)
+		return;
+
+	tpt_trig->running = false;
+	timer_delete_sync(&tpt_trig->timer);
+
+	led_trigger_event(&local->tpt_led, LED_OFF);
+}
+
 void ieee80211_led_exit(struct ieee80211_local *local)
 {
 	if (local->radio_led.name)
@@ -206,6 +219,7 @@ void ieee80211_led_exit(struct ieee80211_local *local)
 		led_trigger_unregister(&local->rx_led);
 
 	if (local->tpt_led_trigger) {
+		ieee80211_stop_tpt_led_trig(local);
 		led_trigger_unregister(&local->tpt_led);
 		kfree(local->tpt_led_trigger);
 	}
@@ -333,19 +347,6 @@ static void ieee80211_start_tpt_led_trig(struct ieee80211_local *local)
 
 	tpt_trig_timer(&tpt_trig->timer);
 	mod_timer(&tpt_trig->timer, round_jiffies(jiffies + HZ));
-}
-
-static void ieee80211_stop_tpt_led_trig(struct ieee80211_local *local)
-{
-	struct tpt_led_trigger *tpt_trig = local->tpt_led_trigger;
-
-	if (!tpt_trig->running)
-		return;
-
-	tpt_trig->running = false;
-	timer_delete_sync(&tpt_trig->timer);
-
-	led_trigger_event(&local->tpt_led, LED_OFF);
 }
 
 void ieee80211_mod_tpt_led_trig(struct ieee80211_local *local,
