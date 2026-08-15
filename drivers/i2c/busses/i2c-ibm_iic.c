@@ -751,6 +751,8 @@ error_cleanup:
 		free_irq(dev->irq, dev);
 	}
 
+	of_node_put(dev->adap.dev.of_node);
+
 	if (dev->vaddr)
 		iounmap(dev->vaddr);
 
@@ -764,8 +766,10 @@ error_cleanup:
 static void iic_remove(struct platform_device *ofdev)
 {
 	struct ibm_iic_private *dev = platform_get_drvdata(ofdev);
+	struct device_node *node = dev->adap.dev.of_node;
 
 	i2c_del_adapter(&dev->adap);
+	of_node_put(node);
 
 	if (dev->irq) {
 		iic_interrupt_mode(dev, 0);
