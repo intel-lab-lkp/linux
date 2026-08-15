@@ -561,10 +561,6 @@ Ip-route2
 
 - <https://www.kernel.org/pub/linux/utils/net/iproute2/>
 
-OProfile
---------
-
-- <https://oprofile.sf.net/download/>
 
 Kernel documentation
 ********************
