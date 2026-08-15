@@ -238,6 +238,8 @@ static int process_state_open_lc(struct nfcmrvl_private *priv,
 	    memcmp(skb->data, nci_pattern_core_conn_create_rsp,
 		   sizeof(nci_pattern_core_conn_create_rsp)))
 		return -EINVAL;
+	if (priv->fw_dnld.binary_config->offset > priv->fw_dnld.fw->size)
+		return -EINVAL;
 
 	priv->fw_dnld.state = STATE_FW_DNLD;
 	priv->fw_dnld.substate = SUBSTATE_WAIT_COMMAND;
@@ -263,9 +265,19 @@ static int process_state_fw_dnld(struct nfcmrvl_private *priv,
 		 * B8..N: payload
 		 */
 
-		/* Remove NCI HDR */
-		skb_pull(skb, 3);
-		if (skb->data[0] != HELPER_CMD_PACKET_FORMAT || skb->len != 5) {
+		if (skb->len != NCI_DATA_HDR_SIZE + 5) {
+			nfc_err(priv->dev, "bad command");
+			return -EINVAL;
+		}
+
+		if (nci_plen(skb->data) != 5) {
+			nfc_err(priv->dev, "bad command length");
+			return -EINVAL;
+		}
+
+		/* Remove NCI header */
+		skb_pull(skb, NCI_DATA_HDR_SIZE);
+		if (skb->data[0] != HELPER_CMD_PACKET_FORMAT) {
 			nfc_err(priv->dev, "bad command");
 			return -EINVAL;
 		}
@@ -273,7 +285,6 @@ static int process_state_fw_dnld(struct nfcmrvl_private *priv,
 		len = get_unaligned_le16(skb->data);
 		skb_pull(skb, 2);
 		comp_len = get_unaligned_le16(skb->data);
-		memcpy(&comp_len, skb->data, 2);
 		skb_pull(skb, 2);
 		if (((~len) & 0xFFFF) != comp_len) {
 			nfc_err(priv->dev, "bad len complement: %x %x %x",
@@ -285,6 +296,12 @@ static int process_state_fw_dnld(struct nfcmrvl_private *priv,
 			nci_send_frame(priv->ndev, out_skb);
 			priv->fw_dnld.substate = SUBSTATE_WAIT_NACK_CREDIT;
 			return 0;
+		}
+		if (len > NCI_MAX_PAYLOAD_SIZE ||
+		    priv->fw_dnld.offset > priv->fw_dnld.fw->size ||
+		    len > priv->fw_dnld.fw->size - priv->fw_dnld.offset) {
+			nfc_err(priv->dev, "invalid firmware chunk: %u", len);
+			return -EINVAL;
 		}
 		priv->fw_dnld.chunk_len = len;
 		out_skb = alloc_lc_skb(priv, 1);
@@ -310,7 +327,8 @@ static int process_state_fw_dnld(struct nfcmrvl_private *priv,
 			nci_send_cmd(priv->ndev, NCI_OP_CORE_CONN_CLOSE_CMD,
 				     1, &conn_id);
 		} else {
-			out_skb = alloc_lc_skb(priv, priv->fw_dnld.chunk_len);
+			out_skb = alloc_lc_skb(priv,
+					       (u8)priv->fw_dnld.chunk_len);
 			if (!out_skb)
 				return -ENOMEM;
 			skb_put_data(out_skb,
@@ -507,16 +525,25 @@ int nfcmrvl_fw_dnld_start(struct nci_dev *ndev, const char *firmware_name)
 		return -ENOENT;
 	}
 
-	fw_dnld->header = (const struct nfcmrvl_fw *) priv->fw_dnld.fw->data;
+	if (fw_dnld->fw->size < sizeof(struct nfcmrvl_fw)) {
+		nfc_err(priv->dev, "firmware binary %s is too small",
+			firmware_name);
+		goto release_firmware;
+	}
+	fw_dnld->header = (const struct nfcmrvl_fw *)fw_dnld->fw->data;
 
 	if (fw_dnld->header->magic != NFCMRVL_FW_MAGIC ||
 	    fw_dnld->header->phy != priv->phy) {
 		nfc_err(priv->dev, "bad firmware binary %s magic=0x%x phy=%d",
 			firmware_name, fw_dnld->header->magic,
 			fw_dnld->header->phy);
-		release_firmware(fw_dnld->fw);
-		fw_dnld->header = NULL;
-		return -EINVAL;
+		goto release_firmware;
+	}
+	if (fw_dnld->header->helper.offset > fw_dnld->fw->size ||
+	    fw_dnld->header->firmware.offset > fw_dnld->fw->size) {
+		nfc_err(priv->dev, "firmware binary %s has invalid offsets",
+			firmware_name);
+		goto release_firmware;
 	}
 
 	if (fw_dnld->header->helper.offset != 0) {
@@ -546,4 +573,11 @@ int nfcmrvl_fw_dnld_start(struct nci_dev *ndev, const char *firmware_name)
 	/* Now wait for CORE_RESET_NTF or timeout */
 
 	return 0;
+
+release_firmware:
+	release_firmware(fw_dnld->fw);
+	fw_dnld->fw = NULL;
+	fw_dnld->header = NULL;
+	fw_dnld->binary_config = NULL;
+	return -EINVAL;
 }

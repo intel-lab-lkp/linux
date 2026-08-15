@@ -67,8 +67,8 @@ struct nfcmrvl_fw_dnld {
 
 	int state;
 	int substate;
-	int offset;
-	int chunk_len;
+	size_t offset;
+	size_t chunk_len;
 
 	struct workqueue_struct	*rx_wq;
 	struct work_struct rx_work;
