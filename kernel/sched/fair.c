@@ -13780,9 +13780,7 @@ static int active_load_balance_cpu_stop(void *data)
 	if (!cpu_active(busiest_cpu) || !cpu_active(target_cpu))
 		goto out_unlock;
 
-	/* Make sure the requested CPU hasn't gone down in the meantime: */
-	if (unlikely(busiest_cpu != smp_processor_id() ||
-		     !busiest_rq->active_balance))
+	if (unlikely(!busiest_rq->active_balance))
 		goto out_unlock;
 
 	/* Is there any task to move? */
