@@ -733,11 +733,6 @@ static int atmel_ac97c_probe(struct platform_device *pdev)
 
 	chip = get_chip(card);
 
-	retval = request_irq(irq, atmel_ac97c_interrupt, 0, "AC97C", chip);
-	if (retval) {
-		dev_dbg(&pdev->dev, "unable to request irq %d\n", irq);
-		goto err_request_irq;
-	}
 	chip->irq = irq;
 
 	spin_lock_init(&chip->lock);
@@ -783,6 +778,12 @@ static int atmel_ac97c_probe(struct platform_device *pdev)
 	if (retval) {
 		dev_dbg(&pdev->dev, "could not register ac97 pcm device\n");
 		goto err_ac97_bus;
+	}
+
+	retval = request_irq(irq, atmel_ac97c_interrupt, 0, "AC97C", chip);
+	if (retval) {
+		dev_dbg(&pdev->dev, "unable to request irq %d\n", irq);
+		goto err_request_irq;
 	}
 
 	retval = snd_card_register(card);
