@@ -1256,22 +1256,59 @@ static void init_cur_mix_raw(struct usb_mixer_elem_info *cval, int ch, int idx)
 static int check_sticky_volume_control(struct usb_mixer_elem_info *cval,
 				       int channel, int saved)
 {
-	int sticky_test_values[] = { cval->min, cval->max };
-	int test, check, i;
+	int test, check, res;
 
-	for (i = 0; i < ARRAY_SIZE(sticky_test_values); i++) {
-		test = sticky_test_values[i];
+	/*
+	 * Check approximately 16 values (15 intervals).
+	 * If the resolution is not fine enough, check fewer values.
+	 */
+	res = DIV_ROUND_UP(cval->max - cval->min, 15);
+	res = res ? roundup(res, cval->res) : cval->res;
+
+	/*
+	 * If (cval->max - cval->min) is not a multiple of cval->res, we still
+	 * want to test cval->max anyway.
+	 */
+	for (test = cval->min; test < cval->max + res; test += res) {
+		if (test > cval->max)
+			test = cval->max;
+
 		if (test == saved)
 			continue;
 
 		/* Assume non-sticky on failure. */
-		if (snd_usb_set_cur_mix_value(cval, channel, 0, test) ||
-		    get_cur_mix_raw(cval, channel, &check) ||
-		    check != saved) /* SET_CUR effective, non-sticky. */
+		if (snd_usb_set_cur_mix_value(cval, channel, 0, test))
 			return 0;
+
+		if (get_cur_mix_raw(cval, channel, &check))
+			goto get_cur_broken;
+		if (check != saved) /* SET_CUR effective, non-sticky. */
+			return 0;
+
+		/*
+		 * Leave some time for asynchronous mixers to change the value.
+		 *
+		 * Note that there is no need to wait between SET_CUR and
+		 * GET_CUR, as we don't care whether the GET_CUR value matches
+		 * the SET_CUR one. IOW, what we expect is just a GET_CUR value
+		 * differing from the saved one.
+		 *
+		 * Mixers of most devices are synchronous. The should have
+		 * returned early without extra sleep. Asynchronous mixers will
+		 * return once the accumulated time is enough for them to change
+		 * the value.
+		 */
+		msleep(10);
 	}
 
+	/* Check again after the last msleep(). */
+	if (get_cur_mix_raw(cval, channel, &check))
+		goto get_cur_broken;
+	if (check != saved)
+		return 0;
+
 	if (cval->head.mixer->chip->quirk_flags & QUIRK_FLAG_MIXER_GET_CUR_BROKEN) {
+get_cur_broken:
 		usb_audio_info(cval->head.mixer->chip,
 			       "%d:%d: broken mixer GET_CUR (%d/%d/%d => %d)\n",
 			       cval->head.id, mixer_ctrl_intf(cval->head.mixer),
