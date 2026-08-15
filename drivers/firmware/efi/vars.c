@@ -265,3 +265,24 @@ efi_status_t efivar_query_variable_info(u32 attr,
 			remaining_space, max_variable_size);
 }
 EXPORT_SYMBOL_NS_GPL(efivar_query_variable_info, "EFIVAR");
+
+/*
+ * efivar_get_next_variable_safe() - enumerate the next name/vendor pair
+ *
+ * Wrapper around efivar_get_next_variable() that keeps the 512-byte name
+ * buffer quirk in one place. Some old UEFI implementations reject name buffer
+ * sizes larger than 512 bytes (the lowest seen in the wild), so this always
+ * requests 512 bytes; callers must provide a buffer of at least that size.
+ *
+ * Must be called with efivars_lock held.
+ */
+efi_status_t efivar_get_next_variable_safe(unsigned long *name_size,
+					   efi_char16_t *name,
+					   efi_guid_t *vendor)
+{
+	BUILD_BUG_ON(EFI_VAR_NAME_LEN < 512);
+	*name_size = 512;
+
+	return efivar_get_next_variable(name_size, name, vendor);
+}
+EXPORT_SYMBOL_NS_GPL(efivar_get_next_variable_safe, "EFIVAR");

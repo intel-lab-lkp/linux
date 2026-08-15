@@ -398,10 +398,8 @@ int efivar_init(int (*func)(efi_char16_t *, efi_guid_t, unsigned long, void *),
 	 */
 
 	do {
-		variable_name_size = 512;
-		BUILD_BUG_ON(EFI_VAR_NAME_LEN < 512);
 
-		status = efivar_get_next_variable(&variable_name_size,
+		status = efivar_get_next_variable_safe(&variable_name_size,
 						  variable_name,
 						  &vendor_guid);
 		switch (status) {

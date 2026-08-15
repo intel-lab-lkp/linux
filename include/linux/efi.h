@@ -1076,6 +1076,10 @@ efi_status_t efivar_get_variable(efi_char16_t *name, efi_guid_t *vendor,
 efi_status_t efivar_get_next_variable(unsigned long *name_size,
 				      efi_char16_t *name, efi_guid_t *vendor);
 
+efi_status_t efivar_get_next_variable_safe(unsigned long *name_size,
+					   efi_char16_t *name,
+					   efi_guid_t *vendor);
+
 efi_status_t efivar_set_variable_locked(efi_char16_t *name, efi_guid_t *vendor,
 					u32 attr, unsigned long data_size,
 					void *data, bool nonblocking);

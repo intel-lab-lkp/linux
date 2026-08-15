@@ -165,16 +165,6 @@ static ssize_t efi_pstore_read(struct pstore_record *record)
 
 	for (;;) {
 		/*
-		 * A small set of old UEFI implementations reject sizes
-		 * above a certain threshold, the lowest seen in the wild
-		 * is 512.
-		 *
-		 * TODO: Commonize with the iteration implementation in
-		 *       fs/efivarfs to keep all the quirks in one place.
-		 */
-		varname_size = 512;
-
-		/*
 		 * If this is the first read() call in the pstore enumeration,
 		 * varname will be the empty string, and the GetNextVariable()
 		 * runtime service call will return the first EFI variable in
@@ -185,8 +175,12 @@ static ssize_t efi_pstore_read(struct pstore_record *record)
 		 * store varname in record->psi->data. Given that we only
 		 * enumerate variables with the efi-pstore GUID, there is no
 		 * need to record the guid return value.
+		 *
+		 * The 512-byte name buffer quirk is handled inside
+		 * efivar_get_next_variable_safe().
 		 */
-		status = efivar_get_next_variable(&varname_size, varname, &guid);
+		status = efivar_get_next_variable_safe(&varname_size, varname,
+						       &guid);
 		if (status == EFI_NOT_FOUND)
 			return 0;
 
