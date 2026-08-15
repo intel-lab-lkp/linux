@@ -2064,6 +2064,11 @@ static int afiucv_hs_rcv(struct sk_buff *skb, struct net_device *dev,
 	int err = NET_RX_SUCCESS;
 	char nullstring[8];
 
+	if (!net_eq(dev_net(dev), &init_net)) {
+		kfree_skb(skb);
+		return NET_RX_SUCCESS;
+	}
+
 	if (!pskb_may_pull(skb, sizeof(*trans_hdr))) {
 		kfree_skb(skb);
 		return NET_RX_SUCCESS;
