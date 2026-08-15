@@ -229,7 +229,7 @@ int __of_mdiobus_register(struct mii_bus *mdio, struct device_node *np,
 		goto unregister;
 
 	if (!scanphys)
-		return 0;
+		goto done;
 
 	/* auto scan for PHYs with empty reg property */
 	for_each_available_child_of_node(np, child) {
@@ -260,6 +260,9 @@ int __of_mdiobus_register(struct mii_bus *mdio, struct device_node *np,
 			}
 		}
 	}
+
+done:
+	device_links_drop_sync_state_only(&mdio->dev);
 
 	return 0;
 
