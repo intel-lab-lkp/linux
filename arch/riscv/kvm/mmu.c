@@ -500,10 +500,21 @@ out:
 
 static unsigned long transparent_hugepage_adjust(struct kvm *kvm,
 						 struct kvm_memory_slot *memslot,
+						 struct kvm_gstage *gstage,
 						 unsigned long hva,
 						 kvm_pfn_t *hfnp, gpa_t *gpa)
 {
 	kvm_pfn_t hfn = *hfnp;
+	u32 ptep_level;
+	pte_t *ptep;
+
+	/*
+	 * Keep the existing split G-stage leaf and update the original
+	 * faulting 4K page in the vCPU fault path.
+	 */
+	if (kvm_riscv_gstage_get_leaf(gstage, *gpa, &ptep, &ptep_level) &&
+	    !ptep_level)
+		return PAGE_SIZE;
 
 	/*
 	 * Make sure the adjustment is done only for THP pages. Also make
@@ -730,7 +741,8 @@ int kvm_riscv_mmu_map(struct kvm_vcpu *vcpu, struct kvm_memory_slot *memslot,
 	 * so do not promote them through the THP helper.
 	 */
 	if (!logging && !is_hugetlb && vma_pagesize == PAGE_SIZE)
-		vma_pagesize = transparent_hugepage_adjust(kvm, memslot, hva, &hfn, &gpa);
+		vma_pagesize = transparent_hugepage_adjust(kvm, memslot, &gstage,
+							   hva, &hfn, &gpa);
 
 	if (writable) {
 		mark_page_dirty_in_slot(kvm, memslot, gfn);
