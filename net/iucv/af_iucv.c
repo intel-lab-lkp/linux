@@ -778,8 +778,16 @@ static int iucv_sock_connect(struct socket *sock, struct sockaddr_unsized *addr,
 	if (sk->sk_state == IUCV_DISCONN || sk->sk_state == IUCV_CLOSED)
 		err = -ECONNREFUSED;
 
-	if (err && iucv->transport == AF_IUCV_TRANS_IUCV)
+	if (err && iucv->transport == AF_IUCV_TRANS_IUCV) {
 		iucv_sever_path(sk, 0);
+		/* A connack may have landed while the wait was unwinding; the
+		 * path is gone, so the socket must not still claim it.
+		 */
+		if (sk->sk_state == IUCV_CONNECTED) {
+			sk->sk_state = IUCV_DISCONN;
+			sk->sk_state_change(sk);
+		}
+	}
 
 done:
 	release_sock(sk);
