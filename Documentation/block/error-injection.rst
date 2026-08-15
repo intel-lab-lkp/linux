@@ -48,7 +48,7 @@ Example
 
 Return BLK_STS_IOERR for one in 10 reads of sector 0 of /dev/nvme0n1:
 
-	$ echo 'add,op=READ,start=0,status=IOERR,chance=10' > /sys/kernel/debug/block/nvme0n1/error_injection
+	$ echo 'add,op=READ,start=0,nr_sectors=1,status=IOERR,chance=10' > /sys/kernel/debug/block/nvme0n1/error_injection
 
 Return BLK_STS_MEDIUM for every write to /dev/nvme0n1:
 
