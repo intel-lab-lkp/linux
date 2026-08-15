@@ -155,6 +155,7 @@ struct zswap_pool {
 	struct crypto_acomp_ctx __percpu *acomp_ctx;
 	struct percpu_ref ref;
 	struct list_head list;
+	struct rcu_head rcu_head;
 	struct work_struct release_work;
 	struct hlist_node node;
 	char tfm_name[CRYPTO_MAX_ALG_NAME];
@@ -382,14 +383,26 @@ static void __zswap_pool_release(struct work_struct *work)
 	struct zswap_pool *pool = container_of(work, typeof(*pool),
 						release_work);
 
-	synchronize_rcu();
-
 	/* nobody should have been able to get a ref... */
 	WARN_ON(!percpu_ref_is_zero(&pool->ref));
 	percpu_ref_exit(&pool->ref);
 
 	/* pool is now off zswap_pools list and has no references. */
 	zswap_pool_destroy(pool);
+}
+
+static void __zswap_pool_release_rcu(struct rcu_head *head)
+{
+	struct zswap_pool *pool = container_of(head, typeof(*pool), rcu_head);
+
+	/*
+	 * The grace period has elapsed, so no RCU reader can still observe the
+	 * pool through the list it was removed from in __zswap_pool_empty().
+	 * Hand off to a worker for the sleepable teardown, since this callback
+	 * runs in softirq context.
+	 */
+	INIT_WORK(&pool->release_work, __zswap_pool_release);
+	schedule_work(&pool->release_work);
 }
 
 static struct zswap_pool *zswap_pool_current(void);
@@ -406,8 +419,7 @@ static void __zswap_pool_empty(struct percpu_ref *ref)
 
 	list_del_rcu(&pool->list);
 
-	INIT_WORK(&pool->release_work, __zswap_pool_release);
-	schedule_work(&pool->release_work);
+	call_rcu(&pool->rcu_head, __zswap_pool_release_rcu);
 
 	spin_unlock_bh(&zswap_pools_lock);
 }
