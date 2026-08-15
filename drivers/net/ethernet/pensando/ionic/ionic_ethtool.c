@@ -347,6 +347,11 @@ static int ionic_set_link_ksettings(struct net_device *netdev,
 	if (test_bit(IONIC_LIF_F_FW_RESET, lif->state))
 		return -EBUSY;
 
+	if (!idev->port_info) {
+		netdev_err(netdev, "port_info not initialized\n");
+		return -EOPNOTSUPP;
+	}
+
 	/* set autoneg */
 	if (ks->base.autoneg != idev->port_info->config.an_enable) {
 		mutex_lock(&ionic->dev_cmd_lock);
@@ -378,6 +383,11 @@ static void ionic_get_pauseparam(struct net_device *netdev,
 
 	pause->autoneg = 0;
 
+	if (!lif->ionic->idev.port_info) {
+		netdev_err_once(netdev, "port_info not initialized\n");
+		return;
+	}
+
 	pause_type = lif->ionic->idev.port_info->config.pause_type;
 	if (pause_type) {
 		pause->rx_pause = (pause_type & IONIC_PAUSE_F_RX) ? 1 : 0;
@@ -395,6 +405,11 @@ static int ionic_set_pauseparam(struct net_device *netdev,
 
 	if (test_bit(IONIC_LIF_F_FW_RESET, lif->state))
 		return -EBUSY;
+
+	if (!lif->ionic->idev.port_info) {
+		netdev_err(netdev, "port_info not initialized\n");
+		return -EOPNOTSUPP;
+	}
 
 	if (pause->autoneg)
 		return -EOPNOTSUPP;
@@ -424,6 +439,11 @@ static int ionic_get_fecparam(struct net_device *netdev,
 {
 	struct ionic_lif *lif = netdev_priv(netdev);
 
+	if (!lif->ionic->idev.port_info) {
+		netdev_err(netdev, "port_info not initialized\n");
+		return -EOPNOTSUPP;
+	}
+
 	switch (lif->ionic->idev.port_info->config.fec_type) {
 	case IONIC_PORT_FEC_TYPE_NONE:
 		fec->active_fec = ETHTOOL_FEC_OFF;
@@ -450,6 +470,11 @@ static int ionic_set_fecparam(struct net_device *netdev,
 
 	if (test_bit(IONIC_LIF_F_FW_RESET, lif->state))
 		return -EBUSY;
+
+	if (!lif->ionic->idev.port_info) {
+		netdev_err(netdev, "port_info not initialized\n");
+		return -EOPNOTSUPP;
+	}
 
 	if (lif->ionic->idev.port_info->config.an_enable) {
 		netdev_err(netdev, "FEC request not allowed while autoneg is enabled\n");
@@ -1002,6 +1027,11 @@ static int ionic_get_module_eeprom_by_page(struct net_device *netdev,
 	if (page_data->bank != 0) {
 		NL_SET_ERR_MSG_MOD(extack, "Only bank 0 is supported");
 		return -EINVAL;
+	}
+
+	if (!idev->port_info) {
+		NL_SET_ERR_MSG_MOD(extack, "port_info not initialized");
+		return -EOPNOTSUPP;
 	}
 
 	switch (page_data->page) {
