@@ -10172,6 +10172,15 @@ static int ath11k_mac_setup_channels_rates(struct ath11k *ar,
 	reg_cap = &ar->ab->hal_reg_cap[ar->pdev_idx];
 	temp_reg_cap = reg_cap;
 
+	/* QCN6122 firmware omits the UNII-3 band (5725-5850 MHz, channels
+	 * 149-165) from high_5ghz_chan, which makes the driver mark those
+	 * channels IEEE80211_CHAN_DISABLED. Clamp it to the standard 5.8 GHz
+	 * upper bound so channels 149-165 remain usable.
+	 */
+	if (ar->ab->hw_rev == ATH11K_HW_QCN6122_HW10 &&
+	    reg_cap->high_5ghz_chan < 5825)
+		reg_cap->high_5ghz_chan = 5825;
+
 	if (supported_bands & WMI_HOST_WLAN_2G_CAP) {
 		channels = kmemdup(ath11k_2ghz_channels,
 				   sizeof(ath11k_2ghz_channels),
