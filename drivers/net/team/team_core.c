@@ -1217,6 +1217,13 @@ static int team_port_add(struct team *team, struct net_device *port_dev,
 	char *portname = port_dev->name;
 	int err;
 
+	if (netdev_has_ml_priv(port_dev)) {
+		NL_SET_ERR_MSG(extack, "devices using ml_priv can't be added as a team port");
+		netdev_err(dev, "Device %s using ml_priv can't be added as a team port\n",
+			   portname);
+		return -EINVAL;
+	}
+
 	if (port_dev->flags & IFF_LOOPBACK) {
 		NL_SET_ERR_MSG(extack, "Loopback device can't be added as a team port");
 		netdev_err(dev, "Device %s is loopback device. Loopback devices can't be added as a team port\n",

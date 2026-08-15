@@ -1894,9 +1894,9 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev,
 	struct sockaddr_storage ss;
 	int res = 0, i;
 
-	if (slave_dev->type == ARPHRD_CAN) {
+	if (netdev_has_ml_priv(slave_dev)) {
 		BOND_NL_ERR(bond_dev, extack,
-			    "CAN devices cannot be enslaved");
+			    "devices using ml_priv cannot be enslaved");
 		return -EPERM;
 	}
 

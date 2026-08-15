@@ -2798,6 +2798,11 @@ static inline void netdev_set_ml_priv(struct net_device *dev,
 	dev->ml_priv_type = type;
 }
 
+static inline bool netdev_has_ml_priv(struct net_device *dev)
+{
+	return (dev->ml_priv != NULL);
+}
+
 /*
  * Net namespace inlines
  */
