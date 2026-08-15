@@ -13481,6 +13481,8 @@ static int sched_balance_rq(int this_cpu, struct rq *this_rq,
 	struct rq *busiest;
 	struct rq_flags rf;
 	struct cpumask *cpus = this_cpu_cpumask_var_ptr(load_balance_mask);
+	int cpu;
+	bool sfind = false;
 	struct lb_env env = {
 		.sd		= sd,
 		.dst_cpu	= this_cpu,
@@ -13515,15 +13517,41 @@ redo:
 	group = sched_balance_find_src_group(&env);
 	if (!group) {
 		schedstat_inc(sd->lb_nobusyg[idle]);
+		if (sched_feat(LB_PROMOTE))
+			goto simple_find;
 		goto out_balanced;
 	}
 
 	busiest = sched_balance_find_src_rq(&env, group);
 	if (!busiest) {
 		schedstat_inc(sd->lb_nobusyq[idle]);
+		if (sched_feat(LB_PROMOTE))
+			goto simple_find;
 		goto out_balanced;
 	}
+	goto begin_balance;
 
+simple_find:
+	if (env.idle != CPU_NEWLY_IDLE ||
+	    (env.dst_rq->nr_running > 0 || env.dst_rq->ttwu_pending))
+		goto out_balanced;
+
+	sfind = true;
+	env.migration_type = migrate_task;
+	env.imbalance = 1;
+
+	for_each_cpu_andnot(cpu, env.cpus, env.dst_grpmask) {
+		busiest = cpu_rq(cpu);
+		if (busiest->nr_running <= 1) {
+			__cpumask_clear_cpu(cpu, cpus);
+			continue;
+		}
+		break;
+	}
+	if (cpu >= nr_cpu_ids)
+		goto out_balanced;
+
+begin_balance:
 	WARN_ON_ONCE(busiest == env.dst_rq);
 
 	update_lb_imbalance_stat(&env, sd, idle);
@@ -13626,6 +13654,7 @@ more_balance:
 
 		/* All tasks on this runqueue were pinned by CPU affinity */
 		if (unlikely(env.flags & LBF_ALL_PINNED)) {
+check_redo:
 			__cpumask_clear_cpu(cpu_of(busiest), cpus);
 			/*
 			 * Attempting to continue load balancing at the current
@@ -13638,6 +13667,8 @@ more_balance:
 			if (!cpumask_subset(cpus, env.dst_grpmask)) {
 				env.loop = 0;
 				env.loop_break = SCHED_NR_MIGRATE_BREAK;
+				if (sfind)
+					goto simple_find;
 				goto redo;
 			}
 			goto out_all_pinned;
@@ -13679,8 +13710,11 @@ more_balance:
 		 * if the curr task on busiest CPU can't be
 		 * moved to this_cpu:
 		 */
-		if (!cpumask_test_cpu(this_cpu, busiest->curr->cpus_ptr))
+		if (!cpumask_test_cpu(this_cpu, busiest->curr->cpus_ptr)) {
+			if (sched_feat(LB_PROMOTE) && env.idle == CPU_NEWLY_IDLE)
+				goto check_redo;
 			goto out_one_pinned;
+		}
 
 		/* Record that we found at least one task that could run on this_cpu */
 		env.flags &= ~LBF_ALL_PINNED;
@@ -13714,6 +13748,8 @@ more_balance:
 	preempt_enable();
 
 out_unbalanced:
+	if (sched_feat(LB_PROMOTE) && !active_balance && env.idle == CPU_NEWLY_IDLE)
+		goto check_redo;
 	/* We were unbalanced, so reset the balancing interval */
 	sd->balance_interval = sd->min_interval;
 	goto out;
