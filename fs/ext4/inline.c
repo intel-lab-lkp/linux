@@ -14,6 +14,7 @@
 #include "ext4.h"
 #include "xattr.h"
 #include "truncate.h"
+#include "ext4_extents.h"
 
 #define EXT4_XATTR_SYSTEM_DATA	"data"
 #define EXT4_MIN_INLINE_DATA_SIZE	((sizeof(__le32) * EXT4_N_BLOCKS))
@@ -1079,21 +1080,67 @@ static int ext4_update_inline_dir(handle_t *handle, struct inode *dir,
 	return 0;
 }
 
-static void ext4_restore_inline_data(handle_t *handle, struct inode *inode,
-				     struct ext4_iloc *iloc,
-				     void *buf, int inline_size)
+static int ext4_set_inline_data_block(handle_t *handle, struct inode *inode,
+				      ext4_fsblk_t block, unsigned int len)
 {
-	int ret;
+	struct ext4_inode_info *ei = EXT4_I(inode);
+	struct ext4_xattr_ibody_find is = {
+		.s = { .not_found = 0, },
+	};
+	struct ext4_xattr_info i = {
+		.name_index = EXT4_XATTR_INDEX_SYSTEM,
+		.name = EXT4_XATTR_SYSTEM_DATA,
+		.value = NULL,
+		.value_len = 0,
+	};
+	int error;
 
-	ret = ext4_create_inline_data(handle, inode, inline_size);
-	if (ret) {
-		ext4_msg(inode->i_sb, KERN_EMERG,
-			"error restoring inline_data for inode -- potential data loss! (inode %llu, error %d)",
-			inode->i_ino, ret);
-		return;
+	down_write(&ei->i_data_sem);
+	error = ext4_get_inode_loc(inode, &is.iloc);
+	if (error) {
+		up_write(&ei->i_data_sem);
+		return error;
 	}
-	ext4_write_inline_data(inode, iloc, buf, 0, inline_size);
-	ext4_set_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+	error = ext4_xattr_ibody_find(inode, &i, &is);
+	if (error)
+		goto out;
+	BUFFER_TRACE(is.iloc.bh, "get_write_access");
+	error = ext4_journal_get_write_access(handle, inode->i_sb, is.iloc.bh, EXT4_JTR_NONE);
+	if (error)
+		goto out;
+	error = ext4_xattr_ibody_set(handle, inode, &i, &is);
+	if (error)
+		goto out;
+	memset((void *)ext4_raw_inode(&is.iloc)->i_block,
+		0, EXT4_MIN_INLINE_DATA_SIZE);
+	memset(ei->i_data, 0, EXT4_MIN_INLINE_DATA_SIZE);
+
+	if (ext4_has_feature_extents(inode->i_sb) &&
+		(S_ISDIR(inode->i_mode) || S_ISREG(inode->i_mode) || S_ISLNK(inode->i_mode))) {
+		ext4_set_inode_flag(inode, EXT4_INODE_EXTENTS);
+		ext4_ext_tree_init(handle, inode);
+		struct ext4_ext_path *path = ext4_find_extent(inode, 0, NULL, 0);
+		struct ext4_extent newex;
+
+		newex.ee_block = cpu_to_le32(0);
+		newex.ee_len = cpu_to_le16(len);
+		ext4_ext_store_pblock(&newex, block);
+		ext4_ext_insert_extent(handle, inode, path, &newex, 0);
+	} else {
+		EXT4_I(inode)->i_data[0] = cpu_to_le32(block);
+	}
+	ext4_clear_inode_flag(inode, EXT4_INODE_INLINE_DATA);
+	get_bh(is.iloc.bh);
+	error = ext4_mark_iloc_dirty(handle, inode, &is.iloc);
+	EXT4_I(inode)->i_inline_off = 0;
+	EXT4_I(inode)->i_inline_size = 0;
+	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+out:
+	brelse(is.iloc.bh);
+	if (error == -ENODATA)
+		error = 0;
+	up_write(&ei->i_data_sem);
+	return error;
 }
 
 static int ext4_convert_inline_data_nolock(handle_t *handle,
@@ -1103,8 +1150,9 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 	int error;
 	void *buf = NULL;
 	struct buffer_head *data_bh = NULL;
-	struct ext4_map_blocks map;
 	int inline_size;
+	ext4_fsblk_t newblock = 0;
+	struct ext4_allocation_request ar;
 
 	inline_size = ext4_get_inline_size(inode);
 	buf = kmalloc(inline_size, GFP_NOFS);
@@ -1129,25 +1177,22 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 			goto out;
 	}
 
-	error = ext4_destroy_inline_data_nolock(handle, inode);
-	if (error)
+	memset(&ar, 0, sizeof(ar));
+	ar.inode = inode;
+	ar.logical = 0;
+	ar.len = 1;
+	if (S_ISREG(inode->i_mode))
+		ar.flags = EXT4_MB_HINT_DATA;
+	else
+		ar.flags = 0;
+	newblock = ext4_mb_new_blocks(handle, &ar, &error);
+	if (error < 0)
 		goto out;
 
-	map.m_lblk = 0;
-	map.m_len = 1;
-	map.m_flags = 0;
-	error = ext4_map_blocks(handle, inode, &map, EXT4_GET_BLOCKS_CREATE);
-	if (error < 0)
-		goto out_restore;
-	if (!(map.m_flags & EXT4_MAP_MAPPED)) {
-		error = -EIO;
-		goto out_restore;
-	}
-
-	data_bh = sb_getblk(inode->i_sb, map.m_pblk);
+	data_bh = sb_getblk(inode->i_sb, newblock);
 	if (!data_bh) {
 		error = -ENOMEM;
-		goto out_restore;
+		goto out_bh;
 	}
 
 	lock_buffer(data_bh);
@@ -1156,7 +1201,7 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 	if (error) {
 		unlock_buffer(data_bh);
 		error = -EIO;
-		goto out_restore;
+		goto out_bh;
 	}
 	memset(data_bh->b_data, 0, inode->i_sb->s_blocksize);
 
@@ -1180,12 +1225,14 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 			error = ext4_mark_inode_dirty(handle, inode);
 	}
 
-out_restore:
 	if (error)
-		ext4_restore_inline_data(handle, inode, iloc, buf, inline_size);
-
-out:
+		goto out_bh;
+	error = ext4_set_inline_data_block(handle, inode, newblock, ar.len);
+out_bh:
+	if (error)
+		ext4_free_blocks(handle, inode, data_bh, newblock, ar.len, EXT4_FREE_BLOCKS_FORGET);
 	brelse(data_bh);
+out:
 	kfree(buf);
 	return error;
 }
