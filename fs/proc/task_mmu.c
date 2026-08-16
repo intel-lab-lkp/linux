@@ -1277,7 +1277,7 @@ static int smaps_hugetlb_range(pte_t *pte, unsigned long hmask,
 	ptl = huge_pte_lock(hstate_vma(vma), walk->mm, pte);
 	ptent = huge_ptep_get(walk->mm, addr, pte);
 	if (pte_present(ptent)) {
-		folio = page_folio(pte_page(ptent));
+		folio = pte_folio(ptent);
 		present = true;
 	} else {
 		const softleaf_t entry = softleaf_from_pte(ptent);
@@ -2227,7 +2227,7 @@ static int pagemap_hugetlb_range(pte_t *ptep, unsigned long hmask,
 	ptl = huge_pte_lock(hstate_vma(vma), walk->mm, ptep);
 	pte = huge_ptep_get(walk->mm, addr, ptep);
 	if (pte_present(pte)) {
-		struct folio *folio = page_folio(pte_page(pte));
+		struct folio *folio = pte_folio(pte);
 
 		if (!folio_test_anon(folio))
 			flags |= PM_FILE;

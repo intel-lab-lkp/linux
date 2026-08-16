@@ -2682,6 +2682,20 @@ static inline pte_t mk_pte(const struct page *page, pgprot_t pgprot)
 }
 
 /**
+ * pte_folio - Return the folio mapped by a present PTE.
+ * @pte: A present page table entry.
+ *
+ * The folio companion to pte_page(); only meaningful for a present PTE
+ * that maps a struct-page-backed folio.
+ *
+ * Return: The folio containing the page @pte maps.
+ */
+static inline struct folio *pte_folio(pte_t pte)
+{
+	return page_folio(pte_page(pte));
+}
+
+/**
  * folio_mk_pte - Create a PTE for this folio
  * @folio: The folio to create a PTE for
  * @pgprot: The page protection bits to use

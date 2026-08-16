@@ -5280,7 +5280,7 @@ void __unmap_hugepage_range(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		 * are about to unmap is the actual folio of interest.
 		 */
 		if (folio_provided) {
-			if (folio != page_folio(pte_page(pte))) {
+			if (folio != pte_folio(pte)) {
 				spin_unlock(ptl);
 				continue;
 			}
@@ -5291,7 +5291,7 @@ void __unmap_hugepage_range(struct mmu_gather *tlb, struct vm_area_struct *vma,
 			 */
 			set_vma_resv_flags(vma, HPAGE_RESV_UNMAPPED);
 		} else {
-			folio = page_folio(pte_page(pte));
+			folio = pte_folio(pte);
 		}
 
 		pte = huge_ptep_get_and_clear(mm, address, ptep, sz);
@@ -5514,7 +5514,7 @@ static vm_fault_t hugetlb_wp(struct vm_fault *vmf)
 		return 0;
 	}
 
-	old_folio = page_folio(pte_page(pte));
+	old_folio = pte_folio(pte);
 
 	delayacct_wpcopy_start();
 
@@ -6189,7 +6189,7 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 			 * checks whether we can re-use the folio exclusively
 			 * for us in case we are the only user of it.
 			 */
-			folio = page_folio(pte_page(vmf.orig_pte));
+			folio = pte_folio(vmf.orig_pte);
 			if (folio_test_anon(folio) && !folio_trylock(folio)) {
 				need_wait_lock = true;
 				goto out_ptl;
