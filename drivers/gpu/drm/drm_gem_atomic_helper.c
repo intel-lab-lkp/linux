@@ -308,14 +308,16 @@ EXPORT_SYMBOL(__drm_gem_reset_shadow_plane);
  */
 void drm_gem_reset_shadow_plane(struct drm_plane *plane)
 {
-	struct drm_shadow_plane_state *shadow_plane_state;
+	struct drm_shadow_plane_state *shadow_plane_state = kzalloc_obj(*shadow_plane_state);
+
+	if (!shadow_plane_state)
+		return;
 
 	if (plane->state) {
 		drm_gem_destroy_shadow_plane_state(plane, plane->state);
 		plane->state = NULL; /* must be set to NULL here */
 	}
 
-	shadow_plane_state = kzalloc_obj(*shadow_plane_state);
 	__drm_gem_reset_shadow_plane(plane, shadow_plane_state);
 }
 EXPORT_SYMBOL(drm_gem_reset_shadow_plane);
