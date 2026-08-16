@@ -98,7 +98,8 @@ static unsigned int bm_find(struct ts_config *conf, struct ts_state *state)
 			if (i == bm->patlen) {
 				/* London calling... */
 				DEBUGP("found!\n");
-				return consumed + (shift-(bm->patlen-1));
+				state->offset = consumed + shift + 1;
+				return state->offset - bm->patlen;
 			}
 
 			bs = bm->bad_shift[text[shift-i]];
