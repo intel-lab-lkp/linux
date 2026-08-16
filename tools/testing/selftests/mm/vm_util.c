@@ -601,7 +601,7 @@ bool is_range_backed_by_folio_orders(char *start, size_t len, int order,
 #define TRACEFS_ROOT "/sys/kernel/tracing"
 
 /*
- * Open the enable file of one ftrace event subsystem (e.g. "huge_memory").
+ * Open the enable file of one ftrace event subsystem (e.g. "collapse").
  * Returns a descriptor for tracing_events_enable(), or -1 if tracefs or the
  * subsystem is not there.  The events are system-wide state: whoever
  * switches them on owns them until it switches them off, including on the

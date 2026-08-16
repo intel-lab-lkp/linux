@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM huge_memory
+#define TRACE_SYSTEM collapse
 
-#if !defined(__HUGE_MEMORY_H) || defined(TRACE_HEADER_MULTI_READ)
-#define __HUGE_MEMORY_H
+#if !defined(_TRACE_COLLAPSE_H) || defined(TRACE_HEADER_MULTI_READ)
+#define _TRACE_COLLAPSE_H
 
 #include  <linux/tracepoint.h>
 
@@ -282,5 +282,5 @@ TRACE_EVENT(mm_khugepaged_scan,
 		__entry->full_scan_finished)
 );
 
-#endif /* __HUGE_MEMORY_H */
+#endif /* _TRACE_COLLAPSE_H */
 #include <trace/define_trace.h>

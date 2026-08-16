@@ -26,9 +26,24 @@
 #include <linux/vmstat.h>
 
 #include <asm/tlb.h>
-#include <trace/events/huge_memory.h>
 #include "collapse.h"
 #include "internal.h"
+
+/*
+ * Which pass of a round reached a verdict on a candidate.  Named by the trace
+ * header, which only this file builds, so it need not be shared.
+ */
+enum collapse_pass {
+	COLLAPSE_PASS_ALLOC,
+	COLLAPSE_PASS_REVALIDATE,
+	COLLAPSE_PASS_FAULTIN,
+	COLLAPSE_PASS_FREEZE,
+	COLLAPSE_PASS_COPY,
+	COLLAPSE_PASS_INSTALL,
+};
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/collapse.h>
 
 /*
  * Anonymous collapse, in rounds.

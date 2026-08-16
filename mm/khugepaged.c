@@ -31,8 +31,7 @@
 #include "page_alloc.h"
 #include "mm_slot.h"
 
-#define CREATE_TRACE_POINTS
-#include <trace/events/huge_memory.h>
+#include <trace/events/collapse.h>
 
 static struct task_struct *khugepaged_thread __read_mostly;
 static DEFINE_MUTEX(khugepaged_mutex);
