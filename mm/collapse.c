@@ -129,6 +129,7 @@ enum collapse_candidate_state {
 	CAND_SELECTED,		/* collected; nothing held on its behalf yet */
 	CAND_SKIPPED,		/* refused; nothing of it left to undo */
 	CAND_FROZEN,		/* sources displaced and frozen */
+	CAND_INSTALLED,		/* the destination is mapped */
 };
 
 /*
@@ -1082,10 +1083,235 @@ static void collapse_copy(struct vm_area_struct *vma,
 	}
 }
 
+/*
+ * Undo one frozen slot: restore the saved PTE if our migration entry is still
+ * there, or drop the rmap the freeze took if a racing zap already replaced it.
+ * Returns true when the slot was zapped -- its mapping reference is then ours to
+ * release.
+ */
+static bool collapse_abort_slot(struct vm_area_struct *vma, struct folio *folio,
+				pte_t *slot, unsigned long addr, pte_t saved)
+{
+	/* No table left: the slot cannot still be holding our entry */
+	if (slot) {
+		softleaf_t entry = softleaf_from_pte(ptep_get(slot));
+
+		if (softleaf_is_migration(entry) &&
+		    softleaf_to_pfn(entry) == pte_pfn(saved)) {
+			set_pte_at(vma->vm_mm, addr, slot, saved);
+			return false;
+		}
+	}
+	folio_remove_rmap_pte(folio, pte_page(saved), vma);
+	return true;
+}
+
+/*
+ * Abort one frozen candidate at install time: it took a machine check during the
+ * copy, or some of its slots no longer hold our migration entries.  mmap_read
+ * (held freeze..putback) blocks fork, mremap and munmap, and faults wait on the
+ * migration entries -- but madvise-class operations run under mmap_read too, so a
+ * concurrent MADV_DONTNEED may have zapped frozen slots, and a fault may have
+ * refilled a zapped one.
+ *
+ * Slots still holding our entries are restored from the saved values (no TLB
+ * flush: identical translation).  Foreign slots are left exactly as found --
+ * restoring them would resurrect memory the user zapped -- but their rmap is
+ * dropped here: the zapper fixed up rss for the slots it cleared, yet could not
+ * drop the rmap a frozen source keeps, unlike a migrating one, which unmaps at
+ * freeze time.  Slots with no source follow the same rule with no rmap to drop: a
+ * cleared zeropage is restored only while its slot is still none, and a hole was
+ * never touched at all.
+ *
+ * @pte is NULL when the table itself is gone: a racing whole-table MADV_DONTNEED
+ * zapped every entry, frozen slots included, and the empty-table reclaim
+ * (CONFIG_PT_RECLAIM) freed it, clearing the pmd under the pmd lock and the pte
+ * ptl, neither of which excludes it between our freeze and install.  Every slot
+ * then reads as foreign, which is exactly right: nothing of ours survives to
+ * restore or verify, and what is left is the half of the teardown the zapper
+ * cannot perform for a frozen source -- the kept rmap, the freeze, the folio
+ * locks and the references.  The caller holds no page-table lock in that case,
+ * there being no table to lock.
+ */
+static void collapse_abort_candidate(struct vm_area_struct *vma,
+				     struct collapse_candidate *cand,
+				     pte_t *pte)
+{
+	const unsigned int nr_pages = candidate_nr_pages(cand);
+	struct mm_struct *mm = vma->vm_mm;
+	unsigned long addr = cand->addr;
+	unsigned int i, nr;
+
+	for (i = 0; i < nr_pages; i += nr, addr += nr * PAGE_SIZE) {
+		pte_t saved = cand->saved_ptes[i];
+		unsigned int k, nr_dropped;
+		struct folio *folio;
+
+		nr = 1;		/* skip stride; a span overrides it */
+		if (pte_none(saved))
+			continue;
+		if (is_zero_pfn(pte_pfn(saved))) {
+			if (pte && pte_none(ptep_get(pte + i)))
+				set_pte_at(mm, addr, pte + i, saved);
+			continue;
+		}
+
+		folio = pte_folio(saved);
+		nr = collapse_saved_span_len(cand, i, nr_pages);
+
+		/*
+		 * Unfreeze before any rmap drop: rmap removal munlocks under
+		 * VM_LOCKED, and munlock_folio() takes a reference a frozen folio
+		 * forbids.  The expected count still holds every slot's mapping
+		 * reference; restored slots keep theirs, and the zapped slots'
+		 * references become ours to drop with the rmap.
+		 */
+		folio_ref_unfreeze(folio, folio_expected_ref_count(folio) + 1);
+
+		nr_dropped = 0;
+		for (k = 0; k < nr; k++) {
+			pte_t *slot = pte ? pte + i + k : NULL;
+
+			nr_dropped += collapse_abort_slot(vma, folio, slot,
+							  addr + k * PAGE_SIZE,
+							  cand->saved_ptes[i + k]);
+		}
+
+		folio_unlock(folio);
+		folio_put_refs(folio, nr_dropped + 1);
+	}
+
+	/*
+	 * Not installed; collapse_finish() releases the destination, which has to
+	 * wait for the ptl to be dropped.
+	 */
+	cand->state = CAND_SKIPPED;
+}
+
+/*
+ * Nothing may have shifted under the round: every source slot must still hold our
+ * migration entry, and every slot with no source must still be none -- the freeze
+ * cleared the zeropage ones, so both read as none by then, and a slot some fault
+ * has refilled, with a page or with a zeropage, is not ours to overwrite.
+ * @nr_populated returns how many source-less slots the install is about to make
+ * present, which is rss no zap ever accounted for.
+ */
+static bool collapse_verify_candidate(struct collapse_candidate *cand,
+				      pte_t *pte, unsigned int *nr_populated)
+{
+	const unsigned int nr_pages = candidate_nr_pages(cand);
+	unsigned int k, populated = 0;
+
+	for (k = 0; k < nr_pages; k++) {
+		pte_t live = ptep_get(pte + k);
+		softleaf_t entry;
+
+		if (pte_none_or_zero(cand->saved_ptes[k])) {
+			if (!pte_none(live))
+				return false;
+			populated++;
+			continue;
+		}
+
+		entry = softleaf_from_pte(live);
+		if (!softleaf_is_migration(entry) ||
+		    softleaf_to_pfn(entry) != pte_pfn(cand->saved_ptes[k]))
+			return false;
+	}
+	*nr_populated = populated;
+	return true;
+}
+
+/*
+ * The PMD terminal layer: verify, detach the table, deposit a fresh one and
+ * install the leaf, as one atomic section under the pmd lock.  A pmd_none window
+ * never exists -- faults stay held at pte level by the migration entries
+ * throughout -- which is what lets PMD collapse run under mmap_read like the rest
+ * of the engine.
+ */
+static void collapse_install_pmd(struct vm_area_struct *vma,
+				 struct collapse_control *cc, pmd_t *pmd)
+{
+}
+
 /* Publish each destination folio in place of the sources it replaces */
 static void collapse_install(struct vm_area_struct *vma,
 			     struct collapse_control *cc, pmd_t *pmd)
 {
+	struct mm_struct *mm = vma->vm_mm;
+	pte_t *pte, *table;
+	spinlock_t *ptl;
+	unsigned int i;
+
+	if (is_pmd_order(cc->candidates[0].order)) {
+		/* A PMD candidate fills the slot pool: always alone */
+		VM_WARN_ON_ONCE(cc->nr_candidates != 1);
+		collapse_install_pmd(vma, cc, pmd);
+		return;
+	}
+
+	pte = pte_offset_map_lock(mm, pmd, cc->candidates[0].addr, &ptl);
+	if (!pte) {
+		/*
+		 * Table gone under us (see collapse_abort_candidate() on @pte).
+		 * Tear down every frozen candidate -- stranding them would leak
+		 * frozen, locked sources.
+		 */
+		for (i = 0; i < cc->nr_candidates; i++) {
+			struct collapse_candidate *cand = &cc->candidates[i];
+
+			if (cand->state != CAND_FROZEN)
+				continue;
+
+			cand->result = SCAN_NO_PTE_TABLE;
+			collapse_abort_candidate(vma, cand, NULL);
+		}
+		return;
+	}
+	table = pte - pte_index(cc->candidates[0].addr);
+
+	for (i = 0; i < cc->nr_candidates; i++) {
+		struct collapse_candidate *cand = &cc->candidates[i];
+		pte_t *cand_pte = table + pte_index(cand->addr);
+		unsigned int nr_populated;
+
+		if (cand->state != CAND_FROZEN)
+			continue;
+
+		if (cand->result != SCAN_SUCCEED) {
+			/* Machine check during the copy */
+			collapse_abort_candidate(vma, cand, cand_pte);
+			continue;
+		}
+
+		/* No destination: the provision pass could not spare one */
+		if (!cand->new_folio) {
+			collapse_abort_candidate(vma, cand, cand_pte);
+			continue;
+		}
+
+		if (!collapse_verify_candidate(cand, cand_pte, &nr_populated)) {
+			cand->result = SCAN_PTE_NON_PRESENT;
+			collapse_abort_candidate(vma, cand, cand_pte);
+			continue;
+		}
+
+		/*
+		 * The smp_wmb() in __folio_mark_uptodate() orders the copied
+		 * data before the set_ptes() that publishes it.
+		 */
+		__folio_mark_uptodate(cand->new_folio);
+		map_anon_folio_pte_nopf(cand->new_folio, cand_pte, vma,
+					cand->addr, /*uffd_wp=*/ false);
+
+		/* Slots with no source gain anon memory that no zap accounted */
+		if (nr_populated)
+			add_mm_counter(mm, MM_ANONPAGES, nr_populated);
+		cand->new_folio = NULL;	/* ownership: the mappings */
+		cand->state = CAND_INSTALLED;
+	}
+
+	pte_unmap_unlock(pte, ptl);
 }
 
 /*
