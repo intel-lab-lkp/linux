@@ -984,6 +984,8 @@ int iova_cache_get(void)
 out_err:
 	kmem_cache_destroy(iova_cache);
 	kmem_cache_destroy(iova_magazine_cache);
+	iova_cache = NULL;
+	iova_magazine_cache = NULL;
 	mutex_unlock(&iova_cache_mutex);
 	return err;
 }
@@ -1001,6 +1003,8 @@ void iova_cache_put(void)
 		cpuhp_remove_multi_state(CPUHP_IOMMU_IOVA_DEAD);
 		kmem_cache_destroy(iova_cache);
 		kmem_cache_destroy(iova_magazine_cache);
+		iova_cache = NULL;
+		iova_magazine_cache = NULL;
 	}
 	mutex_unlock(&iova_cache_mutex);
 }
