@@ -50,11 +50,7 @@ struct vm_area_struct;
 /* Number of pointers that fit on a page:  this will go away. */
 #define PTRS_PER_PAGE	(1UL << (PAGE_SHIFT-3))
 
-#ifdef CONFIG_ALPHA_LARGE_VMALLOC
-#define VMALLOC_START		0xfffffe0000000000
-#else
 #define VMALLOC_START		(-2*PGDIR_SIZE)
-#endif
 #define VMALLOC_END		(-PGDIR_SIZE)
 
 /*

@@ -413,21 +413,6 @@ config ALPHA_WTINT
 
 	  If unsure, say N.
 
-# LARGE_VMALLOC is racy, if you *really* need it then fix it first
-config ALPHA_LARGE_VMALLOC
-	bool
-	help
-	  Process creation and other aspects of virtual memory management can
-	  be streamlined if we restrict the kernel to one PGD for all vmalloc
-	  allocations.  This equates to about 8GB.
-
-	  Under normal circumstances, this is so far and above what is needed
-	  as to be laughable.  However, there are certain applications (such
-	  as benchmark-grade in-kernel web serving) that can make use of as
-	  much vmalloc space as is available.
-
-	  Say N unless you know you need gobs and gobs of vmalloc space.
-
 config VERBOSE_MCHECK
 	bool "Verbose Machine Checks"
 
