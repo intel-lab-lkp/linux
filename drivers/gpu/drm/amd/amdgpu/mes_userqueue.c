@@ -208,7 +208,7 @@ static int mes_userq_detect_and_reset(struct amdgpu_device *adev,
 	struct mes_detect_and_reset_queue_input input;
 	struct amdgpu_usermode_queue *queue;
 	unsigned int hung_db_num = 0;
-	unsigned long queue_id;
+	unsigned long queue_id, flags;
 	u32 db_array[8];
 	bool found_hung_queue = false;
 	int r, i;
@@ -230,6 +230,13 @@ static int mes_userq_detect_and_reset(struct amdgpu_device *adev,
 	if (r) {
 		dev_err(adev->dev, "Failed to detect and reset queues, err (%d)\n", r);
 	} else if (hung_db_num) {
+		/*
+		 * The doorbell xarray is device wide, so this walks queues
+		 * owned by other drm_files too. Hold its lock: the free path
+		 * erases the entry under the same lock strictly before it
+		 * frees the queue, so an entry found here stays allocated.
+		 */
+		xa_lock_irqsave(&adev->userq_doorbell_xa, flags);
 		xa_for_each(&adev->userq_doorbell_xa, queue_id, queue) {
 			if (queue->queue_type == queue_type) {
 				for (i = 0; i < hung_db_num; i++) {
@@ -238,14 +245,16 @@ static int mes_userq_detect_and_reset(struct amdgpu_device *adev,
 						found_hung_queue = true;
 						atomic_inc(&adev->gpu_reset_counter);
 						amdgpu_userq_fence_driver_force_completion(queue);
-						drm_dev_wedged_event(adev_to_drm(adev), DRM_WEDGE_RECOVERY_NONE, NULL);
 					}
 				}
 			}
 		}
+		xa_unlock_irqrestore(&adev->userq_doorbell_xa, flags);
 	}
 
 	if (found_hung_queue) {
+		drm_dev_wedged_event(adev_to_drm(adev), DRM_WEDGE_RECOVERY_NONE, NULL);
+
 		/* Resume scheduling after hang recovery */
 		r = amdgpu_mes_resume(adev, input.xcc_id);
 	}
