@@ -440,6 +440,8 @@ config FUJITSU_TABLET
 
          If you have a Fujitsu convertible or slate, say Y or M here.
 
+source "drivers/platform/x86/goodix-ec-mailbox/Kconfig"
+
 config GPD_POCKET_FAN
 	tristate "GPD Pocket Fan Controller support"
 	depends on ACPI

@@ -11109,6 +11109,14 @@ M:	Maud Spierings <maudspierings@gocontroll.com>
 S:	Maintained
 F:	Documentation/devicetree/bindings/connector/gocontroll,moduline-module-slot.yaml
 
+GOODIX EC MAILBOX FINGERPRINT TRANSPORT DRIVER
+M:	Ertugrul Topcu <ertugtopcu0@gmail.com>
+L:	platform-driver-x86@vger.kernel.org
+S:	Maintained
+F:	Documentation/ABI/testing/dev-goodix-ec-mailbox
+F:	drivers/platform/x86/goodix-ec-mailbox/
+F:	include/uapi/linux/goodix_ec.h
+
 GOODIX TOUCHSCREEN
 M:	Hans de Goede <hansg@kernel.org>
 L:	linux-input@vger.kernel.org
