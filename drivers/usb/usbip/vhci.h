@@ -120,7 +120,7 @@ struct vhci_hcd {
 
 extern int vhci_num_controllers;
 extern struct vhci *vhcis;
-extern struct attribute_group vhci_attr_group;
+extern const struct attribute_group *vhci_groups[];
 
 /* vhci_hcd.c */
 void rh_port_connect(struct vhci_device *vdev, enum usb_device_speed speed);
