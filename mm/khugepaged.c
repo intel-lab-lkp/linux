@@ -511,10 +511,10 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 	__releases(&khugepaged_mm_lock)
 	__acquires(&khugepaged_mm_lock)
 {
-	struct vma_iterator vmi;
 	struct mm_slot *slot;
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
+	bool scan_complete = false;
 	unsigned int progress_prev = cc->progress;
 
 	lockdep_assert_held(&khugepaged_mm_lock);
@@ -534,55 +534,82 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 	vma = NULL;
 
 	/*
-	 * A reference on mm_users for as long as the pass works on this address
-	 * space.  __mmput() cannot start while one is held, so neither can
-	 * exit_mmap(), and the VMAs and page tables stay where they are.
+	 * Hold the address space open for the pass.  A collapse works under a
+	 * per-VMA read lock, and the barrier __khugepaged_exit() puts in front
+	 * of exit_mmap() -- mmap_write_lock() -- waits for a reader of
+	 * mmap_lock, not for a reader of one VMA.  A reference on mm_users
+	 * stops __mmput(), and so both of those, from starting at all.
 	 *
-	 * Once per pass, not once per table: the reference is what makes the
-	 * address space safe to work on, and a pass is how long that is wanted
-	 * for.  Nothing else in mm takes it per unit of work -- DAMON takes one
-	 * per target and walks every region under it, swapoff one per mm across
-	 * the whole address space, userfaultfd one per call.
+	 * Once per pass rather than once per table: the reference is what makes
+	 * the address space safe to work on, and the pass is how long that is
+	 * wanted for.  Nothing else in mm takes it per unit of work -- DAMON
+	 * takes one per target and walks every region under it, swapoff one per
+	 * mm across the whole address space, userfaultfd one per call.  It is
+	 * dropped below before the exiting mm is judged, so that judgement still
+	 * sees the true count.
 	 */
 	if (!mmget_not_zero(mm))
 		goto breakouterloop_no_mmput;
 
-	/*
-	 * Don't wait for semaphore (to avoid long wait times).  Just move to
-	 * the next mm on the list.
-	 */
-	if (unlikely(!mmap_read_trylock(mm)))
-		goto breakouterloop_mmap_lock;
-
 	cc->progress++;
-	if (unlikely(collapse_test_exit_or_disable_mmref(mm)))
-		goto breakouterloop;
 
-	vma_iter_init(&vmi, mm, khugepaged_scan.address);
-	for_each_vma(vmi, vma) {
+	/*
+	 * One VMA at a time, each held by its own read lock rather than by
+	 * mmap_lock over the whole address space.  lock_next_vma() locks what it
+	 * finds, falling back to mmap_lock only where it cannot.
+	 *
+	 * Whether this mm still wants collapsing is asked once, at the top of
+	 * each round of the loop.  Asking again before entering it only repeats
+	 * the same question: nothing between the two can answer it differently.
+	 */
+	for (;;) {
 		unsigned long hstart, hend, window;
+		struct vma_iterator vmi;
 		unsigned long orders;
 
 		cond_resched();
+		/*
+		 * Our reference is the reason the count cannot fall to zero, so
+		 * it is also what an address space whose owner has gone looks
+		 * like.  Stopping is what frees it: nothing else here would.
+		 */
 		if (unlikely(collapse_test_exit_or_disable_mmref(mm))) {
 			cc->progress++;
-			break;
+			goto breakouterloop;
 		}
 
 		/*
-		 * Before the VMA is judged, so that a pass over an address space
-		 * of VMAs it skips is bounded by the budget too: each one is
-		 * charged for, and none of them was being asked to be scanned.
+		 * Before a VMA is locked, so that a pass over an address space
+		 * of VMAs it skips is bounded by the budget too, and so that a
+		 * collapse returning here does not lock one to be told it is
+		 * out of budget.
 		 */
 		if (cc->progress >= progress_max)
-			break;
+			goto breakouterloop;
+
+		/* The first VMA at or after the cursor, which often sits in a gap */
+		rcu_read_lock();
+		vma_iter_init(&vmi, mm, khugepaged_scan.address);
+		vma = lock_next_vma(mm, &vmi, khugepaged_scan.address);
+		rcu_read_unlock();
+
+		/*
+		 * NULL is the end of the address space, and the only thing that
+		 * finishes this mm.  An error is a fatal signal or the unlikely
+		 * reference count overflow: leave the mm for the next pass
+		 * rather than treat it as walked.
+		 */
+		if (IS_ERR_OR_NULL(vma)) {
+			scan_complete = !IS_ERR(vma);
+			vma = NULL;
+			goto breakouterloop;
+		}
 
 		orders = collapse_possible_orders(vma, vma->vm_flags,
 						  TVA_KHUGEPAGED);
 		if (!orders) {
-			khugepaged_scan.address = vma->vm_end;
 			cc->progress++;
-			continue;
+			goto next_vma;
 		}
 
 		/*
@@ -595,9 +622,8 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 		hstart = ALIGN(vma->vm_start, window);
 		hend = ALIGN_DOWN(vma->vm_end, window);
 		if (khugepaged_scan.address > hend) {
-			khugepaged_scan.address = vma->vm_end;
 			cc->progress++;
-			continue;
+			goto next_vma;
 		}
 		if (khugepaged_scan.address < hstart)
 			khugepaged_scan.address = hstart;
@@ -605,19 +631,24 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 		while (khugepaged_scan.address < hend) {
 			unsigned long pmd_addr, range_end, start;
 
+			cond_resched();
+
+			if (unlikely(collapse_test_exit_or_disable_mmref(mm)) ||
+			    cc->progress >= progress_max) {
+				vma_end_read(vma);
+				vma = NULL;
+				goto breakouterloop;
+			}
+
 			/* One table's worth at most, and never past the VMA */
 			pmd_addr = khugepaged_scan.address & HPAGE_PMD_MASK;
 			range_end = min(hend, pmd_addr + HPAGE_PMD_SIZE);
-
-			cond_resched();
-			if (unlikely(collapse_test_exit_or_disable_mmref(mm)) ||
-			    cc->progress >= progress_max)
-				goto breakouterloop;
+			start = khugepaged_scan.address;
 
 			VM_WARN_ON_ONCE(khugepaged_scan.address < hstart);
+			VM_WARN_ON_ONCE(range_end > hend);
 
-			start = khugepaged_scan.address;
-			/* move to next address */
+			/* Move the cursor on regardless of what the scan says */
 			khugepaged_scan.address = range_end;
 
 			/* If nothing to collapse, the lock is still ours */
@@ -627,21 +658,30 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 			}
 
 			/* collapse_run_pmd() takes its own locks, so give this up */
-			mmap_read_unlock(mm);
+			vma_end_read(vma);
+			vma = NULL;
+
 			*result = collapse_run_pmd(mm, start, range_end, cc);
 			if (*result == SCAN_SUCCEED)
-				++khugepaged_pages_collapsed;
-			goto breakouterloop_mmap_lock;
+				khugepaged_pages_collapsed++;
+			goto breakouterloop;
 		}
+next_vma:
+		/*
+		 * Past this VMA: the cursor has to move by hand, where the
+		 * mmap_lock iterator used to carry it.  A VMA that was walked
+		 * is charged by the scan itself, one table at a time; only one
+		 * passed over without being looked at is charged here.
+		 */
+		khugepaged_scan.address = vma->vm_end;
+		vma_end_read(vma);
+		vma = NULL;
 	}
+
 breakouterloop:
-	mmap_read_unlock(mm); /* exit_mmap will destroy ptes after this */
-breakouterloop_mmap_lock:
 	/*
 	 * Not mmput(): the last reference would run exit_mmap() here, and
 	 * khugepaged is not the thread that should tear an address space down.
-	 * Dropped before the exiting mm is judged below, so that judgement still
-	 * sees the true count.
 	 */
 	mmput_async(mm);
 breakouterloop_no_mmput:
@@ -652,7 +692,7 @@ breakouterloop_no_mmput:
 	 * Release the current mm_slot if this mm is about to die, or
 	 * if we scanned all vmas of this mm, or THP got disabled.
 	 */
-	if (collapse_test_exit_or_disable(mm) || !vma) {
+	if (collapse_test_exit_or_disable(mm) || scan_complete) {
 		/*
 		 * Make sure that if mm_users is reaching zero while
 		 * khugepaged runs here, khugepaged_exit will find
