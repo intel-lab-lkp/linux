@@ -11,6 +11,7 @@
 #define COLLAPSE_MIN_MTHP_ORDER		2
 
 struct collapse_candidate;
+struct collapse_retry;
 
 enum scan_result {
 	SCAN_FAIL,
@@ -134,6 +135,16 @@ struct collapse_control {
 	 * the collapse reports it when it salvages nothing.
 	 */
 	enum scan_result scan_refusal;
+
+	/* Why the last window was refused */
+	enum scan_result select_result;
+
+	/* A region ran out of orders to try because none could be allocated */
+	bool smallest_alloc_failed;
+
+	/* Regions waiting to re-enter selection at a lower order */
+	struct collapse_retry *retries;
+	unsigned int nr_retries;
 
 	/* The candidate windows collected for the current round */
 	struct collapse_candidate *candidates;

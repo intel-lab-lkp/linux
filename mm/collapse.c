@@ -124,12 +124,37 @@
  */
 #define COLLAPSE_SAVED_PTES	HPAGE_PMD_NR
 
+/*
+ * Capacity of the retry store: the most regions a table can hold at once.  Live
+ * entries cover disjoint regions -- a region is one candidate's extent, and an
+ * extent is consumed from the cursor or from one entry, never from two -- and
+ * the smallest a producer pushes is one window at the smallest order.  Not
+ * bounded by what a round pushes: the stack is drained from the top, so an entry
+ * below a live one outlives the round that pushed it.
+ */
+#define COLLAPSE_RETRY_STORE_SIZE	COLLAPSE_TABLE_WINDOWS
+
 /* How far a candidate got, and so what a failure has to undo for it */
 enum collapse_candidate_state {
 	CAND_SELECTED,		/* collected; nothing held on its behalf yet */
 	CAND_SKIPPED,		/* refused; nothing of it left to undo */
 	CAND_FROZEN,		/* sources displaced and frozen */
 	CAND_INSTALLED,		/* the destination is mapped */
+};
+
+/*
+ * A region queued to re-enter selection, walked like the table itself: @offset is
+ * the next window to probe, @end one past the region, and @order the largest to
+ * try -- below the order that just failed, so the same window cannot be emitted
+ * twice.  Walking the region rather than shrinking one window keeps its tail,
+ * which is often where the collapsible window is.
+ */
+struct collapse_retry {
+	unsigned int offset;
+	unsigned int end;
+	unsigned int order;
+	/* The light allocation missed here: the next attempt may reclaim */
+	bool reclaim;
 };
 
 /*
@@ -181,16 +206,20 @@ void collapse_control_release(struct collapse_control *cc)
 {
 	kfree(cc->candidates);
 	kfree(cc->saved_ptes);
+	kfree(cc->retries);
 	cc->candidates = NULL;
 	cc->saved_ptes = NULL;
+	cc->retries = NULL;
 }
 
 int collapse_control_init(struct collapse_control *cc)
 {
 	cc->nr_candidates = 0;
+	cc->nr_retries = 0;
 	cc->candidates = kmalloc_objs(*cc->candidates, COLLAPSE_MAX_CANDIDATES);
 	cc->saved_ptes = kmalloc_objs(*cc->saved_ptes, COLLAPSE_SAVED_PTES);
-	if (!cc->candidates || !cc->saved_ptes) {
+	cc->retries = kmalloc_objs(*cc->retries, COLLAPSE_RETRY_STORE_SIZE);
+	if (!cc->candidates || !cc->saved_ptes || !cc->retries) {
 		collapse_control_release(cc);
 		return -ENOMEM;
 	}
@@ -1855,6 +1884,9 @@ static void collapse_anon_scan_init(struct collapse_control *cc)
 	cc->select_orders = 0;
 	cc->scan_unmapped = 0;
 	cc->nr_collapsed = 0;
+	cc->select_result = SCAN_FAIL;
+	cc->smallest_alloc_failed = false;
+	cc->nr_retries = 0;
 }
 
 /*
@@ -2011,6 +2043,48 @@ static bool collapse_window_eligible(struct collapse_control *cc,
 }
 
 /*
+ * Queue the region [@offset, @end) to re-enter selection at @order.  Two
+ * producers push, both in collapse_classify_result(): a refused region, tiled at
+ * the next enabled order down because selection cannot tell which slot refused;
+ * and a region whose in-window allocation missed, at an unchanged order, asking
+ * for reclaim next time.
+ *
+ * The store is a stack, and the classify loop that feeds it walks the batch by
+ * ascending address, so entries pop in the order they were refused rather than
+ * by address: a round drawn from two of them descends.  Nothing may take
+ * candidates[0] for the lowest -- what a round spans is cc->batch_start and
+ * cc->batch_end, taken over its candidates by collapse_revalidate().
+ *
+ * Selection terminates because the tiling producer strictly descends, and the
+ * unchanged-order one cannot fire twice for a region: its retry arrives with
+ * reclaim set, so the next miss is a failure that descends.
+ *
+ * The store is sized for the most regions a table can hold, so this cannot
+ * overflow; losing an entry would cost a region its lower-order attempt, so it
+ * asserts rather than fails.
+ */
+static void collapse_push_retry(struct collapse_control *cc, unsigned int offset,
+				unsigned int end, unsigned int order,
+				bool reclaim)
+{
+	struct collapse_retry *retry;
+
+	if (cc->nr_retries >= COLLAPSE_RETRY_STORE_SIZE) {
+		VM_WARN_ON_ONCE(1);
+		return;
+	}
+
+	retry = &cc->retries[cc->nr_retries];
+
+	retry->offset = offset;
+	retry->end = end;
+	retry->order = order;
+	retry->reclaim = reclaim;
+
+	cc->nr_retries++;
+}
+
+/*
  * The next window worth attempting, as an (offset, order) pair.  False when
  * selection is exhausted, which is what ends the range.
  *
@@ -2019,8 +2093,42 @@ static bool collapse_window_eligible(struct collapse_control *cc,
  * particular -- would be stale by construction.
  */
 static bool collapse_next_candidate(struct collapse_control *cc,
-				    unsigned int *offset, unsigned int *order)
+				    unsigned int *offset, unsigned int *order,
+				    bool *reclaim)
 {
+	while (cc->nr_retries) {
+		struct collapse_retry *r = &cc->retries[cc->nr_retries - 1];
+		unsigned int try, smallest;
+
+		if (r->offset >= r->end) {
+			cc->nr_retries--;
+			continue;
+		}
+
+		/*
+		 * The same walk as the table's own: the largest order the
+		 * offset's alignment allows, capped by the region's, descending
+		 * through the enabled orders until one fits.  If nothing fits
+		 * here, step over the smallest window tried and carry on --
+		 * which is what keeps the region's tail in play.
+		 */
+		try = min(max_order_from_offset(r->offset), r->order);
+		smallest = try;
+		while (try && !collapse_window_eligible(cc, r->offset, try)) {
+			smallest = try;
+			try = collapse_lower_order(cc, try);
+		}
+
+		if (try) {
+			*offset = r->offset;
+			*order = try;
+			*reclaim = r->reclaim;
+			r->offset += 1U << try;
+			return true;
+		}
+		r->offset += 1U << smallest;
+	}
+
 	while (cc->select_offset < cc->select_end) {
 		if (!collapse_window_eligible(cc, cc->select_offset,
 					      cc->select_order)) {
@@ -2035,6 +2143,7 @@ static bool collapse_next_candidate(struct collapse_control *cc,
 		 */
 		*offset = cc->select_offset;
 		*order = cc->select_order;
+		*reclaim = false;
 		collapse_selection_advance(cc, 1U << cc->select_order);
 		return true;
 	}
@@ -2051,7 +2160,68 @@ static bool collapse_classify_result(struct collapse_control *cc,
 				     unsigned int offset, unsigned int order,
 				     enum scan_result result)
 {
-	return true;
+	unsigned int lower;
+
+	switch (result) {
+	/* Done with the region: the cursor moved past it at emission */
+	case SCAN_SUCCEED:
+		cc->nr_collapsed += 1U << order;
+		fallthrough;
+	case SCAN_PTE_MAPPED_HUGEPAGE:
+		return true;
+	/* Only the light allocation missed: the same order, allowed to reclaim */
+	case SCAN_ALLOC_LIGHT_MISS:
+		collapse_push_retry(cc, offset, offset + (1U << order), order,
+				    /*reclaim=*/ true);
+		return true;
+	/* A smaller order over the same region might still fit */
+	case SCAN_ALLOC_HUGE_PAGE_FAIL:
+		/*
+		 * Only a failure with nothing left below it says the allocator
+		 * cannot serve this collapse.  A failure at a large order says
+		 * nothing about what the region will settle for -- one PMD is
+		 * 512M with 64K pages, so that attempt fails as a matter of
+		 * course -- and the caller answers an allocation failure by
+		 * backing off for a while.
+		 */
+		if (!collapse_lower_order(cc, order))
+			cc->smallest_alloc_failed = true;
+		fallthrough;
+	case SCAN_LACK_REFERENCED_PAGE:
+	case SCAN_EXCEED_NONE_PTE:
+	case SCAN_EXCEED_SWAP_PTE:
+	case SCAN_EXCEED_SHARED_PTE:
+	case SCAN_PAGE_LOCK:
+	case SCAN_PAGE_COUNT:
+	case SCAN_PAGE_NOT_EXCLUSIVE:
+	case SCAN_PAGE_NULL:
+	case SCAN_DEL_PAGE_LRU:
+	case SCAN_PTE_NON_PRESENT:
+	case SCAN_PTE_UFFD:
+	case SCAN_PAGE_LAZYFREE:
+	case SCAN_PAGE_DIRTY_OR_WRITEBACK:
+		cc->select_result = result;
+		lower = collapse_lower_order(cc, order);
+		if (lower) {
+			/* The whole failed region re-enters, as one entry */
+			collapse_push_retry(cc, offset, offset + (1U << order),
+					    lower, /*reclaim=*/ false);
+		}
+		return true;
+	/*
+	 * Nothing further is worth attempting in this table.  A dropped lock
+	 * belongs here rather than above: it says nothing about any window, so
+	 * lowering the order of every candidate the round was carrying would be
+	 * a verdict nobody reached.  The next scan finds the table again.
+	 */
+	case SCAN_LOCK_DROPPED:
+	case SCAN_PMD_MAPPED:
+	default:
+		cc->select_result = result;
+		cc->select_offset = cc->select_end;
+		cc->nr_retries = 0;
+		return false;
+	}
 }
 
 /*
@@ -2112,7 +2282,7 @@ static bool collapse_batch_full(struct collapse_control *cc, unsigned int slots,
  */
 static void collapse_add_candidate(struct collapse_control *cc,
 				   unsigned long addr, unsigned int order,
-				   pte_t *saved_ptes)
+				   bool reclaim, pte_t *saved_ptes)
 {
 	struct collapse_candidate *cand;
 
@@ -2124,7 +2294,7 @@ static void collapse_add_candidate(struct collapse_control *cc,
 	cc->nr_candidates++;
 	cand->addr = addr;
 	cand->order = order;
-	cand->reclaim = false;
+	cand->reclaim = reclaim;
 	cand->state = CAND_SELECTED;
 	cand->result = SCAN_FAIL;
 	cand->new_folio = NULL;
@@ -2145,7 +2315,7 @@ collapse_anon_pmd(struct mm_struct *mm, unsigned long start, unsigned long end,
 	unsigned int offset, order;
 	unsigned long bytes = 0;
 	unsigned int slots = 0;
-	bool pending = false;
+	bool pending = false, reclaim = false;
 	bool cont = true;
 
 	collapse_selection_init(cc, (start - pmd_addr) >> PAGE_SHIFT,
@@ -2153,7 +2323,8 @@ collapse_anon_pmd(struct mm_struct *mm, unsigned long start, unsigned long end,
 
 	while (cont) {
 		if (!pending)
-			pending = collapse_next_candidate(cc, &offset, &order);
+			pending = collapse_next_candidate(cc, &offset, &order,
+							  &reclaim);
 
 		if (!pending || collapse_batch_full(cc, slots, bytes, order)) {
 			/*
@@ -2177,12 +2348,24 @@ collapse_anon_pmd(struct mm_struct *mm, unsigned long start, unsigned long end,
 		 * full round could not take is kept pending for the next one.
 		 */
 		collapse_add_candidate(cc, pmd_addr + offset * PAGE_SIZE, order,
-				       cc->saved_ptes + slots);
+				       reclaim, cc->saved_ptes + slots);
 
 		slots += 1U << order;
 		bytes += PAGE_SIZE << order;
 		pending = false;
 	}
 
-	return cc->nr_collapsed ? SCAN_SUCCEED : SCAN_FAIL;
+	if (cc->nr_collapsed)
+		return SCAN_SUCCEED;
+	/*
+	 * Report an allocation failure over any refusal, the scan's included: it
+	 * is the one outcome the caller acts on, by backing off rather than
+	 * scanning on.
+	 */
+	if (cc->smallest_alloc_failed)
+		return SCAN_ALLOC_HUGE_PAGE_FAIL;
+	/* Nothing salvaged and nothing to wait for: say what was refused */
+	if (cc->scan_refusal != SCAN_SUCCEED)
+		return cc->scan_refusal;
+	return cc->select_result;
 }
