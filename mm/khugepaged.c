@@ -485,64 +485,6 @@ static void collapse_policy_khugepaged(struct collapse_policy *p)
 	p->tva_type = TVA_KHUGEPAGED;
 }
 
-/* MADV_COLLAPSE was asked for explicitly, so it is not held to those. */
-static void collapse_policy_forced(struct collapse_policy *p)
-{
-	p->max_ptes_none = HPAGE_PMD_NR;
-	p->max_ptes_swap = HPAGE_PMD_NR;
-	p->max_ptes_shared = HPAGE_PMD_NR;
-	p->strict_sub_pmd = false;
-	p->skip_lazyfree = false;
-	p->require_referenced = false;
-	p->install_pmd = true;
-	p->writeback_dirty = true;
-	p->gfp = GFP_TRANSHUGE;
-	p->tva_type = TVA_FORCED_COLLAPSE;
-}
-
-/*
- * If mmap_lock temporarily dropped, revalidate vma
- * after taking the mmap_lock again.
- * Returns enum scan_result value.
- */
-
-static enum scan_result hugepage_vma_revalidate(struct mm_struct *mm, unsigned long address,
-		bool expect_anon, struct vm_area_struct **vmap,
-		struct collapse_control *cc, unsigned int order)
-{
-	struct vm_area_struct *vma;
-	enum tva_type type = cc->policy.tva_type;
-
-	if (unlikely(collapse_test_exit_or_disable(mm)))
-		return SCAN_ANY_PROCESS;
-
-	*vmap = vma = find_vma(mm, address);
-	if (!vma)
-		return SCAN_VMA_NULL;
-
-	/*
-	 * We cannot collapse VMA regions that do not span the full PMD. This is
-	 * due to the potential of the PMD being shared by another VMA leaving
-	 * us vulnerable to a race condition. Always check the PMD order here to
-	 * ensure its not shared by another VMA. We'd need to lock all VMAs in
-	 * the PMD range to support this.
-	 */
-	if (!thp_vma_suitable_order(vma, address, PMD_ORDER))
-		return SCAN_ADDRESS_RANGE;
-	if (!thp_vma_allowable_orders(vma, vma->vm_flags, type, BIT(order)))
-		return SCAN_VMA_CHECK;
-	/*
-	 * Anon VMA expected, the address may be unmapped then
-	 * remapped to file after khugepaged reacquired the mmap_lock.
-	 *
-	 * thp_vma_allowable_orders() may return true for qualified file
-	 * vmas.
-	 */
-	if (expect_anon && (!(*vmap)->anon_vma || !vma_is_anonymous(*vmap)))
-		return SCAN_PAGE_ANON;
-	return SCAN_SUCCEED;
-}
-
 static void collect_mm_slot(struct mm_slot *slot)
 {
 	struct mm_struct *mm = slot->mm;
@@ -636,8 +578,7 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 			khugepaged_scan.address = hstart;
 
 		while (khugepaged_scan.address < hend) {
-			unsigned long pmd_addr, range_end;
-			bool lock_dropped = false;
+			unsigned long pmd_addr, range_end, start;
 
 			/* One table's worth at most, and never past the VMA */
 			pmd_addr = khugepaged_scan.address & HPAGE_PMD_MASK;
@@ -649,24 +590,24 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 
 			VM_WARN_ON_ONCE(khugepaged_scan.address < hstart);
 
-			*result = collapse_single_pmd(khugepaged_scan.address,
-						      range_end, vma,
-						      &lock_dropped, cc);
-			if (*result == SCAN_SUCCEED)
-				++khugepaged_pages_collapsed;
+			start = khugepaged_scan.address;
 			/* move to next address */
 			khugepaged_scan.address = range_end;
-			if (lock_dropped)
-				/*
-				 * We released mmap_lock so break loop.  Note
-				 * that we drop mmap_lock before all hugepage
-				 * allocations, so if allocation fails, we are
-				 * guaranteed to break here and report the
-				 * correct result back to caller.
-				 */
-				goto breakouterloop_mmap_lock;
-			if (cc->progress >= progress_max)
-				goto breakouterloop;
+
+			/* If nothing to collapse, the lock is still ours */
+			if (!collapse_scan_pmd(vma, start, range_end, cc, orders)) {
+				*result = cc->scan_refusal;
+				if (cc->progress >= progress_max)
+					goto breakouterloop;
+				continue;
+			}
+
+			/* collapse_run_pmd() takes its own locks, so give this up */
+			mmap_read_unlock(mm);
+			*result = collapse_run_pmd(mm, start, range_end, cc);
+			if (*result == SCAN_SUCCEED)
+				++khugepaged_pages_collapsed;
+			goto breakouterloop_mmap_lock;
 		}
 	}
 breakouterloop:
@@ -904,6 +845,21 @@ bool current_is_khugepaged(void)
 	return kthread_func(current) == khugepaged;
 }
 
+/* MADV_COLLAPSE was asked for explicitly, so it is not held to those. */
+static void collapse_policy_forced(struct collapse_policy *p)
+{
+	p->max_ptes_none = HPAGE_PMD_NR;
+	p->max_ptes_swap = HPAGE_PMD_NR;
+	p->max_ptes_shared = HPAGE_PMD_NR;
+	p->strict_sub_pmd = false;
+	p->skip_lazyfree = false;
+	p->require_referenced = false;
+	p->install_pmd = true;
+	p->writeback_dirty = true;
+	p->gfp = GFP_TRANSHUGE;
+	p->tva_type = TVA_FORCED_COLLAPSE;
+}
+
 static int madvise_collapse_errno(enum scan_result r)
 {
 	/*
@@ -942,9 +898,10 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 	struct collapse_control *cc;
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long hstart, hend, addr;
+	/* What the VMA allows; valid only while its lock is held */
+	unsigned long vma_orders;
 	enum scan_result last_fail = SCAN_FAIL;
 	int thps = 0;
-	bool mmap_unlocked = false;
 	int err;
 
 	BUG_ON(vma->vm_start > start);
@@ -971,28 +928,67 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 	}
 
 	mmgrab(mm);
+
+	/*
+	 * Nothing below wants the lock the VMA walk left held, and
+	 * lru_add_drain_all() waits on every CPU, so give it up first.  The
+	 * walk carries on under mmap_lock and its own caller is what drops it,
+	 * so reporting this only tells the walk that its VMA is now stale.
+	 */
+	mmap_read_unlock(mm);
+	*lock_dropped = true;
+	vma = NULL;
+	vma_orders = 0;
 	lru_add_drain_all();
 
 	for (addr = hstart; addr < hend; addr += HPAGE_PMD_SIZE) {
-		enum scan_result result = SCAN_FAIL;
+		enum scan_result result;
 
-		if (mmap_unlocked) {
+		/*
+		 * A collapse gives the lock up, and the VMA has to be found
+		 * again after one: it can shrink while nothing is held.  A scan
+		 * that finds nothing to collapse leaves the lock alone, so a
+		 * range that is already collapsed walks it without relocking.
+		 *
+		 * Reschedule only here, where nothing is held: a preemption
+		 * point under a lock is a writer waiting longer.
+		 */
+		if (!vma) {
 			cond_resched();
 			mmap_read_lock(mm);
-			mmap_unlocked = false;
-			*lock_dropped = true;
-			result = hugepage_vma_revalidate(mm, addr, false, &vma,
-							 cc, HPAGE_PMD_ORDER);
-			if (result != SCAN_SUCCEED) {
-				last_fail = result;
-				goto out_nolock;
+			vma = vma_lookup(mm, addr);
+			if (!vma) {
+				mmap_read_unlock(mm);
+				hend = addr;
+				break;
 			}
-
-			hend = min(hend, vma->vm_end & HPAGE_PMD_MASK);
+			vma_orders = collapse_possible_orders(vma,
+					vma->vm_flags, TVA_FORCED_COLLAPSE);
 		}
 
-		result = collapse_single_pmd(addr, addr + HPAGE_PMD_SIZE, vma,
-					     &mmap_unlocked, cc);
+		/* If nothing to collapse, the lock is still ours */
+		if (!collapse_scan_pmd(vma, addr, addr + HPAGE_PMD_SIZE, cc,
+				       vma_orders)) {
+			result = cc->scan_refusal;
+		} else {
+			/* collapse_run_pmd() takes its own locks, so give this up */
+			mmap_read_unlock(mm);
+			vma = NULL;
+			/* The mask belonged to that lock, not to this range */
+			vma_orders = 0;
+
+			result = collapse_run_pmd(mm, addr,
+						  addr + HPAGE_PMD_SIZE, cc);
+		}
+
+		/*
+		 * The VMA shrank under us, so the rest of the range was never
+		 * ours to collapse: stop, and expect only what came before.
+		 */
+		if (result == SCAN_VMA_NULL || result == SCAN_ADDRESS_RANGE) {
+			hend = addr;
+			break;
+		}
 
 		switch (result) {
 		case SCAN_SUCCEED:
@@ -1015,18 +1011,14 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 		default:
 			last_fail = result;
 			/* Other error, exit */
-			goto out_maybelock;
+			goto out;
 		}
 	}
 
-out_maybelock:
-	/* Caller expects us to hold mmap_lock on return */
-	if (mmap_unlocked) {
-		*lock_dropped = true;
+out:
+	/* The VMA walk this returns to expects the lock it was holding */
+	if (!vma)
 		mmap_read_lock(mm);
-	}
-out_nolock:
-	mmap_assert_locked(mm);
 	mmdrop(mm);
 	collapse_control_release(cc);
 	kfree(cc);

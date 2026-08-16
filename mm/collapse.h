@@ -150,6 +150,13 @@ struct collapse_control {
 	 */
 	enum scan_result scan_refusal;
 
+	/*
+	 * A reference the file side takes while it still has the VMA, since the
+	 * collapse runs without it, and the offset it decided on.
+	 */
+	struct file *scan_file;
+	pgoff_t scan_pgoff;
+
 	/* Why the last window was refused */
 	enum scan_result select_result;
 
@@ -187,12 +194,47 @@ static inline int collapse_test_exit_or_disable(struct mm_struct *mm)
 		mm_flags_test(MMF_DISABLE_THP_COMPLETELY, mm);
 }
 
+/*
+ * A caller states what it allows in the policy, takes a control for the arrays a
+ * round needs, and then hands over one PTE table's worth of a VMA at a time:
+ *
+ *	collapse_control_init(cc);		once per control
+ *	fill in cc->policy;			what this caller allows
+ *	collapse_scan_pmd(vma, addr, end, cc);	per table, as often as wanted
+ *	collapse_run_pmd(mm, addr, end, cc);	when the scan found work
+ *	collapse_control_release(cc);
+ *
+ * The caller holds mmap_lock for reading and passes a range within one PTE table
+ * of @vma.  A range the VMA does not cover is refused, which is also how a caller
+ * learns that its own range shrank.
+ *
+ * A scan returns with that lock still held: it only reads, and almost every table
+ * it is offered has nothing to collapse, so a caller walks a whole VMA under the
+ * one lock it took to get there.
+ *
+ * A collapse is called without it: the caller gives the lock up first, and with it
+ * @vma and anything derived under it, so a caller carrying on has to look up
+ * again.  What the collapse does -- allocate, quiesce, copy, flush -- is slow
+ * enough that a writer would wait behind it, so it takes the lock again per round
+ * instead, and revalidates rather than trusting what the scan saw.
+ *
+ * A scan that found something has to be run: the file side takes a reference on
+ * the file while it still has the VMA to take it from, and the run is what gives
+ * it back.  What it turned down is left in cc->scan_refusal, for a caller that has
+ * to report why a table was not collapsed.
+ *
+ * A control is not reentrant: it carries the arrays a round works out of, so one
+ * per collapsing thread.
+ */
 int collapse_control_init(struct collapse_control *cc);
 void collapse_control_release(struct collapse_control *cc);
-enum scan_result collapse_single_pmd(unsigned long addr, unsigned long end,
-		struct vm_area_struct *vma, bool *lock_dropped,
-		struct collapse_control *cc);
+bool collapse_scan_pmd(struct vm_area_struct *vma, unsigned long addr,
+		unsigned long end, struct collapse_control *cc,
+		unsigned long vma_orders);
+enum scan_result collapse_run_pmd(struct mm_struct *mm, unsigned long addr,
+		unsigned long end, struct collapse_control *cc);
 
+/* Which orders a VMA may collapse to, empty when it may not collapse at all */
 unsigned long collapse_possible_orders(struct vm_area_struct *vma,
 		vm_flags_t vm_flags, enum tva_type tva_flags);
 
