@@ -159,6 +159,7 @@ TEST_GEN_PROGS_x86 += hardware_disable_test
 TEST_GEN_PROGS_x86 += mmu_stress_test
 TEST_GEN_PROGS_x86 += rseq_test
 TEST_GEN_PROGS_x86 += steal_time
+TEST_GEN_PROGS_x86 += steal_time_change_pid
 TEST_GEN_PROGS_x86 += system_counter_offset_test
 TEST_GEN_PROGS_x86 += pre_fault_memory_test
 
