@@ -509,8 +509,10 @@ static enum scan_result collapse_revalidate(struct vm_area_struct *vma,
 
 /*
  * Bring one address to a state the freeze will accept: present, and exclusive if
- * it is anonymous.  Returns with mmap_lock dropped on every failure, because the
- * fault path may drop it and the caller cannot tell which case it is in.
+ * it is anonymous.  Every fault it takes to get there counts in *nr_faults, each
+ * one an allocation or a read the round is paying for.  Returns with mmap_lock
+ * dropped on every failure, because the fault path may drop it and the caller
+ * cannot tell which case it is in.
  *
  * SCAN_EXCEED_SWAP_PTE is the exception: it is a verdict on this candidate
  * rather than on the round, nothing was faulted to reach it, and it keeps the
@@ -518,7 +520,8 @@ static enum scan_result collapse_revalidate(struct vm_area_struct *vma,
  */
 static enum scan_result collapse_faultin_addr(struct vm_area_struct *vma,
 					      struct collapse_candidate *cand,
-					      pmd_t *pmd, unsigned long addr)
+					      pmd_t *pmd, unsigned long addr,
+					      unsigned int *nr_faults)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	const unsigned int flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_UNSHARE |
@@ -571,6 +574,7 @@ static enum scan_result collapse_faultin_addr(struct vm_area_struct *vma,
 
 		/* Only swap or shared PTEs reach here; the rest broke out */
 		ret = handle_mm_fault(vma, addr, flags, NULL);
+		(*nr_faults)++;
 		/*
 		 * Not a verdict on this window: the fault dropped the lock to
 		 * wait, which is what a swap-in normally does.  Distinct from
@@ -600,7 +604,9 @@ static enum scan_result collapse_faultin(struct vm_area_struct *vma,
 					 struct collapse_control *cc,
 					 pmd_t *pmd)
 {
+	struct mm_struct *mm = vma->vm_mm;
 	enum scan_result result = SCAN_SUCCEED;
+	unsigned int nr_faults = 0;
 	unsigned int i;
 
 	for (i = 0; i < cc->nr_candidates; i++) {
@@ -616,7 +622,8 @@ static enum scan_result collapse_faultin(struct vm_area_struct *vma,
 		     j++, addr += PAGE_SIZE) {
 			enum scan_result r;
 
-			r = collapse_faultin_addr(vma, cand, pmd, addr);
+			r = collapse_faultin_addr(vma, cand, pmd, addr,
+						  &nr_faults);
 			/*
 			 * The one failure that judges this candidate rather
 			 * than the round, and so the one that leaves the lock
@@ -627,7 +634,7 @@ static enum scan_result collapse_faultin(struct vm_area_struct *vma,
 			if (r == SCAN_EXCEED_SWAP_PTE) {
 				cand->state = CAND_SKIPPED;
 				cand->result = r;
-				collapse_trace_candidate(vma->vm_mm, cand,
+				collapse_trace_candidate(mm, cand,
 							 COLLAPSE_PASS_FAULTIN);
 				break;
 			}
@@ -638,6 +645,8 @@ static enum scan_result collapse_faultin(struct vm_area_struct *vma,
 		}
 	}
 out:
+	/* @vma is unsafe on the failure path: the callee dropped mmap_lock */
+	trace_mm_collapse_faultin(mm, nr_faults, result);
 	return result;
 }
 

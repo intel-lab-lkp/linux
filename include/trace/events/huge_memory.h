@@ -160,6 +160,30 @@ TRACE_EVENT(mm_collapse_scan,
 		__print_symbolic(__entry->result, SCAN_STATUS))
 );
 
+TRACE_EVENT(mm_collapse_faultin,
+
+	TP_PROTO(struct mm_struct *mm, unsigned int nr_faults, int result),
+
+	TP_ARGS(mm, nr_faults, result),
+
+	TP_STRUCT__entry(
+		__field(struct mm_struct *, mm)
+		__field(unsigned int, nr_faults)
+		__field(int, result)
+	),
+
+	TP_fast_assign(
+		__entry->mm = mm;
+		__entry->nr_faults = nr_faults;
+		__entry->result = result;
+	),
+
+	TP_printk("mm=%p, nr_faults=%u, result=%s",
+		__entry->mm,
+		__entry->nr_faults,
+		__print_symbolic(__entry->result, SCAN_STATUS))
+);
+
 TRACE_EVENT(mm_collapse_candidate,
 
 	TP_PROTO(struct mm_struct *mm, unsigned long addr, unsigned int order,
