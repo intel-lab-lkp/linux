@@ -2198,6 +2198,15 @@ syscall_arg_fmt__init_array(struct syscall_arg_fmt *arg, struct tep_format_field
 		    ((len >= 4 && strcmp(field->name + len - 4, "name") == 0) ||
 		     strstr(field->name, "path") != NULL)) {
 			arg->scnprintf = SCA_FILENAME;
+		} else if ((field->type && (strstr(field->type, "(*)") != NULL ||
+					    strstr(field->type, "_func_t") != NULL ||
+					    strstr(field->type, "_fn") != NULL)) ||
+			   (((field->flags & TEP_FIELD_IS_POINTER) || field->size == sizeof(u64)) &&
+			    (strcmp(field->name, "fn") == 0 ||
+			     strcmp(field->name, "function") == 0 ||
+			     strcmp(field->name, "callsite") == 0 ||
+			     strcmp(field->name, "call_site") == 0))) {
+			arg->scnprintf = SCA_KSYM;
 		} else if ((field->flags & TEP_FIELD_IS_POINTER) || strstr(field->name, "addr") ||
 			   field_has_hex_fmt(field, len))
 			arg->scnprintf = SCA_PTR;
