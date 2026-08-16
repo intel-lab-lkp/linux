@@ -369,6 +369,102 @@ static const struct tps68470_regulator_platform_data intel_nvl_tps68470_pdata = 
 	},
 };
 
+/* Settings for Dell Latitude 7320 Detachable */
+
+static struct regulator_consumer_supply dell_7320_detachable_vsio_consumer_supplies[] = {
+	REGULATOR_SUPPLY("avdd", "i2c-OVTI5678:00"),
+};
+
+static struct regulator_consumer_supply dell_7320_detachable_aux1_consumer_supplies[] = {
+	REGULATOR_SUPPLY("dvdd", "i2c-OVTI5678:00"),
+};
+
+static struct regulator_consumer_supply dell_7320_detachable_aux2_consumer_supplies[] = {
+	REGULATOR_SUPPLY("dovdd", "i2c-OVTI5678:00"),
+};
+
+static const struct regulator_init_data dell_7320_detachable_core_reg_init_data = {
+	.constraints = {
+		.min_uV = 1200000,
+		.max_uV = 1200000,
+		.apply_uV = 1,
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+	},
+};
+
+static const struct regulator_init_data dell_7320_detachable_ana_reg_init_data = {
+	.constraints = {
+		.min_uV = 2815200,
+		.max_uV = 2815200,
+		.apply_uV = 1,
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+	},
+};
+
+static const struct regulator_init_data dell_7320_detachable_vcm_reg_init_data = {
+	.constraints = {
+		.min_uV = 2815200,
+		.max_uV = 2815200,
+		.apply_uV = 1,
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+	},
+};
+
+/* Ensure the always-on VIO regulator has the same voltage as VSIO */
+static const struct regulator_init_data dell_7320_detachable_vio_reg_init_data = {
+	.constraints = {
+		.min_uV = 1800600,
+		.max_uV = 1800600,
+		.apply_uV = 1,
+		.always_on = 1,
+	},
+};
+
+static const struct regulator_init_data dell_7320_detachable_vsio_reg_init_data = {
+	.constraints = {
+		.min_uV = 1800600,
+		.max_uV = 1800600,
+		.apply_uV = 1,
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+	},
+	.num_consumer_supplies = ARRAY_SIZE(dell_7320_detachable_vsio_consumer_supplies),
+	.consumer_supplies = dell_7320_detachable_vsio_consumer_supplies,
+};
+
+static const struct regulator_init_data dell_7320_detachable_aux1_reg_init_data = {
+	.constraints = {
+		.min_uV = 1213200,
+		.max_uV = 1213200,
+		.apply_uV = 1,
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+	},
+	.num_consumer_supplies = ARRAY_SIZE(dell_7320_detachable_aux1_consumer_supplies),
+	.consumer_supplies = dell_7320_detachable_aux1_consumer_supplies,
+};
+
+static const struct regulator_init_data dell_7320_detachable_aux2_reg_init_data = {
+	.constraints = {
+		.min_uV = 1800600,
+		.max_uV = 1800600,
+		.apply_uV = 1,
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+	},
+	.num_consumer_supplies = ARRAY_SIZE(dell_7320_detachable_aux2_consumer_supplies),
+	.consumer_supplies = dell_7320_detachable_aux2_consumer_supplies,
+};
+
+static const struct tps68470_regulator_platform_data dell_7320_detachable_tps68470_pdata = {
+	.reg_init_data = {
+		[TPS68470_CORE] = &dell_7320_detachable_core_reg_init_data,
+		[TPS68470_ANA]  = &dell_7320_detachable_ana_reg_init_data,
+		[TPS68470_VCM]  = &dell_7320_detachable_vcm_reg_init_data,
+		[TPS68470_VIO]  = &dell_7320_detachable_vio_reg_init_data,
+		[TPS68470_VSIO] = &dell_7320_detachable_vsio_reg_init_data,
+		[TPS68470_AUX1] = &dell_7320_detachable_aux1_reg_init_data,
+		[TPS68470_AUX2] = &dell_7320_detachable_aux2_reg_init_data,
+	},
+};
+
 static struct gpiod_lookup_table surface_go_int347a_gpios = {
 	.dev_id = "i2c-INT347A:00",
 	.table = {
@@ -407,6 +503,14 @@ static struct gpiod_lookup_table intel_nvl_tps68470_gpios = {
 	.dev_id = "i2c-OVTI13B1:01",
 	.table = {
 		GPIO_LOOKUP("tps68470-gpio", 9, "reset", GPIO_ACTIVE_LOW),
+		{ }
+	}
+};
+
+static struct gpiod_lookup_table dell_7320_detachable_gpios = {
+	.dev_id = "i2c-OVTI5678:00",
+	.table = {
+		GPIO_LOOKUP("tps68470-gpio", 5, "reset", GPIO_ACTIVE_LOW),
 		{ }
 	}
 };
@@ -469,6 +573,15 @@ static const struct int3472_tps68470_board_data intel_nvl_tps68470_board_data = 
 	},
 };
 
+static const struct int3472_tps68470_board_data dell_7320_detachable_tps68470_board_data = {
+	.dev_name = "i2c-INT3472:07",
+	.tps68470_regulator_pdata = &dell_7320_detachable_tps68470_pdata,
+	.n_gpiod_lookups = 1,
+	.tps68470_gpio_lookup_tables = {
+		&dell_7320_detachable_gpios,
+	},
+};
+
 static const struct dmi_system_id int3472_tps68470_board_data_table[] = {
 	{
 		.matches = {
@@ -528,6 +641,13 @@ static const struct dmi_system_id int3472_tps68470_board_data_table[] = {
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Nova Lake Client Platform"),
 		},
 		.driver_data = (void *)&intel_nvl_tps68470_board_data,
+	},
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Latitude 7320 Detachable"),
+		},
+		.driver_data = (void *)&dell_7320_detachable_tps68470_board_data,
 	},
 	{ }
 };
