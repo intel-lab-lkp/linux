@@ -124,8 +124,8 @@ static void rds_conn_path_reset(struct rds_conn_path *cp)
 	/* Clear the bits the reset is responsible for individually: a
 	 * blanket cp_flags = 0 is a plain store that can clobber a
 	 * concurrent atomic read-modify-write on the same word.
-	 * RDS_IN_XMIT and RDS_RECV_REFILL are already clear here - the
-	 * caller waited for both before tearing the transport down.
+	 * RDS_IN_XMIT and RDS_RECV_REFILL are owned by the caller,
+	 * which releases them once the teardown is complete.
 	 */
 	clear_bit(RDS_LL_SEND_FULL, &cp->cp_flags);
 	clear_bit(RDS_RECONNECT_PENDING, &cp->cp_flags);
@@ -414,13 +414,31 @@ void rds_conn_shutdown(struct rds_conn_path *cp)
 		}
 		mutex_unlock(&cp->cp_cm_lock);
 
+		/* Quiesce the transmit and receive-refill paths by
+		 * acquiring their bit locks, not merely waiting for
+		 * them to be released: with a plain wait, either path
+		 * can re-take its lock the instant after we sample it
+		 * clear and then run concurrently with the transport
+		 * shutdown and the path reset below.  Holding both
+		 * locks across the teardown makes that structurally
+		 * impossible.
+		 */
 		wait_event(cp->cp_waitq,
-			   !test_bit(RDS_IN_XMIT, &cp->cp_flags));
+			   !test_and_set_bit_lock(RDS_IN_XMIT, &cp->cp_flags));
 		wait_event(cp->cp_waitq,
-			   !test_bit(RDS_RECV_REFILL, &cp->cp_flags));
+			   !test_and_set_bit(RDS_RECV_REFILL, &cp->cp_flags));
 
 		conn->c_trans->conn_path_shutdown(cp);
 		rds_conn_path_reset(cp);
+
+		/* Release the two locks and wake any waiter (e.g.
+		 * rds_tcp_reset_callbacks()) that blocked on them while
+		 * we held them.  rds_conn_path_reset() leaves both bits
+		 * alone: ownership ends here, not inside the reset.
+		 */
+		clear_bit_unlock(RDS_IN_XMIT, &cp->cp_flags);
+		clear_bit(RDS_RECV_REFILL, &cp->cp_flags);
+		wake_up_all(&cp->cp_waitq);
 
 		if (!rds_conn_path_transition(cp, RDS_CONN_DISCONNECTING,
 					      RDS_CONN_DOWN) &&
