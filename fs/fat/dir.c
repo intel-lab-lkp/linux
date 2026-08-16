@@ -1394,7 +1394,10 @@ found:
 		/* Fill the long name slots. */
 		for (i = 0; i < long_bhs; i++) {
 			int copy = umin(sb->s_blocksize - offset, size);
+			/* Avoid race with userspace read via bdev */
+			lock_buffer(bhs[i]);
 			memcpy(bhs[i]->b_data + offset, slots, copy);
+			unlock_buffer(bhs[i]);
 			mmb_mark_buffer_dirty(bhs[i],
 					      &MSDOS_I(dir)->i_metadata_bhs);
 			offset = 0;
@@ -1406,7 +1409,10 @@ found:
 		if (!err && i < nr_bhs) {
 			/* Fill the short name slot. */
 			int copy = umin(sb->s_blocksize - offset, size);
+			/* Avoid race with userspace read via bdev */
+			lock_buffer(bhs[i]);
 			memcpy(bhs[i]->b_data + offset, slots, copy);
+			unlock_buffer(bhs[i]);
 			mmb_mark_buffer_dirty(bhs[i],
 					      &MSDOS_I(dir)->i_metadata_bhs);
 			if (IS_DIRSYNC(dir))
