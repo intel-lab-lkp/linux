@@ -6,6 +6,7 @@
 #include <asm/msr.h>
 
 #include "mtrr.h"
+#include <linux/compiler.h>  /* for __maybe_unused */
 
 static struct {
 	unsigned long high;
@@ -45,7 +46,7 @@ centaur_get_free_region(unsigned long base, unsigned long size, int replace_reg)
 	return -ENOSPC;
 }
 
-static void
+static void __maybe_unused
 centaur_get_mcr(unsigned int reg, unsigned long *base,
 		unsigned long *size, mtrr_type * type)
 {
@@ -61,7 +62,7 @@ centaur_get_mcr(unsigned int reg, unsigned long *base,
 		*type = MTRR_TYPE_WRBACK;
 }
 
-static void
+static void __maybe_unused
 centaur_set_mcr(unsigned int reg, unsigned long base,
 		unsigned long size, mtrr_type type)
 {
@@ -87,21 +88,26 @@ centaur_set_mcr(unsigned int reg, unsigned long base,
 	wrmsr(MSR_IDT_MCR0 + reg, low, high);
 }
 
-static int
+static int __maybe_unused
 centaur_validate_add_page(unsigned long base, unsigned long size, unsigned int type)
 {
-	/*
-	 * FIXME: Winchip2 supports uncached
-	 */
-	if (type != MTRR_TYPE_WRCOMB &&
-	    (centaur_mcr_type == 0 || type != MTRR_TYPE_UNCACHABLE)) {
-		pr_warn("mtrr: only write-combining%s supported\n",
-			   centaur_mcr_type ? " and uncacheable are" : " is");
-		return -EINVAL;
+	if (centaur_mcr_type == 0) {
+		/* Winchip2: supports both Write-Combining and Uncached */
+		if (type != MTRR_TYPE_WRCOMB && type != MTRR_TYPE_UNCACHABLE) {
+			pr_warn("mtrr: only write-combining and uncacheable supported\n");
+			return -EINVAL;
+		}
+	} else {
+		/* Other Centaur: only Write-Combining */
+		if (type != MTRR_TYPE_WRCOMB) {
+			pr_warn("mtrr: only write-combining supported\n");
+			return -EINVAL;
+		}
 	}
 	return 0;
 }
 
+/* The ops structure is used externally, so the compiler won't complain */
 const struct mtrr_ops centaur_mtrr_ops = {
 	.var_regs          = 8,
 	.set               = centaur_set_mcr,
