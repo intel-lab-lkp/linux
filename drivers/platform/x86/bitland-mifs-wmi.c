@@ -2,7 +2,11 @@
 /*
  * Linux driver for Bitland notebooks.
  *
- * Copyright (C) 2026 2 Mingyou Chen <qby140326@gmail.com>
+ * Copyright (C) 2026 Mingyou Chen <qby140326@gmail.com>
+ *
+ * Thin-ultrabook firmware (Xiaomi Book Pro 14 / TM2424) uses a different
+ * cmd 0x08 encoding than the gaming line. Detected via DMI; other Bitland
+ * hardware keeps the original 0..3 mapping.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -14,6 +18,7 @@
 #include <linux/dev_printk.h>
 #include <linux/device.h>
 #include <linux/device/devres.h>
+#include <linux/dmi.h>
 #include <linux/err.h>
 #include <linux/hwmon.h>
 #include <linux/init.h>
@@ -37,6 +42,9 @@
 #define DRV_NAME		"bitland-mifs-wmi"
 #define BITLAND_MIFS_GUID	"B60BFB48-3E5B-49E4-A0E9-8CFFE1B3434B"
 #define BITLAND_EVENT_GUID	"46C93E13-EE9B-4262-8488-563BCA757FEF"
+
+/* Firmware status in output.operation (wire OUT[1]): request accepted. */
+#define MIFS_STATUS_OK		0x80
 
 enum bitland_mifs_operation {
 	WMI_METHOD_GET	= 250,
@@ -71,6 +79,15 @@ enum bitland_mifs_power_profile {
 	WMI_PP_PERFORMANCE	= 1,
 	WMI_PP_QUIET		= 2,
 	WMI_PP_FULL_SPEED	= 3,
+};
+
+/* cmd 0x08 values on the thin-ultrabook firmware line (TM2424). */
+enum bitland_mifs_thin_perf_mode {
+	WMI_THIN_QUIET		= 0x02,
+	WMI_THIN_TURBO		= 0x03,
+	WMI_THIN_FULL_SPEED	= 0x04,
+	WMI_THIN_AUTO		= 0x09,
+	WMI_THIN_ECO		= 0x0A,
 };
 
 enum bitland_mifs_event_id {
@@ -123,7 +140,7 @@ struct bitland_mifs_input {
 
 struct bitland_mifs_output {
 	u8 reserved1;
-	u8 operation;
+	u8 operation;	/* firmware status on replies: MIFS_STATUS_OK = accepted/supported */
 	u8 reserved2;
 	u8 function;
 	u8 data[28];
@@ -159,6 +176,18 @@ struct bitland_mifs_wmi_data {
 	struct device *hwmon_dev;
 	struct device *pp_dev;
 	enum platform_profile_option saved_profile;
+	bool thin_ultrabook;		/* DMI quirk: TM2424 thin-ultrabook firmware */
+};
+
+static const struct dmi_system_id bitland_mifs_thin_ultrabook_table[] = {
+	{
+		.ident = "Xiaomi Book Pro 14 (TM2424)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "XIAOMI"),
+			DMI_MATCH(DMI_BOARD_NAME, "TM2424"),
+		},
+	},
+	{ }
 };
 
 static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
@@ -167,22 +196,117 @@ static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
 {
 	struct wmi_buffer in_buf = { .length = sizeof(*input), .data = (void *)input };
 	struct wmi_buffer out_buf = { 0 };
+	struct bitland_mifs_output local_output;
+	struct bitland_mifs_output *dest = output ? output : &local_output;
 	int ret;
 
 	guard(mutex)(&data->lock);
 
-	if (!output)
-		return wmidev_invoke_procedure(data->wdev, 0, 1, &in_buf);
-
-	ret = wmidev_invoke_method(data->wdev, 0, 1, &in_buf, &out_buf, sizeof(*output));
+	/*
+	 * Always parse the reply so SET can check output.operation
+	 * (firmware status) instead of fire-and-forget.
+	 */
+	ret = wmidev_invoke_method(data->wdev, 0, 1, &in_buf, &out_buf, sizeof(*dest));
 	if (ret)
 		return ret;
 
-	memcpy(output, out_buf.data, sizeof(*output));
+	memcpy(dest, out_buf.data, sizeof(*dest));
 	kfree(out_buf.data);
 
 	return 0;
 }
+
+/* --- Thin-ultrabook (TM2424) perf mode --- */
+
+static int bitland_thin_wmi_perf_set(struct bitland_mifs_wmi_data *data, u8 val)
+{
+	struct bitland_mifs_input input = {
+		.operation = WMI_METHOD_SET,
+		.function = WMI_FN_SYSTEM_PER_MODE,
+	};
+	struct bitland_mifs_output output;
+	int ret;
+
+	input.payload[0] = val;
+
+	ret = bitland_mifs_wmi_call(data, &input, &output);
+	if (ret)
+		return ret;
+
+	if (output.operation != MIFS_STATUS_OK) {
+		dev_dbg(&data->wdev->dev,
+			"perf mode %#x rejected by firmware (status=%#x)\n",
+			val, output.operation);
+		return -EREMOTEIO;
+	}
+
+	return 0;
+}
+
+static int bitland_thin_profile_get(struct bitland_mifs_wmi_data *data,
+				    enum platform_profile_option *profile)
+{
+	struct bitland_mifs_input input = {
+		.operation = WMI_METHOD_GET,
+		.function = WMI_FN_SYSTEM_PER_MODE,
+	};
+	struct bitland_mifs_output output;
+	int ret;
+
+	ret = bitland_mifs_wmi_call(data, &input, &output);
+	if (ret)
+		return ret;
+
+	switch (output.data[0]) {
+	case WMI_THIN_ECO:
+	case WMI_THIN_QUIET:
+		*profile = PLATFORM_PROFILE_LOW_POWER;
+		break;
+	case WMI_THIN_AUTO:
+		*profile = PLATFORM_PROFILE_BALANCED;
+		break;
+	case WMI_THIN_FULL_SPEED:
+	case WMI_THIN_TURBO:
+		*profile = PLATFORM_PROFILE_PERFORMANCE;
+		break;
+	default:
+		/*
+		 * Unknown readback (e.g. Balance 0x01, not offered on
+		 * TM24*): degrade to balanced rather than failing sysfs.
+		 */
+		dev_dbg(&data->wdev->dev,
+			"unrecognized thin perf mode readback: %#x\n",
+			output.data[0]);
+		*profile = PLATFORM_PROFILE_BALANCED;
+		break;
+	}
+
+	return 0;
+}
+
+static int bitland_thin_profile_set(struct bitland_mifs_wmi_data *data,
+				    enum platform_profile_option profile)
+{
+	switch (profile) {
+	case PLATFORM_PROFILE_LOW_POWER:
+		return bitland_thin_wmi_perf_set(data, WMI_THIN_ECO);
+	case PLATFORM_PROFILE_BALANCED:
+		return bitland_thin_wmi_perf_set(data, WMI_THIN_AUTO);
+	case PLATFORM_PROFILE_PERFORMANCE:
+		/*
+		 * Full-speed is rejected by firmware on battery. There
+		 * is no DC-jack on this model; honour the status byte
+		 * and fall back to Turbo.
+		 */
+		if (bitland_thin_wmi_perf_set(data, WMI_THIN_FULL_SPEED) == 0)
+			return 0;
+		return bitland_thin_wmi_perf_set(data, WMI_THIN_TURBO);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+/* --- Gaming-line (Tongfang/Redmi G) perf mode - unchanged behavior --- */
 
 static int laptop_profile_get(struct device *dev,
 			      enum platform_profile_option *profile)
@@ -196,6 +320,9 @@ static int laptop_profile_get(struct device *dev,
 	};
 	struct bitland_mifs_output result;
 	int ret;
+
+	if (data->thin_ultrabook)
+		return bitland_thin_profile_get(data, profile);
 
 	ret = bitland_mifs_wmi_call(data, &input, &result);
 	if (ret)
@@ -256,6 +383,9 @@ static int laptop_profile_set(struct device *dev,
 	int ret;
 	u8 val;
 
+	if (data->thin_ultrabook)
+		return bitland_thin_profile_set(data, profile);
+
 	switch (profile) {
 	case PLATFORM_PROFILE_LOW_POWER:
 		val = WMI_PP_QUIET;
@@ -286,10 +416,19 @@ static int laptop_profile_set(struct device *dev,
 
 static int platform_profile_probe(void *drvdata, unsigned long *choices)
 {
+	struct bitland_mifs_wmi_data *data = drvdata;
+
 	set_bit(PLATFORM_PROFILE_LOW_POWER, choices);
 	set_bit(PLATFORM_PROFILE_BALANCED, choices);
-	set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE, choices);
 	set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
+
+	/*
+	 * Thin-ultrabook line exposes exactly 3 firmware-backed levels
+	 * (Eco/Auto/Full-speed-or-Turbo) - no separate
+	 * balanced-performance step, unlike the gaming line's 4 modes.
+	 */
+	if (!data->thin_ultrabook)
+		set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE, choices);
 
 	return 0;
 }
@@ -600,13 +739,35 @@ static const DEVICE_ATTR_RW(gpu_mode);
 static const DEVICE_ATTR_RW(kb_mode);
 static const DEVICE_ATTR_WO(fan_boost);
 
-static const struct attribute *const laptop_attrs[] = {
+static struct attribute *laptop_attrs[] = {
 	&dev_attr_gpu_mode.attr,
 	&dev_attr_kb_mode.attr,
 	&dev_attr_fan_boost.attr,
 	NULL,
 };
-ATTRIBUTE_GROUPS(laptop);
+
+/* gpu_mode/kb_mode/fan_boost are unsupported on thin-ultrabook firmware. */
+static umode_t laptop_attrs_is_visible(struct kobject *kobj,
+				       struct attribute *attr, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+
+	if (data->thin_ultrabook)
+		return 0;
+
+	return attr->mode;
+}
+
+static const struct attribute_group laptop_group = {
+	.attrs = laptop_attrs,
+	.is_visible = laptop_attrs_is_visible,
+};
+
+static const struct attribute_group *laptop_groups[] = {
+	&laptop_group,
+	NULL,
+};
 
 static const struct key_entry bitland_mifs_wmi_keymap[] = {
 	{ KE_KEY, WMI_EVENT_OPEN_APP, { KEY_PROG1 } },
@@ -675,6 +836,7 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 		return -ENOMEM;
 
 	drv_data->wdev = wdev;
+	drv_data->thin_ultrabook = dmi_check_system(bitland_mifs_thin_ultrabook_table) > 0;
 
 	ret = devm_mutex_init(&wdev->dev, &drv_data->lock);
 	if (ret)
@@ -701,11 +863,19 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 		return input_register_device(drv_data->input_dev);
 	}
 
+	if (drv_data->thin_ultrabook)
+		dev_info(&wdev->dev, "using thin-ultrabook perf-mode values\n");
+
 	/* Register platform profile */
 	drv_data->pp_dev = devm_platform_profile_register(&wdev->dev, DRV_NAME, drv_data,
 							  &laptop_profile_ops);
 	if (IS_ERR(drv_data->pp_dev))
 		return PTR_ERR(drv_data->pp_dev);
+
+	if (drv_data->thin_ultrabook) {
+		/* hwmon and keyboard LED WMI functions return 0xE0 here. */
+		return 0;
+	}
 
 	/* Register hwmon */
 	drv_data->hwmon_dev = devm_hwmon_device_register_with_info(&wdev->dev,

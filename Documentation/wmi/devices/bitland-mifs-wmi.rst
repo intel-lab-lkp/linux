@@ -93,8 +93,11 @@ The following Command IDs are used in the third byte of the buffer:
 +----------+-----------------------+------------------------------------------+
 | ID       | Name                  | Values / Description                     |
 +==========+=======================+==========================================+
-| 8        | SystemPerMode         | 0: Balance, 1: Performance, 2: Quiet,    |
-|          |                       | 3: Full-speed                            |
+| 8        | SystemPerMode         | Gaming line: 0 Balance, 1 Performance,   |
+|          |                       | 2 Quiet, 3 Full-speed.                   |
+|          |                       | Thin-ultrabook (TM2424): 0x02 Quiet,     |
+|          |                       | 0x03 Turbo, 0x04 Full-speed, 0x09 Auto,  |
+|          |                       | 0x0A Eco.                                |
 +----------+-----------------------+------------------------------------------+
 | 9        | GPUMode               | 0: Hybrid, 1: Discrete, 2: UMA           |
 +----------+-----------------------+------------------------------------------+
@@ -188,11 +191,18 @@ Performance Modes
 -----------------
 Changing the performance mode via Command ID 0x08 (SystemPerMode) affects the
 power limits (PL1/PL2) and fan curves managed by the Embedded Controller (EC).
-Note that the "Full-speed" and "Performance" mode (1, 3) is typically only
-available when the system is connected to a DC power source (not USB-C/PD).
 
-In the driver implementation, switch to performance/full-speed mode without
-DC power connected will throw the EOPNOTSUPP error.
+Two firmware encodings exist:
+
+* Gaming line (Tongfang/Redmi G): sequential values 0..3. Full-speed and
+  Performance typically require a DC barrel jack; the driver returns
+  ``-EOPNOTSUPP`` otherwise.
+* Thin-ultrabook line (Xiaomi Book Pro 14, DMI ``board_name=TM2424``):
+  Quiet=0x02, Turbo=0x03, Full-speed=0x04, Auto=0x09, Eco=0x0A. These
+  machines charge over USB-C only. Full-speed is still rejected by firmware
+  on battery (status byte != 0x80); the driver then falls back to Turbo.
+
+The firmware status byte is ``OutData[1]`` (0x80 accepted / supported).
 
 Graphics Switching
 ------------------
