@@ -1791,6 +1791,90 @@ static void collapse_order_pinned_window(struct collapse_context *c,
 	ksft_test_result_report(exit_status, "%s\n", __func__);
 }
 
+/*
+ * max_ptes_shared counts PTEs of a whole PMD, but a VMA smaller than one is
+ * scanned in full and judged against the same setting, so the limit is scaled
+ * to the range actually scanned: what decides is the shared *fraction*, not
+ * the raw count. An unscaled comparison against HPAGE_PMD_NR/2 could never
+ * refuse a range this small, so both directions are checked here.
+ */
+static void collapse_order_sub_pmd_shared(struct collapse_context *c,
+					  struct mem_ops *ops)
+{
+	size_t window = mthp_window_size();
+	size_t size = 4 * window;
+	unsigned long nr_ptes = size / page_size;
+	unsigned long budget, cow;
+	int max_shared, wstatus;
+	void *p;
+
+	/*
+	 * The range has to stay strictly below a PMD to say anything about the
+	 * scaling: at exactly one PMD the scaled limit is the raw one, and the
+	 * case would pass without testing what it is here for.
+	 */
+	if (size >= hpage_pmd_size) {
+		ksft_test_result_skip("%s: four windows do not fit below the PMD\n",
+				      __func__);
+		return;
+	}
+
+	max_shared = thp_read_num("khugepaged/max_ptes_shared");
+	/* The same fraction of this range as max_shared is of a PMD. */
+	budget = (unsigned long)max_shared * nr_ptes / hpage_pmd_nr;
+	if (budget + 1 > nr_ptes) {
+		ksft_test_result_skip("%s: max_ptes_shared leaves nothing to exceed\n",
+				      __func__);
+		return;
+	}
+
+	mthp_push_target_order();
+
+	p = mmap(BASE_ADDR, size, PROT_READ | PROT_WRITE,
+		 MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+	if (p != BASE_ADDR)
+		ksft_exit_fail_msg("Failed to allocate VMA at %p\n", BASE_ADDR);
+	fill_memory(p, 0, size);
+	madvise(p, size, MADV_HUGEPAGE);
+
+	if (!fork()) {
+		/*
+		 * Everything is shared with the parent now. Break CoW on all
+		 * but budget + 1 PTEs: one PTE over the scaled limit, and far
+		 * below the unscaled one.
+		 */
+		cow = nr_ptes - budget - 1;
+		fill_memory(p, 0, cow * page_size);
+		ksft_print_msg("Refuse a sub-PMD range over the scaled max_ptes_shared...");
+		if (!khugepaged_wait_full_pass())
+			fail("Timeout");
+		else if (window_not_collapsed(p, size))
+			success("OK");
+		else
+			fail("Fail");
+
+		/* One fewer shared PTE brings it back within the limit. */
+		fill_memory(p, cow * page_size, (cow + 1) * page_size);
+		ksft_print_msg("Collapse once inside it...");
+		if (!khugepaged_wait_full_pass())
+			fail("Timeout");
+		else if (window_collapsed(p, size))
+			success("OK");
+		else
+			fail("Fail");
+
+		validate_memory(p, 0, size);
+		_exit(exit_status);
+	}
+	wait(&wstatus);
+	if (WEXITSTATUS(wstatus))
+		exit_status = WEXITSTATUS(wstatus);
+
+	munmap(p, size);
+	thp_pop_settings();
+	ksft_test_result_report(exit_status, "%s\n", __func__);
+}
+
 static void usage(void)
 {
 	fprintf(stderr, "\nUsage: ./khugepaged [OPTIONS] <test type> [dir]\n\n");
@@ -2084,6 +2168,7 @@ int main(int argc, char **argv)
 		TEST(collapse_order_mlocked, mthp_khugepaged_context, anon_ops);
 		TEST(collapse_order_lazyfree_window, mthp_khugepaged_context, anon_ops);
 		TEST(collapse_order_pinned_window, mthp_khugepaged_context, anon_ops);
+		TEST(collapse_order_sub_pmd_shared, mthp_khugepaged_context, anon_ops);
 	}
 
 	TEST(collapse_full, madvise_context, anon_ops);
