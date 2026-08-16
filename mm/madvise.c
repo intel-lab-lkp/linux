@@ -979,8 +979,6 @@ static int madvise_collapse(struct madvise_behavior *madv_behavior)
 		return err;
 	}
 
-	mmgrab(mm);
-
 	/*
 	 * Nothing below wants the lock the VMA walk left held, and
 	 * lru_add_drain_all() waits on every CPU, so give it up first.  The
@@ -1071,7 +1069,6 @@ out:
 	/* The VMA walk this returns to expects the lock it was holding */
 	if (!vma)
 		mmap_read_lock(mm);
-	mmdrop(mm);
 	collapse_control_release(cc);
 	kfree(cc);
 
