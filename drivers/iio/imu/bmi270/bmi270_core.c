@@ -1132,7 +1132,7 @@ static int bmi270_write_event_value(struct iio_dev *indio_dev,
 	guard(mutex)(&data->mutex);
 
 	if (type == IIO_EV_TYPE_CHANGE) {
-		if (!in_range(val, 0, BMI270_STEP_COUNTER_MAX + 1))
+		if (!in_range_incl(val, 0, BMI270_STEP_COUNTER_MAX))
 			return -EINVAL;
 
 		raw = val / BMI270_STEP_COUNTER_FACTOR;
@@ -1152,7 +1152,7 @@ static int bmi270_write_event_value(struct iio_dev *indio_dev,
 		if (ret)
 			return ret;
 
-		if (!in_range(val, 0, (BMI270_G_MICRO_M_S_2 / uscale) + 1))
+		if (!in_range_incl(val, 0, BMI270_G_MICRO_M_S_2 / uscale))
 			return -EINVAL;
 
 		tmp = (u64)val * BMI270_MOTION_THRES_FULL_SCALE * uscale;
@@ -1161,7 +1161,7 @@ static int bmi270_write_event_value(struct iio_dev *indio_dev,
 		regval = FIELD_PREP(BMI270_FEAT_MOTION_THRESHOLD_MSK, raw);
 		return bmi270_update_feature_reg(data, reg, mask, regval);
 	case IIO_EV_INFO_PERIOD:
-		if (!in_range(val, 0, BMI270_MOTION_DURAT_MAX + 1))
+		if (!in_range_incl(val, 0, BMI270_MOTION_DURAT_MAX))
 			return -EINVAL;
 
 		raw = BMI270_INT_MICRO_TO_RAW(val, val2,
