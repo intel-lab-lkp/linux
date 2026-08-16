@@ -160,6 +160,37 @@ TRACE_EVENT(mm_collapse_scan,
 		__print_symbolic(__entry->result, SCAN_STATUS))
 );
 
+TRACE_EVENT(mm_collapse_round,
+
+	TP_PROTO(struct mm_struct *mm, unsigned int nr_candidates,
+		 unsigned int nr_installed, int result, u64 freeze_to_wake_us),
+
+	TP_ARGS(mm, nr_candidates, nr_installed, result, freeze_to_wake_us),
+
+	TP_STRUCT__entry(
+		__field(struct mm_struct *, mm)
+		__field(unsigned int, nr_candidates)
+		__field(unsigned int, nr_installed)
+		__field(int, result)
+		__field(u64, freeze_to_wake_us)
+	),
+
+	TP_fast_assign(
+		__entry->mm = mm;
+		__entry->nr_candidates = nr_candidates;
+		__entry->nr_installed = nr_installed;
+		__entry->result = result;
+		__entry->freeze_to_wake_us = freeze_to_wake_us;
+	),
+
+	TP_printk("mm=%p, nr_candidates=%u, nr_installed=%u, result=%s, freeze_to_wake_us=%llu",
+		__entry->mm,
+		__entry->nr_candidates,
+		__entry->nr_installed,
+		__print_symbolic(__entry->result, SCAN_STATUS),
+		__entry->freeze_to_wake_us)
+);
+
 TRACE_EVENT(mm_collapse_faultin,
 
 	TP_PROTO(struct mm_struct *mm, unsigned int nr_faults, int result),
