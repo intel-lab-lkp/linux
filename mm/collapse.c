@@ -52,7 +52,8 @@ enum collapse_pass {
  * The folios mapped across a window of PTEs become one folio of that window's
  * order, with the sources quiesced by the two barriers migration uses --
  * migration entries in their PTEs, then a frozen refcount -- so the copy itself
- * needs no lock.  The engine runs under mmap_read throughout.
+ * needs no lock.  A collapse takes a read lock on the VMA for each round; a
+ * scan still runs under the mmap_lock its caller holds.
  *
  * A round carries a batch of candidate windows through the passes together,
  * rather than carrying one window through the whole collapse.  [ptl] and
@@ -450,11 +451,11 @@ int collapse_control_init(struct collapse_control *cc)
 }
 
 /*
- * The scan and the allocation both dropped mmap_lock, so nothing seen before it
- * can be trusted: check the VMA the round just looked up and the PTE table
- * again, and that they still allow every provisioned candidate.
+ * The scan and the allocation both ran unlocked, so nothing seen before can be
+ * trusted: check the VMA the round just locked and the PTE table again, and
+ * that they still allow every provisioned candidate.
  *
- * The VMA was found by address, so it need not be the one the scan saw, nor
+ * The VMA was locked by address, so it need not be the one the scan saw, nor
  * still cover everything the round collected -- thp_vma_suitable_order() asks
  * that of each candidate, since a window is aligned to its own order.  A VMA
  * that shrank under a candidate therefore refuses that candidate and no more,
@@ -528,9 +529,9 @@ static enum scan_result collapse_revalidate(struct vm_area_struct *vma,
 /*
  * Bring one address to a state the freeze will accept: present, and exclusive if
  * it is anonymous.  Every fault it takes to get there counts in *nr_faults, each
- * one an allocation or a read the round is paying for.  Returns with mmap_lock
- * dropped on every failure, because the fault path may drop it and the caller
- * cannot tell which case it is in.
+ * one an allocation or a read the round is paying for.  Returns with the VMA
+ * read lock dropped on every failure, because the fault path may drop it and
+ * the caller cannot tell which case it is in.
  *
  * SCAN_EXCEED_SWAP_PTE is the exception: it is a verdict on this candidate
  * rather than on the round, nothing was faulted to reach it, and it keeps the
@@ -543,6 +544,7 @@ static enum scan_result collapse_faultin_addr(struct vm_area_struct *vma,
 {
 	struct mm_struct *mm = vma->vm_mm;
 	const unsigned int flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_UNSHARE |
+		FAULT_FLAG_VMA_LOCK |
 		(mm != current->mm ? FAULT_FLAG_REMOTE : 0);
 	unsigned int tries;
 
@@ -553,7 +555,7 @@ static enum scan_result collapse_faultin_addr(struct vm_area_struct *vma,
 
 		pte = pte_offset_map(pmd, addr);
 		if (!pte) {
-			mmap_read_unlock(mm);
+			vma_end_read(vma);
 			return SCAN_NO_PTE_TABLE;
 		}
 		ptent = ptep_get_lockless(pte);
@@ -594,14 +596,14 @@ static enum scan_result collapse_faultin_addr(struct vm_area_struct *vma,
 		ret = handle_mm_fault(vma, addr, flags, NULL);
 		(*nr_faults)++;
 		/*
-		 * Not a verdict on this window: the fault dropped the lock to
-		 * wait, which is what a swap-in normally does.  Distinct from
+		 * Not a verdict on this window: the fault dropped the VMA lock
+		 * to wait, which is what a swap-in normally does.  Distinct from
 		 * SCAN_PAGE_LOCK, a folio someone else holds locked.
 		 */
 		if (ret & VM_FAULT_RETRY)
 			return SCAN_LOCK_DROPPED;
 		if (ret & VM_FAULT_ERROR) {
-			mmap_read_unlock(mm);
+			vma_end_read(vma);
 			return SCAN_FAIL;
 		}
 	}
@@ -611,7 +613,7 @@ static enum scan_result collapse_faultin_addr(struct vm_area_struct *vma,
 
 /*
  * Make every source the round needs present and exclusively owned by this mm,
- * by faulting it in as an ordinary access would.  Sleeps, and drops mmap_lock on
+ * by faulting it in as an ordinary access would.  Sleeps, and drops the VMA read
  * failure, since a fault may have to be retried with it released.
  *
  * Anything faulted in lands on a per-CPU LRU batch, holding a reference the
@@ -663,7 +665,7 @@ static enum scan_result collapse_faultin(struct vm_area_struct *vma,
 		}
 	}
 out:
-	/* @vma is unsafe on the failure path: the callee dropped mmap_lock */
+	/* @vma is unsafe on the failure path: the callee dropped its read lock */
 	trace_mm_collapse_faultin(mm, nr_faults, result);
 	return result;
 }
@@ -785,7 +787,7 @@ static void collapse_unfreeze_candidate(struct mm_struct *mm,
  * next page.  No layout is refused for its shape -- the next slot simply starts
  * its own span -- so partially mapped and compound sources collapse too.
  *
- * Caller holds mmap_read and the table's ptl.
+ * Caller holds the VMA read lock and the table's ptl.
  */
 static enum scan_result collapse_check_candidate(struct vm_area_struct *vma,
 						 struct collapse_control *cc,
@@ -929,7 +931,7 @@ static enum scan_result collapse_check_candidate(struct vm_area_struct *vma,
  *
  * On entry:
  *
- *  - mmap_read is held, and the table's ptl for the whole freeze;
+ *  - the VMA read lock is held, and the table's ptl for the whole freeze;
  *  - collapse_check_candidate() has accepted the candidate under that same ptl
  *    hold;
  *  - the round is covered by an mmu_notifier_invalidate_range_start() issued
@@ -1382,11 +1384,12 @@ static bool collapse_abort_slot(struct vm_area_struct *vma, struct folio *folio,
 
 /*
  * Abort one frozen candidate at install time: it took a machine check during the
- * copy, or some of its slots no longer hold our migration entries.  mmap_read
- * (held freeze..putback) blocks fork, mremap and munmap, and faults wait on the
- * migration entries -- but madvise-class operations run under mmap_read too, so a
- * concurrent MADV_DONTNEED may have zapped frozen slots, and a fault may have
- * refilled a zapped one.
+ * copy, or some of its slots no longer hold our migration entries.  The VMA read
+ * lock (held freeze..putback) blocks fork, mremap and munmap, each of which
+ * takes vma_start_write() on the VMA it touches, and faults wait on the
+ * migration entries -- but MADV_DONTNEED and MADV_FREE take a VMA read lock of
+ * their own, which ours does not exclude, so a concurrent zap may have taken
+ * frozen slots, and a fault may have refilled a zapped one.
  *
  * Slots still holding our entries are restored from the saved values (no TLB
  * flush: identical translation).  Foreign slots are left exactly as found --
@@ -1500,8 +1503,8 @@ static bool collapse_verify_candidate(struct collapse_candidate *cand,
  * The PMD terminal layer: verify, detach the table, deposit a fresh one and
  * install the leaf, as one atomic section under the pmd lock.  A pmd_none window
  * never exists -- faults stay held at pte level by the migration entries
- * throughout -- which is what lets PMD collapse run under mmap_read like the rest
- * of the engine.
+ * throughout -- which is what lets PMD collapse run under a VMA read lock like
+ * the rest of the engine.
  */
 static void collapse_install_pmd(struct vm_area_struct *vma,
 				 struct collapse_control *cc, pmd_t *pmd)
@@ -1571,8 +1574,8 @@ static void collapse_install_pmd(struct vm_area_struct *vma,
 	 * walks on the sources are unreachable -- refcounts frozen, folio locks
 	 * held from freeze to putback -- non-rmap pte walkers see migration
 	 * entries, pmd-level observers see the old table or the leaf and never an
-	 * intermediate, and fork, mremap and munmap take mmap_write, which our
-	 * mmap_read excludes.
+	 * intermediate, and fork, mremap and munmap take vma_start_write() on the
+	 * VMA they touch, which our VMA read lock excludes.
 	 *
 	 * The flush inside pmdp_collapse_flush() is the round's second over this
 	 * range: the freeze displaced every leaf here and flushed before dropping
@@ -1829,13 +1832,23 @@ static void collapse_round(struct mm_struct *mm, unsigned long pmd_addr,
 	collapse_reserve(mm, cc);
 	collapse_deposit(mm, cc);
 
+	/*
+	 * A read lock on the VMA rather than on the mm.  A round works inside one
+	 * VMA, and everything else it has to be excluded from -- fork, split,
+	 * merge, unmap, and the free_pgtables() that follows them -- takes
+	 * vma_start_write() on the VMA it touches first.  An mmap_write elsewhere
+	 * in the mm no longer waits behind a collapse.
+	 */
 retry:
-	mmap_read_lock(mm);
-
-	vma = find_vma(mm, pmd_addr);
+	vma = lock_vma_under_rcu(mm, pmd_addr);
 	if (!vma) {
-		result = SCAN_VMA_NULL;
-		goto out_unlock;
+		/*
+		 * Not only a VMA that has gone: lock_vma_under_rcu() also fails
+		 * on one being written to right now.  A caller cannot tell the
+		 * two apart, so say what is true of both -- try again.
+		 */
+		result = SCAN_VMA_LOCK;
+		goto out;
 	}
 
 	result = collapse_revalidate(vma, pmd_addr, cc, &pmd);
@@ -1852,7 +1865,7 @@ retry:
 	if (result == SCAN_LOCK_DROPPED && --passes)
 		goto retry;
 	if (result != SCAN_SUCCEED)
-		goto out;	/* the callee released mmap_lock */
+		goto out;	/* the callee released the VMA read lock */
 
 	/* One invalidate window spans the batch, as collapse_revalidate() left it */
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm,
@@ -1882,7 +1895,7 @@ retry:
 	mmu_notifier_invalidate_range_end(&range);
 
 out_unlock:
-	mmap_read_unlock(mm);
+	vma_end_read(vma);
 out:
 	nr_installed = collapse_finish(mm, cc, result);
 	trace_mm_collapse_round(mm, cc->nr_candidates, nr_installed, result,

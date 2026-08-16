@@ -30,6 +30,7 @@
 	EM( SCAN_PAGE_COMPOUND,		"page_compound")		\
 	EM( SCAN_ANY_PROCESS,		"no_process_for_page")		\
 	EM( SCAN_VMA_NULL,		"vma_null")			\
+	EM( SCAN_VMA_LOCK,		"vma_not_lockable")		\
 	EM( SCAN_VMA_CHECK,		"vma_check_failed")		\
 	EM( SCAN_ADDRESS_RANGE,		"not_suitable_address_range")	\
 	EM( SCAN_DEL_PAGE_LRU,		"could_not_delete_page_from_lru")\

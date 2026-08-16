@@ -933,6 +933,7 @@ static int madvise_collapse_errno(enum scan_result r)
 	case SCAN_PAGE_FILLED:
 	case SCAN_PAGE_HAS_PRIVATE:
 	case SCAN_PAGE_DIRTY_OR_WRITEBACK:
+	case SCAN_VMA_LOCK:
 		return -EAGAIN;
 	/*
 	 * Other: Trying again likely not to succeed / error intrinsic to
