@@ -4,6 +4,7 @@
  */
 
 #include <linux/dma-mapping.h>
+#include <linux/fpga/fpga-dmabuf.h>
 #include <linux/fpga/fpga-mgr.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
@@ -37,10 +38,33 @@ static int versal_fpga_ops_write(struct fpga_manager *mgr,
 	return ret;
 }
 
+static int versal_fpga_ops_write_sg(struct fpga_manager *mgr,
+				    struct sg_table *sgt)
+{
+	dma_addr_t dma_addr;
+
+	/* zynqmp_pm_load_pdi() takes a single base address */
+	if (sgt->nents != 1) {
+		dev_err(&mgr->dev, "dma-buf has %u segments, need exactly 1\n",
+			sgt->nents);
+		return -EINVAL;
+	}
+
+	dma_addr = sg_dma_address(sgt->sgl);
+
+	return zynqmp_pm_load_pdi(PDI_SRC_DDR, dma_addr);
+}
+
 static const struct fpga_manager_ops versal_fpga_ops = {
 	.write_init = versal_fpga_ops_write_init,
 	.write = versal_fpga_ops_write,
+	.write_sg = versal_fpga_ops_write_sg,
 };
+
+static void versal_fpga_dmabuf_remove(void *data)
+{
+	fpga_dmabuf_unregister(data);
+}
 
 static int versal_fpga_probe(struct platform_device *pdev)
 {
@@ -56,7 +80,14 @@ static int versal_fpga_probe(struct platform_device *pdev)
 
 	mgr = devm_fpga_mgr_register(dev, "Xilinx Versal FPGA Manager",
 				     &versal_fpga_ops, NULL);
-	return PTR_ERR_OR_ZERO(mgr);
+	if (IS_ERR(mgr))
+		return PTR_ERR(mgr);
+
+	ret = fpga_dmabuf_register(mgr);
+	if (ret)
+		return ret;
+
+	return devm_add_action_or_reset(dev, versal_fpga_dmabuf_remove, mgr);
 }
 
 static const struct of_device_id versal_fpga_of_match[] = {
