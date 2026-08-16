@@ -1052,6 +1052,11 @@ properties:
 
       - items:
           - enum:
+              - qcom,sm7250-mtp
+          - const: qcom,sm7250
+
+      - items:
+          - enum:
               - motorola,dubai
               - nothing,spacewar
           - const: qcom,sm7325
@@ -1306,6 +1311,7 @@ allOf:
               - qcom,sm6350
               - qcom,sm7125
               - qcom,sm7225
+              - qcom,sm7250
               - qcom,sm8150
               - qcom,sm8250
     then:
