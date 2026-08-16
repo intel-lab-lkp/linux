@@ -277,6 +277,18 @@ static void mark_mmap_lock_dropped(struct madvise_behavior *madv_behavior)
 }
 
 /*
+ * The VMA-lock counterpart, for a behaviour that releases the VMA it was handed
+ * and locks what it needs for itself.  The walk has nothing left to release,
+ * and unlike the mmap_lock case it has nothing to carry on with either: the VMA
+ * fast path applies to one VMA and returns.
+ */
+static void mark_vma_lock_dropped(struct madvise_behavior *madv_behavior)
+{
+	VM_WARN_ON_ONCE(madv_behavior->lock_mode != MADVISE_VMA_READ_LOCK);
+	madv_behavior->lock_dropped = true;
+}
+
+/*
  * Schedule all required I/O operations.  Do not wait for completion.
  */
 static long madvise_willneed(struct madvise_behavior *madv_behavior)
@@ -948,6 +960,8 @@ static int madvise_collapse_errno(enum scan_result r)
 static int madvise_collapse(struct madvise_behavior *madv_behavior)
 {
 	struct madvise_behavior_range *range = &madv_behavior->range;
+	const bool vma_locked =
+		madv_behavior->lock_mode == MADVISE_VMA_READ_LOCK;
 	struct vm_area_struct *vma = madv_behavior->vma;
 	struct mm_struct *mm = madv_behavior->mm;
 	unsigned long hstart, hend, addr;
@@ -981,13 +995,22 @@ static int madvise_collapse(struct madvise_behavior *madv_behavior)
 	}
 
 	/*
-	 * Nothing below wants the lock the VMA walk left held, and
-	 * lru_add_drain_all() waits on every CPU, so give it up first.  The
-	 * walk carries on under mmap_lock and its own caller is what drops it,
-	 * so reporting this only tells the walk that its VMA is now stale.
+	 * Give up whatever the caller locked for us.  lru_add_drain_all() below
+	 * must not run under a lock, and the loop locks what it works on for
+	 * itself, one VMA at a time, so the caller's VMA is of no use past here.
+	 *
+	 * Which lock that is depends on how we were reached.  A range inside one
+	 * VMA arrives with that VMA read-locked and nothing else; a range that
+	 * spans VMAs arrives under mmap_lock, because try_vma_read_lock() took
+	 * it and turned the walk generic.
 	 */
-	mmap_read_unlock(mm);
-	mark_mmap_lock_dropped(madv_behavior);
+	if (vma_locked) {
+		vma_end_read(vma);
+		mark_vma_lock_dropped(madv_behavior);
+	} else {
+		mmap_read_unlock(mm);
+		mark_mmap_lock_dropped(madv_behavior);
+	}
 	vma = NULL;
 	vma_orders = 0;
 	lru_add_drain_all();
@@ -996,22 +1019,36 @@ static int madvise_collapse(struct madvise_behavior *madv_behavior)
 		enum scan_result result;
 
 		/*
-		 * A collapse gives the lock up, and the VMA has to be found
-		 * again after one: it can shrink while nothing is held.  A scan
-		 * that finds nothing to collapse leaves the lock alone, so a
-		 * range that is already collapsed walks it without relocking.
+		 * On another process, the reference this call holds is what
+		 * keeps the address space from being torn down -- so if it is
+		 * the only one left, the owner has gone and every page of it is
+		 * waiting on us to stop.  Nothing else here would notice: the
+		 * range is the caller's, and it can be enormous.
+		 */
+		if (mm != current->mm && collapse_test_exit_mmref(mm)) {
+			hend = addr;
+			break;
+		}
+
+		/*
+		 * A collapse gives the VMA read lock up, and the VMA has to be
+		 * found again after one: it can shrink while nothing is held.
 		 *
 		 * Reschedule only here, where nothing is held: a preemption
 		 * point under a lock is a writer waiting longer.
 		 */
 		if (!vma) {
 			cond_resched();
-			mmap_read_lock(mm);
-			vma = vma_lookup(mm, addr);
-			if (!vma) {
-				mmap_read_unlock(mm);
-				hend = addr;
-				break;
+			vma = lock_vma_under_rcu(mm, addr);
+			if (IS_ERR_OR_NULL(vma)) {
+				/*
+				 * Not only a VMA that has gone: this also fails
+				 * on one being written to right now.  Say what
+				 * is true of both -- try again.
+				 */
+				vma = NULL;
+				last_fail = SCAN_VMA_LOCK;
+				goto out;
 			}
 			vma_orders = collapse_possible_orders(vma,
 					vma->vm_flags, TVA_FORCED_COLLAPSE);
@@ -1023,7 +1060,7 @@ static int madvise_collapse(struct madvise_behavior *madv_behavior)
 			result = cc->scan_refusal;
 		} else {
 			/* collapse_run_pmd() takes its own locks, so give this up */
-			mmap_read_unlock(mm);
+			vma_end_read(vma);
 			vma = NULL;
 			/* The mask belonged to that lock, not to this range */
 			vma_orders = 0;
@@ -1036,7 +1073,7 @@ static int madvise_collapse(struct madvise_behavior *madv_behavior)
 		 * The VMA shrank under us, so the rest of the range was never
 		 * ours to collapse: stop, and expect only what came before.
 		 */
-		if (result == SCAN_VMA_NULL || result == SCAN_ADDRESS_RANGE) {
+		if (result == SCAN_ADDRESS_RANGE) {
 			hend = addr;
 			break;
 		}
@@ -1067,8 +1104,14 @@ static int madvise_collapse(struct madvise_behavior *madv_behavior)
 	}
 
 out:
-	/* The VMA walk this returns to expects the lock it was holding */
-	if (!vma)
+	if (vma)
+		vma_end_read(vma);
+	/*
+	 * Hand mmap_lock back only to a caller that is going to carry on with
+	 * it: the generic walk finds the next VMA under it.  The VMA fast path
+	 * applies to one VMA and returns, so it wants nothing back.
+	 */
+	if (!vma_locked)
 		mmap_read_lock(mm);
 	collapse_control_release(cc);
 	kfree(cc);
@@ -1866,7 +1909,10 @@ int madvise_walk_vmas(struct madvise_behavior *madv_behavior)
 	if (madv_behavior->lock_mode == MADVISE_VMA_READ_LOCK &&
 	    try_vma_read_lock(madv_behavior)) {
 		error = madvise_vma_behavior(madv_behavior);
-		vma_end_read(madv_behavior->vma);
+		/* A behaviour that let the VMA go has nothing left to release */
+		if (!madv_behavior->lock_dropped)
+			vma_end_read(madv_behavior->vma);
+		madv_behavior->lock_dropped = false;
 		return error;
 	}
 
@@ -1941,8 +1987,16 @@ static enum madvise_lock_mode get_lock_mode(struct madvise_behavior *madv_behavi
 	case MADV_PAGEOUT:
 	case MADV_POPULATE_READ:
 	case MADV_POPULATE_WRITE:
-	case MADV_COLLAPSE:
 		return MADVISE_MMAP_READ_LOCK;
+	case MADV_COLLAPSE:
+		/*
+		 * Only for this process.  On another one the range has to be
+		 * untagged with untagged_addr_remote(), which reads mm state
+		 * that mmap_lock protects, before any VMA is looked at.
+		 */
+		if (madv_behavior->mm != current->mm)
+			return MADVISE_MMAP_READ_LOCK;
+		fallthrough;
 	case MADV_GUARD_INSTALL:
 	case MADV_GUARD_REMOVE:
 	case MADV_DONTNEED:

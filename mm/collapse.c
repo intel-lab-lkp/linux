@@ -3685,8 +3685,8 @@ static enum scan_result collapse_scan_file_pmd(struct vm_area_struct *vma,
 
 	/*
 	 * A PMD that is huge already has nothing left to collapse, and skipping
-	 * it here is what keeps mmap_lock out of a collapse that would find
-	 * nothing.  Everything else is worth the page cache scan, pmd_none()
+	 * it here is what keeps a collapse that would find nothing from being
+	 * run at all.  Everything else is worth the page cache scan, pmd_none()
 	 * included: a file range can be collapsed out of the cache without being
 	 * mapped first, which is why this is not the test the anonymous side
 	 * makes.
@@ -3703,8 +3703,8 @@ static enum scan_result collapse_scan_file_pmd(struct vm_area_struct *vma,
 
 /*
  * Build a PMD over what the page cache holds, and map it over the range if a huge
- * folio is already there but mapped by PTEs.  Runs with no mmap_lock, which the
- * caller gave up, and takes it again only for that last step.
+ * folio is already there but mapped by PTEs.  Runs with no lock on the VMA,
+ * which the caller gave up, and takes mmap_lock only for that last step.
  */
 static enum scan_result collapse_file_pmd(struct mm_struct *mm,
 		unsigned long addr, struct collapse_control *cc)
@@ -3746,9 +3746,9 @@ retry:
 
 /*
  * Scan one table's worth of @vma and decide whether there is anything to collapse
- * in it.  The caller holds a read lock and still holds it when this returns:
- * what is looked at is either the VMA or a page table that the lock keeps in
- * place.
+ * in it.  The caller holds a read lock on @vma and still holds it when this
+ * returns: what is looked at is either the VMA or a page table that the lock
+ * keeps in place.
  *
  * Returns whether collapse_run_pmd() has anything to do, and a scan that found
  * something has to be run: the file side takes a reference on the file while it
@@ -3760,6 +3760,8 @@ bool collapse_scan_pmd(struct vm_area_struct *vma, unsigned long addr,
 		unsigned long vma_orders)
 {
 	struct mm_struct *mm = vma->vm_mm;
+
+	vma_assert_locked(vma);
 
 	/*
 	 * What the scan answers with, so cleared before it runs.
@@ -3789,10 +3791,10 @@ bool collapse_scan_pmd(struct vm_area_struct *vma, unsigned long addr,
 }
 
 /*
- * Collapse what the scan selected.  Called with no mmap_lock: the caller gives it
- * up first, because a collapse takes it again for each round and revalidates
- * under it, and holding it across the whole collapse would keep a writer to the
- * address space waiting for it.
+ * Collapse what the scan selected.  Called with no lock on the VMA the scan
+ * looked at: the caller gives that up first, because a collapse takes its own
+ * for each round and revalidates under it, and holding one across the whole
+ * collapse would keep a writer to the VMA waiting for it.
  */
 enum scan_result collapse_run_pmd(struct mm_struct *mm, unsigned long addr,
 		unsigned long end, struct collapse_control *cc)

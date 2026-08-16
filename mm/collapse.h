@@ -207,8 +207,8 @@ static inline int collapse_test_exit_or_disable_mmref(struct mm_struct *mm)
  *	collapse_run_pmd(mm, addr, end, cc);	when the scan found work
  *	collapse_control_release(cc);
  *
- * The caller holds mmap_lock for reading and passes a range within one PTE table
- * of @vma.  A range the VMA does not cover is refused, which is also how a caller
+ * The caller holds a read lock on @vma and passes a range within one PTE table
+ * of it.  A range the VMA does not cover is refused, which is also how a caller
  * learns that its own range shrank.
  *
  * A scan returns with that lock still held: it only reads, and almost every table
@@ -218,8 +218,8 @@ static inline int collapse_test_exit_or_disable_mmref(struct mm_struct *mm)
  * A collapse is called without it: the caller gives the lock up first, and with it
  * @vma and anything derived under it, so a caller carrying on has to look up
  * again.  What the collapse does -- allocate, quiesce, copy, flush -- is slow
- * enough that a writer would wait behind it, so it takes the lock again per round
- * instead, and revalidates rather than trusting what the scan saw.
+ * enough that a writer to the VMA would wait behind it, so it takes its own lock
+ * per round instead, and revalidates rather than trusting what the scan saw.
  *
  * A scan that found something has to be run: the file side takes a reference on
  * the file while it still has the VMA to take it from, and the run is what gives
