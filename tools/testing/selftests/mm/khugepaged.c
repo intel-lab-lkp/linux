@@ -1600,6 +1600,43 @@ static void collapse_order_sub_pmd_range(struct collapse_context *c,
 }
 
 /*
+ * Collapse of an mlocked window: source teardown munlocks the old
+ * pages while the new folio arrives mlocked via folio_add_lru_vma().
+ * A teardown that touches the sources while they are still frozen
+ * blows up exactly here (munlock_folio() takes a reference).
+ */
+static void collapse_order_mlocked(struct collapse_context *c,
+				   struct mem_ops *ops)
+{
+	size_t window = mthp_window_size();
+	void *p;
+
+	mthp_push_target_order();
+
+	p = ops->setup_area(1);
+	ops->fault(p, 0, window);
+	if (mlock(p, window))
+		ksft_exit_fail_perror("mlock()");
+	if (!window_not_collapsed(p, hpage_pmd_size))
+		ksft_exit_fail_msg("Unexpected large folio after fault\n");
+
+	madvise(p, hpage_pmd_size, MADV_HUGEPAGE);
+	ksft_print_msg("Collapse fully populated mlocked window...");
+	if (!khugepaged_wait_full_pass())
+		fail("Timeout");
+	else if (window_collapsed(p, window))
+		success("OK");
+	else
+		fail("Fail");
+
+	validate_memory(p, 0, window);
+	munlock(p, window);
+	ops->cleanup_area(p, hpage_pmd_size);
+	thp_pop_settings();
+	ksft_test_result_report(exit_status, "%s\n", __func__);
+}
+
+/*
  * A partially populated window in a sub-PMD VMA: population and
  * sub-PMD eligibility at once. The unfaulted slots must come back
  * zero-filled in the collapsed folio, and the faulted ones unchanged.
@@ -1938,6 +1975,7 @@ int main(int argc, char **argv)
 		TEST(collapse_order_sub_pmd_vma, mthp_khugepaged_context, anon_ops);
 		TEST(collapse_order_sub_pmd_range, mthp_khugepaged_context, anon_ops);
 		TEST(collapse_order_sub_pmd_holes, mthp_khugepaged_context, anon_ops);
+		TEST(collapse_order_mlocked, mthp_khugepaged_context, anon_ops);
 	}
 
 	TEST(collapse_full, madvise_context, anon_ops);

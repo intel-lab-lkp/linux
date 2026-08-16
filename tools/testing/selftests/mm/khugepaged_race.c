@@ -219,6 +219,29 @@ static void *forker_fn(void *arg)
 	return NULL;
 }
 
+/*
+ * mlock/munlock cycling over the shared areas: collapse of an mlocked
+ * range munlocks the sources at teardown and mlocks the new folio --
+ * the interaction the fuzzer caught (munlock on a frozen source) and
+ * the plain racers never drove.
+ */
+static void *mlocker_fn(void *arg)
+{
+	unsigned int seed = (unsigned long)arg;
+
+	while (!stop) {
+		unsigned long page_idx = rand_page(&seed);
+		unsigned long nr = 1UL << (rand_r(&seed) % 8);	/* 1..128 pages */
+
+		if (rand_r(&seed) & 1)
+			mlock(region + page_idx * page_size, nr * page_size);
+		else
+			munlock(region + page_idx * page_size, nr * page_size);
+		usleep(rand_r(&seed) % 1000);
+	}
+	return NULL;
+}
+
 static void *mremapper_fn(void *arg)
 {
 	unsigned int seed = (unsigned long)arg;
@@ -328,14 +351,14 @@ int main(int argc, char **argv)
 {
 	static const char * const thread_names[] = {
 		"faulter", "faulter2", "dontneed", "pinner", "forker",
-		"mremapper", "pageout", "compactor",
+		"mremapper", "mlocker", "pageout", "compactor",
 	};
 	void *(*const thread_fns[])(void *) = {
 		faulter_fn, faulter_fn, dontneed_fn, pinner_fn, forker_fn,
-		mremapper_fn, pageout_fn, compactor_fn,
+		mremapper_fn, mlocker_fn, pageout_fn, compactor_fn,
 	};
 	enum { T_FAULTER, T_FAULTER2, T_DONTNEED, T_PINNER, T_FORKER,
-	       T_MREMAPPER, T_PAGEOUT, T_COMPACTOR };
+	       T_MREMAPPER, T_MLOCKER, T_PAGEOUT, T_COMPACTOR };
 	const unsigned long pageout_bit = 1UL << T_PAGEOUT;
 	const unsigned long compactor_bit = 1UL << T_COMPACTOR;
 	const int nr_threads = ARRAY_SIZE(thread_names);
