@@ -1439,6 +1439,56 @@ static void collapse_install(struct vm_area_struct *vma,
 static void collapse_putback(struct vm_area_struct *vma,
 			     struct collapse_control *cc)
 {
+	unsigned int i;
+
+	for (i = 0; i < cc->nr_candidates; i++) {
+		struct collapse_candidate *cand = &cc->candidates[i];
+		const unsigned int nr_pages = candidate_nr_pages(cand);
+		unsigned int k = 0;
+
+		if (cand->state != CAND_INSTALLED)
+			continue;
+
+		while (k < nr_pages) {
+			struct folio *folio;
+			unsigned int nr;
+
+			/* A slot with no source has nothing to put back */
+			if (pte_none_or_zero(cand->saved_ptes[k])) {
+				k++;
+				continue;
+			}
+
+			folio = pte_folio(cand->saved_ptes[k]);
+			nr = collapse_saved_span_len(cand, k, nr_pages);
+
+			/*
+			 * Unfreeze before the rmap drop: rmap removal munlocks
+			 * under VM_LOCKED, and munlock_folio() takes a reference
+			 * a frozen folio forbids.  The expected count still
+			 * holds the span's mapping references; once the rmap is
+			 * gone they are ours to drop, so every
+			 * folio_remove_rmap_ptes() is paired with a
+			 * folio_put_refs() for the same slots.  The folio lock
+			 * is held until the wake below, so lock-taking rmap
+			 * walkers stay excluded, and the stale-rmap window this
+			 * leaves -- live folio, no PTEs -- is one any teardown of
+			 * a mapped folio passes through.
+			 */
+			folio_ref_unfreeze(folio,
+					   folio_expected_ref_count(folio) + 1);
+			folio_remove_rmap_ptes(folio,
+					       pte_page(cand->saved_ptes[k]),
+					       nr, vma);
+			folio_unlock(folio);
+
+			/* The copy replaced it; drop the stale swap entry */
+			free_swap_cache(folio);
+			folio_put_refs(folio, nr + 1);
+
+			k += nr;
+		}
+	}
 }
 
 /*
