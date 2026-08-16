@@ -32,6 +32,11 @@ void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 	srcu_read_unlock(&kvm->srcu, idx);
 }
 
+void kvm_reset_stolen_time(struct kvm_vcpu *vcpu)
+{
+	vcpu->arch.steal.last_steal = current->sched_info.run_delay;
+}
+
 long kvm_hypercall_pv_features(struct kvm_vcpu *vcpu)
 {
 	u32 feature = smccc_get_arg1(vcpu);

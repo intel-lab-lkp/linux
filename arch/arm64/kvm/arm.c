@@ -929,6 +929,8 @@ int kvm_arch_vcpu_run_pid_change(struct kvm_vcpu *vcpu)
 	if (!kvm_arm_vcpu_is_finalized(vcpu))
 		return -EPERM;
 
+	kvm_reset_stolen_time(vcpu);
+
 	if (likely(vcpu_has_run_once(vcpu)))
 		return 0;
 
