@@ -348,13 +348,6 @@ struct attribute_group khugepaged_attr_group = {
 };
 #endif /* CONFIG_SYSFS */
 
-static bool pte_none_or_zero(pte_t pte)
-{
-	if (pte_none(pte))
-		return true;
-	return pte_present(pte) && is_zero_pfn(pte_pfn(pte));
-}
-
 /**
  * collapse_max_ptes_none - Calculate maximum allowed empty PTEs or PTEs mapping
  * the shared zeropage for the given collapse operation.

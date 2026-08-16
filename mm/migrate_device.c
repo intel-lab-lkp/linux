@@ -1067,14 +1067,9 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 	if (check_stable_address_space(mm))
 		goto unlock_abort;
 
-	if (pte_present(orig_pte)) {
-		unsigned long pfn = pte_pfn(orig_pte);
-
-		if (!is_zero_pfn(pfn))
-			goto unlock_abort;
-		flush = true;
-	} else if (!pte_none(orig_pte))
+	if (!pte_none_or_zero(orig_pte))
 		goto unlock_abort;
+	flush = pte_present(orig_pte);
 
 	/*
 	 * Check for userfaultfd but do not deliver the fault. Instead,
