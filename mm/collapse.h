@@ -137,6 +137,9 @@ struct collapse_control {
 	 */
 	unsigned long batch_start;
 	unsigned long batch_end;
+
+	/* PTE values the round displaced, carved up between its candidates */
+	pte_t *saved_ptes;
 };
 
 static inline int collapse_test_exit(struct mm_struct *mm)
