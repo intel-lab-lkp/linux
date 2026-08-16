@@ -105,6 +105,30 @@ struct collapse_control {
 
 	/* Each bit marks a PTE the scan accepted as a collapse source */
 	DECLARE_BITMAP(eligible_ptes, MAX_PTRS_PER_PTE);
+
+	/* Orders still worth attempting in the table being scanned */
+	unsigned long select_orders;
+
+	/* PTEs collapsed in it so far */
+	unsigned int nr_collapsed;
+
+	/*
+	 * Why the scan would not take all of the table, or SCAN_SUCCEED if it
+	 * took every order it was offered.  Not the opposite of what the scan
+	 * selected: a table can be worth collapsing at one order and refused at
+	 * another, so a scan that found work still has a reason to report, and
+	 * the collapse reports it when it salvages nothing.
+	 */
+	enum scan_result scan_refusal;
 };
+
+/*
+ * Defined in khugepaged.c, which still uses them itself.
+ * TODO: move each into collapse.c once its last khugepaged.c user is gone.
+ */
+unsigned long collapse_possible_orders(struct vm_area_struct *vma,
+		vm_flags_t vm_flags, enum tva_type tva_flags);
+enum scan_result find_pmd_or_thp_or_none(struct mm_struct *mm,
+		unsigned long address, pmd_t **pmd);
 
 #endif	/* __MM_COLLAPSE_H */

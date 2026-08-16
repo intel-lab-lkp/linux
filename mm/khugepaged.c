@@ -498,7 +498,7 @@ void __khugepaged_enter(struct mm_struct *mm)
  * Check what orders are possible based on the vma and collapse type.
  * This is used to determine if mTHP collapse is a viable option.
  */
-static unsigned long collapse_possible_orders(struct vm_area_struct *vma,
+unsigned long collapse_possible_orders(struct vm_area_struct *vma,
 		vm_flags_t vm_flags, enum tva_type tva_flags)
 {
 	unsigned long orders;
@@ -1090,7 +1090,7 @@ static inline enum scan_result check_pmd_state(pmd_t *pmd)
 	return SCAN_SUCCEED;
 }
 
-static enum scan_result find_pmd_or_thp_or_none(struct mm_struct *mm,
+enum scan_result find_pmd_or_thp_or_none(struct mm_struct *mm,
 		unsigned long address, pmd_t **pmd)
 {
 	*pmd = mm_find_pmd(mm, address);
