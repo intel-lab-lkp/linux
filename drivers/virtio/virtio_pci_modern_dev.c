@@ -535,10 +535,10 @@ void vp_modern_set_queue_reset(struct virtio_pci_modern_device *mdev, u16 index)
 	vp_iowrite16(1, &cfg->queue_reset);
 
 	while (vp_ioread16(&cfg->queue_reset))
-		msleep(1);
+		usleep_range(1000, 2000);
 
 	while (vp_ioread16(&cfg->cfg.queue_enable))
-		msleep(1);
+		usleep_range(1000, 2000);
 }
 EXPORT_SYMBOL_GPL(vp_modern_set_queue_reset);
 
