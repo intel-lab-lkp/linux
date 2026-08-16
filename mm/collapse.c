@@ -4,6 +4,7 @@
 #include <linux/backing-dev.h>
 #include <linux/bitops.h>
 #include <linux/dax.h>
+#include <linux/error-injection.h>
 #include <linux/highmem.h>
 #include <linux/huge_mm.h>
 #include <linux/hugetlb.h>	/* x86 flush_tlb_range() uses hstate_vma() */
@@ -937,7 +938,7 @@ static enum scan_result collapse_check_candidate(struct vm_area_struct *vma,
  * collapse_freeze() issues the ranged TLB flush over everything that froze
  * before dropping the ptl.  No copy may run before it completes.
  */
-static enum scan_result collapse_freeze_candidate(struct mm_struct *mm,
+static noinline enum scan_result collapse_freeze_candidate(struct mm_struct *mm,
 		struct collapse_candidate *cand, pte_t *pte)
 {
 	const unsigned int nr_pages = candidate_nr_pages(cand);
@@ -1085,6 +1086,7 @@ unfreeze:
 	collapse_unfreeze_candidate(mm, cand, pte, nr_saved, nr_frozen);
 	return result;
 }
+ALLOW_ERROR_INJECTION(collapse_freeze_candidate, ERRNO);
 
 /*
  * Raise the two barriers on the sources of every candidate: migration entries in
