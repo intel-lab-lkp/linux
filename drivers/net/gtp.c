@@ -1456,9 +1456,9 @@ static int gtp_create_sockets(struct gtp_dev *gtp, const struct nlattr *nla,
 		return PTR_ERR(sk1u);
 	}
 
-	gtp->sk_created = true;
 	gtp->sk0 = sk0;
 	gtp->sk1u = sk1u;
+	gtp->sk_created = true;
 
 	return 0;
 }
