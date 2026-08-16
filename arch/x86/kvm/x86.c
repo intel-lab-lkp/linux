@@ -3717,6 +3717,13 @@ void kvm_service_local_tlb_flush_requests(struct kvm_vcpu *vcpu)
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_service_local_tlb_flush_requests);
 
+int kvm_arch_vcpu_run_pid_change(struct kvm_vcpu *vcpu)
+{
+	vcpu->arch.st.last_steal = current->sched_info.run_delay;
+
+	return 0;
+}
+
 static void record_steal_time(struct kvm_vcpu *vcpu)
 {
 	struct gfn_to_hva_cache *ghc = &vcpu->arch.st.cache;
