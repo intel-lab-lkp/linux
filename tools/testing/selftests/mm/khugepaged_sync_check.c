@@ -7,10 +7,9 @@
  * advancing by two is a completion barrier for one full pass that
  * started after setup (khugepaged_full_pass()). Verify the pair gives
  * deterministic, attributable results: one barrier step over one
- * prepared window produces exactly one collapse attempt on that
- * window's source pages (mm_collapse_huge_page_isolate events filtered
- * by source PFN and order) and the window is collapsed
- * afterwards, repeatably.
+ * prepared window produces exactly one collapse of that window --
+ * mm_collapse_candidate install events at its address and order -- and
+ * the window is collapsed afterwards, repeatably.
  *
  * scan_sleep_millisecs is set to 60s to prove the wake path: without
  * the wake, one barrier step would sleep multiples of that and blow
@@ -51,11 +50,10 @@ static void trace_events_off(void)
 }
 
 /*
- * Count collapse attempts attributable to our window: isolate events whose
- * scan_pfn is one of the window's source PFNs, reported once per attempt.
+ * Count the collapses attributable to our window: per-candidate install
+ * events at the window's address and order, one per collapse.
  */
-static int count_attributed(unsigned long *pfns, int nr_pfns,
-			    unsigned int order)
+static int count_attributed(unsigned long addr, unsigned int order)
 {
 	char line[1024];
 	int count = 0;
@@ -66,25 +64,25 @@ static int count_attributed(unsigned long *pfns, int nr_pfns,
 		ksft_exit_fail_msg("Cannot open trace buffer\n");
 
 	while (fgets(line, sizeof(line), fp)) {
+		char *s;
 		unsigned long val;
 		unsigned int ord;
-		char *s, *o;
-		int i;
+		char *o;
 
-		s = strstr(line, "mm_collapse_huge_page_isolate:");
-		if (!s)
-			continue;
-		if (sscanf(s, "mm_collapse_huge_page_isolate: scan_pfn=0x%lx",
-			   &val) != 1)
-			continue;
-		o = strstr(s, "order=");
-		if (!o || sscanf(o, "order=%u", &ord) != 1 || ord != order)
-			continue;
-		for (i = 0; i < nr_pfns; i++) {
-			if (val == pfns[i]) {
-				count++;
-				break;
-			}
+		s = strstr(line, "mm_collapse_candidate:");
+		if (s) {
+			if (!strstr(s, "pass=install") ||
+			    !strstr(s, "result=succeeded"))
+				continue;
+			o = strstr(s, "addr=");
+			if (!o || sscanf(o, "addr=0x%lx", &val) != 1 ||
+			    val != addr)
+				continue;
+			o = strstr(s, "order=");
+			if (!o || sscanf(o, "order=%u", &ord) != 1 ||
+			    ord != order)
+				continue;
+			count++;
 		}
 	}
 	fclose(fp);
@@ -95,7 +93,6 @@ static void one_step(int iteration)
 {
 	const size_t window = getpagesize() << TARGET_ORDER;
 	const int nr_pages = 1 << TARGET_ORDER;
-	unsigned long pfns[1 << TARGET_ORDER];
 	bool collapsed, passed;
 	int attributed;
 	char *p;
@@ -106,11 +103,11 @@ static void one_step(int iteration)
 	if (p != BASE_ADDR)
 		ksft_exit_fail_perror("mmap() window");
 
-	/* Prepare one window; record its source PFNs. */
+	/* Prepare one window, and check the sources really are present. */
 	for (i = 0; i < nr_pages; i++) {
 		p[i * getpagesize()] = i + 1;
-		pfns[i] = pagemap_get_pfn(pagemap_fd, p + i * getpagesize());
-		if (pfns[i] == -1UL)
+		if (pagemap_get_pfn(pagemap_fd,
+				    p + i * getpagesize()) == -1UL)
 			ksft_exit_fail_msg("Source page not present\n");
 	}
 
@@ -133,7 +130,7 @@ static void one_step(int iteration)
 
 	collapsed = is_range_backed_by_folio_orders(p, window, TARGET_ORDER,
 						    pagemap_fd, kpageflags_fd);
-	attributed = count_attributed(pfns, nr_pages, TARGET_ORDER);
+	attributed = count_attributed((unsigned long)p, TARGET_ORDER);
 
 	ksft_test_result(collapsed && attributed == 1,
 			 "step %d: window collapsed, %d attributed result(s)\n",
