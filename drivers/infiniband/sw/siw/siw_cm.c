@@ -1467,11 +1467,13 @@ int siw_connect(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 	siw_cep_set_inuse(cep);
 
 	/* Associate QP with CEP */
+	down_write(&qp->state_lock);
 	siw_cep_get(cep);
 	qp->cep = cep;
 
 	/* siw_qp_get(qp) already done by QP lookup */
 	cep->qp = qp;
+	up_write(&qp->state_lock);
 
 	id->add_ref(id);
 	cep->cm_id = id;
@@ -1564,15 +1566,18 @@ error:
 		siw_socket_disassoc(s);
 		sock_release(s);
 
-		cep->qp = NULL;
-
 		cep->cm_id = NULL;
 		id->rem_ref(id);
 
-		qp->cep = NULL;
-		siw_cep_put(cep);
-
 		cep->state = SIW_EPSTATE_CLOSED;
+
+		down_write(&qp->state_lock);
+		cep->qp = NULL;
+		if (qp->cep == cep) {
+			qp->cep = NULL;
+			siw_cep_put(cep);
+		}
+		up_write(&qp->state_lock);
 
 		siw_cep_set_free_and_put(cep);
 
