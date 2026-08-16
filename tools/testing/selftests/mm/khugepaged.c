@@ -1536,6 +1536,69 @@ static void collapse_order_mixed_sources(struct collapse_context *c,
 	ksft_test_result_report(exit_status, "%s\n", __func__);
 }
 
+/*
+ * A VMA smaller than a PMD is a valid collapse target, so long as it holds a
+ * naturally aligned window of the target order.  This is the case khugepaged
+ * used to pass over entirely, its coverage being rooted at whole PMD-aligned
+ * spans, which on arm64 with 64K pages meant every VMA below 512M.
+ */
+static void __collapse_order_sub_pmd_vma(struct collapse_context *c,
+					 struct mem_ops *ops, int nr_windows,
+					 const char *name)
+{
+	size_t size = nr_windows * mthp_window_size();
+	void *p;
+
+	mthp_push_target_order();
+
+	p = mmap(BASE_ADDR, size, PROT_READ | PROT_WRITE,
+		 MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+	if (p != BASE_ADDR)
+		ksft_exit_fail_msg("Failed to allocate VMA at %p\n", BASE_ADDR);
+
+	fill_memory(p, 0, size);
+	if (!window_not_collapsed(p, size))
+		ksft_exit_fail_msg("Unexpected large folio after fault\n");
+
+	madvise(p, size, MADV_HUGEPAGE);
+	ksft_print_msg("Collapse inside a sub-PMD VMA (%d windows)...",
+		       nr_windows);
+	if (!khugepaged_wait_full_pass())
+		fail("Timeout");
+	else if (window_collapsed(p, size))
+		success("OK");
+	else
+		fail("Fail");
+
+	validate_memory(p, 0, size);
+	munmap(p, size);
+	thp_pop_settings();
+	ksft_test_result_report(exit_status, "%s\n", name);
+}
+
+static void collapse_order_sub_pmd_vma(struct collapse_context *c,
+				       struct mem_ops *ops)
+{
+	__collapse_order_sub_pmd_vma(c, ops, 1, __func__);
+}
+
+static void collapse_order_sub_pmd_range(struct collapse_context *c,
+					 struct mem_ops *ops)
+{
+	size_t window = mthp_window_size();
+	int nr_windows = 16;
+
+	while (nr_windows > 1 && nr_windows * window > hpage_pmd_size / 2)
+		nr_windows /= 2;
+
+	if (nr_windows == 1) {
+		ksft_test_result_skip("%s: no room for multiple windows below the PMD\n",
+				      __func__);
+		return;
+	}
+	__collapse_order_sub_pmd_vma(c, ops, nr_windows, __func__);
+}
+
 static void usage(void)
 {
 	fprintf(stderr, "\nUsage: ./khugepaged [OPTIONS] <test type> [dir]\n\n");
@@ -1823,6 +1886,8 @@ int main(int argc, char **argv)
 		TEST(collapse_order_partial_window, mthp_khugepaged_context, anon_ops);
 		TEST(collapse_order_max_ptes_none, mthp_khugepaged_context, anon_ops);
 		TEST(collapse_order_mixed_sources, mthp_khugepaged_context, anon_ops);
+		TEST(collapse_order_sub_pmd_vma, mthp_khugepaged_context, anon_ops);
+		TEST(collapse_order_sub_pmd_range, mthp_khugepaged_context, anon_ops);
 	}
 
 	TEST(collapse_full, madvise_context, anon_ops);
