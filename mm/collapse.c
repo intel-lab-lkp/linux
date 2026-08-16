@@ -1040,6 +1040,46 @@ static void collapse_provision(struct mm_struct *mm,
 static void collapse_copy(struct vm_area_struct *vma,
 			  struct collapse_control *cc)
 {
+	unsigned int i;
+
+	for (i = 0; i < cc->nr_candidates; i++) {
+		struct collapse_candidate *cand = &cc->candidates[i];
+		const unsigned int nr_pages = candidate_nr_pages(cand);
+		unsigned long addr = cand->addr;
+		unsigned int k;
+
+		/* A folio does not imply a freeze: reserve runs before the lock */
+		if (cand->state != CAND_FROZEN)
+			continue;
+
+		/* A freeze does not imply a folio: provision may have declined */
+		if (!cand->new_folio)
+			continue;
+
+		/* Each source lands where its address puts it: slot k, page k */
+		for (k = 0; k < nr_pages; k++, addr += PAGE_SIZE) {
+			struct page *dst = folio_page(cand->new_folio, k);
+			struct page *src;
+
+			/* No source: a hole, or a zeropage the freeze cleared */
+			if (pte_none_or_zero(cand->saved_ptes[k])) {
+				clear_user_highpage(dst, addr);
+				continue;
+			}
+
+			src = pte_page(cand->saved_ptes[k]);
+
+			/*
+			 * A machine check on a source is the only way this
+			 * fails, and the install is what undoes the candidate:
+			 * that is where the ptl the undoing needs is held.
+			 */
+			if (copy_mc_user_highpage(dst, src, addr, vma)) {
+				cand->result = SCAN_COPY_MC;
+				break;
+			}
+		}
+	}
 }
 
 /* Publish each destination folio in place of the sources it replaces */
