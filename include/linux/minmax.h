@@ -299,6 +299,25 @@ static inline bool in_range32(u32 val, u32 start, u32 len)
 	((sizeof(start) | sizeof(len) | sizeof(val)) <= sizeof(u32) ?	\
 		in_range32(val, start, len) : in_range64(val, start, len))
 
+#define __in_range_inclusive(val, start, end, uval, ustart, uend) ({	\
+	typeof(val) uval = (val);					\
+	typeof(start) ustart = (start);					\
+	typeof(end) uend = (end);					\
+	uval >= ustart && uval <= uend;					\
+})
+
+/**
+ * in_range_inclusive - Determine if a value lies within an inclusive range.
+ * @val: Value to test.
+ * @start: First value in range.
+ * @end: Last value in range.
+ *
+ * @val, @start and @end are each evaluated exactly once.
+ */
+#define in_range_inclusive(val, start, end)				\
+	__in_range_inclusive(val, start, end, __UNIQUE_ID(val_),	\
+			     __UNIQUE_ID(start_), __UNIQUE_ID(end_))
+
 /**
  * swap - swap values of @a and @b
  * @a: first value
