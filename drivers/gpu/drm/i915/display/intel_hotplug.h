@@ -17,6 +17,7 @@ struct intel_encoder;
 void intel_hpd_poll_enable(struct intel_display *display);
 void intel_hpd_poll_disable(struct intel_display *display);
 void intel_hpd_poll_fini(struct intel_display *display);
+bool intel_hpd_polling_enabled(struct intel_display *display);
 enum intel_hotplug_state intel_encoder_hotplug(struct intel_encoder *encoder,
 					       struct intel_connector *connector);
 void intel_hpd_irq_handler(struct intel_display *display,

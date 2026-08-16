@@ -932,6 +932,17 @@ void intel_hpd_poll_fini(struct intel_display *display)
 	drm_connector_list_iter_end(&conn_iter);
 }
 
+/**
+ * intel_hpd_polling_enabled - check if HPD polling is enabled
+ * @display: display device instance
+ *
+ * Returns true if HPD polling is currently enabled.
+ */
+bool intel_hpd_polling_enabled(struct intel_display *display)
+{
+	return READ_ONCE(display->hotplug.poll_enabled);
+}
+
 void intel_hpd_init_early(struct intel_display *display)
 {
 	INIT_DELAYED_WORK(&display->hotplug.hotplug_work,
