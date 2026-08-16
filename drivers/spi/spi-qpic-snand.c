@@ -248,7 +248,6 @@ static const struct mtd_ooblayout_ops qcom_spi_ooblayout = {
 static int qcom_spi_ecc_init_ctx_pipelined(struct nand_device *nand)
 {
 	struct qcom_nand_controller *snandc = nand_to_qcom_snand(nand);
-	struct nand_ecc_props *reqs = &nand->ecc.requirements;
 	struct nand_ecc_props *user = &nand->ecc.user_conf;
 	struct nand_ecc_props *conf = &nand->ecc.ctx.conf;
 	struct mtd_info *mtd = nanddev_to_mtd(nand);
@@ -265,13 +264,16 @@ static int qcom_spi_ecc_init_ctx_pipelined(struct nand_device *nand)
 	if (user->step_size && user->strength) {
 		ecc_cfg->step_size = user->step_size;
 		ecc_cfg->strength = user->strength;
-	} else if (reqs->step_size && reqs->strength) {
-		ecc_cfg->step_size = reqs->step_size;
-		ecc_cfg->strength = reqs->strength;
 	} else {
 		/* use defaults */
 		ecc_cfg->step_size = NANDC_STEP_SIZE;
-		ecc_cfg->strength = 4;
+		if (mtd->oobsize < 64) {
+			ret = -EOPNOTSUPP;
+			goto err_free_ecc_cfg;
+		} else if (mtd->oobsize < 80)
+			ecc_cfg->strength = 4;
+		else
+			ecc_cfg->strength = 8;
 	}
 
 	if (ecc_cfg->step_size != NANDC_STEP_SIZE) {
