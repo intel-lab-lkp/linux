@@ -3901,8 +3901,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 		goto fail;
 	}
 
-	set_vm_area_page_order(area, page_shift - PAGE_SHIFT);
-	page_order = vm_area_page_order(area);
+	page_order = page_shift - PAGE_SHIFT;
 
 	/*
 	 * High-order nofail allocations are really expensive and
@@ -4105,6 +4104,14 @@ again:
 	ret = __vmalloc_area_node(area, gfp_mask, prot, shift, node);
 	if (!ret)
 		goto fail;
+
+	/*
+	 * Set area->page_order once it's known exactly that the order of the
+	 * pages the area contains.
+	 * Even if we succeeded to partially populate the area with large pages,
+	 * still treat the area as populated with order-0 pages.
+	 */
+	set_vm_area_page_order(area, shift - PAGE_SHIFT);
 
 	/*
 	 * Mark the pages as accessible, now that they are mapped.
