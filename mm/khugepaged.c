@@ -2838,44 +2838,56 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 
 	vma_iter_init(&vmi, mm, khugepaged_scan.address);
 	for_each_vma(vmi, vma) {
-		unsigned long hstart, hend;
+		unsigned long hstart, hend, window;
+		unsigned long orders;
 
 		cond_resched();
 		if (unlikely(collapse_test_exit_or_disable(mm))) {
 			cc->progress++;
 			break;
 		}
-		if (!collapse_possible(vma, vma->vm_flags, TVA_KHUGEPAGED)) {
+		orders = collapse_possible_orders(vma, vma->vm_flags,
+						  TVA_KHUGEPAGED);
+		if (!orders) {
 			cc->progress++;
 			continue;
 		}
-		hstart = ALIGN(vma->vm_start, HPAGE_PMD_SIZE);
-		hend = ALIGN_DOWN(vma->vm_end, HPAGE_PMD_SIZE);
+
+		/*
+		 * Coverage is rooted at windows of the largest order the VMA
+		 * allows: below the PMD order that reaches VMAs a whole table
+		 * would not fit in, and parts of a VMA that a whole table would
+		 * leave out.
+		 */
+		window = PAGE_SIZE << __fls(orders);
+		hstart = ALIGN(vma->vm_start, window);
+		hend = ALIGN_DOWN(vma->vm_end, window);
 		if (khugepaged_scan.address > hend) {
 			cc->progress++;
 			continue;
 		}
 		if (khugepaged_scan.address < hstart)
 			khugepaged_scan.address = hstart;
-		VM_BUG_ON(khugepaged_scan.address & ~HPAGE_PMD_MASK);
 
 		while (khugepaged_scan.address < hend) {
+			unsigned long pmd_addr, range_end;
 			bool lock_dropped = false;
+
+			/* One table's worth at most, and never past the VMA */
+			pmd_addr = khugepaged_scan.address & HPAGE_PMD_MASK;
+			range_end = min(hend, pmd_addr + HPAGE_PMD_SIZE);
 
 			cond_resched();
 			if (unlikely(collapse_test_exit_or_disable(mm)))
 				goto breakouterloop;
 
-			VM_WARN_ON_ONCE(khugepaged_scan.address < hstart ||
-				  khugepaged_scan.address + HPAGE_PMD_SIZE >
-				  hend);
+			VM_WARN_ON_ONCE(khugepaged_scan.address < hstart);
 
 			*result = collapse_single_pmd(khugepaged_scan.address,
-						      khugepaged_scan.address +
-						      HPAGE_PMD_SIZE,
-						      vma, &lock_dropped, cc);
+						      range_end, vma,
+						      &lock_dropped, cc);
 			/* move to next address */
-			khugepaged_scan.address += HPAGE_PMD_SIZE;
+			khugepaged_scan.address = range_end;
 			if (lock_dropped)
 				/*
 				 * We released mmap_lock so break loop.  Note
