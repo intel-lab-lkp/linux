@@ -215,7 +215,6 @@ static int erofs_scan_devices(struct super_block *sb,
 
 	sbi->device_id_mask = roundup_pow_of_two(ondisk_extradevs + 1) - 1;
 	pos = le16_to_cpu(dsb->devt_slotoff) * EROFS_DEVT_SLOT_SIZE;
-	down_read(&sbi->devs->rwsem);
 	if (sbi->devs->extra_devices) {
 		idr_for_each_entry(&sbi->devs->tree, dif, id) {
 			err = erofs_init_device(&buf, sb, dif, &pos);
@@ -242,7 +241,6 @@ static int erofs_scan_devices(struct super_block *sb,
 				break;
 		}
 	}
-	up_read(&sbi->devs->rwsem);
 	erofs_put_metabuf(&buf);
 	return err;
 }
@@ -489,9 +487,7 @@ static int erofs_fc_parse_param(struct fs_context *fc,
 			kfree(dif);
 			return -ENOMEM;
 		}
-		down_write(&sbi->devs->rwsem);
 		ret = idr_alloc(&sbi->devs->tree, dif, 0, 0, GFP_KERNEL);
-		up_write(&sbi->devs->rwsem);
 		if (ret < 0) {
 			kfree(dif->path);
 			kfree(dif);
@@ -850,7 +846,6 @@ static int erofs_init_fs_context(struct fs_context *fc)
 	fc->s_fs_info = sbi;
 
 	idr_init(&sbi->devs->tree);
-	init_rwsem(&sbi->devs->rwsem);
 	erofs_default_options(sbi);
 	fc->ops = &erofs_context_ops;
 	return 0;

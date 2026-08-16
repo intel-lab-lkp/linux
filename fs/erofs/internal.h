@@ -65,7 +65,6 @@ struct erofs_mount_opts {
 
 struct erofs_dev_context {
 	struct idr tree;
-	struct rw_semaphore rwsem;
 
 	unsigned int extra_devices;
 	bool flatdev;

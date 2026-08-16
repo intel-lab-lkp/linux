@@ -216,21 +216,15 @@ int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *map)
 	erofs_fill_from_devinfo(map, sb, &EROFS_SB(sb)->dif0);
 	map->m_bdev = sb->s_bdev;	/* use s_bdev for the primary device */
 	if (map->m_deviceid) {
-		down_read(&devs->rwsem);
 		dif = idr_find(&devs->tree, map->m_deviceid - 1);
-		if (!dif) {
-			up_read(&devs->rwsem);
+		if (!dif)
 			return -ENODEV;
-		}
 		if (devs->flatdev) {
 			map->m_pa += erofs_pos(sb, dif->uniaddr);
-			up_read(&devs->rwsem);
 			return 0;
 		}
 		erofs_fill_from_devinfo(map, sb, dif);
-		up_read(&devs->rwsem);
 	} else if (devs->extra_devices && !devs->flatdev) {
-		down_read(&devs->rwsem);
 		idr_for_each_entry(&devs->tree, dif, id) {
 			if (!dif->uniaddr)
 				continue;
@@ -243,7 +237,6 @@ int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *map)
 				break;
 			}
 		}
-		up_read(&devs->rwsem);
 	}
 	return 0;
 }
