@@ -421,17 +421,6 @@ void __init khugepaged_destroy(void)
 	kmem_cache_destroy(mm_slot_cache);
 }
 
-static inline int collapse_test_exit(struct mm_struct *mm)
-{
-	return atomic_read(&mm->mm_users) == 0;
-}
-
-static inline int collapse_test_exit_or_disable(struct mm_struct *mm)
-{
-	return collapse_test_exit(mm) ||
-		mm_flags_test(MMF_DISABLE_THP_COMPLETELY, mm);
-}
-
 static inline bool anon_hpage_enabled(void)
 {
 	if (READ_ONCE(huge_anon_orders_always))

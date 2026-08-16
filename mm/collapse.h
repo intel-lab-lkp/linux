@@ -138,6 +138,17 @@ struct collapse_control {
 	unsigned long batch_end;
 };
 
+static inline int collapse_test_exit(struct mm_struct *mm)
+{
+	return atomic_read(&mm->mm_users) == 0;
+}
+
+static inline int collapse_test_exit_or_disable(struct mm_struct *mm)
+{
+	return collapse_test_exit(mm) ||
+		mm_flags_test(MMF_DISABLE_THP_COMPLETELY, mm);
+}
+
 int collapse_control_init(struct collapse_control *cc);
 void collapse_control_release(struct collapse_control *cc);
 

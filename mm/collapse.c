@@ -177,18 +177,36 @@ int collapse_control_init(struct collapse_control *cc)
 
 /*
  * The scan and the allocation both dropped mmap_lock, so nothing seen before it
- * can be trusted: find the VMA and the PTE table again, and check they still
- * allow every provisioned candidate.
+ * can be trusted: check the VMA the round just looked up and the PTE table
+ * again, and that they still allow every provisioned candidate.
  *
- * This is also where the batch's span is settled, for the invalidate the round
- * issues over it.
+ * The VMA was found by address, so it need not be the one the scan saw, nor
+ * still cover everything the round collected -- thp_vma_suitable_order() asks
+ * that of each candidate, since a window is aligned to its own order.  A VMA
+ * that shrank under a candidate therefore refuses that candidate and no more,
+ * like every other pass.
+ *
+ * What survives is what the round goes on to freeze, so this is also where the
+ * batch's span is settled, for the invalidate the round issues over it.
  */
 static enum scan_result collapse_revalidate(struct vm_area_struct *vma,
 					    unsigned long pmd_addr,
 					    struct collapse_control *cc,
 					    pmd_t **pmdp)
 {
-	unsigned int i;
+	struct mm_struct *mm = vma->vm_mm;
+	enum scan_result result;
+	unsigned int i, nr_live = 0;
+
+	if (unlikely(collapse_test_exit_or_disable(mm)))
+		return SCAN_ANY_PROCESS;
+
+	if (!vma->anon_vma || !vma_is_anonymous(vma))
+		return SCAN_PAGE_ANON;
+
+	result = find_pmd_or_thp_or_none(mm, pmd_addr, pmdp);
+	if (result != SCAN_SUCCEED)
+		return result;
 
 	cc->batch_start = ULONG_MAX;
 	cc->batch_end = 0;
@@ -196,9 +214,30 @@ static enum scan_result collapse_revalidate(struct vm_area_struct *vma,
 	for (i = 0; i < cc->nr_candidates; i++) {
 		struct collapse_candidate *cand = &cc->candidates[i];
 
+		if (cand->state != CAND_SELECTED)
+			continue;
+
+		/*
+		 * The window has to still fit the VMA, which may have shrunk or
+		 * been replaced, and its order to still be one the VMA allows.
+		 */
+		if (!thp_vma_suitable_order(vma, cand->addr, cand->order) ||
+		    !thp_vma_allowable_orders(vma, vma->vm_flags,
+					      cc->policy.tva_type,
+					      BIT(cand->order))) {
+			cand->state = CAND_SKIPPED;
+			cand->result = SCAN_VMA_CHECK;
+			continue;
+		}
+
 		cc->batch_start = min(cc->batch_start, candidate_start(cand));
 		cc->batch_end = max(cc->batch_end, candidate_end(cand));
+		nr_live++;
 	}
+
+	/* Nothing the VMA still allows: no span to invalidate, nothing to run */
+	if (!nr_live)
+		return SCAN_VMA_CHECK;
 
 	return SCAN_SUCCEED;
 }
