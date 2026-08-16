@@ -21,7 +21,9 @@
 
 #include "linux/magic.h"
 
+#include <sys/ioctl.h>
 #include "vm_util.h"
+#include "../../../../mm/gup_test.h"
 #include "hugepage_settings.h"
 
 #define BASE_ADDR ((void *)(1UL << 30))
@@ -1728,6 +1730,67 @@ static void collapse_order_lazyfree_window(struct collapse_context *c,
 	ksft_test_result_report(exit_status, "%s\n", __func__);
 }
 
+/*
+ * A GUP pin on one page holds a reference the collapse cannot account for, so
+ * khugepaged must leave the window holding it alone -- and collapse the rest.
+ * The pin is held across the whole khugepaged pass, which is what makes the
+ * refusal deterministic rather than a race.
+ */
+static void collapse_order_pinned_window(struct collapse_context *c,
+					 struct mem_ops *ops)
+{
+	struct pin_longterm_test pin = {};
+	size_t window = mthp_window_size();
+	void *p;
+	int fd;
+
+	fd = open("/sys/kernel/debug/gup_test", O_RDWR);
+	if (fd < 0) {
+		ksft_test_result_skip("%s: gup_test needs CONFIG_GUP_TEST and root\n",
+				      __func__);
+		return;
+	}
+
+	mthp_push_target_order();
+
+	p = ops->setup_area(1);
+	ops->fault(p, 0, hpage_pmd_size);
+	if (!window_not_collapsed(p, hpage_pmd_size))
+		ksft_exit_fail_msg("Unexpected large folio after fault\n");
+
+	pin.addr = (__u64)(unsigned long)p;
+	pin.size = page_size;
+	pin.flags = PIN_LONGTERM_TEST_FLAG_USE_WRITE;
+	if (ioctl(fd, PIN_LONGTERM_TEST_START, &pin)) {
+		ops->cleanup_area(p, hpage_pmd_size);
+		close(fd);
+		thp_pop_settings();
+		ksft_test_result_skip("%s: cannot pin\n", __func__);
+		return;
+	}
+
+	madvise(p, hpage_pmd_size, MADV_HUGEPAGE);
+	ksft_print_msg("Collapse the windows beside a pinned page...");
+	if (!khugepaged_wait_full_pass())
+		fail("Timeout");
+	else if (window_collapsed(p + window, hpage_pmd_size - window) &&
+		 window_not_collapsed(p, window) &&
+		 /* Left alone at every order, not just the target one */
+		 is_range_backed_by_folio_orders(p, page_size, 0,
+						 pagemap_fd, kpageflags_fd))
+		success("OK");
+	else
+		fail("Fail");
+
+	ioctl(fd, PIN_LONGTERM_TEST_STOP);
+	close(fd);
+
+	validate_memory(p, 0, hpage_pmd_size);
+	ops->cleanup_area(p, hpage_pmd_size);
+	thp_pop_settings();
+	ksft_test_result_report(exit_status, "%s\n", __func__);
+}
+
 static void usage(void)
 {
 	fprintf(stderr, "\nUsage: ./khugepaged [OPTIONS] <test type> [dir]\n\n");
@@ -2020,6 +2083,7 @@ int main(int argc, char **argv)
 		TEST(collapse_order_sub_pmd_holes, mthp_khugepaged_context, anon_ops);
 		TEST(collapse_order_mlocked, mthp_khugepaged_context, anon_ops);
 		TEST(collapse_order_lazyfree_window, mthp_khugepaged_context, anon_ops);
+		TEST(collapse_order_pinned_window, mthp_khugepaged_context, anon_ops);
 	}
 
 	TEST(collapse_full, madvise_context, anon_ops);
