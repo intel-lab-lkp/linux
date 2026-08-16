@@ -253,6 +253,11 @@ static bool decap_and_validate(struct sk_buff *skb, int proto)
 
 	skb_reset_network_header(skb);
 	skb_reset_transport_header(skb);
+	if (proto == IPPROTO_IPV6) {
+		memset(IP6CB(skb), 0, sizeof(*IP6CB(skb)));
+		IP6CB(skb)->iif = skb->skb_iif;
+		IP6CB(skb)->nhoff = offsetof(struct ipv6hdr, nexthdr);
+	}
 	if (iptunnel_pull_offloads(skb))
 		return false;
 
