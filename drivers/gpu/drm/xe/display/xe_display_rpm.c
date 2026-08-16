@@ -62,6 +62,11 @@ static void xe_display_rpm_assert_unblock(const struct drm_device *drm)
 	/* FIXME */
 }
 
+static bool xe_display_rpm_pme_capable(const struct drm_device *drm)
+{
+	return xe_pm_pme_supported(to_xe_device(drm));
+}
+
 const struct intel_display_rpm_interface xe_display_rpm_interface = {
 	.get = xe_display_rpm_get,
 	.get_raw = xe_display_rpm_get,
@@ -71,6 +76,7 @@ const struct intel_display_rpm_interface xe_display_rpm_interface = {
 	.put_raw = xe_display_rpm_put,
 	.put_unchecked = xe_display_rpm_put_unchecked,
 	.suspended = xe_display_rpm_suspended,
+	.pme_capable = xe_display_rpm_pme_capable,
 	.assert_held = xe_display_rpm_assert_held,
 	.assert_block = xe_display_rpm_assert_block,
 	.assert_unblock = xe_display_rpm_assert_unblock
