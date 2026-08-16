@@ -19682,6 +19682,7 @@ OCP8178 BACKLIGHT DRIVER
 M:	Wim de With <wf@dewith.io>
 S:	Maintained
 F:	Documentation/devicetree/bindings/leds/backlight/ocs,ocp8178.yaml
+F:	drivers/video/backlight/ocp8178_bl.c
 
 OCXL (Open Coherent Accelerator Processor Interface OpenCAPI) DRIVER
 M:	Mahesh J Salgaonkar <mahesh@linux.ibm.com>
