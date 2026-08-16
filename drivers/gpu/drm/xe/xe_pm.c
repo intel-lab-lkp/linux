@@ -938,6 +938,27 @@ bool xe_pm_runtime_resume_and_get(struct xe_device *xe)
 }
 
 /**
+ * xe_pm_pme_supported - Can the device signal PME from its suspend target state?
+ * @xe: xe device instance
+ *
+ * Determine whether the device can generate a Power Management Event while
+ * runtime suspended.
+ *
+ * Return: true if PME is supported from the target state, false otherwise.
+ */
+bool xe_pm_pme_supported(struct xe_device *xe)
+{
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+
+	/*
+	 * pci_dev_run_wake() checks dev->pme_support, verifies
+	 * pci_pme_capable() against the state pci_target_state() picks, and
+	 * walks upstream to confirm the wake can actually be routed.
+	 */
+	return pci_dev_run_wake(pdev);
+}
+
+/**
  * xe_pm_assert_unbounded_bridge - Disable PM on unbounded pcie parent bridge
  * @xe: xe device instance
  */
