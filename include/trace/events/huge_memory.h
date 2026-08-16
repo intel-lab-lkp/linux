@@ -126,6 +126,40 @@ TRACE_EVENT(mm_collapse_huge_page,
 		__entry->order)
 );
 
+TRACE_EVENT(mm_collapse_scan,
+
+	TP_PROTO(struct mm_struct *mm, unsigned long addr, int none_or_zero,
+		 int unmapped, unsigned long orders, int result),
+
+	TP_ARGS(mm, addr, none_or_zero, unmapped, orders, result),
+
+	TP_STRUCT__entry(
+		__field(struct mm_struct *, mm)
+		__field(unsigned long, addr)
+		__field(int, none_or_zero)
+		__field(int, unmapped)
+		__field(unsigned long, orders)
+		__field(int, result)
+	),
+
+	TP_fast_assign(
+		__entry->mm = mm;
+		__entry->addr = addr;
+		__entry->none_or_zero = none_or_zero;
+		__entry->unmapped = unmapped;
+		__entry->orders = orders;
+		__entry->result = result;
+	),
+
+	TP_printk("mm=%p, addr=0x%lx, none_or_zero=%d, unmapped=%d, orders=0x%lx, result=%s",
+		__entry->mm,
+		__entry->addr,
+		__entry->none_or_zero,
+		__entry->unmapped,
+		__entry->orders,
+		__print_symbolic(__entry->result, SCAN_STATUS))
+);
+
 TRACE_EVENT(mm_collapse_candidate,
 
 	TP_PROTO(struct mm_struct *mm, unsigned long addr, unsigned int order,
