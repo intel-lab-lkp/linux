@@ -24,6 +24,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
+#include <linux/unaligned.h>
 #include <linux/videodev2.h>
 #include <linux/ratelimit.h>
 #include <linux/reset.h>
@@ -2927,36 +2928,60 @@ static int coda_register_device(struct coda_dev *dev, int i)
 	return ret;
 }
 
-static void coda_copy_firmware(struct coda_dev *dev, const u8 * const buf,
-			       size_t size)
+static int coda_copy_firmware(struct coda_dev *dev, const u8 *buf,
+			      size_t size)
 {
-	u32 *src = (u32 *)buf;
+	u32 *dst = dev->codebuf.vaddr;
+	size_t words, i;
+	u32 first, second;
 
 	/* Check if the firmware has a 16-byte Freescale header, skip it */
-	if (buf[0] == 'M' && buf[1] == 'X')
-		src += 4;
+	if (size < 2)
+		return -EINVAL;
+
+	if (buf[0] == 'M' && buf[1] == 'X') {
+		if (size < 16)
+			return -EINVAL;
+
+		buf += 16;
+		size -= 16;
+	}
+
+	if (size < sizeof(__le16))
+		return -EINVAL;
+
 	/*
 	 * Check whether the firmware is in native order or pre-reordered for
 	 * memory access. The first instruction opcode always is 0xe40e.
 	 */
-	if (__le16_to_cpup((__le16 *)src) == 0xe40e) {
-		u32 *dst = dev->codebuf.vaddr;
-		int i;
-
+	if (get_unaligned_le16(buf) == 0xe40e) {
 		/* Firmware in native order, reorder while copying */
+		if (size % sizeof(u32))
+			return -EINVAL;
+
+		words = size / sizeof(u32);
 		if (dev->devtype->product == CODA_DX6) {
-			for (i = 0; i < (size - 16) / 4; i++)
-				dst[i] = (src[i] << 16) | (src[i] >> 16);
+			for (i = 0; i < words; i++) {
+				first = get_unaligned_le32(buf + i * sizeof(u32));
+				dst[i] = (first << 16) | (first >> 16);
+			}
 		} else {
-			for (i = 0; i < (size - 16) / 4; i += 2) {
-				dst[i] = (src[i + 1] << 16) | (src[i + 1] >> 16);
-				dst[i + 1] = (src[i] << 16) | (src[i] >> 16);
+			if (words % 2)
+				return -EINVAL;
+
+			for (i = 0; i < words; i += 2) {
+				first = get_unaligned_le32(buf + i * sizeof(u32));
+				second = get_unaligned_le32(buf + (i + 1) * sizeof(u32));
+				dst[i] = (second << 16) | (second >> 16);
+				dst[i + 1] = (first << 16) | (first >> 16);
 			}
 		}
 	} else {
 		/* Copy the already reordered firmware image */
-		memcpy(dev->codebuf.vaddr, src, size);
+		memcpy(dev->codebuf.vaddr, buf, size);
 	}
+
+	return 0;
 }
 
 static void coda_fw_callback(const struct firmware *fw, void *context);
@@ -3007,8 +3032,12 @@ static void coda_fw_callback(const struct firmware *fw, void *context)
 	if (ret < 0)
 		goto put_pm;
 
-	coda_copy_firmware(dev, fw->data, fw->size);
+	ret = coda_copy_firmware(dev, fw->data, fw->size);
 	release_firmware(fw);
+	if (ret) {
+		v4l2_err(&dev->v4l2_dev, "invalid firmware image\n");
+		goto put_pm;
+	}
 
 	ret = coda_hw_init(dev);
 	if (ret < 0) {
