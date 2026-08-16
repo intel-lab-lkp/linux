@@ -20,6 +20,7 @@
 #include <linux/vmstat.h>
 
 #include <asm/tlb.h>
+#include <trace/events/huge_memory.h>
 #include "collapse.h"
 #include "internal.h"
 
@@ -195,6 +196,14 @@ static unsigned int candidate_nr_pages(const struct collapse_candidate *cand)
 	return 1U << cand->order;
 }
 
+static void collapse_trace_candidate(struct mm_struct *mm,
+				     const struct collapse_candidate *cand,
+				     enum collapse_pass pass)
+{
+	trace_mm_collapse_candidate(mm, cand->addr, cand->order, pass,
+				    cand->result);
+}
+
 /* Where a candidate sits in the table, in the PTE offsets selection counts in */
 static unsigned int candidate_offset(const struct collapse_candidate *cand,
 				     unsigned long pmd_addr)
@@ -278,6 +287,8 @@ static enum scan_result collapse_revalidate(struct vm_area_struct *vma,
 					      BIT(cand->order))) {
 			cand->state = CAND_SKIPPED;
 			cand->result = SCAN_VMA_CHECK;
+			collapse_trace_candidate(mm, cand,
+						 COLLAPSE_PASS_REVALIDATE);
 			continue;
 		}
 
@@ -420,6 +431,8 @@ static enum scan_result collapse_faultin(struct vm_area_struct *vma,
 			if (r == SCAN_EXCEED_SWAP_PTE) {
 				cand->state = CAND_SKIPPED;
 				cand->result = r;
+				collapse_trace_candidate(vma->vm_mm, cand,
+							 COLLAPSE_PASS_FAULTIN);
 				break;
 			}
 			if (r != SCAN_SUCCEED) {
@@ -878,6 +891,7 @@ static void collapse_freeze(struct vm_area_struct *vma,
 				continue;
 			cand->state = CAND_SKIPPED;
 			cand->result = SCAN_NO_PTE_TABLE;
+			collapse_trace_candidate(mm, cand, COLLAPSE_PASS_FREEZE);
 		}
 		return;
 	}
@@ -904,6 +918,7 @@ static void collapse_freeze(struct vm_area_struct *vma,
 		cand->result = result;
 		if (result != SCAN_SUCCEED) {
 			cand->state = CAND_SKIPPED;
+			collapse_trace_candidate(mm, cand, COLLAPSE_PASS_FREEZE);
 			continue;
 		}
 
@@ -986,6 +1001,7 @@ static void collapse_reserve(struct mm_struct *mm, struct collapse_control *cc)
 
 		cand->state = CAND_SKIPPED;
 		cand->result = result;
+		collapse_trace_candidate(mm, cand, COLLAPSE_PASS_ALLOC);
 	}
 }
 
@@ -1016,6 +1032,7 @@ static void collapse_deposit(struct mm_struct *mm, struct collapse_control *cc)
 	if (!cand->deposit) {
 		cand->state = CAND_SKIPPED;
 		cand->result = SCAN_ALLOC_HUGE_PAGE_FAIL;
+		collapse_trace_candidate(mm, cand, COLLAPSE_PASS_ALLOC);
 	}
 }
 
@@ -1060,6 +1077,8 @@ static void collapse_provision(struct mm_struct *mm,
 			}
 			cand->result = result;
 		}
+
+		collapse_trace_candidate(mm, cand, COLLAPSE_PASS_ALLOC);
 	}
 }
 
@@ -1106,6 +1125,8 @@ static void collapse_copy(struct vm_area_struct *vma,
 			 */
 			if (copy_mc_user_highpage(dst, src, addr, vma)) {
 				cand->result = SCAN_COPY_MC;
+				collapse_trace_candidate(vma->vm_mm, cand,
+							 COLLAPSE_PASS_COPY);
 				break;
 			}
 		}
@@ -1294,6 +1315,7 @@ static void collapse_install_pmd(struct vm_area_struct *vma,
 		/* Table gone under us; see collapse_abort_candidate() on @pte */
 		spin_unlock(pmd_ptl);
 		cand->result = SCAN_NO_PTE_TABLE;
+		collapse_trace_candidate(mm, cand, COLLAPSE_PASS_INSTALL);
 		collapse_abort_candidate(vma, cand, NULL);
 		return;
 	}
@@ -1315,6 +1337,7 @@ static void collapse_install_pmd(struct vm_area_struct *vma,
 
 	if (!collapse_verify_candidate(cand, pte, &nr_populated)) {
 		cand->result = SCAN_PTE_NON_PRESENT;
+		collapse_trace_candidate(mm, cand, COLLAPSE_PASS_INSTALL);
 		collapse_abort_candidate(vma, cand, pte);
 		goto out_unlock;
 	}
@@ -1411,6 +1434,8 @@ static void collapse_install(struct vm_area_struct *vma,
 				continue;
 
 			cand->result = SCAN_NO_PTE_TABLE;
+			collapse_trace_candidate(mm, cand,
+						 COLLAPSE_PASS_INSTALL);
 			collapse_abort_candidate(vma, cand, NULL);
 		}
 		return;
@@ -1439,6 +1464,8 @@ static void collapse_install(struct vm_area_struct *vma,
 
 		if (!collapse_verify_candidate(cand, cand_pte, &nr_populated)) {
 			cand->result = SCAN_PTE_NON_PRESENT;
+			collapse_trace_candidate(mm, cand,
+						 COLLAPSE_PASS_INSTALL);
 			collapse_abort_candidate(vma, cand, cand_pte);
 			continue;
 		}
@@ -1548,8 +1575,11 @@ static unsigned int collapse_finish(struct mm_struct *mm,
 			pte_free(mm, cand->deposit);
 			cand->deposit = NULL;
 		}
-		if (cand->state == CAND_INSTALLED)
+		if (cand->state == CAND_INSTALLED) {
 			nr_installed++;
+			collapse_trace_candidate(mm, cand,
+						 COLLAPSE_PASS_INSTALL);
+		}
 	}
 
 	return nr_installed;

@@ -44,12 +44,21 @@
 	EM( SCAN_PAGE_NOT_EXCLUSIVE,	"page_not_exclusive")		\
 	EMe(SCAN_ALLOC_LIGHT_MISS,	"alloc_light_miss")
 
+#define COLLAPSE_PASS_STATUS						\
+	EM( COLLAPSE_PASS_ALLOC,	"alloc")			\
+	EM( COLLAPSE_PASS_REVALIDATE,	"revalidate")			\
+	EM( COLLAPSE_PASS_FAULTIN,	"faultin")			\
+	EM( COLLAPSE_PASS_FREEZE,	"freeze")			\
+	EM( COLLAPSE_PASS_COPY,		"copy")				\
+	EMe(COLLAPSE_PASS_INSTALL,	"install")
+
 #undef EM
 #undef EMe
 #define EM(a, b)	TRACE_DEFINE_ENUM(a);
 #define EMe(a, b)	TRACE_DEFINE_ENUM(a);
 
 SCAN_STATUS
+COLLAPSE_PASS_STATUS
 
 #undef EM
 #undef EMe
@@ -115,6 +124,37 @@ TRACE_EVENT(mm_collapse_huge_page,
 		__entry->isolated,
 		__print_symbolic(__entry->status, SCAN_STATUS),
 		__entry->order)
+);
+
+TRACE_EVENT(mm_collapse_candidate,
+
+	TP_PROTO(struct mm_struct *mm, unsigned long addr, unsigned int order,
+		 int pass, int result),
+
+	TP_ARGS(mm, addr, order, pass, result),
+
+	TP_STRUCT__entry(
+		__field(struct mm_struct *, mm)
+		__field(unsigned long, addr)
+		__field(unsigned int, order)
+		__field(int, pass)
+		__field(int, result)
+	),
+
+	TP_fast_assign(
+		__entry->mm = mm;
+		__entry->addr = addr;
+		__entry->order = order;
+		__entry->pass = pass;
+		__entry->result = result;
+	),
+
+	TP_printk("mm=%p, addr=0x%lx, order=%u, pass=%s, result=%s",
+		__entry->mm,
+		__entry->addr,
+		__entry->order,
+		__print_symbolic(__entry->pass, COLLAPSE_PASS_STATUS),
+		__print_symbolic(__entry->result, SCAN_STATUS))
 );
 
 TRACE_EVENT(mm_collapse_huge_page_isolate,

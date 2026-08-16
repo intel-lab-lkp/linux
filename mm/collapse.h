@@ -13,6 +13,19 @@
 struct collapse_candidate;
 struct collapse_retry;
 
+/*
+ * Which pass of a round reached a verdict on a candidate.  Only collapse.c
+ * produces these; the trace header khugepaged.c builds names them.
+ */
+enum collapse_pass {
+	COLLAPSE_PASS_ALLOC,
+	COLLAPSE_PASS_REVALIDATE,
+	COLLAPSE_PASS_FAULTIN,
+	COLLAPSE_PASS_FREEZE,
+	COLLAPSE_PASS_COPY,
+	COLLAPSE_PASS_INSTALL,
+};
+
 enum scan_result {
 	SCAN_FAIL,
 	SCAN_SUCCEED,
