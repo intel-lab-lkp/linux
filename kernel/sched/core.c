@@ -1420,11 +1420,8 @@ static void nohz_csd_func(void *info)
 #endif /* CONFIG_NO_HZ_COMMON */
 
 #ifdef CONFIG_NO_HZ_FULL
-static inline bool __need_bw_check(struct rq *rq, struct task_struct *p)
+static inline bool __need_bw_check(struct task_struct *p)
 {
-	if (rq->nr_running != 1)
-		return false;
-
 	if (p->sched_class != &fair_sched_class)
 		return false;
 
@@ -1440,6 +1437,14 @@ bool sched_can_stop_tick(struct rq *rq)
 
 	/* Deadline tasks, even if single, need the tick */
 	if (rq->dl.dl_nr_running)
+		return false;
+
+	/*
+	 * The selected scheduling context can be a constrained FAIR donor even
+	 * when rq->curr is an RT task. Check it before the RT fast paths below,
+	 * which may report that the tick can stop for a throttled RT context.
+	 */
+	if (__need_bw_check(rq->donor) && cfs_task_bw_constrained(rq->donor))
 		return false;
 
 	/*
@@ -1471,18 +1476,6 @@ bool sched_can_stop_tick(struct rq *rq)
 
 	if (rq->cfs.h_nr_queued > 1)
 		return false;
-
-	/*
-	 * If there is one task and it has CFS runtime bandwidth constraints
-	 * and it's on the cpu now we don't want to stop the tick.
-	 * This check prevents clearing the bit if a newly enqueued task here is
-	 * dequeued by migrating while the constrained task continues to run.
-	 * E.g. going from 2->1 without going through pick_next_task().
-	 */
-	if (__need_bw_check(rq, rq->curr)) {
-		if (cfs_task_bw_constrained(rq->curr))
-			return false;
-	}
 
 	return true;
 }
@@ -7116,7 +7109,7 @@ find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
  */
 static void __sched notrace __schedule(int sched_mode)
 {
-	struct task_struct *prev, *next;
+	struct task_struct *prev, *next, *tick_donor;
 	/*
 	 * On PREEMPT_RT kernel, SM_RTLOCK_WAIT is noted
 	 * as a preemption by schedule_debug() and RCU.
@@ -7171,6 +7164,7 @@ static void __sched notrace __schedule(int sched_mode)
 	rq->clock_update_flags <<= 1;
 	update_rq_clock(rq);
 	rq->clock_update_flags = RQCF_UPDATED;
+	tick_donor = rq->donor;
 
 	switch_count = &prev->nivcsw;
 
@@ -7246,6 +7240,13 @@ picked:
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
 keep_resched:
+	/*
+	 * Enqueue and dequeue updates can evaluate the outgoing donor. Refresh
+	 * the dependency after selecting a different scheduling context.
+	 */
+	if (rq->donor != tick_donor)
+		sched_update_tick_dependency(rq);
+
 	rq->last_seen_need_resched_ns = 0;
 
 	is_switch = prev != next;
