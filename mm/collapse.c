@@ -94,6 +94,14 @@
  */
 #define COLLAPSE_BATCH_BYTES		SZ_32M
 
+/*
+ * How many times a round runs the fault-in pass.  A fault that has to wait drops
+ * the lock, and running the pass again costs a walk of the batch but buys at
+ * least one completed swap-in; readahead brings a cluster in at a time, so this
+ * covers a PMD's default max_ptes_swap.
+ */
+#define COLLAPSE_FAULTIN_PASSES	8
+
 /* Windows in one table at the finest order collapse cuts */
 #define COLLAPSE_TABLE_WINDOWS	(HPAGE_PMD_NR >> COLLAPSE_MIN_MTHP_ORDER)
 
@@ -118,6 +126,21 @@ struct collapse_candidate {
 	enum scan_result result;
 };
 
+static unsigned long candidate_start(const struct collapse_candidate *cand)
+{
+	return cand->addr;
+}
+
+static unsigned long candidate_size(const struct collapse_candidate *cand)
+{
+	return PAGE_SIZE << cand->order;
+}
+
+static unsigned long candidate_end(const struct collapse_candidate *cand)
+{
+	return candidate_start(cand) + candidate_size(cand);
+}
+
 /* Where a candidate sits in the table, in the PTE offsets selection counts in */
 static unsigned int candidate_offset(const struct collapse_candidate *cand,
 				     unsigned long pmd_addr)
@@ -141,6 +164,134 @@ int collapse_control_init(struct collapse_control *cc)
 }
 
 /*
+ * The scan and the allocation both dropped mmap_lock, so nothing seen before it
+ * can be trusted: find the VMA and the PTE table again, and check they still
+ * allow every provisioned candidate.
+ *
+ * This is also where the batch's span is settled, for the invalidate the round
+ * issues over it.
+ */
+static enum scan_result collapse_revalidate(struct vm_area_struct *vma,
+					    unsigned long pmd_addr,
+					    struct collapse_control *cc,
+					    pmd_t **pmdp)
+{
+	unsigned int i;
+
+	cc->batch_start = ULONG_MAX;
+	cc->batch_end = 0;
+
+	for (i = 0; i < cc->nr_candidates; i++) {
+		struct collapse_candidate *cand = &cc->candidates[i];
+
+		cc->batch_start = min(cc->batch_start, candidate_start(cand));
+		cc->batch_end = max(cc->batch_end, candidate_end(cand));
+	}
+
+	return SCAN_SUCCEED;
+}
+
+/*
+ * Make every source the round needs present and exclusively owned by this mm,
+ * by faulting it in as an ordinary access would.  Sleeps, and drops mmap_lock on
+ * failure, since a fault may have to be retried with it released.
+ *
+ * Anything faulted in lands on a per-CPU LRU batch, holding a reference the
+ * freeze cannot account for, so the freeze drains those batches before it
+ * starts.
+ */
+static enum scan_result collapse_faultin(struct vm_area_struct *vma,
+					 struct collapse_control *cc,
+					 pmd_t *pmd)
+{
+	return SCAN_SUCCEED;
+}
+
+/*
+ * Raise the two barriers on the sources of every candidate: migration entries in
+ * their PTEs, then a frozen refcount.  Takes the table's ptl once for the whole
+ * batch, and flushes the TLB once before dropping it.  A candidate whose sources
+ * moved is dropped here.
+ */
+static void collapse_freeze(struct vm_area_struct *vma,
+			    struct collapse_control *cc, pmd_t *pmd)
+{
+}
+
+/*
+ * Allocate ahead of the freeze for the candidates whose light allocation missed
+ * last round.  This is where reclaim belongs: nothing is held or frozen, so a
+ * long compaction costs only khugepaged's own progress -- which is why the
+ * mechanism this replaces allocated here too.  Having asked the allocator to try
+ * hard, a miss now is a failure.
+ */
+static void collapse_reserve(struct mm_struct *mm, struct collapse_control *cc)
+{
+}
+
+/*
+ * Secure the page table the PMD terminal layer deposits.  This stays ahead of the
+ * freeze because pte_alloc_one() allocates with GFP_PGTABLE_USER and takes no gfp
+ * to strip: order-0 or not, it may reclaim and sleep, which is what the window
+ * exists to keep out.  The destination folio has a light gfp to fall back on and
+ * so can be deferred; this has none.
+ */
+static void collapse_deposit(struct mm_struct *mm, struct collapse_control *cc)
+{
+}
+
+/*
+ * Give the frozen candidates that still need one a destination folio, without
+ * reclaim: a faulter on their sources would wait for it.
+ *
+ * A miss here is not a failure, as long as a retry could do better: the
+ * candidate keeps its freeze and asks for the reclaiming gfp, which
+ * collapse_reserve() uses before the next round freezes anything.  When the
+ * policy forbids reclaim there is nothing better to retry with, so the miss is
+ * the answer, and a smaller order over the same region is the better next move.
+ */
+static void collapse_provision(struct mm_struct *mm,
+			       struct collapse_control *cc)
+{
+}
+
+/*
+ * Copy the frozen sources into their destinations.  Nothing can reach either
+ * side, so this needs no page-table lock, and it sleeps.
+ */
+static void collapse_copy(struct vm_area_struct *vma,
+			  struct collapse_control *cc)
+{
+}
+
+/* Publish each destination folio in place of the sources it replaces */
+static void collapse_install(struct vm_area_struct *vma,
+			     struct collapse_control *cc, pmd_t *pmd)
+{
+}
+
+/*
+ * Lower the barriers the freeze raised, on the sources of an installed candidate
+ * and on those of one that got no further.
+ */
+static void collapse_putback(struct vm_area_struct *vma,
+			     struct collapse_control *cc)
+{
+}
+
+/*
+ * Settle whatever the round reached: account what was installed, release what
+ * was not, and give every candidate the result selection will classify.  Returns
+ * how many candidates were installed.
+ */
+static unsigned int collapse_finish(struct mm_struct *mm,
+				    struct collapse_control *cc,
+				    enum scan_result result)
+{
+	return 0;
+}
+
+/*
  * Carry one batch of candidates through the passes.  Every candidate comes back
  * with a result of its own: the passes before the freeze mark what they refuse
  * and carry on, each pass after it works on what the last left, so no failure
@@ -149,6 +300,62 @@ int collapse_control_init(struct collapse_control *cc)
 static void collapse_round(struct mm_struct *mm, unsigned long pmd_addr,
 			   struct collapse_control *cc)
 {
+	unsigned int passes = COLLAPSE_FAULTIN_PASSES;
+	struct mmu_notifier_range range;
+	struct vm_area_struct *vma;
+	enum scan_result result;
+	pmd_t *pmd;
+
+	collapse_reserve(mm, cc);
+	collapse_deposit(mm, cc);
+
+retry:
+	mmap_read_lock(mm);
+
+	vma = find_vma(mm, pmd_addr);
+	if (!vma) {
+		result = SCAN_VMA_NULL;
+		goto out_unlock;
+	}
+
+	result = collapse_revalidate(vma, pmd_addr, cc, &pmd);
+	if (result != SCAN_SUCCEED)
+		goto out_unlock;
+
+	result = collapse_faultin(vma, cc, pmd);
+	/*
+	 * A fault dropped the lock to wait, as a swap-in does.  The swap-in it
+	 * started is still running and the walk skips whatever has arrived, so
+	 * take the lock again rather than send the batch back to selection.  The
+	 * VMA and the table are looked up afresh: both may have changed.
+	 */
+	if (result == SCAN_LOCK_DROPPED && --passes)
+		goto retry;
+	if (result != SCAN_SUCCEED)
+		goto out;	/* the callee released mmap_lock */
+
+	/* One invalidate window spans the batch, as collapse_revalidate() left it */
+	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm,
+				cc->batch_start, cc->batch_end);
+	mmu_notifier_invalidate_range_start(&range);
+
+	/*
+	 * None of these can fail as a whole: the freeze takes the sources it
+	 * can and drops the candidates it cannot, and each pass after it works
+	 * on what the one before left, so every barrier raised is lowered again.
+	 */
+	collapse_freeze(vma, cc, pmd);
+	collapse_provision(mm, cc);
+	collapse_copy(vma, cc);
+	collapse_install(vma, cc, pmd);
+	collapse_putback(vma, cc);
+
+	mmu_notifier_invalidate_range_end(&range);
+
+out_unlock:
+	mmap_read_unlock(mm);
+out:
+	collapse_finish(mm, cc, result);
 }
 
 /*

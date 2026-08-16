@@ -29,6 +29,7 @@ enum scan_result {
 	SCAN_PAGE_COUNT,
 	SCAN_PAGE_LRU,
 	SCAN_PAGE_LOCK,
+	SCAN_LOCK_DROPPED,
 	SCAN_PAGE_ANON,
 	SCAN_PAGE_LAZYFREE,
 	SCAN_PAGE_COMPOUND,
@@ -126,6 +127,14 @@ struct collapse_control {
 	/* The candidate windows collected for the current round */
 	struct collapse_candidate *candidates;
 	unsigned int nr_candidates;
+
+	/*
+	 * What the candidates the round still means to freeze span, settled by
+	 * collapse_revalidate() as it walks them.  A round is not necessarily
+	 * address-ordered, so this cannot be read off the ends of the array.
+	 */
+	unsigned long batch_start;
+	unsigned long batch_end;
 };
 
 int collapse_control_init(struct collapse_control *cc);

@@ -24,6 +24,7 @@
 	EM( SCAN_PAGE_COUNT,		"not_suitable_page_count")	\
 	EM( SCAN_PAGE_LRU,		"page_not_in_lru")		\
 	EM( SCAN_PAGE_LOCK,		"page_locked")			\
+	EM( SCAN_LOCK_DROPPED,		"lock_dropped")			\
 	EM( SCAN_PAGE_ANON,		"page_not_anon")		\
 	EM( SCAN_PAGE_LAZYFREE,		"page_lazyfree")		\
 	EM( SCAN_PAGE_COMPOUND,		"page_compound")		\
