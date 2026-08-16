@@ -300,6 +300,27 @@ static inline bool in_range32(u32 val, u32 start, u32 len)
 		in_range32(val, start, len) : in_range64(val, start, len))
 
 /**
+ * in_range_incl - Determine if a value lies within an inclusive range.
+ * @val: Value to test.
+ * @start: First value in range.
+ * @end: Last value in range.
+ *
+ * @val, @start and @end are each evaluated exactly once.
+ *
+ * Same caveats as in_range() apply. In particular, if @end sits at the
+ * maximum value representable by the common type of @start and @end,
+ * "@end - @start + 1" wraps to 0, silently rejecting every @val instead
+ * of accepting all of them. Callers must ensure @end - @start + 1 does
+ * not overflow, and that @end >= @start.
+ */
+#define in_range_incl(val, start, end) ({			\
+	typeof(val) __val = (val);				\
+	typeof(start) __start = (start);			\
+	typeof(end) __end = (end);				\
+	in_range(__val, __start, __end - __start + 1);	\
+})
+
+/**
  * swap - swap values of @a and @b
  * @a: first value
  * @b: second value
