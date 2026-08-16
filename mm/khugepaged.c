@@ -434,16 +434,6 @@ void __khugepaged_exit(struct mm_struct *mm)
 		mm_flags_clear(MMF_VM_HUGEPAGE, mm);
 		mm_slot_free(mm_slot_cache, slot);
 		mmdrop(mm);
-	} else if (slot) {
-		/*
-		 * This is required to serialize against
-		 * collapse_test_exit() (which is guaranteed to run
-		 * under mmap_lock read mode). Stop here (after we return all
-		 * pagetables will be destroyed) until khugepaged has finished
-		 * working on the pagetables under the mmap_lock.
-		 */
-		mmap_write_lock(mm);
-		mmap_write_unlock(mm);
 	}
 }
 
