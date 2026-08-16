@@ -1751,11 +1751,13 @@ error:
 	cep->state = SIW_EPSTATE_CLOSED;
 
 	siw_free_cm_id(cep);
+	down_write(&qp->state_lock);
 	if (qp->cep == cep) {
-		siw_cep_put(cep);
 		qp->cep = NULL;
+		siw_cep_put(cep);
 	}
 	cep->qp = NULL;
+	up_write(&qp->state_lock);
 	siw_qp_put(qp);
 free_cep:
 	siw_cep_set_free_and_put(cep);
