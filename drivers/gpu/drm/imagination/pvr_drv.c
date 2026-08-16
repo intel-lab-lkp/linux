@@ -1402,11 +1402,21 @@ static int
 pvr_drm_driver_open(struct drm_device *drm_dev, struct drm_file *file)
 {
 	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
+	struct pvr_gem_object *dummy_bo;
 	struct pvr_file *pvr_file;
 
+	dummy_bo = pvr_gem_object_create(pvr_dev, PVR_DEVICE_PAGE_SIZE,
+					 DRM_PVR_BO_BYPASS_DEVICE_CACHE);
+	if (IS_ERR(dummy_bo))
+		return PTR_ERR(dummy_bo);
+
 	pvr_file = kzalloc_obj(*pvr_file);
-	if (!pvr_file)
+	if (!pvr_file) {
+		pvr_gem_object_put(dummy_bo);
 		return -ENOMEM;
+	}
+
+	pvr_file->sparse_dummy_bo = dummy_bo;
 
 	/*
 	 * Store reference to base DRM file private data for use by
@@ -1459,6 +1469,8 @@ pvr_drm_driver_postclose(__always_unused struct drm_device *drm_dev,
 	pvr_destroy_free_lists_for_file(pvr_file);
 	pvr_destroy_hwrt_datasets_for_file(pvr_file);
 	pvr_destroy_vm_contexts_for_file(pvr_file);
+
+	pvr_gem_object_put(pvr_file->sparse_dummy_bo);
 
 	kfree(pvr_file);
 	file->driver_priv = NULL;

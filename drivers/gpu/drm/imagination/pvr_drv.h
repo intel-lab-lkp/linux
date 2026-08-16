@@ -14,6 +14,7 @@
  * Driver interface version:
  *  - 1.0: Initial interface
  *  - 1.1: adds DRM_IOCTL_PVR_VM_BIND
+ *         adds DRM_PVR_VM_BIND_OP_MAP_SPARSE flag
  */
 #define PVR_DRIVER_MAJOR 1
 #define PVR_DRIVER_MINOR 1

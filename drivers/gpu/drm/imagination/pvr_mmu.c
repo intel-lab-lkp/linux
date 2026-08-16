@@ -2559,6 +2559,77 @@ err_destroy_pages:
 }
 
 /**
+ * pvr_mmu_map_dummy() - Point a range of device-virtual memory at a single
+ * repeated physical page.
+ * @op_ctx: Target MMU op context.
+ * @size: Size of memory to be mapped in bytes. Must be a non-zero multiple
+ * of the device page size.
+ * @flags: Flags from pvr_gem_object associated with the mapping.
+ * @device_addr: Virtual device address to map to. Must be device page-aligned.
+ *
+ * Every entry of the range is pointed at the first page of
+ * &pvr_mmu_op_context.map.sgt, so the mapping costs one page whatever @size is.
+ *
+ * Return:
+ *  * 0 on success,
+ *  * -%EINVAL if @size or @device_addr is misaligned, or
+ *  * Any error encountered while creating a page with pvr_page_create(), or
+ *  * Any error encountered while advancing @op_ctx.curr_page.
+ */
+int pvr_mmu_map_dummy(struct pvr_mmu_op_context *op_ctx, u64 size, u64 flags,
+		      u64 device_addr)
+{
+	const u64 pages = size >> PVR_DEVICE_PAGE_SHIFT;
+	struct pvr_page_table_ptr ptr_copy;
+	struct pvr_page_flags_raw flags_raw;
+	dma_addr_t dma_addr;
+	u64 page;
+	int err;
+
+	if (!size)
+		return 0;
+
+	if (size & ~PVR_DEVICE_PAGE_MASK)
+		return -EINVAL;
+
+	dma_addr = sg_dma_address(op_ctx->map.sgt->sgl);
+
+	err = pvr_mmu_op_context_set_curr_page(op_ctx, device_addr, true);
+	if (err)
+		return -EINVAL;
+
+	memcpy(&ptr_copy, &op_ctx->curr_page, sizeof(ptr_copy));
+
+	flags_raw = pvr_page_flags_raw_create(false, false,
+					      flags & DRM_PVR_BO_BYPASS_DEVICE_CACHE,
+					      flags & DRM_PVR_BO_PM_FW_PROTECT);
+
+	err = pvr_page_create(op_ctx, dma_addr, flags_raw);
+	if (err)
+		return err;
+
+	for (page = 1; page < pages; ++page) {
+		err = pvr_mmu_op_context_next_page(op_ctx, true);
+		if (err)
+			goto err_destroy_pages;
+
+		err = pvr_page_create(op_ctx, dma_addr, flags_raw);
+		if (err)
+			goto err_destroy_pages;
+	}
+
+	pvr_mmu_op_context_require_sync(op_ctx, PVR_MMU_SYNC_LEVEL_0);
+
+	return 0;
+
+err_destroy_pages:
+	memcpy(&op_ctx->curr_page, &ptr_copy, sizeof(op_ctx->curr_page));
+	pvr_mmu_op_context_unmap_curr_page(op_ctx, page);
+
+	return err;
+}
+
+/**
  * pvr_mmu_map() - Map an object's virtual memory to physical memory.
  * @op_ctx: Target MMU op context.
  * @size: Size of memory to be mapped in bytes. Must be a non-zero multiple

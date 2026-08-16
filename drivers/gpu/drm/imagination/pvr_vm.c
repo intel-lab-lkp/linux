@@ -200,6 +200,12 @@ struct pvr_vm_bind_op {
 	 */
 	struct pvr_vm_gpuva *next_va;
 
+	/**
+	 * @sparse: The mapping repeats the file's dummy page rather than
+	 * covering real pages of @pvr_obj.
+	 */
+	bool sparse;
+
 	/** @offset: Offset into @pvr_obj to begin mapping from. */
 	u64 offset;
 
@@ -267,7 +273,7 @@ static int
 pvr_vm_bind_op_map_init(struct pvr_vm_bind_op *bind_op,
 			struct pvr_vm_context *vm_ctx,
 			struct pvr_gem_object *pvr_obj, u64 offset,
-			u64 device_addr, u64 size)
+			u64 device_addr, u64 size, bool sparse)
 {
 	struct drm_gem_object *obj = gem_from_pvr_gem(pvr_obj);
 	const bool is_user = vm_ctx != vm_ctx->pvr_dev->kernel_vm_ctx;
@@ -285,11 +291,19 @@ pvr_vm_bind_op_map_init(struct pvr_vm_bind_op *bind_op,
 	}
 
 	if (!pvr_device_addr_and_size_are_valid(vm_ctx, device_addr, size) ||
-	    offset & ~PAGE_MASK || size & ~PAGE_MASK ||
-	    offset >= pvr_obj_size || offset_plus_size > pvr_obj_size)
+	    offset & ~PAGE_MASK || size & ~PAGE_MASK)
+		return -EINVAL;
+
+	/*
+	 * A sparse mapping repeats one page over a deliberately wider range,
+	 * so the containment check only applies to ordinary mappings.
+	 */
+	if (!sparse &&
+	    (offset >= pvr_obj_size || offset_plus_size > pvr_obj_size))
 		return -EINVAL;
 
 	bind_op->type = PVR_VM_BIND_TYPE_MAP;
+	bind_op->sparse = sparse;
 
 	bind_op->gpuvm_bo = drm_gpuvm_bo_create(&vm_ctx->gpuvm_mgr, obj);
 	if (!bind_op->gpuvm_bo)
@@ -396,8 +410,12 @@ pvr_vm_gpuva_map(struct drm_gpuva_op *op, void *op_ctx)
 	if ((op->map.gem.offset | op->map.va.range) & ~PVR_DEVICE_PAGE_MASK)
 		return -EINVAL;
 
-	err = pvr_mmu_map(ctx->mmu_op_ctx, op->map.va.range, pvr_gem->flags,
-			  op->map.va.addr);
+	if (ctx->sparse)
+		err = pvr_mmu_map_dummy(ctx->mmu_op_ctx, op->map.va.range,
+					pvr_gem->flags, op->map.va.addr);
+	else
+		err = pvr_mmu_map(ctx->mmu_op_ctx, op->map.va.range,
+				  pvr_gem->flags, op->map.va.addr);
 	if (err)
 		return err;
 
@@ -790,7 +808,7 @@ pvr_vm_map(struct pvr_vm_context *vm_ctx, struct pvr_gem_object *pvr_obj,
 
 	int err = pvr_vm_bind_op_map_init(&bind_op, vm_ctx, pvr_obj,
 					  pvr_obj_offset, device_addr,
-					  size);
+					  size, false);
 
 	if (err)
 		return err;
@@ -1475,14 +1493,25 @@ pvr_vm_bind_op_init_from_uapi(struct pvr_vm_bind_op *bind_op,
 
 	switch (uapi_op->flags & DRM_PVR_VM_BIND_OP_TYPE_MASK) {
 	case DRM_PVR_VM_BIND_OP_TYPE_MAP:
-		pvr_obj = pvr_gem_object_from_handle(pvr_file, uapi_op->handle);
-		if (!pvr_obj)
-			return -ENOENT;
+		if (uapi_op->flags & DRM_PVR_VM_BIND_OP_MAP_SPARSE) {
+			if (uapi_op->handle || uapi_op->offset)
+				return -EINVAL;
+
+			pvr_obj = pvr_file->sparse_dummy_bo;
+			pvr_gem_object_get(pvr_obj);
+		} else {
+			pvr_obj = pvr_gem_object_from_handle(pvr_file,
+							     uapi_op->handle);
+			if (!pvr_obj)
+				return -ENOENT;
+		}
 
 		err = pvr_vm_bind_op_map_init(bind_op, vm_ctx, pvr_obj,
 					      uapi_op->offset,
 					      uapi_op->device_addr,
-					      uapi_op->size);
+					      uapi_op->size,
+					      uapi_op->flags &
+					      DRM_PVR_VM_BIND_OP_MAP_SPARSE);
 		if (err) {
 			pvr_gem_object_put(pvr_obj);
 			return err;
@@ -1492,6 +1521,9 @@ pvr_vm_bind_op_init_from_uapi(struct pvr_vm_bind_op *bind_op,
 
 	case DRM_PVR_VM_BIND_OP_TYPE_UNMAP:
 		if (uapi_op->handle || uapi_op->offset)
+			return -EINVAL;
+
+		if (uapi_op->flags & DRM_PVR_VM_BIND_OP_MAP_SPARSE)
 			return -EINVAL;
 
 		return pvr_vm_bind_op_unmap_init(bind_op, vm_ctx, NULL,

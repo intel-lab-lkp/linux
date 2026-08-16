@@ -381,6 +381,15 @@ struct pvr_file {
 	struct xarray hwrt_handles;
 
 	/**
+	 * @sparse_dummy_bo: Single page every sparse mapping made through this
+	 * file points at.
+	 *
+	 * Writes to a sparse range land here, so it is kept per file rather
+	 * than per device to keep them out of other clients' view.
+	 */
+	struct pvr_gem_object *sparse_dummy_bo;
+
+	/**
 	 * @vm_ctx_handles: Array of VM contexts belonging to this file. Array
 	 * members are of type "struct pvr_vm_context *".
 	 *

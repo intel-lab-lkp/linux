@@ -1309,27 +1309,45 @@ struct drm_pvr_ioctl_submit_jobs_args {
  * DOC: Flags for VM_BIND operations.
  *
  * The type of a VM bind operation is stored in the top four bits of
- * &drm_pvr_vm_bind_op.flags.
+ * &drm_pvr_vm_bind_op.flags. The remaining bits carry modifiers, each of which
+ * is only valid with one type.
+ *
+ * .. c:macro:: DRM_PVR_VM_BIND_OP_MAP_SPARSE
+ *
+ *    Sparsely map a range of virtual addresses, without naming a buffer
+ *    object. Only valid with %DRM_PVR_VM_BIND_OP_TYPE_MAP;
+ *    &drm_pvr_vm_bind_op.handle and &drm_pvr_vm_bind_op.offset must both be
+ *    zero.
+ *
+ *    GPU accesses to the range do not fault. Reads return undefined values,
+ *    and writes may become visible through other sparse mappings. Nothing
+ *    more is guaranteed; in particular
+ *    %VkPhysicalDeviceSparseProperties.residencyNonResidentStrict is not
+ *    provided.
  *
  * .. c:macro:: DRM_PVR_VM_BIND_OP_TYPE_MAP
  *
  *    Create a new mapping. &drm_pvr_vm_bind_op.handle must be a valid buffer
- *    object handle.
+ *    object handle, unless %DRM_PVR_VM_BIND_OP_MAP_SPARSE is also set.
  *
  * .. c:macro:: DRM_PVR_VM_BIND_OP_TYPE_UNMAP
  *
  *    Remove existing mappings. &drm_pvr_vm_bind_op.handle and
- *    &drm_pvr_vm_bind_op.offset must both be zero.
+ *    &drm_pvr_vm_bind_op.offset must both be zero, as must
+ *    %DRM_PVR_VM_BIND_OP_MAP_SPARSE.
  *
  * .. c:macro:: DRM_PVR_VM_BIND_OP_TYPE_MASK
  *
  *    Mask used to extract the operation type.
  */
+#define DRM_PVR_VM_BIND_OP_MAP_SPARSE _BITUL(0)
+
 #define DRM_PVR_VM_BIND_OP_TYPE_MAP (0u << 28)
 #define DRM_PVR_VM_BIND_OP_TYPE_UNMAP (1u << 28)
 #define DRM_PVR_VM_BIND_OP_TYPE_MASK (0xfu << 28)
 
-#define DRM_PVR_VM_BIND_OP_FLAGS_MASK DRM_PVR_VM_BIND_OP_TYPE_MASK
+#define DRM_PVR_VM_BIND_OP_FLAGS_MASK \
+	(DRM_PVR_VM_BIND_OP_MAP_SPARSE | DRM_PVR_VM_BIND_OP_TYPE_MASK)
 
 /**
  * struct drm_pvr_vm_bind_op - A single VM bind operation.
@@ -1342,13 +1360,15 @@ struct drm_pvr_vm_bind_op {
 	 * @handle: [IN] Handle of the target buffer object.
 	 *
 	 * Must be a valid handle returned by %DRM_IOCTL_PVR_CREATE_BO for map
-	 * operations. MBZ for unmap operations.
+	 * operations. MBZ for unmap operations, and for sparse map operations,
+	 * which have no buffer object to name.
 	 */
 	__u32 handle;
 
 	/**
 	 * @offset: [IN] Offset into the target buffer object from which to
-	 * begin the mapping. MBZ for unmap operations.
+	 * begin the mapping. MBZ for unmap operations and for sparse map
+	 * operations.
 	 */
 	__u64 offset;
 
