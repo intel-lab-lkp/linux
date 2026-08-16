@@ -85,7 +85,7 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 	u64 missing = 0;
 
 	pair->value = 0;
-	if (has_fpu())
+	if (riscv_isa_extension_available(NULL, f) && riscv_isa_extension_available(NULL, d))
 		pair->value |= RISCV_HWPROBE_IMA_FD;
 
 	if (riscv_isa_extension_available(NULL, c))
