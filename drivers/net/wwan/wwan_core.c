@@ -759,8 +759,17 @@ static int wwan_port_op_start(struct wwan_port *port)
 	if (!port->start_count)
 		ret = port->ops->start(port);
 
-	if (!ret)
+	if (!ret) {
 		port->start_count++;
+		/* Mirror TTY semantics: raise DTR/RTS on first open of an AT port */
+		if (port->start_count == 1 && port->type == WWAN_PORT_AT &&
+		    port->ops->dtr_rts) {
+			mutex_lock(&port->data_lock);
+			port->at_data.mdmbits |= TIOCM_DTR | TIOCM_RTS;
+			mutex_unlock(&port->data_lock);
+			port->ops->dtr_rts(port, true);
+		}
+	}
 
 out_unlock:
 	mutex_unlock(&port->ops_lock);
@@ -773,6 +782,13 @@ static void wwan_port_op_stop(struct wwan_port *port)
 	mutex_lock(&port->ops_lock);
 	port->start_count--;
 	if (!port->start_count) {
+		/* Mirror TTY semantics: drop DTR/RTS on last close of an AT port */
+		if (port->ops && port->type == WWAN_PORT_AT && port->ops->dtr_rts) {
+			mutex_lock(&port->data_lock);
+			port->at_data.mdmbits &= ~(TIOCM_DTR | TIOCM_RTS);
+			mutex_unlock(&port->data_lock);
+			port->ops->dtr_rts(port, false);
+		}
 		if (port->ops)
 			port->ops->stop(port);
 		skb_queue_purge(&port->rxq);
@@ -980,6 +996,8 @@ static long wwan_port_fops_at_ioctl(struct wwan_port *port, unsigned int cmd,
 				    unsigned long arg)
 {
 	int ret = 0;
+	bool call_dtr_rts = false;
+	bool dtr_on = false;
 
 	mutex_lock(&port->data_lock);
 
@@ -1036,6 +1054,10 @@ static long wwan_port_fops_at_ioctl(struct wwan_port *port, unsigned int cmd,
 			port->at_data.mdmbits |= mdmbits;
 		else
 			port->at_data.mdmbits = mdmbits;
+		if (port->type == WWAN_PORT_AT) {
+			dtr_on = !!(port->at_data.mdmbits & TIOCM_DTR);
+			call_dtr_rts = true;
+		}
 		break;
 	}
 
@@ -1060,6 +1082,13 @@ static long wwan_port_fops_at_ioctl(struct wwan_port *port, unsigned int cmd,
 	}
 
 	mutex_unlock(&port->data_lock);
+
+	if (call_dtr_rts) {
+		mutex_lock(&port->ops_lock);
+		if (port->ops && port->ops->dtr_rts)
+			port->ops->dtr_rts(port, dtr_on);
+		mutex_unlock(&port->ops_lock);
+	}
 
 	return ret;
 }
