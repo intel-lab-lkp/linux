@@ -41,6 +41,7 @@
 	EM( SCAN_COPY_MC,		"copy_poisoned_page")		\
 	EM( SCAN_PAGE_FILLED,		"page_filled")			\
 	EM( SCAN_PAGE_DIRTY_OR_WRITEBACK, "page_dirty_or_writeback")	\
+	EM( SCAN_PAGE_NOT_EXCLUSIVE,	"page_not_exclusive")		\
 	EMe(SCAN_ALLOC_LIGHT_MISS,	"alloc_light_miss")
 
 #undef EM

@@ -387,6 +387,145 @@ out:
 }
 
 /*
+ * How many slots a source span starting at @first may cover: the pages left in
+ * its folio, capped at @max.  Every freeze-side walker bounds spans with this,
+ * so per-span batching of clears, locks and freezes cannot reach a slot the span
+ * does not cover.
+ */
+static unsigned int collapse_span_max(pte_t first, unsigned int max)
+{
+	struct page *page = pte_page(first);
+	struct folio *folio = page_folio(page);
+	unsigned int left = folio_nr_pages(folio) - folio_page_idx(folio, page);
+
+	return min(max, left);
+}
+
+/*
+ * Can this candidate's sources be frozen?  Every slot is checked and nothing is
+ * touched, so a refusal costs the round nothing but the walk.
+ *
+ * The walk is in source spans: a span is consecutive PTEs mapping consecutive
+ * pages of one folio, and it ends wherever the next PTE stops being the folio's
+ * next page.  No layout is refused for its shape -- the next slot simply starts
+ * its own span -- so partially mapped and compound sources collapse too.
+ *
+ * Caller holds mmap_read and the table's ptl.
+ */
+static enum scan_result collapse_check_candidate(struct vm_area_struct *vma,
+						 struct collapse_control *cc,
+						 struct collapse_candidate *cand,
+						 pte_t *pte)
+{
+	const unsigned int nr_pages = candidate_nr_pages(cand);
+	unsigned long addr;
+	unsigned int i;
+
+	for (i = 0, addr = cand->addr; i < nr_pages;) {
+		pte_t ptent = ptep_get(pte + i);
+		unsigned int nr, nr_max, k;
+		struct folio *folio;
+		struct page *page;
+
+		if (!pte_present(ptent)) {
+			/* Holes are population; swap and markers are not */
+			if (pte_none(ptent)) {
+				i++;
+				addr += PAGE_SIZE;
+				continue;
+			}
+			return SCAN_PTE_NON_PRESENT;
+		}
+		if (pte_uffd(ptent))
+			return SCAN_PTE_UFFD;
+
+		/* The zeropage zero-fills like a hole, and has no normal page */
+		if (is_zero_pfn(pte_pfn(ptent))) {
+			i++;
+			addr += PAGE_SIZE;
+			continue;
+		}
+		page = vm_normal_page(vma, addr, ptent);
+		if (!page || unlikely(is_zone_device_page(page)))
+			return SCAN_PAGE_NULL;
+
+		folio = page_folio(page);
+		if (!folio_test_anon(folio))
+			return SCAN_PAGE_ANON;
+
+		/*
+		 * Collapsing a MADV_FREE'd page would copy it into a folio that
+		 * is not lazyfree, quietly making memory the user offered up
+		 * undroppable again.
+		 */
+		if (cc->policy.skip_lazyfree &&
+		    !(vma->vm_flags & VM_DROPPABLE) &&
+		    folio_test_lazyfree(folio) && !pte_dirty(ptent))
+			return SCAN_PAGE_LAZYFREE;
+
+		/*
+		 * A sub-PMD candidate refuses folios of its own order and above:
+		 * collapsing those would gain nothing.  A PMD candidate accepts
+		 * every order up to its own -- the PTE-mapped-THP re-collapse
+		 * class.
+		 */
+		if (folio_order(folio) >= cand->order &&
+		    !is_pmd_order(cand->order))
+			return SCAN_PTE_MAPPED_HUGEPAGE;
+
+		/*
+		 * Exclusive anon only: the expected refcount of a shared folio
+		 * cannot be pinned down without its other mappers' ptls.
+		 * Swapcache membership is fine -- folio_expected_ref_count()
+		 * accounts those references.
+		 */
+		if (folio_maybe_mapped_shared(folio))
+			return SCAN_PAGE_NOT_EXCLUSIVE;
+
+		nr_max = collapse_span_max(ptent, nr_pages - i);
+		for (nr = 1; nr < nr_max; nr++) {
+			pte_t tail = ptep_get(pte + i + nr);
+
+			if (!pte_present(tail) ||
+			    pte_pfn(tail) != pte_pfn(ptent) + nr)
+				break;
+			if (pte_uffd(tail))
+				return SCAN_PTE_UFFD;
+		}
+
+		/*
+		 * Every live mapping of the folio must be this span: the freeze
+		 * is whole-folio, and a live PTE left anywhere else loses to a
+		 * racing zap -- its rmap drop is paired with a folio_put() that
+		 * would underflow the frozen count.  The check is race-free
+		 * under our ptl: in-window PTEs are ours, fork (the only way
+		 * exclusive anon gains mappings) takes mmap_write, and a folio
+		 * whose mappings all sit under this ptl cannot lose one either.
+		 * This also refuses a folio scattered across several spans of
+		 * the window, whose mapcount exceeds any single span.
+		 */
+		if (folio_mapcount(folio) != nr)
+			return SCAN_PAGE_COUNT;
+
+		/*
+		 * Every page of the span must be exclusive: the freeze accounts
+		 * only references it can see, and a non-exclusive page may be
+		 * unshared under us.  collapse_faultin() should have arranged
+		 * this; enforce it here, where it is depended on.
+		 */
+		for (k = 0; k < nr; k++) {
+			if (!PageAnonExclusive(pte_page(ptep_get(pte + i + k))))
+				return SCAN_PAGE_NOT_EXCLUSIVE;
+		}
+
+		i += nr;
+		addr += nr * PAGE_SIZE;
+	}
+
+	return SCAN_SUCCEED;
+}
+
+/*
  * Raise the two barriers on the sources of every candidate: migration entries in
  * their PTEs, then a frozen refcount.  Takes the table's ptl once for the whole
  * batch, and flushes the TLB once before dropping it.  A candidate whose sources
@@ -395,6 +534,44 @@ out:
 static void collapse_freeze(struct vm_area_struct *vma,
 			    struct collapse_control *cc, pmd_t *pmd)
 {
+	struct mm_struct *mm = vma->vm_mm;
+	pte_t *pte, *table;
+	spinlock_t *ptl;
+	unsigned int i;
+
+	pte = pte_offset_map_lock(mm, pmd, cc->candidates[0].addr, &ptl);
+	if (!pte) {
+		for (i = 0; i < cc->nr_candidates; i++) {
+			struct collapse_candidate *cand = &cc->candidates[i];
+
+			if (cand->state != CAND_SELECTED)
+				continue;
+			cand->state = CAND_SKIPPED;
+			cand->result = SCAN_NO_PTE_TABLE;
+		}
+		return;
+	}
+
+	/*
+	 * Index each candidate from the table base, not relative to
+	 * candidates[0]: a round is not necessarily address-ordered, so
+	 * candidates[0] need not be the lowest.  They all share one table.
+	 */
+	table = pte - pte_index(cc->candidates[0].addr);
+
+	for (i = 0; i < cc->nr_candidates; i++) {
+		struct collapse_candidate *cand = &cc->candidates[i];
+		pte_t *cand_pte = table + pte_index(cand->addr);
+
+		if (cand->state != CAND_SELECTED)
+			continue;
+
+		cand->result = collapse_check_candidate(vma, cc, cand, cand_pte);
+		if (cand->result != SCAN_SUCCEED)
+			cand->state = CAND_SKIPPED;
+	}
+
+	pte_unmap_unlock(pte, ptl);
 }
 
 /*
