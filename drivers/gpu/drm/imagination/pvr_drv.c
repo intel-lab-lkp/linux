@@ -1130,6 +1130,93 @@ pvr_ioctl_vm_unmap(struct drm_device *drm_dev, void *raw_args,
 	return err;
 }
 
+/**
+ * pvr_ioctl_vm_bind() - IOCTL to apply a batch of VM bind operations.
+ * @drm_dev: [IN] DRM device.
+ * @raw_args: [IN] Arguments passed to this IOCTL. This must be of type
+ *                 &struct drm_pvr_ioctl_vm_bind_args.
+ * @file: [IN] DRM file private data.
+ *
+ * Called from userspace with %DRM_IOCTL_PVR_VM_BIND.
+ *
+ * Return:
+ *  * 0 on success,
+ *  * -%EINVAL if arguments are invalid, or
+ *  * Any error returned by pvr_vm_bind().
+ */
+static int
+pvr_ioctl_vm_bind(struct drm_device *drm_dev, void *raw_args,
+		  struct drm_file *file)
+{
+	struct drm_pvr_ioctl_vm_bind_args *args = raw_args;
+	struct pvr_file *pvr_file = to_pvr_file(file);
+	struct drm_pvr_vm_bind_op *uapi_ops = NULL;
+	struct drm_pvr_sync_op *sync_ops = NULL;
+	struct pvr_vm_context *vm_ctx;
+	struct pvr_vm_bind_req req;
+	int idx;
+	int err;
+
+	if (!drm_dev_enter(drm_dev, &idx))
+		return -EIO;
+
+	if (args->flags & ~DRM_PVR_VM_BIND_FLAGS_MASK) {
+		err = -EINVAL;
+		goto err_drm_dev_exit;
+	}
+
+	if (!(args->flags & DRM_PVR_VM_BIND_ASYNC) && args->sync_ops.count) {
+		err = -EINVAL;
+		goto err_drm_dev_exit;
+	}
+
+	if (!args->ops.count && !args->sync_ops.count) {
+		err = 0;
+		goto err_drm_dev_exit;
+	}
+
+	vm_ctx = pvr_vm_context_lookup(pvr_file, args->vm_context_handle);
+	if (!vm_ctx) {
+		err = -EINVAL;
+		goto err_drm_dev_exit;
+	}
+
+	if (args->ops.count) {
+		err = PVR_UOBJ_GET_ARRAY(uapi_ops, &args->ops);
+		if (err)
+			goto err_put_vm_context;
+	}
+
+	if (args->sync_ops.count) {
+		err = PVR_UOBJ_GET_ARRAY(sync_ops, &args->sync_ops);
+		if (err)
+			goto err_free_uapi_ops;
+	}
+
+	req = (struct pvr_vm_bind_req){
+		.ops = uapi_ops,
+		.op_count = args->ops.count,
+		.sync_ops = sync_ops,
+		.sync_op_count = args->sync_ops.count,
+		.async = args->flags & DRM_PVR_VM_BIND_ASYNC,
+	};
+
+	err = pvr_vm_bind(vm_ctx, pvr_file, &req);
+
+	kvfree(sync_ops);
+
+err_free_uapi_ops:
+	kvfree(uapi_ops);
+
+err_put_vm_context:
+	pvr_vm_context_put(vm_ctx);
+
+err_drm_dev_exit:
+	drm_dev_exit(idx);
+
+	return err;
+}
+
 /*
  * pvr_ioctl_submit_job() - IOCTL to submit a job to the GPU
  * @drm_dev: [IN] DRM device.
@@ -1290,6 +1377,7 @@ static const struct drm_ioctl_desc pvr_drm_driver_ioctls[] = {
 	DRM_PVR_IOCTL(CREATE_HWRT_DATASET, create_hwrt_dataset, DRM_RENDER_ALLOW),
 	DRM_PVR_IOCTL(DESTROY_HWRT_DATASET, destroy_hwrt_dataset, DRM_RENDER_ALLOW),
 	DRM_PVR_IOCTL(SUBMIT_JOBS, submit_jobs, DRM_RENDER_ALLOW),
+	DRM_PVR_IOCTL(VM_BIND, vm_bind, DRM_RENDER_ALLOW),
 };
 
 /* clang-format on */

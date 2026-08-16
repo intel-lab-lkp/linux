@@ -22,6 +22,8 @@ struct pvr_vm_context;
 
 /* Forward declaration from <uapi/drm/pvr_drm.h> */
 struct drm_pvr_ioctl_get_heap_info_args;
+struct drm_pvr_sync_op;
+struct drm_pvr_vm_bind_op;
 
 /* Forward declaration from <drm/drm_exec.h> */
 struct drm_exec;
@@ -43,6 +45,31 @@ int pvr_vm_unmap_obj(struct pvr_vm_context *vm_ctx,
 		     u64 device_addr, u64 size);
 int pvr_vm_unmap(struct pvr_vm_context *vm_ctx, u64 device_addr, u64 size);
 void pvr_vm_unmap_all(struct pvr_vm_context *vm_ctx);
+
+bool pvr_vm_context_is_unusable(struct pvr_vm_context *vm_ctx);
+
+/**
+ * struct pvr_vm_bind_req - A VM bind request, as passed to pvr_vm_bind().
+ */
+struct pvr_vm_bind_req {
+	/** @ops: Array of userspace operation descriptions. */
+	const struct drm_pvr_vm_bind_op *ops;
+
+	/** @op_count: Number of entries in @ops. */
+	u32 op_count;
+
+	/** @sync_ops: Array of sync operations, or %NULL if there are none. */
+	const struct drm_pvr_sync_op *sync_ops;
+
+	/** @sync_op_count: Number of entries in @sync_ops. */
+	u32 sync_op_count;
+
+	/** @async: Queue the request instead of applying it inline. */
+	bool async;
+};
+
+int pvr_vm_bind(struct pvr_vm_context *vm_ctx, struct pvr_file *pvr_file,
+		const struct pvr_vm_bind_req *req);
 
 dma_addr_t pvr_vm_get_page_table_root_addr(struct pvr_vm_context *vm_ctx);
 struct dma_resv *pvr_vm_get_dma_resv(struct pvr_vm_context *vm_ctx);

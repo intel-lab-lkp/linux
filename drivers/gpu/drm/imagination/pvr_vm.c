@@ -9,20 +9,27 @@
 #include "pvr_mmu.h"
 #include "pvr_rogue_fwif.h"
 #include "pvr_rogue_heap_config.h"
+#include "pvr_sync.h"
 
 #include <drm/drm_exec.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_gpuvm.h>
 #include <drm/drm_print.h>
+#include <drm/gpu_scheduler.h>
 
 #include <linux/bug.h>
 #include <linux/container_of.h>
+#include <linux/dma-fence.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/gfp_types.h>
 #include <linux/kref.h>
 #include <linux/mutex.h>
+#include <linux/sched.h>
+#include <linux/slab.h>
 #include <linux/stddef.h>
+#include <linux/workqueue.h>
+#include <linux/xarray.h>
 
 /**
  * DOC: Memory context
@@ -51,6 +58,32 @@ struct pvr_vm_context {
 	struct mutex lock;
 
 	/**
+	 * @sched: Scheduler used to serialise asynchronous VM_BIND requests.
+	 *
+	 * Only initialised for userspace VM contexts; see @sched_initialised.
+	 */
+	struct drm_gpu_scheduler sched;
+
+	/** @entity: Scheduling entity feeding @sched. */
+	struct drm_sched_entity entity;
+
+	/** @sched_initialised: True if @sched and @entity need tearing down. */
+	bool sched_initialised;
+
+	/**
+	 * @unusable: An asynchronous bind failed part way through, leaving the
+	 * address space in a state nobody can reason about.
+	 *
+	 * Only the asynchronous path sets this; a synchronous failure reaches
+	 * its caller directly, who then owns the recovery. Set once and never
+	 * cleared: further operations are rejected with -%ECANCELED and the
+	 * context has to be destroyed and recreated.
+	 *
+	 * Written under @lock, read without it.
+	 */
+	bool unusable;
+
+	/**
 	 * @fw_mem_ctx_obj: Firmware object representing firmware memory
 	 * context.
 	 */
@@ -71,6 +104,9 @@ struct pvr_vm_context *to_pvr_vm_context(struct drm_gpuvm *gpuvm)
 {
 	return container_of(gpuvm, struct pvr_vm_context, gpuvm_mgr);
 }
+
+static int pvr_vm_bind_sched_init(struct pvr_vm_context *vm_ctx);
+static void pvr_vm_bind_sched_fini(struct pvr_vm_context *vm_ctx);
 
 struct pvr_vm_context *pvr_vm_context_get(struct pvr_vm_context *vm_ctx)
 {
@@ -606,7 +642,25 @@ pvr_vm_create_context(struct pvr_device *pvr_dev, bool is_userspace_context)
 	mutex_init(&vm_ctx->lock);
 	kref_init(&vm_ctx->ref_count);
 
+	if (is_userspace_context) {
+		err = pvr_vm_bind_sched_init(vm_ctx);
+		if (err)
+			goto err_gpuvm_put;
+	}
+
 	return vm_ctx;
+
+err_gpuvm_put:
+	if (vm_ctx->fw_mem_ctx_obj)
+		pvr_fw_object_destroy(vm_ctx->fw_mem_ctx_obj);
+
+	pvr_mmu_context_destroy(vm_ctx->mmu_ctx);
+	drm_gem_private_object_fini(&vm_ctx->dummy_gem);
+	mutex_destroy(&vm_ctx->lock);
+
+	drm_gpuvm_put(&vm_ctx->gpuvm_mgr);
+
+	return ERR_PTR(err);
 
 err_page_table_destroy:
 	pvr_mmu_context_destroy(vm_ctx->mmu_ctx);
@@ -629,6 +683,8 @@ pvr_vm_context_release(struct kref *ref_count)
 {
 	struct pvr_vm_context *vm_ctx =
 		container_of(ref_count, struct pvr_vm_context, ref_count);
+
+	pvr_vm_bind_sched_fini(vm_ctx);
 
 	if (vm_ctx->fw_mem_ctx_obj)
 		pvr_fw_object_destroy(vm_ctx->fw_mem_ctx_obj);
@@ -851,6 +907,18 @@ pvr_vm_unmap(struct pvr_vm_context *vm_ctx, u64 device_addr, u64 size)
 	drm_gpuvm_bo_deferred_cleanup(&vm_ctx->gpuvm_mgr);
 
 	return err;
+}
+
+/**
+ * pvr_vm_context_is_unusable() - Test whether a VM context has been left in an
+ * undefined state by a failed operation.
+ * @vm_ctx: Target VM context.
+ *
+ * Return: %true if the context rejects further operations.
+ */
+bool pvr_vm_context_is_unusable(struct pvr_vm_context *vm_ctx)
+{
+	return READ_ONCE(vm_ctx->unusable);
 }
 
 /**
@@ -1173,4 +1241,440 @@ struct pvr_fw_object *
 pvr_vm_get_fw_mem_context(struct pvr_vm_context *vm_ctx)
 {
 	return vm_ctx->fw_mem_ctx_obj;
+}
+
+/**
+ * DOC: Asynchronous VM_BIND
+ *
+ * %DRM_IOCTL_PVR_VM_BIND can queue a batch of bind operations instead of
+ * applying them inline. Each request becomes a &pvr_vm_bind_job pushed to a
+ * per-VM-context &drm_gpu_scheduler, which guarantees that requests targeting
+ * the same VM context are applied in submission order.
+ *
+ * Everything that can fail or allocate - argument validation, page table
+ * pre-allocation, page pinning - happens while building the job, because
+ * &drm_sched_backend_ops.run_job executes inside the dma-fence signalling
+ * critical path. For the same reason the GPUVM is initialised with
+ * %DRM_GPUVM_IMMEDIATE_MODE, so that mappings are tracked under the GEM's
+ * gpuva.lock rather than its dma_resv.
+ */
+
+/**
+ * struct pvr_vm_bind_job - A queued batch of VM bind operations.
+ */
+struct pvr_vm_bind_job {
+	/** @base: Inherited &drm_sched_job object. */
+	struct drm_sched_job base;
+
+	/** @vm_ctx: VM context targeted by this job. Holds a reference. */
+	struct pvr_vm_context *vm_ctx;
+
+	/** @op_count: Number of entries in @ops. */
+	u32 op_count;
+
+	/** @ops: Prepared bind operations, applied in array order. */
+	struct pvr_vm_bind_op *ops;
+
+	/**
+	 * @cleanup_work: Releases @ops and the reference on @vm_ctx.
+	 *
+	 * free_job() cannot do this itself: dropping what may be the last VM
+	 * context reference there would call drm_sched_fini(), which flushes
+	 * the very worker free_job() runs on.
+	 */
+	struct work_struct cleanup_work;
+};
+
+#define to_pvr_vm_bind_job(sched_job) \
+	container_of((sched_job), struct pvr_vm_bind_job, base)
+
+/**
+ * pvr_vm_bind_ops_free() - Release an array of prepared bind operations.
+ * @ops: Array to release. May be %NULL.
+ * @count: Number of prepared entries in @ops.
+ */
+static void pvr_vm_bind_ops_free(struct pvr_vm_bind_op *ops, u32 count)
+{
+	if (!ops)
+		return;
+
+	for (u32 i = 0; i < count; i++)
+		pvr_vm_bind_op_fini(&ops[i]);
+
+	kvfree(ops);
+}
+
+static void pvr_vm_bind_job_free(struct pvr_vm_bind_job *job)
+{
+	if (!job)
+		return;
+
+	pvr_vm_bind_ops_free(job->ops, job->op_count);
+
+	if (job->vm_ctx) {
+		drm_gpuvm_bo_deferred_cleanup(&job->vm_ctx->gpuvm_mgr);
+		pvr_vm_context_put(job->vm_ctx);
+	}
+
+	kfree(job);
+}
+
+static void pvr_vm_bind_job_cleanup_work(struct work_struct *work)
+{
+	struct pvr_vm_bind_job *job =
+		container_of(work, struct pvr_vm_bind_job, cleanup_work);
+
+	pvr_vm_bind_job_free(job);
+}
+
+static struct dma_fence *
+pvr_vm_bind_run_job(struct drm_sched_job *sched_job)
+{
+	struct pvr_vm_bind_job *job = to_pvr_vm_bind_job(sched_job);
+	struct pvr_vm_context *vm_ctx = job->vm_ctx;
+	int err = 0;
+	bool cookie;
+
+	if (pvr_vm_context_is_unusable(vm_ctx))
+		return ERR_PTR(-ECANCELED);
+
+	cookie = dma_fence_begin_signalling();
+
+	mutex_lock(&vm_ctx->lock);
+
+	for (u32 i = 0; i < job->op_count; i++) {
+		err = pvr_vm_bind_op_exec(&job->ops[i]);
+		if (err)
+			break;
+	}
+
+	if (err)
+		WRITE_ONCE(vm_ctx->unusable, true);
+
+	mutex_unlock(&vm_ctx->lock);
+
+	dma_fence_end_signalling(cookie);
+
+	/* NULL completes the job: the page tables are already updated. */
+	return err ? ERR_PTR(err) : NULL;
+}
+
+static enum drm_gpu_sched_stat
+pvr_vm_bind_timedout_job(struct drm_sched_job *sched_job)
+{
+	WARN(1, "VM bind jobs run on a CPU worker and cannot hang\n");
+
+	return DRM_GPU_SCHED_STAT_RESET;
+}
+
+static void pvr_vm_bind_free_job(struct drm_sched_job *sched_job)
+{
+	struct pvr_vm_bind_job *job = to_pvr_vm_bind_job(sched_job);
+
+	drm_sched_job_cleanup(sched_job);
+
+	/* Flushed before the device goes away, so it cannot outlive it. */
+	queue_work(job->vm_ctx->pvr_dev->sched_wq, &job->cleanup_work);
+}
+
+static const struct drm_sched_backend_ops pvr_vm_bind_sched_ops = {
+	.run_job = pvr_vm_bind_run_job,
+	.timedout_job = pvr_vm_bind_timedout_job,
+	.free_job = pvr_vm_bind_free_job,
+};
+
+/**
+ * pvr_vm_bind_sched_init() - Set up the VM_BIND scheduler of a VM context.
+ * @vm_ctx: Target VM context.
+ *
+ * Return:
+ *  * 0 on success, or
+ *  * Any error returned by drm_sched_init() or drm_sched_entity_init().
+ */
+static int pvr_vm_bind_sched_init(struct pvr_vm_context *vm_ctx)
+{
+	struct pvr_device *pvr_dev = vm_ctx->pvr_dev;
+	struct drm_gpu_scheduler *sched = &vm_ctx->sched;
+	const struct drm_sched_init_args sched_args = {
+		.ops = &pvr_vm_bind_sched_ops,
+		.submit_wq = pvr_dev->sched_wq,
+		.credit_limit = 1,
+		.hang_limit = 0,
+		/* Bind jobs run on a CPU worker and cannot hang. */
+		.timeout = MAX_SCHEDULE_TIMEOUT,
+		.name = "pvr-vm-bind",
+		.dev = from_pvr_device(pvr_dev)->dev,
+	};
+	int err;
+
+	err = drm_sched_init(sched, &sched_args);
+	if (err)
+		return err;
+
+	err = drm_sched_entity_init(&vm_ctx->entity, DRM_SCHED_PRIORITY_NORMAL,
+				    &sched, 1, NULL);
+	if (err)
+		goto err_sched_fini;
+
+	vm_ctx->sched_initialised = true;
+
+	return 0;
+
+err_sched_fini:
+	drm_sched_fini(sched);
+
+	return err;
+}
+
+/**
+ * pvr_vm_bind_sched_fini() - Tear down the VM_BIND scheduler of a VM context.
+ * @vm_ctx: Target VM context.
+ *
+ * Waits for all queued bind jobs to be applied before returning.
+ */
+static void pvr_vm_bind_sched_fini(struct pvr_vm_context *vm_ctx)
+{
+	if (!vm_ctx->sched_initialised)
+		return;
+
+	drm_sched_entity_destroy(&vm_ctx->entity);
+	drm_sched_fini(&vm_ctx->sched);
+	vm_ctx->sched_initialised = false;
+}
+
+/**
+ * pvr_vm_bind_op_init_from_uapi() - Prepare a single bind op from its
+ *                                   userspace description.
+ * @bind_op: Bind op to initialise.
+ * @vm_ctx: Target VM context.
+ * @pvr_file: PowerVR file used to resolve buffer object handles.
+ * @uapi_op: Userspace description of the operation.
+ *
+ * On success @bind_op owns every resource it needs to be executed later,
+ * and must be released with pvr_vm_bind_op_fini().
+ *
+ * Return:
+ *  * 0 on success,
+ *  * -%EINVAL if @uapi_op is malformed, or
+ *  * -%ENOENT if @uapi_op refers to an unknown buffer object.
+ */
+static int
+pvr_vm_bind_op_init_from_uapi(struct pvr_vm_bind_op *bind_op,
+			      struct pvr_vm_context *vm_ctx,
+			      struct pvr_file *pvr_file,
+			      const struct drm_pvr_vm_bind_op *uapi_op)
+{
+	struct pvr_gem_object *pvr_obj;
+	int err;
+
+	if (uapi_op->flags & ~DRM_PVR_VM_BIND_OP_FLAGS_MASK)
+		return -EINVAL;
+
+	if (!uapi_op->size)
+		return -EINVAL;
+
+	switch (uapi_op->flags & DRM_PVR_VM_BIND_OP_TYPE_MASK) {
+	case DRM_PVR_VM_BIND_OP_TYPE_MAP:
+		pvr_obj = pvr_gem_object_from_handle(pvr_file, uapi_op->handle);
+		if (!pvr_obj)
+			return -ENOENT;
+
+		err = pvr_vm_bind_op_map_init(bind_op, vm_ctx, pvr_obj,
+					      uapi_op->offset,
+					      uapi_op->device_addr,
+					      uapi_op->size);
+		if (err) {
+			pvr_gem_object_put(pvr_obj);
+			return err;
+		}
+
+		return 0;
+
+	case DRM_PVR_VM_BIND_OP_TYPE_UNMAP:
+		if (uapi_op->handle || uapi_op->offset)
+			return -EINVAL;
+
+		return pvr_vm_bind_op_unmap_init(bind_op, vm_ctx, NULL,
+						 uapi_op->device_addr,
+						 uapi_op->size);
+
+	default:
+		return -EINVAL;
+	}
+}
+
+/**
+ * pvr_vm_bind_ops_create_from_uapi() - Prepare bind operations from their
+ *                                      userspace description.
+ * @vm_ctx: Target VM context.
+ * @pvr_file: PowerVR file used to resolve buffer object handles.
+ * @uapi_ops: Array of userspace operation descriptions.
+ * @op_count: Number of entries in @uapi_ops.
+ *
+ * Every allocation needed to apply the operations is performed here, so that
+ * applying them later - possibly from inside the dma-fence signalling critical
+ * path - cannot fail for want of memory.
+ *
+ * Return: The new array on success, or an ERR_PTR on failure.
+ */
+static struct pvr_vm_bind_op *
+pvr_vm_bind_ops_create_from_uapi(struct pvr_vm_context *vm_ctx,
+				 struct pvr_file *pvr_file,
+				 const struct drm_pvr_vm_bind_op *uapi_ops,
+				 u32 op_count)
+{
+	struct pvr_vm_bind_op *ops;
+	int err;
+
+	ops = kvzalloc_objs(*ops, op_count, GFP_KERNEL);
+	if (!ops)
+		return ERR_PTR(-ENOMEM);
+
+	for (u32 prepared = 0; prepared < op_count; prepared++) {
+		err = pvr_vm_bind_op_init_from_uapi(&ops[prepared], vm_ctx,
+						    pvr_file,
+						    &uapi_ops[prepared]);
+		if (err) {
+			pvr_vm_bind_ops_free(ops, prepared);
+			return ERR_PTR(err);
+		}
+	}
+
+	return ops;
+}
+
+/**
+ * pvr_vm_bind_exec_async() - Queue a batch of bind operations.
+ * @vm_ctx: Target VM context.
+ * @ops: Prepared bind operations. Consumed by this function.
+ * @op_count: Number of entries in @ops.
+ * @pvr_file: PowerVR file the request was issued on.
+ * @sync_ops: Sync operations to apply to the request.
+ * @sync_op_count: Number of entries in @sync_ops.
+ *
+ * Wraps @ops in a &pvr_vm_bind_job and hands it to the VM context scheduler.
+ * The synchronous path needs no job at all; it applies @ops inline.
+ *
+ * Return:
+ *  * 0 on success, or
+ *  * Any error returned while resolving @sync_ops or arming the job.
+ */
+static int pvr_vm_bind_exec_async(struct pvr_vm_context *vm_ctx,
+				  struct pvr_vm_bind_op *ops, u32 op_count,
+				  struct pvr_file *pvr_file,
+				  const struct drm_pvr_sync_op *sync_ops,
+				  u32 sync_op_count)
+{
+	struct dma_fence *finished_fence;
+	struct pvr_vm_bind_job *job;
+	struct xarray signal_array;
+	int err;
+
+	job = kzalloc_obj(*job);
+	if (!job) {
+		pvr_vm_bind_ops_free(ops, op_count);
+		return -ENOMEM;
+	}
+
+	job->vm_ctx = pvr_vm_context_get(vm_ctx);
+	job->ops = ops;
+	job->op_count = op_count;
+	INIT_WORK(&job->cleanup_work, pvr_vm_bind_job_cleanup_work);
+
+	xa_init_flags(&signal_array, XA_FLAGS_ALLOC);
+
+	err = drm_sched_job_init(&job->base, &vm_ctx->entity, 1, pvr_file,
+				 from_pvr_file(pvr_file)->client_id);
+	if (err)
+		goto err_cleanup_signal_array;
+
+	err = pvr_sync_signal_array_collect_ops(&signal_array,
+						from_pvr_file(pvr_file),
+						sync_op_count, sync_ops);
+	if (err)
+		goto err_cleanup_job;
+
+	err = pvr_sync_add_deps_to_job(pvr_file, &job->base, sync_op_count,
+				       sync_ops, &signal_array);
+	if (err)
+		goto err_cleanup_job;
+
+	drm_sched_job_arm(&job->base);
+	finished_fence = &job->base.s_fence->finished;
+
+	/*
+	 * Arming is the point of no return: the job has to be pushed now. The
+	 * update below only touches entries the collect above created, so it
+	 * cannot fail, and a driver bug that made it fail has already warned.
+	 */
+	pvr_sync_signal_array_update_fences(&signal_array, sync_op_count,
+					    sync_ops, finished_fence);
+
+	drm_sched_entity_push_job(&job->base);
+	pvr_sync_signal_array_push_fences(&signal_array);
+
+	pvr_sync_signal_array_cleanup(&signal_array);
+
+	return 0;
+
+err_cleanup_job:
+	drm_sched_job_cleanup(&job->base);
+
+err_cleanup_signal_array:
+	pvr_sync_signal_array_cleanup(&signal_array);
+	pvr_vm_bind_job_free(job);
+
+	return err;
+}
+
+/**
+ * pvr_vm_bind() - Apply a batch of bind operations to a VM context.
+ * @vm_ctx: Target VM context.
+ * @pvr_file: PowerVR file the request was issued on.
+ * @req: The request to apply.
+ *
+ * This is the single entry point for every userspace-initiated mapping change:
+ * %DRM_IOCTL_PVR_VM_BIND passes its whole operation array, while the legacy
+ * %DRM_IOCTL_PVR_VM_MAP and %DRM_IOCTL_PVR_VM_UNMAP build a one-element array.
+ *
+ * Return:
+ *  * 0 on success, or
+ *  * A negative error code on failure.
+ */
+int pvr_vm_bind(struct pvr_vm_context *vm_ctx, struct pvr_file *pvr_file,
+		const struct pvr_vm_bind_req *req)
+{
+	struct pvr_vm_bind_op *ops;
+	int err = 0;
+
+	if (pvr_vm_context_is_unusable(vm_ctx))
+		return -ECANCELED;
+
+	if (req->async && !vm_ctx->sched_initialised)
+		return -EINVAL;
+
+	ops = pvr_vm_bind_ops_create_from_uapi(vm_ctx, pvr_file, req->ops,
+					       req->op_count);
+	if (IS_ERR(ops))
+		return PTR_ERR(ops);
+
+	if (req->async)
+		return pvr_vm_bind_exec_async(vm_ctx, ops, req->op_count,
+					      pvr_file, req->sync_ops,
+					      req->sync_op_count);
+
+	mutex_lock(&vm_ctx->lock);
+
+	if (pvr_vm_context_is_unusable(vm_ctx))
+		err = -ECANCELED;
+
+	for (u32 i = 0; !err && i < req->op_count; i++)
+		err = pvr_vm_bind_op_exec(&ops[i]);
+
+	mutex_unlock(&vm_ctx->lock);
+
+	pvr_vm_bind_ops_free(ops, req->op_count);
+	drm_gpuvm_bo_deferred_cleanup(&vm_ctx->gpuvm_mgr);
+
+	return err;
 }

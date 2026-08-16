@@ -761,6 +761,9 @@ static struct dma_fence *pvr_queue_run_job(struct drm_sched_job *sched_job)
 		return dma_fence_get(job->done_fence);
 	}
 
+	if (pvr_vm_context_is_unusable(job->ctx->vm_ctx))
+		return ERR_PTR(-ECANCELED);
+
 	/* The only kind of jobs that can be paired are geometry and fragment, and
 	 * we bail out early if we see a fragment job that's paired with a geometry job.
 	 * Paired jobs must also target the same context and point to the same HWRT.

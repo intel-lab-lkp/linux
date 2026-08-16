@@ -108,6 +108,7 @@ struct drm_pvr_obj_array {
 #define DRM_IOCTL_PVR_CREATE_HWRT_DATASET PVR_IOCTL(0x0b, DRM_IOWR, create_hwrt_dataset)
 #define DRM_IOCTL_PVR_DESTROY_HWRT_DATASET PVR_IOCTL(0x0c, DRM_IOW, destroy_hwrt_dataset)
 #define DRM_IOCTL_PVR_SUBMIT_JOBS PVR_IOCTL(0x0d, DRM_IOW, submit_jobs)
+#define DRM_IOCTL_PVR_VM_BIND PVR_IOCTL(0x0e, DRM_IOW, vm_bind)
 
 /**
  * DOC: PowerVR IOCTL DEV_QUERY interface
@@ -1286,6 +1287,120 @@ struct drm_pvr_job {
 struct drm_pvr_ioctl_submit_jobs_args {
 	/** @jobs: [IN] Array of jobs to submit. */
 	struct drm_pvr_obj_array jobs;
+};
+
+/**
+ * DOC: PowerVR IOCTL VM_BIND interface
+ *
+ * %DRM_IOCTL_PVR_VM_BIND applies a batch of map and/or unmap operations to a
+ * single VM context, either before the IOCTL returns or, with
+ * %DRM_PVR_VM_BIND_ASYNC, from a queue.
+ *
+ * Operations within a request are applied in array order, and queued requests
+ * targeting one VM context in submission order. A synchronous request does not
+ * wait for the queued ones; a caller mixing the two on one VM context has to
+ * order them itself.
+ *
+ * A request that fails part way through may leave the address space in an
+ * undefined state; how much of it was applied is not reported.
+ */
+
+/**
+ * DOC: Flags for VM_BIND operations.
+ *
+ * The type of a VM bind operation is stored in the top four bits of
+ * &drm_pvr_vm_bind_op.flags.
+ *
+ * .. c:macro:: DRM_PVR_VM_BIND_OP_TYPE_MAP
+ *
+ *    Create a new mapping. &drm_pvr_vm_bind_op.handle must be a valid buffer
+ *    object handle.
+ *
+ * .. c:macro:: DRM_PVR_VM_BIND_OP_TYPE_UNMAP
+ *
+ *    Remove existing mappings. &drm_pvr_vm_bind_op.handle and
+ *    &drm_pvr_vm_bind_op.offset must both be zero.
+ *
+ * .. c:macro:: DRM_PVR_VM_BIND_OP_TYPE_MASK
+ *
+ *    Mask used to extract the operation type.
+ */
+#define DRM_PVR_VM_BIND_OP_TYPE_MAP (0u << 28)
+#define DRM_PVR_VM_BIND_OP_TYPE_UNMAP (1u << 28)
+#define DRM_PVR_VM_BIND_OP_TYPE_MASK (0xfu << 28)
+
+#define DRM_PVR_VM_BIND_OP_FLAGS_MASK DRM_PVR_VM_BIND_OP_TYPE_MASK
+
+/**
+ * struct drm_pvr_vm_bind_op - A single VM bind operation.
+ */
+struct drm_pvr_vm_bind_op {
+	/** @flags: [IN] Combination of ``DRM_PVR_VM_BIND_OP_`` flags. */
+	__u32 flags;
+
+	/**
+	 * @handle: [IN] Handle of the target buffer object.
+	 *
+	 * Must be a valid handle returned by %DRM_IOCTL_PVR_CREATE_BO for map
+	 * operations. MBZ for unmap operations.
+	 */
+	__u32 handle;
+
+	/**
+	 * @offset: [IN] Offset into the target buffer object from which to
+	 * begin the mapping. MBZ for unmap operations.
+	 */
+	__u64 offset;
+
+	/**
+	 * @device_addr: [IN] Device-virtual address at the start of the target
+	 * range. This must be non-zero and must obey the same alignment and
+	 * heap containment rules as %DRM_IOCTL_PVR_VM_MAP.
+	 */
+	__u64 device_addr;
+
+	/** @size: [IN] Size in bytes of the target range. Must be non-zero. */
+	__u64 size;
+};
+
+/**
+ * DOC: Flags for the VM_BIND ioctl.
+ *
+ * .. c:macro:: DRM_PVR_VM_BIND_ASYNC
+ *
+ *    Queue the request instead of applying it synchronously. Completion is
+ *    reported through &drm_pvr_ioctl_vm_bind_args.sync_ops.
+ */
+#define DRM_PVR_VM_BIND_ASYNC _BITUL(0)
+
+#define DRM_PVR_VM_BIND_FLAGS_MASK DRM_PVR_VM_BIND_ASYNC
+
+/**
+ * struct drm_pvr_ioctl_vm_bind_args - Arguments for %DRM_IOCTL_PVR_VM_BIND.
+ */
+struct drm_pvr_ioctl_vm_bind_args {
+	/**
+	 * @vm_context_handle: [IN] Handle for the VM context these operations
+	 * apply to.
+	 */
+	__u32 vm_context_handle;
+
+	/** @flags: [IN] Combination of ``DRM_PVR_VM_BIND_`` flags. */
+	__u32 flags;
+
+	/** @ops: [IN] Array of &struct drm_pvr_vm_bind_op to apply. */
+	struct drm_pvr_obj_array ops;
+
+	/**
+	 * @sync_ops: [IN] Sync operations applied to the request as a whole.
+	 * Waits are honoured before any of @ops is applied, signals fire once
+	 * all of them have been. Must be empty unless %DRM_PVR_VM_BIND_ASYNC is
+	 * set in @flags.
+	 *
+	 * A request with no operations but a non-empty @sync_ops is valid, and
+	 * places a bare synchronisation point on the VM bind queue.
+	 */
+	struct drm_pvr_obj_array sync_ops;
 };
 
 #if defined(__cplusplus)

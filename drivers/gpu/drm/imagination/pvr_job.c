@@ -15,6 +15,7 @@
 #include "pvr_stream_defs.h"
 #include "pvr_sync.h"
 #include "pvr_trace.h"
+#include "pvr_vm.h"
 
 #include <drm/drm_exec.h>
 #include <drm/drm_gem.h>
@@ -431,6 +432,11 @@ create_job(struct pvr_device *pvr_dev,
 	job->ctx = pvr_context_lookup(pvr_file, args->context_handle);
 	if (!job->ctx) {
 		err = -EINVAL;
+		goto err_put_job;
+	}
+
+	if (pvr_vm_context_is_unusable(job->ctx->vm_ctx)) {
+		err = -ECANCELED;
 		goto err_put_job;
 	}
 
