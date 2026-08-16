@@ -10226,6 +10226,7 @@ F:	Documentation/driver-api/fpga/
 F:	Documentation/fpga/
 F:	drivers/fpga/
 F:	include/linux/fpga/
+F:	include/uapi/linux/fpga.h
 
 FRAMEBUFFER CONSOLE
 M:	Helge Deller <deller@gmx.de>

@@ -157,6 +157,15 @@ config OF_FPGA_REGION
 	  Support for loading FPGA images by applying a Device Tree
 	  overlay.
 
+config FPGA_DMA_BUF
+	tristate "FPGA DMA Buffer Support"
+	depends on DMA_SHARED_BUFFER
+	help
+	  Support for programming FPGAs from a pre-allocated DMA buffer
+	  shared via dma-buf. A miscdevice (/dev/fpgaX) accepts a dma-buf
+	  file descriptor via ioctl to load the FPGA image without
+	  redundant memory copies.
+
 config FPGA_DFL
 	tristate "FPGA Device Feature List (DFL) support"
 	select FPGA_BRIDGE

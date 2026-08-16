@@ -213,6 +213,7 @@ struct fpga_manager {
 	const struct fpga_manager_ops *mops;
 	struct module *mops_owner;
 	void *priv;
+	void *dmabuf_priv;
 };
 
 #define to_fpga_manager(d) container_of(d, struct fpga_manager, dev)
