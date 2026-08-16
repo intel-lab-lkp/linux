@@ -7,6 +7,9 @@
 #include <linux/pgtable.h>
 #include <linux/types.h>
 
+/* Ceiling the max_ptes_* tunables accept, and the value meaning "no limit" */
+#define KHUGEPAGED_MAX_PTES_LIMIT	(HPAGE_PMD_NR - 1)
+
 /* The smallest order a collapse will build, and so the finest window it cuts */
 #define COLLAPSE_MIN_MTHP_ORDER		2
 
@@ -194,22 +197,16 @@ enum scan_result collapse_anon_pmd(struct mm_struct *mm, unsigned long start,
 int collapse_control_init(struct collapse_control *cc);
 void collapse_control_release(struct collapse_control *cc);
 
-/*
- * Defined in khugepaged.c, which still uses them itself.
- * TODO: move each into collapse.c once its last khugepaged.c user is gone.
- */
 unsigned long collapse_possible_orders(struct vm_area_struct *vma,
 		vm_flags_t vm_flags, enum tva_type tva_flags);
+enum scan_result check_pmd_state(pmd_t *pmd);
 enum scan_result find_pmd_or_thp_or_none(struct mm_struct *mm,
 		unsigned long address, pmd_t **pmd);
 int collapse_find_target_node(struct collapse_control *cc);
 bool collapse_scan_abort(int nid, struct collapse_control *cc);
-unsigned int max_order_from_offset(unsigned int offset);
 unsigned int collapse_max_ptes_none(struct collapse_control *cc,
 		struct vm_area_struct *vma, unsigned int order);
 unsigned int collapse_max_ptes_swap(struct collapse_control *cc,
-		unsigned int order);
-unsigned int collapse_max_ptes_shared(struct collapse_control *cc,
 		unsigned int order);
 
 #endif	/* __MM_COLLAPSE_H */
