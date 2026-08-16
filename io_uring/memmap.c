@@ -4,6 +4,8 @@
 #include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
+#include <linux/refcount.h>
+#include <linux/sched/user.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/io_uring.h>
@@ -88,6 +90,52 @@ enum {
 	IO_REGION_F_SINGLE_REF			= 4,
 };
 
+struct io_region_account {
+	refcount_t refs;
+	struct user_struct *user;
+	unsigned long nr_pages;
+};
+
+static struct io_region_account *
+io_region_account_alloc(struct user_struct *user, unsigned long nr_pages)
+{
+	struct io_region_account *account;
+	int ret;
+
+	if (!user)
+		return NULL;
+
+	account = kmalloc_obj(*account, GFP_KERNEL_ACCOUNT);
+	if (!account)
+		return ERR_PTR(-ENOMEM);
+
+	ret = __io_account_mem(user, nr_pages);
+	if (ret) {
+		kfree(account);
+		return ERR_PTR(ret);
+	}
+
+	refcount_set(&account->refs, 1);
+	account->user = get_uid(user);
+	account->nr_pages = nr_pages;
+	return account;
+}
+
+static void io_region_account_get(struct io_region_account *account)
+{
+	if (account)
+		refcount_inc(&account->refs);
+}
+
+static void io_region_account_put(struct io_region_account *account)
+{
+	if (account && refcount_dec_and_test(&account->refs)) {
+		__io_unaccount_mem(account->user, account->nr_pages);
+		free_uid(account->user);
+		kfree(account);
+	}
+}
+
 void io_free_region(struct user_struct *user, struct io_mapped_region *mr)
 {
 	if (mr->pages) {
@@ -105,8 +153,12 @@ void io_free_region(struct user_struct *user, struct io_mapped_region *mr)
 	}
 	if ((mr->flags & IO_REGION_F_VMAP) && mr->ptr)
 		vunmap(mr->ptr);
-	if (mr->nr_pages && user)
+	if (mr->account) {
+		WARN_ON_ONCE(mr->account->user != user);
+		io_region_account_put(mr->account);
+	} else if (mr->nr_pages && user) {
 		__io_unaccount_mem(user, mr->nr_pages);
+	}
 
 	memset(mr, 0, sizeof(*mr));
 }
@@ -188,7 +240,8 @@ int io_create_region(struct io_ring_ctx *ctx, struct io_mapped_region *mr,
 	int nr_pages, ret;
 	u64 end;
 
-	if (WARN_ON_ONCE(mr->pages || mr->ptr || mr->nr_pages))
+	if (WARN_ON_ONCE(mr->pages || mr->ptr || mr->nr_pages ||
+			 mr->account))
 		return -EFAULT;
 	if (memchr_inv(&reg->__resv, 0, sizeof(reg->__resv)))
 		return -EINVAL;
@@ -207,10 +260,23 @@ int io_create_region(struct io_ring_ctx *ctx, struct io_mapped_region *mr,
 		return -EOVERFLOW;
 
 	nr_pages = reg->size >> PAGE_SHIFT;
-	if (ctx->user) {
-		ret = __io_account_mem(ctx->user, nr_pages);
-		if (ret)
+	if (reg->flags & IORING_MEM_REGION_TYPE_USER) {
+		if (ctx->user) {
+			ret = __io_account_mem(ctx->user, nr_pages);
+			if (ret)
+				return ret;
+		}
+	} else {
+		/*
+		 * Kernel-allocated pages can outlive their active region through
+		 * userspace mappings.
+		 */
+		mr->account = io_region_account_alloc(ctx->user, nr_pages);
+		if (IS_ERR(mr->account)) {
+			ret = PTR_ERR(mr->account);
+			mr->account = NULL;
 			return ret;
+		}
 	}
 	mr->nr_pages = nr_pages;
 
@@ -281,15 +347,41 @@ static void *io_uring_validate_mmap_request(struct file *file, loff_t pgoff)
 
 #ifdef CONFIG_MMU
 
+static void io_region_vm_open(struct vm_area_struct *vma)
+{
+	io_region_account_get(vma->vm_private_data);
+}
+
+static void io_region_vm_close(struct vm_area_struct *vma)
+{
+	io_region_account_put(vma->vm_private_data);
+}
+
+static const struct vm_operations_struct io_region_vm_ops = {
+	.open = io_region_vm_open,
+	.close = io_region_vm_close,
+};
+
 static int io_region_mmap(struct io_ring_ctx *ctx,
 			  struct io_mapped_region *mr,
 			  struct vm_area_struct *vma,
 			  unsigned max_pages)
 {
 	unsigned long nr_pages = min(mr->nr_pages, max_pages);
+	int ret;
 
 	vm_flags_set(vma, VM_DONTEXPAND);
-	return vm_insert_pages(vma, vma->vm_start, mr->pages, &nr_pages);
+	ret = vm_insert_pages(vma, vma->vm_start, mr->pages, &nr_pages);
+	if (!ret && mr->account) {
+		/*
+		 * Accounting deliberately remains at region granularity when
+		 * this VMA maps only part of the region.
+		 */
+		vma->vm_private_data = mr->account;
+		vma->vm_ops = &io_region_vm_ops;
+		vma->vm_ops->open(vma);
+	}
+	return ret;
 }
 
 __cold int io_uring_mmap(struct file *file, struct vm_area_struct *vma)
@@ -379,6 +471,8 @@ static void io_uring_nommu_vm_close(struct vm_area_struct *vma)
 
 	for (index = vma->vm_start; index < vma->vm_end; index += PAGE_SIZE)
 		put_page(virt_to_page((void *) index));
+
+	io_region_account_put(vma->vm_private_data);
 }
 
 static const struct vm_operations_struct io_uring_nommu_vm_ops = {
@@ -411,6 +505,8 @@ int io_uring_mmap(struct file *file, struct vm_area_struct *vma)
 	for (i = 0; i < region->nr_pages; i++)
 		get_page(region->pages[i]);
 
+	vma->vm_private_data = region->account;
+	io_region_account_get(region->account);
 	vma->vm_ops = &io_uring_nommu_vm_ops;
 	return 0;
 }

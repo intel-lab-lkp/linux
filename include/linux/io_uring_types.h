@@ -94,11 +94,14 @@ struct io_hash_table {
 	unsigned		hash_bits;
 };
 
+struct io_region_account;
+
 struct io_mapped_region {
 	struct page		**pages;
 	void			*ptr;
 	unsigned		nr_pages;
 	unsigned		flags;
+	struct io_region_account	*account;
 };
 
 /*
