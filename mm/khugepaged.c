@@ -2738,8 +2738,8 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
  * the results.
  */
 static enum scan_result collapse_single_pmd(unsigned long addr,
-		struct vm_area_struct *vma, bool *lock_dropped,
-		struct collapse_control *cc)
+		unsigned long end, struct vm_area_struct *vma,
+		bool *lock_dropped, struct collapse_control *cc)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	bool triggered_wb = false;
@@ -2750,8 +2750,7 @@ static enum scan_result collapse_single_pmd(unsigned long addr,
 	mmap_assert_locked(mm);
 
 	if (vma_is_anonymous(vma)) {
-		result = collapse_scan_anon_pmd(vma, addr, addr + HPAGE_PMD_SIZE,
-						cc);
+		result = collapse_scan_anon_pmd(vma, addr, end, cc);
 		if (!cc->select_orders)
 			goto end;
 
@@ -2759,7 +2758,7 @@ static enum scan_result collapse_single_pmd(unsigned long addr,
 		mmap_read_unlock(mm);
 		*lock_dropped = true;
 
-		result = collapse_anon_pmd(mm, addr, addr + HPAGE_PMD_SIZE, cc);
+		result = collapse_anon_pmd(mm, addr, end, cc);
 		goto end;
 	}
 
@@ -2872,6 +2871,8 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 				  hend);
 
 			*result = collapse_single_pmd(khugepaged_scan.address,
+						      khugepaged_scan.address +
+						      HPAGE_PMD_SIZE,
 						      vma, &lock_dropped, cc);
 			/* move to next address */
 			khugepaged_scan.address += HPAGE_PMD_SIZE;
@@ -3211,7 +3212,8 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 			hend = min(hend, vma->vm_end & HPAGE_PMD_MASK);
 		}
 
-		result = collapse_single_pmd(addr, vma, &mmap_unlocked, cc);
+		result = collapse_single_pmd(addr, addr + HPAGE_PMD_SIZE, vma,
+					     &mmap_unlocked, cc);
 
 		switch (result) {
 		case SCAN_SUCCEED:
