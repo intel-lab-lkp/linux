@@ -3531,6 +3531,25 @@ config GLOB_KUNIT_TEST
 
 	  If unsure, say N
 
+config TEXTSEARCH_KUNIT_TEST
+	tristate "Textsearch infrastructure test" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	select TEXTSEARCH
+	select TEXTSEARCH_KMP
+	select TEXTSEARCH_BM
+	default KUNIT_ALL_TESTS
+	help
+	  Enable this option to test the textsearch infrastructure at
+	  runtime.
+
+	  This test suite exercises lib/textsearch.c together with the
+	  string-pattern algorithms registered with it. The same cases are
+	  run against every algorithm, checking the reported match offsets
+	  and that repeated searches over one buffer make progress and
+	  terminate.
+
+	  If unsure, say N
+
 endif # RUNTIME_TESTING_MENU
 
 config ARCH_USE_MEMTEST
