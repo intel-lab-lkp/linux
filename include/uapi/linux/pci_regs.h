@@ -1338,6 +1338,27 @@
 #define  PCI_IDE_SEL_ADDR_3(x)		(28 + (x) * PCI_IDE_SEL_ADDR_BLOCK_SIZE)
 #define PCI_IDE_SEL_BLOCK_SIZE(nr_assoc)  (20 + PCI_IDE_SEL_ADDR_BLOCK_SIZE * (nr_assoc))
 
+/* MMIO Capabilities Register Block (MCAP) */
+#define PCI_MCAP_ARRAY_1		0x00
+#define  PCI_MCAP_ARRAY_ID		__GENMASK(15, 0)
+#define  PCI_MCAP_ARRAY_VERSION		__GENMASK(23, 16)
+#define  PCI_MCAP_ARRAY_TYPE		__GENMASK(27, 24)
+#define  PCI_MCAP_ARRAY_TYPE_CLASS_CODE	0x0
+#define PCI_MCAP_ARRAY_2		0x04
+#define  PCI_MCAP_ARRAY_COUNT		__GENMASK(15, 0)
+
+#define PCI_MCAP_HDR_SIZEOF		0x10
+#define PCI_MCAP_HDR_BASE(n)		((n) * PCI_MCAP_HDR_SIZEOF)
+#define PCI_MCAP_HDR_REG_1		0x00
+#define  PCI_MCAP_CAP_ID		__GENMASK(15, 0)
+#define  PCI_MCAP_CAP_VERSION		__GENMASK(23, 16)
+#define PCI_MCAP_HDR_REG_2		0x04
+#define  PCI_MCAP_HDR_OFFSET		__GENMASK(31, 0)
+#define PCI_MCAP_HDR_REG_3		0x08
+#define  PCI_MCAP_HDR_LENGTH		__GENMASK(31, 0)
+#define PCI_MCAP_HDR_REG_4		0x0c
+#define  PCI_MCAP_HDR_VENDOR_ID		__GENMASK(15, 0)
+
 /*
  * Compute Express Link (CXL r4.0, sec 8.1)
  *
