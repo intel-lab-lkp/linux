@@ -7,6 +7,9 @@
 #include <linux/pgtable.h>
 #include <linux/types.h>
 
+/* The smallest order a collapse will build, and so the finest window it cuts */
+#define COLLAPSE_MIN_MTHP_ORDER		2
+
 enum scan_result {
 	SCAN_FAIL,
 	SCAN_SUCCEED,
