@@ -87,6 +87,20 @@
  */
 
 /*
+ * Is @count past a limit stated per PMD, when only part of a table was scanned?
+ * Scale the comparison to the table so a partial scan is held to the same
+ * density as a whole one.
+ */
+static bool collapse_exceeds_limit(unsigned int count, unsigned int max_per_pmd,
+				   unsigned long start, unsigned long end)
+{
+	const unsigned long nr_scanned = (end - start) >> PAGE_SHIFT;
+
+	return (unsigned long)count * HPAGE_PMD_NR >
+	       (unsigned long)max_per_pmd * nr_scanned;
+}
+
+/*
  * Scan the PTEs between @start and @end and record what a collapse could use: a
  * bit in cc->eligible_ptes for every PTE that may be a source.  Returns
  * SCAN_SUCCEED when every PTE in the range qualified, otherwise the reason one
@@ -97,7 +111,230 @@ static enum scan_result collapse_scan_table(struct vm_area_struct *vma,
 					    unsigned long end,
 					    struct collapse_control *cc)
 {
-	return SCAN_SUCCEED;
+	const unsigned long pmd_addr = start & HPAGE_PMD_MASK;
+	unsigned int max_ptes_none, max_ptes_swap, max_ptes_shared;
+	int none_or_zero = 0, shared = 0, referenced = 0, unmapped = 0;
+	enum scan_result result, pmd_result = SCAN_SUCCEED;
+	unsigned int first_offset;
+	unsigned long addr;
+	pte_t *pte;
+	int i;
+
+	max_ptes_none = collapse_max_ptes_none(cc, vma, HPAGE_PMD_ORDER);
+	max_ptes_swap = collapse_max_ptes_swap(cc, HPAGE_PMD_ORDER);
+	max_ptes_shared = collapse_max_ptes_shared(cc, HPAGE_PMD_ORDER);
+
+	/*
+	 * No page table lock: what this builds is advice, and the freeze settles
+	 * every question it asks by re-reading the table under the lock and
+	 * freezing each source to the count it expects.  A racy read can only
+	 * cost a candidate that the freeze then refuses, or miss one that the
+	 * next pass finds.  What it buys is that a fault in this range does not
+	 * wait for a scan of the whole table.
+	 *
+	 * pte_offset_map() holds rcu_read_lock() until pte_unmap(), which is
+	 * what keeps the table itself from being freed underneath the walk;
+	 * mmap_lock keeps the VMA attached, without which free_pgtables() could
+	 * free it without waiting for RCU at all.  Nothing below here sleeps.
+	 */
+	pte = pte_offset_map(pmd, start);
+	if (!pte) {
+		cc->progress++;
+		result = SCAN_NO_PTE_TABLE;
+		goto out_no_table;
+	}
+
+	/*
+	 * The bitmap and the selection offsets stay relative to the table:
+	 * natural-alignment math needs the table-absolute position, not the
+	 * position within an arbitrarily placed VMA.
+	 */
+	first_offset = (start - pmd_addr) >> PAGE_SHIFT;
+	for (i = first_offset, addr = start; addr < end;
+	     i++, addr += PAGE_SIZE) {
+		pte_t pteval = ptep_get(pte + (i - first_offset));
+		struct folio *folio;
+		struct page *page;
+		int node;
+
+		cc->progress++;
+
+		if (pte_none_or_zero(pteval)) {
+			if (++none_or_zero > max_ptes_none &&
+			    pmd_result == SCAN_SUCCEED) {
+				pmd_result = SCAN_EXCEED_NONE_PTE;
+				count_vm_event(THP_SCAN_EXCEED_NONE_PTE);
+				count_mthp_stat(HPAGE_PMD_ORDER,
+						MTHP_STAT_COLLAPSE_EXCEED_NONE);
+			}
+			continue;
+		}
+		if (!pte_present(pteval)) {
+			unmapped++;
+			if (collapse_exceeds_limit(unmapped, max_ptes_swap,
+						   start, end)) {
+				result = SCAN_EXCEED_SWAP_PTE;
+				count_vm_event(THP_SCAN_EXCEED_SWAP_PTE);
+				count_mthp_stat(HPAGE_PMD_ORDER,
+						MTHP_STAT_COLLAPSE_EXCEED_SWAP);
+				goto out_table_refused;
+			}
+			/* Swap entries armed with uffd-wp are refused too */
+			if (pte_swp_uffd_any(pteval) &&
+			    pmd_result == SCAN_SUCCEED)
+				pmd_result = SCAN_PTE_UFFD;
+			continue;
+		}
+		if (pte_uffd(pteval)) {
+			/*
+			 * The huge PMD could be marked write protected when any
+			 * of the small ones is, but that could deliver
+			 * userfaults outside the registered range.  Keep it
+			 * simple and refuse the PTE.
+			 */
+			if (pmd_result == SCAN_SUCCEED)
+				pmd_result = SCAN_PTE_UFFD;
+			continue;
+		}
+
+		page = vm_normal_page(vma, addr, pteval);
+		if (unlikely(!page) || unlikely(is_zone_device_page(page))) {
+			if (pmd_result == SCAN_SUCCEED)
+				pmd_result = SCAN_PAGE_NULL;
+			continue;
+		}
+		folio = page_folio(page);
+
+		/*
+		 * A VM_DROPPABLE VMA keeps the lazyfree property across the
+		 * collapse, so there is nothing to preserve by skipping.
+		 */
+		if (cc->policy.skip_lazyfree &&
+		    !(vma->vm_flags & VM_DROPPABLE) &&
+		    folio_test_lazyfree(folio) && !pte_dirty(pteval)) {
+			if (pmd_result == SCAN_SUCCEED)
+				pmd_result = SCAN_PAGE_LAZYFREE;
+			continue;
+		}
+
+		if (!folio_test_anon(folio)) {
+			if (pmd_result == SCAN_SUCCEED)
+				pmd_result = SCAN_PAGE_ANON;
+			continue;
+		}
+
+		/*
+		 * A page counts as shared if any part of its folio is, which
+		 * bounds the cost of CoW-breaking rather than the count of it:
+		 * collapse_faultin() unshares on !PageAnonExclusive(), a broader
+		 * test -- a page whose fork co-mapper has exited is
+		 * single-mapped, so not counted here, yet stays non-exclusive
+		 * until a write reuses it.  Those are the cheap ones, reused in
+		 * place.  A page that has to be copied is one this test catches,
+		 * so the limit does bound the copying it is there to bound.
+		 */
+		if (folio_maybe_mapped_shared(folio)) {
+			shared++;
+			if (collapse_exceeds_limit(shared, max_ptes_shared,
+						   start, end)) {
+				result = SCAN_EXCEED_SHARED_PTE;
+				count_vm_event(THP_SCAN_EXCEED_SHARED_PTE);
+				count_mthp_stat(HPAGE_PMD_ORDER,
+						MTHP_STAT_COLLAPSE_EXCEED_SHARED);
+				goto out_table_refused;
+			}
+		}
+
+		/*
+		 * Which node the sources are on decides where the destination is
+		 * allocated: the one with the most of them wins.
+		 */
+		node = folio_nid(folio);
+		if (collapse_scan_abort(node, cc)) {
+			result = SCAN_SCAN_ABORT;
+			goto out_table_refused;
+		}
+		cc->node_load[node]++;
+
+		/*
+		 * Usually a folio somebody else is already isolating, whose
+		 * reference the freeze would refuse anyway.  Not exact: one
+		 * still on a per-CPU add batch reads the same, and the freeze
+		 * drains those before it starts.
+		 */
+		if (!folio_test_lru(folio)) {
+			if (pmd_result == SCAN_SUCCEED)
+				pmd_result = SCAN_PAGE_LRU;
+			continue;
+		}
+		if (folio_test_locked(folio)) {
+			if (pmd_result == SCAN_SUCCEED)
+				pmd_result = SCAN_PAGE_LOCK;
+			continue;
+		}
+
+		/*
+		 * A folio whose reference count its mappings do not account for
+		 * -- a GUP pin, say -- is refused by the freeze, not here.
+		 * folio_expected_ref_count() wants a folio that cannot change
+		 * order while it is read, and this walk holds no page table lock
+		 * and no folio lock, so a folio splitting underneath it would
+		 * have the count read for the wrong size.  A reference of our
+		 * own would not help: it stops the folio being freed, not split.
+		 *
+		 * So leave it to the freeze, which reads the table under the
+		 * lock and settles the question by freezing each source to the
+		 * count it expects.  What it costs is a window selected here and
+		 * refused there.
+		 */
+
+		/*
+		 * Every check passed: this PTE can be a collapse source.  The
+		 * bit is set last, so a disqualified PTE leaves it clear.
+		 */
+		__set_bit(i, cc->eligible_ptes);
+
+		/*
+		 * Whether a range has to look used at all is the caller's
+		 * policy, so only a caller that asks gathers the evidence.
+		 */
+		if (cc->policy.require_referenced &&
+		    (pte_young(pteval) || folio_test_young(folio) ||
+		     folio_test_referenced(folio) ||
+		     mmu_notifier_test_young(vma->vm_mm, addr)))
+			referenced++;
+	}
+
+	if (cc->policy.require_referenced &&
+	    (!referenced || (unmapped && referenced < HPAGE_PMD_NR / 2)))
+		result = SCAN_LACK_REFERENCED_PAGE;
+	else
+		result = pmd_result;
+	pte_unmap(pte);
+	goto out;
+
+out_table_refused:
+	/*
+	 * The table is refused as a unit -- a limit the whole range exceeds, or
+	 * pages on nodes too distant for one folio to serve them all -- so no
+	 * window inside it is eligible either.
+	 */
+	pte_unmap(pte);
+out_no_table:
+	cc->select_orders = 0;
+out:
+	/*
+	 * A PMD candidate needs the whole table, so anything that disqualified a
+	 * single PTE rules it out.  Smaller windows that avoid the offending
+	 * PTEs are still collapsible, so drop just that order and leave the rest
+	 * to selection -- dropping it also lowers the order selection roots its
+	 * windows at.  MADV_COLLAPSE has no other order enabled, so it is left
+	 * with none.
+	 */
+	if (result != SCAN_SUCCEED)
+		cc->select_orders &= ~BIT(HPAGE_PMD_ORDER);
+
+	return result;
 }
 
 /* Everything a table is judged on starts empty for each table */
