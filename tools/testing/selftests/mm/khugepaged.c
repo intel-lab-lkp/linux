@@ -1685,6 +1685,49 @@ static void collapse_order_sub_pmd_holes(struct collapse_context *c,
 	ksft_test_result_report(exit_status, "%s\n", __func__);
 }
 
+/*
+ * One MADV_FREE'd page must not stop the windows beside it from collapsing.
+ * khugepaged still refuses the window holding it: collapsing would copy the
+ * page into a folio that is not lazyfree, quietly making memory the process
+ * offered up undroppable again.
+ */
+static void collapse_order_lazyfree_window(struct collapse_context *c,
+					   struct mem_ops *ops)
+{
+	size_t window = mthp_window_size();
+	void *p;
+
+	mthp_push_target_order();
+
+	p = ops->setup_area(1);
+	ops->fault(p, 0, hpage_pmd_size);
+	if (!window_not_collapsed(p, hpage_pmd_size))
+		ksft_exit_fail_msg("Unexpected large folio after fault\n");
+
+	/* Clean and lazyfree: do not touch this page again. */
+	if (madvise(p, page_size, MADV_FREE))
+		ksft_exit_fail_perror("MADV_FREE");
+
+	madvise(p, hpage_pmd_size, MADV_HUGEPAGE);
+	ksft_print_msg("Collapse the windows beside a MADV_FREE'd page...");
+	if (!khugepaged_wait_full_pass())
+		fail("Timeout");
+	else if (window_collapsed(p + window, hpage_pmd_size - window) &&
+		 window_not_collapsed(p, window) &&
+		 /* Left alone at every order, not just the target one */
+		 is_range_backed_by_folio_orders(p, page_size, 0,
+						 pagemap_fd, kpageflags_fd))
+		success("OK");
+	else
+		fail("Fail");
+
+	/* Everything but the freed page, whose contents may be gone. */
+	validate_memory(p, page_size, hpage_pmd_size);
+	ops->cleanup_area(p, hpage_pmd_size);
+	thp_pop_settings();
+	ksft_test_result_report(exit_status, "%s\n", __func__);
+}
+
 static void usage(void)
 {
 	fprintf(stderr, "\nUsage: ./khugepaged [OPTIONS] <test type> [dir]\n\n");
@@ -1976,6 +2019,7 @@ int main(int argc, char **argv)
 		TEST(collapse_order_sub_pmd_range, mthp_khugepaged_context, anon_ops);
 		TEST(collapse_order_sub_pmd_holes, mthp_khugepaged_context, anon_ops);
 		TEST(collapse_order_mlocked, mthp_khugepaged_context, anon_ops);
+		TEST(collapse_order_lazyfree_window, mthp_khugepaged_context, anon_ops);
 	}
 
 	TEST(collapse_full, madvise_context, anon_ops);
