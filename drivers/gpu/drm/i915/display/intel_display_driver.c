@@ -34,6 +34,7 @@
 #include "intel_display_driver.h"
 #include "intel_display_irq.h"
 #include "intel_display_power.h"
+#include "intel_display_rpm.h"
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
 #include "intel_display_wa.h"
@@ -931,6 +932,10 @@ void intel_display_driver_pm_runtime_suspend_late(struct intel_display *display)
 		intel_opregion_notify_adapter(display, PCI_D1);
 	}
 
+	/* No need of HPD polling if the device is PME capable */
+	if (intel_display_rpm_pme_capable(display))
+		return;
+
 	if (!display->platform.valleyview && !display->platform.cherryview)
 		intel_hpd_poll_enable(display);
 }
@@ -951,10 +956,20 @@ void intel_display_driver_pm_runtime_resume(struct intel_display *display)
 	 * power well, so hpd is reinitialized from there. For
 	 * everyone else do it here.
 	 */
-	if (!display->platform.valleyview && !display->platform.cherryview) {
-		intel_hpd_init(display);
-		intel_hpd_poll_disable(display);
-	}
+	if (display->platform.valleyview || display->platform.cherryview)
+		goto out;
 
+	/* For PME capable devices we would not have resorted into HPD polling */
+	if (intel_hpd_polling_enabled(display))
+		intel_hpd_init(display);
+
+	/*
+	 * Regardless of PME capable path, call the HPD polling disable, the
+	 * poll_init_work, i915_hpd_poll_detect_connectors reprobe catches the
+	 * hotplug that occurred while suspended
+	 */
+	intel_hpd_poll_disable(display);
+
+out:
 	skl_watermark_ipc_update(display);
 }
