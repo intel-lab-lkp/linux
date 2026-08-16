@@ -65,67 +65,6 @@ COLLAPSE_PASS_STATUS
 #define EM(a, b)	{a, b},
 #define EMe(a, b)	{a, b}
 
-TRACE_EVENT(mm_khugepaged_scan_pmd,
-
-	TP_PROTO(struct mm_struct *mm, struct folio *folio,
-		 int referenced, int none_or_zero, int status, int unmapped),
-
-	TP_ARGS(mm, folio, referenced, none_or_zero, status, unmapped),
-
-	TP_STRUCT__entry(
-		__field(struct mm_struct *, mm)
-		__field(unsigned long, pfn)
-		__field(int, referenced)
-		__field(int, none_or_zero)
-		__field(int, status)
-		__field(int, unmapped)
-	),
-
-	TP_fast_assign(
-		__entry->mm = mm;
-		__entry->pfn = folio ? folio_pfn(folio) : -1;
-		__entry->referenced = referenced;
-		__entry->none_or_zero = none_or_zero;
-		__entry->status = status;
-		__entry->unmapped = unmapped;
-	),
-
-	TP_printk("mm=%p, scan_pfn=0x%lx, referenced=%d, none_or_zero=%d, status=%s, unmapped=%d",
-		__entry->mm,
-		__entry->pfn,
-		__entry->referenced,
-		__entry->none_or_zero,
-		__print_symbolic(__entry->status, SCAN_STATUS),
-		__entry->unmapped)
-);
-
-TRACE_EVENT(mm_collapse_huge_page,
-
-	TP_PROTO(struct mm_struct *mm, int isolated, int status, unsigned int order),
-
-	TP_ARGS(mm, isolated, status, order),
-
-	TP_STRUCT__entry(
-		__field(struct mm_struct *, mm)
-		__field(int, isolated)
-		__field(int, status)
-		__field(unsigned int, order)
-	),
-
-	TP_fast_assign(
-		__entry->mm = mm;
-		__entry->isolated = isolated;
-		__entry->status = status;
-		__entry->order = order;
-	),
-
-	TP_printk("mm=%p, isolated=%d, status=%s, order=%u",
-		__entry->mm,
-		__entry->isolated,
-		__print_symbolic(__entry->status, SCAN_STATUS),
-		__entry->order)
-);
-
 TRACE_EVENT(mm_collapse_scan,
 
 	TP_PROTO(struct mm_struct *mm, unsigned long addr, int none_or_zero,
@@ -244,68 +183,6 @@ TRACE_EVENT(mm_collapse_candidate,
 		__entry->order,
 		__print_symbolic(__entry->pass, COLLAPSE_PASS_STATUS),
 		__print_symbolic(__entry->result, SCAN_STATUS))
-);
-
-TRACE_EVENT(mm_collapse_huge_page_isolate,
-
-	TP_PROTO(struct folio *folio, int none_or_zero,
-		 int referenced, int status, unsigned int order),
-
-	TP_ARGS(folio, none_or_zero, referenced, status, order),
-
-	TP_STRUCT__entry(
-		__field(unsigned long, pfn)
-		__field(int, none_or_zero)
-		__field(int, referenced)
-		__field(int, status)
-		__field(unsigned int, order)
-	),
-
-	TP_fast_assign(
-		__entry->pfn = folio ? folio_pfn(folio) : -1;
-		__entry->none_or_zero = none_or_zero;
-		__entry->referenced = referenced;
-		__entry->status = status;
-		__entry->order = order;
-	),
-
-	TP_printk("scan_pfn=0x%lx, none_or_zero=%d, referenced=%d, status=%s, order=%u",
-		__entry->pfn,
-		__entry->none_or_zero,
-		__entry->referenced,
-		__print_symbolic(__entry->status, SCAN_STATUS),
-		__entry->order)
-);
-
-TRACE_EVENT(mm_collapse_huge_page_swapin,
-
-	TP_PROTO(struct mm_struct *mm, int swapped_in, int referenced, int ret,
-		 unsigned int order),
-
-	TP_ARGS(mm, swapped_in, referenced, ret, order),
-
-	TP_STRUCT__entry(
-		__field(struct mm_struct *, mm)
-		__field(int, swapped_in)
-		__field(int, referenced)
-		__field(int, ret)
-		__field(unsigned int, order)
-	),
-
-	TP_fast_assign(
-		__entry->mm = mm;
-		__entry->swapped_in = swapped_in;
-		__entry->referenced = referenced;
-		__entry->ret = ret;
-		__entry->order = order;
-	),
-
-	TP_printk("mm=%p, swapped_in=%d, referenced=%d, ret=%d, order=%u",
-		__entry->mm,
-		__entry->swapped_in,
-		__entry->referenced,
-		__entry->ret,
-		__entry->order)
 );
 
 TRACE_EVENT(mm_collapse_scan_file,
