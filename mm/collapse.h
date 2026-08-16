@@ -46,6 +46,7 @@ enum scan_result {
 	SCAN_COPY_MC,
 	SCAN_PAGE_FILLED,
 	SCAN_PAGE_DIRTY_OR_WRITEBACK,
+	SCAN_ALLOC_LIGHT_MISS,
 };
 
 /*
@@ -148,6 +149,7 @@ unsigned long collapse_possible_orders(struct vm_area_struct *vma,
 		vm_flags_t vm_flags, enum tva_type tva_flags);
 enum scan_result find_pmd_or_thp_or_none(struct mm_struct *mm,
 		unsigned long address, pmd_t **pmd);
+int collapse_find_target_node(struct collapse_control *cc);
 bool collapse_scan_abort(int nid, struct collapse_control *cc);
 unsigned int collapse_max_ptes_none(struct collapse_control *cc,
 		struct vm_area_struct *vma, unsigned int order);

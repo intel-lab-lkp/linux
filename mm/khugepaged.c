@@ -999,7 +999,7 @@ static void collapse_policy_forced(struct collapse_policy *p)
 }
 
 #ifdef CONFIG_NUMA
-static int collapse_find_target_node(struct collapse_control *cc)
+int collapse_find_target_node(struct collapse_control *cc)
 {
 	int nid, target_node = 0, max_value = 0;
 
@@ -1018,7 +1018,7 @@ static int collapse_find_target_node(struct collapse_control *cc)
 	return target_node;
 }
 #else
-static int collapse_find_target_node(struct collapse_control *cc)
+int collapse_find_target_node(struct collapse_control *cc)
 {
 	return 0;
 }

@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/swap.h>
 #include <linux/userfaultfd_k.h>
+#include <linux/vmstat.h>
 
 #include <asm/tlb.h>
 #include "collapse.h"
@@ -114,6 +115,12 @@
 	min(COLLAPSE_BATCH_BYTES >> (PAGE_SHIFT + COLLAPSE_MIN_MTHP_ORDER), \
 	    COLLAPSE_TABLE_WINDOWS)
 
+/* How far a candidate got, and so what a failure has to undo for it */
+enum collapse_candidate_state {
+	CAND_SELECTED,		/* collected; nothing held on its behalf yet */
+	CAND_SKIPPED,		/* refused; nothing of it left to undo */
+};
+
 /*
  * A candidate is an (addr, order) window selected for collapse.  Selection
  * counts in PTE offsets -- the bitmap it reads and the alignment it honours are
@@ -123,7 +130,12 @@
 struct collapse_candidate {
 	unsigned long addr;
 	unsigned int order;
+	/* The light allocation missed last round: this one may reclaim for it */
+	bool reclaim;
+	enum collapse_candidate_state state;
 	enum scan_result result;
+	struct folio *new_folio;
+	pgtable_t deposit;		/* PMD order: fresh table to deposit */
 };
 
 static unsigned long candidate_start(const struct collapse_candidate *cand)
@@ -219,6 +231,43 @@ static void collapse_freeze(struct vm_area_struct *vma,
 }
 
 /*
+ * Allocate one candidate's destination with @gfp: a folio of its order, charged,
+ * with the memcg's deferred-split list heads in place so the install cannot need
+ * to allocate under the pmd lock.  Those heads cost only the first collapse in a
+ * memcg.
+ *
+ * A failure counts nothing and changes nothing: what a miss means is the caller's
+ * policy.
+ */
+static enum scan_result collapse_alloc(struct mm_struct *mm,
+				       struct collapse_control *cc,
+				       struct collapse_candidate *cand,
+				       gfp_t gfp)
+{
+	struct folio *folio;
+
+	folio = __folio_alloc(gfp, cand->order, collapse_find_target_node(cc),
+			      &cc->alloc_nmask);
+	if (!folio)
+		return SCAN_ALLOC_HUGE_PAGE_FAIL;
+
+	if (unlikely(mem_cgroup_charge(folio, mm, gfp)) ||
+	    folio_memcg_alloc_deferred(folio)) {
+		folio_put(folio);
+		return SCAN_CGROUP_CHARGE_FAIL;
+	}
+
+	if (is_pmd_order(cand->order)) {
+		count_vm_event(THP_COLLAPSE_ALLOC);
+		count_memcg_folio_events(folio, THP_COLLAPSE_ALLOC, 1);
+	}
+	count_mthp_stat(cand->order, MTHP_STAT_COLLAPSE_ALLOC);
+	cand->new_folio = folio;
+
+	return SCAN_SUCCEED;
+}
+
+/*
  * Allocate ahead of the freeze for the candidates whose light allocation missed
  * last round.  This is where reclaim belongs: nothing is held or frozen, so a
  * long compaction costs only khugepaged's own progress -- which is why the
@@ -227,6 +276,31 @@ static void collapse_freeze(struct vm_area_struct *vma,
  */
 static void collapse_reserve(struct mm_struct *mm, struct collapse_control *cc)
 {
+	unsigned int i;
+
+	for (i = 0; i < cc->nr_candidates; i++) {
+		struct collapse_candidate *cand = &cc->candidates[i];
+		enum scan_result result;
+
+		if (!cand->reclaim)
+			continue;
+		cand->reclaim = false;
+
+		result = collapse_alloc(mm, cc, cand, cc->policy.gfp);
+		if (result == SCAN_SUCCEED)
+			continue;
+
+		if (result == SCAN_ALLOC_HUGE_PAGE_FAIL) {
+			/* Asked the allocator to try hard and it still missed */
+			if (is_pmd_order(cand->order))
+				count_vm_event(THP_COLLAPSE_ALLOC_FAILED);
+			count_mthp_stat(cand->order,
+					MTHP_STAT_COLLAPSE_ALLOC_FAILED);
+		}
+
+		cand->state = CAND_SKIPPED;
+		cand->result = result;
+	}
 }
 
 /*
@@ -235,9 +309,28 @@ static void collapse_reserve(struct mm_struct *mm, struct collapse_control *cc)
  * to strip: order-0 or not, it may reclaim and sleep, which is what the window
  * exists to keep out.  The destination folio has a light gfp to fall back on and
  * so can be deferred; this has none.
+ *
+ * A round is one table and a PMD-order window is the whole of it, so such a
+ * candidate cannot share a round: if there is one it is the only one, and it is
+ * candidates[0].  This secures one page table, never a batch of them.
  */
 static void collapse_deposit(struct mm_struct *mm, struct collapse_control *cc)
 {
+	struct collapse_candidate *cand = &cc->candidates[0];
+
+	if (!is_pmd_order(cand->order))
+		return;
+
+	VM_WARN_ON_ONCE(cc->nr_candidates != 1);
+
+	if (cand->state != CAND_SELECTED)
+		return;
+
+	cand->deposit = pte_alloc_one(mm);
+	if (!cand->deposit) {
+		cand->state = CAND_SKIPPED;
+		cand->result = SCAN_ALLOC_HUGE_PAGE_FAIL;
+	}
 }
 
 /*
@@ -253,6 +346,35 @@ static void collapse_deposit(struct mm_struct *mm, struct collapse_control *cc)
 static void collapse_provision(struct mm_struct *mm,
 			       struct collapse_control *cc)
 {
+	const gfp_t gfp = cc->policy.gfp & ~__GFP_DIRECT_RECLAIM;
+	const bool may_retry = gfp != cc->policy.gfp;
+	unsigned int i;
+
+	for (i = 0; i < cc->nr_candidates; i++) {
+		struct collapse_candidate *cand = &cc->candidates[i];
+		enum scan_result result;
+
+		if (cand->state != CAND_SELECTED || cand->new_folio)
+			continue;
+
+		result = collapse_alloc(mm, cc, cand, gfp);
+		if (result == SCAN_SUCCEED)
+			continue;
+
+		if (may_retry) {
+			/* A charge miss too: charging may reclaim when allowed */
+			cand->result = SCAN_ALLOC_LIGHT_MISS;
+		} else {
+			/* The gfp a retry would use, so this is the answer */
+			if (result == SCAN_ALLOC_HUGE_PAGE_FAIL) {
+				if (is_pmd_order(cand->order))
+					count_vm_event(THP_COLLAPSE_ALLOC_FAILED);
+				count_mthp_stat(cand->order,
+						MTHP_STAT_COLLAPSE_ALLOC_FAILED);
+			}
+			cand->result = result;
+		}
+	}
 }
 
 /*
@@ -761,7 +883,11 @@ static void collapse_add_candidate(struct collapse_control *cc,
 	cc->nr_candidates++;
 	cand->addr = addr;
 	cand->order = order;
+	cand->reclaim = false;
+	cand->state = CAND_SELECTED;
 	cand->result = SCAN_FAIL;
+	cand->new_folio = NULL;
+	cand->deposit = NULL;
 }
 
 /*
