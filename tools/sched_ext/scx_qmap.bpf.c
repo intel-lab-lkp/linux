@@ -446,7 +446,8 @@ void BPF_STRUCT_OPS(qmap_enqueue, struct task_struct *p, u64 enq_flags)
 	 *
 	 * Force it onto its first allowed cid's local DSQ. If we hold that cid
 	 * it runs. Otherwise the insert carries SCX_ENQ_RESCUE and the kernel
-	 * diverts the task to its rescue path.
+	 * diverts the task to its rescue path. Do this before the blocked-donor
+	 * fast paths, which also require an eligible self cid to make progress.
 	 */
 	if (!cmask_intersects(&taskc->cpus_allowed, &qa.self_cids.mask)) {
 		s32 c = cmask_next_set_wrap(&taskc->cpus_allowed, 0);
@@ -458,6 +459,43 @@ void BPF_STRUCT_OPS(qmap_enqueue, struct task_struct *p, u64 enq_flags)
 					   enq_flags | needs_immed(c) | SCX_ENQ_RESCUE);
 			return;
 		}
+	}
+
+	/*
+	 * SCX_OPS_ALWAYS_ENQ_IMMED makes the local insertion below implicitly
+	 * carry SCX_ENQ_IMMED. If the CPU can't run the blocked donor immediately,
+	 * the core returns it through ops.enqueue() with SCX_ENQ_REENQ. Inserting
+	 * it into the same local DSQ would repeat the IMMED handback until the
+	 * scheduler is ejected. Move reenqueued blocked donors to the shared DSQ,
+	 * which doesn't carry SCX_ENQ_IMMED, so another CPU can consume them.
+	 */
+	if ((enq_flags & (SCX_ENQ_BLOCKED | SCX_ENQ_REENQ)) ==
+	    (SCX_ENQ_BLOCKED | SCX_ENQ_REENQ)) {
+		taskc->force_local = false;
+		scx_bpf_dsq_insert(p, SHARED_DSQ, 0, enq_flags);
+		cid = cmask_next_and2_set_wrap(&taskc->cpus_allowed,
+					       &qa.idle_cids.mask,
+					       &qa.self_cids.mask, 0);
+		if (cid < scx_bpf_nr_cids())
+			scx_bpf_kick_cid(cid, SCX_KICK_IDLE);
+		return;
+	}
+
+	/*
+	 * Insert a blocked mutex donor at the head of its current cid's local
+	 * DSQ with a fresh slice and %SCX_ENQ_PREEMPT, requesting an immediate
+	 * reschedule. Once selected, the core proxy-exec path can immediately
+	 * run the mutex owner using the donor's scheduling context.
+	 *
+	 * This policy is intentionally unfair and can strongly prioritize tasks
+	 * using contended mutexes; scx_qmap is a demonstration scheduler and
+	 * this behavior makes proxy-exec support easy to observe.
+	 */
+	if (enq_flags & SCX_ENQ_BLOCKED) {
+		__sync_fetch_and_add(&qa.nr_enq_blocked, 1);
+		scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL_ON | scx_bpf_task_cid(p),
+				   slice_ns, enq_flags | SCX_ENQ_PREEMPT);
+		return;
 	}
 
 	/*
