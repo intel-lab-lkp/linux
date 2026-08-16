@@ -170,6 +170,11 @@ struct collapse_control {
 	pte_t *saved_ptes;
 };
 
+static inline int collapse_disabled(struct mm_struct *mm)
+{
+	return mm_flags_test(MMF_DISABLE_THP_COMPLETELY, mm);
+}
+
 static inline int collapse_test_exit(struct mm_struct *mm)
 {
 	return atomic_read(&mm->mm_users) == 0;
@@ -177,8 +182,18 @@ static inline int collapse_test_exit(struct mm_struct *mm)
 
 static inline int collapse_test_exit_or_disable(struct mm_struct *mm)
 {
-	return collapse_test_exit(mm) ||
-		mm_flags_test(MMF_DISABLE_THP_COMPLETELY, mm);
+	return collapse_test_exit(mm) || collapse_disabled(mm);
+}
+
+/* The owner has gone: the caller's own reference is the only one left */
+static inline int collapse_test_exit_mmref(struct mm_struct *mm)
+{
+	return atomic_read(&mm->mm_users) == 1;
+}
+
+static inline int collapse_test_exit_or_disable_mmref(struct mm_struct *mm)
+{
+	return collapse_test_exit_mmref(mm) || collapse_disabled(mm);
 }
 
 /*

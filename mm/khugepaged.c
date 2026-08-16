@@ -531,16 +531,31 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 	spin_unlock(&khugepaged_mm_lock);
 
 	mm = slot->mm;
+	vma = NULL;
+
+	/*
+	 * A reference on mm_users for as long as the pass works on this address
+	 * space.  __mmput() cannot start while one is held, so neither can
+	 * exit_mmap(), and the VMAs and page tables stay where they are.
+	 *
+	 * Once per pass, not once per table: the reference is what makes the
+	 * address space safe to work on, and a pass is how long that is wanted
+	 * for.  Nothing else in mm takes it per unit of work -- DAMON takes one
+	 * per target and walks every region under it, swapoff one per mm across
+	 * the whole address space, userfaultfd one per call.
+	 */
+	if (!mmget_not_zero(mm))
+		goto breakouterloop_no_mmput;
+
 	/*
 	 * Don't wait for semaphore (to avoid long wait times).  Just move to
 	 * the next mm on the list.
 	 */
-	vma = NULL;
 	if (unlikely(!mmap_read_trylock(mm)))
 		goto breakouterloop_mmap_lock;
 
 	cc->progress++;
-	if (unlikely(collapse_test_exit_or_disable(mm)))
+	if (unlikely(collapse_test_exit_or_disable_mmref(mm)))
 		goto breakouterloop;
 
 	vma_iter_init(&vmi, mm, khugepaged_scan.address);
@@ -549,7 +564,7 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 		unsigned long orders;
 
 		cond_resched();
-		if (unlikely(collapse_test_exit_or_disable(mm))) {
+		if (unlikely(collapse_test_exit_or_disable_mmref(mm))) {
 			cc->progress++;
 			break;
 		}
@@ -595,7 +610,7 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 			range_end = min(hend, pmd_addr + HPAGE_PMD_SIZE);
 
 			cond_resched();
-			if (unlikely(collapse_test_exit_or_disable(mm)) ||
+			if (unlikely(collapse_test_exit_or_disable_mmref(mm)) ||
 			    cc->progress >= progress_max)
 				goto breakouterloop;
 
@@ -622,6 +637,14 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 breakouterloop:
 	mmap_read_unlock(mm); /* exit_mmap will destroy ptes after this */
 breakouterloop_mmap_lock:
+	/*
+	 * Not mmput(): the last reference would run exit_mmap() here, and
+	 * khugepaged is not the thread that should tear an address space down.
+	 * Dropped before the exiting mm is judged below, so that judgement still
+	 * sees the true count.
+	 */
+	mmput_async(mm);
+breakouterloop_no_mmput:
 
 	spin_lock(&khugepaged_mm_lock);
 	VM_BUG_ON(khugepaged_scan.mm_slot != slot);
