@@ -142,16 +142,40 @@ static inline enum comp_state get_wqe(struct rxe_qp *qp,
 				      struct rxe_send_wqe **wqe_p)
 {
 	struct rxe_send_wqe *wqe;
+	unsigned int num_sge;
+	size_t copy_size;
 
 	/* we come here whether or not we found a response packet to see if
 	 * there are any posted WQEs
 	 */
 	wqe = queue_head(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);
-	*wqe_p = wqe;
 
 	/* no WQE or requester has not started it yet */
-	if (!wqe || wqe->state == wqe_state_posted)
+	if (!wqe || wqe->state == wqe_state_posted) {
+		*wqe_p = NULL;
 		return pkt ? COMPST_DONE : COMPST_EXIT;
+	}
+
+	/* Copy WQE from userspace-mapped shared queue to kernel-private
+	 * buffer. Userspace can concurrently modify DMA state (num_sge,
+	 * sge[], cur_sge), leading to inconsistent state in do_read()
+	 * and do_atomic(). This is the completer-path counterpart to
+	 * the requester-path fix.
+	 */
+	num_sge = wqe->dma.num_sge;
+	if (unlikely(num_sge > qp->sq.max_sge)) {
+		rxe_dbg_qp(qp, "invalid num_sge in send WQE (comp)\n");
+		memcpy(&qp->comp.comp_wqe.wqe, wqe, sizeof(*wqe));
+		qp->comp.comp_wqe.wqe.status = IB_WC_LOC_LEN_ERR;
+		qp->comp.shared_wqe = wqe;
+		*wqe_p = &qp->comp.comp_wqe.wqe;
+		return COMPST_ERROR;
+	}
+	copy_size = sizeof(*wqe) + num_sge * sizeof(struct rxe_sge);
+	memcpy(&qp->comp.comp_wqe.wqe, wqe, copy_size);
+	qp->comp.shared_wqe = wqe;
+	*wqe_p = &qp->comp.comp_wqe.wqe;
+	wqe = *wqe_p;
 
 	/* WQE does not require an ack */
 	if (wqe->state == wqe_state_done)
@@ -445,6 +469,14 @@ static void do_complete(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
 	struct rxe_cqe cqe;
 	bool post;
+
+	/* Write back status to the shared queue entry so the CQE
+	 * and any retry logic sees the correct completion status.
+	 */
+	if (qp->comp.shared_wqe) {
+		qp->comp.shared_wqe->status = wqe->status;
+		qp->comp.shared_wqe->state = wqe->state;
+	}
 
 	/* do we need to post a completion */
 	post = ((qp->sq_sig_type == IB_SIGNAL_ALL_WR) ||
