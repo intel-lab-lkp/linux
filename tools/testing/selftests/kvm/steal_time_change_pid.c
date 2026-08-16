@@ -46,6 +46,60 @@ static void steal_time_enable(struct kvm_vcpu *vcpu)
 		     (ulong)st_gva | KVM_MSR_ENABLED);
 }
 
+#elif defined(__aarch64__)
+
+#define STEAL_TIME_SIZE	((sizeof(struct st_time) + 63) & ~63)
+
+#define PV_TIME_ST	0xc5000021
+
+struct st_time {
+	u32 rev;
+	u32 attr;
+	u64 st_time;
+};
+
+static void guest_code(void)
+{
+	struct arm_smccc_res res;
+	struct st_time *st;
+
+	do_smccc(PV_TIME_ST, 0, 0, 0, 0, 0, 0, 0, &res);
+	GUEST_ASSERT_NE(res.a0, -1);
+	GUEST_ASSERT_EQ(res.a0, (ulong)st_gva);
+
+	st = (struct st_time *)res.a0;
+	WRITE_ONCE(guest_stolen_time, READ_ONCE(st->st_time));
+	GUEST_SYNC(0);
+
+	WRITE_ONCE(guest_stolen_time, READ_ONCE(st->st_time));
+	GUEST_SYNC(1);
+
+	WRITE_ONCE(guest_stolen_time, READ_ONCE(st->st_time));
+	GUEST_DONE();
+}
+
+static bool steal_time_supported(struct kvm_vcpu *vcpu)
+{
+	struct kvm_device_attr dev = {
+		.group = KVM_ARM_VCPU_PVTIME_CTRL,
+		.attr = KVM_ARM_VCPU_PVTIME_IPA,
+	};
+
+	return !__vcpu_ioctl(vcpu, KVM_HAS_DEVICE_ATTR, &dev);
+}
+
+static void steal_time_enable(struct kvm_vcpu *vcpu)
+{
+	u64 st_ipa = (ulong)st_gva;
+	struct kvm_device_attr dev = {
+		.group = KVM_ARM_VCPU_PVTIME_CTRL,
+		.attr = KVM_ARM_VCPU_PVTIME_IPA,
+		.addr = (u64)&st_ipa,
+	};
+
+	vcpu_ioctl(vcpu, KVM_SET_DEVICE_ATTR, &dev);
+}
+
 #else
 #error "steal_time_change_pid is not implemented on this architecture"
 #endif
