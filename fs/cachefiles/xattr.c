@@ -25,6 +25,14 @@ struct cachefiles_xattr {
 	__u8	data[];		/* netfs coherency data */
 } __packed;
 
+static u64 cachefiles_get_aux_u64(const void *data, unsigned int len)
+{
+	__be64 aux = 0;
+
+	memcpy(&aux, data, min_t(unsigned int, len, sizeof(aux)));
+	return be64_to_cpup(&aux);
+}
+
 static const char cachefiles_xattr_cache[] =
 	XATTR_USER_PREFIX "CacheFiles.cache";
 
@@ -77,7 +85,7 @@ int cachefiles_set_object_xattr(struct cachefiles_object *object)
 		trace_cachefiles_vfs_error(object, file_inode(file), ret,
 					   cachefiles_trace_setxattr_error);
 		trace_cachefiles_coherency(object, file_inode(file)->i_ino,
-					   be64_to_cpup((__be64 *)buf->data),
+					   cachefiles_get_aux_u64(buf->data, len),
 					   buf->content,
 					   cachefiles_coherency_set_fail);
 		if (ret != -ENOMEM)
@@ -86,7 +94,7 @@ int cachefiles_set_object_xattr(struct cachefiles_object *object)
 				"Failed to set xattr with error %d", ret);
 	} else {
 		trace_cachefiles_coherency(object, file_inode(file)->i_ino,
-					   be64_to_cpup((__be64 *)buf->data),
+					   cachefiles_get_aux_u64(buf->data, len),
 					   buf->content,
 					   cachefiles_coherency_set_ok);
 	}
@@ -148,7 +156,7 @@ int cachefiles_check_auxdata(struct cachefiles_object *object, struct file *file
 
 out:
 	trace_cachefiles_coherency(object, file_inode(file)->i_ino,
-				   be64_to_cpup((__be64 *)buf->data),
+				   cachefiles_get_aux_u64(buf->data, len),
 				   buf->content, why);
 	kfree(buf);
 	return ret;
