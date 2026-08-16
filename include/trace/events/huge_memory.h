@@ -308,7 +308,7 @@ TRACE_EVENT(mm_collapse_huge_page_swapin,
 		__entry->order)
 );
 
-TRACE_EVENT(mm_khugepaged_scan_file,
+TRACE_EVENT(mm_collapse_scan_file,
 
 	TP_PROTO(struct mm_struct *mm, struct folio *folio, struct file *file,
 		 int present, int swap, int result),
@@ -342,7 +342,7 @@ TRACE_EVENT(mm_khugepaged_scan_file,
 		__print_symbolic(__entry->result, SCAN_STATUS))
 );
 
-TRACE_EVENT(mm_khugepaged_collapse_file,
+TRACE_EVENT(mm_collapse_file,
 	TP_PROTO(struct mm_struct *mm, struct folio *new_folio, pgoff_t index,
 			unsigned long addr, bool is_shmem, struct file *file,
 			int nr, int result),

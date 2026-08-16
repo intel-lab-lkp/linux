@@ -6705,8 +6705,8 @@ static const struct bpf_raw_tp_null_args raw_tp_null_args[] = {
 	/* huge_memory */
 	{ "mm_khugepaged_scan_pmd", 0x10 },
 	{ "mm_collapse_huge_page_isolate", 0x1 },
-	{ "mm_khugepaged_scan_file", 0x10 },
-	{ "mm_khugepaged_collapse_file", 0x10 },
+	{ "mm_collapse_scan_file", 0x10 },
+	{ "mm_collapse_file", 0x10 },
 	/* kmem */
 	{ "mm_page_alloc", 0x1 },
 	{ "mm_page_pcpu_drain", 0x1 },
