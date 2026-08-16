@@ -3079,12 +3079,22 @@ int start_stop_khugepaged(void)
 	guard(mutex)(&khugepaged_mutex);
 	if (hugepage_enabled()) {
 		if (!khugepaged_thread) {
-			struct task_struct *new_thread = kthread_run(khugepaged,
-								     NULL,
-								     "khugepaged");
+			struct task_struct *new_thread;
+			int err;
 
+			/*
+			 * The engine collapses out of its candidate array, so
+			 * take it before starting the thread that needs it: a
+			 * failure surfaces here rather than in the daemon.
+			 */
+			err = collapse_control_init(&khugepaged_collapse_control);
+			if (err)
+				return err;
+
+			new_thread = kthread_run(khugepaged, NULL, "khugepaged");
 			if (IS_ERR(new_thread)) {
 				pr_err("khugepaged: kthread_run(khugepaged) failed\n");
+				collapse_control_release(&khugepaged_collapse_control);
 				return PTR_ERR(new_thread);
 			}
 
@@ -3096,6 +3106,7 @@ int start_stop_khugepaged(void)
 	} else if (khugepaged_thread) {
 		kthread_stop(khugepaged_thread);
 		khugepaged_thread = NULL;
+		collapse_control_release(&khugepaged_collapse_control);
 	}
 	set_recommended_min_free_kbytes();
 	return 0;
@@ -3154,6 +3165,7 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 	enum scan_result last_fail = SCAN_FAIL;
 	int thps = 0;
 	bool mmap_unlocked = false;
+	int err;
 
 	BUG_ON(vma->vm_start > start);
 	BUG_ON(vma->vm_end < end);
@@ -3173,6 +3185,11 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 	cc->is_khugepaged = false;
 	collapse_policy_forced(&cc->policy);
 	cc->progress = 0;
+	err = collapse_control_init(cc);
+	if (err) {
+		kfree(cc);
+		return err;
+	}
 
 	mmgrab(mm);
 	lru_add_drain_all();
@@ -3231,6 +3248,7 @@ out_maybelock:
 out_nolock:
 	mmap_assert_locked(mm);
 	mmdrop(mm);
+	collapse_control_release(cc);
 	kfree(cc);
 
 	return thps == ((hend - hstart) >> HPAGE_PMD_SHIFT) ? 0

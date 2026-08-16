@@ -87,6 +87,52 @@
  */
 
 /*
+ * Cap on the memory a round may hold in flight: destination folios allocated
+ * but not yet installed, the fault latency of anything inside a candidate being
+ * collapsed, and memcg charge pressure all scale with it.  A dense table is
+ * collapsed as several rounds rather than one.
+ */
+#define COLLAPSE_BATCH_BYTES		SZ_32M
+
+/* Windows in one table at the finest order collapse cuts */
+#define COLLAPSE_TABLE_WINDOWS	(HPAGE_PMD_NR >> COLLAPSE_MIN_MTHP_ORDER)
+
+/*
+ * How many candidates a round can hold, fixed by the table geometry: the byte
+ * cap decides it at the smallest order collapse builds, but never more than the
+ * windows one table has at that order.
+ */
+#define COLLAPSE_MAX_CANDIDATES						\
+	min(COLLAPSE_BATCH_BYTES >> (PAGE_SHIFT + COLLAPSE_MIN_MTHP_ORDER), \
+	    COLLAPSE_TABLE_WINDOWS)
+
+/*
+ * A candidate is an (addr, order) window selected for collapse.  Selection
+ * counts in PTE offsets -- the bitmap it reads and the alignment it honours are
+ * indexed that way -- while the passes that run a candidate work in addresses,
+ * like the page tables and VMAs they touch.  This is where the two meet.
+ */
+struct collapse_candidate {
+	unsigned long addr;
+	unsigned int order;
+};
+
+void collapse_control_release(struct collapse_control *cc)
+{
+	kfree(cc->candidates);
+	cc->candidates = NULL;
+}
+
+int collapse_control_init(struct collapse_control *cc)
+{
+	cc->nr_candidates = 0;
+	cc->candidates = kmalloc_objs(*cc->candidates, COLLAPSE_MAX_CANDIDATES);
+	if (!cc->candidates)
+		return -ENOMEM;
+	return 0;
+}
+
+/*
  * Is @count past a limit stated per PMD, when only part of a table was scanned?
  * Scale the comparison to the table so a partial scan is held to the same
  * density as a whole one.
@@ -389,6 +435,75 @@ collapse_scan_anon_pmd(struct vm_area_struct *vma, unsigned long start,
 	return cc->scan_refusal;
 }
 
+/* Point the selection cursor at [start, end) of the table, in PTE offsets */
+static void collapse_selection_init(struct collapse_control *cc,
+				    unsigned int start, unsigned int end)
+{
+}
+
+/*
+ * The next window worth attempting, as an (offset, order) pair.  False when
+ * selection is exhausted, which is what ends the range.
+ *
+ * A candidate is only ever an (offset, order) pair: the scan that recorded the
+ * eligible PTEs has dropped the ptl, so anything else -- folio pointers in
+ * particular -- would be stale by construction.
+ */
+static bool collapse_next_candidate(struct collapse_control *cc,
+				    unsigned int *offset, unsigned int *order)
+{
+	return false;
+}
+
+/*
+ * Run and classify the collected batch.  Returns false when a candidate's
+ * outcome abandons the table.
+ */
+static bool collapse_run_batch(struct mm_struct *mm, unsigned long pmd_addr,
+			       struct collapse_control *cc)
+{
+	/* collapse_anon_pmd() only runs a round it has put something in */
+	VM_WARN_ON_ONCE(!cc->nr_candidates);
+
+	cc->nr_candidates = 0;
+	return true;
+}
+
+/*
+ * One more candidate of @order would either overflow the array or push what the
+ * round holds past the byte cap.  An empty round takes whatever it is offered:
+ * a single candidate is above the cap all by itself once a PMD is (512M with
+ * 64K pages), and refusing it would collapse nothing at all.
+ */
+static bool collapse_batch_full(struct collapse_control *cc,
+				unsigned long bytes, unsigned int order)
+{
+	if (!cc->nr_candidates)
+		return false;
+
+	return cc->nr_candidates == COLLAPSE_MAX_CANDIDATES ||
+	       bytes + (PAGE_SIZE << order) > COLLAPSE_BATCH_BYTES;
+}
+
+/*
+ * Take the next array slot for the window at @addr.  A slot may still hold a
+ * previous round's values, so every field is set here.
+ */
+static void collapse_add_candidate(struct collapse_control *cc,
+				   unsigned long addr, unsigned int order)
+{
+	struct collapse_candidate *cand;
+
+	/* collapse_batch_full() has already made room */
+	if (WARN_ON_ONCE(cc->nr_candidates >= COLLAPSE_MAX_CANDIDATES))
+		return;
+
+	cand = &cc->candidates[cc->nr_candidates];
+	cc->nr_candidates++;
+	cand->addr = addr;
+	cand->order = order;
+}
+
 /*
  * Cut the table into candidate windows and collapse what fits, from the
  * largest order downwards.  Returns what the table yielded: a collapse, or
@@ -398,5 +513,44 @@ static enum scan_result __maybe_unused
 collapse_anon_pmd(struct mm_struct *mm, unsigned long start, unsigned long end,
 		  struct collapse_control *cc)
 {
-	return SCAN_FAIL;
+	const unsigned long pmd_addr = start & HPAGE_PMD_MASK;
+	unsigned int offset, order;
+	unsigned long bytes = 0;
+	bool pending = false;
+	bool cont = true;
+
+	collapse_selection_init(cc, (start - pmd_addr) >> PAGE_SHIFT,
+				(end - pmd_addr) >> PAGE_SHIFT);
+
+	while (cont) {
+		if (!pending)
+			pending = collapse_next_candidate(cc, &offset, &order);
+
+		if (!pending || collapse_batch_full(cc, bytes, order)) {
+			/*
+			 * Selection is exhausted and the round is empty: the
+			 * range is done.  Without this a flush of an empty
+			 * round would return, collect nothing, and come
+			 * straight back here.
+			 */
+			if (!cc->nr_candidates)
+				break;
+
+			cont = collapse_run_batch(mm, pmd_addr, cc);
+			bytes = 0;
+			continue;
+		}
+
+		/*
+		 * The round holds no resources until it is run, so
+		 * collecting costs nothing but the array slot.  A candidate the
+		 * full round could not take is kept pending for the next one.
+		 */
+		collapse_add_candidate(cc, pmd_addr + offset * PAGE_SIZE, order);
+
+		bytes += PAGE_SIZE << order;
+		pending = false;
+	}
+
+	return cc->nr_collapsed ? SCAN_SUCCEED : SCAN_FAIL;
 }

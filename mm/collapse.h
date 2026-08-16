@@ -10,6 +10,8 @@
 /* The smallest order a collapse will build, and so the finest window it cuts */
 #define COLLAPSE_MIN_MTHP_ORDER		2
 
+struct collapse_candidate;
+
 enum scan_result {
 	SCAN_FAIL,
 	SCAN_SUCCEED,
@@ -120,7 +122,14 @@ struct collapse_control {
 	 * the collapse reports it when it salvages nothing.
 	 */
 	enum scan_result scan_refusal;
+
+	/* The candidate windows collected for the current round */
+	struct collapse_candidate *candidates;
+	unsigned int nr_candidates;
 };
+
+int collapse_control_init(struct collapse_control *cc);
+void collapse_control_release(struct collapse_control *cc);
 
 /*
  * Defined in khugepaged.c, which still uses them itself.
