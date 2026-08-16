@@ -153,6 +153,11 @@ static unsigned long candidate_end(const struct collapse_candidate *cand)
 	return candidate_start(cand) + candidate_size(cand);
 }
 
+static unsigned int candidate_nr_pages(const struct collapse_candidate *cand)
+{
+	return 1U << cand->order;
+}
+
 /* Where a candidate sits in the table, in the PTE offsets selection counts in */
 static unsigned int candidate_offset(const struct collapse_candidate *cand,
 				     unsigned long pmd_addr)
@@ -243,6 +248,93 @@ static enum scan_result collapse_revalidate(struct vm_area_struct *vma,
 }
 
 /*
+ * Faults one address may take before the freeze is left to judge it.  More than
+ * one because the unshare can race a co-mapper re-sharing the page, and a swap
+ * read can be interrupted; each try re-reads the PTE to see where it stands.
+ */
+#define COLLAPSE_FAULTIN_TRIES	3
+
+/*
+ * Bring one address to a state the freeze will accept: present, and exclusive if
+ * it is anonymous.  Returns with mmap_lock dropped on every failure, because the
+ * fault path may drop it and the caller cannot tell which case it is in.
+ *
+ * SCAN_EXCEED_SWAP_PTE is the exception: it is a verdict on this candidate
+ * rather than on the round, nothing was faulted to reach it, and it keeps the
+ * lock so the caller can refuse this candidate and carry on with the rest.
+ */
+static enum scan_result collapse_faultin_addr(struct vm_area_struct *vma,
+					      struct collapse_candidate *cand,
+					      pmd_t *pmd, unsigned long addr)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	const unsigned int flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_UNSHARE |
+		(mm != current->mm ? FAULT_FLAG_REMOTE : 0);
+	unsigned int tries;
+
+	for (tries = 0; tries <= COLLAPSE_FAULTIN_TRIES; tries++) {
+		struct page *page;
+		pte_t ptent, *pte;
+		vm_fault_t ret;
+
+		pte = pte_offset_map(pmd, addr);
+		if (!pte) {
+			mmap_read_unlock(mm);
+			return SCAN_NO_PTE_TABLE;
+		}
+		ptent = ptep_get_lockless(pte);
+		pte_unmap(pte);
+
+		/* A hole or the zeropage is population's business */
+		if (pte_none_or_zero(ptent))
+			break;
+
+		if (pte_present(ptent)) {
+			page = vm_normal_page(vma, addr, ptent);
+
+			/*
+			 * PageAnonExclusive is the invariant the freeze relies
+			 * on, and the only exact test for it.  Testing sharing
+			 * with folio_maybe_mapped_shared() is not the same: a
+			 * page whose fork co-mapper has gone away is
+			 * single-mapped, yet stays non-exclusive until a write
+			 * reuses it, so sharing would skip the unshare on
+			 * exactly the pages that need it.  Unsharing one of
+			 * those is cheap -- it reuses the page in place and
+			 * just sets the bit.
+			 */
+			if (!page || !folio_test_anon(page_folio(page)) ||
+			    PageAnonExclusive(page))
+				break;		/* already exclusive */
+		} else if (!is_pmd_order(cand->order)) {
+			/* Sub-PMD collapse does not fault swap in */
+			count_mthp_stat(cand->order,
+					MTHP_STAT_COLLAPSE_EXCEED_SWAP);
+			return SCAN_EXCEED_SWAP_PTE;
+		}
+
+		if (tries == COLLAPSE_FAULTIN_TRIES)
+			break;		/* the freeze refuses it if still unfit */
+
+		/* Only swap or shared PTEs reach here; the rest broke out */
+		ret = handle_mm_fault(vma, addr, flags, NULL);
+		/*
+		 * Not a verdict on this window: the fault dropped the lock to
+		 * wait, which is what a swap-in normally does.  Distinct from
+		 * SCAN_PAGE_LOCK, a folio someone else holds locked.
+		 */
+		if (ret & VM_FAULT_RETRY)
+			return SCAN_LOCK_DROPPED;
+		if (ret & VM_FAULT_ERROR) {
+			mmap_read_unlock(mm);
+			return SCAN_FAIL;
+		}
+	}
+
+	return SCAN_SUCCEED;
+}
+
+/*
  * Make every source the round needs present and exclusively owned by this mm,
  * by faulting it in as an ordinary access would.  Sleeps, and drops mmap_lock on
  * failure, since a fault may have to be retried with it released.
@@ -255,7 +347,43 @@ static enum scan_result collapse_faultin(struct vm_area_struct *vma,
 					 struct collapse_control *cc,
 					 pmd_t *pmd)
 {
-	return SCAN_SUCCEED;
+	enum scan_result result = SCAN_SUCCEED;
+	unsigned int i;
+
+	for (i = 0; i < cc->nr_candidates; i++) {
+		struct collapse_candidate *cand = &cc->candidates[i];
+		unsigned long addr;
+		unsigned int j;
+
+		if (cand->state != CAND_SELECTED)
+			continue;
+
+		for (j = 0, addr = cand->addr;
+		     j < candidate_nr_pages(cand);
+		     j++, addr += PAGE_SIZE) {
+			enum scan_result r;
+
+			r = collapse_faultin_addr(vma, cand, pmd, addr);
+			/*
+			 * The one failure that judges this candidate rather
+			 * than the round, and so the one that leaves the lock
+			 * in our hands: refuse it and go on to the next.
+			 * Failing the round here would lower the order of every
+			 * candidate it carries, a verdict nobody reached.
+			 */
+			if (r == SCAN_EXCEED_SWAP_PTE) {
+				cand->state = CAND_SKIPPED;
+				cand->result = r;
+				break;
+			}
+			if (r != SCAN_SUCCEED) {
+				result = r;
+				goto out;
+			}
+		}
+	}
+out:
+	return result;
 }
 
 /*
