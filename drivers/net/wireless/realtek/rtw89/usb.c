@@ -1201,14 +1201,11 @@ static const struct attribute_group rtw89_usb_group = {
 __ATTRIBUTE_GROUPS(rtw89_usb);
 
 int rtw89_usb_probe(struct usb_interface *intf,
-		    const struct usb_device_id *id)
+		    const struct rtw89_driver_info *info)
 {
-	const struct rtw89_driver_info *info;
 	struct rtw89_dev *rtwdev;
 	struct rtw89_usb *rtwusb;
 	int ret;
-
-	info = (const struct rtw89_driver_info *)id->driver_info;
 
 	rtwdev = rtw89_alloc_ieee80211_hw(&intf->dev,
 					  sizeof(struct rtw89_usb), info);

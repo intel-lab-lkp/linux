@@ -95,7 +95,7 @@ static inline struct rtw89_usb *rtw89_usb_priv(struct rtw89_dev *rtwdev)
 }
 
 int rtw89_usb_probe(struct usb_interface *intf,
-		    const struct usb_device_id *id);
+		    const struct rtw89_driver_info *info);
 void rtw89_usb_disconnect(struct usb_interface *intf);
 
 #endif
