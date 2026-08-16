@@ -458,9 +458,7 @@ static void khugepaged_alloc_sleep(void)
 	remove_wait_queue(&khugepaged_wait, &wait);
 }
 
-static struct collapse_control khugepaged_collapse_control = {
-	.is_khugepaged = true,
-};
+static struct collapse_control khugepaged_collapse_control;
 
 #define khugepaged_defrag()					\
 	(transparent_hugepage_flags &				\
@@ -1639,8 +1637,6 @@ retry:
 		mmap_read_unlock(mm);
 	}
 end:
-	if (cc->is_khugepaged && result == SCAN_SUCCEED)
-		++khugepaged_pages_collapsed;
 	return result;
 }
 
@@ -1731,6 +1727,8 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 			*result = collapse_single_pmd(khugepaged_scan.address,
 						      range_end, vma,
 						      &lock_dropped, cc);
+			if (*result == SCAN_SUCCEED)
+				++khugepaged_pages_collapsed;
 			/* move to next address */
 			khugepaged_scan.address = range_end;
 			if (lock_dropped)
@@ -2039,7 +2037,6 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 	cc = kmalloc_obj(*cc);
 	if (!cc)
 		return -ENOMEM;
-	cc->is_khugepaged = false;
 	collapse_policy_forced(&cc->policy);
 	cc->progress = 0;
 	err = collapse_control_init(cc);

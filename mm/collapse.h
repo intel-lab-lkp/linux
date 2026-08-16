@@ -114,8 +114,6 @@ struct collapse_policy {
 struct collapse_control {
 	struct collapse_policy policy;
 
-	bool is_khugepaged;
-
 	/* Num pages scanned per node */
 	u32 node_load[MAX_NUMNODES];
 
