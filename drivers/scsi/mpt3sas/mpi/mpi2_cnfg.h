@@ -563,6 +563,7 @@ typedef struct _MPI2_CONFIG_REPLY {
 /*MPI v2.5 SAS products */
 #define MPI25_MFGPAGE_DEVID_SAS3004                 (0x0096)
 #define MPI25_MFGPAGE_DEVID_SAS3008                 (0x0097)
+#define MPI25_MFGPAGE_DEVID_SAS3008_1				(0x009F)
 #define MPI25_MFGPAGE_DEVID_SAS3108_1               (0x0090)
 #define MPI25_MFGPAGE_DEVID_SAS3108_2               (0x0091)
 #define MPI25_MFGPAGE_DEVID_SAS3108_5               (0x0094)
