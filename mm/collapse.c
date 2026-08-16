@@ -1500,7 +1500,30 @@ static unsigned int collapse_finish(struct mm_struct *mm,
 				    struct collapse_control *cc,
 				    enum scan_result result)
 {
-	return 0;
+	unsigned int i, nr_installed = 0;
+
+	for (i = 0; i < cc->nr_candidates; i++) {
+		struct collapse_candidate *cand = &cc->candidates[i];
+
+		/* Never froze: the round gave up before it got that far */
+		if (cand->state == CAND_SELECTED) {
+			cand->state = CAND_SKIPPED;
+			cand->result = result;
+		}
+
+		if (cand->new_folio) {
+			folio_put(cand->new_folio);
+			cand->new_folio = NULL;
+		}
+		if (cand->deposit) {
+			pte_free(mm, cand->deposit);
+			cand->deposit = NULL;
+		}
+		if (cand->state == CAND_INSTALLED)
+			nr_installed++;
+	}
+
+	return nr_installed;
 }
 
 /*
