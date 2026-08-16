@@ -1232,6 +1232,124 @@ static bool collapse_verify_candidate(struct collapse_candidate *cand,
 static void collapse_install_pmd(struct vm_area_struct *vma,
 				 struct collapse_control *cc, pmd_t *pmd)
 {
+	struct collapse_candidate *cand = &cc->candidates[0];
+	struct mm_struct *mm = vma->vm_mm;
+	spinlock_t *pmd_ptl, *pte_ptl;
+	pgtable_t old_table = NULL;
+	unsigned int nr_populated;
+	pmd_t old_pmd, pmdval;
+	pte_t *pte;
+
+	if (cand->state != CAND_FROZEN)
+		return;
+
+	/* No destination: the provision pass could not spare one */
+	if (!cand->new_folio) {
+		pte = pte_offset_map_lock(mm, pmd, cand->addr, &pte_ptl);
+		collapse_abort_candidate(vma, cand, pte);
+		if (pte)
+			pte_unmap_unlock(pte, pte_ptl);
+		return;
+	}
+
+	/*
+	 * The pte ptl nests inside the pmd lock, the nesting the tree already
+	 * uses for reinstalling a table: a racing zap of a frozen entry takes
+	 * the pte ptl, so the verify must hold it, and the table must not come
+	 * apart between verify and detach.  pmd_same() rechecks are unnecessary,
+	 * the pmd lock being held across the whole section.
+	 */
+	pmd_ptl = pmd_lock(mm, pmd);
+	pte = pte_offset_map_rw_nolock(mm, pmd, cand->addr, &pmdval, &pte_ptl);
+	if (!pte) {
+		/* Table gone under us; see collapse_abort_candidate() on @pte */
+		spin_unlock(pmd_ptl);
+		cand->result = SCAN_NO_PTE_TABLE;
+		collapse_abort_candidate(vma, cand, NULL);
+		return;
+	}
+	if (pte_ptl != pmd_ptl)
+		spin_lock_nested(pte_ptl, SINGLE_DEPTH_NESTING);
+
+	/*
+	 * Every exit is inside that section, the aborts as much as the install.
+	 * An abort needs no pmd-level exclusion of its own; it only restores
+	 * PTEs.  But the table it works on came from pte_offset_map_rw_nolock(),
+	 * which leaves its caller to establish that the pmd is stable, and the
+	 * held pmd lock is what does that here.
+	 */
+	if (cand->result != SCAN_SUCCEED) {
+		/* Machine check during the copy */
+		collapse_abort_candidate(vma, cand, pte);
+		goto out_unlock;
+	}
+
+	if (!collapse_verify_candidate(cand, pte, &nr_populated)) {
+		cand->result = SCAN_PTE_NON_PRESENT;
+		collapse_abort_candidate(vma, cand, pte);
+		goto out_unlock;
+	}
+
+	/*
+	 * Nothing fallible sits past here.  No anon_vma_lock_write either: rmap
+	 * walks on the sources are unreachable -- refcounts frozen, folio locks
+	 * held from freeze to putback -- non-rmap pte walkers see migration
+	 * entries, pmd-level observers see the old table or the leaf and never an
+	 * intermediate, and fork, mremap and munmap take mmap_write, which our
+	 * mmap_read excludes.
+	 *
+	 * The flush inside pmdp_collapse_flush() is the round's second over this
+	 * range: the freeze displaced every leaf here and flushed before dropping
+	 * the ptl, and the verify above proved nothing has been mapped since.
+	 * What it covers is the paging-structure caches -- a CPU may still hold
+	 * the pmd-to-table link, for a table that is about to be freed -- which
+	 * is why the helper shoots down a pte range rather than a pmd.
+	 */
+	old_pmd = pmdp_collapse_flush(vma, cand->addr, pmd);
+	old_table = pmd_pgtable(old_pmd);
+
+	/*
+	 * The smp_wmb() in __folio_mark_uptodate() orders the copied data before
+	 * the install below publishes it.
+	 */
+	__folio_mark_uptodate(cand->new_folio);
+
+	/*
+	 * Deposit a freshly allocated table, not the one just detached: a
+	 * deposited table has to be quiescent, because whoever withdraws it frees
+	 * it immediately (zap_huge_pmd()) with nothing to hold a lockless walker
+	 * off first.  A table that has never been reachable is quiescent by
+	 * construction, which is why collapse_alloc() secured one.
+	 *
+	 * The detached table is not.  GUP-fast and RCU pte walks that read the
+	 * old PMD before pmdp_collapse_flush() may still be inside it, and on
+	 * broadcast-TLBI arches that flush expels nobody.  Quiescing it would
+	 * take an IPI (tlb_remove_table_sync_one()), which has nowhere to go
+	 * here: outside the pmd lock it opens a pmd_none window a fault can fill,
+	 * inside it is a broadcast under a spinlock.  So it goes to
+	 * pte_free_defer(), which holds the free until those walkers finish, as
+	 * retract_page_tables() does.  One transient table page per PMD collapse
+	 * is what that costs.
+	 */
+	pgtable_trans_huge_deposit(mm, pmd, cand->deposit);
+	map_anon_folio_pmd_nopf(cand->new_folio, pmd, vma, cand->addr);
+
+	/* Slots with no source gain anon memory that no zap accounted */
+	if (nr_populated)
+		add_mm_counter(mm, MM_ANONPAGES, nr_populated);
+	cand->deposit = NULL;
+	cand->new_folio = NULL;	/* ownership: the mapping */
+	cand->state = CAND_INSTALLED;
+
+out_unlock:
+	if (pte_ptl != pmd_ptl)
+		spin_unlock(pte_ptl);
+	pte_unmap(pte);
+	spin_unlock(pmd_ptl);
+
+	/* The deposit balanced the detached table, so the count is already right */
+	if (old_table)
+		pte_free_defer(mm, old_table);
 }
 
 /* Publish each destination folio in place of the sources it replaces */
