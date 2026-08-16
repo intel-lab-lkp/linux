@@ -115,7 +115,15 @@
 struct collapse_candidate {
 	unsigned long addr;
 	unsigned int order;
+	enum scan_result result;
 };
+
+/* Where a candidate sits in the table, in the PTE offsets selection counts in */
+static unsigned int candidate_offset(const struct collapse_candidate *cand,
+				     unsigned long pmd_addr)
+{
+	return (cand->addr - pmd_addr) >> PAGE_SHIFT;
+}
 
 void collapse_control_release(struct collapse_control *cc)
 {
@@ -130,6 +138,17 @@ int collapse_control_init(struct collapse_control *cc)
 	if (!cc->candidates)
 		return -ENOMEM;
 	return 0;
+}
+
+/*
+ * Carry one batch of candidates through the passes.  Every candidate comes back
+ * with a result of its own: the passes before the freeze mark what they refuse
+ * and carry on, each pass after it works on what the last left, so no failure
+ * truncates the round.
+ */
+static void collapse_round(struct mm_struct *mm, unsigned long pmd_addr,
+			   struct collapse_control *cc)
+{
 }
 
 /*
@@ -456,14 +475,47 @@ static bool collapse_next_candidate(struct collapse_control *cc,
 }
 
 /*
+ * Feed one candidate's outcome back into selection: its region is done, it
+ * re-enters the retry store at a lower order, or the table is abandoned.
+ * Returns false in that last case.
+ */
+static bool collapse_classify_result(struct collapse_control *cc,
+				     unsigned int offset, unsigned int order,
+				     enum scan_result result)
+{
+	return true;
+}
+
+/*
  * Run and classify the collected batch.  Returns false when a candidate's
  * outcome abandons the table.
  */
 static bool collapse_run_batch(struct mm_struct *mm, unsigned long pmd_addr,
 			       struct collapse_control *cc)
 {
+	unsigned int i;
+
 	/* collapse_anon_pmd() only runs a round it has put something in */
 	VM_WARN_ON_ONCE(!cc->nr_candidates);
+
+	collapse_round(mm, pmd_addr, cc);
+
+	for (i = 0; i < cc->nr_candidates; i++) {
+		struct collapse_candidate *cand = &cc->candidates[i];
+		unsigned int offset = candidate_offset(cand, pmd_addr);
+
+		if (!collapse_classify_result(cc, offset, cand->order,
+					      cand->result)) {
+			/*
+			 * The table is abandoned: the candidates behind this one
+			 * keep their results and are left unclassified, so
+			 * nothing more of this table enters selection, and the
+			 * abandoning result clears what earlier ones left there.
+			 */
+			cc->nr_candidates = 0;
+			return false;
+		}
+	}
 
 	cc->nr_candidates = 0;
 	return true;
@@ -502,6 +554,7 @@ static void collapse_add_candidate(struct collapse_control *cc,
 	cc->nr_candidates++;
 	cand->addr = addr;
 	cand->order = order;
+	cand->result = SCAN_FAIL;
 }
 
 /*
