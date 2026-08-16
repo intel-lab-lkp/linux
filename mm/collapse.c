@@ -1841,6 +1841,7 @@ out:
 	if (result != SCAN_SUCCEED)
 		cc->select_orders &= ~BIT(HPAGE_PMD_ORDER);
 
+	cc->scan_unmapped = unmapped;
 	return result;
 }
 
@@ -1852,6 +1853,7 @@ static void collapse_anon_scan_init(struct collapse_control *cc)
 	nodes_clear(cc->alloc_nmask);
 
 	cc->select_orders = 0;
+	cc->scan_unmapped = 0;
 	cc->nr_collapsed = 0;
 }
 
@@ -1896,10 +1898,116 @@ collapse_scan_anon_pmd(struct vm_area_struct *vma, unsigned long start,
 	return cc->scan_refusal;
 }
 
+/*
+ * Selection cuts the table into candidate windows and feeds them to rounds.  A
+ * window is cut at the largest enabled order that fits and qualifies -- the PMD
+ * order, when the whole table qualified -- and a region that does not qualify is
+ * probed at the next enabled order below, which need not be half of it: a sparse
+ * set of enabled sizes may skip several.
+ *
+ * Only cc->eligible_ptes is read, so a clear bit is either a hole or a PTE the
+ * scan disqualified: a window's occupancy is what a collapse could use, not what
+ * is present.
+ */
+
+/*
+ * Largest order a window may be rooted at: the largest enabled one.
+ * select_orders is fixed for the table, and the caller checked it is not empty,
+ * so this is well-defined for the whole walk.
+ */
+static unsigned int collapse_root_order(struct collapse_control *cc)
+{
+	return __fls(cc->select_orders);
+}
+
+/*
+ * The next enabled order below @order, or 0 when there is none.  select_orders
+ * never carries an order below COLLAPSE_MIN_MTHP_ORDER -- THP_ORDERS_ALL_ANON
+ * masks orders 0 and 1 -- so __fls() honours that floor by itself.  Order 0 has
+ * no bits below it to mask and has to answer 0 outright: a walk that ascended
+ * instead would emit a window at an offset it is not aligned for.
+ */
+static unsigned int collapse_lower_order(struct collapse_control *cc,
+					 unsigned int order)
+{
+	unsigned long lower;
+
+	if (!order)
+		return 0;
+
+	lower = cc->select_orders & GENMASK(order - 1, 0);
+	return lower ? __fls(lower) : 0;
+}
+
 /* Point the selection cursor at [start, end) of the table, in PTE offsets */
 static void collapse_selection_init(struct collapse_control *cc,
 				    unsigned int start, unsigned int end)
 {
+	cc->select_start = start;
+	cc->select_end = end;
+	cc->select_offset = start;
+	cc->select_order = min(max_order_from_offset(start),
+			       collapse_root_order(cc));
+}
+
+/*
+ * Advance past the region [select_offset, select_offset + nr_ptes) and determine
+ * the highest order that can be attempted next.  Since huge pages must be
+ * naturally aligned, it is limited by the alignment of the new offset: after an
+ * order-2 mTHP at offset 0 the offset becomes 4, and __ffs(4) == 2, so the next
+ * attempt starts at order 2.
+ */
+static void collapse_selection_advance(struct collapse_control *cc,
+				       unsigned int nr_ptes)
+{
+	cc->select_offset += nr_ptes;
+	cc->select_order = min(max_order_from_offset(cc->select_offset),
+			       collapse_root_order(cc));
+}
+
+/*
+ * The window at the cursor did not qualify.  Drop to the next smaller enabled
+ * order over the same region, or -- when no smaller order remains -- give the
+ * region up and advance the cursor past it.
+ */
+static void collapse_selection_reject(struct collapse_control *cc)
+{
+	unsigned int lower = collapse_lower_order(cc, cc->select_order);
+
+	if (lower)
+		cc->select_order = lower;
+	else
+		collapse_selection_advance(cc, 1U << cc->select_order);
+}
+
+/* Is the window at @offset one a collapse of @order should be attempted on? */
+static bool collapse_window_eligible(struct collapse_control *cc,
+				     unsigned int offset, unsigned int order)
+{
+	unsigned int nr_ptes = 1U << order;
+	unsigned int max_ptes_none, nr_eligible_ptes;
+
+	if (!test_bit(order, &cc->select_orders))
+		return false;
+
+	/* The window must lie inside the scanned range */
+	if (offset < cc->select_start || offset + nr_ptes > cc->select_end)
+		return false;
+
+	max_ptes_none = collapse_max_ptes_none(cc, NULL, order);
+	nr_eligible_ptes = bitmap_weight_from(cc->eligible_ptes, offset,
+					      offset + nr_ptes);
+
+	/*
+	 * Swap PTEs the scan accepted are counted in cc->scan_unmapped, not in
+	 * the bitmap.  collapse_faultin() reads them in for a PMD candidate, so
+	 * there they do become sources; a smaller window leaves them as holes,
+	 * sub-PMD collapse not faulting swap in.
+	 */
+	if (is_pmd_order(order))
+		nr_eligible_ptes += cc->scan_unmapped;
+
+	return nr_eligible_ptes >= nr_ptes - max_ptes_none;
 }
 
 /*
@@ -1913,6 +2021,24 @@ static void collapse_selection_init(struct collapse_control *cc,
 static bool collapse_next_candidate(struct collapse_control *cc,
 				    unsigned int *offset, unsigned int *order)
 {
+	while (cc->select_offset < cc->select_end) {
+		if (!collapse_window_eligible(cc, cc->select_offset,
+					      cc->select_order)) {
+			collapse_selection_reject(cc);
+			continue;
+		}
+
+		/*
+		 * The cursor advances past the window at emission: a round is
+		 * collected before it is run, so within a round every attempt is
+		 * assumed to succeed.
+		 */
+		*offset = cc->select_offset;
+		*order = cc->select_order;
+		collapse_selection_advance(cc, 1U << cc->select_order);
+		return true;
+	}
+
 	return false;
 }
 

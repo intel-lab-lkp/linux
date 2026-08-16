@@ -1426,7 +1426,7 @@ out_nolock:
 }
 
 /* Return the highest naturally aligned order that fits at @offset within a PMD. */
-static unsigned int max_order_from_offset(unsigned int offset)
+unsigned int max_order_from_offset(unsigned int offset)
 {
 	if (offset == 0)
 		return HPAGE_PMD_ORDER;

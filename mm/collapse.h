@@ -114,6 +114,15 @@ struct collapse_control {
 	/* Orders still worth attempting in the table being scanned */
 	unsigned long select_orders;
 
+	/* Non-present PTEs the scan accepted, which no bitmap bit marks */
+	unsigned int scan_unmapped;
+
+	/* Where selection has got to in the table, and at what order */
+	unsigned int select_start;
+	unsigned int select_end;
+	unsigned int select_offset;
+	unsigned int select_order;
+
 	/* PTEs collapsed in it so far */
 	unsigned int nr_collapsed;
 
@@ -166,6 +175,7 @@ enum scan_result find_pmd_or_thp_or_none(struct mm_struct *mm,
 		unsigned long address, pmd_t **pmd);
 int collapse_find_target_node(struct collapse_control *cc);
 bool collapse_scan_abort(int nid, struct collapse_control *cc);
+unsigned int max_order_from_offset(unsigned int offset);
 unsigned int collapse_max_ptes_none(struct collapse_control *cc,
 		struct vm_area_struct *vma, unsigned int order);
 unsigned int collapse_max_ptes_swap(struct collapse_control *cc,
