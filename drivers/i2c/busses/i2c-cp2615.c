@@ -125,6 +125,9 @@ static int
 cp2615_i2c_send(struct usb_interface *usbif, struct cp2615_i2c_transfer *i2c_w)
 {
 	struct cp2615_iop_msg *msg = kzalloc_obj(*msg);
+	if (!msg)
+		return -ENOMEM;
+
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
 	int res = cp2615_init_i2c_msg(msg, i2c_w);
 
@@ -172,6 +175,9 @@ cp2615_i2c_recv(struct usb_interface *usbif, unsigned char tag, void *buf)
 static int cp2615_check_iop(struct usb_interface *usbif)
 {
 	struct cp2615_iop_msg *msg = kzalloc_obj(*msg);
+	if (!msg)
+		return -ENOMEM;
+
 	struct cp2615_iop_accessory_info *info = (struct cp2615_iop_accessory_info *)&msg->data;
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
 	int res = cp2615_init_iop_msg(msg, iop_GetAccessoryInfo, NULL, 0);
