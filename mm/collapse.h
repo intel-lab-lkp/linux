@@ -187,24 +187,13 @@ static inline int collapse_test_exit_or_disable(struct mm_struct *mm)
 		mm_flags_test(MMF_DISABLE_THP_COMPLETELY, mm);
 }
 
-enum scan_result collapse_scan_anon_pmd(struct vm_area_struct *vma,
-		unsigned long start, unsigned long end,
-		struct collapse_control *cc);
-enum scan_result collapse_anon_pmd(struct mm_struct *mm, unsigned long start,
-		unsigned long end, struct collapse_control *cc);
 int collapse_control_init(struct collapse_control *cc);
 void collapse_control_release(struct collapse_control *cc);
+enum scan_result collapse_single_pmd(unsigned long addr, unsigned long end,
+		struct vm_area_struct *vma, bool *lock_dropped,
+		struct collapse_control *cc);
 
 unsigned long collapse_possible_orders(struct vm_area_struct *vma,
 		vm_flags_t vm_flags, enum tva_type tva_flags);
-enum scan_result check_pmd_state(pmd_t *pmd);
-enum scan_result find_pmd_or_thp_or_none(struct mm_struct *mm,
-		unsigned long address, pmd_t **pmd);
-int collapse_find_target_node(struct collapse_control *cc);
-bool collapse_scan_abort(int nid, struct collapse_control *cc);
-unsigned int collapse_max_ptes_none(struct collapse_control *cc,
-		struct vm_area_struct *vma, unsigned int order);
-unsigned int collapse_max_ptes_swap(struct collapse_control *cc,
-		unsigned int order);
 
 #endif	/* __MM_COLLAPSE_H */
