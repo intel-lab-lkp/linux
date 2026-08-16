@@ -1553,7 +1553,8 @@ done:
 	return last_result;
 }
 
-static enum scan_result collapse_scan_pmd(struct mm_struct *mm,
+static enum scan_result __maybe_unused
+collapse_scan_pmd(struct mm_struct *mm,
 		struct vm_area_struct *vma, unsigned long start_addr,
 		bool *lock_dropped, struct collapse_control *cc)
 {
@@ -2749,7 +2750,16 @@ static enum scan_result collapse_single_pmd(unsigned long addr,
 	mmap_assert_locked(mm);
 
 	if (vma_is_anonymous(vma)) {
-		result = collapse_scan_pmd(mm, vma, addr, lock_dropped, cc);
+		result = collapse_scan_anon_pmd(vma, addr, addr + HPAGE_PMD_SIZE,
+						cc);
+		if (!cc->select_orders)
+			goto end;
+
+		/* collapse_anon_pmd() takes mmap_lock itself, where it needs it */
+		mmap_read_unlock(mm);
+		*lock_dropped = true;
+
+		result = collapse_anon_pmd(mm, addr, addr + HPAGE_PMD_SIZE, cc);
 		goto end;
 	}
 

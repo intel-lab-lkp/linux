@@ -83,9 +83,6 @@
  * consecutive pages of one folio -- so partially mapped and compound sources
  * collapse too: any order below the window's is a source, and a PMD candidate
  * takes even a PTE-mapped THP of its own order.
- *
- * Nothing calls any of this yet: the anon path still uses the mechanism it
- * replaces, and is switched over once both halves are complete.
  */
 
 /*
@@ -1926,9 +1923,9 @@ static void collapse_anon_scan_init(struct collapse_control *cc)
  * that acts on what it found hands the range to collapse_anon_pmd() afterwards,
  * without the lock.
  */
-static enum scan_result __maybe_unused
-collapse_scan_anon_pmd(struct vm_area_struct *vma, unsigned long start,
-		       unsigned long end, struct collapse_control *cc)
+enum scan_result collapse_scan_anon_pmd(struct vm_area_struct *vma,
+					unsigned long start, unsigned long end,
+					struct collapse_control *cc)
 {
 	const unsigned long pmd_addr = start & HPAGE_PMD_MASK;
 	struct mm_struct *mm = vma->vm_mm;
@@ -2337,9 +2334,9 @@ static void collapse_add_candidate(struct collapse_control *cc,
  * largest order downwards.  Returns what the table yielded: a collapse, or
  * the reason it did not.
  */
-static enum scan_result __maybe_unused
-collapse_anon_pmd(struct mm_struct *mm, unsigned long start, unsigned long end,
-		  struct collapse_control *cc)
+enum scan_result collapse_anon_pmd(struct mm_struct *mm, unsigned long start,
+				   unsigned long end,
+				   struct collapse_control *cc)
 {
 	const unsigned long pmd_addr = start & HPAGE_PMD_MASK;
 	unsigned int offset, order;
