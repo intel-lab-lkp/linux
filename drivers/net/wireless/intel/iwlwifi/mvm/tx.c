@@ -497,7 +497,7 @@ static void iwl_mvm_set_tx_cmd_crypto(struct iwl_mvm *mvm,
 		fallthrough;
 	case WLAN_CIPHER_SUITE_CCMP_256:
 		/* TODO: Taking the key from the table might introduce a race
-		 * when PTK rekeying is done, having an old packets with a PN
+		 * when PTK rekeying is done, having an old packet with a PN
 		 * based on the old key but the message encrypted with a new
 		 * one.
 		 * Need to handle this.
@@ -530,7 +530,7 @@ static bool iwl_mvm_use_host_rate(struct iwl_mvm *mvm,
 	 * Not a data frame, use host rate if on an old device that
 	 * can't possibly be doing MLO (firmware may be selecting a
 	 * bad rate), if we might be doing MLO we need to let FW pick
-	 * (since we don't necesarily know the link), but FW rate
+	 * (since we don't necessarily know the link), but FW rate
 	 * selection was fixed.
 	 */
 	return mvm->trans->mac_cfg->device_family < IWL_DEVICE_FAMILY_BZ;
@@ -914,7 +914,7 @@ static int iwl_mvm_tx_tso(struct iwl_mvm *mvm, struct sk_buff *skb,
 
 	/*
 	 * Do not build AMSDU for IPv6 with extension headers.
-	 * ask stack to segment and checkum the generated MPDUs for us.
+	 * ask stack to segment and checksum the generated MPDUs for us.
 	 */
 	if (skb->protocol == htons(ETH_P_IPV6) &&
 	    ((struct ipv6hdr *)skb_network_header(skb))->nexthdr !=
@@ -1664,7 +1664,7 @@ static void iwl_mvm_rx_tx_cmd_single(struct iwl_mvm *mvm,
 			 * its sequence control is 0. Note that for that same
 			 * reason, NDPs are never sent to A-MPDU'able queues
 			 * so that we can never have more than one freed frame
-			 * for a single Tx resonse (see WARN_ON below).
+			 * for a single Tx response (see WARN_ON below).
 			 */
 			if (ieee80211_is_qos_nullfunc(hdr->frame_control))
 				is_ndp = true;

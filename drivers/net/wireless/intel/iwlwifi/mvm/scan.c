@@ -2226,7 +2226,7 @@ static u16 iwl_mvm_scan_umac_flags(struct iwl_mvm *mvm,
 
 	/*
 	 * Extended dwell is relevant only for low band to start with, as it is
-	 * being used for social channles only (1, 6, 11), so we can check
+	 * being used for social channels only (1, 6, 11), so we can check
 	 * only scan type on low band also for CDB.
 	 */
 	if (iwl_mvm_is_regular_scan(params) &&
@@ -3441,7 +3441,7 @@ size_t iwl_mvm_scan_size(struct iwl_mvm *mvm)
 
 /*
  * This function is used in nic restart flow, to inform mac80211 about scans
- * that was aborted by restart flow or by an assert.
+ * that were aborted by restart flow or by an assert.
  */
 void iwl_mvm_report_scan_aborted(struct iwl_mvm *mvm)
 {
