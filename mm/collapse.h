@@ -8,7 +8,7 @@
 #include <linux/types.h>
 
 /* Ceiling the max_ptes_* tunables accept, and the value meaning "no limit" */
-#define KHUGEPAGED_MAX_PTES_LIMIT	(HPAGE_PMD_NR - 1)
+#define COLLAPSE_MAX_PTES_LIMIT		(HPAGE_PMD_NR - 1)
 
 /* The smallest order a collapse will build, and so the finest window it cuts */
 #define COLLAPSE_MIN_MTHP_ORDER		2
