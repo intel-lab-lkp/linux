@@ -18,6 +18,13 @@
  *   is enabled by default and can be disabled by inserting
  *   TS_FSM_HEAD_IGNORE as the first token in the chain.
  *
+ *   A match is only reported once the data has been consumed as well: the
+ *   token chain has to account for every remaining octet, not just for the
+ *   pattern itself. A chain of three specific tokens therefore matches the
+ *   text "abc" but not "abcd". To look for a pattern somewhere in the
+ *   middle of the data, prepend a token with TS_FSM_HEAD_IGNORE and append
+ *   one with TS_FSM_ANY, the latter matching whatever follows.
+ *
  *   The runtime performance of the algorithm should be around O(n),
  *   however while in strict mode the average runtime can be better.
  */
