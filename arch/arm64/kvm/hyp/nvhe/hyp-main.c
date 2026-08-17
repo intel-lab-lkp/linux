@@ -889,12 +889,18 @@ static void handle___vgic_v5_save_apr(struct kvm_cpu_context *host_ctxt)
 {
 	DECLARE_REG(struct vgic_v5_cpu_if *, cpu_if, host_ctxt, 1);
 
+	if (unlikely(is_protected_kvm_enabled()))
+		return;
+
 	__vgic_v5_save_apr(kern_hyp_va(cpu_if));
 }
 
 static void handle___vgic_v5_restore_vmcr_apr(struct kvm_cpu_context *host_ctxt)
 {
 	DECLARE_REG(struct vgic_v5_cpu_if *, cpu_if, host_ctxt, 1);
+
+	if (unlikely(is_protected_kvm_enabled()))
+		return;
 
 	__vgic_v5_restore_vmcr_apr(kern_hyp_va(cpu_if));
 }
