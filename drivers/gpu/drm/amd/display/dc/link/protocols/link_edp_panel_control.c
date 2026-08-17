@@ -700,6 +700,17 @@ bool edp_setup_psr(struct dc_link *link,
 	if (!link)
 		return false;
 
+	/* Skip PSR setup when the eDP link is not active. When AUX/DPCD
+	 * writes are failing (e.g. after a resume where the panel has not
+	 * fully come back yet), edp_setup_psr() will still try to push
+	 * configuration over the AUX channel. That auxiliary transfer never
+	 * completes and triggers ASSERT_CRITICAL() in dce_aux_transfer_raw().
+	 * The DPCD read of the PSR cap below is also unsafe on a dead link,
+	 * so bail out early before touching the sink.
+	 */
+	if (!link->link_status.link_active)
+		return false;
+
 	/* This is a workaround: some vendors require the source to
 	 * read the PSR cap; otherwise, the vendor's PSR feature will
 	 * fall back to its default behavior, causing a misconfiguration
