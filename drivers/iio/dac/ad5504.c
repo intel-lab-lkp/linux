@@ -19,6 +19,7 @@
 #include <linux/spi/spi.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
+#include <linux/units.h>
 
 #include <linux/iio/events.h>
 #include <linux/iio/iio.h>
@@ -26,6 +27,10 @@
 
 #include <asm/byteorder.h>
 
+/*
+ * In case of ACPI, we use the 60 V as default voltage reference.
+ */
+#define AD5504_VA_MV_ACPI_DEFAULT	(60 * MILLI)
 #define AD5504_RES_MASK			GENMASK(11, 0)
 #define AD5504_CMD_READ			BIT(15)
 #define AD5504_CMD_WRITE		0
@@ -300,11 +305,16 @@ static int ad5504_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	ret = devm_regulator_get_enable_read_voltage(dev, "vcc");
-	if (ret < 0)
-		return ret;
+	if (ACPI_COMPANION(dev)) {
+		st->vref_mv = AD5504_VA_MV_ACPI_DEFAULT;
+	} else {
+		ret = devm_regulator_get_enable_read_voltage(dev, "vcc");
+		if (ret < 0)
+			return dev_err_probe(dev, ret,
+					     "Failed to get vcc regulator\n");
 
-	st->vref_mv = ret / 1000;
+		st->vref_mv = ret / MILLI;
+	}
 
 	st->spi = spi;
 	indio_dev->name = spi_get_device_id(st->spi)->name;
