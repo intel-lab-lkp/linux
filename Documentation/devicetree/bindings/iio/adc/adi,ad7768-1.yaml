@@ -26,7 +26,10 @@ properties:
       - adi,adaq7769-1
 
   reg:
-    maxItems: 1
+    minItems: 1
+    maxItems: 4
+    description:
+      Chip select number. For multi-device setups, one entry per device.
 
   clocks:
     maxItems: 1
@@ -108,6 +111,12 @@ properties:
 
   reset-gpios:
     maxItems: 1
+
+  spi-rx-bus-width:
+    description:
+      Bus width per CS. For multi-device setups (multiple reg entries), one
+      entry per device must be provided. Required when reg has more than
+      one entry.
 
   spi-cpol: true
 
@@ -203,6 +212,15 @@ allOf:
       properties:
         pga-gpios: false
 
+  # spi-rx-bus-width is required for multi-device setups
+  - if:
+      properties:
+        reg:
+          minItems: 2
+    then:
+      required:
+        - spi-rx-bus-width
+
 unevaluatedProperties: false
 
 examples:
@@ -241,6 +259,64 @@ examples:
               vcm_reg: vcm-output {
                 regulator-name = "ad7768-1-vcm";
               };
+            };
+        };
+    };
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/iio/adc/adi,ad7768-1.h>
+    /*
+     * Four ADAQ7768-1 devices aggregated on a single SPI controller.
+     * Each device occupies one CS and one data lane; DRDY and SYNC_IN
+     * pins are wired together across all four devices.
+     */
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        adc@0 {
+            compatible = "adi,adaq7768-1";
+            reg = <0>, <1>, <2>, <3>;
+            spi-max-frequency = <2000000>;
+            spi-rx-bus-width = <1>, <1>, <1>, <1>;
+            spi-cpol;
+            spi-cpha;
+            vref-supply = <&adc_vref>;
+            pga-gpios = <&gpio 10 GPIO_ACTIVE_HIGH>,
+                        <&gpio 11 GPIO_ACTIVE_HIGH>,
+                        <&gpio 12 GPIO_ACTIVE_HIGH>;
+            interrupts = <25 IRQ_TYPE_EDGE_RISING>;
+            interrupt-parent = <&gpio>;
+            #trigger-source-cells = <1>;
+            adi,sync-in-gpios = <&gpio 22 GPIO_ACTIVE_LOW>;
+            reset-gpios = <&gpio 27 GPIO_ACTIVE_LOW>;
+            clocks = <&ad7768_mclk>;
+            clock-names = "mclk";
+            gpio-controller;
+            #gpio-cells = <2>;
+            #io-channel-cells = <1>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            channel@0 {
+                reg = <0>;
+                label = "channel_0";
+            };
+
+            channel@1 {
+                reg = <1>;
+                label = "channel_1";
+            };
+
+            channel@2 {
+                reg = <2>;
+                label = "channel_2";
+            };
+
+            channel@3 {
+                reg = <3>;
+                label = "channel_3";
             };
         };
     };
