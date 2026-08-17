@@ -380,7 +380,7 @@ static int bt_bmc_config_irq(struct bt_bmc *bt_bmc,
 	u32 reg;
 
 	bt_bmc->irq = platform_get_irq_optional(pdev, 0);
-	if (bt_bmc->irq < 0)
+	if (bt_bmc->irq < 0 && bt_bmc->irq != -ENXIO)
 		return bt_bmc->irq;
 
 	rc = devm_request_irq(dev, bt_bmc->irq, bt_bmc_irq, IRQF_SHARED,
