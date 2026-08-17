@@ -18,6 +18,8 @@
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 
+#include "kselftest.h"
+
 #ifndef PR_SET_SYSCALL_USER_DISPATCH
 # define PR_SET_SYSCALL_USER_DISPATCH	59
 # define PR_SYS_DISPATCH_OFF	0
@@ -139,6 +141,13 @@ int main(void)
 	double time1, time2;
 	int ret;
 	sigset_t mask;
+
+	ret = prctl(PR_SET_SYSCALL_USER_DISPATCH, PR_SYS_DISPATCH_OFF,
+		    0UL, 0UL, 0UL);
+	if (ret == -1 && errno == EINVAL)
+		ksft_exit_skip("Syscall User Dispatch is not supported\n");
+	if (ret)
+		ksft_exit_fail_perror("PR_SET_SYSCALL_USER_DISPATCH");
 
 	memset(&act, 0, sizeof(act));
 	sigemptyset(&mask);
