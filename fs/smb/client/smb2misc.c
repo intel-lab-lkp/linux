@@ -570,12 +570,20 @@ static bool
 smb2_tcon_has_lease(struct cifs_tcon *tcon, struct smb2_lease_break *rsp)
 {
 	__u8 lease_state;
+	u32 ls;
 	struct cifsFileInfo *cfile;
 	struct cifsInodeInfo *cinode;
 	int ack_req = le32_to_cpu(rsp->Flags &
 				  SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED);
 
-	lease_state = le32_to_cpu(rsp->NewLeaseState);
+	ls = le32_to_cpu(rsp->NewLeaseState);
+	if (ls & ~(SMB2_LEASE_READ_CACHING_HE | SMB2_LEASE_HANDLE_CACHING_HE |
+		   SMB2_LEASE_WRITE_CACHING_HE)) {
+		cifs_dbg(VFS | ONCE, "%s: invalid NewLeaseState 0x%x\n",
+			 __func__, ls);
+		return false;
+	}
+	lease_state = (__u8)ls;
 
 	list_for_each_entry(cfile, &tcon->openFileList, tlist) {
 		cinode = CIFS_I(d_inode(cfile->dentry));
@@ -609,11 +617,20 @@ static struct cifs_pending_open *
 smb2_tcon_find_pending_open_lease(struct cifs_tcon *tcon,
 				  struct smb2_lease_break *rsp)
 {
-	__u8 lease_state = le32_to_cpu(rsp->NewLeaseState);
+	u32 ls = le32_to_cpu(rsp->NewLeaseState);
 	int ack_req = le32_to_cpu(rsp->Flags &
 				  SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED);
 	struct cifs_pending_open *open;
 	struct cifs_pending_open *found = NULL;
+	__u8 lease_state;
+
+	if (ls & ~(SMB2_LEASE_READ_CACHING_HE | SMB2_LEASE_HANDLE_CACHING_HE |
+		   SMB2_LEASE_WRITE_CACHING_HE)) {
+		cifs_dbg(VFS | ONCE, "%s: invalid NewLeaseState 0x%x\n",
+			 __func__, ls);
+		return NULL;
+	}
+	lease_state = (__u8)ls;
 
 	list_for_each_entry(open, &tcon->pending_opens, olist) {
 		if (memcmp(open->lease_key, rsp->LeaseKey,
