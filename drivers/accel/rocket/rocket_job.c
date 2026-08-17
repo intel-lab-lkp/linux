@@ -192,6 +192,9 @@ static int rocket_job_push(struct rocket_job *job)
 
 	bos = kvmalloc_array(job->in_bo_count + job->out_bo_count, sizeof(void *),
 			     GFP_KERNEL);
+	if (!bos)
+		return -ENOMEM;
+
 	memcpy(bos, job->in_bos, job->in_bo_count * sizeof(void *));
 	memcpy(&bos[job->in_bo_count], job->out_bos, job->out_bo_count * sizeof(void *));
 
@@ -500,6 +503,9 @@ int rocket_job_open(struct rocket_file_priv *rocket_priv)
 							 rdev->num_cores);
 	unsigned int core;
 	int ret;
+
+	if (!scheds)
+		return -ENOMEM;
 
 	for (core = 0; core < rdev->num_cores; core++)
 		scheds[core] = &rdev->cores[core].sched;
