@@ -9,7 +9,7 @@
 //! function calls will map to some struct - for example, f(GPU_NAME_STRING_KEY, 0, b"some gpu")
 //! naturally maps to storing a &str with the GPU name.
 
-#![expect(unused_imports)]
+#![cfg_attr(not(CONFIG_KUNIT), expect(unused_imports))]
 #![cfg_attr(not(CONFIG_KUNIT), expect(unused_macros))]
 
 use core::marker::PhantomData;
@@ -77,6 +77,64 @@ impl<T: Default, const KEY_ID: KeyId, As> Default for Key<T, KEY_ID, As> {
         Self(T::default(), PhantomData)
     }
 }
+
+/// A fixed capacity vector that holds at most `N` elements.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Zeroable)]
+pub(crate) struct ArrayVec<T, const N: usize> {
+    data: [T; N],
+    len: usize,
+}
+
+impl<T, const N: usize> ArrayVec<T, N> {
+    /// Replaces the contents with a copy of `slice`.
+    ///
+    /// Fails with `EMSGSIZE` if `slice` is longer than the capacity.
+    pub(crate) fn set_from_slice(&mut self, slice: &[T]) -> Result
+    where
+        T: Copy,
+    {
+        let Some(dst) = self.data.get_mut(..slice.len()) else {
+            return Err(EMSGSIZE);
+        };
+
+        dst.copy_from_slice(slice);
+        self.len = slice.len();
+
+        Ok(())
+    }
+
+    /// Returns the initialized elements as a slice.
+    #[inline]
+    pub(crate) fn as_slice(&self) -> &[T] {
+        // PANIC: `len` is bounded by `N`.
+        &self.data[..self.len]
+    }
+}
+
+impl<T: Default + Copy, const N: usize> Default for ArrayVec<T, N> {
+    fn default() -> Self {
+        Self {
+            data: [T::default(); N],
+            len: 0,
+        }
+    }
+}
+
+impl<T, const N: usize> Deref for ArrayVec<T, N> {
+    type Target = [T];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+/// A schema field for an array value under the NVKV key `KEY_ID`.
+#[derive(Default)]
+#[repr(transparent)]
+pub(crate) struct Array<T: Default + Copy, const N: usize, const KEY_ID: KeyId>(
+    pub(crate) ArrayVec<T, N>,
+);
 
 bitfield! {
     /// The op word that starts each NVKV operation.
