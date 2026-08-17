@@ -503,7 +503,7 @@ int vfs_dedupe_file_range(struct file *file, struct file_dedupe_range *same)
 	if (!(file->f_mode & FMODE_READ))
 		return -EINVAL;
 
-	if (same->reserved1 || same->reserved2)
+	if (same->reserved1 || (same->flags & ~FILE_DEDUPE_RANGE_REPORT_PROGRESS))
 		return -EINVAL;
 
 	off = same->src_offset;
@@ -551,12 +551,29 @@ int vfs_dedupe_file_range(struct file *file, struct file_dedupe_range *same)
 		deduped = vfs_dedupe_file_range_one(file, off, fd_file(dst_fd),
 						    info->dest_offset, len,
 						    REMAP_FILE_CAN_SHORTEN);
-		if (deduped == -EBADE)
+		if (deduped == -EBADE) {
 			info->status = FILE_DEDUPE_RANGE_DIFFERS;
-		else if (deduped < 0)
+			if (same->flags & FILE_DEDUPE_RANGE_REPORT_PROGRESS) {
+				u64 step = i_blocksize(src);
+
+				/*
+				 * Stacked filesystems (e.g. overlayfs) can
+				 * report a degenerate block size here; a
+				 * one-byte step would only misalign the
+				 * next call, so advance past the whole
+				 * request instead.
+				 */
+				if (step <= 1)
+					step = len;
+				info->bytes_deduped = min_t(u64, step, len);
+			}
+		} else if (deduped < 0) {
 			info->status = deduped;
-		else
+		} else if (same->flags & FILE_DEDUPE_RANGE_REPORT_PROGRESS) {
+			info->bytes_deduped = deduped;
+		} else {
 			info->bytes_deduped = len;
+		}
 
 next_loop:
 		if (fatal_signal_pending(current))
