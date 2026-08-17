@@ -205,12 +205,14 @@ static void program_mode_registers(struct mode_parameter *mode_param,
 
 int ddk750_set_mode_timing(struct mode_parameter *parm, enum clock_type clock)
 {
-	struct pll_value pll;
+	struct pll_value pll = {};
 
 	pll.input_freq = DEFAULT_INPUT_CLOCK;
 	pll.clock_type = clock;
 
-	sm750_calc_pll_value(parm->pixel_clock, &pll);
+	if (!sm750_calc_pll_value(parm->pixel_clock, &pll))
+		return -EINVAL;
+
 	if (sm750_get_chip_type() == SM750LE) {
 		/* set graphic mode via IO method */
 		outb_p(0x88, 0x3d4);
