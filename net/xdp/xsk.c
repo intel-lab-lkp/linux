@@ -955,6 +955,7 @@ static int xsk_skb_init_misc(struct sk_buff *skb, struct xdp_sock *xs,
 	skb->priority = READ_ONCE(xs->sk.sk_priority);
 	skb->mark = READ_ONCE(xs->sk.sk_mark);
 	skb->destructor = xsk_destruct_skb;
+	skb_reset_mac_header(skb);
 	return 0;
 }
 
