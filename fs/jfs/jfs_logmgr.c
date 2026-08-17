@@ -1239,7 +1239,7 @@ int lmLogInit(struct jfs_log * log)
 	int rc = 0;
 	struct lrd lrd;
 	struct logsuper *logsuper;
-	struct lbuf *bpsuper;
+	struct lbuf *bpsuper = NULL;
 	struct lbuf *bp;
 	struct logpage *lp;
 	int lsn = 0;
@@ -1377,7 +1377,13 @@ int lmLogInit(struct jfs_log * log)
 		log->serial = le32_to_cpu(logsuper->serial) + 1;
 		logsuper->serial = cpu_to_le32(log->serial);
 		lbmDirectWrite(log, bpsuper, lbmWRITE | lbmRELEASE | lbmSYNC);
-		if ((rc = lbmIOWait(bpsuper, lbmFREE)))
+		rc = lbmIOWait(bpsuper, lbmFREE);
+		/*
+		 * lbmIOWait() with lbmFREE has already returned bpsuper
+		 * to the free list, whatever the outcome of the i/o.
+		 */
+		bpsuper = NULL;
+		if (rc)
 			goto errout30;
 	}
 
@@ -1407,7 +1413,8 @@ int lmLogInit(struct jfs_log * log)
 	lbmFree(bp);
 
       errout20:		/* release log superblock */
-	lbmFree(bpsuper);
+	if (bpsuper)
+		lbmFree(bpsuper);
 
       errout10:		/* unwind lbmLogInit() */
 	lbmLogShutdown(log);
