@@ -594,6 +594,8 @@ static void spi_dev_set_name(struct spi_device *spi)
 {
 	struct device *dev = &spi->dev;
 	struct fwnode_handle *fwnode = dev_fwnode(dev);
+	char cs_str[32];
+	int cs_len;
 
 	if (is_acpi_device_node(fwnode)) {
 		dev_set_name(dev, "spi-%s", acpi_dev_name(to_acpi_device_node(fwnode)));
@@ -605,8 +607,12 @@ static void spi_dev_set_name(struct spi_device *spi)
 		return;
 	}
 
-	dev_set_name(&spi->dev, "%s.%u", dev_name(&spi->controller->dev),
-		     spi_get_chipselect(spi, 0));
+	cs_len = scnprintf(cs_str, sizeof(cs_str), "%u", spi_get_chipselect(spi, 0));
+	for (unsigned int idx = 1; idx < spi->num_chipselect; idx++)
+		cs_len += scnprintf(cs_str + cs_len, sizeof(cs_str) - cs_len,
+				    "+%u", spi_get_chipselect(spi, idx));
+
+	dev_set_name(&spi->dev, "%s.%s", dev_name(&spi->controller->dev), cs_str);
 }
 
 /*
