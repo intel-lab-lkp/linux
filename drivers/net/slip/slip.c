@@ -96,6 +96,12 @@
 
 static struct net_device **slip_devs;
 
+/* Serialises access to slip_devs[] and to the slip channels it points at.
+ * RTNL is not enough: sl_free_netdev() is the priv_destructor and therefore
+ * runs from netdev_run_todo(), which deliberately drops the RTNL semaphore.
+ */
+static DEFINE_MUTEX(slip_devs_lock);
+
 static int slip_maxdev = SL_NRUNIT;
 module_param(slip_maxdev, int, 0);
 MODULE_PARM_DESC(slip_maxdev, "Maximum number of slip devices");
@@ -635,7 +641,13 @@ static void sl_free_netdev(struct net_device *dev)
 {
 	int i = dev->base_addr;
 
-	slip_devs[i] = NULL;
+	mutex_lock(&slip_devs_lock);
+	/* Only drop our own entry: the slot may already have been reused by
+	 * sl_alloc() for a different channel.
+	 */
+	if (slip_devs[i] == dev)
+		slip_devs[i] = NULL;
+	mutex_unlock(&slip_devs_lock);
 }
 
 static const struct net_device_ops sl_netdev_ops = {
@@ -725,6 +737,7 @@ static void sl_sync(void)
 	struct net_device *dev;
 	struct slip	  *sl;
 
+	mutex_lock(&slip_devs_lock);
 	for (i = 0; i < slip_maxdev; i++) {
 		dev = slip_devs[i];
 		if (dev == NULL)
@@ -736,6 +749,7 @@ static void sl_sync(void)
 		if (dev->flags & IFF_UP)
 			dev_close(dev);
 	}
+	mutex_unlock(&slip_devs_lock);
 }
 
 
@@ -747,19 +761,24 @@ static struct slip *sl_alloc(void)
 	struct net_device *dev = NULL;
 	struct slip       *sl;
 
+	mutex_lock(&slip_devs_lock);
 	for (i = 0; i < slip_maxdev; i++) {
 		dev = slip_devs[i];
 		if (dev == NULL)
 			break;
 	}
 	/* Sorry, too many, all slots in use */
-	if (i >= slip_maxdev)
+	if (i >= slip_maxdev) {
+		mutex_unlock(&slip_devs_lock);
 		return NULL;
+	}
 
 	sprintf(name, "sl%d", i);
 	dev = alloc_netdev(sizeof(*sl), name, NET_NAME_UNKNOWN, sl_setup);
-	if (!dev)
+	if (!dev) {
+		mutex_unlock(&slip_devs_lock);
 		return NULL;
+	}
 
 	dev->base_addr  = i;
 	sl = netdev_priv(dev);
@@ -776,6 +795,7 @@ static struct slip *sl_alloc(void)
 	timer_setup(&sl->outfill_timer, sl_outfill, 0);
 #endif
 	slip_devs[i] = dev;
+	mutex_unlock(&slip_devs_lock);
 	return sl;
 }
 
@@ -1332,6 +1352,7 @@ static void __exit slip_exit(void)
 			msleep_interruptible(100);
 
 		busy = 0;
+		mutex_lock(&slip_devs_lock);
 		for (i = 0; i < slip_maxdev; i++) {
 			dev = slip_devs[i];
 			if (!dev)
@@ -1344,16 +1365,19 @@ static void __exit slip_exit(void)
 			}
 			spin_unlock_bh(&sl->lock);
 		}
+		mutex_unlock(&slip_devs_lock);
 	} while (busy && time_before(jiffies, timeout));
 
 	/* FIXME: hangup is async so we should wait when doing this second
 	   phase */
 
 	for (i = 0; i < slip_maxdev; i++) {
+		mutex_lock(&slip_devs_lock);
 		dev = slip_devs[i];
+		slip_devs[i] = NULL;
+		mutex_unlock(&slip_devs_lock);
 		if (!dev)
 			continue;
-		slip_devs[i] = NULL;
 
 		sl = netdev_priv(dev);
 		if (sl->tty) {
