@@ -1428,9 +1428,17 @@ static struct mpi3mr_sas_port *mpi3mr_sas_port_add(struct mpi3mr_ioc *mrioc,
 	}
 
 	port = sas_port_alloc_num(mr_sas_node->parent_dev);
+	if (!port) {
+		ioc_err(mrioc, "failure at %s:%d/%s()!\n",
+		    __FILE__, __LINE__, __func__);
+		goto out_fail;
+	}
+
 	if ((sas_port_add(port))) {
 		ioc_err(mrioc, "failure at %s:%d/%s()!\n",
 		    __FILE__, __LINE__, __func__);
+		sas_port_free(port);
+		port = NULL;
 		goto out_fail;
 	}
 
@@ -1455,6 +1463,19 @@ static struct mpi3mr_sas_port *mpi3mr_sas_port_add(struct mpi3mr_ioc *mrioc,
 		rphy = sas_expander_alloc(port,
 		    mr_sas_port->remote_identify.device_type);
 	}
+
+	if (!rphy) {
+		ioc_err(mrioc, "failure at %s:%d/%s()!\n",
+		    __FILE__, __LINE__, __func__);
+		list_for_each_entry(mr_sas_phy, &mr_sas_port->phy_list, port_siblings) {
+			mr_sas_phy->phy_belongs_to_port = 0;
+			mr_sas_phy->hba_port = NULL;
+			sas_port_delete_phy(port, mr_sas_phy->phy);
+		}
+		sas_port_delete(port);
+		goto out_fail;
+	}
+
 	rphy->identify = mr_sas_port->remote_identify;
 
 	if (mrioc->current_event)
