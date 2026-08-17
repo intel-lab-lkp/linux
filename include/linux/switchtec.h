@@ -500,6 +500,8 @@ struct switchtec_dev {
 	struct mutex mrpc_mutex;
 	struct list_head mrpc_queue;
 	int mrpc_busy;
+	int event_irq;
+	int dma_mrpc_irq;
 	struct work_struct mrpc_work;
 	struct delayed_work mrpc_timeout;
 	bool alive;

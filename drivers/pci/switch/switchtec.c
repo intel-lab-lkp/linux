@@ -1318,6 +1318,13 @@ static void stdev_kill(struct switchtec_dev *stdev)
 
 	pci_clear_master(stdev->pdev);
 
+	if (stdev->event_irq)
+		devm_free_irq(&stdev->pdev->dev, stdev->event_irq, stdev);
+	if (stdev->dma_mrpc_irq)
+		devm_free_irq(&stdev->pdev->dev, stdev->dma_mrpc_irq, stdev);
+
+	cancel_work_sync(&stdev->mrpc_work);
+	cancel_work_sync(&stdev->link_event_work);
 	cancel_delayed_work_sync(&stdev->mrpc_timeout);
 
 	/* Mark the hardware as unavailable and complete all completions */
@@ -1356,6 +1363,8 @@ static struct switchtec_dev *stdev_create(struct pci_dev *pdev)
 	INIT_LIST_HEAD(&stdev->mrpc_queue);
 	mutex_init(&stdev->mrpc_mutex);
 	stdev->mrpc_busy = 0;
+	stdev->event_irq = 0;
+	stdev->dma_mrpc_irq = 0;
 	INIT_WORK(&stdev->mrpc_work, mrpc_event_work);
 	INIT_DELAYED_WORK(&stdev->mrpc_timeout, mrpc_timeout_work);
 	INIT_WORK(&stdev->link_event_work, link_event_work);
@@ -1513,6 +1522,7 @@ static int switchtec_init_isr(struct switchtec_dev *stdev)
 
 	if (rc)
 		return rc;
+	stdev->event_irq = event_irq;
 
 	if (!stdev->dma_mrpc)
 		return rc;
@@ -1529,7 +1539,11 @@ static int switchtec_init_isr(struct switchtec_dev *stdev)
 				switchtec_dma_mrpc_isr, 0,
 				KBUILD_MODNAME, stdev);
 
-	return rc;
+	if (rc)
+		return rc;
+	stdev->dma_mrpc_irq = dma_mrpc_irq;
+
+	return 0;
 }
 
 static void init_pff(struct switchtec_dev *stdev)
