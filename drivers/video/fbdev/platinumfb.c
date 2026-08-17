@@ -567,15 +567,40 @@ static int platinumfb_probe(struct platform_device* odev)
 	/* frame buffer - map only 4MB */
 	pinfo->frame_buffer_phys = pinfo->rsrc_fb.start;
 	pinfo->frame_buffer = ioremap_wt(pinfo->rsrc_fb.start, 0x400000);
+	if (!pinfo->frame_buffer) {
+		dev_err(&odev->dev, "failed to ioremap frame buffer\n");
+		release_mem_region(pinfo->rsrc_fb.start,
+				   resource_size(&pinfo->rsrc_fb));
+		framebuffer_release(info);
+		return -ENOMEM;
+	}
 	pinfo->base_frame_buffer = pinfo->frame_buffer;
 
 	/* registers */
 	pinfo->platinum_regs_phys = pinfo->rsrc_reg.start;
 	pinfo->platinum_regs = ioremap(pinfo->rsrc_reg.start, 0x1000);
+	if (!pinfo->platinum_regs) {
+		dev_err(&odev->dev, "failed to ioremap registers\n");
+		iounmap(pinfo->frame_buffer);
+		release_mem_region(pinfo->rsrc_fb.start,
+				   resource_size(&pinfo->rsrc_fb));
+		framebuffer_release(info);
+		return -ENOMEM;
+	}
 
 	pinfo->cmap_regs_phys = 0xf301b000;	/* XXX not in prom? */
 	request_mem_region(pinfo->cmap_regs_phys, 0x1000, "platinumfb cmap");
 	pinfo->cmap_regs = ioremap(pinfo->cmap_regs_phys, 0x1000);
+	if (!pinfo->cmap_regs) {
+		dev_err(&odev->dev, "failed to ioremap cmap registers\n");
+		iounmap(pinfo->platinum_regs);
+		iounmap(pinfo->frame_buffer);
+		release_mem_region(pinfo->cmap_regs_phys, 0x1000);
+		release_mem_region(pinfo->rsrc_fb.start,
+				   resource_size(&pinfo->rsrc_fb));
+		framebuffer_release(info);
+		return -ENOMEM;
+	}
 
 	/* Grok total video ram */
 	out_be32(&pinfo->platinum_regs->reg[16].r, (unsigned)pinfo->frame_buffer_phys);
