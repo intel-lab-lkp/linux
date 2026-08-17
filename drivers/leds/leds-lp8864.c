@@ -10,6 +10,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
+#include <linux/led_bl.h>
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -264,9 +265,9 @@ static int lp8864_probe(struct i2c_client *client)
 
 	ret = devm_led_classdev_register_ext(&client->dev, &led->led_dev, &init_data);
 	if (ret)
-		dev_err(&client->dev, "Failed to register LED device (%pe)\n", ERR_PTR(ret));
+		return dev_err_probe(&client->dev, ret, "Failed to register LED device\n");
 
-	return ret;
+	return devm_led_backlight_register(&client->dev, &led->led_dev);
 }
 
 static const struct i2c_device_id lp8864_id[] = {
