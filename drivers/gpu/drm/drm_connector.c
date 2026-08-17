@@ -2201,8 +2201,12 @@ int drm_mode_create_tv_properties_legacy(struct drm_device *dev,
 	struct drm_property *tv_subconnector;
 	unsigned int i;
 
-	if (dev->mode_config.tv_select_subconnector_property)
+	if (dev->mode_config.tv_select_subconnector_property) {
+		if (num_modes && !dev->mode_config.legacy_tv_mode_property)
+			goto other;
+
 		return 0;
+	}
 
 	/*
 	 * Basic connector properties
@@ -2225,6 +2229,7 @@ int drm_mode_create_tv_properties_legacy(struct drm_device *dev,
 		goto nomem;
 	dev->mode_config.tv_subconnector_property = tv_subconnector;
 
+other:
 	/*
 	 * Other, TV specific properties: margins & TV modes.
 	 */
