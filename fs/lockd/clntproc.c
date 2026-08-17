@@ -176,6 +176,7 @@ int nlmclnt_proc(struct nlm_host *host, int cmd, struct file_lock *fl, void *dat
 	if (!fl->fl_u.nfs_fl.owner) {
 		/* lockowner allocation has failed */
 		nlmclnt_release_call(call);
+		fl->fl_ops = NULL;
 		return -ENOMEM;
 	}
 	/* Set up the argument struct */
