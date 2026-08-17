@@ -610,7 +610,6 @@ static int dmatest_func(void *data)
 	ret = -ENOMEM;
 
 	smp_rmb();
-	thread->pending = false;
 	info = thread->info;
 	params = &info->params;
 	chan = thread->chan;
@@ -1142,6 +1141,7 @@ static void run_pending_tests(struct dmatest_info *info)
 		thread_count = 0;
 		list_for_each_entry(thread, &dtc->threads, node) {
 			wake_up_process(thread->task);
+			thread->pending = false;
 			thread_count++;
 		}
 		pr_info("Started %u threads using %s\n",
