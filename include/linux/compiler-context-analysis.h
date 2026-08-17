@@ -447,7 +447,7 @@ static inline void _context_unsafe_alias(void **p) { }
  */
 #define __acquire_ret(call, ret_expr)		\
 	({					\
-		__auto_type __ret = call;	\
+		auto __ret = call;		\
 		__acquire(ret_expr);		\
 		__ret;				\
 	})
@@ -459,7 +459,7 @@ static inline void _context_unsafe_alias(void **p) { }
  */
 #define __acquire_shared_ret(call, ret_expr)	\
 	({					\
-		__auto_type __ret = call;	\
+		auto __ret = call;		\
 		__acquire_shared(ret_expr);	\
 		__ret;				\
 	})
