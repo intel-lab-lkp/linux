@@ -377,6 +377,8 @@ enum rtw_flags {
 	RTW_FLAG_RESTARTING,
 	RTW_FLAG_RESTART_TRIGGERING,
 	RTW_FLAG_FORCE_LOWEST_RATE,
+	/* USB mode switch: the chip re-enumerates, transfers may be cut off */
+	RTW_FLAG_SWITCHING_USB_MODE,
 
 	NUM_OF_RTW_FLAGS,
 };
