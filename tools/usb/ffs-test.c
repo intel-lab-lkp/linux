@@ -293,6 +293,8 @@ static size_t descs_to_legacy(void **legacy, const void *descriptors_v2)
 
 		length = sizeof out->header + (descs_end - descs_start);
 		out = malloc(length);
+		if (!out)
+			return 0;
 		out->header.magic = cpu_to_le32(FUNCTIONFS_DESCRIPTORS_MAGIC);
 		out->header.length = cpu_to_le32(length);
 		out->header.fs_count = cpu_to_le32(fs_count);
