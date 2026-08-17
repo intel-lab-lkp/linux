@@ -7,6 +7,7 @@
  */
 
 #include <linux/backlight.h>
+#include <linux/led_bl.h>
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -173,19 +174,79 @@ static int led_bl_parse_levels(struct device *dev,
 	return 0;
 }
 
-static int led_bl_probe(struct platform_device *pdev)
+static void led_bl_disable(void *data)
+{
+	struct led_bl_data *priv = data;
+	int i;
+
+	led_bl_power_off(priv);
+	for (i = 0; i < priv->nb_leds; i++) {
+		mutex_lock(&priv->leds[i]->led_access);
+		led_sysfs_enable(priv->leds[i]);
+		mutex_unlock(&priv->leds[i]->led_access);
+	}
+}
+
+static int led_bl_register(struct device *dev, struct led_bl_data *priv)
 {
 	struct backlight_properties props;
-	struct led_bl_data *priv;
 	int ret, i;
+
+	priv->dev = dev;
+
+	memset(&props, 0, sizeof(struct backlight_properties));
+	props.type = BACKLIGHT_RAW;
+	props.max_brightness = priv->max_brightness;
+	props.brightness = priv->default_brightness;
+	props.power = (priv->default_brightness > 0) ? BACKLIGHT_POWER_OFF :
+		      BACKLIGHT_POWER_ON;
+	priv->bl_dev = devm_backlight_device_register(dev, dev_name(dev), dev,
+						      priv, &led_bl_ops, &props);
+	if (IS_ERR(priv->bl_dev))
+		return dev_err_probe(dev, PTR_ERR(priv->bl_dev),
+				     "Failed to register backlight\n");
+
+	for (i = 0; i < priv->nb_leds; i++) {
+		struct device *supplier = priv->leds[i]->dev->parent;
+		struct device_link *link;
+
+		/*
+		 * BL and the LED are the same device if instantiated via
+		 * devm_led_backlight_register()
+		 */
+		if (supplier == dev)
+			continue;
+
+		link = device_link_add(dev, supplier, DL_FLAG_AUTOREMOVE_CONSUMER);
+		if (!link)
+			return dev_err_probe(dev, -EINVAL,
+					     "Failed to add devlink (consumer %s, supplier %s)\n",
+					     dev_name(dev), dev_name(supplier));
+	}
+
+	for (i = 0; i < priv->nb_leds; i++) {
+		mutex_lock(&priv->leds[i]->led_access);
+		led_sysfs_disable(priv->leds[i]);
+		mutex_unlock(&priv->leds[i]->led_access);
+	}
+
+	ret = devm_add_action_or_reset(dev, led_bl_disable, priv);
+	if (ret)
+		return ret;
+
+	backlight_update_status(priv->bl_dev);
+
+	return 0;
+}
+
+static int led_bl_probe(struct platform_device *pdev)
+{
+	struct led_bl_data *priv;
+	int ret;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
-
-	platform_set_drvdata(pdev, priv);
-
-	priv->dev = &pdev->dev;
 
 	ret = led_bl_get_leds(&pdev->dev, priv);
 	if (ret)
@@ -197,58 +258,40 @@ static int led_bl_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	memset(&props, 0, sizeof(struct backlight_properties));
-	props.type = BACKLIGHT_RAW;
-	props.max_brightness = priv->max_brightness;
-	props.brightness = priv->default_brightness;
-	props.power = (priv->default_brightness > 0) ? BACKLIGHT_POWER_OFF :
-		      BACKLIGHT_POWER_ON;
-	priv->bl_dev = backlight_device_register(dev_name(&pdev->dev),
-			&pdev->dev, priv, &led_bl_ops, &props);
-	if (IS_ERR(priv->bl_dev)) {
-		dev_err(&pdev->dev, "Failed to register backlight\n");
-		return PTR_ERR(priv->bl_dev);
-	}
-
-	for (i = 0; i < priv->nb_leds; i++) {
-		struct device_link *link;
-
-		link = device_link_add(&pdev->dev, priv->leds[i]->dev->parent,
-				       DL_FLAG_AUTOREMOVE_CONSUMER);
-		if (!link) {
-			dev_err(&pdev->dev, "Failed to add devlink (consumer %s, supplier %s)\n",
-				dev_name(&pdev->dev), dev_name(priv->leds[i]->dev->parent));
-			backlight_device_unregister(priv->bl_dev);
-			return -EINVAL;
-		}
-	}
-
-	for (i = 0; i < priv->nb_leds; i++) {
-		mutex_lock(&priv->leds[i]->led_access);
-		led_sysfs_disable(priv->leds[i]);
-		mutex_unlock(&priv->leds[i]->led_access);
-	}
-
-	backlight_update_status(priv->bl_dev);
-
-	return 0;
+	return led_bl_register(&pdev->dev, priv);
 }
 
-static void led_bl_remove(struct platform_device *pdev)
+/**
+ * devm_led_backlight_register - expose a LED as a backlight device
+ * @dev: LED provider device, also the parent and lifecycle owner
+ * @led: LED class device to drive the backlight
+ *
+ * Registers a backlight class device driven by @led, without device tree and
+ * tied to the lifetime of @dev. This lets self-contained (e.g. hot-pluggable
+ * I2C) LED drivers offer a backlight interface without static platform
+ * plumbing. It is a no-op when the led-backlight support is not built in.
+ *
+ * Return: 0 on success, negative errno otherwise.
+ */
+int devm_led_backlight_register(struct device *dev, struct led_classdev *led)
 {
-	struct led_bl_data *priv = platform_get_drvdata(pdev);
-	struct backlight_device *bl = priv->bl_dev;
-	int i;
+	struct led_bl_data *priv;
 
-	backlight_device_unregister(bl);
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
 
-	led_bl_power_off(priv);
-	for (i = 0; i < priv->nb_leds; i++) {
-		mutex_lock(&priv->leds[i]->led_access);
-		led_sysfs_enable(priv->leds[i]);
-		mutex_unlock(&priv->leds[i]->led_access);
-	}
+	priv->leds = devm_kmalloc(dev, sizeof(*priv->leds), GFP_KERNEL);
+	if (!priv->leds)
+		return -ENOMEM;
+	priv->leds[0] = led;
+	priv->nb_leds = 1;
+	priv->max_brightness = led->max_brightness;
+	priv->default_brightness = led->brightness;
+
+	return led_bl_register(dev, priv);
 }
+EXPORT_SYMBOL_GPL(devm_led_backlight_register);
 
 static const struct of_device_id led_bl_of_match[] = {
 	{ .compatible = "led-backlight" },
@@ -263,7 +306,6 @@ static struct platform_driver led_bl_driver = {
 		.of_match_table	= led_bl_of_match,
 	},
 	.probe		= led_bl_probe,
-	.remove		= led_bl_remove,
 };
 
 module_platform_driver(led_bl_driver);

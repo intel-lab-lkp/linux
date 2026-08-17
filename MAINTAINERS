@@ -4517,6 +4517,7 @@ F:	Documentation/ABI/testing/sysfs-class-backlight
 F:	Documentation/devicetree/bindings/leds/backlight
 F:	drivers/video/backlight/
 F:	include/linux/backlight.h
+F:	include/linux/led_bl.h
 F:	include/linux/pwm_backlight.h
 
 BARCO P50 GPIO DRIVER
