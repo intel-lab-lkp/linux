@@ -59,7 +59,6 @@ static void nft_flow_offload_eval(const struct nft_expr *expr,
 	struct flow_offload *flow;
 	enum ip_conntrack_dir dir;
 	struct nf_conn *ct;
-	int ret;
 
 	if (nft_flow_offload_skip(pkt->skb, nft_pf(pkt)))
 		goto out;
@@ -118,14 +117,9 @@ static void nft_flow_offload_eval(const struct nft_expr *expr,
 		flow_offload_ct_tcp(ct);
 
 	__set_bit(NF_FLOW_HW_BIDIRECTIONAL, &flow->flags);
-	ret = flow_offload_add(flowtable, flow);
-	if (ret < 0)
-		goto err_flow_add;
-
+	flow_offload_add(flowtable, flow);
 	return;
 
-err_flow_add:
-	flow_offload_free(flow);
 err_flow_alloc:
 	dst_release(route.tuple[dir].dst);
 	dst_release(route.tuple[!dir].dst);

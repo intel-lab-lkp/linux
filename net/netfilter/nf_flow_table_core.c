@@ -341,9 +341,11 @@ int flow_offload_add(struct nf_flowtable *flow_table, struct flow_offload *flow)
 				     &flow->tuplehash[FLOW_OFFLOAD_DIR_REPLY].node,
 				     nf_flow_offload_rhash_params);
 	if (err < 0) {
-		rhashtable_remove_fast(&flow_table->rhashtable,
-				       &flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].node,
-				       nf_flow_offload_rhash_params);
+		/* Let GC handle this flow in partial state, confirm it so it
+		 * is handled as an expired flow. The rhashtable_remove_fast()
+		 * call will just report ENOENT for the reply tuple.
+		 */
+		set_bit(NF_FLOW_CONFIRMED, &flow->flags);
 		return err;
 	}
 

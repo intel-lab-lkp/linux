@@ -427,16 +427,13 @@ static void tcf_ct_flow_table_add(struct tcf_ct_flow_table *ct_ft,
 {
 	struct nf_conn_act_ct_ext *act_ct_ext;
 	struct flow_offload *entry;
-	int err;
 
 	if (test_and_set_bit(IPS_OFFLOAD_BIT, &ct->status))
 		return;
 
 	entry = flow_offload_alloc(ct);
-	if (!entry) {
-		WARN_ON_ONCE(1);
+	if (!entry)
 		goto err_alloc;
-	}
 
 	if (tcp) {
 		ct->proto.tcp.seen[0].flags |= IP_CT_TCP_FLAG_BE_LIBERAL;
@@ -451,14 +448,9 @@ static void tcf_ct_flow_table_add(struct tcf_ct_flow_table *ct_ft,
 		tcf_ct_flow_tc_ifidx(entry, act_ct_ext, FLOW_OFFLOAD_DIR_REPLY);
 	}
 
-	err = flow_offload_add(&ct_ft->nf_ft, entry);
-	if (err)
-		goto err_add;
-
+	flow_offload_add(&ct_ft->nf_ft, entry);
 	return;
 
-err_add:
-	flow_offload_free(entry);
 err_alloc:
 	clear_bit(IPS_OFFLOAD_BIT, &ct->status);
 }
