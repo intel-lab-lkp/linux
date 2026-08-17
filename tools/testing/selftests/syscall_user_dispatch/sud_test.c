@@ -41,6 +41,21 @@
 #define SYSCALL_DISPATCH_ON(x) ((x) = SYSCALL_DISPATCH_FILTER_BLOCK)
 #define SYSCALL_DISPATCH_OFF(x) ((x) = SYSCALL_DISPATCH_FILTER_ALLOW)
 
+static bool require_sud(struct __test_metadata *_metadata)
+{
+	int ret;
+
+	ret = prctl(PR_SET_SYSCALL_USER_DISPATCH, PR_SYS_DISPATCH_OFF,
+		    0UL, 0UL, 0UL);
+	if (ret == -1 && errno == EINVAL)
+		SKIP(return false, "Syscall User Dispatch is not supported");
+	ASSERT_EQ(0, ret) {
+		TH_LOG("PR_SET_SYSCALL_USER_DISPATCH: %m");
+	}
+
+	return true;
+}
+
 /* Test Summary:
  *
  * - dispatch_trigger_sigsys: Verify if PR_SET_SYSCALL_USER_DISPATCH is
@@ -67,6 +82,9 @@ TEST_SIGNAL(dispatch_trigger_sigsys, SIGSYS)
 	char sel = SYSCALL_DISPATCH_FILTER_ALLOW;
 	struct sysinfo info;
 	int ret;
+
+	if (!require_sud(_metadata))
+		return;
 
 	ret = sysinfo(&info);
 	ASSERT_EQ(0, ret);
@@ -104,6 +122,9 @@ TEST(bad_prctl_param)
 {
 	char sel = SYSCALL_DISPATCH_FILTER_ALLOW;
 	int op;
+
+	if (!require_sud(_metadata))
+		return;
 
 	/* Invalid op */
 	op = -1;
@@ -211,6 +232,9 @@ TEST(dispatch_and_return)
 {
 	long ret;
 
+	if (!require_sud(_metadata))
+		return;
+
 	glob_sel = 0;
 	nr_syscalls_emulated = 0;
 	si_code = 0;
@@ -259,6 +283,9 @@ TEST_SIGNAL(bad_selector, SIGSYS)
 	sigset_t mask;
 	struct sysinfo info;
 
+	if (!require_sud(_metadata))
+		return;
+
 	glob_sel = SYSCALL_DISPATCH_FILTER_ALLOW;
 	nr_syscalls_emulated = 0;
 	si_code = 0;
@@ -301,6 +328,9 @@ TEST(disable_dispatch)
 	struct sysinfo info;
 	char sel = 0;
 
+	if (!require_sud(_metadata))
+		return;
+
 	ret = prctl(PR_SET_SYSCALL_USER_DISPATCH, PR_SYS_DISPATCH_EXCLUSIVE_ON, 0, 0, &sel);
 	ASSERT_EQ(0, ret) {
 		TH_LOG("Kernel does not support CONFIG_SYSCALL_USER_DISPATCH");
@@ -328,6 +358,9 @@ TEST(direct_dispatch_range)
 	int ret = 0;
 	struct sysinfo info;
 	char sel = SYSCALL_DISPATCH_FILTER_ALLOW;
+
+	if (!require_sud(_metadata))
+		return;
 
 	/*
 	 * Instead of calculating libc addresses; allow the entire
@@ -365,6 +398,9 @@ static void test_range(struct __test_metadata *_metadata,
 
 TEST(dispatch_range)
 {
+	if (!require_sud(_metadata))
+		return;
+
 	ASSERT_EQ(0, setup_sigsys_handler());
 	test_range(_metadata, PR_SYS_DISPATCH_EXCLUSIVE_ON, 0, 0, true);
 	test_range(_metadata, PR_SYS_DISPATCH_EXCLUSIVE_ON, syscall_addr, 1, false);
