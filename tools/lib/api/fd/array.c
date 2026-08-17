@@ -116,14 +116,23 @@ int fdarray__filter(struct fdarray *fda, short revents,
 		return 0;
 
 	for (fd = 0; fd < fda->nr; ++fd) {
-		if (fda->priv[fd].flags & fdarray_flag__nonfilterable)
+		/*
+		 * System-wide perf events are nonfilterable but not non_perf_event.
+		 * We want to skip them entirely and never process revents on them.
+		 */
+		if ((fda->priv[fd].flags & fdarray_flag__nonfilterable) &&
+		    !(fda->priv[fd].flags & fdarray_flag__non_perf_event))
 			continue;
 
 		if (!fda->entries[fd].events)
 			continue;
 
 		if (fda->entries[fd].revents & revents) {
-			if (entry_destructor)
+			/*
+			 * Control descriptors are non_perf_event and don't need
+			 * their perf-specific destructors triggered.
+			 */
+			if (entry_destructor && !(fda->priv[fd].flags & fdarray_flag__non_perf_event))
 				entry_destructor(fda, fd, arg);
 
 			/*
@@ -136,7 +145,8 @@ int fdarray__filter(struct fdarray *fda, short revents,
 			continue;
 		}
 
-		++nr;
+		if (!(fda->priv[fd].flags & fdarray_flag__nonfilterable))
+			++nr;
 	}
 
 	return nr;
