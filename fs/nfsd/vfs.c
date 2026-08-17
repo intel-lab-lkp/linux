@@ -1176,6 +1176,9 @@ nfsd_direct_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
  *
  * Some filesystems or situations cannot use nfsd_splice_read. This
  * function is the slightly less-performant fallback for those cases.
+ * It is also the preferred path where splicing would copy anyway
+ * (see nfsd_splice_read_is_zero_copy()), because the copy then
+ * lands directly in Reply pages nfsd already owns.
  *
  * Returns nfs_ok on success, otherwise an nfserr stat value is
  * returned.
@@ -1576,7 +1579,7 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		return err;
 
 	file = nf->nf_file;
-	if (file->f_op->splice_read && nfsd_read_splice_ok(rqstp))
+	if (nfsd_splice_read_is_zero_copy(file) && nfsd_read_splice_ok(rqstp))
 		err = nfsd_splice_read(rqstp, fhp, file, offset, count, eof);
 	else
 		err = nfsd_iter_read(rqstp, fhp, nf, offset, count, 0, eof);
