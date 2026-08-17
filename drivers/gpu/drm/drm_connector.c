@@ -2201,29 +2201,30 @@ int drm_mode_create_tv_properties_legacy(struct drm_device *dev,
 	struct drm_property *tv_subconnector;
 	unsigned int i;
 
-	if (dev->mode_config.tv_select_subconnector_property)
-		return 0;
+	if (!dev->mode_config.tv_select_subconnector_property) {
+		/*
+		 * Basic connector properties
+		 */
+		tv_selector = drm_property_create_enum(dev, 0,
+					"select subconnector",
+					drm_tv_select_enum_list,
+					ARRAY_SIZE(drm_tv_select_enum_list));
+		if (!tv_selector)
+			goto nomem;
 
-	/*
-	 * Basic connector properties
-	 */
-	tv_selector = drm_property_create_enum(dev, 0,
-					  "select subconnector",
-					  drm_tv_select_enum_list,
-					  ARRAY_SIZE(drm_tv_select_enum_list));
-	if (!tv_selector)
-		goto nomem;
+		dev->mode_config.tv_select_subconnector_property = tv_selector;
+	}
 
-	dev->mode_config.tv_select_subconnector_property = tv_selector;
-
-	tv_subconnector =
-		drm_property_create_enum(dev, DRM_MODE_PROP_IMMUTABLE,
-				    "subconnector",
-				    drm_tv_subconnector_enum_list,
-				    ARRAY_SIZE(drm_tv_subconnector_enum_list));
-	if (!tv_subconnector)
-		goto nomem;
-	dev->mode_config.tv_subconnector_property = tv_subconnector;
+	if (!dev->mode_config.tv_subconnector_property) {
+		tv_subconnector =
+			drm_property_create_enum(dev, DRM_MODE_PROP_IMMUTABLE,
+				"subconnector",
+				drm_tv_subconnector_enum_list,
+				ARRAY_SIZE(drm_tv_subconnector_enum_list));
+		if (!tv_subconnector)
+			goto nomem;
+		dev->mode_config.tv_subconnector_property = tv_subconnector;
+	}
 
 	/*
 	 * Other, TV specific properties: margins & TV modes.
@@ -2231,7 +2232,7 @@ int drm_mode_create_tv_properties_legacy(struct drm_device *dev,
 	if (drm_mode_create_tv_margin_properties(dev))
 		goto nomem;
 
-	if (num_modes) {
+	if (num_modes && !dev->mode_config.legacy_tv_mode_property) {
 		dev->mode_config.legacy_tv_mode_property =
 			drm_property_create(dev, DRM_MODE_PROP_ENUM,
 					    "mode", num_modes);
@@ -2243,35 +2244,48 @@ int drm_mode_create_tv_properties_legacy(struct drm_device *dev,
 					      i, modes[i]);
 	}
 
-	dev->mode_config.tv_brightness_property =
-		drm_property_create_range(dev, 0, "brightness", 0, 100);
-	if (!dev->mode_config.tv_brightness_property)
-		goto nomem;
+	if (!dev->mode_config.tv_brightness_property) {
+		dev->mode_config.tv_brightness_property =
+			drm_property_create_range(dev, 0, "brightness", 0, 100);
+		if (!dev->mode_config.tv_brightness_property)
+			goto nomem;
+	}
 
-	dev->mode_config.tv_contrast_property =
-		drm_property_create_range(dev, 0, "contrast", 0, 100);
-	if (!dev->mode_config.tv_contrast_property)
-		goto nomem;
+	if (!dev->mode_config.tv_contrast_property) {
+		dev->mode_config.tv_contrast_property =
+			drm_property_create_range(dev, 0, "contrast", 0, 100);
+		if (!dev->mode_config.tv_contrast_property)
+			goto nomem;
+	}
 
-	dev->mode_config.tv_flicker_reduction_property =
-		drm_property_create_range(dev, 0, "flicker reduction", 0, 100);
-	if (!dev->mode_config.tv_flicker_reduction_property)
-		goto nomem;
+	if (!dev->mode_config.tv_flicker_reduction_property) {
+		dev->mode_config.tv_flicker_reduction_property =
+			drm_property_create_range(dev, 0, "flicker reduction",
+					0, 100);
+		if (!dev->mode_config.tv_flicker_reduction_property)
+			goto nomem;
+	}
 
-	dev->mode_config.tv_overscan_property =
-		drm_property_create_range(dev, 0, "overscan", 0, 100);
-	if (!dev->mode_config.tv_overscan_property)
-		goto nomem;
+	if (!dev->mode_config.tv_overscan_property) {
+		dev->mode_config.tv_overscan_property =
+			drm_property_create_range(dev, 0, "overscan", 0, 100);
+		if (!dev->mode_config.tv_overscan_property)
+			goto nomem;
+	}
 
-	dev->mode_config.tv_saturation_property =
-		drm_property_create_range(dev, 0, "saturation", 0, 100);
-	if (!dev->mode_config.tv_saturation_property)
-		goto nomem;
+	if (!dev->mode_config.tv_saturation_property) {
+		dev->mode_config.tv_saturation_property =
+			drm_property_create_range(dev, 0, "saturation", 0, 100);
+		if (!dev->mode_config.tv_saturation_property)
+			goto nomem;
+	}
 
-	dev->mode_config.tv_hue_property =
-		drm_property_create_range(dev, 0, "hue", 0, 100);
-	if (!dev->mode_config.tv_hue_property)
-		goto nomem;
+	if (!dev->mode_config.tv_hue_property) {
+		dev->mode_config.tv_hue_property =
+			drm_property_create_range(dev, 0, "hue", 0, 100);
+		if (!dev->mode_config.tv_hue_property)
+			goto nomem;
+	}
 
 	return 0;
 nomem:
