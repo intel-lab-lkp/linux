@@ -498,6 +498,7 @@ static int mark_block_group_to_copy(struct btrfs_fs_info *fs_info,
 	key.type = BTRFS_DEV_EXTENT_KEY;
 	key.offset = 0;
 
+	down_read(&fs_info->commit_root_sem);
 	btrfs_for_each_slot(root, &key, &found_key, path, iter_ret) {
 		struct extent_buffer *leaf = path->nodes[0];
 
@@ -523,6 +524,8 @@ static int mark_block_group_to_copy(struct btrfs_fs_info *fs_info,
 	}
 	if (iter_ret < 0)
 		ret = iter_ret;
+
+	up_read(&fs_info->commit_root_sem);
 
 	btrfs_free_path(path);
 unlock:
