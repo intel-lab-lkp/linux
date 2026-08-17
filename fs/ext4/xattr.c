@@ -1367,6 +1367,63 @@ out:
 }
 
 /*
+ * Undo the setup of a new xattr block that failed to be written out: drop
+ * the ext4_xattr_inode_inc_ref_all() references, free the block, and
+ * release the quota this operation charged for the new value (quota_len,
+ * zero when the value is not in an EA inode).
+ */
+static void ext4_xattr_new_block_fail(handle_t *handle, struct inode *inode,
+				      struct buffer_head *new_bh,
+				      size_t quota_len, int error)
+{
+	struct mb_cache *ea_block_cache = EA_BLOCK_CACHE(inode);
+	struct mb_cache_entry *oe;
+	struct ext4_xattr_inode_array *ea_inode_array = NULL;
+
+	ext4_error_inode(inode, __func__, __LINE__, 0,
+			 "xattr block dirty failed: %d", error);
+	lock_buffer(new_bh);
+retry_owner:
+	if (le32_to_cpu(BHDR(new_bh)->h_refcount) != 1) {
+		unlock_buffer(new_bh);
+		return;
+	}
+	if (ea_block_cache) {
+		oe = mb_cache_entry_delete_or_get(ea_block_cache,
+						  le32_to_cpu(BHDR(new_bh)->h_hash),
+						  new_bh->b_blocknr);
+		if (oe) {
+			unlock_buffer(new_bh);
+			mb_cache_entry_wait_unused(oe);
+			mb_cache_entry_put(ea_block_cache, oe);
+			lock_buffer(new_bh);
+			goto retry_owner;
+		}
+	}
+	get_bh(new_bh);
+	unlock_buffer(new_bh);
+
+	ext4_xattr_inode_dec_ref_all(handle, inode, new_bh,
+				     ENTRY(BHDR(new_bh) + 1),
+				     true /* block_csum */,
+				     &ea_inode_array,
+				     0 /* extra_credits */,
+				     true /* skip_quota */);
+	ext4_xattr_inode_array_free(ea_inode_array);
+	if (quota_len) {
+		/*
+		 * Reverses this operation's own ext4_xattr_inode_alloc_quota()
+		 * charge, so no EA inode pointer is needed here.
+		 */
+		ext4_xattr_inode_free_quota(inode, NULL, quota_len);
+		ext4_mark_inode_dirty(handle, inode);
+	}
+	ext4_free_blocks(handle, inode, new_bh, 0, 1,
+			 EXT4_FREE_BLOCKS_METADATA |
+			 EXT4_FREE_BLOCKS_FORGET);
+}
+
+/*
  * Find the available free space for EAs. This also returns the total number of
  * bytes used by EA entries.
  */
@@ -2175,8 +2232,13 @@ getblk_failed:
 			ext4_xattr_block_cache_insert(ea_block_cache, new_bh);
 			error = ext4_handle_dirty_metadata(handle, inode,
 							   new_bh);
-			if (error)
+			if (error) {
+				ext4_xattr_new_block_fail(handle, inode, new_bh,
+							  i->in_inode ?
+							  i->value_len : 0,
+							  error);
 				goto cleanup;
+			}
 		}
 	}
 
