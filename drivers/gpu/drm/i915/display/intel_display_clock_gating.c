@@ -11,6 +11,7 @@
 #include "intel_display_clock_gating.h"
 #include "intel_display_core.h"
 #include "intel_display_regs.h"
+#include "intel_pch.h"
 
 static void intel_display_gen9_init_clock_gating(struct intel_display *display)
 {
@@ -304,4 +305,10 @@ void intel_display_init_clock_gating(struct intel_display *display)
 		intel_display_g4x_init_clock_gating(display);
 	else if (display->platform.i965gm)
 		intel_display_i965gm_init_clock_gating(display);
+}
+
+void intel_display_restore_clock_gating(struct intel_display *display)
+{
+	intel_display_init_clock_gating(display);
+	intel_pch_init_clock_gating(display);
 }
