@@ -198,6 +198,8 @@ static int platform_ipmi_probe(struct platform_device *pdev)
 		io.slave_addr = slave_addr;
 
 	io.irq = platform_get_irq_optional(pdev, 0);
+	if (io.irq < 0 && io.irq != -ENXIO)
+		return io.irq;
 	if (io.irq > 0)
 		io.irq_setup = ipmi_std_irq_setup;
 	else
