@@ -4712,8 +4712,10 @@ void bnx2x_free_mem_bp(struct bnx2x *bp)
 {
 	int i;
 
-	for (i = 0; i < bp->fp_array_size; i++)
-		kfree(bp->fp[i].tpa_info);
+	if (bp->fp) {
+		for (i = 0; i < bp->fp_array_size; i++)
+			kfree(bp->fp[i].tpa_info);
+	}
 	kfree(bp->fp);
 	kfree(bp->sp_objs);
 	kfree(bp->fp_stats);
@@ -4742,13 +4744,13 @@ int bnx2x_alloc_mem_bp(struct bnx2x *bp)
 
 	/* fp array: RSS plus CNIC related L2 queues */
 	fp_array_size = BNX2X_MAX_RSS_COUNT(bp) + CNIC_SUPPORT(bp);
-	bp->fp_array_size = fp_array_size;
-	BNX2X_DEV_INFO("fp_array_size %d\n", bp->fp_array_size);
+	BNX2X_DEV_INFO("fp_array_size %d\n", fp_array_size);
 
-	fp = kzalloc_objs(*fp, bp->fp_array_size);
+	fp = kzalloc_objs(*fp, fp_array_size);
 	if (!fp)
 		goto alloc_err;
 	bp->fp = fp;
+	bp->fp_array_size = fp_array_size;
 	for (i = 0; i < bp->fp_array_size; i++) {
 		fp[i].tpa_info =
 			kzalloc_objs(struct bnx2x_agg_info,
