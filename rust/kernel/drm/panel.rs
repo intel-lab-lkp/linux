@@ -595,3 +595,90 @@ impl<T: PanelFuncs> PanelFuncsVTable<T> {
         &Self::VTABLE
     }
 }
+
+#[cfg(CONFIG_RUST_DRM_PANEL_KUNIT_TEST)]
+#[macros::kunit_tests(rust_kernel_drm_panel)]
+mod tests {
+    use super::*;
+    use core::mem::{align_of, offset_of, size_of, ManuallyDrop, MaybeUninit};
+
+    struct TestData {
+        _ptr: *const u8,
+        _byte: u8,
+    }
+
+    #[test]
+    fn panel_orientation() {
+        // Test valid values.
+        assert!(matches!(
+            PanelOrientation::try_from(-1),
+            Ok(PanelOrientation::Unknown)
+        ));
+        assert!(matches!(
+            PanelOrientation::try_from(0),
+            Ok(PanelOrientation::Normal)
+        ));
+        assert!(matches!(
+            PanelOrientation::try_from(1),
+            Ok(PanelOrientation::BottomUp)
+        ));
+        assert!(matches!(
+            PanelOrientation::try_from(2),
+            Ok(PanelOrientation::LeftUp)
+        ));
+        assert!(matches!(
+            PanelOrientation::try_from(3),
+            Ok(PanelOrientation::RightUp)
+        ));
+
+        // Test invalid values.
+        assert!(PanelOrientation::try_from(4).is_err());
+        assert!(PanelOrientation::try_from(-2).is_err());
+    }
+
+    #[test]
+    fn connector_type() {
+        // Test valid values.
+        assert!(matches!(
+            ConnectorType::try_from(0),
+            Ok(ConnectorType::Unknown)
+        ));
+        assert!(matches!(
+            ConnectorType::try_from(10),
+            Ok(ConnectorType::DisplayPort)
+        ));
+        assert!(matches!(
+            ConnectorType::try_from(14),
+            Ok(ConnectorType::eDP)
+        ));
+        assert!(matches!(
+            ConnectorType::try_from(16),
+            Ok(ConnectorType::DSI)
+        ));
+        assert!(matches!(
+            ConnectorType::try_from(20),
+            Ok(ConnectorType::USB)
+        ));
+
+        // Test invalid values.
+        assert!(ConnectorType::try_from(21).is_err());
+    }
+
+    #[test]
+    fn panel_container_layout() {
+        assert_eq!(offset_of!(PanelContainer<TestData>, data), 0);
+
+        assert_eq!(size_of::<ManuallyDrop<TestData>>(), size_of::<TestData>());
+
+        let panel_offset = offset_of!(PanelContainer<TestData>, panel);
+        assert_eq!(
+            panel_offset % align_of::<MaybeUninit<bindings::drm_panel>>(),
+            0
+        );
+
+        assert!(
+            size_of::<PanelContainer<TestData>>()
+                >= panel_offset + size_of::<bindings::drm_panel>()
+        );
+    }
+}
