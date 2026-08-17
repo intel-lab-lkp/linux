@@ -436,7 +436,9 @@ static int bt_bmc_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-	bt_bmc_config_irq(bt_bmc, pdev);
+	rc = bt_bmc_config_irq(bt_bmc, pdev);
+	if (rc)
+		return rc;
 
 	if (bt_bmc->irq >= 0) {
 		dev_info(dev, "Using IRQ %d\n", bt_bmc->irq);
