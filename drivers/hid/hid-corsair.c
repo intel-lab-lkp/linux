@@ -194,6 +194,9 @@ static void k90_brightness_set(struct led_classdev *led_cdev,
 {
 	struct k90_led *led = container_of(led_cdev, struct k90_led, cdev);
 
+	if (led->removed)
+		return;
+
 	led->brightness = brightness;
 	schedule_work(&led->work);
 }
@@ -507,8 +510,8 @@ static int k90_init_macro_functions(struct hid_device *dev)
 
 fail_sysfs:
 	k90->record_led.removed = true;
-	led_classdev_unregister(&k90->record_led.cdev);
 	cancel_work_sync(&k90->record_led.work);
+	led_classdev_unregister(&k90->record_led.cdev);
 fail_record_led:
 	kfree(k90->record_led.cdev.name);
 fail_record_led_alloc:
