@@ -1834,12 +1834,11 @@ bool shmem_hpage_pmd_enabled(void)
 }
 
 unsigned long shmem_allowable_huge_orders(struct inode *inode,
-				struct vm_area_struct *vma, pgoff_t index,
-				loff_t write_end, bool shmem_huge_force)
+		struct vm_area_struct *vma, vm_flags_t vm_flags,
+		pgoff_t index, loff_t write_end, bool shmem_huge_force)
 {
 	unsigned long mask = READ_ONCE(huge_shmem_orders_always);
 	unsigned long within_size_orders = READ_ONCE(huge_shmem_orders_within_size);
-	vm_flags_t vm_flags = vma ? vma->vm_flags : 0;
 	unsigned int global_orders;
 
 	if (thp_disabled_by_hw() || (vma && vma_thp_disabled(vma, vm_flags, shmem_huge_force)))
@@ -2430,6 +2429,7 @@ static int shmem_get_folio_gfp(struct inode *inode, pgoff_t index,
 		gfp_t gfp, struct vm_fault *vmf, vm_fault_t *fault_type)
 {
 	struct vm_area_struct *vma = vmf ? vmf->vma : NULL;
+	vm_flags_t vm_flags = vma ? vma->vm_flags : 0;
 	struct mm_struct *fault_mm;
 	struct folio *folio;
 	int error;
@@ -2507,7 +2507,8 @@ repeat:
 	}
 
 	/* Find hugepage orders that are allowed for anonymous shmem and tmpfs. */
-	orders = shmem_allowable_huge_orders(inode, vma, index, write_end, false);
+	orders = shmem_allowable_huge_orders(inode, vma, vm_flags, index,
+					     write_end, false);
 	if (orders > 0) {
 		gfp_t huge_gfp;
 
