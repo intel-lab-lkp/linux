@@ -806,9 +806,16 @@ static bool kvm_need_any_pmc_intercept(struct kvm_vcpu *vcpu)
 	       pmu->nr_arch_fixed_counters != kvm_host_pmu.num_counters_fixed;
 }
 
+static bool kvm_need_perf_metrics_intercept(struct kvm_vcpu *vcpu)
+{
+	return (kvm_host.perf_capabilities & PERF_CAP_PERF_METRICS) &&
+		!kvm_vcpu_has_perf_metrics(vcpu);
+}
+
 bool kvm_need_perf_global_ctrl_intercept(struct kvm_vcpu *vcpu)
 {
 	return kvm_need_any_pmc_intercept(vcpu) ||
+	       kvm_need_perf_metrics_intercept(vcpu) ||
 	       !kvm_pmu_has_perf_global_ctrl(vcpu_to_pmu(vcpu));
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_need_perf_global_ctrl_intercept);
