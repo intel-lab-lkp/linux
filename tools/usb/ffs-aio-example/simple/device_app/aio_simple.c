@@ -294,6 +294,19 @@ int main(int argc, char *argv[])
 	iocb_in = malloc(sizeof(*iocb_in));
 	iocb_out = malloc(sizeof(*iocb_out));
 
+	if (!buf_in || !buf_out || !iocb_in || !iocb_out) {
+		perror("malloc");
+		free(buf_in);
+		free(buf_out);
+		free(iocb_in);
+		free(iocb_out);
+		io_destroy(ctx);
+		for (i = 0; i < 2; ++i)
+			close(ep[i]);
+		close(ep0);
+		return 1;
+	}
+
 	while (1) {
 		FD_ZERO(&rfds);
 		FD_SET(ep0, &rfds);
