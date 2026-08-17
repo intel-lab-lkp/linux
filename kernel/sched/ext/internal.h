@@ -689,7 +689,7 @@ struct sched_ext_ops {
 	 * @burst_us: bandwidth control burst
 	 *
 	 * Update @cgrp's bandwidth control parameters. This is from the cpu.max
-	 * cgroup interface.
+	 * cgroup interface. This operation may block.
 	 *
 	 * @quota_us / @period_us determines the CPU bandwidth @cgrp is entitled
 	 * to. For example, if @period_us is 1_000_000 and @quota_us is

@@ -4572,6 +4572,15 @@ void scx_group_set_bandwidth(struct task_group *tg,
 
 	percpu_up_read(&scx_cgroup_ops_rwsem);
 }
+
+/*
+ * Capability marker for userspace. The sleepable allowance for
+ * ops.cgroup_set_bandwidth() (see bpf_scx_check_member()) is a verifier
+ * property with no other symbol a scheduler can probe, so this no-op function
+ * exists solely so its presence in the kernel's BTF can be detected. It has no
+ * callers; __used keeps it from being optimized away.
+ */
+__used void scx_cgroup_set_bandwidth_may_sleep(void) {}
 #endif	/* CONFIG_EXT_GROUP_SCHED */
 
 #if defined(CONFIG_EXT_GROUP_SCHED) || defined(CONFIG_EXT_SUB_SCHED)
@@ -8013,6 +8022,7 @@ static int bpf_scx_check_member(const struct btf_type *t,
 	case offsetof(struct sched_ext_ops, cgroup_init):
 	case offsetof(struct sched_ext_ops, cgroup_exit):
 	case offsetof(struct sched_ext_ops, cgroup_prep_move):
+	case offsetof(struct sched_ext_ops, cgroup_set_bandwidth):
 #endif
 	case offsetof(struct sched_ext_ops, cpu_online):
 	case offsetof(struct sched_ext_ops, cpu_offline):
