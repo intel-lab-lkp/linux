@@ -133,8 +133,18 @@ void cxl_probe_device_regs(struct device *dev, void __iomem *base,
 
 	for (cap = 1; cap <= cap_count; cap++) {
 		struct cxl_reg_map *rmap;
+		u16 cap_id, vendor_id;
 		u32 offset, length;
-		u16 cap_id;
+
+		vendor_id = FIELD_GET(PCI_MCAP_HDR_VENDOR_ID,
+				      readl(base + PCI_MCAP_HDR_BASE(cap) +
+					    PCI_MCAP_HDR_REG_4));
+		/*
+		 * The Vendor ID field is reserved and reads as zero in legacy
+		 * CXL capability headers. See CXL r3.2, Table 8-44.
+		 */
+		if (vendor_id && vendor_id != PCI_VENDOR_ID_CXL)
+			continue;
 
 		cap_id = FIELD_GET(CXLDEV_CAP_HDR_CAP_ID_MASK,
 				   readl(base + cap * 0x10));
