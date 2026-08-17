@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <errno.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdlib.h>
 
 #include <fcntl.h>
@@ -182,47 +183,77 @@ out_free_threads:
 }
 
 enum user_read_state {
-	USER_READ_ENABLED,
-	USER_READ_DISABLED,
-	USER_READ_UNKNOWN,
+	USER_READ_UNKNOWN = -1,
+	USER_READ_DISABLED = 0,
+	USER_READ_ENABLED = 1,
 };
 
-static enum user_read_state set_user_read(struct perf_pmu *pmu, enum user_read_state enabled)
+static int set_user_read_fd(int fd, int enabled)
 {
-	char buf[2] = {0, '\n'};
+	char buf[32], *endptr;
+	long value;
 	ssize_t len;
-	int events_fd, rdpmc_fd;
-	enum user_read_state old_user_read = USER_READ_UNKNOWN;
+	int old_user_read;
+
+	len = read(fd, buf, sizeof(buf) - 1);
+	if (len <= 0) {
+		pr_debug("%s read failed\n", __func__);
+		return USER_READ_UNKNOWN;
+	}
+	buf[len] = '\0';
+
+	errno = 0;
+	value = strtol(buf, &endptr, 10);
+	if (errno || endptr == buf || value < 0 || value > INT_MAX) {
+		pr_debug("%s invalid value: %s\n", __func__, buf);
+		return USER_READ_UNKNOWN;
+	}
+	old_user_read = value;
+
+	if (enabled == old_user_read)
+		return old_user_read;
+
+	len = scnprintf(buf, sizeof(buf), "%d\n", enabled);
+	if (lseek(fd, 0, SEEK_SET) < 0) {
+		pr_debug("%s seek failed\n", __func__);
+		return old_user_read;
+	}
+	if (write(fd, buf, len) != len)
+		pr_debug("%s write failed\n", __func__);
+
+	return old_user_read;
+}
+
+static int set_user_read(struct perf_pmu *pmu, int enabled)
+{
+	int events_fd, fd, old_user_read;
 
 	if (enabled == USER_READ_UNKNOWN)
 		return USER_READ_UNKNOWN;
 
 	events_fd = perf_pmu__event_source_devices_fd();
-	if (events_fd < 0)
-		return USER_READ_UNKNOWN;
-
-	rdpmc_fd = perf_pmu__pathname_fd(events_fd, pmu->name, "rdpmc", O_RDWR);
-	if (rdpmc_fd < 0) {
+	if (events_fd >= 0) {
+		fd = perf_pmu__pathname_fd(events_fd, pmu->name, "rdpmc", O_RDWR);
+		if (fd >= 0) {
+			/*
+			 * Note, on Intel hybrid disabling on 1 PMU will
+			 * implicitly disable on all the core PMUs.
+			 */
+			old_user_read = set_user_read_fd(fd, enabled);
+			close(fd);
+			close(events_fd);
+			return old_user_read;
+		}
 		close(events_fd);
+	}
+
+	/* Fallback: perf_user_access interface (arm64, riscv, or similar) */
+	fd = open("/proc/sys/kernel/perf_user_access", O_RDWR);
+	if (fd < 0)
 		return USER_READ_UNKNOWN;
-	}
 
-	len = read(rdpmc_fd, buf, sizeof(buf));
-	if (len != sizeof(buf))
-		pr_debug("%s read failed\n", __func__);
-
-	// Note, on Intel hybrid disabling on 1 PMU will implicitly disable on
-	// all the core PMUs.
-	old_user_read = (buf[0] == '1') ? USER_READ_ENABLED : USER_READ_DISABLED;
-
-	if (enabled != old_user_read) {
-		buf[0] = (enabled == USER_READ_ENABLED) ? '1' : '0';
-		len = write(rdpmc_fd, buf, sizeof(buf));
-		if (len != sizeof(buf))
-			pr_debug("%s write failed\n", __func__);
-	}
-	close(rdpmc_fd);
-	close(events_fd);
+	old_user_read = set_user_read_fd(fd, enabled);
+	close(fd);
 	return old_user_read;
 }
 
@@ -240,7 +271,7 @@ static int test_stat_user_read(u64 event, enum user_read_state enabled)
 	perf_thread_map__set_pid(threads, 0, 0);
 
 	while ((pmu = perf_pmus__scan_core(pmu)) != NULL) {
-		enum user_read_state saved_user_read_state = set_user_read(pmu, enabled);
+		int saved_user_read_state = set_user_read(pmu, enabled);
 		struct perf_event_attr attr = {
 			.type	= PERF_TYPE_HARDWARE,
 			.config	= perf_pmus__supports_extended_type()
@@ -253,7 +284,8 @@ static int test_stat_user_read(u64 event, enum user_read_state enabled)
 		struct perf_evsel *evsel = NULL;
 		int err;
 		struct perf_event_mmap_page *pc;
-		bool mapped = false, opened = false, rdpmc_supported;
+		bool mapped = false, opened = false, rdpmc_expected;
+		bool rdpmc_event_active;
 		struct perf_counts_values counts = { .val = 0 };
 
 
@@ -301,26 +333,53 @@ static int test_stat_user_read(u64 event, enum user_read_state enabled)
 			goto cleanup;
 		}
 
+		/*
+		 * When pc->index == 0, userspace access is disabled and Perf
+		 * will silently use the read() syscall instead. Test this to
+		 * make sure we're not doing that.
+		 */
+		rdpmc_event_active = pc->index;
+
+		/*
+		 * If we couldn't set the state, test that whatever state we're
+		 * already in is the expected one.
+		 */
 		if (saved_user_read_state == USER_READ_UNKNOWN)
-			rdpmc_supported = pc->cap_user_rdpmc && pc->index;
+			rdpmc_expected = pc->cap_user_rdpmc && rdpmc_event_active;
 		else
-			rdpmc_supported = (enabled == USER_READ_ENABLED);
+			rdpmc_expected = (enabled == USER_READ_ENABLED);
 
-		if (rdpmc_supported && (!pc->cap_user_rdpmc || !pc->index)) {
-			pr_err("User space counter reading for PMU %s [Failed unexpected supported counter access %d %d]\n",
-				pmu->name, pc->cap_user_rdpmc, pc->index);
+		if (rdpmc_expected && (!pc->cap_user_rdpmc || !rdpmc_event_active)) {
+			pr_err("User space counter reading for PMU %s [Failed. rdpmc event should be both enabled and active %d %d]\n",
+				pmu->name, pc->cap_user_rdpmc, rdpmc_event_active);
 			ret = TEST_FAIL;
 			goto cleanup;
 		}
 
-		if (!rdpmc_supported && pc->cap_user_rdpmc) {
-			pr_err("User space counter reading for PMU %s [Failed unexpected unsupported counter access %d]\n",
-				pmu->name, pc->cap_user_rdpmc);
+#ifdef __aarch64__
+		/*
+		 * On Arm, pc->cap_user_rdpmc is set when the event is opened
+		 * with userspace counter access, regardless of whether rdpmc is
+		 * enabled or not via sysfs. The event is always opened with it
+		 * in this test, so don't check it in the expected disabled
+		 * case.
+		 */
+		if (!rdpmc_expected && rdpmc_event_active) {
+			pr_err("User space counter reading for PMU %s [Failed. rdpmc event should be inactive %d]\n",
+				pmu->name, rdpmc_event_active);
 			ret = TEST_FAIL;
 			goto cleanup;
 		}
+#else
+		if (!rdpmc_expected && pc->cap_user_rdpmc) {
+			pr_err("User space counter reading for PMU %s [Failed. rdpmc event should be disabled and inactive %d %d]\n",
+				pmu->name, pc->cap_user_rdpmc, rdpmc_event_active);
+			ret = TEST_FAIL;
+			goto cleanup;
+		}
+#endif
 
-		if (rdpmc_supported && pc->pmc_width < 32) {
+		if (rdpmc_expected && pc->pmc_width < 32) {
 			pr_err("User space counter reading for PMU %s [Failed width not set %d]\n",
 				pmu->name, pc->pmc_width);
 			ret = TEST_FAIL;
@@ -328,7 +387,7 @@ static int test_stat_user_read(u64 event, enum user_read_state enabled)
 		}
 
 		perf_evsel__read(evsel, 0, 0, &counts);
-		if (rdpmc_supported && counts.val == 0) {
+		if (rdpmc_expected && counts.val == 0) {
 			pr_err("User space counter reading for PMU %s [Failed read]\n", pmu->name);
 			ret = TEST_FAIL;
 			goto cleanup;
