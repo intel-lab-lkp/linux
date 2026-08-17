@@ -119,7 +119,8 @@ static __always_inline depot_stack_handle_t create_dummy_stack(void)
 	unsigned int nr_entries;
 
 	nr_entries = stack_trace_save(entries, ARRAY_SIZE(entries), 0);
-	return stack_depot_save(entries, nr_entries, GFP_KERNEL);
+	return stack_depot_save_flags(entries, nr_entries, GFP_KERNEL,
+				       STACK_DEPOT_FLAG_CAN_ALLOC | STACK_DEPOT_FLAG_COUNTABLE);
 }
 
 static noinline void register_dummy_stack(void)
@@ -181,7 +182,8 @@ static noinline depot_stack_handle_t save_stack(gfp_t flags)
 
 	set_current_in_page_owner();
 	nr_entries = stack_trace_save(entries, ARRAY_SIZE(entries), 2);
-	handle = stack_depot_save(entries, nr_entries, flags);
+	handle = stack_depot_save_flags(entries, nr_entries, flags,
+					STACK_DEPOT_FLAG_CAN_ALLOC | STACK_DEPOT_FLAG_COUNTABLE);
 	if (!handle)
 		handle = failure_handle;
 	unset_current_in_page_owner();

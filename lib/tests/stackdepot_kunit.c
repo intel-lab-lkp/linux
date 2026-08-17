@@ -167,6 +167,60 @@ static void stackdepot_snprint_public(struct kunit *test)
 	KUNIT_EXPECT_STREQ(test, actual, expected);
 }
 
+static void stackdepot_countable_public(struct kunit *test)
+{
+	unsigned long plain_entries[] = {
+		0x141000UL,
+		0x142000UL,
+		0x143000UL,
+	};
+	unsigned long get_entries[] = {
+		0x151000UL,
+		0x152000UL,
+		0x153000UL,
+	};
+	unsigned long fetched[ARRAY_SIZE(plain_entries)] = {};
+	depot_flags_t countable = STACK_DEPOT_FLAG_CAN_ALLOC |
+				  STACK_DEPOT_FLAG_COUNTABLE;
+	struct stack_record *record;
+	depot_stack_handle_t count_handle;
+	depot_stack_handle_t plain_handle;
+	depot_stack_handle_t get_handle;
+	unsigned int get_nr = ARRAY_SIZE(get_entries);
+	unsigned int plain_nr = ARRAY_SIZE(plain_entries);
+	unsigned int nr_entries;
+
+	KUNIT_ASSERT_EQ(test, stack_depot_init(), 0);
+
+	plain_handle = stack_depot_save(plain_entries, plain_nr, GFP_KERNEL);
+	KUNIT_ASSERT_NE(test, plain_handle, (depot_stack_handle_t)0);
+	count_handle = stack_depot_save_flags(plain_entries, plain_nr, GFP_KERNEL,
+					      countable);
+	KUNIT_ASSERT_NE(test, count_handle, (depot_stack_handle_t)0);
+	record = __stack_depot_get_stack_record(count_handle);
+	KUNIT_ASSERT_NOT_NULL(test, record);
+	KUNIT_EXPECT_EQ(test, record->size, (u16)plain_nr);
+	KUNIT_EXPECT_MEMEQ(test, record->entries, plain_entries,
+			   sizeof(plain_entries));
+	nr_entries = stack_depot_fetch_into(count_handle, fetched,
+					    ARRAY_SIZE(fetched));
+	KUNIT_EXPECT_EQ(test, nr_entries, plain_nr);
+	KUNIT_EXPECT_MEMEQ(test, fetched, plain_entries, sizeof(plain_entries));
+
+	get_handle = stack_depot_save_flags(get_entries, get_nr, GFP_KERNEL,
+					    STACK_DEPOT_FLAG_CAN_ALLOC |
+					    STACK_DEPOT_FLAG_GET);
+	KUNIT_ASSERT_NE(test, get_handle, (depot_stack_handle_t)0);
+	count_handle = stack_depot_save_flags(get_entries, get_nr, GFP_KERNEL,
+					      countable);
+	KUNIT_ASSERT_NE(test, count_handle, (depot_stack_handle_t)0);
+	record = __stack_depot_get_stack_record(count_handle);
+	KUNIT_ASSERT_NOT_NULL(test, record);
+	KUNIT_EXPECT_MEMEQ(test, record->entries, get_entries, sizeof(get_entries));
+
+	stack_depot_put(get_handle);
+}
+
 static void stackdepot_fetch_into_roundtrip(struct kunit *test)
 {
 	unsigned long entries[] = {
@@ -392,6 +446,7 @@ static struct kunit_case stackdepot_test_cases[] = {
 	KUNIT_CASE(stackdepot_trie_max_path_roundtrip),
 	KUNIT_CASE(stackdepot_save_flags_public),
 	KUNIT_CASE(stackdepot_snprint_public),
+	KUNIT_CASE(stackdepot_countable_public),
 	KUNIT_CASE(stackdepot_fetch_into_roundtrip),
 	KUNIT_CASE(stackdepot_fetch_into_rejects_missing_or_short_stack),
 	KUNIT_CASE(stackdepot_trie_topology_roundtrip),

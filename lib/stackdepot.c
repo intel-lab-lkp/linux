@@ -2,10 +2,11 @@
 /*
  * Stack depot - a stack trace storage that avoids duplication.
  *
- * Internally, stack depot has two storage backends. Refcounted entries use the
- * legacy hash table with contiguous stack records in stack pools. Persistent
- * non-refcounted entries can use trie storage when enabled; trie nodes share
- * common frame prefixes and are published through RCU children containers.
+ * Internally, stack depot has two storage backends. Refcounted entries and
+ * callers that request STACK_DEPOT_FLAG_COUNTABLE use the legacy hash table with
+ * contiguous stack records in stack pools. Persistent non-refcounted entries
+ * can use trie storage when enabled; trie nodes share common frame prefixes and
+ * are published through RCU children containers.
  *
  * Author: Alexander Potapenko <glider@google.com>
  * Copyright (C) 2016 Google, Inc.
@@ -1022,6 +1023,7 @@ depot_alloc_stack(unsigned long *entries, unsigned int nr_entries, u32 hash, dep
 	/* Save the stack trace. */
 	stack->hash = hash;
 	stack->size = nr_entries;
+	stack->flags = flags & STACK_DEPOT_FLAG_COUNTABLE;
 	/* stack->handle is already filled in by depot_pop_free_pool(). */
 	memcpy(stack->entries, entries, flex_array_size(stack, entries, nr_entries));
 
@@ -1164,6 +1166,9 @@ static inline struct stack_record *find_stack(struct list_head *bucket,
 	list_for_each_entry_rcu(stack, bucket, hash_list) {
 		if (stack->hash != hash || stack->size != size)
 			continue;
+		/* Page owner countable records have a distinct count lifetime. */
+		if ((stack->flags ^ flags) & STACK_DEPOT_FLAG_COUNTABLE)
+			continue;
 
 		/*
 		 * This may race with depot_free_stack() accessing the freelist
@@ -1267,6 +1272,9 @@ depot_stack_handle_t stack_depot_save_flags(unsigned long *entries,
 
 	if (WARN_ON(depot_flags & ~STACK_DEPOT_FLAGS_MASK))
 		return 0;
+	if (WARN_ON_ONCE((depot_flags & STACK_DEPOT_FLAG_GET) &&
+			 (depot_flags & STACK_DEPOT_FLAG_COUNTABLE)))
+		return 0;
 
 	/*
 	 * If this stack trace is from an interrupt, including anything before
@@ -1281,7 +1289,7 @@ depot_stack_handle_t stack_depot_save_flags(unsigned long *entries,
 	if (unlikely(nr_entries == 0) || stack_depot_disabled)
 		return 0;
 
-	if (!(depot_flags & STACK_DEPOT_FLAG_GET) &&
+	if (!(depot_flags & (STACK_DEPOT_FLAG_GET | STACK_DEPOT_FLAG_COUNTABLE)) &&
 	    static_branch_unlikely(&stack_depot_trie_enabled)) {
 		if (nr_entries > CONFIG_STACKDEPOT_MAX_FRAMES)
 			nr_entries = CONFIG_STACKDEPOT_MAX_FRAMES;
@@ -1374,12 +1382,20 @@ EXPORT_SYMBOL_GPL(stack_depot_save);
 
 struct stack_record *__stack_depot_get_stack_record(depot_stack_handle_t handle)
 {
+	struct stack_record *stack;
+
 	if (!handle)
 		return NULL;
 	if (WARN_ON_ONCE(stack_depot_handle_is_trie(handle)))
 		return NULL;
 
-	return depot_fetch_stack(handle);
+	stack = depot_fetch_stack(handle);
+	if (!stack)
+		return NULL;
+	if (WARN_ON_ONCE(!(stack->flags & STACK_DEPOT_FLAG_COUNTABLE)))
+		return NULL;
+
+	return stack;
 }
 
 static void frame_run_init(const unsigned long *entries,
@@ -2136,6 +2152,8 @@ void stack_depot_put(depot_stack_handle_t handle)
 	if (WARN(!stack, "corrupt handle or unbalanced stack_depot_put()"))
 		return;
 
+	if (WARN_ON_ONCE(stack->flags & STACK_DEPOT_FLAG_COUNTABLE))
+		return;
 	if (refcount_dec_and_test(&stack->count))
 		depot_free_stack(stack);
 }
