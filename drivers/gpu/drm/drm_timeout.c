@@ -9,6 +9,7 @@
 #include <linux/export.h>
 #include <linux/jiffies.h>
 #include <linux/ktime.h>
+#include <linux/math64.h>
 #include <linux/sched.h>
 
 #include <drm/drm_utils.h>
@@ -45,3 +46,36 @@ signed long drm_timeout_abs_to_jiffies(int64_t timeout_nsec)
 	return timeout_jiffies64 + 1;
 }
 EXPORT_SYMBOL(drm_timeout_abs_to_jiffies);
+
+/**
+ * drm_timeout_rel_to_jiffies - calculate jiffies timeout from relative value
+ *
+ * @timeout_nsec: relative timeout in ns, 0 for poll
+ *
+ * Calculate the timeout in jiffies from a relative timeout in ns, for drivers
+ * whose UAPI expresses a wait as a duration rather than as a deadline.
+ *
+ * The result is clamped to MAX_JIFFY_OFFSET. That keeps it positive once it is
+ * converted to the signed long taken by dma_fence_wait_timeout() and friends,
+ * which matters on 32-bit, and keeps it distinct from MAX_SCHEDULE_TIMEOUT so
+ * that a finite wait is never understood as an infinite one.
+ *
+ * It's strongly discouraged to use relative timeouts in uAPIs, as they do not
+ * survive a restarted ioctl. A signal-interrupted ioctl is re-entered with the
+ * same arguments, so the duration starts counting from zero again. New uAPIs
+ * should take an absolute deadline and use drm_timeout_abs_to_jiffies().
+ */
+unsigned long drm_timeout_rel_to_jiffies(u64 timeout_nsec)
+{
+	/* make 0 timeout means poll, as for the absolute variant */
+	if (timeout_nsec == 0)
+		return 0;
+
+	/* nsecs_to_jiffies64() does not guard against overflow */
+	if ((NSEC_PER_SEC % HZ) != 0 &&
+	    div_u64(timeout_nsec, NSEC_PER_SEC) >= MAX_JIFFY_OFFSET / HZ)
+		return MAX_JIFFY_OFFSET;
+
+	return min_t(u64, MAX_JIFFY_OFFSET, nsecs_to_jiffies64(timeout_nsec) + 1);
+}
+EXPORT_SYMBOL(drm_timeout_rel_to_jiffies);

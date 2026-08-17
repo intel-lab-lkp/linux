@@ -25,5 +25,6 @@ const struct drm_panel_backlight_quirk *
 drm_get_panel_backlight_quirk(const struct drm_edid *edid);
 
 signed long drm_timeout_abs_to_jiffies(int64_t timeout_nsec);
+unsigned long drm_timeout_rel_to_jiffies(u64 timeout_nsec);
 
 #endif
