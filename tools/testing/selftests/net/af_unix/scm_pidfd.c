@@ -276,8 +276,15 @@ static int cmsg_check_dead(int fd, int expected_pid)
 		return 1;
 	}
 
+	/* pidfd from SCM_PIDFD should point to the client_pid */
+	pid_t pid = get_pid_from_fdinfo_file(*res.pidfd, "Pid:", sizeof("Pid:") - 1);
+	if (pid != expected_pid) {
+		log_err("wrong SCM_PIDFD %d != %d", pid, expected_pid);
+		close(*res.pidfd);
+		return 1;
+	}
+
 	/*
-	 * pidfd from SCM_PIDFD should point to the client_pid.
 	 * Let's read exit information and check if it's what
 	 * we expect to see.
 	 */
