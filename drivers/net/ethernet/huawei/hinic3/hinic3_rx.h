@@ -8,6 +8,17 @@
 #include <linux/dim.h>
 #include <linux/netdevice.h>
 
+/* rx cqe checksum err */
+#define HINIC3_RX_CSUM_IP_CSUM_ERR      BIT(0)
+#define HINIC3_RX_CSUM_TCP_CSUM_ERR     BIT(1)
+#define HINIC3_RX_CSUM_UDP_CSUM_ERR     BIT(2)
+#define HINIC3_RX_CSUM_IGMP_CSUM_ERR    BIT(3)
+#define HINIC3_RX_CSUM_ICMPV4_CSUM_ERR  BIT(4)
+#define HINIC3_RX_CSUM_ICMPV6_CSUM_ERR  BIT(5)
+#define HINIC3_RX_CSUM_SCTP_CRC_ERR     BIT(6)
+#define HINIC3_RX_CSUM_HW_CHECK_NONE    BIT(7)
+#define HINIC3_RX_CSUM_IPSU_OTHER_ERR   BIT(8)
+
 #define RQ_CQE_OFFOLAD_TYPE_PKT_TYPE_MASK           GENMASK(4, 0)
 #define RQ_CQE_OFFOLAD_TYPE_IP_TYPE_MASK            GENMASK(6, 5)
 #define RQ_CQE_OFFOLAD_TYPE_TUNNEL_PKT_FORMAT_MASK  GENMASK(11, 8)
@@ -39,7 +50,6 @@ struct hinic3_rxq_stats {
 	u64                   rx_buf_empty;
 	u64                   alloc_skb_err;
 	u64                   alloc_rx_buf_err;
-	u64                   restore_drop_sge;
 	struct u64_stats_sync syncp;
 };
 
@@ -123,6 +133,9 @@ void hinic3_free_rxqs_res(struct net_device *netdev, u16 num_rq,
 			  u32 rq_depth, struct hinic3_dyna_rxq_res *rxqs_res);
 int hinic3_configure_rxqs(struct net_device *netdev, u16 num_rq,
 			  u32 rq_depth, struct hinic3_dyna_rxq_res *rxqs_res);
+
+void hinic3_rxq_get_stats(struct hinic3_rxq *rxq,
+			  struct hinic3_rxq_stats *stats);
 int hinic3_rx_poll(struct hinic3_rxq *rxq, int budget);
 
 #endif
