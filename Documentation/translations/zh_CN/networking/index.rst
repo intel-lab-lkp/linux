@@ -24,6 +24,7 @@
    driver
    ipv6
    napi
+   secid
    vxlan
    netif-msg
    xfrm_proc
@@ -126,7 +127,6 @@ Todolist:
 *   representors
 *   rxrpc
 *   sctp
-*   secid
 *   seg6-sysctl
 *   smc-sysctl
 *   statistics
