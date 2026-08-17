@@ -2692,20 +2692,12 @@ static void of_register_spi_devices(struct spi_controller *ctlr)
 static void of_register_spi_devices(struct spi_controller *ctlr) { }
 #endif
 
-/**
- * spi_new_ancillary_device() - Register ancillary SPI device
- * @spi:         Pointer to the main SPI device registering the ancillary device
- * @chip_select: Chip Select of the ancillary device
- *
- * Register an ancillary SPI device; for example some chips have a chip-select
- * for normal device usage and another one for setup/firmware upload.
- *
- * This may only be called from main SPI device's probe routine.
- *
- * Return: 0 on success; negative errno on failure
- */
-struct spi_device *spi_new_ancillary_device(struct spi_device *spi,
-					     u8 chip_select)
+#define SPI_UNDEFINED_LANE	-1
+
+static struct spi_device *__spi_new_ancillary_device(struct spi_device *spi,
+						     u8 chip_select,
+						     int rx_lane_idx,
+						     int tx_lane_idx)
 {
 	struct spi_controller *ctlr = spi->controller;
 	struct spi_device *ancillary;
@@ -2732,6 +2724,21 @@ struct spi_device *spi_new_ancillary_device(struct spi_device *spi,
 	 */
 	ancillary->cs_index_mask = BIT(0);
 
+	if (rx_lane_idx >= spi->num_rx_lanes || tx_lane_idx >= spi->num_tx_lanes) {
+		rc = -EINVAL;
+		goto err_out;
+	}
+
+	if (rx_lane_idx != SPI_UNDEFINED_LANE) {
+		ancillary->rx_lane_map[0] = spi->rx_lane_map[rx_lane_idx];
+		ancillary->num_rx_lanes = 1;
+	}
+
+	if (tx_lane_idx != SPI_UNDEFINED_LANE) {
+		ancillary->tx_lane_map[0] = spi->tx_lane_map[tx_lane_idx];
+		ancillary->num_tx_lanes = 1;
+	}
+
 	WARN_ON(!mutex_is_locked(&ctlr->add_lock));
 
 	/* Register the new device, passing the parent to skip CS conflict check */
@@ -2747,7 +2754,52 @@ err_out:
 	spi_dev_put(ancillary);
 	return ERR_PTR(rc);
 }
+
+/**
+ * spi_new_ancillary_device() - Register ancillary SPI device
+ * @spi:         Pointer to the main SPI device registering the ancillary device
+ * @chip_select: Chip Select of the ancillary device
+ *
+ * Register an ancillary SPI device; for example some chips have a chip-select
+ * for normal device usage and another one for setup/firmware upload.
+ *
+ * This may only be called from main SPI device's probe routine.
+ *
+ * Return: 0 on success; negative errno on failure
+ */
+struct spi_device *spi_new_ancillary_device(struct spi_device *spi,
+					    u8 chip_select)
+{
+	return __spi_new_ancillary_device(spi, chip_select,
+					  SPI_UNDEFINED_LANE,
+					  SPI_UNDEFINED_LANE);
+}
 EXPORT_SYMBOL_GPL(spi_new_ancillary_device);
+
+/**
+ * spi_new_ancillary_device_with_lane() - Register ancillary SPI device bound to specific lane
+ * @spi:          Pointer to the main SPI device registering the ancillary device
+ * @chip_select:  Chip Select of the ancillary device
+ * @rx_lane_idx:  Lane index within the parent's rx_lane_map
+ * @tx_lane_idx:  Lane index within the parent's tx_lane_map
+ *
+ * Like spi_new_ancillary_device(), but additionally binds the ancillary device
+ * to a single lane from the parent's lane map. Use this in multi-device setups
+ * where each sub-device is physically wired to a dedicated CS and a dedicated
+ * data lane.
+ *
+ * This may only be called from main SPI device's probe routine.
+ *
+ * Return: Pointer to new ancillary device on success; ERR_PTR on failure
+ */
+struct spi_device *spi_new_ancillary_device_with_lane(struct spi_device *spi,
+						      u8 chip_select,
+						      unsigned int rx_lane_idx,
+						      unsigned int tx_lane_idx)
+{
+	return __spi_new_ancillary_device(spi, chip_select, rx_lane_idx, tx_lane_idx);
+}
+EXPORT_SYMBOL_GPL(spi_new_ancillary_device_with_lane);
 
 static void devm_spi_unregister_device(void *spi)
 {
@@ -2788,6 +2840,42 @@ struct spi_device *devm_spi_new_ancillary_device(struct spi_device *spi,
 	return ancillary;
 }
 EXPORT_SYMBOL_GPL(devm_spi_new_ancillary_device);
+
+/**
+ * devm_spi_new_ancillary_device_with_lane() - Register managed ancillary SPI device bound to a lane
+ * @spi:         Pointer to the main SPI device registering the ancillary device
+ * @chip_select: Chip Select of the ancillary device
+ * @rx_lane_idx: Per-device lane index within the parent's rx_lane_map
+ * @tx_lane_idx: Per-device lane index within the parent's tx_lane_map
+ *
+ * Managed version of spi_new_ancillary_device_with_lane(). The ancillary device
+ * will be unregistered automatically when the parent SPI device is unregistered.
+ *
+ * This may only be called from main SPI device's probe routine.
+ *
+ * Return: Pointer to new ancillary device on success; ERR_PTR on failure
+ */
+struct spi_device *devm_spi_new_ancillary_device_with_lane(struct spi_device *spi,
+							   u8 chip_select,
+							   unsigned int rx_lane_idx,
+							   unsigned int tx_lane_idx)
+{
+	struct spi_device *ancillary;
+	int ret;
+
+	ancillary = spi_new_ancillary_device_with_lane(spi, chip_select,
+						       rx_lane_idx, tx_lane_idx);
+	if (IS_ERR(ancillary))
+		return ancillary;
+
+	ret = devm_add_action_or_reset(&spi->dev, devm_spi_unregister_device,
+				       ancillary);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return ancillary;
+}
+EXPORT_SYMBOL_GPL(devm_spi_new_ancillary_device_with_lane);
 
 #ifdef CONFIG_ACPI
 struct acpi_spi_lookup {
