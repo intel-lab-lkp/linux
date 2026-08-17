@@ -51,7 +51,7 @@ static void init_intr_coal_param(struct net_device *netdev)
 		info->rx_pending_limit_low = HINIC3_RX_PENDING_LIMIT_LOW;
 	}
 
-	nic_dev->adaptive_rx_coal = 1;
+	WRITE_ONCE(nic_dev->adaptive_rx_coal, 1);
 }
 
 static int hinic3_init_intr_coalesce(struct net_device *netdev)
@@ -178,7 +178,7 @@ static int hinic3_sw_init(struct net_device *netdev)
 	u8 mac_addr[ETH_ALEN];
 	int err;
 
-	mutex_init(&nic_dev->port_state_mutex);
+	mutex_init(&nic_dev->state_lock);
 
 	nic_dev->q_params.sq_depth = HINIC3_SQ_DEPTH;
 	nic_dev->q_params.rq_depth = HINIC3_RQ_DEPTH;

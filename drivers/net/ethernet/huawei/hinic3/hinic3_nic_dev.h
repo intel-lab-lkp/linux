@@ -129,8 +129,8 @@ struct hinic3_nic_dev {
 	struct workqueue_struct         *workq;
 	struct delayed_work             periodic_work;
 	struct work_struct              rx_mode_work;
-	/* lock for enable/disable port */
-	struct mutex                    port_state_mutex;
+	/* Protects interface state */
+	struct mutex                    state_lock;
 
 	struct list_head                uc_filter_list;
 	struct list_head                mc_filter_list;
