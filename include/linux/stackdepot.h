@@ -144,6 +144,10 @@ static inline int stack_depot_early_init(void)	{ return 0; }
  * Users of this flag must also call stack_depot_put() when keeping the stack
  * trace is no longer required to avoid overflowing the refcount.
  *
+ * When trie storage is enabled, persistent non-refcounted saves use trie
+ * storage. Constrained callers only look up existing stacks; they do not insert
+ * a missing stack. Trie failures do not fall back to hash storage.
+ *
  * If the provided stack trace comes from the interrupt context, only the part
  * up to the interrupt entry is saved.
  *
@@ -152,7 +156,7 @@ static inline int stack_depot_early_init(void)	{ return 0; }
  *          this is the case for contexts where neither %GFP_ATOMIC nor
  *          %GFP_NOWAIT can be used (NMI, raw_spin_lock).
  *
- * Return: Handle of the stack struct stored in depot, 0 on failure
+ * Return: Handle of the stack trace stored in depot, 0 on failure
  */
 depot_stack_handle_t stack_depot_save_flags(unsigned long *entries,
 					    unsigned int nr_entries,
@@ -169,6 +173,10 @@ depot_stack_handle_t stack_depot_save_flags(unsigned long *entries,
  * Does not increment the refcount on the saved stack trace; see
  * stack_depot_save_flags() for more details.
  *
+ * When trie storage is enabled, this can return trie-backed handles. Use
+ * stack_depot_fetch_into(), stack_depot_print(), or stack_depot_snprint() for
+ * backend-independent access to the stack contents.
+ *
  * Context: Contexts where allocations via alloc_pages() are allowed;
  *          see stack_depot_save_flags() for more details.
  *
@@ -178,7 +186,7 @@ depot_stack_handle_t stack_depot_save(unsigned long *entries,
 				      unsigned int nr_entries, gfp_t alloc_flags);
 
 /**
- * __stack_depot_get_stack_record - Get a pointer to a stack_record struct
+ * __stack_depot_get_stack_record - Get a hash-backed stack record
  *
  * @handle: Stack depot handle
  *
@@ -191,13 +199,54 @@ struct stack_record *__stack_depot_get_stack_record(depot_stack_handle_t handle)
 /**
  * stack_depot_fetch - Fetch a stack trace from stack depot
  *
- * @handle:	Stack depot handle returned from stack_depot_save()
+ * @handle:	Hash-backed stack depot handle
  * @entries:	Pointer to store the address of the stack trace
+ *
+ * This helper returns a pointer to stackdepot-owned contiguous storage for
+ * legacy hash-backed handles. Callers that need backend-independent access to
+ * stack contents should use stack_depot_fetch_into(), stack_depot_print(), or
+ * stack_depot_snprint(). Passing a trie-backed handle is invalid and may WARN.
  *
  * Return: Number of frames for the fetched stack
  */
 unsigned int stack_depot_fetch(depot_stack_handle_t handle,
 			       unsigned long **entries);
+
+/**
+ * stack_depot_fetch_into - Fetch a stack trace into caller-owned storage
+ *
+ * @handle:	Stack depot handle
+ * @entries:	Caller-owned buffer to copy the stack trace into
+ * @max_entries:	Number of frames that fit in @entries
+ *
+ * Copies the stored frames into caller-owned @entries. If fewer frames are
+ * stored than @max_entries, only the stored frames are written and their count
+ * is returned. If more frames are stored than @max_entries, the copy is skipped
+ * entirely and 0 is returned.
+ *
+ * Passing a NULL @entries buffer or zero @max_entries for a valid @handle is
+ * invalid. Callers must provide storage for @max_entries frames.
+ *
+ * Callers should size @entries to match the save-side stack depth cap (for
+ * example, %CONFIG_STACKDEPOT_MAX_FRAMES or the local stack_trace_save() limit)
+ * when losing diagnostics on an undersized buffer would be surprising.
+ *
+ * A non-zero invalid @handle, including a post-put handle, may WARN. Its return
+ * value and copied contents are undefined because the record may have been
+ * reused for another stack.
+ *
+ * Callers must ensure @handle remains valid for the duration of this call.
+ * Persistent handles saved without %STACK_DEPOT_FLAG_GET require no extra
+ * reference; handles saved with %STACK_DEPOT_FLAG_GET require a held reference.
+ * Callers must not call stack_depot_put() on persistent handles.
+ * Racing this helper with stack_depot_put() on the same handle is invalid.
+ *
+ * Return: Number of frames copied, 0 if @handle is 0, stack depot is disabled,
+ * or @max_entries is less than the number of stored frames.
+ */
+unsigned int stack_depot_fetch_into(depot_stack_handle_t handle,
+				    unsigned long *entries,
+				    unsigned int max_entries);
 
 /**
  * stack_depot_print - Print a stack trace from stack depot
@@ -224,10 +273,14 @@ int stack_depot_snprint(depot_stack_handle_t handle, char *buf, size_t size,
  *
  * @handle:	Stack depot handle returned from stack_depot_save()
  *
- * The stack trace is evicted from stack depot once all references to it have
- * been dropped (once the number of stack_depot_evict() calls matches the
- * number of stack_depot_save_flags() calls with STACK_DEPOT_FLAG_GET set for
- * this stack trace).
+ * Drop a reference acquired by stack_depot_save_flags() with
+ * %STACK_DEPOT_FLAG_GET. Calling this for a handle saved without
+ * %STACK_DEPOT_FLAG_GET is invalid; persistent handles, including trie-backed
+ * handles, are owned by stack depot for the lifetime of the system.
+ *
+ * The stack trace is evicted once the number of stack_depot_put() calls matches
+ * the number of successful stack_depot_save_flags() calls with
+ * %STACK_DEPOT_FLAG_GET for this stack trace.
  */
 void stack_depot_put(depot_stack_handle_t handle);
 
