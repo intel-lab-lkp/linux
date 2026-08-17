@@ -93,6 +93,7 @@ struct daemon_state {
 	uint8_t        *acl;
 	size_t          acl_size;
 	int             getxattr_count;
+	bool            cache;
 };
 
 /*
@@ -101,9 +102,17 @@ struct daemon_state {
  */
 static struct daemon_state g_ds = {
 	.lock = PTHREAD_MUTEX_INITIALIZER,
+	.cache = false,
 };
 
 /* ---- FUSE lowlevel callbacks -------------------------------------------- */
+static void fs_init(void *userdata, struct fuse_conn_info *conn)
+{
+	pthread_mutex_lock(&g_ds.lock);
+	if (g_ds.cache)
+		fuse_set_feature_flag(conn, FUSE_CAP_POSIX_ACL);
+	pthread_mutex_unlock(&g_ds.lock);
+}
 
 static void fs_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
@@ -125,6 +134,8 @@ static void fs_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	e.attr.st_ino     = FILE_INO;
 	e.attr.st_mode    = S_IFREG | 0644;
 	e.attr.st_nlink   = 1;
+	e.attr.st_uid = getuid();
+	e.attr.st_gid = getgid();
 	fuse_reply_entry(req, &e);
 }
 
@@ -185,10 +196,38 @@ static void fs_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 	free(acl);
 }
 
+static void fs_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+			    const char *value, size_t size, int flags)
+{
+	int ret = 0;
+	uint8_t *acl;
+
+	if (ino != FILE_INO)
+		ret = ENOENT;
+	else if (!strcmp(name, "system.posix_acl_access")) {
+		acl = malloc(size);
+		if (acl) {
+			memcpy(acl, value, size);
+			pthread_mutex_lock(&g_ds.lock);
+			if (g_ds.acl)
+				free(g_ds.acl);
+			g_ds.acl = acl;
+			g_ds.acl_size = size;
+			pthread_mutex_unlock(&g_ds.lock);
+		} else
+			ret = ENOMEM;
+	} else
+		ret = ENOTSUP;
+
+	fuse_reply_err(req, ret);
+}
+
 static const struct fuse_lowlevel_ops fs_ops = {
+	.init     = fs_init,
 	.lookup   = fs_lookup,
 	.getattr  = fs_getattr,
 	.getxattr = fs_getxattr,
+	.setxattr = fs_setxattr,
 };
 
 /* ---- Daemon thread ------------------------------------------------------- */
@@ -269,6 +308,7 @@ FIXTURE_SETUP(acl_cache)
 	ASSERT_NE(g_ds.acl, NULL);
 	memcpy(g_ds.acl, acl_a, g_ds.acl_size);
 	g_ds.getxattr_count = 0;
+	g_ds.cache          = false;
 
 	if (fs_setup(&self->se, self->mountpoint, self->file_path,
 		     &self->thread, err))
@@ -388,6 +428,143 @@ TEST_F(acl_cache, stale_after_force_sync)
 
 	EXPECT_EQ(sz, (ssize_t)sizeof(acl_b));
 	EXPECT_EQ(count, 4);
+}
+
+FIXTURE(acl_cache_onoff)
+{
+	struct fuse_session *se;
+	char mountpoint[PATH_MAX];
+	char pathname[PATH_MAX];
+	pthread_t thread;
+};
+
+FIXTURE_VARIANT(acl_cache_onoff) { bool cache; };
+FIXTURE_VARIANT_ADD(acl_cache_onoff, nocache) { .cache = false, };
+FIXTURE_VARIANT_ADD(acl_cache_onoff, docache) { .cache = true, };
+
+FIXTURE_SETUP(acl_cache_onoff)
+{
+	char err[MAX_ERR_MSG];
+
+	g_ds.acl = NULL;
+	g_ds.acl_size = 0;
+	g_ds.getxattr_count = 0;
+	g_ds.cache = variant->cache;
+
+	if (fs_setup(&self->se, self->mountpoint, self->pathname,
+		     &self->thread, err))
+		SKIP(return, err);
+}
+
+FIXTURE_TEARDOWN(acl_cache_onoff)
+{
+	fs_teardown(self->se, self->thread, self->mountpoint);
+	free(g_ds.acl);
+}
+
+/*
+ * This is the most basic ACL caching test: verify that, when reading ACLs for
+ * an inode, user-space is called:
+ * - Only once if ACLs cache is enabled, or
+ * - Once per access if cache i disabled.
+ */
+TEST_F(acl_cache_onoff, test_acl_cache_enable_disable)
+{
+	char buf[512];
+	ssize_t sz;
+	bool cache;
+	int counter;
+	int i;
+
+	ASSERT_EQ(lsetxattr(self->pathname, "system.posix_acl_access",
+			    acl_a, sizeof(acl_a), 0), 0);
+
+	for (i = 0; i < 100; i++) {
+		sz = lgetxattr(self->pathname, "system.posix_acl_access",
+			       buf, sizeof(buf));
+		ASSERT_EQ(sz, sizeof(acl_a));
+		ASSERT_EQ(memcmp(buf, acl_a, sz), 0);
+	}
+
+	pthread_mutex_lock(&g_ds.lock);
+	counter = g_ds.getxattr_count;
+	cache = g_ds.cache;
+	pthread_mutex_unlock(&g_ds.lock);
+
+	if (cache) {
+		ASSERT_EQ(counter, 1);
+	} else {
+		ASSERT_EQ(counter, 100);
+	}
+
+	TH_LOG("User-space called %d time(s) with ACL caching %s",
+	       counter, cache ? "enabled" : "disabled");
+}
+
+/*
+ * Test caching invalidation for several scenarios:
+ * 1. When a new ACL is set
+ * 2. When invalidating an inode (NOTIFY_INODE_INVAL)
+ */
+TEST_F(acl_cache_onoff, test_acl_cache_invalidation)
+{
+	char buf[512];
+	ssize_t sz;
+	int counter;
+	bool cache;
+	int i;
+
+	/* Set an ACL */
+	ASSERT_EQ(lsetxattr(self->pathname, "system.posix_acl_access",
+			    acl_a, sizeof(acl_a), 0), 0);
+
+	for (i = 0; i < 100; i++) {
+		sz = lgetxattr(self->pathname, "system.posix_acl_access",
+			       buf, sizeof(buf));
+		ASSERT_EQ(sz, sizeof(acl_a));
+		ASSERT_EQ(memcmp(buf, acl_a, sz), 0);
+	}
+
+	/* 1. force cache invalidation by setting a new ACL */
+	ASSERT_EQ(lsetxattr(self->pathname, "system.posix_acl_access",
+			    acl_b, sizeof(acl_b), 0), 0);
+
+	sz = lgetxattr(self->pathname, "system.posix_acl_access",
+		       buf, sizeof(buf));
+	ASSERT_EQ(sz, sizeof(acl_b));
+	ASSERT_EQ(memcmp(buf, acl_b, sz), 0);
+
+	pthread_mutex_lock(&g_ds.lock);
+	counter = g_ds.getxattr_count;
+	cache = g_ds.cache;
+	pthread_mutex_unlock(&g_ds.lock);
+
+	if (cache) {
+		ASSERT_EQ(counter, 2);
+	} else {
+		ASSERT_EQ(counter, 101);
+	}
+	TH_LOG("Invalidation by setting new ACL: OK");
+
+	/* 2. send FUSE_NOTIFY_INVAL_INODE */
+	fuse_lowlevel_notify_inval_inode(self->se, FILE_INO, 0, 0);
+
+	sz = lgetxattr(self->pathname, "system.posix_acl_access",
+		       buf, sizeof(buf));
+	ASSERT_EQ(sz, sizeof(acl_b));
+	ASSERT_EQ(memcmp(buf, acl_b, sz), 0);
+
+	pthread_mutex_lock(&g_ds.lock);
+	counter = g_ds.getxattr_count;
+	cache = g_ds.cache;
+	pthread_mutex_unlock(&g_ds.lock);
+
+	if (cache) {
+		ASSERT_EQ(counter, 3);
+	} else {
+		ASSERT_EQ(counter, 102);
+	}
+	TH_LOG("Invalidation through FUSE_NOTIFY_INVAL_INODE: OK");
 }
 
 TEST_HARNESS_MAIN
