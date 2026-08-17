@@ -351,7 +351,7 @@ static int read_key_bytes(struct btrfs_inode *inode, u8 key_type, u64 offset,
 		}
 
 		/* desc = NULL to just sum all the item lengths */
-		if (!dest)
+		if (!dest && !dest_folio)
 			copy_end = item_end;
 		else
 			copy_end = min(offset + len, item_end);
@@ -362,7 +362,7 @@ static int read_key_bytes(struct btrfs_inode *inode, u8 key_type, u64 offset,
 		/* Offset from the start of item for copying */
 		copy_offset = offset - key.offset;
 
-		if (dest) {
+		if (dest || dest_folio) {
 			if (dest_folio)
 				kaddr = kmap_local_folio(dest_folio, 0);
 
