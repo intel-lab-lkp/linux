@@ -544,6 +544,11 @@ static int do_standalone_mode(int daemonize, int ipv4, int ipv6)
 	dbg("listening on %d address%s", nsockfd, (nsockfd == 1) ? "" : "es");
 
 	fds = calloc(nsockfd, sizeof(struct pollfd));
+	if (!fds) {
+		err("calloc for pollfd");
+		usbip_driver_close(driver);
+		return -1;
+	}
 	for (i = 0; i < nsockfd; i++) {
 		fds[i].fd = sockfdlist[i];
 		fds[i].events = POLLIN;
