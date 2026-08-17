@@ -358,6 +358,37 @@ static unsigned long deliverable_irqs(struct kvm_vcpu *vcpu)
 	return active_mask;
 }
 
+void distribute_float_irqs(struct kvm *kvm)
+{
+	struct kvm_vcpu *dst_vcpu;
+	int sigcpu, online_vcpus;
+
+	if (!READ_ONCE(kvm->arch.float_int.pending_irqs))
+		return;
+
+	online_vcpus = atomic_read(&kvm->online_vcpus);
+
+	/*
+	 * Not too worried about synchronization for idle_mask. We
+	 * might burn too many cycles but apart from that waking a
+	 * vcpu is not harmful.
+	 */
+	sigcpu = find_first_bit(kvm->arch.idle_mask, online_vcpus);
+	/* Well nobody's sleeping so someone will likely take the IRQ soon */
+	if (sigcpu == online_vcpus)
+		return;
+
+	do {
+		dst_vcpu = kvm_get_vcpu(kvm, sigcpu);
+		if (deliverable_irqs(dst_vcpu)) {
+			kvm->stat.inject_redist++;
+			kvm_s390_vcpu_wakeup(dst_vcpu);
+			break;
+		}
+		sigcpu = find_next_bit(kvm->arch.idle_mask, online_vcpus, ++sigcpu);
+	} while (sigcpu < online_vcpus);
+}
+
 static void __set_cpu_idle(struct kvm_vcpu *vcpu)
 {
 	kvm_s390_set_cpuflags(vcpu, CPUSTAT_WAIT);
@@ -1906,22 +1937,48 @@ static int __inject_io(struct kvm *kvm, struct kvm_s390_interrupt_info *inti)
 	return 0;
 }
 
+static u64 inti_to_irq_pend_mask(struct kvm_s390_interrupt_info *inti)
+{
+	u64 type = READ_ONCE(inti->type);
+
+	switch (type) {
+	case KVM_S390_MCHK:
+		/* Only repressible machine checks are floating */
+		return BIT(IRQ_PEND_MCHK_REP);
+	case KVM_S390_INT_VIRTIO:
+		return BIT(IRQ_PEND_VIRTIO);
+	case KVM_S390_INT_SERVICE:
+		return BIT(IRQ_PEND_EXT_SERVICE) |
+		       BIT(IRQ_PEND_EXT_SERVICE_EV);
+	case KVM_S390_INT_PFAULT_DONE:
+		return BIT(IRQ_PEND_PFAULT_DONE);
+	case KVM_S390_INT_IO_MIN...KVM_S390_INT_IO_MAX:
+		return BIT(isc_to_irq_type(int_word_to_isc(inti->io.io_int_word)));
+	default:
+		return 0;
+	}
+}
+
 /*
  * Find a destination VCPU for a floating irq and kick it.
  */
-static void __floating_irq_kick(struct kvm *kvm, u64 type)
+static void __floating_irq_kick(struct kvm *kvm, struct kvm_s390_interrupt_info *inti)
 {
 	struct kvm_vcpu *dst_vcpu;
 	int sigcpu, online_vcpus, nr_tries = 0;
+	u64 type = READ_ONCE(inti->type);
+	u64 irq_pend_mask;
 
 	online_vcpus = atomic_read(&kvm->online_vcpus);
 	if (!online_vcpus)
 		return;
 
+	irq_pend_mask = inti_to_irq_pend_mask(inti);
 	for (sigcpu = kvm->arch.float_int.last_sleep_cpu; ; sigcpu++) {
 		sigcpu %= online_vcpus;
 		dst_vcpu = kvm_get_vcpu(kvm, sigcpu);
-		if (!is_vcpu_stopped(dst_vcpu))
+		if (!is_vcpu_stopped(dst_vcpu) &&
+		    deliverable_irqs(dst_vcpu) & irq_pend_mask)
 			break;
 		/* avoid endless loops if all vcpus are stopped */
 		if (nr_tries++ >= online_vcpus)
@@ -1973,7 +2030,7 @@ static int __inject_vm(struct kvm *kvm, struct kvm_s390_interrupt_info *inti)
 	if (rc)
 		return rc;
 
-	__floating_irq_kick(kvm, type);
+	__floating_irq_kick(kvm, inti);
 	return 0;
 }
 
