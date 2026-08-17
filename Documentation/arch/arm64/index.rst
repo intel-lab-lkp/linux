@@ -8,6 +8,7 @@ ARM64 Architecture
     :maxdepth: 1
 
     acpi_object_usage
+    arm-cpumod
     amu
     arm-acpi
     arm-cca
