@@ -947,9 +947,25 @@ static inline void inode_state_replace(struct inode *inode,
 
 static inline void inode_set_cached_link(struct inode *inode, char *link, int linklen)
 {
-	VFS_WARN_ON_INODE(strlen(link) != linklen, inode);
+	int testlen;
+
 	VFS_WARN_ON_INODE(inode->i_opflags & IOP_CACHED_LINK, inode);
 	inode->i_link = link;
+
+	/*
+	 * i_linklen is used as a copy_to_user() length by vfs_readlink(), so it
+	 * must not be taken on trust. If it disagrees with the string, leave
+	 * IOP_CACHED_LINK clear: vfs_readlink() then falls back to i_link and
+	 * recomputes the length with strlen(), which is what it did before the
+	 * cached length was introduced.
+	 */
+	testlen = strlen(link);
+	if (testlen != linklen) {
+		WARN_ONCE(1, "bad length passed for symlink [%s] (got %d, expected %d)",
+			  link, linklen, testlen);
+		return;
+	}
+
 	inode->i_linklen = linklen;
 	inode->i_opflags |= IOP_CACHED_LINK;
 }
