@@ -2,7 +2,8 @@
 
 CFLAGS += -Wall -O2 -g $(KHDR_INCLUDES)
 
-TEST_GEN_PROGS := fusectl_test fuse_acl_cache_test fuse_symlink_cache_test
+TEST_GEN_PROGS := fusectl_test fuse_acl_cache_test fuse_symlink_cache_test \
+	fuse_readdir_cache_test
 TEST_GEN_FILES := fuse_mnt
 
 include ../../lib.mk
@@ -25,3 +26,6 @@ $(OUTPUT)/fuse_acl_cache_test: LDLIBS += $(VAR_LDLIBS)
 
 $(OUTPUT)/fuse_symlink_cache_test: CFLAGS += $(VAR_CFLAGS)
 $(OUTPUT)/fuse_symlink_cache_test: LDLIBS += $(VAR_LDLIBS)
+
+$(OUTPUT)/fuse_readdir_cache_test: CFLAGS += $(VAR_CFLAGS)
+$(OUTPUT)/fuse_readdir_cache_test: LDLIBS += $(VAR_LDLIBS)
