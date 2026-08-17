@@ -47,6 +47,9 @@ static void kvm_riscv_csr_init(void)
 	csr_write(CSR_HCOUNTEREN, 0x02);
 
 	csr_write(CSR_HVIP, 0);
+
+	/* clear HSTATUS.HU */
+	csr_clear(CSR_HSTATUS, HSTATUS_HU);
 }
 
 /* Clear hypervisor CSRs - called during CPU offline and non-retention idle entry */
