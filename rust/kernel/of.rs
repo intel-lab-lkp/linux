@@ -6,7 +6,10 @@ use crate::{
     bindings,
     device_id::{RawDeviceId, RawDeviceIdIndex},
     prelude::*,
+    sync::aref::AlwaysRefCounted,
+    types::Opaque,
 };
+use core::ptr::NonNull;
 
 /// IdTable type for OF drivers.
 pub type IdTable<T> = &'static dyn kernel::device_id::IdTable<DeviceId, T>;
@@ -62,4 +65,44 @@ macro_rules! of_device_table {
 
         $crate::module_device_table!("of", $module_table_name, $table_name);
     };
+}
+
+/// A device tree node (`struct device_node`).
+///
+/// # Invariants
+///
+/// The inner pointer is always a valid, non-null pointer to a `struct device_node`
+/// with a positive reference count.
+#[repr(transparent)]
+pub struct Node(Opaque<bindings::device_node>);
+
+impl Node {
+    /// Creates a reference from a raw pointer.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be a valid, non-null `struct device_node` pointer that remains
+    /// valid for the lifetime `'a`.
+    pub unsafe fn from_raw<'a>(ptr: *const bindings::device_node) -> &'a Self {
+        // SAFETY: Caller guarantees `ptr` is valid and lives for `'a`.
+        unsafe { &*ptr.cast() }
+    }
+
+    /// Returns the raw pointer to the underlying `struct device_node`.
+    pub fn as_raw(&self) -> *const bindings::device_node {
+        self.0.get() as _
+    }
+}
+
+// SAFETY: By the type invariants, this type is always refcounted.
+unsafe impl AlwaysRefCounted for Node {
+    fn inc_ref(&self) {
+        // SAFETY: The type invariant guarantees the pointer is valid.
+        unsafe { bindings::of_node_get(self.as_raw().cast_mut()) };
+    }
+
+    unsafe fn dec_ref(obj: NonNull<Self>) {
+        // SAFETY: The safety requirements guarantee that the refcount is non-zero.
+        unsafe { bindings::of_node_put(obj.cast().as_ptr()) };
+    }
 }
