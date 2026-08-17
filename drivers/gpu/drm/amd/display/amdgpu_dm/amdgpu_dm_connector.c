@@ -3087,7 +3087,7 @@ static const u32 supported_colorspaces =
 	BIT(DRM_MODE_COLORIMETRY_BT2020_RGB) |
 	BIT(DRM_MODE_COLORIMETRY_BT2020_YCC);
 
-static void hdmi_frl_status_polling_work(struct work_struct *work)
+void hdmi_frl_status_polling_work(struct work_struct *work)
 {
 	struct amdgpu_display_manager *dm =
 		container_of(to_delayed_work(work), struct amdgpu_display_manager,
