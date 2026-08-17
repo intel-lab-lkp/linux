@@ -94,17 +94,6 @@ do {								\
 	__local_lock_init((local_lock_t *)lock);		\
 } while (0)
 
-#define __spinlock_nested_bh_init(lock)				\
-do {								\
-	static struct lock_class_key __key;			\
-								\
-	debug_check_no_locks_freed((void *)lock, sizeof(*lock));\
-	lockdep_init_map_type(&(lock)->dep_map, #lock, &__key,  \
-			      0, LD_WAIT_CONFIG, LD_WAIT_INV,	\
-			      LD_LOCK_NORMAL);			\
-	local_lock_debug_init(lock);				\
-} while (0)
-
 #define __local_lock_acquire(lock)					\
 	do {								\
 		local_trylock_t *__tl;					\
