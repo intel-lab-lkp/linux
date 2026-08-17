@@ -1053,6 +1053,9 @@ static void ad_mux_machine(struct port *port, bool *update_slave_arr)
 	last_state = port->sm_mux_state;
 
 	aggregator = rcu_dereference(port->aggregator);
+	if (!aggregator)
+		return;
+
 	if (port->sm_vars & AD_PORT_BEGIN) {
 		port->sm_mux_state = AD_MUX_DETACHED;
 	} else {
