@@ -297,8 +297,8 @@ static int uvc_parse_frame(struct uvc_device *dev,
 	 * the value from the frame size.
 	 */
 	if (!(format->flags & UVC_FMT_FLAG_COMPRESSED))
-		frame->dwMaxVideoFrameBufferSize = format->bpp * frame->wWidth
-						 * frame->wHeight / 8;
+		frame->dwMaxVideoFrameBufferSize =
+			(u64)format->bpp * frame->wWidth * frame->wHeight / 8;
 
 	/*
 	 * Clamp the default frame interval to the boundaries. A zero
