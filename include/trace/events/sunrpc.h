@@ -1673,7 +1673,8 @@ DEFINE_SVCXDRBUF_EVENT(sendto);
 	svc_rqst_flag(USEDEFERRAL)					\
 	svc_rqst_flag(DROPME)						\
 	svc_rqst_flag(VICTIM)						\
-	svc_rqst_flag_end(DATA)
+	svc_rqst_flag(DATA)						\
+	svc_rqst_flag_end(RES_REPLACED)
 
 #undef svc_rqst_flag
 #undef svc_rqst_flag_end
@@ -2172,6 +2173,35 @@ TRACE_EVENT(svc_alloc_arg_err,
 
 	TP_printk("requested=%u allocated=%u",
 		__entry->requested, __entry->allocated)
+);
+
+TRACE_EVENT(svc_reuse_scan,
+	TP_PROTO(
+		const struct svc_rqst *rqstp,
+		unsigned long free,
+		unsigned long filled,
+		unsigned long trimmed
+	),
+
+	TP_ARGS(rqstp, free, filled, trimmed),
+
+	TP_STRUCT__entry(
+		__field(unsigned long, held)
+		__field(unsigned long, free)
+		__field(unsigned long, filled)
+		__field(unsigned long, trimmed)
+	),
+
+	TP_fast_assign(
+		__entry->held = rqstp->rq_nreuse;
+		__entry->free = free;
+		__entry->filled = filled;
+		__entry->trimmed = trimmed;
+	),
+
+	TP_printk("held=%lu free=%lu filled=%lu trimmed=%lu",
+		__entry->held, __entry->free, __entry->filled,
+		__entry->trimmed)
 );
 
 DECLARE_EVENT_CLASS(svc_deferred_event,

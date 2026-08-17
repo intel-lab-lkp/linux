@@ -20,6 +20,8 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/kthread.h>
+#include <linux/pagemap.h>
+#include <linux/sizes.h>
 #include <linux/slab.h>
 
 #include <linux/sunrpc/types.h>
@@ -548,6 +550,25 @@ svc_destroy(struct svc_serv **servp)
 }
 EXPORT_SYMBOL_GPL(svc_destroy);
 
+/**
+ * svc_reuse_capacity - Bound on the pages a thread may hold for reuse
+ * @rqstp: RPC transaction context
+ *
+ * Four Reply payloads, capped at 4 MiB. On a service whose own
+ * maximum payload is 4 MiB the cap is what binds, and a thread
+ * holds at most one Reply's worth. This is a policy cap, sized so
+ * that the sent-but-unacknowledged data of the connections a
+ * thread services typically fits; pages beyond it are released
+ * exactly as before, as they are when the array cannot be
+ * allocated.
+ *
+ * Return: maximum count of pages to park in rq_reuse_pages
+ */
+static inline unsigned long svc_reuse_capacity(const struct svc_rqst *rqstp)
+{
+	return min(4 * rqstp->rq_maxpages, SZ_4M / PAGE_SIZE);
+}
+
 static bool
 svc_init_buffer(struct svc_rqst *rqstp, const struct svc_serv *serv, int node)
 {
@@ -569,6 +590,15 @@ svc_init_buffer(struct svc_rqst *rqstp, const struct svc_serv *serv, int node)
 		rqstp->rq_pages = NULL;
 		return false;
 	}
+
+	/*
+	 * Page reuse is an optimization; a thread that cannot allocate
+	 * the array releases sent pages the way it always has.
+	 */
+	rqstp->rq_reuse_pages = kcalloc_node(svc_reuse_capacity(rqstp),
+					     sizeof(struct page *),
+					     GFP_KERNEL | __GFP_NORETRY |
+					     __GFP_NOWARN, node);
 
 	rqstp->rq_pages_nfree = rqstp->rq_maxpages;
 	rqstp->rq_next_page = rqstp->rq_respages + rqstp->rq_maxpages;
@@ -595,6 +625,12 @@ svc_release_buffer(struct svc_rqst *rqstp)
 			if (rqstp->rq_respages[i])
 				put_page(rqstp->rq_respages[i]);
 		kfree(rqstp->rq_respages);
+	}
+
+	if (rqstp->rq_reuse_pages) {
+		while (rqstp->rq_nreuse)
+			put_page(rqstp->rq_reuse_pages[--rqstp->rq_nreuse]);
+		kfree(rqstp->rq_reuse_pages);
 	}
 }
 
@@ -934,6 +970,10 @@ EXPORT_SYMBOL_GPL(svc_serv_maxthreads);
  * When replacing a page in rq_respages, batch the release of the
  * replaced pages to avoid hammering the page allocator.
  *
+ * Flags the transaction so that svc_rqst_release_pages() retains
+ * none of this Reply's pages for reuse: it now carries pages this
+ * thread did not allocate.
+ *
  * Return values:
  *   %true: page replaced
  *   %false: array bounds checking failed
@@ -951,11 +991,171 @@ bool svc_rqst_replace_page(struct svc_rqst *rqstp, struct page *page)
 	if (*rqstp->rq_next_page)
 		svc_rqst_page_release(rqstp, *rqstp->rq_next_page);
 
+	/* Avoid an atomic RMW for every page of a spliced READ */
+	if (!test_bit(RQ_RES_REPLACED, &rqstp->rq_flags))
+		set_bit(RQ_RES_REPLACED, &rqstp->rq_flags);
 	get_page(page);
 	*(rqstp->rq_next_page++) = page;
 	return true;
 }
 EXPORT_SYMBOL_GPL(svc_rqst_replace_page);
+
+/*
+ * Take custody of a sent Reply page in place of dropping this
+ * thread's reference. The transport may still hold references, so
+ * the page is not reused until a scan observes ours to be the last
+ * one. That may be the scan at the end of this same release.
+ */
+static bool svc_reuse_page(struct svc_rqst *rqstp, struct page *page)
+{
+	struct folio *folio = page_folio(page);
+
+	if (!rqstp->rq_reuse_pages ||
+	    rqstp->rq_nreuse >= svc_reuse_capacity(rqstp))
+		return false;
+	/* Backstop: never hold a page-cache folio, whatever installed it */
+	if (folio_test_lru(folio) || folio_mapping(folio))
+		return false;
+	rqstp->rq_reuse_pages[rqstp->rq_nreuse++] = page;
+	return true;
+}
+
+/*
+ * Entries svc_reuse_scan() may examine beyond four per free slot.
+ * A scan resumes from rq_reuse_cursor, so this bounds one call and
+ * not overall progress.
+ */
+#define SVC_REUSE_SCAN_SLACK	64
+
+/*
+ * Pages returned to the allocator per scan once every free slot is
+ * filled. Shrinking rq_reuse_pages a few pages at a time lets it
+ * decay as demand falls, while a thread whose demand persists
+ * refills it faster than the trickle drains it.
+ */
+#define SVC_REUSE_TRIM_MAX	8
+
+/*
+ * Fill the free slots in [@first, @last) with held pages that this
+ * thread again exclusively owns. rq_reuse_pages is unordered and
+ * scanned with a cursor: peers acknowledge on independent clocks,
+ * so an ordered queue would let one slow connection block reuse of
+ * every page held after its own. A consumed entry is replaced by
+ * the last entry. The scan ends once every free slot is filled
+ * and any trim budget is spent, after a pass over rq_reuse_pages
+ * in which no entry was ready, or when the per-call examination
+ * budget is spent. Pages that are unsuitable for reuse are
+ * returned to the allocator, and so is a small surplus when
+ * @trim is set.
+ */
+static void svc_reuse_scan(struct svc_rqst *rqstp, struct page **first,
+			   struct page **last, bool trim)
+{
+	unsigned long skipped = 0, trimmed = 0, free = 0, filled = 0;
+	unsigned long i = rqstp->rq_reuse_cursor;
+	unsigned long budget;
+	struct page **slot;
+
+	if (!rqstp->rq_nreuse)
+		return;
+	for (slot = first; slot < last; slot++)
+		if (!*slot)
+			free++;
+	if (!free)
+		return;
+	budget = 4 * free + SVC_REUSE_SCAN_SLACK;
+	slot = first;
+
+	while (budget-- && skipped < rqstp->rq_nreuse) {
+		struct folio *folio;
+		struct page *page;
+
+		if (i >= rqstp->rq_nreuse)
+			i = 0;
+		page = rqstp->rq_reuse_pages[i];
+		folio = page_folio(page);
+
+		/*
+		 * A consumer holding a reference reads this page
+		 * before its fully ordered final put; the control
+		 * dependency orders the overwrite after that put.
+		 * A copying consumer is done when send returns.
+		 * skb_page_frag_refill() reuses on the same test.
+		 */
+		if (folio_ref_count(folio) != 1) {
+			i++;
+			skipped++;
+			continue;
+		}
+		skipped = 0;
+
+		/*
+		 * rq_reuse_pages is unordered, so the last entry
+		 * backfills the vacated one. @i is left alone so the
+		 * backfilled entry is examined in its turn; if the
+		 * removed entry was the last, the wrap at the top of
+		 * the loop moves @i back into range.
+		 */
+		rqstp->rq_reuse_pages[i] =
+			rqstp->rq_reuse_pages[--rqstp->rq_nreuse];
+
+		/*
+		 * memory_failure() can flag a page this thread owns
+		 * without holding a reference, so poison is checked
+		 * at reuse time. Remote and pfmemalloc pages are
+		 * released rather than reused, as the network stack
+		 * does when recycling receive buffers. A large folio
+		 * is released too: folio_ref_count() counts the whole
+		 * folio, so one subpage cannot be shown to be ours
+		 * alone.
+		 */
+		if (unlikely(folio_test_hwpoison(folio) ||
+			     folio_test_large(folio) ||
+			     folio_is_pfmemalloc(folio) ||
+			     folio_nid(folio) != numa_mem_id())) {
+			folio_put(folio);
+			continue;
+		}
+
+		while (slot < last && *slot)
+			slot++;
+		if (slot != last) {
+			*slot = page;
+			filled++;
+			continue;
+		}
+
+		/* Every free slot is filled; decay a small surplus */
+		if (trim && trimmed < SVC_REUSE_TRIM_MAX) {
+			folio_put(folio);
+			trimmed++;
+			continue;
+		}
+		rqstp->rq_reuse_pages[rqstp->rq_nreuse++] = page;
+		break;
+	}
+	rqstp->rq_reuse_cursor = i;
+	trace_svc_reuse_scan(rqstp, free, filled, trimmed);
+}
+
+/**
+ * svc_rqst_refill_pages - Fill free buffer slots from held pages
+ * @rqstp: RPC transaction context
+ * @first: first slot in the range to fill
+ * @last: one past the last slot in the range
+ *
+ * Fill the free slots in [@first, @last) with Reply pages the
+ * network has finished with, so that a thread consults the pages
+ * it already owns before asking the page allocator for more. Only
+ * as many slots are filled as one scan's budget allows.
+ * rq_reuse_pages is not trimmed here; a surplus is trimmed by
+ * svc_rqst_release_pages() instead, as each Reply is released.
+ */
+void svc_rqst_refill_pages(struct svc_rqst *rqstp,
+			   struct page **first, struct page **last)
+{
+	svc_reuse_scan(rqstp, first, last, false);
+}
 
 /**
  * svc_rqst_release_pages - Release Reply buffer pages
@@ -964,21 +1164,50 @@ EXPORT_SYMBOL_GPL(svc_rqst_replace_page);
  * Release response pages in the range [rq_respages, rq_next_page).
  * NULL entries in this range are skipped, allowing transports to
  * transfer pages to a send context before this function runs.
+ *
+ * Where possible, pages the thread allocated itself are held for
+ * reuse instead of released: the transport's final put_page() then
+ * runs against a page that still has a reference and stays out of
+ * the page allocator entirely. A Reply that contains pages
+ * installed by nfsd_splice_actor(), or one sent by a transport that
+ * has not declared its Reply-page references
+ * (XCL_FL_REPLY_PAGE_REUSE), is released as before, as is any page
+ * that does not fit within svc_reuse_capacity() or that proves to
+ * be page-cache-backed. Free slots in the released range are then
+ * refilled, as far as one scan's budget allows, from held pages
+ * the network has finished with, and a small surplus is returned
+ * to the allocator.
  */
 void svc_rqst_release_pages(struct svc_rqst *rqstp)
 {
+	struct svc_xprt *xprt = rqstp->rq_xprt;
 	struct page **pp;
+	bool hold;
+
+	if (test_bit(RQ_RES_REPLACED, &rqstp->rq_flags)) {
+		clear_bit(RQ_RES_REPLACED, &rqstp->rq_flags);
+		hold = false;
+	} else {
+		hold = xprt &&
+		       (xprt->xpt_class->xcl_flags & XCL_FL_REPLY_PAGE_REUSE);
+	}
 
 	for (pp = rqstp->rq_respages; pp < rqstp->rq_next_page; pp++) {
 		if (*pp) {
-			if (!folio_batch_add(&rqstp->rq_fbatch,
-					     page_folio(*pp)))
-				__folio_batch_release(&rqstp->rq_fbatch);
+			if (!hold || !svc_reuse_page(rqstp, *pp)) {
+				if (!folio_batch_add(&rqstp->rq_fbatch,
+						     page_folio(*pp)))
+					__folio_batch_release(&rqstp->rq_fbatch);
+			}
 			*pp = NULL;
 		}
 	}
 	if (rqstp->rq_fbatch.nr)
 		__folio_batch_release(&rqstp->rq_fbatch);
+
+	if (rqstp->rq_next_page > rqstp->rq_respages)
+		svc_reuse_scan(rqstp, rqstp->rq_respages,
+			       rqstp->rq_next_page, true);
 }
 
 /**

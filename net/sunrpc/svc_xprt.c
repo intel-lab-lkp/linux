@@ -690,6 +690,13 @@ static bool svc_fill_pages(struct svc_rqst *rqstp, struct page **pages,
 	unsigned long filled, ret;
 
 	for (filled = 0; filled < npages; filled = ret) {
+		/*
+		 * alloc_pages_bulk() populates only the slots that are
+		 * NULL on entry and counts the rest in its return
+		 * value, so a slot filled here is a page not allocated
+		 * below.
+		 */
+		svc_rqst_refill_pages(rqstp, pages, pages + npages);
 		ret = alloc_pages_bulk(GFP_KERNEL, npages, pages);
 		if (ret > filled)
 			/* Made progress, don't sleep yet */
