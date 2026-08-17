@@ -228,7 +228,7 @@ static irqreturn_t dw_spi_transfer_handler(struct dw_spi *dws)
 	 */
 	dw_reader(dws);
 	if (!dws->rx_len) {
-		dw_spi_mask_intr(dws, 0xff);
+		dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 		spi_finalize_current_transfer(dws->ctlr);
 	} else if (dws->rx_len <= dw_readl(dws, DW_SPI_RXFTLR)) {
 		dw_writel(dws, DW_SPI_RXFTLR, dws->rx_len - 1);
@@ -264,7 +264,7 @@ static irqreturn_t dw_spi_enh_handler(struct dw_spi *dws)
 	if (!dws->tx_len && dws->rx_len) {
 		dw_spi_mask_intr(dws, DW_SPI_INT_TXEI);
 	} else if (!dws->rx_len && !dws->tx_len) {
-		dw_spi_mask_intr(dws, 0xff);
+		dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 		spi_finalize_current_transfer(dws->ctlr);
 	}
 
@@ -282,12 +282,13 @@ static irqreturn_t dw_spi_irq(int irq, void *dev_id)
 
 	if (!dws->transfer_handler ||
 	    (!ctlr->cur_msg && dws->transfer_handler == dw_spi_transfer_handler)) {
-		dw_spi_mask_intr(dws, 0xff);
+		dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 		return IRQ_HANDLED;
 	}
+
 	if (dws->transfer_handler == dw_spi_enh_handler &&
 	    !dws->rx_len && !dws->tx_len) {
-		dw_spi_mask_intr(dws, 0xff);
+		dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 		spi_finalize_current_transfer(ctlr);
 		return IRQ_HANDLED;
 	}
@@ -525,7 +526,7 @@ static int dw_spi_transfer_one(struct spi_controller *ctlr,
 	dws->dma_mapped = spi_xfer_is_dma_mapped(ctlr, spi, transfer);
 
 	/* For poll mode just disable all interrupts */
-	dw_spi_mask_intr(dws, 0xff);
+	dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 
 	if (dws->dma_mapped) {
 		ret = dws->dma_ops->dma_setup(dws, transfer);
@@ -831,7 +832,7 @@ static int dw_spi_exec_mem_op(struct spi_mem *mem, const struct spi_mem_op *op)
 
 	dw_spi_update_config(dws, mem->spi, &cfg, NULL);
 
-	dw_spi_mask_intr(dws, 0xff);
+	dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 
 	dw_spi_enable_chip(dws, 1);
 
@@ -999,7 +1000,7 @@ static int dw_spi_exec_enh_mem_op(struct spi_mem *mem, const struct spi_mem_op *
 
 	dw_spi_update_config(dws, mem->spi, &cfg, &enh_cfg);
 
-	dw_spi_mask_intr(dws, 0xff);
+	dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 	reinit_completion(&ctlr->xfer_completion);
 
 	if (op->addr.nbytes && dws->set_addr_nbyte) {
@@ -1038,7 +1039,7 @@ static int dw_spi_exec_enh_mem_op(struct spi_mem *mem, const struct spi_mem_op *
 	ms = wait_for_completion_timeout(&ctlr->xfer_completion,
 					 msecs_to_jiffies(ms));
 	if (ms == 0) {
-		dw_spi_mask_intr(dws, 0xff);
+		dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 		synchronize_irq(dws->irq);
 		dws->rx = NULL;
 		dws->tx = NULL;
