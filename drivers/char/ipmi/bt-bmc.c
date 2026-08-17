@@ -383,12 +383,11 @@ static int bt_bmc_config_irq(struct bt_bmc *bt_bmc,
 	if (bt_bmc->irq < 0 && bt_bmc->irq != -ENXIO)
 		return bt_bmc->irq;
 
-	rc = devm_request_irq(dev, bt_bmc->irq, bt_bmc_irq, IRQF_SHARED,
-			      DEVICE_NAME, bt_bmc);
-	if (rc < 0) {
-		dev_warn(dev, "Unable to request IRQ %d\n", bt_bmc->irq);
-		bt_bmc->irq = rc;
-		return rc;
+	if (bt_bmc->irq > 0) {
+		rc = devm_request_irq(dev, bt_bmc->irq, bt_bmc_irq,
+				      IRQF_SHARED, DEVICE_NAME, bt_bmc);
+		if (rc < 0)
+			return rc;
 	}
 
 	/*
