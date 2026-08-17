@@ -1696,7 +1696,7 @@ static int cdns2_ep_enqueue(struct cdns2_endpoint *pep,
 static int cdns2_gadget_ep_queue(struct usb_ep *ep, struct usb_request *request,
 				 gfp_t gfp_flags)
 {
-	struct usb_request *zlp_request;
+	struct usb_request *zlp_request = NULL;
 	struct cdns2_request *preq;
 	struct cdns2_endpoint *pep;
 	struct cdns2_device *pdev;
@@ -1717,20 +1717,31 @@ static int cdns2_gadget_ep_queue(struct usb_ep *ep, struct usb_request *request,
 
 	spin_lock_irqsave(&pdev->lock, flags);
 
-	preq =  to_cdns2_request(request);
-	ret = cdns2_ep_enqueue(pep, preq, gfp_flags);
-
-	if (ret == 0 && request->zero && request->length &&
+	if (request->zero && request->length &&
 	    (request->length % ep->maxpacket == 0)) {
-		struct cdns2_request *preq;
-
 		zlp_request = cdns2_gadget_ep_alloc_request(ep, GFP_ATOMIC);
+		if (!zlp_request) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
 		zlp_request->buf = pdev->zlp_buf;
 		zlp_request->length = 0;
+	}
 
+	preq = to_cdns2_request(request);
+	ret = cdns2_ep_enqueue(pep, preq, gfp_flags);
+	if (ret)
+		goto out;
+
+	if (zlp_request) {
 		preq = to_cdns2_request(zlp_request);
 		ret = cdns2_ep_enqueue(pep, preq, gfp_flags);
 	}
+
+out:
+	if (ret && zlp_request)
+		cdns2_gadget_ep_free_request(ep, zlp_request);
 
 	spin_unlock_irqrestore(&pdev->lock, flags);
 	return ret;
