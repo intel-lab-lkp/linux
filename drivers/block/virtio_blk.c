@@ -1267,6 +1267,13 @@ static int virtblk_read_limits(struct virtio_blk *vblk,
 	/* Prevent integer overflows and honor max vq size */
 	sg_elems = min_t(u32, sg_elems, VIRTIO_BLK_MAX_SG_ELEMS - 2);
 
+	if (!virtio_has_feature(vdev, VIRTIO_RING_F_INDIRECT_DESC)) {
+		u32 ring_size = virtqueue_get_vring_size(vblk->vqs[0].vq);
+
+		if (ring_size > 2)
+			sg_elems = min(sg_elems, ring_size - 2);
+	}
+
 	/* We can handle whatever the host told us to handle. */
 	lim->max_segments = sg_elems;
 
