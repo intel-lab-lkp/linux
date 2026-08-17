@@ -172,7 +172,7 @@ EXPORT_SYMBOL_GPL(flow_offload_route_init);
 
 static inline bool nf_flow_has_expired(const struct flow_offload *flow)
 {
-	return nf_flow_timeout_delta(flow->timeout) <= 0;
+	return nf_flow_timeout_delta(READ_ONCE(flow->timeout)) <= 0;
 }
 
 static void flow_offload_fixup_tcp(struct nf_conn *ct, u8 tcp_state)
@@ -329,7 +329,7 @@ int flow_offload_add(struct nf_flowtable *flow_table, struct flow_offload *flow)
 {
 	int err;
 
-	flow->timeout = nf_flowtable_time_stamp + flow_offload_get_timeout(flow);
+	WRITE_ONCE(flow->timeout, nf_flowtable_time_stamp);
 
 	err = rhashtable_insert_fast(&flow_table->rhashtable,
 				     &flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].node,
@@ -352,6 +352,7 @@ int flow_offload_add(struct nf_flowtable *flow_table, struct flow_offload *flow)
 	if (nf_flowtable_hw_offload(flow_table))
 		nf_flow_offload_add(flow_table, flow);
 
+	WRITE_ONCE(flow->timeout, flow->timeout + flow_offload_get_timeout(flow));
 	smp_mb__before_atomic();
 	set_bit(NF_FLOW_CONFIRMED, &flow->flags);
 
@@ -414,10 +415,9 @@ flow_offload_lookup(struct nf_flowtable *flow_table,
 
 	dir = tuplehash->tuple.dir;
 	flow = container_of(tuplehash, struct flow_offload, tuplehash[dir]);
-	if (test_bit(NF_FLOW_TEARDOWN, &flow->flags))
-		return NULL;
-
-	if (unlikely(nf_ct_is_dying(flow->ct)))
+	if (nf_flow_has_expired(flow) ||
+	    test_bit(NF_FLOW_TEARDOWN, &flow->flags) ||
+	    unlikely(nf_ct_is_dying(flow->ct)))
 		return NULL;
 
 	return tuplehash;
