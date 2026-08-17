@@ -229,7 +229,7 @@ static void rzt2h_pinctrl_set_pfc_mode(struct rzt2h_pinctrl *pctrl,
 
 	reg64 = rzt2h_pinctrl_readq(pctrl, port, PFC(port));
 	/* Check if pin is already configured to the desired function */
-	if ((rzt2h_pinctrl_readb(pctrl, port, PMC(port)) & BIT(pin)) &&
+	if (rzt2h_pin_mode_is_peripheral(pctrl, port, pin) &&
 	    field_get(PFC_PIN_MASK(pin), reg64) == func)
 		return;
 
@@ -783,15 +783,7 @@ static int rzt2h_gpio_request(struct gpio_chip *chip, unsigned int offset)
 static void rzt2h_gpio_set_direction(struct rzt2h_pinctrl *pctrl, u32 port,
 				     u8 bit, bool output)
 {
-	u16 reg;
-
-	guard(raw_spinlock_irqsave)(&pctrl->lock);
-
-	reg = rzt2h_pinctrl_readw(pctrl, port, PM(port));
-	reg &= ~PM_PIN_MASK(bit);
-
-	reg |= (output ? PM_OUTPUT : PM_INPUT) << (bit * 2);
-	rzt2h_pinctrl_writew(pctrl, port, reg, PM(port));
+	rzt2h_pin_write_pm(pctrl, port, bit, output ? PM_OUTPUT : PM_INPUT);
 }
 
 static int rzt2h_gpio_get_direction(struct gpio_chip *chip, unsigned int offset)
@@ -799,9 +791,8 @@ static int rzt2h_gpio_get_direction(struct gpio_chip *chip, unsigned int offset)
 	struct rzt2h_pinctrl *pctrl = gpiochip_get_data(chip);
 	u8 port = RZT2H_PIN_ID_TO_PORT(offset);
 	u8 bit = RZT2H_PIN_ID_TO_PIN(offset);
-	u64 reg64;
-	u16 reg;
 	int ret;
+	u8 pm;
 
 	ret = rzt2h_validate_pin(pctrl, offset);
 	if (ret)
@@ -809,7 +800,7 @@ static int rzt2h_gpio_get_direction(struct gpio_chip *chip, unsigned int offset)
 
 	guard(raw_spinlock_irqsave)(&pctrl->lock);
 
-	if (rzt2h_pinctrl_readb(pctrl, port, PMC(port)) & BIT(bit)) {
+	if (rzt2h_pin_mode_is_peripheral(pctrl, port, bit)) {
 		/*
 		 * When a GPIO is being requested as an IRQ, the pinctrl
 		 * framework expects to be able to read the GPIO's direction.
@@ -819,19 +810,16 @@ static int rzt2h_gpio_get_direction(struct gpio_chip *chip, unsigned int offset)
 		 * called to enable the IRQ function.
 		 * Default to input direction for IRQ function.
 		 */
-		reg64 = rzt2h_pinctrl_readq(pctrl, port, PFC(port));
-		reg64 = (reg64 >> (bit * 8)) & PFC_MASK;
-		if (reg64 == PFC_FUNC_INTERRUPT)
+		if (rzt2h_pin_read_pfc(pctrl, port, bit) == PFC_FUNC_INTERRUPT)
 			return GPIO_LINE_DIRECTION_IN;
 
 		return -EINVAL;
 	}
 
-	reg = rzt2h_pinctrl_readw(pctrl, port, PM(port));
-	reg = (reg >> (bit * 2)) & PM_MASK;
-	if (reg & PM_OUTPUT)
+	pm = rzt2h_pin_read_pm(pctrl, port, bit);
+	if (pm & PM_OUTPUT)
 		return GPIO_LINE_DIRECTION_OUT;
-	if (reg & PM_INPUT)
+	if (pm & PM_INPUT)
 		return GPIO_LINE_DIRECTION_IN;
 
 	return -EINVAL;
@@ -861,7 +849,7 @@ static int rzt2h_gpio_get(struct gpio_chip *chip, unsigned int offset)
 	struct rzt2h_pinctrl *pctrl = gpiochip_get_data(chip);
 	u8 port = RZT2H_PIN_ID_TO_PORT(offset);
 	u8 bit = RZT2H_PIN_ID_TO_PIN(offset);
-	u16 reg;
+	u8 pm;
 
 	if (rzt2h_pin_mode_is_peripheral(pctrl, port, bit)) {
 		if (rzt2h_pin_read_pfc(pctrl, port, bit) == PFC_FUNC_INTERRUPT)
@@ -870,11 +858,10 @@ static int rzt2h_gpio_get(struct gpio_chip *chip, unsigned int offset)
 		return -EINVAL;
 	}
 
-	reg = rzt2h_pinctrl_readw(pctrl, port, PM(port));
-	reg = (reg >> (bit * 2)) & PM_MASK;
-	if (reg & PM_INPUT)
-		return !!(rzt2h_pinctrl_readb(pctrl, port, PIN(port)) & BIT(bit));
-	if (reg & PM_OUTPUT)
+	pm = rzt2h_pin_read_pm(pctrl, port, bit);
+	if (pm & PM_INPUT)
+		return rzt2h_pin_read_input(pctrl, port, bit);
+	if (pm & PM_OUTPUT)
 		return !!(rzt2h_pinctrl_readb(pctrl, port, P(port)) & BIT(bit));
 
 	return -EINVAL;
