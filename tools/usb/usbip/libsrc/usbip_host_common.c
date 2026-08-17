@@ -71,6 +71,8 @@ struct usbip_exported_device *usbip_exported_device_new(
 	int i;
 
 	edev = calloc(1, sizeof(struct usbip_exported_device));
+	if (!edev)
+		goto err;
 
 	edev->sudev =
 		udev_device_new_from_syspath(udev_context, sdevpath);
@@ -107,7 +109,7 @@ struct usbip_exported_device *usbip_exported_device_new(
 
 	return edev;
 err:
-	if (edev->sudev)
+	if (edev && edev->sudev)
 		udev_device_unref(edev->sudev);
 	if (edev)
 		free(edev);
