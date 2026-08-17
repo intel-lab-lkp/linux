@@ -1870,7 +1870,7 @@ static void n_tty_close(struct tty_struct *tty)
 		n_tty_packet_mode_flush(tty);
 
 	guard(rwsem_write)(&tty->termios_rwsem);
-	vfree(ldata);
+	kvfree(ldata);
 	tty->disc_data = NULL;
 }
 
@@ -1887,7 +1887,7 @@ static int n_tty_open(struct tty_struct *tty)
 	struct n_tty_data *ldata;
 
 	/* Currently a malloc failure here can panic */
-	ldata = vzalloc(sizeof(*ldata));
+	ldata = kvzalloc(sizeof(*ldata), GFP_KERNEL);
 	if (!ldata)
 		return -ENOMEM;
 
