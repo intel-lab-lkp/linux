@@ -1426,6 +1426,7 @@ static int prepare_signaling(struct drm_device *dev,
 	struct drm_crtc_state *crtc_state;
 	struct drm_connector *conn;
 	struct drm_connector_state *conn_state;
+	struct drm_pending_vblank_event *e;
 	int i, c = 0, ret;
 
 	if (arg->flags & DRM_MODE_ATOMIC_TEST_ONLY)
@@ -1437,8 +1438,6 @@ static int prepare_signaling(struct drm_device *dev,
 		fence_ptr = get_out_fence_for_crtc(crtc_state->state, crtc);
 
 		if (arg->flags & DRM_MODE_PAGE_FLIP_EVENT || fence_ptr) {
-			struct drm_pending_vblank_event *e;
-
 			e = create_vblank_event(crtc, arg->user_data);
 			if (!e)
 				return -ENOMEM;
@@ -1447,7 +1446,7 @@ static int prepare_signaling(struct drm_device *dev,
 		}
 
 		if (arg->flags & DRM_MODE_PAGE_FLIP_EVENT) {
-			struct drm_pending_vblank_event *e = crtc_state->event;
+			e = crtc_state->event;
 
 			if (!file_priv)
 				continue;
@@ -1464,11 +1463,14 @@ static int prepare_signaling(struct drm_device *dev,
 		if (fence_ptr) {
 			struct dma_fence *fence;
 			struct drm_out_fence_state *f;
+			e = crtc_state->event;
+
+			ret = -ENOMEM;
 
 			f = krealloc(*fence_state, sizeof(**fence_state) *
 				     (*num_fences + 1), GFP_KERNEL);
 			if (!f)
-				return -ENOMEM;
+				goto error;
 
 			memset(&f[*num_fences], 0, sizeof(*f));
 
@@ -1477,12 +1479,12 @@ static int prepare_signaling(struct drm_device *dev,
 
 			fence = drm_crtc_create_fence(crtc);
 			if (!fence)
-				return -ENOMEM;
+				goto error;
 
 			ret = setup_out_fence(&f[(*num_fences)++], fence);
 			if (ret) {
 				dma_fence_put(fence);
-				return ret;
+				goto error;
 			}
 
 			crtc_state->event->base.fence = fence;
@@ -1538,6 +1540,11 @@ static int prepare_signaling(struct drm_device *dev,
 	}
 
 	return 0;
+
+error:
+	drm_event_cancel_free(dev, &e->base);
+	crtc_state->event = NULL;
+	return ret;
 }
 
 static void complete_signaling(struct drm_device *dev,
