@@ -1734,7 +1734,7 @@ static bool phy_drv_supports_irq(const struct phy_driver *phydrv)
 	return phydrv->config_intr && phydrv->handle_interrupt;
 }
 
-static void phy_detach_internal(struct phy_device *phydev)
+static void phy_detach_internal(struct phy_device *phydev, bool notify_bus)
 {
 	struct net_device *dev = phydev->attached_dev;
 	struct module *ndev_owner = NULL;
@@ -1756,6 +1756,10 @@ static void phy_detach_internal(struct phy_device *phydev)
 				  &dev_attr_phy_standalone.attr);
 
 	phy_suspend(phydev);
+
+	if (notify_bus && phydev->mdio.bus->notify_phy_detach)
+		phydev->mdio.bus->notify_phy_detach(phydev);
+
 	if (dev) {
 		struct hwtstamp_provider *hwprov;
 
@@ -1815,7 +1819,8 @@ static void phy_detach_internal(struct phy_device *phydev)
  */
 void phy_detach(struct phy_device *phydev)
 {
-	phy_detach_internal(phydev);
+	/* cleanup including bus notification */
+	phy_detach_internal(phydev, true);
 }
 EXPORT_SYMBOL(phy_detach);
 
@@ -1961,6 +1966,12 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	if (err)
 		goto error;
 
+	if (phydev->mdio.bus->notify_phy_attach) {
+		err = phydev->mdio.bus->notify_phy_attach(phydev);
+		if (err)
+			goto error;
+	}
+
 	phy_resume(phydev);
 
 	/**
@@ -1975,8 +1986,8 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	return err;
 
 error:
-	/* phy_detach() does all of the cleanup below */
-	phy_detach(phydev);
+	/* cleanup without bus notification */
+	phy_detach_internal(phydev, false);
 	return err;
 
 error_module_put:
