@@ -2,6 +2,7 @@
 
 #include <drm/drm_gem.h>
 #include <drm/drm_gem_shmem_helper.h>
+#include <drm/drm_panel.h>
 #include <drm/drm_vma_manager.h>
 
 #ifdef CONFIG_DRM
@@ -75,4 +76,18 @@ rust_helper_drm_gem_shmem_object_mmap(struct drm_gem_object *obj, struct vm_area
 }
 
 #endif /* CONFIG_DRM_GEM_SHMEM_HELPER */
+
+__rust_helper struct drm_panel *
+rust_helper_of_drm_find_panel(const struct device_node *np)
+{
+	return of_drm_find_panel(np);
+}
+
+__rust_helper int
+rust_helper_of_drm_get_panel_orientation(const struct device_node *np,
+					 enum drm_panel_orientation *orientation)
+{
+	return of_drm_get_panel_orientation(np, orientation);
+}
+
 #endif /* CONFIG_DRM */
