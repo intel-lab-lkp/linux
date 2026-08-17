@@ -9,9 +9,6 @@
 //! function calls will map to some struct - for example, f(GPU_NAME_STRING_KEY, 0, b"some gpu")
 //! naturally maps to storing a &str with the GPU name.
 
-#![cfg_attr(not(CONFIG_KUNIT), expect(unused_imports))]
-#![cfg_attr(not(CONFIG_KUNIT), expect(unused_macros))]
-
 use core::marker::PhantomData;
 use core::ops::{
     Deref,
