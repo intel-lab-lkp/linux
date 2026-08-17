@@ -5306,20 +5306,33 @@ EXPORT_SYMBOL_GPL(pci_reset_function_locked);
  */
 int pci_try_reset_function(struct pci_dev *dev)
 {
+	struct pci_dev *bridge;
 	int rc;
 
 	if (!pci_reset_supported(dev))
 		return -ENOTTY;
 
-	if (!pci_dev_trylock(dev))
+	bridge = pci_upstream_bridge(dev);
+	if (bridge && !pci_dev_trylock(bridge))
 		return -EAGAIN;
+
+	if (!pci_dev_trylock(dev))
+		goto out_unlock_bridge;
 
 	pci_dev_save_and_disable(dev);
 	rc = __pci_reset_function_locked(dev);
 	pci_dev_restore(dev);
 	pci_dev_unlock(dev);
 
+	if (bridge)
+		pci_dev_unlock(bridge);
+
 	return rc;
+
+out_unlock_bridge:
+	if (bridge)
+		pci_dev_unlock(bridge);
+	return -EAGAIN;
 }
 EXPORT_SYMBOL_GPL(pci_try_reset_function);
 
