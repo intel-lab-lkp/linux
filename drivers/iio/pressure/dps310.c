@@ -20,8 +20,11 @@
 #include <linux/module.h>
 #include <linux/regmap.h>
 
+#include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
+#include <linux/iio/trigger_consumer.h>
+#include <linux/iio/triggered_buffer.h>
 
 #define DPS310_DEV_NAME		"dps310"
 
@@ -92,19 +95,56 @@ struct dps310_data {
 	bool timeout_recovery_failed;
 };
 
+enum dps310_scan_index {
+	DPS310_SCAN_TEMP,
+	DPS310_SCAN_PRESSURE,
+};
+
 static const struct iio_chan_spec dps310_channels[] = {
 	{
 		.type = IIO_TEMP,
 		.info_mask_separate = BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO) |
 			BIT(IIO_CHAN_INFO_SAMP_FREQ) |
 			BIT(IIO_CHAN_INFO_PROCESSED),
+		.scan_index = DPS310_SCAN_TEMP,
+		.scan_type = {
+			.sign = 's',
+			.realbits = 32,
+			.storagebits = 32,
+			.endianness = IIO_CPU,
+		},
 	},
 	{
 		.type = IIO_PRESSURE,
+		/*
+		 * Pressure is only meaningful once the raw register value has
+		 * been run through the compensation polynomial in section 4.9.1
+		 * of the datasheet, which needs a temperature reading as well.
+		 * So what is reported as _raw here is already compensated, in
+		 * Pa, and _scale converts it to the kPa the ABI asks for. The
+		 * _processed attribute reports the same value and predates
+		 * buffer support, so it has to stay.
+		 *
+		 * Please do not copy this pattern into other drivers. A raw
+		 * attribute that is not the raw register value is only
+		 * tolerable here because the alternative is either losing
+		 * resolution in the buffer or breaking existing users of
+		 * _processed.
+		 */
 		.info_mask_separate = BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO) |
 			BIT(IIO_CHAN_INFO_SAMP_FREQ) |
-			BIT(IIO_CHAN_INFO_PROCESSED),
+			BIT(IIO_CHAN_INFO_PROCESSED) |
+			BIT(IIO_CHAN_INFO_RAW) |
+			BIT(IIO_CHAN_INFO_SCALE),
+		.scan_index = DPS310_SCAN_PRESSURE,
+		.scan_type = {
+			.sign = 's',
+			.realbits = 32,
+			.storagebits = 32,
+			.endianness = IIO_CPU,
+		},
 	},
+	IIO_CHAN_SOFT_TIMESTAMP(2),
 };
 
 /* To be called after checking the COEF_RDY bit in MEAS_CFG */
@@ -463,7 +503,8 @@ static int dps310_ready(struct dps310_data *data, int ready_bit, int timeout)
 	return 0;
 }
 
-static int dps310_read_pres_raw(struct dps310_data *data)
+/* Called with lock held */
+static int dps310_read_pres_raw_locked(struct dps310_data *data)
 {
 	int rc;
 	int rate;
@@ -471,30 +512,25 @@ static int dps310_read_pres_raw(struct dps310_data *data)
 	s32 raw;
 	u8 val[3];
 
-	if (mutex_lock_interruptible(&data->lock))
-		return -EINTR;
-
 	rc = dps310_get_pres_samp_freq(data, &rate);
 	if (rc)
-		goto done;
+		return rc;
 
 	timeout = DPS310_POLL_TIMEOUT_US(rate);
 
 	/* Poll for sensor readiness; base the timeout upon the sample rate. */
 	rc = dps310_ready(data, DPS310_PRS_RDY, timeout);
 	if (rc)
-		goto done;
+		return rc;
 
 	rc = regmap_bulk_read(data->regmap, DPS310_PRS_BASE, val, sizeof(val));
 	if (rc < 0)
-		goto done;
+		return rc;
 
 	raw = (val[0] << 16) | (val[1] << 8) | val[2];
 	data->pressure_raw = sign_extend32(raw, 23);
 
-done:
-	mutex_unlock(&data->lock);
-	return rc;
+	return 0;
 }
 
 /* Called with lock held */
@@ -514,31 +550,45 @@ static int dps310_read_temp_ready(struct dps310_data *data)
 	return 0;
 }
 
-static int dps310_read_temp_raw(struct dps310_data *data)
+/* Called with lock held */
+static int dps310_read_temp_raw_locked(struct dps310_data *data)
 {
 	int rc;
 	int rate;
 	int timeout;
 
-	if (mutex_lock_interruptible(&data->lock))
-		return -EINTR;
-
 	rc = dps310_get_temp_samp_freq(data, &rate);
 	if (rc)
-		goto done;
+		return rc;
 
 	timeout = DPS310_POLL_TIMEOUT_US(rate);
 
 	/* Poll for sensor readiness; base the timeout upon the sample rate. */
 	rc = dps310_ready(data, DPS310_TMP_RDY, timeout);
 	if (rc)
-		goto done;
+		return rc;
 
-	rc = dps310_read_temp_ready(data);
+	return dps310_read_temp_ready(data);
+}
 
-done:
-	mutex_unlock(&data->lock);
-	return rc;
+/*
+ * Refresh the cached temperature if a new measurement is ready, so that the
+ * pressure compensation below uses a recent value. Errors are not fatal here,
+ * the previous temperature is used instead.
+ *
+ * Called with lock held.
+ */
+static void dps310_refresh_temp_locked(struct dps310_data *data)
+{
+	int rc;
+	int t_ready;
+
+	rc = regmap_read(data->regmap, DPS310_MEAS_CFG, &t_ready);
+	if (rc)
+		return;
+
+	if (t_ready & DPS310_TMP_RDY)
+		dps310_read_temp_ready(data);
 }
 
 static bool dps310_is_writeable_reg(struct device *dev, unsigned int reg)
@@ -580,59 +630,52 @@ static int dps310_write_raw(struct iio_dev *iio,
 			    struct iio_chan_spec const *chan, int val,
 			    int val2, long mask)
 {
-	int rc;
 	struct dps310_data *data = iio_priv(iio);
 
-	if (mutex_lock_interruptible(&data->lock))
+	/* Reconfiguring mid-capture would change the values being captured */
+	IIO_DEV_ACQUIRE_DIRECT_MODE(iio, claim);
+	if (IIO_DEV_ACQUIRE_FAILED(claim))
+		return -EBUSY;
+
+	ACQUIRE(mutex_intr, lock)(&data->lock);
+	if (ACQUIRE_ERR(mutex_intr, &lock))
 		return -EINTR;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		switch (chan->type) {
 		case IIO_PRESSURE:
-			rc = dps310_set_pres_samp_freq(data, val);
-			break;
+			return dps310_set_pres_samp_freq(data, val);
 
 		case IIO_TEMP:
-			rc = dps310_set_temp_samp_freq(data, val);
-			break;
+			return dps310_set_temp_samp_freq(data, val);
 
 		default:
-			rc = -EINVAL;
-			break;
+			return -EINVAL;
 		}
-		break;
 
 	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
 		switch (chan->type) {
 		case IIO_PRESSURE:
-			rc = dps310_set_pres_precision(data, val);
-			break;
+			return dps310_set_pres_precision(data, val);
 
 		case IIO_TEMP:
-			rc = dps310_set_temp_precision(data, val);
-			break;
+			return dps310_set_temp_precision(data, val);
 
 		default:
-			rc = -EINVAL;
-			break;
+			return -EINVAL;
 		}
-		break;
 
 	default:
-		rc = -EINVAL;
-		break;
+		return -EINVAL;
 	}
-
-	mutex_unlock(&data->lock);
-	return rc;
 }
 
+/* Called with lock held */
 static int dps310_calculate_pressure(struct dps310_data *data, int *val)
 {
 	int i;
 	int rc;
-	int t_ready;
 	int kpi;
 	int kti;
 	s64 rem = 0ULL;
@@ -655,15 +698,6 @@ static int dps310_calculate_pressure(struct dps310_data *data, int *val)
 
 	kp = (s64)kpi;
 	kt = (s64)kti;
-
-	/* Refresh temp if it's ready, otherwise just use the latest value */
-	if (mutex_trylock(&data->lock)) {
-		rc = regmap_read(data->regmap, DPS310_MEAS_CFG, &t_ready);
-		if (rc >= 0 && t_ready & DPS310_TMP_RDY)
-			dps310_read_temp_ready(data);
-
-		mutex_unlock(&data->lock);
-	}
 
 	p = (s64)data->pressure_raw;
 	t = (s64)data->temp_raw;
@@ -710,6 +744,28 @@ static int dps310_calculate_pressure(struct dps310_data *data, int *val)
 	return 0;
 }
 
+/*
+ * Sample the pressure and compensate it. Shared by the raw and processed
+ * attributes, which report the same value in different units, and takes the
+ * lock once for the whole sequence.
+ */
+static int dps310_read_pressure_value(struct dps310_data *data, int *val)
+{
+	int rc;
+
+	ACQUIRE(mutex_intr, lock)(&data->lock);
+	if (ACQUIRE_ERR(mutex_intr, &lock))
+		return -EINTR;
+
+	rc = dps310_read_pres_raw_locked(data);
+	if (rc)
+		return rc;
+
+	dps310_refresh_temp_locked(data);
+
+	return dps310_calculate_pressure(data, val);
+}
+
 static int dps310_read_pressure(struct dps310_data *data, int *val, int *val2,
 				long mask)
 {
@@ -723,16 +779,25 @@ static int dps310_read_pressure(struct dps310_data *data, int *val, int *val2,
 
 		return IIO_VAL_INT;
 
-	case IIO_CHAN_INFO_PROCESSED:
-		rc = dps310_read_pres_raw(data);
+	case IIO_CHAN_INFO_RAW:
+		rc = dps310_read_pressure_value(data, val);
 		if (rc)
 			return rc;
 
-		rc = dps310_calculate_pressure(data, val);
+		return IIO_VAL_INT;
+
+	case IIO_CHAN_INFO_PROCESSED:
+		rc = dps310_read_pressure_value(data, val);
 		if (rc)
 			return rc;
 
 		*val2 = 1000; /* Convert Pa to KPa per IIO ABI */
+		return IIO_VAL_FRACTIONAL;
+
+	case IIO_CHAN_INFO_SCALE:
+		/* The raw value is in Pa, the ABI wants kPa */
+		*val = 1;
+		*val2 = 1000;
 		return IIO_VAL_FRACTIONAL;
 
 	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
@@ -768,6 +833,21 @@ static int dps310_calculate_temp(struct dps310_data *data, int *val)
 	return 0;
 }
 
+static int dps310_read_temp_value(struct dps310_data *data, int *val)
+{
+	int rc;
+
+	ACQUIRE(mutex_intr, lock)(&data->lock);
+	if (ACQUIRE_ERR(mutex_intr, &lock))
+		return -EINTR;
+
+	rc = dps310_read_temp_raw_locked(data);
+	if (rc)
+		return rc;
+
+	return dps310_calculate_temp(data, val);
+}
+
 static int dps310_read_temp(struct dps310_data *data, int *val, int *val2,
 			    long mask)
 {
@@ -782,11 +862,7 @@ static int dps310_read_temp(struct dps310_data *data, int *val, int *val2,
 		return IIO_VAL_INT;
 
 	case IIO_CHAN_INFO_PROCESSED:
-		rc = dps310_read_temp_raw(data);
-		if (rc)
-			return rc;
-
-		rc = dps310_calculate_temp(data, val);
+		rc = dps310_read_temp_value(data, val);
 		if (rc)
 			return rc;
 
@@ -804,12 +880,10 @@ static int dps310_read_temp(struct dps310_data *data, int *val, int *val2,
 	}
 }
 
-static int dps310_read_raw(struct iio_dev *iio,
-			   struct iio_chan_spec const *chan,
-			   int *val, int *val2, long mask)
+static int dps310_read_channel(struct dps310_data *data,
+			       struct iio_chan_spec const *chan,
+			       int *val, int *val2, long mask)
 {
-	struct dps310_data *data = iio_priv(iio);
-
 	switch (chan->type) {
 	case IIO_PRESSURE:
 		return dps310_read_pressure(data, val, val2, mask);
@@ -820,6 +894,97 @@ static int dps310_read_raw(struct iio_dev *iio,
 	default:
 		return -EINVAL;
 	}
+}
+
+static int dps310_read_raw(struct iio_dev *iio,
+			   struct iio_chan_spec const *chan,
+			   int *val, int *val2, long mask)
+{
+	struct dps310_data *data = iio_priv(iio);
+
+	switch (mask) {
+	case IIO_CHAN_INFO_RAW:
+	case IIO_CHAN_INFO_PROCESSED: {
+		/*
+		 * Sampling here consumes the same measurement the capture path
+		 * reads, so refuse while the buffer is enabled.
+		 */
+		IIO_DEV_ACQUIRE_DIRECT_MODE(iio, claim);
+		if (IIO_DEV_ACQUIRE_FAILED(claim))
+			return -EBUSY;
+
+		return dps310_read_channel(data, chan, val, val2, mask);
+	}
+	default:
+		return dps310_read_channel(data, chan, val, val2, mask);
+	}
+}
+
+/* Called with lock held */
+static int dps310_fill_scan(struct iio_dev *iio, u8 *buffer)
+{
+	struct dps310_data *data = iio_priv(iio);
+	int rc;
+	int pos = 0;
+	s32 value;
+
+	/*
+	 * The pressure compensation needs a temperature reading, so temperature
+	 * is sampled even when only the pressure channel is enabled.
+	 */
+	rc = dps310_read_temp_raw_locked(data);
+	if (rc)
+		return rc;
+
+	if (test_bit(DPS310_SCAN_TEMP, iio->active_scan_mask)) {
+		rc = dps310_calculate_temp(data, &value);
+		if (rc)
+			return rc;
+
+		/* Millidegrees Celsius */
+		memcpy(&buffer[pos], &value, sizeof(value));
+		pos += sizeof(value);
+	}
+
+	if (test_bit(DPS310_SCAN_PRESSURE, iio->active_scan_mask)) {
+		rc = dps310_read_pres_raw_locked(data);
+		if (rc)
+			return rc;
+
+		rc = dps310_calculate_pressure(data, &value);
+		if (rc)
+			return rc;
+
+		/* Pascals, see the comment on the channel definition */
+		memcpy(&buffer[pos], &value, sizeof(value));
+	}
+
+	return 0;
+}
+
+static irqreturn_t dps310_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *iio = pf->indio_dev;
+	struct dps310_data *data = iio_priv(iio);
+	/*
+	 * Either channel can be enabled on its own, so the offset of the second
+	 * value depends on the scan mask and the layout cannot be described
+	 * with a structure. Sized for both 32-bit channels plus the timestamp.
+	 */
+	u8 buffer[16] __aligned(8) = { };
+	int rc = 0;
+
+	scoped_guard(mutex, &data->lock)
+		rc = dps310_fill_scan(iio, buffer);
+
+	if (!rc)
+		iio_push_to_buffers_with_ts(iio, buffer, sizeof(buffer),
+					    pf->timestamp);
+
+	iio_trigger_notify_done(iio->trig);
+
+	return IRQ_HANDLED;
 }
 
 static void dps310_reset(void *action_data)
@@ -874,6 +1039,16 @@ static int dps310_probe(struct i2c_client *client)
 		return rc;
 
 	rc = dps310_startup(data);
+	if (rc)
+		return rc;
+
+	/*
+	 * The device measures continuously in background mode, so a capture is
+	 * just a read of the latest results and no buffer setup ops are needed.
+	 */
+	rc = devm_iio_triggered_buffer_setup(&client->dev, iio,
+					     iio_pollfunc_store_time,
+					     dps310_trigger_handler, NULL);
 	if (rc)
 		return rc;
 
