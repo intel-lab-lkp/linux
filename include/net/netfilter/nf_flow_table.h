@@ -189,6 +189,7 @@ enum nf_flow_flags {
 	NF_FLOW_HW_PENDING,
 	NF_FLOW_HW_BIDIRECTIONAL,
 	NF_FLOW_HW_ESTABLISHED,
+	NF_FLOW_CONFIRMED,
 };
 
 enum flow_offload_type {
