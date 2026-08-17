@@ -2479,7 +2479,7 @@ static void sk_init_common(struct sock *sk)
 struct sock *sk_clone(const struct sock *sk, const gfp_t priority,
 		      bool lock)
 {
-	struct proto *prot = READ_ONCE(sk->sk_prot);
+	struct proto *prot = sk->sk_prot_creator;
 	struct sk_filter *filter;
 	bool is_charged = true;
 	struct sock *newsk;
