@@ -115,6 +115,7 @@
 #include <linux/bitfield.h>
 #include <linux/bitmap.h>
 #include <linux/bits.h>
+#include <linux/device.h>
 #include <linux/find.h>
 #include <linux/mdio.h>
 #include <linux/mfd/syscon.h>
@@ -453,6 +454,10 @@ static int otto_emdio_read_c22(struct mii_bus *bus, int phy_id, int regnum)
 	int ret, port;
 	u32 value;
 
+	if (dev_WARN_ONCE(&bus->dev, regnum == MII_MMD_CTRL || regnum == MII_MMD_DATA,
+			  "C45 over C22 read access broken due to polling\n"))
+		return -ENOTSUPP;
+
 	port = otto_emdio_phy_to_port(bus, phy_id);
 	if (port < 0)
 		return port;
@@ -467,6 +472,10 @@ static int otto_emdio_write_c22(struct mii_bus *bus, int phy_id, int regnum, u16
 {
 	struct otto_emdio_priv *priv = otto_emdio_bus_to_priv(bus);
 	int ret, port;
+
+	if (dev_WARN_ONCE(&bus->dev, regnum == MII_MMD_CTRL || regnum == MII_MMD_DATA,
+			  "C45 over C22 write access broken due to polling\n"))
+		return -ENOTSUPP;
 
 	port = otto_emdio_phy_to_port(bus, phy_id);
 	if (port < 0)
