@@ -2604,6 +2604,23 @@ static int devinet_conf_proc(const struct ctl_table *ctl, int write,
 	return ret;
 }
 
+static int devinet_conf_proc_rtnl(const struct ctl_table *ctl, int write,
+				  void *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct net *net = ctl->extra2;
+	int ret;
+
+	if (write && !rtnl_net_trylock(net))
+		return restart_syscall();
+
+	ret = devinet_conf_proc(ctl, write, buffer, lenp, ppos);
+
+	if (write)
+		rtnl_net_unlock(net);
+
+	return ret;
+}
+
 static int devinet_sysctl_forward(const struct ctl_table *ctl, int write,
 				  void *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -2707,8 +2724,9 @@ static struct devinet_sysctl_table {
 					"igmpv2_unsolicited_report_interval"),
 		DEVINET_SYSCTL_RW_ENTRY(IGMPV3_UNSOLICITED_REPORT_INTERVAL,
 					"igmpv3_unsolicited_report_interval"),
-		DEVINET_SYSCTL_RW_ENTRY(IGNORE_ROUTES_WITH_LINKDOWN,
-					"ignore_routes_with_linkdown"),
+		DEVINET_SYSCTL_COMPLEX_ENTRY(IGNORE_ROUTES_WITH_LINKDOWN,
+					     "ignore_routes_with_linkdown",
+					     devinet_conf_proc_rtnl),
 		DEVINET_SYSCTL_RW_ENTRY(DROP_GRATUITOUS_ARP,
 					"drop_gratuitous_arp"),
 		DEVINET_SYSCTL_RW_ENTRY(NOXFRM, "disable_xfrm"),
