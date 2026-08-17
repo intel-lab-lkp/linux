@@ -1623,6 +1623,10 @@ static void nbd_clear_sock_ioctl(struct nbd_device *nbd)
 
 static void nbd_set_cmd_timeout(struct nbd_device *nbd, u64 timeout)
 {
+	/* clamp so that timeout * HZ fits in an unsigned int */
+	if (timeout > UINT_MAX / HZ)
+		timeout = UINT_MAX / HZ;
+
 	nbd->tag_set.timeout = timeout * HZ;
 	if (timeout)
 		blk_queue_rq_timeout(nbd->disk->queue, timeout * HZ);
