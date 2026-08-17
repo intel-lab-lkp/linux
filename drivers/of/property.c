@@ -1620,7 +1620,9 @@ static int of_link_property(struct device_node *con_np, const char *prop_name)
 
 			matched = true;
 			i++;
-			of_link_to_phandle(con_dev_np, phandle, s->fwlink_flags);
+			if (con_dev_np)
+				of_link_to_phandle(con_dev_np, phandle,
+						   s->fwlink_flags);
 			of_node_put(phandle);
 		}
 		s++;
