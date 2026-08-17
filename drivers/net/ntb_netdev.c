@@ -4,6 +4,7 @@
  */
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
+#include <linux/if_vlan.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/ntb.h>
@@ -29,6 +30,21 @@ static unsigned int tx_stop = 5;
 #define NTB_NETDEV_MAX_QUEUES		64
 #define NTB_NETDEV_DEFAULT_QUEUES	1
 
+/*
+ * Checksum metadata layout:
+ *   bit 23     capability, advertised on every packet
+ *   bit 22     per-packet CHECKSUM_PARTIAL flag
+ *   bit 21..6  skb_checksum_start_offset() (16 bits)
+ *   bit 5..0   skb->csum_offset (6 bits)
+ *
+ * Until the capability is observed, complete partial checksums in software.
+ * Six offset bits cover TCP/UDP. Larger offsets use software checksumming.
+ */
+#define NTB_NETDEV_META_CAP_CSUM		BIT(23)
+#define NTB_NETDEV_META_CSUM			BIT(22)
+#define NTB_NETDEV_META_CSUM_START_SHIFT	6
+#define NTB_NETDEV_META_CSUM_OFFSET_MASK	GENMASK(5, 0)
+
 struct ntb_netdev;
 
 struct ntb_netdev_queue {
@@ -44,6 +60,7 @@ struct ntb_netdev {
 	struct net_device *ndev;
 	unsigned int num_queues;
 	struct ntb_netdev_queue *queues;
+	bool peer_csum;
 };
 
 #define	NTB_TX_TIMEOUT_MS	1000
@@ -108,6 +125,7 @@ static void ntb_netdev_event_handler(void *data, int link_is_up)
 	struct net_device *ndev;
 
 	ndev = dev->ndev;
+	WRITE_ONCE(dev->peer_csum, false);
 
 	netdev_dbg(ndev, "Event %x, Link %x, qp %u\n", link_is_up,
 		   ntb_transport_link_query(q->qp), q->qid);
@@ -151,8 +169,21 @@ static void ntb_netdev_rx_handler(struct ntb_transport_qp *qp, void *qp_data,
 	}
 
 	skb_put(skb, len);
+	if (meta & NTB_NETDEV_META_CAP_CSUM)
+		WRITE_ONCE(dev->peer_csum, true);
+
+	if (meta & NTB_NETDEV_META_CSUM) {
+		u16 csum_start = (meta >> NTB_NETDEV_META_CSUM_START_SHIFT) & U16_MAX;
+		u16 csum_offset = meta & NTB_NETDEV_META_CSUM_OFFSET_MASK;
+
+		if (!skb_partial_csum_set(skb, csum_start, csum_offset))
+			goto rx_drop;
+
+		if (!(ndev->features & NETIF_F_RXCSUM) &&
+		    skb_checksum_help(skb))
+			goto rx_drop;
+	}
 	skb->protocol = eth_type_trans(skb, ndev);
-	skb->ip_summed = CHECKSUM_NONE;
 	skb_record_rx_queue(skb, q->qid);
 
 	if (netif_rx(skb) == NET_RX_DROP) {
@@ -172,6 +203,14 @@ enqueue_again:
 		ndev->stats.rx_errors++;
 		ndev->stats.rx_fifo_errors++;
 	}
+	return;
+
+rx_drop:
+	ndev->stats.rx_errors++;
+	ndev->stats.rx_dropped++;
+	dev_kfree_skb_any(skb);
+	skb = new_skb;
+	goto enqueue_again;
 }
 
 static int __ntb_netdev_maybe_stop_tx(struct net_device *netdev,
@@ -249,6 +288,7 @@ static const struct ntb_queue_handlers ntb_netdev_handlers = {
 static netdev_tx_t ntb_netdev_start_xmit(struct sk_buff *skb,
 					 struct net_device *ndev)
 {
+	unsigned int meta = NTB_NETDEV_META_CAP_CSUM;
 	struct ntb_netdev *dev = netdev_priv(ndev);
 	u16 qid = skb_get_queue_mapping(skb);
 	struct ntb_netdev_queue *q;
@@ -258,7 +298,17 @@ static netdev_tx_t ntb_netdev_start_xmit(struct sk_buff *skb,
 
 	ntb_netdev_maybe_stop_tx(ndev, q, tx_stop);
 
-	rc = ntb_transport_tx_enqueue(q->qp, skb, skb->data, skb->len, 0);
+	if (skb->ip_summed == CHECKSUM_PARTIAL) {
+		if (READ_ONCE(dev->peer_csum))
+			meta |= NTB_NETDEV_META_CSUM |
+				(skb_checksum_start_offset(skb) <<
+				 NTB_NETDEV_META_CSUM_START_SHIFT) |
+				skb->csum_offset;
+		else if (skb_checksum_help(skb))
+			goto drop;
+	}
+
+	rc = ntb_transport_tx_enqueue(q->qp, skb, skb->data, skb->len, meta);
 	if (rc)
 		goto err;
 
@@ -267,10 +317,27 @@ static netdev_tx_t ntb_netdev_start_xmit(struct sk_buff *skb,
 
 	return NETDEV_TX_OK;
 
+drop:
+	dev_kfree_skb_any(skb);
+	ndev->stats.tx_dropped++;
+	ndev->stats.tx_errors++;
+	return NETDEV_TX_OK;
+
 err:
 	ndev->stats.tx_dropped++;
 	ndev->stats.tx_errors++;
 	return NETDEV_TX_BUSY;
+}
+
+static netdev_features_t ntb_netdev_features_check(struct sk_buff *skb,
+						   struct net_device *ndev,
+						   netdev_features_t features)
+{
+	if (skb->ip_summed == CHECKSUM_PARTIAL &&
+	    skb->csum_offset > NTB_NETDEV_META_CSUM_OFFSET_MASK)
+		features &= ~NETIF_F_CSUM_MASK;
+
+	return vlan_features_check(skb, features);
 }
 
 static void ntb_netdev_tx_timer(struct timer_list *t)
@@ -423,6 +490,7 @@ static const struct net_device_ops ntb_netdev_ops = {
 	.ndo_open = ntb_netdev_open,
 	.ndo_stop = ntb_netdev_close,
 	.ndo_start_xmit = ntb_netdev_start_xmit,
+	.ndo_features_check = ntb_netdev_features_check,
 	.ndo_change_mtu = ntb_netdev_change_mtu,
 	.ndo_set_mac_address = eth_mac_addr,
 };
@@ -642,7 +710,8 @@ static int ntb_netdev_probe(struct device *client_dev)
 
 	ndev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
 
-	ndev->hw_features = ndev->features;
+	/* Checksum bypass assumes a trusted NTB link, so keep it opt-in. */
+	ndev->hw_features = ndev->features | NETIF_F_HW_CSUM | NETIF_F_RXCSUM;
 	ndev->watchdog_timeo = msecs_to_jiffies(NTB_TX_TIMEOUT_MS);
 
 	eth_random_addr(ndev->perm_addr);
