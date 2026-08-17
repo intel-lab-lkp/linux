@@ -1734,6 +1734,15 @@ config CSD_LOCK_WAIT_DEBUG_DEFAULT
 	  This option causes the csdlock_debug= kernel boot parameter to
 	  default to 1 (basic debugging) instead of 0 (no debugging).
 
+config MX_TEST
+	tristate "miscellaneous lock-full and lock-less selftests"
+	help
+	  This option provides a kernel module that runs tests using
+	  different locking primitives and lockless operations.
+
+	  Say M if you want these self tests to build as a module.
+	  Say N if you are unsure.
+
 endmenu # lock debugging
 
 config TRACE_IRQFLAGS
