@@ -8,6 +8,7 @@
  *
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#include <linux/namei.h>
 #include <linux/module.h>
 
 #include "../host/nvme.h"
@@ -588,6 +589,7 @@ int nvmet_passthru_ctrl_enable(struct nvmet_subsys *subsys)
 {
 	struct nvme_ctrl *ctrl;
 	struct file *file;
+	struct path path;
 	int ret = -EINVAL;
 	void *old;
 
@@ -602,7 +604,20 @@ int nvmet_passthru_ctrl_enable(struct nvmet_subsys *subsys)
 		goto out_unlock;
 	}
 
-	file = filp_open(subsys->passthru_ctrl_path, O_RDWR, 0);
+	ret = kern_path(subsys->passthru_ctrl_path, LOOKUP_FOLLOW, &path);
+	if (ret)
+		goto out_unlock;
+
+	if (!strcmp(path.dentry->d_sb->s_type->name, "configfs")) {
+		pr_err("configfs paths cannot back passthru controller %s\n",
+		       subsys->passthru_ctrl_path);
+		path_put(&path);
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	file = dentry_open(&path, O_RDWR, current_cred());
+	path_put(&path);
 	if (IS_ERR(file)) {
 		ret = PTR_ERR(file);
 		goto out_unlock;
