@@ -7,6 +7,7 @@
  */
 
 #include <linux/bitmap.h>
+#include <linux/bitrev.h>
 #include <linux/dev_printk.h>
 #include <linux/device/devres.h>
 #include <linux/err.h>
@@ -39,7 +40,7 @@ static int gpio_decoder_get_gpios_state(struct gpio_decoder *decoder)
 		return err;
 	}
 
-	return bitmap_read(values, 0, size);
+	return bitrev32(bitmap_read(values, 0, size)) >> (32 - size);
 }
 
 static void gpio_decoder_poll_gpios(struct input_dev *input)
