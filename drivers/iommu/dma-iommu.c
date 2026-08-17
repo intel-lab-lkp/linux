@@ -21,6 +21,7 @@
 #include <linux/iommu-dma.h>
 #include <linux/iova.h>
 #include <linux/irq.h>
+#include <linux/limits.h>
 #include <linux/list_sort.h>
 #include <linux/memremap.h>
 #include <linux/mm.h>
@@ -1445,6 +1446,7 @@ int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 	for_each_sg(sg, s, nents, i) {
 		size_t s_iova_off = iova_offset(iovad, s->offset);
 		size_t s_length = s->length;
+		size_t s_length_tmp;
 		size_t pad_len = (mask - iova_len + 1) & mask;
 
 		switch (pci_p2pdma_state(&p2pdma_state, dev, sg_page(s))) {
@@ -1476,7 +1478,22 @@ int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 		sg_dma_address(s) = s_iova_off;
 		sg_dma_len(s) = s_length;
 		s->offset -= s_iova_off;
-		s_length = iova_align(iovad, s_length + s_iova_off);
+
+		if (check_add_overflow(s_length, s_iova_off, &s_length_tmp)) {
+			ret = -EOVERFLOW;
+			goto out_restore_sg;
+		}
+		s_length = iova_align(iovad, s_length_tmp);
+
+		if (s_length_tmp != 0 && s_length == 0) {
+			ret = -EOVERFLOW;
+			goto out_restore_sg;
+		}
+
+		if (overflows_type(s_length, s->length)) {
+			ret = -EOVERFLOW;
+			goto out_restore_sg;
+		}
 		s->length = s_length;
 
 		/*
@@ -1493,7 +1510,18 @@ int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 		 *   time through here (i.e. before it has a meaningful value).
 		 */
 		if (pad_len && pad_len < s_length - 1) {
-			prev->length += pad_len;
+			unsigned int new_prev_len;
+			/*
+			 * For large mappings spanning multiple GBs we
+			 * may not be able to fit all needed padding into
+			 * sg->length.
+			 */
+			if (check_add_overflow(prev->length, pad_len, &new_prev_len)) {
+				ret = -EOVERFLOW;
+				goto out_restore_sg;
+			}
+
+			prev->length = new_prev_len;
 			iova_len += pad_len;
 		}
 
