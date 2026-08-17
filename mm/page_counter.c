@@ -281,7 +281,7 @@ int page_counter_memparse(const char *buf, const char *max,
 	}
 
 	bytes = memparse(buf, &end);
-	if (*end != '\0')
+	if (*end != '\0' || end == buf)
 		return -EINVAL;
 
 	*nr_pages = min(bytes / PAGE_SIZE, (u64)PAGE_COUNTER_MAX);
