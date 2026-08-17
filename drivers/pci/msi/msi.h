@@ -27,6 +27,19 @@ static inline void __iomem *pci_msix_desc_addr(struct msi_desc *desc)
 }
 
 /*
+ * The MSI-X Table lives in device MMIO space, so it is only reachable while
+ * the Link is usable. While a Downstream Port has the Link contained by DPC
+ * it completes these accesses with Unsupported Request, which the Root Port
+ * in turn reports as an RP PIO error and answers with a DPC of its own,
+ * taking down every other device below it.
+ */
+static inline bool pci_msix_mmio_unsafe(struct pci_dev *pdev)
+{
+	return pdev->error_state != pci_channel_io_normal ||
+	       pci_dev_is_disconnected(pdev);
+}
+
+/*
  * This internal function does not flush PCI writes to the device.  All
  * users must ensure that they read from the device before either assuming
  * that the device state is up to date, or returning out of this file.
@@ -36,6 +49,9 @@ static inline void pci_msix_write_vector_ctrl(struct msi_desc *desc, u32 ctrl)
 {
 	void __iomem *desc_addr = pci_msix_desc_addr(desc);
 
+	if (pci_msix_mmio_unsafe(msi_desc_to_pci_dev(desc)))
+		return;
+
 	if (desc->pci.msi_attrib.can_mask)
 		writel(ctrl, desc_addr + PCI_MSIX_ENTRY_VECTOR_CTRL);
 }
@@ -43,6 +59,10 @@ static inline void pci_msix_write_vector_ctrl(struct msi_desc *desc, u32 ctrl)
 static inline void pci_msix_mask(struct msi_desc *desc)
 {
 	desc->pci.msix_ctrl |= PCI_MSIX_ENTRY_CTRL_MASKBIT;
+
+	if (pci_msix_mmio_unsafe(msi_desc_to_pci_dev(desc)))
+		return;
+
 	pci_msix_write_vector_ctrl(desc, desc->pci.msix_ctrl);
 	/* Flush write to device */
 	readl(desc->pci.mask_base);
