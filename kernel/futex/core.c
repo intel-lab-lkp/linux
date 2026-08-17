@@ -1787,14 +1787,24 @@ static bool futex_pivot_pending(struct mm_struct *mm)
 {
 	struct futex_mm_phash *mmph = &mm->futex.phash;
 	struct futex_private_hash *fph;
+	unsigned int state;
+	bool ret;
 
-	guard(mutex)(&mmph->lock);
+	state = current->__state;
+	__set_current_state(TASK_RUNNING);
+	scoped_guard(mutex, &mmph->lock) {
+		if (!mmph->hash_new) {
+			ret = true;
+			goto out;
+		}
 
-	if (!mmph->hash_new)
-		return true;
+		fph = rcu_dereference_raw(mmph->hash);
+		ret = futex_ref_is_dead(fph);
+	}
+out:
+	__set_current_state(state);
+	return ret;
 
-	fph = rcu_dereference_raw(mmph->hash);
-	return futex_ref_is_dead(fph);
 }
 
 static bool futex_hash_less(struct futex_private_hash *a,
