@@ -996,28 +996,17 @@ static void ceph_msg_data_iter_cursor_init(struct ceph_msg_data_cursor *cursor,
 static struct page *ceph_msg_data_iter_next(struct ceph_msg_data_cursor *cursor,
 					    size_t *page_offset, size_t *length)
 {
-	struct page *page;
+	struct page *page, **ppage = &page;
 	ssize_t len;
 
 	if (cursor->lastlen)
 		iov_iter_revert(&cursor->iov_iter, cursor->lastlen);
 
-	len = iov_iter_get_pages2(&cursor->iov_iter, &page, PAGE_SIZE,
-				  1, page_offset);
+	len = iov_iter_extract_pages(&cursor->iov_iter, &ppage, PAGE_SIZE,
+				     1, 0, page_offset);
 	BUG_ON(len < 0);
 
 	cursor->lastlen = len;
-
-	/*
-	 * FIXME: The assumption is that the pages represented by the iov_iter
-	 *	  are pinned, with the references held by the upper-level
-	 *	  callers, or by virtue of being under writeback. Eventually,
-	 *	  we'll get an iov_iter_get_pages2 variant that doesn't take
-	 *	  page refs. Until then, just put the page ref.
-	 */
-	VM_BUG_ON_PAGE(!PageWriteback(page) && page_count(page) < 2, page);
-	put_page(page);
-
 	*length = min_t(size_t, len, cursor->resid);
 	return page;
 }
@@ -1966,6 +1955,9 @@ void ceph_msg_data_add_iter(struct ceph_msg *msg,
 			    struct iov_iter *iter)
 {
 	struct ceph_msg_data *data;
+
+	/* the messenger never unpins pages, so the iterator must not pin them */
+	WARN_ON_ONCE(iov_iter_extract_will_pin(iter));
 
 	data = ceph_msg_data_add(msg);
 	data->type = CEPH_MSG_DATA_ITER;
