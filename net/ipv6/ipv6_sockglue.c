@@ -572,6 +572,10 @@ int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
 					retv = -EBUSY;
 					break;
 				}
+				if (inet_csk_reqsk_queue_len(sk)) {
+					retv = -EBUSY;
+					break;
+				}
 			} else {
 				break;
 			}
