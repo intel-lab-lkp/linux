@@ -120,7 +120,8 @@
 
 #define AD7768_TRIGGER_SOURCE_SYNC_IDX 0
 
-#define AD7768_MAX_CHANNELS 1
+#define AD7768_MAX_CHANNELS	1
+#define AD7768_MAX_AGGR_DEVICES	4
 
 #define ADAQ7768_PGA_PINS 3
 
@@ -300,10 +301,12 @@ struct ad7768_chip_info {
 
 struct ad7768_state {
 	struct spi_device *spi;
+	struct spi_device *spi_anc[AD7768_MAX_AGGR_DEVICES];
 	struct spi_offload *offload;
 	struct spi_offload_trigger *offload_trigger;
 	struct regmap *regmap;
 	struct regmap *regmap24;
+	struct regmap *regmap24_anc[AD7768_MAX_AGGR_DEVICES];
 	int vref_uv;
 	struct regulator_dev *vcm_rdev;
 	unsigned int vcm_output_sel;
@@ -322,11 +325,12 @@ struct ad7768_state {
 	struct gpio_descs *pga_gpios;
 	struct gpio_desc *gpio_sync_in;
 	struct gpio_desc *gpio_reset;
-	const char *labels[AD7768_MAX_CHANNELS];
+	const char *labels[AD7768_MAX_CHANNELS * AD7768_MAX_AGGR_DEVICES];
 	struct gpio_chip gpiochip;
 	struct spi_transfer offload_xfer;
 	struct spi_message offload_msg;
 	const struct ad7768_chip_info *chip;
+	u8 num_devices;
 	bool en_spi_sync;
 	struct mutex pga_lock; /* protect device internal state (PGA) */
 	/*
@@ -335,7 +339,7 @@ struct ad7768_state {
 	 */
 	union {
 		struct {
-			__be32 chan;
+			__be32 chan[AD7768_MAX_AGGR_DEVICES];
 			aligned_s64 timestamp;
 		} scan;
 		__be32 d32;
@@ -478,7 +482,7 @@ static int ad7768_set_mode(struct ad7768_state *st,
 				 AD7768_CONV_MODE_MSK, AD7768_CONV_MODE(mode));
 }
 
-static int ad7768_scan_direct(struct iio_dev *indio_dev)
+static int ad7768_scan_direct(struct iio_dev *indio_dev, unsigned int chan)
 {
 	struct ad7768_state *st = iio_priv(indio_dev);
 	int readval, ret;
@@ -492,9 +496,15 @@ static int ad7768_scan_direct(struct iio_dev *indio_dev)
 	if (!ret)
 		return -ETIMEDOUT;
 
-	ret = regmap_read(st->regmap24, AD7768_REG24_ADC_DATA, &readval);
-	if (ret)
-		return ret;
+	if (st->num_devices > 1) {
+		ret = regmap_read(st->regmap24_anc[chan], AD7768_REG24_ADC_DATA, &readval);
+		if (ret)
+			return ret;
+	} else {
+		ret = regmap_read(st->regmap24, AD7768_REG24_ADC_DATA, &readval);
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * When the decimation rate is set to x8, the ADC data precision is
@@ -989,7 +999,7 @@ static int ad7768_read_raw(struct iio_dev *indio_dev,
 		if (!iio_device_claim_direct(indio_dev))
 			return -EBUSY;
 
-		ret = ad7768_scan_direct(indio_dev);
+		ret = ad7768_scan_direct(indio_dev, chan->channel);
 
 		iio_device_release_direct(indio_dev);
 		if (ret < 0)
@@ -1391,6 +1401,8 @@ static int ad7768_offload_buffer_postenable(struct iio_dev *indio_dev)
 	st->offload_xfer.len = spi_bpw_to_bytes(scan_type->realbits);
 	st->offload_xfer.bits_per_word = scan_type->realbits;
 	st->offload_xfer.offload_flags = SPI_OFFLOAD_XFER_RX_STREAM;
+	if (st->num_devices > 1)
+		st->offload_xfer.multi_lane_mode = SPI_MULTI_LANE_MODE_STRIPE;
 
 	spi_message_init_with_transfers(&st->offload_msg, &st->offload_xfer, 1);
 	st->offload_msg.offload = st->offload;
@@ -1694,6 +1706,56 @@ static int ad7768_parse_aaf_gain(struct device *dev, struct ad7768_state *st)
 	return 0;
 }
 
+static int ad7768_probe_multidevices(struct iio_dev *indio_dev)
+{
+	struct ad7768_state *st = iio_priv(indio_dev);
+	struct device *dev = indio_dev->dev.parent;
+	struct iio_chan_spec *channels;
+	unsigned long *masks;
+	u8 cs;
+	int i;
+
+	indio_dev->num_channels = st->num_devices * st->chip->num_channels;
+	channels = devm_kcalloc(dev, indio_dev->num_channels, sizeof(*channels), GFP_KERNEL);
+	if (!channels)
+		return -ENOMEM;
+
+	for (i = 0; i < st->num_devices; i++) {
+		struct iio_chan_spec *chan = &channels[i];
+
+		*chan = *st->chip->channel_spec;
+		chan->channel = i;
+		chan->scan_index = i;
+	}
+
+	indio_dev->channels = channels;
+
+	/* One mask entry, considering single channel ADCs, plus a zero terminator */
+	masks = devm_kcalloc(dev, 2, sizeof(*masks), GFP_KERNEL);
+	if (!masks)
+		return -ENOMEM;
+
+	masks[0] = GENMASK(st->num_devices - 1, 0);
+	indio_dev->available_scan_masks = masks;
+
+	/* Setup ancillary SPI devices for single device access  */
+	for (i = 0; i < st->num_devices; i++) {
+		cs = spi_get_chipselect(st->spi, i);
+		st->spi_anc[i] = devm_spi_new_ancillary_device_with_lane(st->spi,
+									 cs, i, 0);
+		if (IS_ERR(st->spi_anc[i]))
+			return dev_err_probe(dev, PTR_ERR(st->spi_anc[i]),
+					     "failed to register ancillary device\n");
+
+		st->regmap24_anc[i] = devm_regmap_init_spi(st->spi_anc[i],
+							   &ad7768_regmap24_config);
+		if (IS_ERR(st->regmap24_anc[i]))
+			return PTR_ERR(st->regmap24_anc[i]);
+	}
+
+	return 0;
+}
+
 static bool ad7768_offload_trigger_match(struct spi_offload_trigger *trigger,
 					 enum spi_offload_trigger_type type,
 					 u64 *args, u32 nargs)
@@ -1830,6 +1892,15 @@ static int ad7768_probe(struct spi_device *spi)
 
 	st->chip = spi_get_device_match_data(spi);
 	st->spi = spi;
+	/*
+	 * This family is composed of single-lane devices, so we assume that
+	 * each lane is bound to a different device.
+	 */
+	st->num_devices = spi->num_rx_lanes;
+	if (st->num_devices > AD7768_MAX_AGGR_DEVICES)
+		return dev_err_probe(&spi->dev, -EINVAL,
+				     "Too many devices (%u), max %d supported\n",
+				     st->num_devices, AD7768_MAX_AGGR_DEVICES);
 
 	st->regmap = devm_regmap_init_spi(spi, &ad7768_regmap_config);
 	if (IS_ERR(st->regmap))
@@ -1853,11 +1924,18 @@ static int ad7768_probe(struct spi_device *spi)
 
 	st->mclk_freq = clk_get_rate(st->mclk);
 
-	indio_dev->channels = st->chip->channel_spec;
-	indio_dev->num_channels = st->chip->num_channels;
 	indio_dev->name = st->chip->name;
 	indio_dev->info = &ad7768_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
+	if (st->num_devices > 1) {
+		ret = ad7768_probe_multidevices(indio_dev);
+		if (ret)
+			return dev_err_probe(&spi->dev, ret,
+					     "Failed to configure multidevice\n");
+	} else {
+		indio_dev->channels = st->chip->channel_spec;
+		indio_dev->num_channels = st->chip->num_channels;
+	}
 
 	/* Register VCM output regulator */
 	if (st->chip->has_vcm_regulator) {
@@ -1889,7 +1967,7 @@ static int ad7768_probe(struct spi_device *spi)
 			return ret;
 	}
 
-	ret = ad7768_set_channel_label(indio_dev, st->chip->num_channels);
+	ret = ad7768_set_channel_label(indio_dev, st->num_devices);
 	if (ret)
 		return ret;
 
