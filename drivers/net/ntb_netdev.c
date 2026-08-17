@@ -123,7 +123,7 @@ static void ntb_netdev_event_handler(void *data, int link_is_up)
 }
 
 static void ntb_netdev_rx_handler(struct ntb_transport_qp *qp, void *qp_data,
-				  void *data, int len)
+				  void *data, int len, unsigned int meta)
 {
 	struct ntb_netdev_queue *q = qp_data;
 	struct ntb_netdev *dev = q->ntdev;
@@ -258,7 +258,7 @@ static netdev_tx_t ntb_netdev_start_xmit(struct sk_buff *skb,
 
 	ntb_netdev_maybe_stop_tx(ndev, q, tx_stop);
 
-	rc = ntb_transport_tx_enqueue(q->qp, skb, skb->data, skb->len);
+	rc = ntb_transport_tx_enqueue(q->qp, skb, skb->data, skb->len, 0);
 	if (rc)
 		goto err;
 
