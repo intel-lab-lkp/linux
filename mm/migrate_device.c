@@ -1406,16 +1406,17 @@ int migrate_device_range(unsigned long *src_pfns, unsigned long start,
 	for (pfn = start, i = 0; i < npages; pfn++, i++) {
 		struct page *page = pfn_to_page(pfn);
 		struct folio *folio = page_folio(page);
-		unsigned int nr = 1;
+		unsigned long nr, slots;
 
 		src_pfns[i] = migrate_device_pfn_lock(pfn);
 		nr = folio_nr_pages(folio);
+		slots = min(nr, npages - i);
 		if (nr > 1) {
 			src_pfns[i] |= MIGRATE_PFN_COMPOUND;
-			for (j = 1; j < nr; j++)
+			for (j = 1; j < slots; j++)
 				src_pfns[i+j] = 0;
-			i += j - 1;
-			pfn += j - 1;
+			i += slots - 1;
+			pfn += slots - 1;
 		}
 	}
 
@@ -1440,15 +1441,16 @@ int migrate_device_pfns(unsigned long *src_pfns, unsigned long npages)
 	for (i = 0; i < npages; i++) {
 		struct page *page = pfn_to_page(src_pfns[i]);
 		struct folio *folio = page_folio(page);
-		unsigned int nr = 1;
+		unsigned long nr, slots;
 
 		src_pfns[i] = migrate_device_pfn_lock(src_pfns[i]);
 		nr = folio_nr_pages(folio);
+		slots = min(nr, npages - i);
 		if (nr > 1) {
 			src_pfns[i] |= MIGRATE_PFN_COMPOUND;
-			for (j = 1; j < nr; j++)
+			for (j = 1; j < slots; j++)
 				src_pfns[i+j] = 0;
-			i += j - 1;
+			i += slots - 1;
 		}
 	}
 
