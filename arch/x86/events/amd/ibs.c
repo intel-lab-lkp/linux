@@ -1318,10 +1318,30 @@ static void perf_ibs_parse_ld_st_data(__u64 sample_type,
 	}
 }
 
+static void perf_ibs_parse_fetch_data(__u64 sample_type,
+				      struct perf_ibs_data *ibs_data,
+				      struct perf_sample_data *data)
+{
+	union ibs_fetch_ctl fetch_ctl;
+
+	if (!(sample_type & PERF_SAMPLE_PHYS_ADDR))
+		return;
+
+	fetch_ctl.val = ibs_data->regs[ibs_fetch_msr_idx(MSR_AMD64_IBSFETCHCTL)];
+	if (!fetch_ctl.phy_addr_valid)
+		return;
+
+	data->phys_addr = ibs_data->regs[ibs_fetch_msr_idx(MSR_AMD64_IBSFETCHPHYSAD)];
+	data->sample_flags |= PERF_SAMPLE_PHYS_ADDR;
+}
+
 static bool perf_ibs_is_mem_sample_type(struct perf_ibs *perf_ibs,
 					struct perf_event *event)
 {
 	u64 sample_type = event->attr.sample_type;
+
+	if (perf_ibs == &perf_ibs_fetch)
+		return sample_type & PERF_SAMPLE_PHYS_ADDR;
 
 	return perf_ibs == &perf_ibs_op &&
 	       sample_type & (PERF_SAMPLE_DATA_SRC |
@@ -1555,6 +1575,8 @@ fail:
 
 	if (perf_ibs == &perf_ibs_op)
 		perf_ibs_parse_ld_st_data(event->attr.sample_type, &ibs_data, &data);
+	else
+		perf_ibs_parse_fetch_data(event->attr.sample_type, &ibs_data, &data);
 
 	/*
 	 * rip recorded by IbsOpRip will not be consistent with rsp and rbp
