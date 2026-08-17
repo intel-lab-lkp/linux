@@ -4667,6 +4667,10 @@ static int pqi_submit_raid_request_synchronous(struct pqi_ctrl_info *ctrl_info,
 	}
 
 	io_request = pqi_alloc_io_request(ctrl_info, NULL);
+	if (!io_request) {
+		rc = SCSI_MLQUEUE_HOST_BUSY;
+		goto out;
+	}
 
 	put_unaligned_le16(io_request->index,
 		&(((struct pqi_raid_path_request *)request)->request_id));
@@ -6353,6 +6357,9 @@ static int pqi_lun_reset(struct pqi_ctrl_info *ctrl_info, struct pqi_scsi_dev *d
 	struct pqi_task_management_request *request;
 
 	io_request = pqi_alloc_io_request(ctrl_info, NULL);
+	if (!io_request)
+		return SCSI_MLQUEUE_HOST_BUSY;
+
 	io_request->io_complete_callback = pqi_lun_reset_complete;
 	io_request->context = &wait;
 
