@@ -29,6 +29,7 @@
    alias
    mptcp-sysctl
    generic-hdlc
+   team
    timestamping
 
 Todolist:
@@ -136,7 +137,6 @@ Todolist:
 *   tc-queue-filters
 *   tcp_ao
 *   tcp-thin
-*   team
 *   tipc
 *   tproxy
 *   tuntap
