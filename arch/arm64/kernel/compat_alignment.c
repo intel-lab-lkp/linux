@@ -2,6 +2,7 @@
 // based on arch/arm/mm/alignment.c
 
 #include <linux/compiler.h>
+#include <linux/compat.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -41,8 +42,8 @@
 	(((hi16) & 0xe000) == 0xe000 && ((hi16) & 0x1800))
 
 union offset_union {
-	unsigned long un;
-	  signed long sn;
+	u32 un;
+	s32 sn;
 };
 
 #define TYPE_ERROR	0
@@ -51,7 +52,7 @@ union offset_union {
 #define TYPE_DONE	3
 
 static void
-do_alignment_finish_ldst(unsigned long addr, u32 instr, struct pt_regs *regs,
+do_alignment_finish_ldst(u32 addr, u32 instr, struct pt_regs *regs,
 			 union offset_union offset)
 {
 	if (!LDST_U_BIT(instr))
@@ -65,7 +66,7 @@ do_alignment_finish_ldst(unsigned long addr, u32 instr, struct pt_regs *regs,
 }
 
 static int
-do_alignment_ldrdstrd(unsigned long addr, u32 instr, struct pt_regs *regs)
+do_alignment_ldrdstrd(u32 addr, u32 instr, struct pt_regs *regs)
 {
 	unsigned int rd = RD_BITS(instr);
 	unsigned int rd2;
@@ -85,14 +86,15 @@ do_alignment_ldrdstrd(unsigned long addr, u32 instr, struct pt_regs *regs)
 	if (load) {
 		unsigned int val, val2;
 
-		if (get_user(val, (u32 __user *)addr) ||
-		    get_user(val2, (u32 __user *)(addr + 4)))
+		if (get_user(val, (u32 __user *)compat_ptr(addr)) ||
+		    get_user(val2, (u32 __user *)compat_ptr(addr + 4)))
 			return TYPE_FAULT;
 		regs->regs[rd] = val;
 		regs->regs[rd2] = val2;
 	} else {
-		if (put_user(regs->regs[rd], (u32 __user *)addr) ||
-		    put_user(regs->regs[rd2], (u32 __user *)(addr + 4)))
+		if (put_user(regs->regs[rd], (u32 __user *)compat_ptr(addr)) ||
+		    put_user(regs->regs[rd2],
+			     (u32 __user *)compat_ptr(addr + 4)))
 			return TYPE_FAULT;
 	}
 	return TYPE_LDST;
@@ -112,10 +114,10 @@ do_alignment_ldrdstrd(unsigned long addr, u32 instr, struct pt_regs *regs)
  * PU = 10             A                    B
  */
 static int
-do_alignment_ldmstm(unsigned long addr, u32 instr, struct pt_regs *regs)
+do_alignment_ldmstm(u32 addr, u32 instr, struct pt_regs *regs)
 {
 	unsigned int rd, rn, nr_regs, regbits;
-	unsigned long eaddr, newaddr;
+	u32 eaddr, newaddr;
 	unsigned int val;
 
 	/* count the number of registers in the mask to be transferred */
@@ -137,7 +139,8 @@ do_alignment_ldmstm(unsigned long addr, u32 instr, struct pt_regs *regs)
 	     regbits >>= 1, rd += 1)
 		if (regbits & 1) {
 			if (LDST_L_BIT(instr)) {
-				if (get_user(val, (u32 __user *)eaddr))
+				if (get_user(val,
+					     (u32 __user *)compat_ptr(eaddr)))
 					return TYPE_FAULT;
 				if (rd < 15)
 					regs->regs[rd] = val;
@@ -152,7 +155,8 @@ do_alignment_ldmstm(unsigned long addr, u32 instr, struct pt_regs *regs)
 				 * to refer to PC, just add 8 here.
 				 */
 				val = (rd < 15) ? regs->regs[rd] : regs->pc + 8;
-				if (put_user(val, (u32 __user *)eaddr))
+				if (put_user(val,
+					     (u32 __user *)compat_ptr(eaddr)))
 					return TYPE_FAULT;
 			}
 			eaddr += 4;
@@ -311,7 +315,7 @@ int do_compat_alignment_fixup(unsigned long addr, struct pt_regs *regs)
 {
 	union offset_union offset;
 	unsigned long instrptr;
-	int (*handler)(unsigned long addr, u32 instr, struct pt_regs *regs);
+	int (*handler)(u32 addr, u32 instr, struct pt_regs *regs);
 	unsigned int type;
 	u32 instr = 0;
 	int isize = 4;
