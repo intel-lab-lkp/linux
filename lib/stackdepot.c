@@ -28,6 +28,7 @@
 #include <linux/kmsan.h>
 #include <linux/list.h>
 #include <linux/mm.h>
+#include <linux/moduleparam.h>
 #include <linux/mutex.h>
 #include <linux/poison.h>
 #include <linux/printk.h>
@@ -100,8 +101,8 @@ static const char *const counter_names[] = {
 	[DEPOT_COUNTER_REFD_FREES]	= "refcounted_frees",
 	[DEPOT_COUNTER_REFD_INUSE]	= "refcounted_in_use",
 	[DEPOT_COUNTER_FREELIST_SIZE]	= "freelist_size",
-	[DEPOT_COUNTER_PERSIST_COUNT]	= "persistent_count",
-	[DEPOT_COUNTER_PERSIST_BYTES]	= "persistent_bytes",
+	[DEPOT_COUNTER_PERSIST_COUNT]	= "hash_persistent_count",
+	[DEPOT_COUNTER_PERSIST_BYTES]	= "hash_persistent_bytes",
 };
 static_assert(ARRAY_SIZE(counter_names) == DEPOT_COUNTER_COUNT);
 
@@ -180,6 +181,10 @@ static_assert(STACK_DEPOT_TRIE_POOL_FIRST_SLOT < STACK_DEPOT_TRIE_POOL_SLOTS);
 static DEFINE_STATIC_KEY_FALSE(stack_depot_trie_enabled);
 static const struct stack_depot_trie_children __rcu *stack_depot_trie_root;
 static DEFINE_RAW_SPINLOCK(stack_depot_trie_writer_lock);
+static bool stack_depot_trie_requested;
+
+module_param_named(trie_enabled, stack_depot_trie_requested, bool, 0);
+MODULE_PARM_DESC(trie_enabled, "Enable stack depot trie storage at boot");
 
 #define DEPOT_POOL_INDEX_MASK ((1U << DEPOT_POOL_INDEX_BITS) - 1)
 #define DEPOT_OFFSET_MASK ((1U << DEPOT_OFFSET_BITS) - 1)
@@ -236,8 +241,9 @@ static u32 trie_stack_id(depot_stack_handle_t handle)
 /*
  * Trie handles encode a dense stack ID. The side table maps that ID to a node
  * pointer for lockless fetch and print paths, which can run from diagnostic
- * contexts where taking a lock would be unsafe. Additional directories and
- * chunks are published lazily as stack IDs grow.
+ * contexts where taking a lock would be unsafe. Initialization installs the
+ * root; early initialization also installs the first directory and chunk.
+ * Additional directories and chunks are published lazily as stack IDs grow.
  */
 #define STACK_DEPOT_TRIE_SIDE_TABLE_CHUNK_SIZE \
 	(PAGE_SIZE / sizeof(struct stack_depot_trie_node *))
@@ -373,6 +379,75 @@ trie_side_table_prepare_stack_slot(struct stack_depot_trie_side_prealloc *preall
 	}
 
 	return id;
+}
+
+static inline unsigned int trie_side_table_root_size_for_max_id(u32 max_stack_id)
+{
+	unsigned int top_size;
+
+	top_size = DIV_ROUND_UP(max_stack_id,
+				STACK_DEPOT_TRIE_SIDE_TABLE_CHUNK_SIZE);
+	return DIV_ROUND_UP(top_size, STACK_DEPOT_TRIE_SIDE_TABLE_DIR_SIZE);
+}
+
+static int __init stack_depot_trie_init_memblock(void)
+{
+	struct stack_depot_trie_side_root *root_vec;
+	struct stack_depot_trie_side_dir *first_dir;
+	const struct stack_depot_trie_node __rcu **first_chunk;
+	size_t root_bytes;
+	u32 max_stack_id;
+	unsigned int root_size;
+
+	max_stack_id = trie_max_stack_id();
+	if (!max_stack_id)
+		return -EINVAL;
+	root_size = trie_side_table_root_size_for_max_id(max_stack_id);
+	root_bytes = struct_size_t(struct stack_depot_trie_side_root, dirs,
+				   root_size);
+
+	root_vec = memblock_alloc(root_bytes, __alignof__(*root_vec));
+	if (!root_vec)
+		return -ENOMEM;
+	first_dir = memblock_alloc(PAGE_SIZE, PAGE_SIZE);
+	if (!first_dir) {
+		memblock_free(root_vec, root_bytes);
+		return -ENOMEM;
+	}
+	first_chunk = memblock_alloc(PAGE_SIZE, PAGE_SIZE);
+	if (!first_chunk) {
+		memblock_free(first_dir, PAGE_SIZE);
+		memblock_free(root_vec, root_bytes);
+		return -ENOMEM;
+	}
+
+	root_vec->dir_capacity = root_size;
+	RCU_INIT_POINTER(root_vec->dirs[0], first_dir);
+	RCU_INIT_POINTER(first_dir->chunks[0], first_chunk);
+	trie_side_table_root = root_vec;
+	static_branch_enable(&stack_depot_trie_enabled);
+	return 0;
+}
+
+static int stack_depot_trie_init(void)
+{
+	struct stack_depot_trie_side_root *root_vec;
+	unsigned int root_size;
+	u32 max_stack_id;
+
+	max_stack_id = trie_max_stack_id();
+	if (!max_stack_id)
+		return -EINVAL;
+
+	root_size = trie_side_table_root_size_for_max_id(max_stack_id);
+	root_vec = kvzalloc_flex(*root_vec, dirs, root_size);
+	if (!root_vec)
+		return -ENOMEM;
+
+	root_vec->dir_capacity = root_size;
+	trie_side_table_root = root_vec;
+	static_branch_enable(&stack_depot_trie_enabled);
+	return 0;
 }
 
 static int trie_side_table_get_prealloc(gfp_t gfp_flags,
@@ -702,7 +777,7 @@ static void init_stack_table(unsigned long entries)
 		INIT_LIST_HEAD(&stack_table[i]);
 }
 
-/* Allocates a hash table via memblock. Can only be used during early boot. */
+/* Initializes hash and optional trie storage during early boot. */
 int __init stack_depot_early_init(void)
 {
 	unsigned long entries = 0;
@@ -776,11 +851,15 @@ int __init stack_depot_early_init(void)
 		stack_depot_disabled = true;
 		return -ENOMEM;
 	}
+	if (stack_depot_trie_requested && stack_depot_trie_init_memblock()) {
+		pr_warn("trie storage initialization failed, disabling trie storage\n");
+		stack_depot_trie_requested = false;
+	}
 
 	return 0;
 }
 
-/* Allocates a hash table via kvcalloc. Can be used after boot. */
+/* Initializes hash and optional trie storage after boot. */
 int stack_depot_init(void)
 {
 	static DEFINE_MUTEX(stack_depot_init_mutex);
@@ -834,6 +913,15 @@ int stack_depot_init(void)
 		kvfree(stack_table);
 		stack_depot_disabled = true;
 		ret = -ENOMEM;
+		goto out_unlock;
+	}
+	if (stack_depot_trie_requested) {
+		ret = stack_depot_trie_init();
+		if (ret) {
+			pr_warn("trie storage initialization failed, disabling trie storage\n");
+			stack_depot_trie_requested = false;
+			ret = 0;
+		}
 	}
 
 out_unlock:

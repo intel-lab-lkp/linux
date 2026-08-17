@@ -7387,6 +7387,13 @@ Kernel parameters
 			stack traces. Pools are allocated on-demand up to this
 			limit. Default value is 8191 pools.
 
+	stackdepot.trie_enabled= [KNL]
+			Format: <bool>
+			Enable trie storage for persistent, non-refcounted
+			stack depot records at boot. Disabled by default.
+			stack_depot_max_pools must leave unused pool-index
+			values for trie handles.
+
 	stacktrace	[FTRACE]
 			Enable the stack tracer on boot up.
 
