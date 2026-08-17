@@ -22,6 +22,7 @@
 
    msg_zerocopy
    driver
+   ipv6
    napi
    vxlan
    netif-msg
@@ -89,7 +90,6 @@ Todolist:
 *   ip_dynaddr
 *   ipsec
 *   ip-sysctl
-*   ipv6
 *   ipvlan
 *   ipvs-sysctl
 *   kcm
