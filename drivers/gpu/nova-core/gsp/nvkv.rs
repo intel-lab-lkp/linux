@@ -20,6 +20,9 @@ use kernel::{
 mod encode;
 pub(crate) use encode::*;
 
+mod decode;
+pub(crate) use decode::*;
+
 /// The identifier of an NVKV key.
 pub(crate) type KeyId = u16;
 
