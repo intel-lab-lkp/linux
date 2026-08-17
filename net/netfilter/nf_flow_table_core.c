@@ -394,9 +394,10 @@ static void flow_offload_del(struct nf_flowtable *flow_table,
 
 void flow_offload_teardown(struct flow_offload *flow)
 {
-	clear_bit(IPS_OFFLOAD_BIT, &flow->ct->status);
-	if (!test_and_set_bit(NF_FLOW_TEARDOWN, &flow->flags))
+	if (!test_and_set_bit(NF_FLOW_TEARDOWN, &flow->flags)) {
+		clear_bit(IPS_OFFLOAD_BIT, &flow->ct->status);
 		flow_offload_fixup_ct(flow);
+	}
 }
 EXPORT_SYMBOL_GPL(flow_offload_teardown);
 
