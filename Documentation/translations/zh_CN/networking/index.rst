@@ -29,6 +29,7 @@
    alias
    mptcp-sysctl
    generic-hdlc
+   sriov
    team
    timestamping
 
@@ -128,7 +129,6 @@ Todolist:
 *   secid
 *   seg6-sysctl
 *   smc-sysctl
-*   sriov
 *   statistics
 *   strparser
 *   switchdev
