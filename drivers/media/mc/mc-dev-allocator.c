@@ -68,7 +68,8 @@ static struct media_device *__media_device_get(struct device *dev,
 		if (mdi->mdev.dev != dev)
 			continue;
 
-		kref_get(&mdi->refcount);
+		if (!kref_get_unless_zero(&mdi->refcount))
+			continue;
 
 		/* get module reference for the media_device owner */
 		if (owner != mdi->owner && !try_module_get(mdi->owner))
