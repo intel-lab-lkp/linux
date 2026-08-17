@@ -2657,6 +2657,11 @@ static int cdns3_gadget_ep_queue(struct usb_ep *ep, struct usb_request *request,
 		struct cdns3_request *priv_req;
 
 		zlp_request = cdns3_gadget_ep_alloc_request(ep, GFP_ATOMIC);
+		if (!zlp_request) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
 		zlp_request->buf = priv_dev->zlp_buf;
 		zlp_request->length = 0;
 
@@ -2668,6 +2673,7 @@ static int cdns3_gadget_ep_queue(struct usb_ep *ep, struct usb_request *request,
 		ret = __cdns3_gadget_ep_queue(ep, zlp_request, gfp_flags);
 	}
 
+out:
 	spin_unlock_irqrestore(&priv_dev->lock, flags);
 	return ret;
 }
