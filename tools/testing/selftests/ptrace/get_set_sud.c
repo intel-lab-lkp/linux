@@ -22,6 +22,14 @@ TEST(get_set_sud)
 	int ret = 0;
 	int status;
 
+	ret = prctl(PR_SET_SYSCALL_USER_DISPATCH, PR_SYS_DISPATCH_OFF,
+		    0UL, 0UL, 0UL);
+	if (ret == -1 && errno == EINVAL)
+		SKIP(return, "Syscall User Dispatch is not supported");
+	ASSERT_EQ(0, ret) {
+		TH_LOG("PR_SET_SYSCALL_USER_DISPATCH: %m");
+	}
+
 	child = fork();
 	ASSERT_GE(child, 0);
 	if (child == 0) {
