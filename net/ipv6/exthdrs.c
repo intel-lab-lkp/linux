@@ -445,8 +445,6 @@ looped_back:
 	hdr->segments_left--;
 	addr = hdr->segments + hdr->segments_left;
 
-	skb_push(skb, sizeof(struct ipv6hdr));
-
 	if (skb->ip_summed == CHECKSUM_COMPLETE)
 		seg6_update_csum(skb);
 
@@ -455,6 +453,7 @@ looped_back:
 	ip6_route_input(skb);
 
 	if (skb_dst(skb)->error) {
+		skb_push(skb, -skb_network_offset(skb));
 		dst_input(skb);
 		return -1;
 	}
@@ -469,10 +468,10 @@ looped_back:
 		}
 		ipv6_hdr(skb)->hop_limit--;
 
-		skb_pull(skb, sizeof(struct ipv6hdr));
 		goto looped_back;
 	}
 
+	skb_push(skb, -skb_network_offset(skb));
 	dst_input(skb);
 
 	return -1;
