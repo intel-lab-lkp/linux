@@ -2222,9 +2222,10 @@ static bool mlx5e_hw_gro_skb_has_enough_space(struct sk_buff *skb,
 	int nr_frags = skb_shinfo(skb)->nr_frags;
 
 	if (page_size >= GRO_LEGACY_MAX_SIZE)
-		return skb->len + data_bcnt <= GRO_LEGACY_MAX_SIZE;
+		return skb->len + data_bcnt < GRO_LEGACY_MAX_SIZE;
 	else
-		return page_size * nr_frags + data_bcnt <= GRO_LEGACY_MAX_SIZE;
+		return skb_headlen(skb) + page_size * nr_frags + data_bcnt <
+			GRO_LEGACY_MAX_SIZE;
 }
 
 static void mlx5e_handle_rx_cqe_mpwrq_shampo(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
