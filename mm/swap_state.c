@@ -22,6 +22,7 @@
 #include <linux/vmalloc.h>
 #include <linux/huge_mm.h>
 #include <linux/shmem_fs.h>
+#include <linux/zswap.h>
 #include "internal.h"
 #include "swap_table.h"
 #include "swap.h"
@@ -257,11 +258,20 @@ static void __swap_cache_do_del_folio(struct swap_cluster_info *ci,
 	unsigned int ci_start, ci_off, ci_end;
 	bool folio_swapped = false, need_free = false;
 	unsigned long nr_pages = folio_nr_pages(folio);
+	void *shadow_parked;
 
 	VM_WARN_ON_ONCE(__swap_entry_to_cluster(entry) != ci);
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_locked(folio), folio);
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_swapcache(folio), folio);
 	VM_WARN_ON_ONCE_FOLIO(folio_test_writeback(folio), folio);
+
+	/*
+	 * A zswap writeback buffer parked the slot's original shadow in the
+	 * zswap tree: restore it into the slot for later swap-in.
+	 */
+	shadow_parked = zswap_lookup_and_clear_shadows(folio);
+	if (shadow_parked)
+		shadow = shadow_parked;
 
 	si = __swap_entry_to_info(entry);
 	ci_start = swp_cluster_offset(entry);

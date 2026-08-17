@@ -4759,6 +4759,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	unsigned long page_idx;
 	unsigned long address;
 	pte_t *ptep;
+	void *shadow;
 
 	if (!pte_unmap_same(vmf))
 		goto out;
@@ -4879,6 +4880,10 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 		ret = VM_FAULT_HWPOISON;
 		goto out_page;
 	}
+
+	shadow = zswap_lookup_and_clear_shadows(folio);
+	if (shadow)
+		workingset_refault(folio, shadow);
 
 	/*
 	 * KSM sometimes has to copy on read faults, for example, if

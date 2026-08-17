@@ -972,6 +972,79 @@ static bool zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 /*********************************
 * writeback code
 **********************************/
+
+#define ZSWAP_WRITEBACK_NO_SHADOW xa_mk_value(0)
+
+/*
+ * zswap_folio_is_writeback_buffer - is @folio a zswap writeback buffer?
+ * @folio: the folio being examined (typically a swap cache folio under reclaim)
+ *
+ * A folio is a zswap writeback buffer when every one of its swap offsets holds
+ * a parked writeback shadow (a real shadow or the ZSWAP_WRITEBACK_NO_SHADOW
+ * sentinel) in the zswap tree rather than a live zswap entry.
+ *
+ * Return: true if @folio is a writeback buffer, in which case the reclaim path
+ * must not mint a fresh workingset shadow for it.
+ */
+bool zswap_folio_is_writeback_buffer(struct folio *folio)
+{
+	swp_entry_t swp = folio->swap;
+	unsigned long nr_pages = folio_nr_pages(folio);
+	pgoff_t offset = swp_offset(swp);
+	unsigned long i;
+
+	if (zswap_never_enabled())
+		return false;
+
+	for (i = 0; i < nr_pages; i++) {
+		swp_entry_t e = swp_entry(swp_type(swp), offset + i);
+
+		if (!xa_is_value(xa_load(swap_zswap_tree(e), offset + i)))
+			return false;
+	}
+
+	return true;
+}
+
+/*
+ * zswap_lookup_and_clear_shadows - retrieve and clear @folio's parked shadow(s)
+ * @folio: the writeback buffer folio (or the swapin folio that consumed it)
+ *
+ * Remove any parked writeback shadows for @folio's swap offset(s) from the
+ * zswap tree.
+ *
+ * Return: the preserved workingset shadow, or NULL if the slot(s) had no shadow
+ * (sentinel only) or nothing parked. The caller either restores the returned
+ * shadow into the swap slot (buffer dropped) or feeds it to workingset_refault()
+ * (buffer consumed by a swapin); clearing here ensures the two paths never
+ * double-count.
+ */
+void *zswap_lookup_and_clear_shadows(struct folio *folio)
+{
+	swp_entry_t swp = folio->swap;
+	unsigned long nr_pages = folio_nr_pages(folio);
+	pgoff_t offset = swp_offset(swp);
+	void *shadow = NULL;
+	unsigned long i;
+
+	if (zswap_never_enabled())
+		return NULL;
+
+	for (i = 0; i < nr_pages; i++) {
+		swp_entry_t e = swp_entry(swp_type(swp), offset + i);
+		struct xarray *tree = swap_zswap_tree(e);
+		void *parked = xa_load(tree, offset + i);
+
+		if (!xa_is_value(parked))
+			continue;
+		xa_erase(tree, offset + i);
+		if (parked != ZSWAP_WRITEBACK_NO_SHADOW)
+			shadow = parked;
+	}
+
+	return shadow;
+}
+
 /*
  * Attempts to free an entry by adding a folio to the swap cache,
  * decompressing the entry data into the folio, and issuing a
@@ -992,12 +1065,15 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	struct folio *folio;
 	struct mempolicy *mpol;
 	struct swap_info_struct *si;
+	void *shadow;
 	int ret = 0;
 
 	/* try to allocate swap cache folio */
 	si = get_swap_device(swpentry);
 	if (!si)
 		return -EEXIST;
+
+	shadow = swap_cache_get_shadow(swpentry);
 
 	mpol = get_task_policy(current);
 	folio = swap_cache_alloc_folio(swpentry, GFP_KERNEL, BIT(0), NULL, mpol,
@@ -1034,7 +1110,9 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 		goto out;
 	}
 
-	xa_erase(tree, offset);
+	if (!shadow)
+		shadow = ZSWAP_WRITEBACK_NO_SHADOW;
+	xa_store(tree, offset, shadow, GFP_KERNEL);
 
 	count_vm_event(ZSWPWB);
 	if (entry->objcg)
