@@ -320,7 +320,7 @@ static void platinum_init_info(struct fb_info *info,
 	fb_alloc_cmap(&info->cmap, 256, 0);
 
 	/* Fill fix common fields */
-	strcpy(info->fix.id, "platinum");
+	strscpy(info->fix.id, "platinum", sizeof(info->fix.id));
 	info->fix.mmio_start = pinfo->platinum_regs_phys;
 	info->fix.mmio_len = 0x1000;
 	info->fix.type = FB_TYPE_PACKED_PIXELS;
