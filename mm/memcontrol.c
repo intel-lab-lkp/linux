@@ -2296,8 +2296,12 @@ static bool is_memcg_drain_needed(struct memcg_stock_pcp *stock,
 		if (!memcg)
 			continue;
 
-		if (READ_ONCE(stock->nr_pages[i]) &&
-		    mem_cgroup_is_descendant(memcg, root_memcg)) {
+		/*
+		 * An empty slot still pins a css reference which
+		 * mem_cgroup_css_offline() relies on drain_all_stock()
+		 * to release.
+		 */
+		if (mem_cgroup_is_descendant(memcg, root_memcg)) {
 			flush = true;
 			break;
 		}
