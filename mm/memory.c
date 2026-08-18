@@ -4275,6 +4275,12 @@ static bool __wp_can_reuse_large_anon_folio(struct folio *folio,
 		folio_unlock(folio);
 	}
 
+	if (folio_may_be_lru_cached(folio) && !folio_test_lru(folio)) {
+		if (folio_ref_count(folio) != folio_large_mapcount(folio) + 1)
+			return false;
+		lru_add_drain();
+	}
+
 	if (folio_large_mapcount(folio) != folio_ref_count(folio))
 		return false;
 
