@@ -18,6 +18,7 @@
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
 #include <linux/usb/quirks.h>
+#include <linux/string_choices.h>
 #include <linux/of.h>
 #include "usb.h"
 
@@ -303,9 +304,9 @@ static DEVICE_ATTR_RO(urbnum);
 static ssize_t ltm_capable_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	if (usb_device_supports_ltm(to_usb_device(dev)))
-		return sysfs_emit(buf, "%s\n", "yes");
-	return sysfs_emit(buf, "%s\n", "no");
+	bool ltm = usb_device_supports_ltm(to_usb_device(dev));
+
+	return sysfs_emit(buf, "%s\n", str_yes_no(ltm));
 }
 static DEVICE_ATTR_RO(ltm_capable);
 
@@ -482,15 +483,9 @@ static DEVICE_ATTR_RW(level);
 static ssize_t usb2_hardware_lpm_show(struct device *dev,
 				      struct device_attribute *attr, char *buf)
 {
-	struct usb_device *udev = to_usb_device(dev);
-	const char *p;
+	bool lpm = to_usb_device(dev)->usb2_hw_lpm_allowed;
 
-	if (udev->usb2_hw_lpm_allowed == 1)
-		p = "enabled";
-	else
-		p = "disabled";
-
-	return sysfs_emit(buf, "%s\n", p);
+	return sysfs_emit(buf, "%s\n", str_enabled_disabled(lpm));
 }
 
 static ssize_t usb2_hardware_lpm_store(struct device *dev,
@@ -575,21 +570,16 @@ static ssize_t usb3_hardware_lpm_u1_show(struct device *dev,
 				      struct device_attribute *attr, char *buf)
 {
 	struct usb_device *udev = to_usb_device(dev);
-	const char *p;
-	int rc;
+	bool u1;
 
-	rc = usb_lock_device_interruptible(udev);
-	if (rc < 0)
+	if (usb_lock_device_interruptible(udev) < 0)
 		return -EINTR;
 
-	if (udev->usb3_lpm_u1_enabled)
-		p = "enabled";
-	else
-		p = "disabled";
+	u1 = udev->usb3_lpm_u1_enabled;
 
 	usb_unlock_device(udev);
 
-	return sysfs_emit(buf, "%s\n", p);
+	return sysfs_emit(buf, "%s\n", str_enabled_disabled(u1));
 }
 static DEVICE_ATTR_RO(usb3_hardware_lpm_u1);
 
@@ -597,21 +587,16 @@ static ssize_t usb3_hardware_lpm_u2_show(struct device *dev,
 				      struct device_attribute *attr, char *buf)
 {
 	struct usb_device *udev = to_usb_device(dev);
-	const char *p;
-	int rc;
+	bool u2;
 
-	rc = usb_lock_device_interruptible(udev);
-	if (rc < 0)
+	if (usb_lock_device_interruptible(udev) < 0)
 		return -EINTR;
 
-	if (udev->usb3_lpm_u2_enabled)
-		p = "enabled";
-	else
-		p = "disabled";
+	u2 = udev->usb3_lpm_u2_enabled;
 
 	usb_unlock_device(udev);
 
-	return sysfs_emit(buf, "%s\n", p);
+	return sysfs_emit(buf, "%s\n", str_enabled_disabled(u2));
 }
 static DEVICE_ATTR_RO(usb3_hardware_lpm_u2);
 
