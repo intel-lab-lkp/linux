@@ -146,6 +146,10 @@ pub(crate) fn kunit_tests(test_suite: Ident, mut module: ItemMod) -> Result<Toke
                 {
                     #[cfg(CONFIG_RUST_LOCKDEP_KUNIT_DEBUG_LOCKS)]
                     let __debug_locks_snapshot = ::kernel::bindings::debug_locks;
+                    #[cfg(CONFIG_RUST_KUNIT_TAINT_WARN_CHECK)]
+                    let __is_tainted_snapshot =
+                        ::kernel::bindings::test_taint(::kernel::bindings::TAINT_WARN);
+
 
                     (*_test).status = ::kernel::bindings::kunit_status_KUNIT_SUCCESS;
                     use ::kernel::kunit::is_test_result_ok;
@@ -156,6 +160,13 @@ pub(crate) fn kunit_tests(test_suite: Ident, mut module: ItemMod) -> Result<Toke
                         let __debug_locks_ok =
                             ::kernel::bindings::debug_locks == __debug_locks_snapshot;
                         assert!(__debug_locks_ok);
+                    }
+                    #[cfg(CONFIG_RUST_KUNIT_TAINT_WARN_CHECK)]
+                    {
+                        let __is_tainted =
+                            ::kernel::bindings::test_taint(::kernel::bindings::TAINT_WARN)
+                            == __is_tainted_snapshot;
+                        assert!(__is_tainted);
                     }
                 }
             }
