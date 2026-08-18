@@ -903,7 +903,9 @@ static int jz4780_dma_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	clk_prepare_enable(jzdma->clk);
+	ret = clk_prepare_enable(jzdma->clk);
+	if (ret)
+		return ret;
 
 	/* Property is optional, if it doesn't exist the value will remain 0. */
 	of_property_read_u32_index(dev->of_node, "ingenic,reserved-channels",
