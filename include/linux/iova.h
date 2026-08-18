@@ -101,6 +101,14 @@ void init_iova_domain(struct iova_domain *iovad, unsigned long granule,
 int iova_domain_init_rcaches(struct iova_domain *iovad);
 struct iova *find_iova(struct iova_domain *iovad, unsigned long pfn);
 void put_iova_domain(struct iova_domain *iovad);
+#if IS_ENABLED(CONFIG_IOMMU_IOVA_KUNIT_TEST)
+bool iova_domain_verify_invariants(struct iova_domain *iovad);
+bool iova_domain_has_deferred(struct iova_domain *iovad);
+extern bool iova_kunit_defer_erase;
+void iova_kunit_store_types(struct iova_domain *iovad, struct iova *iova,
+			    enum store_type *erase, enum store_type *marker,
+			    unsigned char *marker_nodes);
+#endif
 #else
 static inline int iova_cache_get(void)
 {

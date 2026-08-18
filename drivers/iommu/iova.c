@@ -224,6 +224,47 @@ static void iova_drain_deferred(struct iova_domain *iovad)
 	iovad->deferred_hi = 0;
 }
 
+#if IS_ENABLED(CONFIG_IOMMU_IOVA_KUNIT_TEST)
+/*
+ * Forces the deferred-erase path, which a real GFP_ATOMIC failure cannot
+ * be provoked into taking on demand.
+ */
+bool iova_kunit_defer_erase;
+EXPORT_SYMBOL_GPL(iova_kunit_defer_erase);
+
+/*
+ * Reports the store type the maple tree picks for erasing @iova and for marking
+ * it deferred. remove_iova() depends on the second being wr_exact_fit, so that
+ * it needs no node; the test asserts on both, and fails if a change to the
+ * store-type rules ever makes the marker store allocate.
+ */
+void iova_kunit_store_types(struct iova_domain *iovad, struct iova *iova,
+			    enum store_type *erase, enum store_type *marker,
+			    unsigned char *marker_nodes)
+{
+	unsigned long flags;
+
+	MA_STATE(mas, &iovad->mtree, iova->pfn_lo, iova->pfn_hi);
+
+	spin_lock_irqsave(&iovad->iova_lock, flags);
+
+	mas_preallocate(&mas, NULL, GFP_ATOMIC);
+	*erase = mas.store_type;
+	mas_destroy(&mas);
+
+	mas_set_range(&mas, iova->pfn_lo, iova->pfn_hi);
+	mas_preallocate(&mas, IOVA_DEFERRED, GFP_ATOMIC);
+	*marker = mas.store_type;
+	*marker_nodes = mas.node_request;
+	mas_destroy(&mas);
+
+	spin_unlock_irqrestore(&iovad->iova_lock, flags);
+}
+EXPORT_SYMBOL_GPL(iova_kunit_store_types);
+#else
+#define iova_kunit_defer_erase false
+#endif
+
 /*
  * Must not fail: DMA unmap runs in atomic context, so there is no caller to
  * return an error to.
@@ -239,7 +280,7 @@ static void remove_iova(struct iova_domain *iovad, struct iova *iova)
 	if (pfn_lo < iovad->dma_32bit_pfn)
 		iovad->max32_alloc_size = iovad->dma_32bit_pfn;
 
-	if (mas_store_gfp(&mas, NULL, GFP_ATOMIC)) {
+	if (iova_kunit_defer_erase || mas_store_gfp(&mas, NULL, GFP_ATOMIC)) {
 		/*
 		 * A NULL store gets widened over the neighbouring free ranges,
 		 * and the wider store may cause a maple tree rebalance, which
@@ -998,6 +1039,50 @@ void iova_cache_put(void)
 	mutex_unlock(&iova_cache_mutex);
 }
 EXPORT_SYMBOL_GPL(iova_cache_put);
+
+#if IS_ENABLED(CONFIG_IOMMU_IOVA_KUNIT_TEST)
+bool iova_domain_verify_invariants(struct iova_domain *iovad)
+{
+	struct iova *iova, *prev = NULL;
+	unsigned long flags;
+	bool ok = true;
+	MA_STATE(mas, &iovad->mtree, 0, 0);
+
+	spin_lock_irqsave(&iovad->iova_lock, flags);
+	mas_for_each(&mas, iova, ULONG_MAX) {
+		/* A marker occupies a slot but is not a real iova. */
+		if (iova == IOVA_DEFERRED)
+			continue;
+		if (mas.index != iova->pfn_lo || mas.last != iova->pfn_hi) {
+			pr_err("iova_verify: maple index [%lu,%lu] != iova [%lu,%lu]\n",
+			       mas.index, mas.last, iova->pfn_lo, iova->pfn_hi);
+			ok = false;
+		}
+		if (iova->pfn_lo > iova->pfn_hi) {
+			pr_err("iova_verify: pfn_lo=%lu > pfn_hi=%lu\n",
+			       iova->pfn_lo, iova->pfn_hi);
+			ok = false;
+		}
+		if (prev && prev->pfn_hi >= iova->pfn_lo) {
+			pr_err("iova_verify: overlap prev=[%lu,%lu] curr=[%lu,%lu]\n",
+			       prev->pfn_lo, prev->pfn_hi,
+			       iova->pfn_lo, iova->pfn_hi);
+			ok = false;
+		}
+		prev = iova;
+	}
+	spin_unlock_irqrestore(&iovad->iova_lock, flags);
+	return ok;
+}
+EXPORT_SYMBOL_GPL(iova_domain_verify_invariants);
+
+/* Test accessor: is there an outstanding deferred-erase backlog? */
+bool iova_domain_has_deferred(struct iova_domain *iovad)
+{
+	return iova_has_deferred(iovad);
+}
+EXPORT_SYMBOL_GPL(iova_domain_has_deferred);
+#endif /* CONFIG_IOMMU_IOVA_KUNIT_TEST */
 
 MODULE_AUTHOR("Anil S Keshavamurthy <anil.s.keshavamurthy@intel.com>");
 MODULE_DESCRIPTION("IOMMU I/O Virtual Address management");
