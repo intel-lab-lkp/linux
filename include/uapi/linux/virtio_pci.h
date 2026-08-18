@@ -193,6 +193,23 @@ struct virtio_pci_modern_common_cfg {
 
 	__le16 admin_queue_index;	/* read-only */
 	__le16 admin_queue_num;		/* read-only */
+
+	/*
+	 * Reports the shmid of the Device Memory Buffer region.  Valid once
+	 * VIRTIO_F_DMB has been negotiated.
+	 */
+	__le16 dmb_shm_id;		/* read-only */
+
+	/*
+	 * Reports the memory type of the Device Memory Buffer region.
+	 * VIRTIO_DMB_MEM_TYPE_COHERENT means the region is cache coherent: a
+	 * write by either side becomes visible to the other with no cache
+	 * maintenance by the driver.  Every other value is reserved, and a
+	 * driver must not accept VIRTIO_F_DMB unless the value is one it
+	 * supports.  Valid whenever the device offers VIRTIO_F_DMB, so that a
+	 * driver can read it before it accepts.
+	 */
+	__le16 dmb_mem_type;		/* read-only */
 };
 
 /* Fields in VIRTIO_PCI_CAP_PCI_CFG: */
@@ -235,6 +252,8 @@ struct virtio_pci_cfg_cap {
 #define VIRTIO_PCI_COMMON_Q_RESET	58
 #define VIRTIO_PCI_COMMON_ADM_Q_IDX	60
 #define VIRTIO_PCI_COMMON_ADM_Q_NUM	62
+#define VIRTIO_PCI_COMMON_DMB_SHM_ID	64
+#define VIRTIO_PCI_COMMON_DMB_MEM_TYPE	66
 
 #endif /* VIRTIO_PCI_NO_MODERN */
 
