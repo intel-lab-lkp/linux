@@ -231,7 +231,7 @@ static inline void free_pud_range(struct mmu_gather *tlb, p4d_t *p4d,
 		if (pud_none_or_clear_bad(pud))
 			continue;
 		free_pmd_range(tlb, pud, addr, next, floor, ceiling);
-	} while (pud++, addr = next, addr != end);
+	} while (pud++, cond_resched(), addr = next, addr != end);
 
 	start &= P4D_MASK;
 	if (start < floor)
