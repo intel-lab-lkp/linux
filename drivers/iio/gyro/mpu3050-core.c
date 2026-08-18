@@ -988,8 +988,10 @@ static int mpu3050_drdy_trigger_set_state(struct iio_trigger *trig,
 		return 0;
 	} else {
 		/* Else we're enabling the trigger from this point */
-		pm_runtime_get_sync(mpu3050->dev);
-		mpu3050->hw_irq_trigger = true;
+		PM_RUNTIME_ACQUIRE_IF_ENABLED_AUTOSUSPEND(mpu3050->dev, pm);
+		ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+		if (ret)
+			return ret;
 
 		/* Disable all things in the FIFO */
 		ret = regmap_write(mpu3050->map, MPU3050_FIFO_EN, 0);
@@ -1035,9 +1037,14 @@ static int mpu3050_drdy_trigger_set_state(struct iio_trigger *trig,
 		if (mpu3050->irq_opendrain)
 			val |= MPU3050_INT_OPEN;
 
+		mpu3050->hw_irq_trigger = true;
 		ret = regmap_write(mpu3050->map, MPU3050_INT_CFG, val);
-		if (ret)
+		if (ret) {
+			mpu3050->hw_irq_trigger = false;
 			return ret;
+		}
+
+		retain_and_null_ptr(pm);
 	}
 
 	return 0;
