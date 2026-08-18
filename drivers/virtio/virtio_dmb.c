@@ -20,6 +20,8 @@
  */
 
 #include <linux/align.h>
+#include <linux/atomic.h>
+#include <linux/debugfs.h>
 #include <linux/dma-mapping.h>
 #include <linux/export.h>
 #include <linux/genalloc.h>
@@ -83,6 +85,10 @@ struct virtio_dmb_alloc {
  * @base_va: kernel address the pool starts at, inside the mapping
  * @base_off: region address the pool starts at
  * @nslots: pool size in PAGE_SIZE pages
+ * @used_hiwater: the largest occupancy has been since the last reset through
+ *	debugfs, or since init, in pages; CONFIG_VIRTIO_DEBUG
+ * @alloc_failed: buffer mappings the pool had no room for; CONFIG_VIRTIO_DEBUG
+ * @debugfs_dir: directory holding this region's debugfs files
  * @shm_id: shared memory id the device reported for the region
  */
 struct virtio_dmb {
@@ -98,6 +104,11 @@ struct virtio_dmb {
 	void			*base_va;
 	u64			 base_off;
 	unsigned int		 nslots;
+#ifdef CONFIG_VIRTIO_DEBUG
+	atomic_long_t		 used_hiwater;
+	atomic_long_t		 alloc_failed;
+#endif
+	struct dentry		*debugfs_dir;
 	u16			 shm_id;
 };
 
@@ -110,6 +121,52 @@ static size_t virtio_dmb_pool_size(const struct virtio_dmb *dmb)
 {
 	return (size_t)dmb->nslots << PAGE_SHIFT;
 }
+
+#ifdef CONFIG_VIRTIO_DEBUG
+
+/*
+ * Pages allocated now.  gen_pool_avail() sums its chunks' free counts under
+ * RCU, so this needs no counter of its own and no lock, and it is exact
+ * between two claims rather than approximate.
+ */
+static unsigned long virtio_dmb_used(struct virtio_dmb *dmb)
+{
+	return (gen_pool_size(dmb->pool) - gen_pool_avail(dmb->pool))
+		>> PAGE_SHIFT;
+}
+
+/*
+ * Raise the high-water mark to the occupancy a claim has just established.
+ * Two racing claims each observe a real total and the larger wins, so the
+ * figure is a occupancy the pool genuinely held rather than a sum of readings
+ * taken at different moments.
+ */
+static void virtio_dmb_note_used(struct virtio_dmb *dmb)
+{
+	long old = atomic_long_read(&dmb->used_hiwater);
+	long now = virtio_dmb_used(dmb);
+
+	while (now > old &&
+	       !atomic_long_try_cmpxchg(&dmb->used_hiwater, &old, now))
+		;
+}
+
+static void virtio_dmb_inc_alloc_failed(struct virtio_dmb *dmb)
+{
+	atomic_long_inc(&dmb->alloc_failed);
+}
+
+#else /* !CONFIG_VIRTIO_DEBUG */
+
+static void virtio_dmb_note_used(struct virtio_dmb *dmb)
+{
+}
+
+static void virtio_dmb_inc_alloc_failed(struct virtio_dmb *dmb)
+{
+}
+
+#endif /* CONFIG_VIRTIO_DEBUG */
 
 /* Handle the driver publishes for the allocation starting at pool page @slot. */
 static dma_addr_t virtio_dmb_handle(const struct virtio_dmb *dmb,
@@ -177,6 +234,8 @@ static void *virtio_dmb_claim(struct virtio_dmb *dmb, size_t len,
 	rec = &dmb->allocs[*slot];
 	rec->len = len;
 	rec->src = src;
+
+	virtio_dmb_note_used(dmb);
 
 	*out = rec;
 	return (void *)va;
@@ -371,8 +430,22 @@ static dma_addr_t virtio_dmb_op_map_page(union virtio_map map,
 		return DMA_MAPPING_ERROR;
 
 	va = virtio_dmb_claim(dmb, size, src, &slot, &rec);
-	if (!va)
+	if (!va) {
+		/*
+		 * Counted here and not in virtio_dmb_claim(), which alloc()
+		 * reaches as well.  A virtqueue area that does not fit is a
+		 * step of vring_alloc_queue_split()'s search for a size that
+		 * does, so counting it would have a correctly sized region boot
+		 * with a failure for every attempt but the last, in the one
+		 * file whose purpose is to answer whether the region is too
+		 * small for the traffic.  A request over the per-mapping cap is
+		 * not counted either: the cap is what max_mapping_size()
+		 * advertises, so exceeding it is a caller bug rather than a
+		 * property of the region.
+		 */
+		virtio_dmb_inc_alloc_failed(dmb);
 		return DMA_MAPPING_ERROR;
+	}
 
 	/*
 	 * Copy in whatever the direction is, and without honouring
@@ -448,6 +521,91 @@ static const struct virtio_map_ops virtio_dmb_map_ops = {
 	.max_mapping_size	= virtio_dmb_op_max_mapping_size,
 };
 
+#ifdef CONFIG_VIRTIO_DEBUG
+
+static int virtio_dmb_used_get(void *data, u64 *val)
+{
+	struct virtio_dmb *dmb = data;
+
+	*val = virtio_dmb_used(dmb);
+
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(virtio_dmb_used_fops, virtio_dmb_used_get, NULL,
+			 "%llu\n");
+
+static int virtio_dmb_hiwater_get(void *data, u64 *val)
+{
+	struct virtio_dmb *dmb = data;
+
+	*val = atomic_long_read(&dmb->used_hiwater);
+
+	return 0;
+}
+
+/*
+ * Restart the measurement from the occupancy now, so that a peak never reads
+ * below the used_pages read alongside it.
+ */
+static int virtio_dmb_hiwater_set(void *data, u64 val)
+{
+	struct virtio_dmb *dmb = data;
+
+	if (val)
+		return -EINVAL;
+
+	atomic_long_set(&dmb->used_hiwater, virtio_dmb_used(dmb));
+
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(virtio_dmb_hiwater_fops, virtio_dmb_hiwater_get,
+			 virtio_dmb_hiwater_set, "%llu\n");
+
+static int virtio_dmb_alloc_failed_get(void *data, u64 *val)
+{
+	struct virtio_dmb *dmb = data;
+
+	*val = atomic_long_read(&dmb->alloc_failed);
+
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(virtio_dmb_alloc_failed_fops,
+			 virtio_dmb_alloc_failed_get, NULL, "%llu\n");
+
+static void virtio_dmb_debugfs_init(struct virtio_dmb *dmb)
+{
+	struct dentry *dir;
+
+	dir = debugfs_create_dir("dmb", dmb->vdev->debugfs_dir);
+	dmb->debugfs_dir = dir;
+
+	debugfs_create_u32("pages", 0400, dir, &dmb->nslots);
+	debugfs_create_file("used_pages", 0400, dir, dmb,
+			    &virtio_dmb_used_fops);
+	debugfs_create_file("used_pages_hiwater", 0600, dir, dmb,
+			    &virtio_dmb_hiwater_fops);
+	debugfs_create_file("alloc_failed", 0400, dir, dmb,
+			    &virtio_dmb_alloc_failed_fops);
+}
+
+static void virtio_dmb_debugfs_exit(struct virtio_dmb *dmb)
+{
+	debugfs_remove_recursive(dmb->debugfs_dir);
+	dmb->debugfs_dir = NULL;
+}
+
+#else /* !CONFIG_VIRTIO_DEBUG */
+
+static void virtio_dmb_debugfs_init(struct virtio_dmb *dmb)
+{
+}
+
+static void virtio_dmb_debugfs_exit(struct virtio_dmb *dmb)
+{
+}
+
+#endif /* CONFIG_VIRTIO_DEBUG */
+
 /*
  * Whether the device still has virtqueues.  No caller here can race an adder,
  * because every path that reaches this runs under the device lock, but the
@@ -515,6 +673,7 @@ void virtio_dmb_destroy(struct virtio_device *vdev)
 	 * virtqueue, and the refusal above establishes that none is left, which
 	 * is also why the records are empty by now.
 	 */
+	virtio_dmb_debugfs_exit(dmb);
 	gen_pool_destroy(dmb->pool);
 	kvfree(dmb->allocs);
 	memunmap(dmb->map_va);
@@ -772,6 +931,8 @@ int virtio_dmb_init(struct virtio_device *vdev)
 
 	vdev->vmap.dmb = dmb;
 	vdev->map = &virtio_dmb_map_ops;
+
+	virtio_dmb_debugfs_init(dmb);
 
 	dev_info(&vdev->dev,
 		 "device memory buffer %u at 0x%016llx, %u usable pages\n",
