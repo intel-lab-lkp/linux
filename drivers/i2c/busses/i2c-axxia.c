@@ -795,8 +795,8 @@ static void axxia_i2c_remove(struct platform_device *pdev)
 {
 	struct axxia_i2c_dev *idev = platform_get_drvdata(pdev);
 
-	clk_disable_unprepare(idev->i2c_clk);
 	i2c_del_adapter(&idev->adapter);
+	clk_disable_unprepare(idev->i2c_clk);
 }
 
 /* Match table for of_platform binding */
