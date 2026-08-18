@@ -205,6 +205,8 @@ struct memcg_tier_counter {
 	int tier_id;
 	struct list_head list;
 	struct rcu_head rcu;
+	bool max_derived;	/* true: derive from memory.max by capacity ratio */
+	bool high_derived;	/* true: derive from memory.high by capacity ratio */
 };
 
 struct mem_cgroup {
