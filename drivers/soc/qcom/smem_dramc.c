@@ -371,10 +371,10 @@ DEFINE_SHOW_ATTRIBUTE(smem_hbb);
 struct dentry *smem_dram_parse(struct qcom_smem *smem, struct device *dev)
 {
 	struct dentry *debugfs_dir;
-	enum ddr_info_version ver;
 	struct smem_dram *dram;
 	size_t actual_size;
 	void *data;
+	int ver;
 
 	/* No need to check qcom_smem_is_available(), this func is called by the SMEM driver */
 	data = __qcom_smem_get(smem, QCOM_SMEM_HOST_ANY, SMEM_DDR_INFO_ID, &actual_size);
