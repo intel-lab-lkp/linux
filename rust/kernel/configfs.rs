@@ -130,6 +130,7 @@ pub struct Subsystem<Data> {
     subsystem: Opaque<bindings::configfs_subsystem>,
     #[pin]
     data: Data,
+    registered: bool,
 }
 
 // SAFETY: We do not provide any operations on `Subsystem`.
@@ -173,12 +174,15 @@ impl<Data> Subsystem<Data> {
                 }
             ),
             data <- data,
+            registered: false,
         })
-        .pin_chain(|this| {
+        .pin_chain(|mut this| {
             crate::error::to_result(
                 // SAFETY: We initialized `this.subsystem` according to C API contract above.
                 unsafe { bindings::configfs_register_subsystem(this.subsystem.get()) },
-            )
+            )?;
+            *this.as_mut().project().registered = true;
+            Ok(())
         })
     }
 }
@@ -186,8 +190,10 @@ impl<Data> Subsystem<Data> {
 #[pinned_drop]
 impl<Data> PinnedDrop for Subsystem<Data> {
     fn drop(self: Pin<&mut Self>) {
-        // SAFETY: We registered `self.subsystem` in the initializer returned by `Self::new`.
-        unsafe { bindings::configfs_unregister_subsystem(self.subsystem.get()) };
+        if self.registered {
+            // SAFETY: `registered` is only set after `self.subsystem` was registered.
+            unsafe { bindings::configfs_unregister_subsystem(self.subsystem.get()) };
+        }
         // SAFETY: We initialized the mutex in `Subsystem::new`.
         unsafe { bindings::mutex_destroy(&raw mut (*self.subsystem.get()).su_mutex) };
     }
