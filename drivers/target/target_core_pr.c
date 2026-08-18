@@ -1964,15 +1964,21 @@ static int __core_scsi3_write_aptpl_to_file(
 	int ret;
 	loff_t pos = 0;
 
-	path = kasprintf(GFP_KERNEL, "%s/pr/aptpl_%s", db_root,
-			&wwn->unit_serial[0]);
+	path = kasprintf(GFP_KERNEL, "pr/aptpl_%s", &wwn->unit_serial[0]);
 	if (!path)
 		return -ENOMEM;
 
-	file = filp_open(path, flags, 0600);
+	if (!db_root_path.dentry) {
+		pr_err("db_root is not initialized for APTPL metadata path: %s/%s\n",
+		       db_root, path);
+		kfree(path);
+		return -ENODEV;
+	}
+
+	file = file_open_root(&db_root_path, path, flags, 0600);
 	if (IS_ERR(file)) {
-		pr_err("filp_open(%s) for APTPL metadata"
-			" failed\n", path);
+		pr_err("file_open_root(%s/%s) for APTPL metadata failed\n",
+		       db_root, path);
 		kfree(path);
 		return PTR_ERR(file);
 	}
@@ -1982,7 +1988,8 @@ static int __core_scsi3_write_aptpl_to_file(
 	ret = kernel_write(file, buf, pr_aptpl_buf_len, &pos);
 
 	if (ret < 0)
-		pr_debug("Error writing APTPL metadata file: %s\n", path);
+		pr_debug("Error writing APTPL metadata file: %s/%s\n", db_root,
+			 path);
 	fput(file);
 	kfree(path);
 

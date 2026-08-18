@@ -96,7 +96,30 @@ static ssize_t target_core_item_version_show(struct config_item *item,
 CONFIGFS_ATTR_RO(target_core_item_, version);
 
 char db_root[DB_ROOT_LEN] = DB_ROOT_DEFAULT;
+struct path db_root_path;
 static char db_root_stage[DB_ROOT_LEN];
+
+static int target_validate_db_root(const char *path_str, struct path *path)
+{
+	int ret;
+
+	ret = kern_path(path_str, LOOKUP_FOLLOW | LOOKUP_DIRECTORY, path);
+	if (ret) {
+		pr_err("db_root: cannot open: %s\n", path_str);
+		if (ret == -ENOTDIR)
+			pr_err("db_root: not a directory: %s\n", path_str);
+		return ret;
+	}
+
+	if (!strcmp(path->dentry->d_sb->s_type->name, "configfs")) {
+		pr_err("db_root: configfs is not a valid target database root: %s\n",
+		       path_str);
+		path_put(path);
+		return -EINVAL;
+	}
+
+	return 0;
+}
 
 static ssize_t target_core_item_dbroot_show(struct config_item *item,
 					    char *page)
@@ -110,43 +133,49 @@ static ssize_t target_core_item_dbroot_store(struct config_item *item,
 	ssize_t read_bytes;
 	ssize_t r = -EINVAL;
 	struct path path = {};
-
-	mutex_lock(&target_devices_lock);
-	if (target_devices) {
-		pr_err("db_root: cannot be changed because it's in use\n");
-		goto unlock;
-	}
+	struct path old_path = {};
+	bool have_old_path = false;
 
 	if (count > (DB_ROOT_LEN - 1)) {
 		pr_err("db_root: count %d exceeds DB_ROOT_LEN-1: %u\n",
 		       (int)count, DB_ROOT_LEN - 1);
-		goto unlock;
+		return r;
 	}
 
 	read_bytes = scnprintf(db_root_stage, DB_ROOT_LEN, "%s", page);
 	if (!read_bytes)
-		goto unlock;
+		return r;
 
 	if (db_root_stage[read_bytes - 1] == '\n')
 		db_root_stage[read_bytes - 1] = '\0';
 
 	/* validate new db root before accepting it */
-	r = kern_path(db_root_stage, LOOKUP_FOLLOW | LOOKUP_DIRECTORY, &path);
-	if (r) {
-		pr_err("db_root: cannot open: %s\n", db_root_stage);
-		if (r == -ENOTDIR)
-			pr_err("db_root: not a directory: %s\n", db_root_stage);
-		goto unlock;
-	}
-	path_put(&path);
+	r = target_validate_db_root(db_root_stage, &path);
+	if (r)
+		return r;
 
+	mutex_lock(&target_devices_lock);
+	if (target_devices) {
+		pr_err("db_root: cannot be changed because it's in use\n");
+		goto unlock_put;
+	}
+
+	have_old_path = db_root_path.dentry;
+	if (have_old_path)
+		old_path = db_root_path;
+	db_root_path = path;
+	path = (struct path){};
 	strscpy(db_root, db_root_stage);
 	pr_debug("Target_Core_ConfigFS: db_root set to %s\n", db_root);
 
 	r = read_bytes;
 
-unlock:
+unlock_put:
 	mutex_unlock(&target_devices_lock);
+	if (path.dentry)
+		path_put(&path);
+	if (have_old_path)
+		path_put(&old_path);
 	return r;
 }
 
@@ -3722,21 +3751,19 @@ void target_setup_backend_cits(struct target_backend *tb)
 
 static void target_init_dbroot(void)
 {
-	struct file *fp;
+	struct path path = {};
+	int ret;
 
-	snprintf(db_root_stage, DB_ROOT_LEN, DB_ROOT_PREFERRED);
-	fp = filp_open(db_root_stage, O_RDONLY, 0);
-	if (IS_ERR(fp)) {
-		pr_err("db_root: cannot open: %s\n", db_root_stage);
-		return;
+	strscpy(db_root_stage, DB_ROOT_LEN, DB_ROOT_PREFERRED);
+	ret = target_validate_db_root(db_root_stage, &path);
+	if (ret) {
+		strscpy(db_root_stage, DB_ROOT_LEN, DB_ROOT_DEFAULT);
+		ret = target_validate_db_root(db_root_stage, &path);
+		if (ret)
+			return;
 	}
-	if (!S_ISDIR(file_inode(fp)->i_mode)) {
-		filp_close(fp, NULL);
-		pr_err("db_root: not a valid directory: %s\n", db_root_stage);
-		return;
-	}
-	filp_close(fp, NULL);
 
+	db_root_path = path;
 	strscpy(db_root, db_root_stage);
 	pr_debug("Target_Core_ConfigFS: db_root set to %s\n", db_root);
 }

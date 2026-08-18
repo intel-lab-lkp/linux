@@ -170,6 +170,9 @@ extern struct se_portal_group xcopy_pt_tpg;
 #define	DB_ROOT_DEFAULT		"/var/target"
 #define	DB_ROOT_PREFERRED	"/etc/target"
 
+struct path;
+
 extern char db_root[];
+extern struct path db_root_path;
 
 #endif /* TARGET_CORE_INTERNAL_H */

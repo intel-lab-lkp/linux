@@ -856,17 +856,27 @@ static int core_alua_write_tpg_metadata(
 	unsigned char *md_buf,
 	u32 md_buf_len)
 {
-	struct file *file = filp_open(path, O_RDWR | O_CREAT | O_TRUNC, 0600);
+	struct file *file;
 	loff_t pos = 0;
 	int ret;
 
+	if (!db_root_path.dentry) {
+		pr_err("db_root is not initialized for ALUA metadata path: %s/%s\n",
+		       db_root, path);
+		return -ENODEV;
+	}
+
+	file = file_open_root(&db_root_path, path, O_RDWR | O_CREAT | O_TRUNC,
+			      0600);
 	if (IS_ERR(file)) {
-		pr_err("filp_open(%s) for ALUA metadata failed\n", path);
+		pr_err("file_open_root(%s/%s) for ALUA metadata failed\n",
+		       db_root, path);
 		return -ENODEV;
 	}
 	ret = kernel_write(file, md_buf, md_buf_len, &pos);
 	if (ret < 0)
-		pr_err("Error writing ALUA metadata file: %s\n", path);
+		pr_err("Error writing ALUA metadata file: %s/%s\n", db_root,
+		       path);
 	fput(file);
 	return (ret < 0) ? -EIO : 0;
 }
@@ -896,9 +906,9 @@ static int core_alua_update_tpg_primary_metadata(
 			tg_pt_gp->tg_pt_gp_alua_access_status);
 
 	rc = -ENOMEM;
-	path = kasprintf(GFP_KERNEL, "%s/alua/tpgs_%s/%s", db_root,
-			&wwn->unit_serial[0],
-			config_item_name(&tg_pt_gp->tg_pt_gp_group.cg_item));
+	path = kasprintf(GFP_KERNEL, "alua/tpgs_%s/%s",
+			 &wwn->unit_serial[0],
+			 config_item_name(&tg_pt_gp->tg_pt_gp_group.cg_item));
 	if (path) {
 		rc = core_alua_write_tpg_metadata(path, md_buf, len);
 		kfree(path);
@@ -1187,16 +1197,16 @@ static int core_alua_update_tpg_secondary_metadata(struct se_lun *lun)
 			lun->lun_tg_pt_secondary_stat);
 
 	if (se_tpg->se_tpg_tfo->tpg_get_tag != NULL) {
-		path = kasprintf(GFP_KERNEL, "%s/alua/%s/%s+%hu/lun_%llu",
-				db_root, se_tpg->se_tpg_tfo->fabric_name,
-				se_tpg->se_tpg_tfo->tpg_get_wwn(se_tpg),
-				se_tpg->se_tpg_tfo->tpg_get_tag(se_tpg),
-				lun->unpacked_lun);
+		path = kasprintf(GFP_KERNEL, "alua/%s/%s+%hu/lun_%llu",
+				 se_tpg->se_tpg_tfo->fabric_name,
+				 se_tpg->se_tpg_tfo->tpg_get_wwn(se_tpg),
+				 se_tpg->se_tpg_tfo->tpg_get_tag(se_tpg),
+				 lun->unpacked_lun);
 	} else {
-		path = kasprintf(GFP_KERNEL, "%s/alua/%s/%s/lun_%llu",
-				db_root, se_tpg->se_tpg_tfo->fabric_name,
-				se_tpg->se_tpg_tfo->tpg_get_wwn(se_tpg),
-				lun->unpacked_lun);
+		path = kasprintf(GFP_KERNEL, "alua/%s/%s/lun_%llu",
+				 se_tpg->se_tpg_tfo->fabric_name,
+				 se_tpg->se_tpg_tfo->tpg_get_wwn(se_tpg),
+				 lun->unpacked_lun);
 	}
 	if (!path) {
 		rc = -ENOMEM;
