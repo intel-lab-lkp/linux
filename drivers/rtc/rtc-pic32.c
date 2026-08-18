@@ -325,7 +325,9 @@ static int pic32_rtc_probe(struct platform_device *pdev)
 	if (IS_ERR(pdata->rtc))
 		return PTR_ERR(pdata->rtc);
 
-	clk_prepare_enable(pdata->clk);
+	ret = clk_prepare_enable(pdata->clk);
+	if (ret)
+		return ret;
 
 	pic32_rtc_enable(pdata, 1);
 
