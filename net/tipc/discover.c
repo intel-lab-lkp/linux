@@ -197,27 +197,47 @@ void tipc_disc_rcv(struct net *net, struct sk_buff *skb,
 {
 	struct tipc_net *tn = tipc_net(net);
 	struct tipc_msg *hdr = buf_msg(skb);
-	u32 pnet_hash = msg_peer_net_hash(hdr);
-	u16 caps = msg_node_capabilities(hdr);
+	u32 pnet_hash;
+	u16 caps;
 	bool legacy = tn->legacy_addr_format;
-	u32 sugg = msg_sugg_node_addr(hdr);
-	u32 signature = msg_node_sig(hdr);
+	u32 sugg;
+	u32 signature;
 	u8 peer_id[NODE_ID_LEN] = {0,};
-	u32 dst = msg_dest_domain(hdr);
-	u32 net_id = msg_bc_netid(hdr);
+	u32 dst;
+	u32 net_id;
 	struct tipc_media_addr maddr;
-	u32 src = msg_prevnode(hdr);
-	u32 mtyp = msg_type(hdr);
+	u32 src;
+	u32 mtyp;
 	bool dupl_addr = false;
 	bool respond = false;
 	u32 self;
 	int err;
+
+	/* Discovery messages always carry the maximum size TIPC header
+	 * plus a node identity, see tipc_disc_init_msg(). The header
+	 * fields and the media address area accessed below live beyond
+	 * the minimum header size, so discard shorter messages before
+	 * reading them.
+	 */
+	if (msg_hdr_sz(hdr) < MAX_H_SIZE ||
+	    msg_size(hdr) < MAX_H_SIZE + NODE_ID_LEN) {
+		kfree_skb(skb);
+		return;
+	}
 
 	if (skb_linearize(skb)) {
 		kfree_skb(skb);
 		return;
 	}
 	hdr = buf_msg(skb);
+	pnet_hash = msg_peer_net_hash(hdr);
+	caps = msg_node_capabilities(hdr);
+	sugg = msg_sugg_node_addr(hdr);
+	signature = msg_node_sig(hdr);
+	dst = msg_dest_domain(hdr);
+	net_id = msg_bc_netid(hdr);
+	src = msg_prevnode(hdr);
+	mtyp = msg_type(hdr);
 
 	if (caps & TIPC_NODE_ID128)
 		memcpy(peer_id, msg_node_id(hdr), NODE_ID_LEN);
