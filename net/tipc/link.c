@@ -1315,7 +1315,22 @@ static int tipc_link_input(struct tipc_link *l, struct sk_buff *skb,
 		if (tipc_buf_append(reasm_skb, &skb)) {
 			l->stats.recv_fragmented++;
 			tipc_data_input(l, skb, inputq);
-		} else if (!*reasm_skb && !link_is_bc_rcvlink(l)) {
+		} else if (*reasm_skb) {
+			/* A legitimate reassembled message can never exceed
+			 * MAX_MSG_SIZE. Limit the memory one incomplete
+			 * fragment chain can pin, otherwise a peer can grow
+			 * kernel memory unboundedly by streaming fragment
+			 * chains that never complete: received traffic also
+			 * resets the link silence counter, so the link never
+			 * times out and the chains are never freed.
+			 */
+			if ((*reasm_skb)->truesize > 2 * MAX_MSG_SIZE) {
+				pr_warn_ratelimited("Fragment chain larger than %u bytes, dropping\n",
+						    2 * MAX_MSG_SIZE);
+				kfree_skb(*reasm_skb);
+				*reasm_skb = NULL;
+			}
+		} else if (!link_is_bc_rcvlink(l)) {
 			pr_warn_ratelimited("Unable to build fragment list\n");
 			return tipc_link_fsm_evt(l, LINK_FAILURE_EVT);
 		}
