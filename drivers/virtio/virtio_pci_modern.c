@@ -364,6 +364,29 @@ static void vp_modern_avq_cleanup(struct virtio_device *vdev)
 	}
 }
 
+/*
+ * A device reports the memory type of its Device Memory Buffer region in
+ * dmb_mem_type, and the field is valid as soon as the device offers
+ * VIRTIO_F_DMB.  VIRTIO_DMB_MEM_TYPE_COHERENT says that a write by either side
+ * becomes visible to the other with no cache maintenance by the driver, which
+ * is what plain loads and stores on the region need.  A common configuration
+ * structure too short to hold the field reports no type at all, and reading it
+ * there would fall outside what vp_modern_probe() mapped.  This is the only
+ * place that measures the structure against the field, because the read
+ * happens before vp_check_common_size() runs.
+ */
+static bool vp_dmb_mem_type_supported(struct virtio_pci_device *vp_dev)
+{
+	size_t need = offsetofend(struct virtio_pci_modern_common_cfg,
+				  dmb_mem_type);
+
+	if (vp_dev->mdev.common_len < need)
+		return false;
+
+	return vp_modern_get_dmb_mem_type(&vp_dev->mdev) ==
+	       VIRTIO_DMB_MEM_TYPE_COHERENT;
+}
+
 static void vp_transport_features(struct virtio_device *vdev, u64 features)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
@@ -378,6 +401,30 @@ static void vp_transport_features(struct virtio_device *vdev, u64 features)
 
 	if (features & BIT_ULL(VIRTIO_F_ADMIN_VQ))
 		__virtio_set_bit(vdev, VIRTIO_F_ADMIN_VQ);
+
+	/*
+	 * vring_transport_features() clears every bit in the transport range
+	 * that the ring itself does not consume, and vp_finalize_features()
+	 * hands the features the device offered to this function afterwards.
+	 * A transport feature therefore survives negotiation only if the
+	 * transport sets it again here, the way VIRTIO_F_SR_IOV,
+	 * VIRTIO_F_RING_RESET and VIRTIO_F_ADMIN_VQ do above, so this is where
+	 * the driver accepts a Device Memory Buffer and declining refuses it.
+	 *
+	 * VIRTIO_F_VERSION_1 is required because the core locates and releases
+	 * the region from virtio_features_ok(), which returns before it gets
+	 * that far for a device without VERSION_1, so accepting the feature
+	 * without it would leave the feature negotiated and the region never
+	 * built.  VIRTIO_F_ACCESS_PLATFORM is not required alongside it,
+	 * because virtio_has_dma_quirk() already reads this feature as
+	 * carrying what that one asserts.  Whether the device asks for the
+	 * stronger barriers is its own business and does not bear on this one.
+	 */
+	if (IS_ENABLED(CONFIG_VIRTIO_DMB) &&
+	    (features & BIT_ULL(VIRTIO_F_DMB)) &&
+	    (features & BIT_ULL(VIRTIO_F_VERSION_1)) &&
+	    vp_dmb_mem_type_supported(vp_dev))
+		__virtio_set_bit(vdev, VIRTIO_F_DMB);
 }
 
 static int __vp_check_common_size_one_feature(struct virtio_device *vdev, u32 fbit,
@@ -878,6 +925,15 @@ static bool vp_get_shm_region(struct virtio_device *vdev,
 	return true;
 }
 
+static int vp_get_dmb_shm_id(struct virtio_device *vdev, u16 *id)
+{
+	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
+
+	*id = vp_modern_get_dmb_shm_id(&vp_dev->mdev);
+
+	return 0;
+}
+
 /*
  * virtio_pci_admin_has_dev_parts - Checks whether the device parts
  * functionality is supported
@@ -1241,6 +1297,7 @@ static const struct virtio_config_ops virtio_pci_config_nodev_ops = {
 	.set_vq_affinity = vp_set_vq_affinity,
 	.get_vq_affinity = vp_get_vq_affinity,
 	.get_shm_region  = vp_get_shm_region,
+	.get_dmb_shm_id = vp_get_dmb_shm_id,
 	.disable_vq_and_reset = vp_modern_disable_vq_and_reset,
 	.enable_vq_after_reset = vp_modern_enable_vq_after_reset,
 };
@@ -1261,6 +1318,7 @@ static const struct virtio_config_ops virtio_pci_config_ops = {
 	.set_vq_affinity = vp_set_vq_affinity,
 	.get_vq_affinity = vp_get_vq_affinity,
 	.get_shm_region  = vp_get_shm_region,
+	.get_dmb_shm_id = vp_get_dmb_shm_id,
 	.disable_vq_and_reset = vp_modern_disable_vq_and_reset,
 	.enable_vq_after_reset = vp_modern_enable_vq_after_reset,
 };
