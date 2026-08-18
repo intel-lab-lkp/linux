@@ -647,14 +647,22 @@ static int sun4i_frontend_runtime_resume(struct device *dev)
 
 	clk_set_rate(frontend->mod_clk, 300000000);
 
-	clk_prepare_enable(frontend->bus_clk);
-	clk_prepare_enable(frontend->mod_clk);
-	clk_prepare_enable(frontend->ram_clk);
+	ret = clk_prepare_enable(frontend->bus_clk);
+	if (ret)
+		return ret;
+
+	ret = clk_prepare_enable(frontend->mod_clk);
+	if (ret)
+		goto err_disable_bus_clk;
+
+	ret = clk_prepare_enable(frontend->ram_clk);
+	if (ret)
+		goto err_disable_mod_clk;
 
 	ret = reset_control_reset(frontend->reset);
 	if (ret) {
 		dev_err(dev, "Couldn't reset our device\n");
-		return ret;
+		goto err_disable_ram_clk;
 	}
 
 	regmap_update_bits(frontend->regs, SUN4I_FRONTEND_EN_REG,
@@ -664,6 +672,14 @@ static int sun4i_frontend_runtime_resume(struct device *dev)
 	sun4i_frontend_scaler_init(frontend);
 
 	return 0;
+
+err_disable_ram_clk:
+	clk_disable_unprepare(frontend->ram_clk);
+err_disable_mod_clk:
+	clk_disable_unprepare(frontend->mod_clk);
+err_disable_bus_clk:
+	clk_disable_unprepare(frontend->bus_clk);
+	return ret;
 }
 
 static int sun4i_frontend_runtime_suspend(struct device *dev)
