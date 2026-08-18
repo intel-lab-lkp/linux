@@ -1028,14 +1028,20 @@ static void remove_one_compat_dev(struct ib_device *device, u32 id)
 {
 	struct ib_core_device *cdev;
 
+	/*
+	 * Hold the lock across device_del(): the other remover may have won
+	 * the xa_erase() and still be inside device_del(), and the netns exit
+	 * path has to wait for it instead of letting cleanup_net() free the
+	 * netns state the compat device is still tagged with.
+	 */
 	mutex_lock(&device->compat_devs_mutex);
 	cdev = xa_erase(&device->compat_devs, id);
-	mutex_unlock(&device->compat_devs_mutex);
 	if (cdev) {
 		ib_free_port_attrs(cdev);
 		device_del(&cdev->dev);
 		put_device(&cdev->dev);
 	}
+	mutex_unlock(&device->compat_devs_mutex);
 }
 
 static void remove_compat_devs(struct ib_device *device)
