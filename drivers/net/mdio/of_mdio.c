@@ -243,9 +243,10 @@ int __of_mdiobus_register(struct mii_bus *mdio, struct device_node *np,
 	of_property_read_u32(np, "reset-post-delay-us", &mdio->reset_post_delay_us);
 
 	/* Register the MDIO bus */
+	device_links_supplier_sync_state_pause();
 	rc = __mdiobus_register(mdio, owner);
 	if (rc)
-		return rc;
+		goto resume;
 
 	/* Loop over the child nodes and register a phy_device for each phy */
 	rc = __of_mdiobus_parse_phys(mdio, np, &scanphys);
@@ -253,7 +254,7 @@ int __of_mdiobus_register(struct mii_bus *mdio, struct device_node *np,
 		goto unregister;
 
 	if (!scanphys)
-		return 0;
+		goto resume;
 
 	/* auto scan for PHYs with empty reg property */
 	for_each_available_child_of_node(np, child) {
@@ -285,12 +286,15 @@ int __of_mdiobus_register(struct mii_bus *mdio, struct device_node *np,
 		}
 	}
 
-	return 0;
+	rc = 0;
+	goto resume;
 
 put_unregister:
 	of_node_put(child);
 unregister:
 	mdiobus_unregister(mdio);
+resume:
+	device_links_supplier_sync_state_resume();
 	return rc;
 }
 EXPORT_SYMBOL(__of_mdiobus_register);

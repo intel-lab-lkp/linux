@@ -1256,6 +1256,7 @@ void device_links_supplier_sync_state_pause(void)
 	defer_sync_state_count++;
 	device_links_write_unlock();
 }
+EXPORT_SYMBOL_GPL(device_links_supplier_sync_state_pause);
 
 void device_links_supplier_sync_state_resume(void)
 {
@@ -1284,6 +1285,7 @@ out:
 
 	device_links_flush_sync_list(&sync_list, NULL);
 }
+EXPORT_SYMBOL_GPL(device_links_supplier_sync_state_resume);
 
 static int sync_state_resume_initcall(void)
 {
