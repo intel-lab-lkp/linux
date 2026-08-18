@@ -44,6 +44,11 @@ properties:
           - const: qcom,qcm6490-pmic-glink
           - const: qcom,pmic-glink
       - items:
+          - const: xiaomi,taoyao-pmic-glink
+          - const: qcom,sm7325-pmic-glink
+          - const: qcom,qcm6490-pmic-glink
+          - const: qcom,pmic-glink
+      - items:
           - enum:
               - qcom,eliza-pmic-glink
               - qcom,milos-pmic-glink
