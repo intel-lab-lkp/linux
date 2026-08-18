@@ -116,6 +116,13 @@
 #define PCI_DEVICE_ID_INTEL_IE31200_BTL_S_9	0xa744
 #define PCI_DEVICE_ID_INTEL_IE31200_BTL_S_10	0xa745
 
+/* Arrow Lake-S (Core Ultra 200S desktop) */
+#define PCI_DEVICE_ID_INTEL_IE31200_ARL_S_1	0x7d1a /* 8P+16E */
+#define PCI_DEVICE_ID_INTEL_IE31200_ARL_S_2	0x7d1b /* 8P+12E */
+#define PCI_DEVICE_ID_INTEL_IE31200_ARL_S_3	0x7d29 /* 6P+12E */
+#define PCI_DEVICE_ID_INTEL_IE31200_ARL_S_4	0x7d2a /* 6P+8E */
+#define PCI_DEVICE_ID_INTEL_IE31200_ARL_S_5	0x7d35 /* 6P+4E */
+
 #define IE31200_RANKS_PER_CHANNEL	8
 #define IE31200_DIMMS_PER_CHANNEL	2
 #define IE31200_CHANNELS		2
@@ -815,6 +822,31 @@ static struct res_config rpl_s_cfg = {
 	.reg_mad_dimm_width_mask[1]	= GENMASK(25, 24),
 };
 
+static struct res_config arl_s_cfg = {
+	.mtype				= MEM_DDR5,
+	.cmci				= false,
+	.imc_num			= 2,
+	.reg_mchbar_mask		= GENMASK_ULL(41, 17),
+	.reg_mchbar_window_size		= BIT_ULL(16),
+	.reg_eccerrlog_offset[0]	= 0xe048,
+	.reg_eccerrlog_offset[1]	= 0xe848,
+	.reg_eccerrlog_ce_mask		= BIT_ULL(0),
+	.reg_eccerrlog_ce_ovfl_mask	= BIT_ULL(1),
+	.reg_eccerrlog_ue_mask		= BIT_ULL(2),
+	.reg_eccerrlog_ue_ovfl_mask	= BIT_ULL(3),
+	.reg_eccerrlog_rank_mask	= GENMASK_ULL(28, 27),
+	.reg_eccerrlog_syndrome_mask	= GENMASK_ULL(23, 16),
+	.reg_mad_dimm_offset[0]		= 0xd80c,
+	.reg_mad_dimm_offset[1]		= 0xd810,
+	.reg_mad_dimm_size_granularity	= BIT_ULL(29),
+	.reg_mad_dimm_size_mask[0]	= GENMASK(6, 0),
+	.reg_mad_dimm_size_mask[1]	= GENMASK(22, 16),
+	.reg_mad_dimm_rank_mask[0]	= BIT(9),
+	.reg_mad_dimm_rank_mask[1]	= BIT(26),
+	.reg_mad_dimm_width_mask[0]	= BIT(7),
+	.reg_mad_dimm_width_mask[1]	= BIT(24),
+};
+
 static const struct pci_device_id ie31200_pci_tbl[] = {
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IE31200_HB_1), .driver_data = (kernel_ulong_t)&snb_cfg },
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IE31200_HB_2), .driver_data = (kernel_ulong_t)&snb_cfg },
@@ -858,6 +890,16 @@ static const struct pci_device_id ie31200_pci_tbl[] = {
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IE31200_BTL_S_8), .driver_data = (kernel_ulong_t)&rpl_s_cfg },
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IE31200_BTL_S_9), .driver_data = (kernel_ulong_t)&rpl_s_cfg },
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IE31200_BTL_S_10), .driver_data = (kernel_ulong_t)&rpl_s_cfg },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IE31200_ARL_S_1),
+	  .driver_data = (kernel_ulong_t)&arl_s_cfg },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IE31200_ARL_S_2),
+	  .driver_data = (kernel_ulong_t)&arl_s_cfg },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IE31200_ARL_S_3),
+	  .driver_data = (kernel_ulong_t)&arl_s_cfg },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IE31200_ARL_S_4),
+	  .driver_data = (kernel_ulong_t)&arl_s_cfg },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IE31200_ARL_S_5),
+	  .driver_data = (kernel_ulong_t)&arl_s_cfg },
 	{ } /* 0 terminated list. */
 };
 MODULE_DEVICE_TABLE(pci, ie31200_pci_tbl);
