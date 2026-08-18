@@ -750,7 +750,10 @@ begin:
 	f = head->first;
 	retry = 0;
 	if (f->credit <= 0) {
-		f->credit += q->quantum;
+		if (f->credit + (int)q->quantum > 0)
+			f->credit += q->quantum;
+		else
+			f->credit = q->quantum;
 		head->first = f->next;
 		fq_flow_add_tail(q, f, OLD_FLOW);
 		goto begin;
@@ -1230,8 +1233,8 @@ static int fq_init(struct Qdisc *sch, struct nlattr *opt,
 
 	sch->limit		= 10000;
 	q->flow_plimit		= 100;
-	q->quantum		= 2 * psched_mtu(qdisc_dev(sch));
-	q->initial_quantum	= 10 * psched_mtu(qdisc_dev(sch));
+	q->quantum		= max_t(u32, 2 * psched_mtu(qdisc_dev(sch)), 256);
+	q->initial_quantum	= max_t(u32, 10 * psched_mtu(qdisc_dev(sch)), 256);
 	q->flow_refill_delay	= msecs_to_jiffies(40);
 	q->flow_max_rate	= ~0UL;
 	q->time_next_delayed_flow = ~0ULL;

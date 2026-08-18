@@ -800,6 +800,13 @@ static int sfq_init(struct Qdisc *sch, struct nlattr *opt,
 	q->divisor = SFQ_DEFAULT_HASH_DIVISOR;
 	q->maxflows = SFQ_DEFAULT_FLOWS;
 	q->quantum = psched_mtu(qdisc_dev(sch));
+	/* A device with max_mtu == 0 (e.g. dummy) accepts an MTU that makes
+	 * psched_mtu() wrap into the sign bit; that would set slot->allot
+	 * negative and spin sfq_dequeue() forever. Fall back to a sane
+	 * quantum (10 KiB) that fits a signed int and is >= one MTU.
+	 */
+	if ((int)q->quantum <= 0)
+		q->quantum = 10 * 1024;
 	q->perturb_period = 0;
 	get_random_bytes(&q->perturbation, sizeof(q->perturbation));
 

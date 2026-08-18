@@ -624,6 +624,18 @@ static int hhf_init(struct Qdisc *sch, struct nlattr *opt,
 	q->hhf_evict_timeout = HZ;      /* 1  sec */
 	q->hhf_non_hh_weight = 2;
 
+	if (!opt) {
+		u64 non_hh_quantum = (u64)q->quantum * q->hhf_non_hh_weight;
+
+		/* A device with max_mtu == 0 (e.g. dummy) accepts an MTU that
+		 * makes weight * quantum overflow the signed deficit and spin
+		 * hhf_dequeue() forever. Clamp to the same minimum quantum
+		 * floor fq_codel uses (max(256U, ...)).
+		 */
+		if (non_hh_quantum == 0 || non_hh_quantum > INT_MAX)
+			q->quantum = 256;
+	}
+
 	if (opt) {
 		int err = hhf_change(sch, opt, extack);
 
