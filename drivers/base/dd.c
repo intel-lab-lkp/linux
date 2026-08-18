@@ -555,8 +555,20 @@ int device_bind_driver(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(device_bind_driver);
 
+/* Driver probes and driverless class-device registrations in progress. */
 static atomic_t probe_count = ATOMIC_INIT(0);
 static DECLARE_WAIT_QUEUE_HEAD(probe_waitqueue);
+
+void device_probe_begin(void)
+{
+	atomic_inc(&probe_count);
+}
+
+void device_probe_end(void)
+{
+	atomic_dec(&probe_count);
+	wake_up_all(&probe_waitqueue);
+}
 
 static ssize_t state_synced_store(struct device *dev,
 				  struct device_attribute *attr,
@@ -797,7 +809,7 @@ static int really_probe_debug(struct device *dev, const struct device_driver *dr
 
 /**
  * driver_probe_done
- * Determine if the probe sequence is finished or not.
+ * Determine if the probe and class-device registration sequence is finished.
  *
  * Should somehow figure out how to use a semaphore, not an atomic variable...
  */
@@ -811,7 +823,7 @@ bool __init driver_probe_done(void)
 
 /**
  * wait_for_device_probe
- * Wait for device probing to be completed.
+ * Wait for device probing and driverless class registration to be completed.
  */
 void wait_for_device_probe(void)
 {
@@ -894,7 +906,7 @@ static int driver_probe_device(const struct device_driver *drv, struct device *d
 	int trigger_count = atomic_read(&deferred_trigger_count);
 	int ret;
 
-	atomic_inc(&probe_count);
+	device_probe_begin();
 	ret = __driver_probe_device(drv, dev);
 	if (ret == -EPROBE_DEFER || ret == EPROBE_DEFER) {
 		driver_deferred_probe_add(dev);
@@ -906,8 +918,7 @@ static int driver_probe_device(const struct device_driver *drv, struct device *d
 		    !defer_all_probes)
 			driver_deferred_probe_trigger();
 	}
-	atomic_dec(&probe_count);
-	wake_up_all(&probe_waitqueue);
+	device_probe_end();
 	return ret;
 }
 

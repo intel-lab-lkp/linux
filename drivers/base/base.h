@@ -166,6 +166,8 @@ void device_release_driver_internal(struct device *dev, const struct device_driv
 void driver_detach(const struct device_driver *drv);
 void driver_deferred_probe_del(struct device *dev);
 void device_set_deferred_probe_reason(const struct device *dev, struct va_format *vaf);
+void device_probe_begin(void);
+void device_probe_end(void);
 static inline int driver_match_device(const struct device_driver *drv,
 				      struct device *dev)
 {

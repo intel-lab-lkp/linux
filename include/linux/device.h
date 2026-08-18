@@ -446,11 +446,16 @@ enum device_link_state {
 #define DL_FLAG_CYCLE			BIT(9)
 
 /**
- * enum dl_dev_state - Device driver presence tracking information.
+ * enum dl_dev_state - Device availability tracking information.
  * @DL_DEV_NO_DRIVER: There is no driver attached to the device.
  * @DL_DEV_PROBING: A driver is probing.
  * @DL_DEV_DRIVER_BOUND: The driver has been bound to the device.
  * @DL_DEV_UNBINDING: The driver is unbinding from the device.
+ *
+ * Class devices which are not on a bus use the same states for their
+ * registration lifecycle.  In that case, PROBING and DRIVER_BOUND mean that
+ * device_add() is in progress or has completed, respectively, and UNBINDING
+ * means that device_del() is in progress.
  */
 enum dl_dev_state {
 	DL_DEV_NO_DRIVER = 0,
@@ -480,7 +485,7 @@ enum device_removable {
  * @suppliers: List of links to supplier devices.
  * @consumers: List of links to consumer devices.
  * @defer_sync: Hook to global list of devices that have deferred sync_state.
- * @status: Driver status information.
+ * @status: Driver or class-device availability status.
  */
 struct dev_links_info {
 	struct list_head suppliers;

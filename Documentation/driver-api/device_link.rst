@@ -253,6 +253,18 @@ child one.
 State machine
 =============
 
+Driverless class devices participate in the managed-link state machine as
+supplier and consumer endpoints, including as consumers of sync-state-only
+proxy links.  Their registration is treated like a successful driver probe:
+links are completed after :c:func:`device_add()` has finished running class
+interfaces.  During removal, driver-backed consumers are unbound before the
+class device is deleted and its links return to the no-driver state.
+
+Class devices are not probed, so an ordinary supplier link cannot defer their
+registration in the way that it defers a driver probe.  Frameworks must not use
+such a link as the only mechanism guaranteeing that a class consumer's
+supplier is functional.
+
 .. kernel-doc:: include/linux/device.h
    :functions: device_link_state
 
@@ -271,10 +283,13 @@ State machine
   and consumer.  If the link is created before any devices are probed, it
   is set to ``DL_STATE_DORMANT``.
 
-* When a supplier device is bound to a driver, links to its consumers
-  progress to ``DL_STATE_AVAILABLE``.
-  (Call to :c:func:`device_links_driver_bound()` from
-  :c:func:`driver_bound()`.)
+* When a supplier device is bound to a driver, links to its consumers progress
+  to ``DL_STATE_AVAILABLE``.  Registering a driverless class supplier performs
+  the equivalent transition, or activates a late link whose consumer is
+  already functional.
+  The driver-backed path calls :c:func:`device_links_driver_bound()` from
+  :c:func:`driver_bound()`, while the class-device completion path performs
+  the equivalent transition from :c:func:`device_add()`.
 
 * Before a consumer device is probed, presence of supplier drivers is
   verified by checking the consumer device is not in the wait_for_suppliers
@@ -286,17 +301,28 @@ State machine
   (Call to :c:func:`wait_for_device_probe()` from
   :c:func:`device_links_unbind_consumers()`.)
 
+  Registering a driverless class consumer similarly moves existing available
+  links to ``DL_STATE_CONSUMER_PROBE`` before publishing the device, and its
+  registration participates in :c:func:`wait_for_device_probe()`.  Unlike a
+  driver probe, class registration is not deferred for unavailable suppliers.
+
 * If the probe fails, links to suppliers revert back to ``DL_STATE_AVAILABLE``.
   (Call to :c:func:`device_links_no_driver()` from :c:func:`really_probe()`.)
 
 * If the probe succeeds, links to suppliers progress to ``DL_STATE_ACTIVE``.
-  (Call to :c:func:`device_links_driver_bound()` from :c:func:`driver_bound()`.)
+  A driverless class consumer activates usable incoming links when its
+  registration completes, drops sync-state-only proxy links and preserves
+  links whose suppliers are dormant or unbinding.  The driver-backed path
+  calls :c:func:`device_links_driver_bound()` from :c:func:`driver_bound()`,
+  while :c:func:`device_add()` performs the equivalent class-device
+  transition.
 
 * When the consumer's driver is later on removed, links to suppliers revert
   back to ``DL_STATE_AVAILABLE``.
   (Call to :c:func:`__device_links_no_driver()` from
   :c:func:`device_links_driver_cleanup()`, which in turn is called from
-  :c:func:`__device_release_driver()`.)
+  :c:func:`__device_release_driver()`.)  Removing a driverless class consumer
+  performs the equivalent cleanup from :c:func:`device_del()`.
 
 * Before a supplier's driver is removed, links to consumers that are not
   bound to a driver are updated to ``DL_STATE_SUPPLIER_UNBIND``.
@@ -305,14 +331,17 @@ State machine
   This prevents the consumers from binding.
   (Call to :c:func:`device_links_check_suppliers()` from
   :c:func:`really_probe()`.)
-  Consumers that are bound are freed from their driver; consumers that are
-  probing are waited for until they are done.
+  Driver-backed consumers that are bound are freed from their driver;
+  driverless class consumers remain registered and their links move directly
+  to ``DL_STATE_SUPPLIER_UNBIND``.  Consumers that are probing or being
+  registered as class devices are waited for until they are done.
   (Call to :c:func:`device_links_unbind_consumers()` from
   :c:func:`__device_release_driver()`.)
   Once all links to consumers are in ``DL_STATE_SUPPLIER_UNBIND`` state,
   the supplier driver is released and the links revert to ``DL_STATE_DORMANT``.
   (Call to :c:func:`device_links_driver_cleanup()` from
-  :c:func:`__device_release_driver()`.)
+  :c:func:`__device_release_driver()`.)  Removing a driverless class supplier
+  follows the same sequence from :c:func:`device_del()`.
 
 API
 ===
