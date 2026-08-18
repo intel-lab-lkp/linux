@@ -621,8 +621,8 @@ static void mchp_corei2c_remove(struct platform_device *pdev)
 {
 	struct mchp_corei2c_dev *idev = platform_get_drvdata(pdev);
 
-	clk_disable_unprepare(idev->i2c_clk);
 	i2c_del_adapter(&idev->adapter);
+	clk_disable_unprepare(idev->i2c_clk);
 }
 
 static const struct of_device_id mchp_corei2c_of_match[] = {
