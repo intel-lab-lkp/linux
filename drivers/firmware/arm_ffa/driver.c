@@ -119,6 +119,8 @@ struct ffa_drv_info {
 	struct xarray partition_info;
 	DECLARE_HASHTABLE(notifier_hash, ilog2(FFA_MAX_NOTIFICATIONS));
 	rwlock_t notify_lock; /* lock to protect notifier hashtable  */
+	bool rxtx_mapped;
+	bool partitions_setup;
 };
 
 static struct ffa_drv_info *drv_info;
@@ -2109,6 +2111,36 @@ cleanup:
 	ffa_notifications_cleanup();
 }
 
+static void ffa_fw_cleanup(struct ffa_drv_info *info)
+{
+	if (info->partitions_setup) {
+		ffa_partitions_cleanup();
+		info->partitions_setup = false;
+	}
+
+	ffa_notifications_cleanup();
+
+	if (info->rxtx_mapped) {
+		ffa_rxtx_unmap();
+		info->rxtx_mapped = false;
+	}
+}
+
+static void ffa_shutdown(struct platform_device *pdev)
+{
+	struct ffa_drv_info *info = platform_get_drvdata(pdev);
+
+	if (!info)
+		return;
+
+	/*
+	 * FF-A devices are children of the core platform device, so their
+	 * shutdown callbacks have already run. Drop the FF-A devices and
+	 * global firmware state before kexec enters the next kernel.
+	 */
+	ffa_fw_cleanup(info);
+}
+
 static int ffa_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -2183,6 +2215,7 @@ static int ffa_probe(struct platform_device *pdev)
 	}
 	drv_info->rxtx_bufsz = rxtx_bufsz;
 
+	drv_info->rxtx_mapped = true;
 	mutex_init(&drv_info->rx_lock);
 	mutex_init(&drv_info->tx_lock);
 
@@ -2191,12 +2224,16 @@ static int ffa_probe(struct platform_device *pdev)
 	ffa_notifications_setup();
 
 	ret = ffa_setup_partitions();
-	if (!ret)
-		return ret;
+	if (ret) {
+		pr_err("failed to setup partitions\n");
+		goto fw_cleanup;
+	}
+	drv_info->partitions_setup = true;
 
-	pr_err("failed to setup partitions\n");
-	ffa_notifications_cleanup();
-	ffa_rxtx_unmap();
+	return 0;
+
+fw_cleanup:
+	ffa_fw_cleanup(drv_info);
 free_pages:
 	if (drv_info->tx_buffer)
 		free_pages_exact(drv_info->tx_buffer, rxtx_bufsz);
@@ -2212,9 +2249,7 @@ static void ffa_remove(struct platform_device *pdev)
 {
 	struct ffa_drv_info *info = platform_get_drvdata(pdev);
 
-	ffa_notifications_cleanup();
-	ffa_partitions_cleanup();
-	ffa_rxtx_unmap();
+	ffa_fw_cleanup(info);
 	free_pages_exact(info->tx_buffer, info->rxtx_bufsz);
 	free_pages_exact(info->rx_buffer, info->rxtx_bufsz);
 	kfree(info);
@@ -2225,6 +2260,7 @@ static void ffa_remove(struct platform_device *pdev)
 static struct platform_driver ffa_driver = {
 	.probe = ffa_probe,
 	.remove = ffa_remove,
+	.shutdown = ffa_shutdown,
 	.driver = {
 		.name = FFA_PLATFORM_NAME,
 	},
