@@ -932,34 +932,6 @@ static const struct vdpa_config_ops vduse_vdpa_config_ops = {
 	.free			= vduse_vdpa_free,
 };
 
-static void vduse_dev_sync_single_for_device(union virtio_map token,
-					     dma_addr_t dma_addr, size_t size,
-					     enum dma_data_direction dir)
-{
-	struct vduse_iova_domain *domain;
-
-	if (!token.group)
-		return;
-
-	guard(vq_group_as_read_lock)(token.group);
-	domain = token.group->as->domain;
-	vduse_domain_sync_single_for_device(domain, dma_addr, size, dir);
-}
-
-static void vduse_dev_sync_single_for_cpu(union virtio_map token,
-					     dma_addr_t dma_addr, size_t size,
-					     enum dma_data_direction dir)
-{
-	struct vduse_iova_domain *domain;
-
-	if (!token.group)
-		return;
-
-	guard(vq_group_as_read_lock)(token.group);
-	domain = token.group->as->domain;
-	vduse_domain_sync_single_for_cpu(domain, dma_addr, size, dir);
-}
-
 static dma_addr_t vduse_dev_map_page(union virtio_map token, struct page *page,
 				     unsigned long offset, size_t size,
 				     enum dma_data_direction dir,
@@ -1037,15 +1009,6 @@ static void vduse_dev_free_coherent(union virtio_map token, size_t size,
 	free_pages_exact(vaddr, size);
 }
 
-static bool vduse_dev_need_sync(union virtio_map token, dma_addr_t dma_addr)
-{
-	if (!token.group)
-		return false;
-
-	guard(vq_group_as_read_lock)(token.group);
-	return dma_addr < token.group->as->domain->bounce_size;
-}
-
 static int vduse_dev_mapping_error(union virtio_map token, dma_addr_t dma_addr)
 {
 	if (unlikely(dma_addr == DMA_MAPPING_ERROR))
@@ -1063,13 +1026,10 @@ static size_t vduse_dev_max_mapping_size(union virtio_map token)
 }
 
 static const struct virtio_map_ops vduse_map_ops = {
-	.sync_single_for_device = vduse_dev_sync_single_for_device,
-	.sync_single_for_cpu = vduse_dev_sync_single_for_cpu,
 	.map_page = vduse_dev_map_page,
 	.unmap_page = vduse_dev_unmap_page,
 	.alloc = vduse_dev_alloc_coherent,
 	.free = vduse_dev_free_coherent,
-	.need_sync = vduse_dev_need_sync,
 	.mapping_error = vduse_dev_mapping_error,
 	.max_mapping_size = vduse_dev_max_mapping_size,
 };

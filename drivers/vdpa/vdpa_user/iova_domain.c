@@ -424,26 +424,6 @@ static void vduse_domain_free_iova(struct iova_domain *iovad,
 	free_iova_fast(iovad, iova >> shift, iova_len);
 }
 
-void vduse_domain_sync_single_for_device(struct vduse_iova_domain *domain,
-				      dma_addr_t dma_addr, size_t size,
-				      enum dma_data_direction dir)
-{
-	read_lock(&domain->bounce_lock);
-	if (dir == DMA_TO_DEVICE || dir == DMA_BIDIRECTIONAL)
-		vduse_domain_bounce(domain, dma_addr, size, DMA_TO_DEVICE);
-	read_unlock(&domain->bounce_lock);
-}
-
-void vduse_domain_sync_single_for_cpu(struct vduse_iova_domain *domain,
-				      dma_addr_t dma_addr, size_t size,
-				      enum dma_data_direction dir)
-{
-	read_lock(&domain->bounce_lock);
-	if (dir == DMA_FROM_DEVICE || dir == DMA_BIDIRECTIONAL)
-		vduse_domain_bounce(domain, dma_addr, size, DMA_FROM_DEVICE);
-	read_unlock(&domain->bounce_lock);
-}
-
 dma_addr_t vduse_domain_map_page(struct vduse_iova_domain *domain,
 				 struct page *page, unsigned long offset,
 				 size_t size, enum dma_data_direction dir,

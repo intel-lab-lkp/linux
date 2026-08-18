@@ -157,16 +157,6 @@ struct virtio_config_ops {
  *      size: the buffer size
  *      dir: mapping direction
  *      attrs: unmapping attributes
- * @sync_single_for_cpu: sync a single buffer from device to cpu
- *      map: metadata for performing mapping
- *      map_handle: the mapping address to sync
- *      size: the size of the buffer
- *      dir: synchronization direction
- * @sync_single_for_device: sync a single buffer from cpu to device
- *      map: metadata for performing mapping
- *      map_handle: the mapping address to sync
- *      size: the size of the buffer
- *      dir: synchronization direction
  * @alloc: alloc a coherent buffer mapping
  *      map: metadata for performing mapping
  *      size: the size of the buffer
@@ -179,10 +169,6 @@ struct virtio_config_ops {
  *      vaddr: virtual address of the buffer
  *      map_handle: the mapping address that needs to be freed
  *      attrs: unmapping attributes
- * @need_sync: if the buffer needs synchronization
- *      map: metadata for performing mapping
- *      map_handle: the mapped address
- *      Returns whether the buffer needs synchronization
  * @mapping_error: if the mapping address is error
  *      map: metadata for performing mapping
  *      map_handle: the mapped address
@@ -197,16 +183,10 @@ struct virtio_map_ops {
 	void (*unmap_page)(union virtio_map map, dma_addr_t map_handle,
 			   size_t size, enum dma_data_direction dir,
 			   unsigned long attrs);
-	void (*sync_single_for_cpu)(union virtio_map map, dma_addr_t map_handle,
-				    size_t size, enum dma_data_direction dir);
-	void (*sync_single_for_device)(union virtio_map map,
-				       dma_addr_t map_handle, size_t size,
-				       enum dma_data_direction dir);
 	void *(*alloc)(union virtio_map map, size_t size,
 		       dma_addr_t *map_handle, gfp_t gfp);
 	void (*free)(union virtio_map map, size_t size, void *vaddr,
 		     dma_addr_t map_handle, unsigned long attrs);
-	bool (*need_sync)(union virtio_map map, dma_addr_t map_handle);
 	int (*mapping_error)(union virtio_map map, dma_addr_t map_handle);
 	size_t (*max_mapping_size)(union virtio_map map);
 };
