@@ -147,7 +147,7 @@ int x25_parse_facilities(struct sk_buff *skb, struct x25_facilities *facilities,
 			len -= 4;
 			break;
 		case X25_FAC_CLASS_D:
-			if (len < p[1] + 2)
+			if (len < 2 || len < p[1] + 2)
 				return -1;
 			switch (*p) {
 			case X25_FAC_CALLING_AE:
