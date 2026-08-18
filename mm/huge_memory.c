@@ -4087,6 +4087,8 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
  * @lock_at: a page within @folio to be left locked to caller
  * @list: after-split folios will be put on it if non NULL
  * @split_type: perform uniform split or not (non-uniform split)
+ * @lru_cache_drained: whether lru_cache has been drained locally
+ *  or on all CPUs for a batch of folios
  *
  * It calls __split_unmapped_folio() to perform uniform and non-uniform split.
  * It is in charge of checking whether the split is supported or not and
@@ -4102,7 +4104,8 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
  */
 static int __folio_split(struct folio *folio, unsigned int new_order,
 		struct page *split_at, struct page *lock_at,
-		struct list_head *list, enum split_type split_type)
+		struct list_head *list, enum split_type split_type,
+		enum lru_cache_drained *lru_cache_drained)
 {
 	XA_STATE(xas, &folio->mapping->i_pages, folio->index);
 	struct folio *end_folio = folio_next(folio);
@@ -4205,7 +4208,7 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 	}
 	if (folio_ref_count(folio) == folio_expected_ref_count(folio) + 1 +
 	    folio_may_be_lru_cached(folio))
-		lru_cache_drain_for_folio(folio, 1, NULL);
+		lru_cache_drain_for_folio(folio, 1, lru_cache_drained);
 
 	/*
 	 * Racy check if we can split the page, before unmap_folio() will
@@ -4397,7 +4400,7 @@ int __split_huge_page_to_list_to_order(struct page *page, struct list_head *list
 	struct folio *folio = page_folio(page);
 
 	return __folio_split(folio, new_order, &folio->page, page, list,
-			     SPLIT_TYPE_UNIFORM);
+			     SPLIT_TYPE_UNIFORM, NULL);
 }
 
 /**
@@ -4428,7 +4431,7 @@ int folio_split(struct folio *folio, unsigned int new_order,
 		struct page *split_at, struct list_head *list)
 {
 	return __folio_split(folio, new_order, split_at, &folio->page, list,
-			     SPLIT_TYPE_NON_UNIFORM);
+			     SPLIT_TYPE_NON_UNIFORM, NULL);
 }
 
 /**
@@ -4624,6 +4627,7 @@ static unsigned long deferred_split_scan(struct shrinker *shrink,
 	struct folio *folio, *next;
 	int split = 0;
 	unsigned long isolated;
+	enum lru_cache_drained drained = LRU_CACHE_NOT_DRAINED;
 
 	isolated = list_lru_shrink_walk_irq(&deferred_split_lru, sc,
 					    deferred_split_isolate, &dispose);
@@ -4648,7 +4652,8 @@ static unsigned long deferred_split_scan(struct shrinker *shrink,
 		}
 		if (!folio_trylock(folio))
 			goto requeue;
-		if (!split_folio(folio)) {
+		if (!__folio_split(folio, 0, &folio->page, &folio->page, NULL,
+		    SPLIT_TYPE_UNIFORM, &drained)) {
 			did_split = true;
 			if (underused)
 				count_vm_event(THP_UNDERUSED_SPLIT_PAGE);
