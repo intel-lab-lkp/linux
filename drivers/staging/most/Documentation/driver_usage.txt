@@ -2,7 +2,7 @@
 		Section 1 Overview
 
 The Media Oriented Systems Transport (MOST) driver gives Linux applications
-access a MOST network: The Automotive Information Backbone and the de-facto
+access to a MOST network: The Automotive Information Backbone and the de-facto
 standard for high-bandwidth automotive multimedia networking.
 
 MOST defines the protocol, hardware and software layers necessary to allow
@@ -151,7 +151,7 @@ following attributes:
 	  pass parameters needed by some components
 	- create_link
 	  write '1' to this attribute to trigger the creation of the link. In
-	  case of speculative configuration, the creation is post-poned until
+	  case of speculative configuration, the creation is postponed until
 	  a physical device is being attached to the bus.
 	- destroy_link
 	  write '1' to this attribute to destroy an already established link
@@ -172,7 +172,7 @@ name in ALSA. The sound adapter will have the following attribute:
 	- create_card
 	  write '1' to this attribute to trigger the registration of the card
 	  with the ALSA subsystem.
-	  In case of speculative configuration, the creation is post-poned
+	  In case of speculative configuration, the creation is postponed
 	  until a physical device is being attached to the bus.
 
 Secondly, links will have to be created inside the adapter dir as described in
