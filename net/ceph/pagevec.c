@@ -10,15 +10,6 @@
 
 #include <linux/ceph/libceph.h>
 
-void ceph_put_page_vector(struct page **pages, int num_pages)
-{
-	int i;
-
-	for (i = 0; i < num_pages; i++)
-		put_page(pages[i]);
-	kvfree(pages);
-}
-EXPORT_SYMBOL(ceph_put_page_vector);
 
 void ceph_release_page_vector(struct page **pages, int num_pages)
 {
