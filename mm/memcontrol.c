@@ -28,6 +28,8 @@
 #include <linux/cgroup-defs.h>
 #include <linux/page_counter.h>
 #include <linux/memcontrol.h>
+#include <linux/memory-tiers.h>
+#include <linux/node.h>
 #include <linux/cgroup.h>
 #include <linux/cpuset.h>
 #include <linux/sched/mm.h>
@@ -2361,6 +2363,89 @@ static void high_work_func(struct work_struct *work)
 }
 
 /*
+ * Find a tier counter for a given memcg and tier ID.
+ *
+ * Context: Caller must hold either:
+ * - The RCU read lock, for lockless lookup in the fast (charge) path.
+ * - memcg->tier_lock, for modifications in the slow (creation/free) path.
+ */
+static struct memcg_tier_counter *
+memcg_tier_counter_find(struct mem_cgroup *memcg, int tier_id)
+{
+	struct memcg_tier_counter *tc;
+
+	list_for_each_entry_rcu(tc, &memcg->tier_counters, list,
+				lockdep_is_held(&memcg->tier_lock))
+		if (tc->tier_id == tier_id)
+			return tc;
+	return NULL;
+}
+
+static struct page_counter *
+memcg_tier_parent_link(struct mem_cgroup *parent, int tier_id)
+{
+	struct memcg_tier_counter *ptc;
+	struct page_counter *pc;
+
+	if (!parent || mem_cgroup_is_root(parent))
+		return NULL;
+
+	rcu_read_lock();
+	ptc = memcg_tier_counter_find(parent, tier_id);
+	pc = ptc ? &ptc->counter : NULL;
+	rcu_read_unlock();
+	return pc;
+}
+
+static int memcg_tier_counter_create(struct mem_cgroup *memcg,
+				     struct mem_cgroup *parent, int tier_id)
+{
+	struct page_counter *parent_cnt;
+	struct memcg_tier_counter *new;
+
+	/* Fast path (lockless RCU read): already exists -> nothing to do. */
+	rcu_read_lock();
+	if (memcg_tier_counter_find(memcg, tier_id)) {
+		rcu_read_unlock();
+		return 0;
+	}
+	rcu_read_unlock();
+
+	parent_cnt = memcg_tier_parent_link(parent, tier_id);
+
+	new = kzalloc_obj(*new);
+	if (!new)
+		return -ENOMEM;
+
+	new->tier_id = tier_id;
+	page_counter_init(&new->counter, parent_cnt, false);
+	page_counter_set_high(&new->counter, PAGE_COUNTER_MAX);
+	INIT_LIST_HEAD(&new->list);
+
+	spin_lock(&memcg->tier_lock);
+	if (memcg_tier_counter_find(memcg, tier_id)) {
+		spin_unlock(&memcg->tier_lock);
+		kfree(new);
+		return 0;
+	}
+	list_add_tail_rcu(&new->list, &memcg->tier_counters);
+	spin_unlock(&memcg->tier_lock);
+	return 0;
+}
+
+static void memcg_free_tier_counters(struct mem_cgroup *memcg)
+{
+	struct memcg_tier_counter *tc, *tmp;
+
+	spin_lock(&memcg->tier_lock);
+	list_for_each_entry_safe(tc, tmp, &memcg->tier_counters, list) {
+		list_del_rcu(&tc->list);
+		kfree_rcu(tc, rcu);
+	}
+	spin_unlock(&memcg->tier_lock);
+}
+
+/*
  * Clamp the maximum sleep time per allocation batch to 2 seconds. This is
  * enough to still cause a significant slowdown in most cases, while still
  * allowing diagnostics and tracing to proceed without becoming stuck.
@@ -4129,6 +4214,8 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 		goto fail;
 
 	INIT_WORK(&memcg->high_work, high_work_func);
+	spin_lock_init(&memcg->tier_lock);
+	INIT_LIST_HEAD(&memcg->tier_counters);
 	vmpressure_init(&memcg->vmpressure);
 	INIT_LIST_HEAD(&memcg->memory_peaks);
 	INIT_LIST_HEAD(&memcg->swap_peaks);
@@ -4178,6 +4265,20 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 
 		page_counter_init(&memcg->memory, &parent->memory, memcg_on_dfl);
 		page_counter_init(&memcg->swap, &parent->swap, false);
+
+		{
+			int nid, tid;
+
+			for_each_online_node(nid) {
+				tid = node_to_tier_id(nid);
+				if (tid != -1 && memcg_tier_counter_create(memcg,
+							mem_cgroup_from_css(parent_css), tid)) {
+					memcg_free_tier_counters(memcg);
+					mem_cgroup_free(memcg);
+					return ERR_PTR(-ENOMEM);
+				}
+			}
+		}
 #ifdef CONFIG_MEMCG_V1
 		memcg->memory.track_failcnt = !memcg_on_dfl;
 		WRITE_ONCE(memcg->oom_kill_disable, READ_ONCE(parent->oom_kill_disable));
@@ -4338,6 +4439,7 @@ static void mem_cgroup_css_free(struct cgroup_subsys_state *css)
 
 	vmpressure_cleanup(&memcg->vmpressure);
 	cancel_work_sync(&memcg->high_work);
+	memcg_free_tier_counters(memcg);
 	memcg1_remove_from_trees(memcg);
 	free_shrinker_info(memcg);
 	mem_cgroup_free(memcg);
@@ -5534,6 +5636,41 @@ __setup("cgroup.memory=", cgroup_memory);
  * basically everything that doesn't depend on a specific mem_cgroup structure
  * should be initialized from here.
  */
+#if defined(CONFIG_MEMORY_HOTPLUG) && defined(CONFIG_NUMA)
+/*
+ * Below MEMTIER_HOTPLUG_PRI (100): run after memory-tiers has set or
+ * cleared the node's tier association.
+ */
+#define MEMCG_TIER_NODE_PRI		90
+
+/* Memory hotplug callback: a node came online with a potentially new tier
+ * (e.g. CXL hotplug). Ensure every online memcg has a counter for this tier.
+ * Existing tiers hit in the RCU lookup, so this path does not allocate.
+ */
+static int __meminit memcg_tier_hotplug_cb(struct notifier_block *self,
+					    unsigned long action, void *_arg)
+{
+	struct node_notify *nn = _arg;
+	struct mem_cgroup *memcg;
+	int tid;
+
+	if (action != NODE_ADDED_FIRST_MEMORY)
+		return notifier_from_errno(0);
+
+	tid = node_to_tier_id(nn->nid);
+	if (tid < 0)
+		return notifier_from_errno(0);
+
+	for_each_mem_cgroup(memcg) {
+		if (!mem_cgroup_is_root(memcg) &&
+		    memcg_tier_counter_create(memcg, parent_mem_cgroup(memcg), tid))
+			pr_warn_ratelimited("memcg: tier %d counter alloc failed;"
+					     " tier accounting degraded\n", tid);
+	}
+	return notifier_from_errno(0);
+}
+#endif
+
 int __init mem_cgroup_init(void)
 {
 	unsigned int memcg_size;
@@ -5552,6 +5689,10 @@ int __init mem_cgroup_init(void)
 
 	memcg_wq = alloc_workqueue("memcg", WQ_PERCPU, 0);
 	WARN_ON(!memcg_wq);
+
+#if defined(CONFIG_MEMORY_HOTPLUG) && defined(CONFIG_NUMA)
+	hotplug_node_notifier(memcg_tier_hotplug_cb, MEMCG_TIER_NODE_PRI);
+#endif
 
 	for_each_possible_cpu(cpu) {
 		INIT_WORK(&per_cpu_ptr(&memcg_stock, cpu)->work,

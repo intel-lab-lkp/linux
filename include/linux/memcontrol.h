@@ -199,6 +199,14 @@ struct obj_cgroup {
  * statistics based on the statistics developed by Rik Van Riel for clock-pro,
  * to help the administrator determine what knobs to tune.
  */
+
+struct memcg_tier_counter {
+	struct page_counter counter;
+	int tier_id;
+	struct list_head list;
+	struct rcu_head rcu;
+};
+
 struct mem_cgroup {
 	struct cgroup_subsys_state css;
 
@@ -319,6 +327,9 @@ struct mem_cgroup {
 	struct list_head event_list;
 	spinlock_t event_list_lock;
 #endif /* CONFIG_MEMCG_V1 */
+
+	spinlock_t tier_lock;
+	struct list_head tier_counters;
 
 	struct mem_cgroup_per_node *nodeinfo[];
 };
