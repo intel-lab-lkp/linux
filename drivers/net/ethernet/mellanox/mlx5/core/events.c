@@ -396,7 +396,7 @@ int mlx5_events_init(struct mlx5_core_dev *dev)
 void mlx5_events_cleanup(struct mlx5_core_dev *dev)
 {
 	destroy_workqueue(dev->priv.events->wq);
-	kvfree(dev->priv.events);
+	kfree(dev->priv.events);
 }
 
 void mlx5_events_start(struct mlx5_core_dev *dev)
