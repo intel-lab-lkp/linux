@@ -790,11 +790,13 @@ struct read_balance_ctl {
 	bool sequential_nonrot;
 };
 
+/* Offset from rr start. Replacement uses the same slot as primary. */
 static int raid1_rr_pos(int disk, int start, int n)
 {
 	return ((disk % n) - start + n) % n;
 }
 
+/* True if some readable member is nonrot. */
 static bool raid1_has_readable_nonrot(struct r1conf *conf,
 				      struct r1bio *r1_bio)
 {
@@ -813,6 +815,7 @@ static bool raid1_has_readable_nonrot(struct r1conf *conf,
 	return false;
 }
 
+/* Lower pending wins. Same pending: prefer nonrot, then rr order. */
 static bool is_better_disk(unsigned int pending, int disk, bool nonrot,
 			   const struct read_balance_ctl *ctl,
 			   int rr_start, int n)
@@ -830,6 +833,20 @@ static bool is_better_disk(unsigned int pending, int disk, bool nonrot,
 	       raid1_rr_pos(ctl->min_pending_disk, rr_start, n);
 }
 
+/*
+ * Choose a readable disk for this read.
+ *
+ * Prefer nonrot. Use rot only if no nonrot disk is readable.
+ *
+ * Sequential idle: keep this disk. Mixed array: do not keep a
+ * rot disk (after a write every disk looks sequential).
+ * Sequential busy: try an idle disk of the same class. If none
+ * is idle, keep the sequential disk.
+ *
+ * Else fewest pending I/Os among disks we may pick. Same
+ * pending: nonrot, then round-robin. Rot-only with no idle
+ * disk: closest head.
+ */
 static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 {
 	int disk;
@@ -869,22 +886,28 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 		dist = abs(r1_bio->sector -
 			   READ_ONCE(conf->mirrors[disk].head_position));
 		nonrot = test_bit(Nonrot, &rdev->flags);
+		/*
+		 * If a nonrot disk is readable, pick only nonrot.
+		 * Else we must use rot.
+		 */
 		can_pick = nonrot || !has_nonrot;
 
-		/* Don't change to another disk for sequential reads */
+		/*
+		 * Idle sequential disk: return it now, unless
+		 * should_choose_next() wants another disk.
+		 * Mixed array: do not return a rot disk.
+		 */
 		if (is_sequential(conf, disk, r1_bio)) {
 			if (!should_choose_next(conf, disk) && !pending &&
 			    can_pick)
 				return disk;
 
-			/*
-			 * Add 'pending' to avoid choosing this disk if
-			 * there is other idle disk.
-			 */
+			/* Make an idle disk win over this busy one. */
 			pending++;
 			/*
-			 * If there is no other idle disk, this disk
-			 * will be chosen.
+			 * Remember the first sequential disk.
+			 * A nonrot disk may replace a rot disk.
+			 * A later nonrot disk may not replace an earlier one.
 			 */
 			if (ctl.sequential_disk < 0 ||
 			    (nonrot && !ctl.sequential_nonrot)) {
@@ -908,18 +931,17 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 	}
 
 	/*
-	 * sequential IO size exceeds optimal iosize, however, there is no other
-	 * idle disk, so choose the sequential disk.
+	 * Keep the sequential disk if no idle peer should take it.
+	 * If a nonrot disk is readable: keep only a nonrot sequential disk.
+	 * If not: an idle rot disk may take it.
 	 */
 	if (ctl.sequential_disk != -1 && ctl.min_pending != 0 &&
 	    (ctl.sequential_nonrot || !has_nonrot))
 		return ctl.sequential_disk;
 
 	/*
-	 * If all disks are rotational, choose the closest disk. If any disk is
-	 * non-rotational, choose the disk with less pending request even the
-	 * disk is rotational, which might/might not be optimal for raids with
-	 * mixed ratation/non-rotational disks depending on workload.
+	 * No readable nonrot disk: closest disk, unless some disk is idle.
+	 * Some readable nonrot disk: that nonrot disk with fewest pending I/Os.
 	 */
 	if (ctl.min_pending_disk != -1 &&
 	    (has_nonrot || ctl.min_pending == 0))
