@@ -298,13 +298,12 @@ static int list_gadget_devices(bool parsable)
 		idVendor = le16toh(d_desc->idVendor);
 		sprintf(idVendor_buf, "0x%4x", idVendor);
 		idProduct = le16toh(d_desc->idProduct);
-		sprintf(idProduct_buf, "0x%4x", idVendor);
+		sprintf(idProduct_buf, "0x%4x", idProduct);
 		busid = udev_device_get_sysname(dev);
 
 		/* Get product name. */
 		usbip_names_get_product(product_name, sizeof(product_name),
-					le16toh(idVendor),
-					le16toh(idProduct));
+					idVendor, idProduct);
 
 		/* Print information. */
 		print_device(busid, idVendor_buf, idProduct_buf, parsable);
