@@ -506,7 +506,6 @@ struct ttm_bo_alloc_state {
  *
  * @bo: The buffer to allocate the backing store of
  * @place: The place to attempt allocation in
- * @ctx: ttm_operation_ctx associated with this allocation
  * @force_space: If we should evict buffers to force space
  * @res: On allocation success, the resulting struct ttm_resource.
  * @alloc_state: Object holding allocation state such as charged cgroups.
