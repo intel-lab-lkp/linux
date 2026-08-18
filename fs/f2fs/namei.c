@@ -704,13 +704,15 @@ static int f2fs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	f2fs_alloc_nid_done(sbi, inode->i_ino);
 
 	err = fscrypt_encrypt_symlink(inode, symname, len, &disk_link);
-	if (err)
-		goto err_out;
+	if (!err)
+		err = page_symlink(inode, disk_link.name, disk_link.len);
 
-	err = page_symlink(inode, disk_link.name, disk_link.len);
-
-err_out:
 	d_instantiate_new(dentry, inode);
+
+	if (err) {
+		f2fs_unlink(dir, dentry);
+		goto out_f2fs_handle_failed_inode;
+	}
 
 	/*
 	 * Let's flush symlink data in order to avoid broken symlink as much as
@@ -721,16 +723,10 @@ err_out:
 	 * If the symlink path is stored into inline_data, there is no
 	 * performance regression.
 	 */
-	if (!err) {
-		err = filemap_write_and_wait_range(inode->i_mapping, 0,
-						   disk_link.len - 1);
-
-		if (!err && IS_DIRSYNC(dir))
-			err = f2fs_sync_fs(sbi->sb, 1);
-	}
-
-	if (err)
-		f2fs_unlink(dir, dentry);
+	err = filemap_write_and_wait_range(inode->i_mapping, 0,
+					   disk_link.len - 1);
+	if (!err && IS_DIRSYNC(dir))
+		f2fs_sync_fs(sbi->sb, 1);
 
 	f2fs_balance_fs(sbi, true);
 	goto out_free_encrypted_link;
