@@ -775,9 +775,7 @@ int amd_uncore_df_ctx_init(struct amd_uncore *uncore, unsigned int cpu)
 		goto done;
 	}
 
-	pr_info("%d %s%s counters detected\n", pmu->num_counters,
-		boot_cpu_data.x86_vendor == X86_VENDOR_HYGON ?  "HYGON " : "",
-		pmu->pmu.name);
+	pr_info("%d %s counters detected\n", pmu->num_counters, pmu->pmu.name);
 
 	uncore->num_pmus = 1;
 
@@ -911,9 +909,7 @@ int amd_uncore_l3_ctx_init(struct amd_uncore *uncore, unsigned int cpu)
 		goto done;
 	}
 
-	pr_info("%d %s%s counters detected\n", pmu->num_counters,
-		boot_cpu_data.x86_vendor == X86_VENDOR_HYGON ?  "HYGON " : "",
-		pmu->pmu.name);
+	pr_info("%d %s counters detected\n", pmu->num_counters, pmu->pmu.name);
 
 	uncore->num_pmus = 1;
 
@@ -1120,8 +1116,7 @@ static int __init amd_uncore_init(void)
 	int ret = -ENODEV;
 	int i;
 
-	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
-	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD)
 		return -ENODEV;
 
 	if (!boot_cpu_has(X86_FEATURE_TOPOEXT))
