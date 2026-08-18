@@ -2169,11 +2169,18 @@ static enum sctp_ierror sctp_verify_param(struct net *net,
 	case SCTP_PARAM_IPV4_ADDRESS:
 	case SCTP_PARAM_IPV6_ADDRESS:
 	case SCTP_PARAM_COOKIE_PRESERVATIVE:
-	case SCTP_PARAM_SUPPORTED_ADDRESS_TYPES:
 	case SCTP_PARAM_STATE_COOKIE:
 	case SCTP_PARAM_HEARTBEAT_INFO:
 	case SCTP_PARAM_UNRECOGNIZED_PARAMETERS:
 	case SCTP_PARAM_ECN_CAPABLE:
+		break;
+
+	case SCTP_PARAM_SUPPORTED_ADDRESS_TYPES:
+		if (ntohs(param.p->length) < sizeof(struct sctp_paramhdr)) {
+			sctp_process_inv_paramlength(asoc, param.p,
+						     chunk, err_chunk);
+			retval = SCTP_IERROR_ABORT;
+		}
 		break;
 	case SCTP_PARAM_ADAPTATION_LAYER_IND:
 		if (ntohs(param.p->length) != sizeof(*param.aind)) {
@@ -2600,6 +2607,9 @@ do_addr_param:
 			asoc->peer.ipv4_address = 1;
 
 		/* Cycle through address types; avoid divide by 0. */
+		if (ntohs(param.p->length) < sizeof(struct sctp_paramhdr))
+			break;
+
 		sat = ntohs(param.p->length) - sizeof(struct sctp_paramhdr);
 		if (sat)
 			sat /= sizeof(__u16);
