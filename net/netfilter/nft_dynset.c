@@ -19,7 +19,8 @@ struct nft_dynset {
 	u8				sreg_key;
 	u8				sreg_data;
 	bool				invert;
-	bool				expr;
+	u8				expr:1,
+					cloned:1;
 	u8				num_exprs;
 	u64				timeout;
 	struct nft_expr			*expr_array[NFT_SET_EXPR_MAX];
@@ -168,6 +169,19 @@ static const struct nla_policy nft_dynset_policy[NFTA_DYNSET_MAX + 1] = {
 	[NFTA_DYNSET_EXPRESSIONS] = { .type = NLA_NESTED },
 };
 
+static void nft_dynset_expr_destroy(const struct nft_ctx *ctx,
+				    struct nft_dynset *priv)
+{
+	int i;
+
+	for (i = 0; i < priv->num_exprs; i++) {
+		if (priv->cloned)
+			__nft_set_elem_expr_destroy(ctx, priv->expr_array[i]);
+		else
+			nft_expr_destroy(ctx, priv->expr_array[i]);
+	}
+}
+
 static int nft_dynset_init(const struct nft_ctx *ctx,
 			   const struct nft_expr *expr,
 			   const struct nlattr * const tb[])
@@ -312,6 +326,7 @@ static int nft_dynset_init(const struct nft_ctx *ctx,
 			return err;
 
 		priv->num_exprs = set->num_exprs;
+		priv->cloned = true;
 	}
 
 	nft_set_ext_prepare(&priv->tmpl);
@@ -339,8 +354,7 @@ static int nft_dynset_init(const struct nft_ctx *ctx,
 	return 0;
 
 err_expr_free:
-	for (i = 0; i < priv->num_exprs; i++)
-		nft_expr_destroy(ctx, priv->expr_array[i]);
+	nft_dynset_expr_destroy(ctx, priv);
 	return err;
 }
 
@@ -365,11 +379,8 @@ static void nft_dynset_destroy(const struct nft_ctx *ctx,
 			       const struct nft_expr *expr)
 {
 	struct nft_dynset *priv = nft_expr_priv(expr);
-	int i;
 
-	for (i = 0; i < priv->num_exprs; i++)
-		nft_expr_destroy(ctx, priv->expr_array[i]);
-
+	nft_dynset_expr_destroy(ctx, priv);
 	nf_tables_destroy_set(ctx, priv->set);
 }
 
