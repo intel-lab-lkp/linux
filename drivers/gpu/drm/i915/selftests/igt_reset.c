@@ -4,6 +4,8 @@
  * Copyright © 2018 Intel Corporation
  */
 
+#include <drm/drm_print.h>
+
 #include "igt_reset.h"
 
 #include "gt/intel_engine.h"
@@ -16,7 +18,7 @@ void igt_global_reset_lock(struct intel_gt *gt)
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 
-	pr_debug("%s: current gpu_error=%08lx\n", __func__, gt->reset.flags);
+	drm_dbg(&gt->i915->drm, "%s: current gpu_error=%08lx\n", __func__, gt->reset.flags);
 
 	while (test_and_set_bit(I915_RESET_BACKOFF, &gt->reset.flags))
 		wait_event(gt->reset.queue,

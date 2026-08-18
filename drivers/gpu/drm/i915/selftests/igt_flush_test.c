@@ -7,6 +7,8 @@
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_requests.h"
 
+#include <drm/drm_print.h>
+
 #include "i915_drv.h"
 #include "i915_selftest.h"
 
@@ -35,8 +37,8 @@ int igt_flush_test(struct drm_i915_private *i915)
 
 		/* 2x longest preempt timeout, experimentally determined */
 		if (intel_gt_wait_for_idle(gt, HZ * timeout_ms / 500) == -ETIME) {
-			pr_err("%pS timed out, cancelling all further testing.\n",
-			       __builtin_return_address(0));
+			drm_err(&gt->i915->drm, "%pS timed out, cancelling all further testing.\n",
+				__builtin_return_address(0));
 
 			GEM_TRACE("%pS timed out.\n",
 				  __builtin_return_address(0));

@@ -5,6 +5,8 @@
 
 #include <linux/jiffies.h>
 
+#include <drm/drm_print.h>
+
 //#include "gt/intel_engine_user.h"
 #include "gt/intel_gt.h"
 #include "i915_drv.h"
@@ -24,7 +26,7 @@ struct intel_engine_cs *intel_selftest_find_any_engine(struct intel_gt *gt)
 	for_each_engine(engine, gt, id)
 		return engine;
 
-	pr_err("No valid engine found!\n");
+	drm_err(&gt->i915->drm, "No valid engine found!\n");
 	return NULL;
 }
 
@@ -60,7 +62,8 @@ int intel_selftest_modify_policy(struct intel_engine_cs *engine,
 		break;
 
 	default:
-		pr_err("Invalid scheduler policy modification type: %d!\n", modify_type);
+		drm_err(&engine->i915->drm, "Invalid scheduler policy modification type: %d!\n",
+			modify_type);
 		return -EINVAL;
 	}
 
