@@ -5,6 +5,8 @@
 
 #include <linux/sort.h>
 
+#include <drm/drm_print.h>
+
 #include "gem/i915_gem_internal.h"
 #include "gem/i915_gem_lmem.h"
 
@@ -92,7 +94,7 @@ static int copy(struct intel_migrate *migrate,
 			continue;
 
 		if (err != -EDEADLK && err != -EINTR && err != -ERESTARTSYS)
-			pr_err("%ps failed, size: %u\n", fn, sz);
+			drm_err(&i915->drm, "%ps failed, size: %u\n", fn, sz);
 		if (rq) {
 			i915_request_wait(rq, 0, HZ);
 			i915_request_put(rq);
@@ -106,7 +108,7 @@ unpin_src:
 
 	if (rq) {
 		if (i915_request_wait(rq, 0, HZ) < 0) {
-			pr_err("%ps timed out, size: %u\n", fn, sz);
+			drm_err(&i915->drm, "%ps timed out, size: %u\n", fn, sz);
 			err = -ETIME;
 		}
 		i915_request_put(rq);
@@ -116,8 +118,8 @@ unpin_src:
 		int x = i * 1024 + i915_prandom_u32_max_state(1024, prng);
 
 		if (vaddr[x] != x) {
-			pr_err("%ps failed, size: %u, offset: %zu\n",
-			       fn, sz, x * sizeof(u32));
+			drm_err(&i915->drm, "%ps failed, size: %u, offset: %zu\n",
+				fn, sz, x * sizeof(u32));
 			igt_hexdump(vaddr + i * 1024, 4096);
 			err = -EINVAL;
 		}
@@ -304,8 +306,7 @@ static int clear(struct intel_migrate *migrate,
 						     true, &rq);
 			if (rq && !err) {
 				if (i915_request_wait(rq, 0, HZ) < 0) {
-					pr_err("%ps timed out, size: %u\n",
-					       fn, sz);
+					drm_err(&i915->drm, "%ps timed out, size: %u\n", fn, sz);
 					err = -ETIME;
 				}
 				i915_request_put(rq);
@@ -318,7 +319,7 @@ static int clear(struct intel_migrate *migrate,
 		err = fn(migrate, &ww, obj, val, &rq);
 		if (rq && !err) {
 			if (i915_request_wait(rq, 0, HZ) < 0) {
-				pr_err("%ps timed out, size: %u\n", fn, sz);
+				drm_err(&i915->drm, "%ps timed out, size: %u\n", fn, sz);
 				err = -ETIME;
 			}
 			i915_request_put(rq);
@@ -335,8 +336,8 @@ static int clear(struct intel_migrate *migrate,
 				i915_prandom_u32_max_state(1024, prng);
 
 			if (vaddr[x] != val) {
-				pr_err("%ps failed, (%u != %u), offset: %zu\n",
-				       fn, vaddr[x], val, x * sizeof(u32));
+				drm_err(&i915->drm, "%ps failed, (%u != %u), offset: %zu\n",
+					fn, vaddr[x], val, x * sizeof(u32));
 				igt_hexdump(vaddr + i * 1024, 4096);
 				err = -EINVAL;
 			}
@@ -355,8 +356,7 @@ static int clear(struct intel_migrate *migrate,
 						     false, &rq);
 			if (rq && !err) {
 				if (i915_request_wait(rq, 0, HZ) < 0) {
-					pr_err("%ps timed out, size: %u\n",
-					       fn, sz);
+					drm_err(&i915->drm, "%ps timed out, size: %u\n", fn, sz);
 					err = -ETIME;
 				}
 				i915_request_put(rq);
@@ -377,8 +377,9 @@ static int clear(struct intel_migrate *migrate,
 									 ccs_bytes_left), prng);
 
 				if (vaddr[offset + x]) {
-					pr_err("%ps ccs clearing failed, offset: %ld/%d\n",
-					       fn, i * PAGE_SIZE + x * sizeof(u32), ccs_bytes);
+					drm_err(&i915->drm,
+						"%ps ccs clearing failed, offset: %ld/%d\n",
+						fn, i * PAGE_SIZE + x * sizeof(u32), ccs_bytes);
 					igt_hexdump(vaddr + offset,
 						    min_t(int, 4096,
 							  ccs_bytes_left * sizeof(u32)));
@@ -394,7 +395,7 @@ static int clear(struct intel_migrate *migrate,
 
 	if (err) {
 		if (err != -EDEADLK && err != -EINTR && err != -ERESTARTSYS)
-			pr_err("%ps failed, size: %u\n", fn, sz);
+			drm_err(&i915->drm, "%ps failed, size: %u\n", fn, sz);
 		if (rq && err != -EINVAL) {
 			i915_request_wait(rq, 0, HZ);
 			i915_request_put(rq);
@@ -540,7 +541,7 @@ static void spinner_kill(struct timer_list *timer)
 	struct spinner_timer *st = timer_container_of(st, timer, timer);
 
 	igt_spinner_end(&st->spin);
-	pr_info("%s\n", __func__);
+	drm_info(st->spin.hws->base.dev, "killing spinner\n");
 }
 
 static int live_emit_pte_full_ring(void *arg)
@@ -633,7 +634,7 @@ static int live_emit_pte_full_ring(void *arg)
 		cs += sz;
 		intel_ring_advance(rq, cs);
 
-		pr_info("%s emit=%u sz=%d\n", __func__, rq->ring->emit, sz);
+		drm_info(&i915->drm, "%s emit=%u sz=%d\n", __func__, rq->ring->emit, sz);
 
 		prev = rq;
 	} while (rq->ring->space > (rq->reserved_space +
@@ -646,7 +647,7 @@ static int live_emit_pte_full_ring(void *arg)
 	 * This should wait for the spinner to be killed, otherwise we should go
 	 * down in flames when doing i915_request_add().
 	 */
-	pr_info("%s emite_pte ring space=%u\n", __func__, rq->ring->space);
+	drm_info(&i915->drm, "%s emite_pte ring space=%u\n", __func__, rq->ring->space);
 	it = sg_sgt(obj->mm.pages->sgl);
 	len = emit_pte(rq, &it, obj->pat_index, false, 0, CHUNK_SZ);
 	if (!len) {
@@ -880,11 +881,9 @@ static int __perf_clear_blt(struct intel_context *ce,
 		return err;
 
 	sort(t, ARRAY_SIZE(t), sizeof(*t), wrap_ktime_compare, NULL);
-	pr_info("%s: %zd KiB fill: %lld MiB/s\n",
-		ce->engine->name, sz >> 10,
-		div64_u64(mul_u32_u32(4 * sz,
-				      1000 * 1000 * 1000),
-			  t[1] + 2 * t[2] + t[3]) >> 20);
+	drm_info(&ce->engine->i915->drm, "%s: %zd KiB fill: %lld MiB/s\n", ce->engine->name,
+		 sz >> 10, div64_u64(mul_u32_u32(4 * sz, 1000 * 1000 * 1000),
+		 t[1] + 2 * t[2] + t[3]) >> 20);
 	return 0;
 }
 
@@ -963,11 +962,9 @@ static int __perf_copy_blt(struct intel_context *ce,
 		return err;
 
 	sort(t, ARRAY_SIZE(t), sizeof(*t), wrap_ktime_compare, NULL);
-	pr_info("%s: %zd KiB copy: %lld MiB/s\n",
-		ce->engine->name, sz >> 10,
-		div64_u64(mul_u32_u32(4 * sz,
-				      1000 * 1000 * 1000),
-			  t[1] + 2 * t[2] + t[3]) >> 20);
+	drm_info(&ce->engine->i915->drm, "%s: %zd KiB copy: %lld MiB/s\n", ce->engine->name,
+		 sz >> 10, div64_u64(mul_u32_u32(4 * sz, 1000 * 1000 * 1000),
+		 t[1] + 2 * t[2] + t[3]) >> 20);
 	return 0;
 }
 

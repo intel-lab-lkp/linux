@@ -14,6 +14,8 @@
 #include "selftests/igt_atomic.h"
 #include "selftests/igt_spinner.h"
 
+#include <drm/drm_print.h>
+
 static int
 __igt_reset_stolen(struct intel_gt *gt,
 		   intel_engine_mask_t mask,
@@ -147,8 +149,9 @@ __igt_reset_stolen(struct intel_gt *gt,
 		    !__drm_mm_interval_first(&gt->i915->mm.stolen,
 					     page << PAGE_SHIFT,
 					     ((page + 1) << PAGE_SHIFT) - 1)) {
-			pr_debug("unused stolen page %pa modified by GPU reset\n",
-				 &page);
+			drm_dbg(&gt->i915->drm,
+				"unused stolen page %pa modified by GPU reset\n",
+				&page);
 			if (count++ == 0)
 				igt_hexdump(in, PAGE_SIZE);
 			max = page;
@@ -160,12 +163,14 @@ __igt_reset_stolen(struct intel_gt *gt,
 	ggtt->vm.clear_range(&ggtt->vm, ggtt->error_capture.start, PAGE_SIZE);
 
 	if (count > 0) {
-		pr_info("%s reset clobbered %ld pages of stolen, last clobber at page %ld\n",
-			msg, count, max);
+		drm_info(&gt->i915->drm,
+			 "%s reset clobbered %ld pages of stolen, last clobber at page %ld\n",
+			 msg, count, max);
 	}
 	if (max >= I915_GEM_STOLEN_BIAS >> PAGE_SHIFT) {
-		pr_err("%s reset clobbered unreserved area [above %x] of stolen; may cause severe faults\n",
-		       msg, I915_GEM_STOLEN_BIAS);
+		drm_err(&gt->i915->drm,
+			"%s reset clobbered unreserved area [above %x] of stolen; may cause severe faults\n",
+			msg, I915_GEM_STOLEN_BIAS);
 		err = -EINVAL;
 	}
 
@@ -223,7 +228,7 @@ static int igt_global_reset(void *arg)
 	intel_gt_reset(gt, ALL_ENGINES, NULL);
 
 	if (i915_reset_count(&gt->i915->gpu_error) == reset_count) {
-		pr_err("No GPU reset recorded!\n");
+		drm_err(&gt->i915->drm, "No GPU reset recorded!\n");
 		err = -EINVAL;
 	}
 
@@ -287,7 +292,8 @@ static int igt_atomic_reset(void *arg)
 		reset_finish(gt, awake);
 
 		if (err) {
-			pr_err("__intel_gt_reset failed under %s\n", p->name);
+			drm_err(&gt->i915->drm,
+				"__intel_gt_reset failed under %s\n", p->name);
 			break;
 		}
 	}
@@ -347,8 +353,9 @@ static int igt_atomic_engine_reset(void *arg)
 				local_bh_enable();
 
 			if (err) {
-				pr_err("intel_engine_reset(%s) failed under %s\n",
-				       engine->name, p->name);
+				drm_err(&engine->i915->drm,
+					"intel_engine_reset(%s) failed under %s\n",
+					engine->name, p->name);
 				break;
 			}
 		}

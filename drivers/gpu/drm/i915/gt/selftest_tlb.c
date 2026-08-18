@@ -20,6 +20,8 @@
 #include "selftests/igt_flush_test.h"
 #include "selftests/i915_random.h"
 
+#include <drm/drm_print.h>
+
 static void vma_set_qw(struct i915_vma *vma, u64 addr, u64 val)
 {
 	GEM_BUG_ON(addr < i915_vma_offset(vma));
@@ -68,7 +70,7 @@ pte_tlbinv(struct intel_context *ce,
 				 va->size, align);
 	err = i915_vma_pin(va,  0, 0, addr | PIN_OFFSET_FIXED | PIN_USER);
 	if (err) {
-		pr_err("Cannot pin at %llx+%llx\n", addr, va->size);
+		drm_err(&ce->engine->i915->drm, "Cannot pin at %llx+%llx\n", addr, va->size);
 		goto out;
 	}
 	GEM_BUG_ON(i915_vma_offset(va) != addr);
@@ -91,11 +93,11 @@ pte_tlbinv(struct intel_context *ce,
 	addr = igt_random_offset(prng, addr, addr + align, 8, 8);
 
 	if (va != vb)
-		pr_info("%s(%s): Sampling %llx, with alignment %llx, using PTE size %x (phys %x, sg %x), invalidate:%llx+%llx\n",
-			ce->engine->name, va->obj->mm.region->name ?: "smem",
-			addr, align, va->resource->page_sizes_gtt,
-			va->page_sizes.phys, va->page_sizes.sg,
-			addr & -length, length);
+		drm_info(&ce->engine->i915->drm,
+			 "%s(%s): Sampling %llx, with alignment %llx, using PTE size %x (phys %x, sg %x), invalidate:%llx+%llx\n",
+			 ce->engine->name, va->obj->mm.region->name ?: "smem",  addr, align,
+			 va->resource->page_sizes_gtt, va->page_sizes.phys,
+			 va->page_sizes.sg, addr & -length, length);
 
 	cs = i915_gem_object_pin_map_unlocked(batch, I915_MAP_WC);
 	*cs++ = MI_NOOP; /* for later termination */
@@ -147,10 +149,11 @@ pte_tlbinv(struct intel_context *ce,
 
 	if (va == vb) {
 		if (!i915_request_completed(rq)) {
-			pr_err("%s(%s): Semaphore sanitycheck failed %llx, with alignment %llx, using PTE size %x (phys %x, sg %x)\n",
-			       ce->engine->name, va->obj->mm.region->name ?: "smem",
-			       addr, align, va->resource->page_sizes_gtt,
-			       va->page_sizes.phys, va->page_sizes.sg);
+			drm_err(&ce->engine->i915->drm,
+				"%s(%s): Semaphore sanitycheck failed %llx, with alignment %llx, using PTE size %x (phys %x, sg %x)\n",
+				ce->engine->name, va->obj->mm.region->name ?: "smem", addr, align,
+				va->resource->page_sizes_gtt, va->page_sizes.phys,
+				va->page_sizes.sg);
 			err = -EIO;
 		}
 	} else if (!i915_request_completed(rq)) {
@@ -171,12 +174,13 @@ pte_tlbinv(struct intel_context *ce,
 		tlbinv(ce->vm, addr & -length, length);
 
 		if (wait_for(i915_request_completed(rq), HZ / 2)) {
-			pr_err("%s: Request did not complete; the COND_BBE did not read the updated PTE\n",
-			       ce->engine->name);
+			drm_err(&ce->engine->i915->drm,
+				"%s: Request did not complete; the COND_BBE did not read the updated PTE\n",
+				ce->engine->name);
 			err = -EINVAL;
 		}
 	} else {
-		pr_err("Spinner ended unexpectedly\n");
+		drm_err(&ce->engine->i915->drm, "Spinner ended unexpectedly\n");
 		err = -EIO;
 	}
 	i915_request_put(rq);
@@ -271,8 +275,8 @@ mem_tlbinv(struct intel_gt *gt,
 
 	GEM_BUG_ON(A->base.size != B->base.size);
 	if ((A->mm.page_sizes.phys | B->mm.page_sizes.phys) & (A->base.size - 1))
-		pr_warn("Failed to allocate contiguous pages for size %zx\n",
-			A->base.size);
+		drm_warn(&gt->i915->drm,
+			 "Failed to allocate contiguous pages for size %zx\n", A->base.size);
 
 	ppgtt = i915_ppgtt_create(gt, 0);
 	if (IS_ERR(ppgtt)) {

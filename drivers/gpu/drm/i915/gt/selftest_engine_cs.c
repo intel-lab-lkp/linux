@@ -207,8 +207,8 @@ out:
 		if (err)
 			break;
 
-		pr_info("%s: MI_BB_START cycles: %u\n",
-			engine->name, trifilter(cycles));
+		drm_info(&gt->i915->drm, "%s: MI_BB_START cycles: %u\n",
+			 engine->name, trifilter(cycles));
 	}
 	if (perf_end(gt, wakeref))
 		err = -EIO;
@@ -365,8 +365,8 @@ out:
 		if (err)
 			break;
 
-		pr_info("%s: 16K MI_NOOP cycles: %u\n",
-			engine->name, trifilter(cycles));
+		drm_info(&gt->i915->drm, "%s: 16K MI_NOOP cycles: %u\n",
+			 engine->name, trifilter(cycles));
 	}
 	if (perf_end(gt, wakeref))
 		err = -EIO;
@@ -400,11 +400,10 @@ static int intel_mmio_bases_check(void *arg)
 			u32 base = info->mmio_bases[j].base;
 
 			if (ver >= prev) {
-				pr_err("%s(%s, class:%d, instance:%d): mmio base for graphics ver %u is before the one for ver %u\n",
-				       __func__,
-				       intel_engine_class_repr(info->class),
-				       info->class, info->instance,
-				       prev, ver);
+				drm_err(NULL,
+					"%s(%s, class:%d, instance:%d): mmio base for graphics ver %u is before the one for ver %u\n",
+					__func__, intel_engine_class_repr(info->class),
+					info->class, info->instance, prev, ver);
 				return -EINVAL;
 			}
 
@@ -412,22 +411,20 @@ static int intel_mmio_bases_check(void *arg)
 				break;
 
 			if (!base) {
-				pr_err("%s(%s, class:%d, instance:%d): invalid mmio base (%x) for graphics ver %u at entry %u\n",
-				       __func__,
-				       intel_engine_class_repr(info->class),
-				       info->class, info->instance,
-				       base, ver, j);
+				drm_err(NULL,
+					"%s(%s, class:%d, instance:%d): invalid mmio base (%x) for graphics ver %u at entry %u\n",
+					__func__, intel_engine_class_repr(info->class),
+					info->class, info->instance, base, ver, j);
 				return -EINVAL;
 			}
 
 			prev = ver;
 		}
 
-		pr_debug("%s: min graphics version supported for %s%d is %u\n",
-			 __func__,
-			 intel_engine_class_repr(info->class),
-			 info->instance,
-			 prev);
+		drm_dbg(NULL,
+			"%s: min graphics version supported for %s%d is %u\n",
+			__func__, intel_engine_class_repr(info->class),
+			info->instance, prev);
 	}
 
 	return 0;

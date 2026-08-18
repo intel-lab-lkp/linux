@@ -13,6 +13,8 @@
 #include "selftests/igt_spinner.h"
 #include "selftests/intel_scheduler_helpers.h"
 
+#include <drm/drm_print.h>
+
 struct live_mocs {
 	struct drm_i915_mocs_table table;
 	struct drm_i915_mocs_table *mocs;
@@ -169,8 +171,9 @@ static int check_mocs_table(struct intel_engine_cs *engine,
 
 	for_each_mocs(expect, table, i) {
 		if (**vaddr != expect) {
-			pr_err("%s: Invalid MOCS[%d] entry, found %08x, expected %08x\n",
-			       engine->name, i, **vaddr, expect);
+			drm_err(&engine->i915->drm,
+				"%s: Invalid MOCS[%d] entry, found %08x, expected %08x\n",
+				engine->name, i, **vaddr, expect);
 			return -EINVAL;
 		}
 		++*vaddr;
@@ -203,8 +206,9 @@ static int check_l3cc_table(struct intel_engine_cs *engine,
 
 	for_each_l3cc(expect, table, i) {
 		if (!mcr_range(engine->i915, reg) && **vaddr != expect) {
-			pr_err("%s: Invalid L3CC[%d] entry, found %08x, expected %08x\n",
-			       engine->name, i, **vaddr, expect);
+			drm_err(&engine->i915->drm,
+				"%s: Invalid L3CC[%d] entry, found %08x, expected %08x\n",
+				engine->name, i, **vaddr, expect);
 			return -EINVAL;
 		}
 		++*vaddr;

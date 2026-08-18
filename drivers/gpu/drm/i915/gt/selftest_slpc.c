@@ -3,6 +3,10 @@
  * Copyright © 2021 Intel Corporation
  */
 
+#include <drm/drm_print.h>
+
+#include "uc/intel_guc.h"
+
 #define NUM_STEPS 5
 #define H2G_DELAY 50000
 #define delay_for_h2g() usleep_range(H2G_DELAY, H2G_DELAY + 10000)
@@ -23,13 +27,21 @@ struct slpc_thread {
 	int result;
 };
 
+static struct intel_gt *selftest_slpc_to_gt(struct intel_guc_slpc *slpc)
+{
+	struct intel_guc *guc = container_of(slpc, struct intel_guc, slpc);
+
+	return guc_to_gt(guc);
+}
+
 static int slpc_set_min_freq(struct intel_guc_slpc *slpc, u32 freq)
 {
+	struct intel_gt *gt = selftest_slpc_to_gt(slpc);
 	int ret;
 
 	ret = intel_guc_slpc_set_min_freq(slpc, freq);
 	if (ret)
-		pr_err("Could not set min frequency to [%u]\n", freq);
+		drm_err(&gt->i915->drm, "Could not set min frequency to [%u]\n", freq);
 	else /* Delay to ensure h2g completes */
 		delay_for_h2g();
 
@@ -38,12 +50,12 @@ static int slpc_set_min_freq(struct intel_guc_slpc *slpc, u32 freq)
 
 static int slpc_set_max_freq(struct intel_guc_slpc *slpc, u32 freq)
 {
+	struct intel_gt *gt = selftest_slpc_to_gt(slpc);
 	int ret;
 
 	ret = intel_guc_slpc_set_max_freq(slpc, freq);
 	if (ret)
-		pr_err("Could not set maximum frequency [%u]\n",
-		       freq);
+		drm_err(&gt->i915->drm, "Could not set maximum frequency [%u]\n", freq);
 	else /* Delay to ensure h2g completes */
 		delay_for_h2g();
 
@@ -57,13 +69,13 @@ static int slpc_set_freq(struct intel_gt *gt, u32 freq)
 
 	err = slpc_set_max_freq(slpc, freq);
 	if (err) {
-		pr_err("Unable to update max freq");
+		drm_err(&gt->i915->drm, "Unable to update max freq");
 		return err;
 	}
 
 	err = slpc_set_min_freq(slpc, freq);
 	if (err) {
-		pr_err("Unable to update min freq");
+		drm_err(&gt->i915->drm, "Unable to update min freq");
 		return err;
 	}
 
@@ -72,23 +84,24 @@ static int slpc_set_freq(struct intel_gt *gt, u32 freq)
 
 static int slpc_restore_freq(struct intel_guc_slpc *slpc, u32 min, u32 max)
 {
+	struct intel_gt *gt = selftest_slpc_to_gt(slpc);
 	int err;
 
 	err = slpc_set_max_freq(slpc, max);
 	if (err) {
-		pr_err("Unable to restore max freq");
+		drm_err(&gt->i915->drm, "Unable to restore max freq");
 		return err;
 	}
 
 	err = slpc_set_min_freq(slpc, min);
 	if (err) {
-		pr_err("Unable to restore min freq");
+		drm_err(&gt->i915->drm, "Unable to restore min freq");
 		return err;
 	}
 
 	err = intel_guc_slpc_set_ignore_eff_freq(slpc, false);
 	if (err) {
-		pr_err("Unable to restore efficient freq");
+		drm_err(&gt->i915->drm, "Unable to restore efficient freq");
 		return err;
 	}
 
@@ -143,8 +156,8 @@ static int vary_max_freq(struct intel_guc_slpc *slpc, struct intel_rps *rps,
 
 		/* GuC requests freq in multiples of 50/3 MHz */
 		if (req_freq > (max_freq + FREQUENCY_REQ_UNIT)) {
-			pr_err("SWReq is %d, should be at most %d\n", req_freq,
-			       max_freq + FREQUENCY_REQ_UNIT);
+			drm_err(&rps_to_i915(rps)->drm, "SWReq is %d, should be at most %d\n",
+				req_freq, max_freq + FREQUENCY_REQ_UNIT);
 			err = -EINVAL;
 		}
 
@@ -179,8 +192,8 @@ static int vary_min_freq(struct intel_guc_slpc *slpc, struct intel_rps *rps,
 
 		/* GuC requests freq in multiples of 50/3 MHz */
 		if (req_freq < (min_freq - FREQUENCY_REQ_UNIT)) {
-			pr_err("SWReq is %d, should be at least %d\n", req_freq,
-			       min_freq - FREQUENCY_REQ_UNIT);
+			drm_err(&rps_to_i915(rps)->drm, "SWReq is %d, should be at least %d\n",
+				req_freq, min_freq - FREQUENCY_REQ_UNIT);
 			err = -EINVAL;
 		}
 
@@ -224,19 +237,19 @@ static int slpc_power(struct intel_gt *gt, struct intel_engine_cs *engine)
 	if (err)
 		return err;
 
-	pr_info("%s: min:%llumW @ %uMHz, max:%llumW @ %uMHz\n",
-		engine->name,
-		min.power, min.freq,
-		max.power, max.freq);
+	drm_info(&engine->i915->drm, "%s: min:%llumW @ %uMHz, max:%llumW @ %uMHz\n",
+		 engine->name, min.power, min.freq, max.power, max.freq);
 
 	if (10 * min.freq >= 9 * max.freq) {
-		pr_notice("Could not control frequency, ran at [%uMHz, %uMhz]\n",
-			  min.freq, max.freq);
+		drm_notice(&engine->i915->drm,
+			   "Could not control frequency, ran at [%uMHz, %uMhz]\n",
+			   min.freq, max.freq);
 	}
 
 	if (11 * min.power > 10 * max.power) {
-		pr_err("%s: did not conserve power when setting lower frequency!\n",
-		       engine->name);
+		drm_err(&engine->i915->drm,
+			"%s: did not conserve power when setting lower frequency!\n",
+			engine->name);
 		err = -EINVAL;
 	}
 
@@ -265,10 +278,11 @@ static int max_granted_freq(struct intel_guc_slpc *slpc, struct intel_rps *rps, 
 
 		/* If not, this is an error */
 		if (!(perf_limit_reasons & GT0_PERF_LIMIT_REASONS_MASK)) {
-			pr_err("Pcode did not grant max freq\n");
+			drm_err(&gt->i915->drm, "Pcode did not grant max freq\n");
 			err = -EINVAL;
 		} else {
-			pr_info("Pcode throttled frequency 0x%x\n", perf_limit_reasons);
+			drm_info(&gt->i915->drm, "Pcode throttled frequency 0x%x\n",
+				 perf_limit_reasons);
 		}
 	}
 
@@ -290,7 +304,7 @@ static int run_test(struct intel_gt *gt, int test_type)
 		return 0;
 
 	if (slpc->min_freq == slpc->rp0_freq) {
-		pr_err("Min/Max are fused to the same value\n");
+		drm_err(&gt->i915->drm, "Min/Max are fused to the same value\n");
 		return -EINVAL;
 	}
 
@@ -298,12 +312,12 @@ static int run_test(struct intel_gt *gt, int test_type)
 		return -ENOMEM;
 
 	if (intel_guc_slpc_get_max_freq(slpc, &slpc_max_freq)) {
-		pr_err("Could not get SLPC max freq\n");
+		drm_err(&gt->i915->drm, "Could not get SLPC max freq\n");
 		return -EIO;
 	}
 
 	if (intel_guc_slpc_get_min_freq(slpc, &slpc_min_freq)) {
-		pr_err("Could not get SLPC min freq\n");
+		drm_err(&gt->i915->drm, "Could not get SLPC min freq\n");
 		return -EIO;
 	}
 
@@ -313,7 +327,7 @@ static int run_test(struct intel_gt *gt, int test_type)
 	 */
 	err = slpc_set_min_freq(slpc, slpc->min_freq);
 	if (err) {
-		pr_err("Unable to update min freq!");
+		drm_err(&gt->i915->drm, "Unable to update min freq!");
 		return err;
 	}
 
@@ -322,7 +336,7 @@ static int run_test(struct intel_gt *gt, int test_type)
 	 */
 	err = intel_guc_slpc_set_ignore_eff_freq(slpc, true);
 	if (err) {
-		pr_err("Unable to turn off efficient freq!");
+		drm_err(&gt->i915->drm, "Unable to turn off efficient freq!");
 		return err;
 	}
 
@@ -349,8 +363,7 @@ static int run_test(struct intel_gt *gt, int test_type)
 		i915_request_add(rq);
 
 		if (!igt_wait_for_spinner(&spin, rq)) {
-			pr_err("%s: Spinner did not start\n",
-			       engine->name);
+			drm_err(&engine->i915->drm, "%s: Spinner did not start\n", engine->name);
 			igt_spinner_end(&spin);
 			st_engine_heartbeat_enable(engine);
 			intel_gt_set_wedged(engine->gt);
@@ -387,15 +400,16 @@ static int run_test(struct intel_gt *gt, int test_type)
 		}
 
 		if (test_type != SLPC_POWER) {
-			pr_info("Max actual frequency for %s was %d\n",
-				engine->name, max_act_freq);
+			drm_info(&engine->i915->drm, "%s: Max actual frequency was %d\n",
+				 engine->name, max_act_freq);
 
 			/* Actual frequency should rise above min */
 			if (max_act_freq <= slpc->min_freq) {
-				pr_err("Actual freq did not rise above min\n");
-				pr_err("Perf Limit Reasons: 0x%x\n",
-				       intel_uncore_read(gt->uncore,
-							 intel_gt_perf_limit_reasons_reg(gt)));
+				drm_err(&engine->i915->drm,
+					"Actual freq did not rise above min\n");
+				drm_err(&engine->i915->drm, "Perf Limit Reasons: 0x%x\n",
+					intel_uncore_read(gt->uncore,
+						intel_gt_perf_limit_reasons_reg(gt)));
 				err = -EINVAL;
 			}
 		}
@@ -525,7 +539,7 @@ static int live_slpc_tile_interaction(void *arg)
 		kthread_flush_work(&threads[i].work);
 		status = READ_ONCE(threads[i].result);
 		if (status && !ret) {
-			pr_err("%s GT %d failed ", __func__, gt->info.id);
+			drm_err(&gt->i915->drm, "%s GT %d failed ", __func__, gt->info.id);
 			ret = status;
 		}
 		kthread_destroy_worker(threads[i].worker);

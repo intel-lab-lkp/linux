@@ -89,20 +89,16 @@ static int wait_for_reset(struct intel_engine_cs *engine,
 	} while (time_before(jiffies, timeout));
 
 	if (rq->fence.error != -EIO) {
-		pr_err("%s: hanging request %llx:%lld not reset\n",
-		       engine->name,
-		       rq->fence.context,
-		       rq->fence.seqno);
+		drm_err(&engine->i915->drm, "%s: hanging request %llx:%lld not reset\n",
+			engine->name, rq->fence.context, rq->fence.seqno);
 		return -EINVAL;
 	}
 
 	/* Give the request a jiffy to complete after flushing the worker */
 	if (i915_request_wait(rq, 0,
 			      max(0l, (long)(timeout - jiffies)) + 1) < 0) {
-		pr_err("%s: hanging request %llx:%lld did not complete\n",
-		       engine->name,
-		       rq->fence.context,
-		       rq->fence.seqno);
+		drm_err(&engine->i915->drm, "%s: hanging request %llx:%lld did not complete\n",
+			engine->name, rq->fence.context, rq->fence.seqno);
 		return -ETIME;
 	}
 
@@ -419,12 +415,10 @@ static int live_unlite_ring(void *arg)
 			n++;
 		}
 		intel_engine_flush_submission(engine);
-		pr_debug("%s: Filled ring with %d nop tails {size:%x, tail:%x, emit:%x, rq.tail:%x}\n",
-			 engine->name, n,
-			 ce[0]->ring->size,
-			 ce[0]->ring->tail,
-			 ce[0]->ring->emit,
-			 rq->tail);
+		drm_dbg(&engine->i915->drm,
+			"%s: Filled ring with %d nop tails {size:%x, tail:%x, emit:%x, rq.tail:%x}\n",
+			engine->name, n, ce[0]->ring->size, ce[0]->ring->tail, ce[0]->ring->emit,
+			rq->tail);
 		GEM_BUG_ON(intel_ring_direction(ce[0]->ring,
 						rq->tail,
 						ce[0]->ring->tail) <= 0);
@@ -444,15 +438,15 @@ static int live_unlite_ring(void *arg)
 		err = wait_for_submit(engine, rq, HZ / 2);
 		i915_request_put(rq);
 		if (err) {
-			pr_err("%s: preemption request was not submitted\n",
-			       engine->name);
+			drm_err(&engine->i915->drm, "%s: preemption request was not submitted\n",
+				engine->name);
 			err = -ETIME;
 		}
 
-		pr_debug("%s: ring[0]:{ tail:%x, emit:%x }, ring[1]:{ tail:%x, emit:%x }\n",
-			 engine->name,
-			 ce[0]->ring->tail, ce[0]->ring->emit,
-			 ce[1]->ring->tail, ce[1]->ring->emit);
+		drm_dbg(&engine->i915->drm,
+			"%s: ring[0]:{ tail:%x, emit:%x }, ring[1]:{ tail:%x, emit:%x }\n",
+			engine->name, ce[0]->ring->tail, ce[0]->ring->emit,
+			ce[1]->ring->tail, ce[1]->ring->emit);
 
 err_ce:
 		intel_engine_flush_submission(engine);
@@ -644,8 +638,8 @@ static int live_hold_reset(void *arg)
 
 		/* Check that we do not resubmit the held request */
 		if (!i915_request_wait(rq, 0, HZ / 5)) {
-			pr_err("%s: on hold request completed!\n",
-			       engine->name);
+			drm_err(&engine->i915->drm, "%s: on hold request completed!\n",
+				engine->name);
 			i915_request_put(rq);
 			err = -EIO;
 			goto out;
@@ -655,8 +649,8 @@ static int live_hold_reset(void *arg)
 		/* But is resubmitted on release */
 		execlists_unhold(engine, rq);
 		if (i915_request_wait(rq, 0, HZ / 5) < 0) {
-			pr_err("%s: held request did not complete!\n",
-			       engine->name);
+			drm_err(&engine->i915->drm, "%s: held request did not complete!\n",
+				engine->name);
 			intel_gt_set_wedged(gt);
 			err = -ETIME;
 		}
@@ -764,22 +758,21 @@ static int live_error_interrupt(void *arg)
 
 			err = wait_for_submit(engine, client[0], HZ / 2);
 			if (err) {
-				pr_err("%s: first request did not start within time!\n",
-				       engine->name);
+				drm_err(&engine->i915->drm,
+					"%s: first request did not start within time!\n",
+					engine->name);
 				err = -ETIME;
 				goto out;
 			}
 
 			for (i = 0; i < ARRAY_SIZE(client); i++) {
 				if (i915_request_wait(client[i], 0, HZ / 5) < 0)
-					pr_debug("%s: %s request incomplete!\n",
-						 engine->name,
-						 error_repr(p->error[i]));
+					drm_dbg(&engine->i915->drm, "%s: %s request incomplete!\n",
+						engine->name, error_repr(p->error[i]));
 
 				if (!i915_request_started(client[i])) {
-					pr_err("%s: %s request not started!\n",
-					       engine->name,
-					       error_repr(p->error[i]));
+					drm_err(&engine->i915->drm, "%s: %s request not started!\n",
+						engine->name, error_repr(p->error[i]));
 					err = -ETIME;
 					goto out;
 				}
@@ -787,11 +780,12 @@ static int live_error_interrupt(void *arg)
 				/* Kick the tasklet to process the error */
 				intel_engine_flush_submission(engine);
 				if (client[i]->fence.error != p->error[i]) {
-					pr_err("%s: %s request (%s) with wrong error code: %d\n",
-					       engine->name,
-					       error_repr(p->error[i]),
-					       i915_request_completed(client[i]) ? "completed" : "running",
-					       client[i]->fence.error);
+					drm_err(&engine->i915->drm,
+						"%s: %s request (%s) with wrong error code: %d\n",
+						engine->name, error_repr(p->error[i]),
+						i915_request_completed(
+							client[i]) ? "completed" : "running",
+						client[i]->fence.error);
 					err = -EINVAL;
 					goto out;
 				}
@@ -802,9 +796,10 @@ out:
 				if (client[i])
 					i915_request_put(client[i]);
 			if (err) {
-				pr_err("%s: failed at phase[%zd] { %d, %d }\n",
-				       engine->name, p - phases,
-				       p->error[0], p->error[1]);
+				drm_err(&engine->i915->drm,
+					"%s: failed at phase[%zd] { %d, %d }\n",
+					engine->name, p - phases,
+					p->error[0], p->error[1]);
 				break;
 			}
 		}
@@ -964,8 +959,9 @@ slice_semaphore_queue(struct intel_engine_cs *outer,
 
 	if (i915_request_wait(head, 0,
 			      2 * outer->gt->info.num_engines * (count + 2) * (count + 3)) < 0) {
-		pr_err("%s: Failed to slice along semaphore chain of length (%d, %d)!\n",
-		       outer->name, count, n);
+		drm_err(&outer->gt->i915->drm,
+			"%s: Failed to slice along semaphore chain of length (%d, %d)!\n",
+			outer->name, count, n);
 		GEM_TRACE_DUMP();
 		intel_gt_set_wedged(outer->gt);
 		err = -EIO;
@@ -1174,8 +1170,8 @@ static int live_timeslice_rewind(void *arg)
 
 		err = wait_for_submit(engine, rq[A2], HZ / 2);
 		if (err) {
-			pr_err("%s: failed to submit first context\n",
-			       engine->name);
+			drm_err(&engine->i915->drm, "%s: failed to submit first context\n",
+				engine->name);
 			goto err;
 		}
 
@@ -1192,8 +1188,8 @@ static int live_timeslice_rewind(void *arg)
 
 		err = wait_for_submit(engine, rq[B1], HZ / 2);
 		if (err) {
-			pr_err("%s: failed to submit second context\n",
-			       engine->name);
+			drm_err(&engine->i915->drm, "%s: failed to submit second context\n",
+				engine->name);
 			goto err;
 		}
 
@@ -1222,21 +1218,21 @@ static int live_timeslice_rewind(void *arg)
 				;
 
 			if (!time_before(jiffies, timeout)) {
-				pr_err("%s: rq[%d] timed out\n",
-				       engine->name, i - 1);
+				drm_err(&engine->i915->drm, "%s: rq[%d] timed out\n",
+					engine->name, i - 1);
 				err = -ETIME;
 				goto err;
 			}
 
-			pr_debug("%s: slot[%d]:%x\n", engine->name, i, slot[i]);
+			drm_dbg(&engine->i915->drm, "%s: slot[%d]:%x\n", engine->name,
+				i, slot[i]);
 		}
 
 		/* XZY: XZ < XY */
 		if (slot[Z] - slot[X] >= slot[Y] - slot[X]) {
-			pr_err("%s: timeslicing did not run context B [%u] before A [%u]!\n",
-			       engine->name,
-			       slot[Z] - slot[X],
-			       slot[Y] - slot[X]);
+			drm_err(&engine->i915->drm,
+				"%s: timeslicing did not run context B [%u] before A [%u]!\n",
+				engine->name, slot[Z] - slot[X], slot[Y] - slot[X]);
 			err = -EINVAL;
 		}
 
@@ -1347,8 +1343,9 @@ static int live_timeslice_queue(void *arg)
 		engine->sched_engine->schedule(rq, &attr);
 		err = wait_for_submit(engine, rq, HZ / 2);
 		if (err) {
-			pr_err("%s: Timed out trying to submit semaphores\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: Timed out trying to submit semaphores\n",
+				engine->name);
 			goto err_rq;
 		}
 
@@ -1361,8 +1358,8 @@ static int live_timeslice_queue(void *arg)
 		err = wait_for_submit(engine, nop, HZ / 2);
 		i915_request_put(nop);
 		if (err) {
-			pr_err("%s: Timed out trying to submit nop\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: Timed out trying to submit nop\n", engine->name);
 			goto err_rq;
 		}
 
@@ -1385,8 +1382,8 @@ static int live_timeslice_queue(void *arg)
 			struct drm_printer p =
 				drm_info_printer(gt->i915->drm.dev);
 
-			pr_err("%s: Failed to timeslice into queue\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: Failed to timeslice into queue\n", engine->name);
 			intel_engine_dump(engine, &p,
 					  "%s\n", engine->name);
 
@@ -1501,8 +1498,9 @@ static int live_timeslice_nopreempt(void *arg)
 		 * enough to see if it is timesliced in by mistake.
 		 */
 		if (i915_request_wait(rq, 0, slice_timeout(engine)) >= 0) {
-			pr_err("%s: I915_PRIORITY_BARRIER request completed, bypassing no-preempt request\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: I915_PRIORITY_BARRIER request completed, bypassing no-preempt request\n",
+				engine->name);
 			err = -EINVAL;
 		}
 		i915_request_put(rq);
@@ -1648,8 +1646,8 @@ static int live_busywait_preempt(void *arg)
 		/* Low priority request should be busywaiting now */
 		if (i915_request_wait(lo, 0, 1) != -ETIME) {
 			i915_request_put(lo);
-			pr_err("%s: Busywaiting request did not!\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: Busywaiting request did not!\n", engine->name);
 			err = -EIO;
 			goto err_vma;
 		}
@@ -1680,8 +1678,9 @@ static int live_busywait_preempt(void *arg)
 		if (i915_request_wait(lo, 0, HZ / 5) < 0) {
 			struct drm_printer p = drm_info_printer(gt->i915->drm.dev);
 
-			pr_err("%s: Failed to preempt semaphore busywait!\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: Failed to preempt semaphore busywait!\n",
+				engine->name);
 
 			intel_engine_dump(engine, &p, "%s\n", engine->name);
 			GEM_TRACE_DUMP();
@@ -1871,7 +1870,7 @@ static int live_late_preempt(void *arg)
 
 		i915_request_add(rq);
 		if (!igt_wait_for_spinner(&spin_lo, rq)) {
-			pr_err("First context failed to start\n");
+			drm_err(&engine->i915->drm, "First context failed to start\n");
 			goto err_wedged;
 		}
 
@@ -1885,7 +1884,7 @@ static int live_late_preempt(void *arg)
 
 		i915_request_add(rq);
 		if (igt_wait_for_spinner(&spin_hi, rq)) {
-			pr_err("Second context overtook first?\n");
+			drm_err(&engine->i915->drm, "Second context overtook first?\n");
 			goto err_wedged;
 		}
 
@@ -1893,7 +1892,8 @@ static int live_late_preempt(void *arg)
 		engine->sched_engine->schedule(rq, &attr);
 
 		if (!igt_wait_for_spinner(&spin_hi, rq)) {
-			pr_err("High priority context failed to preempt the low priority context\n");
+			drm_err(&engine->i915->drm,
+				"High priority context failed to preempt the low priority context\n");
 			GEM_TRACE_DUMP();
 			goto err_wedged;
 		}
@@ -1993,7 +1993,7 @@ static int live_nopreempt(void *arg)
 
 		i915_request_add(rq_a);
 		if (!igt_wait_for_spinner(&a.spin, rq_a)) {
-			pr_err("First client failed to start\n");
+			drm_err(&engine->i915->drm, "First client failed to start\n");
 			goto err_wedged;
 		}
 
@@ -2012,22 +2012,23 @@ static int live_nopreempt(void *arg)
 
 		/* Wait long enough for preemption and timeslicing */
 		if (igt_wait_for_spinner(&b.spin, rq_b)) {
-			pr_err("Second client started too early!\n");
+			drm_err(&engine->i915->drm, "Second client started too early!\n");
 			goto err_wedged;
 		}
 
 		igt_spinner_end(&a.spin);
 
 		if (!igt_wait_for_spinner(&b.spin, rq_b)) {
-			pr_err("Second client failed to start\n");
+			drm_err(&engine->i915->drm, "Second client failed to start\n");
 			goto err_wedged;
 		}
 
 		igt_spinner_end(&b.spin);
 
 		if (engine->execlists.preempt_hang.count) {
-			pr_err("Preemption recorded x%d; should have been suppressed!\n",
-			       engine->execlists.preempt_hang.count);
+			drm_err(&engine->i915->drm,
+				"Preemption recorded x%d; should have been suppressed!\n",
+				engine->execlists.preempt_hang.count);
 			err = -EINVAL;
 			goto err_wedged;
 		}
@@ -2089,7 +2090,8 @@ static int __cancel_active0(struct live_preempt_cancel *arg)
 
 	err = wait_for_reset(arg->engine, rq, HZ / 2);
 	if (err) {
-		pr_err("Cancelled inflight0 request did not reset\n");
+		drm_err(&arg->engine->i915->drm,
+			"Cancelled inflight0 request did not reset\n");
 		goto out;
 	}
 
@@ -2152,13 +2154,15 @@ static int __cancel_active1(struct live_preempt_cancel *arg)
 		goto out;
 
 	if (rq[0]->fence.error != 0) {
-		pr_err("Normal inflight0 request did not complete\n");
+		drm_err(&arg->engine->i915->drm,
+			"Normal inflight0 request did not complete\n");
 		err = -EINVAL;
 		goto out;
 	}
 
 	if (rq[1]->fence.error != -EIO) {
-		pr_err("Cancelled inflight1 request did not report -EIO\n");
+		drm_err(&arg->engine->i915->drm,
+			"Cancelled inflight1 request did not report -EIO\n");
 		err = -EINVAL;
 		goto out;
 	}
@@ -2234,7 +2238,8 @@ static int __cancel_queued(struct live_preempt_cancel *arg)
 		goto out;
 
 	if (rq[0]->fence.error != -EIO) {
-		pr_err("Cancelled inflight0 request did not report -EIO\n");
+		drm_err(&arg->engine->i915->drm,
+			"Cancelled inflight0 request did not report -EIO\n");
 		err = -EINVAL;
 		goto out;
 	}
@@ -2246,13 +2251,15 @@ static int __cancel_queued(struct live_preempt_cancel *arg)
 	 */
 	if (intel_engine_has_semaphores(rq[1]->engine) &&
 	    rq[1]->fence.error != 0) {
-		pr_err("Normal inflight1 request did not complete\n");
+		drm_err(&arg->engine->i915->drm,
+			"Normal inflight1 request did not complete\n");
 		err = -EINVAL;
 		goto out;
 	}
 
 	if (rq[2]->fence.error != -EIO) {
-		pr_err("Cancelled queued request did not report -EIO\n");
+		drm_err(&arg->engine->i915->drm,
+			"Cancelled queued request did not report -EIO\n");
 		err = -EINVAL;
 		goto out;
 	}
@@ -2300,7 +2307,8 @@ static int __cancel_hostile(struct live_preempt_cancel *arg)
 
 	err = wait_for_reset(arg->engine, rq, HZ / 2);
 	if (err) {
-		pr_err("Cancelled inflight0 request did not reset\n");
+		drm_err(&arg->engine->i915->drm,
+			"Cancelled inflight0 request did not reset\n");
 		goto out;
 	}
 
@@ -2371,7 +2379,8 @@ static int __cancel_fail(struct live_preempt_cancel *arg)
 	intel_engine_set_heartbeat(engine,
 				   engine->defaults.heartbeat_interval_ms);
 	if (err) {
-		pr_err("Cancelled inflight0 request did not reset\n");
+		drm_err(&engine->i915->drm,
+			"Cancelled inflight0 request did not reset\n");
 		goto out;
 	}
 
@@ -2490,7 +2499,7 @@ static int live_suppress_self_preempt(void *arg)
 
 		i915_request_add(rq_a);
 		if (!igt_wait_for_spinner(&a.spin, rq_a)) {
-			pr_err("First client failed to start\n");
+			drm_err(&engine->i915->drm, "First client failed to start\n");
 			st_engine_heartbeat_enable(engine);
 			goto err_wedged;
 		}
@@ -2513,7 +2522,7 @@ static int live_suppress_self_preempt(void *arg)
 			igt_spinner_end(&a.spin);
 
 			if (!igt_wait_for_spinner(&b.spin, rq_b)) {
-				pr_err("Second client failed to start\n");
+				drm_err(&engine->i915->drm, "Second client failed to start\n");
 				st_engine_heartbeat_enable(engine);
 				goto err_wedged;
 			}
@@ -2524,10 +2533,9 @@ static int live_suppress_self_preempt(void *arg)
 		igt_spinner_end(&a.spin);
 
 		if (engine->execlists.preempt_hang.count) {
-			pr_err("Preemption on %s recorded x%d, depth %d; should have been suppressed!\n",
-			       engine->name,
-			       engine->execlists.preempt_hang.count,
-			       depth);
+			drm_err(&engine->i915->drm,
+				"Preemption on %s recorded x%d, depth %d; should have been suppressed!\n",
+				engine->name, engine->execlists.preempt_hang.count, depth);
 			st_engine_heartbeat_enable(engine);
 			err = -EINVAL;
 			goto err_client_b;
@@ -2595,12 +2603,13 @@ static int live_chain_preempt(void *arg)
 		if (ring_size < 0)
 			ring_size += rq->ring->size;
 		ring_size = rq->ring->size / ring_size;
-		pr_debug("%s(%s): Using maximum of %d requests\n",
-			 __func__, engine->name, ring_size);
+		drm_dbg(&engine->i915->drm, "%s(%s): Using maximum of %d requests\n",
+			__func__, engine->name, ring_size);
 
 		igt_spinner_end(&lo.spin);
 		if (i915_request_wait(rq, 0, HZ / 2) < 0) {
-			pr_err("Timed out waiting to flush %s\n", engine->name);
+			drm_err(&engine->i915->drm, "Timed out waiting to flush %s\n",
+				engine->name);
 			i915_request_put(rq);
 			goto err_wedged;
 		}
@@ -2648,8 +2657,8 @@ static int live_chain_preempt(void *arg)
 				struct drm_printer p =
 					drm_info_printer(gt->i915->drm.dev);
 
-				pr_err("Failed to preempt over chain of %d\n",
-				       count);
+				drm_err(&engine->i915->drm,
+					"Failed to preempt over chain of %d\n", count);
 				intel_engine_dump(engine, &p,
 						  "%s\n", engine->name);
 				i915_request_put(rq);
@@ -2669,8 +2678,9 @@ static int live_chain_preempt(void *arg)
 				struct drm_printer p =
 					drm_info_printer(gt->i915->drm.dev);
 
-				pr_err("Failed to flush low priority chain of %d requests\n",
-				       count);
+				drm_err(&engine->i915->drm,
+					"Failed to flush low priority chain of %d requests\n",
+					count);
 				intel_engine_dump(engine, &p,
 						  "%s\n", engine->name);
 
@@ -2867,12 +2877,10 @@ static int __live_preempt_ring(struct intel_engine_cs *engine,
 		n++;
 	}
 	intel_engine_flush_submission(engine);
-	pr_debug("%s: Filled %d with %d nop tails {size:%x, tail:%x, emit:%x, rq.tail:%x}\n",
-		 engine->name, queue_sz, n,
-		 ce[0]->ring->size,
-		 ce[0]->ring->tail,
-		 ce[0]->ring->emit,
-		 rq->tail);
+	drm_dbg(&engine->i915->drm,
+		"%s: Filled %d with %d nop tails {size:%x, tail:%x, emit:%x, rq.tail:%x}\n",
+		engine->name, queue_sz, n, ce[0]->ring->size, ce[0]->ring->tail,
+		ce[0]->ring->emit, rq->tail);
 	i915_request_put(rq);
 
 	/* Create a second request to preempt the first ring */
@@ -2889,15 +2897,15 @@ static int __live_preempt_ring(struct intel_engine_cs *engine,
 	err = wait_for_submit(engine, rq, HZ / 2);
 	i915_request_put(rq);
 	if (err) {
-		pr_err("%s: preemption request was not submitted\n",
-		       engine->name);
+		drm_err(&engine->i915->drm,
+			"%s: preemption request was not submitted\n", engine->name);
 		err = -ETIME;
 	}
 
-	pr_debug("%s: ring[0]:{ tail:%x, emit:%x }, ring[1]:{ tail:%x, emit:%x }\n",
-		 engine->name,
-		 ce[0]->ring->tail, ce[0]->ring->emit,
-		 ce[1]->ring->tail, ce[1]->ring->emit);
+	drm_dbg(&engine->i915->drm,
+		"%s: ring[0]:{ tail:%x, emit:%x }, ring[1]:{ tail:%x, emit:%x }\n",
+		engine->name, ce[0]->ring->tail, ce[0]->ring->emit,
+		ce[1]->ring->tail, ce[1]->ring->emit);
 
 err_ce:
 	intel_engine_flush_submission(engine);
@@ -2999,8 +3007,8 @@ static int live_preempt_gang(void *arg)
 			engine->sched_engine->schedule(rq, &attr);
 		} while (prio <= I915_PRIORITY_MAX &&
 			 !__igt_timeout(end_time, NULL));
-		pr_debug("%s: Preempt chain of %d requests\n",
-			 engine->name, prio);
+		drm_dbg(&engine->i915->drm, "%s: Preempt chain of %d requests\n",
+			engine->name, prio);
 
 		/*
 		 * Such that the last spinner is the highest priority and
@@ -3024,8 +3032,9 @@ static int live_preempt_gang(void *arg)
 				struct drm_printer p =
 					drm_info_printer(engine->i915->drm.dev);
 
-				pr_err("Failed to flush chain of %d requests, at %d\n",
-				       prio, rq_prio(rq));
+				drm_err(&engine->i915->drm,
+					"Failed to flush chain of %d requests, at %d\n",
+					prio, rq_prio(rq));
 				intel_engine_dump(engine, &p,
 						  "%s\n", engine->name);
 
@@ -3319,8 +3328,8 @@ static int live_preempt_user(void *arg)
 		}
 
 		if (READ_ONCE(result[0]) != NUM_GPR) {
-			pr_err("%s: Failed to release semaphore\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: Failed to release semaphore\n", engine->name);
 			err = -EIO;
 			goto end_test;
 		}
@@ -3335,9 +3344,9 @@ static int live_preempt_user(void *arg)
 
 			for (gpr = 1; gpr < NUM_GPR; gpr++) {
 				if (result[NUM_GPR * i + gpr] != 1) {
-					pr_err("%s: Invalid result, client %d, gpr %d, result: %d\n",
-					       engine->name,
-					       i, gpr, result[NUM_GPR * i + gpr]);
+					drm_err(&engine->i915->drm,
+						"%s: Invalid result, client %d, gpr %d, result: %d\n",
+						engine->name, i, gpr, result[NUM_GPR * i + gpr]);
 					err = -EINVAL;
 					goto end_test;
 				}
@@ -3601,8 +3610,9 @@ static int smoke_crescendo(struct preempt_smoke *smoke, unsigned int flags)
 		kthread_destroy_worker(worker[id]);
 	}
 
-	pr_info("Submitted %lu crescendo:%x requests across %d engines and %d contexts\n",
-		count, flags, smoke->gt->info.num_engines, smoke->ncontext);
+	drm_info(&smoke->gt->i915->drm,
+		 "Submitted %lu crescendo:%x requests across %d engines and %d contexts\n",
+		 count, flags, smoke->gt->info.num_engines, smoke->ncontext);
 
 	kfree(arg);
 	return 0;
@@ -3630,8 +3640,9 @@ static int smoke_random(struct preempt_smoke *smoke, unsigned int flags)
 		}
 	} while (count < smoke->ncontext && !__igt_timeout(end_time, NULL));
 
-	pr_info("Submitted %lu random:%x requests across %d engines and %d contexts\n",
-		count, flags, smoke->gt->info.num_engines, smoke->ncontext);
+	drm_info(&smoke->gt->i915->drm,
+		 "Submitted %lu random:%x requests across %d engines and %d contexts\n",
+		 count, flags, smoke->gt->info.num_engines, smoke->ncontext);
 	return 0;
 }
 
@@ -3787,10 +3798,11 @@ static int nop_virtual_engine(struct intel_gt *gt,
 
 		for (nc = 0; nc < nctx; nc++) {
 			if (i915_request_wait(request[nc], 0, HZ / 10) < 0) {
-				pr_err("%s(%s): wait for %llx:%lld timed out\n",
-				       __func__, ve[0]->engine->name,
-				       request[nc]->fence.context,
-				       request[nc]->fence.seqno);
+				drm_err(&gt->i915->drm,
+					"%s(%s): wait for %llx:%lld timed out\n",
+					__func__, ve[0]->engine->name,
+					request[nc]->fence.context,
+					request[nc]->fence.seqno);
 
 				GEM_TRACE("%s(%s) failed at request %llx:%lld\n",
 					  __func__, ve[0]->engine->name,
@@ -3819,9 +3831,9 @@ static int nop_virtual_engine(struct intel_gt *gt,
 	if (err)
 		goto out;
 
-	pr_info("Requestx%d latencies on %s: 1 = %lluns, %lu = %lluns\n",
-		nctx, ve[0]->engine->name, ktime_to_ns(times[0]),
-		prime, div64_u64(ktime_to_ns(times[1]), prime));
+	drm_info(&gt->i915->drm, "Requestx%d latencies on %s: 1 = %lluns, %lu = %lluns\n",
+		 nctx, ve[0]->engine->name, ktime_to_ns(times[0]),
+		 prime, div64_u64(ktime_to_ns(times[1]), prime));
 
 out:
 	if (igt_flush_test(gt->i915))
@@ -3880,8 +3892,8 @@ static int live_virtual_engine(void *arg)
 	for_each_engine(engine, gt, id) {
 		err = nop_virtual_engine(gt, &engine, 1, 1, 0);
 		if (err) {
-			pr_err("Failed to wrap engine %s: err=%d\n",
-			       engine->name, err);
+			drm_err(&engine->i915->drm, "Failed to wrap engine %s: err=%d\n",
+				engine->name, err);
 			return err;
 		}
 	}
@@ -3954,10 +3966,9 @@ static int mask_virtual_engine(struct intel_gt *gt,
 
 	for (n = 0; n < nsibling; n++) {
 		if (i915_request_wait(request[n], 0, HZ / 10) < 0) {
-			pr_err("%s(%s): wait for %llx:%lld timed out\n",
-			       __func__, ve->engine->name,
-			       request[n]->fence.context,
-			       request[n]->fence.seqno);
+			drm_err(&gt->i915->drm, "%s(%s): wait for %llx:%lld timed out\n",
+				__func__, ve->engine->name, request[n]->fence.context,
+				request[n]->fence.seqno);
 
 			GEM_TRACE("%s(%s) failed at request %llx:%lld\n",
 				  __func__, ve->engine->name,
@@ -3970,9 +3981,10 @@ static int mask_virtual_engine(struct intel_gt *gt,
 		}
 
 		if (request[n]->engine != siblings[nsibling - n - 1]) {
-			pr_err("Executed on wrong sibling '%s', expected '%s'\n",
-			       request[n]->engine->name,
-			       siblings[nsibling - n - 1]->name);
+			drm_err(&gt->i915->drm,
+				"Executed on wrong sibling '%s', expected '%s'\n",
+				request[n]->engine->name,
+				siblings[nsibling - n - 1]->name);
 			err = -EINVAL;
 			goto out;
 		}
@@ -4272,8 +4284,8 @@ static int preserved_virtual_engine(struct intel_gt *gt,
 
 	for (n = 0; n < NUM_GPR_DW; n++) {
 		if (cs[n] != n) {
-			pr_err("Incorrect value[%d] found for GPR[%d]\n",
-			       cs[n], n);
+			drm_err(&gt->i915->drm, "Incorrect value[%d] found for GPR[%d]\n",
+				cs[n], n);
 			err = -EINVAL;
 			break;
 		}
@@ -4400,8 +4412,8 @@ static int reset_virtual_engine(struct intel_gt *gt,
 	/* Check that we do not resubmit the held request */
 	i915_request_get(rq);
 	if (!i915_request_wait(rq, 0, HZ / 5)) {
-		pr_err("%s: on hold request completed!\n",
-		       engine->name);
+		drm_err(&engine->i915->drm,
+			"%s: on hold request completed!\n", engine->name);
 		intel_gt_set_wedged(gt);
 		err = -EIO;
 		goto out_rq;
@@ -4411,8 +4423,8 @@ static int reset_virtual_engine(struct intel_gt *gt,
 	/* But is resubmitted on release */
 	execlists_unhold(engine, rq);
 	if (i915_request_wait(rq, 0, HZ / 5) < 0) {
-		pr_err("%s: held request did not complete!\n",
-		       engine->name);
+		drm_err(&engine->i915->drm,
+			"%s: held request did not complete!\n", engine->name);
 		intel_gt_set_wedged(gt);
 		err = -ETIME;
 	}
