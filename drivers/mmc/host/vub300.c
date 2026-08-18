@@ -344,6 +344,7 @@ struct vub300_mmc_host {
 	struct timer_list sg_transfer_timer;
 	struct usb_sg_request sg_request;
 	struct timer_list inactivity_timer;
+	struct work_struct release_work;
 	struct work_struct deadwork;
 	struct work_struct cmndwork;
 	struct delayed_work pollwork;
@@ -367,7 +368,7 @@ struct vub300_mmc_host {
 #define GET_SYSTEM_PORT_STATUS		0
 
 static void vub300_delete(struct kref *kref)
-{				/* kref callback - softirq */
+{				/* kref release callback */
 	struct vub300_mmc_host *vub300 = kref_to_vub300_mmc_host(kref);
 	struct mmc_host *mmc = vub300->mmc;
 
@@ -441,6 +442,14 @@ static void vub300_queue_dead_work(struct vub300_mmc_host *vub300)
 		 */
 		kref_put(&vub300->kref, vub300_delete);
 	}
+}
+
+static void vub300_release_work_thread(struct work_struct *work)
+{
+	struct vub300_mmc_host *vub300 =
+		container_of(work, struct vub300_mmc_host, release_work);
+
+	kref_put(&vub300->kref, vub300_delete);
 }
 
 static void irqpoll_res_completed(struct urb *urb)
@@ -744,7 +753,7 @@ static void vub300_inactivity_timer_expired(struct timer_list *t)
 	struct vub300_mmc_host *vub300 = timer_container_of(vub300, t,
 							    inactivity_timer);
 	if (!vub300->interface) {
-		kref_put(&vub300->kref, vub300_delete);
+		queue_work(deadworkqueue, &vub300->release_work);
 	} else if (vub300->cmd) {
 		mod_timer(&vub300->inactivity_timer, jiffies + HZ);
 	} else {
@@ -2324,6 +2333,7 @@ static int vub300_probe(struct usb_interface *interface,
 	usb_set_intfdata(interface, vub300);
 	INIT_DELAYED_WORK(&vub300->pollwork, vub300_pollwork_thread);
 	INIT_WORK(&vub300->cmndwork, vub300_cmndwork_thread);
+	INIT_WORK(&vub300->release_work, vub300_release_work_thread);
 	INIT_WORK(&vub300->deadwork, vub300_deadwork_thread);
 	kref_init(&vub300->kref);
 	timer_setup(&vub300->sg_transfer_timer, vub300_sg_timed_out, 0);
