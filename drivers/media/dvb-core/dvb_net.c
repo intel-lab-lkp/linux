@@ -1404,18 +1404,26 @@ static int dvb_net_remove_if(struct dvb_net *dvbnet, unsigned long num)
 {
 	struct net_device *net = dvbnet->device[num];
 	struct dvb_net_priv *priv;
+	bool exiting;
 
 	if (!dvbnet->state[num])
 		return -EINVAL;
 	priv = netdev_priv(net);
-	if (priv->in_use)
+	mutex_lock(&dvbnet->remove_mutex);
+	exiting = dvbnet->exit;
+	mutex_unlock(&dvbnet->remove_mutex);
+	if (priv->in_use && !exiting)
 		return -EBUSY;
 
-	dvb_net_stop(net);
-	flush_work(&priv->set_multicast_list_wq);
-	flush_work(&priv->restart_net_feed_wq);
 	pr_info("removed network interface %s\n", net->name);
 	unregister_netdev(net);
+	flush_work(&priv->set_multicast_list_wq);
+	flush_work(&priv->restart_net_feed_wq);
+	/*
+	 * set_multicast_list_wq may have restarted a feed after ndo_stop().
+	 */
+	if (priv->secfeed || priv->tsfeed)
+		dvb_net_feed_stop(net);
 	dvbnet->state[num]=0;
 	dvbnet->device[num] = NULL;
 	free_netdev(net);
