@@ -269,6 +269,20 @@ static void parse_monitor_param(char *param)
 	avail_monitors = hits;
 }
 
+/*
+ * A monitor exports a counter either as a percentage of the time spent
+ * in the state or as an absolute value. Tell both apart, so that the
+ * numbers a measurement run prints can be interpreted.
+ */
+static const char *value_abbr(const cstate_t *state)
+{
+	if (state->get_count_percent)
+		return "%";
+	if (state->get_count)
+		return "abs";
+	return "?";
+}
+
 void list_monitors(void)
 {
 	unsigned int mon;
@@ -284,10 +298,12 @@ void list_monitors(void)
 		for (state = 0; state < monitors[mon]->hw_states_num; state++) {
 			s = monitors[mon]->hw_states[state];
 			/*
-			 * ToDo show more state capabilities:
-			 * percent, time (granlarity)
+			 * ToDo show the time granularity of a counter, this
+			 * needs a new cstate_t member every monitor has to
+			 * fill in.
 			 */
-			printf("%s\t[%c] -> %s\n", s.name, range_abbr[s.range],
+			printf("%s\t[%c] [%s] -> %s\n", s.name,
+			       range_abbr[s.range], value_abbr(&s),
 			       gettext(s.desc));
 		}
 	}
