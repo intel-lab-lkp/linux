@@ -5989,6 +5989,7 @@ static void bond_destructor(struct net_device *bond_dev)
 		destroy_workqueue(bond->wq);
 
 	free_percpu(bond->rr_tx_counter);
+	free_percpu(bond->alb_info.unbalanced_load);
 }
 
 void bond_setup(struct net_device *bond_dev)
@@ -6488,6 +6489,10 @@ static int bond_init(struct net_device *bond_dev)
 	if (!bond->wq)
 		return -ENOMEM;
 
+	bond->alb_info.unbalanced_load = alloc_percpu(struct unbalanced_load_stats);
+	if (!bond->alb_info.unbalanced_load)
+		goto wq_out;
+
 	bond->notifier_ctx = false;
 
 	spin_lock_init(&bond->stats_lock);
@@ -6505,6 +6510,10 @@ static int bond_init(struct net_device *bond_dev)
 		eth_hw_addr_random(bond_dev);
 
 	return 0;
+
+wq_out:
+	destroy_workqueue(bond->wq);
+	return -ENOMEM;
 }
 
 unsigned int bond_get_num_tx_queues(void)
