@@ -596,7 +596,8 @@ static rseq_inline bool rseq_update_usr(struct task_struct *t, struct pt_regs *r
  * tells the caller to loop back into exit_to_user_mode_loop(). The rseq
  * slow path there will handle the failure.
  */
-static __always_inline bool rseq_exit_user_update(struct pt_regs *regs, struct task_struct *t)
+static __always_inline bool rseq_exit_user_update_inline(struct pt_regs *regs,
+							 struct task_struct *t)
 {
 	/*
 	 * Page faults need to be disabled as this is called with
@@ -647,6 +648,12 @@ static __always_inline bool rseq_exit_user_update(struct pt_regs *regs, struct t
 efault:
 	return false;
 }
+
+#ifdef CONFIG_KMSAN
+bool rseq_exit_user_update(struct pt_regs *regs, struct task_struct *t);
+#else
+#define rseq_exit_user_update rseq_exit_user_update_inline
+#endif
 
 static __always_inline bool __rseq_exit_to_user_mode_restart(struct pt_regs *regs)
 {

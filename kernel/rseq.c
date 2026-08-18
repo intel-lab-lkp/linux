@@ -329,6 +329,13 @@ void __rseq_handle_slowpath(struct pt_regs *regs)
 	rseq_slowpath_update_usr(regs);
 }
 
+#if defined(CONFIG_KMSAN) && defined(CONFIG_GENERIC_ENTRY)
+bool rseq_exit_user_update(struct pt_regs *regs, struct task_struct *t)
+{
+	return rseq_exit_user_update_inline(regs, t);
+}
+#endif
+
 void __rseq_signal_deliver(int sig, struct pt_regs *regs)
 {
 	rseq_stat_inc(rseq_stats.signal);
