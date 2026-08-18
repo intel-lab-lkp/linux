@@ -154,6 +154,8 @@
 #define HPD_TIME               54000
 
 #define AUDIO_CONTROL_REGISTER 0xe6
+#define RIGHT_JUSTIFY_CTRL     BIT(0)
+
 #define TDM_TIMING_MODE 0x08
 
 #define I2C_ADDR_72_DPTX              0x72
@@ -444,6 +446,7 @@ struct anx7625_platform_data {
 	int is_dpi;
 	int mipi_lanes;
 	int audio_en;
+	int audio_right_justify;
 	int dp_lane0_swing_reg_cnt;
 	u8 lane0_reg_data[DP_TX_SWING_REG_CNT];
 	int dp_lane1_swing_reg_cnt;

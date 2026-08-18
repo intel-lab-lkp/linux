@@ -1883,6 +1883,9 @@ static int anx7625_parse_dt(struct device *dev,
 	if (of_property_read_bool(np, "analogix,audio-enable"))
 		pdata->audio_en = 1;
 
+	if (of_property_read_bool(np, "analogix,audio-right-justify-enable"))
+		pdata->audio_right_justify = 1;
+
 	return 0;
 }
 
@@ -2082,6 +2085,12 @@ static int anx7625_audio_hw_params(struct device *dev, void *data,
 	else
 		ret |= anx7625_write_and(ctx, ctx->i2c.tx_p2_client,
 				AUDIO_CHANNEL_STATUS_6, ~AUDIO_LAYOUT);
+
+	/* Right justified */
+	if (ctx->pdata.audio_right_justify)
+		ret |= anx7625_write_or(ctx, ctx->i2c.tx_p2_client,
+					AUDIO_CONTROL_REGISTER,
+					RIGHT_JUSTIFY_CTRL);
 
 	/* FS */
 	switch (params->sample_rate) {
