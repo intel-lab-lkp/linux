@@ -52,7 +52,7 @@
  * rest are per-device feature bits.
  */
 #define VIRTIO_TRANSPORT_F_START	28
-#define VIRTIO_TRANSPORT_F_END		42
+#define VIRTIO_TRANSPORT_F_END		45
 
 #ifndef VIRTIO_CONFIG_NO_LEGACY
 /* Do we get callbacks when the ring is completely used, even if we've
@@ -119,5 +119,27 @@
  * This feature indicates that the device support administration virtqueues.
  */
 #define VIRTIO_F_ADMIN_VQ		41
+
+/*
+ * This feature indicates that the device offers a Device Memory Buffer: a
+ * shared memory region, owned by the device, that holds the virtqueues and
+ * the buffers they reference.  When this feature is negotiated, the data DMA
+ * of the device is routed through a per-device transparent IOMMU whose bus
+ * address space maps 1:1 onto that region, so every address the driver
+ * places in a virtqueue is an address in that space and the device can
+ * reach nothing the driver has not published there.  Interrupts are
+ * unaffected.
+ */
+#define VIRTIO_F_DMB			44
+
+/*
+ * The memory type of a Device Memory Buffer region, as the device reports it.
+ * VIRTIO_DMB_MEM_TYPE_COHERENT means a write by either side becomes visible to
+ * the other with no cache maintenance by the driver.  Every other value is
+ * reserved.  A device reports the type from the moment it offers
+ * VIRTIO_F_DMB, and a driver must not accept the feature unless the type is
+ * one it supports.
+ */
+#define VIRTIO_DMB_MEM_TYPE_COHERENT	0
 
 #endif /* _UAPI_LINUX_VIRTIO_CONFIG_H */
