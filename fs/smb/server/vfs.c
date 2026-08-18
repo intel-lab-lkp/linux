@@ -5,6 +5,7 @@
  */
 
 #include <crypto/sha2.h>
+#include <kunit/visibility.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/filelock.h>
@@ -1668,6 +1669,7 @@ out:
 	kfree(def_smb_acl);
 	return rc;
 }
+EXPORT_SYMBOL_IF_KUNIT(ksmbd_vfs_set_sd_xattr);
 
 int ksmbd_vfs_get_sd_xattr(struct ksmbd_conn *conn,
 			   struct mnt_idmap *idmap,
