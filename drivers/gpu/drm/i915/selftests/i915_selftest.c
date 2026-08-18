@@ -23,6 +23,8 @@
 
 #include <linux/random.h>
 
+#include <drm/drm_print.h>
+
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_pm.h"
 #include "gt/intel_gt_regs.h"
@@ -41,13 +43,13 @@ struct i915_selftest i915_selftest __read_mostly = {
 
 int i915_mock_sanitycheck(void)
 {
-	pr_info(DRIVER_NAME ": %s() - ok!\n", __func__);
+	drm_info(NULL, "%s() - ok!\n", __func__);
 	return 0;
 }
 
 int i915_live_sanitycheck(struct drm_i915_private *i915)
 {
-	pr_info("%s: %s() - ok!\n", i915->drm.driver->name, __func__);
+	drm_info(&i915->drm, "%s() - ok!\n", __func__);
 	return 0;
 }
 
@@ -154,7 +156,7 @@ __wait_gsc_proxy_completed(struct drm_i915_private *i915)
 
 	if (need_to_wait && wait_for(!__gsc_proxy_init_progressing(&i915->media_gt->uc.gsc),
 				     timeout_ms))
-		pr_warn(DRIVER_NAME "Timed out waiting for gsc_proxy_completion!\n");
+		drm_warn(&i915->drm, "Timed out waiting for gsc_proxy_completion!\n");
 }
 
 static void
@@ -178,10 +180,10 @@ __wait_gsc_huc_load_completed(struct drm_i915_private *i915)
 
 	if (need_to_wait &&
 	    wait_for(i915_sw_fence_done(&huc->delayed_load.fence), timeout_ms))
-		pr_warn(DRIVER_NAME "Timed out waiting for huc load via GSC!\n");
+		drm_warn(&i915->drm, "Timed out waiting for huc load via GSC!\n");
 }
 
-static struct mm_struct *get_selftest_mm(int u_pid_nr)
+static struct mm_struct *get_selftest_mm(const struct drm_device *drm, int u_pid_nr)
 {
 	struct task_struct *task = NULL;
 	struct mm_struct *mm = NULL;
@@ -192,19 +194,19 @@ static struct mm_struct *get_selftest_mm(int u_pid_nr)
 
 	u_pid = find_get_pid(u_pid_nr);
 	if (!u_pid) {
-		pr_warn("Could not find PID: %d\n", u_pid_nr);
+		drm_warn(drm, "Could not find PID: %d\n", u_pid_nr);
 		return NULL;
 	}
 
 	task = get_pid_task(u_pid, PIDTYPE_PID);
 	put_pid(u_pid);
 	if (!task) {
-		pr_warn("Could not find task for PID: %d\n", u_pid_nr);
+		drm_warn(drm, "Could not find task for PID: %d\n", u_pid_nr);
 		return NULL;
 	}
 
 	if (task->flags & PF_KTHREAD) {
-		pr_warn("Task not in userspace: %d\n", u_pid_nr);
+		drm_warn(drm, "Task not in userspace: %d\n", u_pid_nr);
 		put_task_struct(task);
 		return NULL;
 	}
@@ -212,7 +214,7 @@ static struct mm_struct *get_selftest_mm(int u_pid_nr)
 	mm = get_task_mm(task);
 	put_task_struct(task);
 	if (!mm) {
-		pr_warn("Could not find address space of task with PID: %d\n", u_pid_nr);
+		drm_warn(drm, "Could not find address space of task with PID: %d\n", u_pid_nr);
 		return NULL;
 	}
 
@@ -224,6 +226,8 @@ static int __run_selftests(const char *name,
 			   unsigned int count,
 			   void *data)
 {
+	struct drm_i915_private *i915 = data;
+	struct drm_device *drm = i915 ? &i915->drm : NULL;
 	struct mm_struct *mm = NULL;
 	int u_pid_nr = -1;
 	int err = 0;
@@ -241,8 +245,8 @@ static int __run_selftests(const char *name,
 
 	set_default_test_all(st, count);
 
-	pr_info(DRIVER_NAME ": Performing %s selftests with st_random_seed=0x%x st_timeout=%u\n",
-		name, i915_selftest.random_seed, i915_selftest.timeout_ms);
+	drm_info(drm, "Performing %s selftests with st_random_seed=0x%x st_timeout=%u\n",
+		 name, i915_selftest.random_seed, i915_selftest.timeout_ms);
 
 	/*
 	 * If we are running in a kthread on a multi NUMA system and the user passed
@@ -250,13 +254,13 @@ static int __run_selftests(const char *name,
 	 * to prepare a safe environment for the mmap selftests.
 	 */
 	if (!current->mm && u_pid_nr > 0) {
-		mm = get_selftest_mm(u_pid_nr);
+		mm = get_selftest_mm(drm, u_pid_nr);
 		if (mm) {
 			kthread_use_mm(mm);
 			if (unlikely(!current->mm)) {
 				mmput(mm);
 				mm = NULL;
-				pr_warn("Could not set mm as current->mm\n");
+				drm_warn(drm, "Could not set mm as current->mm\n");
 			}
 		}
 	}
@@ -275,7 +279,7 @@ static int __run_selftests(const char *name,
 			return -EINTR;
 		}
 
-		pr_info(DRIVER_NAME ": Running %s\n", st->name);
+		drm_info(drm, "Running %s\n", st->name);
 		if (data)
 			err = st->live(data);
 		else
@@ -299,8 +303,8 @@ static int __run_selftests(const char *name,
 	return err;
 }
 
-#define run_selftests(x, data) \
-	__run_selftests(#x, x##_selftests, ARRAY_SIZE(x##_selftests), data)
+#define run_selftests(x, drm, data) \
+	__run_selftests(#x, drm, x##_selftests, ARRAY_SIZE(x##_selftests), data)
 
 int i915_mock_selftests(void)
 {
@@ -309,7 +313,7 @@ int i915_mock_selftests(void)
 	if (!i915_selftest.mock)
 		return 0;
 
-	err = run_selftests(mock, NULL);
+	err = run_selftests(mock, NULL, NULL);
 	if (err) {
 		i915_selftest.mock = err;
 		return 1;
@@ -350,7 +354,7 @@ int i915_live_selftests(struct pci_dev *pdev)
 	__wait_gsc_proxy_completed(i915);
 	__wait_gsc_huc_load_completed(i915);
 
-	err = run_selftests(live, i915);
+	err = run_selftests(live, &i915->drm, i915);
 	if (err) {
 		i915_selftest.live = err;
 		return err;
@@ -375,7 +379,7 @@ int i915_perf_selftests(struct pci_dev *pdev)
 	__wait_gsc_proxy_completed(i915);
 	__wait_gsc_huc_load_completed(i915);
 
-	err = run_selftests(perf, i915);
+	err = run_selftests(perf, &i915->drm, i915);
 	if (err) {
 		i915_selftest.perf = err;
 		return err;
@@ -495,6 +499,8 @@ int __i915_subtests(const char *caller,
 		    unsigned int count,
 		    void *data)
 {
+	struct drm_i915_private *i915 = data;
+	struct drm_device *drm = i915 ? &i915->drm : NULL;
 	int err;
 
 	for (; count--; st++) {
@@ -507,18 +513,16 @@ int __i915_subtests(const char *caller,
 
 		err = setup(data);
 		if (err) {
-			pr_err(DRIVER_NAME "/%s: setup failed for %s\n",
-			       caller, st->name);
+			drm_err(drm, "%s: setup failed for %s\n", caller, st->name);
 			return err;
 		}
 
-		pr_info(DRIVER_NAME ": Running %s/%s\n", caller, st->name);
+		drm_info(drm, "Running %s/%s\n", caller, st->name);
 		GEM_TRACE("Running %s/%s\n", caller, st->name);
 
 		err = teardown(st->func(data), data);
 		if (err && err != -EINTR) {
-			pr_err(DRIVER_NAME "/%s: %s failed with error %d\n",
-			       caller, st->name, err);
+			drm_err(drm, "%s: %s failed with error %d\n", caller, st->name, err);
 			return err;
 		}
 	}
@@ -557,7 +561,7 @@ void igt_hexdump(const void *buf, size_t len)
 
 		if (prev && !memcmp(prev, buf + pos, rowsize)) {
 			if (!skip) {
-				pr_info("*\n");
+				drm_info(NULL, "*\n");
 				skip = true;
 			}
 			continue;
@@ -567,7 +571,7 @@ void igt_hexdump(const void *buf, size_t len)
 						rowsize, sizeof(u32),
 						line, sizeof(line),
 						false) >= sizeof(line));
-		pr_info("[%04zx] %s\n", pos, line);
+		drm_info(NULL, "[%04zx] %s\n", pos, line);
 
 		prev = buf + pos;
 		skip = false;

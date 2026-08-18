@@ -29,6 +29,7 @@
 #define STACK_MAGIC	0xdeadbeef
 
 struct pci_dev;
+struct drm_device;
 struct drm_i915_private;
 
 struct i915_selftest {
@@ -84,6 +85,7 @@ int __intel_gt_live_setup(void *data);
 int __intel_gt_live_teardown(int err, void *data);
 
 int __i915_subtests(const char *caller,
+		    const struct drm_device *drm,
 		    int (*setup)(void *data),
 		    int (*teardown)(int err, void *data),
 		    const struct i915_subtest *st,
