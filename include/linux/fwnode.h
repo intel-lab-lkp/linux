@@ -254,6 +254,8 @@ int fwnode_link_add(struct fwnode_handle *con, struct fwnode_handle *sup,
 void fwnode_links_purge(struct fwnode_handle *fwnode);
 void fw_devlink_purge_absent_suppliers(struct fwnode_handle *fwnode);
 void fw_devlink_refresh_fwnode(struct fwnode_handle *fwnode);
+int fw_devlink_copy_suppliers(struct fwnode_handle *to,
+			      struct fwnode_handle *from);
 bool fw_devlink_is_strict(void);
 
 #endif

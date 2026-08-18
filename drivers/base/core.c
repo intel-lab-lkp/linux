@@ -2394,6 +2394,66 @@ static void fw_devlink_link_device(struct device *dev)
 	__fw_devlink_link_to_suppliers(dev, fwnode);
 }
 
+/**
+ * fw_devlink_copy_suppliers - Copy supplier links between firmware nodes
+ * @to: Firmware node which consumes the copied suppliers
+ * @from: Firmware node whose supplier links should be copied
+ *
+ * Frameworks can use this when a container firmware node describes resources
+ * shared by devices created for its children. The source links remain in
+ * place, while links are added for the real consumer firmware node. Call this
+ * before device_add() associates @to with a registered device, so the normal
+ * fw_devlink path can convert the copied dependencies into device links.
+ *
+ * Ignored source links are skipped. Cycle flags are topology-specific and are
+ * recalculated for the new consumer when its links are converted.
+ *
+ * Return: 0 on success, -EINVAL for invalid firmware nodes, -EBUSY if @to is
+ * already associated with a device, or -ENOMEM if a link could not be
+ * allocated.
+ */
+int fw_devlink_copy_suppliers(struct fwnode_handle *to,
+			      struct fwnode_handle *from)
+{
+	struct list_head *first;
+	struct fwnode_link *link;
+	int ret;
+
+	if (!to || !from)
+		return -EINVAL;
+	if (!fw_devlink_flags || to == from)
+		return 0;
+	fw_devlink_parse_fwnode(from);
+
+	guard(mutex)(&fwnode_link_lock);
+	if (READ_ONCE(to->dev))
+		return -EBUSY;
+
+	first = to->suppliers.next;
+	list_for_each_entry(link, &from->suppliers, c_hook) {
+		u8 flags = link->flags & ~FWLINK_FLAG_CYCLE;
+
+		if (flags & FWLINK_FLAG_IGNORE)
+			continue;
+
+		ret = __fwnode_link_add(to, link->supplier, flags);
+		if (ret)
+			goto rollback;
+	}
+
+	return 0;
+
+rollback:
+	while (to->suppliers.next != first) {
+		link = list_first_entry(&to->suppliers, struct fwnode_link,
+					c_hook);
+		__fwnode_link_del(link);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(fw_devlink_copy_suppliers);
+
 /* Device links support end. */
 
 static struct kobject *dev_kobj;
