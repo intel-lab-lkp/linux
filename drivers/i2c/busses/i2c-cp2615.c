@@ -136,7 +136,7 @@ cp2615_i2c_send(struct usb_interface *usbif, struct cp2615_i2c_transfer *i2c_w)
 }
 
 static int
-cp2615_i2c_recv(struct usb_interface *usbif, unsigned char tag, void *buf)
+cp2615_i2c_recv(struct usb_interface *usbif, unsigned char tag, void *buf, int len)
 {
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
 	struct cp2615_iop_msg *msg;
@@ -158,6 +158,11 @@ cp2615_i2c_recv(struct usb_interface *usbif, unsigned char tag, void *buf)
 	if (msg->msg != htons(iop_I2cTransferResult) || i2c_r->tag != tag) {
 		kfree(msg);
 		return -EIO;
+	}
+
+	if (i2c_r->read_len > len || i2c_r->read_len > MAX_I2C_SIZE) {
+		kfree(msg);
+		return -EPROTO;
 	}
 
 	res = cp2615_check_status(i2c_r->status);
@@ -236,7 +241,7 @@ cp2615_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 		ret = cp2615_i2c_send(usbif, &i2c_w);
 		if (ret)
 			break;
-		ret = cp2615_i2c_recv(usbif, i2c_w.tag, msg->buf);
+		ret = cp2615_i2c_recv(usbif, i2c_w.tag, msg->buf, msg->len);
 	}
 	if (ret < 0)
 		return ret;
