@@ -4565,6 +4565,12 @@ void scx_group_set_bandwidth(struct task_group *tg,
 	     tg->scx.bw_burst_us != burst_us))
 		SCX_CALL_OP(sch, cgroup_set_bandwidth, NULL,
 			    tg_cgrp(tg), period_us, quota_us, burst_us);
+	else if (scx_cgroup_enabled && sch &&
+		 !SCX_HAS_OP(sch, cgroup_set_bandwidth) &&
+		 quota_us != RUNTIME_INF)
+		pr_warn_once("sched_ext: BPF scheduler \"%s\" does not implement "
+			     "ops.cgroup_set_bandwidth(); cpu.max will not be enforced\n",
+			     sch->ops.name);
 
 	tg->scx.bw_period_us = period_us;
 	tg->scx.bw_quota_us = quota_us;
