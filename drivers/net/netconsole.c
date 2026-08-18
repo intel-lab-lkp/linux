@@ -50,6 +50,7 @@
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/ratelimit.h>
+#include <linux/sched/clock.h>
 
 MODULE_AUTHOR("Matt Mackall <mpm@selenic.com>");
 MODULE_DESCRIPTION("Console driver for network interfaces");
@@ -177,6 +178,7 @@ struct netcons_userdata {
  * @sysdata_fields:	Sysdata features enabled.
  * @msgcounter:	Message sent counter.
  * @ratelimit:	Opaque structure to ratelimit messages
+ * @pending_drops: Messages dropped since the last notice was sent.
  * @stats:	Packet send stats for the target. Used for debugging.
  * @state:	State of the target.
  *		Visible from userspace (read-write).
@@ -221,6 +223,7 @@ struct netconsole_target {
 	u32			sysdata_fields;
 	/* protected by target_list_lock */
 	u32			msgcounter;
+	u32			pending_drops;
 	struct ratelimit_state	ratelimit;
 #endif
 	struct netconsole_target_stats stats;
@@ -297,7 +300,20 @@ static bool netconsole_ratelimited(struct netconsole_target *nt)
 	if (oops_in_progress)
 		return false;
 
-	return !__ratelimit(&nt->ratelimit);
+	if (__ratelimit(&nt->ratelimit))
+		return false;
+
+	nt->pending_drops++;
+
+	return true;
+}
+
+static u32 netconsole_take_drops(struct netconsole_target *nt)
+{
+	u32 drops = nt->pending_drops;
+
+	nt->pending_drops = 0;
+	return drops;
 }
 
 #else	/* !CONFIG_NETCONSOLE_DYNAMIC */
@@ -343,6 +359,11 @@ static void netconsole_ratelimit_init(struct netconsole_target *nt)
 static bool netconsole_ratelimited(struct netconsole_target *nt)
 {
 	return false;
+}
+
+static u32 netconsole_take_drops(struct netconsole_target *nt)
+{
+	return 0;
 }
 
 #endif	/* CONFIG_NETCONSOLE_DYNAMIC */
@@ -2554,6 +2575,34 @@ static void send_msg_udp(struct netconsole_target *nt, const char *msg,
 	}
 }
 
+static void send_ratelimit_notice(struct netconsole_target *nt, bool extended)
+{
+	int len = 0;
+	u64 ts_usec;
+	u32 drops;
+
+	drops = netconsole_take_drops(nt);
+	if (!drops)
+		return;
+
+	if (extended) {
+		/* append the extended headers */
+		if (nt->release)
+			len = scnprintf(nt->buf, sizeof(nt->buf), "%s,",
+					init_utsname()->release);
+
+		ts_usec = div_u64(local_clock(), NSEC_PER_USEC);
+		len += scnprintf(nt->buf + len, sizeof(nt->buf) - len,
+				 "%u,0,%llu,-;", LOGLEVEL_WARNING, ts_usec);
+	}
+
+	len += scnprintf(nt->buf + len, sizeof(nt->buf) - len,
+			 "netconsole: %u messages dropped by rate limit\n",
+			 drops);
+
+	send_udp(nt, nt->buf, len);
+}
+
 /**
  * netconsole_write - Generic function to send a msg to all targets
  * @wctxt: nbcon write context
@@ -2582,6 +2631,8 @@ static void netconsole_write(struct nbcon_write_context *wctxt, bool extended)
 		 */
 		if (!nbcon_enter_unsafe(wctxt))
 			return;
+
+		send_ratelimit_notice(nt, extended);
 
 		if (extended)
 			send_ext_msg_udp(nt, wctxt);
