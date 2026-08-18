@@ -1041,11 +1041,11 @@ static int gb_lights_light_register(struct gb_light *light)
 	 * found.
 	 */
 	for (i = 0; i < light->channels_count; i++) {
+		mutex_init(&light->channels[i].lock);
+
 		ret = gb_lights_channel_register(&light->channels[i]);
 		if (ret < 0)
 			return ret;
-
-		mutex_init(&light->channels[i].lock);
 	}
 
 	light->ready = true;
