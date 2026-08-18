@@ -171,6 +171,7 @@ out_unmap_irqs:
 	for (; i > 0; i--)
 		irq_dispose_mapping(tcu->parent_irqs[i - 1]);
 out_domain_remove:
+	irq_domain_remove_generic_chips(tcu->domain);
 	irq_domain_remove(tcu->domain);
 err_free_tcu:
 	kfree(tcu);
