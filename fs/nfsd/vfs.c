@@ -1144,6 +1144,9 @@ nfsd_direct_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (host_err >= 0) {
 		unsigned int pad = offset - dio_start;
 
+		/* Not every ->read_iter implementation updates the atime */
+		file_accessed(nf->nf_file);
+
 		/* The returned payload starts after the pad */
 		rqstp->rq_res.page_base = pad;
 
@@ -1229,6 +1232,9 @@ __be32 nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	trace_nfsd_read_vector(rqstp, fhp, offset, *count - total);
 	iov_iter_bvec(&iter, ITER_DEST, rqstp->rq_bvec, v, *count - total);
 	host_err = vfs_iocb_iter_read(file, &kiocb, &iter);
+	/* Not every ->read_iter implementation updates the atime */
+	if (host_err >= 0)
+		file_accessed(file);
 	return nfsd_finish_read(rqstp, fhp, file, offset, count, eof, host_err);
 }
 
