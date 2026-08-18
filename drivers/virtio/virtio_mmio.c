@@ -55,6 +55,7 @@
 #define pr_fmt(fmt) "virtio-mmio: " fmt
 
 #include <linux/acpi.h>
+#include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/highmem.h>
 #include <linux/interrupt.h>
@@ -254,6 +255,11 @@ static void vm_reset(struct virtio_device *vdev)
 
 	/* 0 status means a reset. */
 	writel(0, vm_dev->base + VIRTIO_MMIO_STATUS);
+
+	/* Wait for reset completion before flushing callbacks. */
+	while (vm_get_status(vdev))
+		fsleep(1000);
+	synchronize_irq(platform_get_irq(vm_dev->pdev, 0));
 }
 
 
