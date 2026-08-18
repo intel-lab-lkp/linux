@@ -188,6 +188,23 @@ config VIRTIO_DEBUG
 
 	  If unsure, say N.
 
+config VIRTIO_DMB
+	bool "Device Memory Buffer support"
+	depends on VIRTIO
+	select GENERIC_ALLOCATOR
+	default y
+	help
+	  Support devices that place their virtqueues and buffers in a shared
+	  memory region they own, rather than in memory the driver allocates.
+
+	  Enabling this adds an allocator over that region and one record per
+	  page of the region, both of which are set up only for a device that
+	  negotiates the feature.  When disabled no transport accepts the
+	  feature, and a device offering it is driven as an ordinary one on a
+	  platform that does not restrict memory access.
+
+	  If unsure, say Y.
+
 config VIRTIO_RTC
 	tristate "Virtio RTC driver"
 	depends on VIRTIO
