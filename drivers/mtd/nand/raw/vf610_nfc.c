@@ -771,8 +771,14 @@ static int vf610_nfc_attach_chip(struct nand_chip *chip)
 	}
 
 	/* Only 64 byte ECC layouts known */
-	if (mtd->oobsize > 64)
+	if (mtd->oobsize > 64) {
+		dev_info(nfc->dev,
+			 "using 64 of %d OOB bytes, ECC layout is unchanged\n",
+			 mtd->oobsize);
 		mtd->oobsize = 64;
+		/* nand_scan_tail() restores mtd->oobsize from the memorg */
+		nanddev_get_memorg(&chip->base)->oobsize = 64;
+	}
 
 	/* Use default large page ECC layout defined in NAND core */
 	mtd_set_ooblayout(mtd, nand_get_large_page_ooblayout());
