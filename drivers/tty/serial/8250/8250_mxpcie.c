@@ -217,8 +217,7 @@ static void mxpcie8250_set_termios(struct uart_port *port,
 				   const struct ktermios *old)
 {
 	struct uart_8250_port *up = up_to_u8250p(port);
-	struct tty_struct *tty = port->state->port.tty;
-	unsigned int cflag = tty->termios.c_cflag;
+	unsigned int cflag = new->c_cflag;
 	u8 efr, val;
 
 	serial8250_do_set_termios(port, new, old);
@@ -233,18 +232,20 @@ static void mxpcie8250_set_termios(struct uart_port *port,
 		up->port.status |= (UPSTAT_AUTORTS | UPSTAT_AUTOCTS);
 	}
 	/* Set on-chip software flow control character */
-	serial_out(up, MOXA_PUART_XON1, START_CHAR(tty));
-	serial_out(up, MOXA_PUART_XON2, START_CHAR(tty));
-	serial_out(up, MOXA_PUART_XOFF1, STOP_CHAR(tty));
-	serial_out(up, MOXA_PUART_XOFF2, STOP_CHAR(tty));
+	serial_out(up, MOXA_PUART_XON1, new->c_cc[VSTART]);
+	serial_out(up, MOXA_PUART_XON2, new->c_cc[VSTART]);
+	serial_out(up, MOXA_PUART_XOFF1, new->c_cc[VSTOP]);
+	serial_out(up, MOXA_PUART_XOFF2, new->c_cc[VSTOP]);
 
-	val = I_IXON(tty) ? MOXA_PUART_EFR_RX_FLOW_XON1_XOFF1 : MOXA_PUART_EFR_RX_FLOW_DISABLED;
+	val = (new->c_iflag & IXON) ? MOXA_PUART_EFR_RX_FLOW_XON1_XOFF1 :
+				      MOXA_PUART_EFR_RX_FLOW_DISABLED;
 	FIELD_MODIFY(MOXA_PUART_EFR_RX_FLOW_MASK, &efr, val);
 
-	val = I_IXOFF(tty) ? MOXA_PUART_EFR_TX_FLOW_XON1_XOFF1 : MOXA_PUART_EFR_TX_FLOW_DISABLED;
+	val = (new->c_iflag & IXOFF) ? MOXA_PUART_EFR_TX_FLOW_XON1_XOFF1 :
+				       MOXA_PUART_EFR_TX_FLOW_DISABLED;
 	FIELD_MODIFY(MOXA_PUART_EFR_TX_FLOW_MASK, &efr, val);
 
-	if (I_IXOFF(tty))
+	if (new->c_iflag & IXOFF)
 		up->port.status |= UPSTAT_AUTOXOFF;
 
 	serial_out(up, MOXA_PUART_EFR, efr);
