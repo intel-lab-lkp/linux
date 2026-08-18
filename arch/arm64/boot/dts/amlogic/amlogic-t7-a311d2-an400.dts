@@ -33,7 +33,5 @@
 };
 
 &uart_a {
-	clocks = <&xtal>, <&xtal>, <&xtal>;
-	clock-names = "xtal", "pclk", "baud";
 	status = "okay";
 };
