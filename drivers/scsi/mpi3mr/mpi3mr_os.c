@@ -5972,6 +5972,8 @@ mpi3mr_pcierr_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 			return PCI_ERS_RESULT_DISCONNECT;
 		}
 
+		mrioc->stop_drv_processing = 1;
+		mpi3mr_cleanup_fwevt_list(mrioc);
 		scsi_block_requests(mrioc->shost);
 		mpi3mr_stop_watchdog(mrioc);
 		mpi3mr_cleanup_resources(mrioc);
@@ -6069,6 +6071,7 @@ static void mpi3mr_pcierr_resume(struct pci_dev *pdev)
 
 	if (mrioc->block_on_pci_err) {
 		mrioc->block_on_pci_err = false;
+		mrioc->stop_drv_processing = 0;
 		scsi_unblock_requests(shost);
 		mpi3mr_start_watchdog(mrioc);
 	}
