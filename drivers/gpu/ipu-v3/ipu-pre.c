@@ -311,6 +311,7 @@ static int ipu_pre_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct ipu_pre *pre;
+	int ret;
 
 	pre = devm_kzalloc(dev, sizeof(*pre), GFP_KERNEL);
 	if (!pre)
@@ -339,7 +340,12 @@ static int ipu_pre_probe(struct platform_device *pdev)
 	if (!pre->buffer_virt)
 		return -ENOMEM;
 
-	clk_prepare_enable(pre->clk_axi);
+	ret = clk_prepare_enable(pre->clk_axi);
+	if (ret) {
+		gen_pool_free(pre->iram, (unsigned long)pre->buffer_virt,
+			      IPU_PRE_MAX_WIDTH * IPU_PRE_NUM_SCANLINES * 4);
+		return ret;
+	}
 
 	pre->dev = dev;
 	platform_set_drvdata(pdev, pre);
