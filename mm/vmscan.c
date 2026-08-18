@@ -3308,18 +3308,22 @@ static int folio_inc_gen(struct lruvec *lruvec, struct folio *folio)
 {
 	int type = folio_is_file_lru(folio);
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
-	int new_gen, old_gen = lru_gen_from_seq(lrugen->min_seq[type]);
+	int new_gen, old_gen, min_gen = lru_gen_from_seq(lrugen->min_seq[type]);
 	unsigned long new_flags, old_flags = READ_ONCE(*folio_flags(folio, 0));
 
 	do {
-		new_gen = lru_gen_from_flags(old_flags);
+		old_gen = lru_gen_from_flags(old_flags);
+		/* This helper should never be called for off-list folios */
+		VM_WARN_ON_ONCE(old_gen < 0);
+		if (old_gen < 0)
+			return min_gen;
 
 		/* folio_update_gen() has promoted this page? */
-		if (new_gen >= 0 && new_gen != old_gen)
-			return new_gen;
+		if (old_gen != min_gen)
+			return old_gen;
 
 		new_flags = old_flags;
-		new_gen = (old_gen + 1) % MAX_NR_GENS;
+		new_gen = (min_gen + 1) % MAX_NR_GENS;
 		lru_gen_set_flags(&new_flags, new_gen);
 		lru_refs_set_flags(&new_flags, 0);
 	} while (!try_cmpxchg(folio_flags(folio, 0), &old_flags, new_flags));
