@@ -2123,6 +2123,8 @@ static const struct soc_device_attribute rswitch_soc_no_speed_change[]  = {
 	{ /* Sentinel */ }
 };
 
+static void rswitch_deinit(struct rswitch_private *priv);
+
 static int renesas_eth_sw_probe(struct platform_device *pdev)
 {
 	const struct soc_device_attribute *attr;
@@ -2194,6 +2196,9 @@ static int renesas_eth_sw_probe(struct platform_device *pdev)
 	ret = rswitch_register_notifiers();
 	if (ret) {
 		dev_err(&pdev->dev, "could not register notifiers\n");
+		rswitch_deinit(priv);
+		pm_runtime_put(&pdev->dev);
+		pm_runtime_disable(&pdev->dev);
 		return ret;
 	}
 
