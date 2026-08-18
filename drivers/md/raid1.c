@@ -786,11 +786,30 @@ struct read_balance_ctl {
 	int min_pending_disk;
 	int sequential_disk;
 	int readable_disks;
+	bool min_pending_nonrot;
+	bool sequential_nonrot;
 };
 
 static int raid1_rr_pos(int disk, int start, int n)
 {
 	return ((disk % n) - start + n) % n;
+}
+
+static bool is_better_disk(unsigned int pending, int disk, bool nonrot,
+			   const struct read_balance_ctl *ctl,
+			   int rr_start, int n)
+{
+	if (ctl->min_pending_disk < 0)
+		return true;
+	if (ctl->min_pending < pending)
+		return false;
+	if (ctl->min_pending > pending)
+		return true;
+	if (nonrot && !ctl->min_pending_nonrot)
+		return true;
+	return nonrot && ctl->min_pending_nonrot &&
+	       raid1_rr_pos(disk, rr_start, n) <
+	       raid1_rr_pos(ctl->min_pending_disk, rr_start, n);
 }
 
 static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
@@ -814,6 +833,7 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 		struct md_rdev *rdev;
 		sector_t dist;
 		unsigned int pending;
+		bool nonrot;
 
 		if (r1_bio->bios[disk] == IO_BLOCKED)
 			continue;
@@ -829,10 +849,12 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 		pending = atomic_read(&rdev->nr_pending);
 		dist = abs(r1_bio->sector -
 			   READ_ONCE(conf->mirrors[disk].head_position));
+		nonrot = test_bit(Nonrot, &rdev->flags);
 
 		/* Don't change to another disk for sequential reads */
 		if (is_sequential(conf, disk, r1_bio)) {
-			if (!should_choose_next(conf, disk) && !pending)
+			if (!should_choose_next(conf, disk) && !pending &&
+			    (nonrot || !has_nonrot))
 				return disk;
 
 			/*
@@ -844,17 +866,18 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 			 * If there is no other idle disk, this disk
 			 * will be chosen.
 			 */
-			ctl.sequential_disk = disk;
+			if (ctl.sequential_disk < 0 ||
+			    (nonrot && !ctl.sequential_nonrot)) {
+				ctl.sequential_disk = disk;
+				ctl.sequential_nonrot = nonrot;
+			}
 		}
 
-		if (ctl.min_pending > pending ||
-		    (has_nonrot && ctl.min_pending == pending &&
-		     ctl.min_pending_disk >= 0 &&
-		     raid1_rr_pos(disk, rr_start, conf->raid_disks) <
-		     raid1_rr_pos(ctl.min_pending_disk, rr_start,
-				  conf->raid_disks))) {
+		if (is_better_disk(pending, disk, nonrot, &ctl,
+				   rr_start, conf->raid_disks)) {
 			ctl.min_pending = pending;
 			ctl.min_pending_disk = disk;
+			ctl.min_pending_nonrot = nonrot;
 		}
 
 		if (ctl.closest_dist > dist) {
@@ -867,7 +890,8 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 	 * sequential IO size exceeds optimal iosize, however, there is no other
 	 * idle disk, so choose the sequential disk.
 	 */
-	if (ctl.sequential_disk != -1 && ctl.min_pending != 0)
+	if (ctl.sequential_disk != -1 && ctl.min_pending != 0 &&
+	    (ctl.sequential_nonrot || !has_nonrot))
 		return ctl.sequential_disk;
 
 	/*
