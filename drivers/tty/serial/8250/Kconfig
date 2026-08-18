@@ -337,6 +337,15 @@ config SERIAL_8250_ACORN
 	  system, say Y to this option.  The driver can handle 1, 2, or 3 port
 	  cards.  If unsure, say N.
 
+config SERIAL_8250_AMBARELLA
+	tristate "Ambarella UART support"
+	depends on SERIAL_8250 && HAVE_CLK
+	depends on ARCH_AMBARELLA || COMPILE_TEST
+	default y if ARCH_AMBARELLA
+	help
+	  Support for the on-chip UART found on Ambarella SoCs.
+	  If unsure, say N.
+
 config SERIAL_8250_BCM2835AUX
 	tristate "BCM2835 auxiliar mini UART support"
 	depends on ARCH_BCM2835 || COMPILE_TEST
