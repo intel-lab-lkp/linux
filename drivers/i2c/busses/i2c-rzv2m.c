@@ -462,7 +462,12 @@ static int rzv2m_i2c_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(dev);
 
-	pm_runtime_get_sync(dev);
+	ret = pm_runtime_get_sync(dev);
+	if (ret < 0) {
+		pm_runtime_put_noidle(dev);
+		return ret;
+	}
+
 	rzv2m_i2c_init(priv);
 	pm_runtime_put(dev);
 
