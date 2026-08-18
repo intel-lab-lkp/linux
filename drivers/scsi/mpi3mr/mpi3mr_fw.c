@@ -127,7 +127,8 @@ void *mpi3mr_get_reply_virt_addr(struct mpi3mr_ioc *mrioc,
 		return NULL;
 
 	if ((phys_addr < mrioc->reply_buf_dma) ||
-	    (phys_addr > mrioc->reply_buf_dma_max_address))
+	    (phys_addr > mrioc->reply_buf_dma_max_address - mrioc->reply_sz) ||
+	    ((phys_addr - mrioc->reply_buf_dma) % mrioc->reply_sz))
 		return NULL;
 
 	return mrioc->reply_buf + (phys_addr - mrioc->reply_buf_dma);
