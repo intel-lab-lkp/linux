@@ -231,6 +231,7 @@ static u32 have_release_callback __read_mostly;
 static u32 have_canfork_callback __read_mostly;
 
 static bool have_favordynmods __ro_after_init = IS_ENABLED(CONFIG_CGROUP_FAVOR_DYNMODS);
+static bool have_memory_tiered_limits __ro_after_init;
 
 /*
  * Write protected by cgroup_mutex and write-lock of cgroup_threadgroup_rwsem,
@@ -1985,6 +1986,7 @@ enum cgroup2_param {
 	Opt_memory_recursiveprot,
 	Opt_memory_hugetlb_accounting,
 	Opt_pids_localevents,
+	Opt_memory_tiered_limits,
 	nr__cgroup2_params
 };
 
@@ -1995,6 +1997,7 @@ static const struct fs_parameter_spec cgroup2_fs_parameters[] = {
 	fsparam_flag("memory_recursiveprot",	Opt_memory_recursiveprot),
 	fsparam_flag("memory_hugetlb_accounting", Opt_memory_hugetlb_accounting),
 	fsparam_flag("pids_localevents",	Opt_pids_localevents),
+	fsparam_flag("memory_tiered_limits",	Opt_memory_tiered_limits),
 	{}
 };
 
@@ -2026,6 +2029,9 @@ static int cgroup2_parse_param(struct fs_context *fc, struct fs_parameter *param
 		return 0;
 	case Opt_pids_localevents:
 		ctx->flags |= CGRP_ROOT_PIDS_LOCAL_EVENTS;
+		return 0;
+	case Opt_memory_tiered_limits:
+		ctx->flags |= CGRP_ROOT_MEMORY_TIERED_LIMITS;
 		return 0;
 	}
 	return -EINVAL;
@@ -2068,6 +2074,11 @@ static void apply_cgroup_root_flags(unsigned int root_flags)
 			cgrp_dfl_root.flags |= CGRP_ROOT_PIDS_LOCAL_EVENTS;
 		else
 			cgrp_dfl_root.flags &= ~CGRP_ROOT_PIDS_LOCAL_EVENTS;
+
+		if (root_flags & CGRP_ROOT_MEMORY_TIERED_LIMITS)
+			cgrp_dfl_root.flags |= CGRP_ROOT_MEMORY_TIERED_LIMITS;
+		else
+			cgrp_dfl_root.flags &= ~CGRP_ROOT_MEMORY_TIERED_LIMITS;
 	}
 }
 
@@ -2085,6 +2096,8 @@ static int cgroup_show_options(struct seq_file *seq, struct kernfs_root *kf_root
 		seq_puts(seq, ",memory_hugetlb_accounting");
 	if (cgrp_dfl_root.flags & CGRP_ROOT_PIDS_LOCAL_EVENTS)
 		seq_puts(seq, ",pids_localevents");
+	if (cgrp_dfl_root.flags & CGRP_ROOT_MEMORY_TIERED_LIMITS)
+		seq_puts(seq, ",memory_tiered_limits");
 	return 0;
 }
 
@@ -2363,6 +2376,8 @@ static int cgroup_init_fs_context(struct fs_context *fc)
 
 	if (have_favordynmods)
 		ctx->flags |= CGRP_ROOT_FAVOR_DYNMODS;
+	if (have_memory_tiered_limits)
+		ctx->flags |= CGRP_ROOT_MEMORY_TIERED_LIMITS;
 
 	return 0;
 }
@@ -7234,6 +7249,12 @@ static int __init cgroup_favordynmods_setup(char *str)
 	return (kstrtobool(str, &have_favordynmods) == 0);
 }
 __setup("cgroup_favordynmods=", cgroup_favordynmods_setup);
+
+static int __init cgroup_memory_tiered_limits_setup(char *str)
+{
+	return (kstrtobool(str, &have_memory_tiered_limits) == 0);
+}
+__setup("cgroup_memory_tiered_limits=", cgroup_memory_tiered_limits_setup);
 
 /**
  * css_tryget_online_from_dir - get corresponding css from a cgroup dentry

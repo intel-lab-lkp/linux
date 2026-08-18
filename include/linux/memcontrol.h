@@ -544,6 +544,18 @@ static inline bool mem_cgroup_disabled(void)
 	return !cgroup_subsys_enabled(memory_cgrp_subsys);
 }
 
+#ifdef CONFIG_NUMA
+static inline bool mem_cgroup_tiered_limits(void)
+{
+	return cgrp_dfl_root.flags & CGRP_ROOT_MEMORY_TIERED_LIMITS;
+}
+#else
+static inline bool mem_cgroup_tiered_limits(void)
+{
+	return false;
+}
+#endif
+
 static inline void mem_cgroup_protection(struct mem_cgroup *root,
 					 struct mem_cgroup *memcg,
 					 unsigned long *min,

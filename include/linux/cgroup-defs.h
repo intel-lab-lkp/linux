@@ -129,6 +129,11 @@ enum {
 	 * Enable legacy local pids.events.
 	 */
 	CGRP_ROOT_PIDS_LOCAL_EVENTS = (1 << 20),
+
+	/*
+	 * Enable tier-aware limits for the memory controller.
+	 */
+	CGRP_ROOT_MEMORY_TIERED_LIMITS = (1 << 21),
 };
 
 /* cftype->flags */

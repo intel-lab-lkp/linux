@@ -2462,7 +2462,7 @@ static void memcg_charge_tier_id(struct mem_cgroup *memcg, int tier_id,
 {
 	struct memcg_tier_counter *tc;
 
-	if (tier_id < 0)
+	if (!mem_cgroup_tiered_limits() || tier_id < 0)
 		return;
 	rcu_read_lock();
 	tc = memcg_tier_counter_find(memcg, tier_id);
@@ -2476,7 +2476,7 @@ static void memcg_uncharge_tier_id(struct mem_cgroup *memcg, int tier_id,
 {
 	struct memcg_tier_counter *tc;
 
-	if (tier_id < 0)
+	if (!mem_cgroup_tiered_limits() || tier_id < 0)
 		return;
 	rcu_read_lock();
 	tc = memcg_tier_counter_find(memcg, tier_id);
@@ -2580,6 +2580,9 @@ static void tier_update_derived_limits(struct mem_cgroup *memcg)
 	struct tier_cap_entry local_entries[NR_TIER_CAP_ENTRIES];
 	unsigned long total;
 	int i, nr_entries;
+
+	if (!mem_cgroup_tiered_limits())
+		return;
 
 	spin_lock(&tier_cap_lock);
 	total = tier_total_capacity;
@@ -3198,6 +3201,9 @@ static void refill_tier_stock(struct mem_cgroup *memcg, int tier_id,
 	uint8_t pages;
 	int i;
 
+	if (!mem_cgroup_tiered_limits())
+		return;
+
 	/* Too big to cache: direct uncharge, leave the stock untouched. */
 	if (nr_pages > MEMCG_CHARGE_BATCH) {
 		rcu_read_lock();
@@ -3252,7 +3258,7 @@ static int try_charge_memcg_tier(struct mem_cgroup *memcg, gfp_t gfp_mask,
 	bool drained = false;
 	nodemask_t nodes, *nmp = NULL;
 
-	if (tier_id < 0)
+	if (!mem_cgroup_tiered_limits() || tier_id < 0)
 		return 0;
 
 	rcu_read_lock();
@@ -4736,7 +4742,7 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 		page_counter_init(&memcg->memory, &parent->memory, memcg_on_dfl);
 		page_counter_init(&memcg->swap, &parent->swap, false);
 
-		{
+		if (mem_cgroup_tiered_limits()) {
 			int nid, tid;
 
 			for_each_online_node(nid) {
@@ -5459,6 +5465,8 @@ static int memory_tier_show(struct seq_file *m, void *v)
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
 	struct memcg_tier_counter *tc;
 
+	if (!mem_cgroup_tiered_limits())
+		return 0;
 	rcu_read_lock();
 	list_for_each_entry_rcu(tc, &memcg->tier_counters, list) {
 		seq_printf(m, "tier%d.current=%llu\n", tc->tier_id,
@@ -5483,6 +5491,9 @@ static ssize_t memory_tier_write(struct kernfs_open_file *of,
 	unsigned long val;
 	char knob[8], *p;
 	int tier_id, err;
+
+	if (!mem_cgroup_tiered_limits())
+		return -EOPNOTSUPP;
 
 	buf = strstrip(buf);
 	if (sscanf(buf, "tier%d.%7[^=]", &tier_id, knob) != 2)
@@ -6266,6 +6277,9 @@ static int __meminit memcg_tier_hotplug_cb(struct notifier_block *self,
 	struct node_notify *nn = _arg;
 	struct mem_cgroup *memcg;
 	int tid;
+
+	if (!mem_cgroup_tiered_limits())
+		return notifier_from_errno(0);
 
 	switch (action) {
 	case NODE_ADDED_FIRST_MEMORY:
