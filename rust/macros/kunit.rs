@@ -144,9 +144,19 @@ pub(crate) fn kunit_tests(test_suite: Ident, mut module: ItemMod) -> Result<Toke
                 // here to reduce the length of the assert message.
                 #(#cfg_attrs)*
                 {
+                    #[cfg(CONFIG_RUST_LOCKDEP_KUNIT_DEBUG_LOCKS)]
+                    let __debug_locks_snapshot = ::kernel::bindings::debug_locks;
+
                     (*_test).status = ::kernel::bindings::kunit_status_KUNIT_SUCCESS;
                     use ::kernel::kunit::is_test_result_ok;
                     assert!(is_test_result_ok(#test()));
+
+                    #[cfg(CONFIG_RUST_LOCKDEP_KUNIT_DEBUG_LOCKS)]
+                    {
+                        let __debug_locks_ok =
+                            ::kernel::bindings::debug_locks == __debug_locks_snapshot;
+                        assert!(__debug_locks_ok);
+                    }
                 }
             }
         });

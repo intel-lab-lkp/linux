@@ -142,4 +142,17 @@ config KUNIT_UML_PCI
 
 	  If unsure, say N.
 
+config RUST_LOCKDEP_KUNIT_DEBUG_LOCKS
+	bool "Enable extra debug_locks assertion in Rust KUnit tests"
+	depends on RUST
+	depends on LOCKDEP
+	default n
+	help
+	  Adds an extra assertion to each Rust kunit test case that asserts
+	  that the debug_locks flag from `lockdep` is unchanged. This is useful
+	  when writing unit tests that could potentially trigger a lockdep warning,
+	  this makes it so the KUnit test does not succeed if the test assertions are
+	  true, but a lockdep warning is triggered.
+
+	  If unsure, say N.
 endif # KUNIT
