@@ -2171,10 +2171,14 @@ nv50_disp_atomic_commit_core(struct drm_atomic_commit *state, u32 *interlock)
 	list_for_each_entry(outp, &atom->outp, head) {
 		if (outp->encoder->encoder_type != DRM_MODE_ENCODER_DPMST) {
 			struct nouveau_encoder *nv_encoder = nouveau_encoder(outp->encoder);
+			struct nouveau_crtc *nv_crtc = nv50_outp_get_new_crtc(state, nv_encoder);
+
+			if (drm_WARN_ON(drm->dev, !nv_crtc))
+				continue;
 
 			if (outp->enabled) {
-				nv50_audio_enable(outp->encoder, nouveau_crtc(nv_encoder->crtc),
-						  nv_encoder->conn, NULL, NULL);
+				nv50_audio_enable(outp->encoder, nv_crtc, nv_encoder->conn, NULL,
+						  NULL);
 				outp->enabled = outp->disabled = false;
 			} else {
 				if (outp->disabled) {
