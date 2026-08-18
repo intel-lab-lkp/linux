@@ -1493,12 +1493,14 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return ret;
 	}
 
-	for (int r = 0; r < ARRAY_SIZE(asus_report_id_init); r++) {
-		if (asus_has_report_id(hdev, asus_report_id_init[r])) {
-			ret = asus_kbd_init(hdev, asus_report_id_init[r]);
-			if (ret < 0)
-				hid_warn(hdev, "Failed to initialize 0x%x: %d.\n",
-					 asus_report_id_init[r], ret);
+	if (!drvdata->tp) {
+		for (int r = 0; r < ARRAY_SIZE(asus_report_id_init); r++) {
+			if (asus_has_report_id(hdev, asus_report_id_init[r])) {
+				ret = asus_kbd_init(hdev, asus_report_id_init[r]);
+				if (ret < 0)
+					hid_warn(hdev, "Failed to initialize 0x%x: %d.\n",
+						 asus_report_id_init[r], ret);
+			}
 		}
 	}
 
@@ -1526,12 +1528,12 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			drvdata->input->name = "Asus TouchPad";
 		else
 			drvdata->input->name = "Asus Keyboard";
+	}
 
-		if (drvdata->tp) {
-			ret = asus_start_multitouch(hdev);
-			if (ret)
-				goto err_stop_hw;
-		}
+	if (drvdata->tp) {
+		ret = asus_start_multitouch(hdev);
+		if (ret)
+			goto err_stop_hw;
 	}
 
 	return 0;
