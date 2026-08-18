@@ -532,6 +532,8 @@ static inline struct inode *erofs_real_inode(struct inode *inode, bool *need_ipu
 }
 #endif
 
+loff_t erofs_file_llseek(struct file *file, loff_t offset, int whence);
+
 long erofs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 long erofs_compat_ioctl(struct file *filp, unsigned int cmd,
 			unsigned long arg);
