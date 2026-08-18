@@ -19,6 +19,10 @@
 #include <linux/module.h>
 #include <linux/vmalloc.h>
 #include <linux/falloc.h>
+#include <linux/dcache.h>
+#include <linux/limits.h>
+#include <linux/mount.h>
+#include <linux/namei.h>
 #include <linux/uio.h>
 #include <linux/scatterlist.h>
 #include <scsi/scsi_proto.h>
@@ -84,6 +88,162 @@ static struct se_device *fd_alloc_device(struct se_hba *hba, const char *name)
 	pr_debug("FILEIO: Allocated fd_dev for %p\n", name);
 
 	return &fd_dev->dev;
+}
+
+static bool fd_backing_file_is_configfs(struct file *file)
+{
+	return !strcmp(d_real(file_dentry(file), D_REAL_DATA)->d_sb->s_type->name,
+		       "configfs");
+}
+
+static int fd_may_open_existing_file(const struct path *path, int flags)
+{
+	struct inode *inode = d_inode(path->dentry);
+	struct mnt_idmap *idmap = mnt_idmap(path->mnt);
+	int acc_mode = ACC_MODE(flags);
+	int ret;
+
+	if (flags & O_APPEND)
+		acc_mode |= MAY_APPEND;
+
+	ret = inode_permission(idmap, inode, MAY_OPEN | acc_mode);
+	if (ret)
+		return ret;
+
+	if (IS_APPEND(inode)) {
+		if ((flags & O_ACCMODE) != O_RDONLY && !(flags & O_APPEND))
+			return -EPERM;
+		if (flags & O_TRUNC)
+			return -EPERM;
+	}
+
+	if (flags & O_NOATIME && !inode_owner_or_capable(idmap, inode))
+		return -EPERM;
+
+	return 0;
+}
+
+static int fd_open_prot_file(struct file *file, int flags, umode_t mode,
+			     struct file **filep)
+{
+	struct dentry *backing_dentry = file_dentry(file);
+	struct name_snapshot backing_name;
+	struct path parent_path;
+	struct path prot_path;
+	struct file *prot_file;
+	struct qstr prot_qname;
+	char *prot_name;
+	size_t prot_name_len;
+	int ret, retries = 0;
+
+	if (fd_backing_file_is_configfs(file))
+		return -EOPNOTSUPP;
+
+	/*
+	 * A regular file used as the root of a mount has no in-mount sibling
+	 * pathname for a ".protection" sidecar.  Reconstructing one from the
+	 * original string path would reopen the configfs recursion hole.
+	 */
+	if (backing_dentry == file->f_path.mnt->mnt_root)
+		return -EXDEV;
+
+retry:
+	parent_path.mnt = mntget(file->f_path.mnt);
+	parent_path.dentry = dget_parent(backing_dentry);
+	prot_path.mnt = parent_path.mnt;
+
+	ret = mnt_want_write_file(file);
+	if (ret)
+		goto out_put_parent;
+
+	inode_lock_nested(d_inode(parent_path.dentry), I_MUTEX_PARENT);
+	if (d_unlinked(backing_dentry) ||
+	    backing_dentry->d_parent != parent_path.dentry) {
+		ret = -ESTALE;
+		goto out_unlock;
+	}
+
+	take_dentry_name_snapshot(&backing_name, backing_dentry);
+	prot_name_len = backing_name.name.len + strlen(".protection");
+	if (prot_name_len > NAME_MAX) {
+		ret = -ENAMETOOLONG;
+		goto out_release_name;
+	}
+
+	prot_name = kmalloc(prot_name_len + 1, GFP_KERNEL);
+	if (!prot_name) {
+		ret = -ENOMEM;
+		goto out_release_name;
+	}
+
+	memcpy(prot_name, backing_name.name.name, backing_name.name.len);
+	memcpy(prot_name + backing_name.name.len, ".protection",
+	       strlen(".protection") + 1);
+	prot_qname = QSTR_LEN(prot_name, prot_name_len);
+
+	prot_path.dentry = lookup_one(mnt_idmap(parent_path.mnt), &prot_qname,
+				      parent_path.dentry);
+	if (IS_ERR(prot_path.dentry)) {
+		ret = PTR_ERR(prot_path.dentry);
+		goto out_free_name;
+	}
+
+	if (d_is_negative(prot_path.dentry)) {
+		prot_file = dentry_create(&prot_path, flags, mode, current_cred());
+	} else {
+		if (!d_is_reg(prot_path.dentry)) {
+			ret = -EINVAL;
+			goto out_dput;
+		}
+
+		ret = fd_may_open_existing_file(&prot_path, flags & ~O_CREAT);
+		if (ret)
+			goto out_dput;
+
+		inode_unlock(d_inode(parent_path.dentry));
+		mnt_drop_write_file(file);
+		release_dentry_name_snapshot(&backing_name);
+		kfree(prot_name);
+
+		prot_file = dentry_open(&prot_path, flags & ~O_CREAT,
+					current_cred());
+		if (IS_ERR(prot_file)) {
+			ret = PTR_ERR(prot_file);
+			goto out_dput_nolock;
+		}
+
+		*filep = prot_file;
+		ret = 0;
+		goto out_dput_nolock;
+	}
+
+	if (IS_ERR(prot_file)) {
+		ret = PTR_ERR(prot_file);
+		goto out_dput;
+	}
+
+	*filep = prot_file;
+	ret = 0;
+
+out_dput:
+	dput(prot_path.dentry);
+out_free_name:
+	kfree(prot_name);
+out_release_name:
+	release_dentry_name_snapshot(&backing_name);
+out_unlock:
+	inode_unlock(d_inode(parent_path.dentry));
+	mnt_drop_write_file(file);
+out_put_parent:
+	path_put(&parent_path);
+	if (ret == -ESTALE && !retries++)
+		goto retry;
+	return ret;
+
+out_dput_nolock:
+	dput(prot_path.dentry);
+	path_put(&parent_path);
+	return ret;
 }
 
 static bool fd_configure_unmap(struct se_device *dev)
@@ -827,7 +987,6 @@ static int fd_init_prot(struct se_device *dev)
 	struct file *prot_file, *file = fd_dev->fd_file;
 	struct inode *inode;
 	int ret, flags = O_RDWR | O_CREAT | O_LARGEFILE | O_DSYNC;
-	char buf[FD_MAX_DEV_PROT_NAME];
 
 	if (!file) {
 		pr_err("Unable to locate fd_dev->fd_file\n");
@@ -844,13 +1003,22 @@ static int fd_init_prot(struct se_device *dev)
 	if (fd_dev->fbd_flags & FDBD_HAS_BUFFERED_IO_WCE)
 		flags &= ~O_DSYNC;
 
-	snprintf(buf, FD_MAX_DEV_PROT_NAME, "%s.protection",
-		 fd_dev->fd_dev_name);
-
-	prot_file = filp_open(buf, flags, 0600);
-	if (IS_ERR(prot_file)) {
-		pr_err("filp_open(%s) failed\n", buf);
-		ret = PTR_ERR(prot_file);
+	ret = fd_open_prot_file(file, flags, 0600, &prot_file);
+	if (ret) {
+		if (ret == -EOPNOTSUPP)
+			pr_err("FILEIO PI sidecars are not supported for configfs-backed backends\n");
+		else if (ret == -EXDEV)
+			pr_err("FILEIO PI sidecars are not supported when the backend file is the root of a mount\n");
+		else if (ret == -EINVAL)
+			pr_err("existing FILEIO PI sidecar must be a regular file\n");
+		else if (ret == -ENAMETOOLONG)
+			pr_err("FILEIO PI sidecar name is too long: %pd.protection\n",
+			       file_dentry(file));
+		else if (ret == -ESTALE)
+			pr_err("FILEIO backing file moved during PI sidecar setup\n");
+		else
+			pr_err("failed to open FILEIO PI sidecar for %pd: %d\n",
+			       file_dentry(file), ret);
 		return ret;
 	}
 	fd_dev->fd_prot_file = prot_file;
