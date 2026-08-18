@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/vmalloc.h>
 #include <linux/falloc.h>
+#include <linux/namei.h>
 #include <linux/uio.h>
 #include <linux/scatterlist.h>
 #include <scsi/scsi_proto.h>
@@ -86,6 +87,33 @@ static struct se_device *fd_alloc_device(struct se_hba *hba, const char *name)
 	return &fd_dev->dev;
 }
 
+static int fd_validate_fileio_path(const char *path)
+{
+	struct path lookup_path = {};
+	struct dentry *dentry;
+	int ret;
+
+	ret = kern_path(path, LOOKUP_FOLLOW, &lookup_path);
+	if (!ret) {
+		ret = !strcmp(lookup_path.dentry->d_sb->s_type->name, "configfs") ?
+			-EINVAL : 0;
+		path_put(&lookup_path);
+		return ret;
+	}
+	if (ret != -ENOENT)
+		return ret;
+
+	dentry = kern_path_parent(path, &lookup_path);
+	if (IS_ERR(dentry))
+		return PTR_ERR(dentry);
+
+	ret = !strcmp(lookup_path.dentry->d_sb->s_type->name, "configfs") ?
+		-EINVAL : 0;
+	dput(dentry);
+	path_put(&lookup_path);
+	return ret;
+}
+
 static bool fd_configure_unmap(struct se_device *dev)
 {
 	struct file *file = FD_DEV(dev)->fd_file;
@@ -135,6 +163,17 @@ static int fd_configure_device(struct se_device *dev)
 	if (fd_dev->fbd_flags & FDBD_HAS_BUFFERED_IO_WCE) {
 		pr_debug("FILEIO: Disabling O_DSYNC, using buffered FILEIO\n");
 		flags &= ~O_DSYNC;
+	}
+
+	ret = fd_validate_fileio_path(fd_dev->fd_dev_name);
+	if (ret) {
+		if (ret == -EINVAL)
+			pr_err("configfs-backed path is not valid for FILEIO backend: %s\n",
+			       fd_dev->fd_dev_name);
+		else
+			pr_err("FILEIO backend path lookup failed for %s: %d\n",
+			       fd_dev->fd_dev_name, ret);
+		goto fail;
 	}
 
 	file = filp_open(fd_dev->fd_dev_name, flags, 0600);
@@ -846,6 +885,17 @@ static int fd_init_prot(struct se_device *dev)
 
 	snprintf(buf, FD_MAX_DEV_PROT_NAME, "%s.protection",
 		 fd_dev->fd_dev_name);
+
+	ret = fd_validate_fileio_path(buf);
+	if (ret) {
+		if (ret == -EINVAL)
+			pr_err("configfs-backed path is not valid for FILEIO protection: %s\n",
+			       buf);
+		else
+			pr_err("FILEIO protection path lookup failed for %s: %d\n",
+			       buf, ret);
+		return ret;
+	}
 
 	prot_file = filp_open(buf, flags, 0600);
 	if (IS_ERR(prot_file)) {
