@@ -150,6 +150,7 @@ impl<Data> Subsystem<Data> {
         data: impl PinInit<Data, Error>,
     ) -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
+            data <- data,
             subsystem <- pin_init::init_zeroed().chain(
                 |place: &mut Opaque<bindings::configfs_subsystem>| {
                     // SAFETY: We initialized the required fields of `place.group` above.
@@ -172,13 +173,23 @@ impl<Data> Subsystem<Data> {
                     Ok(())
                 }
             ),
-            data <- data,
-        })
-        .pin_chain(|this| {
-            crate::error::to_result(
-                // SAFETY: We initialized `this.subsystem` according to C API contract above.
-                unsafe { bindings::configfs_register_subsystem(this.subsystem.get()) },
-            )
+            _: {
+                let result = crate::error::to_result(
+                    // SAFETY: We initialized `subsystem` according to the C API contract above.
+                    unsafe { bindings::configfs_register_subsystem(subsystem.get()) },
+                );
+                if result.is_err() {
+                    // SAFETY: The group and mutex were initialized above, and registration
+                    // failed, so configfs does not hold references to the group.
+                    unsafe {
+                        bindings::config_item_put(
+                            &raw mut (*subsystem.get()).su_group.cg_item,
+                        );
+                        bindings::mutex_destroy(&raw mut (*subsystem.get()).su_mutex);
+                    }
+                }
+                result?
+            }
         })
     }
 }
@@ -188,8 +199,12 @@ impl<Data> PinnedDrop for Subsystem<Data> {
     fn drop(self: Pin<&mut Self>) {
         // SAFETY: We registered `self.subsystem` in the initializer returned by `Self::new`.
         unsafe { bindings::configfs_unregister_subsystem(self.subsystem.get()) };
-        // SAFETY: We initialized the mutex in `Subsystem::new`.
-        unsafe { bindings::mutex_destroy(&raw mut (*self.subsystem.get()).su_mutex) };
+        // SAFETY: Unregistering drops configfs's references to the group, so it is safe to drop
+        // the initial group reference and destroy the initialized mutex.
+        unsafe {
+            bindings::config_item_put(&raw mut (*self.subsystem.get()).su_group.cg_item);
+            bindings::mutex_destroy(&raw mut (*self.subsystem.get()).su_mutex);
+        }
     }
 }
 
@@ -260,6 +275,7 @@ impl<Data> Group<Data> {
         data: impl PinInit<Data, Error>,
     ) -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
+            data <- data,
             group <- pin_init::init_zeroed().chain(|v: &mut Opaque<bindings::config_group>| {
                 let place = v.get();
                 let name = name.to_bytes_with_nul().as_ptr();
@@ -269,7 +285,6 @@ impl<Data> Group<Data> {
                 };
                 Ok(())
             }),
-            data <- data,
         })
     }
 }
