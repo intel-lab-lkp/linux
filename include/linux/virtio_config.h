@@ -273,8 +273,19 @@ static inline bool virtio_has_dma_quirk(const struct virtio_device *vdev)
 	/*
 	 * Note the reverse polarity of the quirk feature (compared to most
 	 * other features), this is for compatibility with legacy systems.
+	 *
+	 * VIRTIO_F_ACCESS_PLATFORM says that the device is subject to the
+	 * platform DMA topology and the driver maps every address it
+	 * publishes through that topology.  The device performs no direct
+	 * guest memory access, so the quirk does not apply.
+	 *
+	 * VIRTIO_F_DMB says that the device holds the virtqueues and the
+	 * buffers they reference in a region it owns, and routes its data
+	 * DMA through the IOMMU in front of that region.  The driver maps
+	 * through that IOMMU, so the quirk does not apply either.
 	 */
-	return !virtio_has_feature(vdev, VIRTIO_F_ACCESS_PLATFORM);
+	return !(virtio_has_feature(vdev, VIRTIO_F_ACCESS_PLATFORM) ||
+		 virtio_has_feature(vdev, VIRTIO_F_DMB));
 }
 
 static inline

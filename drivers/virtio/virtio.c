@@ -216,9 +216,15 @@ static int virtio_features_ok(struct virtio_device *dev)
 			return -ENODEV;
 		}
 
-		if (!virtio_has_feature(dev, VIRTIO_F_ACCESS_PLATFORM)) {
+		/*
+		 * VIRTIO_F_ACCESS_PLATFORM and VIRTIO_F_DMB both ensure that
+		 * the device does not access guest memory directly, bypassing
+		 * the platform DMA topology.
+		 */
+		if (!virtio_has_feature(dev, VIRTIO_F_ACCESS_PLATFORM) &&
+		    !virtio_has_feature(dev, VIRTIO_F_DMB)) {
 			dev_warn(&dev->dev,
-				 "device must provide VIRTIO_F_ACCESS_PLATFORM\n");
+				 "device must provide VIRTIO_F_ACCESS_PLATFORM or VIRTIO_F_DMB\n");
 			return -ENODEV;
 		}
 	}
