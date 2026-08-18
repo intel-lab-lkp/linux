@@ -29,6 +29,8 @@
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_print.h"
 
+#include <drm/drm_print.h>
+
 #include "i915_selftest.h"
 
 #include "igt_flush_test.h"
@@ -71,11 +73,11 @@ static int populate_ggtt(struct i915_ggtt *ggtt, struct list_head *objects)
 		quirk_add(obj, objects);
 		count++;
 	} while (1);
-	pr_debug("Filled GGTT with %lu pages [%llu total]\n",
-		 count, ggtt->vm.total / PAGE_SIZE);
+	drm_dbg(&ggtt->vm.i915->drm, "Filled GGTT with %lu pages [%llu total]\n",
+		count, ggtt->vm.total / PAGE_SIZE);
 
 	if (list_empty(&ggtt->vm.bound_list)) {
-		pr_err("No objects on the GGTT inactive list!\n");
+		drm_err(&ggtt->vm.i915->drm, "No objects on the GGTT inactive list!\n");
 		return -EINVAL;
 	}
 
@@ -125,8 +127,8 @@ static int igt_evict_something(void *arg)
 				       0);
 	mutex_unlock(&ggtt->vm.mutex);
 	if (err != -ENOSPC) {
-		pr_err("i915_gem_evict_something failed on a full GGTT with err=%d\n",
-		       err);
+		drm_err(&gt->i915->drm,
+			"i915_gem_evict_something failed on a full GGTT with err=%d\n", err);
 		goto cleanup;
 	}
 
@@ -140,8 +142,8 @@ static int igt_evict_something(void *arg)
 				       0);
 	mutex_unlock(&ggtt->vm.mutex);
 	if (err) {
-		pr_err("i915_gem_evict_something failed on a full GGTT with err=%d\n",
-		       err);
+		drm_err(&gt->i915->drm,
+			"i915_gem_evict_something failed on a full GGTT with err=%d\n", err);
 		goto cleanup;
 	}
 
@@ -177,7 +179,9 @@ static int igt_overcommit(void *arg)
 
 	vma = i915_gem_object_ggtt_pin(obj, NULL, 0, 0, 0);
 	if (vma != ERR_PTR(-ENOSPC)) {
-		pr_err("Failed to evict+insert, i915_gem_object_ggtt_pin returned err=%d\n", (int)PTR_ERR_OR_ZERO(vma));
+		drm_err(&gt->i915->drm,
+			"Failed to evict+insert, i915_gem_object_ggtt_pin returned err=%d\n",
+			(int)PTR_ERR_OR_ZERO(vma));
 		err = -EINVAL;
 		goto cleanup;
 	}
@@ -209,8 +213,8 @@ static int igt_evict_for_vma(void *arg)
 	err = i915_gem_evict_for_node(&ggtt->vm, NULL, &target, 0);
 	mutex_unlock(&ggtt->vm.mutex);
 	if (err != -ENOSPC) {
-		pr_err("i915_gem_evict_for_node on a full GGTT returned err=%d\n",
-		       err);
+		drm_err(&gt->i915->drm, "i915_gem_evict_for_node on a full GGTT returned err=%d\n",
+			err);
 		goto cleanup;
 	}
 
@@ -221,8 +225,7 @@ static int igt_evict_for_vma(void *arg)
 	err = i915_gem_evict_for_node(&ggtt->vm, NULL, &target, 0);
 	mutex_unlock(&ggtt->vm.mutex);
 	if (err) {
-		pr_err("i915_gem_evict_for_node returned err=%d\n",
-		       err);
+		drm_err(&gt->i915->drm, "i915_gem_evict_for_node returned err=%d\n", err);
 		goto cleanup;
 	}
 
@@ -273,7 +276,7 @@ static int igt_evict_for_cache_color(void *arg)
 	vma = i915_gem_object_ggtt_pin(obj, NULL, 0, 0,
 				       I915_GTT_PAGE_SIZE | flags);
 	if (IS_ERR(vma)) {
-		pr_err("[0]i915_gem_object_ggtt_pin failed\n");
+		drm_err(&gt->i915->drm, "[0]i915_gem_object_ggtt_pin failed\n");
 		err = PTR_ERR(vma);
 		goto cleanup;
 	}
@@ -290,7 +293,7 @@ static int igt_evict_for_cache_color(void *arg)
 	vma = i915_gem_object_ggtt_pin(obj, NULL, 0, 0,
 				       (I915_GTT_PAGE_SIZE * 2) | flags);
 	if (IS_ERR(vma)) {
-		pr_err("[1]i915_gem_object_ggtt_pin failed\n");
+		drm_err(&gt->i915->drm, "[1]i915_gem_object_ggtt_pin failed\n");
 		err = PTR_ERR(vma);
 		goto cleanup;
 	}
@@ -302,7 +305,7 @@ static int igt_evict_for_cache_color(void *arg)
 	err = i915_gem_evict_for_node(&ggtt->vm, NULL, &target, 0);
 	mutex_unlock(&ggtt->vm.mutex);
 	if (err) {
-		pr_err("[0]i915_gem_evict_for_node returned err=%d\n", err);
+		drm_err(&gt->i915->drm, "[0]i915_gem_evict_for_node returned err=%d\n", err);
 		goto cleanup;
 	}
 
@@ -315,7 +318,7 @@ static int igt_evict_for_cache_color(void *arg)
 	err = i915_gem_evict_for_node(&ggtt->vm, NULL, &target, 0);
 	mutex_unlock(&ggtt->vm.mutex);
 	if (!err) {
-		pr_err("[1]i915_gem_evict_for_node returned err=%d\n", err);
+		drm_err(&gt->i915->drm, "[1]i915_gem_evict_for_node returned err=%d\n", err);
 		err = -EINVAL;
 		goto cleanup;
 	}
@@ -348,8 +351,7 @@ static int igt_evict_vm(void *arg)
 	err = i915_gem_evict_vm(&ggtt->vm, NULL, NULL);
 	mutex_unlock(&ggtt->vm.mutex);
 	if (err) {
-		pr_err("i915_gem_evict_vm on a full GGTT returned err=%d]\n",
-		       err);
+		drm_err(&gt->i915->drm, "i915_gem_evict_vm on a full GGTT returned err=%d]\n", err);
 		goto cleanup;
 	}
 
@@ -362,8 +364,7 @@ static int igt_evict_vm(void *arg)
 	}
 
 	if (err) {
-		pr_err("i915_gem_evict_vm on a full GGTT returned err=%d]\n",
-		       err);
+		drm_err(&gt->i915->drm, "i915_gem_evict_vm on a full GGTT returned err=%d]\n", err);
 		goto cleanup;
 	}
 
@@ -443,7 +444,7 @@ static int igt_evict_contexts(void *arg)
 	} while (1);
 	drm_mm_remove_node(&hole);
 	mutex_unlock(&ggtt->vm.mutex);
-	pr_info("Filled GGTT with %lu 1MiB nodes\n", count);
+	drm_info(&i915->drm, "Filled GGTT with %lu 1MiB nodes\n", count);
 
 	/* Overfill the GGTT with context objects and so try to evict one. */
 	for_each_engine(engine, gt, id) {
@@ -469,9 +470,10 @@ static int igt_evict_contexts(void *arg)
 			if (IS_ERR(rq)) {
 				/* When full, fail_if_busy will trigger EBUSY */
 				if (PTR_ERR(rq) != -EBUSY) {
-					pr_err("Unexpected error from request alloc (on %s): %d\n",
-					       engine->name,
-					       (int)PTR_ERR(rq));
+					drm_err(&i915->drm,
+						"Unexpected error from request alloc (on %s): %d\n",
+						engine->name,
+						(int)PTR_ERR(rq));
 					err = PTR_ERR(rq);
 				}
 				break;
@@ -492,16 +494,16 @@ static int igt_evict_contexts(void *arg)
 			err = 0;
 		} while(1);
 		onstack_fence_fini(&fence);
-		pr_info("Submitted %lu contexts/requests on %s\n",
-			count, engine->name);
+		drm_info(&i915->drm, "Submitted %lu contexts/requests on %s\n",
+			 count, engine->name);
 		if (err)
 			break;
 		if (last) {
 			if (i915_request_wait(last, 0, HZ) < 0) {
 				err = -EIO;
 				i915_request_put(last);
-				pr_err("Failed waiting for last request (on %s)",
-				       engine->name);
+				drm_err(&i915->drm, "Failed waiting for last request (on %s)\n",
+					engine->name);
 				break;
 			}
 			i915_request_put(last);

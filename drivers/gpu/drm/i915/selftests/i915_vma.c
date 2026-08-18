@@ -24,6 +24,8 @@
 
 #include <linux/prime_numbers.h>
 
+#include <drm/drm_print.h>
+
 #include "gem/i915_gem_context.h"
 #include "gem/i915_gem_internal.h"
 #include "gem/selftests/mock_context.h"
@@ -41,19 +43,18 @@ static bool assert_vma(struct i915_vma *vma,
 	bool ok = true;
 
 	if (vma->vm != ctx->vm) {
-		pr_err("VMA created with wrong VM\n");
+		drm_err(obj->base.dev, "VMA created with wrong VM\n");
 		ok = false;
 	}
 
 	if (vma->size != obj->base.size) {
-		pr_err("VMA created with wrong size, found %llu, expected %zu\n",
+		drm_err(obj->base.dev, "VMA created with wrong size, found %llu, expected %zu\n",
 		       vma->size, obj->base.size);
 		ok = false;
 	}
 
 	if (vma->gtt_view.type != I915_GTT_VIEW_NORMAL) {
-		pr_err("VMA created with wrong type [%d]\n",
-		       vma->gtt_view.type);
+		drm_err(obj->base.dev, "VMA created with wrong type [%d]\n", vma->gtt_view.type);
 		ok = false;
 	}
 
@@ -74,30 +75,29 @@ checked_vma_instance(struct drm_i915_gem_object *obj,
 
 	/* Manual checks, will be reinforced by i915_vma_compare! */
 	if (vma->vm != vm) {
-		pr_err("VMA's vm [%p] does not match request [%p]\n",
-		       vma->vm, vm);
+		drm_err(obj->base.dev, "VMA's vm [%p] does not match request [%p]\n", vma->vm, vm);
 		ok = false;
 	}
 
 	if (i915_is_ggtt(vm) != i915_vma_is_ggtt(vma)) {
-		pr_err("VMA ggtt status [%d] does not match parent [%d]\n",
-		       i915_vma_is_ggtt(vma), i915_is_ggtt(vm));
+		drm_err(obj->base.dev, "VMA ggtt status [%d] does not match parent [%d]\n",
+			i915_vma_is_ggtt(vma), i915_is_ggtt(vm));
 		ok = false;
 	}
 
 	if (i915_vma_compare(vma, vm, view)) {
-		pr_err("i915_vma_compare failed with create parameters!\n");
+		drm_err(obj->base.dev, "i915_vma_compare failed with create parameters!\n");
 		return ERR_PTR(-EINVAL);
 	}
 
 	if (i915_vma_compare(vma, vma->vm,
 			     i915_vma_is_ggtt(vma) ? &vma->gtt_view : NULL)) {
-		pr_err("i915_vma_compare failed with itself\n");
+		drm_err(obj->base.dev, "i915_vma_compare failed with itself\n");
 		return ERR_PTR(-EINVAL);
 	}
 
 	if (!ok) {
-		pr_err("i915_vma_compare failed to detect the difference!\n");
+		drm_err(obj->base.dev, "i915_vma_compare failed to detect the difference!\n");
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -126,14 +126,14 @@ static int create_vmas(struct drm_i915_private *i915,
 					return PTR_ERR(vma);
 
 				if (!assert_vma(vma, obj, ctx)) {
-					pr_err("VMA lookup/create failed\n");
+					drm_err(obj->base.dev, "VMA lookup/create failed\n");
 					return -EINVAL;
 				}
 
 				if (!pinned) {
 					err = i915_vma_pin(vma, 0, 0, PIN_USER);
 					if (err) {
-						pr_err("Failed to pin VMA\n");
+						drm_err(obj->base.dev, "Failed to pin VMA\n");
 						return err;
 					}
 				} else {
@@ -332,10 +332,10 @@ static int igt_vma_pin1(void *arg)
 	for (m = modes; m->assert; m++) {
 		err = i915_vma_pin(vma, m->size, 0, m->flags);
 		if (!m->assert(vma, m, err)) {
-			pr_err("%s to pin single page into GGTT with mode[%d:%s]: size=%llx flags=%llx, err=%d\n",
-			       m->assert == assert_pin_valid ? "Failed" : "Unexpectedly succeeded",
-			       (int)(m - modes), m->string, m->size, m->flags,
-			       err);
+			drm_err(obj->base.dev,
+				"%s to pin single page into GGTT with mode[%d:%s]: size=%llx flags=%llx, err=%d\n",
+				m->assert == assert_pin_valid ? "Failed" : "Unexpectedly succeeded",
+				(int)(m - modes), m->string, m->size, m->flags, err);
 			if (!err)
 				i915_vma_unpin(vma);
 			err = -EINVAL;
@@ -346,7 +346,8 @@ static int igt_vma_pin1(void *arg)
 			i915_vma_unpin(vma);
 			err = i915_vma_unbind_unlocked(vma);
 			if (err) {
-				pr_err("Failed to unbind single page from GGTT, err=%d\n", err);
+				drm_err(obj->base.dev,
+					"Failed to unbind single page from GGTT, err=%d\n", err);
 				goto out;
 			}
 		}
@@ -384,8 +385,9 @@ assert_rotated(struct drm_i915_gem_object *obj,
 			dma_addr_t src;
 
 			if (!sg) {
-				pr_err("Invalid sg table: too short at plane %d, (%d, %d)!\n",
-				       n, x, y);
+				drm_err(obj->base.dev,
+					"Invalid sg table: too short at plane %d, (%d, %d)!\n",
+					n, x, y);
 				return ERR_PTR(-EINVAL);
 			}
 
@@ -393,15 +395,16 @@ assert_rotated(struct drm_i915_gem_object *obj,
 			src = i915_gem_object_get_dma_address(obj, src_idx);
 
 			if (sg_dma_len(sg) != PAGE_SIZE) {
-				pr_err("Invalid sg.length, found %d, expected %lu for rotated page (%d, %d) [src index %lu]\n",
-				       sg_dma_len(sg), PAGE_SIZE,
-				       x, y, src_idx);
+				drm_err(obj->base.dev,
+					"Invalid sg.length, found %d, expected %lu for rotated page (%d, %d) [src index %lu]\n",
+					sg_dma_len(sg), PAGE_SIZE, x, y, src_idx);
 				return ERR_PTR(-EINVAL);
 			}
 
 			if (sg_dma_address(sg) != src) {
-				pr_err("Invalid address for rotated page (%d, %d) [src index %lu]\n",
-				       x, y, src_idx);
+				drm_err(obj->base.dev,
+					"Invalid address for rotated page (%d, %d) [src index %lu]\n",
+					x, y, src_idx);
 				return ERR_PTR(-EINVAL);
 			}
 
@@ -414,20 +417,22 @@ assert_rotated(struct drm_i915_gem_object *obj,
 			continue;
 
 		if (!sg) {
-			pr_err("Invalid sg table: too short at plane %d, (%d, %d)!\n",
-			       n, x, y);
+			drm_err(obj->base.dev,
+				"Invalid sg table: too short at plane %d, (%d, %d)!\n", n, x, y);
 			return ERR_PTR(-EINVAL);
 		}
 
 		if (sg_dma_len(sg) != left) {
-			pr_err("Invalid sg.length, found %d, expected %u for rotated page (%d, %d)\n",
-			       sg_dma_len(sg), left, x, y);
+			drm_err(obj->base.dev,
+				"Invalid sg.length, found %d, expected %u for rotated page (%d, %d)\n",
+				sg_dma_len(sg), left, x, y);
 			return ERR_PTR(-EINVAL);
 		}
 
 		if (sg_dma_address(sg) != 0) {
-			pr_err("Invalid address, found %pad, expected 0 for remapped page (%d, %d)\n",
-			       &sg_dma_address(sg), x, y);
+			drm_err(obj->base.dev,
+				"Invalid address, found %pad, expected 0 for remapped page (%d, %d)\n",
+				&sg_dma_address(sg), x, y);
 			return ERR_PTR(-EINVAL);
 		}
 
@@ -461,8 +466,9 @@ assert_remapped(struct drm_i915_gem_object *obj,
 			dma_addr_t src;
 
 			if (!sg) {
-				pr_err("Invalid sg table: too short at plane %d, (%d, %d)!\n",
-				       n, x, y);
+				drm_err(obj->base.dev,
+					"Invalid sg table: too short at plane %d, (%d, %d)!\n",
+					n, x, y);
 				return ERR_PTR(-EINVAL);
 			}
 			if (!left) {
@@ -474,15 +480,16 @@ assert_remapped(struct drm_i915_gem_object *obj,
 			src = i915_gem_object_get_dma_address(obj, src_idx);
 
 			if (left < PAGE_SIZE || left & (PAGE_SIZE-1)) {
-				pr_err("Invalid sg.length, found %d, expected %lu for remapped page (%d, %d) [src index %lu]\n",
-				       sg_dma_len(sg), PAGE_SIZE,
-				       x, y, src_idx);
+				drm_err(obj->base.dev,
+					"Invalid sg.length, found %d, expected %lu for remapped page (%d, %d) [src index %lu]\n",
+					sg_dma_len(sg), PAGE_SIZE, x, y, src_idx);
 				return ERR_PTR(-EINVAL);
 			}
 
 			if (sg_dma_address(sg) + offset != src) {
-				pr_err("Invalid address for remapped page (%d, %d) [src index %lu]\n",
-				       x, y, src_idx);
+				drm_err(obj->base.dev,
+					"Invalid address for remapped page (%d, %d) [src index %lu]\n",
+					x, y, src_idx);
 				return ERR_PTR(-EINVAL);
 			}
 
@@ -495,9 +502,9 @@ assert_remapped(struct drm_i915_gem_object *obj,
 		}
 
 		if (left) {
-			pr_err("Unexpected sg tail with %d size for remapped page (%d, %d)\n",
-			       left,
-			       x, y);
+			drm_err(obj->base.dev,
+				"Unexpected sg tail with %d size for remapped page (%d, %d)\n",
+				left, x, y);
 			return ERR_PTR(-EINVAL);
 		}
 
@@ -507,22 +514,22 @@ assert_remapped(struct drm_i915_gem_object *obj,
 			continue;
 
 		if (!sg) {
-			pr_err("Invalid sg table: too short at plane %d, (%d, %d)!\n",
-			       n, x, y);
+			drm_err(obj->base.dev,
+				"Invalid sg table: too short at plane %d, (%d, %d)!\n", n, x, y);
 			return ERR_PTR(-EINVAL);
 		}
 
 		if (sg_dma_len(sg) != left) {
-			pr_err("Invalid sg.length, found %u, expected %u for remapped page (%d, %d)\n",
-			       sg_dma_len(sg), left,
-			       x, y);
+			drm_err(obj->base.dev,
+				"Invalid sg.length, found %u, expected %u for remapped page (%d, %d)\n",
+				sg_dma_len(sg), left, x, y);
 			return ERR_PTR(-EINVAL);
 		}
 
 		if (sg_dma_address(sg) != 0) {
-			pr_err("Invalid address, found %pad, expected 0 for remapped page (%d, %d)\n",
-			       &sg_dma_address(sg),
-			       x, y);
+			drm_err(obj->base.dev,
+				"Invalid address, found %pad, expected 0 for remapped page (%d, %d)\n",
+				&sg_dma_address(sg), x, y);
 			return ERR_PTR(-EINVAL);
 		}
 
@@ -628,7 +635,8 @@ static int igt_vma_rotate_remap(void *arg)
 
 					err = i915_vma_pin(vma, 0, 0, PIN_GLOBAL);
 					if (err) {
-						pr_err("Failed to pin VMA, err=%d\n", err);
+						drm_err(obj->base.dev,
+							"Failed to pin VMA, err=%d\n", err);
 						goto out_object;
 					}
 
@@ -636,36 +644,41 @@ static int igt_vma_rotate_remap(void *arg)
 
 					if (view.type == I915_GTT_VIEW_ROTATED &&
 					    vma->size != expected_pages * PAGE_SIZE) {
-						pr_err("VMA is wrong size, expected %lu, found %llu\n",
-						       PAGE_SIZE * expected_pages, vma->size);
+						drm_err(obj->base.dev,
+							"VMA is wrong size, expected %lu, found %llu\n",
+							PAGE_SIZE * expected_pages, vma->size);
 						err = -EINVAL;
 						goto out_object;
 					}
 
 					if (view.type == I915_GTT_VIEW_REMAPPED &&
 					    vma->size > expected_pages * PAGE_SIZE) {
-						pr_err("VMA is wrong size, expected %lu, found %llu\n",
-						       PAGE_SIZE * expected_pages, vma->size);
+						drm_err(obj->base.dev,
+							"VMA is wrong size, expected %lu, found %llu\n",
+							PAGE_SIZE * expected_pages, vma->size);
 						err = -EINVAL;
 						goto out_object;
 					}
 
 					if (vma->pages->nents > expected_pages) {
-						pr_err("sg table is wrong sizeo, expected %u, found %u nents\n",
-						       expected_pages, vma->pages->nents);
+						drm_err(obj->base.dev,
+							"sg table is wrong sizeo, expected %u, found %u nents\n",
+							expected_pages, vma->pages->nents);
 						err = -EINVAL;
 						goto out_object;
 					}
 
 					if (vma->node.size < vma->size) {
-						pr_err("VMA binding too small, expected %llu, found %llu\n",
-						       vma->size, vma->node.size);
+						drm_err(obj->base.dev,
+							"VMA binding too small, expected %llu, found %llu\n",
+							vma->size, vma->node.size);
 						err = -EINVAL;
 						goto out_object;
 					}
 
 					if (vma->pages == obj->mm.pages) {
-						pr_err("VMA using unrotated object pages!\n");
+						drm_err(obj->base.dev,
+							"VMA using unrotated object pages!\n");
 						err = -EINVAL;
 						goto out_object;
 					}
@@ -677,19 +690,20 @@ static int igt_vma_rotate_remap(void *arg)
 						else
 							sg = assert_remapped(obj, &view.remapped, n, sg);
 						if (IS_ERR(sg)) {
-							pr_err("Inconsistent %s VMA pages for plane %d: [(%d, %d, %d, %d, %d), (%d, %d, %d, %d, %d)]\n",
-							       view.type == I915_GTT_VIEW_ROTATED ?
-							       "rotated" : "remapped", n,
-							       plane_info[0].width,
-							       plane_info[0].height,
-							       plane_info[0].src_stride,
-							       plane_info[0].dst_stride,
-							       plane_info[0].offset,
-							       plane_info[1].width,
-							       plane_info[1].height,
-							       plane_info[1].src_stride,
-							       plane_info[1].dst_stride,
-							       plane_info[1].offset);
+							drm_err(obj->base.dev,
+								"Inconsistent %s VMA pages for plane %d: [(%d, %d, %d, %d, %d), (%d, %d, %d, %d, %d)]\n",
+								view.type == I915_GTT_VIEW_ROTATED ?
+								"rotated" : "remapped", n,
+								plane_info[0].width,
+								plane_info[0].height,
+								plane_info[0].src_stride,
+								plane_info[0].dst_stride,
+								plane_info[0].offset,
+								plane_info[1].width,
+								plane_info[1].height,
+								plane_info[1].src_stride,
+								plane_info[1].dst_stride,
+								plane_info[1].offset);
 							err = -EINVAL;
 							goto out_object;
 						}
@@ -698,7 +712,8 @@ static int igt_vma_rotate_remap(void *arg)
 					i915_vma_unpin(vma);
 					err = i915_vma_unbind_unlocked(vma);
 					if (err) {
-						pr_err("Unbinding returned %i\n", err);
+						drm_err(obj->base.dev,
+							"Unbinding returned %i\n", err);
 						goto out_object;
 					}
 					cond_resched();
@@ -726,14 +741,14 @@ static bool assert_partial(struct drm_i915_gem_object *obj,
 		dma_addr_t src;
 
 		if (!size) {
-			pr_err("Partial scattergather list too long\n");
+			drm_err(obj->base.dev, "Partial scattergather list too long\n");
 			return false;
 		}
 
 		src = i915_gem_object_get_dma_address(obj, offset);
 		if (src != dma) {
-			pr_err("DMA mismatch for partial page offset %lu\n",
-			       offset);
+			drm_err(obj->base.dev,
+				"DMA mismatch for partial page offset %lu\n", offset);
 			return false;
 		}
 
@@ -752,38 +767,38 @@ static bool assert_pin(struct i915_vma *vma,
 	bool ok = true;
 
 	if (vma->size != size) {
-		pr_err("(%s) VMA is wrong size, expected %llu, found %llu\n",
-		       name, size, vma->size);
+		drm_err(vma->obj->base.dev, "(%s) VMA is wrong size, expected %llu, found %llu\n",
+			name, size, vma->size);
 		ok = false;
 	}
 
 	if (vma->node.size < vma->size) {
-		pr_err("(%s) VMA binding too small, expected %llu, found %llu\n",
-		       name, vma->size, vma->node.size);
+		drm_err(vma->obj->base.dev,
+			"(%s) VMA binding too small, expected %llu, found %llu\n",
+			name, vma->size, vma->node.size);
 		ok = false;
 	}
 
 	if (view && view->type != I915_GTT_VIEW_NORMAL) {
 		if (memcmp(&vma->gtt_view, view, sizeof(*view))) {
-			pr_err("(%s) VMA mismatch upon creation!\n",
-			       name);
+			drm_err(vma->obj->base.dev, "(%s) VMA mismatch upon creation!\n", name);
 			ok = false;
 		}
 
 		if (vma->pages == vma->obj->mm.pages) {
-			pr_err("(%s) VMA using original object pages!\n",
-			       name);
+			drm_err(vma->obj->base.dev,
+				"(%s) VMA using original object pages!\n", name);
 			ok = false;
 		}
 	} else {
 		if (vma->gtt_view.type != I915_GTT_VIEW_NORMAL) {
-			pr_err("Not the normal ggtt view! Found %d\n",
-			       vma->gtt_view.type);
+			drm_err(vma->obj->base.dev,
+				"Not the normal ggtt view! Found %d\n", vma->gtt_view.type);
 			ok = false;
 		}
 
 		if (vma->pages != vma->obj->mm.pages) {
-			pr_err("VMA not using object pages!\n");
+			drm_err(vma->obj->base.dev, "VMA not using object pages!\n");
 			ok = false;
 		}
 	}
@@ -843,15 +858,17 @@ static int igt_vma_partial(void *arg)
 					goto out_object;
 
 				if (!assert_pin(vma, &view, sz*PAGE_SIZE, p->name)) {
-					pr_err("(%s) Inconsistent partial pinning for (offset=%d, size=%d)\n",
-					       p->name, offset, sz);
+					drm_err(obj->base.dev,
+						"(%s) Inconsistent partial pinning for (offset=%d, size=%d)\n",
+						p->name, offset, sz);
 					err = -EINVAL;
 					goto out_object;
 				}
 
 				if (!assert_partial(obj, vma, offset, sz)) {
-					pr_err("(%s) Inconsistent partial pages for (offset=%d, size=%d)\n",
-					       p->name, offset, sz);
+					drm_err(obj->base.dev,
+						"(%s) Inconsistent partial pages for (offset=%d, size=%d)\n",
+						p->name, offset, sz);
 					err = -EINVAL;
 					goto out_object;
 				}
@@ -860,7 +877,7 @@ static int igt_vma_partial(void *arg)
 				nvma++;
 				err = i915_vma_unbind_unlocked(vma);
 				if (err) {
-					pr_err("Unbinding returned %i\n", err);
+					drm_err(obj->base.dev, "Unbinding returned %i\n", err);
 					goto out_object;
 				}
 
@@ -872,8 +889,9 @@ static int igt_vma_partial(void *arg)
 		list_for_each_entry(vma, &obj->vma.list, obj_link)
 			count++;
 		if (count != nvma) {
-			pr_err("(%s) All partial vma were not recorded on the obj->vma_list: found %u, expected %u\n",
-			       p->name, count, nvma);
+			drm_err(obj->base.dev,
+				"(%s) All partial vma were not recorded on the obj->vma_list: found %u, expected %u\n",
+				p->name, count, nvma);
 			err = -EINVAL;
 			goto out_object;
 		}
@@ -890,7 +908,7 @@ static int igt_vma_partial(void *arg)
 			goto out_object;
 
 		if (!assert_pin(vma, NULL, obj->base.size, p->name)) {
-			pr_err("(%s) inconsistent full pin\n", p->name);
+			drm_err(obj->base.dev, "(%s) inconsistent full pin\n", p->name);
 			err = -EINVAL;
 			goto out_object;
 		}
@@ -899,7 +917,7 @@ static int igt_vma_partial(void *arg)
 
 		err = i915_vma_unbind_unlocked(vma);
 		if (err) {
-			pr_err("Unbinding returned %i\n", err);
+			drm_err(obj->base.dev, "Unbinding returned %i\n", err);
 			goto out_object;
 		}
 
@@ -907,7 +925,7 @@ static int igt_vma_partial(void *arg)
 		list_for_each_entry(vma, &obj->vma.list, obj_link)
 			count++;
 		if (count != nvma) {
-			pr_err("(%s) allocated an extra full vma!\n", p->name);
+			drm_err(obj->base.dev, "(%s) allocated an extra full vma!\n", p->name);
 			err = -EINVAL;
 			goto out_object;
 		}
@@ -1080,9 +1098,13 @@ static int igt_vma_remapped_gtt(void *arg)
 
 					val = ioread32(&map[offset / sizeof(*map)]);
 					if (val != exp) {
-						pr_err("%s VMA write test failed, expected 0x%x, found 0x%x\n",
-						       *t == I915_GTT_VIEW_ROTATED ? "Rotated" : "Remapped",
-						       exp, val);
+						const char *kind;
+
+						kind = *t == I915_GTT_VIEW_ROTATED ?
+							"Rotated" : "Remapped";
+						drm_err(vma->obj->base.dev,
+							"%s VMA write test failed, expected 0x%x, found 0x%x\n",
+							kind, exp, val);
 						i915_vma_unpin_iomap(vma);
 						err = -EINVAL;
 						goto out;

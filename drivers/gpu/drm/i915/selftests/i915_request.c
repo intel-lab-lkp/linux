@@ -98,49 +98,51 @@ static int igt_wait_request(void *arg)
 	i915_request_get(request);
 
 	if (i915_request_wait(request, 0, 0) != -ETIME) {
-		pr_err("request wait (busy query) succeeded (expected timeout before submit!)\n");
+		drm_err(&i915->drm,
+			"request wait (busy query) succeeded (expected timeout before submit!)\n");
 		goto out_request;
 	}
 
 	if (i915_request_wait(request, 0, T) != -ETIME) {
-		pr_err("request wait succeeded (expected timeout before submit!)\n");
+		drm_err(&i915->drm, "request wait succeeded (expected timeout before submit!)\n");
 		goto out_request;
 	}
 
 	if (i915_request_completed(request)) {
-		pr_err("request completed before submit!!\n");
+		drm_err(&i915->drm, "request completed before submit!!\n");
 		goto out_request;
 	}
 
 	i915_request_add(request);
 
 	if (i915_request_wait(request, 0, 0) != -ETIME) {
-		pr_err("request wait (busy query) succeeded (expected timeout after submit!)\n");
+		drm_err(&i915->drm,
+			"request wait (busy query) succeeded (expected timeout after submit!)\n");
 		goto out_request;
 	}
 
 	if (i915_request_completed(request)) {
-		pr_err("request completed immediately!\n");
+		drm_err(&i915->drm, "request completed immediately!\n");
 		goto out_request;
 	}
 
 	if (i915_request_wait(request, 0, T / 2) != -ETIME) {
-		pr_err("request wait succeeded (expected timeout!)\n");
+		drm_err(&i915->drm, "request wait succeeded (expected timeout!)\n");
 		goto out_request;
 	}
 
 	if (i915_request_wait(request, 0, T) == -ETIME) {
-		pr_err("request wait timed out!\n");
+		drm_err(&i915->drm, "request wait timed out!\n");
 		goto out_request;
 	}
 
 	if (!i915_request_completed(request)) {
-		pr_err("request not complete after waiting!\n");
+		drm_err(&i915->drm, "request not complete after waiting!\n");
 		goto out_request;
 	}
 
 	if (i915_request_wait(request, 0, T) == -ETIME) {
-		pr_err("request wait timed out when already complete!\n");
+		drm_err(&i915->drm, "request wait timed out when already complete!\n");
 		goto out_request;
 	}
 
@@ -165,34 +167,34 @@ static int igt_fence_wait(void *arg)
 		return PTR_ERR(request);
 
 	if (dma_fence_wait_timeout(&request->fence, false, T) != -ETIME) {
-		pr_err("fence wait success before submit (expected timeout)!\n");
+		drm_err(&i915->drm, "fence wait success before submit (expected timeout)!\n");
 		goto out;
 	}
 
 	i915_request_add(request);
 
 	if (dma_fence_is_signaled(&request->fence)) {
-		pr_err("fence signaled immediately!\n");
+		drm_err(&i915->drm, "fence signaled immediately!\n");
 		goto out;
 	}
 
 	if (dma_fence_wait_timeout(&request->fence, false, T / 2) != -ETIME) {
-		pr_err("fence wait success after submit (expected timeout)!\n");
+		drm_err(&i915->drm, "fence wait success after submit (expected timeout)!\n");
 		goto out;
 	}
 
 	if (dma_fence_wait_timeout(&request->fence, false, T) <= 0) {
-		pr_err("fence wait timed out (expected success)!\n");
+		drm_err(&i915->drm, "fence wait timed out (expected success)!\n");
 		goto out;
 	}
 
 	if (!dma_fence_is_signaled(&request->fence)) {
-		pr_err("fence unsignaled after waiting!\n");
+		drm_err(&i915->drm, "fence unsignaled after waiting!\n");
 		goto out;
 	}
 
 	if (dma_fence_wait_timeout(&request->fence, false, T) <= 0) {
-		pr_err("fence wait timed out when complete (expected success)!\n");
+		drm_err(&i915->drm, "fence wait timed out when complete (expected success)!\n");
 		goto out;
 	}
 
@@ -245,7 +247,7 @@ static int igt_request_rewind(void *arg)
 
 	/* Simulate preemption by manual reordering */
 	if (!mock_cancel_request(request)) {
-		pr_err("failed to cancel request (already executed)!\n");
+		drm_err(&i915->drm, "failed to cancel request (already executed)!\n");
 		i915_request_add(vip);
 		goto err_context_1;
 	}
@@ -257,12 +259,12 @@ static int igt_request_rewind(void *arg)
 
 
 	if (i915_request_wait(vip, 0, HZ) == -ETIME) {
-		pr_err("timed out waiting for high priority request\n");
+		drm_err(&i915->drm, "timed out waiting for high priority request\n");
 		goto err;
 	}
 
 	if (i915_request_completed(request)) {
-		pr_err("low priority request already completed\n");
+		drm_err(&i915->drm, "low priority request already completed\n");
 		goto err;
 	}
 
@@ -406,10 +408,10 @@ static void __igt_breadcrumbs_smoketest(struct kthread_work *work)
 					5 * HZ)) {
 			struct i915_request *rq = requests[count - 1];
 
-			pr_err("waiting for %d/%d fences (last %llx:%lld) on %s timed out!\n",
-			       atomic_read(&wait->pending), count,
-			       rq->fence.context, rq->fence.seqno,
-			       t->engine->name);
+			drm_err(&t->engine->i915->drm,
+				"waiting for %d/%d fences (last %llx:%lld) on %s timed out!\n",
+				atomic_read(&wait->pending), count, rq->fence.context,
+				rq->fence.seqno, t->engine->name);
 			GEM_TRACE_DUMP();
 
 			intel_gt_set_wedged(t->engine->gt);
@@ -423,8 +425,8 @@ static void __igt_breadcrumbs_smoketest(struct kthread_work *work)
 
 			if (!test_bit(DMA_FENCE_FLAG_SIGNALED_BIT,
 				      &rq->fence.flags)) {
-				pr_err("%llu:%llu was not signaled!\n",
-				       rq->fence.context, rq->fence.seqno);
+				drm_err(&t->engine->i915->drm, "%llu:%llu was not signaled!\n",
+					rq->fence.context, rq->fence.seqno);
 				err = -EINVAL;
 			}
 
@@ -523,10 +525,10 @@ static int mock_breadcrumbs_smoketest(void *arg)
 
 		kthread_destroy_worker(threads[n].worker);
 	}
-	pr_info("Completed %lu waits for %lu fence across %d cpus\n",
-		atomic_long_read(&t.num_waits),
-		atomic_long_read(&t.num_fences),
-		ncpus);
+	drm_info(&i915->drm, "Completed %lu waits for %lu fence across %d cpus\n",
+		 atomic_long_read(&t.num_waits),
+		 atomic_long_read(&t.num_fences),
+		 ncpus);
 
 out_contexts:
 	for (n = 0; n < t.ncontexts; n++) {
@@ -632,10 +634,9 @@ static int live_nop_request(void *arg)
 		if (err)
 			return err;
 
-		pr_info("Request latencies on %s: 1 = %lluns, %lu = %lluns\n",
-			engine->name,
-			ktime_to_ns(times[0]),
-			prime, div64_u64(ktime_to_ns(times[1]), prime));
+		drm_info(&i915->drm, "Request latencies on %s: 1 = %lluns, %lu = %lluns\n",
+			 engine->name, ktime_to_ns(times[0]),  prime,
+			 div64_u64(ktime_to_ns(times[1]), prime));
 	}
 
 	return err;
@@ -663,7 +664,7 @@ static int __cancel_inactive(struct intel_engine_cs *engine)
 		goto out_ce;
 	}
 
-	pr_debug("%s: Cancelling inactive request\n", engine->name);
+	drm_dbg(&engine->i915->drm, "%s: Cancelling inactive request\n", engine->name);
 	i915_request_cancel(rq, -EINTR);
 	i915_request_get(rq);
 	i915_request_add(rq);
@@ -671,15 +672,16 @@ static int __cancel_inactive(struct intel_engine_cs *engine)
 	if (i915_request_wait(rq, 0, HZ / 5) < 0) {
 		struct drm_printer p = drm_info_printer(engine->i915->drm.dev);
 
-		pr_err("%s: Failed to cancel inactive request\n", engine->name);
+			drm_err(&engine->i915->drm, "%s: Failed to cancel inactive request\n",
+				engine->name);
 		intel_engine_dump(engine, &p, "%s\n", engine->name);
 		err = -ETIME;
 		goto out_rq;
 	}
 
 	if (rq->fence.error != -EINTR) {
-		pr_err("%s: fence not cancelled (%u)\n",
-		       engine->name, rq->fence.error);
+		drm_err(&engine->i915->drm, "%s: fence not cancelled (%u)\n",
+			engine->name, rq->fence.error);
 		err = -EINVAL;
 	}
 
@@ -690,7 +692,7 @@ out_ce:
 out_spin:
 	igt_spinner_fini(&spin);
 	if (err)
-		pr_err("%s: %s error %d\n", __func__, engine->name, err);
+		drm_err(&engine->i915->drm, "%s: %s error %d\n", __func__, engine->name, err);
 	return err;
 }
 
@@ -716,13 +718,13 @@ static int __cancel_active(struct intel_engine_cs *engine)
 		goto out_ce;
 	}
 
-	pr_debug("%s: Cancelling active request\n", engine->name);
+	drm_dbg(&engine->i915->drm, "%s: Cancelling active request\n", engine->name);
 	i915_request_get(rq);
 	i915_request_add(rq);
 	if (!igt_wait_for_spinner(&spin, rq)) {
 		struct drm_printer p = drm_info_printer(engine->i915->drm.dev);
 
-		pr_err("Failed to start spinner on %s\n", engine->name);
+		drm_err(&engine->i915->drm, "Failed to start spinner on %s\n", engine->name);
 		intel_engine_dump(engine, &p, "%s\n", engine->name);
 		err = -ETIME;
 		goto out_rq;
@@ -732,15 +734,15 @@ static int __cancel_active(struct intel_engine_cs *engine)
 	if (i915_request_wait(rq, 0, HZ / 5) < 0) {
 		struct drm_printer p = drm_info_printer(engine->i915->drm.dev);
 
-		pr_err("%s: Failed to cancel active request\n", engine->name);
+		drm_err(&engine->i915->drm, "%s: Failed to cancel active request\n", engine->name);
 		intel_engine_dump(engine, &p, "%s\n", engine->name);
 		err = -ETIME;
 		goto out_rq;
 	}
 
 	if (rq->fence.error != -EINTR) {
-		pr_err("%s: fence not cancelled (%u)\n",
-		       engine->name, rq->fence.error);
+		drm_err(&engine->i915->drm, "%s: fence not cancelled (%u)\n",
+			engine->name, rq->fence.error);
 		err = -EINVAL;
 	}
 
@@ -751,7 +753,7 @@ out_ce:
 out_spin:
 	igt_spinner_fini(&spin);
 	if (err)
-		pr_err("%s: %s error %d\n", __func__, engine->name, err);
+		drm_err(&engine->i915->drm, "%s: %s error %d\n", __func__, engine->name, err);
 	return err;
 }
 
@@ -785,11 +787,11 @@ static int __cancel_completed(struct intel_engine_cs *engine)
 		goto out_rq;
 	}
 
-	pr_debug("%s: Cancelling completed request\n", engine->name);
+	drm_dbg(&engine->i915->drm, "%s: Cancelling completed request\n", engine->name);
 	i915_request_cancel(rq, -EINTR);
 	if (rq->fence.error) {
-		pr_err("%s: fence not cancelled (%u)\n",
-		       engine->name, rq->fence.error);
+		drm_err(&engine->i915->drm, "%s: fence not cancelled (%u)\n",
+			engine->name, rq->fence.error);
 		err = -EINVAL;
 	}
 
@@ -800,7 +802,7 @@ out_ce:
 out_spin:
 	igt_spinner_fini(&spin);
 	if (err)
-		pr_err("%s: %s error %d\n", __func__, engine->name, err);
+		drm_err(&engine->i915->drm, "%s: %s error %d\n", __func__, engine->name, err);
 	return err;
 }
 
@@ -846,14 +848,14 @@ static int __cancel_reset(struct drm_i915_private *i915,
 		goto out_ce;
 	}
 
-	pr_debug("%s: Cancelling active non-preemptable request\n",
+	drm_dbg(&engine->i915->drm, "%s: Cancelling active non-preemptable request\n",
 		 engine->name);
 	i915_request_get(rq);
 	i915_request_add(rq);
 	if (!igt_wait_for_spinner(&spin, rq)) {
 		struct drm_printer p = drm_info_printer(engine->i915->drm.dev);
 
-		pr_err("Failed to start spinner on %s\n", engine->name);
+		drm_err(&engine->i915->drm, "Failed to start spinner on %s\n", engine->name);
 		intel_engine_dump(engine, &p, "%s\n", engine->name);
 		err = -ETIME;
 		goto out_rq;
@@ -870,15 +872,15 @@ static int __cancel_reset(struct drm_i915_private *i915,
 	if (i915_request_wait(rq, 0, HZ) < 0) {
 		struct drm_printer p = drm_info_printer(engine->i915->drm.dev);
 
-		pr_err("%s: Failed to cancel hung request\n", engine->name);
+		drm_err(&engine->i915->drm, "%s: Failed to cancel hung request\n", engine->name);
 		intel_engine_dump(engine, &p, "%s\n", engine->name);
 		err = -ETIME;
 		goto out_nop;
 	}
 
 	if (rq->fence.error != -EINTR) {
-		pr_err("%s: fence not cancelled (%u)\n",
-		       engine->name, rq->fence.error);
+		drm_err(&engine->i915->drm, "%s: fence not cancelled (%u)\n",
+			engine->name, rq->fence.error);
 		err = -EINVAL;
 		goto out_nop;
 	}
@@ -886,15 +888,15 @@ static int __cancel_reset(struct drm_i915_private *i915,
 	if (i915_request_wait(nop, 0, HZ) < 0) {
 		struct drm_printer p = drm_info_printer(engine->i915->drm.dev);
 
-		pr_err("%s: Failed to complete nop request\n", engine->name);
+		drm_err(&engine->i915->drm, "%s: Failed to complete nop request\n", engine->name);
 		intel_engine_dump(engine, &p, "%s\n", engine->name);
 		err = -ETIME;
 		goto out_nop;
 	}
 
 	if (nop->fence.error != 0) {
-		pr_err("%s: Nop request errored (%u)\n",
-		       engine->name, nop->fence.error);
+		drm_err(&engine->i915->drm, "%s: Nop request errored (%u)\n",
+			engine->name, nop->fence.error);
 		err = -EINVAL;
 	}
 
@@ -909,7 +911,7 @@ out_spin:
 out_restore:
 	engine->props.preempt_timeout_ms = preempt_timeout_ms;
 	if (err)
-		pr_err("%s: %s error %d\n", __func__, engine->name, err);
+		drm_err(&engine->i915->drm, "%s: %s error %d\n", __func__, engine->name, err);
 	return err;
 }
 
@@ -1102,10 +1104,9 @@ static int live_empty_request(void *arg)
 		if (err)
 			goto out_batch;
 
-		pr_info("Batch latencies on %s: 1 = %lluns, %lu = %lluns\n",
-			engine->name,
-			ktime_to_ns(times[0]),
-			prime, div64_u64(ktime_to_ns(times[1]), prime));
+		drm_info(&i915->drm, "Batch latencies on %s: 1 = %lluns, %lu = %lluns\n",
+			 engine->name, ktime_to_ns(times[0]),  prime,
+			 div64_u64(ktime_to_ns(times[1]), prime));
 out_batch:
 		i915_vma_unpin(batch);
 		i915_vma_put(batch);
@@ -1218,8 +1219,7 @@ static int live_all_engines(void *arg)
 		batch = recursive_batch(engine->gt);
 		if (IS_ERR(batch)) {
 			err = PTR_ERR(batch);
-			pr_err("%s: Unable to create batch, err=%d\n",
-			       __func__, err);
+			drm_err(&i915->drm, "%s: Unable to create batch, err=%d\n", __func__, err);
 			goto out_free;
 		}
 
@@ -1227,8 +1227,8 @@ static int live_all_engines(void *arg)
 		request[idx] = intel_engine_create_kernel_request(engine);
 		if (IS_ERR(request[idx])) {
 			err = PTR_ERR(request[idx]);
-			pr_err("%s: Request allocation failed with err=%d\n",
-			       __func__, err);
+			drm_err(&i915->drm, "%s: Request allocation failed with err=%d\n",
+				__func__, err);
 			goto out_unlock;
 		}
 		GEM_BUG_ON(request[idx]->context->vm != batch->vm);
@@ -1252,7 +1252,7 @@ out_unlock:
 	idx = 0;
 	for_each_uabi_engine(engine, i915) {
 		if (i915_request_completed(request[idx])) {
-			pr_err("%s(%s): request completed too early!\n",
+			drm_err(&i915->drm, "%s(%s): request completed too early!\n",
 			       __func__, engine->name);
 			err = -EINVAL;
 			goto out_request;
@@ -1264,8 +1264,8 @@ out_unlock:
 	for_each_uabi_engine(engine, i915) {
 		err = recursive_batch_resolve(request[idx]->batch);
 		if (err) {
-			pr_err("%s: failed to resolve batch, err=%d\n",
-			       __func__, err);
+			drm_err(&i915->drm, "%s: failed to resolve batch, err=%d\n",
+				__func__, err);
 			goto out_request;
 		}
 		idx++;
@@ -1280,8 +1280,8 @@ out_unlock:
 					    MAX_SCHEDULE_TIMEOUT);
 		if (timeout < 0) {
 			err = timeout;
-			pr_err("%s: error waiting for request on %s, err=%d\n",
-			       __func__, engine->name, err);
+			drm_err(&i915->drm, "%s: error waiting for request on %s, err=%d\n",
+				__func__, engine->name, err);
 			goto out_request;
 		}
 
@@ -1348,8 +1348,8 @@ static int live_sequential_engines(void *arg)
 		batch = recursive_batch(engine->gt);
 		if (IS_ERR(batch)) {
 			err = PTR_ERR(batch);
-			pr_err("%s: Unable to create batch for %s, err=%d\n",
-			       __func__, engine->name, err);
+			drm_err(&i915->drm, "%s: Unable to create batch for %s, err=%d\n",
+				__func__, engine->name, err);
 			goto out_free;
 		}
 
@@ -1357,8 +1357,8 @@ static int live_sequential_engines(void *arg)
 		request[idx] = intel_engine_create_kernel_request(engine);
 		if (IS_ERR(request[idx])) {
 			err = PTR_ERR(request[idx]);
-			pr_err("%s: Request allocation failed for %s with err=%d\n",
-			       __func__, engine->name, err);
+			drm_err(&i915->drm, "%s: Request allocation failed for %s with err=%d\n",
+				__func__, engine->name, err);
 			goto out_unlock;
 		}
 		GEM_BUG_ON(request[idx]->context->vm != batch->vm);
@@ -1368,8 +1368,8 @@ static int live_sequential_engines(void *arg)
 							   &prev->fence);
 			if (err) {
 				i915_request_add(request[idx]);
-				pr_err("%s: Request await failed for %s with err=%d\n",
-				       __func__, engine->name, err);
+				drm_err(&i915->drm, "%s: Request await failed for %s with err=%d\n",
+					__func__, engine->name, err);
 				goto out_unlock;
 			}
 		}
@@ -1398,16 +1398,16 @@ out_unlock:
 		long timeout;
 
 		if (i915_request_completed(request[idx])) {
-			pr_err("%s(%s): request completed too early!\n",
-			       __func__, engine->name);
+			drm_err(&i915->drm, "%s(%s): request completed too early!\n",
+				__func__, engine->name);
 			err = -EINVAL;
 			goto out_request;
 		}
 
 		err = recursive_batch_resolve(request[idx]->batch);
 		if (err) {
-			pr_err("%s: failed to resolve batch, err=%d\n",
-			       __func__, err);
+			drm_err(&i915->drm, "%s: failed to resolve batch, err=%d\n",
+				__func__, err);
 			goto out_request;
 		}
 
@@ -1415,8 +1415,8 @@ out_unlock:
 					    MAX_SCHEDULE_TIMEOUT);
 		if (timeout < 0) {
 			err = timeout;
-			pr_err("%s: error waiting for request on %s, err=%d\n",
-			       __func__, engine->name, err);
+			drm_err(&i915->drm, "%s: error waiting for request on %s, err=%d\n",
+				__func__, engine->name, err);
 			goto out_request;
 		}
 
@@ -1496,7 +1496,7 @@ static void __live_parallel_engine1(struct kthread_work *work)
 	} while (!__igt_timeout(end_time, NULL));
 	intel_engine_pm_put(engine);
 
-	pr_info("%s: %lu request + sync\n", engine->name, count);
+	drm_info(&engine->i915->drm, "%s: %lu request + sync\n", engine->name, count);
 	thread->result = err;
 }
 
@@ -1525,7 +1525,7 @@ static void __live_parallel_engineN(struct kthread_work *work)
 	} while (!__igt_timeout(end_time, NULL));
 	intel_engine_pm_put(engine);
 
-	pr_info("%s: %lu requests\n", engine->name, count);
+	drm_info(&engine->i915->drm, "%s: %lu requests\n", engine->name, count);
 	thread->result = err;
 }
 
@@ -1592,7 +1592,7 @@ static void __live_parallel_spin(struct kthread_work *work)
 		/* Occupy this engine for the whole test */
 		err = wait_for_all(engine->i915);
 	} else {
-		pr_err("Failed to start spinner on %s\n", engine->name);
+		drm_err(&engine->i915->drm, "Failed to start spinner on %s\n", engine->name);
 		err = -EINVAL;
 	}
 	igt_spinner_end(&spin);
@@ -1798,8 +1798,8 @@ static int live_breadcrumbs_smoketest(void *arg)
 		}
 		/* One ring interleaved between requests from all cpus */
 		smoke[idx].max_batch /= ncpus + 1;
-		pr_debug("Limiting batches to %d requests on %s\n",
-			 smoke[idx].max_batch, engine->name);
+		drm_dbg(&i915->drm, "Limiting batches to %d requests on %s\n",
+			smoke[idx].max_batch, engine->name);
 
 		for (n = 0; n < ncpus; n++) {
 			unsigned int i = idx * ncpus + n;
@@ -1849,8 +1849,8 @@ out_flush:
 		num_fences += atomic_long_read(&smoke[idx].num_fences);
 		idx++;
 	}
-	pr_info("Completed %lu waits for %lu fences across %d engines and %d cpus\n",
-		num_waits, num_fences, idx, ncpus);
+	drm_info(&i915->drm, "Completed %lu waits for %lu fences across %d engines and %d cpus\n",
+		 num_waits, num_fences, idx, ncpus);
 
 	ret = igt_live_test_end(&live) ?: ret;
 out_contexts:
@@ -2075,9 +2075,8 @@ static int measure_semaphore_response(struct intel_context *ce)
 	}
 
 	cycles = trifilter(elapsed);
-	pr_info("%s: semaphore response %d cycles, %lluns\n",
-		ce->engine->name, cycles >> TF_BIAS,
-		cycles_to_ns(ce->engine, cycles));
+	drm_info(&ce->engine->i915->drm, "%s: semaphore response %d cycles, %lluns\n",
+		 ce->engine->name, cycles >> TF_BIAS, cycles_to_ns(ce->engine, cycles));
 
 	return intel_gt_wait_for_idle(ce->engine->gt, HZ);
 
@@ -2146,9 +2145,8 @@ static int measure_idle_dispatch(struct intel_context *ce)
 		elapsed[i] = sema[i] - elapsed[i];
 
 	cycles = trifilter(elapsed);
-	pr_info("%s: idle dispatch latency %d cycles, %lluns\n",
-		ce->engine->name, cycles >> TF_BIAS,
-		cycles_to_ns(ce->engine, cycles));
+	drm_info(&ce->engine->i915->drm, "%s: idle dispatch latency %d cycles, %lluns\n",
+		 ce->engine->name, cycles >> TF_BIAS, cycles_to_ns(ce->engine, cycles));
 
 	return intel_gt_wait_for_idle(ce->engine->gt, HZ);
 
@@ -2223,9 +2221,8 @@ static int measure_busy_dispatch(struct intel_context *ce)
 	}
 
 	cycles = trifilter(elapsed);
-	pr_info("%s: busy dispatch latency %d cycles, %lluns\n",
-		ce->engine->name, cycles >> TF_BIAS,
-		cycles_to_ns(ce->engine, cycles));
+	drm_info(&ce->engine->i915->drm, "%s: busy dispatch latency %d cycles, %lluns\n",
+		 ce->engine->name, cycles >> TF_BIAS, cycles_to_ns(ce->engine, cycles));
 
 	return intel_gt_wait_for_idle(ce->engine->gt, HZ);
 
@@ -2336,9 +2333,8 @@ static int measure_inter_request(struct intel_context *ce)
 		elapsed[i - 1] = sema[i + 1] - sema[i];
 
 	cycles = trifilter(elapsed);
-	pr_info("%s: inter-request latency %d cycles, %lluns\n",
-		ce->engine->name, cycles >> TF_BIAS,
-		cycles_to_ns(ce->engine, cycles));
+	drm_info(&ce->engine->i915->drm, "%s: inter-request latency %d cycles, %lluns\n",
+		 ce->engine->name, cycles >> TF_BIAS, cycles_to_ns(ce->engine, cycles));
 
 	return intel_gt_wait_for_idle(ce->engine->gt, HZ);
 
@@ -2431,9 +2427,8 @@ static int measure_context_switch(struct intel_context *ce)
 		elapsed[i - 1] = sema[2 * i + 2] - sema[2 * i + 1];
 
 	cycles = trifilter(elapsed);
-	pr_info("%s: context switch latency %d cycles, %lluns\n",
-		ce->engine->name, cycles >> TF_BIAS,
-		cycles_to_ns(ce->engine, cycles));
+	drm_info(&ce->engine->i915->drm, "%s: context switch latency %d cycles, %lluns\n",
+		 ce->engine->name, cycles >> TF_BIAS, cycles_to_ns(ce->engine, cycles));
 
 	return intel_gt_wait_for_idle(ce->engine->gt, HZ);
 
@@ -2534,17 +2529,15 @@ static int measure_preemption(struct intel_context *ce)
 		elapsed[i - 1] = sema[2 * i + 0] - elapsed[i - 1];
 
 	cycles = trifilter(elapsed);
-	pr_info("%s: preemption dispatch latency %d cycles, %lluns\n",
-		ce->engine->name, cycles >> TF_BIAS,
-		cycles_to_ns(ce->engine, cycles));
+	drm_info(&ce->engine->i915->drm,  "%s: preemption dispatch latency %d cycles, %lluns\n",
+		 ce->engine->name, cycles >> TF_BIAS, cycles_to_ns(ce->engine, cycles));
 
 	for (i = 1; i <= TF_COUNT; i++)
 		elapsed[i - 1] = sema[2 * i + 1] - sema[2 * i + 0];
 
 	cycles = trifilter(elapsed);
-	pr_info("%s: preemption switch latency %d cycles, %lluns\n",
-		ce->engine->name, cycles >> TF_BIAS,
-		cycles_to_ns(ce->engine, cycles));
+	drm_info(&ce->engine->i915->drm, "%s: preemption switch latency %d cycles, %lluns\n",
+		 ce->engine->name, cycles >> TF_BIAS, cycles_to_ns(ce->engine, cycles));
 
 	return intel_gt_wait_for_idle(ce->engine->gt, HZ);
 
@@ -2636,9 +2629,8 @@ static int measure_completion(struct intel_context *ce)
 	}
 
 	cycles = trifilter(elapsed);
-	pr_info("%s: completion latency %d cycles, %lluns\n",
-		ce->engine->name, cycles >> TF_BIAS,
-		cycles_to_ns(ce->engine, cycles));
+	drm_info(&ce->engine->i915->drm, "%s: completion latency %d cycles, %lluns\n",
+		 ce->engine->name, cycles >> TF_BIAS, cycles_to_ns(ce->engine, cycles));
 
 	return intel_gt_wait_for_idle(ce->engine->gt, HZ);
 
@@ -2929,11 +2921,11 @@ static int perf_series_engines(void *arg)
 				decimal = 0;
 			}
 
-			pr_info("%s %5s: { seqno:%d, busy:%d.%02d%%, runtime:%lldms, walltime:%lldms }\n",
-				name, p->engine->name, ce->timeline->seqno,
-				integer, decimal,
-				div_u64(p->runtime, 1000 * 1000),
-				div_u64(ktime_to_ns(p->time), 1000 * 1000));
+			drm_info(&i915->drm,
+				 "%s %5s: { seqno:%d, busy:%d.%02d%%, runtime:%lldms, walltime:%lldms }\n",
+				 name, p->engine->name, ce->timeline->seqno, integer, decimal,
+				 div_u64(p->runtime, 1000 * 1000), div_u64(ktime_to_ns(p->time),
+				 1000 * 1000));
 		}
 	}
 
@@ -3275,10 +3267,10 @@ static int perf_parallel_engines(void *arg)
 			}
 
 			GEM_BUG_ON(engine != p->engine);
-			pr_info("%s %5s: { count:%lu, busy:%d.%02d%%, runtime:%lldms, walltime:%lldms }\n",
-				name, engine->name, p->count, integer, decimal,
-				div_u64(p->runtime, 1000 * 1000),
-				div_u64(ktime_to_ns(p->time), 1000 * 1000));
+			drm_info(&i915->drm, "%s %5s: { count:%lu, busy:%d.%02d%%, runtime:%lldms, walltime:%lldms }\n",
+				 name, engine->name, p->count, integer, decimal,
+				 div_u64(p->runtime, 1000 * 1000),
+				 div_u64(ktime_to_ns(p->time), 1000 * 1000));
 			idx++;
 		}
 	}
