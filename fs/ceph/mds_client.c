@@ -4732,13 +4732,30 @@ static void replay_unsafe_requests(struct ceph_mds_client *mdsc,
 {
 	struct ceph_mds_request *req, *nreq;
 	unsigned long idx;
+	LIST_HEAD(unsafe_list);
+	LIST_HEAD(old_list);
 
 	doutc(mdsc->fsc->client, "mds%d\n", session->s_mds);
 
+	/*
+	 * Collect unsafe and old requests under mdsc->mutex, then
+	 * replay them without it: __send_request() is lockless and
+	 * ceph_mdsc_release_dir_caps_async() schedules work.
+	 */
 	mutex_lock(&mdsc->mutex);
-	list_for_each_entry_safe(req, nreq, &session->s_unsafe, r_unsafe_item)
+	list_for_each_entry_safe(req, nreq, &session->s_unsafe,
+				 r_unsafe_item) {
+		ceph_mdsc_get_request(req);
 		req->r_attempts++;
-		__send_request(session, req, true);
+		/*
+		 * Keep the request on s_unsafe: r_aux_item is only a
+		 * walk list.  The request must stay tracked as unsafe
+		 * until the MDS replies, so that a later reconnect can
+		 * replay it again and cleanup_session_requests() can
+		 * still abort it on session teardown.
+		 */
+		list_add_tail(&req->r_aux_item, &unsafe_list);
+	}
 
 	/*
 	 * also re-send old requests when MDS enters reconnect stage. So that MDS
@@ -4755,12 +4772,27 @@ static void replay_unsafe_requests(struct ceph_mds_client *mdsc,
 		if (req->r_session->s_mds != session->s_mds)
 			continue;
 
-		ceph_mdsc_release_dir_caps_async(req);
-
+		ceph_mdsc_get_request(req);
 		req->r_attempts++;
-		__send_request(session, req, true);
+		list_add_tail(&req->r_aux_item, &old_list);
 	}
+
 	mutex_unlock(&mdsc->mutex);
+
+	/* replay unsafe requests */
+	list_for_each_entry_safe(req, nreq, &unsafe_list, r_aux_item) {
+		list_del_init(&req->r_aux_item);
+		__send_request(session, req, true);
+		ceph_mdsc_put_request(req);
+	}
+
+	/* replay old requests */
+	list_for_each_entry_safe(req, nreq, &old_list, r_aux_item) {
+		list_del_init(&req->r_aux_item);
+		ceph_mdsc_release_dir_caps_async(req);
+		__send_request(session, req, true);
+		ceph_mdsc_put_request(req);
+	}
 }
 
 static int send_reconnect_partial(struct ceph_reconnect_state *recon_state)
