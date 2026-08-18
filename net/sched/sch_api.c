@@ -544,6 +544,11 @@ static struct qdisc_size_table *qdisc_get_stab(struct nlattr *opt,
 		return ERR_PTR(-EINVAL);
 	}
 
+	if (abs(s->overhead) > STAB_OVERHEAD_MAX) {
+		NL_SET_ERR_MSG(extack, "Invalid size table overhead");
+		return ERR_PTR(-EINVAL);
+	}
+
 	stab = kmalloc_flex(*stab, data, tsize);
 	if (!stab)
 		return ERR_PTR(-ENOMEM);
