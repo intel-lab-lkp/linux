@@ -31,6 +31,9 @@ struct iova_domain {
 	unsigned long	start_pfn;	/* Lower limit for this domain */
 	unsigned long	dma_32bit_pfn;
 	unsigned long	max32_alloc_size; /* Size of last failed allocation */
+	/* Bounding range of deferred erases; lo > hi when there are none. */
+	unsigned long	deferred_lo;
+	unsigned long	deferred_hi;
 
 	struct iova_rcache	*rcaches;
 	struct hlist_node	cpuhp_dead;
