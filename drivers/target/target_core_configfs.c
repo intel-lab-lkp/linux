@@ -138,7 +138,15 @@ static ssize_t target_core_item_dbroot_store(struct config_item *item,
 			pr_err("db_root: not a directory: %s\n", db_root_stage);
 		goto unlock;
 	}
+	if (!strcmp(path.dentry->d_sb->s_type->name, "configfs")) {
+		pr_err("db_root: configfs is not a valid target database root: %s\n",
+		       db_root_stage);
+		r = -EINVAL;
+	}
 	path_put(&path);
+
+	if (r)
+		goto unlock;
 
 	strscpy(db_root, db_root_stage);
 	pr_debug("Target_Core_ConfigFS: db_root set to %s\n", db_root);
