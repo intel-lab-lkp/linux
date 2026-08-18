@@ -1046,7 +1046,6 @@ static __be32 nfsd_finish_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		nfsd_stats_io_read_add(nn, fhp->fh_export, host_err);
 		*eof = nfsd_eof_on_read(file, offset, host_err, *count);
 		*count = host_err;
-		fsnotify_access(file);
 		trace_nfsd_read_io_done(rqstp, fhp, offset, *count);
 		return 0;
 	} else {
@@ -1084,6 +1083,9 @@ __be32 nfsd_splice_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (!host_err)
 		host_err = splice_direct_to_actor(file, &sd,
 						  nfsd_direct_splice_actor);
+	/* splice_direct_to_actor() does not emit an fsnotify event */
+	if (host_err >= 0)
+		fsnotify_access(file);
 	return nfsd_finish_read(rqstp, fhp, file, offset, count, eof, host_err);
 }
 
