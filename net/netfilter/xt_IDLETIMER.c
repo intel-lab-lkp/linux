@@ -318,14 +318,15 @@ static int idletimer_tg_checkentry(const struct xt_tgchk_param *par)
 	struct idletimer_tg_info *info = par->targinfo;
 	int ret;
 
-	pr_debug("checkentry targinfo%s\n", info->label);
-
 	ret = idletimer_tg_helper(info);
 	if(ret < 0)
 	{
 		pr_debug("checkentry helper return invalid\n");
 		return -EINVAL;
 	}
+
+	pr_debug("checkentry targinfo%s\n", info->label);
+
 	mutex_lock(&list_mutex);
 
 	info->timer = __idletimer_tg_find_by_label(info->label);
@@ -360,8 +361,6 @@ static int idletimer_tg_checkentry_v1(const struct xt_tgchk_param *par)
 	struct idletimer_tg_info_v1 *info = par->targinfo;
 	int ret;
 
-	pr_debug("checkentry targinfo%s\n", info->label);
-
 	if (info->send_nl_msg)
 		return -EOPNOTSUPP;
 
@@ -371,6 +370,8 @@ static int idletimer_tg_checkentry_v1(const struct xt_tgchk_param *par)
 		pr_debug("checkentry helper return invalid\n");
 		return -EINVAL;
 	}
+
+	pr_debug("checkentry targinfo%s\n", info->label);
 
 	if (info->timer_type > XT_IDLETIMER_ALARM) {
 		pr_debug("invalid value for timer type\n");
