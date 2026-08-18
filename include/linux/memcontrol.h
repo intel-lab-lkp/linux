@@ -330,6 +330,7 @@ struct mem_cgroup {
 
 	spinlock_t tier_lock;
 	struct list_head tier_counters;
+	struct work_struct tier_high_work;
 
 	struct mem_cgroup_per_node *nodeinfo[];
 };
