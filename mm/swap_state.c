@@ -12,6 +12,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/mempolicy.h>
 #include <linux/swap.h>
+#include <linux/zswap.h>
 #include <linux/leafops.h>
 #include <linux/init.h>
 #include <linux/pagemap.h>
@@ -190,6 +191,15 @@ static int __swap_cache_add_check(struct swap_cluster_info *ci,
 
 	if (nr == 1)
 		return 0;
+
+	/*
+	 * The cluster lock serializes swap-cache insertion with zswap
+	 * writeback. Reject mixed zswap/disk backing before allocating a
+	 * large folio and recheck it before adding the folio to swap cache.
+	 */
+	if (zswap_is_present(swp_entry(swp_type(targ_entry),
+				       round_down(swp_offset(targ_entry), nr)), nr))
+		return -EBUSY;
 
 	is_zero = __swap_table_test_zero(ci, ci_off);
 	ci_off = round_down(ci_off, nr);
