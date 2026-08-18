@@ -823,6 +823,11 @@ static int process_info_req(struct rtrs_srv_con *con,
 		return err;
 	}
 
+	if (!memchr(msg->pathname, '\0', sizeof(msg->pathname))) {
+		rtrs_err(s, "pathname is not NUL terminated\n");
+		return -EINVAL;
+	}
+
 	if (strchr(msg->pathname, '/') || strchr(msg->pathname, '.')) {
 		rtrs_err(s, "pathname cannot contain / and .\n");
 		return -EINVAL;
