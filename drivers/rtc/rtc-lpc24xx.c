@@ -273,8 +273,8 @@ static void lpc24xx_rtc_remove(struct platform_device *pdev)
 
 	rtc_writel(rtc, LPC24XX_CCR, LPC178X_CCALEN);
 
-	clk_disable_unprepare(rtc->clk_rtc);
 	clk_disable_unprepare(rtc->clk_reg);
+	clk_disable_unprepare(rtc->clk_rtc);
 }
 
 static const struct of_device_id lpc24xx_rtc_match[] = {
