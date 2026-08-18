@@ -534,7 +534,11 @@ static int sdhci_s3c_probe(struct platform_device *pdev)
 	}
 
 	/* enable the local io clock and keep it running for the moment. */
-	clk_prepare_enable(sc->clk_io);
+	ret = clk_prepare_enable(sc->clk_io);
+	if (ret) {
+		dev_err(dev, "failed to enable io clock\n");
+		return ret;
+	}
 
 	for (clks = 0, ptr = 0; ptr < MAX_BUS_CLK; ptr++) {
 		char name[14];
