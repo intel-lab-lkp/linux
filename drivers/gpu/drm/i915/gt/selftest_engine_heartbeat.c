@@ -202,8 +202,10 @@ static int __live_heartbeat_off(struct intel_engine_cs *engine)
 	engine->serial++;
 	flush_delayed_work(&engine->heartbeat.work);
 	if (!delayed_work_pending(&engine->heartbeat.work)) {
-		pr_err("%s: heartbeat not running\n",
-		       engine->name);
+		struct drm_printer m = drm_err_printer(&engine->i915->drm, "heartbeat off");
+
+		drm_printf(&m, "%s: heartbeat not running\n", engine->name);
+
 		err = -EINVAL;
 		goto err_pm;
 	}
@@ -215,15 +217,19 @@ static int __live_heartbeat_off(struct intel_engine_cs *engine)
 	engine->serial++;
 	flush_delayed_work(&engine->heartbeat.work);
 	if (delayed_work_pending(&engine->heartbeat.work)) {
-		pr_err("%s: heartbeat still running\n",
-		       engine->name);
+		struct drm_printer m = drm_err_printer(&engine->i915->drm, "heartbeat off");
+
+		drm_printf(&m, "%s: heartbeat still running\n", engine->name);
+
 		err = -EINVAL;
 		goto err_beat;
 	}
 
 	if (READ_ONCE(engine->heartbeat.systole)) {
-		pr_err("%s: heartbeat still allocated\n",
-		       engine->name);
+		struct drm_printer m = drm_err_printer(&engine->i915->drm, "heartbeat off");
+
+		drm_printf(&m, "%s: heartbeat still allocated\n", engine->name);
+
 		err = -EINVAL;
 		goto err_beat;
 	}
