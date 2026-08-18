@@ -567,10 +567,19 @@ static void frwr_wc_localinv_wake(struct ib_cq *cq, struct ib_wc *wc)
 void frwr_unmap_sync(struct rpcrdma_xprt *r_xprt, struct rpcrdma_req *req)
 {
 	struct ib_send_wr *first, **prev, *last;
-	struct rpcrdma_ep *ep = r_xprt->rx_ep;
 	const struct ib_send_wr *bad_wr;
+	struct rpcrdma_ep *ep;
 	struct rpcrdma_mr *mr;
 	int rc;
+
+	/* serialize against rpcrdma_xprt_disconnect() */
+	down_read(&r_xprt->rx_unmap_rwsem);
+
+	ep = r_xprt->rx_ep;
+	if (!ep)
+		goto out_unlock;
+
+	atomic_inc(&r_xprt->rx_unmap_active);
 
 	/* ORDER: Invalidate all of the MRs first
 	 *
@@ -614,6 +623,8 @@ void frwr_unmap_sync(struct rpcrdma_xprt *r_xprt, struct rpcrdma_req *req)
 	bad_wr = NULL;
 	rc = ib_post_send(ep->re_id->qp, first, &bad_wr);
 
+	up_read(&r_xprt->rx_unmap_rwsem);
+
 	/* The final LOCAL_INV WR in the chain is supposed to
 	 * do the wake. If it was never posted, the wake will
 	 * not happen, so don't wait in that case.
@@ -621,7 +632,7 @@ void frwr_unmap_sync(struct rpcrdma_xprt *r_xprt, struct rpcrdma_req *req)
 	if (bad_wr != first)
 		wait_for_completion(&mr->mr_linv_done);
 	if (!rc)
-		return;
+		goto out_atomic_dec;
 
 	/* On error, the MRs get destroyed once the QP has drained. */
 	trace_xprtrdma_post_linv_err(req, rc);
@@ -629,6 +640,14 @@ void frwr_unmap_sync(struct rpcrdma_xprt *r_xprt, struct rpcrdma_req *req)
 	/* Force a connection loss to ensure complete recovery.
 	 */
 	rpcrdma_force_disconnect(ep);
+
+out_atomic_dec:
+	if (atomic_dec_and_test(&r_xprt->rx_unmap_active))
+		wake_up_var(&r_xprt->rx_unmap_active);
+	return;
+
+out_unlock:
+	up_read(&r_xprt->rx_unmap_rwsem);
 }
 
 /**
