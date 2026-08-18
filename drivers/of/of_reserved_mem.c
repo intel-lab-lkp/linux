@@ -158,6 +158,11 @@ static int __init early_init_dt_reserve_memory(phys_addr_t base,
 
 		return memblock_mark_nomap(base, size);
 	}
+
+	if (memblock_is_region_reserved(base, size) ||
+	    memblock_overlaps_nomap(base, size))
+		return -EBUSY;
+
 	return memblock_reserve(base, size);
 }
 
