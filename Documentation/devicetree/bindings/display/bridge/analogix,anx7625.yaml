@@ -82,6 +82,10 @@ properties:
     type: boolean
     description: let the driver enable audio HDMI codec function or not.
 
+  analogix,audio-right-justify-enable:
+    type: boolean
+    description: enable audio data stream right justify.
+
   aux-bus:
     $ref: /schemas/display/dp-aux-bus.yaml#
 
