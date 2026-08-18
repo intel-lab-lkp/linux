@@ -834,6 +834,7 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 		sector_t dist;
 		unsigned int pending;
 		bool nonrot;
+		bool can_pick;
 
 		if (r1_bio->bios[disk] == IO_BLOCKED)
 			continue;
@@ -850,11 +851,12 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 		dist = abs(r1_bio->sector -
 			   READ_ONCE(conf->mirrors[disk].head_position));
 		nonrot = test_bit(Nonrot, &rdev->flags);
+		can_pick = nonrot || !has_nonrot;
 
 		/* Don't change to another disk for sequential reads */
 		if (is_sequential(conf, disk, r1_bio)) {
 			if (!should_choose_next(conf, disk) && !pending &&
-			    (nonrot || !has_nonrot))
+			    can_pick)
 				return disk;
 
 			/*
@@ -873,7 +875,8 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 			}
 		}
 
-		if (is_better_disk(pending, disk, nonrot, &ctl,
+		if (can_pick &&
+		    is_better_disk(pending, disk, nonrot, &ctl,
 				   rr_start, conf->raid_disks)) {
 			ctl.min_pending = pending;
 			ctl.min_pending_disk = disk;
