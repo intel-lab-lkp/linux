@@ -4049,9 +4049,12 @@ sub process {
 		}
 
 # check multi-line statement indentation matches previous line
+# (the anchor line may be unchanged context when only a continuation
+# line of the statement is touched by this patch)
 		if ($perl_version_ok &&
-		    $prevline =~ /^\+([ \t]*)((?:$c90_Keywords(?:\s+if)\s*)|(?:$Declare\s*)?(?:$Ident|\(\s*\*\s*$Ident\s*\))\s*|(?:\*\s*)*$Lval\s*=\s*$Ident\s*)\(.*(\&\&|\|\||,)\s*$/) {
-			$prevline =~ /^\+(\t*)(.*)$/;
+		    $line =~ /^\+/ &&
+		    $prevline =~ /^[\+ ]([ \t]*)((?:$c90_Keywords(?:\s+if)\s*)|(?:$Declare\s*)?(?:$Ident|\(\s*\*\s*$Ident\s*\))\s*|(?:\*\s*)*$Lval\s*=\s*$Ident\s*)\(.*(\&\&|\|\||,)\s*$/) {
+			$prevline =~ /^[\+ ](\t*)(.*)$/;
 			my $oldindent = $1;
 			my $rest = $2;
 
