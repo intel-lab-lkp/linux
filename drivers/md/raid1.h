@@ -56,6 +56,7 @@ struct r1conf {
 						 */
 	int			raid_disks;
 	int			nonrot_disks;
+	atomic_t		read_rr;
 
 	spinlock_t		device_lock;
 

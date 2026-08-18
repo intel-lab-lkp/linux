@@ -782,15 +782,22 @@ static bool rdev_readable(struct md_rdev *rdev, struct r1bio *r1_bio)
 struct read_balance_ctl {
 	sector_t closest_dist;
 	int closest_dist_disk;
-	int min_pending;
+	unsigned int min_pending;
 	int min_pending_disk;
 	int sequential_disk;
 	int readable_disks;
 };
 
+static int raid1_rr_pos(int disk, int start, int n)
+{
+	return ((disk % n) - start + n) % n;
+}
+
 static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 {
 	int disk;
+	int rr_start = 0;
+	bool has_nonrot = READ_ONCE(conf->nonrot_disks);
 	struct read_balance_ctl ctl = {
 		.closest_dist_disk      = -1,
 		.closest_dist           = MaxSector,
@@ -798,6 +805,10 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 		.min_pending            = UINT_MAX,
 		.sequential_disk	= -1,
 	};
+
+	if (has_nonrot)
+		rr_start = (unsigned int)atomic_inc_return(&conf->read_rr) %
+			   conf->raid_disks;
 
 	for (disk = 0 ; disk < conf->raid_disks * 2 ; disk++) {
 		struct md_rdev *rdev;
@@ -821,7 +832,7 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 
 		/* Don't change to another disk for sequential reads */
 		if (is_sequential(conf, disk, r1_bio)) {
-			if (!should_choose_next(conf, disk))
+			if (!should_choose_next(conf, disk) && !pending)
 				return disk;
 
 			/*
@@ -836,7 +847,12 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 			ctl.sequential_disk = disk;
 		}
 
-		if (ctl.min_pending > pending) {
+		if (ctl.min_pending > pending ||
+		    (has_nonrot && ctl.min_pending == pending &&
+		     ctl.min_pending_disk >= 0 &&
+		     raid1_rr_pos(disk, rr_start, conf->raid_disks) <
+		     raid1_rr_pos(ctl.min_pending_disk, rr_start,
+				  conf->raid_disks))) {
 			ctl.min_pending = pending;
 			ctl.min_pending_disk = disk;
 		}
@@ -861,7 +877,7 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 	 * mixed ratation/non-rotational disks depending on workload.
 	 */
 	if (ctl.min_pending_disk != -1 &&
-	    (READ_ONCE(conf->nonrot_disks) || ctl.min_pending == 0))
+	    (has_nonrot || ctl.min_pending == 0))
 		return ctl.min_pending_disk;
 	else
 		return ctl.closest_dist_disk;
@@ -3093,6 +3109,7 @@ static struct r1conf *setup_conf(struct mddev *mddev)
 	err = -EINVAL;
 	spin_lock_init(&conf->device_lock);
 	conf->raid_disks = mddev->raid_disks;
+	atomic_set(&conf->read_rr, -1);
 	rdev_for_each(rdev, mddev) {
 		int disk_idx = rdev->raid_disk;
 
