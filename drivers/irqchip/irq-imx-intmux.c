@@ -241,6 +241,8 @@ static int imx_intmux_probe(struct platform_device *pdev)
 	ret = clk_prepare_enable(data->ipg_clk);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to enable ipg clk: %d\n", ret);
+		pm_runtime_put_noidle(&pdev->dev);
+		pm_runtime_disable(&pdev->dev);
 		return ret;
 	}
 
@@ -283,6 +285,8 @@ static int imx_intmux_probe(struct platform_device *pdev)
 	return 0;
 out:
 	clk_disable_unprepare(data->ipg_clk);
+	pm_runtime_put_noidle(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
 	return ret;
 }
 
