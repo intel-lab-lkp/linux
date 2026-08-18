@@ -84,6 +84,13 @@ int v4l2_isp_params_validate_buffer(struct device *dev, struct vb2_buffer *vb,
 			return -EINVAL;
 		}
 
+		if (block->size < sizeof(*block)) {
+			dev_dbg(dev,
+				"Invalid block size %u at offset %zu\n",
+				block->size, block_offset);
+			return -EINVAL;
+		}
+
 		if (block->size > buffer_size) {
 			dev_dbg(dev, "Premature end of parameters data\n");
 			return -EINVAL;
@@ -100,22 +107,30 @@ int v4l2_isp_params_validate_buffer(struct device *dev, struct vb2_buffer *vb,
 		}
 
 		/*
-		 * Match the block reported size against the type info provided
-		 * one, but allow the block to only contain the header in
-		 * case it is going to be disabled.
+		 * An empty type info entry denotes a block type the driver
+		 * does not support. Skip the block, it is up to the driver to
+		 * ignore it when processing the buffer.
 		 */
 		info = &type_info[block->type];
-		if (block->size != info->size &&
-		    (!(block->flags & V4L2_ISP_PARAMS_FL_BLOCK_DISABLE) ||
-		    block->size != sizeof(*block))) {
-			dev_dbg(dev,
-				"Invalid block size %u (expected %zu) at offset %zu\n",
-				block->size, info->size, block_offset);
-			return -EINVAL;
-		}
+		if (info->size) {
+			/*
+			 * Match the block reported size against the type info
+			 * provided one, but allow the block to only contain the
+			 * header in case it is going to be disabled.
+			 */
+			if (block->size != info->size &&
+			    (!(block->flags & V4L2_ISP_PARAMS_FL_BLOCK_DISABLE) ||
+			    block->size != sizeof(*block))) {
+				dev_dbg(dev,
+					"Invalid block size %u (expected %zu) at offset %zu\n",
+					block->size, info->size, block_offset);
+				return -EINVAL;
+			}
 
-		if (info->block_validate && info->block_validate(dev, block))
-			return -EINVAL;
+			if (info->block_validate &&
+			    info->block_validate(dev, block))
+				return -EINVAL;
+		}
 
 		block_offset += block->size;
 		buffer_size -= block->size;
