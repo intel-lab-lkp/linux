@@ -86,5 +86,25 @@
         "teardown": [
             "$TC qdisc del dev $DUMMY root"
         ]
+    },
+    {
+        "id": "d1e2",
+        "name": "Reject DRR qdisc with oversized TCA_STAB overhead",
+        "category": [
+            "qdisc",
+            "drr"
+        ],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY handle 1: root stab overhead 2147483000 drr",
+        "expExitCode": "2",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc drr",
+        "matchCount": "0",
+        "teardown": [
+        ]
     }
 ]
