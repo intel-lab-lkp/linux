@@ -816,6 +816,7 @@ static int tower_probe(struct usb_interface *interface, const struct usb_device_
 	if (retval) {
 		/* something prevented us from registering this driver */
 		dev_err(idev, "Not able to get a minor for this device.\n");
+		usb_set_intfdata(interface, NULL);
 		goto error;
 	}
 	dev->minor = interface->minor;
@@ -847,6 +848,8 @@ static void tower_disconnect(struct usb_interface *interface)
 	dev = usb_get_intfdata(interface);
 
 	minor = dev->minor;
+
+	usb_set_intfdata(interface, NULL);
 
 	/* give back our minor and prevent further open() */
 	usb_deregister_dev(interface, &tower_class);
