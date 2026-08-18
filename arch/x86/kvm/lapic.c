@@ -2802,17 +2802,29 @@ static void __kvm_apic_set_base(struct kvm_vcpu *vcpu, u64 value)
 {
 	u64 old_value = vcpu->arch.apic_base;
 	struct kvm_lapic *apic = vcpu->arch.apic;
+	u64 changed = old_value ^ value;
+	bool apicbase_enable_changed = changed & MSR_IA32_APICBASE_ENABLE;
+	bool x2apic_enable_changed = changed & X2APIC_ENABLE;
+	bool apic_mode_changed = apicbase_enable_changed || x2apic_enable_changed;
+	bool need_lock = apic && apic_mode_changed;
+
+	/*
+	 * Serialize apic_base and APIC ID updates with APIC map
+	 * recalculation.
+	 */
+	if (need_lock)
+		mutex_lock(&vcpu->kvm->arch.apic_map_lock);
 
 	vcpu->arch.apic_base = value;
 
-	if ((old_value ^ value) & MSR_IA32_APICBASE_ENABLE)
+	if (apicbase_enable_changed)
 		vcpu->arch.cpuid_dynamic_bits_dirty = true;
 
 	if (!apic)
 		return;
 
 	/* update jump label if enable bit changes */
-	if ((old_value ^ value) & MSR_IA32_APICBASE_ENABLE) {
+	if (apicbase_enable_changed) {
 		if (value & MSR_IA32_APICBASE_ENABLE) {
 			kvm_apic_set_xapic_id(apic, vcpu->vcpu_id);
 			static_branch_slow_dec_deferred(&apic_hw_disabled);
@@ -2824,14 +2836,17 @@ static void __kvm_apic_set_base(struct kvm_vcpu *vcpu, u64 value)
 		}
 	}
 
-	if ((old_value ^ value) & X2APIC_ENABLE) {
+	if (x2apic_enable_changed) {
 		if (value & X2APIC_ENABLE)
 			kvm_apic_set_x2apic_id(apic, vcpu->vcpu_id);
 		else if (value & MSR_IA32_APICBASE_ENABLE)
 			kvm_apic_set_xapic_id(apic, vcpu->vcpu_id);
 	}
 
-	if ((old_value ^ value) & (MSR_IA32_APICBASE_ENABLE | X2APIC_ENABLE)) {
+	if (need_lock)
+		mutex_unlock(&vcpu->kvm->arch.apic_map_lock);
+
+	if (apic_mode_changed) {
 		kvm_make_request(KVM_REQ_APICV_UPDATE, vcpu);
 		kvm_x86_call(set_virtual_apic_mode)(vcpu);
 	}
