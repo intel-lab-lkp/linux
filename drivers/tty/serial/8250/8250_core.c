@@ -378,6 +378,14 @@ void __init serial8250_register_ports(struct uart_driver *drv, struct device *de
 		if (up->port.dev)
 			continue;
 
+		/*
+		 * Skip slots that describe no hardware: they would only
+		 * take up ttyS<n> names. Real ports get their node when
+		 * they claim a slot in serial8250_register_8250_port().
+		 */
+		if (!up->port.iobase && !up->port.mapbase && !up->port.membase)
+			continue;
+
 		up->port.dev = dev;
 
 		if (uart_console_registered(&up->port))
