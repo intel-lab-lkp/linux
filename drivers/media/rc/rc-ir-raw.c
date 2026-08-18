@@ -362,7 +362,7 @@ int ir_raw_gen_manchester(struct ir_raw_event **ev, unsigned int max,
 	if (timings->trailer_space) {
 		if (!(*ev)->pulse)
 			(*ev)->duration += timings->trailer_space;
-		else if (!max--)
+		else if (!max)
 			goto nobufs;
 		else
 			init_ir_raw_event_duration(++(*ev), 0,
@@ -491,7 +491,7 @@ int ir_raw_gen_pl(struct ir_raw_event **ev, unsigned int max,
 		}
 	}
 
-	if (!max--)
+	if (!max)
 		return ret;
 
 	init_ir_raw_event_duration((*ev)++, 0, timings->trailer_space);
