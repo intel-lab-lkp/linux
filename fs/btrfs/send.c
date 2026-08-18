@@ -6088,6 +6088,26 @@ static int send_write_or_clone(struct send_ctx *sctx,
 	}
 
 write_data:
+	ei = btrfs_item_ptr(path->nodes[0], path->slots[0],
+			    struct btrfs_file_extent_item);
+	if (btrfs_file_extent_type(path->nodes[0], ei) == BTRFS_FILE_EXTENT_PREALLOC &&
+	    proto_cmd_ok(sctx, BTRFS_SEND_C_FALLOCATE)) {
+		/*
+		 * The inode exists on the receiving side and the range may hold
+		 * anything there, so punch it before allocating it - fallocate
+		 * on its own leaves the current content in place, which would
+		 * turn a preallocated extent into data.
+		 */
+		ret = send_fallocate(sctx, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+				     offset, num_bytes);
+		if (ret < 0)
+			return ret;
+
+		ret = send_fallocate(sctx, 0, offset, num_bytes);
+		sctx->cur_inode_next_write_offset = end;
+		return ret;
+	}
+
 	ret = send_extent_data(sctx, path, offset, num_bytes);
 	sctx->cur_inode_next_write_offset = end;
 	return ret;
@@ -6408,6 +6428,43 @@ static int maybe_send_hole(struct send_ctx *sctx, struct btrfs_path *path,
 	return ret;
 }
 
+/*
+ * Reproduce a preallocated extent on the receiving side.
+ *
+ * Before send stream v2 there was no way to tell a receiver to allocate a range
+ * without writing to it, so a preallocated extent was skipped and the receiver
+ * ended up with a hole - the space the sender reserved is not reserved there.
+ * Since v2 we have a fallocate command, and btrfs-progs runs fallocate(2) for
+ * it, so use it.
+ *
+ * The part of an extent that starts at or beyond the inode's size is not
+ * reproduced. A full send could do it, as the truncate we send once we are done
+ * with the inode grows the file on the receiving side and so does not drop such
+ * a range, but an incremental send clips those ranges away before it gets here.
+ * Reproducing them only for a full send would have the two disagree about the
+ * same subvolume, so both skip them.
+ */
+static int send_prealloc(struct send_ctx *sctx, struct btrfs_path *path,
+			 struct btrfs_key *key)
+{
+	const u64 end = min(btrfs_file_extent_end(path), sctx->cur_inode_size);
+	int ret;
+
+	if (!proto_cmd_ok(sctx, BTRFS_SEND_C_FALLOCATE))
+		return 0;
+
+	if (key->offset >= end)
+		return 0;
+
+	ret = send_fallocate(sctx, 0, key->offset, end - key->offset);
+	if (ret < 0)
+		return ret;
+
+	sctx->cur_inode_next_write_offset = end;
+
+	return 0;
+}
+
 static int process_extent(struct send_ctx *sctx,
 			  struct btrfs_path *path,
 			  struct btrfs_key *key)
@@ -6433,14 +6490,8 @@ static int process_extent(struct send_ctx *sctx,
 		type = btrfs_file_extent_type(path->nodes[0], ei);
 		if (type == BTRFS_FILE_EXTENT_PREALLOC ||
 		    type == BTRFS_FILE_EXTENT_REG) {
-			/*
-			 * The send spec does not have a prealloc command yet,
-			 * so just leave a hole for prealloc'ed extents until
-			 * we have enough commands queued up to justify rev'ing
-			 * the send spec.
-			 */
 			if (type == BTRFS_FILE_EXTENT_PREALLOC)
-				return 0;
+				return send_prealloc(sctx, path, key);
 
 			/* Have a hole, just skip it. */
 			if (btrfs_file_extent_disk_bytenr(path->nodes[0], ei) == 0)
