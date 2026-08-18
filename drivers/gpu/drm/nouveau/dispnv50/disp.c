@@ -502,7 +502,6 @@ nv50_dac_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_commit *s
 	const u32 ctrl = NVDEF(NV507D, DAC_SET_CONTROL, OWNER, NONE);
 
 	core->func->dac->ctrl(core, nv_encoder->outp.or.id, ctrl, NULL);
-	nv_encoder->crtc = NULL;
 }
 
 static void
@@ -532,8 +531,6 @@ nv50_dac_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_commit *st
 
 	core->func->dac->ctrl(core, nv_encoder->outp.or.id, ctrl, asyh);
 	asyh->or.depth = 0;
-
-	nv_encoder->crtc = &nv_crtc->base;
 }
 
 static enum drm_connector_status
@@ -1634,7 +1631,6 @@ nv50_sor_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_commit *s
 
 	nv_encoder->update(nv_encoder, head->base.index, NULL, 0, 0);
 	nv50_audio_disable(encoder, &head->base);
-	nv_encoder->crtc = NULL;
 }
 
 // common/inc/displayport/displayport.h
@@ -1802,7 +1798,6 @@ nv50_sor_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_commit *st
 	u8 depth = NV837D_SOR_SET_CONTROL_PIXEL_DEPTH_DEFAULT;
 
 	nv_connector = nv50_outp_get_new_connector(state, nv_encoder);
-	nv_encoder->crtc = &nv_crtc->base;
 
 	if ((disp->disp->object.oclass == GT214_DISP ||
 	     disp->disp->object.oclass >= GF110_DISP) &&
@@ -2013,7 +2008,6 @@ nv50_pior_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_commit *
 	const u32 ctrl = NVDEF(NV507D, PIOR_SET_CONTROL, OWNER, NONE);
 
 	core->func->pior->ctrl(core, nv_encoder->outp.or.id, ctrl, NULL);
-	nv_encoder->crtc = NULL;
 }
 
 static void
@@ -2058,7 +2052,6 @@ nv50_pior_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_commit *s
 	}
 
 	core->func->pior->ctrl(core, nv_encoder->outp.or.id, ctrl, asyh);
-	nv_encoder->crtc = &nv_crtc->base;
 }
 
 static const struct drm_encoder_helper_funcs
@@ -2797,7 +2790,6 @@ nv50_display_read_hw_or_state(struct drm_device *dev, struct nv50_disp *disp,
 	armh->state.enable = true;
 	pm_runtime_get_noresume(dev->dev);
 
-	outp->crtc = crtc;
 	outp->ctrl = NVVAL(NV507D, SOR_SET_CONTROL, PROTOCOL, proto) | BIT(crtc->index);
 
 	drm_connector_get(conn);
