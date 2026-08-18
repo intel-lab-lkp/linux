@@ -1136,11 +1136,9 @@ static void s3c24xx_i2c_remove(struct platform_device *pdev)
 {
 	struct s3c24xx_i2c *i2c = platform_get_drvdata(pdev);
 
-	clk_unprepare(i2c->clk);
-
-	pm_runtime_disable(&pdev->dev);
-
 	i2c_del_adapter(&i2c->adap);
+	pm_runtime_disable(&pdev->dev);
+	clk_unprepare(i2c->clk);
 }
 
 static int s3c24xx_i2c_suspend_noirq(struct device *dev)
