@@ -10,6 +10,7 @@
 #define _LINUX_FOLIO_BATCH_H
 
 #include <linux/types.h>
+#include <linux/mm.h>
 
 /* 31 pointers + header align the folio_batch structure to a power of two */
 #define FOLIO_BATCH_SIZE	31
@@ -28,6 +29,7 @@ struct folio;
 struct folio_batch {
 	unsigned char nr;
 	unsigned char i;
+	unsigned short nr_pages;
 	bool percpu_pvec_drained;
 	struct folio *folios[FOLIO_BATCH_SIZE];
 };
@@ -42,6 +44,7 @@ static inline void folio_batch_init(struct folio_batch *fbatch)
 {
 	fbatch->nr = 0;
 	fbatch->i = 0;
+	fbatch->nr_pages = 0;
 	fbatch->percpu_pvec_drained = false;
 }
 
@@ -49,6 +52,7 @@ static inline void folio_batch_reinit(struct folio_batch *fbatch)
 {
 	fbatch->nr = 0;
 	fbatch->i = 0;
+	fbatch->nr_pages = 0;
 }
 
 static inline unsigned int folio_batch_count(const struct folio_batch *fbatch)
@@ -75,6 +79,27 @@ static inline unsigned folio_batch_add(struct folio_batch *fbatch,
 		struct folio *folio)
 {
 	fbatch->folios[fbatch->nr++] = folio;
+	return folio_batch_space(fbatch);
+}
+
+/**
+ * folio_batch_add_lru_cache() - Add a folio to a batch of lru_cache
+ * @fbatch: The folio batch.
+ * @folio: The folio to add.
+ *
+ * The folio is added to the end of the batch.
+ * The batch must have previously been initialised using folio_batch_init().
+ *
+ * Return: 0 if the lru_cache is filled with more than FOLIO_BATCH_SIZE
+ *         pages; otherwise, the number of available slots.
+ */
+static inline unsigned folio_batch_add_lru_cache(struct folio_batch *fbatch,
+		struct folio *folio)
+{
+	fbatch->folios[fbatch->nr++] = folio;
+	fbatch->nr_pages += (unsigned short)folio_nr_pages(folio);
+	if (fbatch->nr_pages > FOLIO_BATCH_SIZE)
+		return 0;
 	return folio_batch_space(fbatch);
 }
 
