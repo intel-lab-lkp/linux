@@ -1124,9 +1124,21 @@ static void vgic_its_free_device_list(struct kvm *kvm, struct vgic_its *its)
 static void vgic_its_free_collection_list(struct kvm *kvm, struct vgic_its *its)
 {
 	struct its_collection *cur, *temp;
+	struct its_device *device;
+	struct its_ite *ite;
 
-	list_for_each_entry_safe(cur, temp, &its->collection_list, coll_list)
-		vgic_its_free_collection(its, cur->collection_id);
+	/*
+	 * Bulk-clear the collection pointers for all ITEs.
+	 * This transforms the teardown complexity from O(Collections * ITEs)
+	 * to O(Collections + ITEs), avoiding guest-triggered host RCU stalls.
+	 */
+	for_each_lpi_its(device, ite, its)
+		ite->collection = NULL;
+
+	list_for_each_entry_safe(cur, temp, &its->collection_list, coll_list) {
+		list_del(&cur->coll_list);
+		kfree(cur);
+	}
 }
 
 /* Must be called with its_lock mutex held */
