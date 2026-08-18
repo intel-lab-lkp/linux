@@ -1666,6 +1666,7 @@ done:
 static int vhost_net_set_features(struct vhost_net *n, const u64 *features)
 {
 	size_t vhost_hlen, sock_hlen, hdr_len;
+	int ret = -EFAULT;
 	int i;
 
 	hdr_len = virtio_features_test_bit(features, VIRTIO_NET_F_MRG_RXBUF) ||
@@ -1694,8 +1695,11 @@ static int vhost_net_set_features(struct vhost_net *n, const u64 *features)
 		goto out_unlock;
 
 	if (virtio_features_test_bit(features, VIRTIO_F_ACCESS_PLATFORM)) {
-		if (vhost_init_device_iotlb(&n->dev))
+		ret = vhost_init_device_iotlb(&n->dev);
+		if (ret)
 			goto out_unlock;
+	} else {
+		vhost_clear_device_iotlb(&n->dev);
 	}
 
 	for (i = 0; i < VHOST_NET_VQ_MAX; ++i) {
@@ -1711,7 +1715,7 @@ static int vhost_net_set_features(struct vhost_net *n, const u64 *features)
 
 out_unlock:
 	mutex_unlock(&n->dev.mutex);
-	return -EFAULT;
+	return ret;
 }
 
 static long vhost_net_set_owner(struct vhost_net *n)
