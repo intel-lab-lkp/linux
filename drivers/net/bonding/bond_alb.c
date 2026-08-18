@@ -1345,7 +1345,7 @@ static netdev_tx_t bond_do_alb_xmit(struct sk_buff *skb, struct bonding *bond,
 		/* unbalanced or unassigned, send through primary */
 		tx_slave = rcu_dereference(bond->curr_active_slave);
 		if (bond->params.tlb_dynamic_lb)
-			bond_info->unbalanced_load += skb->len;
+			this_cpu_add(bond_info->unbalanced_load->tx_bytes, skb->len);
 	}
 
 	if (tx_slave && bond_slave_can_tx(tx_slave)) {
@@ -1529,6 +1529,21 @@ netdev_tx_t bond_alb_xmit(struct sk_buff *skb, struct net_device *bond_dev)
 	return bond_do_alb_xmit(skb, bond, tx_slave);
 }
 
+static u32 reset_unbalanced_load(struct alb_bond_info *bond_info)
+{
+	struct unbalanced_load_stats *p;
+	u32 total_bytes = 0;
+	int i;
+
+	for_each_possible_cpu(i) {
+		p = per_cpu_ptr(bond_info->unbalanced_load, i);
+		total_bytes += READ_ONCE(p->tx_bytes);
+		WRITE_ONCE(p->tx_bytes, 0);
+	}
+
+	return total_bytes / BOND_TLB_REBALANCE_INTERVAL;
+}
+
 void bond_alb_monitor(struct work_struct *work)
 {
 	struct bonding *bond = container_of(work, struct bonding,
@@ -1570,12 +1585,8 @@ void bond_alb_monitor(struct work_struct *work)
 	if (atomic_read(&bond_info->tx_rebalance_counter) >= BOND_TLB_REBALANCE_TICKS) {
 		bond_for_each_slave_rcu(bond, slave, iter) {
 			tlb_clear_slave(bond, slave, 1);
-			if (slave == rcu_access_pointer(bond->curr_active_slave)) {
-				SLAVE_TLB_INFO(slave).load =
-					bond_info->unbalanced_load /
-						BOND_TLB_REBALANCE_INTERVAL;
-				bond_info->unbalanced_load = 0;
-			}
+			if (slave == rcu_access_pointer(bond->curr_active_slave))
+				SLAVE_TLB_INFO(slave).load = reset_unbalanced_load(bond_info);
 		}
 		atomic_set(&bond_info->tx_rebalance_counter, 0);
 	}
