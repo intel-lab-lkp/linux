@@ -8,6 +8,8 @@
 #include <linux/of.h>
 #include <uapi/linux/virtio_ids.h>
 
+#include "virtio_dmb.h"
+
 /* Unique numbering for virtio devices. */
 static DEFINE_IDA(virtio_index_ida);
 
@@ -231,7 +233,14 @@ static int virtio_features_ok(struct virtio_device *dev)
 			status);
 		return -ENODEV;
 	}
-	return 0;
+
+	/*
+	 * Negotiation is complete, so a Device Memory Buffer may now be
+	 * located.  Reached from probe, from resume and from reset
+	 * completion, all of which have to end with the state matching what
+	 * the device reports now.
+	 */
+	return virtio_dmb_init(dev);
 }
 
 /**
@@ -361,6 +370,7 @@ static int virtio_dev_probe(struct device *_d)
 
 err:
 	virtio_add_status(dev, VIRTIO_CONFIG_S_FAILED);
+	virtio_dmb_destroy(dev);
 	return err;
 
 }
@@ -376,6 +386,8 @@ static void virtio_dev_remove(struct device *_d)
 
 	/* Driver should have reset device. */
 	WARN_ON_ONCE(dev->config->get_status(dev));
+
+	virtio_dmb_destroy(dev);
 
 	/* Acknowledge the device's existence again. */
 	virtio_add_status(dev, VIRTIO_CONFIG_S_ACKNOWLEDGE);
@@ -650,6 +662,7 @@ static int virtio_device_restore_priv(struct virtio_device *dev, bool restore)
 
 err:
 	virtio_add_status(dev, VIRTIO_CONFIG_S_FAILED);
+	virtio_dmb_destroy(dev);
 	return ret;
 }
 
