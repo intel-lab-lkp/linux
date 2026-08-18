@@ -585,6 +585,13 @@ int iris_queue_buffer(struct iris_inst *inst, struct iris_buffer *buf)
 	const struct iris_hfi_session_ops *hfi_ops = inst->hfi_session_ops;
 	int ret;
 
+	if (buf->type == BUF_INPUT)
+		dma_sync_single_for_device(inst->core->dev, buf->device_addr,
+					   buf->data_size, DMA_TO_DEVICE);
+	else if (buf->type == BUF_OUTPUT)
+		dma_sync_single_for_cpu(inst->core->dev, buf->device_addr,
+					buf->data_size, DMA_FROM_DEVICE);
+
 	ret = hfi_ops->session_queue_buf(inst, buf);
 	if (ret)
 		return ret;
