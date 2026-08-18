@@ -52,6 +52,7 @@
 #include <linux/edac.h>
 
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <asm/barrier.h>
 #include <asm/mce.h>
 #include <asm/msr.h>
 #include "edac_module.h"
@@ -181,7 +182,20 @@ struct ie31200_priv {
 
 static struct ie31200_pvt {
 	struct ie31200_priv *priv[IE31200_IMC_NUM];
+	bool ready;
 } ie31200_pvt;
+
+static bool ie31200_package_ready(void)
+{
+	/* Pair with ie31200_set_package_ready(). */
+	return smp_load_acquire(&ie31200_pvt.ready);
+}
+
+static void ie31200_set_package_ready(bool ready)
+{
+	/* Publish availability; synchronous worker teardown owns reclamation. */
+	smp_store_release(&ie31200_pvt.ready, ready);
+}
 
 enum ie31200_chips {
 	IE31200 = 0,
@@ -195,7 +209,7 @@ struct ie31200_dev_info {
 struct ie31200_error_info {
 	u16 errsts;
 	u16 errsts2;
-	u64 eccerrlog[IE31200_CHANNELS];
+	u64 eccerrlog[IE31200_IMC_NUM][IE31200_CHANNELS];
 	u64 erraddr;
 };
 
@@ -279,23 +293,65 @@ static void ie31200_clear_error_info(struct mem_ctl_info *mci)
 			 IE31200_ERRSTS_BITS, IE31200_ERRSTS_BITS);
 }
 
-static void ie31200_get_and_clear_error_info(struct mem_ctl_info *mci,
-					     struct ie31200_error_info *info)
+static bool ie31200_get_package(struct res_config *cfg,
+				struct ie31200_priv **privs)
 {
-	struct pci_dev *pdev = mci_to_pci_dev(mci);
-	struct ie31200_priv *priv = mci->pvt_info;
+	struct ie31200_priv *priv;
+	int mc;
+
+	if (!ie31200_package_ready())
+		return false;
+
+	if (cfg->imc_num < 1 || cfg->imc_num > IE31200_IMC_NUM)
+		return false;
+
+	for (mc = 0; mc < cfg->imc_num; mc++) {
+		priv = READ_ONCE(ie31200_pvt.priv[mc]);
+		if (!priv || priv->cfg != cfg)
+			return false;
+
+		privs[mc] = priv;
+	}
+
+	return true;
+}
+
+static void ie31200_read_error_info(struct ie31200_priv **privs,
+				    struct res_config *cfg,
+				    struct ie31200_error_info *info)
+{
+	int mc;
+
+	for (mc = 0; mc < cfg->imc_num; mc++) {
+		info->eccerrlog[mc][0] = lo_hi_readq(privs[mc]->c0errlog);
+		if (nr_channels == 2)
+			info->eccerrlog[mc][1] =
+				lo_hi_readq(privs[mc]->c1errlog);
+	}
+}
+
+static bool
+ie31200_get_and_clear_error_info(struct res_config *cfg,
+				 struct ie31200_priv **privs,
+				 struct ie31200_error_info *info)
+{
+	struct mem_ctl_info *mci;
+	struct pci_dev *pdev;
+
+	if (!ie31200_get_package(cfg, privs))
+		return false;
+
+	mci = privs[0]->mci;
+	pdev = mci_to_pci_dev(mci);
 
 	/*
 	 * The PCI ERRSTS register is deprecated, directly read the
 	 * MMIO-mapped ECC error log registers.
 	 */
-	if (priv->cfg->msr_clear_eccerrlog_offset) {
-		info->eccerrlog[0] = lo_hi_readq(priv->c0errlog);
-		if (nr_channels == 2)
-			info->eccerrlog[1] = lo_hi_readq(priv->c1errlog);
-
+	if (cfg->msr_clear_eccerrlog_offset) {
+		ie31200_read_error_info(privs, cfg, info);
 		ie31200_clear_error_info(mci);
-		return;
+		return true;
 	}
 
 	/*
@@ -305,11 +361,9 @@ static void ie31200_get_and_clear_error_info(struct mem_ctl_info *mci,
 	 */
 	pci_read_config_word(pdev, IE31200_ERRSTS, &info->errsts);
 	if (!(info->errsts & IE31200_ERRSTS_BITS))
-		return;
+		return false;
 
-	info->eccerrlog[0] = lo_hi_readq(priv->c0errlog);
-	if (nr_channels == 2)
-		info->eccerrlog[1] = lo_hi_readq(priv->c1errlog);
+	ie31200_read_error_info(privs, cfg, info);
 
 	pci_read_config_word(pdev, IE31200_ERRSTS, &info->errsts2);
 
@@ -319,37 +373,24 @@ static void ie31200_get_and_clear_error_info(struct mem_ctl_info *mci,
 	 * with no info and the second set of reads is valid and
 	 * should be UE info.
 	 */
-	if ((info->errsts ^ info->errsts2) & IE31200_ERRSTS_BITS) {
-		info->eccerrlog[0] = lo_hi_readq(priv->c0errlog);
-		if (nr_channels == 2)
-			info->eccerrlog[1] =
-				lo_hi_readq(priv->c1errlog);
-	}
+	if ((info->errsts ^ info->errsts2) & IE31200_ERRSTS_BITS)
+		ie31200_read_error_info(privs, cfg, info);
 
 	ie31200_clear_error_info(mci);
+	return true;
 }
 
 static void ie31200_process_error_info(struct mem_ctl_info *mci,
-				       struct ie31200_error_info *info)
+				       struct ie31200_error_info *info,
+				       int mc)
 {
 	struct ie31200_priv *priv = mci->pvt_info;
 	struct res_config *cfg = priv->cfg;
 	int channel;
 	u64 log;
 
-	if (!cfg->msr_clear_eccerrlog_offset) {
-		if (!(info->errsts & IE31200_ERRSTS_BITS))
-			return;
-
-		if ((info->errsts ^ info->errsts2) & IE31200_ERRSTS_BITS) {
-			edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci, 1, 0, 0, 0,
-					     -1, -1, -1, "UE overwrote CE", "");
-			info->errsts = info->errsts2;
-		}
-	}
-
 	for (channel = 0; channel < nr_channels; channel++) {
-		log = info->eccerrlog[channel];
+		log = info->eccerrlog[mc][channel];
 		if (log & cfg->reg_eccerrlog_ue_mask) {
 			edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci, 1,
 					     info->erraddr >> PAGE_SHIFT, 0, 0,
@@ -369,11 +410,24 @@ static void ie31200_process_error_info(struct mem_ctl_info *mci,
 
 static void __ie31200_check(struct mem_ctl_info *mci, struct mce *mce)
 {
-	struct ie31200_error_info info;
+	struct ie31200_priv *priv = mci->pvt_info;
+	struct ie31200_priv *privs[IE31200_IMC_NUM];
+	struct res_config *cfg = priv->cfg;
+	struct ie31200_error_info info = {};
+	int mc;
 
 	info.erraddr = mce ? mce->addr : 0;
-	ie31200_get_and_clear_error_info(mci, &info);
-	ie31200_process_error_info(mci, &info);
+	if (!ie31200_get_and_clear_error_info(cfg, privs, &info))
+		return;
+
+	if (!cfg->msr_clear_eccerrlog_offset &&
+	    ((info.errsts ^ info.errsts2) & IE31200_ERRSTS_BITS))
+		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED,
+				     privs[0]->mci, 1, 0, 0, 0,
+				     -1, -1, -1, "UE overwrote CE", "");
+
+	for (mc = 0; mc < cfg->imc_num; mc++)
+		ie31200_process_error_info(privs[mc]->mci, &info, mc);
 }
 
 static void ie31200_check(struct mem_ctl_info *mci)
@@ -529,7 +583,6 @@ static int ie31200_register_mci(struct pci_dev *pdev, struct res_config *cfg, in
 	mci->pdev = mc ? &priv->dev : &pdev->dev;
 
 	ie31200_get_dimm_config(mci, window, cfg, mc);
-	ie31200_clear_error_info(mci);
 
 	if (edac_mc_add_mc(mci)) {
 		edac_dbg(3, "MC: failed edac_mc_add_mc()\n");
@@ -550,15 +603,10 @@ fail_free:
 static void mce_check(struct mce *mce)
 {
 	struct ie31200_priv *priv;
-	int i;
 
-	for (i = 0; i < IE31200_IMC_NUM; i++) {
-		priv = ie31200_pvt.priv[i];
-		if (!priv)
-			continue;
-
+	priv = READ_ONCE(ie31200_pvt.priv[0]);
+	if (priv)
 		__ie31200_check(priv->mci, mce);
-	}
 }
 
 static int mce_handler(struct notifier_block *nb, unsigned long val, void *data)
@@ -605,13 +653,23 @@ static void ie31200_unregister_mcis(void)
 	struct mem_ctl_info *mci;
 	int i;
 
+	ie31200_set_package_ready(false);
+
 	for (i = 0; i < IE31200_IMC_NUM; i++) {
-		priv = ie31200_pvt.priv[i];
+		priv = READ_ONCE(ie31200_pvt.priv[i]);
+		if (!priv)
+			continue;
+
+		edac_mc_del_mc(priv->mci->pdev);
+	}
+
+	for (i = 0; i < IE31200_IMC_NUM; i++) {
+		priv = READ_ONCE(ie31200_pvt.priv[i]);
 		if (!priv)
 			continue;
 
 		mci = priv->mci;
-		edac_mc_del_mc(mci->pdev);
+		WRITE_ONCE(ie31200_pvt.priv[i], NULL);
 		iounmap(priv->window);
 		put_device(&priv->dev);
 		edac_mc_free(mci);
@@ -623,6 +681,7 @@ static int ie31200_probe1(struct pci_dev *pdev, struct res_config *cfg)
 	int i, ret;
 
 	edac_dbg(0, "MC:\n");
+	ie31200_set_package_ready(false);
 
 	if (!ecc_capable(pdev)) {
 		ie31200_printk(KERN_INFO, "No ECC support\n");
@@ -635,12 +694,17 @@ static int ie31200_probe1(struct pci_dev *pdev, struct res_config *cfg)
 			goto fail_register;
 	}
 
+	ie31200_clear_error_info(ie31200_pvt.priv[0]->mci);
+
 	if (cfg->cmci) {
-		mce_register_decode_chain(&ie31200_mce_dec);
 		edac_op_state = EDAC_OPSTATE_INT;
 	} else {
 		edac_op_state = EDAC_OPSTATE_POLL;
 	}
+	ie31200_set_package_ready(true);
+
+	if (cfg->cmci)
+		mce_register_decode_chain(&ie31200_mce_dec);
 
 	/* get this far and it's successful. */
 	edac_dbg(3, "MC: success\n");
@@ -668,11 +732,14 @@ static int ie31200_init_one(struct pci_dev *pdev,
 
 static void ie31200_remove_one(struct pci_dev *pdev)
 {
-	struct ie31200_priv *priv = ie31200_pvt.priv[0];
+	struct ie31200_priv *priv = READ_ONCE(ie31200_pvt.priv[0]);
 
 	edac_dbg(0, "\n");
 	pci_dev_put(mci_pdev);
 	mci_pdev = NULL;
+	if (!priv)
+		return;
+
 	if (priv->cfg->cmci)
 		mce_unregister_decode_chain(&ie31200_mce_dec);
 	ie31200_unregister_mcis();
