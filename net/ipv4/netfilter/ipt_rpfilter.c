@@ -95,8 +95,7 @@ static int rpfilter_check(const struct xt_mtchk_param *par)
 
 	if (strcmp(par->table, "mangle") != 0 &&
 	    strcmp(par->table, "raw") != 0) {
-		pr_info_ratelimited("only valid in \'raw\' or \'mangle\' table, not \'%s\'\n",
-				    par->table);
+		pr_info_ratelimited("only valid in \'raw\' or \'mangle\' table\n");
 		return -EINVAL;
 	}
 

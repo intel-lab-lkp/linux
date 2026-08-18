@@ -79,8 +79,7 @@ secmark_tg_check(const char *table, struct xt_secmark_target_info_v1 *info)
 
 	if (strcmp(table, "mangle") != 0 &&
 	    strcmp(table, "security") != 0) {
-		pr_info_ratelimited("only valid in \'mangle\' or \'security\' table, not \'%s\'\n",
-				    table);
+		pr_info_ratelimited("only valid in \'mangle\' or \'security\' table\n");
 		return -EINVAL;
 	}
 

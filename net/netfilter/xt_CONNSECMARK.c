@@ -87,8 +87,7 @@ static int connsecmark_tg_check(const struct xt_tgchk_param *par)
 
 	if (strcmp(par->table, "mangle") != 0 &&
 	    strcmp(par->table, "security") != 0) {
-		pr_info_ratelimited("only valid in \'mangle\' or \'security\' table, not \'%s\'\n",
-				    par->table);
+		pr_info_ratelimited("only valid in \'mangle\' or \'security\' table\n");
 		return -EINVAL;
 	}
 
