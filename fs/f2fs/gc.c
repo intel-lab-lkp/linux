@@ -2446,8 +2446,10 @@ out_drop_write:
 recover_out:
 	clear_sbi_flag(sbi, SBI_IS_RESIZEFS);
 	if (err) {
-		set_sbi_flag(sbi, SBI_NEED_FSCK);
-		f2fs_err(sbi, "resize_fs failed, should run fsck to repair!");
+		if (err != -EAGAIN) {
+			set_sbi_flag(sbi, SBI_NEED_FSCK);
+			f2fs_err(sbi, "resize_fs failed, should run fsck to repair!");
+		}
 
 		spin_lock(&sbi->stat_lock);
 		sbi->user_block_count += shrunk_blocks;
