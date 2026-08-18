@@ -2401,7 +2401,8 @@ static void mpi3mr_dev_rmhs_complete_iou(struct mpi3mr_ioc *mrioc,
 		ioc_info(mrioc,
 		    "%s :dev removal handshake completed successfully: handle(0x%04x)\n",
 		    __func__, drv_cmd->dev_handle);
-		clear_bit(drv_cmd->dev_handle, mrioc->removepend_bitmap);
+		if (drv_cmd->dev_handle < mrioc->facts.max_devhandle)
+			clear_bit(drv_cmd->dev_handle, mrioc->removepend_bitmap);
 	}
 
 	if (!list_empty(&mrioc->delayed_rmhs_list)) {
@@ -2564,6 +2565,12 @@ issue_cmd:
 	drv_cmd->callback = mpi3mr_dev_rmhs_complete_tm;
 	drv_cmd->dev_handle = handle;
 	drv_cmd->iou_rc = iou_rc;
+	if (handle >= mrioc->facts.max_devhandle) {
+		ioc_err(mrioc, "dev_remove_hs: handle(0x%04x) >= max_devhandle(0x%04x)\n",
+			handle, mrioc->facts.max_devhandle);
+		goto out_failed;
+	}
+
 	tm_req.dev_handle = cpu_to_le16(handle);
 	tm_req.task_type = MPI3_SCSITASKMGMT_TASKTYPE_TARGET_RESET;
 	tm_req.host_tag = cpu_to_le16(drv_cmd->host_tag);
