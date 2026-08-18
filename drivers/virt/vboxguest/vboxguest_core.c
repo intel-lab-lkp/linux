@@ -1047,6 +1047,8 @@ err_free_reqs:
  */
 void vbg_core_exit(struct vbg_dev *gdev)
 {
+	cancel_work_sync(&gdev->mem_balloon.work);
+
 	vbg_heartbeat_exit(gdev);
 	vbg_guest_mappings_exit(gdev);
 
