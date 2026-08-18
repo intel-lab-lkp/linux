@@ -44,7 +44,7 @@ config GCOV_PROFILE_ALL
 	depends on ARCH_HAS_GCOV_PROFILE_ALL
 	default n
 	help
-	This options activates profiling for the entire kernel.
+	This option activates profiling for the entire kernel.
 
 	If unsure, say N.
 
