@@ -4330,7 +4330,14 @@ retry:
 		}
 		new_cap = ceph_get_cap(mdsc, NULL);
 	} else {
-		WARN_ON(1);
+		/*
+		 * -EAGAIN means the target rank's session is
+		 * currently being closed; set target=-1, which drops
+		 * the exported cap - the MDS will reissue it for the
+		 * new session
+		 */
+		WARN_ON(tsession != ERR_PTR(-EAGAIN));
+
 		tsession = NULL;
 		target = -1;
 		mutex_lock(&session->s_mutex);
