@@ -429,6 +429,12 @@ static void dma_device_release(struct kref *ref)
 	list_del_rcu(&device->global_node);
 	dma_channel_rebalance();
 
+	/*
+	 * Wait for RCU readers (e.g. dma_issue_pending_all()) that may still
+	 * be traversing dma_device_list before the device is freed.
+	 */
+	synchronize_rcu();
+
 	if (device->device_release)
 		device->device_release(device);
 }
