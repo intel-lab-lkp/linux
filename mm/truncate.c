@@ -336,7 +336,7 @@ long mapping_evict_folio(struct address_space *mapping, struct folio *folio)
 	if (!filemap_release_folio(folio, 0))
 		return 0;
 
-	return remove_mapping(mapping, folio);
+	return remove_mapping(mapping, folio, false, NULL);
 }
 
 /**

@@ -90,7 +90,7 @@ static bool page_cache_pipe_buf_try_steal(struct pipe_inode_info *pipe,
 		 * If we succeeded in removing the mapping, set LRU flag
 		 * and return good.
 		 */
-		if (remove_mapping(mapping, folio)) {
+		if (remove_mapping(mapping, folio, false, NULL)) {
 			buf->flags |= PIPE_BUF_FLAG_LRU;
 			return true;
 		}

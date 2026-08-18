@@ -16,6 +16,8 @@
 #include <linux/init.h>
 #include <linux/pagemap.h>
 #include <linux/folio_batch.h>
+#include <linux/llist.h>
+#include <linux/workqueue.h>
 #include <linux/backing-dev.h>
 #include <linux/blkdev.h>
 #include <linux/migrate.h>
@@ -536,6 +538,98 @@ struct folio *__swap_cache_alloc_folio(swp_entry_t targ_entry, gfp_t gfp,
 
 	return ret;
 }
+
+static DEFINE_PER_CPU(struct llist_head, swap_dropbehind_llist);
+
+static bool swap_dropbehind_drop_folio(struct folio *folio)
+{
+	struct mem_cgroup *memcg;
+	bool dropped = false;
+
+	folio_lock(folio);
+
+	/* The folio was allocated off the LRU and nothing re-adds it here. */
+	VM_WARN_ON_ONCE_FOLIO(folio_test_lru(folio), folio);
+
+	rcu_read_lock();
+	memcg = folio_memcg(folio);
+	if (!mem_cgroup_tryget(memcg))
+		memcg = NULL;
+	rcu_read_unlock();
+
+	/*
+	 * Gate remove_mapping() on folio_test_swapcache(): a racing swapin may
+	 * have freed the swap slot (folio_free_swap()) and dropped the folio from
+	 * the cache, and remove_mapping() must not run on a non-swapcache folio
+	 * (it would trip __remove_mapping()'s mapping == folio_mapping() check).
+	 */
+	if (folio_test_swapcache(folio) && !folio_test_writeback(folio) &&
+	    remove_mapping(swap_address_space(folio->swap), folio, true, memcg)) {
+		dropped = true;
+	} else {
+		/* Raced: the folio is now owned by the swapin; put it back. */
+		folio_clear_dropbehind(folio);
+		folio_add_lru(folio);
+	}
+
+	mem_cgroup_put(memcg);
+
+	folio_unlock(folio);
+	if (!dropped)
+		folio_put(folio);
+	return dropped;
+}
+
+/**
+ * swap_dropbehind_free_batch_folio - free a dropbehind swap cache folio into a batch
+ * @folio: the off-LRU folio whose writeback has completed
+ * @fbatch: batch of folios to free, flushed when full
+ */
+static void swap_dropbehind_free_batch_folio(struct folio *folio,
+					     struct folio_batch *fbatch)
+{
+	if (swap_dropbehind_drop_folio(folio) && !folio_batch_add(fbatch, folio))
+		folios_put(fbatch);
+}
+
+static void swap_dropbehind_workfn(struct work_struct *work)
+{
+	struct folio_batch fbatch;
+	struct llist_node *pos, *next;
+	int cpu;
+
+	folio_batch_init(&fbatch);
+	for_each_possible_cpu(cpu) {
+		pos = llist_del_all(per_cpu_ptr(&swap_dropbehind_llist, cpu));
+		llist_for_each_safe(pos, next, pos) {
+			struct folio *folio = container_of((struct list_head *)pos,
+							   struct folio, lru);
+			swap_dropbehind_free_batch_folio(folio, &fbatch);
+		}
+	}
+	if (fbatch.nr)
+		folios_put(&fbatch);
+}
+
+static DECLARE_WORK(swap_dropbehind_work, swap_dropbehind_workfn);
+static struct workqueue_struct *swap_dropbehind_wq;
+
+void swap_writeback_dropbehind_folio(struct folio *folio)
+{
+	llist_add((struct llist_node *)&folio->lru,
+		  raw_cpu_ptr(&swap_dropbehind_llist));
+	queue_work(swap_dropbehind_wq, &swap_dropbehind_work);
+}
+
+static int __init swap_dropbehind_init(void)
+{
+	swap_dropbehind_wq = alloc_workqueue("swap_dropbehind",
+					     WQ_MEM_RECLAIM | WQ_PERCPU, 0);
+	if (!swap_dropbehind_wq)
+		return -ENOMEM;
+	return 0;
+}
+core_initcall(swap_dropbehind_init);
 
 /*
  * If we are the only user, then try to free up the swap cache.
