@@ -26,6 +26,8 @@
 #include <linux/delay.h>
 #include <linux/prime_numbers.h>
 
+#include <drm/drm_print.h>
+
 #include "../i915_selftest.h"
 
 static int
@@ -107,7 +109,7 @@ static int test_dag(void *arg)
 		return -ENOMEM;
 
 	if (i915_sw_fence_await_sw_fence_gfp(A, A, GFP_KERNEL) != -EINVAL) {
-		pr_err("recursive cycle not detected (AA)\n");
+		drm_err(NULL, "recursive cycle not detected (AA)\n");
 		goto err_A;
 	}
 
@@ -119,7 +121,7 @@ static int test_dag(void *arg)
 
 	i915_sw_fence_await_sw_fence_gfp(A, B, GFP_KERNEL);
 	if (i915_sw_fence_await_sw_fence_gfp(B, A, GFP_KERNEL) != -EINVAL) {
-		pr_err("single depth cycle not detected (BAB)\n");
+		drm_err(NULL, "single depth cycle not detected (BAB)\n");
 		goto err_B;
 	}
 
@@ -130,19 +132,19 @@ static int test_dag(void *arg)
 	}
 
 	if (i915_sw_fence_await_sw_fence_gfp(B, C, GFP_KERNEL) == -EINVAL) {
-		pr_err("invalid cycle detected\n");
+		drm_err(NULL, "invalid cycle detected\n");
 		goto err_C;
 	}
 	if (i915_sw_fence_await_sw_fence_gfp(C, B, GFP_KERNEL) != -EINVAL) {
-		pr_err("single depth cycle not detected (CBC)\n");
+		drm_err(NULL, "single depth cycle not detected (CBC)\n");
 		goto err_C;
 	}
 	if (i915_sw_fence_await_sw_fence_gfp(C, A, GFP_KERNEL) != -EINVAL) {
-		pr_err("cycle not detected (BA, CB, AC)\n");
+		drm_err(NULL, "cycle not detected (BA, CB, AC)\n");
 		goto err_C;
 	}
 	if (i915_sw_fence_await_sw_fence_gfp(A, C, GFP_KERNEL) == -EINVAL) {
-		pr_err("invalid cycle detected\n");
+		drm_err(NULL, "invalid cycle detected\n");
 		goto err_C;
 	}
 
@@ -152,15 +154,15 @@ static int test_dag(void *arg)
 
 	ret = 0;
 	if (!i915_sw_fence_done(C)) {
-		pr_err("fence C not done\n");
+		drm_err(NULL, "fence C not done\n");
 		ret = -EINVAL;
 	}
 	if (!i915_sw_fence_done(B)) {
-		pr_err("fence B not done\n");
+		drm_err(NULL, "fence B not done\n");
 		ret = -EINVAL;
 	}
 	if (!i915_sw_fence_done(A)) {
-		pr_err("fence A not done\n");
+		drm_err(NULL, "fence A not done\n");
 		ret = -EINVAL;
 	}
 err_C:
@@ -191,7 +193,7 @@ static int test_AB(void *arg)
 	if (ret < 0)
 		goto err_B;
 	if (ret == 0) {
-		pr_err("Incorrectly reported fence A was complete before await\n");
+		drm_err(NULL, "Incorrectly reported fence A was complete before await\n");
 		ret = -EINVAL;
 		goto err_B;
 	}
@@ -203,12 +205,12 @@ static int test_AB(void *arg)
 
 	i915_sw_fence_commit(B);
 	if (!i915_sw_fence_done(B)) {
-		pr_err("Fence B is not done\n");
+		drm_err(NULL, "Fence B is not done\n");
 		goto err_B;
 	}
 
 	if (!i915_sw_fence_done(A)) {
-		pr_err("Fence A is not done\n");
+		drm_err(NULL, "Fence A is not done\n");
 		goto err_B;
 	}
 
@@ -246,7 +248,7 @@ static int test_ABC(void *arg)
 	if (ret < 0)
 		goto err_C;
 	if (ret == 0) {
-		pr_err("Incorrectly reported fence B was complete before await\n");
+		drm_err(NULL, "Incorrectly reported fence B was complete before await\n");
 		goto err_C;
 	}
 
@@ -254,25 +256,25 @@ static int test_ABC(void *arg)
 	if (ret < 0)
 		goto err_C;
 	if (ret == 0) {
-		pr_err("Incorrectly reported fence C was complete before await\n");
+		drm_err(NULL, "Incorrectly reported fence C was complete before await\n");
 		goto err_C;
 	}
 
 	ret = -EINVAL;
 	i915_sw_fence_commit(A);
 	if (i915_sw_fence_done(A)) {
-		pr_err("Fence A completed early\n");
+		drm_err(NULL, "Fence A completed early\n");
 		goto err_C;
 	}
 
 	i915_sw_fence_commit(B);
 	if (i915_sw_fence_done(B)) {
-		pr_err("Fence B completed early\n");
+		drm_err(NULL, "Fence B completed early\n");
 		goto err_C;
 	}
 
 	if (i915_sw_fence_done(A)) {
-		pr_err("Fence A completed early (after signaling B)\n");
+		drm_err(NULL, "Fence A completed early (after signaling B)\n");
 		goto err_C;
 	}
 
@@ -280,15 +282,15 @@ static int test_ABC(void *arg)
 
 	ret = 0;
 	if (!i915_sw_fence_done(C)) {
-		pr_err("Fence C not done\n");
+		drm_err(NULL, "Fence C not done\n");
 		ret = -EINVAL;
 	}
 	if (!i915_sw_fence_done(B)) {
-		pr_err("Fence B not done\n");
+		drm_err(NULL, "Fence B not done\n");
 		ret = -EINVAL;
 	}
 	if (!i915_sw_fence_done(A)) {
-		pr_err("Fence A not done\n");
+		drm_err(NULL, "Fence A not done\n");
 		ret = -EINVAL;
 	}
 err_C:
@@ -343,28 +345,28 @@ static int test_AB_C(void *arg)
 
 	ret = 0;
 	if (i915_sw_fence_done(A)) {
-		pr_err("Fence A completed early\n");
+		drm_err(NULL, "Fence A completed early\n");
 		ret = -EINVAL;
 	}
 
 	if (i915_sw_fence_done(B)) {
-		pr_err("Fence B completed early\n");
+		drm_err(NULL, "Fence B completed early\n");
 		ret = -EINVAL;
 	}
 
 	i915_sw_fence_commit(C);
 	if (!i915_sw_fence_done(C)) {
-		pr_err("Fence C not done\n");
+		drm_err(NULL, "Fence C not done\n");
 		ret = -EINVAL;
 	}
 
 	if (!i915_sw_fence_done(B)) {
-		pr_err("Fence B not done\n");
+		drm_err(NULL, "Fence B not done\n");
 		ret = -EINVAL;
 	}
 
 	if (!i915_sw_fence_done(A)) {
-		pr_err("Fence A not done\n");
+		drm_err(NULL, "Fence A not done\n");
 		ret = -EINVAL;
 	}
 
@@ -424,17 +426,17 @@ static int test_C_AB(void *arg)
 	i915_sw_fence_commit(B);
 
 	if (!i915_sw_fence_done(A)) {
-		pr_err("Fence A not done\n");
+		drm_err(NULL, "Fence A not done\n");
 		ret = -EINVAL;
 	}
 
 	if (!i915_sw_fence_done(B)) {
-		pr_err("Fence B not done\n");
+		drm_err(NULL, "Fence B not done\n");
 		ret = -EINVAL;
 	}
 
 	if (!i915_sw_fence_done(C)) {
-		pr_err("Fence C not done\n");
+		drm_err(NULL, "Fence C not done\n");
 		ret = -EINVAL;
 	}
 
@@ -483,14 +485,14 @@ static int test_chain(void *arg)
 	for (i = nfences; --i; ) {
 		if (i915_sw_fence_done(fences[i])) {
 			if (ret == 0)
-				pr_err("Fence[%d] completed early\n", i);
+				drm_err(NULL, "Fence[%d] completed early\n", i);
 			ret = -EINVAL;
 		}
 	}
 	i915_sw_fence_commit(fences[0]);
 	for (i = 0; ret == 0 && i < nfences; i++) {
 		if (!i915_sw_fence_done(fences[i])) {
-			pr_err("Fence[%d] is not done\n", i);
+			drm_err(NULL, "Fence[%d] is not done\n", i);
 			ret = -EINVAL;
 		}
 	}
@@ -553,7 +555,7 @@ static int test_ipc(void *arg)
 
 	usleep_range(1000, 2000);
 	if (READ_ONCE(ipc.value)) {
-		pr_err("worker updated value before i915_sw_fence was signaled\n");
+		drm_err(NULL, "worker updated value before i915_sw_fence was signaled\n");
 		ret = -EINVAL;
 	}
 
@@ -561,7 +563,7 @@ static int test_ipc(void *arg)
 	i915_sw_fence_wait(ipc.out);
 
 	if (!READ_ONCE(ipc.value)) {
-		pr_err("worker signaled i915_sw_fence before value was posted\n");
+		drm_err(NULL, "worker signaled i915_sw_fence before value was posted\n");
 		ret = -EINVAL;
 	}
 
@@ -584,7 +586,7 @@ static int test_timer(void *arg)
 	preempt_disable();
 	timed_fence_init(&tf, target = jiffies);
 	if (!i915_sw_fence_done(&tf.fence)) {
-		pr_err("Fence with immediate expiration not signaled\n");
+		drm_err(NULL, "Fence with immediate expiration not signaled\n");
 		goto err;
 	}
 	preempt_enable();
@@ -594,7 +596,9 @@ static int test_timer(void *arg)
 		preempt_disable();
 		timed_fence_init(&tf, target = jiffies + delay);
 		if (i915_sw_fence_done(&tf.fence)) {
-			pr_err("Fence with future expiration (%lu jiffies) already signaled\n", delay);
+			drm_err(NULL,
+				"Fence with future expiration (%lu jiffies) already signaled\n",
+				delay);
 			goto err;
 		}
 		preempt_enable();
@@ -603,12 +607,12 @@ static int test_timer(void *arg)
 
 		preempt_disable();
 		if (!i915_sw_fence_done(&tf.fence)) {
-			pr_err("Fence not signaled after wait\n");
+			drm_err(NULL, "Fence not signaled after wait\n");
 			goto err;
 		}
 		if (time_before(jiffies, target)) {
-			pr_err("Fence signaled too early, target=%lu, now=%lu\n",
-			       target, jiffies);
+			drm_err(NULL, "Fence signaled too early, target=%lu, now=%lu\n",
+				target, jiffies);
 			goto err;
 		}
 		preempt_enable();
@@ -692,7 +696,7 @@ static int test_dma_fence(void *arg)
 
 	err = -EINVAL;
 	if (i915_sw_fence_done(timeout) || i915_sw_fence_done(not)) {
-		pr_err("Fences immediately signaled\n");
+		drm_err(NULL, "Fences immediately signaled\n");
 		goto err;
 	}
 
@@ -702,25 +706,25 @@ static int test_dma_fence(void *arg)
 	sleep = jiffies_to_usecs(delay) / 3;
 	usleep_range(sleep, 2 * sleep);
 	if (time_after(jiffies, end)) {
-		pr_debug("Slept too long, delay=%lu, (target=%lu, now=%lu) skipping\n",
-			 delay, end, jiffies);
+		drm_dbg(NULL, "Slept too long, delay=%lu, (target=%lu, now=%lu) skipping\n",
+			delay, end, jiffies);
 		goto skip;
 	}
 
 	if (i915_sw_fence_done(timeout) || i915_sw_fence_done(not)) {
-		pr_err("Fences signaled too early\n");
+		drm_err(NULL, "Fences signaled too early\n");
 		goto err;
 	}
 
 	if (!wait_event_timeout(timeout->wait,
 				i915_sw_fence_done(timeout),
 				2 * (end - jiffies) + 1)) {
-		pr_err("Timeout fence unsignaled!\n");
+		drm_err(NULL, "Timeout fence unsignaled!\n");
 		goto err;
 	}
 
 	if (i915_sw_fence_done(not)) {
-		pr_err("No timeout fence signaled!\n");
+		drm_err(NULL, "No timeout fence signaled!\n");
 		goto err;
 	}
 
@@ -728,7 +732,7 @@ skip:
 	dma_fence_signal(dma);
 
 	if (!i915_sw_fence_done(timeout) || !i915_sw_fence_done(not)) {
-		pr_err("Fences unsignaled\n");
+		drm_err(NULL, "Fences unsignaled\n");
 		goto err;
 	}
 

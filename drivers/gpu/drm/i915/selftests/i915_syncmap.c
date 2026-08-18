@@ -25,6 +25,8 @@
 #include "../i915_selftest.h"
 #include "i915_random.h"
 
+#include <drm/drm_print.h>
+
 static char *
 __sync_print(struct i915_syncmap *p,
 	     char *buf, unsigned long *sz,
@@ -102,7 +104,7 @@ static int check_syncmap_free(struct i915_syncmap **sync)
 {
 	i915_syncmap_free(sync);
 	if (*sync) {
-		pr_err("sync not cleared after free\n");
+		drm_err(NULL, "sync not cleared after free\n");
 		return -EINVAL;
 	}
 
@@ -121,7 +123,7 @@ static int dump_syncmap(struct i915_syncmap *sync, int err)
 		goto skip;
 
 	if (i915_syncmap_print_to_buf(sync, buf, PAGE_SIZE))
-		pr_err("%s", buf);
+		drm_err(NULL, "%s", buf);
 
 	kfree(buf);
 
@@ -146,14 +148,13 @@ static int igt_syncmap_init(void *arg)
 static int check_seqno(struct i915_syncmap *leaf, unsigned int idx, u32 seqno)
 {
 	if (leaf->height) {
-		pr_err("%s: not a leaf, height is %d\n",
-		       __func__, leaf->height);
+		drm_err(NULL, "%s: not a leaf, height is %d\n", __func__, leaf->height);
 		return -EINVAL;
 	}
 
 	if (__sync_seqno(leaf)[idx] != seqno) {
-		pr_err("%s: seqno[%d], found %x, expected %x\n",
-		       __func__, idx, __sync_seqno(leaf)[idx], seqno);
+		drm_err(NULL, "%s: seqno[%d], found %x, expected %x\n",
+			__func__, idx, __sync_seqno(leaf)[idx], seqno);
 		return -EINVAL;
 	}
 
@@ -169,20 +170,21 @@ static int check_one(struct i915_syncmap **sync, u64 context, u32 seqno)
 		return err;
 
 	if ((*sync)->height) {
-		pr_err("Inserting first context=%llx did not return leaf (height=%d, prefix=%llx\n",
-		       context, (*sync)->height, (*sync)->prefix);
+		drm_err(NULL,
+			"Inserting first context=%llx did not return leaf (height=%d, prefix=%llx\n",
+			context, (*sync)->height, (*sync)->prefix);
 		return -EINVAL;
 	}
 
 	if ((*sync)->parent) {
-		pr_err("Inserting first context=%llx created branches!\n",
-		       context);
+		drm_err(NULL, "Inserting first context=%llx created branches!\n", context);
 		return -EINVAL;
 	}
 
 	if (hweight32((*sync)->bitmap) != 1) {
-		pr_err("First bitmap does not contain a single entry, found %x (count=%d)!\n",
-		       (*sync)->bitmap, hweight32((*sync)->bitmap));
+		drm_err(NULL,
+			"First bitmap does not contain a single entry, found %x (count=%d)!\n",
+			(*sync)->bitmap, hweight32((*sync)->bitmap));
 		return -EINVAL;
 	}
 
@@ -191,8 +193,7 @@ static int check_one(struct i915_syncmap **sync, u64 context, u32 seqno)
 		return err;
 
 	if (!i915_syncmap_is_later(sync, context, seqno)) {
-		pr_err("Lookup of first context=%llx/seqno=%x failed!\n",
-		       context, seqno);
+		drm_err(NULL, "Lookup of first context=%llx/seqno=%x failed!\n", context, seqno);
 		return -EINVAL;
 	}
 
@@ -229,8 +230,8 @@ static int igt_syncmap_one(void *arg)
 		}
 		max++;
 	} while (!__igt_timeout(end_time, NULL));
-	pr_debug("%s: Completed %lu single insertions\n",
-		 __func__, max * (max - 1) / 2);
+	drm_dbg(NULL, "%s: Completed %lu single insertions\n",
+		__func__, max * (max - 1) / 2);
 out:
 	return dump_syncmap(sync, err);
 }
@@ -244,14 +245,16 @@ static int check_leaf(struct i915_syncmap **sync, u64 context, u32 seqno)
 		return err;
 
 	if ((*sync)->height) {
-		pr_err("Inserting context=%llx did not return leaf (height=%d, prefix=%llx\n",
-		       context, (*sync)->height, (*sync)->prefix);
+		drm_err(NULL,
+			"Inserting context=%llx did not return leaf (height=%d, prefix=%llx\n",
+			context, (*sync)->height, (*sync)->prefix);
 		return -EINVAL;
 	}
 
 	if (hweight32((*sync)->bitmap) != 1) {
-		pr_err("First entry into leaf (context=%llx) does not contain a single entry, found %x (count=%d)!\n",
-		       context, (*sync)->bitmap, hweight32((*sync)->bitmap));
+		drm_err(NULL,
+			"First entry into leaf (context=%llx) does not contain a single entry, found %x (count=%d)!\n",
+			context, (*sync)->bitmap, hweight32((*sync)->bitmap));
 		return -EINVAL;
 	}
 
@@ -260,8 +263,8 @@ static int check_leaf(struct i915_syncmap **sync, u64 context, u32 seqno)
 		return err;
 
 	if (!i915_syncmap_is_later(sync, context, seqno)) {
-		pr_err("Lookup of first entry context=%llx/seqno=%x failed!\n",
-		       context, seqno);
+		drm_err(NULL, "Lookup of first entry context=%llx/seqno=%x failed!\n",
+			context, seqno);
 		return -EINVAL;
 	}
 
@@ -306,20 +309,20 @@ static int igt_syncmap_join_above(void *arg)
 				continue;
 
 			if (!join->height) {
-				pr_err("Parent with no height!\n");
+				drm_err(NULL, "Parent with no height!\n");
 				err = -EINVAL;
 				goto out;
 			}
 
 			if (hweight32(join->bitmap) != 2) {
-				pr_err("Join does not have 2 children: %x (%d)\n",
-				       join->bitmap, hweight32(join->bitmap));
+				drm_err(NULL, "Join does not have 2 children: %x (%d)\n",
+					join->bitmap, hweight32(join->bitmap));
 				err = -EINVAL;
 				goto out;
 			}
 
 			if (__sync_child(join)[__sync_branch_idx(join, context)] != sync) {
-				pr_err("Leaf misplaced in parent!\n");
+				drm_err(NULL, "Leaf misplaced in parent!\n");
 				err = -EINVAL;
 				goto out;
 			}
@@ -350,8 +353,9 @@ static int igt_syncmap_join_below(void *arg)
 				goto out;
 
 			if (sync->height) {
-				pr_err("Inserting context=%llx (order=%d, step=%d) did not return leaf (height=%d, prefix=%llx\n",
-				       context, order, step, sync->height, sync->prefix);
+				drm_err(NULL,
+					"Inserting context=%llx (order=%d, step=%d) did not return leaf (height=%d, prefix=%llx\n",
+					context, order, step, sync->height, sync->prefix);
 				err = -EINVAL;
 				goto out;
 			}
@@ -363,16 +367,17 @@ static int igt_syncmap_join_below(void *arg)
 			u64 context = step * BIT_ULL(order);
 
 			if (!i915_syncmap_is_later(&sync, context, 0)) {
-				pr_err("1: context %llx (order=%d, step=%d) not found\n",
-				       context, order, step);
+				drm_err(NULL, "1: context %llx (order=%d, step=%d) not found\n",
+					context, order, step);
 				err = -EINVAL;
 				goto out;
 			}
 
 			for (idx = 1; idx < KSYNCMAP; idx++) {
 				if (i915_syncmap_is_later(&sync, context + idx, 0)) {
-					pr_err("1: context %llx (order=%d, step=%d) should not exist\n",
-					       context + idx, order, step);
+					drm_err(NULL,
+						"1: context %llx (order=%d, step=%d) should not exist\n",
+						context + idx, order, step);
 					err = -EINVAL;
 					goto out;
 				}
@@ -385,8 +390,8 @@ static int igt_syncmap_join_below(void *arg)
 			u64 context = step * BIT_ULL(order);
 
 			if (!i915_syncmap_is_later(&sync, context, 0)) {
-				pr_err("2: context %llx (order=%d, step=%d) not found\n",
-				       context, order, step);
+				drm_err(NULL, "2: context %llx (order=%d, step=%d) not found\n",
+					context, order, step);
 				err = -EINVAL;
 				goto out;
 			}
@@ -423,17 +428,19 @@ static int igt_syncmap_neighbours(void *arg)
 				goto out;
 
 			if (sync->height) {
-				pr_err("Inserting context=%llx did not return leaf (height=%d, prefix=%llx\n",
-				       context, sync->height, sync->prefix);
+				drm_err(NULL,
+					"Inserting context=%llx did not return leaf (height=%d, prefix=%llx\n",
+					context, sync->height, sync->prefix);
 				err = -EINVAL;
 				goto out;
 			}
 
 			if (sync->bitmap != BIT(idx + 1) - 1) {
-				pr_err("Inserting neighbouring context=0x%llx+%d, did not fit into the same leaf bitmap=%x (%d), expected %lx (%d)\n",
-				       context, idx,
-				       sync->bitmap, hweight32(sync->bitmap),
-				       BIT(idx + 1) - 1, idx + 1);
+				drm_err(NULL,
+					"Inserting neighbouring context=0x%llx+%d, did not fit into the same leaf bitmap=%x (%d), expected %lx (%d)\n",
+					context, idx,
+					sync->bitmap, hweight32(sync->bitmap),
+					BIT(idx + 1) - 1, idx + 1);
 				err = -EINVAL;
 				goto out;
 			}
@@ -473,9 +480,10 @@ static int igt_syncmap_compact(void *arg)
 				goto out;
 
 			if (sync->height) {
-				pr_err("Inserting context=%llx (order=%d, idx=%d) did not return leaf (height=%d, prefix=%llx\n",
-				       context, order, idx,
-				       sync->height, sync->prefix);
+				drm_err(NULL,
+					"Inserting context=%llx (order=%d, idx=%d) did not return leaf (height=%d, prefix=%llx\n",
+					context, order, idx,
+					sync->height, sync->prefix);
 				err = -EINVAL;
 				goto out;
 			}
@@ -483,22 +491,23 @@ static int igt_syncmap_compact(void *arg)
 
 		sync = sync->parent;
 		if (sync->parent) {
-			pr_err("Parent (join) of last leaf was not the sync!\n");
+			drm_err(NULL, "Parent (join) of last leaf was not the sync!\n");
 			err = -EINVAL;
 			goto out;
 		}
 
 		if (sync->height != order) {
-			pr_err("Join does not have the expected height, found %d, expected %d\n",
-			       sync->height, order);
+			drm_err(NULL,
+				"Join does not have the expected height, found %d, expected %d\n",
+				sync->height, order);
 			err = -EINVAL;
 			goto out;
 		}
 
 		if (sync->bitmap != BIT(KSYNCMAP) - 1) {
-			pr_err("Join is not full!, found %x (%d) expected %lx (%d)\n",
-			       sync->bitmap, hweight32(sync->bitmap),
-			       BIT(KSYNCMAP) - 1, KSYNCMAP);
+			drm_err(NULL, "Join is not full!, found %x (%d) expected %lx (%d)\n",
+				sync->bitmap, hweight32(sync->bitmap),
+				BIT(KSYNCMAP) - 1, KSYNCMAP);
 			err = -EINVAL;
 			goto out;
 		}
@@ -508,28 +517,28 @@ static int igt_syncmap_compact(void *arg)
 			struct i915_syncmap *leaf = __sync_child(sync)[idx];
 
 			if (leaf->height) {
-				pr_err("Child %d is a not leaf!\n", idx);
+				drm_err(NULL, "Child %d is a not leaf!\n", idx);
 				err = -EINVAL;
 				goto out;
 			}
 
 			if (leaf->parent != sync) {
-				pr_err("Child %d is not attached to us!\n",
-				       idx);
+				drm_err(NULL, "Child %d is not attached to us!\n", idx);
 				err = -EINVAL;
 				goto out;
 			}
 
 			if (!is_power_of_2(leaf->bitmap)) {
-				pr_err("Child %d holds more than one id, found %x (%d)\n",
-				       idx, leaf->bitmap, hweight32(leaf->bitmap));
+				drm_err(NULL, "Child %d holds more than one id, found %x (%d)\n",
+					idx, leaf->bitmap, hweight32(leaf->bitmap));
 				err = -EINVAL;
 				goto out;
 			}
 
 			if (leaf->bitmap != BIT(idx)) {
-				pr_err("Child %d has wrong seqno idx, found %d, expected %d\n",
-				       idx, ilog2(leaf->bitmap), idx);
+				drm_err(NULL,
+					"Child %d has wrong seqno idx, found %d, expected %d\n",
+					idx, ilog2(leaf->bitmap), idx);
 				err = -EINVAL;
 				goto out;
 			}
@@ -582,8 +591,9 @@ static int igt_syncmap_random(void *arg)
 			u64 context = i915_prandom_u64_state(&ctx);
 
 			if (i915_syncmap_is_later(&sync, context, seqno) != expect) {
-				pr_err("context=%llu, last=%u this=%u did not match expectation (%d)\n",
-				       context, last_seqno, seqno, expect);
+				drm_err(NULL,
+					"context=%llu, last=%u this=%u did not match expectation (%d)\n",
+					context, last_seqno, seqno, expect);
 				err = -EINVAL;
 				goto out;
 			}
@@ -595,7 +605,8 @@ static int igt_syncmap_random(void *arg)
 
 		phase++;
 	} while (!__igt_timeout(end_time, NULL));
-	pr_debug("Completed %lu passes, each of %lu contexts\n", phase, count);
+	drm_dbg(NULL, "Completed %lu passes, each of %lu contexts\n",
+		phase, count);
 out:
 	return dump_syncmap(sync, err);
 }
