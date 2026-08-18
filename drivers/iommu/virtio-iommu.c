@@ -8,13 +8,16 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/delay.h>
+#include <linux/debugfs.h>
 #include <linux/dma-map-ops.h>
 #include <linux/freezer.h>
 #include <linux/interval_tree.h>
 #include <linux/iommu.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/pci.h>
+#include <linux/seq_file.h>
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>
 #include <linux/virtio_ids.h>
@@ -52,6 +55,14 @@ struct viommu_dev {
 	/* Supported MAP flags */
 	u32				map_flags;
 	u32				probe_size;
+
+#ifdef CONFIG_IOMMU_DEBUGFS
+	struct dentry			*debugfs_dir;
+	/* Protects debugfs_domains and debugfs_endpoints. */
+	struct mutex			debugfs_lock;
+	struct list_head		debugfs_domains;
+	struct list_head		debugfs_endpoints;
+#endif
 };
 
 struct viommu_mapping {
@@ -70,6 +81,10 @@ struct viommu_domain {
 	struct rb_root_cached		mappings;
 
 	unsigned long			nr_endpoints;
+
+#ifdef CONFIG_IOMMU_DEBUGFS
+	struct list_head		debugfs_node;
+#endif
 };
 
 struct viommu_endpoint {
@@ -77,6 +92,10 @@ struct viommu_endpoint {
 	struct viommu_dev		*viommu;
 	struct viommu_domain		*vdomain;
 	struct list_head		resv_regions;
+
+#ifdef CONFIG_IOMMU_DEBUGFS
+	struct list_head		debugfs_node;
+#endif
 };
 
 struct viommu_request {
@@ -100,6 +119,283 @@ static struct viommu_domain viommu_identity_domain;
 
 #define to_viommu_domain(domain)	\
 	container_of(domain, struct viommu_domain, domain)
+
+#ifdef CONFIG_IOMMU_DEBUGFS
+static struct dentry *viommu_debugfs_root;
+
+static const char *viommu_domain_type_name(unsigned int type)
+{
+	switch (type) {
+	case IOMMU_DOMAIN_BLOCKED:
+		return "blocked";
+	case IOMMU_DOMAIN_IDENTITY:
+		return "identity";
+	case IOMMU_DOMAIN_UNMANAGED:
+		return "unmanaged";
+	case IOMMU_DOMAIN_DMA:
+		return "dma";
+	case IOMMU_DOMAIN_DMA_FQ:
+		return "dma-fq";
+	case IOMMU_DOMAIN_SVA:
+		return "sva";
+	case IOMMU_DOMAIN_PLATFORM:
+		return "platform";
+	case IOMMU_DOMAIN_NESTED:
+		return "nested";
+	default:
+		return "unknown";
+	}
+}
+
+static void viommu_debugfs_feature(struct seq_file *s,
+				   struct viommu_dev *viommu,
+				   unsigned int feature,
+				   const char *name)
+{
+	seq_printf(s, "  %-24s %s\n", name,
+		   virtio_has_feature(viommu->vdev, feature) ? "yes" : "no");
+}
+
+static int viommu_debugfs_status_show(struct seq_file *s, void *unused)
+{
+	struct viommu_dev *viommu = s->private;
+
+	seq_printf(s, "device: %s\n", virtio_bus_name(viommu->vdev));
+	seq_printf(s, "input_range: %pad-%pad\n",
+		   &viommu->geometry.aperture_start,
+		   &viommu->geometry.aperture_end);
+	seq_printf(s, "page_size_mask: %#llx\n", viommu->pgsize_bitmap);
+	seq_printf(s, "domain_range: %u-%u\n", viommu->first_domain,
+		   viommu->last_domain);
+	seq_printf(s, "identity_domain_id: %u\n",
+		   viommu->identity_domain_id);
+	seq_printf(s, "probe_size: %u\n", viommu->probe_size);
+	seq_printf(s, "map_flags: %#x\n", viommu->map_flags);
+	seq_puts(s, "features:\n");
+	viommu_debugfs_feature(s, viommu, VIRTIO_IOMMU_F_MAP_UNMAP,
+			       "map_unmap");
+	viommu_debugfs_feature(s, viommu, VIRTIO_IOMMU_F_INPUT_RANGE,
+			       "input_range");
+	viommu_debugfs_feature(s, viommu, VIRTIO_IOMMU_F_DOMAIN_RANGE,
+			       "domain_range");
+	viommu_debugfs_feature(s, viommu, VIRTIO_IOMMU_F_PROBE, "probe");
+	viommu_debugfs_feature(s, viommu, VIRTIO_IOMMU_F_MMIO, "mmio");
+	viommu_debugfs_feature(s, viommu, VIRTIO_IOMMU_F_BYPASS_CONFIG,
+			       "bypass_config");
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(viommu_debugfs_status);
+
+static void viommu_debugfs_print_endpoint(struct seq_file *s,
+					  struct viommu_endpoint *vdev)
+{
+	int i;
+	u32 domain_id = 0;
+	const char *domain_type = "none";
+	struct iommu_group *group;
+	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(vdev->dev);
+
+	if (vdev->vdomain) {
+		domain_type = viommu_domain_type_name(vdev->vdomain->domain.type);
+		if (vdev->vdomain == &viommu_identity_domain)
+			domain_id = vdev->viommu->identity_domain_id;
+		else
+			domain_id = vdev->vdomain->id;
+	}
+
+	group = iommu_group_get(vdev->dev);
+	seq_printf(s, "endpoint=%s group_id=%d domain_type=%s",
+		   dev_name(vdev->dev), group ? iommu_group_id(group) : -1,
+		   domain_type);
+	if (vdev->vdomain)
+		seq_printf(s, " domain_id=%u", domain_id);
+	if (fwspec) {
+		seq_puts(s, " ids=");
+		for (i = 0; i < fwspec->num_ids; i++)
+			seq_printf(s, "%s%u", i ? "," : "", fwspec->ids[i]);
+	}
+	seq_putc(s, '\n');
+
+	iommu_group_put(group);
+}
+
+static int viommu_debugfs_endpoints_show(struct seq_file *s, void *unused)
+{
+	struct viommu_dev *viommu = s->private;
+	struct viommu_endpoint *vdev;
+
+	mutex_lock(&viommu->debugfs_lock);
+	list_for_each_entry(vdev, &viommu->debugfs_endpoints, debugfs_node)
+		viommu_debugfs_print_endpoint(s, vdev);
+	mutex_unlock(&viommu->debugfs_lock);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(viommu_debugfs_endpoints);
+
+static unsigned long viommu_debugfs_count_mappings(struct viommu_domain *vdomain)
+{
+	unsigned long count = 0;
+	struct interval_tree_node *node;
+
+	for (node = interval_tree_iter_first(&vdomain->mappings, 0, ULONG_MAX);
+	     node; node = interval_tree_iter_next(node, 0, ULONG_MAX))
+		count++;
+
+	return count;
+}
+
+static void viommu_debugfs_print_domain(struct seq_file *s,
+					struct viommu_domain *vdomain)
+{
+	unsigned long flags;
+	unsigned long mappings;
+
+	spin_lock_irqsave(&vdomain->mappings_lock, flags);
+	mappings = viommu_debugfs_count_mappings(vdomain);
+	spin_unlock_irqrestore(&vdomain->mappings_lock, flags);
+
+	seq_printf(s,
+		   "id=%u type=%s endpoints=%lu mappings=%lu aperture=%pad-%pad pgsize_bitmap=%#lx map_flags=%#x\n",
+		   vdomain->id, viommu_domain_type_name(vdomain->domain.type),
+		   vdomain->nr_endpoints, mappings,
+		   &vdomain->domain.geometry.aperture_start,
+		   &vdomain->domain.geometry.aperture_end,
+		   vdomain->domain.pgsize_bitmap, vdomain->map_flags);
+}
+
+static int viommu_debugfs_domains_show(struct seq_file *s, void *unused)
+{
+	struct viommu_dev *viommu = s->private;
+	struct viommu_domain *vdomain;
+
+	mutex_lock(&viommu->debugfs_lock);
+	if (viommu_identity_domain.nr_endpoints) {
+		seq_printf(s, "id=%u type=%s endpoints=%lu mappings=identity\n",
+			   viommu->identity_domain_id,
+			   viommu_domain_type_name(viommu_identity_domain.domain.type),
+			   viommu_identity_domain.nr_endpoints);
+	}
+	list_for_each_entry(vdomain, &viommu->debugfs_domains, debugfs_node)
+		viommu_debugfs_print_domain(s, vdomain);
+	mutex_unlock(&viommu->debugfs_lock);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(viommu_debugfs_domains);
+
+static void viommu_debugfs_print_mapping(struct seq_file *s,
+					 struct viommu_domain *vdomain)
+{
+	unsigned long flags;
+	struct viommu_mapping *mapping;
+	struct interval_tree_node *node;
+
+	spin_lock_irqsave(&vdomain->mappings_lock, flags);
+	for (node = interval_tree_iter_first(&vdomain->mappings, 0, ULONG_MAX);
+	     node; node = interval_tree_iter_next(node, 0, ULONG_MAX)) {
+		mapping = container_of(node, struct viommu_mapping, iova);
+		seq_printf(s,
+			   "domain_id=%u iova=%#lx-%#lx phys=%pa size=%#lx flags=%#x\n",
+			   vdomain->id, mapping->iova.start, mapping->iova.last,
+			   &mapping->paddr,
+			   mapping->iova.last - mapping->iova.start + 1,
+			   mapping->flags);
+	}
+	spin_unlock_irqrestore(&vdomain->mappings_lock, flags);
+}
+
+static int viommu_debugfs_mappings_show(struct seq_file *s, void *unused)
+{
+	struct viommu_dev *viommu = s->private;
+	struct viommu_domain *vdomain;
+
+	mutex_lock(&viommu->debugfs_lock);
+	list_for_each_entry(vdomain, &viommu->debugfs_domains, debugfs_node)
+		viommu_debugfs_print_mapping(s, vdomain);
+	mutex_unlock(&viommu->debugfs_lock);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(viommu_debugfs_mappings);
+
+static void viommu_debugfs_init(struct viommu_dev *viommu)
+{
+	struct dentry *parent;
+
+	if (!iommu_debugfs_dir)
+		return;
+
+	if (!viommu_debugfs_root)
+		viommu_debugfs_root = debugfs_create_dir("virtio",
+							 iommu_debugfs_dir);
+
+	parent = viommu_debugfs_root ?: iommu_debugfs_dir;
+	viommu->debugfs_dir = debugfs_create_dir(virtio_bus_name(viommu->vdev),
+						 parent);
+	if (IS_ERR_OR_NULL(viommu->debugfs_dir))
+		return;
+
+	debugfs_create_file("status", 0444, viommu->debugfs_dir, viommu,
+			    &viommu_debugfs_status_fops);
+	debugfs_create_file("endpoints", 0444, viommu->debugfs_dir, viommu,
+			    &viommu_debugfs_endpoints_fops);
+	debugfs_create_file("domains", 0444, viommu->debugfs_dir, viommu,
+			    &viommu_debugfs_domains_fops);
+	debugfs_create_file("mappings", 0444, viommu->debugfs_dir, viommu,
+			    &viommu_debugfs_mappings_fops);
+}
+
+static void viommu_debugfs_remove(struct viommu_dev *viommu)
+{
+	debugfs_remove_recursive(viommu->debugfs_dir);
+	viommu->debugfs_dir = NULL;
+}
+
+static void viommu_debugfs_add_domain(struct viommu_domain *vdomain)
+{
+	struct viommu_dev *viommu = vdomain->viommu;
+
+	mutex_lock(&viommu->debugfs_lock);
+	list_add_tail(&vdomain->debugfs_node, &viommu->debugfs_domains);
+	mutex_unlock(&viommu->debugfs_lock);
+}
+
+static void viommu_debugfs_remove_domain(struct viommu_domain *vdomain)
+{
+	struct viommu_dev *viommu = vdomain->viommu;
+
+	mutex_lock(&viommu->debugfs_lock);
+	list_del(&vdomain->debugfs_node);
+	mutex_unlock(&viommu->debugfs_lock);
+}
+
+static void viommu_debugfs_add_endpoint(struct viommu_endpoint *vdev)
+{
+	struct viommu_dev *viommu = vdev->viommu;
+
+	mutex_lock(&viommu->debugfs_lock);
+	list_add_tail(&vdev->debugfs_node, &viommu->debugfs_endpoints);
+	mutex_unlock(&viommu->debugfs_lock);
+}
+
+static void viommu_debugfs_remove_endpoint(struct viommu_endpoint *vdev)
+{
+	struct viommu_dev *viommu = vdev->viommu;
+
+	mutex_lock(&viommu->debugfs_lock);
+	list_del(&vdev->debugfs_node);
+	mutex_unlock(&viommu->debugfs_lock);
+}
+#else
+static void viommu_debugfs_init(struct viommu_dev *viommu) {}
+static void viommu_debugfs_remove(struct viommu_dev *viommu) {}
+static void viommu_debugfs_add_domain(struct viommu_domain *vdomain) {}
+static void viommu_debugfs_remove_domain(struct viommu_domain *vdomain) {}
+static void viommu_debugfs_add_endpoint(struct viommu_endpoint *vdev) {}
+static void viommu_debugfs_remove_endpoint(struct viommu_endpoint *vdev) {}
+#endif
 
 static int viommu_get_req_errno(void *buf, size_t len)
 {
@@ -676,6 +972,9 @@ static struct iommu_domain *viommu_domain_alloc_paging(struct device *dev)
 
 	spin_lock_init(&vdomain->mappings_lock);
 	vdomain->mappings = RB_ROOT_CACHED;
+#ifdef CONFIG_IOMMU_DEBUGFS
+	INIT_LIST_HEAD(&vdomain->debugfs_node);
+#endif
 
 	ret = ida_alloc_range(&viommu->domain_ids, viommu->first_domain,
 			      viommu->last_domain, GFP_KERNEL);
@@ -691,6 +990,7 @@ static struct iommu_domain *viommu_domain_alloc_paging(struct device *dev)
 
 	vdomain->map_flags = viommu->map_flags;
 	vdomain->viommu = viommu;
+	viommu_debugfs_add_domain(vdomain);
 
 	return &vdomain->domain;
 }
@@ -702,8 +1002,10 @@ static void viommu_domain_free(struct iommu_domain *domain)
 	/* Free all remaining mappings */
 	viommu_del_mappings(vdomain, 0, ULLONG_MAX);
 
-	if (vdomain->viommu)
+	if (vdomain->viommu) {
+		viommu_debugfs_remove_domain(vdomain);
 		ida_free(&vdomain->viommu->domain_ids, vdomain->id);
+	}
 
 	kfree(vdomain);
 }
@@ -1035,6 +1337,9 @@ static struct iommu_device *viommu_probe_device(struct device *dev)
 	vdev->dev = dev;
 	vdev->viommu = viommu;
 	INIT_LIST_HEAD(&vdev->resv_regions);
+#ifdef CONFIG_IOMMU_DEBUGFS
+	INIT_LIST_HEAD(&vdev->debugfs_node);
+#endif
 	dev_iommu_priv_set(dev, vdev);
 
 	if (viommu->probe_size) {
@@ -1043,6 +1348,8 @@ static struct iommu_device *viommu_probe_device(struct device *dev)
 		if (ret)
 			goto err_free_dev;
 	}
+
+	viommu_debugfs_add_endpoint(vdev);
 
 	return &viommu->iommu;
 
@@ -1057,6 +1364,7 @@ static void viommu_release_device(struct device *dev)
 {
 	struct viommu_endpoint *vdev = dev_iommu_priv_get(dev);
 
+	viommu_debugfs_remove_endpoint(vdev);
 	viommu_detach_dev(vdev);
 	iommu_put_resv_regions(dev, &vdev->resv_regions);
 	kfree(vdev);
@@ -1170,6 +1478,11 @@ static int viommu_probe(struct virtio_device *vdev)
 	viommu->dev = dev;
 	viommu->vdev = vdev;
 	INIT_LIST_HEAD(&viommu->requests);
+#ifdef CONFIG_IOMMU_DEBUGFS
+	mutex_init(&viommu->debugfs_lock);
+	INIT_LIST_HEAD(&viommu->debugfs_domains);
+	INIT_LIST_HEAD(&viommu->debugfs_endpoints);
+#endif
 
 	ret = viommu_init_vqs(viommu);
 	if (ret)
@@ -1237,6 +1550,7 @@ static int viommu_probe(struct virtio_device *vdev)
 	vdev->priv = viommu;
 
 	iommu_device_register(&viommu->iommu, &viommu_ops, parent_dev);
+	viommu_debugfs_init(viommu);
 
 	dev_info(dev, "input address: %u bits\n",
 		 order_base_2(viommu->geometry.aperture_end));
@@ -1254,6 +1568,7 @@ static void viommu_remove(struct virtio_device *vdev)
 {
 	struct viommu_dev *viommu = vdev->priv;
 
+	viommu_debugfs_remove(viommu);
 	iommu_device_sysfs_remove(&viommu->iommu);
 	iommu_device_unregister(&viommu->iommu);
 
