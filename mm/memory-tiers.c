@@ -156,6 +156,64 @@ static __always_inline nodemask_t get_memtier_nodemask(struct memory_tier *memti
 	return nodes;
 }
 
+/**
+ * node_to_tier_id() - Get the memory tier id of a node
+ * @node: The node to look up
+ *
+ * Cheap, lockless lookup safe for the memcg charge hot path. The tier id is
+ * the memory tier's device id, i.e. adistance_start >> MEMTIER_CHUNK_BITS.
+ *
+ * Return: the tier id, or -1 if the node has no memory tier.
+ */
+int node_to_tier_id(int node)
+{
+	pg_data_t *pgdat;
+	struct memory_tier *memtier;
+	int tier_id = -1;
+
+	pgdat = NODE_DATA(node);
+	if (!pgdat)
+		return -1;
+
+	rcu_read_lock();
+	memtier = rcu_dereference(pgdat->memtier);
+	if (memtier)
+		tier_id = memtier->dev.id;
+	rcu_read_unlock();
+	return tier_id;
+}
+EXPORT_SYMBOL_GPL(node_to_tier_id);
+
+/**
+ * tier_id_to_nodemask() - Get the set of nodes belonging to a memory tier
+ * @tier_id: The tier id to look up
+ * @nodes: Output nodemask, cleared and filled on success
+ *
+ * Takes the memory tier mutex, so callers must be in a sleepable context.
+ * The memcg charge path calls this only after its gfp-allow-blocking check
+ * (i.e., only when about to reclaim), never on the charge fast path.
+ *
+ * Return: 0 on success, -ENOENT if no tier with the given id exists.
+ */
+int tier_id_to_nodemask(int tier_id, nodemask_t *nodes)
+{
+	struct memory_tier *memtier;
+	int ret = -ENOENT;
+
+	nodes_clear(*nodes);
+	mutex_lock(&memory_tier_lock);
+	list_for_each_entry(memtier, &memory_tiers, list) {
+		if (memtier->dev.id == tier_id) {
+			*nodes = get_memtier_nodemask(memtier);
+			ret = 0;
+			break;
+		}
+	}
+	mutex_unlock(&memory_tier_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(tier_id_to_nodemask);
+
 static void memory_tier_device_release(struct device *dev)
 {
 	struct memory_tier *tier = to_memory_tier(dev);

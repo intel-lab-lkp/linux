@@ -52,6 +52,8 @@ int mt_perf_to_adistance(struct access_coordinate *perf, int *adist);
 struct memory_dev_type *mt_find_alloc_memory_type(int adist,
 						  struct list_head *memory_types);
 void mt_put_memory_types(struct list_head *memory_types);
+int node_to_tier_id(int node);
+int tier_id_to_nodemask(int tier_id, nodemask_t *nodes);
 #ifdef CONFIG_NUMA_MIGRATION
 int next_demotion_node(int node, const nodemask_t *allowed_mask);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);
@@ -150,6 +152,16 @@ static inline struct memory_dev_type *mt_find_alloc_memory_type(int adist,
 
 static inline void mt_put_memory_types(struct list_head *memory_types)
 {
+}
+
+static inline int node_to_tier_id(int node)
+{
+	return -1;
+}
+
+static inline int tier_id_to_nodemask(int tier_id, nodemask_t *nodes)
+{
+	return -ENOENT;
 }
 #endif	/* CONFIG_NUMA */
 #endif  /* _LINUX_MEMORY_TIERS_H */
