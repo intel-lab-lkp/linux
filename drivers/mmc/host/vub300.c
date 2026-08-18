@@ -744,7 +744,12 @@ static void vub300_inactivity_timer_expired(struct timer_list *t)
 	struct vub300_mmc_host *vub300 = timer_container_of(vub300, t,
 							    inactivity_timer);
 	if (!vub300->interface) {
-		kref_put(&vub300->kref, vub300_delete);
+		/*
+		 * The interface is already gone; timer_delete_sync()
+		 * in vub300_disconnect() or the probe() error path is
+		 * guaranteed to run after this and stop the timer for
+		 * good, so no kref handling is needed here.
+		 */
 	} else if (vub300->cmd) {
 		mod_timer(&vub300->inactivity_timer, jiffies + HZ);
 	} else {
@@ -1453,7 +1458,12 @@ static int __command_read_data(struct vub300_mmc_host *vub300,
 						  (linear_length / 16384));
 			add_timer(&vub300->sg_transfer_timer);
 			usb_sg_wait(&vub300->sg_request);
-			timer_delete(&vub300->sg_transfer_timer);
+			/*
+			 * Use the sync variant: usb_sg_wait() returning
+			 * does not guarantee vub300_sg_timed_out() has
+			 * finished if it fired concurrently.
+			 */
+			timer_delete_sync(&vub300->sg_transfer_timer);
 			if (vub300->sg_request.status < 0) {
 				cmd->error = vub300->sg_request.status;
 				data->bytes_xfered = 0;
@@ -1570,10 +1580,17 @@ static int __command_write_data(struct vub300_mmc_host *vub300,
 							   linear_length / 16384);
 			add_timer(&vub300->sg_transfer_timer);
 			usb_sg_wait(&vub300->sg_request);
+			/*
+			 * Always delete synchronously and before checking
+			 * cmd->error: usb_sg_wait() returning does not
+			 * guarantee vub300_sg_timed_out() has finished,
+			 * and the old success-only delete leaked an armed
+			 * timer on the error path.
+			 */
+			timer_delete_sync(&vub300->sg_transfer_timer);
 			if (cmd->error) {
 				data->bytes_xfered = 0;
 			} else {
-				timer_delete(&vub300->sg_transfer_timer);
 				if (vub300->sg_request.status < 0) {
 					cmd->error = vub300->sg_request.status;
 					data->bytes_xfered = 0;
@@ -2327,7 +2344,12 @@ static int vub300_probe(struct usb_interface *interface,
 	INIT_WORK(&vub300->deadwork, vub300_deadwork_thread);
 	kref_init(&vub300->kref);
 	timer_setup(&vub300->sg_transfer_timer, vub300_sg_timed_out, 0);
-	kref_get(&vub300->kref);
+	/*
+	 * inactivity_timer does not hold its own kref (see the
+	 * no-op branch in vub300_inactivity_timer_expired()); it
+	 * is stopped via timer_delete_sync() in the teardown
+	 * paths instead of dropping a reference.
+	 */
 	timer_setup(&vub300->inactivity_timer,
 		    vub300_inactivity_timer_expired, 0);
 	vub300->inactivity_timer.expires = jiffies + HZ;
@@ -2350,6 +2372,14 @@ static int vub300_probe(struct usb_interface *interface,
 
 err_stop_io:
 	vub300->interface = NULL;
+	/*
+	 * Stop the timer before the final kref_put(): once
+	 * ->interface is NULL, any concurrently running timer
+	 * instance takes the no-op branch above, so this call
+	 * is guaranteed to return with the timer stopped for
+	 * good.
+	 */
+	timer_delete_sync(&vub300->inactivity_timer);
 	kref_put(&vub300->kref, vub300_delete);
 
 	return retval;
@@ -2384,6 +2414,14 @@ static void vub300_disconnect(struct usb_interface *interface)
 			usb_set_intfdata(interface, NULL);
 			/* prevent more I/O from starting */
 			vub300->interface = NULL;
+			/*
+			 * Stop the timer before the final kref_put(): once
+			 * ->interface is NULL, any concurrently running
+			 * timer instance takes the no-op branch above, so
+			 * this call is guaranteed to return with the timer
+			 * stopped for good.
+			 */
+			timer_delete_sync(&vub300->inactivity_timer);
 			mmc_remove_host(mmc);
 			kref_put(&vub300->kref, vub300_delete);
 			pr_info("USB vub300 remote SDIO host controller[%d]"
