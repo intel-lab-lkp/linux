@@ -314,10 +314,18 @@ static int pptp_rcv_core(struct sock *sk, struct sk_buff *skb)
 	if (!pskb_may_pull(skb, headersize + payload_len))
 		goto drop;
 
+	/* The payload is a PPP frame, so it always carries at least the
+	 * two-byte PPP protocol field. The payload bytes are dereferenced
+	 * below, reject packets too short to hold them.
+	 */
+	if (payload_len < 2)
+		goto drop;
+
 	payload = skb->data + headersize;
 	/* check for expected sequence number */
 	if (seq < opt->seq_recv + 1 || WRAPPED(opt->seq_recv, seq)) {
-		if ((payload[0] == PPP_ALLSTATIONS) && (payload[1] == PPP_UI) &&
+		if (payload_len >= 5 &&
+				(payload[0] == PPP_ALLSTATIONS) && (payload[1] == PPP_UI) &&
 				(PPP_PROTOCOL(payload) == PPP_LCP) &&
 				((payload[4] == PPP_LCP_ECHOREQ) || (payload[4] == PPP_LCP_ECHOREP)))
 			goto allow_packet;
