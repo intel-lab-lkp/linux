@@ -1810,7 +1810,7 @@ unmap_release:
 	}
 
 	END_USE(vq);
-	return -EIO;
+	return -ENOMEM;
 }
 
 static inline int virtqueue_add_packed_in_order(struct vring_virtqueue *vq,
@@ -1966,7 +1966,7 @@ unmap_release:
 	}
 
 	END_USE(vq);
-	return -EIO;
+	return -ENOMEM;
 }
 
 static bool virtqueue_kick_prepare_packed(struct vring_virtqueue *vq)
