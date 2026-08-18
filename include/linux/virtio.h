@@ -312,14 +312,6 @@ void virtqueue_unmap_single_attrs(const struct virtqueue *_vq, dma_addr_t addr,
 				      unsigned long attrs);
 int virtqueue_map_mapping_error(const struct virtqueue *_vq, dma_addr_t addr);
 
-bool virtqueue_map_need_sync(const struct virtqueue *_vq, dma_addr_t addr);
-void virtqueue_map_sync_single_range_for_cpu(const struct virtqueue *_vq, dma_addr_t addr,
-					     unsigned long offset, size_t size,
-					     enum dma_data_direction dir);
-void virtqueue_map_sync_single_range_for_device(const struct virtqueue *_vq, dma_addr_t addr,
-						unsigned long offset, size_t size,
-						enum dma_data_direction dir);
-
 #ifdef CONFIG_VIRTIO_DEBUG
 void virtio_debug_device_init(struct virtio_device *dev);
 void virtio_debug_device_exit(struct virtio_device *dev);

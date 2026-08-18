@@ -36,15 +36,8 @@ enum dma_data_direction {
 
 #define sg_dma_address(sg) (0)
 #define sg_dma_len(sg) (0)
-#define dma_need_sync(v, a) (0)
 #define dma_unmap_single_attrs(d, a, s, r, t) do { \
 	(void)(d); (void)(a); (void)(s); (void)(r); (void)(t); \
-} while (0)
-#define dma_sync_single_range_for_cpu(d, a, o, s, r) do { \
-	(void)(d); (void)(a); (void)(o); (void)(s); (void)(r); \
-} while (0)
-#define dma_sync_single_range_for_device(d, a, o, s, r) do { \
-	(void)(d); (void)(a); (void)(o); (void)(s); (void)(r); \
 } while (0)
 #define dma_max_mapping_size(...) SIZE_MAX
 
