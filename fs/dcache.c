@@ -1046,7 +1046,16 @@ EXPORT_SYMBOL(dput);
 void d_make_discardable(struct dentry *dentry)
 {
 	spin_lock(&dentry->d_lock);
-	WARN_ON(!(dentry->d_flags & DCACHE_PERSISTENT));
+	/*
+	 * DCACHE_PERSISTENT records that d_make_persistent() took a reference.
+	 * If it is clear there is no such reference to return, and dropping one
+	 * anyway underflows d_lockref and frees a dentry someone else still
+	 * holds. Refuse instead, as select_collect_umount() already does.
+	 */
+	if (WARN_ON(!(dentry->d_flags & DCACHE_PERSISTENT))) {
+		spin_unlock(&dentry->d_lock);
+		return;
+	}
 	dentry->d_flags &= ~DCACHE_PERSISTENT;
 	dentry->d_lockref.count--;
 	finish_dput(dentry);
