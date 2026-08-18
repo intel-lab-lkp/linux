@@ -388,13 +388,16 @@ static int isolate_single_pageblock(unsigned long boundary_pfn,
 		}
 
 		if (PageBuddy(page)) {
-			int order = buddy_order(page);
+			unsigned int order;
 
-			/* pageblock_isolate_and_move_free_pages() handled this */
-			VM_WARN_ON_ONCE(pfn + (1 << order) > boundary_pfn);
+			order = buddy_order_unsafe(page);
+			if (likely(order <= MAX_PAGE_ORDER)) {
+				/* pageblock_isolate_and_move_free_pages() handled this */
+				VM_WARN_ON_ONCE(pfn + (1 << order) > boundary_pfn);
 
-			pfn += 1UL << order;
-			continue;
+				pfn += 1UL << order;
+				continue;
+			}
 		}
 
 		/*
