@@ -117,6 +117,9 @@ void *amdxdna_cmd_get_payload(struct amdxdna_gem_obj *abo, u32 *size)
 	struct amdxdna_cmd *cmd = amdxdna_gem_vmap(abo);
 	u32 num_masks, count;
 
+	if (size)
+		*size = 0;
+
 	if (!cmd)
 		return NULL;
 
