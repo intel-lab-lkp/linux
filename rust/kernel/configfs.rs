@@ -173,12 +173,19 @@ impl<Data> Subsystem<Data> {
                 }
             ),
             data <- data,
-        })
-        .pin_chain(|this| {
-            crate::error::to_result(
-                // SAFETY: We initialized `this.subsystem` according to C API contract above.
-                unsafe { bindings::configfs_register_subsystem(this.subsystem.get()) },
-            )
+            _: {
+                let result = crate::error::to_result(
+                    // SAFETY: We initialized `subsystem` according to the C API contract above.
+                    unsafe { bindings::configfs_register_subsystem(subsystem.get()) },
+                );
+                if result.is_err() {
+                    // SAFETY: The mutex was initialized above and registration failed.
+                    unsafe {
+                        bindings::mutex_destroy(&raw mut (*subsystem.get()).su_mutex)
+                    };
+                }
+                result?
+            }
         })
     }
 }
