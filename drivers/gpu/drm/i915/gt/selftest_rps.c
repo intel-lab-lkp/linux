@@ -6,6 +6,8 @@
 #include <linux/pm_qos.h>
 #include <linux/sort.h>
 
+#include <drm/drm_print.h>
+
 #include "gem/i915_gem_internal.h"
 
 #include "i915_reg.h"
@@ -204,15 +206,15 @@ static void show_pstate_limits(struct intel_rps *rps)
 	struct drm_i915_private *i915 = rps_to_i915(rps);
 
 	if (IS_BROXTON(i915)) {
-		pr_info("P_STATE_CAP[%x]: 0x%08x\n",
-			i915_mmio_reg_offset(BXT_RP_STATE_CAP),
-			intel_uncore_read(rps_to_uncore(rps),
-					  BXT_RP_STATE_CAP));
+		drm_info(&i915->drm, "P_STATE_CAP[%x]: 0x%08x\n",
+			 i915_mmio_reg_offset(BXT_RP_STATE_CAP),
+			 intel_uncore_read(rps_to_uncore(rps),
+					   BXT_RP_STATE_CAP));
 	} else if (GRAPHICS_VER(i915) == 9) {
-		pr_info("P_STATE_LIMITS[%x]: 0x%08x\n",
-			i915_mmio_reg_offset(GEN9_RP_STATE_LIMITS),
-			intel_uncore_read(rps_to_uncore(rps),
-					  GEN9_RP_STATE_LIMITS));
+		drm_info(&i915->drm, "P_STATE_LIMITS[%x]: 0x%08x\n",
+			 i915_mmio_reg_offset(GEN9_RP_STATE_LIMITS),
+			 intel_uncore_read(rps_to_uncore(rps),
+					   GEN9_RP_STATE_LIMITS));
 	}
 }
 
@@ -264,8 +266,8 @@ int live_rps_clock_interval(void *arg)
 		i915_request_add(rq);
 
 		if (!igt_wait_for_spinner(&spin, rq)) {
-			pr_err("%s: RPS spinner did not start\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: RPS spinner did not start\n", engine->name);
 			igt_spinner_end(&spin);
 			st_engine_heartbeat_enable(engine);
 			intel_gt_set_wedged(engine->gt);
@@ -290,8 +292,9 @@ int live_rps_clock_interval(void *arg)
 						  GEN6_RP_CUR_UP_EI),
 			     10)) {
 			/* Just skip the test; assume lack of HW support */
-			pr_notice("%s: rps evaluation interval not ticking\n",
-				  engine->name);
+			drm_notice(&engine->i915->drm,
+				   "%s: rps evaluation interval not ticking\n",
+				   engine->name);
 			err = -ENODEV;
 		} else {
 			ktime_t dt_[5];
@@ -330,21 +333,24 @@ int live_rps_clock_interval(void *arg)
 			u32 expected =
 				intel_gt_ns_to_pm_interval(gt, dt);
 
-			pr_info("%s: rps counted %d C0 cycles [%lldns] in %lldns [%d cycles], using GT clock frequency of %uKHz\n",
-				engine->name, cycles, time, dt, expected,
-				gt->clock_frequency / 1000);
+			drm_info(&engine->i915->drm,
+				 "%s: rps counted %d C0 cycles [%lldns] in %lldns [%d cycles], using GT clock frequency of %uKHz\n",
+				 engine->name, cycles, time, dt, expected,
+				 gt->clock_frequency / 1000);
 
 			if (10 * time < 8 * dt ||
 			    8 * time > 10 * dt) {
-				pr_err("%s: rps clock time does not match walltime!\n",
-				       engine->name);
+				drm_err(&engine->i915->drm,
+					"%s: rps clock time does not match walltime!\n",
+					engine->name);
 				err = -EINVAL;
 			}
 
 			if (10 * expected < 8 * cycles ||
 			    8 * expected > 10 * cycles) {
-				pr_err("%s: walltime does not match rps clock ticks!\n",
-				       engine->name);
+				drm_err(&engine->i915->drm,
+					"%s: walltime does not match rps clock ticks!\n",
+					engine->name);
 				err = -EINVAL;
 			}
 		}
@@ -424,8 +430,8 @@ int live_rps_control(void *arg)
 		i915_request_add(rq);
 
 		if (!igt_wait_for_spinner(&spin, rq)) {
-			pr_err("%s: RPS spinner did not start\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: RPS spinner did not start\n", engine->name);
 			igt_spinner_end(&spin);
 			st_engine_heartbeat_enable(engine);
 			intel_gt_set_wedged(engine->gt);
@@ -434,8 +440,9 @@ int live_rps_control(void *arg)
 		}
 
 		if (rps_set_check(rps, rps->min_freq) != rps->min_freq) {
-			pr_err("%s: could not set minimum frequency [%x], only %x!\n",
-			       engine->name, rps->min_freq, read_cagf(rps));
+			drm_err(&engine->i915->drm,
+				"%s: could not set minimum frequency [%x], only %x!\n",
+				engine->name, rps->min_freq, read_cagf(rps));
 			igt_spinner_end(&spin);
 			st_engine_heartbeat_enable(engine);
 			show_pstate_limits(rps);
@@ -451,8 +458,9 @@ int live_rps_control(void *arg)
 		limit = rps_set_check(rps, f);
 
 		if (rps_set_check(rps, rps->min_freq) != rps->min_freq) {
-			pr_err("%s: could not restore minimum frequency [%x], only %x!\n",
-			       engine->name, rps->min_freq, read_cagf(rps));
+			drm_err(&engine->i915->drm,
+				"%s: could not restore minimum frequency [%x], only %x!\n",
+				engine->name, rps->min_freq, read_cagf(rps));
 			igt_spinner_end(&spin);
 			st_engine_heartbeat_enable(engine);
 			show_pstate_limits(rps);
@@ -474,7 +482,8 @@ int live_rps_control(void *arg)
 		igt_spinner_end(&spin);
 		st_engine_heartbeat_enable(engine);
 
-		pr_info("%s: range:[%x:%uMHz, %x:%uMHz] limit:[%x:%uMHz], %x:%x response %lluns:%lluns\n",
+		drm_info(&engine->i915->drm,
+			 "%s: range:[%x:%uMHz, %x:%uMHz] limit:[%x:%uMHz], %x:%x response %lluns:%lluns\n",
 			engine->name,
 			rps->min_freq, intel_gpu_freq(rps, rps->min_freq),
 			rps->max_freq, intel_gpu_freq(rps, rps->max_freq),
@@ -483,8 +492,9 @@ int live_rps_control(void *arg)
 
 		if (limit != rps->max_freq) {
 			if (throttle)
-				pr_warn("%s: GPU throttled with reasons 0x%08x\n",
-					engine->name, throttle);
+				drm_warn(&engine->i915->drm,
+					 "%s: GPU throttled with reasons 0x%08x\n",
+					 engine->name, throttle);
 			show_pstate_limits(rps);
 		}
 
@@ -523,17 +533,16 @@ static void show_pcu_config(struct intel_rps *rps)
 
 	wakeref = intel_runtime_pm_get(rps_to_uncore(rps)->rpm);
 
-	pr_info("%5s  %5s  %5s\n", "GPU", "eCPU", "eRing");
+	drm_info(&i915->drm, "%5s  %5s  %5s\n", "GPU", "eCPU", "eRing");
 	for (gpu_freq = min_gpu_freq; gpu_freq <= max_gpu_freq; gpu_freq++) {
 		int ia_freq = gpu_freq;
 
 		snb_pcode_read(rps_to_gt(rps)->uncore, GEN6_PCODE_READ_MIN_FREQ_TABLE,
 			       &ia_freq, NULL);
 
-		pr_info("%5d  %5d  %5d\n",
-			gpu_freq * 50,
-			((ia_freq >> 0) & 0xff) * 100,
-			((ia_freq >> 8) & 0xff) * 100);
+		drm_info(&i915->drm, "%5d  %5d  %5d\n", gpu_freq * 50,
+			 ((ia_freq >> 0) & 0xff) * 100,
+			 ((ia_freq >> 8) & 0xff) * 100);
 	}
 
 	intel_runtime_pm_put(rps_to_uncore(rps)->rpm, wakeref);
@@ -669,8 +678,8 @@ int live_rps_frequency_cs(void *arg)
 
 		if (wait_for(intel_uncore_read(engine->uncore, CS_GPR(0)),
 			     10)) {
-			pr_err("%s: timed loop did not start\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: timed loop did not start\n", engine->name);
 			goto err_vma;
 		}
 
@@ -680,22 +689,21 @@ int live_rps_frequency_cs(void *arg)
 		max.freq = rps->max_freq;
 		max.count = measure_cs_frequency_at(rps, engine, &max.freq);
 
-		pr_info("%s: min:%lluKHz @ %uMHz, max:%lluKHz @ %uMHz [%d%%]\n",
-			engine->name,
-			min.count, intel_gpu_freq(rps, min.freq),
-			max.count, intel_gpu_freq(rps, max.freq),
-			(int)DIV64_U64_ROUND_CLOSEST(100 * min.freq * max.count,
-						     max.freq * min.count));
+		drm_info(&engine->i915->drm,
+			 "%s: min:%lluKHz @ %uMHz, max:%lluKHz @ %uMHz [%d%%]\n", engine->name,
+			 min.count, intel_gpu_freq(rps, min.freq),
+			 max.count, intel_gpu_freq(rps, max.freq),
+			 (int)DIV64_U64_ROUND_CLOSEST(100 * min.freq * max.count,
+						      max.freq * min.count));
 
 		if (!scaled_within(max.freq * min.count,
 				   min.freq * max.count,
 				   2, 3)) {
 			int f;
 
-			pr_err("%s: CS did not scale with frequency! scaled min:%llu, max:%llu\n",
-			       engine->name,
-			       max.freq * min.count,
-			       min.freq * max.count);
+			drm_err(&engine->i915->drm,
+				"%s: CS did not scale with frequency! scaled min:%llu, max:%llu\n",
+				engine->name, max.freq * min.count, min.freq * max.count);
 			show_pcu_config(rps);
 
 			for (f = min.freq + 1; f <= rps->max_freq; f++) {
@@ -706,11 +714,10 @@ int live_rps_frequency_cs(void *arg)
 				if (act < f)
 					break;
 
-				pr_info("%s: %x:%uMHz: %lluKHz [%d%%]\n",
-					engine->name,
-					act, intel_gpu_freq(rps, act), count,
-					(int)DIV64_U64_ROUND_CLOSEST(100 * min.freq * count,
-								     act * min.count));
+				drm_info(&engine->i915->drm,  "%s: %x:%uMHz: %lluKHz [%d%%]\n",
+					 engine->name, act, intel_gpu_freq(rps, act), count,
+					 (int)DIV64_U64_ROUND_CLOSEST(100 * min.freq * count,
+								      act * min.count));
 
 				f = act; /* may skip ahead [pcu granularity] */
 			}
@@ -807,8 +814,8 @@ int live_rps_frequency_srm(void *arg)
 			goto err_vma;
 
 		if (wait_for(READ_ONCE(*cntr), 10)) {
-			pr_err("%s: timed loop did not start\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: timed loop did not start\n", engine->name);
 			goto err_vma;
 		}
 
@@ -818,7 +825,8 @@ int live_rps_frequency_srm(void *arg)
 		max.freq = rps->max_freq;
 		max.count = measure_frequency_at(rps, cntr, &max.freq);
 
-		pr_info("%s: min:%lluKHz @ %uMHz, max:%lluKHz @ %uMHz [%d%%]\n",
+		drm_info(&engine->i915->drm,
+			 "%s: min:%lluKHz @ %uMHz, max:%lluKHz @ %uMHz [%d%%]\n",
 			engine->name,
 			min.count, intel_gpu_freq(rps, min.freq),
 			max.count, intel_gpu_freq(rps, max.freq),
@@ -830,10 +838,9 @@ int live_rps_frequency_srm(void *arg)
 				   1, 2)) {
 			int f;
 
-			pr_err("%s: CS did not scale with frequency! scaled min:%llu, max:%llu\n",
-			       engine->name,
-			       max.freq * min.count,
-			       min.freq * max.count);
+			drm_err(&engine->i915->drm,
+				"%s: CS did not scale with frequency! scaled min:%llu, max:%llu\n",
+				engine->name, max.freq * min.count, min.freq * max.count);
 			show_pcu_config(rps);
 
 			for (f = min.freq + 1; f <= rps->max_freq; f++) {
@@ -844,11 +851,10 @@ int live_rps_frequency_srm(void *arg)
 				if (act < f)
 					break;
 
-				pr_info("%s: %x:%uMHz: %lluKHz [%d%%]\n",
-					engine->name,
-					act, intel_gpu_freq(rps, act), count,
-					(int)DIV64_U64_ROUND_CLOSEST(100 * min.freq * count,
-								     act * min.count));
+				drm_info(&engine->i915->drm, "%s: %x:%uMHz: %lluKHz [%d%%]\n",
+					 engine->name, act, intel_gpu_freq(rps, act), count,
+					 (int)DIV64_U64_ROUND_CLOSEST(100 * min.freq * count,
+								      act * min.count));
 
 				f = act; /* may skip ahead [pcu granularity] */
 			}
@@ -915,31 +921,31 @@ static int __rps_up_interrupt(struct intel_rps *rps,
 	i915_request_add(rq);
 
 	if (!igt_wait_for_spinner(spin, rq)) {
-		pr_err("%s: RPS spinner did not start\n",
-		       engine->name);
+		drm_err(&engine->i915->drm,
+			"%s: RPS spinner did not start\n", engine->name);
 		i915_request_put(rq);
 		intel_gt_set_wedged(engine->gt);
 		return -EIO;
 	}
 
 	if (!intel_rps_is_active(rps)) {
-		pr_err("%s: RPS not enabled on starting spinner\n",
-		       engine->name);
+		drm_err(&engine->i915->drm,
+			"%s: RPS not enabled on starting spinner\n", engine->name);
 		igt_spinner_end(spin);
 		i915_request_put(rq);
 		return -EINVAL;
 	}
 
 	if (!(rps->pm_events & GEN6_PM_RP_UP_THRESHOLD)) {
-		pr_err("%s: RPS did not register UP interrupt\n",
-		       engine->name);
+		drm_err(&engine->i915->drm,
+			"%s: RPS did not register UP interrupt\n", engine->name);
 		i915_request_put(rq);
 		return -EINVAL;
 	}
 
 	if (rps->last_freq != rps->min_freq) {
-		pr_err("%s: RPS did not program min frequency\n",
-		       engine->name);
+		drm_err(&engine->i915->drm,
+			"%s: RPS did not program min frequency\n", engine->name);
 		i915_request_put(rq);
 		return -EINVAL;
 	}
@@ -955,17 +961,19 @@ static int __rps_up_interrupt(struct intel_rps *rps,
 	i915_request_put(rq);
 
 	if (rps->cur_freq != rps->min_freq) {
-		pr_err("%s: Frequency unexpectedly changed [up], now %d!\n",
-		       engine->name, intel_rps_read_actual_frequency(rps));
+		drm_err(&engine->i915->drm,
+			"%s: Frequency unexpectedly changed [up], now %d!\n",
+			engine->name, intel_rps_read_actual_frequency(rps));
 		return -EINVAL;
 	}
 
 	if (!(rps->pm_iir & GEN6_PM_RP_UP_THRESHOLD)) {
-		pr_err("%s: UP interrupt not recorded for spinner, pm_iir:%x, prev_up:%x, up_threshold:%x, up_ei:%x\n",
-		       engine->name, rps->pm_iir,
-		       intel_uncore_read(uncore, GEN6_RP_PREV_UP),
-		       intel_uncore_read(uncore, GEN6_RP_UP_THRESHOLD),
-		       intel_uncore_read(uncore, GEN6_RP_UP_EI));
+		drm_err(&engine->i915->drm,
+			"%s: UP interrupt not recorded for spinner, pm_iir:%x, prev_up:%x, up_threshold:%x, up_ei:%x\n",
+			engine->name, rps->pm_iir,
+			intel_uncore_read(uncore, GEN6_RP_PREV_UP),
+			intel_uncore_read(uncore, GEN6_RP_UP_THRESHOLD),
+			intel_uncore_read(uncore, GEN6_RP_UP_EI));
 		return -EINVAL;
 	}
 
@@ -981,14 +989,14 @@ static int __rps_down_interrupt(struct intel_rps *rps,
 	rps_set_check(rps, rps->max_freq);
 
 	if (!(rps->pm_events & GEN6_PM_RP_DOWN_THRESHOLD)) {
-		pr_err("%s: RPS did not register DOWN interrupt\n",
-		       engine->name);
+		drm_err(&engine->i915->drm,
+			"%s: RPS did not register DOWN interrupt\n", engine->name);
 		return -EINVAL;
 	}
 
 	if (rps->last_freq != rps->max_freq) {
-		pr_err("%s: RPS did not program max frequency\n",
-		       engine->name);
+		drm_err(&engine->i915->drm,
+			"%s: RPS did not program max frequency\n", engine->name);
 		return -EINVAL;
 	}
 
@@ -999,21 +1007,22 @@ static int __rps_down_interrupt(struct intel_rps *rps,
 	sleep_for_ei(rps, timeout);
 
 	if (rps->cur_freq != rps->max_freq) {
-		pr_err("%s: Frequency unexpectedly changed [down], now %d!\n",
-		       engine->name,
-		       intel_rps_read_actual_frequency(rps));
+		drm_err(&engine->i915->drm,
+			"%s: Frequency unexpectedly changed [down], now %d!\n",
+			engine->name, intel_rps_read_actual_frequency(rps));
 		return -EINVAL;
 	}
 
 	if (!(rps->pm_iir & (GEN6_PM_RP_DOWN_THRESHOLD | GEN6_PM_RP_DOWN_TIMEOUT))) {
-		pr_err("%s: DOWN interrupt not recorded for idle, pm_iir:%x, prev_down:%x, down_threshold:%x, down_ei:%x [prev_up:%x, up_threshold:%x, up_ei:%x]\n",
-		       engine->name, rps->pm_iir,
-		       intel_uncore_read(uncore, GEN6_RP_PREV_DOWN),
-		       intel_uncore_read(uncore, GEN6_RP_DOWN_THRESHOLD),
-		       intel_uncore_read(uncore, GEN6_RP_DOWN_EI),
-		       intel_uncore_read(uncore, GEN6_RP_PREV_UP),
-		       intel_uncore_read(uncore, GEN6_RP_UP_THRESHOLD),
-		       intel_uncore_read(uncore, GEN6_RP_UP_EI));
+		drm_err(&engine->i915->drm,
+			"%s: DOWN interrupt not recorded for idle, pm_iir:%x, prev_down:%x, down_threshold:%x, down_ei:%x [prev_up:%x, up_threshold:%x, up_ei:%x]\n",
+			engine->name, rps->pm_iir,
+			intel_uncore_read(uncore, GEN6_RP_PREV_DOWN),
+			intel_uncore_read(uncore, GEN6_RP_DOWN_THRESHOLD),
+			intel_uncore_read(uncore, GEN6_RP_DOWN_EI),
+			intel_uncore_read(uncore, GEN6_RP_PREV_UP),
+			intel_uncore_read(uncore, GEN6_RP_UP_THRESHOLD),
+			intel_uncore_read(uncore, GEN6_RP_UP_EI));
 		return -EINVAL;
 	}
 
@@ -1043,7 +1052,8 @@ int live_rps_interrupt(void *arg)
 	with_intel_gt_pm(gt, wakeref)
 		pm_events = rps->pm_events;
 	if (!pm_events) {
-		pr_err("No RPS PM events registered, but RPS is enabled?\n");
+		drm_err(&gt->i915->drm,
+			"No RPS PM events registered, but RPS is enabled?\n");
 		return -ENODEV;
 	}
 
@@ -1186,8 +1196,8 @@ int live_rps_power(void *arg)
 		i915_request_add(rq);
 
 		if (!igt_wait_for_spinner(&spin, rq)) {
-			pr_err("%s: RPS spinner did not start\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: RPS spinner did not start\n", engine->name);
 			igt_spinner_end(&spin);
 			st_engine_heartbeat_enable(engine);
 			intel_gt_set_wedged(engine->gt);
@@ -1207,29 +1217,32 @@ int live_rps_power(void *arg)
 		igt_spinner_end(&spin);
 		st_engine_heartbeat_enable(engine);
 
-		pr_info("%s: min:%llumW @ %uMHz, max:%llumW @ %uMHz\n",
-			engine->name,
-			min.power, intel_gpu_freq(rps, min.freq),
-			max.power, intel_gpu_freq(rps, max.freq));
+		drm_info(&engine->i915->drm, "%s: min:%llumW @ %uMHz, max:%llumW @ %uMHz\n",
+			 engine->name, min.power, intel_gpu_freq(rps, min.freq),
+			 max.power, intel_gpu_freq(rps, max.freq));
 
 		if (10 * min.freq >= 9 * max.freq) {
-			pr_notice("Could not control frequency, ran at [%d:%uMHz, %d:%uMhz]\n",
-				  min.freq, intel_gpu_freq(rps, min.freq),
-				  max.freq, intel_gpu_freq(rps, max.freq));
+			drm_notice(&engine->i915->drm,
+				   "Could not control frequency, ran at [%d:%uMHz, %d:%uMhz]\n",
+				   min.freq, intel_gpu_freq(rps, min.freq),
+				   max.freq, intel_gpu_freq(rps, max.freq));
 
 			if (throttle)
-				pr_warn("%s: GPU throttled with reasons 0x%08x\n",
-					engine->name, throttle);
+				drm_warn(&engine->i915->drm,
+					 "%s: GPU throttled with reasons 0x%08x\n",
+					 engine->name, throttle);
 			continue;
 		}
 
 		if (11 * min.power > 10 * max.power) {
-			pr_err("%s: did not conserve power when setting lower frequency!\n",
-			       engine->name);
+			drm_err(&engine->i915->drm,
+				"%s: did not conserve power when setting lower frequency!\n",
+				engine->name);
 
 			if (throttle)
-				pr_warn("%s: GPU throttled with reasons 0x%08x\n",
-					engine->name, throttle);
+				drm_warn(&engine->i915->drm,
+					 "%s: GPU throttled with reasons 0x%08x\n",
+					 engine->name, throttle);
 
 			err = -EINVAL;
 			break;
@@ -1273,9 +1286,9 @@ int live_rps_dynamic(void *arg)
 		return -ENOMEM;
 
 	if (intel_rps_has_interrupts(rps))
-		pr_info("RPS has interrupt support\n");
+		drm_info(&gt->i915->drm, "RPS has interrupt support\n");
 	if (intel_rps_uses_timer(rps))
-		pr_info("RPS has timer support\n");
+		drm_info(&gt->i915->drm, "RPS has timer support\n");
 
 	for_each_engine(engine, gt, id) {
 		struct i915_request *rq;
@@ -1318,19 +1331,18 @@ int live_rps_dynamic(void *arg)
 		min.freq = wait_for_freq(rps, rps->min_freq, 2000);
 		min.dt = ktime_sub(ktime_get(), min.dt);
 
-		pr_info("%s: dynamically reclocked to %u:%uMHz while busy in %lluns, and %u:%uMHz while idle in %lluns\n",
-			engine->name,
-			max.freq, intel_gpu_freq(rps, max.freq),
-			ktime_to_ns(max.dt),
-			min.freq, intel_gpu_freq(rps, min.freq),
-			ktime_to_ns(min.dt));
+		drm_info(&engine->i915->drm,
+			 "%s: dynamically reclocked to %u:%uMHz while busy in %lluns, and %u:%uMHz while idle in %lluns\n",
+			 engine->name, max.freq, intel_gpu_freq(rps, max.freq), ktime_to_ns(max.dt),
+			 min.freq, intel_gpu_freq(rps, min.freq), ktime_to_ns(min.dt));
 		if (min.freq >= max.freq) {
-			pr_err("%s: dynamic reclocking of spinner failed\n!",
-			       engine->name);
+			drm_err(&engine->i915->drm, "%s: dynamic reclocking of spinner failed\n!",
+				engine->name);
 
 			if (throttle)
-				pr_warn("%s: GPU throttled with reasons 0x%08x\n",
-					engine->name, throttle);
+				drm_warn(&engine->i915->drm,
+					 "%s: GPU throttled with reasons 0x%08x\n",
+					 engine->name, throttle);
 
 			err = -EINVAL;
 		}
