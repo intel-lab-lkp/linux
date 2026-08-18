@@ -656,7 +656,6 @@ static int f_hidg_get_report(struct file *file, struct usb_hidg_report __user *b
 
 	if (copy_from_user(&entry->report_data, buffer,
 				sizeof(struct usb_hidg_report))) {
-		ERROR(cdev, "copy_from_user error\n");
 		kfree(entry);
 		return -EINVAL;
 	}
