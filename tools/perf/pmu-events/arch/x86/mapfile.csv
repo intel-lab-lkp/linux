@@ -46,3 +46,6 @@ AuthenticAMD-25-([245][[:xdigit:]]|[[:xdigit:]]),v1,amdzen3,core
 AuthenticAMD-25-[[:xdigit:]]+,v1,amdzen4,core
 AuthenticAMD-26-([12467][[:xdigit:]]|[[:xdigit:]]),v1,amdzen5,core
 AuthenticAMD-26-[[:xdigit:]]+,v1,amdzen6,core
+HygonGenuine-24-[0123],v1,hygonm1,core
+HygonGenuine-24-[45],v1,hygonm4,core
+HygonGenuine-24-(1[012345678]|[6789ABCDEF]),v1,hygonm6,core
