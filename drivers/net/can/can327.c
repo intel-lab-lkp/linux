@@ -395,6 +395,7 @@ static int can327_parse_frame(struct can327 *elm, size_t len)
 	struct sk_buff *skb;
 	int hexlen;
 	int datastart;
+	int dlc;
 	int i;
 
 	lockdep_assert_held(&elm->lock);
@@ -460,7 +461,13 @@ static int can327_parse_frame(struct can327 *elm, size_t len)
 	 */
 
 	/* Read CAN data length */
-	frame->len = (hex_to_bin(elm->rxbuf[datastart - 2]) << 0);
+	dlc = hex_to_bin(elm->rxbuf[datastart - 2]);
+	if (dlc < 0 || dlc > CAN_MAX_DLEN) {
+		/* Not a hex digit, or more than CAN_MAX_DLEN bytes. */
+		kfree_skb(skb);
+		return -ENODATA;
+	}
+	frame->len = dlc;
 
 	/* Read CAN ID */
 	if (frame->can_id & CAN_EFF_FLAG) {
