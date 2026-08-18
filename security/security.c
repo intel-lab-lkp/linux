@@ -596,6 +596,21 @@ int security_ptrace_traceme(struct task_struct *parent)
 }
 
 /**
+ * security_introspect_mem_foll_force() - Check if introspective FOLL_FORCE is allowed
+ * @subject: credentials of the process accessing its own memory
+ *
+ * Check if FOLL_FORCE is allowed for a process accessing its own memory, which
+ * bypasses the security_ptrace_access_check() hook.
+ * This is only used when the system is configured with PROC_MEM_FORCE_ALWAYS.
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_introspect_mem_foll_force(const struct cred *subject)
+{
+	return call_int_hook(introspect_mem_foll_force, subject);
+}
+
+/**
  * security_capget() - Get the capability sets for a process
  * @target: target process
  * @effective: effective capability set

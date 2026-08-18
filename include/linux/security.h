@@ -338,6 +338,7 @@ int security_binder_transfer_file(const struct cred *from,
 				  const struct cred *to, const struct file *file);
 int security_ptrace_access_check(struct task_struct *child, unsigned int mode);
 int security_ptrace_traceme(struct task_struct *parent);
+int security_introspect_mem_foll_force(const struct cred *subject);
 int security_capget(const struct task_struct *target,
 		    kernel_cap_t *effective,
 		    kernel_cap_t *inheritable,
@@ -674,6 +675,11 @@ static inline int security_ptrace_access_check(struct task_struct *child,
 static inline int security_ptrace_traceme(struct task_struct *parent)
 {
 	return cap_ptrace_traceme(parent);
+}
+
+static inline int security_introspect_mem_foll_force(const struct cred *subject)
+{
+	return 0;
 }
 
 static inline int security_capget(const struct task_struct *target,
