@@ -1117,15 +1117,25 @@ enum dc_status dpcd_set_link_settings(
 				link->dpcd_caps.max_ln_count.bits.POST_LT_ADJ_REQ_SUPPORTED;
 	}
 
+	/* Bail out on the first DPCD write failure so callers can react and
+	 * subsequent operations (e.g. PSR setup) do not keep poking an
+	 * unhealthy AUX channel. Without this, a transient AUX/HPD glitch
+	 * during resume leads to a cascade of DPCD errors and ultimately a
+	 * WARN at dce_aux_transfer_raw() because AUX_SW_DONE never asserts.
+	 */
 	status = core_link_write_dpcd(link, DP_DOWNSPREAD_CTRL,
-		&downspread.raw, sizeof(downspread));
-	if (status != DC_OK)
+				      &downspread.raw, sizeof(downspread));
+	if (status != DC_OK) {
 		DC_LOG_ERROR("%s:%d: core_link_write_dpcd (DP_DOWNSPREAD_CTRL) failed\n", __func__, __LINE__);
+		return status;
+	}
 
 	status = core_link_write_dpcd(link, DP_LANE_COUNT_SET,
-		&lane_count_set.raw, 1);
-	if (status != DC_OK)
+				      &lane_count_set.raw, 1);
+	if (status != DC_OK) {
 		DC_LOG_ERROR("%s:%d: core_link_write_dpcd (DP_LANE_COUNT_SET) failed\n", __func__, __LINE__);
+		return status;
+	}
 
 	if (link->dpcd_caps.dpcd_rev.raw >= DPCD_REV_13 &&
 			lt_settings->link_settings.use_link_rate_set == true) {
@@ -1141,19 +1151,25 @@ enum dc_status dpcd_set_link_settings(
 					supported_link_rates, sizeof(supported_link_rates));
 		}
 		status = core_link_write_dpcd(link, DP_LINK_BW_SET, &rate, 1);
-		if (status != DC_OK)
+		if (status != DC_OK) {
 			DC_LOG_ERROR("%s:%d: core_link_write_dpcd (DP_LINK_BW_SET) failed\n", __func__, __LINE__);
+			return status;
+		}
 
 		status = core_link_write_dpcd(link, DP_LINK_RATE_SET,
-				&lt_settings->link_settings.link_rate_set, 1);
-		if (status != DC_OK)
+					      &lt_settings->link_settings.link_rate_set, 1);
+		if (status != DC_OK) {
 			DC_LOG_ERROR("%s:%d: core_link_write_dpcd (DP_LINK_RATE_SET) failed\n", __func__, __LINE__);
+			return status;
+		}
 	} else {
 		rate = get_dpcd_link_rate(&lt_settings->link_settings);
 
 		status = core_link_write_dpcd(link, DP_LINK_BW_SET, &rate, 1);
-		if (status != DC_OK)
+		if (status != DC_OK) {
 			DC_LOG_ERROR("%s:%d: core_link_write_dpcd (DP_LINK_BW_SET) failed\n", __func__, __LINE__);
+			return status;
+		}
 	}
 
 	if (rate) {
