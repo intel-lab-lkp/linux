@@ -462,7 +462,7 @@ impl<T: Operations> VTable<T> {
         // `uctx_size`.
         unsafe {
             device.with_registration_data(|device, reg_data| {
-                match T::open(device, reg_data).__pinned_init(uctx_ptr) {
+                match pin_init::raw_try_init(uctx_ptr, T::open(device, reg_data)) {
                     Ok(()) => 0,
                     Err(e) => e.to_errno(),
                 }
