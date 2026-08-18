@@ -137,7 +137,6 @@ struct srp_request {
 	struct srp_direct_buf  *indirect_desc;
 	dma_addr_t		indirect_dma_addr;
 	short			nmdesc;
-	struct ib_cqe		reg_cqe;
 };
 
 /**
@@ -145,6 +144,10 @@ struct srp_request {
  * @comp_vector: Completion vector used by this RDMA channel.
  * @max_it_iu_len: Maximum initiator-to-target information unit length.
  * @max_ti_iu_len: Maximum target-to-initiator information unit length.
+ * @reg_cqe: Completion context for fast registration work requests.
+ * @inv_cqe: Completion context for invalidation work requests.  These are
+ *	per channel because their completions do not identify the request and
+ *	because the request pool can be freed before the send queue is drained.
  */
 struct srp_rdma_ch {
 	/* These are RW in the hot path, and commonly used together */
@@ -169,6 +172,9 @@ struct srp_rdma_ch {
 
 	struct completion	done;
 	int			status;
+
+	struct ib_cqe		reg_cqe;
+	struct ib_cqe		inv_cqe;
 
 	union {
 		struct ib_cm {
