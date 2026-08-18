@@ -570,14 +570,18 @@ static int mxpcie8250_probe(struct pci_dev *pdev, const struct pci_device_id *id
 		dev_dbg(dev, "Setup PCI port: port %lx, irq %d, type %d\n",
 			up.port.iobase, up.port.irq, up.port.iotype);
 
-		priv->port[i].line = serial8250_register_8250_port(&up);
-		if (priv->port[i].line < 0) {
+		ret = serial8250_register_8250_port(&up);
+		if (ret < 0) {
 			dev_err(dev,
 				"Couldn't register serial port %lx, irq %d, type %d, error %d\n",
 				up.port.iobase, up.port.irq,
-				up.port.iotype, priv->port[i].line);
-			break;
+				up.port.iotype, ret);
+			while (i--)
+				serial8250_unregister_port(priv->port[i].line);
+
+			return ret;
 		}
+		priv->port[i].line = ret;
 		priv->port[i].rx_trig_level = MOXA_PUART_RX_TRIG_DEFAULT;
 	}
 
