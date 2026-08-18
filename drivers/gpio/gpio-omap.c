@@ -1461,7 +1461,12 @@ static int omap_gpio_probe(struct platform_device *pdev)
 				"Could not get gpio dbck. Disable debounce\n");
 			bank->dbck_flag = false;
 		} else {
-			clk_prepare(bank->dbck);
+			ret = clk_prepare(bank->dbck);
+			if (ret) {
+				dev_err(dev, "Could not prepare gpio dbck\n");
+				bank->dbck_flag = false;
+				return ret;
+			}
 		}
 	}
 
