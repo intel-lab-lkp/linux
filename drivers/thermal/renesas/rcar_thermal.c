@@ -414,7 +414,12 @@ static int rcar_thermal_probe(struct platform_device *pdev)
 	common->dev = dev;
 
 	pm_runtime_enable(dev);
-	pm_runtime_get_sync(dev);
+	ret = pm_runtime_get_sync(dev);
+	if (ret < 0) {
+		pm_runtime_put_noidle(dev);
+		pm_runtime_disable(dev);
+		return ret;
+	}
 
 	for (i = 0; i < chip->nirqs; i++) {
 		int irq;
