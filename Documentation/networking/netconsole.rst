@@ -177,6 +177,49 @@ You can modify these targets in runtime by creating the following targets::
  cat cmdline1/remote_ip
  10.0.0.3
 
+Rate limiting
+-------------
+
+Netconsole hands every console message to every enabled target, so a host that
+logs continuously can saturate the receiving agent. Each target carries a token
+bucket that drops messages once the configured rate is exceeded, controlled by
+two files in the target directory:
+
+        ===================== ================================================
+        ratelimit_interval_ms Length of the accounting interval, in
+                              milliseconds. Zero, the default, sends
+                              everything.
+        ratelimit_burst       Messages allowed per interval. Defaults to
+                              10; zero drops every message.
+        ===================== ================================================
+
+Unlike most target parameters, both knobs can be written while the target is
+enabled, which is when a flooding target most likely needs them.
+
+The limit is applied per message, not per packet, so a message big enough to be
+split into several `ncfrag` packets is either sent whole or not at all.
+
+Crash output bypasses the bucket. While an oops, BUG() or panic() is in
+progress every message is sent, whatever the limit says, so a small burst
+cannot cost you part of a crash dump.
+
+A drop leaves nothing on the wire, so the receiver is told what it missed as
+soon as a message gets through again::
+
+  netconsole: 45 messages dropped by rate limit
+
+The notice only travels with the next message the bucket allows. A host that
+goes quiet right after being limited reports the drops later, when it logs
+again, and a target with a `ratelimit_burst` of zero never reports them.
+
+netconsole generates the notice itself instead of logging it, so on an
+extended target the record carries a sequence number of zero.
+
+Capping a target at 500 messages a minute::
+
+  echo 60000 > ratelimit_interval_ms
+  echo 500 > ratelimit_burst
+
 Append User Data
 ----------------
 
