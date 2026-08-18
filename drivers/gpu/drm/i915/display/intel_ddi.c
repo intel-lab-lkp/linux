@@ -3893,7 +3893,8 @@ static void intel_ddi_set_idle_link_train(struct intel_dp *intel_dp,
 static bool intel_ddi_is_audio_enabled(struct intel_display *display,
 				       enum transcoder cpu_transcoder)
 {
-	if (cpu_transcoder == TRANSCODER_EDP)
+	if (cpu_transcoder == TRANSCODER_EDP ||
+	    cpu_transcoder == INVALID_TRANSCODER)
 		return false;
 
 	if (!intel_display_power_is_enabled(display, POWER_DOMAIN_AUDIO_MMIO))
@@ -4674,10 +4675,26 @@ static int intel_ddi_compute_config_late(struct intel_atomic_state *state,
 	 */
 	if (port_sync_transcoders & BIT(TRANSCODER_EDP))
 		crtc_state->master_transcoder = TRANSCODER_EDP;
+	else if (!port_sync_transcoders)
+		crtc_state->master_transcoder = INVALID_TRANSCODER;
 	else
 		crtc_state->master_transcoder = ffs(port_sync_transcoders) - 1;
 
 	if (crtc_state->master_transcoder == crtc_state->cpu_transcoder) {
+		if (crtc_state->cpu_transcoder == INVALID_TRANSCODER) {
+			/*
+			 * Since master_transcoder == cpu_transcoder,
+			 * master_transcoder == INVALID_TRANSCODER, so we don't need to do
+			 * the later assignment.  Also, the intended behavior in this case
+			 * is to just set the sync_mode_slaves_mask to zero, as
+			 * port_sync_transcoders must be zero here.  But performing a bit
+			 * shift (via REG_BIT) by a negative value results in undefined
+			 * behavior which should always be avoided, so just do the
+			 * assignment to zero directly and return.
+			 */
+			crtc_state->sync_mode_slaves_mask = 0;
+			return 0;
+		}
 		crtc_state->master_transcoder = INVALID_TRANSCODER;
 		crtc_state->sync_mode_slaves_mask = port_sync_transcoders &
 			~REG_BIT(crtc_state->cpu_transcoder);
