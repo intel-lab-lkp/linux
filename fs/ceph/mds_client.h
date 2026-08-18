@@ -441,7 +441,7 @@ struct ceph_mds_request {
 struct ceph_pool_perm {
 	struct rb_node node;
 	int perm;
-	s64 pool;
+	u32 pool;
 	size_t pool_ns_len;
 	char pool_ns[];
 };
