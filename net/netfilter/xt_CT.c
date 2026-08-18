@@ -195,7 +195,8 @@ static int xt_ct_tg_check(const struct xt_tgchk_param *par,
 		goto err3;
 	}
 
-	if (info->helper[0]) {
+	if (info->helper[0] &&
+	    strnlen(info->helper, sizeof(info->helper)) < sizeof(info->helper)) {
 		if (strnlen(info->helper, sizeof(info->helper)) == sizeof(info->helper)) {
 			ret = -ENAMETOOLONG;
 			goto err3;
@@ -206,7 +207,8 @@ static int xt_ct_tg_check(const struct xt_tgchk_param *par,
 			goto err3;
 	}
 
-	if (info->timeout[0]) {
+	if (info->timeout[0] &&
+	    strnlen(info->timeout, sizeof(info->timeout)) < sizeof(info->timeout)) {
 		if (strnlen(info->timeout, sizeof(info->timeout)) == sizeof(info->timeout)) {
 			ret = -ENAMETOOLONG;
 			goto err4;
