@@ -744,8 +744,8 @@ static int tsi148_alloc_resource(struct vme_master_resource *image,
 		}
 	}
 
-	sprintf((char *)image->bus_resource.name, "%s.%d", tsi148_bridge->name,
-		image->number);
+	snprintf((char *)image->bus_resource.name, VMENAMSIZ + 3, "%s.%d", tsi148_bridge->name,
+		 image->number);
 
 	image->bus_resource.start = 0;
 	image->bus_resource.end = (unsigned long)size;
