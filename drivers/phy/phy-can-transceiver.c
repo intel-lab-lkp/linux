@@ -96,6 +96,10 @@ static const struct can_transceiver_data tja1057_drvdata = {
 	.flags = CAN_TRANSCEIVER_SILENT_PRESENT,
 };
 
+static const struct can_transceiver_data mcp2542_drvdata = {
+	.flags = CAN_TRANSCEIVER_STB_PRESENT,
+};
+
 static struct phy *can_transceiver_phy_xlate(struct device *dev,
 					     const struct of_phandle_args *args)
 {
@@ -237,6 +241,10 @@ static const struct of_device_id can_transceiver_phy_ids[] = {
 	{
 		.compatible = "nxp,tjr1443",
 		.data = &tcan1043_drvdata
+	},
+	{
+		.compatible = "microchip,mcp2542",
+		.data = &mcp2542_drvdata
 	},
 	{ }
 };
