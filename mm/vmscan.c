@@ -1819,7 +1819,7 @@ bool folio_isolate_lru(struct folio *folio)
  * the LRU list will go small and be scanned faster than necessary, leading to
  * unnecessary swapping, thrashing and OOM.
  */
-static bool too_many_isolated(struct pglist_data *pgdat, int file,
+static bool too_many_isolated(struct pglist_data *pgdat, bool file,
 		struct scan_control *sc)
 {
 	unsigned long inactive, isolated;
@@ -1854,6 +1854,37 @@ static bool too_many_isolated(struct pglist_data *pgdat, int file,
 		wake_throttle_isolated(pgdat);
 
 	return too_many;
+}
+
+/*
+ * Throttle reclaim if too many isolated folios are piling up. If this makes
+ * no progress, the caller is probably looping on unevictable folios, so give
+ * up. Returns true to tell the caller to stop reclaiming, and sets @fatal
+ * if the task received a fatal signal while waiting, so that the caller can
+ * bail out faster.
+ */
+static bool throttle_is_throttled(struct pglist_data *pgdat, bool file,
+				  struct scan_control *sc, bool *fatal)
+{
+	bool stalled = false;
+
+	*fatal = false;
+	while (unlikely(too_many_isolated(pgdat, file, sc))) {
+		if (stalled)
+			return true;
+
+		/* wait a bit for the reclaimer. */
+		stalled = true;
+		reclaim_throttle(pgdat, VMSCAN_THROTTLE_ISOLATED);
+
+		/* We are about to die and free our memory. Return now. */
+		if (fatal_signal_pending(current)) {
+			*fatal = true;
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /*
@@ -1992,19 +2023,14 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	bool file = is_file_lru(lru);
 	enum node_stat_item item;
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
-	bool stalled = false;
+	bool fatal;
 
-	while (unlikely(too_many_isolated(pgdat, file, sc))) {
-		if (stalled)
-			return 0;
-
-		/* wait a bit for the reclaimer. */
-		stalled = true;
-		reclaim_throttle(pgdat, VMSCAN_THROTTLE_ISOLATED);
-
+	if (throttle_is_throttled(pgdat, file, sc, &fatal)) {
 		/* We are about to die and free our memory. Return now. */
-		if (fatal_signal_pending(current))
+		if (fatal)
 			return SWAP_CLUSTER_MAX;
+
+		return 0;
 	}
 
 	lru_add_drain();
@@ -4877,12 +4903,33 @@ static int evict_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	enum node_stat_item item;
 	struct reclaim_stat stat;
 	struct lru_gen_mm_walk *walk;
-	int scanned, reclaimed;
+	int i, scanned, reclaimed;
 	int isolated = 0, nr_isolated = 0, type, type_scanned;
 	unsigned long total_reclaimed = 0;
 	bool skip_retry = false;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
+	bool fatal;
+
+	/*
+	 * The type to isolate is unknown until isolation, and
+	 * isolate_folios() may fall back to the other type. Throttle if
+	 * any evictable type has too many isolated folios.
+	 */
+	for_each_evictable_type(i, swappiness) {
+		if (throttle_is_throttled(pgdat, i, sc, &fatal)) {
+			/*
+			 * We are about to die and free our memory. Like the
+			 * legacy path, pretend some pages were reclaimed so
+			 * reclaim unwinds quickly instead of looping back
+			 * into the throttle.
+			 */
+			if (fatal)
+				sc->nr_reclaimed += SWAP_CLUSTER_MAX;
+
+			return 0;
+		}
+	}
 
 	lruvec_lock_irq(lruvec);
 
