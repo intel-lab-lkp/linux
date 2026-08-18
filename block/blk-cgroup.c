@@ -136,6 +136,8 @@ static void blkg_free_workfn(struct work_struct *work)
 		blkg_put(blkg->parent);
 	spin_lock_irq(&q->queue_lock);
 	list_del_init(&blkg->q_node);
+	if (list_empty(&q->blkg_list))
+		wake_up_var(&q->blkg_list);
 	spin_unlock_irq(&q->queue_lock);
 	mutex_unlock(&q->blkcg_mutex);
 
@@ -612,8 +614,6 @@ restart:
 	q->root_blkg = NULL;
 	spin_unlock_irq(&q->queue_lock);
 	mutex_unlock(&q->blkcg_mutex);
-
-	wake_up_var(&q->root_blkg);
 }
 
 static void blkg_iostat_set(struct blkg_iostat *dst, struct blkg_iostat *src)
@@ -1472,14 +1472,10 @@ int blkcg_init_disk(struct gendisk *disk)
 	/*
 	 * If the queue is shared across disk rebind (e.g., SCSI), the
 	 * previous disk's blkcg state is cleaned up asynchronously via
-	 * disk_release() -> blkcg_exit_disk(). Wait for that cleanup to
-	 * finish (indicated by root_blkg becoming NULL) before setting up
-	 * new blkcg state. Otherwise, we may overwrite q->root_blkg while
-	 * the old one is still alive, and radix_tree_insert() in
-	 * blkg_create() will fail with -EEXIST because the old entries
-	 * still occupy the same queue id slot in blkcg->blkg_tree.
+	 * disk_release() -> blkcg_exit_disk(). Wait for all old blkgs to be
+	 * removed from the queue list before setting up new blkcg state.
 	 */
-	wait_var_event(&q->root_blkg, !READ_ONCE(q->root_blkg));
+	wait_var_event(&q->blkg_list, list_empty_careful(&q->blkg_list));
 
 	new_blkg = blkg_alloc(&blkcg_root, disk, GFP_KERNEL);
 	if (!new_blkg)
