@@ -894,6 +894,9 @@ enum {
 	HRTICK_SCHED_REARM_HRTIMER	= BIT(3)
 };
 
+#define HRTICK_MIN_SLICE_NS	(10 * NSEC_PER_USEC)
+#define HRTICK_REARM_SLACK_NS	(HRTICK_MIN_SLICE_NS / 2)
+
 static void __used hrtick_clear(struct rq *rq)
 {
 	if (hrtimer_active(&rq->hrtick_timer))
@@ -927,7 +930,7 @@ static inline bool hrtick_needs_rearm(struct hrtimer *timer, ktime_t expires)
 	 * whether the expiry time actually changes substantially.
 	 */
 	return !hrtimer_is_queued(timer) ||
-		abs(expires - hrtimer_get_expires(timer)) > 5000;
+		abs(expires - hrtimer_get_expires(timer)) > HRTICK_REARM_SLACK_NS;
 }
 
 static void hrtick_cond_restart(struct rq *rq)
@@ -962,10 +965,10 @@ void hrtick_start(struct rq *rq, u64 delay)
 	s64 delta;
 
 	/*
-	 * Don't schedule slices shorter than 10000ns, that just
-	 * doesn't make sense and can cause timer DoS.
+	 * Don't schedule slices shorter than the minimum hrtick slice.
+	 * That doesn't make sense and can cause timer DoS.
 	 */
-	delta = max_t(s64, delay, 10000LL);
+	delta = max_t(s64, delay, HRTICK_MIN_SLICE_NS);
 
 	/*
 	 * If this is in the middle of schedule() only note the delay
