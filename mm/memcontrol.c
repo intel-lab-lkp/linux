@@ -4822,6 +4822,7 @@ static void mem_cgroup_css_free(struct cgroup_subsys_state *css)
 static void mem_cgroup_css_reset(struct cgroup_subsys_state *css)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+	struct memcg_tier_counter *tc;
 
 	page_counter_set_max(&memcg->memory, PAGE_COUNTER_MAX);
 	page_counter_set_max(&memcg->swap, PAGE_COUNTER_MAX);
@@ -4835,6 +4836,13 @@ static void mem_cgroup_css_reset(struct cgroup_subsys_state *css)
 	memcg1_soft_limit_reset(memcg);
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
 	memcg_wb_domain_size_changed(memcg);
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(tc, &memcg->tier_counters, list) {
+		page_counter_set_max(&tc->counter, PAGE_COUNTER_MAX);
+		page_counter_set_high(&tc->counter, PAGE_COUNTER_MAX);
+	}
+	rcu_read_unlock();
 }
 
 struct aggregate_control {
@@ -5331,6 +5339,96 @@ out:
 	return nbytes;
 }
 
+static int memory_tier_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+	struct memcg_tier_counter *tc;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(tc, &memcg->tier_counters, list) {
+		seq_printf(m, "tier%d.current=%llu\n", tc->tier_id,
+			(u64)page_counter_read(&tc->counter) * PAGE_SIZE);
+		seq_printf(m, "tier%d.high=", tc->tier_id);
+		seq_puts_memcg_tunable(m, READ_ONCE(tc->counter.high));
+		seq_printf(m, "tier%d.max=", tc->tier_id);
+		seq_puts_memcg_tunable(m, READ_ONCE(tc->counter.max));
+	}
+	rcu_read_unlock();
+	return 0;
+}
+
+static ssize_t memory_tier_write(struct kernfs_open_file *of,
+	char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	struct memcg_tier_counter *tc;
+	unsigned int nr_retries = MAX_RECLAIM_RETRIES;
+	bool drained = false;
+	nodemask_t nodes, *nmp = NULL;
+	unsigned long val;
+	char knob[8], *p;
+	int tier_id, err;
+
+	buf = strstrip(buf);
+	if (sscanf(buf, "tier%d.%7[^=]", &tier_id, knob) != 2)
+		return -EINVAL;
+	if (strcmp(knob, "high") && strcmp(knob, "max"))
+		return -EINVAL;
+	p = strchr(buf, '=');
+	if (!p)
+		return -EINVAL;
+	err = page_counter_memparse(p + 1, "max", &val);
+	if (err)
+		return err;
+
+	rcu_read_lock();
+	tc = memcg_tier_counter_find(memcg, tier_id);
+	rcu_read_unlock();
+	if (!tc)
+		return -ENOENT;
+
+	if (!tier_id_to_nodemask(tier_id, &nodes) && !nodes_empty(nodes))
+		nmp = &nodes;
+
+	if (!strcmp(knob, "high"))
+		page_counter_set_high(&tc->counter, val);
+	else
+		xchg(&tc->counter.max, val);
+
+	if (of->file->f_flags & O_NONBLOCK)
+		return nbytes;
+
+	for (;;) {
+		unsigned long nr_pages = page_counter_read(&tc->counter);
+
+		if (nr_pages <= val)
+			break;
+		if (signal_pending(current))
+			break;
+		if (!drained) {
+			drain_all_tier_stock(memcg);
+			drained = true;
+			continue;
+		}
+		if (reclaim_tier(memcg, nr_pages - val, GFP_KERNEL, nmp))
+			continue;
+		if (nr_retries) {
+			nr_retries--;
+			continue;
+		}
+		if (!strcmp(knob, "max")) {
+			memcg_memory_event(memcg, MEMCG_OOM);
+			if (!mem_cgroup_out_of_memory(memcg, GFP_KERNEL, 0))
+				break;
+			cond_resched();
+		} else {
+			break;
+		}
+	}
+
+	return nbytes;
+}
+
 /*
  * Note: don't forget to update the 'samples/cgroup/memcg_event_listener'
  * if any new events become available.
@@ -5499,6 +5597,12 @@ static struct cftype memory_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = memory_max_show,
 		.write = memory_max_write,
+	},
+	{
+		.name = "tier",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_tier_show,
+		.write = memory_tier_write,
 	},
 	{
 		.name = "events",
