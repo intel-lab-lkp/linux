@@ -6122,13 +6122,13 @@ static int decode_getdeviceinfo(struct xdr_stream *xdr,
 	if (len) {
 		uint32_t i;
 
-		p = xdr_inline_decode(xdr, 4 * len);
-		if (unlikely(!p))
-			return -EIO;
-
-		res->notification = be32_to_cpup(p++);
-		for (i = 1; i < len; i++) {
-			if (be32_to_cpup(p++)) {
+		for (i = 0; i < len; i++) {
+			p = xdr_inline_decode(xdr, 4);
+			if (unlikely(!p))
+				return -EIO;
+			if (i == 0)
+				res->notification = be32_to_cpup(p);
+			else if (be32_to_cpup(p)) {
 				dprintk("%s: unsupported notification\n",
 					__func__);
 				return -EIO;
