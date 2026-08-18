@@ -795,6 +795,24 @@ static int raid1_rr_pos(int disk, int start, int n)
 	return ((disk % n) - start + n) % n;
 }
 
+static bool raid1_has_readable_nonrot(struct r1conf *conf,
+				      struct r1bio *r1_bio)
+{
+	int disk;
+
+	for (disk = 0; disk < conf->raid_disks * 2; disk++) {
+		struct md_rdev *rdev;
+
+		if (r1_bio->bios[disk] == IO_BLOCKED)
+			continue;
+		rdev = conf->mirrors[disk].rdev;
+		if (rdev_readable(rdev, r1_bio) &&
+		    test_bit(Nonrot, &rdev->flags))
+			return true;
+	}
+	return false;
+}
+
 static bool is_better_disk(unsigned int pending, int disk, bool nonrot,
 			   const struct read_balance_ctl *ctl,
 			   int rr_start, int n)
@@ -816,7 +834,7 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 {
 	int disk;
 	int rr_start = 0;
-	bool has_nonrot = READ_ONCE(conf->nonrot_disks);
+	bool has_nonrot = raid1_has_readable_nonrot(conf, r1_bio);
 	struct read_balance_ctl ctl = {
 		.closest_dist_disk      = -1,
 		.closest_dist           = MaxSector,
