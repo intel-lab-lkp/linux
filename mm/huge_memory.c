@@ -4203,6 +4203,9 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 		if (shmem_mapping(mapping))
 			end = shmem_fallocend(mapping->host, end);
 	}
+	if (folio_ref_count(folio) == folio_expected_ref_count(folio) + 1 +
+	    folio_may_be_lru_cached(folio))
+		lru_cache_drain_for_folio(folio, 1, NULL);
 
 	/*
 	 * Racy check if we can split the page, before unmap_folio() will
@@ -4327,6 +4330,9 @@ int folio_split_unmapped(struct folio *folio, unsigned int new_order)
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_large(folio), folio);
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_anon(folio), folio);
 
+	if (folio_ref_count(folio) == folio_expected_ref_count(folio) + 1 +
+	    folio_may_be_lru_cached(folio))
+		lru_cache_drain_for_folio(folio, 1, NULL);
 	if (folio_expected_ref_count(folio) != folio_ref_count(folio) - 1)
 		return -EAGAIN;
 
@@ -4807,6 +4813,10 @@ static int split_huge_pages_pid(int pid, unsigned long vaddr_start,
 			goto next;
 
 		total++;
+
+		if (folio_ref_count(folio) == folio_expected_ref_count(folio) +
+		    folio_may_be_lru_cached(folio))
+			lru_cache_drain_for_folio(folio, 0, NULL);
 		/*
 		 * For folios with private, split_huge_page_to_list_to_order()
 		 * will try to drop it before split and then check if the folio
