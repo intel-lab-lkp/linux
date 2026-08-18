@@ -196,17 +196,11 @@ static int rockchip_mbox_probe(struct platform_device *pdev)
 	/* Each channel has two buffers for A2B and B2A */
 	mb->buf_size = (size_t)resource_size(res) / (drv_data->num_chans * 2);
 
-	mb->pclk = devm_clk_get(&pdev->dev, "pclk_mailbox");
+	mb->pclk = devm_clk_get_enabled(&pdev->dev, "pclk_mailbox");
 	if (IS_ERR(mb->pclk)) {
 		ret = PTR_ERR(mb->pclk);
-		dev_err(&pdev->dev, "failed to get pclk_mailbox clock: %d\n",
+		dev_err(&pdev->dev, "failed to get or enable pclk_mailbox clock: %d\n",
 			ret);
-		return ret;
-	}
-
-	ret = clk_prepare_enable(mb->pclk);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to enable pclk: %d\n", ret);
 		return ret;
 	}
 
