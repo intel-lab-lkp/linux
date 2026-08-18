@@ -6489,7 +6489,7 @@ static int bond_init(struct net_device *bond_dev)
 	if (!bond->wq)
 		return -ENOMEM;
 
-	bond->alb_info.unbalanced_load = alloc_percpu(struct unbalanced_load_stats);
+	bond->alb_info.unbalanced_load = netdev_alloc_pcpu_stats(struct unbalanced_load_stats);
 	if (!bond->alb_info.unbalanced_load)
 		goto wq_out;
 
