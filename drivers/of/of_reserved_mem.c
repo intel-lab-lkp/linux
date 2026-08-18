@@ -32,6 +32,30 @@ static struct reserved_mem *reserved_mem __refdata = reserved_mem_array;
 static int total_reserved_mem_cnt = MAX_RESERVED_REGIONS;
 static int reserved_mem_count;
 
+static int reserve_failed_nodes[MAX_RESERVED_REGIONS] __initdata;
+static int reserve_failed_nodes_cnt __initdata;
+
+static bool __init reserved_mem_node_reserve_failed(int node)
+{
+	int i;
+
+	for (i = 0; i < reserve_failed_nodes_cnt; i++)
+		if (reserve_failed_nodes[i] == node)
+			return true;
+	return false;
+}
+
+static bool __init record_reserve_failed_node(int node, const char *uname)
+{
+	if (reserve_failed_nodes_cnt == MAX_RESERVED_REGIONS) {
+		pr_err("too many failed regions, '%s' reservation failed\n", uname);
+		return false;
+	}
+
+	reserve_failed_nodes[reserve_failed_nodes_cnt++] = node;
+	return true;
+}
+
 static int __init early_init_dt_alloc_reserved_memory_arch(phys_addr_t size,
 	phys_addr_t align, phys_addr_t start, phys_addr_t end, bool nomap,
 	phys_addr_t *res_base)
@@ -141,13 +165,16 @@ static int __init early_init_dt_reserve_memory(phys_addr_t base,
  * first entry in 'reg' property
  */
 static int __init __reserved_mem_reserve_reg(unsigned long node,
-					     const char *uname)
+					     const char *uname,
+					     bool *should_record_failed_node)
 {
 	phys_addr_t base, size;
 	int len, err;
 	const __be32 *prop;
 	bool nomap;
 	u64 b, s;
+
+	*should_record_failed_node = false;
 
 	prop = of_flat_dt_get_addr_size_prop(node, "reg", &len);
 	if (!prop || !len)
@@ -167,14 +194,20 @@ static int __init __reserved_mem_reserve_reg(unsigned long node,
 	base = b;
 	size = s;
 
-	if (size && early_init_dt_reserve_memory(base, size, nomap) == 0) {
-		fdt_fixup_reserved_mem_node(node, base, size);
-		pr_debug("Reserved memory: reserved region for node '%s': base %pa, size %lu MiB\n",
-			 uname, &base, (unsigned long)(size / SZ_1M));
-	} else {
+	if (!size)
+		return -EINVAL;
+
+	err = early_init_dt_reserve_memory(base, size, nomap);
+	if (err) {
+		*should_record_failed_node = true;
 		pr_err("Reserved memory: failed to reserve memory for node '%s': base %pa, size %lu MiB\n",
 		       uname, &base, (unsigned long)(size / SZ_1M));
+		return err;
 	}
+
+	fdt_fixup_reserved_mem_node(node, base, size);
+	pr_debug("Reserved memory: reserved region for node '%s': base %pa, size %lu MiB\n",
+		 uname, &base, (unsigned long)(size / SZ_1M));
 	return 0;
 }
 
@@ -306,10 +339,14 @@ void __init fdt_scan_reserved_mem_late(void)
 		base = b;
 		size = s;
 
-		if (size) {
-			uname = fdt_get_name(fdt, child, NULL);
-			fdt_init_reserved_mem_node(child, uname, base, size);
-		}
+		if (!size)
+			continue;
+
+		if (reserved_mem_node_reserve_failed(child))
+			continue;
+
+		uname = fdt_get_name(fdt, child, NULL);
+		fdt_init_reserved_mem_node(child, uname, base, size);
 	}
 
 	/* check for overlapping reserved regions */
@@ -349,6 +386,7 @@ int __init fdt_scan_reserved_mem(void)
 
 	fdt_for_each_subnode(child, fdt, node) {
 		const char *uname;
+		bool should_record_failed_node;
 		int err;
 
 		if (!of_fdt_device_is_available(fdt, child))
@@ -356,8 +394,13 @@ int __init fdt_scan_reserved_mem(void)
 
 		uname = fdt_get_name(fdt, child, NULL);
 
-		err = __reserved_mem_reserve_reg(child, uname);
+		err = __reserved_mem_reserve_reg(child, uname,
+						 &should_record_failed_node);
 		if (!err)
+			count++;
+		else if (should_record_failed_node &&
+			 !record_reserve_failed_node(child, uname))
+			/* Keep a slot for the untracked node's late initialization. */
 			count++;
 
 		/*
