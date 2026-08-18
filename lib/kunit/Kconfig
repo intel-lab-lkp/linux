@@ -155,4 +155,15 @@ config RUST_LOCKDEP_KUNIT_DEBUG_LOCKS
 	  true, but a lockdep warning is triggered.
 
 	  If unsure, say N.
+
+config RUST_KUNIT_TAINT_WARN_CHECK
+	bool "Enable extra taint assertion in KUnit tests"
+	depends on RUST
+	default n
+	help
+	  Adds an extra assertion to each Rust kunit test case that asserts
+	  that the kernel is not tainted. If the kernel becomes tainted with a TAINT_WARN,
+	  Enabling this config marks the test as failed.
+
+	  If unsure, say N.
 endif # KUNIT
