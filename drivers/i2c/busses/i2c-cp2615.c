@@ -128,6 +128,9 @@ cp2615_i2c_send(struct usb_interface *usbif, struct cp2615_i2c_transfer *i2c_w)
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
 	int res = cp2615_init_i2c_msg(msg, i2c_w);
 
+	if (!msg)
+		return -ENOMEM;
+
 	if (!res)
 		res = usb_bulk_msg(usbdev, usb_sndbulkpipe(usbdev, IOP_EP_OUT),
 				   msg, ntohs(msg->length), NULL, 0);
@@ -175,6 +178,9 @@ static int cp2615_check_iop(struct usb_interface *usbif)
 	struct cp2615_iop_accessory_info *info = (struct cp2615_iop_accessory_info *)&msg->data;
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
 	int res = cp2615_init_iop_msg(msg, iop_GetAccessoryInfo, NULL, 0);
+
+	if (!msg)
+		return -ENOMEM;
 
 	if (res)
 		goto out;
