@@ -212,10 +212,14 @@ static bool __futex_pivot_hash(struct mm_struct *mm, struct futex_private_hash *
 		futex_rehash_private(fph, new);
 	}
 	new->state = FR_PERCPU;
-	scoped_guard(rcu) {
-		mmph->batches = get_state_synchronize_rcu();
-		rcu_assign_pointer(mmph->hash, new);
-	}
+	rcu_assign_pointer(mmph->hash, new);
+	/*
+	 * Pairs with futex_ref_drop(): ->batches must be sampled at or after
+	 * the rcu_assign_pointer() above, so any grace-period satisfying
+	 * poll_state_synchronize_rcu() provably started once no reader could
+	 * still load the retired fph. Both stores are done under mmph->lock.
+	 */
+	mmph->batches = get_state_synchronize_rcu();
 	kvfree_rcu(fph, rcu);
 	return true;
 }
