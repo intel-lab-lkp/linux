@@ -328,7 +328,16 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh)
 		if (last) {
 			if (likely (last->urb != urb)) {
 				ehci_urb_done(ehci, last->urb, last_status);
-				last_status = -EINPROGRESS;
+				/*
+				 * ehci_urb_done() drops ehci->lock for the
+				 * completion callback. The QTD list may have
+				 * been modified (e.g. by URB unlink during
+				 * TX timeout recovery). The 'tmp' saved by
+				 * list_for_each_safe() may be stale.
+				 * Free last and restart the scan.
+				 */
+				ehci_qtd_free(ehci, last);
+				goto rescan;
 			}
 			ehci_qtd_free (ehci, last);
 			last = NULL;
