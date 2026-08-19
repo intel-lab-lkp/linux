@@ -62,6 +62,7 @@ struct nouveau_encoder {
 	/* Protected by nouveau_drm.audio.lock */
 	struct {
 		bool enabled;
+		struct nouveau_crtc *crtc;
 	} audio;
 
 	struct drm_display_mode mode;
