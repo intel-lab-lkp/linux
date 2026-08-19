@@ -902,6 +902,11 @@ xfs_bmap_hw_atomic_write_possible(
  * Handle COW extent allocation and iomap setup for direct writes to reflinked
  * files.
  *
+ * Transitional tpp handling:
+ *	!tpp = do everything internally using local_tp
+ *	tpp & !*tpp = caller did locking, wants -EAGAIN if transaction required
+ *	tpp && *tpp = caller did locking and transaction allocation
+ *
  * The caller passes in an imap and nimaps that the COW allocation will fill
  * with the data fork extent mapping. On return, *nimaps indicates whether the
  * caller needs to continue with the normal IO path:
@@ -913,6 +918,7 @@ xfs_bmap_hw_atomic_write_possible(
  */
 static int
 xfs_direct_write_cow_iomap_begin(
+	struct xfs_trans	**tpp,
 	struct xfs_inode	*ip,
 	loff_t			offset,
 	loff_t			length,
@@ -927,34 +933,37 @@ xfs_direct_write_cow_iomap_begin(
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_bmbt_irec	cmap;
 	struct xfs_trans	*tp = NULL;
+	struct xfs_trans	*local_tp = NULL;
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	xfs_fileoff_t		end_fsb = xfs_iomap_end_fsb(mp, offset, length);
 	bool			shared = false;
 	int			error;
 	u64			seq;
 
-	*lockmode = XFS_ILOCK_EXCL;
+	if (!tpp) {
+		*lockmode = XFS_ILOCK_EXCL;
 
-	error = xfs_ilock_for_iomap(ip, flags, lockmode);
-	if (error)
-		return error;
+		error = xfs_ilock_for_iomap(ip, flags, lockmode);
+		if (error)
+			return error;
 
 retry:
-	*nimaps = 1;
-	error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb, imap,
-			       nimaps, 0);
-	if (error)
-		goto out_unlock;
+		*nimaps = 1;
+		error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb, imap,
+				       nimaps, 0);
+		if (error)
+			goto out_unlock;
+	} else if (*tpp) {
+		tp = *tpp;
+	}
 
 	if (!imap_needs_cow(ip, flags, imap, *nimaps)) {
 		/*
 		 * Extent is not shared - return the imap and ILOCK to the
 		 * caller for normal IO path processing.
 		 */
-		if (tp) {
-			xfs_trans_cancel(tp);
-			tp = NULL;
-		}
+		if (local_tp)
+			xfs_trans_cancel(local_tp);
 		return 0;
 	}
 
@@ -962,13 +971,21 @@ retry:
 	if (flags & IOMAP_NOWAIT)
 		goto out_unlock;
 
-	/* may drop and re-acquire the ilock */
 	error = xfs_reflink_allocate_cow(&tp, ip, imap, &cmap, &shared,
 			lockmode,
 			(flags & IOMAP_DIRECT) || IS_DAX(VFS_I(ip)));
 	if (error == -EAGAIN) {
+		ASSERT(!tp);
+
 		/*
-		 * COW allocation needs a transaction. Drop the ILOCK and
+		 * If the caller can handle the retry, return -EAGAIN so
+		 * they can allocate a transaction and call again.
+		 */
+		if (tpp)
+			goto out_unlock;
+
+		/*
+		 * Otherwise handle the retry internally. Drop the ILOCK and
 		 * allocate a zero-block reservation transaction, which will
 		 * re-acquire the ILOCK. We cannot determine what extent type
 		 * will be found once we've regained the ILOCK, so the callees
@@ -980,22 +997,21 @@ retry:
 		 * Retry the imap lookup since the extent tree may have changed
 		 * while the ILOCK was not held.
 		 */
-		ASSERT(!tp);
-
 		xfs_iunlock(ip, *lockmode);
 
 		error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write,
 				0, 0, false, &tp);
 		if (error)
 			return error;
+		local_tp = tp;
 
 		goto retry;
 	}
 	if (error)
 		goto out_unlock;
 
-	if (tp) {
-		error = xfs_trans_commit(tp);
+	if (local_tp) {
+		error = xfs_trans_commit(local_tp);
 		tp = NULL;
 		if (error)
 			goto out_unlock;
@@ -1026,13 +1042,14 @@ retry:
 			goto out_unlock;
 	}
 	seq = xfs_iomap_inode_sequence(ip, IOMAP_F_SHARED);
-	xfs_iunlock(ip, *lockmode);
+	if (!tpp)
+		xfs_iunlock(ip, *lockmode);
 	return xfs_bmbt_to_iomap(ip, iomap, &cmap, flags, IOMAP_F_SHARED, seq);
 
 out_unlock:
-	if (tp)
-		xfs_trans_cancel(tp);
-	if (*lockmode)
+	if (local_tp && tp)
+		xfs_trans_cancel(local_tp);
+	if (!tpp)
 		xfs_iunlock(ip, *lockmode);
 	return error;
 }
@@ -1076,9 +1093,9 @@ xfs_direct_write_iomap_begin(
 		iomap_flags |= IOMAP_F_ATOMIC_BIO;
 
 	if (xfs_is_cow_inode(ip)) {
-		error = xfs_direct_write_cow_iomap_begin(ip, offset, length,
-				flags, iomap, srcmap, &imap, &nimaps,
-				&lockmode, iomap_flags);
+		error = xfs_direct_write_cow_iomap_begin(NULL, ip, offset,
+				length, flags, iomap, srcmap, &imap,
+				&nimaps, &lockmode, iomap_flags);
 		if (error)
 			return error;
 		if (!nimaps)
