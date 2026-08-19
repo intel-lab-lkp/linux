@@ -1075,110 +1075,162 @@ xfs_direct_write_iomap_begin(
 	if (flags & IOMAP_ATOMIC)
 		dwa.iomap_flags |= IOMAP_F_ATOMIC_BIO;
 
-	if (xfs_is_cow_inode(ip)) {
-		error = xfs_direct_write_cow_iomap_begin(&dwa, true);
-		if (error)
-			return error;
-		if (!dwa.nimaps)
-			return 0;
-
-		end_fsb = dwa.imap.br_startoff + dwa.imap.br_blockcount;
-		dwa.length = XFS_FSB_TO_B(mp, end_fsb) - offset;
-	} else {
+	if (xfs_is_cow_inode(ip))
+		dwa.lockmode = XFS_ILOCK_EXCL;
+	else
 		dwa.lockmode = XFS_ILOCK_SHARED;
 
-		error = xfs_ilock_for_iomap(ip, flags, &dwa.lockmode);
-		if (error)
-			return error;
+	error = xfs_ilock_for_iomap(ip, flags, &dwa.lockmode);
+	if (error)
+		return error;
 
+	do {
+		dwa.nimaps = 1;
 		error = xfs_bmapi_read(ip, dwa.offset_fsb,
 				end_fsb - dwa.offset_fsb,
 				&dwa.imap, &dwa.nimaps, 0);
 		if (error)
 			goto out_unlock;
-	}
 
-	needs_alloc = imap_needs_alloc(inode, flags, &dwa.imap, dwa.nimaps);
+		if (xfs_is_cow_inode(ip)) {
+			error = xfs_direct_write_cow_iomap_begin(&dwa, false);
+			if (error == -EAGAIN)
+				goto alloc_trans;
+			if (error)
+				goto out_unlock;
+			if (!dwa.nimaps) {
+				/*
+				 * COW iomaps filled in. Commit the
+				 * transaction if one was needed and
+				 * return.
+				 */
+				if (dwa.tp)
+					error = xfs_trans_commit(dwa.tp);
+				xfs_iunlock(ip, dwa.lockmode);
+				return error;
+			}
 
-	if (flags & IOMAP_ATOMIC) {
-		error = -ENOPROTOOPT;
+			end_fsb = dwa.imap.br_startoff +
+					dwa.imap.br_blockcount;
+			dwa.length = XFS_FSB_TO_B(mp, end_fsb) - offset;
+		}
+
+		needs_alloc = imap_needs_alloc(inode, flags, &dwa.imap,
+				dwa.nimaps);
+
+		if (flags & IOMAP_ATOMIC) {
+			error = -ENOPROTOOPT;
+			/*
+			 * If we allocate less than what is required for the
+			 * write then we may end up with multiple extents,
+			 * which means that REQ_ATOMIC-based cannot be used,
+			 * so avoid this possibility.
+			 */
+			if (needs_alloc &&
+			    orig_end_fsb - dwa.offset_fsb > 1)
+				goto out_unlock;
+			if (!xfs_bmap_hw_atomic_write_possible(ip, &dwa.imap,
+					dwa.offset_fsb, orig_end_fsb))
+				goto out_unlock;
+		}
+
+		if (needs_alloc) {
+			if (!dwa.tp)
+				goto alloc_trans;
+
+			/*
+			 * Cap the maximum length we map to a sane size to
+			 * keep the chunks of work done where somewhat
+			 * symmetric with the work writeback does.
+			 *
+			 * Note that the values needs to be less than
+			 * 32-bits wide until the lower level functions
+			 * are updated.
+			 */
+			dwa.length = min_t(loff_t, dwa.length,
+					1024 * PAGE_SIZE);
+			end_fsb = xfs_iomap_end_fsb(mp, offset, dwa.length);
+
+			if (offset + dwa.length > XFS_ISIZE(ip))
+				end_fsb = xfs_iomap_eof_align_last_fsb(ip,
+						end_fsb);
+			else if (dwa.nimaps &&
+				 dwa.imap.br_startblock == HOLESTARTBLOCK)
+				end_fsb = min(end_fsb, dwa.imap.br_startoff +
+						dwa.imap.br_blockcount);
+
+			dwa.count_fsb = end_fsb - dwa.offset_fsb;
+
+			error = xfs_iomap_write_direct(&dwa);
+			if (error)
+				goto out_unlock;
+
+			error = xfs_trans_commit(dwa.tp);
+			xfs_iunlock(ip, dwa.lockmode);
+			return error;
+		}
+
 		/*
-		 * If we allocate less than what is required for the write
-		 * then we may end up with multiple extents, which means that
-		 * REQ_ATOMIC-based cannot be used, so avoid this possibility.
+		 * Overwrite path - no allocation needed. Cancel unused
+		 * transaction if allocated and return the mapping.
 		 */
-		if (needs_alloc && orig_end_fsb - dwa.offset_fsb > 1)
-			goto out_unlock;
+		if (dwa.tp) {
+			xfs_trans_cancel(dwa.tp);
+			dwa.tp = NULL;
+		}
 
-		if (!xfs_bmap_hw_atomic_write_possible(ip, &dwa.imap,
-				dwa.offset_fsb, orig_end_fsb))
-			goto out_unlock;
-	}
+		/*
+		 * NOWAIT and OVERWRITE I/O needs to span the entire
+		 * requested I/O with a single map so that we avoid
+		 * partial IO failures due to the rest of the I/O range
+		 * not covered by this map triggering an EAGAIN condition
+		 * when it is subsequently mapped and aborting the I/O.
+		 */
+		if (flags & (IOMAP_NOWAIT | IOMAP_OVERWRITE_ONLY)) {
+			error = -EAGAIN;
+			if (!imap_spans_range(&dwa.imap, dwa.offset_fsb,
+					end_fsb))
+				goto out_unlock;
+		}
+		/*
+		 * For overwrite only I/O, we cannot convert unwritten
+		 * extents without requiring sub-block zeroing. This
+		 * can only be done under an exclusive IOLOCK, hence
+		 * return -EAGAIN if this is not a written extent to
+		 * tell the caller to try again.
+		 */
+		if (flags & IOMAP_OVERWRITE_ONLY) {
+			error = -EAGAIN;
+			if (dwa.imap.br_state != XFS_EXT_NORM &&
+			    ((offset | dwa.length) & mp->m_blockmask))
+				goto out_unlock;
+		}
 
-	if (needs_alloc)
-		goto allocate_blocks;
+		seq = xfs_iomap_inode_sequence(ip, dwa.iomap_flags);
+		xfs_iunlock(ip, dwa.lockmode);
+		trace_xfs_iomap_found(ip, offset, dwa.length, XFS_DATA_FORK,
+				&dwa.imap);
+		return xfs_bmbt_to_iomap(ip, iomap, &dwa.imap, flags,
+				dwa.iomap_flags, seq);
 
-	/*
-	 * NOWAIT and OVERWRITE I/O needs to span the entire requested I/O with
-	 * a single map so that we avoid partial IO failures due to the rest of
-	 * the I/O range not covered by this map triggering an EAGAIN condition
-	 * when it is subsequently mapped and aborting the I/O.
-	 */
-	if (flags & (IOMAP_NOWAIT | IOMAP_OVERWRITE_ONLY)) {
+alloc_trans:
+		ASSERT(!dwa.tp);
+
 		error = -EAGAIN;
-		if (!imap_spans_range(&dwa.imap, dwa.offset_fsb, end_fsb))
+		if (flags & (IOMAP_NOWAIT | IOMAP_OVERWRITE_ONLY))
 			goto out_unlock;
-	}
 
-	/*
-	 * For overwrite only I/O, we cannot convert unwritten extents without
-	 * requiring sub-block zeroing.  This can only be done under an
-	 * exclusive IOLOCK, hence return -EAGAIN if this is not a written
-	 * extent to tell the caller to try again.
-	 */
-	if (flags & IOMAP_OVERWRITE_ONLY) {
-		error = -EAGAIN;
-		if (dwa.imap.br_state != XFS_EXT_NORM &&
-		    ((offset | dwa.length) & mp->m_blockmask))
-			goto out_unlock;
-	}
-
-	seq = xfs_iomap_inode_sequence(ip, dwa.iomap_flags);
-	xfs_iunlock(ip, dwa.lockmode);
-	trace_xfs_iomap_found(ip, offset, dwa.length, XFS_DATA_FORK,
-			&dwa.imap);
-	return xfs_bmbt_to_iomap(ip, iomap, &dwa.imap, flags,
-			dwa.iomap_flags, seq);
-
-allocate_blocks:
-	error = -EAGAIN;
-	if (flags & (IOMAP_NOWAIT | IOMAP_OVERWRITE_ONLY))
-		goto out_unlock;
-
-	/*
-	 * We cap the maximum length we map to a sane size  to keep the chunks
-	 * of work done where somewhat symmetric with the work writeback does.
-	 * This is a completely arbitrary number pulled out of thin air as a
-	 * best guess for initial testing.
-	 *
-	 * Note that the values needs to be less than 32-bits wide until the
-	 * lower level functions are updated.
-	 */
-	dwa.length = min_t(loff_t, dwa.length, 1024 * PAGE_SIZE);
-	end_fsb = xfs_iomap_end_fsb(mp, offset, dwa.length);
-
-	if (offset + dwa.length > XFS_ISIZE(ip))
-		end_fsb = xfs_iomap_eof_align_last_fsb(ip, end_fsb);
-	else if (dwa.nimaps && dwa.imap.br_startblock == HOLESTARTBLOCK)
-		end_fsb = min(end_fsb, dwa.imap.br_startoff +
-				dwa.imap.br_blockcount);
-
-	dwa.count_fsb = end_fsb - dwa.offset_fsb;
-	xfs_iunlock(ip, dwa.lockmode);
-
-	return xfs_iomap_write_direct(&dwa);
+		xfs_iunlock(ip, dwa.lockmode);
+		error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write,
+				0, 0, false, &dwa.tp);
+		if (error)
+			return error;
+		dwa.lockmode = XFS_ILOCK_EXCL;
+	} while (dwa.tp);
 
 out_unlock:
+	if (dwa.tp)
+		xfs_trans_cancel(dwa.tp);
 	if (dwa.lockmode)
 		xfs_iunlock(ip, dwa.lockmode);
 	return error;
