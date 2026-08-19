@@ -207,7 +207,7 @@ static enum sas_device_type to_dev_type(struct discover_resp *dr)
 		return dr->attached_dev_type;
 }
 
-static void sas_set_ex_phy(struct domain_device *dev, int phy_id,
+static int sas_set_ex_phy(struct domain_device *dev, int phy_id,
 			   struct smp_disc_resp *disc_resp)
 {
 	enum sas_device_type dev_type;
@@ -220,14 +220,15 @@ static void sas_set_ex_phy(struct domain_device *dev, int phy_id,
 	struct sas_rphy *rphy = dev->rphy;
 	bool new_phy = !phy->phy;
 	char *type;
+	int error;
 
 	if (new_phy) {
 		if (WARN_ON_ONCE(test_bit(SAS_HA_ATA_EH_ACTIVE, &ha->state)))
-			return;
+			return -EBUSY;
 		phy->phy = sas_phy_alloc(&rphy->dev, phy_id);
 
-		/* FIXME: error_handling */
-		BUG_ON(!phy->phy);
+		if (!phy->phy)
+			return -ENOMEM;
 	}
 
 	switch (disc_resp->result) {
@@ -296,11 +297,14 @@ static void sas_set_ex_phy(struct domain_device *dev, int phy_id,
 	phy->phy->enabled = (phy->linkrate != SAS_PHY_DISABLED);
 
  skip:
-	if (new_phy)
-		if (sas_phy_add(phy->phy)) {
+	if (new_phy) {
+		error = sas_phy_add(phy->phy);
+		if (error) {
 			sas_phy_free(phy->phy);
-			return;
+			phy->phy = NULL;
+			return error;
 		}
+	}
 
  out:
 	switch (phy->attached_dev_type) {
@@ -339,7 +343,7 @@ static void sas_set_ex_phy(struct domain_device *dev, int phy_id,
 	    SAS_ADDR(phy->attached_sas_addr) != SAS_ADDR(sas_addr))
 		/* pass */;
 	else
-		return;
+		return 0;
 
 	/* if the attached device type changed and ata_eh is active,
 	 * make sure we run revalidation when eh completes (see:
@@ -353,6 +357,8 @@ static void sas_set_ex_phy(struct domain_device *dev, int phy_id,
 		 SAS_ADDR(dev->sas_addr), phy->phy_id,
 		 sas_route_char(dev, phy), phy->linkrate,
 		 SAS_ADDR(phy->attached_sas_addr), type);
+
+	return 0;
 }
 
 /* check if we have an existing attached ata device on this expander phy */
@@ -397,8 +403,8 @@ static int sas_ex_phy_discover_helper(struct domain_device *dev, u8 *disc_req,
 		pr_notice("Found loopback topology, just ignore it!\n");
 		return 0;
 	}
-	sas_set_ex_phy(dev, single, disc_resp);
-	return 0;
+
+	return sas_set_ex_phy(dev, single, disc_resp);
 }
 
 int sas_ex_phy_discover(struct domain_device *dev, int single)
@@ -2021,7 +2027,7 @@ static int sas_rediscover_dev(struct domain_device *dev, int phy_id,
 		 * the PHY info, like negotiated linkrate.
 		 */
 		if (res == 0)
-			sas_set_ex_phy(dev, phy_id, disc_resp);
+			res = sas_set_ex_phy(dev, phy_id, disc_resp);
 		goto out_free_resp;
 	} else if (SAS_ADDR(sas_addr) == SAS_ADDR(phy->attached_sas_addr) &&
 		   dev_type_flutter(type, phy->attached_dev_type)) {
