@@ -14182,6 +14182,8 @@ M:	Steve French <smfrench@gmail.com>
 M:	Steve French <sfrench@samba.org>
 R:	Sergey Senozhatsky <senozhatsky@chromium.org>
 R:	Tom Talpey <tom@talpey.com>
+R:	ChenXiaoSong <chenxiaosong@kylinos.cn>
+R:	ChenXiaoSong <chenxiaosong@chenxiaosong.com>
 L:	linux-cifs@vger.kernel.org
 S:	Maintained
 T:	git https://git.samba.org/ksmbd.git ksmbd-for-next
