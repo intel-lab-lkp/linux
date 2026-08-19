@@ -97,6 +97,11 @@ enum realtek_gpio_flags {
 	 * range, where the per-cpu enable masks are located.
 	 */
 	GPIO_INTERRUPTS_PER_CPU = BIT(2),
+	/*
+	 * Request GPIOs from pinctrl using gpiochip_generic_request()
+	 * and gpiochip_generic_free().
+	 */
+	GPIO_PINCTRL = BIT(3),
 };
 
 static struct realtek_gpio_ctrl *irq_data_to_ctrl(struct irq_data *data)
@@ -354,7 +359,7 @@ static const struct of_device_id realtek_gpio_of_match[] = {
 	},
 	{
 		.compatible = "realtek,rtl9607-gpio",
-		.data = (void *)GPIO_PORTS_REVERSED,
+		.data = (void *)(GPIO_PORTS_REVERSED | GPIO_PINCTRL),
 	},
 	{}
 };
@@ -404,6 +409,9 @@ static int realtek_gpio_probe(struct platform_device *pdev)
 		ctrl->bank_write = realtek_gpio_bank_write_swapped;
 		ctrl->line_imr_pos = realtek_gpio_line_imr_pos_swapped;
 	}
+
+	if (dev_flags & GPIO_PINCTRL)
+		gen_gc_flags |= GPIO_GENERIC_PINCTRL_BACKEND;
 
 	config = (struct gpio_generic_chip_config) {
 		.dev = dev,
