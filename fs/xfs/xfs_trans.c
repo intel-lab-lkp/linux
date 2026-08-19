@@ -112,16 +112,19 @@ xfs_trans_dup(
 	ntp->t_flags = XFS_TRANS_PERM_LOG_RES |
 		       (tp->t_flags & XFS_TRANS_RESERVE) |
 		       (tp->t_flags & XFS_TRANS_NO_WRITECOUNT) |
-		       (tp->t_flags & XFS_TRANS_RES_FDBLKS);
+		       (tp->t_flags & XFS_TRANS_RES_FDBLKS) |
+		       (tp->t_flags & XFS_TRANS_RENEW_BLKRES);
 	/* We gave our writer reference to the new transaction */
 	tp->t_flags |= XFS_TRANS_NO_WRITECOUNT;
 	ntp->t_ticket = xfs_log_ticket_get(tp->t_ticket);
 
 	ASSERT(tp->t_blk_res >= tp->t_blk_res_used);
 	ntp->t_blk_res = tp->t_blk_res - tp->t_blk_res_used;
+	ntp->t_blk_res_orig = tp->t_blk_res_orig;
 	tp->t_blk_res = tp->t_blk_res_used;
 
 	ntp->t_rtx_res = tp->t_rtx_res - tp->t_rtx_res_used;
+	ntp->t_rtx_res_orig = tp->t_rtx_res_orig;
 	tp->t_rtx_res = tp->t_rtx_res_used;
 
 	/* move deferred ops over to the new tp */
@@ -203,6 +206,8 @@ xfs_trans_reserve(
 	error = xfs_trans_reserve_blocks(tp, blocks, rtextents);
 	if (error)
 		return error;
+	tp->t_blk_res_orig = tp->t_blk_res;
+	tp->t_rtx_res_orig = tp->t_rtx_res;
 
 	/*
 	 * Reserve the log space needed for this transaction.
@@ -1010,6 +1015,31 @@ xfs_trans_cancel(
 }
 
 /*
+ * Renew the block and RT extent reservations from the free space pool.
+ * The consumed counts were carried forward by xfs_trans_dup() so we know
+ * exactly how many blocks need to be reserved to restore the original
+ * reservation.
+ */
+int
+xfs_trans_regrant_blkres(
+	struct xfs_trans	*tp)
+{
+	unsigned int		blk_deficit;
+	unsigned int		rtx_deficit;
+
+	if (!(tp->t_flags & XFS_TRANS_RENEW_BLKRES))
+		return 0;
+
+	blk_deficit = tp->t_blk_res_orig - tp->t_blk_res;
+	rtx_deficit = tp->t_rtx_res_orig - tp->t_rtx_res;
+
+	if (!blk_deficit && !rtx_deficit)
+		return 0;
+
+	return xfs_trans_reserve_blocks(tp, blk_deficit, rtx_deficit);
+}
+
+/*
  * Roll from one trans in the sequence of PERMANENT transactions to the next:
  * permanent transactions are only flushed out when committed with
  * xfs_trans_commit(), but we still want as soon as possible to let chunks of it
@@ -1181,12 +1211,12 @@ xfs_trans_reserve_more_inode(
 
 		if (!XFS_IS_QUOTA_ON(mp) ||
 		    xfs_is_quota_inode(&mp->m_sb, I_INO(ip)))
-			return 0;
+			break;
 
 		error = xfs_trans_reserve_quota_nblks(tp, ip, dblocks,
 				rblocks, force_quota);
 		if (!error)
-			return 0;
+			break;
 
 		xfs_trans_unreserve_blocks(tp, dblocks, rtx);
 
@@ -1197,6 +1227,10 @@ xfs_trans_reserve_more_inode(
 		return error;
 	} while (retry++ == 0);
 
+	if (!error) {
+		tp->t_blk_res_orig = tp->t_blk_res;
+		tp->t_rtx_res_orig = tp->t_rtx_res;
+	}
 	return error;
 }
 

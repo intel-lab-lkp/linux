@@ -725,6 +725,24 @@ out_shutdown:
 	return error;
 }
 
+/*
+ * Finish all deferred ops and roll the transaction. The transaction is
+ * always rolled unconditionally so that the block reservation can be
+ * regranted after all deferred ops have completed.
+ *
+ * The block reservation regrant is not performed during the internal
+ * transaction rolls in xfs_defer_finish_noroll() because the original
+ * reservation already contains all the space needed for the deferred op
+ * chain. Regranting during internal rolls would risk unnecessary ENOSPC
+ * errors in the middle of a deferred op chain that cannot be safely
+ * aborted.
+ *
+ * The regrant is done after the final roll when the transaction is clean,
+ * replenishing whatever blocks were consumed by both the caller's
+ * modifications and the deferred operations. If the regrant fails with
+ * ENOSPC, the caller can safely cancel the clean transaction without
+ * causing a filesystem shutdown.
+ */
 int
 xfs_defer_finish(
 	struct xfs_trans	**tp)
@@ -734,21 +752,19 @@ xfs_defer_finish(
 #endif
 	int			error;
 
-	/*
-	 * Finish and roll the transaction once more to avoid returning to the
-	 * caller with a dirty transaction.
-	 */
 	error = xfs_defer_finish_noroll(tp);
 	if (error)
 		return error;
-	if ((*tp)->t_flags & XFS_TRANS_DIRTY) {
-		error = xfs_defer_trans_roll(tp);
-		if (error) {
-			xfs_force_shutdown((*tp)->t_mountp,
-					   SHUTDOWN_CORRUPT_INCORE);
-			return error;
-		}
+
+	error = xfs_defer_trans_roll(tp);
+	if (error) {
+		xfs_force_shutdown((*tp)->t_mountp, SHUTDOWN_CORRUPT_INCORE);
+		return error;
 	}
+
+	error = xfs_trans_regrant_blkres(*tp);
+	if (error)
+		return error;
 
 	/* Reset LOWMODE now that we've finished all the dfops. */
 #ifdef DEBUG
