@@ -202,7 +202,7 @@ xfs_fs_map_blocks(
 					       imap.br_blockcount);
 		xfs_iunlock(ip, lock_flags);
 
-		error = xfs_iomap_write_direct(ip, offset_fsb,
+		error = xfs_iomap_write_direct(NULL, ip, offset_fsb,
 				end_fsb - offset_fsb, 0, &imap, &seq);
 		if (error)
 			goto out_unlock;
