@@ -503,7 +503,7 @@ int hantro_g1_vp8_dec_run(struct hantro_ctx *ctx)
 	cfg_ref(ctx, hdr, vb2_dst);
 	cfg_buffers(ctx, hdr, vb2_dst);
 
-	hantro_end_prepare_run(ctx);
+	hantro_end_prepare_run(ctx, 0);
 
 	vdpu_write(vpu, G1_REG_INTERRUPT_DEC_E, G1_REG_INTERRUPT);
 

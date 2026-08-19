@@ -239,7 +239,7 @@ int rockchip_vpu2_mpeg2_dec_run(struct hantro_ctx *ctx)
 					    &dst_buf->vb2_buf, seq, pic);
 
 	/* Kick the watchdog and start decoding */
-	hantro_end_prepare_run(ctx);
+	hantro_end_prepare_run(ctx, 0);
 
 	reg = vdpu_read(vpu, VDPU_SWREG(57)) | VDPU_REG_DEC_E(1);
 	vdpu_write(vpu, reg, VDPU_SWREG(57));

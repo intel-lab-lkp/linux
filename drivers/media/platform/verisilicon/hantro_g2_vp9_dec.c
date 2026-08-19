@@ -895,7 +895,7 @@ int hantro_g2_vp9_dec_run(struct hantro_ctx *ctx)
 
 	ret = start_prepare_run(ctx, &decode_params);
 	if (ret) {
-		hantro_end_prepare_run(ctx);
+		hantro_end_prepare_run(ctx, ret);
 		return ret;
 	}
 
@@ -904,7 +904,7 @@ int hantro_g2_vp9_dec_run(struct hantro_ctx *ctx)
 
 	config_registers(ctx, decode_params, src, dst);
 
-	hantro_end_prepare_run(ctx);
+	hantro_end_prepare_run(ctx, 0);
 
 	vdpu_write(ctx->dev, G2_REG_INTERRUPT_DEC_E, G2_REG_INTERRUPT);
 

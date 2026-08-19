@@ -611,7 +611,7 @@ int hantro_g2_hevc_dec_run(struct hantro_ctx *ctx)
 
 	prepare_scaling_list_buffer(ctx);
 
-	hantro_end_prepare_run(ctx);
+	hantro_end_prepare_run(ctx, 0);
 
 	hantro_reg_write(vpu, &g2_mode, HEVC_DEC_MODE);
 	hantro_reg_write(vpu, &g2_clk_gate_e, 1);

@@ -2185,15 +2185,14 @@ int rockchip_vpu981_av1_dec_run(struct hantro_ctx *ctx)
 	rockchip_vpu981_av1_dec_set_output_buffer(ctx);
 	rockchip_vpu981_av1_dec_set_input_buffer(ctx, vb2_src);
 
-	hantro_end_prepare_run(ctx);
+	hantro_end_prepare_run(ctx, 0);
 
 	hantro_reg_write(vpu, &av1_dec_e, 1);
 
 	return 0;
 
 prepare_error:
-	hantro_end_prepare_run(ctx);
-	hantro_irq_done(vpu, VB2_BUF_STATE_ERROR);
+	hantro_end_prepare_run(ctx, ret);
 	return ret;
 }
 

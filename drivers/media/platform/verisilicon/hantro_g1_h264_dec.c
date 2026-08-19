@@ -264,7 +264,7 @@ int hantro_g1_h264_dec_run(struct hantro_ctx *ctx)
 	set_ref(ctx);
 	set_buffers(ctx, src_buf);
 
-	hantro_end_prepare_run(ctx);
+	hantro_end_prepare_run(ctx, 0);
 
 	/* Start decoding! */
 	vdpu_write_relaxed(vpu,

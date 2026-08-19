@@ -592,7 +592,7 @@ int rockchip_vpu2_vp8_dec_run(struct hantro_ctx *ctx)
 	cfg_ref(ctx, hdr, vb2_dst);
 	cfg_buffers(ctx, hdr, vb2_dst);
 
-	hantro_end_prepare_run(ctx);
+	hantro_end_prepare_run(ctx, 0);
 
 	hantro_reg_write(vpu, &vp8_dec_start_dec, 1);
 

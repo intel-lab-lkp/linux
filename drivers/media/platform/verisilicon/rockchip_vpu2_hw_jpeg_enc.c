@@ -180,7 +180,7 @@ int rockchip_vpu2_jpeg_enc_run(struct hantro_ctx *ctx)
 		| VEPU_REG_ENCODE_ENABLE;
 
 	/* Kick the watchdog and start encoding */
-	hantro_end_prepare_run(ctx);
+	hantro_end_prepare_run(ctx, 0);
 	vepu_write(vpu, reg, VEPU_REG_ENCODE_START);
 
 	return 0;

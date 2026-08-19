@@ -147,11 +147,28 @@ void hantro_start_prepare_run(struct hantro_ctx *ctx)
 	}
 }
 
-void hantro_end_prepare_run(struct hantro_ctx *ctx)
+/**
+ * hantro_end_prepare_run() - finish the preparation of a job
+ * @ctx:	context the job belongs to
+ * @error:	0 if the job is about to be started, negative errno if the
+ *		codec ->run() operation failed and will return that error
+ *
+ * Every hantro_start_prepare_run() must be paired with a call to this
+ * function, including on the error paths of ->run(): the controls of the
+ * request were set up by hantro_start_prepare_run() and the request stays
+ * incomplete forever if they are not completed here.
+ *
+ * When @error is zero the caller must go on and start the hardware, as the
+ * watchdog is armed and only the interrupt handler disarms it again. On the
+ * error paths the job is finished synchronously by device_run(), so no
+ * watchdog is needed and arming it would make it expire during an unrelated
+ * job later on.
+ */
+void hantro_end_prepare_run(struct hantro_ctx *ctx, int error)
 {
 	struct vb2_v4l2_buffer *src_buf;
 
-	if (!ctx->is_encoder && ctx->dev->variant->late_postproc) {
+	if (!error && !ctx->is_encoder && ctx->dev->variant->late_postproc) {
 		if (hantro_needs_postproc(ctx, ctx->vpu_dst_fmt))
 			hantro_postproc_enable(ctx);
 		else
@@ -161,6 +178,9 @@ void hantro_end_prepare_run(struct hantro_ctx *ctx)
 	src_buf = hantro_get_src_buf(ctx);
 	v4l2_ctrl_request_complete(src_buf->vb2_buf.req_obj.req,
 				   &ctx->ctrl_handler);
+
+	if (error)
+		return;
 
 	/* Kick the watchdog. */
 	schedule_delayed_work(&ctx->dev->watchdog_work,
@@ -182,15 +202,19 @@ static void device_run(void *priv)
 
 	ret = clk_bulk_enable(ctx->dev->variant->num_clocks, ctx->dev->clocks);
 	if (ret)
-		goto err_cancel_job;
+		goto err_pm_put;
 
 	v4l2_m2m_buf_copy_metadata(src, dst);
 
 	if (ctx->codec_ops->run(ctx))
-		goto err_cancel_job;
+		goto err_clk_disable;
 
 	return;
 
+err_clk_disable:
+	clk_bulk_disable(ctx->dev->variant->num_clocks, ctx->dev->clocks);
+err_pm_put:
+	pm_runtime_put_autosuspend(ctx->dev->dev);
 err_cancel_job:
 	hantro_job_finish_no_pm(ctx->dev, ctx, VB2_BUF_STATE_ERROR);
 }
