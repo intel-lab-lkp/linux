@@ -4363,27 +4363,12 @@ xfs_bmapi_convert_one_delalloc(
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	struct xfs_bmalloca	bma = { NULL };
 	uint16_t		flags = 0;
-	struct xfs_trans	*local_tp = NULL;
 	int			error;
+
+	ASSERT(tp);
 
 	if (whichfork == XFS_COW_FORK)
 		flags |= IOMAP_F_SHARED;
-
-	if (!tp) {
-		/*
-		 * Space for the extent and indirect blocks was reserved when
-		 * the delalloc extent was created so there's no need to do so
-		 * here.
-		 */
-		error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, 0, 0,
-					XFS_TRANS_RESERVE, &local_tp);
-		if (error)
-			return error;
-
-		xfs_ilock(ip, XFS_ILOCK_EXCL);
-		xfs_trans_ijoin(local_tp, ip, 0);
-		tp = local_tp;
-	}
 
 	/*
 	 * Look up the extent before extending the extent count so that we
@@ -4398,8 +4383,7 @@ xfs_bmapi_convert_one_delalloc(
 		 * might have moved the extent to the data fork in the meantime.
 		 */
 		WARN_ON_ONCE(whichfork != XFS_COW_FORK);
-		error = -EAGAIN;
-		goto out_trans_cancel;
+		return -EAGAIN;
 	}
 
 	/*
@@ -4411,13 +4395,13 @@ xfs_bmapi_convert_one_delalloc(
 				xfs_iomap_inode_sequence(ip, flags));
 		if (seq)
 			*seq = READ_ONCE(ifp->if_seq);
-		goto out_trans_cancel;
+		return 0;
 	}
 
 	error = xfs_iext_count_extend(tp, ip, whichfork,
 			XFS_IEXT_ADD_NOSPLIT_CNT);
 	if (error)
-		goto out_trans_cancel;
+		return error;
 
 	bma.tp = tp;
 	bma.ip = ip;
@@ -4471,23 +4455,8 @@ xfs_bmapi_convert_one_delalloc(
 
 	error = xfs_bmap_btree_to_extents(tp, ip, bma.cur, &bma.logflags,
 			whichfork);
-	if (error)
-		goto out_finish;
-
-	xfs_bmapi_finish(&bma, whichfork, 0);
-	if (local_tp) {
-		error = xfs_trans_commit(local_tp);
-		xfs_iunlock(ip, XFS_ILOCK_EXCL);
-	}
-	return error;
-
 out_finish:
 	xfs_bmapi_finish(&bma, whichfork, error);
-out_trans_cancel:
-	if (local_tp) {
-		xfs_trans_cancel(local_tp);
-		xfs_iunlock(ip, XFS_ILOCK_EXCL);
-	}
 	return error;
 }
 
