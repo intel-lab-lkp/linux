@@ -2173,7 +2173,8 @@ nv50_disp_atomic_commit_core(struct drm_atomic_commit *state, u32 *interlock)
 			struct nouveau_encoder *nv_encoder = nouveau_encoder(outp->encoder);
 
 			if (outp->enabled) {
-				nv50_audio_enable(outp->encoder, nouveau_crtc(nv_encoder->crtc),
+				nv50_audio_enable(outp->encoder,
+						  nv50_outp_get_new_crtc(state, nv_encoder),
 						  nv_encoder->conn, NULL, NULL);
 				outp->enabled = outp->disabled = false;
 			} else {
