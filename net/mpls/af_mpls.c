@@ -1446,9 +1446,12 @@ static int mpls_dev_sysctl_register(struct net_device *dev,
 		table[i].extra2 = net;
 	}
 
-	snprintf(path, sizeof(path), "net/mpls/conf/%s", dev->name);
+#define path_template "net/mpls/conf/%s"
+	snprintf(path, sizeof(path), path_template, dev->name);
 
-	mdev->sysctl = register_net_sysctl_sz(net, path, table, table_size);
+	mdev->sysctl = register_net_sysctl_sz(net, path, table, table_size,
+					      mpls_dev_table, path_template);
+#undef path_template
 	if (!mdev->sysctl)
 		goto free;
 
@@ -2765,7 +2768,7 @@ static __net_init int mpls_net_init(struct net *net)
 		table[i].data = (char *)net + (uintptr_t)table[i].data;
 
 	net->mpls.ctl = register_net_sysctl_sz(net, "net/mpls", table,
-					       table_size);
+					       table_size, mpls_table);
 	if (net->mpls.ctl == NULL) {
 		kfree(table);
 		return -ENOMEM;

@@ -1696,7 +1696,7 @@ static __net_init int ipv4_sysctl_init_net(struct net *net)
 	}
 
 	net->ipv4.ipv4_hdr = register_net_sysctl_sz(net, "net/ipv4", table,
-						    table_size);
+						    table_size, ipv4_net_table);
 	if (!net->ipv4.ipv4_hdr)
 		goto err_reg;
 

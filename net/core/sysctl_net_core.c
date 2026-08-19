@@ -821,7 +821,8 @@ static __net_init int sysctl_core_net_init(struct net *net)
 			goto err_dup;
 	}
 
-	net->core.sysctl_hdr = register_net_sysctl_sz(net, "net/core", tbl, table_size);
+	net->core.sysctl_hdr = register_net_sysctl_sz(net, "net/core", tbl, table_size,
+						      netns_core_table);
 	if (net->core.sysctl_hdr == NULL)
 		goto err_reg;
 

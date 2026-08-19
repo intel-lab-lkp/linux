@@ -386,7 +386,7 @@ static int __net_init lowpan_frags_ns_sysctl_register(struct net *net)
 	table[2].data	= &ieee802154_lowpan->fqdir->timeout;
 
 	hdr = register_net_sysctl_sz(net, "net/ieee802154/6lowpan", table,
-				     table_size);
+				     table_size, lowpan_frags_ns_ctl_table);
 	if (hdr == NULL)
 		goto err_reg;
 

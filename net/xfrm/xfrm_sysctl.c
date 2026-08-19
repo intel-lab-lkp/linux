@@ -60,7 +60,7 @@ int __net_init xfrm_sysctl_init(struct net *net)
 		table_size = 0;
 
 	net->xfrm.sysctl_hdr = register_net_sysctl_sz(net, "net/core", table,
-						      table_size);
+						      table_size, xfrm_table);
 	if (!net->xfrm.sysctl_hdr)
 		goto out_register;
 	return 0;
