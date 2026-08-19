@@ -1,0 +1,75 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob monitor restarting a parked window on the same task (no cross-window accumulator leak, unbind of a repeatedly-started task works)
+# requires: tlob:monitor
+
+set -x
+UPROBE_TARGET="${VERIFICATIONTEST_BINDIR}/tlob_target"
+TLOB_SYM="${VERIFICATIONTEST_BINDIR}/tlob_sym"
+TLOB_MONITOR=monitors/tlob/monitor
+
+# Diagnostic dump for a budget-violation regression: prints the exact
+# error_env_tlob entry (state + clk_elapsed at expiry), the per-state
+# accumulator breakdown, and the full start/stop transition sequence for
+# the monitored pid, so a false-positive violation can be told apart from
+# a genuine per-window overrun (and, if it is the latter, whether the
+# accumulators leaked across a restart).
+dump_tlob_diag() {
+	TRACE=/sys/kernel/tracing/trace
+	echo "===== tlob restart diagnostic (pid ${busy_pid}) =====" >&2
+	echo "--- error_env_tlob (violations) ---" >&2
+	grep "error_env_tlob" "$TRACE" >&2 || true
+	echo "--- detail_env_tlob (accumulator breakdown) ---" >&2
+	grep "detail_env_tlob" "$TRACE" >&2 || true
+	echo "--- event_tlob (state transitions for target pid) ---" >&2
+	grep "event_tlob" "$TRACE" | grep ":${busy_pid}:" >&2 || true
+	echo "--- last 50 trace lines (full context) ---" >&2
+	tail -50 "$TRACE" >&2 || true
+}
+
+busy_offset=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_busy_work 2>/dev/null)
+stop_offset=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_busy_work_done 2>/dev/null)
+
+# tlob_target loops calling tlob_busy_work(200)/tlob_busy_work_done() every
+# ~200ms for the whole run: each call is one start/stop window on the SAME
+# task, driving tlob_start_task()'s restart path (same pid, parked ws) on
+# every iteration after the first.  900ms gives ~4 such windows.
+"$UPROBE_TARGET" 900 &
+busy_pid=$!
+teardown() {
+	kill "$busy_pid" 2>/dev/null || true; wait "$busy_pid" 2>/dev/null || true
+}
+trap teardown EXIT
+sleep 0.05
+
+echo 1 > /sys/kernel/tracing/events/rv/event_tlob/enable
+echo 1 > /sys/kernel/tracing/events/rv/error_env_tlob/enable
+echo 1 > /sys/kernel/tracing/events/rv/detail_env_tlob/enable
+echo 1 > /sys/kernel/tracing/tracing_on
+echo 1 > monitors/tlob/enable
+echo > /sys/kernel/tracing/trace
+
+# 300ms budget: comfortably covers one ~200ms window.  If a restart failed
+# to reset ws->accs_ns[]/budget_exceeded (a regression this test exists to
+# catch), running_ns would keep growing across windows and the SECOND
+# window would already exceed budget (~400ms cumulative > 300ms).  With a
+# correct reset, no window ever exceeds it.
+echo "p ${UPROBE_TARGET}:${busy_offset} ${stop_offset} threshold=300000000" > "$TLOB_MONITOR"
+
+wait "$busy_pid" || true
+
+if grep -q "error_env_tlob" /sys/kernel/tracing/trace; then
+	dump_tlob_diag
+	false
+fi
+
+# The task has exited (tlob_destroy_task() ran via handle_sched_process_exit);
+# removing its now-stale binding must still succeed cleanly.
+echo "-${UPROBE_TARGET}:${busy_offset}" > "$TLOB_MONITOR"
+! grep -q "^p .*:0x${busy_offset#0x} " "$TLOB_MONITOR" || false
+
+echo 0 > monitors/tlob/enable
+echo 0 > /sys/kernel/tracing/events/rv/event_tlob/enable
+echo 0 > /sys/kernel/tracing/events/rv/error_env_tlob/enable
+echo 0 > /sys/kernel/tracing/events/rv/detail_env_tlob/enable
+echo > /sys/kernel/tracing/trace

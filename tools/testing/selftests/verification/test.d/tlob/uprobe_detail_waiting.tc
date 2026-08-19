@@ -1,0 +1,68 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob monitor detail waiting (waiting_ns dominates when task is preempted between probes)
+# requires: tlob:monitor chrt:program taskset:program
+
+UPROBE_TARGET="${VERIFICATIONTEST_BINDIR}/tlob_target"
+TLOB_SYM="${VERIFICATIONTEST_BINDIR}/tlob_sym"
+TLOB_MONITOR=monitors/tlob/monitor
+
+start_offset=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_preempt_work 2>/dev/null)
+stop_offset=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_preempt_work_done 2>/dev/null)
+
+# Pick the last CPU to avoid cpu0 which is used by vng infrastructure.
+cpu=$(($(nproc) - 1))
+
+echo 1 > /sys/kernel/tracing/events/rv/detail_env_tlob/enable
+echo 1 > /sys/kernel/tracing/tracing_on
+echo 1 > monitors/tlob/enable
+echo > /sys/kernel/tracing/trace
+
+# tlob_target loops calling tlob_preempt_work(200) / tlob_preempt_work_done()
+# in 200 ms wall-clock iterations.  The stop probe fires when
+# tlob_preempt_work_done() is called, which cancels the budget timer.
+# Budget must be less than 200 ms so the HA timer fires while the target is
+# still inside tlob_preempt_work() and before the stop probe fires.
+# 150 ms gives a comfortable margin: waiting_ns ≈ 140 ms >> running_ns < 10 ms.
+echo "p ${UPROBE_TARGET}:${start_offset} ${stop_offset} threshold=150000000" > "$TLOB_MONITOR"
+
+# Start the RT hog BEFORE the target so the target is immediately preempted
+# when it calls tlob_preempt_work() (start probe fires), minimising running_ns.
+chrt -f 99 taskset -c "$cpu" sh -c 'while true; do :; done' 2>/dev/null &
+hog_pid=$!
+teardown() {
+    kill "$hog_pid"  2>/dev/null || true; wait "$hog_pid"  2>/dev/null || true
+    kill "$busy_pid" 2>/dev/null || true; wait "$busy_pid" 2>/dev/null || true
+}
+trap teardown EXIT
+sleep 0.02
+
+taskset -c "$cpu" "$UPROBE_TARGET" 5000 preempt &
+busy_pid=$!
+
+# Poll up to 3 s (budget 150 ms + generous margin).
+found=0; i=0
+while [ "$i" -lt 30 ]; do
+	sleep 0.1
+	grep -q "detail_env_tlob" /sys/kernel/tracing/trace && { found=1; break; }
+	i=$((i+1))
+done
+
+# Kill the RT hog first so tlob_target can release any in-flight SRCU read
+# section from uprobe_notify_resume; otherwise probe removal blocks in
+# synchronize_srcu with the hog monopolising the CPU at FIFO-99.
+kill "$hog_pid" 2>/dev/null || true; wait "$hog_pid" 2>/dev/null || true
+kill "$busy_pid" 2>/dev/null || true; wait "$busy_pid" 2>/dev/null || true
+echo "-${UPROBE_TARGET}:${start_offset}" > "$TLOB_MONITOR" 2>/dev/null
+echo 0 > /sys/kernel/tracing/events/rv/detail_env_tlob/enable
+echo 0 > monitors/tlob/enable
+
+[ "$found" = "1" ]
+
+line=$(grep "detail_env_tlob" /sys/kernel/tracing/trace | head -n 1)
+running=$(echo "$line" | sed 's/.*running_ns=\([0-9]*\).*/\1/')
+sleeping=$(echo "$line" | sed 's/.*sleeping_ns=\([0-9]*\).*/\1/')
+waiting=$(echo "$line" | sed 's/.*waiting_ns=\([0-9]*\).*/\1/')
+[ "$waiting" -gt "$((running + sleeping))" ]
+
+echo > /sys/kernel/tracing/trace
