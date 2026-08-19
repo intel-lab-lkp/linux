@@ -395,3 +395,11 @@ static inline struct irq_data *irqd_get_parent_data(struct irq_data *irqd)
 	return NULL;
 #endif
 }
+#ifdef CONFIG_IRQ_SW_MODERATION
+static inline void irq_moderation_init_fields(struct irq_desc *desc)
+{
+	INIT_LIST_HEAD(&desc->swmod_state.swmod_node);
+}
+#else
+static inline void irq_moderation_init_fields(struct irq_desc *desc) {}
+#endif

@@ -120,6 +120,7 @@ static inline void free_masks(struct irq_desc *desc) { }
 static void desc_set_defaults(unsigned int irq, struct irq_desc *desc, int node,
 			      const struct cpumask *affinity, struct module *owner)
 {
+	irq_moderation_init_fields(desc);
 	desc->irq_common_data.handler_data = NULL;
 	desc->irq_common_data.msi_desc = NULL;
 
