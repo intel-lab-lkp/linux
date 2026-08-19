@@ -439,28 +439,28 @@ static void sa_prepare_iopads(struct algo_data *data, const u8 *key,
 	SHASH_DESC_ON_STACK(shash, data->ctx->shash);
 	int block_size = crypto_shash_blocksize(data->ctx->shash);
 	int digest_size = crypto_shash_digestsize(data->ctx->shash);
-	union {
-		struct sha1_state sha1;
-		struct sha256_state sha256;
-		u8 k_pad[SHA1_BLOCK_SIZE];
-	} sha;
+	int state_size = crypto_shash_statesize(data->ctx->shash);
+	u8 *sha;
+
+	sha = kmalloc(state_size, GFP_KERNEL);
+	if (!sha)
+		return;
 
 	shash->tfm = data->ctx->shash;
 
-	prepare_kipad(sha.k_pad, key, key_sz);
+	prepare_kipad(sha, key, key_sz);
 
 	crypto_shash_init(shash);
-	crypto_shash_update(shash, sha.k_pad, block_size);
-	sa_export_shash(&sha, shash, digest_size, ipad);
+	crypto_shash_update(shash, sha, block_size);
+	sa_export_shash(sha, shash, digest_size, ipad);
 
-	prepare_kopad(sha.k_pad, key, key_sz);
+	prepare_kopad(sha, key, key_sz);
 
 	crypto_shash_init(shash);
-	crypto_shash_update(shash, sha.k_pad, block_size);
+	crypto_shash_update(shash, sha, block_size);
+	sa_export_shash(sha, shash, digest_size, opad);
 
-	sa_export_shash(&sha, shash, digest_size, opad);
-
-	memzero_explicit(&sha, sizeof(sha));
+	kfree_sensitive(sha);
 }
 
 /* Derive the inverse key used in AES-CBC decryption operation */
