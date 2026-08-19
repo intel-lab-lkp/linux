@@ -38,7 +38,7 @@ static void gpu_test_buddy_subtree_offset_alignment_stress(struct kunit *test)
 	};
 	struct list_head allocated[ARRAY_SIZE(alignments)];
 	unsigned int i, max_subtree_align = 0;
-	int ret, tree, order;
+	int ret, order;
 	struct gpu_buddy mm;
 
 	KUNIT_ASSERT_FALSE_MSG(test, gpu_buddy_init(&mm, mm_size, SZ_4K),
@@ -78,15 +78,11 @@ static void gpu_test_buddy_subtree_offset_alignment_stress(struct kunit *test)
 		}
 
 		for (order = mm.max_order; order >= 0 && !root; order--) {
-			for (tree = 0; tree < 2; tree++) {
-				node = mm.free_trees[tree][order].rb_node;
-				if (node) {
-					root = container_of(node,
-							    struct gpu_buddy_block,
-							    rb);
-					break;
-				}
-			}
+			node = mm.free_tree[order].rb_node;
+			if (node)
+				root = container_of(node,
+						    struct gpu_buddy_block,
+						    rb);
 		}
 
 		KUNIT_ASSERT_NOT_NULL(test, root);
@@ -97,15 +93,13 @@ static void gpu_test_buddy_subtree_offset_alignment_stress(struct kunit *test)
 		gpu_buddy_free_list(&mm, &allocated[i], 0);
 
 		for (order = 0; order <= mm.max_order; order++) {
-			for (tree = 0; tree < 2; tree++) {
-				node = mm.free_trees[tree][order].rb_node;
-				if (!node)
-					continue;
+			node = mm.free_tree[order].rb_node;
+			if (!node)
+				continue;
 
-				block = container_of(node, struct gpu_buddy_block, rb);
-				max_subtree_align = max(max_subtree_align,
-							block->subtree_max_alignment);
-			}
+			block = container_of(node, struct gpu_buddy_block, rb);
+			max_subtree_align = max(max_subtree_align,
+						block->subtree_max_alignment);
 		}
 
 		KUNIT_EXPECT_GE(test, max_subtree_align, ilog2(alignments[i]));
@@ -931,10 +925,12 @@ static void gpu_test_buddy_alloc_clear(struct kunit *test)
 	/*
 	 * Create a new mm. Intentionally fragment the address space by creating
 	 * two alternating lists. Free both lists, one as dirty the other as clean.
-	 * Try to allocate double the previous size with matching min_page_size. The
-	 * allocation should never fail as it calls the force_merge. Also check that
-	 * the page is always dirty after force_merge. Free the page as dirty, then
-	 * repeat the whole thing, increment the order until we hit the max_order.
+	 * Try to allocate double the previous size with matching min_page_size.
+	 * The allocation should never fail because buddy pairs coalesce
+	 * unconditionally at free() time, rebuilding the larger block. Also check
+	 * that the page is always dirty (a merged block spanning a dirty half is
+	 * dirty). Free the page as dirty, then repeat the whole thing, increment
+	 * the order until we hit the max_order.
 	 */
 
 	i = 0;
@@ -1027,7 +1023,7 @@ static void gpu_test_buddy_alloc_clear(struct kunit *test)
 	gpu_buddy_free_list(&mm, &clean, GPU_BUDDY_CLEARED);
 	gpu_buddy_free_list(&mm, &dirty, 0);
 	gpu_buddy_reset_clear(&mm, false);
-	KUNIT_EXPECT_EQ(test, mm.clear_avail, 0);
+	KUNIT_EXPECT_EQ(test, gpu_buddy_clear_avail(&mm), 0);
 	gpu_buddy_fini(&mm);
 
 	/*
@@ -1050,7 +1046,7 @@ static void gpu_test_buddy_alloc_clear(struct kunit *test)
 	gpu_buddy_free_list(&mm, &clean, GPU_BUDDY_CLEARED);
 	gpu_buddy_free_list(&mm, &dirty, 0);
 	gpu_buddy_reset_clear(&mm, true);
-	KUNIT_EXPECT_EQ(test, mm.clear_avail, mm_size);
+	KUNIT_EXPECT_EQ(test, gpu_buddy_clear_avail(&mm), mm_size);
 	gpu_buddy_fini(&mm);
 }
 
