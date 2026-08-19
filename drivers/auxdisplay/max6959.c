@@ -63,11 +63,15 @@ static void max6959_disp_update(struct work_struct *work)
 	regmap_bulk_write(priv->regmap, REG_DIGIT(0), buf, ARRAY_SIZE(buf));
 }
 
+static void max6959_cancel_work(void *data)
+{
+	struct delayed_work *work = data;
+
+	cancel_delayed_work_sync(work);
+}
+
 static int max6959_linedisp_get_map_type(struct linedisp *linedisp)
 {
-	struct max6959_priv *priv = container_of(linedisp, struct max6959_priv, linedisp);
-
-	INIT_DELAYED_WORK(&priv->work, max6959_disp_update);
 	return LINEDISP_MAP_SEG7;
 }
 
@@ -123,6 +127,11 @@ static int max6959_i2c_probe(struct i2c_client *client)
 	if (!priv)
 		return -ENOMEM;
 
+	INIT_DELAYED_WORK(&priv->work, max6959_disp_update);
+	ret = devm_add_action_or_reset(dev, max6959_cancel_work, &priv->work);
+	if (ret)
+		return ret;
+
 	priv->regmap = devm_regmap_init_i2c(client, &max6959_regmap_config);
 	if (IS_ERR(priv->regmap))
 		return PTR_ERR(priv->regmap);
@@ -131,21 +140,13 @@ static int max6959_i2c_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
-	ret = linedisp_register(&priv->linedisp, dev, 4, &max6959_linedisp_ops);
+	ret = devm_linedisp_register(dev, &priv->linedisp, 4, &max6959_linedisp_ops);
 	if (ret)
 		return ret;
 
 	i2c_set_clientdata(client, priv);
 
 	return 0;
-}
-
-static void max6959_i2c_remove(struct i2c_client *client)
-{
-	struct max6959_priv *priv = i2c_get_clientdata(client);
-
-	cancel_delayed_work_sync(&priv->work);
-	linedisp_unregister(&priv->linedisp);
 }
 
 static int max6959_suspend(struct device *dev)
@@ -179,7 +180,6 @@ static struct i2c_driver max6959_i2c_driver = {
 		.of_match_table = max6959_of_table,
 	},
 	.probe = max6959_i2c_probe,
-	.remove = max6959_i2c_remove,
 	.id_table = max6959_i2c_id,
 };
 module_i2c_driver(max6959_i2c_driver);
