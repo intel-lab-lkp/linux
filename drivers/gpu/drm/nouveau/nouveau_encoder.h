@@ -54,9 +54,6 @@ struct nouveau_encoder {
 
 	struct i2c_adapter *i2c;
 
-	/* different to drm_encoder.crtc, this reflects what's
-	 * actually programmed on the hw, not the proposed crtc */
-	struct drm_crtc *crtc;
 	u32 ctrl;
 
 	/* Protected by nouveau_drm.audio.lock */
