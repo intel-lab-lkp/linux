@@ -160,10 +160,10 @@ static int ensure_safe_net_sysctl(struct net *net, const char *path,
 	return 0;
 }
 
-struct ctl_table_header *register_net_sysctl_sz(struct net *net,
-						const char *path,
-						const struct ctl_table *table,
-						size_t table_size)
+struct ctl_table_header *__register_net_sysctl_sz(struct net *net,
+						  const char *path,
+						  const struct ctl_table *table,
+						  size_t table_size)
 {
 	if (!net_eq(net, &init_net))
 		if (ensure_safe_net_sysctl(net, path, table, table_size))
@@ -171,7 +171,7 @@ struct ctl_table_header *register_net_sysctl_sz(struct net *net,
 
 	return __register_sysctl_table(&net->sysctls, path, table, table_size);
 }
-EXPORT_SYMBOL_GPL(register_net_sysctl_sz);
+EXPORT_SYMBOL_GPL(__register_net_sysctl_sz);
 
 void unregister_net_sysctl_table(struct ctl_table_header *header)
 {
