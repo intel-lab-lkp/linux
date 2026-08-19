@@ -911,7 +911,6 @@ static struct domain_device *sas_ex_discover_expander(
 	struct sas_rphy *rphy;
 	struct sas_expander_device *edev;
 	struct asd_sas_port *port;
-	int res;
 
 	if (phy->routing_attr == DIRECT_ROUTING) {
 		pr_warn("ex %016llx:%02d:D <--> ex %016llx:0x%x is not allowed\n",
@@ -925,9 +924,17 @@ static struct domain_device *sas_ex_discover_expander(
 		return NULL;
 
 	phy->port = sas_port_alloc(&parent->rphy->dev, phy_id);
-	/* FIXME: better error handling */
-	BUG_ON(sas_port_add(phy->port) != 0);
+	if (!phy->port) {
+		sas_put_device(child);
+		return NULL;
+	}
 
+	if (sas_port_add(phy->port)) {
+		sas_port_free(phy->port);
+		phy->port = NULL;
+		sas_put_device(child);
+		return NULL;
+	}
 
 	switch (phy->attached_dev_type) {
 	case SAS_EDGE_EXPANDER_DEVICE:
@@ -966,8 +973,7 @@ static struct domain_device *sas_ex_discover_expander(
 	list_add_tail(&child->dev_list_node, &parent->port->dev_list);
 	spin_unlock_irq(&parent->port->dev_list_lock);
 
-	res = sas_discover_expander(child);
-	if (res) {
+	if (sas_discover_expander(child)) {
 		sas_rphy_delete(rphy);
 		spin_lock_irq(&parent->port->dev_list_lock);
 		list_del(&child->dev_list_node);
@@ -977,6 +983,7 @@ static struct domain_device *sas_ex_discover_expander(
 		phy->port = NULL;
 		return NULL;
 	}
+
 	list_add_tail(&child->siblings, &parent->ex_dev.children);
 	return child;
 }
