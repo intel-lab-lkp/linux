@@ -546,7 +546,7 @@ xrep_rtbitmap(
 		if (delta > UINT_MAX)
 			return -EOPNOTSUPP;
 
-		error = xfs_trans_reserve_more(sc->tp, delta, 0);
+		error = xfs_trans_reserve_blocks(sc->tp, delta, 0);
 		if (error)
 			return error;
 

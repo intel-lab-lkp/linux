@@ -66,7 +66,7 @@ xrep_quota_item_fill_bmap_hole(
 	xfs_trans_ijoin(sc->tp, sc->ip, 0);
 
 	/* Map a block into the file. */
-	error = xfs_trans_reserve_more(sc->tp, XFS_QM_DQALLOC_SPACE_RES(mp),
+	error = xfs_trans_reserve_blocks(sc->tp, XFS_QM_DQALLOC_SPACE_RES(mp),
 			0);
 	if (error)
 		return error;

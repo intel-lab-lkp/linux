@@ -132,6 +132,53 @@ xfs_trans_dup(
 }
 
 /*
+ * Reserve disk blocks and RT extents for a transaction. On success the
+ * requested blocks are decremented from the global free space counters and
+ * added to the transaction's block reservation. On failure, no space is
+ * reserved and the transaction is not modified, and callers must be able to
+ * cancel the transaction without shutting down the filesystem.
+ */
+int
+xfs_trans_reserve_blocks(
+	struct xfs_trans	*tp,
+	unsigned int		blocks,
+	unsigned int		rtextents)
+{
+	bool			rsvd = tp->t_flags & XFS_TRANS_RESERVE;
+
+	if (blocks && xfs_dec_fdblocks(tp->t_mountp, blocks, rsvd))
+		return -ENOSPC;
+	if (rtextents && xfs_dec_frextents(tp->t_mountp, rtextents)) {
+		if (blocks)
+			xfs_add_fdblocks(tp->t_mountp, blocks);
+		return -ENOSPC;
+	}
+	tp->t_blk_res += blocks;
+	tp->t_rtx_res += rtextents;
+	return 0;
+}
+
+/*
+ * Give back block and RT extent reservations to the free space counters.
+ * This is the inverse of xfs_trans_reserve_blocks().
+ */
+void
+xfs_trans_unreserve_blocks(
+	struct xfs_trans	*tp,
+	unsigned int		blocks,
+	unsigned int		rtextents)
+{
+	if (blocks) {
+		xfs_add_fdblocks(tp->t_mountp, blocks);
+		tp->t_blk_res -= blocks;
+	}
+	if (rtextents) {
+		xfs_add_frextents(tp->t_mountp, rtextents);
+		tp->t_rtx_res -= rtextents;
+	}
+}
+
+/*
  * This is called to reserve free disk blocks and log space for the given
  * transaction before allocating any resources within the transaction.
  *
@@ -149,22 +196,13 @@ xfs_trans_reserve(
 	uint			rtextents)
 {
 	struct xfs_mount	*mp = tp->t_mountp;
-	int			error = 0;
-	bool			rsvd = (tp->t_flags & XFS_TRANS_RESERVE) != 0;
+	int			error;
 
 	ASSERT(resp->tr_logres > 0);
 
-	/*
-	 * Attempt to reserve the needed disk blocks by decrementing the number
-	 * needed from the number available.  This will fail if the count would
-	 * go below zero.
-	 */
-	if (blocks > 0) {
-		error = xfs_dec_fdblocks(mp, blocks, rsvd);
-		if (error != 0)
-			return -ENOSPC;
-		tp->t_blk_res += blocks;
-	}
+	error = xfs_trans_reserve_blocks(tp, blocks, rtextents);
+	if (error)
+		return error;
 
 	/*
 	 * Reserve the log space needed for this transaction.
@@ -173,39 +211,15 @@ xfs_trans_reserve(
 		tp->t_flags |= XFS_TRANS_PERM_LOG_RES;
 	error = xfs_log_reserve(mp, resp->tr_logres, resp->tr_logcount,
 			&tp->t_ticket, (tp->t_flags & XFS_TRANS_PERM_LOG_RES));
-	if (error)
-		goto undo_blocks;
+	if (error) {
+		xfs_trans_unreserve_blocks(tp, blocks, rtextents);
+		tp->t_flags &= ~XFS_TRANS_PERM_LOG_RES;
+		return error;
+	}
 
 	tp->t_log_res = resp->tr_logres;
 	tp->t_log_count = resp->tr_logcount;
-
-	/*
-	 * Attempt to reserve the needed realtime extents by decrementing the
-	 * number needed from the number available.  This will fail if the
-	 * count would go below zero.
-	 */
-	if (rtextents > 0) {
-		error = xfs_dec_frextents(mp, rtextents);
-		if (error) {
-			error = -ENOSPC;
-			goto undo_log;
-		}
-		tp->t_rtx_res += rtextents;
-	}
-
 	return 0;
-
-undo_log:
-	xfs_log_ticket_ungrant(mp->m_log, tp->t_ticket);
-	tp->t_ticket = NULL;
-	tp->t_log_res = 0;
-	tp->t_flags &= ~XFS_TRANS_PERM_LOG_RES;
-undo_blocks:
-	if (blocks > 0) {
-		xfs_add_fdblocks(mp, blocks);
-		tp->t_blk_res = 0;
-	}
-	return error;
 }
 
 static struct xfs_trans *
@@ -1116,37 +1130,8 @@ out_cancel:
 }
 
 /*
- * Try to reserve more blocks for a transaction.
- *
- * This is for callers that need to attach resources to a transaction, scan
- * those resources to determine the space reservation requirements, and then
- * modify the attached resources.  In other words, online repair.  This can
- * fail due to ENOSPC, so the caller must be able to cancel the transaction
- * without shutting down the fs.
- */
-int
-xfs_trans_reserve_more(
-	struct xfs_trans	*tp,
-	unsigned int		blocks,
-	unsigned int		rtextents)
-{
-	bool			rsvd = tp->t_flags & XFS_TRANS_RESERVE;
-
-	if (blocks && xfs_dec_fdblocks(tp->t_mountp, blocks, rsvd))
-		return -ENOSPC;
-	if (rtextents && xfs_dec_frextents(tp->t_mountp, rtextents)) {
-		if (blocks)
-			xfs_add_fdblocks(tp->t_mountp, blocks);
-		return -ENOSPC;
-	}
-	tp->t_blk_res += blocks;
-	tp->t_rtx_res += rtextents;
-	return 0;
-}
-
-/*
  * Try to reserve more blocks and file quota for a transaction.  Same
- * conditions of usage as xfs_trans_reserve_more.
+ * conditions of usage as xfs_trans_reserve_blocks.
  */
 int
 xfs_trans_reserve_more_inode(
@@ -1162,7 +1147,7 @@ xfs_trans_reserve_more_inode(
 
 	xfs_assert_ilocked(ip, XFS_ILOCK_EXCL);
 
-	error = xfs_trans_reserve_more(tp, dblocks, rtx);
+	error = xfs_trans_reserve_blocks(tp, dblocks, rtx);
 	if (error)
 		return error;
 
@@ -1178,10 +1163,7 @@ xfs_trans_reserve_more_inode(
 		return 0;
 
 	/* Quota failed, give back the new reservation. */
-	xfs_add_fdblocks(mp, dblocks);
-	tp->t_blk_res -= dblocks;
-	xfs_add_frextents(mp, rtx);
-	tp->t_rtx_res -= rtx;
+	xfs_trans_unreserve_blocks(tp, dblocks, rtx);
 	return error;
 }
 

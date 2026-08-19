@@ -435,7 +435,7 @@ xrep_cow_alloc(
 	};
 	int			error;
 
-	error = xfs_trans_reserve_more(sc->tp, del->br_blockcount, 0);
+	error = xfs_trans_reserve_blocks(sc->tp, del->br_blockcount, 0);
 	if (error)
 		return error;
 
@@ -467,7 +467,7 @@ xrep_cow_alloc_rt(
 	xfs_extlen_t		len;
 	int			error;
 
-	error = xfs_trans_reserve_more(sc->tp, 0, maxrtx);
+	error = xfs_trans_reserve_blocks(sc->tp, 0, maxrtx);
 	if (error)
 		return error;
 
