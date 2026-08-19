@@ -15,6 +15,7 @@
 #include <linux/bits.h>
 #include <linux/bitfield.h>
 #include <linux/delay.h>
+#include <linux/dev_printk.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/iio/iio.h>
@@ -978,8 +979,7 @@ static int mcp47feb02_parse_fw(struct iio_dev *indio_dev,
 
 		ret = fwnode_property_read_string(child, "label", &data->labels[reg]);
 		if (ret)
-			return dev_err_probe(dev, ret, "%pfw: invalid label\n",
-					     fwnode_get_name(child));
+			dev_dbg(dev, "%s: invalid label\n", fwnode_get_name(child));
 
 		chanspec.address = reg;
 		chanspec.channel = reg;
