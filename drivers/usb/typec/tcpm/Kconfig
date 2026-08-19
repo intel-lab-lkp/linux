@@ -91,4 +91,13 @@ config TYPEC_QCOM_PMIC
 	  This driver enables Type-C role switching, orientation, Alternate
 	  mode and Power Delivery support both for VBUS and VCONN.
 
+config TYPEC_ST_UCPD
+	tristate "ST UCPD Type-C Port Controller Manager driver"
+	depends on ARCH_STM32 || COMPILE_TEST
+	help
+	  The ST UCPD Type-C block integrates the physical layer of the
+	  Power Delivery (PD), with CC signaling method, for operation
+	  with Type-C cables. Vbus and Vconn control is performed using
+	  an external chip, usually ST TCPP01/TCPP02/TCPP03 or similar.
+
 endif # TYPEC_TCPM
