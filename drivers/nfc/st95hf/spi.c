@@ -66,7 +66,7 @@ EXPORT_SYMBOL_GPL(st95hf_spi_send);
 
 /* Function to Receive command Response */
 int st95hf_spi_recv_response(struct st95hf_spi_context *spicontext,
-			     unsigned char *receivebuff)
+			     unsigned char *receivebuff, int buff_len)
 {
 	int len = 0;
 	struct spi_transfer tx_takedata;
@@ -105,6 +105,11 @@ int st95hf_spi_recv_response(struct st95hf_spi_context *spicontext,
 		len += (((receivebuff[0] & 0x60) >> 5) << 8) | receivebuff[1];
 	else
 		len += receivebuff[1];
+
+	if (len > buff_len) {
+		mutex_unlock(&spicontext->spi_lock);
+		return -E2BIG;
+	}
 
 	/* Now make a transfer to read only relevant bytes */
 	tx_takedata.rx_buf = &receivebuff[2];

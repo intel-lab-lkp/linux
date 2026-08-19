@@ -45,7 +45,7 @@ int st95hf_spi_send(struct st95hf_spi_context *spicontext,
 		    enum req_type reqtype);
 
 int st95hf_spi_recv_response(struct st95hf_spi_context *spicontext,
-			     unsigned char *receivebuff);
+			     unsigned char *receivebuff, int buff_len);
 
 int st95hf_spi_recv_echo_res(struct st95hf_spi_context *spicontext,
 			     unsigned char *receivebuff);
