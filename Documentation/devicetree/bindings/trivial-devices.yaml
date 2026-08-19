@@ -194,6 +194,8 @@ properties:
           - isil,isl29030
             # Intersil ISL76682 Ambient Light Sensor
           - isil,isl76682
+            # JEDEC JESD301 (PMIC5000) Power Management IC
+          - jedec,pmic5000
             # JEDEC JESD300 (SPD5118) Hub and Serial Presence Detect
           - jedec,spd5118
             # Kandou KB9002 PCIe 5.0 retimer

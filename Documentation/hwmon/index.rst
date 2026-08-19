@@ -226,6 +226,7 @@ Hardware Monitoring Kernel Drivers
    peci-cputemp
    peci-dimmtemp
    pmbus
+   pmic5000
    powerz
    powr1220
    prom21-xhci

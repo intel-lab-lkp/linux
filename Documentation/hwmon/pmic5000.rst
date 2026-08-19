@@ -1,0 +1,103 @@
+.. SPDX-License-Identifier: GPL-2.0-or-later
+
+Kernel driver pmic5000
+=====================
+
+Supported chips:
+
+  * PMIC5000 (JEDEC JESD301) compliant power management chips
+
+    JEDEC standard download:
+	https://www.jedec.org/standards-documents/docs/jesd301-1a03
+	(account required)
+
+
+    Prefix: 'pmic5000'
+
+Author:
+	Stephen Horvath <linux@stevetech.au>
+
+
+Description
+-----------
+
+This driver implements support for PMIC5000 (JEDEC JESD301) compliant power
+management chips, which are used on many DDR5 memory modules.
+
+The driver does not auto-detect PMIC5000 compliant chips, and must be
+instantiated manually or via device tree. The address of these chips are
+usually between (inclusive) 0x48 and 0x4F.
+
+
+Hardware monitoring sysfs entries
+---------------------------------
+
+======================= ==================================
+in0_enable		Whether SWA is enabled (RO)
+in0_input		SWA Voltage (RO)
+in0_min			Minimum SWA Voltage (RO)
+in0_max			Maximum SWA Voltage (RO)
+in0_min_alarm		SWA Voltage low alarm
+in0_max_alarm		SWA Voltage high alarm
+
+in1_enable		Whether SWB is enabled (RO)
+in1_input		SWB Voltage (RO)
+in1_min			Minimum SWB Voltage (RO)
+in1_max			Maximum SWB Voltage (RO)
+in1_min_alarm		SWB Voltage low alarm
+in1_max_alarm		SWB Voltage high alarm
+
+in2_enable		Whether SWC is enabled (RO)
+in2_input		SWC Voltage (RO)
+in2_min			Minimum SWC Voltage (RO)
+in2_max			Maximum SWC Voltage (RO)
+in2_min_alarm		SWC Voltage low alarm
+in2_max_alarm		SWC Voltage high alarm
+
+in3_enable		Whether SWD is enabled (RO)
+in3_input		SWD Voltage (RO)
+in3_min			Minimum SWD Voltage (RO)
+in3_max			Maximum SWD Voltage (RO)
+in3_min_alarm		SWD Voltage low alarm
+in3_max_alarm		SWD Voltage high alarm
+
+in5_input		VIN_Bulk Voltage (RO)
+in5_max			Maximum VIN_Bulk Voltage (RO)
+in5_max_alarm		VIN_Bulk Voltage high alarm
+
+in6_input		VIN_Mgmt Voltage (RO)
+in6_max			Maximum VIN_Mgmt Voltage (RO)
+in6_max_alarm		VIN_Mgmt Voltage high alarm
+
+in7_input		VBias Voltage (RO)
+in8_input		VOUT_1.8V Voltage (RO)
+in9_input		VOUT_1.0V Voltage (RO)
+
+temp1_input		Temperature (RO)
+temp1_max		Maximum temperature (RO)
+temp1_max_alarm		Temperature high alarm
+
+power1_input 		SWA Wattage (RO)
+power2_input 		SWB Wattage (RO)
+power3_input 		SWC Wattage (RO)
+power4_input 		SWD Wattage (RO)
+
+curr1_input		SWA Current (RO)
+curr1_max		Maximum SWA Current (RO)
+curr1_max_alarm		SWA Current high alarm
+
+curr2_input		SWB Current (RO)
+curr2_max		Maximum SWB Current (RO)
+curr2_max_alarm		SWB Current high alarm
+
+curr3_input		SWC Current (RO)
+curr3_max		Maximum SWC Current (RO)
+curr3_max_alarm		SWC Current high alarm
+
+curr4_input		SWD Current (RO)
+curr4_max		Maximum SWD Current (RO)
+curr4_max_alarm		SWD Current high alarm
+
+update_interval		Update interval in milliseconds (RW), Allowed values: 1, 2, 4, 8
+
+======================= ==================================
