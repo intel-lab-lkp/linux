@@ -27,6 +27,11 @@ use kernel::{
     ptr,
     sync::{
         aref::ARef,
+        barrier::{
+            dma_mb,
+            Full,
+            Write, //
+        },
         Mutex, //
     },
     time::Delta,
@@ -272,6 +277,10 @@ impl DmaGspMem {
             (rx - 1, 0)
         };
 
+        // ORDERING: LOAD->STORE ordering needed to order `gsp_read_ptr` read before data write.
+        // Control dependency can serve the same purpose here, but we don't want to rely on it.
+        dma_mb(Full);
+
         // SAFETY:
         // - `data` was created from a valid pointer, and `rx` and `tx` are in the
         //   `0..MSGQ_NUM_PAGES` range per the invariants of `cpu_write_ptr` and `gsp_read_ptr`,
@@ -450,9 +459,6 @@ impl DmaGspMem {
         let tx = io_project!(self.0, .cpuq.tx);
         let wptr = MsgqTxHeader::write_ptr(tx).wrapping_add(elem_count) % MSGQ_NUM_PAGES;
         MsgqTxHeader::set_write_ptr(tx, wptr);
-
-        // Ensure all command data is visible before triggering the GSP read.
-        fence(Ordering::SeqCst);
     }
 }
 
@@ -682,6 +688,9 @@ impl CmdqInner {
             M::FUNCTION,
             dst.header.length(),
         );
+
+        // ORDERING: STORE->STORE ordering needed to order `cpu_write_ptr` write after data write.
+        dma_mb(Write);
 
         // All set - update the write pointer and inform the GSP of the new command.
         let elem_count = dst.header.element_count();
