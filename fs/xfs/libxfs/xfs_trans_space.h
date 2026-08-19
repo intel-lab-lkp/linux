@@ -55,6 +55,18 @@
 	  XFS_MAX_CONTIG_EXTENTS_PER_BLOCK(mp)) * \
 	  XFS_EXTENTADD_SPACE_RES(mp,w))
 
+/*
+ * Blocks needed to add or remove a realtime data extent: the bmbt split plus
+ * rt rmap btree and rt refcount btree updates deferred from the bmbt operation.
+ *
+ * TODO: this should be folded into XFS_EXTENTADD_SPACE_RES() so that all
+ * callers that operate on RT inodes automatically get the correct reservation.
+ */
+#define XFS_RTEXTENTADD_SPACE_RES(mp)	\
+	(XFS_EXTENTADD_SPACE_RES(mp, XFS_DATA_FORK) + \
+	 (xfs_has_rmapbt(mp) ? XFS_RTRMAPADD_SPACE_RES(mp) : 0) + \
+	 (xfs_has_reflink(mp) ? 2 * (mp)->m_rtrefc_maxlevels - 1 : 0))
+
 /* Blocks we might need to add "b" mappings & rmappings to a file. */
 #define XFS_SWAP_RMAP_SPACE_RES(mp,b,w)\
 	(XFS_NEXTENTADD_SPACE_RES((mp), (b), (w)) + \

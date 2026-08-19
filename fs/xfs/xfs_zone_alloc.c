@@ -330,8 +330,11 @@ xfs_zoned_end_io(
 		.br_startblock	= xfs_daddr_to_rtb(mp, daddr),
 		.br_state	= XFS_EXT_NORM,
 	};
-	unsigned int		resblks =
-		XFS_EXTENTADD_SPACE_RES(mp, XFS_DATA_FORK);
+	/*
+	 * A remap performs two independent BMBT modifications - an unmap
+	 * of the old extent followed by a map of the new extent.
+	 */
+	unsigned int		resblks = 2 * XFS_RTEXTENTADD_SPACE_RES(mp);
 	struct xfs_trans	*tp;
 	int			error;
 
@@ -342,7 +345,7 @@ xfs_zoned_end_io(
 		new.br_blockcount = end_fsb - new.br_startoff;
 
 		error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, resblks, 0,
-				XFS_TRANS_RESERVE | XFS_TRANS_RES_FDBLKS, &tp);
+				XFS_TRANS_RESERVE, &tp);
 		if (error)
 			return error;
 		xfs_ilock(ip, XFS_ILOCK_EXCL);
