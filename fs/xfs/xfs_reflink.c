@@ -643,16 +643,22 @@ xfs_reflink_allocate_cow(
 
 	/*
 	 * CoW fork does not have an extent and data extent is shared.
-	 * Allocate a real extent in the CoW fork.
+	 * Allocate a real extent in the CoW fork. If the caller has not
+	 * provided a transaction for the allocation, return -EAGAIN to
+	 * tell the caller to allocate a transaction and retry.
 	 */
-	if (cmap->br_startoff > imap->br_startoff)
-		return xfs_reflink_fill_cow_hole(NULL, ip, imap, cmap, shared,
+	if (cmap->br_startoff > imap->br_startoff) {
+		if (!tp)
+			return -EAGAIN;
+		return xfs_reflink_fill_cow_hole(tp, ip, imap, cmap, shared,
 				lockmode, convert_now);
+	}
 
 	/*
 	 * CoW fork has a delalloc reservation. Replace it with a real extent.
 	 * There may or may not be a data fork mapping.
 	 */
+	ASSERT(!tp);
 	if (isnullstartblock(cmap->br_startblock) ||
 	    cmap->br_startblock == DELAYSTARTBLOCK)
 		return xfs_reflink_fill_delalloc(ip, imap, cmap, shared,
