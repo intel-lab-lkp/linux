@@ -1130,8 +1130,24 @@ out_cancel:
 }
 
 /*
- * Try to reserve more blocks and file quota for a transaction.  Same
- * conditions of usage as xfs_trans_reserve_blocks.
+ * Reserve blocks and quota for an inode that is already locked and joined to
+ * the transaction. If the reservation fails due to ENOSPC or EDQUOT, kick
+ * background blockgc reclaim and retry once after a short delay.
+ *
+ * We cannot use synchronous blockgc flushing here because we hold the ILOCK.
+ * Synchronous blockgc needs to take the ILOCK on each inode it scans, so it
+ * would deadlock on the inode we hold. Furthermore, the locked inode pins
+ * journal space that blockgc transactions need for their own commits, creating
+ * a second deadlock vector. Instead, we kick the background workers and sleep
+ * briefly so that if blockgc is stuck waiting on resources we hold, we still
+ * retry and return ENOSPC rather than deadlocking.
+ *
+ * We use io_schedule_timeout() for the delay because this can be called from
+ * the IO submission path where block plugs may be held. The 100ms delay is
+ * long enough for blockgc workers to lock an inode, run a transaction to free
+ * speculative preallocations and commit it, but short enough that we don't
+ * cause excessive IO latency if blockgc cannot make progress because it is
+ * blocked on resources we hold.
  */
 int
 xfs_trans_reserve_more_inode(
@@ -1143,27 +1159,44 @@ xfs_trans_reserve_more_inode(
 {
 	struct xfs_mount	*mp = ip->i_mount;
 	unsigned int		rtx = xfs_extlen_to_rtxlen(mp, rblocks);
+	int			retry = 0;
 	int			error;
 
 	xfs_assert_ilocked(ip, XFS_ILOCK_EXCL);
 
-	error = xfs_trans_reserve_blocks(tp, dblocks, rtx);
-	if (error)
-		return error;
-
-	if (!XFS_IS_QUOTA_ON(mp) || xfs_is_quota_inode(&mp->m_sb, I_INO(ip)))
-		return 0;
-
 	if (tp->t_flags & XFS_TRANS_RESERVE)
 		force_quota = true;
 
-	error = xfs_trans_reserve_quota_nblks(tp, ip, dblocks, rblocks,
-			force_quota);
-	if (!error)
-		return 0;
+	do {
+		if (retry)
+			io_schedule_timeout(msecs_to_jiffies(100));
 
-	/* Quota failed, give back the new reservation. */
-	xfs_trans_unreserve_blocks(tp, dblocks, rtx);
+		error = xfs_trans_reserve_blocks(tp, dblocks, rtx);
+		if (error == -ENOSPC) {
+			xfs_blockgc_start_flush(mp);
+			continue;
+		}
+		if (error)
+			return error;
+
+		if (!XFS_IS_QUOTA_ON(mp) ||
+		    xfs_is_quota_inode(&mp->m_sb, I_INO(ip)))
+			return 0;
+
+		error = xfs_trans_reserve_quota_nblks(tp, ip, dblocks,
+				rblocks, force_quota);
+		if (!error)
+			return 0;
+
+		xfs_trans_unreserve_blocks(tp, dblocks, rtx);
+
+		if (error == -EDQUOT || error == -ENOSPC) {
+			xfs_blockgc_free_quota_nowait(ip);
+			continue;
+		}
+		return error;
+	} while (retry++ == 0);
+
 	return error;
 }
 
