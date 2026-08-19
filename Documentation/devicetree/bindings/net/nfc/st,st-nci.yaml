@@ -11,10 +11,14 @@ maintainers:
 
 properties:
   compatible:
+    description: |
+      st,st21nfcb-* and st,st21nfcc-i2c use NDLC on the wire.
+      st,st21nfcd is ST21NFCD with raw NCI (no NDLC PCB).
     enum:
       - st,st21nfcb-i2c
       - st,st21nfcb-spi
       - st,st21nfcc-i2c
+      - st,st21nfcd
 
   reset-gpios:
     description: Output GPIO pin used for resetting the controller
@@ -36,6 +40,15 @@ properties:
       Specifies that the uicc swp signal can be physically connected to the
       controller
 
+  clocks:
+    maxItems: 1
+    description:
+      External reference clock connected to SYS_CLK.
+
+  vdd-io-supply:
+    description:
+      Digital I/O supply (VPS_IO).
+
 required:
   - compatible
   - interrupts
@@ -49,6 +62,7 @@ if:
         enum:
           - st,st21nfcb-i2c
           - st,st21nfcc-i2c
+          - st,st21nfcd
 then:
   properties:
     spi-max-frequency: false
@@ -78,6 +92,27 @@ examples:
 
             ese-present;
             uicc-present;
+        };
+    };
+
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        nfc@8 {
+            compatible = "st,st21nfcd";
+            reg = <0x08>;
+
+            interrupt-parent = <&gpio5>;
+            interrupts = <2 IRQ_TYPE_LEVEL_HIGH>;
+            reset-gpios = <&gpio5 29 GPIO_ACTIVE_HIGH>;
+
+            clocks = <&clk>;
+            vdd-io-supply = <&vdd_io>;
         };
     };
 
