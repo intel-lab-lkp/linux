@@ -1531,8 +1531,12 @@ static struct d40_desc *d40_queue_start(struct d40_chan *d40c)
 		/* Start dma job */
 		err = d40_start(d40c);
 
-		if (err)
-			return NULL;
+		if (err) {
+			d40_desc_remove(d40d);
+			d40_desc_free(d40c, d40d);
+			d40c->busy = false;
+			return ERR_PTR(err);
+		}
 	}
 
 	return d40d;
