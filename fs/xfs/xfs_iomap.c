@@ -876,6 +876,7 @@ xfs_direct_write_cow_iomap_begin(
 {
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_bmbt_irec	cmap;
+	struct xfs_trans	*tp = NULL;
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	xfs_fileoff_t		end_fsb = xfs_iomap_end_fsb(mp, offset, length);
 	bool			shared = false;
@@ -884,40 +885,77 @@ xfs_direct_write_cow_iomap_begin(
 
 	*lockmode = XFS_ILOCK_EXCL;
 
-relock:
 	error = xfs_ilock_for_iomap(ip, flags, lockmode);
 	if (error)
 		return error;
 
-	/*
-	 * The reflink iflag could have changed since the earlier unlocked
-	 * check, check if it again and relock if needed.
-	 */
-	if (xfs_is_cow_inode(ip) && *lockmode == XFS_ILOCK_SHARED) {
-		xfs_iunlock(ip, *lockmode);
-		*lockmode = XFS_ILOCK_EXCL;
-		goto relock;
-	}
-
+retry:
 	*nimaps = 1;
 	error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb, imap,
 			       nimaps, 0);
 	if (error)
 		goto out_unlock;
 
-	if (!imap_needs_cow(ip, flags, imap, *nimaps))
+	if (!imap_needs_cow(ip, flags, imap, *nimaps)) {
+		/*
+		 * Extent is not shared - return the imap and ILOCK to the
+		 * caller for normal IO path processing.
+		 */
+		if (tp) {
+			xfs_trans_cancel(tp);
+			tp = NULL;
+		}
 		return 0;
+	}
 
 	error = -EAGAIN;
 	if (flags & IOMAP_NOWAIT)
 		goto out_unlock;
 
 	/* may drop and re-acquire the ilock */
-	error = xfs_reflink_allocate_cow(NULL, ip, imap, &cmap, &shared,
+	error = xfs_reflink_allocate_cow(tp, ip, imap, &cmap, &shared,
 			lockmode,
 			(flags & IOMAP_DIRECT) || IS_DAX(VFS_I(ip)));
+	if (error == -EAGAIN) {
+		/*
+		 * COW allocation needs a transaction. Drop the ILOCK and
+		 * allocate a transaction, which will re-acquire the ILOCK.
+		 * Then retry the imap lookup since the extent tree may have
+		 * changed while the ILOCK was not held.
+		 */
+		xfs_filblks_t		resaligned;
+		unsigned int		dblocks, rblocks;
+
+		ASSERT(!tp);
+
+		xfs_iunlock(ip, *lockmode);
+
+		resaligned = xfs_aligned_fsb_count(offset_fsb,
+				end_fsb - offset_fsb, xfs_get_cowextsz_hint(ip));
+		if (XFS_IS_REALTIME_INODE(ip)) {
+			dblocks = XFS_DIOSTRAT_SPACE_RES(mp, 0);
+			rblocks = resaligned;
+		} else {
+			dblocks = XFS_DIOSTRAT_SPACE_RES(mp, resaligned);
+			rblocks = 0;
+		}
+
+		error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write,
+				dblocks, rblocks, false, &tp);
+		if (error)
+			return error;
+
+		goto retry;
+	}
 	if (error)
 		goto out_unlock;
+
+	if (tp) {
+		error = xfs_trans_commit(tp);
+		tp = NULL;
+		if (error)
+			goto out_unlock;
+	}
 
 	if (!shared)
 		return 0;
@@ -948,6 +986,8 @@ relock:
 	return xfs_bmbt_to_iomap(ip, iomap, &cmap, flags, IOMAP_F_SHARED, seq);
 
 out_unlock:
+	if (tp)
+		xfs_trans_cancel(tp);
 	if (*lockmode)
 		xfs_iunlock(ip, *lockmode);
 	return error;
