@@ -171,6 +171,7 @@ int nlmclnt_proc(struct nlm_host *host, int cmd, struct file_lock *fl, void *dat
 
 	if (nlmclnt_ops && nlmclnt_ops->nlmclnt_alloc_call)
 		nlmclnt_ops->nlmclnt_alloc_call(data);
+	call->a_callback_data = data;
 
 	fl->fl_u.nfs_fl.state = 0;
 	fl->fl_u.nfs_fl.owner = nlmclnt_find_lockowner(host, fl->c.flc_owner);
@@ -184,7 +185,6 @@ int nlmclnt_proc(struct nlm_host *host, int cmd, struct file_lock *fl, void *dat
 
 	/* Set up the argument struct */
 	nlmclnt_setlockargs(call, fl);
-	call->a_callback_data = data;
 
 	if (IS_SETLK(cmd) || IS_SETLKW(cmd)) {
 		if (fl->c.flc_type != F_UNLCK) {
