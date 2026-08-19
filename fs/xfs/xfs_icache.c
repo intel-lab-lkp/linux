@@ -1592,6 +1592,24 @@ xfs_blockgc_free_space(
 }
 
 /*
+ * Kick all the blockgc workers immediately so they start freeing speculative
+ * preallocations. This does not wait for the workers to complete, so callers
+ * that need to wait for space to become available should call
+ * xfs_blockgc_flush_all() instead.
+ */
+void
+xfs_blockgc_start_flush(
+	struct xfs_mount	*mp)
+{
+	struct xfs_perag	*pag = NULL;
+
+	trace_xfs_blockgc_flush_all(mp, __return_address);
+
+	while ((pag = xfs_perag_grab_next_tag(mp, pag, XFS_ICI_BLOCKGC_TAG)))
+		mod_delayed_work(mp->m_blockgc_wq, &pag->pag_blockgc_work, 0);
+}
+
+/*
  * Reclaim all the free space that we can by scheduling the background blockgc
  * and inodegc workers immediately and waiting for them all to clear.
  */
@@ -1601,14 +1619,7 @@ xfs_blockgc_flush_all(
 {
 	struct xfs_perag	*pag = NULL;
 
-	trace_xfs_blockgc_flush_all(mp, __return_address);
-
-	/*
-	 * For each blockgc worker, move its queue time up to now.  If it wasn't
-	 * queued, it will not be requeued.  Then flush whatever is left.
-	 */
-	while ((pag = xfs_perag_grab_next_tag(mp, pag, XFS_ICI_BLOCKGC_TAG)))
-		mod_delayed_work(mp->m_blockgc_wq, &pag->pag_blockgc_work, 0);
+	xfs_blockgc_start_flush(mp);
 
 	while ((pag = xfs_perag_grab_next_tag(mp, pag, XFS_ICI_BLOCKGC_TAG)))
 		flush_delayed_work(&pag->pag_blockgc_work);
