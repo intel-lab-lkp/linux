@@ -4,10 +4,6 @@
 
 :Original: Documentation/cpu-freq/index.rst
 
-:翻譯:
-
- 司延騰 Yanteng Si <siyanteng@loongson.cn>
-
 .. _tw_index.rst:
 
 =======================================================

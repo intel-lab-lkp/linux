@@ -4,14 +4,6 @@
 
 :Original: Documentation/cpu-freq/cpu-drivers.rst
 
-:翻譯:
-
- 司延騰 Yanteng Si <siyanteng@loongson.cn>
-
-:校譯:
-
- 唐藝舟 Tang Yizhou <tangyeechou@gmail.com>
-
 =======================================
 如何實現一個新的CPUFreq處理器驅動程序？
 =======================================
