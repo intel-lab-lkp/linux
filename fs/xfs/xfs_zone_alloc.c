@@ -13,6 +13,7 @@
 #include "xfs_inode.h"
 #include "xfs_iomap.h"
 #include "xfs_trans.h"
+#include "xfs_defer.h"
 #include "xfs_alloc.h"
 #include "xfs_bmap.h"
 #include "xfs_bmap_btree.h"
@@ -314,6 +315,13 @@ skip:
 	return 0;
 }
 
+/*
+ * Map written extents into the data fork after zoned IO completion.
+ *
+ * The rolling transaction keeps the ILOCK held across the entire mapping
+ * loop, making the operation atomic with respect to other concurrent
+ * extent manipulations.
+ */
 int
 xfs_zoned_end_io(
 	struct xfs_inode	*ip,
@@ -341,24 +349,23 @@ xfs_zoned_end_io(
 	if (xfs_is_shutdown(mp))
 		return -EIO;
 
+	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, resblks, 0,
+			XFS_TRANS_RESERVE | XFS_TRANS_RENEW_BLKRES, &tp);
+	if (error)
+		return error;
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+	xfs_trans_ijoin(tp, ip, 0);
+
 	while (new.br_startoff < end_fsb) {
 		new.br_blockcount = end_fsb - new.br_startoff;
 
-		error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, resblks, 0,
-				XFS_TRANS_RESERVE, &tp);
-		if (error)
-			return error;
-		xfs_ilock(ip, XFS_ILOCK_EXCL);
-		xfs_trans_ijoin(tp, ip, 0);
-
 		error = xfs_zoned_map_extent(tp, ip, &new, oz, old_startblock);
 		if (error)
-			xfs_trans_cancel(tp);
-		else
-			error = xfs_trans_commit(tp);
-		xfs_iunlock(ip, XFS_ILOCK_EXCL);
+			goto out_cancel;
+
+		error = xfs_defer_finish(&tp);
 		if (error)
-			return error;
+			goto out_cancel;
 
 		new.br_startoff += new.br_blockcount;
 		new.br_startblock += new.br_blockcount;
@@ -366,7 +373,14 @@ xfs_zoned_end_io(
 			old_startblock += new.br_blockcount;
 	}
 
-	return 0;
+	error = xfs_trans_commit(tp);
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	return error;
+
+out_cancel:
+	xfs_trans_cancel(tp);
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	return error;
 }
 
 /*
