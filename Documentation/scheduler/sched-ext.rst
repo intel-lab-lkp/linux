@@ -241,6 +241,24 @@ optional. The following modified excerpt is from
             .name                   = "simple",
     };
 
+Scheduler-Dependent Knobs
+-------------------------
+
+The fair class enforces cpu controller knobs such as ``cpu.max``,
+``cpu.weight`` and ``cpu.idle`` in the kernel. sched_ext only passes
+them to the BPF scheduler through ``ops.cgroup_set_weight()``,
+``ops.cgroup_set_idle()``, ``ops.cgroup_set_bandwidth()`` and friends.
+Whether and how a knob takes effect is up to the loaded scheduler: if
+it doesn't implement the corresponding callback, the knob is ignored.
+For example, none of scx_simple, scx_flatcg and scx_central implements
+``ops.cgroup_set_bandwidth()``, so with them ``cpu.max`` has no effect
+-- the cgroup runs at unlimited CPU with ``nr_throttled`` staying
+at 0.
+
+The same applies to other knobs like nice levels: the scheduler may
+honor them partially or not at all. When relying on these knobs, check
+the documentation or source of the loaded scheduler.
+
 Dispatch Queues
 ---------------
 
