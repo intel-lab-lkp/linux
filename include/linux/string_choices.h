@@ -59,6 +59,20 @@ static inline const char *str_on_off(bool v)
 }
 #define str_off_on(v)		str_on_off(!(v))
 
+static inline const char *str_pass_fail(bool v)
+{
+	return v ? "pass" : "fail";
+}
+
+#define str_fail_pass(v)		str_pass_fail(!(v))
+
+static inline const char *str_passed_failed(bool v)
+{
+	return v ? "passed" : "failed";
+}
+
+#define str_failed_passed(v)		str_passed_failed(!(v))
+
 static inline const char *str_read_write(bool v)
 {
 	return v ? "read" : "write";
