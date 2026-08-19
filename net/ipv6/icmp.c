@@ -1450,8 +1450,10 @@ struct ctl_table * __net_init ipv6_icmp_sysctl_init(struct net *net)
 	return table;
 }
 
-size_t ipv6_icmp_sysctl_table_size(void)
+struct ctl_table_header *ipv6_icmp_sysctl_register(struct net *net,
+						   const struct ctl_table *table)
 {
-	return ARRAY_SIZE(ipv6_icmp_table_template);
+	return register_net_sysctl(net, "net/ipv6/icmp", table,
+				   ipv6_icmp_table_template);
 }
 #endif
