@@ -935,6 +935,17 @@
 	};
 };
 
+&gpio2 {
+	cbtu02043-xsd-hog {
+		gpio-hog;
+		gpios = <20 GPIO_ACTIVE_LOW>;
+		output-low;
+		line-name = "CBTU02043_XSD";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_cbtu02043_xsd>;
+	};
+};
+
 &usb3_phy1 {
 	fsl,phy-tx-preemp-amp-tune-microamp = <1800>;
 	fsl,phy-tx-vref-tune-percent = <116>;
@@ -1018,6 +1029,12 @@ m2_usdhc: &usdhc1 {
 	pinctrl_audio_pwr_reg: audiopwrreggrp {
 		fsl,pins = <
 			MX8MP_IOMUXC_SAI3_RXC__GPIO4_IO29		0xd6
+		>;
+	};
+
+	pinctrl_cbtu02043_xsd: cbtu02043xsdgrp {
+		fsl,pins = <
+			MX8MP_IOMUXC_SD2_WP__GPIO2_IO20	0x16
 		>;
 	};
 
