@@ -757,7 +757,8 @@ static int __net_init __ip_vs_lblcr_init(struct net *net)
 
 	ipvs->lblcr_ctl_header = register_net_sysctl_sz(net, "net/ipv4/vs",
 							ipvs->lblcr_ctl_table,
-							vars_table_size);
+							vars_table_size,
+							vs_vars_table);
 	if (!ipvs->lblcr_ctl_header) {
 		if (!net_eq(net, &init_net))
 			kfree(ipvs->lblcr_ctl_table);

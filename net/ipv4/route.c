@@ -3661,7 +3661,8 @@ static __net_init int sysctl_route_net_init(struct net *net)
 	tbl[0].extra1 = net;
 
 	net->ipv4.route_hdr = register_net_sysctl_sz(net, "net/ipv4/route",
-						     tbl, table_size);
+						     tbl, table_size,
+						     ipv4_route_netns_table);
 	if (!net->ipv4.route_hdr)
 		goto err_reg;
 	return 0;

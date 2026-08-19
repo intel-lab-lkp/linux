@@ -12,6 +12,7 @@
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#define SYSCTL_MODULE_ALIASES_UNIQUE_ID
 
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -3910,11 +3911,15 @@ int neigh_sysctl_register(struct net_device *dev, struct neigh_parms *p,
 	      BUG();
 	}
 
-	snprintf(neigh_path, sizeof(neigh_path), "net/%s/neigh/%s",
-		p_name, dev_name_source);
+#define path_template "net/%s/neigh/%s"
+	snprintf(neigh_path, sizeof(neigh_path), path_template,
+		 p_name, dev_name_source);
 	t->sysctl_header = register_net_sysctl_sz(neigh_parms_net(p),
 						  neigh_path, t->neigh_vars,
-						  neigh_vars_size);
+						  neigh_vars_size,
+						  neigh_sysctl_template.neigh_vars,
+						  path_template);
+#undef path_template
 	if (!t->sysctl_header)
 		goto free;
 

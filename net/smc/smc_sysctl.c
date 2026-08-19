@@ -235,7 +235,7 @@ int __net_init smc_sysctl_net_init(struct net *net)
 	}
 
 	net->smc.smc_hdr = register_net_sysctl_sz(net, "net/smc", table,
-						  table_size);
+						  table_size, smc_table);
 	if (!net->smc.smc_hdr)
 		goto err_reg;
 

@@ -275,7 +275,8 @@ static int __net_init ipv6_sysctl_net_init(struct net *net)
 		goto out_ipv6_route_table;
 
 	net->ipv6.sysctl.hdr = register_net_sysctl_sz(net, "net/ipv6",
-						      ipv6_table, table_size);
+						      ipv6_table, table_size,
+						      ipv6_table_template);
 	if (!net->ipv6.sysctl.hdr)
 		goto out_ipv6_icmp_table;
 

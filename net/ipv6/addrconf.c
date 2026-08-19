@@ -7347,10 +7347,13 @@ static int __addrconf_sysctl_register(struct net *net, char *dev_name,
 		}
 	}
 
-	snprintf(path, sizeof(path), "net/ipv6/conf/%s", dev_name);
+#define path_template "net/ipv6/conf/%s"
+	snprintf(path, sizeof(path), path_template, dev_name);
 
 	p->sysctl_header = register_net_sysctl_sz(net, path, table,
-						  table_size);
+						  table_size, addrconf_sysctl,
+						  path_template);
+#undef path_template
 	if (!p->sysctl_header)
 		goto free;
 
