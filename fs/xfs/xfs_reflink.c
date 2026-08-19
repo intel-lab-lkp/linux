@@ -437,6 +437,9 @@ xfs_reflink_fill_cow_hole(
 	bool			*shared,
 	bool			convert_now)
 {
+	struct xfs_mount	*mp = ip->i_mount;
+	xfs_filblks_t		resaligned;
+	unsigned int		dblocks = 0, rblocks = 0;
 	int			nimaps;
 	int			error;
 	bool			found;
@@ -449,6 +452,28 @@ xfs_reflink_fill_cow_hole(
 
 	if (found)
 		goto convert;
+
+	/*
+	 * Reserve blocks for the COW extent allocation. The transaction was
+	 * allocated with a zero-block reservation because the caller could
+	 * not determine the block reservation required until the extent
+	 * state was known under the ILOCK. The transaction has not been
+	 * dirtied yet, so on ENOSPC it can safely be cancelled by the caller.
+	 */
+	ASSERT(!(tp->t_flags & XFS_TRANS_DIRTY));
+
+	resaligned = xfs_aligned_fsb_count(imap->br_startoff,
+			imap->br_blockcount, xfs_get_cowextsz_hint(ip));
+	if (XFS_IS_REALTIME_INODE(ip)) {
+		dblocks = XFS_DIOSTRAT_SPACE_RES(mp, 0);
+		rblocks = resaligned;
+	} else {
+		dblocks = XFS_DIOSTRAT_SPACE_RES(mp, resaligned);
+	}
+
+	error = xfs_trans_reserve_more_inode(tp, ip, dblocks, rblocks, false);
+	if (error)
+		return error;
 
 	/* Allocate the entire reservation as unwritten blocks. */
 	nimaps = 1;
