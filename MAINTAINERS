@@ -15920,6 +15920,15 @@ F:	Documentation/devicetree/bindings/net/dsa/maxlinear,mxl862xx.yaml
 F:	drivers/net/dsa/mxl862xx/
 F:	net/dsa/tag_mxl862xx.c
 
+MBEDTEE TEE DRIVER
+M:	Xing Loong <xing.xl.loong@gmail.com>
+L:	op-tee@lists.trustedfirmware.org (moderated for non-subscribers)
+S:	Maintained
+W:	https://github.com/mbedtee
+F:	Documentation/devicetree/bindings/firmware/mbedtee,tee.yaml
+F:	Documentation/tee/mbedtee.rst
+F:	drivers/tee/mbedtee/
+
 MCAN DEVICE DRIVER
 M:	Markus Schneider-Pargmann <msp@baylibre.com>
 L:	linux-can@vger.kernel.org
