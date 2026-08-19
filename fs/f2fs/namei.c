@@ -560,38 +560,31 @@ out:
 	return ERR_PTR(err);
 }
 
-static int f2fs_unlink(struct inode *dir, struct dentry *dentry)
+static int f2fs_unlink_inode(struct inode *dir, const struct qstr *name,
+			     struct inode *inode)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dir);
-	struct inode *inode = d_inode(dentry);
 	struct f2fs_dir_entry *de;
 	struct f2fs_lock_context lc;
 	struct folio *folio;
 	int err;
 
-	trace_f2fs_unlink_enter(dir, dentry);
-
 	if (IS_DEVICE_ALIASING(inode))
 		return -EPERM;
 
-	if (unlikely(f2fs_cp_error(sbi))) {
-		err = -EIO;
-		goto out;
-	}
+	if (unlikely(f2fs_cp_error(sbi)))
+		return -EIO;
 
 	err = f2fs_dquot_initialize(dir);
 	if (err)
-		goto out;
+		return err;
 	err = f2fs_dquot_initialize(inode);
 	if (err)
-		goto out;
+		return err;
 
-	de = f2fs_find_entry(dir, &dentry->d_name, &folio);
-	if (!de) {
-		if (IS_ERR(folio))
-			err = PTR_ERR(folio);
-		goto out;
-	}
+	de = f2fs_find_entry(dir, name, &folio);
+	if (!de)
+		return IS_ERR(folio) ? PTR_ERR(folio) : -ENOENT;
 
 	if (unlikely(inode->i_nlink == 0)) {
 		f2fs_warn(sbi, "%s: inode (ino=%llx) has zero i_nlink",
@@ -610,10 +603,27 @@ static int f2fs_unlink(struct inode *dir, struct dentry *dentry)
 	if (err) {
 		f2fs_unlock_op(sbi, &lc);
 		f2fs_folio_put(folio, false);
-		goto out;
+		return err;
 	}
 	f2fs_delete_entry(de, folio, dir, inode);
 	f2fs_unlock_op(sbi, &lc);
+
+	return 0;
+
+corrupted:
+	set_sbi_flag(sbi, SBI_NEED_FSCK);
+	f2fs_folio_put(folio, false);
+	return -EFSCORRUPTED;
+}
+
+static int f2fs_unlink(struct inode *dir, struct dentry *dentry)
+{
+	struct inode *inode = d_inode(dentry);
+	int err;
+
+	trace_f2fs_unlink_enter(dir, dentry);
+
+	err = f2fs_unlink_inode(dir, &dentry->d_name, inode);
 
 	/* VFS negative dentries are incompatible with Encoding and
 	 * Case-insensitiveness. Eventually we'll want avoid
@@ -621,18 +631,12 @@ static int f2fs_unlink(struct inode *dir, struct dentry *dentry)
 	 * negative dentries at f2fs_lookup(), when it is better
 	 * supported by the VFS for the CI case.
 	 */
-	if (IS_ENABLED(CONFIG_UNICODE) && IS_CASEFOLDED(dir))
+	if (!err && IS_ENABLED(CONFIG_UNICODE) && IS_CASEFOLDED(dir))
 		d_invalidate(dentry);
 
-	if (IS_DIRSYNC(dir))
-		f2fs_sync_fs(sbi->sb, 1);
+	if (!err && IS_DIRSYNC(dir))
+		f2fs_sync_fs(F2FS_I_SB(dir)->sb, 1);
 
-	goto out;
-corrupted:
-	err = -EFSCORRUPTED;
-	set_sbi_flag(sbi, SBI_NEED_FSCK);
-	f2fs_folio_put(folio, false);
-out:
 	trace_f2fs_unlink_exit(inode, err);
 	return err;
 }
@@ -660,7 +664,7 @@ static int f2fs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	struct inode *inode;
 	size_t len = strlen(symname);
 	struct fscrypt_str disk_link;
-	int err;
+	int err, ret;
 
 	if (unlikely(f2fs_cp_error(sbi)))
 		return -EIO;
@@ -701,6 +705,19 @@ static int f2fs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	err = page_symlink(inode, disk_link.name, disk_link.len);
 
 err_out:
+	if (err) {
+		ret = f2fs_unlink_inode(dir, &dentry->d_name, inode);
+		if (ret)
+			f2fs_warn(sbi, "failed to rollback symlink inode %llu, err: %d",
+				  inode->i_ino, ret);
+		d_drop(dentry);
+		unlock_new_inode(inode);
+		if (!ret && IS_DIRSYNC(dir))
+			f2fs_sync_fs(sbi->sb, 1);
+		iput(inode);
+		goto out_balance;
+	}
+
 	d_instantiate_new(dentry, inode);
 
 	/*
@@ -712,16 +729,12 @@ err_out:
 	 * If the symlink path is stored into inline_data, there is no
 	 * performance regression.
 	 */
-	if (!err) {
-		filemap_write_and_wait_range(inode->i_mapping, 0,
-							disk_link.len - 1);
+	filemap_write_and_wait_range(inode->i_mapping, 0, disk_link.len - 1);
 
-		if (IS_DIRSYNC(dir))
-			f2fs_sync_fs(sbi->sb, 1);
-	} else {
-		f2fs_unlink(dir, dentry);
-	}
+	if (IS_DIRSYNC(dir))
+		f2fs_sync_fs(sbi->sb, 1);
 
+out_balance:
 	f2fs_balance_fs(sbi, true);
 	goto out_free_encrypted_link;
 
