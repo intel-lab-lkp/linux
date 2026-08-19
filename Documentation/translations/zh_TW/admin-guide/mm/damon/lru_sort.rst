@@ -3,12 +3,6 @@
 
 :Original: Documentation/admin-guide/mm/damon/lru_sort.rst
 
-:翻譯:
-
- 臧雷剛 Leigang Zang <zangleigang@hisilicon.com>
-
-:校譯:
-
 ==================
 基於DAMON的LRU排序
 ==================

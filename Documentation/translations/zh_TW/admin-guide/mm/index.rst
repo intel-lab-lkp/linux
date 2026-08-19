@@ -2,11 +2,6 @@
 
 :Original:   Documentation/admin-guide/mm/index.rst
 
-:翻譯:
-
-  徐鑫 xu xin <xu.xin16@zte.com.cn>
-
-
 ========
 內存管理
 ========

@@ -3,10 +3,6 @@
 
 :Original: Documentation/admin-guide/cputopology.rst
 
-:翻譯:
-
-  唐藝舟 Tang Yizhou <tangyeechou@gmail.com>
-
 ==========================
 如何通過sysfs將CPU拓撲導出
 ==========================

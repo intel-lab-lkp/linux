@@ -3,12 +3,6 @@
 
 :Original: Documentation/admin-guide/mm/damon/index.rst
 
-:翻譯:
-
- 司延騰 Yanteng Si <siyanteng@loongson.cn>
-
-:校譯:
-
 ============
 監測數據訪問
 ============
