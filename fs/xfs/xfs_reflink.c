@@ -430,7 +430,7 @@ xfs_reflink_convert_unwritten(
 
 static int
 xfs_reflink_fill_cow_hole(
-	struct xfs_trans	*tp,
+	struct xfs_trans	**tpp,
 	struct xfs_inode	*ip,
 	struct xfs_bmbt_irec	*imap,
 	struct xfs_bmbt_irec	*cmap,
@@ -444,7 +444,7 @@ xfs_reflink_fill_cow_hole(
 	int			error;
 	bool			found;
 
-	ASSERT(tp);
+	ASSERT(*tpp);
 
 	error = xfs_find_trim_cow_extent(ip, imap, cmap, shared, &found);
 	if (error || !*shared)
@@ -460,7 +460,7 @@ xfs_reflink_fill_cow_hole(
 	 * state was known under the ILOCK. The transaction has not been
 	 * dirtied yet, so on ENOSPC it can safely be cancelled by the caller.
 	 */
-	ASSERT(!(tp->t_flags & XFS_TRANS_DIRTY));
+	ASSERT(!((*tpp)->t_flags & XFS_TRANS_DIRTY));
 
 	resaligned = xfs_aligned_fsb_count(imap->br_startoff,
 			imap->br_blockcount, xfs_get_cowextsz_hint(ip));
@@ -471,13 +471,14 @@ xfs_reflink_fill_cow_hole(
 		dblocks = XFS_DIOSTRAT_SPACE_RES(mp, resaligned);
 	}
 
-	error = xfs_trans_reserve_more_inode(tp, ip, dblocks, rblocks, false);
+	error = xfs_trans_reserve_more_inode(*tpp, ip, dblocks, rblocks,
+			false);
 	if (error)
 		return error;
 
 	/* Allocate the entire reservation as unwritten blocks. */
 	nimaps = 1;
-	error = xfs_bmapi_write(tp, ip, imap->br_startoff,
+	error = xfs_bmapi_write(*tpp, ip, imap->br_startoff,
 			imap->br_blockcount,
 			XFS_BMAPI_COWFORK | XFS_BMAPI_PREALLOC, 0, cmap,
 			&nimaps);
@@ -575,7 +576,7 @@ out_trans_cancel:
 /* Allocate all CoW reservations covering a range of blocks in a file. */
 int
 xfs_reflink_allocate_cow(
-	struct xfs_trans	*tp,
+	struct xfs_trans	**tpp,
 	struct xfs_inode	*ip,
 	struct xfs_bmbt_irec	*imap,
 	struct xfs_bmbt_irec	*cmap,
@@ -608,9 +609,9 @@ xfs_reflink_allocate_cow(
 	 * tell the caller to allocate a transaction and retry.
 	 */
 	if (cmap->br_startoff > imap->br_startoff) {
-		if (!tp)
+		if (!*tpp)
 			return -EAGAIN;
-		return xfs_reflink_fill_cow_hole(tp, ip, imap, cmap, shared,
+		return xfs_reflink_fill_cow_hole(tpp, ip, imap, cmap, shared,
 				convert_now);
 	}
 
@@ -618,7 +619,7 @@ xfs_reflink_allocate_cow(
 	 * CoW fork has a delalloc reservation. Replace it with a real extent.
 	 * There may or may not be a data fork mapping.
 	 */
-	ASSERT(!tp);
+	ASSERT(!*tpp);
 	if (isnullstartblock(cmap->br_startblock) ||
 	    cmap->br_startblock == DELAYSTARTBLOCK)
 		return xfs_reflink_fill_delalloc(ip, imap, cmap, shared,
