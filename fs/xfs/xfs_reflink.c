@@ -435,75 +435,20 @@ xfs_reflink_fill_cow_hole(
 	struct xfs_bmbt_irec	*imap,
 	struct xfs_bmbt_irec	*cmap,
 	bool			*shared,
-	uint			*lockmode,
 	bool			convert_now)
 {
-	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_trans	*local_tp = NULL;
-	xfs_filblks_t		resaligned;
-	unsigned int		seq_before = READ_ONCE(ip->i_df.if_seq);
-	unsigned int		dblocks = 0, rblocks = 0;
 	int			nimaps;
 	int			error;
 	bool			found;
 
-	/*
-	 * If the caller supplied a transaction, use it directly. The caller
-	 * is responsible for commit/cancel and holds the ILOCK.
-	 *
-	 * Otherwise, we need to drop the ILOCK and allocate a transaction
-	 * ourselves, which will re-acquire the ILOCK.
-	 */
-	if (tp)
-		goto allocate;
+	ASSERT(tp);
 
-	resaligned = xfs_aligned_fsb_count(imap->br_startoff,
-		imap->br_blockcount, xfs_get_cowextsz_hint(ip));
-	if (XFS_IS_REALTIME_INODE(ip)) {
-		dblocks = XFS_DIOSTRAT_SPACE_RES(mp, 0);
-		rblocks = resaligned;
-	} else {
-		dblocks = XFS_DIOSTRAT_SPACE_RES(mp, resaligned);
-		rblocks = 0;
-	}
-
-	xfs_iunlock(ip, *lockmode);
-	*lockmode = 0;
-
-	error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write, dblocks,
-			rblocks, false, &local_tp);
-	if (error)
-		return error;
-
-	*lockmode = XFS_ILOCK_EXCL;
-	tp = local_tp;
-
-	/*
-	 * The data fork mapping may have changed while we dropped the ILOCK
-	 * (a racing O_DIRECT writer under IOLOCK_SHARED can complete a full
-	 * CoW cycle including xfs_reflink_end_cow(), which remaps this offset
-	 * and drops the refcount of the old shared block).  Re-read it so the
-	 * shared-status recheck below and the caller's in-place iomap both
-	 * operate on the current mapping rather than a stale physical block.
-	 */
-	if (seq_before != READ_ONCE(ip->i_df.if_seq)) {
-		nimaps = 1;
-		error = xfs_bmapi_read(ip, imap->br_startoff,
-				imap->br_blockcount, imap, &nimaps, 0);
-		if (error)
-			goto out_trans_cancel;
-	}
-
-allocate:
 	error = xfs_find_trim_cow_extent(ip, imap, cmap, shared, &found);
 	if (error || !*shared)
-		goto out_trans_cancel;
+		return error;
 
-	if (found) {
-		if (local_tp)
-			xfs_trans_cancel(local_tp);
+	if (found)
 		goto convert;
-	}
 
 	/* Allocate the entire reservation as unwritten blocks. */
 	nimaps = 1;
@@ -512,22 +457,12 @@ allocate:
 			XFS_BMAPI_COWFORK | XFS_BMAPI_PREALLOC, 0, cmap,
 			&nimaps);
 	if (error)
-		goto out_trans_cancel;
+		return error;
 
 	xfs_inode_set_cowblocks_tag(ip);
-	if (local_tp) {
-		error = xfs_trans_commit(local_tp);
-		if (error)
-			return error;
-	}
 
 convert:
 	return xfs_reflink_convert_unwritten(ip, imap, cmap, convert_now);
-
-out_trans_cancel:
-	if (local_tp)
-		xfs_trans_cancel(local_tp);
-	return error;
 }
 
 static int
@@ -651,7 +586,7 @@ xfs_reflink_allocate_cow(
 		if (!tp)
 			return -EAGAIN;
 		return xfs_reflink_fill_cow_hole(tp, ip, imap, cmap, shared,
-				lockmode, convert_now);
+				convert_now);
 	}
 
 	/*
