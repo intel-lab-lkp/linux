@@ -624,9 +624,10 @@ static void can327_handle_prompt(struct can327 *elm)
 			snprintf(local_txbuf, sizeof(local_txbuf), "ATRTR\r");
 		} else {
 			/* Send a regular CAN data frame */
+			int dlc = min_t(int, frame->len, CAN_MAX_DLEN);
 			int i;
 
-			for (i = 0; i < frame->len; i++) {
+			for (i = 0; i < dlc; i++) {
 				snprintf(&local_txbuf[2 * i],
 					 sizeof(local_txbuf), "%02X",
 					 frame->data[i]);
