@@ -35,6 +35,13 @@
 
 #define CC KVM_NESTED_VMENTER_CONSISTENCY_CHECK
 
+static void nested_svm_clear_insn_bytes(struct vmcb *vmcb)
+{
+	vmcb->control.insn_len = 0;
+	memset(vmcb->control.insn_bytes, 0,
+	       sizeof(vmcb->control.insn_bytes));
+}
+
 static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
 				       struct x86_exception *fault,
 				       bool from_hardware)
@@ -68,6 +75,7 @@ static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
 				    (fault->error_code & ~PFERR_GUEST_FAULT_STAGE_MASK);
 	vmcb->control.exit_info_2 = fault->address;
 
+	svm->nested.vmcb02_insn_bytes_fresh = from_hardware;
 	nested_svm_vmexit(svm);
 }
 
@@ -868,7 +876,10 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm)
 	/*
 	 * Filled at exit: exit_code, exit_info_1, exit_info_2, exit_int_info,
 	 * exit_int_info_err, next_rip, insn_len, insn_bytes.
+	 * Clear stale DecodeAssist data before L2 runs.
 	 */
+	nested_svm_clear_insn_bytes(vmcb02);
+	svm->nested.vmcb02_insn_bytes_fresh = false;
 
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_VGIF) &&
 	    (vmcb12_ctrl->int_ctl & V_GIF_ENABLE_MASK))
@@ -1643,14 +1654,16 @@ static int nested_svm_intercept(struct vcpu_svm *svm)
 	return vmexit;
 }
 
-int nested_svm_exit_handled(struct vcpu_svm *svm)
+int nested_svm_exit_handled(struct vcpu_svm *svm, bool vmcb02_insn_bytes_fresh)
 {
 	int vmexit;
 
 	vmexit = nested_svm_intercept(svm);
 
-	if (vmexit == NESTED_EXIT_DONE)
+	if (vmexit == NESTED_EXIT_DONE) {
+		svm->nested.vmcb02_insn_bytes_fresh = vmcb02_insn_bytes_fresh;
 		nested_svm_vmexit(svm);
+	}
 
 	return vmexit;
 }
