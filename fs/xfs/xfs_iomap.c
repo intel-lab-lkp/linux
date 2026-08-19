@@ -892,116 +892,44 @@ xfs_bmap_hw_atomic_write_possible(
 
 /*
  * Handle COW extent allocation and iomap setup for direct writes to reflinked
- * files.
+ * files. The caller holds the ILOCK and has already determined that COW is
+ * needed via imap_needs_cow().
  *
- * Transitional tpp handling:
- *	!tpp = do everything internally using local_tp
- *	tpp & !*tpp = caller did locking, wants -EAGAIN if transaction required
- *	tpp && *tpp = caller did locking and transaction allocation
+ * On return, args->nimaps indicates what the caller should do next:
+ *   nimaps == 0: COW was handled, iomap/srcmap are filled in.
+ *                Caller should commit args->tp, unlock, and return.
+ *   nimaps > 0:  Extent is not shared. Caller should continue with the
+ *                normal IO path using the imap.
  *
- * The caller passes in an imap and nimaps that the COW allocation will fill
- * with the data fork extent mapping. On return, *nimaps indicates whether the
- * caller needs to continue with the normal IO path:
- *
- *   *nimaps == 0: COW was handled, iomap/srcmap are filled in, ILOCK released.
- *                 Caller should return 0 immediately.
- *   *nimaps > 0:  Extent is not shared, imap is valid, ILOCK is still held.
- *                 Caller should continue with the normal IO path.
+ * Returns -EAGAIN if a transaction is needed but args->tp is NULL.
  */
 static int
 xfs_direct_write_cow_iomap_begin(
-	struct xfs_direct_write_args *args,
-	bool			needs_tp)
+	struct xfs_direct_write_args *args)
 {
 	struct xfs_inode	*ip = args->ip;
 	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_trans	*local_tp = NULL;
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, args->offset);
 	xfs_fileoff_t		end_fsb = xfs_iomap_end_fsb(mp, args->offset,
 					args->length);
 	int			error;
 	u64			seq;
 
-	if (needs_tp) {
-		args->lockmode = XFS_ILOCK_EXCL;
-
-		error = xfs_ilock_for_iomap(ip, args->flags, &args->lockmode);
-		if (error)
-			return error;
-
-retry:
-		args->nimaps = 1;
-		error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb,
-				&args->imap, &args->nimaps, 0);
-		if (error)
-			goto out_unlock;
-	}
-
-	if (!imap_needs_cow(ip, args->flags, &args->imap, args->nimaps)) {
-		if (local_tp) {
-			xfs_trans_cancel(local_tp);
-			args->tp = NULL;
-		}
-		return 0;
-	}
-
-	error = -EAGAIN;
-	if (args->flags & IOMAP_NOWAIT)
-		goto out_unlock;
-
 	error = xfs_reflink_allocate_cow(args);
-	if (error == -EAGAIN) {
-		ASSERT(!args->tp);
-
-		if (!needs_tp)
-			goto out_unlock;
-
-		/*
-		 * Handle the retry internally. Drop the ILOCK and allocate a
-		 * zero-block reservation transaction, which will re-acquire
-		 * the ILOCK. We cannot determine what extent type will be
-		 * found once we've regained the ILOCK, so the callees will
-		 * use xfs_trans_reserve_more_inode() directly to reserve any
-		 * blocks they require before they start modifications. This
-		 * allows ENOSPC to be returned and the transaction cancelled
-		 * safely if the block reservation cannot be made.
-		 *
-		 * Retry the imap lookup since the extent tree may have changed
-		 * while the ILOCK was not held.
-		 */
-		xfs_iunlock(ip, args->lockmode);
-
-		error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write,
-				0, 0, false, &args->tp);
-		if (error)
-			return error;
-		local_tp = args->tp;
-
-		goto retry;
-	}
 	if (error)
-		goto out_unlock;
-
-	if (local_tp) {
-		error = xfs_trans_commit(local_tp);
-		args->tp = NULL;
-		if (error)
-			goto out_unlock;
-	}
+		return error;
 
 	if (!args->shared)
 		return 0;
 
 	if ((args->flags & IOMAP_ATOMIC) &&
 	    !xfs_bmap_hw_atomic_write_possible(ip, &args->cmap,
-			offset_fsb, end_fsb)) {
-		error = -ENOPROTOOPT;
-		goto out_unlock;
-	}
+			offset_fsb, end_fsb))
+		return -ENOPROTOOPT;
 
 	/*
 	 * COW extent found and allocated. Set up iomap/srcmap and return
-	 * with *nimaps = 0 to tell the caller the COW path is complete.
+	 * with nimaps = 0 to tell the caller the COW path is complete.
 	 */
 	args->nimaps = 0;
 	args->length = XFS_FSB_TO_B(mp,
@@ -1014,20 +942,11 @@ retry:
 		error = xfs_bmbt_to_iomap(ip, args->srcmap, &args->imap,
 				args->flags, 0, seq);
 		if (error)
-			goto out_unlock;
+			return error;
 	}
 	seq = xfs_iomap_inode_sequence(ip, IOMAP_F_SHARED);
-	if (needs_tp)
-		xfs_iunlock(ip, args->lockmode);
 	return xfs_bmbt_to_iomap(ip, args->iomap, &args->cmap, args->flags,
 			IOMAP_F_SHARED, seq);
-
-out_unlock:
-	if (local_tp && args->tp)
-		xfs_trans_cancel(local_tp);
-	if (needs_tp)
-		xfs_iunlock(ip, args->lockmode);
-	return error;
 }
 
 static int
@@ -1092,8 +1011,8 @@ xfs_direct_write_iomap_begin(
 		if (error)
 			goto out_unlock;
 
-		if (xfs_is_cow_inode(ip)) {
-			error = xfs_direct_write_cow_iomap_begin(&dwa, false);
+		if (imap_needs_cow(ip, flags, &dwa.imap, dwa.nimaps)) {
+			error = xfs_direct_write_cow_iomap_begin(&dwa);
 			if (error == -EAGAIN)
 				goto alloc_trans;
 			if (error)
