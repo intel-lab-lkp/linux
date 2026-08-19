@@ -874,7 +874,7 @@ static ssize_t tlob_monitor_read(struct file *file,
  * PATH may contain ':'; the last ':' separates path from offset.
  * Returns 0, -EINVAL, or -ERANGE.
  */
-static int tlob_parse_uprobe_line(char *buf, u64 *thr_out,
+VISIBLE_IF_KUNIT int tlob_parse_uprobe_line(char *buf, u64 *thr_out,
 					    char **path_out,
 					    loff_t *start_out, loff_t *stop_out)
 {
@@ -948,11 +948,12 @@ static int tlob_parse_uprobe_line(char *buf, u64 *thr_out,
 	*stop_out  = (loff_t)stop_val;
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(tlob_parse_uprobe_line);
 
 /*
  * Parse "-PATH:OFFSET_START" (ftrace uprobe_events removal convention).
  */
-static int tlob_parse_remove_line(char *buf, char **path_out,
+VISIBLE_IF_KUNIT int tlob_parse_remove_line(char *buf, char **path_out,
 					    loff_t *start_out)
 {
 	char *binpath, *colon;
@@ -976,6 +977,7 @@ static int tlob_parse_remove_line(char *buf, char **path_out,
 	*start_out = (loff_t)off;
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(tlob_parse_remove_line);
 
 static int tlob_create_or_delete_uprobe(char *buf)
 {

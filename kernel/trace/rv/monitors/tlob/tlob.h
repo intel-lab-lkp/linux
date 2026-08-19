@@ -146,4 +146,10 @@ static const struct automaton_tlob automaton_tlob = {
 /* Upper budget bound (1 hour): keeps the u64 ns accumulators far from overflow. */
 #define TLOB_MAX_THRESHOLD_NS	3600000000000ULL
 
+#if IS_ENABLED(CONFIG_TLOB_KUNIT_TEST)
+int tlob_parse_uprobe_line(char *buf, u64 *thr_out, char **path_out,
+			   loff_t *start_out, loff_t *stop_out);
+int tlob_parse_remove_line(char *buf, char **path_out, loff_t *start_out);
+#endif /* CONFIG_TLOB_KUNIT_TEST */
+
 #endif /* _RV_TLOB_H */
