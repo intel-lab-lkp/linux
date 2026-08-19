@@ -1707,6 +1707,10 @@ static void imx_uart_shutdown(struct uart_port *port)
 
 	uart_port_unlock_irqrestore(&sport->port, flags);
 
+	/* The rs485 trigger callbacks take the port lock and touch registers. */
+	hrtimer_cancel(&sport->trigger_start_tx);
+	hrtimer_cancel(&sport->trigger_stop_tx);
+
 	clk_disable_unprepare(sport->clk_per);
 	clk_disable_unprepare(sport->clk_ipg);
 }
@@ -2649,6 +2653,10 @@ static void imx_uart_remove(struct platform_device *pdev)
 	struct imx_port *sport = platform_get_drvdata(pdev);
 
 	uart_remove_one_port(&imx_uart_uart_driver, &sport->port);
+
+	/* Serial core can reach remove() without calling the driver shutdown. */
+	hrtimer_cancel(&sport->trigger_start_tx);
+	hrtimer_cancel(&sport->trigger_stop_tx);
 }
 
 static void imx_uart_restore_context(struct imx_port *sport)
