@@ -78,4 +78,11 @@ struct cpu_feature {
 	__u16	feature;
 };
 
+struct module_sysctl_table {
+	kernel_ulong_t path;
+	kernel_ulong_t table;
+	__u16 table_size;
+	__u16 entry_size;
+};
+
 #endif /* LINUX_MOD_DEVICETABLE_H */
