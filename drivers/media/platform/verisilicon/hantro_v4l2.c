@@ -765,6 +765,40 @@ static int vidioc_encoder_cmd(struct file *file, void *priv,
 	return 0;
 }
 
+/*
+ * The stateless codecs take a slice or frame per buffer described by the
+ * per frame controls and only accept V4L2_DEC_CMD_FLUSH.  The JPEG decoder
+ * has no controls and decodes a whole frame per buffer, so applications
+ * drive it like a stateful decoder and expect V4L2_DEC_CMD_STOP to work
+ * for draining.  The two sets of commands are disjoint, so dispatch to the
+ * helper matching the codec rather than picking one for everybody.
+ *
+ * The coded format of the context decides, not the set of codecs the device
+ * implements, so a variant offering both kinds answers per file handle.
+ */
+static bool hantro_is_stateful_dec(struct hantro_ctx *ctx)
+{
+	return ctx->vpu_src_fmt->codec_mode == HANTRO_MODE_JPEG_DEC;
+}
+
+static int hantro_try_decoder_cmd(struct file *file, void *priv,
+				  struct v4l2_decoder_cmd *dc)
+{
+	if (hantro_is_stateful_dec(file_to_ctx(file)))
+		return v4l2_m2m_ioctl_try_decoder_cmd(file, priv, dc);
+
+	return v4l2_m2m_ioctl_stateless_try_decoder_cmd(file, priv, dc);
+}
+
+static int hantro_decoder_cmd(struct file *file, void *priv,
+			      struct v4l2_decoder_cmd *dc)
+{
+	if (hantro_is_stateful_dec(file_to_ctx(file)))
+		return v4l2_m2m_ioctl_decoder_cmd(file, priv, dc);
+
+	return v4l2_m2m_ioctl_stateless_decoder_cmd(file, priv, dc);
+}
+
 static int hantro_subscribe_event(struct v4l2_fh *fh,
 				  const struct v4l2_event_subscription *sub)
 {
@@ -807,8 +841,8 @@ const struct v4l2_ioctl_ops hantro_ioctl_ops = {
 	.vidioc_g_selection = vidioc_g_selection,
 	.vidioc_s_selection = vidioc_s_selection,
 
-	.vidioc_decoder_cmd = v4l2_m2m_ioctl_stateless_decoder_cmd,
-	.vidioc_try_decoder_cmd = v4l2_m2m_ioctl_stateless_try_decoder_cmd,
+	.vidioc_decoder_cmd = hantro_decoder_cmd,
+	.vidioc_try_decoder_cmd = hantro_try_decoder_cmd,
 
 	.vidioc_try_encoder_cmd = v4l2_m2m_ioctl_try_encoder_cmd,
 	.vidioc_encoder_cmd = vidioc_encoder_cmd,

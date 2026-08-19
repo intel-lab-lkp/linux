@@ -237,11 +237,13 @@ queue_init(void *priv, struct vb2_queue *src_vq, struct vb2_queue *dst_vq)
 
 	/*
 	 * Driver does mostly sequential access, so sacrifice TLB efficiency
-	 * for faster allocation. Also, no CPU access on the source queue,
-	 * so no kernel mapping needed.
+	 * for faster allocation.  Omit DMA_ATTR_NO_KERNEL_MAPPING when the
+	 * hardware variant needs to CPU-parse the source bitstream (e.g. the
+	 * VPU720 JPEG decoder reads Q/H tables from the JPEG header).
 	 */
-	src_vq->dma_attrs = DMA_ATTR_ALLOC_SINGLE_PAGES |
-			    DMA_ATTR_NO_KERNEL_MAPPING;
+	src_vq->dma_attrs = DMA_ATTR_ALLOC_SINGLE_PAGES;
+	if (!ctx->dev->variant->src_needs_kmap)
+		src_vq->dma_attrs |= DMA_ATTR_NO_KERNEL_MAPPING;
 	src_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	src_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	src_vq->lock = &ctx->dev->vpu_mutex;
@@ -257,10 +259,12 @@ queue_init(void *priv, struct vb2_queue *src_vq, struct vb2_queue *dst_vq)
 	dst_vq->dma_attrs = DMA_ATTR_ALLOC_SINGLE_PAGES;
 	/*
 	 * The Kernel needs access to the JPEG destination buffer for the
-	 * JPEG encoder to fill in the JPEG headers.
+	 * JPEG encoder to fill in the JPEG headers, and for a decoder whose
+	 * hardware variant leaves part of the frame to the driver.
 	 */
 	if (!ctx->is_encoder) {
-		dst_vq->dma_attrs |= DMA_ATTR_NO_KERNEL_MAPPING;
+		if (!ctx->dev->variant->dst_needs_kmap)
+			dst_vq->dma_attrs |= DMA_ATTR_NO_KERNEL_MAPPING;
 		dst_vq->max_num_buffers = MAX_POSTPROC_BUFFERS;
 	}
 
@@ -746,6 +750,7 @@ static const struct of_device_id of_hantro_match[] = {
 	{ .compatible = "rockchip,rk3568-vpu", .data = &rk3568_vpu_variant, },
 	{ .compatible = "rockchip,rk3588-vepu121", .data = &rk3568_vepu_variant, },
 	{ .compatible = "rockchip,rk3588-av1-vpu", .data = &rk3588_vpu981_variant, },
+	{ .compatible = "rockchip,rk3588-vpu720", .data = &rk3588_vpu720_variant, },
 #endif
 #ifdef CONFIG_VIDEO_HANTRO_IMX8M
 	{ .compatible = "nxp,imx8mm-vpu-g1", .data = &imx8mm_vpu_g1_variant, },

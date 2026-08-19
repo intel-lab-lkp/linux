@@ -21,6 +21,21 @@
 #define ROCKCHIP_VPU981_MIN_SIZE 64
 
 /*
+ * VPU720 JPEG decoder limits.  The reference manual gives min 48x48 and
+ * max 65536x65536 with a step of 8 pixels, but the upper end of that range
+ * is not usable: a JPEG frame header cannot describe more than 65535
+ * pixels, the Y_VSTRIDE register field runs out at roughly 46340 square,
+ * and hantro_try_fmt() computes sizeimage as width * height * max_depth in
+ * 32 bits, which wraps beyond the same point.  Cap the advertised size
+ * well below all three, still four times 4K in each direction.
+ *
+ * NV12 output uses MB_DIM (16) step for hardware alignment; the decode path
+ * rounds up height to the next MB boundary (FILL_DOWN) before writing.
+ */
+#define VPU720_JPEGD_MAX_SIZE 16384
+#define VPU720_JPEGD_STEP 8
+
+/*
  * Supported formats.
  */
 
@@ -815,4 +830,69 @@ const struct hantro_variant rk3588_vpu981_variant = {
 	.num_irqs = ARRAY_SIZE(rk3588_vpu981_irqs),
 	.clk_names = rk3588_vpu981_vpu_clk_names,
 	.num_clocks = ARRAY_SIZE(rk3588_vpu981_vpu_clk_names)
+};
+
+/* ------------------------------------------------------------------ */
+/* RK3588 VPU720 JPEG decoder                                          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Capture format: NV12.  The JPEG codec entry is listed last.
+ */
+static const struct hantro_fmt rk3588_vpu720_dec_fmts[] = {
+	{
+		.fourcc    = V4L2_PIX_FMT_NV12,
+		.codec_mode = HANTRO_MODE_NONE,
+		.frmsize   = {
+			.min_width  = FMT_MIN_WIDTH,
+			.max_width  = VPU720_JPEGD_MAX_SIZE,
+			.step_width = MB_DIM,
+			.min_height = FMT_MIN_HEIGHT,
+			.max_height = VPU720_JPEGD_MAX_SIZE,
+			.step_height = MB_DIM,
+		},
+	},
+	{
+		.fourcc    = V4L2_PIX_FMT_JPEG,
+		.codec_mode = HANTRO_MODE_JPEG_DEC,
+		.max_depth  = 2,
+		.frmsize   = {
+			.min_width  = FMT_MIN_WIDTH,
+			.max_width  = VPU720_JPEGD_MAX_SIZE,
+			.step_width = VPU720_JPEGD_STEP,
+			.min_height = FMT_MIN_HEIGHT,
+			.max_height = VPU720_JPEGD_MAX_SIZE,
+			.step_height = VPU720_JPEGD_STEP,
+		},
+	},
+};
+
+static const struct hantro_codec_ops rk3588_vpu720_codec_ops[] = {
+	[HANTRO_MODE_JPEG_DEC] = {
+		.run   = rockchip_vpu720_jpeg_dec_run,
+		.reset = rockchip_vpu720_reset,
+		.init  = rockchip_vpu720_jpeg_dec_init,
+		.exit  = rockchip_vpu720_jpeg_dec_exit,
+	},
+};
+
+static const struct hantro_irq rk3588_vpu720_irqs[] = {
+	{ "vdpu", rockchip_vpu720_irq },
+};
+
+static const char * const rk3588_vpu720_clk_names[] = {
+	"aclk", "hclk",
+};
+
+const struct hantro_variant rk3588_vpu720_variant = {
+	.dec_fmts     = rk3588_vpu720_dec_fmts,
+	.num_dec_fmts = ARRAY_SIZE(rk3588_vpu720_dec_fmts),
+	.codec        = HANTRO_JPEG_DECODER,
+	.codec_ops    = rk3588_vpu720_codec_ops,
+	.irqs         = rk3588_vpu720_irqs,
+	.num_irqs     = ARRAY_SIZE(rk3588_vpu720_irqs),
+	.clk_names    = rk3588_vpu720_clk_names,
+	.num_clocks   = ARRAY_SIZE(rk3588_vpu720_clk_names),
+	.src_needs_kmap = 1,
+	.dst_needs_kmap = 1,
 };

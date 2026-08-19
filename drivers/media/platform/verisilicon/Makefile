@@ -33,6 +33,7 @@ hantro-vpu-$(CONFIG_VIDEO_HANTRO_ROCKCHIP) += \
 		rockchip_vpu2_hw_mpeg2_dec.o \
 		rockchip_vpu2_hw_vp8_dec.o \
 		rockchip_vpu981_hw_av1_dec.o \
+		rockchip_vpu720_hw_jpeg_dec.o \
 		rockchip_av1_filmgrain.o \
 		rockchip_av1_entropymode.o \
 		rockchip_vpu_hw.o

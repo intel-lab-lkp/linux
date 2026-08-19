@@ -341,6 +341,16 @@ struct hantro_av1_dec_hw_ctx {
 	struct mvcdfs  cdfs_last_ndvc[NUM_REF_FRAMES];
 	int current_frame_index;
 };
+
+/**
+ * struct hantro_jpeg_dec_hw_ctx
+ *
+ * @table_base:		Q-table and Huffman table side buffer.
+ */
+struct hantro_jpeg_dec_hw_ctx {
+	struct hantro_aux_buf table_base;
+};
+
 /**
  * struct hantro_postproc_ctx
  *
@@ -415,6 +425,7 @@ extern const struct hantro_variant rk3399_vpu_variant;
 extern const struct hantro_variant rk3568_vepu_variant;
 extern const struct hantro_variant rk3568_vpu_variant;
 extern const struct hantro_variant rk3588_vpu981_variant;
+extern const struct hantro_variant rk3588_vpu720_variant;
 extern const struct hantro_variant sama5d4_vdec_variant;
 extern const struct hantro_variant sunxi_vpu_variant;
 extern const struct hantro_variant stm32mp25_vdec_variant;
@@ -462,6 +473,12 @@ int rockchip_vpu981_av1_dec_init(struct hantro_ctx *ctx);
 void rockchip_vpu981_av1_dec_exit(struct hantro_ctx *ctx);
 int rockchip_vpu981_av1_dec_run(struct hantro_ctx *ctx);
 void rockchip_vpu981_av1_dec_done(struct hantro_ctx *ctx);
+
+int rockchip_vpu720_jpeg_dec_init(struct hantro_ctx *ctx);
+void rockchip_vpu720_jpeg_dec_exit(struct hantro_ctx *ctx);
+int rockchip_vpu720_jpeg_dec_run(struct hantro_ctx *ctx);
+void rockchip_vpu720_reset(struct hantro_ctx *ctx);
+irqreturn_t rockchip_vpu720_irq(int irq, void *dev_id);
 
 static inline unsigned short hantro_vp9_num_sbs(unsigned short dimension)
 {

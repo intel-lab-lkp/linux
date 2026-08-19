@@ -39,6 +39,7 @@ struct hantro_postproc_ops;
 #define HANTRO_HEVC_DECODER	BIT(19)
 #define HANTRO_VP9_DECODER	BIT(20)
 #define HANTRO_AV1_DECODER	BIT(21)
+#define HANTRO_JPEG_DECODER	BIT(22)
 #define HANTRO_DECODERS		0xffff0000
 
 /**
@@ -102,6 +103,19 @@ struct hantro_variant {
 	unsigned int double_buffer : 1;
 	unsigned int legacy_regs : 1;
 	unsigned int late_postproc : 1;
+	/*
+	 * src_needs_kmap: when set, the source queue will be allocated with
+	 * a kernel virtual address so the driver can CPU-parse the bitstream
+	 * (e.g. for JPEG header parsing).
+	 */
+	unsigned int src_needs_kmap : 1;
+	/*
+	 * dst_needs_kmap: when set, the capture queue will be allocated with
+	 * a kernel virtual address so the driver can write the parts of a
+	 * frame the hardware does not produce (e.g. the chroma plane of a
+	 * grayscale JPEG).
+	 */
+	unsigned int dst_needs_kmap : 1;
 	const struct of_device_id *shared_devices;
 };
 
@@ -115,6 +129,7 @@ struct hantro_variant {
  * @HANTRO_MODE_HEVC_DEC: HEVC decoder.
  * @HANTRO_MODE_VP9_DEC: VP9 decoder.
  * @HANTRO_MODE_AV1_DEC: AV1 decoder
+ * @HANTRO_MODE_JPEG_DEC: VPU720 JPEG decoder
  */
 enum hantro_codec_mode {
 	HANTRO_MODE_NONE = -1,
@@ -125,6 +140,7 @@ enum hantro_codec_mode {
 	HANTRO_MODE_HEVC_DEC,
 	HANTRO_MODE_VP9_DEC,
 	HANTRO_MODE_AV1_DEC,
+	HANTRO_MODE_JPEG_DEC,
 };
 
 /*
@@ -276,6 +292,7 @@ struct hantro_ctx {
 		struct hantro_hevc_dec_hw_ctx hevc_dec;
 		struct hantro_vp9_dec_hw_ctx vp9_dec;
 		struct hantro_av1_dec_hw_ctx av1_dec;
+		struct hantro_jpeg_dec_hw_ctx jpeg_dec;
 	};
 };
 
