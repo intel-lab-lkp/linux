@@ -9058,6 +9058,19 @@ int kvm_arch_vcpu_ioctl_set_mpstate(struct kvm_vcpu *vcpu,
 	}
 
 	kvm_set_mp_state(vcpu, mp_state->mp_state);
+
+	/*
+	 * Force the vCPU out of any hardware-tracked inactive state, e.g. VMX's
+	 * GUEST_ACTIVITY_STATE=HLT.  That state is sticky across VM-Exit and
+	 * VM-Enter and is not touched by any other ioctl, so a vCPU that halted
+	 * with HLT-exiting disabled (KVM_X86_DISABLE_EXITS_HLT) stays wedged
+	 * even after userspace declares it RUNNABLE and rewrites its registers,
+	 * e.g. when a VMM emulates a machine reset.  Waking from HLT is
+	 * architecturally allowed to be spurious, so clearing it is always safe.
+	 */
+	if (vcpu->arch.mp_state == KVM_MP_STATE_RUNNABLE)
+		kvm_x86_call(clear_hlt)(vcpu);
+
 	kvm_make_request(KVM_REQ_EVENT, vcpu);
 
 	ret = 0;
