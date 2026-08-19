@@ -335,8 +335,58 @@ struct ctl_table_root {
 #define MODULE_SYSCTL_TABLE(path, table)
 #endif
 
-#define register_sysctl(path, table)	\
-	register_sysctl_sz(path, table, ARRAY_SIZE(table))
+/*
+ * The register_sysctl() wrapper for the MODULE_SYSCTL_TABLE macro
+ * automatically creates symbols in sysctl table registration sites.
+ *
+ * Usage:
+ * - register_sysctl(path, table);
+ * - register_sysctl(path, table, table_tmpl);
+ * - register_sysctl(path, table, table_tmpl, path_tmpl);
+ *
+ * The optional 'template arguments' ('table_tmpl' and 'path_tmpl')
+ * can support callers with non-static variables: dynamic table/path
+ * defined at run-time based on a 'template' available at build-time.
+ *
+ * For example, a sysctl table, or table and path, which is/are:
+ *
+ * - per-namespace: different tables based on a template table
+ *   (i.e., same files in each namespace) with identical path
+ *   (i.e., same path in each namespace).
+ *
+ * - per-device: different tables based on a template table
+ *   (i.e., same files for each device) with different paths
+ *   (i.e., diff paths for each device) based on a template path.
+ *
+ * The wrapper passes the build-time parameters (templates) to the macro
+ * and the dynamic/run-time parameters (instances) to the wrapped function.
+ *
+ * The wrapper reduces to the wrapped function when either the macro or the
+ * config option is disabled.
+ */
+#define _register_sysctl(path, table, table_tmpl, path_tmpl)			\
+({										\
+	MODULE_SYSCTL_TABLE(path_tmpl, table_tmpl);				\
+	register_sysctl_sz(path, table, ARRAY_SIZE(table));			\
+})
+
+#define register_sysctl(path, table, tmpl_args...)				\
+	_register_sysctl(path, table,						\
+			 __sysctl_table_tmpl_or_default(table, ## tmpl_args),	\
+			 __sysctl_path_tmpl_or_default(path, ## tmpl_args))	\
+
+/* Helper macros for optional template arguments */
+#define __sysctl_table_tmpl(skip, table_tmpl, ...)				\
+	table_tmpl
+
+#define __sysctl_path_tmpl(skip, table_tmpl, path_tmpl, ...)			\
+	path_tmpl
+
+#define __sysctl_table_tmpl_or_default(default, tmpl_args...)			\
+	__sysctl_table_tmpl(, ## tmpl_args, default)
+
+#define __sysctl_path_tmpl_or_default(default, tmpl_args...)			\
+	__sysctl_path_tmpl(, ## tmpl_args, default, default)
 
 #ifdef CONFIG_SYSCTL
 

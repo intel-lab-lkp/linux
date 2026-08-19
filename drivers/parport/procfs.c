@@ -13,6 +13,8 @@
  * Cleaned up include files - Russell King <linux@arm.uk.linux.org>
  */
 
+#define SYSCTL_MODULE_ALIASES_DISABLE
+
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/module.h>
