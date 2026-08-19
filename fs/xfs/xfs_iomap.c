@@ -848,6 +848,111 @@ xfs_bmap_hw_atomic_write_possible(
 	return len <= xfs_inode_buftarg(ip)->bt_awu_max;
 }
 
+/*
+ * Handle COW extent allocation and iomap setup for direct writes to reflinked
+ * files.
+ *
+ * The caller passes in an imap and nimaps that the COW allocation will fill
+ * with the data fork extent mapping. On return, *nimaps indicates whether the
+ * caller needs to continue with the normal IO path:
+ *
+ *   *nimaps == 0: COW was handled, iomap/srcmap are filled in, ILOCK released.
+ *                 Caller should return 0 immediately.
+ *   *nimaps > 0:  Extent is not shared, imap is valid, ILOCK is still held.
+ *                 Caller should continue with the normal IO path.
+ */
+static int
+xfs_direct_write_cow_iomap_begin(
+	struct xfs_inode	*ip,
+	loff_t			offset,
+	loff_t			length,
+	unsigned		flags,
+	struct iomap		*iomap,
+	struct iomap		*srcmap,
+	struct xfs_bmbt_irec	*imap,
+	int			*nimaps,
+	unsigned int		*lockmode,
+	u16			iomap_flags)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+	struct xfs_bmbt_irec	cmap;
+	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
+	xfs_fileoff_t		end_fsb = xfs_iomap_end_fsb(mp, offset, length);
+	bool			shared = false;
+	int			error;
+	u64			seq;
+
+	*lockmode = XFS_ILOCK_EXCL;
+
+relock:
+	error = xfs_ilock_for_iomap(ip, flags, lockmode);
+	if (error)
+		return error;
+
+	/*
+	 * The reflink iflag could have changed since the earlier unlocked
+	 * check, check if it again and relock if needed.
+	 */
+	if (xfs_is_cow_inode(ip) && *lockmode == XFS_ILOCK_SHARED) {
+		xfs_iunlock(ip, *lockmode);
+		*lockmode = XFS_ILOCK_EXCL;
+		goto relock;
+	}
+
+	*nimaps = 1;
+	error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb, imap,
+			       nimaps, 0);
+	if (error)
+		goto out_unlock;
+
+	if (!imap_needs_cow(ip, flags, imap, *nimaps))
+		return 0;
+
+	error = -EAGAIN;
+	if (flags & IOMAP_NOWAIT)
+		goto out_unlock;
+
+	/* may drop and re-acquire the ilock */
+	error = xfs_reflink_allocate_cow(ip, imap, &cmap, &shared,
+			lockmode,
+			(flags & IOMAP_DIRECT) || IS_DAX(VFS_I(ip)));
+	if (error)
+		goto out_unlock;
+
+	if (!shared)
+		return 0;
+
+	if ((flags & IOMAP_ATOMIC) &&
+	    !xfs_bmap_hw_atomic_write_possible(ip, &cmap,
+			offset_fsb, end_fsb)) {
+		error = -ENOPROTOOPT;
+		goto out_unlock;
+	}
+
+	/*
+	 * COW extent found and allocated. Set up iomap/srcmap and return
+	 * with *nimaps = 0 to tell the caller the COW path is complete.
+	 */
+	*nimaps = 0;
+	length = XFS_FSB_TO_B(mp, cmap.br_startoff + cmap.br_blockcount);
+	trace_xfs_iomap_found(ip, offset, length - offset, XFS_COW_FORK,
+			&cmap);
+	if (imap->br_startblock != HOLESTARTBLOCK) {
+		seq = xfs_iomap_inode_sequence(ip, 0);
+		error = xfs_bmbt_to_iomap(ip, srcmap, imap, flags, 0, seq);
+		if (error)
+			goto out_unlock;
+	}
+	seq = xfs_iomap_inode_sequence(ip, IOMAP_F_SHARED);
+	xfs_iunlock(ip, *lockmode);
+	return xfs_bmbt_to_iomap(ip, iomap, &cmap, flags, IOMAP_F_SHARED, seq);
+
+out_unlock:
+	if (*lockmode)
+		xfs_iunlock(ip, *lockmode);
+	return error;
+}
+
 static int
 xfs_direct_write_iomap_begin(
 	struct inode		*inode,
@@ -859,12 +964,11 @@ xfs_direct_write_iomap_begin(
 {
 	struct xfs_inode	*ip = XFS_I(inode);
 	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_bmbt_irec	imap, cmap;
+	struct xfs_bmbt_irec	imap;
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	xfs_fileoff_t		end_fsb = xfs_iomap_end_fsb(mp, offset, length);
 	xfs_fileoff_t		orig_end_fsb = end_fsb;
 	int			nimaps = 1, error = 0;
-	bool			shared = false;
 	u16			iomap_flags = 0;
 	bool			needs_alloc;
 	unsigned int		lockmode;
@@ -887,57 +991,28 @@ xfs_direct_write_iomap_begin(
 	if (flags & IOMAP_ATOMIC)
 		iomap_flags |= IOMAP_F_ATOMIC_BIO;
 
-	/*
-	 * COW writes may allocate delalloc space or convert unwritten COW
-	 * extents, so we need to make sure to take the lock exclusively here.
-	 */
-	if (xfs_is_cow_inode(ip))
-		lockmode = XFS_ILOCK_EXCL;
-	else
-		lockmode = XFS_ILOCK_SHARED;
-
-relock:
-	error = xfs_ilock_for_iomap(ip, flags, &lockmode);
-	if (error)
-		return error;
-
-	/*
-	 * The reflink iflag could have changed since the earlier unlocked
-	 * check, check if it again and relock if needed.
-	 */
-	if (xfs_is_cow_inode(ip) && lockmode == XFS_ILOCK_SHARED) {
-		xfs_iunlock(ip, lockmode);
-		lockmode = XFS_ILOCK_EXCL;
-		goto relock;
-	}
-
-	error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb, &imap,
-			       &nimaps, 0);
-	if (error)
-		goto out_unlock;
-
-	if (imap_needs_cow(ip, flags, &imap, nimaps)) {
-		error = -EAGAIN;
-		if (flags & IOMAP_NOWAIT)
-			goto out_unlock;
-
-		/* may drop and re-acquire the ilock */
-		error = xfs_reflink_allocate_cow(ip, &imap, &cmap, &shared,
-				&lockmode,
-				(flags & IOMAP_DIRECT) || IS_DAX(inode));
+	if (xfs_is_cow_inode(ip)) {
+		error = xfs_direct_write_cow_iomap_begin(ip, offset, length,
+				flags, iomap, srcmap, &imap, &nimaps,
+				&lockmode, iomap_flags);
 		if (error)
-			goto out_unlock;
-		if (shared) {
-			if ((flags & IOMAP_ATOMIC) &&
-			    !xfs_bmap_hw_atomic_write_possible(ip, &cmap,
-					offset_fsb, end_fsb)) {
-				error = -ENOPROTOOPT;
-				goto out_unlock;
-			}
-			goto out_found_cow;
-		}
+			return error;
+		if (!nimaps)
+			return 0;
+
 		end_fsb = imap.br_startoff + imap.br_blockcount;
 		length = XFS_FSB_TO_B(mp, end_fsb) - offset;
+	} else {
+		lockmode = XFS_ILOCK_SHARED;
+
+		error = xfs_ilock_for_iomap(ip, flags, &lockmode);
+		if (error)
+			return error;
+
+		error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb,
+				&imap, &nimaps, 0);
+		if (error)
+			goto out_unlock;
 	}
 
 	needs_alloc = imap_needs_alloc(inode, flags, &imap, nimaps);
@@ -1021,19 +1096,6 @@ allocate_blocks:
 	trace_xfs_iomap_alloc(ip, offset, length, XFS_DATA_FORK, &imap);
 	return xfs_bmbt_to_iomap(ip, iomap, &imap, flags,
 				 iomap_flags | IOMAP_F_NEW, seq);
-
-out_found_cow:
-	length = XFS_FSB_TO_B(mp, cmap.br_startoff + cmap.br_blockcount);
-	trace_xfs_iomap_found(ip, offset, length - offset, XFS_COW_FORK, &cmap);
-	if (imap.br_startblock != HOLESTARTBLOCK) {
-		seq = xfs_iomap_inode_sequence(ip, 0);
-		error = xfs_bmbt_to_iomap(ip, srcmap, &imap, flags, 0, seq);
-		if (error)
-			goto out_unlock;
-	}
-	seq = xfs_iomap_inode_sequence(ip, IOMAP_F_SHARED);
-	xfs_iunlock(ip, lockmode);
-	return xfs_bmbt_to_iomap(ip, iomap, &cmap, flags, IOMAP_F_SHARED, seq);
 
 out_unlock:
 	if (lockmode)
