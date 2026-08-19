@@ -8,16 +8,6 @@
 Debugfs
 =======
 
-譯者
-::
-
-	中文版維護者： 羅楚成 Chucheng Luo <luochucheng@vivo.com>
-	中文版翻譯者： 羅楚成 Chucheng Luo <luochucheng@vivo.com>
-	中文版校譯者:  羅楚成 Chucheng Luo <luochucheng@vivo.com>
-	繁體中文版校譯者: 胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
-
-
-
 版權所有2020 羅楚成 <luochucheng@vivo.com>
 
 
