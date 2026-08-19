@@ -1116,9 +1116,16 @@ static int fq_change(struct Qdisc *sch, struct nlattr *opt,
 		}
 	}
 
-	if (tb[TCA_FQ_INITIAL_QUANTUM])
-		WRITE_ONCE(q->initial_quantum,
-			   nla_get_u32(tb[TCA_FQ_INITIAL_QUANTUM]));
+	if (tb[TCA_FQ_INITIAL_QUANTUM]) {
+		u32 initial_quantum = nla_get_u32(tb[TCA_FQ_INITIAL_QUANTUM]);
+
+		if (initial_quantum > 0 && initial_quantum <= (1 << 20)) {
+			WRITE_ONCE(q->initial_quantum, initial_quantum);
+		} else {
+			NL_SET_ERR_MSG_MOD(extack, "invalid initial quantum");
+			err = -EINVAL;
+		}
+	}
 
 	if (tb[TCA_FQ_FLOW_DEFAULT_RATE])
 		pr_warn_ratelimited("sch_fq: defrate %u ignored.\n",
@@ -1230,8 +1237,8 @@ static int fq_init(struct Qdisc *sch, struct nlattr *opt,
 
 	sch->limit		= 10000;
 	q->flow_plimit		= 100;
-	q->quantum		= 2 * psched_mtu(qdisc_dev(sch));
-	q->initial_quantum	= 10 * psched_mtu(qdisc_dev(sch));
+	q->quantum		= clamp_t(u32, 2 * psched_mtu(qdisc_dev(sch)), 1, 1 << 20);
+	q->initial_quantum	= clamp_t(u32, 10 * psched_mtu(qdisc_dev(sch)), 1, 1 << 20);
 	q->flow_refill_delay	= msecs_to_jiffies(40);
 	q->flow_max_rate	= ~0UL;
 	q->time_next_delayed_flow = ~0ULL;

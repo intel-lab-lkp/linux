@@ -152,9 +152,21 @@ static unsigned int fq_codel_drop(struct Qdisc *sch, unsigned int max_packets,
 	 * amortizing this linear lookup to one cache line per drop.
 	 */
 	for (i = 0; i < q->flows_cnt; i++) {
-		if (q->backlogs[i] > maxbacklog) {
+		if (q->backlogs[i] > maxbacklog && q->flows[i].head) {
 			maxbacklog = q->backlogs[i];
 			idx = i;
+		}
+	}
+
+	/* TCA_STAB can inflate qdisc_pkt_len enough to wrap per-flow
+	 * backlogs (u32) to zero; fall back to a flow with packets.
+	 */
+	if (maxbacklog == 0) {
+		for (i = 0; i < q->flows_cnt; i++) {
+			if (q->flows[i].head) {
+				idx = i;
+				break;
+			}
 		}
 	}
 
@@ -516,7 +528,7 @@ static int fq_codel_init(struct Qdisc *sch, struct nlattr *opt,
 	q->flows_cnt = 1024;
 	q->memory_limit = 32 << 20; /* 32 MBytes */
 	q->drop_batch_size = 64;
-	q->quantum = psched_mtu(qdisc_dev(sch));
+	q->quantum = max(256U, psched_mtu(qdisc_dev(sch)));
 	INIT_LIST_HEAD(&q->new_flows);
 	INIT_LIST_HEAD(&q->old_flows);
 	codel_params_init(&q->cparams);
