@@ -520,17 +520,52 @@ void unregister_pernet_device(struct pernet_operations *);
 
 struct ctl_table;
 
-#define register_net_sysctl(net, path, table)	\
-	register_net_sysctl_sz(net, path, table, ARRAY_SIZE(table))
+/*
+ * The register_net_sysctl{_sz}() wrappers for MODULE_SYSCTL_TABLE
+ * automatically create symbols in sysctl registration sites.
+ *
+ * See register_sysctl() and MODULE_SYSCTL_TABLE() in <linux/sysctl.h>
+ * for information about template arguments and options for the macro.
+ *
+ * Usage:
+ * - register_net_sysctl(net, path, table);
+ * - register_net_sysctl(net, path, table, table_tmpl);
+ * - register_net_sysctl(net, path, table, table_tmpl, path_tmpl);
+ * - register_net_sysctl_sz(net, path, table, size);
+ * - register_net_sysctl_sz(net, path, table, size, table_tmpl);
+ * - register_net_sysctl_sz(net, path, table, size, table_tmpl, path_tmpl);
+ */
+#define _register_net_sysctl_sz(net, path, table, size, table_tmpl, path_tmpl)	\
+({										\
+	MODULE_SYSCTL_TABLE(path_tmpl, table_tmpl);				\
+	__register_net_sysctl_sz(net, path, table, size);			\
+})
+
+#define register_net_sysctl_sz(net, path, table, size, tmpl_args...)		\
+	_register_net_sysctl_sz(net, path, table, size,				\
+				__sysctl_table_tmpl_or_default(table,		\
+							       ## tmpl_args),	\
+				__sysctl_path_tmpl_or_default(path,		\
+							      ## tmpl_args))
+#define register_net_sysctl(net, path, table, tmpl_args...)			\
+	register_net_sysctl_sz(net, path, table,				\
+			       __sysctl_table_array_size(table, ## tmpl_args),	\
+			       ## tmpl_args)
+
+/* Helper macro for optional template arguments */
+#define __sysctl_table_array_size(table, tmpl_args...)	\
+	ARRAY_SIZE(__sysctl_table_tmpl_or_default(table, ## tmpl_args))
+
 #ifdef CONFIG_SYSCTL
 int net_sysctl_init(void);
-struct ctl_table_header *register_net_sysctl_sz(struct net *net, const char *path,
-						const struct ctl_table *table,
-						size_t table_size);
+struct ctl_table_header *__register_net_sysctl_sz(struct net *net,
+						  const char *path,
+						  const struct ctl_table *table,
+						  size_t table_size);
 void unregister_net_sysctl_table(struct ctl_table_header *header);
 #else
 static inline int net_sysctl_init(void) { return 0; }
-static inline struct ctl_table_header *register_net_sysctl_sz(struct net *net,
+static inline struct ctl_table_header *__register_net_sysctl_sz(struct net *net,
 	const char *path, const struct ctl_table *table, size_t table_size)
 {
 	return NULL;
