@@ -337,6 +337,7 @@ config NVMEM_ROCKCHIP_OTP
 	tristate "Rockchip OTP controller support"
 	depends on ARCH_ROCKCHIP || COMPILE_TEST
 	depends on HAS_IOMEM
+	depends on PM
 	help
 	  This is a simple driver to dump specified values of Rockchip SoC
 	  from OTP, such as cpu-leakage.

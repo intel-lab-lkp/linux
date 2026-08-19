@@ -18,6 +18,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 
 /* OTP Register Offsets */
 #define OTPC_SBPI_CTRL			0x0020
@@ -272,9 +273,9 @@ static int rockchip_otp_read(void *context, unsigned int offset,
 	if (!otp->data || !otp->data->reg_read)
 		return -EINVAL;
 
-	ret = clk_bulk_prepare_enable(otp->data->num_clks, otp->clks);
+	ret = pm_runtime_resume_and_get(otp->dev);
 	if (ret < 0) {
-		dev_err(otp->dev, "failed to prepare/enable clks\n");
+		dev_err(otp->dev, "failed to resume OTP: %d\n", ret);
 		return ret;
 	}
 
@@ -306,7 +307,7 @@ static int rockchip_otp_read(void *context, unsigned int offset,
 	}
 
 err:
-	clk_bulk_disable_unprepare(otp->data->num_clks, otp->clks);
+	pm_runtime_put(otp->dev);
 
 	return ret;
 }
@@ -457,18 +458,50 @@ static int rockchip_otp_probe(struct platform_device *pdev)
 	otp_config.priv = otp;
 	otp_config.dev = dev;
 
+	platform_set_drvdata(pdev, otp);
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to enable runtime PM\n");
+
 	nvmem = devm_nvmem_register(dev, &otp_config);
 	if (IS_ERR(nvmem))
 		return dev_err_probe(dev, PTR_ERR(nvmem),
 				     "failed to register nvmem device\n");
+
 	return 0;
 }
+
+static int rockchip_otp_runtime_suspend(struct device *dev)
+{
+	struct rockchip_otp *otp = dev_get_drvdata(dev);
+
+	clk_bulk_disable_unprepare(otp->data->num_clks, otp->clks);
+
+	return 0;
+}
+
+static int rockchip_otp_runtime_resume(struct device *dev)
+{
+	struct rockchip_otp *otp = dev_get_drvdata(dev);
+	int ret;
+
+	ret = clk_bulk_prepare_enable(otp->data->num_clks, otp->clks);
+	if (ret)
+		dev_err(dev, "failed to prepare/enable clks\n");
+
+	return ret;
+}
+
+static DEFINE_RUNTIME_DEV_PM_OPS(rockchip_otp_pm_ops,
+				 rockchip_otp_runtime_suspend,
+				 rockchip_otp_runtime_resume, NULL);
 
 static struct platform_driver rockchip_otp_driver = {
 	.probe = rockchip_otp_probe,
 	.driver = {
 		.name = "rockchip-otp",
 		.of_match_table = rockchip_otp_match,
+		.pm = pm_ptr(&rockchip_otp_pm_ops),
 	},
 };
 
