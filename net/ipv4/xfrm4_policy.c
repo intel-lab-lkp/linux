@@ -177,8 +177,7 @@ static __net_init int xfrm4_net_sysctl_init(struct net *net)
 			goto err_alloc;
 	}
 
-	hdr = register_net_sysctl_sz(net, "net/ipv4", table,
-				     ARRAY_SIZE(xfrm4_policy_table));
+	hdr = register_net_sysctl(net, "net/ipv4", table, xfrm4_policy_table);
 	if (!hdr)
 		goto err_reg;
 

@@ -2952,8 +2952,8 @@ static int __net_init vsock_sysctl_register(struct net *net)
 			goto err_alloc;
 	}
 
-	net->vsock.sysctl_hdr = register_net_sysctl_sz(net, "net/vsock", table,
-						       ARRAY_SIZE(vsock_table));
+	net->vsock.sysctl_hdr = register_net_sysctl(net, "net/vsock", table,
+						    vsock_table);
 	if (!net->vsock.sysctl_hdr)
 		goto err_reg;
 
