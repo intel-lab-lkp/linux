@@ -9,6 +9,7 @@
 #include "fsverity_private.h"
 
 #include <linux/ratelimit.h>
+#include <linux/sysctl.h>
 
 #ifdef CONFIG_SYSCTL
 static const struct ctl_table fsverity_sysctl_table[] = {
