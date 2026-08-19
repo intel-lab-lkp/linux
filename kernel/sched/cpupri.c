@@ -69,33 +69,6 @@ static inline int __cpupri_find(struct cpupri *cp, struct task_struct *p,
 				struct cpumask *lowest_mask, int idx)
 {
 	struct cpupri_vec *vec  = &cp->pri_to_cpu[idx];
-	int skip = 0;
-
-	if (!atomic_read(&(vec)->count))
-		skip = 1;
-	/*
-	 * When looking at the vector, we need to read the counter,
-	 * do a memory barrier, then read the mask.
-	 *
-	 * Note: This is still all racy, but we can deal with it.
-	 *  Ideally, we only want to look at masks that are set.
-	 *
-	 *  If a mask is not set, then the only thing wrong is that we
-	 *  did a little more work than necessary.
-	 *
-	 *  If we read a zero count but the mask is set, because of the
-	 *  memory barriers, that can only happen when the highest prio
-	 *  task for a run queue has left the run queue, in which case,
-	 *  it will be followed by a pull. If the task we are processing
-	 *  fails to find a proper place to go, that pull request will
-	 *  pull this task if the run queue is running at a lower
-	 *  priority.
-	 */
-	smp_rmb();
-
-	/* Need to do the rmb for every iteration */
-	if (skip)
-		return 0;
 
 	if (cpumask_any_and(&p->cpus_mask, vec->mask) >= nr_cpu_ids)
 		return 0;
@@ -212,7 +185,6 @@ void cpupri_set(struct cpupri *cp, int cpu, int newpri)
 {
 	int *currpri = &cp->cpu_to_pri[cpu];
 	int oldpri = *currpri;
-	int do_mb = 0;
 
 	newpri = convert_prio(newpri);
 
@@ -231,39 +203,11 @@ void cpupri_set(struct cpupri *cp, int cpu, int newpri)
 		struct cpupri_vec *vec = &cp->pri_to_cpu[newpri];
 
 		cpumask_set_cpu(cpu, vec->mask);
-		/*
-		 * When adding a new vector, we update the mask first,
-		 * do a write memory barrier, and then update the count, to
-		 * make sure the vector is visible when count is set.
-		 */
-		smp_mb__before_atomic();
-		atomic_inc(&(vec)->count);
-		do_mb = 1;
 	}
+
 	if (likely(oldpri != CPUPRI_INVALID)) {
-		struct cpupri_vec *vec  = &cp->pri_to_cpu[oldpri];
+		struct cpupri_vec *vec = &cp->pri_to_cpu[oldpri];
 
-		/*
-		 * Because the order of modification of the vec->count
-		 * is important, we must make sure that the update
-		 * of the new prio is seen before we decrement the
-		 * old prio. This makes sure that the loop sees
-		 * one or the other when we raise the priority of
-		 * the run queue. We don't care about when we lower the
-		 * priority, as that will trigger an rt pull anyway.
-		 *
-		 * We only need to do a memory barrier if we updated
-		 * the new priority vec.
-		 */
-		if (do_mb)
-			smp_mb__after_atomic();
-
-		/*
-		 * When removing from the vector, we decrement the counter first
-		 * do a memory barrier and then clear the mask.
-		 */
-		atomic_dec(&(vec)->count);
-		smp_mb__after_atomic();
 		cpumask_clear_cpu(cpu, vec->mask);
 	}
 
@@ -283,7 +227,6 @@ int cpupri_init(struct cpupri *cp)
 	for (i = 0; i < CPUPRI_NR_PRIORITIES; i++) {
 		struct cpupri_vec *vec = &cp->pri_to_cpu[i];
 
-		atomic_set(&vec->count, 0);
 		if (!zalloc_cpumask_var(&vec->mask, GFP_KERNEL))
 			goto cleanup;
 	}
