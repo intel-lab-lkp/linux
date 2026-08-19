@@ -17,6 +17,7 @@ SYM_FUNC_START(strnlen)
 	__ALTERNATIVE_CFG("nop", "j strnlen_zbb", 0, RISCV_ISA_EXT_ZBB,
 		IS_ENABLED(CONFIG_RISCV_ISA_ZBB) && IS_ENABLED(CONFIG_TOOLCHAIN_HAS_ZBB))
 
+strnlen_generic:
 
 	/*
 	 * Returns
@@ -27,15 +28,17 @@ SYM_FUNC_START(strnlen)
 	 *   a1 - Max length of string
 	 *
 	 * Clobbers
-	 *   t0, t1, t2
+	 *   t0, t1
 	 */
-	addi	t1, a0, -1
-	add	t2, a0, a1
+	mv	t1, a0
+
 1:
-	addi	t1, t1, 1
-	beq	t1, t2, 2f
+	beqz	a1, 2f
+	addi	a1, a1, -1
 	lbu	t0, 0(t1)
-	bnez	t0, 1b
+	beqz	t0, 2f
+	addi	t1, t1, 1
+	j	1b
 2:
 	sub	a0, t1, a0
 	ret
@@ -72,6 +75,13 @@ strnlen_zbb:
 
 	/* If maxlen is 0, return 0. */
 	beqz	a1, 3f
+
+	/*
+	 * Fallback to generic implementation when count is large enough to
+	 * cause address overflow in the ZBB optimized path
+	 */
+	add	t4, a0, a1
+	bltu	t4, a0, strnlen_generic		/* a0 + a1 overflow */
 
 	/* Number of irrelevant bytes in the first word. */
 	andi	t2, a0, SZREG-1
