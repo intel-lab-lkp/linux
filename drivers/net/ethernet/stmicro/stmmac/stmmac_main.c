@@ -3826,10 +3826,15 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 	struct stmmac_priv *priv = netdev_priv(dev);
 	struct stmmac_msi *msi = priv->msi;
 	enum request_irq_err irq_err;
+	cpumask_var_t affinity;
 	int irq_idx = 0;
 	char *int_name;
+	int node;
 	int ret;
 	int i;
+
+	if (!zalloc_cpumask_var(&affinity, GFP_KERNEL))
+		return -ENOMEM;
 
 	/* For common interrupt */
 	int_name = msi->int_name_mac;
@@ -3916,6 +3921,7 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 	}
 
 	/* Request Rx MSI irq */
+	node = dev_to_node(&priv->dev->dev);
 	for (i = 0; i < priv->plat->rx_queues_to_use; i++) {
 		if (i >= MTL_MAX_RX_QUEUES)
 			break;
@@ -3935,8 +3941,10 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 			irq_idx = i;
 			goto irq_error;
 		}
-		irq_set_affinity_hint(msi->rx_irq[i],
-				      cpumask_of(i % num_online_cpus()));
+
+		cpumask_clear(affinity);
+		cpumask_set_cpu(cpumask_local_spread(i, node), affinity);
+		irq_set_affinity_and_hint(msi->rx_irq[i], affinity);
 	}
 
 	/* Request Tx MSI irq */
@@ -3959,13 +3967,18 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 			irq_idx = i;
 			goto irq_error;
 		}
-		irq_set_affinity_hint(msi->tx_irq[i],
-				      cpumask_of(i % num_online_cpus()));
+
+		cpumask_clear(affinity);
+		cpumask_set_cpu(cpumask_local_spread(i, node), affinity);
+		irq_set_affinity_and_hint(msi->tx_irq[i], affinity);
 	}
+
+	free_cpumask_var(affinity);
 
 	return 0;
 
 irq_error:
+	free_cpumask_var(affinity);
 	stmmac_free_irq(dev, irq_err, irq_idx);
 	return ret;
 }
