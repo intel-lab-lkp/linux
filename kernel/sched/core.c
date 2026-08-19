@@ -7930,15 +7930,15 @@ int sched_dynamic_mode(const char *str)
 	return -EINVAL;
 }
 
-# define preempt_dynamic_key_enable(f)	static_key_enable(&sk_dynamic_##f.key)
-# define preempt_dynamic_key_disable(f)	static_key_disable(&sk_dynamic_##f.key)
+# define preempt_dynamic_branch_enable(f)	static_branch_enable(&sk_dynamic_##f)
+# define preempt_dynamic_branch_disable(f)	static_branch_disable(&sk_dynamic_##f)
 
 # if defined(CONFIG_HAVE_PREEMPT_DYNAMIC_CALL)
 #  define preempt_dynamic_enable(f)	static_call_update(f, f##_dynamic_enabled)
 #  define preempt_dynamic_disable(f)	static_call_update(f, f##_dynamic_disabled)
 # elif defined(CONFIG_HAVE_PREEMPT_DYNAMIC_KEY)
-#  define preempt_dynamic_enable(f)	preempt_dynamic_key_enable(f)
-#  define preempt_dynamic_disable(f)	preempt_dynamic_key_disable(f)
+#  define preempt_dynamic_enable(f)	preempt_dynamic_branch_enable(f)
+#  define preempt_dynamic_disable(f)	preempt_dynamic_branch_disable(f)
 # else
 #  error "Unsupported PREEMPT_DYNAMIC mechanism"
 # endif
@@ -7956,7 +7956,7 @@ static void __sched_dynamic_update(int mode)
 	preempt_dynamic_enable(preempt_schedule);
 	preempt_dynamic_enable(preempt_schedule_notrace);
 	preempt_dynamic_enable(irqentry_exit_cond_resched);
-	preempt_dynamic_key_disable(preempt_lazy);
+	preempt_dynamic_branch_disable(preempt_lazy);
 
 	switch (mode) {
 	case preempt_dynamic_none:
@@ -7965,7 +7965,7 @@ static void __sched_dynamic_update(int mode)
 		preempt_dynamic_disable(preempt_schedule);
 		preempt_dynamic_disable(preempt_schedule_notrace);
 		preempt_dynamic_disable(irqentry_exit_cond_resched);
-		preempt_dynamic_key_disable(preempt_lazy);
+		preempt_dynamic_branch_disable(preempt_lazy);
 		if (mode != preempt_dynamic_mode)
 			pr_info("Dynamic Preempt: none\n");
 		break;
@@ -7976,7 +7976,7 @@ static void __sched_dynamic_update(int mode)
 		preempt_dynamic_disable(preempt_schedule);
 		preempt_dynamic_disable(preempt_schedule_notrace);
 		preempt_dynamic_disable(irqentry_exit_cond_resched);
-		preempt_dynamic_key_disable(preempt_lazy);
+		preempt_dynamic_branch_disable(preempt_lazy);
 		if (mode != preempt_dynamic_mode)
 			pr_info("Dynamic Preempt: voluntary\n");
 		break;
@@ -7987,7 +7987,7 @@ static void __sched_dynamic_update(int mode)
 		preempt_dynamic_enable(preempt_schedule);
 		preempt_dynamic_enable(preempt_schedule_notrace);
 		preempt_dynamic_enable(irqentry_exit_cond_resched);
-		preempt_dynamic_key_disable(preempt_lazy);
+		preempt_dynamic_branch_disable(preempt_lazy);
 		if (mode != preempt_dynamic_mode)
 			pr_info("Dynamic Preempt: full\n");
 		break;
@@ -7998,7 +7998,7 @@ static void __sched_dynamic_update(int mode)
 		preempt_dynamic_enable(preempt_schedule);
 		preempt_dynamic_enable(preempt_schedule_notrace);
 		preempt_dynamic_enable(irqentry_exit_cond_resched);
-		preempt_dynamic_key_enable(preempt_lazy);
+		preempt_dynamic_branch_enable(preempt_lazy);
 		if (mode != preempt_dynamic_mode)
 			pr_info("Dynamic Preempt: lazy\n");
 		break;

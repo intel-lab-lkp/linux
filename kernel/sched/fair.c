@@ -6568,21 +6568,21 @@ entity_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr, int queued)
 #ifdef CONFIG_CFS_BANDWIDTH
 
 #ifdef CONFIG_JUMP_LABEL
-static struct static_key __cfs_bandwidth_used;
+static DEFINE_STATIC_KEY_FALSE(__cfs_bandwidth_used);
 
 static inline bool cfs_bandwidth_used(void)
 {
-	return static_key_false(&__cfs_bandwidth_used);
+	return static_branch_unlikely(&__cfs_bandwidth_used);
 }
 
 void cfs_bandwidth_usage_inc(void)
 {
-	static_key_slow_inc_cpuslocked(&__cfs_bandwidth_used);
+	static_branch_inc_cpuslocked(&__cfs_bandwidth_used);
 }
 
 void cfs_bandwidth_usage_dec(void)
 {
-	static_key_slow_dec_cpuslocked(&__cfs_bandwidth_used);
+	static_branch_dec_cpuslocked(&__cfs_bandwidth_used);
 }
 #else /* !CONFIG_JUMP_LABEL: */
 static bool cfs_bandwidth_used(void)
