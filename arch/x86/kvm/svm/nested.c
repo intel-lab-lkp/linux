@@ -71,22 +71,65 @@ static bool nested_svm_vmexit_supports_insn_bytes(struct kvm_vcpu *vcpu,
 	return !(vmcb02->control.exit_info_1 & PFERR_FETCH_MASK);
 }
 
+static void nested_svm_clear_synthesized_insn_bytes(struct vcpu_svm *svm)
+{
+	svm->nested.synthesized_insn_bytes.prepared = false;
+	svm->nested.synthesized_insn_bytes.insn_len = 0;
+}
+
+static void nested_svm_prepare_synthesized_insn_bytes(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+	struct nested_svm_insn_bytes *synthesized =
+		&svm->nested.synthesized_insn_bytes;
+	struct x86_emulate_ctxt *ctxt = vcpu->arch.emulate_ctxt;
+
+	static_assert(sizeof(synthesized->insn_bytes) >=
+		      sizeof(ctxt->fetch.data));
+
+	nested_svm_clear_synthesized_insn_bytes(svm);
+
+	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_DECODEASSISTS))
+		return;
+
+	if (!ctxt || ctxt->eip != kvm_rip_read(vcpu) ||
+	    ctxt->fetch.end < ctxt->fetch.data ||
+	    ctxt->fetch.end > ctxt->fetch.data + sizeof(ctxt->fetch.data))
+		return;
+
+	synthesized->insn_len = ctxt->fetch.end - ctxt->fetch.data;
+	memcpy(synthesized->insn_bytes, ctxt->fetch.data,
+	       synthesized->insn_len);
+	synthesized->prepared = true;
+}
+
 static void nested_svm_update_vmcb12_insn_bytes(struct kvm_vcpu *vcpu,
 						struct vmcb *vmcb12,
 						const struct vmcb *vmcb02)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
+	struct nested_svm_insn_bytes *synthesized =
+		&svm->nested.synthesized_insn_bytes;
 
 	nested_svm_clear_insn_bytes(vmcb12);
 
 	if (!nested_svm_vmexit_supports_insn_bytes(vcpu, vmcb02))
 		goto out;
 
-	if (svm->nested.vmcb02_insn_bytes_fresh)
+	if (svm->nested.vmcb02_insn_bytes_fresh) {
 		nested_svm_copy_insn_bytes(vmcb12, vmcb02);
+		goto out;
+	}
+
+	if (synthesized->prepared) {
+		vmcb12->control.insn_len = synthesized->insn_len;
+		memcpy(vmcb12->control.insn_bytes, synthesized->insn_bytes,
+		       vmcb12->control.insn_len);
+	}
 
 out:
 	svm->nested.vmcb02_insn_bytes_fresh = false;
+	nested_svm_clear_synthesized_insn_bytes(svm);
 }
 
 static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
@@ -95,6 +138,8 @@ static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct vmcb *vmcb = svm->vmcb;
+	struct x86_emulate_ctxt *ctxt = vcpu->arch.emulate_ctxt;
+	bool from_emulation = ctxt && fault == &ctxt->exception;
 	u64 fault_stage;
 
 	/*
@@ -123,6 +168,8 @@ static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
 	vmcb->control.exit_info_2 = fault->address;
 
 	svm->nested.vmcb02_insn_bytes_fresh = from_hardware;
+	if (from_emulation && !(fault->error_code & PFERR_FETCH_MASK))
+		nested_svm_prepare_synthesized_insn_bytes(vcpu);
 	nested_svm_vmexit(svm);
 }
 
@@ -927,6 +974,7 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm)
 	 */
 	nested_svm_clear_insn_bytes(vmcb02);
 	svm->nested.vmcb02_insn_bytes_fresh = false;
+	nested_svm_clear_synthesized_insn_bytes(svm);
 
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_VGIF) &&
 	    (vmcb12_ctrl->int_ctl & V_GIF_ENABLE_MASK))
@@ -1760,6 +1808,10 @@ static void nested_svm_inject_exception_vmexit(struct kvm_vcpu *vcpu)
 			vmcb->control.exit_info_2 = ex->payload;
 		else
 			vmcb->control.exit_info_2 = vcpu->arch.cr2;
+
+		if (ex->has_emulator_context &&
+		    (!ex->has_error_code || !(ex->error_code & PFERR_FETCH_MASK)))
+			nested_svm_prepare_synthesized_insn_bytes(vcpu);
 	} else if (ex->vector == DB_VECTOR) {
 		/* See kvm_check_and_inject_events().  */
 		kvm_deliver_exception_payload(vcpu, ex);
