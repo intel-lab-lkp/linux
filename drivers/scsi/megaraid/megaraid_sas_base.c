@@ -6536,6 +6536,7 @@ fail_start_watchdog:
 fail_get_ld_pd_list:
 	instance->instancet->disable_intr(instance);
 	megasas_destroy_irqs(instance);
+	tasklet_kill(&instance->isr_tasklet);
 fail_init_adapter:
 	if (instance->msix_vectors)
 		pci_free_irq_vectors(instance->pdev);
@@ -7618,6 +7619,7 @@ fail_io_attach:
 
 	instance->instancet->disable_intr(instance);
 	megasas_destroy_irqs(instance);
+	tasklet_kill(&instance->isr_tasklet);
 
 	if (instance->adapter_type != MFI_SERIES)
 		megasas_release_fusion(instance);
@@ -7770,12 +7772,11 @@ megasas_suspend(struct device *dev)
 		instance->ev = NULL;
 	}
 
-	tasklet_kill(&instance->isr_tasklet);
-
 	pci_set_drvdata(instance->pdev, instance);
 	instance->instancet->disable_intr(instance);
 
 	megasas_destroy_irqs(instance);
+	tasklet_kill(&instance->isr_tasklet);
 
 	if (instance->msix_vectors)
 		pci_free_irq_vectors(instance->pdev);
@@ -8010,8 +8011,6 @@ skip_firing_dcmds:
 	/* cancel all wait events */
 	wake_up_all(&instance->int_cmd_wait_q);
 
-	tasklet_kill(&instance->isr_tasklet);
-
 	/*
 	 * Take the instance off the instance array. Note that we will not
 	 * decrement the max_index. We let this array be sparse array
@@ -8028,6 +8027,7 @@ skip_firing_dcmds:
 	instance->instancet->disable_intr(instance);
 
 	megasas_destroy_irqs(instance);
+	tasklet_kill(&instance->isr_tasklet);
 
 	if (instance->msix_vectors)
 		pci_free_irq_vectors(instance->pdev);
