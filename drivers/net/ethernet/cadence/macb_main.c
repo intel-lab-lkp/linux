@@ -5507,38 +5507,6 @@ static int eyeq5_init(struct platform_device *pdev)
 	return ret;
 }
 
-static int macb_alloc_tieoff(struct macb *bp)
-{
-	/* Tieoff is a workaround in case HW cannot disable queues, for PM. */
-	if (bp->caps & MACB_CAPS_QUEUE_DISABLE)
-		return 0;
-
-	bp->rx_ring_tieoff = dma_alloc_coherent(&bp->pdev->dev,
-						macb_dma_desc_get_size(bp),
-						&bp->rx_ring_tieoff_dma,
-						GFP_KERNEL);
-	if (!bp->rx_ring_tieoff)
-		return -ENOMEM;
-
-	macb_set_addr(bp, bp->rx_ring_tieoff,
-		      MACB_BIT(RX_WRAP) | MACB_BIT(RX_USED));
-
-	bp->rx_ring_tieoff->ctrl = 0;
-
-	return 0;
-}
-
-static void macb_free_tieoff(struct macb *bp)
-{
-	if (!bp->rx_ring_tieoff)
-		return;
-
-	dma_free_coherent(&bp->pdev->dev, macb_dma_desc_get_size(bp),
-			  bp->rx_ring_tieoff,
-			  bp->rx_ring_tieoff_dma);
-	bp->rx_ring_tieoff = NULL;
-}
-
 static const struct macb_usrio_config mpfs_usrio = {
 	.tsu_source = 0,
 };
@@ -5755,6 +5723,38 @@ static const struct of_device_id macb_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, macb_dt_ids);
 #endif /* CONFIG_OF */
+
+static int macb_alloc_tieoff(struct macb *bp)
+{
+	/* Tieoff is a workaround in case HW cannot disable queues, for PM. */
+	if (bp->caps & MACB_CAPS_QUEUE_DISABLE)
+		return 0;
+
+	bp->rx_ring_tieoff = dma_alloc_coherent(&bp->pdev->dev,
+						macb_dma_desc_get_size(bp),
+						&bp->rx_ring_tieoff_dma,
+						GFP_KERNEL);
+	if (!bp->rx_ring_tieoff)
+		return -ENOMEM;
+
+	macb_set_addr(bp, bp->rx_ring_tieoff,
+		      MACB_BIT(RX_WRAP) | MACB_BIT(RX_USED));
+
+	bp->rx_ring_tieoff->ctrl = 0;
+
+	return 0;
+}
+
+static void macb_free_tieoff(struct macb *bp)
+{
+	if (!bp->rx_ring_tieoff)
+		return;
+
+	dma_free_coherent(&bp->pdev->dev, macb_dma_desc_get_size(bp),
+			  bp->rx_ring_tieoff,
+			  bp->rx_ring_tieoff_dma);
+	bp->rx_ring_tieoff = NULL;
+}
 
 static const struct macb_config default_gem_config = {
 	.caps = MACB_CAPS_GIGABIT_MODE_AVAILABLE |
