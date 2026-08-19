@@ -9,6 +9,11 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/blkdev.h>
+#include <linux/bio.h>
+#include <linux/blk-mq.h>
+#include <linux/blk_types.h>
+#include <linux/delay.h>
+#include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -18,6 +23,7 @@
 #include <linux/file.h>
 #include <linux/init_syscalls.h>
 #include <linux/mount.h>
+#include <linux/vmalloc.h>
 
 static long kmsg_size = CONFIG_PSTORE_BLK_KMSG_SIZE;
 module_param(kmsg_size, long, 0400);
@@ -190,6 +196,312 @@ static ssize_t psblk_generic_blk_read(char *buf, size_t bytes, loff_t pos)
 	return kernel_read(psblk_file, buf, bytes, &pos);
 }
 
+#define PSBLK_PANIC_MAX_PAGES		16
+#define PSBLK_POLL_DELAY_US		100
+#define PSBLK_POLL_MAX_ITERATIONS	30000
+
+struct psblk_panic_completion {
+	int done;
+	blk_status_t status;
+};
+
+/*
+ * panic_write is only used for panic dmesg records. pstore/zone serializes
+ * those writes, so a single statically reserved bio is enough and avoids
+ * bio allocation from the panic path.
+ */
+static struct bio psblk_panic_bio;
+static struct bio_vec psblk_panic_bvecs[PSBLK_PANIC_MAX_PAGES];
+static struct psblk_panic_completion psblk_panic_comp;
+
+static void psblk_panic_bio_endio(struct bio *bio)
+{
+	struct psblk_panic_completion *comp = bio->bi_private;
+
+	WRITE_ONCE(comp->status, bio->bi_status);
+	/* Pairs with psblk_panic_done() before reading comp->status. */
+	smp_store_release(&comp->done, 1);
+}
+
+static bool psblk_panic_done(struct psblk_panic_completion *comp)
+{
+	/* Pairs with psblk_panic_bio_endio() after writing comp->status. */
+	return smp_load_acquire(&comp->done);
+}
+
+static bool psblk_panic_check_capable(struct block_device *bdev)
+{
+	struct request_queue *q = bdev_get_queue(bdev);
+
+	if (!q) {
+		dev_dbg(&bdev->bd_device,
+			"cannot use polled panic writes: missing request queue\n");
+		return false;
+	}
+
+	if (!(q->limits.features & BLK_FEAT_POLL) || !q->tag_set ||
+	    !q->tag_set->map[HCTX_TYPE_POLL].nr_queues) {
+		dev_dbg(&bdev->bd_device,
+			"cannot use polled panic writes: missing polled hardware queues\n");
+		return false;
+	}
+
+	if (!bdev_nowait(bdev)) {
+		dev_dbg(&bdev->bd_device,
+			"cannot use polled panic writes: missing nowait support\n");
+		return false;
+	}
+
+	if (bdev_write_cache(bdev) && !bdev_fua(bdev)) {
+		dev_dbg(&bdev->bd_device,
+			"cannot use polled panic writes: write cache enabled without FUA\n");
+		return false;
+	}
+
+	return true;
+}
+
+static size_t psblk_panic_max_chunk(struct request_queue *q, const char *buf,
+				    size_t bytes)
+{
+	unsigned int max_pages;
+	unsigned int logical;
+	size_t page_room;
+	size_t max_bytes;
+
+	max_pages = min_t(unsigned int, PSBLK_PANIC_MAX_PAGES,
+			  queue_max_segments(q));
+	max_pages = min_t(unsigned int, max_pages, BIO_MAX_VECS);
+	if (!max_pages)
+		return 0;
+
+	page_room = ((size_t)max_pages << PAGE_SHIFT) - offset_in_page(buf);
+	max_bytes = min_t(size_t, queue_max_bytes(q),
+			  (size_t)max_pages << PAGE_SHIFT);
+	max_bytes = min(max_bytes, page_room);
+
+	logical = queue_logical_block_size(q);
+	max_bytes = round_down(max_bytes, logical);
+
+	return min(bytes, max_bytes);
+}
+
+static ssize_t psblk_panic_fill_bio(struct bio *bio, const char *src,
+				    size_t bytes)
+{
+	size_t added = 0;
+
+	while (added < bytes) {
+		const void *addr = src + added;
+		struct page *page;
+		size_t page_off;
+		size_t page_len;
+		int ret;
+
+		page_off = offset_in_page(addr);
+		page_len = min_t(size_t, PAGE_SIZE - page_off,
+				 bytes - added);
+
+		if (is_vmalloc_addr(addr))
+			page = vmalloc_to_page(addr);
+		else
+			page = virt_to_page(addr);
+
+		if (!page) {
+			pr_emerg("failed to get page for buffer\n");
+			return -EFAULT;
+		}
+
+		ret = bio_add_page(bio, page, page_len, page_off);
+		if (ret != page_len) {
+			pr_emerg("failed to add page to panic bio\n");
+			return -EIO;
+		}
+
+		added += ret;
+	}
+
+	return added;
+}
+
+static int psblk_panic_bio_status(struct psblk_panic_completion *comp)
+{
+	blk_status_t status = READ_ONCE(comp->status);
+	int err;
+
+	if (status == BLK_STS_OK)
+		return 0;
+
+	err = blk_status_to_errno(status);
+	pr_emerg("write failed with block status %u, error %d\n",
+		 (__force unsigned int)status, err);
+	return err;
+}
+
+static int psblk_panic_submit_and_wait(struct bio *bio,
+				       struct psblk_panic_completion *comp,
+				       bool *completed)
+{
+	unsigned long iters = 0;
+	bool can_poll;
+
+	WRITE_ONCE(comp->status, BLK_STS_OK);
+	WRITE_ONCE(comp->done, 0);
+	*completed = false;
+
+	submit_bio(bio);
+
+	can_poll = READ_ONCE(bio->bi_cookie) != BLK_QC_T_NONE;
+	if (!can_poll && !psblk_panic_done(comp))
+		pr_emerg("REQ_POLLED write did not return a poll cookie\n");
+
+	while (!psblk_panic_done(comp)) {
+		if (iters++ >= PSBLK_POLL_MAX_ITERATIONS) {
+			pr_emerg("write timed out after %lu poll attempts\n",
+				 iters);
+			return -ETIMEDOUT;
+		}
+
+		if (can_poll)
+			bio_poll(bio, NULL, BLK_POLL_ONESHOT);
+		cpu_relax();
+
+		if (!psblk_panic_done(comp))
+			udelay(PSBLK_POLL_DELAY_US);
+	}
+
+	*completed = true;
+	return psblk_panic_bio_status(comp);
+}
+
+static ssize_t psblk_panic_blk_write(const char *buf, size_t bytes, loff_t pos)
+{
+	struct file *file = READ_ONCE(psblk_file);
+	struct psblk_panic_completion *comp = &psblk_panic_comp;
+	struct block_device *bdev;
+	struct request_queue *q;
+	size_t remaining = bytes;
+	size_t written = 0;
+	loff_t offset = pos;
+	unsigned int logical;
+	blk_opf_t opf;
+	int ret;
+
+	if (!bytes)
+		return 0;
+
+	if (!file) {
+		pr_emerg("block device file is not available\n");
+		return -ENODEV;
+	}
+
+	if (!buf) {
+		pr_emerg("missing write buffer\n");
+		return -EINVAL;
+	}
+
+	if (pos < 0) {
+		pr_emerg("invalid negative write offset %lld\n", pos);
+		return -EINVAL;
+	}
+
+	if ((pos | bytes) & (SECTOR_SIZE - 1)) {
+		pr_emerg("unaligned sector write: offset %lld, size %zu\n",
+			 pos, bytes);
+		return -EINVAL;
+	}
+
+	bdev = file_bdev(file);
+	if (!bdev) {
+		pr_emerg("failed to get block device\n");
+		return -EINVAL;
+	}
+
+	q = bdev_get_queue(bdev);
+	if (!q) {
+		pr_emerg("failed to get request queue\n");
+		return -EINVAL;
+	}
+
+	if (bdev_read_only(bdev)) {
+		pr_emerg("block device is read-only\n");
+		return -EROFS;
+	}
+
+	if (blk_queue_dying(q)) {
+		pr_emerg("queue is dying, device unavailable\n");
+		return -ENODEV;
+	}
+
+	logical = queue_logical_block_size(q);
+	if ((pos | bytes) & (logical - 1)) {
+		pr_emerg("unaligned logical block write: offset %lld, size %zu, logical block %u\n",
+			 pos, bytes, logical);
+		return -EINVAL;
+	}
+
+	opf = REQ_OP_WRITE | REQ_SYNC | REQ_META | REQ_PRIO |
+	      REQ_IDLE | REQ_POLLED | REQ_NOWAIT | REQ_FUA;
+
+	while (remaining) {
+		struct bio *bio = &psblk_panic_bio;
+		bool completed = false;
+		unsigned int nr_vecs;
+		size_t to_write;
+		ssize_t added;
+
+		to_write = psblk_panic_max_chunk(q, buf + written, remaining);
+		if (!to_write) {
+			pr_emerg("failed to build queue-limited write chunk\n");
+			ret = -EIO;
+			break;
+		}
+
+		nr_vecs = DIV_ROUND_UP(offset_in_page(buf + written) +
+				       to_write, PAGE_SIZE);
+		if (WARN_ON_ONCE(nr_vecs > PSBLK_PANIC_MAX_PAGES)) {
+			pr_emerg("write chunk needs %u bvecs, max is %u\n",
+				 nr_vecs, PSBLK_PANIC_MAX_PAGES);
+			ret = -EIO;
+			break;
+		}
+
+		bio_init(bio, bdev, psblk_panic_bvecs, nr_vecs, opf);
+		bio->bi_iter.bi_sector = offset >> SECTOR_SHIFT;
+		bio->bi_private = comp;
+		bio->bi_end_io = psblk_panic_bio_endio;
+
+		added = psblk_panic_fill_bio(bio, buf + written, to_write);
+		if (added != to_write) {
+			bio_uninit(bio);
+			ret = added < 0 ? added : -EIO;
+			break;
+		}
+
+		ret = psblk_panic_submit_and_wait(bio, comp, &completed);
+		if (completed)
+			bio_uninit(bio);
+		if (ret)
+			break;
+
+		written += to_write;
+		remaining -= to_write;
+		offset += to_write;
+	}
+
+	if (written) {
+		if (ret < 0)
+			pr_emerg("panic write stopped after %zu of %zu bytes: error %d\n",
+				 written, bytes, ret);
+		return written;
+	}
+
+	if (ret < 0)
+		pr_emerg("panic write failed with error %d\n", ret);
+
+	return ret;
+}
+
 static ssize_t psblk_generic_blk_write(const char *buf, size_t bytes,
 		loff_t pos)
 {
@@ -223,6 +535,9 @@ static int __register_pstore_blk(struct pstore_device_info *dev,
 
 	dev->zone.total_size =
 		bdev_nr_bytes(I_BDEV(psblk_file->f_mapping->host));
+
+	if (psblk_panic_check_capable(file_bdev(psblk_file)))
+		dev->zone.panic_write = psblk_panic_blk_write;
 
 	ret = __register_pstore_device(dev);
 	if (ret)
@@ -309,8 +624,11 @@ static int __init __best_effort_init(void)
 	if (ret)
 		kfree(best_effort_dev);
 	else
-		pr_info("attached %s (%lu) (no dedicated panic_write!)\n",
-			blkdev, best_effort_dev->zone.total_size);
+		pr_info("attached %s (%lu)%s\n",
+			blkdev, best_effort_dev->zone.total_size,
+			best_effort_dev->zone.panic_write ?
+			" (panic_write enabled)" :
+			" (no dedicated panic_write!)");
 
 	return ret;
 }

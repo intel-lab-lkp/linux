@@ -219,6 +219,39 @@ pstore/blk supports psblk_blkdev_info(), which is defined in
 *linux/pstore_blk.h*, to get information of using block device, such as the
 device number, sector count and start sector of the whole disk.
 
+Panic writes in best-effort mode
+--------------------------------
+
+When ``best_effort=y`` is used with a suitable block device, pstore/blk can
+register a ``panic_write`` callback for panic dmesg records. The callback
+submits write BIOs with ``REQ_POLLED`` and polls them with ``bio_poll()`` so
+that pstore/blk does not depend on normal completion interrupts for the panic
+record.
+
+The block device must support all of the following when pstore/blk registers:
+
+1. polled hardware queues (``BLK_FEAT_POLL`` with ``HCTX_TYPE_POLL`` queues),
+#. nowait bio submission, and
+#. FUA writes if the device write cache is enabled.
+
+If any requirement is missing, pstore/blk still attaches in best-effort mode
+but leaves ``panic_write`` disabled. The boot log reports whether the panic
+writer was enabled, for example::
+
+        pstore_blk: attached /dev/nvme0n1p3 (...) (panic_write enabled)
+
+or::
+
+        pstore_blk: '/dev/nvme0n1p3' cannot use polled panic writes: missing polled hardware queues
+        pstore_blk: attached /dev/nvme0n1p3 (...) (no dedicated panic_write!)
+
+Some drivers create poll queues only when requested by a module parameter or
+kernel command-line option, such as ``nvme.poll_queues=`` for NVMe.
+
+The panic writer uses ``REQ_FUA`` for the data write. It does not use
+``REQ_PREFLUSH`` because flush requests do not provide a poll cookie that can
+be waited on with ``bio_poll()`` from the panic path.
+
 pstore block internals
 ----------------------
 
