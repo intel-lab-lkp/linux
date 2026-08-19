@@ -271,7 +271,6 @@ xfs_iomap_write_direct(
 {
 	struct xfs_inode	*ip = args->ip;
 	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_trans	*local_tp = NULL;
 	xfs_filblks_t		resaligned;
 	int			nimaps;
 	unsigned int		dblocks, rblocks;
@@ -281,6 +280,7 @@ xfs_iomap_write_direct(
 	int			nr_exts = XFS_IEXT_ADD_NOSPLIT_CNT;
 	u64			seq;
 
+	ASSERT(args->tp);
 	ASSERT(args->count_fsb > 0);
 
 	resaligned = xfs_aligned_fsb_count(args->offset_fsb, args->count_fsb,
@@ -293,10 +293,7 @@ xfs_iomap_write_direct(
 		rblocks = 0;
 	}
 
-	if (args->tp)
-		error = xfs_qm_dqattach_locked(ip, false);
-	else
-		error = xfs_qm_dqattach(ip);
+	error = xfs_qm_dqattach_locked(ip, false);
 	if (error)
 		return error;
 
@@ -322,55 +319,26 @@ xfs_iomap_write_direct(
 		}
 	}
 
-	if (args->tp) {
-		error = xfs_trans_reserve_more_inode(args->tp, ip, dblocks,
-				rblocks, force);
-		if (error)
-			return error;
-	} else {
-		error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write, dblocks,
-				rblocks, force, &args->tp);
-		if (error)
-			return error;
-		local_tp = args->tp;
-	}
+	error = xfs_trans_reserve_more_inode(args->tp, ip, dblocks, rblocks,
+			force);
+	if (error)
+		return error;
 
 	error = xfs_iext_count_extend(args->tp, ip, XFS_DATA_FORK, nr_exts);
 	if (error)
-		goto out_trans_cancel;
+		return error;
 
 	nimaps = 1;
 	error = xfs_bmapi_write(args->tp, ip, args->offset_fsb, args->count_fsb,
 				bmapi_flags, 0, &args->imap, &nimaps);
 	if (error)
-		goto out_trans_cancel;
+		return error;
 
 	seq = xfs_iomap_inode_sequence(ip, args->iomap_flags);
-	if (local_tp) {
-		error = xfs_trans_commit(args->tp);
-		args->tp = NULL;
-		xfs_iunlock(ip, XFS_ILOCK_EXCL);
-		if (error)
-			return error;
-		if (unlikely(!xfs_valid_startblock(ip,
-				args->imap.br_startblock))) {
-			xfs_bmap_mark_sick(ip, XFS_DATA_FORK);
-			return xfs_alert_fsblock_zero(ip, &args->imap);
-		}
-	}
-
 	trace_xfs_iomap_alloc(ip, args->offset, args->length, XFS_DATA_FORK,
 			&args->imap);
 	return xfs_bmbt_to_iomap(ip, args->iomap, &args->imap, args->flags,
 			args->iomap_flags | IOMAP_F_NEW, seq);
-
-out_trans_cancel:
-	if (local_tp) {
-		xfs_trans_cancel(args->tp);
-		args->tp = NULL;
-		xfs_iunlock(ip, XFS_ILOCK_EXCL);
-	}
-	return error;
 }
 
 STATIC bool
