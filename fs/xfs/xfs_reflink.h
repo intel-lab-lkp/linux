@@ -6,6 +6,8 @@
 #ifndef __XFS_REFLINK_H
 #define __XFS_REFLINK_H 1
 
+struct xfs_direct_write_args;
+
 /*
  * Check whether it is safe to free COW fork blocks from an inode. It is unsafe
  * to do so when an inode has dirty cache or I/O in-flight, even if no shared
@@ -30,9 +32,7 @@ int xfs_reflink_trim_around_shared(struct xfs_inode *ip,
 int xfs_bmap_trim_cow(struct xfs_inode *ip, struct xfs_bmbt_irec *imap,
 		bool *shared);
 
-int xfs_reflink_allocate_cow(struct xfs_trans **tpp, struct xfs_inode *ip,
-		struct xfs_bmbt_irec *imap, struct xfs_bmbt_irec *cmap,
-		bool *shared, uint *lockmode, bool convert_now);
+int xfs_reflink_allocate_cow(struct xfs_direct_write_args *args);
 extern int xfs_reflink_convert_cow(struct xfs_inode *ip, xfs_off_t offset,
 		xfs_off_t count);
 int xfs_reflink_convert_cow_locked(struct xfs_inode *ip,
