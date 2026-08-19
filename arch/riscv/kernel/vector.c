@@ -10,6 +10,7 @@
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/prctl.h>
+#include <linux/sysctl.h>
 
 #include <asm/thread_info.h>
 #include <asm/processor.h>
