@@ -406,8 +406,7 @@ static int mptcp_pernet_new_table(struct net *net, struct mptcp_pernet *pernet)
 	/* table[12] is for available_path_managers which is read-only info */
 	table[13].data = &pernet->add_addr_v6_port_drop_ts;
 
-	hdr = register_net_sysctl_sz(net, MPTCP_SYSCTL_PATH, table,
-				     ARRAY_SIZE(mptcp_sysctl_table));
+	hdr = register_net_sysctl(net, MPTCP_SYSCTL_PATH, table, mptcp_sysctl_table);
 	if (!hdr)
 		goto err_reg;
 

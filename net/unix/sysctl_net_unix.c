@@ -48,8 +48,7 @@ int __net_init unix_sysctl_register(struct net *net)
 			goto err_alloc;
 	}
 
-	net->unx.ctl = register_net_sysctl_sz(net, "net/unix", table,
-					      ARRAY_SIZE(unix_table));
+	net->unx.ctl = register_net_sysctl(net, "net/unix", table, unix_table);
 	if (net->unx.ctl == NULL)
 		goto err_reg;
 
