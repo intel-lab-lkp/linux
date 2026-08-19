@@ -170,8 +170,11 @@ static int stmmac_mtl_setup(struct platform_device *pdev,
 
 	/* Processing individual RX queue config */
 	for_each_child_of_node(rx_node, q_node) {
-		if (queue >= plat->rx_queues_to_use)
+		if (queue >= plat->rx_queues_to_use) {
+			of_node_put(q_node);
+			q_node = NULL;
 			break;
+		}
 
 		if (of_property_read_bool(q_node, "snps,dcb-algorithm"))
 			plat->rx_queues_cfg[queue].mode_to_use = MTL_QUEUE_DCB;
