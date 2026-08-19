@@ -444,7 +444,8 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_deliver_exception_payload);
 
 static void kvm_queue_exception_vmexit(struct kvm_vcpu *vcpu, unsigned int vector,
 				       bool has_error_code, u32 error_code,
-				       bool has_payload, unsigned long payload)
+				       bool has_payload, unsigned long payload,
+				       bool has_emulator_context)
 {
 	struct kvm_queued_exception *ex = &vcpu->arch.exception_vmexit;
 
@@ -452,6 +453,7 @@ static void kvm_queue_exception_vmexit(struct kvm_vcpu *vcpu, unsigned int vecto
 	ex->injected = false;
 	ex->pending = true;
 	ex->has_error_code = has_error_code;
+	ex->has_emulator_context = has_emulator_context;
 	ex->error_code = error_code;
 	ex->has_payload = has_payload;
 	ex->payload = payload;
@@ -459,7 +461,8 @@ static void kvm_queue_exception_vmexit(struct kvm_vcpu *vcpu, unsigned int vecto
 
 static void kvm_multiple_exception(struct kvm_vcpu *vcpu, unsigned int nr,
 				   bool has_error, u32 error_code,
-				   bool has_payload, unsigned long payload)
+				   bool has_payload, unsigned long payload,
+				   bool has_emulator_context)
 {
 	u32 prev_nr;
 	int class1, class2;
@@ -473,7 +476,8 @@ static void kvm_multiple_exception(struct kvm_vcpu *vcpu, unsigned int nr,
 	if (is_guest_mode(vcpu) &&
 	    kvm_nested_call(is_exception_vmexit)(vcpu, nr, error_code)) {
 		kvm_queue_exception_vmexit(vcpu, nr, has_error, error_code,
-					   has_payload, payload);
+					   has_payload, payload,
+					   has_emulator_context);
 		return;
 	}
 
@@ -519,7 +523,7 @@ static void kvm_multiple_exception(struct kvm_vcpu *vcpu, unsigned int nr,
 
 void kvm_queue_exception(struct kvm_vcpu *vcpu, unsigned nr)
 {
-	kvm_multiple_exception(vcpu, nr, false, 0, false, 0);
+	kvm_multiple_exception(vcpu, nr, false, 0, false, 0, false);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_queue_exception);
 
@@ -527,14 +531,16 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_queue_exception);
 void kvm_queue_exception_p(struct kvm_vcpu *vcpu, unsigned nr,
 			   unsigned long payload)
 {
-	kvm_multiple_exception(vcpu, nr, false, 0, true, payload);
+	kvm_multiple_exception(vcpu, nr, false, 0, true, payload, false);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_queue_exception_p);
 
 static void kvm_queue_exception_e_p(struct kvm_vcpu *vcpu, unsigned nr,
-				    u32 error_code, unsigned long payload)
+				    u32 error_code, unsigned long payload,
+				    bool has_emulator_context)
 {
-	kvm_multiple_exception(vcpu, nr, true, error_code, true, payload);
+	kvm_multiple_exception(vcpu, nr, true, error_code, true, payload,
+			       has_emulator_context);
 }
 
 void kvm_requeue_exception(struct kvm_vcpu *vcpu, unsigned int nr,
@@ -580,6 +586,9 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_complete_insn_gp);
 void kvm_inject_page_fault(struct kvm_vcpu *vcpu, struct x86_exception *fault,
 			   bool from_hardware)
 {
+	struct x86_emulate_ctxt *ctxt = vcpu->arch.emulate_ctxt;
+	bool has_emulator_context = ctxt && fault == &ctxt->exception;
+
 	++vcpu->stat.pf_guest;
 
 	/*
@@ -589,10 +598,12 @@ void kvm_inject_page_fault(struct kvm_vcpu *vcpu, struct x86_exception *fault,
 	if (is_guest_mode(vcpu) && fault->async_page_fault)
 		kvm_queue_exception_vmexit(vcpu, PF_VECTOR,
 					   true, fault->error_code,
-					   true, fault->address);
+					   true, fault->address,
+					   has_emulator_context);
 	else
 		kvm_queue_exception_e_p(vcpu, PF_VECTOR, fault->error_code,
-					fault->address);
+					fault->address,
+					has_emulator_context);
 }
 
 void __kvm_inject_emulated_page_fault(struct kvm_vcpu *vcpu,
@@ -627,7 +638,7 @@ void kvm_inject_nmi(struct kvm_vcpu *vcpu)
 
 void kvm_queue_exception_e(struct kvm_vcpu *vcpu, unsigned nr, u32 error_code)
 {
-	kvm_multiple_exception(vcpu, nr, true, error_code, false, 0);
+	kvm_multiple_exception(vcpu, nr, true, error_code, false, 0, false);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_queue_exception_e);
 
@@ -8957,7 +8968,7 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 	    kvm_nested_call(is_exception_vmexit)(vcpu, ex->vector, ex->error_code)) {
 		kvm_queue_exception_vmexit(vcpu, ex->vector,
 					   ex->has_error_code, ex->error_code,
-					   ex->has_payload, ex->payload);
+					   ex->has_payload, ex->payload, false);
 		ex->injected = false;
 		ex->pending = false;
 	}
