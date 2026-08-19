@@ -4351,6 +4351,7 @@ error0:
  */
 static int
 xfs_bmapi_convert_one_delalloc(
+	struct xfs_trans	*tp,
 	struct xfs_inode	*ip,
 	int			whichfork,
 	xfs_off_t		offset,
@@ -4362,23 +4363,27 @@ xfs_bmapi_convert_one_delalloc(
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	struct xfs_bmalloca	bma = { NULL };
 	uint16_t		flags = 0;
-	struct xfs_trans	*tp;
+	struct xfs_trans	*local_tp = NULL;
 	int			error;
 
 	if (whichfork == XFS_COW_FORK)
 		flags |= IOMAP_F_SHARED;
 
-	/*
-	 * Space for the extent and indirect blocks was reserved when the
-	 * delalloc extent was created so there's no need to do so here.
-	 */
-	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, 0, 0,
-				XFS_TRANS_RESERVE, &tp);
-	if (error)
-		return error;
+	if (!tp) {
+		/*
+		 * Space for the extent and indirect blocks was reserved when
+		 * the delalloc extent was created so there's no need to do so
+		 * here.
+		 */
+		error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, 0, 0,
+					XFS_TRANS_RESERVE, &local_tp);
+		if (error)
+			return error;
 
-	xfs_ilock(ip, XFS_ILOCK_EXCL);
-	xfs_trans_ijoin(tp, ip, 0);
+		xfs_ilock(ip, XFS_ILOCK_EXCL);
+		xfs_trans_ijoin(local_tp, ip, 0);
+		tp = local_tp;
+	}
 
 	/*
 	 * Look up the extent before extending the extent count so that we
@@ -4470,15 +4475,19 @@ xfs_bmapi_convert_one_delalloc(
 		goto out_finish;
 
 	xfs_bmapi_finish(&bma, whichfork, 0);
-	error = xfs_trans_commit(tp);
-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	if (local_tp) {
+		error = xfs_trans_commit(local_tp);
+		xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	}
 	return error;
 
 out_finish:
 	xfs_bmapi_finish(&bma, whichfork, error);
 out_trans_cancel:
-	xfs_trans_cancel(tp);
-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	if (local_tp) {
+		xfs_trans_cancel(local_tp);
+		xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	}
 	return error;
 }
 
@@ -4503,8 +4512,8 @@ xfs_bmapi_convert_delalloc(
 	 * delalloc extent if free space is sufficiently fragmented.
 	 */
 	do {
-		error = xfs_bmapi_convert_one_delalloc(ip, whichfork, offset,
-					iomap, seq);
+		error = xfs_bmapi_convert_one_delalloc(NULL, ip, whichfork,
+					offset, iomap, seq);
 		if (error)
 			return error;
 	} while (iomap->offset + iomap->length <= offset);
