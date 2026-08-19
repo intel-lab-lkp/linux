@@ -167,12 +167,12 @@ int dso__read_binary_type_filename(const struct dso *dso,
 		break;
 
 	case DSO_BINARY_TYPE__FEDORA_DEBUGINFO:
-		len = __symbol__join_symfs(filename, size, "/usr/lib/debug");
+		len = path__join(filename, size, symbol_conf.symfs, "/usr/lib/debug");
 		snprintf(filename + len, size - len, "%s.debug", dso__long_name(dso));
 		break;
 
 	case DSO_BINARY_TYPE__UBUNTU_DEBUGINFO:
-		len = __symbol__join_symfs(filename, size, "/usr/lib/debug");
+		len = path__join(filename, size, symbol_conf.symfs, "/usr/lib/debug");
 		snprintf(filename + len, size - len, "%s", dso__long_name(dso));
 		break;
 
@@ -187,7 +187,7 @@ int dso__read_binary_type_filename(const struct dso *dso,
 			ret = -1;
 			break;
 		}
-		len = __symbol__join_symfs(filename, size, "/usr/lib/debug");
+		len = path__join(filename, size, symbol_conf.symfs, "/usr/lib/debug");
 		snprintf(filename + len, size - len, "%s", dso__long_name(dso) + 4);
 		break;
 
@@ -200,7 +200,7 @@ int dso__read_binary_type_filename(const struct dso *dso,
 		while (last_slash != dso__long_name(dso) && *last_slash != '/')
 			last_slash--;
 
-		len = __symbol__join_symfs(filename, size, "");
+		len = path__join(filename, size, symbol_conf.symfs, "");
 		dir_size = last_slash - dso__long_name(dso) + 2;
 		if (dir_size > (size - len)) {
 			ret = -1;
@@ -219,7 +219,8 @@ int dso__read_binary_type_filename(const struct dso *dso,
 		}
 
 		build_id__snprintf(dso__bid(dso), build_id_hex, sizeof(build_id_hex));
-		len = __symbol__join_symfs(filename, size, "/usr/lib/debug/.build-id/");
+		len = path__join(filename, size, symbol_conf.symfs,
+				 "/usr/lib/debug/.build-id/");
 		snprintf(filename + len, size - len, "%.2s/%s.debug",
 			 build_id_hex, build_id_hex + 2);
 		break;
