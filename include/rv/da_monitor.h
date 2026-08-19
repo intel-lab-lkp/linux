@@ -14,7 +14,50 @@
 #ifndef _RV_DA_MONITOR_H
 #define _RV_DA_MONITOR_H
 
+/*
+ * Allocation strategies for RV_MON_PER_OBJ monitors, selected by defining
+ * one of the following before including this header (never both):
+ *
+ *   DA_MON_POOL_SIZE N           - pool mode, N pre-allocated slots
+ *   DA_MON_ALLOCATION_STRATEGY   - explicit strategy (see below)
+ *   (neither)                    - auto mode (default)
+ *
+ * DA_ALLOC_AUTO   - kmalloc on demand; unbounded.
+ * DA_ALLOC_POOL   - pre-allocated fixed-size pool.
+ * DA_ALLOC_MANUAL - caller pre-inserts storage; framework links the target.
+ */
+#define DA_ALLOC_AUTO   0
+#define DA_ALLOC_POOL   1
+#define DA_ALLOC_MANUAL 2
+
+#ifdef DA_MON_POOL_SIZE
+#ifdef DA_MON_ALLOCATION_STRATEGY
+#error "Define only one of DA_MON_POOL_SIZE or DA_MON_ALLOCATION_STRATEGY"
+#endif
+#if DA_MON_POOL_SIZE == 0
+#error "DA_MON_POOL_SIZE must be non-zero"
+#endif
+#define DA_MON_ALLOCATION_STRATEGY DA_ALLOC_POOL
+#endif /* DA_MON_POOL_SIZE */
+
+#ifndef DA_MON_ALLOCATION_STRATEGY
+#ifdef DA_SKIP_AUTO_ALLOC
+#define DA_MON_ALLOCATION_STRATEGY DA_ALLOC_MANUAL
+#else
+#define DA_MON_ALLOCATION_STRATEGY DA_ALLOC_AUTO
+#endif
+#endif /* DA_MON_ALLOCATION_STRATEGY */
+
+/* Zero default keeps pool-mode conditionals compile-time constant. */
+#ifndef DA_MON_POOL_SIZE
+#if DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL
+#error "DA_ALLOC_POOL requires DA_MON_POOL_SIZE to be defined and non-zero"
+#endif
+#define DA_MON_POOL_SIZE 0
+#endif /* DA_MON_POOL_SIZE */
+
 #include <rv/automata.h>
+#include <linux/mempool.h>
 #include <linux/rv.h>
 #include <rv/kunit.h>
 #include <linux/stringify.h>
@@ -65,6 +108,16 @@ static struct rv_monitor rv_this;
  */
 #ifndef da_monitor_sync_hook
 #define da_monitor_sync_hook()
+#endif
+
+/*
+ * Per-object teardown hook, called after da_monitor_reset_all() +
+ * da_monitor_sync_hook() and before hash_del_rcu() for each entry.
+ * All HA timer callbacks have completed at this point.
+ * Define before including this header.  Default: no-op.
+ */
+#ifndef da_extra_cleanup
+#define da_extra_cleanup(da_mon)
 #endif
 
 /*
@@ -544,6 +597,59 @@ static inline monitor_target da_get_target_by_id(da_id_type id)
 }
 
 /*
+ * Pre-allocated mempool for DA_ALLOC_POOL monitors: DA_MON_POOL_SIZE
+ * slots, eager-allocated at init.  mempool_alloc_preallocated() pops a
+ * slot without touching the allocator (bounded start latency; NULL when
+ * exhausted).  mempool_free() is safe from RCU-callback context.
+ * Non-pool monitors get a zero-initialised mempool_t; pool paths compile
+ * away.
+ */
+static mempool_t da_monitor_pool;
+
+static void da_pool_return_cb(struct rcu_head *head)
+{
+	struct da_monitor_storage *ms =
+		container_of(head, struct da_monitor_storage, rcu);
+
+	mempool_free(ms, &da_monitor_pool);
+}
+
+/*
+ * da_create_pool_storage - pop a free pool slot and insert it into the hash.
+ *
+ * Returns the new da_monitor, or NULL if the pool is exhausted.  Finding
+ * an existing entry for the same id fires WARN_ON_ONCE (double-start bug).
+ *
+ * Caller must hold an RCU read-side CS and the monitor's serialisation lock.
+ */
+static inline struct da_monitor *
+da_create_pool_storage(da_id_type id, monitor_target target,
+		       struct da_monitor *da_mon)
+{
+	struct da_monitor_storage *mon_storage, *existing;
+
+	if (da_mon)
+		return da_mon;
+
+	mon_storage = mempool_alloc_preallocated(&da_monitor_pool);
+	if (!mon_storage)
+		return NULL;
+	memset(mon_storage, 0, sizeof(*mon_storage));
+
+	mon_storage->id = id;
+	mon_storage->target = target;
+
+	/* Single consumer under the caller's lock; duplicate is a double-start bug. */
+	existing = __da_get_mon_storage(id);
+	if (WARN_ON_ONCE(existing)) {
+		mempool_free(mon_storage, &da_monitor_pool);
+		return NULL;
+	}
+	hash_add_rcu(da_monitor_ht, &mon_storage->node, id);
+	return &mon_storage->rv.da_mon;
+}
+
+/*
  * da_destroy_storage - destroy the per-object storage
  *
  * The caller is responsible to synchronise writers, either with locks or
@@ -564,7 +670,10 @@ static inline void da_destroy_storage(da_id_type id)
 		return;
 	da_monitor_reset_hook(&mon_storage->rv.da_mon);
 	hash_del_rcu(&mon_storage->node);
-	kfree_rcu(mon_storage, rcu);
+	if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL)
+		call_rcu(&mon_storage->rcu, da_pool_return_cb);
+	else
+		kfree_rcu(mon_storage, rcu);
 }
 
 static void __da_monitor_reset_all(void (*reset)(struct da_monitor *))
@@ -590,6 +699,9 @@ static inline void da_monitor_reset_state_all(void)
 static inline int da_monitor_init(void)
 {
 	hash_init(da_monitor_ht);
+	if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL)
+		return mempool_init_kmalloc_pool(&da_monitor_pool, DA_MON_POOL_SIZE,
+						 sizeof(struct da_monitor_storage));
 	return 0;
 }
 
@@ -607,8 +719,17 @@ static inline void da_monitor_destroy(void)
 	 * pending, we can safely assume no concurrent user.
 	 */
 	hash_for_each_safe(da_monitor_ht, bkt, tmp, mon_storage, node) {
+		da_extra_cleanup(&mon_storage->rv.da_mon);
 		hash_del_rcu(&mon_storage->node);
-		kfree(mon_storage);
+		if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL)
+			mempool_free(mon_storage, &da_monitor_pool);
+		else
+			kfree(mon_storage);
+	}
+
+	if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL) {
+		rcu_barrier();
+		mempool_exit(&da_monitor_pool);
 	}
 }
 
@@ -617,11 +738,16 @@ static inline void da_monitor_destroy(void)
  * start condition is in a context problematic for allocation (e.g. scheduling).
  * In such case, if the storage was pre-allocated without a target, set it now.
  */
-#ifdef DA_SKIP_AUTO_ALLOC
-#define da_prepare_storage da_fill_empty_storage
-#else
-#define da_prepare_storage da_create_storage
-#endif /* DA_SKIP_AUTO_ALLOC */
+static inline struct da_monitor *
+da_prepare_storage(da_id_type id, monitor_target target,
+		   struct da_monitor *da_mon)
+{
+	if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL)
+		return da_create_pool_storage(id, target, da_mon);
+	if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_MANUAL)
+		return da_fill_empty_storage(id, target, da_mon);
+	return da_create_storage(id, target, da_mon);
+}
 
 #endif /* RV_MON_TYPE */
 
