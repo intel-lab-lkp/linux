@@ -164,6 +164,9 @@ void	xfs_log_get_max_trans_res(struct xfs_mount *mp,
 /* Transaction has locked the rtbitmap and rtsum inodes */
 #define XFS_TRANS_RTBITMAP_LOCKED	(1u << 9)
 
+/* Renew block reservation on transaction roll */
+#define XFS_TRANS_RENEW_BLKRES		(1u << 10)
+
 /*
  * Field values for xfs_trans_mod_sb.
  */
