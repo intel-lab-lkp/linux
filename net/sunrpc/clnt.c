@@ -2546,17 +2546,21 @@ static void
 rpc_check_timeout(struct rpc_task *task)
 {
 	struct rpc_clnt	*clnt = task->tk_client;
+	struct rpc_rqst	*req;
+	struct rpc_xprt	*xprt;
 
 	if (RPC_SIGNALLED(task))
 		return;
 
-	if (xprt_adjust_timeout(task->tk_rqstp) == 0)
+	req = task->tk_rqstp;
+	if (xprt_adjust_timeout(req) == 0)
 		return;
+	xprt = req->rq_xprt;
 
 	trace_rpc_timeout_status(task);
 	task->tk_timeouts++;
 
-	if (RPC_IS_SOFTCONN(task) && !rpc_check_connected(task->tk_rqstp)) {
+	if (RPC_IS_SOFTCONN(task) && !rpc_check_connected(req)) {
 		rpc_call_rpcerror(task, -ETIMEDOUT);
 		return;
 	}
@@ -2568,14 +2572,15 @@ rpc_check_timeout(struct rpc_task *task)
 		 * connection gets terminally broken.
 		 */
 		if ((task->tk_flags & RPC_TASK_NO_RETRANS_TIMEOUT) &&
-		    rpc_check_connected(task->tk_rqstp))
+		    rpc_check_connected(req))
 			return;
 
 		if (clnt->cl_chatty) {
 			pr_notice_ratelimited(
-				"%s: server %s not responding, timed out\n",
+				"%s: server %s clid=%u xprt=%u cc=%u owner=%d not responding, timed out\n",
 				clnt->cl_program->name,
-				task->tk_xprt->servername);
+				xprt->servername, clnt->cl_clid, xprt->id,
+				READ_ONCE(xprt->connect_cookie), task->tk_owner);
 		}
 		if (task->tk_flags & RPC_TASK_TIMEOUT)
 			rpc_call_rpcerror(task, -ETIMEDOUT);
@@ -2588,9 +2593,10 @@ rpc_check_timeout(struct rpc_task *task)
 		task->tk_flags |= RPC_CALL_MAJORSEEN;
 		if (clnt->cl_chatty) {
 			pr_notice_ratelimited(
-				"%s: server %s not responding, still trying\n",
+				"%s: server %s clid=%u xprt=%u cc=%u owner=%d not responding, still trying\n",
 				clnt->cl_program->name,
-				task->tk_xprt->servername);
+				xprt->servername, clnt->cl_clid, xprt->id,
+				READ_ONCE(xprt->connect_cookie), task->tk_owner);
 		}
 	}
 	rpc_force_rebind(clnt);
