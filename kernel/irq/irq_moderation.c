@@ -9,6 +9,9 @@
 #include <linux/cpuhotplug.h>
 #include <linux/irq.h>
 #include <linux/irqdesc.h>
+#include <linux/kallsyms.h>
+#include <linux/kernel_stat.h>
+#include <linux/math64.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
 #include <linux/proc_fs.h>
@@ -23,8 +26,9 @@
  *
  * Some platforms show reduced I/O performance when the total device interrupt
  * rate across the entire platform becomes too high. To address the problem,
- * GSIM runs after the handler to implement software interrupt moderation
- * with programmable delay.
+ * GSIM runs after the handler to measure global and per-CPU interrupt rates,
+ * compares them with configurable targets, and implements independent, per-CPU
+ * software moderation delays.
  *
  * Configuration is done at runtime via procfs
  *   echo ${VALUE} > /proc/irq/sw_moderation/${NAME}
@@ -34,6 +38,19 @@
  *   delay_us (default 0, suggested 100, 0 off, range 0-500)
  *       Maximum moderation delay. A reasonable range is 20-100. Higher values
  *       can be useful if the hardirq handler has long runtimes.
+ *
+ *   target_intr_rate (default 0, suggested 1000000, 0 off, range 0-50000000)
+ *       The total interrupt rate above which moderation kicks in.
+ *       Not particularly critical, a value in the 500K-1M range is usually ok.
+ *
+ *   hardirq_percent (default 0, suggested 70, 0 off, range 0-100)
+ *       The hardirq percentage above which moderation kicks in.
+ *       50-90 is a reasonable range.
+ *
+ *       FIXED MODERATION mode requires target_intr_rate=0, hardirq_percent=0
+ *
+ *   update_ms (default 5, range 1-100)
+ *       How often the load is measured and moderation delay updated.
  *
  * Moderation is allowed/disallowed dynamically for individual interrupts with
  *   echo 1 > /proc/irq/NN/allow_sw_moderation # use 0 to disallow
@@ -112,7 +129,47 @@
  * GSIM parameters. Initialize delay_ns here to statically enable moderation
  * (e.g. .delay_ns = 100000).
  */
-struct irq_mod_params irq_mod_params ____cacheline_aligned;
+
+/*
+ * Recommended values for the adaptive control loop.
+ *
+ * update_ns is documented earlier and can be modified via procfs
+ *
+ * The following two allow fine tuning of the control loop and should not
+ * be modified unless there is good understanding of their impact on the
+ * stability of the controller.
+ *
+ * scale_cpus (default 150, range 50-1000)
+ *   Small update_ms may lead to underestimate the number of CPUs
+ *   simultaneously handling interrupts, and the opposite can happen
+ *   with very large values. This parameter may help correct the value,
+ *   though it is not recommended to modify the default unless there are
+ *   very strong reasons.
+ *
+ * increase_divisor (default 8, range 8-128)
+ *   This is base parameter used for multiplicative increase/decrease.
+ */
+
+#define MIN_SCALING_DIVISOR	8
+
+struct irq_mod_params irq_mod_params ____cacheline_aligned = {
+	.update_ns		= 5 * NSEC_PER_MSEC,
+	.scale_cpus		= 150,
+	.increase_divisor	= MIN_SCALING_DIVISOR,
+	.seq			= SEQCNT_ZERO(irq_mod_params.seq),
+};
+
+/*
+ * Accumulator for total interrupt and active CPUs, updated by all active
+ * CPUs on each epoch (update_ns or more).
+ * @total_intrs:	running count of total interrupts
+ * @total_cpus:		running count of total active CPUs
+ */
+struct irq_mod_counters {
+	atomic_t	total_intrs;
+	atomic_t	total_cpus;
+};
+static struct irq_mod_counters irq_mod_counters;
 
 DEFINE_PER_CPU_ALIGNED(struct irq_mod_state, irq_mod_state);
 
@@ -122,10 +179,213 @@ static DEFINE_MUTEX(swmod_mutex);
 
 static void update_enable_key(void)
 {
+	lockdep_assert_held(&swmod_mutex);
+
 	if (irq_mod_params.delay_ns != 0)
 		static_branch_enable(&irq_moderation_enabled_key);
 	else
 		static_branch_disable(&irq_moderation_enabled_key);
+}
+
+/* Slow path functions for interrupt moderation. */
+
+/*
+ * Compute smoothed average between old and cur. 'steps' is used
+ * to approximate applying the smoothing multiple times.
+ */
+static inline unsigned int smooth_avg(unsigned int old, unsigned int cur, unsigned int steps)
+{
+	const unsigned int smooth_factor = 64;
+	u64 sum;
+
+	steps = min(steps, smooth_factor - 1);
+	sum = (u64)(smooth_factor - steps) * old + (u64)steps * cur;
+	return div_u64(sum, smooth_factor);
+}
+
+/* Measure and assess time spent in hardirq. */
+static inline bool hardirq_high(struct irq_mod_state *m, unsigned int hardirq_percent,
+				u64 epoch_ns)
+{
+	bool above_threshold;
+	u64 irqtime, cur;
+
+	if (!IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING))
+		return false;
+
+	cur = kcpustat_this_cpu->cpustat[CPUTIME_IRQ];
+	irqtime = cur - m->last_irqtime;
+	m->last_irqtime = cur;
+
+	if (hardirq_percent == 0)
+		return false;
+
+	above_threshold = irqtime * 100 > epoch_ns * hardirq_percent;
+	m->hardirq_high += above_threshold;
+	return above_threshold;
+}
+
+/* Measure and assess total and per-CPU interrupt rates. */
+static inline bool irqrate_high(struct irq_mod_state *m, unsigned int target_rate,
+				unsigned int steps, u64 epoch_ns,
+				unsigned int update_ns, unsigned int scale_cpus)
+{
+	unsigned int global_intr_rate, local_intr_rate, delta_intrs, tmp;
+	bool local_rate_high, global_rate_high;
+	u64 num_local, num_global, num_cpus;
+	/* Use unsigned long to avoid overflow in intermediate results. */
+	unsigned long active_cpus;
+	u32 denom = epoch_ns;
+	int shift = 0;
+
+	num_local = (u64)m->intr_count * NSEC_PER_SEC;
+	/* Scale denominator so we can avoid 64-bit division. */
+	if (unlikely(epoch_ns > U32_MAX)) {
+		shift = fls64(epoch_ns) - 32;
+		denom = epoch_ns >> shift;
+		num_local >>= shift;
+	}
+
+	local_intr_rate = div_u64(num_local, denom);
+
+	/* Accumulate global counter and compute global interrupt rate. */
+	tmp = atomic_add_return(m->intr_count, &irq_mod_counters.total_intrs);
+	m->intr_count = 0;
+	delta_intrs = tmp - m->last_total_intrs;
+	m->last_total_intrs = tmp;
+	num_global = (u64)delta_intrs * NSEC_PER_SEC;
+	if (unlikely(shift))
+		num_global >>= shift;
+	global_intr_rate = div_u64(num_global, denom);
+
+	/*
+	 * Count how many CPUs handled interrupts in the last epoch, needed
+	 * to determine the per-CPU target (target_rate / active_cpus).
+	 * Each active CPU increments the global counter approximately every
+	 * update_ns. Scale the value by (update_ns / epoch_ns) to get the
+	 * correct value. Also apply rounding and make sure active_cpus > 0.
+	 */
+	tmp = atomic_add_return(1, &irq_mod_counters.total_cpus);
+	active_cpus = tmp - m->last_total_cpus;
+	m->last_total_cpus = tmp;
+	num_cpus = (u64)active_cpus * update_ns + (epoch_ns / 2);
+	if (unlikely(shift))
+		num_cpus >>= shift;
+	active_cpus = div_u64(num_cpus, denom);
+	if (active_cpus < 1)
+		active_cpus = 1;
+
+	/* Compare with global and per-CPU targets. */
+	global_rate_high = global_intr_rate > target_rate;
+
+	/*
+	 * Short epochs may lead to underestimate the number of active CPUs.
+	 * Apply a scaling factor to compensate. This may make the controller
+	 * a bit more aggressive but does not harm system throughput.
+	 */
+	local_rate_high = (u64)local_intr_rate * active_cpus *
+			scale_cpus > (u64)target_rate * 100;
+
+	/* Statistics. */
+	m->global_intr_rate = smooth_avg(m->global_intr_rate, global_intr_rate, steps);
+	m->local_intr_rate = smooth_avg(m->local_intr_rate, local_intr_rate, steps);
+	m->scaled_cpu_count = smooth_avg(m->scaled_cpu_count, active_cpus * 256, steps);
+
+	if (target_rate == 0)
+		return false;
+
+	m->local_irq_high += local_rate_high;
+	m->global_irq_high += global_rate_high;
+
+	/* Moderate on this CPU only if both global and local rates are high. */
+	return global_rate_high && local_rate_high;
+}
+
+/* Periodic adjustment, called once per epoch. */
+void irq_moderation_update_epoch(struct irq_mod_state *m, u64 epoch_ns)
+{
+	unsigned int hardirq_percent, target_rate, delay_ns, update_ns;
+	unsigned int increase_divisor, scale_cpus;
+	const unsigned int min_delay_ns = 500;
+	bool above_target = false;
+	unsigned int steps, seq;
+
+	do {
+		seq = read_seqcount_begin(&irq_mod_params.seq);
+		hardirq_percent = READ_ONCE(irq_mod_params.hardirq_percent);
+		target_rate = READ_ONCE(irq_mod_params.target_intr_rate);
+		delay_ns = READ_ONCE(irq_mod_params.delay_ns);
+		update_ns = READ_ONCE(irq_mod_params.update_ns);
+		increase_divisor = READ_ONCE(irq_mod_params.increase_divisor);
+		scale_cpus = READ_ONCE(irq_mod_params.scale_cpus);
+	} while (read_seqcount_retry(&irq_mod_params.seq, seq));
+
+	/*
+	 * If one parameter changes, set the moderation delay to max, and rely
+	 * on the adaptive mechanism to adjust it down if necessary.
+	 * Otherwise the system may be stuck with an interrupt rate that is
+	 * already below the threshold because of bus congestion (one of the
+	 * problems that GSIM is trying to address), and the controller would
+	 * have no signal react. Starting from a high value gives it a chance
+	 * to converge if parameters allow it.
+	 */
+	if (seq != m->seq) {
+		m->seq = seq;
+		m->mod_ns = delay_ns;
+		m->intr_count = 0;
+		m->last_total_intrs = atomic_read(&irq_mod_counters.total_intrs);
+		m->last_total_cpus = atomic_read(&irq_mod_counters.total_cpus);
+		if (IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING))
+			m->last_irqtime = kcpustat_this_cpu->cpustat[CPUTIME_IRQ];
+		return;
+	}
+
+	if (target_rate == 0 && hardirq_percent == 0) {
+		/* Use fixed moderation delay. */
+		m->mod_ns = delay_ns;
+		m->global_intr_rate = 0;
+		m->local_intr_rate = 0;
+		m->scaled_cpu_count = 0;
+		return;
+	}
+
+	/*
+	 * The controller wants to scale the delay mod_ns by (1 + 1/D) every "update_ns".
+	 * Since we operate every epoch_ns >= update_ns, the formula becomes
+	 *   mod_ns = mod_ns * ((1 + 1/D) ** (epoch_ns / update_ns))
+	 * which we approximate with "mod_ns = mod_ns * (1 + steps/D)"
+	 * where "steps = epoch_ns / update_ns" clamped to a value < D.
+	 */
+	steps = (unsigned int)clamp_t(u64, div_u64(epoch_ns, update_ns),
+				      1ULL, (u64)(MIN_SCALING_DIVISOR - 1u));
+
+	if (irqrate_high(m, target_rate, steps, epoch_ns, update_ns, scale_cpus))
+		above_target = true;
+
+	if (hardirq_high(m, hardirq_percent, epoch_ns))
+		above_target = true;
+
+	/*
+	 * Controller: adjust delay with exponential increase or decrease.
+	 *
+	 * Following standard practices, we increase fast (smaller divisor) to
+	 * aggressively slow down when the interrupt rate goes up, but decrease
+	 * slowly (larger divisor) to reduce the chance of load spikes as the
+	 * delay goes down.
+	 */
+	if (above_target) {
+		/* Make sure the value is large enough for the exponential to grow. */
+		if (m->mod_ns < min_delay_ns)
+			m->mod_ns = min_delay_ns;
+		m->mod_ns += m->mod_ns * steps / increase_divisor;
+		if (m->mod_ns > delay_ns)
+			m->mod_ns = delay_ns;
+	} else {
+		m->mod_ns -= m->mod_ns * steps / (2 * increase_divisor);
+		/* Round down to 0 values that are too small to bother. */
+		if (m->mod_ns < min_delay_ns)
+			m->mod_ns = 0;
+	}
 }
 
 /* Actually start moderation. */
@@ -138,7 +398,7 @@ bool irq_moderation_do_start(struct irq_desc *desc, struct irq_mod_state *m)
 		const u64 slack_ns = 2000;
 
 		/* Accumulate sleep time, no moderation if too small. */
-		m->sleep_ns += READ_ONCE(irq_mod_params.delay_ns);
+		m->sleep_ns += m->mod_ns;
 		if (m->sleep_ns < min_delay_ns)
 			return false;
 		/* We need moderation, start the timer. */
@@ -153,6 +413,11 @@ bool irq_moderation_do_start(struct irq_desc *desc, struct irq_mod_state *m)
 	 */
 	m->enqueue++;
 	list_add(&desc->swmod_state.swmod_node, &m->descs);
+	/*
+	 * Set IRQD_IRQ_INPROGRESS so that synchronize_irq() called during
+	 * free_irq() will block until the timer drains this descriptor from
+	 * the moderation list.
+	 */
 	irqd_set(&desc->irq_data, IRQD_IRQ_INPROGRESS | IRQD_MODERATED);
 	__disable_irq(desc);
 	return true;
@@ -186,17 +451,31 @@ struct swmod_procfs_entry {
 	struct var_info	var;
 };
 
+static void write_param(unsigned int *ptr, unsigned int value)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	write_seqcount_begin(&irq_mod_params.seq);
+	WRITE_ONCE(*ptr, value);
+	write_seqcount_end(&irq_mod_params.seq);
+	local_irq_restore(flags);
+}
+
 static ssize_t swmod_wr(struct var_info *v, const char __user *s, size_t count)
 {
 	unsigned int value;
 	int ret;
+
+	lockdep_assert_held(&swmod_mutex);
 
 	ret = kstrtouint_from_user(s, count, 0, &value);
 	if (ret)
 		return ret;
 	if (value < v->min || value > v->max)
 		return -ERANGE;
-	WRITE_ONCE(*v->ptr, value * v->scale);
+	write_param(v->ptr, value * v->scale);
+
 	return count;
 }
 
@@ -216,34 +495,87 @@ static ssize_t swmod_wr_delay(struct var_info *v, const char __user *s, size_t c
 	return ret;
 }
 
-#define HEAD_FMT "%5s  %8s  %11s  %11s\n"
-#define BODY_FMT "%5u  %8u  %11u  %11u\n"
+#define HEAD_FMT "%5s  %8s  %10s  %4s  %8s  %11s  %11s  %11s  %11s  %11s\n"
+#define BODY_FMT "%5u  %8u  %10u  %4u  %8u  %11u  %11u  %11u  %11u  %11u\n"
 
 /* Print statistics */
 static void rd_stats(struct seq_file *p)
 {
 	unsigned int delay_ns = READ_ONCE(irq_mod_params.delay_ns);
-	int cpu;
+	unsigned long global_intr_rate = 0, global_irq_high = 0;
+	unsigned long local_irq_high = 0, hardirq_high = 0;
+	int recent_epoch_limit, cpu, active_cpus = 0;
 
 	if (delay_ns == 0)
 		return;
 	seq_printf(p, HEAD_FMT,
-		   "# CPU", "delay_ns", "timer_set", "enqueue");
+		   "# CPU", "irq/s", "loc_irq/s", "cpus", "delay_ns",
+		   "irq_hi", "loc_irq_hi", "hardirq_hi", "timer_set",
+		   "enqueue");
+
+	/*
+	 * Accumulate/print only entries updated within ~20-30s. The high 32 bits
+	 * of timestamps give ~4s resolution, so we can use them without the need
+	 * for 64bit atomics (because epoch_start_ns is updated concurrently).
+	 */
+	recent_epoch_limit = (ktime_get_ns() - 20ULL * NSEC_PER_SEC) >> 32;
 
 	for_each_possible_cpu(cpu) {
 		/* Copy statistics, will only use some unsigned int values; races ok. */
 		struct irq_mod_state cur = data_race(*per_cpu_ptr(&irq_mod_state, cpu));
 
+		if (cur.epoch_start_ns && (int)(cur.epoch_start_ns >> 32) >= recent_epoch_limit) {
+			/* Recent entry, accumulate in global rate. */
+			active_cpus++;
+			global_intr_rate += cur.global_intr_rate;
+		} else {
+			/* Stale entries, print as 0. */
+			cur.global_intr_rate = 0;
+			cur.local_intr_rate = 0;
+			cur.scaled_cpu_count = 0;
+			cur.mod_ns = 0;
+		}
+
+		global_irq_high += cur.global_irq_high;
+		local_irq_high += cur.local_irq_high;
+		hardirq_high += cur.hardirq_high;
+
 		seq_printf(p, BODY_FMT,
 			   cpu,
-			   delay_ns,
+			   cur.global_intr_rate,
+			   cur.local_intr_rate,
+			   (cur.scaled_cpu_count + 128) / 256,
+			   cur.mod_ns,
+			   cur.global_irq_high,
+			   cur.local_irq_high,
+			   cur.hardirq_high,
 			   cur.timer_set,
 			   cur.enqueue);
 	}
 
 	seq_printf(p, "\n"
-		   "delay_us             %lu\n",
-		   delay_ns / NSEC_PER_USEC);
+		   "delay_us             %lu\n"
+		   "target_intr_rate     %u\n"
+		   "hardirq_percent      %u\n"
+		   "update_ms            %ld\n"
+		   "scale_cpus           %u\n",
+		   delay_ns / NSEC_PER_USEC,
+		   READ_ONCE(irq_mod_params.target_intr_rate),
+		   READ_ONCE(irq_mod_params.hardirq_percent),
+		   READ_ONCE(irq_mod_params.update_ns) / NSEC_PER_MSEC,
+		   READ_ONCE(irq_mod_params.scale_cpus));
+
+	seq_printf(p,
+		   "intr_rate            %lu\n"
+		   "irq_high             %lu\n"
+		   "my_irq_high          %lu\n"
+		   "hardirq_percent_high %lu\n"
+		   "total_interrupts     %u\n"
+		   "total_cpus           %u\n",
+		   active_cpus ? global_intr_rate / active_cpus : 0,
+		   global_irq_high, local_irq_high, hardirq_high,
+		   atomic_read(&irq_mod_counters.total_intrs),
+		   atomic_read(&irq_mod_counters.total_cpus));
 }
 
 static int param_show(struct seq_file *p, void *v)
@@ -477,14 +809,40 @@ static struct swmod_procfs_entry procfs_entries[] = {
 		.var	= SET_VAR(&irq_mod_params.delay_ns, 0, 500, NSEC_PER_USEC),
 	},
 	{
+		.name	= "target_intr_rate",
+		.wr	= swmod_wr,
+		.rd	= swmod_rd,
+		.var	= SET_VAR(&irq_mod_params.target_intr_rate, 0, 50000000, 1),
+	},
+	{
+		.name	= "hardirq_percent",
+		.wr	= swmod_wr,
+		.rd	= swmod_rd,
+		.var	= SET_VAR(&irq_mod_params.hardirq_percent, 0, 100, 1),
+	},
+	{
+		.name	= "update_ms",
+		.wr	= swmod_wr,
+		.rd	= swmod_rd,
+		.var	= SET_VAR(&irq_mod_params.update_ns, 1, 100, NSEC_PER_MSEC),
+	},
+	{
 		.name = "stats",
 		.rd = rd_stats,
+	},
+	/* The next parameters have no procfs entries, only range validation. */
+	{
+		.var	= SET_VAR(&irq_mod_params.increase_divisor, MIN_SCALING_DIVISOR, 128, 1),
+	},
+	{
+		.var	= SET_VAR(&irq_mod_params.scale_cpus, 50, 1000, 1),
 	},
 };
 
 static int __init init_irq_moderation(void)
 {
 	struct proc_dir_entry *dir;
+	unsigned long flags;
 	int cpuhp_state;
 	int i, ret;
 
@@ -535,8 +893,17 @@ static int __init init_irq_moderation(void)
 		goto cleanup_1;
 	}
 
+	/* Increment sequence counter so per-CPU m->seq (0) mismatches on epoch 1 */
+	local_irq_save(flags);
+	write_seqcount_begin(&irq_mod_params.seq);
+	write_seqcount_end(&irq_mod_params.seq);
+	local_irq_restore(flags);
+
 	/* Enable if the defaults require it. */
+	/* Acquire swmod_mutex to satisfy lockdep assertions. */
+	mutex_lock(&swmod_mutex);
 	update_enable_key();
+	mutex_unlock(&swmod_mutex);
 	return 0;
 
 cleanup_1:
