@@ -284,5 +284,11 @@ int main(void)
 	DEVID(coreboot_device_id);
 	DEVID_FIELD(coreboot_device_id, tag);
 
+	DEVID(module_sysctl_table);
+	DEVID_FIELD(module_sysctl_table, path);
+	DEVID_FIELD(module_sysctl_table, table);
+	DEVID_FIELD(module_sysctl_table, table_size);
+	DEVID_FIELD(module_sysctl_table, entry_size);
+
 	return 0;
 }

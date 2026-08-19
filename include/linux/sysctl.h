@@ -293,6 +293,48 @@ struct ctl_table_root {
 	int (*permissions)(struct ctl_table_header *head, const struct ctl_table *table);
 };
 
+/*
+ * Creates a symbol so file2alias.c can find the sysctl table.
+ *
+ * MODULE_SYSCTL_TABLE() is the sysctl equivalent of MODULE_DEVICE_TABLE(),
+ * with pointers to a sysctl table's path and entries, and table/entry sizes.
+ *
+ * The parameters 'path' and 'table' must be static (e.g., string literal or
+ * static char[]; static struct ctl_table[]) as both are used as initializer
+ * elements for a static struct variable.
+ *
+ * The generated symbol name contains 'table' by default. However, if 'table'
+ * is a struct field (contains '.' or '->'), in order to avoid syntax errors,
+ * define the macro SYSCTL_MODULE_ALIASES_UNIQUE_ID.
+ *
+ * Define the macro SYSCTL_MODULE_ALIASES_DISABLE to disable this.
+ */
+#if defined(CONFIG_SYSCTL_MODULE_ALIASES) && defined(MODULE) &&			\
+    !defined(SYSCTL_MODULE_ALIASES_DISABLE)
+
+#include <linux/module.h>
+#include <linux/mod_devicetable.h>
+
+#if defined(SYSCTL_MODULE_ALIASES_UNIQUE_ID)
+#define __MODULE_SYSCTL_TABLE_NAME(table)					\
+	__mod_device_table(sysctl, __UNIQUE_ID)
+#else
+#define __MODULE_SYSCTL_TABLE_NAME(table)					\
+	__mod_device_table(sysctl, table)
+#endif
+
+#define MODULE_SYSCTL_TABLE(path, table)					\
+	static struct module_sysctl_table __used				\
+		__MODULE_SYSCTL_TABLE_NAME(table) = {				\
+			(kernel_ulong_t) path,					\
+			(kernel_ulong_t) table,					\
+			(u16) sizeof(table),					\
+			(u16) sizeof(const struct ctl_table)			\
+		}
+#else
+#define MODULE_SYSCTL_TABLE(path, table)
+#endif
+
 #define register_sysctl(path, table)	\
 	register_sysctl_sz(path, table, ARRAY_SIZE(table))
 
