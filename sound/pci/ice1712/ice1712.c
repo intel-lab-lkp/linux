@@ -2547,7 +2547,7 @@ static int snd_ice1712_probe(struct pci_dev *pci,
 	err = snd_ice1712_create(card, pci, model[dev], omni[dev],
 				 cs8427_timeout[dev], dxr_enable[dev]);
 	if (err < 0)
-		return err;
+		goto error;
 
 	for (tbl = card_tables; *tbl; tbl++) {
 		for (c = *tbl; c->subvendor; c++) {
@@ -2558,7 +2558,7 @@ static int snd_ice1712_probe(struct pci_dev *pci,
 				if (c->chip_init) {
 					err = c->chip_init(ice);
 					if (err < 0)
-						return err;
+						goto error;
 				}
 				ice->card_info = c;
 				goto __found;
@@ -2570,32 +2570,32 @@ static int snd_ice1712_probe(struct pci_dev *pci,
 
 	err = snd_ice1712_pcm_profi(ice, pcm_dev++);
 	if (err < 0)
-		return err;
+		goto error;
 
 	if (ice_has_con_ac97(ice)) {
 		err = snd_ice1712_pcm(ice, pcm_dev++);
 		if (err < 0)
-			return err;
+			goto error;
 	}
 
 	err = snd_ice1712_ac97_mixer(ice);
 	if (err < 0)
-		return err;
+		goto error;
 
 	err = snd_ice1712_build_controls(ice);
 	if (err < 0)
-		return err;
+		goto error;
 
 	if (c->build_controls) {
 		err = c->build_controls(ice);
 		if (err < 0)
-			return err;
+			goto error;
 	}
 
 	if (ice_has_con_ac97(ice)) {
 		err = snd_ice1712_pcm_ds(ice, pcm_dev++);
 		if (err < 0)
-			return err;
+			goto error;
 	}
 
 	if (!c->no_mpu401) {
@@ -2605,7 +2605,7 @@ static int snd_ice1712_probe(struct pci_dev *pci,
 			MPU401_INFO_INTEGRATED | MPU401_INFO_IRQ_HOOK,
 			-1, &ice->rmidi[0]);
 		if (err < 0)
-			return err;
+			goto error;
 		if (c->mpu401_1_name)
 			/*  Preferred name available in card_info */
 			snprintf(ice->rmidi[0]->name,
@@ -2621,7 +2621,7 @@ static int snd_ice1712_probe(struct pci_dev *pci,
 				-1, &ice->rmidi[1]);
 
 			if (err < 0)
-				return err;
+				goto error;
 			if (c->mpu401_2_name)
 				/*  Preferred name available in card_info */
 				snprintf(ice->rmidi[1]->name,
@@ -2638,10 +2638,13 @@ static int snd_ice1712_probe(struct pci_dev *pci,
 
 	err = snd_card_register(card);
 	if (err < 0)
-		return err;
+		goto error;
 	pci_set_drvdata(pci, card);
 	dev++;
 	return 0;
+error:
+	snd_card_free(card);
+	return err;
 }
 
 #ifdef CONFIG_PM_SLEEP
