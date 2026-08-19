@@ -430,6 +430,7 @@ xfs_reflink_convert_unwritten(
 
 static int
 xfs_reflink_fill_cow_hole(
+	struct xfs_trans	*tp,
 	struct xfs_inode	*ip,
 	struct xfs_bmbt_irec	*imap,
 	struct xfs_bmbt_irec	*cmap,
@@ -438,7 +439,7 @@ xfs_reflink_fill_cow_hole(
 	bool			convert_now)
 {
 	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_trans	*tp;
+	struct xfs_trans	*local_tp;
 	xfs_filblks_t		resaligned;
 	unsigned int		seq_before = READ_ONCE(ip->i_df.if_seq);
 	unsigned int		dblocks = 0, rblocks = 0;
@@ -460,7 +461,7 @@ xfs_reflink_fill_cow_hole(
 	*lockmode = 0;
 
 	error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write, dblocks,
-			rblocks, false, &tp);
+			rblocks, false, &local_tp);
 	if (error)
 		return error;
 
@@ -487,20 +488,21 @@ xfs_reflink_fill_cow_hole(
 		goto out_trans_cancel;
 
 	if (found) {
-		xfs_trans_cancel(tp);
+		xfs_trans_cancel(local_tp);
 		goto convert;
 	}
 
 	/* Allocate the entire reservation as unwritten blocks. */
 	nimaps = 1;
-	error = xfs_bmapi_write(tp, ip, imap->br_startoff, imap->br_blockcount,
+	error = xfs_bmapi_write(local_tp, ip, imap->br_startoff,
+			imap->br_blockcount,
 			XFS_BMAPI_COWFORK | XFS_BMAPI_PREALLOC, 0, cmap,
 			&nimaps);
 	if (error)
 		goto out_trans_cancel;
 
 	xfs_inode_set_cowblocks_tag(ip);
-	error = xfs_trans_commit(tp);
+	error = xfs_trans_commit(local_tp);
 	if (error)
 		return error;
 
@@ -508,7 +510,7 @@ convert:
 	return xfs_reflink_convert_unwritten(ip, imap, cmap, convert_now);
 
 out_trans_cancel:
-	xfs_trans_cancel(tp);
+	xfs_trans_cancel(local_tp);
 	return error;
 }
 
@@ -597,6 +599,7 @@ out_trans_cancel:
 /* Allocate all CoW reservations covering a range of blocks in a file. */
 int
 xfs_reflink_allocate_cow(
+	struct xfs_trans	*tp,
 	struct xfs_inode	*ip,
 	struct xfs_bmbt_irec	*imap,
 	struct xfs_bmbt_irec	*cmap,
@@ -627,7 +630,7 @@ xfs_reflink_allocate_cow(
 	 * Allocate a real extent in the CoW fork.
 	 */
 	if (cmap->br_startoff > imap->br_startoff)
-		return xfs_reflink_fill_cow_hole(ip, imap, cmap, shared,
+		return xfs_reflink_fill_cow_hole(NULL, ip, imap, cmap, shared,
 				lockmode, convert_now);
 
 	/*
