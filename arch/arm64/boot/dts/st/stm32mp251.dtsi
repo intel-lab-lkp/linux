@@ -1637,6 +1637,21 @@
 				status = "disabled";
 			};
 
+			ucpd: phy@480a0000 {
+				compatible = "st,stm32mp25-ucpd";
+				reg = <0x480a0000 0x1000>;
+				access-controllers = <&rifsc 69>;
+				clocks = <&rcc CK_BUS_USBTC>, <&rcc CK_KER_USBTC>;
+				clock-names = "apb", "ker";
+				interrupts-extended = <&exti1 46 IRQ_TYPE_LEVEL_HIGH>;
+				nvmem-cells = <&ucpdtrim>;
+				nvmem-cell-names = "trim";
+				power-domains = <&CLUSTER_PD>;
+				resets = <&rcc USBTC_R>;
+				reset-names = "phy";
+				status = "disabled";
+			};
+
 			combophy: phy@480c0000 {
 				compatible = "st,stm32mp25-combophy";
 				reg = <0x480c0000 0x1000>;
@@ -1780,6 +1795,11 @@
 			package-otp@1e8 {
 				reg = <0x1e8 0x1>;
 				bits = <0 3>;
+			};
+
+			ucpdtrim: atrim3@1e8 {
+				reg = <0x1e8 0x4>;
+				bits = <4 16>;
 			};
 		};
 
