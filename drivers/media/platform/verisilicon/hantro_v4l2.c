@@ -386,14 +386,26 @@ static int hantro_try_fmt(const struct hantro_ctx *ctx,
 			pix_mp->plane_fmt[0].sizeimage +=
 				hantro_av1_mv_size(pix_mp->width,
 						   pix_mp->height);
-	} else if (!pix_mp->plane_fmt[0].sizeimage) {
+	} else {
+		u32 sizeimage = fmt->header_size +
+				pix_mp->width * pix_mp->height * fmt->max_depth;
+
 		/*
 		 * For coded formats the application can specify
 		 * sizeimage. If the application passes a zero sizeimage,
 		 * let's default to the maximum frame size.
+		 *
+		 * The JPEG decoder is the exception. Applications drive it
+		 * without parsing the bitstream, so they cannot know how large
+		 * a frame gets and pick a size that works at low resolutions
+		 * and silently truncates frames further up. Treat the maximum
+		 * as a minimum there.
 		 */
-		pix_mp->plane_fmt[0].sizeimage = fmt->header_size +
-			pix_mp->width * pix_mp->height * fmt->max_depth;
+		if (fmt->codec_mode == HANTRO_MODE_JPEG_DEC)
+			pix_mp->plane_fmt[0].sizeimage =
+				max(pix_mp->plane_fmt[0].sizeimage, sizeimage);
+		else if (!pix_mp->plane_fmt[0].sizeimage)
+			pix_mp->plane_fmt[0].sizeimage = sizeimage;
 	}
 
 	return 0;
