@@ -4902,6 +4902,8 @@ static int decode_pnfs_layout_types(struct xdr_stream *xdr,
 	/* pNFS is not supported by the underlying file system */
 	if (fsinfo->nlayouttypes == 0)
 		return 0;
+	if (fsinfo->nlayouttypes > U32_MAX / 4)
+		return -EIO;
 
 	/* Decode and set first layout type, move xdr->p past unused types */
 	p = xdr_inline_decode(xdr, fsinfo->nlayouttypes * 4);
@@ -6089,6 +6091,8 @@ static int decode_getdeviceinfo(struct xdr_stream *xdr,
 	if (len) {
 		uint32_t i;
 
+		if (len > U32_MAX / 4)
+			return -EIO;
 		p = xdr_inline_decode(xdr, 4 * len);
 		if (unlikely(!p))
 			return -EIO;
