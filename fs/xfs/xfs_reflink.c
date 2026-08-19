@@ -498,51 +498,20 @@ xfs_reflink_fill_delalloc(
 	struct xfs_bmbt_irec	*imap,
 	struct xfs_bmbt_irec	*cmap,
 	bool			*shared,
-	uint			*lockmode,
 	bool			convert_now)
 {
-	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*tp = *tpp;
 	int			nimaps;
 	int			error;
 	bool			found;
 
-	if (!tp) {
-		unsigned int	seq_before = READ_ONCE(ip->i_df.if_seq);
-
-		xfs_iunlock(ip, *lockmode);
-		*lockmode = 0;
-
-		error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write, 0, 0,
-				false, &tp);
-		if (error)
-			return error;
-
-		*lockmode = XFS_ILOCK_EXCL;
-
-		/*
-		 * The data fork mapping may have changed while we dropped the
-		 * ILOCK (a racing O_DIRECT writer under IOLOCK_SHARED can
-		 * complete a full CoW cycle including xfs_reflink_end_cow(),
-		 * which remaps this offset and drops the refcount of the old
-		 * shared block).  Re-read it so the shared-status recheck
-		 * below and the caller's in-place iomap both operate on the
-		 * current mapping rather than a stale physical block.
-		 */
-		if (seq_before != READ_ONCE(ip->i_df.if_seq)) {
-			nimaps = 1;
-			error = xfs_bmapi_read(ip, imap->br_startoff,
-					imap->br_blockcount, imap, &nimaps, 0);
-			if (error)
-				goto out_trans_cancel;
-		}
-	}
+	ASSERT(tp);
 
 	do {
 		error = xfs_find_trim_cow_extent(ip, imap, cmap, shared,
 				&found);
 		if (error || !*shared)
-			goto out_trans_cancel;
+			goto out_error;
 
 		if (found)
 			break;
@@ -559,30 +528,18 @@ xfs_reflink_fill_delalloc(
 				XFS_BMAPI_COWFORK | XFS_BMAPI_PREALLOC, 0,
 				cmap, &nimaps);
 		if (error)
-			goto out_trans_cancel;
+			goto out_error;
 
 		xfs_inode_set_cowblocks_tag(ip);
 
 		error = xfs_defer_finish(&tp);
 		if (error)
-			goto out_trans_cancel;
+			goto out_error;
 	} while (cmap->br_startoff + cmap->br_blockcount <= imap->br_startoff);
 
-	if (*tpp) {
-		*tpp = tp;
-	} else {
-		error = xfs_trans_commit(tp);
-		if (error)
-			return error;
-	}
-
-	return xfs_reflink_convert_unwritten(ip, imap, cmap, convert_now);
-
-out_trans_cancel:
-	if (*tpp)
-		*tpp = tp;
-	else
-		xfs_trans_cancel(tp);
+	error = xfs_reflink_convert_unwritten(ip, imap, cmap, convert_now);
+out_error:
+	*tpp = tp;
 	return error;
 }
 
@@ -633,7 +590,7 @@ xfs_reflink_allocate_cow(
 	if (isnullstartblock(cmap->br_startblock) ||
 	    cmap->br_startblock == DELAYSTARTBLOCK)
 		return xfs_reflink_fill_delalloc(tpp, ip, imap, cmap, shared,
-				lockmode, convert_now);
+				convert_now);
 
 	/* Shouldn't get here. */
 	ASSERT(0);
