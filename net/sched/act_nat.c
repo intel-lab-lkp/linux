@@ -257,6 +257,7 @@ TC_INDIRECT_SCOPE int tcf_nat_act(struct sk_buff *skb,
 	}
 
 out:
+	nf_reset_ct(skb);
 	return action;
 
 drop:
