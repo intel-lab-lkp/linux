@@ -127,6 +127,12 @@ int asoc_sdw_ti_tac5xx2_spk_rtd_init(struct snd_soc_pcm_runtime *rtd,
 	struct snd_soc_dai *codec_dai;
 	const char *prefix;
 
+	card->components = devm_kasprintf(card->dev, GFP_KERNEL,
+					  "%s spk:%s", card->components,
+					  dai->component->name_prefix);
+	if (!card->components)
+		return -ENOMEM;
+
 	for_each_rtd_codec_dais(rtd, i, codec_dai) {
 		if (!strstr(codec_dai->name, "tac5") &&
 		    !strstr(codec_dai->name, "tas2883"))
