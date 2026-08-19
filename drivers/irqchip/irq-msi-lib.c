@@ -117,6 +117,14 @@ bool msi_lib_init_dev_msi_info(struct device *dev, struct irq_domain *domain,
 		chip->irq_set_affinity = msi_domain_set_affinity;
 
 	/*
+	 * The problem addressed by software moderation depends on actually
+	 * masking at the PCI level. irq_mask() can be optimized separately
+	 * for the common cases outside the move/teardown paths.
+	 */
+	if (IS_ENABLED(CONFIG_IRQ_SW_MODERATION))
+		return true;
+
+	/*
 	 * If the parent domain insists on being in charge of masking, obey
 	 * blindly. The interrupt is un-masked at the PCI level on startup
 	 * and masked on shutdown to prevent rogue interrupts after the
