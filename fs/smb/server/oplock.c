@@ -1007,20 +1007,27 @@ static int smb2_lease_break_noti(struct oplock_info *opinfo, bool wait_ack,
 	struct lease *lease = opinfo->o_lease;
 	int ret = 0;
 
-	conn = READ_ONCE(opinfo->conn);
+	conn = ksmbd_conn_get(READ_ONCE(opinfo->conn));
+	read_lock(&lease_list_lock);
 	if (lease->version == 2 && lease->l_lb && lease->l_lb->conn &&
-	    !ksmbd_conn_releasing(lease->l_lb->conn))
-		conn = lease->l_lb->conn;
+	    !ksmbd_conn_releasing(lease->l_lb->conn)) {
+		ksmbd_conn_put(conn);
+		conn = ksmbd_conn_get(lease->l_lb->conn);
+	}
+	read_unlock(&lease_list_lock);
 	if (!conn)
 		return ksmbd_invalidate_durable_fd(opinfo->fid);
 
 	work = ksmbd_alloc_work_struct();
-	if (!work)
+	if (!work) {
+		ksmbd_conn_put(conn);
 		return -ENOMEM;
+	}
 
 	br_info = kmalloc_obj(struct lease_break_info, KSMBD_DEFAULT_GFP);
 	if (!br_info) {
 		ksmbd_free_work_struct(work);
+		ksmbd_conn_put(conn);
 		return -ENOMEM;
 	}
 
@@ -1036,7 +1043,7 @@ static int smb2_lease_break_noti(struct oplock_info *opinfo, bool wait_ack,
 	memcpy(br_info->lease_key, lease->lease_key, SMB2_LEASE_KEY_SIZE);
 
 	work->request_buf = (char *)br_info;
-	work->conn = ksmbd_conn_get(conn);
+	work->conn = conn;
 	work->sess = opinfo->sess;
 
 	ksmbd_conn_r_count_inc(conn);
