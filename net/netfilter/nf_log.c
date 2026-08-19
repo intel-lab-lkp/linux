@@ -518,10 +518,11 @@ static int netfilter_log_sysctl_init(struct net *net)
 	for (i = NFPROTO_UNSPEC; i < NFPROTO_NUMPROTO; i++)
 		table[i].extra2 = net;
 
-	net->nf.nf_log_dir_header = register_net_sysctl_sz(net,
-							   "net/netfilter/nf_log",
-							   table,
-							   ARRAY_SIZE(nf_log_sysctl_table));
+	/* MODULE_SYSCTL_TABLE(): template table's .procname set at run-time. */
+	net->nf.nf_log_dir_header = __register_net_sysctl_sz(net,
+							     "net/netfilter/nf_log",
+							     table,
+							     ARRAY_SIZE(nf_log_sysctl_table));
 	if (!net->nf.nf_log_dir_header)
 		goto err_reg;
 
