@@ -34,7 +34,6 @@
 
 #include <linux/device.h>
 #include <linux/delay.h>
-#include <linux/ctype.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -1441,12 +1440,11 @@ csio_store_dbg_level(struct device *dev,
 	struct csio_lnode *ln = shost_priv(class_to_shost(dev));
 	struct csio_hw *hw = csio_lnode_to_hw(ln);
 	uint32_t dbg_level = 0;
+	int ret;
 
-	if (!isdigit(buf[0]))
-		return -EINVAL;
-
-	if (sscanf(buf, "%i", &dbg_level))
-		return -EINVAL;
+	ret = kstrtou32(buf, 16, &dbg_level);
+	if (ret)
+		return ret;
 
 	ln->params.log_level = dbg_level;
 	hw->params.log_level = dbg_level;
