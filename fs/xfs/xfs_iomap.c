@@ -267,6 +267,7 @@ xfs_iomap_eof_align_last_fsb(
 
 int
 xfs_iomap_write_direct(
+	struct xfs_trans	*tp,
 	struct xfs_inode	*ip,
 	xfs_fileoff_t		offset_fsb,
 	xfs_fileoff_t		count_fsb,
@@ -275,7 +276,7 @@ xfs_iomap_write_direct(
 	u64			*seq)
 {
 	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_trans	*tp;
+	struct xfs_trans	*local_tp = NULL;
 	xfs_filblks_t		resaligned;
 	int			nimaps;
 	unsigned int		dblocks, rblocks;
@@ -296,7 +297,10 @@ xfs_iomap_write_direct(
 		rblocks = 0;
 	}
 
-	error = xfs_qm_dqattach(ip);
+	if (tp)
+		error = xfs_qm_dqattach_locked(ip, false);
+	else
+		error = xfs_qm_dqattach(ip);
 	if (error)
 		return error;
 
@@ -322,10 +326,18 @@ xfs_iomap_write_direct(
 		}
 	}
 
-	error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write, dblocks,
-			rblocks, force, &tp);
-	if (error)
-		return error;
+	if (tp) {
+		error = xfs_trans_reserve_more_inode(tp, ip, dblocks, rblocks,
+				force);
+		if (error)
+			return error;
+	} else {
+		error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write, dblocks,
+				rblocks, force, &tp);
+		if (error)
+			return error;
+		local_tp = tp;
+	}
 
 	error = xfs_iext_count_extend(tp, ip, XFS_DATA_FORK, nr_exts);
 	if (error)
@@ -341,9 +353,9 @@ xfs_iomap_write_direct(
 	if (error)
 		goto out_trans_cancel;
 
-	/*
-	 * Complete the transaction
-	 */
+	if (!local_tp)
+		return 0;
+
 	error = xfs_trans_commit(tp);
 	if (error)
 		goto out_unlock;
@@ -359,8 +371,11 @@ out_unlock:
 	return error;
 
 out_trans_cancel:
-	xfs_trans_cancel(tp);
-	goto out_unlock;
+	if (local_tp) {
+		xfs_trans_cancel(tp);
+		goto out_unlock;
+	}
+	return error;
 }
 
 STATIC bool
@@ -1154,8 +1169,8 @@ allocate_blocks:
 		end_fsb = min(end_fsb, imap.br_startoff + imap.br_blockcount);
 	xfs_iunlock(ip, lockmode);
 
-	error = xfs_iomap_write_direct(ip, offset_fsb, end_fsb - offset_fsb,
-			flags, &imap, &seq);
+	error = xfs_iomap_write_direct(NULL, ip, offset_fsb,
+			end_fsb - offset_fsb, flags, &imap, &seq);
 	if (error)
 		return error;
 
