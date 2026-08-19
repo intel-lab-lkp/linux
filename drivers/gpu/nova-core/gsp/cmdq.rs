@@ -2,13 +2,7 @@
 
 mod continuation;
 
-use core::{
-    mem,
-    sync::atomic::{
-        fence,
-        Ordering, //
-    },
-};
+use core::mem;
 
 use kernel::{
     device,
@@ -30,6 +24,7 @@ use kernel::{
         barrier::{
             dma_mb,
             Full,
+            Read,
             Write, //
         },
         Mutex, //
@@ -339,6 +334,9 @@ impl DmaGspMem {
             (MSGQ_NUM_PAGES, tx)
         };
 
+        // ORDERING: LOAD->LOAD ordering needed to order `gsp_write_ptr` read before data read.
+        dma_mb(Read);
+
         // SAFETY:
         // - `data` was created from a valid pointer, and `rx` and `tx` are in the
         //   `0..MSGQ_NUM_PAGES` range per the invariants of `gsp_write_ptr` and `cpu_read_ptr`,
@@ -436,12 +434,11 @@ impl DmaGspMem {
 
     // Informs the GSP that it can send `elem_count` new pages into the message queue.
     fn advance_cpu_read_ptr(&mut self, elem_count: u32) {
+        // ORDERING: LOAD->STORE ordering needed to order `cpu_read_ptr` write after data read.
+        dma_mb(Full);
+
         let rx = io_project!(self.0, .cpuq.rx);
         let rptr = MsgqRxHeader::read_ptr(rx).wrapping_add(elem_count) % MSGQ_NUM_PAGES;
-
-        // Ensure read pointer is properly ordered.
-        fence(Ordering::SeqCst);
-
         MsgqRxHeader::set_read_ptr(rx, rptr)
     }
 
