@@ -742,5 +742,173 @@
         "teardown": [
             "$TC qdisc del dev $DEV1 clsact"
         ]
+    },
+    {
+        "id": "c2a9",
+        "name": "Verify conntrack reset after pedit modifies IP protocol",
+        "category": [
+            "actions",
+            "ct",
+            "pedit",
+            "scapy"
+        ],
+        "plugins": {
+            "requires": [
+                "nsPlugin",
+                "scapyPlugin"
+            ]
+        },
+        "setup": [
+            [
+                "$TC qdisc del dev $DEV1 ingress",
+                0,
+                1,
+                2,
+                255
+            ],
+            "iptables -t raw -F",
+            "iptables -t raw -A PREROUTING -i $DEV1 -p icmp -m conntrack --ctstate INVALID -j DROP",
+            "$TC qdisc add dev $DEV1 ingress"
+        ],
+        "cmdUnderTest": "$TC filter add dev $DEV1 ingress protocol ip prio 1 flower action ct commit pipe action pedit ex munge ip protocol set 1 pipe action csum ip4h continue",
+        "scapy": {
+            "iface": "$DEV0",
+            "count": 1,
+            "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20',proto=6)/TCP(sport=1234,dport=80,flags='S')"
+        },
+        "expExitCode": "0",
+        "verifyCmd": "iptables-save -c -t raw | grep 'ctstate INVALID'",
+        "matchPattern": "^\\[1:40\\]",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 ingress",
+            "iptables -t raw -F"
+        ]
+    },
+    {
+        "id": "d3b8",
+        "name": "Verify conntrack reset after TCP port modification",
+        "category": [
+            "actions",
+            "ct",
+            "pedit",
+            "scapy"
+        ],
+        "plugins": {
+            "requires": [
+                "nsPlugin",
+                "scapyPlugin"
+            ]
+        },
+        "setup": [
+            [
+                "$TC qdisc del dev $DEV1 ingress",
+                0,
+                1,
+                2,
+                255
+            ],
+            "iptables -t raw -F",
+            "iptables -t raw -A PREROUTING -i $DEV1 -p tcp -m conntrack --ctstate INVALID -j DROP",
+            "$TC qdisc add dev $DEV1 ingress"
+        ],
+        "cmdUnderTest": "$TC filter add dev $DEV1 ingress protocol ip prio 1 flower ip_proto tcp action ct commit pipe action pedit ex munge tcp sport set 9999 pipe",
+        "scapy": {
+            "iface": "$DEV0",
+            "count": 1,
+            "packet": "Ether(type=0x800)/IP(src='10.0.0.10',dst='10.0.0.20')/TCP(sport=1234,dport=80,flags='S')"
+        },
+        "expExitCode": "0",
+        "verifyCmd": "iptables-save -c -t raw | grep 'ctstate INVALID'",
+        "matchCount": "1",
+        "matchPattern": "^\\[1:40\\]",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 ingress",
+            "iptables -t raw -F"
+        ]
+    },
+    {
+        "id": "a1b2",
+        "name": "Verify conntrack NOT reset when pedit modifies only MAC",
+        "category": [
+            "actions",
+            "ct",
+            "pedit",
+            "scapy"
+        ],
+        "plugins": {
+            "requires": [
+                "nsPlugin",
+                "scapyPlugin"
+            ]
+        },
+        "setup": [
+            [
+                "$TC qdisc del dev $DEV1 ingress",
+                0,
+                1,
+                2,
+                255
+            ],
+            "iptables -t raw -F",
+            "iptables -t raw -A PREROUTING -i $DEV1 -p icmp -m conntrack --ctstate NEW -j DROP",
+            "$TC qdisc add dev $DEV1 ingress"
+        ],
+        "cmdUnderTest": "$TC filter add dev $DEV1 ingress protocol ip prio 1 flower action ct commit pipe action pedit ex munge eth src set 11:22:33:44:55:66 pipe",
+        "scapy": {
+            "iface": "$DEV0",
+            "count": 1,
+            "packet": "Ether(src='aa:bb:cc:dd:ee:ff',type=0x800)/IP(src='10.0.0.11',dst='10.0.0.21')/ICMP()"
+        },
+        "expExitCode": "0",
+        "verifyCmd": "iptables-save -c -t raw | grep 'ctstate NEW'",
+        "matchPattern": "^\\[1:28\\]",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 ingress",
+            "iptables -t raw -F"
+        ]
+    },
+    {
+        "id": "b7f4",
+        "name": "Verify conntrack reset when ETH write extends into IP layer",
+        "category": [
+            "actions",
+            "ct",
+            "pedit",
+            "scapy"
+        ],
+        "plugins": {
+            "requires": [
+                "nsPlugin",
+                "scapyPlugin"
+            ]
+        },
+        "setup": [
+            [
+                "$TC qdisc del dev $DEV1 ingress",
+                0,
+                1,
+                2,
+                255
+            ],
+            "iptables -t raw -F",
+            "iptables -t raw -A PREROUTING -i $DEV1 -m conntrack --ctstate INVALID -j DROP",
+            "$TC qdisc add dev $DEV1 ingress"
+        ],
+        "cmdUnderTest": "$TC filter add dev $DEV1 ingress protocol ip prio 1 flower action ct commit pipe action pedit ex munge offset 12 u32 set 0x08004500 pipe csum ip4h continue",
+        "scapy": {
+            "iface": "$DEV0",
+            "count": 1,
+            "packet": "Ether(type=0x800)/IP(src='10.0.0.13',dst='10.0.0.23')/ICMP()"
+        },
+        "expExitCode": "0",
+        "verifyCmd": "iptables-save -t raw -c | grep 'ctstate INVALID'",
+        "matchPattern": "^\\[1:28\\]",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DEV1 ingress",
+            "iptables -t raw -F"
+        ]
     }
 ]
