@@ -688,10 +688,12 @@
 &pcieport0 {
 	reset-gpios = <&tlmm 2 GPIO_ACTIVE_LOW>;
 	wake-gpios = <&tlmm 0 GPIO_ACTIVE_HIGH>;
-};
 
-&pcieport0_ep {
-	remote-endpoint = <&m2_e_pcie_ep>;
+	port {
+		pcieport0_ep: endpoint {
+			remote-endpoint = <&m2_e_pcie_ep>;
+		};
+	};
 };
 
 &pcieport1 {
@@ -974,8 +976,10 @@
 
 &uart2 {
 	status = "okay";
-};
 
-&uart2_ep {
-	remote-endpoint = <&m2_e_uart_ep>;
+	port {
+		uart2_ep: endpoint {
+			remote-endpoint = <&m2_e_uart_ep>;
+		};
+	};
 };
