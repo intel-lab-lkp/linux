@@ -6,6 +6,7 @@
 #include <linux/export.h>
 #include <linux/memblock.h>
 #include <linux/numa.h>
+#include <linux/interrupt.h>
 
 /* These are not inline because of header tangles. */
 #ifdef CONFIG_CPUMASK_OFFSTACK
@@ -81,8 +82,9 @@ void __init free_bootmem_cpumask_var(cpumask_var_t mask)
  * @i: index number
  * @node: local numa_node
  *
- * Return: online CPU according to a numa aware policy; local cpus are returned
- * first, followed by non-local ones, then it wraps around.
+ * Return: online CPU according to the default IRQ affinity and a numa aware
+ * policy; local cpus are returned first, followed by non-local ones, then it
+ * wraps around.
  *
  * For those who wants to enumerate all CPUs based on their NUMA distances,
  * i.e. call this function in a loop, like:
@@ -110,9 +112,9 @@ unsigned int cpumask_local_spread(unsigned int i, int node)
 	unsigned int cpu;
 
 	/* Wrap: we always want a cpu. */
-	i %= num_online_cpus();
+	i %= cpumask_weight(irq_default_affinity);
 
-	cpu = sched_numa_find_nth_cpu(cpu_online_mask, i, node);
+	cpu = sched_numa_find_nth_cpu(irq_default_affinity, i, node);
 
 	WARN_ON(cpu >= nr_cpu_ids);
 	return cpu;
