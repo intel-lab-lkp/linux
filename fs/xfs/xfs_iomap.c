@@ -682,11 +682,15 @@ xfs_iomap_write_unwritten(
 			goto error_on_bmapi_transaction;
 
 		/*
-		 * Log the updated inode size as we go.  We have to be careful
-		 * to only log it up to the actual write offset if it is
-		 * halfway into a block.
+		 * Update the inode size to reflect the extent that was
+		 * converted in this iteration. We must not advance isize
+		 * beyond the extent we just converted, otherwise a crash
+		 * before the next conversion exposes unwritten extents
+		 * (zeroes) to userspace instead of the written data.
+		 * Clamp to the byte-level write end in case the converted
+		 * extent extends past the write boundary.
 		 */
-		i_size = XFS_FSB_TO_B(mp, offset_fsb + count_fsb);
+		i_size = XFS_FSB_TO_B(mp, imap.br_startoff + imap.br_blockcount);
 		if (i_size > offset + count)
 			i_size = offset + count;
 		if (update_isize && i_size > i_size_read(inode))
