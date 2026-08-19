@@ -167,7 +167,9 @@ typedef struct xfs_trans {
 int		xfs_trans_alloc(struct xfs_mount *mp, struct xfs_trans_res *resp,
 			uint blocks, uint rtextents, uint flags,
 			struct xfs_trans **tpp);
-int		xfs_trans_reserve_more(struct xfs_trans *tp,
+int		xfs_trans_reserve_blocks(struct xfs_trans *tp,
+			unsigned int blocks, unsigned int rtextents);
+void		xfs_trans_unreserve_blocks(struct xfs_trans *tp,
 			unsigned int blocks, unsigned int rtextents);
 struct xfs_trans *xfs_trans_alloc_empty(struct xfs_mount *mp);
 void		xfs_trans_mod_sb(xfs_trans_t *, uint, int64_t);

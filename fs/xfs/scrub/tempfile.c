@@ -818,7 +818,7 @@ xrep_tempexch_trans_reserve(
 	if (error)
 		return error;
 
-	error = xfs_trans_reserve_more(sc->tp, tx->req.resblks, 0);
+	error = xfs_trans_reserve_blocks(sc->tp, tx->req.resblks, 0);
 	if (error)
 		return error;
 
