@@ -98,6 +98,19 @@ config SYSCTL
 	  building a kernel for install/rescue disks or your system is very
 	  limited in memory.
 
+config SYSCTL_MODULE_ALIASES
+	bool "'sysctl:' module aliases (EXPERIMENTAL)"
+	depends on SYSCTL && MODULES
+	default n
+	help
+	  The /proc/sys files registered by a module do not exist until the
+	  module is loaded; meanwhile, userspace cannot find or access them.
+
+	  This option adds 'sysctl:*/<path>/<file>' module aliases for the
+	  /proc/sys files registered by modules, so modules for nonexistent
+	  files can be loaded with 'modprobe sysctl:/proc/sys/<path>/<file>'
+	  by userspace when needed.
+
 config PROC_PAGE_MONITOR
  	default y
 	depends on PROC_FS && MMU
