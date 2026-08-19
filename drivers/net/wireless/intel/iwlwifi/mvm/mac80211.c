@@ -1421,6 +1421,10 @@ void iwl_mvm_mac_stop(struct ieee80211_hw *hw, bool suspend)
 	 */
 	cancel_work_sync(&mvm->async_handlers_wk);
 	wiphy_work_cancel(hw->wiphy, &mvm->async_handlers_wiphy_wk);
+
+	/* The work takes mvm->mutex, so cancel it after releasing the mutex. */
+	cancel_work_sync(&mvm->mei_scan_filter.scan_work);
+	skb_queue_purge(&mvm->mei_scan_filter.scan_res);
 }
 
 struct iwl_mvm_phy_ctxt *iwl_mvm_get_free_phy_ctxt(struct iwl_mvm *mvm)
