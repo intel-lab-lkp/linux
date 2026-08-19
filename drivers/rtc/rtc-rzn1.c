@@ -379,7 +379,7 @@ static void rzn1_rtc_disable_hardware(void *data)
 	/* Disable all interrupts */
 	writel(0, rtc->base + RZN1_RTC_CTL1);
 
-	pm_runtime_put(dev);
+	pm_runtime_put_sync(dev);
 }
 
 static int rzn1_rtc_probe(struct platform_device *pdev)
