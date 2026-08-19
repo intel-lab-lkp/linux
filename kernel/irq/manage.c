@@ -1470,6 +1470,12 @@ static bool valid_percpu_irqaction(struct irqaction *old, struct irqaction *new)
 static int
 __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 {
+	/*
+	 * Choose the default moderation mode.
+	 * Hardcoded to false for now; configurable defaults are added later.
+	 * Set to true here to force-enable GSIM for testing this commit.
+	 */
+	bool use_moderation = false;
 	struct irqaction *old, **old_ptr;
 	unsigned long flags, thread_mask = 0;
 	int ret, nested, shared = 0;
@@ -1789,6 +1795,8 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 
 	irq_pm_install_action(desc, new);
 
+	irq_moderation_allow(desc, use_moderation);
+
 	/* Reset broken irq detection when installing new handler */
 	desc->irq_count = 0;
 	desc->irqs_unhandled = 0;
@@ -1897,6 +1905,7 @@ static struct irqaction *__free_irq(struct irq_desc *desc, void *dev_id)
 	/* If this was the last handler, shut down the IRQ line: */
 	if (!desc->action) {
 		irq_settings_clr_disable_unlazy(desc);
+		irq_settings_clr_moderatable(desc);
 		/* Only shutdown. Deactivate after synchronize_hardirq() */
 		irq_shutdown(desc);
 	}
@@ -2046,6 +2055,7 @@ static const void *__cleanup_nmi(unsigned int irq, struct irq_desc *desc)
 		desc->action = NULL;
 
 		irq_settings_clr_disable_unlazy(desc);
+		irq_settings_clr_moderatable(desc);
 		irq_shutdown_and_deactivate(desc);
 	}
 

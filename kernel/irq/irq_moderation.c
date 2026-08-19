@@ -294,3 +294,45 @@ cleanup:
 	return ret;
 }
 device_initcall(init_irq_moderation);
+
+bool irq_moderation_supported(struct irq_desc *desc)
+{
+	struct irq_data *irqd = &desc->irq_data;
+	struct irq_chip *chip = irqd->chip;
+
+	/* GSIM does not support shared interrupts */
+	if (desc->action && desc->action->next)
+		return false;
+
+	if (desc->istate & IRQS_ONESHOT)
+		return false;
+	if (irqd_is_level_type(irqd))
+		return false;
+	if (!irqd_is_single_target(irqd))
+		return false;
+	if (chip->irq_bus_lock || chip->irq_bus_sync_unlock)
+		return false;
+	if (!chip->irq_mask || !chip->irq_unmask)
+		return false;
+	if (desc->handle_irq != handle_edge_irq && desc->handle_irq != handle_fasteoi_irq)
+		return false;
+	return true;
+}
+
+int irq_moderation_allow(struct irq_desc *desc, bool allow)
+{
+	lockdep_assert_held(&desc->lock);
+
+	if (!allow) {
+		irq_settings_clr_moderatable(desc);
+		return 0;
+	}
+
+	if (!irq_moderation_supported(desc)) {
+		irq_settings_clr_moderatable(desc);
+		return -EOPNOTSUPP;
+	}
+
+	irq_settings_set_moderatable(desc);
+	return 0;
+}

@@ -400,6 +400,14 @@ static inline void irq_moderation_init_fields(struct irq_desc *desc)
 {
 	INIT_LIST_HEAD(&desc->swmod_state.swmod_node);
 }
+
+int irq_moderation_allow(struct irq_desc *desc, bool allow);
+bool irq_moderation_supported(struct irq_desc *desc);
 #else
 static inline void irq_moderation_init_fields(struct irq_desc *desc) {}
+static inline int irq_moderation_allow(struct irq_desc *desc, bool allow)
+{
+	return allow ? -EOPNOTSUPP : 0;
+}
+static inline bool irq_moderation_supported(struct irq_desc *desc) { return false; }
 #endif
