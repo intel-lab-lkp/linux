@@ -1243,7 +1243,6 @@ void nvfnic_nvme_unload(struct fnic *fnic)
 				WARN_ON(1);
 			}
 			iport->flags &= ~FNIC_LPORT_NVME_REGISTERED;
-			kfree(iport->nv_tmpl);
 		}
 	}
 
@@ -1668,6 +1667,9 @@ void nvfnic_local_port_delete(struct nvme_fc_local_port *lport)
 
 	FNIC_NVME_DBG(KERN_INFO, fnic, "lport delete 0x%x\n",
 		      iport->fcid);
+
+	kfree(iport->nv_tmpl);
+	iport->nv_tmpl = NULL;
 
 	spin_lock_irqsave(&fnic->fnic_lock, flags);
 	if (fnic->nvme_lport_unreg_done)
