@@ -34,6 +34,7 @@ struct configfs_group_operations;
 struct configfs_attribute;
 struct configfs_bin_attribute;
 struct configfs_subsystem;
+struct path;
 
 struct config_item {
 	char			*ci_name;
@@ -243,6 +244,7 @@ void configfs_unregister_subsystem(struct configfs_subsystem *subsys);
 int configfs_register_group(struct config_group *parent_group,
 			    struct config_group *group);
 void configfs_unregister_group(struct config_group *group);
+bool configfs_path_is_configfs(const struct path *path);
 
 void configfs_remove_default_groups(struct config_group *group);
 
