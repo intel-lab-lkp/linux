@@ -173,16 +173,13 @@ static int test_cpuset_perms_object_deny(const char *root)
 static int test_cpuset_perms_subtree(const char *root)
 {
 	char *parent = NULL, *child = NULL;
-	char *parent_procs = NULL, *parent_subctl = NULL, *child_procs = NULL;
+	char *parent_subctl = NULL;
 	const uid_t test_euid = TEST_UID;
 	int object_pid = 0;
 	int ret = KSFT_FAIL;
 
 	parent = cg_name(root, "cpuset_test_0");
 	if (!parent)
-		goto cleanup;
-	parent_procs = cg_name(parent, "cgroup.procs");
-	if (!parent_procs)
 		goto cleanup;
 	parent_subctl = cg_name(parent, "cgroup.subtree_control");
 	if (!parent_subctl)
@@ -193,16 +190,11 @@ static int test_cpuset_perms_subtree(const char *root)
 	child = cg_name(parent, "cpuset_test_1");
 	if (!child)
 		goto cleanup;
-	child_procs = cg_name(child, "cgroup.procs");
-	if (!child_procs)
-		goto cleanup;
 	if (cg_create(child))
 		goto cleanup;
 
-	/* Enable permissions as in a delegated subtree */
-	if (chown(parent_procs, test_euid, -1) ||
-	    chown(parent_subctl, test_euid, -1) ||
-	    chown(child_procs, test_euid, -1))
+	/* Grant minimal subtree_control permission to trigger implicit migration */
+	if (chown(parent_subctl, test_euid, -1))
 		goto cleanup;
 
 	/* Put a privileged child in the subtree and modify controller state
@@ -227,12 +219,10 @@ cleanup:
 	}
 
 	cg_destroy(child);
-	free(child_procs);
 	free(child);
 
 	cg_destroy(parent);
 	free(parent_subctl);
-	free(parent_procs);
 	free(parent);
 
 	return ret;
