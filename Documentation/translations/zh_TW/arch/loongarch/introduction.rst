@@ -3,7 +3,6 @@
 .. include:: ../../disclaimer-zh_TW.rst
 
 :Original: Documentation/arch/loongarch/introduction.rst
-:Translator: Huacai Chen <chenhuacai@loongson.cn>
 
 =============
 LoongArch介紹

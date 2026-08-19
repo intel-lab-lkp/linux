@@ -3,7 +3,6 @@
 .. include:: ../../disclaimer-zh_TW.rst
 
 :Original: Documentation/arch/loongarch/index.rst
-:Translator: Huacai Chen <chenhuacai@loongson.cn>
 
 =================
 LoongArch體系結構

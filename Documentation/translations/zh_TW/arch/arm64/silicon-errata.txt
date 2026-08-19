@@ -8,9 +8,6 @@ communicating in English you can also ask the Chinese maintainer for
 help.  Contact the Chinese maintainer if this translation is outdated
 or if there is a problem with the translation.
 
-M:	Will Deacon <will.deacon@arm.com>
-zh_CN:	Fu Wei <wefu@redhat.com>
-zh_TW:	Hu Haowen <2023002089@link.tyut.edu.cn>
 C:	1926e54f115725a9248d0c4c65c22acaf94de4c4
 ---------------------------------------------------------------------
 Documentation/arch/arm64/silicon-errata.rst 的中文翻譯
@@ -19,11 +16,6 @@ Documentation/arch/arm64/silicon-errata.rst 的中文翻譯
 交流有困難的話，也可以向中文版維護者求助。如果本翻譯更新不及時或者翻
 譯存在問題，請聯繫中文版維護者。
 
-英文版維護者： Will Deacon <will.deacon@arm.com>
-中文版維護者： 傅煒  Fu Wei <wefu@redhat.com>
-中文版翻譯者： 傅煒  Fu Wei <wefu@redhat.com>
-中文版校譯者： 傅煒  Fu Wei <wefu@redhat.com>
-繁體中文版校譯者： 胡皓文  Hu Haowen <2023002089@link.tyut.edu.cn>
 本文翻譯提交時的 Git 檢出點爲： 1926e54f115725a9248d0c4c65c22acaf94de4c4
 
 以下爲正文
