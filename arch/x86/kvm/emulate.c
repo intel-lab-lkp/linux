@@ -410,6 +410,26 @@ static int em_salc(struct x86_emulate_ctxt *ctxt)
 	_fault ? X86EMUL_UNHANDLEABLE : X86EMUL_CONTINUE; \
 })
 
+static unsigned long seg_base(struct x86_emulate_ctxt *ctxt, int seg)
+{
+	if (ctxt->mode == X86EMUL_MODE_PROT64 && seg < VCPU_SREG_FS)
+		return 0;
+
+	return ctxt->ops->get_cached_segment_base(ctxt, seg);
+}
+
+static u64 get_intercept_linear_addr(struct x86_emulate_ctxt *ctxt,
+				     enum x86_intercept intercept)
+{
+	u64 la;
+
+	if (intercept != x86_intercept_invlpg)
+		return 0;
+
+	la = seg_base(ctxt, ctxt->src.addr.mem.seg) + ctxt->src.addr.mem.ea;
+	return ctxt->mode == X86EMUL_MODE_PROT64 ? la : (u32)la;
+}
+
 static int emulator_check_intercept(struct x86_emulate_ctxt *ctxt,
 				    enum x86_intercept intercept,
 				    enum x86_intercept_stage stage)
@@ -427,6 +447,7 @@ static int emulator_check_intercept(struct x86_emulate_ctxt *ctxt,
 		.src_type   = ctxt->src.type,
 		.dst_type   = ctxt->dst.type,
 		.ad_bytes   = ctxt->ad_bytes,
+		.intercept_linear_addr = get_intercept_linear_addr(ctxt, intercept),
 		.rip	    = ctxt->eip,
 		.next_rip   = ctxt->_eip,
 	};
@@ -518,14 +539,6 @@ static u32 desc_limit_scaled(struct desc_struct *desc)
 	u32 limit = get_desc_limit(desc);
 
 	return desc->g ? (limit << 12) | 0xfff : limit;
-}
-
-static unsigned long seg_base(struct x86_emulate_ctxt *ctxt, int seg)
-{
-	if (ctxt->mode == X86EMUL_MODE_PROT64 && seg < VCPU_SREG_FS)
-		return 0;
-
-	return ctxt->ops->get_cached_segment_base(ctxt, seg);
 }
 
 static int emulate_exception(struct x86_emulate_ctxt *ctxt, int vec,
