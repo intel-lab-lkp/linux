@@ -273,7 +273,10 @@ xfs_iomap_write_direct(
 	xfs_fileoff_t		count_fsb,
 	unsigned int		flags,
 	struct xfs_bmbt_irec	*imap,
-	u64			*seq)
+	loff_t			offset,
+	loff_t			length,
+	struct iomap		*iomap,
+	u16			iomap_flags)
 {
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*local_tp = NULL;
@@ -284,6 +287,7 @@ xfs_iomap_write_direct(
 	int			error;
 	int			bmapi_flags = XFS_BMAPI_PREALLOC;
 	int			nr_exts = XFS_IEXT_ADD_NOSPLIT_CNT;
+	u64			seq;
 
 	ASSERT(count_fsb > 0);
 
@@ -353,27 +357,26 @@ xfs_iomap_write_direct(
 	if (error)
 		goto out_trans_cancel;
 
-	if (!local_tp)
-		return 0;
-
-	error = xfs_trans_commit(tp);
-	if (error)
-		goto out_unlock;
-
-	if (unlikely(!xfs_valid_startblock(ip, imap->br_startblock))) {
-		xfs_bmap_mark_sick(ip, XFS_DATA_FORK);
-		error = xfs_alert_fsblock_zero(ip, imap);
+	seq = xfs_iomap_inode_sequence(ip, iomap_flags);
+	if (local_tp) {
+		error = xfs_trans_commit(tp);
+		xfs_iunlock(ip, XFS_ILOCK_EXCL);
+		if (error)
+			return error;
+		if (unlikely(!xfs_valid_startblock(ip, imap->br_startblock))) {
+			xfs_bmap_mark_sick(ip, XFS_DATA_FORK);
+			return xfs_alert_fsblock_zero(ip, imap);
+		}
 	}
 
-out_unlock:
-	*seq = xfs_iomap_inode_sequence(ip, 0);
-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
-	return error;
+	trace_xfs_iomap_alloc(ip, offset, length, XFS_DATA_FORK, imap);
+	return xfs_bmbt_to_iomap(ip, iomap, imap, flags,
+			iomap_flags | IOMAP_F_NEW, seq);
 
 out_trans_cancel:
 	if (local_tp) {
 		xfs_trans_cancel(tp);
-		goto out_unlock;
+		xfs_iunlock(ip, XFS_ILOCK_EXCL);
 	}
 	return error;
 }
@@ -1169,14 +1172,9 @@ allocate_blocks:
 		end_fsb = min(end_fsb, imap.br_startoff + imap.br_blockcount);
 	xfs_iunlock(ip, lockmode);
 
-	error = xfs_iomap_write_direct(NULL, ip, offset_fsb,
-			end_fsb - offset_fsb, flags, &imap, &seq);
-	if (error)
-		return error;
-
-	trace_xfs_iomap_alloc(ip, offset, length, XFS_DATA_FORK, &imap);
-	return xfs_bmbt_to_iomap(ip, iomap, &imap, flags,
-				 iomap_flags | IOMAP_F_NEW, seq);
+	return xfs_iomap_write_direct(NULL, ip, offset_fsb,
+			end_fsb - offset_fsb, flags, &imap,
+			offset, length, iomap, iomap_flags);
 
 out_unlock:
 	if (lockmode)

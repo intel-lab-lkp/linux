@@ -190,8 +190,6 @@ xfs_fs_map_blocks(
 		xfs_iunlock(ip, lock_flags);
 		goto out_unlock;
 	}
-	seq = xfs_iomap_inode_sequence(ip, 0);
-
 	ASSERT(!nimaps || imap.br_startblock != DELAYSTARTBLOCK);
 
 	if (write && (!nimaps || imap.br_startblock == HOLESTARTBLOCK)) {
@@ -203,7 +201,8 @@ xfs_fs_map_blocks(
 		xfs_iunlock(ip, lock_flags);
 
 		error = xfs_iomap_write_direct(NULL, ip, offset_fsb,
-				end_fsb - offset_fsb, 0, &imap, &seq);
+				end_fsb - offset_fsb, 0, &imap,
+				offset, length, iomap, 0);
 		if (error)
 			goto out_unlock;
 
@@ -219,11 +218,11 @@ xfs_fs_map_blocks(
 			goto out_unlock;
 
 	} else {
+		seq = xfs_iomap_inode_sequence(ip, 0);
 		xfs_iunlock(ip, lock_flags);
+		error = xfs_bmbt_to_iomap(ip, iomap, &imap, 0, 0, seq);
 	}
 	xfs_iunlock(ip, XFS_IOLOCK_EXCL);
-
-	error = xfs_bmbt_to_iomap(ip, iomap, &imap, 0, 0, seq);
 	*device_generation = mp->m_generation;
 	return error;
 out_unlock:
