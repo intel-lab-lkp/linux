@@ -1571,24 +1571,75 @@ xfs_blockgc_worker(
 	xfs_blockgc_queue(pag);
 }
 
+struct xfs_blockgc_async_work {
+	struct work_struct	work;
+	struct xfs_mount	*mp;
+	struct xfs_icwalk	icw;
+	int			error;
+	bool			async;
+};
+
+static void
+xfs_blockgc_free_space_worker(
+	struct work_struct	*work)
+{
+	struct xfs_blockgc_async_work *baw = container_of(work,
+					struct xfs_blockgc_async_work, work);
+
+	baw->error = xfs_icwalk(baw->mp, XFS_ICWALK_BLOCKGC, &baw->icw);
+	if (!baw->error)
+		baw->error = xfs_inodegc_flush(baw->mp);
+
+	if (baw->async)
+		kfree(baw);
+}
+
 /*
  * Try to free space in the filesystem by purging inactive inodes, eofblocks
- * and cowblocks.
+ * and cowblocks. The scan is queued to the blockgc workqueue and the caller
+ * waits for it to complete.
  */
 int
 xfs_blockgc_free_space(
 	struct xfs_mount	*mp,
 	struct xfs_icwalk	*icw)
 {
-	int			error;
+	struct xfs_blockgc_async_work baw = {
+		.mp		= mp,
+		.icw		= *icw,
+		.async		= false,
+	};
 
 	trace_xfs_blockgc_free_space(mp, icw, _RET_IP_);
 
-	error = xfs_icwalk(mp, XFS_ICWALK_BLOCKGC, icw);
-	if (error)
-		return error;
+	INIT_WORK_ONSTACK(&baw.work, xfs_blockgc_free_space_worker);
+	queue_work(mp->m_blockgc_wq, &baw.work);
+	flush_work(&baw.work);
+	destroy_work_on_stack(&baw.work);
+	return baw.error;
+}
 
-	return xfs_inodegc_flush(mp);
+/*
+ * Queue a background space reclaim scan without waiting for it to complete.
+ * This is for callers that hold the ILOCK and cannot wait for the scan
+ * synchronously because the blockgc workers need the ILOCK to scan inodes
+ * and the locked inode pins journal space that the workers need for
+ * transactions.
+ */
+static void
+xfs_blockgc_free_space_nowait(
+	struct xfs_mount	*mp,
+	struct xfs_icwalk	*icw)
+{
+	struct xfs_blockgc_async_work *baw;
+
+	baw = kzalloc(sizeof(*baw), GFP_KERNEL | __GFP_NOFAIL);
+	baw->mp = mp;
+	baw->icw = *icw;
+	baw->async = true;
+
+	INIT_WORK(&baw->work, xfs_blockgc_free_space_worker);
+	queue_work(mp->m_blockgc_wq, &baw->work);
 }
 
 /*
@@ -1628,10 +1679,53 @@ xfs_blockgc_flush_all(
 }
 
 /*
- * Run cow/eofblocks scans on the supplied dquots.  We don't know exactly which
- * quota caused an allocation failure, so we make a best effort by including
- * each quota under low free space conditions (less than 1% free space) in the
- * scan.
+ * Build an icwalk filter to free speculative preallocations on inodes in
+ * quota groups that are under low free space conditions. We don't know
+ * exactly which quota caused an allocation failure, so we make a best effort
+ * by including each quota under low free space conditions (less than 1% free
+ * space) in the scan.
+ *
+ * Returns true if there are quota groups that need scanning, false otherwise.
+ */
+static bool
+xfs_blockgc_dquot_filter(
+	struct xfs_mount	*mp,
+	struct xfs_dquot	*udqp,
+	struct xfs_dquot	*gdqp,
+	struct xfs_dquot	*pdqp,
+	struct xfs_icwalk	*icw)
+{
+	bool			do_work = false;
+
+	if (!udqp && !gdqp && !pdqp)
+		return false;
+
+	memset(icw, 0, sizeof(*icw));
+	icw->icw_flags = XFS_ICWALK_FLAG_UNION;
+
+	if (XFS_IS_UQUOTA_ENFORCED(mp) && udqp && xfs_dquot_lowsp(udqp)) {
+		icw->icw_uid = make_kuid(mp->m_super->s_user_ns, udqp->q_id);
+		icw->icw_flags |= XFS_ICWALK_FLAG_UID;
+		do_work = true;
+	}
+
+	if (XFS_IS_UQUOTA_ENFORCED(mp) && gdqp && xfs_dquot_lowsp(gdqp)) {
+		icw->icw_gid = make_kgid(mp->m_super->s_user_ns, gdqp->q_id);
+		icw->icw_flags |= XFS_ICWALK_FLAG_GID;
+		do_work = true;
+	}
+
+	if (XFS_IS_PQUOTA_ENFORCED(mp) && pdqp && xfs_dquot_lowsp(pdqp)) {
+		icw->icw_prid = pdqp->q_id;
+		icw->icw_flags |= XFS_ICWALK_FLAG_PRID;
+		do_work = true;
+	}
+
+	return do_work;
+}
+
+/*
+ * Run cow/eofblocks scans on the supplied dquots.
  *
  * Callers must not hold any inode's ILOCK.  If requesting a synchronous scan
  * (XFS_ICWALK_FLAG_SYNC), the caller also must not hold any inode's IOLOCK or
@@ -1645,39 +1739,12 @@ xfs_blockgc_free_dquots(
 	struct xfs_dquot	*pdqp,
 	unsigned int		iwalk_flags)
 {
-	struct xfs_icwalk	icw = {0};
-	bool			do_work = false;
+	struct xfs_icwalk	icw;
 
-	if (!udqp && !gdqp && !pdqp)
+	if (!xfs_blockgc_dquot_filter(mp, udqp, gdqp, pdqp, &icw))
 		return 0;
 
-	/*
-	 * Run a scan to free blocks using the union filter to cover all
-	 * applicable quotas in a single scan.
-	 */
-	icw.icw_flags = XFS_ICWALK_FLAG_UNION | iwalk_flags;
-
-	if (XFS_IS_UQUOTA_ENFORCED(mp) && udqp && xfs_dquot_lowsp(udqp)) {
-		icw.icw_uid = make_kuid(mp->m_super->s_user_ns, udqp->q_id);
-		icw.icw_flags |= XFS_ICWALK_FLAG_UID;
-		do_work = true;
-	}
-
-	if (XFS_IS_UQUOTA_ENFORCED(mp) && gdqp && xfs_dquot_lowsp(gdqp)) {
-		icw.icw_gid = make_kgid(mp->m_super->s_user_ns, gdqp->q_id);
-		icw.icw_flags |= XFS_ICWALK_FLAG_GID;
-		do_work = true;
-	}
-
-	if (XFS_IS_PQUOTA_ENFORCED(mp) && pdqp && xfs_dquot_lowsp(pdqp)) {
-		icw.icw_prid = pdqp->q_id;
-		icw.icw_flags |= XFS_ICWALK_FLAG_PRID;
-		do_work = true;
-	}
-
-	if (!do_work)
-		return 0;
-
+	icw.icw_flags |= iwalk_flags;
 	return xfs_blockgc_free_space(mp, &icw);
 }
 
@@ -1691,6 +1758,24 @@ xfs_blockgc_free_quota(
 			xfs_inode_dquot(ip, XFS_DQTYPE_USER),
 			xfs_inode_dquot(ip, XFS_DQTYPE_GROUP),
 			xfs_inode_dquot(ip, XFS_DQTYPE_PROJ), iwalk_flags);
+}
+
+/*
+ * Start an async background scan to free speculative preallocations on inodes
+ * in the quota groups attached to the given inode. This does not wait for the
+ * scan to complete and is safe to call with the ILOCK held.
+ */
+void
+xfs_blockgc_free_quota_nowait(
+	struct xfs_inode	*ip)
+{
+	struct xfs_icwalk	icw;
+
+	if (xfs_blockgc_dquot_filter(ip->i_mount,
+			xfs_inode_dquot(ip, XFS_DQTYPE_USER),
+			xfs_inode_dquot(ip, XFS_DQTYPE_GROUP),
+			xfs_inode_dquot(ip, XFS_DQTYPE_PROJ), &icw))
+		xfs_blockgc_free_space_nowait(ip->i_mount, &icw);
 }
 
 /* XFS Inode Cache Walking Code */
