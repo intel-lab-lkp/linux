@@ -1041,14 +1041,21 @@ xfs_direct_write_iomap_begin(
 {
 	struct xfs_inode	*ip = XFS_I(inode);
 	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_bmbt_irec	imap;
-	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
+	struct xfs_direct_write_args dwa = {
+		.ip		= ip,
+		.offset_fsb	= XFS_B_TO_FSBT(mp, offset),
+		.offset		= offset,
+		.length		= length,
+		.flags		= flags,
+		.nimaps		= 1,
+		.convert_now	= (flags & IOMAP_DIRECT) || IS_DAX(inode),
+		.iomap		= iomap,
+		.srcmap		= srcmap,
+	};
 	xfs_fileoff_t		end_fsb = xfs_iomap_end_fsb(mp, offset, length);
 	xfs_fileoff_t		orig_end_fsb = end_fsb;
-	int			nimaps = 1, error = 0;
-	u16			iomap_flags = 0;
 	bool			needs_alloc;
-	unsigned int		lockmode;
+	int			error = 0;
 	u64			seq;
 
 	ASSERT(flags & (IOMAP_WRITE | IOMAP_ZERO));
@@ -1062,49 +1069,36 @@ xfs_direct_write_iomap_begin(
 	 * there is no other metadata changes pending or have been made here.
 	 */
 	if (offset + length > i_size_read(inode))
-		iomap_flags |= IOMAP_F_DIRTY;
+		dwa.iomap_flags |= IOMAP_F_DIRTY;
 
 	/* HW-offload atomics are always used in this path */
 	if (flags & IOMAP_ATOMIC)
-		iomap_flags |= IOMAP_F_ATOMIC_BIO;
+		dwa.iomap_flags |= IOMAP_F_ATOMIC_BIO;
 
 	if (xfs_is_cow_inode(ip)) {
-		struct xfs_direct_write_args cow_args = {
-			.ip		= ip,
-			.offset		= offset,
-			.length		= length,
-			.flags		= flags,
-			.iomap_flags	= iomap_flags,
-			.convert_now	= (flags & IOMAP_DIRECT) ||
-					  IS_DAX(inode),
-			.iomap		= iomap,
-			.srcmap		= srcmap,
-		};
-
-		error = xfs_direct_write_cow_iomap_begin(&cow_args, true);
+		error = xfs_direct_write_cow_iomap_begin(&dwa, true);
 		if (error)
 			return error;
-		if (!cow_args.nimaps)
+		if (!dwa.nimaps)
 			return 0;
 
-		imap = cow_args.imap;
-		lockmode = cow_args.lockmode;
-		end_fsb = imap.br_startoff + imap.br_blockcount;
-		length = XFS_FSB_TO_B(mp, end_fsb) - offset;
+		end_fsb = dwa.imap.br_startoff + dwa.imap.br_blockcount;
+		dwa.length = XFS_FSB_TO_B(mp, end_fsb) - offset;
 	} else {
-		lockmode = XFS_ILOCK_SHARED;
+		dwa.lockmode = XFS_ILOCK_SHARED;
 
-		error = xfs_ilock_for_iomap(ip, flags, &lockmode);
+		error = xfs_ilock_for_iomap(ip, flags, &dwa.lockmode);
 		if (error)
 			return error;
 
-		error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb,
-				&imap, &nimaps, 0);
+		error = xfs_bmapi_read(ip, dwa.offset_fsb,
+				end_fsb - dwa.offset_fsb,
+				&dwa.imap, &dwa.nimaps, 0);
 		if (error)
 			goto out_unlock;
 	}
 
-	needs_alloc = imap_needs_alloc(inode, flags, &imap, nimaps);
+	needs_alloc = imap_needs_alloc(inode, flags, &dwa.imap, dwa.nimaps);
 
 	if (flags & IOMAP_ATOMIC) {
 		error = -ENOPROTOOPT;
@@ -1113,11 +1107,11 @@ xfs_direct_write_iomap_begin(
 		 * then we may end up with multiple extents, which means that
 		 * REQ_ATOMIC-based cannot be used, so avoid this possibility.
 		 */
-		if (needs_alloc && orig_end_fsb - offset_fsb > 1)
+		if (needs_alloc && orig_end_fsb - dwa.offset_fsb > 1)
 			goto out_unlock;
 
-		if (!xfs_bmap_hw_atomic_write_possible(ip, &imap, offset_fsb,
-				orig_end_fsb))
+		if (!xfs_bmap_hw_atomic_write_possible(ip, &dwa.imap,
+				dwa.offset_fsb, orig_end_fsb))
 			goto out_unlock;
 	}
 
@@ -1132,7 +1126,7 @@ xfs_direct_write_iomap_begin(
 	 */
 	if (flags & (IOMAP_NOWAIT | IOMAP_OVERWRITE_ONLY)) {
 		error = -EAGAIN;
-		if (!imap_spans_range(&imap, offset_fsb, end_fsb))
+		if (!imap_spans_range(&dwa.imap, dwa.offset_fsb, end_fsb))
 			goto out_unlock;
 	}
 
@@ -1144,15 +1138,17 @@ xfs_direct_write_iomap_begin(
 	 */
 	if (flags & IOMAP_OVERWRITE_ONLY) {
 		error = -EAGAIN;
-		if (imap.br_state != XFS_EXT_NORM &&
-	            ((offset | length) & mp->m_blockmask))
+		if (dwa.imap.br_state != XFS_EXT_NORM &&
+		    ((offset | dwa.length) & mp->m_blockmask))
 			goto out_unlock;
 	}
 
-	seq = xfs_iomap_inode_sequence(ip, iomap_flags);
-	xfs_iunlock(ip, lockmode);
-	trace_xfs_iomap_found(ip, offset, length, XFS_DATA_FORK, &imap);
-	return xfs_bmbt_to_iomap(ip, iomap, &imap, flags, iomap_flags, seq);
+	seq = xfs_iomap_inode_sequence(ip, dwa.iomap_flags);
+	xfs_iunlock(ip, dwa.lockmode);
+	trace_xfs_iomap_found(ip, offset, dwa.length, XFS_DATA_FORK,
+			&dwa.imap);
+	return xfs_bmbt_to_iomap(ip, iomap, &dwa.imap, flags,
+			dwa.iomap_flags, seq);
 
 allocate_blocks:
 	error = -EAGAIN;
@@ -1168,34 +1164,23 @@ allocate_blocks:
 	 * Note that the values needs to be less than 32-bits wide until the
 	 * lower level functions are updated.
 	 */
-	length = min_t(loff_t, length, 1024 * PAGE_SIZE);
-	end_fsb = xfs_iomap_end_fsb(mp, offset, length);
+	dwa.length = min_t(loff_t, dwa.length, 1024 * PAGE_SIZE);
+	end_fsb = xfs_iomap_end_fsb(mp, offset, dwa.length);
 
-	if (offset + length > XFS_ISIZE(ip))
+	if (offset + dwa.length > XFS_ISIZE(ip))
 		end_fsb = xfs_iomap_eof_align_last_fsb(ip, end_fsb);
-	else if (nimaps && imap.br_startblock == HOLESTARTBLOCK)
-		end_fsb = min(end_fsb, imap.br_startoff + imap.br_blockcount);
-	xfs_iunlock(ip, lockmode);
+	else if (dwa.nimaps && dwa.imap.br_startblock == HOLESTARTBLOCK)
+		end_fsb = min(end_fsb, dwa.imap.br_startoff +
+				dwa.imap.br_blockcount);
 
-	{
-		struct xfs_direct_write_args args = {
-			.ip		= ip,
-			.offset_fsb	= offset_fsb,
-			.count_fsb	= end_fsb - offset_fsb,
-			.offset		= offset,
-			.length		= length,
-			.flags		= flags,
-			.iomap_flags	= iomap_flags,
-			.imap		= imap,
-			.iomap		= iomap,
-		};
+	dwa.count_fsb = end_fsb - dwa.offset_fsb;
+	xfs_iunlock(ip, dwa.lockmode);
 
-		return xfs_iomap_write_direct(&args);
-	}
+	return xfs_iomap_write_direct(&dwa);
 
 out_unlock:
-	if (lockmode)
-		xfs_iunlock(ip, lockmode);
+	if (dwa.lockmode)
+		xfs_iunlock(ip, dwa.lockmode);
 	return error;
 }
 
