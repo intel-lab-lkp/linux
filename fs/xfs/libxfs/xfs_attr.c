@@ -1136,7 +1136,7 @@ xfs_attr_set(
 	struct xfs_inode	*dp = args->dp;
 	struct xfs_mount	*mp = dp->i_mount;
 	struct xfs_trans_res	tres;
-	int			error, local;
+	int			error, lookup_result, local;
 	int			rmt_blks = 0;
 	unsigned int		total = 0;
 
@@ -1185,48 +1185,48 @@ xfs_attr_set(
 	if (error)
 		return error;
 
-	if (op != XFS_ATTRUPDATE_REMOVE || xfs_inode_hasattr(dp)) {
-		error = xfs_iext_count_extend(args->trans, dp, XFS_ATTR_FORK,
-				XFS_IEXT_ATTR_MANIP_CNT(rmt_blks));
-		if (error)
-			goto out_trans_cancel;
-	}
-
-	error = xfs_attr_lookup(args);
-	switch (error) {
-	case -EEXIST:
-		if (op == XFS_ATTRUPDATE_REMOVE) {
-			/* if no value, we are performing a remove operation */
-			error = xfs_attr_removename(args);
-			if (error)
-				goto out_trans_cancel;
-			break;
-		}
-
-		/* Pure create fails if the attr already exists */
+	/*
+	 * Look up the attr before extending the extent count so that we
+	 * don't dirty the transaction if the op is going to fail with an
+	 * error. Cancelling a dirty transaction would shutdown the fs.
+	 */
+	lookup_result = xfs_attr_lookup(args);
+	if (lookup_result == -EEXIST) {
 		if (op == XFS_ATTRUPDATE_CREATE)
 			goto out_trans_cancel;
-
-		error = xfs_attr_replacename(args, rmt_blks);
-		if (error)
+	} else if (lookup_result == -ENOATTR) {
+		if (op == XFS_ATTRUPDATE_REMOVE ||
+		    op == XFS_ATTRUPDATE_REPLACE)
 			goto out_trans_cancel;
-		break;
-	case -ENOATTR:
-		/* Can't remove what isn't there. */
-		if (op == XFS_ATTRUPDATE_REMOVE)
-			goto out_trans_cancel;
-
-		/* Pure replace fails if no existing attr to replace. */
-		if (op == XFS_ATTRUPDATE_REPLACE)
-			goto out_trans_cancel;
-
-		error = xfs_attr_setname(args, rmt_blks);
-		if (error)
-			goto out_trans_cancel;
-		break;
-	default:
+	} else {
+		error = lookup_result;
 		goto out_trans_cancel;
 	}
+
+	error = xfs_iext_count_extend(args->trans, dp, XFS_ATTR_FORK,
+			XFS_IEXT_ATTR_MANIP_CNT(rmt_blks));
+	if (error)
+		goto out_trans_cancel;
+
+	switch (op) {
+	case XFS_ATTRUPDATE_REMOVE:
+		error = xfs_attr_removename(args);
+		break;
+	case XFS_ATTRUPDATE_CREATE:
+		error = xfs_attr_setname(args, rmt_blks);
+		break;
+	case XFS_ATTRUPDATE_UPSERT:
+		if (lookup_result == -ENOATTR) {
+			error = xfs_attr_setname(args, rmt_blks);
+			break;
+		}
+		fallthrough;
+	case XFS_ATTRUPDATE_REPLACE:
+		error = xfs_attr_replacename(args, rmt_blks);
+		break;
+	}
+	if (error)
+		goto out_trans_cancel;
 
 	/*
 	 * If this is a synchronous mount, make sure that the
