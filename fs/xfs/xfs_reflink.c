@@ -889,14 +889,18 @@ xfs_reflink_end_cow_extent_locked(
  */
 STATIC int
 xfs_reflink_end_cow_extent(
+	struct xfs_trans	*tp,
 	struct xfs_inode	*ip,
 	xfs_fileoff_t		*offset_fsb,
 	xfs_fileoff_t		end_fsb)
 {
 	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_trans	*tp;
 	unsigned int		resblks;
+	bool			local_tp = false;
 	int			error;
+
+	if (tp)
+		goto end_cow;
 
 	resblks = XFS_EXTENTADD_SPACE_RES(mp, XFS_DATA_FORK);
 	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, resblks, 0,
@@ -905,8 +909,12 @@ xfs_reflink_end_cow_extent(
 		return error;
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
 	xfs_trans_ijoin(tp, ip, 0);
+	local_tp = true;
 
+end_cow:
 	error = xfs_reflink_end_cow_extent_locked(tp, ip, offset_fsb, end_fsb);
+	if (!local_tp)
+		return error;
 	if (error)
 		xfs_trans_cancel(tp);
 	else
@@ -966,7 +974,8 @@ xfs_reflink_end_cow(
 	 * blocks will be remapped.
 	 */
 	while (end_fsb > offset_fsb && !error)
-		error = xfs_reflink_end_cow_extent(ip, &offset_fsb, end_fsb);
+		error = xfs_reflink_end_cow_extent(NULL, ip, &offset_fsb,
+				end_fsb);
 
 	if (error)
 		trace_xfs_reflink_end_cow_error(ip, error, _RET_IP_);
