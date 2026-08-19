@@ -600,6 +600,18 @@ def mp_bins(alltests):
 
     return (serial, parallel)
 
+mp_pm = None
+mp_args = None
+
+def __mp_init__(pm, args):
+    """
+    This function is called once when each worker process starts.
+    It sets the global variables in the child process's memory space.
+    """
+    global mp_pm, mp_args
+    mp_pm = pm
+    mp_args = args
+
 def __mp_runner(tests):
     (_, tsr) = test_runner(mp_pm, mp_args, tests)
     return tsr._testsuite
@@ -615,14 +627,13 @@ def test_runner_mp(pm, args, alltests):
     print("Executing {} tests in parallel and {} in serial".format(len(parallel), len(serial)))
     print("Using {} batches and {} workers".format(len(batches), args.mp))
 
-    # We can't pickle these objects so workaround them
-    global mp_pm
-    mp_pm = pm
-
-    global mp_args
-    mp_args = args
-
-    with Pool(args.mp) as p:
+    # Use the 'initializer' to pass the unpickleable/shared objects
+    # to each worker process exactly once upon startup.
+    with Pool(
+        processes=args.mp,
+        initializer=__mp_init__,
+        initargs=(pm, args)
+    ) as p:
         pres = p.map(__mp_runner, batches)
 
     tsr = TestSuiteReport()
