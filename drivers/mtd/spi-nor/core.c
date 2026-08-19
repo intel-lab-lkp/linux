@@ -1273,14 +1273,15 @@ static bool spi_nor_rww_start_io(struct spi_nor *nor)
 {
 	struct spi_nor_rww *rww = &nor->rww;
 
-	guard(mutex)(&nor->lock);
+	scoped_guard(mutex_try, &nor->lock) {
+		if (rww->ongoing_io)
+			return false;
 
-	if (rww->ongoing_io)
-		return false;
+		rww->ongoing_io = true;
+		return true;
+	}
 
-	rww->ongoing_io = true;
-
-	return true;
+	return false;
 }
 
 static void spi_nor_rww_end_io(struct spi_nor *nor)
@@ -1310,16 +1311,17 @@ static bool spi_nor_rww_start_exclusive(struct spi_nor *nor)
 {
 	struct spi_nor_rww *rww = &nor->rww;
 
-	mutex_lock(&nor->lock);
+	scoped_guard(mutex_try, &nor->lock) {
+		if (rww->ongoing_io || rww->ongoing_rd || rww->ongoing_pe)
+			return false;
 
-	if (rww->ongoing_io || rww->ongoing_rd || rww->ongoing_pe)
-		return false;
+		rww->ongoing_io = true;
+		rww->ongoing_rd = true;
+		rww->ongoing_pe = true;
+		return true;
+	}
 
-	rww->ongoing_io = true;
-	rww->ongoing_rd = true;
-	rww->ongoing_pe = true;
-
-	return true;
+	return false;
 }
 
 static void spi_nor_rww_end_exclusive(struct spi_nor *nor)
@@ -1369,23 +1371,25 @@ static bool spi_nor_rww_start_pe(struct spi_nor *nor, loff_t start, size_t len)
 	u8 first, last;
 	int bank;
 
-	guard(mutex)(&nor->lock);
-
-	if (rww->ongoing_io || rww->ongoing_rd || rww->ongoing_pe)
-		return false;
-
-	spi_nor_offset_to_banks(nor->params->bank_size, start, len, &first, &last);
-	for (bank = first; bank <= last; bank++) {
-		if (rww->used_banks & BIT(bank))
+	scoped_guard(mutex_try, &nor->lock) {
+		if (rww->ongoing_io || rww->ongoing_rd || rww->ongoing_pe)
 			return false;
 
-		used_banks |= BIT(bank);
+		spi_nor_offset_to_banks(nor->params->bank_size, start, len,
+					&first, &last);
+		for (bank = first; bank <= last; bank++) {
+			if (rww->used_banks & BIT(bank))
+				return false;
+
+			used_banks |= BIT(bank);
+		}
+
+		rww->used_banks |= used_banks;
+		rww->ongoing_pe = true;
+		return true;
 	}
 
-	rww->used_banks |= used_banks;
-	rww->ongoing_pe = true;
-
-	return true;
+	return false;
 }
 
 static void spi_nor_rww_end_pe(struct spi_nor *nor, loff_t start, size_t len)
@@ -1440,24 +1444,26 @@ static bool spi_nor_rww_start_rd(struct spi_nor *nor, loff_t start, size_t len)
 	u8 first, last;
 	int bank;
 
-	guard(mutex)(&nor->lock);
-
-	if (rww->ongoing_io || rww->ongoing_rd)
-		return false;
-
-	spi_nor_offset_to_banks(nor->params->bank_size, start, len, &first, &last);
-	for (bank = first; bank <= last; bank++) {
-		if (rww->used_banks & BIT(bank))
+	scoped_guard(mutex_try, &nor->lock) {
+		if (rww->ongoing_io || rww->ongoing_rd)
 			return false;
 
-		used_banks |= BIT(bank);
+		spi_nor_offset_to_banks(nor->params->bank_size, start, len,
+					&first, &last);
+		for (bank = first; bank <= last; bank++) {
+			if (rww->used_banks & BIT(bank))
+				return false;
+
+			used_banks |= BIT(bank);
+		}
+
+		rww->used_banks |= used_banks;
+		rww->ongoing_io = true;
+		rww->ongoing_rd = true;
+		return true;
 	}
 
-	rww->used_banks |= used_banks;
-	rww->ongoing_io = true;
-	rww->ongoing_rd = true;
-
-	return true;
+	return false;
 }
 
 static void spi_nor_rww_end_rd(struct spi_nor *nor, loff_t start, size_t len)
