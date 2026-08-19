@@ -1582,6 +1582,7 @@ static void arm_cmn_claim_wp_idx(struct arm_cmn_dtm *dtm,
 
 static u32 arm_cmn_wp_config(struct perf_event *event, int wp_idx)
 {
+	struct arm_cmn *cmn = to_cmn(event->pmu);
 	u32 config;
 	u32 dev = CMN_EVENT_WP_DEV_SEL(event);
 	u32 chn = CMN_EVENT_WP_CHN_SEL(event);
@@ -1593,6 +1594,9 @@ static u32 arm_cmn_wp_config(struct perf_event *event, int wp_idx)
 	/* CMN-600 supports only primary and secondary matching groups */
 	if (is_cmn600)
 		grp &= 1;
+
+	if (cmn->multi_dtm)
+		dev %=  2;
 
 	config = FIELD_PREP(CMN_DTM_WPn_CONFIG_WP_DEV_SEL, dev) |
 		 FIELD_PREP(CMN_DTM_WPn_CONFIG_WP_CHN_SEL, chn) |
