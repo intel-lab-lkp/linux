@@ -88,29 +88,17 @@ xfs_fs_get_uuid(
  * is from the client to indicate that data has been written and the file size
  * can be extended.
  */
-static int
+static void
 xfs_fs_map_update_inode(
+	struct xfs_trans	*tp,
 	struct xfs_inode	*ip)
 {
-	struct xfs_trans	*tp;
-	int			error;
-
-	error = xfs_trans_alloc(ip->i_mount, &M_RES(ip->i_mount)->tr_writeid,
-			0, 0, 0, &tp);
-	if (error)
-		return error;
-
-	xfs_ilock(ip, XFS_ILOCK_EXCL);
-	xfs_trans_ijoin(tp, ip, XFS_ILOCK_EXCL);
-
 	VFS_I(ip)->i_mode &= ~S_ISUID;
 	if (VFS_I(ip)->i_mode & S_IXGRP)
 		VFS_I(ip)->i_mode &= ~S_ISGID;
 	xfs_trans_ichgtime(tp, ip, XFS_ICHGTIME_MOD | XFS_ICHGTIME_CHG);
 	ip->i_diflags |= XFS_DIFLAG_PREALLOC;
-
 	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
-	return xfs_trans_commit(tp);
 }
 
 /*
@@ -127,6 +115,10 @@ xfs_fs_map_blocks(
 {
 	struct xfs_inode	*ip = XFS_I(inode);
 	struct xfs_mount	*mp = ip->i_mount;
+	struct xfs_direct_write_args dwa = {
+		.ip		= ip,
+		.iomap		= iomap,
+	};
 	struct xfs_bmbt_irec	imap;
 	xfs_fileoff_t		offset_fsb, end_fsb;
 	loff_t			limit;
@@ -182,61 +174,67 @@ xfs_fs_map_blocks(
 	end_fsb = XFS_B_TO_FSB(mp, (xfs_ufsize_t)offset + length);
 	offset_fsb = XFS_B_TO_FSBT(mp, offset);
 
+	/*
+	 * Extent allocation requires a transaction. If we find a hole, drop
+	 * the ILOCK, allocate a transaction and re-read the mapping so we
+	 * don't use a stale imap for determining the allocation.
+	 */
 	lock_flags = xfs_ilock_data_map_shared(ip);
-	/* request mappings for the specified range only */
-	error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb,
-				&imap, &nimaps, 0);
-	if (error) {
-		xfs_iunlock(ip, lock_flags);
-		goto out_unlock;
-	}
-	ASSERT(!nimaps || imap.br_startblock != DELAYSTARTBLOCK);
+	do {
+		nimaps = 1;
+		error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb,
+					&imap, &nimaps, 0);
+		if (error)
+			goto out_cancel;
+		ASSERT(!nimaps || imap.br_startblock != DELAYSTARTBLOCK);
 
-	if (write && (!nimaps || imap.br_startblock == HOLESTARTBLOCK)) {
-		if (offset + length > XFS_ISIZE(ip))
-			end_fsb = xfs_iomap_eof_align_last_fsb(ip, end_fsb);
-		else if (nimaps && imap.br_startblock == HOLESTARTBLOCK)
-			end_fsb = min(end_fsb, imap.br_startoff +
-					       imap.br_blockcount);
-		xfs_iunlock(ip, lock_flags);
-
-		{
-			struct xfs_direct_write_args args = {
-				.ip		= ip,
-				.offset_fsb	= offset_fsb,
-				.count_fsb	= end_fsb - offset_fsb,
-				.offset		= offset,
-				.length		= length,
-				.imap		= imap,
-				.iomap		= iomap,
-			};
-
-			error = xfs_iomap_write_direct(&args);
+		if (!write || (nimaps &&
+			       imap.br_startblock != HOLESTARTBLOCK)) {
+			seq = xfs_iomap_inode_sequence(ip, 0);
+			error = xfs_bmbt_to_iomap(ip, iomap, &imap, 0, 0, seq);
+			goto out_cancel;
 		}
-		if (error)
-			goto out_unlock;
 
-		/*
-		 * Ensure the next transaction is committed synchronously so
-		 * that the blocks allocated and handed out to the client are
-		 * guaranteed to be present even after a server crash.
-		 */
-		error = xfs_fs_map_update_inode(ip);
-		if (!error)
-			error = xfs_log_force_inode(ip);
-		if (error)
-			goto out_unlock;
+		if (!dwa.tp) {
+			xfs_iunlock(ip, lock_flags);
+			error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write,
+					0, 0, false, &dwa.tp);
+			if (error)
+				goto out_unlock;
+			lock_flags = XFS_ILOCK_EXCL;
+		}
+	} while (!dwa.tp);
 
-	} else {
-		seq = xfs_iomap_inode_sequence(ip, 0);
-		xfs_iunlock(ip, lock_flags);
-		error = xfs_bmbt_to_iomap(ip, iomap, &imap, 0, 0, seq);
-	}
-	xfs_iunlock(ip, XFS_IOLOCK_EXCL);
-	*device_generation = mp->m_generation;
-	return error;
+	if (offset + length > XFS_ISIZE(ip))
+		end_fsb = xfs_iomap_eof_align_last_fsb(ip, end_fsb);
+	else if (nimaps && imap.br_startblock == HOLESTARTBLOCK)
+		end_fsb = min(end_fsb, imap.br_startoff + imap.br_blockcount);
+
+	dwa.offset_fsb = offset_fsb;
+	dwa.count_fsb = end_fsb - offset_fsb;
+	dwa.offset = offset;
+	dwa.length = length;
+	dwa.imap = imap;
+	error = xfs_iomap_write_direct(&dwa);
+	if (error)
+		goto out_cancel;
+
+	/*
+	 * Update the inode and commit synchronously so that the blocks
+	 * are guaranteed persistent before being handed to the client.
+	 */
+	xfs_fs_map_update_inode(dwa.tp, ip);
+	xfs_trans_set_sync(dwa.tp);
+	error = xfs_trans_commit(dwa.tp);
+	dwa.tp = NULL;
+
+out_cancel:
+	if (dwa.tp)
+		xfs_trans_cancel(dwa.tp);
+	xfs_iunlock(ip, lock_flags);
 out_unlock:
 	xfs_iunlock(ip, XFS_IOLOCK_EXCL);
+	*device_generation = mp->m_generation;
 	return error;
 }
 
