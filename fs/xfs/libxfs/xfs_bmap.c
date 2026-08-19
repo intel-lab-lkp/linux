@@ -4503,7 +4503,25 @@ xfs_bmapi_convert_delalloc(
 	struct iomap		*iomap,
 	unsigned int		*seq)
 {
+	struct xfs_mount	*mp = ip->i_mount;
+	struct xfs_trans	*tp;
 	int			error;
+
+	/*
+	 * Allocate the transaction, take the ILOCK and join the inode to it.
+	 * Space for the extent and indirect blocks was reserved when the
+	 * delalloc extent was created so there's no need to reserve blocks.
+	 * The rolling transaction keeps the ILOCK held across the entire
+	 * conversion loop, making this multi-extent conversion operation
+	 * atomic with respect to other concurrent extent operations.
+	 */
+	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, 0, 0,
+				XFS_TRANS_RESERVE, &tp);
+	if (error)
+		return error;
+
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+	xfs_trans_ijoin(tp, ip, 0);
 
 	/*
 	 * Attempt to allocate whatever delalloc extent currently backs offset
@@ -4512,13 +4530,24 @@ xfs_bmapi_convert_delalloc(
 	 * delalloc extent if free space is sufficiently fragmented.
 	 */
 	do {
-		error = xfs_bmapi_convert_one_delalloc(NULL, ip, whichfork,
+		error = xfs_bmapi_convert_one_delalloc(tp, ip, whichfork,
 					offset, iomap, seq);
 		if (error)
-			return error;
+			goto out_trans_cancel;
+
+		error = xfs_defer_finish(&tp);
+		if (error)
+			goto out_trans_cancel;
 	} while (iomap->offset + iomap->length <= offset);
 
-	return 0;
+	error = xfs_trans_commit(tp);
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	return error;
+
+out_trans_cancel:
+	xfs_trans_cancel(tp);
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	return error;
 }
 
 int
