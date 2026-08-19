@@ -386,6 +386,7 @@ TC_INDIRECT_SCOPE int tcf_pedit_act(struct sk_buff *skb,
 	struct tcf_pedit *p = to_pedit(a);
 	struct tcf_pedit_key_ex *tkey_ex;
 	struct tcf_pedit_parms *parms;
+	bool l3_l4_changed = false;
 	struct tc_pedit_key *tkey;
 	int i;
 
@@ -398,7 +399,7 @@ TC_INDIRECT_SCOPE int tcf_pedit_act(struct sk_buff *skb,
 	tkey_ex = parms->tcfp_keys_ex;
 
 	for (i = parms->tcfp_nkeys; i > 0; i--, tkey++) {
-		int write_offset, write_len;
+		int write_offset, write_len, nw_offset;
 		int offset = tkey->off;
 		int hoffset = 0;
 		u32 cur_val, val;
@@ -417,6 +418,8 @@ TC_INDIRECT_SCOPE int tcf_pedit_act(struct sk_buff *skb,
 			pr_info_ratelimited("tc action pedit unable to extract header offset for header type (0x%x)\n", htype);
 			goto bad;
 		}
+
+		nw_offset = skb_network_offset(skb);
 
 		if (tkey->offmask) {
 			u8 *d, _d;
@@ -485,6 +488,19 @@ TC_INDIRECT_SCOPE int tcf_pedit_act(struct sk_buff *skb,
 		}
 
 		put_unaligned((cur_val & tkey->mask) ^ val, ptr);
+
+		/* Track if L3 or L4 headers were modified:
+		 * - Direct L3/L4 header types
+		 * - ETH header type with offset/length reaching into L3/L4
+		 */
+		if (htype == TCA_PEDIT_KEY_EX_HDR_TYPE_NETWORK ||
+		    htype == TCA_PEDIT_KEY_EX_HDR_TYPE_IP4 ||
+		    htype == TCA_PEDIT_KEY_EX_HDR_TYPE_IP6 ||
+		    htype == TCA_PEDIT_KEY_EX_HDR_TYPE_TCP ||
+		    htype == TCA_PEDIT_KEY_EX_HDR_TYPE_UDP ||
+		    (htype == TCA_PEDIT_KEY_EX_HDR_TYPE_ETH &&
+		     write_offset + (int)sizeof(*ptr) > nw_offset))
+			l3_l4_changed = true;
 	}
 
 	goto done;
@@ -492,6 +508,9 @@ TC_INDIRECT_SCOPE int tcf_pedit_act(struct sk_buff *skb,
 bad:
 	tcf_action_inc_overlimit_qstats(&p->common);
 done:
+	if (l3_l4_changed)
+		nf_reset_ct(skb);
+
 	return parms->action;
 }
 
