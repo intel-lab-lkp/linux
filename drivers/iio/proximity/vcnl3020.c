@@ -584,7 +584,7 @@ static irqreturn_t vcnl3020_handle_irq_thread(int irq, void *p)
 		return IRQ_HANDLED;
 	}
 
-	if (!(isr & VCNL_ICR_THRES_EN))
+	if (!(isr & (VCNL_INT_TH_HI | VCNL_INT_TH_LOW)))
 		return IRQ_NONE;
 
 	iio_push_event(indio_dev,
