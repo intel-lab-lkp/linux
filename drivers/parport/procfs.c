@@ -13,7 +13,7 @@
  * Cleaned up include files - Russell King <linux@arm.uk.linux.org>
  */
 
-#define SYSCTL_MODULE_ALIASES_DISABLE
+#define SYSCTL_MODULE_ALIASES_UNIQUE_ID
 
 #include <linux/string.h>
 #include <linux/init.h>
@@ -434,13 +434,17 @@ int parport_proc_register(struct parport *port)
 #endif /* IEEE 1284 support */
 	}
 
-	tmp_dir_path = kasprintf(GFP_KERNEL, "dev/parport/%s/devices", port->name);
+#define tmp_dir_tmpl "dev/parport/%s/devices"
+	tmp_dir_path = kasprintf(GFP_KERNEL, tmp_dir_tmpl, port->name);
 	if (!tmp_dir_path) {
 		err = -ENOMEM;
 		goto exit_free_t;
 	}
 
-	t->devices_header = register_sysctl(tmp_dir_path, t->device_dir);
+	t->devices_header = register_sysctl(tmp_dir_path, t->device_dir,
+					    parport_sysctl_template.device_dir,
+					    tmp_dir_tmpl);
+#undef tmp_dir_tmpl
 	if (t->devices_header == NULL) {
 		err = -ENOENT;
 		goto  exit_free_tmp_dir_path;
@@ -448,13 +452,17 @@ int parport_proc_register(struct parport *port)
 
 	kfree(tmp_dir_path);
 
-	tmp_dir_path = kasprintf(GFP_KERNEL, "dev/parport/%s", port->name);
+#define tmp_dir_tmpl "dev/parport/%s"
+	tmp_dir_path = kasprintf(GFP_KERNEL, tmp_dir_tmpl,  port->name);
 	if (!tmp_dir_path) {
 		err = -ENOMEM;
 		goto unregister_devices_h;
 	}
 
-	t->port_header = register_sysctl(tmp_dir_path, t->vars);
+	t->port_header = register_sysctl(tmp_dir_path, t->vars,
+					 parport_sysctl_template.vars,
+					 tmp_dir_tmpl);
+#undef tmp_dir_tmpl
 	if (t->port_header == NULL) {
 		err = -ENOENT;
 		goto unregister_devices_h;
@@ -500,7 +508,8 @@ int parport_device_proc_register(struct pardevice *device)
 		return -ENOMEM;
 
 	/* Allocate a buffer for two paths: dev/parport/PORT/devices/DEVICE. */
-	tmp_dir_path = kasprintf(GFP_KERNEL, "dev/parport/%s/devices/%s", port->name, device->name);
+#define tmp_dir_tmpl "dev/parport/%s/devices/%s"
+	tmp_dir_path = kasprintf(GFP_KERNEL, tmp_dir_tmpl, port->name, device->name);
 	if (!tmp_dir_path) {
 		err = -ENOMEM;
 		goto exit_free_t;
@@ -508,7 +517,10 @@ int parport_device_proc_register(struct pardevice *device)
 
 	t->vars[0].data = &device->timeslice;
 
-	t->sysctl_header = register_sysctl(tmp_dir_path, t->vars);
+	t->sysctl_header = register_sysctl(tmp_dir_path, t->vars,
+					   parport_device_sysctl_template.vars,
+					   tmp_dir_tmpl);
+#undef tmp_dir_tmpl
 	if (t->sysctl_header == NULL) {
 		kfree(t);
 		t = NULL;
