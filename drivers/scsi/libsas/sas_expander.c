@@ -33,19 +33,29 @@ static void sas_port_add_ex_phy(struct sas_port *port, struct ex_phy *ex_phy)
 	ex_phy->phy_state = PHY_DEVICE_DISCOVERED;
 }
 
-static void sas_ex_add_parent_port(struct domain_device *dev, int phy_id)
+static int sas_ex_add_parent_port(struct domain_device *dev, int phy_id)
 {
 	struct expander_device *ex = &dev->ex_dev;
 	struct ex_phy *ex_phy = &ex->ex_phy[phy_id];
+	int error;
 
 	if (!ex->parent_port) {
 		ex->parent_port = sas_port_alloc(&dev->rphy->dev, phy_id);
-		/* FIXME: error handling */
-		BUG_ON(!ex->parent_port);
-		BUG_ON(sas_port_add(ex->parent_port));
+		if (!ex->parent_port)
+			return -ENOMEM;
+
+		error = sas_port_add(ex->parent_port);
+		if (error) {
+			sas_port_free(ex->parent_port);
+			ex->parent_port = NULL;
+			return error;
+		}
+
 		sas_port_mark_backlink(ex->parent_port);
 	}
 	sas_port_add_ex_phy(ex->parent_port, ex_phy);
+
+	return 0;
 }
 
 /* ---------- SMP task management ---------- */
@@ -981,12 +991,14 @@ static int sas_ex_discover_dev(struct domain_device *dev, int phy_id)
 	}
 
 	/* Parent and domain coherency */
-	if (!dev->parent && sas_phy_match_port_addr(dev->port, ex_phy)) {
-		sas_ex_add_parent_port(dev, phy_id);
-		return 0;
-	}
+	if (!dev->parent && sas_phy_match_port_addr(dev->port, ex_phy))
+		return sas_ex_add_parent_port(dev, phy_id);
+
 	if (dev->parent && sas_phy_match_dev_addr(dev->parent, ex_phy)) {
-		sas_ex_add_parent_port(dev, phy_id);
+		res = sas_ex_add_parent_port(dev, phy_id);
+		if (res)
+			return res;
+
 		if (ex_phy->routing_attr == TABLE_ROUTING)
 			sas_configure_phy(dev, phy_id, dev->port->sas_addr, 1);
 		return 0;
