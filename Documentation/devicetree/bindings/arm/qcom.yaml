@@ -176,6 +176,9 @@ properties:
           - const: qcom,kaanapali
 
       - items:
+          - const: qcom,maili
+
+      - items:
           - enum:
               - qcom,mahua-crd
           - const: qcom,mahua
