@@ -2636,6 +2636,17 @@ config TEST_BITOPS
 
 	  If unsure, say N.
 
+config TEST_MEMPRESS_TIMER
+	tristate "Test module for memory pressure and allocation stall timing"
+	default n
+	help
+	  This builds the "test_mempress_timer" module that can be used to
+	  provoke and profile page allocation stalls and direct reclaim
+	  slowness. It periodically does a atomic page allocation to generate a
+	  memory pressure.
+
+	  If unsure, say N.
+
 config TEST_VMALLOC
 	tristate "Test module for stress/performance analysis of vmalloc allocator"
 	default n
