@@ -1335,6 +1335,14 @@ transport_set_vpd_ident(struct t10_vpd *vpd, unsigned char *page_83)
 	vpd->device_identifier_code_set = (page_83[0] & 0x0f);
 	switch (vpd->device_identifier_code_set) {
 	case 0x01: /* Binary */
+		/*
+		 * Reserve one character for the type and one for the NUL;
+		 * each binary byte expands to two hex characters.
+		 */
+		if (page_83[3] >
+		    (sizeof(vpd->device_identifier) - 2) / 2)
+			return -EINVAL;
+
 		vpd->device_identifier[j++] =
 				hex_str[vpd->device_identifier_type];
 		while (i < (4 + page_83[3])) {
@@ -1344,11 +1352,16 @@ transport_set_vpd_ident(struct t10_vpd *vpd, unsigned char *page_83)
 				hex_str[page_83[i] & 0x0f];
 			i++;
 		}
+		vpd->device_identifier[j] = '\0';
 		break;
 	case 0x02: /* ASCII */
 	case 0x03: /* UTF-8 */
+		if (page_83[3] >= sizeof(vpd->device_identifier))
+			return -EINVAL;
+
 		while (i < (4 + page_83[3]))
 			vpd->device_identifier[j++] = page_83[i++];
+		vpd->device_identifier[j] = '\0';
 		break;
 	default:
 		break;
