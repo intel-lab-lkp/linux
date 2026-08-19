@@ -1531,6 +1531,238 @@ static const struct devtable devtable[] = {
 	{"pnp_card", SIZE_pnp_card_device_id, do_pnp_card_entry},
 };
 
+// Looks like: sysctl:*/path/procname
+static void do_sysctl_entry(const char *procname, const char *path,
+			    struct module *mod)
+{
+	const char *src, *end_src = path + strlen(path);
+	char *dst, buf[256], *end_dst = buf + sizeof(buf) - 1; /* -1 for NUL. */
+
+	/* Replace '%s' from path template with '*' for wildcard in modprobe. */
+	for (src = path, dst = buf; src < end_src && *src && dst < end_dst; src++, dst++)
+		*dst = (*src == '%') ? (src++, '*') : *src;
+	*dst = '\0';
+
+	module_alias_printf(mod, false, "sysctl:*/%s/%s", buf, procname);
+}
+
+/*
+ * Execute a callback function for each relocation entry in relocation section.
+ * The caller must ensure sechdr->sh_type is SHT_RELA or SHT_REL.
+ */
+static void for_each_reloc(struct elf_info *elf, unsigned int shndx,
+			   bool (*fn)(struct elf_info *elf, Elf_Shdr *sechdr,
+				      Elf_Sym *sym, Elf_Addr r_offset,
+				      Elf_Addr r_addend, void *data),
+			   void *data)
+{
+	Elf_Shdr *sechdr = &elf->sechdrs[shndx];
+	const Elf_Rela *rela; /* used as Elf_Rel[a] on SHT_REL[A] */
+	const Elf_Rela *start = (void *) elf->hdr + sechdr->sh_offset;
+	const Elf_Rela *stop = (void *) start + sechdr->sh_size;
+	size_t size = (sechdr->sh_type == SHT_RELA) ? sizeof(Elf_Rela)
+						    : sizeof(Elf_Rel);
+
+	for (rela = start; rela < stop; rela = (Elf_Rela *)((void *) rela + size)) {
+		Elf_Sym *sym;
+		Elf_Addr r_offset, r_addend;
+		unsigned int r_type, r_sym;
+
+		r_offset = TO_NATIVE(rela->r_offset);
+		get_rel_type_and_sym(elf, rela->r_info, &r_type, &r_sym);
+
+		sym = elf->symtab_start + r_sym;
+		r_addend = (sechdr->sh_type == SHT_RELA)
+					? TO_NATIVE(rela->r_addend)
+					: addend_rel(elf, sechdr->sh_info,
+						     r_type, r_offset, sym);
+
+		if (fn(elf, sechdr, sym, r_offset, r_addend, data))
+			break;
+	}
+}
+
+/*
+ * Callback parameters and function to loop over the sysctl entries in struct
+ * module_sysctl_table's .table symbol (found below) in its reloction section.
+ */
+struct sysctl_entries {
+	Elf_Addr table_offset;
+	ssize_t table_size;
+	ssize_t entry_size;
+	const char *path;
+	const char *modsymname;
+	struct module *mod;
+};
+
+static bool do_sysctl_entries(struct elf_info *elf, Elf_Shdr *sechdr, Elf_Sym *sym,
+			      Elf_Addr r_offset, Elf_Addr r_addend, void *data)
+{
+	struct sysctl_entries *sysctl_entries = (struct sysctl_entries *) data;
+
+	/* Skip until .table starts */
+	if (r_offset < sysctl_entries->table_offset)
+		return false;
+
+	/* Stop after .table ends */
+	if (r_offset >= sysctl_entries->table_offset + sysctl_entries->table_size)
+		return true;
+
+	/* Check for alignment with an array entry (.procname at offset zero) */
+	if ((r_offset - sysctl_entries->table_offset) % sysctl_entries->entry_size == 0) {
+
+		/* The symbol for .procname points to a string */
+		const char *procname = (const char *)
+				       sym_get_data_addend(elf, sym, r_addend);
+
+		if (!procname) {
+			warn("%s [%s] found entry with NULL .procname (skip)\n",
+			     sysctl_entries->modsymname, sysctl_entries->mod->name);
+			return false;
+		}
+
+		do_sysctl_entry(procname, sysctl_entries->path, sysctl_entries->mod);
+	}
+
+	/* Continue at next entry */
+	return false;
+}
+
+/*
+ * Callback parameters and function to search for struct module_sysctl_table's
+ * pointers (.path and .table) in relocation entries of a relocation section.
+ */
+struct sysctl_pointers {
+	/* Input: offsets */
+	Elf_Addr path_offset;
+	Elf_Addr table_offset;
+
+	/* Output: symbols and relocation addends */
+	Elf_Sym *path_sym;
+	Elf_Sym *table_sym;
+	Elf_Addr path_r_addend;
+	Elf_Addr table_r_addend;
+};
+
+static bool do_sysctl_pointers(struct elf_info *elf, Elf_Shdr *sechdr, Elf_Sym *sym,
+			       Elf_Addr r_offset, Elf_Addr r_addend, void *data)
+{
+	struct sysctl_pointers *sysctl_pointers = (struct sysctl_pointers *) data;
+
+	/* Check for relocation entry's offset matching .path or .table */
+	if (!sysctl_pointers->path_sym &&
+	     sysctl_pointers->path_offset == r_offset) {
+		sysctl_pointers->path_sym = sym;
+		sysctl_pointers->path_r_addend = r_addend;
+	} else if (!sysctl_pointers->table_sym &&
+		    sysctl_pointers->table_offset == r_offset) {
+		sysctl_pointers->table_sym = sym;
+		sysctl_pointers->table_r_addend = r_addend;
+	}
+
+	/* Stop once both .path and .table are found */
+	return (sysctl_pointers->path_sym && sysctl_pointers->table_sym);
+}
+
+static void do_sysctl_table(const char *modsymname, void *modsymval,
+			    Elf_Sym *modsym, struct module *mod,
+			    struct elf_info *info)
+{
+	/*
+	 * The struct module_sysctl_table symbol contains 4 fields:
+	 *  .path: pointer to string with the dirname in /proc/sys
+	 *  .table: pointer to struct ctl_table array with filenames (.procname)
+	 *  .table_size: size of struct ctl_table array
+	 *  .entry_size: size of struct ctl_table entry in the array
+	 */
+
+	/* The size values can be read directly. */
+	DEF_FIELD(modsymval, module_sysctl_table, table_size);
+	DEF_FIELD(modsymval, module_sysctl_table, entry_size);
+
+	struct sysctl_entries sysctl_entries = {
+		.table_size = table_size,
+		.entry_size = entry_size,
+		.modsymname = modsymname,
+		.mod = mod,
+	};
+
+	/*
+	 * Step 1:
+	 *
+	 * Each pointer has a relocation entry in a relocation section,
+	 * that links the pointer with the symbol it points to.
+	 *
+	 * In order to access the symbols pointed to by .path and .table pointers:
+	 * 1) find the relocation section of the struct module_sysctl_table symbol;
+	 * 2) find the relocation entries for these pointers by their field offset;
+	 * 3) then use the symbols found in these relocation entries.
+	 */
+
+	struct sysctl_pointers sysctl_pointers = {
+		.path_offset = modsym->st_value + OFF_module_sysctl_table_path,
+		.path_sym = NULL,
+		.table_offset = modsym->st_value + OFF_module_sysctl_table_table,
+		.table_sym = NULL,
+	};
+
+	unsigned int shndx;
+
+	/* Find the relocation section for struct module_sysctl_table symbol. */
+	shndx = get_reloc_secindex(info, modsym);
+	if (shndx == SHN_UNDEF) {
+		error("%s [%s.ko] cannot find relocation section for symbol\n",
+		      modsymname, mod->name);
+		return;
+	}
+
+	/* Find the relocation entries for the .path and .table pointers. */
+	for_each_reloc(info, shndx, do_sysctl_pointers, &sysctl_pointers);
+	if (!sysctl_pointers.path_sym || !sysctl_pointers.table_sym) {
+		error("%s [%s.ko] cannot find relocation entry for path/table\n",
+		      modsymname, mod->name);
+		return;
+	}
+
+	/*
+	 * Step 2:
+	 *
+	 * The .table symbol is the struct ctl_table array where each entry has
+	 * a .procname pointer with a relocation entry for the filename string.
+	 *
+	 * In order to access the strings pointed to by .procname pointers:
+	 * 1) Find the relocation section of the struct ctl_table array symbol;
+	 * 2) Find the relocation entries for these pointers by their field offset;
+	 * 3) Then use the symbols found in these relocation entries.
+	 */
+
+	/* Find the relocation section for the struct ctl_table array. */
+	shndx = get_reloc_secindex(info, sysctl_pointers.table_sym);
+	if (shndx == SHN_UNDEF) {
+		/* Edge case: empty .table: no relocation section. */
+		return;
+	}
+
+	/* The .path symbol can be read directly. */
+	sysctl_entries.path = (const char *)
+			   sym_get_data_addend(info, sysctl_pointers.path_sym,
+						sysctl_pointers.path_r_addend);
+
+	/* The .table symbol is the struct ctl_table array. */
+	sysctl_entries.table_offset = sysctl_pointers.table_sym->st_value +
+				   sysctl_pointers.table_r_addend;
+
+	/* The .entry_size value must not be zero. */
+	if (sysctl_entries.entry_size == 0) {
+		error("%s [%s.ko] invalid entry size (zero)\n",
+		      modsymname, mod->name);
+		return;
+	}
+
+	/* Add module aliases for entries in the struct ctl_table array. */
+	for_each_reloc(info, shndx, do_sysctl_entries, &sysctl_entries);
+}
+
 /* Create MODULE_ALIAS() statements.
  * At this time, we cannot write the actual output C source yet,
  * so we write into the mod->dev_table_buf buffer. */
@@ -1542,6 +1774,7 @@ void handle_moddevtable(struct module *mod, struct elf_info *info,
 	const char *type, *name, *modname;
 	size_t typelen, modnamelen;
 	static const char *prefix = "__mod_device_table__";
+	bool sym_is_devtable = false;
 
 	/* We're looking for a section relative symbol */
 	if (!sym->st_shndx || get_secindex(info, sym) >= info->num_sections)
@@ -1586,9 +1819,13 @@ void handle_moddevtable(struct module *mod, struct elf_info *info,
 		if (sym_is(type, typelen, p->device_id)) {
 			do_table(name, symval, sym->st_size, p->id_size,
 				 p->device_id, p->do_entry, mod);
+			sym_is_devtable = true;
 			break;
 		}
 	}
+
+	if (!sym_is_devtable && sym_is(type, typelen, "sysctl"))
+		do_sysctl_table(name, symval, sym, mod, info);
 
 	if (mod->is_vmlinux) {
 		struct module_alias *alias;
