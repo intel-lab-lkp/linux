@@ -88,5 +88,7 @@ void linedisp_detach(struct device *dev);
 int linedisp_register(struct linedisp *linedisp, struct device *parent,
 		      unsigned int num_chars, const struct linedisp_ops *ops);
 void linedisp_unregister(struct linedisp *linedisp);
+int devm_linedisp_register(struct device *dev, struct linedisp *linedisp,
+			   unsigned int num_chars, const struct linedisp_ops *ops);
 
 #endif /* LINEDISP_H */

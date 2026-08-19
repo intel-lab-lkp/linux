@@ -592,5 +592,37 @@ void linedisp_unregister(struct linedisp *linedisp)
 }
 EXPORT_SYMBOL_NS_GPL(linedisp_unregister, "LINEDISP");
 
+static void devm_linedisp_unregister(void *data)
+{
+	struct linedisp *linedisp = data;
+
+	linedisp_unregister(linedisp);
+}
+
+/**
+ * devm_linedisp_register - register a character line display
+ * @dev: device being registered
+ * @linedisp: pointer to character line display structure
+ * @num_chars: the number of characters that can be displayed
+ * @ops: character line display operations
+ *
+ * Managed linedisp_register(). Line display registered with this function will
+ * automatically be unregistered on driver detach.
+ *
+ * Return: zero on success, else a negative error code.
+ */
+int devm_linedisp_register(struct device *dev, struct linedisp *linedisp,
+			   unsigned int num_chars, const struct linedisp_ops *ops)
+{
+	int err;
+
+	err = linedisp_register(linedisp, dev, num_chars, ops);
+	if (err)
+		return err;
+
+	return devm_add_action_or_reset(dev, devm_linedisp_unregister, linedisp);
+}
+EXPORT_SYMBOL_NS_GPL(devm_linedisp_register, "LINEDISP");
+
 MODULE_DESCRIPTION("Character line display core support");
 MODULE_LICENSE("GPL");
