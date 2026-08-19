@@ -392,7 +392,6 @@ static void vhost_vq_reset(struct vhost_dev *dev,
 	vq->busyloop_timeout = 0;
 	vq->umem = NULL;
 	vq->iotlb = NULL;
-	rcu_assign_pointer(vq->worker, NULL);
 	vhost_vring_call_reset(&vq->call_ctx);
 	__vhost_vq_meta_reset(vq);
 }
@@ -613,6 +612,7 @@ void vhost_dev_init(struct vhost_dev *dev,
 		vq->heads = NULL;
 		vq->nheads = NULL;
 		vq->dev = dev;
+		RCU_INIT_POINTER(vq->worker, NULL);
 		mutex_init(&vq->mutex);
 		vhost_vq_reset(dev, vq);
 		if (vq->handle_kick)
@@ -722,13 +722,19 @@ static void vhost_worker_destroy(struct vhost_dev *dev,
 static void vhost_workers_free(struct vhost_dev *dev)
 {
 	struct vhost_worker *worker;
+	struct vhost_virtqueue *vq;
 	unsigned long i;
 
 	if (!dev->use_worker)
 		return;
 
-	for (i = 0; i < dev->nvqs; i++)
-		rcu_assign_pointer(dev->vqs[i]->worker, NULL);
+	for (i = 0; i < dev->nvqs; i++) {
+		vq = dev->vqs[i];
+
+		mutex_lock(&vq->mutex);
+		rcu_assign_pointer(vq->worker, NULL);
+		mutex_unlock(&vq->mutex);
+	}
 
 	/*
 	 * vhost_vq_work_queue() reads vq->worker under rcu_read_lock(), so a
