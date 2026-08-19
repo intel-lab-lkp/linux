@@ -19,6 +19,7 @@
 #include "xfs_errortag.h"
 #include "xfs_error.h"
 #include "xfs_trans.h"
+#include "xfs_defer.h"
 #include "xfs_trans_space.h"
 #include "xfs_inode_item.h"
 #include "xfs_iomap.h"
@@ -702,44 +703,49 @@ xfs_iomap_write_unwritten(
 	if (error)
 		return error;
 
-	do {
-		/*
-		 * Set up a transaction to convert the range of extents
-		 * from unwritten to real. Do allocations in a loop until
-		 * we have covered the range passed in.
-		 *
-		 * Note that we can't risk to recursing back into the filesystem
-		 * here as we might be asked to write out the same inode that we
-		 * complete here and might deadlock on the iolock.
-		 */
-		error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write, resblks,
-				0, true, &tp);
-		if (error)
-			return error;
+	/*
+	 * Allocate the transaction once and use a rolling transaction to
+	 * convert the range of extents from unwritten to real. The rolling
+	 * transaction keeps the ILOCK held across the entire conversion,
+	 * making it atomic with respect to other concurrent extent
+	 * operations. The block reservation is automatically renewed on
+	 * each roll by XFS_TRANS_RENEW_BLKRES.
+	 *
+	 * Note that we can't risk recursing back into the filesystem here
+	 * as we might be asked to write out the same inode that we complete
+	 * here and might deadlock on the iolock.
+	 */
+	error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write, resblks,
+			0, true, &tp);
+	if (error)
+		return error;
+	tp->t_flags |= XFS_TRANS_RENEW_BLKRES;
 
+	do {
 		error = xfs_iomap_write_unwritten_one(tp, ip, offset_fsb,
 				count_fsb, end, update_isize, resblks, &imap);
-		if (error) {
-			xfs_trans_cancel(tp);
-			xfs_iunlock(ip, XFS_ILOCK_EXCL);
-			return error;
-		}
-
-		error = xfs_trans_commit(tp);
-		xfs_iunlock(ip, XFS_ILOCK_EXCL);
 		if (error)
-			return error;
+			goto out_cancel;
+
+		/*
+		 * Roll the transaction to commit the conversion and renew
+		 * the block reservation. The startblock validation must be
+		 * done after the roll commits the transaction, so that a
+		 * corruption detection does not cancel a dirty transaction
+		 * and shut down the filesystem.
+		 */
+		error = xfs_defer_finish(&tp);
+		if (error)
+			goto out_cancel;
 
 		if (unlikely(!xfs_valid_startblock(ip, imap.br_startblock))) {
 			xfs_bmap_mark_sick(ip, XFS_DATA_FORK);
-			return xfs_alert_fsblock_zero(ip, &imap);
+			error = xfs_alert_fsblock_zero(ip, &imap);
+			goto out_cancel;
 		}
 
-		if ((numblks_fsb = imap.br_blockcount) == 0) {
-			/*
-			 * The numblks_fsb value should always get
-			 * smaller, otherwise the loop is stuck.
-			 */
+		numblks_fsb = imap.br_blockcount;
+		if (numblks_fsb == 0) {
 			ASSERT(imap.br_blockcount);
 			break;
 		}
@@ -747,7 +753,14 @@ xfs_iomap_write_unwritten(
 		count_fsb -= numblks_fsb;
 	} while (count_fsb > 0);
 
-	return 0;
+	error = xfs_trans_commit(tp);
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	return error;
+
+out_cancel:
+	xfs_trans_cancel(tp);
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	return error;
 }
 
 static inline bool
