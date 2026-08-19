@@ -908,7 +908,23 @@
 &i2c9 {
 	status = "okay";
 
-	/* ST21NFC NFC @ 28 */
+	nfc@8 {
+		compatible = "st,st21nfcd";
+		reg = <0x08>;
+
+		interrupts-extended = <&tlmm 41 IRQ_TYPE_LEVEL_HIGH>;
+		reset-gpios = <&tlmm 38 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-0 = <&nfc_int_default>, <&nfc_reset_default>;
+		pinctrl-names = "default";
+
+		clocks = <&rpmhcc RPMH_LN_BB_CLK2>;
+		vdd-io-supply = <&vreg_l18b>;
+
+		ese-present;
+		uicc-present;
+	};
+
 	/* VL53L3 ToF @ 29 */
 };
 
@@ -1409,6 +1425,21 @@
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-up;
+	};
+
+	nfc_int_default: nfc-int-default-state {
+		pins = "gpio41";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	nfc_reset_default: nfc-reset-default-state {
+		pins = "gpio38";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-high;
 	};
 };
 
