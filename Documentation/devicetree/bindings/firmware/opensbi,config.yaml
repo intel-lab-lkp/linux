@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/firmware/opensbi,config.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: OpenSBI Firmware Configuration
+
+maintainers:
+
+description: |
+  OpenSBI configuration data passed in the chosen node.
+
+properties:
+  compatible:
+    const: opensbi,config
+
+  cold-boot-harts:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      List of hart CPU nodes selected as cold boot harts by OpenSBI.
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    / {
+        chosen {
+            opensbi-config {
+                compatible = "opensbi,config";
+                cold-boot-harts = <&cpu0>;
+            };
+        };
+    };
+...
