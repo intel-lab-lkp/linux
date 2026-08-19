@@ -763,6 +763,7 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 	/* Start at vcn = lowest_vcn and lcn 0. */
 	vcn = lowest_vcn;
 	lcn = 0;
+	deltaxcn = le64_to_cpu(attr->data.non_resident.highest_vcn);
 	/* Get start of the mapping pairs array. */
 	buf = (u8 *)attr +
 		le16_to_cpu(attr->data.non_resident.mapping_pairs_offset);
@@ -770,6 +771,23 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 	if (unlikely(buf < (u8 *)attr || buf >= attr_end)) {
 		ntfs_error(vol->sb, "Corrupt attribute.");
 		return ERR_PTR(-EIO);
+	}
+
+	/*
+	 * An empty mapping-pairs array is valid only for a zero-length
+	 * attribute.
+	 */
+	if (!vcn && !*buf &&
+	    (deltaxcn != -1 ||
+	     le64_to_cpu(attr->data.non_resident.allocated_size) ||
+	     le64_to_cpu(attr->data.non_resident.data_size) ||
+	     le64_to_cpu(attr->data.non_resident.initialized_size))) {
+		ntfs_error(vol->sb, "Invalid empty mapping pairs array.");
+		return ERR_PTR(-EIO);
+	}
+	if (!vcn && !*buf && old_runlist && old_runlist->rl) {
+		*new_rl_count = old_runlist->count;
+		return old_runlist->rl;
 	}
 
 	/* Current position in runlist array. */
@@ -942,7 +960,6 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 	 * If there is a highest_vcn specified, it must be equal to the final
 	 * vcn in the runlist - 1, or something has gone badly wrong.
 	 */
-	deltaxcn = le64_to_cpu(attr->data.non_resident.highest_vcn);
 	if (unlikely(deltaxcn && vcn - 1 != deltaxcn)) {
 mpa_err:
 		ntfs_error(vol->sb, "Corrupt mapping pairs array in non-resident attribute.");
