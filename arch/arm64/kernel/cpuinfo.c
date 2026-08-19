@@ -502,11 +502,13 @@ static void __cpuinfo_store_cpu(struct cpuinfo_arm64 *info)
 	info->reg_id_aa64smfr0 = read_cpuid(ID_AA64SMFR0_EL1);
 	info->reg_id_aa64fpfr0 = read_cpuid(ID_AA64FPFR0_EL1);
 
-	if (id_aa64pfr1_mte(info->reg_id_aa64pfr1))
-		info->reg_gmid = read_cpuid(GMID_EL1);
-
 	if (id_aa64pfr0_32bit_el0(info->reg_id_aa64pfr0))
 		__cpuinfo_store_cpu_32bit(&info->aarch32);
+
+	/*
+	 * info->reg_gmid deferred to {init,update}_cpu_features because
+	 * reading it traps to EL2 when MTE is disabled.
+	 */
 
 	/*
 	 * info->reg_mpamidr deferred to {init,update}_cpu_features because we
