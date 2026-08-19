@@ -439,13 +439,23 @@ xfs_reflink_fill_cow_hole(
 	bool			convert_now)
 {
 	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_trans	*local_tp;
+	struct xfs_trans	*local_tp = NULL;
 	xfs_filblks_t		resaligned;
 	unsigned int		seq_before = READ_ONCE(ip->i_df.if_seq);
 	unsigned int		dblocks = 0, rblocks = 0;
 	int			nimaps;
 	int			error;
 	bool			found;
+
+	/*
+	 * If the caller supplied a transaction, use it directly. The caller
+	 * is responsible for commit/cancel and holds the ILOCK.
+	 *
+	 * Otherwise, we need to drop the ILOCK and allocate a transaction
+	 * ourselves, which will re-acquire the ILOCK.
+	 */
+	if (tp)
+		goto allocate;
 
 	resaligned = xfs_aligned_fsb_count(imap->br_startoff,
 		imap->br_blockcount, xfs_get_cowextsz_hint(ip));
@@ -466,6 +476,7 @@ xfs_reflink_fill_cow_hole(
 		return error;
 
 	*lockmode = XFS_ILOCK_EXCL;
+	tp = local_tp;
 
 	/*
 	 * The data fork mapping may have changed while we dropped the ILOCK
@@ -483,18 +494,20 @@ xfs_reflink_fill_cow_hole(
 			goto out_trans_cancel;
 	}
 
+allocate:
 	error = xfs_find_trim_cow_extent(ip, imap, cmap, shared, &found);
 	if (error || !*shared)
 		goto out_trans_cancel;
 
 	if (found) {
-		xfs_trans_cancel(local_tp);
+		if (local_tp)
+			xfs_trans_cancel(local_tp);
 		goto convert;
 	}
 
 	/* Allocate the entire reservation as unwritten blocks. */
 	nimaps = 1;
-	error = xfs_bmapi_write(local_tp, ip, imap->br_startoff,
+	error = xfs_bmapi_write(tp, ip, imap->br_startoff,
 			imap->br_blockcount,
 			XFS_BMAPI_COWFORK | XFS_BMAPI_PREALLOC, 0, cmap,
 			&nimaps);
@@ -502,15 +515,18 @@ xfs_reflink_fill_cow_hole(
 		goto out_trans_cancel;
 
 	xfs_inode_set_cowblocks_tag(ip);
-	error = xfs_trans_commit(local_tp);
-	if (error)
-		return error;
+	if (local_tp) {
+		error = xfs_trans_commit(local_tp);
+		if (error)
+			return error;
+	}
 
 convert:
 	return xfs_reflink_convert_unwritten(ip, imap, cmap, convert_now);
 
 out_trans_cancel:
-	xfs_trans_cancel(local_tp);
+	if (local_tp)
+		xfs_trans_cancel(local_tp);
 	return error;
 }
 
