@@ -355,7 +355,7 @@ static inline u64 ha_invariant_passed_ns(struct ha_monitor *ha_mon, enum envs en
 	if (env < 0 || env >= ENV_MAX_STORED)
 		return 0;
 	if (ha_monitor_env_invalid(ha_mon, env))
-		return 0;
+		ha_reset_clk_ns(ha_mon, env, time_ns);
 	return ha_get_env(ha_mon, env, time_ns);
 }
 
@@ -375,6 +375,7 @@ static inline bool ha_check_invariant_jiffy(struct ha_monitor *ha_mon, enum envs
 {
 	return time_after64(READ_ONCE(ha_mon->env_store[env]), get_jiffies_64() - expire_jiffy);
 }
+
 /*
  * ha_invariant_passed_jiffy - prepare the invariant and return the time since reset
  */
@@ -383,7 +384,7 @@ static inline u64 ha_invariant_passed_jiffy(struct ha_monitor *ha_mon, enum envs
 	if (env < 0 || env >= ENV_MAX_STORED)
 		return 0;
 	if (ha_monitor_env_invalid(ha_mon, env))
-		return 0;
+		ha_reset_clk_jiffy(ha_mon, env);
 	return ha_get_env(ha_mon, env, time_ns);
 }
 
