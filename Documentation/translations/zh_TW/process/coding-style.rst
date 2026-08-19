@@ -6,19 +6,6 @@
 
 .. _tw_codingstyle:
 
-:譯者:
- - 張樂 Zhang Le <r0bertz@gentoo.org>
- - Andy Deng <theandy.deng@gmail.com>
- - 吳想成 <bobwxc@email.cn>
-
-:校譯:
- - 王聰 Wang Cong <xiyou.wangcong@gmail.com>
- - wheelz <kernel.zeng@gmail.com>
- - 管旭東 Xudong Guan <xudong.guan@gmail.com>
- - Li Zefan <lizf@cn.fujitsu.com>
- - Wang Chen <wangchen@cn.fujitsu.com>
- - Hu Haowen <2023002089@link.tyut.edu.cn>
-
 Linux 內核代碼風格
 ==================
 

@@ -4,15 +4,6 @@
 
 :Original: :ref:`Documentation/process/7.AdvancedTopics.rst <development_advancedtopics>`
 
-:Translator:
-
- 時奎亮 Alex Shi <alex.shi@linux.alibaba.com>
-
-:校譯:
-
- 吳想成 Wu XiangCheng <bobwxc@email.cn>
- 胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
-
 .. _tw_development_advancedtopics:
 
 高級主題

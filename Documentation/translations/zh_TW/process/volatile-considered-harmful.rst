@@ -7,18 +7,6 @@
 :Original: :ref:`Documentation/process/volatile-considered-harmful.rst
            <volatile_considered_harmful>`
 
-如果想評論或更新本文的內容，請直接聯繫原文檔的維護者。如果你使用英文
-交流有困難的話，也可以向中文版維護者求助。如果本翻譯更新不及時或者翻
-譯存在問題，請聯繫中文版維護者::
-
-        英文版維護者： Jonathan Corbet <corbet@lwn.net>
-        中文版維護者： 伍鵬  Bryan Wu <bryan.wu@analog.com>
-        中文版翻譯者： 伍鵬  Bryan Wu <bryan.wu@analog.com>
-        中文版校譯者： 張漢輝  Eugene Teo <eugeneteo@kernel.sg>
-                       楊瑞  Dave Young <hidave.darkstar@gmail.com>
-                       時奎亮 Alex Shi <alex.shi@linux.alibaba.com>
-                       胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
-
 爲什麼不應該使用“volatile”類型
 ==============================
 

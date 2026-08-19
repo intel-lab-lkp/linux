@@ -6,17 +6,6 @@
 
 :Original: Documentation/process/submitting-patches.rst
 
-:譯者:
- - 鍾宇 TripleX Chung <xxx.phy@gmail.com>
- - 時奎亮 Alex Shi <alexs@kernel.org>
- - 吳想成 Wu XiangCheng <bobwxc@email.cn>
-
-:校譯:
- - 李陽 Li Yang <leoyang.li@nxp.com>
- - 王聰 Wang Cong <xiyou.wangcong@gmail.com>
- - 胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
-
-
 提交補丁：如何讓你的改動進入內核
 ================================
 

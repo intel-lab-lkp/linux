@@ -6,17 +6,6 @@
 
 :Original: :ref:`Documentation/process/stable-kernel-rules.rst <stable_kernel_rules>`
 
-如果想評論或更新本文的內容，請直接聯繫原文檔的維護者。如果你使用英文
-交流有困難的話，也可以向中文版維護者求助。如果本翻譯更新不及時或者翻
-譯存在問題，請聯繫中文版維護者::
-
-        中文版維護者： 鍾宇  TripleX Chung <xxx.phy@gmail.com>
-        中文版翻譯者： 鍾宇  TripleX Chung <xxx.phy@gmail.com>
-        中文版校譯者：
-            - 李陽  Li Yang <leoyang.li@nxp.com>
-            - Kangkai Yin <e12051@motorola.com>
-            - 胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
-
 所有你想知道的事情 - 關於linux穩定版發佈
 ========================================
 

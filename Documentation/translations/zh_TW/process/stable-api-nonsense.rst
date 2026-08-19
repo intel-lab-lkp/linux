@@ -7,13 +7,6 @@
 :Original: :ref:`Documentation/process/stable-api-nonsense.rst
            <stable_api_nonsense>`
 
-譯者::
-
-        中文版維護者： 鍾宇  TripleX Chung <xxx.phy@gmail.com>
-        中文版翻譯者： 鍾宇  TripleX Chung <xxx.phy@gmail.com>
-        中文版校譯者： 李陽  Li Yang <leoyang.li@nxp.com>
-                      胡皓文 Hu Haowen <2023002089@link.tyut.edu.cn>
-
 Linux 內核驅動接口
 ==================
 
@@ -154,6 +147,3 @@ Linux能成爲強壯，穩定，成熟的操作系統，這也是你最開始選
 ----
 感謝 Randy Dunlap, Andrew Morton, David Brownell, Hanna Linder,
 Robert Love, and Nishanth Aravamudan 對於本文檔早期版本的評審和建議。
-
-英文版維護者： Greg Kroah-Hartman <greg@kroah.com>
-
