@@ -1368,6 +1368,7 @@ enum bpf_tramp_prog_type {
 struct bpf_tramp_image {
 	void *image;
 	int size;
+	int progs_cnt;
 	struct bpf_ksym ksym;
 	struct percpu_ref pcref;
 	void *ip_after_call;
@@ -1376,6 +1377,7 @@ struct bpf_tramp_image {
 		struct rcu_head rcu;
 		struct work_struct work;
 	};
+	struct bpf_prog *progs[] __counted_by(progs_cnt);
 };
 
 struct bpf_trampoline {
