@@ -31,11 +31,11 @@ static int	nlmclnt_test(struct nlm_rqst *, struct file_lock *);
 static int	nlmclnt_lock(struct nlm_rqst *, struct file_lock *);
 static int	nlmclnt_unlock(struct nlm_rqst *, struct file_lock *);
 static int	nlm_stat_to_errno(__be32 stat);
-static void	nlmclnt_locks_init_private(struct file_lock *fl, struct nlm_host *host);
 static int	nlmclnt_cancel(struct nlm_host *, int , struct file_lock *);
 
 static const struct rpc_call_ops nlmclnt_unlock_ops;
 static const struct rpc_call_ops nlmclnt_cancel_ops;
+static const struct file_lock_operations nlmclnt_lock_ops;
 
 /*
  * Cookie counter for NLM requests
@@ -172,12 +172,16 @@ int nlmclnt_proc(struct nlm_host *host, int cmd, struct file_lock *fl, void *dat
 	if (nlmclnt_ops && nlmclnt_ops->nlmclnt_alloc_call)
 		nlmclnt_ops->nlmclnt_alloc_call(data);
 
-	nlmclnt_locks_init_private(fl, host);
+	fl->fl_u.nfs_fl.state = 0;
+	fl->fl_u.nfs_fl.owner = nlmclnt_find_lockowner(host, fl->c.flc_owner);
 	if (!fl->fl_u.nfs_fl.owner) {
 		/* lockowner allocation has failed */
 		nlmclnt_release_call(call);
 		return -ENOMEM;
 	}
+	INIT_LIST_HEAD(&fl->fl_u.nfs_fl.list);
+	fl->fl_ops = &nlmclnt_lock_ops;
+
 	/* Set up the argument struct */
 	nlmclnt_setlockargs(call, fl);
 	call->a_callback_data = data;
@@ -483,15 +487,6 @@ static const struct file_lock_operations nlmclnt_lock_ops = {
 	.fl_copy_lock = nlmclnt_locks_copy_lock,
 	.fl_release_private = nlmclnt_locks_release_private,
 };
-
-static void nlmclnt_locks_init_private(struct file_lock *fl, struct nlm_host *host)
-{
-	fl->fl_u.nfs_fl.state = 0;
-	fl->fl_u.nfs_fl.owner = nlmclnt_find_lockowner(host,
-						       fl->c.flc_owner);
-	INIT_LIST_HEAD(&fl->fl_u.nfs_fl.list);
-	fl->fl_ops = &nlmclnt_lock_ops;
-}
 
 static int do_vfs_lock(struct file_lock *fl)
 {
