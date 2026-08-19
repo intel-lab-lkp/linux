@@ -2562,6 +2562,7 @@ static irqreturn_t __gdth_interrupt(gdth_ha_str *ha,
                         if (ha->dvr.event_string[i] == 0)
                             break;
                     }
+                    ha->dvr.event_string[255] = 0;
                 }
             }
             writeb(0xff, &dp6m_ptr->i960r.edoor_reg);
