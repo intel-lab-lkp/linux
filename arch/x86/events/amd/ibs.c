@@ -505,7 +505,7 @@ perf_ibs_event_update(struct perf_ibs *perf_ibs, struct perf_event *event,
 	 * prev count manually on overflow.
 	 */
 	while (!perf_event_try_update(event, count, 64)) {
-		rdmsrq(event->hw.config_base, *config);
+		*config = rdmsrq(event->hw.config_base);
 		count = perf_ibs->get_count(*config);
 	}
 }
@@ -610,7 +610,7 @@ static void perf_ibs_stop(struct perf_event *event, int flags)
 	if (!stopping && (hwc->state & PERF_HES_UPTODATE))
 		return;
 
-	rdmsrq(hwc->config_base, config);
+	config = rdmsrq(hwc->config_base);
 
 	if (stopping) {
 		/*
@@ -1437,7 +1437,7 @@ fail:
 	hwc = &event->hw;
 	msr = hwc->config_base;
 	buf = ibs_data.regs;
-	rdmsrq(msr, *buf);
+	*buf = rdmsrq(msr);
 	if (!(*buf++ & perf_ibs->valid_mask))
 		goto fail;
 
@@ -1455,7 +1455,7 @@ fail:
 	offset_max = perf_ibs_get_offset_max(perf_ibs, event, check_rip);
 
 	do {
-		rdmsrq(msr + offset, *buf++);
+		*buf++ = rdmsrq(msr + offset);
 		size++;
 		offset = find_next_bit(perf_ibs->offset_mask,
 				       perf_ibs->offset_max,
@@ -1497,17 +1497,17 @@ fail:
 	if (event->attr.sample_type & PERF_SAMPLE_RAW) {
 		if (perf_ibs == &perf_ibs_op) {
 			if (ibs_caps & IBS_CAPS_BRNTRGT) {
-				rdmsrq(MSR_AMD64_IBSBRTARGET, *buf++);
+				*buf++ = rdmsrq(MSR_AMD64_IBSBRTARGET);
 				br_target_idx = size;
 				size++;
 			}
 			if (ibs_caps & IBS_CAPS_OPDATA4) {
-				rdmsrq(MSR_AMD64_IBSOPDATA4, *buf++);
+				*buf++ = rdmsrq(MSR_AMD64_IBSOPDATA4);
 				size++;
 			}
 		}
 		if (perf_ibs == &perf_ibs_fetch && (ibs_caps & IBS_CAPS_FETCHCTLEXTD)) {
-			rdmsrq(MSR_AMD64_ICIBSEXTDCTL, *buf++);
+			*buf++ = rdmsrq(MSR_AMD64_ICIBSEXTDCTL);
 			size++;
 		}
 	}
@@ -1768,7 +1768,7 @@ static inline int ibs_eilvt_valid(void)
 
 	preempt_disable();
 
-	rdmsrq(MSR_AMD64_IBSCTL, val);
+	val = rdmsrq(MSR_AMD64_IBSCTL);
 	offset = val & IBSCTL_LVT_OFFSET_MASK;
 
 	if (!(val & IBSCTL_LVT_OFFSET_VALID)) {
@@ -1883,7 +1883,7 @@ static inline int get_ibs_lvt_offset(void)
 {
 	u64 val;
 
-	rdmsrq(MSR_AMD64_IBSCTL, val);
+	val = rdmsrq(MSR_AMD64_IBSCTL);
 	if (!(val & IBSCTL_LVT_OFFSET_VALID))
 		return -EINVAL;
 
