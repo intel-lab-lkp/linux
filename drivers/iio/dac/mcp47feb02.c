@@ -34,8 +34,9 @@
 /* Register addresses must be left shifted with 3 positions in order to append command mask */
 #define MCP47FEB02_DAC0_REG_ADDR			0x00
 #define MCP47FEB02_VREF_REG_ADDR			0x40
+#define MCP47FEB02_GET_VREF_MODE(reg, ch)		(((reg) >> (2 * (ch))) & GENMASK(1, 0))
 #define MCP47FEB02_POWER_DOWN_REG_ADDR			0x48
-#define MCP47FEB02_DAC_CTRL_MASK			GENMASK(1, 0)
+#define MCP47FEB02_GET_POWER_DOWN_MODE(reg, ch)		(((reg) >> (2 * (ch))) & GENMASK(1, 0))
 
 #define MCP47FEB02_GAIN_CTRL_STATUS_REG_ADDR		0x50
 #define MCP47FEB02_GAIN_BIT_MASK			BIT(0)
@@ -1026,7 +1027,7 @@ static int mcp47feb02_init_ctrl_regs(struct mcp47feb02_data *data)
 			return ret;
 		data->chdata[i].dac_data = dac_val;
 
-		data->chdata[i].ref_mode = (vref_ch >> (2 * i)) & MCP47FEB02_DAC_CTRL_MASK;
+		data->chdata[i].ref_mode = MCP47FEB02_GET_VREF_MODE(vref_ch, i);
 		data->chdata[i].use_2x_gain = (gain_ch & DAC_GAIN_MASK(i)) ? 1 : 0;
 
 		/*
@@ -1070,7 +1071,7 @@ static int mcp47feb02_init_ctrl_regs(struct mcp47feb02_data *data)
 			break;
 		}
 
-		pd_tmp = (pd_ch >> (2 * i)) & MCP47FEB02_DAC_CTRL_MASK;
+		pd_tmp = MCP47FEB02_GET_POWER_DOWN_MODE(pd_ch, i);
 		data->chdata[i].powerdown_mode = pd_tmp ? (pd_tmp - 1) : pd_tmp;
 		data->chdata[i].powerdown = !!(data->chdata[i].powerdown_mode);
 	}
