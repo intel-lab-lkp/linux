@@ -1543,6 +1543,12 @@ static int mt_input_mapping(struct hid_device *hdev, struct hid_input *hi,
 	if (ret != 0)
 		return ret;
 
+	/* Ignore Goodix FreeTouch vendor telemetry collection */
+	if (hdev->vendor == I2C_VENDOR_ID_GOODIX &&
+	    hdev->product == I2C_DEVICE_ID_GOODIX_01E0 &&
+	    field->application == 0xff010001)
+		return -1;
+
 	/* let hid-core decide for the others */
 	return 0;
 }
@@ -2451,6 +2457,11 @@ static const struct hid_device_id mt_devices[] = {
 	{ .driver_data = MT_CLS_NSMU,
 		MT_BT_DEVICE(USB_VENDOR_ID_FRUCTEL,
 			USB_DEVICE_ID_GAMETEL_MT_MODE) },
+
+	/* Goodix GXTP7863 Touchpad */
+	{ .driver_data = MT_CLS_WIN_8,
+	  HID_DEVICE(BUS_I2C, HID_GROUP_ANY, I2C_VENDOR_ID_GOODIX,
+		     I2C_DEVICE_ID_GOODIX_01E0) },
 
 	/* Goodix GT7868Q devices */
 	{ .driver_data = MT_CLS_WIN_8_FORCE_MULTI_INPUT_NSMU,
