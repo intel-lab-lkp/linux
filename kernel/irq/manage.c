@@ -503,11 +503,21 @@ EXPORT_SYMBOL_GPL(irq_force_affinity);
 
 int __irq_apply_affinity_hint(unsigned int irq, const struct cpumask *m, bool setaffinity)
 {
+	struct irq_data *irq_data;
 	int ret = -EINVAL;
 
 	scoped_irqdesc_get_and_lock(irq, IRQ_GET_DESC_CHECK_GLOBAL) {
 		scoped_irqdesc->affinity_hint = m;
+		irq_data = irq_desc_get_irq_data(scoped_irqdesc);
 		ret = 0;
+
+		/*
+		 * Do not overwrite the affinity in case an affinity for this
+		 * IRQ has already been requested, e.g. by writing to
+		 * /proc/irq/<n>/smp_affinity
+		 */
+		if (irqd_affinity_was_set(irq_data))
+			setaffinity = false;
 	}
 
 	if (!ret && m && setaffinity)
