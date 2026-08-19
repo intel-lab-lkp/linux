@@ -220,7 +220,14 @@ static inline void *proc_sys_poll_event(struct ctl_table_poll *poll)
 
 /* A sysctl table is an array of struct ctl_table: */
 struct ctl_table {
+
+	/* This must be the first field for module aliases (file2alias.c) */
 	const char *procname;		/* Text ID for /proc/sys */
+
+#ifdef CONFIG_SYSCTL_MODULE_ALIASES
+	/* This begins the randomizable portion of the struct. */
+	randomized_struct_fields_start
+#endif
 	void *data;
 	int maxlen;
 	umode_t mode;
@@ -228,7 +235,14 @@ struct ctl_table {
 	struct ctl_table_poll *poll;
 	void *extra1;
 	void *extra2;
+#ifdef CONFIG_SYSCTL_MODULE_ALIASES
+	/* New fields go above here, so they are in the randomized portion. */
+	randomized_struct_fields_end
+};
+static_assert(offsetof(const struct ctl_table, procname) == 0);
+#else
 } __randomize_layout;
+#endif
 
 struct ctl_node {
 	struct rb_node node;
