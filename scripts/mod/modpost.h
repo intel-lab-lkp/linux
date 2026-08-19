@@ -186,6 +186,25 @@ static inline unsigned int get_secindex(const struct elf_info *info,
 	return index;
 }
 
+/* Find the relocation section for the section of a symbol */
+static inline unsigned int get_reloc_secindex(const struct elf_info *info,
+					      const Elf_Sym *sym)
+{
+	unsigned int sym_secindex = get_secindex(info, sym);
+	unsigned int secindex;
+
+	for (secindex = 0; secindex < info->num_sections; secindex++) {
+		Elf_Shdr *shdr = &info->sechdrs[secindex];
+
+		if ((shdr->sh_type == SHT_RELA || shdr->sh_type == SHT_REL) &&
+		    (shdr->sh_flags & SHF_INFO_LINK) &&
+		    shdr->sh_info == sym_secindex)
+			return secindex;
+	}
+
+	return SHN_UNDEF;
+}
+
 /*
  * If there's no name there, ignore it; likewise, ignore it if it's
  * one of the magic symbols emitted used by current tools.
@@ -222,8 +241,12 @@ const char *get_basename(const char *path);
 char *read_text_file(const char *filename);
 char *get_line(char **stringp);
 void *sym_get_data(const struct elf_info *info, const Elf_Sym *sym);
+void *sym_get_data_addend(const struct elf_info *info, const Elf_Sym *sym,
+			  Elf_Addr r_addend);
 Elf_Addr addend_rel(struct elf_info *elf, unsigned int secndx,
 		    unsigned int r_type, Elf_Addr r_offset, Elf_Sym *tsym);
+void get_rel_type_and_sym(struct elf_info *elf, uint64_t r_info,
+			  unsigned int *r_type, unsigned int *r_sym);
 
 void __attribute__((format(printf, 3, 4)))
 modpost_log(bool is_error, struct module *mod, const char *fmt, ...);

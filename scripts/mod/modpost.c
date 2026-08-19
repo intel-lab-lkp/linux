@@ -340,6 +340,13 @@ void *sym_get_data(const struct elf_info *info, const Elf_Sym *sym)
 				      sym->st_value);
 }
 
+void *sym_get_data_addend(const struct elf_info *info, const Elf_Sym *sym,
+			  Elf_Addr r_addend)
+{
+	return sym_get_data_by_offset(info, get_secindex(info, sym),
+				      sym->st_value + r_addend);
+}
+
 static const char *sech_name(const struct elf_info *info, Elf_Shdr *sechdr)
 {
 	return sym_get_data_by_offset(info, info->secindex_strings,
@@ -1338,8 +1345,8 @@ Elf_Addr addend_rel(struct elf_info *elf, unsigned int secndx,
 #define R_LARCH_ALIGN		102
 #endif
 
-static void get_rel_type_and_sym(struct elf_info *elf, uint64_t r_info,
-				 unsigned int *r_type, unsigned int *r_sym)
+void get_rel_type_and_sym(struct elf_info *elf, uint64_t r_info,
+			  unsigned int *r_type, unsigned int *r_sym)
 {
 	typedef struct {
 		Elf64_Word    r_sym;	/* Symbol index */
