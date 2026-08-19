@@ -4380,11 +4380,11 @@ xfs_bmapi_convert_one_delalloc(
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
 	xfs_trans_ijoin(tp, ip, 0);
 
-	error = xfs_iext_count_extend(tp, ip, whichfork,
-			XFS_IEXT_ADD_NOSPLIT_CNT);
-	if (error)
-		goto out_trans_cancel;
-
+	/*
+	 * Look up the extent before extending the extent count so that we
+	 * don't dirty the transaction if there is nothing to convert. A
+	 * dirty transaction cancellation on -EAGAIN would shutdown the fs.
+	 */
 	if (!xfs_iext_lookup_extent(ip, ifp, offset_fsb, &bma.icur, &bma.got) ||
 	    bma.got.br_startoff > offset_fsb) {
 		/*
@@ -4408,6 +4408,11 @@ xfs_bmapi_convert_one_delalloc(
 			*seq = READ_ONCE(ifp->if_seq);
 		goto out_trans_cancel;
 	}
+
+	error = xfs_iext_count_extend(tp, ip, whichfork,
+			XFS_IEXT_ADD_NOSPLIT_CNT);
+	if (error)
+		goto out_trans_cancel;
 
 	bma.tp = tp;
 	bma.ip = ip;
