@@ -128,6 +128,8 @@ static const struct irq_bit_descr irqdata_states[] = {
 	BIT_MASK_DESCR(IRQD_IRQ_ENABLED_ON_SUSPEND),
 
 	BIT_MASK_DESCR(IRQD_RESEND_WHEN_IN_PROGRESS),
+
+	BIT_MASK_DESCR(IRQD_MODERATED),
 };
 
 static const struct irq_bit_descr irqdesc_states[] = {
@@ -140,6 +142,7 @@ static const struct irq_bit_descr irqdesc_states[] = {
 	BIT_MASK_DESCR(_IRQ_IS_POLLED),
 	BIT_MASK_DESCR(_IRQ_DISABLE_UNLAZY),
 	BIT_MASK_DESCR(_IRQ_HIDDEN),
+	BIT_MASK_DESCR(_IRQ_MODERATABLE),
 };
 
 static const struct irq_bit_descr irqdesc_istates[] = {
