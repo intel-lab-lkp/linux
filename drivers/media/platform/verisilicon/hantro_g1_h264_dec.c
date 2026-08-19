@@ -255,8 +255,10 @@ int hantro_g1_h264_dec_run(struct hantro_ctx *ctx)
 
 	/* Prepare the H264 decoder context. */
 	ret = hantro_h264_dec_prepare_run(ctx);
-	if (ret)
+	if (ret) {
+		hantro_end_prepare_run(ctx, ret);
 		return ret;
+	}
 
 	/* Configure hardware registers. */
 	src_buf = hantro_get_src_buf(ctx);

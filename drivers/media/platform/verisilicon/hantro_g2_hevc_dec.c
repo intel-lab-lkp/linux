@@ -596,7 +596,7 @@ int hantro_g2_hevc_dec_run(struct hantro_ctx *ctx)
 	/* Prepare HEVC decoder context. */
 	ret = hantro_hevc_dec_prepare_run(ctx);
 	if (ret)
-		return ret;
+		goto end_prepare_run;
 
 	/* Configure hardware registers. */
 	set_params(ctx);
@@ -604,7 +604,7 @@ int hantro_g2_hevc_dec_run(struct hantro_ctx *ctx)
 	/* set reference pictures */
 	ret = set_ref(ctx);
 	if (ret)
-		return ret;
+		goto end_prepare_run;
 
 	set_buffers(ctx);
 	prepare_tile_info_buffer(ctx);
@@ -634,4 +634,9 @@ int hantro_g2_hevc_dec_run(struct hantro_ctx *ctx)
 	vdpu_write(vpu, G2_REG_INTERRUPT_DEC_E, G2_REG_INTERRUPT);
 
 	return 0;
+
+end_prepare_run:
+	hantro_end_prepare_run(ctx, ret);
+
+	return ret;
 }

@@ -473,8 +473,10 @@ int rockchip_vpu2_h264_dec_run(struct hantro_ctx *ctx)
 
 	/* Prepare the H264 decoder context. */
 	ret = hantro_h264_dec_prepare_run(ctx);
-	if (ret)
+	if (ret) {
+		hantro_end_prepare_run(ctx, ret);
 		return ret;
+	}
 
 	src_buf = hantro_get_src_buf(ctx);
 	set_params(ctx, src_buf);
