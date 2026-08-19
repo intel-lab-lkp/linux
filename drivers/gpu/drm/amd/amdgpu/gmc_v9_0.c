@@ -799,13 +799,18 @@ static void gmc_v9_0_flush_gpu_tlb(struct amdgpu_device *adev, uint32_t vmid,
 	 * properly under bare metal
 	 */
 	if (adev->gfx.kiq[inst].ring.sched.ready &&
-	    (amdgpu_sriov_runtime(adev) || !amdgpu_sriov_vf(adev))) {
+	    (amdgpu_sriov_runtime(adev) || !amdgpu_sriov_vf(adev)) &&
+	    atomic_read(&adev->gmc.kiq_flush_failures) <
+			AMDGPU_KIQ_FLUSH_MAX_FAIL) {
 		uint32_t req = hub->vm_inv_eng0_req + hub->eng_distance * eng;
 		uint32_t ack = hub->vm_inv_eng0_ack + hub->eng_distance * eng;
 
-		amdgpu_gmc_fw_reg_write_reg_wait(adev, req, ack, inv_req,
-						 1 << vmid, inst);
-		return;
+		if (!amdgpu_gmc_fw_reg_write_reg_wait(adev, req, ack, inv_req,
+						      1 << vmid, inst))
+			return;
+		/* KIQ submit failed - fall through to the MMIO path below
+		 * so the invalidation is not silently dropped
+		 */
 	}
 
 	/* This path is needed before KIQ/MES/GFXOFF are set up */
@@ -2246,6 +2251,11 @@ static void gmc_v9_0_gart_disable(struct amdgpu_device *adev)
 static int gmc_v9_0_hw_fini(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_device *adev = ip_block->adev;
+
+	/* KIQ is re-initialized on the next resume; give it a clean
+	 * start for the MMIO fallback latch
+	 */
+	atomic_set(&adev->gmc.kiq_flush_failures, 0);
 
 	gmc_v9_0_gart_disable(adev);
 
