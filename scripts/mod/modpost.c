@@ -1296,6 +1296,24 @@ static Elf_Addr addend_mips_rel(uint32_t *location, unsigned int r_type)
 	return (Elf_Addr)(-1);
 }
 
+Elf_Addr addend_rel(struct elf_info *elf, unsigned int secndx,
+		    unsigned int r_type, Elf_Addr r_offset, Elf_Sym *tsym)
+{
+	void *loc = sym_get_data_by_offset(elf, secndx, r_offset);
+
+	switch (elf->hdr->e_machine) {
+	case EM_386:
+		return addend_386_rel(loc, r_type);
+	case EM_ARM:
+		return addend_arm_rel(loc, tsym, r_type);
+	case EM_MIPS:
+		return addend_mips_rel(loc, r_type);
+	}
+
+	fatal("Please add code to calculate addend for this architecture\n");
+	return (Elf_Addr)(-1);
+}
+
 #ifndef EM_RISCV
 #define EM_RISCV		243
 #endif
@@ -1402,27 +1420,12 @@ static void section_rel(struct module *mod, struct elf_info *elf,
 		Elf_Sym *tsym;
 		Elf_Addr taddr, r_offset;
 		unsigned int r_type, r_sym;
-		void *loc;
 
 		r_offset = TO_NATIVE(rel->r_offset);
 		get_rel_type_and_sym(elf, rel->r_info, &r_type, &r_sym);
 
-		loc = sym_get_data_by_offset(elf, fsecndx, r_offset);
 		tsym = elf->symtab_start + r_sym;
-
-		switch (elf->hdr->e_machine) {
-		case EM_386:
-			taddr = addend_386_rel(loc, r_type);
-			break;
-		case EM_ARM:
-			taddr = addend_arm_rel(loc, tsym, r_type);
-			break;
-		case EM_MIPS:
-			taddr = addend_mips_rel(loc, r_type);
-			break;
-		default:
-			fatal("Please add code to calculate addend for this architecture\n");
-		}
+		taddr = addend_rel(elf, fsecndx, r_type, r_offset, tsym);
 
 		check_section_mismatch(mod, elf, tsym,
 				       fsecndx, fromsec, r_offset, taddr);
