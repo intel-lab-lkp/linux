@@ -451,18 +451,22 @@ static struct port_buffer *alloc_buf(struct virtio_device *vdev, size_t buf_size
 		/* Increase device refcnt to avoid freeing it */
 		get_device(buf->dev);
 		buf->buf = dma_alloc_coherent(buf->dev, buf_size, &buf->dma, gfp);
+		if (!buf->buf)
+			goto free_buf_and_put_dev;
 	} else {
 		buf->dev = NULL;
 		buf->buf = kmalloc(buf_size, gfp);
+		if (!buf->buf)
+			goto free_buf;
 	}
 
-	if (!buf->buf)
-		goto free_buf;
 	buf->len = 0;
 	buf->offset = 0;
 	buf->size = buf_size;
 	return buf;
 
+free_buf_and_put_dev:
+	put_device(buf->dev);
 free_buf:
 	kfree(buf);
 fail:
