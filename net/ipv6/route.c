@@ -6698,13 +6698,17 @@ struct ctl_table * __net_init ipv6_route_sysctl_init(struct net *net)
 	return table;
 }
 
-size_t ipv6_route_sysctl_table_size(struct net *net)
+struct ctl_table_header *ipv6_route_sysctl_register(struct net *net,
+						    const struct ctl_table *table)
 {
+	size_t table_size = ARRAY_SIZE(ipv6_route_table_template);
+
 	/* Don't export sysctls to unprivileged users */
 	if (net->user_ns != &init_user_ns)
-		return 1;
+		table_size = 1;
 
-	return ARRAY_SIZE(ipv6_route_table_template);
+	return register_net_sysctl_sz(net, "net/ipv6/route", table,
+				      table_size, ipv6_route_table_template);
 }
 #endif
 
