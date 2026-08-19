@@ -3,7 +3,6 @@
 .. include:: ../disclaimer-zh_TW.rst
 
 :Original: Documentation/dev-tools/index.rst
-:Translator: 趙軍奎 Bernard Zhao <bernard@vivo.com>
 
 ============
 內核開發工具
