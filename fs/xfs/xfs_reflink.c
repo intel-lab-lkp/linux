@@ -775,7 +775,7 @@ xfs_reflink_update_quota(
  * requirements as low as possible.
  */
 STATIC int
-xfs_reflink_end_cow_extent_locked(
+xfs_reflink_end_cow_extent(
 	struct xfs_trans	*tp,
 	struct xfs_inode	*ip,
 	xfs_fileoff_t		*offset_fsb,
@@ -887,42 +887,6 @@ xfs_reflink_end_cow_extent_locked(
  * every remap operation and we'd like to keep the block reservation
  * requirements as low as possible.
  */
-STATIC int
-xfs_reflink_end_cow_extent(
-	struct xfs_trans	*tp,
-	struct xfs_inode	*ip,
-	xfs_fileoff_t		*offset_fsb,
-	xfs_fileoff_t		end_fsb)
-{
-	struct xfs_mount	*mp = ip->i_mount;
-	unsigned int		resblks;
-	bool			local_tp = false;
-	int			error;
-
-	if (tp)
-		goto end_cow;
-
-	resblks = XFS_EXTENTADD_SPACE_RES(mp, XFS_DATA_FORK);
-	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, resblks, 0,
-			XFS_TRANS_RESERVE, &tp);
-	if (error)
-		return error;
-	xfs_ilock(ip, XFS_ILOCK_EXCL);
-	xfs_trans_ijoin(tp, ip, 0);
-	local_tp = true;
-
-end_cow:
-	error = xfs_reflink_end_cow_extent_locked(tp, ip, offset_fsb, end_fsb);
-	if (!local_tp)
-		return error;
-	if (error)
-		xfs_trans_cancel(tp);
-	else
-		error = xfs_trans_commit(tp);
-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
-	return error;
-}
-
 /*
  * Remap parts of a file's data fork after a successful CoW.
  *
@@ -1023,7 +987,7 @@ xfs_reflink_end_atomic_cow(
 	xfs_trans_ijoin(tp, ip, 0);
 
 	while (end_fsb > offset_fsb && !error) {
-		error = xfs_reflink_end_cow_extent_locked(tp, ip, &offset_fsb,
+		error = xfs_reflink_end_cow_extent(tp, ip, &offset_fsb,
 				end_fsb);
 	}
 	if (error) {
