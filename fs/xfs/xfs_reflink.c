@@ -493,6 +493,7 @@ convert:
 
 static int
 xfs_reflink_fill_delalloc(
+	struct xfs_trans	**tpp,
 	struct xfs_inode	*ip,
 	struct xfs_bmbt_irec	*imap,
 	struct xfs_bmbt_irec	*cmap,
@@ -501,12 +502,12 @@ xfs_reflink_fill_delalloc(
 	bool			convert_now)
 {
 	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_trans	*tp;
+	struct xfs_trans	*tp = *tpp;
 	int			nimaps;
 	int			error;
 	bool			found;
 
-	do {
+	if (!tp) {
 		unsigned int	seq_before = READ_ONCE(ip->i_df.if_seq);
 
 		xfs_iunlock(ip, *lockmode);
@@ -535,16 +536,16 @@ xfs_reflink_fill_delalloc(
 			if (error)
 				goto out_trans_cancel;
 		}
+	}
 
+	do {
 		error = xfs_find_trim_cow_extent(ip, imap, cmap, shared,
 				&found);
 		if (error || !*shared)
 			goto out_trans_cancel;
 
-		if (found) {
-			xfs_trans_cancel(tp);
+		if (found)
 			break;
-		}
 
 		ASSERT(isnullstartblock(cmap->br_startblock) ||
 		       cmap->br_startblock == DELAYSTARTBLOCK);
@@ -561,15 +562,27 @@ xfs_reflink_fill_delalloc(
 			goto out_trans_cancel;
 
 		xfs_inode_set_cowblocks_tag(ip);
+
+		error = xfs_defer_finish(&tp);
+		if (error)
+			goto out_trans_cancel;
+	} while (cmap->br_startoff + cmap->br_blockcount <= imap->br_startoff);
+
+	if (*tpp) {
+		*tpp = tp;
+	} else {
 		error = xfs_trans_commit(tp);
 		if (error)
 			return error;
-	} while (cmap->br_startoff + cmap->br_blockcount <= imap->br_startoff);
+	}
 
 	return xfs_reflink_convert_unwritten(ip, imap, cmap, convert_now);
 
 out_trans_cancel:
-	xfs_trans_cancel(tp);
+	if (*tpp)
+		*tpp = tp;
+	else
+		xfs_trans_cancel(tp);
 	return error;
 }
 
@@ -622,7 +635,7 @@ xfs_reflink_allocate_cow(
 	ASSERT(!*tpp);
 	if (isnullstartblock(cmap->br_startblock) ||
 	    cmap->br_startblock == DELAYSTARTBLOCK)
-		return xfs_reflink_fill_delalloc(ip, imap, cmap, shared,
+		return xfs_reflink_fill_delalloc(tpp, ip, imap, cmap, shared,
 				lockmode, convert_now);
 
 	/* Shouldn't get here. */
