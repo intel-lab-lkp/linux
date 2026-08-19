@@ -706,10 +706,7 @@ static void hl_pci_reset_done(struct pci_dev *pdev)
 	hl_device_reset(hdev, flags);
 }
 
-static const struct dev_pm_ops hl_pm_ops = {
-	.suspend = hl_pmops_suspend,
-	.resume = hl_pmops_resume,
-};
+static SIMPLE_DEV_PM_OPS(hl_pm_ops, hl_pmops_suspend, hl_pmops_resume);
 
 static const struct pci_error_handlers hl_pci_err_handler = {
 	.error_detected = hl_pci_err_detected,
