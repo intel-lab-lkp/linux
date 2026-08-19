@@ -919,29 +919,23 @@ retry:
 	if (error == -EAGAIN) {
 		/*
 		 * COW allocation needs a transaction. Drop the ILOCK and
-		 * allocate a transaction, which will re-acquire the ILOCK.
-		 * Then retry the imap lookup since the extent tree may have
-		 * changed while the ILOCK was not held.
+		 * allocate a zero-block reservation transaction, which will
+		 * re-acquire the ILOCK. We cannot determine what extent type
+		 * will be found once we've regained the ILOCK, so the callees
+		 * will use xfs_trans_reserve_more_inode() directly to reserve
+		 * any blocks they require before they start modifications.
+		 * This allows ENOSPC to be returned and the transaction
+		 * cancelled safely if the block reservation cannot be made.
+		 *
+		 * Retry the imap lookup since the extent tree may have changed
+		 * while the ILOCK was not held.
 		 */
-		xfs_filblks_t		resaligned;
-		unsigned int		dblocks, rblocks;
-
 		ASSERT(!tp);
 
 		xfs_iunlock(ip, *lockmode);
 
-		resaligned = xfs_aligned_fsb_count(offset_fsb,
-				end_fsb - offset_fsb, xfs_get_cowextsz_hint(ip));
-		if (XFS_IS_REALTIME_INODE(ip)) {
-			dblocks = XFS_DIOSTRAT_SPACE_RES(mp, 0);
-			rblocks = resaligned;
-		} else {
-			dblocks = XFS_DIOSTRAT_SPACE_RES(mp, resaligned);
-			rblocks = 0;
-		}
-
 		error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write,
-				dblocks, rblocks, false, &tp);
+				0, 0, false, &tp);
 		if (error)
 			return error;
 
