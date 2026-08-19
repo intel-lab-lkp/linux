@@ -707,8 +707,9 @@ static void request_wait_answer(struct fuse_req *req)
 
 	if (!fch->no_interrupt) {
 		/* Any signal may interrupt this */
-		err = wait_event_interruptible(req->waitq,
-					test_bit(FR_FINISHED, &req->flags));
+		err = wait_event_state(req->waitq,
+				       test_bit(FR_FINISHED, &req->flags),
+				       (TASK_INTERRUPTIBLE | TASK_FREEZABLE));
 		if (!err)
 			return;
 
@@ -723,8 +724,9 @@ static void request_wait_answer(struct fuse_req *req)
 		bool removed;
 
 		/* Only fatal signals may interrupt this */
-		err = wait_event_killable(req->waitq,
-					test_bit(FR_FINISHED, &req->flags));
+		err = wait_event_state(req->waitq,
+				       test_bit(FR_FINISHED, &req->flags),
+				       (TASK_KILLABLE | TASK_FREEZABLE));
 		if (!err)
 			return;
 
@@ -746,7 +748,8 @@ wait_for_finish:
 	 * Either request is already in userspace, or it was forced.
 	 * Wait it out.
 	 */
-	wait_event(req->waitq, test_bit(FR_FINISHED, &req->flags));
+	wait_event_state(req->waitq, test_bit(FR_FINISHED, &req->flags),
+			 (TASK_UNINTERRUPTIBLE | TASK_FREEZABLE));
 }
 
 static void __fuse_request_send(struct fuse_req *req)
