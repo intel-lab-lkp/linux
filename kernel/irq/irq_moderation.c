@@ -11,6 +11,8 @@
 #include <linux/irqdesc.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/suspend.h>
 
 #include "internals.h"
@@ -23,6 +25,21 @@
  * rate across the entire platform becomes too high. To address the problem,
  * GSIM runs after the handler to implement software interrupt moderation
  * with programmable delay.
+ *
+ * Configuration is done at runtime via procfs
+ *   echo ${VALUE} > /proc/irq/sw_moderation/${NAME}
+ *
+ * Supported parameters:
+ *
+ *   delay_us (default 0, suggested 100, 0 off, range 0-500)
+ *       Maximum moderation delay. A reasonable range is 20-100. Higher values
+ *       can be useful if the hardirq handler has long runtimes.
+ *
+ * Moderation is allowed/disallowed dynamically for individual interrupts with
+ *   echo 1 > /proc/irq/NN/allow_sw_moderation # use 0 to disallow
+ *
+ * Monitoring of per-cpu and global statistics is available via procfs
+ *   cat /proc/irq/sw_moderation/stats
  *
  * === ARCHITECTURE ===
  *
@@ -101,6 +118,8 @@ DEFINE_PER_CPU_ALIGNED(struct irq_mod_state, irq_mod_state);
 
 DEFINE_STATIC_KEY_FALSE(irq_moderation_enabled_key);
 
+static DEFINE_MUTEX(swmod_mutex);
+
 static void update_enable_key(void)
 {
 	if (irq_mod_params.delay_ns != 0)
@@ -137,6 +156,185 @@ bool irq_moderation_do_start(struct irq_desc *desc, struct irq_mod_state *m)
 	irqd_set(&desc->irq_data, IRQD_IRQ_INPROGRESS | IRQD_MODERATED);
 	__disable_irq(desc);
 	return true;
+}
+
+/*
+ * struct var_info - target and limits for parameters
+ * @ptr:	pointer to the value, NULL if not used.
+ * @min:	minimum value allowed
+ * @max:	maximum value allowed
+ * @scale:	scale factor between procfs and internal.
+ */
+struct var_info {
+	unsigned int	*ptr;
+	unsigned int	min;
+	unsigned int	max;
+	unsigned int	scale;
+};
+
+/*
+ * struct swmod_procfs_entry - description for procfs entries and parameter limits
+ * @name:	name in procfs. If NULL, the entry is only for limit checks.
+ * @wr:		write handler for procfs. NULL if readonly
+ * @rd:		read handler for procfs.
+ * @var:	variable address and limits, if used.
+ */
+struct swmod_procfs_entry {
+	const char	*name;
+	ssize_t		(*wr)(struct var_info *n, const char __user *s, size_t count);
+	void		(*rd)(struct seq_file *p);
+	struct var_info	var;
+};
+
+static ssize_t swmod_wr(struct var_info *v, const char __user *s, size_t count)
+{
+	unsigned int value;
+	int ret;
+
+	ret = kstrtouint_from_user(s, count, 0, &value);
+	if (ret)
+		return ret;
+	if (value < v->min || value > v->max)
+		return -ERANGE;
+	WRITE_ONCE(*v->ptr, value * v->scale);
+	return count;
+}
+
+static void swmod_rd(struct seq_file *p)
+{
+	struct swmod_procfs_entry *n = p->private;
+
+	seq_printf(p, "%u\n", *n->var.ptr / n->var.scale);
+}
+
+static ssize_t swmod_wr_delay(struct var_info *v, const char __user *s, size_t count)
+{
+	ssize_t ret = swmod_wr(v, s, count);
+
+	if (ret >= 0)
+		update_enable_key();
+	return ret;
+}
+
+#define HEAD_FMT "%5s  %8s  %11s  %11s\n"
+#define BODY_FMT "%5u  %8u  %11u  %11u\n"
+
+/* Print statistics */
+static void rd_stats(struct seq_file *p)
+{
+	unsigned int delay_ns = READ_ONCE(irq_mod_params.delay_ns);
+	int cpu;
+
+	if (delay_ns == 0)
+		return;
+	seq_printf(p, HEAD_FMT,
+		   "# CPU", "delay_ns", "timer_set", "enqueue");
+
+	for_each_possible_cpu(cpu) {
+		/* Copy statistics, will only use some unsigned int values; races ok. */
+		struct irq_mod_state cur = data_race(*per_cpu_ptr(&irq_mod_state, cpu));
+
+		seq_printf(p, BODY_FMT,
+			   cpu,
+			   delay_ns,
+			   cur.timer_set,
+			   cur.enqueue);
+	}
+
+	seq_printf(p, "\n"
+		   "delay_us             %lu\n",
+		   delay_ns / NSEC_PER_USEC);
+}
+
+static int param_show(struct seq_file *p, void *v)
+{
+	struct swmod_procfs_entry *n = p->private;
+
+	n->rd(p);
+	return 0;
+}
+
+static int param_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, param_show, pde_data(inode));
+}
+
+static ssize_t param_write(struct file *f, const char __user *buf, size_t count, loff_t *ppos)
+{
+	struct swmod_procfs_entry *n = (struct swmod_procfs_entry *)pde_data(file_inode(f));
+	ssize_t ret;
+
+	if (!n->wr)
+		return -EINVAL;
+	mutex_lock(&swmod_mutex);
+	ret = n->wr(&n->var, buf, count);
+	mutex_unlock(&swmod_mutex);
+	return ret;
+}
+
+static const struct proc_ops param_ops = {
+	.proc_open	= param_open,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
+	.proc_write	= param_write,
+};
+
+/* Handlers for /proc/irq/NN/allow_sw_moderation */
+static int allow_flag_show(struct seq_file *p, void *v)
+{
+	struct irq_desc *desc = irq_to_desc((long)p->private);
+
+	if (!desc)
+		return -ENODEV;
+
+	seq_puts(p, irq_settings_moderatable(desc) ? "on\n" : "off\n");
+	return 0;
+}
+
+
+static ssize_t allow_flag_write(struct file *f, const char __user *buf, size_t count, loff_t *ppos)
+{
+	struct irq_desc *desc = irq_to_desc((long)pde_data(file_inode(f)));
+	bool allow;
+	int ret;
+
+	if (!desc)
+		return -ENODEV;
+
+	ret = kstrtobool_from_user(buf, count, &allow);
+
+	if (!ret) {
+		guard(raw_spinlock_irq)(&desc->lock);
+		ret = irq_moderation_allow(desc, allow);
+	}
+	return ret ? : count;
+}
+
+static int allow_flag_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, allow_flag_show, pde_data(inode));
+}
+
+static const struct proc_ops allow_flag_ops = {
+	.proc_open	= allow_flag_open,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
+	.proc_write	= allow_flag_write,
+};
+
+void irq_moderation_procfs_add(struct irq_desc *desc, umode_t umode)
+{
+	if (!irq_moderation_supported(desc))
+		return;
+	proc_create_data("allow_sw_moderation", umode, desc->dir,
+			 &allow_flag_ops, (void *)(long)desc->irq_data.irq);
+}
+
+void irq_moderation_procfs_remove(struct irq_desc *desc)
+{
+	remove_proc_entry("allow_sw_moderation", desc->dir);
 }
 
 static void clean_moderation_state(struct irq_desc *desc)
@@ -267,10 +465,41 @@ struct notifier_block mod_nb = {
 	.priority	= 100,
 };
 
+/* Helper to initialize the struct var_info. */
+#define SET_VAR(_ptr, _min, _max, _scale)					\
+	{ .ptr = (_ptr), .min = (_min), .max = (_max), .scale = (_scale), }
+
+static struct swmod_procfs_entry procfs_entries[] = {
+	{
+		.name	= "delay_us",
+		.wr	= swmod_wr_delay,
+		.rd	= swmod_rd,
+		.var	= SET_VAR(&irq_mod_params.delay_ns, 0, 500, NSEC_PER_USEC),
+	},
+	{
+		.name = "stats",
+		.rd = rd_stats,
+	},
+};
+
 static int __init init_irq_moderation(void)
 {
+	struct proc_dir_entry *dir;
 	int cpuhp_state;
-	int ret;
+	int i, ret;
+
+	for (i = 0; i < ARRAY_SIZE(procfs_entries); i++) {
+		struct var_info *v = &procfs_entries[i].var;
+
+		if (!v->ptr)
+			continue;
+		if (*v->ptr >= v->min * v->scale && *v->ptr <= v->max * v->scale)
+			continue;
+		pr_err("%s: Parameter %s: value %u out of bounds [%u,%u]\n",
+		       __func__, procfs_entries[i].name ? : "no-name",
+		       *v->ptr / v->scale, v->min, v->max);
+		return -ERANGE;
+	}
 
 	cpuhp_state = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "sw_moderation",
 					cpu_setup_cb, cpu_remove_cb);
@@ -285,9 +514,34 @@ static int __init init_irq_moderation(void)
 		goto cleanup;
 	}
 
+	/* Safe because /proc/irq is created earlier, in kernel_init_freeable(). */
+	dir = proc_mkdir("irq/sw_moderation", NULL);
+	if (!dir) {
+		pr_err("%s: Failed to create procfs directory\n", __func__);
+		goto cleanup_1;
+	}
+	for (i = 0; i < ARRAY_SIZE(procfs_entries); i++) {
+		struct swmod_procfs_entry *n = &procfs_entries[i];
+
+		if (!n->name || proc_create_data(n->name, n->wr ? 0644 : 0444, dir, &param_ops, n))
+			continue;
+		pr_err("%s: Failed to create procfs entry %s\n", __func__, n->name);
+		for (i--; i >= 0; i--) {
+			n = &procfs_entries[i];
+			if (n->name)
+				remove_proc_entry(n->name, dir);
+		}
+		remove_proc_entry("irq/sw_moderation", NULL);
+		goto cleanup_1;
+	}
+
 	/* Enable if the defaults require it. */
 	update_enable_key();
 	return 0;
+
+cleanup_1:
+	ret = -ENOMEM;
+	unregister_pm_notifier(&mod_nb);
 
 cleanup:
 	cpuhp_remove_state(cpuhp_state);

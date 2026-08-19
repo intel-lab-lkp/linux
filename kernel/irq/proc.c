@@ -379,6 +379,7 @@ void register_irq_proc(unsigned int irq, struct irq_desc *desc)
 				irq_effective_aff_list_proc_show, irqp);
 # endif
 #endif
+	irq_moderation_procfs_add(desc, 0644);
 	proc_create_single_data("spurious", 0444, desc->dir,
 				irq_spurious_proc_show, (void *)(long)irq);
 
@@ -400,6 +401,7 @@ void unregister_irq_proc(unsigned int irq, struct irq_desc *desc)
 	remove_proc_entry("effective_affinity_list", desc->dir);
 # endif
 #endif
+	irq_moderation_procfs_remove(desc);
 	remove_proc_entry("spurious", desc->dir);
 
 	snprintf(name, MAX_NAMELEN, "%u", irq);

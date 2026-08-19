@@ -403,6 +403,8 @@ static inline void irq_moderation_init_fields(struct irq_desc *desc)
 
 int irq_moderation_allow(struct irq_desc *desc, bool allow);
 bool irq_moderation_supported(struct irq_desc *desc);
+void irq_moderation_procfs_add(struct irq_desc *desc, umode_t umode);
+void irq_moderation_procfs_remove(struct irq_desc *desc);
 #else
 static inline void irq_moderation_init_fields(struct irq_desc *desc) {}
 static inline int irq_moderation_allow(struct irq_desc *desc, bool allow)
@@ -410,4 +412,6 @@ static inline int irq_moderation_allow(struct irq_desc *desc, bool allow)
 	return allow ? -EOPNOTSUPP : 0;
 }
 static inline bool irq_moderation_supported(struct irq_desc *desc) { return false; }
+static inline void irq_moderation_procfs_add(struct irq_desc *desc, umode_t umode) {}
+static inline void irq_moderation_procfs_remove(struct irq_desc *desc) {}
 #endif
