@@ -16,9 +16,13 @@
 #include <linux/iopoll.h>
 #include <linux/irqdomain.h>
 #include <linux/rcupdate.h>
+#include <linux/sizes.h>
 #include <linux/generic_pt/iommu.h>
 
 #include "iommu-bits.h"
+
+/* IOVA base for the SW MSI reservation; same convention as ARM SMMU. */
+#define RISCV_IOMMU_MSI_IOVA_BASE	SZ_128M
 
 /* This struct contains protection domain specific IOMMU driver data. */
 struct riscv_iommu_domain {
@@ -93,6 +97,7 @@ void riscv_iommu_ir_irq_domain_remove(struct device *dev, struct riscv_iommu_inf
 int riscv_iommu_ir_attach_paging_domain(struct iommu_domain *iommu_domain, struct device *dev,
 					struct iommu_domain *old);
 void riscv_iommu_ir_free_paging_domain(struct iommu_domain *iommu_domain);
+void riscv_iommu_ir_get_resv_regions(struct device *dev, struct list_head *head);
 
 #define riscv_iommu_readl(iommu, addr) \
 	readl_relaxed((iommu)->reg + (addr))
