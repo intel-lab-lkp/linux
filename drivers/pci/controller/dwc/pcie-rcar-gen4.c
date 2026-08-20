@@ -487,6 +487,8 @@ static int rcar_gen4_pcie_ep_pre_init(struct dw_pcie_ep *ep)
 	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
 	int ret;
 
+	writel(0, rcar->base + PCIEDMAINTSTSEN);
+
 	ret = rcar_gen4_pcie_common_init(rcar);
 	if (ret)
 		return ret;
@@ -496,8 +498,11 @@ static int rcar_gen4_pcie_ep_pre_init(struct dw_pcie_ep *ep)
 	return 0;
 }
 
-static void rcar_gen4_pcie_ep_deinit(struct rcar_gen4_pcie *rcar)
+static void rcar_gen4_pcie_ep_post_deinit(struct dw_pcie_ep *ep)
 {
+	struct dw_pcie *dw = to_dw_pcie_from_ep(ep);
+	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
+
 	writel(0, rcar->base + PCIEDMAINTSTSEN);
 	rcar_gen4_pcie_common_deinit(rcar);
 }
@@ -552,6 +557,7 @@ static unsigned int rcar_gen4_pcie_ep_get_dbi2_offset(struct dw_pcie_ep *ep,
 
 static const struct dw_pcie_ep_ops pcie_ep_ops = {
 	.pre_init = rcar_gen4_pcie_ep_pre_init,
+	.post_deinit = rcar_gen4_pcie_ep_post_deinit,
 	.raise_irq = rcar_gen4_pcie_ep_raise_irq,
 	.get_features = rcar_gen4_pcie_ep_get_features,
 	.get_dbi_offset = rcar_gen4_pcie_ep_get_dbi_offset,
@@ -570,16 +576,13 @@ static int rcar_gen4_add_dw_pcie_ep(struct rcar_gen4_pcie *rcar)
 	ep->ops = &pcie_ep_ops;
 
 	ret = dw_pcie_ep_init(ep);
-	if (ret) {
-		rcar_gen4_pcie_ep_deinit(rcar);
+	if (ret)
 		return ret;
-	}
 
 	ret = dw_pcie_ep_init_registers(ep);
 	if (ret) {
 		dev_err(dev, "Failed to initialize DWC endpoint registers\n");
 		dw_pcie_ep_deinit(ep);
-		rcar_gen4_pcie_ep_deinit(rcar);
 	}
 
 	pci_epc_init_notify(ep->epc);
@@ -590,7 +593,6 @@ static int rcar_gen4_add_dw_pcie_ep(struct rcar_gen4_pcie *rcar)
 static void rcar_gen4_remove_dw_pcie_ep(struct rcar_gen4_pcie *rcar)
 {
 	dw_pcie_ep_deinit(&rcar->dw.ep);
-	rcar_gen4_pcie_ep_deinit(rcar);
 }
 
 /* Common */
