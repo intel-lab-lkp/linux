@@ -382,7 +382,7 @@ static const struct drm_panel_funcs td043mtea1_funcs = {
  * Power Management, Probe and Remove
  */
 
-static int __maybe_unused td043mtea1_suspend(struct device *dev)
+static int td043mtea1_suspend(struct device *dev)
 {
 	struct td043mtea1_panel *lcd = dev_get_drvdata(dev);
 
@@ -396,7 +396,7 @@ static int __maybe_unused td043mtea1_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused td043mtea1_resume(struct device *dev)
+static int td043mtea1_resume(struct device *dev)
 {
 	struct td043mtea1_panel *lcd = dev_get_drvdata(dev);
 	int ret;
@@ -413,7 +413,7 @@ static int __maybe_unused td043mtea1_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(td043mtea1_pm_ops, td043mtea1_suspend,
+static DEFINE_SIMPLE_DEV_PM_OPS(td043mtea1_pm_ops, td043mtea1_suspend,
 			 td043mtea1_resume);
 
 static int td043mtea1_probe(struct spi_device *spi)
@@ -492,7 +492,7 @@ static struct spi_driver td043mtea1_driver = {
 	.id_table	= td043mtea1_ids,
 	.driver		= {
 		.name	= "panel-tpo-td043mtea1",
-		.pm	= &td043mtea1_pm_ops,
+		.pm	= pm_sleep_ptr(&td043mtea1_pm_ops),
 		.of_match_table = td043mtea1_of_match,
 	},
 };

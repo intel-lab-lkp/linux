@@ -149,7 +149,7 @@ static const struct drm_panel_funcs nl8048_funcs = {
 	.get_modes = nl8048_get_modes,
 };
 
-static int __maybe_unused nl8048_suspend(struct device *dev)
+static int nl8048_suspend(struct device *dev)
 {
 	struct nl8048_panel *lcd = dev_get_drvdata(dev);
 
@@ -159,7 +159,7 @@ static int __maybe_unused nl8048_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused nl8048_resume(struct device *dev)
+static int nl8048_resume(struct device *dev)
 {
 	struct nl8048_panel *lcd = dev_get_drvdata(dev);
 
@@ -171,7 +171,7 @@ static int __maybe_unused nl8048_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(nl8048_pm_ops, nl8048_suspend, nl8048_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(nl8048_pm_ops, nl8048_suspend, nl8048_resume);
 
 static int nl8048_probe(struct spi_device *spi)
 {
@@ -239,7 +239,7 @@ static struct spi_driver nl8048_driver = {
 	.id_table	= nl8048_ids,
 	.driver		= {
 		.name	= "panel-nec-nl8048hl11",
-		.pm	= &nl8048_pm_ops,
+		.pm	= pm_sleep_ptr(&nl8048_pm_ops),
 		.of_match_table = nl8048_of_match,
 	},
 };
