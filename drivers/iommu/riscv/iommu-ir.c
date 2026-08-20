@@ -4,8 +4,11 @@
  *
  * Copyright (c) 2026 Qualcomm Technologies, Inc.
  */
+#include <linux/acpi.h>
 #include <linux/cleanup.h>
 #include <linux/msi.h>
+#include <linux/of_irq.h>
+#include <linux/platform_device.h>
 #include <linux/slab.h>
 
 #include "iommu.h"
@@ -53,13 +56,34 @@ static const struct msi_parent_ops riscv_iommu_ir_msi_parent_ops = {
 	.init_dev_msi_info	= msi_parent_init_dev_msi_info,
 };
 
+static void riscv_iommu_ir_refresh_msi_domain(struct device *dev)
+{
+	struct fwnode_handle *fwnode = dev_fwnode(dev);
+	struct irq_domain *irqdomain;
+
+	if (dev_get_msi_domain(dev) || !dev_is_platform(dev))
+		return;
+
+	if (is_of_node(fwnode)) {
+		of_msi_configure(dev, to_of_node(fwnode));
+	} else if (is_acpi_device_node(fwnode)) {
+		fwnode = imsic_acpi_get_fwnode(dev);
+		irqdomain = irq_find_matching_fwnode(fwnode, DOMAIN_BUS_PLATFORM_MSI);
+		if (irqdomain)
+			dev_set_msi_domain(dev, irqdomain);
+	}
+}
+
 struct irq_domain *riscv_iommu_ir_irq_domain_create(struct device *dev,
 						    struct riscv_iommu_info *info)
 {
-	struct irq_domain *irqparent = dev_get_msi_domain(dev);
+	struct irq_domain *irqparent;
 	char *fwname __free(kfree) = NULL;
 	struct irq_domain *irqdomain;
 	struct fwnode_handle *fn;
+
+	riscv_iommu_ir_refresh_msi_domain(dev);
+	irqparent = dev_get_msi_domain(dev);
 
 	if (!irqparent)
 		return NULL;
