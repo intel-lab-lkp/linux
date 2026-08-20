@@ -17,7 +17,6 @@
 #include <linux/irq.h>
 #include <linux/kernel.h>
 #include <linux/of_clk.h>
-#include <linux/profile.h>
 #include <linux/sched.h>
 #include <linux/sched_clock.h>
 #include <linux/smp.h>

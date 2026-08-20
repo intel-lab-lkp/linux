@@ -17,7 +17,6 @@
 #include <linux/smp.h>
 #include <linux/timex.h>
 #include <linux/errno.h>
-#include <linux/profile.h>
 #include <linux/stacktrace.h>
 #include <linux/syscore_ops.h>
 #include <linux/timer.h>

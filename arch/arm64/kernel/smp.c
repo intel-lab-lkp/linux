@@ -16,7 +16,6 @@
 #include <linux/sched/task_stack.h>
 #include <linux/interrupt.h>
 #include <linux/cache.h>
-#include <linux/profile.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/err.h>
