@@ -38,11 +38,15 @@ static int u_boot_env_read_post_process_ethaddr(void *context, const char *id, i
 {
 	u8 mac[ETH_ALEN];
 
+	/* Handle quotation which increases length by 2 bytes if present. */
 	if (bytes != MAC_ADDR_STR_LEN)
-		return -EINVAL;
+		if (bytes != MAC_ADDR_STR_LEN + 2 && !(*(char *)buf == '"' || *(char *)buf == '\''))
+			return -EINVAL;
 
+	/* Handle quotation which offsets data by 1 byte if present. */
 	if (!mac_pton(buf, mac))
-		return -EINVAL;
+		if (!mac_pton(buf + 1, mac))
+			return -EINVAL;
 
 	if (index)
 		eth_addr_add(mac, index);
