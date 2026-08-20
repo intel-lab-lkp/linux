@@ -344,14 +344,14 @@ Paperkey。
 
 .. note::
 
-    如果你位列于 MAINTAINERS 中或在 kernel.org 上拥有帐户，则你有
-    资格获得Linux 基金会提供的_`qualify for a free Nitrokey Start` 。
+    如果你被列在 MAINTAINERS 的 `M:` 条目中，或者拥有 kernel.org 帐户，
+    则有资格获得 Linux 基金会提供的 `免费 Nitrokey Start`_。
 
 .. _`Nitrokey Start`: https://www.nitrokey.com/products/nitrokeys
 .. _`Nitrokey 3`: https://www.nitrokey.com/products/nitrokeys
 .. _`Yubikey 5`: https://www.yubico.com/products/yubikey-5-overview/
 .. _Gnuk: https://www.fsij.org/doc-gnuk/
-.. _`qualify for a free Nitrokey Start`: https://www.kernel.org/nitrokey-digital-tokens-for-kernel-developers.html
+.. _`免费 Nitrokey Start`: https://www.kernel.org/nitrokey-digital-tokens-for-kernel-developers.html
 
 配置你的智能卡设备
 ------------------
