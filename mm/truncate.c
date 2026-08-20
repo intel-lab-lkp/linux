@@ -603,15 +603,6 @@ unsigned long invalidate_mapping_pages(struct address_space *mapping,
 }
 EXPORT_SYMBOL(invalidate_mapping_pages);
 
-static int folio_launder(struct address_space *mapping, struct folio *folio)
-{
-	if (!folio_test_dirty(folio))
-		return 0;
-	if (folio->mapping != mapping || mapping->a_ops->launder_folio == NULL)
-		return 0;
-	return mapping->a_ops->launder_folio(folio);
-}
-
 /*
  * This is like mapping_evict_folio(), except it ignores the folio's
  * refcount.  We do this because invalidate_inode_pages2() needs stronger
@@ -623,7 +614,6 @@ int folio_unmap_invalidate(struct address_space *mapping, struct folio *folio,
 			   gfp_t gfp)
 {
 	void (*free_folio)(struct folio *);
-	int ret;
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 
@@ -631,9 +621,8 @@ int folio_unmap_invalidate(struct address_space *mapping, struct folio *folio,
 		unmap_mapping_folio(folio);
 	BUG_ON(folio_mapped(folio));
 
-	ret = folio_launder(mapping, folio);
-	if (ret)
-		return ret;
+	if (folio_test_dirty(folio))
+		return -EBUSY;
 	if (folio->mapping != mapping)
 		return -EBUSY;
 	if (!filemap_release_folio(folio, gfp))

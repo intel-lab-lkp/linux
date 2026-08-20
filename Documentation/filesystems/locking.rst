@@ -261,7 +261,6 @@ prototypes::
 	int (*direct_IO)(struct kiocb *, struct iov_iter *iter);
 	int (*migrate_folio)(struct address_space *, struct folio *dst,
 			struct folio *src, enum migrate_mode);
-	int (*launder_folio)(struct folio *);
 	bool (*is_partially_uptodate)(struct folio *, size_t from, size_t count);
 	int (*error_remove_folio)(struct address_space *, struct folio *);
 	int (*swap_activate)(struct swap_info_struct *sis, struct file *f, sector_t *span)
@@ -286,7 +285,6 @@ release_folio:		yes
 free_folio:		yes
 direct_IO:
 migrate_folio:		yes (both)
-launder_folio:		yes
 is_partially_uptodate:	yes
 error_remove_folio:	yes
 swap_activate:		no
@@ -343,12 +341,6 @@ try_to_free_buffers().
 
 ->free_folio() is called when the kernel has dropped the folio
 from the page cache.
-
-->launder_folio() may be called prior to releasing a folio if
-it is still found to be dirty. It returns zero if the folio was successfully
-cleaned, or an error value if not. Note that in order to prevent the folio
-getting mapped back in and redirtied, it needs to be kept locked
-across the entire operation.
 
 ->swap_activate() will be called to prepare the given file for swap.  It
 should perform any validation and preparation necessary to ensure that
