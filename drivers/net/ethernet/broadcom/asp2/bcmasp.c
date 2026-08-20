@@ -1106,21 +1106,20 @@ static int bcmasp_get_and_request_irq(struct bcmasp_priv *priv, int i)
 	return irq;
 }
 
-static void bcmasp_init_wol(struct bcmasp_priv *priv)
+static int bcmasp_init_wol(struct bcmasp_priv *priv)
 {
 	struct platform_device *pdev = priv->pdev;
-	struct device *dev = &pdev->dev;
 	int irq;
 
 	irq = bcmasp_get_and_request_irq(priv, 1);
-	if (irq < 0) {
-		dev_warn(dev, "Failed to init WoL irq: %d\n", irq);
-		return;
-	}
+	if (irq < 0)
+		return irq;
 
 	priv->wol_irq = irq;
 	priv->wol_irq_enabled_mask = 0;
 	device_set_wakeup_capable(&pdev->dev, 1);
+
+	return 0;
 }
 
 void bcmasp_enable_wol(struct bcmasp_intf *intf, bool en)
@@ -1321,7 +1320,9 @@ static int bcmasp_probe(struct platform_device *pdev)
 
 	bcmasp_core_init_filters(priv);
 
-	bcmasp_init_wol(priv);
+	ret = bcmasp_init_wol(priv);
+	if (ret)
+		goto err_clock_disable;
 
 	ports_node = of_find_node_by_name(dev->of_node, "ethernet-ports");
 	if (!ports_node) {
