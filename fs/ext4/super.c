@@ -5768,6 +5768,12 @@ failed_mount8: __maybe_unused
 failed_mount7:
 	ext4_unregister_li_request(sb);
 failed_mount6:
+	/*
+	 * The last commit can re-arm s_discard_work, so destroy the
+	 * journal before ext4_mb_release() flushes it.
+	 */
+	if (sbi->s_journal)
+		ext4_journal_destroy(sbi, sbi->s_journal);
 	ext4_mb_release(sb);
 	ext4_flex_groups_free(sbi);
 failed_mount5:
