@@ -418,6 +418,7 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 	struct scatterlist *sg;
 	struct list_head pages;
 	struct page *page, *tmp_page;
+	int nr_decrypted = 0;
 	int i, ret = -ENOMEM;
 
 	buffer = kzalloc_obj(*buffer);
@@ -472,6 +473,7 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 				goto free_pages;
 
 			clear_pages(page_address(page), 1 << compound_order(page));
+			nr_decrypted++;
 		}
 	}
 
@@ -496,9 +498,11 @@ free_pages:
 		 * Intentionally leak pages that cannot be re-encrypted
 		 * to prevent shared memory from being reused.
 		 */
-		if (cc_shared_buffer(buffer) &&
-		    system_heap_set_page_encrypted(p))
-			continue;
+		if (cc_shared_buffer(buffer)) {
+			if (i <= nr_decrypted &&
+			    system_heap_set_page_encrypted(p))
+				continue;
+		}
 		__free_pages(p, compound_order(p));
 	}
 	sg_free_table(table);
