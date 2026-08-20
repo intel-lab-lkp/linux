@@ -304,12 +304,22 @@ xfs_imap_valid(
 	    offset >= wpc->iomap.offset + wpc->iomap.length)
 		return false;
 	/*
-	 * If this is a COW mapping, it is sufficient to check that the mapping
-	 * covers the offset. Be careful to check this first because the caller
-	 * can revalidate a COW mapping without updating the data seqno.
+	 * A COW mapping is only valid while the COW fork is unchanged. After a
+	 * change, the blocks behind the mapping can already be freed, for
+	 * example by the post-EOF trim on close. Do this check before the
+	 * data fork check, because the caller can revalidate a COW mapping
+	 * without updating the data seqno.
 	 */
-	if (wpc->iomap.flags & IOMAP_F_SHARED)
+	if (wpc->iomap.flags & IOMAP_F_SHARED) {
+		if (!ip->i_cowfp)
+			return false;
+		if (XFS_WPC(wpc)->cow_seq != READ_ONCE(ip->i_cowfp->if_seq)) {
+			trace_xfs_wb_cow_iomap_invalid(ip, &wpc->iomap,
+					XFS_WPC(wpc)->cow_seq, XFS_COW_FORK);
+			return false;
+		}
 		return true;
+	}
 
 	/*
 	 * This is not a COW mapping. Check the sequence number of the data fork
@@ -359,9 +369,8 @@ xfs_map_blocks(
 	/*
 	 * COW fork blocks can overlap data fork blocks even if the blocks
 	 * aren't shared.  COW I/O always takes precedent, so we must always
-	 * check for overlap on reflink inodes unless the mapping is already a
-	 * COW one, or the COW fork hasn't changed from the last time we looked
-	 * at it.
+	 * check for overlap on reflink inodes unless the COW fork hasn't
+	 * changed from the last time we looked at it.
 	 *
 	 * It's safe to check the COW fork if_seq here without the ILOCK because
 	 * we've indirectly protected against concurrent updates: writeback has
@@ -394,16 +403,14 @@ retry:
 	    xfs_iext_lookup_extent(ip, ip->i_cowfp, offset_fsb, &icur, &imap))
 		cow_fsb = imap.br_startoff;
 	if (cow_fsb != NULLFILEOFF && cow_fsb <= offset_fsb) {
-		XFS_WPC(wpc)->cow_seq = READ_ONCE(ip->i_cowfp->if_seq);
 		xfs_iunlock(ip, XFS_ILOCK_SHARED);
-
 		whichfork = XFS_COW_FORK;
 		goto allocate_blocks;
 	}
 
 	/*
-	 * No COW extent overlap. Revalidate now that we may have updated
-	 * ->cow_seq. If the data mapping is still valid, we're done.
+	 * No COW extent overlap. If the data mapping is still valid, we're
+	 * done.
 	 */
 	if (xfs_imap_valid(wpc, ip, offset)) {
 		xfs_iunlock(ip, XFS_ILOCK_SHARED);
