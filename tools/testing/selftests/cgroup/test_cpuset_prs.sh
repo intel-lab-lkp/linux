@@ -520,6 +520,15 @@ REMOTE_TEST_MATRIX=(
 	"  C1-4:P1   .   C1-2:P1  C2-4:P2  .       .  \
 	      .      .     .       C1-2    .       .     p1:3-4|c11:1-2|c12:3-4 \
 							 p1:P1|c11:P1|c12:P-2"
+	# Shrinking a remote partition must return removed CPUs to the top
+	# partition even when it has no child partitions.
+	"  C1-4:P1   .      .       .       .       .  \
+	    C1-3     .      .       .       .       .     p1:1-3 p1:P1 ."
+	# A local child invalidated by a remote parent's CPU change must return
+	# isolated accounting to the remote parent or the top partition.
+	"  C1-4:P1   .   C3-4:P2   .       .       .  \
+	    C1-3     .     .       .       .       .     p1:1-3|c11:3 \
+							 p1:P1|c11:P-2 ."
 	# Cpusets with empty cpuset.cpus should inherit parent's effective_cpus
 	"  C1-4:P1 C5-6   C1-2     .       C5      .  \
 	      .      P1    P1      .       .       .     p1:3-4|p2:5-6|c11:1-2|c12:3-4|c21:5|c22:5-6 \
