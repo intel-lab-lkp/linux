@@ -835,19 +835,10 @@ static int dmap_writeback_invalidate(struct inode *inode,
 	loff_t start_pos = dmap->itn.start << FUSE_DAX_SHIFT;
 	loff_t end_pos = (start_pos + FUSE_DAX_SZ - 1);
 
-	ret = filemap_fdatawrite_range(inode->i_mapping, start_pos, end_pos);
-	if (ret) {
-		pr_debug("fuse: filemap_fdatawrite_range() failed. err=%d start_pos=0x%llx, end_pos=0x%llx\n",
-			 ret, start_pos, end_pos);
-		return ret;
-	}
-
-	ret = invalidate_inode_pages2_range(inode->i_mapping,
-					    start_pos >> PAGE_SHIFT,
-					    end_pos >> PAGE_SHIFT);
+	ret = filemap_invalidate_pages(inode->i_mapping, start_pos, end_pos);
 	if (ret)
-		pr_debug("fuse: invalidate_inode_pages2_range() failed err=%d\n",
-			 ret);
+		pr_debug("fuse: filemap_invalidate_pages() failed. err=%d start_pos=0x%llx, end_pos=0x%llx\n",
+			 ret, start_pos, end_pos);
 
 	return ret;
 }

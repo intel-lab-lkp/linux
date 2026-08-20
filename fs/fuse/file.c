@@ -294,7 +294,8 @@ static int fuse_open(struct inode *inode, struct file *file)
 		if (is_truncate)
 			truncate_pagecache(inode, 0);
 		else if (!(ff->open_flags & FOPEN_KEEP_CACHE))
-			invalidate_inode_pages2(inode->i_mapping);
+			filemap_invalidate_pages(inode->i_mapping, 0,
+					OFFSET_MAX);
 	}
 	if (dax_truncate)
 		filemap_invalidate_unlock(inode->i_mapping);
@@ -644,10 +645,8 @@ static void fuse_aio_invalidate_worker(struct work_struct *work)
 	struct fuse_io_priv *io = container_of(work, struct fuse_io_priv, work);
 	struct address_space *mapping = io->iocb->ki_filp->f_mapping;
 	ssize_t res = fuse_get_res_by_io(io);
-	pgoff_t start = io->offset >> PAGE_SHIFT;
-	pgoff_t end = (io->offset + res - 1) >> PAGE_SHIFT;
 
-	invalidate_inode_pages2_range(mapping, start, end);
+	filemap_invalidate_pages(mapping, io->offset, io->offset + res - 1);
 	io->iocb->ki_complete(io->iocb, res);
 	kref_put(&io->refcnt, fuse_io_release);
 }
@@ -1675,8 +1674,6 @@ ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 	size_t nmax = write ? fc->max_write : fc->max_read;
 	loff_t pos = *ppos;
 	size_t count = iov_iter_count(iter);
-	pgoff_t idx_from = pos >> PAGE_SHIFT;
-	pgoff_t idx_to = (pos + count - 1) >> PAGE_SHIFT;
 	ssize_t res = 0;
 	int err = 0;
 	struct fuse_io_args *ia;
@@ -1689,7 +1686,7 @@ ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 		return -ENOMEM;
 
 	if (fopen_direct_io) {
-		res = filemap_write_and_wait_range(mapping, pos, pos + count - 1);
+		res = filemap_invalidate_pages(mapping, pos, pos + count - 1);
 		if (res) {
 			fuse_io_free(ia);
 			return res;
@@ -1701,14 +1698,6 @@ ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 		fuse_sync_writes(inode);
 		if (!write)
 			inode_unlock(inode);
-	}
-
-	if (fopen_direct_io && write) {
-		res = invalidate_inode_pages2_range(mapping, idx_from, idx_to);
-		if (res) {
-			fuse_io_free(ia);
-			return res;
-		}
 	}
 
 	io->should_dirty = !write && user_backed_iter(iter);
@@ -1824,9 +1813,7 @@ static ssize_t fuse_direct_write_iter(struct kiocb *iocb, struct iov_iter *from)
 			 * write, to invalidate read-ahead cache that may have
 			 * with the write.
 			 */
-			invalidate_inode_pages2_range(mapping,
-				pos >> PAGE_SHIFT,
-				(pos + res - 1) >> PAGE_SHIFT);
+			filemap_invalidate_pages(mapping, pos, pos + res - 1);
 		}
 	}
 	fuse_dio_unlock(iocb, exclusive);
@@ -2324,26 +2311,6 @@ static int fuse_writepages(struct address_space *mapping,
 	return iomap_writepages(&wpc);
 }
 
-static int fuse_launder_folio(struct folio *folio)
-{
-	int err = 0;
-	struct fuse_fill_wb_data data = {};
-	struct iomap_writepage_ctx wpc = {
-		.inode = folio->mapping->host,
-		.iomap.type = IOMAP_MAPPED,
-		.ops = &fuse_writeback_ops,
-		.wb_ctx	= &data,
-	};
-
-	if (folio_clear_dirty_for_io(folio)) {
-		err = iomap_writeback_folio(&wpc, folio);
-		err = fuse_iomap_writeback_submit(&wpc, err);
-		if (!err)
-			folio_wait_writeback(folio);
-	}
-	return err;
-}
-
 /*
  * Write back dirty data/metadata now (there may not be any suitable
  * open files later for data)
@@ -2427,7 +2394,7 @@ static int fuse_file_mmap(struct file *file, struct vm_area_struct *vma)
 		if ((vma->vm_flags & VM_MAYSHARE) && !fc->direct_io_allow_mmap)
 			return -ENODEV;
 
-		invalidate_inode_pages2(file->f_mapping);
+		filemap_invalidate_pages(file->f_mapping, 0, OFFSET_MAX);
 
 		if (!(vma->vm_flags & VM_MAYSHARE)) {
 			/* MAP_PRIVATE */
@@ -3102,7 +3069,6 @@ static const struct address_space_operations fuse_file_aops  = {
 	.read_folio	= fuse_read_folio,
 	.readahead	= fuse_readahead,
 	.writepages	= fuse_writepages,
-	.launder_folio	= fuse_launder_folio,
 	.dirty_folio	= iomap_dirty_folio,
 	.release_folio	= iomap_release_folio,
 	.invalidate_folio = iomap_invalidate_folio,

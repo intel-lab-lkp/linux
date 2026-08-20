@@ -382,7 +382,8 @@ static void fuse_change_attributes_i(struct inode *inode, struct fuse_attr *attr
 		}
 
 		if (inval)
-			invalidate_inode_pages2(inode->i_mapping);
+			filemap_invalidate_pages(inode->i_mapping, 0,
+					OFFSET_MAX);
 	}
 
 	if (IS_ENABLED(CONFIG_FUSE_DAX))
@@ -547,8 +548,6 @@ int fuse_reverse_inval_inode(struct fuse_conn *fc, u64 nodeid,
 {
 	struct fuse_inode *fi;
 	struct inode *inode;
-	pgoff_t pg_start;
-	pgoff_t pg_end;
 
 	inode = fuse_ilookup(fc, nodeid, NULL);
 	if (!inode)
@@ -561,15 +560,9 @@ int fuse_reverse_inval_inode(struct fuse_conn *fc, u64 nodeid,
 
 	fuse_invalidate_attr(inode);
 	forget_all_cached_acls(inode);
-	if (offset >= 0) {
-		pg_start = offset >> PAGE_SHIFT;
-		if (len <= 0)
-			pg_end = -1;
-		else
-			pg_end = (offset + len - 1) >> PAGE_SHIFT;
-		invalidate_inode_pages2_range(inode->i_mapping,
-					      pg_start, pg_end);
-	}
+	if (offset >= 0)
+		filemap_invalidate_pages(inode->i_mapping, offset,
+				offset + len - 1);
 	iput(inode);
 	return 0;
 }
