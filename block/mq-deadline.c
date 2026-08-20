@@ -83,6 +83,7 @@ struct deadline_data {
 	 * run time data
 	 */
 
+	struct request_queue *q;	/* associated request queue */
 	struct list_head dispatch;
 	struct dd_per_prio per_prio[DD_PRIO_COUNT];
 
@@ -184,10 +185,7 @@ static void deadline_remove_request(struct request_queue *q,
 static void dd_request_merged(struct request_queue *q, struct request *req,
 			      enum elv_merge type)
 {
-	struct deadline_data *dd = q->elevator->elevator_data;
-	const u8 ioprio_class = dd_rq_ioclass(req);
-	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
-	struct dd_per_prio *per_prio = &dd->per_prio[prio];
+	struct dd_per_prio *per_prio = req->elv.priv[0];
 
 	/*
 	 * if the merge was a front merge, we need to reposition request
@@ -205,12 +203,11 @@ static void dd_merged_requests(struct request_queue *q, struct request *req,
 			       struct request *next)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const u8 ioprio_class = dd_rq_ioclass(next);
-	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
+	struct dd_per_prio *per_prio = next->elv.priv[0];
 
 	lockdep_assert_held(&dd->lock);
 
-	dd->per_prio[prio].stats.merged++;
+	per_prio->stats.merged++;
 
 	/*
 	 * if next expires before rq, assign its expire time to rq
@@ -227,7 +224,7 @@ static void dd_merged_requests(struct request_queue *q, struct request *req,
 	/*
 	 * kill knowledge of next, this one is a goner
 	 */
-	deadline_remove_request(q, &dd->per_prio[prio], next);
+	deadline_remove_request(q, per_prio, next);
 }
 
 /*
@@ -423,6 +420,15 @@ static struct request *dd_dispatch_prio_aged_requests(struct deadline_data *dd,
 
 	lockdep_assert_held(&dd->lock);
 
+	/*
+	 * A prio_aging_expire of zero disables I/O priority: all requests are
+	 * filed in the DD_BE_PRIO bucket and must never be dispatched ahead of
+	 * higher priority requests through this aging path, which would cause
+	 * priority inversion.
+	 */
+	if (dd->prio_aging_expire == 0)
+		return NULL;
+
 	prio_cnt = !!dd_queued(dd, DD_RT_PRIO) + !!dd_queued(dd, DD_BE_PRIO) +
 		   !!dd_queued(dd, DD_IDLE_PRIO);
 	if (prio_cnt < 2)
@@ -533,6 +539,7 @@ static int dd_init_sched(struct request_queue *q, struct elevator_queue *eq)
 		return -ENOMEM;
 
 	eq->elevator_data = dd;
+	dd->q = q;
 
 	INIT_LIST_HEAD(&dd->dispatch);
 	for (prio = 0; prio <= DD_PRIO_MAX; prio++) {
@@ -570,7 +577,8 @@ static int dd_request_merge(struct request_queue *q, struct request **rq,
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
 	const u8 ioprio_class = IOPRIO_PRIO_CLASS(bio->bi_ioprio);
-	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
+	const enum dd_prio prio = dd->prio_aging_expire == 0 ? DD_BE_PRIO :
+					  ioprio_class_to_prio[ioprio_class];
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];
 	sector_t sector = bio_end_sector(bio);
 	struct request *__rq;
@@ -630,7 +638,15 @@ static void dd_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 
 	lockdep_assert_held(&dd->lock);
 
-	prio = ioprio_class_to_prio[ioprio_class];
+	/*
+	 * When prio_aging_expire is zero, I/O priority is disabled: file every
+	 * request in the best-effort bucket so that the dispatch path no longer
+	 * distinguishes between RT, BE and IDLE classes.
+	 */
+	if (dd->prio_aging_expire == 0)
+		prio = DD_BE_PRIO;
+	else
+		prio = ioprio_class_to_prio[ioprio_class];
 	per_prio = &dd->per_prio[prio];
 	if (!rq->elv.priv[0])
 		per_prio->stats.inserted++;
@@ -770,13 +786,52 @@ static ssize_t __FUNC(struct elevator_queue *e, const char *page, size_t count)	
 	STORE_FUNCTION(__FUNC, __PTR, MIN, MAX, msecs_to_jiffies)
 STORE_JIFFIES(deadline_read_expire_store, &dd->fifo_expire[DD_READ], 0, INT_MAX);
 STORE_JIFFIES(deadline_write_expire_store, &dd->fifo_expire[DD_WRITE], 0, INT_MAX);
-STORE_JIFFIES(deadline_prio_aging_expire_store, &dd->prio_aging_expire, 0, INT_MAX);
 STORE_INT(deadline_writes_starved_store, &dd->writes_starved, INT_MIN, INT_MAX);
 STORE_INT(deadline_front_merges_store, &dd->front_merges, 0, 1);
 STORE_INT(deadline_fifo_batch_store, &dd->fifo_batch, 0, INT_MAX);
 #undef STORE_FUNCTION
 #undef STORE_INT
 #undef STORE_JIFFIES
+
+/*
+ * Writing zero to prio_aging_expire disables I/O priority: all requests are
+ * treated as best-effort. To avoid priority inversion while the mode is being
+ * switched, first drain all in-flight I/O by following the same sequence used
+ * by elevator_switch(): freeze the queue so that new upper-layer I/O is
+ * blocked and all outstanding requests complete, quiesce the queue so that no
+ * dispatch is in progress, then flip prio_aging_expire to zero. New I/O
+ * queued after the switch lands in the best-effort bucket.
+ * Writing a non-zero value (re-)enables priority without draining.
+ */
+static ssize_t deadline_prio_aging_expire_store(struct elevator_queue *e,
+						 const char *page, size_t count)
+{
+	struct deadline_data *dd = e->elevator_data;
+	int val, ret;
+
+	ret = kstrtoint(page, 0, &val);
+	if (ret < 0)
+		return ret;
+	if (val < 0)
+		val = 0;
+	else if (val > INT_MAX)
+		val = INT_MAX;
+	val = msecs_to_jiffies(val);
+
+	if (val == 0 && dd->prio_aging_expire != 0) {
+		unsigned int memflags;
+
+		memflags = blk_mq_freeze_queue(dd->q);
+		blk_mq_quiesce_queue(dd->q);
+		dd->prio_aging_expire = 0;
+		blk_mq_unquiesce_queue(dd->q);
+		blk_mq_unfreeze_queue(dd->q, memflags);
+	} else {
+		dd->prio_aging_expire = val;
+	}
+
+	return count;
+}
 
 #define DD_ATTR(name) \
 	__ATTR(name, 0644, deadline_##name##_show, deadline_##name##_store)
