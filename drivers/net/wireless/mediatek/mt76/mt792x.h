@@ -39,6 +39,9 @@
 
 #define MT792x_WATCHDOG_TIME	(HZ / 4)
 
+#define MT792x_PERF_UPDATE_PERIOD	1000	/* ms */
+#define MT792x_PERF_IND_TIME		(HZ)	/* 1 second */
+
 #define MT792x_DRV_OWN_RETRY_COUNT	10
 #define MT792x_MCU_INIT_RETRY_COUNT	10
 #define MT792x_WFSYS_INIT_RETRY_COUNT	2
@@ -162,6 +165,11 @@ struct mt792x_bss_conf {
 	struct ewma_rssi rssi;
 	struct ieee80211_tx_queue_params queue_params[IEEE80211_NUM_ACS];
 	unsigned int link_id;
+
+	atomic64_t perf_tx_bytes;
+	atomic64_t perf_rx_bytes;
+	u64 perf_last_tx_bytes;
+	u64 perf_last_rx_bytes;
 };
 
 struct mt792x_nan_conf {
@@ -342,7 +350,41 @@ struct mt792x_dev {
 	struct ieee80211_vif *nan_vif;
 	const struct ieee80211_iface_combination *iface_combinations;
 	int n_iface_combinations;
+
+	struct {
+		struct delayed_work work;
+		bool enabled;
+	} perf;
 };
+
+/* accumulate TX bytes for the interface transmitting @len bytes */
+static inline void
+mt792x_perf_account_tx(struct mt792x_dev *dev, struct ieee80211_vif *vif,
+		       u32 len)
+{
+	struct mt792x_vif *mvif;
+
+	if (!vif)
+		return;
+
+	mvif = (struct mt792x_vif *)vif->drv_priv;
+	atomic64_add(len, &mvif->bss_conf.perf_tx_bytes);
+}
+
+/* accumulate RX bytes for the interface owning @wcid */
+static inline void
+mt792x_perf_account_rx(struct mt792x_dev *dev, struct mt76_wcid *wcid, u32 len)
+{
+	struct mt792x_link_sta *mlink;
+	struct mt792x_sta *msta;
+
+	if (!wcid || !wcid->sta)
+		return;
+
+	mlink = container_of(wcid, struct mt792x_link_sta, wcid);
+	msta = container_of(mlink, struct mt792x_sta, deflink);
+	atomic64_add(len, &msta->vif->bss_conf.perf_rx_bytes);
+}
 
 static inline struct mt792x_bss_conf *
 mt792x_vif_to_link(struct mt792x_vif *mvif, u8 link_id)
@@ -533,6 +575,13 @@ void mt792x_mac_link_bss_remove(struct mt792x_dev *dev,
 void mt792x_config_mac_addr_list(struct mt792x_dev *dev);
 int mt792x_mcu_chip_config(struct mt792x_dev *dev, const char *cmd);
 int mt792x_mcu_set_dyn_pcie_gen(struct mt792x_dev *dev);
+int mt792x_mcu_set_perf_ind(struct mt792x_dev *dev, u32 valid_period,
+			    const u64 *tx_bytes, const u64 *rx_bytes);
+void mt792x_perf_ind_update(struct mt792x_dev *dev, struct ieee80211_vif *vif,
+			    unsigned long delay);
+void mt792x_perf_ind_init(struct mt792x_dev *dev);
+void mt792x_perf_ind_resched(struct mt792x_dev *dev);
+int mt792x_perf_ind_trigger(struct mt792x_dev *dev, u64 val);
 
 static inline char *mt792x_ram_name(struct mt792x_dev *dev)
 {
