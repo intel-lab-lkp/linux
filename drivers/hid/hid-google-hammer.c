@@ -132,7 +132,7 @@ static int cbas_ec_notify(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-static __maybe_unused int cbas_ec_resume(struct device *dev)
+static int cbas_ec_resume(struct device *dev)
 {
 	struct cros_ec_device *ec = dev_get_drvdata(dev->parent);
 	bool base_present;
@@ -163,7 +163,7 @@ static __maybe_unused int cbas_ec_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(cbas_ec_pm_ops, NULL, cbas_ec_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(cbas_ec_pm_ops, NULL, cbas_ec_resume);
 
 static void cbas_ec_set_input(struct input_dev *input)
 {
@@ -289,7 +289,7 @@ static struct platform_driver cbas_ec_driver = {
 		.name = "cbas_ec",
 		.acpi_match_table = ACPI_PTR(cbas_ec_acpi_ids),
 		.of_match_table = of_match_ptr(cbas_ec_of_match),
-		.pm = &cbas_ec_pm_ops,
+		.pm = pm_sleep_ptr(&cbas_ec_pm_ops),
 	},
 };
 

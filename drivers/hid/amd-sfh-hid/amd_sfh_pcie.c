@@ -560,7 +560,7 @@ static void amd_sfh_shutdown(struct pci_dev *pdev)
 	}
 }
 
-static int __maybe_unused amd_mp2_pci_resume(struct device *dev)
+static int amd_mp2_pci_resume(struct device *dev)
 {
 	struct amd_mp2_dev *mp2 = dev_get_drvdata(dev);
 
@@ -571,7 +571,7 @@ static int __maybe_unused amd_mp2_pci_resume(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused amd_mp2_pci_suspend(struct device *dev)
+static int amd_mp2_pci_suspend(struct device *dev)
 {
 	struct amd_mp2_dev *mp2 = dev_get_drvdata(dev);
 
@@ -582,7 +582,7 @@ static int __maybe_unused amd_mp2_pci_suspend(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(amd_mp2_pm_ops, amd_mp2_pci_suspend,
+static DEFINE_SIMPLE_DEV_PM_OPS(amd_mp2_pm_ops, amd_mp2_pci_suspend,
 		amd_mp2_pci_resume);
 
 static const struct pci_device_id amd_mp2_pci_tbl[] = {
@@ -596,7 +596,7 @@ static struct pci_driver amd_mp2_pci_driver = {
 	.name		= DRIVER_NAME,
 	.id_table	= amd_mp2_pci_tbl,
 	.probe		= amd_mp2_pci_probe,
-	.driver.pm	= &amd_mp2_pm_ops,
+	.driver.pm	= pm_sleep_ptr(&amd_mp2_pm_ops),
 	.shutdown	= amd_sfh_shutdown,
 	.remove		= amd_sfh_remove,
 	.dev_groups	= amd_sfh_groups,
