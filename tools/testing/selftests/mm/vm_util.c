@@ -14,6 +14,8 @@
 #define PMD_SIZE_FILE_PATH "/sys/kernel/mm/transparent_hugepage/hpage_pmd_size"
 #define SMAP_FILE_PATH "/proc/self/smaps"
 #define STATUS_FILE_PATH "/proc/self/status"
+#define PAGEMAP_FILE_PATH "/proc/self/pagemap"
+#define KPAGEFLAGS_FILE_PATH "/proc/kpageflags"
 #define MAX_LINE_LENGTH 500
 
 unsigned int __page_size;
@@ -229,37 +231,128 @@ err_out:
 	return entry;
 }
 
-bool __check_huge(void *addr, char *pattern, int nr_hpages,
-		  uint64_t hpage_size)
-{
-	char buffer[MAX_LINE_LENGTH];
-	uint64_t thp = -1;
-	char *entry;
-
-	entry = __get_smap_entry(addr, pattern, buffer, sizeof(buffer));
-	if (!entry)
-		goto err_out;
-
-	if (sscanf(entry, "%9" SCNu64 " kB", &thp) != 1)
-		ksft_exit_fail_msg("Reading smap error\n");
-
-err_out:
-	return thp == (nr_hpages * (hpage_size >> 10));
-}
-
 bool check_huge_anon(void *addr, int nr_hpages, uint64_t hpage_size)
 {
-	return __check_huge(addr, "AnonHugePages: ", nr_hpages, hpage_size);
+	int i, pagemap_fd, nr = 0;
+	uint64_t categories;
+	bool expect_huge;
+
+	if (nr_hpages == 0 || hpage_size == 0)
+		return false;
+
+	if (nr_hpages < 0) {
+		nr_hpages = -nr_hpages;
+		expect_huge = false;
+	} else
+		expect_huge = true;
+
+	pagemap_fd = open(PAGEMAP_FILE_PATH, O_RDONLY);
+	if (pagemap_fd < 0)
+		ksft_exit_fail_msg("open pagemap: %s\n", strerror(errno));
+
+	for (i = 0; i < nr_hpages; i++, addr += hpage_size) {
+		categories = pagemap_scan_get_categories(pagemap_fd, addr);
+		if (!(categories & PAGE_IS_HUGE))
+			continue;
+		if (categories & PAGE_IS_FILE)
+			continue;
+		nr++;
+	}
+
+	close(pagemap_fd);
+	return expect_huge ? nr == nr_hpages : nr == 0;
 }
 
 bool check_huge_file(void *addr, int nr_hpages, uint64_t hpage_size)
 {
-	return __check_huge(addr, "FilePmdMapped:", nr_hpages, hpage_size);
+	int i, pagemap_fd, kpf_fd, nr = 0;
+	unsigned long pfn;
+	uint64_t categories, kpf;
+	bool expect_huge;
+
+	if (nr_hpages == 0 || hpage_size == 0)
+		return false;
+
+	if (nr_hpages < 0) {
+		nr_hpages = -nr_hpages;
+		expect_huge = false;
+	} else
+		expect_huge = true;
+
+	pagemap_fd = open(PAGEMAP_FILE_PATH, O_RDONLY);
+	if (pagemap_fd < 0)
+		ksft_exit_fail_msg("open pagemap: %s\n", strerror(errno));
+
+	kpf_fd = open(KPAGEFLAGS_FILE_PATH, O_RDONLY);
+	if (kpf_fd < 0)
+		ksft_exit_fail_msg("open kpageflags: %s\n", strerror(errno));
+
+	for (i = 0; i < nr_hpages; i++, addr += hpage_size) {
+		categories = pagemap_scan_get_categories(pagemap_fd, addr);
+		pfn = pagemap_get_pfn(pagemap_fd, addr);
+		if (pfn == -1UL)
+			continue;
+		if (pageflags_get(pfn, kpf_fd, &kpf))
+			ksft_exit_fail_msg("read kpageflags: %s\n", strerror(errno));
+		if (!(categories & PAGE_IS_HUGE))
+			continue;
+		if (!(categories & PAGE_IS_FILE))
+			continue;
+		if (kpf & KPF_SWAPBACKED)
+			continue;
+		nr++;
+	}
+
+	close(pagemap_fd);
+	close(kpf_fd);
+
+	return expect_huge ? nr == nr_hpages : nr == 0;
 }
 
 bool check_huge_shmem(void *addr, int nr_hpages, uint64_t hpage_size)
 {
-	return __check_huge(addr, "ShmemPmdMapped:", nr_hpages, hpage_size);
+	int i, pagemap_fd, kpf_fd, nr = 0;
+	unsigned long pfn;
+	uint64_t categories, kpf;
+	bool expect_huge;
+
+	if (nr_hpages == 0 || hpage_size == 0)
+		return false;
+
+	if (nr_hpages < 0) {
+		nr_hpages = -nr_hpages;
+		expect_huge = true;
+	} else
+		expect_huge = false;
+
+	pagemap_fd = open(PAGEMAP_FILE_PATH, O_RDONLY);
+	if (pagemap_fd < 0)
+		ksft_exit_fail_msg("open pagemap: %s\n", strerror(errno));
+
+	kpf_fd = open(KPAGEFLAGS_FILE_PATH, O_RDONLY);
+	if (kpf_fd < 0)
+		ksft_exit_fail_msg("open kpageflags: %s\n", strerror(errno));
+
+	for (i = 0; i < nr_hpages; i++, addr += hpage_size) {
+		categories = pagemap_scan_get_categories(pagemap_fd, addr);
+		pfn = pagemap_get_pfn(pagemap_fd, addr);
+		if (pfn == -1UL)
+			continue;
+		if (pageflags_get(pfn, kpf_fd, &kpf))
+			ksft_exit_fail_msg("read kpageflags: %s\n", strerror(errno));
+		if (!(categories & PAGE_IS_HUGE))
+			continue;
+		if (!(categories & PAGE_IS_FILE))
+			continue;
+		if (!(kpf & KPF_SWAPBACKED))
+			continue;
+		nr++;
+	}
+
+	close(pagemap_fd);
+	close(kpf_fd);
+
+	return expect_huge ? nr == nr_hpages : nr == 0;
 }
 
 int64_t allocate_transhuge(void *ptr, int pagemap_fd)
