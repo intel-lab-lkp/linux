@@ -2982,6 +2982,8 @@ ieee80211_uhr_cap_ie_to_sta_uhr_cap(struct ieee80211_sub_if_data *sdata,
 				    const struct ieee80211_uhr_cap *uhr_cap,
 				    u8 uhr_cap_len,
 				    struct link_sta_info *link_sta);
+struct ieee80211_bss_conf *
+ieee80211_get_sdata_bss_conf(struct ieee80211_sub_if_data *sdata, int link_id);
 
 #if IS_ENABLED(CONFIG_MAC80211_KUNIT_TEST)
 #define EXPORT_SYMBOL_IF_MAC80211_KUNIT(sym) EXPORT_SYMBOL_IF_KUNIT(sym)

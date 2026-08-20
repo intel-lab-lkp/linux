@@ -4752,3 +4752,24 @@ bool ieee80211_vif_nan_started(struct ieee80211_vif *vif)
 	return vif->type == NL80211_IFTYPE_NAN && sdata->u.nan.started;
 }
 EXPORT_SYMBOL_GPL(ieee80211_vif_nan_started);
+
+struct ieee80211_bss_conf *
+ieee80211_get_sdata_bss_conf(struct ieee80211_sub_if_data *sdata, int link_id)
+{
+	struct ieee80211_sub_if_data *bss_sdata = sdata;
+
+	lockdep_assert_wiphy(sdata->local->hw.wiphy);
+
+	if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN) {
+		if (!sdata->bss)
+			return NULL;
+
+		bss_sdata = get_bss_sdata(sdata);
+	}
+
+	if (link_id >= 0)
+		return sdata_dereference(bss_sdata->vif.link_conf[link_id],
+					 bss_sdata);
+
+	return &bss_sdata->vif.bss_conf;
+}
