@@ -2236,9 +2236,12 @@ static void update_cpumasks_hier(struct cpuset *cs, struct tmpmasks *tmp,
 	cpuset_for_each_descendant_pre(cp, pos_css, cs) {
 		struct cpuset *parent = parent_cs(cp);
 		bool remote = is_remote_partition(cp);
+		bool was_remote = remote;
 		bool update_parent = false;
+		int owner_prs;
 
 		old_prs = new_prs = cp->partition_root_state;
+		owner_prs = old_prs;
 
 		/*
 		 * For child remote partition root (!= cs), we need to call
@@ -2338,7 +2341,18 @@ get_css:
 			new_prs = cp->partition_root_state;
 		}
 
+		/*
+		 * With no valid parent partition left, this partition's CPUs
+		 * return to the nearest valid partition ancestor.
+		 */
+		if (!was_remote && old_prs > 0 && new_prs < 0 &&
+		    !is_partition_valid(parent))
+			owner_prs = partition_owner(cp)->partition_root_state;
+
 		spin_lock_irq(&callback_lock);
+		if (old_prs != owner_prs)
+			isolated_cpus_update(old_prs, owner_prs,
+					     cp->effective_xcpus);
 		cpumask_copy(cp->effective_cpus, tmp->new_cpus);
 		cp->partition_root_state = new_prs;
 		/*
