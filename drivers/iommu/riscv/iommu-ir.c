@@ -6,12 +6,107 @@
  */
 #include <linux/acpi.h>
 #include <linux/cleanup.h>
+#include <linux/irqchip/riscv-imsic.h>
 #include <linux/msi.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
 
 #include "iommu.h"
+
+/*
+ * Compute the MSI index for an MSI physical address using the
+ * IOMMU "extract" function (RISC-V IOMMU spec section 2.3.3).
+ */
+static size_t riscv_iommu_ir_extract_msi_idx(phys_addr_t pa)
+{
+	const struct imsic_global_config *global = imsic_get_global_config();
+	phys_addr_t mask, addr = pa >> 12;
+	size_t idx;
+
+	mask = BIT(global->hart_index_bits + global->guest_index_bits) - 1;
+	idx = addr & mask;
+
+	if (global->group_index_bits) {
+		phys_addr_t group_mask = BIT(global->group_index_bits) - 1;
+		phys_addr_t group_shift = global->group_index_shift - 12;
+		phys_addr_t group = (addr >> group_shift) & group_mask;
+
+		idx |= group << fls64(mask);
+	}
+
+	return idx;
+}
+
+static size_t riscv_iommu_ir_msi_iova_idx(phys_addr_t pa)
+{
+	const struct imsic_global_config *global = imsic_get_global_config();
+
+	/* msi_iova[] is only used for the host imsics */
+	return riscv_iommu_ir_extract_msi_idx(pa) >> global->guest_index_bits;
+}
+
+static size_t riscv_iommu_ir_msi_iova_count(void)
+{
+	const struct imsic_global_config *global = imsic_get_global_config();
+
+	return BIT(global->group_index_bits + global->hart_index_bits);
+}
+
+static int riscv_iommu_ir_build_msi_iova(struct riscv_iommu_domain *domain, struct device *dev)
+{
+	const struct imsic_global_config *global = imsic_get_global_config();
+	struct iommu_domain *d = &domain->domain;
+	dma_addr_t *msi_iova;
+	unsigned int cpu;
+	int ret;
+
+	guard(mutex)(&domain->mutex);
+
+	if (domain->msi_iova)
+		return 0;
+
+	switch (d->cookie_type) {
+	case IOMMU_COOKIE_DMA_IOVA:
+	case IOMMU_COOKIE_DMA_MSI:
+	case IOMMU_COOKIE_IOMMUFD:
+		break;
+	default:
+		return 0;
+	}
+
+	msi_iova = vcalloc(riscv_iommu_ir_msi_iova_count(), sizeof(*msi_iova));
+	if (!msi_iova)
+		return -ENOMEM;
+
+	for_each_possible_cpu(cpu) {
+		const struct imsic_local_config *local = per_cpu_ptr(global->local, cpu);
+		phys_addr_t pa = local->msi_pa;
+		unsigned int shift;
+		size_t idx;
+
+		if (!pa)
+			continue;
+
+		idx = riscv_iommu_ir_msi_iova_idx(pa);
+		ret = iommu_dma_map_msi(d, dev, pa, IMSIC_MMIO_PAGE_SZ, &msi_iova[idx], &shift);
+		if (ret)
+			goto err_free;
+		if (shift != IMSIC_MMIO_PAGE_SHIFT) {
+			ret = -EBUSY;
+			goto err_free;
+		}
+	}
+
+	domain->msi_iova = msi_iova;
+
+	return 0;
+
+err_free:
+	vfree(msi_iova);
+	return ret;
+}
 
 static struct irq_chip riscv_iommu_ir_irq_chip = {
 	.name			= "IOMMU-IR",
@@ -25,7 +120,23 @@ static int riscv_iommu_ir_irq_domain_alloc_irqs(struct irq_domain *irqdomain,
 						unsigned int irq_base, unsigned int nr_irqs,
 						void *arg)
 {
+	struct riscv_iommu_info *info = irqdomain->host_data;
 	int ret;
+
+	/*
+	 * MSI IOVAs are domain-local, just like DMA IOVAs. The device must be
+	 * quiesced, including MSI teardown, before switching away from or freeing
+	 * the domain. iommu_dma_map_msi() requires the group mutex to be held;
+	 * take it around the domain lookup too so info->domain can't change
+	 * out from under the build.
+	 */
+	scoped_guard(iommu_group, info->dev) {
+		struct riscv_iommu_domain *domain = rcu_dereference_protected(info->domain, true);
+
+		ret = domain ? riscv_iommu_ir_build_msi_iova(domain, info->dev) : 0;
+	}
+	if (ret)
+		return ret;
 
 	ret = irq_domain_alloc_irqs_parent(irqdomain, irq_base, nr_irqs, arg);
 	if (ret)
@@ -112,9 +223,20 @@ struct irq_domain *riscv_iommu_ir_irq_domain_create(struct device *dev,
 	irqdomain->msi_parent_ops = &riscv_iommu_ir_msi_parent_ops;
 	irq_domain_update_bus_token(irqdomain, DOMAIN_BUS_MSI_REMAP);
 
-	dev_set_msi_domain(dev, irqdomain);
-
+	/*
+	 * Publication is deferred to riscv_iommu_ir_irq_domain_publish(),
+	 * called from probe_finalize() after the IOMMU core assigns
+	 * dev->iommu_group, because the allocation callback locks the group.
+	 */
 	return irqdomain;
+}
+
+void riscv_iommu_ir_irq_domain_publish(struct device *dev)
+{
+	struct riscv_iommu_info *info = dev_iommu_priv_get(dev);
+
+	if (info->irqdomain)
+		dev_set_msi_domain(dev, info->irqdomain);
 }
 
 void riscv_iommu_ir_irq_domain_remove(struct device *dev, struct riscv_iommu_info *info)
@@ -124,7 +246,8 @@ void riscv_iommu_ir_irq_domain_remove(struct device *dev, struct riscv_iommu_inf
 	if (!info->irqdomain)
 		return;
 
-	dev_set_msi_domain(dev, info->irqdomain->parent);
+	if (dev_get_msi_domain(dev) == info->irqdomain)
+		dev_set_msi_domain(dev, info->irqdomain->parent);
 	fn = info->irqdomain->fwnode;
 	irq_domain_remove(info->irqdomain);
 	info->irqdomain = NULL;
@@ -139,6 +262,10 @@ int riscv_iommu_ir_attach_paging_domain(struct iommu_domain *iommu_domain, struc
 
 void riscv_iommu_ir_free_paging_domain(struct iommu_domain *iommu_domain)
 {
+	struct riscv_iommu_domain *domain = iommu_domain_to_riscv(iommu_domain);
+
+	vfree(domain->msi_iova);
+	domain->msi_iova = NULL;
 }
 
 void riscv_iommu_ir_get_resv_regions(struct device *dev, struct list_head *head)

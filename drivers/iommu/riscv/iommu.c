@@ -811,9 +811,6 @@ static int riscv_iommu_iodir_set_mode(struct riscv_iommu_device *iommu,
 	return 0;
 }
 
-#define iommu_domain_to_riscv(iommu_domain) \
-	container_of(iommu_domain, struct riscv_iommu_domain, domain)
-
 /*
  * Linkage between an iommu_domain and attached devices.
  *
@@ -1341,6 +1338,8 @@ static struct iommu_domain *riscv_iommu_alloc_paging_domain(struct device *dev)
 	if (!domain)
 		return ERR_PTR(-ENOMEM);
 
+	mutex_init(&domain->mutex);
+
 	INIT_LIST_HEAD_RCU(&domain->bonds);
 	spin_lock_init(&domain->lock);
 	/*
@@ -1467,6 +1466,7 @@ static struct iommu_device *riscv_iommu_probe_device(struct device *dev)
 	 * any IMSICs or no MSI domain has been set up for the device.
 	 */
 	info->irqdomain = irqdomain;
+	info->dev = dev;
 
 	/*
 	 * Allocate and pre-configure device context entries in
@@ -1488,6 +1488,11 @@ static struct iommu_device *riscv_iommu_probe_device(struct device *dev)
 	dev_iommu_priv_set(dev, info);
 
 	return &iommu->iommu;
+}
+
+static void riscv_iommu_probe_finalize(struct device *dev)
+{
+	riscv_iommu_ir_irq_domain_publish(dev);
 }
 
 static void riscv_iommu_release_device(struct device *dev)
@@ -1512,6 +1517,7 @@ static const struct iommu_ops riscv_iommu_ops = {
 	.domain_alloc_paging = riscv_iommu_alloc_paging_domain,
 	.device_group = riscv_iommu_device_group,
 	.probe_device = riscv_iommu_probe_device,
+	.probe_finalize = riscv_iommu_probe_finalize,
 	.release_device	= riscv_iommu_release_device,
 	.get_resv_regions = riscv_iommu_get_resv_regions,
 };
