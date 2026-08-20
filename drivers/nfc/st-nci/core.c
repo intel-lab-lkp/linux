@@ -18,7 +18,12 @@
 
 static int st_nci_init(struct nci_dev *ndev)
 {
+	struct st_nci_info *info = nci_get_drvdata(ndev);
 	struct nci_mode_set_cmd cmd;
+
+	/* ST21NFCD has no NDLC proprietary SET_NFC_MODE */
+	if (info->ndlc->raw_nci)
+		return 0;
 
 	cmd.cmd_type = ST_NCI_SET_NFC_MODE;
 	cmd.mode = 1;

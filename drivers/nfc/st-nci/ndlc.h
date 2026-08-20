@@ -39,6 +39,8 @@ struct llt_ndlc {
 	 */
 	int hard_fault;
 	int powered;
+	/* ST21NFCD: raw NCI on the wire, no NDLC PCB / ACK timers */
+	bool raw_nci;
 };
 
 int ndlc_open(struct llt_ndlc *ndlc);
