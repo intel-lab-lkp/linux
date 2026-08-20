@@ -174,6 +174,84 @@ Description:
 		similiar to writing 1 to their individual "reset" file, so use
 		with caution.
 
+What:		/sys/bus/pci/devices/.../max_link_speed
+Date:		September 2018
+Contact:	linux-pci@vger.kernel.org
+Description:
+		The maximum link speed this device is capable of, as a
+		human-readable string such as "16.0 GT/s PCIe".
+
+		Derived from the Supported Link Speeds Vector in the device's
+		Link Capabilities 2 register, capped by the Max Link Speed
+		field in Link Capabilities. Devices predating PCIe r3.0 have no
+		Link Capabilities 2, and for those the value is synthesized
+		from Max Link Speed alone. Read once during enumeration and
+		cached thereafter, so unlike current_link_speed it does not
+		change between reads.
+
+		This is the device's own capability, not a property of the
+		link. A link trains at the lower of what its two ends support,
+		so an endpoint capable of a higher speed than the port above it
+		reports that higher speed here while the port reports the lower
+		one. Reading one end therefore does not tell you what the link
+		will do; read both ends and take the lower.
+
+		Present only for PCI Express devices.
+
+What:		/sys/bus/pci/devices/.../max_link_width
+Date:		September 2018
+Contact:	linux-pci@vger.kernel.org
+Description:
+		The maximum link width this device is capable of, in lanes,
+		e.g. "16". Read from the Maximum Link Width field of the
+		device's Link Capabilities register.
+
+		As with max_link_speed this is the device's own capability, not
+		a property of the link; a link trains at the lower of what its
+		two ends support.
+
+		Present only for PCI Express devices.
+
+What:		/sys/bus/pci/devices/.../current_link_speed
+Date:		September 2018
+Contact:	linux-pci@vger.kernel.org
+Description:
+		The speed the link is operating at right now, as a
+		human-readable string such as "16.0 GT/s PCIe". Read fresh from
+		the device's Link Status register on every read of this file;
+		nothing is cached.
+
+		This value is instantaneous and may change at any time. A link
+		is permitted to retrain to a lower speed and back, and devices
+		with aggressive link power management (GPUs in particular) do so
+		routinely while idle. Two reads seconds apart, with no
+		configuration change in between, can legitimately differ by
+		several generations.
+
+		Consequently, comparing this attribute against max_link_speed is
+		not by itself a test for a degraded link: an idle device will
+		frequently report a lower speed and is working correctly.
+		Callers that need a figure representing what the link will
+		actually deliver should sample while the device is under load.
+		max_link_speed is not that figure either: it reports one end's
+		capability, and the link is limited by the lower of its two
+		ends.
+
+		Present only for PCI Express devices.
+
+What:		/sys/bus/pci/devices/.../current_link_width
+Date:		September 2018
+Contact:	linux-pci@vger.kernel.org
+Description:
+		The width the link is operating at right now, in lanes, e.g.
+		"16". Read fresh from the device's Link Status register on every
+		read of this file.
+
+		As with current_link_speed, this is instantaneous. Links may
+		also narrow and re-widen under link power management.
+
+		Present only for PCI Express devices.
+
 What:		/sys/bus/pci/devices/.../vpd
 Date:		February 2008
 Contact:	Ben Hutchings <bwh@kernel.org>
