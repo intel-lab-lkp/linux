@@ -3944,7 +3944,7 @@ static void mtip_pci_remove(struct pci_dev *pdev)
  *	0  Success
  *	<0 Error
  */
-static int __maybe_unused mtip_pci_suspend(struct device *dev)
+static int mtip_pci_suspend(struct device *dev)
 {
 	int rv = 0;
 	struct driver_data *dd = dev_get_drvdata(dev);
@@ -3966,7 +3966,7 @@ static int __maybe_unused mtip_pci_suspend(struct device *dev)
  *      0  Success
  *      <0 Error
  */
-static int __maybe_unused mtip_pci_resume(struct device *dev)
+static int mtip_pci_resume(struct device *dev)
 {
 	int rv = 0;
 	struct driver_data *dd = dev_get_drvdata(dev);
@@ -4009,7 +4009,7 @@ static const struct pci_device_id mtip_pci_tbl[] = {
 	{ 0 }
 };
 
-static SIMPLE_DEV_PM_OPS(mtip_pci_pm_ops, mtip_pci_suspend, mtip_pci_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(mtip_pci_pm_ops, mtip_pci_suspend, mtip_pci_resume);
 
 /* Structure that describes the PCI driver functions. */
 static struct pci_driver mtip_pci_driver = {
@@ -4017,7 +4017,7 @@ static struct pci_driver mtip_pci_driver = {
 	.id_table		= mtip_pci_tbl,
 	.probe			= mtip_pci_probe,
 	.remove			= mtip_pci_remove,
-	.driver.pm		= &mtip_pci_pm_ops,
+	.driver.pm		= pm_sleep_ptr(&mtip_pci_pm_ops),
 	.shutdown		= mtip_pci_shutdown,
 };
 
