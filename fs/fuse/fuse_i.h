@@ -1183,6 +1183,7 @@ long fuse_ioctl_common(struct file *file, unsigned int cmd,
 __poll_t fuse_file_poll(struct file *file, poll_table *wait);
 
 bool fuse_write_update_attr(struct inode *inode, loff_t pos, ssize_t written);
+void fuse_zero_partial_eof_folio(struct inode *inode, loff_t from, loff_t to);
 
 int fuse_flush_times(struct inode *inode, struct fuse_file *ff);
 int fuse_write_inode(struct inode *inode, struct writeback_control *wbc);

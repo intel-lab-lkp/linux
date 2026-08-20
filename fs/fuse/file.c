@@ -21,6 +21,8 @@
 #include <linux/splice.h>
 #include <linux/task_io_accounting_ops.h>
 #include <linux/iomap.h>
+#include <linux/highmem.h>
+#include <linux/rmap.h>
 
 static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
 			  unsigned int open_flags, int opcode,
@@ -1200,6 +1202,43 @@ static ssize_t fuse_send_write(struct fuse_io_args *ia, loff_t pos,
 	return err ?: ia->write.out.size;
 }
 
+/*
+ * A size-extending operation is about to turn [@from, @to) -- the range past a
+ * non-folio-aligned old EOF at @from -- into a hole that must read back as
+ * zero.  If the old last folio is cached and was dirtied beyond the old EOF
+ * (e.g. mmap stores into the post-EOF region, which are undefined until the
+ * file grows), zero that tail so it is not exposed as stale data instead of
+ * zeros (xfstests generic/363).  Only the folio straddling @from can hold such
+ * bytes, so a single folio is handled, as in pagecache_isize_extended().
+ *
+ * Callers hold i_rwsem, serialising this against concurrent writes and
+ * truncates; it must not run under fi->lock, as it locks the folio.
+ */
+void fuse_zero_partial_eof_folio(struct inode *inode, loff_t from, loff_t to)
+{
+	struct folio *folio;
+	size_t offset, end;
+
+	if (from >= to)
+		return;
+
+	folio = filemap_lock_folio(inode->i_mapping, from >> PAGE_SHIFT);
+	if (IS_ERR(folio))
+		return;
+
+	if (folio_mkclean(folio))
+		folio_mark_dirty(folio);
+
+	if (folio_test_dirty(folio)) {
+		offset = offset_in_folio(folio, from);
+		end = min_t(loff_t, to - folio_pos(folio), folio_size(folio));
+		folio_zero_segment(folio, offset, end);
+	}
+
+	folio_unlock(folio);
+	folio_put(folio);
+}
+
 bool fuse_write_update_attr(struct inode *inode, loff_t pos, ssize_t written)
 {
 	struct fuse_conn *fc = get_fuse_conn(inode);
@@ -1368,8 +1407,18 @@ static ssize_t fuse_perform_write(struct kiocb *iocb, struct iov_iter *ii)
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	loff_t pos = iocb->ki_pos;
+	loff_t old_size = i_size_read(inode);
 	int err = 0;
 	ssize_t res = 0;
+
+	/*
+	 * If the write starts past a non-aligned EOF, zero the old EOF folio's
+	 * tail before filling the page cache, so [old_size, pos) reads as the
+	 * hole it is.  The write below fills from @pos, disjoint from this
+	 * range.
+	 */
+	if (pos > old_size)
+		fuse_zero_partial_eof_folio(inode, old_size, pos);
 
 	if (inode->i_size < pos + iov_iter_count(ii))
 		set_bit(FUSE_I_SIZE_UNSTABLE, &fi->state);
@@ -2913,6 +2962,13 @@ static long fuse_file_fallocate(struct file *file, int mode, loff_t offset,
 
 	/* we could have extended the file */
 	if (!(mode & FALLOC_FL_KEEP_SIZE)) {
+		/*
+		 * fallocate writes no data, so the whole extension past the old
+		 * EOF is a hole; zero the old EOF folio's tail before publishing
+		 * the new size.
+		 */
+		fuse_zero_partial_eof_folio(inode, i_size_read(inode),
+					    offset + length);
 		if (fuse_write_update_attr(inode, offset + length, length))
 			file_update_time(file);
 	}
