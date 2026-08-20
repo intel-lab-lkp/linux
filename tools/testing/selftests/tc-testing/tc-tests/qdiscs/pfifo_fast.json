@@ -105,5 +105,28 @@
         "teardown": [
             "$TC qdisc del dev $DUMMY handle 1: root"
         ]
+    },
+    {
+        "id": "0249",
+        "name": "Create pfifo_fast with huge tx_queue_len (ring cap regression)",
+        "category": [
+            "qdisc",
+            "pfifo_fast"
+        ],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$IP link set dev $DUMMY txqueuelen 100000000"
+        ],
+        "cmdUnderTest": "$TC qdisc add dev $DUMMY handle 1: root pfifo_fast",
+        "expExitCode": "0",
+        "verifyCmd": "$TC qdisc show dev $DUMMY",
+        "matchPattern": "qdisc pfifo_fast 1: root",
+        "matchCount": "1",
+        "teardown": [
+            "$IP link set dev $DUMMY txqueuelen 1000",
+            "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
     }
 ]
