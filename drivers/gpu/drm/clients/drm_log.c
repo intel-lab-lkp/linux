@@ -113,7 +113,7 @@ static void drm_log_draw_line(struct drm_log_scanout *scanout, const char *s,
 	const u8 *src;
 	u32 px_width = fb->format->cpp[0];
 	struct drm_rect r = DRM_RECT_INIT(0, scanout->line * scanout->scaled_font_h,
-					  fb->width, (scanout->line + 1) * scanout->scaled_font_h);
+					  fb->width, scanout->scaled_font_h);
 	u32 i;
 
 	if (drm_client_buffer_vmap_local(scanout->buffer, &map))
