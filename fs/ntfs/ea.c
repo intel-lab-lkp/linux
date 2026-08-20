@@ -716,6 +716,18 @@ static int ntfs_setxattr(const struct xattr_handler *handler,
 	if (NVolShutdown(ni->vol))
 		return -EIO;
 
+	/*
+	 * system.dos_attrib and system.ntfs_attrib affect file permissions
+	 * (READONLY flag maps to write permissions). Require owner or
+	 * CAP_FOWNER to prevent unauthorized access control bypass.
+	 */
+	if (!strcmp(name, SYSTEM_DOS_ATTRIB) ||
+	    !strcmp(name, SYSTEM_NTFS_ATTRIB) ||
+	    !strcmp(name, SYSTEM_NTFS_ATTRIB_BE)) {
+		if (!inode_owner_or_capable(idmap, inode))
+			return -EPERM;
+	}
+
 	if (!strcmp(name, SYSTEM_DOS_ATTRIB)) {
 		if (sizeof(u8) != size) {
 			err = -EINVAL;
