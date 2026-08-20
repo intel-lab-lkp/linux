@@ -1173,13 +1173,6 @@ static int en8811h_probe(struct phy_device *phydev)
 	if (ret)
 		return ret;
 
-	/* Configure led gpio pins as output */
-	ret = air_phy_buckpbus_reg_modify(phydev, EN8811H_GPIO_OUTPUT,
-					  EN8811H_GPIO_OUTPUT_345,
-					  EN8811H_GPIO_OUTPUT_345);
-	if (ret < 0)
-		return ret;
-
 	return 0;
 }
 
@@ -1314,6 +1307,16 @@ static int en8811h_config_init(struct phy_device *phydev)
 		return ret;
 
 	ret = en8811h_config_serdes_polarity(phydev);
+	if (ret < 0)
+		return ret;
+
+	/*
+	 * Restarting MD32 clears the GPIO3/4/5 output enable bits. Restore
+	 * them after every restart, before enabling the corresponding LEDs.
+	 */
+	ret = air_phy_buckpbus_reg_modify(phydev, EN8811H_GPIO_OUTPUT,
+					  EN8811H_GPIO_OUTPUT_345,
+					  EN8811H_GPIO_OUTPUT_345);
 	if (ret < 0)
 		return ret;
 
