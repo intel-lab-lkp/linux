@@ -1,5 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Broadcom PCIe 1570 webcam driver
+ * FacetimeHD camera driver
  *
  * Copyright (C) 2014 Patrik Jakobsson (patrik.r.jakobsson@gmail.com)
  *
@@ -19,6 +20,8 @@
 
 #ifndef _FTHD_DDR_H
 #define _FTHD_DDR_H
+
+#include "fthd_drv.h"
 
 #define MEM_VERIFY_BASE		0x0 /* 0x1000000 */
 #define MEM_VERIFY_NUM		128

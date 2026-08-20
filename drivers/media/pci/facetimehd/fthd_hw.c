@@ -1,6 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * SPDX-License-Identifier: GPL-2.0-only
- *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2014 Patrik Jakobsson (patrik.r.jakobsson@gmail.com)
@@ -12,6 +11,7 @@
 #include "fthd_hw.h"
 #include "fthd_ddr.h"
 #include "fthd_isp.h"
+#include "fthd_reg.h"
 
 static int fthd_hw_s2_pll_reset(struct fthd_private *dev_priv)
 {
@@ -20,7 +20,7 @@ static int fthd_hw_s2_pll_reset(struct fthd_private *dev_priv)
 	FTHD_S2_REG_WRITE(0xbcbc1500, S2_PLL_CTRL_100);
 	FTHD_S2_REG_WRITE(0x0, S2_PLL_CTRL_14);
 
-	udelay(10000);
+	mdelay(10);
 
 	FTHD_S2_REG_WRITE(0x3, S2_PLL_CTRL_14);
 
@@ -142,14 +142,14 @@ static int fthd_hw_s2_pll_init(struct fthd_private *dev_priv, u32 ddr_speed)
 		dev_info(&dev_priv->pdev->dev, "Failed to lock S2 PLL: 0x%x\n",
 			 reg);
 		return -EINVAL;
-	} else {
-		dev_info(&dev_priv->pdev->dev, "S2 PLL is locked after %d us\n",
-			 (retries * 10));
 	}
+
+	dev_info(&dev_priv->pdev->dev, "S2 PLL is locked after %d us\n",
+			(retries * 10));
 
 	reg = FTHD_S2_REG_READ(S2_PLL_STATUS_A8);
 	FTHD_S2_REG_WRITE(reg | S2_PLL_BYPASS, S2_PLL_STATUS_A8);
-	udelay(10000);
+	mdelay(10);
 
 	reg = FTHD_S2_REG_READ(S2_PLL_STATUS_A8);
 	if (reg & S2_PLL_BYPASS)
@@ -182,7 +182,7 @@ static int fthd_hw_ddr_phy_soft_reset(struct fthd_private *dev_priv)
 
 	FTHD_S2_REG_WRITE(0xfffff, S2_PLL_CTRL_9C);
 
-	udelay(10000);
+	mdelay(10);
 
 	FTHD_S2_REG_WRITE(0xffbff, S2_PLL_CTRL_9C);
 
@@ -323,7 +323,7 @@ static int fthd_hw_s2_init_ddr_controller_soc(struct fthd_private *dev_priv)
 		return -EIO;
 	}
 
-	udelay(10000);
+	mdelay(10);
 
 	/* WL */
 	FTHD_S2_REG_WRITE(0x0c10, S2_DDR40_PHY_PLL_DIV);
@@ -397,9 +397,9 @@ static int fthd_hw_s2_init_ddr_controller_soc(struct fthd_private *dev_priv)
 		dev_err(&dev_priv->pdev->dev,
 			"Timeout waiting for STRAP valid\n");
 		return -ENODEV;
-	} else {
-		dev_info(&dev_priv->pdev->dev, "STRAP valid\n");
 	}
+
+	dev_info(&dev_priv->pdev->dev, "STRAP valid\n");
 
 	/* Manual DDR40 PHY init */
 	if (dev_priv->ddr_speed != 450) {
@@ -565,7 +565,7 @@ static int fthd_hw_s2_init_ddr_controller_soc(struct fthd_private *dev_priv)
 	udelay(500);
 
 	FTHD_S2_REG_WRITE(0, S2_DDR_2004);
-	udelay(10000);
+	mdelay(10);
 
 	FTHD_S2_REG_WRITE(0xab0a, S2_DDR_2014);
 
@@ -574,7 +574,7 @@ static int fthd_hw_s2_init_ddr_controller_soc(struct fthd_private *dev_priv)
 	if (ret != 0)
 		return -EBUSY;
 
-	udelay(10000);
+	mdelay(10);
 
 	FTHD_S2_REG_WRITE(0, S2_3204);
 
@@ -652,35 +652,34 @@ int fthd_hw_init(struct fthd_private *dev_priv)
 
 	ret = fthd_hw_s2_init_pcie_link(dev_priv);
 	if (ret)
-		goto out;
+		return ret;
 
 	fthd_hw_s2_preinit_ddr_controller_soc(dev_priv);
 	fthd_hw_s2_init_ddr_controller_soc(dev_priv);
 
-/*
-	dev_info(&dev_priv->pdev->dev,
+	dev_dbg(&dev_priv->pdev->dev,
 		 "Dumping DDR PHY reg map before shmoo\n");
 
-	for (i = 0; i < DDR_PHY_NUM_REGS; i++) {
+	for (int i = 0; i < ARRAY_SIZE(fthd_ddr_phy_reg_map); i++) {
 		if (!(i % 3) && i >  0)
-			printk("\n");
+			dev_dbg(&dev_priv->pdev->dev, "\n");
 
-		val = FTHD_S2_REG_READ(ddr_phy_reg_map[i]);
-		printk(KERN_CONT "0x%.3x = 0x%.8x\t",
-			 ddr_phy_reg_map[i], val);
+		int val = FTHD_S2_REG_READ(fthd_ddr_phy_reg_map[i]);
+
+		pr_cont("0x%.3x = 0x%.8x\t",
+			 fthd_ddr_phy_reg_map[i], val);
 	}
-*/
 
 	ret = fthd_ddr_verify_mem(dev_priv, 0, MEM_VERIFY_NUM);
 	if (ret) {
-		dev_err(&dev_priv->pdev->dev,
-			"Full memory verification failed! (%d)\n", ret);
-		/*
-		 * Here we should do a shmoo calibration but it's not yet
-		 * fully implemented.
-		 */
+		dev_warn(&dev_priv->pdev->dev,
+			"Full memory verification failed, calibrating. (%d)\n", ret);
 
-		/* fthd_ddr_calibrate(dev_priv); */
+		ret = fthd_ddr_calibrate(dev_priv);
+		if (ret) {
+			dev_err(&dev_priv->pdev->dev,
+				"Calibration failed! (%d)\n", ret);
+		}
 	} else {
 		dev_info(&dev_priv->pdev->dev,
 			 "Full memory verification succeeded! (%d)\n", ret);
@@ -696,17 +695,16 @@ int fthd_hw_init(struct fthd_private *dev_priv)
 
 	ret = isp_init(dev_priv);
 	if (ret)
-	    goto out;
+		return ret;
 
 	dev_info(&dev_priv->pdev->dev, "Enabling interrupts\n");
 	fthd_irq_enable(dev_priv);
-out:
+
 	return ret;
 }
 
 void fthd_hw_deinit(struct fthd_private *dev_priv)
 {
-	dev_info(&dev_priv->pdev->dev, "%s", __FUNCTION__);
 	FTHD_ISP_REG_WRITE(0, ISP_REG_41020);
 	fthd_irq_disable(dev_priv);
 }

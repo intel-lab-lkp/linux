@@ -1,6 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * SPDX-License-Identifier: GPL-2.0-only
- *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2014 Patrik Jakobsson (patrik.r.jakobsson@gmail.com)
@@ -9,6 +8,10 @@
 
 #ifndef _ISP_H
 #define _ISP_H
+
+#include <linux/types.h>
+#include <linux/ioport.h>
+#include "fthd_drv.h"
 
 /* ISP memory types */
 #define FTHD_MEM_FIRMWARE	1
@@ -438,7 +441,7 @@ enum fthd_isp_cmds {
 };
 
 enum isp_debug_cmds {
-	CISP_CMD_DEBUG_BANNER=0,
+	CISP_CMD_DEBUG_BANNER = 0,
 	CISP_CMD_DEBUG_NOP1,
 	CISP_CMD_DEBUG_NOP2,
 	CISP_CMD_DEBUG_PS,
@@ -494,11 +497,11 @@ struct isp_cmd_hdr {
 	u32 unknown0;
 	u16 opcode;
 	u16 status;
-} __attribute__((packed));
+} __packed;
 
 struct isp_cmd_print_enable {
 	u32 enable;
-} __attribute__((packed));
+} __packed;
 
 struct isp_cmd_config {
 	u32 field0;
@@ -509,13 +512,13 @@ struct isp_cmd_config {
 	u32 field14;
 	u32 field18;
 	u32 field1c;
-} __attribute__((packed));
+} __packed;
 
 struct isp_cmd_set_loadfile {
 	u32 unknown;
 	u32 addr;
 	u32 length;
-} __attribute__((packed));
+} __packed;
 
 struct isp_cmd_channel_info {
 	u32 field_0;
@@ -534,7 +537,7 @@ struct isp_cmd_channel_info {
 	u8 unknown2[40];
 	u8 sensor_serial_number[8];
 	u8 camera_module_serial_number[18];
-} __attribute__((packed));
+} __packed;
 
 struct isp_cmd_channel_camera_config {
 	u32 unknown;
