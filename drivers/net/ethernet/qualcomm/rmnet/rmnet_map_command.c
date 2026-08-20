@@ -79,6 +79,8 @@ void rmnet_map_command(struct sk_buff *skb, struct rmnet_port *port)
 	unsigned char command_name;
 	unsigned char rc = 0;
 
+	skb->dev = port->dev;
+
 	/* Command data immediately follows the MAP header */
 	cmd = (struct rmnet_map_control_command *)(map_header + 1);
 	command_name = cmd->command_name;
