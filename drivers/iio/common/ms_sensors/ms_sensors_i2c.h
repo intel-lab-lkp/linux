@@ -36,17 +36,28 @@ struct ms_tp_hw_data {
 };
 
 /**
+ * struct ms_tp_data - Temperature/Pressure sensor data
+ * @name: Device name
+ * @hw: Sensor hardware data
+ */
+struct ms_tp_data {
+	const char *name;
+	const struct ms_tp_hw_data *hw;
+};
+
+/**
  * struct ms_tp_dev - Temperature/Pressure sensor device structure
  * @client:	i2c client
  * @lock:	lock protecting the i2c conversion
  * @prom:	array of PROM coefficients used for conversion. Added element
  *              for CRC computation
  * @res_index:	index to selected sensor resolution
+ * @data:	Temperature/Pressure sensor data
  */
 struct ms_tp_dev {
 	struct i2c_client *client;
 	struct mutex lock;
-	const struct ms_tp_hw_data *hw;
+	const struct ms_tp_data *data;
 	u16 prom[MS_SENSORS_TP_PROM_WORDS_NB];
 	u8 res_index;
 };

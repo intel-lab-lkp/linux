@@ -579,7 +579,7 @@ int ms_sensors_tp_read_prom(struct ms_tp_dev *dev_data)
 	int i, ret;
 	bool valid;
 
-	for (i = 0; i < dev_data->hw->prom_len; i++) {
+	for (i = 0; i < dev_data->data->hw->prom_len; i++) {
 		ret = ms_sensors_read_prom_word(
 			dev_data->client,
 			MS_SENSORS_TP_PROM_READ + (i << 1),
@@ -589,7 +589,7 @@ int ms_sensors_tp_read_prom(struct ms_tp_dev *dev_data)
 			return ret;
 	}
 
-	if (dev_data->hw->prom_len == 8)
+	if (dev_data->data->hw->prom_len == 8)
 		valid = ms_sensors_tp_crc_valid_128(dev_data->prom);
 	else
 		valid = ms_sensors_tp_crc_valid_112(dev_data->prom);

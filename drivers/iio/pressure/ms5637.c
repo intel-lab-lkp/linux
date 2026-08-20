@@ -29,11 +29,6 @@
 
 #include "../common/ms_sensors/ms_sensors_i2c.h"
 
-struct ms_tp_data {
-	const char *name;
-	const struct ms_tp_hw_data *hw;
-};
-
 static const int ms5637_samp_freq[6] = { 960, 480, 240, 120, 60, 30 };
 
 static ssize_t ms5637_show_samp_freq(struct device *dev, struct device_attribute *attr, char *buf)
@@ -42,7 +37,7 @@ static ssize_t ms5637_show_samp_freq(struct device *dev, struct device_attribute
 	struct ms_tp_dev *dev_data = iio_priv(indio_dev);
 	int i, len = 0;
 
-	for (i = 0; i <= dev_data->hw->max_res_index; i++)
+	for (i = 0; i <= dev_data->data->hw->max_res_index; i++)
 		len += sysfs_emit_at(buf, len, "%u ", ms5637_samp_freq[i]);
 	sysfs_emit_at(buf, len - 1, "\n");
 
@@ -168,7 +163,7 @@ static int ms5637_probe(struct i2c_client *client)
 	dev_data = iio_priv(indio_dev);
 	dev_data->client = client;
 	dev_data->res_index = data->hw->max_res_index;
-	dev_data->hw = data->hw;
+	dev_data->data = data;
 	mutex_init(&dev_data->lock);
 
 	indio_dev->info = &ms5637_info;
