@@ -169,11 +169,12 @@ config NET_DSA_VITESSE_VSC73XX_PLATFORM
 	  and VSC7398 SparX integrated ethernet switches, connected over
 	  a CPU-attached address bus and work in memory-mapped I/O mode.
 
-config NET_DSA_YT921X
-	tristate "Motorcomm YT9215 ethernet switch chip support"
+config NET_DSA_YT92XX
+	tristate "Motorcomm YT9215 and YT9224 ethernet switch chip support"
 	select NET_DSA_TAG_YT921X
+	select NET_DSA_TAG_YT922X
 	select NET_IEEE8021Q_HELPERS if DCB
 	help
-	  This enables support for the Motorcomm YT9215 ethernet switch
+	  This enables support for the Motorcomm YT9215 and YT9224 ethernet switch
 	  chip.
 endmenu
