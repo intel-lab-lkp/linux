@@ -978,7 +978,7 @@ static int otx2_get_ts_info(struct net_device *netdev,
 {
 	struct otx2_nic *pfvf = netdev_priv(netdev);
 
-	if (!pfvf->ptp)
+	if (!pfvf->ptp || is_otx2_sdp_rep(pfvf->pdev))
 		return ethtool_op_get_ts_info(netdev, info);
 
 	info->so_timestamping = SOF_TIMESTAMPING_TX_SOFTWARE |
