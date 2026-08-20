@@ -306,9 +306,7 @@ int orangefs_revalidate_mapping(struct inode *inode)
 	spin_unlock(&inode->i_lock);
 
 	unmap_mapping_range(mapping, 0, 0, 0);
-	ret = filemap_write_and_wait(mapping);
-	if (!ret)
-		ret = invalidate_inode_pages2(mapping);
+	ret = filemap_invalidate_pages(mapping, 0, OFFSET_MAX);
 
 	orangefs_inode->mapping_time = jiffies +
 	    orangefs_cache_timeout_msecs*HZ/1000;
