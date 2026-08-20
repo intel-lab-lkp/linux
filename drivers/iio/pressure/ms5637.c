@@ -223,51 +223,395 @@ static const struct ms_tp_comp_consts ms5637_02_consts = {
 	.press_shift = 15,
 };
 
-static const struct ms_tp_data ms5637_data = {
-	.name = "ms5637",
+static const struct ms_tp_data ms5637_02_data = {
+	.name = "ms5637-02ba",
 	.hw = &ms5637_hw_data,
 	.comp_consts = &ms5637_02_consts,
 };
 
-static const struct ms_tp_data ms5803_data = {
-	.name = "ms5803",
+/*
+ * MS5637-30BA compensation constants
+ * Datasheet: https://www.te.com/commerce/DocumentDelivery/DDEController?Action=showdoc&DocId=Data+Sheet%7FMS5637-30BA%7FA3%7Fpdf%7FEnglish%7FENG_DS_MS5637-30BA_A3.pdf
+ * Pages: 8-9
+ * Sections: Pressure and Temperature Calculation, Second Order Temperature Compensation
+ */
+static const struct ms_tp_comp_consts ms5637_30_consts = {
+	.press_scale = 100,
+	.high_t2_multiplier = 2,
+	.high_t2_shift = 37,
+	.high_off2_multiplier = 1,
+	.high_off2_shift = 4,
+	.low_t2_multiplier = 3,
+	.low_t2_shift = 33,
+	.low_off2_multiplier = 3,
+	.low_off2_shift = 1,
+	.low_sens2_multiplier = 5,
+	.low_sens2_shift = 3,
+	.vlow_off2_multiplier = 7,
+	.vlow_sens2_multiplier = 4,
+	.has_vhigh_temp = false,
+	.off_t1_shift = 16,
+	.off_shift = 7,
+	.sens_t1_shift = 15,
+	.sens_shift = 8,
+	.press_sens_shift = 21,
+	.press_shift = 13,
+};
+
+static const struct ms_tp_data ms5637_30_data = {
+	.name = "ms5637-30ba",
+	.hw = &ms5637_hw_data,
+	.comp_consts = &ms5637_30_consts,
+};
+
+/*
+ * MS5803-01BA compensation Constants
+ * Datasheet: https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&DocNm=MS5803-01BA&DocType=Data%20Sheet&DocLang=English&DocFormat=pdf
+ * Pages: 13-14
+ * Sections: Pressure and Temperature Calculation, Second Order Temperature Compensation
+ */
+static const struct ms_tp_comp_consts ms5803_01_consts = {
+	.press_scale = 1000,
+	.high_t2_multiplier = 0,
+	.high_t2_shift = 0,
+	.high_off2_multiplier = 0,
+	.high_off2_shift = 0,
+	.low_t2_multiplier = 1,
+	.low_t2_shift = 31,
+	.low_off2_multiplier = 3,
+	.low_off2_shift = 0,
+	.low_sens2_multiplier = 7,
+	.low_sens2_shift = 3,
+	.vlow_off2_multiplier = 0,
+	.vlow_sens2_multiplier = 2,
+	.has_vhigh_temp = true,
+	.off_t1_shift = 16,
+	.off_shift = 7,
+	.sens_t1_shift = 15,
+	.sens_shift = 8,
+	.press_sens_shift = 21,
+	.press_shift = 15,
+};
+
+static const struct ms_tp_data ms5803_01_data = {
+	.name = "ms5803-01ba",
 	.hw = &ms5803_hw_data,
-	.comp_consts = &ms5637_02_consts,
+	.comp_consts = &ms5803_01_consts,
+};
+
+/*
+ * MS5803-02BA compensation constants
+ * Datasheet: https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&DocNm=MS5803-02BA&DocType=Data%20Sheet&DocLang=English&DocFormat=pdf
+ * Pages: 13-14
+ * Sections: Pressure and Temperature Calculation, Second Order Temperature Compensation
+ */
+static const struct ms_tp_comp_consts ms5803_02_consts = {
+	.press_scale = 1000,
+	.high_t2_multiplier = 0,
+	.high_t2_shift = 0,
+	.high_off2_multiplier = 0,
+	.high_off2_shift = 0,
+	.low_t2_multiplier = 1,
+	.low_t2_shift = 31,
+	.low_off2_multiplier = 61,
+	.low_off2_shift = 4,
+	.low_sens2_multiplier = 2,
+	.low_sens2_shift = 0,
+	.vlow_off2_multiplier = 20,
+	.vlow_sens2_multiplier = 12,
+	.has_vhigh_temp = false,
+	.off_t1_shift = 17,
+	.off_shift = 6,
+	.sens_t1_shift = 16,
+	.sens_shift = 7,
+	.press_sens_shift = 21,
+	.press_shift = 15,
+};
+
+static const struct ms_tp_data ms5803_02_data = {
+	.name = "ms5803-02ba",
+	.hw = &ms5803_hw_data,
+	.comp_consts = &ms5803_02_consts,
+};
+
+/*
+ * MS5803-05BA compensation constants
+ * Datasheet: https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&DocNm=MS5803-05BA&DocType=Data%20Sheet&DocLang=English&DocFormat=pdf&PartCntxt=MS580305BA01-00
+ * Pages: 13-14
+ * Sections: Pressure and Temperature Calculation, Second Order Temperature Compensation
+ */
+static const struct ms_tp_comp_consts ms5803_05_consts = {
+	.press_scale = 1000,
+	.high_t2_multiplier = 0,
+	.high_t2_shift = 0,
+	.high_off2_multiplier = 0,
+	.high_off2_shift = 0,
+	.low_t2_multiplier = 3,
+	.low_t2_shift = 33,
+	.low_off2_multiplier = 3,
+	.low_off2_shift = 3,
+	.low_sens2_multiplier = 7,
+	.low_sens2_shift = 3,
+	.vlow_off2_multiplier = 0,
+	.vlow_sens2_multiplier = 3,
+	.has_vhigh_temp = false,
+	.off_t1_shift = 18,
+	.off_shift = 5,
+	.sens_t1_shift = 17,
+	.sens_shift = 7,
+	.press_sens_shift = 21,
+	.press_shift = 15,
+};
+
+static const struct ms_tp_data ms5803_05_data = {
+	.name = "ms5803-05ba",
+	.hw = &ms5803_hw_data,
+	.comp_consts = &ms5803_05_consts,
+};
+
+/*
+ * MS5803-14BA compensation constants
+ * Datasheet: https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&DocNm=MS5803-14BA&DocType=Data%20Sheet&DocLang=English&DocFormat=pdf&PartCntxt=MS580314BA01-50
+ * Pages: 13-14
+ * Sections: Pressure and Temperature Calculation, Second Order Temperature Compensation
+ */
+static const struct ms_tp_comp_consts ms5803_14_consts = {
+	.press_scale = 100,
+	.high_t2_multiplier = 7,
+	.high_t2_shift = 37,
+	.high_off2_multiplier = 1,
+	.high_off2_shift = 4,
+	.low_t2_multiplier = 3,
+	.low_t2_shift = 33,
+	.low_off2_multiplier = 3,
+	.low_off2_shift = 1,
+	.low_sens2_multiplier = 5,
+	.low_sens2_shift = 3,
+	.vlow_off2_multiplier = 7,
+	.vlow_sens2_multiplier = 4,
+	.has_vhigh_temp = false,
+	.off_t1_shift = 16,
+	.off_shift = 7,
+	.sens_t1_shift = 15,
+	.sens_shift = 8,
+	.press_sens_shift = 21,
+	.press_shift = 15,
+};
+
+static const struct ms_tp_data ms5803_14_data = {
+	.name = "ms5803-14ba",
+	.hw = &ms5803_hw_data,
+	.comp_consts = &ms5803_14_consts,
+};
+
+/*
+ * MS5803-30BA compensation constants
+ * Datasheet: https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&DocNm=MS5803-30BA&DocType=Data%20Sheet&DocLang=English&DocFormat=pdf&PartCntxt=MS580330BA01-00
+ * Pages: 13-14
+ * Sections: Pressure and Temperature Calculation, Second Order Temperature Compensation
+ */
+static const struct ms_tp_comp_consts ms5803_30_consts = {
+	.press_scale = 100,
+	.high_t2_multiplier = 7,
+	.high_t2_shift = 37,
+	.high_off2_multiplier = 1,
+	.high_off2_shift = 4,
+	.low_t2_multiplier = 3,
+	.low_t2_shift = 33,
+	.low_off2_multiplier = 3,
+	.low_off2_shift = 1,
+	.low_sens2_multiplier = 5,
+	.low_sens2_shift = 3,
+	.vlow_off2_multiplier = 7,
+	.vlow_sens2_multiplier = 4,
+	.has_vhigh_temp = false,
+	.off_t1_shift = 16,
+	.off_shift = 7,
+	.sens_t1_shift = 15,
+	.sens_shift = 8,
+	.press_sens_shift = 21,
+	.press_shift = 13,
+};
+
+static const struct ms_tp_data ms5803_30_data = {
+	.name = "ms5803-30ba",
+	.hw = &ms5803_hw_data,
+	.comp_consts = &ms5803_30_consts,
+};
+
+/*
+ * MS5805-02BA01 compensation constants
+ * Datasheet: https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&DocNm=MS5805-02BA01&DocType=Data%20Sheet&DocLang=English&DocFormat=pdf&PartCntxt=MS580502BA01-50
+ * Pages: 8-9
+ * Sections: Pressure and Temperature Calculation, Second Order Temperature Compensation
+ */
+static const struct ms_tp_comp_consts ms5805_consts = {
+	.press_scale = 1000,
+	.high_t2_multiplier = 0,
+	.high_t2_shift = 0,
+	.high_off2_multiplier = 0,
+	.high_off2_shift = 0,
+	.low_t2_multiplier = 11,
+	.low_t2_shift = 35,
+	.low_off2_multiplier = 31,
+	.low_off2_shift = 3,
+	.low_sens2_multiplier = 63,
+	.low_sens2_shift = 5,
+	.vlow_off2_multiplier = 0,
+	.vlow_sens2_multiplier = 0,
+	.has_vhigh_temp = false,
+	.off_t1_shift = 17,
+	.off_shift = 6,
+	.sens_t1_shift = 16,
+	.sens_shift = 7,
+	.press_sens_shift = 21,
+	.press_shift = 15,
 };
 
 static const struct ms_tp_data ms5805_data = {
 	.name = "ms5805",
 	.hw = &ms5637_hw_data,
-	.comp_consts = &ms5637_02_consts,
+	.comp_consts = &ms5805_consts,
 };
 
-static const struct ms_tp_data ms5837_data = {
-	.name = "ms5837",
+/*
+ * MS5837-02BA compensation constants
+ * Datasheet: https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&DocNm=MS5837-02BA01&DocType=Data%20Sheet&DocLang=English&DocFormat=pdf&PartCntxt=20000979-00
+ * Pages: 7-8
+ * Sections: Pressure and Temperature Calculation, Second Order Temperature Compensation
+ */
+static const struct ms_tp_comp_consts ms5837_02_consts = {
+	.press_scale = 1000,
+	.high_t2_multiplier = 0,
+	.high_t2_shift = 0,
+	.high_off2_multiplier = 0,
+	.high_off2_shift = 0,
+	.low_t2_multiplier = 11,
+	.low_t2_shift = 35,
+	.low_off2_multiplier = 31,
+	.low_off2_shift = 3,
+	.low_sens2_multiplier = 63,
+	.low_sens2_shift = 5,
+	.vlow_off2_multiplier = 0,
+	.vlow_sens2_multiplier = 0,
+	.has_vhigh_temp = false,
+	.off_t1_shift = 17,
+	.off_shift = 6,
+	.sens_t1_shift = 16,
+	.sens_shift = 7,
+	.press_sens_shift = 21,
+	.press_shift = 15,
+};
+
+static const struct ms_tp_data ms5837_02_data = {
+	.name = "ms5837-02ba",
 	.hw = &ms5637_hw_data,
-	.comp_consts = &ms5637_02_consts,
+	.comp_consts = &ms5837_02_consts,
+};
+
+/*
+ * MS5837-30BA compensation constants
+ * Datasheet: https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&DocNm=MS5837-30BA&DocType=Data%20Sheet&DocLang=English&DocFormat=pdf&PartCntxt=MS583730BA01-50
+ * Pages: 11-12
+ * Sections: Pressure and Temperature Calculation, Second Order Temperature Compensation
+ */
+static const struct ms_tp_comp_consts ms5837_30_consts = {
+	.press_scale = 100,
+	.high_t2_multiplier = 2,
+	.high_t2_shift = 37,
+	.high_off2_multiplier = 1,
+	.high_off2_shift = 4,
+	.low_t2_multiplier = 3,
+	.low_t2_shift = 33,
+	.low_off2_multiplier = 3,
+	.low_off2_shift = 1,
+	.low_sens2_multiplier = 5,
+	.low_sens2_shift = 3,
+	.vlow_off2_multiplier = 7,
+	.vlow_sens2_multiplier = 4,
+	.has_vhigh_temp = false,
+	.off_t1_shift = 16,
+	.off_shift = 7,
+	.sens_t1_shift = 15,
+	.sens_shift = 8,
+	.press_sens_shift = 21,
+	.press_shift = 13,
+};
+
+static const struct ms_tp_data ms5837_30_data = {
+	.name = "ms5837-30ba",
+	.hw = &ms5637_hw_data,
+	.comp_consts = &ms5837_30_consts,
+};
+
+/*
+ * MS8607-02BA compensation constants
+ * Datasheet: https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&DocNm=MS8607-02BA01&DocType=Data%20Sheet&DocLang=English&DocFormat=pdf&PartCntxt=CAT-BLPS0018
+ * Pages: 9-10
+ * Sections: Pressure and Temperature Calculation, Second Order Temperature Compensation
+ */
+static const struct ms_tp_comp_consts ms8607_consts = {
+	.press_scale = 1000,
+	.high_t2_multiplier = 5,
+	.high_t2_shift = 38,
+	.high_off2_multiplier = 0,
+	.high_off2_shift = 0,
+	.low_t2_multiplier = 3,
+	.low_t2_shift = 33,
+	.low_off2_multiplier = 61,
+	.low_off2_shift = 4,
+	.low_sens2_multiplier = 29,
+	.low_sens2_shift = 4,
+	.vlow_off2_multiplier = 17,
+	.vlow_sens2_multiplier = 9,
+	.has_vhigh_temp = false,
+	.off_t1_shift = 17,
+	.off_shift = 6,
+	.sens_t1_shift = 16,
+	.sens_shift = 7,
+	.press_sens_shift = 21,
+	.press_shift = 15,
 };
 
 static const struct ms_tp_data ms8607_data = {
 	.name = "ms8607-temppressure",
 	.hw = &ms5637_hw_data,
-	.comp_consts = &ms5637_02_consts,
+	.comp_consts = &ms8607_consts,
 };
 
 static const struct i2c_device_id ms5637_id[] = {
-	{ .name = "ms5637", .driver_data = (kernel_ulong_t)&ms5637_data },
-	{ .name = "ms5803", .driver_data = (kernel_ulong_t)&ms5803_data },
+	{ .name = "ms5637", .driver_data = (kernel_ulong_t)&ms5637_02_data },
+	{ .name = "ms5637-02ba", .driver_data = (kernel_ulong_t)&ms5637_02_data },
+	{ .name = "ms5637-30ba", .driver_data = (kernel_ulong_t)&ms5637_30_data },
+	{ .name = "ms5803", .driver_data = (kernel_ulong_t)&ms5803_02_data },
+	{ .name = "ms5803-01ba", .driver_data = (kernel_ulong_t)&ms5803_01_data },
+	{ .name = "ms5803-02ba", .driver_data = (kernel_ulong_t)&ms5803_02_data },
+	{ .name = "ms5803-05ba", .driver_data = (kernel_ulong_t)&ms5803_05_data },
+	{ .name = "ms5803-14ba", .driver_data = (kernel_ulong_t)&ms5803_14_data },
+	{ .name = "ms5803-30ba", .driver_data = (kernel_ulong_t)&ms5803_30_data },
 	{ .name = "ms5805", .driver_data = (kernel_ulong_t)&ms5805_data },
-	{ .name = "ms5837", .driver_data = (kernel_ulong_t)&ms5837_data },
+	{ .name = "ms5837", .driver_data = (kernel_ulong_t)&ms5837_02_data },
+	{ .name = "ms5837-02ba", .driver_data = (kernel_ulong_t)&ms5837_02_data },
+	{ .name = "ms5837-30ba", .driver_data = (kernel_ulong_t)&ms5837_30_data },
 	{ .name = "ms8607-temppressure", .driver_data = (kernel_ulong_t)&ms8607_data },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ms5637_id);
 
 static const struct of_device_id ms5637_of_match[] = {
-	{ .compatible = "meas,ms5637", .data = &ms5637_data },
-	{ .compatible = "meas,ms5803", .data = &ms5803_data },
+	{ .compatible = "meas,ms5637", .data = &ms5637_02_data },
+	{ .compatible = "meas,ms5637-02ba", .data = &ms5637_02_data },
+	{ .compatible = "meas,ms5637-30ba", .data = &ms5637_30_data },
+	{ .compatible = "meas,ms5803", .data = &ms5803_02_data },
+	{ .compatible = "meas,ms5803-01ba", .data = &ms5803_01_data },
+	{ .compatible = "meas,ms5803-02ba", .data = &ms5803_02_data },
+	{ .compatible = "meas,ms5803-05ba", .data = &ms5803_05_data },
+	{ .compatible = "meas,ms5803-14ba", .data = &ms5803_14_data },
+	{ .compatible = "meas,ms5803-30ba", .data = &ms5803_30_data },
 	{ .compatible = "meas,ms5805", .data = &ms5805_data },
-	{ .compatible = "meas,ms5837", .data = &ms5837_data },
+	{ .compatible = "meas,ms5837", .data = &ms5837_02_data },
+	{ .compatible = "meas,ms5837-02ba", .data = &ms5837_02_data },
+	{ .compatible = "meas,ms5837-30ba", .data = &ms5837_30_data },
 	{ .compatible = "meas,ms8607-temppressure", .data = &ms8607_data },
 	{ }
 };
