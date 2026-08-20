@@ -213,10 +213,12 @@ static gfp_t gfp_flags_quirk;
 static struct page *its_alloc_pages_node(int node, gfp_t gfp,
 					 unsigned int order)
 {
+	bool want_zero = gfp & __GFP_ZERO;
 	struct page *page;
 	int ret = 0;
 
-	page = alloc_pages_node(node, gfp | gfp_flags_quirk, order);
+	page = alloc_pages_node(node, (gfp & ~__GFP_ZERO) | gfp_flags_quirk,
+				order);
 
 	if (!page)
 		return NULL;
@@ -230,6 +232,9 @@ static struct page *its_alloc_pages_node(int node, gfp_t gfp,
 	 */
 	if (ret)
 		return NULL;
+
+	if (want_zero)
+		clear_pages(page_address(page), 1 << order);
 
 	return page;
 }
