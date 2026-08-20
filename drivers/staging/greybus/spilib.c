@@ -444,7 +444,6 @@ static int gb_spi_setup_device(struct gb_spilib *spi, u8 cs)
 	struct gb_spi_device_config_request request;
 	struct gb_spi_device_config_response response;
 	struct spi_board_info spi_board = { {0} };
-	struct spi_device *spidev;
 	int ret;
 	u8 dev_type;
 
@@ -475,8 +474,7 @@ static int gb_spi_setup_device(struct gb_spilib *spi, u8 cs)
 	spi_board.chip_select	= cs;
 	spi_board.max_speed_hz	= le32_to_cpu(response.max_speed_hz);
 
-	spidev = spi_new_device(ctlr, &spi_board);
-	if (!spidev)
+	if (!spi_new_device(ctlr, &spi_board))
 		return -EINVAL;
 
 	return 0;
