@@ -72,6 +72,7 @@ struct tmio_mmc_data {
 	unsigned short			max_segs;
 	u64				clk_mask;
 	int				max_divider;
+	u32				osel_tmpout;
 	u16				clk_div_mask;
 };
 #endif

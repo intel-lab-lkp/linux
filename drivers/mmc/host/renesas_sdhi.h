@@ -42,6 +42,7 @@ struct renesas_sdhi_of_data {
 	unsigned long sdhi_flags;
 	u64 clk_mask;
 	int max_divider;
+	u32 osel_tmpout;
 	u16 clk_div_mask;
 };
 
