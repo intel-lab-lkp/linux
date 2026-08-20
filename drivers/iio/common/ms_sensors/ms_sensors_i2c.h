@@ -36,13 +36,61 @@ struct ms_tp_hw_data {
 };
 
 /**
+ * struct ms_tp_comp_consts - Temperature compensation constants
+ * @press_scale: pressure scale
+ * @high_t2_multiplier: multiplier for t2 in high temperature state
+ * @high_t2_shift: bit shift for t2 in high temperature state
+ * @high_off2_multiplier: multiplier for off2 in high temperature state
+ * @high_off2_shift: bit shift for off2 in high temperature state
+ * @low_t2_multiplier: multiplier for t2 in low temperature state
+ * @low_t2_shift: bit shift for t2 in low temperature state
+ * @low_off2_multiplier: multiplier for off2 in low temperature state
+ * @low_off2_shift: bit shift for off2 in low temperature state
+ * @low_sens2_multiplier: multiplier for sens2 in low temperature state
+ * @low_sens2_shift: bit shift for sens2 in low temperature state
+ * @vlow_off2_multiplier: multiplier for value added to off2 in very low temperature state
+ * @vlow_sens2_multiplier: multiplier for value added to sens2 in very low temperature state
+ * @has_vhigh_temp: has very high temperature compensation logic
+ * @off_t1_shift: temperature offset t1 bit shift
+ * @off_shift: temperature offset shift
+ * @sens_t1_shift: temperature sensitivity t1 shift
+ * @sens_shift: temperature sensitivity shift
+ * @press_sens_shift: pressure sensitivity shift
+ * @press_shift: pressure shift
+ */
+struct ms_tp_comp_consts {
+	u32 press_scale;
+	u8 high_t2_multiplier;
+	u8 high_t2_shift;
+	u8 high_off2_multiplier;
+	u8 high_off2_shift;
+	u8 low_t2_multiplier;
+	u8 low_t2_shift;
+	u8 low_off2_multiplier;
+	u8 low_off2_shift;
+	u8 low_sens2_multiplier;
+	u8 low_sens2_shift;
+	u8 vlow_off2_multiplier;
+	u8 vlow_sens2_multiplier;
+	bool has_vhigh_temp;
+	u8 off_t1_shift;
+	u8 off_shift;
+	u8 sens_t1_shift;
+	u8 sens_shift;
+	u8 press_sens_shift;
+	u8 press_shift;
+};
+
+/**
  * struct ms_tp_data - Temperature/Pressure sensor data
  * @name: Device name
  * @hw: Sensor hardware data
+ * @comp_consts: Temperature compensation constants
  */
 struct ms_tp_data {
 	const char *name;
 	const struct ms_tp_hw_data *hw;
+	const struct ms_tp_comp_consts *comp_consts;
 };
 
 /**

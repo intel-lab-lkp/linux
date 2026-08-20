@@ -604,6 +604,38 @@ int ms_sensors_tp_read_prom(struct ms_tp_dev *dev_data)
 }
 EXPORT_SYMBOL_NS(ms_sensors_tp_read_prom, "IIO_MEAS_SPEC_SENSORS");
 
+/* apply second order temperature compensation */
+static void ms_tp_compensate(const struct ms_tp_comp_consts *c,
+			     s32 temp, s32 dt, s64 *t2, s64 *off2, s64 *sens2)
+{
+	s64 tmp;
+
+	if (temp < 2000) {
+		tmp = temp - 2000;
+		*t2 = (c->low_t2_multiplier * ((s64)dt * (s64)dt)) >>
+		      c->low_t2_shift;
+		*off2 = (c->low_off2_multiplier * tmp * tmp) >>
+			c->low_off2_shift;
+		*sens2 = (c->low_sens2_multiplier * tmp * tmp) >>
+			 c->low_sens2_shift;
+
+		if (temp < -1500) {
+			tmp = temp + 1500;
+			*off2 += c->vlow_off2_multiplier * tmp * tmp;
+			*sens2 += c->vlow_sens2_multiplier * tmp * tmp;
+		}
+	} else {
+		*sens2 = 0;
+		if (c->has_vhigh_temp && temp > 4500)
+			*sens2 -= (((s64)temp - 4500) * ((s64)temp - 4500)) >> 3;
+
+		*t2 = (c->high_t2_multiplier * ((s64)dt * (s64)dt)) >> c->high_t2_shift;
+		*off2 = (c->high_off2_multiplier *
+			 ((s64)temp - 2000) * ((s64)temp - 2000)) >>
+			c->high_off2_shift;
+	}
+}
+
 /**
  * ms_sensors_read_temp_and_pressure() - read temp and pressure
  * @dev_data:	pointer to temperature/pressure device data
@@ -619,6 +651,7 @@ int ms_sensors_read_temp_and_pressure(struct ms_tp_dev *dev_data,
 				      int *temperature,
 				      unsigned int *pressure)
 {
+	const struct ms_tp_comp_consts *c = dev_data->data->comp_consts;
 	int ret;
 	u32 t_adc, p_adc;
 	s32 dt, temp;
@@ -654,37 +687,21 @@ int ms_sensors_read_temp_and_pressure(struct ms_tp_dev *dev_data,
 	/* Actual temperature = 2000 + dT * TEMPSENS */
 	temp = 2000 + (((s64)dt * prom[6]) >> 23);
 
-	/* Second order temperature compensation */
-	if (temp < 2000) {
-		s64 tmp = (s64)temp - 2000;
-
-		t2 = (3 * ((s64)dt * (s64)dt)) >> 33;
-		off2 = (61 * tmp * tmp) >> 4;
-		sens2 = (29 * tmp * tmp) >> 4;
-
-		if (temp < -1500) {
-			s64 tmp = (s64)temp + 1500;
-
-			off2 += 17 * tmp * tmp;
-			sens2 += 9 * tmp * tmp;
-		}
-	} else {
-		t2 = (5 * ((s64)dt * (s64)dt)) >> 38;
-		off2 = 0;
-		sens2 = 0;
-	}
+	ms_tp_compensate(c, temp, dt, &t2, &off2, &sens2);
 
 	/* OFF = OFF_T1 + TCO * dT */
-	off = (((s64)prom[2]) << 17) + ((((s64)prom[4]) * (s64)dt) >> 6);
+	off = (((s64)prom[2]) << c->off_t1_shift) +
+	      ((((s64)prom[4]) * (s64)dt) >> c->off_shift);
 	off -= off2;
 
 	/* Sensitivity at actual temperature = SENS_T1 + TCS * dT */
-	sens = (((s64)prom[1]) << 16) + (((s64)prom[3] * dt) >> 7);
+	sens = (((s64)prom[1]) << c->sens_t1_shift) +
+	       (((s64)prom[3] * dt) >> c->sens_shift);
 	sens -= sens2;
 
 	/* Temperature compensated pressure = D1 * SENS - OFF */
 	*temperature = (temp - t2) * 10;
-	*pressure = (u32)(((((s64)p_adc * sens) >> 21) - off) >> 15);
+	*pressure = (u32)(((((s64)p_adc * sens) >> c->press_sens_shift) - off) >> c->press_shift);
 
 	return 0;
 }

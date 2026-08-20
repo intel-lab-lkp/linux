@@ -67,10 +67,9 @@ static int ms5637_read_raw(struct iio_dev *indio_dev,
 
 			return IIO_VAL_INT;
 		case IIO_PRESSURE:	/* in kPa */
-			*val = pressure / 1000;
-			*val2 = (pressure % 1000) * 1000;
-
-			return IIO_VAL_INT_PLUS_MICRO;
+			*val = pressure;
+			*val2 = dev_data->data->comp_consts->press_scale;
+			return IIO_VAL_FRACTIONAL;
 		default:
 			return -EINVAL;
 		}
@@ -195,17 +194,63 @@ static const struct ms_tp_hw_data ms5803_hw_data  = {
 	.max_res_index = 4
 };
 
-static const struct ms_tp_data ms5637_data = { .name = "ms5637", .hw = &ms5637_hw_data };
+/*
+ * MS5637-02BA03 compensation constants
+ * Datasheet: https://www.te.com/commerce/DocumentDelivery/DDEController?Action=showdoc&DocId=Data+Sheet%7FMS5637-02BA03%7FB1%7Fpdf%7FEnglish%7FENG_DS_MS5637-02BA03_B1.pdf
+ * Pages: 7-8
+ * Sections: Pressure and Temperature Calculation, Second Order Temperature Compensation
+ */
+static const struct ms_tp_comp_consts ms5637_02_consts = {
+	.press_scale = 1000,
+	.high_t2_multiplier = 5,
+	.high_t2_shift = 38,
+	.high_off2_multiplier = 0,
+	.high_off2_shift = 0,
+	.low_t2_multiplier = 3,
+	.low_t2_shift = 33,
+	.low_off2_multiplier = 61,
+	.low_off2_shift = 4,
+	.low_sens2_multiplier = 29,
+	.low_sens2_shift = 4,
+	.vlow_off2_multiplier = 17,
+	.vlow_sens2_multiplier = 9,
+	.has_vhigh_temp = false,
+	.off_t1_shift = 17,
+	.off_shift = 6,
+	.sens_t1_shift = 16,
+	.sens_shift = 7,
+	.press_sens_shift = 21,
+	.press_shift = 15,
+};
 
-static const struct ms_tp_data ms5803_data = { .name = "ms5803", .hw = &ms5803_hw_data };
+static const struct ms_tp_data ms5637_data = {
+	.name = "ms5637",
+	.hw = &ms5637_hw_data,
+	.comp_consts = &ms5637_02_consts,
+};
 
-static const struct ms_tp_data ms5805_data = { .name = "ms5805", .hw = &ms5637_hw_data };
+static const struct ms_tp_data ms5803_data = {
+	.name = "ms5803",
+	.hw = &ms5803_hw_data,
+	.comp_consts = &ms5637_02_consts,
+};
 
-static const struct ms_tp_data ms5837_data = { .name = "ms5837", .hw = &ms5637_hw_data };
+static const struct ms_tp_data ms5805_data = {
+	.name = "ms5805",
+	.hw = &ms5637_hw_data,
+	.comp_consts = &ms5637_02_consts,
+};
+
+static const struct ms_tp_data ms5837_data = {
+	.name = "ms5837",
+	.hw = &ms5637_hw_data,
+	.comp_consts = &ms5637_02_consts,
+};
 
 static const struct ms_tp_data ms8607_data = {
 	.name = "ms8607-temppressure",
 	.hw = &ms5637_hw_data,
+	.comp_consts = &ms5637_02_consts,
 };
 
 static const struct i2c_device_id ms5637_id[] = {
