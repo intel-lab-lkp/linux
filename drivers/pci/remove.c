@@ -36,6 +36,7 @@ static void pci_destroy_dev(struct pci_dev *dev)
 
 	pci_doe_sysfs_teardown(dev);
 	pci_npem_remove(dev);
+	pci_lmr_exit(dev);
 
 	/*
 	 * While device is in D0 drop the device from TSM link operations

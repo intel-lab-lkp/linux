@@ -5145,8 +5145,10 @@ int __pci_reset_function_locked(struct pci_dev *dev)
 		method = &pci_reset_fn_methods[m];
 		pci_dbg(dev, "reset via %s\n", method->name);
 		rc = method->reset_fn(dev, PCI_RESET_DO_RESET);
-		if (!rc)
+		if (!rc) {
+			pci_reset_lmr(dev);
 			return 0;
+		}
 
 		pci_dbg(dev, "%s failed with %d\n", method->name, rc);
 		if (rc != -ENOTTY)
