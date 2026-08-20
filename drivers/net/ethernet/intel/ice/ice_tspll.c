@@ -158,7 +158,7 @@ static void ice_tspll_log_cfg(struct ice_hw *hw, bool enable, u8 clk_src,
 		new_cfg ? "New" : "Current", str_enabled_disabled(enable),
 		ice_tspll_clk_src_str((enum ice_clk_src)clk_src),
 		ice_tspll_clk_freq_str((enum ice_tspll_freq)tspll_freq),
-		lock ? "locked" : "unlocked");
+		str_locked_unlocked(lock));
 }
 
 /**

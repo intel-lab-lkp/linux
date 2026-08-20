@@ -1775,8 +1775,7 @@ void ice_print_vf_rx_mdd_event(struct ice_vf *vf)
 	dev_info(dev, "%d Rx Malicious Driver Detection events detected on PF %d VF %d MAC %pM. mdd-auto-reset-vfs=%s\n",
 		 vf->mdd_rx_events.count, pf->hw.pf_id, vf->vf_id,
 		 vf->dev_lan_addr,
-		 test_bit(ICE_FLAG_MDD_AUTO_RESET_VF, pf->flags)
-			  ? "on" : "off");
+		 str_on_off(test_bit(ICE_FLAG_MDD_AUTO_RESET_VF, pf->flags)));
 }
 
 /**
@@ -1793,8 +1792,7 @@ void ice_print_vf_tx_mdd_event(struct ice_vf *vf)
 	dev_info(dev, "%d Tx Malicious Driver Detection events detected on PF %d VF %d MAC %pM. mdd-auto-reset-vfs=%s\n",
 		 vf->mdd_tx_events.count, pf->hw.pf_id, vf->vf_id,
 		 vf->dev_lan_addr,
-		 test_bit(ICE_FLAG_MDD_AUTO_RESET_VF, pf->flags)
-			  ? "on" : "off");
+		 str_on_off(test_bit(ICE_FLAG_MDD_AUTO_RESET_VF, pf->flags)));
 }
 
 /**
