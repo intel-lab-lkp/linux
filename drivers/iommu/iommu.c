@@ -4272,6 +4272,11 @@ EXPORT_SYMBOL_GPL(pci_dev_reset_iommu_done);
  * stop the domain from changing between iterations, leaving the table
  * inconsistent. The caller locks once around the whole loop instead.
  *
+ * @domain may be the incoming domain of an attach_dev() callback. In that
+ * case, @dev need not be attached to @domain yet, but it must be compatible
+ * with @domain and the caller must keep the current group attachment stable
+ * until the callback completes.
+ *
  * Return: 0 on success or negative error code if the mapping failed.
  */
 int iommu_dma_map_msi(struct iommu_domain *domain,

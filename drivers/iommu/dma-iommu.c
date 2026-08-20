@@ -2239,9 +2239,10 @@ out_free_page:
  * mapping granule. Used for pre-mapping MSI targets before any MSI
  * descriptor has been set.
  *
- * The caller must pass a device attached to @domain and hold @dev's IOMMU
- * group mutex. If @required_size is non-zero then it must exactly match the
- * domain's MSI mapping granule. @msi_iova and @msi_shift must be non-NULL.
+ * The caller must pass a device compatible with @domain and hold @dev's IOMMU
+ * group mutex. @domain may be the incoming domain of an attach_dev() callback.
+ * If @required_size is non-zero then it must exactly match the domain's MSI
+ * mapping granule. @msi_iova and @msi_shift must be non-NULL.
  */
 int iommu_dma_sw_map_msi(struct iommu_domain *domain,
 			 struct device *dev, phys_addr_t msi_addr,

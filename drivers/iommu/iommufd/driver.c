@@ -281,9 +281,11 @@ int iommufd_sw_map_msi(struct iommu_domain *domain, struct device *dev,
 		return -EOPNOTSUPP;
 
 	/*
-	 * It is safe to call iommu_attach_handle_get() here because the iommu
-	 * core code invokes this under the group mutex which also prevents any
-	 * change of the attach handle for the duration of this function.
+	 * During a domain replacement this returns the current handle, not the
+	 * handle for @domain. That is intentional: the current handle supplies
+	 * the stable iommufd context and group MSI window, while @domain selects
+	 * the HWPT where the mapping is installed. The group mutex prevents the
+	 * current handle from changing for the duration of this function.
 	 */
 	iommu_group_mutex_assert(dev);
 
