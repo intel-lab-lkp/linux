@@ -537,7 +537,7 @@ EXPORT_SYMBOL(ttm_tt_pages_limit);
 
 /**
  * ttm_tt_setup_backup() - Allocate and assign a backup structure for a ttm_tt
- * @tt: The ttm_tt for wich to allocate and assign a backup structure.
+ * @tt: The ttm_tt for which to allocate and assign a backup structure.
  *
  * Assign a backup structure to be used for tt backup. This should
  * typically be done at bo creation, to avoid allocations at shrinking
