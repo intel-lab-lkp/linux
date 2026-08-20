@@ -260,12 +260,117 @@ static const struct dma_buf_test_params test_params[] = {
 	{}
 };
 
+static void xe_test_dmabuf_export_deferred(struct xe_device *xe, u32 bo_flags,
+					   u32 mem_type, bool expect_populated)
+{
+	struct drm_exec *exec = XE_VALIDATION_OPT_OUT;
+	struct kunit *test = kunit_get_current_test();
+	struct ttm_resource_manager *man;
+	struct dma_buf *dmabuf;
+	struct xe_bo *bo;
+	size_t size = PAGE_SIZE;
+	int err;
+
+	/* No VRAM on device? */
+	if (!ttm_manager_type(&xe->ttm, mem_type))
+		return;
+
+	if (mem_type == XE_PL_VRAM0 &&
+	    xe->info.vram_flags & XE_VRAM_FLAGS_NEED64K)
+		size = SZ_64K;
+
+	/*
+	 * DEFER_BACKING places the BO in SYSTEM and creates a ttm_tt which
+	 * is unpopulated. In the case of VRAM, migrating leaves the ttm_tt
+	 * retained and unpopulated while VRAM becomes the real backing.
+	 */
+	bo = xe_bo_create_user(xe, NULL, size, DRM_XE_GEM_CPU_CACHING_WC,
+			       bo_flags | XE_BO_FLAG_DEFER_BACKING, NULL);
+	if (IS_ERR(bo)) {
+		KUNIT_FAIL(test, "BO creation failed: %pe\n", bo);
+		return;
+	}
+
+	err = xe_bo_lock(bo, false);
+	if (err) {
+		KUNIT_FAIL(test, "BO lock failed: %d\n", err);
+		goto out_put_bo;
+	}
+
+	if (bo->ttm.resource->mem_type != mem_type)
+		err = xe_bo_migrate(bo, mem_type, NULL, exec);
+	if (err) {
+		KUNIT_FAIL(test, "BO migration to %u failed: %d\n", mem_type,
+			   err);
+		goto out_unlock;
+	}
+
+	man = ttm_manager_type(bo->ttm.bdev, bo->ttm.resource->mem_type);
+	if (!man || !bo->ttm.ttm) {
+		KUNIT_FAIL(test, "Expected a retained unpopulated TT\n");
+		goto out_unlock;
+	}
+
+	/* Precondition: ttm_tt starts unpopulated after migration */
+	KUNIT_EXPECT_EQ(test, man->use_tt, expect_populated);
+	KUNIT_EXPECT_FALSE(test, ttm_tt_is_populated(bo->ttm.ttm));
+
+	xe_bo_unlock(bo);
+
+	dmabuf = xe_gem_prime_export(&bo->ttm.base, 0);
+	if (IS_ERR(dmabuf)) {
+		KUNIT_FAIL(test, "dma-buf export failed: %pe\n", dmabuf);
+		goto out_put_bo;
+	}
+
+	err = xe_bo_lock(bo, false);
+	if (err) {
+		KUNIT_FAIL(test, "post-export BO lock failed: %d\n", err);
+		goto out_put_dmabuf;
+	}
+
+	/* Postcondition: if VRAM, ttm_tt remains unpopulated, if SYSTEM ttm_tt is populated */
+	KUNIT_EXPECT_EQ(test, bo->ttm.resource->mem_type, mem_type);
+	KUNIT_EXPECT_NOT_NULL(test, bo->ttm.ttm);
+	if (bo->ttm.ttm)
+		KUNIT_EXPECT_EQ(test, ttm_tt_is_populated(bo->ttm.ttm),
+				expect_populated);
+
+	xe_bo_unlock(bo);
+	dma_buf_put(dmabuf);
+	drm_gem_object_put(&bo->ttm.base);
+	return;
+
+out_unlock:
+	xe_bo_unlock(bo);
+	goto out_put_bo;
+out_put_dmabuf:
+	dma_buf_put(dmabuf);
+out_put_bo:
+	drm_gem_object_put(&bo->ttm.base);
+}
+
 static int dma_buf_run_device(struct xe_device *xe)
 {
 	const struct dma_buf_test_params *params;
 	struct kunit *test = kunit_get_current_test();
 
 	guard(xe_pm_runtime)(xe);
+
+	/*
+	 * A retained TT must not be populated when VRAM is the backing
+	 * resource.
+	 */
+	xe_test_dmabuf_export_deferred(xe, XE_BO_FLAG_VRAM0, XE_PL_VRAM0,
+				       false);
+
+	/*
+	 * Control case: deferred SYSTEM backing must still be populated
+	 * before export.
+	 */
+	xe_test_dmabuf_export_deferred(xe, XE_BO_FLAG_SYSTEM, XE_PL_SYSTEM,
+				       true);
+
 	for (params = test_params; params->mem_mask; ++params) {
 		struct dma_buf_test_params p = *params;
 

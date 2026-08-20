@@ -219,6 +219,32 @@ static const struct dma_buf_ops xe_dmabuf_ops = {
 	.vunmap = drm_gem_dmabuf_vunmap,
 };
 
+static int xe_dma_bo_setup_export(struct ttm_buffer_object *tbo,
+				  struct ttm_operation_ctx *ctx)
+{
+	struct ttm_resource_manager *man = NULL;
+	int ret;
+
+	ret = ttm_bo_reserve(tbo, false, false, NULL);
+	if (ret)
+		return ret;
+
+	if (tbo->resource)
+		man = ttm_manager_type(tbo->bdev, tbo->resource->mem_type);
+
+	/*
+	 * Do not populate BO-sized system pages when backed by a non-TT resource.
+	 * This is Xe-specific; the generic ttm_bo_setup_export() always populates.
+	 */
+	if (man && !man->use_tt)
+		ret = 0;
+	else
+		ret = ttm_bo_populate(tbo, ctx);
+
+	ttm_bo_unreserve(tbo);
+	return ret;
+}
+
 struct dma_buf *xe_gem_prime_export(struct drm_gem_object *obj, int flags)
 {
 	struct xe_bo *bo = gem_to_xe_bo(obj);
@@ -257,7 +283,7 @@ struct dma_buf *xe_gem_prime_export(struct drm_gem_object *obj, int flags)
 	xe_bo_willneed_get_locked(bo);
 	xe_bo_unlock(bo);
 
-	ret = ttm_bo_setup_export(&bo->ttm, &ctx);
+	ret = xe_dma_bo_setup_export(&bo->ttm, &ctx);
 	if (ret)
 		goto out_put;
 
