@@ -360,9 +360,10 @@ void nouveau_unregister_dsm_handler(void) {}
 void nouveau_switcheroo_optimus_dsm(void) {}
 #endif
 
-void *
+const struct drm_edid *
 nouveau_acpi_edid(struct drm_device *dev, struct drm_connector *connector)
 {
+	const struct drm_edid *drm_edid;
 	struct acpi_device *acpidev;
 	int type, ret;
 	void *edid;
@@ -384,7 +385,23 @@ nouveau_acpi_edid(struct drm_device *dev, struct drm_connector *connector)
 	if (ret < 0)
 		return NULL;
 
-	return edid;
+	/* Never let the EDID's own extension count reach past what _DDC
+	 * actually returned. Drop the padding some firmware appends so the
+	 * container is exactly the EDID, then validate it like the DDC
+	 * readers would.
+	 */
+	if (ret >= EDID_LENGTH)
+		ret = min_t(int, ret, EDID_LENGTH *
+				      (1 + ((const struct edid *)edid)->extensions));
+	drm_edid = drm_edid_alloc(edid, ret);
+	kfree(edid);
+
+	if (drm_edid && !drm_edid_valid(drm_edid)) {
+		drm_dbg_kms(dev, "Invalid EDID from ACPI _DDC\n");
+		drm_edid_free(drm_edid);
+		drm_edid = NULL;
+	}
+	return drm_edid;
 }
 
 bool nouveau_acpi_video_backlight_use_native(void)
