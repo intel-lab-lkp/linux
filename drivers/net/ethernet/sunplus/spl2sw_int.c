@@ -147,7 +147,7 @@ int spl2sw_tx_poll(struct napi_struct *napi, int budget)
 	u32 cmd;
 	int i;
 
-	spin_lock(&comm->tx_lock);
+	spin_lock_irqsave(&comm->tx_lock, flags);
 
 	tx_done_pos = comm->tx_done_pos;
 	while (((tx_done_pos != comm->tx_pos) || (comm->tx_desc_full == 1)) && budget_left) {
@@ -196,7 +196,7 @@ spl2sw_tx_poll_next:
 				if (netif_queue_stopped(comm->ndev[i]))
 					netif_wake_queue(comm->ndev[i]);
 
-	spin_unlock(&comm->tx_lock);
+	spin_unlock_irqrestore(&comm->tx_lock, flags);
 
 	spin_lock_irqsave(&comm->int_mask_lock, flags);
 	mask = readl(comm->l2sw_reg_base + L2SW_SW_INT_MASK_0);
