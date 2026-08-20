@@ -41,7 +41,6 @@
 #include <linux/kernel_stat.h>
 #include <linux/time.h>
 #include <linux/init.h>
-#include <linux/profile.h>
 #include <linux/cpu.h>
 #include <linux/security.h>
 #include <linux/percpu.h>

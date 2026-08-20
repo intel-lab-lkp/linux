@@ -29,7 +29,6 @@
 #include <linux/cpu.h>
 #include <linux/notifier.h>
 #include <linux/topology.h>
-#include <linux/profile.h>
 #include <linux/processor.h>
 #include <linux/random.h>
 #include <linux/stackprotector.h>

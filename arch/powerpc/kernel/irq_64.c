@@ -33,7 +33,6 @@
 #include <linux/irq.h>
 #include <linux/seq_file.h>
 #include <linux/cpumask.h>
-#include <linux/profile.h>
 #include <linux/bitops.h>
 #include <linux/list.h>
 #include <linux/radix-tree.h>
