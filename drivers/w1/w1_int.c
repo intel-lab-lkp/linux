@@ -22,8 +22,7 @@ static int w1_enable_pullup = 1;
 module_param_named(enable_pullup, w1_enable_pullup, int, 0);
 
 static struct w1_master *w1_alloc_dev(u32 id, int slave_count, int slave_ttl,
-				       struct device_driver *driver,
-				       struct device *device)
+				       struct device_driver *driver)
 {
 	struct w1_master *dev;
 	int err;
@@ -57,7 +56,7 @@ static struct w1_master *w1_alloc_dev(u32 id, int slave_count, int slave_ttl,
 	mutex_init(&dev->bus_mutex);
 	mutex_init(&dev->list_mutex);
 
-	memcpy(&dev->dev, device, sizeof(struct device));
+	w1_master_dev_init(&dev->dev);
 	dev_set_name(&dev->dev, "w1_bus_master%u", dev->id);
 	snprintf(dev->name, sizeof(dev->name), "w1_bus_master%u", dev->id);
 	dev->dev.init_name = dev->name;
@@ -116,7 +115,7 @@ int w1_add_master_device(struct w1_bus_master *master)
 	} while (found);
 
 	dev = w1_alloc_dev(id, w1_max_slave_count, w1_max_slave_ttl,
-		&w1_master_driver, &w1_master_device);
+		&w1_master_driver);
 	if (!dev) {
 		mutex_unlock(&w1_mlock);
 		return -ENOMEM;

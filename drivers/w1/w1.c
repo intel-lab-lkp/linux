@@ -193,18 +193,17 @@ struct device_driver w1_master_driver = {
 	.bus = &w1_bus_type,
 };
 
-struct device w1_master_device = {
-	.parent = NULL,
-	.bus = &w1_bus_type,
-	.type = &w1_master_device_type,
-	.init_name = "w1 bus master",
-	.release = &w1_master_release
-};
-
 static struct device_driver w1_slave_driver = {
 	.name = "w1_slave_driver",
 	.bus = &w1_bus_type,
 };
+
+void w1_master_dev_init(struct device *dev)
+{
+	dev->bus = &w1_bus_type;
+	dev->type = &w1_master_device_type;
+	dev->release = &w1_master_release;
+}
 
 #if 0
 struct device w1_slave_device = {

@@ -65,7 +65,7 @@ void __w1_family_get(struct w1_family *f);
 struct w1_family *w1_family_registered(u8 fid);
 
 extern struct device_driver w1_master_driver;
-extern struct device w1_master_device;
+void w1_master_dev_init(struct device *dev);
 extern int w1_max_slave_count;
 extern int w1_max_slave_ttl;
 extern struct list_head w1_masters;
