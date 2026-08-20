@@ -20,6 +20,9 @@
 #define IF_MODE_SPEED_MSK		GENMASK(3, 2)
 #define IF_MODE_HALF_DUPLEX		BIT(4)
 
+#define ENETC_PCS_REPL_LINK_TIMER_1_DEF	0x0003
+#define ENETC_PCS_REPL_LINK_TIMER_2_DEF	0x06a0
+
 struct lynx_pcs {
 	struct phylink_pcs pcs;
 	struct mdio_device *mdio;
@@ -154,6 +157,7 @@ static int lynx_pcs_config_usxgmii(struct mdio_device *pcs,
 				   const unsigned long *advertising,
 				   unsigned int neg_mode)
 {
+	int ret;
 	struct mii_bus *bus = pcs->bus;
 	int addr = pcs->addr;
 
@@ -164,10 +168,38 @@ static int lynx_pcs_config_usxgmii(struct mdio_device *pcs,
 	}
 
 	/* Configure device ability for the USXGMII Replicator */
-	return mdiobus_c45_write(bus, addr, MDIO_MMD_VEND2, MII_ADVERTISE,
-				 MDIO_USXGMII_10G | MDIO_USXGMII_LINK |
-				 MDIO_USXGMII_FULL_DUPLEX |
-				 ADVERTISE_SGMII | ADVERTISE_LPACK);
+	ret = mdiobus_c45_write(bus, addr, MDIO_MMD_VEND2, MII_ADVERTISE,
+				MDIO_USXGMII_10G | MDIO_USXGMII_LINK |
+				MDIO_USXGMII_FULL_DUPLEX |
+				ADVERTISE_SGMII | ADVERTISE_LPACK);
+	if (ret < 0) {
+		dev_err(&pcs->dev, "could not set USXGMII replicator config\n");
+		return ret;
+	}
+
+	/* Configure autonegotiation */
+	ret = mdiobus_c45_write(bus, addr, MDIO_MMD_VEND2, MII_BMCR,
+				BMCR_RESET | BMCR_ANENABLE | BMCR_ANRESTART);
+	if (ret < 0) {
+		dev_err(&pcs->dev, "could not set USXGMII replicator control config\n");
+		return ret;
+	}
+
+	ret = mdiobus_c45_write(bus, addr, MDIO_MMD_VEND2, LINK_TIMER_LO,
+				ENETC_PCS_REPL_LINK_TIMER_1_DEF);
+	if (ret < 0) {
+		dev_err(&pcs->dev, "could not set USXGMII Link Timer 1\n");
+		return ret;
+	}
+
+	ret = mdiobus_c45_write(bus, addr, MDIO_MMD_VEND2, LINK_TIMER_HI,
+				ENETC_PCS_REPL_LINK_TIMER_2_DEF);
+	if (ret < 0) {
+		dev_err(&pcs->dev, "could not set USXGMII Link Timer 2\n");
+		return ret;
+	}
+
+	return ret;
 }
 
 static int lynx_pcs_config(struct phylink_pcs *pcs, unsigned int neg_mode,
