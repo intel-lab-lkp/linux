@@ -385,14 +385,14 @@ static const struct of_device_id  hdlcd_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, hdlcd_of_match);
 
-static int __maybe_unused hdlcd_pm_suspend(struct device *dev)
+static int hdlcd_pm_suspend(struct device *dev)
 {
 	struct drm_device *drm = dev_get_drvdata(dev);
 
 	return drm_mode_config_helper_suspend(drm);
 }
 
-static int __maybe_unused hdlcd_pm_resume(struct device *dev)
+static int hdlcd_pm_resume(struct device *dev)
 {
 	struct drm_device *drm = dev_get_drvdata(dev);
 
@@ -401,7 +401,7 @@ static int __maybe_unused hdlcd_pm_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(hdlcd_pm_ops, hdlcd_pm_suspend, hdlcd_pm_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(hdlcd_pm_ops, hdlcd_pm_suspend, hdlcd_pm_resume);
 
 static struct platform_driver hdlcd_platform_driver = {
 	.probe		= hdlcd_probe,
@@ -409,7 +409,7 @@ static struct platform_driver hdlcd_platform_driver = {
 	.shutdown	= hdlcd_shutdown,
 	.driver	= {
 		.name = "hdlcd",
-		.pm = &hdlcd_pm_ops,
+		.pm = pm_sleep_ptr(&hdlcd_pm_ops),
 		.of_match_table	= hdlcd_of_match,
 	},
 };
