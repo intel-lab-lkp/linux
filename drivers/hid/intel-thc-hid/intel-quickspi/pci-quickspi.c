@@ -9,6 +9,7 @@
 #include <linux/interrupt.h>
 #include <linux/irqreturn.h>
 #include <linux/pci.h>
+#include <linux/sizes.h>
 #include <linux/pm_runtime.h>
 
 #include <linux/gpio/consumer.h>
@@ -549,8 +550,12 @@ static int quickspi_alloc_report_buf(struct quickspi_device *qsdev)
 	if (!qsdev->report_descriptor)
 		return -ENOMEM;
 
-	max_input_len = max(le16_to_cpu(qsdev->dev_desc.rep_desc_len),
-			    le16_to_cpu(qsdev->dev_desc.max_input_len));
+	/*
+	 * thc_dma_set_max_packet_sizes() rounds the RXDMA2 packet size up to
+	 * 4K, so the DMA can hand back more than max_input_len bytes.
+	 */
+	max_input_len = max_t(size_t, le16_to_cpu(qsdev->dev_desc.rep_desc_len),
+			      ALIGN(le16_to_cpu(qsdev->dev_desc.max_input_len), SZ_4K));
 
 	qsdev->input_buf = devm_kzalloc(qsdev->dev, max_input_len, GFP_KERNEL);
 	if (!qsdev->input_buf)
