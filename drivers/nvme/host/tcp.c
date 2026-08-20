@@ -92,6 +92,7 @@ enum nvme_tcp_queue_flags {
 	NVME_TCP_Q_LIVE		= 1,
 	NVME_TCP_Q_POLLING	= 2,
 	NVME_TCP_Q_IO_CPU_SET	= 3,
+	NVME_TCP_Q_IO_CPU_ADOPTED = 4,
 };
 
 enum nvme_tcp_recv_state {
@@ -105,6 +106,7 @@ struct nvme_tcp_queue {
 	struct socket		*sock;
 	struct work_struct	io_work;
 	int			io_cpu;
+	unsigned long		last_data;
 
 	struct mutex		queue_lock;
 	struct mutex		send_mutex;
@@ -2783,6 +2785,74 @@ static void nvme_tcp_commit_rqs(struct blk_mq_hw_ctx *hctx)
 		queue_work_on(queue->io_cpu, nvme_tcp_wq, &queue->io_work);
 }
 
+/* Re-adopt io_cpu on the first data request after this much queue idle time */
+#define NVME_TCP_READOPT_IDLE	(30 * HZ)
+
+/*
+ * Adopt the CPU of the current data submission as the queue's io_cpu.
+ *
+ * The connect time choice in nvme_tcp_set_queue_io_cpu() picks the least
+ * loaded CPU in the queue's mq_map group before any I/O exists, so it
+ * cannot know which side of the group the actual submitters live on. On
+ * hosts that partition CPUs between pinned workloads a group that
+ * straddles a partition boundary can get an io_cpu on CPUs the submitting
+ * workload does not own, and its network processing then preempts an
+ * unrelated workload. The submitting CPU is in the queue's mq_map group
+ * by construction, so adopting it preserves the spreading property while
+ * landing the work on the side that generates it.
+ *
+ * Queues belong to the controller connection and outlive the workloads
+ * that submit through them, so adoption re-arms after NVME_TCP_READOPT_IDLE
+ * of queue quiet. A successor workload reclaims an idle queue with its
+ * first data request, while a continuously busy queue keeps a stable
+ * io_cpu and cannot ping pong between two live submitters.
+ *
+ * The fabrics Connect command targets a specific queue via
+ * blk_mq_alloc_request_hctx() and so runs on an arbitrary CPU that does
+ * not represent the data path, so it is skipped and the first real read
+ * or write decides. All other commands, including user passthrough,
+ * carry a real submitting CPU and adopt.
+ *
+ * Adoption is opt in per controller via the io_cpu_adopt connect option
+ * and is bypassed when wq_unbound is set.
+ */
+static void nvme_tcp_adopt_io_cpu(struct nvme_tcp_queue *queue,
+		struct request *rq)
+{
+	struct nvme_command *cmd = nvme_req(rq)->cmd;
+	int old, new;
+
+	if (!queue->ctrl->ctrl.opts->io_cpu_adopt || wq_unbound)
+		return;
+	if (!nvme_tcp_queue_id(queue))
+		return;
+	if (nvme_is_fabrics(cmd) &&
+	    cmd->fabrics.fctype == nvme_fabrics_type_connect)
+		return;
+
+	if (test_bit(NVME_TCP_Q_IO_CPU_ADOPTED, &queue->flags) &&
+	    time_before(jiffies, READ_ONCE(queue->last_data) +
+				NVME_TCP_READOPT_IDLE)) {
+		WRITE_ONCE(queue->last_data, jiffies);
+		return;
+	}
+
+	WRITE_ONCE(queue->last_data, jiffies);
+	set_bit(NVME_TCP_Q_IO_CPU_ADOPTED, &queue->flags);
+
+	old = READ_ONCE(queue->io_cpu);
+	new = raw_smp_processor_id();
+	if (old == new || !try_cmpxchg(&queue->io_cpu, &old, new))
+		return;
+
+	if (test_bit(NVME_TCP_Q_IO_CPU_SET, &queue->flags)) {
+		atomic_dec(&nvme_tcp_cpu_queues[old]);
+		atomic_inc(&nvme_tcp_cpu_queues[new]);
+	}
+	dev_dbg(queue->ctrl->ctrl.device, "queue %d: adopted io_cpu %d\n",
+		nvme_tcp_queue_id(queue), new);
+}
+
 static blk_status_t nvme_tcp_queue_rq(struct blk_mq_hw_ctx *hctx,
 		const struct blk_mq_queue_data *bd)
 {
@@ -2801,6 +2871,8 @@ static blk_status_t nvme_tcp_queue_rq(struct blk_mq_hw_ctx *hctx,
 		return ret;
 
 	nvme_start_request(rq);
+
+	nvme_tcp_adopt_io_cpu(queue, rq);
 
 	nvme_tcp_queue_request(req, bd->last);
 
@@ -3047,7 +3119,8 @@ static struct nvmf_transport_ops nvme_tcp_transport = {
 			  NVMF_OPT_HDR_DIGEST | NVMF_OPT_DATA_DIGEST |
 			  NVMF_OPT_NR_WRITE_QUEUES | NVMF_OPT_NR_POLL_QUEUES |
 			  NVMF_OPT_TOS | NVMF_OPT_HOST_IFACE | NVMF_OPT_TLS |
-			  NVMF_OPT_KEYRING | NVMF_OPT_TLS_KEY | NVMF_OPT_CONCAT,
+			  NVMF_OPT_KEYRING | NVMF_OPT_TLS_KEY | NVMF_OPT_CONCAT |
+			  NVMF_OPT_IO_CPU_ADOPT,
 	.create_ctrl	= nvme_tcp_create_ctrl,
 };
 

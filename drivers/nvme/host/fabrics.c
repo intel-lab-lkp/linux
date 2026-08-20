@@ -695,6 +695,7 @@ static const match_table_t opt_tokens = {
 	{ NVMF_OPT_NR_WRITE_QUEUES,	"nr_write_queues=%d"	},
 	{ NVMF_OPT_NR_POLL_QUEUES,	"nr_poll_queues=%d"	},
 	{ NVMF_OPT_TOS,			"tos=%d"		},
+	{ NVMF_OPT_IO_CPU_ADOPT,	"io_cpu_adopt"		},
 #ifdef CONFIG_NVME_TCP_TLS
 	{ NVMF_OPT_KEYRING,		"keyring=%d"		},
 	{ NVMF_OPT_TLS_KEY,		"tls_key=%d"		},
@@ -950,6 +951,9 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 			break;
 		case NVMF_OPT_DATA_DIGEST:
 			opts->data_digest = true;
+			break;
+		case NVMF_OPT_IO_CPU_ADOPT:
+			opts->io_cpu_adopt = true;
 			break;
 		case NVMF_OPT_NR_WRITE_QUEUES:
 			if (match_int(args, &token)) {
