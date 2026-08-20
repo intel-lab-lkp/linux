@@ -1248,6 +1248,27 @@ static int platform_legacy_resume(struct device *dev)
 	return ret;
 }
 
+static int platform_legacy_resume_state(struct device *dev, pm_message_t state)
+{
+	return platform_legacy_resume(dev);
+}
+
+static int platform_pm_dispatch(struct device *dev,
+				int (*pm_op)(struct device *),
+				int (*legacy_op)(struct device *, pm_message_t),
+				pm_message_t legacy_state)
+{
+	const struct device_driver *drv = dev->driver;
+
+	if (!drv)
+		return 0;
+
+	if (drv->pm)
+		return pm_op ? pm_op(dev) : 0;
+
+	return legacy_op(dev, legacy_state);
+}
+
 #endif /* CONFIG_PM_SLEEP */
 
 #ifdef CONFIG_SUSPEND
@@ -1255,37 +1276,19 @@ static int platform_legacy_resume(struct device *dev)
 int platform_pm_suspend(struct device *dev)
 {
 	const struct device_driver *drv = dev->driver;
-	int ret = 0;
 
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->suspend)
-			ret = drv->pm->suspend(dev);
-	} else {
-		ret = platform_legacy_suspend(dev, PMSG_SUSPEND);
-	}
-
-	return ret;
+	return platform_pm_dispatch(dev,
+				    drv && drv->pm ? drv->pm->suspend : NULL,
+				    platform_legacy_suspend, PMSG_SUSPEND);
 }
 
 int platform_pm_resume(struct device *dev)
 {
 	const struct device_driver *drv = dev->driver;
-	int ret = 0;
 
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->resume)
-			ret = drv->pm->resume(dev);
-	} else {
-		ret = platform_legacy_resume(dev);
-	}
-
-	return ret;
+	return platform_pm_dispatch(dev,
+				    drv && drv->pm ? drv->pm->resume : NULL,
+				    platform_legacy_resume_state, PMSG_RESUME);
 }
 
 #endif /* CONFIG_SUSPEND */
@@ -1295,73 +1298,37 @@ int platform_pm_resume(struct device *dev)
 int platform_pm_freeze(struct device *dev)
 {
 	const struct device_driver *drv = dev->driver;
-	int ret = 0;
 
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->freeze)
-			ret = drv->pm->freeze(dev);
-	} else {
-		ret = platform_legacy_suspend(dev, PMSG_FREEZE);
-	}
-
-	return ret;
+	return platform_pm_dispatch(dev,
+				    drv && drv->pm ? drv->pm->freeze : NULL,
+				    platform_legacy_suspend, PMSG_FREEZE);
 }
 
 int platform_pm_thaw(struct device *dev)
 {
 	const struct device_driver *drv = dev->driver;
-	int ret = 0;
 
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->thaw)
-			ret = drv->pm->thaw(dev);
-	} else {
-		ret = platform_legacy_resume(dev);
-	}
-
-	return ret;
+	return platform_pm_dispatch(dev,
+				    drv && drv->pm ? drv->pm->thaw : NULL,
+				    platform_legacy_resume_state, PMSG_RESUME);
 }
 
 int platform_pm_poweroff(struct device *dev)
 {
 	const struct device_driver *drv = dev->driver;
-	int ret = 0;
 
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->poweroff)
-			ret = drv->pm->poweroff(dev);
-	} else {
-		ret = platform_legacy_suspend(dev, PMSG_HIBERNATE);
-	}
-
-	return ret;
+	return platform_pm_dispatch(dev,
+				    drv && drv->pm ? drv->pm->poweroff : NULL,
+				    platform_legacy_suspend, PMSG_HIBERNATE);
 }
 
 int platform_pm_restore(struct device *dev)
 {
 	const struct device_driver *drv = dev->driver;
-	int ret = 0;
 
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->restore)
-			ret = drv->pm->restore(dev);
-	} else {
-		ret = platform_legacy_resume(dev);
-	}
-
-	return ret;
+	return platform_pm_dispatch(dev,
+				    drv && drv->pm ? drv->pm->restore : NULL,
+				    platform_legacy_resume_state, PMSG_RESUME);
 }
 
 #endif /* CONFIG_HIBERNATE_CALLBACKS */
