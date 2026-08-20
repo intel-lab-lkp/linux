@@ -97,6 +97,9 @@ static struct guehdr *gue_remcsum(struct sk_buff *skb, struct guehdr *guehdr,
 	size_t plen = sizeof(struct udphdr) + hdrlen +
 	    max_t(size_t, offset + sizeof(u16), start);
 
+	if (unlikely(offset < start))
+		return NULL;
+
 	if (skb->remcsum_offload)
 		return guehdr;
 
@@ -307,6 +310,9 @@ static struct guehdr *gue_gro_remcsum(struct sk_buff *skb, unsigned int off,
 	__be16 *pd = data;
 	size_t start = ntohs(pd[0]);
 	size_t offset = ntohs(pd[1]);
+
+	if (unlikely(offset < start))
+		return NULL;
 
 	if (skb->remcsum_offload)
 		return guehdr;
