@@ -541,11 +541,11 @@ static int check_iosys_map(struct vkms_crtc_state *crtc_state)
 
 static int compose_active_planes(struct vkms_writeback_job *active_wb,
 				 struct vkms_crtc_state *crtc_state,
+				 struct vkms_output *out,
 				 u32 *crc32)
 {
 	size_t line_width, pixel_size = sizeof(struct pixel_argb_u16);
 	struct line_buffer output_buffer, stage_buffer;
-	int ret = 0;
 
 	/*
 	 * This check exists so we can call `crc32_le` for the entire line
@@ -565,27 +565,35 @@ static int compose_active_planes(struct vkms_writeback_job *active_wb,
 	stage_buffer.n_pixels = line_width;
 	output_buffer.n_pixels = line_width;
 
-	stage_buffer.pixels = kvmalloc(line_width * pixel_size, GFP_KERNEL);
-	if (!stage_buffer.pixels) {
-		DRM_ERROR("Cannot allocate memory for the output line buffer");
-		return -ENOMEM;
+	if (out->composer_buffer_width != line_width) {
+		kvfree(out->composer_stage_buffer);
+		kvfree(out->composer_output_buffer);
+		out->composer_buffer_width = 0;
+
+		out->composer_stage_buffer = kvmalloc(line_width * pixel_size, GFP_KERNEL);
+		if (!out->composer_stage_buffer) {
+			DRM_ERROR("Cannot allocate memory for the output line buffer");
+			return -ENOMEM;
+		}
+
+		out->composer_output_buffer = kvmalloc(line_width * pixel_size, GFP_KERNEL);
+		if (!out->composer_output_buffer) {
+			DRM_ERROR("Cannot allocate memory for intermediate line buffer");
+			kvfree(out->composer_stage_buffer);
+			out->composer_stage_buffer = NULL;
+			return -ENOMEM;
+		}
+
+		out->composer_buffer_width = line_width;
 	}
 
-	output_buffer.pixels = kvmalloc(line_width * pixel_size, GFP_KERNEL);
-	if (!output_buffer.pixels) {
-		DRM_ERROR("Cannot allocate memory for intermediate line buffer");
-		ret = -ENOMEM;
-		goto free_stage_buffer;
-	}
+	stage_buffer.pixels = out->composer_stage_buffer;
+	output_buffer.pixels = out->composer_output_buffer;
 
 	blend(active_wb, crtc_state, crc32, &stage_buffer,
 	      &output_buffer, line_width * pixel_size);
 
-	kvfree(output_buffer.pixels);
-free_stage_buffer:
-	kvfree(stage_buffer.pixels);
-
-	return ret;
+	return 0;
 }
 
 /**
@@ -644,9 +652,9 @@ void vkms_composer_worker(struct work_struct *work)
 		return;
 
 	if (wb_pending)
-		ret = compose_active_planes(active_wb, crtc_state, &crc32);
+		ret = compose_active_planes(active_wb, crtc_state, out, &crc32);
 	else
-		ret = compose_active_planes(NULL, crtc_state, &crc32);
+		ret = compose_active_planes(NULL, crtc_state, out, &crc32);
 
 	if (ret)
 		return;

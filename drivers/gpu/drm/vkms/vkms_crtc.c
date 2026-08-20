@@ -13,6 +13,14 @@
 
 #include "vkms_drv.h"
 
+static void vkms_composer_buffers_release(struct drm_device *dev, void *data)
+{
+	struct vkms_output *out = data;
+
+	kvfree(out->composer_stage_buffer);
+	kvfree(out->composer_output_buffer);
+}
+
 static bool vkms_crtc_handle_vblank_timeout(struct drm_crtc *crtc)
 {
 	struct vkms_output *output = drm_crtc_to_vkms_output(crtc);
@@ -236,6 +244,10 @@ struct vkms_output *vkms_crtc_init(struct drm_device *dev, struct drm_plane *pri
 	vkms_out->composer_workq = drmm_alloc_ordered_workqueue(dev, "vkms_composer", 0);
 	if (IS_ERR(vkms_out->composer_workq))
 		return ERR_CAST(vkms_out->composer_workq);
+
+	ret = drmm_add_action_or_reset(dev, vkms_composer_buffers_release, vkms_out);
+	if (ret)
+		return ERR_PTR(ret);
 
 	return vkms_out;
 }

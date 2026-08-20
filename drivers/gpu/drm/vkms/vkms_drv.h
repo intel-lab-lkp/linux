@@ -214,6 +214,9 @@ struct vkms_crtc_state {
  *		      writeback)
  * @composer_state: Protected by @lock, current state of this VKMS output
  * @composer_lock: Lock used internally to protect @composer_state members
+ * @composer_stage_buffer: Cached line buffer for plane pixel read and pre-blend transform
+ * @composer_output_buffer: Cached line buffer for blending output
+ * @composer_buffer_width: Current allocated width of the cached buffers (in pixels)
  */
 struct vkms_output {
 	struct drm_crtc crtc;
@@ -226,6 +229,10 @@ struct vkms_output {
 	struct vkms_crtc_state *composer_state;
 
 	spinlock_t composer_lock;
+
+	struct pixel_argb_u16 *composer_stage_buffer;
+	struct pixel_argb_u16 *composer_output_buffer;
+	size_t composer_buffer_width;
 };
 
 struct vkms_config;
