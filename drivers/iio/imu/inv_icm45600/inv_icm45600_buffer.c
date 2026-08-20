@@ -419,8 +419,10 @@ int inv_icm45600_buffer_fifo_read(struct inv_icm45600_state *st,
 	fifo_nb = le16_to_cpup(raw_fifo_count);
 	if (fifo_nb == 0)
 		return 0;
-	if (max > 0 && fifo_nb > max)
-		fifo_nb = max;
+	if (max > 0)
+		fifo_nb = min(fifo_nb, (size_t)max);
+	fifo_nb = min_t(size_t, fifo_nb,
+			INV_ICM45600_FIFO_SIZE_MAX / packet_size);
 
 	/* Try to read all FIFO data in internal buffer. */
 	st->fifo.count = fifo_nb * packet_size;
