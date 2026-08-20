@@ -2911,20 +2911,27 @@ int kiocb_write_and_wait(struct kiocb *iocb, size_t count)
 }
 EXPORT_SYMBOL_GPL(kiocb_write_and_wait);
 
+/**
+ * filemap_invalidate_pages - Invalidate pages from the page cache
+ * @mapping: Address space to invalidate
+ * @pos: First byte to invalidate
+ * @end: Last byte (inclusive) to invalidate
+ *
+ * Invalidates the folios containing @pos and @end from the page cache
+ * (as well as all folios between them), so may remove more pages from
+ * the page cache than you ask for.
+ *
+ * Context: May sleep.  Caller may wish to hold mapping_invalidate_lock to
+ * prevent new pages being instantiated in this range.
+ * Return: 0 on success or negative errno.
+ */
 int filemap_invalidate_pages(struct address_space *mapping,
-			     loff_t pos, loff_t end, bool nowait)
+		loff_t pos, loff_t end)
 {
-	int ret;
+	int ret = filemap_write_and_wait_range(mapping, pos, end);
 
-	if (nowait) {
-		/* we could block if there are any pages in the range */
-		if (filemap_range_has_page(mapping, pos, end))
-			return -EAGAIN;
-	} else {
-		ret = filemap_write_and_wait_range(mapping, pos, end);
-		if (ret)
-			return ret;
-	}
+	if (ret)
+		return ret;
 
 	/*
 	 * After a write we want buffered reads to be sure to go to disk to get
@@ -2935,14 +2942,21 @@ int filemap_invalidate_pages(struct address_space *mapping,
 	return invalidate_inode_pages2_range(mapping, pos >> PAGE_SHIFT,
 					     end >> PAGE_SHIFT);
 }
+EXPORT_SYMBOL_GPL(filemap_invalidate_pages);
 
 int kiocb_invalidate_pages(struct kiocb *iocb, size_t count)
 {
 	struct address_space *mapping = iocb->ki_filp->f_mapping;
+	loff_t end = iocb->ki_pos + count - 1;
 
-	return filemap_invalidate_pages(mapping, iocb->ki_pos,
-					iocb->ki_pos + count - 1,
-					iocb->ki_flags & IOCB_NOWAIT);
+	if (iocb->ki_flags & IOCB_NOWAIT) {
+		/* we could block if there are any pages in the range */
+		if (filemap_range_has_page(mapping, iocb->ki_pos, end))
+			return -EAGAIN;
+		return 0;
+	}
+
+	return filemap_invalidate_pages(mapping, iocb->ki_pos, end);
 }
 EXPORT_SYMBOL_GPL(kiocb_invalidate_pages);
 

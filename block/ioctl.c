@@ -908,10 +908,16 @@ static int blkdev_cmd_discard(struct io_uring_cmd *cmd,
 	if (err)
 		return err;
 
-	err = filemap_invalidate_pages(bdev->bd_mapping, start,
-					start + len - 1, nowait);
-	if (err)
-		return err;
+	if (nowait) {
+		if (filemap_range_has_page(bdev->bd_mapping, start,
+					start + len - 1))
+			return -EAGAIN;
+	} else {
+		err = filemap_invalidate_pages(bdev->bd_mapping, start,
+					start + len - 1);
+		if (err)
+			return err;
+	}
 
 	while (true) {
 		bio = blk_alloc_discard_bio(bdev, &sector, &nr_sects, gfp);
