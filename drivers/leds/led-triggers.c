@@ -42,6 +42,10 @@ static bool __led_trigger_is_hw_controlled(struct led_classdev *led_cdev)
 	if (!led_cdev->trigger)
 		return false;
 
+	if (led_cdev->trigger->offloaded)
+		return led_cdev->trigger->offloaded(led_cdev);
+
+	/* Otherwise assume private triggers as always offloaded. */
 	return led_cdev->trigger->trigger_type;
 }
 
@@ -340,6 +344,32 @@ void led_trigger_set_default(struct led_classdev *led_cdev)
 		request_module_nowait("ledtrig:%s", led_cdev->default_trigger);
 }
 EXPORT_SYMBOL_GPL(led_trigger_set_default);
+
+ssize_t trigger_may_offload_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct led_trigger *trig;
+	bool hit, offloaded;
+	int len;
+
+	guard(mutex)(&led_cdev->led_access);
+	guard(rwsem_read)(&led_cdev->trigger_lock);
+
+	trig = led_cdev->trigger;
+
+	offloaded = __led_trigger_is_hw_controlled(led_cdev);
+	hit = offloaded || (trig && !strcmp(led_cdev->hw_control_trigger, trig->name));
+
+	/* [offloaded] <active_but_not_offloaded> inactive */
+	len = sysfs_emit(buf, "%s%s%s\n",
+			 offloaded ? "[" : (hit ? "<" : ""),
+			 led_cdev->hw_control_trigger,
+			 offloaded ? "]" : (hit ? ">" : ""));
+
+	return len;
+}
+EXPORT_SYMBOL_GPL(trigger_may_offload_show);
 
 /* LED Trigger Interface */
 
