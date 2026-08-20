@@ -4924,6 +4924,7 @@ out_free_mq_map:
 	}
 	kfree(set->tags);
 	set->tags = NULL;
+	srcu_barrier(&set->tags_srcu);
 out_cleanup_tags_srcu:
 	cleanup_srcu_struct(&set->tags_srcu);
 out_cleanup_srcu:
