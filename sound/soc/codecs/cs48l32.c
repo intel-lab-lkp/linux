@@ -21,6 +21,7 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/string_choices.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <linux/string_choices.h>
@@ -1542,7 +1543,8 @@ static int cs48l32_wait_for_fll(struct cs48l32_fll *fll, bool requested)
 		}
 	}
 
-	cs48l32_fll_warn(fll, "Timed out waiting for %s\n", requested ? "lock" : "unlock");
+	cs48l32_fll_warn(fll, "Timed out waiting for %s\n",
+			 str_lock_unlock(requested));
 
 	return -ETIMEDOUT;
 }
