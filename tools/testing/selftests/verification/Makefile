@@ -5,4 +5,8 @@ TEST_PROGS := verificationtest-ktap
 TEST_FILES := test.d settings
 EXTRA_CLEAN := $(OUTPUT)/logs/*
 
+TEST_GEN_FILES := tlob_sym tlob_target
+
 include ../lib.mk
+
+export VERIFICATIONTEST_BINDIR := $(OUTPUT)
