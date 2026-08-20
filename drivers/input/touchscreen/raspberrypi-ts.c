@@ -78,6 +78,7 @@ static void rpi_ts_poll(struct input_dev *input)
 		 ts->fw_regs_va + offsetof(struct rpi_ts_regs, num_points));
 
 	if (regs.num_points == RPI_TS_NPOINTS_REG_INVALIDATE ||
+	    regs.num_points > RPI_TS_MAX_SUPPORTED_POINTS ||
 	    (regs.num_points == 0 && ts->known_ids == 0))
 		return;
 
@@ -86,6 +87,9 @@ static void rpi_ts_poll(struct input_dev *input)
 		y = (((int)regs.point[i].yh & 0xf) << 8) + regs.point[i].yl;
 		touchid = (regs.point[i].yh >> 4) & 0xf;
 		event_type = (regs.point[i].xh >> 6) & 0x03;
+
+		if (touchid >= RPI_TS_MAX_SUPPORTED_POINTS)
+			return;
 
 		modified_ids |= BIT(touchid);
 
