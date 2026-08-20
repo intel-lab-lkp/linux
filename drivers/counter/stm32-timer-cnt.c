@@ -795,7 +795,7 @@ static int stm32_timer_cnt_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int __maybe_unused stm32_timer_cnt_suspend(struct device *dev)
+static int stm32_timer_cnt_suspend(struct device *dev)
 {
 	struct stm32_timer_cnt *priv = dev_get_drvdata(dev);
 
@@ -815,7 +815,7 @@ static int __maybe_unused stm32_timer_cnt_suspend(struct device *dev)
 	return pinctrl_pm_select_sleep_state(dev);
 }
 
-static int __maybe_unused stm32_timer_cnt_resume(struct device *dev)
+static int stm32_timer_cnt_resume(struct device *dev)
 {
 	struct stm32_timer_cnt *priv = dev_get_drvdata(dev);
 	int ret;
@@ -843,7 +843,7 @@ static int __maybe_unused stm32_timer_cnt_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(stm32_timer_cnt_pm_ops, stm32_timer_cnt_suspend,
+static DEFINE_SIMPLE_DEV_PM_OPS(stm32_timer_cnt_pm_ops, stm32_timer_cnt_suspend,
 			 stm32_timer_cnt_resume);
 
 static const struct of_device_id stm32_timer_cnt_of_match[] = {
@@ -858,7 +858,7 @@ static struct platform_driver stm32_timer_cnt_driver = {
 	.driver = {
 		.name = "stm32-timer-counter",
 		.of_match_table = stm32_timer_cnt_of_match,
-		.pm = &stm32_timer_cnt_pm_ops,
+		.pm = pm_sleep_ptr(&stm32_timer_cnt_pm_ops),
 	},
 };
 module_platform_driver(stm32_timer_cnt_driver);
