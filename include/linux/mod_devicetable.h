@@ -49,6 +49,7 @@
 #include "device-id/pnp.h"
 #include "device-id/rio.h"
 #include "device-id/rpmsg.h"
+#include "device-id/scmi.h"
 #include "device-id/sdio.h"
 #include "device-id/sdw.h"
 #include "device-id/serio.h"
