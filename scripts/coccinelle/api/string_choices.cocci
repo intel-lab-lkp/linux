@@ -300,3 +300,79 @@ e << str_yes_no_r.E;
 @@
 
 coccilib.report.print_report(p[0], "opportunity for str_yes_no(%s)" % e)
+
+@str_lock_unlock depends on patch@
+expression E;
+@@
+-      ((E) ? "lock" : "unlock")
++      str_lock_unlock(E)
+
+@str_lock_unlock_r depends on !patch@
+expression E;
+position P;
+@@
+*      E@P ? "lock" : "unlock"
+
+@script:python depends on report@
+p << str_lock_unlock_r.P;
+e << str_lock_unlock_r.E;
+@@
+
+coccilib.report.print_report(p[0], "opportunity for str_lock_unlock(%s)" % e)
+
+@str_locked_unlocked depends on patch@
+expression E;
+@@
+-      ((E) ? "locked" : "unlocked")
++      str_locked_unlocked(E)
+
+@str_locked_unlocked_r depends on !patch@
+expression E;
+position P;
+@@
+*      E@P ? "locked" : "unlocked"
+
+@script:python depends on report@
+p << str_locked_unlocked_r.P;
+e << str_locked_unlocked_r.E;
+@@
+
+coccilib.report.print_report(p[0], "opportunity for str_locked_unlocked(%s)" % e)
+
+@str_pass_fail depends on patch@
+expression E;
+@@
+-      ((E) ? "pass" : "fail")
++      str_pass_fail(E)
+
+@str_pass_fail_r depends on !patch@
+expression E;
+position P;
+@@
+*      E@P ? "pass" : "fail"
+
+@script:python depends on report@
+p << str_pass_fail_r.P;
+e << str_pass_fail_r.E;
+@@
+
+coccilib.report.print_report(p[0], "opportunity for str_pass_fail(%s)" % e)
+
+@str_passed_failed depends on patch@
+expression E;
+@@
+-      ((E) ? "passed" : "failed")
++      str_passed_failed(E)
+
+@str_passed_failed_r depends on !patch@
+expression E;
+position P;
+@@
+*      E@P ? "passed" : "failed"
+
+@script:python depends on report@
+p << str_passed_failed_r.P;
+e << str_passed_failed_r.E;
+@@
+
+coccilib.report.print_report(p[0], "opportunity for str_passed_failed(%s)" % e)
