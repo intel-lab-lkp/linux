@@ -1987,11 +1987,15 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 				adding = cpumask_and(tmp->addmask,
 						     cs->effective_xcpus,
 						     parent->effective_xcpus);
-		} else if (is_partition_invalid(cs) && !cpumask_empty(xcpus) &&
-			   cpumask_subset(xcpus, parent->effective_xcpus)) {
+		} else if (is_partition_invalid(cs) && !cpumask_empty(xcpus)) {
 			struct cgroup_subsys_state *css;
 			struct cpuset *child;
 			bool exclusive = true;
+
+			if (!cpumask_subset(xcpus, parent->effective_xcpus)) {
+				part_error = PERR_INVCPUS;
+				goto write_error;
+			}
 
 			/*
 			 * Convert invalid partition to valid has to
@@ -2144,7 +2148,7 @@ static void compute_partition_effective_cpumask(struct cpuset *cs,
 		WARN_ON_ONCE(is_remote_partition(child));
 		WRITE_ONCE(child->prs_err, 0);
 		if (!cpumask_subset(child->effective_xcpus,
-				    cs->effective_xcpus))
+				    new_xcpus))
 			WRITE_ONCE(child->prs_err, PERR_INVCPUS);
 		else if (populated &&
 			 cpumask_subset(new_ecpus, child->effective_xcpus))
