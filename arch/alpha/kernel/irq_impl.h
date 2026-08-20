@@ -11,8 +11,6 @@
 
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/profile.h>
-
 
 #define RTC_IRQ    8
 

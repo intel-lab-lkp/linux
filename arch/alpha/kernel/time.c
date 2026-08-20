@@ -32,7 +32,6 @@
 #include <linux/interrupt.h>
 #include <linux/init.h>
 #include <linux/bcd.h>
-#include <linux/profile.h>
 #include <linux/irq_work.h>
 
 #include <linux/uaccess.h>

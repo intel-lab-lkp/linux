@@ -26,7 +26,6 @@
 #include <linux/spinlock.h>
 #include <linux/irq.h>
 #include <linux/cache.h>
-#include <linux/profile.h>
 #include <linux/bitops.h>
 #include <linux/cpu.h>
 
