@@ -6,6 +6,7 @@
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/ethtool.h>
 #include <linux/pkt_sched.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
@@ -74,8 +75,8 @@ static inline u8 _simple_hash(const u8 *hash_start, int hash_size)
 static inline void tlb_init_table_entry(struct tlb_client_info *entry, int save_load)
 {
 	if (save_load) {
-		entry->load_history = 1 + entry->tx_bytes /
-				      BOND_TLB_REBALANCE_INTERVAL;
+		entry->load_history = 1 + div_u64(entry->tx_bytes,
+				      BOND_TLB_REBALANCE_INTERVAL);
 		entry->tx_bytes = 0;
 	}
 
@@ -133,7 +134,7 @@ static int tlb_initialize(struct bonding *bond)
 	if (!new_hashtbl)
 		return -ENOMEM;
 
-	bond_info->unbalanced_load = alloc_percpu(struct unbalanced_load_stats);
+	bond_info->unbalanced_load = netdev_alloc_pcpu_stats(struct unbalanced_load_stats);
 	if (!bond_info->unbalanced_load)
 		goto out;
 
@@ -168,27 +169,38 @@ static void tlb_deinitialize(struct bonding *bond)
 	spin_unlock_bh(&bond->mode_lock);
 }
 
-static long long compute_gap(struct slave *slave)
+static u64 compute_gap(struct slave *slave)
 {
-	return (s64) (slave->speed << 20) - /* Convert to Megabit per sec */
-	       (s64) (SLAVE_TLB_INFO(slave).load << 3); /* Bytes to bits */
+	u64 slave_load = SLAVE_TLB_INFO(slave).load << 3; /* Bytes to bits */
+	u32 raw_speed = READ_ONCE(slave->speed);
+	u64 speed = (u64)raw_speed << 20; /* Convert to bits per sec */
+
+	/* It's meaningless to compare gap on unknown speed NIC */
+	if (raw_speed == (u32)SPEED_UNKNOWN)
+		return 0;
+
+	/* Skip slave which is over loaded */
+	if (speed <= slave_load)
+		return 0;
+
+	return speed - slave_load;
 }
 
 static struct slave *tlb_get_least_loaded_slave(struct bonding *bond)
 {
 	struct slave *slave, *least_loaded;
 	struct list_head *iter;
-	long long max_gap;
+	u64 max_gap = 0;
 
 	least_loaded = NULL;
-	max_gap = LLONG_MIN;
 
 	/* Find the slave with the largest gap */
 	bond_for_each_slave_rcu(bond, slave, iter) {
 		if (bond_slave_can_tx(slave)) {
-			long long gap = compute_gap(slave);
+			u64 gap = compute_gap(slave);
 
-			if (max_gap < gap) {
+			/* Make sure we have one available slave */
+			if (max_gap <= gap) {
 				least_loaded = slave;
 				max_gap = gap;
 			}
@@ -1354,8 +1366,14 @@ static netdev_tx_t bond_do_alb_xmit(struct sk_buff *skb, struct bonding *bond,
 	if (!tx_slave) {
 		/* unbalanced or unassigned, send through primary */
 		tx_slave = rcu_dereference(bond->curr_active_slave);
-		if (bond->params.tlb_dynamic_lb)
-			this_cpu_add(bond_info->unbalanced_load->tx_bytes, skb->len);
+		if (bond->params.tlb_dynamic_lb) {
+			struct unbalanced_load_stats *pcpu_load;
+
+			pcpu_load = this_cpu_ptr(bond_info->unbalanced_load);
+			u64_stats_update_begin(&pcpu_load->syncp);
+			u64_stats_add(&pcpu_load->tx_bytes, skb->len);
+			u64_stats_update_end(&pcpu_load->syncp);
+		}
 	}
 
 	if (tx_slave && bond_slave_can_tx(tx_slave)) {
@@ -1539,21 +1557,27 @@ netdev_tx_t bond_alb_xmit(struct sk_buff *skb, struct net_device *bond_dev)
 	return bond_do_alb_xmit(skb, bond, tx_slave);
 }
 
-static u32 reset_unbalanced_load(struct alb_bond_info *bond_info)
+static u64 reset_unbalanced_load(struct alb_bond_info *bond_info)
 {
+	u64 delta, tx_bytes, total_bytes = 0;
 	struct unbalanced_load_stats *p;
-	u32 delta, total_bytes = 0;
+	unsigned int start;
 	int i;
 
 	for_each_possible_cpu(i) {
 		p = per_cpu_ptr(bond_info->unbalanced_load, i);
-		total_bytes += READ_ONCE(p->tx_bytes);
+		do {
+			start = u64_stats_fetch_begin(&p->syncp);
+			tx_bytes = u64_stats_read(&p->tx_bytes);
+		} while (u64_stats_fetch_retry(&p->syncp, start));
+
+		total_bytes += tx_bytes;
 	}
 
 	delta = total_bytes - bond_info->prev_total_unbalanced;
 	bond_info->prev_total_unbalanced = total_bytes;
 
-	return delta / BOND_TLB_REBALANCE_INTERVAL;
+	return div_u64(delta, BOND_TLB_REBALANCE_INTERVAL);
 }
 
 void bond_alb_monitor(struct work_struct *work)
@@ -1597,8 +1621,13 @@ void bond_alb_monitor(struct work_struct *work)
 	if (atomic_read(&bond_info->tx_rebalance_counter) >= BOND_TLB_REBALANCE_TICKS) {
 		bond_for_each_slave_rcu(bond, slave, iter) {
 			tlb_clear_slave(bond, slave, 1);
-			if (slave == rcu_access_pointer(bond->curr_active_slave))
-				SLAVE_TLB_INFO(slave).load = reset_unbalanced_load(bond_info);
+			if (slave == rcu_access_pointer(bond->curr_active_slave)) {
+				u64 new_load = reset_unbalanced_load(bond_info);
+
+				spin_lock_bh(&bond->mode_lock);
+				SLAVE_TLB_INFO(slave).load = new_load;
+				spin_unlock_bh(&bond->mode_lock);
+			}
 		}
 		atomic_set(&bond_info->tx_rebalance_counter, 0);
 	}
