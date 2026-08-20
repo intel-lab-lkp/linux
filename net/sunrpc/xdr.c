@@ -409,6 +409,9 @@ xdr_inline_pages(struct xdr_buf *xdr, unsigned int offset,
 	char *buf = (char *)head->iov_base;
 	unsigned int buflen = head->iov_len;
 
+	if (offset > buflen)
+		offset = buflen;
+
 	head->iov_len  = offset;
 
 	xdr->pages = pages;
