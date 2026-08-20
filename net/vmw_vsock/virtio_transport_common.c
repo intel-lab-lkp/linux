@@ -1764,6 +1764,21 @@ static bool virtio_transport_valid_type(u16 type)
 	       (type == VIRTIO_VSOCK_TYPE_SEQPACKET);
 }
 
+static bool virtio_transport_source_matches(const struct virtio_transport *t,
+					    const struct sockaddr_vm *src,
+					    const struct sockaddr_vm *remote)
+{
+	if (src->svm_port != remote->svm_port)
+		return false;
+
+	if (src->svm_cid == remote->svm_cid)
+		return true;
+
+	/* The loopback transport represents its peer as VMADDR_CID_LOCAL. */
+	return t->transport.get_local_cid() == VMADDR_CID_LOCAL &&
+	       src->svm_cid == VMADDR_CID_LOCAL;
+}
+
 /* We are under the virtio-vsock's vsock->rx_lock or vhost-vsock's vq->mutex
  * lock.
  */
@@ -1823,10 +1838,15 @@ void virtio_transport_recv_pkt(struct virtio_transport *t,
 	lock_sock(sk);
 
 	/* Check if sk has been closed or assigned to another transport before
-	 * lock_sock (note: listener sockets are not assigned to any transport)
+	 * lock_sock (note: listener sockets are not assigned to any transport).
+	 * The bound-table fallback matches only the destination, so reject packets
+	 * from a peer other than the one stored in the socket.
 	 */
 	if (sock_flag(sk, SOCK_DONE) ||
-	    (sk->sk_state != TCP_LISTEN && vsk->transport != &t->transport)) {
+	    (sk->sk_state != TCP_LISTEN &&
+	     (vsk->transport != &t->transport ||
+	      !virtio_transport_source_matches(t, &src,
+					       &vsk->remote_addr)))) {
 		(void)virtio_transport_reset_no_sock(t, skb, net);
 		release_sock(sk);
 		sock_put(sk);
