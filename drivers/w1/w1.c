@@ -164,11 +164,14 @@ static const struct device_type w1_master_device_type = {
 	.name = "w1_master",
 };
 
+static int w1_slave_uevent(const struct device *dev,
+			   struct kobj_uevent_env *env);
+
 static const struct device_type w1_slave_device_type = {
 	.name = "w1_slave",
+	.uevent = w1_slave_uevent,
 };
 
-static int w1_uevent(const struct device *dev, struct kobj_uevent_env *env);
 static struct device_driver w1_slave_driver;
 
 static int w1_match(struct device *dev, const struct device_driver *drv)
@@ -183,7 +186,6 @@ static int w1_match(struct device *dev, const struct device_driver *drv)
 static const struct bus_type w1_bus_type = {
 	.name = "w1",
 	.match = w1_match,
-	.uevent = w1_uevent,
 };
 
 struct device_driver w1_master_driver = {
@@ -580,39 +582,18 @@ void w1_destroy_master_attributes(struct w1_master *master)
 	sysfs_remove_group(&master->dev.kobj, &w1_master_defattr_group);
 }
 
-static int w1_uevent(const struct device *dev, struct kobj_uevent_env *env)
+static int w1_slave_uevent(const struct device *dev,
+			   struct kobj_uevent_env *env)
 {
-	const struct w1_master *md = NULL;
-	const struct w1_slave *sl = NULL;
-	const char *event_owner, *name;
-	int err = 0;
-
-	if (dev->type == &w1_master_device_type) {
-		md = container_of(dev, struct w1_master, dev);
-		event_owner = "master";
-		name = md->name;
-	} else if (dev->type == &w1_slave_device_type) {
-		sl = container_of(dev, struct w1_slave, dev);
-		event_owner = "slave";
-		name = sl->name;
-	} else {
-		dev_dbg(dev, "Unknown event.\n");
-		return -EINVAL;
-	}
-
-	dev_dbg(dev, "Hotplug event for %s %s, bus_id=%s.\n",
-			event_owner, name, dev_name(dev));
-
-	if (dev->type != &w1_slave_device_type || !sl)
-		goto end;
+	const struct w1_slave *sl = container_of(dev, struct w1_slave, dev);
+	int err;
 
 	err = add_uevent_var(env, "W1_FID=%02X", sl->reg_num.family);
 	if (err)
-		goto end;
+		return err;
 
 	err = add_uevent_var(env, "W1_SLAVE_ID=%024LX",
 			     (unsigned long long)sl->reg_num.id);
-end:
 	return err;
 }
 
