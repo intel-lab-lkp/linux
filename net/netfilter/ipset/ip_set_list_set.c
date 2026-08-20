@@ -144,7 +144,9 @@ __list_set_del_rcu(struct rcu_head * rcu)
 {
 	struct set_elem *e = container_of(rcu, struct set_elem, rcu);
 	struct ip_set *set = e->set;
+	struct list_set *map = set->data;
 
+	ip_set_put_byindex(map->net, e->id);
 	ip_set_ext_destroy(set, e);
 	kfree(e);
 }
@@ -152,21 +154,15 @@ __list_set_del_rcu(struct rcu_head * rcu)
 static void
 list_set_del(struct ip_set *set, struct set_elem *e)
 {
-	struct list_set *map = set->data;
-
 	set->elements--;
 	list_del_rcu(&e->list);
-	ip_set_put_byindex(map->net, e->id);
 	call_rcu(&e->rcu, __list_set_del_rcu);
 }
 
 static void
 list_set_replace(struct ip_set *set, struct set_elem *e, struct set_elem *old)
 {
-	struct list_set *map = set->data;
-
 	list_replace_rcu(&old->list, &e->list);
-	ip_set_put_byindex(map->net, old->id);
 	call_rcu(&old->rcu, __list_set_del_rcu);
 }
 
