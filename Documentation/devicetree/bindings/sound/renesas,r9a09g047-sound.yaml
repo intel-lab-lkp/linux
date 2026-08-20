@@ -298,7 +298,6 @@ required:
   - reg
   - reg-names
   - "#sound-dai-cells"
-  - "#clock-cells"
   - clocks
   - clock-names
   - resets
