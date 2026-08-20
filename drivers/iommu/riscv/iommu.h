@@ -103,6 +103,12 @@ struct irq_domain *riscv_iommu_ir_irq_domain_create(struct device *dev,
 						    struct riscv_iommu_info *info);
 void riscv_iommu_ir_irq_domain_publish(struct device *dev);
 void riscv_iommu_ir_irq_domain_remove(struct device *dev, struct riscv_iommu_info *info);
+int riscv_iommu_ir_check_attach_paging_domain(struct iommu_domain *iommu_domain,
+					      struct device *dev,
+					      struct iommu_domain *old);
+int riscv_iommu_ir_check_attach_identity_domain(struct iommu_domain *iommu_domain,
+						struct device *dev,
+						struct iommu_domain *old);
 int riscv_iommu_ir_attach_paging_domain(struct iommu_domain *iommu_domain, struct device *dev,
 					struct iommu_domain *old);
 void riscv_iommu_ir_free_paging_domain(struct iommu_domain *iommu_domain);

@@ -278,6 +278,44 @@ void riscv_iommu_ir_irq_domain_remove(struct device *dev, struct riscv_iommu_inf
 	irq_domain_free_fwnode(fn);
 }
 
+int riscv_iommu_ir_check_attach_paging_domain(struct iommu_domain *iommu_domain,
+					      struct device *dev,
+					      struct iommu_domain *old)
+{
+	struct riscv_iommu_info *info = dev_iommu_priv_get(dev);
+
+	/*
+	 * IOMMU_DOMAIN_BLOCKED is intentionally not checked. The immediate old
+	 * domain does not reveal whether BLOCKED was entered from identity or
+	 * paging, so rejecting it would also reject valid same-mode restores.
+	 * IDENTITY -> BLOCKED -> PAGING can therefore bypass this check; callers
+	 * must quiesce and tear down MSIs before making such a change.
+	 */
+	if (old && old->type == IOMMU_DOMAIN_IDENTITY && info->nr_irqs)
+		return -EBUSY;
+
+	return 0;
+}
+
+int riscv_iommu_ir_check_attach_identity_domain(struct iommu_domain *iommu_domain,
+						struct device *dev,
+						struct iommu_domain *old)
+{
+	struct riscv_iommu_info *info = dev_iommu_priv_get(dev);
+
+	/*
+	 * IOMMU_DOMAIN_BLOCKED is intentionally not checked. The immediate old
+	 * domain does not reveal whether BLOCKED was entered from identity or
+	 * paging, so rejecting it would also reject valid same-mode restores.
+	 * PAGING -> BLOCKED -> IDENTITY can therefore bypass this check; callers
+	 * must quiesce and tear down MSIs before making such a change.
+	 */
+	if (old && (old->type & __IOMMU_DOMAIN_PAGING) && info->nr_irqs)
+		return -EBUSY;
+
+	return 0;
+}
+
 int riscv_iommu_ir_attach_paging_domain(struct iommu_domain *iommu_domain, struct device *dev,
 					struct iommu_domain *old)
 {

@@ -1280,6 +1280,10 @@ static int riscv_iommu_attach_paging_domain(struct iommu_domain *iommu_domain,
 	u64 fsc, ta;
 	int ret;
 
+	ret = riscv_iommu_ir_check_attach_paging_domain(iommu_domain, dev, old);
+	if (ret)
+		return ret;
+
 	pt_iommu_riscv_64_hw_info(&domain->riscvpt, &pt_info);
 
 	if (!riscv_iommu_pt_supported(iommu, pt_info.fsc_iosatp_mode))
@@ -1398,6 +1402,11 @@ static int riscv_iommu_attach_identity_domain(struct iommu_domain *iommu_domain,
 {
 	struct riscv_iommu_device *iommu = dev_to_iommu(dev);
 	struct riscv_iommu_info *info = dev_iommu_priv_get(dev);
+	int ret;
+
+	ret = riscv_iommu_ir_check_attach_identity_domain(iommu_domain, dev, old);
+	if (ret)
+		return ret;
 
 	riscv_iommu_iodir_update(iommu, dev, RISCV_IOMMU_FSC_BARE, RISCV_IOMMU_PC_TA_V);
 	riscv_iommu_bond_unlink(old, dev);
