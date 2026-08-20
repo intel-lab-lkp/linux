@@ -2200,6 +2200,7 @@ smb2_duplicate_extents(const unsigned int xid,
 	struct duplicate_extents_to_file dup_ext_buf;
 	struct timespec64 ts;
 	struct cifs_tcon *tcon = tlink_tcon(trgtfile->tlink);
+	loff_t orig_size;
 	u64 asize;
 
 	/* server fileays advertise duplicate extent support with this flag */
@@ -2218,7 +2219,8 @@ smb2_duplicate_extents(const unsigned int xid,
 			       trgtfile->fid.volatile_fid, tcon->tid,
 			       tcon->ses->Suid, src_off, dest_off, len);
 	inode = d_inode(trgtfile->dentry);
-	if (inode->i_size < dest_off + len) {
+	orig_size = i_size_read(inode);
+	if (orig_size < dest_off + len) {
 		rc = smb2_set_file_size(xid, tcon, trgtfile, dest_off + len, false);
 		if (rc)
 			goto duplicate_extents_out;
@@ -2235,6 +2237,23 @@ smb2_duplicate_extents(const unsigned int xid,
 
 	if (ret_data_len > 0)
 		cifs_dbg(FYI, "Non-zero response length in duplicate extents\n");
+
+	if (rc && i_size_read(inode) > orig_size) {
+		int rrc;
+
+		/*
+		 * FSCTL failed after we pre-extended the file.  Attempt to
+		 * restore the original size so the caller sees a consistent
+		 * file rather than a larger file with uncloned content.
+		 */
+		rrc = smb2_set_file_size(xid, tcon, trgtfile, orig_size, false);
+		if (rrc == 0)
+			cifs_resize_file_locked(inode, orig_size);
+		else {
+			CIFS_I(inode)->time = 0; /* force reval */
+			cifs_invalidate_cache(inode, 0);
+		}
+	}
 
 	if (rc == 0) {
 		qrc = SMB2_query_info(xid, tcon, trgtfile->fid.persistent_fid,
