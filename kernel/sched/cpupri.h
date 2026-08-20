@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#include <linux/atomic.h>
 #include <linux/cpumask.h>
 #include <linux/sched/rt.h>
 
@@ -11,7 +10,6 @@
 #define CPUPRI_HIGHER		100
 
 struct cpupri_vec {
-	atomic_t		count;
 	cpumask_var_t		mask;
 };
 
