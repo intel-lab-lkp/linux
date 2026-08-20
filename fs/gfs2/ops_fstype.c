@@ -1314,6 +1314,7 @@ fail_glock_wq:
 fail_iput:
 	iput(sdp->sd_inode);
 fail_free:
+	rcu_barrier();
 	free_sbd(sdp);
 	return error;
 }
