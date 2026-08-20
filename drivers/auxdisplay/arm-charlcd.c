@@ -306,10 +306,7 @@ static int charlcd_resume(struct device *dev)
 	return 0;
 }
 
-static const struct dev_pm_ops charlcd_pm_ops = {
-	.suspend = charlcd_suspend,
-	.resume = charlcd_resume,
-};
+static DEFINE_SIMPLE_DEV_PM_OPS(charlcd_pm_ops, charlcd_suspend, charlcd_resume);
 
 static const struct of_device_id charlcd_match[] = {
 	{ .compatible = "arm,versatile-lcd", },
