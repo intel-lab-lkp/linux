@@ -1309,6 +1309,7 @@ static int anx78xx_i2c_probe(struct i2c_client *client)
 					"anx78xx-intp", anx78xx);
 	if (err) {
 		DRM_ERROR("Failed to request INTP threaded IRQ: %d\n", err);
+		devm_free_irq(&client->dev, pdata->hpd_irq, anx78xx);
 		goto err_poweroff;
 	}
 
@@ -1331,6 +1332,14 @@ err_unregister_i2c:
 static void anx78xx_i2c_remove(struct i2c_client *client)
 {
 	struct anx78xx *anx78xx = i2c_get_clientdata(client);
+
+	/*
+	 * The threaded IRQ handlers access the dummy I2C clients through
+	 * regmap and may free the cached EDID, so stop them before those
+	 * resources are freed below.
+	 */
+	devm_free_irq(&client->dev, anx78xx->pdata.hpd_irq, anx78xx);
+	devm_free_irq(&client->dev, anx78xx->pdata.intp_irq, anx78xx);
 
 	drm_bridge_remove(&anx78xx->bridge);
 
