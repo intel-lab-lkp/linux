@@ -1,0 +1,36 @@
+drm drm-fixes 8d3ae59288f1e7d58d76558a6ee96d533bc5019f
+	Linux 7.2
+drm-misc drm-misc-fixes dc14753664240cedf669623b27ae9922b0618b25
+	accel/amdxdna: return early from a zero-length flush
+drm-rust drm-rust-fixes 8cdeaa50eae8dad34885515f62559ee83e7e8dda
+	Linux 7.2-rc2
+drm-intel drm-intel-fixes 266ebacffc5809478a2e80d61ddc58c921dbe2b4
+	drm/i915/lt_phy: program DDI_CLK_VALFREQ with DDI clock frequency
+drm-xe drm-xe-fixes ef526d122b62af5afa437f095aa6661a953676c4
+	drm/xe: Fix xe_device_probe() failure
+drm drm-next c44e278ce02efd0c4be79a8eda1ea6885c1ce5ec
+	BackMerge tag 'v7.2' into drm-next
+drm-misc drm-misc-next-fixes 271e90eb5f9ff34951647e5ed33c1775eebcca50
+	drm: use drm_warn() in validate_blend_mode_for_alpha_formats()
+drm-rust drm-rust-next-fixes 4c9ba407018e8deb06dbc643112bac8f40404f95
+	gpu: nova-core: falcon: use I/O projection to check transfer bounds
+drm-intel drm-intel-next-fixes 65b92bc671db7c222f8de1146c88e40fe8764d95
+	Merge tag 'drm-xe-next-fixes-2026-08-13' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-xe drm-xe-next-fixes 13087ad7817e6e5f210064518bfc4d6d58a9c2f3
+	drm/xe: don't WARN on kernel job timeout when device already wedged
+drm-misc drm-misc-next 8aee06aa4c72e9bdfda81ce720b51fe0fe0f307e
+	drm/panfrost: Remove unnecessary header file include
+drm-rust drm-rust-next 4c9ba407018e8deb06dbc643112bac8f40404f95
+	gpu: nova-core: falcon: use I/O projection to check transfer bounds
+drm-intel drm-intel-next 7fe0404b027fe478cbcb2e197c9a969a98a191e6
+	drm/i915/xe3p_lpd: Update CURSOR_BUF/WM masks
+drm-intel drm-intel-gt-next 682ea2d28d18bb06f9fc663cb5ab7e80dc0e606a
+	drm/i915/selftests: Fix GT PM sort comparators
+drm-xe drm-xe-next a1c1dbd0f047bb05de6aaf6abe9103031179bf19
+	drm/xe: don't WARN on kernel job timeout when device already wedged
+drm-intel topic/core-for-CI d8451c92a4da76aa7cabb07864ef2a601c482ca7
+	Revert "lockdep: Enable PROVE_RAW_LOCK_NESTING with PROVE_LOCKING."
+drm-xe topic/xe-for-CI b275cb3f07a7ab3ef3bd419db86bd42fa95dcedb
+	topic/xe-for-CI: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
