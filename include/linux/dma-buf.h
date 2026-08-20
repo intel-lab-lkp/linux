@@ -355,6 +355,29 @@ struct dma_buf {
 	spinlock_t name_lock;
 
 	/**
+	 * @priority:
+	 *
+	 * Reclaim-priority hint for this buffer's backing memory, in the
+	 * range DMA_BUF_PRIORITY_MIN..DMA_BUF_PRIORITY_MAX (see
+	 * include/uapi/linux/dma-buf.h). Lower values should be reclaimed
+	 * EARLIER under memory pressure. Defaults to
+	 * DMA_BUF_PRIORITY_DEFAULT.
+	 *
+	 * This is a hint only: dma-buf core implements no eviction policy
+	 * of its own, it merely stores and reports the value so exporters
+	 * (and cooperating shrinkers) have one shared, generic place to
+	 * look instead of each inventing a private side channel. Read with
+	 * dma_buf_get_priority(), set with dma_buf_set_priority() , also
+	 * reachable from userspace via DMA_BUF_IOCTL_SET_PRIORITY /
+	 * DMA_BUF_IOCTL_GET_PRIORITY.
+	 *
+	 * Plain atomic_t rather than a lock: this is a coarse, racy-by-
+	 * design hint consulted opportunistically, not a value anything
+	 * synchronizes correctness on.
+	 */
+	atomic_t priority;
+
+	/**
 	 * @owner:
 	 *
 	 * Pointer to exporter module; used for refcounting when exporter is a
@@ -565,6 +588,9 @@ int dma_buf_pin(struct dma_buf_attachment *attach);
 void dma_buf_unpin(struct dma_buf_attachment *attach);
 
 struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info);
+
+void dma_buf_set_priority(struct dma_buf *dmabuf, unsigned int priority);
+unsigned int dma_buf_get_priority(struct dma_buf *dmabuf);
 
 int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 struct dma_buf *dma_buf_get(int fd);

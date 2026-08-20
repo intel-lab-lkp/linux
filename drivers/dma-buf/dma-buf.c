@@ -432,6 +432,39 @@ static long dma_buf_set_name(struct dma_buf *dmabuf, const char __user *buf)
 	return 0;
 }
 
+/**
+ * dma_buf_set_priority - Set the reclaim-priority hint on a dma_buf.
+ * @dmabuf:   [in] buffer to update.
+ * @priority: [in] new priority, clamped to
+ *                 [DMA_BUF_PRIORITY_MIN, DMA_BUF_PRIORITY_MAX].
+ *
+ * Lower values should be reclaimed EARLIER under memory pressure. This is
+ * a hint only , dma-buf core stores and reports it, it implements no
+ * eviction policy itself. Safe to call at any time, from any context that
+ * can call dma_buf_get()/hold a reference (no locking required beyond
+ * that reference).
+ */
+void dma_buf_set_priority(struct dma_buf *dmabuf, unsigned int priority)
+{
+	if (priority > DMA_BUF_PRIORITY_MAX)
+		priority = DMA_BUF_PRIORITY_MAX;
+	atomic_set(&dmabuf->priority, priority);
+}
+EXPORT_SYMBOL_NS_GPL(dma_buf_set_priority, "DMA_BUF");
+
+/**
+ * dma_buf_get_priority - Read back the current reclaim-priority hint.
+ * @dmabuf: [in] buffer to query.
+ *
+ * Returns the value most recently set via dma_buf_set_priority() (or
+ * DMA_BUF_PRIORITY_DEFAULT if never set).
+ */
+unsigned int dma_buf_get_priority(struct dma_buf *dmabuf)
+{
+	return atomic_read(&dmabuf->priority);
+}
+EXPORT_SYMBOL_NS_GPL(dma_buf_get_priority, "DMA_BUF");
+
 #if IS_ENABLED(CONFIG_SYNC_FILE)
 static long dma_buf_export_sync_file(struct dma_buf *dmabuf,
 				     void __user *user_data)
@@ -542,6 +575,7 @@ static long dma_buf_ioctl(struct file *file,
 {
 	struct dma_buf *dmabuf;
 	struct dma_buf_sync sync;
+	struct dma_buf_priority prio;
 	enum dma_data_direction direction;
 	int ret;
 
@@ -580,6 +614,21 @@ static long dma_buf_ioctl(struct file *file,
 	case DMA_BUF_SET_NAME_B:
 		return dma_buf_set_name(dmabuf, (const char __user *)arg);
 
+	case DMA_BUF_IOCTL_SET_PRIORITY:
+		if (copy_from_user(&prio, (void __user *)arg, sizeof(prio)))
+			return -EFAULT;
+		if (prio.pad || prio.priority > DMA_BUF_PRIORITY_MAX)
+			return -EINVAL;
+		dma_buf_set_priority(dmabuf, prio.priority);
+		return 0;
+
+	case DMA_BUF_IOCTL_GET_PRIORITY:
+		memset(&prio, 0, sizeof(prio));
+		prio.priority = dma_buf_get_priority(dmabuf);
+		if (copy_to_user((void __user *)arg, &prio, sizeof(prio)))
+			return -EFAULT;
+		return 0;
+
 #if IS_ENABLED(CONFIG_SYNC_FILE)
 	case DMA_BUF_IOCTL_EXPORT_SYNC_FILE:
 		return dma_buf_export_sync_file(dmabuf, (void __user *)arg);
@@ -604,6 +653,7 @@ static void dma_buf_show_fdinfo(struct seq_file *m, struct file *file)
 	if (dmabuf->name)
 		seq_printf(m, "name:\t%s\n", dmabuf->name);
 	spin_unlock(&dmabuf->name_lock);
+	seq_printf(m, "priority:\t%u\n", dma_buf_get_priority(dmabuf));
 }
 
 static const struct file_operations dma_buf_fops = {
@@ -748,6 +798,7 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	dmabuf->exp_name = exp_info->exp_name;
 	dmabuf->owner = exp_info->owner;
 	spin_lock_init(&dmabuf->name_lock);
+	atomic_set(&dmabuf->priority, DMA_BUF_PRIORITY_DEFAULT);
 	init_waitqueue_head(&dmabuf->poll);
 	dmabuf->cb_in.poll = dmabuf->cb_out.poll = &dmabuf->poll;
 	dmabuf->cb_in.active = dmabuf->cb_out.active = 0;

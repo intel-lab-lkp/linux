@@ -168,6 +168,37 @@ struct dma_buf_import_sync_file {
 	__s32 fd;
 };
 
+/**
+ * struct dma_buf_priority - Reclaim-priority hint for a dma-buf
+ *
+ * dma-buf has no generic mechanism for a buffer's exporter, importer, or
+ * a cooperating userspace agent to signal how eagerly this buffer's
+ * backing memory should be given up relative to other buffers when the
+ * system is under memory pressure. Every subsystem that wants this today
+ * (GPU drivers juggling foreground/background clients, memory-tiering
+ * allocators for large ML/AI working sets, ...) has to build its own
+ * private, driver-specific side channel to express it.
+ *
+ * DMA_BUF_IOCTL_SET_PRIORITY / DMA_BUF_IOCTL_GET_PRIORITY add one shared,
+ * generic hint that any dma-buf exporter MAY consult. This is a hint
+ * only: the dma-buf core stores and reports the value, it implements no
+ * eviction policy of its own and by itself changes no behavior for any
+ * existing exporter.
+ */
+struct dma_buf_priority {
+	/**
+	 * @priority: DMA_BUF_PRIORITY_MIN..DMA_BUF_PRIORITY_MAX. Lower
+	 * values should be reclaimed EARLIER under memory pressure.
+	 */
+	__u32 priority;
+	/** @pad: must be zero, reserved for future use. */
+	__u32 pad;
+};
+
+#define DMA_BUF_PRIORITY_MIN		0
+#define DMA_BUF_PRIORITY_DEFAULT	128
+#define DMA_BUF_PRIORITY_MAX		255
+
 #define DMA_BUF_BASE		'b'
 #define DMA_BUF_IOCTL_SYNC	_IOW(DMA_BUF_BASE, 0, struct dma_buf_sync)
 
@@ -179,5 +210,7 @@ struct dma_buf_import_sync_file {
 #define DMA_BUF_SET_NAME_B	_IOW(DMA_BUF_BASE, 1, __u64)
 #define DMA_BUF_IOCTL_EXPORT_SYNC_FILE	_IOWR(DMA_BUF_BASE, 2, struct dma_buf_export_sync_file)
 #define DMA_BUF_IOCTL_IMPORT_SYNC_FILE	_IOW(DMA_BUF_BASE, 3, struct dma_buf_import_sync_file)
+#define DMA_BUF_IOCTL_SET_PRIORITY	_IOW(DMA_BUF_BASE, 4, struct dma_buf_priority)
+#define DMA_BUF_IOCTL_GET_PRIORITY	_IOR(DMA_BUF_BASE, 5, struct dma_buf_priority)
 
 #endif
