@@ -147,28 +147,6 @@ static const struct dmi_system_id dmi_lid_quirks[] = {
 	{}
 };
 
-static int acpi_button_probe(struct platform_device *pdev);
-static void acpi_button_remove(struct platform_device *pdev);
-
-#ifdef CONFIG_PM_SLEEP
-static int acpi_button_suspend(struct device *dev);
-static int acpi_button_resume(struct device *dev);
-#else
-#define acpi_button_suspend NULL
-#define acpi_button_resume NULL
-#endif
-static SIMPLE_DEV_PM_OPS(acpi_button_pm, acpi_button_suspend, acpi_button_resume);
-
-static struct platform_driver acpi_button_driver = {
-	.probe = acpi_button_probe,
-	.remove = acpi_button_remove,
-	.driver = {
-		.name = "acpi-button",
-		.acpi_match_table = button_device_ids,
-		.pm = &acpi_button_pm,
-	},
-};
-
 struct acpi_button {
 	struct acpi_device *adev;
 	struct device *dev;		/* physical button device */
@@ -491,7 +469,6 @@ static u32 acpi_button_event(void *data)
 	return ACPI_INTERRUPT_HANDLED;
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int acpi_button_suspend(struct device *dev)
 {
 	struct acpi_button *button = dev_get_drvdata(dev);
@@ -521,7 +498,6 @@ static int acpi_button_resume(struct device *dev)
 	}
 	return 0;
 }
-#endif
 
 static int acpi_lid_input_open(struct input_dev *input)
 {
@@ -752,6 +728,18 @@ static void acpi_button_remove(struct platform_device *pdev)
 	if (button->type == ACPI_BUTTON_TYPE_LID)
 		acpi_lid_forget(button->adev);
 }
+
+static DEFINE_SIMPLE_DEV_PM_OPS(acpi_button_pm, acpi_button_suspend, acpi_button_resume);
+
+static struct platform_driver acpi_button_driver = {
+	.probe = acpi_button_probe,
+	.remove = acpi_button_remove,
+	.driver = {
+		.name = "acpi-button",
+		.acpi_match_table = button_device_ids,
+		.pm = pm_sleep_ptr(&acpi_button_pm),
+	},
+};
 
 static int param_set_lid_init_state(const char *val,
 				    const struct kernel_param *kp)
