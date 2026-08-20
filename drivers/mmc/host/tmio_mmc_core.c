@@ -182,10 +182,15 @@ static void tmio_mmc_set_bus_width(struct tmio_mmc_host *host,
 static void tmio_mmc_reset(struct tmio_mmc_host *host, bool preserve)
 {
 	u16 card_opt, clk_ctrl, sdif_mode;
+	u32 clk_ctrl_32;
 
 	if (preserve) {
 		card_opt = sd_ctrl_read16(host, CTL_SD_MEM_CARD_OPT);
-		clk_ctrl = sd_ctrl_read16(host, CTL_SD_CARD_CLK_CTL);
+		if (host->pdata->flags & TMIO_MMC_INTERNAL_DIVIDER)
+			clk_ctrl_32 = sd_ctrl_read32(host, CTL_SD_CARD_CLK_CTL);
+		else
+			clk_ctrl = sd_ctrl_read16(host, CTL_SD_CARD_CLK_CTL);
+
 		if (host->pdata->flags & TMIO_MMC_MIN_RCAR2)
 			sdif_mode = sd_ctrl_read16(host, CTL_SDIF_MODE);
 	}
@@ -217,7 +222,11 @@ static void tmio_mmc_reset(struct tmio_mmc_host *host, bool preserve)
 
 	if (preserve) {
 		sd_ctrl_write16(host, CTL_SD_MEM_CARD_OPT, card_opt);
-		sd_ctrl_write16(host, CTL_SD_CARD_CLK_CTL, clk_ctrl);
+		if (host->pdata->flags & TMIO_MMC_INTERNAL_DIVIDER)
+			sd_ctrl_write32(host, CTL_SD_CARD_CLK_CTL, clk_ctrl_32);
+		else
+			sd_ctrl_write16(host, CTL_SD_CARD_CLK_CTL, clk_ctrl);
+
 		if (host->pdata->flags & TMIO_MMC_MIN_RCAR2)
 			sd_ctrl_write16(host, CTL_SDIF_MODE, sdif_mode);
 	}
