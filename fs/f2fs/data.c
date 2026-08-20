@@ -21,6 +21,7 @@
 #include <linux/fiemap.h>
 #include <linux/iomap.h>
 #include <linux/fserror.h>
+#include <linux/rcupdate.h>
 
 #include "f2fs.h"
 #include "node.h"
@@ -43,8 +44,28 @@ struct f2fs_folio_state {
 
 struct f2fs_bio {
 	struct work_struct work;
+	bool dropbehind;
 	struct bio bio;
 };
+
+static struct f2fs_bio *to_f2fs_bio(struct bio *bio)
+{
+	return container_of(bio, struct f2fs_bio, bio);
+}
+
+/* Keep in sync with the proposed block-layer bio_in_atomic(). */
+static bool f2fs_bio_in_atomic(void)
+{
+#ifdef CONFIG_PREEMPTION
+	if (rcu_preempt_depth())
+		return true;
+#endif
+#ifndef CONFIG_PREEMPT_COUNT
+	return true;
+#else
+	return !preemptible();
+#endif
+}
 
 #define	F2FS_BIO_POOL_SIZE	NR_CURSEG_TYPE
 
@@ -426,12 +447,13 @@ static void f2fs_write_end_io(struct bio *bio)
 
 	sbi = bio->bi_private;
 
-	if (in_atomic() && bio->bi_iter.bi_size > sbi->max_atc_write_bio_size) {
-		struct work_struct *w;
+	if ((to_f2fs_bio(bio)->dropbehind && f2fs_bio_in_atomic()) ||
+	    (in_atomic() &&
+	     bio->bi_iter.bi_size > sbi->max_atc_write_bio_size)) {
+		struct work_struct *work = &to_f2fs_bio(bio)->work;
 
-		w = &container_of(bio, struct f2fs_bio, bio)->work;
-		INIT_WORK(w, f2fs_write_end_io_work);
-		queue_work(sbi->wq, w);
+		INIT_WORK(work, f2fs_write_end_io_work);
+		queue_work(sbi->wq, work);
 	} else {
 		f2fs_write_end_bio(bio);
 	}
@@ -530,6 +552,8 @@ static struct bio *__bio_alloc(struct f2fs_io_info *fio, int npages)
 	bio = bio_alloc_bioset(bdev, npages,
 				fio->op | fio->op_flags | f2fs_io_flags(fio),
 				GFP_NOIO, &f2fs_bioset);
+	to_f2fs_bio(bio)->dropbehind =
+			!is_read_io(fio->op) && folio_test_dropbehind(fio->folio);
 	bio->bi_iter.bi_sector = sector;
 	if (is_read_io(fio->op)) {
 		bio->bi_end_io = f2fs_read_end_io;
@@ -825,6 +849,13 @@ static bool page_is_mergeable(struct f2fs_sb_info *sbi, struct bio *bio,
 	return bio->bi_bdev == f2fs_target_device(sbi, cur_blkaddr, NULL);
 }
 
+static bool f2fs_bio_dropbehind_mergeable(struct bio *bio,
+					  struct f2fs_io_info *fio)
+{
+	return to_f2fs_bio(bio)->dropbehind ==
+		folio_test_dropbehind(fio->folio);
+}
+
 static bool io_type_is_mergeable(struct f2fs_bio_info *io,
 						struct f2fs_io_info *fio)
 {
@@ -1017,8 +1048,10 @@ int f2fs_merge_page_bio(struct f2fs_io_info *fio)
 
 	trace_f2fs_submit_folio_bio(data_folio, fio);
 
-	if (bio && !page_is_mergeable(fio->sbi, bio, *fio->last_block,
-						fio->new_blkaddr))
+	if (bio &&
+	    (!page_is_mergeable(fio->sbi, bio, *fio->last_block,
+				fio->new_blkaddr) ||
+	     !f2fs_bio_dropbehind_mergeable(bio, fio)))
 		f2fs_submit_merged_ipu_write(fio->sbi, &bio, NULL);
 alloc_new:
 	if (!bio) {
@@ -1118,7 +1151,8 @@ next:
 	    (!io_is_mergeable(sbi, io->bio, io, fio, io->last_block_in_bio,
 			      fio->new_blkaddr) ||
 	     !f2fs_crypt_mergeable_bio(io->bio, fio_inode(fio),
-				bio_folio->index, fio)))
+				bio_folio->index, fio) ||
+	     !f2fs_bio_dropbehind_mergeable(io->bio, fio)))
 		__submit_merged_bio(io);
 alloc_new:
 	if (io->bio == NULL) {
