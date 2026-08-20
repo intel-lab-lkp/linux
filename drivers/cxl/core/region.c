@@ -1434,6 +1434,16 @@ static int check_interleave_cap(struct cxl_decoder *cxld, int iw, int ig)
 	return 0;
 }
 
+/* Mixed granularity has a region IG finer than the interleaving root IG */
+static bool cxl_region_is_mixed_gran(struct cxl_region *cxlr)
+{
+	struct cxl_decoder *cxld = &cxlr->cxlrd->cxlsd.cxld;
+
+	return cxld->interleave_ways > 1 &&
+	       cxld->interleave_granularity >
+		       cxlr->params.interleave_granularity;
+}
+
 static int cxl_port_setup_targets(struct cxl_port *port,
 				  struct cxl_region *cxlr,
 				  struct cxl_endpoint_decoder *cxled)
@@ -1447,7 +1457,6 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	struct cxl_region_params *p = &cxlr->params;
 	struct cxl_decoder *cxld = cxl_rr->decoder;
 	struct cxl_switch_decoder *cxlsd;
-	struct cxl_port *iter = port;
 	u16 eig, peig;
 	u8 eiw, peiw;
 
@@ -1463,26 +1472,21 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	}
 
 	cxlsd = to_cxl_switch_decoder(&cxld->dev);
+	iw = cxl_rr->nr_targets;
+
 	if (cxl_rr->nr_targets_set) {
-		int i, distance = 1;
-		struct cxl_region_ref *cxl_rr_iter;
+		int i, distance;
 
 		/*
-		 * The "distance" between peer downstream ports represents which
-		 * endpoint positions in the region interleave a given port can
-		 * host.
-		 *
-		 * For example, at the root of a hierarchy the distance is
-		 * always 1 as every index targets a different host-bridge. At
-		 * each subsequent switch level those ports map every Nth region
-		 * position where N is the width of the switch == distance.
+		 * @distance is the spacing between region positions sharing
+		 * this dport. Mixed-granularity regions place those positions
+		 * contiguously.
 		 */
-		do {
-			cxl_rr_iter = cxl_rr_load(iter, cxlr);
-			distance *= cxl_rr_iter->nr_targets;
-			iter = to_cxl_port(iter->dev.parent);
-		} while (!is_cxl_root(iter));
-		distance *= cxlrd->cxlsd.cxld.interleave_ways;
+		if (cxl_region_is_mixed_gran(cxlr))
+			distance = 1;
+		else
+			distance = cxld->interleave_granularity * iw /
+				   p->interleave_granularity;
 
 		for (i = 0; i < cxl_rr->nr_targets_set; i++)
 			if (ep->dport == cxlsd->target[i]) {
@@ -1496,15 +1500,15 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	}
 
 	if (is_cxl_root(parent_port)) {
-		/*
-		 * Root decoder IG is always set to value in CFMWS which
-		 * may be different than this region's IG.  We can use the
-		 * region's IG here since interleave_granularity_store()
-		 * does not allow interleaved host-bridges with
-		 * root IG != region IG.
-		 */
-		parent_ig = p->interleave_granularity;
 		parent_iw = cxlrd->cxlsd.cxld.interleave_ways;
+		/*
+		 * A non-interleaving root does not contribute to the region
+		 * interleave.
+		 */
+		if (parent_iw > 1)
+			parent_ig = cxlrd->cxlsd.cxld.interleave_granularity;
+		else
+			parent_ig = p->interleave_granularity;
 		/*
 		 * For purposes of address bit routing, use power-of-2 math for
 		 * switch ports.
@@ -1537,7 +1541,6 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 		return rc;
 	}
 
-	iw = cxl_rr->nr_targets;
 	rc = ways_to_eiw(iw, &eiw);
 	if (rc) {
 		dev_dbg(&cxlr->dev, "%s:%s: invalid port interleave: %d\n",
@@ -1545,23 +1548,15 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 		return rc;
 	}
 
-	/*
-	 * Interleave granularity is a multiple of @parent_port granularity.
-	 * Multiplier is the parent port interleave ways.
-	 */
-	rc = granularity_to_eig(parent_ig * parent_iw, &eig);
-	if (rc) {
-		dev_dbg(&cxlr->dev,
-			"%s: invalid granularity calculation (%d * %d)\n",
-			dev_name(&parent_port->dev), parent_ig, parent_iw);
-		return rc;
-	}
+	if (cxl_region_is_mixed_gran(cxlr))
+		ig = parent_ig / iw;
+	else
+		ig = parent_ig * parent_iw;
 
-	rc = eig_to_granularity(eig, &ig);
+	rc = granularity_to_eig(ig, &eig);
 	if (rc) {
-		dev_dbg(&cxlr->dev, "%s:%s: invalid interleave: %d\n",
-			dev_name(port->uport_dev), dev_name(&port->dev),
-			256 << eig);
+		dev_dbg(&cxlr->dev, "%s:%s: invalid granularity: %d\n",
+			dev_name(port->uport_dev), dev_name(&port->dev), ig);
 		return rc;
 	}
 
@@ -2058,6 +2053,39 @@ static int cxl_region_sort_targets(struct cxl_region *cxlr)
 	return rc;
 }
 
+static int cxl_region_validate_interleave(struct cxl_region *cxlr)
+{
+	struct cxl_decoder *cxld = &cxlr->cxlrd->cxlsd.cxld;
+	struct cxl_region_params *p = &cxlr->params;
+	int root_iw = cxld->interleave_ways;
+	int root_ig = cxld->interleave_granularity;
+
+	if (root_iw == 1)
+		return 0;
+
+	if (p->interleave_granularity > root_ig) {
+		dev_dbg(&cxlr->dev,
+			"granularity %d exceeds root decoder granularity %d\n",
+			p->interleave_granularity, root_ig);
+		return -ENXIO;
+	}
+
+	/* Same-gran power-of-two regions may span multiple root targets */
+	if (is_power_of_2(root_iw) && p->interleave_granularity == root_ig)
+		return 0;
+
+	/* Mixed-gran regions must span exactly one root interleave */
+	if (root_iw * root_ig != p->interleave_ways * p->interleave_granularity) {
+		dev_dbg(&cxlr->dev,
+			"%d ways at %d does not span root decoder %d ways at %d\n",
+			p->interleave_ways, p->interleave_granularity, root_iw,
+			root_ig);
+		return -ENXIO;
+	}
+
+	return 0;
+}
+
 static int cxl_region_attach(struct cxl_region *cxlr,
 			     struct cxl_endpoint_decoder *cxled, int pos)
 {
@@ -2099,6 +2127,10 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		dev_dbg(&cxlr->dev, "interleave config missing\n");
 		return -ENXIO;
 	}
+
+	rc = cxl_region_validate_interleave(cxlr);
+	if (rc)
+		return rc;
 
 	if (p->nr_targets >= p->interleave_ways) {
 		dev_dbg(&cxlr->dev, "region already has %d endpoints\n",
