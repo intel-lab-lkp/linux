@@ -128,6 +128,9 @@ static int uio_pdrv_genirq_probe(struct platform_device *pdev)
 
 		if (!device_property_read_string(&pdev->dev, "linux,uio-name", &name))
 			uioinfo->name = devm_kstrdup(&pdev->dev, name, GFP_KERNEL);
+		else if (is_of_node(node))
+			uioinfo->name = devm_kasprintf(&pdev->dev, GFP_KERNEL,
+						       "%pOFn", to_of_node(node));
 		else
 			uioinfo->name = devm_kasprintf(&pdev->dev, GFP_KERNEL,
 						       "%pfwP", node);
