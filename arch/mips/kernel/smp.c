@@ -10,7 +10,6 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
-#include <linux/profile.h>
 #include <linux/smp.h>
 #include <linux/spinlock.h>
 #include <linux/threads.h>
@@ -483,14 +482,6 @@ int __cpu_up(unsigned int cpu, struct task_struct *tidle)
 
 	/* Wait for CPU to finish startup & mark itself online before return */
 	wait_for_completion(&cpu_running);
-	return 0;
-}
-#endif
-
-#ifdef CONFIG_PROFILING
-/* Not really SMP stuff ... */
-int setup_profiling_timer(unsigned int multiplier)
-{
 	return 0;
 }
 #endif
