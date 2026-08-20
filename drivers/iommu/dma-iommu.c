@@ -2235,9 +2235,9 @@ out_free_page:
 }
 
 /*
- * Descriptor-free counterpart to iommu_dma_sw_msi(). Maps an MSI physical
- * page into the domain and returns the IOVA and mapping granule. Used for
- * pre-mapping MSI targets before any MSI descriptor has been set.
+ * Maps an MSI physical page into the domain and returns the IOVA and
+ * mapping granule. Used for pre-mapping MSI targets before any MSI
+ * descriptor has been set.
  *
  * The caller must pass a device attached to @domain and hold @dev's IOMMU
  * group mutex. If @required_size is non-zero then it must exactly match the
@@ -2268,22 +2268,6 @@ int iommu_dma_sw_map_msi(struct iommu_domain *domain,
 
 	*msi_iova = msi_page->iova;
 	*msi_shift = ilog2(size);
-	return 0;
-}
-
-int iommu_dma_sw_msi(struct iommu_domain *domain, struct msi_desc *desc,
-		     phys_addr_t msi_addr)
-{
-	struct device *dev = msi_desc_to_dev(desc);
-	dma_addr_t msi_iova;
-	unsigned int msi_shift;
-	int ret;
-
-	ret = iommu_dma_sw_map_msi(domain, dev, msi_addr, 0, &msi_iova, &msi_shift);
-	if (ret)
-		return ret;
-
-	msi_desc_set_iommu_msi_iova(desc, msi_iova, msi_shift);
 	return 0;
 }
 

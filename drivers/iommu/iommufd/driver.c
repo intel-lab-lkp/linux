@@ -249,11 +249,11 @@ int iommufd_sw_msi_install(struct iommufd_ctx *ictx,
 EXPORT_SYMBOL_NS_GPL(iommufd_sw_msi_install, "IOMMUFD_INTERNAL");
 
 /*
- * Descriptor-free counterpart to iommufd_sw_msi(). Maps an MSI physical page
- * into the domain and returns the IOVA. Used for pre-mapping MSI targets before
- * any MSI descriptor has been set (e.g. IMSIC doorbell pages). The IOVA is
- * global to the iommufd file descriptor: every domain and device using the
- * same MSI parameters gets the same IOVA.
+ * Maps an MSI physical page into the domain and returns the IOVA. Used for
+ * pre-mapping MSI targets before any MSI descriptor has been set (e.g.
+ * IMSIC doorbell pages). The IOVA is global to the iommufd file
+ * descriptor: every domain and device using the same MSI parameters gets
+ * the same IOVA.
  *
  * msi_addr is the exact byte offset of the MSI doorbell; the caller must have
  * verified it is contained within an MMIO region safe to map at PAGE_SIZE. If
@@ -321,27 +321,6 @@ int iommufd_sw_map_msi(struct iommu_domain *domain, struct device *dev,
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(iommufd_sw_map_msi, "IOMMUFD");
-
-/*
- * Called by the irq layer when the platform translates MSI addresses through
- * the IOMMU. Wraps iommufd_sw_map_msi() and stores the result in the descriptor.
- */
-int iommufd_sw_msi(struct iommu_domain *domain, struct msi_desc *desc,
-		   phys_addr_t msi_addr)
-{
-	dma_addr_t msi_iova;
-	unsigned int msi_shift;
-	int rc;
-
-	rc = iommufd_sw_map_msi(domain, msi_desc_to_dev(desc), msi_addr,
-				0, &msi_iova, &msi_shift);
-	if (rc)
-		return rc;
-
-	msi_desc_set_iommu_msi_iova(desc, msi_iova, msi_shift);
-	return 0;
-}
-EXPORT_SYMBOL_NS_GPL(iommufd_sw_msi, "IOMMUFD");
 #endif
 
 MODULE_DESCRIPTION("iommufd code shared with builtin modules");
