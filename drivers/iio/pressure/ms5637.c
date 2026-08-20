@@ -215,6 +215,7 @@ static const struct ms_tp_data ms8607_data = {
 
 static const struct i2c_device_id ms5637_id[] = {
 	{ .name = "ms5637", .driver_data = (kernel_ulong_t)&ms5637_data },
+	{ .name = "ms5803", .driver_data = (kernel_ulong_t)&ms5803_data },
 	{ .name = "ms5805", .driver_data = (kernel_ulong_t)&ms5805_data },
 	{ .name = "ms5837", .driver_data = (kernel_ulong_t)&ms5837_data },
 	{ .name = "ms8607-temppressure", .driver_data = (kernel_ulong_t)&ms8607_data },
