@@ -1215,6 +1215,52 @@ test_boot_isolated()
 }
 
 #
+# A parent's type change must validate only CPUs owned directly by the parent,
+# not a boot-isolated CPU owned by a valid isolated child partition.
+#
+test_owned_cpus_housekeeping()
+{
+	TEST_NAME="Child-owned CPU type change"
+	get_boot_isolated_cpu "$TEST_NAME" || return 0
+	echo "Running $TEST_NAME test ..."
+
+	cd $CGROUP2/test
+	echo member > cpuset.cpus.partition
+	echo +cpuset > cgroup.subtree_control
+	echo 2,$BOOT_CPU > cpuset.cpus
+	[[ $(cat cpuset.cpus.effective) = "2,$BOOT_CPU" ]] || {
+		echo "$TEST_NAME test SKIPPED: CPUs 2,$BOOT_CPU are unavailable"
+		echo "" > cpuset.cpus
+		cd $CGROUP2
+		return 0
+	}
+	test_partition isolated
+	mkdir A1
+	cd A1
+	echo $BOOT_CPU > cpuset.cpus
+	test_partition isolated
+	cd ..
+	test_effective_cpus 2
+	test_partition root
+	[[ $(cat A1/cpuset.cpus.partition) = isolated ]] || {
+		echo "Child partition changed during parent type change"
+		exit 1
+	}
+	check_isolcpus "." || {
+		echo "Parent type change corrupted child isolation"
+		exit 1
+	}
+	cd A1
+	test_partition member
+	cd ..
+	rmdir A1
+	test_partition member
+	echo "" > cpuset.cpus
+	cd $CGROUP2
+	echo "$TEST_NAME test PASSED."
+}
+
+#
 # Wait for inotify event for the given file and read it
 # $1: cgroup file to wait for
 # $2: file to store the read result
@@ -1286,5 +1332,6 @@ run_state_test TEST_MATRIX
 run_remote_state_test REMOTE_TEST_MATRIX
 test_isolated
 test_boot_isolated
+test_owned_cpus_housekeeping
 test_inotify
 echo "All tests PASSED."
