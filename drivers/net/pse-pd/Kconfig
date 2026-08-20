@@ -48,6 +48,17 @@ config PSE_REGULATOR
 	  Sourcing Equipment without automatic classification support. For
 	  example for basic implementation of PoDL (802.3bu) specification.
 
+config PSE_LTC4266
+	tristate "LTC4266 PSE controller"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  This module provides support for LTC4266 regulator based Ethernet
+	  Power Sourcing Equipment.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ltc4266.
+
 config PSE_PD692X0
 	tristate "PD692X0 PSE controller"
 	depends on I2C
