@@ -2436,18 +2436,16 @@ static void posix_lock_to_flock64(struct flock64 *flock, struct file_lock *fl)
  */
 int fcntl_getlk(struct file *filp, unsigned int cmd, struct flock *flock)
 {
-	struct file_lock *fl;
+	struct file_lock fl;
 	int error;
 
-	fl = locks_alloc_lock();
-	if (fl == NULL)
-		return -ENOMEM;
+	locks_init_lock(&fl);
 	error = -EINVAL;
 	if (cmd != F_OFD_GETLK && flock->l_type != F_RDLCK
 			&& flock->l_type != F_WRLCK)
 		goto out;
 
-	error = flock_to_posix_lock(filp, fl, flock);
+	error = flock_to_posix_lock(filp, &fl, flock);
 	if (error)
 		goto out;
 
@@ -2456,22 +2454,22 @@ int fcntl_getlk(struct file *filp, unsigned int cmd, struct flock *flock)
 		if (flock->l_pid != 0)
 			goto out;
 
-		fl->c.flc_flags |= FL_OFDLCK;
-		fl->c.flc_owner = filp;
+		fl.c.flc_flags |= FL_OFDLCK;
+		fl.c.flc_owner = filp;
 	}
 
-	error = vfs_test_lock(filp, fl);
+	error = vfs_test_lock(filp, &fl);
 	if (error)
 		goto out;
 
-	flock->l_type = fl->c.flc_type;
-	if (fl->c.flc_type != F_UNLCK) {
-		error = posix_lock_to_flock(flock, fl);
+	flock->l_type = fl.c.flc_type;
+	if (fl.c.flc_type != F_UNLCK) {
+		error = posix_lock_to_flock(flock, &fl);
 		if (error)
 			goto out;
 	}
 out:
-	locks_free_lock(fl);
+	locks_release_private(&fl);
 	return error;
 }
 
@@ -2644,19 +2642,17 @@ out:
  */
 int fcntl_getlk64(struct file *filp, unsigned int cmd, struct flock64 *flock)
 {
-	struct file_lock *fl;
+	struct file_lock fl;
 	int error;
 
-	fl = locks_alloc_lock();
-	if (fl == NULL)
-		return -ENOMEM;
+	locks_init_lock(&fl);
 
 	error = -EINVAL;
 	if (cmd != F_OFD_GETLK && flock->l_type != F_RDLCK
 			&& flock->l_type != F_WRLCK)
 		goto out;
 
-	error = flock64_to_posix_lock(filp, fl, flock);
+	error = flock64_to_posix_lock(filp, &fl, flock);
 	if (error)
 		goto out;
 
@@ -2665,20 +2661,20 @@ int fcntl_getlk64(struct file *filp, unsigned int cmd, struct flock64 *flock)
 		if (flock->l_pid != 0)
 			goto out;
 
-		fl->c.flc_flags |= FL_OFDLCK;
-		fl->c.flc_owner = filp;
+		fl.c.flc_flags |= FL_OFDLCK;
+		fl.c.flc_owner = filp;
 	}
 
-	error = vfs_test_lock(filp, fl);
+	error = vfs_test_lock(filp, &fl);
 	if (error)
 		goto out;
 
-	flock->l_type = fl->c.flc_type;
-	if (fl->c.flc_type != F_UNLCK)
-		posix_lock_to_flock64(flock, fl);
+	flock->l_type = fl.c.flc_type;
+	if (fl.c.flc_type != F_UNLCK)
+		posix_lock_to_flock64(flock, &fl);
 
 out:
-	locks_free_lock(fl);
+	locks_release_private(&fl);
 	return error;
 }
 
