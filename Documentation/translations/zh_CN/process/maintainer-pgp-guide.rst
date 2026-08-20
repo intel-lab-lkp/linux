@@ -742,7 +742,7 @@ Greg Kroah-Hartman 的密钥（如果你还没有它们）::
 如果你有 kernel.org 帐户，那么你应该 `添加 kernel.org UID 到你的密钥中`_
 添加到你的密钥中，以使 WKD 对其他内核开发人员更有用。
 
-.. _`添加 kernel.org UID 到你的密钥中`: https://korg.wiki.kernel.org/userdoc/mail#adding_a_kernelorg_uid_to_your_pgp_key
+.. _`添加 kernel.org UID 到你的密钥中`: https://korg.docs.kernel.org/mail.html#adding-a-kernel-org-uid-to-your-pgp-key
 
 信任网 (WOT) 与首次使用信任 (TOFU)
 -----------------------------------
