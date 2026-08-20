@@ -157,11 +157,13 @@ static const struct i2c_algorithm usb_algorithm = {
 /*
  * Initially the usb i2c interface uses a vid/pid pair donated by
  * Future Technology Devices International Ltd., later a pair was
- * bought from EZPrototypes
+ * bought from EZPrototypes. The Zephyr Project reserved a pid from
+ * its own vid for the i2c-tiny-usb sample of its USB device stack.
  */
 static const struct usb_device_id i2c_tiny_usb_table[] = {
 	{ USB_DEVICE(0x0403, 0xc631) },   /* FTDI */
 	{ USB_DEVICE(0x1c40, 0x0534) },   /* EZPrototypes */
+	{ USB_DEVICE(0x2fe3, 0x0013) },   /* Zephyr Project */
 	{ }                               /* Terminating entry */
 };
 
