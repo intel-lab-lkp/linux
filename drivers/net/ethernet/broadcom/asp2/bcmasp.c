@@ -1094,7 +1094,7 @@ static int bcmasp_get_and_request_irq(struct bcmasp_priv *priv, int i)
 	struct platform_device *pdev = priv->pdev;
 	int irq, ret;
 
-	irq = platform_get_irq_optional(pdev, i);
+	irq = platform_get_irq(pdev, i);
 	if (irq < 0)
 		return irq;
 
