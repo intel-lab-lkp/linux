@@ -899,6 +899,7 @@ static int read_rindex_entry(struct gfs2_inode *ip)
 	struct gfs2_rindex buf;
 	int error;
 	struct gfs2_rgrpd *rgd;
+	size_t size;
 
 	if (pos >= i_size_read(&ip->i_inode))
 		return 1;
@@ -917,6 +918,13 @@ static int read_rindex_entry(struct gfs2_inode *ip)
 	rgd->rd_sbd = sdp;
 	rgd->rd_addr = be64_to_cpu(buf.ri_addr);
 	rgd->rd_length = be32_to_cpu(buf.ri_length);
+
+	size = rgd->rd_length * sizeof(struct gfs2_bitmap);
+	if (get_order(size) > MAX_PAGE_ORDER) {
+		error = -EINVAL;
+		goto fail;
+	}
+
 	rgd->rd_data0 = be64_to_cpu(buf.ri_data0);
 	rgd->rd_data = be32_to_cpu(buf.ri_data);
 	rgd->rd_bitbytes = be32_to_cpu(buf.ri_bitbytes);
