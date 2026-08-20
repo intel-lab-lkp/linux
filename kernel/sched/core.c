@@ -9781,6 +9781,11 @@ static unsigned long tg_weight(struct task_group *tg)
 #endif
 }
 
+/* Serializes concurrent cgroup updates to keep CFS and SCX state consistent */
+#ifdef CONFIG_EXT_GROUP_SCHED
+static DEFINE_MUTEX(scx_cgroup_mutex);
+#endif
+
 static int cpu_shares_write_u64(struct cgroup_subsys_state *css,
 				struct cftype *cftype, u64 shareval)
 {
@@ -9788,6 +9793,10 @@ static int cpu_shares_write_u64(struct cgroup_subsys_state *css,
 
 	if (shareval > scale_load_down(ULONG_MAX))
 		shareval = MAX_SHARES;
+
+#ifdef CONFIG_EXT_GROUP_SCHED
+	guard(mutex)(&scx_cgroup_mutex);
+#endif
 	ret = sched_group_set_shares(css_tg(css), scale_load(shareval));
 	if (!ret)
 		scx_group_set_weight(css_tg(css),
@@ -10123,6 +10132,9 @@ static int tg_set_bandwidth(struct task_group *tg,
 					burst_us + quota_us > max_bw_runtime_us))
 		return -EINVAL;
 
+#ifdef CONFIG_EXT_GROUP_SCHED
+	guard(mutex)(&scx_cgroup_mutex);
+#endif
 #ifdef CONFIG_CFS_BANDWIDTH
 	ret = tg_set_cfs_bandwidth(tg, period_us, quota_us, burst_us);
 #endif /* CONFIG_CFS_BANDWIDTH */
@@ -10221,6 +10233,9 @@ static int cpu_idle_write_s64(struct cgroup_subsys_state *css,
 {
 	int ret;
 
+#ifdef CONFIG_EXT_GROUP_SCHED
+	guard(mutex)(&scx_cgroup_mutex);
+#endif
 	ret = sched_group_set_idle(css_tg(css), idle);
 	if (!ret)
 		scx_group_set_idle(css_tg(css), idle);
@@ -10397,6 +10412,9 @@ static int cpu_weight_write_u64(struct cgroup_subsys_state *css,
 
 	weight = sched_weight_from_cgroup(cgrp_weight);
 
+#ifdef CONFIG_EXT_GROUP_SCHED
+	guard(mutex)(&scx_cgroup_mutex);
+#endif
 	ret = sched_group_set_shares(css_tg(css), scale_load(weight));
 	if (!ret)
 		scx_group_set_weight(css_tg(css), cgrp_weight);
@@ -10434,6 +10452,9 @@ static int cpu_weight_nice_write_s64(struct cgroup_subsys_state *css,
 	idx = array_index_nospec(idx, 40);
 	weight = sched_prio_to_weight[idx];
 
+#ifdef CONFIG_EXT_GROUP_SCHED
+	guard(mutex)(&scx_cgroup_mutex);
+#endif
 	ret = sched_group_set_shares(css_tg(css), scale_load(weight));
 	if (!ret)
 		scx_group_set_weight(css_tg(css),
