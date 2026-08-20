@@ -2499,14 +2499,22 @@ static int bcm_sysport_probe(struct platform_device *pdev)
 	priv->num_rx_desc_words = params->num_rx_desc_words;
 
 	priv->irq0 = platform_get_irq(pdev, 0);
+	if (priv->irq0 < 0) {
+		ret = priv->irq0;
+		goto err_free_netdev;
+	}
 	if (!priv->is_lite) {
 		priv->irq1 = platform_get_irq(pdev, 1);
 		priv->wol_irq = platform_get_irq_optional(pdev, 2);
 	} else {
 		priv->wol_irq = platform_get_irq_optional(pdev, 1);
 	}
-	if (priv->irq0 <= 0 || (priv->irq1 <= 0 && !priv->is_lite)) {
-		ret = -EINVAL;
+	if (priv->irq1 < 0 && !priv->is_lite) {
+		ret = priv->irq1;
+		goto err_free_netdev;
+	}
+	if (priv->wol_irq < 0 && priv->wol_irq != -ENXIO) {
+		ret = priv->wol_irq;
 		goto err_free_netdev;
 	}
 
