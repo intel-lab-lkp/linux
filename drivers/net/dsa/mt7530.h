@@ -854,6 +854,7 @@ struct mt753x_info {
 	void (*mac_port_config)(struct dsa_switch *ds, int port,
 				unsigned int mode,
 				phy_interface_t interface);
+	bool broken_eee;
 };
 
 /* struct mt7530_priv -	This is the main data structure for holding the state
