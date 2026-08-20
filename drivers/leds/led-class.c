@@ -633,12 +633,13 @@ void led_classdev_unregister(struct led_classdev *led_cdev)
 
 #ifdef CONFIG_LEDS_TRIGGERS
 	down_write(&led_cdev->trigger_lock);
+	led_cdev->flags |= LED_UNREGISTERING;
 	if (led_cdev->trigger)
 		led_trigger_set(led_cdev, NULL);
 	up_write(&led_cdev->trigger_lock);
-#endif
-
+#else
 	led_cdev->flags |= LED_UNREGISTERING;
+#endif
 
 	/* Stop blinking */
 	led_stop_software_blink(led_cdev);

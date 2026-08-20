@@ -200,6 +200,9 @@ int led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trig)
 	const char *name;
 	int ret;
 
+	if ((led_cdev->flags & LED_UNREGISTERING) && trig)
+		return -ENODEV;
+
 	if (!led_cdev->trigger && !trig)
 		return 0;
 
