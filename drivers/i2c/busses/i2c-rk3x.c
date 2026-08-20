@@ -1145,7 +1145,7 @@ static int rk3x_i2c_xfer_polling(struct i2c_adapter *adap,
 	return rk3x_i2c_xfer_common(adap, msgs, num, true);
 }
 
-static __maybe_unused int rk3x_i2c_resume(struct device *dev)
+static int rk3x_i2c_resume(struct device *dev)
 {
 	struct rk3x_i2c *i2c = dev_get_drvdata(dev);
 
@@ -1394,7 +1394,7 @@ static void rk3x_i2c_remove(struct platform_device *pdev)
 	clk_unprepare(i2c->clk);
 }
 
-static SIMPLE_DEV_PM_OPS(rk3x_i2c_pm_ops, NULL, rk3x_i2c_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(rk3x_i2c_pm_ops, NULL, rk3x_i2c_resume);
 
 static struct platform_driver rk3x_i2c_driver = {
 	.probe   = rk3x_i2c_probe,
@@ -1402,7 +1402,7 @@ static struct platform_driver rk3x_i2c_driver = {
 	.driver  = {
 		.name  = "rk3x-i2c",
 		.of_match_table = rk3x_i2c_match,
-		.pm = &rk3x_i2c_pm_ops,
+		.pm = pm_sleep_ptr(&rk3x_i2c_pm_ops),
 	},
 };
 

@@ -829,7 +829,7 @@ static void pch_i2c_remove(struct pci_dev *pdev)
 	kfree(adap_info);
 }
 
-static int __maybe_unused pch_i2c_suspend(struct device *dev)
+static int pch_i2c_suspend(struct device *dev)
 {
 	int i;
 	struct pci_dev *pdev = to_pci_dev(dev);
@@ -857,7 +857,7 @@ static int __maybe_unused pch_i2c_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused pch_i2c_resume(struct device *dev)
+static int pch_i2c_resume(struct device *dev)
 {
 	int i;
 	struct adapter_info *adap_info = dev_get_drvdata(dev);
@@ -870,14 +870,14 @@ static int __maybe_unused pch_i2c_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(pch_i2c_pm_ops, pch_i2c_suspend, pch_i2c_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(pch_i2c_pm_ops, pch_i2c_suspend, pch_i2c_resume);
 
 static struct pci_driver pch_pcidriver = {
 	.name = KBUILD_MODNAME,
 	.id_table = pch_pcidev_id,
 	.probe = pch_i2c_probe,
 	.remove = pch_i2c_remove,
-	.driver.pm = &pch_i2c_pm_ops,
+	.driver.pm = pm_sleep_ptr(&pch_i2c_pm_ops),
 };
 
 module_pci_driver(pch_pcidriver);

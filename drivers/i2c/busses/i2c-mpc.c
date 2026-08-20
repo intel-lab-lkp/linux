@@ -880,7 +880,7 @@ static void fsl_i2c_remove(struct platform_device *op)
 	i2c_del_adapter(&i2c->adap);
 };
 
-static int __maybe_unused mpc_i2c_suspend(struct device *dev)
+static int mpc_i2c_suspend(struct device *dev)
 {
 	struct mpc_i2c *i2c = dev_get_drvdata(dev);
 
@@ -890,7 +890,7 @@ static int __maybe_unused mpc_i2c_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused mpc_i2c_resume(struct device *dev)
+static int mpc_i2c_resume(struct device *dev)
 {
 	struct mpc_i2c *i2c = dev_get_drvdata(dev);
 
@@ -899,7 +899,7 @@ static int __maybe_unused mpc_i2c_resume(struct device *dev)
 
 	return 0;
 }
-static SIMPLE_DEV_PM_OPS(mpc_i2c_pm_ops, mpc_i2c_suspend, mpc_i2c_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(mpc_i2c_pm_ops, mpc_i2c_suspend, mpc_i2c_resume);
 
 static const struct mpc_i2c_data mpc_i2c_data_512x = {
 	.setup = mpc_i2c_setup_512x,
@@ -942,7 +942,7 @@ static struct platform_driver mpc_i2c_driver = {
 	.driver = {
 		.name = "mpc-i2c",
 		.of_match_table = mpc_i2c_of_match,
-		.pm = &mpc_i2c_pm_ops,
+		.pm = pm_sleep_ptr(&mpc_i2c_pm_ops),
 	},
 };
 
