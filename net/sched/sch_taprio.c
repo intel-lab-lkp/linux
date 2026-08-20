@@ -259,6 +259,26 @@ static int length_to_duration(struct taprio_sched *q, int len)
 	return div_u64(len * atomic64_read(&q->picos_per_byte), PSEC_PER_NSEC);
 }
 
+/* Software schedules service one hrtimer expiry per entry; intervals
+ * shorter than the expiry service cost rearm the timer with an expiry
+ * already in the past and storm the CPU. 100us leaves margin above the
+ * measured cost on debug configurations.
+ */
+#define TAPRIO_MIN_SW_INTERVAL_NS	(100 * NSEC_PER_USEC)
+
+static s64 taprio_min_interval(struct taprio_sched *q)
+{
+	s64 min_interval = length_to_duration(q, ETH_ZLEN);
+
+	/* Only pure software schedules arm the per-entry hrtimer. */
+	if (!FULL_OFFLOAD_IS_ENABLED(q->flags) &&
+	    !TXTIME_ASSIST_IS_ENABLED(q->flags))
+		min_interval = max_t(s64, min_interval,
+				     TAPRIO_MIN_SW_INTERVAL_NS);
+
+	return min_interval;
+}
+
 static int duration_to_length(struct taprio_sched *q, u64 duration)
 {
 	return div_u64(duration * PSEC_PER_NSEC, atomic64_read(&q->picos_per_byte));
@@ -1089,7 +1109,7 @@ static int fill_sched_entry(struct taprio_sched *q, struct nlattr **tb,
 			    struct sched_entry *entry,
 			    struct netlink_ext_ack *extack)
 {
-	int min_duration = length_to_duration(q, ETH_ZLEN);
+	s64 min_duration = taprio_min_interval(q);
 	u32 interval = 0;
 
 	if (tb[TCA_TAPRIO_SCHED_ENTRY_CMD])
@@ -1217,7 +1237,7 @@ static int parse_taprio_schedule(struct taprio_sched *q, struct nlattr **tb,
 		new->cycle_time = cycle;
 	}
 
-	if (new->cycle_time < new->num_entries * length_to_duration(q, ETH_ZLEN)) {
+	if (new->cycle_time < (s64)new->num_entries * taprio_min_interval(q)) {
 		NL_SET_ERR_MSG(extack, "'cycle_time' is too small");
 		return -EINVAL;
 	}
