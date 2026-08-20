@@ -172,6 +172,8 @@ struct amdgpu_kiq {
 	struct amdgpu_irq_src	irq;
 	const struct kiq_pm4_funcs *pmf;
 	void			*mqd_backup;
+	/* consecutive TLB flush reg access failures on this instance */
+	atomic_t		flush_failures;
 };
 
 /*
