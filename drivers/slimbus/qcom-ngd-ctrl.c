@@ -546,6 +546,25 @@ static u32 *qcom_slim_ngd_tx_msg_get(struct qcom_slim_ngd_ctrl *ctrl, int len,
 	return desc->base;
 }
 
+/*
+ * Give back a descriptor obtained from qcom_slim_ngd_tx_msg_get() that will
+ * not be submitted to the DMA engine.
+ *
+ * The ring is accounted by count rather than by index: tx_tail counts the
+ * descriptors handed out and tx_head the ones the controller is finished
+ * with, and qcom_slim_ngd_tx_msg_dma_cb() is the only other place that
+ * advances tx_head. A descriptor that is never posted therefore has to
+ * advance it here, or the ring loses that slot for good.
+ */
+static void qcom_slim_ngd_tx_msg_put(struct qcom_slim_ngd_ctrl *ctrl)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&ctrl->tx_buf_lock, flags);
+	ctrl->tx_head = (ctrl->tx_head + 1) % QCOM_SLIM_NGD_DESC_NUM;
+	spin_unlock_irqrestore(&ctrl->tx_buf_lock, flags);
+}
+
 static void qcom_slim_ngd_tx_msg_dma_cb(void *args)
 {
 	struct qcom_slim_ngd_dma_desc *desc = args;
@@ -848,6 +867,7 @@ static int qcom_slim_ngd_xfer_msg(struct slim_controller *sctrl,
 		ret = slim_alloc_txn_tid(sctrl, txn);
 		if (ret) {
 			dev_err(ctrl->dev, "Unable to allocate TID\n");
+			qcom_slim_ngd_tx_msg_put(ctrl);
 			return ret;
 		}
 
@@ -887,6 +907,7 @@ static int qcom_slim_ngd_xfer_msg(struct slim_controller *sctrl,
 	mutex_lock(&ctrl->tx_lock);
 	ret = qcom_slim_ngd_tx_msg_post(ctrl, pbuf, txn->rl);
 	if (ret) {
+		qcom_slim_ngd_tx_msg_put(ctrl);
 		mutex_unlock(&ctrl->tx_lock);
 		return ret;
 	}
