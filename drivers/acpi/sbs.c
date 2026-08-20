@@ -692,17 +692,13 @@ static void acpi_sbs_remove(struct platform_device *pdev)
 	kfree(sbs);
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int acpi_sbs_resume(struct device *dev)
 {
 	acpi_sbs_callback(dev_get_drvdata(dev));
 	return 0;
 }
-#else
-#define acpi_sbs_resume NULL
-#endif
 
-static SIMPLE_DEV_PM_OPS(acpi_sbs_pm, NULL, acpi_sbs_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(acpi_sbs_pm, NULL, acpi_sbs_resume);
 
 static struct platform_driver acpi_sbs_driver = {
 	.probe = acpi_sbs_probe,
@@ -710,7 +706,7 @@ static struct platform_driver acpi_sbs_driver = {
 	.driver = {
 		.name = "acpi-sbs",
 		.acpi_match_table = sbs_device_ids,
-		.pm = &acpi_sbs_pm,
+		.pm = pm_sleep_ptr(&acpi_sbs_pm),
 	},
 };
 
