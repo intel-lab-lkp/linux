@@ -3,6 +3,7 @@
  * Copyright (C) 2026 UltraRISC Technology (Shanghai) Co., Ltd.
  */
 
+#include <linux/init.h>
 #include <linux/module.h>
 
 #include <dt-bindings/clock/ultrarisc,dp1000-clk.h>
@@ -147,7 +148,23 @@ static struct platform_driver dp1000_clk_driver = {
 		.of_match_table = dp1000_clk_of_match,
 	},
 };
-module_platform_driver(dp1000_clk_driver);
+
+/*
+ * PCI host drivers are registered before sysfb_init() through link order.
+ * Register the clock provider earlier so the host controllers do not defer
+ * probing until after sysfb has claimed the firmware framebuffer aperture.
+ */
+static int __init dp1000_clk_init(void)
+{
+	return platform_driver_register(&dp1000_clk_driver);
+}
+subsys_initcall(dp1000_clk_init);
+
+static void __exit dp1000_clk_exit(void)
+{
+	platform_driver_unregister(&dp1000_clk_driver);
+}
+module_exit(dp1000_clk_exit);
 
 MODULE_IMPORT_NS("CLK_ULTRARISC");
 MODULE_DESCRIPTION("UltraRISC DP1000 clock controller");
