@@ -5,6 +5,8 @@
 #include <engine/disp.h>
 #include <core/enum.h>
 struct nvkm_head;
+struct nvkm_head_state;
+struct nvkm_ior;
 struct nvkm_outp;
 struct dcb_output;
 
@@ -33,6 +35,23 @@ struct nvkm_disp_func {
 		int (*cnt)(struct nvkm_disp *, unsigned long *mask);
 		int (*new)(struct nvkm_disp *, int id);
 	} wndw, head, dac, sor, pior;
+
+	/* Register programming that the GSP-RM display path (rm/r535) needs from
+	 * the chip, everything else on that path goes through RM. Every hook
+	 * is called unconditionally.
+	 */
+	struct {
+		irqreturn_t (*intr)(struct nvkm_inth *);
+		/* Head-timing interrupts arrive on a second DISP vector. */
+		bool intr_low_latency;
+		void (*head_state)(struct nvkm_head *, struct nvkm_head_state *);
+		void (*head_rgpos)(struct nvkm_head *, u16 *hline, u16 *vline);
+		void (*vblank_get)(struct nvkm_head *);
+		void (*vblank_put)(struct nvkm_head *);
+		void (*hdmi_gcp)(struct nvkm_ior *, int head, bool enable);
+		void (*hdmi_infoframe_avi)(struct nvkm_ior *, int head, void *data, u32 size);
+		void (*hdmi_infoframe_vsi)(struct nvkm_ior *, int head, void *data, u32 size);
+	} gsp;
 
 	u16 ramht_size;
 
