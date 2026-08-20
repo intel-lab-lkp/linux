@@ -778,6 +778,8 @@ config SND_PCXHR
 	  To compile this driver as a module, choose M here: the module
 	  will be called snd-pcxhr.
 
+source "sound/pci/quantum/Kconfig"
+
 config SND_RIPTIDE
 	tristate "Conexant Riptide"
 	depends on HAS_IOPORT

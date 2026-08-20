@@ -1,0 +1,19 @@
+config SND_QUANTUM
+	tristate "PreSonus Quantum PCI sound driver"
+	depends on SND_PCI
+	select SND_PCM
+	select SND_RAWMIDI
+	help
+	  Say Y or M here to include support for PreSonus Quantum series
+	  PCI over Thunderbolt sound cards.
+
+	  The supported devices are professional audio interfaces with
+	  multichannel playback and capture, raw MIDI, sample-rate control,
+	  and clock-source control.
+
+	  This driver is independent and is not affiliated with PreSonus
+	  or Fender. Later Quantum-branded USB interfaces are not supported
+	  by this driver, as they use a different hardware architecture.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called snd-quantum.
