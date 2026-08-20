@@ -19312,6 +19312,11 @@ F:	drivers/nubus/
 F:	include/linux/nubus.h
 F:	include/uapi/linux/nubus.h
 
+NUVOTON NCT6126D I2C/SMBUS DRIVER
+M:	Benedikt Niedermayr <benedikt.niedermayr@siemens.com>
+S:	Maintained
+F:	drivers/i2c/busses/i2c-nct6126.c
+
 NUVOTON NCT6694 MFD DRIVER
 M:	Ming Yu <tmyu0@nuvoton.com>
 S:	Supported
