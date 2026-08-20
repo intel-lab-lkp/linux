@@ -2156,6 +2156,30 @@ static void compute_partition_effective_cpumask(struct cpuset *cs,
 }
 
 /*
+ * Compute CPUs owned directly by a partition.
+ *
+ * effective_xcpus includes CPUs granted to valid child partitions. Exclude
+ * those CPUs when changing only this partition's type.
+ */
+static void compute_partition_owned_cpumask(struct cpuset *cs,
+					    struct cpumask *owned_cpus)
+{
+	struct cgroup_subsys_state *css;
+	struct cpuset *child;
+
+	lockdep_assert_held(&cpuset_mutex);
+	cpumask_copy(owned_cpus, cs->effective_xcpus);
+
+	rcu_read_lock();
+	cpuset_for_each_child(child, css, cs) {
+		if (is_partition_valid(child))
+			cpumask_andnot(owned_cpus, owned_cpus,
+				       child->effective_xcpus);
+	}
+	rcu_read_unlock();
+}
+
+/*
  * update_cpumasks_hier - Update effective cpumasks and tasks in the subtree
  * @cs:  the cpuset to consider
  * @tmp: temp variables for calculating effective_cpus & partition setup
@@ -2990,8 +3014,10 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 	} else if (old_prs && new_prs) {
 		/*
 		 * A change in load balance state only, no change in cpumasks.
-		 * Need to update isolated_cpus.
+		 * Need to update isolated_cpus for CPUs owned by this partition,
+		 * excluding CPUs distributed to valid child partitions.
 		 */
+		compute_partition_owned_cpumask(cs, tmpmask.new_cpus);
 		if (((new_prs == PRS_ISOLATED) &&
 		     !isolated_cpus_can_update(cs->effective_xcpus, NULL)) ||
 		    prstate_housekeeping_conflict(new_prs, cs->effective_xcpus))
@@ -3030,7 +3056,7 @@ out:
 	if (!is_partition_valid(cs))
 		reset_partition_data(cs);
 	else if (isolcpus_updated)
-		isolated_cpus_update(old_prs, new_prs, cs->effective_xcpus);
+		isolated_cpus_update(old_prs, new_prs, tmpmask.new_cpus);
 	spin_unlock_irq(&callback_lock);
 
 	/* Force update if switching back to member & update effective_xcpus */
