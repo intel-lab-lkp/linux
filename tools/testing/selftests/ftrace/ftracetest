@@ -159,9 +159,29 @@ parse_opts() { # opts
   if [ -n "$OPT_TEST_CASES" ]; then
     TEST_CASES=$OPT_TEST_CASES
   fi
-  if [ -n "$OPT_TEST_DIR" -a -f "$OPT_TEST_DIR"/test.d/functions ]; then
-    TOP_DIR=$OPT_TEST_DIR
-    TEST_DIR=$TOP_DIR/test.d
+  if [ -n "$OPT_TEST_DIR" ]; then
+    # Walk up from OPT_TEST_DIR to find the nearest ancestor that contains
+    # test.d/functions.  This allows a monitor subdirectory (e.g.
+    # verification/test.d/tlob/) to be passed directly without placing a
+    # dummy functions shim in each new subdirectory.
+    # Security: only walk within directories owned by root or the current user
+    # to prevent sourcing a functions file planted in a world-writable ancestor.
+    dir=$(realpath "$OPT_TEST_DIR" 2>/dev/null || echo "$OPT_TEST_DIR")
+    while [ "$dir" != "/" ] && [ "$dir" != "//" ]; do
+      if [ -f "$dir/test.d/functions" ]; then
+        # Verify the directory is not world-writable to prevent LPE.
+        dirperms=$(stat -c "%a" "$dir" 2>/dev/null || stat -f "%Lp" "$dir" 2>/dev/null)
+        case "$dirperms" in
+          *2|*3|*6|*7) ;; # world-writable: skip this candidate
+          *)
+            TOP_DIR=$dir
+            TEST_DIR=$TOP_DIR/test.d
+            break
+            ;;
+        esac
+      fi
+      dir=$(dirname "$dir")
+    done
   fi
 }
 
