@@ -734,6 +734,67 @@ cleanup:
 }
 
 /*
+ * This test verifies that writing a finite cpu.max resets an incompatible
+ * cpu.max.burst, while preserving a compatible burst.
+ */
+static int test_cpucg_max_burst_reset(const char *root)
+{
+	char *cpucg = NULL;
+	int ret = KSFT_FAIL;
+
+	cpucg = cg_name(root, "cpucg_max_burst_reset_test");
+	if (!cpucg)
+		goto cleanup;
+
+	if (cg_create(cpucg))
+		goto cleanup;
+
+	/* An unconstrained group may retain a burst for later use. */
+	if (cg_write(cpucg, "cpu.max.burst", "100000000"))
+		goto cleanup;
+	if (cg_read_long(cpucg, "cpu.max.burst") != 100000000)
+		goto cleanup;
+
+	/* A finite quota must not be blocked by the incompatible burst. */
+	if (cg_write(cpucg, "cpu.max", "50000 100000"))
+		goto cleanup;
+	if (cg_read_long(cpucg, "cpu.max.burst") != 0)
+		goto cleanup;
+	if (cg_read_strcmp(cpucg, "cpu.max", "50000 100000\n"))
+		goto cleanup;
+
+	/* Keep a burst which remains valid across a quota update. */
+	if (cg_write(cpucg, "cpu.max", "100000 100000"))
+		goto cleanup;
+	if (cg_write(cpucg, "cpu.max.burst", "50000"))
+		goto cleanup;
+	if (cg_write(cpucg, "cpu.max", "75000 100000"))
+		goto cleanup;
+	if (cg_read_long(cpucg, "cpu.max.burst") != 50000)
+		goto cleanup;
+
+	/* An unlimited quota preserves burst until it becomes incompatible. */
+	if (cg_write(cpucg, "cpu.max", "max 100000"))
+		goto cleanup;
+	if (cg_read_long(cpucg, "cpu.max.burst") != 50000)
+		goto cleanup;
+
+	/* Reset the same burst when a later finite quota conflicts. */
+	if (cg_write(cpucg, "cpu.max", "25000 100000"))
+		goto cleanup;
+	if (cg_read_long(cpucg, "cpu.max.burst") != 0)
+		goto cleanup;
+
+	ret = KSFT_PASS;
+
+cleanup:
+	cg_destroy(cpucg);
+	free(cpucg);
+
+	return ret;
+}
+
+/*
  * This test verifies that a process inside of a nested cgroup whose parent
  * group has a cpu.max value set, is properly throttled.
  */
@@ -822,6 +883,7 @@ struct cpucg_test {
 	T(test_cpucg_nested_weight_overprovisioned),
 	T(test_cpucg_nested_weight_underprovisioned),
 	T(test_cpucg_max),
+	T(test_cpucg_max_burst_reset),
 	T(test_cpucg_max_nested),
 };
 #undef T

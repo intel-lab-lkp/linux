@@ -10080,6 +10080,18 @@ static u64 cpu_period_read_u64(struct cgroup_subsys_state *css,
 	return period_us;
 }
 
+static u64 tg_burst_on_quota_change(u64 quota_us, u64 burst_us)
+{
+	if (quota_us == RUNTIME_INF || quota_us > max_bw_runtime_us)
+		return burst_us;
+
+	if (burst_us > quota_us ||
+	    burst_us > max_bw_runtime_us - quota_us)
+		return 0;
+
+	return burst_us;
+}
+
 static int tg_set_bandwidth(struct task_group *tg,
 			    u64 period_us, u64 quota_us, u64 burst_us)
 {
@@ -10168,6 +10180,7 @@ static int cpu_quota_write_s64(struct cgroup_subsys_state *css,
 		quota_us = RUNTIME_INF;
 
 	tg_bandwidth(tg, &period_us, NULL, &burst_us);
+	burst_us = tg_burst_on_quota_change(quota_us, burst_us);
 	return tg_set_bandwidth(tg, period_us, quota_us, burst_us);
 }
 
@@ -10491,8 +10504,10 @@ static ssize_t cpu_max_write(struct kernfs_open_file *of,
 
 	tg_bandwidth(tg, &period_us, NULL, &burst_us);
 	ret = cpu_period_quota_parse(buf, &period_us, &quota_us);
-	if (!ret)
+	if (!ret) {
+		burst_us = tg_burst_on_quota_change(quota_us, burst_us);
 		ret = tg_set_bandwidth(tg, period_us, quota_us, burst_us);
+	}
 	return ret ?: nbytes;
 }
 #endif /* CONFIG_CFS_BANDWIDTH */
