@@ -157,6 +157,12 @@ static int elf_fdpic_fetch_phdrs(struct elf_fdpic_params *params,
 	if (unlikely(retval != size))
 		return retval < 0 ? retval : -ENOEXEC;
 
+	phdr = params->phdrs;
+	for (loop = 0; loop < params->hdr.e_phnum; loop++, phdr++) {
+		if (phdr->p_type == PT_LOAD && phdr->p_filesz > phdr->p_memsz)
+			return -EINVAL;
+	}
+
 	/* determine stack size for this binary */
 	phdr = params->phdrs;
 	for (loop = 0; loop < params->hdr.e_phnum; loop++, phdr++) {
