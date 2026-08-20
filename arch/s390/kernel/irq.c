@@ -13,7 +13,6 @@
 #include <linux/interrupt.h>
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
-#include <linux/profile.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/ftrace.h>

@@ -32,7 +32,6 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 #include <linux/types.h>
-#include <linux/profile.h>
 #include <linux/timex.h>
 #include <linux/notifier.h>
 #include <linux/clockchips.h>

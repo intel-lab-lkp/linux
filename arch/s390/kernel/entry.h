@@ -45,7 +45,6 @@ void do_ext_irq(struct pt_regs *regs);
 void do_restart(void *arg);
 void __init startup_init(void);
 void die(struct pt_regs *regs, const char *str);
-int setup_profiling_timer(unsigned int multiplier);
 
 struct s390_mmap_arg_struct;
 struct fadvise64_64_args;

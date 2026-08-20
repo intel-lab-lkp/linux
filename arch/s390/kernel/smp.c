@@ -980,17 +980,6 @@ void __init smp_setup_processor_id(void)
 	lc->spinlock_index = 0;
 }
 
-/*
- * the frequency of the profiling timer can be changed
- * by writing a multiplier value into /proc/profile.
- *
- * usually you want to run this on all CPUs ;)
- */
-int setup_profiling_timer(unsigned int multiplier)
-{
-	return 0;
-}
-
 static ssize_t cpu_configure_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
