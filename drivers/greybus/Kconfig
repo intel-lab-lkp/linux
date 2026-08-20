@@ -41,5 +41,17 @@ config GREYBUS_ES2
 	  To compile this code as a module, choose M here: the module
 	  will be called gb-es2.ko
 
+config GREYBUS_SOFTSVC
+	tristate "Greybus software SVC"
+	depends on RUST
+	help
+	  Select this option to enable a software implementation of the
+	  Greybus SVC (Supervisory Controller) running in the kernel. It can
+	  be used by host drivers that talk to a Greybus network which does
+	  not provide an SVC of its own.
+
+	  To compile this code as a module, choose M here: the module
+	  will be called gb-softsvc.ko
+
 endif	# GREYBUS
 
