@@ -1267,7 +1267,7 @@ static int tg_print_conf_uint(struct seq_file *sf, void *v)
 	return 0;
 }
 
-static void tg_conf_updated(struct throtl_grp *tg, bool global)
+static void tg_conf_updated(struct throtl_grp *tg)
 {
 	struct throtl_service_queue *sq = &tg->service_queue;
 	struct cgroup_subsys_state *pos_css;
@@ -1286,16 +1286,8 @@ static void tg_conf_updated(struct throtl_grp *tg, bool global)
 	 * restrictions in the whole hierarchy and allows them to bypass
 	 * blk-throttle.
 	 */
-	blkg_for_each_descendant_pre(blkg, pos_css,
-			global ? tg->td->queue->root_blkg : tg_to_blkg(tg)) {
-		struct throtl_grp *this_tg = blkg_to_tg(blkg);
-
-		tg_update_has_rules(this_tg);
-		/* ignore root/second level */
-		if (!cgroup_subsys_on_dfl(io_cgrp_subsys) || !blkg->parent ||
-		    !blkg->parent->parent)
-			continue;
-	}
+	blkg_for_each_descendant_pre(blkg, pos_css, tg_to_blkg(tg))
+		tg_update_has_rules(blkg_to_tg(blkg));
 	rcu_read_unlock();
 
 	/*
@@ -1388,7 +1380,7 @@ static ssize_t tg_set_conf(struct kernfs_open_file *of,
 	else
 		*(unsigned int *)((void *)tg + of_cft(of)->private) = v;
 
-	tg_conf_updated(tg, false);
+	tg_conf_updated(tg);
 	ret = 0;
 
 unprep:
@@ -1610,7 +1602,7 @@ static ssize_t tg_set_limit(struct kernfs_open_file *of,
 	tg->iops[READ] = v[2];
 	tg->iops[WRITE] = v[3];
 
-	tg_conf_updated(tg, false);
+	tg_conf_updated(tg);
 	ret = 0;
 unprep:
 	blkg_conf_unprep(&ctx);
