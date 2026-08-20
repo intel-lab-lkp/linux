@@ -395,8 +395,7 @@ static void nfs42_copy_dest_done(struct file *file, loff_t pos, loff_t len,
 	loff_t end = newsize - 1;
 
 	nfs_truncate_last_folio(mapping, oldsize, pos);
-	WARN_ON_ONCE(invalidate_inode_pages2_range(mapping, pos >> PAGE_SHIFT,
-						   end >> PAGE_SHIFT));
+	WARN_ON_ONCE(filemap_invalidate_pages(mapping, pos, end));
 
 	spin_lock(&inode->i_lock);
 	if (newsize > i_size_read(inode))

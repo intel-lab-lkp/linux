@@ -1035,7 +1035,8 @@ static int find_and_lock_cache_page(struct nfs_readdir_descriptor *desc)
 			nfs_readdir_folio_unlock_and_put_cached(desc);
 			trace_nfs_readdir_cache_fill_done(inode, res);
 			if (res == -EBADCOOKIE || res == -ENOTSYNC) {
-				invalidate_inode_pages2(desc->file->f_mapping);
+				filemap_invalidate_pages(desc->file->f_mapping,
+						0, OFFSET_MAX);
 				nfs_readdir_rewind_search(desc);
 				trace_nfs_readdir_invalidate_cache_range(
 					inode, 0, MAX_LFS_FILESIZE);
@@ -1050,8 +1051,8 @@ static int find_and_lock_cache_page(struct nfs_readdir_descriptor *desc)
 		    memcmp(nfsi->cookieverf, verf, sizeof(nfsi->cookieverf))) {
 			memcpy(nfsi->cookieverf, verf,
 			       sizeof(nfsi->cookieverf));
-			invalidate_inode_pages2_range(desc->file->f_mapping, 1,
-						      -1);
+			filemap_invalidate_pages(desc->file->f_mapping,
+					PAGE_SIZE, -1);
 			trace_nfs_readdir_invalidate_cache_range(
 				inode, 1, MAX_LFS_FILESIZE);
 		}

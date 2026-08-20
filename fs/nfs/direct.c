@@ -1019,7 +1019,7 @@ ssize_t nfs_file_direct_write(struct kiocb *iocb, struct iov_iter *iter,
 	nfs_add_stats(mapping->host, NFSIOS_DIRECTWRITTENBYTES, count);
 
 	pos = iocb->ki_pos;
-	end = (pos + iov_iter_count(iter) - 1) >> PAGE_SHIFT;
+	end = pos + iov_iter_count(iter) - 1;
 
 	task_io_account_write(count);
 
@@ -1060,8 +1060,7 @@ ssize_t nfs_file_direct_write(struct kiocb *iocb, struct iov_iter *iter,
 							    FLUSH_COND_STABLE);
 
 		if (mapping->nrpages) {
-			invalidate_inode_pages2_range(mapping,
-						      pos >> PAGE_SHIFT, end);
+			filemap_invalidate_pages(mapping, pos, end);
 		}
 
 		nfs_end_io_direct(inode);

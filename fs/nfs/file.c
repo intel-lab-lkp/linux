@@ -552,29 +552,6 @@ static void nfs_check_dirty_writeback(struct folio *folio,
 		*dirty = true;
 }
 
-/*
- * Attempt to clear the private state associated with a page when an error
- * occurs that requires the cached contents of an inode to be written back or
- * destroyed
- * - Called if either PG_private or fscache is set on the page
- * - Caller holds page lock
- * - Return 0 if successful, -error otherwise
- */
-static int nfs_launder_folio(struct folio *folio)
-{
-	struct inode *inode = folio->mapping->host;
-	int ret;
-
-	dfprintk(PAGECACHE, "NFS: launder_folio(%llu, %llu)\n",
-		inode->i_ino, folio_pos(folio));
-
-	folio_wait_private_2(folio); /* [DEPRECATED] */
-	ret = nfs_wb_folio(inode, folio);
-	trace_nfs_launder_folio_done(inode, folio_pos(folio),
-			folio_size(folio), ret);
-	return ret;
-}
-
 static int nfs_swap_activate(struct swap_info_struct *sis, struct file *file,
 						sector_t *span)
 {
@@ -633,7 +610,6 @@ const struct address_space_operations nfs_file_aops = {
 	.invalidate_folio = nfs_invalidate_folio,
 	.release_folio = nfs_release_folio,
 	.migrate_folio = nfs_migrate_folio,
-	.launder_folio = nfs_launder_folio,
 	.is_dirty_writeback = nfs_check_dirty_writeback,
 	.error_remove_folio = generic_error_remove_folio,
 	.swap_activate = nfs_swap_activate,

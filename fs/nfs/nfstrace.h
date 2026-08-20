@@ -1070,7 +1070,6 @@ DEFINE_NFS_FOLIO_EVENT(nfs_writeback_folio);
 DEFINE_NFS_FOLIO_EVENT_DONE(nfs_writeback_folio_done);
 
 DEFINE_NFS_FOLIO_EVENT(nfs_invalidate_folio);
-DEFINE_NFS_FOLIO_EVENT_DONE(nfs_launder_folio_done);
 
 DEFINE_NFS_FOLIO_EVENT(nfs_try_to_update_request);
 DEFINE_NFS_FOLIO_EVENT_DONE(nfs_try_to_update_request_done);
