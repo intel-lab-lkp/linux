@@ -26,6 +26,14 @@ check_prereqs()
 		echo $msg efivarfs is not mounted on $efivarfs_mount >&2
 		exit $ksft_skip
 	fi
+
+	# Determine whether efivarfs is mounted read-only or read-write
+	# and store the result ("ro" or "rw") in the global efivarfs_mode.
+	if grep -q "^\S\+ $efivarfs_mount efivarfs ro[, ]" /proc/mounts; then
+		efivarfs_mode=ro
+	else
+		efivarfs_mode=rw
+	fi
 }
 
 run_test()
@@ -74,7 +82,7 @@ test_create_empty()
 {
 	local file=$efivarfs_mount/$FUNCNAME-$test_guid
 
-	: > $file
+	: 2>/dev/null > $file
 
 	if [ -e $file ]; then
 		echo "$file can be created without writing" >&2
@@ -361,18 +369,27 @@ check_prereqs
 
 rc=0
 
-run_test test_create
+# Tests that are also valid on a read-only efivarfs run unconditionally.
 run_test test_create_empty
-run_test test_create_read
-run_test test_delete
-run_test test_zero_size_delete
-run_test test_open_unlink
-run_test test_valid_filenames
 run_test test_invalid_filenames
-run_test test_no_set_size
-setup_test_multiple
-run_test test_multiple_zero_size
-run_test test_multiple_create
-run_test test_multiple_delete_on_write
+
+# These tests need to create, modify or delete EFI variables, so they
+# require a writable efivarfs. Skip them when it is mounted read-only.
+if [ "$efivarfs_mode" = "rw" ]; then
+	run_test test_create
+	run_test test_create_read
+	run_test test_delete
+	run_test test_zero_size_delete
+	run_test test_open_unlink
+	run_test test_valid_filenames
+	run_test test_no_set_size
+	setup_test_multiple
+	run_test test_multiple_zero_size
+	run_test test_multiple_create
+	run_test test_multiple_delete_on_write
+else
+	echo "efivarfs is mounted read-only on $efivarfs_mount;" \
+	     "tests that require write access were skipped" >&2
+fi
 
 exit $rc
