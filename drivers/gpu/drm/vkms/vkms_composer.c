@@ -190,13 +190,29 @@ static void apply_colorop(struct pixel_argb_s32 *pixel, struct drm_colorop *colo
 	}
 }
 
+static bool pipeline_all_bypassed(struct drm_colorop *colorop)
+{
+	while (colorop) {
+		struct drm_colorop_state *colorop_state = colorop->state;
+
+		if (!colorop_state || !colorop_state->bypass)
+			return false;
+		colorop = colorop->next;
+	}
+	return true;
+}
+
 static void pre_blend_color_transform(const struct vkms_plane_state *plane_state,
 				      struct line_buffer *output_buffer)
 {
+	struct drm_colorop *colorop = plane_state->base.base.color_pipeline;
 	struct pixel_argb_s32 pixel;
 
+	if (!colorop || pipeline_all_bypassed(colorop))
+		return;
+
 	for (size_t x = 0; x < output_buffer->n_pixels; x++) {
-		struct drm_colorop *colorop = plane_state->base.base.color_pipeline;
+		colorop = plane_state->base.base.color_pipeline;
 
 		/*
 		 * Some operations, such as applying a BT709 encoding matrix,
