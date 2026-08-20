@@ -2668,7 +2668,7 @@ static struct dst_entry *xfrm_bundle_create(struct xfrm_policy *policy,
 	const struct xfrm_mode *inner_mode;
 	struct net *net = xp_net(policy);
 	unsigned long now = jiffies;
-	struct net_device *dev;
+	struct net_device *dev = NULL;
 	struct xfrm_dst *xdst_prev = NULL;
 	struct xfrm_dst *xdst0 = NULL;
 	int i = 0;
@@ -2770,7 +2770,11 @@ static struct dst_entry *xfrm_bundle_create(struct xfrm_policy *policy,
 	xdst0->path = dst;
 
 	err = -ENODEV;
-	dev = dst->dev;
+	rcu_read_lock();
+	dev = dst_dev_rcu(dst);
+	if (dev)
+		dev_hold(dev);
+	rcu_read_unlock();
 	if (!dev)
 		goto free_dst;
 
@@ -2789,6 +2793,7 @@ static struct dst_entry *xfrm_bundle_create(struct xfrm_policy *policy,
 		trailer_len -= xdst_prev->u.dst.xfrm->props.trailer_len;
 	}
 
+	dev_put(dev);
 	return &xdst0->u.dst;
 
 put_states:
@@ -2798,6 +2803,8 @@ free_dst:
 	if (xdst0)
 		dst_release_immediate(&xdst0->u.dst);
 
+	if (dev)
+		dev_put(dev);
 	return ERR_PTR(err);
 }
 
@@ -3058,11 +3065,16 @@ static struct xfrm_dst *xfrm_create_dummy_bundle(struct net *net,
 	xfrm_init_path((struct xfrm_dst *)dst1, dst, 0);
 
 	err = -ENODEV;
-	dev = dst->dev;
+	rcu_read_lock();
+	dev = dst_dev_rcu(dst);
+	if (dev)
+		dev_hold(dev);
+	rcu_read_unlock();
 	if (!dev)
 		goto free_dst;
 
 	err = xfrm_fill_dst(xdst, dev, fl);
+	dev_put(dev);
 	if (err)
 		goto free_dst;
 
