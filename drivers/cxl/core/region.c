@@ -571,15 +571,8 @@ static int set_interleave_granularity(struct cxl_region *cxlr, int val)
 	if (rc)
 		return rc;
 
-	/*
-	 * When the host-bridge is interleaved, disallow region granularity !=
-	 * root granularity. Regions with a granularity less than the root
-	 * interleave result in needing multiple endpoints to support a single
-	 * slot in the interleave (possible to support in the future). Regions
-	 * with a granularity greater than the root interleave result in invalid
-	 * DPA translations (invalid to support).
-	 */
-	if (cxld->interleave_ways > 1 && val != cxld->interleave_granularity)
+	/* Region granularity must not be coarser than an interleaving root's */
+	if (cxld->interleave_ways > 1 && val > cxld->interleave_granularity)
 		return -EINVAL;
 
 	lockdep_assert_held_write(&cxl_rwsem.region);
