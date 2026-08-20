@@ -1307,7 +1307,7 @@ static int __btrfs_wait_cache_io(struct btrfs_root *root,
 				io_ctl->entries, io_ctl->bitmaps);
 out:
 	if (ret) {
-		invalidate_inode_pages2(inode->i_mapping);
+		filemap_invalidate_pages(inode->i_mapping, 0, OFFSET_MAX);
 		BTRFS_I(inode)->generation = 0;
 		if (block_group)
 			btrfs_debug(root->fs_info,
@@ -1500,7 +1500,7 @@ out:
 	io_ctl->inode = NULL;
 	io_ctl_free(io_ctl);
 	if (ret) {
-		invalidate_inode_pages2(inode->i_mapping);
+		filemap_invalidate_pages(inode->i_mapping, 0, OFFSET_MAX);
 		BTRFS_I(inode)->generation = 0;
 	}
 	btrfs_update_inode(trans, BTRFS_I(inode));

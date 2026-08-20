@@ -1370,8 +1370,8 @@ struct btrfs_super_block *btrfs_read_disk_super(struct block_device *bdev,
 		 * Drop the page of the primary superblock, so later read will
 		 * always read from the device.
 		 */
-		invalidate_inode_pages2_range(mapping, bytenr >> PAGE_SHIFT,
-				      (bytenr + BTRFS_SUPER_INFO_SIZE) >> PAGE_SHIFT);
+		filemap_invalidate_pages(mapping, bytenr,
+				bytenr + BTRFS_SUPER_INFO_SIZE - 1);
 	}
 
 	filemap_invalidate_lock_shared(mapping);

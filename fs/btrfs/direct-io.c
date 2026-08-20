@@ -115,7 +115,7 @@ static int lock_extent_direct(struct inode *inode, u64 lockstart, u64 lockend,
 			/*
 			 * We could trigger writeback for this range (and wait
 			 * for it to complete) and then invalidate the pages for
-			 * this range (through invalidate_inode_pages2_range()),
+			 * this range (through filemap_invalidate_pages()),
 			 * but that can lead us to a deadlock with a concurrent
 			 * call to readahead (a buffered read or a defrag call
 			 * triggered a readahead) on a page lock due to an
