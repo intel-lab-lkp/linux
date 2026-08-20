@@ -25,6 +25,8 @@
  */
 unsigned int __read_mostly freeze_timeout_msecs = 20 * MSEC_PER_SEC;
 
+EXPORT_SYMBOL(freeze_timeout_msecs);
+
 static int try_to_freeze_tasks(bool user_only)
 {
 	const char *what = user_only ? "user space processes" :
