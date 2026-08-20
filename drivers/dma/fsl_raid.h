@@ -110,59 +110,59 @@
 
 struct fsl_re_ctrl {
 	/* General Configuration Registers */
-	__be32 global_config;	/* Global Configuration Register */
+	u32 global_config;	/* Global Configuration Register */
 	u8     rsvd1[4];
-	__be32 galois_field_config; /* Galois Field Configuration Register */
+	u32 galois_field_config; /* Galois Field Configuration Register */
 	u8     rsvd2[4];
-	__be32 jq_wrr_config;   /* WRR Configuration register */
+	u32 jq_wrr_config;	/* WRR Configuration register */
 	u8     rsvd3[4];
-	__be32 crc_config;	/* CRC Configuration register */
+	u32 crc_config;		/* CRC Configuration register */
 	u8     rsvd4[228];
-	__be32 system_reset;	/* System Reset Register */
+	u32 system_reset;	/* System Reset Register */
 	u8     rsvd5[252];
-	__be32 global_status;	/* Global Status Register */
+	u32 global_status;	/* Global Status Register */
 	u8     rsvd6[832];
-	__be32 re_liodn_base;	/* LIODN Base Register */
+	u32 re_liodn_base;	/* LIODN Base Register */
 	u8     rsvd7[1712];
-	__be32 re_version_id;	/* Version ID register of RE */
-	__be32 re_version_id_2; /* Version ID 2 register of RE */
+	u32 re_version_id;	/* Version ID register of RE */
+	u32 re_version_id_2;	/* Version ID 2 register of RE */
 	u8     rsvd8[512];
-	__be32 host_config;	/* Host I/F Configuration Register */
+	u32 host_config;	/* Host I/F Configuration Register */
 };
 
 struct fsl_re_chan_cfg {
 	/* Registers for JR interface */
-	__be32 jr_config_0;	/* Job Queue Configuration 0 Register */
-	__be32 jr_config_1;	/* Job Queue Configuration 1 Register */
-	__be32 jr_interrupt_status; /* Job Queue Interrupt Status Register */
+	u32 jr_config_0;	/* Job Queue Configuration 0 Register */
+	u32 jr_config_1;	/* Job Queue Configuration 1 Register */
+	u32 jr_interrupt_status; /* Job Queue Interrupt Status Register */
 	u8     rsvd1[4];
-	__be32 jr_command;	/* Job Queue Command Register */
+	u32 jr_command;		/* Job Queue Command Register */
 	u8     rsvd2[4];
-	__be32 jr_status;	/* Job Queue Status Register */
+	u32 jr_status;		/* Job Queue Status Register */
 	u8     rsvd3[228];
 
 	/* Input Ring */
-	__be32 inbring_base_h;	/* Inbound Ring Base Address Register - High */
-	__be32 inbring_base_l;	/* Inbound Ring Base Address Register - Low */
-	__be32 inbring_size;	/* Inbound Ring Size Register */
+	u32 inbring_base_h;	/* Inbound Ring Base Address Register - High */
+	u32 inbring_base_l;	/* Inbound Ring Base Address Register - Low */
+	u32 inbring_size;	/* Inbound Ring Size Register */
 	u8     rsvd4[4];
-	__be32 inbring_slot_avail; /* Inbound Ring Slot Available Register */
+	u32 inbring_slot_avail; /* Inbound Ring Slot Available Register */
 	u8     rsvd5[4];
-	__be32 inbring_add_job;	/* Inbound Ring Add Job Register */
+	u32 inbring_add_job;	/* Inbound Ring Add Job Register */
 	u8     rsvd6[4];
-	__be32 inbring_cnsmr_indx; /* Inbound Ring Consumer Index Register */
+	u32 inbring_cnsmr_indx; /* Inbound Ring Consumer Index Register */
 	u8     rsvd7[220];
 
 	/* Output Ring */
-	__be32 oubring_base_h;	/* Outbound Ring Base Address Register - High */
-	__be32 oubring_base_l;	/* Outbound Ring Base Address Register - Low */
-	__be32 oubring_size;	/* Outbound Ring Size Register */
+	u32 oubring_base_h;	/* Outbound Ring Base Address Register - High */
+	u32 oubring_base_l;	/* Outbound Ring Base Address Register - Low */
+	u32 oubring_size;	/* Outbound Ring Size Register */
 	u8     rsvd8[4];
-	__be32 oubring_job_rmvd; /* Outbound Ring Job Removed Register */
+	u32 oubring_job_rmvd;	/* Outbound Ring Job Removed Register */
 	u8     rsvd9[4];
-	__be32 oubring_slot_full; /* Outbound Ring Slot Full Register */
+	u32 oubring_slot_full;	/* Outbound Ring Slot Full Register */
 	u8     rsvd10[4];
-	__be32 oubring_prdcr_indx; /* Outbound Ring Producer Index */
+	u32 oubring_prdcr_indx;	/* Outbound Ring Producer Index */
 };
 
 /*
