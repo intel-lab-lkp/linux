@@ -982,7 +982,6 @@ static void k3_dma_remove(struct platform_device *op)
 	clk_disable_unprepare(d->clk);
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int k3_dma_suspend_dev(struct device *dev)
 {
 	struct k3_dma_dev *d = dev_get_drvdata(dev);
@@ -1012,14 +1011,13 @@ static int k3_dma_resume_dev(struct device *dev)
 	k3_dma_enable_dma(d, true);
 	return 0;
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(k3_dma_pmops, k3_dma_suspend_dev, k3_dma_resume_dev);
+static DEFINE_SIMPLE_DEV_PM_OPS(k3_dma_pmops, k3_dma_suspend_dev, k3_dma_resume_dev);
 
 static struct platform_driver k3_pdma_driver = {
 	.driver		= {
 		.name	= DRIVER_NAME,
-		.pm	= &k3_dma_pmops,
+		.pm	= pm_sleep_ptr(&k3_dma_pmops),
 		.of_match_table = k3_pdma_dt_ids,
 	},
 	.probe		= k3_dma_probe,

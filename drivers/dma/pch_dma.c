@@ -776,7 +776,7 @@ static void __maybe_unused pch_dma_restore_regs(struct pch_dma *pd)
 	}
 }
 
-static int __maybe_unused pch_dma_suspend(struct device *dev)
+static int pch_dma_suspend(struct device *dev)
 {
 	struct pch_dma *pd = dev_get_drvdata(dev);
 
@@ -786,7 +786,7 @@ static int __maybe_unused pch_dma_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused pch_dma_resume(struct device *dev)
+static int pch_dma_resume(struct device *dev)
 {
 	struct pch_dma *pd = dev_get_drvdata(dev);
 
@@ -972,14 +972,14 @@ static const struct pci_device_id pch_dma_id_table[] = {
 };
 MODULE_DEVICE_TABLE(pci, pch_dma_id_table);
 
-static SIMPLE_DEV_PM_OPS(pch_dma_pm_ops, pch_dma_suspend, pch_dma_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(pch_dma_pm_ops, pch_dma_suspend, pch_dma_resume);
 
 static struct pci_driver pch_dma_driver = {
 	.name		= DRV_NAME,
 	.id_table	= pch_dma_id_table,
 	.probe		= pch_dma_probe,
 	.remove		= pch_dma_remove,
-	.driver.pm	= &pch_dma_pm_ops,
+	.driver.pm	= pm_sleep_ptr(&pch_dma_pm_ops),
 };
 
 module_pci_driver(pch_dma_driver);
