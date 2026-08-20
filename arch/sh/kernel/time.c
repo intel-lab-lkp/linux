@@ -9,7 +9,6 @@
  */
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/profile.h>
 #include <linux/timex.h>
 #include <linux/sched.h>
 #include <linux/clockchips.h>
