@@ -5302,7 +5302,23 @@ static bool fill_evictable(struct lruvec *lruvec)
 
 		while (!list_empty(head)) {
 			bool success;
-			struct folio *folio = lru_to_folio(head);
+			struct folio *folio;
+
+			/*
+			 * Both the legacy LRU and a MGLRU generation keep the
+			 * hottest folios at the head and the coldest at the
+			 * tail, and reclaim takes from the tail.  To preserve
+			 * that order, the end we take from must match the end
+			 * lru_gen_add_folio() inserts at: inactive folios use
+			 * reclaiming=true (list_add_tail), so take from the
+			 * head; active folios use reclaiming=false (list_add),
+			 * so take from the tail.  Taking from the wrong end
+			 * would reverse hot/cold within the generation.
+			 */
+			if (active)
+				folio = lru_to_folio(head);
+			else
+				folio = list_first_entry(head, struct folio, lru);
 
 			VM_WARN_ON_ONCE_FOLIO(folio_test_unevictable(folio), folio);
 			VM_WARN_ON_ONCE_FOLIO(folio_test_active(folio) != active, folio);
@@ -5310,7 +5326,16 @@ static bool fill_evictable(struct lruvec *lruvec)
 			VM_WARN_ON_ONCE_FOLIO(folio_lru_gen(folio) != -1, folio);
 
 			lruvec_del_folio(lruvec, folio);
-			success = lru_gen_add_folio(lruvec, folio, false);
+			/*
+			 * With reclaiming=false, lru_gen_folio_seq() would seed
+			 * an inactive folio near max_seq, which
+			 * lru_gen_is_active() reports as active, so its inactive
+			 * placement would be lost.  Pass reclaiming=!active to
+			 * seed it into the oldest generation instead.  This
+			 * reuses reclaiming beyond its folio_rotate_reclaimable()
+			 * meaning; it also picks list_add_tail() above.
+			 */
+			success = lru_gen_add_folio(lruvec, folio, !active);
 			VM_WARN_ON_ONCE(!success);
 
 			if (!--remaining)
