@@ -66,12 +66,22 @@ static struct kernfs_open_node *of_on(struct kernfs_open_file *of)
 /* Get active reference to kernfs node for an open file */
 static struct kernfs_open_file *kernfs_get_active_of(struct kernfs_open_file *of)
 {
-	/* Skip if file was already released */
-	if (unlikely(of->released))
-		return NULL;
-
 	if (!kernfs_get_active(of->kn))
 		return NULL;
+
+	/*
+	 * @of->released is set under kernfs_open_file_mutex.  While the
+	 * active reference is held, @kn can't be drained anymore and
+	 * kernfs_fop_release() can't run, so re-reading @of->released
+	 * here settles whether @of was released for good.
+	 */
+	mutex_lock(kernfs_open_file_mutex_ptr(of->kn));
+	if (unlikely(of->released)) {
+		mutex_unlock(kernfs_open_file_mutex_ptr(of->kn));
+		kernfs_put_active(of->kn);
+		return NULL;
+	}
+	mutex_unlock(kernfs_open_file_mutex_ptr(of->kn));
 
 	return of;
 }
