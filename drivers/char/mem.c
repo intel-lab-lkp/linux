@@ -471,6 +471,61 @@ static ssize_t read_iter_zero(struct kiocb *iocb, struct iov_iter *iter)
 	return written;
 }
 
+static bool zero_pipe_buf_get(struct pipe_inode_info *pipe,
+			      struct pipe_buffer *buf)
+{
+	return true;
+}
+
+static void zero_pipe_buf_release(struct pipe_inode_info *pipe,
+				  struct pipe_buffer *buf)
+{
+}
+
+static bool zero_pipe_buf_try_steal(struct pipe_inode_info *pipe,
+				    struct pipe_buffer *buf)
+{
+	return false;
+}
+
+static const struct pipe_buf_operations zero_pipe_buf_ops = {
+	.release	= zero_pipe_buf_release,
+	.try_steal	= zero_pipe_buf_try_steal,
+	.get		= zero_pipe_buf_get,
+};
+
+static ssize_t splice_read_zero(struct file *in, loff_t *ppos,
+				struct pipe_inode_info *pipe, size_t len,
+				unsigned int flags)
+{
+	size_t total = 0;
+	size_t used, npages;
+	struct page *page = ZERO_PAGE(0);
+
+	used = pipe_buf_usage(pipe);
+	if (used >= pipe->max_usage)
+		return -EAGAIN;
+	npages = pipe->max_usage - used;
+	len = min_t(size_t, len, npages * PAGE_SIZE);
+
+	while (len) {
+		size_t chunk = min_t(size_t, len, PAGE_SIZE);
+		struct pipe_buffer *buf = pipe_head_buf(pipe);
+
+		*buf = (struct pipe_buffer) {
+			.ops = &zero_pipe_buf_ops,
+			.page = page,
+			.offset = 0,
+			.len = chunk,
+		};
+		pipe->head++;
+		total += chunk;
+		len -= chunk;
+	}
+
+	return total;
+}
+
 static ssize_t read_zero(struct file *file, char __user *buf,
 			 size_t count, loff_t *ppos)
 {
@@ -669,7 +724,7 @@ static const struct file_operations zero_fops = {
 	.read_iter	= read_iter_zero,
 	.read		= read_zero,
 	.write_iter	= write_iter_zero,
-	.splice_read	= copy_splice_read,
+	.splice_read	= splice_read_zero,
 	.splice_write	= splice_write_zero,
 	.mmap_prepare	= mmap_zero_prepare,
 	.get_unmapped_area = get_unmapped_area_zero,
@@ -682,7 +737,7 @@ static const struct file_operations full_fops = {
 	.llseek		= full_lseek,
 	.read_iter	= read_iter_zero,
 	.write		= write_full,
-	.splice_read	= copy_splice_read,
+	.splice_read	= splice_read_zero,
 };
 
 static const struct memdev {
