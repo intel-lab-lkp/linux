@@ -44,7 +44,8 @@ nf_conntrack_events - BOOLEAN
 
 nf_conntrack_expect_max - INTEGER
 	Maximum size of expectation table.  Default value is
-	nf_conntrack_buckets / 256. Minimum is 1.
+	nf_conntrack_buckets / 64 (i.e. 4 times the hash table size,
+	which defaults to nf_conntrack_buckets / 256). Minimum is 1.
 
 nf_conntrack_frag6_high_thresh - INTEGER
 	default 262144
