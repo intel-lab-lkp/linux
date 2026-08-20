@@ -3020,10 +3020,21 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 		compute_partition_owned_cpumask(cs, tmpmask.new_cpus);
 		if (((new_prs == PRS_ISOLATED) &&
 		     !isolated_cpus_can_update(tmpmask.new_cpus, NULL)) ||
-		    prstate_housekeeping_conflict(new_prs, tmpmask.new_cpus))
+		    prstate_housekeeping_conflict(new_prs, tmpmask.new_cpus)) {
 			err = PERR_HKEEPING;
-		else
+			if (is_remote_partition(cs)) {
+				WRITE_ONCE(cs->prs_err, err);
+				remote_partition_disable(cs, &tmpmask);
+			} else {
+				spin_lock_irq(&callback_lock);
+				partition_xcpus_del(old_prs, parent, cs->effective_xcpus);
+				spin_unlock_irq(&callback_lock);
+				cpuset_update_tasks_cpumask(parent, tmpmask.new_cpus);
+				update_sibling_cpumasks(parent, cs, &tmpmask);
+			}
+		} else {
 			isolcpus_updated = true;
+		}
 	} else {
 		/*
 		 * Switching back to member is always allowed even if it
