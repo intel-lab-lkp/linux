@@ -18,6 +18,7 @@
 #include <linux/reset.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
+#include <linux/string_choices.h>
 
 #include "sdhci.h"
 #include "sdhci-pltfm.h"
@@ -293,7 +294,7 @@ static int spacemit_sdhci_execute_tuning(struct sdhci_host *host, u32 opcode)
 		ret = mmc_send_tuning(host->mmc, opcode, NULL);
 
 		dev_dbg(mmc_dev(host->mmc), "RX delay %d: %s\n",
-			i, ret == 0 ? "pass" : "fail");
+			i, str_fail_pass(ret));
 
 		if (ret == 0) {
 			/* Test passed - extend current window */
