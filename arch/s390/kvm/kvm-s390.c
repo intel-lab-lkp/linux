@@ -86,6 +86,7 @@ const struct kvm_stats_desc kvm_vm_stats_desc[] = {
 	STATS_DESC_COUNTER(VM, gmap_shadow_r3_entry),
 	STATS_DESC_COUNTER(VM, gmap_shadow_sg_entry),
 	STATS_DESC_COUNTER(VM, gmap_shadow_pg_entry),
+	STATS_DESC_COUNTER(VM, inject_redist),
 };
 
 const struct kvm_stats_header kvm_vm_stats_header = {
@@ -4564,6 +4565,8 @@ static int vcpu_pre_run(struct kvm_vcpu *vcpu)
 		rc = kvm_s390_deliver_pending_interrupts(vcpu);
 		if (rc || guestdbg_exit_pending(vcpu))
 			return rc;
+
+		distribute_float_irqs(vcpu->kvm);
 	}
 
 	rc = kvm_s390_handle_requests(vcpu);
