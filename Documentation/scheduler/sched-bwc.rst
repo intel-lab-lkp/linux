@@ -90,14 +90,16 @@ bandwidth restriction in place, such a group is described as an unconstrained
 bandwidth group. This represents the traditional work-conserving behavior for
 CFS.
 
-Writing any (valid) positive value(s) no smaller than cpu.cfs_burst_us will
-enact the specified bandwidth limit. The minimum quota allowed for the quota or
-period is 1ms. There is also an upper bound on the period length of 1s.
-Additional restrictions exist when bandwidth limits are used in a hierarchical
-fashion, these are explained in more detail below.
+Writing any valid positive value will enact the specified bandwidth limit. If
+the existing cpu.cfs_burst_us value is incompatible with the new quota, it is
+reset to zero. The minimum quota allowed for the quota or period is 1ms. There
+is also an upper bound on the period length of 1s. Additional restrictions
+exist when bandwidth limits are used in a hierarchical fashion, these are
+explained in more detail below.
 
 Writing any negative value to cpu.cfs_quota_us will remove the bandwidth limit
-and return the group to an unconstrained state once more.
+and return the group to an unconstrained state once more. The existing
+cpu.cfs_burst_us value remains unchanged.
 
 A value of 0 for cpu.cfs_burst_us indicates that the group can not accumulate
 any unused bandwidth. It makes the traditional bandwidth control behavior for

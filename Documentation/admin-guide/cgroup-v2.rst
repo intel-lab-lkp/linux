@@ -1221,7 +1221,10 @@ will be referred to. All time durations are in microseconds.
 
 	which indicates that the group may consume up to $MAX in each
 	$PERIOD duration.  "max" for $MAX indicates no limit.  If only
-	one number is written, $MAX is updated.
+	one number is written, $MAX is updated.  When a finite $MAX is
+	written, an existing cpu.max.burst value which is incompatible
+	with the new limit is reset to zero.  Writing "max" leaves the
+	burst value unchanged.
 
 	This file affects only processes under the fair-class scheduler.
 
