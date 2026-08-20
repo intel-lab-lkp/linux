@@ -9,6 +9,7 @@
  */
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/string_choices.h>
 #include "net_driver.h"
 #include "mcdi.h"
 #include "nic.h"
@@ -162,8 +163,8 @@ void efx_ethtool_self_test(struct net_device *net_dev,
 		dev_close(efx->net_dev);
 
 	netif_info(efx, drv, efx->net_dev, "%s %sline self-tests\n",
-		   rc == 0 ? "passed" : "failed",
-		   (test->flags & ETH_TEST_FL_OFFLINE) ? "off" : "on");
+		   str_failed_passed(rc),
+		   str_off_on(test->flags & ETH_TEST_FL_OFFLINE));
 
 out:
 	efx_ethtool_fill_self_tests(efx, efx_tests, NULL, data);
