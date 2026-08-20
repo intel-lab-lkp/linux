@@ -33,7 +33,10 @@ static const int write_expire = 5 * HZ; /* ditto for writes, these limits are SO
  * Time after which to dispatch lower priority requests even if higher
  * priority requests are pending.
  */
-static const int prio_aging_expire = 10 * HZ;
+static int prio_aging_expire = 10 * MSEC_PER_SEC;
+module_param(prio_aging_expire, int, 0644);
+MODULE_PARM_DESC(prio_aging_expire,
+		 "Default prio_aging_expire in milliseconds; 0 disables I/O priority.");
 static const int writes_starved = 2;    /* max times reads can starve a write */
 static const int fifo_batch = 16;       /* # of sequential requests treated as one
 				     by the above parameters. For throughput. */
@@ -556,7 +559,7 @@ static int dd_init_sched(struct request_queue *q, struct elevator_queue *eq)
 	dd->front_merges = 1;
 	dd->last_dir = DD_WRITE;
 	dd->fifo_batch = fifo_batch;
-	dd->prio_aging_expire = prio_aging_expire;
+	dd->prio_aging_expire = msecs_to_jiffies(prio_aging_expire);
 	spin_lock_init(&dd->lock);
 
 	/* We dispatch from request queue wide instead of hw queue */
