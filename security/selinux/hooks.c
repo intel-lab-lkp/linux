@@ -3849,7 +3849,9 @@ static int selinux_backing_file_alloc(struct file *backing_file,
 	struct backing_file_security_struct *bfsec;
 
 	bfsec = selinux_backing_file(backing_file);
-	bfsec->uf_sid = selinux_file(user_file)->sid;
+	bfsec->uf_sid = (user_file->f_mode & FMODE_BACKING) ?
+				selinux_backing_file(user_file)->uf_sid :
+				selinux_file(user_file)->sid;
 
 	return 0;
 }
