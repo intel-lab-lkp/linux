@@ -23,7 +23,6 @@
 #include <linux/ioport.h>
 #include <linux/mc146818rtc.h>
 #include <linux/delay.h>
-#include <linux/profile.h>
 #include <linux/bcd.h>
 #include <linux/jiffies.h>
 #include <linux/cpufreq.h>

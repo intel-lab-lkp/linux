@@ -20,7 +20,6 @@
 #include <linux/spinlock.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
-#include <linux/profile.h>
 #include <linux/pm.h>
 #include <linux/delay.h>
 #include <linux/gfp.h>

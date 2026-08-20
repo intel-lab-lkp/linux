@@ -31,7 +31,6 @@
 #include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/ioport.h>
-#include <linux/profile.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 
