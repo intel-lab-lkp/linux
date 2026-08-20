@@ -50,6 +50,7 @@
 #include "intel_cdclk.h"
 #include "intel_cursor.h"
 #include "intel_colorop.h"
+#include "intel_display.h"
 #include "intel_display_rps.h"
 #include "intel_display_trace.h"
 #include "intel_display_types.h"
@@ -1396,6 +1397,24 @@ void intel_plane_unpin_fb(struct intel_plane_state *old_plane_state)
 
 		old_plane_state->dpt_vma = NULL;
 		old_plane_state->ggtt_vma = NULL;
+	}
+}
+
+/*
+ * D3cold/S3+ can power down the GGTT translation HW without the display
+ * code ever knowing -- re-validate every plane's cached ggtt_vma PTEs
+ * on resume, before anything tries to scan out through them again.
+ */
+void intel_plane_resume_ggtt_mappings(struct intel_display *display)
+{
+	struct intel_plane *plane;
+
+	for_each_intel_plane(display->drm, plane) {
+		const struct intel_plane_state *plane_state =
+			to_intel_plane_state(plane->base.state);
+
+		if (plane_state->ggtt_vma)
+			intel_parent_fb_pin_remap_vma(display, plane_state->ggtt_vma);
 	}
 }
 

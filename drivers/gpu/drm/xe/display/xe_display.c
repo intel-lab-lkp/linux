@@ -30,6 +30,7 @@
 #include "intel_fbdev.h"
 #include "intel_hotplug.h"
 #include "intel_opregion.h"
+#include "intel_plane.h"
 #include "skl_watermark.h"
 #include "xe_device.h"
 #include "xe_display_bo.h"
@@ -295,6 +296,9 @@ void xe_display_pm_resume(struct xe_device *xe)
 
 	intel_display_driver_init_hw(display);
 
+	/* GGTT translation HW may have lost state across suspend; restore plane vmas. */
+	intel_plane_resume_ggtt_mappings(display);
+
 	intel_display_driver_pm_resume(display);
 }
 
@@ -334,6 +338,9 @@ static void xe_display_disable_d3cold(struct xe_device *xe)
 		drm_mode_config_reset(&xe->drm);
 
 	intel_display_driver_init_hw(display);
+
+	/* D3cold power-cycles the GGTT translation HW; restore plane vmas. */
+	intel_plane_resume_ggtt_mappings(display);
 
 	intel_hpd_init(display);
 

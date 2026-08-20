@@ -99,5 +99,6 @@ bool intel_plane_format_mod_supported_async(struct drm_plane *plane,
 int intel_plane_pin_fb(struct intel_plane_state *new_plane_state,
 		       const struct intel_plane_state *old_plane_state);
 void intel_plane_unpin_fb(struct intel_plane_state *old_plane_state);
+void intel_plane_resume_ggtt_mappings(struct intel_display *display);
 
 #endif /* __INTEL_PLANE_H__ */

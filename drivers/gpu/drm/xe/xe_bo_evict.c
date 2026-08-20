@@ -205,7 +205,7 @@ static int xe_bo_restore_and_map_ggtt(struct xe_bo *bo)
 			if (tile != bo->tile && !(bo->flags & XE_BO_FLAG_GGTTx(tile)))
 				continue;
 
-			xe_ggtt_map_bo_unlocked(tile->mem.ggtt, bo);
+			xe_ggtt_map_bo_unlocked(tile->mem.ggtt, bo->ggtt_node[id], bo);
 		}
 	}
 

@@ -717,11 +717,14 @@ static void xe_ggtt_map_bo(struct xe_ggtt *ggtt, struct xe_ggtt_node *node,
 /**
  * xe_ggtt_map_bo_unlocked - Restore a mapping of a BO into GGTT
  * @ggtt: the &xe_ggtt where node will be mapped
+ * @node: the &xe_ggtt_node to restore the mapping for
  * @bo: the &xe_bo to be mapped
  *
- * This is used to restore a GGTT mapping after suspend.
+ * This is used to restore a GGTT mapping after suspend. @node need not be
+ * @bo's own ggtt_node[] entry -- e.g. a display scanout vma may hold a
+ * separate node that was never inserted via xe_ggtt_insert_bo_at().
  */
-void xe_ggtt_map_bo_unlocked(struct xe_ggtt *ggtt, struct xe_bo *bo)
+void xe_ggtt_map_bo_unlocked(struct xe_ggtt *ggtt, struct xe_ggtt_node *node, struct xe_bo *bo)
 {
 	u16 cache_mode = bo->flags & XE_BO_FLAG_NEEDS_UC ? XE_CACHE_NONE : XE_CACHE_WB;
 	u16 pat_index = xe_cache_pat_idx(tile_to_xe(ggtt->tile), cache_mode);
@@ -729,7 +732,7 @@ void xe_ggtt_map_bo_unlocked(struct xe_ggtt *ggtt, struct xe_bo *bo)
 
 	mutex_lock(&ggtt->lock);
 	pte = ggtt->pt_ops->pte_encode_flags(bo, pat_index);
-	xe_ggtt_map_bo(ggtt, bo->ggtt_node[ggtt->tile->id], bo, pte);
+	xe_ggtt_map_bo(ggtt, node, bo, pte);
 	mutex_unlock(&ggtt->lock);
 }
 

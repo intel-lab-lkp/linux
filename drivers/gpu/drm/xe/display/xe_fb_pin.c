@@ -476,6 +476,18 @@ xe_fb_pin_reuse_vma(struct i915_vma *old_ggtt_vma,
 	return NULL;
 }
 
+/* D3cold/S3+ power down the GGTT translation HW; restore this vma's PTEs on resume. */
+static void xe_fb_pin_remap_vma(struct i915_vma *ggtt_vma)
+{
+	struct xe_bo *bo = ggtt_vma->bo;
+	struct xe_tile *tile0 = xe_device_get_root_tile(xe_bo_device(bo));
+
+	if (ggtt_vma->dpt)
+		return;
+
+	xe_ggtt_map_bo_unlocked(tile0->mem.ggtt, ggtt_vma->node, bo);
+}
+
 static void xe_fb_pin_get_map(struct i915_vma *vma, struct iosys_map *map)
 {
 	*map = vma->bo->vmap;
@@ -487,5 +499,6 @@ const struct intel_display_fb_pin_interface xe_display_fb_pin_interface = {
 	.dpt_pin = xe_fb_pin_dpt_pin,
 	.dpt_unpin = xe_fb_pin_dpt_unpin,
 	.reuse_vma = xe_fb_pin_reuse_vma,
+	.remap_vma = xe_fb_pin_remap_vma,
 	.get_map = xe_fb_pin_get_map,
 };

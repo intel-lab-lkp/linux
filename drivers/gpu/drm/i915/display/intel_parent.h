@@ -57,6 +57,8 @@ struct i915_vma *intel_parent_fb_pin_reuse_vma(struct intel_display *display,
 					       struct drm_gem_object *new_obj,
 					       const struct i915_gtt_view *new_view,
 					       u32 *out_offset);
+void intel_parent_fb_pin_remap_vma(struct intel_display *display,
+				   struct i915_vma *ggtt_vma);
 void intel_parent_fb_pin_get_map(struct intel_display *display,
 				 struct i915_vma *vma, struct iosys_map *map);
 

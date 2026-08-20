@@ -105,6 +105,7 @@ struct intel_display_fb_pin_interface {
 				      struct drm_gem_object *new_obj,
 				      const struct i915_gtt_view *new_view,
 				      u32 *out_offset);
+	void (*remap_vma)(struct i915_vma *ggtt_vma); /* Optional */
 	void (*get_map)(struct i915_vma *vma, struct iosys_map *map);
 };
 
