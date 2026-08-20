@@ -2932,7 +2932,7 @@ static int allocate_vpe_l1_table(void)
 	if (val & GICR_VPROPBASER_4_1_VALID)
 		goto out;
 
-	gic_data_rdist()->vpe_table_mask = kzalloc_obj(cpumask_t, GFP_ATOMIC);
+	gic_data_rdist()->vpe_table_mask = kzalloc_obj(cpumask_t, GFP_KERNEL);
 	if (!gic_data_rdist()->vpe_table_mask)
 		return -ENOMEM;
 
@@ -2999,7 +2999,7 @@ static int allocate_vpe_l1_table(void)
 
 	pr_debug("np = %d, npg = %lld, psz = %d, epp = %d, esz = %d\n",
 		 np, npg, psz, epp, esz);
-	page = its_alloc_pages(GFP_ATOMIC | __GFP_ZERO, get_order(np * PAGE_SIZE));
+	page = its_alloc_pages(GFP_KERNEL | __GFP_ZERO, get_order(np * PAGE_SIZE));
 	if (!page)
 		return -ENOMEM;
 
@@ -3266,16 +3266,6 @@ out:
 		 * corrupting memory.
 		 */
 		val = its_clear_vpend_valid(vlpi_base, 0, 0);
-	}
-
-	if (allocate_vpe_l1_table()) {
-		/*
-		 * If the allocation has failed, we're in massive trouble.
-		 * Disable direct injection, and pray that no VM was
-		 * already running...
-		 */
-		gic_rdists->has_rvpeid = false;
-		gic_rdists->has_vlpis = false;
 	}
 
 	/* Make sure the GIC has seen the above */
@@ -5452,6 +5442,19 @@ static int its_cpu_memreserve_lpi(unsigned int cpu)
 	if (gic_data_rdist()->flags & RD_LOCAL_MEMRESERVE_DONE)
 		return 0;
 
+	if (allocate_vpe_l1_table()) {
+		/*
+		 * If the allocation has failed, we're in massive trouble.
+		 * Disable direct injection, and pray that no VM was
+		 * already running...
+		 */
+		gic_rdists->has_rvpeid = false;
+		gic_rdists->has_vlpis = false;
+	}
+
+	if (!efi_enabled(EFI_CONFIG_TABLES))
+		goto out;
+
 	pend_page = gic_data_rdist()->pend_page;
 	if (WARN_ON(!pend_page)) {
 		ret = -ENOMEM;
@@ -5792,9 +5795,6 @@ static void __init its_acpi_probe(void) { }
 int __init its_lpi_memreserve_init(void)
 {
 	int state;
-
-	if (!efi_enabled(EFI_CONFIG_TABLES))
-		return 0;
 
 	if (list_empty(&its_nodes))
 		return 0;
