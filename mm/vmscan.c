@@ -4862,7 +4862,7 @@ static int isolate_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	bool type_fallback_allowed = !is_single_type_reclaim(swappiness);
 	int type = get_type_to_scan(lruvec, swappiness);
 	int total_scanned = 0, scanned, tier;
-	bool exhausted;
+	bool exhausted, tried = false;
 
 retry:
 	tier = get_tier_idx(lruvec, type);
@@ -4883,6 +4883,14 @@ retry:
 	if (exhausted && type_fallback_allowed) {
 		type = !type;
 		type_fallback_allowed = false;
+		goto retry;
+	}
+	/*
+	 * We are not exhausted, but failed to isolate any folios due to
+	 * promotions, protections, or races. Retry once to avoid a larger loop.
+	 */
+	if (!exhausted && !tried) {
+		tried = true;
 		goto retry;
 	}
 
