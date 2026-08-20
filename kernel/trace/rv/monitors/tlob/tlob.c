@@ -20,7 +20,6 @@
 #include <linux/namei.h>
 #include <linux/rv.h>
 #include <linux/slab.h>
-#include <kunit/visibility.h>
 #include <rv/instrumentation.h>
 #include <rv/rv_uprobe.h>
 #include <rv.h>
@@ -877,9 +876,9 @@ static ssize_t tlob_monitor_read(struct file *file,
  * PATH may contain ':'; the last ':' separates path from offset.
  * Returns 0, -EINVAL, or -ERANGE.
  */
-VISIBLE_IF_KUNIT int tlob_parse_uprobe_line(char *buf, u64 *thr_out,
-					    char **path_out,
-					    loff_t *start_out, loff_t *stop_out)
+static int tlob_parse_uprobe_line(char *buf, u64 *thr_out,
+				  char **path_out,
+				  loff_t *start_out, loff_t *stop_out)
 {
 	unsigned long long thr = 0, stop_val = 0;
 	long long start_val;
@@ -951,13 +950,12 @@ VISIBLE_IF_KUNIT int tlob_parse_uprobe_line(char *buf, u64 *thr_out,
 	*stop_out  = (loff_t)stop_val;
 	return 0;
 }
-EXPORT_SYMBOL_IF_KUNIT(tlob_parse_uprobe_line);
 
 /*
  * Parse "-PATH:OFFSET_START" (ftrace uprobe_events removal convention).
  */
-VISIBLE_IF_KUNIT int tlob_parse_remove_line(char *buf, char **path_out,
-					    loff_t *start_out)
+static int tlob_parse_remove_line(char *buf, char **path_out,
+				  loff_t *start_out)
 {
 	char *binpath, *colon;
 	long long off;
@@ -980,7 +978,17 @@ VISIBLE_IF_KUNIT int tlob_parse_remove_line(char *buf, char **path_out,
 	*start_out = (loff_t)off;
 	return 0;
 }
-EXPORT_SYMBOL_IF_KUNIT(tlob_parse_remove_line);
+
+#if IS_ENABLED(CONFIG_RV_MONITORS_KUNIT_TEST)
+#include <kunit/visibility.h>
+#include "tlob_kunit.h"
+
+const struct rv_tlob_kunit_ops rv_tlob_kunit_ops = {
+	.parse_uprobe_line = tlob_parse_uprobe_line,
+	.parse_remove_line = tlob_parse_remove_line,
+};
+EXPORT_SYMBOL_IF_KUNIT(rv_tlob_kunit_ops);
+#endif
 
 static int tlob_create_or_delete_uprobe(char *buf)
 {
