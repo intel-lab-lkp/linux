@@ -53,11 +53,35 @@ static inline const char *str_input_output(bool v)
 }
 #define str_output_input(v)	str_input_output(!(v))
 
+static inline const char *str_lock_unlock(bool v)
+{
+	return v ? "lock" : "unlock";
+}
+#define str_unlock_lock(v)		str_lock_unlock(!(v))
+
+static inline const char *str_locked_unlocked(bool v)
+{
+	return v ? "locked" : "unlocked";
+}
+#define str_unlocked_locked(v)		str_locked_unlocked(!(v))
+
 static inline const char *str_on_off(bool v)
 {
 	return v ? "on" : "off";
 }
 #define str_off_on(v)		str_on_off(!(v))
+
+static inline const char *str_pass_fail(bool v)
+{
+	return v ? "pass" : "fail";
+}
+#define str_fail_pass(v)		str_pass_fail(!(v))
+
+static inline const char *str_passed_failed(bool v)
+{
+	return v ? "passed" : "failed";
+}
+#define str_failed_passed(v)		str_passed_failed(!(v))
 
 static inline const char *str_read_write(bool v)
 {
