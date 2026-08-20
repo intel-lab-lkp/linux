@@ -2266,6 +2266,8 @@ static void iscsi_if_disconnect_bound_ep(struct iscsi_cls_conn *conn,
 
 static int iscsi_if_stop_conn(struct iscsi_cls_conn *conn, int flag)
 {
+	bool cleanup;
+
 	ISCSI_DBG_TRANS_CONN(conn, "iscsi if conn stop.\n");
 	/*
 	 * For offload, iscsid may not know about the ep like when iscsid is
@@ -2278,35 +2280,36 @@ static int iscsi_if_stop_conn(struct iscsi_cls_conn *conn, int flag)
 	mutex_unlock(&conn->ep_mutex);
 
 	/*
-	 * If this is a termination we have to call stop_conn with that flag
-	 * so the correct states get set. If we haven't run the work yet try to
-	 * avoid the extra run.
+	 * Figure out if it was the kernel or userspace initiating this.
 	 */
-	if (flag == STOP_CONN_TERM) {
-		cancel_work_sync(&conn->cleanup_work);
-		iscsi_stop_conn(conn, flag);
-	} else {
+	spin_lock_irq(&conn->lock);
+	cleanup = test_and_set_bit(ISCSI_CLS_CONN_BIT_CLEANUP, &conn->flags);
+	spin_unlock_irq(&conn->lock);
+
+	if (cleanup) {
 		/*
-		 * Figure out if it was the kernel or userspace initiating this.
+		 * If this is a termination we have to call stop_conn with
+		 * that flag so the correct states get set. If we haven't
+		 * run the work yet try to avoid the extra run.
 		 */
-		spin_lock_irq(&conn->lock);
-		if (!test_and_set_bit(ISCSI_CLS_CONN_BIT_CLEANUP, &conn->flags)) {
-			spin_unlock_irq(&conn->lock);
+		if (flag == STOP_CONN_TERM) {
+			ISCSI_DBG_TRANS_CONN(conn,
+					"cancel kernel conn cleanup.\n");
+			cancel_work_sync(&conn->cleanup_work);
 			iscsi_stop_conn(conn, flag);
 		} else {
-			spin_unlock_irq(&conn->lock);
 			ISCSI_DBG_TRANS_CONN(conn,
-					     "flush kernel conn cleanup.\n");
+					"flush kernel conn cleanup.\n");
 			flush_work(&conn->cleanup_work);
 		}
-		/*
-		 * Only clear for recovery to avoid extra cleanup runs during
-		 * termination.
-		 */
-		spin_lock_irq(&conn->lock);
-		clear_bit(ISCSI_CLS_CONN_BIT_CLEANUP, &conn->flags);
-		spin_unlock_irq(&conn->lock);
+	} else {
+		iscsi_stop_conn(conn, flag);
 	}
+
+	spin_lock_irq(&conn->lock);
+	clear_bit(ISCSI_CLS_CONN_BIT_CLEANUP, &conn->flags);
+	spin_unlock_irq(&conn->lock);
+
 	ISCSI_DBG_TRANS_CONN(conn, "iscsi if conn stop done.\n");
 	return 0;
 }
