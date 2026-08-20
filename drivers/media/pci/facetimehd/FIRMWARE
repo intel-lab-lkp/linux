@@ -1,0 +1,6 @@
+This driver uses proprietary Apple firmware. To obtain this firmware, use the
+included firmware.sh script (copied from patjak/facetimehd-firmware). This
+script will download and extract the firmware from a Mac update file found at
+https://updates.cdn-apple.com/2019/cert/041-88431-20191011-e7ee7d98-2878-4cd9-bc0a-d98b3a1e24b1/OSXUpd10.11.5.dmg
+The script extracts the firmware to /usr/lib/firmware or /lib/firmware,
+or to a folder specified using the first argument
