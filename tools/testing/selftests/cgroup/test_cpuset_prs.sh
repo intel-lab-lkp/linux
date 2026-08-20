@@ -331,6 +331,11 @@ TEST_MATRIX=(
 	" C0-3:X1-3:P2 C1-3:X2-3:P2 C2-3:X3:P2 \
 				   .      .    C4:X     .      .     0 A1:1-3|A2:1-3|A3:2-3|XA2:|XA3: A1:P2|A2:P-2|A3:P-2 1-3"
 
+	# A child outside its parent's new CPU mask becomes invalid
+	" C0-3:P1  C2-3:P1  .      .    C0-2     .      .      .     0 A1:0-2|A2:2 A1:P1|A2:P-1"
+	" C0-3:P1  C2-3:P2  .      .    C0-2     .      .      .     0 A1:0-2|A2:2 A1:P1|A2:P-2 ."
+	" C0-3:P2  C2-3:P1  .      .    C0-2     .      .      .     0 A1:0-2|A2:2 A1:P2|A2:P-1 0-2"
+
 	# Direct invalidation returns child CPUs to the parent or its owner
 	" C1-4:P2  C3-4:P1  .      . T:O1=0:O2=0:O4=0 . .      . \
 					   0 A1:3|A2:3 A1:P2|A2:P-1 1-4"
