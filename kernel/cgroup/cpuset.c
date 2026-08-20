@@ -3019,8 +3019,8 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 		 */
 		compute_partition_owned_cpumask(cs, tmpmask.new_cpus);
 		if (((new_prs == PRS_ISOLATED) &&
-		     !isolated_cpus_can_update(cs->effective_xcpus, NULL)) ||
-		    prstate_housekeeping_conflict(new_prs, cs->effective_xcpus))
+		     !isolated_cpus_can_update(tmpmask.new_cpus, NULL)) ||
+		    prstate_housekeeping_conflict(new_prs, tmpmask.new_cpus))
 			err = PERR_HKEEPING;
 		else
 			isolcpus_updated = true;
