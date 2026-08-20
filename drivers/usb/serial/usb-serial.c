@@ -1522,9 +1522,9 @@ int __usb_serial_register_drivers(struct usb_serial_driver *const serial_drivers
 	return 0;
 
 err_deregister_drivers:
+	usb_deregister(udriver);
 	while (sd-- > serial_drivers)
 		usb_serial_deregister(*sd);
-	usb_deregister(udriver);
 err_free_driver:
 	kfree(udriver);
 	return rc;
@@ -1543,9 +1543,15 @@ void usb_serial_deregister_drivers(struct usb_serial_driver *const serial_driver
 {
 	struct usb_driver *udriver = (*serial_drivers)->usb_driver;
 
+	/*
+	 * The USB driver must be deregistered before the USB serial drivers
+	 * so that I/O is stopped before unbinding the ports.
+	 */
+	usb_deregister(udriver);
+
 	for (; *serial_drivers; ++serial_drivers)
 		usb_serial_deregister(*serial_drivers);
-	usb_deregister(udriver);
+
 	kfree(udriver);
 }
 EXPORT_SYMBOL_GPL(usb_serial_deregister_drivers);
