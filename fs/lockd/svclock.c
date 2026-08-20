@@ -91,6 +91,9 @@ nlmsvc_insert_block_locked(struct nlm_block *block, unsigned long when)
 	struct list_head *pos;
 
 	dprintk("lockd: nlmsvc_insert_block(%p, %ld)\n", block, when);
+	if (block->b_flags & B_DEAD)
+		return;
+
 	if (list_empty(&block->b_list)) {
 		kref_get(&block->b_count);
 	} else {
@@ -288,6 +291,20 @@ static int nlmsvc_unlink_block(struct nlm_block *block)
 	return status;
 }
 
+/*
+ * nlmsvc_retry_blocked() holds a reference to this block outside
+ * nlm_blocked_lock and re-inserts it once the retry has run. Set
+ * B_DEAD before the unlink, or the block reappears on nlm_blocked.
+ */
+static int nlmsvc_retire_block(struct nlm_block *block)
+{
+	spin_lock(&nlm_blocked_lock);
+	block->b_flags |= B_DEAD;
+	spin_unlock(&nlm_blocked_lock);
+
+	return nlmsvc_unlink_block(block);
+}
+
 static void nlmsvc_free_block(struct kref *kref)
 {
 	struct nlm_block *block = container_of(kref, struct nlm_block, b_count);
@@ -334,7 +351,7 @@ restart:
 		kref_get(&block->b_count);
 		spin_unlock(&nlm_blocked_lock);
 		mutex_unlock(&file->f_mutex);
-		nlmsvc_unlink_block(block);
+		nlmsvc_retire_block(block);
 		nlmsvc_release_block(block);
 		goto restart;
 	}
@@ -521,12 +538,12 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 		dprintk("lockd: nlmsvc_lock deferred block %p flags %d\n",
 							block, block->b_flags);
 		if (block->b_granted) {
-			nlmsvc_unlink_block(block);
+			nlmsvc_retire_block(block);
 			ret = nlm_granted;
 			goto out;
 		}
 		if (block->b_flags & B_TIMED_OUT) {
-			nlmsvc_unlink_block(block);
+			nlmsvc_retire_block(block);
 			ret = nlm_lck_denied;
 			goto out;
 		}
@@ -734,7 +751,7 @@ nlmsvc_cancel_blocked(struct net *net, struct nlm_file *file, struct lockd_lock 
 
 		mode = lock_to_openmode(fl);
 		vfs_cancel_lock(block->b_file->f_file[mode], fl);
-		status = nlmsvc_unlink_block(block);
+		status = nlmsvc_retire_block(block);
 		nlmsvc_release_block(block);
 	}
 	return status ? nlm_lck_denied : nlm_granted;
@@ -1000,7 +1017,7 @@ nlmsvc_grant_reply(struct lockd_cookie *cookie, __be32 status)
 		break;
 	case nlm_lck_denied:
 		/* Client doesn't want it, just unlock it */
-		nlmsvc_unlink_block(block);
+		nlmsvc_retire_block(block);
 		fl = &block->b_call->a_args.lock.fl;
 		fl->c.flc_type = F_UNLCK;
 		error = vfs_lock_file(fl->c.flc_file, F_SETLK, fl, NULL);
@@ -1012,7 +1029,7 @@ nlmsvc_grant_reply(struct lockd_cookie *cookie, __be32 status)
 		 * Either it was accepted or the status makes no sense
 		 * just unlink it either way.
 		 */
-		nlmsvc_unlink_block(block);
+		nlmsvc_retire_block(block);
 	}
 	nlmsvc_release_block(block);
 }
@@ -1055,6 +1072,7 @@ nlmsvc_retry_blocked(struct svc_rqst *rqstp)
 			timeout = block->b_when - jiffies;
 			break;
 		}
+		kref_get(&block->b_count);
 		spin_unlock(&nlm_blocked_lock);
 
 		dprintk("nlmsvc_retry_blocked(%p, when=%ld)\n",
@@ -1065,6 +1083,7 @@ nlmsvc_retry_blocked(struct svc_rqst *rqstp)
 			retry_deferred_block(block);
 		} else
 			nlmsvc_grant_blocked(block);
+		nlmsvc_release_block(block);
 		spin_lock(&nlm_blocked_lock);
 	}
 	spin_unlock(&nlm_blocked_lock);

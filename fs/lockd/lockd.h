@@ -230,6 +230,7 @@ struct nlm_block {
 #define B_QUEUED		1	/* lock queued */
 #define B_GOT_CALLBACK		2	/* got lock or conflicting lock */
 #define B_TIMED_OUT		4	/* filesystem too slow to respond */
+#define B_DEAD			8	/* block retired, must not be requeued */
 };
 
 /*
