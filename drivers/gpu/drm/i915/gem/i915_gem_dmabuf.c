@@ -10,6 +10,8 @@
 
 #include <asm/smp.h>
 
+#include <drm/drm_cache.h>
+
 #include "gem/i915_gem_dmabuf.h"
 #include "i915_drv.h"
 #include "i915_gem_object.h"
@@ -249,16 +251,50 @@ static int i915_gem_object_get_pages_dmabuf(struct drm_i915_gem_object *obj)
 	 * DG1 is special here since it still snoops transactions even with
 	 * CACHE_NONE. This is not the case with other HAS_SNOOP platforms. We
 	 * might need to revisit this as we add new discrete platforms.
-	 *
-	 * XXX: Consider doing a vmap flush or something, where possible.
-	 * Currently we just do a heavy handed wbinvd_on_all_cpus() here since
-	 * the underlying sg_table might not even point to struct pages, so we
-	 * can't just call drm_clflush_sg or similar, like we do elsewhere in
-	 * the driver.
 	 */
 	if (i915_gem_object_can_bypass_llc(obj) ||
-	    (!HAS_LLC(i915) && !IS_DG1(i915)))
-		wbinvd_on_all_cpus();
+	    (!HAS_LLC(i915) && !IS_DG1(i915))) {
+		struct dma_buf *dma_buf = obj->base.import_attach->dmabuf;
+
+		if (dma_buf->ops == &i915_dmabuf_ops) {
+			struct drm_i915_gem_object *dma_obj =
+				dma_buf_to_obj(dma_buf);
+
+			/*
+			 * We imported one of our own dma-bufs. The exporter is
+			 * migrated to SMEM on attach, so it is struct-page
+			 * backed and we can flush it directly, the same way we
+			 * flush our other objects. This also avoids re-entering
+			 * the exporter through dma_buf_vmap(), which would
+			 * recurse into i915_gem_object_pin_map() on the source
+			 * object we already hold locked.
+			 */
+			drm_clflush_sg(dma_obj->mm.pages);
+		} else {
+			struct iosys_map map;
+
+			/*
+			 * A foreign sg_table is not guaranteed to be backed by
+			 * struct pages, so we cannot use drm_clflush_sg(). vmap
+			 * the buffer and flush the virtual range instead; x86
+			 * uses PIPT caches, so flushing one alias evicts the
+			 * lines for every alias of the same physical pages.
+			 *
+			 * We already hold the dma_resv lock via the imported
+			 * obj, so use the locked dma_buf_vmap() variant.
+			 */
+			if (!dma_buf_vmap(dma_buf, &map)) {
+				if (!map.is_iomem)
+					drm_clflush_virt_range(map.vaddr,
+							       obj->base.size);
+				else
+					wbinvd_on_all_cpus();
+				dma_buf_vunmap(dma_buf, &map);
+			} else {
+				wbinvd_on_all_cpus();
+			}
+		}
+	}
 
 	__i915_gem_object_set_pages(obj, sgt);
 
