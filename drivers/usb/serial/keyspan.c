@@ -2997,6 +2997,8 @@ static void keyspan_port_remove(struct usb_serial_port *port)
 	for (i = 0; i < ARRAY_SIZE(p_priv->in_buffer); ++i)
 		kfree(p_priv->in_buffer[i]);
 
+	usb_set_serial_port_data(port, NULL);
+
 	kfree(p_priv);
 }
 
