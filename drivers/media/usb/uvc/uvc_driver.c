@@ -520,7 +520,6 @@ static int uvc_parse_format(struct uvc_device *dev,
 		format->xfer_func = uvc_xfer_func(buffer[4]);
 		format->ycbcr_enc = uvc_ycbcr_enc(buffer[5]);
 
-		buflen -= buffer[0];
 		buffer += buffer[0];
 	} else {
 		format->colorspace = V4L2_COLORSPACE_SRGB;
