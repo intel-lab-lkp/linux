@@ -588,7 +588,7 @@ static const struct of_device_id kmb_of_match[] = {
 
 MODULE_DEVICE_TABLE(of, kmb_of_match);
 
-static int __maybe_unused kmb_pm_suspend(struct device *dev)
+static int kmb_pm_suspend(struct device *dev)
 {
 	struct drm_device *drm = dev_get_drvdata(dev);
 	struct kmb_drm_private *kmb = to_kmb(drm);
@@ -604,7 +604,7 @@ static int __maybe_unused kmb_pm_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused kmb_pm_resume(struct device *dev)
+static int kmb_pm_resume(struct device *dev)
 {
 	struct drm_device *drm = dev_get_drvdata(dev);
 	struct kmb_drm_private *kmb = drm ? to_kmb(drm) : NULL;
@@ -618,14 +618,14 @@ static int __maybe_unused kmb_pm_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(kmb_pm_ops, kmb_pm_suspend, kmb_pm_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(kmb_pm_ops, kmb_pm_suspend, kmb_pm_resume);
 
 static struct platform_driver kmb_platform_driver = {
 	.probe = kmb_probe,
 	.remove = kmb_remove,
 	.driver = {
 		.name = "kmb-drm",
-		.pm = &kmb_pm_ops,
+		.pm = pm_sleep_ptr(&kmb_pm_ops),
 		.of_match_table = kmb_of_match,
 	},
 };
