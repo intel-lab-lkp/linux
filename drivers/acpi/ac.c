@@ -239,7 +239,6 @@ static int acpi_ac_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int acpi_ac_resume(struct device *dev)
 {
 	struct acpi_ac *ac = dev_get_drvdata(dev);
@@ -253,9 +252,8 @@ static int acpi_ac_resume(struct device *dev)
 
 	return 0;
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(acpi_ac_pm, NULL, acpi_ac_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(acpi_ac_pm, NULL, acpi_ac_resume);
 
 static void acpi_ac_remove(struct platform_device *pdev)
 {
@@ -270,7 +268,7 @@ static struct platform_driver acpi_ac_driver = {
 	.driver = {
 		.name = "ac",
 		.acpi_match_table = ac_device_ids,
-		.pm = &acpi_ac_pm,
+		.pm = pm_sleep_ptr(&acpi_ac_pm),
 	},
 };
 
