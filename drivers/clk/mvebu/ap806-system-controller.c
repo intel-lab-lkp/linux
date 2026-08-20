@@ -152,7 +152,9 @@ static int ap806_syscon_common_probe(struct platform_device *pdev,
 	freq_mode = reg & AP806_SAR_CLKFREQ_MODE_MASK;
 
 	if (of_device_is_compatible(pdev->dev.of_node,
-				    "marvell,ap806-clock")) {
+				    "marvell,ap806-clock") ||
+	    of_device_is_compatible(pdev->dev.of_node,
+				    "marvell,ap806-system-controller")) {
 		ret = ap806_get_sar_clocks(freq_mode, &cpuclk_freq, &dclk_freq);
 	} else if (of_device_is_compatible(pdev->dev.of_node,
 					   "marvell,ap807-clock")) {
