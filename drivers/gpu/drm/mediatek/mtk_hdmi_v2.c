@@ -1412,7 +1412,7 @@ static const struct hdmi_codec_ops mtk_hdmi_v2_audio_codec_ops = {
 	.hook_plugged_cb = mtk_hdmi_v2_audio_hook_plugged_cb,
 };
 
-static __maybe_unused int mtk_hdmi_v2_suspend(struct device *dev)
+static int mtk_hdmi_v2_suspend(struct device *dev)
 {
 	struct mtk_hdmi *hdmi = dev_get_drvdata(dev);
 
@@ -1421,14 +1421,14 @@ static __maybe_unused int mtk_hdmi_v2_suspend(struct device *dev)
 	return 0;
 }
 
-static __maybe_unused int mtk_hdmi_v2_resume(struct device *dev)
+static int mtk_hdmi_v2_resume(struct device *dev)
 {
 	struct mtk_hdmi *hdmi = dev_get_drvdata(dev);
 
 	return mtk_hdmi_v2_enable(hdmi);
 }
 
-static SIMPLE_DEV_PM_OPS(mtk_hdmi_v2_pm_ops, mtk_hdmi_v2_suspend, mtk_hdmi_v2_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(mtk_hdmi_v2_pm_ops, mtk_hdmi_v2_suspend, mtk_hdmi_v2_resume);
 
 static const struct mtk_hdmi_ver_conf mtk_hdmi_conf_v2 = {
 	.bridge_funcs = &mtk_v2_hdmi_bridge_funcs,
@@ -1519,7 +1519,7 @@ static struct platform_driver mtk_hdmi_v2_driver = {
 	.driver = {
 		.name = "mediatek-drm-hdmi-v2",
 		.of_match_table = mtk_drm_hdmi_v2_of_ids,
-		.pm = &mtk_hdmi_v2_pm_ops,
+		.pm = pm_sleep_ptr(&mtk_hdmi_v2_pm_ops),
 	},
 };
 module_platform_driver(mtk_hdmi_v2_driver);
