@@ -93,8 +93,9 @@ int vmw_prime_handle_to_fd(struct drm_device *dev,
 	struct vmw_private *vmw = vmw_priv(dev);
 	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
 	struct vmw_bo *vbo;
+	struct vmw_surface *surface = NULL;
+	int surf_handle = 0;
 	int ret;
-	int surf_handle;
 
 	if (handle > VMWGFX_NUM_MOB) {
 		ret = ttm_prime_handle_to_fd(tfile, handle, flags, prime_fd);
@@ -106,16 +107,19 @@ int vmw_prime_handle_to_fd(struct drm_device *dev,
 			ret = drm_gem_prime_handle_to_fd(dev, file_priv, handle,
 							 flags, prime_fd);
 		} else {
-			surf_handle = vmw_lookup_surface_handle_for_buffer(vmw,
-									   vbo,
-									   handle);
-			if (surf_handle > 0)
+			vmw_lookup_surface_and_handle_for_buffer(vmw, vbo,
+								 handle,
+								 &surf_handle,
+								 &surface);
+			if (surface && !surface->metadata.scanout)
 				ret = ttm_prime_handle_to_fd(tfile, surf_handle,
 							     flags, prime_fd);
 			else
 				ret = drm_gem_prime_handle_to_fd(dev, file_priv,
 								 handle, flags,
 								 prime_fd);
+			if (surface)
+				vmw_surface_unreference(&surface);
 		}
 		vmw_user_bo_unref(&vbo);
 	}

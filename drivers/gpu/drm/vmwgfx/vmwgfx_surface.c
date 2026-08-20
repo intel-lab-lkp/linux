@@ -895,38 +895,38 @@ vmw_lookup_user_surface_for_buffer(struct vmw_private *vmw, struct vmw_bo *bo,
 	return user_srf;
 }
 
+void vmw_lookup_surface_and_handle_for_buffer(struct vmw_private *vmw,
+					      struct vmw_bo *bo,
+					      u32 handle,
+					      u32 *srf_handle,
+					      struct vmw_surface **p_srf)
+{
+	struct vmw_user_surface *user_srf =
+		vmw_lookup_user_surface_for_buffer(vmw, bo, handle);
+	struct ttm_base_object *base;
+
+	if (p_srf)
+		*p_srf = NULL;
+	if (srf_handle)
+		*srf_handle = 0;
+	if (user_srf) {
+		if (p_srf)
+			*p_srf = vmw_surface_reference(&user_srf->srf);
+		base = &user_srf->prime.base;
+		if (srf_handle)
+			*srf_handle = (u32)base->handle;
+		ttm_base_object_unref(&base);
+	}
+}
+
 struct vmw_surface *vmw_lookup_surface_for_buffer(struct vmw_private *vmw,
 						  struct vmw_bo *bo,
 						  u32 handle)
 {
-	struct vmw_user_surface *user_srf =
-		vmw_lookup_user_surface_for_buffer(vmw, bo, handle);
-	struct vmw_surface *surf = NULL;
-	struct ttm_base_object *base;
+	struct vmw_surface *surface = NULL;
 
-	if (user_srf) {
-		surf = vmw_surface_reference(&user_srf->srf);
-		base = &user_srf->prime.base;
-		ttm_base_object_unref(&base);
-	}
-	return surf;
-}
-
-u32 vmw_lookup_surface_handle_for_buffer(struct vmw_private *vmw,
-					 struct vmw_bo *bo,
-					 u32 handle)
-{
-	struct vmw_user_surface *user_srf =
-		vmw_lookup_user_surface_for_buffer(vmw, bo, handle);
-	int surf_handle = 0;
-	struct ttm_base_object *base;
-
-	if (user_srf) {
-		base = &user_srf->prime.base;
-		surf_handle = (u32)base->handle;
-		ttm_base_object_unref(&base);
-	}
-	return surf_handle;
+	vmw_lookup_surface_and_handle_for_buffer(vmw, bo, handle, NULL, &surface);
+	return surface;
 }
 
 static int vmw_buffer_prime_to_surface_base(struct vmw_private *dev_priv,

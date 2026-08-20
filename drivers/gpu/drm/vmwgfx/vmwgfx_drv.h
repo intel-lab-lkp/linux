@@ -39,7 +39,7 @@
 
 #define VMWGFX_DRIVER_NAME "vmwgfx"
 #define VMWGFX_DRIVER_MAJOR 2
-#define VMWGFX_DRIVER_MINOR 21
+#define VMWGFX_DRIVER_MINOR 22
 #define VMWGFX_DRIVER_PATCHLEVEL 0
 #define VMWGFX_FIFO_STATIC_SIZE (1024*1024)
 #define VMWGFX_NUM_DISPLAY_UNITS 8
@@ -1180,9 +1180,11 @@ int vmw_gb_surface_define(struct vmw_private *dev_priv,
 struct vmw_surface *vmw_lookup_surface_for_buffer(struct vmw_private *vmw,
 						  struct vmw_bo *bo,
 						  u32 handle);
-u32 vmw_lookup_surface_handle_for_buffer(struct vmw_private *vmw,
-					 struct vmw_bo *bo,
-					 u32 handle);
+void vmw_lookup_surface_and_handle_for_buffer(struct vmw_private *vmw,
+					      struct vmw_bo *bo,
+					      u32 handle,
+					      u32 *srf_handle,
+					      struct vmw_surface **p_srf);
 int vmw_dumb_create(struct drm_file *file_priv,
 		    struct drm_device *dev,
 		    struct drm_mode_create_dumb *args);
