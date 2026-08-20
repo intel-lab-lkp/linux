@@ -150,6 +150,11 @@ properties:
     description:
       List of phandles to system idle states in which mcan can wakeup the system.
 
+  out-band-wakeup:
+    type: boolean
+    description:
+      Indicates CAN device is out-of-band wakeup capable.
+
 required:
   - compatible
   - reg
@@ -157,6 +162,13 @@ required:
   - clocks
   - clock-names
   - bosch,mram-cfg
+
+if:
+  required:
+    - out-band-wakeup
+then:
+  required:
+    - wakeup-source
 
 unevaluatedProperties: false
 
