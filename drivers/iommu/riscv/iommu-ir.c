@@ -128,19 +128,27 @@ static int riscv_iommu_ir_irq_domain_alloc_irqs(struct irq_domain *irqdomain,
 	 * quiesced, including MSI teardown, before switching away from or freeing
 	 * the domain. iommu_dma_map_msi() requires the group mutex to be held;
 	 * take it around the domain lookup too so info->domain can't change
-	 * out from under the build.
+	 * out from under the build. Bump info->nr_irqs here too, before
+	 * irq_domain_alloc_irqs_parent() runs unlocked below, so a concurrent
+	 * riscv_iommu_ir_attach_paging_domain() can never observe a count that
+	 * is lower than the number of IRQs actually in flight for this device.
 	 */
 	scoped_guard(iommu_group, info->dev) {
 		struct riscv_iommu_domain *domain = rcu_dereference_protected(info->domain, true);
 
 		ret = domain ? riscv_iommu_ir_build_msi_iova(domain, info->dev) : 0;
+		if (!ret)
+			info->nr_irqs += nr_irqs;
 	}
 	if (ret)
 		return ret;
 
 	ret = irq_domain_alloc_irqs_parent(irqdomain, irq_base, nr_irqs, arg);
-	if (ret)
+	if (ret) {
+		guard(iommu_group)(info->dev);
+		info->nr_irqs -= nr_irqs;
 		return ret;
+	}
 
 	for (unsigned int i = 0; i < nr_irqs; i++) {
 		struct irq_data *data = irq_domain_get_irq_data(irqdomain, irq_base + i);
@@ -151,9 +159,25 @@ static int riscv_iommu_ir_irq_domain_alloc_irqs(struct irq_domain *irqdomain,
 	return 0;
 }
 
+static void riscv_iommu_ir_irq_domain_free_irqs(struct irq_domain *irqdomain,
+						unsigned int irq_base, unsigned int nr_irqs)
+{
+	struct riscv_iommu_info *info = irqdomain->host_data;
+
+	irq_domain_free_irqs_parent(irqdomain, irq_base, nr_irqs);
+
+	/*
+	 * Decrement only after the parent free completes, so a concurrent
+	 * riscv_iommu_ir_attach_paging_domain() never observes a count lower
+	 * than the number of IRQs that are actually still live.
+	 */
+	scoped_guard(iommu_group, info->dev)
+		info->nr_irqs -= nr_irqs;
+}
+
 static const struct irq_domain_ops riscv_iommu_ir_irq_domain_ops = {
 	.alloc			= riscv_iommu_ir_irq_domain_alloc_irqs,
-	.free			= irq_domain_free_irqs_parent,
+	.free			= riscv_iommu_ir_irq_domain_free_irqs,
 };
 
 static const struct msi_parent_ops riscv_iommu_ir_msi_parent_ops = {
@@ -257,6 +281,17 @@ void riscv_iommu_ir_irq_domain_remove(struct device *dev, struct riscv_iommu_inf
 int riscv_iommu_ir_attach_paging_domain(struct iommu_domain *iommu_domain, struct device *dev,
 					struct iommu_domain *old)
 {
+	struct riscv_iommu_domain *domain = iommu_domain_to_riscv(iommu_domain);
+	struct riscv_iommu_info *info = dev_iommu_priv_get(dev);
+
+	/*
+	 * Build the table if this device has allocated MSIs, since those MSIs may
+	 * already be live and expecting riscv_iommu_ir_compose_msi_msg() to find
+	 * a populated table for whatever domain is now attached.
+	 */
+	if (info->nr_irqs)
+		return riscv_iommu_ir_build_msi_iova(domain, dev);
+
 	return 0;
 }
 
