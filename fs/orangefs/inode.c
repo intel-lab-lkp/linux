@@ -616,7 +616,6 @@ static const struct address_space_operations orangefs_address_operations = {
 	.release_folio = orangefs_release_folio,
 	.free_folio = orangefs_free_folio,
 	.migrate_folio = filemap_migrate_folio,
-	.launder_folio = orangefs_launder_folio,
 	.direct_IO = orangefs_direct_IO,
 };
 
