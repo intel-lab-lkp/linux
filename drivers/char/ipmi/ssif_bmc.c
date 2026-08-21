@@ -101,6 +101,8 @@ struct ssif_bmc_ctx {
 	bool                    response_in_progress;
 	bool                    busy;
 	bool                    aborting;
+	/* Response was loaded into part_buf for the on-going read transaction */
+	bool                    part_buf_loaded;
 	/* Buffer for SSIF Transaction part*/
 	struct ssif_part_buffer part_buf;
 	struct ipmi_ssif_msg    response;
@@ -639,6 +641,7 @@ static void on_read_requested_event(struct ssif_bmc_ctx *ssif_bmc, u8 *val)
 	}
 
 	ssif_bmc->msg_idx = 0;
+	ssif_bmc->part_buf_loaded = false;
 
 	/* Send 0 if there is nothing to send */
 	if (!ssif_bmc->response_in_progress || ssif_bmc->state == SSIF_ABORTING) {
@@ -653,6 +656,7 @@ static void on_read_requested_event(struct ssif_bmc_ctx *ssif_bmc, u8 *val)
 
 	calculate_response_part_pec(&ssif_bmc->part_buf);
 	ssif_bmc->part_buf.index = 0;
+	ssif_bmc->part_buf_loaded = true;
 	*val = ssif_bmc->part_buf.length;
 }
 
@@ -671,7 +675,8 @@ static void on_read_processed_event(struct ssif_bmc_ctx *ssif_bmc, u8 *val)
 	}
 
 	/* Send 0 if there is nothing to send */
-	if (!ssif_bmc->response_in_progress || ssif_bmc->state == SSIF_ABORTING) {
+	if (!ssif_bmc->response_in_progress || !ssif_bmc->part_buf_loaded ||
+	    ssif_bmc->state == SSIF_ABORTING) {
 		*val = 0;
 		return;
 	}
@@ -763,7 +768,8 @@ static void on_stop_event(struct ssif_bmc_ctx *ssif_bmc, u8 *val)
 			ssif_bmc->aborting = true;
 		}
 	} else if (ssif_bmc->state == SSIF_RES_SENDING) {
-		if (ssif_bmc->is_singlepart_read || ssif_bmc->block_num == 0xFF) {
+		if (ssif_bmc->part_buf_loaded &&
+		    (ssif_bmc->is_singlepart_read || ssif_bmc->block_num == 0xFF)) {
 			memset(&ssif_bmc->part_buf, 0, sizeof(struct ssif_part_buffer));
 			/* Invalidate response buffer to denote it is sent */
 			complete_response(ssif_bmc);
@@ -773,6 +779,7 @@ static void on_stop_event(struct ssif_bmc_ctx *ssif_bmc, u8 *val)
 
 	/* Reset message index */
 	ssif_bmc->msg_idx = 0;
+	ssif_bmc->part_buf_loaded = false;
 }
 
 /*
@@ -835,6 +842,7 @@ static int ssif_bmc_probe(struct i2c_client *client)
 	ssif_bmc->request_available = false;
 	ssif_bmc->response_in_progress = false;
 	ssif_bmc->busy = false;
+	ssif_bmc->part_buf_loaded = false;
 	ssif_bmc->response_timer_inited = false;
 
 	/* Register misc device interface */
