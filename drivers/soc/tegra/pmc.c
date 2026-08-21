@@ -2694,7 +2694,7 @@ tegra_pmc_clk_out_register(struct tegra_pmc *pmc,
 			   const struct pmc_clk_init_data *data,
 			   unsigned long offset)
 {
-	struct clk_init_data init;
+	struct clk_init_data init = {};
 	struct pmc_clk *pmc_clk;
 
 	pmc_clk = devm_kzalloc(pmc->dev, sizeof(*pmc_clk), GFP_KERNEL);
@@ -2752,7 +2752,7 @@ tegra_pmc_clk_gate_register(struct tegra_pmc *pmc, const char *name,
 			    const char *parent_name, unsigned long offset,
 			    u32 shift)
 {
-	struct clk_init_data init;
+	struct clk_init_data init = {};
 	struct pmc_clk_gate *gate;
 
 	gate = devm_kzalloc(pmc->dev, sizeof(*gate), GFP_KERNEL);
