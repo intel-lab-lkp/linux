@@ -835,7 +835,8 @@ static struct nfs_client *(*get_v3_ds_connect)(
 			int ds_addrlen,
 			int ds_proto,
 			unsigned int ds_timeo,
-			unsigned int ds_retrans);
+			unsigned int ds_retrans,
+			unsigned int ds_nconnect);
 
 static bool load_v3_ds_connect(void)
 {
@@ -858,7 +859,8 @@ void nfs4_pnfs_v3_ds_connect_unload(void)
 static int _nfs4_pnfs_v3_ds_connect(struct nfs_server *mds_srv,
 				 struct nfs4_pnfs_ds *ds,
 				 unsigned int timeo,
-				 unsigned int retrans)
+				 unsigned int retrans,
+				 unsigned int nconnect)
 {
 	struct nfs_client *clp = ERR_PTR(-EIO);
 	struct nfs_client *mds_clp = mds_srv->nfs_client;
@@ -910,7 +912,7 @@ static int _nfs4_pnfs_v3_ds_connect(struct nfs_server *mds_srv,
 			ds_proto = XPRT_TRANSPORT_TCP_TLS;
 
 		clp = get_v3_ds_connect(mds_srv, &da->da_addr, da->da_addrlen,
-					ds_proto, timeo, retrans);
+					ds_proto, timeo, retrans, nconnect);
 		if (IS_ERR(clp))
 			continue;
 		clp->cl_rpcclient->cl_softerr = 0;
@@ -933,6 +935,7 @@ static int _nfs4_pnfs_v4_ds_connect(struct nfs_server *mds_srv,
 				 struct nfs4_pnfs_ds *ds,
 				 unsigned int timeo,
 				 unsigned int retrans,
+				 unsigned int nconnect,
 				 u32 minor_version)
 {
 	struct nfs_client *clp = ERR_PTR(-EIO);
@@ -1023,7 +1026,8 @@ static int _nfs4_pnfs_v4_ds_connect(struct nfs_server *mds_srv,
 
 			clp = nfs4_set_ds_client(mds_srv, &da->da_addr,
 						 da->da_addrlen, ds_proto,
-						 timeo, retrans, minor_version);
+						 timeo, retrans, nconnect,
+						 minor_version);
 			if (IS_ERR(clp))
 				continue;
 
@@ -1056,7 +1060,8 @@ out:
  */
 int nfs4_pnfs_ds_connect(struct nfs_server *mds_srv, struct nfs4_pnfs_ds *ds,
 			  struct nfs4_deviceid_node *devid, unsigned int timeo,
-			  unsigned int retrans, u32 version, u32 minor_version)
+			  unsigned int retrans, unsigned int nconnect,
+			  u32 version, u32 minor_version)
 {
 	int err;
 
@@ -1075,11 +1080,12 @@ int nfs4_pnfs_ds_connect(struct nfs_server *mds_srv, struct nfs4_pnfs_ds *ds,
 
 	switch (version) {
 	case 3:
-		err = _nfs4_pnfs_v3_ds_connect(mds_srv, ds, timeo, retrans);
+		err = _nfs4_pnfs_v3_ds_connect(mds_srv, ds, timeo, retrans,
+					       nconnect);
 		break;
 	case 4:
 		err = _nfs4_pnfs_v4_ds_connect(mds_srv, ds, timeo, retrans,
-					       minor_version);
+					       nconnect, minor_version);
 		break;
 	default:
 		dprintk("%s: unsupported DS version %d\n", __func__, version);
