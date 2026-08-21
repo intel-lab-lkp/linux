@@ -800,6 +800,64 @@ static void blk_stack_path_limits(struct queue_limits *t,
 	t->dma_alignment = max(t->dma_alignment, b->dma_alignment);
 }
 
+/**
+ * blk_set_mpath_head_limits - set head limits common to all paths
+ * @t: limits for the multipath head
+ * @b: limits for one path
+ *
+ * Set head limits that are expected to be identical across paths. Stack
+ * limits that may differ between paths with blk_stack_mpath_limits().
+ */
+void blk_set_mpath_head_limits(struct queue_limits *t,
+			       struct queue_limits *b)
+{
+	t->logical_block_size = b->logical_block_size;
+	t->physical_block_size = b->physical_block_size;
+	t->alignment_offset = b->alignment_offset;
+	t->io_min = b->io_min;
+	t->io_opt = b->io_opt;
+	t->discard_granularity = b->discard_granularity;
+	t->discard_alignment = b->discard_alignment;
+	t->zone_write_granularity = b->zone_write_granularity;
+	t->max_write_streams = b->max_write_streams;
+	t->write_stream_granularity = b->write_stream_granularity;
+}
+EXPORT_SYMBOL_GPL(blk_set_mpath_head_limits);
+
+/**
+ * blk_stack_mpath_limits - stack limits across same-LBA multipath paths
+ * @t: limits for the multipath head
+ * @b: limits for one path
+ *
+ * Stack limits in @b that may differ between paths. Unlike
+ * blk_stack_limits(), this does not apply mapped-range topology or a mapping
+ * offset. Set limits that are expected to be identical across paths with
+ * blk_set_mpath_head_limits().
+ *
+ * Initialize @t with blk_set_stacking_limits() and set features that require
+ * support from every path before the first call. Set
+ * @t->max_hw_discard_sectors to UINT_MAX and call once for each path. A zero
+ * discard limit disables discard for the head.
+ */
+void blk_stack_mpath_limits(struct queue_limits *t, struct queue_limits *b)
+{
+	if (b->chunk_sectors)
+		t->chunk_sectors = gcd(t->chunk_sectors, b->chunk_sectors);
+
+	t->features |= b->features &
+		(BLK_FEAT_WRITE_CACHE | BLK_FEAT_FUA |
+		 BLK_FEAT_ROTATIONAL | BLK_FEAT_STABLE_WRITES);
+	blk_stack_path_limits(t, b);
+	STACK_MIN(t, b, max_hw_discard_sectors);
+	blk_stack_atomic_writes_hw_limits(t, b);
+
+	if (t->features & BLK_FEAT_ZONED) {
+		STACK_MIN_NOT_ZERO(t, b, max_open_zones);
+		STACK_MIN_NOT_ZERO(t, b, max_active_zones);
+	}
+}
+EXPORT_SYMBOL_GPL(blk_stack_mpath_limits);
+
 /*
  * Stack block sizes, I/O granularities, chunk boundaries and alignment for a
  * bottom-device range mapped at @start. Round maximum sector limits after the

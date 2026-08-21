@@ -2530,14 +2530,6 @@ out:
 	return ret;
 }
 
-static void nvme_stack_zone_resources(struct queue_limits *t,
-				      const struct queue_limits *b)
-{
-	t->max_open_zones = min_not_zero(t->max_open_zones, b->max_open_zones);
-	t->max_active_zones =
-		min_not_zero(t->max_active_zones, b->max_active_zones);
-}
-
 static int nvme_update_ns_head_limits(struct nvme_ns *ns,
 		struct nvme_ns_info *info, bool unsupported)
 {
@@ -2549,34 +2541,12 @@ static int nvme_update_ns_head_limits(struct nvme_ns *ns,
 
 	lim = queue_limits_start_update(head_q);
 	memflags = blk_mq_freeze_queue(head_q);
-	/*
-	 * queue_limits mixes hardware limitations for bio splitting with device
-	 * configuration.
-	 *
-	 * For NVMe the device configuration can change after e.g. a Format
-	 * command, and we really want to pick up the new format value here. But
-	 * we must still stack the queue limits to the least common denominator
-	 * for multipathing to split the bios properly.
-	 *
-	 * To work around this, we explicitly set the device configuration to
-	 * those that we just queried, but only stack the splitting limits in to
-	 * make sure we still obey possibly lower limitations of other
-	 * controllers.
-	 */
-	lim.logical_block_size = ns_lim->logical_block_size;
-	lim.physical_block_size = ns_lim->physical_block_size;
-	lim.io_min = ns_lim->io_min;
-	lim.io_opt = ns_lim->io_opt;
-	queue_limits_stack_bdev(&lim, ns->disk->part0, 0,
-				ns->head->disk->disk_name);
-	if (lim.features & BLK_FEAT_ZONED)
-		nvme_stack_zone_resources(&lim, ns_lim);
+	blk_set_mpath_head_limits(&lim, ns_lim);
+	blk_stack_mpath_limits(&lim, ns_lim);
 	if (unsupported)
 		ns->head->disk->flags |= GENHD_FL_HIDDEN;
 	else
 		nvme_init_integrity(ns->head, &lim, info);
-	lim.max_write_streams = ns_lim->max_write_streams;
-	lim.write_stream_granularity = ns_lim->write_stream_granularity;
 	ret = queue_limits_commit_update(head_q, &lim);
 	if (ret)
 		goto unfreeze_head_queue;
