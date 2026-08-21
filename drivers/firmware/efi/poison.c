@@ -3,8 +3,9 @@
  * Runtime handling for the LINUX_EFI_POISONED_MEMORY configuration table: a
  * bitmap with one bit per EFI_POISON_UNIT_SIZE of physical memory that records
  * hardware-poisoned frames so the next kexec kernel can keep them out of its
- * allocator. The stub installs the (empty) bitmap; this kernel sets bits at
- * runtime.
+ * allocator. The stub allocates and installs the (empty) bitmap; this kernel
+ * sets bits at runtime; the next kernel reserves the set units before the
+ * allocator comes up.
  *
  * Copyright (c) 2026 Meta Platforms, Inc. and affiliates.
  * Copyright (c) 2026 Breno Leitao <leitao@debian.org>
@@ -16,6 +17,8 @@
 #include <linux/efi.h>
 #include <linux/io.h>
 #include <linux/log2.h>
+#include <linux/memblock.h>
+#include <linux/minmax.h>
 #include <linux/mm.h>
 #include <linux/overflow.h>
 
@@ -127,4 +130,68 @@ void efi_hwpoison_record_pfn(unsigned long pfn)
 		return;
 
 	set_bit(unit, efi_poison->bitmap);
+}
+
+void __init efi_reserve_poisoned_memory(void)
+{
+	u64 ppm = efi.poisoned_memory, phys_base, unit_size, bitmap_size, off;
+	struct linux_efi_poisoned_memory *pm;
+	unsigned int nr_units = 0;
+
+	if (ppm == EFI_INVALID_TABLE_ADDR)
+		return;
+
+	pm = early_memremap(ppm, sizeof(*pm));
+	if (!pm) {
+		pr_warn("Could not map poisoned-memory table\n");
+		return;
+	}
+
+	if (!efi_poison_table_valid(pm)) {
+		/* Keep the runtime side off a table this pass rejected. */
+		efi.poisoned_memory = EFI_INVALID_TABLE_ADDR;
+		early_memunmap(pm, sizeof(*pm));
+		return;
+	}
+
+	phys_base = pm->phys_base;
+	unit_size = pm->unit_size;
+	bitmap_size = pm->size;
+
+	early_memunmap(pm, sizeof(*pm));
+
+	/* Reserve the table itself so it survives a further kexec. */
+	memblock_reserve(PAGE_ALIGN_DOWN(ppm),
+			 PAGE_ALIGN(ppm + sizeof(*pm) + bitmap_size) -
+			 PAGE_ALIGN_DOWN(ppm));
+
+	/*
+	 * Walk the bitmap a page at a time and reserve each poisoned unit.
+	 * memblock.memory is not populated this early, so memblock_remove()
+	 * and memblock_mark_nomap() would be no-ops; a reservation is what
+	 * keeps the units away from the allocator.
+	 */
+	for (off = 0; off < bitmap_size; off += PAGE_SIZE) {
+		u64 chunk = min_t(u64, PAGE_SIZE, bitmap_size - off);
+		unsigned long bit, nbits = chunk * BITS_PER_BYTE;
+		unsigned long *map;
+
+		map = early_memremap(ppm + offsetof(struct linux_efi_poisoned_memory,
+						    bitmap) + off, chunk);
+		if (!map) {
+			pr_warn("Could not map poisoned-memory bitmap\n");
+			return;
+		}
+		for_each_set_bit(bit, map, nbits) {
+			u64 unit = off * BITS_PER_BYTE + bit;
+
+			memblock_reserve(phys_base + unit * unit_size, unit_size);
+			nr_units++;
+		}
+		early_memunmap(map, chunk);
+	}
+
+	if (nr_units)
+		pr_info("reserved %u poisoned unit(s) (%lluK each) inherited across kexec\n",
+			nr_units, unit_size >> 10);
 }
