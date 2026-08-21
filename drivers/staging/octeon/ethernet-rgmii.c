@@ -148,7 +148,7 @@ int cvm_oct_rgmii_open(struct net_device *dev)
 		 */
 		if ((priv->imode == CVMX_HELPER_INTERFACE_MODE_GMII &&
 		     priv->port  == 0) ||
-		    (priv->imode == CVMX_HELPER_INTERFACE_MODE_RGMII)) {
+		     priv->imode == CVMX_HELPER_INTERFACE_MODE_RGMII) {
 			priv->poll = cvm_oct_check_preamble_errors;
 			cvm_oct_check_preamble_errors(dev);
 		}
