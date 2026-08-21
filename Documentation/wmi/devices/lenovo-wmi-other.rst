@@ -60,6 +60,9 @@ Some Legion Go firmware does not advertise fan 1 RPM through Capability
 Data. In that case, the driver reads Other Mode feature ``0x04030001`` for
 ``fan1_input``. Value ``0xffffffff`` means that RPM is unavailable.
 
+When the separate Lenovo Fan Method driver binds to the same WMI provider, it
+adds ten automatic fan-curve points to this HWMON device.
+
 LENOVO_CAPABILITY_DATA_01
 -------------------------
 

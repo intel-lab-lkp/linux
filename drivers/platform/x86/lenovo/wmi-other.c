@@ -192,11 +192,13 @@ struct lwmi_om_priv {
 	struct device *fw_attr_dev;
 	struct kset *fw_attr_kset;
 	struct wmi_device *wdev;
+	const struct attribute_group *fan_method_group;
 	int ida_id;
 
 	struct lwmi_fan_info fan_info[LWMI_FAN_NR];
 	bool fullspeed_supported;
 	bool fan0_input_fallback;
+	bool fan_method_group_added;
 
 	struct {
 		bool capdata00_collected : 1;
@@ -542,6 +544,31 @@ static const struct hwmon_chip_info lwmi_om_hwmon_chip_info = {
 	.info = lwmi_om_hwmon_info,
 };
 
+static int lwmi_om_fan_method_group_add(struct lwmi_om_priv *priv)
+{
+	int ret;
+
+	if (!priv->hwmon_dev || !priv->fan_method_group ||
+	    priv->fan_method_group_added)
+		return 0;
+
+	ret = sysfs_create_group(&priv->hwmon_dev->kobj,
+				 priv->fan_method_group);
+	if (!ret)
+		priv->fan_method_group_added = true;
+
+	return ret;
+}
+
+static void lwmi_om_fan_method_group_remove(struct lwmi_om_priv *priv)
+{
+	if (!priv->hwmon_dev || !priv->fan_method_group_added)
+		return;
+
+	sysfs_remove_group(&priv->hwmon_dev->kobj, priv->fan_method_group);
+	priv->fan_method_group_added = false;
+}
+
 /**
  * lwmi_om_hwmon_add() - Register HWMON device if all info is collected
  * @priv: Driver private data
@@ -550,9 +577,9 @@ static void lwmi_om_hwmon_add(struct lwmi_om_priv *priv)
 {
 	u32 rpm;
 	long enable;
-	int i, valid;
+	int i, ret, valid;
 
-	if (WARN_ON(priv->hwmon_dev))
+	if (priv->hwmon_dev)
 		return;
 
 	if (!priv->fan_flags.capdata00_collected || !priv->fan_flags.capdata_fan_collected) {
@@ -592,7 +619,8 @@ static void lwmi_om_hwmon_add(struct lwmi_om_priv *priv)
 		}
 	}
 
-	if (valid == 0 && !priv->fullspeed_supported && !priv->fan0_input_fallback) {
+	if (valid == 0 && !priv->fullspeed_supported &&
+	    !priv->fan0_input_fallback && !priv->fan_method_group) {
 		dev_warn(&priv->wdev->dev,
 			 "fan reporting/tuning is unsupported on this device\n");
 		return;
@@ -609,6 +637,11 @@ static void lwmi_om_hwmon_add(struct lwmi_om_priv *priv)
 		return;
 	}
 
+	ret = lwmi_om_fan_method_group_add(priv);
+	if (ret)
+		dev_warn(&priv->wdev->dev,
+			 "failed to register Fan Method attributes: %d\n", ret);
+
 	dev_dbg(&priv->wdev->dev, "registered HWMON device\n");
 }
 
@@ -623,6 +656,7 @@ static void lwmi_om_hwmon_remove(struct lwmi_om_priv *priv)
 	if (!priv->hwmon_dev)
 		return;
 
+	lwmi_om_fan_method_group_remove(priv);
 	hwmon_device_unregister(priv->hwmon_dev);
 	priv->hwmon_dev = NULL;
 }
@@ -1801,10 +1835,44 @@ static const struct component_master_ops lwmi_om_master_ops = {
 	.unbind = lwmi_om_master_unbind,
 };
 
+static int lwmi_om_fan_method_component_bind(struct device *component,
+					     struct device *master, void *data)
+{
+	const struct attribute_group *group = data;
+	struct lwmi_om_priv *priv = dev_get_drvdata(component);
+	int ret;
+
+	if (!group)
+		return -EINVAL;
+
+	priv->fan_method_group = group;
+	lwmi_om_hwmon_add(priv);
+	ret = lwmi_om_fan_method_group_add(priv);
+	if (ret)
+		priv->fan_method_group = NULL;
+
+	return ret;
+}
+
+static void lwmi_om_fan_method_component_unbind(struct device *component,
+						struct device *master, void *data)
+{
+	struct lwmi_om_priv *priv = dev_get_drvdata(component);
+
+	lwmi_om_fan_method_group_remove(priv);
+	priv->fan_method_group = NULL;
+}
+
+static const struct component_ops lwmi_om_fan_method_component_ops = {
+	.bind = lwmi_om_fan_method_component_bind,
+	.unbind = lwmi_om_fan_method_component_unbind,
+};
+
 static int lwmi_other_probe(struct wmi_device *wdev, const void *context)
 {
 	struct component_match *master_match = NULL;
 	struct lwmi_om_priv *priv;
+	int ret;
 
 	priv = devm_kzalloc(&wdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -1816,16 +1884,31 @@ static int lwmi_other_probe(struct wmi_device *wdev, const void *context)
 	priv->wdev = wdev;
 	dev_set_drvdata(&wdev->dev, priv);
 
-	lwmi_cd_match_add_all(&wdev->dev, &master_match);
-	if (IS_ERR(master_match))
-		return PTR_ERR(master_match);
+	ret = component_add(&wdev->dev, &lwmi_om_fan_method_component_ops);
+	if (ret)
+		return ret;
 
-	return component_master_add_with_match(&wdev->dev, &lwmi_om_master_ops,
-					       master_match);
+	lwmi_cd_match_add_all(&wdev->dev, &master_match);
+	if (IS_ERR(master_match)) {
+		ret = PTR_ERR(master_match);
+		goto err_component;
+	}
+
+	ret = component_master_add_with_match(&wdev->dev, &lwmi_om_master_ops,
+					      master_match);
+	if (ret)
+		goto err_component;
+
+	return 0;
+
+err_component:
+	component_del(&wdev->dev, &lwmi_om_fan_method_component_ops);
+	return ret;
 }
 
 static void lwmi_other_remove(struct wmi_device *wdev)
 {
+	component_del(&wdev->dev, &lwmi_om_fan_method_component_ops);
 	component_master_del(&wdev->dev, &lwmi_om_master_ops);
 }
 

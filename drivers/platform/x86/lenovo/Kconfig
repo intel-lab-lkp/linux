@@ -276,3 +276,14 @@ config LENOVO_WMI_TUNING
 
 	  To compile this driver as a module, choose M here: the module will
 	  be called lenovo-wmi-other.
+
+config LENOVO_WMI_FAN_METHOD
+	tristate "Lenovo Fan Method WMI Driver"
+	depends on DMI
+	depends on LENOVO_WMI_TUNING
+	help
+	  Say Y here to add the firmware fan table on supported Lenovo
+	  Legion Go products to the Lenovo Other Mode HWMON device.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called lenovo-wmi-fan-method.
