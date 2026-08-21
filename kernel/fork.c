@@ -2115,6 +2115,7 @@ __latent_entropy struct task_struct *copy_process(
 	p = dup_task_struct(current, node);
 	if (!p)
 		goto fork_out;
+	ftrace_graph_init_task(p);
 	retval = copy_exec_state(clone_flags, p);
 	if (retval)
 		goto bad_fork_free;
@@ -2140,8 +2141,6 @@ __latent_entropy struct task_struct *copy_process(
 	 * TID is cleared in mm_release() when the task exits
 	 */
 	p->clear_child_tid = (clone_flags & CLONE_CHILD_CLEARTID) ? args->child_tid : NULL;
-
-	ftrace_graph_init_task(p);
 
 	rt_mutex_init_task(p);
 	raw_spin_lock_init(&p->blocked_lock);
