@@ -6,6 +6,7 @@
 //
 // Author: James Schulman <james.schulman@cirrus.com>
 
+#include <linux/bitfield.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
@@ -193,6 +194,38 @@ static int cs35l45_activate_ctl(struct snd_soc_component *component,
 	snd_ctl_notify(card, SNDRV_CTL_EVENT_MASK_INFO, &kcontrol->id);
 
 	return 0;
+}
+
+static int cs35l45_sync_en_get(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct cs35l45_private *cs35l45 =
+			snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = cs35l45->sync_en;
+
+	return 0;
+}
+
+static int cs35l45_sync_en_put(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct cs35l45_private *cs35l45 =
+			snd_soc_component_get_drvdata(component);
+
+	if (ucontrol->value.integer.value[0] == cs35l45->sync_en)
+		return 1;
+
+	if ((bool)ucontrol->value.integer.value[0])
+		regmap_set_bits(cs35l45->regmap, CS35L45_BLOCK_ENABLES2, CS35L45_SYNC_EN_MASK);
+	else
+		regmap_clear_bits(cs35l45->regmap, CS35L45_BLOCK_ENABLES2, CS35L45_SYNC_EN_MASK);
+
+	cs35l45->sync_en = ucontrol->value.integer.value[0];
+
+	return 1;
 }
 
 static int cs35l45_amplifier_mode_get(struct snd_kcontrol *kcontrol,
@@ -591,6 +624,18 @@ static SOC_ENUM_SINGLE_DECL(amplifier_mode_enum, SND_SOC_NOPM, 0,
 static DECLARE_TLV_DB_SCALE(amp_gain_tlv, 1000, 300, 0);
 static const DECLARE_TLV_DB_SCALE(cs35l45_dig_pcm_vol_tlv, -10225, 25, true);
 
+static const struct snd_kcontrol_new cs35l45_sync_controls[] = {
+	SOC_SINGLE_BOOL_EXT("SYNC Enable", 0, cs35l45_sync_en_get, cs35l45_sync_en_put),
+	SOC_SINGLE("SYNC LSW RX Enable", CS35L45_SYNC_TX_RX_ENABLES,
+			CS35L45_SYNC_LSW_RX_EN_SHIFT, 1, 0),
+	SOC_SINGLE("SYNC LSW TX Enable", CS35L45_SYNC_TX_RX_ENABLES,
+			CS35L45_SYNC_LSW_TX_EN_SHIFT, 1, 0),
+	SOC_SINGLE("SYNC SW RX Enable", CS35L45_SYNC_TX_RX_ENABLES,
+			CS35L45_SYNC_SW_RX_EN_SHIFT, 1, 0),
+	SOC_SINGLE("SYNC SW TX Enable", CS35L45_SYNC_TX_RX_ENABLES,
+			CS35L45_SYNC_SW_TX_EN_SHIFT, 1, 0),
+};
+
 static const struct snd_kcontrol_new cs35l45_controls[] = {
 	SOC_ENUM_EXT("Amplifier Mode", amplifier_mode_enum,
 		     cs35l45_amplifier_mode_get, cs35l45_amplifier_mode_put),
@@ -880,6 +925,19 @@ static struct snd_soc_dai_driver cs35l45_dai[] = {
 static int cs35l45_component_probe(struct snd_soc_component *component)
 {
 	struct cs35l45_private *cs35l45 = snd_soc_component_get_drvdata(component);
+	int ret;
+
+	ret = snd_soc_add_component_controls(component, cs35l45_controls,
+					     ARRAY_SIZE(cs35l45_controls));
+	if (ret < 0)
+		return ret;
+
+	if (cs35l45->sync_pin_set) {
+		ret = snd_soc_add_component_controls(component, cs35l45_sync_controls,
+						     ARRAY_SIZE(cs35l45_sync_controls));
+		if (ret < 0)
+			return ret;
+	}
 
 	return wm_adsp2_component_probe(&cs35l45->dsp, component);
 }
@@ -900,9 +958,6 @@ static const struct snd_soc_component_driver cs35l45_component = {
 
 	.dapm_routes = cs35l45_dapm_routes,
 	.num_dapm_routes = ARRAY_SIZE(cs35l45_dapm_routes),
-
-	.controls = cs35l45_controls,
-	.num_controls = ARRAY_SIZE(cs35l45_controls),
 
 	.name = "cs35l45",
 
@@ -1064,6 +1119,25 @@ static int cs35l45_sys_resume(struct device *dev)
 	return 0;
 }
 
+static int cs35l45_apply_sync_property_config(struct cs35l45_private *cs35l45,
+					      struct device_node *child)
+{
+	unsigned int val;
+	int ret;
+
+	ret = of_property_read_u32(child, "cirrus,sync-lsw-txid", &val);
+	if (!ret)
+		regmap_update_bits(cs35l45->regmap, CS35L45_SYNC_SW_TX_ID,
+				   CS35L45_SYNC_LSW_TXID_MASK, val << CS35L45_SYNC_LSW_TXID_SHIFT);
+
+	ret = of_property_read_u32(child, "cirrus,sync-sw-txid", &val);
+	if (!ret)
+		regmap_update_bits(cs35l45->regmap, CS35L45_SYNC_SW_TX_ID,
+				   CS35L45_SYNC_SW_TXID_MASK, val);
+
+	return 0;
+}
+
 static int cs35l45_apply_property_config(struct cs35l45_private *cs35l45)
 {
 	struct device_node *node = cs35l45->dev->of_node;
@@ -1110,10 +1184,13 @@ static int cs35l45_apply_property_config(struct cs35l45_private *cs35l45)
 					   val << CS35L45_GPIO_POL_SHIFT);
 
 		ret = of_property_read_u32(child, "gpio-ctrl", &val);
-		if (!ret)
+		if (!ret) {
+			if ((i == 0) && (val == CS35L45_GP1_CTRL_MDSYNC))
+				cs35l45->sync_pin_set = true;
 			regmap_update_bits(cs35l45->regmap, pad_regs[i],
 					   CS35L45_GPIO_CTRL_MASK,
 					   val << CS35L45_GPIO_CTRL_SHIFT);
+		}
 
 		ret = of_property_read_u32(child, "gpio-invert", &val);
 		if (!ret) {
@@ -1132,6 +1209,14 @@ static int cs35l45_apply_property_config(struct cs35l45_private *cs35l45)
 		regmap_update_bits(cs35l45->regmap, CS35L45_ASP_CONTROL3,
 				   CS35L45_ASP_DOUT_HIZ_CTRL_MASK,
 				   val << CS35L45_ASP_DOUT_HIZ_CTRL_SHIFT);
+	}
+
+	if (cs35l45->sync_pin_set) {
+		child = of_get_child_by_name(node, "sync");
+		if (child)
+			cs35l45_apply_sync_property_config(cs35l45, child);
+
+		of_node_put(child);
 	}
 
 	return 0;
