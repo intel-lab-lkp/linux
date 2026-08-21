@@ -522,7 +522,7 @@ static struct clk_ops clk_spc_ops = {
 
 static struct clk *ve_spc_clk_register(struct device *cpu_dev)
 {
-	struct clk_init_data init;
+	struct clk_init_data init = {};
 	struct clk_spc *spc;
 
 	spc = kzalloc_obj(*spc);
