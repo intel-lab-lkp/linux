@@ -705,7 +705,7 @@ config TOUCHSCREEN_IMAGIS
 	tristate "Imagis touchscreen support"
 	depends on I2C
 	help
-	  Say Y here if you have an Imagis IST30xxC touchscreen.
+	  Say Y here if you have an Imagis IST30xx or IST40xx touchscreen.
 	  If unsure, say N.
 
 	  To compile this driver as a module, choose M here: the
