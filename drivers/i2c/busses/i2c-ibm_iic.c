@@ -690,7 +690,7 @@ static int iic_probe(struct platform_device *ofdev)
 	if (irq < 0)
 		dev_warn(&ofdev->dev, "using polling mode\n");
 
-	dev = kzalloc_obj(*dev);
+	dev = devm_kzalloc(&ofdev->dev, sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 
@@ -748,7 +748,6 @@ error_cleanup:
 		free_irq(dev->irq, dev);
 	}
 
-	kfree(dev);
 	return ret;
 }
 
@@ -765,8 +764,6 @@ static void iic_remove(struct platform_device *ofdev)
 		iic_interrupt_mode(dev, 0);
 		free_irq(dev->irq, dev);
 	}
-
-	kfree(dev);
 }
 
 static const struct of_device_id ibm_iic_match[] = {
