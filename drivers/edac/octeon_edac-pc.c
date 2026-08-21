@@ -31,9 +31,11 @@ struct co_cache_error {
 };
 
 /**
- * EDAC CPU cache error callback
+ * co_cache_error_event() - EDAC CPU cache error callback
  *
+ * @this: notifier block
  * @event: non-zero if unrecoverable.
+ * @ptr: unused
  */
 static int  co_cache_error_event(struct notifier_block *this,
 	unsigned long event, void *ptr)
