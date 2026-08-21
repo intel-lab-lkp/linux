@@ -384,3 +384,12 @@ conn_subsys: bus@5b000000 {
 		status = "disabled";
 	};
 };
+
+usbphynop2: usbphynop2 {
+	compatible = "usb-nop-xceiv";
+	#phy-cells = <0>;
+	clocks = <&usb2_lpcg IMX_LPCG_CLK_7>;
+	clock-names = "main_clk";
+	power-domains = <&pd IMX_SC_R_USB_0_PHY>;
+	status = "disabled";
+};
