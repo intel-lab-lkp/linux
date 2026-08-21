@@ -146,6 +146,24 @@ static const struct irq_domain_ops tps65217_irq_domain_ops = {
 	.map = tps65217_irq_map,
 };
 
+static void tps65217_irq_cleanup(struct tps65217 *tps)
+{
+	unsigned int virq;
+	int i;
+
+	if (!tps->irq_domain)
+		return;
+
+	for (i = 0; i < TPS65217_NUM_IRQ; i++) {
+		virq = irq_find_mapping(tps->irq_domain, i);
+		if (virq)
+			irq_dispose_mapping(virq);
+	}
+
+	irq_domain_remove(tps->irq_domain);
+	tps->irq_domain = NULL;
+}
+
 static int tps65217_irq_init(struct tps65217 *tps, int irq)
 {
 	int ret;
@@ -176,6 +194,7 @@ static int tps65217_irq_init(struct tps65217 *tps, int irq)
 	if (ret) {
 		dev_err(tps->dev, "Failed to request IRQ %d: %d\n",
 			irq, ret);
+		tps65217_irq_cleanup(tps);
 		return ret;
 	}
 
@@ -337,6 +356,13 @@ static int tps65217_probe(struct i2c_client *client)
 		return ret;
 	}
 
+	ret = tps65217_reg_read(tps, TPS65217_REG_CHIPID, &version);
+	if (ret < 0) {
+		dev_err(tps->dev, "Failed to read revision register: %d\n",
+			ret);
+		return ret;
+	}
+
 	if (client->irq) {
 		ret = tps65217_irq_init(tps, client->irq);
 		if (ret)
@@ -354,13 +380,7 @@ static int tps65217_probe(struct i2c_client *client)
 				   tps->irq_domain);
 	if (ret < 0) {
 		dev_err(tps->dev, "mfd_add_devices failed: %d\n", ret);
-		return ret;
-	}
-
-	ret = tps65217_reg_read(tps, TPS65217_REG_CHIPID, &version);
-	if (ret < 0) {
-		dev_err(tps->dev, "Failed to read revision register: %d\n",
-			ret);
+		tps65217_irq_cleanup(tps);
 		return ret;
 	}
 
