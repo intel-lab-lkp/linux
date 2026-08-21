@@ -116,10 +116,8 @@ struct mtk_nor {
 	void __iomem *base;
 	u8 *buffer;
 	dma_addr_t buffer_dma;
-	struct clk *spi_clk;
-	struct clk *ctlr_clk;
-	struct clk *axi_clk;
-	struct clk *axi_s_clk;
+	struct clk_bulk_data *clks;
+	int num_clks;
 	unsigned int spi_freq;
 	bool wbuf_en;
 	bool has_irq;
@@ -703,42 +701,12 @@ msg_done:
 
 static void mtk_nor_disable_clk(struct mtk_nor *sp)
 {
-	clk_disable_unprepare(sp->spi_clk);
-	clk_disable_unprepare(sp->ctlr_clk);
-	clk_disable_unprepare(sp->axi_clk);
-	clk_disable_unprepare(sp->axi_s_clk);
+	clk_bulk_disable_unprepare(sp->num_clks, sp->clks);
 }
 
 static int mtk_nor_enable_clk(struct mtk_nor *sp)
 {
-	int ret;
-
-	ret = clk_prepare_enable(sp->spi_clk);
-	if (ret)
-		return ret;
-
-	ret = clk_prepare_enable(sp->ctlr_clk);
-	if (ret) {
-		clk_disable_unprepare(sp->spi_clk);
-		return ret;
-	}
-
-	ret = clk_prepare_enable(sp->axi_clk);
-	if (ret) {
-		clk_disable_unprepare(sp->spi_clk);
-		clk_disable_unprepare(sp->ctlr_clk);
-		return ret;
-	}
-
-	ret = clk_prepare_enable(sp->axi_s_clk);
-	if (ret) {
-		clk_disable_unprepare(sp->spi_clk);
-		clk_disable_unprepare(sp->ctlr_clk);
-		clk_disable_unprepare(sp->axi_clk);
-		return ret;
-	}
-
-	return 0;
+	return clk_bulk_prepare_enable(sp->num_clks, sp->clks);
 }
 
 static void mtk_nor_init(struct mtk_nor *sp)
@@ -807,34 +775,47 @@ static const struct of_device_id mtk_nor_match[] = {
 };
 MODULE_DEVICE_TABLE(of, mtk_nor_match);
 
+static struct clk *mtk_nor_get_clk(struct clk_bulk_data *clks, int num_clks,
+				   const char *id)
+{
+	int i;
+
+	for (i = 0; i < num_clks; i++) {
+		if (clks[i].id && !strcmp(clks[i].id, id))
+			return clks[i].clk;
+	}
+
+	return NULL;
+}
+
 static int mtk_nor_probe(struct platform_device *pdev)
 {
 	struct spi_controller *ctlr;
 	struct mtk_nor *sp;
 	struct mtk_nor_caps *caps;
 	void __iomem *base;
-	struct clk *spi_clk, *ctlr_clk, *axi_clk, *axi_s_clk;
-	int ret, irq;
+	struct clk_bulk_data *clks;
+	struct clk *spi_clk;
+	int num_clks, ret, irq;
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
-	spi_clk = devm_clk_get(&pdev->dev, "spi");
-	if (IS_ERR(spi_clk))
-		return PTR_ERR(spi_clk);
+	num_clks = devm_clk_bulk_get_all(&pdev->dev, &clks);
+	if (num_clks < 0)
+		return dev_err_probe(&pdev->dev, num_clks,
+				     "failed to get clocks\n");
+	if (!num_clks)
+		return dev_err_probe(&pdev->dev, -EINVAL, "no clocks defined\n");
 
-	ctlr_clk = devm_clk_get(&pdev->dev, "sf");
-	if (IS_ERR(ctlr_clk))
-		return PTR_ERR(ctlr_clk);
-
-	axi_clk = devm_clk_get_optional(&pdev->dev, "axi");
-	if (IS_ERR(axi_clk))
-		return PTR_ERR(axi_clk);
-
-	axi_s_clk = devm_clk_get_optional(&pdev->dev, "axi_s");
-	if (IS_ERR(axi_s_clk))
-		return PTR_ERR(axi_s_clk);
+	spi_clk = mtk_nor_get_clk(clks, num_clks, "spi");
+	if (!spi_clk)
+		return dev_err_probe(&pdev->dev, -EINVAL,
+				     "missing \"spi\" clock\n");
+	if (!mtk_nor_get_clk(clks, num_clks, "sf"))
+		return dev_err_probe(&pdev->dev, -EINVAL,
+				     "missing \"sf\" clock\n");
 
 	caps = (struct mtk_nor_caps *)of_device_get_match_data(&pdev->dev);
 
@@ -867,10 +848,8 @@ static int mtk_nor_probe(struct platform_device *pdev)
 	sp->wbuf_en = false;
 	sp->ctlr = ctlr;
 	sp->dev = &pdev->dev;
-	sp->spi_clk = spi_clk;
-	sp->ctlr_clk = ctlr_clk;
-	sp->axi_clk = axi_clk;
-	sp->axi_s_clk = axi_s_clk;
+	sp->clks = clks;
+	sp->num_clks = num_clks;
 	sp->caps = caps;
 	sp->high_dma = caps->dma_bits > 32;
 	sp->buffer = dmam_alloc_coherent(&pdev->dev,
@@ -886,9 +865,15 @@ static int mtk_nor_probe(struct platform_device *pdev)
 
 	ret = mtk_nor_enable_clk(sp);
 	if (ret < 0)
-		return ret;
+		return dev_err_probe(&pdev->dev, ret,
+				     "failed to enable clocks\n");
 
-	sp->spi_freq = clk_get_rate(sp->spi_clk);
+	sp->spi_freq = clk_get_rate(spi_clk);
+	if (!sp->spi_freq) {
+		dev_err(&pdev->dev, "invalid spi clock rate\n");
+		ret = -EINVAL;
+		goto err_disable_clk;
+	}
 
 	mtk_nor_init(sp);
 
@@ -928,6 +913,7 @@ err_probe:
 	pm_runtime_set_suspended(&pdev->dev);
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 
+err_disable_clk:
 	mtk_nor_disable_clk(sp);
 
 	return ret;
