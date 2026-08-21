@@ -79,9 +79,74 @@ static inline int eh_frame_do_def_cfa_expression(const char *expr,
 		return 0;
 	}
 
+	/*
+	 * DRAP (Dynamic Realignment Pointer) CFA expression:
+	 *
+	 * DW_OP_breg<FP> + <FP_offset>	// 5 (EBP) - 4 or 6 (RBP) - 8
+	 * DW_OP_deref
+	 *
+	 * CFA = *(FP + FP_offset)
+	 */
+	static const char drap_expr[] = {0x70, 0x00, 0x06};
+	static const char drap_mask[] = {0xf0, 0x80, 0xff};
+
+	if (size == sizeof(drap_expr) &&
+	    !memcmp_masked(expr, drap_expr, drap_mask, sizeof(drap_expr))) {
+		unsigned char fp_reg = DW_OP_breg_register(expr[0]);
+		unsigned char fp_offset_byte = expr[1];
+		long fp_offset;
+
+		if (fp_reg != EH_FRAME_REG_FP)
+			return -EOPNOTSUPP;
+
+		fp_offset = (long)(fp_offset_byte);
+		if (fp_offset_byte & 0x40)
+			fp_offset |= -(1L << 7);	/* Sign extend */
+
+		/* CFA = *(FP + offset) */
+		reg_state->cfa_rule = CFA_REG_OFFSET_DEREF;
+		reg_state->cfa_regnum = EH_FRAME_REG_FP;
+		reg_state->cfa_offset = fp_offset;
+		return 0;
+	}
+
 	return -EOPNOTSUPP;
 }
 #define eh_frame_do_def_cfa_expression eh_frame_do_def_cfa_expression
+
+static inline int eh_frame_do_expression(unsigned int reg,
+					 const char *expr,
+					 int size,
+					 unsigned long ip,
+					 struct eh_frame_reg_state *reg_state)
+{
+	/*
+	 * DRAP (Dynamic Realignment Pointer) FP expression:
+	 *
+	 * DW_OP_breg<FP> +0	// 5 (EBP) or 6 (RBP)
+	 *
+	 * FP = *(FP + 0)
+	 */
+	static const char drap_fp_expr[] = {0x70, 0x00};
+	static const char drap_fp_mask[] = {0xf0, 0xff};
+
+	if (reg == EH_FRAME_REG_FP && size == sizeof(drap_fp_expr) &&
+	    !memcmp_masked(expr, drap_fp_expr, drap_fp_mask, sizeof(drap_fp_expr))) {
+		unsigned char fp_reg = DW_OP_breg_register(expr[0]);
+
+		if (fp_reg != EH_FRAME_REG_FP)
+			return -EOPNOTSUPP;
+
+		/* FP = *(FP + 0) */
+		reg_state->reg_rule[FP_IDX] = REG_REGISTER_OFFSET_DEREF;
+		reg_state->reg_regnum[FP_IDX] = EH_FRAME_REG_FP;
+		reg_state->reg_offset[FP_IDX] = 0;
+		return 0;
+	}
+
+	return -EOPNOTSUPP;
+}
+#define eh_frame_do_expression eh_frame_do_expression
 
 #include <asm-generic/unwind_user_eh_frame.h>
 

@@ -1098,18 +1098,33 @@ static __always_inline int __find_frame_row(struct eh_frame_section *sec,
 		return ret;
 
 	/* Convert CFA rule */
-	if (ctx.state.cfa_rule != CFA_REG_OFFSET)
+	switch (ctx.state.cfa_rule) {
+	case CFA_REG_OFFSET:
+		if (ctx.state.cfa_regnum == EH_FRAME_REG_SP)
+			frame->cfa.rule = UNWIND_USER_CFA_RULE_SP_OFFSET;
+		else if (ctx.state.cfa_regnum == EH_FRAME_REG_FP)
+			frame->cfa.rule = UNWIND_USER_CFA_RULE_FP_OFFSET;
+		else {
+			if (ctx.state.cfa_regnum > UINT_MAX)
+				return -EINVAL;
+			frame->cfa.rule = UNWIND_USER_CFA_RULE_REG_OFFSET;
+			frame->cfa.regnum = ctx.state.cfa_regnum;
+		}
+		break;
+	case CFA_REG_OFFSET_DEREF:
+		if (ctx.state.cfa_regnum == EH_FRAME_REG_SP)
+			frame->cfa.rule = UNWIND_USER_CFA_RULE_SP_OFFSET_DEREF;
+		else if (ctx.state.cfa_regnum == EH_FRAME_REG_FP)
+			frame->cfa.rule = UNWIND_USER_CFA_RULE_FP_OFFSET_DEREF;
+		else {
+			if (ctx.state.cfa_regnum > UINT_MAX)
+				return -EINVAL;
+			frame->cfa.rule = UNWIND_USER_CFA_RULE_REG_OFFSET_DEREF;
+			frame->cfa.regnum = ctx.state.cfa_regnum;
+		}
+		break;
+	default:
 		return -EINVAL;
-
-	if (ctx.state.cfa_regnum == EH_FRAME_REG_SP)
-		frame->cfa.rule = UNWIND_USER_CFA_RULE_SP_OFFSET;
-	else if (ctx.state.cfa_regnum == EH_FRAME_REG_FP)
-		frame->cfa.rule = UNWIND_USER_CFA_RULE_FP_OFFSET;
-	else {
-		if (ctx.state.cfa_regnum > UINT_MAX)
-			return -EINVAL;
-		frame->cfa.rule = UNWIND_USER_CFA_RULE_REG_OFFSET;
-		frame->cfa.regnum = ctx.state.cfa_regnum;
 	}
 
 	if (ctx.state.cfa_offset < INT_MIN ||
@@ -1150,6 +1165,16 @@ static __always_inline int __find_frame_row(struct eh_frame_section *sec,
 		frame->ra.regnum = ctx.state.reg_regnum[RA_IDX];
 		frame->ra.offset = 0;
 		break;
+	case REG_REGISTER_OFFSET_DEREF:
+		if (ctx.state.reg_regnum[RA_IDX] > UINT_MAX)
+			return -EINVAL;
+		if (ctx.state.reg_offset[RA_IDX] < INT_MIN ||
+		    ctx.state.reg_offset[RA_IDX] > INT_MAX)
+			return -EOPNOTSUPP;
+		frame->ra.rule = UNWIND_USER_RULE_REG_OFFSET_DEREF;
+		frame->ra.regnum = ctx.state.reg_regnum[RA_IDX];
+		frame->ra.offset = ctx.state.reg_offset[RA_IDX];
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -1183,6 +1208,16 @@ static __always_inline int __find_frame_row(struct eh_frame_section *sec,
 		frame->fp.rule = UNWIND_USER_RULE_REG_OFFSET;
 		frame->fp.regnum = ctx.state.reg_regnum[FP_IDX];
 		frame->fp.offset = 0;
+		break;
+	case REG_REGISTER_OFFSET_DEREF:
+		if (ctx.state.reg_regnum[FP_IDX] > UINT_MAX)
+			return -EINVAL;
+		if (ctx.state.reg_offset[FP_IDX] < INT_MIN ||
+		    ctx.state.reg_offset[FP_IDX] > INT_MAX)
+			return -EOPNOTSUPP;
+		frame->fp.rule = UNWIND_USER_RULE_REG_OFFSET_DEREF;
+		frame->fp.regnum = ctx.state.reg_regnum[FP_IDX];
+		frame->fp.offset = ctx.state.reg_offset[FP_IDX];
 		break;
 	default:
 		return -EINVAL;

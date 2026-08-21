@@ -5,6 +5,8 @@
 enum eh_frame_cfa_rule {
 	CFA_UNDEFINED,		/* unrecoverable */
 	CFA_REG_OFFSET,		/* CFA = reg + offset */
+	/* CFA expressions rules */
+	CFA_REG_OFFSET_DEREF,	/* CFA = *(reg + offset) */
 };
 
 enum eh_frame_reg_rule {
@@ -14,6 +16,8 @@ enum eh_frame_reg_rule {
 	REG_OFFSET,		/* reg = *(CFA + offset) */
 	REG_VAL_OFFSET,		/* reg = CFA + offset */
 	REG_REGISTER,		/* reg = other_reg */
+	/* expressions rules */
+	REG_REGISTER_OFFSET_DEREF,	/* reg = *(other_reg + offset) */
 };
 
 enum eh_frame_reg_index {
