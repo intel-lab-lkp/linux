@@ -24,6 +24,7 @@ TEST_PROGS := \
 	shaper.py \
 	so_txtime.py \
 	stats.py \
+	vlan.py \
 	xdp.py \
 # end of TEST_PROGS
 
