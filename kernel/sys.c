@@ -65,6 +65,7 @@
 #include <linux/rcupdate.h>
 #include <linux/uidgid.h>
 #include <linux/cred.h>
+#include <linux/eh_frame.h>
 
 #include <linux/nospec.h>
 
@@ -2906,6 +2907,16 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 			break;
 		if (arg3 & PR_CFI_LOCK && !(arg3 & PR_CFI_DISABLE))
 			error = arch_prctl_lock_branch_landing_pad_state(me);
+		break;
+	case PR_REGISTER_EH_FRAME:
+		if (arg4 || arg5)
+			return -EINVAL;
+		error = eh_frame_register((void __user *)arg2, arg3);
+		break;
+	case PR_UNREGISTER_EH_FRAME:
+		if (arg4 || arg5)
+			return -EINVAL;
+		error = eh_frame_unregister((void __user *)arg2, arg3);
 		break;
 	default:
 		trace_task_prctl_unknown(option, arg2, arg3, arg4, arg5);

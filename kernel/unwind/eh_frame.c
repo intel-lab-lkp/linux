@@ -15,6 +15,7 @@
 #include <linux/types.h>
 #include <linux/unwind_user_types.h>
 #include <linux/unwind_user_eh_frame_types.h>
+#include <uapi/linux/eh_frame.h>
 
 #include "eh_frame.h"
 #include "eh_frame_debug.h"
@@ -1608,4 +1609,49 @@ void eh_frame_free_mm(struct mm_struct *mm)
 		free_section(sec);
 
 	mtree_destroy(&mm->eh_frame_mt);
+}
+
+int eh_frame_register(struct eh_frame_setup __user *user_data, __kernel_size_t size)
+{
+	struct eh_frame_setup data;
+	unsigned long eh_frame_hdr_end, text_end;
+
+	if (!user_data || !size)
+		return -EINVAL;
+
+	if (size != sizeof(data))
+		return -EINVAL;
+
+	if (copy_from_user(&data, user_data, sizeof(data)))
+		return -EFAULT;
+
+	if (check_add_overflow(data.eh_frame_hdr_start, data.eh_frame_hdr_size,
+			       &eh_frame_hdr_end))
+		return -EINVAL;
+
+	if (check_add_overflow(data.text_start, data.text_size, &text_end))
+		return -EINVAL;
+
+	return eh_frame_add_section(data.eh_frame_hdr_start, eh_frame_hdr_end,
+				    data.text_start, text_end);
+}
+
+int eh_frame_unregister(struct eh_frame_setup __user *user_data, __kernel_size_t size)
+{
+	struct eh_frame_setup data;
+
+	if (!user_data || !size)
+		return -EINVAL;
+
+	if (size != sizeof(data))
+		return -EINVAL;
+
+	if (copy_from_user(&data, user_data, sizeof(data)))
+		return -EFAULT;
+
+	/* Unregister only uses eh_frame_hdr_start */
+	if (data.eh_frame_hdr_size || data.text_start || data.text_size)
+		return -EINVAL;
+
+	return eh_frame_remove_section(data.eh_frame_hdr_start);
 }

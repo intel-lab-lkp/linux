@@ -6,6 +6,8 @@
 #include <linux/srcu.h>
 #include <linux/unwind_user_types.h>
 
+struct eh_frame_setup;
+
 #ifdef CONFIG_HAVE_UNWIND_USER_EH_FRAME
 
 struct eh_frame_section {
@@ -40,6 +42,12 @@ extern int eh_frame_add_section(unsigned long eh_frame_hdr_start,
 				unsigned long text_start,
 				unsigned long text_end);
 extern int eh_frame_remove_section(unsigned long eh_frame_hdr_start);
+
+extern int eh_frame_register(struct eh_frame_setup __user *user_data,
+			     __kernel_size_t size);
+extern int eh_frame_unregister(struct eh_frame_setup __user *user_data,
+			       __kernel_size_t size);
+
 extern int eh_frame_find(unsigned long ip, struct unwind_user_frame *frame);
 
 static inline bool current_has_eh_frame(void)
@@ -76,6 +84,18 @@ static inline int eh_frame_remove_section(unsigned long eh_frame_hdr_start)
 static inline int eh_frame_find(unsigned long ip, struct unwind_user_frame *frame)
 {
 	return -ENOSYS;
+}
+
+static inline int eh_frame_register(struct eh_frame_setup __user *user_data,
+				    __kernel_size_t size)
+{
+	return -EINVAL;
+}
+
+static inline int eh_frame_unregister(struct eh_frame_setup __user *user_data,
+				      __kernel_size_t size)
+{
+	return -EINVAL;
 }
 
 static inline bool current_has_eh_frame(void) { return false; }

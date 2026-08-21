@@ -416,4 +416,8 @@ struct prctl_mm_map {
 # define PR_CFI_DISABLE		_BITUL(1)
 # define PR_CFI_LOCK		_BITUL(2)
 
+/* EH_FRAME management */
+#define PR_REGISTER_EH_FRAME		82
+#define PR_UNREGISTER_EH_FRAME		83
+
 #endif /* _LINUX_PRCTL_H */
