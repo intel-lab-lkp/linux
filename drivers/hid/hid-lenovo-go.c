@@ -725,6 +725,11 @@ static int mcu_property_out(struct hid_device *hdev, u8 id, u8 command,
 	int timeout = 50;
 	int ret;
 
+	/* The FPS mode DPI request does not contain a device byte. */
+	if (id == MCU_CONFIG_DATA && command == SET_DPI_CFG &&
+	    index == FPS_MODE_DPI)
+		header_size--;
+
 	if (header_size + len > GO_PACKET_SIZE)
 		return -EINVAL;
 
