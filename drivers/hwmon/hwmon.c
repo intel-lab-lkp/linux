@@ -336,9 +336,14 @@ static int hwmon_attr_base(enum hwmon_sensor_types type)
  * attached to an i2c client device.
  */
 
-static int hwmon_match_device(struct device *dev, const void *data)
+static bool is_hwmon_device(struct device *dev)
 {
 	return dev->class == &hwmon_class;
+}
+
+static int hwmon_match_device(struct device *dev, const void *data)
+{
+	return is_hwmon_device(dev);
 }
 
 static ssize_t pec_show(struct device *dev, const struct device_attribute *dummy,
@@ -781,6 +786,9 @@ int hwmon_notify_event(struct device *dev, enum hwmon_sensor_types type,
 	const char *template;
 	int base;
 
+	if (WARN(!is_hwmon_device(dev), "%s is not a hardware monitoring device\n",
+		 dev_name(dev)))
+		return -EINVAL;
 	if (type >= ARRAY_SIZE(__templates))
 		return -EINVAL;
 	if (attr >= __templates_size[type])
