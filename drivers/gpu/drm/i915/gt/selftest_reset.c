@@ -30,6 +30,7 @@ __igt_reset_stolen(struct intel_gt *gt,
 	void *tmp;
 	u32 *crc;
 	int err;
+	bool unused;
 
 	if (!drm_mm_node_allocated(&ggtt->error_capture))
 		return 0;
@@ -95,9 +96,12 @@ __igt_reset_stolen(struct intel_gt *gt,
 				      ggtt->error_capture.start,
 				      PAGE_SIZE);
 
-		if (!__drm_mm_interval_first(&gt->i915->mm.stolen,
-					     page << PAGE_SHIFT,
-					     ((page + 1) << PAGE_SHIFT) - 1))
+		mutex_lock(&gt->i915->mm.stolen_lock);
+		unused = !__drm_mm_interval_first(&gt->i915->mm.stolen,
+						  page << PAGE_SHIFT,
+						  ((page + 1) << PAGE_SHIFT) - 1);
+		mutex_unlock(&gt->i915->mm.stolen_lock);
+		if (unused)
 			memset_io(s, STACK_MAGIC, PAGE_SIZE);
 
 		in = (void __force *)s;
@@ -143,10 +147,12 @@ __igt_reset_stolen(struct intel_gt *gt,
 			in = tmp;
 		x = crc32_le(0, in, PAGE_SIZE);
 
-		if (x != crc[page] &&
-		    !__drm_mm_interval_first(&gt->i915->mm.stolen,
-					     page << PAGE_SHIFT,
-					     ((page + 1) << PAGE_SHIFT) - 1)) {
+		mutex_lock(&gt->i915->mm.stolen_lock);
+		unused = !__drm_mm_interval_first(&gt->i915->mm.stolen,
+						  page << PAGE_SHIFT,
+						  ((page + 1) << PAGE_SHIFT) - 1);
+		mutex_unlock(&gt->i915->mm.stolen_lock);
+		if (x != crc[page] && unused) {
 			pr_debug("unused stolen page %pa modified by GPU reset\n",
 				 &page);
 			if (count++ == 0)
