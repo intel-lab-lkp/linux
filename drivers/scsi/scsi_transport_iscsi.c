@@ -2128,6 +2128,13 @@ static void iscsi_conn_release(struct device *dev)
 	struct device *parent = conn->dev.parent;
 
 	ISCSI_DBG_TRANS_CONN(conn, "Releasing conn\n");
+	/*
+	 * iscsi_conn_error_event() may have queued conn->cleanup_work without
+	 * holding a reference to the connection. Cancel any pending or
+	 * running work before freeing the connection to prevent a
+	 * use-after-free.
+	 */
+	cancel_work_sync(&conn->cleanup_work);
 	kfree(conn);
 	put_device(parent);
 }
