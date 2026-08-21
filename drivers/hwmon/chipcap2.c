@@ -73,7 +73,11 @@
 
 struct cc2_rh_alarm_info {
 	bool low_alarm;
+	/* Serialize accesses to low_alarm from threaded IRQ and sysfs */
+	struct mutex low_alarm_lock;
 	bool high_alarm;
+	/* Serialize accesses to high_alarm from threaded IRQ and sysfs */
+	struct mutex high_alarm_lock;
 	bool low_alarm_visible;
 	bool high_alarm_visible;
 };
@@ -500,6 +504,7 @@ static irqreturn_t cc2_low_interrupt(int irq, void *data)
 	if (cc2->process_irqs) {
 		hwmon_notify_event(cc2->hwmon, hwmon_humidity,
 				   hwmon_humidity_min_alarm, CC2_CHAN_HUMIDITY);
+		guard(mutex)(&cc2->rh_alarm.low_alarm_lock);
 		cc2->rh_alarm.low_alarm = true;
 	}
 
@@ -513,6 +518,7 @@ static irqreturn_t cc2_high_interrupt(int irq, void *data)
 	if (cc2->process_irqs) {
 		hwmon_notify_event(cc2->hwmon, hwmon_humidity,
 				   hwmon_humidity_max_alarm, CC2_CHAN_HUMIDITY);
+		guard(mutex)(&cc2->rh_alarm.high_alarm_lock);
 		cc2->rh_alarm.high_alarm = true;
 	}
 
@@ -529,11 +535,13 @@ static int cc2_humidity_min_alarm_status(struct cc2_data *data, long *val)
 	if (ret < 0)
 		return ret;
 
-	if (data->rh_alarm.low_alarm) {
-		*val = (measurement < min_hyst) ? 1 : 0;
-		data->rh_alarm.low_alarm = *val;
-	} else {
-		*val = 0;
+	scoped_guard(mutex, &data->rh_alarm.low_alarm_lock) {
+		if (data->rh_alarm.low_alarm) {
+			*val = (measurement < min_hyst) ? 1 : 0;
+			data->rh_alarm.low_alarm = *val;
+		} else {
+			*val = 0;
+		}
 	}
 
 	return 0;
@@ -549,11 +557,13 @@ static int cc2_humidity_max_alarm_status(struct cc2_data *data, long *val)
 	if (ret < 0)
 		return ret;
 
-	if (data->rh_alarm.high_alarm) {
-		*val = (measurement > max_hyst) ? 1 : 0;
-		data->rh_alarm.high_alarm = *val;
-	} else {
-		*val = 0;
+	scoped_guard(mutex, &data->rh_alarm.high_alarm_lock) {
+		if (data->rh_alarm.high_alarm) {
+			*val = (measurement > max_hyst) ? 1 : 0;
+			data->rh_alarm.high_alarm = *val;
+		} else {
+			*val = 0;
+		}
 	}
 
 	return 0;
@@ -719,6 +729,14 @@ static int cc2_probe(struct i2c_client *client)
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
+
+	ret = devm_mutex_init(dev, &data->rh_alarm.low_alarm_lock);
+	if (ret)
+		return ret;
+
+	ret = devm_mutex_init(dev, &data->rh_alarm.high_alarm_lock);
+	if (ret)
+		return ret;
 
 	i2c_set_clientdata(client, data);
 
