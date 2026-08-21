@@ -32,6 +32,7 @@ struct eh_frame_section {
 #define EH_FRAME_MT_FLAGS (MT_FLAGS_USE_RCU)
 
 #define INIT_MM_EH_FRAME .eh_frame_mt = MTREE_INIT(eh_frame_mt, EH_FRAME_MT_FLAGS),
+extern int eh_frame_dup_mm(struct mm_struct *mm, struct mm_struct *oldmm);
 extern void eh_frame_free_mm(struct mm_struct *mm);
 
 extern int eh_frame_add_section(unsigned long eh_frame_hdr_start,
@@ -51,6 +52,12 @@ static inline bool current_has_eh_frame(void)
 #else /* !CONFIG_HAVE_UNWIND_USER_EH_FRAME */
 
 #define INIT_MM_EH_FRAME
+
+static inline int eh_frame_dup_mm(struct mm_struct *mm, struct mm_struct *oldmm)
+{
+	return 0;
+}
+
 static inline void eh_frame_free_mm(struct mm_struct *mm) {}
 
 static inline int eh_frame_add_section(unsigned long eh_frame_hdr_start,

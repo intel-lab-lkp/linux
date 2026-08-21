@@ -41,6 +41,12 @@ static inline void dbg_init(struct eh_frame_section *sec)
 		sec->filename = kstrdup("(vma unknown???)", GFP_KERNEL_ACCOUNT);
 }
 
+static inline void dbg_dup(struct eh_frame_section *sec, struct eh_frame_section *oldsec)
+{
+	if (oldsec->filename)
+		sec->filename = kstrdup(oldsec->filename, GFP_KERNEL_ACCOUNT);
+}
+
 static inline void dbg_free(struct eh_frame_section *sec)
 {
 	kfree(sec->filename);
@@ -53,6 +59,7 @@ static inline void dbg_free(struct eh_frame_section *sec)
 #define dbg_sec_ehfh(args...)		no_printk(args)
 
 static inline void dbg_init(struct eh_frame_section *sec) {}
+static inline void dbg_dup(struct eh_frame_section *sec, struct eh_frame_section *oldsec) {}
 static inline void dbg_free(struct eh_frame_section *sec) {}
 
 #endif /* !CONFIG_DYNAMIC_DEBUG */

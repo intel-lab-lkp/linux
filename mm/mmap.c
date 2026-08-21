@@ -48,6 +48,7 @@
 #include <linux/sched/mm.h>
 #include <linux/ksm.h>
 #include <linux/memfd.h>
+#include <linux/eh_frame.h>
 
 #include <linux/uaccess.h>
 #include <asm/cacheflush.h>
@@ -1844,6 +1845,9 @@ __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 			goto loop_out;
 		}
 	}
+	retval = eh_frame_dup_mm(mm, oldmm);
+	if (retval)
+		goto loop_out;
 	/* a new mm has just been created */
 	retval = arch_dup_mmap(oldmm, mm);
 loop_out:
@@ -1893,6 +1897,7 @@ loop_out:
 			vm_unacct_memory(charge);
 		}
 		__mt_destroy(&mm->mm_mt);
+		eh_frame_free_mm(mm);
 		/*
 		 * The mm_struct is going to exit, but the locks will be dropped
 		 * first.  Set the mm_struct as unstable is advisable as it is

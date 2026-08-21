@@ -1501,6 +1501,54 @@ int eh_frame_remove_section(unsigned long eh_frame_hdr_start)
 	return 0;
 }
 
+static void __eh_frame_dup_section(struct eh_frame_section *sec,
+				   struct eh_frame_section *oldsec)
+{
+	sec->eh_frame_hdr_start	= oldsec->eh_frame_hdr_start;
+	sec->eh_frame_hdr_end	= oldsec->eh_frame_hdr_end;
+	sec->text_start		= oldsec->text_start;
+	sec->text_end		= oldsec->text_end;
+
+	sec->eh_frame_start		= oldsec->eh_frame_start;
+	sec->eh_frame_vma_end		= oldsec->eh_frame_vma_end;
+	sec->binary_search_table_start	= oldsec->binary_search_table_start;
+	sec->binary_search_table_end	= oldsec->binary_search_table_end;
+	sec->fde_count			= oldsec->fde_count;
+	sec->binary_search_table_enc	= oldsec->binary_search_table_enc;
+
+	dbg_dup(sec, oldsec);
+}
+
+int eh_frame_dup_mm(struct mm_struct *mm, struct mm_struct *oldmm)
+{
+	struct eh_frame_section *sec, *oldsec;
+	unsigned long index = 0;
+	int ret;
+
+	guard(srcu)(&eh_frame_srcu);
+
+	mt_for_each(&oldmm->eh_frame_mt, oldsec, index, ULONG_MAX) {
+		sec = kzalloc(sizeof(*sec), GFP_KERNEL_ACCOUNT);
+		if (!sec)
+			return -ENOMEM;
+
+		__eh_frame_dup_section(sec, oldsec);
+
+		ret = mtree_insert_range(&mm->eh_frame_mt,
+					 sec->text_start,
+					 sec->text_end - 1,
+					 sec, GFP_KERNEL_ACCOUNT);
+		if (ret)
+			goto err_free;
+	}
+
+	return 0;
+
+err_free:
+	free_section(sec);
+	return ret;
+}
+
 void eh_frame_free_mm(struct mm_struct *mm)
 {
 	struct eh_frame_section *sec;
