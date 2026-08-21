@@ -575,6 +575,9 @@ int u_audio_get_playback_srate(struct g_audio *audio_dev, u32 *val)
 	struct uac_rtd_params *prm;
 	unsigned long flags;
 
+	if (!audio_dev->params.p_chmask)
+		return -EOPNOTSUPP;
+
 	prm = &uac->p_prm;
 	spin_lock_irqsave(&prm->lock, flags);
 	*val = prm->srate;
