@@ -150,7 +150,7 @@ static int idletimer_tg_create(struct idletimer_tg_info *info)
 {
 	int ret;
 
-	info->timer = kzalloc_obj(*info->timer);
+	info->timer = kzalloc_obj(*info->timer, GFP_KERNEL_ACCOUNT);
 	if (!info->timer) {
 		ret = -ENOMEM;
 		goto out;
@@ -161,7 +161,7 @@ static int idletimer_tg_create(struct idletimer_tg_info *info)
 		goto out_free_timer;
 
 	sysfs_attr_init(&info->timer->attr.attr);
-	info->timer->attr.attr.name = kstrdup(info->label, GFP_KERNEL);
+	info->timer->attr.attr.name = kstrdup(info->label, GFP_KERNEL_ACCOUNT);
 	if (!info->timer->attr.attr.name) {
 		ret = -ENOMEM;
 		goto out_free_timer;
@@ -199,7 +199,7 @@ static int idletimer_tg_create_v1(struct idletimer_tg_info_v1 *info)
 {
 	int ret;
 
-	info->timer = kmalloc_obj(*info->timer);
+	info->timer = kmalloc_obj(*info->timer, GFP_KERNEL_ACCOUNT);
 	if (!info->timer) {
 		ret = -ENOMEM;
 		goto out;
@@ -210,7 +210,7 @@ static int idletimer_tg_create_v1(struct idletimer_tg_info_v1 *info)
 		goto out_free_timer;
 
 	sysfs_attr_init(&info->timer->attr.attr);
-	info->timer->attr.attr.name = kstrdup(info->label, GFP_KERNEL);
+	info->timer->attr.attr.name = kstrdup(info->label, GFP_KERNEL_ACCOUNT);
 	if (!info->timer->attr.attr.name) {
 		ret = -ENOMEM;
 		goto out_free_timer;
