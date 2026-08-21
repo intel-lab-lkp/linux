@@ -21,6 +21,7 @@
 #include <linux/led-class-multicolor.h>
 #include <linux/mutex.h>
 #include <linux/printk.h>
+#include <linux/spinlock.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
 #include <linux/unaligned.h>
@@ -31,13 +32,30 @@
 #include "hid-ids.h"
 
 #define GO_GP_INTF_IN		0x83
+#define GO_INPUT_REPORT_ID	0x04
 #define GO_OUTPUT_REPORT_ID	0x05
 #define GO_GP_RESET_SUCCESS	0x01
 #define GO_PACKET_SIZE		64
 
+/* Lenovo replies identify a command and a sub-command, but have no sequence. */
+struct hid_go_cmd {
+	struct completion done;
+	spinlock_t lock; /* protects fields below */
+	bool pending;
+	u8 id;
+	u8 command;
+	u8 sub_command;
+	u8 device;
+	int result;
+};
+
+static struct hid_go_cmd go_cmd = {
+	.done = COMPLETION_INITIALIZER(go_cmd.done),
+	.lock = __SPIN_LOCK_UNLOCKED(go_cmd.lock),
+};
+
 static struct hid_go_cfg {
 	struct delayed_work go_cfg_setup;
-	struct completion send_cmd_complete;
 	struct led_classdev *led_cdev;
 	struct hid_device *hdev;
 	struct mutex cfg_mutex; /*ensure single synchronous output report*/
@@ -330,6 +348,72 @@ static const char *const os_mode_text[] = {
 	[WINDOWS] = "windows",
 	[LINUX] = "linux",
 };
+
+static void hid_go_cmd_arm(u8 id, u8 command, u8 sub_command, u8 device)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&go_cmd.lock, flags);
+	reinit_completion(&go_cmd.done);
+	go_cmd.pending = true;
+	go_cmd.id = id;
+	go_cmd.command = command;
+	go_cmd.sub_command = sub_command;
+	go_cmd.device = device;
+	spin_unlock_irqrestore(&go_cmd.lock, flags);
+}
+
+static void hid_go_cmd_consume(const struct command_report *cmd_rep, int result)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&go_cmd.lock, flags);
+	if (go_cmd.pending && cmd_rep->id == go_cmd.id &&
+	    cmd_rep->cmd == go_cmd.command &&
+	    cmd_rep->sub_cmd == go_cmd.sub_command &&
+	    cmd_rep->device_type == go_cmd.device) {
+		go_cmd.pending = false;
+		go_cmd.result = result;
+		complete(&go_cmd.done);
+	}
+	spin_unlock_irqrestore(&go_cmd.lock, flags);
+}
+
+static int hid_go_cmd_finish(long wait_result)
+{
+	unsigned long flags;
+	int ret;
+
+	spin_lock_irqsave(&go_cmd.lock, flags);
+	if (wait_result <= 0) {
+		go_cmd.pending = false;
+		ret = wait_result < 0 ? wait_result : -ETIMEDOUT;
+	} else {
+		ret = go_cmd.result;
+	}
+	spin_unlock_irqrestore(&go_cmd.lock, flags);
+	return ret;
+}
+
+static int hid_go_cmd_cancel(int result)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&go_cmd.lock, flags);
+	go_cmd.pending = false;
+	spin_unlock_irqrestore(&go_cmd.lock, flags);
+	return result;
+}
+
+static int hid_go_send_output_report(struct hid_device *hdev, u8 *packet)
+{
+	int ret;
+
+	ret = hid_hw_output_report(hdev, packet, GO_PACKET_SIZE);
+	if (ret < 0)
+		return ret;
+	return ret == GO_PACKET_SIZE ? 0 : -EINVAL;
+}
 
 static int hid_go_version_event(struct command_report *cmd_rep)
 {
@@ -658,6 +742,8 @@ static int hid_go_raw_event(struct hid_device *hdev, struct hid_report *report,
 
 	if (size != GO_PACKET_SIZE)
 		goto passthrough;
+	if (data[0] != GO_INPUT_REPORT_ID)
+		goto passthrough;
 
 	ep = get_endpoint_address(hdev);
 	if (ep != GO_GP_INTF_IN)
@@ -709,7 +795,7 @@ static int hid_go_raw_event(struct hid_device *hdev, struct hid_report *report,
 	dev_dbg(&hdev->dev, "Rx data as raw input report: [%*ph]\n",
 		GO_PACKET_SIZE, data);
 
-	complete(&drvdata.send_cmd_complete);
+	hid_go_cmd_consume(cmd_rep, ret);
 	return ret;
 
 passthrough:
@@ -725,6 +811,7 @@ static int mcu_property_out(struct hid_device *hdev, u8 id, u8 command,
 	u8 header[] = { GO_OUTPUT_REPORT_ID, id, command, index, device };
 	size_t header_size = ARRAY_SIZE(header);
 	int timeout = 50;
+	long wait_result;
 	int ret;
 
 	/* The FPS mode DPI request does not contain a device byte. */
@@ -747,22 +834,19 @@ static int mcu_property_out(struct hid_device *hdev, u8 id, u8 command,
 	dev_dbg(&hdev->dev, "Send data as raw output report: [%*ph]\n",
 		GO_PACKET_SIZE, dmabuf);
 
-	ret = hid_hw_output_report(hdev, dmabuf, GO_PACKET_SIZE);
-	if (ret < 0)
-		return ret;
+	if (id == MCU_CONFIG_DATA &&
+	    ((command == SET_TRIGGER_CFG && index == TRIGGER_CALIBRATE) ||
+	     (command == SET_JOYSTICK_CFG && index == JOYSTICK_CALIBRATE) ||
+	     (command == SET_GYRO_CFG && index == GYRO_CALIBRATE)))
+		return hid_go_send_output_report(hdev, dmabuf);
 
-	ret = ret == GO_PACKET_SIZE ? 0 : -EINVAL;
+	hid_go_cmd_arm(id, command, index, device);
+	ret = hid_go_send_output_report(hdev, dmabuf);
 	if (ret)
-		return ret;
-
-	ret = wait_for_completion_interruptible_timeout(&drvdata.send_cmd_complete,
-							msecs_to_jiffies(timeout));
-
-	if (ret == 0) /* timeout occurred */
-		ret = -EBUSY;
-
-	reinit_completion(&drvdata.send_cmd_complete);
-	return 0;
+		return hid_go_cmd_cancel(ret);
+	wait_result = wait_for_completion_interruptible_timeout(&go_cmd.done,
+								msecs_to_jiffies(timeout));
+	return hid_go_cmd_finish(wait_result);
 }
 
 static ssize_t version_show(struct device *dev, struct device_attribute *attr,
@@ -2394,8 +2478,6 @@ static int hid_go_cfg_probe(struct hid_device *hdev,
 	}
 
 	drvdata.led_cdev = &go_cdev_rgb.led_cdev;
-
-	init_completion(&drvdata.send_cmd_complete);
 
 	/* Executing calls prior to returning from probe will lock the MCU. Schedule
 	 * initial data call after probe has completed and MCU can accept calls.
