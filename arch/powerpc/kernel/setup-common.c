@@ -35,6 +35,8 @@
 #include <linux/of_irq.h>
 #include <linux/hugetlb.h>
 #include <linux/pgtable.h>
+#include <linux/libfdt.h>
+#include <linux/kexec_handover.h>
 #include <asm/io.h>
 #include <asm/paca.h>
 #include <asm/processor.h>
@@ -910,6 +912,33 @@ static void __init smp_setup_pacas(void)
 }
 #endif
 
+#ifdef CONFIG_PPC64
+static void __init init_kho(const void *fdt)
+{
+	unsigned long node;
+	u64 fdt_start, fdt_size, scratch_start, scratch_size;
+
+	if (!IS_ENABLED(CONFIG_KEXEC_HANDOVER))
+		return;
+
+	/* Find and verify the /chosen node, same as early_init_dt_scan_chosen() does */
+	node = fdt_path_offset(fdt, "/chosen");
+	if ((long)node < 0)
+		node = fdt_path_offset(fdt, "/chosen@0");
+	if ((long)node < 0)
+		return;
+
+	if (!of_flat_dt_get_addr_size(node, "linux,kho-fdt",
+				      &fdt_start, &fdt_size))
+		return;
+	if (!of_flat_dt_get_addr_size(node, "linux,kho-scratch",
+				      &scratch_start, &scratch_size))
+		return;
+
+	kho_populate(fdt_start, fdt_size, scratch_start, scratch_size);
+}
+#endif
+
 /*
  * Called into from start_kernel this initializes memblock, which is used
  * to manage page allocation until mem_init is called.
@@ -922,6 +951,10 @@ void __init setup_arch(char **cmdline_p)
 
 	/* Set a half-reasonable default so udelay does something sensible */
 	loops_per_jiffy = 500000000 / HZ;
+
+#ifdef CONFIG_PPC64
+	init_kho(initial_boot_params);
+#endif
 
 	/* Unflatten the device-tree passed by prom_init or kexec */
 	unflatten_device_tree();
