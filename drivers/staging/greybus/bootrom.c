@@ -245,7 +245,7 @@ static int gb_bootrom_get_firmware(struct gb_operation *op)
 	struct gb_bootrom_get_firmware_request *firmware_request;
 	struct device *dev = &op->connection->bundle->dev;
 	unsigned int offset, size;
-	enum next_request_type next_request;
+	enum next_request_type next_request = NEXT_REQ_GET_FIRMWARE;
 	u8 *firmware_response;
 	int ret = 0;
 
@@ -293,16 +293,14 @@ static int gb_bootrom_get_firmware(struct gb_operation *op)
 	dev_dbg(dev, "responding with firmware (offs = %u, size = %u)\n",
 		offset, size);
 
+	if (offset + size == fw->size)
+		next_request = NEXT_REQ_READY_TO_BOOT;
+
 unlock:
 	mutex_unlock(&bootrom->mutex);
 
 queue_work:
 	/* Refresh timeout */
-	if (!ret && (offset + size == fw->size))
-		next_request = NEXT_REQ_READY_TO_BOOT;
-	else
-		next_request = NEXT_REQ_GET_FIRMWARE;
-
 	gb_bootrom_set_timeout(bootrom, next_request, NEXT_REQ_TIMEOUT_MS);
 
 	return ret;
