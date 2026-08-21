@@ -129,6 +129,11 @@ enum {
 	 * Enable legacy local pids.events.
 	 */
 	CGRP_ROOT_PIDS_LOCAL_EVENTS = (1 << 20),
+
+	/*
+	 * Enable cma accounting for the memory controller.
+	 */
+	CGRP_ROOT_MEMORY_CMA_ACCOUNTING = (1 << 21),
 };
 
 /* cftype->flags */

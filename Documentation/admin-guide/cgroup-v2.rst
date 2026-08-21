@@ -246,6 +246,26 @@ cgroup v2 currently supports the following mount options.
           will not be tracked by the memory controller (even if cgroup
           v2 is remounted later on).
 
+  memory_cma_accounting
+        Count CMA memory usage towards the cgroup's overall memory usage for
+        the memory controller, and expose per-CMA-area usage counters. This
+        behavior is opt-in, so as to not cause regression on existing setups.
+
+        A few caveats to keep in mind:
+
+        * CMA areas are reserved at boot time, memory is only charged to a
+          cgroup when a CMA allocation is performed on its behalf.
+        * CMA pages allocated while this option is not enabled will not be
+          tracked by the memory controller, even if cgroup v2 is remounted
+          later on with this option. Charges happen at allocation.
+        * CMA allocations are charged both to the cgroup's memory counter
+          (limited by memory.max) and the per-area CMA counter (limited by
+          memory.cma.<area>.max). Hitting either limit can cause an allocation
+          to fail. If CMA usage pushes the cgroup over memory.high or
+          memory.max, the memory controller will attempt to reclaim other
+          memory only. CMA memory charged to the cgroup is not reclaimable.
+          Limits should be sized to accommodate the expected CMA pressure.
+
   pids_localevents
         The option restores v1-like behavior of pids.events:max, that is only
         local (inside cgroup proper) fork failures are counted. Without this
