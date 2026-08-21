@@ -12,6 +12,19 @@
 #include "dwarf-regs.h"
 #include "strbuf.h"
 #include "string2.h"
+#include "symbol.h"
+
+#ifndef DW_AT_vtable_elem_index
+#define DW_AT_vtable_elem_index 0x8c
+#endif
+
+/* Added in DWARF 5, may be missing in older elfutils */
+#ifndef DW_LANG_C_plus_plus_17
+#define DW_LANG_C_plus_plus_17 0x2a
+#endif
+#ifndef DW_LANG_C_plus_plus_20
+#define DW_LANG_C_plus_plus_20 0x2b
+#endif
 
 /**
  * cu_find_realpath - Find the realpath of the target file
@@ -60,12 +73,127 @@ const char *cu_get_comp_dir(Dwarf_Die *cu_die)
 	return dwarf_formstring(&attr);
 }
 
+Dwarf_Word cu_get_language(Dwarf_Die *cu_die)
+{
+	Dwarf_Attribute attr;
+	Dwarf_Word lang;
+
+	if (dwarf_attr(cu_die, DW_AT_language, &attr) == NULL)
+		return 0;
+
+	if (dwarf_formudata(&attr, &lang) != 0)
+		return 0;
+
+	return lang;
+}
+
+bool cu_is_cplusplus(Dwarf_Die *cu_die)
+{
+	Dwarf_Word lang = cu_get_language(cu_die);
+
+	switch (lang) {
+	case DW_LANG_C_plus_plus:
+	case DW_LANG_C_plus_plus_03:
+	case DW_LANG_C_plus_plus_11:
+	case DW_LANG_C_plus_plus_14:
+	case DW_LANG_C_plus_plus_17:
+	case DW_LANG_C_plus_plus_20:
+		return true;
+	default:
+		return false;
+	}
+}
+
 bool die_is_compound_type(Dwarf_Die *type_die)
 {
 	int tag = dwarf_tag(type_die);
 
 	return tag == DW_TAG_structure_type || tag == DW_TAG_union_type ||
 	       tag == DW_TAG_class_type;
+}
+
+static int __die_find_inheritance_cb(Dwarf_Die *die_mem, void *arg)
+{
+	int tag = dwarf_tag(die_mem);
+
+	if (tag == DW_TAG_inheritance) {
+		*(Dwarf_Die *)arg = *die_mem;
+		return DIE_FIND_CB_END;
+	}
+
+	return DIE_FIND_CB_SIBLING;
+}
+
+Dwarf_Die *die_get_base_class(Dwarf_Die *class_die, Dwarf_Die *base_die, int *offset)
+{
+	Dwarf_Die inherit_die;
+	Dwarf_Attribute attr;
+	Dwarf_Word loc;
+
+	if (die_find_child(class_die, __die_find_inheritance_cb,
+			   &inherit_die, &inherit_die) == NULL)
+		return NULL;
+
+	if (__die_get_real_type(&inherit_die, base_die) == NULL)
+		return NULL;
+
+	if (dwarf_attr_integrate(&inherit_die, DW_AT_data_member_location, &attr) &&
+	    dwarf_formudata(&attr, &loc) == 0) {
+		*offset = loc;
+	} else {
+		*offset = 0;
+	}
+
+	return base_die;
+}
+
+int die_get_vtable_index(Dwarf_Die *func_die, int *index)
+{
+	Dwarf_Attribute attr;
+	Dwarf_Word idx;
+
+	/* Try DW_AT_vtable_elem_index first (DWARF 5+) */
+	if (dwarf_attr(func_die, DW_AT_vtable_elem_index, &attr) &&
+	    dwarf_formudata(&attr, &idx) == 0) {
+		*index = idx;
+		return 0;
+	}
+
+	/* Fallback to DW_AT_vtable_elem_location (older DWARF) */
+	if (dwarf_attr(func_die, DW_AT_vtable_elem_location, &attr)) {
+		Dwarf_Op *expr;
+		size_t expr_len;
+
+		/* Compile often emits it as a simple constant expression or block */
+		if (dwarf_getlocation(&attr, &expr, &expr_len) == 0 && expr_len > 0) {
+			if (expr[0].atom == DW_OP_constu) {
+				*index = expr[0].number;
+				return 0;
+			}
+			if (expr[0].atom >= DW_OP_lit0 && expr[0].atom <= DW_OP_lit31) {
+				*index = expr[0].atom - DW_OP_lit0;
+				return 0;
+			}
+		}
+	}
+
+	return -1;
+}
+
+Dwarf_Die *die_get_parent(Dwarf_Die *die, Dwarf_Die *parent_die)
+{
+	Dwarf_Die *scopes = NULL;
+	int n = dwarf_getscopes_die(die, &scopes);
+
+	if (n <= 1) {
+		free(scopes);
+		return NULL;
+	}
+
+	/* scopes[0] is the DIE itself, scopes[1] is the parent */
+	*parent_die = scopes[1];
+	free(scopes);
+	return parent_die;
 }
 
 /* Unlike dwarf_getsrc_die(), cu_getsrc_die() only returns statement line */
@@ -2162,6 +2290,70 @@ Dwarf_Die *die_get_member_type(Dwarf_Die *type_die, int offset,
 	}
 	*die_mem = mb_type;
 	return die_mem;
+}
+
+Dwarf_Die *die_find_member_by_offset(Dwarf_Die *type_die, int offset, Dwarf_Die *member_die)
+{
+	if (!die_is_compound_type(type_die))
+		return NULL;
+
+	return die_find_child(type_die, __die_find_member_offset_cb,
+			      (void *)(long)offset, member_die);
+}
+
+struct find_virtual_func_data {
+	int index;
+	Dwarf_Die func_die;
+	bool found;
+};
+
+static int __die_find_virtual_func_cb(Dwarf_Die *die_mem, void *arg)
+{
+	struct find_virtual_func_data *ad = arg;
+	int tag = dwarf_tag(die_mem);
+
+	if (tag == DW_TAG_subprogram) {
+		int idx;
+
+		if (die_get_vtable_index(die_mem, &idx) == 0 && idx == ad->index) {
+			ad->func_die = *die_mem;
+			ad->found = true;
+			return DIE_FIND_CB_END;
+		}
+	}
+
+	if (tag == DW_TAG_inheritance) {
+		Dwarf_Die base_type;
+
+		if (__die_get_real_type(die_mem, &base_type)) {
+			if (die_find_child(&base_type,
+					   __die_find_virtual_func_cb,
+					   ad, &ad->func_die))
+				return DIE_FIND_CB_END;
+		}
+	}
+
+	return DIE_FIND_CB_SIBLING;
+}
+
+Dwarf_Die *die_find_virtual_func(Dwarf_Die *class_die, int index, Dwarf_Die *die_mem)
+{
+	struct find_virtual_func_data ad = {
+		.index = index,
+		.found = false,
+	};
+
+	if (die_find_child(class_die, __die_find_virtual_func_cb, &ad, die_mem))
+		return die_mem;
+
+	return NULL;
+}
+
+bool die_is_vptr_member(Dwarf_Die *die)
+{
+	const char *name = dwarf_diename(die);
+
+	return name && strstarts(name, "_vptr");
 }
 
 /**

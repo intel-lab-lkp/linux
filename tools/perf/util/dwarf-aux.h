@@ -23,8 +23,32 @@ const char *cu_find_realpath(Dwarf_Die *cu_die, const char *fname);
 /* Get DW_AT_comp_dir (should be NULL with older gcc) */
 const char *cu_get_comp_dir(Dwarf_Die *cu_die);
 
+/* Get source language of CU */
+Dwarf_Word cu_get_language(Dwarf_Die *cu_die);
+
+/* Check if CU is C++ */
+bool cu_is_cplusplus(Dwarf_Die *cu_die);
+
 /* Check if DIE is a compound type (structure, union, or class) */
 bool die_is_compound_type(Dwarf_Die *type_die);
+
+/* Get base class of a class DIE */
+Dwarf_Die *die_get_base_class(Dwarf_Die *class_die, Dwarf_Die *base_die, int *offset);
+
+/* Get vtable index of a virtual function */
+int die_get_vtable_index(Dwarf_Die *func_die, int *index);
+
+/* Get parent DIE */
+Dwarf_Die *die_get_parent(Dwarf_Die *die, Dwarf_Die *parent_die);
+
+/* Find member DIE by offset */
+Dwarf_Die *die_find_member_by_offset(Dwarf_Die *type_die, int offset, Dwarf_Die *member_die);
+
+/* Find virtual function by vtable index */
+Dwarf_Die *die_find_virtual_func(Dwarf_Die *class_die, int index, Dwarf_Die *die_mem);
+
+/* Check if member DIE is a vtable pointer (_vptr) */
+bool die_is_vptr_member(Dwarf_Die *die);
 
 /* Get a line number and file name for given address */
 int cu_find_lineinfo(Dwarf_Die *cudie, Dwarf_Addr addr,
