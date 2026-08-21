@@ -482,8 +482,13 @@ static int __sprint_symbol(char *buffer, unsigned long address,
 	address += symbol_offset;
 	len = kallsyms_lookup_buildid(address, &size, &offset, &modname, &buildid,
 				       buffer);
-	if (!len)
+	if (!len) {
+		/*
+		 * Print the raw pointer to allow post-mortem analysis of corrupted
+		 * pointer in backtraces.
+		 */
 		return sprintf(buffer, "0x%lx", address - symbol_offset);
+	}
 
 	offset -= symbol_offset;
 
