@@ -14,6 +14,7 @@
 #include <linux/pfn.h>
 #include <linux/debugfs.h>
 #include <linux/kmemleak.h>
+#include <linux/memory_hotplug.h>
 #include <linux/seq_file.h>
 #include <linux/memblock.h>
 #include <linux/mutex.h>
@@ -2815,6 +2816,7 @@ static int memblock_debug_show(struct seq_file *m, void *private)
 	phys_addr_t end;
 	bool first;
 
+	get_online_mems();
 	for (i = 0; i < type->cnt; i++) {
 		reg = &type->regions[i];
 		end = reg->base + reg->size - 1;
@@ -2843,6 +2845,7 @@ static int memblock_debug_show(struct seq_file *m, void *private)
 			seq_puts(m, "NONE\n");
 		}
 	}
+	put_online_mems();
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(memblock_debug);
