@@ -459,6 +459,9 @@ static int rvu_rep_open(struct net_device *dev)
 	netif_carrier_on(dev);
 	netif_tx_start_all_queues(dev);
 
+	if (rep->pcifunc & RVU_PFVF_FUNC_MASK)
+		return 0;
+
 	evt.event = RVU_EVENT_PORT_STATE;
 	evt.evt_data.port_state = 1;
 	evt.pcifunc = rep->pcifunc;
@@ -477,6 +480,9 @@ static int rvu_rep_stop(struct net_device *dev)
 
 	netif_carrier_off(dev);
 	netif_tx_disable(dev);
+
+	if (rep->pcifunc & RVU_PFVF_FUNC_MASK)
+		return 0;
 
 	evt.event = RVU_EVENT_PORT_STATE;
 	evt.pcifunc = rep->pcifunc;

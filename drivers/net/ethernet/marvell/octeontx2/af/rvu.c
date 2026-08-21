@@ -3709,6 +3709,10 @@ static void rvu_remove(struct pci_dev *pdev)
 	rvu_unregister_dl(rvu);
 	rvu_unregister_interrupts(rvu);
 	rvu_flr_wq_destroy(rvu);
+	if (rvu->rep_evt_wq) {
+		destroy_workqueue(rvu->rep_evt_wq);
+		rvu->rep_evt_wq = NULL;
+	}
 	rvu_cgx_exit(rvu);
 	rvu_fwdata_exit(rvu);
 	rvu_mcs_exit(rvu);
