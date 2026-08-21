@@ -47,7 +47,7 @@ static irqreturn_t pm80x_onkey_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static SIMPLE_DEV_PM_OPS(pm80x_onkey_pm_ops, pm80x_dev_suspend,
+static DEFINE_SIMPLE_DEV_PM_OPS(pm80x_onkey_pm_ops, pm80x_dev_suspend,
 			 pm80x_dev_resume);
 
 static int pm80x_onkey_probe(struct platform_device *pdev)
@@ -138,7 +138,7 @@ static void pm80x_onkey_remove(struct platform_device *pdev)
 static struct platform_driver pm80x_onkey_driver = {
 	.driver = {
 		   .name = "88pm80x-onkey",
-		   .pm = &pm80x_onkey_pm_ops,
+		   .pm = pm_sleep_ptr(&pm80x_onkey_pm_ops),
 		   },
 	.probe = pm80x_onkey_probe,
 	.remove = pm80x_onkey_remove,

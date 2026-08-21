@@ -193,7 +193,7 @@ static void bbnsm_pwrkey_remove(struct platform_device *pdev)
 	device_init_wakeup(&pdev->dev, false);
 }
 
-static int __maybe_unused bbnsm_pwrkey_suspend(struct device *dev)
+static int bbnsm_pwrkey_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct bbnsm_pwrkey *bbnsm = platform_get_drvdata(pdev);
@@ -203,7 +203,7 @@ static int __maybe_unused bbnsm_pwrkey_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused bbnsm_pwrkey_resume(struct device *dev)
+static int bbnsm_pwrkey_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct bbnsm_pwrkey *bbnsm = platform_get_drvdata(pdev);
@@ -213,7 +213,7 @@ static int __maybe_unused bbnsm_pwrkey_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(bbnsm_pwrkey_pm_ops, bbnsm_pwrkey_suspend,
+static DEFINE_SIMPLE_DEV_PM_OPS(bbnsm_pwrkey_pm_ops, bbnsm_pwrkey_suspend,
 		bbnsm_pwrkey_resume);
 
 static const struct of_device_id bbnsm_pwrkey_ids[] = {
@@ -225,7 +225,7 @@ MODULE_DEVICE_TABLE(of, bbnsm_pwrkey_ids);
 static struct platform_driver bbnsm_pwrkey_driver = {
 	.driver = {
 		.name = "bbnsm_pwrkey",
-		.pm = &bbnsm_pwrkey_pm_ops,
+		.pm = pm_sleep_ptr(&bbnsm_pwrkey_pm_ops),
 		.of_match_table = bbnsm_pwrkey_ids,
 	},
 	.probe = bbnsm_pwrkey_probe,
