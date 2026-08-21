@@ -905,6 +905,13 @@ ext4_find_extent(struct inode *inode, ext4_lblk_t block,
 		ret = -EFSCORRUPTED;
 		goto err;
 	}
+	/* ext4_iget() skips extent validation during fast commit replay. */
+	if (unlikely((EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY) &&
+		     ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))) {
+		ret = ext4_ext_check(inode, eh, depth, 0);
+		if (ret)
+			goto err;
+	}
 
 	if (path) {
 		ext4_ext_drop_refs(path);
