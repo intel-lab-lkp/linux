@@ -169,7 +169,7 @@ static unsigned int spa_nr_entries;
 static DEFINE_MUTEX(fmpm_update_mutex);
 
 #define for_each_fru(i, rec) \
-	for (i = 0; rec = fru_records[i], i < max_nr_fru; i++)
+	for (i = 0; i < max_nr_fru && ((rec = fru_records[i]), 1); i++)
 
 static inline u32 get_fmp_len(struct fru_rec *rec)
 {
