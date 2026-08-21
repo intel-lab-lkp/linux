@@ -43,9 +43,17 @@ module_param_named(vram_pushbuf, nouveau_vram_pushbuf, int, 0400);
 void
 nouveau_channel_kill(struct nouveau_channel *chan)
 {
+	struct nouveau_fence_chan *fctx;
+
 	atomic_set(&chan->killed, 1);
-	if (chan->fence)
-		nouveau_fence_context_kill(chan->fence, -ENODEV);
+
+	/* Pairs with the smp_mb() in nouveau_fence_context_arm(). */
+	smp_mb();
+
+	fctx = READ_ONCE(chan->fence);
+	/* Pairs with the smp_store_release() there. */
+	if (fctx && smp_load_acquire(&fctx->ready))
+		nouveau_fence_context_kill(fctx, -ENODEV);
 }
 
 static int
@@ -494,7 +502,12 @@ nouveau_channel_init(struct nouveau_channel *chan, u32 vram, u32 gart)
 	}
 
 	/* initialise synchronisation */
-	return nouveau_fence(drm)->context_new(chan);
+	ret = nouveau_fence(drm)->context_new(chan);
+	if (ret)
+		return ret;
+
+	nouveau_fence_context_arm(chan);
+	return 0;
 }
 
 int

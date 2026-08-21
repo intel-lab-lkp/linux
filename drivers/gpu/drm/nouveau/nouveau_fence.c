@@ -93,6 +93,25 @@ nouveau_fence_context_kill(struct nouveau_fence_chan *fctx, int error)
 	spin_unlock_irqrestore(&fctx->lock, flags);
 }
 
+/*
+ * Declare a finished fence context killable.  A kill can arrive while the
+ * caller is still building the context, so this and nouveau_channel_kill()
+ * hand over through fctx->ready and chan->killed.
+ */
+void
+nouveau_fence_context_arm(struct nouveau_channel *chan)
+{
+	struct nouveau_fence_chan *fctx = chan->fence;
+
+	/* Pairs with the smp_load_acquire() in nouveau_channel_kill(). */
+	smp_store_release(&fctx->ready, true);
+	/* Pairs with the smp_mb() there: store-buffering, one side always sees the other. */
+	smp_mb();
+
+	if (atomic_read(&chan->killed))
+		nouveau_fence_context_kill(fctx, -ENODEV);
+}
+
 void
 nouveau_fence_context_del(struct nouveau_fence_chan *fctx)
 {
