@@ -242,18 +242,12 @@ static int imx_irqsteer_probe(struct platform_device *pdev)
 	for (i = 0; i < data->reg_num; i++)
 		writel_relaxed(0, data->regs + CHANMASK(i, data->reg_num));
 
-	struct irq_domain_info info = {
-		.fwnode		= dev_fwnode(&pdev->dev),
-		.size		= data->reg_num * 32,
-		.hwirq_max	= data->reg_num * 32,
-		.ops		= &imx_irqsteer_domain_ops,
-		.host_data	= data,
-	};
-
-	data->domain = devm_irq_domain_instantiate(&pdev->dev, &info);
-	if (IS_ERR(data->domain)) {
+	data->domain = devm_irq_domain_create_linear(&pdev->dev, dev_fwnode(&pdev->dev),
+						     data->reg_num * 32,
+						     &imx_irqsteer_domain_ops, data);
+	if (!data->domain) {
 		dev_err(&pdev->dev, "failed to create IRQ domain\n");
-		ret = PTR_ERR(data->domain);
+		ret = -ENOMEM;
 		goto out;
 	}
 	irq_domain_set_pm_device(data->domain, &pdev->dev);
