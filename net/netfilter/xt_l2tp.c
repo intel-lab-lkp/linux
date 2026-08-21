@@ -267,8 +267,9 @@ static int l2tp_mt_check4(const struct xt_mtchk_param *par)
 	if (ret != 0)
 		return ret;
 
-	if ((ip->proto != IPPROTO_UDP) &&
-	    (ip->proto != IPPROTO_L2TP)) {
+	if (ip->invflags & IPT_INV_PROTO ||
+	    (ip->proto != IPPROTO_UDP &&
+	    ip->proto != IPPROTO_L2TP)) {
 		pr_info_ratelimited("missing protocol rule (udp|l2tpip)\n");
 		return -EINVAL;
 	}
@@ -294,8 +295,10 @@ static int l2tp_mt_check6(const struct xt_mtchk_param *par)
 	if (ret != 0)
 		return ret;
 
-	if ((ip->proto != IPPROTO_UDP) &&
-	    (ip->proto != IPPROTO_L2TP)) {
+	if (((ip->flags & IP6T_F_PROTO) == 0 ||
+	     ip->invflags & IP6T_INV_PROTO ||
+	   (ip->proto != IPPROTO_UDP &&
+	    ip->proto != IPPROTO_L2TP))) {
 		pr_info_ratelimited("missing protocol rule (udp|l2tpip)\n");
 		return -EINVAL;
 	}
