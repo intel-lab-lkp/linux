@@ -722,3 +722,24 @@ Description:	This displays the protocol version of the internal wireless transmi
 
 		Applies to Lenovo Legion Go and Go 2 line of handheld devices.
 
+What:		/sys/bus/usb/devices/<busnum>-<devnum>:<config num>.<interface num>/<hid-bus>:<vendor-id>:<product-id>.<num>/{left_handle,right_handle}/calibrate_{gyro,joystick,trigger}_error
+Date:		August 2026
+Contact:	linux-input@vger.kernel.org
+Description:	This read-only attribute displays the 16-bit firmware error from the
+		most recently received calibration completion. The value is
+		hexadecimal from 0x0000 through 0xffff. It is 0x0000 before the
+		first completion. Starting calibration does not clear the last
+		completion. Read the matching calibrate_*_status attribute to
+		determine whether calibration succeeded or failed. Separate status
+		and error reads do not form an atomic snapshot.
+
+		Lenovo controller software identifies gyro errors 0x0001 as not
+		stationary or timeout and 0x0002 as a connection change. Joystick
+		errors are 0x0100 for incomplete range, 0x0200 for not centered,
+		0x0400 for incomplete rotations, and 0x0800 for a connection change.
+		Trigger errors are 0x0001 for incomplete press, 0x0002 for incomplete
+		release, 0x0004 for incomplete repetitions, and 0x0008 for a
+		connection change. Error 0xffff is a calibration exception. Other
+		values are returned without translation.
+
+		Applies to Lenovo Legion Go and Go 2 line of handheld devices.

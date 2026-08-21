@@ -54,18 +54,24 @@ static struct hid_go_cmd go_cmd = {
 	.lock = __SPIN_LOCK_UNLOCKED(go_cmd.lock),
 };
 
+struct hid_go_calibration_state {
+	u16 error;
+	u8 status;
+};
+
 static struct hid_go_cfg {
 	struct delayed_work go_cfg_setup;
 	struct led_classdev *led_cdev;
 	struct hid_device *hdev;
 	struct mutex cfg_mutex; /*ensure single synchronous output report*/
+	spinlock_t cal_lock; /* protects calibration state */
 	u8 fps_mode;
 	u8 gp_left_auto_sleep_time;
-	u8 gp_left_gyro_cal_status;
-	u8 gp_left_joy_cal_status;
+	struct hid_go_calibration_state gp_left_gyro_cal;
+	struct hid_go_calibration_state gp_left_joy_cal;
 	u8 gp_left_notify_en;
 	u8 gp_left_rumble_mode;
-	u8 gp_left_trigg_cal_status;
+	struct hid_go_calibration_state gp_left_trigg_cal;
 	u32 gp_left_version_firmware;
 	u8 gp_left_version_gen;
 	u32 gp_left_version_hardware;
@@ -73,11 +79,11 @@ static struct hid_go_cfg {
 	u32 gp_left_version_protocol;
 	u8 gp_mode;
 	u8 gp_right_auto_sleep_time;
-	u8 gp_right_gyro_cal_status;
-	u8 gp_right_joy_cal_status;
+	struct hid_go_calibration_state gp_right_gyro_cal;
+	struct hid_go_calibration_state gp_right_joy_cal;
 	u8 gp_right_notify_en;
 	u8 gp_right_rumble_mode;
-	u8 gp_right_trigg_cal_status;
+	struct hid_go_calibration_state gp_right_trigg_cal;
 	u32 gp_right_version_firmware;
 	u8 gp_right_version_gen;
 	u32 gp_right_version_hardware;
@@ -108,7 +114,9 @@ static struct hid_go_cfg {
 	u32 tx_dongle_version_hardware;
 	u32 tx_dongle_version_product;
 	u32 tx_dongle_version_protocol;
-} drvdata;
+} drvdata = {
+	.cal_lock = __SPIN_LOCK_UNLOCKED(drvdata.cal_lock),
+};
 
 struct go_cfg_attr {
 	u8 index;
@@ -659,44 +667,51 @@ static int hid_go_light_event(struct command_report *cmd_rep)
 	}
 }
 
+static struct hid_go_calibration_state *
+hid_go_calibration_state(u8 device, u8 module)
+{
+	switch (device) {
+	case LEFT_CONTROLLER:
+		switch (module) {
+		case CALDEV_GYROSCOPE:
+			return &drvdata.gp_left_gyro_cal;
+		case CALDEV_JOYSTICK:
+			return &drvdata.gp_left_joy_cal;
+		case CALDEV_TRIGGER:
+			return &drvdata.gp_left_trigg_cal;
+		default:
+			return NULL;
+		}
+	case RIGHT_CONTROLLER:
+		switch (module) {
+		case CALDEV_GYROSCOPE:
+			return &drvdata.gp_right_gyro_cal;
+		case CALDEV_JOYSTICK:
+			return &drvdata.gp_right_joy_cal;
+		case CALDEV_TRIGGER:
+			return &drvdata.gp_right_trigg_cal;
+		default:
+			return NULL;
+		}
+	default:
+		return NULL;
+	}
+}
+
 static int hid_go_device_status_event(struct command_report *cmd_rep)
 {
-	u8 status = cmd_rep->data[1] ? CAL_STAT_SUCCESS : CAL_STAT_FAILURE;
+	struct hid_go_calibration_state *state;
+	unsigned long flags;
 
-	switch (cmd_rep->device_type) {
-	case LEFT_CONTROLLER:
-		switch (cmd_rep->data[0]) {
-		case CALDEV_GYROSCOPE:
-			drvdata.gp_left_gyro_cal_status = status;
-			return 0;
-		case CALDEV_JOYSTICK:
-			drvdata.gp_left_joy_cal_status = status;
-			return 0;
-		case CALDEV_TRIGGER:
-			drvdata.gp_left_trigg_cal_status = status;
-			return 0;
-		default:
-			return -EINVAL;
-		}
-		break;
-	case RIGHT_CONTROLLER:
-		switch (cmd_rep->data[0]) {
-		case CALDEV_GYROSCOPE:
-			drvdata.gp_right_gyro_cal_status = status;
-			return 0;
-		case CALDEV_JOYSTICK:
-			drvdata.gp_right_joy_cal_status = status;
-			return 0;
-		case CALDEV_TRIGGER:
-			drvdata.gp_right_trigg_cal_status = status;
-			return 0;
-		default:
-			return -EINVAL;
-		}
-		break;
-	default:
+	state = hid_go_calibration_state(cmd_rep->device_type, cmd_rep->data[0]);
+	if (!state)
 		return -EINVAL;
-	}
+
+	spin_lock_irqsave(&drvdata.cal_lock, flags);
+	state->error = get_unaligned_le16(cmd_rep->data + 2);
+	state->status = cmd_rep->data[1] ? CAL_STAT_SUCCESS : CAL_STAT_FAILURE;
+	spin_unlock_irqrestore(&drvdata.cal_lock, flags);
+	return 0;
 }
 
 static int hid_go_os_mode_cfg_event(struct command_report *cmd_rep)
@@ -1380,53 +1395,45 @@ static ssize_t device_status_show(struct device *dev,
 				  enum dev_type device_type,
 				  enum cal_device_type cal_type)
 {
-	u8 i;
+	struct hid_go_calibration_state *state;
+	unsigned long flags;
+	u8 status;
 
-	switch (index) {
-	case GET_CAL_STATUS:
-		switch (device_type) {
-		case LEFT_CONTROLLER:
-			switch (cal_type) {
-			case CALDEV_GYROSCOPE:
-				i = drvdata.gp_left_gyro_cal_status;
-				break;
-			case CALDEV_JOYSTICK:
-				i = drvdata.gp_left_joy_cal_status;
-				break;
-			case CALDEV_TRIGGER:
-				i = drvdata.gp_left_trigg_cal_status;
-				break;
-			default:
-				return -EINVAL;
-			}
-			break;
-		case RIGHT_CONTROLLER:
-			switch (cal_type) {
-			case CALDEV_GYROSCOPE:
-				i = drvdata.gp_right_gyro_cal_status;
-				break;
-			case CALDEV_JOYSTICK:
-				i = drvdata.gp_right_joy_cal_status;
-				break;
-			case CALDEV_TRIGGER:
-				i = drvdata.gp_right_trigg_cal_status;
-				break;
-			default:
-				return -EINVAL;
-			}
-			break;
-		default:
-			return -EINVAL;
-		}
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	if (i >= ARRAY_SIZE(cal_status_text))
+	if (index != GET_CAL_STATUS)
 		return -EINVAL;
 
-	return sysfs_emit(buf, "%s\n", cal_status_text[i]);
+	state = hid_go_calibration_state(device_type, cal_type);
+	if (!state)
+		return -EINVAL;
+
+	spin_lock_irqsave(&drvdata.cal_lock, flags);
+	status = state->status;
+	spin_unlock_irqrestore(&drvdata.cal_lock, flags);
+
+	if (status >= ARRAY_SIZE(cal_status_text))
+		return -EINVAL;
+
+	return sysfs_emit(buf, "%s\n", cal_status_text[status]);
+}
+
+static ssize_t calibration_error_show(struct device *dev,
+				      struct device_attribute *attr, char *buf,
+				      enum dev_type device_type,
+				      enum cal_device_type cal_type)
+{
+	struct hid_go_calibration_state *state;
+	unsigned long flags;
+	u16 error;
+
+	state = hid_go_calibration_state(device_type, cal_type);
+	if (!state)
+		return -EINVAL;
+
+	spin_lock_irqsave(&drvdata.cal_lock, flags);
+	error = state->error;
+	spin_unlock_irqrestore(&drvdata.cal_lock, flags);
+
+	return sysfs_emit(buf, "0x%04x\n", error);
 }
 
 static ssize_t calibrate_config_store(struct device *dev,
@@ -1860,6 +1867,14 @@ static void hid_go_brightness_set(struct led_classdev *led_cdev,
 	}                                                                     \
 	static DEVICE_ATTR_RO_NAMED(_name, _attrname)
 
+#define LEGO_CAL_ERROR_ATTR(_name, _attrname, _dtype, _ctype)                 \
+	static ssize_t _name##_show(struct device *dev,                       \
+				    struct device_attribute *attr, char *buf) \
+	{                                                                     \
+		return calibration_error_show(dev, attr, buf, _dtype, _ctype); \
+	}                                                                     \
+	static DEVICE_ATTR_RO_NAMED(_name, _attrname)
+
 /* Gamepad - MCU */
 static struct go_cfg_attr version_product_mcu = { PRODUCT_VERSION };
 LEGO_DEVICE_ATTR_RO(version_product_mcu, "product_version", USB_MCU, version);
@@ -2029,16 +2044,26 @@ static struct go_cfg_attr cal_gyro_left_status = { GET_CAL_STATUS };
 LEGO_DEVICE_STATUS_ATTR(cal_gyro_left_status, "calibrate_gyro_status",
 			LEFT_CONTROLLER, CALDEV_GYROSCOPE);
 
+LEGO_CAL_ERROR_ATTR(cal_trigg_left_error, "calibrate_trigger_error",
+		    LEFT_CONTROLLER, CALDEV_TRIGGER);
+LEGO_CAL_ERROR_ATTR(cal_joy_left_error, "calibrate_joystick_error",
+		    LEFT_CONTROLLER, CALDEV_JOYSTICK);
+LEGO_CAL_ERROR_ATTR(cal_gyro_left_error, "calibrate_gyro_error",
+		    LEFT_CONTROLLER, CALDEV_GYROSCOPE);
+
 static struct attribute *left_gamepad_attrs[] = {
 	&dev_attr_auto_sleep_time_left.attr,
 	&dev_attr_auto_sleep_time_left_range.attr,
 	&dev_attr_cal_gyro_left.attr,
+	&dev_attr_cal_gyro_left_error.attr,
 	&dev_attr_cal_gyro_left_index.attr,
 	&dev_attr_cal_gyro_left_status.attr,
 	&dev_attr_cal_joy_left.attr,
+	&dev_attr_cal_joy_left_error.attr,
 	&dev_attr_cal_joy_left_index.attr,
 	&dev_attr_cal_joy_left_status.attr,
 	&dev_attr_cal_trigg_left.attr,
+	&dev_attr_cal_trigg_left_error.attr,
 	&dev_attr_cal_trigg_left_index.attr,
 	&dev_attr_cal_trigg_left_status.attr,
 	&dev_attr_imu_bypass_left.attr,
@@ -2136,16 +2161,26 @@ static struct go_cfg_attr cal_gyro_right_status = { GET_CAL_STATUS };
 LEGO_DEVICE_STATUS_ATTR(cal_gyro_right_status, "calibrate_gyro_status",
 			RIGHT_CONTROLLER, CALDEV_GYROSCOPE);
 
+LEGO_CAL_ERROR_ATTR(cal_trigg_right_error, "calibrate_trigger_error",
+		    RIGHT_CONTROLLER, CALDEV_TRIGGER);
+LEGO_CAL_ERROR_ATTR(cal_joy_right_error, "calibrate_joystick_error",
+		    RIGHT_CONTROLLER, CALDEV_JOYSTICK);
+LEGO_CAL_ERROR_ATTR(cal_gyro_right_error, "calibrate_gyro_error",
+		    RIGHT_CONTROLLER, CALDEV_GYROSCOPE);
+
 static struct attribute *right_gamepad_attrs[] = {
 	&dev_attr_auto_sleep_time_right.attr,
 	&dev_attr_auto_sleep_time_right_range.attr,
 	&dev_attr_cal_gyro_right.attr,
+	&dev_attr_cal_gyro_right_error.attr,
 	&dev_attr_cal_gyro_right_index.attr,
 	&dev_attr_cal_gyro_right_status.attr,
 	&dev_attr_cal_joy_right.attr,
+	&dev_attr_cal_joy_right_error.attr,
 	&dev_attr_cal_joy_right_index.attr,
 	&dev_attr_cal_joy_right_status.attr,
 	&dev_attr_cal_trigg_right.attr,
+	&dev_attr_cal_trigg_right_error.attr,
 	&dev_attr_cal_trigg_right_index.attr,
 	&dev_attr_cal_trigg_right_status.attr,
 	&dev_attr_imu_bypass_right.attr,
