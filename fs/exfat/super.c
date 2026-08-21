@@ -94,6 +94,8 @@ int exfat_set_volume_dirty(struct super_block *sb)
 {
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 
+	lockdep_assert_held(&sbi->s_lock);
+
 	if (test_and_set_bit(VOLUME_DIRTY_BIT, &sbi->vol_flags))
 		return 0;
 
@@ -103,6 +105,8 @@ int exfat_set_volume_dirty(struct super_block *sb)
 int exfat_clear_volume_dirty(struct super_block *sb)
 {
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+
+	lockdep_assert_held_write(&sbi->s_lock);
 
 	if (!test_and_clear_bit(VOLUME_DIRTY_BIT, &sbi->vol_flags))
 		return 0;
