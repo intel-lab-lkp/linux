@@ -1710,7 +1710,7 @@ static struct attr_def *ntfs_attr_find_in_attrdef(const struct ntfs_volume *vol,
 	struct attr_def *ad;
 
 	WARN_ON(!type);
-	for (ad = vol->attrdef; (u8 *)ad - (u8 *)vol->attrdef <
+	for (ad = vol->attrdef; (u8 *)(ad + 1) - (u8 *)vol->attrdef <=
 			vol->attrdef_size && ad->type; ++ad) {
 		/* We have not found it yet, carry on searching. */
 		if (likely(le32_to_cpu(ad->type) < le32_to_cpu(type)))
