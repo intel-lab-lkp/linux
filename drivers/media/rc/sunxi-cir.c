@@ -236,19 +236,19 @@ static void sunxi_ir_hw_exit(struct device *dev)
 	reset_control_assert(ir->rst);
 }
 
-static int __maybe_unused sunxi_ir_suspend(struct device *dev)
+static int sunxi_ir_suspend(struct device *dev)
 {
 	sunxi_ir_hw_exit(dev);
 
 	return 0;
 }
 
-static int __maybe_unused sunxi_ir_resume(struct device *dev)
+static int sunxi_ir_resume(struct device *dev)
 {
 	return sunxi_ir_hw_init(dev);
 }
 
-static SIMPLE_DEV_PM_OPS(sunxi_ir_pm_ops, sunxi_ir_suspend, sunxi_ir_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(sunxi_ir_pm_ops, sunxi_ir_suspend, sunxi_ir_resume);
 
 static int sunxi_ir_probe(struct platform_device *pdev)
 {
@@ -422,7 +422,7 @@ static struct platform_driver sunxi_ir_driver = {
 	.driver = {
 		.name = SUNXI_IR_DEV,
 		.of_match_table = sunxi_ir_match,
-		.pm = &sunxi_ir_pm_ops,
+		.pm = pm_sleep_ptr(&sunxi_ir_pm_ops),
 	},
 };
 

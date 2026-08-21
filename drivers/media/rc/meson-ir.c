@@ -567,7 +567,7 @@ static void meson_ir_shutdown(struct platform_device *pdev)
 	spin_unlock_irqrestore(&ir->lock, flags);
 }
 
-static __maybe_unused int meson_ir_resume(struct device *dev)
+static int meson_ir_resume(struct device *dev)
 {
 	struct meson_ir *ir = dev_get_drvdata(dev);
 
@@ -579,7 +579,7 @@ static __maybe_unused int meson_ir_resume(struct device *dev)
 	return 0;
 }
 
-static __maybe_unused int meson_ir_suspend(struct device *dev)
+static int meson_ir_suspend(struct device *dev)
 {
 	struct meson_ir *ir = dev_get_drvdata(dev);
 	unsigned long flags;
@@ -591,7 +591,7 @@ static __maybe_unused int meson_ir_suspend(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(meson_ir_pm_ops, meson_ir_suspend, meson_ir_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(meson_ir_pm_ops, meson_ir_suspend, meson_ir_resume);
 
 static const struct meson_ir_param meson6_ir_param = {
 	.support_hw_decoder = false,
