@@ -75,7 +75,8 @@ given index.  You can use mtree_erase() to erase an entire range by only
 knowing one value within that range, or mtree_store() call with an entry of
 NULL may be used to partially erase a range or many ranges at once.  Note that
 mtree_erase() may use GFP_KERNEL | __GFP_NOFAIL for allocations and cannot
-fail, but may need to sleep - do not use mtree_erase() from a blocking context.
+fail.  mtree_erase() can sleep, so it must not be called from an atomic
+context.
 
 If you want to only store a new entry to a range (or index) if that range is
 currently ``NULL``, you can use mtree_insert_range() or mtree_insert() which
