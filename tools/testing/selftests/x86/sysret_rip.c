@@ -94,12 +94,40 @@ static void sigsegv_for_fallthrough(int sig, siginfo_t *info, void *ctx_void)
 	siglongjmp(jmpbuf, 1);
 }
 
+static bool address_is_mapped(unsigned long addr)
+{
+	unsigned char vec;
+
+	/*
+	 * mincore() succeeds only when the whole range is mapped and fails
+	 * with ENOMEM when the page is not mapped.
+	 */
+	return mincore((void *)addr, 4096, &vec) == 0;
+}
+
 static void test_syscall_fallthrough_to(unsigned long ip)
 {
 	void *new_address = (void *)(ip - 4096);
 	void *ret;
 
 	printf("[RUN]\tTrying a SYSCALL that falls through to 0x%lx\n", ip);
+
+	/*
+	 * MREMAP_FIXED, like MAP_FIXED, silently unmaps whatever already
+	 * occupies the destination.  With ASLR disabled the stack lives at
+	 * the top of the address space and overlaps the high addresses
+	 * exercised here, so a blind remap would clobber the stack and take
+	 * the test down with a SIGSEGV.  Skip any target whose trampoline or
+	 * landing page is already in use; the noncanonical cases that
+	 * actually probe the kernel sit far above the stack and are
+	 * unaffected.
+	 */
+	if (address_is_mapped((unsigned long)new_address) ||
+	    address_is_mapped(ip)) {
+		printf("[SKIP]\t0x%lx: address space near the stack is in use (ASLR off?)\n",
+		       ip);
+		return;
+	}
 
 	ret = mremap((void *)current_test_page_addr, 4096, 4096,
 		     MREMAP_MAYMOVE | MREMAP_FIXED, new_address);
