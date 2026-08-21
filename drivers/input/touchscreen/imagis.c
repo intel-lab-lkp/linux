@@ -44,11 +44,18 @@
 #define IST3038C_FINGER_STATUS_MASK	GENMASK(9, 0)
 #define IST3032C_KEY_STATUS_MASK	GENMASK(20, 16)
 
+#define IST40XX_TOUCH_ID_MASK		GENMASK(31, 28)
+#define IST40XX_TOUCH_EVENT_MASK	GENMASK(27, 24)
+#define IST40XX_TOUCH_EVENT_PRESS	1
+#define IST40XX_TOUCH_EVENT_RELEASE	2
+
 enum imagis_protocol {
 	/* one coordinate register shared by all contacts */
 	IMAGIS_PROTOCOL_SHARED_REGISTER,
 	/* one coordinate register per contact */
 	IMAGIS_PROTOCOL_PER_CONTACT_REGISTERS,
+	/* one record per contact, carrying a touch ID and an event type */
+	IMAGIS_PROTOCOL_TOUCH_EVENTS,
 };
 
 struct imagis_properties {
@@ -134,9 +141,14 @@ static irqreturn_t imagis_interrupt(int irq, void *dev_id)
 	finger_pressed = FIELD_GET(IST3038C_FINGER_STATUS_MASK, intr_message);
 
 	for (i = 0; i < finger_count; i++) {
+		unsigned int slot = i;
 		bool pressed;
 
-		if (ts->tdata->protocol == IMAGIS_PROTOCOL_PER_CONTACT_REGISTERS)
+		if (ts->tdata->protocol == IMAGIS_PROTOCOL_TOUCH_EVENTS)
+			error = imagis_i2c_read_reg(ts,
+						    ts->tdata->touch_coord_cmd + (i * 8),
+						    &finger_status);
+		else if (ts->tdata->protocol == IMAGIS_PROTOCOL_PER_CONTACT_REGISTERS)
 			error = imagis_i2c_read_reg(ts,
 						    ts->tdata->touch_coord_cmd + (i * 4),
 						    &finger_status);
@@ -150,9 +162,31 @@ static irqreturn_t imagis_interrupt(int irq, void *dev_id)
 			goto out;
 		}
 
-		pressed = finger_pressed & BIT(i);
+		if (ts->tdata->protocol == IMAGIS_PROTOCOL_TOUCH_EVENTS) {
+			unsigned int id = FIELD_GET(IST40XX_TOUCH_ID_MASK,
+						    finger_status);
 
-		input_mt_slot(ts->input_dev, i);
+			if (!id || id > IST3038C_MAX_FINGER_NUM)
+				continue;
+
+			slot = id - 1;
+
+			switch (FIELD_GET(IST40XX_TOUCH_EVENT_MASK,
+					  finger_status)) {
+			case IST40XX_TOUCH_EVENT_PRESS:
+				pressed = true;
+				break;
+			case IST40XX_TOUCH_EVENT_RELEASE:
+				pressed = false;
+				break;
+			default:
+				continue;
+			}
+		} else {
+			pressed = finger_pressed & BIT(i);
+		}
+
+		input_mt_slot(ts->input_dev, slot);
 		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, pressed);
 		if (!pressed)
 			continue;
@@ -161,8 +195,10 @@ static irqreturn_t imagis_interrupt(int irq, void *dev_id)
 				       FIELD_GET(IST3038C_X_MASK, finger_status),
 				       FIELD_GET(IST3038C_Y_MASK, finger_status),
 				       true);
-		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR,
-				 FIELD_GET(IST3038C_AREA_MASK, finger_status));
+		if (ts->tdata->protocol != IMAGIS_PROTOCOL_TOUCH_EVENTS)
+			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR,
+					 FIELD_GET(IST3038C_AREA_MASK,
+						   finger_status));
 	}
 
 	key_pressed = FIELD_GET(IST3032C_KEY_STATUS_MASK, intr_message);
@@ -255,7 +291,8 @@ static int imagis_init_input_dev(struct imagis_ts *ts)
 
 	input_set_capability(input_dev, EV_ABS, ABS_MT_POSITION_X);
 	input_set_capability(input_dev, EV_ABS, ABS_MT_POSITION_Y);
-	input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR, 0, 16, 0, 0);
+	if (ts->tdata->protocol != IMAGIS_PROTOCOL_TOUCH_EVENTS)
+		input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR, 0, 16, 0, 0);
 	if (ts->tdata->touch_keys_supported) {
 		ts->num_keycodes = of_property_read_variable_u32_array(
 				ts->client->dev.of_node, "linux,keycodes",
