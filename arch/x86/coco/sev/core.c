@@ -1401,7 +1401,7 @@ static int __init snp_init_platform_device(void)
 
 	if (snp_svsm_vtpm_probe() &&
 	    platform_device_register(&tpm_svsm_device))
-		return -ENODEV;
+		pr_err("Failed to register the SVSM vTPM device\n");
 
 	pr_info("SNP guest platform devices initialized.\n");
 	return 0;
