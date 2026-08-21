@@ -621,8 +621,8 @@ static const struct net_device_ops cvm_oct_pow_netdev_ops = {
 #endif
 };
 
-static struct device_node *cvm_oct_of_get_child
-				(const struct device_node *parent, int reg_val)
+static struct device_node *
+cvm_oct_of_get_child(const struct device_node *parent, int reg_val)
 {
 	struct device_node *node;
 	const __be32 *addr;
