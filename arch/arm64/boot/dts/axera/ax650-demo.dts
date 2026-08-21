@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright 2026 Axera Semiconductor Co., Ltd.
+ */
+
+/dts-v1/;
+
+#include "ax650.dtsi"
+
+/ {
+	model = "Axera AX650 Demo";
+	compatible = "axera,ax650-demo", "axera,ax650";
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	memory@100000000 {
+		device_type = "memory";
+		reg = <0x1 0x00000000 0x2 0x00000000>;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+};
+
+&uart0 {
+	status = "okay";
+};
