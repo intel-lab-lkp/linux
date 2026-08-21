@@ -195,6 +195,63 @@ unsigned long __rounddown_pow_of_two(unsigned long n)
 	__rounddown_pow_of_two(n)		\
  )
 
+/**
+ * __rounddown_pow_of_two64() - round a 64-bit value down to nearest power of two
+ * @n: value to round up
+ */
+static inline __attribute_const__
+u64 __rounddown_pow_of_two64(u64 n)
+{
+	return 1ULL << ilog2(n);
+}
+
+/**
+ * rounddown_pow_of_two64 - round a 64-bit value down to nearest power of two
+ * @n: parameter
+ *
+ * round the given value down to the nearest power of two
+ * - this always operates on 64-bit values, even on 32-bit systems
+ * - the result is undefined when n == 0
+ * - this can be used to initialise global variables from constant data
+ */
+#define rounddown_pow_of_two64(n)		\
+(						\
+	__builtin_constant_p(n) ? (		\
+		((n) == 1) ? 1ULL :		\
+		(1ULL << ilog2((n)))		\
+				   ) :		\
+	__rounddown_pow_of_two64(n)		\
+)
+
+
+/**
+ * __roundup_pow_of_two64() - round a 64-bit value up to nearest power of two
+ * @n: value to round up
+ */
+static inline __attribute_const__
+u64 __roundup_pow_of_two64(u64 n)
+{
+	return 1ULL << (ilog2(n - 1) + 1);
+}
+
+/**
+ * roundup_pow_of_two64 - round a 64-bit value up to nearest power of two
+ * @n: parameter
+ *
+ * round the given value up to the nearest power of two
+ * - this always operates on 64-bit values, even on 32-bit systems
+ * - the result is undefined when n == 0
+ * - this can be used to initialise global variables from constant data
+ */
+#define roundup_pow_of_two64(n)			\
+(						\
+	__builtin_constant_p(n) ? (		\
+		((n) == 1) ? 1ULL :		\
+		(1ULL << (ilog2((n) - 1) + 1))	\
+				   ) :		\
+	__roundup_pow_of_two64(n)		\
+)
+
 static inline __attribute_const__
 int __order_base_2(unsigned long n)
 {
