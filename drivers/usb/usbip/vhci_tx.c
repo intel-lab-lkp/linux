@@ -68,7 +68,9 @@ static int vhci_send_cmd_submit(struct vhci_device *vdev)
 		int ret;
 		struct urb *urb = priv->urb;
 		struct usbip_header pdu_header;
+		unsigned long flags;
 
+		usb_get_urb(urb);
 		txsize = 0;
 		memset(&pdu_header, 0, sizeof(pdu_header));
 		memset(&msg, 0, sizeof(msg));
@@ -85,6 +87,7 @@ static int vhci_send_cmd_submit(struct vhci_device *vdev)
 		iov = kzalloc_objs(*iov, iovnum);
 		if (!iov) {
 			usbip_event_add(&vdev->ud, SDEV_EVENT_ERROR_MALLOC);
+			usb_put_urb(urb);
 			return -ENOMEM;
 		}
 
@@ -92,7 +95,15 @@ static int vhci_send_cmd_submit(struct vhci_device *vdev)
 			urb->transfer_flags |= URB_DMA_MAP_SG;
 
 		/* 1. setup usbip_header */
+		spin_lock_irqsave(&vdev->priv_lock, flags);
+		if (!urb->hcpriv) {
+			err = -EIO;
+			spin_unlock_irqrestore(&vdev->priv_lock, flags);
+			usb_put_urb(urb);
+			goto err_iso_buffer;
+		}
 		setup_cmd_submit_pdu(&pdu_header, urb);
+		spin_unlock_irqrestore(&vdev->priv_lock, flags);
 		usbip_header_correct_endian(&pdu_header, 1);
 		iovnum = 0;
 
@@ -127,6 +138,7 @@ static int vhci_send_cmd_submit(struct vhci_device *vdev)
 			if (!iso_buffer) {
 				usbip_event_add(&vdev->ud,
 						SDEV_EVENT_ERROR_MALLOC);
+				usb_put_urb(urb);
 				goto err_iso_buffer;
 			}
 
@@ -143,8 +155,10 @@ static int vhci_send_cmd_submit(struct vhci_device *vdev)
 			       txsize);
 			usbip_event_add(&vdev->ud, VDEV_EVENT_ERROR_TCP);
 			err = -EPIPE;
+			usb_put_urb(urb);
 			goto err_tx;
 		}
+		usb_put_urb(urb);
 
 		kfree(iov);
 		/* This is only for isochronous case */
