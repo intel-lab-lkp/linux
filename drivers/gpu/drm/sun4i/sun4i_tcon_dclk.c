@@ -167,7 +167,7 @@ static const struct clk_ops sun4i_dclk_ops = {
 int sun4i_dclk_create(struct device *dev, struct sun4i_tcon *tcon)
 {
 	const char *clk_name, *parent_name;
-	struct clk_init_data init;
+	struct clk_init_data init = {};
 	struct sun4i_dclk *dclk;
 	int ret;
 

@@ -143,7 +143,7 @@ static const struct clk_ops sun8i_phy_clk_ops = {
 int sun8i_phy_clk_create(struct sun8i_hdmi_phy *phy, struct device *dev,
 			 bool second_parent)
 {
-	struct clk_init_data init;
+	struct clk_init_data init = {};
 	struct sun8i_phy_clk *priv;
 	const char *parents[2];
 

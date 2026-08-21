@@ -202,7 +202,7 @@ static const struct clk_ops sun4i_tmds_ops = {
 
 int sun4i_tmds_create(struct sun4i_hdmi *hdmi)
 {
-	struct clk_init_data init;
+	struct clk_init_data init = {};
 	struct sun4i_tmds *tmds;
 	const char *parents[2];
 
