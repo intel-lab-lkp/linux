@@ -138,7 +138,7 @@ static struct dentry *fmpm_dfs_entries;
  * No input or '0' will default to FMPM_DEFAULT_MAX_NR_ENTRIES.
  */
 static u8 max_nr_entries;
-module_param(max_nr_entries, byte, 0644);
+module_param(max_nr_entries, byte, 0444);
 MODULE_PARM_DESC(max_nr_entries,
 		 "Maximum number of memory poison descriptor entries per FRU");
 
