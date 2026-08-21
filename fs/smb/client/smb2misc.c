@@ -451,7 +451,8 @@ __smb2_calc_size(void *buf, bool *have_data, bool *data_area_overlap)
 	 */
 	len += le16_to_cpu(pdu->StructureSize2);
 
-	if (has_smb2_data_area[le16_to_cpu(shdr->Command)] == false)
+	if (le16_to_cpu(shdr->Command) >= ARRAY_SIZE(has_smb2_data_area) ||
+	    !has_smb2_data_area[le16_to_cpu(shdr->Command)])
 		goto calc_size_exit;
 
 	smb2_get_data_area_len(&offset, &data_length, shdr);
