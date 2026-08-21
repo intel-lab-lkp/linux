@@ -235,6 +235,49 @@ static int otx2_qos_txschq_set_parent_topology(struct otx2_nic *pfvf,
 	return rc;
 }
 
+static int otx2_qos_reset_tl4_topology(struct otx2_nic *pfvf)
+{
+	struct mbox *mbox = &pfvf->mbox;
+	struct nix_txschq_config *cfg;
+	int i, err;
+
+	if (!pfvf->hw.txschq_cnt[NIX_TXSCH_LVL_TL4])
+		return 0;
+
+	mutex_lock(&mbox->lock);
+
+	for (i = 0; i < pfvf->hw.txschq_cnt[NIX_TXSCH_LVL_TL4]; ) {
+		cfg = otx2_mbox_alloc_msg_nix_txschq_cfg(mbox);
+		if (!cfg) {
+			mutex_unlock(&mbox->lock);
+			return -ENOMEM;
+		}
+
+		cfg->lvl = NIX_TXSCH_LVL_TL4;
+		cfg->num_regs = 0;
+
+		while (i < pfvf->hw.txschq_cnt[NIX_TXSCH_LVL_TL4] &&
+		       cfg->num_regs < MAX_REGS_PER_MBOX_MSG) {
+			int schq = pfvf->hw.txschq_list[NIX_TXSCH_LVL_TL4][i];
+
+			cfg->reg[cfg->num_regs] = NIX_AF_TL4X_TOPOLOGY(schq);
+			cfg->regval[cfg->num_regs] = 0;
+			cfg->num_regs++;
+			i++;
+		}
+
+		err = otx2_sync_mbox_msg(mbox);
+		if (err) {
+			mutex_unlock(&mbox->lock);
+			return err;
+		}
+	}
+
+	mutex_unlock(&mbox->lock);
+
+	return 0;
+}
+
 static void otx2_qos_free_hw_node_schq(struct otx2_nic *pfvf,
 				       struct otx2_qos_node *parent)
 {
@@ -1098,6 +1141,7 @@ free_root_node:
 static int otx2_qos_root_destroy(struct otx2_nic *pfvf)
 {
 	struct otx2_qos_node *root;
+	int err;
 
 	netdev_dbg(pfvf->netdev, "TC_HTB_DESTROY\n");
 
@@ -1108,6 +1152,14 @@ static int otx2_qos_root_destroy(struct otx2_nic *pfvf)
 
 	/* free the hw mappings */
 	otx2_qos_destroy_node(pfvf, root);
+
+	if (netif_running(pfvf->netdev)) {
+		err = otx2_qos_reset_tl4_topology(pfvf);
+		if (err)
+			netdev_warn(pfvf->netdev,
+				    "HTB destroy: failed to reset TL4 topology: %d\n",
+				    err);
+	}
 
 	return 0;
 }
