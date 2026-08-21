@@ -403,17 +403,20 @@ static int tps65217_probe(struct i2c_client *client)
 static void tps65217_remove(struct i2c_client *client)
 {
 	struct tps65217 *tps = i2c_get_clientdata(client);
-	unsigned int virq;
-	int i;
 
-	for (i = 0; i < TPS65217_NUM_IRQ; i++) {
-		virq = irq_find_mapping(tps->irq_domain, i);
-		if (virq)
-			irq_dispose_mapping(virq);
-	}
+	if (!tps->irq_domain)
+		return;
 
-	irq_domain_remove(tps->irq_domain);
-	tps->irq_domain = NULL;
+	/*
+	 * The interrupt is only freed by devres after this callback
+	 * returns, so make sure no handler can run while the domain
+	 * is being torn down.
+	 */
+	disable_irq(tps->irq);
+	synchronize_irq(tps->irq);
+	disable_irq_wake(tps->irq);
+
+	tps65217_irq_cleanup(tps);
 }
 
 static const struct i2c_device_id tps65217_id_table[] = {
