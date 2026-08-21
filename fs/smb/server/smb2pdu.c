@@ -7163,6 +7163,7 @@ static int smb2_get_info_filesystem(struct ksmbd_work *work,
 
 		info = (struct object_id_info *)(rsp->Buffer);
 
+		memset(info->objid, 0, sizeof(info->objid));
 		if (path.mnt->mnt_sb->s_uuid_len == 16)
 			memcpy(info->objid, path.mnt->mnt_sb->s_uuid.b,
 					path.mnt->mnt_sb->s_uuid_len);
