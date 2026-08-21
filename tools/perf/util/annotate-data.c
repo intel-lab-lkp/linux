@@ -28,6 +28,8 @@
 
 /* register number of the stack pointer */
 #define X86_REG_SP 7
+/* register number of the first integer argument (%rdi) */
+#define X86_REG_DI 5
 
 static void delete_var_types(struct die_var_type *var_types);
 
@@ -64,6 +66,10 @@ void pr_debug_type_name(Dwarf_Die *die, enum type_state_kind kind)
 		break;
 	case TSR_KIND_POINTER:
 		pr_info(" pointer");
+		/* it also prints the type info */
+		break;
+	case TSR_KIND_VTABLE_PTR:
+		pr_info(" C++ vtable pointer");
 		/* it also prints the type info */
 		break;
 	case TSR_KIND_CANARY:
@@ -177,6 +183,7 @@ static void init_type_state(struct type_state *state, const struct arch *arch)
 		state->regs[10].caller_saved = true;
 		state->regs[11].caller_saved = true;
 		state->ret_reg = 0;
+		state->arg0_reg = X86_REG_DI;
 		state->stack_reg = X86_REG_SP;
 	}
 }

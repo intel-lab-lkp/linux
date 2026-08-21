@@ -279,6 +279,7 @@ find_target:
 	return 0;
 
 indirect_call:
+	ops->target.raw = strdup(ops->raw);
 	tok = strchr(endptr, '*');
 	if (tok != NULL) {
 		endptr++;

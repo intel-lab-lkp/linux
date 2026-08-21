@@ -11,6 +11,8 @@
 #include "../map.h"
 #include "../string2.h" // strstarts
 #include "../symbol.h"
+#include "../hist.h"
+#include "../dwarf-aux.h"
 
 /*
  * x86 instruction nmemonic table to parse disasm lines for annotate.
@@ -234,6 +236,11 @@ static void update_insn_state_x86(struct type_state *state,
 		struct symbol *func = dl->ops.target.sym;
 		const char *call_name;
 		u64 call_addr;
+		Dwarf_Die target_func_die;
+		bool resolved_statically = false;
+		Dwarf_Die class_die;
+		bool has_class_die = false;
+		struct annotated_op_loc *target_op;
 
 		/* Try to resolve the call target name */
 		if (func)
@@ -245,12 +252,42 @@ static void update_insn_state_x86(struct type_state *state,
 		if (call_name && !strcmp(call_name, "__fentry__"))
 			return;
 
+		/*
+		 * 1. Resolve target statically (virtual call fallback) FIRST
+		 * (before invalidation)
+		 */
+		target_op = &loc.ops[INSN_OP_TARGET];
+
+		if (target_op->mem_ref && has_reg_type(state, target_op->reg1)) {
+			struct type_state_reg *reg = &state->regs[target_op->reg1];
+
+			if (reg->ok && reg->kind == TSR_KIND_VTABLE_PTR) {
+				/* TODO: handle multiple inheritance (non-primary vtables) */
+				int vtable_index = target_op->offset / 8;
+				Dwarf_Die target_class_die = reg->type;
+
+				if (die_find_virtual_func(&target_class_die, vtable_index,
+							  &target_func_die) &&
+				    die_get_type(&target_func_die, &type_die)) {
+					resolved_statically = true;
+					class_die = target_class_die;
+					has_class_die = true;
+				}
+			}
+		}
+
+		/* Fallback to name-based resolution for direct calls */
+		if (!resolved_statically && call_name) {
+			if (die_find_func_rettype(cu_die, call_name, &type_die))
+				resolved_statically = true;
+		}
+
 		if (call_name)
 			pr_debug_dtp("call [%x] %s\n", insn_offset, call_name);
 		else
 			pr_debug_dtp("call [%x] <unknown>\n", insn_offset);
 
-		/* Invalidate caller-saved registers after call */
+		/* 2. Invalidate caller-saved registers after we read them for resolution */
 		call_addr = map__rip_2objdump(dloc->ms->map,
 					      dloc->ms->sym->start + dl->al.offset);
 		for (unsigned i = 0; i < ARRAY_SIZE(state->regs); i++) {
@@ -264,8 +301,8 @@ static void update_insn_state_x86(struct type_state *state,
 			invalidate_reg_state(reg);
 		}
 
-		/* Update register with the return type (if any) */
-		if (call_name && die_find_func_rettype(cu_die, call_name, &type_die)) {
+		/* 3. Apply resolved types to registers */
+		if (resolved_statically) {
 			tsr = &state->regs[state->ret_reg];
 			tsr->type = type_die;
 			tsr->kind = TSR_KIND_TYPE;
@@ -275,6 +312,20 @@ static void update_insn_state_x86(struct type_state *state,
 			pr_debug_dtp("call [%x] return -> reg%d",
 				     insn_offset, state->ret_reg);
 			pr_debug_type_name(&type_die, tsr->kind);
+
+			/* Update receiver ('this' pointer) register if C++ */
+			if (has_class_die && cu_is_cplusplus(cu_die)) {
+				struct type_state_reg *recv_tsr = &state->regs[state->arg0_reg];
+
+				if (recv_tsr->ok &&
+				    (recv_tsr->kind == TSR_KIND_TYPE ||
+				     recv_tsr->kind == TSR_KIND_POINTER)) {
+					recv_tsr->type = class_die;
+					pr_debug_dtp("call [%x] update receiver reg%d to C++ class",
+						     insn_offset, state->arg0_reg);
+					pr_debug_type_name(&class_die, recv_tsr->kind);
+				}
+			}
 		}
 		return;
 	}
@@ -622,17 +673,43 @@ retry:
 		}
 		/* And then dereference the pointer if it has one */
 		else if (has_reg_type(state, sreg) && state->regs[sreg].ok &&
-			 state->regs[sreg].kind == TSR_KIND_TYPE &&
-			 die_deref_ptr_type(&state->regs[sreg].type,
-					    src->offset + state->regs[sreg].offset, &type_die)) {
-			tsr->type = type_die;
-			tsr->kind = TSR_KIND_TYPE;
-			tsr->offset = 0;
-			tsr->ok = true;
+			 state->regs[sreg].kind == TSR_KIND_TYPE) {
+			Dwarf_Die class_type;
+			Dwarf_Die member;
+			int total_offset = src->offset + state->regs[sreg].offset;
+			bool is_vptr = false;
 
-			pr_debug_dtp("mov [%x] %#x(reg%d) -> reg%d",
-				     insn_offset, src->offset, sreg, dst->reg1);
-			pr_debug_type_name(&tsr->type, tsr->kind);
+			if (die_get_real_type(&state->regs[sreg].type, &class_type) &&
+			    die_is_compound_type(&class_type) &&
+			    die_find_member_by_offset(&class_type, total_offset, &member) &&
+			    die_is_vptr_member(&member)) {
+				tsr->type = class_type;
+				tsr->kind = TSR_KIND_VTABLE_PTR;
+				tsr->offset = 0;
+				tsr->ok = true;
+
+				pr_debug_dtp("mov [%x] %#x(reg%d) -> reg%d (vptr)",
+					     insn_offset, src->offset,
+					     sreg, dst->reg1);
+				pr_debug_type_name(&class_type, tsr->kind);
+				is_vptr = true;
+			}
+
+			if (!is_vptr) {
+				if (die_deref_ptr_type(&state->regs[sreg].type,
+						       total_offset, &type_die)) {
+					tsr->type = type_die;
+					tsr->kind = TSR_KIND_TYPE;
+					tsr->offset = 0;
+					tsr->ok = true;
+
+					pr_debug_dtp("mov [%x] %#x(reg%d) -> reg%d",
+						     insn_offset, src->offset, sreg, dst->reg1);
+					pr_debug_type_name(&tsr->type, tsr->kind);
+				} else {
+					invalidate_reg_state(tsr);
+				}
+			}
 		}
 		/* Handle dereference of TSR_KIND_POINTER registers */
 		else if (has_reg_type(state, sreg) && state->regs[sreg].ok &&

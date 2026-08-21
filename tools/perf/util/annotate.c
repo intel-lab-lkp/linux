@@ -2509,6 +2509,10 @@ static int extract_reg_offset(const struct arch *arch, const char *str,
 	if (arch->objdump.register_char == 0)
 		return -1;
 
+	/* Skip leading '*' for indirect call/jmp operands (e.g. *%rax) */
+	if (*str == '*')
+		str++;
+
 	/*
 	 * It should start from offset, but it's possible to skip 0
 	 * in the asm.  So 0(%rax) should be same as (%rax).

@@ -36,6 +36,7 @@ enum type_state_kind {
 	TSR_KIND_CONST,
 	TSR_KIND_PERCPU_POINTER,
 	TSR_KIND_POINTER,
+	TSR_KIND_VTABLE_PTR,
 	TSR_KIND_CANARY,
 };
 
@@ -224,6 +225,8 @@ struct type_state {
 	struct list_head stack_vars;
 	/* return value register */
 	int ret_reg;
+	/* first integer argument register (holds 'this' for C++ methods) */
+	int arg0_reg;
 	/* stack pointer register */
 	int stack_reg;
 };
