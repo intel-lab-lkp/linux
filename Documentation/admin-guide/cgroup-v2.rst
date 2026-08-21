@@ -1928,6 +1928,21 @@ The following nested keys are defined.
 	This setting has no effect if zswap is disabled, and swapping
 	is allowed unless memory.swap.max is set to 0.
 
+  memory.cma.<area>.current
+        A read-only single value file which exists on non-root cgroups. <area>
+        is the CMA area name (e.g. "reserved" for the default DMA CMA area).
+
+        The total amount of CMA memory currently charged to the cgroup for the
+        given CMA area. Only accounted when memory_cma_accounting is enabled.
+
+  memory.cma.<area>.max
+        A read-write single value file which exists on non-root cgroups. The
+        default is "max".
+
+        CMA usage hard limit for the given area. If a cgroup's CMA usage for
+        this area exceeds this limit, the allocation will fail. Only enforced
+        when memory_cma_accounting is enabled.
+
   memory.pressure
 	A read-only nested-keyed file.
 
