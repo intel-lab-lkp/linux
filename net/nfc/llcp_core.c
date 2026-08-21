@@ -143,7 +143,7 @@ static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 	write_unlock(&local->raw_sockets.lock);
 }
 
-static struct nfc_llcp_local *nfc_llcp_local_get(struct nfc_llcp_local *local)
+struct nfc_llcp_local *nfc_llcp_local_get(struct nfc_llcp_local *local)
 {
 	/* Since using nfc_llcp_local may result in usage of nfc_dev, whenever
 	 * we hold a reference to local, we also need to hold a reference to

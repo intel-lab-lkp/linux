@@ -787,6 +787,7 @@ static int llcp_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 {
 	struct sock *sk = sock->sk;
 	struct nfc_llcp_sock *llcp_sock = nfc_llcp_sock(sk);
+	struct nfc_llcp_local *local;
 	int ret;
 
 	pr_debug("sock %p sk %p", sock, sk);
@@ -819,10 +820,15 @@ static int llcp_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 			return -EINVAL;
 		}
 
+		local = nfc_llcp_local_get(llcp_sock->local);
 		release_sock(sk);
+		if (!local)
+			return -ENODEV;
 
-		return nfc_llcp_send_ui_frame(llcp_sock, addr->dsap, addr->ssap,
-					      msg, len);
+		ret = nfc_llcp_send_ui_frame(llcp_sock, local, addr->dsap,
+					     addr->ssap, msg, len);
+		nfc_llcp_local_put(local);
+		return ret;
 	}
 
 	if (sk->sk_state != LLCP_CONNECTED) {

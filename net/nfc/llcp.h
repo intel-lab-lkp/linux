@@ -201,6 +201,7 @@ void nfc_llcp_sock_link(struct llcp_sock_list *l, struct sock *s);
 void nfc_llcp_sock_unlink(struct llcp_sock_list *l, struct sock *s);
 void nfc_llcp_socket_remote_param_init(struct nfc_llcp_sock *sock);
 struct nfc_llcp_local *nfc_llcp_find_local(struct nfc_dev *dev);
+struct nfc_llcp_local *nfc_llcp_local_get(struct nfc_llcp_local *local);
 int nfc_llcp_local_put(struct nfc_llcp_local *local);
 u8 nfc_llcp_get_sdp_ssap(struct nfc_llcp_local *local,
 			 struct nfc_llcp_sock *sock);
@@ -243,7 +244,8 @@ int nfc_llcp_send_dm(struct nfc_llcp_local *local, u8 ssap, u8 dsap, u8 reason);
 int nfc_llcp_send_disconnect(struct nfc_llcp_sock *sock);
 int nfc_llcp_send_i_frame(struct nfc_llcp_sock *sock,
 			  struct msghdr *msg, size_t len);
-int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock, u8 ssap, u8 dsap,
+int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock,
+			   struct nfc_llcp_local *local, u8 ssap, u8 dsap,
 			   struct msghdr *msg, size_t len);
 int nfc_llcp_send_rr(struct nfc_llcp_sock *sock);
 
