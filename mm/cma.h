@@ -81,6 +81,11 @@ static inline unsigned long cma_bitmap_maxno(struct cma *cma,
 	return cmr->count >> cma->order_per_bit;
 }
 
+static inline int cma_area_index(const struct cma *cma)
+{
+	return cma - cma_areas;
+}
+
 #ifdef CONFIG_CMA_SYSFS
 void cma_sysfs_account_success_pages(struct cma *cma, unsigned long nr_pages);
 void cma_sysfs_account_fail_pages(struct cma *cma, unsigned long nr_pages);

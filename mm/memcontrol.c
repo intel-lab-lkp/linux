@@ -68,6 +68,7 @@
 #include <net/ip.h>
 #include "slab.h"
 #include "memcontrol-v1.h"
+#include "cma.h"
 
 #include <linux/uaccess.h>
 
@@ -4062,6 +4063,9 @@ static void __mem_cgroup_free(struct mem_cgroup *memcg)
 {
 	int node;
 
+#ifdef CONFIG_CMA
+	kfree(memcg->cma_counters);
+#endif
 	for_each_node(node) {
 		struct mem_cgroup_per_node *pn = memcg->nodeinfo[node];
 		if (!pn)
@@ -4145,6 +4149,15 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 		memcg->cgwb_frn[i].done =
 			__WB_COMPLETION_INIT(&memcg_cgwb_frn_waitq);
 #endif
+#ifdef CONFIG_CMA
+	if (cma_area_count) {
+		memcg->cma_counters = kcalloc(cma_area_count,
+					      sizeof(struct page_counter),
+					      GFP_KERNEL);
+		if (!memcg->cma_counters)
+			goto fail;
+	}
+#endif
 	lru_gen_init_memcg(memcg);
 	return memcg;
 fail:
@@ -4159,6 +4172,7 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	struct mem_cgroup *parent = mem_cgroup_from_css(parent_css);
 	struct mem_cgroup *memcg, *old_memcg;
 	bool memcg_on_dfl = cgroup_subsys_on_dfl(memory_cgrp_subsys);
+	unsigned int __maybe_unused i;
 
 	old_memcg = set_active_memcg(parent);
 	memcg = mem_cgroup_alloc(parent);
@@ -4171,6 +4185,12 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 #ifdef CONFIG_ZSWAP
 	memcg->zswap_max = PAGE_COUNTER_MAX;
 	WRITE_ONCE(memcg->zswap_writeback, true);
+#endif
+#ifdef CONFIG_CMA
+	for (i = 0; i < cma_area_count; ++i)
+		page_counter_init(&memcg->cma_counters[i],
+				  parent ? &parent->cma_counters[i] : NULL,
+				  false);
 #endif
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
 	if (parent) {
@@ -5212,6 +5232,102 @@ int mem_cgroup_swapin_charge_folio(struct folio *folio, unsigned short id,
 	css_put(&memcg->css);
 	return ret;
 }
+
+#ifdef CONFIG_CMA
+static bool memcg_accounts_cma(void)
+{
+	return cgrp_dfl_root.flags & CGRP_ROOT_MEMORY_CMA_ACCOUNTING;
+}
+
+int mem_cgroup_charge_cma(struct page *page, unsigned long count,
+			  struct cma *cma)
+{
+	struct page_counter *counter, *fail;
+	struct obj_cgroup *objcg;
+	struct mem_cgroup *memcg;
+	unsigned int i;
+	int rc = 0;
+
+	if (mem_cgroup_disabled() || !memcg_accounts_cma())
+		return 0;
+
+	memcg = get_mem_cgroup_from_current();
+	if (!memcg)
+		return 0;
+
+	if (mem_cgroup_is_root(memcg))
+		goto cgroup_put;
+
+	rc = try_charge_memcg(memcg, GFP_KERNEL, count);
+	if (rc)
+		goto cgroup_put;
+
+	counter = &memcg->cma_counters[cma_area_index(cma)];
+	if (!page_counter_try_charge(counter, count, &fail)) {
+		refill_stock(memcg, count);
+		rc = -ENOMEM;
+		goto cgroup_put;
+	}
+
+	objcg = get_obj_cgroup_from_memcg(memcg);
+	if (folio_test_large(page_folio(page))) {
+		commit_charge(page_folio(page), objcg);
+	} else {
+		obj_cgroup_get_many(objcg, count - 1);
+		for (i = 0; i < count; i++)
+			commit_charge(page_folio(page + i), objcg);
+	}
+
+cgroup_put:
+	mem_cgroup_put(memcg);
+	return rc;
+}
+
+void mem_cgroup_uncharge_cma(struct page *page, unsigned long count,
+			     struct cma *cma)
+{
+	struct page_counter *counter;
+	struct obj_cgroup *objcg;
+	struct mem_cgroup *memcg;
+	struct folio *folio;
+	unsigned int i;
+
+	if (mem_cgroup_disabled() || !memcg_accounts_cma())
+		return;
+
+	/*
+	 * Get the objcg from the first page.
+	 * page_objcg() expects MEMCG_DATA_KMEM, but for CMA we used
+	 * commit_charge() which sets folio->memcg_data = objcg
+	 * without flags, so we cannot use it.
+	 */
+	objcg = folio_objcg(page_folio(page));
+	if (!objcg)
+		return;
+
+	rcu_read_lock();
+	memcg = obj_cgroup_memcg(objcg);
+
+	counter = &memcg->cma_counters[cma_area_index(cma)];
+	page_counter_uncharge(counter, count);
+
+	memcg_uncharge(memcg, count);
+
+	rcu_read_unlock();
+
+	folio = page_folio(page);
+	if (folio_test_large(folio)) {
+		folio->memcg_data = 0;
+		obj_cgroup_put(objcg);
+	} else {
+		for (i = 0; i < count; ++i) {
+			folio = page_folio(page + i);
+			folio->memcg_data = 0;
+			obj_cgroup_put(objcg);
+		}
+	}
+}
+#endif /* CONFIG_CMA */
 
 struct uncharge_gather {
 	struct obj_cgroup *objcg;
