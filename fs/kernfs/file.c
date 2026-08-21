@@ -66,12 +66,17 @@ static struct kernfs_open_node *of_on(struct kernfs_open_file *of)
 /* Get active reference to kernfs node for an open file */
 static struct kernfs_open_file *kernfs_get_active_of(struct kernfs_open_file *of)
 {
-	/* Skip if file was already released */
-	if (unlikely(of->released))
-		return NULL;
-
 	if (!kernfs_get_active(of->kn))
 		return NULL;
+
+	/*
+	 * A successful active reference prevents a new drain and orders this
+	 * check after an earlier reactivation.
+	 */
+	if (unlikely(READ_ONCE(of->released))) {
+		kernfs_put_active(of->kn);
+		return NULL;
+	}
 
 	return of;
 }
