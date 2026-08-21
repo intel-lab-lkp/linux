@@ -255,6 +255,12 @@ static __always_inline unsigned long user_stack_pointer(const struct pt_regs *re
 	return regs->gprs[15];
 }
 
+static __always_inline unsigned long frame_pointer(const struct pt_regs *regs)
+{
+	/* Return ABI-designated "preferred" frame-pointer register value. */
+	return regs->gprs[11];
+}
+
 static __always_inline unsigned long regs_get_register(const struct pt_regs *regs,
 						       unsigned int offset)
 {
