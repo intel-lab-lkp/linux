@@ -459,6 +459,23 @@ int vga_get(struct pci_dev *pdev, unsigned int rsrc, int interruptible)
 			break;
 		}
 		conflict = __vga_tryget(vgadev, rsrc);
+		/*
+		 * We have a conflict; we wait until somebody kicks the
+		 * work queue. Currently we have one work queue that we
+		 * kick each time some resources are released, but it would
+		 * be fairly easy to have a per-device one so that we only
+		 * need to attach to the conflicting device.
+		 *
+		 * Queue up before dropping vga_lock: __vga_put() wakes the
+		 * queue while holding it, so a wakeup cannot slip past.
+		 */
+		if (!IS_ERR_OR_NULL(conflict)) {
+			init_waitqueue_entry(&wait, current);
+			add_wait_queue(&vga_wait_queue, &wait);
+			set_current_state(interruptible ?
+					  TASK_INTERRUPTIBLE :
+					  TASK_UNINTERRUPTIBLE);
+		}
 		spin_unlock_irqrestore(&vga_lock, flags);
 		if (IS_ERR(conflict)) {
 			rc = PTR_ERR(conflict);
@@ -467,18 +484,6 @@ int vga_get(struct pci_dev *pdev, unsigned int rsrc, int interruptible)
 		if (conflict == NULL)
 			break;
 
-		/*
-		 * We have a conflict; we wait until somebody kicks the
-		 * work queue. Currently we have one work queue that we
-		 * kick each time some resources are released, but it would
-		 * be fairly easy to have a per-device one so that we only
-		 * need to attach to the conflicting device.
-		 */
-		init_waitqueue_entry(&wait, current);
-		add_wait_queue(&vga_wait_queue, &wait);
-		set_current_state(interruptible ?
-				  TASK_INTERRUPTIBLE :
-				  TASK_UNINTERRUPTIBLE);
 		if (interruptible && signal_pending(current)) {
 			__set_current_state(TASK_RUNNING);
 			remove_wait_queue(&vga_wait_queue, &wait);
