@@ -139,6 +139,7 @@ static int ecn_mt_check6(const struct xt_mtchk_param *par)
 		return -EINVAL;
 
 	if (info->operation & (XT_ECN_OP_MATCH_ECE | XT_ECN_OP_MATCH_CWR) &&
+	    ip->flags & IP6T_F_PROTO &&
 	    (ip->proto != IPPROTO_TCP || ip->invflags & IP6T_INV_PROTO)) {
 		pr_info_ratelimited("cannot match TCP bits for non-tcp packets\n");
 		return -EINVAL;

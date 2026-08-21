@@ -267,14 +267,16 @@ static int l2tp_mt_check4(const struct xt_mtchk_param *par)
 	if (ret != 0)
 		return ret;
 
-	if ((ip->proto != IPPROTO_UDP) &&
-	    (ip->proto != IPPROTO_L2TP)) {
+	if (!(ip->flags & IP6T_F_PROTO) ||
+	    (ip->proto != IPPROTO_UDP &&
+	     ip->proto != IPPROTO_L2TP)) {
 		pr_info_ratelimited("missing protocol rule (udp|l2tpip)\n");
 		return -EINVAL;
 	}
 
-	if ((ip->proto == IPPROTO_L2TP) &&
-	    (info->version == 2)) {
+	if (!(ip->flags & IP6T_F_PROTO) ||
+	    (ip->proto == IPPROTO_L2TP &&
+	     info->version == 2)) {
 		pr_info_ratelimited("v2 doesn't support IP mode\n");
 		return -EINVAL;
 	}
@@ -294,14 +296,16 @@ static int l2tp_mt_check6(const struct xt_mtchk_param *par)
 	if (ret != 0)
 		return ret;
 
-	if ((ip->proto != IPPROTO_UDP) &&
-	    (ip->proto != IPPROTO_L2TP)) {
+	if (!(ip->flags & IP6T_F_PROTO) ||
+	    (ip->proto != IPPROTO_UDP &&
+	     ip->proto != IPPROTO_L2TP)) {
 		pr_info_ratelimited("missing protocol rule (udp|l2tpip)\n");
 		return -EINVAL;
 	}
 
-	if ((ip->proto == IPPROTO_L2TP) &&
-	    (info->version == 2)) {
+	if (!(ip->flags & IP6T_F_PROTO) ||
+	    (ip->proto == IPPROTO_L2TP &&
+	     info->version == 2)) {
 		pr_info_ratelimited("v2 doesn't support IP mode\n");
 		return -EINVAL;
 	}

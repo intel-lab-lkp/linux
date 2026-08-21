@@ -160,6 +160,9 @@ static int multiport_mt6_check(const struct xt_mtchk_param *par)
 	const struct ip6t_ip6 *ip = par->entryinfo;
 	const struct xt_multiport_v1 *multiinfo = par->matchinfo;
 
+	if (!(ip->flags & IP6T_F_PROTO))
+		return -EINVAL;
+
 	if (!check(ip->proto, ip->invflags, multiinfo->flags, multiinfo->count))
 		return -EINVAL;
 

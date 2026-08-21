@@ -179,7 +179,8 @@ static int tproxy_tg6_check(const struct xt_tgchk_param *par)
 	if (err)
 		return err;
 
-	if ((i->proto == IPPROTO_TCP || i->proto == IPPROTO_UDP) &&
+	if ((i->flags & IP6T_F_PROTO) &&
+	    (i->proto == IPPROTO_TCP || i->proto == IPPROTO_UDP) &&
 	    !(i->invflags & IP6T_INV_PROTO))
 		return 0;
 
