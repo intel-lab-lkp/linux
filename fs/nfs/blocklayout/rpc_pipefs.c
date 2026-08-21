@@ -84,14 +84,16 @@ bl_resolve_deviceid(struct nfs_server *server, struct pnfs_block_volume *b,
 
 	dprintk("%s CALLING USERSPACE DAEMON\n", __func__);
 	add_wait_queue(&nn->bl_wq, &wq);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	rc = rpc_queue_upcall(nn->bl_device_pipe, msg);
 	if (rc < 0) {
+		__set_current_state(TASK_RUNNING);
 		remove_wait_queue(&nn->bl_wq, &wq);
 		goto out_free_data;
 	}
 
-	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule();
+	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(&nn->bl_wq, &wq);
 
 	if (reply->status != BL_DEVICE_REQUEST_PROC) {
