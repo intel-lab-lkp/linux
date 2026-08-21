@@ -191,8 +191,20 @@ struct scan_control {
 			prefetchw(&prev->_field);			\
 		}							\
 	} while (0)
+#define prefetchw_next_lru_folio(_folio, _base, _field)			\
+	do {								\
+		if ((_folio)->lru.next != _base) {			\
+			struct folio *next;				\
+									\
+			next = list_entry((_folio)->lru.next,		\
+					struct folio, lru);		\
+			prefetchw(&next->_field);			\
+		}							\
+	} while (0)
+
 #else
 #define prefetchw_prev_lru_folio(_folio, _base, _field) do { } while (0)
+#define prefetchw_next_lru_folio(_folio, _base, _field) do { } while (0)
 #endif
 
 /*
@@ -3932,9 +3944,10 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 	for (zone = 0; zone < MAX_NR_ZONES; zone++) {
 		struct list_head *head = &lrugen->folios[old_gen][type][zone];
 		unsigned long protected[MAX_NR_TIERS] = {}, delta = 0;
+		struct list_head *pos = head->next;
 
-		while (!list_empty(head)) {
-			struct folio *folio = lru_to_folio(head);
+		while (pos != head) {
+			struct folio *folio = list_entry(pos, struct folio, lru);
 			long nr_pages = folio_nr_pages(folio);
 			int refs = folio_lru_refs(folio);
 			bool workingset = folio_test_workingset(folio);
@@ -3945,6 +3958,8 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 			VM_WARN_ON_ONCE_FOLIO(folio_is_file_lru(folio) != type, folio);
 			VM_WARN_ON_ONCE_FOLIO(folio_zonenum(folio) != zone, folio);
 
+			prefetchw_next_lru_folio(folio, head, flags);
+			pos = pos->next;
 			new_gen = __folio_inc_gen(folio, old_gen, &gen_increased);
 			if (gen_increased) {
 				delta += nr_pages;
