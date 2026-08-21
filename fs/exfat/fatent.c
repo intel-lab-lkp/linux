@@ -24,7 +24,10 @@ static int exfat_mirror_bh(struct super_block *sb, struct buffer_head *bh)
 		c_bh = sb_getblk(sb, sec2);
 		if (!c_bh)
 			return -ENOMEM;
+		/* Serialize the copy with writeback to avoid a torn FAT2 write */
+		lock_buffer(c_bh);
 		memcpy(c_bh->b_data, bh->b_data, sb->s_blocksize);
+		unlock_buffer(c_bh);
 		err = exfat_update_bh(c_bh, sb->s_flags & SB_SYNCHRONOUS);
 		brelse(c_bh);
 	}
