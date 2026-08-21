@@ -533,6 +533,8 @@ static int save_new_records(void)
 	unsigned int i;
 	int ret = 0;
 
+	bitmap_zero(new_records, FMPM_MAX_NR_FRU);
+
 	for_each_fru(i, rec) {
 		/* No need to update saved records that match the current record size. */
 		if (rec->hdr.record_length == max_rec_len)
