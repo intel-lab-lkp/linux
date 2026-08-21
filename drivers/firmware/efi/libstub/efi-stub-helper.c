@@ -774,3 +774,92 @@ void efi_remap_image(unsigned long image_base, unsigned alloc_size,
 			efi_warn("Failed to remap data region non-executable\n");
 	}
 }
+
+#ifdef CONFIG_EFI_POISONED_MEMORY
+/* Cap on the bitmap; a span too wide to fit gets a coarser unit instead. */
+#define EFI_POISON_MAX_TABLE_SIZE	SZ_1M
+#define EFI_POISON_MAX_UNIT_SIZE	SZ_1G
+
+/*
+ * Bitmap geometry for a given top of RAM. The bitmap starts at address 0, so
+ * bit N covers unit N.
+ * In the following code, a "unit" is granule of physical address space that one
+ * bitmap bit covers.
+ */
+static u32 efi_poison_geometry(u64 ram_top, u64 *bitmap_size)
+{
+	u64 nr_units = DIV_ROUND_UP(ram_top, EFI_POISON_UNIT_SIZE);
+	u32 unit_size = EFI_POISON_UNIT_SIZE;
+
+	while (DIV_ROUND_UP(nr_units, BITS_PER_BYTE) > EFI_POISON_MAX_TABLE_SIZE &&
+	       unit_size < EFI_POISON_MAX_UNIT_SIZE) {
+		nr_units = DIV_ROUND_UP(nr_units, 2);
+		unit_size *= 2;
+	}
+
+	*bitmap_size = DIV_ROUND_UP(nr_units, BITS_PER_BYTE);
+	return unit_size;
+}
+
+/* ACPI reclaim memory, so the next kernel does not treat it as free RAM. */
+static struct linux_efi_poisoned_memory *efi_poison_alloc(u64 bitmap_size,
+							  u32 unit_size)
+{
+	struct linux_efi_poisoned_memory *pm;
+	efi_status_t status;
+
+	status = efi_bs_call(allocate_pool, EFI_ACPI_RECLAIM_MEMORY,
+			     sizeof(*pm) + bitmap_size, (void **)&pm);
+	if (status != EFI_SUCCESS)
+		return NULL;
+
+	pm->version = 1;
+	pm->unit_size = unit_size;
+	pm->phys_base = 0;
+	pm->size = bitmap_size;
+	memset(pm->bitmap, 0, bitmap_size);
+
+	return pm;
+}
+
+/*
+ * Allocate and install the poisoned-memory bitmap while boot services are
+ * available
+ */
+void install_poisoned_memory_table(void)
+{
+	efi_guid_t poisoned_memory_table_guid = LINUX_EFI_POISONED_MEMORY_TABLE_GUID;
+	struct linux_efi_poisoned_memory *pm;
+	u64 ram_top, bitmap_size;
+	efi_status_t status;
+	u32 unit_size;
+
+	/* A table installed by an earlier boot rides the system table across kexec. */
+	pm = get_efi_config_table(poisoned_memory_table_guid);
+	if (pm) {
+		if (pm->version != 1)
+			efi_err("Unknown version of poisoned-memory table\n");
+		return;
+	}
+
+	if (efi_get_ram_top(&ram_top) != EFI_SUCCESS) {
+		efi_err("Failed to size the poisoned-memory table!\n");
+		return;
+	}
+
+	unit_size = efi_poison_geometry(ram_top, &bitmap_size);
+
+	pm = efi_poison_alloc(bitmap_size, unit_size);
+	if (!pm) {
+		efi_err("Failed to allocate poisoned-memory table!\n");
+		return;
+	}
+
+	status = efi_bs_call(install_configuration_table,
+			     &poisoned_memory_table_guid, pm);
+	if (status != EFI_SUCCESS) {
+		efi_bs_call(free_pool, pm);
+		efi_err("Failed to install poisoned-memory config table!\n");
+	}
+}
+#endif
