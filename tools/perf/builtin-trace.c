@@ -2096,6 +2096,18 @@ static int syscall__alloc_arg_fmts(struct syscall *sc, int nr_args)
 }
 
 static const struct syscall_arg_fmt syscall_arg_fmts__by_name[] = {
+	{ .name = "action",	.scnprintf = SCA_KSYM, },
+	{ .name = "call_site",	.scnprintf = SCA_KSYM, },
+	{ .name = "callback",	.scnprintf = SCA_KSYM, },
+	{ .name = "caller",	.scnprintf = SCA_KSYM, },
+	{ .name = "caller_ip",	.scnprintf = SCA_KSYM, },
+	{ .name = "callsite",	.scnprintf = SCA_KSYM, },
+	{ .name = "cb",		.scnprintf = SCA_KSYM, },
+	{ .name = "fn",		.scnprintf = SCA_KSYM, },
+	{ .name = "func",	.scnprintf = SCA_KSYM, },
+	{ .name = "function",	.scnprintf = SCA_KSYM, },
+	{ .name = "handler",	.scnprintf = SCA_KSYM, },
+	{ .name = "location",	.scnprintf = SCA_KSYM, },
 	{ .name = "msr",	.scnprintf = SCA_X86_MSR,	  .strtoul = STUL_X86_MSR,	   },
 	{ .name = "vector",	.scnprintf = SCA_X86_IRQ_VECTORS, .strtoul = STUL_X86_IRQ_VECTORS, },
 };
@@ -2198,38 +2210,47 @@ syscall_arg_fmt__init_array(struct syscall_arg_fmt *arg, struct tep_format_field
 		    ((len >= 4 && strcmp(field->name + len - 4, "name") == 0) ||
 		     strstr(field->name, "path") != NULL)) {
 			arg->scnprintf = SCA_FILENAME;
-		} else if ((field->flags & TEP_FIELD_IS_POINTER) || strstr(field->name, "addr") ||
-			   field_has_hex_fmt(field, len))
-			arg->scnprintf = SCA_PTR;
-		else if (strcmp(field->type, "pid_t") == 0)
-			arg->scnprintf = SCA_PID;
-		else if (strcmp(field->type, "umode_t") == 0)
-			arg->scnprintf = SCA_MODE_T;
-		else if ((field->flags & TEP_FIELD_IS_ARRAY) && strstr(field->type, "char")) {
-			arg->scnprintf = SCA_CHAR_ARRAY;
-			arg->nr_entries = field->arraylen;
-		} else if ((strcmp(field->type, "int") == 0 ||
-			  strcmp(field->type, "unsigned int") == 0 ||
-			  strcmp(field->type, "long") == 0) &&
-			 len >= 2 && strcmp(field->name + len - 2, "fd") == 0) {
-			/*
-			 * /sys/kernel/tracing/events/syscalls/sys_enter*
-			 * grep -E 'field:.*fd;' .../format|sed -r 's/.*field:([a-z ]+) [a-z_]*fd.+/\1/g'|sort|uniq -c
-			 * 65 int
-			 * 23 unsigned int
-			 * 7 unsigned long
-			 */
-			arg->scnprintf = SCA_FD;
-		} else if (strstr(field->type, "enum") && use_btf != NULL) {
-			*use_btf = true;
-			arg->strtoul = STUL_BTF_TYPE;
+		} else if (field->type && (strstr(field->type, "(*)") != NULL ||
+					   strstr(field->type, "_func_t") != NULL ||
+					   strstr(field->type, "_fn") != NULL)) {
+			arg->scnprintf = SCA_KSYM;
 		} else {
 			const struct syscall_arg_fmt *fmt =
 				syscall_arg_fmt__find_by_name(field->name);
 
 			if (fmt) {
-				arg->scnprintf = fmt->scnprintf;
-				arg->strtoul   = fmt->strtoul;
+				if (fmt->scnprintf == SCA_KSYM) {
+					if ((field->flags & TEP_FIELD_IS_POINTER) ||
+					    (field->size == sizeof(void *) && !(field->flags & TEP_FIELD_IS_ARRAY))) {
+						arg->scnprintf = fmt->scnprintf;
+						arg->strtoul   = fmt->strtoul;
+					}
+				} else {
+					arg->scnprintf = fmt->scnprintf;
+					arg->strtoul   = fmt->strtoul;
+				}
+			}
+
+			if (arg->scnprintf == NULL) {
+				if ((field->flags & TEP_FIELD_IS_POINTER) || strstr(field->name, "addr") ||
+				    field_has_hex_fmt(field, len)) {
+					arg->scnprintf = SCA_PTR;
+				} else if (strcmp(field->type, "pid_t") == 0) {
+					arg->scnprintf = SCA_PID;
+				} else if (strcmp(field->type, "umode_t") == 0) {
+					arg->scnprintf = SCA_MODE_T;
+				} else if ((field->flags & TEP_FIELD_IS_ARRAY) && strstr(field->type, "char")) {
+					arg->scnprintf = SCA_CHAR_ARRAY;
+					arg->nr_entries = field->arraylen;
+				} else if ((strcmp(field->type, "int") == 0 ||
+					    strcmp(field->type, "unsigned int") == 0 ||
+					    strcmp(field->type, "long") == 0) &&
+					   len >= 2 && strcmp(field->name + len - 2, "fd") == 0) {
+					arg->scnprintf = SCA_FD;
+				} else if (strstr(field->type, "enum") && use_btf != NULL) {
+					*use_btf = true;
+					arg->strtoul = STUL_BTF_TYPE;
+				}
 			}
 		}
 	}
@@ -3297,12 +3318,6 @@ static unsigned char bitmap_byte(const unsigned long *mask, int byte_idx)
 	return b_val;
 }
 
-static bool trace__field_is_ip(const char *name)
-{
-	return !strcmp(name, "__probe_ip") ||
-	       !strcmp(name, "caller_ip") ||
-	       !strcmp(name, "call_site");
-}
 
 static size_t trace__fprintf_tp_fields(struct trace *trace, struct perf_sample *sample,
 				       struct thread *thread, void *augmented_args, int augmented_args_size)
@@ -3404,14 +3419,11 @@ static size_t trace__fprintf_tp_fields(struct trace *trace, struct perf_sample *
 		 * Suppress it by default to avoid cluttering the output.
 		 * If verbose mode is enabled, ensure it is formatted as a
 		 * hexadecimal memory address rather than a signed integer.
-		 *
-		 * caller_ip and call_site are also expected to be instruction
-		 * pointers and should always be represented in hexadecimal.
 		 */
 		is_probe_ip = evsel__is_probe(evsel) && !strcmp(field->name, "__probe_ip");
 
-		if (is_probe_ip || trace__field_is_ip(field->name)) {
-			if (is_probe_ip && !verbose)
+		if (is_probe_ip) {
+			if (!verbose)
 				continue;
 
 			printed += scnprintf(bf + printed, size - printed,
