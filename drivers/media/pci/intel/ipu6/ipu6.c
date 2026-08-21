@@ -480,6 +480,40 @@ static void ipu6_configure_vc_mechanism(struct ipu6_device *isp)
 	writel(val, isp->base + BUTTRESS_REG_BTRS_CTRL);
 }
 
+static int __ipu6_map_fw_by_sys(struct ipu6_device *isp, struct ipu6_bus_device *adev)
+{
+	int ret = ipu6_map_fw_region(adev, isp->cpd_fw->data, isp->cpd_fw->size,
+				 DMA_TO_DEVICE, 0);
+
+	if (ret) {
+		dev_err_probe(&isp->pdev->dev, ret,
+			      "Firmware mapping failed\n");
+		return ret;
+	}
+
+	ret = ipu6_cpd_create_pkg_dir(adev, isp->cpd_fw->data);
+	if (ret) {
+		dev_err_probe(&isp->pdev->dev, ret,
+			      "failed to create pkg dir\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int ipu6_map_fw(struct ipu6_device *isp)
+{
+	int ret = __ipu6_map_fw_by_sys(isp, isp->psys);
+
+	if (ret)
+		return ret;
+
+	if (!isp->secure_mode)
+		return __ipu6_map_fw_by_sys(isp, isp->isys);
+
+	return 0;
+}
+
 static int ipu6_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	const struct ipu6_buttress_ctrl *isys_ctrl, *psys_ctrl;
@@ -624,19 +658,9 @@ static int ipu6_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto out_ipu6_rpm_put;
 	}
 
-	ret = ipu6_map_fw_region(isp->psys, isp->cpd_fw->data,
-				 isp->cpd_fw->size, DMA_TO_DEVICE, 0);
-	if (ret) {
-		dev_err_probe(&isp->pdev->dev, ret, "failed to map fw image\n");
+	ret = ipu6_map_fw(isp);
+	if (ret)
 		goto out_ipu6_rpm_put;
-	}
-
-	ret = ipu6_cpd_create_pkg_dir(isp->psys, isp->cpd_fw->data);
-	if (ret) {
-		dev_err_probe(&isp->pdev->dev, ret,
-			      "failed to create pkg dir\n");
-		goto out_ipu6_rpm_put;
-	}
 
 	ret = devm_request_threaded_irq(dev, pdev->irq, ipu6_buttress_isr,
 					ipu6_buttress_isr_threaded,
@@ -679,7 +703,13 @@ out_ipu6_rpm_put:
 out_ipu6_bus_del_devices:
 	if (!IS_ERR_OR_NULL(isp->psys)) {
 		ipu6_cpd_free_pkg_dir(isp->psys);
-		ipu6_unmap_fw_region(isp->psys, DMA_TO_DEVICE);
+		if (isp->psys->fw_sgt.nents)
+			ipu6_unmap_fw_region(isp->psys, DMA_TO_DEVICE);
+	}
+	if (!IS_ERR_OR_NULL(isp->isys)) {
+		ipu6_cpd_free_pkg_dir(isp->isys);
+		if (isp->isys->fw_sgt.nents)
+			ipu6_unmap_fw_region(isp->isys, DMA_TO_DEVICE);
 	}
 	if (!IS_ERR_OR_NULL(isp->psys) && !IS_ERR_OR_NULL(isp->psys->mmu))
 		ipu6_mmu_cleanup(isp->psys->mmu);
@@ -703,6 +733,13 @@ static void ipu6_pci_remove(struct pci_dev *pdev)
 	ipu6_cpd_free_pkg_dir(isp->psys);
 
 	ipu6_unmap_fw_region(isp->psys, DMA_TO_DEVICE);
+
+	if (isp->isys) {
+		ipu6_cpd_free_pkg_dir(isp->isys);
+		if (isp->isys->fw_sgt.nents)
+			ipu6_unmap_fw_region(isp->isys, DMA_TO_DEVICE);
+	}
+
 	ipu6_buttress_exit(isp);
 
 	ipu6_bus_del_devices(pdev);
