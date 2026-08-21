@@ -977,7 +977,7 @@ static const struct media_entity_operations xtpg_media_ops = {
  * Power Management
  */
 
-static int __maybe_unused xtpg_pm_suspend(struct device *dev)
+static int xtpg_pm_suspend(struct device *dev)
 {
 	struct xtpg_device *xtpg = dev_get_drvdata(dev);
 
@@ -986,7 +986,7 @@ static int __maybe_unused xtpg_pm_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused xtpg_pm_resume(struct device *dev)
+static int xtpg_pm_resume(struct device *dev)
 {
 	struct xtpg_device *xtpg = dev_get_drvdata(dev);
 
@@ -1291,7 +1291,7 @@ static void xtpg_remove(struct platform_device *pdev)
 	xvip_cleanup_resources(&xtpg->xvip);
 }
 
-static SIMPLE_DEV_PM_OPS(xtpg_pm_ops, xtpg_pm_suspend, xtpg_pm_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(xtpg_pm_ops, xtpg_pm_suspend, xtpg_pm_resume);
 
 static const struct of_device_id xtpg_of_id_table[] = {
 	{ .compatible = "xlnx,v-tpg-5.0" },
@@ -1305,7 +1305,7 @@ MODULE_DEVICE_TABLE(of, xtpg_of_id_table);
 static struct platform_driver xtpg_driver = {
 	.driver = {
 		.name		= "xilinx-tpg",
-		.pm		= &xtpg_pm_ops,
+		.pm		= pm_sleep_ptr(&xtpg_pm_ops),
 		.of_match_table	= xtpg_of_id_table,
 	},
 	.probe			= xtpg_probe,
