@@ -5409,6 +5409,88 @@ static int pci_bus_trylock(struct pci_bus *bus)
 	return __pci_bus_trylock(bus, NULL);
 }
 
+struct pci_bus_lock_context {
+	struct pci_dev **devs;
+	size_t nr_devs;
+};
+
+static size_t pci_bus_lock_count(struct pci_bus *bus)
+{
+	struct pci_dev *dev;
+	size_t count = 1;
+
+	lockdep_assert_held(&pci_bus_sem);
+
+	list_for_each_entry(dev, &bus->devices, bus_list) {
+		if (dev->subordinate)
+			count += pci_bus_lock_count(dev->subordinate);
+		else
+			count++;
+	}
+
+	return count;
+}
+
+static void pci_bus_lock_fill(struct pci_bus *bus,
+			      struct pci_bus_lock_context *context,
+			      size_t *index)
+{
+	struct pci_dev *dev;
+
+	lockdep_assert_held(&pci_bus_sem);
+
+	context->devs[(*index)++] = pci_dev_get(bus->self);
+	list_for_each_entry(dev, &bus->devices, bus_list) {
+		if (dev->subordinate)
+			pci_bus_lock_fill(dev->subordinate, context, index);
+		else
+			context->devs[(*index)++] = pci_dev_get(dev);
+	}
+}
+
+static int pci_bus_lock_snapshot_init(struct pci_bus *bus,
+				      struct pci_bus_lock_context *context)
+{
+	size_t index = 0;
+
+	lockdep_assert_held(&pci_bus_sem);
+
+	context->nr_devs = pci_bus_lock_count(bus);
+	context->devs = kvmalloc_array(context->nr_devs,
+				       sizeof(*context->devs), GFP_KERNEL);
+	if (!context->devs)
+		return -ENOMEM;
+
+	pci_bus_lock_fill(bus, context, &index);
+
+	return 0;
+}
+
+static void pci_bus_lock_snapshot(struct pci_bus_lock_context *context)
+{
+	size_t i;
+
+	for (i = 0; i < context->nr_devs; i++)
+		pci_dev_lock(context->devs[i]);
+}
+
+static void pci_bus_unlock_snapshot(struct pci_bus_lock_context *context)
+{
+	size_t i;
+
+	for (i = context->nr_devs; i > 0; i--)
+		pci_dev_unlock(context->devs[i - 1]);
+}
+
+static void pci_bus_lock_snapshot_release(struct pci_bus_lock_context *context)
+{
+	size_t i;
+
+	for (i = 0; i < context->nr_devs; i++)
+		pci_dev_put(context->devs[i]);
+	kvfree(context->devs);
+}
+
 /* Do any devices on or below this slot prevent a bus reset? */
 static bool pci_slot_resettable(struct pci_slot *slot)
 {
@@ -5585,21 +5667,31 @@ static int pci_try_reset_slot(struct pci_slot *slot)
 
 static int pci_bus_reset(struct pci_bus *bus, bool probe)
 {
+	struct pci_bus_lock_context context;
 	int ret;
 
+	down_read(&pci_bus_sem);
+
 	if (!bus->self || !pci_bus_resettable(bus))
-		return -ENOTTY;
+		ret = -ENOTTY;
+	else if (probe)
+		ret = 0;
+	else
+		ret = pci_bus_lock_snapshot_init(bus, &context);
 
-	if (probe)
-		return 0;
+	up_read(&pci_bus_sem);
 
-	pci_bus_lock(bus);
+	if (ret || probe)
+		return ret;
+
+	pci_bus_lock_snapshot(&context);
 
 	might_sleep();
 
 	ret = pci_bridge_secondary_bus_reset(bus->self);
 
-	pci_bus_unlock(bus);
+	pci_bus_unlock_snapshot(&context);
+	pci_bus_lock_snapshot_release(&context);
 
 	return ret;
 }
