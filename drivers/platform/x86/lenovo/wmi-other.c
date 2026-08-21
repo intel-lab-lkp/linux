@@ -32,6 +32,7 @@
 #include <linux/component.h>
 #include <linux/container_of.h>
 #include <linux/device.h>
+#include <linux/dmi.h>
 #include <linux/export.h>
 #include <linux/gfp_types.h>
 #include <linux/hwmon.h>
@@ -83,6 +84,7 @@ enum lwmi_feature_id_psu {
 	LWMI_FEATURE_ID_PSU_CHARGE_BEHAVIOUR =	0x02,
 };
 
+#define LWMI_FEATURE_ID_FAN_FULLSPEED 0x02
 #define LWMI_FEATURE_ID_FAN_RPM 0x03
 
 #define LWMI_TYPE_ID_CROSSLOAD	0x01
@@ -102,6 +104,10 @@ enum lwmi_feature_id_psu {
 #define LWMI_CHARGE_TYPE_STANDARD	0x00
 #define LWMI_CHARGE_TYPE_LONGLIFE	0x01
 
+#define LWMI_ATTR_ID_FAN_FULLSPEED					\
+	lwmi_attr_id(LWMI_DEVICE_ID_FAN, LWMI_FEATURE_ID_FAN_FULLSPEED, \
+		     LWMI_GZ_THERMAL_MODE_NONE, LWMI_TYPE_ID_NONE)
+
 #define LWMI_ATTR_ID_FAN_RPM(x)                                   \
 	lwmi_attr_id(LWMI_DEVICE_ID_FAN, LWMI_FEATURE_ID_FAN_RPM, \
 		     LWMI_GZ_THERMAL_MODE_NONE, LWMI_FAN_ID(x))
@@ -114,6 +120,50 @@ enum lwmi_feature_id_psu {
 #define LWMI_OM_HWMON_NAME "lenovo_wmi_other"
 
 static DEFINE_IDA(lwmi_om_ida);
+
+static const struct dmi_system_id lwmi_fan_dmi_table[] = {
+	{
+		.ident = "Lenovo Legion Go 8APU1",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "Legion Go 8APU1"),
+		},
+	},
+	{
+		.ident = "Lenovo Legion Go S 8APU1",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "Legion Go S 8APU1"),
+		},
+	},
+	{
+		.ident = "Lenovo Legion Go S 8ARP1",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "Legion Go S 8ARP1"),
+		},
+	},
+	{
+		.ident = "Lenovo Legion Go 8ASP2",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "Legion Go 8ASP2"),
+		},
+	},
+	{
+		.ident = "Lenovo Legion Go 8AHP2",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "Legion Go 8AHP2"),
+		},
+	},
+	{}
+};
+
+static bool lwmi_fan_supported(void)
+{
+	return dmi_check_system(lwmi_fan_dmi_table);
+}
 
 enum attribute_property {
 	DEFAULT_VAL,
@@ -144,6 +194,7 @@ struct lwmi_om_priv {
 	int ida_id;
 
 	struct lwmi_fan_info fan_info[LWMI_FAN_NR];
+	bool fullspeed_supported;
 
 	struct {
 		bool capdata00_collected : 1;
@@ -237,6 +288,38 @@ static int lwmi_om_fan_get_set(struct lwmi_om_priv *priv, int channel, u32 *val,
 	return (retval == 0 || retval == 1) ? 0 : -EIO;
 }
 
+static int lwmi_om_fullspeed_get(struct lwmi_om_priv *priv, long *enable)
+{
+	struct wmi_method_args_32 args = {
+		.arg0 = LWMI_ATTR_ID_FAN_FULLSPEED,
+	};
+	u32 value;
+	int ret;
+
+	ret = lwmi_dev_evaluate_int(priv->wdev, 0, LWMI_FEATURE_VALUE_GET,
+				    (u8 *)&args, sizeof(args), &value);
+	if (ret)
+		return ret;
+
+	if (value > 1)
+		return -ERANGE;
+
+	*enable = value ? 0 : 2;
+	return 0;
+}
+
+static int lwmi_om_fullspeed_set(struct lwmi_om_priv *priv, bool fullspeed)
+{
+	struct wmi_method_args_32 args = {
+		.arg0 = LWMI_ATTR_ID_FAN_FULLSPEED,
+		.arg1 = fullspeed,
+	};
+
+	/* The WMI method has no return value. */
+	return lwmi_dev_evaluate_int(priv->wdev, 0, LWMI_FEATURE_VALUE_SET,
+				     (u8 *)&args, sizeof(args), NULL);
+}
+
 /**
  * lwmi_om_hwmon_is_visible() - Determine visibility of HWMON attributes
  * @drvdata: Driver private data
@@ -254,6 +337,10 @@ static umode_t lwmi_om_hwmon_is_visible(const void *drvdata, enum hwmon_sensor_t
 {
 	struct lwmi_om_priv *priv = (struct lwmi_om_priv *)drvdata;
 	bool visible = false;
+
+	if (type == hwmon_pwm && priv->fullspeed_supported && channel == 0 &&
+	    attr == hwmon_pwm_enable)
+		return 0644;
 
 	if (type == hwmon_fan) {
 		if (!(priv->fan_info[channel].supported & LWMI_SUPP_VALID))
@@ -311,6 +398,9 @@ static int lwmi_om_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 	u32 retval = 0;
 	int err;
 
+	if (type == hwmon_pwm && attr == hwmon_pwm_enable && channel == 0)
+		return lwmi_om_fullspeed_get(priv, val);
+
 	if (type == hwmon_fan) {
 		switch (attr) {
 		/*
@@ -366,6 +456,17 @@ static int lwmi_om_hwmon_write(struct device *dev, enum hwmon_sensor_types type,
 	u32 raw, min_rpm, max_rpm;
 	int err;
 
+	if (type == hwmon_pwm && attr == hwmon_pwm_enable && channel == 0) {
+		switch (val) {
+		case 0:
+			return lwmi_om_fullspeed_set(priv, true);
+		case 2:
+			return lwmi_om_fullspeed_set(priv, false);
+		default:
+			return -EINVAL;
+		}
+	}
+
 	if (type == hwmon_fan) {
 		switch (attr) {
 		case hwmon_fan_target:
@@ -420,6 +521,7 @@ static const struct hwmon_channel_info * const lwmi_om_hwmon_info[] = {
 			   HWMON_F_MIN | HWMON_F_MAX,
 			   HWMON_F_INPUT | HWMON_F_TARGET | HWMON_F_DIV |
 			   HWMON_F_MIN | HWMON_F_MAX),
+	HWMON_CHANNEL_INFO(pwm, HWMON_PWM_ENABLE),
 	NULL
 };
 
@@ -440,6 +542,7 @@ static const struct hwmon_chip_info lwmi_om_hwmon_chip_info = {
  */
 static void lwmi_om_hwmon_add(struct lwmi_om_priv *priv)
 {
+	long enable;
 	int i, valid;
 
 	if (WARN_ON(priv->hwmon_dev))
@@ -458,6 +561,9 @@ static void lwmi_om_hwmon_add(struct lwmi_om_priv *priv)
 	if (relax_fan_constraint)
 		dev_warn(&priv->wdev->dev, "fan RPM constraint relaxed. Use with caution\n");
 
+	priv->fullspeed_supported =
+		lwmi_fan_supported() && !lwmi_om_fullspeed_get(priv, &enable);
+
 	valid = 0;
 	for (i = 0; i < LWMI_FAN_NR; i++) {
 		if (!(priv->fan_info[i].supported & LWMI_SUPP_VALID))
@@ -474,7 +580,7 @@ static void lwmi_om_hwmon_add(struct lwmi_om_priv *priv)
 		}
 	}
 
-	if (valid == 0) {
+	if (valid == 0 && !priv->fullspeed_supported) {
 		dev_warn(&priv->wdev->dev,
 			 "fan reporting/tuning is unsupported on this device\n");
 		return;

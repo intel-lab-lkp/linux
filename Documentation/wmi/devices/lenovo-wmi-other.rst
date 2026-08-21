@@ -49,6 +49,13 @@ The following HWMON attributes are implemented:
 Due to the internal RPM divisor, the current/target RPMs are rounded down to
 its nearest multiple. The divisor itself is not necessary to be a power of two.
 
+Legion Go fan controls
+----------------------
+
+On supported Legion Go models, Other Mode feature ``0x04020000`` controls
+Full Speed mode in firmware. The driver exposes it as ``pwm1_enable``. Value 0
+enables Full Speed, and value 2 returns fan control to firmware.
+
 LENOVO_CAPABILITY_DATA_01
 -------------------------
 
