@@ -277,10 +277,6 @@ int __exfat_truncate(struct inode *inode)
 	/* clear exfat cache */
 	exfat_cache_inval_inode(inode);
 
-	/* hint information */
-	ei->hint_bmap.off = EXFAT_EOF_CLUSTER;
-	ei->hint_bmap.clu = EXFAT_EOF_CLUSTER;
-
 	/* hint_stat will be used if this is directory. */
 	ei->hint_stat.eidx = 0;
 	ei->hint_stat.clu = ei->start_clu;

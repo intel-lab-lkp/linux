@@ -144,7 +144,6 @@ int exfat_map_cluster(struct inode *inode, unsigned int clu_offset,
 	struct super_block *sb = inode->i_sb;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	struct exfat_inode_info *ei = EXFAT_I(inode);
-	unsigned int local_clu_offset = clu_offset;
 	unsigned int num_to_be_allocated = 0, num_clusters;
 
 	num_clusters = exfat_bytes_to_cluster(sbi, exfat_ondisk_size(inode));
@@ -233,10 +232,6 @@ int exfat_map_cluster(struct inode *inode, unsigned int clu_offset,
 		if (balloc)
 			*balloc = true;
 	}
-
-	/* hint information */
-	ei->hint_bmap.off = local_clu_offset;
-	ei->hint_bmap.clu = *clu;
 
 	return 0;
 }
