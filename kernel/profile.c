@@ -177,32 +177,12 @@ read_profile(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 	return read;
 }
 
-/* default is to not implement this call */
-int __weak setup_profiling_timer(unsigned mult)
-{
-	return -EINVAL;
-}
-
 /*
  * Writing to /proc/profile resets the counters
- *
- * Writing a 'profiling multiplier' value into it also re-sets the profiling
- * interrupt frequency, on architectures that support this.
  */
 static ssize_t write_profile(struct file *file, const char __user *buf,
 			     size_t count, loff_t *ppos)
 {
-#ifdef CONFIG_SMP
-	if (count == sizeof(int)) {
-		unsigned int multiplier;
-
-		if (copy_from_user(&multiplier, buf, sizeof(int)))
-			return -EFAULT;
-
-		if (setup_profiling_timer(multiplier))
-			return -EINVAL;
-	}
-#endif
 	memset(prof_buffer, 0, prof_len * sizeof(atomic_t));
 	return count;
 }
