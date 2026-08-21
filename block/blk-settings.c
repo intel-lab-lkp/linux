@@ -653,6 +653,14 @@ static unsigned int blk_round_down_sectors(unsigned int sectors, unsigned int lb
 	return sectors;
 }
 
+static void blk_clear_atomic_write_limits(struct queue_limits *lim)
+{
+	lim->atomic_write_hw_max = 0;
+	lim->atomic_write_hw_unit_max = 0;
+	lim->atomic_write_hw_unit_min = 0;
+	lim->atomic_write_hw_boundary = 0;
+}
+
 /* Check if second and later bottom devices are compliant */
 static bool blk_stack_atomic_writes_tail(struct queue_limits *t,
 				struct queue_limits *b)
@@ -726,16 +734,13 @@ static bool blk_stack_atomic_writes_head(struct queue_limits *t,
 	return true;
 }
 
-static void blk_stack_atomic_writes_limits(struct queue_limits *t,
-				struct queue_limits *b, sector_t start)
+static bool blk_stack_atomic_writes_hw_limits(struct queue_limits *t,
+				struct queue_limits *b)
 {
 	if (!(b->features & BLK_FEAT_ATOMIC_WRITES))
 		goto unsupported;
 
 	if (!b->atomic_write_hw_unit_min)
-		goto unsupported;
-
-	if (!blk_atomic_write_start_sect_aligned(start, b))
 		goto unsupported;
 
 	/* UINT_MAX indicates no stacking of bottom devices yet */
@@ -747,13 +752,19 @@ static void blk_stack_atomic_writes_limits(struct queue_limits *t,
 			goto unsupported;
 	}
 	blk_stack_atomic_writes_chunk_sectors(t);
-	return;
+	return true;
 
 unsupported:
-	t->atomic_write_hw_max = 0;
-	t->atomic_write_hw_unit_max = 0;
-	t->atomic_write_hw_unit_min = 0;
-	t->atomic_write_hw_boundary = 0;
+	blk_clear_atomic_write_limits(t);
+	return false;
+}
+
+static void blk_stack_atomic_writes_limits(struct queue_limits *t,
+				struct queue_limits *b, sector_t start)
+{
+	if (blk_stack_atomic_writes_hw_limits(t, b) &&
+	    !blk_atomic_write_start_sect_aligned(start, b))
+		blk_clear_atomic_write_limits(t);
 }
 
 #define STACK_MIN_NOT_ZERO(t, b, field) \
