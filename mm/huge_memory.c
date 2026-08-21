@@ -193,9 +193,10 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 	if (!vma_is_anonymous(vma)) {
 		/*
 		 * Enforce THP collapse requirements as necessary. Anonymous vmas
-		 * were already handled in thp_vma_allowable_orders().
+		 * were already handled in thp_vma_allowable_orders(). Special
+		 * mappings have no THP costs and are exempt.
 		 */
-		if (!forced_collapse &&
+		if (!forced_collapse && !vma_is_special_huge(vma) &&
 		    (!hugepage_global_enabled() || (!(vm_flags & VM_HUGEPAGE) &&
 						    !hugepage_global_always())))
 			return 0;
