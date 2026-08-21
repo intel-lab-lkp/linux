@@ -14,6 +14,7 @@
 #include <linux/types.h>
 #include <linux/completion.h>
 #include <linux/list.h>
+#include <linux/workqueue.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
 #include <linux/cdev.h>
@@ -569,12 +570,14 @@ struct pmcraid_cmd {
 	struct list_head free_list;
 	struct completion wait_for_completion;
 	struct timer_list timer;	/* needed for internal commands */
+	struct work_struct timer_work;
 	u32 timeout;			/* current timeout value */
 	u32 index;			/* index into the command list */
 	u8 completion_req;		/* for handling internal commands */
 	u8 release;			/* for handling completions */
 
 	void (*cmd_done) (struct pmcraid_cmd *);
+	void (*work_fn)(struct pmcraid_cmd *cmd);
 	struct pmcraid_instance *drv_inst;
 
 	struct pmcraid_sglist *sglist; /* used for passthrough IOCTLs */

@@ -55,6 +55,43 @@ static unsigned int pmcraid_enable_msix;
  */
 static atomic_t pmcraid_adapter_count = ATOMIC_INIT(0);
 
+static void pmcraid_cmd_work(struct work_struct *work);
+static void pmcraid_complete_reset_cmd(struct pmcraid_cmd *cmd);
+
+static void pmcraid_complete_reset_cmd(struct pmcraid_cmd *cmd)
+{
+	struct pmcraid_instance *pinstance = cmd->drv_inst;
+	unsigned long lock_flags;
+
+	spin_lock_irqsave(pinstance->host->host_lock, lock_flags);
+	cmd->cmd_done(cmd);
+	spin_unlock_irqrestore(pinstance->host->host_lock, lock_flags);
+}
+
+static void pmcraid_complete_response_cmd(struct pmcraid_cmd *cmd)
+{
+	cmd->cmd_done(cmd);
+}
+
+static void pmcraid_schedule_cmd_work(struct pmcraid_cmd *cmd,
+				      void (*work_fn)(struct pmcraid_cmd *))
+{
+	/* The command block stays unavailable until the worker completes. */
+	timer_shutdown(&cmd->timer);
+	cmd->work_fn = work_fn;
+	schedule_work(&cmd->timer_work);
+}
+
+static void pmcraid_cmd_work(struct work_struct *work)
+{
+	struct pmcraid_cmd *cmd = container_of(work, struct pmcraid_cmd,
+			timer_work);
+	void (*work_fn)(struct pmcraid_cmd *) = cmd->work_fn;
+
+	timer_shutdown_sync(&cmd->timer);
+	work_fn(cmd);
+}
+
 /*
  * Supporting user-level control interface through IOCTL commands.
  * pmcraid_major - major number to use
@@ -330,6 +367,7 @@ static void pmcraid_init_cmdblk(struct pmcraid_cmd *cmd, int index)
 	}
 
 	cmd->cmd_done = NULL;
+	cmd->work_fn = NULL;
 	cmd->scsi_cmd = NULL;
 	cmd->release = 0;
 	cmd->completion_req = 0;
@@ -483,8 +521,6 @@ static void pmcraid_clr_trans_op(
 	struct pmcraid_instance *pinstance
 )
 {
-	unsigned long lock_flags;
-
 	if (!pinstance->interrupt_mode) {
 		iowrite32(INTRS_TRANSITION_TO_OPERATIONAL,
 			pinstance->int_regs.ioa_host_interrupt_mask_reg);
@@ -495,12 +531,8 @@ static void pmcraid_clr_trans_op(
 	}
 
 	if (pinstance->reset_cmd != NULL) {
-		timer_delete(&pinstance->reset_cmd->timer);
-		spin_lock_irqsave(
-			pinstance->host->host_lock, lock_flags);
-		pinstance->reset_cmd->cmd_done(pinstance->reset_cmd);
-		spin_unlock_irqrestore(
-			pinstance->host->host_lock, lock_flags);
+		pmcraid_schedule_cmd_work(pinstance->reset_cmd,
+					  pmcraid_complete_reset_cmd);
 	}
 }
 
@@ -1967,6 +1999,32 @@ static void pmcraid_get_dump(struct pmcraid_instance *pinstance)
 	pmcraid_info("%s is not yet implemented\n", __func__);
 }
 
+static void pmcraid_fail_cmd(struct pmcraid_cmd *cmd)
+{
+	struct pmcraid_instance *pinstance = cmd->drv_inst;
+	unsigned long lock_flags;
+
+	spin_lock_irqsave(pinstance->host->host_lock, lock_flags);
+	if (cmd->scsi_cmd) {
+		struct scsi_cmnd *scsi_cmd = cmd->scsi_cmd;
+		__le32 resp = cmd->ioa_cb->ioarcb.response_handle;
+		u8 cdb = cmd->ioa_cb->ioarcb.cdb[0];
+
+		scsi_cmd->result |= DID_ERROR << 16;
+		scsi_dma_unmap(scsi_cmd);
+		pmcraid_info("failing(%d) CDB[0] = %x result: %x\n",
+			     le32_to_cpu(resp) >> 2, cdb, scsi_cmd->result);
+		pmcraid_return_cmd(cmd);
+		scsi_done(scsi_cmd);
+	} else if (cmd->cmd_done == pmcraid_internal_done ||
+		   cmd->cmd_done == pmcraid_erp_done) {
+		cmd->cmd_done(cmd);
+	} else {
+		pmcraid_return_cmd(cmd);
+	}
+	spin_unlock_irqrestore(pinstance->host->host_lock, lock_flags);
+}
+
 /**
  * pmcraid_fail_outstanding_cmds - Fails all outstanding ops.
  * @pinstance: pointer to adapter instance structure
@@ -1977,12 +2035,13 @@ static void pmcraid_get_dump(struct pmcraid_instance *pinstance)
  * pool.
  *
  * Return value:
- *	 none
+ *	 true if reset command completion was deferred, otherwise false
  */
-static void pmcraid_fail_outstanding_cmds(struct pmcraid_instance *pinstance)
+static bool pmcraid_fail_outstanding_cmds(struct pmcraid_instance *pinstance)
 {
 	struct pmcraid_cmd *cmd, *temp;
 	unsigned long lock_flags;
+	bool reset_deferred = false;
 
 	/* pending command list is protected by pending_pool_lock. Its
 	 * traversal must be done as within this lock
@@ -1998,42 +2057,28 @@ static void pmcraid_fail_outstanding_cmds(struct pmcraid_instance *pinstance)
 		cmd->ioa_cb->ioasa.ilid =
 			cpu_to_le32(PMCRAID_DRIVER_ILID);
 
-		/* In case the command timer is still running */
-		timer_delete(&cmd->timer);
-
-		/* If this is an IO command, complete it by invoking scsi_done
-		 * function. If this is one of the internal commands other
-		 * than pmcraid_ioa_reset and HCAM commands invoke cmd_done to
-		 * complete it
-		 */
-		if (cmd->scsi_cmd) {
-
-			struct scsi_cmnd *scsi_cmd = cmd->scsi_cmd;
-			__le32 resp = cmd->ioa_cb->ioarcb.response_handle;
-
-			scsi_cmd->result |= DID_ERROR << 16;
-
-			scsi_dma_unmap(scsi_cmd);
-			pmcraid_return_cmd(cmd);
-
-			pmcraid_info("failing(%d) CDB[0] = %x result: %x\n",
-				     le32_to_cpu(resp) >> 2,
-				     cmd->ioa_cb->ioarcb.cdb[0],
-				     scsi_cmd->result);
-			scsi_done(scsi_cmd);
-		} else if (cmd->cmd_done == pmcraid_internal_done ||
-			   cmd->cmd_done == pmcraid_erp_done) {
-			cmd->cmd_done(cmd);
-		} else if (cmd->cmd_done != pmcraid_ioa_reset &&
-			   cmd->cmd_done != pmcraid_ioa_shutdown_done) {
-			pmcraid_return_cmd(cmd);
-		}
-
 		atomic_dec(&pinstance->outstanding_cmds);
+		if (cmd == pinstance->reset_cmd &&
+		    cmd->cmd_done == pmcraid_ioa_reset) {
+			/* The reset engine owns this command and must resume only
+			 * after its timer callback has finished.
+			 */
+			pmcraid_schedule_cmd_work(cmd, pmcraid_complete_reset_cmd);
+			reset_deferred = true;
+		} else if (cmd == pinstance->reset_cmd &&
+			   cmd->cmd_done == pmcraid_ioa_shutdown_done) {
+			/* pmcraid_ioa_shutdown_done() takes host_lock itself. */
+			pmcraid_schedule_cmd_work(cmd,
+						  pmcraid_complete_response_cmd);
+			reset_deferred = true;
+		} else {
+			pmcraid_schedule_cmd_work(cmd, pmcraid_fail_cmd);
+		}
 		spin_lock_irqsave(&pinstance->pending_pool_lock, lock_flags);
 	}
 
 	spin_unlock_irqrestore(&pinstance->pending_pool_lock, lock_flags);
+	return reset_deferred;
 }
 
 /**
@@ -2151,8 +2196,11 @@ static void pmcraid_ioa_reset(struct pmcraid_cmd *cmd)
 		 */
 		pci_restore_state(pinstance->pdev);
 
-		/* fail all pending commands */
-		pmcraid_fail_outstanding_cmds(pinstance);
+		/* fail all pending commands. If the reset command itself is still
+		 * pending, its timer must finish before the reset engine reuses it.
+		 */
+		if (pmcraid_fail_outstanding_cmds(pinstance))
+			break;
 
 		/* check if unit check is active, if so extract dump */
 		if (pinstance->ioa_unit_check) {
@@ -3934,7 +3982,6 @@ static void pmcraid_tasklet_function(unsigned long instance)
 	struct pmcraid_instance *pinstance;
 	unsigned long hrrq_lock_flags;
 	unsigned long pending_lock_flags;
-	unsigned long host_lock_flags;
 	spinlock_t *lockp; /* hrrq buffer lock */
 	int id;
 	u32 resp;
@@ -3982,17 +4029,15 @@ static void pmcraid_tasklet_function(unsigned long instance)
 		list_del(&cmd->free_list);
 		spin_unlock_irqrestore(&pinstance->pending_pool_lock,
 					pending_lock_flags);
-		timer_delete(&cmd->timer);
 		atomic_dec(&pinstance->outstanding_cmds);
 
 		if (cmd->cmd_done == pmcraid_ioa_reset) {
-			spin_lock_irqsave(pinstance->host->host_lock,
-					  host_lock_flags);
-			cmd->cmd_done(cmd);
-			spin_unlock_irqrestore(pinstance->host->host_lock,
-					       host_lock_flags);
+			pmcraid_schedule_cmd_work(cmd, pmcraid_complete_reset_cmd);
 		} else if (cmd->cmd_done != NULL) {
-			cmd->cmd_done(cmd);
+			pmcraid_schedule_cmd_work(cmd,
+						  pmcraid_complete_response_cmd);
+		} else {
+			timer_shutdown(&cmd->timer);
 		}
 		/* loop over until we are done with all responses */
 		spin_lock_irqsave(lockp, hrrq_lock_flags);
@@ -4097,7 +4142,10 @@ pmcraid_release_cmd_blocks(struct pmcraid_instance *pinstance, int max_index)
 {
 	int i;
 	for (i = 0; i < max_index; i++) {
-		kmem_cache_free(pinstance->cmd_cachep, pinstance->cmd_list[i]);
+		struct pmcraid_cmd *cmd = pinstance->cmd_list[i];
+
+		flush_work(&cmd->timer_work);
+		kmem_cache_free(pinstance->cmd_cachep, cmd);
 		pinstance->cmd_list[i] = NULL;
 	}
 	kmem_cache_destroy(pinstance->cmd_cachep);
@@ -4137,6 +4185,14 @@ pmcraid_release_control_blocks(
 	pinstance->control_pool = NULL;
 }
 
+static void pmcraid_flush_cmd_works(struct pmcraid_instance *pinstance)
+{
+	int i;
+
+	for (i = 0; i < PMCRAID_MAX_CMD; i++)
+		flush_work(&pinstance->cmd_list[i]->timer_work);
+}
+
 /**
  * pmcraid_allocate_cmd_blocks - allocate memory for cmd block structures
  * @pinstance: pointer to per adapter instance structure
@@ -4168,6 +4224,7 @@ static int pmcraid_allocate_cmd_blocks(struct pmcraid_instance *pinstance)
 			pmcraid_release_cmd_blocks(pinstance, i);
 			return -ENOMEM;
 		}
+		INIT_WORK(&pinstance->cmd_list[i]->timer_work, pmcraid_cmd_work);
 	}
 	return 0;
 }
@@ -4459,6 +4516,7 @@ static void pmcraid_kill_tasklets(struct pmcraid_instance *pinstance)
  */
 static void pmcraid_release_buffers(struct pmcraid_instance *pinstance)
 {
+	pmcraid_flush_cmd_works(pinstance);
 	pmcraid_release_config_buffers(pinstance);
 	pmcraid_release_control_blocks(pinstance, PMCRAID_MAX_CMD);
 	pmcraid_release_cmd_blocks(pinstance, PMCRAID_MAX_CMD);
