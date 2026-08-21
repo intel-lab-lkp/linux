@@ -600,8 +600,8 @@ static const struct clk_ops tegra_clk_sor_pad_ops = {
 static struct clk *tegra_clk_sor_pad_register(struct tegra_sor *sor,
 					      const char *name)
 {
+	struct clk_init_data init = {};
 	struct tegra_clk_sor_pad *pad;
-	struct clk_init_data init;
 	struct clk *clk;
 
 	pad = devm_kzalloc(sor->dev, sizeof(*pad), GFP_KERNEL);
