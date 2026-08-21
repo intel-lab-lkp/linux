@@ -146,6 +146,7 @@ static int genregs_set(struct task_struct *target,
 		       const void *kbuf, const void __user *ubuf)
 {
 	struct pt_regs *regs = task_pt_regs(target);
+	unsigned long sr = regs->sr & ~SR_USER_MASK;
 	int ret;
 
 	ret = user_regset_copyin(&pos, &count, &kbuf, &ubuf,
@@ -159,6 +160,7 @@ static int genregs_set(struct task_struct *target,
 	if (!ret)
 		user_regset_copyin_ignore(&pos, &count, &kbuf, &ubuf,
 					  sizeof(struct pt_regs), -1);
+	regs->sr = (regs->sr & SR_USER_MASK) | sr;
 
 	return ret;
 }
@@ -391,6 +393,11 @@ long arch_ptrace(struct task_struct *child, long request,
 		    addr > sizeof(struct user) - 3)
 			break;
 
+		if (addr == offsetof(struct pt_regs, sr)) {
+			unsigned long sr = get_stack_long(child, addr);
+
+			data = (data & SR_USER_MASK) | (sr & ~SR_USER_MASK);
+		}
 		if (addr < sizeof(struct pt_regs))
 			ret = put_stack_long(child, addr, data);
 		else if (addr >= offsetof(struct user, fpu) &&
