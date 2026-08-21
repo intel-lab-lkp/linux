@@ -441,6 +441,14 @@ int rmnet_add_bridge(struct net_device *rmnet_dev,
 	struct rmnet_port *port, *slave_port;
 	int err;
 
+	/*
+	 * The rtnl path only checks CAP_NET_ADMIN against dev_net(rmnet_dev),
+	 * but bridge mode below controls real_dev, which may live in another
+	 * netns.
+	 */
+	if (!rtnl_dev_link_net_capable(rmnet_dev, dev_net(real_dev)))
+		return -EPERM;
+
 	port = rmnet_get_port_rtnl(real_dev);
 
 	/* If there is more than one rmnet dev attached, its probably being
