@@ -35,7 +35,10 @@
 #define LG_G13_BACKLIGHT_HW_ON_BIT	23
 
 /**
- * g13_input_report.keybits[] is not 32-bit aligned, so we can't use the bitops macros.
+ * TEST_BIT() - Test a bit in an unaligned byte array
+ *
+ * g13_input_report.keybits[] is not 32-bit aligned, so we cannot use
+ * the bitops macros.
  *
  * @ary: Pointer to array of u8s
  * @b: Bit index into ary, LSB first.  Not range checked.
