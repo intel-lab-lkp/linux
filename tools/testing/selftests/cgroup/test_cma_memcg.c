@@ -4,7 +4,9 @@
 #include <linux/limits.h>
 #include <sys/mman.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <linux/dma-heap.h>
 #include <sys/ioctl.h>
@@ -14,6 +16,10 @@
 #define CMA_HEAP_DEFAULT_PATH	"/dev/dma_heap/default_cma_region"
 #define CMA_RESERVED_CURRENT	"memory.cma.reserved.current"
 #define CMA_RESERVED_MAX	"memory.cma.reserved.max"
+
+#define HUGETLB_CMA_CURRENT	"memory.cma.hugetlb0.current"
+#define HUGETLB_CMA_MAX	"memory.cma.hugetlb0.max"
+#define HUGEPAGES_DIR		"/sys/kernel/mm/hugepages"
 
 static int cma_heap_alloc(int heap_fd, size_t size)
 {
@@ -145,6 +151,207 @@ cleanup:
 	return rc;
 }
 
+static long find_largest_hugepage_size_kb(void)
+{
+	DIR *dir;
+	struct dirent *entry;
+	long max_size = 0;
+
+	dir = opendir(HUGEPAGES_DIR);
+	if (!dir)
+		return -1;
+
+	while ((entry = readdir(dir)) != NULL) {
+		long size;
+
+		if (sscanf(entry->d_name, "hugepages-%ldkB", &size) == 1) {
+			if (size > max_size)
+				max_size = size;
+		}
+	}
+	closedir(dir);
+
+	return max_size > 0 ? max_size : -1;
+}
+
+static long read_sysfs_long(const char *path)
+{
+	FILE *f;
+	long val = -1;
+
+	f = fopen(path, "r");
+	if (!f)
+		return -1;
+	if (fscanf(f, "%ld", &val) != 1)
+		val = -1;
+	fclose(f);
+	return val;
+}
+
+static int write_sysfs_long(const char *path, long val)
+{
+	FILE *f;
+	int rc;
+
+	f = fopen(path, "w");
+	if (!f)
+		return -1;
+	rc = fprintf(f, "%ld", val);
+	fclose(f);
+	return rc < 0 ? -1 : 0;
+}
+
+static int test_hugetlb_cma_charge(const char *root)
+{
+	int rc = KSFT_SKIP, in_cg = 0;
+	long hpage_size_kb, hpage_size_bytes;
+	long orig_nr = -1, new_nr, before, after;
+	char nr_path[PATH_MAX];
+	char *cg;
+
+	hpage_size_kb = find_largest_hugepage_size_kb();
+	if (hpage_size_kb < 0) {
+		ksft_print_msg("no hugepage size found\n");
+		return KSFT_SKIP;
+	}
+	hpage_size_bytes = hpage_size_kb * 1024;
+
+	snprintf(nr_path, sizeof(nr_path),
+		 HUGEPAGES_DIR "/hugepages-%ldkB/nr_hugepages", hpage_size_kb);
+
+	cg = cg_name(root, "memcg_hugetlb_cma_charge");
+	if (!cg)
+		goto cleanup;
+
+	if (cg_create(cg))
+		goto cleanup;
+
+	if (cg_enter_current(cg))
+		goto cleanup;
+	in_cg = 1;
+
+	if (cg_read_long(cg, HUGETLB_CMA_CURRENT) < 0) {
+		ksft_print_msg("hugetlb CMA counters not available\n");
+		goto cleanup;
+	}
+
+	orig_nr = read_sysfs_long(nr_path);
+	if (orig_nr < 0) {
+		ksft_print_msg("cannot read %s\n", nr_path);
+		goto cleanup;
+	}
+
+	before = cg_read_long(cg, HUGETLB_CMA_CURRENT);
+
+	if (write_sysfs_long(nr_path, orig_nr + 1)) {
+		ksft_print_msg("cannot write %s\n", nr_path);
+		goto cleanup;
+	}
+
+	new_nr = read_sysfs_long(nr_path);
+	if (new_nr <= orig_nr) {
+		ksft_print_msg("failed to allocate a hugepage\n");
+		goto cleanup;
+	}
+
+	rc = KSFT_FAIL;
+	after = cg_read_long(cg, HUGETLB_CMA_CURRENT);
+
+	if (after - before < hpage_size_bytes) {
+		ksft_print_msg(
+			"hugetlb CMA counter not charged: before=%ld after=%ld expected +%ld\n",
+			before, after, hpage_size_bytes);
+		goto cleanup;
+	}
+
+	write_sysfs_long(nr_path, orig_nr);
+
+	after = cg_read_long(cg, HUGETLB_CMA_CURRENT);
+	if (!values_close(before, after, 3)) {
+		ksft_print_msg(
+			"hugetlb CMA counter not uncharged: before=%ld after=%ld\n",
+			before, after);
+		goto cleanup;
+	}
+
+	rc = KSFT_PASS;
+
+cleanup:
+	if (orig_nr >= 0)
+		write_sysfs_long(nr_path, orig_nr);
+
+	if (in_cg)
+		cg_enter_current(root);
+	cg_destroy(cg);
+	free(cg);
+
+	return rc;
+}
+
+static int test_hugetlb_cma_limit(const char *root)
+{
+	int rc = KSFT_SKIP, in_cg = 0;
+	long hpage_size_kb;
+	long orig_nr, new_nr;
+	char nr_path[PATH_MAX];
+	char *cg;
+
+	hpage_size_kb = find_largest_hugepage_size_kb();
+	if (hpage_size_kb < 0) {
+		ksft_print_msg("no hugepage size found\n");
+		return KSFT_SKIP;
+	}
+
+	snprintf(nr_path, sizeof(nr_path),
+		 HUGEPAGES_DIR "/hugepages-%ldkB/nr_hugepages", hpage_size_kb);
+
+	cg = cg_name(root, "memcg_hugetlb_cma_limit");
+	if (!cg)
+		goto cleanup;
+
+	if (cg_create(cg))
+		goto cleanup;
+
+	if (cg_enter_current(cg))
+		goto cleanup;
+	in_cg = 1;
+
+	if (cg_read_long(cg, HUGETLB_CMA_MAX) < 0) {
+		ksft_print_msg("hugetlb CMA counters not available\n");
+		goto cleanup;
+	}
+
+	if (cg_write(cg, HUGETLB_CMA_MAX, "0")) {
+		ksft_print_msg("cannot set hugetlb CMA limit\n");
+		goto cleanup;
+	}
+
+	orig_nr = read_sysfs_long(nr_path);
+	if (orig_nr < 0) {
+		ksft_print_msg("cannot read %s\n", nr_path);
+		goto cleanup;
+	}
+
+	write_sysfs_long(nr_path, orig_nr + 1);
+	new_nr = read_sysfs_long(nr_path);
+
+	rc = KSFT_FAIL;
+	if (new_nr > orig_nr) {
+		ksft_print_msg("hugetlb CMA limit not enforced\n");
+		write_sysfs_long(nr_path, orig_nr);
+	} else {
+		rc = KSFT_PASS;
+	}
+
+cleanup:
+	if (in_cg)
+		cg_enter_current(root);
+	cg_destroy(cg);
+	free(cg);
+
+	return rc;
+}
+
 #define T(x) { x, #x }
 struct cma_memcg_tests {
 	int (*fn)(const char *root);
@@ -152,6 +359,8 @@ struct cma_memcg_tests {
 } tests[] = {
 	T(test_cma_charge),
 	T(test_cma_limit),
+	T(test_hugetlb_cma_charge),
+	T(test_hugetlb_cma_limit),
 };
 #undef T
 
