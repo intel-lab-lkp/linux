@@ -69,19 +69,10 @@ static int exfat_statfs(struct dentry *dentry, struct kstatfs *buf)
 	return 0;
 }
 
-static int exfat_set_vol_flags(struct super_block *sb, unsigned short new_flags)
+static int exfat_sync_vol_flags(struct super_block *sb)
 {
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	struct boot_sector *p_boot = (struct boot_sector *)sbi->boot_bh->b_data;
-
-	/* retain persistent-flags */
-	new_flags |= sbi->vol_flags_persistent;
-
-	/* flags are not changed */
-	if (sbi->vol_flags == new_flags)
-		return 0;
-
-	sbi->vol_flags = new_flags;
 
 	/* skip updating volume dirty flag,
 	 * if this volume has been mounted with read-only
@@ -89,7 +80,7 @@ static int exfat_set_vol_flags(struct super_block *sb, unsigned short new_flags)
 	if (sb_rdonly(sb))
 		return 0;
 
-	p_boot->vol_flags = cpu_to_le16(new_flags);
+	p_boot->vol_flags = cpu_to_le16((unsigned short)READ_ONCE(sbi->vol_flags));
 
 	set_buffer_uptodate(sbi->boot_bh);
 	mark_buffer_dirty(sbi->boot_bh);
@@ -103,14 +94,20 @@ int exfat_set_volume_dirty(struct super_block *sb)
 {
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 
-	return exfat_set_vol_flags(sb, sbi->vol_flags | VOLUME_DIRTY);
+	if (test_and_set_bit(VOLUME_DIRTY_BIT, &sbi->vol_flags))
+		return 0;
+
+	return exfat_sync_vol_flags(sb);
 }
 
 int exfat_clear_volume_dirty(struct super_block *sb)
 {
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 
-	return exfat_set_vol_flags(sb, sbi->vol_flags & ~VOLUME_DIRTY);
+	if (!test_and_clear_bit(VOLUME_DIRTY_BIT, &sbi->vol_flags))
+		return 0;
+
+	return exfat_sync_vol_flags(sb);
 }
 
 static int exfat_show_options(struct seq_file *m, struct dentry *root)
@@ -510,7 +507,6 @@ static int exfat_read_boot_sector(struct super_block *sb)
 		(sbi->cluster_size_bits - DENTRY_SIZE_BITS);
 
 	sbi->vol_flags = le16_to_cpu(p_boot->vol_flags);
-	sbi->vol_flags_persistent = sbi->vol_flags & (VOLUME_DIRTY | MEDIA_FAILURE);
 	sbi->clu_srch_ptr = EXFAT_FIRST_CLUSTER;
 
 	/* check consistencies */
@@ -527,9 +523,9 @@ static int exfat_read_boot_sector(struct super_block *sb)
 		return -EINVAL;
 	}
 
-	if (sbi->vol_flags & VOLUME_DIRTY)
+	if (test_bit(VOLUME_DIRTY_BIT, &sbi->vol_flags))
 		exfat_warn(sb, "Volume was not properly unmounted. Some data may be corrupt. Please run fsck.");
-	if (sbi->vol_flags & MEDIA_FAILURE)
+	if (test_bit(MEDIA_FAILURE_BIT, &sbi->vol_flags))
 		exfat_warn(sb, "Medium has reported failures. Some data may be lost.");
 
 	/*
