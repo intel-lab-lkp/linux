@@ -127,6 +127,8 @@ static irqreturn_t imagis_interrupt(int irq, void *dev_id)
 	finger_pressed = FIELD_GET(IST3038C_FINGER_STATUS_MASK, intr_message);
 
 	for (i = 0; i < finger_count; i++) {
+		bool pressed;
+
 		if (ts->tdata->protocol_b)
 			error = imagis_i2c_read_reg(ts,
 						    ts->tdata->touch_coord_cmd + (i * 4),
@@ -141,9 +143,13 @@ static irqreturn_t imagis_interrupt(int irq, void *dev_id)
 			goto out;
 		}
 
+		pressed = finger_pressed & BIT(i);
+
 		input_mt_slot(ts->input_dev, i);
-		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER,
-					   finger_pressed & BIT(i));
+		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, pressed);
+		if (!pressed)
+			continue;
+
 		touchscreen_report_pos(ts->input_dev, &ts->prop,
 				       FIELD_GET(IST3038C_X_MASK, finger_status),
 				       FIELD_GET(IST3038C_Y_MASK, finger_status),
