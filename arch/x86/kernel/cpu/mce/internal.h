@@ -37,6 +37,7 @@ struct llist_node *mce_gen_pool_prepare_records(void);
 
 int mce_severity(struct mce *a, struct pt_regs *regs, char **msg, bool is_excp);
 struct dentry *mce_get_debugfs_dir(void);
+noinstr void mce_panic(const char *msg, struct mce_hw_err *final, char *exp);
 
 extern mce_banks_t mce_banks_ce_disabled;
 
@@ -64,6 +65,7 @@ void mce_timer_kick(bool storm);
 void cmci_storm_begin(unsigned int bank);
 void cmci_storm_end(unsigned int bank);
 void mce_track_storm(struct mce *mce);
+void mce_track_ce_count(struct mce *mce);
 void mce_inherit_storm(unsigned int bank);
 bool mce_get_storm_mode(void);
 void mce_set_storm_mode(bool storm);
@@ -72,6 +74,7 @@ u32  mce_get_apei_thr_limit(void);
 static inline void cmci_storm_begin(unsigned int bank) {}
 static inline void cmci_storm_end(unsigned int bank) {}
 static inline void mce_track_storm(struct mce *mce) {}
+static inline void mce_track_ce_count(struct mce *mce) {}
 static inline void mce_inherit_storm(unsigned int bank) {}
 static inline bool mce_get_storm_mode(void) { return false; }
 static inline void mce_set_storm_mode(bool storm) {}
@@ -83,12 +86,14 @@ static inline u32  mce_get_apei_thr_limit(void) { return 0; }
  *			represents an error seen.
  *
  * timestamp:		Last time (in jiffies) that the bank was polled.
+ * ce_count:		Corrected errors logged since boot.
  * in_storm_mode:	Is this bank in storm mode?
  * poll_only:		Bank does not support CMCI, skip storm tracking.
  */
 struct storm_bank {
 	u64 history;
 	u64 timestamp;
+	u64 ce_count;
 	bool in_storm_mode;
 	bool poll_only;
 };
@@ -183,6 +188,7 @@ struct mca_config {
 	bool ignore_ce;
 	bool print_all;
 
+	int panic_on_ce_count;
 	int monarch_timeout;
 	int panic_timeout;
 	u32 rip_msr;

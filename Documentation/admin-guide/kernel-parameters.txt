@@ -3924,6 +3924,16 @@ Kernel parameters
 		print_all
 			print all machine check logs to the console.
 
+		panic_on_ce_count=<count>
+			panic once a machine check bank has logged this many
+			corrected errors. 0, the default, disables it.
+
+			This is a running total per CPU and per bank for the
+			life of the boot, not a rate, so a machine that logs
+			a slow trickle for long enough will reach any value
+			eventually. Pick one a failing part reaches in
+			minutes and a healthy one does not reach at all.
+
 		monarchtimeout (number)
 			sets the time in us to wait for other CPUs on machine
 			checks. 0 to disable.

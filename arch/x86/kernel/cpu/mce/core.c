@@ -261,7 +261,7 @@ static const char *mce_dump_aux_info(struct mce *m)
 	return NULL;
 }
 
-static noinstr void mce_panic(const char *msg, struct mce_hw_err *final, char *exp)
+noinstr void mce_panic(const char *msg, struct mce_hw_err *final, char *exp)
 {
 	struct llist_node *pending;
 	struct mce_evt_llist *l;
@@ -812,6 +812,10 @@ void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 
 		barrier();
 		m->status = mce_rdmsrq(mca_msr_reg(i, MCA_STATUS));
+
+		/* The boot time poll replays errors from before this boot. */
+		if (!(flags & MCP_QUEUE_LOG))
+			mce_track_ce_count(m);
 
 		/*
 		 * Update storm tracking here, before checking for the
@@ -2326,6 +2330,7 @@ void mce_disable_bank(int bank)
  * mce=nobootlog Don't log MCEs from before booting.
  * mce=bios_cmci_threshold Don't program the CMCI threshold
  * mce=recovery force enable copy_mc_fragile()
+ * mce=panic_on_ce_count=<n> Panic after n corrected errors on one bank
  */
 static int __init mcheck_enable(char *str)
 {
@@ -2349,7 +2354,10 @@ static int __init mcheck_enable(char *str)
 		cfg->print_all = true;
 	else if (!strcmp(str, "ignore_ce"))
 		cfg->ignore_ce = true;
-	else if (!strcmp(str, "bootlog") || !strcmp(str, "nobootlog"))
+	else if (str_has_prefix(str, "panic_on_ce_count=")) {
+		str += strlen("panic_on_ce_count=");
+		get_option(&str, &cfg->panic_on_ce_count);
+	} else if (!strcmp(str, "bootlog") || !strcmp(str, "nobootlog"))
 		cfg->bootlog = (str[0] == 'b');
 	else if (!strcmp(str, "bios_cmci_threshold"))
 		cfg->bios_cmci_threshold = 1;
@@ -2617,6 +2625,7 @@ static ssize_t store_int_with_restart(struct device *s,
 }
 
 static DEVICE_INT_ATTR(monarch_timeout, 0644, mca_cfg.monarch_timeout);
+static DEVICE_INT_ATTR(panic_on_ce_count, 0644, mca_cfg.panic_on_ce_count);
 static DEVICE_BOOL_ATTR(dont_log_ce, 0644, mca_cfg.dont_log_ce);
 static DEVICE_BOOL_ATTR(print_all, 0644, mca_cfg.print_all);
 
@@ -2641,6 +2650,7 @@ static struct device_attribute *mce_device_attrs[] = {
 	&dev_attr_trigger,
 #endif
 	&dev_attr_monarch_timeout.attr,
+	&dev_attr_panic_on_ce_count.attr,
 	&dev_attr_dont_log_ce.attr,
 	&dev_attr_print_all.attr,
 	&dev_attr_ignore_ce.attr,

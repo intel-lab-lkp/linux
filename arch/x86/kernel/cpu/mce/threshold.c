@@ -119,6 +119,29 @@ void cmci_storm_end(unsigned int bank)
 static DEFINE_RATELIMIT_STATE(storm_rs, DEFAULT_RATELIMIT_INTERVAL,
 			      DEFAULT_RATELIMIT_BURST);
 
+/*
+ * A bank that keeps reporting corrected errors is repairing them faster than
+ * anything acts on it. Count them and let the admin put a ceiling on it.
+ */
+void mce_track_ce_count(struct mce *mce)
+{
+	struct storm_bank *bank = &this_cpu_ptr(&storm_desc)->banks[mce->bank];
+	int limit = READ_ONCE(mca_cfg.panic_on_ce_count);
+
+	if (limit <= 0)
+		return;
+
+	if (!(mce->status & MCI_STATUS_VAL) || !mce_is_correctable(mce))
+		return;
+
+	if (++bank->ce_count < (u64)limit)
+		return;
+
+	printk_deferred(KERN_EMERG "CPU%d BANK%d logged %llu corrected errors\n",
+			smp_processor_id(), mce->bank, bank->ce_count);
+	mce_panic("Too many corrected errors", NULL, NULL);
+}
+
 void mce_track_storm(struct mce *mce)
 {
 	struct mca_storm_desc *storm = this_cpu_ptr(&storm_desc);

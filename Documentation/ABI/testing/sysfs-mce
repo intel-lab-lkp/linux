@@ -95,3 +95,15 @@ Contact:	Hidetoshi Seto <seto.hidetoshi@jp.fujitsu.com>
 Date:		Jun 2009
 Description:
 		Disables the CMCI feature.
+
+What:		/sys/devices/system/machinecheck/machinecheckX/panic_on_ce_count
+Contact:	Breno Leitao <leitao@debian.org>
+Date:		Aug 2026
+Description:
+		Panic once a machine check bank has logged this many corrected
+		errors. 0, the default, disables it.
+
+		The setting is global rather than per-CPU, and it is compared
+		against a running total kept per CPU and per bank. Lowering it
+		below a total a bank has already reached takes the machine
+		down on that bank's next corrected error.
