@@ -1219,6 +1219,9 @@ static struct btrfs_inode *find_first_inode_to_shrink(struct btrfs_root *root,
 
 		tree = &inode->extent_tree;
 
+		if (!READ_ONCE(tree->root.rb_node))
+			goto next;
+
 		/*
 		 * We want to be fast so if the lock is busy we don't want to
 		 * spend time waiting for it (some task is about to do IO for
