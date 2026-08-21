@@ -18,6 +18,7 @@
 #include <sched.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <linux/types.h>
 
 #include "parse_vdso.h"
 #include "vdso_config.h"
