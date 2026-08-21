@@ -56,6 +56,10 @@ On supported Legion Go models, Other Mode feature ``0x04020000`` controls
 Full Speed mode in firmware. The driver exposes it as ``pwm1_enable``. Value 0
 enables Full Speed, and value 2 returns fan control to firmware.
 
+Some Legion Go firmware does not advertise fan 1 RPM through Capability
+Data. In that case, the driver reads Other Mode feature ``0x04030001`` for
+``fan1_input``. Value ``0xffffffff`` means that RPM is unavailable.
+
 LENOVO_CAPABILITY_DATA_01
 -------------------------
 

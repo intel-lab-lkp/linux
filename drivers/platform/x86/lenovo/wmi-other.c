@@ -98,6 +98,7 @@ enum lwmi_feature_id_psu {
 #define LWMI_FAN_ID(x) ((x) + LWMI_FAN_ID_BASE)
 
 #define LWMI_FAN_DIV 100
+#define LWMI_FAN_RPM_NORMAL_SUPPORT (LWMI_SUPP_VALID | LWMI_SUPP_GET)
 
 #define LWMI_CHARGE_BEHAVIOR_DISCHARGE	0x00
 #define LWMI_CHARGE_BEHAVIOR_AUTO	0x01
@@ -195,6 +196,7 @@ struct lwmi_om_priv {
 
 	struct lwmi_fan_info fan_info[LWMI_FAN_NR];
 	bool fullspeed_supported;
+	bool fan0_input_fallback;
 
 	struct {
 		bool capdata00_collected : 1;
@@ -343,6 +345,8 @@ static umode_t lwmi_om_hwmon_is_visible(const void *drvdata, enum hwmon_sensor_t
 		return 0644;
 
 	if (type == hwmon_fan) {
+		if (channel == 0 && priv->fan0_input_fallback && attr == hwmon_fan_input)
+			return 0444;
 		if (!(priv->fan_info[channel].supported & LWMI_SUPP_VALID))
 			return 0;
 
@@ -419,6 +423,8 @@ static int lwmi_om_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 			err = lwmi_om_fan_get_set(priv, channel, &retval, false);
 			if (err)
 				return err;
+			if (channel == 0 && priv->fan0_input_fallback && retval == U32_MAX)
+				return -EIO;
 
 			*val = retval;
 			return 0;
@@ -542,6 +548,7 @@ static const struct hwmon_chip_info lwmi_om_hwmon_chip_info = {
  */
 static void lwmi_om_hwmon_add(struct lwmi_om_priv *priv)
 {
+	u32 rpm;
 	long enable;
 	int i, valid;
 
@@ -563,6 +570,11 @@ static void lwmi_om_hwmon_add(struct lwmi_om_priv *priv)
 
 	priv->fullspeed_supported =
 		lwmi_fan_supported() && !lwmi_om_fullspeed_get(priv, &enable);
+	priv->fan0_input_fallback =
+		lwmi_fan_supported() &&
+		(priv->fan_info[0].supported & LWMI_FAN_RPM_NORMAL_SUPPORT) !=
+		LWMI_FAN_RPM_NORMAL_SUPPORT &&
+		!lwmi_om_fan_get_set(priv, 0, &rpm, false) && rpm != U32_MAX;
 
 	valid = 0;
 	for (i = 0; i < LWMI_FAN_NR; i++) {
@@ -580,7 +592,7 @@ static void lwmi_om_hwmon_add(struct lwmi_om_priv *priv)
 		}
 	}
 
-	if (valid == 0 && !priv->fullspeed_supported) {
+	if (valid == 0 && !priv->fullspeed_supported && !priv->fan0_input_fallback) {
 		dev_warn(&priv->wdev->dev,
 			 "fan reporting/tuning is unsupported on this device\n");
 		return;
