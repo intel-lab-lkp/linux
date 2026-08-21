@@ -3708,6 +3708,17 @@ static int net2280_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		writel(0, &dev->usb->usbctl);
 	}
 
+	/* usb_reinit() dispatches on PLX_LEGACY vs PLX_PCIE and assumes
+	 * every non-legacy chip has llregs mapped (PLX_PCIE branch above).
+	 * A forced/mismatched driver bind can hand us quirks that satisfy
+	 * neither, so refuse to proceed rather than dereference NULL.
+	 */
+	if (!(dev->quirks & (PLX_LEGACY | PLX_PCIE))) {
+		ep_err(dev, "unsupported device (quirks=%#lx)\n", dev->quirks);
+		retval = -ENODEV;
+		goto done;
+	}
+
 	usb_reset(dev);
 	usb_reinit(dev);
 
