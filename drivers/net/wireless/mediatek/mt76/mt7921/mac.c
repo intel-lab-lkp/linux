@@ -619,6 +619,10 @@ void mt7921_queue_rx_skb(struct mt76_dev *mdev, enum mt76_rxq_id q,
 	case PKT_TYPE_NORMAL_MCU:
 	case PKT_TYPE_NORMAL:
 		if (!mt7921_mac_fill_rx(dev, skb)) {
+			struct mt76_rx_status *status =
+				(struct mt76_rx_status *)skb->cb;
+
+			mt792x_perf_account_rx(dev, status->wcid, skb->len);
 			mt76_rx(&dev->mt76, q, skb);
 			return;
 		}

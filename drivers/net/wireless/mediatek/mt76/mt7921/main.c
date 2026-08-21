@@ -730,6 +730,8 @@ static void mt7921_bss_info_changed(struct ieee80211_hw *hw,
 		mt7921_mcu_sta_update(dev, NULL, vif, true,
 				      MT76_STA_INFO_STATE_ASSOC);
 		mt7921_mcu_set_beacon_filter(dev, vif, vif->cfg.assoc);
+
+		mt792x_perf_ind_update(dev, vif, MT792x_PERF_IND_TIME);
 	}
 
 	if (changed & BSS_CHANGED_ARP_FILTER) {

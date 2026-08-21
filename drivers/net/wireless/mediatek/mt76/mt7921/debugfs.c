@@ -247,6 +247,37 @@ static int mt7921_chip_reset(void *data, u64 val)
 
 DEFINE_DEBUGFS_ATTRIBUTE(fops_reset, NULL, mt7921_chip_reset, "%lld\n");
 
+/* send one perf_ind carrying the written value in every tx/rx byte field */
+static int mt7921_perf_ind_set(void *data, u64 val)
+{
+	struct mt792x_dev *dev = data;
+
+	return mt792x_perf_ind_trigger(dev, val);
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_perf_ind, NULL, mt7921_perf_ind_set, "%lld\n");
+
+static int mt7921_perf_ind_enable_get(void *data, u64 *val)
+{
+	struct mt792x_dev *dev = data;
+
+	*val = dev->perf.enabled;
+
+	return 0;
+}
+
+static int mt7921_perf_ind_enable_set(void *data, u64 val)
+{
+	struct mt792x_dev *dev = data;
+
+	dev->perf.enabled = !!val;
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_perf_ind_enable, mt7921_perf_ind_enable_get,
+			 mt7921_perf_ind_enable_set, "%lld\n");
+
 static int
 mt7921s_sched_quota_read(struct seq_file *s, void *data)
 {
@@ -287,6 +318,11 @@ int mt7921_init_debugfs(struct mt792x_dev *dev)
 	debugfs_create_devm_seqfile(dev->mt76.dev, "runtime_pm_stats", dir,
 				    mt792x_pm_stats);
 	debugfs_create_file("deep-sleep", 0600, dir, dev, &fops_ds);
+	if (mt76_is_mmio(&dev->mt76)) {
+		debugfs_create_file("enable_perf_ind", 0600, dir, dev,
+				    &fops_perf_ind_enable);
+		debugfs_create_file("perf_ind", 0200, dir, dev, &fops_perf_ind);
+	}
 	if (mt76_is_sdio(&dev->mt76))
 		debugfs_create_devm_seqfile(dev->mt76.dev, "sched-quota", dir,
 					    mt7921s_sched_quota_read);
