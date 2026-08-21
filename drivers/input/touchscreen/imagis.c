@@ -44,12 +44,19 @@
 #define IST3038C_FINGER_STATUS_MASK	GENMASK(9, 0)
 #define IST3032C_KEY_STATUS_MASK	GENMASK(20, 16)
 
+enum imagis_protocol {
+	/* one coordinate register shared by all contacts */
+	IMAGIS_PROTOCOL_SHARED_REGISTER,
+	/* one coordinate register per contact */
+	IMAGIS_PROTOCOL_PER_CONTACT_REGISTERS,
+};
+
 struct imagis_properties {
 	unsigned int interrupt_msg_cmd;
 	unsigned int touch_coord_cmd;
 	unsigned int whoami_cmd;
 	unsigned int whoami_val;
-	bool protocol_b;
+	enum imagis_protocol protocol;
 	bool touch_keys_supported;
 };
 
@@ -129,7 +136,7 @@ static irqreturn_t imagis_interrupt(int irq, void *dev_id)
 	for (i = 0; i < finger_count; i++) {
 		bool pressed;
 
-		if (ts->tdata->protocol_b)
+		if (ts->tdata->protocol == IMAGIS_PROTOCOL_PER_CONTACT_REGISTERS)
 			error = imagis_i2c_read_reg(ts,
 						    ts->tdata->touch_coord_cmd + (i * 4),
 						    &finger_status);
@@ -410,8 +417,8 @@ static const struct imagis_properties imagis_3032c_data = {
 	.touch_coord_cmd = IST3038C_REG_TOUCH_COORD,
 	.whoami_cmd = IST3038C_REG_CHIPID,
 	.whoami_val = IST3032C_WHOAMI,
+	.protocol = IMAGIS_PROTOCOL_PER_CONTACT_REGISTERS,
 	.touch_keys_supported = true,
-	.protocol_b = true,
 };
 
 static const struct imagis_properties imagis_3038_data = {
@@ -419,6 +426,7 @@ static const struct imagis_properties imagis_3038_data = {
 	.touch_coord_cmd = IST30XX_REG_STATUS,
 	.whoami_cmd = IST30XX_REG_CHIPID,
 	.whoami_val = IST3038_WHOAMI,
+	.protocol = IMAGIS_PROTOCOL_SHARED_REGISTER,
 	.touch_keys_supported = true,
 };
 
@@ -427,6 +435,7 @@ static const struct imagis_properties imagis_3038b_data = {
 	.touch_coord_cmd = IST30XX_REG_STATUS,
 	.whoami_cmd = IST3038B_REG_CHIPID,
 	.whoami_val = IST3038B_WHOAMI,
+	.protocol = IMAGIS_PROTOCOL_SHARED_REGISTER,
 };
 
 static const struct imagis_properties imagis_3038c_data = {
@@ -434,7 +443,7 @@ static const struct imagis_properties imagis_3038c_data = {
 	.touch_coord_cmd = IST3038C_REG_TOUCH_COORD,
 	.whoami_cmd = IST3038C_REG_CHIPID,
 	.whoami_val = IST3038C_WHOAMI,
-	.protocol_b = true,
+	.protocol = IMAGIS_PROTOCOL_PER_CONTACT_REGISTERS,
 };
 
 static const struct imagis_properties imagis_3038h_data = {
@@ -442,6 +451,7 @@ static const struct imagis_properties imagis_3038h_data = {
 	.touch_coord_cmd = IST3038C_REG_TOUCH_COORD,
 	.whoami_cmd = IST3038C_REG_CHIPID,
 	.whoami_val = IST3038H_WHOAMI,
+	.protocol = IMAGIS_PROTOCOL_SHARED_REGISTER,
 };
 
 static const struct of_device_id imagis_of_match[] = {
