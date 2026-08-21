@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/string.h>
+#include <linux/delay.h>
 
 #include <asm/eeh.h>
 #include <asm/pci-bridge.h>
@@ -235,6 +236,41 @@ static void fixup_winbond_82c105(struct pci_dev* dev)
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105,
 			 fixup_winbond_82c105);
+
+/*
+ * Reset Spyre adapter using pci_set_pcie_reset_state()
+ * This is specifically for PPC platforms where EEH (Enhanced Error Handling)
+ * requires this reset method for proper device recovery.
+ */
+int reset_spyre(struct pci_dev *dev, bool probe)
+{
+	int ret;
+
+	if (probe)
+		return 0;
+
+	/* Assert warm reset */
+	ret = pci_set_pcie_reset_state(dev, pcie_warm_reset);
+	if (ret) {
+		pci_err(dev, "Failed to assert reset: %d\n", ret);
+		return ret;
+	}
+
+	/* Wait for reset to take effect */
+	msleep(250);
+
+	/* Deassert reset */
+	ret = pci_set_pcie_reset_state(dev, pcie_deassert_reset);
+	if (ret) {
+		pci_err(dev, "Failed to deassert reset: %d\n", ret);
+		return ret;
+	}
+
+	/* Wait for device to recover */
+	msleep(250);
+
+	return 0;
+}
 
 static enum pci_bus_speed prop_to_pci_speed(u32 prop)
 {
