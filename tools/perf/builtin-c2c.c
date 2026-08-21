@@ -73,6 +73,7 @@ struct perf_c2c {
 	bool			 show_all;
 	bool			 use_stdio;
 	bool			 stats_only;
+	bool			 function_view;
 	bool			 symbol_full;
 	bool			 stitch_lbr;
 
@@ -2530,7 +2531,48 @@ static void print_c2c_info(FILE *out, struct perf_session *session)
 	fprintf(out, "  Cacheline data grouping           : %s\n", c2c.cl_sort);
 }
 
-static void perf_c2c__hists_fprintf(FILE *out, struct perf_session *session)
+static void c2c_function__unfold_all(struct rb_root_cached *root)
+{
+	struct rb_node *nd;
+
+	for (nd = rb_first_cached(root); nd; nd = rb_next(nd)) {
+		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
+
+		if (!he->has_children)
+			continue;
+		he->unfolded = true;
+		c2c_function__unfold_all(&he->hroot_out);
+	}
+}
+
+static int perf_c2c__function_fprintf(FILE *out)
+{
+	bool saved_use_callchain = symbol_conf.use_callchain;
+	struct hists *hists;
+	int ret;
+
+	/* Function-view entries aggregate samples and never display callchains. */
+	symbol_conf.use_callchain = false;
+	ret = c2c_function__build(&c2c.hists, c2c.cl_sort, c2c.symbol_full,
+				  &hists);
+	if (ret) {
+		if (ret == -EOPNOTSUPP)
+			pr_err("The function view requires iaddr in --coalesce.\n");
+		else
+			pr_err("Failed to build function view hierarchy (ret=%d)\n", ret);
+		goto out;
+	}
+
+	/* Match fold signs to hists__fprintf()'s forced child traversal. */
+	c2c_function__unfold_all(&hists->entries);
+	hists__fprintf(hists, true, 0, 0, 0, out, true);
+	c2c_function__reset();
+out:
+	symbol_conf.use_callchain = saved_use_callchain;
+	return ret;
+}
+
+static int perf_c2c__hists_fprintf(FILE *out, struct perf_session *session)
 {
 	setup_pager();
 
@@ -2541,7 +2583,17 @@ static void perf_c2c__hists_fprintf(FILE *out, struct perf_session *session)
 	print_c2c_info(out, session);
 
 	if (c2c.stats_only)
-		return;
+		return 0;
+
+	if (c2c.function_view) {
+		fprintf(out, "\n");
+		fprintf(out, "=================================================\n");
+		fprintf(out, "           Shared Data Functions Table\n");
+		fprintf(out, "=================================================\n");
+		fprintf(out, "#\n");
+
+		return perf_c2c__function_fprintf(out);
+	}
 
 	fprintf(out, "\n");
 	fprintf(out, "=================================================\n");
@@ -2558,6 +2610,7 @@ static void perf_c2c__hists_fprintf(FILE *out, struct perf_session *session)
 	fprintf(out, "#\n");
 
 	print_pareto(out, perf_session__env(session));
+	return 0;
 }
 
 #ifdef HAVE_SLANG_SUPPORT
@@ -2794,18 +2847,18 @@ out:
 	return 0;
 }
 
-static void perf_c2c_display(struct perf_session *session)
+static int perf_c2c_display(struct perf_session *session)
 {
 	if (use_browser == 0)
-		perf_c2c__hists_fprintf(stdout, session);
-	else
-		perf_c2c__hists_browse(&c2c.hists.hists);
+		return perf_c2c__hists_fprintf(stdout, session);
+
+	return perf_c2c__hists_browse(&c2c.hists.hists);
 }
 #else
-static void perf_c2c_display(struct perf_session *session)
+static int perf_c2c_display(struct perf_session *session)
 {
 	use_browser = 0;
-	perf_c2c__hists_fprintf(stdout, session);
+	return perf_c2c__hists_fprintf(stdout, session);
 }
 #endif /* HAVE_SLANG_SUPPORT */
 
@@ -3081,6 +3134,8 @@ static int perf_c2c__report(int argc, const char **argv)
 	OPT_BOOLEAN(0, "stdio", &c2c.use_stdio, "Use the stdio interface"),
 	OPT_BOOLEAN(0, "stats", &c2c.stats_only,
 		    "Display only statistic tables (implies --stdio)"),
+	OPT_BOOLEAN(0, "function", &c2c.function_view,
+		    "Display the function view (implies --stdio)"),
 	OPT_BOOLEAN(0, "full-symbols", &c2c.symbol_full,
 		    "Display full length of symbols"),
 	OPT_BOOLEAN(0, "no-source", &no_source,
@@ -3119,12 +3174,19 @@ static int perf_c2c__report(int argc, const char **argv)
 			     PARSE_OPT_STOP_AT_NON_OPTION);
 	if (argc)
 		usage_with_options(report_c2c_usage, options);
+	if (c2c.stats_only && c2c.function_view) {
+		pr_err("--stats and --function cannot be used together.\n");
+		err = -EINVAL;
+		goto out;
+	}
 
 #ifndef HAVE_SLANG_SUPPORT
 	c2c.use_stdio = true;
 #endif
 
 	if (c2c.stats_only)
+		c2c.use_stdio = true;
+	if (c2c.function_view)
 		c2c.use_stdio = true;
 
 	/**
@@ -3197,6 +3259,11 @@ static int perf_c2c__report(int argc, const char **argv)
 	err = setup_coalesce(coalesce, no_source);
 	if (err) {
 		pr_debug("Failed to initialize hists\n");
+		goto out_session;
+	}
+	if (c2c.function_view && !c2c_function__has_iaddr(c2c.cl_sort)) {
+		pr_err("The function view requires iaddr in --coalesce.\n");
+		err = -EINVAL;
 		goto out_session;
 	}
 
@@ -3332,7 +3399,7 @@ static int perf_c2c__report(int argc, const char **argv)
 		goto out_mem2node;
 	}
 
-	perf_c2c_display(session);
+	err = perf_c2c_display(session);
 
 out_mem2node:
 	mem2node__exit(&c2c.mem2node);
