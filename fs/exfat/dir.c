@@ -223,7 +223,7 @@ static int exfat_iterate(struct file *file, struct dir_context *ctx)
 	if (err)
 		goto out;
 get_new:
-	mutex_lock(&EXFAT_SB(sb)->s_lock);
+	down_write(&EXFAT_SB(sb)->s_lock);
 
 	if (ei->flags == ALLOC_NO_FAT_CHAIN && cpos >= i_size_read(inode))
 		goto end_of_dir;
@@ -255,7 +255,7 @@ get_new:
 		inum = iunique(sb, EXFAT_ROOT_INO);
 	}
 
-	mutex_unlock(&EXFAT_SB(sb)->s_lock);
+	up_write(&EXFAT_SB(sb)->s_lock);
 	if (!dir_emit(ctx, nb->lfn, strlen(nb->lfn), inum,
 			(de.attr & EXFAT_ATTR_SUBDIR) ? DT_DIR : DT_REG))
 		goto out;
@@ -266,7 +266,7 @@ end_of_dir:
 	if (!cpos && fake_offset)
 		cpos = ITER_POS_FILLED_DOTS;
 	ctx->pos = cpos;
-	mutex_unlock(&EXFAT_SB(sb)->s_lock);
+	up_write(&EXFAT_SB(sb)->s_lock);
 out:
 	/*
 	 * To improve performance, free namebuf after unlock sb_lock.
@@ -1288,7 +1288,7 @@ int exfat_read_volume_label(struct super_block *sb, struct exfat_uni_name *label
 	struct exfat_entry_set_cache es;
 	struct exfat_dentry *ep;
 
-	mutex_lock(&sbi->s_lock);
+	down_write(&sbi->s_lock);
 
 	memset(label_out, 0, sizeof(*label_out));
 	ret = exfat_get_volume_label_dentry(sb, &es);
@@ -1316,7 +1316,7 @@ int exfat_read_volume_label(struct super_block *sb, struct exfat_uni_name *label
 
 	exfat_put_dentry_set(&es, false);
 unlock:
-	mutex_unlock(&sbi->s_lock);
+	up_write(&sbi->s_lock);
 	return ret;
 }
 
@@ -1333,7 +1333,7 @@ int exfat_write_volume_label(struct super_block *sb,
 	if (label->name_len > EXFAT_VOLUME_LABEL_LEN)
 		return -EINVAL;
 
-	mutex_lock(&sbi->s_lock);
+	down_write(&sbi->s_lock);
 
 	ret = exfat_get_volume_label_dentry(sb, &es);
 	if (ret == -ENOENT) {
@@ -1370,6 +1370,6 @@ int exfat_write_volume_label(struct super_block *sb,
 	ret = exfat_put_dentry_set(&es, IS_DIRSYNC(root_inode));
 
 unlock:
-	mutex_unlock(&sbi->s_lock);
+	up_write(&sbi->s_lock);
 	return ret;
 }

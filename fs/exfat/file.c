@@ -296,7 +296,7 @@ static void exfat_truncate(struct inode *inode)
 	struct exfat_inode_info *ei = EXFAT_I(inode);
 	int err;
 
-	mutex_lock(&sbi->s_lock);
+	down_write(&sbi->s_lock);
 	if (ei->start_clu == 0) {
 		/*
 		 * Empty start_clu != ~0 (not allocated)
@@ -311,7 +311,7 @@ static void exfat_truncate(struct inode *inode)
 
 	inode->i_blocks = round_up(i_size_read(inode), sbi->cluster_size) >> 9;
 write_size:
-	mutex_unlock(&sbi->s_lock);
+	up_write(&sbi->s_lock);
 }
 
 int exfat_getattr(struct mnt_idmap *idmap, const struct path *path,

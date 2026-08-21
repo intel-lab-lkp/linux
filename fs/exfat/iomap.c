@@ -68,7 +68,7 @@ static int __exfat_iomap_begin(struct inode *inode, loff_t offset, loff_t length
 	num_clusters = exfat_bytes_to_cluster_round_up(sbi,
 			offset + length) - exfat_bytes_to_cluster(sbi, offset);
 
-	mutex_lock(&sbi->s_lock);
+	down_write(&sbi->s_lock);
 	iomap->bdev = inode->i_sb->s_bdev;
 	iomap->offset = offset;
 
@@ -135,7 +135,7 @@ static int __exfat_iomap_begin(struct inode *inode, loff_t offset, loff_t length
 
 	iomap->flags |= IOMAP_F_MERGED;
 out:
-	mutex_unlock(&sbi->s_lock);
+	up_write(&sbi->s_lock);
 	return err;
 }
 

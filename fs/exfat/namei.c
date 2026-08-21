@@ -550,7 +550,7 @@ static int exfat_create(struct mnt_idmap *idmap, struct inode *dir,
 	if (unlikely(exfat_forced_shutdown(sb)))
 		return -EIO;
 
-	mutex_lock(&EXFAT_SB(sb)->s_lock);
+	down_write(&EXFAT_SB(sb)->s_lock);
 	exfat_set_volume_dirty(sb);
 	err = exfat_add_entry(dir, dentry->d_name.name, TYPE_FILE, &info);
 	if (err)
@@ -577,7 +577,7 @@ static int exfat_create(struct mnt_idmap *idmap, struct inode *dir,
 
 	d_instantiate(dentry, inode);
 unlock:
-	mutex_unlock(&EXFAT_SB(sb)->s_lock);
+	up_write(&EXFAT_SB(sb)->s_lock);
 	return err;
 }
 
@@ -717,7 +717,7 @@ static struct dentry *exfat_lookup(struct inode *dir, struct dentry *dentry,
 	int err;
 	loff_t i_pos;
 
-	mutex_lock(&EXFAT_SB(sb)->s_lock);
+	down_write(&EXFAT_SB(sb)->s_lock);
 	err = exfat_find(dir, &dentry->d_name, &info);
 	if (err) {
 		if (unlikely(err != -ENOENT))
@@ -746,12 +746,12 @@ static struct dentry *exfat_lookup(struct inode *dir, struct dentry *dentry,
 		 */
 		d_move(alias, dentry);
 		iput(inode);
-		mutex_unlock(&EXFAT_SB(sb)->s_lock);
+		up_write(&EXFAT_SB(sb)->s_lock);
 		return alias;
 	}
 	dput(alias);
 out:
-	mutex_unlock(&EXFAT_SB(sb)->s_lock);
+	up_write(&EXFAT_SB(sb)->s_lock);
 	if (!inode)
 		exfat_d_version_set(dentry, inode_query_iversion(dir));
 
@@ -770,7 +770,7 @@ static int exfat_unlink(struct inode *dir, struct dentry *dentry)
 	if (unlikely(exfat_forced_shutdown(sb)))
 		return -EIO;
 
-	mutex_lock(&EXFAT_SB(sb)->s_lock);
+	down_write(&EXFAT_SB(sb)->s_lock);
 	if (ei->dir.dir == DIR_DELETED) {
 		exfat_err(sb, "abnormal access to deleted dentry");
 		err = -ENOENT;
@@ -806,7 +806,7 @@ static int exfat_unlink(struct inode *dir, struct dentry *dentry)
 	exfat_unhash_inode(inode);
 	exfat_d_version_set(dentry, inode_query_iversion(dir));
 unlock:
-	mutex_unlock(&EXFAT_SB(sb)->s_lock);
+	up_write(&EXFAT_SB(sb)->s_lock);
 	return err;
 }
 
@@ -823,7 +823,7 @@ static struct dentry *exfat_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (unlikely(exfat_forced_shutdown(sb)))
 		return ERR_PTR(-EIO);
 
-	mutex_lock(&EXFAT_SB(sb)->s_lock);
+	down_write(&EXFAT_SB(sb)->s_lock);
 	exfat_set_volume_dirty(sb);
 	err = exfat_add_entry(dir, dentry->d_name.name, TYPE_DIR, &info);
 	if (err)
@@ -852,7 +852,7 @@ static struct dentry *exfat_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	d_instantiate(dentry, inode);
 
 unlock:
-	mutex_unlock(&EXFAT_SB(sb)->s_lock);
+	up_write(&EXFAT_SB(sb)->s_lock);
 	return err ? ERR_PTR(err) : NULL;
 }
 
@@ -914,7 +914,7 @@ static int exfat_rmdir(struct inode *dir, struct dentry *dentry)
 	if (unlikely(exfat_forced_shutdown(sb)))
 		return -EIO;
 
-	mutex_lock(&EXFAT_SB(inode->i_sb)->s_lock);
+	down_write(&EXFAT_SB(inode->i_sb)->s_lock);
 
 	if (ei->dir.dir == DIR_DELETED) {
 		exfat_err(sb, "abnormal access to deleted dentry");
@@ -964,7 +964,7 @@ static int exfat_rmdir(struct inode *dir, struct dentry *dentry)
 	exfat_unhash_inode(inode);
 	exfat_d_version_set(dentry, inode_query_iversion(dir));
 unlock:
-	mutex_unlock(&EXFAT_SB(inode->i_sb)->s_lock);
+	up_write(&EXFAT_SB(inode->i_sb)->s_lock);
 	return err;
 }
 
@@ -1267,7 +1267,7 @@ static int exfat_rename(struct mnt_idmap *idmap,
 	if (flags & ~RENAME_NOREPLACE)
 		return -EINVAL;
 
-	mutex_lock(&EXFAT_SB(sb)->s_lock);
+	down_write(&EXFAT_SB(sb)->s_lock);
 	old_inode = old_dentry->d_inode;
 	new_inode = new_dentry->d_inode;
 
@@ -1319,7 +1319,7 @@ static int exfat_rename(struct mnt_idmap *idmap,
 	}
 
 unlock:
-	mutex_unlock(&EXFAT_SB(sb)->s_lock);
+	up_write(&EXFAT_SB(sb)->s_lock);
 	return err;
 }
 

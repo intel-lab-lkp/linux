@@ -116,16 +116,16 @@ int exfat_write_inode(struct inode *inode, struct writeback_control *wbc)
 	if (unlikely(exfat_forced_shutdown(inode->i_sb)))
 		return -EIO;
 
-	mutex_lock(&EXFAT_SB(inode->i_sb)->s_lock);
+	down_write(&EXFAT_SB(inode->i_sb)->s_lock);
 	ret = __exfat_write_inode(inode, wbc->sync_mode == WB_SYNC_ALL);
-	mutex_unlock(&EXFAT_SB(inode->i_sb)->s_lock);
+	up_write(&EXFAT_SB(inode->i_sb)->s_lock);
 
 	return ret;
 }
 
 void exfat_sync_inode(struct inode *inode)
 {
-	lockdep_assert_held(&EXFAT_SB(inode->i_sb)->s_lock);
+	lockdep_assert_held_write(&EXFAT_SB(inode->i_sb)->s_lock);
 	__exfat_write_inode(inode, 1);
 }
 
@@ -444,9 +444,9 @@ void exfat_evict_inode(struct inode *inode)
 
 	if (!inode->i_nlink) {
 		i_size_write(inode, 0);
-		mutex_lock(&EXFAT_SB(inode->i_sb)->s_lock);
+		down_write(&EXFAT_SB(inode->i_sb)->s_lock);
 		__exfat_truncate(inode);
-		mutex_unlock(&EXFAT_SB(inode->i_sb)->s_lock);
+		up_write(&EXFAT_SB(inode->i_sb)->s_lock);
 	}
 
 	clear_inode(inode);

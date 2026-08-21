@@ -246,7 +246,7 @@ struct exfat_sb_info {
 
 	unsigned long s_exfat_flags; /* Exfat superblock flags */
 
-	struct mutex s_lock; /* superblock lock */
+	struct rw_semaphore s_lock; /* superblock lock */
 	struct mutex bitmap_lock; /* bitmap lock */
 	struct exfat_mount_options options;
 	struct nls_table *nls_io; /* Charset used for input and display */

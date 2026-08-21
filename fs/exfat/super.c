@@ -45,11 +45,11 @@ static void exfat_put_super(struct super_block *sb)
 {
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 
-	mutex_lock(&sbi->s_lock);
+	down_write(&sbi->s_lock);
 	exfat_clear_volume_dirty(sb);
 	exfat_free_bitmap(sbi);
 	brelse(sbi->boot_bh);
-	mutex_unlock(&sbi->s_lock);
+	up_write(&sbi->s_lock);
 }
 
 static int exfat_statfs(struct dentry *dentry, struct kstatfs *buf)
@@ -772,9 +772,9 @@ static int exfat_reconfigure(struct fs_context *fc)
 	fc->sb_flags |= SB_NODIRATIME;
 
 	sync_filesystem(sb);
-	mutex_lock(&sbi->s_lock);
+	down_write(&sbi->s_lock);
 	exfat_clear_volume_dirty(sb);
-	mutex_unlock(&sbi->s_lock);
+	up_write(&sbi->s_lock);
 
 	if (new_opts->allow_utime == (unsigned short)-1)
 		new_opts->allow_utime = ~new_opts->fs_dmask & 0022;
@@ -821,7 +821,7 @@ static int exfat_init_fs_context(struct fs_context *fc)
 	if (!sbi)
 		return -ENOMEM;
 
-	mutex_init(&sbi->s_lock);
+	init_rwsem(&sbi->s_lock);
 	mutex_init(&sbi->bitmap_lock);
 	ratelimit_state_init(&sbi->ratelimit, DEFAULT_RATELIMIT_INTERVAL,
 			DEFAULT_RATELIMIT_BURST);
