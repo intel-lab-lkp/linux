@@ -139,7 +139,8 @@ static void c3_isp_params_awb_cood(struct c3_isp_device *isp,
 	unsigned int max_point_num;
 
 	/* The number of points is one more than the number of edges */
-	max_point_num = max(cfg->horiz_zones_num, cfg->vert_zones_num) + 1;
+	max_point_num = min(max(cfg->horiz_zones_num, cfg->vert_zones_num) + 1,
+			    C3_ISP_AWB_MAX_PT_NUM);
 
 	/* Set the index address to 0 position */
 	c3_isp_write(isp, ISP_AWB_IDX_ADDR, 0);
@@ -258,7 +259,8 @@ static void c3_isp_params_ae_cood(struct c3_isp_device *isp,
 	unsigned int max_point_num;
 
 	/* The number of points is one more than the number of edges */
-	max_point_num = max(cfg->horiz_zones_num, cfg->vert_zones_num) + 1;
+	max_point_num = min(max(cfg->horiz_zones_num, cfg->vert_zones_num) + 1,
+			    C3_ISP_AE_MAX_PT_NUM);
 
 	/* Set the index address to 0 position */
 	c3_isp_write(isp, ISP_AE_IDX_ADDR, 0);
@@ -316,7 +318,8 @@ static void c3_isp_params_af_cood(struct c3_isp_device *isp,
 	unsigned int max_point_num;
 
 	/* The number of points is one more than the number of edges */
-	max_point_num = max(cfg->horiz_zones_num, cfg->vert_zones_num) + 1;
+	max_point_num = min(max(cfg->horiz_zones_num, cfg->vert_zones_num) + 1,
+			    C3_ISP_AF_MAX_PT_NUM);
 
 	/* Set the index address to 0 position */
 	c3_isp_write(isp, ISP_AF_IDX_ADDR, 0);
