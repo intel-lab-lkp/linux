@@ -150,6 +150,8 @@ properties:
     description:
       List of phandles to system idle states in which mcan can wakeup the system.
 
+  out-band-wakeup: true
+
 required:
   - compatible
   - reg
