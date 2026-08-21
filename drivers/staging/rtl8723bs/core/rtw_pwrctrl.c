@@ -885,7 +885,7 @@ void rtw_unregister_tx_alive(struct adapter *padapter)
 }
 
 /*
- * Caller: ISR
+ * Caller: not ISR
  *
  * If all commands have been done,
  * and no more command to do,
