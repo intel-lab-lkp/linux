@@ -638,6 +638,7 @@ int bdev_del_partition(struct gendisk *disk, int partno);
 int bdev_resize_partition(struct gendisk *disk, int partno, sector_t start,
 		sector_t length);
 void drop_partition(struct block_device *part);
+int bdev_clone_partitions(struct gendisk *disk);
 
 void bdev_set_nr_sectors(struct block_device *bdev, sector_t sectors);
 

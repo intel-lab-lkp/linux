@@ -644,6 +644,7 @@ out_free_state:
 int bdev_disk_changed(struct gendisk *disk, bool invalidate)
 {
 	struct block_device *part;
+	struct gendisk *mirror;
 	unsigned long idx;
 	int ret = 0;
 
@@ -703,6 +704,13 @@ rescan:
 		kobject_uevent(&disk_to_dev(disk)->kobj, KOBJ_CHANGE);
 	}
 
+	hlist_for_each_entry(mirror, &disk->mirror_head,
+				mirror_node) {
+		ret = bdev_clone_partitions(mirror);
+		if (ret)
+			break;
+	}
+
 	return ret;
 }
 /*
@@ -710,6 +718,43 @@ rescan:
  * code!
  */
 EXPORT_SYMBOL_GPL(bdev_disk_changed);
+
+int bdev_clone_partitions(struct gendisk *disk)
+{
+	struct block_device *part;
+	unsigned long idx;
+
+	if (!disk->head)
+		return -EINVAL;
+
+	mutex_lock(&disk->open_mutex);
+	xa_for_each_start(&disk->part_tbl, idx, part, 1) {
+		/* Same as bdev_disk_changed() */
+		bdev_unhash(part);
+		WARN_ON_ONCE(atomic_read(&part->bd_openers));
+		invalidate_bdev(part);
+		drop_partition(part);
+	}
+
+	xa_for_each_start(&disk->head->part_tbl, idx, part, 1) {
+		struct block_device *part_added;
+
+		part_added = add_partition(disk, idx, part->bd_start_sect,
+					part->bd_nr_sectors, ADDPART_FLAG_NONE,
+					part->bd_meta_info);
+		if (IS_ERR(part_added)) {
+			if (PTR_ERR(part_added) != -ENXIO) {
+				dev_err(disk_to_dev(disk), "p%ld could not be added: %pe\n",
+				       idx, part_added);
+			}
+			mutex_unlock(&disk->open_mutex);
+			return PTR_ERR(part_added);
+		}
+	}
+	mutex_unlock(&disk->open_mutex);
+
+	return 0;
+}
 
 void *read_part_sector(struct parsed_partitions *state, sector_t n, Sector *p)
 {

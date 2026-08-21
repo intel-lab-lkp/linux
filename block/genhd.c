@@ -419,6 +419,17 @@ static void add_disk_final(struct gendisk *disk)
 		disk_uevent(disk, KOBJ_ADD);
 	}
 
+	if (disk->head) {
+		int ret;
+
+		mutex_lock(&disk->head->open_mutex);
+		ret = bdev_clone_partitions(disk);
+		mutex_unlock(&disk->head->open_mutex);
+		if (ret)
+			dev_err(disk_to_dev(disk), "could not clone partitions (%d)\n",
+				ret);
+	}
+
 	blk_apply_bdi_limits(disk->bdi, &disk->queue->limits);
 	disk_add_events(disk);
 	set_bit(GD_ADDED, &disk->state);
@@ -431,6 +442,9 @@ static int __add_disk(struct device *parent, struct gendisk *disk,
 {
 	struct device *ddev = disk_to_dev(disk);
 	int ret;
+
+	if (disk->head && disk_has_partscan(disk))
+		return -EINVAL;
 
 	if (WARN_ON_ONCE(bdev_nr_sectors(disk->part0) > BLK_DEV_MAX_SECTORS))
 		return -EINVAL;
@@ -708,6 +722,12 @@ static void __del_gendisk(struct gendisk *disk)
 	xa_for_each(&disk->part_tbl, idx, part)
 		bdev_unhash(part);
 	mutex_unlock(&disk->open_mutex);
+
+	if (disk->head) {
+		mutex_lock(&disk->head->open_mutex);
+		hlist_del(&disk->mirror_node);
+		mutex_unlock(&disk->head->open_mutex);
+	}
 
 	/*
 	 * Tell the file system to write back all dirty data and shut down if
@@ -1509,6 +1529,18 @@ out_free_disk:
 	kfree(disk);
 	return NULL;
 }
+
+void disk_add_mirror(struct gendisk *head, struct gendisk *mirror)
+{
+	if (!head)
+		return;
+	WARN_ON_ONCE(test_bit(GD_ADDED, &mirror->state));
+	mirror->head = head;
+	mutex_lock(&head->open_mutex);
+	hlist_add_head(&mirror->mirror_node, &head->mirror_head);
+	mutex_unlock(&head->open_mutex);
+}
+EXPORT_SYMBOL_GPL(disk_add_mirror);
 
 struct gendisk *__blk_alloc_disk(struct queue_limits *lim, int node,
 		struct lock_class_key *lkclass)

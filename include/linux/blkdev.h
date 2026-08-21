@@ -187,6 +187,13 @@ struct gendisk {
 #ifdef CONFIG_BLOCK_HOLDER_DEPRECATED
 	struct list_head slave_bdevs;
 #endif
+	union {
+		struct hlist_head mirror_head;
+		struct {
+			struct hlist_node mirror_node;
+			struct gendisk *head;
+		};
+	};
 	struct timer_rand_state *random;
 	struct disk_events *ev;
 
@@ -977,6 +984,7 @@ static inline unsigned int bdev_nr_zones(struct block_device *bdev)
 }
 
 int bdev_disk_changed(struct gendisk *disk, bool invalidate);
+void disk_add_mirror(struct gendisk *head, struct gendisk *mirror);
 
 void put_disk(struct gendisk *disk);
 struct gendisk *__blk_alloc_disk(struct queue_limits *lim, int node,
