@@ -1202,6 +1202,15 @@ int eh_frame_find(unsigned long ip, struct unwind_user_frame *frame)
 	if (!ret)
 		ret = __find_frame_row(sec, &fde, ip, frame);
 
+	/*
+	 * Unregister .eh_frame[_hdr] in case of an error,
+	 * e.g. EINVAL (corrupted) or EFAULT (inaccessible).
+	 * Keep if ENOENT (not found) or EOPNOTSUPP (unsupported CFI).
+	 */
+	if (ret && (ret != -ENOENT && ret != -EOPNOTSUPP))
+		if (eh_frame_remove_section(sec->eh_frame_hdr_start))
+			dbg("eh_frame_remove_section() failed\n");
+
 	return ret;
 }
 
