@@ -11,6 +11,8 @@
 #include <linux/delay.h>
 #include <scsi/scsi_tcq.h>
 
+static void qla_edif_list_free_sa_index_work(struct work_struct *work);
+
 static struct edif_sa_index_entry *qla_edif_sadb_find_sa_index_entry(uint16_t nport_handle,
 		struct list_head *sa_list);
 static uint16_t qla_edif_sadb_get_sa_index(fc_port_t *fcport,
@@ -85,7 +87,8 @@ static struct edif_list_entry *qla_edif_list_find_sa_index(fc_port_t *fcport,
 	struct list_head *indx_list = &fcport->edif.edif_indx_list;
 
 	list_for_each_entry_safe(entry, tentry, indx_list, next) {
-		if (entry->handle == handle)
+		if (entry->handle == handle &&
+		    !(READ_ONCE(entry->flags) & EDIF_ENTRY_FLAGS_FREE_PENDING))
 			return entry;
 	}
 	return NULL;
@@ -185,6 +188,7 @@ static int qla_edif_list_add_sa_update_index(fc_port_t *fcport,
 	entry->count = 0;
 	entry->flags = 0;
 	timer_setup(&entry->timer, qla2x00_sa_replace_iocb_timeout, 0);
+	INIT_WORK(&entry->free_work, qla_edif_list_free_sa_index_work);
 	spin_lock_irqsave(&fcport->edif.indx_list_lock, flags);
 	list_add_tail(&entry->next, &fcport->edif.edif_indx_list);
 	spin_unlock_irqrestore(&fcport->edif.indx_list_lock, flags);
@@ -197,7 +201,51 @@ static void qla_edif_list_delete_sa_index(fc_port_t *fcport, struct edif_list_en
 	unsigned long flags = 0;
 
 	spin_lock_irqsave(&fcport->edif.indx_list_lock, flags);
-	list_del(&entry->next);
+	if (!list_empty(&entry->next))
+		list_del_init(&entry->next);
+	spin_unlock_irqrestore(&fcport->edif.indx_list_lock, flags);
+}
+
+static void qla_edif_list_free_sa_index(struct edif_list_entry *entry)
+{
+	cancel_work_sync(&entry->free_work);
+	timer_shutdown_sync(&entry->timer);
+	kfree(entry);
+}
+
+static void qla_edif_list_free_sa_index_work(struct work_struct *work)
+{
+	struct edif_list_entry *entry = container_of(work,
+			struct edif_list_entry, free_work);
+	fc_port_t *fcport = entry->fcport;
+	unsigned long flags = 0;
+	bool free_entry = false;
+
+	timer_shutdown_sync(&entry->timer);
+
+	spin_lock_irqsave(&fcport->edif.indx_list_lock, flags);
+	if (!list_empty(&entry->next)) {
+		list_del_init(&entry->next);
+		free_entry = true;
+	}
+	spin_unlock_irqrestore(&fcport->edif.indx_list_lock, flags);
+
+	if (free_entry)
+		kfree(entry);
+}
+
+static void qla_edif_list_schedule_free_sa_index(fc_port_t *fcport,
+						 struct edif_list_entry *entry)
+{
+	unsigned long flags = 0;
+
+	spin_lock_irqsave(&fcport->edif.indx_list_lock, flags);
+	if (!list_empty(&entry->next) &&
+	    !(entry->flags & EDIF_ENTRY_FLAGS_FREE_PENDING)) {
+		entry->flags |= EDIF_ENTRY_FLAGS_FREE_PENDING;
+		timer_shutdown(&entry->timer);
+		schedule_work(&entry->free_work);
+	}
 	spin_unlock_irqrestore(&fcport->edif.indx_list_lock, flags);
 }
 
@@ -417,8 +465,6 @@ static void __qla2x00_release_all_sadb(struct scsi_qla_host *vha,
 				 */
 				if (edif_entry->delete_sa_index !=
 						INVALID_EDIF_SA_INDEX) {
-					timer_shutdown(&edif_entry->timer);
-
 					/* build and send the aen */
 					fcport->edif.rx_sa_set = 1;
 					fcport->edif.rx_sa_pending = 0;
@@ -432,7 +478,7 @@ static void __qla2x00_release_all_sadb(struct scsi_qla_host *vha,
 				    __func__, edif_entry, edif_entry->update_sa_index,
 				    edif_entry->delete_sa_index);
 
-				kfree(edif_entry);
+				qla_edif_list_free_sa_index(edif_entry);
 			}
 		}
 		key_cnt++;
@@ -1666,7 +1712,7 @@ qla24xx_sadb_update(struct bsg_job *bsg_job)
 			ql_dbg(ql_dbg_edif, vha, 0x911d,
 			    "%s: FORCE DELETE flag found for nport_handle 0x%x, sa_index 0x%x, forcing DELETE\n",
 			    __func__, fcport->loop_id, sa_index);
-			kfree(edif_entry);
+			qla_edif_list_free_sa_index(edif_entry);
 			goto force_rx_delete;
 		}
 
@@ -2843,14 +2889,12 @@ qla28xx_sa_update_iocb_entry(scsi_qla_host_t *v, struct req_que *req,
 			ql_dbg(ql_dbg_edif, vha, 0x5033,
 			    "%s: removing edif_entry %p, new sa_index: 0x%x\n",
 			    __func__, edif_entry, pkt->sa_index);
-			qla_edif_list_delete_sa_index(sp->fcport, edif_entry);
-			timer_shutdown(&edif_entry->timer);
+			qla_edif_list_schedule_free_sa_index(sp->fcport, edif_entry);
 
 			ql_dbg(ql_dbg_edif, vha, 0x5033,
 			    "%s: releasing edif_entry %p, new sa_index: 0x%x\n",
 			    __func__, edif_entry, pkt->sa_index);
 
-			kfree(edif_entry);
 		}
 	}
 
@@ -3230,16 +3274,21 @@ queuing_error:
 void qla_edif_list_del(fc_port_t *fcport)
 {
 	struct edif_list_entry *indx_lst;
-	struct edif_list_entry *tindx_lst;
-	struct list_head *indx_list = &fcport->edif.edif_indx_list;
 	unsigned long flags = 0;
 
-	spin_lock_irqsave(&fcport->edif.indx_list_lock, flags);
-	list_for_each_entry_safe(indx_lst, tindx_lst, indx_list, next) {
-		list_del(&indx_lst->next);
-		kfree(indx_lst);
+	for (;;) {
+		spin_lock_irqsave(&fcport->edif.indx_list_lock, flags);
+		indx_lst = list_first_entry_or_null(&fcport->edif.edif_indx_list,
+						    struct edif_list_entry, next);
+		if (indx_lst)
+			list_del_init(&indx_lst->next);
+		spin_unlock_irqrestore(&fcport->edif.indx_list_lock, flags);
+
+		if (!indx_lst)
+			break;
+
+		qla_edif_list_free_sa_index(indx_lst);
 	}
-	spin_unlock_irqrestore(&fcport->edif.indx_list_lock, flags);
 }
 
 /******************

@@ -5367,9 +5367,11 @@ struct edif_list_entry {
 	uint32_t delete_sa_index;
 	uint32_t count;				/* counter for filtering sa_index */
 #define EDIF_ENTRY_FLAGS_CLEANUP	0x01	/* this index is being cleaned up */
+#define EDIF_ENTRY_FLAGS_FREE_PENDING	0x02	/* entry is queued for freeing */
 	uint32_t flags;				/* used by sadb cleanup code */
 	fc_port_t *fcport;			/* needed by rx delay timer function */
 	struct timer_list timer;		/* rx delay timer */
+	struct work_struct free_work;
 	struct list_head next;
 };
 
