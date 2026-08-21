@@ -63,6 +63,14 @@ enum cc_attr {
 	CC_ATTR_GUEST_STATE_ENCRYPT,
 
 	/**
+	 * @CC_ATTR_GUEST_DEBUG_VIRT: Guest debug register virtualization is active.
+	 *
+	 * The platform/OS is running as a guest/virtual machine and is
+	 * virtualizing the debug register state.
+	 */
+	CC_ATTR_GUEST_DEBUG_VIRT,
+
+	/**
 	 * @CC_ATTR_GUEST_UNROLL_STRING_IO: String I/O is implemented with
 	 *                                  IN/OUT instructions
 	 *

@@ -398,7 +398,16 @@ void __nocfi machine_kexec(struct kimage *image)
 
 	/* Interrupts aren't acceptable while we reboot */
 	local_irq_disable();
-	hw_breakpoint_disable();
+
+	/*
+	 * On SEV-ES/SEV-SNP guests without debug virtualization enabled, DR7
+	 * writes are intercepted and generate a #VC. The GHCBs have already
+	 * been torn down at this point so the #VC cannot be handled. Skip the
+	 * DR7 write as the new kernel re-initializes DR7 during boot.
+	 */
+	if (!cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT) ||
+	    cc_platform_has(CC_ATTR_GUEST_DEBUG_VIRT))
+		hw_breakpoint_disable();
 	cet_disable();
 
 	if (image->preserve_context) {
