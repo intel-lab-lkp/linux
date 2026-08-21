@@ -116,7 +116,8 @@ vm_start() {
 		--qemu="$(command -v "$QEMU")" \
 		--user root \
 		--ssh "$SSH_GUEST_PORT" \
-		--append "cma=64M" \
+		--memory 3G \
+		--append "cma=64M hugetlb_cma=1G hugetlb_cma_only=1" \
 		--rw &>"$logfile" &
 
 	local vng_pid=$!
