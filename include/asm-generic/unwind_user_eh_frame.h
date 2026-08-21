@@ -2,6 +2,8 @@
 #ifndef _ASM_GENERIC_UNWIND_USER_EH_FRAME_H
 #define _ASM_GENERIC_UNWIND_USER_EH_FRAME_H
 
+#include <linux/unwind_user_eh_frame_types.h>
+
 #ifndef EH_FRAME_MAX_CIE_LENGTH
 #define EH_FRAME_MAX_CIE_LENGTH 128
 #endif
@@ -12,6 +14,10 @@
 
 #ifndef EH_FRAME_MAX_AUGSTR_LENGTH
 #define EH_FRAME_MAX_AUGSTR_LENGTH 16
+#endif
+
+#ifndef EH_FRAME_MAX_EXPRESSION_LENGTH
+#define EH_FRAME_MAX_EXPRESSION_LENGTH 32
 #endif
 
 #ifndef EH_FRAME_MAX_STATE_STACK
@@ -45,6 +51,41 @@ static inline bool eh_frame_reject_sp_rule(void)
 	return true;
 }
 #define eh_frame_reject_sp_rule eh_frame_reject_sp_rule
+#endif
+
+#ifndef eh_frame_do_def_cfa_expression
+static inline int eh_frame_do_def_cfa_expression(const char *expr,
+						 int size,
+						 unsigned long ip,
+						 struct eh_frame_reg_state *reg_state)
+{
+	return -EOPNOTSUPP;
+}
+#define eh_frame_do_def_cfa_expression eh_frame_do_def_cfa_expression
+#endif
+
+#ifndef eh_frame_do_expression
+static inline int eh_frame_do_expression(unsigned int reg,
+					 const char *expr,
+					 int size,
+					 unsigned long ip,
+					 struct eh_frame_reg_state *reg_state)
+{
+	return -EOPNOTSUPP;
+}
+#define eh_frame_do_expression eh_frame_do_expression
+#endif
+
+#ifndef eh_frame_do_val_expression
+static inline int eh_frame_do_val_expression(unsigned int reg,
+					     const char *expr,
+					     int size,
+					     unsigned long ip,
+					     struct eh_frame_reg_state *reg_state)
+{
+	return -EOPNOTSUPP;
+}
+#define eh_frame_do_val_expression eh_frame_do_val_expression
 #endif
 
 #endif /* _ASM_GENERIC_UNWIND_USER_EH_FRAME_H */

@@ -12,44 +12,13 @@
 #include <linux/mm.h>
 #include <linux/string_helpers.h>
 #include <linux/eh_frame.h>
+#include <linux/types.h>
 #include <linux/unwind_user_types.h>
+#include <linux/unwind_user_eh_frame_types.h>
 #include <asm/unwind_user_eh_frame.h>
 
 #include "eh_frame.h"
 #include "eh_frame_debug.h"
-
-/* Register state for CFI interpreter */
-enum eh_frame_cfa_rule {
-	CFA_UNDEFINED,		/* unrecoverable */
-	CFA_REG_OFFSET,		/* CFA = reg + offset */
-};
-
-enum eh_frame_reg_rule {
-	REG_UNDEFINED_IMPLICIT,	/* reg = reg */
-	REG_UNDEFINED_EXPLICIT,	/* unrecoverable; RA: outermost frame */
-	REG_SAME_VALUE,		/* reg = reg; TODO: reset to CIE initial CFI */
-	REG_OFFSET,		/* reg = *(CFA + offset) */
-	REG_VAL_OFFSET,		/* reg = CFA + offset */
-	REG_REGISTER,		/* reg = other_reg */
-};
-
-enum eh_frame_reg_index {
-	FP_IDX,			/* frame pointer (FP) */
-	RA_IDX,			/* return address (RA) */
-	NR_REGS
-};
-
-struct eh_frame_reg_state {
-	/* CFA recovery rule */
-	enum eh_frame_cfa_rule cfa_rule;
-	unsigned long cfa_regnum;
-	long cfa_offset;
-
-	/* FP and RA recovery rules (SP uses implicit recovery) */
-	enum eh_frame_reg_rule reg_rule[NR_REGS];
-	unsigned long reg_regnum[NR_REGS];
-	long reg_offset[NR_REGS];
-};
 
 struct eh_frame_cfi_context {
 	struct eh_frame_reg_state state;
@@ -803,6 +772,27 @@ static __always_inline int __do_cfi_insn(struct eh_frame_section *sec,
 			break;
 		}
 
+		case DW_CFA_def_cfa_expression: {
+			unsigned long expr_len;
+			char expr[EH_FRAME_MAX_EXPRESSION_LENGTH];
+
+			ret = read_uleb128(&cur, end, &expr_len);
+			if (ret)
+				return ret;
+
+			if (cur + expr_len < cur || cur + expr_len > end)
+				return -EINVAL;
+
+			if (expr_len > sizeof(expr))
+				return -EOPNOTSUPP;
+			unsafe_copy_from_user(&expr, (void __user *)cur, expr_len, Efault);
+			ret = eh_frame_do_def_cfa_expression(expr, expr_len, target_ip, &ctx->state);
+			if (ret)
+				return ret;
+			cur += expr_len;
+			break;
+		}
+
 		case DW_CFA_undefined: {
 			unsigned long reg;
 			int idx;
@@ -970,12 +960,22 @@ static __always_inline int __do_cfi_insn(struct eh_frame_section *sec,
 			if (ret)
 				return ret;
 
-			if (cur + expr_len > end)
+			if (cur + expr_len < cur || cur + expr_len > end)
 				return -EINVAL;
 
-			if (reg == EH_FRAME_REG_SP || reg == EH_FRAME_REG_FP || reg == EH_FRAME_REG_RA)
-				return -EOPNOTSUPP;
+			if (reg == EH_FRAME_REG_SP || reg == EH_FRAME_REG_FP || reg == EH_FRAME_REG_RA) {
+				char expr[EH_FRAME_MAX_EXPRESSION_LENGTH];
 
+				if (expr_len > sizeof(expr))
+					return -EOPNOTSUPP;
+				unsafe_copy_from_user(&expr, (void __user *)cur, expr_len, Efault);
+				if (opcode == DW_CFA_expression)
+					ret = eh_frame_do_expression(reg, expr, expr_len, target_ip, &ctx->state);
+				else
+					ret = eh_frame_do_val_expression(reg, expr, expr_len, target_ip, &ctx->state);
+				if (ret)
+					return ret;
+			}
 			cur += expr_len;
 			break;
 		}
