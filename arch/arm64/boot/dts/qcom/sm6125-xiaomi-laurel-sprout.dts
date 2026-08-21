@@ -37,6 +37,20 @@
 	};
 
 	reserved-memory {
+		/*
+		 * The SoC dtsi sizes reserved_mem1 at 0x2d00000 (45 MiB), ending
+		 * at 0x48f00000. This device's firmware owns 0x4900000 (73 MiB)
+		 * there -- downstream laurel_sprout carves out
+		 * removed_region@46200000 with that size, ending exactly at
+		 * camera_mem's 0x4ab00000. The 28 MiB in between is XPU-owned
+		 * on this board and mainline currently hands it to the buddy
+		 * allocator.
+		 */
+		reserved_mem1_laurel: memory@48f00000 {
+			reg = <0x0 0x48f00000 0x0 0x1c00000>;
+			no-map;
+		};
+
 		debug_mem: debug@ffb00000 {
 			reg = <0x0 0xffb00000 0x0 0xc0000>;
 			no-map;
