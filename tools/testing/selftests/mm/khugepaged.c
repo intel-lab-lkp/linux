@@ -1110,6 +1110,7 @@ static void parse_test_type(int argc, char **argv)
 {
 	int opt;
 	char *buf;
+	char *c;
 	const char *token;
 
 	while ((opt = getopt(argc, argv, "s:h")) != -1) {
@@ -1135,7 +1136,10 @@ static void parse_test_type(int argc, char **argv)
 	}
 
 	buf = strdup(argv[0]);
-	token = strsep(&buf, ":");
+	if (!buf)
+		ksft_exit_fail_msg("Insufficient memory\n");
+	c = buf;
+	token = strsep(&c, ":");
 
 	if (!strcmp(token, "all")) {
 		khugepaged_context =  &__khugepaged_context;
@@ -1148,26 +1152,27 @@ static void parse_test_type(int argc, char **argv)
 		usage();
 	}
 
-	if (!buf)
+	if (!c)
 		usage();
 
-	if (!strcmp(buf, "all")) {
+	if (!strcmp(c, "all")) {
 		read_only_file_ops =  &__read_only_file_ops;
 		read_write_file_read_ops =  &__read_write_file_read_ops;
 		read_write_file_write_ops =  &__read_write_file_write_ops;
 		anon_ops = &__anon_ops;
 		shmem_ops = &__shmem_ops;
-	} else if (!strcmp(buf, "anon")) {
+	} else if (!strcmp(c, "anon")) {
 		anon_ops = &__anon_ops;
-	} else if (!strcmp(buf, "file")) {
+	} else if (!strcmp(c, "file")) {
 		read_only_file_ops =  &__read_only_file_ops;
 		read_write_file_read_ops =  &__read_write_file_read_ops;
 		read_write_file_write_ops =  &__read_write_file_write_ops;
-	} else if (!strcmp(buf, "shmem")) {
+	} else if (!strcmp(c, "shmem")) {
 		shmem_ops = &__shmem_ops;
 	} else {
 		usage();
 	}
+	free(buf);
 
 	if (!read_only_file_ops && !read_write_file_read_ops &&
 	    !read_write_file_write_ops)
