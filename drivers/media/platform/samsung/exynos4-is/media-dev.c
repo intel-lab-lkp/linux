@@ -1313,7 +1313,7 @@ static int fimc_md_register_clk_provider(struct fimc_md *fmd)
 
 	for (i = 0; i < FIMC_MAX_CAMCLKS; i++) {
 		struct cam_clk *camclk = &cp->camclk[i];
-		struct clk_init_data init;
+		struct clk_init_data init = {};
 		const char *p_name;
 
 		ret = of_property_read_string_index(dev->of_node,
