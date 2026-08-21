@@ -28202,7 +28202,9 @@ M:	Josh Poimboeuf <jpoimboe@kernel.org>
 M:	Steven Rostedt <rostedt@goodmis.org>
 S:	Maintained
 F:	arch/*/include/asm/unwind_user.h
+F:	arch/*/include/asm/unwind_user_eh_frame.h
 F:	include/asm-generic/unwind_user.h
+F:	include/asm-generic/unwind_user_eh_frame.h
 F:	include/linux/eh_frame.h
 F:	include/linux/unwind*.h
 F:	kernel/unwind/

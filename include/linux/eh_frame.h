@@ -4,6 +4,7 @@
 
 #include <linux/mm_types.h>
 #include <linux/srcu.h>
+#include <linux/unwind_user_types.h>
 
 #ifdef CONFIG_HAVE_UNWIND_USER_EH_FRAME
 
@@ -34,6 +35,7 @@ extern int eh_frame_add_section(unsigned long eh_frame_hdr_start,
 				unsigned long text_start,
 				unsigned long text_end);
 extern int eh_frame_remove_section(unsigned long eh_frame_hdr_start);
+extern int eh_frame_find(unsigned long ip, struct unwind_user_frame *frame);
 
 static inline bool current_has_eh_frame(void)
 {
@@ -56,6 +58,11 @@ static inline int eh_frame_add_section(unsigned long eh_frame_hdr_start,
 }
 
 static inline int eh_frame_remove_section(unsigned long eh_frame_hdr_start)
+{
+	return -ENOSYS;
+}
+
+static inline int eh_frame_find(unsigned long ip, struct unwind_user_frame *frame)
 {
 	return -ENOSYS;
 }
