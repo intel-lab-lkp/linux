@@ -4677,6 +4677,13 @@ bool scx_can_stop_tick(struct rq *rq)
 
 DEFINE_STATIC_PERCPU_RWSEM(scx_cgroup_ops_rwsem);
 
+/*
+ * Serialize concurrent cpu.max writers to the same cgroup so the
+ * ops.cgroup_set_bandwidth() callback and the cached tg->scx.bw_* values update
+ * atomically in one order -- the SCX-side counterpart to cfs_constraints_mutex.
+ */
+static DEFINE_MUTEX(scx_cgroup_set_bw_mutex);
+
 void scx_tg_init(struct task_group *tg)
 {
 	tg->scx.weight = CGROUP_WEIGHT_DFL;
@@ -4945,6 +4952,7 @@ void scx_group_set_bandwidth(struct task_group *tg,
 	struct scx_sched *sch;
 
 	percpu_down_read(&scx_cgroup_ops_rwsem);
+	mutex_lock(&scx_cgroup_set_bw_mutex);
 	sch = scx_tg_knob_sched(tg);
 
 	if (scx_cgroup_enabled && sch && SCX_HAS_OP(sch, cgroup_set_bandwidth) &&
@@ -4958,6 +4966,7 @@ void scx_group_set_bandwidth(struct task_group *tg,
 	tg->scx.bw_quota_us = quota_us;
 	tg->scx.bw_burst_us = burst_us;
 
+	mutex_unlock(&scx_cgroup_set_bw_mutex);
 	percpu_up_read(&scx_cgroup_ops_rwsem);
 }
 #endif	/* CONFIG_EXT_GROUP_SCHED */
