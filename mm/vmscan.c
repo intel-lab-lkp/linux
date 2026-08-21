@@ -48,6 +48,7 @@
 #include <linux/prefetch.h>
 #include <linux/printk.h>
 #include <linux/dax.h>
+#include <linux/zswap.h>
 #include <linux/psi.h>
 #include <linux/pagewalk.h>
 #include <linux/shmem_fs.h>
@@ -735,7 +736,8 @@ static int __remove_mapping(struct address_space *mapping, struct folio *folio,
 	if (folio_test_swapcache(folio)) {
 		swp_entry_t swap = folio->swap;
 
-		if (reclaimed && !mapping_exiting(mapping))
+		if (reclaimed && !mapping_exiting(mapping) &&
+		    !zswap_folio_is_writeback_buffer(folio))
 			shadow = workingset_eviction(folio, target_memcg);
 		__memcg1_swapout(folio, ci);
 		__swap_cache_del_folio(ci, folio, swap, shadow);
