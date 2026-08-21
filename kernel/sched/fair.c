@@ -15390,8 +15390,6 @@ void init_tg_cfs_entry(struct task_group *tg, struct cfs_rq *cfs_rq,
 	se->parent = parent;
 }
 
-static DEFINE_MUTEX(shares_mutex);
-
 static int __sched_group_set_shares(struct task_group *tg, unsigned long shares)
 {
 	int i;
@@ -15428,23 +15426,31 @@ static int __sched_group_set_shares(struct task_group *tg, unsigned long shares)
 	return 0;
 }
 
-int sched_group_set_shares(struct task_group *tg, unsigned long shares)
+int sched_group_set_shares_locked(struct task_group *tg, unsigned long shares)
 {
 	int ret;
 
-	mutex_lock(&shares_mutex);
+	lockdep_assert_held(&shares_mutex);
+
 	if (tg_is_idle(tg))
 		ret = -EINVAL;
 	else
 		ret = __sched_group_set_shares(tg, shares);
-	mutex_unlock(&shares_mutex);
 
 	return ret;
+}
+
+int sched_group_set_shares(struct task_group *tg, unsigned long shares)
+{
+	guard(mutex)(&shares_mutex);
+	return sched_group_set_shares_locked(tg, shares);
 }
 
 int sched_group_set_idle(struct task_group *tg, long idle)
 {
 	int i;
+
+	lockdep_assert_held(&shares_mutex);
 
 	if (tg == &root_task_group)
 		return -EINVAL;
@@ -15452,12 +15458,8 @@ int sched_group_set_idle(struct task_group *tg, long idle)
 	if (idle < 0 || idle > 1)
 		return -EINVAL;
 
-	mutex_lock(&shares_mutex);
-
-	if (tg->idle == idle) {
-		mutex_unlock(&shares_mutex);
+	if (tg->idle == idle)
 		return 0;
-	}
 
 	tg->idle = idle;
 
@@ -15503,7 +15505,6 @@ next_cpu:
 	else
 		__sched_group_set_shares(tg, NICE_0_LOAD);
 
-	mutex_unlock(&shares_mutex);
 	return 0;
 }
 
