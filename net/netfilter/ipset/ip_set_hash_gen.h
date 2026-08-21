@@ -711,7 +711,7 @@ mtype_resize(struct ip_set *set, bool retried)
 	int ret;
 
 #ifdef IP_SET_HASH_WITH_NETS
-	tmp = kmalloc(dsize, GFP_KERNEL);
+	tmp = kmalloc(dsize, GFP_KERNEL_ACCOUNT);
 	if (!tmp)
 		return -ENOMEM;
 #endif
@@ -1681,7 +1681,7 @@ IPSET_TOKEN(HTYPE, _create)(struct net *net, struct ip_set *set,
 		sizeof(struct IPSET_TOKEN(HTYPE, 6)) :
 		sizeof(struct IPSET_TOKEN(HTYPE, 4));
 #endif
-	h = kzalloc(hsize, GFP_KERNEL);
+	h = kzalloc(hsize, GFP_KERNEL_ACCOUNT);
 	if (!h)
 		return -ENOMEM;
 
@@ -1701,7 +1701,7 @@ IPSET_TOKEN(HTYPE, _create)(struct net *net, struct ip_set *set,
 		goto free_t;
 #ifdef IP_SET_HASH_WITH_NETS
 	for (i = 0; i < IPSET_NET_COUNT; i++) {
-		nets = kzalloc_obj(*nets);
+		nets = kzalloc_obj(*nets, GFP_KERNEL_ACCOUNT);
 		if (!nets) {
 			while (i > 0)
 				kfree(rcu_dereference_raw(h->rnets[--i]));

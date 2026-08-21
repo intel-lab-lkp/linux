@@ -231,7 +231,7 @@ static bool
 init_map_port(struct ip_set *set, struct bitmap_port *map,
 	      u16 first_port, u16 last_port)
 {
-	map->members = bitmap_zalloc(map->elements, GFP_KERNEL | __GFP_NOWARN);
+	map->members = bitmap_zalloc(map->elements, GFP_KERNEL_ACCOUNT | __GFP_NOWARN);
 	if (!map->members)
 		return false;
 	map->first_port = first_port;
