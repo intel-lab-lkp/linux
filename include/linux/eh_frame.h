@@ -11,6 +11,10 @@
 struct eh_frame_section {
 	struct rcu_head	rcu;
 
+#ifdef CONFIG_DYNAMIC_DEBUG
+	const char	*filename;
+#endif
+
 	unsigned long	eh_frame_hdr_start;
 	unsigned long	eh_frame_hdr_end;
 	unsigned long	text_start;

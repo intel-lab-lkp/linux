@@ -1207,15 +1207,18 @@ int eh_frame_find(unsigned long ip, struct unwind_user_frame *frame)
 	 * e.g. EINVAL (corrupted) or EFAULT (inaccessible).
 	 * Keep if ENOENT (not found) or EOPNOTSUPP (unsupported CFI).
 	 */
-	if (ret && (ret != -ENOENT && ret != -EOPNOTSUPP))
+	if (ret && (ret != -ENOENT && ret != -EOPNOTSUPP)) {
+		dbg_sec("removing bad .eh_frame[_hdr] section\n");
 		if (eh_frame_remove_section(sec->eh_frame_hdr_start))
 			dbg("eh_frame_remove_section() failed\n");
+	}
 
 	return ret;
 }
 
 static void free_section(struct eh_frame_section *sec)
 {
+	dbg_free(sec);
 	kfree(sec);
 }
 
@@ -1342,6 +1345,8 @@ int eh_frame_add_section(unsigned long eh_frame_hdr_start,
 	sec->text_start		= text_start;
 	sec->text_end		= text_end;
 
+	dbg_init(sec);
+
 	ret = eh_frame_read_header(sec);
 	if (ret)
 		goto err_free;
@@ -1349,8 +1354,8 @@ int eh_frame_add_section(unsigned long eh_frame_hdr_start,
 	ret = mtree_insert_range(eh_frame_mt, sec->text_start, sec->text_end - 1,
 				 sec, GFP_KERNEL_ACCOUNT);
 	if (ret) {
-		dbg("mtree_insert_range failed: text=%lx-%lx\n",
-		    sec->text_start, sec->text_end);
+		dbg_sec("mtree_insert_range failed: text=%lx-%lx\n",
+			sec->text_start, sec->text_end);
 		goto err_free;
 	}
 
@@ -1372,7 +1377,7 @@ static int __eh_frame_remove_section(struct ma_state *mas,
 				     struct eh_frame_section *sec)
 {
 	if (mas_erase(mas) != sec) {
-		dbg("mas_erase failed: text=%lx\n", sec->text_start);
+		dbg_sec("mas_erase failed: text=%lx\n", sec->text_start);
 		return -EINVAL;
 	}
 
