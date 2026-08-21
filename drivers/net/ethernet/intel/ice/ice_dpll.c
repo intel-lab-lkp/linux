@@ -760,6 +760,9 @@ ice_dpll_pin_state_update(struct ice_pf *pf, struct ice_dpll_pin *pin,
 	u8 parent, port_num = ICE_AQC_SET_PHY_REC_CLK_OUT_CURR_PORT;
 	int ret;
 
+	for (int i = 0; i < ICE_DPLL_RCLK_NUM_MAX; i++)
+		pin->state[i] = DPLL_PIN_STATE_DISCONNECTED;
+
 	switch (pin_type) {
 	case ICE_DPLL_PIN_TYPE_INPUT:
 		ret = ice_aq_get_input_pin_cfg(&pf->hw, pin->idx, &pin->status,
@@ -769,25 +772,31 @@ ice_dpll_pin_state_update(struct ice_pf *pf, struct ice_dpll_pin *pin,
 			goto err;
 		if (ICE_AQC_GET_CGU_IN_CFG_FLG2_INPUT_EN & pin->flags[0]) {
 			if (pin->pin) {
-				pin->state[pf->dplls.eec.dpll_idx] =
-					pin->pin == pf->dplls.eec.active_input ?
-					DPLL_PIN_STATE_CONNECTED :
-					DPLL_PIN_STATE_SELECTABLE;
-				pin->state[pf->dplls.pps.dpll_idx] =
-					pin->pin == pf->dplls.pps.active_input ?
-					DPLL_PIN_STATE_CONNECTED :
-					DPLL_PIN_STATE_SELECTABLE;
+				if (pf->dplls.eec.dpll_idx < ICE_DPLL_RCLK_NUM_MAX)
+					pin->state[pf->dplls.eec.dpll_idx] =
+						pin->pin == pf->dplls.eec.active_input ?
+						DPLL_PIN_STATE_CONNECTED :
+						DPLL_PIN_STATE_SELECTABLE;
+				if (pf->dplls.pps.dpll_idx < ICE_DPLL_RCLK_NUM_MAX)
+					pin->state[pf->dplls.pps.dpll_idx] =
+						pin->pin == pf->dplls.pps.active_input ?
+						DPLL_PIN_STATE_CONNECTED :
+						DPLL_PIN_STATE_SELECTABLE;
 			} else {
-				pin->state[pf->dplls.eec.dpll_idx] =
-					DPLL_PIN_STATE_SELECTABLE;
-				pin->state[pf->dplls.pps.dpll_idx] =
-					DPLL_PIN_STATE_SELECTABLE;
+				if (pf->dplls.eec.dpll_idx < ICE_DPLL_RCLK_NUM_MAX)
+					pin->state[pf->dplls.eec.dpll_idx] =
+						DPLL_PIN_STATE_SELECTABLE;
+				if (pf->dplls.pps.dpll_idx < ICE_DPLL_RCLK_NUM_MAX)
+					pin->state[pf->dplls.pps.dpll_idx] =
+						DPLL_PIN_STATE_SELECTABLE;
 			}
 		} else {
-			pin->state[pf->dplls.eec.dpll_idx] =
-				DPLL_PIN_STATE_DISCONNECTED;
-			pin->state[pf->dplls.pps.dpll_idx] =
-				DPLL_PIN_STATE_DISCONNECTED;
+			if (pf->dplls.eec.dpll_idx < ICE_DPLL_RCLK_NUM_MAX)
+				pin->state[pf->dplls.eec.dpll_idx] =
+					DPLL_PIN_STATE_DISCONNECTED;
+			if (pf->dplls.pps.dpll_idx < ICE_DPLL_RCLK_NUM_MAX)
+				pin->state[pf->dplls.pps.dpll_idx] =
+					DPLL_PIN_STATE_DISCONNECTED;
 		}
 		break;
 	case ICE_DPLL_PIN_TYPE_OUTPUT:
@@ -799,19 +808,23 @@ ice_dpll_pin_state_update(struct ice_pf *pf, struct ice_dpll_pin *pin,
 
 		parent &= ICE_AQC_GET_CGU_OUT_CFG_DPLL_SRC_SEL;
 		if (ICE_AQC_GET_CGU_OUT_CFG_OUT_EN & pin->flags[0]) {
-			pin->state[pf->dplls.eec.dpll_idx] =
-				parent == pf->dplls.eec.dpll_idx ?
-				DPLL_PIN_STATE_CONNECTED :
-				DPLL_PIN_STATE_DISCONNECTED;
-			pin->state[pf->dplls.pps.dpll_idx] =
-				parent == pf->dplls.pps.dpll_idx ?
-				DPLL_PIN_STATE_CONNECTED :
-				DPLL_PIN_STATE_DISCONNECTED;
+			if (pf->dplls.eec.dpll_idx < ICE_DPLL_RCLK_NUM_MAX)
+				pin->state[pf->dplls.eec.dpll_idx] =
+					parent == pf->dplls.eec.dpll_idx ?
+					DPLL_PIN_STATE_CONNECTED :
+					DPLL_PIN_STATE_DISCONNECTED;
+			if (pf->dplls.pps.dpll_idx < ICE_DPLL_RCLK_NUM_MAX)
+				pin->state[pf->dplls.pps.dpll_idx] =
+					parent == pf->dplls.pps.dpll_idx ?
+					DPLL_PIN_STATE_CONNECTED :
+					DPLL_PIN_STATE_DISCONNECTED;
 		} else {
-			pin->state[pf->dplls.eec.dpll_idx] =
-				DPLL_PIN_STATE_DISCONNECTED;
-			pin->state[pf->dplls.pps.dpll_idx] =
-				DPLL_PIN_STATE_DISCONNECTED;
+			if (pf->dplls.eec.dpll_idx < ICE_DPLL_RCLK_NUM_MAX)
+				pin->state[pf->dplls.eec.dpll_idx] =
+					DPLL_PIN_STATE_DISCONNECTED;
+			if (pf->dplls.pps.dpll_idx < ICE_DPLL_RCLK_NUM_MAX)
+				pin->state[pf->dplls.pps.dpll_idx] =
+					DPLL_PIN_STATE_DISCONNECTED;
 		}
 		break;
 	case ICE_DPLL_PIN_TYPE_RCLK_INPUT:
@@ -5180,6 +5193,13 @@ static int ice_dpll_init_info(struct ice_pf *pf, bool cgu)
 
 	de->dpll_idx = abilities.eec_dpll_idx;
 	dp->dpll_idx = abilities.pps_dpll_idx;
+	if (de->dpll_idx >= ICE_DPLL_RCLK_NUM_MAX ||
+	    dp->dpll_idx >= ICE_DPLL_RCLK_NUM_MAX) {
+		dev_err(ice_pf_to_dev(pf),
+			"invalid dpll_idx in cgu abilities: eec=%u, pps=%u\n",
+			de->dpll_idx, dp->dpll_idx);
+		return -EINVAL;
+	}
 	d->num_inputs = abilities.num_inputs;
 	d->num_outputs = abilities.num_outputs;
 	d->input_phase_adj_max = le32_to_cpu(abilities.max_in_phase_adj) &
