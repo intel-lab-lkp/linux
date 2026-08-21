@@ -609,9 +609,12 @@ mlx5e_free_rx_mpwqe(struct mlx5e_rq *rq, struct mlx5e_mpw_info *wi)
 		 * is no way to return the page to userspace when the interface
 		 * goes down.
 		 */
-		for (i = 0; i < rq->mpwqe.pages_per_wqe; i++)
-			if (no_xdp_xmit || !test_bit(i, wi->skip_release_bitmap))
+		for (i = 0; i < rq->mpwqe.pages_per_wqe; i++) {
+			if (no_xdp_xmit || !test_bit(i, wi->skip_release_bitmap)) {
 				xsk_buff_free(xsk_buffs[i]);
+				__set_bit(i, wi->skip_release_bitmap);
+			}
+		}
 	} else {
 		for (i = 0; i < rq->mpwqe.pages_per_wqe; i++) {
 			if (no_xdp_xmit || !test_bit(i, wi->skip_release_bitmap)) {
