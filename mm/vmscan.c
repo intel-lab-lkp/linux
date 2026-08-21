@@ -7922,18 +7922,14 @@ unsigned long node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned i
 	};
 
 	/*
-	 * Node reclaim reclaims unmapped file backed pages and
-	 * slab pages if we are over the defined limits.
-	 *
-	 * A small portion of unmapped file backed pages is needed for
-	 * file I/O otherwise pages read by file I/O will be immediately
-	 * thrown out if the node is overallocated. So we do not reclaim
-	 * if less than a specified percentage of the node is used by
-	 * unmapped file backed pages.
+	 * min_unmapped_pages and min_slab_pages only gate file and slab.
+	 * Bail out only when both are under their limits and anon cannot
+	 * be reclaimed either, so we do not skip reclaimable anon.
 	 */
 	if (node_pagecache_reclaimable(pgdat) <= pgdat->min_unmapped_pages &&
 	    node_page_state_pages(pgdat, NR_SLAB_RECLAIMABLE_B) <=
-	    pgdat->min_slab_pages)
+	    pgdat->min_slab_pages &&
+	    !can_reclaim_anon_pages(NULL, pgdat->node_id, &sc))
 		return 0;
 
 	/*
