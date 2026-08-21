@@ -1339,6 +1339,26 @@ sddr09_read_map(struct us_data *us) {
 
 		lba += 1000*(i/0x400);
 
+		/*
+		 * The LBA is taken from device-controlled redundancy data
+		 * and is only checked against the 1000-per-zone limit
+		 * above.  Nothing prevents it from exceeding the size of
+		 * the translation table, which for a 1 MB card has only
+		 * numblocks = 256 entries while a device may report an LBA
+		 * up to 999.  Bounds-check it before indexing
+		 * info->lba_to_pba[]/info->pba_to_lba[], otherwise a
+		 * hostile or corrupted card makes the driver read and
+		 * write past the end of the table.
+		 */
+		if (lba >= numblocks) {
+			printk(KERN_WARNING
+			       "sddr09: Bad LBA %d for block %d exceeds "
+			       "the translation table size %d\n",
+			       lba, i, numblocks);
+			info->pba_to_lba[i] = UNUSABLE;
+			continue;
+		}
+
 		if (info->lba_to_pba[lba] != UNDEF) {
 			printk(KERN_WARNING
 			       "sddr09: LBA %d seen for PBA %d and %d\n",
