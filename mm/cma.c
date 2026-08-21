@@ -25,7 +25,6 @@
 #include <linux/string.h>
 #include <linux/string_choices.h>
 #include <linux/log2.h>
-#include <linux/cma.h>
 #include <linux/highmem.h>
 #include <linux/io.h>
 #include <linux/kmemleak.h>

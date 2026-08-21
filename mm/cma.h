@@ -4,6 +4,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/kobject.h>
+#include <linux/cma.h>
 
 struct cma_kobject {
 	struct kobject kobj;
