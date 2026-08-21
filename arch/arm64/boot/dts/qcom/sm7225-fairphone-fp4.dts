@@ -626,7 +626,19 @@
 	clock-frequency = <400000>;
 	status = "okay";
 
-	/* HX83112A touchscreen @ 48 */
+	touchscreen@48 {
+		compatible = "himax,hx83112a";
+		reg = <0x48>;
+
+		interrupts-extended = <&tlmm 22 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&tlmm 21 GPIO_ACTIVE_LOW>;
+
+		touchscreen-size-x = <1080>;
+		touchscreen-size-y = <2340>;
+
+		pinctrl-0 = <&touchscreen_default>;
+		pinctrl-names = "default";
+	};
 };
 
 &i2c10 {
@@ -1116,6 +1128,13 @@
 
 &tlmm {
 	gpio-reserved-ranges = <13 4>, <56 2>;
+
+	touchscreen_default: touchscreen-default-state {
+		pins = "gpio21", "gpio22";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
 
 	qup_uart1_sleep_cts: qup-uart1-sleep-cts-state {
 		pins = "gpio61";
