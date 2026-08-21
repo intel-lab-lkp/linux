@@ -666,7 +666,8 @@ static void pcie_aspm_check_latency(struct pci_dev *endpoint)
 		latency = max_t(u32, latency_up_l1, latency_dw_l1);
 		if ((link->aspm_capable & PCIE_LINK_STATE_L1) &&
 		    (latency + l1_switch_latency > acceptable_l1))
-			link->aspm_capable &= ~PCIE_LINK_STATE_L1;
+			link->aspm_capable &= ~(PCIE_LINK_STATE_L1 |
+						PCIE_LINK_STATE_L1SS);
 		l1_switch_latency += NSEC_PER_USEC;
 
 		link = link->parent;
