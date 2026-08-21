@@ -720,6 +720,7 @@ config ARCH_SUPPORTS_KEXEC_HANDOVER
 	def_bool y
 	depends on PPC64
 	depends on !CRASH_DUMP
+	depends on !TRANSPARENT_HUGEPAGE && !HUGETLB_PAGE
 
 config ARCH_SUPPORTS_CRASH_HOTPLUG
 	def_bool y
