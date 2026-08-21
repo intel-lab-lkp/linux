@@ -312,20 +312,20 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 			 udata->int_buffer, sizeof(*udata->int_buffer), nct6694_usb_int_callback,
 			 nct6694, int_endpoint->bInterval);
 
-	ret = usb_submit_urb(udata->int_in_urb, GFP_KERNEL);
-	if (ret)
-		goto err_urb;
-
 	usb_set_intfdata(iface, nct6694);
 
 	ret = nct6694_core_probe(dev, nct6694, nct6694_usb_devs, ARRAY_SIZE(nct6694_usb_devs));
 	if (ret)
-		goto err_mfd;
+		goto err_urb;
+
+	ret = usb_submit_urb(udata->int_in_urb, GFP_KERNEL);
+	if (ret)
+		goto err_core;
 
 	return 0;
 
-err_mfd:
-	usb_kill_urb(udata->int_in_urb);
+err_core:
+	nct6694_core_remove(nct6694);
 err_urb:
 	usb_free_urb(udata->int_in_urb);
 	return ret;
@@ -336,8 +336,8 @@ static void nct6694_usb_disconnect(struct usb_interface *iface)
 	struct nct6694 *nct6694 = usb_get_intfdata(iface);
 	struct nct6694_usb_data *udata = nct6694->priv;
 
-	nct6694_core_remove(nct6694);
 	usb_kill_urb(udata->int_in_urb);
+	nct6694_core_remove(nct6694);
 	usb_free_urb(udata->int_in_urb);
 }
 
