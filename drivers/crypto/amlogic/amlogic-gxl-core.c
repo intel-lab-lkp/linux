@@ -140,7 +140,6 @@ DEFINE_SHOW_ATTRIBUTE(meson_debugfs);
 static void meson_free_chanlist(struct meson_dev *mc, int i)
 {
 	while (i >= 0) {
-		crypto_engine_exit(mc->chanlist[i].engine);
 		if (mc->chanlist[i].tl)
 			dma_free_coherent(mc->dev, sizeof(struct meson_desc) * MAXDESC,
 					  mc->chanlist[i].tl,
@@ -164,7 +163,7 @@ static int meson_allocate_chanlist(struct meson_dev *mc)
 	for (i = 0; i < MAXFLOW; i++) {
 		init_completion(&mc->chanlist[i].complete);
 
-		mc->chanlist[i].engine = crypto_engine_alloc_init(mc->dev, true);
+		mc->chanlist[i].engine = devm_crypto_engine_alloc_init(mc->dev, true);
 		if (!mc->chanlist[i].engine) {
 			dev_err(mc->dev, "Cannot allocate engine\n");
 			i--;
@@ -244,10 +243,10 @@ static int meson_crypto_probe(struct platform_device *pdev)
 	if (IS_ERR(mc->base))
 		return PTR_ERR(mc->base);
 
-	mc->busclk = devm_clk_get(&pdev->dev, "blkmv");
+	mc->busclk = devm_clk_get_enabled(&pdev->dev, "blkmv");
 	if (IS_ERR(mc->busclk)) {
 		err = PTR_ERR(mc->busclk);
-		dev_err(&pdev->dev, "Cannot get core clock err=%d\n", err);
+		dev_err(&pdev->dev, "Cannot get/enable core clock err=%d\n", err);
 		return err;
 	}
 
@@ -270,7 +269,7 @@ static int meson_crypto_probe(struct platform_device *pdev)
 
 	err = meson_allocate_chanlist(mc);
 	if (err)
-		goto error_flow;
+		return err;
 
 	err = meson_register_algs(mc);
 	if (err)
@@ -291,8 +290,6 @@ static int meson_crypto_probe(struct platform_device *pdev)
 error_alg:
 	meson_unregister_algs(mc);
 	meson_free_chanlist(mc, MAXFLOW - 1);
-error_flow:
-	clk_disable_unprepare(mc->busclk);
 	return err;
 }
 
