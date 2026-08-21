@@ -19,14 +19,23 @@
 # pylint: disable=missing-function-docstring
 
 import argparse
+from dataclasses import dataclass
 import hashlib
 import io
 import json
 import os
 import subprocess
 import sys
+import re
 from typing import Dict, Optional, Union
 import urllib.request
+from perf_trace_context import perf_config_get
+
+
+def default_objdump():
+    config = perf_config_get("annotate.objdump")
+    return config if config else "objdump"
+
 
 MINIMAL_HTML = """<head>
   <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.css">
@@ -67,10 +76,101 @@ class Node:
         }
 
 
+@dataclass
+class Symbol:
+    start: int
+    size: int
+
+
+class Instructions:
+    def __init__(self):
+        self.symbols:      dict[str, dict[str, Symbol]] = {}
+        self.instructions: dict[tuple[str, str], dict[int, str]] = {}
+        self.objdump_line: re.Pattern = re.compile(r"^\s+([0-9a-f]+):\s+(.*)")
+        self.symbol_line: re.Pattern = re.compile(
+            r"^([0-9a-f]+) (.{7})\s+\S+\s+([0-9a-f]+)\s+(.*)$")
+        self.objdump:      str = default_objdump()
+
+    def load_symbols(self, dso: str) -> dict[str, Symbol]:
+        result = subprocess.run(
+            [self.objdump, "--demangle", "-t", dso],
+            capture_output=True, text=True, check=False
+        )
+
+        if result.returncode != 0:
+            return {}
+
+        symbols: dict[str, Symbol] = {}
+
+        for line in result.stdout.splitlines():
+            match = self.symbol_line.match(line)
+            if not match:
+                continue
+
+            value, flags, size_str, name = match.groups()
+            # the 7th flag column holds the symbol type, "F" for a function
+            if flags[6] != "F":
+                continue
+
+            size = int(size_str, 16)
+            if size == 0:
+                continue
+
+            # a name may be preceded by its visibility
+            parts = name.split(maxsplit=1)
+            if len(parts) == 2 and parts[0] in (".hidden", ".protected",
+                                                ".internal"):
+                name = parts[1]
+
+            symbols[name.strip()] = Symbol(start=int(value, 16), size=size)
+
+        return symbols
+
+    def load_instructions(self, dso: str, sym: Symbol) -> dict[int, str]:
+        result = subprocess.run(
+            [
+                self.objdump, "-d",
+                "--no-show-raw-insn",
+                f"--start-address=0x{sym.start:x}",
+                f"--stop-address=0x{sym.start + sym.size:x}",
+                dso,
+            ],
+            capture_output=True, text=True, check=False
+        )
+
+        instructions: dict[int, str] = {}
+
+        for line in result.stdout.splitlines():
+            match = self.objdump_line.match(line)
+            if not match:
+                continue
+            addr = int(match.group(1), 16)
+            insn = match.group(2).strip()
+            instructions[addr] = insn
+
+        return instructions
+
+    def lookup_instruction(self, dso: str, func: str,
+                           off: int) -> Optional[tuple[int, Optional[str]]]:
+        if dso not in self.symbols:
+            self.symbols[dso] = self.load_symbols(dso)
+
+        sym = self.symbols[dso].get(func)
+        if sym is None:
+            return None
+
+        if (dso, func) not in self.instructions:
+            self.instructions[(dso, func)] = self.load_instructions(dso, sym)
+
+        addr = sym.start + off
+        return (addr, self.instructions[(dso, func)].get(addr))
+
+
 class FlameGraphCLI:
     def __init__(self, args):
         self.args = args
         self.stack = Node("all", "root")
+        self.instructions = Instructions() if args.asm else None
 
     @staticmethod
     def get_libtype_from_dso(dso: Optional[str]) -> str:
@@ -119,6 +219,22 @@ class FlameGraphCLI:
             name = event.get("symbol", "[unknown]")
             libtype = self.get_libtype_from_dso(event.get("dso"))
             node = self.find_or_create_node(node, name, libtype)
+
+        if self.args.asm:
+            # use the sample IP directly rather than callchain[0], since with
+            # precise event recording (i.e. :pp) the top callchain entry may
+            # point to the next instruction rather than the sampled IP
+            sym_name = event.get("symbol")
+            sym_off  = event.get("symoff")
+            dso      = event.get("dso")
+
+            if sym_name and sym_off is not None and dso:
+                found = self.instructions.lookup_instruction(dso, sym_name, sym_off)
+                if found is not None:
+                    addr, insn = found
+                    name = f"{insn} [0x{addr:x}]" if insn else f"[0x{addr:x}]"
+                    libtype = self.get_libtype_from_dso(dso)
+                    node = self.find_or_create_node(node, name, libtype)
         node.value += 1
 
     def get_report_header(self) -> str:
@@ -259,6 +375,10 @@ if __name__ == "__main__":
                         dest="event_name",
                         type=str,
                         help="specify the event to generate flamegraph for")
+    parser.add_argument("--asm",
+                        default=False,
+                        action="store_true",
+                        help="annotate leaf frames with instruction-level nodes")
 
     cli_args = parser.parse_args()
     cli = FlameGraphCLI(cli_args)
