@@ -488,6 +488,7 @@ config UNWIND_USER
 
 config HAVE_UNWIND_USER_EH_FRAME
 	bool
+	select UNWIND_USER
 
 config HAVE_UNWIND_USER_FP
 	bool
