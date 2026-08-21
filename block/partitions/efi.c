@@ -344,10 +344,9 @@ static int is_gpt_valid(struct parsed_partitions *state, u64 lba,
 
 	/* Check the GUID Partition Table signature */
 	if (le64_to_cpu((*gpt)->signature) != GPT_HEADER_SIGNATURE) {
-		pr_debug("GUID Partition Table Header signature is wrong:"
-			 "%lld != %lld\n",
-			 (unsigned long long)le64_to_cpu((*gpt)->signature),
-			 (unsigned long long)GPT_HEADER_SIGNATURE);
+		pr_debug("GUID Partition Table Header signature is wrong: %llu != %llu\n",
+			 le64_to_cpu((*gpt)->signature),
+			 GPT_HEADER_SIGNATURE);
 		goto fail;
 	}
 
@@ -383,9 +382,9 @@ static int is_gpt_valid(struct parsed_partitions *state, u64 lba,
 	/* Check that the my_lba entry points to the LBA that contains
 	 * the GUID Partition Table */
 	if (le64_to_cpu((*gpt)->my_lba) != lba) {
-		pr_debug("GPT my_lba incorrect: %lld != %lld\n",
-			 (unsigned long long)le64_to_cpu((*gpt)->my_lba),
-			 (unsigned long long)lba);
+		pr_debug("GPT my_lba incorrect: %llu != %llu\n",
+			 le64_to_cpu((*gpt)->my_lba),
+			 lba);
 		goto fail;
 	}
 
@@ -394,21 +393,21 @@ static int is_gpt_valid(struct parsed_partitions *state, u64 lba,
 	 */
 	lastlba = last_lba(state->disk);
 	if (le64_to_cpu((*gpt)->first_usable_lba) > lastlba) {
-		pr_debug("GPT: first_usable_lba incorrect: %lld > %lld\n",
-			 (unsigned long long)le64_to_cpu((*gpt)->first_usable_lba),
-			 (unsigned long long)lastlba);
+		pr_debug("GPT: first_usable_lba incorrect: %llu > %llu\n",
+			 le64_to_cpu((*gpt)->first_usable_lba),
+			 lastlba);
 		goto fail;
 	}
 	if (le64_to_cpu((*gpt)->last_usable_lba) > lastlba) {
-		pr_debug("GPT: last_usable_lba incorrect: %lld > %lld\n",
-			 (unsigned long long)le64_to_cpu((*gpt)->last_usable_lba),
-			 (unsigned long long)lastlba);
+		pr_debug("GPT: last_usable_lba incorrect: %llu > %llu\n",
+			 le64_to_cpu((*gpt)->last_usable_lba),
+			 lastlba);
 		goto fail;
 	}
 	if (le64_to_cpu((*gpt)->last_usable_lba) < le64_to_cpu((*gpt)->first_usable_lba)) {
-		pr_debug("GPT: last_usable_lba incorrect: %lld < %lld\n",
-			 (unsigned long long)le64_to_cpu((*gpt)->last_usable_lba),
-			 (unsigned long long)le64_to_cpu((*gpt)->first_usable_lba));
+		pr_debug("GPT: last_usable_lba incorrect: %llu < %llu\n",
+			 le64_to_cpu((*gpt)->last_usable_lba),
+			 le64_to_cpu((*gpt)->first_usable_lba));
 		goto fail;
 	}
 	/* Check that sizeof_partition_entry has the correct value */
@@ -422,7 +421,7 @@ static int is_gpt_valid(struct parsed_partitions *state, u64 lba,
 		le32_to_cpu((*gpt)->sizeof_partition_entry);
 	if (pt_size > KMALLOC_MAX_SIZE) {
 		pr_debug("GUID Partition Table is too large: %llu > %lu bytes\n",
-			 (unsigned long long)pt_size, KMALLOC_MAX_SIZE);
+			 pt_size, KMALLOC_MAX_SIZE);
 		goto fail;
 	}
 
@@ -484,32 +483,32 @@ compare_gpts(gpt_header *pgpt, gpt_header *agpt, u64 lastlba)
 		return;
 	if (le64_to_cpu(pgpt->my_lba) != le64_to_cpu(agpt->alternate_lba)) {
 		pr_warn("GPT:Primary header LBA != Alt. header alternate_lba\n");
-		pr_warn("GPT:%lld != %lld\n",
-		       (unsigned long long)le64_to_cpu(pgpt->my_lba),
-                       (unsigned long long)le64_to_cpu(agpt->alternate_lba));
+		pr_warn("GPT:%llu != %llu\n",
+			le64_to_cpu(pgpt->my_lba),
+			le64_to_cpu(agpt->alternate_lba));
 		error_found++;
 	}
 	if (le64_to_cpu(pgpt->alternate_lba) != le64_to_cpu(agpt->my_lba)) {
 		pr_warn("GPT:Primary header alternate_lba != Alt. header my_lba\n");
-		pr_warn("GPT:%lld != %lld\n",
-		       (unsigned long long)le64_to_cpu(pgpt->alternate_lba),
-                       (unsigned long long)le64_to_cpu(agpt->my_lba));
+		pr_warn("GPT:%llu != %llu\n",
+			le64_to_cpu(pgpt->alternate_lba),
+			le64_to_cpu(agpt->my_lba));
 		error_found++;
 	}
 	if (le64_to_cpu(pgpt->first_usable_lba) !=
             le64_to_cpu(agpt->first_usable_lba)) {
 		pr_warn("GPT:first_usable_lbas don't match.\n");
-		pr_warn("GPT:%lld != %lld\n",
-		       (unsigned long long)le64_to_cpu(pgpt->first_usable_lba),
-                       (unsigned long long)le64_to_cpu(agpt->first_usable_lba));
+		pr_warn("GPT:%llu != %llu\n",
+			le64_to_cpu(pgpt->first_usable_lba),
+			le64_to_cpu(agpt->first_usable_lba));
 		error_found++;
 	}
 	if (le64_to_cpu(pgpt->last_usable_lba) !=
             le64_to_cpu(agpt->last_usable_lba)) {
 		pr_warn("GPT:last_usable_lbas don't match.\n");
-		pr_warn("GPT:%lld != %lld\n",
-		       (unsigned long long)le64_to_cpu(pgpt->last_usable_lba),
-                       (unsigned long long)le64_to_cpu(agpt->last_usable_lba));
+		pr_warn("GPT:%llu != %llu\n",
+			le64_to_cpu(pgpt->last_usable_lba),
+			le64_to_cpu(agpt->last_usable_lba));
 		error_found++;
 	}
 	if (efi_guidcmp(pgpt->disk_guid, agpt->disk_guid)) {
@@ -542,17 +541,17 @@ compare_gpts(gpt_header *pgpt, gpt_header *agpt, u64 lastlba)
 	}
 	if (le64_to_cpu(pgpt->alternate_lba) != lastlba) {
 		pr_warn("GPT:Primary header thinks Alt. header is not at the end of the disk.\n");
-		pr_warn("GPT:%lld != %lld\n",
-			(unsigned long long)le64_to_cpu(pgpt->alternate_lba),
-			(unsigned long long)lastlba);
+		pr_warn("GPT:%llu != %llu\n",
+			le64_to_cpu(pgpt->alternate_lba),
+			lastlba);
 		error_found++;
 	}
 
 	if (le64_to_cpu(agpt->my_lba) != lastlba) {
 		pr_warn("GPT:Alternate GPT header not at the end of the disk.\n");
-		pr_warn("GPT:%lld != %lld\n",
-			(unsigned long long)le64_to_cpu(agpt->my_lba),
-			(unsigned long long)lastlba);
+		pr_warn("GPT:%llu != %llu\n",
+			le64_to_cpu(agpt->my_lba),
+			lastlba);
 		error_found++;
 	}
 
