@@ -490,6 +490,28 @@ config HAVE_UNWIND_USER_EH_FRAME
 	bool
 	select UNWIND_USER
 
+config EH_FRAME_VALIDATION
+	bool "Enable .eh_frame[_hdr] section debugging"
+	depends on HAVE_UNWIND_USER_EH_FRAME
+	depends on DYNAMIC_DEBUG
+	help
+	  When adding an .eh_frame_hdr section for a test, validate the
+	  entire section and its referenced entire .eh_frame section
+	  immediately rather than on demand.
+
+	  This is a debug feature which is helpful for rooting out
+	  .eh_frame[_hdr] section issues.  If the .eh_frame[_hdr]
+	  section is corrupt, it will fail to load immediately, with
+	  more information provided in dynamic printks.
+
+	  This has a significant page cache footprint due to its reading
+	  of the entire .eh_frame[_hdr] sections for every loaded executable
+	  and shared library.  Also, it's done for all processes, even those
+	  which don't get stack traced by the kernel.  Not recommended for
+	  general use.
+
+	  If unsure, say N.
+
 config HAVE_UNWIND_USER_FP
 	bool
 	select UNWIND_USER

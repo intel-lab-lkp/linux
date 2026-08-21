@@ -1216,6 +1216,92 @@ int eh_frame_find(unsigned long ip, struct unwind_user_frame *frame)
 	return ret;
 }
 
+#ifdef CONFIG_EH_FRAME_VALIDATION
+
+static int eh_frame_validate_section(struct eh_frame_section *sec)
+{
+	void __user *table_start_ptr;
+	unsigned long table_size;
+	u8 table_enc;
+	int entry_size;
+	unsigned long prev_func_addr;
+	unsigned long i;
+
+	if (!sec->fde_count) {
+		dbg_sec(".eh_frame_hdr: invalid FDE count\n");
+		return -EINVAL;
+	}
+
+	table_enc = sec->binary_search_table_enc;
+	entry_size = 2 * encoded_pointer_size(table_enc);
+	if (!entry_size) {
+		dbg_sec(".eh_frame_hdr: invalid binary search table entry size\n");
+		return -EINVAL;
+	}
+	table_start_ptr = (void __user *)sec->binary_search_table_start;
+	table_size = sec->binary_search_table_end - sec->binary_search_table_start;
+
+	for (i = 0; i < sec->fde_count; i++) {
+		struct eh_frame_fde fde;
+		unsigned long cur;
+		unsigned long func_addr, fde_addr;
+		int ret;
+
+		cur = sec->binary_search_table_start + i * entry_size;
+
+		scoped_user_read_access_size(table_start_ptr, table_size, Efault) {
+			/* Read function start address from table */
+			ret = read_encoded_pointer(sec, &cur,
+						   sec->binary_search_table_end,
+						   table_enc, &func_addr);
+			if (ret) {
+				dbg_sec_ehfh(cur, "table[%lu]: failed to read function start address\n", i);
+				return ret;
+			}
+			if (i && func_addr <= prev_func_addr) {
+				dbg_sec(".eh_frame_hdr: table[%lu]: not sorted\n", i);
+				return -EINVAL;
+			}
+			prev_func_addr = func_addr;
+
+			/* Read FDE address from table */
+			ret = read_encoded_pointer(sec, &cur,
+						   sec->binary_search_table_end,
+						   table_enc, &fde_addr);
+			if (ret) {
+				dbg_sec_ehfh(cur, "table[%lu]: failed to read FDE pointer\n", i);
+				return ret;
+			}
+			if (fde_addr < sec->eh_frame_start) {
+				dbg_sec(".eh_frame_hdr: table[%lu]: invalid FDE address\n", i);
+				return -EINVAL;
+			}
+		}
+
+		ret = __read_fde(sec, fde_addr, &fde);
+		if (ret) {
+			dbg_sec(".eh_frame_hdr: table[%lu]: failed to read FDE at .eh_frame+%#lx\n",
+				i, fde_addr - sec->eh_frame_start);
+			return ret;
+		}
+		if (func_addr != fde.func_addr) {
+			dbg_sec(".eh_frame_hdr: table[%lu]: function start address mismatch\n", i);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+
+Efault:
+	return -EFAULT;
+}
+
+#else /* !CONFIG_EH_FRAME_VALIDATION */
+
+static int eh_frame_validate_section(struct eh_frame_section *sec) { return 0; }
+
+#endif /* !CONFIG_EH_FRAME_VALIDATION */
+
 static void free_section(struct eh_frame_section *sec)
 {
 	dbg_free(sec);
@@ -1348,6 +1434,10 @@ int eh_frame_add_section(unsigned long eh_frame_hdr_start,
 	dbg_init(sec);
 
 	ret = eh_frame_read_header(sec);
+	if (ret)
+		goto err_free;
+
+	ret = eh_frame_validate_section(sec);
 	if (ret)
 		goto err_free;
 

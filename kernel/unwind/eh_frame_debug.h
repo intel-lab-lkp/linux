@@ -14,6 +14,9 @@
 #define dbg_sec(fmt, ...)						\
 	dbg("%s: " fmt, sec->filename, ##__VA_ARGS__)
 
+#define dbg_sec_ehfh(addr, fmt, ...)					\
+	dbg_sec(".eh_frame_hdr+%#lx: " fmt, ((addr) - sec->eh_frame_hdr_start), ##__VA_ARGS__)
+
 static inline void dbg_init(struct eh_frame_section *sec)
 {
 	struct mm_struct *mm = current->mm;
@@ -47,6 +50,7 @@ static inline void dbg_free(struct eh_frame_section *sec)
 
 #define dbg(args...)			no_printk(args)
 #define dbg_sec(args...)		no_printk(args)
+#define dbg_sec_ehfh(args...)		no_printk(args)
 
 static inline void dbg_init(struct eh_frame_section *sec) {}
 static inline void dbg_free(struct eh_frame_section *sec) {}
