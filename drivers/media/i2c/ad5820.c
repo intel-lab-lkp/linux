@@ -268,7 +268,7 @@ static const struct v4l2_subdev_internal_ops ad5820_internal_ops = {
 /*
  * I2C driver
  */
-static int __maybe_unused ad5820_suspend(struct device *dev)
+static int ad5820_suspend(struct device *dev)
 {
 	struct v4l2_subdev *subdev = dev_get_drvdata(dev);
 	struct ad5820_device *coil = to_ad5820_device(subdev);
@@ -279,7 +279,7 @@ static int __maybe_unused ad5820_suspend(struct device *dev)
 	return ad5820_power_off(coil, false);
 }
 
-static int __maybe_unused ad5820_resume(struct device *dev)
+static int ad5820_resume(struct device *dev)
 {
 	struct v4l2_subdev *subdev = dev_get_drvdata(dev);
 	struct ad5820_device *coil = to_ad5820_device(subdev);
@@ -360,12 +360,12 @@ static const struct of_device_id ad5820_of_table[] = {
 };
 MODULE_DEVICE_TABLE(of, ad5820_of_table);
 
-static SIMPLE_DEV_PM_OPS(ad5820_pm, ad5820_suspend, ad5820_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(ad5820_pm, ad5820_suspend, ad5820_resume);
 
 static struct i2c_driver ad5820_i2c_driver = {
 	.driver		= {
 		.name	= "ad5820",
-		.pm	= &ad5820_pm,
+		.pm	= pm_sleep_ptr(&ad5820_pm),
 		.of_match_table = ad5820_of_table,
 	},
 	.probe		= ad5820_probe,
