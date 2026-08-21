@@ -114,6 +114,12 @@ struct scan_control {
 	/* zone_reclaim_mode, boost reclaim, cgroup restrictions */
 	unsigned int may_swap:1;
 
+	/*
+	 * When set, the slab shrinkers are not invoked because reclaimable
+	 * slab is already at or below min_slab_pages.
+	 */
+	unsigned int skip_slab_reclaim:1;
+
 	/* Not allow cache_trim_mode to be turned on as part of reclaim? */
 	unsigned int no_cache_trim_mode:1;
 
@@ -5111,7 +5117,8 @@ static int shrink_one(struct lruvec *lruvec, struct scan_control *sc)
 
 	need_rotate = try_to_shrink_lruvec(lruvec, sc);
 
-	shrink_slab(sc->gfp_mask, pgdat->node_id, memcg, sc->priority);
+	if (!sc->skip_slab_reclaim)
+		shrink_slab(sc->gfp_mask, pgdat->node_id, memcg, sc->priority);
 
 	if (!sc->proactive)
 		vmpressure(sc->gfp_mask, sc->order, memcg, false,
@@ -6214,8 +6221,9 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 
 		shrink_lruvec(lruvec, sc);
 
-		shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
-			    sc->priority);
+		if (!sc->skip_slab_reclaim)
+			shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
+				    sc->priority);
 
 		/* Record the group's reclaim efficiency */
 		if (!sc->proactive)
@@ -7916,6 +7924,15 @@ unsigned long node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned i
 
 	if (test_and_set_bit_lock(PGDAT_RECLAIM_LOCKED, &pgdat->flags))
 		return 0;
+
+	/*
+	 * min_slab_pages only gates slab reclaim: when reclaimable slab is
+	 * already at or below the limit, leave the shrinkers alone even if we
+	 * entered node reclaim to trim unmapped page cache.
+	 */
+	sc.skip_slab_reclaim =
+		node_page_state_pages(pgdat, NR_SLAB_RECLAIMABLE_B) <=
+		pgdat->min_slab_pages;
 
 	ret = __node_reclaim(pgdat, nr_pages, &sc);
 	clear_bit_unlock(PGDAT_RECLAIM_LOCKED, &pgdat->flags);
