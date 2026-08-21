@@ -249,7 +249,6 @@ static ssize_t configfs_bin_write_iter(struct kiocb *iocb,
 		len = -ETXTBSY;
 		goto out;
 	}
-	buffer->write_in_progress = true;
 
 	/* buffer grows? */
 	end_offset = iocb->ki_pos + iov_iter_count(from);
@@ -281,6 +280,8 @@ static ssize_t configfs_bin_write_iter(struct kiocb *iocb,
 
 	len = copy_from_iter(buffer->bin_buffer + iocb->ki_pos,
 			     buffer->bin_buffer_size - iocb->ki_pos, from);
+	if (len > 0)
+		buffer->write_in_progress = true;
 	iocb->ki_pos += len;
 out:
 	mutex_unlock(&buffer->mutex);
