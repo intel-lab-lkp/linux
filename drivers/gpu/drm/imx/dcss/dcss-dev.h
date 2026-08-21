@@ -147,7 +147,8 @@ bool dcss_dtg_is_enabled(struct dcss_dtg *dtg);
 void dcss_dtg_ctxld_kick_irq_enable(struct dcss_dtg *dtg, bool en);
 bool dcss_dtg_global_alpha_changed(struct dcss_dtg *dtg, int ch_num, int alpha);
 void dcss_dtg_plane_alpha_set(struct dcss_dtg *dtg, int ch_num,
-			      const struct drm_format_info *format, int alpha);
+			      const struct drm_format_info *format, int alpha,
+			      unsigned int blend_mode);
 void dcss_dtg_plane_pos_set(struct dcss_dtg *dtg, int ch_num,
 			    int px, int py, int pw, int ph);
 void dcss_dtg_ch_enable(struct dcss_dtg *dtg, int ch_num, bool en);

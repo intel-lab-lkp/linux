@@ -3,6 +3,7 @@
  * Copyright 2019 NXP.
  */
 
+#include <drm/drm_blend.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
@@ -268,17 +269,20 @@ bool dcss_dtg_global_alpha_changed(struct dcss_dtg *dtg, int ch_num, int alpha)
 }
 
 void dcss_dtg_plane_alpha_set(struct dcss_dtg *dtg, int ch_num,
-			      const struct drm_format_info *format, int alpha)
+			      const struct drm_format_info *format, int alpha,
+			      unsigned int blend_mode)
 {
 	/* we care about alpha only when channel 0 is concerned */
 	if (ch_num)
 		return;
 
 	/*
-	 * Use global alpha if pixel format does not have alpha channel or the
-	 * user explicitly chose to use global alpha (i.e. alpha is not OPAQUE).
+	 * DCSS supports either global alpha or per-pixel blending, following
+	 * the coverage blending formula (with global alpha set to opaque).
+	 * When the pixel blend mode is PIXEL_NONE, the per-pixel alpha is
+	 * meant to be ignored, so fall back to global alpha in that case too.
 	 */
-	if (!format->has_alpha || alpha != 255)
+	if (!format->has_alpha || blend_mode == DRM_MODE_BLEND_PIXEL_NONE)
 		dtg->alpha_cfg = (alpha << DEFAULT_FG_ALPHA_POS) & DEFAULT_FG_ALPHA_MASK;
 	else /* use per-pixel alpha otherwise */
 		dtg->alpha_cfg = CH1_ALPHA_SEL;
