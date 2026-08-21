@@ -187,7 +187,7 @@ static int scmi_imx_bbm_key_probe(struct scmi_device *sdev)
 	return ret;
 }
 
-static int __maybe_unused scmi_imx_bbm_key_suspend(struct device *dev)
+static int scmi_imx_bbm_key_suspend(struct device *dev)
 {
 	struct scmi_imx_bbm *bbnsm = dev_get_drvdata(dev);
 
@@ -196,12 +196,12 @@ static int __maybe_unused scmi_imx_bbm_key_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused scmi_imx_bbm_key_resume(struct device *dev)
+static int scmi_imx_bbm_key_resume(struct device *dev)
 {
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(scmi_imx_bbm_pm_key_ops, scmi_imx_bbm_key_suspend,
+static DEFINE_SIMPLE_DEV_PM_OPS(scmi_imx_bbm_pm_key_ops, scmi_imx_bbm_key_suspend,
 			 scmi_imx_bbm_key_resume);
 
 static const struct scmi_device_id scmi_id_table[] = {
@@ -212,7 +212,7 @@ MODULE_DEVICE_TABLE(scmi, scmi_id_table);
 
 static struct scmi_driver scmi_imx_bbm_key_driver = {
 	.driver = {
-		.pm = &scmi_imx_bbm_pm_key_ops,
+		.pm = pm_sleep_ptr(&scmi_imx_bbm_pm_key_ops),
 	},
 	.name = "scmi-imx-bbm-key",
 	.probe = scmi_imx_bbm_key_probe,
