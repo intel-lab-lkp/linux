@@ -786,8 +786,11 @@ static void nfc_llcp_tx_work(struct work_struct *work)
 			print_hex_dump_debug("LLCP Tx: ", DUMP_PREFIX_OFFSET,
 					     16, 1, skb->data, skb->len, true);
 
-			if (ptype == LLCP_PDU_I)
+			if (ptype == LLCP_PDU_I) {
 				copy_skb = skb_copy(skb, GFP_ATOMIC);
+				if (copy_skb)
+					skb_set_owner_w(copy_skb, sk);
+			}
 
 			__net_timestamp(skb);
 
