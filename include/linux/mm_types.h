@@ -1404,6 +1404,9 @@ struct mm_struct {
 #ifdef CONFIG_MM_ID
 		mm_id_t mm_id;
 #endif /* CONFIG_MM_ID */
+#ifdef CONFIG_HAVE_UNWIND_USER_EH_FRAME
+		struct maple_tree eh_frame_mt;
+#endif
 	} __randomize_layout;
 
 	/*

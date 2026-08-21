@@ -111,6 +111,7 @@
 #include <linux/tick.h>
 #include <linux/unwind_deferred.h>
 #include <linux/pgalloc.h>
+#include <linux/eh_frame.h>
 #include <linux/uaccess.h>
 
 #include <asm/mmu_context.h>
@@ -738,6 +739,7 @@ void __mmdrop(struct mm_struct *mm)
 	mm_pasid_drop(mm);
 	mm_destroy_cid(mm);
 	percpu_counter_destroy_many(mm->rss_stat, NR_MM_COUNTERS);
+	eh_frame_free_mm(mm);
 
 	free_mm(mm);
 }
@@ -1082,6 +1084,13 @@ static void mmap_init_lock(struct mm_struct *mm)
 #endif
 }
 
+static void mm_init_eh_frame(struct mm_struct *mm)
+{
+#ifdef CONFIG_HAVE_UNWIND_USER_EH_FRAME
+	mt_init_flags(&mm->eh_frame_mt, EH_FRAME_MT_FLAGS);
+#endif
+}
+
 static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 {
 	mt_init_flags(&mm->mm_mt, MM_MT_FLAGS);
@@ -1109,6 +1118,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 	mm->pmd_huge_pte = NULL;
 #endif
 	mm_init_uprobes_state(mm);
+	mm_init_eh_frame(mm);
 	hugetlb_count_init(mm);
 	futex_mm_init(mm);
 

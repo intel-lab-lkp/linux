@@ -19,6 +19,8 @@
 #define dbg(fmt, ...)							\
 	pr_debug("%s (%d): " fmt, current->comm, current->pid, ##__VA_ARGS__)
 
+DEFINE_STATIC_SRCU(eh_frame_srcu);
+
 #define UNSAFE_GET_USER_INC(to, from, end, label)			\
 ({									\
 	typeof(to) __to;						\
@@ -310,6 +312,7 @@ int eh_frame_add_section(unsigned long eh_frame_hdr_start,
 			 unsigned long text_start,
 			 unsigned long text_end)
 {
+	struct maple_tree *eh_frame_mt = &current->mm->eh_frame_mt;
 	struct mm_struct *mm = current->mm;
 	struct eh_frame_section *sec;
 	int ret;
@@ -352,15 +355,76 @@ int eh_frame_add_section(unsigned long eh_frame_hdr_start,
 	if (ret)
 		goto err_free;
 
-	/* TODO nowhere to store it yet - just free it and return an error */
-	ret = -ENOSYS;
+	ret = mtree_insert_range(eh_frame_mt, sec->text_start, sec->text_end - 1,
+				 sec, GFP_KERNEL_ACCOUNT);
+	if (ret) {
+		dbg("mtree_insert_range failed: text=%lx-%lx\n",
+		    sec->text_start, sec->text_end);
+		goto err_free;
+	}
+
+	return 0;
 
 err_free:
 	free_section(sec);
 	return ret;
 }
 
+static void eh_frame_free_srcu(struct rcu_head *rcu)
+{
+	struct eh_frame_section *sec = container_of(rcu, struct eh_frame_section, rcu);
+
+	free_section(sec);
+}
+
+static int __eh_frame_remove_section(struct ma_state *mas,
+				     struct eh_frame_section *sec)
+{
+	if (mas_erase(mas) != sec) {
+		dbg("mas_erase failed: text=%lx\n", sec->text_start);
+		return -EINVAL;
+	}
+
+	call_srcu(&eh_frame_srcu, &sec->rcu, eh_frame_free_srcu);
+
+	return 0;
+}
+
 int eh_frame_remove_section(unsigned long eh_frame_hdr_start)
 {
-	return -ENOSYS;
+	struct mm_struct *mm = current->mm;
+	struct eh_frame_section *sec;
+	MA_STATE(mas, &mm->eh_frame_mt, 0, 0);
+	bool found = false;
+	int ret = 0;
+
+	guard(srcu)(&eh_frame_srcu);
+
+	mtree_lock(&mm->eh_frame_mt);
+	mas_for_each(&mas, sec, ULONG_MAX) {
+		if (sec->eh_frame_hdr_start == eh_frame_hdr_start) {
+			found = true;
+			ret |= __eh_frame_remove_section(&mas, sec);
+		}
+	}
+	mtree_unlock(&mm->eh_frame_mt);
+
+	if (!found || ret)
+		return -EINVAL;
+
+	return 0;
+}
+
+void eh_frame_free_mm(struct mm_struct *mm)
+{
+	struct eh_frame_section *sec;
+	unsigned long index = 0;
+
+	if (!mm)
+		return;
+
+	mt_for_each(&mm->eh_frame_mt, sec, index, ULONG_MAX)
+		free_section(sec);
+
+	mtree_destroy(&mm->eh_frame_mt);
 }

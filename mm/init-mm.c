@@ -11,6 +11,7 @@
 #include <linux/atomic.h>
 #include <linux/user_namespace.h>
 #include <linux/iommu.h>
+#include <linux/eh_frame.h>
 #include <asm/mmu.h>
 
 #ifndef INIT_MM_CONTEXT
@@ -48,6 +49,7 @@ struct mm_struct init_mm = {
 #endif
 	.flexible_array	= MM_STRUCT_FLEXIBLE_ARRAY_INIT,
 	INIT_MM_CONTEXT(init_mm)
+	INIT_MM_EH_FRAME
 };
 
 void setup_initial_init_mm(void *start_code, void *end_code,
