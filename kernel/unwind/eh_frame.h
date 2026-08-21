@@ -60,6 +60,20 @@
 #define DW_EH_PE_format(encoding)	((encoding) & 0x0f)
 #define DW_EH_PE_application(encoding)	((encoding) & 0x70)
 
+/* DWARF expression operations */
+#define DW_OP_lit0	0x30
+/* ... */
+#define DW_OP_lit31	0x4f
+#define DW_OP_breg0	0x70
+/* ... */
+#define DW_OP_breg31	0x8f
+
+/* Helpers for DWARF expression operations */
+#define DW_OP_is_lit(op)		((op) >= DW_OP_lit0 && (op) <= DW_OP_lit31)
+#define DW_OP_is_breg(op)		((op) >= DW_OP_breg0 && (op) <= DW_OP_breg31)
+#define DW_OP_lit_value(op)		((op) - DW_OP_lit0)
+#define DW_OP_breg_register(op)		((op) - DW_OP_breg0)
+
 /* CIE/FDE constants */
 #define EH_FRAME_CIE_ID			0
 #define EH_FRAME_DWARF64_LENGTH		0xffffffff

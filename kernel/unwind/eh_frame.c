@@ -15,10 +15,11 @@
 #include <linux/types.h>
 #include <linux/unwind_user_types.h>
 #include <linux/unwind_user_eh_frame_types.h>
-#include <asm/unwind_user_eh_frame.h>
 
 #include "eh_frame.h"
 #include "eh_frame_debug.h"
+
+#include <asm/unwind_user_eh_frame.h>
 
 struct eh_frame_cfi_context {
 	struct eh_frame_reg_state state;
