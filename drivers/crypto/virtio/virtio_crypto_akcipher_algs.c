@@ -69,6 +69,7 @@ static void virtio_crypto_dataq_akcipher_callback(struct virtio_crypto_request *
 	struct akcipher_request *akcipher_req =
 		container_of((void *)vc_akcipher_req, struct akcipher_request,
 			     __ctx);
+	unsigned int dst_len;
 	int error;
 
 	switch (vc_req->status) {
@@ -88,9 +89,19 @@ static void virtio_crypto_dataq_akcipher_callback(struct virtio_crypto_request *
 	}
 
 	/* actual length may be less than dst buffer */
-	akcipher_req->dst_len = len - sizeof(vc_req->status);
+	if (len < (int)sizeof(vc_req->status)) {
+		error = -EIO;
+		goto out;
+	}
+	dst_len = len - sizeof(vc_req->status);
+	if (dst_len > akcipher_req->dst_len) {
+		error = -EIO;
+		goto out;
+	}
+	akcipher_req->dst_len = dst_len;
 	sg_copy_from_buffer(akcipher_req->dst, sg_nents(akcipher_req->dst),
 			    vc_akcipher_req->dst_buf, akcipher_req->dst_len);
+out:
 	virtio_crypto_akcipher_finalize_req(vc_akcipher_req, akcipher_req, error);
 }
 
