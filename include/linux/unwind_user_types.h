@@ -67,6 +67,7 @@ struct unwind_user_frame {
 	struct unwind_user_cfa_rule_data cfa;
 	struct unwind_user_rule_data ra;
 	struct unwind_user_rule_data fp;
+	s32 sp_off;
 	bool outermost;
 };
 

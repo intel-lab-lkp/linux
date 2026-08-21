@@ -43,7 +43,7 @@ get_user_word(unsigned long *word, unsigned long base, int off, unsigned int ws)
 static int unwind_user_next_common(struct unwind_user_state *state,
 				   const struct unwind_user_frame *frame)
 {
-	unsigned long cfa, fp, ra;
+	unsigned long cfa, sp, fp, ra;
 
 	/* Stop unwinding when reaching an outermost frame. */
 	if (frame->outermost) {
@@ -77,16 +77,17 @@ static int unwind_user_next_common(struct unwind_user_state *state,
 	    get_user_word(&cfa, cfa, 0, state->ws))
 		return -EINVAL;
 
+	/* Get the Stack Pointer (SP) */
+	sp = cfa + frame->sp_off;
 	/*
 	 * Make sure that stack is not going in wrong direction.  Allow SP
 	 * to be unchanged for the topmost frame, by subtracting topmost,
 	 * which is either 0 or 1.
 	 */
-	if (cfa <= state->sp - state->topmost)
+	if (sp <= state->sp - state->topmost)
 		return -EINVAL;
-
 	/* Make sure that the address is word aligned */
-	if (cfa & (state->ws - 1))
+	if (sp & (state->ws - 1))
 		return -EINVAL;
 
 	/* Get the Return Address (RA) */
@@ -149,7 +150,7 @@ static int unwind_user_next_common(struct unwind_user_state *state,
 		return -EINVAL;
 
 	state->ip = ra;
-	state->sp = cfa;
+	state->sp = sp;
 	state->fp = fp;
 	state->topmost = false;
 	return 0;
