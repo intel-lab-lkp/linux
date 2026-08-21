@@ -154,8 +154,8 @@ netdev_tx_t cvm_oct_xmit(struct sk_buff *skb, struct net_device *dev)
 	 * completely remove "qos" in the event neither interface
 	 * supports multiple queues per port.
 	 */
-	if ((CVMX_PKO_QUEUES_PER_PORT_INTERFACE0 > 1) ||
-	    (CVMX_PKO_QUEUES_PER_PORT_INTERFACE1 > 1)) {
+	if (CVMX_PKO_QUEUES_PER_PORT_INTERFACE0 > 1 ||
+	    CVMX_PKO_QUEUES_PER_PORT_INTERFACE1 > 1) {
 		qos = GET_SKBUFF_QOS(skb);
 		if (qos <= 0)
 			qos = 0;
@@ -225,7 +225,7 @@ netdev_tx_t cvm_oct_xmit(struct sk_buff *skb, struct net_device *dev)
 	 * no room to add the padding.  The kernel should always give
 	 * us at least a cache line
 	 */
-	if ((skb->len < 64) && OCTEON_IS_MODEL(OCTEON_CN3XXX)) {
+	if (skb->len < 64 && OCTEON_IS_MODEL(OCTEON_CN3XXX)) {
 		union cvmx_gmxx_prtx_cfg gmx_prt_cfg;
 		int interface = INTERFACE(priv->port);
 		int index = INDEX(priv->port);
@@ -360,13 +360,13 @@ netdev_tx_t cvm_oct_xmit(struct sk_buff *skb, struct net_device *dev)
 dont_put_skbuff_in_hw:
 
 	/* Check if we can use the hardware checksumming */
-	if ((skb->protocol == htons(ETH_P_IP)) &&
-	    (ip_hdr(skb)->version == 4) &&
-	    (ip_hdr(skb)->ihl == 5) &&
-	    ((ip_hdr(skb)->frag_off == 0) ||
-	     (ip_hdr(skb)->frag_off == htons(1 << 14))) &&
-	    ((ip_hdr(skb)->protocol == IPPROTO_TCP) ||
-	     (ip_hdr(skb)->protocol == IPPROTO_UDP))) {
+	if (skb->protocol == htons(ETH_P_IP) &&
+	    ip_hdr(skb)->version == 4 &&
+	    ip_hdr(skb)->ihl == 5 &&
+	    (ip_hdr(skb)->frag_off == 0 ||
+	     ip_hdr(skb)->frag_off == htons(1 << 14)) &&
+	    (ip_hdr(skb)->protocol == IPPROTO_TCP ||
+	     ip_hdr(skb)->protocol == IPPROTO_UDP)) {
 		/* Use hardware checksum calc */
 		pko_command.s.ipoffp1 = skb_network_offset(skb) + 1;
 	}

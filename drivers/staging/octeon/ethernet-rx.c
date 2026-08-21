@@ -66,7 +66,7 @@ static inline int cvm_oct_check_rcv_error(struct cvmx_wqe *work)
 	else
 		port = work->word1.cn38xx.ipprt;
 
-	if ((work->word2.snoip.err_code == 10) && (work->word1.len <= 64))
+	if (work->word2.snoip.err_code == 10 && work->word1.len <= 64)
 		/*
 		 * Ignore length errors on min size packets. Some
 		 * equipment incorrectly pads packets to 64+4FCS
@@ -321,7 +321,7 @@ static int cvm_oct_poll(struct oct_rx_group *rx_group, int budget)
 			}
 			packet_not_copied = 0;
 		}
-		if (likely((port < TOTAL_NUMBER_OF_PORTS) &&
+		if (likely(port < TOTAL_NUMBER_OF_PORTS &&
 			   cvm_oct_device[port])) {
 			struct net_device *dev = cvm_oct_device[port];
 
