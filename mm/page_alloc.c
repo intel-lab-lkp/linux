@@ -4169,6 +4169,7 @@ __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 	 * count a compaction stall
 	 */
 	count_vm_event(COMPACTSTALL);
+	count_vm_event(COMPACTSTALL_ORDER_FIRST + order - 1);
 
 	/* Prep a captured page if available */
 	if (page)
@@ -4184,6 +4185,7 @@ __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 		zone->compact_blockskip_flush = false;
 		compaction_defer_reset(zone, order, true);
 		count_vm_event(COMPACTSUCCESS);
+		count_vm_event(COMPACTSUCCESS_ORDER_FIRST + order - 1);
 		return page;
 	}
 
@@ -4757,6 +4759,8 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 		WARN_ON_ONCE(current->flags & PF_MEMALLOC);
 	}
 
+	count_vm_event(PGALLOC_SLOWPATH_ORDER_FIRST + order);
+
 restart:
 	compaction_retries = 0;
 	no_progress_loops = 0;
@@ -5322,6 +5326,9 @@ out:
 		free_frozen_pages(page, order);
 		page = NULL;
 	}
+
+	if (unlikely(!page))
+		count_vm_event(PGALLOC_FAIL_ORDER_FIRST + order);
 
 	trace_mm_page_alloc(page, order, alloc_gfp, ac.migratetype);
 	kmsan_alloc_page(page, order, alloc_gfp);

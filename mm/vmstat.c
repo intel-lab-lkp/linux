@@ -1184,6 +1184,94 @@ int fragmentation_index(struct zone *zone, unsigned int order)
 	[xx##_MOVABLE] = yy "_movable",		\
 	TEXT_FOR_DEVICE(xx, yy)
 
+#if MAX_PAGE_ORDER >= 4
+#define TEXT_FOR_ORDER_4(xx, yy) [I((xx) + 4)] = yy "4",
+#else
+#define TEXT_FOR_ORDER_4(xx, yy)
+#endif
+
+#if MAX_PAGE_ORDER >= 5
+#define TEXT_FOR_ORDER_5(xx, yy) [I((xx) + 5)] = yy "5",
+#else
+#define TEXT_FOR_ORDER_5(xx, yy)
+#endif
+
+#if MAX_PAGE_ORDER >= 6
+#define TEXT_FOR_ORDER_6(xx, yy) [I((xx) + 6)] = yy "6",
+#else
+#define TEXT_FOR_ORDER_6(xx, yy)
+#endif
+
+#if MAX_PAGE_ORDER >= 7
+#define TEXT_FOR_ORDER_7(xx, yy) [I((xx) + 7)] = yy "7",
+#else
+#define TEXT_FOR_ORDER_7(xx, yy)
+#endif
+
+#if MAX_PAGE_ORDER >= 8
+#define TEXT_FOR_ORDER_8(xx, yy) [I((xx) + 8)] = yy "8",
+#else
+#define TEXT_FOR_ORDER_8(xx, yy)
+#endif
+
+#if MAX_PAGE_ORDER >= 9
+#define TEXT_FOR_ORDER_9(xx, yy) [I((xx) + 9)] = yy "9",
+#else
+#define TEXT_FOR_ORDER_9(xx, yy)
+#endif
+
+#if MAX_PAGE_ORDER >= 10
+#define TEXT_FOR_ORDER_10(xx, yy) [I((xx) + 10)] = yy "10",
+#else
+#define TEXT_FOR_ORDER_10(xx, yy)
+#endif
+
+#if MAX_PAGE_ORDER >= 11
+#define TEXT_FOR_ORDER_11(xx, yy) [I((xx) + 11)] = yy "11",
+#else
+#define TEXT_FOR_ORDER_11(xx, yy)
+#endif
+
+#if MAX_PAGE_ORDER >= 12
+#define TEXT_FOR_ORDER_12(xx, yy) [I((xx) + 12)] = yy "12",
+#else
+#define TEXT_FOR_ORDER_12(xx, yy)
+#endif
+
+#if MAX_PAGE_ORDER >= 13
+#define TEXT_FOR_ORDER_13(xx, yy) [I((xx) + 13)] = yy "13",
+#else
+#define TEXT_FOR_ORDER_13(xx, yy)
+#endif
+
+static_assert(MAX_PAGE_ORDER >= 4 && MAX_PAGE_ORDER <= 13,
+	      "the per-order counter names need updating for this MAX_PAGE_ORDER");
+
+/*
+ * (xx) + n must resolve to the vm_event_item for order n, so ranges that
+ * start at order 1 pass their *_ORDER_FIRST item minus one. Orders 1..3
+ * are generated unconditionally, 4..13 are MAX_PAGE_ORDER dependent (e.g.
+ * ppc32 with 256k pages forces 4 by default).
+ */
+#define TEXTS_FOR_NONZERO_ORDERS(xx, yy)	\
+	[I((xx) + 1)] = yy "1",			\
+	[I((xx) + 2)] = yy "2",			\
+	[I((xx) + 3)] = yy "3",			\
+	TEXT_FOR_ORDER_4(xx, yy)		\
+	TEXT_FOR_ORDER_5(xx, yy)		\
+	TEXT_FOR_ORDER_6(xx, yy)		\
+	TEXT_FOR_ORDER_7(xx, yy)		\
+	TEXT_FOR_ORDER_8(xx, yy)		\
+	TEXT_FOR_ORDER_9(xx, yy)		\
+	TEXT_FOR_ORDER_10(xx, yy)		\
+	TEXT_FOR_ORDER_11(xx, yy)		\
+	TEXT_FOR_ORDER_12(xx, yy)		\
+	TEXT_FOR_ORDER_13(xx, yy)
+
+#define TEXTS_FOR_ORDERS(xx, yy)		\
+	[I(xx)] = yy "0",			\
+	TEXTS_FOR_NONZERO_ORDERS(xx, yy)
+
 const char * const vmstat_text[] = {
 	/* enum zone_stat_item counters */
 #define I(x) (x)
@@ -1488,6 +1576,14 @@ const char * const vmstat_text[] = {
 #if THREAD_SIZE > 65536
 	[I(KSTACK_REST)]			= "kstack_rest",
 #endif
+#endif
+	TEXTS_FOR_ORDERS(PGALLOC_SLOWPATH_ORDER_FIRST, "pgalloc_slowpath_order")
+	TEXTS_FOR_ORDERS(PGALLOC_FAIL_ORDER_FIRST, "pgalloc_fail_order")
+#ifdef CONFIG_COMPACTION
+	TEXTS_FOR_NONZERO_ORDERS(COMPACTSTALL_ORDER_FIRST - 1,
+				 "compact_stall_order")
+	TEXTS_FOR_NONZERO_ORDERS(COMPACTSUCCESS_ORDER_FIRST - 1,
+				 "compact_success_order")
 #endif
 #undef I
 #endif /* CONFIG_VM_EVENT_COUNTERS */
