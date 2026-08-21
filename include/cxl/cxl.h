@@ -228,4 +228,8 @@ struct cxl_memdev *devm_cxl_probe_mem(struct cxl_dev_state *cxlds,
 				      struct range *range);
 
 int cxl_set_capacity(struct cxl_dev_state *cxlds, u64 capacity);
+struct cxl_memdev *cxl_get_pf0_memdev(struct device *pf0, struct device *pfx,
+				      unsigned long index, struct range *range);
+void cxl_put_pf0_memdev(struct device *pf0, struct device *pfx, unsigned long index);
+//struct range *cxl_get_memdev_region_range(struct cxl_memdev *cxlmd);
 #endif /* __CXL_CXL_H__ */

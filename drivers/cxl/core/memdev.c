@@ -26,6 +26,35 @@ static void cxl_memdev_release(struct device *dev)
 {
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
 	struct device *parent = dev->parent;
+	struct device *sibling;
+	unsigned long index;
+
+	/*
+	 * Type2 multipf support implies other non-PF0 PFs could be having a
+	 * temporal reference to the memdev, only for registering/unregistering
+	 * as sibling, requiring to postpone the memdev release and the sibling
+	 * management until no further references. While detach_memdev() calls
+	 * for pf0 release from its driver (parent device of the memdev device)
+	 * it is not safe to invoke for sibling PFs to be detached at that time
+	 * as it could race with PFs registering/unregistering as memdev siblings.
+	 */
+	if (cxlmd->attach) {
+		xa_for_each(&cxlmd->siblings, index, sibling) {
+			device_release_driver(sibling);
+			xa_erase(&cxlmd->siblings, index);
+		}
+
+		/* Several possibilities trigger a memdev release with one being
+		 * its parent device (Type2 device) released from its driver. If
+		 * so, such release is the context for this function, precluding
+		 * the mutex lock and therefore safely avoiding to invoke the
+		 * release again which would trigger a deadlock.
+		 */
+		if (mutex_trylock(&cxlmd->dev.parent->mutex)) {
+			mutex_unlock(&cxlmd->dev.parent->mutex);
+			device_release_driver(cxlmd->dev.parent);
+		}
+	}
 
 	ida_free(&cxl_memdev_ida, cxlmd->id);
 	kfree(cxlmd);
@@ -795,12 +824,105 @@ static struct cxl_memdev *cxl_memdev_alloc(struct cxl_dev_state *cxlds,
 
 	cdev = &cxlmd->cdev;
 	cdev_init(cdev, fops);
+	xa_init(&cxlmd->siblings);
 	return cxlmd;
 
 err:
 	kfree(cxlmd);
 	return ERR_PTR(rc);
 }
+
+static int match_memdev_by_parent_device(struct device *dev, const void *data)
+{
+	const struct device *pf_dev = data;
+	struct cxl_memdev *cxlmd;
+
+	if (!is_cxl_memdev(dev))
+		return 0;
+
+	cxlmd = to_cxl_memdev(dev);
+	return (cxlmd->cxlds->dev == pf_dev);
+}
+
+/**
+ * cxl_get_pf0_memdev - register as PF0's memdev sibling
+ * @pf0: device for PF0 used to match current memdevs.
+ * @pfx: device to register as sibling to PF0's memdev.
+ * @index: where to register the device in the xarray.
+ * @range: to be set with the PF0's memdev range.
+ *
+ * Return: PF0 memdev pointer or error.
+ */
+struct cxl_memdev *cxl_get_pf0_memdev(struct device *pf0, struct device *pfx,
+				      unsigned long index, struct range *range)
+{
+	struct cxl_attach_region *attach;
+	struct cxl_memdev *cxlmd;
+	struct device *mem_dev __free(put_device) =
+		bus_find_device(&cxl_bus_type, NULL, pf0,
+				match_memdev_by_parent_device);
+
+	if (!mem_dev)
+		return ERR_PTR(-ENODEV);
+
+	cxlmd = to_cxl_memdev(mem_dev);
+
+	/*
+	 * we got the cxl_memdev and the implicit get_device in bus_find_device
+	 * makes the next steps safe.
+	 */
+
+	xa_store(&cxlmd->siblings, index, pfx, GFP_KERNEL);
+	attach = container_of(cxlmd->attach, struct cxl_attach_region, attach);
+
+	/*
+	 * The cxlmd object does exist and it can be found in the cxl bus after
+	 * creation but before attach probe setting the proper HPA range. If so,
+	 * the caller will need to try later.
+	 */
+	if (attach->hpa_range.end == -1)
+		return ERR_PTR(-EPROBE_DEFER);
+
+	range->start =  attach->hpa_range.start;
+	range->end =  attach->hpa_range.end;
+
+	return to_cxl_memdev(mem_dev);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_get_pf0_memdev, "CXL");
+
+/**
+ * cxl_put_pf0_memdev - unregister as PF0's memdev sibling
+ * @pf0: device for PF0 used to match current memdevs.
+ * @pfx: device to register as sibling to PF0's memdev.
+ * @index: where to unregister the device in the xarray.
+ *
+ */
+void cxl_put_pf0_memdev(struct device *pf0, struct device *pfx,
+			unsigned long index)
+{
+	struct cxl_memdev *cxlmd;
+	struct device *mem_dev __free(put_device) =
+		bus_find_device(&cxl_bus_type, NULL, pf0,
+				match_memdev_by_parent_device);
+
+	/*
+	 * This is not an error but a possibility if triggered by PF0 being
+	 * released which triggers the caller driver releasing pfx. It should
+	 * not happen if the caller driver does the release of pfx independently
+	 * but we do not have a simple way to ensure this here.
+	 */
+	if (!mem_dev)
+		return;
+
+	/*
+	 * we got the cxl_memdev and the implicit get_device in bus_find_device
+	 * makes the next steps safe.
+	 */
+
+	cxlmd = to_cxl_memdev(mem_dev);
+	xa_erase(&cxlmd->siblings, index);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_put_pf0_memdev, "CXL");
 
 static long __cxl_memdev_ioctl(struct cxl_memdev *cxlmd, unsigned int cmd,
 			       unsigned long arg)

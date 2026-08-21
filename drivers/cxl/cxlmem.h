@@ -54,6 +54,7 @@
  */
 struct cxl_memdev {
 	struct device dev;
+	struct xarray siblings;
 	struct cdev cdev;
 	struct cxl_dev_state *cxlds;
 	struct work_struct detach_work;
