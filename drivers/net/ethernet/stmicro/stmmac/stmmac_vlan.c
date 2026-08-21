@@ -161,8 +161,20 @@ static void vlan_restore_hw_rx_fltr(struct net_device *dev,
 		vlan_write_filter(dev, hw, i, hw->vlan_filter[i]);
 }
 
-static void vlan_update_hash(struct mac_device_info *hw, u32 hash,
-			     bool is_double)
+static void vlan_update_dvlan_state(struct mac_device_info *hw, bool enable)
+{
+	void __iomem *ioaddr = hw->pcsr;
+	u32 value;
+
+	value = readl(ioaddr + VLAN_TAG);
+	if (enable)
+		value |= VLAN_EDVLP | VLAN_ESVL | VLAN_DOVLTC;
+	else
+		value &= ~(VLAN_EDVLP | VLAN_ESVL | VLAN_DOVLTC);
+	writel(value, ioaddr + VLAN_TAG);
+}
+
+static void vlan_update_hash(struct mac_device_info *hw, u32 hash)
 {
 	void __iomem *ioaddr = hw->pcsr;
 	u32 value;
@@ -173,21 +185,9 @@ static void vlan_update_hash(struct mac_device_info *hw, u32 hash,
 
 	if (hash) {
 		value |= VLAN_VTHM | VLAN_ETV;
-		if (is_double) {
-			value |= VLAN_EDVLP;
-			value |= VLAN_ESVL;
-			value |= VLAN_DOVLTC;
-		} else {
-			value &= ~VLAN_EDVLP;
-			value &= ~VLAN_ESVL;
-			value &= ~VLAN_DOVLTC;
-		}
-
 		writel(value, ioaddr + VLAN_TAG);
 	} else {
 		value &= ~(VLAN_VTHM | VLAN_ETV);
-		value &= ~(VLAN_EDVLP | VLAN_ESVL);
-		value &= ~VLAN_DOVLTC;
 		value &= ~VLAN_VID;
 
 		writel(value, ioaddr + VLAN_TAG);
@@ -236,8 +236,7 @@ static void vlan_set_hw_mode(struct mac_device_info *hw)
 	writel(value, ioaddr + VLAN_TAG);
 }
 
-static void dwxgmac2_update_vlan_hash(struct mac_device_info *hw, u32 hash,
-				      bool is_double)
+static void dwxgmac2_update_vlan_hash(struct mac_device_info *hw, u32 hash)
 {
 	void __iomem *ioaddr = hw->pcsr;
 
@@ -253,15 +252,6 @@ static void dwxgmac2_update_vlan_hash(struct mac_device_info *hw, u32 hash,
 		value = readl(ioaddr + VLAN_TAG);
 
 		value |= VLAN_VTHM | VLAN_ETV;
-		if (is_double) {
-			value |= VLAN_EDVLP;
-			value |= VLAN_ESVL;
-			value |= VLAN_DOVLTC;
-		} else {
-			value &= ~VLAN_EDVLP;
-			value &= ~VLAN_ESVL;
-			value &= ~VLAN_DOVLTC;
-		}
 
 		value &= ~VLAN_VID;
 		writel(value, ioaddr + VLAN_TAG);
@@ -275,8 +265,6 @@ static void dwxgmac2_update_vlan_hash(struct mac_device_info *hw, u32 hash,
 		value = readl(ioaddr + VLAN_TAG);
 
 		value &= ~(VLAN_VTHM | VLAN_ETV);
-		value &= ~(VLAN_EDVLP | VLAN_ESVL);
-		value &= ~VLAN_DOVLTC;
 		value &= ~VLAN_VID;
 
 		writel(value, ioaddr + VLAN_TAG);
@@ -285,6 +273,7 @@ static void dwxgmac2_update_vlan_hash(struct mac_device_info *hw, u32 hash,
 
 const struct stmmac_vlan_ops dwmac_vlan_ops = {
 	.update_vlan_hash = vlan_update_hash,
+	.update_dvlan_state = vlan_update_dvlan_state,
 	.enable_vlan = vlan_enable,
 	.add_hw_vlan_rx_fltr = vlan_add_hw_rx_fltr,
 	.del_hw_vlan_rx_fltr = vlan_del_hw_rx_fltr,
@@ -295,11 +284,13 @@ const struct stmmac_vlan_ops dwmac_vlan_ops = {
 
 const struct stmmac_vlan_ops dwxlgmac2_vlan_ops = {
 	.update_vlan_hash = dwxgmac2_update_vlan_hash,
+	.update_dvlan_state = vlan_update_dvlan_state,
 	.enable_vlan = vlan_enable,
 };
 
 const struct stmmac_vlan_ops dwxgmac210_vlan_ops = {
 	.update_vlan_hash = dwxgmac2_update_vlan_hash,
+	.update_dvlan_state = vlan_update_dvlan_state,
 	.enable_vlan = vlan_enable,
 	.add_hw_vlan_rx_fltr = vlan_add_hw_rx_fltr,
 	.del_hw_vlan_rx_fltr = vlan_del_hw_rx_fltr,
