@@ -38,6 +38,7 @@ struct nct6694_usb_data {
 	struct urb *int_in_urb;
 	struct usb_device *udev;
 	union nct6694_usb_msg *usb_msg;
+	void *xfer_buf;
 	__le32 *int_buffer;
 };
 
@@ -120,7 +121,11 @@ int nct6694_usb_read_msg(struct nct6694 *nct6694,
 	struct nct6694_usb_data *udata = nct6694->priv;
 	union nct6694_usb_msg *msg = udata->usb_msg;
 	struct usb_device *udev = udata->udev;
+	u16 len = le16_to_cpu(cmd_hd->len);
 	int tx_len, rx_len, ret;
+
+	if (len > NCT6694_MAX_PACKET_SIZE)
+		return -EINVAL;
 
 	guard(mutex)(&udata->access_lock);
 
@@ -140,16 +145,18 @@ int nct6694_usb_read_msg(struct nct6694 *nct6694,
 		return ret;
 
 	/* Receive data packet from USB device */
-	ret = usb_bulk_msg(udev, usb_rcvbulkpipe(udev, NCT6694_BULK_IN_EP), buf,
-			   le16_to_cpu(cmd_hd->len), &rx_len, NCT6694_URB_TIMEOUT);
+	ret = usb_bulk_msg(udev, usb_rcvbulkpipe(udev, NCT6694_BULK_IN_EP), udata->xfer_buf,
+			   len, &rx_len, NCT6694_URB_TIMEOUT);
 	if (ret)
 		return ret;
 
-	if (rx_len != le16_to_cpu(cmd_hd->len)) {
+	if (rx_len != len) {
 		dev_err(nct6694->dev, "Expected received length %d, but got %d\n",
-			le16_to_cpu(cmd_hd->len), rx_len);
+			len, rx_len);
 		return -EIO;
 	}
+
+	memcpy(buf, udata->xfer_buf, len);
 
 	return nct6694_usb_err_handling(nct6694, msg->response_header.sts);
 }
@@ -173,12 +180,17 @@ int nct6694_usb_write_msg(struct nct6694 *nct6694,
 	struct nct6694_usb_data *udata = nct6694->priv;
 	union nct6694_usb_msg *msg = udata->usb_msg;
 	struct usb_device *udev = udata->udev;
+	u16 len = le16_to_cpu(cmd_hd->len);
 	int tx_len, rx_len, ret;
+
+	if (len > NCT6694_MAX_PACKET_SIZE)
+		return -EINVAL;
 
 	guard(mutex)(&udata->access_lock);
 
 	memcpy(&msg->cmd_header, cmd_hd, sizeof(*cmd_hd));
 	msg->cmd_header.hctrl = NCT6694_HCTRL_SET;
+	memcpy(udata->xfer_buf, buf, len);
 
 	/* Send command packet to USB device */
 	ret = usb_bulk_msg(udev, usb_sndbulkpipe(udev, NCT6694_BULK_OUT_EP), &msg->cmd_header,
@@ -187,8 +199,8 @@ int nct6694_usb_write_msg(struct nct6694 *nct6694,
 		return ret;
 
 	/* Send data packet to USB device */
-	ret = usb_bulk_msg(udev, usb_sndbulkpipe(udev, NCT6694_BULK_OUT_EP), buf,
-			   le16_to_cpu(cmd_hd->len), &tx_len, NCT6694_URB_TIMEOUT);
+	ret = usb_bulk_msg(udev, usb_sndbulkpipe(udev, NCT6694_BULK_OUT_EP), udata->xfer_buf,
+			   len, &tx_len, NCT6694_URB_TIMEOUT);
 	if (ret)
 		return ret;
 
@@ -199,16 +211,18 @@ int nct6694_usb_write_msg(struct nct6694 *nct6694,
 		return ret;
 
 	/* Receive data packet from USB device */
-	ret = usb_bulk_msg(udev, usb_rcvbulkpipe(udev, NCT6694_BULK_IN_EP), buf,
-			   le16_to_cpu(cmd_hd->len), &rx_len, NCT6694_URB_TIMEOUT);
+	ret = usb_bulk_msg(udev, usb_rcvbulkpipe(udev, NCT6694_BULK_IN_EP), udata->xfer_buf,
+			   len, &rx_len, NCT6694_URB_TIMEOUT);
 	if (ret)
 		return ret;
 
-	if (rx_len != le16_to_cpu(cmd_hd->len)) {
+	if (rx_len != len) {
 		dev_err(nct6694->dev, "Expected transmitted length %d, but got %d\n",
-			le16_to_cpu(cmd_hd->len), rx_len);
+			len, rx_len);
 		return -EIO;
 	}
+
+	memcpy(buf, udata->xfer_buf, len);
 
 	return nct6694_usb_err_handling(nct6694, msg->response_header.sts);
 }
@@ -268,6 +282,10 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 
 	udata->usb_msg = devm_kzalloc(dev, sizeof(*udata->usb_msg), GFP_KERNEL);
 	if (!udata->usb_msg)
+		return -ENOMEM;
+
+	udata->xfer_buf = devm_kzalloc(dev, NCT6694_MAX_PACKET_SIZE, GFP_KERNEL);
+	if (!udata->xfer_buf)
 		return -ENOMEM;
 
 	udata->int_buffer = devm_kzalloc(dev, sizeof(*udata->int_buffer), GFP_KERNEL);

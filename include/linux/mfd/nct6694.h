@@ -29,6 +29,9 @@ struct mfd_cell;
 #define NCT6694_HCTRL_SET	0x40
 #define NCT6694_HCTRL_GET	0x80
 
+/* Maximum payload length the firmware accepts in a single command */
+#define NCT6694_MAX_PACKET_SIZE	0x3F0
+
 enum nct6694_irq_id {
 	NCT6694_IRQ_GPIO0 = 0,
 	NCT6694_IRQ_GPIO1,
