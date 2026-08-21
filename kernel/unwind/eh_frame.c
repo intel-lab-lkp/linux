@@ -980,6 +980,17 @@ static __always_inline int __do_cfi_insn(struct eh_frame_section *sec,
 			break;
 		}
 
+		case DW_CFA_GNU_args_size: {
+			unsigned long args_size;
+
+			ret = read_uleb128(&cur, end, &args_size);
+			if (ret)
+				return ret;
+
+			/* Ignore DW_CFA_GNU_args_size */
+			break;
+		}
+
 		case DW_CFA_remember_state:
 			if (ctx->stack_depth >= EH_FRAME_MAX_STATE_STACK)
 				return -EINVAL;

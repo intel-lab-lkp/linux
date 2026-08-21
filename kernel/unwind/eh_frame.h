@@ -29,6 +29,7 @@
 #define DW_CFA_val_offset		0x14
 #define DW_CFA_val_offset_sf		0x15
 #define DW_CFA_val_expression		0x16
+#define DW_CFA_GNU_args_size		0x2e
 
 /* Helpers for CFI opcodes */
 #define DW_CFA_opcode(insn)		((insn) & 0xc0)
