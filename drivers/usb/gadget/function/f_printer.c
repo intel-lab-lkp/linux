@@ -1035,6 +1035,17 @@ static int printer_func_setup(struct usb_function *f,
 				break;
 			}
 			value = strlen(*dev->pnp_string);
+			/*
+			 * The EP0 response buffer is USB_COMP_EP0_BUFSIZ
+			 * bytes and the first two bytes hold the string
+			 * length, so at most USB_COMP_EP0_BUFSIZ - 2 bytes
+			 * of the PnP string can be copied.  A string stored
+			 * through configfs is at most USB_COMP_EP0_BUFSIZ - 1
+			 * bytes long, which would overflow the buffer by one
+			 * byte here, so clamp it before the memcpy() below.
+			 */
+			if (value > USB_COMP_EP0_BUFSIZ - 2)
+				value = USB_COMP_EP0_BUFSIZ - 2;
 			buf[0] = (value >> 8) & 0xFF;
 			buf[1] = value & 0xFF;
 			memcpy(buf + 2, *dev->pnp_string, value);
@@ -1268,6 +1279,18 @@ static ssize_t f_printer_opts_pnp_string_store(struct config_item *item,
 	int result;
 
 	mutex_lock(&opts->lock);
+
+	/*
+	 * The string is echoed on the wire by the GET_DEVICE_ID request as
+	 * a two-byte length prefix followed by the string itself, and the
+	 * EP0 response buffer is only USB_COMP_EP0_BUFSIZ bytes, so a
+	 * longer string would make printer_func_setup() overrun that
+	 * buffer.  Reject it here as an additional line of defense.
+	 */
+	if (len > USB_COMP_EP0_BUFSIZ - 2) {
+		result = -EINVAL;
+		goto unlock;
+	}
 
 	new_pnp = kstrndup(page, len, GFP_KERNEL);
 	if (!new_pnp) {
