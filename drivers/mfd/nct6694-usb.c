@@ -266,7 +266,6 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 {
 	struct usb_device *udev = interface_to_usbdev(iface);
 	struct usb_endpoint_descriptor *int_endpoint;
-	struct usb_host_interface *interface;
 	struct device *dev = &iface->dev;
 	struct nct6694_usb_data *udata;
 	struct nct6694 *nct6694;
@@ -305,13 +304,9 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 	if (ret)
 		goto err_urb;
 
-	interface = iface->cur_altsetting;
-
-	int_endpoint = &interface->endpoint[0].desc;
-	if (!usb_endpoint_is_int_in(int_endpoint)) {
-		ret = -ENODEV;
+	ret = usb_find_int_in_endpoint(iface->cur_altsetting, &int_endpoint);
+	if (ret)
 		goto err_urb;
-	}
 
 	usb_fill_int_urb(udata->int_in_urb, udev, usb_rcvintpipe(udev, NCT6694_INT_IN_EP),
 			 udata->int_buffer, sizeof(*udata->int_buffer), nct6694_usb_int_callback,
