@@ -65,6 +65,59 @@ efi_status_t efi_get_memory_map(struct efi_boot_memmap **map,
 }
 
 /**
+ * efi_get_ram_top() - find the top of usable RAM
+ * @top:	on return, the end of the highest memory map entry that becomes
+ *		usable RAM
+ *
+ * Walk the UEFI memory map for the entry types that become usable RAM, the set
+ * setup_e820() maps to E820_TYPE_RAM, and return the highest address any of
+ * them reaches. Memory a confidential guest has not accepted yet counts as
+ * well, since it becomes RAM once accepted. This is what the stub has in place
+ * of max_pfn, which is only set once the kernel proper is up.
+ *
+ * Memory the firmware hot-adds later is not described by the memory map and so
+ * is not accounted for here.
+ *
+ * Return:	status code
+ */
+efi_status_t efi_get_ram_top(u64 *top)
+{
+	struct efi_boot_memmap *map __free(efi_pool) = NULL;
+	efi_status_t status;
+	u64 ram_top = 0;
+	int i, nr_desc;
+
+	status = efi_get_memory_map(&map, false);
+	if (status != EFI_SUCCESS)
+		return status;
+
+	nr_desc = map->map_size / map->desc_size;
+	for (i = 0; i < nr_desc; i++) {
+		efi_memory_desc_t *d;
+
+		d = efi_memdesc_ptr((unsigned long)map->map, map->desc_size, i);
+		switch (d->type) {
+		case EFI_LOADER_CODE:
+		case EFI_LOADER_DATA:
+		case EFI_BOOT_SERVICES_CODE:
+		case EFI_BOOT_SERVICES_DATA:
+		case EFI_CONVENTIONAL_MEMORY:
+		case EFI_UNACCEPTED_MEMORY:
+			ram_top = max(ram_top,
+				      d->phys_addr + d->num_pages * EFI_PAGE_SIZE);
+			break;
+		default:
+			break;
+		}
+	}
+	if (!ram_top)
+		return EFI_NOT_FOUND;
+
+	*top = ram_top;
+	return EFI_SUCCESS;
+}
+
+/**
  * efi_allocate_pages() - Allocate memory pages
  * @size:	minimum number of bytes to allocate
  * @addr:	On return the address of the first allocated page. The first

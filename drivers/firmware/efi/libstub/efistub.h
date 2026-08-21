@@ -1094,6 +1094,8 @@ char *efi_convert_cmdline(efi_loaded_image_t *image);
 efi_status_t efi_get_memory_map(struct efi_boot_memmap **map,
 				bool install_cfg_tbl);
 
+efi_status_t efi_get_ram_top(u64 *top);
+
 efi_status_t efi_allocate_pages(unsigned long size, unsigned long *addr,
 				unsigned long max);
 
