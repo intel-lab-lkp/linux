@@ -1687,6 +1687,7 @@ struct nfs_pgio_header {
 	struct nfs_client	*ds_clp;	/* pNFS data server */
 	u32			ds_commit_idx;	/* ds index if ds_clp is set */
 	u32			pgio_mirror_idx;/* mirror index in pgio layer */
+	struct nfs4_deviceid_node *ds_dev;	/* device node ref held across the I/O */
 };
 
 struct nfs_mds_commit_info {
@@ -1725,6 +1726,7 @@ struct nfs_commit_data {
 	struct nfs_open_context *context;
 	struct pnfs_layout_segment *lseg;
 	struct nfs_client	*ds_clp;	/* pNFS data server */
+	struct nfs4_deviceid_node *ds_dev;	/* device node ref held across the commit */
 	int			ds_commit_index;
 	loff_t			lwb;
 	const struct rpc_call_ops *mds_ops;
