@@ -76,7 +76,7 @@ static int hpfs_readdir(struct file *file, struct dir_context *ctx)
 
 	hpfs_lock(inode->i_sb);
 
-	if (hpfs_sb(inode->i_sb)->sb_chk) {
+	{
 		if (hpfs_chk_sectors(inode->i_sb, inode->i_ino, 1, "dir_fnode")) {
 			ret = -EFSERROR;
 			goto out;
@@ -124,7 +124,6 @@ static int hpfs_readdir(struct file *file, struct dir_context *ctx)
 		/* This won't work when cycle is longer than number of dirents
 		   accepted by filldir, but what can I do?
 		   maybe killall -9 ls helps */
-		if (hpfs_sb(inode->i_sb)->sb_chk)
 			if (hpfs_stop_cycles(inode->i_sb, ctx->pos, &c1, &c2, "hpfs_readdir")) {
 				ret = -EFSERROR;
 				goto out;
@@ -158,7 +157,7 @@ static int hpfs_readdir(struct file *file, struct dir_context *ctx)
 			goto out;
 		}
 		if (de->first || de->last) {
-			if (hpfs_sb(inode->i_sb)->sb_chk) {
+			{
 				if (de->first && !de->last && (de->namelen != 2
 				    || de ->name[0] != 1 || de->name[1] != 1))
 					hpfs_error(inode->i_sb, "hpfs_readdir: bad ^A^A entry; pos = %08lx", (unsigned long)ctx->pos);
