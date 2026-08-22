@@ -1132,6 +1132,7 @@ static ssize_t cs_char_read(struct file *file, char __user *buf, size_t count,
 	struct cs_char *csdata = file->private_data;
 	u32 data;
 	ssize_t retval;
+	bool empty;
 
 	if (count < sizeof(data))
 		return -EINVAL;
@@ -1161,7 +1162,18 @@ static ssize_t cs_char_read(struct file *file, char __user *buf, size_t count,
 		}
 		prepare_to_wait_exclusive(&csdata->wait, &wait,
 						TASK_INTERRUPTIBLE);
-		schedule();
+		/*
+		 * Re-check after being queued: cs_notify() may have queued
+		 * an entry and woken csdata->wait in the window between the
+		 * empty check above and prepare_to_wait_exclusive() adding
+		 * us to it.
+		 */
+		spin_lock_bh(&csdata->lock);
+		empty = list_empty(&csdata->chardev_queue) &&
+			list_empty(&csdata->dataind_queue);
+		spin_unlock_bh(&csdata->lock);
+		if (empty)
+			schedule();
 		finish_wait(&csdata->wait, &wait);
 	}
 
