@@ -1666,6 +1666,9 @@ static int usbat_hp8200e_transport(struct scsi_cmnd *srb, struct us_data *us)
 		else
 			len = *status;
 
+		/* Device-controlled; clamp to the command buffer to avoid OOB DMA */
+		if (len > scsi_bufflen(srb))
+			len = scsi_bufflen(srb);
 
 		result = usbat_read_block(us, scsi_sglist(srb), len,
 			                                   scsi_sg_count(srb));
