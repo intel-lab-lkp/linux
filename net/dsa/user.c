@@ -397,6 +397,49 @@ void dsa_user_host_uc_uninstall(struct net_device *dev)
 		dsa_port_standalone_host_fdb_del(dp, dev->dev_addr, 0);
 }
 
+/* Returns the port's PHY node with a reference taken, or NULL if the port has
+ * no PHY node. Looks at the same properties as phylink_fwnode_phy_connect().
+ */
+static struct fwnode_handle *dsa_user_phy_fwnode(const struct dsa_port *dp)
+{
+	struct fwnode_handle *phy_fwnode;
+
+	phy_fwnode = fwnode_get_phy_node(of_fwnode_handle(dp->dn));
+
+	return IS_ERR(phy_fwnode) ? NULL : phy_fwnode;
+}
+
+/* Connect a PHY that dsa_user_phy_setup() left behind because it had no
+ * driver of its own back then. Runs before the port is enabled, so that a
+ * port in MLO_AN_PHY mode is not started without its PHY.
+ */
+static int dsa_user_late_phy_connect(struct net_device *dev)
+{
+	struct dsa_port *dp = dsa_user_to_port(dev);
+	struct fwnode_handle *phy_fwnode;
+	struct dsa_switch *ds = dp->ds;
+	u32 phy_flags = 0;
+	int err;
+
+	if (dev->phydev)
+		return 0;
+
+	phy_fwnode = dsa_user_phy_fwnode(dp);
+	if (!phy_fwnode)
+		return 0;
+
+	fwnode_handle_put(phy_fwnode);
+
+	if (ds->ops->get_phy_flags)
+		phy_flags = ds->ops->get_phy_flags(ds, dp->index);
+
+	err = phylink_of_phy_connect(dp->pl, dp->dn, phy_flags);
+	if (err)
+		netdev_warn(dev, "could not connect PHY: %pe\n", ERR_PTR(err));
+
+	return err;
+}
+
 static int dsa_user_open(struct net_device *dev)
 {
 	struct net_device *conduit = dsa_user_to_conduit(dev);
@@ -412,6 +455,10 @@ static int dsa_user_open(struct net_device *dev)
 	err = dsa_user_host_uc_install(dev, dev->dev_addr);
 	if (err)
 		goto out;
+
+	err = dsa_user_late_phy_connect(dev);
+	if (err)
+		goto out_del_host_uc;
 
 	err = dsa_port_enable_rt(dp, dev->phydev);
 	if (err)
@@ -2651,11 +2698,37 @@ static int dsa_user_phy_connect(struct net_device *user_dev, int addr,
 	return phylink_connect_phy(dp->pl, user_dev->phydev);
 }
 
+/* Whether the port's PHY is served by the generic driver rather than by one
+ * of its own. Only meaningful after a failed connect, which releases the
+ * generic driver again.
+ */
+static bool dsa_user_phy_lacks_driver(const struct dsa_port *dp)
+{
+	struct fwnode_handle *phy_fwnode;
+	struct phy_device *phydev;
+	bool lacks_driver;
+
+	phy_fwnode = dsa_user_phy_fwnode(dp);
+	if (!phy_fwnode)
+		return false;
+
+	phydev = fwnode_phy_find_device(phy_fwnode);
+	fwnode_handle_put(phy_fwnode);
+	if (!phydev)
+		return false;
+
+	lacks_driver = !READ_ONCE(phydev->mdio.dev.driver);
+	put_device(&phydev->mdio.dev);
+
+	return lacks_driver;
+}
+
 static int dsa_user_phy_setup(struct net_device *user_dev)
 {
 	struct dsa_port *dp = dsa_user_to_port(user_dev);
 	struct device_node *port_dn = dp->dn;
 	struct dsa_switch *ds = dp->ds;
+	bool had_driver, retried = false;
 	u32 phy_flags = 0;
 	int ret;
 
@@ -2678,6 +2751,8 @@ static int dsa_user_phy_setup(struct net_device *user_dev)
 	if (ds->ops->get_phy_flags)
 		phy_flags = ds->ops->get_phy_flags(ds, dp->index);
 
+	had_driver = !dsa_user_phy_lacks_driver(dp);
+connect:
 	ret = phylink_of_phy_connect(dp->pl, port_dn, phy_flags);
 	if (ret == -ENODEV && ds->user_mii_bus) {
 		/* We could not connect to a designated PHY or SFP, so try to
@@ -2686,6 +2761,29 @@ static int dsa_user_phy_setup(struct net_device *user_dev)
 		ret = dsa_user_phy_connect(user_dev, dp->index, phy_flags);
 	}
 	if (ret) {
+		if (dsa_user_phy_lacks_driver(dp)) {
+			/* Not known to be reachable from the internal MDIO bus
+			 * fallback, which assigns user_dev->phydev before it
+			 * connects, but do not hand the open path a leftover.
+			 */
+			user_dev->phydev = NULL;
+
+			netdev_info(user_dev,
+				    "PHY has no driver, connecting it at open\n");
+			return 0;
+		}
+
+		/* A driver that was not there before this attempt is one that
+		 * bound while it ran: the failure came from the generic driver
+		 * and says nothing about this one, so try once more. A port
+		 * that had its driver all along keeps the single attempt.
+		 */
+		if (!had_driver && !retried) {
+			had_driver = true;
+			retried = true;
+			goto connect;
+		}
+
 		netdev_err(user_dev, "failed to connect to PHY: %pe\n",
 			   ERR_PTR(ret));
 		dsa_port_phylink_destroy(dp);
