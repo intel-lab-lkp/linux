@@ -1883,8 +1883,19 @@ int get_tree_bdev_flags(struct fs_context *fc,
 		}
 	} else {
 		error = setup_bdev_super(s, fc->sb_flags, fc);
-		if (!error)
-			error = fill_super(s, fc);
+		if (error) {
+			/*
+			 * fill_super() was not called, so nothing has taken
+			 * ownership of fc->s_fs_info.  Hand it back so that
+			 * put_fs_context() can release it, otherwise it
+			 * leaks.
+			 */
+			fc->s_fs_info = s->s_fs_info;
+			s->s_fs_info = NULL;
+			deactivate_locked_super(s);
+			return error;
+		}
+		error = fill_super(s, fc);
 		if (error) {
 			deactivate_locked_super(s);
 			return error;
