@@ -272,8 +272,34 @@ static const struct emac_variant emac_variant_h6 = {
 /* sun8i_dwmac_dma_reset() - reset the EMAC
  * Called from stmmac via stmmac_dma_ops->reset
  */
+static int sun8i_dwmac_soft_reset(void __iomem *ioaddr)
+{
+	u32 v;
+
+	v = readl(ioaddr + EMAC_BASIC_CTL1);
+	writel(v | 0x01, ioaddr + EMAC_BASIC_CTL1);
+
+	/* The timeout was previously set to 10ms, but some board (OrangePI0)
+	 * need more if no cable plugged. 100ms seems OK
+	 */
+	return readl_poll_timeout(ioaddr + EMAC_BASIC_CTL1, v,
+				  !(v & 0x01), 100, 100000);
+}
+
 static int sun8i_dwmac_dma_reset(void __iomem *ioaddr)
 {
+	int err;
+
+	/* The MAC soft reset only completes once the PHY is driving the RX
+	 * clock. Doing it here rather than at probe means phylib has already
+	 * attached and resumed the PHY, so the clock is running by
+	 * construction -- including after a warm reboot that left the PHY
+	 * powered down.
+	 */
+	err = sun8i_dwmac_soft_reset(ioaddr);
+	if (err)
+		return err;
+
 	writel(0, ioaddr + EMAC_RX_CTL1);
 	writel(0, ioaddr + EMAC_TX_CTL1);
 	writel(0, ioaddr + EMAC_RX_FRM_FLT);
@@ -740,23 +766,12 @@ static void sun8i_dwmac_flow_ctrl(struct mac_device_info *hw,
 
 static int sun8i_dwmac_reset(struct stmmac_priv *priv)
 {
-	u32 v;
-	int err;
+	int err = sun8i_dwmac_soft_reset(priv->ioaddr);
 
-	v = readl(priv->ioaddr + EMAC_BASIC_CTL1);
-	writel(v | 0x01, priv->ioaddr + EMAC_BASIC_CTL1);
-
-	/* The timeout was previously set to 10ms, but some board (OrangePI0)
-	 * need more if no cable plugged. 100ms seems OK
-	 */
-	err = readl_poll_timeout(priv->ioaddr + EMAC_BASIC_CTL1, v,
-				 !(v & 0x01), 100, 100000);
-
-	if (err) {
+	if (err)
 		dev_err(priv->device, "EMAC reset timeout\n");
-		return err;
-	}
-	return 0;
+
+	return err;
 }
 
 /* Search in mdio-mux node for internal PHY node and get its clk/reset */
@@ -1217,10 +1232,6 @@ static int sun8i_dwmac_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Failed to register mux\n");
 			goto dwmac_mux;
 		}
-	} else {
-		ret = sun8i_dwmac_reset(priv);
-		if (ret)
-			goto dwmac_remove;
 	}
 
 	pm_runtime_put(&pdev->dev);
