@@ -602,9 +602,12 @@ static int quicki2c_alloc_report_buf(struct quicki2c_device *qcdev)
 
 	/*
 	 * Some HIDI2C devices don't declare input/output max length correctly,
-	 * give default 4K buffer to avoid DMA buffer overrun.
+	 * give default 4K buffer to avoid DMA buffer overrun.  Both RxDMA2 and
+	 * SWDMA land here, so cover the larger SWDMA packet size.
 	 */
-	max_report_len = max(le16_to_cpu(qcdev->dev_desc.max_input_len), SZ_4K);
+	max_report_len = max(le16_to_cpu(qcdev->dev_desc.max_input_len),
+			     le16_to_cpu(qcdev->dev_desc.report_desc_len));
+	max_report_len = max_t(size_t, ALIGN(max_report_len, SZ_4K), SZ_4K);
 
 	qcdev->input_buf = devm_kzalloc(qcdev->dev, max_report_len, GFP_KERNEL);
 	if (!qcdev->input_buf)
