@@ -1324,6 +1324,76 @@ static const struct hwmon_chip_info aqc_chip_info = {
 	.info = aqc_info,
 };
 
+static bool aqc_raw_data_valid(struct aqc_data *priv, int size)
+{
+	int off;
+	char *msg;
+
+	if (!priv)
+		return false;
+
+	off = priv->serial_number_start_offset + SERIAL_PART_OFFSET;
+	if (off >= size) {
+		msg = "serial number start offset";
+		goto invalid;
+	}
+
+	off = priv->firmware_version_offset;
+	if (off >= size) {
+		msg = "firmware version offset";
+		goto invalid;
+	}
+
+	/* Physical temperature sensor readings data size check*/
+	if (priv->num_temp_sensors > 0) {
+		off = priv->temp_sensor_start_offset +
+		      (priv->num_temp_sensors - 1) * AQC_SENSOR_SIZE;
+
+		if (off >= size) {
+			msg = "temp sensor start offset";
+			goto invalid;
+		}
+	}
+	/* Virtual temperature sensor readings data size check*/
+	if (priv->num_virtual_temp_sensors > 0) {
+		off = priv->virtual_temp_sensor_start_offset +
+		      (priv->num_virtual_temp_sensors - 1) * AQC_SENSOR_SIZE;
+
+		if (off >= size) {
+			msg = "virtual temp sensor start offset";
+			goto invalid;
+		}
+	}
+	/* Fan speed and related readings data size check */
+	if (priv->num_fans > 0) {
+		int fan_off = priv->fan_sensor_offsets[priv->num_fans - 1];
+
+		off = fan_off + priv->fan_structure->power;
+		if (off >= size) {
+			msg = "fan power offset";
+			goto invalid;
+		}
+
+		off = fan_off + priv->fan_structure->voltage;
+		if (off >= size) {
+			msg = "fan voltage offset";
+			goto invalid;
+		}
+
+		off = fan_off + priv->fan_structure->curr;
+		if (off >= size) {
+			msg = "fan curr offset";
+			goto invalid;
+		}
+	}
+
+	return true;
+invalid:
+	pr_debug("data size (%d) is less than the %s, %s\n",
+		 size, msg, __func__);
+	return false;
+}
+
 static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
 {
 	int i, j, sensor_value;
@@ -1333,6 +1403,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		return 0;
 
 	priv = hid_get_drvdata(hdev);
+
+	if (!aqc_raw_data_valid(priv, size))
+		return 0;
 
 	/* Info provided with every report */
 	priv->serial_number[0] = get_unaligned_be16(data + priv->serial_number_start_offset);
