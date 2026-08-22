@@ -591,6 +591,10 @@ struct phy_oatc14_sqi_capability {
  *      - Bits [31:24] are reserved for defining generic
  *        PHY driver behavior.
  * @irq: IRQ number of the PHY's interrupt (-1 if none)
+ * @genphy_saved_irq: value of @irq before the generic driver bound, given
+ *                    back when that driver is released; zero outside a
+ *                    generic bind cycle, and non-positive values are
+ *                    never restored
  * @phylink: Pointer to phylink instance for this PHY
  * @sfp_bus_attached: Flag indicating whether the SFP bus has been attached
  * @sfp_bus: SFP bus attached to this PHY's fiber port
@@ -761,6 +765,8 @@ struct phy_device {
 	 * -1 means no interrupt
 	 */
 	int irq;
+
+	int genphy_saved_irq;
 
 	/* private data pointer */
 	/* For use by PHYs to maintain extra state */

@@ -1780,6 +1780,7 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 		else
 			d->driver = &genphy_driver.mdiodrv.driver;
 
+		phydev->genphy_saved_irq = phydev->irq;
 		phydev->is_genphy_driven = 1;
 	}
 
@@ -1897,6 +1898,9 @@ error:
 error_module_put:
 	module_put(d->driver->owner);
 	phydev->is_genphy_driven = 0;
+	if (phydev->genphy_saved_irq > 0 && phydev->irq == PHY_POLL)
+		phydev->irq = phydev->genphy_saved_irq;
+	phydev->genphy_saved_irq = 0;
 	d->driver = NULL;
 error_put_device:
 	put_device(d);
@@ -1965,6 +1969,15 @@ void phy_detach(struct phy_device *phydev)
 	 * real driver could be loaded
 	 */
 	if (phydev->is_genphy_driven) {
+		/* Give back the interrupt phy_probe() parked when the generic
+		 * driver bound, before the device becomes bindable again. A
+		 * PHY that was in polling mode for any other reason had
+		 * PHY_POLL saved, and the restore is skipped.
+		 */
+		if (phydev->genphy_saved_irq > 0 && phydev->irq == PHY_POLL)
+			phydev->irq = phydev->genphy_saved_irq;
+		phydev->genphy_saved_irq = 0;
+
 		device_release_driver(&phydev->mdio.dev);
 		phydev->is_genphy_driven = 0;
 	}
