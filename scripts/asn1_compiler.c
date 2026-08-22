@@ -1039,6 +1039,8 @@ static struct element *parse_type(struct token **_cursor, struct token *end,
 			if (cursor >= end)
 				goto overrun_error;
 			element->children = parse_type(&cursor, end, NULL);
+			element->flags |= element->children->flags & ELEMENT_SKIPPABLE;
+			element->children->flags &= ~ELEMENT_SKIPPABLE;
 		} else {
 			element->children = parse_compound(&cursor, end, 0);
 		}
@@ -1056,6 +1058,8 @@ static struct element *parse_type(struct token **_cursor, struct token *end,
 			if (cursor >= end)
 				goto parse_error;
 			element->children = parse_type(&cursor, end, NULL);
+			element->flags |= element->children->flags & ELEMENT_SKIPPABLE;
+			element->children->flags &= ~ELEMENT_SKIPPABLE;
 		} else {
 			element->children = parse_compound(&cursor, end, 1);
 		}
@@ -1522,7 +1526,13 @@ dont_render_tag:
 	/* Deal with compound types */
 	switch (e->compound) {
 	case TYPE_REF:
-		render_element(out, e->type->type->element, tag);
+		if (skippable && !tag) {
+			struct element tmp = { .flags = ELEMENT_SKIPPABLE };
+
+			render_element(out, e->type->type->element, &tmp);
+		} else {
+			render_element(out, e->type->type->element, tag);
+		}
 		if (e->action)
 			render_opcode(out, "ASN1_OP_%sACT,\n",
 				      skippable ? "MAYBE_" : "");
