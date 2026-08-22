@@ -1324,6 +1324,84 @@ static const struct hwmon_chip_info aqc_chip_info = {
 	.info = aqc_info,
 };
 
+/* aqc_raw_data_valid()
+ * Does not support special-case sensor readings data size check
+ */
+static bool aqc_raw_data_valid(struct aqc_data *priv, int size)
+{
+	int off, fan_off, i;
+
+	if (!priv)
+		return false;
+
+	/* +1 for get_unaligned_be16(), it reads 2 bytes */
+	off = priv->serial_number_start_offset + SERIAL_PART_OFFSET + 1;
+	if (off >= size)
+		goto invalid;
+
+	off = priv->firmware_version_offset + 1;
+	if (off >= size)
+		goto invalid;
+
+	/* Physical temperature sensor */
+	for (i = 0; i < priv->num_temp_sensors; i++) {
+		off = priv->temp_sensor_start_offset + i * AQC_SENSOR_SIZE + 1;
+
+		if (off >= size)
+			goto invalid;
+	}
+
+	/* Virtual temperature sensor */
+	for (i = 0; i < priv->num_virtual_temp_sensors; i++) {
+		off = priv->virtual_temp_sensor_start_offset +
+		      i * AQC_SENSOR_SIZE + 1;
+
+		if (off >= size)
+			goto invalid;
+	}
+
+	/* Fan speed and related */
+	if (!priv->fan_structure)
+		goto flow;
+
+	for (i = 0; i < priv->num_fans; i++) {
+		fan_off = priv->fan_sensor_offsets[i] + 1;
+		off = fan_off + priv->fan_structure->speed;
+		if (off >= size)
+			goto invalid;
+
+		off = fan_off + priv->fan_structure->power;
+		if (off >= size)
+			goto invalid;
+
+		off = fan_off + priv->fan_structure->voltage;
+		if (off >= size)
+			goto invalid;
+
+		off = fan_off + priv->fan_structure->curr;
+		if (off >= size)
+			goto invalid;
+	}
+
+flow:
+	/* Flow sensor */
+	for (i = 0; i < priv->num_flow_sensors; i++) {
+		off = priv->flow_sensors_start_offset + i * AQC_SENSOR_SIZE + 1;
+		if (off >= size)
+			goto invalid;
+	}
+
+	if (priv->power_cycle_count_offset != 0) {
+		off = priv->power_cycle_count_offset + 3;
+		if (off >= size)
+			goto invalid;
+	}
+
+	return true;
+invalid:
+	return false;
+}
+
 static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
 {
 	int i, j, sensor_value;
@@ -1333,6 +1411,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		return 0;
 
 	priv = hid_get_drvdata(hdev);
+
+	if (!aqc_raw_data_valid(priv, size))
+		return 0;
 
 	/* Info provided with every report */
 	priv->serial_number[0] = get_unaligned_be16(data + priv->serial_number_start_offset);
