@@ -1334,6 +1334,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 
 	priv = hid_get_drvdata(hdev);
 
+	if (size < priv->buffer_size)
+		return 0;
+
 	/* Info provided with every report */
 	priv->serial_number[0] = get_unaligned_be16(data + priv->serial_number_start_offset);
 	priv->serial_number[1] = get_unaligned_be16(data + priv->serial_number_start_offset +
