@@ -532,9 +532,24 @@ BTF_ID_FLAGS(func, bpf_ct_set_status)
 BTF_ID_FLAGS(func, bpf_ct_change_status)
 BTF_KFUNCS_END(nf_ct_kfunc_set)
 
+static int nf_conntrack_kfunc_filter(const struct bpf_prog *prog, u32 kfunc_id)
+{
+	/*
+	 * Conntrack kfuncs accept a netns ID relative to the program context.
+	 * The verifier cannot determine which user namespace owns that target.
+	 * Do not let a token delegate authority over arbitrary peer netns state.
+	 */
+	if (prog->aux->token &&
+	    btf_id_set8_contains(&nf_ct_kfunc_set, kfunc_id))
+		return -EACCES;
+
+	return 0;
+}
+
 static const struct btf_kfunc_id_set nf_conntrack_kfunc_set = {
 	.owner = THIS_MODULE,
 	.set   = &nf_ct_kfunc_set,
+	.filter = nf_conntrack_kfunc_filter,
 };
 
 int register_nf_conntrack_bpf(void)
