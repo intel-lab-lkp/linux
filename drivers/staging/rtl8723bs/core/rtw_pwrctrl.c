@@ -885,8 +885,6 @@ void rtw_unregister_tx_alive(struct adapter *padapter)
 }
 
 /*
- * Caller: ISR
- *
  * If all commands have been done,
  * and no more command to do,
  * then driver shall call this fun. to power down firmware again.
