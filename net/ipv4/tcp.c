@@ -1162,6 +1162,10 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 					binding = NULL;
 					goto out_err;
 				}
+				if (zc != MSG_ZEROCOPY) {
+					err = -EOPNOTSUPP;
+					goto out_err;
+				}
 			}
 		}
 	} else if (unlikely(msg->msg_flags & MSG_SPLICE_PAGES) && size) {
