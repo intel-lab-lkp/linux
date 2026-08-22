@@ -96,8 +96,10 @@ int ima_read_modsig(enum ima_hooks func, const void *buf, loff_t buf_len,
  * Since the modsig is part of the file contents, the hash used in its signature
  * isn't the same one ordinarily calculated by IMA. Therefore PKCS7 code
  * calculates a separate one for signature verification.
+ *
+ * Return: 0 if the file data was supplied, error code otherwise.
  */
-void ima_collect_modsig(struct modsig *modsig, const void *buf, loff_t size)
+int ima_collect_modsig(struct modsig *modsig, const void *buf, loff_t size)
 {
 	int rc;
 
@@ -109,11 +111,14 @@ void ima_collect_modsig(struct modsig *modsig, const void *buf, loff_t size)
 		sizeof(struct module_signature);
 	rc = pkcs7_supply_detached_data(modsig->pkcs7_msg, buf, size);
 	if (rc)
-		return;
+		return rc;
 
 	/* Ask the PKCS7 code to calculate the file hash. */
 	rc = pkcs7_get_digest(modsig->pkcs7_msg, &modsig->digest,
 			      &modsig->digest_size, &modsig->hash_algo);
+
+	/* Some signature algorithms operate on the message without a digest. */
+	return 0;
 }
 
 int ima_modsig_verify(struct key *keyring, const struct modsig *modsig)

@@ -262,8 +262,11 @@ int ima_collect_measurement(struct ima_iint_cache *iint, struct file *file,
 	 * the file digest without collecting the modsig in a previous
 	 * measurement rule.
 	 */
-	if (modsig)
-		ima_collect_modsig(modsig, buf, size);
+	if (modsig) {
+		result = ima_collect_modsig(modsig, buf, size);
+		if (result)
+			goto out;
+	}
 
 	if (iint->flags & IMA_COLLECTED)
 		goto out;
