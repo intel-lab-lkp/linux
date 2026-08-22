@@ -431,6 +431,21 @@ static int imx471_set_pad_format(struct v4l2_subdev *sd,
 
 	*v4l2_subdev_state_get_format(sd_state, fmt->pad) = fmt->format;
 
+	/* Analog crop: 2x bin, centered in the native array (same idea as imx219). */
+	{
+		struct v4l2_rect *crop;
+		u8 bin_h, bin_v, binning;
+
+		crop = v4l2_subdev_state_get_crop(sd_state, fmt->pad);
+		bin_h = min_t(u32, IMX471_PIXEL_ARRAY_WIDTH / fmt->format.width, 2);
+		bin_v = min_t(u32, IMX471_PIXEL_ARRAY_HEIGHT / fmt->format.height, 2);
+		binning = min(bin_h, bin_v);
+		crop->width = fmt->format.width * binning;
+		crop->height = fmt->format.height * binning;
+		crop->left = (IMX471_NATIVE_WIDTH - crop->width) / 2;
+		crop->top = (IMX471_NATIVE_HEIGHT - crop->height) / 2;
+	}
+
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY)
 		return 0;
 
@@ -468,7 +483,7 @@ static int imx471_get_selection(struct v4l2_subdev *sd,
 		sel->r.left = 0;
 		sel->r.width = IMX471_NATIVE_WIDTH;
 		sel->r.height = IMX471_NATIVE_HEIGHT;
-		return 0;
+		break;
 
 	case V4L2_SEL_TGT_CROP_DEFAULT:
 	case V4L2_SEL_TGT_CROP_BOUNDS:
@@ -476,10 +491,13 @@ static int imx471_get_selection(struct v4l2_subdev *sd,
 		sel->r.left = IMX471_PIXEL_ARRAY_LEFT;
 		sel->r.width = IMX471_PIXEL_ARRAY_WIDTH;
 		sel->r.height = IMX471_PIXEL_ARRAY_HEIGHT;
-		return 0;
+		break;
+
+	default:
+		return -EINVAL;
 	}
 
-	return -EINVAL;
+	return 0;
 }
 
 static int imx471_init_state(struct v4l2_subdev *sd,
