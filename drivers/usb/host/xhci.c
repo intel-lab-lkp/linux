@@ -5432,7 +5432,7 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	 */
 	struct device		*dev = hcd->self.sysdev;
 	int			retval;
-	u32			hcs_params1;
+	u32			hcs_params1, capbase;
 
 	/* Accept arbitrarily long scatter-gather lists */
 	hcd->self.sg_tablesize = ~0;
@@ -5453,8 +5453,16 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	mutex_init(&xhci->mutex);
 	xhci->main_hcd = hcd;
 	xhci->cap_regs = hcd->regs;
-	xhci->op_regs = hcd->regs +
-		HC_LENGTH(readl(&xhci->cap_regs->hc_capbase));
+	capbase = readl(&xhci->cap_regs->hc_capbase);
+	if (HC_LENGTH(capbase) < 0x20 ||
+	    (HC_LENGTH(capbase) & 0x3) ||
+	    (hcd->rsrc_len &&
+	     HC_LENGTH(capbase) + sizeof(struct xhci_op_regs) > hcd->rsrc_len)) {
+		xhci_err(xhci, "Invalid CAPLENGTH %#x (rsrc_len %#lx)\n",
+			 HC_LENGTH(capbase), (unsigned long)hcd->rsrc_len);
+		return -ENODEV;
+	}
+	xhci->op_regs = hcd->regs + HC_LENGTH(capbase);
 	xhci->run_regs = hcd->regs +
 		(readl(&xhci->cap_regs->run_regs_off) & RTSOFF_MASK);
 	/* Cache read-only capability registers */
