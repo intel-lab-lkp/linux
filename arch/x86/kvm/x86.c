@@ -10609,8 +10609,12 @@ static void kvm_noncoherent_dma_assignment_start_or_stop(struct kvm *kvm)
 	 *
 	 * If KVM always honors guest PAT, however, there is nothing to do.
 	 */
-	if (kvm_check_has_quirk(kvm, KVM_X86_QUIRK_IGNORE_GUEST_PAT))
+	if (kvm_check_has_quirk(kvm, KVM_X86_QUIRK_IGNORE_GUEST_PAT)) {
+		int idx = srcu_read_lock(&kvm->srcu);
+
 		kvm_zap_gfn_range(kvm, gpa_to_gfn(0), gpa_to_gfn(~0ULL));
+		srcu_read_unlock(&kvm->srcu, idx);
+	}
 }
 
 void kvm_arch_register_noncoherent_dma(struct kvm *kvm)
