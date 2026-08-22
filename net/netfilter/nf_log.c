@@ -42,6 +42,18 @@ static struct nf_logger *__find_logger(int pf, const char *str_logger)
 	return NULL;
 }
 
+static void __nf_log_unset(struct net *net, const struct nf_logger *logger)
+{
+	const struct nf_logger *log;
+	int i;
+
+	for (i = 0; i < NFPROTO_NUMPROTO; i++) {
+		log = nft_log_dereference(net->nf.nf_loggers[i]);
+		if (log == logger)
+			RCU_INIT_POINTER(net->nf.nf_loggers[i], NULL);
+	}
+}
+
 int nf_log_set(struct net *net, u_int8_t pf, const struct nf_logger *logger)
 {
 	const struct nf_logger *log;
@@ -62,15 +74,8 @@ EXPORT_SYMBOL(nf_log_set);
 
 void nf_log_unset(struct net *net, const struct nf_logger *logger)
 {
-	int i;
-	const struct nf_logger *log;
-
 	mutex_lock(&nf_log_mutex);
-	for (i = 0; i < NFPROTO_NUMPROTO; i++) {
-		log = nft_log_dereference(net->nf.nf_loggers[i]);
-		if (log == logger)
-			RCU_INIT_POINTER(net->nf.nf_loggers[i], NULL);
-	}
+	__nf_log_unset(net, logger);
 	mutex_unlock(&nf_log_mutex);
 }
 EXPORT_SYMBOL(nf_log_unset);
@@ -112,6 +117,7 @@ EXPORT_SYMBOL(nf_log_register);
 void nf_log_unregister(struct nf_logger *logger)
 {
 	const struct nf_logger *log;
+	struct net *net;
 	int i;
 
 	mutex_lock(&nf_log_mutex);
@@ -120,6 +126,10 @@ void nf_log_unregister(struct nf_logger *logger)
 		if (log == logger)
 			RCU_INIT_POINTER(loggers[i][logger->type], NULL);
 	}
+	rcu_read_lock();
+	for_each_net_rcu(net)
+		__nf_log_unset(net, logger);
+	rcu_read_unlock();
 	mutex_unlock(&nf_log_mutex);
 	synchronize_rcu();
 }
