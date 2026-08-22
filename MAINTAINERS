@@ -21770,6 +21770,7 @@ F:	include/net/psp/
 F:	include/net/psp.h
 F:	include/uapi/linux/psp.h
 F:	net/psp/
+F:	tools/testing/selftests/drivers/net/psp*
 K:	struct\ psp(_assoc|_dev|hdr)\b
 
 PSTORE FILESYSTEM
