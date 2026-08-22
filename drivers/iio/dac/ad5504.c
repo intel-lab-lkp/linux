@@ -5,6 +5,7 @@
  * Copyright 2011 Analog Devices Inc.
  */
 
+#include <linux/acpi.h>
 #include <linux/array_size.h>
 #include <linux/bits.h>
 #include <linux/dev_printk.h>
@@ -12,10 +13,12 @@
 #include <linux/interrupt.h>
 #include <linux/kstrtox.h>
 #include <linux/module.h>
+#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
+#include <linux/units.h>
 
 #include <linux/iio/dac/ad5504.h>
 #include <linux/iio/events.h>
@@ -24,6 +27,10 @@
 
 #include <asm/byteorder.h>
 
+/*
+ * In case of ACPI, we use the 60 V as default voltage reference.
+ */
+#define AD5504_VREF_ACPI_DEFAULT_mV	(60 * MILLI)
 #define AD5504_RES_MASK			GENMASK(11, 0)
 #define AD5504_CMD_READ			BIT(15)
 #define AD5504_CMD_WRITE		0
@@ -285,16 +292,20 @@ static int ad5504_probe(struct spi_device *spi)
 
 	st = iio_priv(indio_dev);
 
-	ret = devm_regulator_get_enable_read_voltage(dev, "vcc");
-	if (ret < 0 && ret != -ENODEV)
-		return ret;
-	if (ret == -ENODEV) {
-		if (pdata->vref_mv)
-			st->vref_mv = pdata->vref_mv;
-		else
-			dev_warn(dev, "reference voltage unspecified\n");
+	if (is_acpi_device_node(dev_fwnode(dev))) {
+		st->vref_mv = AD5504_VREF_ACPI_DEFAULT_mV;
 	} else {
-		st->vref_mv = ret / 1000;
+		ret = devm_regulator_get_enable_read_voltage(dev, "vcc");
+		if (ret < 0 && ret != -ENODEV)
+			return ret;
+		if (ret == -ENODEV) {
+			if (pdata->vref_mv)
+				st->vref_mv = pdata->vref_mv;
+			else
+				dev_warn(dev, "reference voltage unspecified\n");
+		} else {
+			st->vref_mv = ret / 1000;
+		}
 	}
 
 	st->spi = spi;
