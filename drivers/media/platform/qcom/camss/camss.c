@@ -1075,7 +1075,7 @@ static const struct camss_subdev_resources csiphy_res_670[] = {
 		.clock_rate = { { 0 },
 				{ 0 },
 				{ 0 },
-				{ 19200000, 240000000, 269333333 } },
+				{ 19200000, 240000000, 269333333, 400000000 } },
 		.reg = { "csiphy0" },
 		.interrupt = { "csiphy0" },
 		.csiphy = {
@@ -1096,7 +1096,7 @@ static const struct camss_subdev_resources csiphy_res_670[] = {
 		.clock_rate = { { 0 },
 				{ 0 },
 				{ 0 },
-				{ 19200000, 240000000, 269333333 } },
+				{ 19200000, 240000000, 269333333, 400000000 } },
 		.reg = { "csiphy1" },
 		.interrupt = { "csiphy1" },
 		.csiphy = {
@@ -1117,7 +1117,7 @@ static const struct camss_subdev_resources csiphy_res_670[] = {
 		.clock_rate = { { 0 },
 				{ 0 },
 				{ 0 },
-				{ 19200000, 240000000, 269333333 } },
+				{ 19200000, 240000000, 269333333, 400000000 } },
 		.reg = { "csiphy2" },
 		.interrupt = { "csiphy2" },
 		.csiphy = {
@@ -1268,7 +1268,7 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
 				{ 0 },
 				{ 0 },
 				{ 0 },
-				{ 19200000, 240000000, 269333333 } },
+				{ 19200000, 240000000, 269333333, 400000000 } },
 		.reg = { "csiphy0" },
 		.interrupt = { "csiphy0" },
 		.csiphy = {
@@ -1291,7 +1291,7 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
 				{ 0 },
 				{ 0 },
 				{ 0 },
-				{ 19200000, 240000000, 269333333 } },
+				{ 19200000, 240000000, 269333333, 400000000 } },
 		.reg = { "csiphy1" },
 		.interrupt = { "csiphy1" },
 		.csiphy = {
@@ -1314,7 +1314,7 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
 				{ 0 },
 				{ 0 },
 				{ 0 },
-				{ 19200000, 240000000, 269333333 } },
+				{ 19200000, 240000000, 269333333, 400000000 } },
 		.reg = { "csiphy2" },
 		.interrupt = { "csiphy2" },
 		.csiphy = {
@@ -1337,7 +1337,7 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
 				{ 0 },
 				{ 0 },
 				{ 0 },
-				{ 19200000, 240000000, 269333333 } },
+				{ 19200000, 240000000, 269333333, 400000000 } },
 		.reg = { "csiphy3" },
 		.interrupt = { "csiphy3" },
 		.csiphy = {

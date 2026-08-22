@@ -255,6 +255,7 @@ static const struct freq_tbl ftbl_cam_cc_csi0phytimer_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
 	F(240000000, P_CAM_CC_PLL2_OUT_EVEN, 2, 0, 0),
 	F(269333333, P_CAM_CC_PLL1_OUT_EVEN, 3, 0, 0),
+	F(288000000, P_CAM_CC_PLL1_OUT_EVEN, 2, 0, 0),
 	{ }
 };
 
