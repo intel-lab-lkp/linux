@@ -16,7 +16,7 @@ TBSCertList ::= SEQUENCE {
 	nextUpdate		Time OPTIONAL ({ x509_note_not_after }) ,
 	revokedCertificates	SEQUENCE OF RevokedCertificate OPTIONAL,
 	crlExtensions		[ 0 ] Extensions OPTIONAL
-	}
+	} ({ x509_note_tbs_certificate })
 
 RevokedCertificate ::= SEQUENCE {
 	userCertificate		CertificateSerialNumber ({ crl_note_serial }),

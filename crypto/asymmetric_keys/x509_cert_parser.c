@@ -907,14 +907,24 @@ struct x509_crl_context *x509_crl_parse(const void *data, size_t datalen)
 	if (ret < 0)
 		return ERR_PTR(ret);
 
+	/*
+	 * Extract signature parameters (sig->s, sig->digest, etc.)
+	 * This does what we previously tried to do manually.
+	 */
+	ret = x509_get_sig_params(cert);
+	if (ret < 0)
+		return ERR_PTR(ret);
+
 	/* Transfer parsed data to crl_context */
 	INIT_LIST_HEAD(&crl_ctx->revoked_list);
 	crl_ctx->indirect_crl = ctx->indirect_crl;
 	crl_ctx->raw_issuer = cert->raw_issuer;
 	crl_ctx->raw_issuer_size = cert->raw_issuer_size;
+	crl_ctx->sig = cert->sig;
 	list_splice(&ctx->revoked_list, &crl_ctx->revoked_list);
 
 	/* Detach pointers from cert before auto-free */
+	cert->sig = NULL;
 	cert->raw_issuer = NULL;
 	cert->raw_serial = NULL;
 
@@ -930,6 +940,7 @@ void x509_crl_free(struct x509_crl_context *ctx)
 		kfree(entry->serial);
 		kfree(entry);
 	}
+	public_key_signature_free(ctx->sig);
 	kfree(ctx);
 }
 

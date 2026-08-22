@@ -49,9 +49,9 @@ struct x509_certificate {
 struct x509_crl_context {
 	const void *raw_issuer;
 	size_t raw_issuer_size;
+	struct public_key_signature *sig;
 	struct list_head revoked_list;
 	bool indirect_crl;
-	u8 crl_reason;
 };
 
 struct x509_revoked_entry {

@@ -6,6 +6,7 @@
 #include <keys/system_keyring.h>
 #include <linux/slab.h>
 #include <crypto/sha2.h>
+#include <crypto/public_key.h>
 #include "x509_parser.h"
 
 int x509_load_certificate_list(const u8 cert_list[],
@@ -74,7 +75,30 @@ static const void *crl_entry_issuer(const struct x509_crl_context *crl,
 	return crl->raw_issuer;
 }
 
-int x509_load_crl_list(const u8 crl_list[], const unsigned long list_size)
+static int x509_crl_verify_signature(struct x509_crl_context *crl_ctx,
+				     const struct key *keyring)
+{
+	struct key *key;
+	int ret = -ENOKEY;
+
+	if (!crl_ctx->raw_issuer || !crl_ctx->sig)
+		return -ENOKEY;
+
+	key = find_asymmetric_key(keyring,
+				  crl_ctx->sig->auth_ids[0],
+				  crl_ctx->sig->auth_ids[1],
+				  crl_ctx->sig->auth_ids[2],
+				  false);
+	if (IS_ERR(key))
+		return PTR_ERR(key);
+
+	ret = verify_signature(key, crl_ctx->sig);
+	key_put(key);
+	return ret;
+}
+
+int x509_load_crl_list(const u8 crl_list[], const unsigned long list_size,
+		       const struct key *keyring)
 {
 	const u8 *p = crl_list, *end = p + list_size;
 
@@ -105,6 +129,11 @@ int x509_load_crl_list(const u8 crl_list[], const unsigned long list_size)
 		crl_ctx = x509_crl_parse(p, plen);
 		if (IS_ERR(crl_ctx)) {
 			pr_err("Problem parsing CRL (%ld)\n", PTR_ERR(crl_ctx));
+			goto next_crl;
+		}
+		if (keyring && x509_crl_verify_signature(crl_ctx, keyring) < 0) {
+			pr_warn("CRL signature verification failed, skipping\n");
+			x509_crl_free(crl_ctx);
 			goto next_crl;
 		}
 		list_for_each_entry_safe(entry, tmp, &crl_ctx->revoked_list, list) {
