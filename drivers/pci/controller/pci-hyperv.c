@@ -294,6 +294,7 @@ struct tran_int_desc {
 struct hv_msi_int_entry {
 	struct tran_int_desc		int_desc;
 	struct hv_interrupt_entry	hv_entry;
+	unsigned int			mapped_vector;
 };
 
 /* chip_data is passed around as a struct tran_int_desc *, so it must be first. */
@@ -742,6 +743,8 @@ out:
 			"%s() failed: %#llx", __func__, res);
 }
 
+static void hv_compose_msi_msg(struct irq_data *data, struct msi_msg *msg);
+
 static void hv_arch_irq_unmask(struct irq_data *data)
 {
 	if (hv_root_partition()) {
@@ -752,9 +755,17 @@ static void hv_arch_irq_unmask(struct irq_data *data)
 		 * RETARGET_INTERRUPT.
 		 *
 		 * Keep the returned entry so the mapping can be removed again
-		 * when the interrupt is torn down.
+		 * when the interrupt is re-targeted or torn down.
+		 *
+		 * This is also the re-target point.  The core calls us from
+		 * __irq_move_irq() with the interrupt masked once the new
+		 * vector has been assigned, so if the vector changed the vmbus
+		 * interrupt is re-composed for it first -- PCI_CREATE_INTERRUPT
+		 * carries the vector, so the device would otherwise keep
+		 * signalling the one it was created with.
 		 */
 		struct hv_msi_int_entry *ie = data->chip_data;
+		unsigned int vec = hv_msi_get_int_vector(data);
 
 		/*
 		 * A NULL chip_data means hv_compose_msi_msg() failed and the
@@ -763,8 +774,29 @@ static void hv_arch_irq_unmask(struct irq_data *data)
 		if (!ie)
 			return;
 
-		if (hv_map_msi_interrupt(data, &ie->hv_entry))
+		/* Already mapped for this vector, nothing changed. */
+		if (ie->mapped_vector == vec && ie->hv_entry.source)
+			return;
+
+		if (ie->mapped_vector && ie->mapped_vector != vec) {
+			struct msi_msg msg;
+
+			hv_compose_msi_msg(data, &msg);
+
+			ie = data->chip_data;
+			if (!ie)
+				return;
+
+			if (data->chip->irq_write_msi_msg)
+				data->chip->irq_write_msi_msg(data, &msg);
+		}
+
+		if (hv_map_msi_interrupt(data, &ie->hv_entry)) {
 			memset(&ie->hv_entry, 0, sizeof(ie->hv_entry));
+			ie->mapped_vector = 0;
+			return;
+		}
+		ie->mapped_vector = vec;
 	} else {
 		hv_irq_retarget_interrupt(data);
 	}
@@ -1974,6 +2006,11 @@ static void hv_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 	if (data->chip_data && !multi_msi) {
 		int_desc = data->chip_data;
 		data->chip_data = NULL;
+		/*
+		 * The descriptor is about to be destroyed, so release the
+		 * hypervisor mapping that belongs to it first.
+		 */
+		hv_vmbus_unmap_msi_interrupt(pdev, int_desc);
 		hv_int_desc_free(hpdev, int_desc);
 	}
 
