@@ -585,8 +585,14 @@ static int i2c_device_probe(struct device *dev)
 		goto err_clear_wakeup_irq;
 	}
 
-	client->debugfs = debugfs_create_dir(dev_name(&client->dev),
-					     client->adapter->debugfs);
+	struct dentry *parent = READ_ONCE(client->adapter->debugfs);
+
+	if (!parent) {
+		status = -ENODEV;
+		goto err_clear_wakeup_irq;
+	}
+
+	client->debugfs = debugfs_create_dir(dev_name(&client->dev), parent);
 
 	if (driver->probe)
 		status = driver->probe(client);
@@ -607,7 +613,10 @@ static int i2c_device_probe(struct device *dev)
 	return 0;
 
 err_release_driver_resources:
-	debugfs_remove_recursive(client->debugfs);
+	// debugfs_remove_recursive(client->debugfs);
+	struct dentry *dir = xchg(&client->debugfs, NULL);
+
+	debugfs_remove_recursive(dir);
 	devres_release_group(&client->dev, client->devres_group_id);
 err_clear_wakeup_irq:
 	dev_pm_clear_wake_irq(&client->dev);
@@ -631,7 +640,9 @@ static void i2c_device_remove(struct device *dev)
 		driver->remove(client);
 	}
 
-	debugfs_remove_recursive(client->debugfs);
+	struct dentry *dir = xchg(&client->debugfs, NULL);
+
+	debugfs_remove_recursive(dir);
 
 	devres_release_group(&client->dev, client->devres_group_id);
 
@@ -1817,6 +1828,8 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 
 	i2c_acpi_remove_space_handler(adap);
 
+	struct dentry *dir = xchg(&adap->debugfs, NULL);
+
 	i2c_deregister_clients(adap);
 
 	/* device name is gone after device_unregister */
@@ -1826,7 +1839,7 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 
 	i2c_host_notify_irq_teardown(adap);
 
-	debugfs_remove_recursive(adap->debugfs);
+	debugfs_remove_recursive(dir);
 
 	/* wait until all references to the device are gone
 	 *
