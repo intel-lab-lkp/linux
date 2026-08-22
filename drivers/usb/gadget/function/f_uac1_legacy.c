@@ -324,7 +324,8 @@ static int f_audio_out_ep_complete(struct usb_ep *ep, struct usb_request *req)
 	struct usb_composite_dev *cdev = audio->card.func.config->cdev;
 	struct f_audio_buf *copy_buf = audio->copy_buf;
 	struct f_uac1_legacy_opts *opts;
-	int audio_buf_size;
+	unsigned int audio_buf_size;
+	unsigned int cp_len;
 	int err;
 
 	opts = container_of(audio->card.func.fi, struct f_uac1_legacy_opts,
@@ -335,7 +336,7 @@ static int f_audio_out_ep_complete(struct usb_ep *ep, struct usb_request *req)
 		return -EINVAL;
 
 	/* Copy buffer is full, add it to the play_queue */
-	if (audio_buf_size - copy_buf->actual < req->actual) {
+	if (audio_buf_size < copy_buf->actual + req->actual) {
 		spin_lock_irq(&audio->lock);
 		list_add_tail(&copy_buf->list, &audio->play_queue);
 		spin_unlock_irq(&audio->lock);
@@ -345,8 +346,10 @@ static int f_audio_out_ep_complete(struct usb_ep *ep, struct usb_request *req)
 			return -ENOMEM;
 	}
 
-	memcpy(copy_buf->buf + copy_buf->actual, req->buf, req->actual);
-	copy_buf->actual += req->actual;
+	/* Clamp the copy to the space left; req->actual may exceed it */
+	cp_len = min(req->actual, audio_buf_size - copy_buf->actual);
+	memcpy(copy_buf->buf + copy_buf->actual, req->buf, cp_len);
+	copy_buf->actual += cp_len;
 	audio->copy_buf = copy_buf;
 
 	err = usb_ep_queue(ep, req, GFP_ATOMIC);
