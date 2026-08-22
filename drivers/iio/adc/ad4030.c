@@ -751,8 +751,10 @@ static int ad4030_set_avg_frame_len(struct iio_dev *dev, int avg_val)
 	int freq_hz;
 	int ret;
 
-	if (avg_val < 0 || avg_val > ad4030_average_modes[last_avg_idx])
+	if (avg_val <= 0 || avg_val > ad4030_average_modes[last_avg_idx] || !is_power_of_2(avg_val))
 		return -EINVAL;
+
+	avg_log2 = ilog2(avg_val);
 
 	if (st->offload_trigger) {
 		/*
