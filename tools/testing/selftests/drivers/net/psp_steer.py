@@ -10,16 +10,34 @@ import socket
 from lib.py import defer
 from lib.py import ksft_run, ksft_exit
 from lib.py import ksft_eq, ksft_ge, ksft_in, ksft_ne, ksft_raises
-from lib.py import KsftSkipEx
+from lib.py import CmdExitFailure, KsftSkipEx
 from lib.py import NetDrvEpEnv
 from lib.py import NetdevFamily, NlError, PSPFamily
+from lib.py import ethtool
 
-from psp_lib import close_conn, init_psp_dev, make_psp_conn, psp_txrx, \
-    remote_conn_steer, remote_dev_steer, spi_xchg
+from psp_lib import close_conn, init_psp_dev, make_clr_conn, make_psp_conn, \
+    psp_txrx, remote_conn_steer, remote_dev_steer, spi_xchg
 from psp_lib import responder as psp_responder
 
 # Not exposed by the socket module
 _SO_INCOMING_NAPI_ID = 56
+
+
+# Mirrors the helpers of the same name in hw/rss_ctx.py, which lives in a
+# directory this test cannot import from.
+def ethtool_create(cfg, act, opts):
+    output = ethtool(f"{act} {cfg.ifname} {opts}").stdout
+    # "New RSS context is 1" / "Added rule with ID 7", we want the integer
+    return int(output.split()[-1])
+
+
+def require_ntuple(cfg):
+    features = ethtool(f"-k {cfg.ifname}", json=True)[0]
+    if not features["ntuple-filters"]["active"]:
+        if features["ntuple-filters"]["fixed"]:
+            raise KsftSkipEx("Device does not support ntuple-filters")
+        ethtool(f"-K {cfg.ifname} ntuple-filters on")
+        defer(ethtool, f"-K {cfg.ifname} ntuple-filters off")
 
 _VC_TX = 1 << 0
 _VC_RX = 1 << 1
@@ -92,6 +110,14 @@ def _psp_conn(cfg):
     return s
 
 
+def _rx_queue(cfg, s):
+    """Rx queue the socket's last packet arrived on"""
+    napi_id = s.getsockopt(socket.SOL_SOCKET, _SO_INCOMING_NAPI_ID)
+    ksft_ne(napi_id, 0, comment="socket saw no traffic?")
+    ksft_in(napi_id, cfg.napi2queue, comment="unknown NAPI id")
+    return cfg.napi2queue[napi_id]
+
+
 def _settled_rx_queue(cfg, s, sent):
     """Run traffic until the peer picked our request up, report the queue
 
@@ -101,10 +127,52 @@ def _settled_rx_queue(cfg, s, sent):
     sent = psp_txrx(cfg, s, 1, sent)
     sent = psp_txrx(cfg, s, 1, sent)
 
-    napi_id = s.getsockopt(socket.SOL_SOCKET, _SO_INCOMING_NAPI_ID)
-    ksft_ne(napi_id, 0, comment="socket saw no traffic?")
-    ksft_in(napi_id, cfg.napi2queue, comment="unknown NAPI id")
-    return cfg.napi2queue[napi_id], sent
+    return _rx_queue(cfg, s), sent
+
+
+def _rss_pin(cfg, qid, context=None):
+    """Point an RSS indirection table at a single queue"""
+    ctx = f"context {context} " if context is not None else ""
+    weights = " ".join("1" if i == qid else "0"
+                       for i in range(cfg.rx_queue_cnt))
+    ethtool(f"-X {cfg.ifname} {ctx}weight {weights}")
+
+
+def _require_rss_steering(cfg):
+    """Skip unless the Rx queue actually follows the RSS table
+
+    Steering can only be shown to outrank RSS on a device where RSS has
+    a say in the first place - netdevsim, for one, ignores the table.
+    """
+    probe = cfg.rx_queue_cnt - 1
+
+    try:
+        _rss_pin(cfg, probe)
+    except CmdExitFailure as exc:
+        raise KsftSkipEx("Device does not support RSS table updates") from exc
+    defer(ethtool, f"-X {cfg.ifname} default")
+
+    with make_clr_conn(cfg) as s:
+        psp_txrx(cfg, s, 1)
+        landed = _rx_queue(cfg, s)
+        close_conn(cfg, s)
+
+    if landed != probe:
+        raise KsftSkipEx("Rx queue does not follow the RSS table")
+
+
+def _ntuple_l3_rule(cfg, target):
+    """Steer this host's traffic with an L3 only rule, and clean it up
+
+    L3 only on purpose: whether the classifier sees the inner TCP ports
+    of a PSP packet or just the outer UDP encapsulation is up to the
+    device, the addresses are there either way.
+    """
+    flow = (f"flow-type ip{cfg.addr_ipver} "
+            f"src-ip {cfg.remote_addr} dst-ip {cfg.addr} {target}")
+    rule = ethtool_create(cfg, "-N", flow)
+    defer(ethtool, f"-N {cfg.ifname} delete {rule}")
+    return rule
 
 
 #
@@ -218,6 +286,95 @@ def data_steer_one_sided(cfg):
     with _psp_conn(cfg) as s:
         qid, _ = _settled_rx_queue(cfg, s, 0)
         ksft_eq(qid, 1)
+        close_conn(cfg, s)
+
+
+def data_steer_no_grant(cfg):
+    """ We ask and nobody grants: nothing is steered """
+    _require_steer(cfg)
+    _require_queues(cfg, 3)
+    _require_rss_steering(cfg)
+    _enable_steer(cfg, local=_VC_RX, remote=0)
+
+    # RSS says 2, we would be asking for 1 if anyone were listening
+    _rss_pin(cfg, 2)
+    defer(_force_tx_queue, cfg, -1)
+    _force_tx_queue(cfg, 1)
+
+    with _psp_conn(cfg) as s:
+        qid, _ = _settled_rx_queue(cfg, s, 0)
+        ksft_eq(qid, 2, comment="steered without the peer granting anything")
+        close_conn(cfg, s)
+
+
+def data_steer_beats_rss(cfg):
+    """ Steering has to win over the RSS table """
+    _require_steer(cfg)
+    _require_queues(cfg, 3)
+    _enable_steer(cfg)
+    _require_rss_steering(cfg)
+
+    # RSS says 2, steering is going to ask for 1
+    _rss_pin(cfg, 2)
+    defer(_force_tx_queue, cfg, -1)
+    _force_tx_queue(cfg, 1)
+
+    with _psp_conn(cfg) as s:
+        qid, _ = _settled_rx_queue(cfg, s, 0)
+        ksft_eq(qid, 1)
+        close_conn(cfg, s)
+
+
+def data_steer_beats_rss_ctx(cfg):
+    """ Steering has to win over an additional RSS context as well """
+    _require_steer(cfg)
+    _require_queues(cfg, 3)
+    _enable_steer(cfg)
+    _require_rss_steering(cfg)
+    require_ntuple(cfg)
+
+    # Three distinct answers: default RSS says 0, the context says 2,
+    # and steering is going to ask for 1.
+    _rss_pin(cfg, 0)
+    ctx = ethtool_create(cfg, "-X", "context new")
+    defer(ethtool, f"-X {cfg.ifname} context {ctx} delete")
+    _rss_pin(cfg, 2, context=ctx)
+    _ntuple_l3_rule(cfg, f"context {ctx}")
+
+    # Without a cookie the context has to be the one deciding, otherwise
+    # the check below would pass without steering doing anything.
+    with make_clr_conn(cfg) as s:
+        psp_txrx(cfg, s, 1)
+        ksft_eq(_rx_queue(cfg, s), 2, comment="RSS context not in use")
+        close_conn(cfg, s)
+
+    defer(_force_tx_queue, cfg, -1)
+    _force_tx_queue(cfg, 1)
+
+    with _psp_conn(cfg) as s:
+        qid, _ = _settled_rx_queue(cfg, s, 0)
+        ksft_eq(qid, 1, comment="steering did not escape the RSS context")
+        close_conn(cfg, s)
+
+
+def data_ntuple_beats_steer(cfg):
+    """ An ntuple rule naming a queue outranks steering """
+    _require_steer(cfg)
+    _require_queues(cfg, 3)
+    _enable_steer(cfg)
+    _require_rss_steering(cfg)
+    require_ntuple(cfg)
+
+    # RSS says 0, the rule says 2, steering is going to ask for 1
+    _rss_pin(cfg, 0)
+    _ntuple_l3_rule(cfg, "action 2")
+
+    defer(_force_tx_queue, cfg, -1)
+    _force_tx_queue(cfg, 1)
+
+    with _psp_conn(cfg) as s:
+        qid, _ = _settled_rx_queue(cfg, s, 0)
+        ksft_eq(qid, 2, comment="steering overrode an explicit ntuple rule")
         close_conn(cfg, s)
 
 
