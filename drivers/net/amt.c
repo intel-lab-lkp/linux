@@ -1348,6 +1348,11 @@ static void amt_tunnel_expire(struct work_struct *work)
 	struct amt_dev *amt = tunnel->amt;
 
 	spin_lock_bh(&amt->lock);
+	/* amt_dev_stop() marks tunnels it owns with list_del_init(). */
+	if (list_empty(&tunnel->list)) {
+		spin_unlock_bh(&amt->lock);
+		return;
+	}
 	rcu_read_lock();
 	list_del_rcu(&tunnel->list);
 	amt->nr_tunnels--;
@@ -3068,7 +3073,7 @@ static int amt_dev_open(struct net_device *dev)
 static int amt_dev_stop(struct net_device *dev)
 {
 	struct amt_dev *amt = netdev_priv(dev);
-	struct amt_tunnel_list *tunnel, *tmp;
+	struct amt_tunnel_list *tunnel;
 	struct sk_buff *skb;
 	struct sock *sk;
 	int i;
@@ -3077,9 +3082,11 @@ static int amt_dev_stop(struct net_device *dev)
 	disable_delayed_work_sync(&amt->discovery_wq);
 	cancel_delayed_work_sync(&amt->secret_wq);
 
-	/* shutdown */
+	/* Quiesce RX path before tearing down tunnels. */
 	sk = rtnl_dereference(amt->sk);
 	RCU_INIT_POINTER(amt->sk, NULL);
+	if (sk)
+		rcu_assign_sk_user_data(sk, NULL);
 	synchronize_net();
 	if (sk)
 		udp_tunnel_sock_release(sk);
@@ -3097,13 +3104,21 @@ static int amt_dev_stop(struct net_device *dev)
 	amt->req_cnt = 0;
 	WRITE_ONCE(amt->remote_ip, 0);
 
-	list_for_each_entry_safe(tunnel, tmp, &amt->tunnel_list, list) {
-		list_del_rcu(&tunnel->list);
+	spin_lock_bh(&amt->lock);
+	while (!list_empty(&amt->tunnel_list)) {
+		tunnel = list_first_entry(&amt->tunnel_list,
+					  struct amt_tunnel_list, list);
+		list_del_init(&tunnel->list);
 		amt->nr_tunnels--;
-		cancel_delayed_work_sync(&tunnel->gc_wq);
+		spin_unlock_bh(&amt->lock);
+
+		disable_delayed_work_sync(&tunnel->gc_wq);
 		amt_clear_groups(tunnel);
 		kfree_rcu(tunnel, rcu);
+
+		spin_lock_bh(&amt->lock);
 	}
+	spin_unlock_bh(&amt->lock);
 
 	return 0;
 }
