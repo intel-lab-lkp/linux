@@ -80,6 +80,7 @@
 #define RV3028_EEBUSY_TIMEOUT		100000
 
 #define RV3028_BACKUP_TCE		BIT(5)
+#define RV3028_BACKUP_FEDE		BIT(4)
 #define RV3028_BACKUP_TCR_MASK		GENMASK(1,0)
 #define RV3028_BACKUP_BSM		GENMASK(3,2)
 
@@ -519,70 +520,6 @@ exit_eerd:
 
 }
 
-static int rv3028_param_get(struct device *dev, struct rtc_param *param)
-{
-	struct rv3028_data *rv3028 = dev_get_drvdata(dev);
-	int ret;
-	u32 value;
-
-	switch(param->param) {
-	case RTC_PARAM_BACKUP_SWITCH_MODE:
-		ret = regmap_read(rv3028->regmap, RV3028_BACKUP, &value);
-		if (ret < 0)
-			return ret;
-
-		value = FIELD_GET(RV3028_BACKUP_BSM, value);
-
-		switch(value) {
-		case RV3028_BACKUP_BSM_DSM:
-			param->uvalue = RTC_BSM_DIRECT;
-			break;
-		case RV3028_BACKUP_BSM_LSM:
-			param->uvalue = RTC_BSM_LEVEL;
-			break;
-		default:
-			param->uvalue = RTC_BSM_DISABLED;
-		}
-		break;
-
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
-static int rv3028_param_set(struct device *dev, struct rtc_param *param)
-{
-	struct rv3028_data *rv3028 = dev_get_drvdata(dev);
-	u8 mode;
-
-	switch(param->param) {
-	case RTC_PARAM_BACKUP_SWITCH_MODE:
-		switch (param->uvalue) {
-		case RTC_BSM_DISABLED:
-			mode = 0;
-			break;
-		case RTC_BSM_DIRECT:
-			mode = RV3028_BACKUP_BSM_DSM;
-			break;
-		case RTC_BSM_LEVEL:
-			mode = RV3028_BACKUP_BSM_LSM;
-			break;
-		default:
-			return -EINVAL;
-		}
-
-		return rv3028_update_cfg(rv3028, RV3028_BACKUP, RV3028_BACKUP_BSM,
-					 FIELD_PREP(RV3028_BACKUP_BSM, mode));
-
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 static int rv3028_ioctl(struct device *dev, unsigned int cmd, unsigned long arg)
 {
 	struct rv3028_data *rv3028 = dev_get_drvdata(dev);
@@ -852,8 +789,6 @@ static const struct rtc_class_ops rv3028_rtc_ops = {
 	.read_offset = rv3028_read_offset,
 	.set_offset = rv3028_set_offset,
 	.ioctl = rv3028_ioctl,
-	.param_get = rv3028_param_get,
-	.param_set = rv3028_param_set,
 };
 
 static const struct regmap_config regmap_config = {
@@ -918,6 +853,65 @@ static u8 rv3028_set_trickle_charger(struct rv3028_data *rv3028,
 	}
 
 	return ret;
+}
+
+/*
+ * Configure backup switchover mode from device tree.
+ *   0 = disabled
+ *   1 = DSM (Direct Switching Mode)  - switch when VDD < VBACKUP
+ *   3 = LSM (Level Switching Mode)   - switch when VDD < 2.0V
+ */
+static int rv3028_set_bsm_from_dt(struct rv3028_data *rv3028,
+				  struct i2c_client *client)
+{
+	u32 val_old, bsm_dt, bsm_bits;
+	int ret;
+
+	if (device_property_read_u32(&client->dev, "backup-switch-mode",
+				     &bsm_dt))
+		return 0;
+
+	/* Validate and convert DT value to register bits */
+	switch (bsm_dt) {
+	case 0:
+		bsm_bits = 0;
+		break;
+	case 1:
+		bsm_bits = FIELD_PREP(RV3028_BACKUP_BSM, RV3028_BACKUP_BSM_DSM);
+		break;
+	case 3:
+		bsm_bits = FIELD_PREP(RV3028_BACKUP_BSM, RV3028_BACKUP_BSM_LSM);
+		break;
+	default:
+		dev_warn(&client->dev,
+			 "invalid backup-switch-mode %u (use 0, 1, or 3)\n",
+			 bsm_dt);
+		return 0;
+	}
+
+	/* Read current BACKUP register */
+	ret = regmap_read(rv3028->regmap, RV3028_BACKUP, &val_old);
+	if (ret < 0)
+		return ret;
+
+	/* Check if BSM and FEDE already match desired values */
+	if ((val_old & (RV3028_BACKUP_BSM | RV3028_BACKUP_FEDE)) ==
+	    (bsm_bits | RV3028_BACKUP_FEDE)) {
+		dev_dbg(&client->dev,
+			"backup switch mode already set to %u\n", bsm_dt);
+		return 0;
+	}
+
+	dev_info(&client->dev,
+		 "setting backup switch mode to %u (reg 0x37: 0x%02x -> 0x%02x)\n",
+		 bsm_dt, val_old,
+		 (val_old & ~(RV3028_BACKUP_BSM | RV3028_BACKUP_FEDE)) |
+		 bsm_bits | RV3028_BACKUP_FEDE);
+
+	/* Set BSM and always enable FEDE as recommended by datasheet */
+	return rv3028_update_cfg(rv3028, RV3028_BACKUP,
+				 RV3028_BACKUP_BSM | RV3028_BACKUP_FEDE,
+				 bsm_bits | RV3028_BACKUP_FEDE);
 }
 
 static int rv3028_probe(struct i2c_client *client)
@@ -1005,11 +999,14 @@ static int rv3028_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
-	ret = rtc_add_group(rv3028->rtc, &rv3028_attr_group);
+	/* Configure backup switchover mode from device tree */
+	ret = rv3028_set_bsm_from_dt(rv3028, client);
 	if (ret)
 		return ret;
 
-	set_bit(RTC_FEATURE_BACKUP_SWITCH_MODE, rv3028->rtc->features);
+	ret = rtc_add_group(rv3028->rtc, &rv3028_attr_group);
+	if (ret)
+		return ret;
 
 	rv3028->rtc->range_min = RTC_TIMESTAMP_BEGIN_2000;
 	rv3028->rtc->range_max = RTC_TIMESTAMP_END_2099;
