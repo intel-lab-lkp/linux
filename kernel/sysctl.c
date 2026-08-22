@@ -350,12 +350,9 @@ static void proc_put_long(void **buf, size_t *size, unsigned long val, bool neg)
 static void proc_put_char(void **buf, size_t *size, char c)
 {
 	if (*size) {
-		char **buffer = (char **)buf;
-		**buffer = c;
-
+		*(char *)*buf = c;
 		(*size)--;
-		(*buffer)++;
-		*buf = *buffer;
+		(*buf)++;
 	}
 }
 
