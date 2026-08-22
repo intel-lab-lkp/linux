@@ -284,6 +284,35 @@ struct tran_int_desc {
 } __packed;
 
 /*
+ * On a nested root partition a vPCI MSI is mapped in the hypervisor with a
+ * MAP_DEVICE_INTERRUPT hypercall in hv_arch_irq_unmask().  Keep the entry the
+ * hypervisor returns next to the per-interrupt transaction descriptor so the
+ * mapping can be removed again with UNMAP_DEVICE_INTERRUPT when the interrupt
+ * is torn down.  tran_int_desc stays first: chip_data is used as a struct
+ * tran_int_desc throughout this driver.
+ */
+struct hv_msi_int_entry {
+	struct tran_int_desc		int_desc;
+	struct hv_interrupt_entry	hv_entry;
+};
+
+/* chip_data is passed around as a struct tran_int_desc *, so it must be first. */
+static_assert(offsetof(struct hv_msi_int_entry, int_desc) == 0);
+
+static void hv_vmbus_unmap_msi_interrupt(struct pci_dev *pdev __maybe_unused,
+					 void *chip_data)
+{
+	struct hv_msi_int_entry *ie = chip_data;
+
+	if (!ie || !ie->hv_entry.source)
+		return;
+#ifdef CONFIG_X86
+	hv_unmap_msi_interrupt(pdev, &ie->hv_entry);
+#endif
+	memset(&ie->hv_entry, 0, sizeof(ie->hv_entry));
+}
+
+/*
  * A generic message format for virtual PCI.
  * Specific message formats are defined later in the file.
  */
@@ -715,16 +744,30 @@ out:
 
 static void hv_arch_irq_unmask(struct irq_data *data)
 {
-	if (hv_root_partition())
+	if (hv_root_partition()) {
 		/*
 		 * In case of the nested root partition, the nested hypervisor
 		 * is taking care of interrupt remapping and thus the
 		 * MAP_DEVICE_INTERRUPT hypercall is required instead of
 		 * RETARGET_INTERRUPT.
+		 *
+		 * Keep the returned entry so the mapping can be removed again
+		 * when the interrupt is torn down.
 		 */
-		(void)hv_map_msi_interrupt(data, NULL);
-	else
+		struct hv_msi_int_entry *ie = data->chip_data;
+
+		/*
+		 * A NULL chip_data means hv_compose_msi_msg() failed and the
+		 * interrupt was never set up, so there is nothing to map.
+		 */
+		if (!ie)
+			return;
+
+		if (hv_map_msi_interrupt(data, &ie->hv_entry))
+			memset(&ie->hv_entry, 0, sizeof(ie->hv_entry));
+	} else {
 		hv_irq_retarget_interrupt(data);
+	}
 }
 #elif defined(CONFIG_ARM64)
 /*
@@ -1708,6 +1751,7 @@ static void hv_msi_free(struct irq_domain *domain, unsigned int irq)
 		return;
 	}
 
+	hv_vmbus_unmap_msi_interrupt(pdev, int_desc);
 	hv_int_desc_free(hpdev, int_desc);
 	put_pcichild(hpdev);
 }
@@ -1882,6 +1926,7 @@ static void hv_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 	const struct cpumask *dest;
 	struct compose_comp_ctxt comp;
 	struct tran_int_desc *int_desc;
+	struct hv_msi_int_entry *int_entry;
 	struct msi_desc *msi_desc;
 	/*
 	 * vector_count should be u16: see hv_msi_desc, hv_msi_desc2
@@ -1932,9 +1977,10 @@ static void hv_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 		hv_int_desc_free(hpdev, int_desc);
 	}
 
-	int_desc = kzalloc_obj(*int_desc, GFP_ATOMIC);
-	if (!int_desc)
+	int_entry = kzalloc_obj(*int_entry, GFP_ATOMIC);
+	if (!int_entry)
 		goto drop_reference;
+	int_desc = &int_entry->int_desc;
 
 	if (multi_msi) {
 		/*
@@ -2184,9 +2230,34 @@ static void hv_pcie_domain_free(struct irq_domain *d, unsigned int virq, unsigne
 	irq_domain_free_irqs_top(d, virq, nr_irqs);
 }
 
+/*
+ * Runs from irq_domain_deactivate_irq() during irq_shutdown(), before the
+ * parent (x86 vector) domain is deactivated and the (cpu, vector) is returned
+ * to the matrix allocator, so a freed vector can never collide with a stale
+ * hypervisor entry when it is reused.
+ */
+static void hv_pcie_domain_deactivate(struct irq_domain *d,
+				      struct irq_data *data)
+{
+	struct msi_desc *msi_desc;
+	struct pci_dev *pdev;
+
+	if (!hv_root_partition())
+		return;
+
+	msi_desc = irq_data_get_msi_desc(data);
+	if (!msi_desc)
+		return;
+
+	pdev = msi_desc_to_pci_dev(msi_desc);
+	if (pdev)
+		hv_vmbus_unmap_msi_interrupt(pdev, data->chip_data);
+}
+
 static const struct irq_domain_ops hv_pcie_domain_ops = {
-	.alloc	= hv_pcie_domain_alloc,
-	.free	= hv_pcie_domain_free,
+	.alloc		= hv_pcie_domain_alloc,
+	.free		= hv_pcie_domain_free,
+	.deactivate	= hv_pcie_domain_deactivate,
 };
 
 /**
