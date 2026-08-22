@@ -1431,27 +1431,19 @@ static int generic_ocp_read(struct r8152 *tp, u16 index, u16 size,
 	if ((u32)index + (u32)size > 0xffff)
 		return -EPERM;
 
-	while (size) {
-		if (size > limit) {
-			ret = get_registers(tp, index, type, limit, data);
-			if (ret < 0)
-				break;
+	while (size > limit) {
+		ret = get_registers(tp, index, type, limit, data);
+		if (ret < 0)
+			goto error1;
 
-			index += limit;
-			data += limit;
-			size -= limit;
-		} else {
-			ret = get_registers(tp, index, type, size, data);
-			if (ret < 0)
-				break;
-
-			index += size;
-			data += size;
-			size = 0;
-			break;
-		}
+		index += limit;
+		data += limit;
+		size -= limit;
 	}
 
+	ret = get_registers(tp, index, type, size, data);
+
+error1:
 	if (ret == -ENODEV)
 		rtl_set_unplug(tp);
 
@@ -1498,30 +1490,23 @@ static int generic_ocp_write(struct r8152 *tp, u16 index, u16 byteen,
 		if (byen != BYTE_EN_DWORD)
 			size -= 4;
 
-		while (size) {
-			if (size > limit) {
-				ret = set_registers(tp, index,
-						    type | BYTE_EN_DWORD,
-						    limit, data);
-				if (ret < 0)
-					goto error1;
+		while (size > limit) {
+			ret = set_registers(tp, index, type | BYTE_EN_DWORD,
+					    limit, data);
+			if (ret < 0)
+				goto error1;
 
-				index += limit;
-				data += limit;
-				size -= limit;
-			} else {
-				ret = set_registers(tp, index,
-						    type | BYTE_EN_DWORD,
-						    size, data);
-				if (ret < 0)
-					goto error1;
-
-				index += size;
-				data += size;
-				size = 0;
-				break;
-			}
+			index += limit;
+			data += limit;
+			size -= limit;
 		}
+
+		ret = set_registers(tp, index, type | BYTE_EN_DWORD, size, data);
+		if (ret < 0)
+			goto error1;
+
+		index += size;
+		data += size;
 
 		/* Set the last DWORD */
 		if (byen != BYTE_EN_DWORD)
