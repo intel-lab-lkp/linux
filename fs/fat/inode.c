@@ -847,9 +847,13 @@ int fat_reconfigure(struct fs_context *fc)
 	bool new_rdonly;
 	struct super_block *sb = fc->root->d_sb;
 	struct msdos_sb_info *sbi = MSDOS_SB(sb);
+	struct fat_mount_options *new_opts = fc->fs_private;
 	fc->sb_flags |= SB_NODIRATIME | (sbi->options.isvfat ? 0 : SB_NOATIME);
 
 	sync_filesystem(sb);
+
+	/* allow reconfiguring "flush" or "noflush" */
+	sbi->options.flush = new_opts->flush;
 
 	/* make sure we update state on remount. */
 	new_rdonly = fc->sb_flags & SB_RDONLY;
@@ -1076,7 +1080,7 @@ enum {
 	Opt_charset, Opt_shortname, Opt_utf8, Opt_utf8_bool,
 	Opt_uni_xl, Opt_uni_xl_bool, Opt_nonumtail, Opt_nonumtail_bool,
 	Opt_obsolete, Opt_flush, Opt_tz, Opt_rodir, Opt_errors, Opt_discard,
-	Opt_nfs, Opt_nfs_enum, Opt_time_offset, Opt_dos1xfloppy,
+	Opt_nfs, Opt_nfs_enum, Opt_time_offset, Opt_dos1xfloppy, Opt_noflush
 };
 
 static const struct constant_table fat_param_check[] = {
@@ -1139,6 +1143,7 @@ const struct fs_parameter_spec fat_param_spec[] = {
 	fsparam_flag	("debug",	Opt_debug),
 	fsparam_flag	("sys_immutable", Opt_immutable),
 	fsparam_flag	("flush",	Opt_flush),
+	fsparam_flag	("noflush",	Opt_noflush),
 	fsparam_enum	("tz",		Opt_tz, fat_param_tz),
 	fsparam_s32	("time_offset",	Opt_time_offset),
 	fsparam_enum	("errors",	Opt_errors, fat_param_errors),
@@ -1196,10 +1201,6 @@ int fat_parse_param(struct fs_context *fc, struct fs_parameter *param,
 	struct fs_parse_result result;
 	int opt;
 
-	/* remount options have traditionally been ignored */
-	if (fc->purpose == FS_CONTEXT_FOR_RECONFIGURE)
-		return 0;
-
 	opt = fs_parse(fc, fat_param_spec, param, &result);
 	/* If option not found in fat_param_spec, try vfat/msdos options */
 	if (opt == -ENOPARAM) {
@@ -1211,6 +1212,18 @@ int fat_parse_param(struct fs_context *fc, struct fs_parameter *param,
 
 	if (opt < 0)
 		return opt;
+
+	/* remount options have traditionally been ignored */
+	if (fc->purpose == FS_CONTEXT_FOR_RECONFIGURE) {
+		switch (opt) {
+		/* but there are exceptions */
+		case Opt_flush:
+		case Opt_noflush:
+			break;
+		default:
+			return 0;
+		}
+	}
 
 	switch (opt) {
 	case Opt_check:
@@ -1263,6 +1276,9 @@ int fat_parse_param(struct fs_context *fc, struct fs_parameter *param,
 		break;
 	case Opt_flush:
 		opts->flush = 1;
+		break;
+	case Opt_noflush:
+		opts->flush = 0;
 		break;
 	case Opt_time_offset:
 		/*
