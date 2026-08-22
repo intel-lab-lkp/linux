@@ -1,0 +1,59 @@
+--
+-- X.509 CRL (RFC 5280, section 5.1)
+--
+
+CertificateList ::= SEQUENCE {
+	tbsCertList		TBSCertList,
+	signatureAlgorithm	AlgorithmIdentifier,
+	signature		BIT STRING ({ x509_note_signature })
+	}
+
+TBSCertList ::= SEQUENCE {
+	version			Version OPTIONAL,
+	signature		AlgorithmIdentifier ({ x509_note_sig_algo }),
+	issuer			Name ({ x509_note_issuer }),
+	thisUpdate		Time ({ x509_note_not_before }),
+	nextUpdate		Time OPTIONAL ({ x509_note_not_after }) ,
+	revokedCertificates	SEQUENCE OF RevokedCertificate OPTIONAL,
+	crlExtensions		[ 0 ] Extensions OPTIONAL
+	}
+
+RevokedCertificate ::= SEQUENCE {
+	userCertificate		CertificateSerialNumber ({ crl_note_serial }),
+	revocationDate		Time,
+	crlEntryExtensions	Extensions OPTIONAL
+	}
+
+--
+-- Primitives and common types
+--
+
+Version ::= INTEGER
+CertificateSerialNumber ::= INTEGER
+
+AlgorithmIdentifier ::= SEQUENCE {
+	algorithm		OBJECT IDENTIFIER ({ x509_note_OID }),
+	parameters		ANY OPTIONAL ({ x509_note_params })
+}
+
+Name ::= SEQUENCE OF RelativeDistinguishedName
+
+RelativeDistinguishedName ::= SET OF AttributeValueAssertion
+
+AttributeValueAssertion ::= SEQUENCE {
+	attributeType		OBJECT IDENTIFIER ({ x509_note_OID }),
+	attributeValue		ANY ({ x509_extract_name_segment })
+}
+
+Time ::= CHOICE {
+	utcTime			UTCTime,
+	generalTime		GeneralizedTime
+}
+
+Extensions ::= SEQUENCE OF Extension
+
+Extension ::= SEQUENCE {
+	extnid			OBJECT IDENTIFIER ({ x509_note_OID }),
+	critical		BOOLEAN DEFAULT,
+	extnValue		OCTET STRING ({ x509_process_extension })
+	}

@@ -46,6 +46,22 @@ struct x509_certificate {
 /*
  * x509_cert_parser.c
  */
+struct x509_crl_context {
+	const void *raw_issuer;
+	size_t raw_issuer_size;
+	struct list_head revoked_list;
+	bool indirect_crl;
+	u8 crl_reason;
+};
+
+struct x509_revoked_entry {
+	struct list_head list;
+	u8 *serial;
+	size_t serial_size;
+	const void *raw_issuer;      /* for indirect */
+	size_t raw_issuer_size;
+};
+
 extern void x509_free_certificate(struct x509_certificate *cert);
 DEFINE_FREE(x509_free_certificate, struct x509_certificate *,
 	    if (!IS_ERR(_T)) x509_free_certificate(_T))
@@ -53,6 +69,8 @@ extern struct x509_certificate *x509_cert_parse(const void *data, size_t datalen
 extern int x509_decode_time(time64_t *_t,  size_t hdrlen,
 			    unsigned char tag,
 			    const unsigned char *value, size_t vlen);
+struct x509_crl_context *x509_crl_parse(const void *data, size_t datalen);
+void x509_crl_free(struct x509_crl_context *ctx);
 
 /*
  * x509_public_key.c

@@ -150,6 +150,10 @@ enum OID {
 	OID_id_ml_dsa_65,			/* 2.16.840.1.101.3.4.3.18 */
 	OID_id_ml_dsa_87,			/* 2.16.840.1.101.3.4.3.19 */
 
+	OID_id_ce_issuingDistributionPoint,	/* 2.5.29.28 */
+	OID_id_ce_certificateIssuer,		/* 2.5.29.29 */
+	OID_id_ce_cRLReason,			/* 2.5.29.21 */
+
 	OID__NR
 };
 

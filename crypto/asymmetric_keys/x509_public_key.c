@@ -15,6 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <crypto/sha2.h>
 #include "asymmetric_keys.h"
 #include "x509_parser.h"
 
@@ -89,6 +90,26 @@ int x509_get_sig_params(struct x509_certificate *cert)
 	ret = crypto_shash_digest(desc, cert->tbs, cert->tbs_size, sig->m);
 	if (ret < 0)
 		goto error_2;
+
+	/* Check CRL blacklist (hash of serial + issuer) */
+	if (!cert->blacklisted && cert->raw_serial && cert->raw_issuer) {
+		struct asymmetric_key_id *kid;
+
+		kid = asymmetric_key_generate_id(cert->raw_serial, cert->raw_serial_size,
+						 cert->raw_issuer, cert->raw_issuer_size);
+		if (!IS_ERR(kid)) {
+			u8 digest[SHA256_DIGEST_SIZE];
+
+			sha256(kid->data, kid->len, digest);
+			ret = is_hash_blacklisted(digest, SHA256_DIGEST_SIZE,
+						  BLACKLIST_HASH_X509_CRL);
+			if (ret == -EKEYREJECTED) {
+				pr_err("Cert is CRL-blacklisted\n");
+				cert->blacklisted = true;
+			}
+			kfree(kid);
+		}
+	}
 
 error_2:
 	kfree(desc);

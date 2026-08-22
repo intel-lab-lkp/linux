@@ -15,6 +15,8 @@ enum blacklist_hash_type {
 	BLACKLIST_HASH_X509_TBS = 1,
 	/* Raw data hash */
 	BLACKLIST_HASH_BINARY = 2,
+	/* Hash = serial + issuer */
+	BLACKLIST_HASH_X509_CRL = 3,
 };
 
 #ifdef CONFIG_SYSTEM_TRUSTED_KEYRING

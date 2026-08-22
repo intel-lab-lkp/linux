@@ -1,0 +1,12 @@
+--
+-- Issuing Distribution Point (RFC 5280, section 5.2.5)
+--
+
+IssuingDistributionPoint ::= SEQUENCE {
+	distributionPoint	[0] ANY OPTIONAL,
+	onlyContainsUserCerts	[1] IMPLICIT BOOLEAN OPTIONAL,
+	onlyContainsCACerts	[2] IMPLICIT BOOLEAN OPTIONAL,
+	onlySomeReasons		[3] IMPLICIT BIT STRING OPTIONAL,
+	indirectCRL		[4] IMPLICIT BOOLEAN OPTIONAL ({ x509_note_indirect_crl }),
+	onlyContainsAttributeCerts [5] IMPLICIT BOOLEAN OPTIONAL
+	}

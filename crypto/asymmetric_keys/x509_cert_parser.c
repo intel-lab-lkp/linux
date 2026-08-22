@@ -15,6 +15,8 @@
 #include "x509_parser.h"
 #include "x509.asn1.h"
 #include "x509_akid.asn1.h"
+#include "x509_crl.asn1.h"
+#include "x509_idp.asn1.h"
 
 struct x509_parse_context {
 	struct x509_certificate	*cert;		/* Certificate being constructed */
@@ -36,6 +38,10 @@ struct x509_parse_context {
 	const void	*raw_akid;		/* Raw authorityKeyId in ASN.1 */
 	const void	*akid_raw_issuer;	/* Raw directoryName in authorityKeyId */
 	unsigned	akid_raw_issuer_size;
+	bool		is_crl;			/* true if parsing CRL */
+	bool		indirect_crl;		/* true if indirect CRL */
+	struct list_head revoked_list;		/* list of revoked serials */
+	u8		crl_reason;		/* CRL reason code */
 };
 
 /*
@@ -574,6 +580,7 @@ int x509_process_extension(void *context, size_t hdrlen,
 	struct x509_parse_context *ctx = context;
 	struct asymmetric_key_id *kid;
 	const unsigned char *v = value;
+	int ret;
 
 	pr_debug("Extension: %u\n", ctx->last_oid);
 
@@ -658,6 +665,32 @@ int x509_process_extension(void *context, size_t hdrlen,
 			ctx->cert->pub->key_eflags |= 1 << KEY_EFLAG_CA;
 		else
 			return -EBADMSG;
+		return 0;
+	}
+
+	/* CRL-specific extensions */
+	if (ctx->last_oid == OID_id_ce_issuingDistributionPoint) {
+		/* Decode IssuingDistributionPoint */
+		ret = asn1_ber_decoder(&x509_idp_decoder, ctx, v, vlen);
+		return ret < 0 ? ret : 0;
+	}
+
+	if (ctx->last_oid == OID_id_ce_certificateIssuer) {
+		struct x509_revoked_entry *entry;
+
+		if (ctx->is_crl && !list_empty(&ctx->revoked_list)) {
+			entry = list_last_entry(&ctx->revoked_list,
+					struct x509_revoked_entry, list);
+			entry->raw_issuer = v;
+			entry->raw_issuer_size = vlen;
+		}
+		return 0;
+	}
+
+	if (ctx->last_oid == OID_id_ce_cRLReason) {
+		/* CRLReason: ENUMERATED (tag 0x0a, len 1) */
+		if (vlen >= 3 && v[0] == 0x0a && v[1] == 1)
+			ctx->crl_reason = v[2];
 		return 0;
 	}
 
@@ -838,5 +871,93 @@ int x509_akid_note_serial(void *context, size_t hdrlen,
 
 	pr_debug("authkeyid %*phN\n", kid->len, kid->data);
 	ctx->cert->sig->auth_ids[0] = kid;
+	return 0;
+}
+
+struct x509_crl_context *x509_crl_parse(const void *data, size_t datalen)
+{
+	struct x509_crl_context *crl_ctx __free(kfree) = NULL;
+	struct x509_parse_context *ctx __free(kfree) = NULL;
+	struct x509_certificate *cert __free(x509_free_certificate) = NULL;
+	int ret;
+
+	crl_ctx = kzalloc_obj(struct x509_crl_context);
+	if (!crl_ctx)
+		return ERR_PTR(-ENOMEM);
+
+	cert = kzalloc_obj(struct x509_certificate);
+	if (!cert)
+		return ERR_PTR(-ENOMEM);
+
+	cert->pub = kzalloc_obj(struct public_key);
+	cert->sig = kzalloc_obj(struct public_key_signature);
+	if (!cert->pub || !cert->sig)
+		return ERR_PTR(-ENOMEM);
+
+	ctx = kzalloc_obj(struct x509_parse_context);
+	if (!ctx)
+		return ERR_PTR(-ENOMEM);
+
+	ctx->cert = cert;
+	ctx->is_crl = true;
+	ctx->data = (unsigned long)data;
+	INIT_LIST_HEAD(&ctx->revoked_list);
+
+	ret = asn1_ber_decoder(&x509_crl_decoder, ctx, data, datalen);
+	if (ret < 0)
+		return ERR_PTR(ret);
+
+	/* Transfer parsed data to crl_context */
+	INIT_LIST_HEAD(&crl_ctx->revoked_list);
+	crl_ctx->indirect_crl = ctx->indirect_crl;
+	crl_ctx->raw_issuer = cert->raw_issuer;
+	crl_ctx->raw_issuer_size = cert->raw_issuer_size;
+	list_splice(&ctx->revoked_list, &crl_ctx->revoked_list);
+
+	/* Detach pointers from cert before auto-free */
+	cert->raw_issuer = NULL;
+	cert->raw_serial = NULL;
+
+	return_ptr(crl_ctx);
+}
+
+void x509_crl_free(struct x509_crl_context *ctx)
+{
+	struct x509_revoked_entry *entry, *tmp;
+
+	list_for_each_entry_safe(entry, tmp, &ctx->revoked_list, list) {
+		list_del(&entry->list);
+		kfree(entry->serial);
+		kfree(entry);
+	}
+	kfree(ctx);
+}
+
+int x509_note_indirect_crl(void *context, size_t hdrlen, unsigned char tag,
+			   const void *value, size_t vlen)
+{
+	struct x509_parse_context *ctx = context;
+
+	if (vlen == 1 && *(const u8 *)value == 0xFF)
+		ctx->indirect_crl = true;
+	return 0;
+}
+
+int crl_note_serial(void *context, size_t hdrlen, unsigned char tag,
+		    const void *value, size_t vlen)
+{
+	struct x509_parse_context *ctx = context;
+	struct x509_revoked_entry *entry;
+
+	entry = kzalloc_obj(struct x509_revoked_entry);
+	if (!entry)
+		return -ENOMEM;
+	entry->serial = kmemdup(value, vlen, GFP_KERNEL);
+	if (!entry->serial) {
+		kfree(entry);
+		return -ENOMEM;
+	}
+	entry->serial_size = vlen;
+	list_add_tail(&entry->list, &ctx->revoked_list);
 	return 0;
 }

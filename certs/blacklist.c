@@ -32,6 +32,7 @@
 
 static const char tbs_prefix[] = "tbs";
 static const char bin_prefix[] = "bin";
+static const char crl_prefix[] = "crl";
 
 static struct key *blacklist_keyring;
 
@@ -46,16 +47,16 @@ extern __initconst const unsigned long revocation_certificate_list_size;
  */
 static int blacklist_vet_description(const char *desc)
 {
-	int i, prefix_len, tbs_step = 0, bin_step = 0;
+	int i, prefix_len, tbs_step = 0, bin_step = 0, crl_step = 0;
 
 	/* The following algorithm only works if prefix lengths match. */
-	BUILD_BUG_ON(sizeof(tbs_prefix) != sizeof(bin_prefix));
+	BUILD_BUG_ON(sizeof(tbs_prefix) != sizeof(bin_prefix) ||
+		     sizeof(tbs_prefix) != sizeof(crl_prefix));
 	prefix_len = sizeof(tbs_prefix) - 1;
 	for (i = 0; *desc; desc++, i++) {
 		if (*desc == ':') {
-			if (tbs_step == prefix_len)
-				goto found_colon;
-			if (bin_step == prefix_len)
+			if (tbs_step == prefix_len || bin_step == prefix_len ||
+			    crl_step == prefix_len)
 				goto found_colon;
 			return -EINVAL;
 		}
@@ -65,6 +66,8 @@ static int blacklist_vet_description(const char *desc)
 			tbs_step++;
 		if (*desc == bin_prefix[i])
 			bin_step++;
+		if (*desc == crl_prefix[i])
+			crl_step++;
 	}
 	return -EINVAL;
 
@@ -159,6 +162,10 @@ static char *get_raw_hash(const u8 *hash, size_t hash_len,
 	case BLACKLIST_HASH_BINARY:
 		type_len = sizeof(bin_prefix) - 1;
 		type_prefix = bin_prefix;
+		break;
+	case BLACKLIST_HASH_X509_CRL:
+		type_len = sizeof(crl_prefix) - 1;
+		type_prefix = crl_prefix;
 		break;
 	default:
 		WARN_ON_ONCE(1);
