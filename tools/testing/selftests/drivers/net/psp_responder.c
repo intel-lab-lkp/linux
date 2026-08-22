@@ -23,6 +23,7 @@ static bool should_quit;
 struct opts {
 	int port;
 	int ifindex;
+	int devid;
 	bool verbose;
 };
 
@@ -119,6 +120,36 @@ static void send_str(int sock, int value)
 }
 
 static void
+handle_dev_steer(struct ynl_sock *ys, struct opts *opts, char *data,
+		 int comm_sock)
+{
+	struct psp_dev_set_req *req;
+	struct psp_dev_set_rsp *rsp;
+
+	if (opts->devid < 0) {
+		fprintf(stderr, "WARN: dev steer but no PSP device\n");
+		send_err(comm_sock);
+		return;
+	}
+
+	req = psp_dev_set_req_alloc();
+
+	psp_dev_set_req_set_id(req, opts->devid);
+	psp_dev_set_req_set_vc_steer_ena(req, *data);
+
+	rsp = psp_dev_set(ys, req);
+	psp_dev_set_req_free(req);
+	if (!rsp) {
+		perror("ERROR: failed to set device features");
+		send_err(comm_sock);
+		return;
+	}
+	psp_dev_set_rsp_free(rsp);
+
+	send_ack(comm_sock);
+}
+
+static void
 run_session(struct ynl_sock *ys, struct opts *opts,
 	    int server_sock, int comm_sock)
 {
@@ -210,6 +241,9 @@ run_session(struct ynl_sock *ys, struct opts *opts,
 			match;						\
 		})
 
+#define cmd_w_msg(_name, _type)						\
+		(off >= sizeof(_name) + sizeof(_type) && cmd(_name))
+
 			do {
 				consumed = false;
 
@@ -223,6 +257,11 @@ run_session(struct ynl_sock *ys, struct opts *opts,
 					else
 						fprintf(stderr, "WARN: echo but no data sock\n");
 					send_ack(comm_sock);
+				}
+				if (cmd_w_msg("dev steer", __u8)) {
+					handle_dev_steer(ys, opts, buf,
+							 comm_sock);
+					__consume(sizeof(__u8));
 				}
 				if (cmd("data close")) {
 					if (data_sock >= 0) {
@@ -254,6 +293,7 @@ run_session(struct ynl_sock *ys, struct opts *opts,
 				}
 				if (cmd("exit"))
 					should_quit = true;
+#undef cmd_w_msg
 #undef cmd
 
 				if (!consumed) {
@@ -460,6 +500,8 @@ int main(int argc, char **argv)
 		if (ret)
 			goto err_close;
 	}
+
+	opts.devid = devid;
 
 	ret = run_responder(ys, &opts);
 

@@ -58,6 +58,11 @@ def close_conn(cfg, s):
     s.close()
 
 
+def remote_dev_steer(cfg, mode):
+    """Set vc-steer-ena on the remote PSP device"""
+    send_with_ack(cfg, b'dev steer\0' + struct.pack('B', mode))
+
+
 def spi_xchg(s, rx):
     s.send(struct.pack('I', rx['spi']) + rx['key'])
     tx = s.recv(4 + len(rx['key']))
