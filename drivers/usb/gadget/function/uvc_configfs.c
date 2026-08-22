@@ -845,6 +845,15 @@ static ssize_t uvcg_extension_b_num_controls_store(struct config_item *item,
 }
 UVCG_EXTENSION_ATTR(b_num_controls, bNumControls);
 
+/* The descriptor length must fit into the one-byte bLength field */
+static int uvcg_extension_check_size(u8 nr_in_pins, u8 control_size)
+{
+	if (UVC_DT_EXTENSION_UNIT_SIZE(nr_in_pins, control_size) > 255)
+		return -EINVAL;
+
+	return 0;
+}
+
 /*
  * In addition to storing bNrInPins, this function needs to realloc the
  * memory for the baSourceID array and additionally expand bLength.
@@ -876,6 +885,10 @@ static ssize_t uvcg_extension_b_nr_in_pins_store(struct config_item *item,
 		ret = len;
 		goto unlock;
 	}
+
+	ret = uvcg_extension_check_size(num, xu->desc.bControlSize);
+	if (ret)
+		goto unlock;
 
 	tmp_buf = krealloc_array(xu->desc.baSourceID, num, sizeof(u8),
 				 GFP_KERNEL | __GFP_ZERO);
@@ -929,6 +942,10 @@ static ssize_t uvcg_extension_b_control_size_store(struct config_item *item,
 		ret = len;
 		goto unlock;
 	}
+
+	ret = uvcg_extension_check_size(xu->desc.bNrInPins, num);
+	if (ret)
+		goto unlock;
 
 	tmp_buf = krealloc_array(xu->desc.bmControls, num, sizeof(u8),
 				 GFP_KERNEL | __GFP_ZERO);
@@ -1055,6 +1072,10 @@ static ssize_t uvcg_extension_ba_source_id_store(struct config_item *item,
 	if (ret)
 		goto unlock;
 
+	ret = uvcg_extension_check_size(n, xu->desc.bControlSize);
+	if (ret)
+		goto unlock;
+
 	iter = source_ids = kcalloc(n, sizeof(u8), GFP_KERNEL);
 	if (!source_ids) {
 		ret = -ENOMEM;
@@ -1131,6 +1152,10 @@ static ssize_t uvcg_extension_bm_controls_store(struct config_item *item,
 
 	ret = __uvcg_iter_item_entries(page, len, __uvcg_count_item_entries, &n,
 				       sizeof(u8));
+	if (ret)
+		goto unlock;
+
+	ret = uvcg_extension_check_size(xu->desc.bNrInPins, n);
 	if (ret)
 		goto unlock;
 
