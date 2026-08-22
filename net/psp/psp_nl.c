@@ -299,6 +299,11 @@ psp_nl_dev_fill(struct psp_dev *psd, struct sk_buff *rsp,
 	    nla_put_u32(rsp, PSP_A_DEV_PSP_VERSIONS_ENA, psd->config.versions))
 		goto err_cancel_msg;
 
+	if (psd->caps->vc_steer && nla_put_flag(rsp, PSP_A_DEV_VC_STEER_CAP))
+		goto err_cancel_msg;
+	if (nla_put_u32(rsp, PSP_A_DEV_VC_STEER_ENA, psd->config.vc_steer))
+		goto err_cancel_msg;
+
 	if (cur_net == dev_net(psd->main_netdev)) {
 		/* Primary device - dump assoc list */
 		err = psp_nl_fill_assoc_dev_list(psd, rsp, cur_net, NULL);
@@ -418,9 +423,23 @@ int psp_nl_dev_set_doit(struct sk_buff *skb, struct genl_info *info)
 			NL_SET_ERR_MSG(info->extack, "Requested PSP versions not supported by the device");
 			return -EINVAL;
 		}
-	} else {
+	} else if (!info->attrs[PSP_A_DEV_VC_STEER_ENA]) {
 		NL_SET_ERR_MSG(info->extack, "No settings present");
 		return -EINVAL;
+	}
+
+	if (info->attrs[PSP_A_DEV_VC_STEER_ENA]) {
+		new_config.vc_steer =
+			nla_get_u32(info->attrs[PSP_A_DEV_VC_STEER_ENA]);
+		/* Granting a peer's request is just header generation,
+		 * only steering our own Rx needs the device to help.
+		 */
+		if (new_config.vc_steer & (1 << PSP_VC_STEER_RX) &&
+		    !psd->caps->vc_steer) {
+			NL_SET_BAD_ATTR(info->extack,
+					info->attrs[PSP_A_DEV_VC_STEER_ENA]);
+			return -EOPNOTSUPP;
+		}
 	}
 
 	rsp = psp_nl_reply_new(info);

@@ -26,6 +26,32 @@ struct psp_dev *psp_dev_get_for_sock(struct sock *sk)
 	return psd;
 }
 
+/* Refresh the local queue ID we ask the peer to send to.
+ *
+ * Rx and Tx queues are assumed to be paired by index, so the Tx queue the
+ * stack has just picked for this flow doubles as the Rx queue we expect
+ * the flow's replies to land on. This is the Tx side counterpart of an
+ * aRFS update, and runs for every skb of a steered PSP socket, so the
+ * unchanged case has to stay down to a load and a compare.
+ */
+static void psp_assoc_vc_tx_update(struct psp_assoc *pas,
+				   struct net_device *dev,
+				   struct sk_buff *skb)
+{
+	u16 qid = skb_get_queue_mapping(skb);
+
+	/* A device may have more Tx than Rx queues, in which case the top
+	 * Tx queues have no Rx queue to pair with.
+	 */
+	if (unlikely(qid >= READ_ONCE(dev->real_num_rx_queues)))
+		qid = PSP_VC_QID_NONE;
+
+	if (likely(qid == READ_ONCE(pas->vc_loc)))
+		return;
+
+	WRITE_ONCE(pas->vc_loc, qid);
+}
+
 static struct sk_buff *
 psp_validate_xmit(struct sock *sk, struct net_device *dev, struct sk_buff *skb)
 {
@@ -35,6 +61,8 @@ psp_validate_xmit(struct sock *sk, struct net_device *dev, struct sk_buff *skb)
 	rcu_read_lock();
 	pas = psp_skb_get_assoc_rcu(skb);
 	good = !pas || rcu_access_pointer(dev->psp_dev) == pas->psd;
+	if (good && pas && pas->flags & PSP_ASSOC_VC_RX)
+		psp_assoc_vc_tx_update(pas, dev, skb);
 	rcu_read_unlock();
 	if (!good) {
 		sk_skb_reason_drop(sk, skb, SKB_DROP_REASON_PSP_OUTPUT);
@@ -58,6 +86,13 @@ struct psp_assoc *psp_assoc_create(struct psp_dev *psd)
 	pas->psd = psd;
 	pas->dev_id = psd->id;
 	pas->generation = psd->generation;
+	pas->vc_loc = PSP_VC_QID_NONE;
+	pas->vc_rem = PSP_VC_QID_NONE;
+	/* Snapshot the config, the header size may not change later on */
+	if (psd->config.vc_steer & (1 << PSP_VC_STEER_TX))
+		pas->flags |= PSP_ASSOC_VC_TX;
+	if (psd->config.vc_steer & (1 << PSP_VC_STEER_RX))
+		pas->flags |= PSP_ASSOC_VC_RX;
 	psp_dev_get(psd);
 	refcount_set(&pas->refcnt, 1);
 

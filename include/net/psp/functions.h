@@ -18,7 +18,7 @@ psp_dev_create(struct net_device *netdev, struct psp_dev_ops *psd_ops,
 	       struct psp_dev_caps *psd_caps, void *priv_ptr);
 void psp_dev_unregister(struct psp_dev *psd);
 bool psp_dev_encapsulate(struct net *net, struct sk_buff *skb, __be32 spi,
-			 u8 ver, __be16 sport);
+			 u8 ver, __be16 sport, u64 vc);
 int psp_dev_rcv(struct sk_buff *skb, u16 dev_id, u8 generation, bool strip_icv);
 
 /* Kernel-facing API */
@@ -27,6 +27,22 @@ void psp_assoc_put(struct psp_assoc *pas);
 static inline void *psp_assoc_drv_data(struct psp_assoc *pas)
 {
 	return pas->drv_data;
+}
+
+/**
+ * psp_assoc_vc_tx_get() - build the virtualization cookie for an association
+ * @pas: association the packet belongs to
+ *
+ * Return: cookie to place in the PSP header, or 0 if the association does
+ *	   not use VC steering and the header should carry no cookie.
+ */
+static inline u64 psp_assoc_vc_tx_get(const struct psp_assoc *pas)
+{
+	if (likely(!(pas->flags & PSP_ASSOC_VC_ANY)))
+		return 0;
+
+	return FIELD_PREP(PSP_VC_REQ_QID, READ_ONCE(pas->vc_loc)) |
+	       FIELD_PREP(PSP_VC_DST_QID, READ_ONCE(pas->vc_rem));
 }
 
 #if IS_ENABLED(CONFIG_INET_PSP)
@@ -88,6 +104,31 @@ psp_pse_matches_pas(struct psp_skb_ext *pse, struct psp_assoc *pas)
 	       pas->dev_id == pse->dev_id;
 }
 
+/**
+ * psp_assoc_vc_rx_update() - note the queue the peer is asking for
+ * @pas: association the packet arrived on
+ * @pse: PSP info extracted from the packet
+ *
+ * The peer's request becomes the destination in the cookies we send it,
+ * which is what makes its device steer our traffic. Only tracked if we
+ * are going to grant it. Called for every PSP packet, so the common
+ * cases have to be cheap: a peer which sends no cookie leaves @vc_req
+ * at %PSP_VC_QID_NONE, which is also what @vc_rem was initialised to,
+ * so both "no cookie" and "request unchanged" cost a single compare and
+ * no store.
+ */
+static inline void
+psp_assoc_vc_rx_update(struct psp_assoc *pas, const struct psp_skb_ext *pse)
+{
+	if (likely(!(pas->flags & PSP_ASSOC_VC_TX)))
+		return;
+
+	if (likely(pse->vc_req == READ_ONCE(pas->vc_rem)))
+		return;
+
+	WRITE_ONCE(pas->vc_rem, pse->vc_req);
+}
+
 static inline enum skb_drop_reason
 __psp_sk_rx_policy_check(struct sk_buff *skb, struct psp_assoc *pas)
 {
@@ -99,6 +140,8 @@ __psp_sk_rx_policy_check(struct sk_buff *skb, struct psp_assoc *pas)
 	if (likely(psp_pse_matches_pas(pse, pas))) {
 		if (unlikely(!pas->peer_tx))
 			pas->peer_tx = 1;
+
+		psp_assoc_vc_rx_update(pas, pse);
 
 		return 0;
 	}
@@ -150,9 +193,14 @@ static inline struct psp_assoc *psp_skb_get_assoc_rcu(struct sk_buff *skb)
 static inline unsigned int psp_sk_overhead(const struct sock *sk)
 {
 	int psp_encap = sizeof(struct udphdr) + PSP_HDR_SIZE + PSP_TRL_SIZE;
-	bool has_psp = rcu_access_pointer(sk->psp_assoc);
+	struct psp_assoc *pas = psp_sk_assoc(sk);
 
-	return has_psp ? psp_encap : 0;
+	if (!pas)
+		return 0;
+	if (pas->flags & PSP_ASSOC_VC_ANY)
+		psp_encap += PSP_VC_SIZE;
+
+	return psp_encap;
 }
 #else
 static inline void psp_sk_assoc_free(struct sock *sk) { }

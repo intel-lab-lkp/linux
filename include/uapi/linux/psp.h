@@ -17,6 +17,21 @@ enum psp_version {
 	PSP_VERSION_HDR0_AES_GMAC_256,
 };
 
+/**
+ * enum psp_vc_steer - Directions of traffic which take part in VC based queue
+ *   steering.
+ * @PSP_VC_STEER_TX: Grant the requests peers make, so that traffic this device
+ *   sends is steered at the far end. Costs nothing but the room in the header,
+ *   the queue is the peer's to pick, so this does not need vc-steer-cap.
+ * @PSP_VC_STEER_RX: Ask peers to send to the Rx queue paired with the flow's
+ *   Tx queue, so that traffic this device receives is steered. Needs
+ *   vc-steer-cap, the rules doing the steering are ours.
+ */
+enum psp_vc_steer {
+	PSP_VC_STEER_TX,
+	PSP_VC_STEER_RX,
+};
+
 enum {
 	PSP_A_ASSOC_DEV_INFO_IFINDEX = 1,
 	PSP_A_ASSOC_DEV_INFO_NSID,
@@ -33,6 +48,8 @@ enum {
 	PSP_A_DEV_ASSOC_LIST,
 	PSP_A_DEV_NSID,
 	PSP_A_DEV_BY_ASSOCIATION,
+	PSP_A_DEV_VC_STEER_CAP,
+	PSP_A_DEV_VC_STEER_ENA,
 
 	__PSP_A_DEV_MAX,
 	PSP_A_DEV_MAX = (__PSP_A_DEV_MAX - 1)

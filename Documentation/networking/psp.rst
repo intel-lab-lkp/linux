@@ -132,6 +132,68 @@ numbers in a way that deletes a prefix of the PSP protected part of
 the TCP stream. If userspace cares to mitigate this type of attack, a
 special "start of PSP" message should be exchanged after ``tx-assoc``.
 
+Queue steering
+--------------
+
+The PSP header may carry an optional 64 bit "virtualization cookie" (VC).
+The protocol assigns it no meaning in transport mode, so Linux uses it to
+let the two ends of a connection tell each other which Rx queue they want
+traffic delivered to. The cookie carries two queue IDs::
+
+   63           48 47           32 31           16 15            0
+  +---------------+---------------+---------------+---------------+
+  |    reserved   |    req qid    |    reserved   |    dst qid    |
+  +---------------+---------------+---------------+---------------+
+
+``req`` is the Rx queue the sender is asking the peer to send to, and
+``dst`` is the queue this packet is to be delivered to, which holds the
+``req`` the sender last saw from the peer. Each side's request is what
+becomes the other side's destination. ``0xffff`` means "no queue" and
+reserved bits must be zero.
+
+Each ID gets a 32 bit word to itself, of which only the low half is used.
+Queue counts fit in 16 bits today; should that stop being true, an ID can
+grow into the reserved half of its word without the fields moving.
+
+The two directions are enabled independently, with ``vc-steer-ena``:
+
+ * ``rx`` asks peers to send to the queue paired with the flow's Tx queue,
+   so traffic this host *receives* gets steered. This needs
+   ``vc-steer-cap``: the driver is required to arrange the appropriate Rx
+   steering, and whatever rules it uses to do so are implicit, not visible
+   to the user. They have lower priority than any explicitly configured
+   flow steering, but do take precedence over the RSS table.
+ * ``tx`` grants the requests peers make, so traffic this host *sends*
+   gets steered at the far end. The queue is the peer's to choose and the
+   rules are the peer's to install, so this needs no device support at
+   all, and can be turned on even where ``vc-steer-cap`` is absent.
+
+Enabling either direction grows the PSP header by the size of the cookie,
+and the MSS shrinks accordingly. The setting is therefore sampled when an
+association is created; changing it later applies to new associations
+only, and existing connections keep the header size they were set up
+with.
+
+The queue the local end asks for is refreshed from the Tx queue the stack
+picks for the flow, assuming that Rx and Tx queues are paired by index.
+
+Trust model
+~~~~~~~~~~~
+
+VC steering as implemented is not robust against queue DDoS attacks, that
+is a coordinated overload of a single Rx queue, because any peer can name
+any queue. The expectation is that PSP is not used to talk to untrusted
+peers while VC steering is enabled. Note that use of the cookie requires
+PSP, so the *machine* as a whole may still talk to untrusted peers, as
+long as it hands out no PSP keys to them.
+
+The intended way of handling a mix of trusted and untrusted peers is to
+extend the queue ID and stop using it as a direct index, making it a per
+queue cookie instead. An untrusted peer should then not be able to guess
+a tag which was never communicated to it, and the secrets can be rotated
+periodically and gradually, one queue at a time. It is important that
+changes to the implementation do not prevent this future extension.
+
 Rotation notifications
 ----------------------
 
@@ -171,6 +233,19 @@ OS instance already had access to.
 Drivers must use ``psp_skb_get_assoc_rcu()`` to check if PSP Tx offload
 was requested for given skb. On Rx drivers should allocate and populate
 the ``SKB_EXT_PSP`` skb extension, and set the skb->decrypted bit to 1.
+
+Every driver has to carry the cookie, not just those which advertise
+``vc-steer-cap`` - granting a peer's request needs no help from the
+device, so the ``tx`` direction of ``vc-steer-ena`` may be turned on
+anywhere. Drivers must ask ``psp_assoc_vc_tx_get()`` for the cookie to
+place in the Tx header, and report the queue IDs a received cookie held
+in ``psp_skb_ext.vc_req`` and ``vc_dst`` (``psp_dev_rcv()`` does this for
+drivers which let the core strip the headers). Reporting is what allows
+the core to grant the peer's request. The steering itself is only
+expected of drivers which advertise ``vc-steer-cap``.
+
+When VC steering is enabled GRO implementations are allowed to ignore
+changes in the cookie for transport mode PSP.
 
 Kernel implementation notes
 ---------------------------

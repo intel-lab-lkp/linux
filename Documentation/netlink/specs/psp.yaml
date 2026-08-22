@@ -11,6 +11,24 @@ definitions:
     name: version
     entries: [hdr0-aes-gcm-128, hdr0-aes-gcm-256,
               hdr0-aes-gmac-128, hdr0-aes-gmac-256]
+  -
+    type: enum
+    name: vc-steer
+    doc: Directions of traffic which take part in VC based queue steering.
+    entries:
+      -
+        name: tx
+        doc: |
+          Grant the requests peers make, so that traffic this device
+          sends is steered at the far end. Costs nothing but the room in
+          the header, the queue is the peer's to pick, so this does not
+          need vc-steer-cap.
+      -
+        name: rx
+        doc: |
+          Ask peers to send to the Rx queue paired with the flow's Tx
+          queue, so that traffic this device receives is steered. Needs
+          vc-steer-cap, the rules doing the steering are ours.
 
 attribute-sets:
   -
@@ -72,6 +90,27 @@ attribute-sets:
           Present when in associated namespace, absent when in primary/host
           namespace.
         type: flag
+      -
+        name: vc-steer-cap
+        doc: |
+          Device can steer received traffic on the PSP virtualization
+          cookie (VC). The VC is split into a 32b reserved part, a 16b
+          queue ID the sender is asking the peer to send to, and a 16b
+          queue ID granting the peer's own request. Steering installs low
+          priority rules matching the latter, which win over the RSS table
+          result. Only needed for the rx direction; granting a peer's
+          request is just header generation and needs no device support.
+        type: flag
+      -
+        name: vc-steer-ena
+        doc: |
+          Directions taking part in VC based queue steering. Leave the
+          attribute out of a dev-set request to keep the current setting.
+          Applies to associations created from then on, existing ones keep
+          the setting they were created with.
+        type: u32
+        enum: vc-steer
+        enum-as-flags: true
 
   -
     name: assoc
@@ -207,6 +246,8 @@ operations:
             - psp-versions-ena
             - assoc-list
             - by-association
+            - vc-steer-cap
+            - vc-steer-ena
         pre: psp-device-get-locked
         post: psp-device-unlock
       dump:
@@ -231,6 +272,7 @@ operations:
           attributes:
             - id
             - psp-versions-ena
+            - vc-steer-ena
         reply:
           attributes: []
         pre: psp-device-get-locked-admin

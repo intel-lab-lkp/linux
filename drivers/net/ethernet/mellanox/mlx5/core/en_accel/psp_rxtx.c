@@ -171,7 +171,7 @@ bool mlx5e_psp_handle_tx_skb(struct net_device *netdev,
 		return true;
 
 	/* psp_encap of the packet */
-	if (!psp_dev_encapsulate(net, skb, psp_st->spi, psp_st->ver, 0)) {
+	if (!psp_dev_encapsulate(net, skb, psp_st->spi, psp_st->ver, 0, 0)) {
 		kfree_skb_reason(skb, SKB_DROP_REASON_PSP_OUTPUT);
 		atomic_inc(&priv->psp->tx_drop);
 		return false;

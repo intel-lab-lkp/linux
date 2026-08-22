@@ -186,7 +186,8 @@ unsigned int psp_key_size(u32 version)
 EXPORT_SYMBOL(psp_key_size);
 
 static void psp_write_headers(struct net *net, struct sk_buff *skb, __be32 spi,
-			      u8 ver, unsigned int udp_len, __be16 sport)
+			      u8 ver, unsigned int udp_len, __be16 sport,
+			      u64 vc)
 {
 	struct udphdr *uh = udp_hdr(skb);
 	struct psphdr *psph = (struct psphdr *)(uh + 1);
@@ -234,54 +235,62 @@ static void psp_write_headers(struct net *net, struct sk_buff *skb, __be32 spi,
 	udp_set_len(uh, udp_len);
 
 	psph->nexthdr = IPPROTO_TCP;
-	psph->hdrlen = PSP_HDRLEN_NOOPT;
+	psph->hdrlen = vc ? PSP_HDRLEN_VC : PSP_HDRLEN_NOOPT;
 	psph->crypt_offset = 0;
 	psph->verfl = FIELD_PREP(PSPHDR_VERFL_VERSION, ver) |
+		      FIELD_PREP(PSPHDR_VERFL_VIRT, !!vc) |
 		      FIELD_PREP(PSPHDR_VERFL_ONE, 1);
 	psph->spi = spi;
 	memset(&psph->iv, 0, sizeof(psph->iv));
+	if (vc)
+		psph->vc[0] = cpu_to_be64(vc);
 }
 
 /* Encapsulate a TCP packet with PSP by adding the UDP+PSP headers and filling
- * them in.
+ * them in. @vc is the virtualization cookie to place in the header, 0 for
+ * a header with no optional fields.
  */
 bool psp_dev_encapsulate(struct net *net, struct sk_buff *skb, __be32 spi,
-			 u8 ver, __be16 sport)
+			 u8 ver, __be16 sport, u64 vc)
 {
 	u32 network_len = skb_network_header_len(skb);
 	u32 ethr_len = skb_mac_header_len(skb);
 	u32 bufflen = ethr_len + network_len;
+	u32 encap_len = PSP_ENCAP_HLEN;
 
 	if (skb->protocol != htons(ETH_P_IP) &&
 	    skb->protocol != htons(ETH_P_IPV6))
 		return false;
 
-	if (skb_cow_head(skb, PSP_ENCAP_HLEN))
+	if (vc)
+		encap_len += PSP_VC_SIZE;
+
+	if (skb_cow_head(skb, encap_len))
 		return false;
 
-	skb_push(skb, PSP_ENCAP_HLEN);
-	skb->mac_header		-= PSP_ENCAP_HLEN;
-	skb->network_header	-= PSP_ENCAP_HLEN;
-	skb->transport_header	-= PSP_ENCAP_HLEN;
-	memmove(skb->data, skb->data + PSP_ENCAP_HLEN, bufflen);
+	skb_push(skb, encap_len);
+	skb->mac_header		-= encap_len;
+	skb->network_header	-= encap_len;
+	skb->transport_header	-= encap_len;
+	memmove(skb->data, skb->data + encap_len, bufflen);
 
 	if (skb->protocol == htons(ETH_P_IP)) {
 		ip_hdr(skb)->protocol = IPPROTO_UDP;
-		be16_add_cpu(&ip_hdr(skb)->tot_len, PSP_ENCAP_HLEN);
+		be16_add_cpu(&ip_hdr(skb)->tot_len, encap_len);
 		ip_hdr(skb)->check = 0;
 		ip_hdr(skb)->check =
 			ip_fast_csum((u8 *)ip_hdr(skb), ip_hdr(skb)->ihl);
 	} else {
 		ipv6_hdr(skb)->nexthdr = IPPROTO_UDP;
-		be16_add_cpu(&ipv6_hdr(skb)->payload_len, PSP_ENCAP_HLEN);
+		be16_add_cpu(&ipv6_hdr(skb)->payload_len, encap_len);
 	}
 
 	skb_set_inner_ipproto(skb, IPPROTO_TCP);
 	skb_set_inner_transport_header(skb, skb_transport_offset(skb) +
-						    PSP_ENCAP_HLEN);
+						    encap_len);
 	skb->encapsulation = 1;
 	psp_write_headers(net, skb, spi, ver,
-			  skb->len - skb_transport_offset(skb), sport);
+			  skb->len - skb_transport_offset(skb), sport, vc);
 
 	return true;
 }
@@ -290,9 +299,10 @@ EXPORT_SYMBOL(psp_dev_encapsulate);
 /* Receive handler for PSP packets.
  *
  * Accepts only already-authenticated packets. The full PSP header is
- * stripped according to psph->hdrlen; any optional fields it advertises
- * (virtualization cookies, etc.) are ignored and discarded along with the
- * rest of the header. The caller should ensure that skb->data is pointing
+ * stripped according to psph->hdrlen; the virtualization cookie is recorded
+ * in the skb extension, any other optional fields are ignored and discarded
+ * along with the rest of the header. The caller should ensure that skb->data
+ * is pointing
  * to the mac header, and that skb->mac_len is set. This function does not
  * currently adjust skb->csum (CHECKSUM_COMPLETE is not supported).
  */
@@ -370,6 +380,15 @@ int psp_dev_rcv(struct sk_buff *skb, u16 dev_id, u8 generation, bool strip_icv)
 	pse->dev_id = dev_id;
 	pse->generation = generation;
 	pse->version = FIELD_GET(PSPHDR_VERFL_VERSION, psph->verfl);
+	pse->vc_req = PSP_VC_QID_NONE;
+	pse->vc_dst = PSP_VC_QID_NONE;
+	if (unlikely(psph->verfl & PSPHDR_VERFL_VIRT) &&
+	    psp_hlen >= sizeof(*psph) + PSP_VC_SIZE) {
+		u64 vc = be64_to_cpu(psph->vc[0]);
+
+		pse->vc_req = FIELD_GET(PSP_VC_REQ_QID, vc);
+		pse->vc_dst = FIELD_GET(PSP_VC_DST_QID, vc);
+	}
 
 	encap = sizeof(struct udphdr) + psp_hlen;
 	encap += strip_icv ? PSP_TRL_SIZE : 0;
