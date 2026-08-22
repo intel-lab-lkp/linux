@@ -353,5 +353,29 @@
         "teardown": [
             "$TC qdisc del dev $DEV1 parent root drr"
         ]
+    },
+    {
+        "id": "934a",
+        "name": "Add u32 filter when node ID pool is exhausted (4096th filter rejected)",
+        "category": [
+            "filter",
+            "u32"
+        ],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$TC qdisc add dev $DUMMY clsact",
+            "bash -c 'yes \"filter add dev $DUMMY ingress prio 1 protocol ip u32 match u8 0 0 at 0\" | head -n 4095 > /tmp/u32_batch.txt'",
+            "bash -c '$TC -b /tmp/u32_batch.txt'"
+        ],
+        "cmdUnderTest": "$TC filter add dev $DUMMY ingress prio 1 protocol ip u32 match u8 0 0 at 0",
+        "expExitCode": "2",
+        "verifyCmd": "$TC -d filter show dev $DUMMY ingress",
+        "matchPattern": "fh 800::",
+        "matchCount": "4095",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY clsact"
+        ]
     }
 ]
