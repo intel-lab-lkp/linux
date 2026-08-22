@@ -15,12 +15,16 @@
 #include <sys/resource.h>
 #include <sys/capability.h>
 
+#include <setjmp.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <stdio.h>
 #include <fcntl.h>
+
+#include <sys/mman.h>
 
 #include "kselftest.h"
 
@@ -31,6 +35,11 @@
 #ifdef __NR_memfd_secret
 
 #define PATTERN	0x55
+/*
+ * Set 8 MiB as a reasonable mlock limit so users with unlimited or absurdly
+ * high RLIMIT_MEMLOCK don't cause us to overflow in the tests.
+ */
+#define MLOCK_LIMIT_CAP	(8UL << 20)
 
 static const int prot = PROT_READ | PROT_WRITE;
 static const int mode = MAP_SHARED;
@@ -38,6 +47,13 @@ static const int mode = MAP_SHARED;
 static unsigned long page_size;
 static unsigned long mlock_limit_cur;
 static unsigned long mlock_limit_max;
+
+static sigjmp_buf fault_env;
+
+static void sigbus_handler(int sig)
+{
+	siglongjmp(fault_env, 1);
+}
 
 static int memfd_secret(unsigned int flags)
 {
@@ -57,10 +73,31 @@ static void test_file_apis(int fd)
 		pass("file IO is blocked as expected\n");
 }
 
-static void test_mlock_limit(int fd)
+/* GUP disallows automatic fault-in of secretmem, so do it manually. */
+static bool fault_in_secretmem(char *mem, size_t len)
+{
+	if (sigsetjmp(fault_env, 1))
+		return false;
+	memset(mem, PATTERN, len);
+	return true;
+}
+
+static void test_mlock_limit(void)
 {
 	size_t len;
 	char *mem;
+	int fd;
+
+	/* Locked pages have an inode lifetime, so need a new fd. */
+	fd = memfd_secret(0);
+	if (fd < 0) {
+		fail("memfd_secret failed: %s\n", strerror(errno));
+		return;
+	}
+	if (ftruncate(fd, mlock_limit_max * 2)) {
+		fail("ftruncate failed: %s\n", strerror(errno));
+		goto out_close;
+	}
 
 	len = mlock_limit_cur;
 	if (len % page_size != 0)
@@ -69,19 +106,50 @@ static void test_mlock_limit(int fd)
 	mem = mmap(NULL, len, prot, mode, fd, 0);
 	if (mem == MAP_FAILED) {
 		fail("unable to mmap secret memory\n");
-		return;
+		goto out_close;
 	}
-	munmap(mem, len);
 
+	if (!fault_in_secretmem(mem, len)) {
+		fail("unable to fault in secret memory\n");
+		goto out;
+	}
+
+	munmap(mem, len);
 	len = mlock_limit_max * 2;
 	mem = mmap(NULL, len, prot, mode, fd, 0);
-	if (mem != MAP_FAILED) {
-		fail("unexpected mlock limit violation\n");
-		munmap(mem, len);
-		return;
+
+	if (mem == MAP_FAILED) {
+		fail("unable to mmap secret memory\n");
+		goto out_close;
+	}
+
+	if (fault_in_secretmem(mem, len)) {
+		fail("mlock limit is not respected\n");
+		goto out;
+	}
+
+	munmap(mem, len);
+	len = page_size;
+
+	/* map a page past the limit to assert inode scope. */
+
+	mem = mmap(NULL, page_size, prot, mode, fd,
+		   mlock_limit_max & ~(page_size - 1));
+	if (mem == MAP_FAILED) {
+		fail("unable to mmap secret memory\n");
+		goto out_close;
+	}
+
+	if (fault_in_secretmem(mem, page_size)) {
+		fail("mlock limit is not respected\n");
+		goto out;
 	}
 
 	pass("mlock limit is respected\n");
+out:
+	munmap(mem, len);
+out_close:
+	close(fd);
 }
 
 static void test_vmsplice(int fd, const char *desc)
@@ -292,6 +360,12 @@ static void prepare(void)
 	if (page_size > mlock_limit_max)
 		mlock_limit_max = page_size;
 
+	/* Clamp huge or unlimited. */
+	if (mlock_limit_max > MLOCK_LIMIT_CAP)
+		mlock_limit_max = MLOCK_LIMIT_CAP;
+	if (mlock_limit_cur > mlock_limit_max)
+		mlock_limit_cur = mlock_limit_max;
+
 	if (set_cap_limits(mlock_limit_max))
 		ksft_exit_fail_msg("Unable to set mlock limit: %s\n",
 				   strerror(errno));
@@ -301,6 +375,7 @@ static void prepare(void)
 
 int main(int argc, char *argv[])
 {
+	struct sigaction sa = { .sa_handler = sigbus_handler };
 	int fd;
 
 	prepare();
@@ -316,10 +391,15 @@ int main(int argc, char *argv[])
 			ksft_exit_fail_msg("memfd_secret failed: %s\n",
 					   strerror(errno));
 	}
+
+	sigemptyset(&sa.sa_mask);
+	if (sigaction(SIGBUS, &sa, NULL))
+		ksft_exit_fail_msg("Cannot set up SIGBUS handler");
+
 	if (ftruncate(fd, page_size))
 		ksft_exit_fail_msg("ftruncate failed: %s\n", strerror(errno));
 
-	test_mlock_limit(fd);
+	test_mlock_limit();
 	test_file_apis(fd);
 	/*
 	 * We have to run the first vmsplice test before any secretmem page was
