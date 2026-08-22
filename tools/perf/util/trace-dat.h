@@ -8,9 +8,13 @@
 #define __PERF_TRACE_DAT_H
 
 #include <stdio.h>
+#include <stdbool.h>
+#include <event-parse.h>
+#include <byteswap.h>
+#include "util.h"
 
 /* trace.dat file format version */
-#define TRACE_DAT_VERSION '7'
+#define TRACE_DAT_VERSION "7"
 
 /*
  * Section IDs for trace.dat format
@@ -51,6 +55,32 @@
 #define STRID_OPTIONS_2        77
 #define STRID_BUFFER_FLYRECORD 85
 
+/*
+ * Set by trace.dat section writers (kallsyms, ftrace, events etc.) on
+ * fwrite() failure; checked by trace_convert__perf2dat() to clean up.
+ */
+extern bool trace_dat_write_failed;
+
+/*
+ * tep handle from the recording machine; set by trace_convert__perf2dat()
+ * before options/flyrecord sections are written.
+ */
+
+static inline uint16_t to_file_u16(struct tep_handle *pevent, uint16_t val)
+{
+	return tep_read_number(pevent, &val, 2);
+}
+
+static inline uint32_t to_file_u32(struct tep_handle *pevent, uint32_t val)
+{
+	return tep_read_number(pevent, &val, 4);
+}
+
+static inline uint64_t to_file_u64(struct tep_handle *pevent, uint64_t val)
+{
+	return tep_read_number(pevent, &val, 8);
+}
+
 struct perf_session;
 
 extern FILE *trace_dat_fp;
@@ -75,9 +105,9 @@ int trace_dat__collect_cpu_event(int cpu, unsigned long long ts,
 void trace_dat__free_cpu_buffers(void);
 
 /* write trace.dat file sections */
-int trace_dat__write_options_section1(void);
-int trace_dat__write_options_section2(void);
-int trace_dat__write_flyrecord_section(void);
-int trace_dat__write_strings_section(void);
+int trace_dat__write_options_section1(struct tep_handle *pevent);
+int trace_dat__write_options_section2(struct tep_handle *pevent);
+int trace_dat__write_flyrecord_section(struct tep_handle *pevent);
+int trace_dat__write_strings_section(struct tep_handle *pevent);
 
 #endif /* __PERF_TRACE_DAT_H */

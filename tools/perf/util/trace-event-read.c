@@ -20,6 +20,7 @@
 #include "trace-event.h"
 #include "debug.h"
 #include "util.h"
+#include "trace-dat.h"
 
 static int input_fd;
 
@@ -155,10 +156,9 @@ out:
 static int read_proc_kallsyms(struct tep_handle *pevent)
 {
 	unsigned int size;
+	char *buf;
 
 	size = read4(pevent);
-	if (!size)
-		return 0;
 	/*
 	 * Just skip it, now that we configure libtraceevent to use the
 	 * tools/perf/ symbol resolver.
@@ -170,10 +170,58 @@ static int read_proc_kallsyms(struct tep_handle *pevent)
 	 * payload", so that older tools can continue reading it and interpret
 	 * it as "no kallsyms payload is present".
 	 */
-	lseek(input_fd, size, SEEK_CUR);
+	/* Write kallsyms section with empty payload if no data */
+	if (!size) {
+		if (trace_dat_fp && !trace_dat_write_failed) {
+			unsigned short section_id = to_file_u16(pevent, TRACE_DAT_SECTION_KALLSYMS);
+			unsigned short flags = to_file_u16(pevent, 0);
+			unsigned int string_id = to_file_u32(pevent, STRID_KALLSYMS);
+			unsigned long long section_size = to_file_u64(pevent, sizeof(unsigned int));
+			unsigned int kallsyms_data = to_file_u32(pevent, 0);
+
+			trace_dat_kallsyms_offset = ftell(trace_dat_fp);
+			if (!fwrite(&section_id, sizeof(unsigned short), 1, trace_dat_fp) ||
+			    !fwrite(&flags, sizeof(unsigned short), 1, trace_dat_fp) ||
+			    !fwrite(&string_id, sizeof(unsigned int), 1, trace_dat_fp) ||
+			    !fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp) ||
+			    !fwrite(&kallsyms_data, sizeof(unsigned int), 1, trace_dat_fp)) {
+				pr_warning("Failed to write trace.dat kallsyms section\n");
+				trace_dat_write_failed = true;
+			}
+		}
+		return 0;
+	}
+	buf = malloc(size);
+	if (buf == NULL)
+		return -1;
+	if (do_read(buf, size) < 0) {
+		free(buf);
+		return -1;
+	}
 	trace_data_size += size;
+	/* Write kallsyms section with data */
+	if (trace_dat_fp && !trace_dat_write_failed) {
+		unsigned short section_id = to_file_u16(pevent, TRACE_DAT_SECTION_KALLSYMS);
+		unsigned int string_id = to_file_u32(pevent, STRID_KALLSYMS);
+		unsigned long long section_size = to_file_u64(pevent, sizeof(unsigned int) + size);
+		unsigned short flags = to_file_u16(pevent, 0);
+		unsigned int size_out = to_file_u32(pevent, size);
+
+		trace_dat_kallsyms_offset = ftell(trace_dat_fp);
+		if (!fwrite(&section_id, sizeof(unsigned short), 1, trace_dat_fp) ||
+		    !fwrite(&flags, sizeof(unsigned short), 1, trace_dat_fp) ||
+		    !fwrite(&string_id, sizeof(unsigned int), 1, trace_dat_fp) ||
+		    !fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp) ||
+		    !fwrite(&size_out, sizeof(unsigned int), 1, trace_dat_fp) ||
+		    !fwrite(buf, 1, size, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat kallsyms section\n");
+			trace_dat_write_failed = true;
+		}
+	}
+	free(buf);
 	return 0;
 }
+
 
 static int read_ftrace_printk(struct tep_handle *pevent)
 {
@@ -210,6 +258,13 @@ static int read_ftrace_printk(struct tep_handle *pevent)
 static int read_header_files(struct tep_handle *pevent)
 {
 	unsigned long long size;
+	unsigned long long header_page_size;
+	unsigned long long header_event_size;
+	char *header_event;
+	unsigned short section_id;
+	unsigned short flags;
+	unsigned int string_id;
+	unsigned long long section_size;
 	char *header_page;
 	char buf[BUFSIZ];
 	ssize_t ret = 0;
@@ -224,6 +279,7 @@ static int read_header_files(struct tep_handle *pevent)
 
 	size = read8(pevent);
 
+	header_page_size = size;
 	header_page = malloc(size);
 	if (header_page == NULL)
 		return -1;
@@ -242,19 +298,63 @@ static int read_header_files(struct tep_handle *pevent)
 		 */
 		tep_set_long_size(pevent, tep_get_header_page_size(pevent));
 	}
-	free(header_page);
 
-	if (do_read(buf, 13) < 0)
+	if (do_read(buf, 13) < 0) {
+		free(header_page);
 		return -1;
+	}
 
 	if (memcmp(buf, "header_event", 13) != 0) {
 		pr_debug("did not read header event");
+		free(header_page);
 		return -1;
 	}
 
 	size = read8(pevent);
-	skip(size);
+	if (trace_dat_fp && !trace_dat_write_failed) {
+		unsigned long long header_page_size_out;
+		unsigned long long header_event_size_out;
 
+		header_event_size = size;
+		header_event = malloc(size);
+		if (header_event == NULL) {
+			free(header_page);
+			return -1;
+		}
+		if (do_read(header_event, size) < 0) {
+			free(header_page);
+			free(header_event);
+			return -1;
+		}
+		/* Write header_page and header_event to trace.dat */
+		section_id = to_file_u16(pevent, TRACE_DAT_SECTION_HEADER);
+		flags = to_file_u16(pevent, 0);
+		string_id = to_file_u32(pevent, STRID_HEADERS);
+		section_size = to_file_u64(pevent, 12 + 8 + header_page_size +
+				13 + 8 + header_event_size);
+		header_page_size_out = to_file_u64(pevent, header_page_size);
+		header_event_size_out = to_file_u64(pevent, header_event_size);
+
+		trace_dat_header_info_offset = ftell(trace_dat_fp);
+		if (!fwrite(&section_id, sizeof(unsigned short), 1, trace_dat_fp) ||
+		    !fwrite(&flags, sizeof(unsigned short), 1, trace_dat_fp) ||
+		    !fwrite(&string_id, sizeof(unsigned int), 1, trace_dat_fp) ||
+		    !fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp) ||
+		    !fwrite("header_page\0", 1, 12, trace_dat_fp) ||
+		    !fwrite(&header_page_size_out, sizeof(unsigned long long), 1, trace_dat_fp) ||
+		    !fwrite(header_page, 1, header_page_size, trace_dat_fp) ||
+		    !fwrite("header_event\0", 1, 13, trace_dat_fp) ||
+		    !fwrite(&header_event_size_out, sizeof(unsigned long long), 1, trace_dat_fp) ||
+		    !fwrite(header_event, 1, header_event_size, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat header section\n");
+			trace_dat_write_failed = true;
+		}
+		free(header_event);
+	} else {
+		skip(size);
+	}
+
+	free(header_page);
 	return ret;
 }
 
@@ -273,6 +373,15 @@ static int read_ftrace_file(struct tep_handle *pevent, unsigned long long size)
 	if (ret < 0) {
 		pr_debug("error reading ftrace file.\n");
 		goto out;
+	}
+	if (trace_dat_fp && !trace_dat_write_failed) {
+		unsigned long long size_out = to_file_u64(pevent, size);
+
+		if (!fwrite(&size_out, sizeof(unsigned long long), 1, trace_dat_fp) ||
+		    !fwrite(buf, 1, size, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat ftrace event formats section\n");
+			trace_dat_write_failed = true;
+		}
 	}
 
 	ret = parse_ftrace_file(pevent, buf, size);
@@ -298,6 +407,15 @@ static int read_event_file(struct tep_handle *pevent, char *sys,
 	ret = do_read(buf, size);
 	if (ret < 0)
 		goto out;
+	if (trace_dat_fp && !trace_dat_write_failed) {
+		unsigned long long size_out = to_file_u64(pevent, size);
+
+		if (!fwrite(&size_out, sizeof(unsigned long long), 1, trace_dat_fp) ||
+		    !fwrite(buf, 1, size, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat event formats section\n");
+			trace_dat_write_failed = true;
+		}
+	}
 
 	ret = parse_event_file(pevent, buf, size, sys);
 	if (ret < 0)
@@ -313,8 +431,39 @@ static int read_ftrace_files(struct tep_handle *pevent)
 	int count;
 	int i;
 	int ret;
+	long section_size_pos = 0;
+	long count_pos = 0;
+	unsigned long long section_size = 0;
+	long end_pos;
 
 	count = read4(pevent);
+	/* Write ftrace formats section to trace.dat output file */
+	if (trace_dat_fp && !trace_dat_write_failed) {
+		unsigned short section_id = to_file_u16(pevent, TRACE_DAT_SECTION_FTRACE);
+		unsigned short flags = to_file_u16(pevent, 0);
+		unsigned int string_id = to_file_u32(pevent, STRID_FTRACE_FORMATS);
+		unsigned int count_out = to_file_u32(pevent, count);
+
+		section_size = to_file_u64(pevent, 0);
+		trace_dat_ftrace_format_offset = ftell(trace_dat_fp);
+
+		if (!fwrite(&section_id, sizeof(unsigned short), 1, trace_dat_fp) ||
+			!fwrite(&flags, sizeof(unsigned short), 1, trace_dat_fp) ||
+			!fwrite(&string_id, sizeof(unsigned int), 1, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat ftrace event formats section\n");
+			trace_dat_write_failed = true;
+		}
+		section_size_pos = ftell(trace_dat_fp);
+		if (!fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat ftrace event formats section\n");
+			trace_dat_write_failed = true;
+		}
+		count_pos = ftell(trace_dat_fp);
+		if (!fwrite(&count_out, sizeof(unsigned int), 1, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat ftrace event formats section\n");
+			trace_dat_write_failed = true;
+		}
+	}
 
 	for (i = 0; i < count; i++) {
 		size = read8(pevent);
@@ -322,6 +471,18 @@ static int read_ftrace_files(struct tep_handle *pevent)
 		if (ret)
 			return ret;
 	}
+	/* Fill in section size after writing all ftrace files */
+	if (trace_dat_fp && !trace_dat_write_failed) {
+		end_pos = ftell(trace_dat_fp);
+		section_size = to_file_u64(pevent, end_pos - count_pos);
+		if (fseek(trace_dat_fp, section_size_pos, SEEK_SET) < 0 ||
+			!fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp) ||
+			fseek(trace_dat_fp, end_pos, SEEK_SET) < 0) {
+			pr_warning("Failed to write trace.dat ftrace event formats section\n");
+			trace_dat_write_failed = true;
+		}
+	}
+
 	return 0;
 }
 
@@ -333,8 +494,38 @@ static int read_event_files(struct tep_handle *pevent)
 	int count;
 	int i,x;
 	ssize_t ret;
+	long section_size_pos = 0;
+	long sys_count_pos = 0;
+	unsigned long long section_size = 0;
+	long end_pos;
 
 	systems = read4(pevent);
+	/* Write event formats section to trace.dat output file */
+	if (trace_dat_fp && !trace_dat_write_failed) {
+		unsigned short section_id = to_file_u16(pevent, TRACE_DAT_SECTION_EVENTS);
+		unsigned short flags = to_file_u16(pevent, 0);
+		unsigned int string_id = to_file_u32(pevent, STRID_EVENT_FORMATS);
+		unsigned int systems_out = to_file_u32(pevent, systems);
+
+		section_size = to_file_u64(pevent, 0);
+		trace_dat_events_format_offset = ftell(trace_dat_fp);
+		if (!fwrite(&section_id, sizeof(unsigned short), 1, trace_dat_fp) ||
+		    !fwrite(&flags, sizeof(unsigned short), 1, trace_dat_fp) ||
+		    !fwrite(&string_id, sizeof(unsigned int), 1, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat event formats section\n");
+			trace_dat_write_failed = true;
+		}
+		section_size_pos = ftell(trace_dat_fp);
+		if (!fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat event formats section\n");
+			trace_dat_write_failed = true;
+		}
+		sys_count_pos = ftell(trace_dat_fp);
+		if (!fwrite(&systems_out, sizeof(unsigned int), 1, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat event formats section\n");
+			trace_dat_write_failed = true;
+		}
+	}
 
 	for (i = 0; i < systems; i++) {
 		sys = read_string();
@@ -342,6 +533,15 @@ static int read_event_files(struct tep_handle *pevent)
 			return -1;
 
 		count = read4(pevent);
+		if (trace_dat_fp && !trace_dat_write_failed) {
+			unsigned int count_out = to_file_u32(pevent, count);
+
+			if (!fwrite(sys, 1, strlen(sys) + 1, trace_dat_fp) ||
+			    !fwrite(&count_out, sizeof(unsigned int), 1, trace_dat_fp)) {
+				pr_warning("Failed to write trace.dat event formats section\n");
+				trace_dat_write_failed = true;
+			}
+		}
 
 		for (x=0; x < count; x++) {
 			size = read8(pevent);
@@ -353,6 +553,18 @@ static int read_event_files(struct tep_handle *pevent)
 		}
 		free(sys);
 	}
+	/* Fill in section size after writing all event files */
+	if (trace_dat_fp && !trace_dat_write_failed) {
+		end_pos = ftell(trace_dat_fp);
+		section_size = to_file_u64(pevent, end_pos - sys_count_pos);
+		if (fseek(trace_dat_fp, section_size_pos, SEEK_SET) < 0 ||
+			!fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp) ||
+			fseek(trace_dat_fp, end_pos, SEEK_SET) < 0) {
+			pr_warning("Failed to write trace.dat event formats section\n");
+			trace_dat_write_failed = true;
+		}
+	}
+
 	return 0;
 }
 
@@ -364,8 +576,28 @@ static int read_saved_cmdline(struct tep_handle *pevent)
 
 	/* it can have 0 size */
 	size = read8(pevent);
-	if (!size)
+	/* Write cmdlines section with empty payload if no data */
+	if (!size) {
+		if (trace_dat_fp && !trace_dat_write_failed) {
+			unsigned short section_id = to_file_u16(pevent, TRACE_DAT_SECTION_CMDLINE);
+			unsigned short flags = to_file_u16(pevent, 0);
+			unsigned int string_id = to_file_u32(pevent, STRID_CMDLINES);
+			unsigned long long section_size =
+				to_file_u64(pevent, sizeof(unsigned long long));
+			unsigned long long section_data = to_file_u64(pevent, 0);
+
+			trace_dat_cmdline_offset = ftell(trace_dat_fp);
+			if (!fwrite(&section_id, sizeof(unsigned short), 1, trace_dat_fp) ||
+			    !fwrite(&flags, sizeof(unsigned short), 1, trace_dat_fp) ||
+			    !fwrite(&string_id, sizeof(unsigned int), 1, trace_dat_fp) ||
+			    !fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp) ||
+			    !fwrite(&section_data, sizeof(unsigned long long), 1, trace_dat_fp)) {
+				pr_warning("Failed to write trace.dat cmdlines section\n");
+				trace_dat_write_failed = true;
+			}
+		}
 		return 0;
+	}
 
 	if (size == ULLONG_MAX) {
 		pr_debug("invalid saved cmdline size");
@@ -383,6 +615,27 @@ static int read_saved_cmdline(struct tep_handle *pevent)
 		pr_debug("error reading saved cmdlines\n");
 		goto out;
 	}
+	/* Write cmdlines section with data */
+	if (trace_dat_fp && !trace_dat_write_failed) {
+		unsigned short section_id = to_file_u16(pevent, TRACE_DAT_SECTION_CMDLINE);
+		unsigned short flags = to_file_u16(pevent, 0);
+		unsigned int string_id = to_file_u32(pevent, STRID_CMDLINES);
+		unsigned long long section_size =
+			to_file_u64(pevent, sizeof(unsigned long long) + size);
+		unsigned long long size_out = to_file_u64(pevent, size);
+
+		trace_dat_cmdline_offset = ftell(trace_dat_fp);
+		if (!fwrite(&section_id, sizeof(unsigned short), 1, trace_dat_fp) ||
+			!fwrite(&flags, sizeof(unsigned short), 1, trace_dat_fp) ||
+			!fwrite(&string_id, sizeof(unsigned int), 1, trace_dat_fp) ||
+			!fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp) ||
+			!fwrite(&size_out, sizeof(unsigned long long), 1, trace_dat_fp) ||
+			!fwrite(buf, 1, size, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat cmdlines section\n");
+			trace_dat_write_failed = true;
+		}
+	}
+
 	buf[ret] = '\0';
 
 	parse_saved_cmdline(pevent, buf, size);
@@ -407,6 +660,7 @@ ssize_t trace_report(int fd, struct trace_event *tevent, bool __repipe)
 	int file_page_size;
 	struct tep_handle *pevent = NULL;
 	int err;
+	char magic_buf[10];
 
 	repipe = __repipe;
 	input_fd = fd;
@@ -418,12 +672,17 @@ ssize_t trace_report(int fd, struct trace_event *tevent, bool __repipe)
 		return -1;
 	}
 
+	if (trace_dat_fp)
+		memcpy(magic_buf, buf, 3);
+
 	if (do_read(buf, 7) < 0)
 		return -1;
 	if (memcmp(buf, "tracing", 7) != 0) {
 		pr_debug("not a trace file (missing 'tracing' tag)");
 		return -1;
 	}
+	if (trace_dat_fp)
+		memcpy(magic_buf + 3, buf, 7);
 
 	version = read_string();
 	if (version == NULL)
@@ -460,6 +719,34 @@ ssize_t trace_report(int fd, struct trace_event *tevent, bool __repipe)
 	tep_set_long_size(pevent, file_long_size);
 	tep_set_page_size(pevent, file_page_size);
 
+	/* Write initial file header to trace.dat */
+	if (trace_dat_fp && !trace_dat_write_failed) {
+		unsigned char endian = file_bigendian;
+		unsigned char long_size = file_long_size;
+		unsigned int page_size = to_file_u32(pevent, file_page_size);
+		unsigned long long placeholder = to_file_u64(pevent, 0);
+
+		if (!fwrite(magic_buf, 1, 10, trace_dat_fp) ||    /* magic + "tracing" */
+		    !fwrite(TRACE_DAT_VERSION, 1, 2, trace_dat_fp) ||
+		    !fwrite(&endian, 1, 1, trace_dat_fp) ||
+		    !fwrite(&long_size, 1, 1, trace_dat_fp) ||
+		    !fwrite(&page_size, sizeof(unsigned int), 1, trace_dat_fp) ||
+		    !fwrite("none", 1, 4, trace_dat_fp) ||
+		    !fwrite("\0", 1, 1, trace_dat_fp) ||
+		    !fwrite("\0", 1, 1, trace_dat_fp)) {
+			pr_warning("Failed to write trace.dat initalfile header\n");
+			trace_dat_write_failed = true;
+		}
+
+		if (!trace_dat_write_failed) {
+			trace_dat_options_offset = ftell(trace_dat_fp);
+			if (!fwrite(&placeholder, sizeof(unsigned long long), 1, trace_dat_fp)) {
+				pr_warning("Failed to write trace.dat initial file header\n");
+				trace_dat_write_failed = true;
+			}
+		}
+	}
+
 	err = read_header_files(pevent);
 	if (err)
 		goto out;
@@ -477,6 +764,12 @@ ssize_t trace_report(int fd, struct trace_event *tevent, bool __repipe)
 		goto out;
 	if (atof(version) >= 0.6) {
 		err = read_saved_cmdline(pevent);
+		if (err)
+			goto out;
+	}
+	/* Write strings section to trace.dat output file */
+	if (trace_dat_fp && !trace_dat_write_failed) {
+		err = trace_dat__write_strings_section(pevent);
 		if (err)
 			goto out;
 	}
