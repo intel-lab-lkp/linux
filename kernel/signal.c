@@ -482,7 +482,11 @@ void flush_sigqueue(struct sigpending *queue)
 	sigemptyset(&queue->signal);
 	while (!list_empty(&queue->list)) {
 		q = list_entry(queue->list.next, struct sigqueue , list);
-		list_del_init(&q->list);
+		/*
+		 * Pairs with the list_empty() in posixtimer_send_sigqueue().
+		 * release_task() gets here without ->siglock.
+		 */
+		list_del_init_careful(&q->list);
 		__sigqueue_free(q);
 	}
 }
