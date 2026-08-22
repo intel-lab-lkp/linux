@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 
+#include <linux/rtnetlink.h>
 #include <linux/netdevice.h>
 #include <linux/if_ether.h>
 #include <linux/if_phonet.h>
@@ -600,7 +601,13 @@ static const struct configfs_item_operations phonet_item_ops = {
 
 static ssize_t f_phonet_ifname_show(struct config_item *item, char *page)
 {
-	return gether_get_ifname(to_f_phonet_opts(item)->net, page, PAGE_SIZE);
+	struct net_device *net = to_f_phonet_opts(item)->net;
+	int ret;
+
+	rtnl_lock();
+	ret = scnprintf(page, PAGE_SIZE, "%s\n", netdev_name(net));
+	rtnl_unlock();
+	return ret;
 }
 
 CONFIGFS_ATTR_RO(f_phonet_, ifname);
