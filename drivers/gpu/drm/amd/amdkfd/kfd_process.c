@@ -743,7 +743,7 @@ static void kfd_process_free_gpuvm(struct kgd_mem *mem,
 
 	amdgpu_amdkfd_gpuvm_unmap_memory_from_gpu(dev->adev, mem, pdd->drm_priv);
 	amdgpu_amdkfd_gpuvm_free_memory_of_gpu(dev->adev, mem, pdd->drm_priv,
-					       NULL);
+					       NULL, true);
 }
 
 static void kfd_process_free_gpuvm_map(struct kgd_mem *mem,
@@ -759,7 +759,7 @@ static void kfd_process_free_gpuvm_map(struct kgd_mem *mem,
 
 	amdgpu_amdkfd_gpuvm_unmap_memory_from_gpu(dev->adev, mem, pdd->drm_priv);
 	amdgpu_amdkfd_gpuvm_free_memory_of_gpu(dev->adev, mem, pdd->drm_priv,
-					       NULL);
+					       NULL, true);
 }
 
 /* kfd_process_alloc_gpuvm - Allocate GPU VM for the KFD process
@@ -814,7 +814,7 @@ sync_memory_failed:
 
 err_map_mem:
 	amdgpu_amdkfd_gpuvm_free_memory_of_gpu(kdev->adev, *mem, pdd->drm_priv,
-					       NULL);
+					       NULL, false);
 err_alloc_mem:
 	*mem = NULL;
 	*kptr = NULL;
@@ -1119,18 +1119,29 @@ static void kfd_process_device_free_bos(struct kfd_process_device *pdd)
 	 * local memory object
 	 */
 	idr_for_each_entry(&pdd->alloc_idr, mem, id) {
+		int r;
 
 		for (i = 0; i < p->n_pdds; i++) {
 			struct kfd_process_device *peer_pdd = p->pdds[i];
 
 			if (!peer_pdd->drm_priv)
 				continue;
+			/*
+			 * This can fail under memory pressure: unmapping has
+			 * to validate the page-table BOs first. Ignore it and
+			 * force the free below - the handle is dropped either
+			 * way, so a failed free would leak the BO onto the
+			 * process_info lists and poison the eviction LRU.
+			 */
 			amdgpu_amdkfd_gpuvm_unmap_memory_from_gpu(
 				peer_pdd->dev->adev, mem, peer_pdd->drm_priv);
 		}
 
-		amdgpu_amdkfd_gpuvm_free_memory_of_gpu(pdd->dev->adev, mem,
-						       pdd->drm_priv, NULL);
+		r = amdgpu_amdkfd_gpuvm_free_memory_of_gpu(pdd->dev->adev, mem,
+							   pdd->drm_priv, NULL,
+							   true);
+		if (r)
+			pr_err("Failed to free BO on process teardown: %d\n", r);
 		kfd_process_device_remove_obj_handle(pdd, id);
 	}
 }

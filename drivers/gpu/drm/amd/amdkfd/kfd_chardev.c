@@ -1219,7 +1219,7 @@ static int kfd_ioctl_alloc_memory_of_gpu(struct file *filep,
 
 err_free:
 	amdgpu_amdkfd_gpuvm_free_memory_of_gpu(dev->adev, (struct kgd_mem *)mem,
-					       pdd->drm_priv, NULL);
+					       pdd->drm_priv, NULL, false);
 err_unlock:
 err_pdd:
 err_large_bar:
@@ -1262,7 +1262,8 @@ static int kfd_ioctl_free_memory_of_gpu(struct file *filep,
 	}
 
 	ret = amdgpu_amdkfd_gpuvm_free_memory_of_gpu(pdd->dev->adev,
-				(struct kgd_mem *)mem, pdd->drm_priv, &size);
+				(struct kgd_mem *)mem, pdd->drm_priv, &size,
+				false);
 
 	/* If freeing the buffer failed, leave the handle in place for
 	 * clean-up during process tear-down.
@@ -1618,7 +1619,7 @@ static int kfd_ioctl_import_dmabuf(struct file *filep,
 
 err_free:
 	amdgpu_amdkfd_gpuvm_free_memory_of_gpu(pdd->dev->adev, (struct kgd_mem *)mem,
-					       pdd->drm_priv, NULL);
+					       pdd->drm_priv, NULL, false);
 err_unlock:
 	mutex_unlock(&p->mutex);
 	return r;
@@ -2483,7 +2484,7 @@ static int criu_restore_memory_of_gpu(struct kfd_process_device *pdd,
 	if (idr_handle < 0) {
 		pr_err("Could not allocate idr\n");
 		amdgpu_amdkfd_gpuvm_free_memory_of_gpu(pdd->dev->adev, *kgd_mem, pdd->drm_priv,
-						       NULL);
+						       NULL, false);
 		return -ENOMEM;
 	}
 

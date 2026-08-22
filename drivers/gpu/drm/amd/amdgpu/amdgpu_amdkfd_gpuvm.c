@@ -1901,7 +1901,7 @@ err:
 
 int amdgpu_amdkfd_gpuvm_free_memory_of_gpu(
 		struct amdgpu_device *adev, struct kgd_mem *mem, void *drm_priv,
-		uint64_t *size)
+		uint64_t *size, bool force)
 {
 	struct amdkfd_process_info *process_info = mem->process_info;
 	unsigned long bo_size = mem->bo->tbo.base.size;
@@ -1922,9 +1922,26 @@ int amdgpu_amdkfd_gpuvm_free_memory_of_gpu(
 	 */
 
 	if (mapped_to_gpu_memory > 0) {
-		pr_debug("BO VA 0x%llx size 0x%lx is still mapped.\n",
-				mem->va, bo_size);
-		return -EBUSY;
+		/*
+		 * Refusing to free a mapped BO is only meaningful while the
+		 * process can still unmap it. On process teardown (@force)
+		 * there is no such chance: the caller drops the last handle
+		 * to @mem regardless, so bailing out here leaks the BO onto
+		 * process_info->kfd_bo_list / userptr_inval_list. Those lists
+		 * are then destroyed non-empty in
+		 * amdgpu_amdkfd_gpuvm_destroy_cb(), leaving a BO in TTM's
+		 * eviction LRU whose bo_vas point into the freed amdgpu_vm.
+		 * The next client to trigger eviction deadlocks in
+		 * amdgpu_vm_bo_move(). Tear the mappings down instead - the
+		 * VM is going away right after us anyway.
+		 */
+		if (!force) {
+			pr_debug("BO VA 0x%llx size 0x%lx is still mapped.\n",
+				 mem->va, bo_size);
+			return -EBUSY;
+		}
+		pr_warn("Force-freeing BO VA 0x%llx size 0x%lx still mapped %u time(s)\n",
+			mem->va, bo_size, mapped_to_gpu_memory);
 	}
 
 	/* At this point the BO is guaranteed to be freed, so unpin the
