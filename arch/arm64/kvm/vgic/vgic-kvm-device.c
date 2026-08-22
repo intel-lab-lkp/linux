@@ -97,12 +97,28 @@ static int kvm_vgic_addr(struct kvm *kvm, struct kvm_device_attr *attr, bool wri
 	phys_addr_t *addr_ptr, alignment, size;
 	u64 undef_value = VGIC_ADDR_UNDEF;
 	u64 addr;
+	bool redist_write = write &&
+		(attr->attr == KVM_VGIC_V3_ADDR_TYPE_REDIST ||
+		 attr->attr == KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION);
 	int r;
 
 	/* Reading a redistributor region addr implies getting the index */
 	if (write || attr->attr == KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION)
 		if (get_user(addr, uaddr))
 			return -EFAULT;
+
+	/*
+	 * A vCPU can have an RD assignment before it is visible to
+	 * kvm_for_each_vcpu(). Reject redistributor updates while vCPU creation
+	 * is in progress, so rollback can reset every assignment.
+	 */
+	if (redist_write) {
+		mutex_lock(&kvm->lock);
+		if (kvm->created_vcpus != atomic_read(&kvm->online_vcpus)) {
+			r = -EBUSY;
+			goto out_unlock_kvm;
+		}
+	}
 
 	/*
 	 * Since we can't hold config_lock while registering the redistributor
@@ -200,6 +216,10 @@ static int kvm_vgic_addr(struct kvm *kvm, struct kvm_device_attr *attr, bool wri
 
 out:
 	mutex_unlock(&kvm->slots_lock);
+
+out_unlock_kvm:
+	if (redist_write)
+		mutex_unlock(&kvm->lock);
 
 	if (!r && !write)
 		r =  put_user(addr, uaddr);
