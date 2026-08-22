@@ -1324,6 +1324,107 @@ static const struct hwmon_chip_info aqc_chip_info = {
 	.info = aqc_info,
 };
 
+/* aqc_raw_data_valid()
+ * Does not support special-case sensor readings data size check
+ */
+static bool aqc_raw_data_valid(struct aqc_data *priv, int size)
+{
+	int off, fan_off, i;
+	char *msg;
+
+	if (!priv)
+		return false;
+
+	/* +1 for get_unaligned_be16(), it reads 2 bytes */
+	off = priv->serial_number_start_offset + SERIAL_PART_OFFSET + 1;
+	if (off >= size) {
+		msg = "serial number start offset";
+		goto invalid;
+	}
+
+	off = priv->firmware_version_offset + 1;
+	if (off >= size) {
+		msg = "firmware version offset";
+		goto invalid;
+	}
+
+	/* Physical temperature sensor readings data size check*/
+	for (i = 0; i < priv->num_temp_sensors; i++) {
+		off = priv->temp_sensor_start_offset + i * AQC_SENSOR_SIZE + 1;
+
+		if (off >= size) {
+			msg = "temp sensor start offset";
+			goto invalid;
+		}
+	}
+
+	/* Virtual temperature sensor readings data size check*/
+	for (i = 0; i < priv->num_virtual_temp_sensors; i++) {
+		off = priv->virtual_temp_sensor_start_offset +
+		      i * AQC_SENSOR_SIZE + 1;
+
+		if (off >= size) {
+			msg = "virtual temp sensor start offset";
+			goto invalid;
+		}
+	}
+
+	/* Fan speed and related readings data size check */
+	if (!priv->fan_structure)
+		goto flow;
+
+	for (i = 0; i < priv->num_fans; i++) {
+		fan_off = priv->fan_sensor_offsets[i] + 1;
+		off = fan_off + priv->fan_structure->speed;
+		if (off >= size) {
+			msg = "fan speed offset";
+			goto invalid;
+		}
+
+		off = fan_off + priv->fan_structure->power;
+		if (off >= size) {
+			msg = "fan power offset";
+			goto invalid;
+		}
+
+		off = fan_off + priv->fan_structure->voltage;
+		if (off >= size) {
+			msg = "fan voltage offset";
+			goto invalid;
+		}
+
+		off = fan_off + priv->fan_structure->curr;
+		if (off >= size) {
+			msg = "fan curr offset";
+			goto invalid;
+		}
+	}
+
+flow:
+	/* Flow sensor readings data size check */
+	for (i = 0; i < priv->num_flow_sensors; i++) {
+		off = priv->flow_sensors_start_offset + i * AQC_SENSOR_SIZE + 1;
+		if (off >= size) {
+			msg = "flow sensors start offset";
+			goto invalid;
+		}
+	}
+
+	if (priv->power_cycle_count_offset != 0) {
+		off = priv->power_cycle_count_offset + 3;
+		if (off >= size) {
+			msg = "power cycle count offset";
+			goto invalid;
+		}
+	}
+
+	return true;
+invalid:
+	pr_debug("data size (%d) is less than the %s, %s\n",
+		 size, msg, __func__);
+	return false;
+}
+
 static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
 {
 	int i, j, sensor_value;
@@ -1333,6 +1434,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		return 0;
 
 	priv = hid_get_drvdata(hdev);
+
+	if (!aqc_raw_data_valid(priv, size))
+		return 0;
 
 	/* Info provided with every report */
 	priv->serial_number[0] = get_unaligned_be16(data + priv->serial_number_start_offset);
