@@ -7898,7 +7898,7 @@ requeue_delayed_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	/*
 	 * se->sched_delayed should imply: se->on_rq == 1.
 	 * Because a delayed entity is one that is still on
-	 * the runqueue competing until elegibility.
+	 * the runqueue competing until eligibility.
 	 */
 	WARN_ON_ONCE(!se->sched_delayed);
 	WARN_ON_ONCE(!se->on_rq);
