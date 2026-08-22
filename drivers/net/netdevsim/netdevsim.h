@@ -453,13 +453,13 @@ void nsim_psp_uninit(struct netdevsim *ns);
 void nsim_psp_handle_ext(struct sk_buff *skb, struct skb_ext *psp_ext);
 enum skb_drop_reason
 nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
-	    struct netdevsim *peer_ns, struct skb_ext **psp_ext);
+	    struct netdevsim *peer_ns, struct skb_ext **psp_ext, int *rxq);
 #else
 static inline int nsim_psp_init(struct netdevsim *ns) { return 0; }
 static inline void nsim_psp_uninit(struct netdevsim *ns) {}
 static inline enum skb_drop_reason
 nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
-	    struct netdevsim *peer_ns, struct skb_ext **psp_ext)
+	    struct netdevsim *peer_ns, struct skb_ext **psp_ext, int *rxq)
 {
 	return 0;
 }

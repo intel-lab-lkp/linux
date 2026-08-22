@@ -14,9 +14,26 @@ void nsim_psp_handle_ext(struct sk_buff *skb, struct skb_ext *psp_ext)
 		__skb_ext_set(skb, SKB_EXT_PSP, psp_ext);
 }
 
+/* Pick the Rx queue for a decapsulated frame. Devices which support
+ * PSP_VC_STEER_RX match the destination queue ID carried in the
+ * cookie ahead of consulting the RSS table.
+ */
+static int nsim_psp_steer(struct netdevsim *peer_ns, struct sk_buff *skb,
+			  int rxq)
+{
+	struct net_device *dev = peer_ns->netdev;
+	struct psp_skb_ext *pse;
+
+	pse = skb_ext_find(skb, SKB_EXT_PSP);
+	if (!pse || pse->vc_dst >= dev->real_num_rx_queues)
+		return rxq;
+
+	return pse->vc_dst;
+}
+
 enum skb_drop_reason
 nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
-	    struct netdevsim *peer_ns, struct skb_ext **psp_ext)
+	    struct netdevsim *peer_ns, struct skb_ext **psp_ext, int *rxq)
 {
 	enum skb_drop_reason rc = 0;
 	struct psp_dev *peer_psd;
@@ -44,7 +61,8 @@ nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
 	}
 
 	net = sock_net(skb->sk);
-	if (!psp_dev_encapsulate(net, skb, pas->tx.spi, pas->version, 0, 0)) {
+	if (!psp_dev_encapsulate(net, skb, pas->tx.spi, pas->version, 0,
+				 psp_assoc_vc_tx_get(pas))) {
 		rc = SKB_DROP_REASON_PSP_OUTPUT;
 		goto out_unlock;
 	}
@@ -72,6 +90,9 @@ nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
 			rc = SKB_DROP_REASON_PSP_OUTPUT;
 			goto out_unlock;
 		}
+
+		if (peer_psd->config.vc_steer & (1 << PSP_VC_STEER_RX))
+			*rxq = nsim_psp_steer(peer_ns, skb, *rxq);
 
 		*psp_ext = skb->extensions;
 		refcount_inc(&(*psp_ext)->refcnt);
@@ -216,6 +237,7 @@ static struct psp_dev_caps nsim_psp_caps = {
 		    1 << PSP_VERSION_HDR0_AES_GCM_256 |
 		    1 << PSP_VERSION_HDR0_AES_GMAC_256,
 	.assoc_drv_spc = sizeof(void *),
+	.vc_steer = true,
 };
 
 static void __nsim_psp_uninit(struct netdevsim *ns, bool teardown)

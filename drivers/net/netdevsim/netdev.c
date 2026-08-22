@@ -147,11 +147,12 @@ static netdev_tx_t nsim_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		peer_dev = peer_ns->netdev;
 	}
 
-	dr = nsim_do_psp(skb, ns, peer_ns, &psp_ext);
+	rxq = skb_get_queue_mapping(skb);
+
+	dr = nsim_do_psp(skb, ns, peer_ns, &psp_ext, &rxq);
 	if (dr)
 		goto out_drop_free;
 
-	rxq = skb_get_queue_mapping(skb);
 	if (rxq >= peer_dev->num_rx_queues)
 		rxq = rxq % peer_dev->num_rx_queues;
 	rq = peer_ns->rq[rxq];
