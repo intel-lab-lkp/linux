@@ -618,6 +618,11 @@ static struct tsm_report_ops sev_tsm_report_ops = {
 	.report_bin_attr_visible = sev_report_bin_attr_visible,
 };
 
+static void free_snp_msg(void *data)
+{
+	snp_msg_free(data);
+}
+
 static void unregister_sev_tsm(void *data)
 {
 	tsm_report_unregister(&sev_tsm_report_ops);
@@ -644,9 +649,15 @@ static int __init sev_guest_probe(struct platform_device *pdev)
 	if (IS_ERR_OR_NULL(mdesc))
 		return -ENOMEM;
 
+	ret = devm_add_action_or_reset(&pdev->dev, free_snp_msg, mdesc);
+	if (ret)
+		return ret;
+
 	ret = snp_msg_init(mdesc, vmpck_id);
 	if (ret)
-		goto e_msg_init;
+		return ret;
+
+	snp_dev->msg_desc = mdesc;
 
 	platform_set_drvdata(pdev, snp_dev);
 	snp_dev->dev = dev;
@@ -661,32 +672,25 @@ static int __init sev_guest_probe(struct platform_device *pdev)
 
 	ret = tsm_report_register(&sev_tsm_report_ops, snp_dev);
 	if (ret)
-		goto e_msg_init;
+		return ret;
 
 	ret = devm_add_action_or_reset(&pdev->dev, unregister_sev_tsm, NULL);
 	if (ret)
-		goto e_msg_init;
+		return ret;
 
 	ret =  misc_register(misc);
 	if (ret)
-		goto e_msg_init;
+		return ret;
 
-	snp_dev->msg_desc = mdesc;
 	dev_info(dev, "Initialized SEV guest driver (using VMPCK%d communication key)\n",
 		 mdesc->vmpck_id);
 	return 0;
-
-e_msg_init:
-	snp_msg_free(mdesc);
-
-	return ret;
 }
 
 static void __exit sev_guest_remove(struct platform_device *pdev)
 {
 	struct snp_guest_dev *snp_dev = platform_get_drvdata(pdev);
 
-	snp_msg_free(snp_dev->msg_desc);
 	misc_deregister(&snp_dev->misc);
 }
 
