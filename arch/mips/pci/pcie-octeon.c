@@ -95,12 +95,13 @@ union cvmx_pcie_address {
 static int cvmx_pcie_rc_initialize(int pcie_port);
 
 /**
- * Return the Core virtual base address for PCIe IO access. IOs are
- * read/written as an offset from this address.
+ * cvmx_pcie_get_io_base_address() - Return the Core virtual base address
+ *	for PCIe IO access. IOs are read/written as an offset from this
+ *	address.
  *
  * @pcie_port: PCIe port the IO is for
  *
- * Returns 64bit Octeon IO base address for read/write
+ * Returns: 64bit Octeon IO base address for read/write
  */
 static inline uint64_t cvmx_pcie_get_io_base_address(int pcie_port)
 {
@@ -116,12 +117,12 @@ static inline uint64_t cvmx_pcie_get_io_base_address(int pcie_port)
 }
 
 /**
- * Size of the IO address region returned at address
- * cvmx_pcie_get_io_base_address()
+ * cvmx_pcie_get_io_size() - Size of the IO address region returned at
+ *	address cvmx_pcie_get_io_base_address().
  *
  * @pcie_port: PCIe port the IO is for
  *
- * Returns Size of the IO window
+ * Returns: Size of the IO window
  */
 static inline uint64_t cvmx_pcie_get_io_size(int pcie_port)
 {
@@ -129,12 +130,13 @@ static inline uint64_t cvmx_pcie_get_io_size(int pcie_port)
 }
 
 /**
- * Return the Core virtual base address for PCIe MEM access. Memory is
- * read/written as an offset from this address.
+ * cvmx_pcie_get_mem_base_address() - Return the Core virtual base address
+ *	for PCIe MEM access. Memory is read/written as an offset from this
+ *	address.
  *
  * @pcie_port: PCIe port the IO is for
  *
- * Returns 64bit Octeon IO base address for read/write
+ * Returns: 64bit Octeon IO base address for read/write
  */
 static inline uint64_t cvmx_pcie_get_mem_base_address(int pcie_port)
 {
@@ -148,12 +150,12 @@ static inline uint64_t cvmx_pcie_get_mem_base_address(int pcie_port)
 }
 
 /**
- * Size of the Mem address region returned at address
- * cvmx_pcie_get_mem_base_address()
+ * cvmx_pcie_get_mem_size() - Size of the Mem address region returned at
+ *	address cvmx_pcie_get_mem_base_address().
  *
  * @pcie_port: PCIe port the IO is for
  *
- * Returns Size of the Mem window
+ * Returns: Size of the Mem window
  */
 static inline uint64_t cvmx_pcie_get_mem_size(int pcie_port)
 {
@@ -161,13 +163,14 @@ static inline uint64_t cvmx_pcie_get_mem_size(int pcie_port)
 }
 
 /**
- * Read a PCIe config space register indirectly. This is used for
- * registers of the form PCIEEP_CFG??? and PCIERC?_CFG???.
+ * cvmx_pcie_cfgx_read() - Read a PCIe config space register indirectly.
+ *	This is used for registers of the form PCIEEP_CFG??? and
+ *	PCIFRC?_CFG???.
  *
  * @pcie_port:	PCIe port to read from
  * @cfg_offset: Address to read
  *
- * Returns Value read
+ * Returns: Value read
  */
 static uint32_t cvmx_pcie_cfgx_read(int pcie_port, uint32_t cfg_offset)
 {
@@ -189,8 +192,9 @@ static uint32_t cvmx_pcie_cfgx_read(int pcie_port, uint32_t cfg_offset)
 }
 
 /**
- * Write a PCIe config space register indirectly. This is used for
- * registers of the form PCIEEP_CFG??? and PCIERC?_CFG???.
+ * cvmx_pcie_cfgx_write() - Write a PCIe config space register indirectly.
+ *	This is used for registers of the form PCIEEP_CFG??? and
+ *	PCIFRC?_CFG???.
  *
  * @pcie_port:	PCIe port to write to
  * @cfg_offset: Address to write
@@ -215,7 +219,8 @@ static void cvmx_pcie_cfgx_write(int pcie_port, uint32_t cfg_offset,
 }
 
 /**
- * Build a PCIe config space request address for a device
+ * __cvmx_pcie_build_config_addr() - Build a PCIe config space request
+ *	address for a device
  *
  * @pcie_port: PCIe port to access
  * @bus:       Sub bus
@@ -223,7 +228,7 @@ static void cvmx_pcie_cfgx_write(int pcie_port, uint32_t cfg_offset,
  * @fn:	       Device sub function
  * @reg:       Register to access
  *
- * Returns 64bit Octeon IO address
+ * Returns: 64bit Octeon IO address
  */
 static inline uint64_t __cvmx_pcie_build_config_addr(int pcie_port, int bus,
 						     int dev, int fn, int reg)
@@ -258,7 +263,7 @@ static inline uint64_t __cvmx_pcie_build_config_addr(int pcie_port, int bus,
 }
 
 /**
- * Read 8bits from a Device's config space
+ * cvmx_pcie_config_read8() - Read 8bits from a Device's config space
  *
  * @pcie_port: PCIe port the device is on
  * @bus:       Sub bus
@@ -266,7 +271,7 @@ static inline uint64_t __cvmx_pcie_build_config_addr(int pcie_port, int bus,
  * @fn:	       Device sub function
  * @reg:       Register to access
  *
- * Returns Result of the read
+ * Returns: Result of the read
  */
 static uint8_t cvmx_pcie_config_read8(int pcie_port, int bus, int dev,
 				      int fn, int reg)
@@ -280,7 +285,7 @@ static uint8_t cvmx_pcie_config_read8(int pcie_port, int bus, int dev,
 }
 
 /**
- * Read 16bits from a Device's config space
+ * cvmx_pcie_config_read16() - Read 16bits from a Device's config space
  *
  * @pcie_port: PCIe port the device is on
  * @bus:       Sub bus
@@ -288,7 +293,7 @@ static uint8_t cvmx_pcie_config_read8(int pcie_port, int bus, int dev,
  * @fn:	       Device sub function
  * @reg:       Register to access
  *
- * Returns Result of the read
+ * Returns: Result of the read
  */
 static uint16_t cvmx_pcie_config_read16(int pcie_port, int bus, int dev,
 					int fn, int reg)
@@ -302,7 +307,7 @@ static uint16_t cvmx_pcie_config_read16(int pcie_port, int bus, int dev,
 }
 
 /**
- * Read 32bits from a Device's config space
+ * cvmx_pcie_config_read32() - Read 32bits from a Device's config space
  *
  * @pcie_port: PCIe port the device is on
  * @bus:       Sub bus
@@ -310,7 +315,7 @@ static uint16_t cvmx_pcie_config_read16(int pcie_port, int bus, int dev,
  * @fn:	       Device sub function
  * @reg:       Register to access
  *
- * Returns Result of the read
+ * Returns: Result of the read
  */
 static uint32_t cvmx_pcie_config_read32(int pcie_port, int bus, int dev,
 					int fn, int reg)
@@ -324,7 +329,7 @@ static uint32_t cvmx_pcie_config_read32(int pcie_port, int bus, int dev,
 }
 
 /**
- * Write 8bits to a Device's config space
+ * cvmx_pcie_config_write8() - Write 8bits to a Device's config space
  *
  * @pcie_port: PCIe port the device is on
  * @bus:       Sub bus
@@ -343,7 +348,7 @@ static void cvmx_pcie_config_write8(int pcie_port, int bus, int dev, int fn,
 }
 
 /**
- * Write 16bits to a Device's config space
+ * cvmx_pcie_config_write16() - Write 16bits to a Device's config space
  *
  * @pcie_port: PCIe port the device is on
  * @bus:       Sub bus
@@ -362,7 +367,7 @@ static void cvmx_pcie_config_write16(int pcie_port, int bus, int dev, int fn,
 }
 
 /**
- * Write 32bits to a Device's config space
+ * cvmx_pcie_config_write32() - Write 32bits to a Device's config space
  *
  * @pcie_port: PCIe port the device is on
  * @bus:       Sub bus
@@ -381,7 +386,8 @@ static void cvmx_pcie_config_write32(int pcie_port, int bus, int dev, int fn,
 }
 
 /**
- * Initialize the RC config space CSRs
+ * __cvmx_pcie_rc_initialize_config_space() - Initialize the RC config
+ *	space CSRs
  *
  * @pcie_port: PCIe port to initialize
  */
@@ -579,13 +585,13 @@ static void __cvmx_pcie_rc_initialize_config_space(int pcie_port)
 }
 
 /**
- * Initialize a host mode PCIe gen 1 link. This function takes a PCIe
- * port from reset to a link up state. Software can then begin
- * configuring the rest of the link.
+ * __cvmx_pcie_rc_initialize_link_gen1() - Initialize a host mode PCIe
+ *	gen 1 link. This function takes a PCIe port from reset to a link up
+ *	state. Software can then begin configuring the rest of the link.
  *
  * @pcie_port: PCIe port to initialize
  *
- * Returns Zero on success
+ * Returns: Zero on success
  */
 static int __cvmx_pcie_rc_initialize_link_gen1(int pcie_port)
 {
@@ -687,12 +693,12 @@ static void __cvmx_increment_ba(union cvmx_sli_mem_access_subidx *pmas)
 }
 
 /**
- * Initialize a PCIe gen 1 port for use in host(RC) mode. It doesn't
- * enumerate the bus.
+ * __cvmx_pcie_rc_initialize_gen1() - Initialize a PCIe gen 1 port for
+ *	use in host(RC) mode. It doesn't enumerate the bus.
  *
  * @pcie_port: PCIe port to initialize
  *
- * Returns Zero on success
+ * Returns: Zero on success
  */
 static int __cvmx_pcie_rc_initialize_gen1(int pcie_port)
 {
@@ -1084,13 +1090,13 @@ retry:
 }
 
 /**
-  * Initialize a host mode PCIe gen 2 link. This function takes a PCIe
- * port from reset to a link up state. Software can then begin
- * configuring the rest of the link.
+ * __cvmx_pcie_rc_initialize_link_gen2() - Initialize a host mode PCIe
+ *	gen 2 link. This function takes a PCIe port from reset to a link up
+ *	state. Software can then begin configuring the rest of the link.
  *
  * @pcie_port: PCIe port to initialize
  *
- * Return Zero on success.
+ * Return: Zero on success.
  */
 static int __cvmx_pcie_rc_initialize_link_gen2(int pcie_port)
 {
@@ -1143,12 +1149,12 @@ static int __cvmx_pcie_rc_initialize_link_gen2(int pcie_port)
 
 
 /**
- * Initialize a PCIe gen 2 port for use in host(RC) mode. It doesn't enumerate
- * the bus.
+ * __cvmx_pcie_rc_initialize_gen2() - Initialize a PCIe gen 2 port for
+ *	use in host(RC) mode. It doesn't enumerate the bus.
  *
  * @pcie_port: PCIe port to initialize
  *
- * Returns Zero on success.
+ * Returns: Zero on success.
  */
 static int __cvmx_pcie_rc_initialize_gen2(int pcie_port)
 {
@@ -1439,11 +1445,12 @@ static int __cvmx_pcie_rc_initialize_gen2(int pcie_port)
 }
 
 /**
- * Initialize a PCIe port for use in host(RC) mode. It doesn't enumerate the bus.
+ * cvmx_pcie_rc_initialize() - Initialize a PCIe port for use in host(RC)
+ *	mode. It doesn't enumerate the bus.
  *
  * @pcie_port: PCIe port to initialize
  *
- * Returns Zero on success
+ * Returns: Zero on success
  */
 static int cvmx_pcie_rc_initialize(int pcie_port)
 {
@@ -1458,7 +1465,8 @@ static int cvmx_pcie_rc_initialize(int pcie_port)
 /* Above was cvmx-pcie.c, below original pcie.c */
 
 /**
- * Map a PCI device to the appropriate interrupt line
+ * octeon_pcie_pcibios_map_irq() - Map a PCI device to the appropriate
+ *	interrupt line
  *
  * @dev:    The Linux PCI device structure for the device to map
  * @slot:   The slot number for this device on __BUS 0__. Linux
@@ -1466,7 +1474,8 @@ static int cvmx_pcie_rc_initialize(int pcie_port)
  *		 slot on Bus 0 where this device eventually hooks to.
  * @pin:    The PCI interrupt pin read from the device, then swizzled
  *		 as it goes through each bridge.
- * Returns Interrupt number for the device
+ *
+ * Returns: Interrupt number for the device
  */
 int octeon_pcie_pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 {
@@ -1859,9 +1868,7 @@ static int device_needs_bus_num_war(uint32_t deviceid)
 }
 
 /**
- * Initialize the Octeon PCIe controllers
- *
- * Returns
+ * octeon_pcie_setup() - Initialize the Octeon PCIe controllers
  */
 static int __init octeon_pcie_setup(void)
 {
