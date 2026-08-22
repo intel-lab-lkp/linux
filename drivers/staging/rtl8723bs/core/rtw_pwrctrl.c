@@ -7,6 +7,7 @@
 #include <drv_types.h>
 #include <hal_data.h>
 #include <linux/jiffies.h>
+#include <linux/cleanup.h>
 
 void _ips_enter(struct adapter *padapter)
 {
@@ -37,9 +38,8 @@ void ips_enter(struct adapter *padapter)
 
 	hal_btcoex_IpsNotify(padapter, pwrpriv->ips_mode_req);
 
-	mutex_lock(&pwrpriv->lock);
+	guard(mutex)(&pwrpriv->lock);
 	_ips_enter(padapter);
-	mutex_unlock(&pwrpriv->lock);
 }
 
 int _ips_leave(struct adapter *padapter)
@@ -337,7 +337,7 @@ void rtw_set_ps_mode(struct adapter *padapter, u8 ps_mode,
 		if (ps_mode == PS_MODE_ACTIVE)
 			return;
 
-	mutex_lock(&pwrpriv->lock);
+	guard(mutex)(&pwrpriv->lock);
 
 	/* if (pwrpriv->pwr_mode == PS_MODE_ACTIVE) */
 	if (ps_mode == PS_MODE_ACTIVE) {
@@ -383,8 +383,6 @@ void rtw_set_ps_mode(struct adapter *padapter, u8 ps_mode,
 			rtw_set_rpwm(padapter, pslv);
 		}
 	}
-
-	mutex_unlock(&pwrpriv->lock);
 }
 
 /*
@@ -578,10 +576,10 @@ void cpwm_int_hdl(struct adapter *padapter, struct reportpwrstate_parm *preportp
 
 	pwrpriv = adapter_to_pwrctl(padapter);
 
-	mutex_lock(&pwrpriv->lock);
+	guard(mutex)(&pwrpriv->lock);
 
 	if (pwrpriv->rpwm < PS_STATE_S2)
-		goto exit;
+		return;
 
 	pwrpriv->cpwm = PS_STATE(preportpwrstate->state);
 	pwrpriv->cpwm_tog = preportpwrstate->state & PS_TOGGLE;
@@ -593,9 +591,6 @@ void cpwm_int_hdl(struct adapter *padapter, struct reportpwrstate_parm *preportp
 		if (pwrpriv->alives & XMIT_ALIVE)
 			complete(&padapter->xmitpriv.xmit_comp);
 	}
-
-exit:
-	mutex_unlock(&pwrpriv->lock);
 }
 
 static void cpwm_event_callback(struct work_struct *work)
@@ -744,7 +739,7 @@ void rtw_unregister_task_alive(struct adapter *padapter, u32 task)
 			pslv = PS_STATE_S2;
 	}
 
-	mutex_lock(&pwrctrl->lock);
+	guard(mutex)(&pwrctrl->lock);
 
 	unregister_task_alive(pwrctrl, task);
 
@@ -754,8 +749,6 @@ void rtw_unregister_task_alive(struct adapter *padapter, u32 task)
 				rtw_set_rpwm(padapter, pslv);
 		}
 	}
-
-	mutex_unlock(&pwrctrl->lock);
 }
 
 /*
@@ -871,7 +864,7 @@ void rtw_unregister_tx_alive(struct adapter *padapter)
 			pslv = PS_STATE_S2;
 	}
 
-	mutex_lock(&pwrctrl->lock);
+	guard(mutex)(&pwrctrl->lock);
 
 	unregister_task_alive(pwrctrl, XMIT_ALIVE);
 
@@ -880,8 +873,6 @@ void rtw_unregister_tx_alive(struct adapter *padapter)
 			if ((pslv >= PS_STATE_S2) || (pwrctrl->alives == 0))
 				rtw_set_rpwm(padapter, pslv);
 	}
-
-	mutex_unlock(&pwrctrl->lock);
 }
 
 /*
@@ -907,7 +898,7 @@ void rtw_unregister_cmd_alive(struct adapter *padapter)
 			pslv = PS_STATE_S2;
 	}
 
-	mutex_lock(&pwrctrl->lock);
+	guard(mutex)(&pwrctrl->lock);
 
 	unregister_task_alive(pwrctrl, CMD_ALIVE);
 
@@ -917,8 +908,6 @@ void rtw_unregister_cmd_alive(struct adapter *padapter)
 				rtw_set_rpwm(padapter, pslv);
 		}
 	}
-
-	mutex_unlock(&pwrctrl->lock);
 }
 
 void rtw_init_pwrctrl_priv(struct adapter *padapter)
@@ -1108,9 +1097,8 @@ void rtw_ps_deny(struct adapter *padapter, enum ps_deny_reason reason)
 
 	pwrpriv = adapter_to_pwrctl(padapter);
 
-	mutex_lock(&pwrpriv->lock);
+	guard(mutex)(&pwrpriv->lock);
 	pwrpriv->ps_deny |= BIT(reason);
-	mutex_unlock(&pwrpriv->lock);
 }
 
 /*
@@ -1123,9 +1111,8 @@ void rtw_ps_deny_cancel(struct adapter *padapter, enum ps_deny_reason reason)
 
 	pwrpriv = adapter_to_pwrctl(padapter);
 
-	mutex_lock(&pwrpriv->lock);
+	guard(mutex)(&pwrpriv->lock);
 	pwrpriv->ps_deny &= ~BIT(reason);
-	mutex_unlock(&pwrpriv->lock);
 }
 
 /*
