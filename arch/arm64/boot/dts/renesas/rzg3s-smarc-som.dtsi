@@ -234,7 +234,7 @@
 			drive-strength-microamp = <5200>;
 		};
 
-		tx_ctl {
+		tx-ctl {
 			pinmux = <RZG2L_PORT_PINMUX(1, 1, 1)>;  /* ET0_TX_CTL */
 			power-source = <1800>;
 			output-enable;
@@ -277,7 +277,7 @@
 			drive-strength-microamp = <5200>;
 		};
 
-		tx_ctl {
+		tx-ctl {
 			pinmux = <RZG2L_PORT_PINMUX(7, 1, 1)>;	/* ET1_TX_CTL */
 			power-source = <1800>;
 			output-enable;
