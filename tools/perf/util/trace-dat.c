@@ -194,6 +194,7 @@ static int trace_dat__write_cpu_dat(FILE *fp, struct tep_handle *pevent,
 	int page_size_used = 0;
 	int ret = 0;
 	int i, j;
+	unsigned long long page_base_ts;
 
 	file_offset = ftell(fp);
 	*file_offset_out = file_offset;
@@ -212,6 +213,7 @@ static int trace_dat__write_cpu_dat(FILE *fp, struct tep_handle *pevent,
 	}
 
 	base_ts = cpu_events->events[0].ts;
+	page_base_ts = base_ts;
 
 	for (i = 0; i < cpu_events->count; i++) {
 		struct cpu_event *event = &cpu_events->events[i];
@@ -234,8 +236,10 @@ static int trace_dat__write_cpu_dat(FILE *fp, struct tep_handle *pevent,
 
 			extend_size = TRACE_DAT_RECORD_TIME_EXTEND_SIZE;
 			extend = calloc(1, extend_size);
-			if (!extend)
-				return -ENOMEM;
+			if (!extend) {
+				ret = -ENOMEM;
+				goto out_free;
+			}
 
 			if (tep_is_file_bigendian(pevent)) {
 				extend_hdr = (time_delta & TRACE_DAT_RECORD_TIME_MASK) |
@@ -245,7 +249,7 @@ static int trace_dat__write_cpu_dat(FILE *fp, struct tep_handle *pevent,
 				extend_hdr = ((time_delta & TRACE_DAT_RECORD_TIME_MASK) <<
 					TRACE_DAT_RECORD_TIME_SHIFT) |
 					TRACE_DAT_RECORD_TYPE_TIME_EXTEND;
-				delta_upper = time_delta >> TRACE_DAT_RECORD_TIME_SHIFT;
+				delta_upper = time_delta >> 27;
 			}
 			extend_hdr  = to_file_u32(pevent, extend_hdr);   /* still needed */
 			delta_upper = to_file_u32(pevent, delta_upper);   /* still needed */
@@ -288,7 +292,7 @@ static int trace_dat__write_cpu_dat(FILE *fp, struct tep_handle *pevent,
 		/* Check page fit BEFORE allocating data record */
 		if (page_size_used + needed_size >
 			trace_dat_page_size - TRACE_DAT_RECORD_HEADER_SIZE) {
-			ret = trace_dat__write_page(fp, pevent, base_ts,
+			ret = trace_dat__write_page(fp, pevent, page_base_ts,
 					page_records, page_rec_sizes,
 					nr_page_recs);
 
@@ -298,6 +302,7 @@ static int trace_dat__write_cpu_dat(FILE *fp, struct tep_handle *pevent,
 			nr_page_recs = 0;
 			page_size_used = 0;
 			base_ts = event->ts;
+			page_base_ts = event->ts;
 
 			if (ret < 0) {
 				free(extend);
@@ -312,6 +317,7 @@ static int trace_dat__write_cpu_dat(FILE *fp, struct tep_handle *pevent,
 			extend = NULL;
 			extend_size = 0;
 			time_delta = 0;
+			base_ts = event->ts;
 		}
 
 		if (tep_is_file_bigendian(pevent))
@@ -387,10 +393,11 @@ static int trace_dat__write_cpu_dat(FILE *fp, struct tep_handle *pevent,
 		page_rec_sizes[nr_page_recs] = data_rec_size;
 		nr_page_recs++;
 		page_size_used += data_rec_size;
+		base_ts = event->ts;
 	}
 
 	if (nr_page_recs > 0) {
-		ret = trace_dat__write_page(fp, pevent, base_ts,
+		ret = trace_dat__write_page(fp, pevent, page_base_ts,
 				page_records, page_rec_sizes, nr_page_recs);
 	}
 out_free:
@@ -860,6 +867,9 @@ void trace_dat__free_cpu_buffers(void)
 
 	for (cpu = 0; cpu < trace_dat_nr_cpus; cpu++) {
 		int i;
+
+		if (!trace_cpu_data[cpu].events)
+			continue;
 
 		for (i = 0; i < trace_cpu_data[cpu].count; i++)
 			free(trace_cpu_data[cpu].events[i].raw);

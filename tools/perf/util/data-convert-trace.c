@@ -22,6 +22,7 @@
 #include "evsel.h"
 #include "tool.h"
 #include "debug.h"
+#include "time-utils.h"
 #include "trace-dat.h"
 #include "trace-event.h"
 #include "event.h"
@@ -31,6 +32,10 @@
 struct trace_convert {
 	struct perf_tool tool;
 	u64 events_count;
+	struct perf_time_interval *ptime_range;
+	int range_size;
+	int range_num;
+	u64 skipped;
 };
 
 /* Session handle and init flag used for lazy CPU buffer init in pipe mode */
@@ -84,6 +89,11 @@ static int process_sample_event(const struct perf_tool *tool,
 			return -ENOMEM;
 		}
 		cpu_buffers_initialized = true;
+	}
+
+	if (perf_time__ranges_skip_sample(tc->ptime_range, tc->range_num, sample->time)) {
+		tc->skipped++;
+		return 0;
 	}
 
 	if (trace_dat__collect_cpu_event(sample->cpu, sample->time,
@@ -185,6 +195,15 @@ int trace_convert__perf2dat(const char *input, const char *to_trace,
 	/* Stash session for lazy CPU buffer init on first sample (pipe and normal mode) */
 	trace_dat_session = session;
 
+	if (opts->time_str) {
+		ret = perf_time__parse_for_ranges(opts->time_str, session,
+				&tc.ptime_range,
+				&tc.range_size,
+				&tc.range_num);
+		if (ret < 0)
+			goto out_delete;
+	}
+
 	/* Process all events - collects raw data per-cpu */
 	ret = perf_session__process_events(session);
 	if (ret < 0) {
@@ -230,6 +249,8 @@ int trace_convert__perf2dat(const char *input, const char *to_trace,
 out_delete:
 	if (cpu_buffers_initialized)
 		trace_dat__free_cpu_buffers();
+	if (tc.ptime_range)
+		zfree(&tc.ptime_range);
 	perf_session__delete(session);
 	trace_dat_session = NULL;
 out_close:

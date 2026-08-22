@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <event-parse.h>
 #include <byteswap.h>
+#include <stdint.h>
 #include "util.h"
 
 /* trace.dat file format version */

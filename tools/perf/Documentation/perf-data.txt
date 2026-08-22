@@ -30,6 +30,13 @@ OPTIONS for 'convert'
 --to-json::
 	Triggers JSON conversion. Specify the JSON filename to output.
 
+--to-trace-dat::
+	Triggers trace.dat conversion. Converts perf.data tracepoint events
+	to trace.dat format v7, compatible with trace-cmd and KernelShark.
+	Only PERF_TYPE_TRACEPOINT events are converted. Specify the
+	trace.dat filename to output. Requires libtraceevent support.
+	Mutually exclusive with --to-ctf and --to-json.
+
 --tod::
 	Convert time to wall clock time.
 
