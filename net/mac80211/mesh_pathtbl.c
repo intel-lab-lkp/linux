@@ -131,21 +131,31 @@ void mesh_path_assign_nexthop(struct mesh_path *mpath, struct sta_info *sta)
 	spin_unlock_irqrestore(&mpath->frame_queue.lock, flags);
 }
 
-static void prepare_for_gate(struct sk_buff *skb, char *dst_addr,
-			     struct mesh_path *gate_mpath)
+static int prepare_for_gate(struct sk_buff *skb, char *dst_addr,
+			    struct mesh_path *gate_mpath)
 {
 	struct ieee80211_hdr *hdr;
 	struct ieee80211s_hdr *mshdr;
 	int mesh_hdrlen, hdrlen;
 	char *next_hop;
 
+	if (skb->len < sizeof(struct ieee80211_hdr))
+		return -EINVAL;
+
 	hdr = (struct ieee80211_hdr *) skb->data;
 	hdrlen = ieee80211_hdrlen(hdr->frame_control);
+
+	if (skb->len < hdrlen + 6)
+		return -EINVAL;
+
 	mshdr = (struct ieee80211s_hdr *) (skb->data + hdrlen);
 
 	if (!(mshdr->flags & MESH_FLAGS_AE)) {
 		/* size of the fixed part of the mesh header */
 		mesh_hdrlen = 6;
+
+		if (skb_headroom(skb) < 2 * ETH_ALEN)
+			return -EINVAL;
 
 		/* make room for the two extended addresses */
 		skb_push(skb, 2 * ETH_ALEN);
@@ -169,6 +179,7 @@ static void prepare_for_gate(struct sk_buff *skb, char *dst_addr,
 	rcu_read_unlock();
 	memcpy(hdr->addr2, gate_mpath->sdata->vif.addr, ETH_ALEN);
 	memcpy(hdr->addr3, dst_addr, ETH_ALEN);
+	return 0;
 }
 
 /**
@@ -218,8 +229,10 @@ static void mesh_path_move_to_queue(struct mesh_path *gate_mpath,
 		if (WARN_ON(!skb))
 			break;
 
-		prepare_for_gate(skb, gate_mpath->dst, gate_mpath);
-		skb_queue_tail(&gate_mpath->frame_queue, skb);
+		if (prepare_for_gate(skb, gate_mpath->dst, gate_mpath) == 0)
+			skb_queue_tail(&gate_mpath->frame_queue, skb);
+		else
+			kfree_skb(skb);
 
 		if (copy)
 			continue;
