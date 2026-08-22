@@ -709,6 +709,26 @@ static const struct file_operations sched_cgroup_fops = {
 };
 #endif
 
+#ifdef CONFIG_NUMA_BALANCING
+static int numa_scan_size_get(void *data, u64 *val)
+{
+	*val = *(u32 *)data;
+	return 0;
+}
+
+static int numa_scan_size_set(void *data, u64 val)
+{
+	if (val == 0 || val > UINT_MAX)
+		return -ERANGE;
+
+	*(u32 *)data = (u32)val;
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(numa_scan_size_fops, numa_scan_size_get,
+			 numa_scan_size_set, "%llu\n");
+#endif /* CONFIG_NUMA_BALANCING */
+
 static __init int sched_init_debug(void)
 {
 	struct dentry __maybe_unused *numa, *llc;
@@ -740,7 +760,8 @@ static __init int sched_init_debug(void)
 	debugfs_create_u32("scan_delay_ms", 0644, numa, &sysctl_numa_balancing_scan_delay);
 	debugfs_create_u32("scan_period_min_ms", 0644, numa, &sysctl_numa_balancing_scan_period_min);
 	debugfs_create_u32("scan_period_max_ms", 0644, numa, &sysctl_numa_balancing_scan_period_max);
-	debugfs_create_u32("scan_size_mb", 0644, numa, &sysctl_numa_balancing_scan_size);
+	debugfs_create_file_unsafe("scan_size_mb", 0644, numa,
+			    &sysctl_numa_balancing_scan_size, &numa_scan_size_fops);
 	debugfs_create_u32("hot_threshold_ms", 0644, numa, &sysctl_numa_balancing_hot_threshold);
 #endif /* CONFIG_NUMA_BALANCING */
 
