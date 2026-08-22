@@ -1438,20 +1438,34 @@ static __init int kho_out_fdt_setup(void)
 	int err;
 
 	err = fdt_create(root, PAGE_SIZE);
-	err |= fdt_finish_reservemap(root);
-	err |= fdt_begin_node(root, "");
-	err |= fdt_property_string(root, "compatible", KHO_FDT_COMPATIBLE);
+	if (err)
+		return err;
+	err = fdt_finish_reservemap(root);
+	if (err)
+		return err;
+	err = fdt_begin_node(root, "");
+	if (err)
+		return err;
+	err = fdt_property_string(root, "compatible", KHO_FDT_COMPATIBLE);
+	if (err)
+		return err;
 
 	preserved_mem_tree_pa = virt_to_phys(tree->root);
 
-	err |= fdt_property(root, KHO_FDT_MEMORY_MAP_PROP_NAME,
-			    &preserved_mem_tree_pa,
-			    sizeof(preserved_mem_tree_pa));
+	err = fdt_property(root, KHO_FDT_MEMORY_MAP_PROP_NAME,
+			   &preserved_mem_tree_pa,
+			   sizeof(preserved_mem_tree_pa));
+	if (err)
+		return err;
 
-	err |= fdt_end_node(root);
-	err |= fdt_finish(root);
+	err = fdt_end_node(root);
+	if (err)
+		return err;
+	err = fdt_finish(root);
+	if (err)
+		return err;
 
-	return err;
+	return 0;
 }
 
 static void __init kho_in_kexec_metadata(void)
