@@ -50,12 +50,12 @@
 static int interface_port_count[9];
 
 /**
- * Return the number of interfaces the chip has. Each interface
- * may have multiple ports. Most chips support two interfaces,
- * but the CNX0XX and CNX1XX are exceptions. These only support
- * one interface.
+ * cvmx_helper_get_number_of_interfaces() - Return the number of interfaces
+ *	the chip has. Each interface may have multiple ports. Most chips support
+ *	two interfaces, but the CNX0XX and CNX1XX are exceptions. These only
+ *	support one interface.
  *
- * Returns Number of interfaces on chip
+ * Returns: Number of interfaces on chip
  */
 int cvmx_helper_get_number_of_interfaces(void)
 {
@@ -77,13 +77,13 @@ int cvmx_helper_get_number_of_interfaces(void)
 EXPORT_SYMBOL_GPL(cvmx_helper_get_number_of_interfaces);
 
 /**
- * Return the number of ports on an interface. Depending on the
- * chip and configuration, this can be 1-16. A value of 0
- * specifies that the interface doesn't exist or isn't usable.
+ * cvmx_helper_ports_on_interface() - Return the number of ports on an
+ *	interface. Depending on the chip and configuration, this can be 1-16. A
+ *	value of 0 specifies that the interface doesn't exist or isn't usable.
  *
  * @interface: Interface to get the port count for
  *
- * Returns Number of ports on interface. Can be Zero.
+ * Returns: Number of ports on interface. Can be Zero.
  */
 int cvmx_helper_ports_on_interface(int interface)
 {
@@ -92,8 +92,10 @@ int cvmx_helper_ports_on_interface(int interface)
 EXPORT_SYMBOL_GPL(cvmx_helper_ports_on_interface);
 
 /**
+ * __cvmx_get_mode_cn68xx() - Return interface mode for CN68xx.
  * @INTERNAL
- * Return interface mode for CN68xx.
+ *
+ * @interface: interface to get the mode for
  */
 static enum cvmx_helper_interface_mode __cvmx_get_mode_cn68xx(int interface)
 {
@@ -144,8 +146,10 @@ static enum cvmx_helper_interface_mode __cvmx_get_mode_cn68xx(int interface)
 }
 
 /**
+ * __cvmx_get_mode_octeon2() - Return interface mode for an Octeon II
  * @INTERNAL
- * Return interface mode for an Octeon II
+ *
+ * @interface: interface to get the mode for
  */
 static enum cvmx_helper_interface_mode __cvmx_get_mode_octeon2(int interface)
 {
@@ -244,8 +248,10 @@ static enum cvmx_helper_interface_mode __cvmx_get_mode_octeon2(int interface)
 }
 
 /**
+ * __cvmx_get_mode_cn7xxx() - Return interface mode for CN7XXX.
  * @INTERNAL
- * Return interface mode for CN7XXX.
+ *
+ * @interface: interface to get the mode for
  */
 static enum cvmx_helper_interface_mode __cvmx_get_mode_cn7xxx(int interface)
 {
@@ -280,13 +286,13 @@ static enum cvmx_helper_interface_mode __cvmx_get_mode_cn7xxx(int interface)
 }
 
 /**
- * Get the operating mode of an interface. Depending on the Octeon
- * chip and configuration, this function returns an enumeration
- * of the type of packet I/O supported by an interface.
+ * cvmx_helper_interface_get_mode() - Get the operating mode of an interface.
+ *	Depending on the Octeon chip and configuration, this function returns an
+ *	enumeration of the type of packet I/O supported by an interface.
  *
  * @interface: Interface to probe
  *
- * Returns Mode of the interface. Unknown or unsupported interfaces return
+ * Returns: Mode of the interface. Unknown or unsupported interfaces return
  *	   DISABLED.
  */
 enum cvmx_helper_interface_mode cvmx_helper_interface_get_mode(int interface)
@@ -362,15 +368,15 @@ enum cvmx_helper_interface_mode cvmx_helper_interface_get_mode(int interface)
 EXPORT_SYMBOL_GPL(cvmx_helper_interface_get_mode);
 
 /**
- * Configure the IPD/PIP tagging and QoS options for a specific
- * port. This function determines the POW work queue entry
- * contents for a port. The setup performed here is controlled by
- * the defines in executive-config.h.
+ * __cvmx_helper_port_setup_ipd() - Configure the IPD/PIP tagging and QoS
+ *	options for a specific port. This function determines the POW work queue
+ *	entry contents for a port. The setup performed here is controlled by the
+ *	defines in executive-config.h.
  *
  * @ipd_port: Port to configure. This follows the IPD numbering, not the
  *		   per interface numbering
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 static int __cvmx_helper_port_setup_ipd(int ipd_port)
 {
@@ -411,13 +417,13 @@ static int __cvmx_helper_port_setup_ipd(int ipd_port)
 }
 
 /**
- * This function sets the interface_port_count[interface] correctly,
- * without modifying any hardware configuration.  Hardware setup of
- * the ports will be performed later.
+ * cvmx_helper_interface_enumerate() - This function sets the
+ *	interface_port_count[interface] correctly, without modifying any hardware
+ *	configuration. Hardware setup of the ports will be performed later.
  *
  * @interface: Interface to probe
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 int cvmx_helper_interface_enumerate(int interface)
 {
@@ -485,15 +491,15 @@ int cvmx_helper_interface_enumerate(int interface)
 }
 
 /**
- * This function probes an interface to determine the actual
- * number of hardware ports connected to it. It doesn't setup the
- * ports or enable them. The main goal here is to set the global
- * interface_port_count[interface] correctly. Hardware setup of the
- * ports will be performed later.
+ * cvmx_helper_interface_probe() - This function probes an interface to
+ *	determine the actual number of hardware ports connected to it. It doesn't
+ *	setup the ports or enable them. The main goal here is to set the global
+ *	interface_port_count[interface] correctly. Hardware setup of the ports will
+ *	be performed later.
  *
  * @interface: Interface to probe
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 int cvmx_helper_interface_probe(int interface)
 {
@@ -553,14 +559,14 @@ int cvmx_helper_interface_probe(int interface)
 }
 
 /**
- * Setup the IPD/PIP for the ports on an interface. Packet
- * classification and tagging are set for every port on the
- * interface. The number of ports on the interface must already
- * have been probed.
+ * __cvmx_helper_interface_setup_ipd() - Setup the IPD/PIP for the ports on an
+ *	interface. Packet classification and tagging are set for every port on the
+ *	interface. The number of ports on the interface must already have been
+ *	probed.
  *
  * @interface: Interface to setup IPD/PIP for
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 static int __cvmx_helper_interface_setup_ipd(int interface)
 {
@@ -575,10 +581,11 @@ static int __cvmx_helper_interface_setup_ipd(int interface)
 }
 
 /**
- * Setup global setting for IPD/PIP not related to a specific
- * interface or port. This must be called before IPD is enabled.
+ * __cvmx_helper_global_setup_ipd() - Setup global setting for IPD/PIP not
+ *	related to a specific interface or port. This must be called before IPD is
+ *	enabled.
  *
- * Returns Zero on success, negative on failure.
+ * Returns: Zero on success, negative on failure.
  */
 static int __cvmx_helper_global_setup_ipd(void)
 {
@@ -597,13 +604,14 @@ static int __cvmx_helper_global_setup_ipd(void)
 }
 
 /**
- * Setup the PKO for the ports on an interface. The number of
- * queues per port and the priority of each PKO output queue
- * is set here. PKO must be disabled when this function is called.
+ * __cvmx_helper_interface_setup_pko() - Setup the PKO for the ports on an
+ *	interface. The number of queues per port and the priority of each PKO
+ *	output queue is set here. PKO must be disabled when this function is
+ *	called.
  *
  * @interface: Interface to setup PKO for
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 static int __cvmx_helper_interface_setup_pko(int interface)
 {
@@ -641,10 +649,10 @@ static int __cvmx_helper_interface_setup_pko(int interface)
 }
 
 /**
- * Setup global setting for PKO not related to a specific
- * interface or port. This must be called before PKO is enabled.
+ * __cvmx_helper_global_setup_pko() - Setup global setting for PKO not related
+ *	to a specific interface or port. This must be called before PKO is enabled.
  *
- * Returns Zero on success, negative on failure.
+ * Returns: Zero on success, negative on failure.
  */
 static int __cvmx_helper_global_setup_pko(void)
 {
@@ -676,9 +684,10 @@ static int __cvmx_helper_global_setup_pko(void)
 }
 
 /**
- * Setup global backpressure setting.
+ * __cvmx_helper_global_setup_backpressure() - Setup global backpressure
+ *	setting.
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 static int __cvmx_helper_global_setup_backpressure(void)
 {
@@ -710,15 +719,15 @@ static int __cvmx_helper_global_setup_backpressure(void)
 }
 
 /**
- * Enable packet input/output from the hardware. This function is
- * called after all internal setup is complete and IPD is enabled.
- * After this function completes, packets will be accepted from the
- * hardware ports. PKO should still be disabled to make sure packets
- * aren't sent out partially setup hardware.
+ * __cvmx_helper_packet_hardware_enable() - Enable packet input/output from
+ *	the hardware. This function is called after all internal setup is complete
+ *	and IPD is enabled. After this function completes, packets will be accepted
+ *	from the hardware ports. PKO should still be disabled to make sure packets
+ *	aren't sent out partially setup hardware.
  *
  * @interface: Interface to enable
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 static int __cvmx_helper_packet_hardware_enable(int interface)
 {
@@ -772,9 +781,10 @@ static int __cvmx_helper_packet_hardware_enable(int interface)
 }
 
 /**
- * Function to adjust internal IPD pointer alignments
+ * __cvmx_helper_errata_fix_ipd_ptr_alignment() - Function to adjust internal
+ *	IPD pointer alignments
  *
- * Returns 0 on success
+ * Returns: 0 on success
  *	   !0 on failure
  */
 static int __cvmx_helper_errata_fix_ipd_ptr_alignment(void)
@@ -966,10 +976,11 @@ fix_ipd_exit:
 }
 
 /**
- * Called after all internal packet IO paths are setup. This
- * function enables IPD/PIP and begins packet input and output.
+ * cvmx_helper_ipd_and_packet_input_enable() - Called after all internal
+ *	packet IO paths are setup. This function enables IPD/PIP and begins packet
+ *	input and output.
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 int cvmx_helper_ipd_and_packet_input_enable(void)
 {
@@ -1002,13 +1013,13 @@ int cvmx_helper_ipd_and_packet_input_enable(void)
 EXPORT_SYMBOL_GPL(cvmx_helper_ipd_and_packet_input_enable);
 
 /**
- * Initialize the PIP, IPD, and PKO hardware to support
- * simple priority based queues for the ethernet ports. Each
- * port is configured with a number of priority queues based
- * on CVMX_PKO_QUEUES_PER_PORT_* where each queue is lower
- * priority than the previous.
+ * cvmx_helper_initialize_packet_io_global() - Initialize the PIP, IPD, and
+ *	PKO hardware to support simple priority based queues for the ethernet
+ *	ports. Each port is configured with a number of priority queues based on
+ *	CVMX_PKO_QUEUES_PER_PORT_* where each queue is lower priority than the
+ *	previous.
  *
- * Returns Zero on success, non-zero on failure
+ * Returns: Zero on success, non-zero on failure
  */
 int cvmx_helper_initialize_packet_io_global(void)
 {
@@ -1062,14 +1073,14 @@ int cvmx_helper_initialize_packet_io_global(void)
 EXPORT_SYMBOL_GPL(cvmx_helper_initialize_packet_io_global);
 
 /**
- * Return the link state of an IPD/PKO port as returned by
- * auto negotiation. The result of this function may not match
- * Octeon's link config if auto negotiation has changed since
- * the last call to cvmx_helper_link_set().
+ * cvmx_helper_link_get() - Return the link state of an IPD/PKO port as
+ *	returned by auto negotiation. The result of this function may not match
+ *	Octeon's link config if auto negotiation has changed since the last call to
+ *	cvmx_helper_link_set().
  *
  * @ipd_port: IPD/PKO port to query
  *
- * Returns Link state
+ * Returns: Link state
  */
 union cvmx_helper_link_info cvmx_helper_link_get(int ipd_port)
 {
@@ -1122,15 +1133,15 @@ union cvmx_helper_link_info cvmx_helper_link_get(int ipd_port)
 EXPORT_SYMBOL_GPL(cvmx_helper_link_get);
 
 /**
- * Configure an IPD/PKO port for the specified link state. This
- * function does not influence auto negotiation at the PHY level.
- * The passed link state must always match the link state returned
- * by cvmx_helper_link_get().
+ * cvmx_helper_link_set() - Configure an IPD/PKO port for the specified link
+ *	state. This function does not influence auto negotiation at the PHY level.
+ *	The passed link state must always match the link state returned by
+ *	cvmx_helper_link_get().
  *
  * @ipd_port:  IPD/PKO port to configure
  * @link_info: The new link state
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 int cvmx_helper_link_set(int ipd_port, union cvmx_helper_link_info link_info)
 {

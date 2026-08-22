@@ -26,7 +26,7 @@
  * Contact Cavium Networks for more information
  ***********************license end**************************************/
 
-/**
+/*
  *
  * Helper utilities for qlm_jtag.
  *
@@ -37,11 +37,11 @@
 
 
 /**
- * Initialize the internal QLM JTAG logic to allow programming
- * of the JTAG chain by the cvmx_helper_qlm_jtag_*() functions.
- * These functions should only be used at the direction of Cavium
- * Networks. Programming incorrect values into the JTAG chain
- * can cause chip damage.
+ * cvmx_helper_qlm_jtag_init() - Initialize the internal QLM JTAG logic to
+ *	allow programming of the JTAG chain by the cvmx_helper_qlm_jtag_*()
+ *	functions. These functions should only be used at the direction of Cavium
+ *	Networks. Programming incorrect values into the JTAG chain can cause chip
+ *	damage.
  */
 void cvmx_helper_qlm_jtag_init(void)
 {
@@ -71,17 +71,17 @@ void cvmx_helper_qlm_jtag_init(void)
 }
 
 /**
- * Write up to 32bits into the QLM jtag chain. Bits are shifted
- * into the MSB and out the LSB, so you should shift in the low
- * order bits followed by the high order bits. The JTAG chain is
- * 4 * 268 bits long, or 1072.
+ * cvmx_helper_qlm_jtag_shift() - Write up to 32bits into the QLM jtag chain.
+ *	Bits are shifted into the MSB and out the LSB, so you should shift in the
+ *	low order bits followed by the high order bits. The JTAG chain is 4 * 268
+ *	bits long, or 1072.
  *
  * @qlm:    QLM to shift value into
  * @bits:   Number of bits to shift in (1-32).
  * @data:   Data to shift in. Bit 0 enters the chain first, followed by
  *		 bit 1, etc.
  *
- * Returns The low order bits of the JTAG chain that shifted out of the
+ * Returns: The low order bits of the JTAG chain that shifted out of the
  *	   circle.
  */
 uint32_t cvmx_helper_qlm_jtag_shift(int qlm, int bits, uint32_t data)
@@ -101,11 +101,10 @@ uint32_t cvmx_helper_qlm_jtag_shift(int qlm, int bits, uint32_t data)
 }
 
 /**
- * Shift long sequences of zeros into the QLM JTAG chain. It is
- * common to need to shift more than 32 bits of zeros into the
- * chain. This function is a convenience wrapper around
- * cvmx_helper_qlm_jtag_shift() to shift more than 32 bits of
- * zeros at a time.
+ * cvmx_helper_qlm_jtag_shift_zeros() - Shift long sequences of zeros into the
+ *	QLM JTAG chain. It is common to need to shift more than 32 bits of zeros
+ *	into the chain. This function is a convenience wrapper around
+ *	cvmx_helper_qlm_jtag_shift() to shift more than 32 bits of zeros at a time.
  *
  * @qlm:    QLM to shift zeros into
  * @bits:
@@ -122,9 +121,9 @@ void cvmx_helper_qlm_jtag_shift_zeros(int qlm, int bits)
 }
 
 /**
- * Program the QLM JTAG chain into all lanes of the QLM. You must
- * have already shifted in 268*4, or 1072 bits into the JTAG
- * chain. Updating invalid values can possibly cause chip damage.
+ * cvmx_helper_qlm_jtag_update() - Program the QLM JTAG chain into all lanes
+ *	of the QLM. You must have already shifted in 268*4, or 1072 bits into the
+ *	JTAG chain. Updating invalid values can possibly cause chip damage.
  *
  * @qlm:    QLM to program
  */

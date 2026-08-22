@@ -153,8 +153,8 @@ static void cvmx_boot_vector_init(void *mem)
 }
 
 /**
- * Get a pointer to the per-core table of reset vector pointers
- *
+ * cvmx_boot_vector_get() - Get a pointer to the per-core table of reset
+ *	vector pointers
  */
 struct cvmx_boot_vector_element *cvmx_boot_vector_get(void)
 {

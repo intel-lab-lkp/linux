@@ -42,8 +42,8 @@
 void __cvmx_interrupt_gmxx_rxx_int_en_enable(int index, int block);
 
 /**
- * Enable ASX error interrupts that exist on CN3XXX, CN50XX, and
- * CN58XX.
+ * __cvmx_interrupt_asxx_enable() - Enable ASX error interrupts that exist on
+ *	CN3XXX, CN50XX, and CN58XX.
  *
  * @block:  Interface to enable 0-1
  */
@@ -69,7 +69,8 @@ void __cvmx_interrupt_asxx_enable(int block)
 	cvmx_write_csr(CVMX_ASXX_INT_EN(block), csr.u64);
 }
 /**
- * Enable GMX error reporting for the supplied interface
+ * __cvmx_interrupt_gmxx_enable() - Enable GMX error reporting for the
+ *	supplied interface
  *
  * @interface: Interface to enable
  */

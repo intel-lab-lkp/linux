@@ -13,11 +13,12 @@
 #include <linux/sched/task_stack.h>
 
 /**
- * Enable access to Octeon's COP2 crypto hardware for kernel use. Wrap any
- * crypto operations in calls to octeon_crypto_enable/disable in order to make
- * sure the state of COP2 isn't corrupted if userspace is also performing
- * hardware crypto operations. Allocate the state parameter on the stack.
- * Returns with preemption disabled.
+ * octeon_crypto_enable() - Enable access to Octeon's COP2 crypto hardware for
+ *	kernel use. Wrap any crypto operations in calls to
+ *	octeon_crypto_enable/disable in order to make sure the state of COP2 isn't
+ *	corrupted if userspace is also performing hardware crypto operations.
+ *	Allocate the state parameter on the stack. Returns with preemption
+ *	disabled.
  *
  * @state: Pointer to state structure to store current COP2 state in.
  *
@@ -45,12 +46,12 @@ unsigned long octeon_crypto_enable(struct octeon_cop2_state *state)
 EXPORT_SYMBOL_GPL(octeon_crypto_enable);
 
 /**
- * Disable access to Octeon's COP2 crypto hardware in the kernel. This must be
- * called after an octeon_crypto_enable() before any context switch or return to
- * userspace.
+ * octeon_crypto_disable() - Disable access to Octeon's COP2 crypto hardware
+ *	in the kernel. This must be called after an octeon_crypto_enable() before
+ *	any context switch or return to userspace.
  *
  * @state:	Pointer to COP2 state to restore
- * @flags:	Return value from octeon_crypto_enable()
+ * @crypto_flags: Return value from octeon_crypto_enable()
  */
 void octeon_crypto_disable(struct octeon_cop2_state *state,
 			   unsigned long crypto_flags)

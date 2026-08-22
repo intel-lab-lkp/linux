@@ -38,13 +38,13 @@
 #include <asm/octeon/cvmx-pip-defs.h>
 
 /**
- * Probe a NPI interface and determine the number of ports
- * connected to it. The NPI interface should still be down
- * after this call.
+ * __cvmx_helper_npi_probe() - Probe a NPI interface and determine the number
+ *	of ports connected to it. The NPI interface should still be down after this
+ *	call.
  *
  * @interface: Interface to probe
  *
- * Returns Number of ports on the interface. Zero to disable.
+ * Returns: Number of ports on the interface. Zero to disable.
  */
 int __cvmx_helper_npi_probe(int interface)
 {
@@ -64,13 +64,13 @@ int __cvmx_helper_npi_probe(int interface)
 }
 
 /**
- * Bringup and enable a NPI interface. After this call packet
- * I/O should be fully functional. This is called with IPD
- * enabled but PKO disabled.
+ * __cvmx_helper_npi_enable() - Bringup and enable a NPI interface. After this
+ *	call packet I/O should be fully functional. This is called with IPD enabled
+ *	but PKO disabled.
  *
  * @interface: Interface to bring up
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 int __cvmx_helper_npi_enable(int interface)
 {

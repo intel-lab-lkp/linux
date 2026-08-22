@@ -46,11 +46,12 @@
 #include <asm/octeon/cvmx-ipd-defs.h>
 
 /**
- * Convert a interface mode into a human readable string
+ * cvmx_helper_interface_mode_to_string() - Convert a interface mode into a
+ *	human readable string
  *
  * @mode:   Mode to convert
  *
- * Returns String
+ * Returns: String
  */
 const char *cvmx_helper_interface_mode_to_string(enum cvmx_helper_interface_mode
 						 mode)
@@ -81,7 +82,8 @@ const char *cvmx_helper_interface_mode_to_string(enum cvmx_helper_interface_mode
 }
 
 /**
- * Setup Random Early Drop on a specific input queue
+ * cvmx_helper_setup_red_queue() - Setup Random Early Drop on a specific input
+ *	queue
  *
  * @queue:  Input queue to setup RED on (0-7)
  * @pass_thresh:
@@ -90,7 +92,8 @@ const char *cvmx_helper_interface_mode_to_string(enum cvmx_helper_interface_mode
  * @drop_thresh:
  *		 All incoming packets will be dropped when there are less
  *		 than this many free packet buffers in FPA 0.
- * Returns Zero on success. Negative on failure
+ *
+ * Returns: Zero on success. Negative on failure
  */
 static int cvmx_helper_setup_red_queue(int queue, int pass_thresh,
 				       int drop_thresh)
@@ -118,7 +121,8 @@ static int cvmx_helper_setup_red_queue(int queue, int pass_thresh,
 }
 
 /**
- * Setup Random Early Drop to automatically begin dropping packets.
+ * cvmx_helper_setup_red() - Setup Random Early Drop to automatically begin
+ *	dropping packets.
  *
  * @pass_thresh:
  *		 Packets will begin slowly dropping when there are less than
@@ -126,7 +130,8 @@ static int cvmx_helper_setup_red_queue(int queue, int pass_thresh,
  * @drop_thresh:
  *		 All incoming packets will be dropped when there are less
  *		 than this many free packet buffers in FPA 0.
- * Returns Zero on success. Negative on failure
+ *
+ * Returns: Zero on success. Negative on failure
  */
 int cvmx_helper_setup_red(int pass_thresh, int drop_thresh)
 {
@@ -168,14 +173,14 @@ int cvmx_helper_setup_red(int pass_thresh, int drop_thresh)
 EXPORT_SYMBOL_GPL(cvmx_helper_setup_red);
 
 /**
- * Setup the common GMX settings that determine the number of
- * ports. These setting apply to almost all configurations of all
- * chips.
+ * __cvmx_helper_setup_gmx() - Setup the common GMX settings that determine
+ *	the number of ports. These setting apply to almost all configurations of
+ *	all chips.
  *
  * @interface: Interface to configure
  * @num_ports: Number of ports on the interface
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 int __cvmx_helper_setup_gmx(int interface, int num_ports)
 {
@@ -277,13 +282,13 @@ int __cvmx_helper_setup_gmx(int interface, int num_ports)
 }
 
 /**
- * Returns the IPD/PKO port number for a port on the given
- * interface.
+ * cvmx_helper_get_ipd_port() - Returns the IPD/PKO port number for a port on
+ *	the given interface.
  *
  * @interface: Interface to use
  * @port:      Port on the interface
  *
- * Returns IPD/PKO port number
+ * Returns: IPD/PKO port number
  */
 int cvmx_helper_get_ipd_port(int interface, int port)
 {
@@ -306,11 +311,12 @@ int cvmx_helper_get_ipd_port(int interface, int port)
 EXPORT_SYMBOL_GPL(cvmx_helper_get_ipd_port);
 
 /**
- * Returns the interface number for an IPD/PKO port number.
+ * cvmx_helper_get_interface_num() - Returns the interface number for an
+ *	IPD/PKO port number.
  *
  * @ipd_port: IPD/PKO port number
  *
- * Returns Interface number
+ * Returns: Interface number
  */
 int cvmx_helper_get_interface_num(int ipd_port)
 {
@@ -335,12 +341,12 @@ int cvmx_helper_get_interface_num(int ipd_port)
 EXPORT_SYMBOL_GPL(cvmx_helper_get_interface_num);
 
 /**
- * Returns the interface index number for an IPD/PKO port
- * number.
+ * cvmx_helper_get_interface_index_num() - Returns the interface index number
+ *	for an IPD/PKO port number.
  *
  * @ipd_port: IPD/PKO port number
  *
- * Returns Interface index number
+ * Returns: Interface index number
  */
 int cvmx_helper_get_interface_index_num(int ipd_port)
 {

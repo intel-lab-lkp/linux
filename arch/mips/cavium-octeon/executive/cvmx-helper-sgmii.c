@@ -42,12 +42,13 @@
 #include <asm/octeon/cvmx-pcsxx-defs.h>
 
 /**
- * Perform initialization required only once for an SGMII port.
+ * __cvmx_helper_sgmii_hardware_init_one_time() - Perform initialization
+ *	required only once for an SGMII port.
  *
  * @interface: Interface to init
  * @index:     Index of prot on the interface
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 static int __cvmx_helper_sgmii_hardware_init_one_time(int interface, int index)
 {
@@ -126,13 +127,13 @@ static int __cvmx_helper_sgmii_hardware_init_one_time(int interface, int index)
 }
 
 /**
- * Initialize the SERTES link for the first time or after a loss
- * of link.
+ * __cvmx_helper_sgmii_hardware_init_link() - Initialize the SERTES link for
+ *	the first time or after a loss of link.
  *
  * @interface: Interface to init
  * @index:     Index of prot on the interface
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 static int __cvmx_helper_sgmii_hardware_init_link(int interface, int index)
 {
@@ -189,14 +190,14 @@ static int __cvmx_helper_sgmii_hardware_init_link(int interface, int index)
 }
 
 /**
- * Configure an SGMII link to the specified speed after the SERTES
- * link is up.
+ * __cvmx_helper_sgmii_hardware_init_link_speed() - Configure an SGMII link to
+ *	the specified speed after the SERTES link is up.
  *
  * @interface: Interface to init
  * @index:     Index of prot on the interface
  * @link_info: Link state to configure
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 static int __cvmx_helper_sgmii_hardware_init_link_speed(int interface,
 							int index,
@@ -295,14 +296,14 @@ static int __cvmx_helper_sgmii_hardware_init_link_speed(int interface,
 }
 
 /**
- * Bring up the SGMII interface to be ready for packet I/O but
- * leave I/O disabled using the GMX override. This function
- * follows the bringup documented in 10.6.3 of the manual.
+ * __cvmx_helper_sgmii_hardware_init() - Bring up the SGMII interface to be
+ *	ready for packet I/O but leave I/O disabled using the GMX override. This
+ *	function follows the bringup documented in 10.6.3 of the manual.
  *
  * @interface: Interface to bringup
  * @num_ports: Number of ports on the interface
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 static int __cvmx_helper_sgmii_hardware_init(int interface, int num_ports)
 {
@@ -331,13 +332,13 @@ int __cvmx_helper_sgmii_enumerate(int interface)
 	return 4;
 }
 /**
- * Probe a SGMII interface and determine the number of ports
- * connected to it. The SGMII interface should still be down after
- * this call.
+ * __cvmx_helper_sgmii_probe() - Probe a SGMII interface and determine the
+ *	number of ports connected to it. The SGMII interface should still be down
+ *	after this call.
  *
  * @interface: Interface to probe
  *
- * Returns Number of ports on the interface. Zero to disable.
+ * Returns: Number of ports on the interface. Zero to disable.
  */
 int __cvmx_helper_sgmii_probe(int interface)
 {
@@ -355,13 +356,13 @@ int __cvmx_helper_sgmii_probe(int interface)
 }
 
 /**
- * Bringup and enable a SGMII interface. After this call packet
- * I/O should be fully functional. This is called with IPD
- * enabled but PKO disabled.
+ * __cvmx_helper_sgmii_enable() - Bringup and enable a SGMII interface. After
+ *	this call packet I/O should be fully functional. This is called with IPD
+ *	enabled but PKO disabled.
  *
  * @interface: Interface to bring up
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 int __cvmx_helper_sgmii_enable(int interface)
 {
@@ -385,14 +386,14 @@ int __cvmx_helper_sgmii_enable(int interface)
 }
 
 /**
- * Return the link state of an IPD/PKO port as returned by
- * auto negotiation. The result of this function may not match
- * Octeon's link config if auto negotiation has changed since
- * the last call to cvmx_helper_link_set().
+ * __cvmx_helper_sgmii_link_get() - Return the link state of an IPD/PKO port
+ *	as returned by auto negotiation. The result of this function may not match
+ *	Octeon's link config if auto negotiation has changed since the last call to
+ *	cvmx_helper_link_set().
  *
  * @ipd_port: IPD/PKO port to query
  *
- * Returns Link state
+ * Returns: Link state
  */
 union cvmx_helper_link_info __cvmx_helper_sgmii_link_get(int ipd_port)
 {
@@ -494,15 +495,15 @@ union cvmx_helper_link_info __cvmx_helper_sgmii_link_get(int ipd_port)
 }
 
 /**
- * Configure an IPD/PKO port for the specified link state. This
- * function does not influence auto negotiation at the PHY level.
- * The passed link state must always match the link state returned
- * by cvmx_helper_link_get().
+ * __cvmx_helper_sgmii_link_set() - Configure an IPD/PKO port for the
+ *	specified link state. This function does not influence auto negotiation at
+ *	the PHY level. The passed link state must always match the link state
+ *	returned by cvmx_helper_link_get().
  *
  * @ipd_port:  IPD/PKO port to configure
  * @link_info: The new link state
  *
- * Returns Zero on success, negative on failure
+ * Returns: Zero on success, negative on failure
  */
 int __cvmx_helper_sgmii_link_set(int ipd_port,
 				 union cvmx_helper_link_info link_info)

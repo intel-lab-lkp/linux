@@ -25,7 +25,7 @@
  * Contact Cavium Networks for more information
  ***********************license end**************************************/
 
-/**
+/*
  *
  * Fixes and workaround for Octeon chip errata. This file
  * contains functions called by cvmx-helper to workaround known
@@ -40,9 +40,9 @@
 #include <asm/octeon/cvmx-helper-jtag.h>
 
 /**
- * Due to errata G-720, the 2nd order CDR circuit on CN52XX pass
- * 1 doesn't work properly. The following code disables 2nd order
- * CDR for the specified QLM.
+ * __cvmx_helper_errata_qlm_disable_2nd_order_cdr() - Due to errata G-720, the
+ *	2nd order CDR circuit on CN52XX pass 1 doesn't work properly. The following
+ *	code disables 2nd order CDR for the specified QLM.
  *
  * @qlm:    QLM to disable 2nd order CDR for.
  */

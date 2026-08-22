@@ -37,7 +37,11 @@
 u64 octeon_bar1_pci_phys;
 
 /**
- * This is the bit decoding used for the Octeon PCI controller addresses
+ * union octeon_pci_address - This is the bit decoding used for the Octeon PCI
+ *	controller addresses
+ *
+ * @u64: the address as a single 64-bit value
+ * @s: the address split into bit fields
  */
 union octeon_pci_address {
 	uint64_t u64;
@@ -61,7 +65,7 @@ int (*octeon_pcibios_map_irq)(const struct pci_dev *dev, u8 slot, u8 pin);
 enum octeon_dma_bar_type octeon_dma_bar_type = OCTEON_DMA_BAR_TYPE_INVALID;
 
 /**
- * Map a PCI device to the appropriate interrupt line
+ * pcibios_map_irq() - Map a PCI device to the appropriate interrupt line
  *
  * @dev:    The Linux PCI device structure for the device to map
  * @slot:   The slot number for this device on __BUS 0__. Linux
@@ -69,7 +73,8 @@ enum octeon_dma_bar_type octeon_dma_bar_type = OCTEON_DMA_BAR_TYPE_INVALID;
  *		 slot on Bus 0 where this device eventually hooks to.
  * @pin:    The PCI interrupt pin read from the device, then swizzled
  *		 as it goes through each bridge.
- * Returns Interrupt number for the device
+ *
+ * Returns: Interrupt number for the device
  */
 int pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 {
@@ -168,13 +173,12 @@ int pcibios_plat_dev_init(struct pci_dev *dev)
 }
 
 /**
- * Return the mapping of PCI device number to IRQ line. Each
- * character in the return string represents the interrupt
- * line for the device at that position. Device 1 maps to the
- * first character, etc. The characters A-D are used for PCI
- * interrupts.
+ * octeon_get_pci_interrupts() - Return the mapping of PCI device number to
+ *	IRQ line. Each character in the return string represents the interrupt line
+ *	for the device at that position. Device 1 maps to the first character, etc.
+ *	The characters A-D are used for PCI interrupts.
  *
- * Returns PCI interrupt mapping
+ * Returns: PCI interrupt mapping
  */
 const char *octeon_get_pci_interrupts(void)
 {
@@ -221,7 +225,8 @@ const char *octeon_get_pci_interrupts(void)
 }
 
 /**
- * Map a PCI device to the appropriate interrupt line
+ * octeon_pci_pcibios_map_irq() - Map a PCI device to the appropriate
+ *	interrupt line
  *
  * @dev:    The Linux PCI device structure for the device to map
  * @slot:   The slot number for this device on __BUS 0__. Linux
@@ -229,7 +234,8 @@ const char *octeon_get_pci_interrupts(void)
  *		 slot on Bus 0 where this device eventually hooks to.
  * @pin:    The PCI interrupt pin read from the device, then swizzled
  *		 as it goes through each bridge.
- * Returns Interrupt number for the device
+ *
+ * Returns: Interrupt number for the device
  */
 int __init octeon_pci_pcibios_map_irq(const struct pci_dev *dev,
 				      u8 slot, u8 pin)
