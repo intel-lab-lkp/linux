@@ -6,17 +6,18 @@
 import errno
 import os
 import socket
+import time
 
 from lib.py import defer
 from lib.py import ksft_run, ksft_exit
-from lib.py import ksft_eq, ksft_ge, ksft_in, ksft_ne, ksft_raises
+from lib.py import ksft_eq, ksft_ge, ksft_in, ksft_lt, ksft_ne, ksft_raises
 from lib.py import CmdExitFailure, KsftSkipEx
 from lib.py import NetDrvEpEnv
 from lib.py import NetdevFamily, NlError, PSPFamily
 from lib.py import ethtool
 
 from psp_lib import close_conn, init_psp_dev, make_clr_conn, make_psp_conn, \
-    psp_txrx, remote_conn_steer, remote_dev_steer, spi_xchg
+    psp_txrx, remote_dev_steer, req_echo, spi_xchg
 from psp_lib import responder as psp_responder
 
 # Not exposed by the socket module
@@ -43,6 +44,8 @@ _VC_TX = 1 << 0
 _VC_RX = 1 << 1
 _VC_BOTH = _VC_TX | _VC_RX
 _VC_SIZE = 8
+_IDLE_TIME = 0.5
+_FALLBACK_QUEUE = 3
 
 
 def _require_steer(cfg):
@@ -138,18 +141,19 @@ def _rss_pin(cfg, qid, context=None):
     ethtool(f"-X {cfg.ifname} {ctx}weight {weights}")
 
 
-def _require_rss_steering(cfg):
-    """Skip unless the Rx queue actually follows the RSS table
+def _rss_steers(cfg):
+    """Does the Rx queue actually follow the RSS table?
 
-    Steering can only be shown to outrank RSS on a device where RSS has
-    a say in the first place - netdevsim, for one, ignores the table.
+    Steering can only be compared against RSS on a device where RSS has a
+    say in the first place - netdevsim, for one, ignores the table. Leaves
+    the table as it found it.
     """
     probe = cfg.rx_queue_cnt - 1
 
     try:
         _rss_pin(cfg, probe)
-    except CmdExitFailure as exc:
-        raise KsftSkipEx("Device does not support RSS table updates") from exc
+    except CmdExitFailure:
+        return False
     defer(ethtool, f"-X {cfg.ifname} default")
 
     with make_clr_conn(cfg) as s:
@@ -157,8 +161,20 @@ def _require_rss_steering(cfg):
         landed = _rx_queue(cfg, s)
         close_conn(cfg, s)
 
-    if landed != probe:
+    ethtool(f"-X {cfg.ifname} default")
+    return landed == probe
+
+
+def _require_rss_steering(cfg):
+    """Skip unless the Rx queue follows the RSS table"""
+    if not _rss_steers(cfg):
         raise KsftSkipEx("Rx queue does not follow the RSS table")
+
+
+def _set_queue_cnt(cfg, cnt):
+    """Reconfigure the device, and re-read the NAPI ids it hands out"""
+    ethtool(f"-L {cfg.ifname} combined {cnt}")
+    _queue_info(cfg)
 
 
 def _ntuple_l3_rule(cfg, target):
@@ -378,6 +394,50 @@ def data_ntuple_beats_steer(cfg):
         close_conn(cfg, s)
 
 
+def data_steer_stale_queue(cfg):
+    """ A cookie naming a queue which went away has to fall back to RSS """
+    _require_steer(cfg)
+    _require_queues(cfg, 8)
+    _enable_steer(cfg)
+
+    nq = cfg.rx_queue_cnt
+    rss = _rss_steers(cfg)
+    if rss:
+        # Point RSS at a queue of our choosing so that "it fell back to
+        # RSS" is a statement we can actually check. Deliberately not
+        # queue 0: plenty of devices use that as a default or error queue,
+        # and landing there would prove nothing - it would also be a
+        # thundering herd waiting to happen if every stale flow went there.
+        _rss_pin(cfg, _FALLBACK_QUEUE)
+
+    defer(_set_queue_cnt, cfg, nq)
+    defer(_force_tx_queue, cfg, -1)
+    _force_tx_queue(cfg, nq - 1)
+
+    with _psp_conn(cfg) as s:
+        qid, _ = _settled_rx_queue(cfg, s, 0)
+        ksft_eq(qid, nq - 1)
+
+        # Go properly idle first. A delayed ACK landing after the
+        # reconfiguration would carry a fresh request and teach the peer a
+        # live queue, and we would end up measuring nothing.
+        time.sleep(_IDLE_TIME)
+
+        # Take the queue away without telling the peer, which goes on
+        # asking for it in every cookie it sends.
+        _set_queue_cnt(cfg, nq - 1)
+
+        # One packet, so that our ACK cannot teach the peer a new queue
+        # before we get to look at where this one landed.
+        req_echo(cfg, s)
+        qid = _rx_queue(cfg, s)
+        close_conn(cfg, s)
+
+    ksft_lt(qid, nq - 1, comment="delivered to a queue which no longer exists")
+    if rss:
+        ksft_eq(qid, _FALLBACK_QUEUE, comment="stale request did not fall back to RSS")
+
+
 def _queue_info(cfg):
     """Map NAPI ids to Rx queue ids, and count the queues"""
     netnl = NetdevFamily()
@@ -398,7 +458,7 @@ def _queue_info(cfg):
 def main() -> None:
     """ Ksft boiler plate main """
 
-    with NetDrvEpEnv(__file__, queue_count=4) as cfg:
+    with NetDrvEpEnv(__file__, queue_count=8) as cfg:
         cfg.pspnl = PSPFamily()
         _queue_info(cfg)
 
