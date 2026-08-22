@@ -43,7 +43,7 @@ description: |
   connection. Any user / client application will require additional information
   on the connections between the CTI and other components for correct operation.
   This information might be found by enabling the Integration Test registers in
-  the driver (set CONFIG_CORESIGHT_CTI_INTEGRATION_TEST in Kernel
+  the driver (set CONFIG_CORESIGHT_CTI_INTEGRATION_REGS in Kernel
   configuration). These registers may be used to explore the trigger connections
   between CTI and other CoreSight components.
 
