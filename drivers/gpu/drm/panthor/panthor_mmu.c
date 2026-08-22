@@ -2732,6 +2732,7 @@ panthor_vm_create(struct panthor_device *ptdev, bool for_mcu,
 	const struct drm_sched_init_args sched_args = {
 		.ops = &panthor_vm_bind_ops,
 		.submit_wq = ptdev->mmu->vm.wq,
+		.num_rqs = 1,
 		.credit_limit = 1,
 		/* Bind operations are synchronous for now, no timeout needed. */
 		.timeout = MAX_SCHEDULE_TIMEOUT,
@@ -3262,7 +3263,6 @@ int panthor_mmu_init(struct panthor_device *ptdev)
 		return -ENODEV;
 
 	ret = panthor_request_mmu_irq(ptdev, &mmu->irq, irq,
-				      panthor_mmu_fault_mask(ptdev, ~0),
 				      ptdev->iomem + MMU_INT_BASE);
 	if (ret)
 		return ret;
@@ -3280,7 +3280,13 @@ int panthor_mmu_init(struct panthor_device *ptdev)
 		ptdev->gpu_info.mmu_features |= BITS_PER_LONG;
 	}
 
-	return drmm_add_action_or_reset(&ptdev->base, panthor_mmu_release_wq, mmu->vm.wq);
+	ret = drmm_add_action_or_reset(&ptdev->base, panthor_mmu_release_wq, mmu->vm.wq);
+	if (ret)
+		return ret;
+
+	panthor_mmu_irq_enable_events(&mmu->irq, panthor_mmu_fault_mask(ptdev, ~0));
+	panthor_mmu_irq_resume(&mmu->irq);
+	return 0;
 }
 
 #ifdef CONFIG_DEBUG_FS
