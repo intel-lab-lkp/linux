@@ -2125,6 +2125,8 @@ static struct return_instance *dup_return_instance(struct return_instance *old)
 			kfree(ri);
 			return NULL;
 		}
+	} else {
+		ri->extra_consumers = NULL;
 	}
 
 	return ri;
@@ -2147,8 +2149,10 @@ static int dup_utask(struct task_struct *t, struct uprobe_task *o_utask)
 	p = &n_utask->return_instances;
 	for (o = o_utask->return_instances; o; o = o->next) {
 		n = dup_return_instance(o);
-		if (!n)
+		if (!n) {
+			uprobe_free_utask(t);
 			return -ENOMEM;
+		}
 
 		/* if uprobe is non-NULL, we'll have an extra refcount for uprobe */
 		uprobe = hprobe_expire(&o->hprobe, true);
