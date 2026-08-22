@@ -40,7 +40,7 @@ int memcmp(const void *s1, const void *s2, size_t len)
 	asm volatile("test %3, %3\n\t"
 		     "repe cmpsb"
 		     : "=@ccnz" (diff), "+D" (s1), "+S" (s2), "+c" (len)
-		     : : "cc", "memory");
+		     : : "memory");
 	return diff;
 }
 
