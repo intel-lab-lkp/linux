@@ -196,6 +196,12 @@ struct tb_path *tb_path_discover(struct tb_port *src, int src_hopid,
 		path->hops[i].out_port = out_port;
 		path->hops[i].next_hop_index = next_hop;
 
+		/* Keep the ports alive, see tb_path_free() */
+		if (alloc_hopid) {
+			tb_switch_get(path->hops[i].in_port->sw);
+			tb_switch_get(path->hops[i].out_port->sw);
+		}
+
 		tb_dump_hop(&path->hops[i], &hop);
 
 		h = next_hop;
@@ -323,6 +329,10 @@ struct tb_path *tb_path_alloc(struct tb *tb, struct tb_port *src, int src_hopid,
 		path->hops[i].out_port = out_port;
 		path->hops[i].next_hop_index = out_hopid;
 
+		/* Keep the ports alive, see tb_path_free() */
+		tb_switch_get(path->hops[i].in_port->sw);
+		tb_switch_get(path->hops[i].out_port->sw);
+
 		in_hopid = out_hopid;
 	}
 
@@ -356,6 +366,17 @@ void tb_path_free(struct tb_path *path)
 			if (hop->out_port)
 				tb_port_release_out_hopid(hop->out_port,
 							  hop->next_hop_index);
+			/*
+			 * Only drop the switch references after both HopIDs
+			 * have been released: the path may be freed after the
+			 * switch was already removed (e.g. asynchronous DP
+			 * tunnel teardown) and these references are what
+			 * keeps the ports and their HopID IDAs alive.
+			 */
+			if (hop->in_port)
+				tb_switch_put(hop->in_port->sw);
+			if (hop->out_port)
+				tb_switch_put(hop->out_port->sw);
 		}
 	}
 

@@ -33,6 +33,11 @@ static void kunit_ida_init(struct kunit *test, struct ida *ida)
 	kunit_alloc_resource(test, __ida_init, __ida_destroy, GFP_KERNEL, ida);
 }
 
+static void tb_test_switch_release(struct device *dev)
+{
+	/* The memory is owned by KUnit, nothing to do here */
+}
+
 static struct tb_switch *alloc_switch(struct kunit *test, u64 route,
 				      u8 upstream_port, u8 max_port_number)
 {
@@ -43,6 +48,13 @@ static struct tb_switch *alloc_switch(struct kunit *test, u64 route,
 	sw = kunit_kzalloc(test, sizeof(*sw), GFP_KERNEL);
 	if (!sw)
 		return NULL;
+
+	/*
+	 * The paths take a reference to their switches and those devices
+	 * have to be initialized for that to work.
+	 */
+	sw->dev.release = tb_test_switch_release;
+	device_initialize(&sw->dev);
 
 	sw->config.upstream_port_number = upstream_port;
 	sw->config.depth = tb_route_length(route);
