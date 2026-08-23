@@ -42,6 +42,7 @@ static struct inode *jffs2_alloc_inode(struct super_block *sb)
 	f = alloc_inode_sb(sb, jffs2_inode_cachep, GFP_KERNEL);
 	if (!f)
 		return NULL;
+	f->target = NULL;
 	return &f->vfs_inode;
 }
 
@@ -50,6 +51,7 @@ static void jffs2_free_inode(struct inode *inode)
 	struct jffs2_inode_info *f = JFFS2_INODE_INFO(inode);
 
 	kfree(f->target);
+	f->target = NULL;
 	kmem_cache_free(jffs2_inode_cachep, f);
 }
 
