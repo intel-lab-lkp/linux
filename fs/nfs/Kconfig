@@ -215,3 +215,37 @@ config NFS_V4_2_READ_PLUS
 	default y
 	help
 	 Choose Y here to enable use of the NFS v4.2 READ_PLUS operation.
+
+config NFS_PNFS_DECODE_KUNIT_TEST
+	tristate "KUnit tests for pNFS data server address decoding" if !KUNIT_ALL_TESTS
+	depends on NFS_V4 && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds KUnit tests for the pNFS data server address decoder.
+	  The tests cover valid IPv4 and IPv6 universal addresses and malformed
+	  port fields supplied by an NFS server. They verify that invalid port
+	  octets cannot produce a usable data server socket address.
+	  Results are reported in TAP format when the test module is loaded on a
+	  KUnit-enabled kernel.
+
+	  For more information on KUnit and unit tests in general, refer to
+	  Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
+config NFS_FLEXFILE_DEVICEID_KUNIT_TEST
+	tristate "KUnit tests for flexfiles GETDEVICEINFO decoding" if !KUNIT_ALL_TESTS
+	depends on PNFS_FLEXFILE_LAYOUT && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds KUnit tests for the flexfiles GETDEVICEINFO decoder.
+	  The tests cover valid device information and malformed multipath
+	  address counts supplied by an NFS server. They verify that oversized
+	  counts are rejected before entering the address decode loop.
+	  Results are reported in TAP format when the test module is loaded on a
+	  KUnit-enabled kernel.
+
+	  For more information on KUnit and unit tests in general, refer to
+	  Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.

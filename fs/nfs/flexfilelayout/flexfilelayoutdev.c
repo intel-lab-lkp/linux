@@ -12,6 +12,8 @@
 #include <linux/module.h>
 #include <linux/sunrpc/addr.h>
 
+#include <kunit/visibility.h>
+
 #include "../internal.h"
 #include "../nfs4session.h"
 #include "flexfilelayout.h"
@@ -36,6 +38,7 @@ void nfs4_ff_layout_free_deviceid(struct nfs4_ff_layout_ds *mirror_ds)
 	kfree(mirror_ds->ds_versions);
 	kfree_rcu(mirror_ds, id_node.rcu);
 }
+EXPORT_SYMBOL_IF_KUNIT(nfs4_ff_layout_free_deviceid);
 
 /* Decode opaque device data and construct new_ds using it */
 struct nfs4_ff_layout_ds *
@@ -193,6 +196,7 @@ out_err:
 	dprintk("%s ERROR: returning %d\n", __func__, ret);
 	return NULL;
 }
+EXPORT_SYMBOL_IF_KUNIT(nfs4_ff_alloc_deviceid_node);
 
 static void extend_ds_error(struct nfs4_ff_layout_ds_err *err,
 			    u64 offset, u64 length)
