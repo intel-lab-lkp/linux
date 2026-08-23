@@ -1485,6 +1485,15 @@ ath11k_update_per_peer_tx_stats(struct ath11k *ar,
 
 	arsta->txrate.bw = ath11k_mac_bw_to_mac80211_bw(bw);
 	arsta->tx_duration += tx_duration;
+
+	/* tid is HTT_PPDU_STATS_NON_QOS_TID when no ack/BA TLV came with the
+	 * PPDU; mask it so that airtime lands in a real access category rather
+	 * than one chosen by the spare bits.
+	 */
+	if (tx_duration)
+		ieee80211_sta_register_airtime(sta,
+					       tid & IEEE80211_QOS_CTL_TID_MASK,
+					       tx_duration, 0);
 	memcpy(&arsta->last_txrate, &arsta->txrate, sizeof(struct rate_info));
 
 	/* PPDU stats reported for mgmt packet doesn't have valid tx bytes.
