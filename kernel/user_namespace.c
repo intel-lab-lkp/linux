@@ -1413,3 +1413,7 @@ static __init int user_namespaces_init(void)
 	return 0;
 }
 subsys_initcall(user_namespaces_init);
+
+#if IS_ENABLED(CONFIG_USER_NAMESPACE_KUNIT_TEST)
+#include "user_namespace_kunit.c"
+#endif
