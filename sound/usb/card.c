@@ -326,6 +326,20 @@ static int snd_usb_create_stream(struct snd_usb_audio *chip, int ctrlif, int int
 }
 
 /*
+ * Claim an interface of this device for snd-usb-audio.
+ *
+ * A mixer quirk may need an interface the audio class knows nothing
+ * about -- a vendor control channel that happens to wear the HID class,
+ * for instance -- and cannot claim it itself, because usb_audio_driver
+ * is private to this file.
+ */
+int snd_usb_claim_iface(struct snd_usb_audio *chip, struct usb_interface *iface)
+{
+	return usb_driver_claim_interface(&usb_audio_driver, iface,
+					  USB_AUDIO_IFACE_UNUSED);
+}
+
+/*
  * parse audio control descriptor and create pcm/midi streams
  */
 static int snd_usb_create_streams(struct snd_usb_audio *chip, int ctrlif)
