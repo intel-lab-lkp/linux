@@ -5849,6 +5849,9 @@ static int skb_maybe_pull_tail(struct sk_buff *skb, unsigned int len,
 	if (max > skb->len)
 		max = skb->len;
 
+	if (max < skb_headlen(skb))
+		return -EPROTO;
+
 	if (__pskb_pull_tail(skb, max - skb_headlen(skb)) == NULL)
 		return -ENOMEM;
 
