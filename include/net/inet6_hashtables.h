@@ -115,6 +115,12 @@ struct sock *inet6_steal_sock(struct net *net, struct sk_buff *skb, int doff,
 	if (!sk)
 		return NULL;
 
+	if (unlikely(sk->sk_family != AF_INET6)) {
+		if (*refcounted)
+			sock_gen_put(sk);
+		return NULL;
+	}
+
 	if (!prefetched || !sk_fullsock(sk))
 		return sk;
 
