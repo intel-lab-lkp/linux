@@ -1169,11 +1169,7 @@ static int en8811h_probe(struct phy_device *phydev)
 
 	priv->phydev = phydev;
 	/* Co-Clock Output */
-	ret = en8811h_clk_provider_setup(&phydev->mdio.dev, &priv->hw);
-	if (ret)
-		return ret;
-
-	return 0;
+	return en8811h_clk_provider_setup(&phydev->mdio.dev, &priv->hw);
 }
 
 static int an8811hb_config_serdes_polarity(struct phy_device *phydev)
