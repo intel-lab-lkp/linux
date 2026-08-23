@@ -366,7 +366,7 @@ struct txdesc_8723b {
 #endif
 /*  */
 /*  */
-/* 	Rate */
+/*	Rate */
 /*  */
 /*  */
 /*  CCK Rates, TxHT = 0 */
