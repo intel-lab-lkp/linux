@@ -315,6 +315,11 @@ static int mpxy_get_notifications(u32 channel_id,
 	if (sret.error)
 		goto err_put_cpu;
 
+	if (sret.value + 16 > mpxy_shmem_size) {
+		put_cpu();
+		return -EIO;
+	}
+
 	memcpy(notif_data, mpxy->shmem, sret.value + 16);
 	*events_data_len = sret.value;
 
