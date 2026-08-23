@@ -33,6 +33,7 @@ struct ksm_sysfs {
 	unsigned long pages_to_scan;
 	unsigned long run;
 	unsigned long sleep_millisecs;
+	unsigned long smart_scan;
 	unsigned long stable_node_chains_prune_millisecs;
 	unsigned long use_zero_pages;
 };
@@ -293,6 +294,7 @@ static int ksm_save_def(struct ksm_sysfs *ksm_sysfs)
 	    ksm_read_sysfs(KSM_FP("sleep_millisecs"), &ksm_sysfs->sleep_millisecs) ||
 	    ksm_read_sysfs(KSM_FP("pages_to_scan"), &ksm_sysfs->pages_to_scan) ||
 	    ksm_read_sysfs(KSM_FP("run"), &ksm_sysfs->run) ||
+	    ksm_read_sysfs(KSM_FP("smart_scan"), &ksm_sysfs->smart_scan) ||
 	    ksm_read_sysfs(KSM_FP("stable_node_chains_prune_millisecs"),
 			   &ksm_sysfs->stable_node_chains_prune_millisecs) ||
 	    ksm_read_sysfs(KSM_FP("use_zero_pages"), &ksm_sysfs->use_zero_pages))
@@ -309,6 +311,7 @@ static int ksm_restore(struct ksm_sysfs *ksm_sysfs)
 	    ksm_write_sysfs(KSM_FP("pages_to_scan"), ksm_sysfs->pages_to_scan) ||
 	    ksm_write_sysfs(KSM_FP("run"), ksm_sysfs->run) ||
 	    ksm_write_sysfs(KSM_FP("sleep_millisecs"), ksm_sysfs->sleep_millisecs) ||
+	    ksm_write_sysfs(KSM_FP("smart_scan"), ksm_sysfs->smart_scan) ||
 	    ksm_write_sysfs(KSM_FP("stable_node_chains_prune_millisecs"),
 			    ksm_sysfs->stable_node_chains_prune_millisecs) ||
 	    ksm_write_sysfs(KSM_FP("use_zero_pages"), ksm_sysfs->use_zero_pages))
@@ -846,6 +849,7 @@ int main(int argc, char *argv[])
 
 	if (ksm_write_sysfs(KSM_FP("run"), 2) ||
 	    ksm_write_sysfs(KSM_FP("sleep_millisecs"), 0) ||
+	    ksm_write_sysfs(KSM_FP("smart_scan"), 0) ||
 	    (numa_available() ? 0 :
 		ksm_write_sysfs(KSM_FP("merge_across_nodes"), 1)) ||
 	    ksm_write_sysfs(KSM_FP("pages_to_scan"), page_count))
