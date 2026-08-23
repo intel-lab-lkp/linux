@@ -80,6 +80,18 @@ static int devtmpfs_get_tree(struct fs_context *fc)
 	atomic_inc(&sb->s_active);
 	down_write(&sb->s_umount);
 	fc->root = dget(sb->s_root);
+
+	if (fc->ops->reconfigure) {
+		int err = fc->ops->reconfigure(fc);
+
+		if (err) {
+			dput(fc->root);
+			fc->root = NULL;
+			deactivate_locked_super(sb);
+			return err;
+		}
+	}
+
 	return 0;
 }
 
