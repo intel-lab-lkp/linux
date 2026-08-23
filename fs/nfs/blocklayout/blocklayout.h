@@ -163,7 +163,7 @@ BLK_LSEG2EXT(struct pnfs_layout_segment *lseg)
 
 struct bl_pipe_msg {
 	struct rpc_pipe_msg msg;
-	wait_queue_head_t *bl_wq;
+	struct completion *bl_recv;
 };
 
 struct bl_msg_hdr {

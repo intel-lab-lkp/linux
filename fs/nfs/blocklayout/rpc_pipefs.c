@@ -58,14 +58,15 @@ bl_resolve_deviceid(struct nfs_server *server, struct pnfs_block_volume *b,
 	struct bl_pipe_msg bl_pipe_msg;
 	struct rpc_pipe_msg *msg = &bl_pipe_msg.msg;
 	struct bl_msg_hdr *bl_msg;
-	DECLARE_WAITQUEUE(wq, current);
 	dev_t dev = 0;
 	int rc;
 
 	dprintk("%s CREATING PIPEFS MESSAGE\n", __func__);
 
 	mutex_lock(&nn->bl_mutex);
-	bl_pipe_msg.bl_wq = &nn->bl_wq;
+	bl_pipe_msg.bl_recv = &nn->bl_recv;
+	reinit_completion(&nn->bl_recv);
+	reply->status = BL_DEVICE_REQUEST_INIT;
 
 	b->simple.len += 4;	/* single volume */
 	if (b->simple.len > PAGE_SIZE)
@@ -83,16 +84,11 @@ bl_resolve_deviceid(struct nfs_server *server, struct pnfs_block_volume *b,
 	nfs4_encode_simple(msg->data + sizeof(*bl_msg), b);
 
 	dprintk("%s CALLING USERSPACE DAEMON\n", __func__);
-	add_wait_queue(&nn->bl_wq, &wq);
 	rc = rpc_queue_upcall(nn->bl_device_pipe, msg);
-	if (rc < 0) {
-		remove_wait_queue(&nn->bl_wq, &wq);
+	if (rc < 0)
 		goto out_free_data;
-	}
 
-	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule();
-	remove_wait_queue(&nn->bl_wq, &wq);
+	wait_for_completion(&nn->bl_recv);
 
 	if (reply->status != BL_DEVICE_REQUEST_PROC) {
 		printk(KERN_WARNING "%s failed to decode device: %d\n",
@@ -120,7 +116,7 @@ static ssize_t bl_pipe_downcall(struct file *filp, const char __user *src,
 	if (copy_from_user(&nn->bl_mount_reply, src, mlen) != 0)
 		return -EFAULT;
 
-	wake_up(&nn->bl_wq);
+	complete(&nn->bl_recv);
 
 	return mlen;
 }
@@ -132,7 +128,7 @@ static void bl_pipe_destroy_msg(struct rpc_pipe_msg *msg)
 
 	if (msg->errno >= 0)
 		return;
-	wake_up(bl_pipe_msg->bl_wq);
+	complete(bl_pipe_msg->bl_recv);
 }
 
 static const struct rpc_pipe_ops bl_upcall_ops = {
@@ -221,7 +217,7 @@ static int nfs4blocklayout_net_init(struct net *net)
 	int err;
 
 	mutex_init(&nn->bl_mutex);
-	init_waitqueue_head(&nn->bl_wq);
+	init_completion(&nn->bl_recv);
 	nn->bl_device_pipe = rpc_mkpipe_data(&bl_upcall_ops, 0);
 	if (IS_ERR(nn->bl_device_pipe))
 		return PTR_ERR(nn->bl_device_pipe);

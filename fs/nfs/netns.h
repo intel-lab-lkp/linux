@@ -6,6 +6,7 @@
 #ifndef __NFS_NETNS_H__
 #define __NFS_NETNS_H__
 
+#include <linux/completion.h>
 #include <linux/nfs4.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
@@ -22,7 +23,7 @@ struct nfs_net {
 	struct cache_detail *nfs_dns_resolve;
 	struct rpc_pipe *bl_device_pipe;
 	struct bl_dev_msg bl_mount_reply;
-	wait_queue_head_t bl_wq;
+	struct completion bl_recv;
 	struct mutex bl_mutex;
 	struct list_head nfs_client_list;
 	struct list_head nfs_volume_list;
