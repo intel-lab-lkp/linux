@@ -501,6 +501,14 @@ static int tcf_gate_init(struct net *net, struct nlattr *nla,
 			cycle = ktime_add_ns(cycle, entry->interval);
 		cycletime = cycle;
 	}
+
+	if (cycletime < 0 || cycletime > INT_MAX) {
+		NL_SET_ERR_MSG(extack, "'cycle_time' is too big");
+		err = -EINVAL;
+		spin_unlock_bh(&gact->tcf_lock);
+		goto err_free;
+	}
+
 	p->tcfg_cycletime = cycletime;
 	p->tcfg_cycletime_ext = cycletime_ext;
 
