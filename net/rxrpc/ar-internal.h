@@ -1580,7 +1580,8 @@ static inline u32 latest(u32 seq1, u32 seq2)
 
 static inline bool rxrpc_seq_in_txq(const struct rxrpc_txqueue *tq, rxrpc_seq_t seq)
 {
-	return (seq & (RXRPC_NR_TXQUEUE - 1)) == tq->qbase;
+	return after_eq(seq, tq->qbase) &&
+	       before(seq, tq->qbase + RXRPC_NR_TXQUEUE);
 }
 
 static inline void rxrpc_queue_rx_call_packet(struct rxrpc_call *call, struct sk_buff *skb)
