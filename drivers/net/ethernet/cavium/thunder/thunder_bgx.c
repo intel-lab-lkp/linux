@@ -1479,8 +1479,10 @@ static int bgx_init_of_phy(struct bgx *bgx)
 		 * cannot handle it, so exit the loop.
 		 */
 		node = to_of_node(fwn);
-		if (!node)
+		if (!node) {
+			fwnode_handle_put(fwn);
 			break;
+		}
 
 		of_get_mac_address(node, bgx->lmac[lmac].mac);
 
