@@ -980,14 +980,22 @@ static int smc_pnet_determine_gid(struct smc_ib_device *ibdev, int i,
 	if (!ini->check_smcrv2 &&
 	    !smc_ib_determine_gid(ibdev, i, ini->vlan_id, ini->ib_gid, NULL,
 				  NULL)) {
+		if (ini->ib_dev_ref)
+			smc_ibdev_put(ini->ib_dev);
+		smc_ibdev_get(ibdev);
 		ini->ib_dev = ibdev;
+		ini->ib_dev_ref = true;
 		ini->ib_port = i;
 		return 0;
 	}
 	if (ini->check_smcrv2 &&
 	    !smc_ib_determine_gid(ibdev, i, ini->vlan_id, ini->smcrv2.ib_gid_v2,
 				  NULL, &ini->smcrv2)) {
+		if (ini->smcrv2.ib_dev_v2_ref)
+			smc_ibdev_put(ini->smcrv2.ib_dev_v2);
+		smc_ibdev_get(ibdev);
 		ini->smcrv2.ib_dev_v2 = ibdev;
+		ini->smcrv2.ib_dev_v2_ref = true;
 		ini->smcrv2.ib_port_v2 = i;
 		return 0;
 	}

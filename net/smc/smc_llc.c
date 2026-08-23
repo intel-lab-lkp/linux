@@ -1108,6 +1108,7 @@ int smc_llc_cli_add_link(struct smc_link *link, struct smc_llc_qentry *qentry)
 	rc = smcr_link_init(lgr, lnk_new, lnk_idx, ini);
 	if (rc)
 		goto out_reject;
+	smc_ibdev_init_end(lnk_new->smcibdev);
 	smc_llc_save_add_link_info(lnk_new, llc);
 	lnk_new->link_id = llc->link_num;	/* SMC server assigns link id */
 	smc_llc_link_set_uid(lnk_new);
@@ -1143,7 +1144,7 @@ out_clear_lnk:
 out_reject:
 	smc_llc_cli_add_link_reject(qentry);
 out:
-	kfree(ini);
+	smc_init_info_free(ini);
 	kfree(qentry);
 	return rc;
 }
@@ -1217,7 +1218,7 @@ static void smc_llc_cli_add_link_invite(struct smc_link *link,
 	smc_llc_send_add_link(link, ini->ib_dev->mac[ini->ib_port - 1],
 			      ini->ib_gid, NULL, SMC_LLC_REQ);
 out:
-	kfree(ini);
+	smc_init_info_free(ini);
 	kfree(qentry);
 }
 
@@ -1487,6 +1488,7 @@ int smc_llc_srv_add_link(struct smc_link *link,
 	if (rc)
 		goto out;
 	link_new = &lgr->lnk[lnk_idx];
+	smc_ibdev_init_end(link_new->smcibdev);
 
 	rc = smcr_buf_map_lgr(link_new);
 	if (rc)
@@ -1544,7 +1546,7 @@ out_err:
 	}
 out:
 	kfree(qentry);
-	kfree(ini);
+	smc_init_info_free(ini);
 	if (send_req_add_link_resp)
 		smc_llc_send_req_add_link_response(req_qentry);
 	return rc;

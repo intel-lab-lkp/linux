@@ -55,6 +55,17 @@ static void __smc_lgr_terminate(struct smc_link_group *lgr, bool soft);
 
 static void smc_link_down_work(struct work_struct *work);
 
+void smc_init_info_free(struct smc_init_info *ini)
+{
+	if (!ini)
+		return;
+	if (ini->ib_dev_ref)
+		smc_ibdev_put(ini->ib_dev);
+	if (ini->smcrv2.ib_dev_v2_ref)
+		smc_ibdev_put(ini->smcrv2.ib_dev_v2);
+	kfree(ini);
+}
+
 /* return head of link group list and its lock for a given link group */
 static inline struct list_head *smc_lgr_list_head(struct smc_link_group *lgr,
 						  spinlock_t **lgr_lock)
@@ -793,14 +804,21 @@ int smcr_link_init(struct smc_link_group *lgr, struct smc_link *lnk,
 	int rc;
 
 	if (lgr->smc_version == SMC_V2) {
-		lnk->smcibdev = ini->smcrv2.ib_dev_v2;
+		smcibdev = ini->smcrv2.ib_dev_v2;
 		lnk->ibport = ini->smcrv2.ib_port_v2;
-		lnk->wr_rx_sge_cnt = lnk->smcibdev->ibdev->attrs.max_recv_sge < 2 ? 1 : 2;
+	} else {
+		smcibdev = ini->ib_dev;
+		lnk->ibport = ini->ib_port;
+	}
+	rc = smc_ibdev_init_begin(smcibdev);
+	if (rc)
+		return rc;
+	lnk->smcibdev = smcibdev;
+	if (lgr->smc_version == SMC_V2) {
+		lnk->wr_rx_sge_cnt = smcibdev->ibdev->attrs.max_recv_sge < 2 ? 1 : 2;
 		lnk->wr_rx_buflen = smc_link_shared_v2_rxbuf(lnk) ?
 			SMC_WR_BUF_SIZE : SMC_WR_BUF_V2_SIZE;
 	} else {
-		lnk->smcibdev = ini->ib_dev;
-		lnk->ibport = ini->ib_port;
 		lnk->wr_rx_sge_cnt = 1;
 		lnk->wr_rx_buflen = SMC_WR_BUF_SIZE;
 	}
@@ -882,6 +900,7 @@ out:
 	if (!atomic_dec_return(&smcibdev->lnk_cnt))
 		wake_up(&smcibdev->lnks_deleted);
 	smc_lgr_put(lgr); /* lgr_hold above */
+	smc_ibdev_init_end(smcibdev);
 	return rc;
 }
 
@@ -997,6 +1016,8 @@ static int smc_lgr_create(struct smc_sock *smc, struct smc_init_info *ini)
 	spin_lock_bh(lgr_lock);
 	list_add_tail(&lgr->list, lgr_list);
 	spin_unlock_bh(lgr_lock);
+	if (!ini->is_smcd)
+		smc_ibdev_init_end(lnk->smcibdev);
 	return 0;
 
 free_wq:

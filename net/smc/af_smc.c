@@ -1225,7 +1225,7 @@ void smc_fill_gid_list(struct smc_link_group *lgr,
 	       SMC_GID_SIZE);
 
 out:
-	kfree(alt_ini);
+	smc_init_info_free(alt_ini);
 }
 
 static int smc_connect_rdma_v2_prepare(struct smc_sock *smc,
@@ -1596,14 +1596,14 @@ static int __smc_connect(struct smc_sock *smc)
 	SMC_STAT_CLNT_SUCC_INC(sock_net(smc->clcsock->sk), aclc);
 	smc_connect_ism_vlan_cleanup(ini);
 	kfree(buf);
-	kfree(ini);
+	smc_init_info_free(ini);
 	return 0;
 
 vlan_cleanup:
 	smc_connect_ism_vlan_cleanup(ini);
 	kfree(buf);
 fallback:
-	kfree(ini);
+	smc_init_info_free(ini);
 	return smc_connect_decline_fallback(smc, rc, version);
 }
 
@@ -2344,7 +2344,10 @@ static void smc_find_rdma_v2_device_serv(struct smc_sock *new_smc,
 
 not_found:
 	ini->smcr_version &= ~SMC_V2;
+	if (ini->smcrv2.ib_dev_v2_ref)
+		smc_ibdev_put(ini->smcrv2.ib_dev_v2);
 	ini->smcrv2.ib_dev_v2 = NULL;
+	ini->smcrv2.ib_dev_v2_ref = false;
 	ini->check_smcrv2 = false;
 }
 
@@ -2588,7 +2591,7 @@ out_decl:
 	smc_listen_decline(new_smc, rc, ini ? ini->first_contact_local : 0,
 			   proposal_version);
 out_free:
-	kfree(ini);
+	smc_init_info_free(ini);
 	kfree(buf);
 }
 

@@ -403,6 +403,7 @@ struct smc_init_info_smcrv2 {
 
 	/* Output fields when saddr is set */
 	struct smc_ib_device	*ib_dev_v2;
+	bool			ib_dev_v2_ref; /* owns an smc_ibdev reference */
 	u8			ib_port_v2;
 	u8			ib_gid_v2[SMC_GID_SIZE];
 
@@ -438,6 +439,7 @@ struct smc_init_info {
 	u8			peer_mac[ETH_ALEN];
 	u8			peer_systemid[SMC_SYSTEMID_LEN];
 	struct smc_ib_device	*ib_dev;
+	bool			ib_dev_ref; /* owns an smc_ibdev reference */
 	u8			ib_gid[SMC_GID_SIZE];
 	u8			ib_port;
 	u32			ib_clcqpn;
@@ -594,6 +596,7 @@ void smc_rtoken_set2(struct smc_link_group *lgr, int rtok_idx, int link_id,
 void smc_sndbuf_sync_sg_for_device(struct smc_connection *conn);
 void smc_rmb_sync_sg_for_cpu(struct smc_connection *conn);
 int smc_vlan_by_tcpsk(struct socket *clcsock, struct smc_init_info *ini);
+void smc_init_info_free(struct smc_init_info *ini);
 
 void smc_conn_free(struct smc_connection *conn);
 int smc_conn_create(struct smc_sock *smc, struct smc_init_info *ini);

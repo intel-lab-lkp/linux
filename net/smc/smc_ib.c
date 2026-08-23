@@ -934,6 +934,44 @@ void smc_ib_ndev_change(struct net_device *ndev, unsigned long event)
 	mutex_unlock(&smc_ib_devices.mutex);
 }
 
+static void smc_ibdev_release(struct smc_ib_device *smcibdev)
+{
+	put_device(&smcibdev->ibdev->dev);
+	kfree(smcibdev);
+}
+
+void smc_ibdev_get(struct smc_ib_device *smcibdev)
+{
+	refcount_inc(&smcibdev->refcnt);
+}
+
+void smc_ibdev_put(struct smc_ib_device *smcibdev)
+{
+	if (refcount_dec_and_test(&smcibdev->refcnt))
+		smc_ibdev_release(smcibdev);
+}
+
+int smc_ibdev_init_begin(struct smc_ib_device *smcibdev)
+{
+	int rc = 0;
+
+	mutex_lock(&smc_ib_devices.mutex);
+	if (list_empty(&smcibdev->list))
+		rc = -ENODEV;
+	else
+		atomic_inc(&smcibdev->init_cnt);
+	mutex_unlock(&smc_ib_devices.mutex);
+	return rc;
+}
+
+void smc_ibdev_init_end(struct smc_ib_device *smcibdev)
+{
+	mutex_lock(&smc_ib_devices.mutex);
+	if (atomic_dec_and_test(&smcibdev->init_cnt))
+		wake_up(&smcibdev->init_wait);
+	mutex_unlock(&smc_ib_devices.mutex);
+}
+
 /* callback function for ib_register_client() */
 static int smc_ib_add_dev(struct ib_device *ibdev)
 {
@@ -949,7 +987,11 @@ static int smc_ib_add_dev(struct ib_device *ibdev)
 		return -ENOMEM;
 
 	smcibdev->ibdev = ibdev;
+	get_device(&ibdev->dev);
+	refcount_set(&smcibdev->refcnt, 1);
 	INIT_WORK(&smcibdev->port_event_work, smc_ib_port_event_work);
+	atomic_set(&smcibdev->init_cnt, 0);
+	init_waitqueue_head(&smcibdev->init_wait);
 	atomic_set(&smcibdev->lnk_cnt, 0);
 	init_waitqueue_head(&smcibdev->lnks_deleted);
 	mutex_init(&smcibdev->mutex);
@@ -1000,11 +1042,14 @@ static void smc_ib_remove_dev(struct ib_device *ibdev, void *client_data)
 	mutex_unlock(&smc_ib_devices.mutex);
 	pr_warn_ratelimited("smc: removing ib device %s\n",
 			    smcibdev->ibdev->name);
+	if (atomic_read(&smcibdev->init_cnt))
+		wait_event(smcibdev->init_wait,
+			   !atomic_read(&smcibdev->init_cnt));
 	smc_smcr_terminate_all(smcibdev);
 	smc_ib_cleanup_per_ibdev(smcibdev);
 	ib_unregister_event_handler(&smcibdev->event_handler);
 	cancel_work_sync(&smcibdev->port_event_work);
-	kfree(smcibdev);
+	smc_ibdev_put(smcibdev);
 }
 
 static struct ib_client smc_ib_client = {
