@@ -24,7 +24,7 @@ struct _io_ops {
 
 struct	intf_hdl {
 	struct adapter *padapter;
-	struct dvobj_priv *pintf_dev;/* 	pointer to &(padapter->dvobjpriv); */
+	struct dvobj_priv *pintf_dev;/* pointer to &(padapter->dvobjpriv); */
 
 	struct _io_ops	io_ops;
 };
