@@ -80,6 +80,10 @@ struct snd_usb_audio {
 
 #define USB_AUDIO_IFACE_UNUSED	((void *)-1L)
 
+int snd_usb_claim_iface(struct snd_usb_audio *chip,
+			struct usb_interface *iface);
+void snd_usb_release_iface(struct usb_interface *iface);
+
 #define usb_audio_err(chip, fmt, args...) \
 	dev_err(&(chip)->dev->dev, fmt, ##args)
 #define usb_audio_err_ratelimited(chip, fmt, args...) \
