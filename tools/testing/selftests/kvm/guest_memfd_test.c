@@ -76,33 +76,53 @@ static void test_mmap_supported(int fd, size_t total_size)
 	kvm_munmap(mem, total_size);
 }
 
+/*
+ * Fill @nids with the first @nr_nids nodes in the allowed mask.
+ * Return false if the mask contains fewer than @nr_nids nodes.
+ */
+static bool get_numa_node_ids(int *nids, int nr_nids)
+{
+	unsigned long nodemask = get_numa_mem_nodes();
+	unsigned long nid;
+	int nr_found = 0;
+
+	for_each_set_bit(nid, &nodemask, BITS_PER_TYPE(nodemask)) {
+		nids[nr_found++] = nid;
+		if (nr_found == nr_nids)
+			return true;
+	}
+
+	return false;
+}
+
 static void test_mbind(int fd, size_t total_size)
 {
-	const unsigned long nodemask_0 = 1; /* nid: 0 */
-	unsigned long nodemask = 0;
-	unsigned long maxnode = BITS_PER_TYPE(nodemask);
+	unsigned long nodemask, bind_nodemask;
+	unsigned long maxnode = BITS_PER_TYPE(nodemask) + 1;
 	int policy;
 	char *mem;
+	int nid;
 	int ret;
 
-	if (!is_multi_numa_node_system())
+	if (!get_numa_node_ids(&nid, 1))
 		return;
 
+	bind_nodemask = 1UL << nid;
 	mem = kvm_mmap(total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd);
 
 	/* Test MPOL_INTERLEAVE policy */
-	kvm_mbind(mem, page_size * 2, MPOL_INTERLEAVE, &nodemask_0, maxnode, 0);
+	kvm_mbind(mem, page_size * 2, MPOL_INTERLEAVE, &bind_nodemask, maxnode, 0);
 	kvm_get_mempolicy(&policy, &nodemask, maxnode, mem, MPOL_F_ADDR);
-	TEST_ASSERT(policy == MPOL_INTERLEAVE && nodemask == nodemask_0,
+	TEST_ASSERT(policy == MPOL_INTERLEAVE && nodemask == bind_nodemask,
 		    "Wanted MPOL_INTERLEAVE (%u) and nodemask 0x%lx, got %u and 0x%lx",
-		    MPOL_INTERLEAVE, nodemask_0, policy, nodemask);
+		    MPOL_INTERLEAVE, bind_nodemask, policy, nodemask);
 
 	/* Test basic MPOL_BIND policy */
-	kvm_mbind(mem + page_size * 2, page_size * 2, MPOL_BIND, &nodemask_0, maxnode, 0);
+	kvm_mbind(mem + page_size * 2, page_size * 2, MPOL_BIND, &bind_nodemask, maxnode, 0);
 	kvm_get_mempolicy(&policy, &nodemask, maxnode, mem + page_size * 2, MPOL_F_ADDR);
-	TEST_ASSERT(policy == MPOL_BIND && nodemask == nodemask_0,
+	TEST_ASSERT(policy == MPOL_BIND && nodemask == bind_nodemask,
 		    "Wanted MPOL_BIND (%u) and nodemask 0x%lx, got %u and 0x%lx",
-		    MPOL_BIND, nodemask_0, policy, nodemask);
+		    MPOL_BIND, bind_nodemask, policy, nodemask);
 
 	/* Test MPOL_DEFAULT policy */
 	kvm_mbind(mem, total_size, MPOL_DEFAULT, NULL, 0, 0);
@@ -112,7 +132,7 @@ static void test_mbind(int fd, size_t total_size)
 		    MPOL_DEFAULT, policy, nodemask);
 
 	/* Test with invalid policy */
-	ret = mbind(mem, page_size, 999, &nodemask_0, maxnode, 0);
+	ret = mbind(mem, page_size, 999, &bind_nodemask, maxnode, 0);
 	TEST_ASSERT(ret == -1 && errno == EINVAL,
 		    "mbind with invalid policy should fail with EINVAL");
 
@@ -121,17 +141,19 @@ static void test_mbind(int fd, size_t total_size)
 
 static void test_numa_allocation(int fd, size_t total_size)
 {
-	unsigned long node0_mask = 1;  /* Node 0 */
-	unsigned long node1_mask = 2;  /* Node 1 */
-	unsigned long maxnode = 8;
+	unsigned long bind_nodemasks[2];
+	unsigned long maxnode = BITS_PER_TYPE(bind_nodemasks[0]) + 1;
 	void *pages[4];
+	int nids[2];
 	int status[4];
 	char *mem;
 	int i;
 
-	if (!is_multi_numa_node_system())
+	if (!get_numa_node_ids(nids, ARRAY_SIZE(nids)))
 		return;
 
+	bind_nodemasks[0] = 1UL << nids[0];
+	bind_nodemasks[1] = 1UL << nids[1];
 	mem = kvm_mmap(total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd);
 
 	for (i = 0; i < 4; i++)
@@ -139,34 +161,42 @@ static void test_numa_allocation(int fd, size_t total_size)
 
 	/* Set NUMA policy after allocation */
 	memset(mem, 0xaa, page_size);
-	kvm_mbind(pages[0], page_size, MPOL_BIND, &node0_mask, maxnode, 0);
+	kvm_mbind(pages[0], page_size, MPOL_BIND, &bind_nodemasks[0], maxnode, 0);
 	kvm_fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, page_size);
 
 	/* Set NUMA policy before allocation */
-	kvm_mbind(pages[0], page_size * 2, MPOL_BIND, &node1_mask, maxnode, 0);
-	kvm_mbind(pages[2], page_size * 2, MPOL_BIND, &node0_mask, maxnode, 0);
+	kvm_mbind(pages[0], page_size * 2, MPOL_BIND, &bind_nodemasks[1], maxnode, 0);
+	kvm_mbind(pages[2], page_size * 2, MPOL_BIND, &bind_nodemasks[0], maxnode, 0);
 	memset(mem, 0xaa, total_size);
 
 	/* Validate if pages are allocated on specified NUMA nodes */
 	kvm_move_pages(0, 4, pages, NULL, status, 0);
-	TEST_ASSERT(status[0] == 1, "Expected page 0 on node 1, got it on node %d", status[0]);
-	TEST_ASSERT(status[1] == 1, "Expected page 1 on node 1, got it on node %d", status[1]);
-	TEST_ASSERT(status[2] == 0, "Expected page 2 on node 0, got it on node %d", status[2]);
-	TEST_ASSERT(status[3] == 0, "Expected page 3 on node 0, got it on node %d", status[3]);
+	TEST_ASSERT(status[0] == nids[1],
+		    "Expected page 0 on node %d, got it on node %d", nids[1], status[0]);
+	TEST_ASSERT(status[1] == nids[1],
+		    "Expected page 1 on node %d, got it on node %d", nids[1], status[1]);
+	TEST_ASSERT(status[2] == nids[0],
+		    "Expected page 2 on node %d, got it on node %d", nids[0], status[2]);
+	TEST_ASSERT(status[3] == nids[0],
+		    "Expected page 3 on node %d, got it on node %d", nids[0], status[3]);
 
 	/* Punch hole for all pages */
 	kvm_fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, total_size);
 
 	/* Change NUMA policy nodes and reallocate */
-	kvm_mbind(pages[0], page_size * 2, MPOL_BIND, &node0_mask, maxnode, 0);
-	kvm_mbind(pages[2], page_size * 2, MPOL_BIND, &node1_mask, maxnode, 0);
+	kvm_mbind(pages[0], page_size * 2, MPOL_BIND, &bind_nodemasks[0], maxnode, 0);
+	kvm_mbind(pages[2], page_size * 2, MPOL_BIND, &bind_nodemasks[1], maxnode, 0);
 	memset(mem, 0xaa, total_size);
 
 	kvm_move_pages(0, 4, pages, NULL, status, 0);
-	TEST_ASSERT(status[0] == 0, "Expected page 0 on node 0, got it on node %d", status[0]);
-	TEST_ASSERT(status[1] == 0, "Expected page 1 on node 0, got it on node %d", status[1]);
-	TEST_ASSERT(status[2] == 1, "Expected page 2 on node 1, got it on node %d", status[2]);
-	TEST_ASSERT(status[3] == 1, "Expected page 3 on node 1, got it on node %d", status[3]);
+	TEST_ASSERT(status[0] == nids[0],
+		    "Expected page 0 on node %d, got it on node %d", nids[0], status[0]);
+	TEST_ASSERT(status[1] == nids[0],
+		    "Expected page 1 on node %d, got it on node %d", nids[0], status[1]);
+	TEST_ASSERT(status[2] == nids[1],
+		    "Expected page 2 on node %d, got it on node %d", nids[1], status[2]);
+	TEST_ASSERT(status[3] == nids[1],
+		    "Expected page 3 on node %d, got it on node %d", nids[1], status[3]);
 
 	kvm_munmap(mem, total_size);
 }
