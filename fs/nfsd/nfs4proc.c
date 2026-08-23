@@ -800,6 +800,8 @@ nfsd4_open_release(union nfsd4_op_u *u)
 {
 	posix_acl_release(u->open.op_dpacl);
 	posix_acl_release(u->open.op_pacl);
+	u->open.op_dpacl = NULL;
+	u->open.op_pacl = NULL;
 }
 
 /*

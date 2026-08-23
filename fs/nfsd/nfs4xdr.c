@@ -2680,6 +2680,7 @@ nfsd4_decode_compound(struct nfsd4_compoundargs *argp)
 		argp->ops = vcalloc(argp->opcnt, sizeof(*argp->ops));
 		if (!argp->ops) {
 			argp->ops = argp->iops;
+			argp->opcnt = 0;
 			return false;
 		}
 	}
@@ -2692,8 +2693,10 @@ nfsd4_decode_compound(struct nfsd4_compoundargs *argp)
 		op->replay = NULL;
 		op->opdesc = NULL;
 
-		if (xdr_stream_decode_u32(argp->xdr, &op->opnum) < 0)
+		if (xdr_stream_decode_u32(argp->xdr, &op->opnum) < 0) {
+			argp->opcnt = i;
 			return false;
+		}
 		if (nfsd4_opnum_in_range(argp, op)) {
 			op->opdesc = OPDESC(op);
 			op->status = nfsd4_dec_ops[op->opnum](argp, &op->u);
@@ -6836,6 +6839,32 @@ void nfsd4_encode_replay(struct xdr_stream *xdr, struct nfsd4_op *op)
 void nfsd4_release_compoundargs(struct svc_rqst *rqstp)
 {
 	struct nfsd4_compoundargs *args = rqstp->rq_argp;
+	unsigned int i;
+
+	/*
+	 * Ops that were decoded but never executed (a later op failed to
+	 * decode, or an earlier op failed at runtime) may still hold
+	 * decoded POSIX ACLs; release them here.  Executed ops have
+	 * already released or NULLed their ACL pointers.
+	 */
+	for (i = 0; i < args->opcnt; i++) {
+		struct nfsd4_op *op = &args->ops[i];
+
+		switch (op->opnum) {
+		case OP_OPEN:
+			posix_acl_release(op->u.open.op_dpacl);
+			posix_acl_release(op->u.open.op_pacl);
+			break;
+		case OP_CREATE:
+			posix_acl_release(op->u.create.cr_dpacl);
+			posix_acl_release(op->u.create.cr_pacl);
+			break;
+		case OP_SETATTR:
+			posix_acl_release(op->u.setattr.sa_dpacl);
+			posix_acl_release(op->u.setattr.sa_pacl);
+			break;
+		}
+	}
 
 	args->opcnt = 0;
 	if (args->ops != args->iops) {
