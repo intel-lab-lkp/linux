@@ -2732,6 +2732,16 @@ config BITOPS_KUNIT
 
 	  If unsure, say N.
 
+config STACKTRACE_KUNIT_TEST
+	tristate "KUnit test for stacktrace counted_by attribute" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This option enables the KUnit test for verifying the __counted_by_ptr
+	  attribute on struct stack_trace.
+
+	  If unsure, say N.
+
 config BITFIELD_KUNIT
 	tristate "KUnit test bitfield functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
