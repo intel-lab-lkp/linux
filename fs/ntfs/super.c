@@ -2298,6 +2298,22 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 		ntfs_debug("Changed device block size to %i bytes (block size bits %i) to match volume sector size.",
 				blocksize, sb->s_blocksize_bits);
 	}
+
+	/*
+	 * If the device's logical block size is larger than the mft record (1k)
+	 * writes to it will currently fail. Reads are unaffected, so we can still
+	 * mount the volume as read-only.
+	 */
+	if (vol->mft_record_size < bdev_logical_block_size(sb->s_bdev)) {
+		if (!sb_rdonly(sb)) {
+			ntfs_error(sb,
+				   "mft record size (%i) is smaller than the device logical block size (%u).  Mft records cannot be written.  Mounting read-only.",
+				   vol->mft_record_size,
+				   bdev_logical_block_size(sb->s_bdev));
+			sb->s_flags |= SB_RDONLY;
+		}
+	}
+
 	/* Initialize the cluster and mft allocators. */
 	ntfs_setup_allocators(vol);
 	/* Setup remaining fields in the super block. */
