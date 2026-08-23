@@ -1531,7 +1531,6 @@ static noinline int commit_fs_roots(struct btrfs_trans_handle *trans)
 			if (unlikely(ret2))
 				return ret2;
 
-			/* see comments in should_cow_block() */
 			clear_bit(BTRFS_ROOT_FORCE_COW, &root->state);
 			smp_mb__after_atomic();
 
@@ -1819,7 +1818,6 @@ static noinline int create_pending_snapshot(struct btrfs_trans_handle *trans,
 		btrfs_abort_transaction(trans, ret);
 		goto fail;
 	}
-	/* see comments in should_cow_block() */
 	set_bit(BTRFS_ROOT_FORCE_COW, &root->state);
 	smp_mb__after_atomic();
 

@@ -625,8 +625,6 @@ static inline bool should_cow_block(struct btrfs_trans_handle *trans,
 	if (btrfs_header_flag(buf, BTRFS_HEADER_FLAG_WRITTEN))
 		return true;
 
-	/* Ensure we can see the FORCE_COW bit. */
-	smp_mb__before_atomic();
 	if (test_bit(BTRFS_ROOT_FORCE_COW, &root->state))
 		return true;
 
