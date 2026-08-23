@@ -1858,6 +1858,16 @@ struct sctp_association *sctp_unpack_cookie(
 	/* Populate the association from the cookie.  */
 	memcpy(&retval->c, bear_cookie, sizeof(*bear_cookie));
 
+	if (ntohs(((__be16 *)retval->c.auth_random)[1]) >
+	    sizeof(retval->c.auth_random) ||
+	    ntohs(((__be16 *)retval->c.auth_hmacs)[1]) >
+	    sizeof(retval->c.auth_hmacs) ||
+	    ntohs(((__be16 *)retval->c.auth_chunks)[1]) >
+	    sizeof(retval->c.auth_chunks)) {
+		*error = -SCTP_IERROR_MALFORMED;
+		goto fail;
+	}
+
 	if (sctp_assoc_set_bind_addr_from_cookie(retval, bear_cookie,
 						 GFP_ATOMIC) < 0) {
 		*error = -SCTP_IERROR_NOMEM;
