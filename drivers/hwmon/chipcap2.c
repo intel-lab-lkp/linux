@@ -631,28 +631,37 @@ static int cc2_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	}
 }
 
-static int cc2_request_ready_irq(struct cc2_data *data, struct device *dev)
+static void cc2_get_irqs(struct cc2_data *data, struct device *dev)
 {
-	int ret = 0;
 
 	data->irq_ready = fwnode_irq_get_byname(dev_fwnode(dev), "ready");
-	if (data->irq_ready > 0) {
+	if (data->irq_ready > 0)
 		init_completion(&data->complete);
+
+	data->irq_low = fwnode_irq_get_byname(dev_fwnode(dev), "low");
+	if (data->irq_low > 0)
+		data->rh_alarm.low_alarm_visible = true;
+
+	data->irq_high = fwnode_irq_get_byname(dev_fwnode(dev), "high");
+	if (data->irq_high > 0)
+		data->rh_alarm.high_alarm_visible = true;
+}
+
+static int cc2_request_irqs(struct cc2_data *data, struct device *dev)
+{
+	int ret;
+
+	if (data->irq_ready > 0) {
 		ret = devm_request_threaded_irq(dev, data->irq_ready, NULL,
 						cc2_ready_interrupt,
 						IRQF_ONESHOT |
 						IRQF_TRIGGER_RISING,
 						dev_name(dev), data);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "Failed to request ready irq\n");
 	}
 
-	return ret;
-}
-
-static int cc2_request_alarm_irqs(struct cc2_data *data, struct device *dev)
-{
-	int ret = 0;
-
-	data->irq_low = fwnode_irq_get_byname(dev_fwnode(dev), "low");
 	if (data->irq_low > 0) {
 		ret = devm_request_threaded_irq(dev, data->irq_low, NULL,
 						cc2_low_interrupt,
@@ -660,12 +669,10 @@ static int cc2_request_alarm_irqs(struct cc2_data *data, struct device *dev)
 						IRQF_TRIGGER_RISING,
 						dev_name(dev), data);
 		if (ret)
-			return ret;
-
-		data->rh_alarm.low_alarm_visible = true;
+			return dev_err_probe(dev, ret,
+					     "Failed to request low alarm irq\n");
 	}
 
-	data->irq_high = fwnode_irq_get_byname(dev_fwnode(dev), "high");
 	if (data->irq_high > 0) {
 		ret = devm_request_threaded_irq(dev, data->irq_high, NULL,
 						cc2_high_interrupt,
@@ -673,12 +680,11 @@ static int cc2_request_alarm_irqs(struct cc2_data *data, struct device *dev)
 						IRQF_TRIGGER_RISING,
 						dev_name(dev), data);
 		if (ret)
-			return ret;
-
-		data->rh_alarm.high_alarm_visible = true;
+			return dev_err_probe(dev, ret,
+					     "Failed to request high alarm irq\n");
 	}
 
-	return ret;
+	return 0;
 }
 
 static const struct hwmon_channel_info *cc2_info[] = {
@@ -706,7 +712,6 @@ static int cc2_probe(struct i2c_client *client)
 {
 	struct cc2_data *data;
 	struct device *dev = &client->dev;
-	int ret;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 		return -EOPNOTSUPP;
@@ -726,13 +731,7 @@ static int cc2_probe(struct i2c_client *client)
 
 	device_property_read_string(dev, "label", &data->label);
 
-	ret = cc2_request_ready_irq(data, dev);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to request ready irq\n");
-
-	ret = cc2_request_alarm_irqs(data, dev);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to request alarm irqs\n");
+	cc2_get_irqs(data, dev);
 
 	data->hwmon = devm_hwmon_device_register_with_info(dev, client->name,
 							   data, &cc2_chip_info,
@@ -741,7 +740,7 @@ static int cc2_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(data->hwmon),
 				     "Failed to register hwmon device\n");
 
-	return 0;
+	return cc2_request_irqs(data, dev);
 }
 
 static void cc2_remove(struct i2c_client *client)
