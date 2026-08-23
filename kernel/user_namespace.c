@@ -809,13 +809,13 @@ static int insert_extent(struct uid_gid_map *map, struct uid_gid_extent *extent)
 		map->reverse = NULL;
 	}
 
-	if (map->nr_extents < UID_GID_MAP_MAX_BASE_EXTENTS)
-		dest = &map->extent[map->nr_extents];
+	map->nr_extents++;
+	if (map->nr_extents <= UID_GID_MAP_MAX_BASE_EXTENTS)
+		dest = &map->extent[map->nr_extents - 1];
 	else
-		dest = &map->forward[map->nr_extents];
+		dest = &map->forward[map->nr_extents - 1];
 
 	*dest = *extent;
-	map->nr_extents++;
 	return 0;
 }
 

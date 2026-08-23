@@ -29,8 +29,8 @@ struct uid_gid_map { /* 64 bytes -- 1 cache line */
 			u32 nr_extents;
 		};
 		struct {
-			struct uid_gid_extent *forward;
-			struct uid_gid_extent *reverse;
+			struct uid_gid_extent *forward __counted_by_ptr(nr_extents);
+			struct uid_gid_extent *reverse __counted_by_ptr(nr_extents);
 		};
 	};
 };
