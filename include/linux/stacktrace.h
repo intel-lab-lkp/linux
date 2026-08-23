@@ -81,7 +81,7 @@ unsigned int filter_irq_stacks(unsigned long *entries, unsigned int nr_entries);
 /* Internal interfaces. Do not use in generic code */
 struct stack_trace {
 	unsigned int nr_entries, max_entries;
-	unsigned long *entries;
+	unsigned long *entries __counted_by_ptr(max_entries);
 	unsigned int skip;	/* input argument: How many entries to skip */
 };
 
