@@ -51,7 +51,7 @@
 #define POWER_BUDGET	500	/* in mA; use 8 for low-power port testing */
 #define POWER_BUDGET_3	900	/* in mA */
 
-#define DUMMY_TIMER_INT_NSECS	125000 /* 1 microframe */
+#define DUMMY_TIMER_INT_NSECS	((u64)tick_us * NSEC_PER_USEC)
 
 static const char	driver_name[] = "dummy_hcd";
 static const char	driver_desc[] = "USB Host+Gadget Emulator";
@@ -79,6 +79,12 @@ module_param_named(is_high_speed, mod_data.is_high_speed, bool, S_IRUGO);
 MODULE_PARM_DESC(is_high_speed, "true to simulate HighSpeed connection");
 module_param_named(num, mod_data.num, uint, S_IRUGO);
 MODULE_PARM_DESC(num, "number of emulated controllers");
+
+static unsigned int tick_us = 125;
+module_param(tick_us, uint, 0644);
+MODULE_PARM_DESC(tick_us,
+		"enqueue-to-completion latency of the simulated controller, in microseconds (default 125, one high-speed microframe);"
+		" larger values slow the internal timer pendulum and reduce its interrupt-rate pressure on the host platform");
 /*-------------------------------------------------------------------------*/
 
 /* gadget side driver data structures */
