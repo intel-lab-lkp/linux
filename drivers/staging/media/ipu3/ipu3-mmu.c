@@ -313,7 +313,7 @@ size_t imgu_mmu_map_sg(struct imgu_mmu_info *info, unsigned long iova,
 		if (!IS_ALIGNED(s->offset, IPU3_PAGE_SIZE))
 			goto out_err;
 
-		/* must be IPU3_PAGE_SIZE aligned to be mapped singlely */
+		/* must be IPU3_PAGE_SIZE aligned to be mapped singly */
 		if (i == nents - 1 && !IS_ALIGNED(s->length, IPU3_PAGE_SIZE))
 			s_length = PAGE_ALIGN(s->length);
 
