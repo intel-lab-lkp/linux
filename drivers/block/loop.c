@@ -1769,8 +1769,59 @@ static void lo_release(struct gendisk *disk)
 	need_clear = (lo->lo_state == Lo_rundown);
 	mutex_unlock(&lo->lo_mutex);
 
-	if (need_clear)
+	if (need_clear) {
+		/*
+		 * Temporarily release disk->open_mutex in order to flush pending I/O
+		 * requests before clearing the backing device.
+		 *
+		 * This is a layering violation. But since bdev->bd_disk->fops->release()
+		 * (which is mapped to lo_release()) is the final function which
+		 * blkdev_put_whole() from bdev_release() calls immediately before
+		 * releasing disk->open_mutex, this changes nothing except opens a new
+		 * race window for allowing disk->fops->open() (which is mapped to
+		 * lo_open()) to be called.
+		 *
+		 * Even if lo_open() is called from blkdev_get_whole() due to this race,
+		 * the Lo_rundown state guarantees that lo_open() will fail with -ENXIO.
+		 * Thus, there will be effectively no change caused by this violation.
+		 */
+		mutex_unlock(&lo->lo_disk->open_mutex);
+		/*
+		 * Now that loop_queue_rq() sees lo->lo_state != Lo_bound,
+		 * wait for already started loop_queue_rq() to complete.
+		 */
+		synchronize_rcu();
+		/*
+		 * Now that no more works are scheduled by loop_queue_rq(),
+		 * wait for already scheduled works to complete.
+		 */
+		drain_workqueue(lo->workqueue);
+		/*
+		 * Now that no more AIO requests are scheduled by lo_rw_aio(),
+		 * wait for already started AIO to complete.
+		 *
+		 * Due to synchronize_rcu() + drain_workqueue() sequence above,
+		 * calling blk_mq_unfreeze_queue() immediately after blk_mq_freeze_queue()
+		 * returns has to be safe, for loop_queue_rq() no longer schedules new
+		 * lo_rw_aio() works and lo_rw_aio() no longer submits new AIO requests.
+		 *
+		 * Deferring blk_mq_unfreeze_queue() does not help because we are about
+		 * to clear the backing device and drop the refcount for the backing device.
+		 * There is nothing we can do if blk_mq_freeze_queue() fails to flush.
+		 */
+		blk_mq_unfreeze_queue(lo->lo_queue, blk_mq_freeze_queue(lo->lo_queue));
+		/*
+		 * Perform remaining cleanup, with disk->open_mutex held.
+		 *
+		 * The lo->lo_state should remain Lo_rundown despite we temporarily
+		 * released disk->open_mutex, for I am the only and the last user of
+		 * this loop device because lo_open() cannot succeed.
+		 */
+		mutex_lock(&lo->lo_disk->open_mutex);
+		if (WARN_ON(data_race(READ_ONCE(lo->lo_state)) != Lo_rundown))
+			return;
 		__loop_clr_fd(lo);
+	}
 }
 
 static void lo_free_disk(struct gendisk *disk)
