@@ -41,6 +41,7 @@ struct device_node *mmc_of_find_child_device(struct mmc_host *host,
 		unsigned func_num);
 
 void mmc_init_erase(struct mmc_card *card);
+void mmc_sanitize_cid_name(char *name);
 
 void mmc_set_chip_select(struct mmc_host *host, int mode);
 void mmc_set_clock(struct mmc_host *host, unsigned int hz);

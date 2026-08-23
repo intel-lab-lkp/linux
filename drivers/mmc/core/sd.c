@@ -97,8 +97,7 @@ void mmc_decode_cid(struct mmc_card *card)
 
 	card->cid.year += 2000; /* SD cards year offset */
 
-	/* some product names may include trailing whitespace */
-	strim(card->cid.prod_name);
+	mmc_sanitize_cid_name(card->cid.prod_name);
 }
 
 /*

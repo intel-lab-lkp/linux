@@ -117,8 +117,7 @@ static int mmc_decode_cid(struct mmc_card *card)
 		return -EINVAL;
 	}
 
-	/* some product names include trailing whitespace */
-	strim(card->cid.prod_name);
+	mmc_sanitize_cid_name(card->cid.prod_name);
 
 	return 0;
 }

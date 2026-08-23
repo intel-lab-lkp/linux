@@ -8,6 +8,7 @@
  *  MMCv4 support Copyright (C) 2006 Philip Langdale, All Rights Reserved.
  */
 #include <linux/module.h>
+#include <linux/ctype.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/completion.h>
@@ -23,6 +24,7 @@
 #include <linux/fault-inject.h>
 #include <linux/random.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/of.h>
 
 #include <linux/mmc/card.h>
@@ -51,6 +53,25 @@
 #define SD_DISCARD_TIMEOUT_MS	(250)
 
 static const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
+
+/**
+ * mmc_sanitize_cid_name() - sanitize a CID product name in place
+ * @name: NUL-terminated CID product name to sanitize
+ *
+ * Trim trailing whitespace and replace bytes outside printable ASCII with '?'.
+ */
+void mmc_sanitize_cid_name(char *name)
+{
+	char *p;
+
+	/* some product names may include trailing whitespace */
+	strim(name);
+
+	/* Keep product names safe for sysfs and uevent consumers. */
+	for (p = name; *p; p++)
+		if (!isascii(*p) || !isprint(*p))
+			*p = '?';
+}
 
 /*
  * Enabling software CRCs on the data blocks can be a significant (30%)
