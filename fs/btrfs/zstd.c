@@ -83,6 +83,8 @@ struct zstd_workspace_manager {
 	unsigned long active_map;
 	wait_queue_head_t wait;
 	struct timer_list timer;
+	/* Number of max level workspaces alive, only their put wakes @wait. */
+	atomic_t nr_max_level_ws;
 };
 
 static size_t zstd_ws_mem_sizes[ZSTD_BTRFS_MAX_LEVEL];
@@ -137,6 +139,9 @@ static void zstd_reclaim_timer_fn(struct timer_list *timer)
 		list_del(&victim->lru_list);
 		list_del(&victim->list);
 		zstd_free_workspace(&victim->list);
+
+		if (level == ZSTD_BTRFS_MAX_LEVEL - 1)
+			atomic_dec(&zwsm->nr_max_level_ws);
 
 		if (list_empty(&zwsm->idle_ws[level]))
 			clear_bit(level, &zwsm->active_map);
@@ -204,6 +209,7 @@ int zstd_alloc_workspace_manager(struct btrfs_fs_info *fs_info)
 	} else {
 		set_bit(ZSTD_BTRFS_MAX_LEVEL - 1, &zwsm->active_map);
 		list_add(ws, &zwsm->idle_ws[ZSTD_BTRFS_MAX_LEVEL - 1]);
+		atomic_set(&zwsm->nr_max_level_ws, 1);
 	}
 	return 0;
 }
@@ -280,7 +286,8 @@ static struct list_head *zstd_find_workspace(struct btrfs_fs_info *fs_info, int 
  * If @level is 0, then any compression level can be used.  Therefore, we begin
  * scanning from 1.  We first scan through possible workspaces and then after
  * attempt to allocate a new workspace.  If we fail to allocate one due to
- * memory pressure, go to sleep waiting for the max level workspace to free up.
+ * memory pressure, go to sleep waiting for the max level workspace to free up,
+ * or retry the allocation if no max level workspace exists to wake us.
  */
 struct list_head *zstd_get_workspace(struct btrfs_fs_info *fs_info, int level)
 {
@@ -302,6 +309,22 @@ again:
 	nofs_flag = memalloc_nofs_save();
 	ws = zstd_alloc_workspace(fs_info, level);
 	memalloc_nofs_restore(nofs_flag);
+
+	if (!IS_ERR(ws) && clip_level(level) == ZSTD_BTRFS_MAX_LEVEL - 1)
+		atomic_inc(&zwsm->nr_max_level_ws);
+
+	/* Waiting without a workspace that can wake us would never end */
+	if (IS_ERR(ws) && !atomic_read(&zwsm->nr_max_level_ws)) {
+		static DEFINE_RATELIMIT_STATE(_rs,
+				/* once per minute */ 60 * HZ,
+				/* no burst */ 1);
+
+		if (__ratelimit(&_rs))
+			btrfs_warn(fs_info,
+				   "no zstd compression workspace, low memory, retrying");
+		memalloc_retry_wait(GFP_KERNEL);
+		goto again;
+	}
 
 	if (IS_ERR(ws)) {
 		DEFINE_WAIT(wait);
