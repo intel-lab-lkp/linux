@@ -70,6 +70,16 @@ extern struct key_user	root_key_user;
 extern struct key_user *key_user_lookup(kuid_t uid);
 extern void key_user_put(struct key_user *user);
 
+static inline kuid_t key_user_uid(const struct key *key)
+{
+	kuid_t uid;
+
+	spin_lock(&key_user_lock);
+	uid = key->user->uid;
+	spin_unlock(&key_user_lock);
+	return uid;
+}
+
 /*
  * Key quota limits.
  * - root has its own separate limits to everyone else
