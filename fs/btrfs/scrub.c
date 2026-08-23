@@ -3177,6 +3177,7 @@ int btrfs_scrub_dev(struct btrfs_fs_info *fs_info, u64 devid, u64 start,
 	mutex_lock(&fs_info->scrub_lock);
 	dev->scrub_ctx = NULL;
 	mutex_unlock(&fs_info->scrub_lock);
+	wake_up(&fs_info->scrub_pause_wait);
 
 	scrub_workers_put(fs_info);
 	scrub_put_ctx(sctx);
