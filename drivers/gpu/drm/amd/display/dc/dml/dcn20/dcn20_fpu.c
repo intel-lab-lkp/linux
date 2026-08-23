@@ -2332,6 +2332,8 @@ bool dcn21_validate_bandwidth_fp(struct dc *dc, struct dc_state *context,
 				 enum dc_validate_mode validate_mode, display_e2e_pipe_params_st *pipes)
 {
 	bool out = false;
+	double sr_exit_time_us;
+	double sr_enter_plus_exit_time_us;
 
 	BW_VAL_TRACE_SETUP();
 
@@ -2347,7 +2349,8 @@ bool dcn21_validate_bandwidth_fp(struct dc *dc, struct dc_state *context,
 	/*Unsafe due to current pipe merge and split logic*/
 	ASSERT(context != dc->current_state);
 
-	out = dcn21_fast_validate_bw(dc, context, pipes, &pipe_cnt, pipe_split_from, &vlevel, validate_mode, false);
+	out = dcn21_fast_validate_bw(dc, context, pipes, &pipe_cnt, pipe_split_from,
+				     &vlevel, validate_mode, true);
 
 	if (pipe_cnt == 0)
 		goto validate_out;
@@ -2362,8 +2365,28 @@ bool dcn21_validate_bandwidth_fp(struct dc *dc, struct dc_state *context,
 		goto validate_out;
 	}
 
+	/*
+	 * calculate_wm_set_for_vlevel() overrides the DML soc stutter
+	 * latencies with the values of each watermark range entry, but only
+	 * restores dram_clock_change_latency_us. Snapshot the two stutter
+	 * latencies and put them back once the watermark and DLG parameters
+	 * have been computed, so the override cannot leak into
+	 * dc->current_state. A later atomic_check() duplicates that state,
+	 * and validating against mutated latencies is what makes
+	 * atomic_check() and atomic_commit_tail() disagree.
+	 *
+	 * Restoring after dcn20_calculate_dlg_params() keeps the DLG
+	 * computation reading the same latencies as before, so this only
+	 * removes the leak.
+	 */
+	sr_exit_time_us = context->bw_ctx.dml.soc.sr_exit_time_us;
+	sr_enter_plus_exit_time_us = context->bw_ctx.dml.soc.sr_enter_plus_exit_time_us;
+
 	dcn21_calculate_wm(dc, context, pipes, &pipe_cnt, pipe_split_from, vlevel, validate_mode);
 	dcn20_calculate_dlg_params(dc, context, pipes, pipe_cnt, vlevel);
+
+	context->bw_ctx.dml.soc.sr_exit_time_us = sr_exit_time_us;
+	context->bw_ctx.dml.soc.sr_enter_plus_exit_time_us = sr_enter_plus_exit_time_us;
 
 	BW_VAL_TRACE_END_WATERMARKS();
 
