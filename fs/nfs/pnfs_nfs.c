@@ -8,6 +8,7 @@
  * Tom Haynes <loghyr@primarydata.com>
  */
 
+#include <linux/ctype.h>
 #include <linux/nfs_fs.h>
 #include <linux/nfs_page.h>
 #include <linux/sunrpc/addr.h>
@@ -1059,6 +1060,19 @@ out:
 }
 EXPORT_SYMBOL_GPL(nfs4_pnfs_ds_connect);
 
+static int
+nfs4_parse_port_octet(const char *str, u8 *port)
+{
+	const char *p;
+
+	if (!*str)
+		return -EINVAL;
+	for (p = str; *p; p++)
+		if (!isdigit(*p))
+			return -EINVAL;
+	return kstrtou8(str, 10, port);
+}
+
 /*
  * Currently only supports ipv4, ipv6 and one multi-path address.
  */
@@ -1066,10 +1080,10 @@ struct nfs4_pnfs_ds_addr *
 nfs4_decode_mp_ds_addr(struct net *net, struct xdr_stream *xdr, gfp_t gfp_flags)
 {
 	struct nfs4_pnfs_ds_addr *da = NULL;
-	char *buf, *portstr;
+	char *buf, *portsep;
 	__be16 port;
 	ssize_t nlen, rlen;
-	int tmp[2];
+	u8 porthi, portlo;
 	char *netid;
 	size_t len;
 	char *startsep = "";
@@ -1089,37 +1103,33 @@ nfs4_decode_mp_ds_addr(struct net *net, struct xdr_stream *xdr, gfp_t gfp_flags)
 	if (unlikely(rlen <= 0))
 		goto out_free_netid;
 
-	/* replace port '.' with '-' */
-	portstr = strrchr(buf, '.');
-	if (!portstr) {
-		dprintk("%s: Failed finding expected dot in port\n",
-			__func__);
+	/* Parse the low port octet and remove it from the address string. */
+	portsep = strrchr(buf, '.');
+	if (!portsep || nfs4_parse_port_octet(portsep + 1, &portlo)) {
+		dprintk("%s: Failed parsing low port octet\n", __func__);
 		goto out_free_buf;
 	}
-	*portstr = '-';
+	*portsep = '\0';
 
-	/* find '.' between address and port */
-	portstr = strrchr(buf, '.');
-	if (!portstr) {
-		dprintk("%s: Failed finding expected dot between address and "
-			"port\n", __func__);
+	/* Parse the high port octet and terminate the address string. */
+	portsep = strrchr(buf, '.');
+	if (!portsep || nfs4_parse_port_octet(portsep + 1, &porthi)) {
+		dprintk("%s: Failed parsing high port octet\n", __func__);
 		goto out_free_buf;
 	}
-	*portstr = '\0';
+	*portsep = '\0';
 
 	da = nfs4_pnfs_ds_addr_alloc(gfp_flags);
 	if (unlikely(!da))
 		goto out_free_buf;
 
-	if (!rpc_pton(net, buf, portstr-buf, (struct sockaddr *)&da->da_addr,
+	if (!rpc_pton(net, buf, portsep - buf, (struct sockaddr *)&da->da_addr,
 		      sizeof(da->da_addr))) {
 		dprintk("%s: error parsing address %s\n", __func__, buf);
 		goto out_free_da;
 	}
 
-	portstr++;
-	sscanf(portstr, "%d-%d", &tmp[0], &tmp[1]);
-	port = htons((tmp[0] << 8) | (tmp[1]));
+	port = htons((porthi << 8) | portlo);
 
 	switch (da->da_addr.ss_family) {
 	case AF_INET:
@@ -1226,4 +1236,3 @@ pnfs_nfs_generic_sync(struct inode *inode, bool datasync)
 	return pnfs_layoutcommit_inode(inode, true);
 }
 EXPORT_SYMBOL_GPL(pnfs_nfs_generic_sync);
-
