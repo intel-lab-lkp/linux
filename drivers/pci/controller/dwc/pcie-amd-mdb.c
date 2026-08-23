@@ -21,6 +21,17 @@
 #include "../../pci.h"
 #include "pcie-designware.h"
 
+/*
+ * On CPM6 the per-controller PCIe MISC_EVENT registers live in a dedicated
+ * region ("intr"), separate from the CPM SLCR region ("slcr") that holds the
+ * MERGED and PS severity registers they feed into. Each has a sticky W1C
+ * STATUS, a read-only MASK, and write-1 ENABLE/DISABLE register.
+ */
+#define AMD_CPM6_MISC_EVENT_STATUS		0x514
+#define AMD_CPM6_MISC_EVENT_MASK		0x518
+#define AMD_CPM6_MISC_EVENT_ENABLE		0x51C
+#define AMD_CPM6_MISC_EVENT_DISABLE		0x520
+
 #define AMD_MDB_TLP_IR_STATUS_MISC		0x4C0
 #define AMD_MDB_TLP_IR_MASK_MISC		0x4C4
 #define AMD_MDB_TLP_IR_ENABLE_MISC		0x4C8
@@ -30,7 +41,22 @@
 
 #define AMD_MDB_PCIE_INTR_INTX_ASSERT(x)	BIT((x) * 2)
 
-/* Interrupt registers definitions. */
+#define AMD_CPM6_MERGED_STATUS			0x648
+#define AMD_CPM6_MERGED_ENABLE			0x650
+#define AMD_CPM6_MERGED_DISABLE			0x654
+
+/* MERGED input bits for the MISC_EVENT sources this driver handles. */
+#define AMD_CPM6_MERGED_MISC_EVENT_HOST0	14
+#define AMD_CPM6_MERGED_MISC_EVENT_HOST1	17
+
+/*
+ * The PS_MISC severity register feeds the misc/OR GIC line. The MERGED
+ * aggregator appears as bit 21 within it.
+ */
+#define AMD_CPM6_PS_MISC_IR_STATUS		0x340
+#define AMD_CPM6_PS_IR_MERGED			BIT(21)
+
+/* MDB5 interrupt register definitions. */
 #define AMD_MDB_PCIE_INTR_CMPL_TIMEOUT		15
 #define AMD_MDB_PCIE_INTR_INTX			16
 #define AMD_MDB_PCIE_INTR_PM_PME_RCVD		24
@@ -51,23 +77,76 @@
 		AMD_MDB_TLP_PCIE_INTX_MASK		\
 	)
 
+/* CPM6 hwirq mapping (hwirq == MISC_EVENT status bit). */
+#define AMD_CPM6_PCIE_INTR_INTX			22
+
+enum amd_mdb_pcie_version {
+	MDB5,
+	CPM6,
+	CPM6_HOST1,
+};
+
+struct amd_mdb_pcie_variant {
+	enum	amd_mdb_pcie_version version;
+	u32	misc_status_reg;
+	u32	misc_mask_reg;
+	u32	misc_enable_reg;
+	u32	misc_disable_reg;
+	u32	misc_mask_all;
+	u32	intx_hwirq;
+	u32	intx_mask;
+};
+
 /**
  * struct amd_mdb_pcie - PCIe port information
  * @pci: DesignWare PCIe controller structure
  * @slcr: MDB System Level Control and Status Register (SLCR) base
+ * @intr_base: Per-controller interrupt register base. On CPM6 this maps the
+ *             "intr" region holding the MISC_EVENT registers; on MDB5
+ *             the interrupt registers live in the SLCR block, so it aliases
+ *             @slcr.
+ * @variant: Interrupt layout data for the matched platform compatible
  * @intx_domain: INTx IRQ domain pointer
  * @mdb_domain: MDB IRQ domain pointer
  * @perst_gpio: GPIO descriptor for PERST# signal handling
  * @intx_irq: INTx IRQ interrupt number
+ * @intx_refmask: CPM6 mask of unmasked INTx lines; gates the shared aggregate
  */
 struct amd_mdb_pcie {
 	struct dw_pcie			pci;
 	void __iomem			*slcr;
+	void __iomem			*intr_base;
+	const struct amd_mdb_pcie_variant	*variant;
 	struct irq_domain		*intx_domain;
 	struct irq_domain		*mdb_domain;
 	struct gpio_desc		*perst_gpio;
 	int				intx_irq;
+	u32				intx_refmask;
 };
+
+static u32 amd_mdb_pcie_merged_host_mask(struct amd_mdb_pcie *pcie)
+{
+	return pcie->variant->version == CPM6 ?
+	       BIT(AMD_CPM6_MERGED_MISC_EVENT_HOST0) :
+	       BIT(AMD_CPM6_MERGED_MISC_EVENT_HOST1);
+}
+
+static void amd_mdb_pcie_clear_aggregators(struct amd_mdb_pcie *pcie)
+{
+	if (pcie->variant->version == MDB5)
+		return;
+
+	/* Clear this host's serviced MISC_EVENT contribution from MERGED. */
+	writel_relaxed(amd_mdb_pcie_merged_host_mask(pcie),
+		       pcie->slcr + AMD_CPM6_MERGED_STATUS);
+
+	/*
+	 * Clear MERGED in the PS_MISC severity register so the misc GIC line
+	 * de-asserts.
+	 */
+	writel_relaxed(AMD_CPM6_PS_IR_MERGED,
+		       pcie->slcr + AMD_CPM6_PS_MISC_IR_STATUS);
+}
 
 static const struct dw_pcie_host_ops amd_mdb_pcie_host_ops = {
 };
@@ -81,14 +160,17 @@ static void amd_mdb_intx_irq_mask(struct irq_data *data)
 	u32 val;
 
 	raw_spin_lock_irqsave(&port->lock, flags);
-	val = FIELD_PREP(AMD_MDB_TLP_PCIE_INTX_MASK,
-			 AMD_MDB_PCIE_INTR_INTX_ASSERT(data->hwirq));
-
-	/*
-	 * Writing '1' to a bit in AMD_MDB_TLP_IR_DISABLE_MISC disables that
-	 * interrupt, writing '0' has no effect.
-	 */
-	writel_relaxed(val, pcie->slcr + AMD_MDB_TLP_IR_DISABLE_MISC);
+	if (pcie->variant->version == MDB5) {
+		val = FIELD_PREP(AMD_MDB_TLP_PCIE_INTX_MASK,
+				 AMD_MDB_PCIE_INTR_INTX_ASSERT(data->hwirq));
+	} else {
+		/* CPM6 shares one INTx enable; drop it on the last mask. */
+		pcie->intx_refmask &= ~BIT(data->hwirq);
+		val = pcie->intx_refmask ? 0 : pcie->variant->intx_mask;
+	}
+	/* Writing '1' disables the interrupt; writing '0' has no effect. */
+	if (val)
+		writel_relaxed(val, pcie->intr_base + pcie->variant->misc_disable_reg);
 	raw_spin_unlock_irqrestore(&port->lock, flags);
 }
 
@@ -101,14 +183,17 @@ static void amd_mdb_intx_irq_unmask(struct irq_data *data)
 	u32 val;
 
 	raw_spin_lock_irqsave(&port->lock, flags);
-	val = FIELD_PREP(AMD_MDB_TLP_PCIE_INTX_MASK,
-			 AMD_MDB_PCIE_INTR_INTX_ASSERT(data->hwirq));
-
-	/*
-	 * Writing '1' to a bit in AMD_MDB_TLP_IR_ENABLE_MISC enables that
-	 * interrupt, writing '0' has no effect.
-	 */
-	writel_relaxed(val, pcie->slcr + AMD_MDB_TLP_IR_ENABLE_MISC);
+	if (pcie->variant->version == MDB5) {
+		val = FIELD_PREP(AMD_MDB_TLP_PCIE_INTX_MASK,
+				 AMD_MDB_PCIE_INTR_INTX_ASSERT(data->hwirq));
+	} else {
+		/* CPM6 shares one INTx enable; raise it on the first unmask. */
+		val = pcie->intx_refmask ? 0 : pcie->variant->intx_mask;
+		pcie->intx_refmask |= BIT(data->hwirq);
+	}
+	/* Writing '1' enables the interrupt; writing '0' has no effect. */
+	if (val)
+		writel_relaxed(val, pcie->intr_base + pcie->variant->misc_enable_reg);
 	raw_spin_unlock_irqrestore(&port->lock, flags);
 }
 
@@ -148,11 +233,19 @@ static irqreturn_t dw_pcie_rp_intx(int irq, void *args)
 	unsigned long val;
 	int i, int_status;
 
-	val = readl_relaxed(pcie->slcr + AMD_MDB_TLP_IR_STATUS_MISC);
-	int_status = FIELD_GET(AMD_MDB_TLP_PCIE_INTX_MASK, val);
+	val = readl_relaxed(pcie->intr_base + pcie->variant->misc_status_reg);
 
-	for (i = 0; i < PCI_NUM_INTX; i++) {
-		if (int_status & AMD_MDB_PCIE_INTR_INTX_ASSERT(i))
+	if (pcie->variant->version == MDB5) {
+		int_status = FIELD_GET(AMD_MDB_TLP_PCIE_INTX_MASK, val);
+		for (i = 0; i < PCI_NUM_INTX; i++) {
+			if (int_status & AMD_MDB_PCIE_INTR_INTX_ASSERT(i))
+				generic_handle_domain_irq(pcie->intx_domain, i);
+		}
+	} else {
+		/* CPM6 exposes only an aggregate INTx indication */
+		if (!(val & pcie->variant->intx_mask))
+			return IRQ_NONE;
+		for (i = 0; i < PCI_NUM_INTX; i++)
 			generic_handle_domain_irq(pcie->intx_domain, i);
 	}
 
@@ -179,11 +272,17 @@ static void amd_mdb_event_irq_mask(struct irq_data *d)
 	struct dw_pcie *pci = &pcie->pci;
 	struct dw_pcie_rp *port = &pci->pp;
 	unsigned long flags;
-	u32 val;
+
+	/*
+	 * On CPM6 the INTx aggregate leaf is owned by the INTx irqchip
+	 * refcount (intx_refmask), so leave that bit to that path.
+	 */
+	if (pcie->variant->version != MDB5 && d->hwirq == pcie->variant->intx_hwirq)
+		return;
 
 	raw_spin_lock_irqsave(&port->lock, flags);
-	val = BIT(d->hwirq);
-	writel_relaxed(val, pcie->slcr + AMD_MDB_TLP_IR_DISABLE_MISC);
+	writel_relaxed(BIT(d->hwirq),
+		       pcie->intr_base + pcie->variant->misc_disable_reg);
 	raw_spin_unlock_irqrestore(&port->lock, flags);
 }
 
@@ -193,11 +292,17 @@ static void amd_mdb_event_irq_unmask(struct irq_data *d)
 	struct dw_pcie *pci = &pcie->pci;
 	struct dw_pcie_rp *port = &pci->pp;
 	unsigned long flags;
-	u32 val;
+
+	/*
+	 * On CPM6 the INTx aggregate leaf is owned by the INTx irqchip
+	 * refcount (intx_refmask), so leave that bit to that path.
+	 */
+	if (pcie->variant->version != MDB5 && d->hwirq == pcie->variant->intx_hwirq)
+		return;
 
 	raw_spin_lock_irqsave(&port->lock, flags);
-	val = BIT(d->hwirq);
-	writel_relaxed(val, pcie->slcr + AMD_MDB_TLP_IR_ENABLE_MISC);
+	writel_relaxed(BIT(d->hwirq),
+		       pcie->intr_base + pcie->variant->misc_enable_reg);
 	raw_spin_unlock_irqrestore(&port->lock, flags);
 }
 
@@ -226,19 +331,47 @@ static irqreturn_t amd_mdb_pcie_event(int irq, void *args)
 {
 	struct amd_mdb_pcie *pcie = args;
 	unsigned long val;
+	u32 ev_raw;
 	int i;
 
-	val = readl_relaxed(pcie->slcr + AMD_MDB_TLP_IR_STATUS_MISC);
-	val &= ~readl_relaxed(pcie->slcr + AMD_MDB_TLP_IR_MASK_MISC);
+	ev_raw = readl_relaxed(pcie->intr_base + pcie->variant->misc_status_reg);
+	val = ev_raw;
+	val &= ~readl_relaxed(pcie->intr_base + pcie->variant->misc_mask_reg);
+
+	if (pcie->variant->version == MDB5) {
+		for_each_set_bit(i, &val, 32)
+			generic_handle_domain_irq(pcie->mdb_domain, i);
+		writel_relaxed(val, pcie->intr_base + pcie->variant->misc_status_reg);
+		return IRQ_HANDLED;
+	}
+
+	val &= pcie->variant->misc_mask_all;
+
+	/*
+	 * The misc GIC line is shared with the peer host controller. If this
+	 * host has nothing pending, report the interrupt as not ours so the
+	 * shared line's spurious detection keeps working and the peer's sticky
+	 * aggregator state is left untouched.
+	 */
+	if (!ev_raw)
+		return IRQ_NONE;
+
 	for_each_set_bit(i, &val, 32)
 		generic_handle_domain_irq(pcie->mdb_domain, i);
-	writel_relaxed(val, pcie->slcr + AMD_MDB_TLP_IR_STATUS_MISC);
+
+	/* Clear this host's serviced leaf bits. */
+	writel_relaxed(ev_raw, pcie->intr_base + pcie->variant->misc_status_reg);
+
+	/* Clear only this host's sticky aggregator contribution. */
+	amd_mdb_pcie_clear_aggregators(pcie);
 
 	return IRQ_HANDLED;
 }
 
-static void amd_mdb_pcie_free_irq_domains(struct amd_mdb_pcie *pcie)
+static void amd_mdb_pcie_free_irq_domains(void *data)
 {
+	struct amd_mdb_pcie *pcie = data;
+
 	if (pcie->intx_domain) {
 		irq_domain_remove(pcie->intx_domain);
 		pcie->intx_domain = NULL;
@@ -250,24 +383,64 @@ static void amd_mdb_pcie_free_irq_domains(struct amd_mdb_pcie *pcie)
 	}
 }
 
-static int amd_mdb_pcie_init_port(struct amd_mdb_pcie *pcie)
+static void amd_mdb_pcie_disable_interrupts(struct amd_mdb_pcie *pcie)
 {
-	unsigned long val;
+	u32 misc_mask_all = pcie->variant->misc_mask_all;
+	u32 val;
+
+	/* Mask all leaf TLP interrupts. */
+	writel_relaxed(misc_mask_all,
+		       pcie->intr_base + pcie->variant->misc_disable_reg);
+
+	/* Clear any pending leaf TLP interrupts. */
+	val = readl_relaxed(pcie->intr_base + pcie->variant->misc_status_reg) &
+	      misc_mask_all;
+	writel_relaxed(val, pcie->intr_base + pcie->variant->misc_status_reg);
+
+	if (pcie->variant->version == MDB5)
+		return;
+
+	/*
+	 * Mask this host's MISC_EVENT input in the shared MERGED aggregator so
+	 * a stale source cannot drive the GIC line the peer host controller
+	 * also shares.
+	 */
+	writel_relaxed(amd_mdb_pcie_merged_host_mask(pcie),
+		       pcie->slcr + AMD_CPM6_MERGED_DISABLE);
+}
+
+static void amd_mdb_pcie_init_port(struct amd_mdb_pcie *pcie)
+{
+	u32 misc_mask_all;
+	u32 val;
+
+	misc_mask_all = pcie->variant->misc_mask_all;
 
 	/* Disable all TLP interrupts. */
-	writel_relaxed(AMD_MDB_PCIE_IMR_ALL_MASK,
-		       pcie->slcr + AMD_MDB_TLP_IR_DISABLE_MISC);
+	writel_relaxed(misc_mask_all,
+		       pcie->intr_base + pcie->variant->misc_disable_reg);
 
 	/* Clear pending TLP interrupts. */
-	val = readl_relaxed(pcie->slcr + AMD_MDB_TLP_IR_STATUS_MISC);
-	val &= AMD_MDB_PCIE_IMR_ALL_MASK;
-	writel_relaxed(val, pcie->slcr + AMD_MDB_TLP_IR_STATUS_MISC);
+	val = readl_relaxed(pcie->intr_base + pcie->variant->misc_status_reg) &
+	      misc_mask_all;
+	writel_relaxed(val, pcie->intr_base + pcie->variant->misc_status_reg);
 
-	/* Enable all TLP interrupts. */
-	writel_relaxed(AMD_MDB_PCIE_IMR_ALL_MASK,
-		       pcie->slcr + AMD_MDB_TLP_IR_ENABLE_MISC);
+	/*
+	 * Enable the leaf TLP interrupts. On CPM6 the only leaf source is the
+	 * INTx aggregate, which the INTx irqchip enables on demand through
+	 * intx_refmask, so it is left masked here.
+	 */
+	if (pcie->variant->version == MDB5)
+		writel_relaxed(misc_mask_all,
+			       pcie->intr_base + pcie->variant->misc_enable_reg);
 
-	return 0;
+	/*
+	 * On CPM6 unmask this host's MISC_EVENT input in the shared MERGED
+	 * aggregator so it reaches the GIC.
+	 */
+	if (pcie->variant->version != MDB5)
+		writel_relaxed(amd_mdb_pcie_merged_host_mask(pcie),
+			       pcie->slcr + AMD_CPM6_MERGED_ENABLE);
 }
 
 /**
@@ -316,9 +489,16 @@ static int amd_mdb_pcie_init_irq_domains(struct amd_mdb_pcie *pcie,
 
 	raw_spin_lock_init(&pp->lock);
 
-	return 0;
+	/*
+	 * Remove the IRQ domains through devres so that on a later probe
+	 * failure the device-managed IRQs requested in amd_mdb_setup_irq() are
+	 * freed before the domains they are mapped into are destroyed.
+	 */
+	return devm_add_action_or_reset(dev, amd_mdb_pcie_free_irq_domains, pcie);
+
 mdb_out:
-	amd_mdb_pcie_free_irq_domains(pcie);
+	irq_domain_remove(pcie->mdb_domain);
+	pcie->mdb_domain = NULL;
 out:
 	of_node_put(pcie_intc_node);
 	return err;
@@ -351,35 +531,48 @@ static int amd_mdb_setup_irq(struct amd_mdb_pcie *pcie,
 	struct dw_pcie *pci = &pcie->pci;
 	struct dw_pcie_rp *pp = &pci->pp;
 	struct device *dev = &pdev->dev;
+	unsigned long event_flags = IRQF_NO_THREAD;
 	int i, irq, err;
 
-	amd_mdb_pcie_init_port(pcie);
+	/*
+	 * Keep the hardware interrupts masked until every handler is
+	 * registered below, so an early assertion cannot storm the shared
+	 * CPM6 GIC line before there is anything to service it.
+	 */
+	amd_mdb_pcie_disable_interrupts(pcie);
 
 	pp->irq = platform_get_irq(pdev, 0);
 	if (pp->irq < 0)
 		return pp->irq;
 
-	for (i = 0; i < ARRAY_SIZE(intr_cause); i++) {
-		if (!intr_cause[i].str)
-			continue;
+	/*
+	 * MDB5 reports the error messages on the event domain. On CPM6 those
+	 * are left to the native AER service, so only INTx is serviced on the
+	 * event domain there.
+	 */
+	if (pcie->variant->version == MDB5) {
+		for (i = 0; i < ARRAY_SIZE(intr_cause); i++) {
+			if (!intr_cause[i].str)
+				continue;
 
-		irq = irq_create_mapping(pcie->mdb_domain, i);
-		if (!irq) {
-			dev_err(dev, "Failed to map MDB domain interrupt\n");
-			return -ENOMEM;
-		}
+			irq = irq_create_mapping(pcie->mdb_domain, i);
+			if (!irq) {
+				dev_err(dev, "Failed to map MDB domain interrupt\n");
+				return -ENOMEM;
+			}
 
-		err = devm_request_irq(dev, irq, amd_mdb_pcie_intr_handler,
-				       IRQF_NO_THREAD, intr_cause[i].sym, pcie);
-		if (err) {
-			dev_err(dev, "Failed to request IRQ %d, err=%d\n",
-				irq, err);
-			return err;
+			err = devm_request_irq(dev, irq, amd_mdb_pcie_intr_handler,
+					       IRQF_NO_THREAD, intr_cause[i].sym, pcie);
+			if (err) {
+				dev_err(dev, "Failed to request IRQ %d, err=%d\n",
+					irq, err);
+				return err;
+			}
 		}
 	}
 
 	pcie->intx_irq = irq_create_mapping(pcie->mdb_domain,
-					    AMD_MDB_PCIE_INTR_INTX);
+				    pcie->variant->intx_hwirq);
 	if (!pcie->intx_irq) {
 		dev_err(dev, "Failed to map INTx interrupt\n");
 		return -ENXIO;
@@ -393,14 +586,24 @@ static int amd_mdb_setup_irq(struct amd_mdb_pcie *pcie,
 		return err;
 	}
 
+	/*
+	 * On CPM6 the misc GIC line is shared between both host controllers,
+	 * so the event IRQ must allow sharing.
+	 */
+	if (pcie->variant->version != MDB5)
+		event_flags |= IRQF_SHARED;
+
 	/* Plug the main event handler. */
-	err = devm_request_irq(dev, pp->irq, amd_mdb_pcie_event, IRQF_NO_THREAD,
+	err = devm_request_irq(dev, pp->irq, amd_mdb_pcie_event, event_flags,
 			       "amd_mdb pcie_irq", pcie);
 	if (err) {
 		dev_err(dev, "Failed to request event IRQ %d, err=%d\n",
 			pp->irq, err);
 		return err;
 	}
+
+	/* Arm the hardware only now that all handlers are in place. */
+	amd_mdb_pcie_init_port(pcie);
 
 	return 0;
 }
@@ -435,13 +638,42 @@ static int amd_mdb_add_pcie_port(struct amd_mdb_pcie *pcie,
 	struct device *dev = &pdev->dev;
 	int err;
 
-	pcie->slcr = devm_platform_ioremap_resource_byname(pdev, "slcr");
-	if (IS_ERR(pcie->slcr))
-		return PTR_ERR(pcie->slcr);
+	if (pcie->variant->version == MDB5) {
+		/*
+		 * On MDB5 all interrupt registers live in the SLCR block, so
+		 * the interrupt-register base simply aliases @slcr.
+		 */
+		pcie->slcr = devm_platform_ioremap_resource_byname(pdev, "slcr");
+		if (IS_ERR(pcie->slcr))
+			return PTR_ERR(pcie->slcr);
+		pcie->intr_base = pcie->slcr;
+	} else {
+		struct resource *res;
+
+		/*
+		 * CPM6 moves the per-controller MISC_EVENT registers
+		 * into a separate "intr" region. The SLCR block, which holds
+		 * the shared MERGED/PS_MISC aggregators, is shared by both CPM6
+		 * host controllers, so map it without requesting exclusive
+		 * ownership; otherwise the second controller fails to probe.
+		 */
+		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "slcr");
+		if (!res)
+			return -EINVAL;
+		pcie->slcr = devm_ioremap(dev, res->start, resource_size(res));
+		if (!pcie->slcr)
+			return -ENOMEM;
+
+		pcie->intr_base = devm_platform_ioremap_resource_byname(pdev, "intr");
+		if (IS_ERR(pcie->intr_base))
+			return PTR_ERR(pcie->intr_base);
+	}
 
 	err = amd_mdb_pcie_init_irq_domains(pcie, pdev);
-	if (err)
+	if (err) {
+		amd_mdb_pcie_disable_interrupts(pcie);
 		return err;
+	}
 
 	err = amd_mdb_setup_irq(pcie, pdev);
 	if (err) {
@@ -466,7 +698,13 @@ static int amd_mdb_add_pcie_port(struct amd_mdb_pcie *pcie,
 	return 0;
 
 out:
-	amd_mdb_pcie_free_irq_domains(pcie);
+	/*
+	 * Mask the hardware interrupts before tearing down so a stale source
+	 * cannot storm the shared CPM6 GIC line once this host is unwound. The
+	 * IRQ domains are released by the devres action registered in
+	 * amd_mdb_pcie_init_irq_domains(), after the device-managed IRQs.
+	 */
+	amd_mdb_pcie_disable_interrupts(pcie);
 	return err;
 }
 
@@ -483,6 +721,9 @@ static int amd_mdb_pcie_probe(struct platform_device *pdev)
 
 	pci = &pcie->pci;
 	pci->dev = dev;
+	pcie->variant = of_device_get_match_data(dev);
+	if (!pcie->variant)
+		return -EINVAL;
 
 	platform_set_drvdata(pdev, pcie);
 
@@ -514,9 +755,51 @@ static void amd_mdb_pcie_shutdown(struct platform_device *pdev)
 	gpiod_set_value_cansleep(pcie->perst_gpio, 1);
 }
 
+static const struct amd_mdb_pcie_variant cpm6_host = {
+	.version = CPM6,
+	.misc_status_reg = AMD_CPM6_MISC_EVENT_STATUS,
+	.misc_mask_reg = AMD_CPM6_MISC_EVENT_MASK,
+	.misc_enable_reg = AMD_CPM6_MISC_EVENT_ENABLE,
+	.misc_disable_reg = AMD_CPM6_MISC_EVENT_DISABLE,
+	.misc_mask_all = BIT(AMD_CPM6_PCIE_INTR_INTX),
+	.intx_hwirq = AMD_CPM6_PCIE_INTR_INTX,
+	.intx_mask = BIT(AMD_CPM6_PCIE_INTR_INTX),
+};
+
+static const struct amd_mdb_pcie_variant cpm6_host1 = {
+	.version = CPM6_HOST1,
+	.misc_status_reg = AMD_CPM6_MISC_EVENT_STATUS,
+	.misc_mask_reg = AMD_CPM6_MISC_EVENT_MASK,
+	.misc_enable_reg = AMD_CPM6_MISC_EVENT_ENABLE,
+	.misc_disable_reg = AMD_CPM6_MISC_EVENT_DISABLE,
+	.misc_mask_all = BIT(AMD_CPM6_PCIE_INTR_INTX),
+	.intx_hwirq = AMD_CPM6_PCIE_INTR_INTX,
+	.intx_mask = BIT(AMD_CPM6_PCIE_INTR_INTX),
+};
+
+static const struct amd_mdb_pcie_variant mdb5_host = {
+	.version = MDB5,
+	.misc_status_reg = AMD_MDB_TLP_IR_STATUS_MISC,
+	.misc_mask_reg = AMD_MDB_TLP_IR_MASK_MISC,
+	.misc_enable_reg = AMD_MDB_TLP_IR_ENABLE_MISC,
+	.misc_disable_reg = AMD_MDB_TLP_IR_DISABLE_MISC,
+	.misc_mask_all = AMD_MDB_PCIE_IMR_ALL_MASK,
+	.intx_hwirq = AMD_MDB_PCIE_INTR_INTX,
+	.intx_mask = AMD_MDB_TLP_PCIE_INTX_MASK,
+};
+
 static const struct of_device_id amd_mdb_pcie_of_match[] = {
 	{
 		.compatible = "amd,versal2-mdb-host",
+		.data = &mdb5_host,
+	},
+	{
+		.compatible = "amd,versal2-cpm6-host",
+		.data = &cpm6_host,
+	},
+	{
+		.compatible = "amd,versal2-cpm6-host1",
+		.data = &cpm6_host1,
 	},
 	{},
 };
