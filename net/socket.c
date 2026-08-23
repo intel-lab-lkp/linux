@@ -925,6 +925,8 @@ static void put_ts_pktinfo(struct msghdr *msg, struct sk_buff *skb,
 			if_index = orig_dev->ifindex;
 		rcu_read_unlock();
 	}
+	if (!if_index)
+		if_index = skb->skb_iif;
 	ts_pktinfo.if_index = if_index;
 
 	ts_pktinfo.pkt_length = skb->len - skb_mac_offset(skb);
