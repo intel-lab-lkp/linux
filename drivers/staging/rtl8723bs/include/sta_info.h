@@ -122,7 +122,7 @@ struct sta_info {
 	struct recv_reorder_ctrl recvreorder_ctrl[16];
 
 	/* for A-MPDU Tx */
-	/* unsigned char 	ampdu_txen_bitmap; */
+	/* unsigned char ampdu_txen_bitmap; */
 	u16 BA_starting_seqctrl[16];
 
 
