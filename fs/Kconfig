@@ -71,11 +71,10 @@ config FS_DAX
 	  struct pages.  For the nfit based NVDIMMs this can be enabled
 	  using the ndctl utility:
 
-		# ndctl create-namespace --force --reconfig=namespace0.0 \
-			--mode=fsdax --map=mem
+	  # ndctl create-namespace --force --reconfig=namespace0.0 --mode=fsdax --map=mem
 
-	  See the 'create-namespace' man page for details on the overhead of
-	  --map=mem:
+	  See the 'create-namespace' man page for details on the overhead of --map=mem
+
 	  https://docs.pmem.io/ndctl-user-guide/ndctl-man-pages/ndctl-create-namespace
 
 	  For ndctl to work CONFIG_DEV_DAX needs to be enabled as well. For most
