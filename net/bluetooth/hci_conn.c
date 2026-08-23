@@ -1354,11 +1354,13 @@ struct hci_dev *hci_get_route(bdaddr_t *dst, bdaddr_t *src, uint8_t src_type)
 			}
 
 			if (!bacmp(&id_addr, src) && id_addr_type == src_type) {
-				hdev = d; break;
+				hdev = d;
+				break;
 			}
 		} else {
 			if (bacmp(&d->bdaddr, dst)) {
-				hdev = d; break;
+				hdev = d;
+				break;
 			}
 		}
 	}
@@ -1469,9 +1471,8 @@ struct hci_conn *hci_connect_le(struct hci_dev *hdev, bdaddr_t *dst,
 	 * to connect.
 	 */
 	conn = hci_conn_hash_lookup_le(hdev, dst, dst_type);
-	if (conn && !test_bit(HCI_CONN_SCANNING, &conn->flags)) {
+	if (conn && !test_bit(HCI_CONN_SCANNING, &conn->flags))
 		return ERR_PTR(-EBUSY);
-	}
 
 	/* Check if the destination address has been resolved by the controller
 	 * since if it did then the identity address shall be used.

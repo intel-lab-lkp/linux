@@ -818,9 +818,8 @@ static u32 get_supported_settings(struct hci_dev *hdev)
 		settings |= MGMT_SETTING_BREDR;
 		settings |= MGMT_SETTING_LINK_SECURITY;
 
-		if (lmp_ssp_capable(hdev)) {
+		if (lmp_ssp_capable(hdev))
 			settings |= MGMT_SETTING_SSP;
-		}
 
 		if (lmp_sc_capable(hdev))
 			settings |= MGMT_SETTING_SECURE_CONN;

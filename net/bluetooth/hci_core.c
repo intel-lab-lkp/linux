@@ -2889,9 +2889,8 @@ int hci_recv_frame(struct hci_dev *hdev, struct sk_buff *skb)
 
 	/* Check if the driver agree with packet type classification */
 	dev_pkt_type = hci_dev_classify_pkt_type(hdev, skb);
-	if (hci_skb_pkt_type(skb) != dev_pkt_type) {
+	if (hci_skb_pkt_type(skb) != dev_pkt_type)
 		hci_skb_pkt_type(skb) = dev_pkt_type;
-	}
 
 	switch (hci_skb_pkt_type(skb)) {
 	case HCI_EVENT_PKT:

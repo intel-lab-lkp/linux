@@ -1059,9 +1059,8 @@ static void btusb_intel_reset(struct hci_dev *hdev)
 		/* If ACPI reset method fails, lets try with legacy GPIO
 		 * toggling
 		 */
-		if (!intel_data->acpi_reset_method(hdev)) {
+		if (!intel_data->acpi_reset_method(hdev))
 			return;
-		}
 	}
 
 	if (!reset_gpio) {

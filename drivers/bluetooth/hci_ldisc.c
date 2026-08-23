@@ -242,7 +242,8 @@ static int hci_uart_flush(struct hci_dev *hdev)
 	disable_work_sync(&hu->write_work);
 
 	if (hu->tx_skb) {
-		kfree_skb(hu->tx_skb); hu->tx_skb = NULL;
+		kfree_skb(hu->tx_skb);
+		hu->tx_skb = NULL;
 	}
 
 	/* Flush any pending characters in the driver and discipline. */

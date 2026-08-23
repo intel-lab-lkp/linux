@@ -98,7 +98,8 @@ static int hci_uart_flush(struct hci_dev *hdev)
 	BT_DBG("hdev %p serdev %p", hdev, hu->serdev);
 
 	if (hu->tx_skb) {
-		kfree_skb(hu->tx_skb); hu->tx_skb = NULL;
+		kfree_skb(hu->tx_skb);
+		hu->tx_skb = NULL;
 	}
 
 	/* Flush any pending characters in the driver and discipline. */
