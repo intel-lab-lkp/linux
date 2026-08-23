@@ -495,9 +495,11 @@ static irqreturn_t cc2_low_interrupt(int irq, void *data)
 	struct cc2_data *cc2 = data;
 
 	if (cc2->process_irqs) {
+		scoped_guard(hwmon_lock, cc2->hwmon);
+			cc2->rh_alarm.low_alarm = true;
+
 		hwmon_notify_event(cc2->hwmon, hwmon_humidity,
 				   hwmon_humidity_min_alarm, 0);
-		cc2->rh_alarm.low_alarm = true;
 	}
 
 	return IRQ_HANDLED;
@@ -508,9 +510,11 @@ static irqreturn_t cc2_high_interrupt(int irq, void *data)
 	struct cc2_data *cc2 = data;
 
 	if (cc2->process_irqs) {
+		scoped_guard(hwmon_lock, cc2->hwmon);
+			cc2->rh_alarm.high_alarm = true;
+
 		hwmon_notify_event(cc2->hwmon, hwmon_humidity,
 				   hwmon_humidity_max_alarm, 0);
-		cc2->rh_alarm.high_alarm = true;
 	}
 
 	return IRQ_HANDLED;
