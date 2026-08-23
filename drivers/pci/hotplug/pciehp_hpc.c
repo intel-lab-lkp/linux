@@ -620,6 +620,40 @@ static void pciehp_ignore_link_change(struct controller *ctrl,
 	up_read(&ctrl->reset_lock);
 }
 
+/*
+ * Workaround to not wait in the isr.
+ */
+static void pciehp_disconnect_work(struct work_struct *work)
+{
+	struct controller *ctrl = container_of(work, struct controller,
+					       disconnect_work);
+	struct pci_dev *pdev = ctrl_dev(ctrl);
+	int events;
+
+	events = atomic_read(&ctrl->pending_events);
+
+	/*
+	 * Ignore Link Down/Up events caused by Downstream Port Containment
+	 * if recovery succeeded, or caused by Secondary Bus Reset,
+	 * suspend to D3cold, firmware update, FPGA reconfiguration, etc.
+	 */
+	if ((events & (PCI_EXP_SLTSTA_PDC | PCI_EXP_SLTSTA_DLLSC)) &&
+	    (pci_dpc_recovered(pdev) || pci_hp_spurious_link_change(pdev)) &&
+	    ctrl->state == ON_STATE) {
+		// Ignore the link change events and return to normal operation.
+		// Could also wait here if needed.
+		return;
+	}
+
+	struct pci_bus *bus = ctrl->pcie->port->subordinate;
+
+	/* the card may have returned. */
+	if (!bus || pciehp_card_present(ctrl) != 0)
+		return;
+
+	pci_walk_bus(bus, pci_dev_set_disconnected, NULL);
+}
+
 static irqreturn_t pciehp_isr(int irq, void *dev_id)
 {
 	struct controller *ctrl = (struct controller *)dev_id;
@@ -722,6 +756,17 @@ read_status:
 
 	/* Save pending events for consumption by IRQ thread. */
 	atomic_or(events, &ctrl->pending_events);
+
+	// presence change events
+	if (events & (PCI_EXP_SLTSTA_PDC | PCI_EXP_SLTSTA_DLLSC)) {
+		// Get PDS bit to determine if card is present or not
+		int present = pciehp_card_present(ctrl);
+		if (!present) { // for sure the card is not present
+			schedule_work(&ctrl->disconnect_work);
+			// After this we are no longer in isr and can wait.
+		}
+	}
+
 	return IRQ_WAKE_THREAD;
 }
 
@@ -1036,6 +1081,7 @@ struct controller *pcie_init(struct pcie_device *dev)
 	init_waitqueue_head(&ctrl->requester);
 	init_waitqueue_head(&ctrl->queue);
 	INIT_DELAYED_WORK(&ctrl->button_work, pciehp_queue_pushbutton_work);
+	INIT_WORK(&ctrl->disconnect_work, pciehp_disconnect_work);
 	dbg_ctrl(ctrl);
 
 	down_read(&pci_bus_sem);
@@ -1096,6 +1142,7 @@ struct controller *pcie_init(struct pcie_device *dev)
 void pciehp_release_ctrl(struct controller *ctrl)
 {
 	cancel_delayed_work_sync(&ctrl->button_work);
+	cancel_work_sync(&ctrl->disconnect_work);
 	kfree(ctrl);
 }
 
