@@ -330,15 +330,23 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 		agpio->resource_source.string_ptr, agpio->pin_table[0],
 		str_high_low(gpio_flags == GPIO_ACTIVE_HIGH));
 
+	/*
+	 * int3472->ngpios can be incremented here as it is an argument to the
+	 * _DSM, not e.g. an index to an array in C. Additionally, in case of an
+	 * error the value won't be used.
+	 */
+	int3472->ngpios++;
+
 	switch (type) {
 	case INT3472_GPIO_TYPE_RESET:
 	case INT3472_GPIO_TYPE_POWERDOWN:
 	case INT3472_GPIO_TYPE_HOTPLUG_DETECT:
 		ret = skl_int3472_map_gpio_to_sensor(int3472, agpio, con_id, gpio_flags);
 		if (ret)
-			dev_err_probe(int3472->dev, ret, "Failed to map GPIO pin to sensor\n");
+			return dev_err_probe(int3472->dev, ret,
+					     "Failed to map GPIO pin to sensor\n");
 
-		break;
+		return 0;
 	case INT3472_GPIO_TYPE_CLK_ENABLE:
 	case INT3472_GPIO_TYPE_PRIVACY_LED:
 	case INT3472_GPIO_TYPE_STROBE:
@@ -346,24 +354,24 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 	case INT3472_GPIO_TYPE_DOVDD:
 	case INT3472_GPIO_TYPE_HANDSHAKE:
 		gpio = skl_int3472_gpiod_get_from_temp_lookup(int3472, agpio, con_id, gpio_flags);
-		if (IS_ERR(gpio)) {
-			ret = PTR_ERR(gpio);
-			dev_err_probe(int3472->dev, ret, "Failed to get GPIO\n");
-			break;
-		}
+		if (IS_ERR(gpio))
+			return dev_err_probe(int3472->dev, PTR_ERR(gpio),
+					     "Failed to get GPIO\n");
 
 		switch (type) {
 		case INT3472_GPIO_TYPE_CLK_ENABLE:
 			ret = skl_int3472_register_gpio_clock(int3472, gpio);
 			if (ret)
-				dev_err_probe(int3472->dev, ret, "Failed to register clock\n");
+				dev_err_probe(int3472->dev, ret,
+					      "Failed to register clock\n");
 
 			break;
 		case INT3472_GPIO_TYPE_PRIVACY_LED:
 		case INT3472_GPIO_TYPE_STROBE:
 			ret = skl_int3472_register_led(int3472, gpio, con_id);
 			if (ret)
-				dev_err_probe(int3472->dev, ret, "Failed to register LED\n");
+				dev_err_probe(int3472->dev, ret,
+					      "Failed to register LED\n");
 
 			break;
 		case INT3472_GPIO_TYPE_POWER_ENABLE:
@@ -374,7 +382,8 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 			ret = skl_int3472_register_regulator(int3472, gpio, enable_time_us,
 							     con_id, second_sensor);
 			if (ret)
-				dev_err_probe(int3472->dev, ret, "Failed to register regulator\n");
+				dev_err_probe(int3472->dev, ret,
+					      "Failed to register regulator\n");
 
 			break;
 		default: /* Never reached */
@@ -385,22 +394,13 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 		if (ret)
 			gpiod_put(gpio);
 
-		break;
+		return ret;
 	default:
 		dev_warn(int3472->dev,
 			 "GPIO type 0x%02x unknown; the sensor may not work\n",
 			 type);
-		ret = 1;
-		break;
+		return 1;
 	}
-
-	int3472->ngpios++;
-
-	/*
-	 * Either return an error or tell acpi_dev_get_resources() to not make a
-	 * copy of the resource.
-	 */
-	return ret < 0 ? ret : 1;
 }
 
 int int3472_discrete_parse_crs(struct int3472_discrete_device *int3472)
