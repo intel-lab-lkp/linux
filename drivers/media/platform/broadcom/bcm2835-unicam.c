@@ -27,6 +27,7 @@
  * output interface and V4L2 subdevice driver.
  */
 
+#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -888,7 +889,6 @@ static int unicam_get_image_vc_dt(struct unicam_device *unicam,
 				  struct v4l2_subdev_state *state,
 				  u8 *vc, u8 *dt)
 {
-	struct v4l2_mbus_frame_desc fd;
 	u32 stream;
 	int ret;
 
@@ -898,17 +898,15 @@ static int unicam_get_image_vc_dt(struct unicam_device *unicam,
 	if (ret)
 		return ret;
 
-	ret = v4l2_subdev_call(unicam->sensor.subdev, pad, get_frame_desc,
-			       unicam->sensor.pad->index, &fd);
-	if (ret)
-		return ret;
+	struct v4l2_mbus_frame_desc *fd __free(v4l2_subdev_free_frame_desc) =
+		v4l2_subdev_get_frame_desc(unicam->sensor.subdev,
+					   unicam->sensor.pad->index,
+					   V4L2_MBUS_FRAME_DESC_TYPE_CSI2);
+	if (IS_ERR(fd))
+		return PTR_ERR(fd);
 
-	/* Only CSI-2 supports DTs. */
-	if (fd.type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2)
-		return -EINVAL;
-
-	for (unsigned int i = 0; i < fd.num_entries; ++i) {
-		const struct v4l2_mbus_frame_desc_entry *fde = &fd.entry[i];
+	for (unsigned int i = 0; i < fd->num_entries; ++i) {
+		const struct v4l2_mbus_frame_desc_entry *fde = &fd->entry[i];
 
 		if (fde->stream == stream) {
 			*vc = fde->bus.csi2.vc;
@@ -927,7 +925,7 @@ static void unicam_start_rx(struct unicam_device *unicam,
 	const struct unicam_format_info *fmtinfo;
 	const struct v4l2_mbus_framefmt *fmt;
 	unsigned int line_int_freq;
-	u8 vc, dt;
+	u8 vc = 0, dt = 0;
 	u32 val;
 	int ret;
 
