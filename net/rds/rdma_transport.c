@@ -52,7 +52,7 @@ static int rds_rdma_cm_event_handler_cmn(struct rdma_cm_id *cm_id,
 {
 	/* this can be null in the listening path */
 	struct rds_connection *conn = cm_id->context;
-	struct rds_transport *trans;
+	struct rds_transport *trans = NULL;
 	int ret = 0;
 	int *err;
 	u8 len;
@@ -78,6 +78,14 @@ static int rds_rdma_cm_event_handler_cmn(struct rdma_cm_id *cm_id,
 				ret = 1;
 			goto out;
 		}
+	}
+
+	/* No RDS transport exists for this device type (e.g. iWARP RNIC),
+	 * so trans was never assigned; reject instead of dereferencing it.
+	 */
+	if (!trans) {
+		ret = 1;
+		goto out;
 	}
 
 	switch (event->event) {
