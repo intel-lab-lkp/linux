@@ -1454,41 +1454,6 @@ SYSCALL_DEFINE2(creat, const char __user *, pathname, umode_t, mode)
 #endif
 
 /*
- * "id" is the POSIX thread ID. We use the
- * files pointer for this..
- */
-static int filp_flush(struct file *filp, fl_owner_t id)
-{
-	int retval = 0;
-
-	if (CHECK_DATA_CORRUPTION(file_count(filp) == 0, filp,
-			"VFS: Close: file count is 0 (f_op=%ps)",
-			filp->f_op)) {
-		return 0;
-	}
-
-	if (filp->f_op->flush)
-		retval = filp->f_op->flush(filp, id);
-
-	if (likely(!(filp->f_mode & FMODE_PATH))) {
-		dnotify_flush(filp, id);
-		locks_remove_posix(filp, id);
-	}
-	return retval;
-}
-
-int filp_close(struct file *filp, fl_owner_t id)
-{
-	int retval;
-
-	retval = filp_flush(filp, id);
-	fput_close(filp);
-
-	return retval;
-}
-EXPORT_SYMBOL(filp_close);
-
-/*
  * Careful here! We test whether the file pointer is NULL before
  * releasing the fd. This ensures that one clone task can't release
  * an fd while another clone is opening it.
@@ -1502,13 +1467,11 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 	if (!file)
 		return -EBADF;
 
-	retval = filp_flush(file, current->files);
-
 	/*
 	 * We're returning to user space. Don't bother
 	 * with any delayed fput() cases.
 	 */
-	fput_close_sync(file);
+	retval = filp_close_sync(file, current->files);
 
 	if (likely(retval == 0))
 		return 0;

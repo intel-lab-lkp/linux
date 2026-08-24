@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/filelock.h>
+#include <linux/dnotify.h>
 #include <linux/security.h>
 #include <linux/cred.h>
 #include <linux/eventpoll.h>
@@ -606,15 +607,53 @@ void __fput_sync(struct file *file)
 EXPORT_SYMBOL(__fput_sync);
 
 /*
- * Equivalent to __fput_sync(), but optimized for being called with the last
- * reference.
- *
- * See file_ref_put_close() for details.
+ * "id" is the POSIX thread ID. We use the
+ * files pointer for this..
  */
-void fput_close_sync(struct file *file)
+static int filp_flush(struct file *filp, fl_owner_t id)
 {
-	if (likely(file_ref_put_close(&file->f_ref)))
-		__fput(file);
+	int retval = 0;
+
+	if (CHECK_DATA_CORRUPTION(file_count(filp) == 0, filp,
+			"VFS: Close: file count is 0 (f_op=%ps)",
+			filp->f_op)) {
+		return 0;
+	}
+
+	if (filp->f_op->flush)
+		retval = filp->f_op->flush(filp, id);
+
+	if (likely(!(filp->f_mode & FMODE_PATH))) {
+		dnotify_flush(filp, id);
+		locks_remove_posix(filp, id);
+	}
+	return retval;
+}
+
+int filp_close(struct file *filp, fl_owner_t id)
+{
+	int retval;
+
+	retval = filp_flush(filp, id);
+	fput_close(filp);
+
+	return retval;
+}
+EXPORT_SYMBOL(filp_close);
+
+/*
+ * Like filp_close() but without deferring the release of the last
+ * reference, see file_ref_put_close() for details.
+ */
+int filp_close_sync(struct file *filp, fl_owner_t id)
+{
+	int retval;
+
+	retval = filp_flush(filp, id);
+	if (likely(file_ref_put_close(&filp->f_ref)))
+		__fput(filp);
+
+	return retval;
 }
 
 /*

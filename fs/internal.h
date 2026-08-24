@@ -127,7 +127,7 @@ static inline void put_file_access(struct file *file)
 	}
 }
 
-void fput_close_sync(struct file *);
+int filp_close_sync(struct file *filp, fl_owner_t id);
 void fput_close(struct file *);
 
 /*
@@ -190,6 +190,7 @@ struct open_flags {
 	int intent;
 	int lookup_flags;
 };
+
 extern struct file *do_file_open(int dfd, struct filename *pathname,
 		const struct open_flags *op);
 extern struct file *do_file_open_root(const struct path *,
