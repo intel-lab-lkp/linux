@@ -122,9 +122,13 @@ struct ingenic_drm {
 
 struct ingenic_drm_bridge {
 	struct drm_encoder encoder;
-	struct drm_bridge bridge, *next_bridge;
+	struct drm_bridge *bridge, *next_bridge;
 
 	struct drm_bus_cfg bus_cfg;
+};
+
+struct ingenic_drm_bridge_alloc {
+	struct drm_bridge bridge;
 };
 
 static inline struct ingenic_drm_bridge *
@@ -802,7 +806,7 @@ static int ingenic_drm_bridge_attach(struct drm_bridge *bridge,
 	struct ingenic_drm_bridge *ib = to_ingenic_drm_bridge(encoder);
 
 	return drm_bridge_attach(encoder, ib->next_bridge,
-				 &ib->bridge, flags);
+				 bridge, flags);
 }
 
 static int ingenic_drm_bridge_atomic_check(struct drm_bridge *bridge,
@@ -1107,6 +1111,7 @@ static int ingenic_drm_bind(struct device *dev, bool has_components)
 	struct clk *parent_clk;
 	struct drm_plane *primary;
 	struct drm_bridge *bridge;
+	struct ingenic_drm_bridge_alloc *bridge_alloc;
 	struct drm_panel *panel;
 	struct drm_connector *connector;
 	struct drm_encoder *encoder;
@@ -1316,13 +1321,27 @@ static int ingenic_drm_bind(struct device *dev, bool has_components)
 
 		drm_encoder_helper_add(encoder, &ingenic_drm_encoder_helper_funcs);
 
-		ib->bridge.funcs = &ingenic_drm_bridge_funcs;
+		bridge_alloc = devm_drm_bridge_alloc(priv->dev,
+						     struct ingenic_drm_bridge_alloc,
+						     bridge,
+						     &ingenic_drm_bridge_funcs);
+		if (IS_ERR(bridge_alloc)) {
+			ret = PTR_ERR(bridge_alloc);
+			goto err_drvdata;
+		}
+
+		ib->bridge = &bridge_alloc->bridge;
+		ib->bridge->of_node = priv->dev->of_node;
+
 		ib->next_bridge = bridge;
 
-		ret = drm_bridge_attach(encoder, &ib->bridge, NULL,
+		drm_bridge_add(ib->bridge);
+
+		ret = drm_bridge_attach(encoder, ib->bridge, NULL,
 					DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 		if (ret) {
 			dev_err(dev, "Unable to attach bridge\n");
+			drm_bridge_remove(ib->bridge);
 			goto err_drvdata;
 		}
 
