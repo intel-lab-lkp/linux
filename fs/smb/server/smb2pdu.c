@@ -4681,7 +4681,14 @@ int smb2_open(struct ksmbd_work *work)
 		file_info = FILE_CREATED;
 	}
 
-	ksmbd_vfs_set_fadvise(filp, req->CreateOptions);
+	/*
+	 * MS-SMB2 3.3.5.9: Opens on CA shares MUST have FILE_WRITE_THROUGH
+	 * semantics to ensure data is committed to stable storage.
+	 */
+	if (test_share_config_flag(share, KSMBD_SHARE_FLAG_CONTINUOUS_AVAILABILITY))
+		ksmbd_vfs_set_fadvise(filp, req->CreateOptions | FILE_WRITE_THROUGH_LE);
+	else
+		ksmbd_vfs_set_fadvise(filp, req->CreateOptions);
 
 	/* Obtain Volatile-ID */
 	fp = ksmbd_open_fd(work, filp);
