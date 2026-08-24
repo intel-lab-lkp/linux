@@ -621,9 +621,11 @@ static int test_no_kmem_bypass(const char *root)
 			break;
 		/* If memory was pushed to zswap, verify it belongs to memcg */
 		if (stored_pages > stored_pages_threshold) {
-			int zswapped = cg_read_key_long(test_group, "memory.stat", "zswapped ");
-			int delta = stored_pages * page_size - zswapped;
-			int result_ok = delta < stored_pages * page_size / 4;
+			long zswapped = cg_read_key_long(
+				test_group, "memory.stat", "zswapped ");
+			long delta = stored_pages * page_size - zswapped;
+			long max_delta = (long)(stored_pages * page_size / 4);
+			int result_ok = delta < max_delta;
 
 			ret = result_ok ? KSFT_PASS : KSFT_FAIL;
 			break;
