@@ -578,7 +578,9 @@ int mac802154_perform_association(struct ieee802154_sub_if_data *sdata,
 		return ret;
 	}
 
+	spin_lock_bh(&local->assoc_dev_lock);
 	local->assoc_dev = coord;
+	spin_unlock_bh(&local->assoc_dev_lock);
 	reinit_completion(&local->assoc_done);
 	set_bit(IEEE802154_IS_ASSOCIATING, &local->ongoing);
 
@@ -617,7 +619,9 @@ int mac802154_perform_association(struct ieee802154_sub_if_data *sdata,
 
 clear_assoc:
 	clear_bit(IEEE802154_IS_ASSOCIATING, &local->ongoing);
+	spin_lock_bh(&local->assoc_dev_lock);
 	local->assoc_dev = NULL;
+	spin_unlock_bh(&local->assoc_dev_lock);
 
 	return ret;
 }
@@ -630,6 +634,7 @@ int mac802154_process_association_resp(struct ieee802154_sub_if_data *sdata,
 	u64 deaddr = swab64((__force u64)dest->extended_addr);
 	struct ieee802154_local *local = sdata->local;
 	struct wpan_dev *wpan_dev = &sdata->wpan_dev;
+	struct ieee802154_pan_device *assoc_dev;
 	struct ieee802154_assoc_resp_pl resp_pl = {};
 
 	if (skb->len != sizeof(resp_pl))
@@ -639,9 +644,15 @@ int mac802154_process_association_resp(struct ieee802154_sub_if_data *sdata,
 		     dest->mode != IEEE802154_EXTENDED_ADDRESSING))
 		return -EINVAL;
 
-	if (unlikely(dest->extended_addr != wpan_dev->extended_addr ||
-		     src->extended_addr != local->assoc_dev->extended_addr))
+	spin_lock_bh(&local->assoc_dev_lock);
+	assoc_dev = local->assoc_dev;
+	if (unlikely(!assoc_dev ||
+		     dest->extended_addr != wpan_dev->extended_addr ||
+		     src->extended_addr != assoc_dev->extended_addr)) {
+		spin_unlock_bh(&local->assoc_dev_lock);
 		return -ENODEV;
+	}
+	spin_unlock_bh(&local->assoc_dev_lock);
 
 	memcpy(&resp_pl, skb->data, sizeof(resp_pl));
 	local->assoc_addr = resp_pl.short_addr;

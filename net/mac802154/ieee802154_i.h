@@ -77,6 +77,7 @@ struct ieee802154_local {
 
 	/* Association */
 	struct ieee802154_pan_device *assoc_dev;
+	spinlock_t assoc_dev_lock; /* protects assoc_dev */
 	struct completion assoc_done;
 	__le16 assoc_addr;
 	u8 assoc_status;
