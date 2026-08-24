@@ -738,6 +738,7 @@ int rkisp2_isp_register(struct rkisp2_device *rkisp2)
 	pads[RKISP2_ISP_PAD_SINK_PARAMS].flags = MEDIA_PAD_FL_SINK;
 	pads[RKISP2_ISP_PAD_SOURCE_VIDEO_MAIN].flags = MEDIA_PAD_FL_SOURCE;
 	pads[RKISP2_ISP_PAD_SOURCE_VIDEO_SELF].flags = MEDIA_PAD_FL_SOURCE;
+	pads[RKISP2_ISP_PAD_SOURCE_STATS].flags = MEDIA_PAD_FL_SOURCE;
 
 	ret = media_entity_pads_init(&sd->entity, RKISP2_ISP_PAD_MAX, pads);
 	if (ret)
@@ -829,6 +830,7 @@ irqreturn_t rkisp2_isp_isr(int irq, void *ctx)
 	if (status & RKISP2_CIF_ISP_FRAME) {
 		rkisp2->debug.complete_frames++;
 		rkisp2_params_isr(&rkisp2->params);
+		rkisp2_stats_isr_eof(&rkisp2->stats);
 	}
 
 	rkisp2_write(rkisp2, RKISP2_CIF_ISP_ICR, status);

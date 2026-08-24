@@ -34,6 +34,10 @@
 		.priority = RKISP2_PARAMS_CONFIG_PRIO_ ## prio_postfix, \
 	}
 
+/*
+ * We only need one instance of hist_big here since it's only for accessing the
+ * members of the union
+ */
 union rkisp2_params_block {
 	const struct v4l2_isp_params_block_header *header;
 	const struct rkisp2_params_bls *bls;
@@ -43,6 +47,10 @@ union rkisp2_params_block {
 	const struct rkisp2_params_goc *goc;
 	const struct rkisp2_params_lsc *lsc;
 	const struct rkisp2_params_crop *crop;
+	const struct rkisp2_params_ae_lite *ae_lite;
+	const struct rkisp2_params_hist_lite *hist_lite;
+	const struct rkisp2_params_hist_big *hist_big;
+	const struct rkisp2_params_awb_meas *awb_meas;
 	const __u8 *data;
 };
 
@@ -60,6 +68,14 @@ static void rkisp2_params_lsc(struct rkisp2_params *params,
 			      union rkisp2_params_block block);
 static void rkisp2_params_crop(struct rkisp2_params *params,
 			       union rkisp2_params_block block);
+static void rkisp2_params_ae_lite(struct rkisp2_params *params,
+				  union rkisp2_params_block block);
+static void rkisp2_params_hist_lite(struct rkisp2_params *params,
+				    union rkisp2_params_block block);
+static void rkisp2_params_hist_big(struct rkisp2_params *params,
+				   union rkisp2_params_block block);
+static void rkisp2_params_awb_meas(struct rkisp2_params *params,
+				   union rkisp2_params_block block);
 
 typedef void (*rkisp2_params_handler)(struct rkisp2_params *params,
 				      const union rkisp2_params_block block);
@@ -84,6 +100,12 @@ rkisp2_params_handlers[] = {
 	RKISP2_PARAMS_BLOCK_HANDLER_INFO(GOC, goc, PRE),
 	RKISP2_PARAMS_BLOCK_HANDLER_INFO(LSC, lsc, POST),
 	RKISP2_PARAMS_BLOCK_HANDLER_INFO(CROP, crop, PRE),
+	RKISP2_PARAMS_BLOCK_HANDLER_INFO(AE_LITE, ae_lite, PRE),
+	RKISP2_PARAMS_BLOCK_HANDLER_INFO(HIST_LITE, hist_lite, PRE),
+	RKISP2_PARAMS_BLOCK_HANDLER_INFO(HIST_BIG0, hist_big, PRE),
+	RKISP2_PARAMS_BLOCK_HANDLER_INFO(HIST_BIG1, hist_big, PRE),
+	RKISP2_PARAMS_BLOCK_HANDLER_INFO(HIST_BIG2, hist_big, PRE),
+	RKISP2_PARAMS_BLOCK_HANDLER_INFO(AWB_MEAS, awb_meas, PRE),
 };
 
 static const struct v4l2_isp_params_block_type_info
@@ -95,6 +117,12 @@ rkisp2_params_block_types_info[] = {
 	RKISP2_PARAMS_BLOCK_INFO(GOC, goc),
 	RKISP2_PARAMS_BLOCK_INFO(LSC, lsc),
 	RKISP2_PARAMS_BLOCK_INFO(CROP, crop),
+	RKISP2_PARAMS_BLOCK_INFO(AE_LITE, ae_lite),
+	RKISP2_PARAMS_BLOCK_INFO(HIST_LITE, hist_lite),
+	RKISP2_PARAMS_BLOCK_INFO(HIST_BIG0, hist_big),
+	RKISP2_PARAMS_BLOCK_INFO(HIST_BIG1, hist_big),
+	RKISP2_PARAMS_BLOCK_INFO(HIST_BIG2, hist_big),
+	RKISP2_PARAMS_BLOCK_INFO(AWB_MEAS, awb_meas),
 };
 
 static_assert(ARRAY_SIZE(rkisp2_params_handlers) ==
@@ -547,6 +575,216 @@ static void rkisp2_params_crop_init(struct rkisp2_params *params)
 		__func__, arg.mp_crop.h_size, arg.mp_crop.v_size);
 
 	__rkisp2_params_crop(params, &arg, V4L2_ISP_PARAMS_FL_BLOCK_ENABLE);
+}
+
+static void rkisp2_params_ae_lite(struct rkisp2_params *params,
+				  union rkisp2_params_block block)
+{
+	const struct rkisp2_params_ae_lite *arg = block.ae_lite;
+	u32 control;
+
+	if (block.header->flags & V4L2_ISP_PARAMS_FL_BLOCK_DISABLE) {
+		rkisp2_param_clear_bits(params, ISP_RAWAE_LITE_CTRL,
+					ISP3X_RAWAE_LITE_EN);
+		rkisp2_param_clear_bits(params, ISP_ISP3A_IMSC, ISP2X_3A_RAWAE_CH0);
+		return;
+	}
+
+	if (!(block.header->flags & V4L2_ISP_PARAMS_FL_BLOCK_ENABLE))
+		return;
+
+	/*
+	 * \todo clamp these: width and height must be even, min size is 16x4,
+	 * and total height must be < frame height
+	 */
+	rkisp2_write(params->rkisp2, ISP_RAWAE_LITE_BLK_SIZ,
+		     ISP3X_RAWAE_LITE_H(arg->meas_window.h_size) |
+		     ISP3X_RAWAE_LITE_V(arg->meas_window.v_size));
+
+	rkisp2_write(params->rkisp2, ISP_RAWAE_LITE_OFFSET,
+		     ISP3X_RAWAE_LITE_H(arg->meas_window.h_offs) |
+		     ISP3X_RAWAE_LITE_V(arg->meas_window.v_offs));
+
+	control = arg->window_num ? ISP3X_RAWAE_LITE_WNDNUM : 0;
+	control |= ISP3X_RAWAE_LITE_EN;
+
+	rkisp2_param_set_bits(params, ISP_RAWAE_LITE_CTRL,
+			      control);
+	/* TODO figure out CH1 and CH2 */
+	rkisp2_param_set_bits(params, ISP_ISP3A_IMSC, ISP2X_3A_RAWAE_CH0);
+}
+
+static void rkisp2_params_hist_lite(struct rkisp2_params *params,
+				    union rkisp2_params_block block)
+{
+	const struct rkisp2_params_hist_lite *arg = block.hist_lite;
+	unsigned int i;
+	u32 control;
+
+	if (block.header->flags & V4L2_ISP_PARAMS_FL_BLOCK_DISABLE) {
+		rkisp2_param_clear_bits(params, ISP_RAWHIST_LITE_BASE, ISP_RAWHIST_CTRL_EN);
+		rkisp2_param_clear_bits(params, ISP_ISP3A_IMSC, ISP2X_3A_RAWHIST_CH0);
+		return;
+	}
+
+	if (!(block.header->flags & V4L2_ISP_PARAMS_FL_BLOCK_ENABLE))
+		return;
+
+	rkisp2_write(params->rkisp2, ISP_RAWHIST_LITE_SIZE,
+		     ISP_RAWHIST_H_SIZE(arg->meas_window.h_size) |
+		     ISP_RAWHIST_V_SIZE(arg->meas_window.v_size));
+
+	rkisp2_write(params->rkisp2, ISP_RAWHIST_LITE_OFFS,
+		     ISP_RAWHIST_H_OFFS(arg->meas_window.h_offs) |
+		     ISP_RAWHIST_V_OFFS(arg->meas_window.v_offs));
+
+	rkisp2_write(params->rkisp2, ISP_RAWHIST_LITE_RAW2Y_CC,
+		     ISP_RAWHIST_RAW2Y_CC_RCC(arg->coeffs.r) |
+		     ISP_RAWHIST_RAW2Y_CC_GCC(arg->coeffs.g) |
+		     ISP_RAWHIST_RAW2Y_CC_BCC(arg->coeffs.b));
+
+	for (i = 0; i < 6; i++) {
+		rkisp2_write(params->rkisp2, ISP_RAWHIST_LITE_WEIGHT + 4 * i,
+			     ISP_RAWHIST_LITE_WEIGHT_WND0(arg->weights[4 * i + 0]) |
+			     ISP_RAWHIST_LITE_WEIGHT_WND1(arg->weights[4 * i + 1]) |
+			     ISP_RAWHIST_LITE_WEIGHT_WND2(arg->weights[4 * i + 2]) |
+			     ISP_RAWHIST_LITE_WEIGHT_WND3(arg->weights[4 * i + 3]));
+	}
+
+	rkisp2_write(params->rkisp2, ISP_RAWHIST_LITE_WEIGHT + 4 * 6,
+		     ISP_RAWHIST_LITE_WEIGHT_WND0(arg->weights[24]));
+
+	control = ISP_RAWHIST_CTRL_EN |
+		  ISP_RAWHIST_CTRL_STEPSIZE(arg->stepsize) |
+		  ISP_RAWHIST_CTRL_MODE(arg->mode) |
+		  ISP_RAWHIST_CTRL_WATERLINE(arg->waterline) |
+		  ISP_RAWHIST_CTRL_DATA_SEL(arg->data_sel);
+	rkisp2_write(params->rkisp2, ISP_RAWHIST_LITE_CTRL, control);
+	// I think you can choose the channels in VI_ISP_PATH
+	rkisp2_param_set_bits(params, ISP_ISP3A_IMSC, ISP2X_3A_RAWHIST_CH0);
+}
+
+static void rkisp2_params_hist_big(struct rkisp2_params *params,
+				   union rkisp2_params_block block)
+{
+	const struct rkisp2_params_hist_big *arg = block.hist_big;
+	unsigned int i, reg_base, ctrl;
+	u32 control;
+
+	switch (block.header->type) {
+	case RKISP2_PARAMS_BLOCK_HIST_BIG0:
+		reg_base = ISP_RAWHIST_BIG1_BASE;
+		break;
+	case RKISP2_PARAMS_BLOCK_HIST_BIG1:
+		reg_base = ISP_RAWHIST_BIG2_BASE;
+		break;
+	case RKISP2_PARAMS_BLOCK_HIST_BIG2:
+		reg_base = ISP_RAWHIST_BIG3_BASE;
+		break;
+	default:
+		WARN_ONCE(1, "invalid big histogram base %x\n", reg_base);
+		return;
+	}
+
+	ctrl = reg_base + ISP_RAWHIST_BIG_CTRL;
+
+	if (block.header->flags & V4L2_ISP_PARAMS_FL_BLOCK_DISABLE) {
+		rkisp2_param_clear_bits(params, ctrl, ISP_RAWHIST_CTRL_EN);
+		rkisp2_param_clear_bits(params, ISP_ISP3A_IMSC, ISP2X_3A_RAWHIST_BIG);
+		return;
+	}
+
+	if (!(block.header->flags & V4L2_ISP_PARAMS_FL_BLOCK_ENABLE))
+		return;
+
+	rkisp2_write(params->rkisp2, reg_base + ISP_RAWHIST_BIG_SIZE,
+		     ISP_RAWHIST_H_SIZE(arg->meas_window.h_size) |
+		     ISP_RAWHIST_V_SIZE(arg->meas_window.v_size));
+
+	rkisp2_write(params->rkisp2, reg_base + ISP_RAWHIST_BIG_OFFS,
+		     ISP_RAWHIST_H_OFFS(arg->meas_window.h_offs) |
+		     ISP_RAWHIST_V_OFFS(arg->meas_window.v_offs));
+
+	rkisp2_write(params->rkisp2, reg_base + ISP_RAWHIST_BIG_RAW2Y_CC,
+		     ISP_RAWHIST_RAW2Y_CC_RCC(arg->coeffs.r) |
+		     ISP_RAWHIST_RAW2Y_CC_GCC(arg->coeffs.g) |
+		     ISP_RAWHIST_RAW2Y_CC_BCC(arg->coeffs.b));
+
+	/*
+	 * TODO check if the other weights are programmed in the registers
+	 * after the bins, or if it's sequential write
+	 */
+	for (i = 0; i < 16; i++) {
+		rkisp2_write(params->rkisp2, reg_base + ISP_RAWHIST_BIG_WEIGHT_BASE + 4 * i,
+			     ISP_RAWHIST_BIG_WEIGHT_WND0(arg->weights[5 * i + 0]) |
+			     ISP_RAWHIST_BIG_WEIGHT_WND1(arg->weights[5 * i + 1]) |
+			     ISP_RAWHIST_BIG_WEIGHT_WND2(arg->weights[5 * i + 2]) |
+			     ISP_RAWHIST_BIG_WEIGHT_WND3(arg->weights[5 * i + 3]) |
+			     ISP_RAWHIST_BIG_WEIGHT_WND4(arg->weights[5 * i + 4]));
+	}
+
+	rkisp2_param_set_bits(params, ISP_CTRL1, ISP21_BIGMODE_MODE | ISP21_BIGMODE_FORCE_EN);
+
+	control = ISP_RAWHIST_CTRL_EN |
+		  ISP_RAWHIST_CTRL_STEPSIZE(arg->stepsize) |
+		  ISP_RAWHIST_CTRL_MODE(arg->mode) |
+		  ISP_RAWHIST_CTRL_WATERLINE(arg->waterline) |
+		  ISP_RAWHIST_CTRL_DATA_SEL(arg->data_sel) |
+		  (arg->window_num & ISP_RAWHIST_BIG_CTRL_WND_MASK);
+	rkisp2_write(params->rkisp2, ctrl, control);
+	rkisp2_param_set_bits(params, ISP_ISP3A_IMSC, ISP2X_3A_RAWHIST_BIG);
+}
+
+static void rkisp2_params_awb_meas(struct rkisp2_params *params,
+				   union rkisp2_params_block block)
+{
+	const struct rkisp2_params_awb_meas *arg = block.awb_meas;
+	unsigned int i;
+	u32 val;
+	u32 control = 0;
+
+	if (block.header->flags & V4L2_ISP_PARAMS_FL_BLOCK_DISABLE) {
+		rkisp2_param_clear_bits(params, ISP3X_RAWAWB_CTRL,
+					ISP3X_RAWAWB_CTRL_EN);
+		rkisp2_param_clear_bits(params, ISP_ISP3A_IMSC, ISP2X_3A_RAWAWB);
+		rkisp2_param_clear_bits(params, ISP21_RAWAWB_BLK_CTRL, 0x1);
+		return;
+	}
+
+	if (!(block.header->flags & V4L2_ISP_PARAMS_FL_BLOCK_ENABLE))
+		return;
+
+	rkisp2_write(params->rkisp2, ISP21_RAWAWB_WIN_OFFS,
+		     ISP3X_RAWAWB_WIN(arg->meas_window.h_offs,
+				    arg->meas_window.v_offs));
+	rkisp2_write(params->rkisp2, ISP21_RAWAWB_WIN_SIZE,
+		     ISP3X_RAWAWB_WIN(arg->meas_window.h_size,
+				    arg->meas_window.v_size));
+
+	rkisp2_write(params->rkisp2, ISP21_RAWAWB_LIMIT_RG_MAX,
+		     ISP3X_RAWAWB_LIMITS(arg->limits[1].r, arg->limits[1].g));
+	rkisp2_write(params->rkisp2, ISP21_RAWAWB_LIMIT_BY_MAX,
+		     ISP3X_RAWAWB_LIMITS(arg->limits[1].b, arg->limits[1].y));
+	rkisp2_write(params->rkisp2, ISP21_RAWAWB_LIMIT_RG_MIN,
+		     ISP3X_RAWAWB_LIMITS(arg->limits[0].r, arg->limits[0].g));
+	rkisp2_write(params->rkisp2, ISP21_RAWAWB_LIMIT_BY_MIN,
+		     ISP3X_RAWAWB_LIMITS(arg->limits[0].b, arg->limits[0].y));
+
+	for (i = 0; i < RKISP2_ISP_AWB_COUNTS_SIZE / 5; i++) {
+		val = (arg->weights[5 * i] & 0x3f)
+		    | ((arg->weights[5 * i + 1] & 0x3f) << 6)
+		    | ((arg->weights[5 * i + 2] & 0x3f) << 12)
+		    | ((arg->weights[5 * i + 3] & 0x3f) << 18)
+		    | ((arg->weights[5 * i + 4] & 0x3f) << 24);
+		rkisp2_write(params->rkisp2, ISP21_RAWAWB_WRAM_DATA_BASE, val);
+	}
+
+	// This options looks like it's required to get "useful" data out
+	rkisp2_param_set_bits(params, ISP21_RAWAWB_BLK_CTRL, 0x1);
+
+	control |= ISP3X_RAWAWB_CTRL_EN;
+	rkisp2_write(params->rkisp2, ISP3X_RAWAWB_CTRL, control);
+	rkisp2_param_set_bits(params, ISP_ISP3A_IMSC, ISP2X_3A_RAWAWB);
 }
 
 static void rkisp2_params_configure(struct rkisp2_params *params,

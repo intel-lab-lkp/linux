@@ -1,10 +1,11 @@
 .. SPDX-License-Identifier: GPL-2.0
 
 .. _v4l2-meta-fmt-rkisp2-params:
+.. _v4l2-meta-fmt-rkisp2-stats:
 
-************************************
-V4L2_META_FMT_RKISP2_PARAMS ('RK2P')
-************************************
+*************************************************************************
+V4L2_META_FMT_RKISP2_PARAMS ('RK2P'), V4L2_META_FMT_RKISP2_STATS ('RK2S')
+*************************************************************************
 
 Configuration Parameters
 ========================
@@ -63,6 +64,23 @@ first member and userspace must populate the type member with a value from
         bls->bls_fixed_val.d = 256;
 
 	params->data_size += sizeof(struct rkisp2_params_bls);
+
+3A Statistics
+=============
+
+The ISP device collects different statistics over an input bayer frame. Those
+statistics can be obtained by userspace from the
+:ref:`rkisp2_stats <rkisp2_stats>` metadata capture video node, using
+the :c:type:`v4l2_meta_format` interface. The buffer contains a single instance
+of the C structure :c:type:`rkisp2_stats_buffer` defined in
+``rkisp2-config.h``, so the structure can be obtained from the buffer by:
+
+.. code-block:: C
+
+	struct rkisp2_stats_buffer *stats =
+		(struct rkisp2_stats_buffer *)buf;
+
+For details of the statistics see :c:type:`rkisp2_stats_buffer`.
 
 rkisp2 uAPI data types
 ======================

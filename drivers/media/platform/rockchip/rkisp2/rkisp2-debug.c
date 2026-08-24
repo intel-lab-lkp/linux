@@ -191,6 +191,8 @@ void rkisp2_debug_init(struct rkisp2_device *rkisp2)
 			     &debug->mipi_error);
 	debugfs_create_ulong("stats_error", 0444, debug->debugfs_dir,
 			     &debug->stats_error);
+	debugfs_create_ulong("stats3a_irq", 0444, debug->debugfs_dir,
+			     &debug->stats3a_irq);
 	debugfs_create_ulong("mp_stop_timeout", 0444, debug->debugfs_dir,
 			     &debug->stop_timeout[RKISP2_MAINPATH]);
 	debugfs_create_ulong("sp_stop_timeout", 0444, debug->debugfs_dir,
@@ -201,6 +203,18 @@ void rkisp2_debug_init(struct rkisp2_device *rkisp2)
 			     &debug->frame_drop[RKISP2_SELFPATH]);
 	debugfs_create_ulong("complete_frames", 0444, debug->debugfs_dir,
 			     &debug->complete_frames);
+	debugfs_create_ulong("stats3a_hist_ch0_count", 0444, debug->debugfs_dir,
+			     &debug->stats3a_hist_ch0_count);
+	debugfs_create_ulong("stats3a_hist_ch1_count", 0444, debug->debugfs_dir,
+			     &debug->stats3a_hist_ch1_count);
+	debugfs_create_ulong("stats3a_hist_ch2_count", 0444, debug->debugfs_dir,
+			     &debug->stats3a_hist_ch2_count);
+	debugfs_create_ulong("stats3a_hist_big_count", 0444, debug->debugfs_dir,
+			     &debug->stats3a_hist_big_count);
+	debugfs_create_ulong("stats3a_awb_count", 0444, debug->debugfs_dir,
+			     &debug->stats3a_awb_count);
+	debugfs_create_ulong("stats3a_awb_done_count", 0444, debug->debugfs_dir,
+			     &debug->stats3a_awb_done_count);
 	debugfs_create_file("input_status", 0444, debug->debugfs_dir, rkisp2,
 			    &rkisp2_debug_input_status_fops);
 

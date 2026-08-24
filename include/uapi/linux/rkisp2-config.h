@@ -20,6 +20,17 @@
 #define RKISP2_ISP_LSC_SAMPLES_MAX		17
 #define RKISP2_ISP_LSC_SECTORS_TBL_SIZE_MAX	16
 
+#define RKISP2_ISP_AE_MEAN_MAX_LITE	25
+#define RKISP2_ISP_AE_MEAN_MAX_BIG	225
+
+#define RKISP2_ISP_HIST_WEIGHT_GRIDS_SIZE_LITE	25
+#define RKISP2_ISP_HIST_WEIGHT_GRIDS_SIZE_BIG	225
+#define RKISP2_ISP_HIST_WEIGHT_GRIDS_SIZE_MAX		RKISP2_ISP_HIST_WEIGHT_GRIDS_SIZE_BIG
+
+#define RKISP2_ISP_HIST_BIN_N_MAX	256
+
+#define RKISP2_ISP_AWB_COUNTS_SIZE	225
+
 /**
  * enum rkisp2_isp_version - ISP variants
  *
@@ -60,6 +71,109 @@ enum rkisp2_isp_crop_en {
 	RKISP2_ISP_CROP_ENABLE_SELF = 0x2,
 };
 
+enum rkisp2_isp_histogram_mode {
+	RKISP2_ISP_HISTOGRAM_MODE_DISABLE,
+	RKISP2_ISP_HISTOGRAM_MODE_R_HISTOGRAM = 2,
+	RKISP2_ISP_HISTOGRAM_MODE_G_HISTOGRAM,
+	RKISP2_ISP_HISTOGRAM_MODE_B_HISTOGRAM,
+	RKISP2_ISP_HISTOGRAM_MODE_Y_HISTOGRAM
+};
+
+/*
+ * This selects which bits are used from the input data to compute the
+ * histogram
+ */
+enum rkisp2_isp_histogram_data_sel {
+	RKISP2_ISP_HISTOGRAM_DATA_SEL_11_4,
+	RKISP2_ISP_HISTOGRAM_DATA_SEL_10_3,
+	RKISP2_ISP_HISTOGRAM_DATA_SEL_9_2,
+	RKISP2_ISP_HISTOGRAM_DATA_SEL_8_1,
+	RKISP2_ISP_HISTOGRAM_DATA_SEL_7_0,
+};
+
+/*---------- Statistics ------------*/
+
+/**
+ * enum rkisp2_stats_block_type - RkISP2 extensible stats block types
+ *
+ * @RKISP2_STATS_BLOCK_AE_LITE: Auto exposite (lite) measurements
+ * @RKISP2_STATS_BLOCK_HIST_LITE: Histogram (lite)
+ * @RKISP2_STATS_BLOCK_HIST_BIG0: Histogram (big 0)
+ * @RKISP2_STATS_BLOCK_HIST_BIG1: Histogram (big 1)
+ * @RKISP2_STATS_BLOCK_HIST_BIG2: Histogram (big 2)
+ * @RKISP2_STATS_BLOCK_AWB: Auto white balance counts
+ */
+enum rkisp2_stats_block_type {
+	RKISP2_STATS_BLOCK_AE_LITE,
+	RKISP2_STATS_BLOCK_HIST_LITE,
+	RKISP2_STATS_BLOCK_HIST_BIG0,
+	RKISP2_STATS_BLOCK_HIST_BIG1,
+	RKISP2_STATS_BLOCK_HIST_BIG2,
+	RKISP2_STATS_BLOCK_AWB,
+};
+
+/**
+ * struct rkisp2_stats_ae_lite - statistics auto exposure data
+ *
+ * @header: block header (type = RKISP2_STATS_BLOCK_AE_LITE)
+ * @exp_mean_r: Mean luminance value of block xy for r channel
+ * @exp_mean_g: Mean luminance value of block xy for g channel
+ * @exp_mean_b: Mean luminance value of block xy for b channel
+ * @done: This set to nonzero when the stats are ready
+ *
+ * Image is divided into 5x5 blocks on lite and 15x15 blocks on big.
+ */
+struct rkisp2_stats_ae_lite {
+	struct v4l2_isp_block_header header;
+	__u16 exp_mean_r[RKISP2_ISP_AE_MEAN_MAX_LITE];
+	__u16 exp_mean_g[RKISP2_ISP_AE_MEAN_MAX_LITE];
+	__u16 exp_mean_b[RKISP2_ISP_AE_MEAN_MAX_LITE];
+	__u8 done;
+};
+
+/**
+ * struct rkisp2_stats_hist - statistics histogram data
+ *
+ * @header: block header (type = RKISP2_STATS_BLOCK_HIST_{LITE,BIG0,BIG1,BIG2})
+ * @hist_bins: measured bin counters. Each bin is a 28 bits unsigned fixed point
+ *	       type. Bits 0-4 are the fractional part and bits 5-27 are the
+ *	       integer part.
+ * @done: This set to nonzero when the stats are ready
+ *
+ * There are 256 bins, at least on 3.x.
+ */
+struct rkisp2_stats_hist {
+	struct v4l2_isp_block_header header;
+	__u32 hist_bins[RKISP2_ISP_HIST_BIN_N_MAX];
+	__u8 done;
+};
+
+/**
+ * struct rkisp2_stats_awb - statistics auto white balance data
+ *
+ * @header: block header (type = RKISP2_STATS_BLOCK_AWB)
+ * @counts_r: Counts of red (18-bits)
+ * @counts_g: Counts of green (18-bits)
+ * @counts_b: Counts of blue (18-bits)
+ * @counts_w: Counts of white point (10-bits)
+ * @done: This set to nonzero when the stats are ready
+ *
+ * TODO Figure out what is being counted
+ */
+struct rkisp2_stats_awb {
+	struct v4l2_isp_block_header header;
+	__u32 counts_r[RKISP2_ISP_AWB_COUNTS_SIZE];
+	__u32 counts_g[RKISP2_ISP_AWB_COUNTS_SIZE];
+	__u32 counts_b[RKISP2_ISP_AWB_COUNTS_SIZE];
+	__u16 counts_w[RKISP2_ISP_AWB_COUNTS_SIZE];
+	__u8 done;
+};
+
+#define RKISP2_STATS_MAX_SIZE					\
+	(sizeof(struct rkisp2_stats_ae_lite)			+\
+	sizeof(struct rkisp2_stats_hist) * 4			+\
+	sizeof(struct rkisp2_stats_awb))
+
 /*---------- Parameters ------------*/
 
 /**
@@ -72,6 +186,12 @@ enum rkisp2_isp_crop_en {
  * @RKISP2_PARAMS_BLOCK_GOC: Gamma out correction
  * @RKISP2_PARAMS_BLOCK_LSC: Lens shading correction
  * @RKISP2_PARAMS_BLOCK_CROP: Crop config
+ * @RKISP2_PARAMS_BLOCK_AE_LITE: AE measurement config (lite)
+ * @RKISP2_PARAMS_BLOCK_HIST_LITE: Histogram measurement config (lite)
+ * @RKISP2_PARAMS_BLOCK_HIST_BIG0: Histogram measurement config (zeroth big block)
+ * @RKISP2_PARAMS_BLOCK_HIST_BIG1: Histogram measurement config (first big block)
+ * @RKISP2_PARAMS_BLOCK_HIST_BIG2: Histogram measurement config (second big block)
+ * @RKISP2_PARAMS_BLOCK_AWB_MEAS: AWB measurements config
  */
 enum rkisp2_params_block_type {
 	RKISP2_PARAMS_BLOCK_BLS,
@@ -81,6 +201,12 @@ enum rkisp2_params_block_type {
 	RKISP2_PARAMS_BLOCK_GOC,
 	RKISP2_PARAMS_BLOCK_LSC,
 	RKISP2_PARAMS_BLOCK_CROP,
+	RKISP2_PARAMS_BLOCK_AE_LITE,
+	RKISP2_PARAMS_BLOCK_HIST_LITE,
+	RKISP2_PARAMS_BLOCK_HIST_BIG0,
+	RKISP2_PARAMS_BLOCK_HIST_BIG1,
+	RKISP2_PARAMS_BLOCK_HIST_BIG2,
+	RKISP2_PARAMS_BLOCK_AWB_MEAS,
 };
 
 /**
@@ -139,6 +265,36 @@ struct rkisp2_isp_awb_gains {
 	__u16 gr;
 	__u16 b;
 	__u16 gb;
+};
+
+/**
+ * struct rkisp2_isp_color_cc - Color coefficients
+ *
+ * @r: Red coefficient
+ * @g: Green coefficient
+ * @b: Blue coefficient
+ */
+struct rkisp2_isp_color_cc {
+	__u8 r;
+	__u8 g;
+	__u8 b;
+};
+
+/**
+ * struct rkisp2_isp_awb_color_quad - Group of RGB and luminance for AWB
+ *
+ * TODO redesign this?
+ *
+ * @r: Red
+ * @g: Green
+ * @b: Blue
+ * @y: Y (luminance)
+ */
+struct rkisp2_isp_awb_color_quad {
+	__u8 r;
+	__u8 g;
+	__u8 b;
+	__u8 y;
 };
 
 /**
@@ -351,6 +507,88 @@ struct rkisp2_params_crop {
 	struct rkisp2_isp_window sp_crop;
 } __attribute__((aligned(8)));
 
+/**
+ * struct rkisp2_params_ae_lite - RKISP2 params AE lite config
+ *
+ * RkISP2 parameters auto exposure measurement configuration block.
+ * Identified by :c:type:`RKISP2_PARAMS_BLOCK_AE_LITE`.
+ *
+ * TODO change window_num to enum?
+ *
+ * @header: The RkISP2 parameters block header
+ * @window_num: 0 for 1x1, 1 for 5x5
+ * @meas_window: Size of measurement window. First window for 5x5.
+ */
+struct rkisp2_params_ae_lite {
+	struct v4l2_isp_params_block_header header;
+	__u8 window_num;
+	struct rkisp2_isp_window meas_window;
+} __attribute__((aligned(8)));
+
+/**
+ * struct rkisp2_params_hist_lite RKISP2 params histogram lite config
+ *
+ * RkISP2 parameters histogram configuration block.
+ * Identified by :c:type:`RKISP2_PARAMS_BLOCK_HIST_LITE`.
+ *
+ * @header: The RkISP2 parameters block header
+ * @data_sel: Data selection mode (from enum rkisp2_isp_histogram_data_sel)
+ * @mode: Histogram mode (from enum rkisp2_isp_histogram_mode)
+ * @stepsize: Predivider (count every <stepsize> pixel)
+ * @waterline: Waterline for region statics
+ * @coeffs: Coefficients for raw2y formula
+ * @meas_window: Size of first measurement subwindow
+ * @weights: Weights
+ */
+struct rkisp2_params_hist_lite {
+	struct v4l2_isp_params_block_header header;
+	__u8 data_sel;
+	__u8 mode;
+	__u8 stepsize;
+	__u16 waterline;
+	struct rkisp2_isp_color_cc coeffs;
+	struct rkisp2_isp_window meas_window;
+	__u8 weights[RKISP2_ISP_HIST_WEIGHT_GRIDS_SIZE_LITE];
+} __attribute__((aligned(8)));
+
+/**
+ * Same as struct rkisp2_params_hist_lite but for big channel
+ *
+ * RkISP2 parameters histogram configuration block.
+ * Identified by :c:type:`RKISP2_PARAMS_BLOCK_HIST_BIG{0,1,2}`.
+ *
+ * @window_num: 0 or 1 for 5x5, 2 or 3 for 15x15
+ */
+struct rkisp2_params_hist_big {
+	struct v4l2_isp_params_block_header header;
+	__u8 window_num;
+	__u8 data_sel;
+	__u8 mode;
+	__u8 stepsize;
+	__u16 waterline;
+	struct rkisp2_isp_color_cc coeffs;
+	struct rkisp2_isp_window meas_window;
+	__u8 weights[RKISP2_ISP_HIST_WEIGHT_GRIDS_SIZE_BIG];
+} __attribute__((aligned(8)));
+
+/**
+ * struct rkisp2_params_awb_meas - Configuration used by rawawb
+ *
+ * RkISP2 parameters AWB measurement configuration block.
+ * Identified by :c:type:`RKISP2_PARAMS_BLOCK_AWB_MEAS`.
+ *
+ * @header: The RkISP2 parameters block header
+ * @meas_window: Size of first measurement subwindow (13 bits)
+ * @limits: Limits for white point detection [min, max] (8 bits)
+ * @weights: Weights (6-bits)
+ */
+struct rkisp2_params_awb_meas {
+	struct v4l2_isp_params_block_header header;
+	struct rkisp2_isp_window meas_window;
+	struct rkisp2_isp_awb_color_quad limits[2];
+	__u8 weights[RKISP2_ISP_AWB_COUNTS_SIZE];
+} __attribute__((aligned(8)));
+
 #define RKISP2_PARAMS_MAX_SIZE					\
 	(sizeof(struct rkisp2_params_bls)			+\
 	sizeof(struct rkisp2_params_awb_gains)			+\
@@ -358,6 +596,10 @@ struct rkisp2_params_crop {
 	sizeof(struct rkisp2_params_ccm)			+\
 	sizeof(struct rkisp2_params_goc)			+\
 	sizeof(struct rkisp2_params_lsc)			+\
-	sizeof(struct rkisp2_params_crop))
+	sizeof(struct rkisp2_params_crop)			+\
+	sizeof(struct rkisp2_params_ae_lite)			+\
+	sizeof(struct rkisp2_params_hist_lite)			+\
+	sizeof(struct rkisp2_params_hist_big) * 3		+\
+	sizeof(struct rkisp2_params_awb_meas))
 
 #endif /* _UAPI_RKISP2_CONFIG_H */
