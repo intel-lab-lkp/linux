@@ -660,6 +660,12 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 	tcp_ecn_openreq_child(newsk, req, skb);
 	newtp->fastopen_req = NULL;
 	RCU_INIT_POINTER(newtp->fastopen_rsk, NULL);
+	newtp->packets_out = 0;
+	newtp->retrans_out = 0;
+	newtp->sacked_out = 0;
+	newtp->lost_out = 0;
+	newtp->retransmit_skb_hint = NULL;
+	newtp->highest_sack = NULL;
 
 	newtp->bpf_chg_cc_inprogress = 0;
 	tcp_bpf_clone(sk, newsk);
