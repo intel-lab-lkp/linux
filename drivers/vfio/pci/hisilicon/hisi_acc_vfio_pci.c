@@ -1208,6 +1208,23 @@ static int hisi_acc_vf_qm_init(struct hisi_acc_vf_core_device *hisi_acc_vdev)
 	else
 		hisi_acc_vdev->drv_mode = HW_ACC_MIG_VF_CTRL;
 
+	/*
+	 * On VF_CTRL hardware, BAR2 holds 32KB functional + 32KB
+	 * migration registers. When the host page exceeds 32KB, the
+	 * two share one physical page and cannot be isolated by mmap.
+	 * Reject the open so QEMU fails cleanly at startup.
+	 */
+	if (hisi_acc_vdev->drv_mode == HW_ACC_MIG_VF_CTRL) {
+		resource_size_t func_len =
+			pci_resource_len(vf_dev, VFIO_PCI_BAR2_REGION_INDEX) >> 1;
+
+		if (func_len < PAGE_SIZE) {
+			dev_err(&vf_dev->dev,
+				"migration not supported on 64KB pages with QM_HW_V3\n");
+			return -EINVAL;
+		}
+	}
+
 	if (hisi_acc_vdev->drv_mode == HW_ACC_MIG_PF_CTRL) {
 		/*
 		 * On hardware platforms greater than QM_HW_V3, the migration function
