@@ -63,6 +63,11 @@
  */
 #define IO_TLB_MIN_SLABS ((1<<20) >> IO_TLB_SHIFT)
 
+/* enable nocopy tx swiotlb and set the percentage of buffers allowed for it. */
+unsigned int nocopy_tx_percent;
+module_param(nocopy_tx_percent, uint, 0644);
+MODULE_PARM_DESC(nocopy_tx_percent, "percentage of swiotlb buffer allowed for nocopy tx");
+
 /**
  * struct io_tlb_slot - IO TLB slot descriptor
  * @orig_addr:	The original address corresponding to a mapped entry.
@@ -1640,6 +1645,13 @@ void __swiotlb_tbl_unmap_single(struct device *dev, phys_addr_t tlb_addr,
 		size_t mapping_size, enum dma_data_direction dir,
 		unsigned long attrs, struct io_tlb_pool *pool)
 {
+	int index = (tlb_addr - pool->start) >> IO_TLB_SHIFT;
+
+	if (pool->slots[index].flags & SWIOTLB_SLOT_NOCOPY) {
+		swiotlb_nocopy_dec_ref(pool, tlb_addr);
+		return;
+	}
+
 	/*
 	 * First, sync the memory before unmapping the entry
 	 */

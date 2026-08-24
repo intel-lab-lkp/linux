@@ -1228,7 +1228,14 @@ dma_addr_t iommu_dma_map_phys(struct device *dev, phys_addr_t phys, size_t size,
 	 * If both the physical buffer start address and size are page aligned,
 	 * we don't need to use a bounce page.
 	 */
-	if (dev_use_swiotlb(dev, size, dir) &&
+	bool is_nocopy = false;
+
+	if (swiotlb_is_nocopy_addr(dev, phys)) {
+		swiotlb_nocopy_inc_ref(&dev->dma_io_tlb_mem->defpool, phys);
+		is_nocopy = true;
+	}
+
+	if (!is_nocopy && dev_use_swiotlb(dev, size, dir) &&
 	    iova_unaligned(iovad, phys, size)) {
 		if (attrs & (DMA_ATTR_MMIO | DMA_ATTR_REQUIRE_COHERENT))
 			return DMA_MAPPING_ERROR;

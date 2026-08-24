@@ -3002,8 +3002,13 @@ static void __free_frozen_pages(struct page *page, unsigned int order,
 {
 	struct per_cpu_pages *pcp;
 	struct zone *zone;
-	unsigned long pfn = page_to_pfn(page);
+	unsigned long pfn;
 	int migratetype;
+
+	if (unlikely(swiotlb_free_pages(page, order)))
+		return;
+
+	pfn = page_to_pfn(page);
 
 	if (!pcp_allowed_order(order)) {
 		__free_pages_ok(page, order, fpi_flags);
@@ -3069,6 +3074,9 @@ void free_unref_folios(struct folio_batch *folios)
 		struct folio *folio = folios->folios[i];
 		unsigned long pfn = folio_pfn(folio);
 		unsigned int order = folio_order(folio);
+
+		if (unlikely(swiotlb_free_pages(&folio->page, order)))
+			continue;
 
 		if (!__free_pages_prepare(&folio->page, order, FPI_NONE))
 			continue;

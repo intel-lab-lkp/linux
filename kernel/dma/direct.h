@@ -88,6 +88,17 @@ static inline dma_addr_t dma_direct_map_phys(struct device *dev,
 {
 	dma_addr_t dma_addr;
 
+	if (swiotlb_is_nocopy_addr(dev, phys)) {
+		dma_addr_t unenc_addr = phys_to_dma_unencrypted(dev, phys);
+
+		if (likely(dma_capable(dev, unenc_addr, size, true))) {
+			swiotlb_nocopy_inc_ref(&dev->dma_io_tlb_mem->defpool, phys);
+			if (!dev_is_dma_coherent(dev) && !(attrs & DMA_ATTR_SKIP_CPU_SYNC))
+				arch_sync_dma_for_device(phys, size, dir);
+			return unenc_addr;
+		}
+	}
+
 	if (is_swiotlb_force_bounce(dev)) {
 		if (!(attrs & DMA_ATTR_CC_SHARED)) {
 			if (attrs & (DMA_ATTR_MMIO | DMA_ATTR_REQUIRE_COHERENT))
