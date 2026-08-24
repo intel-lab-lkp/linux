@@ -115,6 +115,15 @@ static int ieee80211_set_mon_options(struct ieee80211_sub_if_data *sdata,
 			return -EBUSY;
 	}
 
+	/*
+	 * An active monitor is passed to the driver and needs a TXQ, which is
+	 * reserved with the netdev in ieee80211_if_add() and cannot be added
+	 * later.  An interface created without the flag has none, so refuse to
+	 * set it rather than hand the driver a NULL vif->txq.
+	 */
+	if ((params->flags & MONITOR_FLAG_ACTIVE) && !sdata->vif.txq)
+		return -EOPNOTSUPP;
+
 	/* validate whether MU-MIMO can be configured */
 	if (!ieee80211_hw_check(&local->hw, WANT_MONITOR_VIF) &&
 	    !ieee80211_hw_check(&local->hw, NO_VIRTUAL_MONITOR) &&
