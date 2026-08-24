@@ -1201,6 +1201,7 @@ void ieee80211_stop_mesh(struct ieee80211_sub_if_data *sdata)
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_if_mesh *ifmsh = &sdata->u.mesh;
 	struct beacon_data *bcn;
+	struct mesh_csa_settings *csa;
 
 	netif_carrier_off(sdata->dev);
 
@@ -1221,6 +1222,13 @@ void ieee80211_stop_mesh(struct ieee80211_sub_if_data *sdata)
 	bcn = sdata_dereference(ifmsh->beacon, sdata);
 	RCU_INIT_POINTER(ifmsh->beacon, NULL);
 	kfree_rcu(bcn, rcu_head);
+
+	/* free any pending, unfinished channel switch */
+	csa = sdata_dereference(ifmsh->csa, sdata);
+	if (csa) {
+		RCU_INIT_POINTER(ifmsh->csa, NULL);
+		kfree_rcu(csa, rcu_head);
+	}
 
 	/* free all potentially still buffered group-addressed frames */
 	local->total_ps_buffered -= skb_queue_len(&ifmsh->ps.bc_buf);
