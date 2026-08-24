@@ -1085,6 +1085,21 @@ static inline bool cpu_has_lpa2(void)
 #endif
 }
 
+/*
+ * Reading GMID_EL1 when the kernel has disabled MTE traps to EL2, and the raw
+ * ID_AA64PFR1_EL1 reflects neither CONFIG_ARM64_MTE nor the cmdline override.
+ */
+static inline bool gmid_el1_accessible(u64 pfr1)
+{
+	if (!IS_ENABLED(CONFIG_ARM64_MTE))
+		return false;
+
+	pfr1 &= ~id_aa64pfr1_override.mask;
+	pfr1 |= id_aa64pfr1_override.val;
+
+	return id_aa64pfr1_mte(pfr1);
+}
+
 #endif /* __ASSEMBLER__ */
 
 #endif
