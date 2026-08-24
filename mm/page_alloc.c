@@ -16,6 +16,7 @@
 
 #include <linux/stddef.h>
 #include <linux/mm.h>
+#include <linux/swiotlb.h>
 #include <linux/highmem.h>
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
@@ -710,6 +711,56 @@ void prep_compound_page(struct page *page, unsigned int order)
 
 	prep_compound_head(page, order);
 }
+
+#ifdef CONFIG_SWIOTLB
+/*
+ * Prepare a SWIOTLB page (potentially compound).
+ *
+ * We explicitly initialize the head page refcount to 1 because recycled
+ * SWIOTLB pages might have a refcount of 0.
+ *
+ * If order > 0 (compound page), we must explicitly set all tail page
+ * refcounts to 0. This is because SWIOTLB pages might have a boot-default
+ * refcount of 1, but the core memory management subsystem expects tail pages
+ * of a compound page to have a refcount of 0.
+ */
+void swiotlb_prep_compound_page(struct page *page, unsigned int order)
+{
+	init_page_count(page);
+	if (order > 0) {
+		for (int i = 1; i < (1 << order); i++)
+			set_page_count(page + i, 0);
+		prep_compound_page(page, order);
+	}
+}
+
+/*
+ * Destroy a SWIOTLB compound page and restore page refcounts.
+ *
+ * When pages are returned to the SWIOTLB pool, we restore the refcount of
+ * all constituent pages (head and tails) to 1. This resets them to their
+ * clean boot-default state, ensuring they are ready for reuse either as
+ * individual order-0 pages or as part of a new compound allocation.
+ */
+void swiotlb_destroy_compound_page(struct page *page, unsigned int order)
+{
+	if (order > 0) {
+		struct folio *folio = (struct folio *)page;
+
+		__ClearPageHead(page);
+		page[1].flags.f &= ~PAGE_FLAGS_SECOND;
+#ifdef NR_PAGES_IN_LARGE_FOLIO
+		folio->_nr_pages = 0;
+#endif
+		for (int i = 1; i < (1 << order); i++) {
+			page[i].mapping = NULL;
+			clear_compound_head(&page[i]);
+			set_page_count(page + i, 1);
+		}
+	}
+	set_page_count(page, 1);
+}
+#endif /* CONFIG_SWIOTLB */
 
 static inline void set_buddy_order(struct page *page, unsigned int order)
 {
