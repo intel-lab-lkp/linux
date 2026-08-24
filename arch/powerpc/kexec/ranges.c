@@ -524,9 +524,20 @@ int get_usable_memory_ranges(struct crash_mem **mem_ranges)
 	 * Also, crashed kernel's memory must be added to reserve map to
 	 * avoid kdump kernel from using it.
 	 */
-	ret = add_mem_range(mem_ranges, 0, crashk_res.end + 1);
-	if (ret)
-		goto out;
+	if (crashk_low_res.end) {
+		ret = add_mem_range(mem_ranges, 0, crashk_low_res.end + 1);
+		if (ret)
+			goto out;
+
+		ret = add_mem_range(mem_ranges, crashk_res.start,
+				    crashk_res.end - crashk_res.start + 1);
+		if (ret)
+			goto out;
+	} else {
+		ret = add_mem_range(mem_ranges, 0, crashk_res.end + 1);
+		if (ret)
+			goto out;
+	}
 
 	for (i = 0; i < crashk_cma_cnt; i++) {
 		ret = add_mem_range(mem_ranges, crashk_cma_ranges[i].start,
@@ -608,6 +619,13 @@ int get_crash_memory_ranges(struct crash_mem **mem_ranges)
 	ret = crash_exclude_mem_range_guarded(mem_ranges, crashk_res.start, crashk_res.end);
 	if (ret)
 		goto out;
+
+	if (crashk_low_res.end) {
+		ret = crash_exclude_mem_range_guarded(mem_ranges, crashk_low_res.start,
+						      crashk_low_res.end);
+		if (ret)
+			goto out;
+	}
 
 	for (i = 0; i < crashk_cma_cnt; ++i) {
 		ret = crash_exclude_mem_range_guarded(mem_ranges, crashk_cma_ranges[i].start,
