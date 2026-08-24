@@ -63,6 +63,7 @@ properties:
               - mscc,jaguar2-spi
               - sophgo,sg2042-spi
               - thead,th1520-spi
+              - ultrarisc,dp1000-spi
           - const: snps,dw-apb-ssi
       - description: Vendor controllers compatible with v1.01a
         items:
