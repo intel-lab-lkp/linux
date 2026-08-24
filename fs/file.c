@@ -480,6 +480,11 @@ static struct fdtable *close_files(struct files_struct * files)
 	 */
 	struct fdtable *fdt = rcu_dereference_raw(files->fdt);
 	unsigned int i, j = 0;
+	/*
+	 * A kernel thread that might be needed to make progress on some
+	 * umount must not run __fput() itself, see __fput_sync().
+	 */
+	bool sync = !(current->flags & PF_KTHREAD);
 
 	for (;;) {
 		unsigned long set;
@@ -491,7 +496,10 @@ static struct fdtable *close_files(struct files_struct * files)
 			if (set & 1) {
 				struct file *file = fdt->fd[i];
 				if (file) {
-					filp_close(file, files);
+					if (sync)
+						filp_close_sync(file, files);
+					else
+						filp_close(file, files);
 					cond_resched();
 				}
 			}
