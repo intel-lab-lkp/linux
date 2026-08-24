@@ -3077,7 +3077,7 @@ sub process {
 		}
 
 # Check signature styles
-		if (!$in_header_lines &&
+		if (!$in_header_lines && $realfile eq '' &&
 		    $line =~ /^(\s*)([a-z0-9_-]+by:|$signature_tags)(\s*)(.*)/i) {
 			my $space_before = $1;
 			my $sign_off = $2;
