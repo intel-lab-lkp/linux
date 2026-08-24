@@ -2672,6 +2672,26 @@ int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_get_frame_desc_passthrough);
 
+int v4l2_subdev_get_frame_desc_passthrough_dvp(struct v4l2_subdev *sd,
+					       unsigned int pad,
+					       struct v4l2_mbus_frame_desc *fd)
+{
+	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_PARALLEL;
+
+	return v4l2_subdev_get_frame_desc_passthrough(sd, pad, fd);
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_frame_desc_passthrough_dvp);
+
+int v4l2_subdev_get_frame_desc_passthrough_csi2(struct v4l2_subdev *sd,
+						unsigned int pad,
+						struct v4l2_mbus_frame_desc *fd)
+{
+	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2;
+
+	return v4l2_subdev_get_frame_desc_passthrough(sd, pad, fd);
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_frame_desc_passthrough_csi2);
+
 struct v4l2_mbus_frame_desc *
 v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 			   enum v4l2_mbus_frame_desc_type type)

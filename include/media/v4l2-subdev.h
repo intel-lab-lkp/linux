@@ -1796,6 +1796,55 @@ int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 					   struct v4l2_mbus_frame_desc *fd);
 
 /**
+ * v4l2_subdev_get_frame_desc_passthrough_dvp() - Helper to implement the subdev
+ *	get_frame_desc operation in simple passthrough cases for DVP
+ * @sd: The subdevice
+ * @pad: The source pad index
+ * @fd: The mbus frame desc
+ *
+ * This function locks the subdevice's active state, calls
+ * __v4l2_subdev_get_frame_desc_passthrough(), and unlocks the state.
+ *
+ * This function can be assigned directly as the .get_frame_desc callback in
+ * &v4l2_subdev_pad_ops for subdevices that pass streams through without
+ * modification. Drivers that need to perform additional work should use
+ * __v4l2_subdev_get_frame_desc_passthrough() in their custom
+ * .get_frame_desc implementation instead.
+ *
+ * This callback can be used for the DVP (Digital Video Port), also often called
+ * simply the "parallel interface".
+ *
+ * Return: 0 on success, or a negative error code otherwise.
+ */
+int v4l2_subdev_get_frame_desc_passthrough_dvp(struct v4l2_subdev *sd,
+					       unsigned int pad,
+					       struct v4l2_mbus_frame_desc *fd);
+
+/**
+ * v4l2_subdev_get_frame_desc_passthrough_csi2() - Helper to implement the subdev
+ *	get_frame_desc operation in simple passthrough cases for MIPI CSI-2
+ * @sd: The subdevice
+ * @pad: The source pad index
+ * @fd: The mbus frame desc
+ *
+ * This function locks the subdevice's active state, calls
+ * __v4l2_subdev_get_frame_desc_passthrough(), and unlocks the state.
+ *
+ * This function can be assigned directly as the .get_frame_desc callback in
+ * &v4l2_subdev_pad_ops for subdevices that pass streams through without
+ * modification. Drivers that need to perform additional work should use
+ * __v4l2_subdev_get_frame_desc_passthrough() in their custom
+ * .get_frame_desc implementation instead.
+ *
+ * This callback can be used for the MIPI CSI-2 interface.
+ *
+ * Return: 0 on success, or a negative error code otherwise.
+ */
+int v4l2_subdev_get_frame_desc_passthrough_csi2(struct v4l2_subdev *sd,
+						unsigned int pad,
+						struct v4l2_mbus_frame_desc *fd);
+
+/**
  * v4l2_subdev_get_frame_desc() - Get a frame descriptor for a pad
  * @sd: The sub-device
  * @pad: The number of the pad in @sd from which to obtain the frame descriptor
