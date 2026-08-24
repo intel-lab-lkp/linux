@@ -176,6 +176,8 @@ static int addr2line(const char *dso_name, u64 addr, char **file, unsigned int *
 		}
 		if (ret > 0)
 			return ret;
+		if (ret < 0)
+			return 0;
 	}
 
 	return 0;

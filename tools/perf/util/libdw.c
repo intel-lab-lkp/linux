@@ -186,8 +186,15 @@ int libdw__addr2line(const char *dso_name, u64 addr, char **file, unsigned int *
 	 * between the regular ELF addr2line addresses and those to use with
 	 * libdw.
 	 */
-	if (!dwfl_module_getdwarf(mod, &bias))
-		return 0;
+	if (!dwfl_module_getdwarf(mod, &bias)) {
+		const char *err = dwfl_errmsg(-1);
+
+		/*
+		 * Abort fallbacks specifically when DWARF is completely missing,
+		 * but allow alternative backends to try if parsing failed.
+		 */
+		return (err && strstr(err, "no DWARF")) ? -1 : 0;
+	}
 
 	/* Find source line information for the address. */
 	dwline = dwfl_module_getsrc(mod, addr + bias);

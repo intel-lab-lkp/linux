@@ -441,8 +441,17 @@ int libdw__get_entries(unwind_entry_cb_t cb, void *arg,
 	}
 
  out:
-	if (err)
-		pr_debug("unwind: failed with '%s'\n", dwfl_errmsg(-1));
+	if (err) {
+		const char *msg = dwfl_errmsg(-1);
+
+		pr_debug("unwind: failed with '%s'\n", msg);
+		/*
+		 * Abort fallbacks specifically when unwinding information is completely
+		 * missing, but allow fallback unwinders to try if parsing simply failed.
+		 */
+		if (msg && strstr(msg, "no DWARF"))
+			err = -EINVAL;
+	}
 
 	for (i = 0; i < ui->idx; i++)
 		map_symbol__exit(&ui->entries[i].ms);
@@ -460,6 +469,6 @@ int libdw__get_entries(unwind_entry_cb_t cb, void *arg,
 	 *  < 0 : fatal error (e.g. -ENOMEM). Aborts unwinding entirely.
 	 */
 	if (err)
-		return (err == -ENOMEM) ? -ENOMEM : (entries > 0 ? 1 : 0);
+		return (err == -ENOMEM || err == -EINVAL) ? err : (entries > 0 ? 1 : 0);
 	return entries;
 }
