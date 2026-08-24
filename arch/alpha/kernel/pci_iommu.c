@@ -228,7 +228,8 @@ pci_map_single_1(struct pci_dev *pdev, phys_addr_t paddr, size_t size,
 		 int dac_allowed)
 {
 	struct pci_controller *hose = pdev ? pdev->sysdata : pci_isa_hose;
-	dma_addr_t max_dma = pdev ? pdev->dma_mask : ISA_DMA_MASK;
+	dma_addr_t max_dma = pdev ? min_not_zero(pdev->dma_mask,
+		pdev->dev.bus_dma_limit) : ISA_DMA_MASK;
 	unsigned long offset = offset_in_page(paddr);
 	struct pci_iommu_arena *arena;
 	long npages, dma_ofs, i;
@@ -250,7 +251,8 @@ pci_map_single_1(struct pci_dev *pdev, phys_addr_t paddr, size_t size,
 #endif
 
 	/* Next, use DAC if selected earlier.  */
-	if (dac_allowed) {
+	if (dac_allowed
+	    && paddr + alpha_mv.pci_dac_offset + size - 1 <= max_dma) {
 		ret = paddr + alpha_mv.pci_dac_offset;
 
 		DBGA2("pci_map_single: [%pa,%zx] -> DAC %llx from %ps\n",
@@ -549,7 +551,8 @@ sg_fill(struct device *dev, struct scatterlist *leader, struct scatterlist *end,
 #endif
 
 	/* If physically contiguous and DAC is available, use it.  */
-	if (leader->dma_address == 0 && dac_allowed) {
+	if (leader->dma_address == 0 && dac_allowed
+	    && paddr + alpha_mv.pci_dac_offset + size - 1 <= max_dma) {
 		out->dma_address = paddr + alpha_mv.pci_dac_offset;
 		out->dma_length = size;
 
@@ -558,6 +561,10 @@ sg_fill(struct device *dev, struct scatterlist *leader, struct scatterlist *end,
 
 		return 0;
 	}
+
+	/* No IOMMU and direct/DAC didn't fit: nothing left to try.  */
+	if (!arena)
+		return -1;
 
 	/* Otherwise, we'll use the iommu to make the pages virtually
 	   contiguous.  */
@@ -654,12 +661,14 @@ static int alpha_pci_map_sg(struct device *dev, struct scatterlist *sg,
 	/* Second, figure out where we're going to map things.  */
 	if (alpha_mv.mv_pci_tbi) {
 		hose = pdev ? pdev->sysdata : pci_isa_hose;
-		max_dma = pdev ? pdev->dma_mask : ISA_DMA_MASK;
+		max_dma = pdev ? min_not_zero(pdev->dma_mask,
+			pdev->dev.bus_dma_limit) : ISA_DMA_MASK;
 		arena = hose->sg_pci;
 		if (!arena || arena->dma_base + arena->size - 1 > max_dma)
 			arena = hose->sg_isa;
 	} else {
-		max_dma = -1;
+		max_dma = pdev ? min_not_zero(pdev->dma_mask,
+			pdev->dev.bus_dma_limit) : -1;
 		arena = NULL;
 		hose = NULL;
 	}
@@ -719,7 +728,8 @@ static void alpha_pci_unmap_sg(struct device *dev, struct scatterlist *sg,
 		return;
 
 	hose = pdev ? pdev->sysdata : pci_isa_hose;
-	max_dma = pdev ? pdev->dma_mask : ISA_DMA_MASK;
+	max_dma = pdev ? min_not_zero(pdev->dma_mask,
+		pdev->dev.bus_dma_limit) : ISA_DMA_MASK;
 	arena = hose->sg_pci;
 	if (!arena || arena->dma_base + arena->size - 1 > max_dma)
 		arena = hose->sg_isa;
