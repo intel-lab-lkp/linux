@@ -899,6 +899,24 @@ static int rmi_create_function(struct rmi_device *rmi_dev,
 	fn->irq_pos = *current_irq_count;
 	*current_irq_count += fn->num_of_irqs;
 
+	/*
+	 * irq_mask[] was sized from the interrupt count collected by the
+	 * earlier rmi_count_irqs() scan of the PDT.  Nothing guarantees that
+	 * this scan sees the same table -- the PDT is read back from the
+	 * device every time -- so a device that grows its interrupt counts
+	 * between the two scans would push these set_bit() calls past the end
+	 * of the flexible array.  Refuse the function instead.
+	 */
+	if (fn->num_of_irqs > RMI_FN_MAX_IRQS ||
+	    fn->irq_pos + fn->num_of_irqs > data->irq_count) {
+		dev_err(dev,
+			"F%02X: interrupt count changed between PDT scans (pos %u + %u > %d)\n",
+			pdt->function_number, fn->irq_pos, fn->num_of_irqs,
+			data->irq_count);
+		kfree(fn);
+		return -EINVAL;
+	}
+
 	for (i = 0; i < fn->num_of_irqs; i++)
 		set_bit(fn->irq_pos + i, fn->irq_mask);
 
