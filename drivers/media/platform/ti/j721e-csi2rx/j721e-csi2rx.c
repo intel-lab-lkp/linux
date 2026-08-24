@@ -909,10 +909,7 @@ static int ti_csi2rx_get_vc_and_dt(struct ti_csi2rx_ctx *ctx)
 {
 	struct ti_csi2rx_dev *csi = ctx->csi;
 	struct ti_csi2rx_ctx *curr_ctx;
-	struct v4l2_mbus_frame_desc fd;
 	struct media_pad *source_pad;
-	const struct ti_csi2rx_fmt *fmt;
-	int ret;
 	unsigned int i, j;
 
 	/* Get the frame desc from source */
@@ -920,20 +917,15 @@ static int ti_csi2rx_get_vc_and_dt(struct ti_csi2rx_ctx *ctx)
 	if (IS_ERR(source_pad))
 		return PTR_ERR(source_pad);
 
-	ret = v4l2_subdev_call(csi->source, pad, get_frame_desc, source_pad->index, &fd);
-	if (ret) {
-		if (ret == -ENOIOCTLCMD) {
-			ctx->vc = 0;
-			fmt = find_format_by_fourcc(ctx->v_fmt.fmt.pix.pixelformat);
-			ctx->dt = fmt->csi_dt;
-		}
-		return ret;
-	}
-
-	if (fd.type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2)
-		return -EINVAL;
+	struct v4l2_mbus_frame_desc *fd __free(v4l2_subdev_free_frame_desc) =
+		v4l2_subdev_get_frame_desc(csi->source, source_pad->index,
+					   V4L2_MBUS_FRAME_DESC_TYPE_CSI2);
+	if (IS_ERR(fd))
+		return PTR_ERR(fd);
 
 	for (i = 0; i < csi->num_ctx; i++) {
+		int ret;
+
 		curr_ctx = &csi->ctx[i];
 
 		/* Capture VC 0 by default */
@@ -943,15 +935,15 @@ static int ti_csi2rx_get_vc_and_dt(struct ti_csi2rx_ctx *ctx)
 		if (ret)
 			continue;
 
-		for (j = 0; j < fd.num_entries; j++) {
-			if (curr_ctx->stream == fd.entry[j].stream) {
-				curr_ctx->vc = fd.entry[j].bus.csi2.vc;
-				curr_ctx->dt = fd.entry[j].bus.csi2.dt;
+		for (j = 0; j < fd->num_entries; j++) {
+			if (curr_ctx->stream == fd->entry[j].stream) {
+				curr_ctx->vc = fd->entry[j].bus.csi2.vc;
+				curr_ctx->dt = fd->entry[j].bus.csi2.dt;
 				break;
 			}
 
 			/* Return error if no matching stream found */
-			if (j == fd.num_entries)
+			if (j == fd->num_entries)
 				return -EINVAL;
 		}
 	}
