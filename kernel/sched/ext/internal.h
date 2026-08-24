@@ -259,6 +259,9 @@ struct scx_cgroup_init_args {
 	u64			bw_period_us;
 	u64			bw_quota_us;
 	u64			bw_burst_us;
+
+	/* whether the cgroup is configured idle via cpu.idle */
+	bool			idle;
 };
 
 enum scx_cpu_preempt_reason {
