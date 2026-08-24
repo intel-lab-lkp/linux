@@ -122,11 +122,22 @@ static int rkisp2_create_links(struct rkisp2_device *rkisp2)
 			return ret;
 	}
 
+	/* params links */
+	ret = media_create_pad_link(&rkisp2->params.vnode.vdev.entity, 0,
+				    &rkisp2->isp.sd.entity,
+				    RKISP2_ISP_PAD_SINK_PARAMS,
+				    MEDIA_LNK_FL_ENABLED |
+				    MEDIA_LNK_FL_IMMUTABLE);
+	if (ret)
+		return ret;
+
+
 	return 0;
 }
 
 static void rkisp2_entities_unregister(struct rkisp2_device *rkisp2)
 {
+	rkisp2_params_unregister(rkisp2);
 	rkisp2_dmarx_unregister(rkisp2);
 	rkisp2_capture_devs_unregister(rkisp2);
 	rkisp2_isp_unregister(rkisp2);
@@ -140,11 +151,17 @@ static int rkisp2_entities_register(struct rkisp2_device *rkisp2)
 	if (ret)
 		goto error;
 
+	rkisp2_resizer_devs_init(rkisp2);
+
 	ret = rkisp2_capture_devs_register(rkisp2);
 	if (ret)
 		goto error;
 
 	ret = rkisp2_dmarx_register(rkisp2);
+	if (ret)
+		goto error;
+
+	ret = rkisp2_params_register(rkisp2);
 	if (ret)
 		goto error;
 

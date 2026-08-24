@@ -93,6 +93,7 @@ static int rkisp2_config_isp(struct rkisp2_isp *isp,
 	const struct rkisp2_mbus_info *sink_fmt;
 	const struct rkisp2_mbus_info *mp_src_fmt;
 	const struct v4l2_mbus_framefmt *mp_src_frm;
+	const struct v4l2_mbus_framefmt *sp_src_frm;
 	const struct v4l2_mbus_framefmt *sink_frm;
 
 	/* All the video sink formats and crops are kept equal */
@@ -149,6 +150,11 @@ static int rkisp2_config_isp(struct rkisp2_isp *isp,
 	irq_mask |= RKISP2_CIF_ISP_FRAME | RKISP2_CIF_ISP_V_START |
 		    RKISP2_CIF_ISP_PIC_SIZE_ERROR;
 	rkisp2_write(rkisp2, RKISP2_CIF_ISP_IMSC, irq_mask);
+
+	sp_src_frm = v4l2_subdev_state_get_format(sd_state,
+					       RKISP2_ISP_PAD_SOURCE_VIDEO_SELF);
+	rkisp2_params_pre_configure(&rkisp2->params, sink_fmt->bayer_pat,
+				    sink_frm, mp_src_frm, sp_src_frm);
 
 	isp->sink_fmt = sink_fmt;
 
@@ -277,6 +283,8 @@ static int rkisp2_isp_start(struct rkisp2_isp *isp,
 	       RKISP2_CIF_ISP_CTRL_ISP_ENABLE |
 	       RKISP2_CIF_ISP_CTRL_ISP_INFORM_ENABLE | RKISP2_CIF_ISP_CTRL_ISP_CFG_UPD_PERMANENT;
 	rkisp2_write(rkisp2, RKISP2_CIF_ISP_CTRL, val);
+
+	rkisp2_params_post_configure(&rkisp2->params);
 
 	return 0;
 }
@@ -727,6 +735,7 @@ int rkisp2_isp_register(struct rkisp2_device *rkisp2)
 	pads[RKISP2_ISP_PAD_SINK_VIDEO_DMA_1].flags = MEDIA_PAD_FL_SINK;
 	pads[RKISP2_ISP_PAD_SINK_VIDEO_DMA_2].flags = MEDIA_PAD_FL_SINK;
 	pads[RKISP2_ISP_PAD_SINK_VIDEO_CIF].flags = MEDIA_PAD_FL_SINK;
+	pads[RKISP2_ISP_PAD_SINK_PARAMS].flags = MEDIA_PAD_FL_SINK;
 	pads[RKISP2_ISP_PAD_SOURCE_VIDEO_MAIN].flags = MEDIA_PAD_FL_SOURCE;
 	pads[RKISP2_ISP_PAD_SOURCE_VIDEO_SELF].flags = MEDIA_PAD_FL_SOURCE;
 
@@ -817,8 +826,10 @@ irqreturn_t rkisp2_isp_isr(int irq, void *ctx)
 		rkisp2->debug.data_loss++;
 	}
 
-	if (status & RKISP2_CIF_ISP_FRAME)
+	if (status & RKISP2_CIF_ISP_FRAME) {
 		rkisp2->debug.complete_frames++;
+		rkisp2_params_isr(&rkisp2->params);
+	}
 
 	rkisp2_write(rkisp2, RKISP2_CIF_ISP_ICR, status);
 
