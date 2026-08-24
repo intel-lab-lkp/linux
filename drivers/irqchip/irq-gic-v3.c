@@ -1208,8 +1208,6 @@ static void gic_cpu_sys_reg_init(void)
 		case 4:
 			write_gicreg(0, ICC_AP0R0_EL1);
 		}
-
-		isb();
 	}
 
 	switch(pribits) {
