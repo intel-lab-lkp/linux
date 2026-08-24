@@ -1088,14 +1088,7 @@ static long subdev_do_ioctl(struct file *file, unsigned int cmd, void *arg,
 				num_active_routes++;
 		}
 
-		/*
-		 * Drivers that implement routing need to report a frame
-		 * descriptor accordingly, with up to one entry per route. Until
-		 * the frame descriptors entries get allocated dynamically,
-		 * limit the number of active routes to
-		 * V4L2_FRAME_DESC_ENTRY_PREALLOC.
-		 */
-		if (num_active_routes > V4L2_FRAME_DESC_ENTRY_PREALLOC)
+		if (num_active_routes > V4L2_FRAME_DESC_ENTRY_MAX)
 			return -E2BIG;
 
 		/*
