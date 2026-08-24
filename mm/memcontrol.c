@@ -1103,7 +1103,7 @@ unsigned long memcg_events(struct mem_cgroup *memcg, int event)
 
 bool memcg_vm_event_item_valid(enum vm_event_item idx)
 {
-	if (idx >= NR_VM_EVENT_ITEMS)
+	if ((u32)idx >= NR_VM_EVENT_ITEMS)
 		return false;
 
 	return !BAD_STAT_IDX(memcg_events_index(idx));

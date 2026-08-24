@@ -125,7 +125,7 @@ __bpf_kfunc unsigned long bpf_mem_cgroup_usage(struct mem_cgroup *memcg)
 __bpf_kfunc unsigned long bpf_mem_cgroup_memory_events(struct mem_cgroup *memcg,
 						       enum memcg_memory_event event)
 {
-	if (unlikely(event >= MEMCG_NR_MEMORY_EVENTS))
+	if (unlikely((u32)event >= MEMCG_NR_MEMORY_EVENTS))
 		return (unsigned long)-1;
 
 	return atomic_long_read(&memcg->memory_events[event]);
