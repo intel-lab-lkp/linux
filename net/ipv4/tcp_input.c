@@ -7141,6 +7141,42 @@ static void tcp_rcv_synrecv_state_fastopen(struct sock *sk)
 	tcp_rearm_rto(sk);
 }
 
+enum skb_drop_reason tcp_rcv_listen_state_process(struct sock *sk,
+						  struct sk_buff *skb)
+{
+	const struct tcphdr *th = tcp_hdr(skb);
+	SKB_DR(reason);
+
+	if (th->ack)
+		return SKB_DROP_REASON_TCP_FLAGS;
+
+	if (th->rst) {
+		SKB_DR_SET(reason, TCP_RESET);
+		goto discard;
+	}
+	if (th->syn) {
+		if (th->fin) {
+			SKB_DR_SET(reason, TCP_FLAGS);
+			goto discard;
+		}
+		/* It is possible that we process SYN packets from backlog,
+		 * so we need to make sure to disable BH and RCU right there.
+		 */
+		rcu_read_lock();
+		local_bh_disable();
+		inet_csk(sk)->icsk_af_ops->conn_request(sk, skb);
+		local_bh_enable();
+		rcu_read_unlock();
+
+		consume_skb(skb);
+		return 0;
+	}
+	SKB_DR_SET(reason, TCP_FLAGS);
+discard:
+	tcp_drop_reason(sk, skb, reason);
+	return 0;
+}
+
 /*
  *	This function implements the receiving procedure of RFC 793 for
  *	all states except ESTABLISHED and TIME_WAIT.
@@ -7152,7 +7188,6 @@ enum skb_drop_reason
 tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-	struct inet_connection_sock *icsk = inet_csk(sk);
 	const struct tcphdr *th = tcp_hdr(skb);
 	struct request_sock *req;
 	int queued = 0;
@@ -7164,32 +7199,7 @@ tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		goto discard;
 
 	case TCP_LISTEN:
-		if (th->ack)
-			return SKB_DROP_REASON_TCP_FLAGS;
-
-		if (th->rst) {
-			SKB_DR_SET(reason, TCP_RESET);
-			goto discard;
-		}
-		if (th->syn) {
-			if (th->fin) {
-				SKB_DR_SET(reason, TCP_FLAGS);
-				goto discard;
-			}
-			/* It is possible that we process SYN packets from backlog,
-			 * so we need to make sure to disable BH and RCU right there.
-			 */
-			rcu_read_lock();
-			local_bh_disable();
-			icsk->icsk_af_ops->conn_request(sk, skb);
-			local_bh_enable();
-			rcu_read_unlock();
-
-			consume_skb(skb);
-			return 0;
-		}
-		SKB_DR_SET(reason, TCP_FLAGS);
-		goto discard;
+		return tcp_rcv_listen_state_process(sk, skb);
 
 	case TCP_SYN_SENT:
 		tp->rx_opt.saw_tstamp = 0;

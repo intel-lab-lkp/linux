@@ -1556,7 +1556,7 @@ put_and_exit:
 INDIRECT_CALLABLE_DECLARE(struct dst_entry *ipv4_dst_check(struct dst_entry *,
 							   u32));
 /* The socket must have it's spinlock held when we get
- * here, unless it is a TCP_LISTEN socket.
+ * here.
  *
  * We have a potential double-lock case here, so even when
  * doing backlog processing we use the BH locking scheme.
@@ -1702,6 +1702,46 @@ ipv6_pktoptions:
 
 	consume_skb(opt_skb);
 	return 0;
+}
+
+/* @sk is not locked here and can leave TCP_LISTEN; do not test sk_state. */
+static noinline int tcp_v6_rcv_listen(struct sock *sk, struct sk_buff *skb)
+{
+	enum skb_drop_reason reason;
+	struct sock *nsk;
+
+	reason = psp_sk_rx_policy_check(sk, skb);
+	if (reason)
+		goto err_discard;
+
+	if (tcp_checksum_complete(skb))
+		goto csum_err;
+
+	nsk = tcp_v6_cookie_check(sk, skb);
+	if (!nsk)
+		return 0;
+
+	if (nsk != sk) {
+		reason = tcp_child_process(sk, nsk, skb);
+		sock_put(nsk);
+	} else {
+		reason = tcp_rcv_listen_state_process(sk, skb);
+	}
+	if (!reason)
+		return 0;
+
+	tcp_v6_send_reset(sk, skb, sk_rst_convert_drop_reason(reason));
+discard:
+	sk_skb_reason_drop(sk, skb, reason);
+	return 0;
+
+csum_err:
+	reason = SKB_DROP_REASON_TCP_CSUM;
+	trace_tcp_bad_csum(skb);
+	TCP_INC_STATS(sock_net(sk), TCP_MIB_CSUMERRORS);
+err_discard:
+	TCP_INC_STATS(sock_net(sk), TCP_MIB_INERRS);
+	goto discard;
 }
 
 static void tcp_v6_fill_cb(struct sk_buff *skb, const struct ipv6hdr *hdr,
@@ -1891,7 +1931,7 @@ process:
 	skb->dev = NULL;
 
 	if (sk->sk_state == TCP_LISTEN) {
-		ret = tcp_v6_do_rcv(sk, skb);
+		ret = tcp_v6_rcv_listen(sk, skb);
 		goto put_and_return;
 	}
 
