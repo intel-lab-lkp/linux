@@ -324,6 +324,18 @@
 	status = "okay";
 };
 
+/*
+ * The firmware carveout at this base is larger on this device than the
+ * SoC dtsi assumes: downstream laurel_sprout describes it as
+ * removed_region@46200000 with a size of 0x4900000, ending exactly where
+ * camera_mem begins. The 28 MiB past the dtsi's 0x2d00000 is not the
+ * kernel's to allocate, and handing it to the buddy allocator wedges the
+ * machine under memory pressure.
+ */
+&reserved_mem1 {
+	reg = <0x0 0x46200000 0x0 0x4900000>;
+};
+
 &rpm_requests {
 	regulators-0 {
 		compatible = "qcom,rpm-pm6125-regulators";
