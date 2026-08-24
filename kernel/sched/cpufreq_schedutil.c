@@ -111,7 +111,7 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 
 		return true;
 	} else if (sg_policy->need_freq_update) {
-		/* ignore_dl_rate_limit() wants a new frequency to be found. */
+		/* A forced update needs a new frequency to be found. */
 		return true;
 	}
 
@@ -417,6 +417,9 @@ static inline bool sugov_update_single_common(struct sugov_cpu *sg_cpu,
 
 	sugov_iowait_boost(sg_cpu, time, flags);
 	sg_cpu->last_update = time;
+
+	if (flags & SCHED_CPUFREQ_IDLE)
+		sg_cpu->sg_policy->need_freq_update = true;
 
 	ignore_dl_rate_limit(sg_cpu);
 

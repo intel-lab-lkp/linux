@@ -161,10 +161,35 @@ static int call_cpuidle(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	return cpuidle_enter(drv, dev, next_state);
 }
 
+static void idle_stop_tick(void)
+{
+#ifdef CONFIG_CPU_FREQ
+	bool was_stopped = tick_nohz_tick_stopped();
+#endif
+
+	tick_nohz_idle_stop_tick();
+
+#ifdef CONFIG_CPU_FREQ
+	/*
+	 * Run one last cpufreq update before entering idle with the tick
+	 * stopped, because no later update is guaranteed.
+	 */
+	if (!was_stopped && tick_nohz_tick_stopped()) {
+		struct rq *rq = this_rq();
+		struct rq_flags rf;
+
+		rq_lock(rq, &rf);
+		update_rq_clock(rq);
+		cpufreq_update_util(rq, SCHED_CPUFREQ_IDLE);
+		rq_unlock(rq, &rf);
+	}
+#endif
+}
+
 static void idle_call_stop_or_retain_tick(bool stop_tick)
 {
 	if (stop_tick || tick_nohz_tick_stopped())
-		tick_nohz_idle_stop_tick();
+		idle_stop_tick();
 	else
 		tick_nohz_idle_retain_tick();
 }
@@ -225,7 +250,7 @@ static void cpuidle_idle_call(bool stop_tick)
 			max_latency_ns = dev->forced_idle_latency_limit_ns;
 		}
 
-		tick_nohz_idle_stop_tick();
+		idle_stop_tick();
 
 		next_state = cpuidle_find_deepest_state(drv, dev, max_latency_ns);
 		call_cpuidle(drv, dev, next_state);
