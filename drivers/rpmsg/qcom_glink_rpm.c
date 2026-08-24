@@ -316,15 +316,6 @@ static int glink_rpm_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	rpm->irq = of_irq_get(dev->of_node, 0);
-	ret = devm_request_irq(dev, rpm->irq, qcom_glink_rpm_intr,
-			       IRQF_NO_SUSPEND | IRQF_NO_AUTOEN,
-			       "glink-rpm", rpm);
-	if (ret) {
-		dev_err(dev, "failed to request IRQ\n");
-		return ret;
-	}
-
 	rpm->mbox_client.dev = dev;
 	rpm->mbox_client.knows_txdone = true;
 	rpm->mbox_chan = mbox_request_channel(&rpm->mbox_client, 0);
@@ -356,17 +347,28 @@ static int glink_rpm_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, rpm);
 
-	enable_irq(rpm->irq);
-
-	ret = qcom_glink_native_start(glink);
+	rpm->irq = of_irq_get(dev->of_node, 0);
+	ret = devm_request_irq(dev, rpm->irq, qcom_glink_rpm_intr,
+			       IRQF_NO_SUSPEND, "glink-rpm", rpm);
 	if (ret) {
-		disable_irq(rpm->irq);
-		qcom_glink_native_remove(glink);
-		mbox_free_channel(rpm->mbox_chan);
-		return ret;
+		dev_err(dev, "failed to request IRQ\n");
+		goto err_glink_remove;
 	}
 
+	ret = qcom_glink_native_start(glink);
+	if (ret)
+		goto err_disable_irq;
+
 	return 0;
+
+err_disable_irq:
+	disable_irq(rpm->irq);
+
+err_glink_remove:
+	qcom_glink_native_remove(glink);
+	mbox_free_channel(rpm->mbox_chan);
+
+	return ret;
 }
 
 static void glink_rpm_remove(struct platform_device *pdev)
