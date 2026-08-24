@@ -2377,6 +2377,12 @@ TEST_F(coredump, socket_request_memory_types_without_kernel)
 	check_conflicting_ack(_metadata, self, COREDUMP_USERSPACE | COREDUMP_MEMORY_TYPES);
 }
 
+/* A rejected task closes everything on its way out anyway. */
+TEST_F(coredump, socket_request_close_files_reject)
+{
+	check_conflicting_ack(_metadata, self, COREDUMP_REJECT | COREDUMP_CLOSE_FILES);
+}
+
 /*
  * A server built with the first structs reads the request it knows,
  * discards the rest and acks with the ack it knows. It raises nothing
