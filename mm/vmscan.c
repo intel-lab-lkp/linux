@@ -4470,8 +4470,14 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr)
 	lazy_mmu_mode_disable();
 
 	/* feedback from rmap walkers to page table walkers */
-	if (mm_state && suitable_to_scan(i, young))
+	if (mm_state && suitable_to_scan(i, young)) {
+		/* the PUD entry covering the young PTEs scanned above */
+		pud_t *pud_p = pud_offset(p4d_offset(pgd_offset(vma->vm_mm, pvmw->address),
+						     pvmw->address), pvmw->address);
+
 		update_pmd_bloom_filter(mm_state, max_seq, pvmw->pmd);
+		update_pud_bloom_filter(mm_state, max_seq, pud_p);
+	}
 
 	mem_cgroup_put(memcg);
 
