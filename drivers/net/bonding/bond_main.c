@@ -1524,10 +1524,24 @@ static int bond_header_create(struct sk_buff *skb, struct net_device *bond_dev,
 	slave = rcu_dereference(bond->curr_active_slave);
 	if (slave) {
 		slave_ops = READ_ONCE(slave->dev->header_ops);
-		if (slave_ops && slave_ops->create)
+		if (slave_ops && slave_ops->create) {
+			unsigned int hlen = READ_ONCE(slave->dev->hard_header_len);
+
+			/* Headroom was reserved from a snapshot of
+			 * bond_dev->hard_header_len that may predate this
+			 * slave (concurrent bond type change); reject if
+			 * insufficient for the slave's create(), which
+			 * pushes its own hlen.
+			 */
+			if (skb_headroom(skb) < hlen) {
+				ret = -EINVAL;
+				goto unlock;
+			}
 			ret = slave_ops->create(skb, slave->dev,
 						type, daddr, saddr, len);
+		}
 	}
+unlock:
 	rcu_read_unlock();
 	return ret;
 }
