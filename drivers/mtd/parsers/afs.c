@@ -287,11 +287,17 @@ static int afs_parse_v2_partition(struct mtd_info *mtd,
 		 block_start, block_end);
 
 	for (i = 0; i < region_count; i++) {
-		u32 region_load_addr = imginfo[pad + 3 + i*4];
-		u32 region_size = imginfo[pad + 4 + i*4];
-		u32 region_offset = imginfo[pad + 5 + i*4];
+		u32 region_load_addr;
+		u32 region_size;
+		u32 region_offset;
 		u32 region_start;
 		u32 region_end;
+
+		if (pad + 5 + i*4 >= ARRAY_SIZE(imginfo))
+			break;
+		region_load_addr = imginfo[pad + 3 + i*4];
+		region_size = imginfo[pad + 4 + i*4];
+		region_offset = imginfo[pad + 5 + i*4];
 
 		pr_debug("  region %d: address: %08x, size: %08x, "
 			 "offset: %08x\n",
