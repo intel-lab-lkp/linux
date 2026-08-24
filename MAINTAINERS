@@ -23523,6 +23523,7 @@ L:	linux-riscv@lists.infradead.org
 S:	Supported
 T:	git https://github.com/ultrarisc/linux.git
 F:	Documentation/devicetree/bindings/riscv/ultrarisc.yaml
+F:	arch/riscv/boot/dts/ultrarisc/
 
 RNBD BLOCK DRIVERS
 M:	Md. Haris Iqbal <haris.iqbal@ionos.com>
