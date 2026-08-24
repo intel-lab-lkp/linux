@@ -401,6 +401,19 @@ static struct files_struct *alloc_files(gfp_t gfp)
 	return newf;
 }
 
+/* An empty descriptor table with one reference. */
+static struct files_struct *alloc_files_struct(void)
+{
+	struct files_struct *newf;
+
+	newf = alloc_files(GFP_KERNEL | __GFP_ZERO);
+	if (!newf)
+		return NULL;
+
+	rcu_assign_pointer(newf->fdt, &newf->fdtab);
+	return newf;
+}
+
 /*
  * Allocate a new descriptor table and copy contents from the passed in
  * instance.  Returns a pointer to cloned table on success, ERR_PTR()
@@ -560,6 +573,74 @@ void exit_files(struct task_struct *tsk)
 	if (!tsk->files)
 		return;
 	switch_files_struct(tsk, NULL);
+}
+
+/*
+ * The thread-group is waiting in coredump_task_exit(). Wake them and
+ * tell them to get rid of their files.
+ */
+bool coredump_close_files(void)
+{
+	struct core_state *core_state = current->signal->core_state;
+	struct files_struct *files;
+	struct core_thread *ct;
+	int nr = 0;
+
+	files = alloc_files_struct();
+	if (!files)
+		return false;
+
+	/* Tasks without a table, vhost workers say, sit the switch out. */
+	for (ct = core_state->dumper.next; ct; ct = ct->next)
+		if (ct->task->files)
+			nr++;
+	atomic_set(&core_state->nr_threads, nr);
+	reinit_completion(&core_state->done);
+
+	for (ct = core_state->dumper.next; ct; ct = ct->next) {
+		if (!ct->task->files)
+			continue;
+		/* Pairs with the acquire in coredump_task_close_files(). */
+		smp_store_release(&ct->files, files);
+		wake_up_process(ct->task);
+	}
+
+	/* The dumper's subjective creds are the dump's, not its own. */
+	scoped_with_creds(current_real_cred())
+		switch_files_struct(current, files);
+
+	if (nr) {
+		wait_for_completion_state(&core_state->done,
+					  TASK_UNINTERRUPTIBLE|TASK_FREEZABLE);
+		/* Back asleep before the notes read their registers. */
+		for (ct = core_state->dumper.next; ct; ct = ct->next)
+			wait_task_inactive(ct->task, TASK_ANY);
+	}
+
+	put_files_struct(files);
+	return true;
+}
+
+/*
+ * Get rid of the files and switch to the empty file descriptor table
+ * the dumping thread published in this thread's core_thread entry.
+ */
+bool coredump_task_close_files(struct core_thread *self)
+{
+	struct core_state *core_state;
+	struct files_struct *files;
+
+	/* Pairs with the release in coredump_close_files(). */
+	files = smp_load_acquire(&self->files);
+	if (!files || !current->files || current->files == files)
+		return false;
+
+	__set_current_state(TASK_RUNNING);
+	switch_files_struct(current, files);
+	core_state = current->signal->core_state;
+	if (atomic_dec_and_test(&core_state->nr_threads))
+		complete(&core_state->done);
+	return true;
 }
 
 struct files_struct init_files = {

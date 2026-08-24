@@ -837,7 +837,8 @@ static bool coredump_sock_request(struct core_name *cn, struct coredump_params *
 		.mask			= COREDUMP_KERNEL | COREDUMP_USERSPACE |
 					  COREDUMP_REJECT | COREDUMP_WAIT |
 					  COREDUMP_RECORDS | COREDUMP_SPARSE |
-					  COREDUMP_MEMORY_TYPES,
+					  COREDUMP_MEMORY_TYPES |
+					  COREDUMP_CLOSE_FILES,
 		.size_ack		= sizeof(struct coredump_ack),
 		.memory_types		= cprm->memory_types,
 		.memory_types_mask	= COREDUMP_MEMORY_ALL,
@@ -901,6 +902,12 @@ static bool coredump_sock_request(struct core_name *cn, struct coredump_params *
 
 	/* Zero records only exist inside a record stream. */
 	if ((ack.mask & COREDUMP_SPARSE) && !(ack.mask & COREDUMP_RECORDS)) {
+		coredump_sock_mark(cprm->file, COREDUMP_MARK_CONFLICTING);
+		return false;
+	}
+
+	/* A rejected task exits right away and closes everything anyway. */
+	if ((ack.mask & COREDUMP_CLOSE_FILES) && (ack.mask & COREDUMP_REJECT)) {
 		coredump_sock_mark(cprm->file, COREDUMP_MARK_CONFLICTING);
 		return false;
 	}
@@ -1224,6 +1231,11 @@ static void do_coredump(struct core_name *cn, struct coredump_params *cprm,
 	/* Don't even generate the coredump. */
 	if (cprm->mask & COREDUMP_REJECT)
 		return;
+
+	if ((cprm->mask & COREDUMP_CLOSE_FILES) && !coredump_close_files()) {
+		coredump_report_failure("Failed to close files, aborting core");
+		return;
+	}
 
 	/* get us an unshared descriptor table; almost always a no-op */
 	/* The cell spufs coredump code reads the file descriptor tables */

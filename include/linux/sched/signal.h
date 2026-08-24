@@ -76,12 +76,14 @@ struct multiprocess_signals {
 struct core_thread {
 	struct task_struct *task;
 	struct core_thread *next;
+	/* The empty table to switch to, published by the dumping thread. */
+	struct files_struct *files;
 };
 
 struct core_state {
 	atomic_t nr_threads;
 	struct core_thread dumper;
-	/* Completed by the last thread to park. */
+	/* Completed by the last thread to park, reused for the table switch. */
 	struct completion done;
 };
 

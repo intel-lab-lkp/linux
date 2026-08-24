@@ -25,6 +25,7 @@
 #include <linux/acct.h>
 #include <linux/tsacct_kern.h>
 #include <linux/file.h>
+#include <linux/fdtable.h>
 #include <linux/freezer.h>
 #include <linux/binfmts.h>
 #include <linux/nsproxy.h>
@@ -432,6 +433,7 @@ static void coredump_task_exit(struct task_struct *tsk,
 	struct core_thread self;
 
 	self.task = tsk;
+	self.files = NULL;
 	if (self.task->flags & PF_SIGNALED)
 		self.next = xchg(&core_state->dumper.next, &self);
 	else
@@ -447,6 +449,9 @@ static void coredump_task_exit(struct task_struct *tsk,
 		set_current_state(TASK_IDLE|TASK_FREEZABLE);
 		if (!self.task) /* see coredump_finish() */
 			break;
+		/* see coredump_close_files() */
+		if (coredump_task_close_files(&self))
+			continue;
 		schedule();
 	}
 	__set_current_state(TASK_RUNNING);

@@ -99,11 +99,16 @@ static inline bool close_on_exec(unsigned int fd, const struct files_struct *fil
 
 struct task_struct;
 
+struct core_thread;
+
 void put_files_struct(struct files_struct *fs);
+bool coredump_close_files(void);
+bool coredump_task_close_files(struct core_thread *self);
 int unshare_files(void);
 struct fd_range {
 	unsigned int from, to;
 };
+
 struct files_struct *dup_fd(struct files_struct *, struct fd_range *) __latent_entropy;
 void do_close_on_exec(struct files_struct *);
 int iterate_fd(struct files_struct *, unsigned,
