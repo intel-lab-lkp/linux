@@ -1325,6 +1325,7 @@ struct rq {
 #endif
 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
 	u64			prev_steal_time_rq;
+	u64			deferred_clock_task;
 #endif
 
 	/* calc_load related fields */

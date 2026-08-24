@@ -816,6 +816,30 @@ static void update_rq_clock_task(struct rq *rq, s64 delta)
  */
 	s64 __maybe_unused steal = 0, irq_delta = 0;
 
+#ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
+	if (static_key_false((&paravirt_steal_rq_enabled))) {
+		int rq_cpu = cpu_of(rq);
+
+		/*
+		 * A remote CPU can update this rq before the owner vCPU
+		 * has re-entered the guest and refreshed its stealtime
+		 * state. Do not charge that elapsed time to the current
+		 * task until stealtime can be sampled after the vCPU is
+		 * no longer preempted.
+		 */
+		if (rq_cpu != raw_smp_processor_id() &&
+		    vcpu_is_preempted(rq_cpu)) {
+			rq->deferred_clock_task += delta;
+			return;
+		}
+
+		if (rq->deferred_clock_task) {
+			delta += rq->deferred_clock_task;
+			rq->deferred_clock_task = 0;
+		}
+	}
+#endif
+
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 	if (irqtime_enabled()) {
 		irq_delta = irq_time_read(cpu_of(rq)) - rq->prev_irq_time;
