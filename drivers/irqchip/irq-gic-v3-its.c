@@ -216,7 +216,17 @@ static struct page *its_alloc_pages_node(int node, gfp_t gfp,
 	struct page *page;
 	int ret = 0;
 
-	page = alloc_pages_node(node, gfp | gfp_flags_quirk, order);
+	/*
+	 * Defer the zeroing requested by __GFP_ZERO until after the page has
+	 * been shared below. Under memory encryption (e.g. an Arm CCA realm),
+	 * any clearing performed by the allocator occurs in the private view
+	 * (the realm MECID/PAS). Once set_memory_decrypted() has run, both the
+	 * hypervisor and the guest access the page through its shared
+	 * (non-secure) alias, where the earlier private zeroing is not visible.
+	 * Strip __GFP_ZERO here and clear the shared view after the transition.
+	 */
+	page = alloc_pages_node(node, (gfp & ~__GFP_ZERO) | gfp_flags_quirk,
+				order);
 
 	if (!page)
 		return NULL;
@@ -230,6 +240,15 @@ static struct page *its_alloc_pages_node(int node, gfp_t gfp,
 	 */
 	if (ret)
 		return NULL;
+
+	/*
+	 * If the caller requested __GFP_ZERO, clear the page after it has been
+	 * shared. This is required for sparsely populated tables, such as the
+	 * indirect device-table L1: zeroing the shared view ensures that the
+	 * hypervisor observes zero for entries the guest has not written.
+	 */
+	if (gfp & __GFP_ZERO)
+		memset(page_address(page), 0, PAGE_ORDER_TO_SIZE(order));
 
 	return page;
 }
