@@ -266,27 +266,26 @@ static int mxc_isi_get_vc(struct mxc_isi_pipe *pipe)
 {
 	struct mxc_isi_crossbar *xbar = &pipe->isi->crossbar;
 	struct device *dev = pipe->isi->dev;
-	struct v4l2_mbus_frame_desc fd = { };
 	unsigned int source_pad = xbar->num_sinks + pipe->id;
 	unsigned int num_vcs;
 	unsigned int i;
-	int ret;
 
-	ret = v4l2_subdev_call(&xbar->sd, pad, get_frame_desc,
-			       source_pad, &fd);
-	if (ret < 0) {
+	struct v4l2_mbus_frame_desc *fd __free(v4l2_subdev_free_frame_desc) =
+		v4l2_subdev_get_frame_desc(&xbar->sd, source_pad,
+					   V4L2_MBUS_FRAME_DESC_TYPE_CSI2);
+	if (IS_ERR(fd)) {
 		dev_err(dev, "Failed to get source frame desc from pad %u\n",
 			source_pad);
-		return ret;
+		return PTR_ERR(fd);
 	}
 
 	/* Find stream 0 in the frame descriptor. */
-	for (i = 0; i < fd.num_entries; i++) {
-		if (fd.entry[i].stream == 0)
+	for (i = 0; i < fd->num_entries; i++) {
+		if (fd->entry[i].stream == 0)
 			break;
 	}
 
-	if (i == fd.num_entries) {
+	if (i == fd->num_entries) {
 		dev_err(dev, "Failed to find stream from source frame desc\n");
 		return -EPIPE;
 	}
@@ -294,13 +293,13 @@ static int mxc_isi_get_vc(struct mxc_isi_pipe *pipe)
 	num_vcs = pipe->isi->pdata->num_vc ? : 1;
 
 	/* Check virtual channel range. */
-	if (fd.entry[i].bus.csi2.vc >= num_vcs) {
+	if (fd->entry[i].bus.csi2.vc >= num_vcs) {
 		dev_err(dev, "Virtual channel %u exceeds maximum %u\n",
-			fd.entry[i].bus.csi2.vc, num_vcs - 1);
+			fd->entry[i].bus.csi2.vc, num_vcs - 1);
 		return -EPIPE;
 	}
 
-	return fd.entry[i].bus.csi2.vc;
+	return fd->entry[i].bus.csi2.vc;
 }
 
 int mxc_isi_pipe_enable(struct mxc_isi_pipe *pipe)
