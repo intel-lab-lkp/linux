@@ -375,21 +375,15 @@ static unsigned int sane_fdtable_size(struct fdtable *fdt, struct fd_range *punc
 	return ALIGN(last + 1, BITS_PER_LONG);
 }
 
-/*
- * Allocate a new descriptor table and copy contents from the passed in
- * instance.  Returns a pointer to cloned table on success, ERR_PTR()
- * on failure.  For 'punch_hole' see sane_fdtable_size().
- */
-struct files_struct *dup_fd(struct files_struct *oldf, struct fd_range *punch_hole)
+/* A table with one reference and the embedded fdtable, nothing copied yet. */
+static struct files_struct *alloc_files(gfp_t gfp)
 {
 	struct files_struct *newf;
-	struct file **old_fds, **new_fds;
-	unsigned int open_files, i;
-	struct fdtable *old_fdt, *new_fdt;
+	struct fdtable *new_fdt;
 
-	newf = kmem_cache_alloc(files_cachep, GFP_KERNEL);
+	newf = kmem_cache_alloc(files_cachep, gfp);
 	if (!newf)
-		return ERR_PTR(-ENOMEM);
+		return NULL;
 
 	atomic_set(&newf->count, 1);
 
@@ -403,6 +397,26 @@ struct files_struct *dup_fd(struct files_struct *oldf, struct fd_range *punch_ho
 	new_fdt->open_fds = newf->open_fds_init;
 	new_fdt->full_fds_bits = newf->full_fds_bits_init;
 	new_fdt->fd = &newf->fd_array[0];
+
+	return newf;
+}
+
+/*
+ * Allocate a new descriptor table and copy contents from the passed in
+ * instance.  Returns a pointer to cloned table on success, ERR_PTR()
+ * on failure.  For 'punch_hole' see sane_fdtable_size().
+ */
+struct files_struct *dup_fd(struct files_struct *oldf, struct fd_range *punch_hole)
+{
+	struct files_struct *newf;
+	struct file **old_fds, **new_fds;
+	unsigned int open_files, i;
+	struct fdtable *old_fdt, *new_fdt;
+
+	newf = alloc_files(GFP_KERNEL);
+	if (!newf)
+		return ERR_PTR(-ENOMEM);
+	new_fdt = &newf->fdtab;
 
 	spin_lock(&oldf->file_lock);
 	old_fdt = files_fdtable(oldf);
@@ -523,16 +537,29 @@ void put_files_struct(struct files_struct *files)
 	}
 }
 
+/* Hand @tsk the table @files, or none, and drop the one it had. */
+static void switch_files_struct(struct task_struct *tsk,
+				struct files_struct *files)
+{
+	struct files_struct *old;
+
+	task_lock(tsk);
+	old = tsk->files;
+	if (old) {
+		if (files)
+			atomic_inc(&files->count);
+		tsk->files = files;
+	}
+	task_unlock(tsk);
+	if (old)
+		put_files_struct(old);
+}
+
 void exit_files(struct task_struct *tsk)
 {
-	struct files_struct * files = tsk->files;
-
-	if (files) {
-		task_lock(tsk);
-		tsk->files = NULL;
-		task_unlock(tsk);
-		put_files_struct(files);
-	}
+	if (!tsk->files)
+		return;
+	switch_files_struct(tsk, NULL);
 }
 
 struct files_struct init_files = {
