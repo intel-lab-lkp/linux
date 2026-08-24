@@ -2710,14 +2710,6 @@ static bool should_clear_pmd_young(void)
 	return arch_has_hw_nonleaf_pmd_young() && get_cap(LRU_GEN_NONLEAF_YOUNG);
 }
 
-/*
- * Cross-node empty walk suppression. lru_gen_use_mm() marks an mm used on all
- * nodes, so aging on a node where the mm has no memory wastes a full page table
- * walk. Skip such an mm for up to MGLRU_EMPTY_SKIP_GENS generations after an
- * empty walk, then force-rescan to close migration/mlock/NUMA-balancing windows.
- */
-#define MGLRU_EMPTY_SKIP_GENS 4
-
 /******************************************************************************
  *                          shorthand helpers
  ******************************************************************************/
@@ -2927,6 +2919,9 @@ static struct lru_gen_mm_state *get_mm_state(struct lruvec *lruvec)
 {
 	return &lruvec->mm_state;
 }
+
+/* tunable empty-walk skip threshold; defined later, get_next_mm() needs it */
+static unsigned long mglru_empty_skip_gens __read_mostly;
 
 static struct mm_struct *get_next_mm(struct lru_gen_mm_walk *walk)
 {
@@ -4265,6 +4260,14 @@ static bool lruvec_is_reclaimable(struct lruvec *lruvec, struct scan_control *sc
 
 /* to protect the working set of the last N jiffies */
 static unsigned long lru_gen_min_ttl __read_mostly;
+
+/*
+ * Skip an mm on node N between re-scan passes: every
+ * @mglru_empty_skip_gens-th aging pass the node re-scans all empty-marked
+ * mms and re-marks them if still empty. Default 4, 0 disables. Tunable via:
+ * echo "skip_empty <N>" > /sys/kernel/debug/lru_gen
+ */
+static unsigned long mglru_empty_skip_gens __read_mostly = 4;
 
 static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 {
@@ -5676,6 +5679,7 @@ static int lru_gen_seq_show(struct seq_file *m, void *v)
 			cgroup_path(memcg->css.cgroup, m->private, PATH_MAX);
 #endif
 		seq_printf(m, "memcg %llu %s\n", mem_cgroup_id(memcg), path);
+		seq_printf(m, "empty_skip %lu\n", READ_ONCE(mglru_empty_skip_gens));
 	}
 
 	seq_printf(m, " node %5d\n", nid);
@@ -5853,6 +5857,35 @@ static ssize_t lru_gen_seq_write(struct file *file, const char __user *src,
 		cur = skip_spaces(cur);
 		if (!*cur)
 			continue;
+
+		/*
+		 * set the empty-walk skip threshold: "skip_empty <N>"
+		 * (the current value is readable via /sys/kernel/debug/lru_gen)
+		 */
+		if (!strncmp(cur, "skip_empty", 10)) {
+			unsigned long val;
+
+			cur += 10;
+			/* require a space before the value: reject "skip_empty123" */
+			if (*cur && !isspace(*cur)) {
+				err = -EINVAL;
+				break;
+			}
+			cur = skip_spaces(cur);
+			if (!*cur) {
+				/* no value: read the threshold via lru_gen */
+				err = -EINVAL;
+				break;
+			}
+			/* kstrtoul() rejects negatives and trailing garbage */
+			if (kstrtoul(cur, 10, &val)) {
+				err = -EINVAL;
+				break;
+			}
+			WRITE_ONCE(mglru_empty_skip_gens, val);
+			err = 0;
+			continue;
+		}
 
 		n = sscanf(cur, "%c %llu %u %lu %n %4s %n %lu %n", &cmd, &memcg_id, &nid,
 			   &seq, &end, swap_string, &end, &opt, &end);
