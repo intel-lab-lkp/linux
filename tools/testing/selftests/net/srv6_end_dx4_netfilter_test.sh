@@ -311,6 +311,14 @@ router_netfilter_tests()
 	check_and_log_hs_connectivity 2 1 100
 }
 
+test_iproute2_supp_or_ksft_skip()
+{
+	if ! ip route help 2>&1 | grep -qo "End.DX4"; then
+		echo "SKIP: Missing SRv6 End.DX4 support in iproute2"
+		exit "${ksft_skip}"
+	fi
+}
+
 if [ "$(id -u)" -ne 0 ];then
 	echo "SKIP: Need root privileges"
 	exit $ksft_skip
@@ -320,6 +328,8 @@ if [ ! -x "$(command -v ip)" ]; then
 	echo "SKIP: Could not run test without ip tool"
 	exit $ksft_skip
 fi
+
+test_iproute2_supp_or_ksft_skip
 
 cleanup &>/dev/null
 
