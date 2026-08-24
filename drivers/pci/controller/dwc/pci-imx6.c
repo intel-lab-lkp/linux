@@ -1634,7 +1634,10 @@ static int imx_add_pcie_ep(struct imx_pcie *imx_pcie,
 	struct dw_pcie_rp *pp = &pci->pp;
 	struct device *dev = pci->dev;
 
-	imx_pcie_host_init(pp);
+	ret = imx_pcie_host_init(pp);
+	if (ret)
+		return ret;
+
 	ep = &pci->ep;
 	ep->ops = &pcie_ep_ops;
 
@@ -1646,7 +1649,7 @@ static int imx_add_pcie_ep(struct imx_pcie *imx_pcie,
 	ret = dw_pcie_ep_init(ep);
 	if (ret) {
 		dev_err(dev, "failed to initialize endpoint\n");
-		return ret;
+		goto err_host_exit;
 	}
 	imx_pcie_host_post_init(pp);
 
@@ -1654,12 +1657,16 @@ static int imx_add_pcie_ep(struct imx_pcie *imx_pcie,
 	if (ret) {
 		dev_err(dev, "Failed to initialize DWC endpoint registers\n");
 		dw_pcie_ep_deinit(ep);
-		return ret;
+		goto err_host_exit;
 	}
 
 	pci_epc_init_notify(ep->epc);
 
 	return 0;
+
+err_host_exit:
+	imx_pcie_host_exit(pp);
+	return ret;
 }
 
 static void imx_pcie_msi_save_restore(struct imx_pcie *imx_pcie, bool save)
