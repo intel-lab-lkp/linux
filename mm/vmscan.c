@@ -2849,7 +2849,7 @@ static bool test_bloom_filter(struct lru_gen_mm_state *mm_state, unsigned long s
 	unsigned long *filter;
 	int gen = filter_gen_from_seq(seq);
 
-	filter = READ_ONCE(mm_state->filters[gen]);
+	filter = READ_ONCE(mm_state->pmd_filters[gen]);
 	if (!filter)
 		return true;
 
@@ -2865,7 +2865,7 @@ static void update_bloom_filter(struct lru_gen_mm_state *mm_state, unsigned long
 	unsigned long *filter;
 	int gen = filter_gen_from_seq(seq);
 
-	filter = READ_ONCE(mm_state->filters[gen]);
+	filter = READ_ONCE(mm_state->pmd_filters[gen]);
 	if (!filter)
 		return;
 
@@ -2882,7 +2882,7 @@ static void reset_bloom_filter(struct lru_gen_mm_state *mm_state, unsigned long 
 	unsigned long *filter;
 	int gen = filter_gen_from_seq(seq);
 
-	filter = mm_state->filters[gen];
+	filter = mm_state->pmd_filters[gen];
 	if (filter) {
 		bitmap_clear(filter, 0, BIT(BLOOM_FILTER_SHIFT));
 		return;
@@ -2890,7 +2890,7 @@ static void reset_bloom_filter(struct lru_gen_mm_state *mm_state, unsigned long 
 
 	filter = bitmap_zalloc(BIT(BLOOM_FILTER_SHIFT),
 			       __GFP_HIGH | __GFP_NOMEMALLOC | __GFP_NOWARN);
-	WRITE_ONCE(mm_state->filters[gen], filter);
+	WRITE_ONCE(mm_state->pmd_filters[gen], filter);
 }
 
 /******************************************************************************
@@ -6010,8 +6010,8 @@ void lru_gen_exit_memcg(struct mem_cgroup *memcg)
 			continue;
 
 		for (i = 0; i < NR_BLOOM_FILTERS; i++) {
-			bitmap_free(mm_state->filters[i]);
-			mm_state->filters[i] = NULL;
+			bitmap_free(mm_state->pmd_filters[i]);
+			mm_state->pmd_filters[i] = NULL;
 		}
 	}
 }
