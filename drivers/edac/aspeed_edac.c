@@ -32,6 +32,23 @@
 #define ASPEED_MCR_INTR_CTRL_CNT_UNREC  GENMASK(15, 12)
 #define ASPEED_MCR_INTR_CTRL_ENABLE     (BIT(0) | BIT(1))
 
+#define AST2700_INT_STS			0x04
+#define AST2700_INT_CLR			0x08
+#define AST2700_INT_MASK		0x0c
+#define   AST2700_INT_ECC_RECOVERABLE	BIT(5)
+#define   AST2700_INT_ECC_UNRECOVERABLE	BIT(4)
+#define   AST2700_INT_ECC		(AST2700_INT_ECC_RECOVERABLE | \
+					 AST2700_INT_ECC_UNRECOVERABLE)
+#define AST2700_MCFG			0x10
+#define   AST2700_MCFG_ECC		BIT(6)
+#define   AST2700_MCFG_DRAM_TYPE	BIT(0) /* 0=DDR4, 1=DDR5 */
+#define AST2700_ECC_STS			0x78
+#define   AST2700_ECC_REC_CNT		GENMASK(15, 8)
+#define   AST2700_ECC_UNREC_CNT		GENMASK(7, 0)
+#define AST2700_ECC_FAIL_ADDR		0x7c
+
+struct aspeed_edac;
+
 struct aspeed_edac_chip {
 	unsigned int conf_reg;
 	u32 conf_ecc;
@@ -40,6 +57,8 @@ struct aspeed_edac_chip {
 	unsigned long mtype_cap;
 	unsigned int prot_reg;
 	u32 prot_key;
+	irqreturn_t (*isr)(int irq, void *arg);
+	void (*set_irq)(struct aspeed_edac *priv, bool enable);
 };
 
 struct aspeed_edac {
@@ -50,25 +69,33 @@ struct aspeed_edac {
 	int irq;
 };
 
-static void count_rec(struct mem_ctl_info *mci, u8 rec_cnt, u32 rec_addr)
+static void count_rec(struct mem_ctl_info *mci, u8 rec_cnt, phys_addr_t rec_addr,
+		      bool have_addr)
 {
 	struct csrow_info *csrow = mci->csrows[0];
-	u32 page, offset, syndrome;
+	unsigned long page, offset, syndrome;
 
 	if (!rec_cnt)
 		return;
 
-	/* report first few errors (if there are) */
-	/* note: no addresses are recorded */
-	if (rec_cnt > 1) {
+	/*
+	 * Report the errors whose address is not recorded: all of them when
+	 * no address is available, otherwise all but the last one (reported
+	 * with its address below).
+	 */
+	if (rec_cnt > 1 || !have_addr) {
 		/* page, offset and syndrome are not available */
 		page = 0;
 		offset = 0;
 		syndrome = 0;
-		edac_mc_handle_error(HW_EVENT_ERR_CORRECTED, mci, rec_cnt-1,
+		edac_mc_handle_error(HW_EVENT_ERR_CORRECTED, mci,
+				     have_addr ? rec_cnt - 1 : rec_cnt,
 				     page, offset, syndrome, 0, 0, -1,
 				     "address(es) not available", "");
 	}
+
+	if (!have_addr)
+		return;
 
 	/* report last error */
 	/* note: rec_addr is the last recoverable error addr */
@@ -82,32 +109,34 @@ static void count_rec(struct mem_ctl_info *mci, u8 rec_cnt, u32 rec_addr)
 }
 
 static void count_un_rec(struct mem_ctl_info *mci, u8 un_rec_cnt,
-			 u32 un_rec_addr)
+			 phys_addr_t un_rec_addr, bool have_addr)
 {
 	struct csrow_info *csrow = mci->csrows[0];
-	u32 page, offset, syndrome;
+	unsigned long page, offset, syndrome;
 
 	if (!un_rec_cnt)
 		return;
 
-	/* report 1. error */
-	/* note: un_rec_addr is the first unrecoverable error addr */
-	page = un_rec_addr >> PAGE_SHIFT;
-	offset = un_rec_addr & ~PAGE_MASK;
-	/* syndrome is not available */
-	syndrome = 0;
-	edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci, 1,
-			     csrow->first_page + page, offset, syndrome,
-			     0, 0, -1, "", "");
+	/* report the first error with its address when one is available */
+	if (have_addr) {
+		/* note: un_rec_addr is the first unrecoverable error addr */
+		page = un_rec_addr >> PAGE_SHIFT;
+		offset = un_rec_addr & ~PAGE_MASK;
+		/* syndrome is not available */
+		syndrome = 0;
+		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci, 1,
+				     csrow->first_page + page, offset, syndrome,
+				     0, 0, -1, "", "");
+	}
 
-	/* report further errors (if there are) */
-	/* note: no addresses are recorded */
-	if (un_rec_cnt > 1) {
+	/* report the remaining errors without a recorded address */
+	if (un_rec_cnt > 1 || !have_addr) {
 		/* page, offset and syndrome are not available */
 		page = 0;
 		offset = 0;
 		syndrome = 0;
-		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci, un_rec_cnt-1,
+		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci,
+				     have_addr ? un_rec_cnt - 1 : un_rec_cnt,
 				     page, offset, syndrome, 0, 0, -1,
 				     "address(es) not available", "");
 	}
@@ -166,8 +195,8 @@ static irqreturn_t aspeed_mcr_isr(int irq, void *arg)
 		rec_cnt, un_rec_cnt);
 
 	/* process recoverable and unrecoverable errors */
-	count_rec(mci, rec_cnt, rec_addr);
-	count_un_rec(mci, un_rec_cnt, un_rec_addr);
+	count_rec(mci, rec_cnt, rec_addr, true);
+	count_un_rec(mci, un_rec_cnt, un_rec_addr, true);
 
 	if (!rec_cnt && !un_rec_cnt)
 		dev_dbg_ratelimited(mci->pdev, "received edac interrupt, but did not find any ECC counters\n");
@@ -176,6 +205,54 @@ static irqreturn_t aspeed_mcr_isr(int irq, void *arg)
 		reg50 = readl(priv->regs + ASPEED_MCR_INTR_CTRL);
 	dev_dbg(mci->pdev, "edac interrupt handled. mcr reg 50 is now: 0x%x\n",
 		reg50);
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t ast2700_dramc_isr(int irq, void *arg)
+{
+	u32 int_sts, ecc_sts, fail_addr;
+	struct mem_ctl_info *mci = arg;
+	struct aspeed_edac *priv;
+	u8 rec_cnt, un_rec_cnt;
+	phys_addr_t addr;
+
+	priv = mci->pvt_info;
+
+	scoped_guard(raw_spinlock, &priv->lock) {
+		int_sts = readl(priv->regs + AST2700_INT_STS);
+		if (!(int_sts & AST2700_INT_ECC))
+			return IRQ_NONE;
+
+		ecc_sts = readl(priv->regs + AST2700_ECC_STS);
+		fail_addr = readl(priv->regs + AST2700_ECC_FAIL_ADDR);
+
+		/* the interrupt registers are not key-protected; clear only ECC */
+		writel(int_sts & AST2700_INT_ECC, priv->regs + AST2700_INT_CLR);
+	}
+
+	rec_cnt = FIELD_GET(AST2700_ECC_REC_CNT, ecc_sts);
+	un_rec_cnt = FIELD_GET(AST2700_ECC_UNREC_CNT, ecc_sts);
+
+	/* the register holds address bits [35:4], in units of 16 bytes */
+	addr = (phys_addr_t)fail_addr << 4;
+
+	/*
+	 * The controller records only the address of the latest failure,
+	 * shared by both error types. When only one type occurred it owns
+	 * that address; when both occurred attribute it to the uncorrectable
+	 * error and report the corrected ones without an address.
+	 */
+	if (un_rec_cnt && !rec_cnt) {
+		count_un_rec(mci, un_rec_cnt, addr, true);
+	} else if (!un_rec_cnt && rec_cnt) {
+		count_rec(mci, rec_cnt, addr, true);
+	} else if (un_rec_cnt && rec_cnt) {
+		count_un_rec(mci, un_rec_cnt, addr, true);
+		count_rec(mci, rec_cnt, 0, false);
+	} else {
+		dev_dbg_ratelimited(mci->pdev, "received interrupt with no ECC counters set\n");
+	}
 
 	return IRQ_HANDLED;
 }
@@ -197,6 +274,22 @@ static void aspeed_set_irq(struct aspeed_edac *priv, bool enable)
 	aspeed_mcr_irq_update_exit(priv);
 }
 
+static void ast2700_set_irq(struct aspeed_edac *priv, bool enable)
+{
+	u32 val;
+
+	guard(raw_spinlock_irqsave)(&priv->lock);
+
+	/* interrupts are enabled by clearing their mask bits */
+	val = readl(priv->regs + AST2700_INT_MASK);
+	if (enable)
+		val &= ~AST2700_INT_ECC;
+	else
+		val |= AST2700_INT_ECC;
+
+	writel(val, priv->regs + AST2700_INT_MASK);
+}
+
 static int config_irq(struct mem_ctl_info *mci, struct platform_device *pdev)
 {
 	struct aspeed_edac *priv = mci->pvt_info;
@@ -209,7 +302,7 @@ static int config_irq(struct mem_ctl_info *mci, struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
-	rc = devm_request_irq(&pdev->dev, irq, aspeed_mcr_isr, IRQF_TRIGGER_HIGH,
+	rc = devm_request_irq(&pdev->dev, irq, priv->chip->isr, IRQF_TRIGGER_HIGH,
 			      DRV_NAME, mci);
 	if (rc)
 		return rc;
@@ -217,7 +310,7 @@ static int config_irq(struct mem_ctl_info *mci, struct platform_device *pdev)
 	priv->irq = irq;
 
 	/* enable interrupts */
-	aspeed_set_irq(priv, true);
+	priv->chip->set_irq(priv, true);
 
 	return 0;
 }
@@ -365,7 +458,7 @@ static void aspeed_remove(struct platform_device *pdev)
 	struct aspeed_edac *priv = mci->pvt_info;
 
 	/* disable interrupts */
-	aspeed_set_irq(priv, false);
+	priv->chip->set_irq(priv, false);
 
 	devm_free_irq(&pdev->dev, priv->irq, mci);
 
@@ -382,6 +475,8 @@ static const struct aspeed_edac_chip ast2400_edac = {
 	.mtype_cap = MEM_FLAG_DDR3 | MEM_FLAG_DDR4,
 	.prot_reg = ASPEED_MCR_PROT,
 	.prot_key = ASPEED_MCR_PROT_PASSWD,
+	.isr = aspeed_mcr_isr,
+	.set_irq = aspeed_set_irq,
 };
 
 /* The AST2600 does not key-protect the interrupt control register (MCR50). */
@@ -391,12 +486,26 @@ static const struct aspeed_edac_chip ast2600_edac = {
 	.conf_dram_type = ASPEED_MCR_CONF_DRAM_TYPE,
 	.dram_type = { MEM_DDR3, MEM_DDR4 },
 	.mtype_cap = MEM_FLAG_DDR3 | MEM_FLAG_DDR4,
+	.isr = aspeed_mcr_isr,
+	.set_irq = aspeed_set_irq,
+};
+
+/* The AST2700 interrupt registers are not key-protected either. */
+static const struct aspeed_edac_chip ast2700_edac = {
+	.conf_reg = AST2700_MCFG,
+	.conf_ecc = AST2700_MCFG_ECC,
+	.conf_dram_type = AST2700_MCFG_DRAM_TYPE,
+	.dram_type = { MEM_DDR4, MEM_DDR5 },
+	.mtype_cap = MEM_FLAG_DDR4 | MEM_FLAG_DDR5,
+	.isr = ast2700_dramc_isr,
+	.set_irq = ast2700_set_irq,
 };
 
 static const struct of_device_id aspeed_of_match[] = {
 	{ .compatible = "aspeed,ast2400-sdram-edac", .data = &ast2400_edac },
 	{ .compatible = "aspeed,ast2500-sdram-edac", .data = &ast2400_edac },
 	{ .compatible = "aspeed,ast2600-sdram-edac", .data = &ast2600_edac },
+	{ .compatible = "aspeed,ast2700-sdram-edac", .data = &ast2700_edac },
 	{},
 };
 
