@@ -44,6 +44,11 @@ properties:
            - 0 (Open-Drain)
            - 1 (Push-Pull)
 
+  vcc-supply: true
+
+  "#cooling-cells":
+    const: 2
+
 patternProperties:
   '^fan@[0-4]$':
     $ref: fan-common.yaml#
