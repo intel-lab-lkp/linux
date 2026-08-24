@@ -1383,7 +1383,7 @@ static int pistachio_gpio_register(struct pistachio_pinctrl *pctl)
 			goto err;
 		}
 
-		if (!fwnode_property_present(child, "gpio-controller")) {
+		if (!fwnode_is_gpiochip(child)) {
 			fwnode_handle_put(child);
 			dev_err(pctl->dev,
 				"No gpio-controller property for bank %u\n", i);
