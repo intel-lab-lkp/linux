@@ -445,55 +445,36 @@ static bool cal_ctx_wr_dma_stopped(struct cal_ctx *ctx)
 	return stopped;
 }
 
-static int
-cal_get_remote_frame_desc_entry(struct cal_ctx *ctx,
-				struct v4l2_mbus_frame_desc_entry *entry)
+int cal_ctx_prepare(struct cal_ctx *ctx)
 {
-	struct v4l2_mbus_frame_desc fd;
 	struct media_pad *phy_source_pad;
-	int ret;
 
 	phy_source_pad = media_pad_remote_pad_first(&ctx->pad);
 	if (!phy_source_pad)
 		return -ENODEV;
 
-	ret = v4l2_subdev_call(&ctx->phy->subdev, pad, get_frame_desc,
-			       phy_source_pad->index, &fd);
-	if (ret)
-		return ret;
+	struct v4l2_mbus_frame_desc *fd __free(v4l2_subdev_free_frame_desc) =
+		v4l2_subdev_get_frame_desc(&ctx->phy->subdev,
+					   phy_source_pad->index,
+					   V4L2_MBUS_FRAME_DESC_TYPE_CSI2);
+	if (IS_ERR(fd))
+		return PTR_ERR(fd);
 
-	if (fd.num_entries != 1)
+	if (fd->num_entries != 1)
 		return -EINVAL;
 
-	*entry = fd.entry[0];
+	ctx_dbg(2, ctx, "Framedesc: stream %u, len %u, vc %u, dt %#x\n",
+		fd->entry[0].stream, fd->entry[0].length,
+		fd->entry[0].bus.csi2.vc, fd->entry[0].bus.csi2.dt);
 
-	return 0;
-}
-
-int cal_ctx_prepare(struct cal_ctx *ctx)
-{
-	struct v4l2_mbus_frame_desc_entry entry;
-	int ret;
-
-	ret = cal_get_remote_frame_desc_entry(ctx, &entry);
-
-	if (ret == -ENOIOCTLCMD) {
-		ctx->vc = 0;
-		ctx->datatype = CAL_CSI2_CTX_DT_ANY;
-	} else if (!ret) {
-		ctx_dbg(2, ctx, "Framedesc: stream %u, len %u, vc %u, dt %#x\n",
-			entry.stream, entry.length, entry.bus.csi2.vc,
-			entry.bus.csi2.dt);
-
-		ctx->vc = entry.bus.csi2.vc;
-		ctx->datatype = entry.bus.csi2.dt;
-	} else {
-		return ret;
-	}
+	ctx->vc = fd->entry[0].bus.csi2.vc;
+	ctx->datatype = fd->entry[0].bus.csi2.dt;
 
 	ctx->use_pix_proc = ctx->vb_vidq.type == V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 	if (ctx->use_pix_proc) {
+		int ret;
+
 		ret = cal_reserve_pix_proc(ctx->cal);
 		if (ret < 0) {
 			ctx_err(ctx, "Failed to reserve pix proc: %d\n", ret);
