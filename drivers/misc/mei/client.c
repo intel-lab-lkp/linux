@@ -695,6 +695,8 @@ int mei_cl_unlink(struct mei_cl *cl)
 	cl->state = MEI_FILE_UNINITIALIZED;
 	cl->writing_state = MEI_IDLE;
 
+	mei_cl_flush_queues(cl, NULL);
+
 	WARN_ON(!list_empty(&cl->rd_completed) ||
 		!list_empty(&cl->rd_pending) ||
 		!list_empty(&cl->link));
