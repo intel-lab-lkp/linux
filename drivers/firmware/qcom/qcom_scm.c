@@ -78,6 +78,8 @@ struct qcom_scm_mem_map_info {
 	__le64 mem_size;
 };
 
+DEFINE_SEMAPHORE(qcom_scm_sem_lock, 1);
+
 /**
  * struct qcom_scm_qseecom_resp - QSEECOM SCM call response.
  * @result:    Result or status of the SCM call. See &enum qcom_scm_qseecom_result.
@@ -2892,6 +2894,8 @@ static int qcom_scm_probe(struct platform_device *pdev)
 			return dev_err_probe(scm->dev, ret,
 					     "Failed to request qcom-scm irq\n");
 	}
+
+	sema_init(&qcom_scm_sem_lock, scm->wq_cnt);
 
 	/*
 	 * Paired with smp_load_acquire() in qcom_scm_is_available().
