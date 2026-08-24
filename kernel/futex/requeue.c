@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <linux/plist.h>
+#include <linux/sched/rt.h>
 #include <linux/sched/signal.h>
 
 #include "futex.h"
@@ -865,7 +866,10 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 	case Q_REQUEUE_PI_DONE:
 		/* Requeue completed. Current is 'pi_blocked_on' the rtmutex */
 		pi_mutex = &q.pi_state->pi_mutex;
+
+		rt_mutex_pre_schedule();
 		ret = rt_mutex_wait_proxy_lock(pi_mutex, to, &rt_waiter);
+		rt_mutex_post_schedule();
 
 		/*
 		 * See futex_unlock_pi()'s cleanup: comment.
