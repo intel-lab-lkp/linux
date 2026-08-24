@@ -752,7 +752,7 @@ EXPORT_SYMBOL_GPL(cper_estatus_check_header);
 int cper_estatus_check(const struct acpi_hest_generic_status *estatus)
 {
 	struct acpi_hest_generic_data *gdata;
-	unsigned int data_len, record_size;
+	unsigned int data_len;
 	int rc;
 
 	rc = cper_estatus_check_header(estatus);
@@ -762,11 +762,21 @@ int cper_estatus_check(const struct acpi_hest_generic_status *estatus)
 	data_len = estatus->data_length;
 
 	apei_estatus_for_each_section(estatus, gdata) {
+		u64 record_size;
+
 		if (acpi_hest_get_size(gdata) > data_len)
 			return -EINVAL;
 
-		record_size = acpi_hest_get_record_size(gdata);
-		if (record_size > data_len)
+		/*
+		 * acpi_hest_get_record_size() sums these as a signed int (see
+		 * <acpi/ghes.h>), which wraps small for a huge
+		 * error_data_length and slips past the check below. Sum in u64,
+		 * and reject what those helpers cannot carry, since the walk
+		 * advances by their return value.
+		 */
+		record_size = (u64)acpi_hest_get_size(gdata) +
+			      gdata->error_data_length;
+		if (record_size > data_len || record_size > INT_MAX)
 			return -EINVAL;
 
 		data_len -= record_size;
