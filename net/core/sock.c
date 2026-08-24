@@ -103,6 +103,8 @@
 #include <linux/sockios.h>
 #include <linux/net.h>
 #include <linux/mm.h>
+#include <linux/swiotlb.h>
+#include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/poll.h>
@@ -152,6 +154,41 @@
 
 #include "dev.h"
 
+#if defined(CONFIG_SWIOTLB) && !defined(CONFIG_PREEMPT_RT)
+
+DEFINE_PER_CPU(struct sock *, current_tx_socket);
+EXPORT_PER_CPU_SYMBOL(current_tx_socket);
+
+void sk_record_bounce_device(struct sock *sk, struct device *dev)
+{
+	struct device *old_dev;
+
+	if (in_hardirq() || !sk_fullsock(sk) || sock_flag(sk, SOCK_ZEROCOPY))
+		return;
+
+	old_dev = rcu_dereference_protected(sk->sk_swiotlb.dev, 1);
+
+	if (dev != old_dev) {
+		/* Rate-limit updates to once per second to prevent bonding thrashing */
+		if (old_dev && time_before(jiffies, sk->sk_swiotlb.jiffies + HZ))
+			return;
+
+		get_device(dev);
+
+		/* Atomically swap in the new device and get the actual old one */
+		old_dev = (struct device *)xchg((struct device __force **)&sk->sk_swiotlb.dev,
+						(struct device __force *)dev);
+
+		WRITE_ONCE(sk->sk_swiotlb.epoch, swiotlb_dev_epoch());
+		sk->sk_swiotlb.jiffies = jiffies;
+
+		/* Only drop the reference to the device we actually replaced */
+		if (old_dev)
+			swiotlb_safe_put_device(old_dev);
+	}
+}
+EXPORT_SYMBOL(sk_record_bounce_device);
+#endif
 static DEFINE_MUTEX(proto_list_mutex);
 static LIST_HEAD(proto_list);
 
@@ -2388,6 +2425,7 @@ static void __sk_destruct(struct rcu_head *head)
 		__netns_tracker_free(net, &sk->ns_tracker, false);
 		net_passive_dec(net);
 	}
+	sk_release_bounce_device(sk);
 	sk_prot_free(sk->sk_prot_creator, sk);
 }
 
@@ -2490,6 +2528,7 @@ struct sock *sk_clone(const struct sock *sk, const gfp_t priority,
 		goto out;
 
 	sock_copy(newsk, sk);
+	sk_clear_bounce_device(newsk);
 
 	newsk->sk_prot_creator = prot;
 #ifdef CONFIG_BPF_SYSCALL

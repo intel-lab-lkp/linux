@@ -3921,6 +3921,7 @@ void device_del(struct device *dev)
 	unsigned int noio_flag;
 
 	device_lock(dev);
+	swiotlb_change_epoch();
 	kill_device(dev);
 	device_unlock(dev);
 

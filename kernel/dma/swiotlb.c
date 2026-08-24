@@ -1683,6 +1683,8 @@ dma_addr_t swiotlb_map(struct device *dev, phys_addr_t paddr, size_t size,
 	phys_addr_t swiotlb_addr;
 	dma_addr_t dma_addr;
 
+	dma_learn_bounce_device(dev);
+
 	trace_swiotlb_bounced(dev, phys_to_dma(dev, paddr), size);
 
 	swiotlb_addr = swiotlb_tbl_map_single(dev, paddr, size, 0, dir, attrs);
@@ -2085,3 +2087,74 @@ bool swiotlb_pool_is_nocopy(struct io_tlb_pool *pool, phys_addr_t paddr)
 	return pool->slots[index].flags & SWIOTLB_SLOT_NOCOPY;
 }
 EXPORT_SYMBOL_GPL(swiotlb_pool_is_nocopy);
+
+/*
+ * Dropping the reference to sk_swiotlb.dev must be done in two steps:
+ *
+ * 1. Readers inspect the pointer inside RCU critical sections without
+ *    acquiring a reference. Use call_rcu() to wait for an RCU grace period
+ *    to elapse so lockless in-flight readers finish accessing the device.
+ *
+ * 2. The RCU callback executes in atomic softirq context, but put_device()
+ *    can block when releasing a device. Use schedule_work() to transition
+ *    to sleepable process context where calling put_device() is safe.
+ */
+struct swiotlb_deferred_put {
+	struct rcu_head rcu;
+	struct work_struct work;
+	struct device *dev;
+};
+
+static void swiotlb_deferred_put_work(struct work_struct *work)
+{
+	struct swiotlb_deferred_put *dp = container_of(work, struct swiotlb_deferred_put, work);
+
+	/* Stage 2: Safely call put_device (can sleep) in process context */
+	put_device(dp->dev);
+	kfree(dp);
+}
+
+static void swiotlb_deferred_put_rcu(struct rcu_head *rcu)
+{
+	struct swiotlb_deferred_put *dp = container_of(rcu, struct swiotlb_deferred_put, rcu);
+
+	/* RCU grace period has passed. Queue the work to do the actual put */
+	schedule_work(&dp->work);
+}
+
+/**
+ * swiotlb_safe_put_device() - Safely release device reference from atomic/interrupt context
+ * @dev: The device structure to release.
+ *
+ * Enqueues a deferred put_device() call on a workqueue using GFP_ATOMIC.
+ * If memory allocation fails, the reference is leaked to avoid an immediate crash.
+ */
+void swiotlb_safe_put_device(struct device *dev)
+{
+	struct swiotlb_deferred_put *dp;
+
+	if (!dev)
+		return;
+
+	/* Lockless fast-path: if we are not the last reference, decrement is safe */
+	if (refcount_dec_not_one(&dev->kobj.kref.refcount))
+		return;
+
+	/*
+	 * On the last reference we must defer the final put_device() to task
+	 * context because it will trigger device_release() which can sleep.
+	 */
+	dp = kmalloc_obj(*dp, GFP_ATOMIC);
+	if (dp) {
+		INIT_WORK(&dp->work, swiotlb_deferred_put_work);
+		dp->dev = dev;
+		/* Stage 1: Wait for RCU readers to finish */
+		call_rcu(&dp->rcu, swiotlb_deferred_put_rcu);
+	} else {
+		pr_warn_ratelimited("swiotlb: failed to allocate deferred put, leaking device ref\n");
+	}
+}
+EXPORT_SYMBOL_GPL(swiotlb_safe_put_device);
+
+atomic_t global_device_epoch = ATOMIC_INIT(1);
+EXPORT_SYMBOL(global_device_epoch);

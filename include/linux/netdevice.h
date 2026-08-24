@@ -5400,13 +5400,34 @@ static inline netdev_tx_t __netdev_start_xmit(const struct net_device_ops *ops,
 	return ops->ndo_start_xmit(skb, dev);
 }
 
+struct sock;
+
+#if defined(CONFIG_SWIOTLB) && !defined(CONFIG_PREEMPT_RT)
+/* Per-CPU pointer to the socket currently performing transmission. Used
+ * to bridge the networking and DMA layers, allowing dma_map_page() to
+ * identify the socket originating the packet and apply SWIOTLB optimizations.
+ */
+DECLARE_PER_CPU(struct sock *, current_tx_socket);
+static inline struct sock *__save_current_tx_socket(struct sock *sk)
+{
+	struct sock *old_sk = this_cpu_read(current_tx_socket);
+
+	this_cpu_write(current_tx_socket, sk);
+	return old_sk;
+}
+#else
+static inline struct sock *__save_current_tx_socket(struct sock *sk) { return NULL; }
+#endif
+
 static inline netdev_tx_t netdev_start_xmit(struct sk_buff *skb, struct net_device *dev,
 					    struct netdev_queue *txq, bool more)
 {
+	struct sock *old_sk = __save_current_tx_socket(skb->sk);
 	const struct net_device_ops *ops = dev->netdev_ops;
 	netdev_tx_t rc;
 
 	rc = __netdev_start_xmit(ops, skb, dev, more);
+	__save_current_tx_socket(old_sk);
 	if (rc == NETDEV_TX_OK)
 		txq_trans_update(dev, txq);
 
