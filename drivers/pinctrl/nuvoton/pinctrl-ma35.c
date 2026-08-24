@@ -1075,7 +1075,7 @@ static int ma35_pinctrl_probe_dt(struct platform_device *pdev, struct ma35_pinct
 	int ret;
 
 	device_for_each_child_node(dev, child) {
-		if (fwnode_property_present(child, "gpio-controller"))
+		if (fwnode_is_gpiochip(child))
 			continue;
 
 		npctl->nfunctions++;
@@ -1096,7 +1096,7 @@ static int ma35_pinctrl_probe_dt(struct platform_device *pdev, struct ma35_pinct
 		return -ENOMEM;
 
 	device_for_each_child_node(dev, child) {
-		if (fwnode_property_present(child, "gpio-controller"))
+		if (fwnode_is_gpiochip(child))
 			continue;
 
 		ret = ma35_pinctrl_parse_functions(child, npctl, idx++);
