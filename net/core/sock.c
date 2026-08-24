@@ -2533,6 +2533,7 @@ struct sock *sk_clone(const struct sock *sk, const gfp_t priority,
 	newsk->sk_reserved_mem  = 0;
 	DEBUG_NET_WARN_ON_ONCE(newsk->sk_drop_counters);
 	sk_drops_reset(newsk);
+	newsk->sk_tsq_flags	= 0;
 	newsk->sk_send_head	= NULL;
 	newsk->sk_userlocks	= sk->sk_userlocks & ~SOCK_BINDPORT_LOCK;
 	atomic_set(&newsk->sk_zckey, 0);
