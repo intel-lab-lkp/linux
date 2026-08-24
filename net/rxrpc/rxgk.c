@@ -251,8 +251,10 @@ static int rxgk_init_connection_security(struct rxrpc_connection *conn,
 					 GFP_NOFS);
 	if (IS_ERR(gk))
 		return PTR_ERR(gk);
+	write_lock(&conn->security_use_lock);
 	conn->rxgk.enctype = gk->krb5->etype;
 	conn->rxgk.keys[gk->key_number & 3] = gk;
+	write_unlock(&conn->security_use_lock);
 
 	switch (conn->security_level) {
 	case RXRPC_SECURITY_PLAIN:
