@@ -2655,9 +2655,10 @@ int __v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 }
 EXPORT_SYMBOL_GPL(__v4l2_subdev_get_frame_desc_passthrough);
 
-int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
-					   unsigned int pad,
-					   struct v4l2_mbus_frame_desc *fd)
+static int
+v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
+				       unsigned int pad,
+				       struct v4l2_mbus_frame_desc *fd)
 {
 	struct v4l2_subdev_state *state;
 	int ret;
@@ -2670,7 +2671,6 @@ int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(v4l2_subdev_get_frame_desc_passthrough);
 
 int v4l2_subdev_get_frame_desc_passthrough_dvp(struct v4l2_subdev *sd,
 					       unsigned int pad,
