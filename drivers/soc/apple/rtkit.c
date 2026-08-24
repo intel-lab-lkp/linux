@@ -439,7 +439,8 @@ static void apple_rtkit_syslog_rx_init(struct apple_rtkit *rtk, u64 msg)
 	rtk->syslog_msg_size = FIELD_GET(APPLE_RTKIT_SYSLOG_MSG_SIZE, msg);
 
 	if (rtk->syslog_msg_size == 0) {
-		dev_warn(rtk->dev, "RTKit: syslog msg_size is zero\n");
+		dev_warn_ratelimited(rtk->dev,
+				     "RTKit: syslog msg_size is zero\n");
 		return;
 	}
 
@@ -464,26 +465,24 @@ static void apple_rtkit_syslog_rx_log(struct apple_rtkit *rtk, u64 msg)
 	int msglen;
 
 	if (!rtk->syslog_msg_buffer || rtk->syslog_msg_size == 0) {
-		dev_warn(
-			rtk->dev,
-			"RTKit: received syslog message but no syslog_msg_buffer\n");
+		dev_warn_ratelimited(rtk->dev,
+				     "RTKit: received syslog message but no syslog_msg_buffer\n");
 		goto done;
 	}
 	if (!rtk->syslog_buffer.size) {
-		dev_warn(
-			rtk->dev,
-			"RTKit: received syslog message but syslog_buffer.size is zero\n");
+		dev_warn_ratelimited(rtk->dev,
+				     "RTKit: received syslog message but syslog_buffer.size is zero\n");
 		goto done;
 	}
 	if (!rtk->syslog_buffer.buffer && !rtk->syslog_buffer.iomem) {
-		dev_warn(
-			rtk->dev,
-			"RTKit: received syslog message but no syslog_buffer.buffer or syslog_buffer.iomem\n");
+		dev_warn_ratelimited(rtk->dev,
+				     "RTKit: received syslog message but no syslog_buffer.buffer or syslog_buffer.iomem\n");
 		goto done;
 	}
 	if (idx >= rtk->syslog_n_entries) {
-		dev_warn(rtk->dev, "RTKit: syslog index %d out of range\n",
-			 idx);
+		dev_warn_ratelimited(rtk->dev,
+				     "RTKit: syslog index %d out of range\n",
+				     idx);
 		goto done;
 	}
 
