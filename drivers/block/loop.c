@@ -20,6 +20,7 @@
 #include <linux/suspend.h>
 #include <linux/freezer.h>
 #include <linux/mutex.h>
+#include <linux/lockdep.h>
 #include <linux/writeback.h>
 #include <linux/completion.h>
 #include <linux/highmem.h>
@@ -37,6 +38,17 @@
 #include <linux/spinlock.h>
 #include <uapi/linux/loop.h>
 
+/*
+ * Lock order:
+ * 1. loop_ctl_mutex: protects loop_index_idr.
+ * 2. disk->open_mutex: gendisk mutex held during open, release, etc.
+ * 3. loop_validate_mutex: global lock for loop_validate_file() check.
+ * 4. lo->lo_mutex: protects loop device configuration and state changes.
+ * 5. q->limits_lock: serializes request queue limits changes.
+ * 6. q->q_usage_counter: acquired by blk_mq_freeze_queue().
+ * 7. lo->lo_work_lock: spinlock protecting worker lists and tree.
+ */
+
 /* Possible states of device */
 enum {
 	Lo_unbound,
@@ -52,21 +64,20 @@ struct loop_device {
 	int		lo_flags;
 	char		lo_file_name[LO_NAME_SIZE];
 
-	struct file	*lo_backing_file;
+	struct file	*lo_backing_file __guarded_by(&lo_mutex);
 	unsigned int	lo_min_dio_size;
 	unsigned int	lo_dio_mem_align;
 	struct block_device *lo_device;
 
 	gfp_t		old_gfp_mask;
 
-	spinlock_t		lo_lock;
-	int			lo_state;
+	int			lo_state __guarded_by(&lo_mutex);
 	spinlock_t              lo_work_lock;
 	struct workqueue_struct *workqueue;
 	struct work_struct      rootcg_work;
-	struct list_head        rootcg_cmd_list;
-	struct list_head        idle_worker_list;
-	struct rb_root          worker_tree;
+	struct list_head        rootcg_cmd_list __guarded_by(&lo_work_lock);
+	struct list_head        idle_worker_list __guarded_by(&lo_work_lock);
+	struct rb_root          worker_tree __guarded_by(&lo_work_lock);
 	struct timer_list       timer;
 	bool			sysfs_inited;
 
@@ -74,6 +85,7 @@ struct loop_device {
 	struct blk_mq_tag_set	tag_set;
 	struct gendisk		*lo_disk;
 	struct mutex		lo_mutex;
+	struct lock_class_key	lo_mutex_key;
 	bool			idr_visible;
 };
 
@@ -91,33 +103,32 @@ struct loop_cmd {
 #define LOOP_IDLE_WORKER_TIMEOUT (60 * HZ)
 #define LOOP_DEFAULT_HW_Q_DEPTH 128
 
-static DEFINE_IDR(loop_index_idr);
 static DEFINE_MUTEX(loop_ctl_mutex);
+static __guarded_by(&loop_ctl_mutex) DEFINE_IDR(loop_index_idr);
 static DEFINE_MUTEX(loop_validate_mutex);
 
 /**
  * loop_global_lock_killable() - take locks for safe loop_validate_file() test
  *
  * @lo: struct loop_device
- * @global: true if @lo is about to bind another "struct loop_device", false otherwise
  *
  * Returns 0 on success, -EINTR otherwise.
  *
- * Since loop_validate_file() traverses on other "struct loop_device" if
- * is_loop_device() is true, we need a global lock for serializing concurrent
+ * Since loop_validate_file() traverses on other "struct loop_device", we need a
+ * global lock for serializing concurrent
  * loop_configure()/loop_change_fd()/__loop_clr_fd() calls.
  */
-static int loop_global_lock_killable(struct loop_device *lo, bool global)
+static int loop_global_lock_killable(struct loop_device *lo)
+	__cond_acquires(0, &loop_validate_mutex)
+	__cond_acquires(0, &lo->lo_mutex)
 {
 	int err;
 
-	if (global) {
-		err = mutex_lock_killable(&loop_validate_mutex);
-		if (err)
-			return err;
-	}
+	err = mutex_lock_killable(&loop_validate_mutex);
+	if (err)
+		return err;
 	err = mutex_lock_killable(&lo->lo_mutex);
-	if (err && global)
+	if (err)
 		mutex_unlock(&loop_validate_mutex);
 	return err;
 }
@@ -126,19 +137,20 @@ static int loop_global_lock_killable(struct loop_device *lo, bool global)
  * loop_global_unlock() - release locks taken by loop_global_lock_killable()
  *
  * @lo: struct loop_device
- * @global: true if @lo was about to bind another "struct loop_device", false otherwise
  */
-static void loop_global_unlock(struct loop_device *lo, bool global)
+static void loop_global_unlock(struct loop_device *lo)
+	__releases(&lo->lo_mutex)
+	__releases(&loop_validate_mutex)
 {
 	mutex_unlock(&lo->lo_mutex);
-	if (global)
-		mutex_unlock(&loop_validate_mutex);
+	mutex_unlock(&loop_validate_mutex);
 }
 
 static int max_part;
 static int part_shift;
 
 static loff_t lo_calculate_size(struct loop_device *lo, struct file *file)
+	__must_hold(&lo->lo_mutex)
 {
 	loff_t loopsize;
 	int ret;
@@ -180,6 +192,7 @@ static loff_t lo_calculate_size(struct loop_device *lo, struct file *file)
  * the backing device.
  */
 static bool lo_can_use_dio(struct loop_device *lo)
+	__must_hold(&lo->lo_mutex)
 {
 	if (!(lo->lo_backing_file->f_mode & FMODE_CAN_ODIRECT))
 		return false;
@@ -199,6 +212,7 @@ static bool lo_can_use_dio(struct loop_device *lo)
  * not the originally passed in one.
  */
 static inline void loop_update_dio(struct loop_device *lo)
+	__must_hold(&lo->lo_mutex)
 {
 	lockdep_assert_held(&lo->lo_mutex);
 	WARN_ON_ONCE(lo->lo_state == Lo_bound &&
@@ -217,6 +231,7 @@ static inline void loop_update_dio(struct loop_device *lo)
  * a sector_t, eg using loop_validate_size()
  */
 static void loop_set_size(struct loop_device *lo, loff_t size)
+	__must_hold(&lo->lo_mutex)
 {
 	if (!set_capacity_and_notify(lo->lo_disk, size))
 		kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
@@ -251,7 +266,7 @@ static int lo_fallocate(struct loop_device *lo, struct request *rq, loff_t pos,
 	 * We use fallocate to manipulate the space mappings used by the image
 	 * a.k.a. discard/zerorange.
 	 */
-	struct file *file = lo->lo_backing_file;
+	struct file *file = context_unsafe(READ_ONCE(lo->lo_backing_file));
 	int ret;
 
 	mode |= FALLOC_FL_KEEP_SIZE;
@@ -275,7 +290,7 @@ static int lo_fallocate(struct loop_device *lo, struct request *rq, loff_t pos,
 
 static int lo_req_flush(struct loop_device *lo, struct request *rq)
 {
-	int ret = vfs_fsync(lo->lo_backing_file, 0);
+	int ret = vfs_fsync(context_unsafe(READ_ONCE(lo->lo_backing_file)), 0);
 	if (unlikely(ret && ret != -EINVAL))
 		ret = -EIO;
 
@@ -344,7 +359,7 @@ static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	struct iov_iter iter;
 	struct req_iterator rq_iter;
 	struct request *rq = blk_mq_rq_from_pdu(cmd);
-	struct file *file = lo->lo_backing_file;
+	struct file *file = context_unsafe(READ_ONCE(lo->lo_backing_file));
 	unsigned int nr_bvec;
 	int ret;
 
@@ -449,6 +464,7 @@ static void loop_reread_partitions(struct loop_device *lo)
 }
 
 static void loop_update_dio_alignment(struct loop_device *lo)
+	__must_hold(&lo->lo_mutex)
 {
 	struct file *file = lo->lo_backing_file;
 	struct block_device *sb_bdev = file->f_mapping->host->i_sb->s_bdev;
@@ -481,39 +497,70 @@ static void loop_update_dio_alignment(struct loop_device *lo)
 	lo->lo_dio_mem_align = SECTOR_SIZE - 1;
 }
 
-static inline int is_loop_device(struct file *file)
+/* Returns the block device that underpins a file.  */
+static inline struct block_device *loop_get_bdev(struct file *file)
 {
-	struct inode *i = file->f_mapping->host;
+	struct inode *inode = file->f_mapping->host;
 
-	return i && S_ISBLK(i->i_mode) && imajor(i) == LOOP_MAJOR;
+	if (S_ISBLK(inode->i_mode))
+		return I_BDEV(inode);
+	if (S_ISREG(inode->i_mode) && inode->i_sb)
+		return inode->i_sb->s_bdev;
+	return NULL;
 }
 
-static int loop_validate_file(struct file *file, struct block_device *bdev)
+static inline bool is_loop_device(struct file *file)
+{
+	struct block_device *bdev = loop_get_bdev(file);
+
+	return bdev && bdev->bd_disk->major == LOOP_MAJOR;
+}
+
+static struct file *loop_get_backing_file(struct loop_device *lo)
+	__must_hold(&lo->lo_mutex)
+{
+	if (lo->lo_state != Lo_bound)
+		return NULL;
+	return get_file(lo->lo_backing_file);
+}
+
+/* Returns 0 if and only if @file is not backed by loop device @bdev. */
+static int loop_validate_file(struct loop_device *lo, struct file *file,
+			      struct block_device *bdev)
+	__must_hold(&lo->lo_mutex)
 {
 	struct inode	*inode = file->f_mapping->host;
 	struct file	*f = file;
 
+	if (!S_ISREG(inode->i_mode) && !S_ISBLK(inode->i_mode))
+		return -EINVAL;
+
+	get_file(f);
 	/* Avoid recursion */
 	while (is_loop_device(f)) {
 		struct loop_device *l;
+		struct file *prev_f = f;
+		struct block_device *f_bdev = loop_get_bdev(f);
 
 		lockdep_assert_held(&loop_validate_mutex);
-		if (f->f_mapping->host->i_rdev == bdev->bd_dev)
+		if (f_bdev->bd_disk == bdev->bd_disk) {
+			fput(f);
 			return -EBADF;
+		}
 
-		l = I_BDEV(f->f_mapping->host)->bd_disk->private_data;
-		if (l->lo_state != Lo_bound)
+		l = f_bdev->bd_disk->private_data;
+		scoped_guard(mutex, &l->lo_mutex)
+			f = loop_get_backing_file(l);
+		fput(prev_f);
+		if (!f)
 			return -EINVAL;
-		/* Order wrt setting lo->lo_backing_file in loop_configure(). */
-		rmb();
-		f = l->lo_backing_file;
 	}
-	if (!S_ISREG(inode->i_mode) && !S_ISBLK(inode->i_mode))
-		return -EINVAL;
+	fput(f);
 	return 0;
 }
 
 static void loop_assign_backing_file(struct loop_device *lo, struct file *file)
+	__must_hold(&lo->lo_mutex)
 {
 	lo->lo_backing_file = file;
 	lo->old_gfp_mask = mapping_gfp_mask(file->f_mapping);
@@ -531,6 +578,50 @@ static int loop_check_backing_file(struct file *file)
 
 	if ((file->f_mode & FMODE_WRITE) && !file->f_op->write_iter)
 		return -EINVAL;
+
+	return 0;
+}
+
+static int __loop_change_fd(struct loop_device *lo, struct block_device *bdev,
+			    struct file *file, struct file **old_file,
+			    bool *partscan)
+	__must_hold(&lo->lo_mutex)
+{
+	unsigned int memflags;
+	int error;
+
+	if (lo->lo_state != Lo_bound)
+		return -ENXIO;
+
+	/* the loop device has to be read-only */
+	if (!(lo->lo_flags & LO_FLAGS_READ_ONLY))
+		return -EINVAL;
+
+	error = loop_validate_file(lo, file, bdev);
+	if (error)
+		return error;
+
+	*old_file = lo->lo_backing_file;
+
+	/* size of the new backing store needs to be the same */
+	if (lo_calculate_size(lo, file) != lo_calculate_size(lo, *old_file))
+		return -EINVAL;
+
+	/*
+	 * We might switch to direct I/O mode for the loop device, write back
+	 * all dirty data the page cache now that so that the individual I/O
+	 * operations don't have to do that.
+	 */
+	vfs_fsync(file, 0);
+
+	/* and ... switch */
+	disk_force_media_change(lo->lo_disk);
+	memflags = blk_mq_freeze_queue(lo->lo_queue);
+	mapping_set_gfp_mask((*old_file)->f_mapping, lo->old_gfp_mask);
+	loop_assign_backing_file(lo, file);
+	loop_update_dio(lo);
+	blk_mq_unfreeze_queue(lo->lo_queue, memflags);
+	*partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
 
 	return 0;
 }
@@ -566,46 +657,21 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 1);
 
 	is_loop = is_loop_device(file);
-	error = loop_global_lock_killable(lo, is_loop);
+	if (is_loop) {
+		error = loop_global_lock_killable(lo);
+		if (error)
+			goto out_putf;
+		error = __loop_change_fd(lo, bdev, file, &old_file, &partscan);
+		loop_global_unlock(lo);
+	} else {
+		error = mutex_lock_killable(&lo->lo_mutex);
+		if (error)
+			goto out_putf;
+		error = __loop_change_fd(lo, bdev, file, &old_file, &partscan);
+		mutex_unlock(&lo->lo_mutex);
+	}
 	if (error)
 		goto out_putf;
-	error = -ENXIO;
-	if (lo->lo_state != Lo_bound)
-		goto out_err;
-
-	/* the loop device has to be read-only */
-	error = -EINVAL;
-	if (!(lo->lo_flags & LO_FLAGS_READ_ONLY))
-		goto out_err;
-
-	error = loop_validate_file(file, bdev);
-	if (error)
-		goto out_err;
-
-	old_file = lo->lo_backing_file;
-
-	error = -EINVAL;
-
-	/* size of the new backing store needs to be the same */
-	if (lo_calculate_size(lo, file) != lo_calculate_size(lo, old_file))
-		goto out_err;
-
-	/*
-	 * We might switch to direct I/O mode for the loop device, write back
-	 * all dirty data the page cache now that so that the individual I/O
-	 * operations don't have to do that.
-	 */
-	vfs_fsync(file, 0);
-
-	/* and ... switch */
-	disk_force_media_change(lo->lo_disk);
-	memflags = blk_mq_freeze_queue(lo->lo_queue);
-	mapping_set_gfp_mask(old_file->f_mapping, lo->old_gfp_mask);
-	loop_assign_backing_file(lo, file);
-	loop_update_dio(lo);
-	blk_mq_unfreeze_queue(lo->lo_queue, memflags);
-	partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
-	loop_global_unlock(lo, is_loop);
 
 	/*
 	 * Flush loop_validate_file() before fput(), for l->lo_backing_file
@@ -615,12 +681,16 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 		mutex_lock(&loop_validate_mutex);
 		mutex_unlock(&loop_validate_mutex);
 	}
+
 	/*
-	 * We must drop file reference outside of lo_mutex as dropping
-	 * the file ref can take open_mutex which creates circular locking
-	 * dependency.
+	 * Freeze and unfreeze the request queue to wait until old_file is
+	 * no longer in use by the I/O path.
 	 */
+	memflags = blk_mq_freeze_queue(lo->lo_queue);
+	blk_mq_unfreeze_queue(lo->lo_queue, memflags);
+
 	fput(old_file);
+
 	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
 	if (partscan)
 		loop_reread_partitions(lo);
@@ -630,8 +700,6 @@ done:
 	kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
 	return error;
 
-out_err:
-	loop_global_unlock(lo, is_loop);
 out_putf:
 	fput(file);
 	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
@@ -664,10 +732,9 @@ static ssize_t loop_attr_backing_file_show(struct loop_device *lo, char *buf)
 	ssize_t ret;
 	char *p = NULL;
 
-	spin_lock_irq(&lo->lo_lock);
-	if (lo->lo_backing_file)
-		p = file_path(lo->lo_backing_file, buf, PAGE_SIZE - 1);
-	spin_unlock_irq(&lo->lo_lock);
+	scoped_guard(mutex, &lo->lo_mutex)
+		if (lo->lo_backing_file)
+			p = file_path(lo->lo_backing_file, buf, PAGE_SIZE - 1);
 
 	if (IS_ERR_OR_NULL(p))
 		ret = PTR_ERR(p);
@@ -749,6 +816,7 @@ static void loop_sysfs_exit(struct loop_device *lo)
 
 static void loop_get_discard_config(struct loop_device *lo,
 				    u32 *granularity, u32 *max_discard_sectors)
+	__must_hold(&lo->lo_mutex)
 {
 	struct file *file = lo->lo_backing_file;
 	struct inode *inode = file->f_mapping->host;
@@ -915,6 +983,7 @@ static void loop_free_idle_workers_timer(struct timer_list *timer)
 static int
 loop_set_status_from_info(struct loop_device *lo,
 			  const struct loop_info64 *info)
+	__must_hold(&lo->lo_mutex)
 {
 	if ((unsigned int) info->lo_encrypt_key_size > LO_KEY_SIZE)
 		return -EINVAL;
@@ -953,6 +1022,7 @@ static unsigned int loop_default_blocksize(struct loop_device *lo)
 }
 
 static void loop_set_dma_limit(struct loop_device *lo, struct queue_limits *lim)
+	__must_hold(&lo->lo_mutex)
 {
 	/*
 	 * Direct I/O forwards the user pages to the backing file unchanged, so
@@ -967,6 +1037,7 @@ static void loop_set_dma_limit(struct loop_device *lo, struct queue_limits *lim)
 
 static void loop_update_limits(struct loop_device *lo, struct queue_limits *lim,
 		unsigned int bsize)
+	__must_hold(&lo->lo_mutex)
 {
 	struct file *file = lo->lo_backing_file;
 	struct inode *inode = file->f_mapping->host;
@@ -1000,14 +1071,91 @@ static void loop_update_limits(struct loop_device *lo, struct queue_limits *lim,
 		lim->discard_granularity = 0;
 }
 
+static int __loop_configure(struct loop_device *lo, blk_mode_t mode,
+			    struct block_device *bdev,
+			    const struct loop_config *config, struct file *file,
+			    bool *partscan)
+	__must_hold(&lo->lo_mutex)
+{
+	struct queue_limits lim;
+	loff_t size;
+	int error;
+
+	if (lo->lo_state != Lo_unbound)
+		return -EBUSY;
+
+	error = loop_validate_file(lo, file, bdev);
+	if (error)
+		return error;
+
+	if ((config->info.lo_flags & ~LOOP_CONFIGURE_SETTABLE_FLAGS) != 0)
+		return -EINVAL;
+
+	error = loop_set_status_from_info(lo, &config->info);
+	if (error)
+		return error;
+	lo->lo_flags = config->info.lo_flags;
+
+	if (!(file->f_mode & FMODE_WRITE) || !(mode & BLK_OPEN_WRITE) ||
+	    !file->f_op->write_iter)
+		lo->lo_flags |= LO_FLAGS_READ_ONLY;
+
+	if (!lo->workqueue) {
+		lo->workqueue = alloc_workqueue("loop%d",
+						WQ_UNBOUND | WQ_FREEZABLE,
+						0, lo->lo_number);
+		if (!lo->workqueue)
+			return -ENOMEM;
+	}
+
+	/* suppress uevents while reconfiguring the device */
+	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 1);
+
+	disk_force_media_change(lo->lo_disk);
+	set_disk_ro(lo->lo_disk, (lo->lo_flags & LO_FLAGS_READ_ONLY) != 0);
+
+	lo->lo_device = bdev;
+	loop_assign_backing_file(lo, file);
+
+	lim = queue_limits_start_update(lo->lo_queue);
+	loop_update_limits(lo, &lim, config->block_size);
+	/* No need to freeze the queue as the device isn't bound yet. */
+	error = queue_limits_commit_update(lo->lo_queue, &lim);
+	if (error)
+		return error;
+
+	/*
+	 * We might switch to direct I/O mode for the loop device, write back
+	 * all dirty data the page cache now that so that the individual I/O
+	 * operations don't have to do that.
+	 */
+	vfs_fsync(file, 0);
+
+	loop_update_dio(lo);
+	loop_sysfs_init(lo);
+
+	size = lo_calculate_size(lo, file);
+	loop_set_size(lo, size);
+
+	WRITE_ONCE(lo->lo_state, Lo_bound);
+	if (part_shift)
+		lo->lo_flags |= LO_FLAGS_PARTSCAN;
+	*partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
+	if (*partscan)
+		clear_bit(GD_SUPPRESS_PART_SCAN, &lo->lo_disk->state);
+
+	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
+	kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
+
+	return 0;
+}
+
 static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 			  struct block_device *bdev,
 			  const struct loop_config *config)
 {
 	struct file *file = fget(config->fd);
-	struct queue_limits lim;
 	int error;
-	loff_t size;
 	bool partscan;
 	bool is_loop;
 
@@ -1035,85 +1183,23 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 			goto out_putf;
 	}
 
-	error = loop_global_lock_killable(lo, is_loop);
+	if (is_loop) {
+		error = loop_global_lock_killable(lo);
+		if (error)
+			goto out_bdev;
+		error = __loop_configure(lo, mode, bdev, config, file,
+					 &partscan);
+		loop_global_unlock(lo);
+	} else {
+		error = mutex_lock_killable(&lo->lo_mutex);
+		if (error)
+			goto out_bdev;
+		error = __loop_configure(lo, mode, bdev, config, file,
+					 &partscan);
+		mutex_unlock(&lo->lo_mutex);
+	}
 	if (error)
 		goto out_bdev;
-
-	error = -EBUSY;
-	if (lo->lo_state != Lo_unbound)
-		goto out_unlock;
-
-	error = loop_validate_file(file, bdev);
-	if (error)
-		goto out_unlock;
-
-	if ((config->info.lo_flags & ~LOOP_CONFIGURE_SETTABLE_FLAGS) != 0) {
-		error = -EINVAL;
-		goto out_unlock;
-	}
-
-	error = loop_set_status_from_info(lo, &config->info);
-	if (error)
-		goto out_unlock;
-	lo->lo_flags = config->info.lo_flags;
-
-	if (!(file->f_mode & FMODE_WRITE) || !(mode & BLK_OPEN_WRITE) ||
-	    !file->f_op->write_iter)
-		lo->lo_flags |= LO_FLAGS_READ_ONLY;
-
-	if (!lo->workqueue) {
-		lo->workqueue = alloc_workqueue("loop%d",
-						WQ_UNBOUND | WQ_FREEZABLE,
-						0, lo->lo_number);
-		if (!lo->workqueue) {
-			error = -ENOMEM;
-			goto out_unlock;
-		}
-	}
-
-	/* suppress uevents while reconfiguring the device */
-	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 1);
-
-	disk_force_media_change(lo->lo_disk);
-	set_disk_ro(lo->lo_disk, (lo->lo_flags & LO_FLAGS_READ_ONLY) != 0);
-
-	lo->lo_device = bdev;
-	loop_assign_backing_file(lo, file);
-
-	lim = queue_limits_start_update(lo->lo_queue);
-	loop_update_limits(lo, &lim, config->block_size);
-	/* No need to freeze the queue as the device isn't bound yet. */
-	error = queue_limits_commit_update(lo->lo_queue, &lim);
-	if (error)
-		goto out_unlock;
-
-	/*
-	 * We might switch to direct I/O mode for the loop device, write back
-	 * all dirty data the page cache now that so that the individual I/O
-	 * operations don't have to do that.
-	 */
-	vfs_fsync(file, 0);
-
-	loop_update_dio(lo);
-	loop_sysfs_init(lo);
-
-	size = lo_calculate_size(lo, file);
-	loop_set_size(lo, size);
-
-	/* Order wrt reading lo_state in loop_validate_file(). */
-	wmb();
-
-	WRITE_ONCE(lo->lo_state, Lo_bound);
-	if (part_shift)
-		lo->lo_flags |= LO_FLAGS_PARTSCAN;
-	partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
-	if (partscan)
-		clear_bit(GD_SUPPRESS_PART_SCAN, &lo->lo_disk->state);
-
-	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
-	kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
-
-	loop_global_unlock(lo, is_loop);
 	if (partscan)
 		loop_reread_partitions(lo);
 
@@ -1122,8 +1208,6 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 
 	return 0;
 
-out_unlock:
-	loop_global_unlock(lo, is_loop);
 out_bdev:
 	if (!(mode & BLK_OPEN_EXCL))
 		bd_abort_claiming(bdev, loop_configure);
@@ -1139,29 +1223,27 @@ static void __loop_clr_fd(struct loop_device *lo)
 	struct queue_limits lim;
 	struct file *filp;
 	gfp_t gfp = lo->old_gfp_mask;
+	unsigned int memflags;
 	int err;
 
-	spin_lock_irq(&lo->lo_lock);
+	mutex_lock(&lo->lo_mutex);
+	lim = queue_limits_start_update(lo->lo_queue);
+	memflags = blk_mq_freeze_queue(lo->lo_queue);
 	filp = lo->lo_backing_file;
 	lo->lo_backing_file = NULL;
-	spin_unlock_irq(&lo->lo_lock);
 
 	lo->lo_device = NULL;
 	lo->lo_offset = 0;
 	lo->lo_sizelimit = 0;
 	memset(lo->lo_file_name, 0, LO_NAME_SIZE);
 
-	/*
-	 * Reset the block size to the default.
-	 *
-	 * No queue freezing needed because this is called from the final
-	 * ->release call only, so there can't be any outstanding I/O.
-	 */
-	lim = queue_limits_start_update(lo->lo_queue);
+	/* Reset the block size to the default. */
 	lim.logical_block_size = SECTOR_SIZE;
 	lim.physical_block_size = SECTOR_SIZE;
 	lim.io_min = SECTOR_SIZE;
 	queue_limits_commit_update(lo->lo_queue, &lim);
+	blk_mq_unfreeze_queue(lo->lo_queue, memflags);
+	mutex_unlock(&lo->lo_mutex);
 
 	invalidate_disk(lo->lo_disk);
 	loop_sysfs_exit(lo);
@@ -1220,11 +1302,11 @@ static int loop_clr_fd(struct loop_device *lo)
 	 * which loop_configure()/loop_change_fd() found via fget() was this
 	 * loop device.
 	 */
-	err = loop_global_lock_killable(lo, true);
+	err = loop_global_lock_killable(lo);
 	if (err)
 		return err;
 	if (lo->lo_state != Lo_bound) {
-		loop_global_unlock(lo, true);
+		loop_global_unlock(lo);
 		return -ENXIO;
 	}
 	/*
@@ -1236,7 +1318,7 @@ static int loop_clr_fd(struct loop_device *lo)
 	lo->lo_flags |= LO_FLAGS_AUTOCLEAR;
 	if (disk_openers(lo->lo_disk) == 1)
 		WRITE_ONCE(lo->lo_state, Lo_rundown);
-	loop_global_unlock(lo, true);
+	loop_global_unlock(lo);
 
 	return 0;
 }
@@ -1422,6 +1504,7 @@ loop_get_status64(struct loop_device *lo, struct loop_info64 __user *arg) {
 }
 
 static int loop_set_capacity(struct loop_device *lo)
+	__must_hold(&lo->lo_mutex)
 {
 	loff_t size;
 
@@ -1435,6 +1518,7 @@ static int loop_set_capacity(struct loop_device *lo)
 }
 
 static int loop_set_dio(struct loop_device *lo, unsigned long arg)
+	__must_hold(&lo->lo_mutex)
 {
 	bool use_dio = !!arg;
 	unsigned int memflags;
@@ -1782,6 +1866,7 @@ static void lo_free_disk(struct gendisk *disk)
 	loop_free_idle_workers(lo, true);
 	timer_shutdown_sync(&lo->timer);
 	mutex_destroy(&lo->lo_mutex);
+	lockdep_unregister_key(&lo->lo_mutex_key);
 	kfree(lo);
 }
 
@@ -1966,13 +2051,15 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 }
 
 static void loop_process_work(struct loop_worker *worker,
-			struct list_head *cmd_list, struct loop_device *lo)
+			      struct loop_device *lo, bool rootcg)
 {
 	int orig_flags = current->flags;
+	struct list_head *cmd_list;
 	struct loop_cmd *cmd;
 
 	current->flags |= PF_LOCAL_THROTTLE | PF_MEMALLOC_NOIO;
 	spin_lock_irq(&lo->lo_work_lock);
+	cmd_list = rootcg ? &lo->rootcg_cmd_list : &worker->cmd_list;
 	while (!list_empty(cmd_list)) {
 		cmd = container_of(
 			cmd_list->next, struct loop_cmd, list_entry);
@@ -2003,14 +2090,14 @@ static void loop_workfn(struct work_struct *work)
 {
 	struct loop_worker *worker =
 		container_of(work, struct loop_worker, work);
-	loop_process_work(worker, &worker->cmd_list, worker->lo);
+	loop_process_work(worker, worker->lo, false);
 }
 
 static void loop_rootcg_workfn(struct work_struct *work)
 {
 	struct loop_device *lo =
 		container_of(work, struct loop_device, rootcg_work);
-	loop_process_work(NULL, &lo->rootcg_cmd_list, lo);
+	loop_process_work(NULL, lo, true);
 }
 
 static const struct blk_mq_ops loop_mq_ops = {
@@ -2034,10 +2121,10 @@ static int loop_add(int i)
 	lo = kzalloc_obj(*lo);
 	if (!lo)
 		goto out;
-	lo->worker_tree = RB_ROOT;
-	INIT_LIST_HEAD(&lo->idle_worker_list);
+	context_unsafe(lo->worker_tree = RB_ROOT);
+	context_unsafe(INIT_LIST_HEAD(&lo->idle_worker_list));
 	timer_setup(&lo->timer, loop_free_idle_workers_timer, TIMER_DEFERRABLE);
-	WRITE_ONCE(lo->lo_state, Lo_unbound);
+	context_unsafe(WRITE_ONCE(lo->lo_state, Lo_unbound));
 
 	err = mutex_lock_killable(&loop_ctl_mutex);
 	if (err)
@@ -2095,12 +2182,12 @@ static int loop_add(int i)
 	 */
 	if (!part_shift)
 		set_bit(GD_SUPPRESS_PART_SCAN, &disk->state);
-	mutex_init(&lo->lo_mutex);
+	lockdep_register_key(&lo->lo_mutex_key);
+	mutex_init_with_key(&lo->lo_mutex, &lo->lo_mutex_key);
 	lo->lo_number		= i;
-	spin_lock_init(&lo->lo_lock);
 	spin_lock_init(&lo->lo_work_lock);
 	INIT_WORK(&lo->rootcg_work, loop_rootcg_workfn);
-	INIT_LIST_HEAD(&lo->rootcg_cmd_list);
+	context_unsafe(INIT_LIST_HEAD(&lo->rootcg_cmd_list));
 	disk->major		= LOOP_MAJOR;
 	disk->first_minor	= i << part_shift;
 	disk->minors		= 1 << part_shift;
@@ -2332,6 +2419,7 @@ static void __exit loop_exit(void)
 	 * module unloading is requested). If this is not a clean unloading,
 	 * we have no means to avoid kernel crash.
 	 */
+	__assume_ctx_lock(&loop_ctl_mutex);
 	idr_for_each_entry(&loop_index_idr, lo, id)
 		loop_remove(lo);
 
