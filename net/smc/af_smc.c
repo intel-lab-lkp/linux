@@ -1833,10 +1833,14 @@ struct sock *smc_accept_dequeue(struct sock *parent,
 		smc_accept_unlink(new_sk);
 		if (new_sk->sk_state == SMC_CLOSED) {
 			new_sk->sk_prot->unhash(new_sk);
+			mutex_lock(&isk->clcsock_release_lock);
 			if (isk->clcsock) {
-				sock_release(isk->clcsock);
+				struct socket *clcsock = isk->clcsock;
+
 				isk->clcsock = NULL;
+				sock_release(clcsock);
 			}
+			mutex_unlock(&isk->clcsock_release_lock);
 			sock_put(new_sk); /* final */
 			continue;
 		}
