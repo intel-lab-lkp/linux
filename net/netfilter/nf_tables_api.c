@@ -1978,7 +1978,7 @@ nla_put_failure:
 	return -ENOSPC;
 }
 
-static bool hook_is_prefix(struct nft_hook *hook)
+static bool hook_is_prefix(const struct nft_hook *hook)
 {
 	return strlen(hook->ifname) >= hook->ifnamelen;
 }
@@ -2447,6 +2447,27 @@ static struct nft_hook *nft_hook_list_find(struct list_head *hook_list,
 	list_for_each_entry(hook, hook_list, list) {
 		if (!strncmp(hook->ifname, this->ifname,
 			     min(hook->ifnamelen, this->ifnamelen))) {
+			if (hook->flags & NFT_HOOK_REMOVE)
+				continue;
+
+			return hook;
+		}
+	}
+
+	return NULL;
+}
+
+static struct nft_hook *nft_hook_list_find_strict(struct list_head *hook_list,
+						  const struct nft_hook *this)
+{
+	struct nft_hook *hook;
+
+	list_for_each_entry(hook, hook_list, list) {
+		if (hook_is_prefix(hook) != hook_is_prefix(this))
+			continue;
+		if (hook->ifnamelen != this->ifnamelen)
+			continue;
+		if (!strncmp(hook->ifname, this->ifname, hook->ifnamelen)) {
 			if (hook->flags & NFT_HOOK_REMOVE)
 				continue;
 
@@ -3257,7 +3278,7 @@ static int nft_delchain_hook(struct nft_ctx *ctx,
 		return err;
 
 	list_for_each_entry(this, &chain_hook.list, list) {
-		hook = nft_hook_list_find(&basechain->hook_list, this);
+		hook = nft_hook_list_find_strict(&basechain->hook_list, this);
 		if (!hook) {
 			err = -ENOENT;
 			goto err_chain_del_hook;
@@ -9383,7 +9404,7 @@ static int nft_delflowtable_hook(struct nft_ctx *ctx,
 		return err;
 
 	list_for_each_entry(this, &flowtable_hook.list, list) {
-		hook = nft_hook_list_find(&flowtable->hook_list, this);
+		hook = nft_hook_list_find_strict(&flowtable->hook_list, this);
 		if (!hook) {
 			err = -ENOENT;
 			goto err_flowtable_del_hook;
