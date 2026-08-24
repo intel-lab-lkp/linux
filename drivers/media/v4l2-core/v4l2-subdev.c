@@ -2558,6 +2558,7 @@ int __v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 					     unsigned int pad,
 					     struct v4l2_mbus_frame_desc *fd)
 {
+	struct v4l2_mbus_frame_desc *source_fd = NULL;
 	struct media_pad *local_sink_pad;
 	struct v4l2_subdev_route *route;
 	struct device *dev = sd->dev;
@@ -2599,9 +2600,6 @@ int __v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 
 	/* Iterate over sink pads */
 	media_entity_for_each_pad(&sd->entity, local_sink_pad) {
-		struct v4l2_mbus_frame_desc source_fd;
-		bool have_source_fd = false;
-
 		if (!(local_sink_pad->flags & MEDIA_PAD_FL_SINK))
 			continue;
 
@@ -2618,7 +2616,7 @@ int __v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 			    route->sink_pad != local_sink_pad->index)
 				continue;
 
-			if (!have_source_fd) {
+			if (!source_fd) {
 				remote_source_pad = media_pad_remote_pad_unique(local_sink_pad);
 				if (IS_ERR(remote_source_pad)) {
 					dev_dbg(dev, "Failed to find remote pad for sink pad %u\n",
@@ -2633,33 +2631,31 @@ int __v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 					goto err_free;
 				}
 
-				ret = v4l2_subdev_call(remote_sd, pad,
-						       get_frame_desc,
-						       remote_source_pad->index,
-						       &source_fd);
-				if (ret) {
+				source_fd = v4l2_subdev_get_frame_desc(remote_sd,
+								       remote_source_pad->index,
+								       fd->type);
+				if (IS_ERR(source_fd)) {
+					ret = PTR_ERR(source_fd);
 					dev_err(dev,
 						"Failed to get frame desc from remote subdev %s\n",
 						remote_sd->name);
 					goto err_free;
 				}
 
-				have_source_fd = true;
-
 				if (fd->num_entries == 0) {
-					fd->type = source_fd.type;
-				} else if (fd->type != source_fd.type) {
+					fd->type = source_fd->type;
+				} else if (fd->type != source_fd->type) {
 					dev_err(dev,
 						"Frame desc type mismatch: %u != %u\n",
-						fd->type, source_fd.type);
+						fd->type, source_fd->type);
 					ret = -EPIPE;
 					goto err_free;
 				}
 			}
 
-			for (unsigned int i = 0; i < source_fd.num_entries; i++) {
-				if (source_fd.entry[i].stream == route->sink_stream) {
-					source_entry = &source_fd.entry[i];
+			for (unsigned int i = 0; i < source_fd->num_entries; i++) {
+				if (source_fd->entry[i].stream == route->sink_stream) {
+					source_entry = &source_fd->entry[i];
 					break;
 				}
 			}
@@ -2684,11 +2680,15 @@ int __v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 
 			fd->num_entries++;
 		}
+
+		v4l2_subdev_free_frame_desc(source_fd);
+		source_fd = NULL;
 	}
 
 	return 0;
 
 err_free:
+	v4l2_subdev_free_frame_desc(source_fd);
 	kfree(fd->entry);
 	fd->entry = fd->entry_mem;
 	fd->num_entries = 0;
