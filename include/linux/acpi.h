@@ -62,6 +62,8 @@ static inline acpi_handle acpi_device_handle(struct acpi_device *adev)
 #define ACPI_HANDLE_FWNODE(fwnode)	\
 				acpi_device_handle(to_acpi_device_node(fwnode))
 
+DEFINE_FREE(ACPI_FREE, void *, ACPI_FREE(_T))
+
 static inline struct fwnode_handle *acpi_alloc_fwnode_static(void)
 {
 	struct fwnode_handle *fwnode;
