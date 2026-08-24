@@ -2192,8 +2192,7 @@ int rockchip_vpu981_av1_dec_run(struct hantro_ctx *ctx)
 	return 0;
 
 prepare_error:
-	hantro_end_prepare_run(ctx);
-	hantro_irq_done(vpu, VB2_BUF_STATE_ERROR);
+	hantro_abort_prepare_run(ctx);
 	return ret;
 }
 

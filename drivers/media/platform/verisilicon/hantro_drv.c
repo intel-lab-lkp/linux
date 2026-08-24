@@ -147,6 +147,18 @@ void hantro_start_prepare_run(struct hantro_ctx *ctx)
 	}
 }
 
+/**
+ * hantro_end_prepare_run() - finish the preparation of a job and arm the
+ *			      watchdog
+ * @ctx:	context the job belongs to
+ *
+ * Complete the controls of the request that hantro_start_prepare_run() set up
+ * and arm the watchdog. The caller must go on and start the hardware, as only
+ * the interrupt handler disarms the watchdog again.
+ *
+ * A ->run() operation that gives up before the hardware is started must call
+ * hantro_abort_prepare_run() instead.
+ */
 void hantro_end_prepare_run(struct hantro_ctx *ctx)
 {
 	struct vb2_v4l2_buffer *src_buf;
@@ -167,6 +179,21 @@ void hantro_end_prepare_run(struct hantro_ctx *ctx)
 			      msecs_to_jiffies(2000));
 }
 
+/**
+ * hantro_abort_prepare_run() - give up on a job before the hardware is started
+ * @ctx:	context the job belongs to
+ *
+ * Counterpart of hantro_end_prepare_run() for the error paths of ->run().
+ */
+void hantro_abort_prepare_run(struct hantro_ctx *ctx)
+{
+	struct vb2_v4l2_buffer *src_buf;
+
+	src_buf = hantro_get_src_buf(ctx);
+	v4l2_ctrl_request_complete(src_buf->vb2_buf.req_obj.req,
+				   &ctx->ctrl_handler);
+}
+
 static void device_run(void *priv)
 {
 	struct hantro_ctx *ctx = priv;
@@ -182,15 +209,19 @@ static void device_run(void *priv)
 
 	ret = clk_bulk_enable(ctx->dev->variant->num_clocks, ctx->dev->clocks);
 	if (ret)
-		goto err_cancel_job;
+		goto err_pm_put;
 
 	v4l2_m2m_buf_copy_metadata(src, dst);
 
 	if (ctx->codec_ops->run(ctx))
-		goto err_cancel_job;
+		goto err_clk_disable;
 
 	return;
 
+err_clk_disable:
+	clk_bulk_disable(ctx->dev->variant->num_clocks, ctx->dev->clocks);
+err_pm_put:
+	pm_runtime_put_autosuspend(ctx->dev->dev);
 err_cancel_job:
 	hantro_job_finish_no_pm(ctx->dev, ctx, VB2_BUF_STATE_ERROR);
 }
