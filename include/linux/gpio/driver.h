@@ -883,9 +883,14 @@ static inline void gpiochip_unlock_as_irq(struct gpio_chip *gc,
 }
 #endif /* CONFIG_GPIOLIB */
 
+static inline bool fwnode_is_gpiochip(struct fwnode_handle *fwnode)
+{
+	return fwnode_property_present(child, "gpio-controller");
+}
+
 #define for_each_gpiochip_node(dev, child)					\
 	device_for_each_child_node(dev, child)					\
-		for_each_if(fwnode_property_present(child, "gpio-controller"))
+		for_each_if(fwnode_is_gpiochip(child))
 
 static inline unsigned int gpiochip_node_count(struct device *dev)
 {
