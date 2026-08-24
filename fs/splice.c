@@ -1009,21 +1009,14 @@ ssize_t vfs_splice_read(struct file *in, loff_t *ppos,
 }
 EXPORT_SYMBOL_GPL(vfs_splice_read);
 
-/**
- * splice_direct_to_actor - splices data directly between two non-pipes
- * @in:		file to splice from
- * @sd:		actor information on where to splice to
- * @actor:	handles the data splicing
- *
- * Description:
- *    This is a special case helper to splice directly between two
- *    points, without requiring an explicit pipe. Internally an allocated
- *    pipe is cached in the process, and reused during the lifetime of
- *    that process.
- *
+/*
+ * This is a special case helper to splice directly between two
+ * points, without requiring an explicit pipe. Internally an allocated
+ * pipe is cached in the process, and reused during the lifetime of
+ * that process.
  */
-ssize_t splice_direct_to_actor(struct file *in, struct splice_desc *sd,
-			       splice_direct_actor *actor)
+static ssize_t splice_direct_to_actor(struct file *in, struct splice_desc *sd,
+				      splice_direct_actor *actor)
 {
 	struct pipe_inode_info *pipe;
 	ssize_t ret, bytes;
@@ -1147,7 +1140,40 @@ out_release:
 
 	goto done;
 }
-EXPORT_SYMBOL(splice_direct_to_actor);
+
+/**
+ * vfs_splice_direct_to_actor - splice from a file through a caller's actor
+ * @in:		file to splice from; must be seekable (FMODE_LSEEK)
+ * @sd:		splice parameters. The caller sets @sd->pos and
+ *		@sd->total_len. @sd->pos advances as data is consumed,
+ *		and @sd->total_len is overwritten with the length of
+ *		each read.
+ * @actor:	consumes each pipe-full and returns the number of
+ *		bytes taken
+ *
+ * Description:
+ *    Splice from @in through @actor, for a caller that consumes
+ *    the data itself rather than sending it to a second file.
+ *    This helper verifies the read and emits the fsnotify access
+ *    event. do_splice_direct() leaves both to its callers.
+ *
+ * Return: The number of bytes spliced, or a negative errno.
+ */
+ssize_t vfs_splice_direct_to_actor(struct file *in, struct splice_desc *sd,
+				   splice_direct_actor *actor)
+{
+	ssize_t ret;
+
+	ret = rw_verify_area(READ, in, &sd->pos, sd->total_len);
+	if (ret < 0)
+		return ret;
+
+	ret = splice_direct_to_actor(in, sd, actor);
+	if (ret >= 0)
+		fsnotify_access(in);
+	return ret;
+}
+EXPORT_SYMBOL(vfs_splice_direct_to_actor);
 
 static int direct_splice_actor(struct pipe_inode_info *pipe,
 			       struct splice_desc *sd)
