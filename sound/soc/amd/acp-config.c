@@ -387,8 +387,8 @@ struct snd_soc_acpi_mach snd_soc_acpi_amd_acp7x_sof_machines[] = {
 		.pdata = &acp_quirk_data,
 		.machine_quirk = snd_soc_acpi_codec_list,
 		.quirk_data = &amp_max98388,
-		.fw_filename = "sof-vangogh.ri",
-		.sof_tplg_filename = "sof-vangogh-nau8821-max.tplg",
+		.fw_filename = "sof-acp7x.ri",
+		.sof_tplg_filename = "sof-acp7x-nau8821-max.tplg",
 	},
 	{},
 };
