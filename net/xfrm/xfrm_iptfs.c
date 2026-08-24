@@ -699,8 +699,12 @@ static void __iptfs_reassem_done(struct xfrm_iptfs_data *xtfs, bool free)
 {
 	assert_spin_locked(&xtfs->drop_lock);
 
-	/* We don't care if it works locking takes care of things */
-	hrtimer_try_to_cancel(&xtfs->drop_timer);
+        /*
+         * The drop timer also drives the reorder window timeout. Locking makes
+         * a failed cancel harmless.
+         */
+        if (!xtfs->w_savedlen)
+                hrtimer_try_to_cancel(&xtfs->drop_timer);
 	if (free)
 		kfree_skb(xtfs->ra_newskb);
 	xtfs->ra_newskb = NULL;
