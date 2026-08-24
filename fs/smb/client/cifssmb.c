@@ -3339,6 +3339,9 @@ static int cifs_to_posix_acl(struct posix_acl **acl, char *src,
 		count = le16_to_cpu(cifs_acl->access_entry_count);
 		size = sizeof(struct cifs_posix_acl);
 		size += sizeof(struct cifs_posix_ace) * count;
+		/* validate access ACE count before pointer arithmetic */
+		if (size_of_data_area < size)
+			return -EINVAL;
 		/* skip past access ACEs to get to default ACEs */
 		pACE = &cifs_acl->ace_array[count];
 		count = le16_to_cpu(cifs_acl->default_entry_count);
