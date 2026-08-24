@@ -3751,6 +3751,35 @@ static void record_steal_time(struct kvm_vcpu *vcpu)
 	}
 
 	st = (struct kvm_steal_time __user *)ghc->hva;
+
+	if (!user_access_begin(st, sizeof(*st)))
+		return;
+
+	unsafe_get_user(version, &st->version, out);
+	if (version & 1)
+		version += 1;  /* first time write, random junk */
+
+	version += 1;
+	unsafe_put_user(version, &st->version, out);
+
+	/* Pairs with the guest side virt_rmb() in kvm_steal_clock(). */
+	smp_wmb();
+
+	unsafe_get_user(steal, &st->steal, out);
+	steal += current->sched_info.run_delay -
+		vcpu->arch.st.last_steal;
+	vcpu->arch.st.last_steal = current->sched_info.run_delay;
+	unsafe_put_user(steal, &st->steal, out);
+
+	version += 1;
+	unsafe_put_user(version, &st->version, out);
+
+	/*
+	 * Publish the stealtime before making the vCPU look runnable to
+	 * the guest.
+	 */
+	smp_wmb();
+
 	/*
 	 * Doing a TLB flush here, on the guest's behalf, can avoid
 	 * expensive IPIs.
@@ -3758,9 +3787,6 @@ static void record_steal_time(struct kvm_vcpu *vcpu)
 	if (guest_pv_has(vcpu, KVM_FEATURE_PV_TLB_FLUSH)) {
 		u8 st_preempted = 0;
 		int err = -EFAULT;
-
-		if (!user_access_begin(st, sizeof(*st)))
-			return;
 
 		asm volatile("1: xchgb %0, %2\n"
 			     "xor %1, %1\n"
@@ -3781,37 +3807,17 @@ static void record_steal_time(struct kvm_vcpu *vcpu)
 		if (st_preempted & KVM_VCPU_FLUSH_TLB)
 			kvm_vcpu_flush_tlb_guest(vcpu);
 
-		if (!user_access_begin(st, sizeof(*st)))
-			goto dirty;
 	} else {
-		if (!user_access_begin(st, sizeof(*st)))
-			return;
-
 		unsafe_put_user(0, &st->preempted, out);
 		vcpu->arch.st.preempted = 0;
+		user_access_end();
 	}
 
-	unsafe_get_user(version, &st->version, out);
-	if (version & 1)
-		version += 1;  /* first time write, random junk */
-
-	version += 1;
-	unsafe_put_user(version, &st->version, out);
-
-	smp_wmb();
-
-	unsafe_get_user(steal, &st->steal, out);
-	steal += current->sched_info.run_delay -
-		vcpu->arch.st.last_steal;
-	vcpu->arch.st.last_steal = current->sched_info.run_delay;
-	unsafe_put_user(steal, &st->steal, out);
-
-	version += 1;
-	unsafe_put_user(version, &st->version, out);
+	mark_page_dirty_in_slot(vcpu->kvm, ghc->memslot, gpa_to_gfn(ghc->gpa));
+	return;
 
  out:
 	user_access_end();
- dirty:
 	mark_page_dirty_in_slot(vcpu->kvm, ghc->memslot, gpa_to_gfn(ghc->gpa));
 }
 
