@@ -2358,7 +2358,6 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 		bool full_pool_decay)
 {
 	unsigned long nr_purged_areas = 0;
-	unsigned int nr_purge_helpers;
 	static cpumask_t purge_nodes;
 	unsigned int nr_purge_nodes;
 	struct vmap_node *vn;
@@ -2397,36 +2396,17 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 	if (nr_purge_nodes > 0) {
 		flush_tlb_kernel_range(start, end);
 
-		/* One extra worker is per a lazy_max_pages() full set minus one. */
-		nr_purge_helpers = atomic_long_read(&vmap_lazy_nr) / lazy_max_pages();
-		nr_purge_helpers = clamp(nr_purge_helpers, 1U, nr_purge_nodes) - 1;
-
+		/*
+		 * Purge all nodes inline.  Do not schedule_work() and
+		 * flush_work() here: flush_work() while holding
+		 * vmap_purge_lock can deadlock if the worker pool is
+		 * starved (e.g. all workers blocked on this same lock
+		 * in the direct reclaim path via vmap_node_shrink_scan).
+		 */
 		for_each_cpu(i, &purge_nodes) {
 			vn = &vmap_nodes[i];
-
-			if (nr_purge_helpers > 0) {
-				INIT_WORK(&vn->purge_work, purge_vmap_node);
-
-				if (cpumask_test_cpu(i, cpu_online_mask))
-					schedule_work_on(i, &vn->purge_work);
-				else
-					schedule_work(&vn->purge_work);
-
-				nr_purge_helpers--;
-			} else {
-				vn->purge_work.func = NULL;
-				purge_vmap_node(&vn->purge_work);
-				nr_purged_areas += vn->nr_purged;
-			}
-		}
-
-		for_each_cpu(i, &purge_nodes) {
-			vn = &vmap_nodes[i];
-
-			if (vn->purge_work.func) {
-				flush_work(&vn->purge_work);
-				nr_purged_areas += vn->nr_purged;
-			}
+			purge_vmap_node(&vn->purge_work);
+			nr_purged_areas += vn->nr_purged;
 		}
 	}
 
@@ -5519,10 +5499,21 @@ vmap_node_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
 {
 	struct vmap_node *vn;
 
-	guard(mutex)(&vmap_purge_lock);
+	/*
+	 * This shrinker is invoked from direct reclaim path where memory
+	 * pressure is already high.  Blocking on vmap_purge_lock here can
+	 * cause a pile-up of tasks all waiting for the same mutex while
+	 * the lock holder may itself be blocked in flush_work() waiting for
+	 * a worker that is stuck in the same reclaim path.  Use trylock to
+	 * avoid this; skipping a pool decay cycle is harmless.
+	 */
+	if (!mutex_trylock(&vmap_purge_lock))
+		return SHRINK_STOP;
+
 	for_each_vmap_node(vn)
 		decay_va_pool_node(vn, true);
 
+	mutex_unlock(&vmap_purge_lock);
 	return SHRINK_STOP;
 }
 
