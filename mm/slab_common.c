@@ -2172,11 +2172,11 @@ kfree_rcu_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
 		count += drain_page_cache(krcp);
 		kfree_rcu_monitor(&krcp->monitor_work.work);
 
-		sc->nr_to_scan -= count;
 		freed += count;
 
-		if (sc->nr_to_scan <= 0)
+		if (count >= sc->nr_to_scan)
 			break;
+		sc->nr_to_scan -= count;
 	}
 
 	return freed == 0 ? SHRINK_STOP : freed;
