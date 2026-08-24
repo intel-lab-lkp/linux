@@ -203,9 +203,8 @@ static int gpio_shared_of_traverse(struct device_node *curr)
 			if (ret)
 				continue;
 
-			np = args.np;
-
-			if (!of_property_present(np, "gpio-controller"))
+			fwnode = of_fwnode_handle(args.np);
+			if (!fwnode_is_gpiochip(fwnode))
 				continue;
 
 			/*
@@ -222,7 +221,6 @@ static int gpio_shared_of_traverse(struct device_node *curr)
 			if (args.args_count != 2)
 				continue;
 
-			fwnode = of_fwnode_handle(args.np);
 			offset = args.args[0];
 
 			entry = gpio_shared_find_entry(fwnode, offset);
