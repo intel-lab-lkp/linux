@@ -2050,12 +2050,20 @@ static int vsock_connectible_setsockopt(struct socket *sock,
 
 	case SO_VM_SOCKETS_BUFFER_MAX_SIZE:
 		COPY_IN(val);
+		if (val < vsk->buffer_min_size) {
+			err = -EINVAL;
+			goto exit;
+		}
 		vsk->buffer_max_size = val;
 		vsock_update_buffer_size(vsk, transport, vsk->buffer_size);
 		break;
 
 	case SO_VM_SOCKETS_BUFFER_MIN_SIZE:
 		COPY_IN(val);
+		if (val > vsk->buffer_max_size) {
+			err = -EINVAL;
+			goto exit;
+		}
 		vsk->buffer_min_size = val;
 		vsock_update_buffer_size(vsk, transport, vsk->buffer_size);
 		break;
