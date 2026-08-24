@@ -20,6 +20,7 @@
 #include <linux/version.h>
 #include <linux/videodev2.h>
 
+#include <media/mipi-csi2.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-event.h>
@@ -2670,6 +2671,80 @@ int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_get_frame_desc_passthrough);
+
+struct v4l2_mbus_frame_desc *
+v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+			   enum v4l2_mbus_frame_desc_type type)
+{
+	int ret;
+
+	if (type != V4L2_MBUS_FRAME_DESC_TYPE_PARALLEL &&
+	    type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2)
+		return ERR_PTR(-EINVAL);
+
+	struct v4l2_mbus_frame_desc *desc = kzalloc_obj(*desc, GFP_KERNEL);
+	if (!desc)
+		return ERR_PTR(-ENOMEM);
+
+	desc->type = type;
+
+	if (v4l2_subdev_has_op(sd, pad, get_frame_desc)) {
+		unsigned int type = desc->type;
+
+		ret = v4l2_subdev_call(sd, pad, get_frame_desc, pad, desc);
+		if (ret < 0)
+			goto err_free;
+
+		if (desc->type != type) {
+			dev_dbg(sd->dev,
+				"wrong type of frame descriptor for pad %d (got %u, expected %u)\n",
+				pad, desc->type, type);
+			ret = -EINVAL;
+			goto err_free;
+		}
+
+		return desc;
+	}
+
+	struct v4l2_subdev_format subdev_fmt = {
+		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
+		.pad = pad,
+	};
+	struct v4l2_subdev_state *state =
+		v4l2_subdev_lock_and_get_active_state(sd);
+	ret = v4l2_subdev_call(sd, pad, get_fmt, state, &subdev_fmt);
+	v4l2_subdev_unlock_state(state);
+	if (ret < 0)
+		goto err_free;
+
+	struct v4l2_mbus_frame_desc_entry *entry = &desc->entry[0];
+
+	entry->pixelcode = subdev_fmt.format.code;
+
+	if (desc->type == V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
+		ret = media_bus_fmt_to_csi2_dt(subdev_fmt.format.code);
+		if (ret < 0)
+			goto err_free;
+
+		entry->bus.csi2.dt = ret;
+	}
+
+	desc->num_entries = 1;
+
+	return desc;
+
+err_free:
+	v4l2_subdev_free_frame_desc(desc);
+
+	return ERR_PTR(ret);
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_frame_desc);
+
+void v4l2_subdev_free_frame_desc(struct v4l2_mbus_frame_desc *desc)
+{
+	kfree(desc);
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_free_frame_desc);
 
 #endif /* CONFIG_VIDEO_V4L2_SUBDEV_API */
 
