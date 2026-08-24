@@ -853,6 +853,22 @@ void __init early_init_devtree(void *params)
 	if (PHYSICAL_START > MEMORY_START)
 		memblock_reserve(MEMORY_START, int_vector_size);
 	reserve_kdump_trampoline();
+
+	DBG("Scanning CPUs ...\n");
+
+	dt_cpu_ftrs_scan();
+
+	/* Retrieve CPU related informations from the flat tree
+	 * (altivec support, boot CPU ID, ...)
+	 */
+	of_scan_flat_dt(early_init_dt_scan_cpus, NULL);
+	if (boot_cpuid < 0) {
+		printk("Failed to identify boot CPU !\n");
+		BUG();
+	}
+
+	mmu_early_init_type();
+
 #if defined(CONFIG_FA_DUMP) || defined(CONFIG_PRESERVE_FA_DUMP)
 	/*
 	 * If we fail to reserve memory for firmware-assisted dump then
@@ -883,19 +899,6 @@ void __init early_init_devtree(void *params)
 	/* We may need to relocate the flat tree, do it now.
 	 * FIXME .. and the initrd too? */
 	move_device_tree();
-
-	DBG("Scanning CPUs ...\n");
-
-	dt_cpu_ftrs_scan();
-
-	/* Retrieve CPU related informations from the flat tree
-	 * (altivec support, boot CPU ID, ...)
-	 */
-	of_scan_flat_dt(early_init_dt_scan_cpus, NULL);
-	if (boot_cpuid < 0) {
-		printk("Failed to identify boot CPU !\n");
-		BUG();
-	}
 
 	save_fscr_to_task();
 

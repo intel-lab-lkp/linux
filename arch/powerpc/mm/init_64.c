@@ -614,7 +614,8 @@ static void __init early_init_memory_block_size(void)
 	of_scan_flat_dt(probe_memory_block_size, &memory_block_size);
 }
 
-void __init mmu_early_init_devtree(void)
+
+void __init mmu_early_init_type(void)
 {
 	bool hvmode = !!(mfmsr() & MSR_HV);
 
@@ -625,6 +626,20 @@ void __init mmu_early_init_devtree(void)
 		else
 			pr_warn("WARNING: Ignoring cmdline option disable_radix\n");
 	}
+
+	/*
+	 * Check /chosen/ibm,architecture-vec-5 if running as a guest.
+	 * When running bare-metal, we can use radix if we like
+	 * even though the ibm,architecture-vec-5 property created by
+	 * skiboot doesn't have the necessary bits set.
+	 */
+	if (!hvmode)
+		early_check_vec5();
+}
+
+void __init mmu_early_init_devtree(void)
+{
+	bool hvmode = !!(mfmsr() & MSR_HV);
 
 	of_scan_flat_dt(dt_scan_mmu_pid_width, NULL);
 	if (hvmode && !mmu_lpid_bits) {
@@ -637,15 +652,6 @@ void __init mmu_early_init_devtree(void)
 		if (early_cpu_has_feature(CPU_FTR_ARCH_300))
 			mmu_pid_bits = 20; /* POWER9-10 */
 	}
-
-	/*
-	 * Check /chosen/ibm,architecture-vec-5 if running as a guest.
-	 * When running bare-metal, we can use radix if we like
-	 * even though the ibm,architecture-vec-5 property created by
-	 * skiboot doesn't have the necessary bits set.
-	 */
-	if (!hvmode)
-		early_check_vec5();
 
 	early_init_memory_block_size();
 
