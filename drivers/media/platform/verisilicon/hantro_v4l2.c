@@ -765,6 +765,17 @@ static int vidioc_encoder_cmd(struct file *file, void *priv,
 	return 0;
 }
 
+static int hantro_subscribe_event(struct v4l2_fh *fh,
+				  const struct v4l2_event_subscription *sub)
+{
+	switch (sub->type) {
+	case V4L2_EVENT_EOS:
+		return v4l2_event_subscribe(fh, sub, 0, NULL);
+	default:
+		return v4l2_ctrl_subscribe_event(fh, sub);
+	}
+}
+
 const struct v4l2_ioctl_ops hantro_ioctl_ops = {
 	.vidioc_querycap = vidioc_querycap,
 	.vidioc_enum_framesizes = vidioc_enum_framesizes,
@@ -787,7 +798,7 @@ const struct v4l2_ioctl_ops hantro_ioctl_ops = {
 	.vidioc_remove_bufs = v4l2_m2m_ioctl_remove_bufs,
 	.vidioc_expbuf = v4l2_m2m_ioctl_expbuf,
 
-	.vidioc_subscribe_event = v4l2_ctrl_subscribe_event,
+	.vidioc_subscribe_event = hantro_subscribe_event,
 	.vidioc_unsubscribe_event = v4l2_event_unsubscribe,
 
 	.vidioc_streamon = v4l2_m2m_ioctl_streamon,
