@@ -87,6 +87,54 @@ static void nested_svm_clear_synthesized_insn_bytes(struct vcpu_svm *svm)
 	svm->nested.synthesized_insn_bytes.insn_len = 0;
 }
 
+static u8 nested_svm_fetch_insn_bytes(struct kvm_vcpu *vcpu, u8 *bytes,
+				      u8 count, u8 max_bytes)
+{
+	struct kvm_pagewalk *gva_walk = &vcpu->arch.gva_walk;
+	u64 access = PFERR_FETCH_MASK;
+	gva_t rip = kvm_get_linear_rip(vcpu);
+	struct x86_exception e;
+
+	if (kvm_x86_call(get_cpl)(vcpu) == 3)
+		access |= PFERR_USER_MASK;
+
+	if (!is_64_bit_mode(vcpu)) {
+		u32 eip = kvm_rip_read(vcpu);
+		u32 limit = to_svm(vcpu)->vmcb->save.cs.limit;
+
+		if (eip > limit)
+			return 0;
+		max_bytes = min_t(u64, max_bytes, (u64)limit - eip + 1);
+	}
+
+	count = min(count, max_bytes);
+
+	while (count < max_bytes) {
+		gva_t addr = rip + count;
+		unsigned int chunk;
+		gpa_t gpa;
+
+		if (!is_64_bit_mode(vcpu))
+			addr = (u32)addr;
+		else if (is_noncanonical_address(addr, vcpu, 0))
+			break;
+
+		chunk = min_t(unsigned int, max_bytes - count,
+			      PAGE_SIZE - offset_in_page(addr));
+		gpa = gva_walk->gva_to_gpa(vcpu, gva_walk, addr, access, &e);
+
+		if (gpa == INVALID_GPA ||
+		    kvm_vcpu_read_guest_page(vcpu, gpa_to_gfn(gpa),
+					     bytes + count,
+					     offset_in_page(gpa), chunk))
+			break;
+
+		count += chunk;
+	}
+
+	return count;
+}
+
 static void nested_svm_prepare_synthesized_insn_bytes(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
@@ -120,6 +168,7 @@ static void nested_svm_update_vmcb12_insn_bytes(struct kvm_vcpu *vcpu,
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct nested_svm_insn_bytes *synthesized =
 		&svm->nested.synthesized_insn_bytes;
+	const u8 max_bytes = sizeof(vmcb12->control.insn_bytes);
 
 	nested_svm_clear_insn_bytes(vmcb12);
 
@@ -135,8 +184,15 @@ static void nested_svm_update_vmcb12_insn_bytes(struct kvm_vcpu *vcpu,
 	if (synthesized->prepared) {
 		vmcb12->control.insn_len = synthesized->insn_len;
 		memcpy(vmcb12->control.insn_bytes, synthesized->insn_bytes,
-		       vmcb12->control.insn_len);
+		       synthesized->insn_len);
 	}
+
+	if (!is_sev_guest(vcpu))
+		vmcb12->control.insn_len =
+			nested_svm_fetch_insn_bytes(vcpu,
+						    vmcb12->control.insn_bytes,
+						    vmcb12->control.insn_len,
+						    max_bytes);
 
 out:
 	svm->nested.vmcb02_insn_bytes_fresh = false;
