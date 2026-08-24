@@ -2796,6 +2796,8 @@ static int mxc_jpeg_release(struct file *file)
 	struct mxc_jpeg_ctx *ctx = mxc_jpeg_file_to_ctx(file);
 	struct device *dev = mxc_jpeg->dev;
 
+	cancel_delayed_work_sync(&ctx->task_timer);
+
 	mutex_lock(&mxc_jpeg->lock);
 	if (mxc_jpeg->mode == MXC_JPEG_DECODE)
 		dev_dbg(dev, "Release JPEG decoder instance on slot %d.",
