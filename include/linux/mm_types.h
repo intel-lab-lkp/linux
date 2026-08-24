@@ -1410,6 +1410,8 @@ struct mm_struct {
 			 * page table walkers cleared the corresponding bits.
 			 */
 			unsigned long bitmap;
+			/* bit N: node N's last walk found no folio; skip until re-scan */
+			unsigned long empty_map;
 #ifdef CONFIG_MEMCG
 			/* points to the memcg of "owner" above */
 			struct mem_cgroup *memcg;
@@ -1503,6 +1505,7 @@ static inline void lru_gen_init_mm(struct mm_struct *mm)
 {
 	INIT_LIST_HEAD(&mm->lru_gen.list);
 	mm->lru_gen.bitmap = 0;
+	mm->lru_gen.empty_map = 0;
 #ifdef CONFIG_MEMCG
 	mm->lru_gen.memcg = NULL;
 #endif

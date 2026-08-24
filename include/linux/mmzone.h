@@ -633,6 +633,8 @@ struct lru_gen_mm_walk {
 	int batched;
 	int swappiness;
 	bool force_scan;
+	/* this aging pass is an empty-walk re-scan pass (every K-th) */
+	bool rescan_pass;
 };
 
 /*
