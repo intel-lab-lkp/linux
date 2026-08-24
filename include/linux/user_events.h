@@ -48,6 +48,7 @@ static inline void user_events_fork(struct task_struct *t,
 		return;
 	}
 
+	t->user_event_mm = NULL;
 	user_event_mm_dup(t, old_mm);
 }
 
