@@ -29,6 +29,26 @@
 
 #define IPU_MAX_FRAME_COUNTER	(U8_MAX + 1)
 
+static int ipu7_isys_check_sgtable(struct ipu7_isys *isys, struct sg_table *sgt)
+{
+	struct device *dev = &isys->adev->auxdev.dev;
+	struct scatterlist *sg;
+	unsigned int i;
+
+	/* Validate every entry ipu7_dma_sync_sgtable() will later flush. */
+	for_each_sg(sgt->sgl, sg, sgt->orig_nents, i) {
+		struct page *page = sg_page(sg);
+
+		if (!page || PageHighMem(page)) {
+			dev_err_ratelimited(dev,
+					    "sg[%u] has no permanent kernel mapping\n", i);
+			return -EFAULT;
+		}
+	}
+
+	return 0;
+}
+
 static int ipu7_isys_buf_init(struct vb2_buffer *vb)
 {
 	struct ipu7_isys *isys = vb2_get_drv_priv(vb->vb2_queue);
@@ -37,6 +57,10 @@ static int ipu7_isys_buf_init(struct vb2_buffer *vb)
 	struct ipu7_isys_video_buffer *ivb =
 		vb2_buffer_to_ipu7_isys_video_buffer(vvb);
 	int ret;
+
+	ret = ipu7_isys_check_sgtable(isys, sg);
+	if (ret)
+		return ret;
 
 	ret = ipu7_dma_map_sgtable(isys->adev, sg, DMA_TO_DEVICE, 0);
 	if (ret)
@@ -82,6 +106,20 @@ static int ipu7_isys_queue_setup(struct vb2_queue *q, unsigned int *num_buffers,
 	return 0;
 }
 
+static void ipu7_isys_buf_sync(struct vb2_buffer *vb)
+{
+	struct ipu7_isys *isys = vb2_get_drv_priv(vb->vb2_queue);
+	struct sg_table *sgt = vb2_dma_sg_plane_desc(vb, 0);
+
+	/*
+	 * Device writes do not invalidate the CPU cache and the DMA API
+	 * sync helpers do no cache maintenance on x86. Flush dirty
+	 * lines before the device writes the buffer and stale lines
+	 * before userspace reads it.
+	 */
+	ipu7_dma_sync_sgtable(isys->adev, sgt);
+}
+
 static int ipu7_isys_buf_prepare(struct vb2_buffer *vb)
 {
 	struct ipu7_isys_queue *aq = vb2_queue_to_isys_queue(vb->vb2_queue);
@@ -99,8 +137,14 @@ static int ipu7_isys_buf_prepare(struct vb2_buffer *vb)
 	dev_dbg(dev, "buffer: %s: bytesperline %u, height %u\n",
 		av->vdev.name, bytesperline, height);
 	vb2_set_plane_payload(vb, 0, bytesperline * height);
+	ipu7_isys_buf_sync(vb);
 
 	return 0;
+}
+
+static void ipu7_isys_buf_finish(struct vb2_buffer *vb)
+{
+	ipu7_isys_buf_sync(vb);
 }
 
 /*
@@ -790,6 +834,7 @@ static const struct vb2_ops ipu7_isys_queue_ops = {
 	.queue_setup = ipu7_isys_queue_setup,
 	.buf_init = ipu7_isys_buf_init,
 	.buf_prepare = ipu7_isys_buf_prepare,
+	.buf_finish = ipu7_isys_buf_finish,
 	.buf_cleanup = ipu7_isys_buf_cleanup,
 	.start_streaming = start_streaming,
 	.stop_streaming = stop_streaming,
