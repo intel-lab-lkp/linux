@@ -192,7 +192,7 @@ use crate::{
     sync::{
         aref::{
             ARef,
-            AlwaysRefCounted, //
+            RefCounted, //
         },
         Arc,
         LockClassKey, //
@@ -954,7 +954,7 @@ where
 //     implementation of `WorkItemPointer` for `ARef<T>`.
 unsafe impl<T, const ID: u64> WorkItemPointer<ID> for ARef<T>
 where
-    T: AlwaysRefCounted,
+    T: RefCounted,
     T: WorkItem<ID, Pointer = Self>,
     T: HasWork<T, ID>,
 {
@@ -987,7 +987,7 @@ where
 // requirements of `WorkItemPointer`.
 unsafe impl<T, const ID: u64> RawWorkItem<ID> for ARef<T>
 where
-    T: AlwaysRefCounted,
+    T: RefCounted,
     T: WorkItem<ID, Pointer = Self>,
     T: HasWork<T, ID>,
 {
@@ -1020,7 +1020,7 @@ unsafe impl<T, const ID: u64> RawDelayedWorkItem<ID> for ARef<T>
 where
     T: WorkItem<ID, Pointer = Self>,
     T: HasDelayedWork<T, ID>,
-    T: AlwaysRefCounted,
+    T: RefCounted,
 {
 }
 
