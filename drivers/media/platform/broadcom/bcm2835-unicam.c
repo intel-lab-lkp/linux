@@ -918,8 +918,8 @@ static int unicam_get_image_vc_dt(struct unicam_device *unicam,
 	return -EINVAL;
 }
 
-static void unicam_start_rx(struct unicam_device *unicam,
-			    struct v4l2_subdev_state *state)
+static int unicam_start_rx(struct unicam_device *unicam,
+			   struct v4l2_subdev_state *state)
 {
 	struct unicam_node *node = &unicam->node[UNICAM_IMAGE_NODE];
 	const struct unicam_format_info *fmtinfo;
@@ -933,7 +933,11 @@ static void unicam_start_rx(struct unicam_device *unicam,
 	fmtinfo = unicam_find_format_by_code(fmt->code,
 					     UNICAM_SD_PAD_SOURCE_IMAGE);
 	if (WARN_ON(!fmtinfo))
-		return;
+		return -EINVAL;
+
+	ret = unicam_get_image_vc_dt(unicam, state, &vc, &dt);
+	if (ret)
+		return ret;
 
 	/*
 	 * Enable lane clocks. The register is structured as follows:
@@ -1090,16 +1094,6 @@ static void unicam_start_rx(struct unicam_device *unicam,
 	unicam_wr_dma_addr(node, node->cur_frm);
 	unicam_set_packing_config(unicam, fmtinfo);
 
-	ret = unicam_get_image_vc_dt(unicam, state, &vc, &dt);
-	if (ret) {
-		/*
-		 * If the source doesn't support frame descriptors, default to
-		 * VC 0 and use the DT corresponding to the format.
-		 */
-		vc = 0;
-		dt = fmtinfo->csi_dt;
-	}
-
 	unicam_cfg_image_id(unicam, vc, dt);
 
 	val = unicam_reg_read(unicam, UNICAM_MISC);
@@ -1118,6 +1112,8 @@ static void unicam_start_rx(struct unicam_device *unicam,
 	 * sync correctly to the FS from the source.
 	 */
 	unicam_reg_write_field(unicam, UNICAM_ICTL, 1, UNICAM_TFC);
+
+	return 0;
 }
 
 static void unicam_start_metadata(struct unicam_device *unicam)
@@ -1427,7 +1423,9 @@ static int unicam_sd_enable_streams(struct v4l2_subdev *sd,
 			unicam_start_metadata(unicam);
 
 		unicam->frame_started = false;
-		unicam_start_rx(unicam, state);
+		ret = unicam_start_rx(unicam, state);
+		if (ret)
+			return ret;
 	}
 
 	ret = v4l2_subdev_routing_find_opposite_end(&state->routing, pad, 0,
