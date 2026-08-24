@@ -523,6 +523,12 @@ static struct clk *pcf85063_clkout_register_clk(struct pcf85063 *pcf85063)
 	/* optional override of the clockname */
 	of_property_read_string(node, "clock-output-names", &init.name);
 
+	/* power-on default is the 32768 Hz output on; gate it until claimed */
+	ret = regmap_update_bits(pcf85063->regmap, PCF85063_REG_CTRL2,
+				 PCF85063_REG_CLKO_F_MASK, PCF85063_REG_CLKO_F_OFF);
+	if (ret)
+		return ret;
+
 	/* register the clock */
 	clk = devm_clk_register(&pcf85063->rtc->dev, &pcf85063->clkout_hw);
 
