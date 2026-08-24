@@ -270,10 +270,8 @@ void init_smb3_02_server(struct ksmbd_conn *conn)
 	if (server_conf.flags & KSMBD_GLOBAL_FLAG_SMB3_MULTICHANNEL)
 		conn->vals->req_capabilities |= SMB2_GLOBAL_CAP_MULTI_CHANNEL;
 
-	/*
-	 * Durable handles are in-memory only.  Do not advertise persistent
-	 * handles until CA recovery and fencing are implemented.
-	 */
+	if (server_conf.flags & KSMBD_GLOBAL_FLAG_DURABLE_HANDLE)
+		conn->vals->req_capabilities |= SMB2_GLOBAL_CAP_PERSISTENT_HANDLES;
 }
 
 /**
@@ -296,7 +294,9 @@ int init_smb3_11_server(struct ksmbd_conn *conn)
 	if (server_conf.flags & KSMBD_GLOBAL_FLAG_SMB3_MULTICHANNEL)
 		conn->vals->req_capabilities |= SMB2_GLOBAL_CAP_MULTI_CHANNEL;
 
-	/* See init_smb3_02_server(): persistent handles require CA recovery. */
+	if (server_conf.flags & KSMBD_GLOBAL_FLAG_DURABLE_HANDLE)
+		conn->vals->req_capabilities |= SMB2_GLOBAL_CAP_PERSISTENT_HANDLES;
+
 	return 0;
 }
 
