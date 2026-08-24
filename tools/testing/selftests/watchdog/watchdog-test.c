@@ -106,24 +106,28 @@ struct wdiof_status {
 	const char *status_str;
 };
 
-#define WDIOF_NUM_STATUS 8
+#define WDIOF_NUM_STATUS 12
 
 static const struct wdiof_status wdiof_status[WDIOF_NUM_STATUS] = {
-	{WDIOF_SETTIMEOUT,  "Set timeout (in seconds)"},
-	{WDIOF_MAGICCLOSE,  "Supports magic close char"},
-	{WDIOF_PRETIMEOUT,  "Pretimeout (in seconds), get/set"},
-	{WDIOF_ALARMONLY,  "Watchdog triggers a management or other external alarm not a reboot"},
-	{WDIOF_KEEPALIVEPING,  "Keep alive ping reply"},
-	{WDIOS_DISABLECARD,  "Turn off the watchdog timer"},
-	{WDIOS_ENABLECARD,  "Turn on the watchdog timer"},
-	{WDIOS_TEMPPANIC,  "Kernel panic on temperature trip"},
+	{WDIOF_OVERHEAT, "Reset due to CPU overheat"},
+	{WDIOF_FANFAULT, "Fan failed"},
+	{WDIOF_EXTERN1, "External relay 1"},
+	{WDIOF_EXTERN2, "External relay 2"},
+	{WDIOF_POWERUNDER, "Power bad/power fault"},
+	{WDIOF_CARDRESET, "Card previously reset the CPU"},
+	{WDIOF_POWEROVER, "Power over voltage"},
+	{WDIOF_SETTIMEOUT, "Set timeout (in seconds)"},
+	{WDIOF_MAGICCLOSE, "Supports magic close char"},
+	{WDIOF_PRETIMEOUT, "Pretimeout (in seconds), get/set"},
+	{WDIOF_ALARMONLY, "Watchdog triggers a management or other external alarm not a reboot"},
+	{WDIOF_KEEPALIVEPING, "Keep alive ping reply"},
 };
 
 static void print_status(int flags)
 {
 	int wdiof = 0;
 
-	if (flags == WDIOS_UNKNOWN) {
+	if (flags == WDIOF_UNKNOWN) {
 		printf("Unknown status error from WDIOC_GETSTATUS\n");
 		return;
 	}
