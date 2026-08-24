@@ -2269,10 +2269,24 @@ static int team_header_create(struct sk_buff *skb, struct net_device *team_dev,
 	port = team_header_port_get_rcu(team, true);
 	if (port) {
 		port_ops = READ_ONCE(port->dev->header_ops);
-		if (port_ops && port_ops->create)
+		if (port_ops && port_ops->create) {
+			unsigned int hlen = READ_ONCE(port->dev->hard_header_len);
+
+			/* Headroom was reserved from a snapshot of
+			 * team_dev->hard_header_len that may predate this
+			 * port (concurrent team type change); reject if
+			 * insufficient for the port's create(), which
+			 * pushes its own hlen.
+			 */
+			if (skb_headroom(skb) < hlen) {
+				ret = -EINVAL;
+				goto unlock;
+			}
 			ret = port_ops->create(skb, port->dev,
 					       type, daddr, saddr, len);
+		}
 	}
+unlock:
 	rcu_read_unlock();
 	return ret;
 }
