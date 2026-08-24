@@ -878,7 +878,7 @@ static int beiscsi_init_irqs(struct beiscsi_hba *phba)
 	return 0;
 free_msix_irqs:
 	for (j = i - 1; j >= 0; j--) {
-		free_irq(pci_irq_vector(pcidev, i), &phwi_context->be_eq[j]);
+		free_irq(pci_irq_vector(pcidev, j), &phwi_context->be_eq[j]);
 		kfree(phba->msi_name[j]);
 	}
 	return ret;
