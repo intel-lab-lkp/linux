@@ -235,7 +235,22 @@ static int rmi_hid_read_block(struct rmi_transport_dev *xport, u16 addr,
 				break;
 			}
 
-			read_input_count = data->readReport[1];
+			read_input_count = min_t(int, data->readReport[1],
+						 data->input_report_size - 2);
+			if (!read_input_count) {
+				/*
+				 * A zero length reply advances neither
+				 * bytes_read nor bytes_needed, and because a
+				 * reply did arrive the wait above does not
+				 * time out either, so a device answering 0
+				 * forever would spin here indefinitely with
+				 * page_mutex held.
+				 */
+				hid_warn(hdev, "%s: zero-length read reply\n",
+					 __func__);
+				ret = -EIO;
+				break;
+			}
 			memcpy(buf + bytes_read, &data->readReport[2],
 				min(read_input_count, bytes_needed));
 
@@ -269,6 +284,11 @@ static int rmi_hid_write_block(struct rmi_transport_dev *xport, u16 addr,
 		ret = rmi_set_page(hdev, RMI_PAGE(addr));
 		if (ret < 0)
 			goto exit;
+	}
+
+	if (len > data->output_report_size - 4) {
+		ret = -EINVAL;
+		goto exit;
 	}
 
 	data->writeReport[0] = RMI_WRITE_REPORT_ID;
@@ -695,6 +715,17 @@ static int rmi_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 	data->output_report_size = hid_report_len(output_report);
+
+	/*
+	 * The write reports built by this driver occupy 6 bytes and the read
+	 * handshake looks at the first 3 bytes of an input report, so refuse
+	 * to drive a device whose reports cannot hold them.
+	 */
+	if (data->output_report_size < 6 || data->input_report_size < 3) {
+		hid_err(hdev, "rmi reports too small (out=%u in=%u)\n",
+			data->output_report_size, data->input_report_size);
+		goto start;
+	}
 
 	data->device_flags |= RMI_DEVICE;
 	alloc_size = data->output_report_size + data->input_report_size;
