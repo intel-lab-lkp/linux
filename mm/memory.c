@@ -4076,6 +4076,9 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 		BUG_ON(unshare && pte_write(entry));
 		set_pte_at(mm, vmf->address, vmf->pte, entry);
 		update_mmu_cache_range(vmf, vma, vmf->address, vmf->pte, 1);
+		/* COW mapped a fresh folio of this mm on this node */
+		if (lru_gen_enabled())
+			lru_gen_mm_accessed(vma->vm_mm, folio_nid(new_folio));
 		if (old_folio) {
 			/*
 			 * Only after switching the pte to the new page may
@@ -5224,6 +5227,9 @@ check_folio:
 	set_ptes(vma->vm_mm, address, ptep, pte, nr_pages);
 	arch_do_swap_page_nr(vma->vm_mm, vma, address,
 			pte, pte, nr_pages);
+	/* a swapped-in page of this mm lands on this node */
+	if (lru_gen_enabled())
+		lru_gen_mm_accessed(vma->vm_mm, folio_nid(folio));
 
 	/*
 	 * Remove the swap entry and conditionally try to free up the swapcache.
@@ -5516,6 +5522,10 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 		folio_put(folio);
 		return handle_userfault(vmf, VM_UFFD_MISSING);
 	}
+	/* a new page of this mm lands on this node: invalidate any empty skip */
+	if (lru_gen_enabled())
+		lru_gen_mm_accessed(vma->vm_mm, folio_nid(folio));
+
 	map_anon_folio_pte_pf(folio, vmf->pte, vma, addr,
 			      vmf_orig_pte_uffd_wp(vmf));
 unlock:
@@ -5776,6 +5786,11 @@ fallback:
 		page = vmf->page;
 
 	folio = page_folio(page);
+
+	/* mapping a page of this mm on this node: invalidate any empty skip */
+	if (lru_gen_enabled())
+		lru_gen_mm_accessed(vma->vm_mm, folio_nid(folio));
+
 	/*
 	 * check even for read faults because we might have lost our CoWed
 	 * page

@@ -1521,6 +1521,21 @@ static inline void lru_gen_use_mm(struct mm_struct *mm)
 	WRITE_ONCE(mm->lru_gen.bitmap, -1);
 }
 
+/*
+ * A page of this mm appeared on node @nid (fault or migration): set the
+ * node's bitmap bit and clear the empty-walk skip. Probe first - the
+ * transitions are rare and unconditional locked RMWs would bounce the
+ * mm cache line.
+ */
+static inline void lru_gen_mm_accessed(struct mm_struct *mm, int nid)
+{
+	unsigned long key = nid % BITS_PER_TYPE(mm->lru_gen.bitmap);
+
+	if (!test_bit(key, &mm->lru_gen.bitmap))
+		set_bit(key, &mm->lru_gen.bitmap);
+	if (test_bit(key, &mm->lru_gen.empty_map))
+		clear_bit(key, &mm->lru_gen.empty_map);
+}
 #else /* !CONFIG_LRU_GEN_WALKS_MMU */
 
 static inline void lru_gen_add_mm(struct mm_struct *mm)
@@ -1540,6 +1555,10 @@ static inline void lru_gen_init_mm(struct mm_struct *mm)
 }
 
 static inline void lru_gen_use_mm(struct mm_struct *mm)
+{
+}
+
+static inline void lru_gen_mm_accessed(struct mm_struct *mm, int nid)
 {
 }
 

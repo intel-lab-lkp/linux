@@ -354,6 +354,10 @@ static bool remove_migration_pte(struct folio *folio,
 	struct rmap_walk_arg *rmap_walk_arg = arg;
 	DEFINE_FOLIO_VMA_WALK(pvmw, rmap_walk_arg->folio, vma, addr, PVMW_SYNC | PVMW_MIGRATION);
 
+	/* the folio ends up on folio_nid(): notify MGLRU for this mm */
+	if (lru_gen_enabled())
+		lru_gen_mm_accessed(vma->vm_mm, folio_nid(folio));
+
 	while (page_vma_mapped_walk(&pvmw)) {
 		rmap_t rmap_flags = RMAP_NONE;
 		unsigned long idx = 0;

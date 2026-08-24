@@ -1418,6 +1418,9 @@ static vm_fault_t __do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 		map_anon_folio_pmd_pf(folio, vmf->pmd, vma, haddr);
 		mm_inc_nr_ptes(vma->vm_mm);
 		spin_unlock(vmf->ptl);
+		/* a new THP of this mm lands on this node */
+		if (lru_gen_enabled())
+			lru_gen_mm_accessed(vma->vm_mm, folio_nid(folio));
 	}
 
 	return 0;
