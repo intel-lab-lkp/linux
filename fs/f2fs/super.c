@@ -235,6 +235,7 @@ enum {
 	Opt_jqfmt,
 	Opt_checkpoint,
 	Opt_lookup_mode,
+	Opt_resizable_tail_secno,
 	Opt_err,
 };
 
@@ -366,6 +367,7 @@ static const struct fs_parameter_spec f2fs_param_specs[] = {
 	fsparam_flag("age_extent_cache", Opt_age_extent_cache),
 	fsparam_enum("errors", Opt_errors, f2fs_param_errors),
 	fsparam_enum("lookup_mode", Opt_lookup_mode, f2fs_param_lookup_mode),
+	fsparam_u32("resizable_tail_secno", Opt_resizable_tail_secno),
 	{}
 };
 
@@ -549,6 +551,17 @@ static inline void adjust_unusable_cap_perc(struct f2fs_sb_info *sbi)
 	f2fs_info(sbi, "Adjust unusable cap for checkpoint=disable = %u / %u%%",
 			F2FS_OPTION(sbi).unusable_cap,
 			F2FS_OPTION(sbi).unusable_cap_perc);
+}
+
+static inline void adjust_pinned_area_boundary(struct f2fs_sb_info *sbi)
+{
+	sbi->pinned_area_max_secno = MAIN_SECS(sbi);
+	if (f2fs_sb_has_blkzoned(sbi) && sbi->first_seq_zone_segno != NULL_SEGNO)
+		sbi->pinned_area_max_secno = min(sbi->pinned_area_max_secno,
+				GET_SEC_FROM_SEG(sbi, sbi->first_seq_zone_segno));
+	if (F2FS_OPTION(sbi).resizable_tail_secno)
+		sbi->pinned_area_max_secno = min(sbi->pinned_area_max_secno,
+				MAIN_SECS(sbi) - F2FS_OPTION(sbi).resizable_tail_secno);
 }
 
 static void init_once(void *foo)
@@ -1235,6 +1248,9 @@ static int f2fs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		F2FS_CTX_INFO(ctx).lookup_mode = result.uint_32;
 		ctx->spec_mask |= F2FS_SPEC_lookup_mode;
 		break;
+	case Opt_resizable_tail_secno:
+		F2FS_CTX_INFO(ctx).resizable_tail_secno = result.uint_32;
+		break;
 	}
 	return 0;
 }
@@ -1771,6 +1787,12 @@ static void f2fs_apply_options(struct fs_context *fc, struct super_block *sb)
 
 static int f2fs_sanity_check_options(struct f2fs_sb_info *sbi, bool remount)
 {
+	if (remount &&
+	    F2FS_OPTION(sbi).resizable_tail_secno >= MAIN_SECS(sbi)) {
+		f2fs_err(sbi, "Option resizable_tail_secno is larger than or equal to total sections (%u >= %u)",
+				F2FS_OPTION(sbi).resizable_tail_secno, MAIN_SECS(sbi));
+		return -EINVAL;
+	}
 	if (f2fs_sb_has_device_alias(sbi) &&
 	    !test_opt(sbi, READ_EXTENT_CACHE)) {
 		f2fs_err(sbi, "device aliasing requires extent cache");
@@ -2544,6 +2566,10 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 	else if (F2FS_OPTION(sbi).lookup_mode == LOOKUP_AUTO)
 		seq_show_option(seq, "lookup_mode", "auto");
 
+	if (F2FS_OPTION(sbi).resizable_tail_secno)
+		seq_printf(seq, ",resizable_tail_secno=%u",
+				F2FS_OPTION(sbi).resizable_tail_secno);
+
 	return 0;
 }
 
@@ -2586,6 +2612,7 @@ static void default_options(struct f2fs_sb_info *sbi, bool remount)
 	F2FS_OPTION(sbi).bggc_mode = BGGC_MODE_ON;
 	F2FS_OPTION(sbi).memory_mode = MEMORY_MODE_NORMAL;
 	F2FS_OPTION(sbi).errors = MOUNT_ERRORS_CONTINUE;
+	F2FS_OPTION(sbi).resizable_tail_secno = 0;
 
 	set_opt(sbi, INLINE_XATTR);
 	set_opt(sbi, INLINE_DATA);
@@ -3045,6 +3072,7 @@ skip:
 	sb->s_flags = (sb->s_flags & ~SB_POSIXACL) |
 		(test_opt(sbi, POSIX_ACL) ? SB_POSIXACL : 0);
 
+	adjust_pinned_area_boundary(sbi);
 	limit_reserve_root(sbi);
 	fc->sb_flags = (flags & ~SB_LAZYTIME) | (sb->s_flags & SB_LAZYTIME);
 
@@ -5286,6 +5314,14 @@ try_onemore:
 
 	/* get segno of first zoned block device */
 	sbi->first_seq_zone_segno = get_first_seq_zone_segno(sbi);
+
+	if (F2FS_OPTION(sbi).resizable_tail_secno >= MAIN_SECS(sbi)) {
+		f2fs_err(sbi, "Option resizable_tail_secno is larger than or equal to total sections (%u >= %u)",
+				F2FS_OPTION(sbi).resizable_tail_secno, MAIN_SECS(sbi));
+		err = -EINVAL;
+		goto free_nm;
+	}
+	adjust_pinned_area_boundary(sbi);
 
 	sbi->reserved_pin_section = f2fs_sb_has_blkzoned(sbi) ?
 			ZONED_PIN_SEC_REQUIRED_COUNT :
