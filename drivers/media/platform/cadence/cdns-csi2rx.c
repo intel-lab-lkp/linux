@@ -230,19 +230,20 @@ static const struct csi2rx_fmt *csi2rx_get_fmt_by_code(u32 code)
 	return NULL;
 }
 
-static int csi2rx_get_frame_desc_from_source(struct csi2rx_priv *csi2rx,
-					     struct v4l2_mbus_frame_desc *fd)
+static struct v4l2_mbus_frame_desc *
+csi2rx_get_frame_desc_from_source(struct csi2rx_priv *csi2rx)
 {
 	struct media_pad *remote_pad;
 
 	remote_pad = media_entity_remote_source_pad_unique(&csi2rx->subdev.entity);
 	if (IS_ERR(remote_pad)) {
 		dev_err(csi2rx->dev, "No remote pad found for sink\n");
-		return PTR_ERR(remote_pad);
+		return ERR_CAST(remote_pad);
 	}
 
-	return v4l2_subdev_call(csi2rx->source_subdev, pad, get_frame_desc,
-				remote_pad->index, fd);
+	return v4l2_subdev_get_frame_desc(csi2rx->source_subdev,
+					  remote_pad->index,
+					  V4L2_MBUS_FRAME_DESC_TYPE_CSI2);
 }
 
 static inline
@@ -459,13 +460,12 @@ static int csi2rx_log_status(struct v4l2_subdev *sd)
 static void csi2rx_update_vc_select(struct csi2rx_priv *csi2rx,
 				    struct v4l2_subdev_state *state)
 {
-	struct v4l2_mbus_frame_desc fd = {0};
 	struct v4l2_subdev_route *route;
 	unsigned int i;
-	int ret;
 
-	ret = csi2rx_get_frame_desc_from_source(csi2rx, &fd);
-	if (ret || fd.type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
+	struct v4l2_mbus_frame_desc __free(v4l2_subdev_free_frame_desc) *fd =
+		csi2rx_get_frame_desc_from_source(csi2rx);
+	if (IS_ERR(fd) || fd->type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
 		dev_dbg(csi2rx->dev,
 			"Failed to get source frame desc, allowing only VC=0\n");
 		for (i = 0; i < CSI2RX_STREAMS_MAX; i++)
@@ -479,12 +479,12 @@ static void csi2rx_update_vc_select(struct csi2rx_priv *csi2rx,
 	for_each_active_route(&state->routing, route) {
 		u32 cdns_stream = route->source_pad - CSI2RX_PAD_SOURCE_STREAM0;
 
-		for (i = 0; i < fd.num_entries; i++) {
-			if (fd.entry[i].stream != route->sink_stream)
+		for (i = 0; i < fd->num_entries; i++) {
+			if (fd->entry[i].stream != route->sink_stream)
 				continue;
 
 			csi2rx->vc_select[cdns_stream] |=
-				CSI2RX_STREAM_DATA_CFG_VC_SELECT(fd.entry[i].bus.csi2.vc);
+				CSI2RX_STREAM_DATA_CFG_VC_SELECT(fd->entry[i].bus.csi2.vc);
 		}
 	}
 }
