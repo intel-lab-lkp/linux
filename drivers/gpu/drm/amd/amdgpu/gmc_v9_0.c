@@ -765,27 +765,28 @@ static bool gmc_v9_0_get_atc_vmid_pasid_mapping_info(struct amdgpu_device *adev,
  */
 
 /**
- * gmc_v9_0_flush_gpu_tlb - tlb flush with certain type
+ * gmc_v9_0_flush_gpu_tlb_mmio - tlb flush via direct MMIO
  *
  * @adev: amdgpu_device pointer
+ * @hub: vmhub to flush
  * @vmid: vm instance to flush
  * @vmhub: which hub to flush
- * @flush_type: the flush type
+ * @inv_req: invalidation request payload
  *
- * Flush the TLB for the requested page table using certain type.
+ * Direct CPU access to the invalidation engine. Callers must ensure
+ * the target block cannot power gate across the access (GFXOFF needs
+ * to be held off at runtime) and must hold no other locks.
  */
-static void gmc_v9_0_flush_gpu_tlb(struct amdgpu_device *adev, uint32_t vmid,
-					uint32_t vmhub, uint32_t flush_type)
+static void gmc_v9_0_flush_gpu_tlb_mmio(struct amdgpu_device *adev,
+					struct amdgpu_vmhub *hub,
+					uint32_t vmid, uint32_t vmhub,
+					u32 inv_req)
 {
 	bool use_semaphore = gmc_v9_0_use_invalidate_semaphore(adev, vmhub);
-	u32 j, inv_req, tmp, sem, req, ack, inst;
 	const unsigned int eng = 17;
-	struct amdgpu_vmhub *hub;
+	unsigned long flags;
+	u32 j, tmp, sem, req, ack, inst;
 
-	BUG_ON(vmhub >= AMDGPU_MAX_VMHUBS);
-
-	hub = &adev->vmhub[vmhub];
-	inv_req = gmc_v9_0_get_invalidate_req(vmid, flush_type);
 	sem = hub->vm_inv_eng0_sem + hub->eng_distance * eng;
 	req = hub->vm_inv_eng0_req + hub->eng_distance * eng;
 	ack = hub->vm_inv_eng0_ack + hub->eng_distance * eng;
@@ -795,21 +796,8 @@ static void gmc_v9_0_flush_gpu_tlb(struct amdgpu_device *adev, uint32_t vmid,
 	else
 		inst = vmhub;
 
-	/* This is necessary for SRIOV as well as for GFXOFF to function
-	 * properly under bare metal
-	 */
-	if (adev->gfx.kiq[inst].ring.sched.ready &&
-	    (amdgpu_sriov_runtime(adev) || !amdgpu_sriov_vf(adev))) {
-		uint32_t req = hub->vm_inv_eng0_req + hub->eng_distance * eng;
-		uint32_t ack = hub->vm_inv_eng0_ack + hub->eng_distance * eng;
-
-		amdgpu_gmc_fw_reg_write_reg_wait(adev, req, ack, inv_req,
-						 1 << vmid, inst);
-		return;
-	}
-
 	/* This path is needed before KIQ/MES/GFXOFF are set up */
-	spin_lock(&adev->gmc.invalidate_lock);
+	spin_lock_irqsave(&adev->gmc.invalidate_lock, flags);
 
 	/*
 	 * It may lose gpuvm invalidate acknowldege state across power-gating
@@ -871,12 +859,88 @@ static void gmc_v9_0_flush_gpu_tlb(struct amdgpu_device *adev, uint32_t vmid,
 			WREG32_SOC15_IP_NO_KIQ(GC, sem, 0, GET_INST(GC, inst));
 	}
 
-	spin_unlock(&adev->gmc.invalidate_lock);
+	spin_unlock_irqrestore(&adev->gmc.invalidate_lock, flags);
 
 	if (j < adev->usec_timeout)
 		return;
 
 	DRM_ERROR("Timeout waiting for VM flush ACK!\n");
+}
+
+/**
+ * gmc_v9_0_flush_gpu_tlb - tlb flush with certain type
+ *
+ * @adev: amdgpu_device pointer
+ * @vmid: vm instance to flush
+ * @vmhub: which hub to flush
+ * @flush_type: the flush type
+ *
+ * Flush the TLB for the requested page table using certain type.
+ */
+static void gmc_v9_0_flush_gpu_tlb(struct amdgpu_device *adev, uint32_t vmid,
+					uint32_t vmhub, uint32_t flush_type)
+{
+	u32 inv_req, inst;
+	const unsigned int eng = 17;
+	struct amdgpu_vmhub *hub;
+	bool latched, can_mmio;
+
+	BUG_ON(vmhub >= AMDGPU_MAX_VMHUBS);
+
+	hub = &adev->vmhub[vmhub];
+	inv_req = gmc_v9_0_get_invalidate_req(vmid, flush_type);
+
+	if (vmhub >= AMDGPU_MMHUB0(0))
+		inst = 0;
+	else
+		inst = vmhub;
+
+	latched = atomic_read(&adev->gfx.kiq[inst].flush_failures) >=
+			AMDGPU_KIQ_FLUSH_MAX_FAIL;
+	/* Direct register access requires process context (holding
+	 * GFXOFF off may sleep) and bare metal (VFs lack the
+	 * privileges for direct GMC invalidation writes)
+	 */
+	can_mmio = !in_interrupt() && !amdgpu_sriov_vf(adev);
+
+	/* This is necessary for SRIOV as well as for GFXOFF to function
+	 * properly under bare metal
+	 */
+	if (adev->gfx.kiq[inst].ring.sched.ready &&
+	    (amdgpu_sriov_runtime(adev) || !amdgpu_sriov_vf(adev))) {
+		uint32_t req = hub->vm_inv_eng0_req + hub->eng_distance * eng;
+		uint32_t ack = hub->vm_inv_eng0_ack + hub->eng_distance * eng;
+
+		/* Once latched, KIQ is only attempted by callers that have
+		 * no MMIO alternative (IRQ context, VFs); bare metal
+		 * process context goes straight to the MMIO fallback
+		 */
+		if (!latched || !can_mmio) {
+			if (!amdgpu_gmc_fw_reg_write_reg_wait(adev, req, ack,
+							      inv_req,
+							      1 << vmid, inst))
+				return;
+			/* KIQ submit failed; error already logged above */
+		}
+
+		/*
+		 * MMIO fallback: the invalidation must not be silently
+		 * dropped when KIQ is unresponsive.
+		 */
+		if (can_mmio) {
+			amdgpu_gfx_off_ctrl(adev, false);
+			gmc_v9_0_flush_gpu_tlb_mmio(adev, hub, vmid, vmhub,
+						    inv_req);
+			amdgpu_gfx_off_ctrl(adev, true);
+		}
+		/* IRQ context / VF: flush dropped as before this patch;
+		 * the failure was logged in
+		 * amdgpu_gmc_fw_reg_write_reg_wait()
+		 */
+		return;
+	}
+
+	gmc_v9_0_flush_gpu_tlb_mmio(adev, hub, vmid, vmhub, inv_req);
 }
 
 /**
@@ -2246,6 +2310,13 @@ static void gmc_v9_0_gart_disable(struct amdgpu_device *adev)
 static int gmc_v9_0_hw_fini(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_device *adev = ip_block->adev;
+	int i;
+
+	/* KIQ instances are re-initialized on the next resume; re-arm
+	 * the MMIO fallback logic
+	 */
+	for (i = 0; i < AMDGPU_MAX_GC_INSTANCES; i++)
+		atomic_set(&adev->gfx.kiq[i].flush_failures, 0);
 
 	gmc_v9_0_gart_disable(adev);
 
