@@ -3059,14 +3059,17 @@ resources (res_a and res_b) are registered then:
         file.
 
   misc.events
-	A read-only flat-keyed file which exists on non-root cgroups. The
-	following entries are defined. Unless specified otherwise, a value
-	change in this file generates a file modified event. All fields in
-	this file are hierarchical.
+        A read-only flat-keyed file which exists on non-root cgroups. It
+        shows, per resource, the number of times the resource usage of the
+        cgroup and its children was about to go over the max boundary.
+        Unless specified otherwise, a value change in this file generates a
+        file modified event. All fields in this file are hierarchical::
 
-	  max
-		The number of times the cgroup's resource usage was
-		about to go over the max boundary.
+          $ cat misc.events
+          res_a.max 0
+          res_b.max 0
+
+        Each entry is keyed by the resource name suffixed with ``.max``.
 
   misc.events.local
         Similar to misc.events but the fields in the file are local to the
