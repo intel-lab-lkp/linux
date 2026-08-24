@@ -133,6 +133,8 @@ int no_unaligned_warning __read_mostly = 1;	/* Only 1 warning by default */
 static void fixup_load(struct disasm_state *state, struct pt_regs *regs,
 			struct callee_regs *cregs)
 {
+	unsigned long address;
+	unsigned int size;
 	int val;
 
 	/* register write back */
@@ -143,10 +145,15 @@ static void fixup_load(struct disasm_state *state, struct pt_regs *regs,
 			state->src2 = 0;
 	}
 
+	address = state->src1 + state->src2;
+	size = state->zz ? 2 : 4;
+	if (!access_ok((void __user *)address, size))
+		goto fault;
+
 	if (state->zz == 0) {
-		get32_unaligned_check(val, state->src1 + state->src2);
+		get32_unaligned_check(val, address);
 	} else {
-		get16_unaligned_check(val, state->src1 + state->src2);
+		get16_unaligned_check(val, address);
 
 		if (state->x)
 			val = (val << 16) >> 16;
@@ -163,6 +170,9 @@ fault:	state->fault = 1;
 static void fixup_store(struct disasm_state *state, struct pt_regs *regs,
 			struct callee_regs *cregs)
 {
+	unsigned long address;
+	unsigned int size;
+
 	/* register write back */
 	if ((state->aa == 1) || (state->aa == 2)) {
 		set_reg(state->wb_reg, state->src2 + state->src3, regs, cregs);
@@ -181,11 +191,16 @@ static void fixup_store(struct disasm_state *state, struct pt_regs *regs,
 		}
 	}
 
+	address = state->src2 + state->src3;
+	size = state->zz ? 2 : 4;
+	if (!access_ok((void __user *)address, size))
+		goto fault;
+
 	/* write fix-up */
 	if (!state->zz)
-		put32_unaligned_check(state->src1, state->src2 + state->src3);
+		put32_unaligned_check(state->src1, address);
 	else
-		put16_unaligned_check(state->src1, state->src2 + state->src3);
+		put16_unaligned_check(state->src1, address);
 
 	return;
 
