@@ -42,6 +42,20 @@ static void nested_svm_clear_insn_bytes(struct vmcb *vmcb)
 	       sizeof(vmcb->control.insn_bytes));
 }
 
+static void nested_svm_copy_insn_bytes(struct vmcb *to,
+				       const struct vmcb *from)
+{
+	u8 insn_len = from->control.insn_len;
+
+	nested_svm_clear_insn_bytes(to);
+
+	if (WARN_ON_ONCE(insn_len > sizeof(from->control.insn_bytes)))
+		return;
+
+	to->control.insn_len = insn_len;
+	memcpy(to->control.insn_bytes, from->control.insn_bytes, insn_len);
+}
+
 static bool nested_svm_vmexit_has_insn_bytes(const struct vmcb *vmcb)
 {
 	u64 exit_code = vmcb->control.exit_code;
@@ -64,6 +78,25 @@ static void nested_svm_set_vmcb02_insn_bytes_fresh(struct vcpu_svm *svm,
 static void nested_svm_clear_vmcb02_insn_bytes(struct vcpu_svm *svm)
 {
 	nested_svm_clear_insn_bytes(svm->nested.vmcb02.ptr);
+	svm->nested.vmcb02_insn_bytes_fresh = false;
+}
+
+static void nested_svm_update_vmcb12_insn_bytes(struct kvm_vcpu *vcpu,
+						struct vmcb *vmcb12,
+						const struct vmcb *vmcb02)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+
+	nested_svm_clear_insn_bytes(vmcb12);
+
+	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_DECODEASSISTS) ||
+	    !nested_svm_vmexit_has_insn_bytes(vmcb02))
+		goto out;
+
+	if (svm->nested.vmcb02_insn_bytes_fresh)
+		nested_svm_copy_insn_bytes(vmcb12, vmcb02);
+
+out:
 	svm->nested.vmcb02_insn_bytes_fresh = false;
 }
 
@@ -1331,6 +1364,8 @@ static int nested_svm_vmexit_update_vmcb12(struct kvm_vcpu *vcpu)
 
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_NRIPS))
 		vmcb12->control.next_rip  = vmcb02->control.next_rip;
+
+	nested_svm_update_vmcb12_insn_bytes(vcpu, vmcb12, vmcb02);
 
 	if (nested_vmcb12_has_lbrv(vcpu))
 		svm_copy_lbrs(&vmcb12->save, &vmcb02->save);
