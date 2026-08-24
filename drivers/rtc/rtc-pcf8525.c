@@ -34,6 +34,7 @@
  */
 
 #include <linux/bcd.h>
+#include <linux/hwmon.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/device.h>
@@ -166,6 +167,7 @@
 #define PCF8525_WD_MIN_HW_HEARTBEAT_MS  4000
 #define PCF8525_WD_VAL_STOP             0
 #define PCF8525_WD_DEFAULT_TIMEOUT_S    60
+#define PCF8525_CLKOUT_TCR_MASK		GENMASK(7, 5)
 
 #define PCF8525_REG_AGING_OFFSET_HI	0x26
 #define PCF8525_REG_AGING_OFFSET_LO	0x27
@@ -596,6 +598,199 @@ static int pcf8525_rtc_set_offset(struct device *dev, long offset)
 		return -ERANGE;
 
 	return pcf8525_write_aging_offset(pcf8525, (s16)raw);
+}
+
+static int pcf8525_hwmon_read_temp(struct device *dev, long *temp)
+{
+	struct pcf8525 *pcf8525 = dev_get_drvdata(dev);
+	unsigned int regval;
+	int ret;
+
+	ret = regmap_read(pcf8525->regmap, PCF8525_REG_TEMP, &regval);
+	if (ret)
+		return ret;
+
+	/*
+	 * PCF8525: signed 8-bit, 1 degree C per LSB.
+	 * HWMON requires millidegree Celsius.
+	 */
+	*temp = (long)(s8)(u8)regval * 1000L;
+
+	return 0;
+}
+
+static int pcf8525_hwmon_read_update_interval(struct device *dev, long *val)
+{
+	struct pcf8525 *pcf8525 = dev_get_drvdata(dev);
+	unsigned int regval;
+	unsigned int tcr;
+	int ret;
+
+	ret = regmap_read(pcf8525->regmap, PCF8525_REG_CLKOUT, &regval);
+	if (ret)
+		return ret;
+
+	tcr = FIELD_GET(PCF8525_CLKOUT_TCR_MASK, regval);
+
+	switch (tcr) {
+	case 0:
+		*val = 32 * 60 * 1000L;
+		break;
+	case 1:
+		*val = 16 * 60 * 1000L;
+		break;
+	case 2:
+		*val = 8 * 60 * 1000L;
+		break;
+	case 3:
+		*val = 4 * 60 * 1000L;
+		break;
+	case 4:
+		*val = 2 * 60 * 1000L;
+		break;
+	default:
+		*val = 60 * 1000L;
+		break;
+	}
+
+	return 0;
+}
+
+static int pcf8525_hwmon_write_update_interval(struct device *dev, long val)
+{
+	struct pcf8525 *pcf8525 = dev_get_drvdata(dev);
+	unsigned int tcr;
+
+	switch (val) {
+	case 32 * 60 * 1000L:
+		tcr = 0;
+		break;
+	case 16 * 60 * 1000L:
+		tcr = 1;
+		break;
+	case 8 * 60 * 1000L:
+		tcr = 2;
+		break;
+	case 4 * 60 * 1000L:
+		tcr = 3;
+		break;
+	case 2 * 60 * 1000L:
+		tcr = 4;
+		break;
+	case 60 * 1000L:
+		tcr = 5;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/* Update only TCR[2:0]; preserve OTPR, CLKOE and COF[2:0]. */
+	return regmap_update_bits(pcf8525->regmap, PCF8525_REG_CLKOUT,
+				  PCF8525_CLKOUT_TCR_MASK,
+				  FIELD_PREP(PCF8525_CLKOUT_TCR_MASK, tcr));
+}
+
+static umode_t pcf8525_hwmon_is_visible(const void *data,
+					enum hwmon_sensor_types type,
+					u32 attr, int channel)
+{
+	switch (type) {
+	case hwmon_chip:
+		if (attr == hwmon_chip_update_interval)
+			return 0644;
+		break;
+	case hwmon_temp:
+		if (attr == hwmon_temp_input && channel == 0)
+			return 0444;
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static int pcf8525_hwmon_read(struct device *dev,
+			      enum hwmon_sensor_types type,
+			      u32 attr, int channel, long *val)
+{
+	switch (type) {
+	case hwmon_chip:
+		if (attr == hwmon_chip_update_interval)
+			return pcf8525_hwmon_read_update_interval(dev, val);
+		break;
+	case hwmon_temp:
+		if (attr == hwmon_temp_input && channel == 0)
+			return pcf8525_hwmon_read_temp(dev, val);
+		break;
+	default:
+		break;
+	}
+
+	return -EOPNOTSUPP;
+}
+
+static int pcf8525_hwmon_write(struct device *dev,
+			       enum hwmon_sensor_types type,
+			       u32 attr, int channel, long val)
+{
+	if (type == hwmon_chip && attr == hwmon_chip_update_interval)
+		return pcf8525_hwmon_write_update_interval(dev, val);
+
+	return -EOPNOTSUPP;
+}
+
+static const struct hwmon_channel_info * const pcf8525_hwmon_info[] = {
+	HWMON_CHANNEL_INFO(chip, HWMON_C_UPDATE_INTERVAL),
+	HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT),
+	NULL
+};
+
+static const struct hwmon_ops pcf8525_hwmon_ops = {
+	.is_visible = pcf8525_hwmon_is_visible,
+	.read = pcf8525_hwmon_read,
+	.write = pcf8525_hwmon_write,
+};
+
+static const struct hwmon_chip_info pcf8525_hwmon_chip_info = {
+	.ops = &pcf8525_hwmon_ops,
+	.info = pcf8525_hwmon_info,
+};
+
+/*
+ * Keep HWMON optional and non-fatal so RTC and watchdog registration remain
+ * usable even if the temperature interface cannot be registered.
+ */
+static void pcf8525_hwmon_register(struct device *dev,
+				   struct pcf8525 *pcf8525)
+{
+	struct device *hwmon_dev;
+	int ret;
+
+	if (!IS_ENABLED(CONFIG_RTC_DRV_PCF8525_HWMON))
+		return;
+
+	/*
+	 * Register the hwmon device first.  Only enable the hardware
+	 * temperature readout afterwards so that the device is not left
+	 * enabled if registration fails.
+	 */
+	hwmon_dev = devm_hwmon_device_register_with_info(dev, "pcf8525",
+							 pcf8525,
+							 &pcf8525_hwmon_chip_info,
+							 NULL);
+	if (IS_ERR(hwmon_dev)) {
+		dev_warn(dev, "failed to register HWMON device: %ld\n",
+			 PTR_ERR(hwmon_dev));
+		return;
+	}
+
+	/* Enable digital readout; preserve TSIE, CL and XTL_TYP. */
+	ret = regmap_update_bits(pcf8525->regmap, PCF8525_REG_CTRL5,
+				 PCF8525_CTRL5_TEMP_RD_EN,
+				 PCF8525_CTRL5_TEMP_RD_EN);
+	if (ret)
+		dev_warn(dev, "failed to enable temperature readout: %d\n", ret);
 }
 
 static int pcf8525_read_time(struct device *dev, struct rtc_time *tm)
@@ -1193,6 +1388,8 @@ static int pcf8525_probe(struct i2c_client *client)
 	ret = devm_rtc_register_device(pcf8525->rtc);
 	if (ret)
 		return ret;
+
+	pcf8525_hwmon_register(dev, pcf8525);
 
 	return 0;
 }
