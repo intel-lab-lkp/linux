@@ -5341,6 +5341,26 @@ int ath11k_dp_rx_process_mon_status(struct ath11k_base *ab, int mac_id,
 		arsta = ath11k_sta_to_arsta(peer->sta);
 		ath11k_dp_rx_update_peer_stats(arsta, ppdu_info);
 
+		/* The airtime a station spends transmitting is airtime it takes
+		 * from the others, so the fairness deficit is charged for it as
+		 * well. This is the duration the hardware measured for the
+		 * whole PPDU, which is what the transmit side registers too.
+		 *
+		 * ppdu_info->tid is ffs() of the TID bitmap less one, so a PPDU
+		 * that reports no TID leaves it at 65535; charge that airtime to
+		 * the same access category the transmit side gives a frame with
+		 * no QoS TID.
+		 */
+		if (ppdu_info->rx_duration) {
+			u8 tid = 0;
+
+			if (ppdu_info->tid < IEEE80211_NUM_TIDS)
+				tid = ppdu_info->tid;
+
+			ieee80211_sta_register_airtime(peer->sta, tid, 0,
+						       ppdu_info->rx_duration);
+		}
+
 		if (ath11k_debugfs_is_pktlog_peer_valid(ar, peer->addr))
 			trace_ath11k_htt_rxdesc(ar, skb->data, log_type, rx_buf_sz);
 
