@@ -2774,6 +2774,12 @@ v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 			goto err_free;
 		}
 
+		if (!desc->num_entries) {
+			dev_dbg(sd->dev, "no frame descriptor entries\n");
+			ret = -EINVAL;
+			goto err_free;
+		}
+
 		return desc;
 	}
 
