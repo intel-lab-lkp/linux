@@ -1536,9 +1536,9 @@ static bool kvm_xen_schedop_poll(struct kvm_vcpu *vcpu, bool longmode,
 	}
 
 	if (sched_poll.nr_ports == 1)
-		vcpu->arch.xen.poll_evtchn = port;
+		WRITE_ONCE(vcpu->arch.xen.poll_evtchn, port);
 	else
-		vcpu->arch.xen.poll_evtchn = -1;
+		WRITE_ONCE(vcpu->arch.xen.poll_evtchn, -1);
 
 	set_bit(vcpu->vcpu_idx, vcpu->kvm->arch.xen.poll_mask);
 
@@ -1557,7 +1557,7 @@ static bool kvm_xen_schedop_poll(struct kvm_vcpu *vcpu, bool longmode,
 		kvm_set_mp_state(vcpu, KVM_MP_STATE_RUNNABLE);
 	}
 
-	vcpu->arch.xen.poll_evtchn = 0;
+	WRITE_ONCE(vcpu->arch.xen.poll_evtchn, 0);
 	*r = 0;
 out:
 	/* Really, this is only needed in case of timeout */
@@ -1773,7 +1773,7 @@ handle_in_userspace:
 
 static void kvm_xen_check_poller(struct kvm_vcpu *vcpu, int port)
 {
-	int poll_evtchn = vcpu->arch.xen.poll_evtchn;
+	int poll_evtchn = READ_ONCE(vcpu->arch.xen.poll_evtchn);
 
 	if ((poll_evtchn == port || poll_evtchn == -1) &&
 	    test_and_clear_bit(vcpu->vcpu_idx, vcpu->kvm->arch.xen.poll_mask)) {
