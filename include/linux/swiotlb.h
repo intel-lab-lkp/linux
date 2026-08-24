@@ -205,6 +205,7 @@ void swiotlb_destroy_compound_page(struct page *page, unsigned int order);
 void swiotlb_safe_put_device(struct device *dev);
 
 extern unsigned int nocopy_tx_percent;
+extern unsigned int nocopy_rx_percent;
 
 /* Track epoch (number of delete operations) for leaf device info. */
 extern atomic_t global_device_epoch;

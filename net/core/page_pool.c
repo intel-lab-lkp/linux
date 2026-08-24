@@ -19,6 +19,7 @@
 
 #include <linux/dma-direction.h>
 #include <linux/dma-mapping.h>
+#include <linux/swiotlb.h>
 #include <linux/page-flags.h>
 #include <linux/mm.h> /* for put_page() */
 #include <linux/poison.h>
@@ -567,10 +568,16 @@ unmap_failed:
 static struct page *__page_pool_alloc_page_order(struct page_pool *pool,
 						 gfp_t gfp)
 {
+	unsigned int pct = READ_ONCE(nocopy_rx_percent);
 	struct page *page;
 
 	gfp |= __GFP_COMP;
-	page = alloc_pages_node(pool->p.nid, gfp, pool->p.order);
+	page = NULL;
+	if (pct && is_swiotlb_active(pool->p.dev))
+		page = swiotlb_alloc_pages(pool->p.dev, pool->p.order, gfp,
+					   pct);
+	if (!page)
+		page = alloc_pages_node(pool->p.nid, gfp, pool->p.order);
 	if (unlikely(!page))
 		return NULL;
 
@@ -605,8 +612,9 @@ static noinline netmem_ref __page_pool_alloc_netmems_slow(struct page_pool *pool
 	if ((gfp & GFP_ATOMIC) == GFP_ATOMIC)
 		gfp |= __GFP_NOWARN;
 
-	/* Don't support bulk alloc for high-order pages */
-	if (unlikely(pp_order))
+	/* Don't support bulk alloc for high-order pages or nocopy SWIOTLB */
+	if (unlikely(pp_order || (READ_ONCE(nocopy_rx_percent) &&
+				  is_swiotlb_active(pool->p.dev))))
 		return page_to_netmem(__page_pool_alloc_page_order(pool, gfp));
 
 	/* Unnecessary as alloc cache is empty, but guarantees zero count */
@@ -831,6 +839,17 @@ __page_pool_put_page(struct page_pool *pool, netmem_ref netmem,
 		     unsigned int dma_sync_size, bool allow_direct)
 {
 	lockdep_assert_no_hardirq();
+
+	/*
+	 * If runtime nocopy mode toggled, evict circulating buffers immediately
+	 * back to their respective allocators rather than recycling them.
+	 */
+	if (unlikely(!netmem_is_net_iov(netmem) &&
+		     swiotlb_is_nocopy_addr(pool->p.dev, page_to_phys(netmem_to_page(netmem))) !=
+		     (READ_ONCE(nocopy_rx_percent) > 0))) {
+		page_pool_return_netmem(pool, netmem);
+		return 0;
+	}
 
 	/* This allocator is optimized for the XDP mode that uses
 	 * one-frame-per-page, but have fallbacks that act like the
