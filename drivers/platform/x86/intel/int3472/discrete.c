@@ -4,6 +4,7 @@
 #include <linux/acpi.h>
 #include <linux/array_size.h>
 #include <linux/bitfield.h>
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/dmi.h>
 #include <linux/gpio/consumer.h>
@@ -288,7 +289,6 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 	unsigned int enable_time_us;
 	u8 active_value, pin, type;
 	unsigned long gpio_flags;
-	union acpi_object *obj;
 	struct gpio_desc *gpio;
 	const char *con_id;
 	int ret;
@@ -300,10 +300,11 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 	 * ngpios + 2 because the index of this _DSM function is 1-based and
 	 * the first function is just a count.
 	 */
-	obj = acpi_evaluate_dsm_typed(int3472->adev->handle,
-				      &int3472_gpio_guid, 0x00,
-				      int3472->ngpios + 2,
-				      NULL, ACPI_TYPE_INTEGER);
+	union acpi_object *obj __free(ACPI_FREE) =
+		acpi_evaluate_dsm_typed(int3472->adev->handle,
+					&int3472_gpio_guid, 0x00,
+					int3472->ngpios + 2,
+					NULL, ACPI_TYPE_INTEGER);
 
 	if (!obj) {
 		dev_warn(int3472->dev, "No _DSM entry for GPIO pin %u\n",
@@ -394,7 +395,6 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 	}
 
 	int3472->ngpios++;
-	ACPI_FREE(obj);
 
 	/*
 	 * Either return an error or tell acpi_dev_get_resources() to not make a
