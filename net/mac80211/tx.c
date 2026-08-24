@@ -4223,6 +4223,25 @@ EXPORT_SYMBOL(__ieee80211_schedule_txq);
 
 DEFINE_STATIC_KEY_FALSE(aql_disable);
 
+/* The airtime a station may keep in flight scales with its weight. The low
+ * limit is consulted unconditionally, so the scaled value is bounded by the
+ * radio-wide threshold rather than by the weight alone, and never below the
+ * limit that was configured.
+ */
+static u32 ieee80211_aql_sta_limit(struct ieee80211_local *local,
+				   struct sta_info *sta, u32 limit)
+{
+	u32 scaled;
+
+	if (sta->airtime_weight == IEEE80211_DEFAULT_AIRTIME_WEIGHT)
+		return limit;
+
+	scaled = mult_frac(limit, sta->airtime_weight,
+			   IEEE80211_DEFAULT_AIRTIME_WEIGHT);
+
+	return min(scaled, max(limit, local->aql_threshold));
+}
+
 bool ieee80211_txq_airtime_check(struct ieee80211_hw *hw,
 				 struct ieee80211_txq *txq)
 {
@@ -4244,13 +4263,15 @@ bool ieee80211_txq_airtime_check(struct ieee80211_hw *hw,
 
 	sta = container_of(txq->sta, struct sta_info, sta);
 	if (atomic_read(&sta->airtime[txq->ac].aql_tx_pending) <
-	    sta->airtime[txq->ac].aql_limit_low)
+	    ieee80211_aql_sta_limit(local, sta,
+				    sta->airtime[txq->ac].aql_limit_low))
 		return true;
 
 	if (atomic_read(&local->aql_total_pending_airtime) <
 	    local->aql_threshold &&
 	    atomic_read(&sta->airtime[txq->ac].aql_tx_pending) <
-	    sta->airtime[txq->ac].aql_limit_high)
+	    ieee80211_aql_sta_limit(local, sta,
+				    sta->airtime[txq->ac].aql_limit_high))
 		return true;
 
 	return false;
