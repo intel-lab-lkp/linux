@@ -14,6 +14,19 @@
 	model = "Qualcomm Technologies, Inc. Eliza CQS EVK";
 	compatible = "qcom,eliza-cqs-evk", "qcom,eliza-cqs-som", "qcom,eliza";
 
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		key-volume-up {
+			label = "Volume Up";
+			linux,code = <KEY_VOLUMEUP>;
+			gpios = <&pm7550_gpios 6 GPIO_ACTIVE_LOW>;
+			debounce-interval = <10>;
+			linux,can-disable;
+			wakeup-source;
+		};
+	};
+
 	sound {
 		compatible = "qcom,eliza-sndcard", "qcom,sm8450-sndcard";
 		model = "eliza-cqs-evk";
@@ -81,6 +94,15 @@
 
 	vdd-micb-supply = <&dmic_eldo>;
 	qcom,dmic-sample-rate = <4800000>;
+};
+
+&pon_pwrkey {
+	status = "okay";
+};
+
+&pon_resin {
+	linux,code = <KEY_VOLUMEDOWN>;
+	status = "okay";
 };
 
 &swr0 {
