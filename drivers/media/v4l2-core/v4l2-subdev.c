@@ -63,10 +63,6 @@ static bool v4l2_subdev_enable_streams_api;
 /*
  * Maximum stream ID is 63 for now, as we use u64 bitmask to represent a set
  * of streams.
- *
- * Note that V4L2_FRAME_DESC_ENTRY_MAX is related: V4L2_FRAME_DESC_ENTRY_MAX
- * restricts the total number of streams in a pad, although the stream ID is
- * not restricted.
  */
 #define V4L2_SUBDEV_MAX_STREAM_ID 63
 
@@ -354,6 +350,7 @@ static int call_set_frame_interval(struct v4l2_subdev *sd,
 static int call_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 			       struct v4l2_mbus_frame_desc *fd)
 {
+	unsigned int type;
 	unsigned int i;
 	int ret;
 
@@ -362,16 +359,26 @@ static int call_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 		return -EOPNOTSUPP;
 #endif
 
-	memset(fd, 0, sizeof(*fd));
+	type = fd->type;
+	memset_after(fd, 0, type);
+	fd->entry = fd->entry_mem;
+	fd->len_entries = ARRAY_SIZE(fd->entry_mem);
 
 	ret = sd->ops->pad->get_frame_desc(sd, pad, fd);
 	if (ret)
 		return ret;
 
+	if (type == V4L2_MBUS_FRAME_DESC_TYPE_UNDEFINED) {
+		type = fd->type;
+	} else if (type != fd->type) {
+		dev_dbg(sd->dev, "Expected frame descriptor type %u, got %u\n",
+			type, fd->type);
+		return -EINVAL;
+	}
+
 	dev_dbg(sd->dev, "Frame descriptor on pad %u, type %s\n", pad,
-		fd->type == V4L2_MBUS_FRAME_DESC_TYPE_PARALLEL ? "parallel" :
-		fd->type == V4L2_MBUS_FRAME_DESC_TYPE_CSI2 ? "CSI-2" :
-		"unknown");
+		type == V4L2_MBUS_FRAME_DESC_TYPE_PARALLEL ? "parallel" :
+		type == V4L2_MBUS_FRAME_DESC_TYPE_CSI2 ? "CSI-2" : "unknown");
 
 	for (i = 0; i < fd->num_entries; i++) {
 		struct v4l2_mbus_frame_desc_entry *entry = &fd->entry[i];
@@ -1086,9 +1093,9 @@ static long subdev_do_ioctl(struct file *file, unsigned int cmd, void *arg,
 		 * descriptor accordingly, with up to one entry per route. Until
 		 * the frame descriptors entries get allocated dynamically,
 		 * limit the number of active routes to
-		 * V4L2_FRAME_DESC_ENTRY_MAX.
+		 * V4L2_FRAME_DESC_ENTRY_PREALLOC.
 		 */
-		if (num_active_routes > V4L2_FRAME_DESC_ENTRY_MAX)
+		if (num_active_routes > V4L2_FRAME_DESC_ENTRY_PREALLOC)
 			return -E2BIG;
 
 		/*
@@ -2638,7 +2645,7 @@ int __v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 				return -EPIPE;
 			}
 
-			if (fd->num_entries >= V4L2_FRAME_DESC_ENTRY_MAX) {
+			if (fd->num_entries >= V4L2_FRAME_DESC_ENTRY_PREALLOC) {
 				dev_dbg(dev, "Frame desc entry limit reached\n");
 				return -E2BIG;
 			}
@@ -2703,6 +2710,14 @@ v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 			goto err_free;
 		}
 
+		if (desc->num_entries > desc->len_entries) {
+			dev_dbg(sd->dev,
+				"too many frame descriptors; got %u, expected at most %u\n",
+				desc->num_entries, desc->len_entries);
+			ret = -EINVAL;
+			goto err_free;
+		}
+
 		return desc;
 	}
 
@@ -2717,7 +2732,10 @@ v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 	if (ret < 0)
 		goto err_free;
 
-	struct v4l2_mbus_frame_desc_entry *entry = &desc->entry[0];
+	desc->entry = desc->entry_mem;
+	desc->len_entries = ARRAY_SIZE(desc->entry_mem);
+
+	struct v4l2_mbus_frame_desc_entry *entry = desc->entry;
 
 	entry->pixelcode = subdev_fmt.format.code;
 
@@ -2742,6 +2760,9 @@ EXPORT_SYMBOL_GPL(v4l2_subdev_get_frame_desc);
 
 void v4l2_subdev_free_frame_desc(struct v4l2_mbus_frame_desc *desc)
 {
+	if (desc->entry != desc->entry_mem)
+		kfree(desc->entry);
+
 	kfree(desc);
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_free_frame_desc);
