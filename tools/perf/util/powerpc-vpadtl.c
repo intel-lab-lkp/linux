@@ -113,8 +113,10 @@ static void powerpc_vpadtl_dump(struct powerpc_vpadtl *vpa __maybe_unused,
 			printf("dispatch_reason:%s, preempt_reason:%s, "
 					"enqueue_to_dispatch_time:%d, ready_to_enqueue_time:%d, "
 					"waiting_to_ready_time:%d\n",
-					dispatch_reasons[dtl->dispatch_reason],
-					preempt_reasons[dtl->preempt_reason],
+					dtl->dispatch_reason < ARRAY_SIZE(dispatch_reasons)
+						? dispatch_reasons[dtl->dispatch_reason] : "unknown",
+					dtl->preempt_reason < ARRAY_SIZE(preempt_reasons)
+						? preempt_reasons[dtl->preempt_reason] : "unknown",
 					be32_to_cpu(dtl->enqueue_to_dispatch_time),
 					be32_to_cpu(dtl->ready_to_enqueue_time),
 					be32_to_cpu(dtl->waiting_to_ready_time));
