@@ -21,9 +21,21 @@
 #include <linux/spinlock.h>
 #include <linux/units.h>
 
+#define SE_GENI_CFG_REG68		0x210
+#define SE_I2C_HS_TLOW_REG		0x268
 #define SE_I2C_TX_TRANS_LEN		0x26c
 #define SE_I2C_RX_TRANS_LEN		0x270
 #define SE_I2C_SCL_COUNTERS		0x278
+#define SE_I2C_HS_TCYCLE_REG		0x27c
+
+/* I2C High-Speed mode definitions */
+#define I2C_HS_MODE_FREQ		3400000
+#define I2C_HS_SRC_CLK_FREQ		(100 * HZ_PER_MHZ)
+#define I2C_HS_TCYCLE_CNT		28
+#define I2C_HS_TLOW_CNT			38
+/* I2C HS mode support requires QUPv3 core version >= 4.3 per HPG */
+#define QUP_I2C_HS_MIN_MAJOR		4
+#define QUP_I2C_HS_MIN_MINOR		3
 
 #define SE_I2C_ERR  (M_CMD_OVERRUN_EN | M_ILLEGAL_CMD_EN | M_CMD_FAILURE_EN |\
 			M_GP_IRQ_1_EN | M_GP_IRQ_3_EN | M_GP_IRQ_4_EN)
@@ -36,6 +48,9 @@
 #define I2C_ADDR_ONLY		0x4
 #define I2C_BUS_CLEAR		0x6
 #define I2C_STOP_ON_BUS		0x7
+#define I2C_HS_WRITE		0xa
+#define I2C_HS_READ		0xb
+
 /* M_CMD params for I2C */
 #define PRE_CMD_DELAY		BIT(0)
 #define TIMESTAMP_BEFORE	BIT(1)
@@ -138,6 +153,9 @@ struct geni_i2c_dev {
 	u32 num_msgs;
 	struct geni_i2c_gpi_multi_desc_xfer i2c_multi_desc_config;
 	const struct geni_i2c_desc *dev_data;
+	bool is_hs_mode;
+	bool config1_sent;
+	u32 dfs_index;
 };
 
 struct geni_i2c_err_log {
@@ -162,9 +180,14 @@ static const struct geni_i2c_err_log gi2c_log[] = {
 struct geni_i2c_clk_fld {
 	u32	clk_freq_out;
 	u8	clk_div;
-	u8	t_high_cnt;
-	u8	t_low_cnt;
-	u8	t_cycle_cnt;
+	/*
+	 * In normal mode, these counter values fit within 8 bits.
+	 * In High-Speed mode, HS_TLOW_COUNT and HS_TCYCLE_COUNT are
+	 * 10-bit fields, so u16 is required.
+	 */
+	u16	t_high_cnt;
+	u16	t_low_cnt;
+	u16	t_cycle_cnt;
 };
 
 /*
@@ -194,9 +217,29 @@ static const struct geni_i2c_clk_fld geni_i2c_clk_map_32mhz[] = {
 	{}
 };
 
+/* source_clock = 100 MHz */
+static const struct geni_i2c_clk_fld geni_i2c_clk_map_100mhz[] = {
+	{ I2C_MAX_STANDARD_MODE_FREQ, 1, 449, 548, 998 },
+	{ I2C_MAX_FAST_MODE_FREQ, 1, 76, 167, 248 },
+	{ I2C_MAX_FAST_MODE_PLUS_FREQ, 1, 23, 59, 98 },
+	{}
+};
+
 static int geni_i2c_clk_map_idx(struct geni_i2c_dev *gi2c)
 {
 	const struct geni_i2c_clk_fld *itr;
+
+	/* Check if HS mode is requested */
+	if (gi2c->clk_freq_out == I2C_HS_MODE_FREQ) {
+		gi2c->is_hs_mode = true;
+		/* For HS mode, source clock should be 100 MHz */
+		itr = geni_i2c_clk_map_100mhz;
+		/* For HS mode, start with 1MHz for master code */
+		gi2c->clk_fld = &itr[2];
+		return 0;
+	}
+
+	gi2c->is_hs_mode = false;
 
 	if (clk_get_rate(gi2c->se.clk) == 32 * HZ_PER_MHZ)
 		itr = geni_i2c_clk_map_32mhz;
@@ -219,7 +262,12 @@ static int qcom_geni_i2c_conf(struct geni_se *se, unsigned long freq)
 	const struct geni_i2c_clk_fld *itr = gi2c->clk_fld;
 	u32 val;
 
-	writel_relaxed(0, gi2c->se.base + SE_GENI_CLK_SEL);
+	if (gi2c->is_hs_mode) {
+		writel_relaxed(I2C_HS_TCYCLE_CNT, gi2c->se.base + SE_I2C_HS_TCYCLE_REG);
+		writel_relaxed(I2C_HS_TLOW_CNT, gi2c->se.base + SE_I2C_HS_TLOW_REG);
+	}
+
+	writel_relaxed(gi2c->dfs_index, gi2c->se.base + SE_GENI_CLK_SEL);
 
 	val = (itr->clk_div << CLK_DIV_SHFT) | SER_CLK_EN;
 	writel_relaxed(val, gi2c->se.base + GENI_SER_M_CLK_CFG);
@@ -500,7 +548,11 @@ static int geni_i2c_rx_one_msg(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
 		geni_se_select_mode(se, GENI_SE_FIFO);
 
 	writel_relaxed(len, se->base + SE_I2C_RX_TRANS_LEN);
-	geni_se_setup_m_cmd(se, I2C_READ, m_param);
+
+	if (gi2c->is_hs_mode)
+		geni_se_setup_m_cmd(se, I2C_HS_READ, m_param);
+	else
+		geni_se_setup_m_cmd(se, I2C_READ, m_param);
 
 	if (dma_buf && geni_se_rx_dma_prep(se, dma_buf, len, &rx_dma)) {
 		geni_se_select_mode(se, GENI_SE_FIFO);
@@ -539,7 +591,11 @@ static int geni_i2c_tx_one_msg(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
 		geni_se_select_mode(se, GENI_SE_FIFO);
 
 	writel_relaxed(len, se->base + SE_I2C_TX_TRANS_LEN);
-	geni_se_setup_m_cmd(se, I2C_WRITE, m_param);
+
+	if (gi2c->is_hs_mode)
+		geni_se_setup_m_cmd(se, I2C_HS_WRITE, m_param);
+	else
+		geni_se_setup_m_cmd(se, I2C_WRITE, m_param);
 
 	if (dma_buf && geni_se_tx_dma_prep(se, dma_buf, len, &tx_dma)) {
 		geni_se_select_mode(se, GENI_SE_FIFO);
@@ -700,7 +756,7 @@ static int geni_i2c_gpi(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[],
 		goto out;
 	}
 
-	if (op == I2C_WRITE)
+	if (op == I2C_WRITE || op == I2C_HS_WRITE)
 		map_dirn = DMA_TO_DEVICE;
 	else
 		map_dirn = DMA_FROM_DEVICE;
@@ -737,7 +793,7 @@ skip_tx_dma_map:
 	peripheral->set_config = 0;
 	peripheral->multi_msg = true;
 
-	if (op == I2C_WRITE)
+	if (op == I2C_WRITE || op == I2C_HS_WRITE)
 		dma_dirn = DMA_MEM_TO_DEV;
 	else
 		dma_dirn = DMA_DEV_TO_MEM;
@@ -827,6 +883,7 @@ static int geni_i2c_gpi_xfer(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[], i
 	peripheral.high_count = itr->t_high_cnt;
 	peripheral.low_count = itr->t_low_cnt;
 	peripheral.clk_div = itr->clk_div;
+	peripheral.clk_src = gi2c->dfs_index;
 	peripheral.set_config = 1;
 	peripheral.multi_msg = false;
 
@@ -836,6 +893,13 @@ static int geni_i2c_gpi_xfer(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[], i
 
 	gi2c->num_msgs = num;
 	gi2c->is_tx_multi_desc_xfer = false;
+	gi2c->config1_sent = false;
+
+	/* Initialize config1 TRE settings for HS mode */
+	if (gi2c->is_hs_mode) {
+		peripheral.config1.tcycle_cnt = I2C_HS_TCYCLE_CNT;
+		peripheral.config1.tlow_cnt = I2C_HS_TLOW_CNT;
+	}
 
 	tx_multi_xfer = &gi2c->i2c_multi_desc_config;
 	memset(tx_multi_xfer, 0, sizeof(struct geni_i2c_gpi_multi_desc_xfer));
@@ -883,14 +947,25 @@ static int geni_i2c_gpi_xfer(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[], i
 		if (i > 0 && (!(msgs[i].flags & I2C_M_RD)))
 			peripheral.multi_msg = false;
 
-		ret =  geni_i2c_gpi(gi2c, msgs, &config,
-				    &tx_addr, &tx_buf, I2C_WRITE, gi2c->tx_c);
+		/* Set config1 TRE only for HS mode */
+		if (gi2c->is_hs_mode && !gi2c->config1_sent) {
+			peripheral.set_config1 = 1;
+			gi2c->config1_sent = true;
+		} else {
+			peripheral.set_config1 = 0;
+		}
+
+		ret =  geni_i2c_gpi(gi2c, msgs, &config, &tx_addr, &tx_buf,
+				    gi2c->is_hs_mode ? I2C_HS_WRITE : I2C_WRITE, gi2c->tx_c);
 		if (ret)
 			goto err;
 
+		/* CONFIG1 TRE is only for the TX channel; clear before RX call */
+		peripheral.set_config1 = 0;
+
 		if (msgs[i].flags & I2C_M_RD) {
-			ret =  geni_i2c_gpi(gi2c, msgs, &config,
-					    &rx_addr, &rx_buf, I2C_READ, gi2c->rx_c);
+			ret =  geni_i2c_gpi(gi2c, msgs, &config, &rx_addr, &rx_buf,
+					    gi2c->is_hs_mode ? I2C_HS_READ : I2C_READ, gi2c->rx_c);
 			if (ret)
 				goto err;
 
@@ -1037,6 +1112,7 @@ err_tx:
 static int geni_i2c_init(struct geni_i2c_dev *gi2c)
 {
 	u32 proto, tx_depth;
+	unsigned long freq_out;
 	bool fifo_disable;
 	int ret;
 
@@ -1044,6 +1120,39 @@ static int geni_i2c_init(struct geni_i2c_dev *gi2c)
 	if (ret < 0) {
 		dev_err(gi2c->se.dev, "error turning on device :%d\n", ret);
 		return ret;
+	}
+
+	/*
+	 * For I2C High-Speed mode, first verify QUP HW version supports it
+	 * (requires QUPv3 core >= 4.3 per HPG), then configure 100 MHz source clock.
+	 */
+	if (gi2c->is_hs_mode) {
+		u32 hw_ver = geni_se_get_qup_hw_version(&gi2c->se);
+		u32 major = GENI_SE_VERSION_MAJOR(hw_ver);
+		u32 minor = GENI_SE_VERSION_MINOR(hw_ver);
+
+		if (major < QUP_I2C_HS_MIN_MAJOR ||
+		    (major == QUP_I2C_HS_MIN_MAJOR && minor < QUP_I2C_HS_MIN_MINOR)) {
+			dev_err(gi2c->se.dev,
+				"QUP HW v%u.%u does not support I2C HS mode (requires >= %u.%u)\n",
+				major, minor,
+				QUP_I2C_HS_MIN_MAJOR, QUP_I2C_HS_MIN_MINOR);
+			ret = -EOPNOTSUPP;
+			goto err;
+		}
+
+		ret = geni_se_clk_freq_match(&gi2c->se, I2C_HS_SRC_CLK_FREQ,
+					     &gi2c->dfs_index, &freq_out, false);
+		if (ret) {
+			dev_err(gi2c->se.dev, "Failed to get DFS index for HS mode: %d\n", ret);
+			goto err;
+		}
+
+		ret = clk_set_rate(gi2c->se.clk, freq_out);
+		if (ret) {
+			dev_err(gi2c->se.dev, "Failed to set HS mode clock rate: %d\n", ret);
+			goto err;
+		}
 	}
 
 	proto = geni_se_read_proto(&gi2c->se);
