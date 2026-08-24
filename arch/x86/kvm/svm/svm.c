@@ -4810,6 +4810,52 @@ static const struct __x86_intercept {
 #undef POST_EX
 #undef POST_MEM
 
+static void svm_prepare_decode_assist_exit_info(struct kvm_vcpu *vcpu,
+						const struct x86_instruction_info *info)
+{
+	struct vmcb *vmcb = to_svm(vcpu)->vmcb;
+	u64 exit_info_1;
+
+	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_DECODEASSISTS))
+		return;
+
+	switch (info->intercept) {
+	case x86_intercept_cr_read:
+	case x86_intercept_cr_write:
+		/* MOV CRx: bit 63 set, GPR number in bits 3:0. */
+		exit_info_1 = BIT_ULL(63) | (info->modrm_rm & 0xf);
+		break;
+	case x86_intercept_clts:
+	case x86_intercept_lmsw:
+	case x86_intercept_smsw:
+		/* CLTS/LMSW/SMSW: no decode information, bit 63 clear. */
+		exit_info_1 = 0;
+		break;
+	case x86_intercept_dr_read:
+	case x86_intercept_dr_write:
+		/* MOV DRx: GPR number in bits 3:0. */
+		exit_info_1 = info->modrm_rm & 0xf;
+		break;
+	case x86_intercept_intn:
+		/* INTn: software interrupt number in bits 7:0. */
+		exit_info_1 = info->src_val & 0xff;
+		break;
+	case x86_intercept_invlpg:
+		/* INVLPG: linear address of the target page. */
+		exit_info_1 = info->intercept_linear_addr;
+		break;
+	case x86_intercept_invlpga:
+		/* INVLPGA: the address remains available in guest rAX. */
+		exit_info_1 = 0;
+		break;
+	default:
+		return;
+	}
+
+	vmcb->control.exit_info_1 = exit_info_1;
+	vmcb->control.exit_info_2 = 0;
+}
+
 static int svm_check_intercept(struct kvm_vcpu *vcpu,
 			       struct x86_instruction_info *info,
 			       enum x86_intercept_stage stage,
@@ -4930,6 +4976,8 @@ static int svm_check_intercept(struct kvm_vcpu *vcpu,
 	default:
 		break;
 	}
+
+	svm_prepare_decode_assist_exit_info(vcpu, info);
 
 	/* TODO: Advertise NRIPS to guest hypervisor unconditionally */
 	if (static_cpu_has(X86_FEATURE_NRIPS))
