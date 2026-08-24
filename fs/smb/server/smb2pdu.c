@@ -6167,6 +6167,8 @@ static int smb2_get_info_filesystem(struct ksmbd_work *work,
 			info->UserBlocksAvail = cpu_to_le64(stfs.f_bavail);
 			info->TotalFileNodes = cpu_to_le64(stfs.f_files);
 			info->FreeFileNodes = cpu_to_le64(stfs.f_ffree);
+			memcpy(&info->FileSysIdentifier, &stfs.f_fsid,
+			       sizeof(stfs.f_fsid));
 			rsp->OutputBufferLength = cpu_to_le32(56);
 		}
 		break;
