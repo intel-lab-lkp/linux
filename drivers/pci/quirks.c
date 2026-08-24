@@ -6415,3 +6415,35 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9750, pci_mask_replay_timer_timeout);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9755, pci_mask_replay_timer_timeout);
 #endif
+
+/*
+ * Drop unused 32 GiB BAR 4 on Tenstorrent Blackhole cards so the card is
+ * usable on systems with smaller host bridge apertures.
+ */
+static void quirk_tenstorrent_blackhole_bar4(struct pci_dev *pdev)
+{
+	struct resource *res = &pdev->resource[4];
+	struct pci_bus *bus = pdev->bus;
+	struct resource *win;
+
+	if (!(res->flags & IORESOURCE_MEM))
+		return;
+
+	/* Find the root bus; its resource list holds the host apertures */
+	while (bus->parent)
+		bus = bus->parent;
+
+	pci_bus_for_each_resource(bus, win) {
+		if (!win || !(win->flags & IORESOURCE_MEM))
+			continue;
+		if (resource_size(res) <= resource_size(win))
+			return;
+	}
+
+	pci_info(pdev, "BAR 4 %pR larger than every host bridge aperture, dropping it\n",
+		 res);
+	res->start = 0;
+	res->end = 0;
+	res->flags = 0;
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_TENSTORRENT, 0xb140, quirk_tenstorrent_blackhole_bar4);
