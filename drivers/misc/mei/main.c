@@ -148,7 +148,6 @@ static int mei_release(struct inode *inode, struct file *file)
 		goto out;
 	}
 
-	mei_cl_flush_queues(cl, NULL);
 	cl_dbg(dev, cl, "removing\n");
 
 	mei_cl_unlink(cl);
