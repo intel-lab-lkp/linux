@@ -1225,10 +1225,6 @@ static enum scan_result __collapse_huge_page_swapin(struct mm_struct *mm,
 	if (pte)
 		pte_unmap(pte);
 
-	/* Drain LRU cache to remove extra pin on the swapped in pages */
-	if (swapped_in)
-		lru_add_drain();
-
 	result = SCAN_SUCCEED;
 out:
 	trace_mm_collapse_huge_page_swapin(mm, swapped_in, referenced, result,
@@ -2325,8 +2321,6 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 					result = SCAN_FAIL;
 					goto xa_unlocked;
 				}
-				/* drain lru cache to help folio_isolate_lru() */
-				lru_add_drain();
 			} else if (folio_trylock(folio)) {
 				folio_get(folio);
 				xas_unlock_irq(&xas);
@@ -2340,8 +2334,6 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 				page_cache_sync_readahead(mapping, &file->f_ra,
 							  file, index,
 							  end - index);
-				/* drain lru cache to help folio_isolate_lru() */
-				lru_add_drain();
 				folio = filemap_lock_folio(mapping, index);
 				if (IS_ERR(folio)) {
 					result = SCAN_FAIL;
@@ -2981,8 +2973,6 @@ static void khugepaged_do_scan(struct collapse_control *cc)
 	bool wait = true;
 	enum scan_result result = SCAN_SUCCEED;
 
-	lru_add_drain_all();
-
 	cc->progress = 0;
 	while (true) {
 		cond_resched();
@@ -3214,7 +3204,6 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 	cc->progress = 0;
 
 	mmgrab(mm);
-	lru_add_drain_all();
 
 	for (addr = hstart; addr < hend; addr += HPAGE_PMD_SIZE) {
 		enum scan_result result = SCAN_FAIL;
