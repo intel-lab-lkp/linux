@@ -821,6 +821,7 @@ static int pci_pm_suspend(struct device *dev)
 	 * since Coffee Lake, to enter a lower-power PM state.
 	 */
 	pci_suspend_ptm(pci_dev);
+	pci_suspend_lmr(pci_dev);
 
 	if (pci_has_legacy_pm_support(pci_dev))
 		return pci_legacy_suspend(dev, PMSG_SUSPEND);
