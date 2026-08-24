@@ -349,6 +349,8 @@ struct rcec_ea;
  *			number resources to allow for hierarchy expansion.
  * @is_pciehp:		PCIe Hot-Plug Capable bridge.
  */
+struct pci_margin_dev;
+
 struct pci_dev {
 	struct list_head bus_list;	/* Node in per-bus list */
 	struct pci_bus	*bus;		/* Bus this device is on */
@@ -527,6 +529,10 @@ struct pci_dev {
 	unsigned int	ptm_requester:1;
 	atomic_t	ptm_enable_cnt;
 	u8		ptm_granularity;
+#endif
+#ifdef CONFIG_PCIE_LMR
+	u16			lmr_cap;	/* Lane Margining Capability */
+	struct pci_margin_dev	*lmr;
 #endif
 #ifdef CONFIG_PCI_MSI
 	void __iomem	*msix_base;
