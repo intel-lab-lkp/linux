@@ -290,9 +290,15 @@ void kunit_exec_run_tests(struct kunit_suite_set *suite_set, bool builtin)
 	size_t num_suites = suite_set->end - suite_set->start;
 	bool autorun = kunit_autorun();
 
+	#ifdef CONFIG_KUNIT_EXTRA_ASSERTS
+	size_t num_suites_plus_extra = num_suites+1;
+	#else
+	size_t num_suites_plus_extra = num_suites;
+	#endif
+
 	if (autorun && (builtin || num_suites)) {
 		pr_info("KTAP version 1\n");
-		pr_info("1..%zu\n", num_suites);
+		pr_info("1..%zu\n", num_suites_plus_extra);
 	}
 
 	__kunit_test_suites_init(suite_set->start, num_suites, autorun);

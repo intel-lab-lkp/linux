@@ -835,6 +835,30 @@ bool kunit_enabled(void)
 	return enable_param;
 }
 
+#ifdef CONFIG_KUNIT_EXTRA_ASSERTS
+#define DEBUG_LOCKS_OK 1
+#define TAINT_WARN_OK 0
+
+static void pre_kunit_assert(struct kunit *test)
+{
+	KUNIT_EXPECT_EQ_MSG(test, debug_locks, DEBUG_LOCKS_OK,
+		"debug_locks are off before any test ran");
+	KUNIT_EXPECT_EQ_MSG(test, test_taint(TAINT_WARN), TAINT_WARN_OK,
+		"kernel already TAINT_WARN tainted before any test ran");
+}
+
+static struct kunit_case pre_kunit_assert_cases[] = {
+	KUNIT_CASE(pre_kunit_assert),
+	{}
+};
+
+static struct kunit_suite pre_kunit_assert_clean_state_suite = {
+	.name = "pre_kunit_extra_asserts",
+	.test_cases = pre_kunit_assert_cases,
+};
+
+#endif /* CONFIG_RUST_KUNIT_EXTRA_ASSERTS */
+
 int __kunit_test_suites_init(struct kunit_suite * const * const suites, int num_suites,
 			     bool run_tests)
 {
@@ -856,6 +880,12 @@ int __kunit_test_suites_init(struct kunit_suite * const * const suites, int num_
 		return -EINTR;
 	}
 	static_branch_inc(&kunit_running);
+
+	#ifdef CONFIG_KUNIT_EXTRA_ASSERTS
+	kunit_init_suite(&pre_kunit_assert_clean_state_suite);
+	if (run_tests)
+		kunit_run_tests(&pre_kunit_assert_clean_state_suite);
+	#endif
 
 	for (i = 0; i < num_suites; i++) {
 		kunit_init_suite(suites[i]);
