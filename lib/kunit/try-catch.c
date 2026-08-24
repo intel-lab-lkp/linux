@@ -41,6 +41,11 @@ void kunit_try_catch_run(struct kunit_try_catch *try_catch, void *context)
 	struct completion *task_done;
 	int exit_code, time_remaining;
 
+	#ifdef CONFIG_KUNIT_EXTRA_ASSERTS
+	int debug_locks_snapshot = debug_locks;
+	int tainted_warn_snapshot = test_taint(TAINT_WARN);
+	#endif
+
 	try_catch->context = context;
 	try_catch->try_result = 0;
 	task_struct = kthread_create(kunit_generic_run_threadfn_adapter,
@@ -70,7 +75,23 @@ void kunit_try_catch_run(struct kunit_try_catch *try_catch, void *context)
 	put_task_struct(task_struct);
 	exit_code = try_catch->try_result;
 
-	if (!exit_code)
+	#ifdef CONFIG_KUNIT_EXTRA_ASSERTS
+	bool extra_assert = false;
+
+	if (debug_locks_snapshot != debug_locks && !exit_code) {
+		extra_assert = true;
+		try_catch->try_result = -EDEADLK;
+		kunit_err(test, "Test triggered lockdep\n");
+	} else if (tainted_warn_snapshot != test_taint(TAINT_WARN) && !exit_code) {
+		extra_assert = true;
+		try_catch->try_result = -EDEADLK;
+		kunit_err(test, "Test tainted kernel with TAINT_WARN\n");
+	}
+	#else
+	bool extra_assert = false;
+	#endif
+
+	if (!exit_code && !extra_assert)
 		return;
 
 	if (exit_code == -EFAULT)

@@ -142,4 +142,16 @@ config KUNIT_UML_PCI
 
 	  If unsure, say N.
 
+config KUNIT_EXTRA_ASSERTS
+	bool "Enable extra assertions in KUnit tests"
+	depends on LOCKDEP
+	default n
+	help
+		Enables all extra assertions for KUnit which includes asserting `TAINT_WARN` and
+		`debug_locks` from lockdep. A KUnit test suite (and test case) is inserted
+		at the start of all KUnit test suites. This makes assertions prior to running any
+		tests, as a pre-test integrity check. Assertions are made after each test case which
+		asserts that each test case did not trigger either `TAINT_WARN` or `debug_locks`.
+
+		If unsure, say N.
 endif # KUNIT
