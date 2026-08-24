@@ -52,6 +52,7 @@
 #define RS5C_REG_CTRL2		15
 #	define RS5C372_CTRL2_24		(1 << 5)
 #	define RS5C_CTRL2_XSTP		(1 << 4)	/* only if !R2x2x */
+#	define R2223x_CTRL2_ECO		(1 << 7)	/* only if  R2223x */
 #	define R2x2x_CTRL2_VDET		(1 << 6)	/* only if  R2x2x */
 #	define R2x2x_CTRL2_XSTP		(1 << 5)	/* only if  R2x2x */
 #	define R2x2x_CTRL2_PON		(1 << 4)	/* only if  R2x2x */
@@ -802,6 +803,24 @@ static int rs5c_oscillator_setup(struct rs5c372 *rs5c372)
 	return 0;
 }
 
+static int rs5c372_set_eco_mode(struct rs5c372 *rs5c372, bool eco)
+{
+	struct i2c_client *client = rs5c372->client;
+	int ctrl2;
+
+	ctrl2 = i2c_smbus_read_byte_data(client, RS5C_ADDR(RS5C_REG_CTRL2));
+	if (ctrl2 < 0)
+		return ctrl2;
+
+	if (eco)
+		ctrl2 |= R2223x_CTRL2_ECO;
+	else
+		ctrl2 &= ~R2223x_CTRL2_ECO;
+
+	return i2c_smbus_write_byte_data(client, RS5C_ADDR(RS5C_REG_CTRL2),
+					 ctrl2);
+}
+
 static int rs5c372_probe(struct i2c_client *client)
 {
 	int err = 0;
@@ -897,6 +916,13 @@ static int rs5c372_probe(struct i2c_client *client)
 			}; s;}),
 			rs5c372->time24 ? "24hr" : "am/pm"
 			);
+
+	if (rs5c372->type == rtc_r2223x &&
+	    device_property_read_bool(&client->dev, "ricoh,eco-mode")) {
+		err = rs5c372_set_eco_mode(rs5c372, true);
+		if (err < 0)
+			return err;
+	}
 
 	/* REVISIT use client->irq to register alarm irq ... */
 	rs5c372->rtc = devm_rtc_device_register(&client->dev,
