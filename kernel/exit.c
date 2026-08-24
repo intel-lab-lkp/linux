@@ -441,7 +441,7 @@ static void coredump_task_exit(struct task_struct *tsk,
 	 * to core_state->dumper.
 	 */
 	if (atomic_dec_and_test(&core_state->nr_threads))
-		complete(&core_state->startup);
+		complete(&core_state->done);
 
 	for (;;) {
 		set_current_state(TASK_IDLE|TASK_FREEZABLE);
