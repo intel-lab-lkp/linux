@@ -63,16 +63,22 @@ struct hash_netiface4_elem {
 };
 
 /* Common functions */
+static bool
+hash_netiface4_key_equal(const struct hash_netiface4_elem *ip1,
+			 const struct hash_netiface4_elem *ip2)
+{
+	return ip1->ip == ip2->ip &&
+	       ip1->cidr == ip2->cidr &&
+	       ip1->physdev == ip2->physdev;
+}
 
 static bool
 hash_netiface4_data_equal(const struct hash_netiface4_elem *ip1,
 			  const struct hash_netiface4_elem *ip2,
 			  u32 *multi)
 {
-	return ip1->ip == ip2->ip &&
-	       ip1->cidr == ip2->cidr &&
+	return hash_netiface4_key_equal(ip1, ip2) &&
 	       (++*multi) &&
-	       ip1->physdev == ip2->physdev &&
 	       (ip1->wildcard ?
 		strncmp(ip1->iface, ip2->iface, strlen(ip1->iface)) == 0 :
 		strcmp(ip1->iface, ip2->iface) == 0);
@@ -297,16 +303,22 @@ struct hash_netiface6_elem {
 };
 
 /* Common functions */
+static bool
+hash_netiface6_key_equal(const struct hash_netiface6_elem *ip1,
+			 const struct hash_netiface6_elem *ip2)
+{
+	return ipv6_addr_equal(&ip1->ip.in6, &ip2->ip.in6) &&
+	       ip1->cidr == ip2->cidr &&
+	       ip1->physdev == ip2->physdev;
+}
 
 static bool
 hash_netiface6_data_equal(const struct hash_netiface6_elem *ip1,
 			  const struct hash_netiface6_elem *ip2,
 			  u32 *multi)
 {
-	return ipv6_addr_equal(&ip1->ip.in6, &ip2->ip.in6) &&
-	       ip1->cidr == ip2->cidr &&
+	return hash_netiface6_key_equal(ip1, ip2) &&
 	       (++*multi) &&
-	       ip1->physdev == ip2->physdev &&
 	       (ip1->wildcard ?
 		strncmp(ip1->iface, ip2->iface, strlen(ip1->iface)) == 0 :
 		strcmp(ip1->iface, ip2->iface) == 0);

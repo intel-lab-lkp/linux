@@ -206,6 +206,7 @@ static const union nf_inet_addr zeromask = {};
 /* Family dependent templates */
 
 #undef ahash_data
+#undef mtype_key_equal
 #undef mtype_data_equal
 #undef mtype_do_data_match
 #undef mtype_data_set_flags
@@ -257,6 +258,9 @@ static const union nf_inet_addr zeromask = {};
 #undef htype
 #undef HKEY
 
+#ifdef IP_SET_HASH_WITH_MULTI
+#define mtype_key_equal	IPSET_TOKEN(MTYPE, _key_equal)
+#endif
 #define mtype_data_equal	IPSET_TOKEN(MTYPE, _data_equal)
 #ifdef IP_SET_HASH_WITH_NETS
 #define mtype_do_data_match	IPSET_TOKEN(MTYPE, _do_data_match)
@@ -320,7 +324,11 @@ static const union nf_inet_addr zeromask = {};
  * allocate as offsetof(struct mtype_rht_elem, elem) + set->dsize bytes.
  */
 struct mtype_rht_elem {
+#ifdef IP_SET_HASH_WITH_MULTI
+	struct rhlist_head node;
+#else
 	struct rhash_head node;
+#endif
 	struct rcu_head rcu;		/* deferred free after removal */
 
 	/* element data; must be last. extensions follow. */
@@ -357,10 +365,15 @@ static u32 mtype_rht_obj_hashfn(const void *obj, u32 len, u32 seed)
 static int mtype_rht_cmpfn(struct rhashtable_compare_arg *arg, const void *obj)
 {
 	const struct mtype_rht_elem *e = obj;
+#ifdef IP_SET_HASH_WITH_MULTI
+	return !mtype_key_equal(&e->elem,
+				(const struct mtype_elem *)arg->key);
+#else
 	u32 multi = 0;
 
 	return !mtype_data_equal(&e->elem,
-				 (const struct mtype_elem *)arg->key, &multi);
+				(const struct mtype_elem *)arg->key, &multi);
+#endif
 }
 
 static const struct rhashtable_params mtype_rht_params = {
@@ -385,7 +398,11 @@ static const struct rhashtable_params mtype_rht_params = {
 /* The generic hash structure */
 struct htype {
 	struct htable __rcu *table; /* the hash table */
+#ifdef IP_SET_HASH_WITH_MULTI
+	struct rhltable rhlt;	/* the hashlist table */
+#else
 	struct rhashtable ht;	/* the hash table */
+#endif
 	struct net_prefixes __rcu *rnets[IPSET_NET_COUNT]; /* cidr prefixes */
 	struct htable_gc gc;	/* gc workqueue */
 	u32 maxelem;		/* max elements in the hash */
@@ -403,6 +420,16 @@ struct htype {
 	 */
 	struct mtype_elem next; /* temporary storage for uadd */
 };
+
+#ifdef IP_SET_HASH_WITH_MULTI
+#define ipset_hash_nelems(h) atomic_read(&(h)->rhlt.ht.nelems)
+#define ipset_hash_walk_enter(h, iter)	rhltable_walk_enter(&(h)->rhlt, (iter))
+#define ipset_hash_remove(h, e) rhltable_remove(&(h)->rhlt, &(e)->node, mtype_rht_params)
+#else
+#define ipset_hash_nelems(h) atomic_read(&(h)->ht.nelems)
+#define ipset_hash_walk_enter(h, iter)	rhashtable_walk_enter(&(h)->ht, (iter))
+#define ipset_hash_remove(h, e) rhashtable_remove_fast(&(h)->ht, &(e)->node, mtype_rht_params)
+#endif
 
 /* ADD|DEL entries saved during resize */
 struct mtype_resize_ad {
@@ -669,7 +696,11 @@ mtype_destroy(struct ip_set *set)
 	struct htable *t = (__force struct htable *)h->table;
 	struct list_head *l, *lt;
 
+#ifdef IP_SET_HASH_WITH_MULTI
+	rhltable_free_and_destroy(&h->rhlt, mtype_flush_elem, set);
+#else
 	rhashtable_free_and_destroy(&h->ht, mtype_flush_elem, set);
+#endif
 
 	list_for_each_safe(l, lt, &t->ad) {
 		list_del(l);
@@ -1853,7 +1884,11 @@ IPSET_TOKEN(HTYPE, _create)(struct net *net, struct ip_set *set,
 	/* maxsize: maximum bucket table size to expand to */
 	params.max_size = maxelem;
 
+#ifdef IP_SET_HASH_WITH_MULTI
+	err = rhltable_init(&h->rhlt, &params);
+#else
 	err = rhashtable_init(&h->ht, &params);
+#endif
 	if (err)
 		goto free_h;
 
@@ -1955,7 +1990,11 @@ free_hregion:
 free_t:
 	ip_set_free(t);
 free_rht:
+#ifdef IP_SET_HASH_WITH_MULTI
+	rhltable_free_and_destroy(&h->rhlt, mtype_flush_elem, set);
+#else
 	rhashtable_free_and_destroy(&h->ht, mtype_flush_elem, set);
+#endif
 free_h:
 	kfree(h);
 	return -ENOMEM;
