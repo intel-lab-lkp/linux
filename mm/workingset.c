@@ -648,6 +648,37 @@ void workingset_update_node(struct xa_node *node)
 	}
 }
 
+#ifdef CONFIG_LRU_GEN
+/*
+ * The per-generation counters are eventually consistent and may go
+ * transiently negative while batched updates are pending, so clamp
+ * the sum at zero.
+ */
+static unsigned long count_lru_gen_pages(struct lruvec *lruvec)
+{
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	long nr_pages = 0;
+	int gen, type, zone;
+
+	if (!lrugen->enabled)
+		return 0;
+
+	for (gen = 0; gen < MAX_NR_GENS; gen++) {
+		for (type = 0; type < ANON_AND_FILE; type++) {
+			long *cnt = lrugen->nr_pages[gen][type];
+
+			for (zone = 0; zone < MAX_NR_ZONES; zone++)
+				nr_pages += READ_ONCE(cnt[zone]);
+		}
+	}
+
+	if (nr_pages <= 0)
+		return 0;
+
+	return nr_pages;
+}
+#endif
+
 static unsigned long count_shadow_nodes(struct shrinker *shrinker,
 					struct shrink_control *sc)
 {
@@ -691,6 +722,15 @@ static unsigned long count_shadow_nodes(struct shrinker *shrinker,
 
 		for (pages = 0, i = 0; i < NR_LRU_LISTS; i++)
 			pages += lruvec_lru_size(lruvec, i, MAX_NR_ZONES - 1);
+
+#ifdef CONFIG_LRU_GEN
+		/*
+		 * MGLRU accounts for the evictable pages in
+		 * lrugen->nr_pages[] instead of mz->lru_zone_size, which
+		 * lruvec_lru_size() reads, so the loop above misses them.
+		 */
+		pages += count_lru_gen_pages(lruvec);
+#endif
 
 		pages += lruvec_page_state_local(
 			lruvec, NR_SLAB_RECLAIMABLE_B) >> PAGE_SHIFT;
