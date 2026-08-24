@@ -336,8 +336,9 @@ static int decode_int(struct bitstr *bs, const struct field_t *f,
 			unsigned int v = get_uint(bs, len) + f->lb;
 			PRINT(" = %u", v);
 			*((unsigned int *)(base + f->offset)) = v;
+		} else {
+			bs->cur += len;
 		}
-		bs->cur += len;
 		break;
 	case UNCO:
 		BYTE_ALIGN(bs);
