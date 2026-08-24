@@ -112,6 +112,7 @@
 #include <linux/gfp.h>
 #include <linux/if_vlan.h>
 #include <asm/irq.h>
+#include <linux/unaligned.h>
 
 /* Default Message level */
 #define RTL8139_DEF_MSG_ENABLE   (NETIF_MSG_DRV   | \
@@ -2230,8 +2231,8 @@ static int rtl8139_set_mac_address(struct net_device *dev, void *p)
 	spin_lock_irq(&tp->lock);
 
 	RTL_W8_F(Cfg9346, Cfg9346_Unlock);
-	RTL_W32_F(MAC0 + 0, cpu_to_le32 (*(u32 *) (dev->dev_addr + 0)));
-	RTL_W32_F(MAC0 + 4, cpu_to_le32 (*(u32 *) (dev->dev_addr + 4)));
+	RTL_W32_F(MAC0 + 0, get_unaligned_le32(dev->dev_addr));
+	RTL_W32_F(MAC0 + 4, get_unaligned_le16(dev->dev_addr + 4));
 	RTL_W8_F(Cfg9346, Cfg9346_Lock);
 
 	spin_unlock_irq(&tp->lock);
