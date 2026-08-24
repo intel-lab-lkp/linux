@@ -139,17 +139,16 @@ static void ntb_netdev_rx_handler(struct ntb_transport_qp *qp, void *qp_data,
 	netdev_dbg(ndev, "%s: %d byte payload received\n", __func__, len);
 
 	if (len < 0) {
-		ndev->stats.rx_errors++;
-		ndev->stats.rx_length_errors++;
+		DEV_STATS_INC(ndev, rx_errors);
+		DEV_STATS_INC(ndev, rx_length_errors);
 		goto enqueue_again;
 	}
 
-	ndev->stats.rx_packets++;
-	ndev->stats.rx_bytes += len;
+	dev_dstats_rx_add(ndev, len);
 
 	new_skb = netdev_alloc_skb(ndev, ndev->mtu + ETH_HLEN);
 	if (!new_skb) {
-		ndev->stats.rx_dropped++;
+		dev_dstats_rx_dropped(ndev);
 		goto enqueue_again;
 	}
 
@@ -166,8 +165,8 @@ enqueue_again:
 	rc = ntb_transport_rx_enqueue(qp, skb, skb->data, ndev->mtu + ETH_HLEN);
 	if (rc) {
 		dev_kfree_skb_any(skb);
-		ndev->stats.rx_errors++;
-		ndev->stats.rx_fifo_errors++;
+		DEV_STATS_INC(ndev, rx_errors);
+		DEV_STATS_INC(ndev, rx_fifo_errors);
 	}
 }
 
@@ -219,11 +218,13 @@ static void ntb_netdev_tx_handler(struct ntb_transport_qp *qp, void *qp_data,
 		return;
 
 	if (len > 0) {
-		ndev->stats.tx_packets++;
-		ndev->stats.tx_bytes += skb->len;
+		/* TX completion may run from the memcpy kthread. */
+		local_bh_disable();
+		dev_dstats_tx_add(ndev, skb->len);
+		local_bh_enable();
 	} else {
-		ndev->stats.tx_errors++;
-		ndev->stats.tx_aborted_errors++;
+		DEV_STATS_INC(ndev, tx_errors);
+		DEV_STATS_INC(ndev, tx_aborted_errors);
 	}
 
 	dev_kfree_skb_any(skb);
@@ -277,7 +278,7 @@ static netdev_tx_t ntb_netdev_start_xmit(struct sk_buff *skb,
 
 drop:
 	dev_kfree_skb_any(skb);
-	ndev->stats.tx_dropped++;
+	dev_dstats_tx_dropped(ndev);
 	return NETDEV_TX_OK;
 }
 
@@ -427,7 +428,19 @@ err:
 	return rc;
 }
 
+static void ntb_netdev_uninit(struct net_device *ndev)
+{
+	struct ntb_netdev *dev = netdev_priv(ndev);
+	unsigned int q;
+
+	for (q = 0; q < dev->num_queues; q++) {
+		ntb_transport_free_queue(dev->queues[q].qp);
+		dev->queues[q].qp = NULL;
+	}
+}
+
 static const struct net_device_ops ntb_netdev_ops = {
+	.ndo_uninit = ntb_netdev_uninit,
 	.ndo_open = ntb_netdev_open,
 	.ndo_stop = ntb_netdev_close,
 	.ndo_start_xmit = ntb_netdev_start_xmit,
@@ -647,6 +660,7 @@ static int ntb_netdev_probe(struct device *client_dev)
 	}
 
 	ndev->features = NETIF_F_HIGHDMA;
+	ndev->pcpu_stat_type = NETDEV_PCPU_STAT_DSTATS;
 
 	ndev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
 
@@ -696,8 +710,7 @@ static int ntb_netdev_probe(struct device *client_dev)
 	return 0;
 
 err_free_qps:
-	for (q = 0; q < dev->num_queues; q++)
-		ntb_transport_free_queue(dev->queues[q].qp);
+	ntb_netdev_uninit(ndev);
 
 err_free_queues:
 	kfree(dev->queues);
@@ -711,11 +724,8 @@ static void ntb_netdev_remove(struct device *client_dev)
 {
 	struct net_device *ndev = dev_get_drvdata(client_dev);
 	struct ntb_netdev *dev = netdev_priv(ndev);
-	unsigned int q;
 
 	unregister_netdev(ndev);
-	for (q = 0; q < dev->num_queues; q++)
-		ntb_transport_free_queue(dev->queues[q].qp);
 
 	kfree(dev->queues);
 	free_netdev(ndev);
