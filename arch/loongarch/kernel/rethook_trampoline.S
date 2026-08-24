@@ -59,7 +59,14 @@
 	cfi_ld	t6, PT_R18
 	cfi_ld	t7, PT_R19
 	cfi_ld	t8, PT_R20
-	cfi_ld	u0, PT_R21
+	/*
+	 * $r21 ($u0, percpu base) is deliberately not restored: in kernel
+	 * mode it must always hold the current CPU's percpu base, and
+	 * restoring it from the frame would poison it with the old CPU's
+	 * base if the handler scheduled and we migrated.  The save side
+	 * stays so that the pt_regs view handed to handlers remains fully
+	 * initialized.
+	 */
 	cfi_ld	fp, PT_R22
 	cfi_ld	s0, PT_R23
 	cfi_ld	s1, PT_R24
