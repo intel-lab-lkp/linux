@@ -125,8 +125,18 @@ static int __trace_define_field(struct list_head *head, const char *type,
 	if (!field)
 		return -ENOMEM;
 
-	field->name = name;
-	field->type = type;
+	field->name = kstrdup_const(name, GFP_TRACE);
+	if (!field->name) {
+		kmem_cache_free(field_cachep, field);
+		return -ENOMEM;
+	}
+
+	field->type = kstrdup_const(type, GFP_TRACE);
+	if (!field->type) {
+		kfree_const(field->name);
+		kmem_cache_free(field_cachep, field);
+		return -ENOMEM;
+	}
 
 	if (filter_type == FILTER_OTHER)
 		field->filter_type = filter_assign_type(type);
@@ -227,6 +237,8 @@ static void trace_destroy_fields(struct trace_event_call *call)
 	head = trace_get_fields(call);
 	list_for_each_entry_safe(field, next, head, link) {
 		list_del(&field->link);
+		kfree_const(field->name);
+		kfree_const(field->type);
 		kmem_cache_free(field_cachep, field);
 	}
 }
