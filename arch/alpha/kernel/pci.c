@@ -23,6 +23,8 @@
 #include <linux/cache.h>
 #include <linux/slab.h>
 #include <linux/syscalls.h>
+#include <linux/dma-mapping.h>
+#include <asm/hwrpb.h>
 #include <asm/machvec.h>
 
 #include "proto.h"
@@ -116,6 +118,26 @@ static void pcibios_fixup_final(struct pci_dev *dev)
 	}
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_ANY_ID, PCI_ANY_ID, pcibios_fixup_final);
+
+/*
+ * Tsunami/Typhoon's DAC "monster window" corrupts data on 32-bit PCI
+ * cards; cap them to 32-bit DMA by proxy of having no 64-bit BAR.
+ */
+static void tsunami_dac_quirk(struct pci_dev *pdev)
+{
+	int i;
+
+	if (hwrpb->sys_type != ST_DEC_TSUNAMI)
+		return;
+
+	for (i = 0; i <= PCI_STD_RESOURCE_END; i++)
+		if (pci_resource_flags(pdev, i) & IORESOURCE_MEM_64)
+			return;
+
+	pdev->dev.bus_dma_limit = DMA_BIT_MASK(32);
+	dev_dbg(&pdev->dev, "disabling DAC for device\n");
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_ANY_ID, PCI_ANY_ID, tsunami_dac_quirk);
 
 /* Just declaring that the power-of-ten prefixes are actually the
    power-of-two ones doesn't make it true :) */
