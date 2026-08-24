@@ -6168,7 +6168,7 @@ void __setparam_fair(struct task_struct *p, const struct sched_attr *attr)
 }
 
 static void
-place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
+place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags, bool is_curr)
 {
 	u64 vslice, vruntime = avg_vruntime(cfs_rq);
 	unsigned int nr_queued = cfs_rq->h_nr_queued;
@@ -6192,7 +6192,7 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 */
 	if (sched_feat(PLACE_LAG) && nr_queued && se->vlag) {
 		struct sched_entity *curr = cfs_rq->curr;
-		long load, weight;
+		long load, weight, curr_weight;
 
 		lag = se->vlag;
 
@@ -6249,10 +6249,17 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		 *   vl_i = (W + w_i)*vl'_i / W
 		 */
 		load = cfs_rq->sum_weight;
-		if (curr && curr->on_rq)
-			load += avg_vruntime_weight(cfs_rq, curr->h_load.weight);
+		if (curr) {
+			curr_weight = avg_vruntime_weight(cfs_rq, curr->h_load.weight);
+			if (curr->on_rq)
+				load += curr_weight;
+		}
 
-		weight = avg_vruntime_weight(cfs_rq, se->h_load.weight);
+		if (is_curr)
+			weight = curr_weight;
+		else
+			weight = avg_vruntime_weight(cfs_rq, se->h_load.weight);
+
 		lag *= load + weight;
 		if (WARN_ON_ONCE(!load))
 			load = 1;
@@ -7893,7 +7900,7 @@ static int choose_idle_cpu(int cpu, struct task_struct *p)
 }
 
 static void
-requeue_delayed_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
+requeue_delayed_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, bool curr)
 {
 	/*
 	 * se->sched_delayed should imply: se->on_rq == 1.
@@ -7905,10 +7912,10 @@ requeue_delayed_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 	if (update_entity_lag(cfs_rq, se)) {
 		cfs_rq->h_nr_queued--;
-		if (se != cfs_rq->curr)
+		if (!curr)
 			__dequeue_entity(cfs_rq, se);
-		place_entity(cfs_rq, se, 0);
-		if (se != cfs_rq->curr)
+		place_entity(cfs_rq, se, 0, curr);
+		if (!curr)
 			__enqueue_entity(cfs_rq, se);
 		cfs_rq->h_nr_queued++;
 	}
@@ -7993,9 +8000,10 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		util_est_enqueue(cfs_rq, p);
 
 	update_curr_eevdf(cfs_rq);
+	curr = (cfs_rq->curr == se);
 
 	if (delayed) {
-		requeue_delayed_entity(cfs_rq, se);
+		requeue_delayed_entity(cfs_rq, se, curr);
 		return;
 	}
 
@@ -8010,18 +8018,18 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	/*
 	 * XXX comment on the curr thing
 	 */
-	curr = (cfs_rq->curr == se);
+
 	if (curr)
-		place_entity(cfs_rq, se, flags);
+		place_entity(cfs_rq, se, flags, curr);
 
 	if (se->on_rq && se->sched_delayed)
-		requeue_delayed_entity(cfs_rq, se);
+		requeue_delayed_entity(cfs_rq, se, curr);
 
 	weight = enqueue_hierarchy(p, flags);
 
 	if (!curr) {
 		reweight_eevdf(cfs_rq, se, weight, false);
-		place_entity(cfs_rq, se, flags | ENQUEUE_QUEUED);
+		place_entity(cfs_rq, se, flags | ENQUEUE_QUEUED, curr);
 		__enqueue_entity(cfs_rq, se);
 	}
 
