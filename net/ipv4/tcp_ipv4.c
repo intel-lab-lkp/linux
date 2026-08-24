@@ -1714,6 +1714,14 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 		inet_csk(newsk)->icsk_ext_hdr_len = inet_opt->opt.optlen;
 	atomic_set(&newinet->inet_id, get_random_u16());
 
+#if IS_ENABLED(CONFIG_IPV6)
+	/* Never inherit the listener's ipv6_pinfo; IPV6_ADDRFORM leaves it set
+	 * on an AF_INET socket.  tcp_v6_mapped_child_init() installs our own.
+	 */
+	newinet->pinet6 = NULL;
+	newinet->ipv6_fl_list = NULL;
+#endif
+
 	/* Set ToS of the new socket based upon the value of incoming SYN.
 	 * ECT bits are set later in tcp_init_transfer().
 	 */
