@@ -25,17 +25,17 @@ void dso__free_libdw(struct dso *dso)
 	}
 }
 
-struct Dwfl *dso__libdw_dwfl(struct dso *dso)
+struct Dwfl *dso__libdw_dwfl(struct dso *dso, const char *dso_name)
 {
 	Dwfl *dwfl = dso__libdw(dso);
-	const char *dso_name;
 	Dwfl_Module *mod;
 	int fd;
 
 	if (dwfl)
 		return dwfl;
 
-	dso_name = dso__long_name(dso);
+	if (!dso_name)
+		dso_name = dso__long_name(dso);
 	/*
 	 * Initialize Dwfl session.
 	 * We need to open the DSO file to report it to libdw.
@@ -163,11 +163,11 @@ abort_enomem:
 	return DWARF_CB_ABORT;
 }
 
-int libdw__addr2line(u64 addr, char **file, unsigned int *line_nr,
+int libdw__addr2line(const char *dso_name, u64 addr, char **file, unsigned int *line_nr,
 		     struct dso *dso, bool unwind_inlines,
 		     struct inline_node *node, struct symbol *sym)
 {
-	Dwfl *dwfl = dso__libdw_dwfl(dso);
+	Dwfl *dwfl = dso__libdw_dwfl(dso, dso_name);
 	Dwfl_Module *mod;
 	Dwfl_Line *dwline;
 	Dwarf_Addr bias;

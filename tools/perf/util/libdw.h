@@ -25,7 +25,7 @@ struct symbol;
  *
  * Returns 1 on success (found), 0 on failure (not found).
  */
-int libdw__addr2line(u64 addr, char **file,
+int libdw__addr2line(const char *dso_name, u64 addr, char **file,
 		     unsigned int *line_nr, struct dso *dso,
 		     bool unwind_inlines, struct inline_node *node,
 		     struct symbol *sym);
@@ -40,7 +40,8 @@ void dso__free_libdw(struct dso *dso);
 
 #else /* HAVE_LIBDW_SUPPORT */
 
-static inline int libdw__addr2line(u64 addr __maybe_unused, char **file __maybe_unused,
+static inline int libdw__addr2line(const char *dso_name, u64 addr __maybe_unused,
+				   char **file __maybe_unused,
 				   unsigned int *line_nr __maybe_unused,
 				   struct dso *dso __maybe_unused,
 				   bool unwind_inlines __maybe_unused,

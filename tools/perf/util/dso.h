@@ -380,9 +380,10 @@ static inline void dso__set_libdw(struct dso *dso, void *val)
 
 struct Dwfl;
 #ifdef HAVE_LIBDW_SUPPORT
-struct Dwfl *dso__libdw_dwfl(struct dso *dso);
+struct Dwfl *dso__libdw_dwfl(struct dso *dso, const char *dso_name);
 #else
-static inline struct Dwfl *dso__libdw_dwfl(struct dso *dso __maybe_unused)
+static inline struct Dwfl *dso__libdw_dwfl(struct dso *dso __maybe_unused,
+					   const char *dso_name __maybe_unused)
 {
 	return NULL;
 }

@@ -152,7 +152,7 @@ static int check_return_addr(struct dso *dso, Dwarf_Addr mapped_pc)
 	Dwarf_Addr	end = mapped_pc;
 	bool		signalp;
 
-	dwfl = dso__libdw_dwfl(dso);
+	dwfl = dso__libdw_dwfl(dso, NULL);
 	if (!dwfl)
 		return -1;
 
