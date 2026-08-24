@@ -349,7 +349,12 @@ navi10_init_allowed_features(struct smu_context *smu)
 	      (amdgpu_ip_version(adev, MP1_HWIP, 0) == IP_VERSION(11, 0, 0)) &&
 	      (adev->rev_id == 0)) &&
 	    (adev->pm.pp_feature & PP_MCLK_DPM_MASK)) {
-		smu_feature_list_set_bit(smu, SMU_FEATURE_LIST_ALLOWED, FEATURE_DPM_UCLK_BIT);
+		if (!(adev->pdev->device == 0x7340 &&
+				adev->pdev->subsystem_vendor == PCI_VENDOR_ID_APPLE &&
+				adev->pdev->subsystem_device == 0x0219))
+			smu_feature_list_set_bit(smu, SMU_FEATURE_LIST_ALLOWED,
+					FEATURE_DPM_UCLK_BIT);
+
 		smu_feature_list_set_bit(smu, SMU_FEATURE_LIST_ALLOWED, FEATURE_MEM_VDDCI_SCALING_BIT);
 		smu_feature_list_set_bit(smu, SMU_FEATURE_LIST_ALLOWED, FEATURE_MEM_MVDD_SCALING_BIT);
 	}

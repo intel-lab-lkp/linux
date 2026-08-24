@@ -903,6 +903,33 @@ static int smu_apply_default_config_table_settings(struct smu_context *smu)
 	return smu_set_config_table(smu, &adev->pm.config_table);
 }
 
+static int smu_apply_late_quirks(struct smu_context *smu)
+{
+	struct pci_dev *pdev = smu->adev->pdev;
+	int ret = 0;
+	uint32_t features[2];
+	struct smu_feature_bits feature_mask;
+	uint64_t mask;
+
+	if (pdev->device == 0x7340 &&
+			pdev->subsystem_vendor == PCI_VENDOR_ID_APPLE &&
+			pdev->subsystem_device == 0x0219) {
+		ret = smu_feature_get_enabled_mask(smu, &feature_mask);
+		if (ret)
+			return ret;
+
+		smu_feature_bits_to_arr32(&feature_mask, features, 64);
+		features[0] |= BIT(3);
+		mask = ((uint64_t)features[1] << 32) | features[0];
+
+		ret = smu_set_pp_feature_mask(smu, mask);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int smu_late_init(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_device *adev = ip_block->adev;
@@ -974,6 +1001,12 @@ static int smu_late_init(struct amdgpu_ip_block *ip_block)
 	}
 
 	smu_restore_dpm_user_profile(smu);
+
+	ret = smu_apply_late_quirks(smu);
+	if (ret) {
+		dev_err(adev->dev, "Unable to apply late quirks\n");
+		return ret;
+	}
 
 	return 0;
 }
