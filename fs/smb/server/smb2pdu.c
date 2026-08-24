@@ -4427,6 +4427,19 @@ int smb2_open(struct ksmbd_work *work)
 	if (!rc) {
 		file_present = true;
 
+		/*
+		 * MS-SMB2 3.3.5.9: If a non-reconnect CREATE arrives for a
+		 * file with a disconnected persistent handle from a different
+		 * client, fail with STATUS_FILE_NOT_AVAILABLE.
+		 */
+		if (!dh_info.reconnected && !dh_info.replay &&
+		    ksmbd_has_disconnected_persistent_handle(path.dentry,
+							    conn->ClientGUID)) {
+			rsp->hdr.Status = STATUS_FILE_NOT_AVAILABLE;
+			rc = -EAGAIN;
+			goto err_out;
+		}
+
 		if (req->CreateOptions & FILE_DELETE_ON_CLOSE_LE) {
 			struct xattr_dos_attrib da;
 

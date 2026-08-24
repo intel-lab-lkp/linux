@@ -207,6 +207,8 @@ void ksmbd_fd_put(struct ksmbd_work *work, struct ksmbd_file *fp);
 struct ksmbd_inode *ksmbd_inode_lookup_lock(struct dentry *d);
 void ksmbd_inode_put(struct ksmbd_inode *ci);
 bool ksmbd_close_disconnected_durable_delete_on_close(struct dentry *dentry);
+bool ksmbd_has_disconnected_persistent_handle(struct dentry *dentry,
+					      const char *client_guid);
 struct ksmbd_file *ksmbd_lookup_global_fd(unsigned long long id);
 struct ksmbd_file *ksmbd_lookup_durable_fd(unsigned long long id);
 void ksmbd_put_durable_fd(struct ksmbd_file *fp);

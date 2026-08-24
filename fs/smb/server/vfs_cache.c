@@ -788,6 +788,51 @@ bool ksmbd_close_disconnected_durable_delete_on_close(struct dentry *dentry)
 	return closed;
 }
 
+/**
+ * ksmbd_has_disconnected_persistent_handle() - check if a file has a
+ *	disconnected persistent handle that should block new opens (fencing)
+ * @dentry:	dentry of the file being opened
+ * @client_guid: ClientGUID of the requesting client (same client may reconnect)
+ *
+ * Per MS-SMB2 3.3.5.9: when a non-reconnect CREATE arrives for a file with
+ * a disconnected persistent handle, the server SHOULD fail with
+ * STATUS_FILE_NOT_AVAILABLE.  Exception: same ClientGuid with handle-caching
+ * lease or batch oplock may attempt to break the lease.
+ *
+ * Return:	true if a disconnected persistent handle exists from a
+ *		different client.
+ */
+bool ksmbd_has_disconnected_persistent_handle(struct dentry *dentry,
+					      const char *client_guid)
+{
+	struct ksmbd_inode *ci;
+	struct ksmbd_file *fp;
+	bool found = false;
+
+	ci = ksmbd_inode_lookup_lock(dentry);
+	if (!ci)
+		return false;
+
+	down_read(&ci->m_lock);
+	list_for_each_entry(fp, &ci->m_fp_list, node) {
+		if (!fp->is_persistent)
+			continue;
+		if (fp->conn)
+			continue;
+		if (fp->f_state != FP_INITED)
+			continue;
+		/* Same client can reconnect — don't fence it */
+		if (!memcmp(fp->client_guid, client_guid,
+			    SMB2_CLIENT_GUID_SIZE))
+			continue;
+		found = true;
+		break;
+	}
+	up_read(&ci->m_lock);
+	ksmbd_inode_put(ci);
+	return found;
+}
+
 static struct ksmbd_file *ksmbd_fp_get(struct ksmbd_file *fp)
 {
 	if (fp->f_state != FP_INITED)
