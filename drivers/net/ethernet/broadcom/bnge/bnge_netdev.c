@@ -3267,6 +3267,33 @@ static const struct netdev_stat_ops bnge_stat_ops = {
 	.get_base_stats		= bnge_get_base_stats,
 };
 
+static int bnge_set_features(struct net_device *dev, netdev_features_t features)
+{
+	struct bnge_net *bn = netdev_priv(dev);
+	struct bnge_dev *bd = bn->bd;
+	u32 flags = bn->priv_flags;
+
+	flags &= ~BNGE_NET_EN_TPA;
+	if (features & NETIF_F_GRO_HW)
+		flags |= BNGE_NET_EN_GRO;
+	else if (features & NETIF_F_LRO)
+		flags |= BNGE_NET_EN_LRO;
+
+	if (flags == bn->priv_flags)
+		return 0;
+
+	bn->priv_flags = flags;
+
+	if (!netif_running(dev)) {
+		bnge_set_ring_params(bd);
+		return 0;
+	}
+
+	bnge_close_core(bn);
+	bnge_set_ring_params(bd);
+	return bnge_open_core(bn);
+}
+
 static const struct net_device_ops bnge_netdev_ops = {
 	.ndo_open		= bnge_open,
 	.ndo_stop		= bnge_close,
@@ -3274,6 +3301,7 @@ static const struct net_device_ops bnge_netdev_ops = {
 	.ndo_get_stats64	= bnge_get_stats64,
 	.ndo_set_rx_mode_async	= bnge_set_rx_mode,
 	.ndo_features_check	= bnge_features_check,
+	.ndo_set_features	= bnge_set_features,
 };
 
 static void bnge_init_mac_addr(struct bnge_dev *bd)
