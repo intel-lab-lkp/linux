@@ -2571,7 +2571,7 @@ static bool check_selective_cr0_intercepted(struct kvm_vcpu *vcpu,
 
 	if (cr0 ^ val) {
 		svm->vmcb->control.exit_code = SVM_EXIT_CR0_SEL_WRITE;
-		ret = (nested_svm_exit_handled(svm) == NESTED_EXIT_DONE);
+		ret = (nested_svm_exit_handled(svm, false) == NESTED_EXIT_DONE);
 	}
 
 	return ret;
@@ -3723,7 +3723,7 @@ static int svm_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 		vmexit = nested_svm_exit_special(svm);
 
 		if (vmexit == NESTED_EXIT_CONTINUE)
-			vmexit = nested_svm_exit_handled(svm);
+			vmexit = nested_svm_exit_handled(svm, true);
 
 		if (vmexit == NESTED_EXIT_DONE)
 			return 1;
@@ -4983,7 +4983,7 @@ static int svm_check_intercept(struct kvm_vcpu *vcpu,
 	if (static_cpu_has(X86_FEATURE_NRIPS))
 		vmcb->control.next_rip  = info->next_rip;
 	vmcb->control.exit_code = icpt_info.exit_code;
-	vmexit = nested_svm_exit_handled(svm);
+	vmexit = nested_svm_exit_handled(svm, false);
 
 	ret = (vmexit == NESTED_EXIT_DONE) ? X86EMUL_INTERCEPTED
 					   : X86EMUL_CONTINUE;
