@@ -3736,6 +3736,8 @@ static int __bpf_strncasecmp(const char *s1, const char *s2, bool ignore_case, s
 	    !copy_from_kernel_nofault_allowed(s2, 1)) {
 		return -ERANGE;
 	}
+	if (!len)
+		return 0;
 
 	guard(pagefault)();
 	for (i = 0; i < len && i < XATTR_SIZE_MAX; i++) {
@@ -3835,6 +3837,8 @@ __bpf_kfunc int bpf_strnchr(const char *s__ign, size_t count, char c)
 
 	if (!copy_from_kernel_nofault_allowed(s__ign, 1))
 		return -ERANGE;
+	if (!count)
+		return -ENOENT;
 
 	guard(pagefault)();
 	for (i = 0; i < count && i < XATTR_SIZE_MAX; i++) {
@@ -3954,6 +3958,8 @@ __bpf_kfunc int bpf_strnlen(const char *s__ign, size_t count)
 
 	if (!copy_from_kernel_nofault_allowed(s__ign, 1))
 		return -ERANGE;
+	if (!count)
+		return 0;
 
 	guard(pagefault)();
 	for (i = 0; i < count && i < XATTR_SIZE_MAX; i++) {
