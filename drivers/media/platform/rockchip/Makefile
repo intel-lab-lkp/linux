@@ -3,3 +3,4 @@ obj-y += rga/
 obj-y += rkcif/
 obj-y += rkisp1/
 obj-y += rkvdec/
+obj-y += rkisp2/
