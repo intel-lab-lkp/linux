@@ -587,6 +587,21 @@ int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
 				break;
 			}
 
+			if (sk->sk_protocol == IPPROTO_TCP) {
+				if (inet_csk_reqsk_queue_len(sk)) {
+					retv = -EBUSY;
+					break;
+				}
+				/* A SYN that found this socket while it was
+				 * still listening may not be counted yet.
+				 */
+				synchronize_rcu();
+				if (inet_csk_reqsk_queue_len(sk)) {
+					retv = -EBUSY;
+					break;
+				}
+			}
+
 			__ipv6_sock_mc_close(sk);
 			__ipv6_sock_ac_close(sk);
 
