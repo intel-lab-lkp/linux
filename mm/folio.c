@@ -151,57 +151,34 @@ static void folio_batch_move_lru(struct folio_batch *fbatch, move_fn_t move_fn)
 	int i;
 	struct lruvec *lruvec = NULL;
 	unsigned long flags = 0;
-	struct folio_batch free_fbatch;
-	bool is_lru_add = (move_fn == lru_add);
-
-	/*
-	 * If we're adding to the LRU, preemptively filter dead folios. Use
-	 * this dedicated folio batch for temp storage and deferred cleanup.
-	 */
-	if (is_lru_add)
-		folio_batch_init(&free_fbatch);
 
 	for (i = 0; i < folio_batch_count(fbatch); i++) {
 		struct folio *folio = fbatch->folios[i];
 
-		/* block memcg migration while the folio moves between lru */
-		if (!is_lru_add && !folio_test_clear_lru(folio))
-			continue;
-
-		/*
-		 * Filter dead folios by moving them from the add batch to the temp
-		 * batch for freeing after this loop.
-		 *
-		 * We're bypassing normal cleanup. Clear flags that are not
-		 * applicable to dead folios.
-		 *
-		 * Since the folio may be part of a huge page, unqueue from
-		 * deferred split list to avoid a dangling list entry.
-		 */
-		if (is_lru_add && folio_ref_freeze(folio, 1)) {
-			__folio_clear_active(folio);
-			__folio_clear_unevictable(folio);
-			folio_unqueue_deferred_split(folio);
+		if (!folio_try_get(folio)) {
 			fbatch->folios[i] = NULL;
-			folio_batch_add(&free_fbatch, folio);
 			continue;
 		}
+
+		if (!folio_test_clear_lru(folio))
+			continue;
+
+		/* Do not add to LRU if it has already been added */
+		if (move_fn == lru_add && !lru_add_del_folio(folio))
+			goto restore_lru;
 
 		folio_lruvec_relock_irqsave(folio, &lruvec, &flags);
 		move_fn(lruvec, folio);
 
+		/* Do add to LRU if not already there (move_fn skipped) */
+		if (lru_add_del_folio(folio))
+			lruvec_add_folio(lruvec, folio);
+restore_lru:
 		folio_set_lru(folio);
 	}
 
 	if (lruvec)
 		lruvec_unlock_irqrestore(lruvec, flags);
-
-	/* Cleanup filtered dead folios. */
-	if (is_lru_add) {
-		mem_cgroup_uncharge_folios(&free_fbatch);
-		free_unref_folios(&free_fbatch);
-	}
-
 	folios_put(fbatch);
 }
 
@@ -209,8 +186,6 @@ static void __folio_batch_add_and_move(struct folio_batch __percpu *fbatch,
 		struct folio *folio, move_fn_t move_fn, bool disable_irq)
 {
 	unsigned long flags;
-
-	folio_get(folio);
 
 	if (disable_irq)
 		local_lock_irqsave(&cpu_fbatches.lock_irq, flags);
@@ -339,7 +314,6 @@ static void lru_activate(struct lruvec *lruvec, struct folio *folio)
 	if (folio_test_active(folio) || folio_test_unevictable(folio))
 		return;
 
-
 	lruvec_del_folio(lruvec, folio);
 	folio_set_active(folio);
 	lruvec_add_folio(lruvec, folio);
@@ -355,37 +329,12 @@ void folio_activate(struct folio *folio)
 	    !folio_test_lru(folio))
 		return;
 
-	folio_batch_add_and_move(folio, lru_activate);
-}
-
-static void __lru_cache_activate_folio(struct folio *folio)
-{
-	struct folio_batch *fbatch;
-	int i;
-
-	local_lock(&cpu_fbatches.lock);
-	fbatch = this_cpu_ptr(&cpu_fbatches.lru_add);
-
 	/*
-	 * Search backwards on the optimistic assumption that the folio being
-	 * activated has just been added to this batch. Note that only
-	 * the local batch is examined as a !LRU folio could be in the
-	 * process of being released, reclaimed, migrated or on a remote
-	 * batch that is currently being drained. Furthermore, marking
-	 * a remote batch's folio active potentially hits a race where
-	 * a folio is marked active just after it is added to the inactive
-	 * list causing accounting errors and BUG_ON checks to trigger.
+	 * XXX: It is curiously difficult to recreate safely the old
+	 * __lru_cache_activate_folio() optimization (folio_set_active()
+	 * directly if it's on the local lru_add fbatch): revisit later.
 	 */
-	for (i = folio_batch_count(fbatch) - 1; i >= 0; i--) {
-		struct folio *batch_folio = fbatch->folios[i];
-
-		if (batch_folio == folio) {
-			folio_set_active(folio);
-			break;
-		}
-	}
-
-	local_unlock(&cpu_fbatches.lock);
+	folio_batch_add_and_move(folio, lru_activate);
 }
 
 #ifdef CONFIG_LRU_GEN
@@ -476,16 +425,7 @@ void folio_mark_accessed(struct folio *folio)
 		 * unevictable page accessed has no effect.
 		 */
 	} else if (!folio_test_active(folio)) {
-		/*
-		 * If the folio is on the LRU, queue it for activation via
-		 * cpu_fbatches.lru_activate. Otherwise, assume the folio is in a
-		 * folio_batch, mark it active and it'll be moved to the active
-		 * LRU on the next drain.
-		 */
-		if (folio_test_lru(folio))
-			folio_activate(folio);
-		else
-			__lru_cache_activate_folio(folio);
+		folio_activate(folio);
 		folio_clear_referenced(folio);
 		workingset_activation(folio);
 	}
@@ -505,6 +445,10 @@ EXPORT_SYMBOL(folio_mark_accessed);
  */
 void folio_add_lru(struct folio *folio)
 {
+	struct folio_batch *fbatch;
+	unsigned long lru_next;
+	bool full;
+
 	VM_BUG_ON_FOLIO(folio_test_active(folio) &&
 			folio_test_unevictable(folio), folio);
 	VM_BUG_ON_FOLIO(folio_test_lru(folio), folio);
@@ -524,7 +468,26 @@ void folio_add_lru(struct folio *folio)
 			folio_mark_accessed(folio);
 	}
 
-	folio_batch_add_and_move(folio, lru_add);
+	local_lock(&cpu_fbatches.lock);
+	fbatch = this_cpu_ptr(&cpu_fbatches.lru_add);
+
+	/* Storing this address is only for debugging */
+	lru_next = (unsigned long)&fbatch->folios[fbatch->nr];
+	/* This mask will do nothing on 64-bit */
+	lru_next &= ~(BIT(NR_LRU_NEXT_FLAGS) - 1);
+	lru_next |= BIT(LRU_NEXT_BATCHED);
+	folio->lru_next = lru_next;
+
+	full = !folio_batch_add(fbatch, folio);
+
+	/* Ensure folio->lru_next visible to folio_test_clear_lru() callers */
+	smp_mb__before_atomic();
+	folio_set_lru(folio);
+
+	if (full || !folio_may_be_lru_cached(folio) || lru_cache_disabled())
+		folio_batch_move_lru(fbatch, lru_add);
+
+	local_unlock(&cpu_fbatches.lock);
 }
 EXPORT_SYMBOL(folio_add_lru);
 

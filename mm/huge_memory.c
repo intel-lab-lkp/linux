@@ -3993,8 +3993,12 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 		}
 
 		/* lock lru list/PageCompound, ref frozen by page_ref_freeze */
-		if (do_lru)
+		if (do_lru) {
 			lruvec = folio_lruvec_lock(folio);
+			/* Move from fbatch to lruvec before lru_add_split_folio()s */
+			if (lru_add_del_folio(folio))
+				lruvec_add_folio(lruvec, folio);
+		}
 
 		ret = __split_unmapped_folio(folio, new_order, split_at, xas,
 					     mapping, split_type);
