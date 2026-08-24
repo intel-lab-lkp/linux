@@ -635,7 +635,7 @@ static const struct v4l2_subdev_pad_ops ub953_pad_ops = {
 	.enable_streams = ub953_enable_streams,
 	.disable_streams = ub953_disable_streams,
 	.set_routing = ub953_set_routing,
-	.get_frame_desc = v4l2_subdev_get_frame_desc_passthrough,
+	.get_frame_desc = v4l2_subdev_get_frame_desc_passthrough_csi2,
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = ub953_set_fmt,
 };
