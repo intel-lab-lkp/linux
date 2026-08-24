@@ -14,6 +14,14 @@ struct rtas_args {
 	rtas_arg_t *rets;     /* Pointer to return values in args[]. */
 } __aligned(8);
 
+struct rtas_args_64 {
+	__be64 token;
+	__be64 nargs;
+	__be64 nret;
+	__be64 args[16];
+	__be64 *rets;     /* Pointer to return values in args[]. */
+} __aligned(8);
+
 struct rtas_t {
 	unsigned long entry;		/* physical address pointer */
 	unsigned long base;		/* physical address pointer */

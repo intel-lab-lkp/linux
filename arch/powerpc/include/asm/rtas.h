@@ -10,6 +10,8 @@
 #include <linux/time.h>
 #include <linux/cpumask.h>
 
+extern int rtas_64;
+
 /*
  * Definitions for talking to the RTAS on CHRP machines.
  *

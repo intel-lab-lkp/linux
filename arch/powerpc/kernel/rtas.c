@@ -45,6 +45,8 @@
 #include <asm/trace.h>
 #include <asm/udbg.h>
 
+int rtas_64;
+
 struct rtas_filter {
 	/* Indexes into the args buffer, -1 if not used */
 	const int buf_idx1;
@@ -569,6 +571,7 @@ static struct rtas_function rtas_function_table[] __ro_after_init = {
  */
 static DEFINE_RAW_SPINLOCK(rtas_lock);
 static struct rtas_args rtas_args;
+static struct rtas_args_64 rtas_args_64;
 
 /**
  * rtas_function_token() - RTAS function token lookup.
@@ -690,13 +693,48 @@ static const struct rtas_function *rtas_token_to_function(s32 token)
 	return NULL;
 }
 
+static void populate_rtas_args_64(struct rtas_args *args)
+{
+	int i;
+
+	rtas_args_64.token = cpu_to_be64((s64)(s32)be32_to_cpu(args->token));
+	rtas_args_64.nargs = cpu_to_be64((s64)(s32)be32_to_cpu(args->nargs));
+	rtas_args_64.nret  = cpu_to_be64((s64)(s32)be32_to_cpu(args->nret));
+	rtas_args_64.rets  = &rtas_args_64.args[be32_to_cpu(args->nargs)];
+
+	for (i = 0; i < be32_to_cpu(args->nargs); ++i)
+		rtas_args_64.args[i] = cpu_to_be64((s64)(s32)be32_to_cpu(args->args[i]));
+
+	for (i = 0; i < be32_to_cpu(args->nret); ++i)
+		rtas_args_64.rets[i] = 0;
+}
+
+static void rtas_args_copy_64_32(struct rtas_args *args)
+{
+	int i;
+
+	for (i = 0; i < (s32)be64_to_cpu(rtas_args_64.nret); ++i)
+		args->rets[i] = cpu_to_be32((s32)be64_to_cpu(rtas_args_64.rets[i]));
+}
+
 /* This is here deliberately so it's only used in this file */
 void enter_rtas(unsigned long);
 
+static void _do_enter_rtas_64(struct rtas_args *args)
+{
+	populate_rtas_args_64(args);
+	enter_rtas(__pa(&rtas_args_64));
+	rtas_args_copy_64_32(args);
+}
+
 static void __do_enter_rtas(struct rtas_args *args)
 {
-	enter_rtas(__pa(args));
-	srr_regs_clobbered(); /* rtas uses SRRs, invalidate */
+	if (rtas_64)
+		_do_enter_rtas_64(args);
+	else
+		enter_rtas(__pa(args));
+
+	srr_regs_clobbered();
 }
 
 static void __do_enter_rtas_trace(struct rtas_args *args)
@@ -2078,7 +2116,7 @@ void __init rtas_initialize(void)
 int __init early_init_dt_scan_rtas(unsigned long node,
 		const char *uname, int depth, void *data)
 {
-	const u32 *basep, *entryp, *sizep;
+	const u32 *basep, *entryp, *sizep, *val;
 
 	if (depth != 1 || strcmp(uname, "rtas") != 0)
 		return 0;
@@ -2086,6 +2124,10 @@ int __init early_init_dt_scan_rtas(unsigned long node,
 	basep  = of_get_flat_dt_prop(node, "linux,rtas-base", NULL);
 	entryp = of_get_flat_dt_prop(node, "linux,rtas-entry", NULL);
 	sizep  = of_get_flat_dt_prop(node, "rtas-size", NULL);
+	val    = of_get_flat_dt_prop(node, "linux,rtas-64", NULL);
+
+	if (val && *val)
+		rtas_64 = 1;
 
 #ifdef CONFIG_PPC64
 	/* need this feature to decide the crashkernel offset */
