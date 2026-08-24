@@ -23,9 +23,11 @@
 #include <linux/ksm.h>
 #include <linux/pgalloc.h>
 #include <linux/backing-dev.h>
+#include <linux/cleanup.h>
 
 #include <asm/tlb.h>
 #include "internal.h"
+#include "page_alloc.h"
 #include "mm_slot.h"
 
 enum scan_result {
@@ -37,7 +39,7 @@ enum scan_result {
 	SCAN_EXCEED_SWAP_PTE,
 	SCAN_EXCEED_SHARED_PTE,
 	SCAN_PTE_NON_PRESENT,
-	SCAN_PTE_UFFD_WP,
+	SCAN_PTE_UFFD,
 	SCAN_PTE_MAPPED_HUGEPAGE,
 	SCAN_LACK_REFERENCED_PAGE,
 	SCAN_PAGE_NULL,
@@ -599,8 +601,7 @@ void __khugepaged_exit(struct mm_struct *mm)
 	spin_lock(&khugepaged_mm_lock);
 	slot = mm_slot_lookup(mm_slots_hash, mm);
 	if (slot && khugepaged_scan.mm_slot != slot) {
-		hash_del(&slot->hash);
-		list_del(&slot->mm_node);
+		mm_slot_remove(slot);
 		free = 1;
 	}
 	spin_unlock(&khugepaged_mm_lock);
@@ -689,8 +690,8 @@ static enum scan_result __collapse_huge_page_isolate(struct vm_area_struct *vma,
 			result = SCAN_PTE_NON_PRESENT;
 			goto out;
 		}
-		if (pte_uffd_wp(pteval)) {
-			result = SCAN_PTE_UFFD_WP;
+		if (pte_uffd(pteval)) {
+			result = SCAN_PTE_UFFD;
 			goto out;
 		}
 		page = vm_normal_page(vma, addr, pteval);
@@ -1537,7 +1538,7 @@ static enum scan_result mthp_collapse(struct mm_struct *mm,
 			case SCAN_PAGE_NULL:
 			case SCAN_DEL_PAGE_LRU:
 			case SCAN_PTE_NON_PRESENT:
-			case SCAN_PTE_UFFD_WP:
+			case SCAN_PTE_UFFD:
 			case SCAN_PAGE_LAZYFREE:
 				last_result = ret;
 				goto next_order;
@@ -1658,15 +1659,15 @@ static enum scan_result collapse_scan_pmd(struct mm_struct *mm,
 			/*
 			 * Always be strict with uffd-wp
 			 * enabled swap entries.  Please see
-			 * comment below for pte_uffd_wp().
+			 * comment below for pte_uffd().
 			 */
-			if (pte_swp_uffd_wp_any(pteval)) {
-				result = SCAN_PTE_UFFD_WP;
+			if (pte_swp_uffd_any(pteval)) {
+				result = SCAN_PTE_UFFD;
 				goto out_unmap;
 			}
 			continue;
 		}
-		if (pte_uffd_wp(pteval)) {
+		if (pte_uffd(pteval)) {
 			/*
 			 * Don't collapse the page if any of the small
 			 * PTEs are armed with uffd write protection.
@@ -1676,7 +1677,7 @@ static enum scan_result collapse_scan_pmd(struct mm_struct *mm,
 			 * userfault messages that falls outside of
 			 * the registered range.  So, just be simple.
 			 */
-			result = SCAN_PTE_UFFD_WP;
+			result = SCAN_PTE_UFFD;
 			goto out_unmap;
 		}
 
@@ -1795,8 +1796,7 @@ static void collect_mm_slot(struct mm_slot *slot)
 
 	if (collapse_test_exit(mm)) {
 		/* free mm_slot */
-		hash_del(&slot->hash);
-		list_del(&slot->mm_node);
+		mm_slot_remove(slot);
 
 		/*
 		 * Not strictly needed because the mm exited already.
@@ -1886,9 +1886,12 @@ static enum scan_result try_collapse_pte_mapped_thp(struct mm_struct *mm, unsign
 	if (!thp_vma_allowable_order(vma, vma->vm_flags, TVA_FORCED_COLLAPSE, PMD_ORDER))
 		return SCAN_VMA_CHECK;
 
-	/* Keep pmd pgtable for uffd-wp; see comment in retract_page_tables() */
-	if (userfaultfd_wp(vma))
-		return SCAN_PTE_UFFD_WP;
+	/*
+	 * Keep pmd pgtable while the uffd bit is in use; see comment in
+	 * retract_page_tables().
+	 */
+	if (userfaultfd_protected(vma))
+		return SCAN_PTE_UFFD;
 
 	folio = filemap_lock_folio(vma->vm_file->f_mapping,
 			       linear_page_index(vma, haddr));
@@ -2100,13 +2103,14 @@ static bool file_backed_vma_is_retractable(struct vm_area_struct *vma)
 		return false;
 
 	/*
-	 * When a vma is registered with uffd-wp, we cannot recycle
+	 * When a vma is registered with uffd-wp or RWP, we cannot recycle
 	 * the page table because there may be pte markers installed.
-	 * Other vmas can still have the same file mapped hugely, but
-	 * skip this one: it will always be mapped in small page size
-	 * for uffd-wp registered ranges.
+	 * VM_UFFD_RWP ranges similarly rely on per-PTE uffd state
+	 * and cannot be recycled to a shared PMD. Other vmas can still
+	 * have the same file mapped hugely, but skip this one: it will
+	 * always be mapped in small page size for these registrations.
 	 */
-	if (userfaultfd_wp(vma))
+	if (userfaultfd_protected(vma))
 		return false;
 
 	/*
@@ -2130,7 +2134,7 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 	struct vm_area_struct *vma;
 
 	i_mmap_lock_read(mapping);
-	vma_interval_tree_foreach(vma, &mapping->i_mmap, pgoff, pgoff) {
+	mapping_rmap_tree_foreach(vma, mapping, pgoff, pgoff) {
 		struct mmu_notifier_range range;
 		struct mm_struct *mm;
 		unsigned long addr;
@@ -2139,7 +2143,8 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 		spinlock_t *ptl;
 		bool success = false;
 
-		addr = vma->vm_start + ((pgoff - vma->vm_pgoff) << PAGE_SHIFT);
+		addr = vma->vm_start +
+			((pgoff - vma_start_pgoff(vma)) << PAGE_SHIFT);
 		if (addr & ~HPAGE_PMD_MASK ||
 		    vma->vm_end < addr + HPAGE_PMD_SIZE)
 			continue;
@@ -2562,7 +2567,7 @@ xa_unlocked:
 		 * not be able to observe any missing pages due to the
 		 * previously inserted retry entries.
 		 */
-		vma_interval_tree_foreach(vma, &mapping->i_mmap, start, end) {
+		mapping_rmap_tree_foreach(vma, mapping, start, end) {
 			if (userfaultfd_missing(vma)) {
 				result = SCAN_EXCEED_NONE_PTE;
 				goto immap_locked;
@@ -3105,18 +3110,19 @@ update_wmarks:
 
 int start_stop_khugepaged(void)
 {
-	int err = 0;
-
-	mutex_lock(&khugepaged_mutex);
+	guard(mutex)(&khugepaged_mutex);
 	if (hugepage_enabled()) {
-		if (!khugepaged_thread)
-			khugepaged_thread = kthread_run(khugepaged, NULL,
-							"khugepaged");
-		if (IS_ERR(khugepaged_thread)) {
-			pr_err("khugepaged: kthread_run(khugepaged) failed\n");
-			err = PTR_ERR(khugepaged_thread);
-			khugepaged_thread = NULL;
-			goto fail;
+		if (!khugepaged_thread) {
+			struct task_struct *new_thread = kthread_run(khugepaged,
+								     NULL,
+								     "khugepaged");
+
+			if (IS_ERR(new_thread)) {
+				pr_err("khugepaged: kthread_run(khugepaged) failed\n");
+				return PTR_ERR(new_thread);
+			}
+
+			khugepaged_thread = new_thread;
 		}
 
 		if (!list_empty(&khugepaged_scan.mm_head))
@@ -3126,17 +3132,14 @@ int start_stop_khugepaged(void)
 		khugepaged_thread = NULL;
 	}
 	set_recommended_min_free_kbytes();
-fail:
-	mutex_unlock(&khugepaged_mutex);
-	return err;
+	return 0;
 }
 
 void khugepaged_min_free_kbytes_update(void)
 {
-	mutex_lock(&khugepaged_mutex);
+	guard(mutex)(&khugepaged_mutex);
 	if (hugepage_enabled() && khugepaged_thread)
 		set_recommended_min_free_kbytes();
-	mutex_unlock(&khugepaged_mutex);
 }
 
 bool current_is_khugepaged(void)
@@ -3235,7 +3238,7 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 		/* Whitelisted set of results where continuing OK */
 		case SCAN_NO_PTE_TABLE:
 		case SCAN_PTE_NON_PRESENT:
-		case SCAN_PTE_UFFD_WP:
+		case SCAN_PTE_UFFD:
 		case SCAN_LACK_REFERENCED_PAGE:
 		case SCAN_PAGE_NULL:
 		case SCAN_PAGE_COUNT:
