@@ -1469,6 +1469,7 @@ static void nfs_clear_verifier_file(struct inode *inode)
 	struct dentry *alias;
 	struct inode *dir;
 
+	guard(spinlock)(&inode->i_lock);
 	for_each_alias(alias, inode) {
 		spin_lock(&alias->d_lock);
 		dir = d_inode_rcu(alias->d_parent);
@@ -1485,10 +1486,9 @@ static void nfs_clear_verifier_directory(struct inode *dir)
 	struct dentry *dentry;
 	struct inode *inode;
 
-	if (hlist_empty(&dir->i_dentry))
+	this_parent = d_find_alias(dir);
+	if (!this_parent)
 		return;
-	this_parent =
-		hlist_entry(dir->i_dentry.first, struct dentry, d_alias);
 
 	spin_lock(&this_parent->d_lock);
 	nfs_unset_verifier_delegated(&this_parent->d_time);
@@ -1503,6 +1503,7 @@ static void nfs_clear_verifier_directory(struct inode *dir)
 		nfs_unset_verifier_delegated(&dentry->d_time);
 		spin_unlock(&dentry->d_lock);
 	}
+	dput(this_parent);
 }
 
 /**
@@ -1519,12 +1520,10 @@ void nfs_clear_verifier_delegated(struct inode *inode)
 {
 	if (!inode)
 		return;
-	spin_lock(&inode->i_lock);
 	if (S_ISREG(inode->i_mode))
 		nfs_clear_verifier_file(inode);
 	else if (S_ISDIR(inode->i_mode))
 		nfs_clear_verifier_directory(inode);
-	spin_unlock(&inode->i_lock);
 }
 EXPORT_SYMBOL_GPL(nfs_clear_verifier_delegated);
 #endif /* IS_ENABLED(CONFIG_NFS_V4) */
