@@ -1516,11 +1516,106 @@ static bool intel_fbc_is_ok(const struct intel_plane_state *plane_state)
 		intel_fbc_is_cfb_ok(plane_state);
 }
 
+static bool intel_fbc_can_flip_nuke(struct intel_atomic_state *state,
+				    struct intel_crtc *crtc,
+				    struct intel_plane *plane)
+{
+	struct intel_display *display = to_intel_display(state);
+	const struct intel_crtc_state *new_crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+	const struct intel_plane_state *old_plane_state =
+		intel_atomic_get_old_plane_state(state, plane);
+	const struct intel_plane_state *new_plane_state =
+		intel_atomic_get_new_plane_state(state, plane);
+	const struct drm_framebuffer *old_fb = old_plane_state->hw.fb;
+	const struct drm_framebuffer *new_fb = new_plane_state->hw.fb;
+
+	if (intel_crtc_needs_modeset(new_crtc_state))
+		return false;
+
+	if (!intel_fbc_is_ok(old_plane_state) ||
+	    !intel_fbc_is_ok(new_plane_state))
+		return false;
+
+	if (old_fb->format->format != new_fb->format->format)
+		return false;
+
+	if (old_fb->modifier != new_fb->modifier)
+		return false;
+
+	if (intel_fbc_plane_stride(old_plane_state) !=
+	    intel_fbc_plane_stride(new_plane_state))
+		return false;
+
+	if (intel_fbc_cfb_stride(old_plane_state) !=
+	    intel_fbc_cfb_stride(new_plane_state))
+		return false;
+
+	if (intel_fbc_cfb_size(old_plane_state) !=
+	    intel_fbc_cfb_size(new_plane_state))
+		return false;
+
+	if (intel_fbc_override_cfb_stride(old_plane_state) !=
+	    intel_fbc_override_cfb_stride(new_plane_state))
+		return false;
+
+	if (!HAS_FBC_DIRTY_RECT(display))
+		return true;
+
+	/*
+	 * From BSpec about "FBC Dirty Rectangle", when Dirty Rectangle mode is
+	 * active, partial updates only apply to surface address changes. Any other
+	 * plane state modification requires Plane to fetch full-plane pixel data
+	 * from memory to re-compress and update the entire CFB in stolen memory.
+	 * Once fully re-compressed, subsequent atomic commits go ahead with FBC
+	 * dirty rectangle updates for smooth visual updates.
+	 *
+	 * So check other Plane attribute changed except for its surface address by
+	 * referring to intel_async_flip_check_hw() which also checks async flip.
+	 */
+
+	/* Includes pixel_blend_mode, color_encoding & color_range checking. */
+	if (old_plane_state->color_ctl != new_plane_state->color_ctl)
+		return false;
+
+	if (!drm_rect_equals(&old_plane_state->uapi.src,
+			     &new_plane_state->uapi.src) ||
+	    !drm_rect_equals(&old_plane_state->uapi.dst,
+			     &new_plane_state->uapi.dst))
+		return false;
+
+	if ((old_plane_state->view.color_plane[0].x !=
+	    new_plane_state->view.color_plane[0].x) ||
+	    (old_plane_state->view.color_plane[0].y !=
+	    new_plane_state->view.color_plane[0].y))
+		return false;
+
+	if (old_plane_state->hw.rotation != new_plane_state->hw.rotation)
+		return false;
+
+	if (old_plane_state->hw.alpha != new_plane_state->hw.alpha)
+		return false;
+
+	if (skl_plane_aux_dist(old_plane_state, 0) !=
+	    skl_plane_aux_dist(new_plane_state, 0))
+		return false;
+
+	if (old_plane_state->decrypt != new_plane_state->decrypt)
+		return false;
+
+	if (old_plane_state->cus_ctl != new_plane_state->cus_ctl)
+		return false;
+
+	return true;
+}
+
 static void
-__intel_fbc_prepare_dirty_rect(const struct intel_plane_state *plane_state,
+__intel_fbc_prepare_dirty_rect(struct intel_atomic_state *state,
+			       const struct intel_plane_state *plane_state,
 			       const struct intel_crtc_state *crtc_state)
 {
 	struct intel_plane *plane = to_intel_plane(plane_state->uapi.plane);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct intel_display *display = to_intel_display(plane_state);
 	struct intel_fbc *fbc = plane->fbc;
 	struct drm_rect *fbc_dirty_rect = &fbc->state.dirty_rect;
@@ -1538,7 +1633,15 @@ __intel_fbc_prepare_dirty_rect(const struct intel_plane_state *plane_state,
 		return;
 	}
 
-	if (drm_rect_visible(damage)) {
+	if (!intel_fbc_can_flip_nuke(state, crtc, plane)) {
+		if (HAS_FBC_DIRTY_RECT(display))
+			drm_dbg_kms(display->drm,
+				    "[PLANE:%d:%s] Non surf addr changed for FBC DIRTY RECT\n",
+				    plane->base.base.id, plane->base.name);
+
+		/* compress the entire region due to non PLANE_SURF updating. */
+		*fbc_dirty_rect = DRM_RECT_INIT(0, y_offset, width, height);
+	} else if (drm_rect_visible(damage)) {
 		int y1, y2;
 
 		if (plane_state->hw.rotation & DRM_MODE_ROTATE_180) {
@@ -1598,8 +1701,7 @@ intel_fbc_prepare_dirty_rect(struct intel_atomic_state *state,
 		mutex_lock(&fbc->lock);
 
 		if (fbc->state.plane == plane)
-			__intel_fbc_prepare_dirty_rect(plane_state,
-						       crtc_state);
+			__intel_fbc_prepare_dirty_rect(state, plane_state, crtc_state);
 
 		mutex_unlock(&fbc->lock);
 	}
@@ -1796,51 +1898,6 @@ int intel_fbc_min_cdclk(const struct intel_crtc_state *crtc_state)
 		return 0;
 
 	return min_cdclk;
-}
-
-static bool intel_fbc_can_flip_nuke(struct intel_atomic_state *state,
-				    struct intel_crtc *crtc,
-				    struct intel_plane *plane)
-{
-	const struct intel_crtc_state *new_crtc_state =
-		intel_atomic_get_new_crtc_state(state, crtc);
-	const struct intel_plane_state *old_plane_state =
-		intel_atomic_get_old_plane_state(state, plane);
-	const struct intel_plane_state *new_plane_state =
-		intel_atomic_get_new_plane_state(state, plane);
-	const struct drm_framebuffer *old_fb = old_plane_state->hw.fb;
-	const struct drm_framebuffer *new_fb = new_plane_state->hw.fb;
-
-	if (intel_crtc_needs_modeset(new_crtc_state))
-		return false;
-
-	if (!intel_fbc_is_ok(old_plane_state) ||
-	    !intel_fbc_is_ok(new_plane_state))
-		return false;
-
-	if (old_fb->format->format != new_fb->format->format)
-		return false;
-
-	if (old_fb->modifier != new_fb->modifier)
-		return false;
-
-	if (intel_fbc_plane_stride(old_plane_state) !=
-	    intel_fbc_plane_stride(new_plane_state))
-		return false;
-
-	if (intel_fbc_cfb_stride(old_plane_state) !=
-	    intel_fbc_cfb_stride(new_plane_state))
-		return false;
-
-	if (intel_fbc_cfb_size(old_plane_state) !=
-	    intel_fbc_cfb_size(new_plane_state))
-		return false;
-
-	if (intel_fbc_override_cfb_stride(old_plane_state) !=
-	    intel_fbc_override_cfb_stride(new_plane_state))
-		return false;
-
-	return true;
 }
 
 static bool __intel_fbc_pre_update(struct intel_atomic_state *state,
