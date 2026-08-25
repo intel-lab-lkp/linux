@@ -920,6 +920,58 @@ int cxl_decoder_recommit(struct cxl_decoder *cxld, u32 ctrl)
 	return 0;
 }
 
+static int __cxl_endpoint_decoder_is_emulated(struct device *dev, void *data)
+{
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	return !to_cxl_decoder(dev)->commit;
+}
+
+/* Only the DVSEC setup path leaves ->commit NULL. */
+static bool cxl_endpoint_decoders_are_emulated(struct cxl_port *endpoint)
+{
+	return device_for_each_child(&endpoint->dev, NULL,
+				     __cxl_endpoint_decoder_is_emulated);
+}
+
+/*
+ * Restore CXL.mem decode on @cxlmd before any of its decoders is committed. A
+ * reset clears the endpoint's HDM Decoder Global Control and the DVSEC CXL
+ * Control, and per CXL r4.0 sec 8.2.4.20.2 Table 8-118 a device decodes CXL.mem
+ * with the DVSEC range registers while HDM Decoder Enable is clear. Committing
+ * a decoder in that state does not establish the route. An endpoint with no HDM
+ * decoder registers is driven through the DVSEC ranges and has nothing to
+ * enable. So is an endpoint whose decoders are emulated from those ranges, and
+ * setting HDM Decoder Enable there would switch it to decoders locked against
+ * reprogramming.
+ *
+ * @global_ctrl is the Global Control value to enable decode in. That register
+ * also holds Poison On Decode Error Enable, which the driver does not model, so
+ * the caller supplies the value it saved rather than one read back after the
+ * reset.
+ */
+int cxl_endpoint_enable_hdm_decode(struct cxl_memdev *cxlmd, u32 global_ctrl)
+{
+	struct cxl_port *endpoint = cxlmd->endpoint;
+	struct cxl_hdm *cxlhdm = dev_get_drvdata(&endpoint->dev);
+	int rc;
+
+	if (!cxlhdm || !cxlhdm->regs.hdm_decoder)
+		return 0;
+
+	if (cxl_endpoint_decoders_are_emulated(endpoint))
+		return 0;
+
+	cxl_enable_hdm(cxlhdm, global_ctrl);
+
+	rc = cxl_set_mem_enable(cxlmd->cxlds, PCI_DVSEC_CXL_MEM_ENABLE);
+	if (rc < 0)
+		return rc;
+
+	return 0;
+}
+
 static int commit_reap(struct device *dev, void *data)
 {
 	struct cxl_port *port = to_cxl_port(dev->parent);
