@@ -104,7 +104,7 @@ int ocfs2_fileattr_set(struct mnt_idmap *idmap,
 	}
 
 	if (!S_ISDIR(inode->i_mode))
-		flags &= ~OCFS2_DIRSYNC_FL;
+		flags &= ~FS_DIRSYNC_FL;
 
 	oldflags = ocfs2_inode->ip_attr;
 	flags = flags & OCFS2_FL_MODIFIABLE;
