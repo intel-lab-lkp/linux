@@ -910,11 +910,18 @@ static int pfifo_fast_init(struct Qdisc *qdisc, struct nlattr *opt,
 	if (!qlen)
 		return -EINVAL;
 
+	if (qlen > S16_MAX) {
+		NL_SET_ERR_MSG_FMT_MOD(extack,
+				       "ring size %u too large (max %d)",
+				       qlen, S16_MAX);
+		return -ERANGE;
+	}
+
 	for (prio = 0; prio < PFIFO_FAST_BANDS; prio++) {
 		struct skb_array *q = band2list(priv, prio);
 		int err;
 
-		err = skb_array_init(q, qlen, GFP_KERNEL);
+		err = skb_array_init(q, qlen, GFP_KERNEL_ACCOUNT);
 		if (err)
 			return -ENOMEM;
 	}
@@ -957,8 +964,11 @@ static int pfifo_fast_change_tx_queue_len(struct Qdisc *sch,
 		bands[prio] = q;
 	}
 
+	if (new_len > S16_MAX)
+		return -ERANGE;
+
 	return skb_array_resize_multiple_bh(bands, PFIFO_FAST_BANDS, new_len,
-					    GFP_KERNEL);
+					    GFP_KERNEL_ACCOUNT);
 }
 
 struct Qdisc_ops pfifo_fast_ops __read_mostly = {
