@@ -1225,6 +1225,8 @@ _destroy_all_sets(struct ip_set_net *inst)
 	/* Must wait for flush to be really finished  */
 	if (need_wait)
 		rcu_barrier();
+	/* Wait for RCU readers before NULLing slots */
+	synchronize_rcu();
 	for (i = 0; i < inst->ip_set_max; i++) {
 		set = ip_set(inst, i);
 		if (set) {
@@ -1283,6 +1285,17 @@ static int ip_set_destroy(struct sk_buff *skb, const struct nfnl_info *info,
 				ret = -ENOENT;
 			goto out;
 		} else if (s->ref || s->ref_netlink) {
+			ret = -IPSET_ERR_BUSY;
+			goto out;
+		}
+		read_unlock_bh(&ip_set_ref_lock);
+
+		/* Wait for RCU readers before NULLing slot */
+		synchronize_rcu();
+
+		read_lock_bh(&ip_set_ref_lock);
+		/* Dump may have taken a ref while lock was dropped */
+		if (s->ref || s->ref_netlink) {
 			ret = -IPSET_ERR_BUSY;
 			goto out;
 		}
