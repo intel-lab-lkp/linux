@@ -20,10 +20,8 @@
 //! - Two extension traits, [`FromSafeCast`] and [`IntoSafeCast`], providing conversion methods
 //!   similar to [`From`] and [`Into`] for conversions that are safe to perform in the kernel, but
 //!   not supported by the standard library.
-//! - Another series of const functions (e.g. [`u64_into_u8`]) supporting the conversion of a const
-//!   value from a larger type into a smaller one, provided the value fits into the destination
-//!   type. This is useful if a constant is defined as a larger type, but needs to be used as a
-//!   smaller one.
+//! - A [`const_as!`] macro, losslessly casting a constant expression between any two integer
+//!   types, with conversions that would alter the value reported as build errors.
 //! - An [`arch`] sub-module, defining more conversion functions that are only guaranteed to be
 //!   lossless for a given pointer size. These can only be used in code that is specific to a
 //!   given pointer size.
@@ -35,6 +33,9 @@
 //!
 //! // Conversion from const context.
 //! const USIZED_CONST: usize = casts::u8_as_usize(255u8);
+//!
+//! // Build-time checked narrowing conversion of a constant expression.
+//! const NARROWED_CONST: u16 = casts::const_as!(0xf00u32 => u16);
 //!
 //! // Non-const conversions.
 //! let a = u64::from_safe_cast(4096usize);
@@ -182,57 +183,85 @@ where
     }
 }
 
-/// Implements lossless conversion of a constant from a larger type into a smaller one.
-macro_rules! impl_const_into {
-    ($from:ty => { $($into:ty),* }) => {
-        $(
-        $crate::macros::paste! {
-            #[doc = ::core::concat!(
-                "Performs a build-time safe conversion of a [`",
-                ::core::stringify!($from),
-                "`] constant value into a [`",
-                ::core::stringify!($into),
-                "`].")]
-            ///
-            /// This checks at compile-time that the conversion is lossless, and triggers a build
-            /// error if it isn't.
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use kernel::num::casts;
-            ///
-            /// // Succeeds because the value of the source fits into the destination's type.
-            #[doc = ::core::concat!(
-                "assert_eq!(casts::",
-                ::core::stringify!($from),
-                "_into_",
-                ::core::stringify!($into),
-                "::<1",
-                ::core::stringify!($from),
-                ">(), 1",
-                ::core::stringify!($into),
-                ");")]
-            /// ```
-            #[inline]
-            pub const fn [<$from _into_ $into>]<const N: $from>() -> $into {
-                // Make sure that the target type is smaller than the source one.
-                $crate::static_assert!($from::BITS >= $into::BITS);
-                // CAST: we statically enforced above that `$from` is larger than `$into`, so the
-                // `as` conversion will be lossless.
-                $crate::const_assert!(N >= $into::MIN as $from && N <= $into::MAX as $from);
+/// Losslessly casts a constant expression into a target integer type, or fails the build.
+///
+/// This is a checked replacement for the `as` keyword on constant expressions: the conversion is
+/// evaluated at build time, and a build error is triggered if the source value does not fit into
+/// the destination type. Since the compiler verifies that the conversion is lossless, a `CAST`
+/// comment is not needed.
+///
+/// The argument is a constant expression.
+///
+/// # Examples
+///
+/// ```
+/// use kernel::num::casts;
+///
+/// // Narrows the type of a constant in const context.
+/// const CAP_ID: u16 = casts::const_as!(0x0010u32 => u16);
+/// assert_eq!(CAP_ID, 0x0010u16);
+///
+/// // Widens the type of a constant, outside of const context.
+/// let v: u64 = casts::const_as!(42u16 => u64);
+/// assert_eq!(v, 42u64);
+///
+/// // Signed conversions work as well...
+/// assert_eq!(casts::const_as!(-42i32 => i16), -42i16);
+///
+/// // ...and so do cross-signedness conversions as long as the value fits.
+/// assert_eq!(casts::const_as!(258i32 => u16), 258u16);
+/// ```
+///
+/// A value that does not fit into the destination type fails to build:
+///
+/// ```ignore,compile_fail
+/// # use kernel::num::casts;
+/// // Fails to build: `0x10000` does not fit into a `u16`.
+/// const ID: u16 = casts::const_as!(0x10000u32 => u16);
+/// ```
+///
+/// Conversions that alter the value also fail to build:
+///
+/// ```ignore,compile_fail
+/// # use kernel::num::casts;
+/// // Fails to build: `-1i64 as u64` yields `u64::MAX`.
+/// const V: u64 = casts::const_as!(-1i64 => u64);
+/// ```
+///
+/// Runtime values are rejected:
+///
+/// ```ignore,compile_fail
+/// # use kernel::num::casts;
+/// fn f(v: u32) -> u16 {
+///     // Fails to build: `v` is not a constant expression.
+///     casts::const_as!(v => u16)
+/// }
+/// ```
+#[macro_export]
+#[doc(hidden)]
+macro_rules! const_as {
+    ($v:expr => $into:ty) => {
+        const {
+            #[allow(unused_comparisons, unused_assignments, clippy::as_underscore)]
+            {
+                let v = $v;
+                let r = v as $into;
+                // Pin `back` to `v`'s type so `as _` casts back to the source type.
+                let mut back = v;
+                back = r as _;
 
-                N as $into
+                ::core::assert!(
+                    back == v && (v < 0) == (r < 0),
+                    "value does not fit into the target type"
+                );
+
+                r
             }
         }
-        )*
     };
 }
-
-impl_const_into!(usize => { u8, u16, u32 });
-impl_const_into!(u64 => { u8, u16, u32 });
-impl_const_into!(u32 => { u8, u16 });
-impl_const_into!(u16 => { u8 });
+#[doc(inline)]
+pub use const_as;
 
 /// Conversions that are only lossless for the current architecture.
 ///
