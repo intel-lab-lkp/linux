@@ -65,3 +65,5 @@
 #define EST_GCL_DATA			0x00000034
 
 extern const struct stmmac_est_ops dwmac510_est_ops;
+
+void stmmac_est_reconfigure(struct stmmac_priv *priv);

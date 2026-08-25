@@ -48,6 +48,7 @@
 #include "stmmac_ptp.h"
 #include "stmmac_fpe.h"
 #include "stmmac.h"
+#include "stmmac_est.h"
 #include "stmmac_pcs.h"
 #include "stmmac_xdp.h"
 #include <linux/reset.h>
@@ -4157,6 +4158,12 @@ static int __stmmac_open(struct net_device *dev,
 	}
 
 	stmmac_setup_ptp(priv);
+
+	/* The core soft reset in stmmac_hw_setup() clears the MTL_EST
+	 * registers, so re-apply the taprio offload after PTP is up.
+	 */
+	if (priv->est && priv->est->enable)
+		stmmac_est_reconfigure(priv);
 
 	stmmac_init_coalesce(priv);
 
