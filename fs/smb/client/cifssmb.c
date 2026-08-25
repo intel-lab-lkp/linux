@@ -3314,31 +3314,27 @@ static void cifs_init_posix_acl(struct posix_acl_entry *ace,
 static int cifs_to_posix_acl(struct posix_acl **acl, char *src,
 			     const int acl_type, const int size_of_data_area)
 {
-	int size =  0;
+	int size =  sizeof(struct cifs_posix_acl);
 	__u16 count;
 	struct cifs_posix_ace *pACE;
 	struct cifs_posix_acl *cifs_acl = (struct cifs_posix_acl *)src;
 	struct posix_acl *kacl = NULL;
 	struct posix_acl_entry *pa, *pe;
 
+	if (size_of_data_area < size) /* validate acl header */
+		return -EINVAL;
+
 	if (le16_to_cpu(cifs_acl->version) != CIFS_ACL_VERSION)
 		return -EOPNOTSUPP;
 
+	count = le16_to_cpu(cifs_acl->access_entry_count);
+	size += sizeof(struct cifs_posix_ace) * count;
+	if (size_of_data_area < size) /* validate access ACEs */
+		return -EINVAL;
+
 	if (acl_type == ACL_TYPE_ACCESS) {
-		count = le16_to_cpu(cifs_acl->access_entry_count);
 		pACE = &cifs_acl->ace_array[0];
-		size = sizeof(struct cifs_posix_acl);
-		size += sizeof(struct cifs_posix_ace) * count;
-		/* check if we would go beyond end of SMB */
-		if (size_of_data_area < size) {
-			cifs_dbg(FYI, "bad CIFS POSIX ACL size %d vs. %d\n",
-				 size_of_data_area, size);
-			return -EINVAL;
-		}
 	} else if (acl_type == ACL_TYPE_DEFAULT) {
-		count = le16_to_cpu(cifs_acl->access_entry_count);
-		size = sizeof(struct cifs_posix_acl);
-		size += sizeof(struct cifs_posix_ace) * count;
 		/* skip past access ACEs to get to default ACEs */
 		pACE = &cifs_acl->ace_array[count];
 		count = le16_to_cpu(cifs_acl->default_entry_count);
