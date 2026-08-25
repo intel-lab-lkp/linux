@@ -596,6 +596,26 @@ int security_ptrace_traceme(struct task_struct *parent)
 }
 
 /**
+ * security_mem_foll_force_opened_by_owner() - Check if introspective FOLL_FORCE is allowed
+ * @subject: credentials of the process accessing its own memory
+ *
+ * Check if FOLL_FORCE is allowed for accessing process memory through
+ * /proc/$pid/mem in the case where the opener's MM was the same as the target
+ * MM, meaning the security_ptrace_access_check() hook was bypassed on open().
+ * (current->mm does not matter for this; for example, if write() is called on
+ * an FD that was received from another process which obtained it with
+ * open("/proc/self/mem"), this hook still runs.)
+ *
+ * This is only used when the system is configured with PROC_MEM_FORCE_ALWAYS.
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_mem_foll_force_opened_by_owner(const struct cred *subject)
+{
+	return call_int_hook(mem_foll_force_opened_by_owner, subject);
+}
+
+/**
  * security_capget() - Get the capability sets for a process
  * @target: target process
  * @effective: effective capability set
