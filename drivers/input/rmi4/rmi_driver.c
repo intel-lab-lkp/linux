@@ -369,6 +369,24 @@ static void rmi_driver_set_input_name(struct rmi_device *rmi_dev,
 	input->name = name;
 }
 
+/*
+ * Let go of an input device that belongs to the transport driver.  It outlives
+ * us, but rmi_driver_set_input_name() pointed its name at devres memory of
+ * ours that is freed as soon as we are done - input_register_device() and both
+ * the add and the remove uevent print that name - so put the name back to a
+ * string with static storage duration before dropping the reference.
+ */
+static void rmi_driver_put_input(struct rmi_device *rmi_dev,
+				 struct rmi_driver_data *data)
+{
+	if (!data->input || data->input != rmi_dev->xport->input)
+		return;
+
+	data->input->name = SYNAPTICS_INPUT_DEVICE_NAME;
+	input_put_device(data->input);
+	data->input = NULL;
+}
+
 static int rmi_driver_set_irq_bits(struct rmi_device *rmi_dev,
 				   unsigned long *mask)
 {
@@ -1026,6 +1044,8 @@ static int rmi_driver_remove(struct device *dev)
 	rmi_f34_remove_sysfs(rmi_dev);
 	rmi_free_function_list(rmi_dev);
 
+	rmi_driver_put_input(rmi_dev, data);
+
 	irq_domain_remove(data->irqdomain);
 	data->irqdomain = NULL;
 
@@ -1231,7 +1251,7 @@ static int rmi_driver_probe(struct device *dev)
 		 * One example is some HID touchpads report "pass-through"
 		 * button events are not reported by rmi registers.
 		 */
-		data->input = rmi_dev->xport->input;
+		data->input = input_get_device(rmi_dev->xport->input);
 	} else {
 		data->input = devm_input_allocate_device(dev);
 		if (!data->input) {
@@ -1287,6 +1307,7 @@ err_disable_irq:
 err_destroy_functions:
 	rmi_free_function_list(rmi_dev);
 err:
+	rmi_driver_put_input(rmi_dev, data);
 	return retval;
 }
 
