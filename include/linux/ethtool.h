@@ -1244,6 +1244,45 @@ struct ethtool_intf_caps {
 	struct ethtool_intf_block blocks[INTF_CAPS_MAX_BLOCKS];
 };
 
+/* Bitmask of which ethtool_phy_test fields were explicitly specified */
+#define PHY_TEST_CMD_TX_PATTERN		BIT(0)
+#define PHY_TEST_CMD_RX_PATTERN		BIT(1)
+#define PHY_TEST_CMD_BERT_ACTION		BIT(2)
+#define PHY_TEST_CMD_INJECT_COUNT		BIT(3)
+#define PHY_TEST_CMD_LANE			BIT(4)
+#define PHY_TEST_CMD_BLOCK_ID			BIT(5)
+
+/* Bitmask of currently active tests (read-only) */
+#define PHY_TEST_ACTIVE_BERT		BIT(0)
+
+/**
+ * struct ethtool_phy_test - PHY test configuration and status
+ * @cmd: Bitmask of which fields are valid (PHY_TEST_CMD_*)
+ * @block_id: Block to operate on (from intf-caps-get)
+ * @lane: Lane number (0-based)
+ * @tx_pattern: TX pattern generator setting
+ * @rx_pattern: RX pattern checker setting
+ * @bert_action: BERT start/stop control
+ * @inject_error_count: Number of errors to inject
+ * @active_tests: Bitmask of running tests (PHY_TEST_ACTIVE_*)
+ * @checker_lock: RX checker lock status (read-only)
+ * @error_count: BERT error counter (read-only)
+ * @total_bits_sent: BERT total bits counter (read-only)
+ */
+struct ethtool_phy_test {
+	u32 cmd;
+	u32 block_id;
+	u32 lane;
+	enum phy_test_pattern tx_pattern;
+	enum phy_test_pattern rx_pattern;
+	enum phy_test_action bert_action;
+	u32 inject_error_count;
+	u32 active_tests;
+	u8 checker_lock;
+	u64 error_count;
+	u64 total_bits_sent;
+};
+
 struct ethtool_ops {
 	u32     supported_input_xfrm:8;
 	u32     cap_link_lanes_supported:1;
@@ -1403,6 +1442,10 @@ struct ethtool_ops {
 	void	(*get_mm_stats)(struct net_device *dev, struct ethtool_mm_stats *stats);
 	int	(*get_intf_caps)(struct net_device *dev,
 				 struct ethtool_intf_caps *caps);
+	int	(*get_phy_test)(struct net_device *dev,
+				struct ethtool_phy_test *test);
+	int	(*set_phy_test)(struct net_device *dev,
+				struct ethtool_phy_test *test);
 };
 
 int ethtool_check_ops(const struct ethtool_ops *ops);

@@ -432,6 +432,7 @@ ethnl_default_requests[__ETHTOOL_MSG_USER_CNT] = {
 	[ETHTOOL_MSG_PHY_GET]		= &ethnl_phy_request_ops,
 	[ETHTOOL_MSG_MSE_GET]		= &ethnl_mse_request_ops,
 	[ETHTOOL_MSG_INTF_CAPS_GET]	= &ethnl_intf_caps_request_ops,
+	[ETHTOOL_MSG_PHY_TEST_GET]	= &ethnl_phy_test_request_ops,
 };
 
 static struct ethnl_dump_ctx *ethnl_dump_context(struct netlink_callback *cb)
@@ -1581,6 +1582,19 @@ static const struct genl_ops ethtool_genl_ops[] = {
 		.done	= ethnl_default_done,
 		.policy = ethnl_intf_caps_get_policy,
 		.maxattr = ARRAY_SIZE(ethnl_intf_caps_get_policy) - 1,
+	},
+	{
+		.cmd	= ETHTOOL_MSG_PHY_TEST_GET,
+		.doit	= ethnl_default_doit,
+		.policy = ethnl_phy_test_get_policy,
+		.maxattr = ARRAY_SIZE(ethnl_phy_test_get_policy) - 1,
+	},
+	{
+		.cmd	= ETHTOOL_MSG_PHY_TEST_ACT,
+		.flags	= GENL_UNS_ADMIN_PERM,
+		.doit	= ethnl_act_phy_test,
+		.policy = ethnl_phy_test_act_policy,
+		.maxattr = ARRAY_SIZE(ethnl_phy_test_act_policy) - 1,
 	},
 };
 

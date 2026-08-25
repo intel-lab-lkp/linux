@@ -229,6 +229,36 @@ definitions:
       - fec
       - pma
       - pmd
+  -
+    name: phy-test-pattern
+    type: enum
+    doc: PHY test pattern types for PRBS generation/checking.
+    entries:
+      - off
+      - prbs7
+      - prbs9
+      - prbs11
+      - prbs13
+      - prbs15
+      - prbs23
+      - prbs31
+      - ssprq
+      - prbs13q
+      - prbs31q
+      - square-nrz
+      - square-pam4
+      - tx-linearity
+      - scrambled-idle
+      - k28-5
+      - k28-7
+  -
+    name: phy-test-action
+    type: enum
+    doc: BERT control actions.
+    entries:
+      - none
+      - start
+      - stop
 
 attribute-sets:
   -
@@ -1991,6 +2021,48 @@ attribute-sets:
         type: nest
         nested-attributes: intf-block
         multi-attr: true
+  -
+    name: phy-test
+    doc: PHY test configuration and status.
+    attributes:
+      -
+        name: header
+        type: nest
+        nested-attributes: header
+      -
+        name: block-id
+        type: u32
+      -
+        name: lane
+        type: u32
+      -
+        name: tx-pattern
+        type: u32
+        enum: phy-test-pattern
+      -
+        name: rx-pattern
+        type: u32
+        enum: phy-test-pattern
+      -
+        name: bert-action
+        type: u32
+        enum: phy-test-action
+      -
+        name: inject-error-count
+        type: u32
+      -
+        name: active-tests
+        type: u32
+        doc: Bitmask of currently running tests (bit 0 = BERT).
+      -
+        name: checker-lock
+        type: u8
+      -
+        name: error-count
+        type: u64
+      -
+        name: total-bits-sent
+        type: u64
 
 operations:
   enum-model: directional
@@ -2958,6 +3030,41 @@ operations:
             - header
             - blocks
       dump: *intf-caps-get-op
+    -
+      name: phy-test-get
+      doc: Get PHY test status (patterns, BERT counters).
+      attribute-set: phy-test
+      do:
+        request:
+          attributes:
+            - header
+            - block-id
+            - lane
+        reply:
+          attributes:
+            - header
+            - block-id
+            - lane
+            - tx-pattern
+            - rx-pattern
+            - active-tests
+            - checker-lock
+            - error-count
+            - total-bits-sent
+    -
+      name: phy-test-act
+      doc: Configure PHY test (set patterns, start/stop BERT, inject errors).
+      attribute-set: phy-test
+      do:
+        request:
+          attributes:
+            - header
+            - block-id
+            - lane
+            - tx-pattern
+            - rx-pattern
+            - bert-action
+            - inject-error-count
 
 mcast-groups:
   list:
