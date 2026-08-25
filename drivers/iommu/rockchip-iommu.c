@@ -794,6 +794,10 @@ static int rk_iommu_map_iova(struct rk_iommu_domain *rk_domain, u32 *pte_addr,
 
 	assert_spin_locked(&rk_domain->dt_lock);
 
+	/* Reject addresses the hardware cannot support */
+	if ((paddr + size - 1) & ~rk_domain->rk_ops->paddr_mask)
+		return -ERANGE;
+
 	for (pte_count = 0; pte_count < pte_total; pte_count++) {
 		u32 pte = pte_addr[pte_count];
 
