@@ -1255,7 +1255,7 @@ static int rmi_driver_probe(struct device *dev)
 
 	retval = rmi_f34_create_sysfs(rmi_dev);
 	if (retval)
-		goto err;
+		goto err_destroy_functions;
 
 	if (data->input) {
 		rmi_driver_set_input_name(rmi_dev, data->input);
@@ -1264,14 +1264,14 @@ static int rmi_driver_probe(struct device *dev)
 			if (retval) {
 				dev_err(dev, "%s: Failed to register input device.\n",
 					__func__);
-				goto err_destroy_functions;
+				goto err_remove_sysfs;
 			}
 		}
 	}
 
 	retval = rmi_irq_init(rmi_dev);
 	if (retval < 0)
-		goto err_destroy_functions;
+		goto err_remove_sysfs;
 
 	if (data->f01_container->dev.driver) {
 		/* Driver already bound, so enable ATTN now. */
@@ -1284,6 +1284,8 @@ static int rmi_driver_probe(struct device *dev)
 
 err_disable_irq:
 	rmi_disable_irq(rmi_dev, false);
+err_remove_sysfs:
+	rmi_f34_remove_sysfs(rmi_dev);
 err_destroy_functions:
 	rmi_free_function_list(rmi_dev);
 err:
