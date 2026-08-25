@@ -334,6 +334,14 @@ static void rmi_reset_work(struct work_struct *work)
 	struct rmi_data *hdata = container_of(work, struct rmi_data,
 						reset_work);
 
+	/*
+	 * A report that raced with rmi_remove() may have queued us after it
+	 * cleared RMI_STARTED, i.e. after the transport device we would reset
+	 * has been unregistered.
+	 */
+	if (!test_bit(RMI_STARTED, &hdata->flags))
+		return;
+
 	/* switch the device to RMI if we receive a generic mouse report */
 	rmi_reset_attn_mode(hdata->hdev);
 }
@@ -433,7 +441,13 @@ static int rmi_event(struct hid_device *hdev, struct hid_field *field,
 				return 1;
 		}
 
-		schedule_work(&data->reset_work);
+		/*
+		 * Only reset a device that finished rmi_input_configured();
+		 * before that, and after rmi_remove() has cleared the bit,
+		 * struct rmi_data may go away under the work.
+		 */
+		if (test_bit(RMI_STARTED, &data->flags))
+			schedule_work(&data->reset_work);
 		return 1;
 	}
 
@@ -771,15 +785,29 @@ start:
 static void rmi_remove(struct hid_device *hdev)
 {
 	struct rmi_data *hdata = hid_get_drvdata(hdev);
+	bool started = test_and_clear_bit(RMI_STARTED, &hdata->flags);
 
-	if ((hdata->device_flags & RMI_DEVICE)
-	    && test_bit(RMI_STARTED, &hdata->flags)) {
-		clear_bit(RMI_STARTED, &hdata->flags);
-		cancel_work_sync(&hdata->reset_work);
+	/*
+	 * reset_work lives inside the devm-allocated hdata, which is freed as
+	 * soon as this returns, so it has to be cancelled whether or not the
+	 * device ever reached the RMI_STARTED state.  Cancel it here, while
+	 * the transport device it resets is still registered.
+	 */
+	cancel_work_sync(&hdata->reset_work);
+
+	if ((hdata->device_flags & RMI_DEVICE) && started)
 		rmi_unregister_transport_device(&hdata->xport);
-	}
 
 	hid_hw_stop(hdev);
+
+	/*
+	 * A report that passed the RMI_STARTED test in rmi_event() just before
+	 * the clear above can queue the work again after that first cancel.
+	 * Such a work item does nothing, but it still has to be reaped before
+	 * hdata goes away.  hid_hw_stop() has stopped the report flow, so no
+	 * further queueing is possible by now.
+	 */
+	cancel_work_sync(&hdata->reset_work);
 }
 
 static const struct hid_device_id rmi_id[] = {
