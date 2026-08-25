@@ -105,21 +105,50 @@ static int get_lfps_half_cycle_clocks(const struct intel_crtc_state *crtc_state)
 		1000 / (2 * LFPS_CYCLE_COUNT);
 }
 
+#define ML_PHY_LOCK_LEN		252
+#define ML_PHY_LOCK_LEN_UHBR	396
+
 static int get_tphy2_p2_to_p0(const struct intel_crtc_state *crtc_state)
 {
-	return 12 * 1000;
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	return DISPLAY_VER(display) >= 35 ? (20 * 1000) : (12 * 1000);
 }
 
-static int get_establishment_period(const struct intel_crtc_state *crtc_state)
+static int get_establishment_period(struct intel_dp *intel_dp,
+				    const struct intel_crtc_state *crtc_state)
 {
 	int t1 = 50 * 1000;
-	int tps4 = 252;
+	int tps4 = intel_dp_is_uhbr(crtc_state) ? (ML_PHY_LOCK_LEN_UHBR * 32) :
+		   (ML_PHY_LOCK_LEN * 10);
 	/* port_clock is link rate in 10kbit/s units */
-	int tml_phy_lock = 1000 * 1000 * tps4 / crtc_state->port_clock;
+	int tml_phy_lock = 1000 * 1000 * tps4 / crtc_state->port_clock / 10;
+	int lttpr_count = 0;
 	int tcds, establishment_period;
 
-	tcds = (7 + DIV_ROUND_UP(6500, tml_phy_lock) + 1) * tml_phy_lock;
-	establishment_period = (SILENCE_PERIOD_TIME + t1 + tcds);
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		tcds = (7 + DIV_ROUND_UP(6500, tml_phy_lock) + 1) * tml_phy_lock;
+	} else {
+		tcds = 7 * tml_phy_lock;
+		lttpr_count = drm_dp_lttpr_count(intel_dp->lttpr_common_caps);
+	}
+
+	if (lttpr_count) {
+		int tlw = 13000;
+		int tcs = 10000;
+		int tlfps_period = get_lfps_cycle_time(crtc_state);
+		int tdcs = (SILENCE_PERIOD_TIME + t1 + tcs +
+			    (lttpr_count - 1) * (tlw + tlfps_period));
+		int tacds = 70000;
+		int tds = (lttpr_count - 1) * 7 * tml_phy_lock;
+
+		/* tdrl is same as tcds*/
+		establishment_period = tlw + tlfps_period + tdcs + tacds + tds + tcds;
+	} else {
+		/* TODO: Add a check for data realign by DPCD 0x116[3] */
+
+		establishment_period = (SILENCE_PERIOD_TIME + t1 + tcds);
+	}
 
 	return establishment_period;
 }
@@ -141,12 +170,16 @@ static int get_establishment_period(const struct intel_crtc_state *crtc_state)
  * within the CDS period complete within the CDS period regardless of
  * entry into the period
  * tML_PHY_LOCK = TPS4 Length * ( 10 / (Link Rate in MHz) )
- * TPS4 Length = 252 Symbols
+ * ML_PHY_LOCK Length (8b/10b): 252
+ * ML_PHY_LOCK Length (128b/132b): 396
+ * TPS4 Length = ML_PHY_LOCK * Rate Div
+ * Rate Div = 32 for 128b/132b and 10 for 8b/10b.
  */
-static int _lnl_compute_aux_less_wake_time(const struct intel_crtc_state *crtc_state)
+static int _lnl_compute_aux_less_wake_time(struct intel_dp *intel_dp,
+					   const struct intel_crtc_state *crtc_state)
 {
 	int tphy2_p2_to_p0 = get_tphy2_p2_to_p0(crtc_state);
-	int establishment_period = get_establishment_period(crtc_state);
+	int establishment_period = get_establishment_period(intel_dp, crtc_state);
 
 	return DIV_ROUND_UP(tphy2_p2_to_p0 + get_lfps_cycle_time(crtc_state) +
 			    establishment_period, 1000);
@@ -161,7 +194,7 @@ _lnl_compute_aux_less_alpm_params(struct intel_dp *intel_dp,
 		lfps_half_cycle;
 
 	aux_less_wake_time =
-		_lnl_compute_aux_less_wake_time(crtc_state);
+		_lnl_compute_aux_less_wake_time(intel_dp, crtc_state);
 	aux_less_wake_lines = intel_usecs_to_scanlines(&crtc_state->hw.adjusted_mode,
 						       aux_less_wake_time);
 	silence_period = get_silence_period_symbols(crtc_state);
@@ -430,8 +463,12 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 	if (intel_alpm_is_alpm_aux_less(intel_dp, crtc_state)) {
 		alpm_ctl = ALPM_CTL_ALPM_ENABLE |
 			ALPM_CTL_ALPM_AUX_LESS_ENABLE |
-			ALPM_CTL_AUX_LESS_SLEEP_HOLD_TIME_50_SYMBOLS |
-			ALPM_CTL_AUX_LESS_WAKE_TIME(crtc_state->alpm_state.aux_less_wake_lines);
+			ALPM_CTL_AUX_LESS_SLEEP_HOLD_TIME_50_SYMBOLS;
+
+		if (DISPLAY_VER(display) < 35)
+			alpm_ctl |= ALPM_CTL_AUX_LESS_WAKE_TIME(crtc_state->alpm_state.aux_less_wake_lines);
+		else
+			alpm_ctl |= ALPM_CTL_AUX_LESS_WAKE_TIME_XE3LPD(crtc_state->alpm_state.aux_less_wake_lines);
 
 		if (intel_dp->as_sdp_supported) {
 			u32 pr_alpm_ctl = get_pr_alpm_as_sdp_transmission_time(crtc_state);
