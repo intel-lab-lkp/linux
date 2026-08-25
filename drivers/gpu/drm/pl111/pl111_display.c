@@ -15,6 +15,7 @@
 #include <linux/media-bus-format.h>
 #include <linux/of_graph.h>
 
+#include <drm/drm_blend.h>
 #include <drm/drm_fb_dma_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
@@ -593,6 +594,11 @@ int pl111_display_init(struct drm_device *drm)
 					   priv->variant->nformats,
 					   NULL,
 					   priv->connector);
+	if (ret)
+		return ret;
+
+	ret = drm_plane_create_blend_mode_property(&priv->pipe.plane,
+						   BIT(DRM_MODE_BLEND_PIXEL_NONE));
 	if (ret)
 		return ret;
 
