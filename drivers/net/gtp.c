@@ -603,10 +603,12 @@ static int gtp0_udp_encap_recv(struct gtp_dev *gtp, struct sk_buff *skb)
 	 * there is no daemon running in userspace which would
 	 * handle echo request.
 	 */
-	if (gtp0->type == GTP_ECHO_REQ && gtp->sk_created)
+	/* Pairs with smp_store_release() in gtp_create_sockets(). */
+	if (gtp0->type == GTP_ECHO_REQ && smp_load_acquire(&gtp->sk_created))
 		return gtp0_send_echo_resp(gtp, skb);
 
-	if (gtp0->type == GTP_ECHO_RSP && gtp->sk_created)
+	/* Pairs with smp_store_release() in gtp_create_sockets(). */
+	if (gtp0->type == GTP_ECHO_RSP && smp_load_acquire(&gtp->sk_created))
 		return gtp0_handle_echo_resp(gtp, skb);
 
 	if (gtp0->type != GTP_TPDU)
@@ -811,10 +813,12 @@ static int gtp1u_udp_encap_recv(struct gtp_dev *gtp, struct sk_buff *skb)
 	 * there is no daemon running in userspace which would
 	 * handle echo request.
 	 */
-	if (gtp1->type == GTP_ECHO_REQ && gtp->sk_created)
+	/* Pairs with smp_store_release() in gtp_create_sockets(). */
+	if (gtp1->type == GTP_ECHO_REQ && smp_load_acquire(&gtp->sk_created))
 		return gtp1u_send_echo_resp(gtp, skb);
 
-	if (gtp1->type == GTP_ECHO_RSP && gtp->sk_created)
+	/* Pairs with smp_store_release() in gtp_create_sockets(). */
+	if (gtp1->type == GTP_ECHO_RSP && smp_load_acquire(&gtp->sk_created))
 		return gtp1u_handle_echo_resp(gtp, skb);
 
 	if (gtp1->type != GTP_TPDU)
@@ -894,7 +898,10 @@ static void gtp_encap_disable(struct gtp_dev *gtp)
 	if (gtp->sk_created) {
 		udp_tunnel_sock_release(gtp->sk0);
 		udp_tunnel_sock_release(gtp->sk1u);
-		gtp->sk_created = false;
+		/* Pairs with smp_load_acquire() in the RX and
+		 * genl echo paths.
+		 */
+		smp_store_release(&gtp->sk_created, false);
 		gtp->sk0 = NULL;
 		gtp->sk1u = NULL;
 	} else {
@@ -1462,9 +1469,14 @@ static int gtp_create_sockets(struct gtp_dev *gtp, const struct nlattr *nla,
 		return PTR_ERR(sk1u);
 	}
 
-	gtp->sk_created = true;
 	gtp->sk0 = sk0;
 	gtp->sk1u = sk1u;
+
+	/* Ensure sk0/sk1u are visible before sk_created is set.
+	 * Pairs with smp_load_acquire() in the RX and genl
+	 * echo paths.
+	 */
+	smp_store_release(&gtp->sk_created, true);
 
 	return 0;
 }
@@ -2365,7 +2377,10 @@ static int gtp_genl_send_echo_req(struct sk_buff *skb, struct genl_info *info)
 	if (!gtp)
 		return -ENODEV;
 
-	if (!gtp->sk_created)
+	/* Pairs with smp_store_release() in gtp_create_sockets()
+	 * and gtp_encap_disable().
+	 */
+	if (!smp_load_acquire(&gtp->sk_created))
 		return -EOPNOTSUPP;
 	if (!(gtp->dev->flags & IFF_UP))
 		return -ENETDOWN;
