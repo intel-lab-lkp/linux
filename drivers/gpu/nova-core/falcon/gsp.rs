@@ -7,20 +7,18 @@ use kernel::{
             RegisterBase,
             WithBase, //
         },
-        Io,
+        Io, //
     },
     prelude::*,
     time::Delta, //
 };
 
-use crate::{
-    falcon::{
-        Falcon,
-        FalconEngine,
-        PFalcon2Base,
-        PFalconBase, //
-    },
+use crate::falcon::{
     regs,
+    Falcon,
+    FalconEngine,
+    PFalcon2Base,
+    PFalconBase, //
 };
 
 /// Type specifying the `Gsp` falcon engine. Cannot be instantiated.
@@ -49,7 +47,7 @@ impl<'a> Falcon<'a, Gsp> {
     /// Checks if GSP reload/resume has completed during the boot process.
     pub(crate) fn check_reload_completed(&self, timeout: Delta) -> Result<bool> {
         read_poll_timeout(
-            || Ok(self.bar.read(regs::NV_PGC6_BSI_SECURE_SCRATCH_14)),
+            || Ok(self.bar.read(crate::regs::NV_PGC6_BSI_SECURE_SCRATCH_14)),
             |val| val.boot_stage_3_handoff(),
             Delta::ZERO,
             timeout,

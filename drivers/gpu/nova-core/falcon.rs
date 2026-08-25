@@ -45,8 +45,8 @@ pub(crate) mod sec2;
 pub(crate) const MEM_BLOCK_ALIGNMENT: usize = 256;
 
 bounded_enum! {
-    /// Revision number of a falcon core, used in the [`crate::regs::NV_PFALCON_FALCON_HWCFG1`]
-    /// register.
+    /// Revision number of a falcon core, used in the
+    /// [`crate::falcon::regs::NV_PFALCON_FALCON_HWCFG1`] register.
     #[derive(Debug, Copy, Clone)]
     pub(crate) enum FalconCoreRev with TryFrom<Bounded<u32, 4>> {
         Rev1 = 1,
@@ -61,7 +61,7 @@ bounded_enum! {
 
 bounded_enum! {
     /// Revision subversion number of a falcon core, used in the
-    /// [`crate::regs::NV_PFALCON_FALCON_HWCFG1`] register.
+    /// [`crate::falcon::regs::NV_PFALCON_FALCON_HWCFG1`] register.
     #[derive(Debug, Copy, Clone)]
     pub(crate) enum FalconCoreRevSubversion with From<Bounded<u32, 2>> {
         Subversion0 = 0,
@@ -107,8 +107,8 @@ bounded_enum! {
 }
 
 bounded_enum! {
-    /// Valid values for the `size` field of the [`crate::regs::NV_PFALCON_FALCON_DMATRFCMD`]
-    /// register.
+    /// Valid values for the `size` field of the
+    /// [`crate::falcon::regs::NV_PFALCON_FALCON_DMATRFCMD`] register.
     #[derive(Debug, Copy, Clone)]
     pub(crate) enum DmaTrfCmdSize with TryFrom<Bounded<u32, 3>> {
         /// 256 bytes transfer.
@@ -592,6 +592,20 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
         Ok(())
     }
 
+    // Configure DMA index for the bootloader to fetch the FWSEC firmware from system memory.
+    pub(crate) fn set_fbif_transcfg_regs_at(&self, ctx_dma: u32) -> Result {
+        self.bar.update(
+            regs::NV_PFALCON_FBIF_TRANSCFG::of::<E>()
+                .try_at(usize::from_safe_cast(ctx_dma))
+                .ok_or(EINVAL)?,
+            |v| {
+                v.with_target(FalconFbifTarget::CoherentSysmem)
+                    .with_mem_type(FalconFbifMemType::Physical)
+            },
+        );
+        Ok(())
+    }
+
     /// Perform a DMA load into `IMEM` and `DMEM` of `fw`, and prepare the falcon to run it.
     fn dma_load<F: FalconFirmware<Target = E> + FalconDmaLoadable>(&self, fw: &F) -> Result {
         // DMA object with firmware content as the source of the DMA engine.
@@ -614,11 +628,7 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
         };
 
         self.dma_reset();
-        self.bar
-            .update(regs::NV_PFALCON_FBIF_TRANSCFG::of::<E>().at(0), |v| {
-                v.with_target(FalconFbifTarget::CoherentSysmem)
-                    .with_mem_type(FalconFbifMemType::Physical)
-            });
+        self.set_fbif_transcfg_regs_at(0)?;
 
         self.dma_wr(&dma_obj, FalconMem::ImemSecure, fw.imem_sec_load_params())?;
         self.dma_wr(&dma_obj, FalconMem::Dmem, fw.dmem_load_params())?;
