@@ -1743,7 +1743,7 @@ static int mma8452_probe(struct i2c_client *client)
 
 	ret = iio_device_register(indio_dev);
 	if (ret < 0)
-		goto free_irq;
+		goto runtime_suspend;
 
 	ret = mma8452_set_freefall_mode(data, false);
 	if (ret < 0)
@@ -1753,6 +1753,10 @@ static int mma8452_probe(struct i2c_client *client)
 
 unregister_device:
 	iio_device_unregister(indio_dev);
+
+runtime_suspend:
+	pm_runtime_disable(dev);
+	pm_runtime_set_suspended(dev);
 
 free_irq:
 	if (client->irq)
