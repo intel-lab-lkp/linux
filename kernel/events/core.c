@@ -13433,11 +13433,13 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		overflow_handler = parent_event->overflow_handler;
 		context = parent_event->overflow_handler_context;
 #if defined(CONFIG_BPF_SYSCALL) && defined(CONFIG_EVENT_TRACING)
-		if (parent_event->prog) {
-			struct bpf_prog *prog = parent_event->prog;
+		struct bpf_prog *prog;
 
-			bpf_prog_inc(prog);
-			event->prog = prog;
+		prog = READ_ONCE(parent_event->prog);
+		if (prog) {
+			prog = bpf_prog_inc_not_zero(prog);
+			if (!IS_ERR(prog))
+				event->prog = prog;
 		}
 #endif
 	}
