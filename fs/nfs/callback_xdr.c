@@ -257,26 +257,20 @@ static __be32 decode_notify_entry(struct xdr_stream *xdr,
 {
 	uint32_t bitmap[3] = {0};
 	__be32 status;
-	u32 attrlen;
-	__be32 *p;
 
 	status = decode_string(xdr, &args->ne_namelen, &args->ne_name,
 				NFS4_OPAQUE_LIMIT);
 	if (unlikely(status != 0))
 		return status;
 
-	status = decode_bitmap(xdr, bitmap);
+	status = xdr_stream_decode_uint32_array(xdr, bitmap, 3);
+	if (unlikely(status == 0 || status > 3))
+		return htonl(NFS4ERR_BADXDR);
+
+	status = decode_fattr_cb(xdr, bitmap, &args->ne_attrs, &args->ne_fh);
 	if (unlikely(status != 0))
-		return status;
-
-	p = xdr_inline_decode(xdr, 4);
-	if (unlikely(!p))
 		return htonl(NFS4ERR_BADXDR);
-
-	attrlen = be32_to_cpup(p);
-	if (attrlen != 0)
-		return htonl(NFS4ERR_BADXDR);
-	return 0;
+	return status;
 }
 
 static __be32 decode_notify_remove(struct xdr_stream *xdr,
@@ -293,6 +287,54 @@ static __be32 decode_notify_remove(struct xdr_stream *xdr,
 	if (unlikely(!p))
 		return htonl(NFS4ERR_BADXDR);
 	xdr_decode_hyper(p, &args->nrm_old_entry_cookie);
+	return 0;
+}
+
+static __be32 decode_notify_add(struct xdr_stream *xdr,
+				struct cb_notify_add *args)
+{
+	__be32 status;
+	__be32 *p;
+
+	p = xdr_inline_decode(xdr, 4);
+	if (unlikely(!p))
+		return htonl(NFS4ERR_BADXDR);
+	args->na_have_old_entry = ntohl(*p);
+
+	if (args->na_have_old_entry) {
+		status = decode_notify_remove(xdr, &args->na_old_entry);
+		if (unlikely(status != 0))
+			return status;
+	}
+
+	status = decode_notify_entry(xdr, &args->na_new_entry);
+	if (unlikely(status != 0))
+		return status;
+
+	p = xdr_inline_decode(xdr, 4);
+	if (unlikely(!p))
+		return htonl(NFS4ERR_BADXDR);
+	args->na_have_new_entry_cookie = ntohl(*p);
+
+	if (args->na_have_new_entry_cookie) {
+		p = xdr_inline_decode(xdr, 8);
+		if (unlikely(!p))
+			return htonl(NFS4ERR_BADXDR);
+
+		xdr_decode_hyper(p, &args->na_new_entry_cookie);
+	}
+
+	p = xdr_inline_decode(xdr, 4);
+	if (unlikely(!p))
+		return htonl(NFS4ERR_BADXDR);
+	args->na_have_prev_entry = ntohl(*p);
+
+	WARN_ONCE(args->na_have_prev_entry, "NFS: Have prev entry unimplemented\n");
+
+	p = xdr_inline_decode(xdr, 4);
+	if (unlikely(!p))
+		return htonl(NFS4ERR_BADXDR);
+	args->na_last_entry = ntohl(*p);
 	return 0;
 }
 
@@ -344,6 +386,9 @@ __be32 decode_notify_args(struct svc_rqst *rqstp,
 		case CB_NOTIFY4_REMOVE_ENTRY:
 			status = decode_notify_remove(xdr,
 						      &change->notify_remove);
+			break;
+		case CB_NOTIFY4_ADD_ENTRY:
+			status = decode_notify_add(xdr, &change->notify_add);
 			break;
 		default:
 			goto err;
