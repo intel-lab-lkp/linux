@@ -155,6 +155,15 @@ properties:
       HS/FS/LS modes are supported.
     type: boolean
 
+  qcom,select-utmi-as-ref-clk:
+    description:
+      If present, pass the UTMI clock as the reference clock to the DWC3 core to
+      use its clock rate to calculate the reference clock period and frame
+      length adjustment in GUCTL and GFLADJ registers. This is needed when these
+      values based on the standard clock rate deviate from the hardware default
+      values. If not set, the hardware default values are used.
+    type: boolean
+
   wakeup-source: true
 
 required:
