@@ -113,6 +113,7 @@
 
 #define PTE_VALID		BIT(0)
 #define PGD_TYPE_TABLE		BIT(1)
+#define P4D_TYPE_TABLE		BIT(1)
 #define PUD_TYPE_TABLE		BIT(1)
 #define PMD_TYPE_TABLE		BIT(1)
 #define PTE_TYPE_PAGE		BIT(1)
@@ -167,6 +168,7 @@ enum {
 			   (v) == VECTOR_SYNC_LOWER_64    || \
 			   (v) == VECTOR_SYNC_LOWER_32)
 
+u32 aarch64_get_supported_va_size(void);
 void aarch64_get_supported_page_sizes(u32 ipa, u32 *ipa4k,
 				      u32 *ipa16k, u32 *ipa64k);
 
