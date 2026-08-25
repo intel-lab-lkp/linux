@@ -636,6 +636,11 @@ static void mmu_free_memory_caches(struct kvm_vcpu *vcpu)
 	kvm_mmu_free_memory_cache(&vcpu->arch.mmu_shadowed_info_cache);
 	kvm_mmu_free_memory_cache(&vcpu->arch.mmu_external_spt_cache);
 	kvm_mmu_free_memory_cache(&vcpu->arch.mmu_page_header_cache);
+
+	if (vcpu->arch.mmu_prefetch_pages) {
+		free_page((unsigned long)vcpu->arch.mmu_prefetch_pages);
+		vcpu->arch.mmu_prefetch_pages = NULL;
+	}
 }
 
 static void mmu_free_pte_list_desc(struct pte_list_desc *pte_list_desc)
@@ -6808,6 +6813,13 @@ int kvm_mmu_create(struct kvm_vcpu *vcpu)
 {
 	int ret;
 
+	/* Prefetch scratch: one page of 512 page ptrs.  Freed via kvm_mmu_destroy(). */
+	BUILD_BUG_ON(SPTE_ENT_PER_PAGE * sizeof(struct page *) > PAGE_SIZE);
+	vcpu->arch.mmu_prefetch_pages =
+		(struct page **)__get_free_page(GFP_KERNEL_ACCOUNT);
+	if (!vcpu->arch.mmu_prefetch_pages)
+		return -ENOMEM;
+
 	vcpu->arch.mmu_pte_list_desc_cache.kmem_cache = pte_list_desc_cache;
 	vcpu->arch.mmu_pte_list_desc_cache.gfp_zero = __GFP_ZERO;
 
@@ -6824,7 +6836,7 @@ int kvm_mmu_create(struct kvm_vcpu *vcpu)
 
 	ret = __kvm_mmu_create(vcpu, &vcpu->arch.guest_mmu);
 	if (ret)
-		return ret;
+		goto fail_prefetch;
 
 	ret = __kvm_mmu_create(vcpu, &vcpu->arch.root_mmu);
 	if (ret)
@@ -6833,6 +6845,9 @@ int kvm_mmu_create(struct kvm_vcpu *vcpu)
 	return ret;
  fail_allocate_root:
 	free_mmu_pages(&vcpu->arch.guest_mmu);
+ fail_prefetch:
+	free_page((unsigned long)vcpu->arch.mmu_prefetch_pages);
+	vcpu->arch.mmu_prefetch_pages = NULL;
 	return ret;
 }
 

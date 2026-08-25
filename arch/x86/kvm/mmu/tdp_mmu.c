@@ -1210,6 +1210,99 @@ static int tdp_mmu_split_huge_page(struct kvm *kvm, struct tdp_iter *iter,
 				   struct kvm_mmu_page *sp, bool shared);
 
 /*
+ * Prefetch the forward run of host-present pages after the fault, within the
+ * faulting leaf table (512 pages).  One non-blocking GUP fills the empty SPTEs.
+ * Forward only; capped at the first present SPTE and the first host hole.
+ */
+static void tdp_mmu_pte_prefetch(struct kvm_vcpu *vcpu,
+				 struct kvm_page_fault *fault,
+				 struct tdp_iter *iter)
+{
+	struct kvm_mmu_page *sp = sptep_to_sp(rcu_dereference(iter->sptep));
+	struct page **pages = vcpu->arch.mmu_prefetch_pages;
+	struct kvm_memory_slot *slot = fault->slot;
+	unsigned int access = sp->role.access;
+	bool host_writable = !(slot->flags & KVM_MEM_READONLY);
+	gfn_t start_gfn, slot_end;
+	int start, count, nr, i;
+
+	if (sp_ad_disabled(sp))
+		return;
+
+	/* Mirror (TDX) needs set_external_spte(); gmem pfns aren't in GUP's tables. */
+	if (is_mirror_sp(sp) || kvm_slot_has_gmem(slot))
+		return;
+
+	/* Racing invalidation may be stale.  No mmu_seq recheck: GUP is under the lock. */
+	if (unlikely(vcpu->kvm->mmu_invalidate_in_progress))
+		return;
+
+	if (WARN_ON_ONCE(!pages))
+		return;
+
+	/* Forward window: after the fault to end of table, clamped to the slot. */
+	start = spte_index(rcu_dereference(iter->sptep)) + 1;
+	if (start >= SPTE_ENT_PER_PAGE)
+		return;			/* fault on the last entry */
+
+	start_gfn = sp->gfn + start;
+	slot_end = slot->base_gfn + slot->npages;
+	if (start_gfn >= slot_end)
+		return;			/* fault on the slot's last page */
+
+	count = min_t(gfn_t, SPTE_ENT_PER_PAGE - start, slot_end - start_gfn);
+
+	/* Bound the GUP at the first present SPTE (just a bound; install re-checks). */
+	for (i = 0; i < count; i++) {
+		u64 spte = READ_ONCE(sp->spt[start + i]);
+
+		if (is_shadow_present_pte(spte) || spte != SHADOW_NONPRESENT_VALUE)
+			break;
+	}
+	count = i;
+	if (!count)
+		return;
+
+	vcpu->stat.pf_prefetch_called++;
+
+	/* Non-blocking GUP; stops at the first host hole. */
+	nr = kvm_prefetch_pages(slot, start_gfn, pages, count);
+	if (nr <= 0)
+		return;
+
+	vcpu->stat.pf_prefetch_pages += nr;
+
+	for (i = 0; i < nr; i++) {
+		u64 *sptep = sp->spt + start + i;
+		u64 old_spte = SHADOW_NONPRESENT_VALUE;
+		gfn_t gfn = start_gfn + i;
+		u64 new_spte;
+
+		make_spte(vcpu, sp, slot, access, gfn,
+			  page_to_pfn(pages[i]), old_spte,
+			  true /* prefetch */, false, host_writable, &new_spte);
+
+		/* cmpxchg from empty is the race check; present/MMIO/frozen fails it. */
+		if (try_cmpxchg64(sptep, &old_spte, new_spte)) {
+			handle_changed_spte(vcpu->kvm, sp, gfn,
+					    SHADOW_NONPRESENT_VALUE,
+					    new_spte, PG_LEVEL_4K, true);
+			vcpu->stat.pf_prefetch_mapped++;
+
+			/* Mark dirty only if mapped writable. */
+			if (host_writable)
+				kvm_release_page_dirty(pages[i]);
+			else
+				kvm_release_page_clean(pages[i]);
+		} else {
+			/* Present/raced; the winner dirties its own pin. */
+			kvm_release_page_clean(pages[i]);
+			vcpu->stat.pf_prefetch_unused++;
+		}
+	}
+}
+
+/*
  * Handle a TDP page fault (NPT/EPT violation/misconfiguration) by installing
  * page tables and SPTEs to translate the faulting guest physical address.
  */
@@ -1296,6 +1389,10 @@ int kvm_tdp_mmu_map(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 
 map_target_level:
 	ret = tdp_mmu_map_handle_target_level(vcpu, fault, &iter);
+
+	if (ret == RET_PF_FIXED && fault->goal_level == PG_LEVEL_4K &&
+	    !fault->prefetch && fault->slot)
+		tdp_mmu_pte_prefetch(vcpu, fault, &iter);
 
 retry:
 	rcu_read_unlock();

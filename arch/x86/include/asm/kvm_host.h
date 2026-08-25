@@ -898,6 +898,13 @@ struct kvm_vcpu_arch {
 	struct kvm_mmu_memory_cache mmu_external_spt_cache;
 
 	/*
+	 * Per-vCPU scratch (one page, 512 page ptrs) for the wide GUP done
+	 * during TDP fault-time prefetch.  Owning vCPU thread only; not for
+	 * zap/mmu-notifier contexts.
+	 */
+	struct page **mmu_prefetch_pages;
+
+	/*
 	 * QEMU userspace and the guest each have their own FPU state.
 	 * In vcpu_run, we switch between the user and guest FPU contexts.
 	 * While running a VCPU, the VCPU thread will have the guest FPU
@@ -1722,6 +1729,10 @@ struct kvm_vcpu_stat {
 	u64 pf_fast;
 	u64 pf_mmio_spte_created;
 	u64 pf_guest;
+	u64 pf_prefetch_called;
+	u64 pf_prefetch_pages;
+	u64 pf_prefetch_mapped;
+	u64 pf_prefetch_unused;
 	u64 tlb_flush;
 	u64 invlpg;
 
