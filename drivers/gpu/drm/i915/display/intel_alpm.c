@@ -80,12 +80,18 @@ static int get_silence_period_symbols(const struct intel_crtc_state *crtc_state)
 static void get_lfps_cycle_min_max_time(const struct intel_crtc_state *crtc_state,
 					int *min, int *max)
 {
-	if (crtc_state->port_clock < 540000) {
-		*min = 65 * LFPS_CYCLE_COUNT;
-		*max = 75 * LFPS_CYCLE_COUNT;
-	} else {
-		*min = 140;
-		*max = 800;
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	*min = 320;
+	*max = 1600;
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		if (crtc_state->port_clock < 540000 && DISPLAY_VER(display) < 35) {
+			*min = 65 * LFPS_CYCLE_COUNT;
+			*max = 75 * LFPS_CYCLE_COUNT;
+		} else {
+			*min = 140;
+			*max = 800;
+		}
 	}
 }
 
