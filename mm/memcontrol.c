@@ -65,6 +65,7 @@
 #include "internal.h"
 #include "swap.h"
 #include "swap_table.h"
+#include "vswap.h"
 #include <net/sock.h>
 #include <net/ip.h>
 #include "slab.h"
@@ -5800,6 +5801,13 @@ void __mem_cgroup_uncharge_swap(unsigned short id, unsigned int nr_pages)
 long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
 {
 	long nr_swap_pages = get_nr_swap_pages();
+
+	/*
+	 * vswap zswap-backed swapout needs no physical slot, so gate anon
+	 * reclaim on the swap.max headroom instead of the physical free count.
+	 */
+	if (vswap_is_enabled() && zswap_is_enabled())
+		nr_swap_pages = PAGE_COUNTER_MAX;
 
 	if (mem_cgroup_disabled() || do_memsw_account())
 		return nr_swap_pages;
