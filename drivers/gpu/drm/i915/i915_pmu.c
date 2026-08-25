@@ -502,7 +502,8 @@ frequency_sample(struct intel_gt *gt, unsigned int period_ns)
 	intel_gt_pm_put_async(gt, wakeref);
 }
 
-static enum hrtimer_restart i915_sample(struct hrtimer *hrtimer)
+static enum hrtimer_restart i915_sample(struct hrtimer *hrtimer, ktime_t expires,
+					struct hrtimer_forward_args *fwd)
 {
 	struct i915_pmu *pmu = container_of(hrtimer, struct i915_pmu, timer);
 	struct drm_i915_private *i915 = pmu_to_i915(pmu);
@@ -533,7 +534,8 @@ static enum hrtimer_restart i915_sample(struct hrtimer *hrtimer)
 		frequency_sample(gt, period_ns);
 	}
 
-	hrtimer_forward(hrtimer, now, ns_to_ktime(PERIOD));
+	fwd->now = now;
+	fwd->interval = ns_to_ktime(PERIOD);
 
 	return HRTIMER_RESTART;
 }
@@ -1157,7 +1159,7 @@ void i915_pmu_register(struct drm_i915_private *i915)
 	int ret = -ENOMEM;
 
 	spin_lock_init(&pmu->lock);
-	hrtimer_setup(&pmu->timer, i915_sample, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	hrtimer_setup_ext(&pmu->timer, i915_sample, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	init_rc6(pmu);
 
 	if (IS_DGFX(i915)) {
