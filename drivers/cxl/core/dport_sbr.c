@@ -86,6 +86,72 @@ void cxl_region_enable(struct cxl_region *cxlr)
 }
 
 /*
+ * Collect the regions with a member endpoint routed through @dport_pci, the
+ * CXL Downstream Port about to be reset. cxl_rwsem.region keeps the topology
+ * stable for the duration of the walk only. Each collected region is pinned
+ * with get_device() so the object survives after the lock is dropped, since
+ * cxl_region_disable()/cxl_region_enable() run with the rwsem released (they
+ * unbind and rebind the region driver). Hence snapshot the set first.
+ */
+int cxl_sbr_collect_regions(struct pci_dev *dport_pci,
+			    struct xarray *regions)
+{
+	struct cxl_region_ref *cxl_rr;
+	struct cxl_dport *dport;
+	unsigned long index;
+	int count = 0;
+	int rc;
+
+	struct cxl_port *port __free(put_cxl_port) =
+		find_cxl_port(&dport_pci->dev, &dport);
+	if (!port) {
+		pci_dbg(dport_pci, "no CXL port found for reset dport\n");
+		return 0;
+	}
+
+	guard(rwsem_read)(&cxl_rwsem.region);
+	xa_for_each(&port->regions, index, cxl_rr) {
+		struct cxl_region *cxlr = cxl_rr->region;
+		struct cxl_ep *ep;
+		unsigned long ep_index;
+
+		/* Skip unless a region endpoint sits below the reset dport. */
+		xa_for_each(&cxl_rr->endpoints, ep_index, ep)
+			if (ep->dport == dport)
+				break;
+		if (!ep) {
+			dev_dbg(&cxlr->dev, "%s: no endpoint below %s, region excluded\n",
+				__func__, dev_name(dport->dport_dev));
+			continue;
+		}
+
+		get_device(&cxlr->dev);
+		rc = xa_insert(regions, (unsigned long)cxlr, cxlr, GFP_KERNEL);
+		if (rc) {
+			put_device(&cxlr->dev);
+			return rc;
+		}
+		dev_dbg(&cxlr->dev, "%s: endpoint below %s, region collected\n",
+			__func__, dev_name(dport->dport_dev));
+		count++;
+	}
+
+	dev_dbg(&port->dev, "%d region(s) routed through %s\n", count,
+		dev_name(dport->dport_dev));
+	return 0;
+}
+
+void cxl_sbr_put_regions(struct xarray *regions)
+{
+	struct cxl_region *cxlr;
+	unsigned long index;
+
+	xa_for_each(regions, index, cxlr)
+		put_device(&cxlr->dev);
+	xa_destroy(regions);
+}
+
+/*
  * The reset cleared the HDM Decoder registers of every CXL component below
  * @dport_pci, so restore them from the settings the driver holds and from
  * @hdm_state, the register fields the driver does not model, saved before the

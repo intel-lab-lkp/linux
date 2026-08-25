@@ -60,6 +60,8 @@ int cxl_region_invalidate_memregion(struct cxl_region *cxlr);
 int cxl_region_disable(struct cxl_region *cxlr);
 void cxl_region_enable(struct cxl_region *cxlr);
 struct pci_dev;
+int cxl_sbr_collect_regions(struct pci_dev *dport_pci, struct xarray *regions);
+void cxl_sbr_put_regions(struct xarray *regions);
 void cxl_sbr_recommit_decoders(struct pci_dev *dport_pci,
 			       struct xarray *hdm_state);
 
