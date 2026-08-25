@@ -170,6 +170,10 @@ lookup_protocol:
 	sock->ops = answer->ops;
 	answer_prot = answer->prot;
 	answer_flags = answer->flags;
+	if (!try_module_get(answer_prot->owner)) {
+		err = -EPROTONOSUPPORT;
+		goto out_rcu_unlock;
+	}
 	rcu_read_unlock();
 
 	WARN_ON(!answer_prot->slab);
@@ -177,7 +181,7 @@ lookup_protocol:
 	err = -ENOBUFS;
 	sk = sk_alloc(net, PF_INET6, GFP_KERNEL, answer_prot, kern);
 	if (!sk)
-		goto out;
+		goto out_module_put;
 
 	sock_init_data(sock, sk);
 
@@ -251,6 +255,8 @@ lookup_protocol:
 		if (err)
 			goto out_sk_release;
 	}
+out_module_put:
+	module_put(answer_prot->owner);
 out:
 	return err;
 out_rcu_unlock:
@@ -259,7 +265,7 @@ out_rcu_unlock:
 out_sk_release:
 	sk_common_release(sk);
 	sock->sk = NULL;
-	goto out;
+	goto out_module_put;
 }
 
 int __inet6_bind(struct sock *sk, struct sockaddr_unsized *uaddr, int addr_len,
