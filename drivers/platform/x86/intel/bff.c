@@ -23,14 +23,19 @@
 #include <linux/cpufeature.h>
 #include <linux/cpuhplock.h>
 #include <linux/device-id/x86_cpu.h>
+#include <linux/err.h>
 #include <linux/errno.h>
+#include <linux/gfp_types.h>
 #include <linux/init.h>
+#include <linux/jiffies.h>
 #include <linux/limits.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
 #include <linux/printk.h>
+#include <linux/slab.h>
 #include <linux/topology.h>
 #include <linux/types.h>
+#include <linux/xarray.h>
 
 #include <asm/cpu_device_id.h>
 #include <asm/cpufeatures.h>
@@ -38,6 +43,16 @@
 #include <asm/mce.h>
 #include <asm/msr.h>
 #include <asm/msr-index.h>
+
+/*
+ * A 10-minute observation period helps distinguish between:
+ *
+ *  - A long-term accumulation of transient corrected errors
+ *    (filter stays clear after reset).
+ *
+ *  - Permanent defects (filter overflows again quickly).
+ */
+#define BFF_OVERFLOW_INTERVAL   secs_to_jiffies(10 * 60)
 
 #define NUM_IMH_PER_SKT		2
 
@@ -73,6 +88,8 @@ static const struct x86_cpu_id bff_cpu_ids[] __initconst = {
 MODULE_DEVICE_TABLE(x86cpu, bff_cpu_ids);
 
 static const enum bff_type *bank_types;
+
+static DEFINE_XARRAY(bff_bank_xa);
 
 /* Diamond Rapids maps APICID[2] to the IMH instance. */
 static void bff_set_imh_id(struct mce *mce, unsigned long *id)
@@ -139,13 +156,58 @@ static unsigned long get_bff_id(struct mce *mce)
 	return id;
 }
 
+/*
+ * Save current timestamp for bff_id. Return true if it is within
+ * BFF_OVERFLOW_INTERVAL of previous timestamp for this bff_id.
+ */
+static bool bff_note_event_and_check_burst(unsigned long bff_id)
+{
+	unsigned long now = jiffies, when;
+	unsigned long *ts;
+
+	if (bff_id == ULONG_MAX)
+		return false;
+
+	ts = xa_load(&bff_bank_xa, bff_id);
+	if (!ts) {
+		ts = kzalloc_obj(*ts);
+		if (!ts) {
+			pr_warn("Timestamp allocation failed\n");
+			return false;
+		}
+		if (IS_ERR(xa_store(&bff_bank_xa, bff_id, ts, GFP_KERNEL))) {
+			kfree(ts);
+			pr_warn("Timestamp save failure\n");
+			return false;
+		}
+		*ts = now;
+
+		return false;
+	}
+
+	when = *ts + BFF_OVERFLOW_INTERVAL;
+	*ts = now;
+
+	return time_before(now, when);
+}
+
 static void handle_bff(struct mce *mce)
 {
+	bool burst = false;
+
 	/* The bitfix filter overflowed, get the target CPU to reset it. */
 	if (wrmsrq_on_cpu(mce->extcpu, MSR_MCx_BFF_CTL(mce->bank), MCI_BFF_RESET))
 		pr_warn("Failed to reset bitfix filter for CPU %d Bank %d\n", mce->extcpu, mce->bank);
 
-	pr_debug("unique_id = 0x%lx\n", get_bff_id(mce));
+	/* Get unique id for bitfix filter instance that overflowed */
+	burst = bff_note_event_and_check_burst(get_bff_id(mce));
+
+	if (burst)
+		pr_warn_ratelimited(HW_ERR "Socket %d CPU %d Bank %d bitfix filter overflowed frequently\n",
+				    mce->socketid, mce->extcpu, mce->bank);
+	else
+		pr_notice_ratelimited(HW_ERR "Socket %d CPU %d Bank %d bitfix filter overflowed\n",
+				      mce->socketid, mce->extcpu, mce->bank);
 }
 
 static int bff_mce_notify(struct notifier_block *nb, unsigned long val, void *data)
@@ -205,7 +267,14 @@ static int __init bff_init(void)
 
 static void __exit bff_exit(void)
 {
+	unsigned long bff_id;
+	unsigned long *ts;
+
 	mce_unregister_decode_chain(&bff_notifier);
+
+	xa_for_each(&bff_bank_xa, bff_id, ts)
+		kfree(ts);
+	xa_destroy(&bff_bank_xa);
 }
 
 module_init(bff_init);
