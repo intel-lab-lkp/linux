@@ -67,6 +67,144 @@ struct override_status_id {
 #define NOT_PRESENT_ENTRY_PATH(path, cpu_vfm, dmi...) \
 	ENTRY(0, "", NULL, path, cpu_vfm, dmi)
 
+struct acpi_i2c_resource_info {
+	acpi_handle device;
+	acpi_handle controller;
+	u32 connection_speed;
+	unsigned int i2c_resources;
+	unsigned int other_resources;
+	u16 address;
+	u8 slave_mode;
+	u8 connection_sharing;
+	u8 access_mode;
+	bool has_interrupt;
+	bool found;
+};
+
+static acpi_status acpi_get_i2c_resource(struct acpi_resource *ares,
+					 void *context)
+{
+	struct acpi_i2c_resource_info *info = context;
+	struct acpi_resource_i2c_serialbus *sb;
+
+	if (ares->type == ACPI_RESOURCE_TYPE_END_TAG)
+		return AE_OK;
+
+	if (ares->type != ACPI_RESOURCE_TYPE_SERIAL_BUS) {
+		if ((ares->type == ACPI_RESOURCE_TYPE_IRQ &&
+		     ares->data.irq.interrupt_count) ||
+		    (ares->type == ACPI_RESOURCE_TYPE_EXTENDED_IRQ &&
+		     ares->data.extended_irq.interrupt_count) ||
+		    (ares->type == ACPI_RESOURCE_TYPE_GPIO &&
+		     ares->data.gpio.connection_type == ACPI_RESOURCE_GPIO_TYPE_INT &&
+		     ares->data.gpio.pin_table_length))
+			info->has_interrupt = true;
+		info->other_resources++;
+		return AE_OK;
+	}
+
+	sb = &ares->data.i2c_serial_bus;
+	if (sb->type != ACPI_RESOURCE_SERIAL_TYPE_I2C) {
+		info->other_resources++;
+		return AE_OK;
+	}
+
+	info->i2c_resources++;
+	if (info->found)
+		return AE_OK;
+
+	if (ACPI_FAILURE(acpi_get_handle(info->device,
+					 sb->resource_source.string_ptr,
+					 &info->controller)))
+		return AE_OK;
+
+	info->address = sb->slave_address;
+	info->connection_speed = sb->connection_speed;
+	info->slave_mode = sb->slave_mode;
+	info->connection_sharing = sb->connection_sharing;
+	info->access_mode = sb->access_mode;
+	info->found = true;
+
+	return AE_OK;
+}
+
+static bool acpi_get_i2c_resource_info(acpi_handle handle,
+				       struct acpi_i2c_resource_info *info)
+{
+	acpi_status status;
+
+	memset(info, 0, sizeof(*info));
+	info->device = handle;
+	status = acpi_walk_resources(handle, METHOD_NAME__CRS,
+				     acpi_get_i2c_resource, info);
+
+	return ACPI_SUCCESS(status) && info->found;
+}
+
+struct acpi_ite_ucsi_duplicate_context {
+	const struct acpi_i2c_resource_info *rhproxy;
+	bool found;
+};
+
+static acpi_status acpi_match_ite_ucsi_duplicate(acpi_handle handle,
+						 u32 level, void *context,
+						 void **return_value)
+{
+	struct acpi_ite_ucsi_duplicate_context *match = context;
+	struct acpi_i2c_resource_info info;
+
+	if (!acpi_get_i2c_resource_info(handle, &info))
+		return AE_OK;
+	if (info.i2c_resources != 1 || !info.has_interrupt)
+		return AE_OK;
+
+	if (info.controller != match->rhproxy->controller ||
+	    info.address != match->rhproxy->address ||
+	    info.connection_speed != match->rhproxy->connection_speed ||
+	    info.slave_mode != match->rhproxy->slave_mode ||
+	    info.connection_sharing != match->rhproxy->connection_sharing ||
+	    info.access_mode != match->rhproxy->access_mode)
+		return AE_OK;
+
+	match->found = true;
+	return AE_CTRL_TERMINATE;
+}
+
+static bool acpi_has_ite_ucsi_duplicate(struct acpi_device *adev)
+{
+	static const char * const ite_ucsi_ids[] = {
+		"ITE8853",
+		"ITE8800",
+		"ITE8801",
+		"ITE8802",
+		"ITE8803",
+		"ITE8804",
+		"ITE8805",
+	};
+	struct acpi_ite_ucsi_duplicate_context match;
+	struct acpi_i2c_resource_info rhproxy;
+	unsigned int i;
+
+	if (!acpi_get_i2c_resource_info(adev->handle, &rhproxy))
+		return false;
+	if (rhproxy.i2c_resources != 1 || rhproxy.other_resources)
+		return false;
+
+	match.rhproxy = &rhproxy;
+	match.found = false;
+
+	for (i = 0; i < ARRAY_SIZE(ite_ucsi_ids) && !match.found; i++)
+		acpi_get_devices(ite_ucsi_ids[i], acpi_match_ite_ucsi_duplicate,
+				 &match, NULL);
+
+	return match.found;
+}
+
+static const struct acpi_device_id acpi_rhproxy_ids[] = {
+	{ "MSFT8000" },
+	{ }
+};
+
 static const struct override_status_id override_status_ids[] = {
 	/*
 	 * Bay / Cherry Trail PWM directly poked by GPU driver in win10,
@@ -181,6 +319,19 @@ bool acpi_device_override_status(struct acpi_device *adev, unsigned long long *s
 {
 	bool ret = false;
 	unsigned int i;
+
+	/*
+	 * Some firmware describes an ITE UCSI controller twice: once through
+	 * the Windows Resource Hub Proxy and once as a vendor-specific device.
+	 * Both nodes point at the same I2C address, but only the ITE node has
+	 * the interrupt resource required by the Linux driver. Hide only an
+	 * exact duplicate so unrelated Resource Hub Proxy devices keep working.
+	 */
+	if (!acpi_match_device_ids(adev, acpi_rhproxy_ids) &&
+	    acpi_has_ite_ucsi_duplicate(adev)) {
+		*status = 0;
+		return true;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(override_status_ids); i++) {
 		if (!x86_match_cpu(override_status_ids[i].cpu_ids))
