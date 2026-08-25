@@ -27,6 +27,7 @@ intel-target-$(CONFIG_INTEL_ISHTP_ECLITE)	+= ishtp_eclite.o
 intel-target-$(CONFIG_INTEL_OAKTRAIL)		+= oaktrail.o
 intel-target-$(CONFIG_INTEL_SDSI)		+= sdsi.o
 intel-target-$(CONFIG_INTEL_VSEC)		+= vsec.o
+intel-target-$(CONFIG_INTEL_BFF_RESET)		+= bff.o
 
 # Intel PMIC / PMC / P-Unit drivers
 intel-target-$(CONFIG_INTEL_BYTCRC_PWRSRC)	+= bytcrc_pwrsrc.o
