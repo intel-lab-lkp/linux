@@ -323,6 +323,16 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 		}
 		return PCI_ERS_RESULT_CAN_RECOVER;
 	case pci_channel_io_frozen:
+		/*
+		 * A Port on the path in DPC means dpc_reset_link() is about to
+		 * reset the link, and that path takes the CXL regions out of
+		 * service and restores the HDM decode itself. Keep the memdev
+		 * driver bound so the endpoint and its decoders are still there
+		 * to restore.
+		 */
+		if (pci_dpc_containment_active(pdev))
+			return PCI_ERS_RESULT_NEED_RESET;
+
 		dev_warn(&pdev->dev,
 			 "%s: frozen state error detected, disable CXL.mem\n",
 			 dev_name(dev));

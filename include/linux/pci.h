@@ -1609,10 +1609,13 @@ int pci_bridge_secondary_bus_reset(struct pci_dev *dev);
 /**
  * struct pci_cxl_sbr_region_ops - CXL region callbacks for a bus reset
  * @disable_regions: disable the regions below @dport, 0 or errno
+ * @unbind_regions: unbind the drivers of the regions below @dport, leaving
+ *		    their memory online, for a link already contained
  * @enable_regions: re-enable the regions below @dport
  */
 struct pci_cxl_sbr_region_ops {
 	int (*disable_regions)(struct pci_dev *dport);
+	void (*unbind_regions)(struct pci_dev *dport);
 	void (*enable_regions)(struct pci_dev *dport);
 };
 

@@ -66,6 +66,15 @@ static inline int pcie_aer_is_native(struct pci_dev *dev) { return 0; }
 static inline void pci_aer_unmask_internal_errors(struct pci_dev *dev) { }
 #endif
 
+#if defined(CONFIG_PCIE_DPC)
+bool pci_dpc_containment_active(struct pci_dev *pdev);
+#else
+static inline bool pci_dpc_containment_active(struct pci_dev *pdev)
+{
+	return false;
+}
+#endif
+
 void pci_print_aer(struct pci_dev *dev, int aer_severity,
 		    struct aer_capability_regs *aer);
 int cper_severity_to_aer(int cper_severity);

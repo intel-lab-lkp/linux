@@ -10,6 +10,30 @@
 #include "core.h"
 
 /*
+ * cxl_region_unbind - take a region out of service ahead of a reset
+ * @cxlr: region routed through the CXL Downstream Port being reset
+ *
+ * Unbind the region driver, which tears down everything built on the region:
+ * the dax region device, its dax device and the driver bound to it. An SBR
+ * zeroes the downstream bus number, so a region left bound would decode to a
+ * device in reset.
+ *
+ * The memory the region hosts is left as it is. A caller that reaches a live
+ * device offlines it first; see cxl_region_disable().
+ *
+ * Context: process context. Driver unbind sleeps, so this cannot run in atomic
+ * context.
+ */
+static void cxl_region_unbind(struct cxl_region *cxlr)
+{
+	struct cxl_region_params *p = &cxlr->params;
+
+	device_release_driver(&cxlr->dev);
+	dev_dbg(&cxlr->dev, "%s: region unbound before reset, HPA %pr\n",
+		__func__, p->res);
+}
+
+/*
  * cxl_region_disable - make a region inactive ahead of a Secondary Bus Reset
  * @cxlr: region routed through the CXL Downstream Port being reset
  *
@@ -58,7 +82,7 @@ static int cxl_region_disable(struct cxl_region *cxlr)
 		return rc;
 	}
 
-	device_release_driver(&cxlr->dev);
+	cxl_region_unbind(cxlr);
 	dev_dbg(&cxlr->dev, "%s: System RAM offline, region disabled before reset, HPA %pr\n",
 		__func__, p->res);
 
@@ -285,6 +309,36 @@ out:
 }
 
 /*
+ * Unbind the regions routed through the Downstream Port being reset, leaving
+ * their memory online. Used on the DPC recovery path, where dpc_reset_link()
+ * clears DPC Trigger Status and enters the reset without waiting for the link,
+ * so the device may still be unreachable and the page migration that an offline
+ * performs would have no device to read from.
+ *
+ * Unbinding cannot fail, so unlike cxl_sbr_disable_regions() this never aborts
+ * the reset. The memory stays online across the reset with no region decoding
+ * it; cxl_sbr_enable_regions() reprograms the decoders on the way out.
+ */
+static void cxl_sbr_unbind_regions(struct pci_dev *dport_pci)
+{
+	struct cxl_region *cxlr;
+	struct xarray regions;
+	unsigned long index;
+
+	if (cxl_sbr_save_hdm_state(dport_pci))
+		pci_warn(dport_pci, "HDM state not saved, decode will not be restored\n");
+
+	xa_init(&regions);
+
+	cxl_sbr_collect_regions(dport_pci, &regions);
+
+	xa_for_each(&regions, index, cxlr)
+		cxl_region_unbind(cxlr);
+
+	cxl_sbr_put_regions(&regions);
+}
+
+/*
  * Re-enable the regions disabled by cxl_sbr_disable_regions(). Restore the HDM
  * decode first: a region cannot serve memory through decoders that are not
  * programmed, so its driver must not re-attach before they are.
@@ -315,5 +369,6 @@ static void cxl_sbr_enable_regions(struct pci_dev *dport_pci)
 
 const struct pci_cxl_sbr_region_ops cxl_sbr_region_ops = {
 	.disable_regions = cxl_sbr_disable_regions,
+	.unbind_regions = cxl_sbr_unbind_regions,
 	.enable_regions = cxl_sbr_enable_regions,
 };

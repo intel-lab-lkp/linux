@@ -4864,24 +4864,37 @@ struct cxl_sbr_ctx {
 	u16 command;
 };
 
-static bool is_cxl_dport(struct pci_dev *dev)
+bool is_cxl_dport(struct pci_dev *dev)
 {
 	return pcie_is_cxl(dev) && pcie_downstream_port(dev);
 }
 
-static u16 cxl_port_dvsec(struct pci_dev *dev)
+u16 cxl_port_dvsec(struct pci_dev *dev)
 {
 	return pci_find_dvsec_capability(dev, PCI_VENDOR_ID_CXL,
 					 PCI_DVSEC_CXL_PORT);
 }
 
 static int cxl_sbr_prepare(struct pci_dev *bridge, u16 dvsec,
-			   struct cxl_sbr_ctx *ctx)
+			   struct cxl_sbr_ctx *ctx,
+			   enum cxl_sbr_region_action action)
 {
 	int rc;
 
-	/* Abort before touching hardware if the regions cannot be disabled. */
-	if (cxl_sbr_region_ops) {
+	/*
+	 * CXL_SBR_UNBIND: the link is already down, so offlining the regions'
+	 * memory would take the reads that page migration performs as a machine
+	 * check. Per PCIe r7.0 sec 2.9.3 the Port answers a Non-Posted Request
+	 * with an Unsupported Request or Completer Abort completion while it is
+	 * in DPC. Unbinding never fails, so the reset always goes ahead.
+	 *
+	 * CXL_SBR_OFFLINE_AND_UNBIND: the device is reachable, so offline the
+	 * memory first and abort the reset before touching hardware if that
+	 * fails.
+	 */
+	if (cxl_sbr_region_ops && action == CXL_SBR_UNBIND) {
+		cxl_sbr_region_ops->unbind_regions(bridge);
+	} else if (cxl_sbr_region_ops) {
 		rc = cxl_sbr_region_ops->disable_regions(bridge);
 		if (rc)
 			return rc;
@@ -5003,6 +5016,44 @@ static void cxl_sbr_complete(struct pci_dev *bridge, u16 dvsec,
 		cxl_sbr_region_ops->enable_regions(bridge);
 }
 
+/*
+ * __pci_bridge_secondary_bus_reset - assert Secondary Bus Reset on a bridge
+ * @dev: bridge device
+ * @action: what to do with the CXL regions reached through @dev
+ *
+ * See pci_bridge_secondary_bus_reset(). Pass CXL_SBR_UNBIND when the link is
+ * already down, which leaves the regions' memory online because offlining it
+ * needs a reachable device.
+ */
+int __pci_bridge_secondary_bus_reset(struct pci_dev *dev,
+				     enum cxl_sbr_region_action action)
+{
+	struct cxl_sbr_ctx ctx = {};
+	u16 dvsec = 0;
+	int rc;
+
+	if (!dev->block_cfg_access)
+		pci_warn_once(dev, "unlocked secondary bus reset via: %pS\n",
+			      __builtin_return_address(0));
+
+	if (is_cxl_dport(dev))
+		dvsec = cxl_port_dvsec(dev);
+	if (dvsec) {
+		rc = cxl_sbr_prepare(dev, dvsec, &ctx, action);
+		if (rc)
+			return rc;
+	}
+
+	pcibios_reset_secondary_bus(dev);
+
+	rc = pci_bridge_wait_for_secondary_bus(dev, "bus reset");
+
+	if (dvsec)
+		cxl_sbr_complete(dev, dvsec, &ctx);
+
+	return rc;
+}
+
 /**
  * pci_bridge_secondary_bus_reset - Reset the secondary bus on a PCI bridge.
  * @dev: Bridge device
@@ -5017,30 +5068,7 @@ static void cxl_sbr_complete(struct pci_dev *bridge, u16 dvsec,
  */
 int pci_bridge_secondary_bus_reset(struct pci_dev *dev)
 {
-	struct cxl_sbr_ctx ctx = {};
-	u16 dvsec = 0;
-	int rc;
-
-	if (!dev->block_cfg_access)
-		pci_warn_once(dev, "unlocked secondary bus reset via: %pS\n",
-			      __builtin_return_address(0));
-
-	if (is_cxl_dport(dev))
-		dvsec = cxl_port_dvsec(dev);
-	if (dvsec) {
-		rc = cxl_sbr_prepare(dev, dvsec, &ctx);
-		if (rc)
-			return rc;
-	}
-
-	pcibios_reset_secondary_bus(dev);
-
-	rc = pci_bridge_wait_for_secondary_bus(dev, "bus reset");
-
-	if (dvsec)
-		cxl_sbr_complete(dev, dvsec, &ctx);
-
-	return rc;
+	return __pci_bridge_secondary_bus_reset(dev, CXL_SBR_OFFLINE_AND_UNBIND);
 }
 EXPORT_SYMBOL_GPL(pci_bridge_secondary_bus_reset);
 

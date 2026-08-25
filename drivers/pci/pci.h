@@ -233,6 +233,21 @@ int pci_mmap_fits(struct pci_dev *pdev, int resno, struct vm_area_struct *vmai,
 bool pci_reset_supported(struct pci_dev *dev);
 void pci_init_reset_methods(struct pci_dev *dev);
 int pci_bridge_secondary_bus_reset(struct pci_dev *dev);
+
+/*
+ * What to do with the CXL regions reached through a Downstream Port before it
+ * is reset. Offlining their memory needs a reachable device, so a Port whose
+ * link is already down only unbinds and leaves the memory online.
+ */
+enum cxl_sbr_region_action {
+	CXL_SBR_OFFLINE_AND_UNBIND,
+	CXL_SBR_UNBIND,
+};
+
+int __pci_bridge_secondary_bus_reset(struct pci_dev *dev,
+				     enum cxl_sbr_region_action action);
+bool is_cxl_dport(struct pci_dev *dev);
+u16 cxl_port_dvsec(struct pci_dev *dev);
 int pci_bus_error_reset(struct pci_dev *dev);
 int pci_try_reset_bridge(struct pci_dev *bridge);
 

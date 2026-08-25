@@ -127,6 +127,44 @@ bool pci_dpc_recovered(struct pci_dev *pdev)
 }
 #endif /* CONFIG_HOTPLUG_PCI_PCIE */
 
+/**
+ * pci_dpc_containment_active - whether a Port above @pdev is contained by DPC
+ * @pdev: PCI device below the Port
+ *
+ * Per PCIe r7.0 sec 2.9.3 the Port's LTSSM stays in the Disabled state while
+ * DPC Trigger Status is set, and dpc_reset_link() clears that bit only after
+ * pcie_do_recovery() has broadcast error_detected. A ->error_detected()
+ * callback can therefore use this to tell a DPC containment from any other
+ * frozen-channel error, and to know that the link is about to be reset.
+ *
+ * The Port that triggered is on the path to @pdev, because the broadcast walks
+ * that Port's subordinate bus, so test every bridge above @pdev.
+ *
+ * Return: true if a Port on the path to @pdev has DPC Trigger Status set.
+ */
+bool pci_dpc_containment_active(struct pci_dev *pdev)
+{
+	struct pci_dev *bridge;
+
+	for (bridge = pci_upstream_bridge(pdev); bridge;
+	     bridge = pci_upstream_bridge(bridge)) {
+		u16 status;
+
+		if (!bridge->dpc_cap)
+			continue;
+
+		pci_read_config_word(bridge,
+				     bridge->dpc_cap + PCI_EXP_DPC_STATUS,
+				     &status);
+		if (!PCI_POSSIBLE_ERROR(status) &&
+		    (status & PCI_EXP_DPC_STATUS_TRIGGER))
+			return true;
+	}
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(pci_dpc_containment_active);
+
 static int dpc_wait_rp_inactive(struct pci_dev *pdev)
 {
 	unsigned long timeout = jiffies + HZ;
@@ -149,6 +187,7 @@ pci_ers_result_t dpc_reset_link(struct pci_dev *pdev)
 {
 	pci_ers_result_t ret;
 	u16 cap;
+	int rc;
 
 	set_bit(PCI_DPC_RECOVERING, &pdev->priv_flags);
 
@@ -174,7 +213,12 @@ pci_ers_result_t dpc_reset_link(struct pci_dev *pdev)
 	pci_write_config_word(pdev, cap + PCI_EXP_DPC_STATUS,
 			      PCI_EXP_DPC_STATUS_TRIGGER);
 
-	if (pci_bridge_wait_for_secondary_bus(pdev, "DPC")) {
+	if (is_cxl_dport(pdev) && cxl_port_dvsec(pdev))
+		rc = __pci_bridge_secondary_bus_reset(pdev, CXL_SBR_UNBIND);
+	else
+		rc = pci_bridge_wait_for_secondary_bus(pdev, "DPC");
+
+	if (rc) {
 		clear_bit(PCI_DPC_RECOVERED, &pdev->priv_flags);
 		ret = PCI_ERS_RESULT_DISCONNECT;
 	} else {
