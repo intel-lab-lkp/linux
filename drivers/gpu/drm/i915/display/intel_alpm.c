@@ -115,6 +115,92 @@ static int get_tphy2_p2_to_p0(const struct intel_crtc_state *crtc_state)
 	return DISPLAY_VER(display) >= 35 ? (20 * 1000) : (12 * 1000);
 }
 
+#define DEFAULT_MAX_LTTPR_COUNT 7
+#define MAX_SUPPORTED_DP_LINK_RATES 12
+
+static const u32 establishment_periods[DEFAULT_MAX_LTTPR_COUNT][MAX_SUPPORTED_DP_LINK_RATES] = {
+	/* 1620, 2160, 2430, 2700, 3240, 4320, 5400, 6750, 8100, 10000, 13500, 20000 */
+	/* No Retimers */
+	{ 61070, 0, 0, 56710, 0, 0, 53450, 0, 52360, 59050, 56750, 54620 },
+	/*  1 Retimer  */
+	{ 155670, 0, 0, 151310, 0, 0, 148050, 0, 146960, 153650, 151350, 149220 },
+	/*  2 Retimers */
+	{ 181160, 0, 0, 172450, 0, 0, 165910, 0, 163740, 177120, 172520, 168220 },
+	/*  3 Retimers */
+	{ 206650, 0, 0, 193580, 0, 0, 183780, 0, 180510, 200590, 193690, 187290 },
+	/*  4 Retimers */
+	{ 232140, 0, 0, 214710, 0, 0, 201650, 0, 197290, 224060, 214860, 206320 },
+	/*  5 Retimers */
+	{ 257620, 0, 0, 235850, 0, 0, 219510, 0, 214070, 247530, 236030, 225360 },
+	/*  6 Retimers */
+	{ 283110, 0, 0, 256980, 0, 0, 237380, 0, 230850, 271000, 257200, 244390 },
+};
+
+enum link_rate_idx {
+	LINK_RATE_INVALID = -1,
+	LINK_RATE_1,
+	LINK_RATE_2,
+	LINK_RATE_3,
+	LINK_RATE_4,
+	LINK_RATE_5,
+	LINK_RATE_6,
+	LINK_RATE_7,
+	LINK_RATE_8,
+	LINK_RATE_9,
+	LINK_RATE_10,
+	LINK_RATE_11,
+	LINK_RATE_12
+};
+
+static int get_link_rate_index(int port_clock)
+{
+	int link_rate_index;
+
+	switch (port_clock) {
+	case 162000:
+		link_rate_index = LINK_RATE_1;	// Rate_1 (RBR) - 1.62 Gbps/Lane
+		break;
+	case 216000:
+		link_rate_index = LINK_RATE_2;	// Rate_2       - 2.16 Gbps/Lane
+		break;
+	case 243000:
+		link_rate_index = LINK_RATE_3;	// Rate_3       - 2.43 Gbps/Lane
+		break;
+	case 270000:
+		link_rate_index = LINK_RATE_4;	// Rate_4 (HBR) - 2.70 Gbps/Lane
+		break;
+	case 324000:
+		link_rate_index = LINK_RATE_5;	// Rate_5 (RBR2)- 3.24 Gbps/Lane
+		break;
+	case 432000:
+		link_rate_index = LINK_RATE_6;	// Rate_6       - 4.32 Gbps/Lane
+		break;
+	case 540000:
+		link_rate_index = LINK_RATE_7;	// Rate_7 (HBR2)- 5.40 Gbps/Lane
+		break;
+	case 675000:
+		link_rate_index = LINK_RATE_8;	// Rate_8       - 6.75 Gbps/Lane
+		break;
+	case 810000:
+		link_rate_index = LINK_RATE_9;	// Rate_9 (HBR3)- 8.10 Gbps/Lane
+		break;
+	case 1000000:
+		link_rate_index = LINK_RATE_10;	// Rate_10 (UHBR10) - 10.0 Gbps/Lane
+		break;
+	case 1350000:
+		link_rate_index = LINK_RATE_11;	// Rate_11 (UHBR13.5) - 13.5 Gbps/Lane
+		break;
+	case 2000000:
+		link_rate_index = LINK_RATE_12;	// Rate_12 (UHBR20) - 20.0 Gbps/Lane
+		break;
+	default:
+		link_rate_index = -1;
+		break;
+	}
+
+	return link_rate_index;
+}
+
 static int get_establishment_period(struct intel_dp *intel_dp,
 				    const struct intel_crtc_state *crtc_state)
 {
@@ -129,8 +215,17 @@ static int get_establishment_period(struct intel_dp *intel_dp,
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
 		tcds = (7 + DIV_ROUND_UP(6500, tml_phy_lock) + 1) * tml_phy_lock;
 	} else {
+		int idx = get_link_rate_index(crtc_state->port_clock);
+
 		tcds = 7 * tml_phy_lock;
 		lttpr_count = drm_dp_lttpr_count(intel_dp->lttpr_common_caps);
+
+		if (idx != LINK_RATE_INVALID &&
+		    lttpr_count < DEFAULT_MAX_LTTPR_COUNT &&
+		    establishment_periods[lttpr_count][idx]) {
+			establishment_period = establishment_periods[lttpr_count][idx];
+			return establishment_period;
+		}
 	}
 
 	if (lttpr_count) {
