@@ -3849,15 +3849,14 @@ void tcp_send_fin(struct sock *sk)
  * was unread data in the receive queue.  This behavior is recommended
  * by RFC 2525, section 2.17.  -DaveM
  */
-void tcp_send_active_reset(struct sock *sk, gfp_t priority,
-			   enum sk_rst_reason reason)
+void tcp_send_active_reset(struct sock *sk, enum sk_rst_reason reason)
 {
 	struct sk_buff *skb;
 
 	TCP_INC_STATS(sock_net(sk), TCP_MIB_OUTRSTS);
 
 	/* NOTE: No TCP options attached and we never retransmit this. */
-	skb = alloc_skb(MAX_TCP_HEADER, priority);
+	skb = alloc_skb(MAX_TCP_HEADER, GFP_ATOMIC);
 	if (!skb) {
 		NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPABORTFAILED);
 		return;
@@ -3869,7 +3868,7 @@ void tcp_send_active_reset(struct sock *sk, gfp_t priority,
 			     TCPHDR_ACK | TCPHDR_RST);
 	tcp_mstamp_refresh(tcp_sk(sk));
 	/* Send it off. */
-	if (tcp_transmit_skb(sk, skb, 0, priority))
+	if (tcp_transmit_skb(sk, skb, 0, GFP_ATOMIC))
 		NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPABORTFAILED);
 
 	/* skb of trace_tcp_send_reset() keeps the skb that caused RST,
