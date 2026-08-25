@@ -2369,7 +2369,7 @@ void intel_xe3plpd_mac_transmit_lfps(struct intel_encoder *encoder,
 	struct ref_tracker *wakeref;
 	u8 owned_lane_mask;
 
-	if (!intel_alpm_is_alpm_aux_less(intel_dp, crtc_state))
+	if (!crtc_state->has_alpm || !intel_alpm_aux_less_wake_supported(intel_dp))
 		return;
 
 	wakeref = intel_lt_phy_transaction_begin(encoder);

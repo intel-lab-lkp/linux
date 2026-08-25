@@ -37,13 +37,6 @@ bool intel_alpm_aux_less_wake_supported(struct intel_dp *intel_dp)
 	return intel_dp->alpm_dpcd & DP_ALPM_AUX_LESS_CAP;
 }
 
-bool intel_alpm_is_alpm_aux_less(struct intel_dp *intel_dp,
-				 const struct intel_crtc_state *crtc_state)
-{
-	return intel_psr_needs_alpm_aux_less(intel_dp, crtc_state) ||
-		(crtc_state->has_lobf && intel_alpm_aux_less_wake_supported(intel_dp));
-}
-
 bool intel_alpm_source_supported(struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(connector);
@@ -513,6 +506,7 @@ void intel_alpm_lobf_compute_config_late(struct intel_dp *intel_dp,
 
 	crtc_state->has_lobf = (crtc_state->set_context_latency + crtc_state->vrr.guardband) >
 			       (first_sdp_position + waketime_in_lines);
+	crtc_state->has_alpm = crtc_state->has_lobf;
 }
 
 void intel_alpm_lobf_compute_config(struct intel_dp *intel_dp,
@@ -575,8 +569,7 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	u32 alpm_ctl, alpm_ctl2, lttpr_count;
 
-	if (DISPLAY_VER(display) < 20 || (!intel_psr_needs_alpm(intel_dp, crtc_state) &&
-					  !crtc_state->has_lobf))
+	if (DISPLAY_VER(display) < 20 || !crtc_state->has_alpm)
 		return;
 
 	mutex_lock(&intel_dp->alpm.lock);
@@ -584,7 +577,7 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 	 * Panel Replay on eDP is always using ALPM aux less. I.e. no need to
 	 * check panel support at this point.
 	 */
-	if (intel_alpm_is_alpm_aux_less(intel_dp, crtc_state)) {
+	if (intel_alpm_aux_less_wake_supported(intel_dp)) {
 		alpm_ctl = ALPM_CTL_ALPM_ENABLE |
 			ALPM_CTL_ALPM_AUX_LESS_ENABLE |
 			ALPM_CTL_AUX_LESS_SLEEP_HOLD_TIME_50_SYMBOLS;
@@ -648,10 +641,10 @@ void intel_alpm_port_configure(struct intel_dp *intel_dp,
 	enum port port = dp_to_dig_port(intel_dp)->base.port;
 	u32 alpm_ctl_val = 0, lfps_ctl_val = 0;
 
-	if (DISPLAY_VER(display) < 20)
+	if (DISPLAY_VER(display) < 20 || !crtc_state->has_alpm)
 		return;
 
-	if (intel_alpm_is_alpm_aux_less(intel_dp, crtc_state)) {
+	if (intel_alpm_aux_less_wake_supported(intel_dp)) {
 		int lfps_cycle = get_lfps_cycle_count(crtc_state);
 		u32 lfps_cycle_val;
 
@@ -710,7 +703,7 @@ void intel_alpm_enable_sink(struct intel_dp *intel_dp,
 {
 	u8 val;
 
-	if (!intel_psr_needs_alpm(intel_dp, crtc_state) && !crtc_state->has_lobf)
+	if (!crtc_state->has_alpm)
 		return;
 
 	val = DP_ALPM_ENABLE | DP_ALPM_LOCK_ERROR_IRQ_HPD_ENABLE;

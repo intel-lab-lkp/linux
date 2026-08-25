@@ -3448,8 +3448,10 @@ void intel_lnl_mac_transmit_lfps(struct intel_encoder *encoder,
 	int i;
 	u8 owned_lane_mask;
 
-	if (DISPLAY_VER(display) < 20 ||
-	    !intel_alpm_is_alpm_aux_less(enc_to_intel_dp(encoder), crtc_state))
+	if (DISPLAY_VER(display) < 20 || !crtc_state->has_alpm)
+		return;
+
+	if (!intel_alpm_aux_less_wake_supported(enc_to_intel_dp(encoder)))
 		return;
 
 	owned_lane_mask = intel_cx0_get_owned_lane_mask(encoder);

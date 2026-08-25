@@ -1442,6 +1442,7 @@ struct intel_crtc_state {
 		u8 silence_period_sym_clocks;
 		u8 lfps_half_cycle_num_of_syms;
 	} alpm_state;
+	bool has_alpm;
 
 	/* to track changes in plane color blocks */
 	bool plane_color_changed;
