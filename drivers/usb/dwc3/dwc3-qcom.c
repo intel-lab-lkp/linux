@@ -617,6 +617,8 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	int			ret;
 	bool			ignore_pipe_clk;
 	bool			wakeup_source;
+	bool			select_utmi_as_ref_clk;
+	struct clk		*ref_clk;
 
 	qcom = devm_kzalloc(&pdev->dev, sizeof(*qcom), GFP_KERNEL);
 	if (!qcom)
@@ -696,6 +698,18 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 			qcom->current_role = USB_ROLE_HOST;
 		else
 			qcom->current_role = USB_ROLE_DEVICE;
+	}
+
+	select_utmi_as_ref_clk = device_property_read_bool(dev,
+					"qcom,select-utmi-as-ref-clk");
+	if (select_utmi_as_ref_clk) {
+		ref_clk = devm_clk_get_optional(dev, "mock_utmi");
+		if (IS_ERR(ref_clk)) {
+			ret = PTR_ERR(ref_clk);
+			dev_warn(dev, "failed to get ref clock: %d\n", ret);
+		} else {
+			probe_data.ref_clk = ref_clk;
+		}
 	}
 
 	qcom->dwc.glue_ops = &dwc3_qcom_glue_ops;
