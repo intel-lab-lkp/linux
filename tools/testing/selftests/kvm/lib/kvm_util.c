@@ -195,6 +195,9 @@ const char *vm_guest_mode_string(u32 i)
 		[VM_MODE_P52V48_4K]	= "PA-bits:52,  VA-bits:48,  4K pages",
 		[VM_MODE_P52V48_16K]	= "PA-bits:52,  VA-bits:48, 16K pages",
 		[VM_MODE_P52V48_64K]	= "PA-bits:52,  VA-bits:48, 64K pages",
+		[VM_MODE_P52V52_4K]	= "PA-bits:52,  VA-bits:52,  4K pages",
+		[VM_MODE_P52V52_16K]	= "PA-bits:52,  VA-bits:52, 16K pages",
+		[VM_MODE_P52V52_64K]	= "PA-bits:52,  VA-bits:52, 64K pages",
 		[VM_MODE_P48V48_4K]	= "PA-bits:48,  VA-bits:48,  4K pages",
 		[VM_MODE_P48V48_16K]	= "PA-bits:48,  VA-bits:48, 16K pages",
 		[VM_MODE_P48V48_64K]	= "PA-bits:48,  VA-bits:48, 64K pages",
@@ -231,6 +234,9 @@ const struct vm_guest_mode_params vm_guest_mode_params[] = {
 	[VM_MODE_P52V48_4K]	= { 52, 48,  0x1000, 12 },
 	[VM_MODE_P52V48_16K]	= { 52, 48,  0x4000, 14 },
 	[VM_MODE_P52V48_64K]	= { 52, 48, 0x10000, 16 },
+	[VM_MODE_P52V52_4K]	= { 52, 52,  0x1000, 12 },
+	[VM_MODE_P52V52_16K]	= { 52, 52,  0x4000, 14 },
+	[VM_MODE_P52V52_64K]	= { 52, 52, 0x10000, 16 },
 	[VM_MODE_P48V48_4K]	= { 48, 48,  0x1000, 12 },
 	[VM_MODE_P48V48_16K]	= { 48, 48,  0x4000, 14 },
 	[VM_MODE_P48V48_64K]	= { 48, 48, 0x10000, 16 },
@@ -298,10 +304,14 @@ struct kvm_vm *____vm_create(struct vm_shape shape)
 
 	/* Setup mode specific traits. */
 	switch (vm->mode) {
+	case VM_MODE_P52V52_4K:
+		vm->mmu.pgtable_levels = 5;
+		break;
 	case VM_MODE_P52V48_4K:
 		vm->mmu.pgtable_levels = 4;
 		break;
 	case VM_MODE_P52V48_64K:
+	case VM_MODE_P52V52_64K:
 		vm->mmu.pgtable_levels = 3;
 		break;
 	case VM_MODE_P48V48_4K:
@@ -322,6 +332,7 @@ struct kvm_vm *____vm_create(struct vm_shape shape)
 	case VM_MODE_P48V48_16K:
 	case VM_MODE_P40V48_16K:
 	case VM_MODE_P36V48_16K:
+	case VM_MODE_P52V52_16K:
 		vm->mmu.pgtable_levels = 4;
 		break;
 	case VM_MODE_P47V47_16K:

@@ -46,7 +46,7 @@ static u64 pud_index(struct kvm_vm *vm, gva_t gva)
 	u64 mask = (1UL << (vm->page_shift - 3)) - 1;
 
 	TEST_ASSERT(vm->mmu.pgtable_levels >= 4,
-		    "Mode %d does not have at least 4 page table levels",
+		    "Mode %d does not have >= 4 page table levels",
 		    vm->mode);
 
 	return (gva >> shift) & mask;
