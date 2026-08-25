@@ -71,6 +71,15 @@ static u32 hyp_ffa_version;
 static bool has_version_negotiated;
 static hyp_spinlock_t version_lock;
 
+/*
+ * Size, in bytes, of the RX/TX buffers used by the pKVM FF-A proxy: the
+ * portion of the (fixed, KVM_FFA_MBOX_NR_PAGES * PAGE_SIZE) hyp buffers
+ * that is actually mapped into the SPMC. Negotiated with the SPMC in
+ * hyp_ffa_post_init() and, since it is what the host must in turn provide,
+ * also reported to the host via FFA_FEATURES.
+ */
+static size_t hyp_ffa_rxtx_sz;
+
 static void ffa_to_smccc_error(struct arm_smccc_1_2_regs *res, u64 ffa_errno)
 {
 	*res = (struct arm_smccc_1_2_regs) {
@@ -239,7 +248,7 @@ static void do_ffa_rxtx_map(struct arm_smccc_1_2_regs *res,
 	int ret = 0;
 	void *rx_virt, *tx_virt;
 
-	if (npages != (KVM_FFA_MBOX_NR_PAGES * PAGE_SIZE) / FFA_PAGE_SIZE) {
+	if (npages != hyp_ffa_rxtx_sz / FFA_PAGE_SIZE) {
 		ret = FFA_RET_INVALID_PARAMETERS;
 		goto out;
 	}
@@ -421,7 +430,7 @@ static void do_ffa_mem_frag_tx(struct arm_smccc_1_2_regs *res,
 	int ret = FFA_RET_INVALID_PARAMETERS;
 	u32 nr_ranges;
 
-	if (fraglen > KVM_FFA_MBOX_NR_PAGES * PAGE_SIZE)
+	if (fraglen > hyp_ffa_rxtx_sz)
 		goto out;
 
 	if (fraglen % sizeof(*buf))
@@ -484,7 +493,7 @@ static void __do_ffa_mem_xfer(const u64 func_id,
 	size_t mem_region_len = FFA_MEM_REGION_SZ(hyp_ffa_version);
 
 	if (addr_mbz || npages_mbz || fraglen > len ||
-	    fraglen > KVM_FFA_MBOX_NR_PAGES * PAGE_SIZE) {
+	    fraglen > hyp_ffa_rxtx_sz) {
 		ret = FFA_RET_INVALID_PARAMETERS;
 		goto out;
 	}
@@ -619,7 +628,7 @@ static void do_ffa_mem_reclaim(struct arm_smccc_1_2_regs *res,
 	 * bogus.
 	 */
 	if (offset + CONSTITUENTS_OFFSET(0) > len ||
-	    fraglen > KVM_FFA_MBOX_NR_PAGES * PAGE_SIZE) {
+	    fraglen > hyp_ffa_rxtx_sz) {
 		ret = FFA_RET_ABORTED;
 		ffa_rx_release(res);
 		goto out_unlock;
@@ -723,6 +732,26 @@ static bool do_ffa_features(struct arm_smccc_1_2_regs *res,
 	}
 
 	switch (id) {
+	case FFA_RXTX_MAP:
+	case FFA_FN64_RXTX_MAP:
+		switch (hyp_ffa_rxtx_sz) {
+		case SZ_4K:
+			prop = FFA_FEAT_RXTX_MIN_SZ_4K;
+			break;
+		case SZ_16K:
+			prop = FFA_FEAT_RXTX_MIN_SZ_16K;
+			break;
+		case SZ_64K:
+			prop = FFA_FEAT_RXTX_MIN_SZ_64K;
+			break;
+		default:
+			ret = FFA_RET_NOT_SUPPORTED;
+		}
+
+		if (!ret && hyp_ffa_version >= FFA_VERSION_1_2)
+			prop |= FIELD_PREP(FFA_FEAT_RXTX_MAX_SZ_MASK,
+					    hyp_ffa_rxtx_sz / FFA_PAGE_SIZE);
+		goto out_handled;
 	case FFA_MEM_SHARE:
 	case FFA_FN64_MEM_SHARE:
 	case FFA_MEM_LEND:
@@ -741,7 +770,8 @@ out_handled:
 
 static int hyp_ffa_post_init(void)
 {
-	size_t min_rxtx_sz;
+	size_t min_rxtx_sz, max_rxtx_sz = 0;
+	size_t capacity = KVM_FFA_MBOX_NR_PAGES * PAGE_SIZE;
 	struct arm_smccc_1_2_regs res;
 
 	hyp_smccc_1_2_smc(&(struct arm_smccc_1_2_regs){
@@ -774,8 +804,26 @@ static int hyp_ffa_post_init(void)
 		return -EINVAL;
 	}
 
-	if (min_rxtx_sz > PAGE_SIZE)
+	if (min_rxtx_sz > capacity)
 		return -EOPNOTSUPP;
+
+	/*
+	 * The maximum RX/TX buffer size was only added to FFA_FEATURES in
+	 * FF-A 1.2; the field is undefined on earlier versions, so treat it
+	 * as unavailable there and settle for the (guaranteed supported)
+	 * minimum size instead of guessing.
+	 */
+	if (hyp_ffa_version < FFA_VERSION_1_2) {
+		hyp_ffa_rxtx_sz = min_rxtx_sz;
+		return 0;
+	}
+
+	max_rxtx_sz = FIELD_GET(FFA_FEAT_RXTX_MAX_SZ_MASK, res.a2) * FFA_PAGE_SIZE;
+	if (max_rxtx_sz && max_rxtx_sz < min_rxtx_sz)
+		max_rxtx_sz = min_rxtx_sz;
+
+	/* A maximum of 0 means the SPMC does not enforce an upper bound. */
+	hyp_ffa_rxtx_sz = min(max_rxtx_sz ?: capacity, capacity);
 
 	return 0;
 }
@@ -868,7 +916,7 @@ static void do_ffa_part_get(struct arm_smccc_1_2_regs *res,
 	}
 
 	copy_sz = partition_sz * count;
-	if (copy_sz > KVM_FFA_MBOX_NR_PAGES * PAGE_SIZE) {
+	if (copy_sz > hyp_ffa_rxtx_sz) {
 		ffa_to_smccc_res(res, FFA_RET_ABORTED);
 		goto out_unlock;
 	}

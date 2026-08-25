@@ -130,6 +130,13 @@
 #define FFA_FEAT_RXTX_MIN_SZ_16K	2
 #define FFA_FEAT_RXTX_MIN_SZ_MASK	GENMASK(1, 0)
 
+/*
+ * Maximum buffer size supported by the callee, expressed in units of
+ * FFA_PAGE_SIZE, as returned by an FFA_FEATURES query for FFA_RXTX_MAP.
+ * A value of 0 means no maximum size is enforced.
+ */
+#define FFA_FEAT_RXTX_MAX_SZ_MASK	GENMASK(31, 16)
+
 /* FFA Bus/Device/Driver related */
 struct ffa_device {
 	u32 id;
