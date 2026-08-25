@@ -2266,6 +2266,7 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	struct folio *folio = NULL;
 	int error, nr_pages, order;
 	pgoff_t offset;
+	void *shadow;
 
 	VM_BUG_ON(!*foliop || !xa_is_value(*foliop));
 	index_entry = radix_to_swp_entry(*foliop);
@@ -2376,6 +2377,10 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	 * folio after reading from swap.
 	 */
 	arch_swap_restore(folio_swap(swap, folio), folio);
+
+	shadow = zswap_lookup_and_clear_shadows(folio);
+	if (shadow)
+		workingset_refault_lru_managed(folio, shadow);
 
 	if (shmem_should_replace_folio(folio, gfp)) {
 		error = shmem_replace_folio(&folio, gfp, info, index, vma);
