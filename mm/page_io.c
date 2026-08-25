@@ -456,6 +456,13 @@ static void swap_writepage_bdev_async(struct folio *folio,
 	bio->bi_end_io = end_swap_bio_write;
 	bio_add_folio_nofail(bio, folio, folio_size(folio), 0);
 
+	/*
+	 * Dropping the folio from the swap cache takes sleeping locks, so the
+	 * completion must not run in interrupt context.
+	 */
+	if (folio_test_dropbehind(folio))
+		bio_set_flag(bio, BIO_COMPLETE_IN_TASK);
+
 	bio_associate_blkg_from_page(bio, folio);
 	count_swpout_vm_event(folio);
 	folio_start_writeback(folio);
