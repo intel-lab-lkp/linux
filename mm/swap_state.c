@@ -483,8 +483,6 @@ static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
 
 	/* memsw uncharges swap when folio is added to swap cache */
 	memcg1_swapin(folio);
-	if (shadow)
-		workingset_refault(folio, shadow);
 
 	node_stat_mod_folio(folio, NR_FILE_PAGES, nr_pages);
 	lruvec_stat_mod_folio(folio, NR_SWAPCACHE, nr_pages);
@@ -646,16 +644,25 @@ static struct folio *swap_cache_read_folio(struct swap_io_ctx *ctx,
 		pgoff_t ilx, bool readahead)
 {
 	struct folio *folio;
+	void *shadow = NULL;
 
 	do {
 		folio = swap_cache_get_folio(entry);
 		if (folio)
 			return folio;
+		/*
+		 * Capture the slot's shadow before the allocation overwrites it,
+		 * so a fresh swap-in can be evaluated as a refault below.
+		 */
+		shadow = swap_cache_get_shadow(entry);
 		folio = __swap_cache_alloc_folio(entry, gfp, BIT(0), NULL, mpol, ilx);
 	} while (PTR_ERR(folio) == -EEXIST);
 
 	if (IS_ERR_OR_NULL(folio))
 		return NULL;
+
+	if (shadow)
+		workingset_refault(folio, shadow);
 
 	folio_add_lru(folio);
 	swap_read_folio(ctx, folio);
@@ -688,16 +695,25 @@ struct folio *swapin_sync(swp_entry_t entry, gfp_t gfp, unsigned long orders,
 {
 	struct swap_io_ctx ctx = {};
 	struct folio *folio;
+	void *shadow = NULL;
 
 	do {
 		folio = swap_cache_get_folio(entry);
 		if (folio)
 			return folio;
+		/*
+		 * Capture the slot's shadow before the allocation overwrites it,
+		 * so a fresh swap-in can be evaluated as a refault below.
+		 */
+		shadow = swap_cache_get_shadow(entry);
 		folio = __swap_cache_alloc_folio(entry, gfp, orders, vmf, mpol, ilx);
 	} while (PTR_ERR(folio) == -EEXIST);
 
 	if (IS_ERR(folio))
 		return folio;
+
+	if (shadow)
+		workingset_refault(folio, shadow);
 
 	folio_add_lru(folio);
 	swap_read_folio(&ctx, folio);
