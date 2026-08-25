@@ -437,6 +437,32 @@
 #ifndef __ASSEMBLER__
 #include <asm/types.h>
 
+static inline u8 esr_trap_get_class(unsigned long esr)
+{
+	return ESR_ELx_EC(esr);
+}
+
+static inline bool esr_trap_is_iabt(unsigned long esr)
+{
+	return esr_trap_get_class(esr) == ESR_ELx_EC_IABT_LOW;
+}
+
+static inline bool esr_abt_is_s1ptw(unsigned long esr)
+{
+	return esr & ESR_ELx_S1PTW;
+}
+
+/* Always check for S1PTW *before* using this. */
+static inline bool esr_dabt_is_write(unsigned long esr)
+{
+	return esr & ESR_ELx_WNR;
+}
+
+static inline bool esr_dabt_is_cm(unsigned long esr)
+{
+	return esr & ESR_ELx_CM;
+}
+
 static inline unsigned long esr_brk_comment(unsigned long esr)
 {
 	return esr & ESR_ELx_BRK64_ISS_COMMENT_MASK;
@@ -460,75 +486,104 @@ static inline bool esr_is_ubsan_brk(unsigned long esr)
 	return (esr_brk_comment(esr) & ~UBSAN_BRK_MASK) == UBSAN_BRK_IMM;
 }
 
+static inline u8 esr_fsc_get_fault(unsigned long esr)
+{
+	return esr & ESR_ELx_FSC;
+}
+
 static inline bool esr_fsc_is_translation_fault(unsigned long esr)
 {
-	esr = esr & ESR_ELx_FSC;
+	const u8 fault = esr_fsc_get_fault(esr);
 
-	return (esr == ESR_ELx_FSC_FAULT_L(3)) ||
-	       (esr == ESR_ELx_FSC_FAULT_L(2)) ||
-	       (esr == ESR_ELx_FSC_FAULT_L(1)) ||
-	       (esr == ESR_ELx_FSC_FAULT_L(0)) ||
-	       (esr == ESR_ELx_FSC_FAULT_L(-1));
+	return (fault == ESR_ELx_FSC_FAULT_L(3)) ||
+	       (fault == ESR_ELx_FSC_FAULT_L(2)) ||
+	       (fault == ESR_ELx_FSC_FAULT_L(1)) ||
+	       (fault == ESR_ELx_FSC_FAULT_L(0)) ||
+	       (fault == ESR_ELx_FSC_FAULT_L(-1));
 }
 
 static inline bool esr_fsc_is_permission_fault(unsigned long esr)
 {
-	esr = esr & ESR_ELx_FSC;
+	const u8 fault = esr_fsc_get_fault(esr);
 
-	return (esr == ESR_ELx_FSC_PERM_L(3)) ||
-	       (esr == ESR_ELx_FSC_PERM_L(2)) ||
-	       (esr == ESR_ELx_FSC_PERM_L(1)) ||
-	       (esr == ESR_ELx_FSC_PERM_L(0));
+	return (fault == ESR_ELx_FSC_PERM_L(3)) ||
+	       (fault == ESR_ELx_FSC_PERM_L(2)) ||
+	       (fault == ESR_ELx_FSC_PERM_L(1)) ||
+	       (fault == ESR_ELx_FSC_PERM_L(0));
 }
 
 static inline bool esr_fsc_is_access_flag_fault(unsigned long esr)
 {
-	esr = esr & ESR_ELx_FSC;
+	const u8 fault = esr_fsc_get_fault(esr);
 
-	return (esr == ESR_ELx_FSC_ACCESS_L(3)) ||
-	       (esr == ESR_ELx_FSC_ACCESS_L(2)) ||
-	       (esr == ESR_ELx_FSC_ACCESS_L(1)) ||
-	       (esr == ESR_ELx_FSC_ACCESS_L(0));
+	return (fault == ESR_ELx_FSC_ACCESS_L(3)) ||
+	       (fault == ESR_ELx_FSC_ACCESS_L(2)) ||
+	       (fault == ESR_ELx_FSC_ACCESS_L(1)) ||
+	       (fault == ESR_ELx_FSC_ACCESS_L(0));
 }
 
 static inline bool esr_fsc_is_excl_atomic_fault(unsigned long esr)
 {
-	esr = esr & ESR_ELx_FSC;
-
-	return esr == ESR_ELx_FSC_EXCL_ATOMIC;
+	return esr_fsc_get_fault(esr) == ESR_ELx_FSC_EXCL_ATOMIC;
 }
 
 static inline bool esr_fsc_is_addr_sz_fault(unsigned long esr)
 {
-	esr &= ESR_ELx_FSC;
+	const u8 fault = esr_fsc_get_fault(esr);
 
-	return (esr == ESR_ELx_FSC_ADDRSZ_L(3))	||
-	       (esr == ESR_ELx_FSC_ADDRSZ_L(2))	||
-	       (esr == ESR_ELx_FSC_ADDRSZ_L(1)) ||
-	       (esr == ESR_ELx_FSC_ADDRSZ_L(0))	||
-	       (esr == ESR_ELx_FSC_ADDRSZ_L(-1));
+	return (fault == ESR_ELx_FSC_ADDRSZ_L(3)) ||
+	       (fault == ESR_ELx_FSC_ADDRSZ_L(2)) ||
+	       (fault == ESR_ELx_FSC_ADDRSZ_L(1)) ||
+	       (fault == ESR_ELx_FSC_ADDRSZ_L(0)) ||
+	       (fault == ESR_ELx_FSC_ADDRSZ_L(-1));
+}
+
+static inline bool esr_abt_is_exec_fault(unsigned long esr)
+{
+	return esr_trap_is_iabt(esr) && !esr_abt_is_s1ptw(esr);
+}
+
+static inline bool esr_abt_is_sea(unsigned long esr)
+{
+	const u8 fault = esr_fsc_get_fault(esr);
+
+	switch (fault) {
+	case ESR_ELx_FSC_EXTABT:
+	case ESR_ELx_FSC_SEA_TTW(-1) ... ESR_ELx_FSC_SEA_TTW(3):
+	case ESR_ELx_FSC_SECC:
+	case ESR_ELx_FSC_SECC_TTW(-1) ... ESR_ELx_FSC_SECC_TTW(3):
+		return true;
+	default:
+		return false;
+	}
+}
+
+/* Not valid for negative levels. */
+static inline u64 esr_fsc_get_level(unsigned long esr)
+{
+	return esr & ESR_ELx_FSC_LEVEL;
 }
 
 static inline bool esr_fsc_is_sea_ttw(unsigned long esr)
 {
-	esr = esr & ESR_ELx_FSC;
+	const u8 fault = esr_fsc_get_fault(esr);
 
-	return (esr == ESR_ELx_FSC_SEA_TTW(3)) ||
-	       (esr == ESR_ELx_FSC_SEA_TTW(2)) ||
-	       (esr == ESR_ELx_FSC_SEA_TTW(1)) ||
-	       (esr == ESR_ELx_FSC_SEA_TTW(0)) ||
-	       (esr == ESR_ELx_FSC_SEA_TTW(-1));
+	return (fault == ESR_ELx_FSC_SEA_TTW(3)) ||
+	       (fault == ESR_ELx_FSC_SEA_TTW(2)) ||
+	       (fault == ESR_ELx_FSC_SEA_TTW(1)) ||
+	       (fault == ESR_ELx_FSC_SEA_TTW(0)) ||
+	       (fault == ESR_ELx_FSC_SEA_TTW(-1));
 }
 
 static inline bool esr_fsc_is_secc_ttw(unsigned long esr)
 {
-	esr = esr & ESR_ELx_FSC;
+	const u8 fault = esr_fsc_get_fault(esr);
 
-	return (esr == ESR_ELx_FSC_SECC_TTW(3)) ||
-	       (esr == ESR_ELx_FSC_SECC_TTW(2)) ||
-	       (esr == ESR_ELx_FSC_SECC_TTW(1)) ||
-	       (esr == ESR_ELx_FSC_SECC_TTW(0)) ||
-	       (esr == ESR_ELx_FSC_SECC_TTW(-1));
+	return (fault == ESR_ELx_FSC_SECC_TTW(3)) ||
+	       (fault == ESR_ELx_FSC_SECC_TTW(2)) ||
+	       (fault == ESR_ELx_FSC_SECC_TTW(1)) ||
+	       (fault == ESR_ELx_FSC_SECC_TTW(0)) ||
+	       (fault == ESR_ELx_FSC_SECC_TTW(-1));
 }
 
 /* Indicate whether ESR.EC==0x1A is for an ERETAx instruction */
