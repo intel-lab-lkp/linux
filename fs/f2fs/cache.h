@@ -168,6 +168,7 @@ unsigned int f2fs_cache_gang_lookup_tag(struct f2fs_cached_block_list *cache,
 		unsigned int max_items, int tag);
 void f2fs_cache_gang_release(struct f2fs_cached_block **entries,
 				unsigned int nr_entries);
+void f2fs_truncate_cache(struct f2fs_cached_block *entry, bool drop_dirty);
 int f2fs_writeback_cache(struct f2fs_cached_block_list *cache, bool sync);
 void f2fs_cache_wait_on_all_writeback(struct f2fs_cached_block_list *cache);
 void f2fs_cache_wait_writeback_cond(struct f2fs_cached_block *entry,

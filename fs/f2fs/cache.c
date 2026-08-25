@@ -417,13 +417,12 @@ static void f2fs_do_truncate_cache(struct f2fs_cached_block *entry,
 	spin_unlock(&cache->list_lock);
 }
 
-static void f2fs_truncate_cache(struct f2fs_cached_block *entry,
+void f2fs_truncate_cache(struct f2fs_cached_block *entry,
 					bool drop_dirty)
 {
-	f2fs_lock_cache(entry);
-	if (entry->cache)
-		f2fs_do_truncate_cache(entry, drop_dirty);
-	f2fs_unlock_cache(entry);
+	if (!entry->cache)
+		return;
+	f2fs_do_truncate_cache(entry, drop_dirty);
 }
 
 static void f2fs_drop_cache(struct f2fs_cached_block_list *cache,
@@ -435,8 +434,9 @@ static void f2fs_drop_cache(struct f2fs_cached_block_list *cache,
 	if (IS_ERR(entry))
 		return;
 
+	f2fs_lock_cache(entry);
 	f2fs_truncate_cache(entry, drop_dirty);
-	f2fs_put_cache(entry, false);
+	f2fs_put_cache(entry, true);
 }
 
 void f2fs_drop_cache_range(struct f2fs_cached_block_list *cache,
@@ -478,7 +478,9 @@ out_unlock:
 
 		index = entry->index + 1;
 
+		f2fs_lock_cache(entry);
 		f2fs_truncate_cache(entry, drop_dirty);
+		f2fs_unlock_cache(entry);
 	}
 	f2fs_cache_gang_release(entries, nr);
 
