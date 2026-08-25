@@ -404,6 +404,52 @@ static bool damon_is_last_region(struct damon_region *r,
 	return list_is_last(&r->list, &t->regions_list);
 }
 
+static bool damos_completely_walked(struct damos *s, struct damon_target *t)
+{
+	/*
+	 * '>=' instead of '==', because the region set of @t could have been
+	 * shrunken by damon_set_regions() after the cursor was saved.
+	 */
+	return s->quota.walk_target_from == t &&
+		s->quota.walk_addr_from >= damon_last_region(t)->ar.end;
+}
+
+static struct damon_target *damon_next_valid_target(struct damon_target *t,
+		struct damon_ctx *c)
+{
+	struct list_head *head = &c->adaptive_targets;
+	struct damon_target *start = t;
+	struct damon_target *next = t;
+
+	while (true) {
+		if (list_is_last(&next->list, head))
+			next = list_first_entry(head, struct damon_target, list);
+		else
+			next = list_next_entry(next, list);
+
+		if (!c->ops.target_valid || c->ops.target_valid(next))
+			return next;
+
+		if (next == start)
+			break;
+	}
+	return NULL;
+}
+
+static void damos_replace_invalid_target(struct damon_ctx *c,
+		struct damon_target *t)
+{
+	struct damos *s;
+
+	damon_for_each_scheme(s, c) {
+		if (s->quota.walk_target_from != t)
+			continue;
+
+		s->quota.walk_target_from = damon_next_valid_target(t, c);
+		s->quota.walk_addr_from = 0;
+	}
+}
+
 /**
  * damon_probe_hits_wsum() - Returns probe hits weighted sum of a region.
  * @r:		region to get the weighted sum of.
@@ -673,8 +719,8 @@ static struct damos_quota *damos_quota_init(struct damos_quota *quota)
 	quota->total_charged_ns = 0;
 	quota->charged_sz = 0;
 	quota->charged_from = 0;
-	quota->charge_target_from = NULL;
-	quota->charge_addr_from = 0;
+	quota->walk_target_from = NULL;
+	quota->walk_addr_from = 0;
 	quota->esz_bp = 0;
 	return quota;
 }
@@ -1628,9 +1674,9 @@ static int damon_commit_targets(
 
 			damon_destroy_target(dst_target, dst);
 			damon_for_each_scheme(s, dst) {
-				if (s->quota.charge_target_from == dst_target) {
-					s->quota.charge_target_from = NULL;
-					s->quota.charge_addr_from = 0;
+				if (s->quota.walk_target_from == dst_target) {
+					s->quota.walk_target_from = NULL;
+					s->quota.walk_addr_from = 0;
 				}
 			}
 		}
@@ -2312,64 +2358,54 @@ static bool damos_valid_target(struct damon_ctx *c, struct damon_region *r,
 }
 
 /*
- * damos_skip_charged_region() - Check if the given region or starting part of
- * it is already charged for the DAMOS quota.
+ * damos_skip_walked_region() - Check if the given region or starting part of
+ * it is already walked for the DAMOS quota.
  * @t:	The target of the region.
- * @rp:	The pointer to the region.
+ * @r:	The pointer to the region.
  * @s:	The scheme to be applied.
  * @min_region_sz:	minimum region size.
  *
- * If a quota of a scheme has exceeded in a quota charge window, the scheme's
- * action would applied to only a part of the target access pattern fulfilling
- * regions.  To avoid applying the scheme action to only already applied
- * regions, DAMON skips applying the scheme action to the regions that charged
- * in the previous charge window.
- *
- * This function checks if a given region should be skipped or not for the
- * reason.  If only the starting part of the region has previously charged,
- * this function splits the region into two so that the second one covers the
- * area that not charged in the previous charge widnow, and return true.  The
- * caller can see the second one on the next iteration of the region walk.
- * Note that this means the caller should use damon_for_each_region() instead
- * of damon_for_each_region_safe().  If damon_for_each_region_safe() is used,
- * the second region will just be ignored.
+ * When a quota is configured, DAMON records how far it has walked so that
+ * subsequent quota windows continue from that point instead of re-applying the
+ * same regions.  This function returns true for regions that are before the
+ * recorded cursor and therefore should be skipped.  If only the starting part
+ * has been walked, the region is split so that the remaining part can be
+ * visited.
  *
  * Return: true if the region should be skipped, false otherwise.
  */
-static bool damos_skip_charged_region(struct damon_target *t,
+static bool damos_skip_walked_region(struct damon_target *t,
 		struct damon_region *r, struct damos *s,
 		unsigned long min_region_sz)
 {
 	struct damos_quota *quota = &s->quota;
 	unsigned long sz_to_skip;
 
-	/* Skip previously charged regions */
-	if (quota->charge_target_from) {
-		if (t != quota->charge_target_from)
+	if (!damos_quota_is_set(quota))
+		return false;
+
+	/* Skip previously walked regions */
+	if (quota->walk_target_from) {
+		if (t != quota->walk_target_from)
 			return true;
-		if (r == damon_last_region(t)) {
-			quota->charge_target_from = NULL;
-			quota->charge_addr_from = 0;
-			return true;
-		}
-		if (quota->charge_addr_from &&
-				r->ar.end <= quota->charge_addr_from)
+		if (quota->walk_addr_from &&
+				r->ar.end <= quota->walk_addr_from)
 			return true;
 
-		if (quota->charge_addr_from && r->ar.start <
-				quota->charge_addr_from) {
-			sz_to_skip = ALIGN_DOWN(quota->charge_addr_from -
+		if (quota->walk_addr_from && r->ar.start <
+				quota->walk_addr_from) {
+			sz_to_skip = ALIGN_DOWN(quota->walk_addr_from -
 					r->ar.start, min_region_sz);
 			if (!sz_to_skip) {
-				if (damon_sz_region(r) <= min_region_sz)
+				if (damon_sz_region(r) <= min_region_sz) {
+					quota->walk_addr_from = r->ar.end;
 					return true;
+				}
 				sz_to_skip = min_region_sz;
 			}
 			damon_split_region_at(t, r, sz_to_skip);
 			return true;
 		}
-		quota->charge_target_from = NULL;
-		quota->charge_addr_from = 0;
 	}
 	return false;
 }
@@ -2627,10 +2663,6 @@ static void damos_apply_scheme(struct damon_ctx *c, struct damon_target *t,
 		quota->total_charged_ns += timespec64_to_ns(&end) -
 			timespec64_to_ns(&begin);
 		damos_charge_quota(quota, sz, sz_applied);
-		if (damos_quota_is_full(quota, c->min_region_sz)) {
-			quota->charge_target_from = t;
-			quota->charge_addr_from = r->ar.end;
-		}
 	}
 	if (s->action != DAMOS_STAT)
 		r->age = 0;
@@ -2639,8 +2671,19 @@ update_stat:
 	damos_update_stat(s, sz, sz_applied, sz_ops_filter_passed);
 }
 
-static void damon_do_apply_schemes(struct damon_ctx *c,
-				   struct damon_target *t,
+static void damos_walk_maybe_rotate(struct damon_ctx *c,
+				    struct damon_target *t,
+				    struct damos *s)
+{
+	struct damos_quota *quota = &s->quota;
+
+	if (damos_completely_walked(s, t)) {
+		quota->walk_target_from = damon_next_valid_target(t, c);
+		quota->walk_addr_from = 0;
+	}
+}
+
+static void damon_do_apply_schemes(struct damon_ctx *c, struct damon_target *t,
 				   struct damon_region *r)
 {
 	struct damos *s;
@@ -2658,18 +2701,31 @@ static void damon_do_apply_schemes(struct damon_ctx *c,
 		if (damos_quota_is_full(quota, c->min_region_sz))
 			continue;
 
-		if (damos_skip_charged_region(t, r, s, c->min_region_sz))
-			continue;
-
 		if (s->max_nr_snapshots &&
 				s->max_nr_snapshots <= s->stat.nr_snapshots)
 			continue;
+
+		/*
+		 * Skip regions before the cursor.  If the skip makes the cursor
+		 * reach the end of this target, rotate to the next valid target
+		 * before continuing with the next region/scheme.
+		 */
+		if (damos_skip_walked_region(t, r, s, c->min_region_sz)) {
+			damos_walk_maybe_rotate(c, t, s);
+			continue;
+		}
 
 		if (damos_valid_target(c, r, s))
 			damos_apply_scheme(c, t, r, s);
 
 		if (damon_is_last_region(r, t))
 			s->stat.nr_snapshots++;
+
+		if (damos_quota_is_set(quota)) {
+			quota->walk_target_from = t;
+			quota->walk_addr_from = r->ar.end;
+			damos_walk_maybe_rotate(c, t, s);
+		}
 	}
 }
 
@@ -3241,8 +3297,10 @@ static void kdamond_apply_schemes(struct damon_ctx *c)
 	max_region_sz = damon_region_sz_limit(c);
 	mutex_lock(&c->walk_control_lock);
 	damon_for_each_target(t, c) {
-		if (c->ops.target_valid && c->ops.target_valid(t) == false)
+		if (c->ops.target_valid && c->ops.target_valid(t) == false) {
+			damos_replace_invalid_target(c, t);
 			continue;
+		}
 		damos_apply_target(c, t, max_region_sz);
 	}
 

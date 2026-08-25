@@ -296,8 +296,10 @@ struct damos_quota {
 	/* For charging the quota */
 	unsigned long charged_sz;
 	unsigned long charged_from;
-	struct damon_target *charge_target_from;
-	unsigned long charge_addr_from;
+
+	/* For tracking the DAMOS walk position (rotating cursor) */
+	struct damon_target *walk_target_from;
+	unsigned long walk_addr_from;
 
 	/* For prioritization */
 	unsigned int min_score;
