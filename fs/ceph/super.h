@@ -1400,8 +1400,8 @@ extern ssize_t __ceph_sync_read(struct inode *inode, loff_t *ki_pos,
 				struct iov_iter *to, int *retry_op,
 				u64 *last_objver);
 extern int ceph_release(struct inode *inode, struct file *filp);
-extern void ceph_fill_inline_data(struct inode *inode, struct page *locked_page,
-				  char *data, size_t len);
+void ceph_fill_inline_data(struct inode *inode, struct folio *locked_folio,
+			   char *data, size_t len);
 
 /* dir.c */
 extern const struct file_operations ceph_dir_fops;
