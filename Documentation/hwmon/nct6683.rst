@@ -49,6 +49,12 @@ The driver has only been tested with the Intel firmware, and by default
 only instantiates on Intel boards. To enable it on non-Intel boards,
 set the 'force' module parameter to 1.
 
+Fan control is likewise restricted. The EC runs its own control loop unless
+a fan is switched to manual mode by writing 1 to its pwm[1-8]_enable
+attribute, and pwm values are only writable on boards where this has been
+verified to work. On all other boards the pwm attributes are read-only and
+the fan curve must be configured from the BIOS.
+
 Tested Boards and Firmware Versions
 -----------------------------------
 

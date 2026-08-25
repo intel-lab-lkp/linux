@@ -165,6 +165,7 @@ superio_exit(int ioreg)
 
 #define NCT6683_REG_FAN_MIN(x)		(0x3b8 + (x) * 2)	/* 16 bit */
 
+#define NCT6683_REG_FAN_CTRL_MODE	0xa00
 #define NCT6683_REG_FAN_CFG_CTRL	0xa01
 #define NCT6683_FAN_CFG_REQ		0x80
 #define NCT6683_FAN_CFG_DONE		0x40
@@ -962,25 +963,93 @@ store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
 
 SENSOR_TEMPLATE(pwm, "pwm%d", S_IRUGO, show_pwm, store_pwm, 0);
 
+/*
+ * Fan control has only been verified on the boards listed here. Intel boards
+ * in particular run a firmware variant that Nuvoton confirms uses different
+ * register addresses, so 0xa00 cannot be assumed to mean the same thing
+ * there. Leave the fans to the EC everywhere else.
+ */
+static bool nct6683_has_fan_control(struct nct6683_data *data)
+{
+	return data->customer_id == NCT6683_CUSTOMER_ID_MITAC;
+}
+
+/*
+ * NCT668x keeps a per-fan manual-control bitmap. While a fan's bit is clear
+ * the EC runs its own control loop and ignores the pwm registers, so pwm
+ * writes only take effect once the fan has been switched to manual mode.
+ */
+static ssize_t
+show_pwm_enable(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	struct nct6683_data *data = dev_get_drvdata(dev);
+	u8 mode;
+
+	mutex_lock(&data->update_lock);
+	mode = nct6683_read(data, NCT6683_REG_FAN_CTRL_MODE);
+	mutex_unlock(&data->update_lock);
+
+	return sysfs_emit(buf, "%d\n", (mode & BIT(sattr->index)) ? 1 : 2);
+}
+
+static ssize_t
+store_pwm_enable(struct device *dev, struct device_attribute *attr,
+		 const char *buf, size_t count)
+{
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	struct nct6683_data *data = dev_get_drvdata(dev);
+	u8 bit = BIT(sattr->index);
+	unsigned long val;
+	bool manual;
+	int err = 0;
+	u8 mode;
+
+	if (kstrtoul(buf, 10, &val) || (val != 1 && val != 2))
+		return -EINVAL;
+
+	manual = val == 1;
+
+	mutex_lock(&data->update_lock);
+	mode = nct6683_read(data, NCT6683_REG_FAN_CTRL_MODE);
+	if (manual)
+		mode |= bit;
+	else
+		mode &= ~bit;
+	nct6683_write(data, NCT6683_REG_FAN_CTRL_MODE, mode);
+
+	if (!!(nct6683_read(data, NCT6683_REG_FAN_CTRL_MODE) & bit) != manual)
+		err = -EIO;
+	mutex_unlock(&data->update_lock);
+
+	return err ? err : count;
+}
+
+SENSOR_TEMPLATE(pwm_enable, "pwm%d_enable", 0444, show_pwm_enable,
+		store_pwm_enable, 0);
+
 static umode_t nct6683_pwm_is_visible(struct kobject *kobj,
 				      struct attribute *attr, int index)
 {
 	struct device *dev = kobj_to_dev(kobj);
 	struct nct6683_data *data = dev_get_drvdata(dev);
-	int pwm = index;	/* pwm index */
+	int pwm = index / 2;	/* pwm index */
+	int nr = index % 2;	/* attribute index */
 
 	if (!(data->have_pwm & (1 << pwm)))
 		return 0;
 
-	/* Only update pwm values for Mitac boards */
-	if (data->customer_id == NCT6683_CUSTOMER_ID_MITAC)
+	/* Only touch fan control on boards where it has been verified */
+	if (nct6683_has_fan_control(data))
 		return attr->mode | S_IWUSR;
 
-	return attr->mode;
+	/* Elsewhere hide pwm_enable and keep pwm read-only */
+	return nr ? 0 : attr->mode;
 }
 
 static struct sensor_device_template *nct6683_attributes_pwm_template[] = {
 	&sensor_dev_template_pwm,
+	&sensor_dev_template_pwm_enable,
 	NULL
 };
 
