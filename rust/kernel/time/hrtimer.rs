@@ -78,6 +78,8 @@
 //! handler returns, and a restart requested by the return value of the handler is discarded in
 //! favor of the `restart` operation.
 //!
+//! ⚠️ Issuing the `start` operation from within the timer handler will lead to deadlock.
+//!
 //! # Examples
 //!
 //! ## Using an intrusive timer living in a [`Box`]
