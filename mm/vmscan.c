@@ -6971,28 +6971,12 @@ static bool pgdat_balanced(pg_data_t *pgdat, int order, int highest_zoneidx)
 	 * meet watermarks.
 	 */
 	for_each_managed_zone_pgdat(zone, pgdat, i, highest_zoneidx) {
-		enum zone_stat_item item;
 		unsigned long free_pages;
 
 		if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING)
 			mark = promo_wmark_pages(zone);
 		else
 			mark = high_wmark_pages(zone);
-
-		/*
-		 * In defrag_mode, watermarks must be met in whole
-		 * blocks to avoid polluting allocator fallbacks.
-		 *
-		 * However, kswapd usually cannot accomplish this on
-		 * its own and needs kcompactd support. Once it's
-		 * reclaimed a compaction gap, and kswapd_shrink_node
-		 * has dropped order, simply ensure there are enough
-		 * base pages for compaction, wake kcompactd & sleep.
-		 */
-		if (defrag_mode && order)
-			item = NR_FREE_PAGES_BLOCKS;
-		else
-			item = NR_FREE_PAGES;
 
 		/*
 		 * When there is a high number of CPUs in the system,
@@ -7006,9 +6990,12 @@ static bool pgdat_balanced(pg_data_t *pgdat, int order, int highest_zoneidx)
 		 * counter won't actually be per-cpu cached. But keep
 		 * things simple for now; revisit when somebody cares.
 		 */
-		free_pages = zone_page_state(zone, item);
+		free_pages = zone_effective_free_pages(zone, order,
+						       defrag_mode & order);
 		if (zone->percpu_drift_mark && free_pages < zone->percpu_drift_mark)
-			free_pages = zone_page_state_snapshot(zone, item);
+			free_pages = zone_page_state_snapshot(zone,
+					defrag_mode & order ?
+					NR_FREE_PAGES_BLOCKS : NR_FREE_PAGES);
 
 		if (__zone_watermark_ok(zone, order, mark, highest_zoneidx,
 					0, free_pages))

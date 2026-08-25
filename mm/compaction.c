@@ -2528,6 +2528,38 @@ bool compaction_zonelist_suitable(struct alloc_context *ac, int order,
 	return false;
 }
 
+/**
+ * zone_effective_free_pages - get free pages relevant to allocation order
+ * @zone:       target zone
+ * @order:      allocation order
+ * @use_blocks: if true, use NR_FREE_PAGES_BLOCKS
+ *
+ * In defrag_mode, watermarks must be met in whole blocks to avoid
+ * polluting allocator fallbacks. kswapd usually cannot accomplish
+ * this on its own and needs kcompactd support.
+ *
+ * When mTHP always-enabled orders are configured, count only free pages
+ * in blocks >= min mTHP order, as smaller fragments cannot satisfy mTHP
+ * allocations.
+ */
+unsigned long zone_effective_free_pages(struct zone *zone,
+					unsigned int order,
+					bool use_blocks)
+{
+	if (use_blocks)
+		return zone_page_state(zone, NR_FREE_PAGES_BLOCKS);
+
+	if (READ_ONCE(huge_anon_orders_always) && order == compact_hpage_order()) {
+		unsigned long free_pages = 0;
+
+		for (int o = order; o < NR_PAGE_ORDERS; o++)
+			free_pages += zone->free_area[o].nr_free << o;
+		return free_pages;
+	}
+
+	return zone_page_state(zone, NR_FREE_PAGES);
+}
+
 /*
  * Should we do compaction for target allocation order.
  * Return COMPACT_SUCCESS if allocation for target order can be already
@@ -2543,10 +2575,8 @@ compaction_suit_allocation_order(struct zone *zone, unsigned int order,
 	unsigned long free_pages;
 	unsigned long watermark;
 
-	if (kcompactd && defrag_mode)
-		free_pages = zone_page_state(zone, NR_FREE_PAGES_BLOCKS);
-	else
-		free_pages = zone_page_state(zone, NR_FREE_PAGES);
+	free_pages = zone_effective_free_pages(zone, order,
+					       kcompactd && defrag_mode);
 
 	watermark = wmark_pages(zone, alloc_flags & ALLOC_WMARK_MASK);
 	if (__zone_watermark_ok(zone, order, watermark, highest_zoneidx,
