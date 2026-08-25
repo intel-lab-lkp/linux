@@ -144,7 +144,8 @@ EXPORT_SYMBOL_GPL(xhci_sideband_notify_ep_ring_free);
  */
 int
 xhci_sideband_add_endpoint(struct xhci_sideband *sb,
-			   struct usb_host_endpoint *host_ep)
+			   struct usb_host_endpoint *host_ep,
+			   unsigned int alignment_req)
 {
 	struct xhci_virt_ep *ep;
 	unsigned int ep_index;
@@ -171,6 +172,7 @@ xhci_sideband_add_endpoint(struct xhci_sideband *sb,
 	if (sb->eps[ep_index] || ep->sideband)
 		return -EBUSY;
 
+	sb->alignment_req = alignment_req;
 	ep->sideband = sb;
 	sb->eps[ep_index] = ep;
 
@@ -322,7 +324,8 @@ EXPORT_SYMBOL_GPL(xhci_sideband_check);
  */
 int
 xhci_sideband_create_interrupter(struct xhci_sideband *sb, int num_seg,
-				 bool ip_autoclear, u32 imod_interval, int intr_num)
+				 bool ip_autoclear, u32 imod_interval, int intr_num,
+				 unsigned int alignment_req)
 {
 	if (!sb || !sb->xhci)
 		return -ENODEV;
@@ -337,7 +340,7 @@ xhci_sideband_create_interrupter(struct xhci_sideband *sb, int num_seg,
 
 	sb->ir = xhci_create_secondary_interrupter(xhci_to_hcd(sb->xhci),
 						   num_seg, imod_interval,
-						   intr_num);
+						   intr_num, alignment_req);
 	if (!sb->ir)
 		return -ENOMEM;
 

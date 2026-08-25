@@ -62,6 +62,7 @@ struct xhci_sideband {
 	struct usb_interface		*intf;
 	int (*notify_client)(struct usb_interface *intf,
 			     struct xhci_sideband_event *evt);
+	unsigned int			alignment_req;
 };
 
 struct xhci_sideband *
@@ -72,7 +73,8 @@ void
 xhci_sideband_unregister(struct xhci_sideband *sb);
 int
 xhci_sideband_add_endpoint(struct xhci_sideband *sb,
-			   struct usb_host_endpoint *host_ep);
+			   struct usb_host_endpoint *host_ep,
+			   unsigned int alignment_req);
 int
 xhci_sideband_remove_endpoint(struct xhci_sideband *sb,
 			      struct usb_host_endpoint *host_ep);
@@ -94,7 +96,8 @@ static inline bool xhci_sideband_check(struct usb_hcd *hcd)
 
 int
 xhci_sideband_create_interrupter(struct xhci_sideband *sb, int num_seg,
-				 bool ip_autoclear, u32 imod_interval, int intr_num);
+				 bool ip_autoclear, u32 imod_interval, int intr_num,
+				 unsigned int alignment_req);
 void
 xhci_sideband_remove_interrupter(struct xhci_sideband *sb);
 int
