@@ -1,4 +1,19 @@
 # SPDX-License-Identifier: GPL-2.0-only
+
+config ECONET_FE_SOC_PHY
+	tristate "EcoNet 10/100 SoC Ethernet PHYs"
+	depends on ECONET || COMPILE_TEST
+	select MTK_NET_PHYLIB
+	select PHY_PACKAGE
+	help
+	  Supports EcoNet SoC built-in 10/100 Ethernet PHYs.
+
+	  Include support for built-in Ethernet PHYs which are present in
+	  EN7526C based SoCs (including EN7526F). It can also work with
+	  legacy EN7512 FE PHYs which identify as 03a2.9412, but since this
+	  ID is used by MEDIATEK_GE_PHY, users wanting to force this driver
+	  must override the ID to 03a2.9414 in the device tree.
+
 config MEDIATEK_2P5GE_PHY
 	tristate "MediaTek 2.5Gb Ethernet PHYs"
 	depends on (ARM64 && ARCH_MEDIATEK) || COMPILE_TEST
