@@ -1232,9 +1232,42 @@ void __init init_cpu_features(struct cpuinfo_arm64 *info)
 		init_cpu_ftr_reg(SYS_GMID_EL1, info->reg_gmid);
 }
 
+/*
+ * Sanitise the register fields to clamp the values to the overrides that
+ * have been applied.
+ */
+static u64 override_cpu_ftr_reg(struct arm64_ftr_reg *reg, u64 val)
+{
+	const struct arm64_ftr_bits *ftrp;
+
+	if (!reg || !reg->override->mask)
+		return val;
+
+	for (ftrp = reg->ftr_bits; ftrp->width; ftrp++) {
+		u64 ftr_mask = arm64_ftr_mask(ftrp);
+		s64 ftr_val, ftr_ovr, ftr_safe;
+
+		/* Skip the fields not overridden */
+		if ((ftr_mask & reg->override->mask) != ftr_mask)
+			continue;
+
+		ftr_val = arm64_ftr_value(ftrp, val);
+		ftr_ovr = arm64_ftr_value(ftrp, reg->override->val);
+		ftr_safe = arm64_ftr_safe_value(ftrp, ftr_ovr, ftr_val);
+
+		if (ftr_safe != ftr_val)
+			val = arm64_ftr_set_value(ftrp, val, ftr_safe);
+	}
+
+	return val;
+}
+
 static void update_cpu_ftr_reg(struct arm64_ftr_reg *reg, u64 new)
 {
 	const struct arm64_ftr_bits *ftrp;
+
+	/* Apply the overrides */
+	new = override_cpu_ftr_reg(reg, new);
 
 	for (ftrp = reg->ftr_bits; ftrp->width; ftrp++) {
 		s64 ftr_cur = arm64_ftr_value(ftrp, reg->sys_val);
@@ -1539,7 +1572,6 @@ EXPORT_SYMBOL_GPL(read_sanitised_ftr_reg);
  */
 u64 __read_sysreg_by_encoding(u32 sys_id)
 {
-	struct arm64_ftr_reg *regp;
 	u64 val;
 
 	switch (sys_id) {
@@ -1592,13 +1624,7 @@ u64 __read_sysreg_by_encoding(u32 sys_id)
 		return 0;
 	}
 
-	regp  = get_arm64_ftr_reg(sys_id);
-	if (regp) {
-		val &= ~regp->override->mask;
-		val |= (regp->override->val & regp->override->mask);
-	}
-
-	return val;
+	return override_cpu_ftr_reg(get_arm64_ftr_reg(sys_id), val);
 }
 
 #include <linux/irqchip/arm-gic-v3.h>
