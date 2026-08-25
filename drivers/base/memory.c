@@ -1027,6 +1027,42 @@ int walk_memory_blocks(unsigned long start, unsigned long size,
 	return ret;
 }
 
+static int cxl_offline_memory_block(struct memory_block *mem, void *arg)
+{
+	int rc = device_offline(&mem->dev);
+
+	/* device_offline() returns a positive value when already offline. */
+	if (rc > 0)
+		return 0;
+
+	return rc;
+}
+
+/**
+ * cxl_offline_memory - offline the memory blocks spanning a physical range
+ * @start: start of the range, memory-block aligned
+ * @size: size of the range, a multiple of the memory block size
+ *
+ * Offline every memory block in [start, start + size). The blocks are offlined
+ * but not removed, so the range can be brought back online afterward. The
+ * caller owns the range and this performs no validation on it.
+ *
+ * Return: 0 on success, negative errno if a block cannot be offlined.
+ *
+ * Context: process context. Sleeps and takes the memory hotplug lock.
+ */
+int cxl_offline_memory(u64 start, u64 size)
+{
+	int rc;
+
+	lock_device_hotplug();
+	rc = walk_memory_blocks(start, size, NULL, cxl_offline_memory_block);
+	unlock_device_hotplug();
+
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_offline_memory, "CXL_MHP");
+
 struct for_each_memory_block_cb_data {
 	walk_memory_blocks_func_t func;
 	void *arg;
