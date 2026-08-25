@@ -908,12 +908,11 @@ csio_hw_dev_ready(struct csio_hw *hw)
 /*
  * csio_do_hello - Perform the HELLO FW Mailbox command and process response.
  * @hw: HW module
- * @state: Device state
  *
  * FW_HELLO_CMD has to be polled for completion.
  */
 static int
-csio_do_hello(struct csio_hw *hw, enum csio_dev_state *state)
+csio_do_hello(struct csio_hw *hw)
 {
 	struct csio_mb	*mbp;
 	int	rv = 0;
@@ -941,7 +940,7 @@ retry:
 		goto out_free_mb;
 	}
 
-	csio_mb_process_hello_rsp(hw, mbp, &retval, state, &mpfn);
+	csio_mb_process_hello_rsp(hw, mbp, &retval, &hw->fw_state, &mpfn);
 	if (retval != FW_SUCCESS) {
 		csio_err(hw, "HELLO cmd failed with ret: %d\n", retval);
 		rv = -EINVAL;
@@ -951,7 +950,7 @@ retry:
 	/* Firmware has designated us to be master */
 	if (hw->pfn == mpfn) {
 		hw->flags |= CSIO_HWF_MASTER;
-	} else if (*state == CSIO_DEV_STATE_UNINIT) {
+	} else if (hw->fw_state == CSIO_DEV_STATE_UNINIT) {
 		/*
 		 * If we're not the Master PF then we need to wait around for
 		 * the Master PF Driver to finish setting up the adapter.
@@ -1004,12 +1003,11 @@ retry:
 			 * We either have an Error or Initialized condition
 			 * report errors preferentially.
 			 */
-			if (state) {
-				if (pcie_fw & PCIE_FW_ERR_F) {
-					*state = CSIO_DEV_STATE_ERR;
-					rv = -ETIMEDOUT;
-				} else if (pcie_fw & PCIE_FW_INIT_F)
-					*state = CSIO_DEV_STATE_INIT;
+			if (pcie_fw & PCIE_FW_ERR_F) {
+				hw->fw_state = CSIO_DEV_STATE_ERR;
+				rv = -ETIMEDOUT;
+			} else if (pcie_fw & PCIE_FW_INIT_F) {
+				hw->fw_state = CSIO_DEV_STATE_INIT;
 			}
 
 			/*
@@ -1025,7 +1023,7 @@ retry:
 		hw->flags &= ~CSIO_HWF_MASTER;
 	}
 
-	switch (*state) {
+	switch (hw->fw_state) {
 	case CSIO_DEV_STATE_UNINIT:
 		strcpy(state_str, "Initializing");
 		break;
@@ -2511,7 +2509,7 @@ csio_hw_configure(struct csio_hw *hw)
 
 	csio_hw_print_fw_version(hw, "Firmware revision");
 
-	rv = csio_do_hello(hw, &hw->fw_state);
+	rv = csio_do_hello(hw);
 	if (rv != 0) {
 		CSIO_INC_STATS(hw, n_err_fatal);
 		csio_post_event(&hw->sm, CSIO_HWE_FATAL);
