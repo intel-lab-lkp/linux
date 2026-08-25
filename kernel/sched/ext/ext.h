@@ -78,6 +78,15 @@ void scx_tg_offline(struct task_group *tg);
 int scx_cgroup_can_attach(struct cgroup_taskset *tset);
 void scx_cgroup_move_task(struct task_struct *p);
 void scx_cgroup_cancel_attach(struct cgroup_taskset *tset);
+static inline void scx_group_knob_lock(struct task_group *tg)
+{
+	mutex_lock(&tg->scx.knob_mutex);
+}
+
+static inline void scx_group_knob_unlock(struct task_group *tg)
+{
+	mutex_unlock(&tg->scx.knob_mutex);
+}
 void scx_group_set_weight(struct task_group *tg, unsigned long cgrp_weight);
 void scx_group_set_idle(struct task_group *tg, bool idle);
 void scx_group_set_bandwidth(struct task_group *tg, u64 period_us, u64 quota_us, u64 burst_us);
@@ -88,8 +97,13 @@ static inline void scx_tg_offline(struct task_group *tg) {}
 static inline int scx_cgroup_can_attach(struct cgroup_taskset *tset) { return 0; }
 static inline void scx_cgroup_move_task(struct task_struct *p) {}
 static inline void scx_cgroup_cancel_attach(struct cgroup_taskset *tset) {}
+static inline void scx_group_knob_lock(struct task_group *tg) {}
+static inline void scx_group_knob_unlock(struct task_group *tg) {}
 static inline void scx_group_set_weight(struct task_group *tg, unsigned long cgrp_weight) {}
 static inline void scx_group_set_idle(struct task_group *tg, bool idle) {}
 static inline void scx_group_set_bandwidth(struct task_group *tg, u64 period_us, u64 quota_us, u64 burst_us) {}
 #endif	/* CONFIG_EXT_GROUP_SCHED */
+
+DEFINE_GUARD(scx_group_knob, struct task_group *,
+	     scx_group_knob_lock(_T), scx_group_knob_unlock(_T));
 #endif	/* CONFIG_CGROUP_SCHED */

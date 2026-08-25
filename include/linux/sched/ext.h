@@ -317,6 +317,11 @@ struct scx_task_group {
 	 * cgroup1.
 	 */
 	struct scx_sched	*sched;
+	/*
+	 * Serialize cgroup knob updates from the core scheduler change through
+	 * the matching ops.cgroup_set_*() callback and cached state update.
+	 */
+	struct mutex		knob_mutex;
 
 	u32			flags;		/* SCX_TG_* */
 	u32			weight;

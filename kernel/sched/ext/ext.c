@@ -4679,6 +4679,7 @@ DEFINE_STATIC_PERCPU_RWSEM(scx_cgroup_ops_rwsem);
 
 void scx_tg_init(struct task_group *tg)
 {
+	mutex_init(&tg->scx.knob_mutex);
 	tg->scx.weight = CGROUP_WEIGHT_DFL;
 	tg->scx.bw_period_us = default_bw_period_us();
 	tg->scx.bw_quota_us = RUNTIME_INF;

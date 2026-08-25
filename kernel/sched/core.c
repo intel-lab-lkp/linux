@@ -9824,14 +9824,16 @@ static unsigned long tg_weight(struct task_group *tg)
 static int cpu_shares_write_u64(struct cgroup_subsys_state *css,
 				struct cftype *cftype, u64 shareval)
 {
+	struct task_group *tg = css_tg(css);
 	int ret;
 
 	if (shareval > scale_load_down(ULONG_MAX))
 		shareval = MAX_SHARES;
-	ret = sched_group_set_shares(css_tg(css), scale_load(shareval));
+
+	guard(scx_group_knob)(tg);
+	ret = sched_group_set_shares(tg, scale_load(shareval));
 	if (!ret)
-		scx_group_set_weight(css_tg(css),
-				     sched_weight_to_cgroup(shareval));
+		scx_group_set_weight(tg, sched_weight_to_cgroup(shareval));
 	return ret;
 }
 
@@ -10163,6 +10165,7 @@ static int tg_set_bandwidth(struct task_group *tg,
 					burst_us + quota_us > max_bw_runtime_us))
 		return -EINVAL;
 
+	guard(scx_group_knob)(tg);
 #ifdef CONFIG_CFS_BANDWIDTH
 	ret = tg_set_cfs_bandwidth(tg, period_us, quota_us, burst_us);
 #endif /* CONFIG_CFS_BANDWIDTH */
@@ -10259,11 +10262,13 @@ static s64 cpu_idle_read_s64(struct cgroup_subsys_state *css,
 static int cpu_idle_write_s64(struct cgroup_subsys_state *css,
 				struct cftype *cft, s64 idle)
 {
+	struct task_group *tg = css_tg(css);
 	int ret;
 
-	ret = sched_group_set_idle(css_tg(css), idle);
+	guard(scx_group_knob)(tg);
+	ret = sched_group_set_idle(tg, idle);
 	if (!ret)
-		scx_group_set_idle(css_tg(css), idle);
+		scx_group_set_idle(tg, idle);
 	return ret;
 }
 #endif /* CONFIG_GROUP_SCHED_WEIGHT */
@@ -10429,6 +10434,7 @@ static u64 cpu_weight_read_u64(struct cgroup_subsys_state *css,
 static int cpu_weight_write_u64(struct cgroup_subsys_state *css,
 				struct cftype *cft, u64 cgrp_weight)
 {
+	struct task_group *tg = css_tg(css);
 	unsigned long weight;
 	int ret;
 
@@ -10437,9 +10443,10 @@ static int cpu_weight_write_u64(struct cgroup_subsys_state *css,
 
 	weight = sched_weight_from_cgroup(cgrp_weight);
 
-	ret = sched_group_set_shares(css_tg(css), scale_load(weight));
+	guard(scx_group_knob)(tg);
+	ret = sched_group_set_shares(tg, scale_load(weight));
 	if (!ret)
-		scx_group_set_weight(css_tg(css), cgrp_weight);
+		scx_group_set_weight(tg, cgrp_weight);
 	return ret;
 }
 
@@ -10464,6 +10471,7 @@ static s64 cpu_weight_nice_read_s64(struct cgroup_subsys_state *css,
 static int cpu_weight_nice_write_s64(struct cgroup_subsys_state *css,
 				     struct cftype *cft, s64 nice)
 {
+	struct task_group *tg = css_tg(css);
 	unsigned long weight;
 	int idx, ret;
 
@@ -10474,10 +10482,10 @@ static int cpu_weight_nice_write_s64(struct cgroup_subsys_state *css,
 	idx = array_index_nospec(idx, 40);
 	weight = sched_prio_to_weight[idx];
 
-	ret = sched_group_set_shares(css_tg(css), scale_load(weight));
+	guard(scx_group_knob)(tg);
+	ret = sched_group_set_shares(tg, scale_load(weight));
 	if (!ret)
-		scx_group_set_weight(css_tg(css),
-				     sched_weight_to_cgroup(weight));
+		scx_group_set_weight(tg, sched_weight_to_cgroup(weight));
 	return ret;
 }
 #endif /* CONFIG_GROUP_SCHED_WEIGHT */
