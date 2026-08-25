@@ -71,6 +71,49 @@ static const struct clk_ops rk808_clkout2_ops = {
 	.recalc_rate = rk808_clkout_recalc_rate,
 };
 
+static int rk818_clkout2_enable(struct clk_hw *hw, bool enable)
+{
+	struct rk808_clkout *rk808_clkout = container_of(hw,
+							 struct rk808_clkout,
+							 clkout2_hw);
+
+	return regmap_update_bits(rk808_clkout->regmap, RK808_CLK32OUT_REG,
+				  RK818_CLK32KOUT2_FUNC_MASK | CLK32KOUT2_EN,
+				  enable ? CLK32KOUT2_EN : 0);
+}
+
+static int rk818_clkout2_prepare(struct clk_hw *hw)
+{
+	return rk818_clkout2_enable(hw, true);
+}
+
+static void rk818_clkout2_unprepare(struct clk_hw *hw)
+{
+	rk818_clkout2_enable(hw, false);
+}
+
+static int rk818_clkout2_is_prepared(struct clk_hw *hw)
+{
+	struct rk808_clkout *rk808_clkout = container_of(hw,
+							 struct rk808_clkout,
+							 clkout2_hw);
+	u32 val;
+
+	int ret = regmap_read(rk808_clkout->regmap, RK808_CLK32OUT_REG, &val);
+
+	if (ret < 0)
+		return 0;
+
+	return (val & (RK818_CLK32KOUT2_FUNC_MASK | CLK32KOUT2_EN)) == CLK32KOUT2_EN;
+}
+
+static const struct clk_ops rk818_clkout2_ops = {
+	.prepare = rk818_clkout2_prepare,
+	.unprepare = rk818_clkout2_unprepare,
+	.is_prepared = rk818_clkout2_is_prepared,
+	.recalc_rate = rk808_clkout_recalc_rate,
+};
+
 static struct clk_hw *
 of_clk_rk808_get(struct of_phandle_args *clkspec, void *data)
 {
@@ -134,11 +177,12 @@ static const struct clk_ops *rkpmic_get_ops(long variant)
 	case RK809_ID:
 	case RK817_ID:
 		return &rk817_clkout2_ops;
+	case RK818_ID:
+		return &rk818_clkout2_ops;
 	/*
 	 * For the default case, it match the following PMIC type.
 	 * RK805_ID
 	 * RK808_ID
-	 * RK818_ID
 	 */
 	default:
 		return &rk808_clkout2_ops;
