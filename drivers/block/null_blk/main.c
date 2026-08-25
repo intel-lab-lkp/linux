@@ -1912,6 +1912,12 @@ static int null_validate_conf(struct nullb_device *dev)
 		dev->blocking = true;
 	else /* cache is meaningless */
 		dev->cache_size = 0;
+
+	if (dev->shared_tags && dev->blocking && !g_blocking) {
+		pr_info("shared_tags disabled: memory_backed/blocking device requires per-device tag set for BLK_MQ_F_BLOCKING\n");
+		dev->shared_tags = false;
+	}
+
 	dev->cache_size = min_t(unsigned long, ULONG_MAX / 1024 / 1024,
 						dev->cache_size);
 	dev->mbps = min_t(unsigned int, 1024 * 40, dev->mbps);
