@@ -1040,11 +1040,18 @@ static void put_pcichild(struct hv_pci_dev *hpdev)
 
 /*
  * There is no good way to get notified from vmbus_onoffer_rescind(),
- * so let's use polling here, since this is not a hot path.
+ * so let's use polling here, since this is not a hot path. If
+ * wait_for_response() has been polling for PCI_RESPONSE_HANG_TIMEOUT_SEC
+ * without either a rescind or completion, add a periodic warning.
  */
+#define PCI_RESPONSE_HANG_TIMEOUT_SEC 300
+
 static int wait_for_response(struct hv_device *hdev,
 			     struct completion *comp)
 {
+	unsigned long delay = secs_to_jiffies(PCI_RESPONSE_HANG_TIMEOUT_SEC);
+	u64 timeout = get_jiffies_64() + delay;
+
 	while (true) {
 		if (hdev->channel->rescind) {
 			dev_warn_once(&hdev->device, "The device is gone.\n");
@@ -1053,6 +1060,11 @@ static int wait_for_response(struct hv_device *hdev,
 
 		if (wait_for_completion_timeout(comp, HZ / 10))
 			break;
+
+		if (time_after64(get_jiffies_64(), timeout)) {
+			dev_warn(&hdev->device, "PCI stuck waiting for response.\n");
+			timeout = get_jiffies_64() + delay;
+		}
 	}
 
 	return 0;
