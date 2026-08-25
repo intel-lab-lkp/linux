@@ -934,18 +934,29 @@ store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
 	struct nct6683_data *data = dev_get_drvdata(dev);
 	int index = sattr->index;
 	unsigned long val;
+	int tries;
 
 	if (kstrtoul(buf, 10, &val) || val > 255)
 		return -EINVAL;
 
+	/*
+	 * The EC does not always release the fan configuration registers
+	 * within the settling delay, and a write issued before it does is
+	 * silently discarded. Repeat the sequence until the value sticks.
+	 */
 	mutex_lock(&data->update_lock);
-	nct6683_write(data, NCT6683_REG_FAN_CFG_CTRL, NCT6683_FAN_CFG_REQ);
-	usleep_range(1000, 2000);
-	nct6683_write(data, NCT6683_REG_PWM_WRITE(index), val);
-	nct6683_write(data, NCT6683_REG_FAN_CFG_CTRL, NCT6683_FAN_CFG_DONE);
+	for (tries = 0; tries < 3; tries++) {
+		nct6683_write(data, NCT6683_REG_FAN_CFG_CTRL, NCT6683_FAN_CFG_REQ);
+		/* A failed attempt means the EC needed longer than we waited */
+		usleep_range(1000 * (tries + 1), 2000 * (tries + 1));
+		nct6683_write(data, NCT6683_REG_PWM_WRITE(index), val);
+		nct6683_write(data, NCT6683_REG_FAN_CFG_CTRL, NCT6683_FAN_CFG_DONE);
+		if (nct6683_read(data, NCT6683_REG_PWM_WRITE(index)) == val)
+			break;
+	}
 	mutex_unlock(&data->update_lock);
 
-	return count;
+	return tries == 3 ? -EIO : count;
 }
 
 SENSOR_TEMPLATE(pwm, "pwm%d", S_IRUGO, show_pwm, store_pwm, 0);
