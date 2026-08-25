@@ -24,7 +24,8 @@
 				(SILENCE_PERIOD_MAX_TIME -	\
 				 SILENCE_PERIOD_MIN_TIME) / 2)
 
-#define LFPS_CYCLE_COUNT 10
+#define LFPS_CYCLE_COUNT	10
+#define LFPS_CYCLE_COUNT_DP	16
 
 bool intel_alpm_aux_wake_supported(struct intel_dp *intel_dp)
 {
@@ -105,10 +106,22 @@ static int get_lfps_cycle_time(const struct intel_crtc_state *crtc_state)
 	return tlfps_cycle_min +  (tlfps_cycle_max - tlfps_cycle_min) / 2;
 }
 
+static int get_lfps_cycle_count(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	/* External DP on Xe3lpd+ uses a minimum of 16 LFPS cycles. */
+	if (!intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP) &&
+	    DISPLAY_VER(display) >= 35)
+		return LFPS_CYCLE_COUNT_DP;
+
+	return LFPS_CYCLE_COUNT;
+}
+
 static int get_lfps_half_cycle_clocks(const struct intel_crtc_state *crtc_state)
 {
 	return get_lfps_cycle_time(crtc_state) * crtc_state->port_clock / 1000 /
-		1000 / (2 * LFPS_CYCLE_COUNT);
+		1000 / (2 * get_lfps_cycle_count(crtc_state));
 }
 
 #define ML_PHY_LOCK_LEN		252
@@ -622,12 +635,21 @@ void intel_alpm_port_configure(struct intel_dp *intel_dp,
 		return;
 
 	if (intel_alpm_is_alpm_aux_less(intel_dp, crtc_state)) {
+		int lfps_cycle = get_lfps_cycle_count(crtc_state);
+		u32 lfps_cycle_val;
+
+		if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP))
+			lfps_cycle_val = PORT_ALPM_LFPS_CTL_LFPS_CYCLE_COUNT(lfps_cycle);
+		else
+			lfps_cycle_val = PORT_ALPM_LFPS_CTL_LFPS_CYCLE_COUNT_XE3LPD(lfps_cycle);
+
 		alpm_ctl_val = PORT_ALPM_CTL_ALPM_AUX_LESS_ENABLE |
 			PORT_ALPM_CTL_MAX_PHY_SWING_SETUP(15) |
 			PORT_ALPM_CTL_MAX_PHY_SWING_HOLD(0) |
 			PORT_ALPM_CTL_SILENCE_PERIOD(
 				crtc_state->alpm_state.silence_period_sym_clocks);
-		lfps_ctl_val = PORT_ALPM_LFPS_CTL_LFPS_CYCLE_COUNT(LFPS_CYCLE_COUNT) |
+
+		lfps_ctl_val = lfps_cycle_val |
 			PORT_ALPM_LFPS_CTL_LFPS_HALF_CYCLE_DURATION(
 				crtc_state->alpm_state.lfps_half_cycle_num_of_syms) |
 			PORT_ALPM_LFPS_CTL_FIRST_LFPS_HALF_CYCLE_DURATION(
