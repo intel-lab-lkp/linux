@@ -736,7 +736,7 @@ struct sched_ext_ops {
 	 * @cgrp: cgroup whose weight is being updated
 	 * @weight: new weight [1..10000]
 	 *
-	 * Update @cgrp's weight to @weight.
+	 * Update @cgrp's weight to @weight. This operation may block.
 	 *
 	 * Knobs of a cgroup belong to the parent, so the set_* ops are
 	 * delivered to @cgrp's parent's sched. That sched may never have seen
@@ -773,9 +773,10 @@ struct sched_ext_ops {
 	 * @cgrp: cgroup whose idle state is being updated
 	 * @idle: whether the cgroup is entering or exiting idle state
 	 *
-	 * Update @cgrp's idle state to @idle. This callback is invoked when
-	 * a cgroup transitions between idle and non-idle states, allowing the
-	 * BPF scheduler to adjust its behavior accordingly.
+	 * Update @cgrp's idle state to @idle. This operation may block. This
+	 * callback is invoked when a cgroup transitions between idle and
+	 * non-idle states, allowing the BPF scheduler to adjust its behavior
+	 * accordingly.
 	 *
 	 * Delivery follows the same rule as cgroup_set_weight().
 	 */

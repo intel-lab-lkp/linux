@@ -8079,7 +8079,9 @@ static int bpf_scx_check_member(const struct btf_type *t,
 	case offsetof(struct sched_ext_ops, cgroup_init):
 	case offsetof(struct sched_ext_ops, cgroup_exit):
 	case offsetof(struct sched_ext_ops, cgroup_prep_move):
+	case offsetof(struct sched_ext_ops, cgroup_set_weight):
 	case offsetof(struct sched_ext_ops, cgroup_set_bandwidth):
+	case offsetof(struct sched_ext_ops, cgroup_set_idle):
 #endif
 	case offsetof(struct sched_ext_ops, cpu_online):
 	case offsetof(struct sched_ext_ops, cpu_offline):
@@ -11054,4 +11056,20 @@ __initcall(scx_init);
  */
 #ifdef CONFIG_EXT_GROUP_SCHED
 DEFINE_SCX_COMPAT_MARKER(cgroup_set_bandwidth_may_sleep);
+#endif	/* CONFIG_EXT_GROUP_SCHED */
+
+/*
+ * scx_compat_marker_cgroup_set_weight_may_sleep: advertises that
+ * ops.cgroup_set_weight() may be implemented as a sleepable callback.
+ */
+#ifdef CONFIG_EXT_GROUP_SCHED
+DEFINE_SCX_COMPAT_MARKER(cgroup_set_weight_may_sleep);
+#endif	/* CONFIG_EXT_GROUP_SCHED */
+
+/*
+ * scx_compat_marker_cgroup_set_idle_may_sleep: advertises that
+ * ops.cgroup_set_idle() may be implemented as a sleepable callback.
+ */
+#ifdef CONFIG_EXT_GROUP_SCHED
+DEFINE_SCX_COMPAT_MARKER(cgroup_set_idle_may_sleep);
 #endif	/* CONFIG_EXT_GROUP_SCHED */
