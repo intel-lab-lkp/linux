@@ -13,7 +13,7 @@ from lib.py import ksft_run, ksft_exit, ksft_pr
 from lib.py import KsftSkipEx, KsftFailEx
 from lib.py import NetdevFamily, NlError
 from lib.py import NetDrvEpEnv
-from lib.py import cmd, tool, GenerateTraffic
+from lib.py import cmd, defer, ethtool, tool, GenerateTraffic
 
 
 def _write_fail_config(config):
@@ -77,7 +77,6 @@ def test_pp_alloc(cfg, netdevnl):
     if 'rx-alloc-fail' not in stats:
         raise KsftSkipEx("Driver does not report 'rx-alloc-fail' via qstats")
 
-    set_g = False
     traffic = None
     try:
         traffic = GenerateTraffic(cfg)
@@ -112,10 +111,11 @@ def test_pp_alloc(cfg, netdevnl):
             new_g = None
 
         if new_g:
-            set_g = cmd(f"ethtool -G {cfg.ifname} rx {new_g}", fail=False).ret == 0
-            if set_g:
+            restore_g = defer(ethtool, f"-G {cfg.ifname} rx {g['rx']}")
+            if cmd(f"ethtool -G {cfg.ifname} rx {new_g}", fail=False).ret == 0:
                 ksft_pr("ethtool -G change retval: success")
             else:
+                restore_g.cancel()
                 ksft_pr("ethtool -G change retval: did not succeed", new_g)
         else:
             ksft_pr("ethtool -G change retval: did not try")
@@ -127,8 +127,6 @@ def test_pp_alloc(cfg, netdevnl):
         if traffic:
             traffic.stop()
         time.sleep(0.1)
-        if set_g:
-            cmd(f"ethtool -G {cfg.ifname} rx {g['rx']}")
 
 
 def main() -> None:
