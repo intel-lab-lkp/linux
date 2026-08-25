@@ -504,9 +504,7 @@ static int mma8452_read_raw(struct iio_dev *indio_dev,
 		if (!iio_device_claim_direct(indio_dev))
 			return -EBUSY;
 
-		mutex_lock(&data->lock);
 		ret = mma8452_read(data, buffer);
-		mutex_unlock(&data->lock);
 		iio_device_release_direct(indio_dev);
 		if (ret < 0)
 			return ret;
