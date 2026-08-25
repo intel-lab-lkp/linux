@@ -174,6 +174,22 @@ Description:
 		similiar to writing 1 to their individual "reset" file, so use
 		with caution.
 
+What:		/sys/bus/pci/devices/.../cxl_unmask_sbr
+Date:		August 2026
+Contact:	linux-pci@vger.kernel.org
+Description:
+		This is visible only for a CXL Downstream Port, that is a Root
+		Port or a Downstream Switch Port that publishes the CXL
+		Extensions DVSEC for Ports.  Such a Port ignores the Secondary
+		Bus Reset bit in its Bridge Control register unless its
+		"Unmask SBR" bit is set, and system firmware leaves that bit
+		clear by default.
+
+		Writing 1 allows the kernel to set "Unmask SBR" while it
+		resets the Port's secondary bus, so that the reset reaches the
+		component below the Port.  While this reads 0, a bus reset of
+		the Port fails instead.
+
 What:		/sys/bus/pci/devices/.../vpd
 Date:		February 2008
 Contact:	Ben Hutchings <bwh@kernel.org>

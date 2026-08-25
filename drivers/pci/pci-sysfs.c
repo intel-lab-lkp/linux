@@ -573,6 +573,33 @@ static ssize_t reset_subordinate_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(reset_subordinate);
 
+static ssize_t cxl_unmask_sbr_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	return sysfs_emit(buf, "%u\n", pdev->cxl_unmask_sbr);
+}
+
+static ssize_t cxl_unmask_sbr_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	unsigned long val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoul(buf, 0, &val) < 0)
+		return -EINVAL;
+
+	pdev->cxl_unmask_sbr = !!val;
+
+	return count;
+}
+static DEVICE_ATTR_RW(cxl_unmask_sbr);
+
 #if defined(CONFIG_PM) && defined(CONFIG_ACPI)
 static ssize_t d3cold_allowed_store(struct device *dev,
 				    struct device_attribute *attr,
@@ -650,6 +677,7 @@ static struct attribute *pci_bridge_attrs[] = {
 	&dev_attr_subordinate_bus_number.attr,
 	&dev_attr_secondary_bus_number.attr,
 	&dev_attr_reset_subordinate.attr,
+	&dev_attr_cxl_unmask_sbr.attr,
 	NULL,
 };
 
@@ -1823,6 +1851,9 @@ static umode_t pci_bridge_attrs_are_visible(struct kobject *kobj,
 {
 	struct device *dev = kobj_to_dev(kobj);
 	struct pci_dev *pdev = to_pci_dev(dev);
+
+	if (a == &dev_attr_cxl_unmask_sbr.attr && !is_cxl_dport(pdev))
+		return 0;
 
 	if (pci_is_bridge(pdev))
 		return a->mode;
