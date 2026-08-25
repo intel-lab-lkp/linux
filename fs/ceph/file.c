@@ -182,11 +182,15 @@ static void put_bvecs(struct bio_vec *bvecs, int num_bvecs, bool should_dirty)
 	int i;
 
 	for (i = 0; i < num_bvecs; i++) {
-		if (bvecs[i].bv_page) {
-			if (should_dirty)
-				set_page_dirty_lock(bvecs[i].bv_page);
-			put_page(bvecs[i].bv_page);
-		}
+		struct folio *folio;
+
+		if (!bvecs[i].bv_page)
+			continue;
+
+		folio = bvec_folio(&bvecs[i]);
+		if (should_dirty)
+			folio_mark_dirty_lock(folio);
+		folio_put(folio);
 	}
 	kvfree(bvecs);
 }
