@@ -61,7 +61,8 @@ DECLARE_EVENT_CLASS(drm_sched_job,
 			     __string(name, sched_job->sched->name)
 			     __field(u32, job_count)
 			     __field(int, hw_job_count)
-			     __string(dev, dev_name(sched_job->sched->dev))
+			     __string(dev, sched_job->sched->dev ?
+				      dev_name(sched_job->sched->dev) : "none")
 			     __field(u64, fence_context)
 			     __field(u64, fence_seqno)
 			     __field(u64, client_id)
