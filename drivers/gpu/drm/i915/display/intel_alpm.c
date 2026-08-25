@@ -314,9 +314,9 @@ void intel_alpm_lobf_compute_config_late(struct intel_dp *intel_dp,
 	 */
 	first_sdp_position = adjusted_mode->crtc_vtotal - adjusted_mode->crtc_vsync_start;
 	if (intel_alpm_aux_less_wake_supported(intel_dp))
-		waketime_in_lines = crtc_state->alpm_state.io_wake_lines;
-	else
 		waketime_in_lines = crtc_state->alpm_state.aux_less_wake_lines;
+	else
+		waketime_in_lines = crtc_state->alpm_state.io_wake_lines;
 
 	crtc_state->has_lobf = (crtc_state->set_context_latency + crtc_state->vrr.guardband) >
 			       (first_sdp_position + waketime_in_lines);
