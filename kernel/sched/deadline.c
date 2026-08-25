@@ -122,12 +122,12 @@ static inline struct dl_bw *dl_bw_of(int i)
 {
 	RCU_LOCKDEP_WARN(!rcu_read_lock_sched_held(),
 			 "sched RCU must be held");
-	return &cpu_rq(i)->rd->dl_bw;
+	return &rcu_dereference_sched(cpu_rq(i)->rd)->dl_bw;
 }
 
 static inline int dl_bw_cpus(int i)
 {
-	struct root_domain *rd = cpu_rq(i)->rd;
+	struct root_domain *rd = rcu_dereference_sched(cpu_rq(i)->rd);
 
 	RCU_LOCKDEP_WARN(!rcu_read_lock_sched_held(),
 			 "sched RCU must be held");
@@ -159,13 +159,13 @@ static inline unsigned long dl_bw_capacity(int i)
 		RCU_LOCKDEP_WARN(!rcu_read_lock_sched_held(),
 				 "sched RCU must be held");
 
-		return __dl_bw_capacity(cpu_rq(i)->rd->span);
+		return __dl_bw_capacity(rcu_dereference_sched(cpu_rq(i)->rd)->span);
 	}
 }
 
 bool dl_bw_visited(int cpu, u64 cookie)
 {
-	struct root_domain *rd = cpu_rq(cpu)->rd;
+	struct root_domain *rd = rcu_dereference_sched(cpu_rq(cpu)->rd);
 
 	if (rd->visit_cookie == cookie)
 		return true;
