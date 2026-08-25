@@ -17,6 +17,7 @@ config SND_USB_AUDIO
 	select SND_PCM
 	select SND_UMP if SND_USB_AUDIO_MIDI_V2
 	select BITREVERSE
+	select CRC16
 	select SND_USB_AUDIO_USE_MEDIA_CONTROLLER if MEDIA_CONTROLLER && (MEDIA_SUPPORT=y || MEDIA_SUPPORT=SND_USB_AUDIO)
 	help
 	  Say Y here to include support for USB audio and USB MIDI
