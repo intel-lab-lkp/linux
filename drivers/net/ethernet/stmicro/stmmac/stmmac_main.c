@@ -6821,7 +6821,9 @@ static int stmmac_vlan_update(struct stmmac_priv *priv, bool is_double)
 	if (!netif_running(priv->dev))
 		return 0;
 
-	return stmmac_update_vlan_hash(priv, priv->hw, hash, is_double);
+	stmmac_update_dvlan_state(priv, priv->hw, is_double);
+
+	return stmmac_update_vlan_hash(priv, priv->hw, hash);
 }
 
 /* FIXME: This may need RXC to be running, but it may be called with BH

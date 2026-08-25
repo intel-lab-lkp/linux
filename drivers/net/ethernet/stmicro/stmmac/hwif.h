@@ -632,8 +632,8 @@ struct stmmac_est_ops {
 
 struct stmmac_vlan_ops {
 	/* VLAN */
-	void (*update_vlan_hash)(struct mac_device_info *hw, u32 hash,
-				 bool is_double);
+	void (*update_vlan_hash)(struct mac_device_info *hw, u32 hash);
+	void (*update_dvlan_state)(struct mac_device_info *hw, bool enable);
 	void (*enable_vlan)(struct mac_device_info *hw, u32 type);
 	void (*rx_hw_vlan)(struct mac_device_info *hw, struct dma_desc *rx_desc,
 			   struct sk_buff *skb);
@@ -650,6 +650,8 @@ struct stmmac_vlan_ops {
 
 #define stmmac_update_vlan_hash(__priv, __args...) \
 	stmmac_do_void_callback(__priv, vlan, update_vlan_hash, __args)
+#define stmmac_update_dvlan_state(__priv, __args...) \
+	stmmac_do_void_callback(__priv, vlan, update_dvlan_state, __args)
 #define stmmac_enable_vlan(__priv, __args...) \
 	stmmac_do_void_callback(__priv, vlan, enable_vlan, __args)
 #define stmmac_rx_hw_vlan(__priv, __args...) \
