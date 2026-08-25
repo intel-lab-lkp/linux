@@ -125,18 +125,33 @@ struct erdma_kmem {
 	struct erdma_buf_list *buf_list;
 };
 
+enum erdma_mem_flags {
+	ERDMA_MEM_FLAG_MR_BUF = (1 << 0),
+};
+
+struct erdma_mem_init_attr {
+	enum erdma_mem_type type;
+	u64 start;
+	u64 virt;
+	u64 len;
+	unsigned long req_page_size;
+	int access;
+	u32 flags;
+};
+
 struct erdma_mem {
 	enum erdma_mem_type type;
 	union {
 		struct ib_umem *umem;
 		struct erdma_kmem *kmem;
 	};
-	struct erdma_mtt *mtt;
 
 	u32 page_size;
 	u32 page_offset;
 	u32 page_cnt;
 	u32 mtt_nents;
+
+	struct erdma_mtt *mtt;
 
 	u64 va;
 	u64 len;
