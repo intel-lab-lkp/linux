@@ -2323,9 +2323,10 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 	if (cc->proactive_compaction) {
 		int score, wmark_low;
 		pg_data_t *pgdat;
+		bool costly = compact_hpage_order() > PAGE_ALLOC_COSTLY_ORDER;
 
 		pgdat = cc->zone->zone_pgdat;
-		if (kswapd_is_running(pgdat))
+		if (costly && kswapd_is_running(pgdat))
 			return COMPACT_PARTIAL_SKIPPED;
 
 		score = fragmentation_score_zone(cc->zone, compact_hpage_order());
