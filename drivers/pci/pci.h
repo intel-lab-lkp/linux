@@ -248,6 +248,7 @@ int __pci_bridge_secondary_bus_reset(struct pci_dev *dev,
 				     enum cxl_sbr_region_action action);
 bool is_cxl_dport(struct pci_dev *dev);
 u16 cxl_port_dvsec(struct pci_dev *dev);
+bool cxl_sbr_allowed(struct pci_dev *dev);
 int pci_bus_error_reset(struct pci_dev *dev);
 int pci_try_reset_bridge(struct pci_dev *bridge);
 
