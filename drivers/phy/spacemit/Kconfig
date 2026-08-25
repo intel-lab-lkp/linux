@@ -22,6 +22,7 @@ config PHY_SPACEMIT_K1_USB2
 	depends on USB_COMMON
 	select GENERIC_PHY
 	select REGMAP_MMIO
+	default ARCH_SPACEMIT
 	help
 	  Enable this to support K1 USB 2.0 PHY driver. This driver takes care of
 	  enabling and clock setup and will be used by K1 udc/ehci/otg/xhci driver.
