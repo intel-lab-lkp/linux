@@ -337,7 +337,7 @@ static int mshv_region_chunk_unmap(struct mshv_mem_region *region,
 				       page_count, flags);
 }
 
-static int mshv_region_unmap(struct mshv_mem_region *region)
+int mshv_region_unmap(struct mshv_mem_region *region)
 {
 	return mshv_region_process_range(region, 0,
 					 0, region->nr_pages,
@@ -354,17 +354,19 @@ static void mshv_region_destroy(struct kref *ref)
 	if (region->mreg_type == MSHV_REGION_TYPE_MEM_MOVABLE)
 		mshv_region_movable_fini(region);
 
-	if (mshv_partition_encrypted(partition)) {
+	if (mshv_partition_encrypted(partition) &&
+	    !partition->snp_host_access_restored) {
 		ret = mshv_region_share(region);
 		if (ret) {
 			pt_err(partition,
-			       "Failed to regain access to memory, unpinning user pages will fail and crash the host error: %d\n",
+			       "Failed to regain access to memory, retaining pinned region: %d\n",
 			       ret);
 			return;
 		}
 	}
 
-	mshv_region_unmap(region);
+	if (!partition->snp_regions_unmapped)
+		mshv_region_unmap(region);
 
 	mshv_region_invalidate(region);
 

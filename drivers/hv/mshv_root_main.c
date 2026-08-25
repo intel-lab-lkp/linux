@@ -65,6 +65,7 @@ static int mshv_vp_mmap(struct file *file, struct vm_area_struct *vma);
 static vm_fault_t mshv_vp_fault(struct vm_fault *vmf);
 static int mshv_init_async_handler(struct mshv_partition *partition);
 static void mshv_async_hvcall_handler(void *data, u64 *status);
+static void mshv_quarantine_partition(struct mshv_partition *partition);
 
 static const union hv_input_vtl input_vtl_zero;
 static const union hv_input_vtl input_vtl_normal = {
@@ -641,6 +642,42 @@ mshv_partition_region_by_gfn_get(struct mshv_partition *p, u64 gfn)
 	return region;
 }
 
+static int mshv_gpfns_to_pages(struct mshv_partition *partition,
+			       const u64 *gpfns, u64 page_count,
+			       struct page **pages)
+{
+	struct mshv_mem_region *region;
+	u64 i;
+	int ret = 0;
+
+	for (i = 0; i < page_count; i++) {
+		u64 gfn = gpfns[i];
+		u64 offset;
+
+		region = mshv_partition_region_by_gfn_get(partition, gfn);
+		if (!region) {
+			pt_err(partition, "Failed to find region for GFN %#llx\n",
+			       gfn);
+			return -ERANGE;
+		}
+
+		offset = gfn - region->start_gfn;
+		mutex_lock(&region->mreg_mutex);
+		if (offset >= region->nr_pages || !region->mreg_pages[offset]) {
+			ret = -EFAULT;
+			mutex_unlock(&region->mreg_mutex);
+			mshv_region_put(region);
+			return ret;
+		}
+
+		pages[i] = region->mreg_pages[offset];
+		mutex_unlock(&region->mreg_mutex);
+		mshv_region_put(region);
+	}
+
+	return 0;
+}
+
 /**
  * mshv_handle_gpa_intercept - Handle GPA (Guest Physical Address) intercepts.
  * @vp: Pointer to the virtual processor structure.
@@ -1213,12 +1250,7 @@ out:
 
 static int mshv_init_async_handler(struct mshv_partition *partition)
 {
-	if (completion_done(&partition->async_hypercall)) {
-		pt_err(partition,
-		       "Cannot issue async hypercall while another one in progress!\n");
-		return -EPERM;
-	}
-
+	/* Partition ioctls are serialized by pt_mutex. */
 	reinit_completion(&partition->async_hypercall);
 	return 0;
 }
@@ -1434,6 +1466,8 @@ mshv_unmap_user_memory(struct mshv_partition *partition,
 
 	if (!(mem->flags & BIT(MSHV_SET_MEM_BIT_UNMAP)))
 		return -EINVAL;
+	if (partition->pt_initialized && mshv_partition_encrypted(partition))
+		return -EBUSY;
 
 	spin_lock(&partition->pt_mem_regions_lock);
 
@@ -1648,6 +1682,409 @@ withdraw_mem:
 	return ret;
 }
 
+#ifdef HV_SUPPORTS_SEV_SNP_GUESTS
+static int set_sev_control_register(struct mshv_vp *vp,
+				    u64 enable_encrypted_state,
+				    u64 vmsa_gpa_page_number)
+{
+	struct hv_register_assoc sev_control = {
+		.name = HV_X64_REGISTER_SEV_CONTROL,
+	};
+
+	sev_control.value.sev_control.enable_encrypted_state =
+		enable_encrypted_state;
+	sev_control.value.sev_control.vmsa_gpa_page_number =
+		vmsa_gpa_page_number;
+
+	return mshv_set_vp_registers(vp->vp_index, vp->vp_partition->pt_id,
+					 1, &sev_control);
+}
+
+static long
+mshv_partition_ioctl_sev_snp_ap_create(struct mshv_partition *partition,
+				       void __user *user_args)
+{
+	struct hv_register_assoc internal_activity = {
+		.name = HV_REGISTER_INTERNAL_ACTIVITY_STATE,
+		.value.internal_activity.as_uint64 = 0,
+	};
+	struct mshv_sev_snp_ap_create req;
+	struct mshv_vp *vp;
+	long ret;
+
+	if (copy_from_user(&req, user_args, sizeof(req)))
+		return -EFAULT;
+
+	if (req.vp_id >= MSHV_MAX_VPS)
+		return -EINVAL;
+
+	vp = partition->pt_vp_array[req.vp_id];
+	if (!vp)
+		return -EINVAL;
+
+	ret = set_sev_control_register(vp, 1, HVPFN_DOWN(req.vmsa_gpa));
+	if (ret) {
+		vp_err(vp, "Failed to set SEV control register\n");
+		return ret;
+	}
+
+	ret = mshv_set_vp_registers(vp->vp_index, vp->vp_partition->pt_id, 1,
+				    &internal_activity);
+	if (ret)
+		vp_err(vp, "Failed to set internal activity\n");
+
+	return ret;
+}
+
+static bool mshv_pages_are_contiguous_2m(struct page **pages,
+					 u64 page_count)
+{
+	const u64 pages_per_large_page =
+		1ULL << (HV_HYP_LARGE_PAGE_SHIFT - HV_HYP_PAGE_SHIFT);
+	u64 i, j;
+
+	if (!IS_ALIGNED(page_count, pages_per_large_page))
+		return false;
+
+	for (i = 0; i < page_count; i += pages_per_large_page) {
+		u64 base_pfn = page_to_pfn(pages[i]);
+
+		if (!IS_ALIGNED(base_pfn, pages_per_large_page))
+			return false;
+		for (j = 1; j < pages_per_large_page; j++)
+			if (page_to_pfn(pages[i + j]) != base_pfn + j)
+				return false;
+	}
+
+	return true;
+}
+
+#define MSHV_USER_PAGE_BATCH_SIZE	4096
+
+static long
+mshv_partition_ioctl_modify_gpa_host_access(struct mshv_partition *partition,
+					    void __user *user_args)
+{
+	struct mshv_modify_gpa_host_access args;
+	struct page **pages;
+	u64 __user *guest_gpas;
+	u64 *gpfns;
+	u64 offset = 0;
+	u32 host_access = 0;
+	u32 flags = 0;
+	bool acquire;
+	long ret = 0;
+
+	if (copy_from_user(&args, user_args, sizeof(args)))
+		return -EFAULT;
+
+	if ((args.flags & ~MSHV_GPA_HOST_ACCESS_FLAGS_MASK) ||
+	    mshv_field_nonzero(args, rsvd) || !args.page_count ||
+	    !args.guest_gpas)
+		return -EINVAL;
+	if ((args.flags & BIT(MSHV_GPA_HOST_ACCESS_BIT_LARGE_PAGE)) &&
+	    !IS_ALIGNED(args.page_count,
+			1ULL << (HV_HYP_LARGE_PAGE_SHIFT - HV_HYP_PAGE_SHIFT)))
+		return -EINVAL;
+
+	guest_gpas = u64_to_user_ptr(args.guest_gpas);
+	gpfns = kvmalloc_array(MSHV_USER_PAGE_BATCH_SIZE, sizeof(*gpfns),
+			       GFP_KERNEL);
+	pages = kvmalloc_array(MSHV_USER_PAGE_BATCH_SIZE, sizeof(*pages),
+			       GFP_KERNEL);
+	if (!gpfns || !pages) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	if (args.flags & BIT(MSHV_GPA_HOST_ACCESS_BIT_READABLE))
+		host_access |= HV_MAP_GPA_READABLE;
+	if (args.flags & BIT(MSHV_GPA_HOST_ACCESS_BIT_WRITABLE))
+		host_access |= HV_MAP_GPA_WRITABLE;
+	if (args.flags & BIT(MSHV_GPA_HOST_ACCESS_BIT_LARGE_PAGE))
+		flags |= HV_MODIFY_SPA_PAGE_HOST_ACCESS_LARGE_PAGE;
+	acquire = args.flags & BIT(MSHV_GPA_HOST_ACCESS_BIT_ACQUIRE);
+
+	while (offset < args.page_count) {
+		u64 count = min_t(u64, args.page_count - offset,
+				  MSHV_USER_PAGE_BATCH_SIZE);
+		u64 i;
+
+		if (copy_from_user(gpfns, guest_gpas + offset,
+				   array_size(count, sizeof(*gpfns)))) {
+			ret = -EFAULT;
+			break;
+		}
+
+		for (i = 0; i < count; i++) {
+			if (!IS_ALIGNED(gpfns[i], MSHV_HV_PAGE_SIZE)) {
+				ret = -EINVAL;
+				goto out;
+			}
+			gpfns[i] = HVPFN_DOWN(gpfns[i]);
+		}
+
+		ret = mshv_gpfns_to_pages(partition, gpfns, count, pages);
+		if (ret)
+			break;
+
+		if (flags & HV_MODIFY_SPA_PAGE_HOST_ACCESS_LARGE_PAGE) {
+			if (!mshv_pages_are_contiguous_2m(pages, count)) {
+				ret = -EINVAL;
+				break;
+			}
+		}
+
+		ret = hv_call_modify_spa_host_access(partition->pt_id, pages,
+						     count, host_access, flags,
+					     acquire);
+		if (ret)
+			break;
+
+		offset += count;
+		cond_resched();
+	}
+
+out:
+	kvfree(pages);
+	kvfree(gpfns);
+	return ret;
+}
+
+static long
+mshv_partition_ioctl_import_isolated_pages(struct mshv_partition *partition,
+					   void __user *user_args)
+{
+	struct mshv_import_isolated_pages args;
+	u64 __user *guest_pfns;
+	u64 *pages;
+	u64 offset = 0;
+	long ret = 0;
+
+	if (copy_from_user(&args, user_args, sizeof(args)))
+		return -EFAULT;
+
+	if (args.page_type >= MSHV_ISOLATED_PAGE_COUNT ||
+	    args.page_size >= MSHV_ISOLATED_PAGE_SIZE_COUNT ||
+	    mshv_field_nonzero(args, rsvd) || !args.page_count ||
+	    !args.guest_pfns)
+		return -EINVAL;
+
+	guest_pfns = u64_to_user_ptr(args.guest_pfns);
+	pages = kvmalloc_array(MSHV_USER_PAGE_BATCH_SIZE, sizeof(*pages),
+			       GFP_KERNEL);
+	if (!pages)
+		return -ENOMEM;
+
+	while (offset < args.page_count) {
+		u64 count = min_t(u64, args.page_count - offset,
+				  MSHV_USER_PAGE_BATCH_SIZE);
+
+		if (copy_from_user(pages, guest_pfns + offset,
+				   array_size(count, sizeof(*pages)))) {
+			ret = -EFAULT;
+			break;
+		}
+		if (args.page_size == MSHV_ISOLATED_PAGE_SIZE_2MB) {
+			u64 i;
+
+			for (i = 0; i < count; i++) {
+				if (!IS_ALIGNED(pages[i],
+						1ULL << (HV_HYP_LARGE_PAGE_SHIFT -
+							HV_HYP_PAGE_SHIFT))) {
+					ret = -EINVAL;
+					goto import_out;
+				}
+			}
+		}
+
+		ret = mshv_init_async_handler(partition);
+		if (ret)
+			break;
+
+		ret = hv_call_import_isolated_pages(partition->pt_id, pages, count,
+						    args.page_type, args.page_size,
+						    mshv_async_hvcall_handler,
+						    partition);
+		if (ret)
+			break;
+
+		offset += count;
+		cond_resched();
+	}
+
+import_out:
+	kvfree(pages);
+	return ret;
+}
+
+static void
+mshv_copy_snp_id_auth_info(struct hv_snp_id_auth_info *dst,
+			   const struct mshv_snp_id_auth_info *src)
+{
+	dst->id_key_algorithm = src->id_key_algorithm;
+	dst->auth_key_algorithm = src->auth_key_algorithm;
+	memcpy(dst->reserved0, src->reserved0, sizeof(dst->reserved0));
+	memcpy(dst->id_block_signature, src->id_block_signature,
+	       sizeof(dst->id_block_signature));
+	memcpy(dst->id_key, src->id_key, sizeof(dst->id_key));
+	memcpy(dst->reserved1, src->reserved1, sizeof(dst->reserved1));
+	memcpy(dst->id_key_signature, src->id_key_signature,
+	       sizeof(dst->id_key_signature));
+	memcpy(dst->author_key, src->author_key, sizeof(dst->author_key));
+}
+
+static long
+mshv_partition_ioctl_complete_isolated_import(struct mshv_partition *partition,
+					      void __user *user_args)
+{
+	union hv_partition_complete_isolated_import_data *import_data;
+	struct mshv_psp_launch_finish_data *psp;
+	struct mshv_complete_isolated_import args;
+	long ret;
+
+	if (copy_from_user(&args, user_args, sizeof(args)))
+		return -EFAULT;
+	if (!args.psp_parameters)
+		return -EINVAL;
+
+	psp = memdup_user(u64_to_user_ptr(args.psp_parameters), sizeof(*psp));
+	if (IS_ERR(psp))
+		return PTR_ERR(psp);
+	if (memchr_inv(psp->reserved, 0, sizeof(psp->reserved))) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	import_data = kvzalloc(sizeof(*import_data), GFP_KERNEL);
+	if (!import_data) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	memcpy(import_data->psp_parameters.id_block.launch_digest,
+	       psp->id_block.launch_digest,
+	       sizeof(psp->id_block.launch_digest));
+	memcpy(import_data->psp_parameters.id_block.family_id,
+	       psp->id_block.family_id, sizeof(psp->id_block.family_id));
+	memcpy(import_data->psp_parameters.id_block.image_id,
+	       psp->id_block.image_id, sizeof(psp->id_block.image_id));
+	import_data->psp_parameters.id_block.version = psp->id_block.version;
+	import_data->psp_parameters.id_block.guest_svn = psp->id_block.guest_svn;
+	import_data->psp_parameters.id_block.policy.as_uint64 =
+		psp->id_block.policy;
+	mshv_copy_snp_id_auth_info(&import_data->psp_parameters.id_auth_info,
+				   &psp->id_auth_info);
+	memcpy(import_data->psp_parameters.host_data, psp->host_data,
+	       sizeof(psp->host_data));
+	import_data->psp_parameters.id_block_enabled = psp->id_block_enabled;
+	import_data->psp_parameters.author_key_enabled = psp->author_key_enabled;
+
+	ret = mshv_init_async_handler(partition);
+	if (!ret)
+		ret = hv_call_complete_isolated_import(partition->pt_id,
+						       import_data,
+						       mshv_async_hvcall_handler,
+						       partition);
+	if (!ret)
+		partition->import_completed = true;
+
+	kvfree(import_data);
+out:
+	kfree(psp);
+	return ret;
+}
+
+static long
+mshv_partition_ioctl_issue_psp_guest_request(struct mshv_partition *partition,
+					     void __user *user_args)
+{
+	struct mshv_issue_psp_guest_request req;
+	u32 host_access = HV_MAP_GPA_READABLE | HV_MAP_GPA_WRITABLE;
+	struct page *pages[2];
+	u64 gpfns[2];
+	long ret;
+
+	if (copy_from_user(&req, user_args, sizeof(req)))
+		return -EFAULT;
+
+	gpfns[0] = HVPFN_DOWN(req.req_gpa);
+	gpfns[1] = HVPFN_DOWN(req.rsp_gpa);
+
+	ret = mshv_gpfns_to_pages(partition, gpfns, ARRAY_SIZE(gpfns), pages);
+	if (ret)
+		return ret;
+
+	ret = hv_call_modify_spa_host_access(partition->pt_id, pages,
+					     ARRAY_SIZE(pages), 0, 0, false);
+	if (ret)
+		goto restore_host_access;
+
+	ret = mshv_init_async_handler(partition);
+	if (ret)
+		goto restore_host_access;
+
+	ret = hv_call_issue_psp_guest_request(partition->pt_id,
+					      HVPFN_DOWN(req.req_gpa),
+					      HVPFN_DOWN(req.rsp_gpa),
+					      mshv_async_hvcall_handler,
+					      partition);
+	if (!ret)
+		return 0;
+
+restore_host_access:
+	{
+		int restore_ret;
+
+		restore_ret = hv_call_modify_spa_host_access(partition->pt_id,
+							     pages, ARRAY_SIZE(pages),
+						     host_access, 0, true);
+		if (restore_ret) {
+			pt_err(partition,
+			       "Failed to restore PSP request page access: %d\n",
+			       restore_ret);
+			mshv_quarantine_partition(partition);
+			if (!ret)
+				ret = restore_ret;
+		}
+	}
+	return ret;
+}
+
+static long mshv_partition_snp_ioctl(unsigned int ioctl,
+				     struct mshv_partition *partition,
+				     unsigned long arg)
+{
+	void __user *uarg = (void __user *)arg;
+
+	if (!mshv_partition_encrypted(partition)) {
+		pt_err(partition,
+		       "Ioctl(%u) not supported for non SEV-SNP partition\n",
+		       ioctl);
+		return -EOPNOTSUPP;
+	}
+
+	switch (ioctl) {
+	case MSHV_MODIFY_GPA_HOST_ACCESS:
+		return mshv_partition_ioctl_modify_gpa_host_access(partition,
+								   uarg);
+	case MSHV_IMPORT_ISOLATED_PAGES:
+		return mshv_partition_ioctl_import_isolated_pages(partition,
+								  uarg);
+	case MSHV_COMPLETE_ISOLATED_IMPORT:
+		return mshv_partition_ioctl_complete_isolated_import(partition,
+								     uarg);
+	case MSHV_ISSUE_PSP_GUEST_REQUEST:
+		return mshv_partition_ioctl_issue_psp_guest_request(partition,
+								    uarg);
+	case MSHV_SEV_SNP_AP_CREATE:
+		return mshv_partition_ioctl_sev_snp_ap_create(partition, uarg);
+	default:
+		return -ENOTTY;
+	}
+}
+#endif
+
 static long
 mshv_partition_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 {
@@ -1684,6 +2121,15 @@ mshv_partition_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 	case MSHV_ROOT_HVCALL:
 		ret = mshv_ioctl_passthru_hvcall(partition, true, uarg);
 		break;
+#ifdef HV_SUPPORTS_SEV_SNP_GUESTS
+	case MSHV_MODIFY_GPA_HOST_ACCESS:
+	case MSHV_IMPORT_ISOLATED_PAGES:
+	case MSHV_COMPLETE_ISOLATED_IMPORT:
+	case MSHV_ISSUE_PSP_GUEST_REQUEST:
+	case MSHV_SEV_SNP_AP_CREATE:
+		ret = mshv_partition_snp_ioctl(ioctl, partition, arg);
+		break;
+#endif
 	default:
 		ret = -ENOTTY;
 	}
@@ -1795,6 +2241,79 @@ remove_partition(struct mshv_partition *partition)
 	synchronize_rcu();
 }
 
+#ifdef HV_SUPPORTS_SEV_SNP_GUESTS
+static int destroy_snp_partition_state(struct mshv_partition *partition)
+{
+	struct hv_register_assoc explicit_suspend = {
+		.name = HV_REGISTER_EXPLICIT_SUSPEND,
+		.value.explicit_suspend.suspended = 1,
+	};
+	struct mshv_vp *vp;
+	int i, ret;
+
+	for (i = 0; i < MSHV_MAX_VPS; i++) {
+		vp = partition->pt_vp_array[i];
+		if (!vp)
+			continue;
+
+		ret = mshv_set_vp_registers(vp->vp_index,
+					    vp->vp_partition->pt_id, 1,
+					    &explicit_suspend);
+		if (ret) {
+			vp_err(vp, "Failed to set explicit suspend\n");
+			return ret;
+		}
+
+		ret = set_sev_control_register(vp, 0, 0);
+		if (ret) {
+			vp_err(vp, "Failed to clear SEV control register\n");
+			return ret;
+		}
+	}
+
+	if (partition->import_completed) {
+		union hv_partition_isolation_control isolation_control = {};
+
+		ret = mshv_init_async_handler(partition);
+		if (ret)
+			return ret;
+
+		ret = hv_call_set_partition_property(partition->pt_id,
+						     HV_PARTITION_PROPERTY_ISOLATION_CONTROL,
+					     isolation_control.as_uint64,
+					     mshv_async_hvcall_handler, partition);
+		if (ret) {
+			pt_err(partition, "Failed to clear runnable bit\n");
+			return ret;
+		}
+	}
+
+	ret = mshv_init_async_handler(partition);
+	if (ret)
+		return ret;
+
+	ret = hv_call_set_partition_property(partition->pt_id,
+					     HV_PARTITION_PROPERTY_ISOLATION_STATE,
+					     HV_PARTITION_ISOLATION_INSECURE_DIRTY,
+					     mshv_async_hvcall_handler, partition);
+	if (ret)
+		pt_err(partition,
+		       "Failed to set isolation state to INSECURE_DIRTY\n");
+
+	return ret;
+}
+#endif
+
+static void mshv_quarantine_partition(struct mshv_partition *partition)
+{
+	if (partition->teardown_quarantined)
+		return;
+
+	/* Keep module text and the pinned inaccessible pages alive. */
+	__module_get(THIS_MODULE);
+	partition->teardown_quarantined = true;
+}
+
 /*
  * Tear down a partition and remove it from the list.
  * Partition's refcount must be 0
@@ -1805,6 +2324,9 @@ static void destroy_partition(struct mshv_partition *partition)
 	struct mshv_mem_region *region;
 	struct hlist_node *n;
 	int i;
+#ifdef HV_SUPPORTS_SEV_SNP_GUESTS
+	int ret;
+#endif
 
 	if (refcount_read(&partition->pt_ref_count)) {
 		pt_err(partition,
@@ -1814,13 +2336,95 @@ static void destroy_partition(struct mshv_partition *partition)
 
 	trace_mshv_destroy_partition(partition->pt_id);
 
+#ifdef HV_SUPPORTS_SEV_SNP_GUESTS
+	if (!partition->pt_initialized && mshv_partition_encrypted(partition)) {
+		int region_ret;
+
+		ret = 0;
+		hlist_for_each_entry_safe(region, n,
+					  &partition->pt_mem_regions, hnode) {
+			region_ret = mshv_region_share(region);
+			if (region_ret) {
+				pt_err(partition,
+				       "Failed to restore host access at GFN %#llx: %d\n",
+				       region->start_gfn, region_ret);
+				ret = region_ret;
+			}
+		}
+		if (ret) {
+			pt_err(partition,
+			       "Retaining uninitialized partition with inaccessible SNP pages\n");
+			mshv_quarantine_partition(partition);
+			return;
+		}
+		partition->snp_host_access_restored = true;
+	}
+#endif
+
 	if (partition->pt_initialized) {
+#ifdef HV_SUPPORTS_SEV_SNP_GUESTS
+		if (mshv_partition_encrypted(partition)) {
+			int region_ret;
+
+			ret = 0;
+			hlist_for_each_entry_safe(region, n,
+						  &partition->pt_mem_regions,
+						  hnode) {
+				region_ret = mshv_region_unmap(region);
+				if (region_ret) {
+					pt_err(partition,
+					       "Failed to unmap SNP region at GFN %#llx: %d\n",
+					       region->start_gfn, region_ret);
+					ret = region_ret;
+				}
+			}
+			if (ret) {
+				pt_err(partition,
+				       "Retaining partition after SNP region unmap failure\n");
+				mshv_quarantine_partition(partition);
+				return;
+			}
+
+			ret = destroy_snp_partition_state(partition);
+			if (ret) {
+				pt_err(partition,
+				       "Failed to destroy SNP state: %d; retaining partition\n",
+				       ret);
+				mshv_quarantine_partition(partition);
+				return;
+			}
+
+			ret = 0;
+			hlist_for_each_entry_safe(region, n,
+						  &partition->pt_mem_regions,
+						  hnode) {
+				region_ret = mshv_region_share(region);
+				if (region_ret) {
+					pt_err(partition,
+					       "Failed to restore host access at GFN %#llx: %d\n",
+					       region->start_gfn, region_ret);
+					ret = region_ret;
+				}
+			}
+			if (ret) {
+				pt_err(partition,
+				       "Retaining partition with inaccessible SNP pages\n");
+				mshv_quarantine_partition(partition);
+				return;
+			}
+
+			partition->snp_regions_unmapped = true;
+			partition->snp_host_access_restored = true;
+		}
+#endif
 		/*
 		 * We only need to drain signals for root scheduler. This should be
 		 * done before removing the partition from the partition list.
 		 */
 		if (hv_scheduler_type == HV_SCHEDULER_TYPE_ROOT)
 			drain_all_vps(partition);
+
+		remove_partition(partition);
 
 		/* Remove vps */
 		for (i = 0; i < MSHV_MAX_VPS; ++i) {
@@ -1868,9 +2472,9 @@ static void destroy_partition(struct mshv_partition *partition)
 		hv_call_finalize_partition(partition->pt_id);
 
 		partition->pt_initialized = false;
+	} else {
+		remove_partition(partition);
 	}
-
-	remove_partition(partition);
 
 	hlist_for_each_entry_safe(region, n, &partition->pt_mem_regions,
 				  hnode) {
@@ -1883,6 +2487,8 @@ static void destroy_partition(struct mshv_partition *partition)
 	hv_call_delete_partition(partition->pt_id);
 
 	mshv_free_routing_table(partition);
+	if (partition->teardown_quarantined)
+		module_put(THIS_MODULE);
 	kfree(partition);
 }
 
@@ -2039,6 +2645,9 @@ static long mshv_ioctl_process_pt_flags(void __user *user_arg, u64 *pt_flags,
 	case MSHV_PT_ISOLATION_NONE:
 		isol_props->isolation_type = HV_PARTITION_ISOLATION_TYPE_NONE;
 		break;
+	case MSHV_PT_ISOLATION_SNP:
+		isol_props->isolation_type = HV_PARTITION_ISOLATION_TYPE_SNP;
+		break;
 	}
 
 	return 0;
@@ -2074,6 +2683,8 @@ mshv_ioctl_create_partition(void __user *user_arg, struct device *module_dev)
 	mutex_init(&partition->pt_irq_lock);
 
 	init_completion(&partition->async_hypercall);
+	INIT_DELAYED_WORK(&partition->destroy_work,
+			  mshv_partition_destroy_work);
 
 	INIT_HLIST_HEAD(&partition->irq_ack_notifier_list);
 
