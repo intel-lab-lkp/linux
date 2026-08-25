@@ -1606,6 +1606,18 @@ int devm_request_pci_bus_resources(struct device *dev,
 /* Temporary until new and working PCI SBR API in place */
 int pci_bridge_secondary_bus_reset(struct pci_dev *dev);
 
+/**
+ * struct pci_cxl_sbr_region_ops - CXL region callbacks for a bus reset
+ * @disable_regions: disable the regions below @dport, 0 or errno
+ * @enable_regions: re-enable the regions below @dport
+ */
+struct pci_cxl_sbr_region_ops {
+	int (*disable_regions)(struct pci_dev *dport);
+	void (*enable_regions)(struct pci_dev *dport);
+};
+
+void pci_cxl_set_sbr_region_ops(const struct pci_cxl_sbr_region_ops *ops);
+
 #define __pci_bus_for_each_res0(bus, res, ...)				\
 	for (unsigned int __b = 0;					\
 	     (res = pci_bus_resource_n(bus, __b)) || __b < PCI_BRIDGE_RESOURCE_NUM; \

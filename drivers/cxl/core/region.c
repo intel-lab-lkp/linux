@@ -12,6 +12,7 @@
 #include <linux/idr.h>
 #include <linux/memory-tiers.h>
 #include <linux/string_choices.h>
+#include <linux/pci.h>
 #include <cxlmem.h>
 #include <cxl.h>
 #include "core.h"
@@ -4263,12 +4264,14 @@ static struct cxl_driver cxl_region_driver = {
 
 int cxl_region_init(void)
 {
+	pci_cxl_set_sbr_region_ops(&cxl_sbr_region_ops);
 	return cxl_driver_register(&cxl_region_driver);
 }
 
 void cxl_region_exit(void)
 {
 	cxl_driver_unregister(&cxl_region_driver);
+	pci_cxl_set_sbr_region_ops(NULL);
 }
 
 MODULE_IMPORT_NS("CXL");

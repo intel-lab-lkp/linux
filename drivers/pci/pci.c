@@ -4844,6 +4844,19 @@ void __weak pcibios_reset_secondary_bus(struct pci_dev *dev)
 	pci_reset_secondary_bus(dev);
 }
 
+/*
+ * Registered by the CXL core to disable and re-enable the regions mapped
+ * through a CXL Downstream Port across a Secondary Bus Reset. NULL whenever
+ * the CXL region code is absent: not built, or built as a module not loaded.
+ */
+static const struct pci_cxl_sbr_region_ops *cxl_sbr_region_ops;
+
+void pci_cxl_set_sbr_region_ops(const struct pci_cxl_sbr_region_ops *ops)
+{
+	cxl_sbr_region_ops = ops;
+}
+EXPORT_SYMBOL_GPL(pci_cxl_set_sbr_region_ops);
+
 /**
  * pci_bridge_secondary_bus_reset - Reset the secondary bus on a PCI bridge.
  * @dev: Bridge device

@@ -21,7 +21,7 @@
  * Context: process context. Offlining and driver unbind sleep and take the
  * memory hotplug lock, so this cannot run in atomic context.
  */
-int cxl_region_disable(struct cxl_region *cxlr)
+static int cxl_region_disable(struct cxl_region *cxlr)
 {
 	struct cxl_region_params *p = &cxlr->params;
 	unsigned long block_size;
@@ -72,7 +72,7 @@ int cxl_region_disable(struct cxl_region *cxlr)
  * Rebind the region driver. The System RAM is left offline; bringing it back
  * online is a separate administrative step.
  */
-void cxl_region_enable(struct cxl_region *cxlr)
+static void cxl_region_enable(struct cxl_region *cxlr)
 {
 	struct cxl_region_params *p = &cxlr->params;
 
@@ -93,8 +93,8 @@ void cxl_region_enable(struct cxl_region *cxlr)
  * cxl_region_disable()/cxl_region_enable() run with the rwsem released (they
  * unbind and rebind the region driver). Hence snapshot the set first.
  */
-int cxl_sbr_collect_regions(struct pci_dev *dport_pci,
-			    struct xarray *regions)
+static int cxl_sbr_collect_regions(struct pci_dev *dport_pci,
+				   struct xarray *regions)
 {
 	struct cxl_region_ref *cxl_rr;
 	struct cxl_dport *dport;
@@ -141,7 +141,7 @@ int cxl_sbr_collect_regions(struct pci_dev *dport_pci,
 	return 0;
 }
 
-void cxl_sbr_put_regions(struct xarray *regions)
+static void cxl_sbr_put_regions(struct xarray *regions)
 {
 	struct cxl_region *cxlr;
 	unsigned long index;
@@ -159,8 +159,8 @@ void cxl_sbr_put_regions(struct xarray *regions)
  * requires. The caller has already disabled the regions, so nothing reaches the
  * decoders being reprogrammed.
  */
-void cxl_sbr_recommit_decoders(struct pci_dev *dport_pci,
-			       struct xarray *hdm_state)
+static void cxl_sbr_recommit_decoders(struct pci_dev *dport_pci,
+				      struct xarray *hdm_state)
 {
 	struct cxl_dport *dport;
 	int rc;
@@ -179,3 +179,141 @@ void cxl_sbr_recommit_decoders(struct pci_dev *dport_pci,
 	if (rc)
 		pci_warn(dport_pci, "HDM decode restore failed: %d\n", rc);
 }
+
+/*
+ * The HDM decoder control registers the reset is about to clear, held from the
+ * disable to the enable of one Downstream Port and indexed by that Port's
+ * struct pci_dev, so resets of different Ports do not share an entry.
+ */
+static DEFINE_XARRAY(cxl_sbr_hdm_state);
+
+static void cxl_sbr_drop_hdm_state(struct pci_dev *dport_pci)
+{
+	struct xarray *hdm_state;
+
+	hdm_state = xa_erase(&cxl_sbr_hdm_state, (unsigned long)dport_pci);
+	if (!hdm_state)
+		return;
+
+	cxl_port_put_hdm_state(hdm_state);
+	kfree(hdm_state);
+}
+
+/*
+ * Record the control registers of every port below @dport_pci before the reset
+ * clears them. cxl_sbr_enable_regions() consumes the set and drops it.
+ */
+static int cxl_sbr_save_hdm_state(struct pci_dev *dport_pci)
+{
+	struct xarray *hdm_state;
+	struct cxl_dport *dport;
+	int rc;
+
+	struct cxl_port *port __free(put_cxl_port) =
+		find_cxl_port(&dport_pci->dev, &dport);
+	if (!port)
+		return 0;
+
+	hdm_state = kzalloc_obj(*hdm_state);
+	if (!hdm_state)
+		return -ENOMEM;
+
+	xa_init(hdm_state);
+
+	scoped_guard(rwsem_read, &cxl_rwsem.region)
+		rc = cxl_port_save_hdm_state(port, hdm_state);
+
+	if (!rc)
+		rc = xa_insert(&cxl_sbr_hdm_state, (unsigned long)dport_pci,
+			       hdm_state, GFP_KERNEL);
+	if (rc) {
+		cxl_port_put_hdm_state(hdm_state);
+		kfree(hdm_state);
+		return rc;
+	}
+
+	return 0;
+}
+
+/*
+ * Disable the regions routed through the Downstream Port being reset. On
+ * failure re-enable the regions already disabled and return the error so the
+ * PCI core aborts the reset with the topology unchanged.
+ */
+static int cxl_sbr_disable_regions(struct pci_dev *dport_pci)
+{
+	struct cxl_region *cxlr;
+	struct xarray regions;
+	unsigned long index;
+	int rc;
+
+	rc = cxl_sbr_save_hdm_state(dport_pci);
+	if (rc)
+		return rc;
+
+	xa_init(&regions);
+
+	rc = cxl_sbr_collect_regions(dport_pci, &regions);
+	if (rc)
+		goto out;
+
+	xa_for_each(&regions, index, cxlr) {
+		rc = cxl_region_disable(cxlr);
+		if (rc)
+			break;
+	}
+
+	/*
+	 * On failure restore every collected region and return the error so the
+	 * PCI core aborts the reset before touching the hardware. Re-enabling a
+	 * region left untouched is a no-op, so enabling the whole set also
+	 * recovers the region whose offline failed midway.
+	 */
+	if (rc) {
+		dev_dbg(&dport_pci->dev, "%s: disable failed (%d), re-enabling collected regions and aborting reset\n",
+			__func__, rc);
+		xa_for_each(&regions, index, cxlr)
+			cxl_region_enable(cxlr);
+	}
+
+out:
+	cxl_sbr_put_regions(&regions);
+	/* No enable_regions() call follows an aborted reset, so drop the set. */
+	if (rc)
+		cxl_sbr_drop_hdm_state(dport_pci);
+	return rc;
+}
+
+/*
+ * Re-enable the regions disabled by cxl_sbr_disable_regions(). Restore the HDM
+ * decode first: a region cannot serve memory through decoders that are not
+ * programmed, so its driver must not re-attach before they are.
+ */
+static void cxl_sbr_enable_regions(struct pci_dev *dport_pci)
+{
+	struct xarray *hdm_state;
+	struct cxl_region *cxlr;
+	struct xarray regions;
+	unsigned long index;
+
+	xa_init(&regions);
+
+	cxl_sbr_collect_regions(dport_pci, &regions);
+
+	hdm_state = xa_load(&cxl_sbr_hdm_state, (unsigned long)dport_pci);
+	if (hdm_state)
+		cxl_sbr_recommit_decoders(dport_pci, hdm_state);
+	else
+		pci_warn(dport_pci, "no saved HDM state, decode not restored\n");
+
+	xa_for_each(&regions, index, cxlr)
+		cxl_region_enable(cxlr);
+
+	cxl_sbr_put_regions(&regions);
+	cxl_sbr_drop_hdm_state(dport_pci);
+}
+
+const struct pci_cxl_sbr_region_ops cxl_sbr_region_ops = {
+	.disable_regions = cxl_sbr_disable_regions,
+	.enable_regions = cxl_sbr_enable_regions,
+};
