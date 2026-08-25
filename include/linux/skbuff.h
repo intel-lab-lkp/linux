@@ -5011,45 +5011,81 @@ static inline void skb_set_nfct(struct sk_buff *skb, unsigned long nfct)
 }
 
 #ifdef CONFIG_SKB_EXTENSIONS
-enum skb_ext_id {
+
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
-	SKB_EXT_BRIDGE_NF,
+#define SKB_EXT_X_BRIDGE_NF	X(SKB_EXT_BRIDGE_NF, struct nf_bridge_info)
+#else
+#define SKB_EXT_X_BRIDGE_NF
 #endif
-#ifdef CONFIG_XFRM
-	SKB_EXT_SEC_PATH,
+
+#if IS_ENABLED(CONFIG_XFRM)
+#define SKB_EXT_X_SEC_PATH	X(SKB_EXT_SEC_PATH, struct sec_path)
+#else
+#define SKB_EXT_X_SEC_PATH
 #endif
+
 #if IS_ENABLED(CONFIG_NET_TC_SKB_EXT)
-	TC_SKB_EXT,
+#define SKB_EXT_X_TC		X(TC_SKB_EXT, struct tc_skb_ext)
+#else
+#define SKB_EXT_X_TC
 #endif
+
 #if IS_ENABLED(CONFIG_MPTCP)
-	SKB_EXT_MPTCP,
+#define SKB_EXT_X_MPTCP		X(SKB_EXT_MPTCP, struct mptcp_ext)
+#else
+#define SKB_EXT_X_MPTCP
 #endif
+
 #if IS_ENABLED(CONFIG_MCTP_FLOWS)
-	SKB_EXT_MCTP,
+#define SKB_EXT_X_MCTP		X(SKB_EXT_MCTP, struct mctp_flow)
+#else
+#define SKB_EXT_X_MCTP
 #endif
+
 #if IS_ENABLED(CONFIG_INET_PSP)
-	SKB_EXT_PSP,
+#define SKB_EXT_X_PSP		X(SKB_EXT_PSP, struct psp_skb_ext)
+#else
+#define SKB_EXT_X_PSP
 #endif
+
 #if IS_ENABLED(CONFIG_CAN)
-	SKB_EXT_CAN,
+#define SKB_EXT_X_CAN		X(SKB_EXT_CAN, struct can_skb_ext)
+#else
+#define SKB_EXT_X_CAN
 #endif
-	SKB_EXT_NUM, /* must be last */
+
+#define SKB_EXT_FOREACH(X)	\
+	SKB_EXT_X_BRIDGE_NF	\
+	SKB_EXT_X_SEC_PATH	\
+	SKB_EXT_X_TC		\
+	SKB_EXT_X_MPTCP		\
+	SKB_EXT_X_MCTP		\
+	SKB_EXT_X_PSP		\
+	SKB_EXT_X_CAN
+
+enum skb_ext_id {
+#define X(id, type)	id,
+	SKB_EXT_FOREACH(X)
+#undef X
+	SKB_EXT_NUM,
 };
+
+extern const u8 skb_ext_offset[SKB_EXT_NUM];
 
 /**
  *	struct skb_ext - sk_buff extensions
  *	@refcnt: 1 on allocation, deallocated on 0
- *	@offset: offset to add to @data to obtain extension address
- *	@chunks: size currently allocated, stored in SKB_EXT_ALIGN_SHIFT units
+ *	@present_extensions: bitmap of extensions stored in @data
  *	@data: start of extension data, variable sized
  *
- *	Note: offsets/lengths are stored in chunks of 8 bytes, this allows
- *	to use 'u8' types while allowing up to 2kb worth of extension data.
+ *	Each extension id occupies a fixed slot within @data, located at
+ *	skb_ext_offset[id] chunks of 8 bytes. Storing offsets/lengths
+ *	in 8-byte chunks allows 'u8' types while allowing up to 2kb worth
+ *	of extension data.
  */
 struct skb_ext {
 	refcount_t refcnt;
-	u8 offset[SKB_EXT_NUM]; /* in chunks of 8 bytes */
-	u8 chunks;		/* same */
+	u8 present_extensions;
 	char data[] __aligned(8);
 };
 
@@ -5087,7 +5123,7 @@ static inline void skb_ext_copy(struct sk_buff *dst, const struct sk_buff *src)
 
 static inline bool __skb_ext_exist(const struct skb_ext *ext, enum skb_ext_id i)
 {
-	return !!ext->offset[i];
+	return ext->present_extensions & (1 << i);
 }
 
 static inline bool skb_ext_exist(const struct sk_buff *skb, enum skb_ext_id id)
@@ -5106,7 +5142,7 @@ static inline void *skb_ext_find(const struct sk_buff *skb, enum skb_ext_id id)
 	if (skb_ext_exist(skb, id)) {
 		struct skb_ext *ext = skb->extensions;
 
-		return (void *)ext + (ext->offset[id] << 3);
+		return (void *)ext + (skb_ext_offset[id] << 3);
 	}
 
 	return NULL;

@@ -5134,47 +5134,32 @@ EXPORT_SYMBOL_GPL(skb_segment);
 #define SKB_EXT_CHUNKSIZEOF(x)	(ALIGN((sizeof(x)), SKB_EXT_ALIGN_VALUE) / SKB_EXT_ALIGN_VALUE)
 
 static const u8 skb_ext_type_len[] = {
-#if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
-	[SKB_EXT_BRIDGE_NF] = SKB_EXT_CHUNKSIZEOF(struct nf_bridge_info),
-#endif
-#ifdef CONFIG_XFRM
-	[SKB_EXT_SEC_PATH] = SKB_EXT_CHUNKSIZEOF(struct sec_path),
-#endif
-#if IS_ENABLED(CONFIG_NET_TC_SKB_EXT)
-	[TC_SKB_EXT] = SKB_EXT_CHUNKSIZEOF(struct tc_skb_ext),
-#endif
-#if IS_ENABLED(CONFIG_MPTCP)
-	[SKB_EXT_MPTCP] = SKB_EXT_CHUNKSIZEOF(struct mptcp_ext),
-#endif
-#if IS_ENABLED(CONFIG_MCTP_FLOWS)
-	[SKB_EXT_MCTP] = SKB_EXT_CHUNKSIZEOF(struct mctp_flow),
-#endif
-#if IS_ENABLED(CONFIG_INET_PSP)
-	[SKB_EXT_PSP] = SKB_EXT_CHUNKSIZEOF(struct psp_skb_ext),
-#endif
-#if IS_ENABLED(CONFIG_CAN)
-	[SKB_EXT_CAN] = SKB_EXT_CHUNKSIZEOF(struct can_skb_ext),
-#endif
+#define X(id, type)	[id] = SKB_EXT_CHUNKSIZEOF(type),
+	SKB_EXT_FOREACH(X)
+#undef X
 };
 
-static __always_inline __no_profile unsigned int skb_ext_total_length(void)
-{
-	unsigned int l = SKB_EXT_CHUNKSIZEOF(struct skb_ext);
-	int i;
+struct skb_ext_layout {
+	u8	header[sizeof(struct skb_ext)] __aligned(SKB_EXT_ALIGN_VALUE);
+#define X(id, type)	type f_##id __aligned(SKB_EXT_ALIGN_VALUE);
+	SKB_EXT_FOREACH(X)
+#undef X
+};
 
-	for (i = 0; i < ARRAY_SIZE(skb_ext_type_len); i++)
-		l += skb_ext_type_len[i];
-
-	return l;
-}
+const u8 skb_ext_offset[SKB_EXT_NUM] = {
+#define X(id, type)	[id] = offsetof(struct skb_ext_layout, f_##id) / SKB_EXT_ALIGN_VALUE,
+	SKB_EXT_FOREACH(X)
+#undef X
+};
+EXPORT_SYMBOL(skb_ext_offset);
 
 static noinline void __init __no_profile skb_extensions_init(void)
 {
 	BUILD_BUG_ON(SKB_EXT_NUM > 8);
-	BUILD_BUG_ON(skb_ext_total_length() > 255);
+	BUILD_BUG_ON(sizeof(struct skb_ext_layout) > 255 * SKB_EXT_ALIGN_VALUE);
 
 	skbuff_ext_cache = kmem_cache_create("skbuff_ext_cache",
-					     SKB_EXT_ALIGN_VALUE * skb_ext_total_length(),
+					     sizeof(struct skb_ext_layout),
 					     0,
 					     SLAB_HWCACHE_ALIGN|SLAB_PANIC,
 					     NULL);
@@ -7083,7 +7068,7 @@ EXPORT_SYMBOL(skb_condense);
 #ifdef CONFIG_SKB_EXTENSIONS
 static void *skb_ext_get_ptr(struct skb_ext *ext, enum skb_ext_id id)
 {
-	return (void *)ext + (ext->offset[id] * SKB_EXT_ALIGN_VALUE);
+	return (void *)ext + (skb_ext_offset[id] * SKB_EXT_ALIGN_VALUE);
 }
 
 /**
@@ -7100,7 +7085,7 @@ struct skb_ext *__skb_ext_alloc(gfp_t flags)
 	struct skb_ext *new = kmem_cache_alloc(skbuff_ext_cache, flags);
 
 	if (new) {
-		memset(new->offset, 0, sizeof(new->offset));
+		new->present_extensions = 0;
 		refcount_set(&new->refcnt, 1);
 	}
 
@@ -7111,6 +7096,7 @@ static struct skb_ext *skb_ext_maybe_cow(struct skb_ext *old,
 					 unsigned int old_active)
 {
 	struct skb_ext *new;
+	int i;
 
 	if (refcount_read(&old->refcnt) == 1)
 		return old;
@@ -7119,7 +7105,12 @@ static struct skb_ext *skb_ext_maybe_cow(struct skb_ext *old,
 	if (!new)
 		return NULL;
 
-	memcpy(new, old, old->chunks * SKB_EXT_ALIGN_VALUE);
+	memcpy(new, old, SKB_EXT_CHUNKSIZEOF(*old) * SKB_EXT_ALIGN_VALUE);
+	for (i = 0; i < SKB_EXT_NUM; i++) {
+		if (old->present_extensions & (1 << i))
+			memcpy(skb_ext_get_ptr(new, i), skb_ext_get_ptr(old, i),
+			       skb_ext_type_len[i] * SKB_EXT_ALIGN_VALUE);
+	}
 	refcount_set(&new->refcnt, 1);
 
 #ifdef CONFIG_XFRM
@@ -7156,12 +7147,8 @@ static struct skb_ext *skb_ext_maybe_cow(struct skb_ext *old,
 void *__skb_ext_set(struct sk_buff *skb, enum skb_ext_id id,
 		    struct skb_ext *ext)
 {
-	unsigned int newlen, newoff = SKB_EXT_CHUNKSIZEOF(*ext);
-
 	skb_ext_put(skb);
-	newlen = newoff + skb_ext_type_len[id];
-	ext->chunks = newlen;
-	ext->offset[id] = newoff;
+	ext->present_extensions = 1 << id;
 	skb->extensions = ext;
 	skb->active_extensions = 1 << id;
 	return skb_ext_get_ptr(ext, id);
@@ -7184,31 +7171,23 @@ EXPORT_SYMBOL_NS_GPL(__skb_ext_set, "NETDEV_INTERNAL");
  */
 void *skb_ext_add(struct sk_buff *skb, enum skb_ext_id id)
 {
-	struct skb_ext *new, *old = NULL;
-	unsigned int newlen, newoff;
+	struct skb_ext *new;
 
 	if (skb->active_extensions) {
-		old = skb->extensions;
-
-		new = skb_ext_maybe_cow(old, skb->active_extensions);
+		new = skb_ext_maybe_cow(skb->extensions,
+					skb->active_extensions);
 		if (!new)
 			return NULL;
 
 		if (__skb_ext_exist(new, id))
 			goto set_active;
-
-		newoff = new->chunks;
 	} else {
-		newoff = SKB_EXT_CHUNKSIZEOF(*new);
-
 		new = __skb_ext_alloc(GFP_ATOMIC);
 		if (!new)
 			return NULL;
 	}
 
-	newlen = newoff + skb_ext_type_len[id];
-	new->chunks = newlen;
-	new->offset[id] = newoff;
+	new->present_extensions |= 1 << id;
 set_active:
 	skb->slow_gro = 1;
 	skb->extensions = new;
