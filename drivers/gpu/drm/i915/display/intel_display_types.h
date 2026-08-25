@@ -1441,6 +1441,7 @@ struct intel_crtc_state {
 		u8 aux_less_wake_lines;
 		u8 silence_period_sym_clocks;
 		u8 lfps_half_cycle_num_of_syms;
+		int switch_to_active;
 	} alpm_state;
 	bool has_alpm;
 

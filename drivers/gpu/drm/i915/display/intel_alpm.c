@@ -270,6 +270,31 @@ static int get_establishment_period(struct intel_dp *intel_dp,
 	return establishment_period;
 }
 
+
+static int get_switch_to_active(const struct intel_crtc_state *crtc_state)
+{
+	int port_clock = crtc_state->port_clock;
+	int switch_to_active;
+
+	if (intel_dp_is_uhbr(crtc_state)) {
+		/* symbol_clock (fLink) in MHz */
+		int symbol_clock = port_clock / intel_dp_link_symbol_size(port_clock) / 100;
+
+		/*
+		 * tSwitch to Active = 32 * (ML_PHY_LOCK Length + 3 + 64) / fLink
+		 *
+		 * The "+ 3" term is the trailing zero padding after the
+		 * POST_LT_SCRAMBLER_RESET, the "+ 64" term represents the MTP
+		 * time slots. The result is in microseconds.
+		 */
+		switch_to_active = 32 * ((396 + 3 + 64) / symbol_clock);
+	} else {
+		switch_to_active = 0;
+	}
+
+	return switch_to_active;
+}
+
 /*
  * AUX-Less Wake Time = CEILING( ((PHY P2 to P0) + tLFPS_Period, Max+
  * tSilence, Max+ tPHY Establishment + tCDS) / tline)
@@ -329,7 +354,8 @@ _lnl_compute_aux_less_alpm_params(struct intel_dp *intel_dp,
 	crtc_state->alpm_state.aux_less_wake_lines = aux_less_wake_lines;
 	crtc_state->alpm_state.silence_period_sym_clocks = silence_period;
 	crtc_state->alpm_state.lfps_half_cycle_num_of_syms = lfps_half_cycle;
-
+	crtc_state->alpm_state.switch_to_active = intel_usecs_to_scanlines(&crtc_state->hw.adjusted_mode,
+									   get_switch_to_active(crtc_state));
 	return true;
 }
 
@@ -619,8 +645,10 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 	lttpr_count = drm_dp_lttpr_count(intel_dp->lttpr_common_caps);
 
 	alpm_ctl2 = intel_de_read(display, ALPM_CTL2(display, cpu_transcoder));
-	alpm_ctl2 &= ~ALPM_CTL2_NUMBER_OF_LTTPR_MASK;
+	alpm_ctl2 &= ~(ALPM_CTL2_NUMBER_OF_LTTPR_MASK |
+		       ALPM_CTL2_SWITCH_TO_ACTIVE_LATENCY_MASK);
 	alpm_ctl2 |= ALPM_CTL2_NUMBER_OF_LTTPR(lttpr_count);
+	alpm_ctl2 |= ALPM_CTL2_SWITCH_TO_ACTIVE_LATENCY(crtc_state->alpm_state.switch_to_active);
 
 	intel_de_write(display, ALPM_CTL2(display, cpu_transcoder), alpm_ctl2);
 	intel_de_write(display, ALPM_CTL(display, cpu_transcoder), alpm_ctl);
