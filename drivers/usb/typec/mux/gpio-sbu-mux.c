@@ -17,6 +17,7 @@ struct gpio_sbu_mux {
 
 	struct typec_switch_dev *sw;
 	struct typec_mux_dev *mux;
+	bool mode_switch;
 
 	struct mutex lock; /* protect enabled and swapped */
 	bool enabled;
@@ -40,9 +41,13 @@ static int gpio_sbu_switch_set(struct typec_switch_dev *sw,
 		enabled = false;
 		break;
 	case TYPEC_ORIENTATION_NORMAL:
+		if (!sbu_mux->mode_switch)
+			enabled = true;
 		swapped = false;
 		break;
 	case TYPEC_ORIENTATION_REVERSE:
+		if (!sbu_mux->mode_switch)
+			enabled = true;
 		swapped = true;
 		break;
 	}
@@ -124,6 +129,8 @@ static int gpio_sbu_mux_probe(struct platform_device *pdev)
 	if (IS_ERR(sbu_mux->sw))
 		return dev_err_probe(dev, PTR_ERR(sbu_mux->sw),
 				     "failed to register typec switch\n");
+
+	sbu_mux->mode_switch = device_property_read_bool(dev, "mode-switch");
 
 	mux_desc.drvdata = sbu_mux;
 	mux_desc.fwnode = dev_fwnode(dev);
