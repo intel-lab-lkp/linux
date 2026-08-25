@@ -344,6 +344,7 @@ struct nct6683_data {
 	u16 have_fan;			/* some fan inputs can be disabled */
 
 	u8 have_pwm;
+	u8 initial_fan_ctrl_mode;
 	u8 pwm[NCT6683_NUM_REG_PWM];
 
 #ifdef CONFIG_PM
@@ -1275,6 +1276,17 @@ static void nct6683_setup_sensors(struct nct6683_data *data)
 	}
 }
 
+/* Put the fan control mode register back the way probe found it. */
+static void nct6683_restore_fan_control(void *_data)
+{
+	struct nct6683_data *data = _data;
+
+	mutex_lock(&data->update_lock);
+	nct6683_write(data, NCT6683_REG_FAN_CTRL_MODE,
+		      data->initial_fan_ctrl_mode);
+	mutex_unlock(&data->update_lock);
+}
+
 static int nct6683_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1284,6 +1296,7 @@ static int nct6683_probe(struct platform_device *pdev)
 	struct device *hwmon_dev;
 	struct resource *res;
 	int groups = 0;
+	int err;
 	char build[16];
 
 	res = platform_get_resource(pdev, IORESOURCE_IO, 0);
@@ -1400,6 +1413,15 @@ static int nct6683_probe(struct platform_device *pdev)
 		 nct6683_read(data, NCT6683_REG_VERSION_HI),
 		 nct6683_read(data, NCT6683_REG_VERSION_LO),
 		 build);
+
+	if (nct6683_has_fan_control(data)) {
+		data->initial_fan_ctrl_mode =
+			nct6683_read(data, NCT6683_REG_FAN_CTRL_MODE);
+		err = devm_add_action_or_reset(dev, nct6683_restore_fan_control,
+					       data);
+		if (err)
+			return err;
+	}
 
 	hwmon_dev = devm_hwmon_device_register_with_groups(dev,
 			nct6683_device_names[data->kind], data, data->groups);
