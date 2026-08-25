@@ -249,7 +249,7 @@ void __pci_write_msi_msg(struct msi_desc *entry, struct msi_msg *msg)
 {
 	struct pci_dev *dev = msi_desc_to_pci_dev(entry);
 
-	if (dev->current_state != PCI_D0 || pci_dev_is_disconnected(dev)) {
+	if (dev->current_state != PCI_D0 || pci_msi_dev_inaccessible(dev)) {
 		/* Don't touch the hardware now */
 	} else if (entry->pci.msi_attrib.is_msix) {
 		pci_write_msg_msix(entry, msg);
@@ -953,6 +953,14 @@ int pci_msix_write_tph_tag(struct pci_dev *pdev, unsigned int index, u16 tag)
 
 	if (!pdev->msix_enabled)
 		return -ENXIO;
+
+	/*
+	 * The tag update below is a write to the MSI-X Table followed by a
+	 * flush read, neither of which can be completed while the Link is
+	 * contained. Let the caller disable TPH instead.
+	 */
+	if (pci_msi_dev_inaccessible(pdev))
+		return -EIO;
 
 	virq = msi_get_virq(&pdev->dev, index);
 	if (!virq)
