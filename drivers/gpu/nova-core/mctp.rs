@@ -9,14 +9,12 @@
 
 use kernel::{
     bitfield,
+    num::casts,
     pci::Vendor,
     prelude::*, //
 };
 
-use crate::{
-    bounded_enum,
-    num, //
-};
+use crate::bounded_enum;
 
 bounded_enum! {
     /// NVDM message type identifiers carried over MCTP.
@@ -76,7 +74,7 @@ impl NvdmHeader {
     /// Builds an NVDM header for the given message type.
     pub(crate) fn new(nvdm_type: NvdmType) -> Self {
         Self::zeroed()
-            .with_const_msg_type::<{ num::u8_as_u32(MSG_TYPE_VENDOR_PCI) }>()
+            .with_const_msg_type::<{ casts::u8_as_u32(MSG_TYPE_VENDOR_PCI) }>()
             .with_vendor_id(Vendor::NVIDIA.as_raw())
             .with_nvdm_type(nvdm_type)
     }

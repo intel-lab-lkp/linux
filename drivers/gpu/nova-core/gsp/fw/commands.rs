@@ -5,6 +5,7 @@ use core::ops::Range;
 
 use kernel::{
     device,
+    num::casts::IntoSafeCast,
     pci,
     prelude::*,
     transmute::{
@@ -15,8 +16,7 @@ use kernel::{
 
 use crate::{
     gpu::Chipset,
-    gsp::GSP_PAGE_SIZE,
-    num::IntoSafeCast, //
+    gsp::GSP_PAGE_SIZE, //
 };
 
 use super::bindings;

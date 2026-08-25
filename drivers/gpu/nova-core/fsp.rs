@@ -11,7 +11,10 @@ use kernel::{
     device,
     dma::Coherent,
     io::poll::read_poll_timeout,
-    num::TryIntoBounded,
+    num::{
+        casts,
+        TryIntoBounded, //
+    },
     prelude::*,
     ptr::{
         Alignable,
@@ -47,7 +50,6 @@ use crate::{
         NvdmHeader,
         NvdmType, //
     },
-    num,
     regs, //
 };
 
@@ -285,7 +287,7 @@ impl FspCotMessage {
         };
 
         let version = hal.cot_version();
-        let size = num::usize_into_u16::<{ core::mem::size_of::<NvdmPayloadCot>() }>();
+        let size = casts::const_as!(core::mem::size_of::<NvdmPayloadCot>() => u16);
 
         Ok(init!(Self {
             header: FspMessageHeader::new(NvdmType::Cot),

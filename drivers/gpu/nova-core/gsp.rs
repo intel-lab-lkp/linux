@@ -17,6 +17,7 @@ use kernel::{
         io_write,
         Io, //
     },
+    num::casts,
     pci,
     prelude::*, //
 };
@@ -48,7 +49,6 @@ use crate::{
         cmdq::Cmdq,
         fw::GspArgumentsPadded, //
     },
-    num,
     vgpu::VgpuManager, //
 };
 
@@ -92,7 +92,7 @@ impl<const NUM_PAGES: usize> PteArray<NUM_PAGES> {
         for i in 0..NUM_PAGES {
             io_write!(view, .0[build: i],
                 start
-                    .checked_add(num::usize_as_u64(i) << GSP_PAGE_SHIFT)
+                    .checked_add(casts::usize_as_u64(i) << GSP_PAGE_SHIFT)
                     .ok_or(EOVERFLOW)?
             );
         }

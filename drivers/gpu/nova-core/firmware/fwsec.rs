@@ -19,6 +19,7 @@ use kernel::{
         self,
         Device, //
     },
+    num::casts::FromSafeCast,
     prelude::*,
     transmute::{
         AsBytes,
@@ -42,7 +43,6 @@ use crate::{
         Signed,
         Unsigned, //
     },
-    num::FromSafeCast,
     vbios::Vbios,
 };
 

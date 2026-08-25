@@ -10,6 +10,7 @@ use kernel::{
     dma::CoherentHandle,
     fmt,
     io::Io,
+    num::casts::FromSafeCast,
     prelude::*,
     ptr::{
         Alignable,
@@ -23,7 +24,6 @@ use crate::{
     firmware::gsp::GspFirmware,
     gpu::Chipset,
     gsp,
-    num::FromSafeCast,
     vgpu::VgpuState, //
 };
 

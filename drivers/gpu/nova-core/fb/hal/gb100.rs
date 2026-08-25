@@ -11,7 +11,10 @@ use kernel::{
         },
         Io, //
     },
-    num::Bounded,
+    num::{
+        casts,
+        Bounded, //
+    },
     prelude::*,
     ptr::{
         const_align_up,
@@ -26,7 +29,6 @@ use crate::{
         hal::FbHal,
         regs, //
     },
-    num::usize_into_u32,
 };
 
 struct Gb100;
@@ -82,7 +84,8 @@ fn write_sysmem_flush_page_gb100(bar: Bar0<'_>, addr: Bounded<u64, 52>) {
 
 // This PMU reservation size is r570-specific.
 pub(super) const fn pmu_reserved_size_gb100() -> u32 {
-    usize_into_u32::<{ const_align_up(SZ_8M + SZ_16M + SZ_4K, Alignment::new::<SZ_128K>()).unwrap() }>(
+    casts::const_as!(
+        const_align_up(SZ_8M + SZ_16M + SZ_4K, Alignment::new::<SZ_128K>()).unwrap() => u32
     )
 }
 
