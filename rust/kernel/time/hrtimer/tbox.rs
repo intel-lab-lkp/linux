@@ -3,12 +3,12 @@
 use super::HasHrTimer;
 use super::HrTimer;
 use super::HrTimerCallback;
-use super::HrTimerCallbackContext;
 use super::HrTimerHandle;
 use super::HrTimerMode;
 use super::HrTimerPointer;
 use super::RawHrTimerCallback;
 use crate::prelude::*;
+use crate::time::Instant;
 use core::ptr::NonNull;
 
 /// A handle for a [`Box<HasHrTimer<T>>`] returned by a call to
@@ -102,7 +102,11 @@ where
 {
     type CallbackTarget<'a> = Pin<&'a mut T>;
 
-    unsafe extern "C" fn run(ptr: *mut bindings::hrtimer) -> bindings::hrtimer_restart {
+    unsafe extern "C" fn run(
+        ptr: *mut bindings::hrtimer,
+        expires: bindings::ktime_t,
+        fwd: *mut bindings::hrtimer_forward_args,
+    ) -> bindings::hrtimer_restart {
         // `HrTimer` is `repr(C)`
         let timer_ptr = ptr.cast::<super::HrTimer<T>>();
 
@@ -120,12 +124,13 @@ where
         //   `data_ptr` exist.
         let data_mut_ref = unsafe { Pin::new_unchecked(&mut *data_ptr) };
 
-        // SAFETY:
-        // - By C API contract `timer_ptr` is the pointer that we passed when queuing the timer, so
-        //   it is a valid pointer to a `HrTimer<T>` embedded in a `T`.
-        // - We are within `RawHrTimerCallback::run`
-        let context = unsafe { HrTimerCallbackContext::from_raw(timer_ptr) };
+        // SAFETY: By C API contract, `expires` is the expiry of the timer
+        // snapshotted under the timer base lock, and timers cannot have
+        // negative expiry times.
+        let expires = unsafe { Instant::from_ktime(expires) };
 
-        T::run(data_mut_ref, context).into_c()
+        // SAFETY: By C API contract, `fwd` is valid for writing a
+        // `bindings::hrtimer_forward_args`.
+        unsafe { T::run(data_mut_ref, expires).into_c(fwd) }
     }
 }

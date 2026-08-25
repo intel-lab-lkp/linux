@@ -60,16 +60,23 @@
 //! by the `cancel` operation. A timer that is cancelled enters the **stopped**
 //! state.
 //!
-//! A `cancel` or `restart` operation on a timer in the **running** state takes
-//! effect after the handler has returned and the timer has transitioned
-//! out of the **running** state.
+//! The handler receives the expiry time that was in effect when the timer fired. To restart the
+//! timer, the handler returns a forward request; the timer core applies the request and requeues
+//! the timer. A concurrent `start` operation overrides the restart request of the timer handler.
+//!
+//! A `cancel` operation on a timer in the **running** state takes effect after
+//! the handler has returned and the timer has transitioned out of the
+//! **running** state.
 //!
 //! A `restart` operation on a timer in the **stopped** state is equivalent to a
 //! `start` operation.
 //!
-//! When a type implements both `HrTimerPointer` and `Clone`, it is possible to
-//! issue the `start` operation while the timer is in the **started** state. In
-//! this case the `start` operation is equivalent to the `restart` operation.
+//! When a type implements both `HrTimerPointer` and `Clone`, it is possible to issue the `start`
+//! operation while the timer is in the **started** or **running** state. In this case the `start`
+//! operation is equivalent to the `restart` operation. A `restart` operation on a timer in the
+//! **running** state takes effect immediately: the timer re-enters the **started** state before the
+//! handler returns, and a restart requested by the return value of the handler is discarded in
+//! favor of the `restart` operation.
 //!
 //! # Examples
 //!
@@ -87,8 +94,8 @@
 //! #     },
 //! #     time::{
 //! #         hrtimer::{
-//! #             RelativeMode, HrTimer, HrTimerCallback, HrTimerPointer,
-//! #             HrTimerRestart, HrTimerCallbackContext
+//! #             RelativeMode, HrTimer, HrTimerCallback, HrTimerInstant,
+//! #             HrTimerPointer, HrTimerRestart
 //! #         },
 //! #         Delta, Monotonic,
 //! #     },
@@ -130,7 +137,7 @@
 //! impl HrTimerCallback for BoxIntrusiveHrTimer {
 //!     type Pointer<'a> = Pin<KBox<Self>>;
 //!
-//!     fn run(this: Pin<&mut Self>, _ctx: HrTimerCallbackContext<'_, Self>) -> HrTimerRestart {
+//!     fn run(this: Pin<&mut Self>, _expires: HrTimerInstant<Self>) -> HrTimerRestart<Self> {
 //!         pr_info!("Timer called\n");
 //!
 //!         let flag = this.shared.flag.fetch_add(1, ordering::Full);
@@ -139,7 +146,7 @@
 //!         if flag == 4 {
 //!             HrTimerRestart::NoRestart
 //!         } else {
-//!             HrTimerRestart::Restart
+//!             HrTimerRestart::forward_now(Delta::from_micros(200))
 //!         }
 //!     }
 //! }
@@ -176,8 +183,8 @@
 //! #     },
 //! #     time::{
 //! #         hrtimer::{
-//! #             RelativeMode, HrTimer, HrTimerCallback, HrTimerPointer, HrTimerRestart,
-//! #             HasHrTimer, HrTimerCallbackContext
+//! #             RelativeMode, HrTimer, HrTimerCallback, HrTimerInstant, HrTimerPointer,
+//! #             HrTimerRestart, HasHrTimer
 //! #         },
 //! #         Delta, Monotonic,
 //! #     },
@@ -208,8 +215,8 @@
 //!
 //!     fn run(
 //!         this: ArcBorrow<'_, Self>,
-//!         _ctx: HrTimerCallbackContext<'_, Self>,
-//!     ) -> HrTimerRestart {
+//!         _expires: HrTimerInstant<Self>,
+//!     ) -> HrTimerRestart<Self> {
 //!         pr_info!("Timer called\n");
 //!
 //!         let flag = this.flag.fetch_add(1, ordering::Full);
@@ -218,7 +225,7 @@
 //!         if flag == 4 {
 //!             HrTimerRestart::NoRestart
 //!         } else {
-//!             HrTimerRestart::Restart
+//!             HrTimerRestart::forward_now(Delta::from_micros(200))
 //!         }
 //!     }
 //! }
@@ -252,8 +259,8 @@
 //! #     },
 //! #     time::{
 //! #         hrtimer::{
-//! #             ScopedHrTimerPointer, HrTimer, HrTimerCallback, HrTimerPointer, HrTimerRestart,
-//! #             HasHrTimer, RelativeMode, HrTimerCallbackContext
+//! #             ScopedHrTimerPointer, HrTimer, HrTimerCallback, HrTimerInstant,
+//! #             HrTimerPointer, HrTimerRestart, HasHrTimer, RelativeMode
 //! #         },
 //! #         Delta, Monotonic,
 //! #     },
@@ -283,7 +290,7 @@
 //! impl HrTimerCallback for IntrusiveHrTimer {
 //!     type Pointer<'a> = Pin<&'a Self>;
 //!
-//!     fn run(this: Pin<&Self>, _ctx: HrTimerCallbackContext<'_, Self>) -> HrTimerRestart {
+//!     fn run(this: Pin<&Self>, _expires: HrTimerInstant<Self>) -> HrTimerRestart<Self> {
 //!         pr_info!("Timer called\n");
 //!
 //!         this.flag.store(1, ordering::Release);
@@ -324,8 +331,8 @@
 //! #     },
 //! #     time::{
 //! #         hrtimer::{
-//! #             ScopedHrTimerPointer, HrTimer, HrTimerCallback, HrTimerPointer, HrTimerRestart,
-//! #             HasHrTimer, RelativeMode, HrTimerCallbackContext
+//! #             ScopedHrTimerPointer, HrTimer, HrTimerCallback, HrTimerInstant,
+//! #             HrTimerPointer, HrTimerRestart, HasHrTimer, RelativeMode
 //! #         },
 //! #         Delta, Monotonic,
 //! #     },
@@ -368,7 +375,7 @@
 //! impl HrTimerCallback for IntrusiveHrTimer {
 //!     type Pointer<'a> = Pin<&'a mut Self>;
 //!
-//!     fn run(this: Pin<&mut Self>, _ctx: HrTimerCallbackContext<'_, Self>) -> HrTimerRestart {
+//!     fn run(this: Pin<&mut Self>, _expires: HrTimerInstant<Self>) -> HrTimerRestart<Self> {
 //!         pr_info!("Timer called\n");
 //!
 //!         let flag = this.shared.flag.fetch_add(1, ordering::Full);
@@ -377,7 +384,7 @@
 //!         if flag == 4 {
 //!             HrTimerRestart::NoRestart
 //!         } else {
-//!             HrTimerRestart::Restart
+//!             HrTimerRestart::forward_now(Delta::from_micros(200))
 //!         }
 //!     }
 //! }
@@ -405,7 +412,7 @@
 
 use super::{ClockSource, Delta, Instant};
 use crate::{prelude::*, types::Opaque};
-use core::{marker::PhantomData, ptr::NonNull};
+use core::marker::PhantomData;
 use pin_init::PinInit;
 
 /// A type-alias to refer to the [`Instant<C>`] for a given `T` from [`HrTimer<T>`].
@@ -417,7 +424,7 @@ pub type HrTimerInstant<T> = Instant<<<T as HasHrTimer<T>>::TimerMode as HrTimer
 ///
 /// # Invariants
 ///
-/// * `self.timer` is initialized by `bindings::hrtimer_setup`.
+/// * `self.timer` is initialized by `bindings::hrtimer_setup_ext`.
 #[pin_data]
 #[repr(C)]
 pub struct HrTimer<T> {
@@ -442,13 +449,14 @@ impl<T> HrTimer<T> {
         T: HasHrTimer<T>,
     {
         pin_init!(Self {
-            // INVARIANT: We initialize `timer` with `hrtimer_setup` below.
+            // INVARIANT: We initialize `timer` with `hrtimer_setup_ext` below.
             timer <- Opaque::ffi_init(move |place: *mut bindings::hrtimer| {
                 // SAFETY: By design of `pin_init!`, `place` is a pointer to a
-                // live allocation. hrtimer_setup will initialize `place` and
-                // does not require `place` to be initialized prior to the call.
+                // live allocation. hrtimer_setup_ext will initialize `place`
+                // and does not require `place` to be initialized prior to the
+                // call.
                 unsafe {
-                    bindings::hrtimer_setup(
+                    bindings::hrtimer_setup_ext(
                         place,
                         Some(T::Pointer::run),
                         <<T as HasHrTimer<T>>::TimerMode as HrTimerMode>::Clock::ID,
@@ -510,8 +518,7 @@ impl<T> HrTimer<T> {
     /// # Safety
     ///
     /// - `self_ptr` must point to a valid `Self`.
-    /// - The caller must either have exclusive access to the data pointed at by `self_ptr`, or be
-    ///   within the context of the timer callback.
+    /// - The caller must have exclusive access to the data pointed at by `self_ptr`.
     #[inline]
     unsafe fn raw_forward(self_ptr: *mut Self, now: HrTimerInstant<T>, interval: Delta) -> u64
     where
@@ -533,8 +540,8 @@ impl<T> HrTimer<T> {
     /// `interval`.
     ///
     /// This function is mainly useful for timer types which can provide exclusive access to the
-    /// timer when the timer is not running. For forwarding the timer from within the timer callback
-    /// context, see [`HrTimerCallbackContext::forward()`].
+    /// timer when the timer is not running. To forward the timer from within the timer callback,
+    /// return [`HrTimerRestart::Forward`] from the callback instead.
     ///
     /// Returns the number of overruns that occurred as a result of the timer expiry change.
     pub fn forward(self: Pin<&mut Self>, now: HrTimerInstant<T>, interval: Delta) -> u64
@@ -707,9 +714,16 @@ pub trait RawHrTimerCallback {
     ///
     /// # Safety
     ///
-    /// Only to be called by C code in the `hrtimer` subsystem. `this` must point
-    /// to the `bindings::hrtimer` structure that was used to start the timer.
-    unsafe extern "C" fn run(this: *mut bindings::hrtimer) -> bindings::hrtimer_restart;
+    /// Only to be called by C code in the `hrtimer` subsystem. `this` must
+    /// point to the `bindings::hrtimer` structure that was used to start the
+    /// timer, `expires` must be the expiry of the timer snapshotted under the
+    /// timer base lock, and `fwd` must be valid for writing a
+    /// `bindings::hrtimer_forward_args`.
+    unsafe extern "C" fn run(
+        this: *mut bindings::hrtimer,
+        expires: bindings::ktime_t,
+        fwd: *mut bindings::hrtimer_forward_args,
+    ) -> bindings::hrtimer_restart;
 }
 
 /// Implemented by structs that can be the target of a timer callback.
@@ -719,10 +733,14 @@ pub trait HrTimerCallback {
     type Pointer<'a>: RawHrTimerCallback;
 
     /// Called by the timer logic when the timer fires.
+    ///
+    /// `expires` is the expiry time of the timer, read under the timer base
+    /// lock when the timer fired. A concurrent restart of the timer is not
+    /// reflected in `expires`.
     fn run(
         this: <Self::Pointer<'_> as RawHrTimerCallback>::CallbackTarget<'_>,
-        ctx: HrTimerCallbackContext<'_, Self>,
-    ) -> HrTimerRestart
+        expires: HrTimerInstant<Self>,
+    ) -> HrTimerRestart<Self>
     where
         Self: Sized,
         Self: HasHrTimer<Self>;
@@ -829,19 +847,62 @@ pub unsafe trait HasHrTimer<T> {
     }
 }
 
-/// Restart policy for timers.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-#[repr(u32)]
-pub enum HrTimerRestart {
+/// Restart policy for timers, as returned by [`HrTimerCallback::run`].
+///
+/// A timer callback requests a restart of its timer by returning
+/// [`HrTimerRestart::Forward`]. The forward is not applied by the callback
+/// itself: the timer core applies it and requeues the timer under the timer
+/// base lock after the callback has returned. If the timer was restarted by a
+/// concurrent start operation while the callback was running, the request is
+/// discarded and the concurrent start operation wins.
+pub enum HrTimerRestart<T: HasHrTimer<T>> {
     /// Timer should not be restarted.
-    NoRestart = bindings::hrtimer_restart_HRTIMER_NORESTART,
-    /// Timer should be restarted.
-    Restart = bindings::hrtimer_restart_HRTIMER_RESTART,
+    NoRestart,
+    /// Forward the timer expiry to lie past `now` in increments of `interval`
+    /// and restart the timer.
+    ///
+    /// `interval` must be a positive time delta.
+    Forward {
+        /// The point in time to forward the expiry past.
+        now: HrTimerInstant<T>,
+        /// The time interval to forward the expiry by.
+        interval: Delta,
+    },
 }
 
-impl HrTimerRestart {
-    fn into_c(self) -> bindings::hrtimer_restart {
-        self as bindings::hrtimer_restart
+impl<T: HasHrTimer<T>> HrTimerRestart<T> {
+    /// Request that the timer be forwarded past the current time by `interval`
+    /// and restarted.
+    pub fn forward_now(interval: Delta) -> Self {
+        Self::Forward {
+            now: HrTimerInstant::<T>::now(),
+            interval,
+        }
+    }
+
+    /// Convert to the C representation, filling `fwd` with the forward
+    /// request.
+    ///
+    /// # Safety
+    ///
+    /// `fwd` must be valid for writing a `bindings::hrtimer_forward_args`.
+    pub(crate) unsafe fn into_c(
+        self,
+        fwd: *mut bindings::hrtimer_forward_args,
+    ) -> bindings::hrtimer_restart {
+        match self {
+            Self::NoRestart => bindings::hrtimer_restart_HRTIMER_NORESTART,
+            Self::Forward { now, interval } => {
+                // SAFETY: By our safety contract, `fwd` is valid for writing.
+                unsafe {
+                    *fwd = bindings::hrtimer_forward_args {
+                        now: now.as_nanos(),
+                        interval: interval.as_nanos(),
+                    }
+                };
+                bindings::hrtimer_restart_HRTIMER_RESTART
+            }
+        }
     }
 }
 
@@ -1008,63 +1069,6 @@ impl<C: ClockSource> HrTimerMode for RelativePinnedHardMode<C> {
 
     type Clock = C;
     type Expires = Delta;
-}
-
-/// Privileged smart-pointer for a [`HrTimer`] callback context.
-///
-/// Many [`HrTimer`] methods can only be called in two situations:
-///
-/// * When the caller has exclusive access to the `HrTimer` and the `HrTimer` is guaranteed not to
-///   be running.
-/// * From within the context of an `HrTimer`'s callback method.
-///
-/// This type provides access to said methods from within a timer callback context.
-///
-/// # Invariants
-///
-/// * The existence of this type means the caller is currently within the callback for an
-///   [`HrTimer`].
-/// * `self.0` always points to a live instance of [`HrTimer<T>`].
-pub struct HrTimerCallbackContext<'a, T: HasHrTimer<T>>(NonNull<HrTimer<T>>, PhantomData<&'a ()>);
-
-impl<'a, T: HasHrTimer<T>> HrTimerCallbackContext<'a, T> {
-    /// Create a new [`HrTimerCallbackContext`].
-    ///
-    /// # Safety
-    ///
-    /// This function relies on the caller being within the context of a timer callback, so it must
-    /// not be used anywhere except for within implementations of [`RawHrTimerCallback::run`]. The
-    /// caller promises that `timer` points to a valid initialized instance of
-    /// [`bindings::hrtimer`].
-    ///
-    /// The returned `Self` must not outlive the function context of [`RawHrTimerCallback::run`]
-    /// where this function is called.
-    pub(crate) unsafe fn from_raw(timer: *mut HrTimer<T>) -> Self {
-        // SAFETY: The caller guarantees `timer` is a valid pointer to an initialized
-        // `bindings::hrtimer`
-        // INVARIANT: Our safety contract ensures that we're within the context of a timer callback
-        // and that `timer` points to a live instance of `HrTimer<T>`.
-        Self(unsafe { NonNull::new_unchecked(timer) }, PhantomData)
-    }
-
-    /// Conditionally forward the timer.
-    ///
-    /// This function is identical to [`HrTimer::forward()`] except that it may only be used from
-    /// within the context of a [`HrTimer`] callback.
-    pub fn forward(&mut self, now: HrTimerInstant<T>, interval: Delta) -> u64 {
-        // SAFETY:
-        // - We are guaranteed to be within the context of a timer callback by our type invariants
-        // - By our type invariants, `self.0` always points to a valid `HrTimer<T>`
-        unsafe { HrTimer::<T>::raw_forward(self.0.as_ptr(), now, interval) }
-    }
-
-    /// Conditionally forward the timer.
-    ///
-    /// This is a variant of [`HrTimerCallbackContext::forward()`] that uses an interval after the
-    /// current time of the base clock for the [`HrTimer`].
-    pub fn forward_now(&mut self, duration: Delta) -> u64 {
-        self.forward(HrTimerInstant::<T>::now(), duration)
-    }
 }
 
 /// Use to implement the [`HasHrTimer<T>`] trait.

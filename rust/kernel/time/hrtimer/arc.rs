@@ -3,13 +3,13 @@
 use super::HasHrTimer;
 use super::HrTimer;
 use super::HrTimerCallback;
-use super::HrTimerCallbackContext;
 use super::HrTimerHandle;
 use super::HrTimerMode;
 use super::HrTimerPointer;
 use super::RawHrTimerCallback;
 use crate::sync::Arc;
 use crate::sync::ArcBorrow;
+use crate::time::Instant;
 
 /// A handle for an `Arc<HasHrTimer<T>>` returned by a call to
 /// [`HrTimerPointer::start`].
@@ -79,7 +79,11 @@ where
 {
     type CallbackTarget<'a> = ArcBorrow<'a, T>;
 
-    unsafe extern "C" fn run(ptr: *mut bindings::hrtimer) -> bindings::hrtimer_restart {
+    unsafe extern "C" fn run(
+        ptr: *mut bindings::hrtimer,
+        expires: bindings::ktime_t,
+        fwd: *mut bindings::hrtimer_forward_args,
+    ) -> bindings::hrtimer_restart {
         // `HrTimer` is `repr(C)`
         let timer_ptr = ptr.cast::<super::HrTimer<T>>();
 
@@ -100,12 +104,13 @@ where
         //    allocation from other `Arc` clones.
         let receiver = unsafe { ArcBorrow::from_raw(data_ptr) };
 
-        // SAFETY:
-        // - By C API contract `timer_ptr` is the pointer that we passed when queuing the timer, so
-        //   it is a valid pointer to a `HrTimer<T>` embedded in a `T`.
-        // - We are within `RawHrTimerCallback::run`
-        let context = unsafe { HrTimerCallbackContext::from_raw(timer_ptr) };
+        // SAFETY: By C API contract, `expires` is the expiry of the timer
+        // snapshotted under the timer base lock, and timers cannot have
+        // negative expiry times.
+        let expires = unsafe { Instant::from_ktime(expires) };
 
-        T::run(receiver, context).into_c()
+        // SAFETY: By C API contract, `fwd` is valid for writing a
+        // `bindings::hrtimer_forward_args`.
+        unsafe { T::run(receiver, expires).into_c(fwd) }
     }
 }
