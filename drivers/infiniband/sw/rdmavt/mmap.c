@@ -100,15 +100,30 @@ int rvt_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 		if (size > ip->size)
 			break;
 
+		/*
+		 * Increment refcount and check whether it is being freed atm
+		 * while holding the lock to prevent UAF, matching the RXE
+		 * provider fix.
+		 */
+		if (!kref_get_unless_zero(&ip->ref)) {
+			spin_unlock_irq(&rdi->pending_lock);
+			ret = -ENXIO;
+			goto done;
+		}
+
 		list_del_init(&ip->pending_mmaps);
 		spin_unlock_irq(&rdi->pending_lock);
 
-		ret = remap_vmalloc_range(vma, ip->obj, 0);
-		if (ret)
-			goto done;
 		vma->vm_ops = &rvt_vm_ops;
 		vma->vm_private_data = ip;
-		rvt_vma_open(vma);
+
+		ret = remap_vmalloc_range(vma, ip->obj, 0);
+		if (ret) {
+			vma->vm_private_data = NULL;
+			vma->vm_ops = NULL;
+			kref_put(&ip->ref, rvt_release_mmap_info);
+			goto done;
+		}
 		goto done;
 	}
 	spin_unlock_irq(&rdi->pending_lock);
