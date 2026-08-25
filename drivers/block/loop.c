@@ -270,7 +270,7 @@ static int lo_fallocate(struct loop_device *lo, struct request *rq, loff_t pos,
 	return ret;
 }
 
-static int lo_req_flush(struct loop_device *lo, struct request *rq)
+static int lo_req_flush(struct loop_device *lo)
 {
 	int ret = vfs_fsync(lo->lo_backing_file, 0);
 	if (unlikely(ret && ret != -EINVAL))
@@ -411,7 +411,7 @@ static int do_req_filebacked(struct loop_device *lo, struct request *rq)
 
 	switch (req_op(rq)) {
 	case REQ_OP_FLUSH:
-		return lo_req_flush(lo, rq);
+		return lo_req_flush(lo);
 	case REQ_OP_WRITE_ZEROES:
 		/*
 		 * If the caller doesn't want deallocation, call zeroout to
