@@ -577,7 +577,7 @@ static int do_read_inode(struct inode *inode)
 
 static bool is_meta_ino(struct f2fs_sb_info *sbi, unsigned int ino)
 {
-	if (ino == F2FS_NODE_INO(sbi) || ino == F2FS_META_INO(sbi))
+	if (ino == F2FS_NODE_INO(sbi))
 		return true;
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	if (test_opt(sbi, COMPRESS_CACHE) && ino == F2FS_COMPRESS_INO(sbi))
@@ -623,9 +623,6 @@ make_now:
 
 	if (ino == F2FS_NODE_INO(sbi)) {
 		inode->i_mapping->a_ops = &f2fs_node_aops;
-		mapping_set_gfp_mask(inode->i_mapping, GFP_NOFS);
-	} else if (ino == F2FS_META_INO(sbi)) {
-		inode->i_mapping->a_ops = &f2fs_meta_aops;
 		mapping_set_gfp_mask(inode->i_mapping, GFP_NOFS);
 	} else if (ino == F2FS_COMPRESS_INO(sbi)) {
 #ifdef CONFIG_F2FS_FS_COMPRESSION
@@ -824,8 +821,7 @@ int f2fs_write_inode(struct inode *inode, struct writeback_control *wbc)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 
-	if (inode->i_ino == F2FS_NODE_INO(sbi) ||
-			inode->i_ino == F2FS_META_INO(sbi))
+	if (inode->i_ino == F2FS_NODE_INO(sbi))
 		return 0;
 
 	/*
@@ -919,7 +915,6 @@ static bool f2fs_pre_evict_inode(struct inode *inode)
 		f2fs_invalidate_compress_pages(sbi, inode->i_ino);
 
 	if (inode->i_ino == F2FS_NODE_INO(sbi) ||
-	    inode->i_ino == F2FS_META_INO(sbi) ||
 	    inode->i_ino == F2FS_COMPRESS_INO(sbi))
 		return true;
 

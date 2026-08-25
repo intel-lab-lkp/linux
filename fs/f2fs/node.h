@@ -311,9 +311,9 @@ static inline void fill_node_footer_blkaddr(struct folio *folio, block_t blkaddr
 	rn->footer.next_blkaddr = cpu_to_le32(blkaddr);
 }
 
-static inline bool is_recoverable_dnode(const struct folio *folio)
+static inline bool is_recoverable_dnode(struct f2fs_sb_info *sbi, const struct folio *folio)
 {
-	struct f2fs_checkpoint *ckpt = F2FS_CKPT(F2FS_F_SB(folio));
+	struct f2fs_checkpoint *ckpt = F2FS_CKPT(sbi);
 	__u64 cp_ver = cur_cp_version(ckpt);
 
 	/* Don't care crc part, if fsck.f2fs sets it. */
