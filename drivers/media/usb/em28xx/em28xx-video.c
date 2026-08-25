@@ -2305,9 +2305,14 @@ static void em28xx_free_v4l2(struct v4l2_device *v4l2_dev)
 		container_of(v4l2_dev, struct em28xx_v4l2, v4l2_dev);
 	struct em28xx *dev = v4l2->dev;
 
+	mutex_lock(&dev->lock);
+
 	v4l2_ctrl_handler_free(&v4l2->ctrl_handler);
 	v4l2_device_unregister(v4l2_dev);
 	dev->v4l2 = NULL;
+
+	mutex_unlock(&dev->lock);
+
 	kfree(v4l2);
 	kref_put(&dev->ref, em28xx_free_device);
 }
@@ -2388,24 +2393,23 @@ static int em28xx_v4l2_open(struct file *filp)
  */
 static int em28xx_v4l2_fini(struct em28xx *dev)
 {
-	struct em28xx_v4l2 *v4l2 = dev->v4l2;
-
-	if (dev->is_audio_only) {
-		/* Shouldn't initialize IR for this interface */
-		return 0;
-	}
-
-	if (!dev->has_video) {
-		/* This device does not support the v4l2 extension */
-		return 0;
-	}
-
-	if (!v4l2)
-		return 0;
-
-	dev_info(&dev->intf->dev, "Closing video extension\n");
+	struct em28xx_v4l2 *v4l2;
 
 	mutex_lock(&dev->lock);
+
+	if (dev->is_audio_only || /* Shouldn't initialize IR for this interface */
+	    !dev->has_video) {    /* This device does not support the v4l2 extension */
+		mutex_unlock(&dev->lock);
+		return 0;
+	}
+
+	v4l2 = dev->v4l2;
+	if (!v4l2) {
+		mutex_unlock(&dev->lock);
+		return 0;
+	}
+
+	dev_info(&dev->intf->dev, "Closing video extension\n");
 
 	v4l2_device_disconnect(&v4l2->v4l2_dev);
 
