@@ -131,7 +131,6 @@ enum bmc150_accel_axis {
 	AXIS_X,
 	AXIS_Y,
 	AXIS_Z,
-	AXIS_MAX,
 };
 
 enum bmc150_power_modes {
@@ -1191,14 +1190,15 @@ static irqreturn_t bmc150_accel_trigger_handler(int irq, void *p)
 
 	mutex_lock(&data->mutex);
 	ret = regmap_bulk_read(data->regmap, BMC150_ACCEL_REG_XOUT_L,
-			       data->buffer, AXIS_MAX * 2);
-	mutex_unlock(&data->mutex);
+			       data->scan.channels,
+			       sizeof(data->scan.channels));
 	if (ret < 0)
 		goto err_read;
 
-	iio_push_to_buffers_with_timestamp(indio_dev, data->buffer,
+	iio_push_to_buffers_with_timestamp(indio_dev, &data->scan,
 					   pf->timestamp);
 err_read:
+	mutex_unlock(&data->mutex);
 	iio_trigger_notify_done(indio_dev->trig);
 
 	return IRQ_HANDLED;

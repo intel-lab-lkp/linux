@@ -64,15 +64,6 @@ struct bmc150_accel_data {
 	struct bmc150_accel_trigger triggers[BMC150_ACCEL_TRIGGERS];
 	struct mutex mutex;
 	u8 fifo_mode, watermark;
-	s16 buffer[8];
-	/*
-	 * Ensure there is sufficient space and correct alignment for
-	 * the timestamp if enabled
-	 */
-	struct {
-		__le16 channels[3];
-		aligned_s64 ts;
-	} scan;
 	u8 bw_bits;
 	u32 slope_dur;
 	u32 slope_thres;
@@ -85,6 +76,11 @@ struct bmc150_accel_data {
 	void (*resume_callback)(struct device *dev);
 	struct delayed_work resume_work;
 	struct iio_mount_matrix orientation;
+	/* Ensure correct alignment of timestamp and DMA safety */
+	struct {
+		__le16 channels[3];
+		aligned_s64 ts;
+	} scan __aligned(IIO_DMA_MINALIGN);
 };
 
 int bmc150_accel_core_probe(struct device *dev, struct regmap *regmap, int irq,
