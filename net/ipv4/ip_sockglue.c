@@ -22,6 +22,7 @@
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/icmp.h>
+#include <linux/if_ether.h>
 #include <linux/inetdevice.h>
 #include <linux/netdevice.h>
 #include <linux/slab.h>
@@ -170,6 +171,9 @@ void ip_cmsg_recv_offset(struct msghdr *msg, struct sock *sk,
 			 struct sk_buff *skb, int tlen, int offset)
 {
 	unsigned long flags = inet_cmsg_flags(inet_sk(sk));
+
+	if (unlikely(skb->protocol != htons(ETH_P_IP)))
+		return;
 
 	if (!flags)
 		return;
