@@ -116,6 +116,9 @@ static int tcf_sample_init(struct net *net, struct nlattr *nla,
 	if (tb[TCA_SAMPLE_TRUNC_SIZE]) {
 		s->truncate = true;
 		s->trunc_size = nla_get_u32(tb[TCA_SAMPLE_TRUNC_SIZE]);
+	} else {
+		s->truncate = false;
+		s->trunc_size = 0;
 	}
 	spin_unlock_bh(&s->tcf_lock);
 
