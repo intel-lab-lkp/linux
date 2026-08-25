@@ -23,13 +23,13 @@ use kernel::{
 
 use crate::{
     falcon::{
+        regs, //
         Falcon,
         FalconEngine,
         PFalcon2Base,
-        PFalconBase, //
+        PFalconBase,
     },
-    num,
-    regs, //
+    num, //
 };
 
 /// FSP message timeout in milliseconds.
