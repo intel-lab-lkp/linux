@@ -2463,6 +2463,23 @@ config ARM64_CONTPTE
 	  bit, for any mappings that meet the size and alignment requirements.
 	  This reduces TLB pressure and improves performance.
 
+config ARM64_CPUMOD
+	tristate "Arm CPU prefetch modulation sysfs controls"
+	help
+	  Expose selected CPU implementation control register fields through
+	  per-CPU sysfs attributes for performance characterization.
+
+	  The exposed controls allow hardware prefetch and cache-management
+	  policy fields to be inspected and adjusted on CPUs where firmware
+	  permits EL1 access to the relevant implementation control registers.
+	  Systems where firmware traps or blocks these writes cannot use this
+	  interface.
+
+	  This interface is intended for controlled performance evaluation and
+	  should not be enabled by default on production systems.
+
+	  If unsure, say N.
+
 endmenu # "Kernel Features"
 
 menu "Boot options"
