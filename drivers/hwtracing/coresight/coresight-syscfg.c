@@ -1210,8 +1210,14 @@ static int cscfg_create_device(void)
 	dev->init_name = "cs_system_cfg";
 
 	err = device_register(dev);
-	if (err)
+	if (err) {
+		/* put_device() triggers cscfg_dev_release() which takes
+		 * cscfg_mutex, so drop the lock first to avoid deadlocking.
+		 */
+		mutex_unlock(&cscfg_mutex);
 		put_device(dev);
+		return err;
+	}
 
 create_dev_exit_unlock:
 	mutex_unlock(&cscfg_mutex);
