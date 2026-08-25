@@ -806,3 +806,80 @@ Date:		Nov 2022
 Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
 Description:
 		(RO) the list of CPUs that can be brought online.
+
+What:		/sys/devices/system/cpu/cpuX/cpumod/affected_cpus
+Date:		August 2026
+Contact:	Koba Ko <kobak@nvidia.com>
+Contact:	Linux ARM Kernel mailing list <linux-arm-kernel@lists.infradead.org>
+Description:
+		(RO) The decimal logical CPU identifier for this cpumod sysfs
+		instance. The file is present only while CPU X is online and its
+		MIDR matches a supported Grace or Vera profile. The file is
+		world-readable and read-only (0444).
+
+What:		/sys/devices/system/cpu/cpuX/cpumod/pf_dis
+Date:		August 2026
+Contact:	Koba Ko <kobak@nvidia.com>
+Contact:	Linux ARM Kernel mailing list <linux-arm-kernel@lists.infradead.org>
+Description:
+		(RW) Hardware prefetch disable control for CPU X. The file is
+		present only while a supported Grace or Vera CPU is online. Reads
+		return a decimal value. Writes accept decimal values 0 and 1.
+		Invalid writes fail with -EINVAL without changing the target CPU
+		register. The file is root-only read/write (0600).
+
+What:		/sys/devices/system/cpu/cpuX/cpumod/pf_mode
+Date:		August 2026
+Contact:	Koba Ko <kobak@nvidia.com>
+Contact:	Linux ARM Kernel mailing list <linux-arm-kernel@lists.infradead.org>
+Description:
+		(RW) Hardware prefetch aggressiveness mode for CPU X. The file is
+		present only while a supported Grace or Vera CPU is online. Reads
+		return a decimal value. Writes accept decimal values 0 through 9;
+		values 10 through 15 are reserved and rejected. Invalid writes fail
+		with -EINVAL without changing the target CPU register. The file is
+		root-only read/write (0600).
+
+What:		/sys/devices/system/cpu/cpuX/cpumod/cbusy_filter_threshold
+Date:		August 2026
+Contact:	Koba Ko <kobak@nvidia.com>
+Contact:	Linux ARM Kernel mailing list <linux-arm-kernel@lists.infradead.org>
+Description:
+		(RW) Grace CPU cache-busy filter threshold. The file is present only
+		while a supported Grace CPU is online. Reads return a decimal value.
+		Writes accept decimal values 0 through 3. Invalid writes fail with
+		-EINVAL without changing the target CPU register. The file is
+		root-only read/write (0600).
+
+What:		/sys/devices/system/cpu/cpuX/cpumod/cbusy_filter_window
+Date:		August 2026
+Contact:	Koba Ko <kobak@nvidia.com>
+Contact:	Linux ARM Kernel mailing list <linux-arm-kernel@lists.infradead.org>
+Description:
+		(RW) Grace CPU cache-busy filter window. The file is present only
+		while a supported Grace CPU is online. Reads return a decimal value.
+		Writes accept decimal values 0 through 3. Invalid writes fail with
+		-EINVAL without changing the target CPU register. The file is
+		root-only read/write (0600).
+
+What:		/sys/devices/system/cpu/cpuX/cpumod/cmc_min_ways
+Date:		August 2026
+Contact:	Koba Ko <kobak@nvidia.com>
+Contact:	Linux ARM Kernel mailing list <linux-arm-kernel@lists.infradead.org>
+Description:
+		(RW) Grace CPU cache-management minimum-way control. The file is
+		present only while a supported Grace CPU is online. Reads return a
+		decimal value. Writes accept decimal values 0 through 7. Invalid
+		writes fail with -EINVAL without changing the target CPU register.
+		The file is root-only read/write (0600).
+
+What:		/sys/devices/system/cpu/cpuX/cpumod/l2spr_cmc_max_ways
+Date:		August 2026
+Contact:	Koba Ko <kobak@nvidia.com>
+Contact:	Linux ARM Kernel mailing list <linux-arm-kernel@lists.infradead.org>
+Description:
+		(RW) Vera CPU cache-management maximum-way control. The file is
+		present only while a supported Vera CPU is online. Reads return a
+		decimal value. Writes accept decimal values 0 through 7. Invalid
+		writes fail with -EINVAL without changing the target CPU register.
+		The file is root-only read/write (0600).
