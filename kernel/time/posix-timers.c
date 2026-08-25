@@ -1057,9 +1057,9 @@ static void posix_timer_delete(struct k_itimer *timer)
 
 	while (timer->kclock->timer_del(timer) == TIMER_RETRY) {
 		guard(rcu)();
-		spin_unlock_irq(&timer->it_lock);
+		spin_unlock_irq_enable(&timer->it_lock);
 		timer_wait_running(timer);
-		spin_lock_irq(&timer->it_lock);
+		spin_lock_irq_disable(&timer->it_lock);
 	}
 }
 
