@@ -87,7 +87,7 @@ where
         expires: bindings::ktime_t,
         fwd: *mut bindings::hrtimer_forward_args,
     ) -> bindings::hrtimer_restart {
-        // `HrTimer` is `repr(C)`
+        // `HrTimer` is `repr(transparent)`
         let timer_ptr = ptr.cast::<HrTimer<T>>();
 
         // SAFETY: By the safety requirement of this function, `timer_ptr`
