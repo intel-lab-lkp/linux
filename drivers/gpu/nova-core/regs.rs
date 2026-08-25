@@ -24,8 +24,7 @@ use crate::{
         FalconModSelAlgo,
         FalconSecurityModel,
         PFalcon2Base,
-        PFalconBase,
-        PeregrineCoreSelect, //
+        PFalconBase, //
     },
 };
 
@@ -332,30 +331,6 @@ register! {
     /// first element. Be conservative until we know the actual size or need to use more registers.
     pub(crate) NV_PFALCON2_FALCON_BROM_PARAADDR(u32)[1] @ PFalcon2Base + 0x00000210 {
         31:0    value => u32;
-    }
-}
-
-// PRISCV
-
-register! {
-    /// RISC-V status register for debug (Turing and GA100 only).
-    /// Reflects current RISC-V core status.
-    pub(crate) NV_PRISCV_RISCV_CORE_SWITCH_RISCV_STATUS(u32) @ PFalcon2Base + 0x00000240 {
-        /// RISC-V core active/inactive status.
-        0:0     active_stat => bool;
-    }
-
-    /// GA102 and later.
-    pub(crate) NV_PRISCV_RISCV_CPUCTL(u32) @ PFalcon2Base + 0x00000388 {
-        7:7     active_stat => bool;
-        4:4     halted => bool;
-    }
-
-    /// GA102 and later.
-    pub(crate) NV_PRISCV_RISCV_BCR_CTRL(u32) @ PFalcon2Base + 0x00000668 {
-        8:8     br_fetch => bool;
-        4:4     core_select => PeregrineCoreSelect;
-        0:0     valid => bool;
     }
 }
 

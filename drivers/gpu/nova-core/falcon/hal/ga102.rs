@@ -20,13 +20,13 @@ use crate::{
     driver::Bar0,
     falcon::{
         hal::LoadMethod,
+        regs, //
         Falcon,
         FalconBromParams,
         FalconEngine,
         FalconModSelAlgo,
-        PeregrineCoreSelect, //
+        PeregrineCoreSelect,
     },
-    regs,
 };
 
 use super::FalconHal;
