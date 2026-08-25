@@ -1085,6 +1085,15 @@ static inline bool cpu_has_lpa2(void)
 #endif
 }
 
+/* No ID register reflects CONFIG_ARM64_MTE. */
+static inline bool gmid_el1_accessible(void)
+{
+	if (!IS_ENABLED(CONFIG_ARM64_MTE))
+		return false;
+
+	return id_aa64pfr1_mte(__read_sysreg_by_encoding(SYS_ID_AA64PFR1_EL1));
+}
+
 #endif /* __ASSEMBLER__ */
 
 #endif
