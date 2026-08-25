@@ -42,7 +42,7 @@ On **Hopper/Blackwell** GPUs, FSP replaces this multi-stage process with a
 single message-driven interface::
 
      FSP (hardware root of trust, boots from ROM)
-          -> FMC (Falcon Microcontroller, verified by FSP)
+          -> FMC (First Mutable Code, verified by FSP)
                -> GSP-RM (verified and loaded by FMC)
 
 The driver only needs to:
