@@ -23,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <linux/string_choices.h>
 #include <linux/log2.h>
 #include <linux/logic_pio.h>
 #include <linux/device.h>
@@ -4857,21 +4858,189 @@ void pci_cxl_set_sbr_region_ops(const struct pci_cxl_sbr_region_ops *ops)
 }
 EXPORT_SYMBOL_GPL(pci_cxl_set_sbr_region_ops);
 
+struct cxl_sbr_ctx {
+	u16 port_ctl;
+	u16 acs_ctrl;
+	u16 command;
+};
+
+static bool is_cxl_dport(struct pci_dev *dev)
+{
+	return pcie_is_cxl(dev) && pcie_downstream_port(dev);
+}
+
+static u16 cxl_port_dvsec(struct pci_dev *dev)
+{
+	return pci_find_dvsec_capability(dev, PCI_VENDOR_ID_CXL,
+					 PCI_DVSEC_CXL_PORT);
+}
+
+static int cxl_sbr_prepare(struct pci_dev *bridge, u16 dvsec,
+			   struct cxl_sbr_ctx *ctx)
+{
+	int rc;
+
+	/* Abort before touching hardware if the regions cannot be disabled. */
+	if (cxl_sbr_region_ops) {
+		rc = cxl_sbr_region_ops->disable_regions(bridge);
+		if (rc)
+			return rc;
+	}
+
+	/* CXL r4.0 sec 8.1.5.2, Table 8-32: set Unmask SBR so the Port issues Hot Reset. */
+	pci_read_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL, &ctx->port_ctl);
+	pci_write_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL,
+			      ctx->port_ctl | PCI_DVSEC_CXL_PORT_CTL_UNMASK_SBR);
+
+	pci_read_config_word(bridge, PCI_COMMAND, &ctx->command);
+	pci_clear_master(bridge);
+
+	/* CXL r4.0 sec 8.1.5.1: Disable ACS SV bit before SBR */
+	if (bridge->acs_cap) {
+		pci_read_config_word(bridge, bridge->acs_cap + PCI_ACS_CTRL, &ctx->acs_ctrl);
+		pci_dbg(bridge, "%s: ACS SV %s\n", __func__,
+			str_enabled_disabled(ctx->acs_ctrl & PCI_ACS_SV));
+		pci_write_config_word(bridge, bridge->acs_cap + PCI_ACS_CTRL,
+				      ctx->acs_ctrl & ~PCI_ACS_SV);
+	}
+
+	return 0;
+}
+
+/*
+ * CXL r4.0 sec 8.1.5.1, Table 8-31: the Port sets PM Init Complete within
+ * 100 ms of link-up. Restoring ACS Source Validation before then makes the
+ * Port reject the downstream Component's Requester-Bus-0 IP2PM message, so
+ * poll for completion before restoring config.
+ */
+static bool cxl_port_pm_init_is_complete(struct pci_dev *bridge, u16 dvsec)
+{
+	unsigned long start = jiffies;
+	unsigned long timeout = start + msecs_to_jiffies(100);
+	u16 status;
+
+	do {
+		pci_read_config_word(bridge,
+				     dvsec + PCI_DVSEC_CXL_PORT_EXT_STATUS,
+				     &status);
+		if (!PCI_POSSIBLE_ERROR(status) &&
+		    (status & PCI_DVSEC_CXL_PORT_EXT_STATUS_PM_INIT_COMP)) {
+			pci_dbg(bridge, "%s: PM Init Complete set after %u ms, ext status %#06x\n",
+				__func__, jiffies_to_msecs(jiffies - start), status);
+			return true;
+		}
+		msleep(10);
+	} while (time_before(jiffies, timeout));
+
+	pci_warn(bridge, "%s: PM Init Complete not set after %u ms, ext status %#06x\n",
+		 __func__, jiffies_to_msecs(jiffies - start), status);
+
+	return false;
+}
+
+static int cxl_sbr_restore_config_space(struct pci_dev *dev, void *userdata)
+{
+	pci_restore_config_space(dev);
+	pci_dbg(dev, "%s: config space restored\n", __func__);
+
+	return 0;
+}
+
+/*
+ * The CXL region ops that run next read the HDM Decoders through a Base Address
+ * Register the reset returned to its initialization value, so restore the
+ * header of every device below @bridge first. Restoring also re-captures each
+ * Bus Number before the Port's ACS Source Validation comes back: a device that
+ * has completed no Type 0 Configuration Write since the reset sources Requests
+ * with Bus 0, which the Port rejects as an ACS Violation.
+ *
+ * Only the header is restored. The capability state each caller saved is its own
+ * to replay, and the ->reset_done() callbacks pci_dev_restore() invokes must
+ * fire once, from the caller that owns the reset.
+ */
+static void cxl_sbr_restore_subordinate(struct pci_dev *bridge)
+{
+	if (!bridge->subordinate)
+		return;
+
+	/* Parents before children: a child answers once its parent forwards. */
+	pci_walk_bus(bridge->subordinate, cxl_sbr_restore_config_space, NULL);
+}
+
+static void cxl_sbr_complete(struct pci_dev *bridge, u16 dvsec,
+			     const struct cxl_sbr_ctx *ctx)
+{
+	u16 val;
+
+	/* CXL r4.0 sec 8.1.5.1: wait for PM Init before restoring ACS SV. */
+	if (!cxl_port_pm_init_is_complete(bridge, dvsec))
+		pci_warn(bridge,
+			 "restoring ACS Source Validation before PM Init complete; Port may reject the Component's bus 0 traffic\n");
+
+	cxl_sbr_restore_subordinate(bridge);
+
+	/* CXL r4.0 sec 8.1.5.1: Re-enable ACS SV bit after SBR if it was enabled before */
+	if (bridge->acs_cap && (ctx->acs_ctrl & PCI_ACS_SV)) {
+		pci_read_config_word(bridge, bridge->acs_cap + PCI_ACS_CTRL, &val);
+		pci_write_config_word(bridge, bridge->acs_cap + PCI_ACS_CTRL,
+				      val | PCI_ACS_SV);
+		pci_dbg(bridge, "%s: ACS SV bit set\n", __func__);
+	} else {
+		pci_dbg(bridge, "%s: ACS SV bit not set (was not enabled before the SBR)\n",
+			__func__);
+	}
+
+	if (ctx->command & PCI_COMMAND_MASTER)
+		pci_set_master(bridge);
+
+	if (!(ctx->port_ctl & PCI_DVSEC_CXL_PORT_CTL_UNMASK_SBR)) {
+		pci_read_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL, &val);
+		pci_write_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL,
+				      val & ~PCI_DVSEC_CXL_PORT_CTL_UNMASK_SBR);
+	}
+
+	if (cxl_sbr_region_ops)
+		cxl_sbr_region_ops->enable_regions(bridge);
+}
+
 /**
  * pci_bridge_secondary_bus_reset - Reset the secondary bus on a PCI bridge.
  * @dev: Bridge device
  *
  * Use the bridge control register to assert reset on the secondary bus.
  * Devices on the secondary bus are left in power-on state.
+ *
+ * When @dev is a CXL Downstream Port, clear ACS Source Validation and Bus
+ * Master Enable across the reset, per the workaround in CXL r4.0 sec 8.1.5.1,
+ * so that Port Power Management Initialization completes at link-up. The
+ * bits stay cleared until the secondary bus is back, then are restored.
  */
 int pci_bridge_secondary_bus_reset(struct pci_dev *dev)
 {
+	struct cxl_sbr_ctx ctx = {};
+	u16 dvsec = 0;
+	int rc;
+
 	if (!dev->block_cfg_access)
 		pci_warn_once(dev, "unlocked secondary bus reset via: %pS\n",
 			      __builtin_return_address(0));
+
+	if (is_cxl_dport(dev))
+		dvsec = cxl_port_dvsec(dev);
+	if (dvsec) {
+		rc = cxl_sbr_prepare(dev, dvsec, &ctx);
+		if (rc)
+			return rc;
+	}
+
 	pcibios_reset_secondary_bus(dev);
 
-	return pci_bridge_wait_for_secondary_bus(dev, "bus reset");
+	rc = pci_bridge_wait_for_secondary_bus(dev, "bus reset");
+
+	if (dvsec)
+		cxl_sbr_complete(dev, dvsec, &ctx);
+
+	return rc;
 }
 EXPORT_SYMBOL_GPL(pci_bridge_secondary_bus_reset);
 
@@ -4915,12 +5084,6 @@ static int pci_dev_reset_slot_function(struct pci_dev *dev, bool probe)
 		return -ENOTTY;
 
 	return pci_reset_hotplug_slot(dev->slot->hotplug, probe);
-}
-
-static u16 cxl_port_dvsec(struct pci_dev *dev)
-{
-	return pci_find_dvsec_capability(dev, PCI_VENDOR_ID_CXL,
-					 PCI_DVSEC_CXL_PORT);
 }
 
 static bool cxl_sbr_masked(struct pci_dev *dev)
