@@ -6349,6 +6349,9 @@ intel_dp_detect(struct drm_connector *_connector,
 	if (ret == 1)
 		connector->base.epoch_counter++;
 
+	if (intel_alpm_source_supported(connector))
+		intel_alpm_init_dpcd(intel_dp);
+
 	if (!intel_dp_is_edp(intel_dp))
 		intel_psr_init_dpcd(intel_dp, connector);
 
@@ -6992,8 +6995,6 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 	 */
 	intel_hpd_enable_detection(encoder);
 
-	intel_alpm_init(intel_dp);
-
 	/* Cache DPCD and EDID for edp. */
 	has_dpcd = intel_edp_init_dpcd(intel_dp, connector);
 
@@ -7207,6 +7208,9 @@ intel_dp_init_connector(struct intel_digital_port *dig_port,
 	intel_dp->frl.trained_rate_gbps = 0;
 
 	intel_psr_init(intel_dp);
+
+	if (intel_alpm_source_supported(connector))
+		intel_alpm_init(intel_dp);
 
 	return true;
 

@@ -43,6 +43,19 @@ bool intel_alpm_is_alpm_aux_less(struct intel_dp *intel_dp,
 		(crtc_state->has_lobf && intel_alpm_aux_less_wake_supported(intel_dp));
 }
 
+bool intel_alpm_source_supported(struct intel_connector *connector)
+{
+	struct intel_display *display = to_intel_display(connector);
+
+	if (!((connector->base.connector_type == DRM_MODE_CONNECTOR_DisplayPort &&
+	       DISPLAY_VER(display) >= 35) ||
+	    (connector->base.connector_type == DRM_MODE_CONNECTOR_eDP &&
+	     DISPLAY_VER(display) >= 20)))
+		return false;
+
+	return true;
+}
+
 void intel_alpm_init_dpcd(struct intel_dp *intel_dp)
 {
 	u8 dpcd;
