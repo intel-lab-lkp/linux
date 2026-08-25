@@ -364,8 +364,13 @@ static int __init ftrace_direct_multi_init(void)
 
 	ret = register_ftrace_direct(&direct, my_tramp);
 
-	if (!ret)
+	if (!ret) {
 		simple_tsk = kthread_run(simple_thread, NULL, "event-sample-fn");
+		if (IS_ERR(simple_tsk)) {
+			unregister_ftrace_direct(&direct, my_tramp, true);
+			ret = PTR_ERR(simple_tsk);
+		}
+	}
 	return ret;
 }
 
