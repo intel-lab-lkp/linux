@@ -1072,6 +1072,20 @@ static void fec_enet_active_rxring(struct net_device *ndev)
 		writel(0, fep->rx_queue[i]->bd.reg_desc_active);
 }
 
+/* Program the per-queue RX flushing bits in FEC_QOS_SCHEME */
+static void fec_enet_set_rx_flush(struct fec_enet_private *fep)
+{
+#if !defined(CONFIG_M5272)
+	u32 val;
+
+	/* ethtool can race with fec_enet_adjust_link() (no RTNL) */
+	guard(spinlock)(&fep->qos_lock);
+	val = readl(fep->hwp + FEC_QOS_SCHEME);
+	val &= ~QOS_RX_FLUSH_MASK;
+	writel(val | fep->rx_flush_mask, fep->hwp + FEC_QOS_SCHEME);
+#endif
+}
+
 static void fec_enet_enable_ring(struct net_device *ndev)
 {
 	struct fec_enet_private *fep = netdev_priv(ndev);
@@ -1089,6 +1103,8 @@ static void fec_enet_enable_ring(struct net_device *ndev)
 			writel(RCMR_MATCHEN | RCMR_CMP(i),
 			       fep->hwp + FEC_RCMR(i));
 	}
+
+	fec_enet_set_rx_flush(fep);
 
 	for (i = 0; i < fep->num_tx_queues; i++) {
 		txq = fep->tx_queue[i];
@@ -3546,6 +3562,7 @@ static void fec_enet_get_ethtool_stats(struct net_device *dev,
 static void fec_enet_get_strings(struct net_device *netdev,
 	u32 stringset, u8 *data)
 {
+	struct fec_enet_private *fep = netdev_priv(netdev);
 	int i;
 	switch (stringset) {
 	case ETH_SS_STATS:
@@ -3561,11 +3578,18 @@ static void fec_enet_get_strings(struct net_device *netdev,
 	case ETH_SS_TEST:
 		net_selftest_get_strings(data);
 		break;
+	case ETH_SS_PRIV_FLAGS:
+		for (i = 0; i < fep->num_rx_queues; i++) {
+			snprintf(data, ETH_GSTRING_LEN, "rx-flush-q%d", i);
+			data += ETH_GSTRING_LEN;
+		}
+		break;
 	}
 }
 
 static int fec_enet_get_sset_count(struct net_device *dev, int sset)
 {
+	struct fec_enet_private *fep = netdev_priv(dev);
 	int count;
 
 	switch (sset) {
@@ -3576,9 +3600,56 @@ static int fec_enet_get_sset_count(struct net_device *dev, int sset)
 
 	case ETH_SS_TEST:
 		return net_selftest_get_count();
+	case ETH_SS_PRIV_FLAGS:
+		return fep->num_rx_queues;
 	default:
 		return -EOPNOTSUPP;
 	}
+}
+
+static u32 fec_enet_get_priv_flags(struct net_device *ndev)
+{
+	struct fec_enet_private *fep = netdev_priv(ndev);
+	u32 flags = 0;
+	int i;
+
+	for (i = 0; i < fep->num_rx_queues; i++)
+		if (fep->rx_flush_mask & QOS_RX_FLUSH(i))
+			flags |= BIT(i);
+
+	return flags;
+}
+
+static int fec_enet_set_priv_flags(struct net_device *ndev, u32 flags)
+{
+	struct fec_enet_private *fep = netdev_priv(ndev);
+	u32 mask = 0;
+	int i;
+
+	if (flags & ~(BIT(fep->num_rx_queues) - 1))
+		return -EINVAL;
+
+	/* Erratum ERR050395 */
+	if (hweight32(flags) > 1) {
+		netdev_err(ndev, "RX flush is supported on a single queue only\n");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < fep->num_rx_queues; i++)
+		if (flags & BIT(i))
+			mask |= QOS_RX_FLUSH(i);
+
+	if (mask == fep->rx_flush_mask)
+		return 0;
+
+	fep->rx_flush_mask = mask;
+
+	if (!netif_running(ndev))
+		return 0;
+
+	fec_enet_set_rx_flush(fep);
+
+	return 0;
 }
 
 static void fec_enet_clear_ethtool_stats(struct net_device *dev)
@@ -3800,6 +3871,8 @@ static const struct ethtool_ops fec_enet_ethtool_ops = {
 	.get_strings		= fec_enet_get_strings,
 	.get_ethtool_stats	= fec_enet_get_ethtool_stats,
 	.get_sset_count		= fec_enet_get_sset_count,
+	.get_priv_flags		= fec_enet_get_priv_flags,
+	.set_priv_flags		= fec_enet_set_priv_flags,
 #endif
 	.get_ts_info		= fec_enet_get_ts_info,
 	.get_wol		= fec_enet_get_wol,
@@ -5323,6 +5396,7 @@ fec_probe(struct platform_device *pdev)
 
 	fep->ptp_clk_on = false;
 	mutex_init(&fep->ptp_clk_mutex);
+	spin_lock_init(&fep->qos_lock);
 
 	/* clk_ref is optional, depends on board */
 	fep->clk_ref = devm_clk_get_optional(&pdev->dev, "enet_clk_ref");
