@@ -792,7 +792,7 @@ static int jmb38x_ms_pmos(struct pci_dev *pdev, int flag)
         return 0;
 }
 
-static int __maybe_unused jmb38x_ms_suspend(struct device *dev)
+static int jmb38x_ms_suspend(struct device *dev)
 {
 	struct jmb38x_ms *jm = dev_get_drvdata(dev);
 
@@ -809,7 +809,7 @@ static int __maybe_unused jmb38x_ms_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused jmb38x_ms_resume(struct device *dev)
+static int jmb38x_ms_resume(struct device *dev)
 {
 	struct jmb38x_ms *jm = dev_get_drvdata(dev);
 	int rc;
@@ -1011,14 +1011,14 @@ static struct pci_device_id jmb38x_ms_id_tbl [] = {
 	{ }
 };
 
-static SIMPLE_DEV_PM_OPS(jmb38x_ms_pm_ops, jmb38x_ms_suspend, jmb38x_ms_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(jmb38x_ms_pm_ops, jmb38x_ms_suspend, jmb38x_ms_resume);
 
 static struct pci_driver jmb38x_ms_driver = {
 	.name = DRIVER_NAME,
 	.id_table = jmb38x_ms_id_tbl,
 	.probe = jmb38x_ms_probe,
 	.remove = jmb38x_ms_remove,
-	.driver.pm = &jmb38x_ms_pm_ops,
+	.driver.pm = pm_sleep_ptr(&jmb38x_ms_pm_ops),
 };
 
 module_pci_driver(jmb38x_ms_driver);

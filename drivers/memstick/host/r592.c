@@ -847,7 +847,6 @@ static void r592_remove(struct pci_dev *pdev)
 	memstick_free_host(dev->host);
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int r592_suspend(struct device *core_dev)
 {
 	struct r592_device *dev = dev_get_drvdata(core_dev);
@@ -868,9 +867,8 @@ static int r592_resume(struct device *core_dev)
 	r592_update_card_detect(dev);
 	return 0;
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(r592_pm_ops, r592_suspend, r592_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(r592_pm_ops, r592_suspend, r592_resume);
 
 MODULE_DEVICE_TABLE(pci, r592_pci_id_tbl);
 
@@ -879,7 +877,7 @@ static struct pci_driver r592_pci_driver = {
 	.id_table	= r592_pci_id_tbl,
 	.probe		= r592_probe,
 	.remove		= r592_remove,
-	.driver.pm	= &r592_pm_ops,
+	.driver.pm	= pm_sleep_ptr(&r592_pm_ops),
 };
 
 module_pci_driver(r592_pci_driver);
