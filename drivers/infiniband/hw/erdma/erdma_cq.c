@@ -8,8 +8,8 @@
 
 static void *get_next_valid_cqe(struct erdma_cq *cq)
 {
-	__be32 *cqe = get_queue_entry(cq->kern_cq.qbuf, cq->kern_cq.ci,
-				      cq->depth, CQE_SHIFT);
+	__be32 *cqe = erdma_kmem_get_entry(&cq->kern_cq.qbuf_mem,
+					 cq->kern_cq.ci, cq->depth, CQE_SHIFT);
 	u32 owner = FIELD_GET(ERDMA_CQE_HDR_OWNER_MASK,
 			      be32_to_cpu(READ_ONCE(*cqe)));
 
@@ -242,15 +242,16 @@ void erdma_remove_cqes_of_qp(struct ib_cq *ibcq, u32 qpn)
 
 	while (ncqe > 0) {
 		cur_cq_ci = prev_cq_ci + ncqe - 1;
-		cqe = get_queue_entry(cq->kern_cq.qbuf, cur_cq_ci, cq->depth,
-				      CQE_SHIFT);
+		cqe = erdma_kmem_get_entry(&cq->kern_cq.qbuf_mem, cur_cq_ci,
+					   cq->depth, CQE_SHIFT);
 
 		if (be32_to_cpu(cqe->qpn) == qpn) {
 			++nqp_cqe;
 		} else if (nqp_cqe) {
-			dst_cqe = get_queue_entry(cq->kern_cq.qbuf,
-						  cur_cq_ci + nqp_cqe,
-						  cq->depth, CQE_SHIFT);
+			dst_cqe =
+				erdma_kmem_get_entry(&cq->kern_cq.qbuf_mem,
+						     cur_cq_ci + nqp_cqe,
+						     cq->depth, CQE_SHIFT);
 			owner = FIELD_GET(ERDMA_CQE_HDR_OWNER_MASK,
 					  be32_to_cpu(dst_cqe->hdr));
 			cqe->hdr = cpu_to_be32(
