@@ -65,7 +65,7 @@ static void nft_nat_setup_netmap(struct nf_nat_range2 *range,
 				 const struct nft_nat *priv)
 {
 	struct sk_buff *skb = pkt->skb;
-	union nf_inet_addr new_addr;
+	union nf_inet_addr new_addr = {};
 	__be32 netmask;
 	int i, len = 0;
 
