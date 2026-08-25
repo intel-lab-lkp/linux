@@ -179,7 +179,7 @@ int cxl_await_media_ready(struct cxl_dev_state *cxlds)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_await_media_ready, "CXL");
 
-static int cxl_set_mem_enable(struct cxl_dev_state *cxlds, u16 val)
+int cxl_set_mem_enable(struct cxl_dev_state *cxlds, u16 val)
 {
 	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
 	int d = cxlds->cxl_dvsec;
@@ -247,14 +247,23 @@ static void disable_hdm(void *_cxlhdm)
 	       hdm + CXL_HDM_DECODER_CTRL_OFFSET);
 }
 
-static int devm_cxl_enable_hdm(struct device *host, struct cxl_hdm *cxlhdm)
+/*
+ * @global_ctrl is the CXL HDM Decoder Global Control value to enable decode in.
+ * A caller restoring decode after a reset passes the value it saved, so the
+ * fields the driver does not model are not left at their reset defaults.
+ */
+void cxl_enable_hdm(struct cxl_hdm *cxlhdm, u32 global_ctrl)
 {
 	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
-	u32 global_ctrl;
 
-	global_ctrl = readl(hdm + CXL_HDM_DECODER_CTRL_OFFSET);
 	writel(global_ctrl | CXL_HDM_DECODER_ENABLE,
 	       hdm + CXL_HDM_DECODER_CTRL_OFFSET);
+}
+
+static int devm_cxl_enable_hdm(struct device *host, struct cxl_hdm *cxlhdm,
+			       u32 global_ctrl)
+{
+	cxl_enable_hdm(cxlhdm, global_ctrl);
 
 	return devm_add_action_or_reset(host, disable_hdm, cxlhdm);
 }
@@ -398,7 +407,7 @@ int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 	 * enable and use the HDM Decoder Capability registers.
 	 */
 	if (!info->mem_enabled) {
-		rc = devm_cxl_enable_hdm(&port->dev, cxlhdm);
+		rc = devm_cxl_enable_hdm(&port->dev, cxlhdm, global_ctrl);
 		if (rc)
 			return rc;
 
