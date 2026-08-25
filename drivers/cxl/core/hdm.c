@@ -849,6 +849,77 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
 	return 0;
 }
 
+/**
+ * cxl_decoder_recommit - reprogram @cxld's HDM decoder registers and commit
+ * @cxld: decoder to reprogram from its cached settings
+ * @ctrl: CXL HDM Decoder n Control value to restore under the cached settings
+ *
+ * A reset of an upstream link clears the HDM decoder registers of every
+ * component below it, dropping Committed while the driver still holds the
+ * settings that were in effect. Restore those settings and commit.
+ *
+ * setup_hw_decoder() rewrites only Interleave Granularity, Interleave Ways and
+ * Target Range Type, so the rest of the control register would come from a read
+ * of the reset defaults. Per CXL r4.0 sec 8.2.4.20.7 Table 8-123 that register
+ * also holds BI, UIO, Upstream Interleave Granularity, Upstream Interleave Ways
+ * and Lock On Commit, none of which the driver models, and sec 8.2.4.20.12 makes
+ * device operation undefined if a device that requires BI is committed without
+ * it. Write @ctrl first so those fields are in place, with Commit masked off
+ * until setup_hw_decoder() has written the range.
+ *
+ * A decoder that hardware still reports Committed kept its programming across
+ * the reset and needs no work. A decoder with no ->commit is driven through the
+ * DVSEC ranges or is a passthrough decoder, and has no registers to program.
+ *
+ * Section 8.2.4.20.13 requires the traffic targeting @cxld to be quiesced while
+ * it is reprogrammed, which the caller owns. @cxld decodes nothing until the
+ * commit completes.
+ *
+ * Return: 0 on success or if @cxld needs no reprogramming, negative errno if the
+ * commit times out or if the hardware reports a commit error.
+ */
+int cxl_decoder_recommit(struct cxl_decoder *cxld, u32 ctrl)
+{
+	struct cxl_port *port = to_cxl_port(cxld->dev.parent);
+	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
+	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
+	u32 hw_ctrl;
+	int rc;
+
+	if ((cxld->flags & CXL_DECODER_F_ENABLE) == 0)
+		return 0;
+
+	if (!cxld->commit)
+		return 0;
+
+	hw_ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(cxld->id));
+	if (FIELD_GET(CXL_HDM_DECODER0_CTRL_COMMITTED, hw_ctrl)) {
+		dev_dbg(&cxld->dev, "%s: still committed, no reprogram needed\n",
+			__func__);
+		return 0;
+	}
+
+	writel(ctrl & ~(CXL_HDM_DECODER0_CTRL_COMMIT |
+			CXL_HDM_DECODER0_CTRL_COMMITTED |
+			CXL_HDM_DECODER0_CTRL_COMMIT_ERROR),
+	       hdm + CXL_HDM_DECODER0_CTRL_OFFSET(cxld->id));
+
+	scoped_guard(rwsem_read, &cxl_rwsem.dpa)
+		setup_hw_decoder(cxld, hdm);
+
+	rc = cxld_await_commit(hdm, cxld->id);
+	if (rc) {
+		dev_warn(&cxld->dev, "%s: failed to commit decoder: %d\n",
+			 __func__, rc);
+		return rc;
+	}
+
+	dev_dbg(&cxld->dev, "%s: reprogrammed HPA %#llx-%#llx\n",
+		__func__, cxld->hpa_range.start, cxld->hpa_range.end);
+
+	return 0;
+}
+
 static int commit_reap(struct device *dev, void *data)
 {
 	struct cxl_port *port = to_cxl_port(dev->parent);
