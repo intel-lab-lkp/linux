@@ -779,6 +779,9 @@ struct eventfs_inode *eventfs_create_events_dir(const char *name, struct dentry 
 	if (!ei)
 		goto fail;
 
+	INIT_LIST_HEAD(&ei->children);
+	INIT_LIST_HEAD(&ei->list);
+
 	inode = tracefs_get_inode(dentry->d_sb);
 	if (unlikely(!inode))
 		goto fail;
@@ -801,9 +804,6 @@ struct eventfs_inode *eventfs_create_events_dir(const char *name, struct dentry 
 	 */
 	ei->attr.uid = uid;
 	ei->attr.gid = gid;
-
-	INIT_LIST_HEAD(&ei->children);
-	INIT_LIST_HEAD(&ei->list);
 
 	ti = get_tracefs(inode);
 	ti->flags |= TRACEFS_EVENT_INODE;
