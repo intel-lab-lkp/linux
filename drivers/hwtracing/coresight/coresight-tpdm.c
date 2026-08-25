@@ -1457,11 +1457,11 @@ static int tpdm_probe(struct device *dev, struct resource *res)
 		desc.groups = tpdm_attr_grps;
 	else
 		desc.groups = static_tpdm_attr_grps;
+	spin_lock_init(&drvdata->spinlock);
+
 	drvdata->csdev = coresight_register(&desc);
 	if (IS_ERR(drvdata->csdev))
 		return PTR_ERR(drvdata->csdev);
-
-	spin_lock_init(&drvdata->spinlock);
 
 	return 0;
 }
