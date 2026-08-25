@@ -13,6 +13,9 @@ extern const struct device_type cxl_pmu_type;
 
 extern struct attribute_group cxl_base_attribute_group;
 
+struct cxl_port *find_cxl_port(struct device *dport_dev,
+			       struct cxl_dport **dport);
+
 enum cxl_detach_mode {
 	DETACH_ONLY,
 	DETACH_INVALIDATE,
@@ -53,6 +56,9 @@ u64 cxl_dpa_to_hpa(struct cxl_region *cxlr, const struct cxl_memdev *cxlmd,
 int devm_cxl_add_dax_region(struct cxl_region *cxlr);
 int devm_cxl_add_pmem_region(struct cxl_region *cxlr);
 void kill_regions(struct cxl_root_decoder *cxlrd);
+struct pci_dev;
+void cxl_sbr_recommit_decoders(struct pci_dev *dport_pci,
+			       struct xarray *hdm_state);
 
 #else
 static inline u64 cxl_dpa_to_hpa(struct cxl_region *cxlr,
