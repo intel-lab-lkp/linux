@@ -123,8 +123,16 @@ static int get_lfps_cycle_count(const struct intel_crtc_state *crtc_state)
 
 static int get_lfps_half_cycle_clocks(const struct intel_crtc_state *crtc_state)
 {
-	return get_lfps_cycle_time(crtc_state) * crtc_state->port_clock / 1000 /
-		1000 / (2 * get_lfps_cycle_count(crtc_state));
+	int n_symbols = get_lfps_cycle_time(crtc_state) * crtc_state->port_clock /
+			1000 / 1000 / (2 * get_lfps_cycle_count(crtc_state));
+
+	/*
+	 * The LFPS half cycle duration fields (including the first and last
+	 * half cycle) are zero-based, i.e. the value programmed is N_Symbol - 1.
+	 *
+	 * Bspec: 71632
+	 */
+	return n_symbols - 1;
 }
 
 #define ML_PHY_LOCK_LEN		252
