@@ -878,7 +878,7 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
  * Return: 0 on success or if @cxld needs no reprogramming, negative errno if the
  * commit times out or if the hardware reports a commit error.
  */
-int cxl_decoder_recommit(struct cxl_decoder *cxld, u32 ctrl)
+static int cxl_decoder_recommit(struct cxl_decoder *cxld, u32 ctrl)
 {
 	struct cxl_port *port = to_cxl_port(cxld->dev.parent);
 	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
@@ -935,6 +935,42 @@ static bool cxl_endpoint_decoders_are_emulated(struct cxl_port *endpoint)
 				     __cxl_endpoint_decoder_is_emulated);
 }
 
+struct cxl_recommit_ctx {
+	const struct cxl_hdm_state *state;
+	int *first_rc;
+};
+
+static int __cxl_port_recommit_decoder(struct device *dev, void *data)
+{
+	struct cxl_recommit_ctx *ctx = data;
+	struct cxl_decoder *cxld;
+	int rc;
+
+	if (!(is_switch_decoder(dev) || is_endpoint_decoder(dev)))
+		return 0;
+
+	cxld = to_cxl_decoder(dev);
+
+	if (cxld->id >= ctx->state->nr_ctrl) {
+		dev_warn(&cxld->dev, "%s: no saved control register\n",
+			 __func__);
+		if (!*ctx->first_rc)
+			*ctx->first_rc = -ENODATA;
+		return 0;
+	}
+
+	/*
+	 * Reprogram every decoder the walk reaches. Stopping at the first
+	 * failure would leave the rest of the path decoding nothing, so record
+	 * the first error and continue.
+	 */
+	rc = cxl_decoder_recommit(cxld, ctx->state->ctrl[cxld->id]);
+	if (rc && !*ctx->first_rc)
+		*ctx->first_rc = rc;
+
+	return 0;
+}
+
 /*
  * Restore CXL.mem decode on @cxlmd before any of its decoders is committed. A
  * reset clears the endpoint's HDM Decoder Global Control and the DVSEC CXL
@@ -951,7 +987,8 @@ static bool cxl_endpoint_decoders_are_emulated(struct cxl_port *endpoint)
  * the caller supplies the value it saved rather than one read back after the
  * reset.
  */
-int cxl_endpoint_enable_hdm_decode(struct cxl_memdev *cxlmd, u32 global_ctrl)
+static int cxl_endpoint_enable_hdm_decode(struct cxl_memdev *cxlmd,
+					  u32 global_ctrl)
 {
 	struct cxl_port *endpoint = cxlmd->endpoint;
 	struct cxl_hdm *cxlhdm = dev_get_drvdata(&endpoint->dev);
@@ -970,6 +1007,187 @@ int cxl_endpoint_enable_hdm_decode(struct cxl_memdev *cxlmd, u32 global_ctrl)
 		return rc;
 
 	return 0;
+}
+
+/**
+ * cxl_port_recommit_decoders - reprogram the HDM decoders below @port
+ * @port: CXL port whose downstream decoders to reprogram
+ * @hdm_state: saved &struct cxl_hdm_state per port, keyed by &struct cxl_port
+ *
+ * Reprogram the HDM decoders below @port that lost their programming. Every
+ * endpoint beneath @port is restored along its whole path, from the endpoint up
+ * to the last port below @port. A decoder that hardware still reports committed
+ * is left untouched.
+ *
+ * Per CXL r4.0 sec 8.2.4.20.13 decoder m must be committed before decoder m+1
+ * while reprogramming, so let device_for_each_child() visit each port's decoders
+ * in instance order. Each path is walked from the endpoint upward, the order
+ * cxl_region_decode_commit() uses.
+ *
+ * The endpoints are reprogrammed one after another, so an interleaved HPA range
+ * decodes through only part of its interleave set until the last member is
+ * done. Per CXL r4.0 sec 8.2.4.20.13 software owns quiescing the traffic that
+ * targets a decoder being reprogrammed: a read that no decoder positively
+ * decodes returns all 1s or poison, and per Table 8-118 such a write is
+ * dropped. Nothing here can detect a stray access, so the caller carries that
+ * duty.
+ *
+ * Context: caller must hold @cxl_rwsem.region to keep the topology and the
+ * switch decoder target lists stable across the walk, and must have quiesced
+ * every access to the HPA ranges decoded below @port.
+ *
+ * A port with no entry in @hdm_state was not saved, so its decoders are left
+ * alone rather than committed with whatever the reset left in the fields the
+ * driver does not model.
+ *
+ * Return: 0 on success, negative errno of the first decoder that failed or
+ * -ENODATA if a port on the path has no saved state.
+ */
+int cxl_port_recommit_decoders(struct cxl_port *port, struct xarray *hdm_state)
+{
+	struct cxl_ep *port_ep;
+	unsigned long index;
+	int first_rc = 0;
+
+	lockdep_assert_held(&cxl_rwsem.region);
+
+	xa_for_each(&port->endpoints, index, port_ep) {
+		struct cxl_memdev *cxlmd = to_cxl_memdev(port_ep->ep);
+		struct cxl_hdm_state *state;
+		struct cxl_port *iter;
+		int rc;
+
+		if (IS_ERR_OR_NULL(cxlmd->endpoint))
+			continue;
+
+		state = xa_load(hdm_state, (unsigned long)cxlmd->endpoint);
+		if (!state) {
+			dev_warn(&cxlmd->dev, "%s: no saved HDM state\n",
+				 __func__);
+			if (!first_rc)
+				first_rc = -ENODATA;
+			continue;
+		}
+
+		rc = cxl_endpoint_enable_hdm_decode(cxlmd, state->global_ctrl);
+		if (rc) {
+			dev_warn(&cxlmd->dev,
+				 "%s: failed to enable HDM decode: %d\n",
+				 __func__, rc);
+			if (!first_rc)
+				first_rc = rc;
+			continue;
+		}
+
+		/*
+		 * Walk from the endpoint up to @port so a decoder is committed
+		 * only after the decoder it routes to. @port is the last parent
+		 * visited by the walk, and it is excluded.
+		 */
+		for (iter = cxlmd->endpoint; iter && iter != port;
+		     iter = parent_port_of(iter)) {
+			struct cxl_recommit_ctx ctx = {
+				.state = xa_load(hdm_state, (unsigned long)iter),
+				.first_rc = &first_rc,
+			};
+
+			if (!ctx.state) {
+				dev_warn(&iter->dev, "%s: no saved HDM state\n",
+					 __func__);
+				if (!first_rc)
+					first_rc = -ENODATA;
+				continue;
+			}
+
+			device_for_each_child(&iter->dev, &ctx,
+					      __cxl_port_recommit_decoder);
+		}
+	}
+
+	return first_rc;
+}
+
+/**
+ * cxl_port_save_hdm_state - record the HDM decoder control registers below @port
+ * @port: CXL port whose downstream decoders to record
+ * @hdm_state: xarray to fill, one entry per port, keyed by &struct cxl_port
+ *
+ * Read the CXL HDM Decoder Global Control and every CXL HDM Decoder n Control
+ * register of the ports below @port. Those hold the fields
+ * cxl_port_recommit_decoders() cannot rebuild from the driver's cached settings,
+ * so they have to be read while the registers still hold them.
+ *
+ * The set of ports is the same one cxl_port_recommit_decoders() walks. A port
+ * with no HDM decoder registers has nothing to record and gets no entry.
+ *
+ * Context: caller must hold @cxl_rwsem.region.
+ *
+ * Return: 0 on success, negative errno if an entry cannot be allocated or
+ * inserted.
+ */
+int cxl_port_save_hdm_state(struct cxl_port *port, struct xarray *hdm_state)
+{
+	struct cxl_ep *port_ep;
+	unsigned long index;
+
+	lockdep_assert_held(&cxl_rwsem.region);
+
+	xa_for_each(&port->endpoints, index, port_ep) {
+		struct cxl_memdev *cxlmd = to_cxl_memdev(port_ep->ep);
+		struct cxl_port *iter;
+
+		if (IS_ERR_OR_NULL(cxlmd->endpoint))
+			continue;
+
+		for (iter = cxlmd->endpoint; iter && iter != port;
+		     iter = parent_port_of(iter)) {
+			struct cxl_hdm *cxlhdm = dev_get_drvdata(&iter->dev);
+			struct cxl_hdm_state *state;
+			void __iomem *hdm;
+			int rc;
+
+			if (xa_load(hdm_state, (unsigned long)iter))
+				continue;
+
+			if (!cxlhdm || !cxlhdm->regs.hdm_decoder)
+				continue;
+
+			hdm = cxlhdm->regs.hdm_decoder;
+			state = kzalloc_flex(*state, ctrl,
+					     cxlhdm->decoder_count);
+			if (!state)
+				return -ENOMEM;
+
+			state->global_ctrl = readl(hdm + CXL_HDM_DECODER_CTRL_OFFSET);
+			state->nr_ctrl = cxlhdm->decoder_count;
+			for (int i = 0; i < state->nr_ctrl; i++)
+				state->ctrl[i] =
+					readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(i));
+
+			rc = xa_insert(hdm_state, (unsigned long)iter, state,
+				       GFP_KERNEL);
+			if (rc) {
+				kfree(state);
+				return rc;
+			}
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * cxl_port_put_hdm_state - release a set filled by cxl_port_save_hdm_state()
+ * @hdm_state: xarray to empty
+ */
+void cxl_port_put_hdm_state(struct xarray *hdm_state)
+{
+	struct cxl_hdm_state *state;
+	unsigned long index;
+
+	xa_for_each(hdm_state, index, state)
+		kfree(state);
+	xa_destroy(hdm_state);
 }
 
 static int commit_reap(struct device *dev, void *data)

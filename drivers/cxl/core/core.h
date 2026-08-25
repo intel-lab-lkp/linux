@@ -215,8 +215,26 @@ int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 			struct cxl_endpoint_dvsec_info *info);
 void cxl_enable_hdm(struct cxl_hdm *cxlhdm, u32 global_ctrl);
 int cxl_set_mem_enable(struct cxl_dev_state *cxlds, u16 val);
-int cxl_decoder_recommit(struct cxl_decoder *cxld, u32 ctrl);
-int cxl_endpoint_enable_hdm_decode(struct cxl_memdev *cxlmd, u32 global_ctrl);
+/**
+ * struct cxl_hdm_state - one CXL port's HDM decoder programming, saved
+ * @global_ctrl: CXL HDM Decoder Global Control
+ * @nr_ctrl: number of entries in @ctrl
+ * @ctrl: CXL HDM Decoder n Control, indexed by decoder id
+ *
+ * Holds the fields of those two registers that the driver does not model, read
+ * before a reset and written back after it. Instances are held in an xarray
+ * keyed by the &struct cxl_port they were read from.
+ */
+struct cxl_hdm_state {
+	u32 global_ctrl;
+	int nr_ctrl;
+	u32 ctrl[];
+};
+
+int cxl_port_save_hdm_state(struct cxl_port *port, struct xarray *hdm_state);
+void cxl_port_put_hdm_state(struct xarray *hdm_state);
+int cxl_port_recommit_decoders(struct cxl_port *port,
+			       struct xarray *hdm_state);
 int cxl_port_get_possible_dports(struct cxl_port *port);
 
 #ifdef CONFIG_CXL_FEATURES
