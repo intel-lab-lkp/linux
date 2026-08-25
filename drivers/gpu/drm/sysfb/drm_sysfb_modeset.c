@@ -380,13 +380,9 @@ void drm_sysfb_plane_helper_atomic_disable(struct drm_plane *plane,
 	void __iomem *dst_vmap = dst.vaddr_iomem; /* TODO: Use mapping abstraction */
 	unsigned int dst_pitch = sysfb->fb_pitch;
 	const struct drm_format_info *dst_format = sysfb->fb_format;
-	struct drm_rect dst_clip;
+	struct drm_rect dst_clip = plane_state->dst;
 	unsigned long lines, linepixels, i;
 	int idx;
-
-	drm_rect_init(&dst_clip,
-		      plane_state->src_x >> 16, plane_state->src_y >> 16,
-		      plane_state->src_w >> 16, plane_state->src_h >> 16);
 
 	lines = drm_rect_height(&dst_clip);
 	linepixels = drm_rect_width(&dst_clip);
