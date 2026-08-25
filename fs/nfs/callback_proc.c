@@ -9,6 +9,7 @@
 
 #include <linux/errno.h>
 #include <linux/math.h>
+#include <linux/namei.h>
 #include <linux/nfs4.h>
 #include <linux/nfs_fs.h>
 #include <linux/slab.h>
@@ -369,13 +370,73 @@ static void pnfs_recall_all_layouts(struct nfs_client *clp,
 	do_callback_layoutrecall(clp, &args, cps);
 }
 
+static __be32 nfs4_cb_notify_remove(struct cb_process_state *cps,
+				    struct dentry *parent,
+				    struct cb_notify_remove *cb_remove)
+{
+	struct qstr filename = QSTR_INIT(cb_remove->nrm_old_entry.ne_name,
+					 cb_remove->nrm_old_entry.ne_namelen);
+	struct dentry *child;
+
+	filename.hash = full_name_hash(parent, filename.name, filename.len);
+	child = d_lookup(parent, &filename);
+	if (IS_ERR_OR_NULL(child))
+		return htonl(NFS4ERR_BADHANDLE);
+
+	d_drop(child);
+	dput(child);
+
+	nfs_set_cache_invalid(parent->d_inode, NFS_INO_INVALID_DATA);
+	return 0;
+}
+
 __be32 nfs4_callback_notify(void *argp, void *resp,
 			    struct cb_process_state *cps)
 {
 	struct cb_notifyargs *args = argp;
+	struct dentry *parent;
+	struct inode *inode;
+	unsigned int i;
+	__be32 res = 0;
 
+	if (!cps->clp) {
+		res = htonl(NFS4ERR_OP_NOT_IN_SESSION);
+		goto out;
+	}
+
+	inode = nfs_delegation_find_inode(cps->clp, &args->cna_fh);
+	if (IS_ERR(inode)) {
+		res = htonl(NFS4ERR_BADHANDLE);
+		goto out;
+	}
+	parent = d_find_alias(inode);
+	if (!parent)
+		goto out_iput;
+
+	for (i = 0; i < args->cna_n_changes; i++) {
+		struct cb_notify_changes *change = &args->cna_changes[i];
+
+		switch (change->notify_mask) {
+		case CB_NOTIFY4_REMOVE_ENTRY:
+			res = nfs4_cb_notify_remove(cps, parent,
+						    &change->notify_remove);
+			break;
+		default:
+			res = htonl(NFS4ERR_NOTSUPP);
+			goto out_dput;
+		}
+
+		if (unlikely(res != 0))
+			break;
+	}
+
+out_dput:
+	dput(parent);
+out_iput:
+	nfs_iput_and_deactive(inode);
+out:
 	kfree(args->cna_changes);
-	return 0;
+	return res;
 }
 
 __be32 nfs4_callback_devicenotify(void *argp, void *resp,
