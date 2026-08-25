@@ -1032,6 +1032,7 @@ struct dwc3_glue_ops {
  * @regs_size: address space size
  * @fladj: frame length adjustment
  * @ref_clk_per: reference clock period configuration
+ * @ref_clk_rate: clock rate taken from reference clock provided by glue layer
  * @irq_gadget: peripheral controller's IRQ number
  * @otg_irq: IRQ number for OTG IRQs
  * @current_otg_role: current role of operation while using the OTG block
@@ -1261,6 +1262,7 @@ struct dwc3 {
 
 	u32			fladj;
 	u32			ref_clk_per;
+	unsigned long		ref_clk_rate;
 	u32			irq_gadget;
 	u32			otg_irq;
 	u32			current_otg_role;

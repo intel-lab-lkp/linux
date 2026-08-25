@@ -420,6 +420,10 @@ static void dwc3_ref_clk_period(struct dwc3 *dwc)
 	} else if (dwc->ref_clk_per) {
 		period = dwc->ref_clk_per;
 		rate = NSEC_PER_SEC / period;
+	} else if (dwc->ref_clk_rate) {
+		rate = dwc->ref_clk_rate;
+		period = NSEC_PER_SEC / rate;
+
 	} else {
 		return;
 	}
@@ -2332,6 +2336,14 @@ int dwc3_core_probe(const struct dwc3_probe_data *data)
 		ret = dwc3_get_clocks(dwc);
 		if (ret)
 			goto err_put_psy;
+	} else if (data->ref_clk) {
+		dwc->ref_clk_rate = clk_get_rate(data->ref_clk);
+		if (!dwc->ref_clk_rate) {
+			dev_err(dev,
+				"failed to get rate from ref clock provided by glue layer\n");
+			ret = -EINVAL;
+			goto err_put_psy;
+		}
 	}
 
 	ret = reset_control_deassert(dwc->reset);
