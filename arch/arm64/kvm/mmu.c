@@ -5,6 +5,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/cleanup.h>
 #include <linux/mman.h>
 #include <linux/kvm_host.h>
 #include <linux/io.h>
@@ -1554,9 +1555,9 @@ static void *get_mmu_memcache(struct kvm_vcpu *vcpu)
 		return &vcpu->arch.pkvm_memcache;
 }
 
-static int topup_mmu_memcache(struct kvm_vcpu *vcpu, void *memcache)
+static int topup_mmu_memcache(struct kvm_s2_mmu *mmu, void *memcache)
 {
-	int min_pages = kvm_mmu_cache_min_pages(vcpu->arch.hw_mmu);
+	const int min_pages = kvm_mmu_cache_min_pages(mmu);
 
 	if (!is_protected_kvm_enabled())
 		return kvm_mmu_topup_memory_cache(memcache, min_pages);
@@ -1605,6 +1606,7 @@ struct kvm_s2_fault_desc {
 	unsigned long		hva;
 	unsigned long		esr;
 	struct kvm_s2_mmu	*mmu;
+	bool			pre_fault;
 };
 
 struct kvm_s2_fault_result {
@@ -1664,7 +1666,7 @@ static int gmem_abort(const struct kvm_s2_fault_desc *s2fd,
 
 	if (!perm_fault) {
 		memcache = get_mmu_memcache(s2fd->vcpu);
-		ret = topup_mmu_memcache(s2fd->vcpu, memcache);
+		ret = topup_mmu_memcache(s2fd->mmu, memcache);
 		if (ret)
 			return ret;
 	}
@@ -1761,7 +1763,7 @@ static int pkvm_mem_abort(const struct kvm_s2_fault_desc *s2fd)
 	int ret;
 
 	hyp_memcache = get_mmu_memcache(vcpu);
-	ret = topup_mmu_memcache(vcpu, hyp_memcache);
+	ret = topup_mmu_memcache(s2fd->mmu, hyp_memcache);
 	if (ret)
 		return -ENOMEM;
 
@@ -1953,6 +1955,8 @@ static int kvm_s2_fault_pin_pfn(const struct kvm_s2_fault_desc *s2fd,
 				      &s2vi->map_writable, &s2vi->page);
 	if (unlikely(is_error_noslot_pfn(s2vi->pfn))) {
 		if (s2vi->pfn == KVM_PFN_ERR_HWPOISON) {
+			if (s2fd->pre_fault)
+				return -EHWPOISON;
 			kvm_send_hwpoison_signal(s2fd->hva, __ffs(s2vi->vma_pagesize));
 			return 0;
 		}
@@ -2163,7 +2167,7 @@ static int user_mem_abort(const struct kvm_s2_fault_desc *s2fd,
 	memcache = get_mmu_memcache(s2fd->vcpu);
 	if (!perm_fault || memslot_is_logging(s2fd->memslot) ||
 	    is_protected_kvm_enabled()) {
-		ret = topup_mmu_memcache(s2fd->vcpu, memcache);
+		ret = topup_mmu_memcache(s2fd->mmu, memcache);
 		if (ret)
 			return ret;
 	}
@@ -2185,18 +2189,22 @@ static int user_mem_abort(const struct kvm_s2_fault_desc *s2fd,
 	return kvm_s2_fault_map(s2fd, &s2vi, prot, memcache, result);
 }
 
+static void __handle_access_fault(struct kvm_pgtable *pgt, phys_addr_t fault_ipa)
+{
+	enum kvm_pgtable_walk_flags flags = KVM_PGTABLE_WALK_SHARED;
+
+	trace_kvm_access_fault(fault_ipa);
+	KVM_PGT_FN(kvm_pgtable_stage2_mkyoung)(pgt, fault_ipa, flags);
+}
+
 /* Resolve the access fault by making the page young again. */
 static void handle_access_fault(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa)
 {
-	enum kvm_pgtable_walk_flags flags = KVM_PGTABLE_WALK_SHARED;
 	struct kvm_s2_mmu *mmu;
 
-	trace_kvm_access_fault(fault_ipa);
-
-	read_lock(&vcpu->kvm->mmu_lock);
+	guard(read_lock)(&vcpu->kvm->mmu_lock);
 	mmu = vcpu->arch.hw_mmu;
-	KVM_PGT_FN(kvm_pgtable_stage2_mkyoung)(mmu->pgt, fault_ipa, flags);
-	read_unlock(&vcpu->kvm->mmu_lock);
+	__handle_access_fault(mmu->pgt, fault_ipa);
 }
 
 /*
@@ -2833,4 +2841,166 @@ void kvm_toggle_cache(struct kvm_vcpu *vcpu, bool was_enabled)
 		*vcpu_hcr(vcpu) &= ~HCR_TVM;
 
 	trace_kvm_toggle_cache(*vcpu_pc(vcpu), was_enabled, now_enabled);
+}
+
+static bool kvm_pte_young_s2(kvm_pte_t pte)
+{
+	return pte & KVM_PTE_LEAF_ATTR_LO_S2_AF;
+}
+
+static void kvm_pte_mkyoung_s2(struct kvm_pgtable *pgt, gpa_t gpa)
+{
+	struct kvm *kvm = kvm_s2_mmu_to_kvm(pgt->mmu);
+
+	lockdep_assert_held(&kvm->mmu_lock);
+	/* Despite its name, doesn't fault here. */
+	__handle_access_fault(pgt, gpa);
+}
+
+/*
+ * Try to walk to the specified GPA in canonical mmu - if unmapped returns 0, if
+ * mapped returns the granule size, otherwise returns an error.
+ */
+static long kvm_walk_s2(struct kvm_pgtable *pgt,
+			gpa_t gpa, s8 *level)
+{
+	struct kvm *kvm = kvm_s2_mmu_to_kvm(pgt->mmu);
+	kvm_pte_t pte;
+	long ret;
+
+	guard(read_lock)(&kvm->mmu_lock);
+
+	ret = kvm_pgtable_get_leaf(pgt, gpa, &pte, level,
+				   KVM_PGTABLE_WALK_SHARED);
+	if (ret)
+		return ret;
+	/* Unpopulated, must fault. */
+	if (!kvm_pte_valid(pte))
+		return 0;
+	/* Walked the entry so mark young. */
+	if (!kvm_pte_young_s2(pte))
+		kvm_pte_mkyoung_s2(pgt, gpa);
+	return kvm_granule_size(*level);
+}
+
+/* Synthesised data abort at specified page table level. */
+#define PRE_FAULT_ESR(level)				\
+	 ((ESR_ELx_EC_DABT_LOW << ESR_ELx_EC_SHIFT) |	\
+	  ESR_ELx_IL | ESR_ELx_FSC_FAULT_L(level))
+
+/* Retrieve either a read-only or a read/write hva. */
+static hva_t gfn_to_hva_memslot_read(struct kvm_memory_slot *slot, gfn_t gfn)
+{
+	return gfn_to_hva_memslot_prot(slot, gfn, /*writable=*/NULL);
+}
+
+static long __pre_fault_s2(struct kvm_s2_mmu *mmu, struct kvm_vcpu *vcpu,
+			   gpa_t gpa, struct kvm_memory_slot *memslot, s8 level)
+{
+	const bool is_gmem  = kvm_slot_has_gmem(memslot);
+	const gfn_t gfn = gpa_to_gfn(gpa);
+	const hva_t hva = is_gmem ? 0 : gfn_to_hva_memslot_read(memslot, gfn);
+	const struct kvm_s2_fault_desc s2fd = {
+		.vcpu		= vcpu,
+		.fault_ipa	= gpa,
+		.nested		= NULL,
+		.memslot	= memslot,
+		.hva		= hva,
+		.esr		= PRE_FAULT_ESR(level),
+		.mmu		= mmu,
+		.pre_fault	= true,
+	};
+	struct kvm_s2_fault_result result = {};
+	long ret;
+
+	if (kvm_is_error_hva(hva))
+		return -EFAULT;
+
+	if (is_gmem)
+		ret = gmem_abort(&s2fd, &result);
+	else
+		ret = user_mem_abort(&s2fd, &result);
+	if (IS_ERR_VALUE(ret))
+		return ret;
+	if (!result.mapped)
+		return -EAGAIN;
+	return result.mapping_size;
+}
+
+static long pre_fault_s2(struct kvm_s2_mmu *mmu, struct kvm_vcpu *vcpu,
+			 gpa_t gpa, struct kvm_memory_slot *memslot)
+{
+	s8 level = KVM_PGTABLE_LAST_LEVEL;
+	long ret;
+
+	/* Try a walk first. */
+	ret = kvm_walk_s2(mmu->pgt, gpa, &level);
+	if (ret)
+		return ret;
+	/* OK, have to fault page in. */
+	return __pre_fault_s2(mmu, vcpu, gpa, memslot, level);
+}
+
+static unsigned long
+pre_fault_bytes_consumed(gpa_t gpa, unsigned long granule_size,
+			 unsigned long bytes_remaining)
+{
+	/* Granules are always a power-of-2. */
+	const unsigned long granule_bytes_remaining =
+		granule_size - (gpa % granule_size);
+
+	return min(granule_bytes_remaining, bytes_remaining);
+}
+
+/* If you lose the race this many times, time to give up. */
+#define MAX_PRE_FAULT_RETRIES 3
+
+/**
+ * kvm_arch_vcpu_pre_fault_memory - pre-fault stage-2 page tables for the
+ * specified GPA.
+ * @vcpu:	The VCPU pointer
+ * @range:	{gpa, size, flags} tuple
+ *
+ * The mapping performed is always best-effort - faulting in is necessarily
+ * racey. The ranges faulted in are canonical, nested page tables are ignored.
+ *
+ * If the GPA is already mapped, the page table entry is marked young.
+ *
+ * @range->gpa specifies the GPA to pre-fault, @range->size specifies how many
+ * bytes remain to be pre-faulted and @range->flags is reserved and must be 0.
+ *
+ * Returns: the number of bytes the pre-fault consumed, or an error.
+ */
+long kvm_arch_vcpu_pre_fault_memory(struct kvm_vcpu *vcpu,
+				    struct kvm_pre_fault_memory *range)
+{
+	struct kvm *kvm = vcpu->kvm;
+	const u64 bytes_remaining = range->size;
+	struct kvm_s2_mmu *mmu = &kvm->arch.mmu; /* Canonical. */
+	struct kvm_memory_slot *memslot;
+	const gpa_t gpa = range->gpa;
+	int num_retries = 0;
+	long ret;
+
+	/*
+	 * pKVM is unsupported as their vCPUs are instantiated on first run and
+	 * pre-faulting only running vCPUs would be inconsistent and confusing.
+	 */
+	if (is_protected_kvm_enabled())
+		return -EOPNOTSUPP;
+
+	memslot = gfn_to_memslot(kvm, gpa_to_gfn(gpa));
+	if (!memslot)
+		return -ENOENT;
+	/* SRCU must be released for progress and only userland can do that. */
+	if (memslot->flags & KVM_MEMSLOT_INVALID)
+		return -EAGAIN;
+
+	do {
+		ret = pre_fault_s2(mmu, vcpu, gpa, memslot);
+	} while (ret == -EAGAIN && num_retries++ < MAX_PRE_FAULT_RETRIES);
+
+	if (IS_ERR_VALUE(ret))
+		return ret;
+	return pre_fault_bytes_consumed(gpa, ret, bytes_remaining);
 }
