@@ -5,6 +5,7 @@
  * Copyright (c) 2021 HiSilicon Technologies Co., Ltd.
  */
 
+#include <linux/acpi.h>
 #include <linux/bits.h>
 #include <linux/bitfield.h>
 #include <linux/clk.h>
@@ -63,6 +64,8 @@
 #define HISI_I2C_INT_CLR		0x0048
 #define HISI_I2C_INT_MASK		0x004C
 #define HISI_I2C_TRANS_STATE		0x0050
+#define   HISI_I2C_TRANS_STATE_SDA_LEVEL	BIT(5)
+#define   HISI_I2C_TRANS_STATE_SCL_LEVEL	BIT(6)
 #define HISI_I2C_TRANS_ERR		0x0054
 #define HISI_I2C_VERSION		0x0058
 
@@ -87,9 +90,26 @@
 #define NSEC_TO_CYCLES(ns, clk_rate_khz) \
 	DIV_ROUND_UP_ULL((clk_rate_khz) * (ns), NSEC_PER_MSEC)
 
+/*
+ * SUBCTRL SC_I2C_CTRL register
+ * Set HISI_I2C_CTRL_DAT_CFG_EN and HISI_I2C_CTRL_SCL_CFG_EN to control
+ * I2C pin behaviorhe by subctrl controller; use HISI_I2C_CTRL_DAT_OE and
+ * HISI_I2C_CTRL_CLK_OE to control input or output; use HISI_I2C_CTRL_SDA_OUT
+ * and HISI_I2C_CTRL_SCL_OUT to control output value.
+ */
+#define HISI_I2C_CTRL_DAT_CFG_EN	BIT(5)
+#define HISI_I2C_CTRL_SCL_CFG_EN	BIT(4)
+#define HISI_I2C_CTRL_DAT_OE		BIT(3)
+#define HISI_I2C_CTRL_CLK_OE		BIT(2)
+#define HISI_I2C_CTRL_SDA_OUT		BIT(1)
+#define HISI_I2C_CTRL_SCL_OUT		BIT(0)
+
+#define HISI_I2C_RECOVERY_REG_SIZE 4
+
 struct hisi_i2c_controller {
 	struct i2c_adapter adapter;
 	void __iomem *iobase;
+	void __iomem *sctrl_addr;
 	struct device *dev;
 	struct clk *clk;
 	int irq;
@@ -109,7 +129,13 @@ struct hisi_i2c_controller {
 	struct i2c_timings t;
 	u32 clk_rate_khz;
 	u32 spk_len;
+
+	/* Bus recovery */
+	struct i2c_bus_recovery_info rinfo;
+	acpi_handle acpi_handle;
 };
+
+static void hisi_i2c_configure_bus(struct hisi_i2c_controller *ctlr);
 
 static void hisi_i2c_enable_int(struct hisi_i2c_controller *ctlr, u32 mask)
 {
@@ -150,6 +176,115 @@ static void hisi_i2c_handle_errors(struct hisi_i2c_controller *ctlr)
 		if (reg & HISI_I2C_FIFO_STATE_TX_WERR)
 			dev_err(ctlr->dev, "tx fifo error write\n");
 	}
+}
+
+static int hisi_i2c_recovery_get_scl(struct i2c_adapter *adap)
+{
+	struct hisi_i2c_controller *ctlr = i2c_get_adapdata(adap);
+	u32 reg = readl(ctlr->iobase + HISI_I2C_TRANS_STATE);
+
+	return !!(reg & HISI_I2C_TRANS_STATE_SCL_LEVEL);
+}
+
+static int hisi_i2c_recovery_get_sda(struct i2c_adapter *adap)
+{
+	struct hisi_i2c_controller *ctlr = i2c_get_adapdata(adap);
+	u32 reg = readl(ctlr->iobase + HISI_I2C_TRANS_STATE);
+
+	return !!(reg & HISI_I2C_TRANS_STATE_SDA_LEVEL);
+}
+
+static void hisi_i2c_recovery_set_scl(struct i2c_adapter *adap, int val)
+{
+	struct hisi_i2c_controller *ctlr = i2c_get_adapdata(adap);
+	u32 reg;
+
+	reg = readl(ctlr->sctrl_addr);
+	if (val)
+		reg |= HISI_I2C_CTRL_SCL_OUT;
+	else
+		reg &= ~HISI_I2C_CTRL_SCL_OUT;
+	writel(reg, ctlr->sctrl_addr);
+}
+
+static void hisi_i2c_prepare_recovery(struct i2c_adapter *adap)
+{
+	struct hisi_i2c_controller *ctlr = i2c_get_adapdata(adap);
+	u32 reg;
+
+	reg = readl(ctlr->sctrl_addr);
+	reg |= HISI_I2C_CTRL_SCL_CFG_EN | HISI_I2C_CTRL_DAT_CFG_EN |
+		   HISI_I2C_CTRL_CLK_OE | HISI_I2C_CTRL_SCL_OUT;
+	reg &= ~HISI_I2C_CTRL_DAT_OE;
+	writel(reg, ctlr->sctrl_addr);
+}
+
+static void hisi_i2c_unprepare_recovery(struct i2c_adapter *adap)
+{
+	struct hisi_i2c_controller *ctlr = i2c_get_adapdata(adap);
+	u32 reg;
+
+	reg = readl(ctlr->sctrl_addr);
+	reg &= ~(HISI_I2C_CTRL_SCL_CFG_EN | HISI_I2C_CTRL_DAT_CFG_EN);
+	writel(reg, ctlr->sctrl_addr);
+
+	/*
+	 * Invokes the specific ACPI method "_RST" for trigger a soft
+	 * reset of I2C controller in order to help on I2C controller recover from
+	 * the abnormal state after bus recovery process.
+	 */
+	if (ctlr->acpi_handle && acpi_has_method(ctlr->acpi_handle, "_RST")) {
+		acpi_status status;
+
+		status = acpi_evaluate_object(ctlr->acpi_handle, "_RST", NULL, NULL);
+		if (ACPI_FAILURE(status))
+			dev_err(ctlr->dev, "_RST method failed: %s\n",
+				acpi_format_exception(status));
+	}
+
+	hisi_i2c_configure_bus(ctlr);
+}
+
+static int hisi_i2c_get_bus_recovery_res(struct hisi_i2c_controller *ctlr,
+					 struct platform_device *pdev)
+{
+	struct resource *res;
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+
+	if (!res || resource_size(res) != HISI_I2C_RECOVERY_REG_SIZE)
+		return -ENODEV;
+
+	ctlr->sctrl_addr = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(ctlr->sctrl_addr)) {
+		ctlr->sctrl_addr = NULL;
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static int hisi_i2c_recovery_init(struct hisi_i2c_controller *ctlr)
+{
+	struct platform_device *pdev = to_platform_device(ctlr->dev);
+	struct i2c_adapter *adapter = &ctlr->adapter;
+	int ret;
+
+	ret = hisi_i2c_get_bus_recovery_res(ctlr, pdev);
+	if (ret)
+		return ret;
+
+	ctlr->rinfo = (struct i2c_bus_recovery_info){
+		.get_scl = hisi_i2c_recovery_get_scl,
+		.get_sda = hisi_i2c_recovery_get_sda,
+		.set_scl = hisi_i2c_recovery_set_scl,
+		.prepare_recovery = hisi_i2c_prepare_recovery,
+		.unprepare_recovery = hisi_i2c_unprepare_recovery,
+		.recover_bus = i2c_generic_scl_recovery,
+	};
+	adapter->bus_recovery_info = &ctlr->rinfo;
+	ctlr->acpi_handle = ACPI_HANDLE(ctlr->dev);
+	return 0;
 }
 
 static int hisi_i2c_start_xfer(struct hisi_i2c_controller *ctlr)
@@ -504,6 +639,10 @@ static int hisi_i2c_probe(struct platform_device *pdev)
 	adapter->algo = &hisi_i2c_algo;
 	adapter->dev.parent = dev;
 	i2c_set_adapdata(adapter, ctlr);
+
+	ret = hisi_i2c_recovery_init(ctlr);
+	if (ret)
+		dev_info(ctlr->dev, "I2C bus recovery not available\n");
 
 	ret = devm_i2c_add_adapter(dev, adapter);
 	if (ret)
