@@ -896,12 +896,14 @@ static void gtp_encap_disable_sock(struct sock *sk)
 static void gtp_encap_disable(struct gtp_dev *gtp)
 {
 	if (gtp->sk_created) {
-		udp_tunnel_sock_release(gtp->sk0);
-		udp_tunnel_sock_release(gtp->sk1u);
-		/* Pairs with smp_load_acquire() in the RX and
-		 * genl echo paths.
+		/* Prevent new readers from entering echo handlers,
+		 * then wait for in-flight softirq readers to complete
+		 * before releasing the sockets.
 		 */
 		smp_store_release(&gtp->sk_created, false);
+		synchronize_net();
+		udp_tunnel_sock_release(gtp->sk0);
+		udp_tunnel_sock_release(gtp->sk1u);
 		gtp->sk0 = NULL;
 		gtp->sk1u = NULL;
 	} else {
@@ -1473,8 +1475,7 @@ static int gtp_create_sockets(struct gtp_dev *gtp, const struct nlattr *nla,
 	gtp->sk1u = sk1u;
 
 	/* Ensure sk0/sk1u are visible before sk_created is set.
-	 * Pairs with smp_load_acquire() in the RX and genl
-	 * echo paths.
+	 * Pairs with smp_load_acquire() in the RX echo paths.
 	 */
 	smp_store_release(&gtp->sk_created, true);
 
@@ -2362,6 +2363,7 @@ static int gtp_genl_send_echo_req(struct sk_buff *skb, struct genl_info *info)
 	struct sock *sk;
 	__be16 port;
 	int len;
+	int ret;
 
 	if (!info->attrs[GTPA_VERSION] ||
 	    !info->attrs[GTPA_LINK] ||
@@ -2373,17 +2375,22 @@ static int gtp_genl_send_echo_req(struct sk_buff *skb, struct genl_info *info)
 	dst_ip = nla_get_be32(info->attrs[GTPA_PEER_ADDRESS]);
 	src_ip = nla_get_be32(info->attrs[GTPA_MS_ADDRESS]);
 
-	gtp = gtp_find_dev(sock_net(skb->sk), info->attrs);
-	if (!gtp)
-		return -ENODEV;
+	rtnl_lock();
 
-	/* Pairs with smp_store_release() in gtp_create_sockets()
-	 * and gtp_encap_disable().
-	 */
-	if (!smp_load_acquire(&gtp->sk_created))
-		return -EOPNOTSUPP;
-	if (!(gtp->dev->flags & IFF_UP))
-		return -ENETDOWN;
+	gtp = gtp_find_dev(sock_net(skb->sk), info->attrs);
+	if (!gtp) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
+
+	if (!gtp->sk_created) {
+		ret = -EOPNOTSUPP;
+		goto out_unlock;
+	}
+	if (!(gtp->dev->flags & IFF_UP)) {
+		ret = -ENETDOWN;
+		goto out_unlock;
+	}
 
 	if (version == GTP_V0) {
 		struct gtp0_header *gtp0_h;
@@ -2392,8 +2399,10 @@ static int gtp_genl_send_echo_req(struct sk_buff *skb, struct genl_info *info)
 			sizeof(struct iphdr) + sizeof(struct udphdr);
 
 		skb_to_send = netdev_alloc_skb_ip_align(gtp->dev, len);
-		if (!skb_to_send)
-			return -ENOMEM;
+		if (!skb_to_send) {
+			ret = -ENOMEM;
+			goto out_unlock;
+		}
 
 		sk = gtp->sk0;
 		port = htons(GTP0_PORT);
@@ -2409,8 +2418,10 @@ static int gtp_genl_send_echo_req(struct sk_buff *skb, struct genl_info *info)
 			sizeof(struct iphdr) + sizeof(struct udphdr);
 
 		skb_to_send = netdev_alloc_skb_ip_align(gtp->dev, len);
-		if (!skb_to_send)
-			return -ENOMEM;
+		if (!skb_to_send) {
+			ret = -ENOMEM;
+			goto out_unlock;
+		}
 
 		sk = gtp->sk1u;
 		port = htons(GTP1U_PORT);
@@ -2420,7 +2431,8 @@ static int gtp_genl_send_echo_req(struct sk_buff *skb, struct genl_info *info)
 		memset(gtp1u_h, 0, sizeof(struct gtp1_header_long));
 		gtp1u_build_echo_msg(gtp1u_h, GTP_ECHO_REQ);
 	} else {
-		return -ENODEV;
+		ret = -ENODEV;
+		goto out_unlock;
 	}
 
 	rt = ip4_route_output_gtp(&fl4, sk, dst_ip, src_ip);
@@ -2428,7 +2440,8 @@ static int gtp_genl_send_echo_req(struct sk_buff *skb, struct genl_info *info)
 		netdev_dbg(gtp->dev, "no route for echo request to %pI4\n",
 			   &dst_ip);
 		kfree_skb(skb_to_send);
-		return -ENODEV;
+		ret = -ENODEV;
+		goto out_unlock;
 	}
 
 	local_bh_disable();
@@ -2442,7 +2455,11 @@ static int gtp_genl_send_echo_req(struct sk_buff *skb, struct genl_info *info)
 				    dev_net(gtp->dev)),
 			    false, 0);
 	local_bh_enable();
-	return 0;
+	ret = 0;
+
+out_unlock:
+	rtnl_unlock();
+	return ret;
 }
 
 static const struct nla_policy gtp_genl_policy[GTPA_MAX + 1] = {
