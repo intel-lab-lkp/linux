@@ -225,13 +225,12 @@ static void cx_process_headset_plugin(struct hda_codec *codec)
 	val = snd_hda_codec_read(codec, 0x1c, 0, 0xcb0, 0x0);
 	if (val & 0x800) {
 		codec_dbg(codec, "headset plugin, type is CTIA\n");
-		snd_hda_codec_write(codec, 0x19, 0, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x24);
 	} else if (val & 0x400) {
 		codec_dbg(codec, "headset plugin, type is OMTP\n");
-		snd_hda_codec_write(codec, 0x19, 0, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x24);
 	} else {
-		codec_dbg(codec, "headphone plugin\n");
+		codec_dbg(codec, "mic plugin\n");
 	}
+	snd_hda_codec_write(codec, 0x19, 0, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x24);
 }
 
 static void cx_update_headset_mic_vref(struct hda_codec *codec, struct hda_jack_callback *event)
