@@ -18,13 +18,18 @@
 #define pr_fmt(fmt) "bff: " fmt
 
 #include <linux/bits.h>
+#include <linux/cacheinfo.h>
+#include <linux/cleanup.h>
 #include <linux/cpufeature.h>
+#include <linux/cpuhplock.h>
 #include <linux/device-id/x86_cpu.h>
 #include <linux/errno.h>
 #include <linux/init.h>
+#include <linux/limits.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
 #include <linux/printk.h>
+#include <linux/topology.h>
 #include <linux/types.h>
 
 #include <asm/cpu_device_id.h>
@@ -33,6 +38,8 @@
 #include <asm/mce.h>
 #include <asm/msr.h>
 #include <asm/msr-index.h>
+
+#define NUM_IMH_PER_SKT		2
 
 /* Intel bitfix filter control register defines */
 #define MSR_MC0_BFF_CTL		0x000006c0
@@ -67,11 +74,78 @@ MODULE_DEVICE_TABLE(x86cpu, bff_cpu_ids);
 
 static const enum bff_type *bank_types;
 
+/* Diamond Rapids maps APICID[2] to the IMH instance. */
+static void bff_set_imh_id(struct mce *mce, unsigned long *id)
+{
+	int imh_num = (NUM_IMH_PER_SKT * topology_physical_package_id(mce->extcpu)) +
+		      ((mce->apicid >> 2) & 0x1);
+
+	*id |= imh_num;
+}
+
+static bool bff_set_cache_id(int cpu, int level, unsigned long *id)
+{
+	int cacheid;
+
+	guard(cpus_read_lock)();
+
+	cacheid = get_cpu_cacheinfo_id(cpu, level);
+	if (cacheid == -1) {
+		pr_warn("Could not get L%d cache id for CPU %d\n", level, cpu);
+		return false;
+	}
+
+	*id |= cacheid;
+
+	return true;
+}
+
+#define BFF_ID_BANK_SHIFT	16
+
+/*
+ * Cache IDs are only unique within a cache level.
+ * Include the MCA bank number so each BFF-capable hardware
+ * resource has a unique tracking ID.
+ */
+static unsigned long get_bff_id(struct mce *mce)
+{
+	unsigned long id = (unsigned long)mce->bank << BFF_ID_BANK_SHIFT;
+
+	switch (bank_types[mce->bank]) {
+	case BFF_BANK_DCU:
+	case BFF_BANK_DTLB:
+		if (!bff_set_cache_id(mce->extcpu, 1, &id))
+			return ULONG_MAX;
+		break;
+
+	case BFF_BANK_MLC:
+		if (!bff_set_cache_id(mce->extcpu, 2, &id))
+			return ULONG_MAX;
+		break;
+
+	case BFF_BANK_CCF:
+		if (!bff_set_cache_id(mce->extcpu, 3, &id))
+			return ULONG_MAX;
+		break;
+
+	case BFF_BANK_HSF:
+	case BFF_BANK_IOCACHE:
+		bff_set_imh_id(mce, &id);
+		break;
+	default:
+		return ULONG_MAX;
+	}
+
+	return id;
+}
+
 static void handle_bff(struct mce *mce)
 {
 	/* The bitfix filter overflowed, get the target CPU to reset it. */
 	if (wrmsrq_on_cpu(mce->extcpu, MSR_MCx_BFF_CTL(mce->bank), MCI_BFF_RESET))
 		pr_warn("Failed to reset bitfix filter for CPU %d Bank %d\n", mce->extcpu, mce->bank);
+
+	pr_debug("unique_id = 0x%lx\n", get_bff_id(mce));
 }
 
 static int bff_mce_notify(struct notifier_block *nb, unsigned long val, void *data)
