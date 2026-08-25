@@ -130,6 +130,7 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(sched_dl_server_stop_tp);
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 DEFINE_PER_CPU(struct rnd_state, sched_rnd_state);
+DEFINE_PER_CPU(unsigned int, rq_nr_pinned);
 
 #ifdef CONFIG_SCHED_PROXY_EXEC
 DEFINE_STATIC_KEY_TRUE(__sched_proxy_exec);
@@ -2491,7 +2492,7 @@ EXPORT_SYMBOL_GPL(migrate_enable);
 
 static inline bool rq_has_pinned_tasks(struct rq *rq)
 {
-	return rq->nr_pinned;
+	return READ_ONCE(*per_cpu_ptr(&rq_nr_pinned, cpu_of(rq)));
 }
 
 /*

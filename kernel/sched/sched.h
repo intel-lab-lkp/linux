@@ -1340,7 +1340,6 @@ struct rq {
 	struct cpuidle_state	*idle_state;
 #endif
 
-	unsigned int		nr_pinned;
 	unsigned int		push_busy;
 	struct cpu_stop_work	push_work;
 

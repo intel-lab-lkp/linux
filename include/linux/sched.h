@@ -51,9 +51,6 @@
 #include <linux/unwind_deferred_types.h>
 #include <asm/kmap_size.h>
 #include <linux/time64.h>
-#ifndef COMPILE_OFFSETS
-#include <generated/rq-offsets.h>
-#endif
 
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
@@ -2405,27 +2402,10 @@ struct sched_cache_stat { };
 #endif
 
 #ifndef MODULE
-#ifndef COMPILE_OFFSETS
 
 extern void ___migrate_enable(void);
 
-struct rq;
-DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
-
-/*
- * The "struct rq" is not available here, so we can't access the
- * "runqueues" with this_cpu_ptr(), as the compilation will fail in
- * this_cpu_ptr() -> raw_cpu_ptr() -> __verify_pcpu_ptr():
- *   typeof((ptr) + 0)
- *
- * So use arch_raw_cpu_ptr()/PERCPU_PTR() directly here.
- */
-#ifdef CONFIG_SMP
-#define this_rq_raw() arch_raw_cpu_ptr(&runqueues)
-#else
-#define this_rq_raw() PERCPU_PTR(&runqueues)
-#endif
-#define this_rq_pinned() (*(unsigned int *)((void *)this_rq_raw() + RQ_nr_pinned))
+DECLARE_PER_CPU(unsigned int, rq_nr_pinned);
 
 static inline void __migrate_enable(void)
 {
@@ -2459,7 +2439,7 @@ static inline void __migrate_enable(void)
 	 */
 	barrier();
 	p->migration_disabled = 0;
-	this_rq_pinned()--;
+	__this_cpu_dec(rq_nr_pinned);
 }
 
 static inline void __migrate_disable(void)
@@ -2478,13 +2458,9 @@ static inline void __migrate_disable(void)
 	}
 
 	guard(preempt)();
-	this_rq_pinned()++;
+	__this_cpu_inc(rq_nr_pinned);
 	p->migration_disabled = 1;
 }
-#else /* !COMPILE_OFFSETS */
-static inline void __migrate_disable(void) { }
-static inline void __migrate_enable(void) { }
-#endif /* !COMPILE_OFFSETS */
 
 /*
  * So that it is possible to not export the runqueues variable, define and
