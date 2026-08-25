@@ -1863,8 +1863,7 @@ ktime_t hrtimer_cb_get_time(const struct hrtimer *timer)
 }
 EXPORT_SYMBOL_GPL(hrtimer_cb_get_time);
 
-static void __hrtimer_setup(struct hrtimer *timer, enum hrtimer_restart (*fn)(struct hrtimer *),
-			    clockid_t clock_id, enum hrtimer_mode mode)
+static void __hrtimer_init(struct hrtimer *timer, clockid_t clock_id, enum hrtimer_mode mode)
 {
 	bool softtimer = !!(mode & HRTIMER_MODE_SOFT);
 	struct hrtimer_cpu_base *cpu_base;
@@ -1898,11 +1897,31 @@ static void __hrtimer_setup(struct hrtimer *timer, enum hrtimer_restart (*fn)(st
 	timer->is_lazy = !!(mode & HRTIMER_MODE_LAZY_REARM);
 	timer->base = &cpu_base->clock_base[base];
 	timerqueue_linked_init(&timer->node);
+}
+
+static void __hrtimer_setup(struct hrtimer *timer, enum hrtimer_restart (*fn)(struct hrtimer *),
+			    clockid_t clock_id, enum hrtimer_mode mode)
+{
+	__hrtimer_init(timer, clock_id, mode);
 
 	if (WARN_ON_ONCE(!fn))
 		ACCESS_PRIVATE(timer, function) = hrtimer_dummy_timeout;
 	else
 		ACCESS_PRIVATE(timer, function) = fn;
+}
+
+static void __hrtimer_setup_ext(struct hrtimer *timer, hrtimer_ext_func_t fn,
+				clockid_t clock_id, enum hrtimer_mode mode)
+{
+	__hrtimer_init(timer, clock_id, mode);
+
+	if (WARN_ON_ONCE(!fn)) {
+		ACCESS_PRIVATE(timer, function) = hrtimer_dummy_timeout;
+		return;
+	}
+
+	ACCESS_PRIVATE(timer, function_ext) = fn;
+	timer->is_ext = true;
 }
 
 /**
@@ -1925,6 +1944,45 @@ void hrtimer_setup(struct hrtimer *timer, enum hrtimer_restart (*function)(struc
 	__hrtimer_setup(timer, function, clock_id, mode);
 }
 EXPORT_SYMBOL_GPL(hrtimer_setup);
+
+/**
+ * hrtimer_setup_ext - initialize a timer with an expiry injecting callback
+ * @timer:	the timer to be initialized
+ * @function_ext: the expiry injecting callback function
+ * @clock_id:	the clock to be used
+ * @mode:       The modes which are relevant for initialization:
+ *              HRTIMER_MODE_ABS, HRTIMER_MODE_REL, HRTIMER_MODE_ABS_SOFT,
+ *              HRTIMER_MODE_REL_SOFT
+ *
+ *              The PINNED variants of the above can be handed in,
+ *              but the PINNED bit is ignored as pinning happens
+ *              when the hrtimer is started
+ *
+ * In contrast to a callback installed by hrtimer_setup(), an expiry
+ * injecting callback does not access the expiry of the timer itself.
+ * The expiry is snapshotted under the timer base lock and handed into
+ * the callback by value. To restart the timer, the callback fills @fwd
+ * and returns HRTIMER_RESTART; the core then applies
+ * hrtimer_forward(timer, fwd->now, fwd->interval) and requeues the
+ * timer, both under the timer base lock.
+ *
+ * This closes the race between hrtimer_forward()/expiry reads in
+ * callback context and a concurrent hrtimer_start() on another CPU,
+ * without requiring the timer user to provide serialization: if a
+ * concurrent start requeued the timer while the callback ran, the
+ * restart request is discarded and the concurrent start wins.
+ *
+ * The callback must not call hrtimer_forward() or modify the expiry
+ * itself, and a callback returning HRTIMER_RESTART must fill @fwd with
+ * a non zero interval.
+ */
+void hrtimer_setup_ext(struct hrtimer *timer, hrtimer_ext_func_t function_ext,
+		       clockid_t clock_id, enum hrtimer_mode mode)
+{
+	debug_setup(timer, clock_id, mode);
+	__hrtimer_setup_ext(timer, function_ext, clock_id, mode);
+}
+EXPORT_SYMBOL_GPL(hrtimer_setup_ext);
 
 /**
  * hrtimer_setup_on_stack - initialize a timer on stack memory
@@ -1991,8 +2049,11 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base, struct hrtimer_cloc
 			  struct hrtimer *timer, ktime_t now, unsigned long flags)
 	__must_hold(&cpu_base->lock)
 {
-	enum hrtimer_restart (*fn)(struct hrtimer *);
+	enum hrtimer_restart (*fn)(struct hrtimer *) = NULL;
+	struct hrtimer_forward_args fwd = { };
+	hrtimer_ext_func_t fn_ext = NULL;
 	bool expires_in_hardirq;
+	ktime_t expires = 0;
 	int restart;
 
 	lockdep_assert_held(&cpu_base->lock);
@@ -2010,7 +2071,20 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base, struct hrtimer_cloc
 	raw_write_seqcount_barrier(&base->seq);
 
 	__remove_hrtimer(timer, base, HRTIMER_STATE_INACTIVE, false);
-	fn = ACCESS_PRIVATE(timer, function);
+
+	/*
+	 * Snapshot the expiry for an expiry injecting callback while the
+	 * base lock is still held. The callback gets the snapshot by
+	 * value and must not access timer->node.expires, which a
+	 * concurrent hrtimer_start_range_ns() can modify once the lock is
+	 * dropped.
+	 */
+	if (timer->is_ext) {
+		fn_ext = ACCESS_PRIVATE(timer, function_ext);
+		expires = hrtimer_get_expires(timer);
+	} else {
+		fn = ACCESS_PRIVATE(timer, function);
+	}
 
 	/*
 	 * Clear the 'is relative' flag for the TIME_LOW_RES case. If the
@@ -2029,11 +2103,18 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base, struct hrtimer_cloc
 	trace_hrtimer_expire_entry(timer, now);
 	expires_in_hardirq = lockdep_hrtimer_enter(timer);
 
-	restart = fn(timer);
+	if (fn_ext)
+		restart = fn_ext(timer, expires, &fwd);
+	else
+		restart = fn(timer);
 
 	lockdep_hrtimer_exit(expires_in_hardirq);
 	trace_hrtimer_expire_exit(timer);
 	raw_spin_lock_irq(&cpu_base->lock);
+
+	/* An expiry injecting callback requesting a restart must forward. */
+	if (fn_ext && restart == HRTIMER_RESTART && WARN_ON_ONCE(!fwd.interval))
+		restart = HRTIMER_NORESTART;
 
 	/*
 	 * Note: We clear the running state after enqueue_hrtimer and
@@ -2044,8 +2125,27 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base, struct hrtimer_cloc
 	 * hrtimer_start_range_ns() can have popped in and enqueued the timer
 	 * for us already.
 	 */
-	if (restart == HRTIMER_RESTART && !timer->is_queued)
+	if (restart == HRTIMER_RESTART && !timer->is_queued) {
+		/*
+		 * Apply the deferred forward of an expiry injecting
+		 * callback with the base lock held.
+		 *
+		 * While base->running == timer, hrtimer_try_to_cancel()
+		 * bails out before remove_hrtimer() and the timer cannot
+		 * switch bases, so only a concurrent start can have
+		 * enqueued the timer and it writes the expiry and
+		 * is_queued in the same critical section. Thus !is_queued
+		 * here guarantees that the expiry is still equal to the
+		 * snapshot handed to the callback, and the concurrent
+		 * start check in hrtimer_forward() cannot trigger. If a
+		 * concurrent start enqueued the timer, is_queued is set
+		 * and the restart request is discarded - the concurrent
+		 * start expressed newer intent and wins.
+		 */
+		if (fn_ext)
+			hrtimer_forward(timer, fwd.now, fwd.interval);
 		enqueue_hrtimer(timer, base, HRTIMER_MODE_ABS, false);
+	}
 
 	/*
 	 * Separate the ->running assignment from the ->is_queued assignment.

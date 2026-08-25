@@ -190,6 +190,10 @@ static inline enum hrtimer_restart hrtimer_dummy_timeout(struct hrtimer *unused)
 /* Initialize timers: */
 extern void hrtimer_setup(struct hrtimer *timer, enum hrtimer_restart (*function)(struct hrtimer *),
 			  clockid_t clock_id, enum hrtimer_mode mode);
+
+extern void hrtimer_setup_ext(struct hrtimer *timer, hrtimer_ext_func_t function_ext,
+			      clockid_t clock_id, enum hrtimer_mode mode);
+
 extern void hrtimer_setup_on_stack(struct hrtimer *timer,
 				   enum hrtimer_restart (*function)(struct hrtimer *),
 				   clockid_t clock_id, enum hrtimer_mode mode);
@@ -307,6 +311,9 @@ static inline int hrtimer_callback_running(struct hrtimer *timer)
 static inline void hrtimer_update_function(struct hrtimer *timer,
 					   enum hrtimer_restart (*function)(struct hrtimer *))
 {
+	if (WARN_ON_ONCE(timer->is_ext))
+		return;
+
 #ifdef CONFIG_PROVE_LOCKING
 	guard(raw_spinlock_irqsave)(&timer->base->cpu_base->lock);
 
