@@ -48,6 +48,7 @@ struct f2fs_cached_block_list {
 };
 
 #define IS_META_CACHE(cache) (cache->type == F2FS_META_CACHE)
+#define IS_NODE_CACHE(cache) (cache->type == F2FS_NODE_CACHE)
 
 /* Flags for f2fs_cached_block state */
 enum f2fs_cached_state {
