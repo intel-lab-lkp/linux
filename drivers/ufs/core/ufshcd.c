@@ -97,6 +97,9 @@ enum {
 /* Default delay of RPM device flush delayed work */
 #define RPM_DEV_FLUSH_RECHECK_WORK_DELAY_MS 5000
 
+/* Delay for WriteBooster manual-flush recheck delayed work */
+#define WB_FLUSH_RECHECK_WORK_DELAY_MS 5000
+
 /* Default value of wait time before gating device ref clock */
 #define UFSHCD_REF_CLK_GATING_WAIT_US 0xFF /* microsecs */
 
@@ -402,6 +405,17 @@ static void ufshcd_configure_wb(struct ufs_hba *hba)
 
 	ufshcd_wb_toggle_buf_flush_during_h8(hba, true);
 
+	if (ufshcd_is_wb_exception_event_allowed(hba)) {
+		/*
+		 * Re-arm the flush-needed event: it is muted during a manual
+		 * flush and cleared by a device reset, but the cached mask
+		 * still shows it enabled, so clear then set the driver mask
+		 * to force the write through.
+		 */
+		ufshcd_update_ee_drv_mask(hba, 0, MASK_EE_WRITEBOOSTER_EVENT);
+		ufshcd_update_ee_drv_mask(hba, MASK_EE_WRITEBOOSTER_EVENT, 0);
+		return;
+	}
 	if (ufshcd_is_wb_buf_flush_allowed(hba))
 		ufshcd_wb_toggle_buf_flush(hba, true);
 }
@@ -6275,6 +6289,33 @@ static inline int ufshcd_get_ee_status(struct ufs_hba *hba, u32 *status)
 			QUERY_ATTR_IDN_EE_STATUS, 0, 0, status);
 }
 
+/* Arm the on-demand manual flush and mute the level-triggered event. */
+static void ufshcd_wb_arm_flush_event(struct ufs_hba *hba)
+{
+	ufshcd_wb_toggle_buf_flush(hba, true);
+	ufshcd_disable_ee(hba, MASK_EE_WRITEBOOSTER_EVENT);
+}
+
+/* Clear the manual flush and re-arm the event once the buffer drained. */
+static void ufshcd_wb_disarm_flush_event(struct ufs_hba *hba)
+{
+	ufshcd_wb_toggle_buf_flush(hba, false);
+	ufshcd_enable_ee(hba, MASK_EE_WRITEBOOSTER_EVENT);
+}
+
+static void ufshcd_wb_flush_needed_exception_event_handler(struct ufs_hba *hba)
+{
+	/*
+	 * The event is level-triggered and would be re-asserted on every
+	 * completion while the buffer is full, so mute it here; the
+	 * recheck work re-arms it once the buffer has drained.
+	 */
+	ufshcd_wb_arm_flush_event(hba);
+
+	schedule_delayed_work(&hba->wb_flush_recheck_work,
+			      msecs_to_jiffies(WB_FLUSH_RECHECK_WORK_DELAY_MS));
+}
+
 static void ufshcd_bkops_exception_event_handler(struct ufs_hba *hba)
 {
 	int err;
@@ -6518,6 +6559,35 @@ static void ufshcd_rpm_dev_flush_recheck_work(struct work_struct *work)
 	ufshcd_rpm_put_sync(hba);
 }
 
+static void ufshcd_wb_flush_recheck_work(struct work_struct *work)
+{
+	struct ufs_hba *hba = container_of(to_delayed_work(work),
+					   struct ufs_hba,
+					   wb_flush_recheck_work);
+	bool drained = false;
+
+	/* Stop once the manual flush has been cleared (here or at suspend). */
+	if (!hba->dev_info.wb_buf_flush_enabled)
+		return;
+
+	/* Probe the buffer only while active; never force a resume. */
+	if (ufshcd_rpm_get_if_active(hba) > 0) {
+		drained = !ufshcd_wb_need_flush(hba);
+
+		/* Disarm under the PM reference: it issues device commands. */
+		if (drained && ufshcd_is_wb_allowed(hba))
+			ufshcd_wb_disarm_flush_event(hba);
+
+		ufshcd_rpm_put(hba);
+	}
+
+	if (drained)
+		return;
+
+	schedule_delayed_work(&hba->wb_flush_recheck_work,
+			      msecs_to_jiffies(WB_FLUSH_RECHECK_WORK_DELAY_MS));
+}
+
 /**
  * ufshcd_exception_event_handler - handle exceptions raised by device
  * @work: pointer to work data
@@ -6556,6 +6626,9 @@ static void ufshcd_exception_event_handler(struct work_struct *work)
 		atomic_inc(&hba->dev_lvl_exception_count);
 		sysfs_notify(&hba->dev->kobj, NULL, "device_lvl_exception_count");
 	}
+
+	if (status & hba->ee_drv_mask & MASK_EE_WRITEBOOSTER_EVENT)
+		ufshcd_wb_flush_needed_exception_event_handler(hba);
 
 	ufs_debugfs_exception_event(hba, status);
 }
@@ -8491,6 +8564,7 @@ static void ufshcd_wb_probe(struct ufs_hba *hba, const u8 *desc_buf)
 	u8 lun;
 	u32 d_lu_wb_buf_alloc;
 	u32 ext_ufs_feature;
+	int err;
 
 	if (!ufshcd_is_wb_allowed(hba))
 		return;
@@ -8548,6 +8622,16 @@ static void ufshcd_wb_probe(struct ufs_hba *hba, const u8 *desc_buf)
 
 	if (!ufshcd_is_wb_buf_lifetime_available(hba))
 		goto wb_disabled;
+
+	if (ufshcd_is_wb_exception_event_allowed(hba)) {
+		err = ufshcd_enable_ee(hba, MASK_EE_WRITEBOOSTER_EVENT);
+		if (err) {
+			dev_err(hba->dev, "%s: failed to configure WB exception event %d\n",
+				__func__, err);
+			/* Not armed; fall back to always-on manual flush. */
+			ufshcd_wb_toggle_buf_flush(hba, true);
+		}
+	}
 
 	return;
 
@@ -10253,6 +10337,14 @@ static int __ufshcd_wl_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	if (ufshcd_is_clkscaling_supported(hba))
 		ufshcd_clk_scaling_suspend(hba, true);
 
+	/* Hand draining back to the H8 flush; re-arm before any early exit. */
+	if (ufshcd_is_wb_exception_event_allowed(hba)) {
+		flush_work(&hba->eeh_work);
+		if (hba->dev_info.wb_buf_flush_enabled)
+			ufshcd_wb_disarm_flush_event(hba);
+		cancel_delayed_work_sync(&hba->wb_flush_recheck_work);
+	}
+
 	if (req_dev_pwr_mode == UFS_ACTIVE_PWR_MODE &&
 			req_link_state == UIC_LINK_ACTIVE_STATE) {
 		ufshcd_disable_auto_bkops(hba);
@@ -10854,6 +10946,12 @@ void ufshcd_remove(struct ufs_hba *hba)
 	/* disable interrupts */
 	ufshcd_disable_intr(hba, hba->intr_mask);
 	ufshcd_hba_stop(hba);
+	/*
+	 * The exception event handler re-arms wb_flush_recheck_work, so
+	 * quiesce it and drop the work only once interrupts are disabled.
+	 */
+	cancel_work_sync(&hba->eeh_work);
+	cancel_delayed_work_sync(&hba->wb_flush_recheck_work);
 	ufshcd_hba_exit(hba);
 }
 EXPORT_SYMBOL_GPL(ufshcd_remove);
@@ -11250,6 +11348,7 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	}
 
 	INIT_DELAYED_WORK(&hba->rpm_dev_flush_recheck_work, ufshcd_rpm_dev_flush_recheck_work);
+	INIT_DELAYED_WORK(&hba->wb_flush_recheck_work, ufshcd_wb_flush_recheck_work);
 	INIT_DELAYED_WORK(&hba->ufs_rtc_update_work, ufshcd_rtc_work);
 
 	/* Set the default auto-hiberate idle timer value to 150 ms */

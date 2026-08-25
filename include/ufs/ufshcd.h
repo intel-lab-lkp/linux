@@ -815,6 +815,10 @@ enum ufshcd_quirks {
 	 * allowed by M-PHY spec ver 6.0.
 	 */
 	UFSHCD_QUIRK_EXTENDED_TX_EQTR_ADAPT_LENGTH_L0L1L2L3	= 1 << 28,
+	/*
+	 * Enable exception-event-driven WriteBooster buffer flush handling.
+	 */
+	UFSHCI_QUIRK_ENABLE_WB_EXCEPTION_EVENT_CTRL	= 1 << 29,
 };
 
 enum ufshcd_caps {
@@ -1055,6 +1059,9 @@ enum ufshcd_mcq_opr {
  * @rpm_dev_flush_recheck_work: used to suspend from RPM (runtime power
  *	management) after the UFS device has finished a WriteBooster buffer
  *	flush or auto BKOP.
+ * @wb_flush_recheck_work: used to disable the WriteBooster manual flush
+ *      once the WriteBooster buffer has drained below the flush-needed
+ *      threshold on platforms that stay runtime-active
  * @monitor: statistics about UFS commands
  * @crypto_capabilities: Content of crypto capabilities register (0x100)
  * @crypto_cap_array: Array of crypto capabilities
@@ -1234,6 +1241,7 @@ struct ufs_hba {
 	struct device		bsg_dev;
 	struct request_queue	*bsg_queue;
 	struct delayed_work rpm_dev_flush_recheck_work;
+	struct delayed_work wb_flush_recheck_work;
 
 	struct ufs_hba_monitor	monitor;
 

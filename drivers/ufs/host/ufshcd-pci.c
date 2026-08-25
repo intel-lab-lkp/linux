@@ -539,6 +539,9 @@ static int ufs_amd_init(struct ufs_hba *hba)
 	/* Enable WriteBooster with runtime-PM autosuspend. */
 	hba->caps |= UFSHCD_CAP_WB_EN | UFSHCD_CAP_RPM_AUTOSUSPEND;
 
+	/* Drive WriteBooster flushing from the flush-needed exception event. */
+	hba->quirks |= UFSHCI_QUIRK_ENABLE_WB_EXCEPTION_EVENT_CTRL;
+
 	return 0;
 }
 
