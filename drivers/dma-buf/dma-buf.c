@@ -684,7 +684,90 @@ err_alloc_file:
  *    reference acquired with dma_buf_get() by calling dma_buf_put().
  *
  * For the detailed semantics exporters are expected to implement see
- * &dma_buf_ops.
+ * &dma_buf_ops. Whether the exporter may still move or destroy the backing
+ * storage after step 3 depends on what exporter and importer implement, see
+ * the mapping lifetime negotiation section below.
+ */
+
+/**
+ * DOC: mapping lifetime negotiation
+ *
+ * No flag or enum says whether the exporter may move or take away the backing
+ * storage while an importer holds a mapping. Each side implements a set of
+ * optional callbacks, and dma_buf_pin() settles the result at runtime. Three
+ * flows come out of it:
+ *
+ * - Pinned: the storage never moves and is never taken away.
+ * - Revoked: the storage never moves, but the exporter may take it away.
+ * - Movable: the exporter may relocate the storage at any time.
+ *
+ * Every exporter implements &dma_buf_ops.map_dma_buf,
+ * &dma_buf_ops.unmap_dma_buf and &dma_buf_ops.release. dma_buf_export()
+ * rejects an exporter missing any of them.
+ *
+ * An importer reaches its flow like this:
+ *
+ * 1. Attach with dma_buf_dynamic_attach(). Leaving
+ *    &dma_buf_attach_ops.invalidate_mappings NULL rules out everything but the
+ *    pinned flow, because the importer can then never be told anything.
+ * 2. Call dma_buf_pin() under the reservation lock.
+ * 3. On failure run the movable flow, or give up.
+ * 4. On success the storage stays put. Whether the exporter may still take it
+ *    away, which makes this the revoked flow instead of the pinned one, is the
+ *    exporter's choice and is not reported back.
+ *
+ * dma_buf_attach() is the shorthand for an importer which only ever wants the
+ * pinned flow. It passes no &dma_buf_attach_ops, and DMA-buf then pins around
+ * every dma_buf_map_attachment() and waits for the DMA_RESV_USAGE_KERNEL
+ * fences on the importer's behalf. Peer to peer needs
+ * dma_buf_dynamic_attach(), because &dma_buf_attach_ops.allow_peer2peer lives
+ * in the attach ops.
+ *
+ * Pinned flow:
+ *
+ * - Exporter: implement &dma_buf_ops.pin and &dma_buf_ops.unpin to hold the
+ *   storage still on request. An exporter whose storage never moves implements
+ *   neither, and dma_buf_pin() then succeeds on its own. An exporter which
+ *   refuses to be pinned implements &dma_buf_ops.pin and fails it.
+ * - Importer: nothing more. The mapping stays valid until it unmaps.
+ *
+ * Revoked flow:
+ *
+ * - Exporter: answer dma_buf_pin() as above. Call
+ *   dma_buf_invalidate_mappings() when the storage goes away and fail
+ *   &dma_buf_ops.map_dma_buf while it is gone. The two waits which complete a
+ *   revocation are described in dma_buf_invalidate_mappings().
+ * - Importer: &dma_buf_attach_ops.invalidate_mappings has to unmap within
+ *   bounded time and drop the pin.
+ *
+ * Movable flow:
+ *
+ * - Exporter: call dma_buf_invalidate_mappings() before each move, then wait
+ *   for the &dma_buf.resv fences. &dma_buf_ops.pin and &dma_buf_ops.unpin play
+ *   no part here.
+ * - Importer: hold no pin. &dma_buf_attach_ops.invalidate_mappings drops the
+ *   cached mapping and has to lead to dma_buf_unmap_attachment() within
+ *   bounded time. It need not stop the hardware, because access runs until the
+ *   importer's &dma_buf.resv fences retire. Map again before the next DMA.
+ *
+ * The pin tells a revoke from a move.
+ * &dma_buf_attach_ops.invalidate_mappings carries no reason, and both flows
+ * ask for the same unmap. An importer holding a pin can only be seeing a
+ * revoke, because the exporter promised not to move. An importer without a pin
+ * treats every call as a move and maps again.
+ *
+ * A revoke need not be forever. An exporter revoking around a temporary loss
+ * of access takes mappings again afterwards. Giving up for good is the
+ * importer's own choice, so an exporter must not wait for one to come back.
+ *
+ * &dma_buf_ops.attach is the only place where an exporter can turn an importer
+ * away. An exporter which revokes rejects the importers for which
+ * dma_buf_attach_revocable() returns false. An exporter of memory without
+ * struct page rejects the importers which left
+ * &dma_buf_attach_ops.allow_peer2peer clear.
+ *
+ * Userspace sees none of this. The two drivers negotiate the flow between
+ * themselves, and the DMA-buf file descriptor shows no trace of the result.
  */
 
 /**

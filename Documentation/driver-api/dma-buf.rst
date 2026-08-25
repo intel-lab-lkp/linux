@@ -113,6 +113,12 @@ Basic Operation and Device DMA Access
 .. kernel-doc:: drivers/dma-buf/dma-buf.c
    :doc: dma buf device access
 
+Mapping Lifetime Negotiation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. kernel-doc:: drivers/dma-buf/dma-buf.c
+   :doc: mapping lifetime negotiation
+
 CPU Access to DMA Buffer Objects
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
