@@ -972,7 +972,8 @@ SENSOR_TEMPLATE(pwm, "pwm%d", S_IRUGO, show_pwm, store_pwm, 0);
  */
 static bool nct6683_has_fan_control(struct nct6683_data *data)
 {
-	return data->customer_id == NCT6683_CUSTOMER_ID_MITAC;
+	return data->customer_id == NCT6683_CUSTOMER_ID_MITAC ||
+	       data->customer_id == NCT6683_CUSTOMER_ID_ASROCK8;
 }
 
 /*
