@@ -1197,6 +1197,53 @@ struct kernel_ethtool_ts_info {
  * See &struct net_device and &struct net_device_ops for documentation
  * of the generic netdev features interface.
  */
+
+#define INTF_CAPS_MAX_BLOCKS	16
+#define INTF_BLOCK_NAME_LEN	32
+
+#define LOOPBACK_SUPPORT_LOCAL	BIT(0)
+#define LOOPBACK_SUPPORT_REMOTE	BIT(1)
+
+/**
+ * struct ethtool_intf_block - Single functional block in the interface
+ * @id: Unique block identifier
+ * @component: Hardware component (MAC, PHY, MODULE)
+ * @sublayer: 802.3 sublayer (RS, PCS, FEC, PMA, PMD, or NONE)
+ * @instance: Index when multiple instances of same component exist
+ * @name: Driver-chosen label
+ * @depth: Ordering within same (component, sublayer) tuple
+ * @lanes: Number of lanes
+ * @loopback_supported: Bitmask of supported loopback directions
+ * @supported_tx_patterns: Bitmask of patterns this block can generate
+ * @supported_rx_patterns: Bitmask of patterns this block can check
+ * @error_inject_supported: Block supports bit error injection
+ * @bert_supported: Block supports BERT counters
+ */
+struct ethtool_intf_block {
+	u32 id;
+	enum intf_component component;
+	enum intf_sublayer sublayer;
+	u32 instance;
+	char name[INTF_BLOCK_NAME_LEN];
+	u8 depth;
+	u32 lanes;
+	u32 loopback_supported;
+	u32 supported_tx_patterns;
+	u32 supported_rx_patterns;
+	bool error_inject_supported;
+	bool bert_supported;
+};
+
+/**
+ * struct ethtool_intf_caps - Interface capabilities (all blocks)
+ * @num_blocks: Number of valid entries in blocks[]
+ * @blocks: Array of functional blocks
+ */
+struct ethtool_intf_caps {
+	u32 num_blocks;
+	struct ethtool_intf_block blocks[INTF_CAPS_MAX_BLOCKS];
+};
+
 struct ethtool_ops {
 	u32     supported_input_xfrm:8;
 	u32     cap_link_lanes_supported:1;
@@ -1354,6 +1401,8 @@ struct ethtool_ops {
 	int	(*set_mm)(struct net_device *dev, struct ethtool_mm_cfg *cfg,
 			  struct netlink_ext_ack *extack);
 	void	(*get_mm_stats)(struct net_device *dev, struct ethtool_mm_stats *stats);
+	int	(*get_intf_caps)(struct net_device *dev,
+				 struct ethtool_intf_caps *caps);
 };
 
 int ethtool_check_ops(const struct ethtool_ops *ops);

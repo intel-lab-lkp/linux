@@ -210,6 +210,25 @@ definitions:
       -
         name: discard
         value: 31
+  -
+    name: intf-component
+    type: enum
+    doc: Type of hardware component in the interface.
+    entries:
+      - mac
+      - phy
+      - module
+  -
+    name: intf-sublayer
+    type: enum
+    doc: 802.3 sublayer within a component.
+    entries:
+      - none
+      - rs
+      - pcs
+      - fec
+      - pma
+      - pmd
 
 attribute-sets:
   -
@@ -1905,6 +1924,73 @@ attribute-sets:
         name: link
         type: nest
         nested-attributes: mse-snapshot
+  -
+    name: intf-block
+    doc: A single functional block in the interface.
+    attributes:
+      -
+        name: id
+        type: u32
+      -
+        name: component
+        type: u32
+        enum: intf-component
+      -
+        name: sublayer
+        type: u32
+        enum: intf-sublayer
+      -
+        name: instance
+        type: u32
+        doc: |
+          Identifies the hardware entity when multiple instances of
+          the same component exist in the interface. The driver
+          assigns instance numbers sequentially based on position in
+          the physical path. Defaults to 0 when only one instance of
+          a given component exists.
+          For PHY: instance 0 is the internal/host-side PHY,
+          instance 1 is an external PHY further along the path
+          toward the line side.
+          For MAC: instance 0 is the host-facing MAC, instance 1 is
+          a secondary MAC further along the data path (e.g., behind
+          an embedded switch).
+      -
+        name: name
+        type: string
+      -
+        name: depth
+        type: u8
+      -
+        name: lanes
+        type: u32
+      -
+        name: loopback-supported
+        type: u32
+      -
+        name: supported-tx-patterns
+        type: u32
+      -
+        name: supported-rx-patterns
+        type: u32
+      -
+        name: error-inject-supported
+        type: flag
+      -
+        name: bert-supported
+        type: flag
+  -
+    name: intf-caps
+    doc: Interface capabilities message.
+    attributes:
+      -
+        name: header
+        type: nest
+        nested-attributes: header
+      -
+        name: blocks
+        type: nest
+        nested-attributes: intf-block
+        multi-attr: true
 
 operations:
   enum-model: directional
@@ -2859,6 +2945,19 @@ operations:
             - worst-channel
             - link
       dump: *mse-get-op
+    -
+      name: intf-caps-get
+      doc: Get interface capabilities (functional block layout).
+      attribute-set: intf-caps
+      do: &intf-caps-get-op
+        request:
+          attributes:
+            - header
+        reply:
+          attributes:
+            - header
+            - blocks
+      dump: *intf-caps-get-op
 
 mcast-groups:
   list:
