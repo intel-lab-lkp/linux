@@ -320,8 +320,13 @@ static int __init ftrace_direct_init(void)
 	ftrace_set_filter_ip(&direct, (unsigned long) my_ip, 0, 0);
 	ret = register_ftrace_direct(&direct, my_tramp);
 
-	if (!ret)
+	if (!ret) {
 		simple_tsk = kthread_run(simple_thread, NULL, "event-sample-fn");
+		if (IS_ERR(simple_tsk)) {
+			unregister_ftrace_direct(&direct, my_tramp, true);
+			ret = PTR_ERR(simple_tsk);
+		}
+	}
 	return ret;
 }
 
