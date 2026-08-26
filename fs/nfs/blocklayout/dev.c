@@ -204,10 +204,10 @@ nfs4_block_decode_volume(struct xdr_stream *xdr, struct pnfs_block_volume *b)
 		b->scsi.code_set = be32_to_cpup(p++);
 		b->scsi.designator_type = be32_to_cpup(p++);
 		b->scsi.designator_len = be32_to_cpup(p++);
+		if (b->scsi.designator_len > sizeof(b->scsi.designator))
+			return -EIO;
 		p = xdr_inline_decode(xdr, b->scsi.designator_len);
 		if (!p)
-			return -EIO;
-		if (b->scsi.designator_len > 256)
 			return -EIO;
 		memcpy(&b->scsi.designator, p, b->scsi.designator_len);
 		p = xdr_inline_decode(xdr, 8);
@@ -346,14 +346,14 @@ bl_validate_designator(struct pnfs_block_volume *v)
 	case PS_DESIGNATOR_T10:
 	case PS_DESIGNATOR_NAME:
 		pr_err("pNFS: unsupported designator "
-			"(code set %d, type %d, len %d.\n",
+			"(code set %d, type %d, len %u.\n",
 			v->scsi.code_set,
 			v->scsi.designator_type,
 			v->scsi.designator_len);
 		return false;
 	default:
 		pr_err("pNFS: invalid designator "
-			"(code set %d, type %d, len %d.\n",
+			"(code set %d, type %d, len %u.\n",
 			v->scsi.code_set,
 			v->scsi.designator_type,
 			v->scsi.designator_len);

@@ -84,7 +84,7 @@ struct pnfs_block_volume {
 		struct {
 			enum scsi_code_set		code_set;
 			enum scsi_designator_type	designator_type;
-			int				designator_len;
+			u32				designator_len;
 			u8				designator[256];
 			u64				pr_key;
 		} scsi;
