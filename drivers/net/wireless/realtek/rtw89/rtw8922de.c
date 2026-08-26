@@ -9,6 +9,12 @@
 #include "reg.h"
 #include "rtw8922d.h"
 
+static const struct rtw89_pci_ssid_quirk rtw8922de_pci_ssid_quirks[] = {
+	{RTW89_PCI_SSID(PCI_VENDOR_ID_REALTEK, 0x892D, 0x1E44, 0x1400, VALVE),
+		.bitmap = BIT(RTW89_QUIRK_LOW_LATENCY)},
+	{},
+};
+
 static const struct rtw89_pci_info rtw8922d_pci_info = {
 	.gen_def		= &rtw89_pci_gen_be,
 	.isr_def		= &rtw89_pci_isr_be_v1,
@@ -66,7 +72,7 @@ static const struct rtw89_pci_info rtw8922d_pci_info = {
 	.disable_intr		= rtw89_pci_disable_intr_v3,
 	.recognize_intrs	= rtw89_pci_recognize_intrs_v3,
 
-	.ssid_quirks		= NULL,
+	.ssid_quirks		= rtw8922de_pci_ssid_quirks,
 };
 
 static const struct rtw89_driver_info rtw89_8922de_vs_info = {
