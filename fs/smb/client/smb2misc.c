@@ -85,6 +85,49 @@ static const __le16 smb2_rsp_struct_sizes[NUMBER_OF_SMB2_COMMANDS] = {
 	/* SMB2_OPLOCK_BREAK */ cpu_to_le16(24)
 };
 
+/*
+ * Minimum received PDU size for commands whose fixed response struct is read
+ * by smb2_get_data_area_len() before the packet length is validated.  Must
+ * be non-zero for every command where has_smb2_data_area[] is true; zero
+ * otherwise (guard in smb2_check_message() is skipped).  Keep in sync with
+ * has_smb2_data_area[] above: adding a data area for a currently-zero command
+ * requires a matching sizeof() entry here.
+ */
+static const size_t smb2_min_pdu_len[NUMBER_OF_SMB2_COMMANDS] = {
+	/* SMB2_NEGOTIATE */       sizeof(struct smb2_negotiate_rsp),
+	/* SMB2_SESSION_SETUP */   sizeof(struct smb2_sess_setup_rsp),
+	/* SMB2_LOGOFF */          0,
+	/* SMB2_TREE_CONNECT */    0,
+	/* SMB2_TREE_DISCONNECT */ 0,
+	/* SMB2_CREATE */          sizeof(struct smb2_create_rsp),
+	/* SMB2_CLOSE */           0,
+	/* SMB2_FLUSH */           0,
+	/* SMB2_READ */            sizeof(struct smb2_read_rsp),
+	/* SMB2_WRITE */           0,
+	/* SMB2_LOCK */            0,
+	/* SMB2_IOCTL */           sizeof(struct smb2_ioctl_rsp),
+	/* SMB2_CANCEL */          0,
+	/* SMB2_ECHO */            0,
+	/* SMB2_QUERY_DIRECTORY */ sizeof(struct smb2_query_directory_rsp),
+	/* SMB2_CHANGE_NOTIFY */   sizeof(struct smb2_change_notify_rsp),
+	/* SMB2_QUERY_INFO */      sizeof(struct smb2_query_info_rsp),
+	/* SMB2_SET_INFO */        0,
+	/* SMB2_OPLOCK_BREAK */    0,
+};
+
+/* Enforce: smb2_min_pdu_len[x] != 0 for every x where has_smb2_data_area[x]. */
+static void __maybe_unused smb2_check_min_pdu_len_table(void)
+{
+	BUILD_BUG_ON(!smb2_min_pdu_len[SMB2_NEGOTIATE_HE]);
+	BUILD_BUG_ON(!smb2_min_pdu_len[SMB2_SESSION_SETUP_HE]);
+	BUILD_BUG_ON(!smb2_min_pdu_len[SMB2_CREATE_HE]);
+	BUILD_BUG_ON(!smb2_min_pdu_len[SMB2_READ_HE]);
+	BUILD_BUG_ON(!smb2_min_pdu_len[SMB2_IOCTL_HE]);
+	BUILD_BUG_ON(!smb2_min_pdu_len[SMB2_QUERY_DIRECTORY_HE]);
+	BUILD_BUG_ON(!smb2_min_pdu_len[SMB2_CHANGE_NOTIFY_HE]);
+	BUILD_BUG_ON(!smb2_min_pdu_len[SMB2_QUERY_INFO_HE]);
+}
+
 #define SMB311_NEGPROT_BASE_SIZE (sizeof(struct smb2_hdr) + sizeof(struct smb2_negotiate_rsp))
 
 static __u32 get_neg_ctxt_len(struct smb2_hdr *hdr, __u32 len,
@@ -231,6 +274,16 @@ smb2_check_message(char *buf, unsigned int pdu_len, unsigned int len,
 				 le16_to_cpu(pdu->StructureSize2));
 			return 1;
 		}
+	}
+
+	if ((shdr->Status == 0 ||
+	     shdr->Status == STATUS_MORE_PROCESSING_REQUIRED ||
+	     pdu->StructureSize2 != SMB2_ERROR_STRUCTURE_SIZE2_LE) &&
+	    smb2_min_pdu_len[command] &&
+	    len < smb2_min_pdu_len[command]) {
+		cifs_dbg(VFS, "SMB2 command %d response too short: %u < %zu\n",
+			 command, len, smb2_min_pdu_len[command]);
+		return 1;
 	}
 
 	have_data = false;
