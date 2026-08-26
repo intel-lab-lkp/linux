@@ -547,6 +547,17 @@ config VIDEO_OV2740
 	  To compile this driver as a module, choose M here: the
 	  module will be called ov2740.
 
+config VIDEO_OV32C4
+	tristate "OmniVision OV32C4 sensor support"
+	depends on ACPI || COMPILE_TEST
+	select V4L2_CCI_I2C
+	help
+	  This is a Video4Linux2 sensor driver for the OmniVision
+	  OV32C4 camera.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ov32c4.
+
 config VIDEO_OV4689
 	tristate "OmniVision OV4689 sensor support"
 	depends on GPIOLIB
