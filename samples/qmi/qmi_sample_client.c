@@ -434,7 +434,7 @@ static const struct qmi_msg_handler qmi_sample_handlers[] = {
 		.type = QMI_RESPONSE,
 		.msg_id = TEST_PING_REQ_MSG_ID_V01,
 		.ei = test_ping_resp_msg_v01_ei,
-		.decoded_size = sizeof(struct test_ping_req_msg_v01),
+		.decoded_size = sizeof(struct test_ping_resp_msg_v01),
 		.fn = ping_pong_cb
 	},
 	{}
