@@ -1969,7 +1969,6 @@ int btrfs_load_block_group_zone_info(struct btrfs_block_group *cache, bool new)
 		} else if (map->num_stripes == num_conventional) {
 			cache->alloc_offset = last_alloc;
 			cache->zone_capacity = cache->length;
-			set_bit(BLOCK_GROUP_FLAG_ZONE_IS_ACTIVE, &cache->runtime_flags);
 			goto out;
 		}
 	}
@@ -2005,6 +2004,8 @@ out:
 	if (!ret) {
 		cache->meta_write_pointer = cache->alloc_offset + cache->start;
 		if (test_bit(BLOCK_GROUP_FLAG_ZONE_IS_ACTIVE, &cache->runtime_flags)) {
+			ASSERT(test_bit(BLOCK_GROUP_FLAG_SEQUENTIAL_ZONE,
+					&cache->runtime_flags));
 			btrfs_get_block_group(cache);
 			spin_lock(&fs_info->zone_active_bgs_lock);
 			list_add_tail(&cache->active_bg_list,
@@ -2196,6 +2197,9 @@ static bool check_bg_is_active(struct btrfs_eb_write_context *ctx,
 	struct btrfs_fs_info *fs_info = block_group->fs_info;
 
 	if (test_bit(BLOCK_GROUP_FLAG_ZONE_IS_ACTIVE, &block_group->runtime_flags))
+		return true;
+
+	if (!test_bit(BLOCK_GROUP_FLAG_SEQUENTIAL_ZONE, &block_group->runtime_flags))
 		return true;
 
 	if (fs_info->treelog_bg == block_group->start) {
@@ -2394,6 +2398,18 @@ int btrfs_sync_zone_write_pointer(struct btrfs_device *tgt_dev, u64 logical,
 	return btrfs_zoned_issue_zeroout(tgt_dev, physical_pos, length);
 }
 
+static inline bool btrfs_needs_active_zone_tracking(struct btrfs_device *dev,
+						    u64 physical)
+{
+	if (!btrfs_dev_is_sequential(dev, physical))
+		return false;
+
+	if (dev->zone_info->max_active_zones == 0)
+		return false;
+
+	return true;
+}
+
 /*
  * Activate block group and underlying device zones
  *
@@ -2415,6 +2431,9 @@ bool btrfs_zone_activate(struct btrfs_block_group *block_group)
 		return true;
 
 	if (unlikely(btrfs_is_testing(fs_info)))
+		return true;
+
+	if (!test_bit(BLOCK_GROUP_FLAG_SEQUENTIAL_ZONE, &block_group->runtime_flags))
 		return true;
 
 	map = block_group->physical_map;
@@ -2448,7 +2467,7 @@ bool btrfs_zone_activate(struct btrfs_block_group *block_group)
 		if (!device->bdev)
 			continue;
 
-		if (zinfo->max_active_zones == 0)
+		if (!btrfs_needs_active_zone_tracking(device, physical))
 			continue;
 
 		if (is_data)
@@ -2514,26 +2533,22 @@ static int call_zone_finish(struct btrfs_block_group *block_group,
 	struct btrfs_device *device = stripe->dev;
 	const u64 physical = stripe->physical;
 	struct btrfs_zoned_device_info *zinfo = device->zone_info;
+	unsigned int nofs_flags;
 	int ret;
 
 	if (!device->bdev)
 		return 0;
 
-	if (zinfo->max_active_zones == 0)
+	if (!btrfs_needs_active_zone_tracking(device, physical))
 		return 0;
 
-	if (btrfs_dev_is_sequential(device, physical)) {
-		unsigned int nofs_flags;
-
-		nofs_flags = memalloc_nofs_save();
-		ret = blkdev_zone_mgmt(device->bdev, REQ_OP_ZONE_FINISH,
-				       physical >> SECTOR_SHIFT,
-				       zinfo->zone_size >> SECTOR_SHIFT);
-		memalloc_nofs_restore(nofs_flags);
-
-		if (ret)
-			return ret;
-	}
+	nofs_flags = memalloc_nofs_save();
+	ret = blkdev_zone_mgmt(device->bdev, REQ_OP_ZONE_FINISH,
+			       physical >> SECTOR_SHIFT,
+			       zinfo->zone_size >> SECTOR_SHIFT);
+	memalloc_nofs_restore(nofs_flags);
+	if (ret)
+		return ret;
 
 	if (!(block_group->flags & BTRFS_BLOCK_GROUP_DATA))
 		zinfo->reserved_active_zones++;
@@ -3087,8 +3102,18 @@ void btrfs_check_active_zone_reservation(struct btrfs_fs_info *fs_info)
 		      (BTRFS_BLOCK_GROUP_METADATA | BTRFS_BLOCK_GROUP_SYSTEM)))
 			continue;
 
-		for (int i = 0; i < map->num_stripes; i++)
-			map->stripes[i].dev->zone_info->reserved_active_zones--;
+		for (int i = 0; i < map->num_stripes; i++) {
+			struct btrfs_device *device = map->stripes[i].dev;
+			u64 physical = map->stripes[i].physical;
+
+			if (!device->bdev)
+				continue;
+
+			if (!btrfs_needs_active_zone_tracking(device, physical))
+				continue;
+
+			device->zone_info->reserved_active_zones--;
+		}
 	}
 	spin_unlock(&fs_info->zone_active_bgs_lock);
 }

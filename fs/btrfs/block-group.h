@@ -80,13 +80,17 @@ enum btrfs_block_group_flags {
 	BLOCK_GROUP_FLAG_TO_COPY,
 	BLOCK_GROUP_FLAG_RELOCATING_REPAIR,
 	BLOCK_GROUP_FLAG_CHUNK_ITEM_INSERTED,
+	/*
+	 * Only block groups containing sequential zones can have this bit set;
+	 * conventional-only block groups never do.
+	 */
 	BLOCK_GROUP_FLAG_ZONE_IS_ACTIVE,
 	BLOCK_GROUP_FLAG_ZONED_DATA_RELOC,
 	/* Does the block group need to be added to the free space tree? */
 	BLOCK_GROUP_FLAG_NEEDS_FREE_SPACE,
 	/* Set after we add a new block group to the free space tree. */
 	BLOCK_GROUP_FLAG_FREE_SPACE_ADDED,
-	/* Indicate that the block group is placed on a sequential zone */
+	/* Indicate that the block group contains at least one sequential zone. */
 	BLOCK_GROUP_FLAG_SEQUENTIAL_ZONE,
 	/*
 	 * Indicate that block group is in the list of new block groups of a
