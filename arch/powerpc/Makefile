@@ -259,6 +259,22 @@ generated_configs += ppc64le_guest_defconfig
 ppc64le_guest_defconfig:
 	$(call merge_into_defconfig,ppc64_defconfig,le guest kvm_guest)
 
+generated_configs += ppc64le_common_debug_defconfig
+ppc64le_common_debug_defconfig:
+	$(call merge_into_defconfig,ppc64_defconfig,le common_debug)
+
+generated_configs += ppc64le_locks_debug_defconfig
+ppc64le_locks_debug_defconfig:
+	$(call merge_into_defconfig,ppc64_defconfig,le locks_debug)
+
+generated_configs += ppc64le_mm_debug_defconfig
+ppc64le_mm_debug_defconfig:
+	$(call merge_into_defconfig,ppc64_defconfig,le mm_debug)
+
+generated_configs += ppc64le_lockup_debug_defconfig
+ppc64le_lockup_debug_defconfig:
+	$(call merge_into_defconfig,ppc64_defconfig,le lockup_debug)
+
 generated_configs += ppc64_guest_defconfig
 ppc64_guest_defconfig:
 	$(call merge_into_defconfig,ppc64_defconfig,be guest kvm_guest)
