@@ -1628,6 +1628,18 @@ static inline void f2fs_clear_bit(unsigned int nr, char *addr);
  * Layout B: lowest bit should be 0
  * page.private is a wrapped pointer.
  */
+
+struct f2fs_folio_state {
+	spinlock_t		state_lock;
+	unsigned int		read_pages_pending;
+	atomic_t		write_pages_pending;
+	unsigned long		private_flags;
+	/* state[0..nr_subpages - 1] tracks uptodate subpages.
+	 * state[nr_subpages..2 * nr_subpages - 1] tracks dirty subpages.
+	 */
+	unsigned long		state[];
+};
+
 enum {
 	PAGE_PRIVATE_NOT_POINTER,		/* private contains non-pointer data */
 	PAGE_PRIVATE_ONGOING_MIGRATION,		/* data page which is on-going migrating */
@@ -1636,6 +1648,14 @@ enum {
 	PAGE_PRIVATE_ATOMIC_WRITE,		/* data page from atomic write path */
 	PAGE_PRIVATE_MAX
 };
+
+static inline bool f2fs_folio_has_ffs(const struct folio *folio)
+{
+	unsigned long private = (unsigned long)folio->private;
+
+	return folio_test_large(folio) && private &&
+		!(private & BIT(PAGE_PRIVATE_NOT_POINTER));
+}
 
 /* For compression */
 enum compress_algorithm_type {
@@ -2682,10 +2702,57 @@ release_quota:
 	return -ENOSPC;
 }
 
+static inline unsigned long f2fs_folio_get_private_flags(const struct folio *folio)
+{
+	if (f2fs_folio_has_ffs(folio)) {
+		struct f2fs_folio_state *ffs = folio->private;
+
+		return ffs->private_flags;
+	}
+
+	return (unsigned long)folio->private;
+}
+
+static inline void f2fs_folio_set_private_flags(struct folio *folio,
+						unsigned long flags)
+{
+	if (f2fs_folio_has_ffs(folio)) {
+		struct f2fs_folio_state *ffs = folio->private;
+
+		ffs->private_flags |= flags;
+		return;
+	}
+
+	if (!folio_test_private(folio))
+		folio_attach_private(folio, (void *)flags);
+	else
+		folio->private = (void *)((unsigned long)folio->private | flags);
+}
+
+static inline void f2fs_folio_clear_private_flags(struct folio *folio,
+						 unsigned long flags)
+{
+	unsigned long private;
+
+	if (f2fs_folio_has_ffs(folio)) {
+		struct f2fs_folio_state *ffs = folio->private;
+
+		ffs->private_flags &= ~flags;
+		return;
+	}
+
+	private = (unsigned long)folio->private;
+	private &= ~flags;
+	if (private == BIT(PAGE_PRIVATE_NOT_POINTER))
+		folio_detach_private(folio);
+	else
+		folio->private = (void *)private;
+}
+
 #define PAGE_PRIVATE_GET_FUNC(name, flagname) \
 static inline bool folio_test_f2fs_##name(const struct folio *folio)	\
 {									\
-	unsigned long priv = (unsigned long)folio->private;		\
+	unsigned long priv = f2fs_folio_get_private_flags(folio);		\
 	unsigned long v = (1UL << PAGE_PRIVATE_NOT_POINTER) |		\
 			     (1UL << PAGE_PRIVATE_##flagname);		\
 	return (priv & v) == v;						\
@@ -2702,12 +2769,7 @@ static inline void folio_set_f2fs_##name(struct folio *folio)		\
 {									\
 	unsigned long v = (1UL << PAGE_PRIVATE_NOT_POINTER) |		\
 			     (1UL << PAGE_PRIVATE_##flagname);		\
-	if (!folio->private)						\
-		folio_attach_private(folio, (void *)v);			\
-	else {								\
-		v |= (unsigned long)folio->private;			\
-		folio->private = (void *)v;				\
-	}								\
+	f2fs_folio_set_private_flags(folio, v);				\
 }									\
 static inline void set_page_private_##name(struct page *page) \
 { \
@@ -2720,13 +2782,8 @@ static inline void set_page_private_##name(struct page *page) \
 #define PAGE_PRIVATE_CLEAR_FUNC(name, flagname) \
 static inline void folio_clear_f2fs_##name(struct folio *folio)		\
 {									\
-	unsigned long v = (unsigned long)folio->private;		\
-									\
-	v &= ~(1UL << PAGE_PRIVATE_##flagname);				\
-	if (v == (1UL << PAGE_PRIVATE_NOT_POINTER))			\
-		folio_detach_private(folio);				\
-	else								\
-		folio->private = (void *)v;				\
+	f2fs_folio_clear_private_flags(folio,				\
+			1UL << PAGE_PRIVATE_##flagname);			\
 }									\
 static inline void clear_page_private_##name(struct page *page) \
 { \
@@ -2752,7 +2809,7 @@ PAGE_PRIVATE_CLEAR_FUNC(atomic, ATOMIC_WRITE);
 
 static inline unsigned long folio_get_f2fs_data(struct folio *folio)
 {
-	unsigned long data = (unsigned long)folio->private;
+	unsigned long data = f2fs_folio_get_private_flags(folio);
 
 	if (!test_bit(PAGE_PRIVATE_NOT_POINTER, &data))
 		return 0;
@@ -2763,10 +2820,7 @@ static inline void folio_set_f2fs_data(struct folio *folio, unsigned long data)
 {
 	data = (1UL << PAGE_PRIVATE_NOT_POINTER) | (data << PAGE_PRIVATE_MAX);
 
-	if (!folio_test_private(folio))
-		folio_attach_private(folio, (void *)data);
-	else
-		folio->private = (void *)((unsigned long)folio->private | data);
+	f2fs_folio_set_private_flags(folio, data);
 }
 
 static inline void dec_valid_block_count(struct f2fs_sb_info *sbi,
