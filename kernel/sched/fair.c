@@ -7978,7 +7978,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	struct cfs_rq *cfs_rq = &rq->cfs;
 	unsigned long weight;
-	bool curr;
+	bool curr, delayed = (flags & ENQUEUE_DELAYED);
 
 	if (task_is_throttled(p) && enqueue_throttled_task(p))
 		return;
@@ -7989,12 +7989,12 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 * Let's add the task's estimated utilization to the cfs_rq's
 	 * estimated utilization, before we update schedutil.
 	 */
-	if (!p->se.sched_delayed || (flags & ENQUEUE_DELAYED))
+	if (!p->se.sched_delayed || delayed)
 		util_est_enqueue(cfs_rq, p);
 
 	update_curr_eevdf(cfs_rq);
 
-	if (flags & ENQUEUE_DELAYED) {
+	if (delayed) {
 		requeue_delayed_entity(cfs_rq, se);
 		return;
 	}
