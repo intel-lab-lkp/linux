@@ -238,6 +238,14 @@ static int bfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 					old_inode->i_ino);
 		if (error)
 			goto end_rename;
+	} else {
+		new_de->ino = cpu_to_le16((u16)old_inode->i_ino);
+		mmb_mark_buffer_dirty(new_bh, &BFS_I(new_dir)->i_metadata_bhs);
+		if (new_dir != old_dir) {
+			inode_set_mtime_to_ts(new_dir,
+					      inode_set_ctime_current(new_dir));
+			mark_inode_dirty(new_dir);
+		}
 	}
 	old_de->ino = 0;
 	inode_set_mtime_to_ts(old_dir, inode_set_ctime_current(old_dir));
