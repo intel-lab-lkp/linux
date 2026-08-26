@@ -53,6 +53,7 @@ struct svc_xprt {
 	struct svc_xprt_class	*xpt_class;
 	const struct svc_xprt_ops *xpt_ops;
 	struct kref		xpt_ref;
+	unsigned int		xpt_id;
 	ktime_t			xpt_qtime;
 	struct list_head	xpt_list;
 	struct lwq_node		xpt_ready;
@@ -159,7 +160,7 @@ static inline bool svc_xprt_is_dead(const struct svc_xprt *xprt)
 
 int	svc_reg_xprt_class(struct svc_xprt_class *);
 void	svc_unreg_xprt_class(struct svc_xprt_class *);
-void	svc_xprt_init(struct net *, struct svc_xprt_class *, struct svc_xprt *,
+bool	svc_xprt_init(struct net *, struct svc_xprt_class *, struct svc_xprt *,
 		      struct svc_serv *);
 int	svc_xprt_create_from_sa(struct svc_serv *serv, const char *xprt_name,
 				struct net *net, struct sockaddr *sap,

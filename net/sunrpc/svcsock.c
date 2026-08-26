@@ -802,10 +802,11 @@ static struct svc_xprt_class svc_udp_class = {
 	.xcl_ident = XPRT_TRANSPORT_UDP,
 };
 
-static void svc_udp_init(struct svc_sock *svsk, struct svc_serv *serv)
+static bool svc_udp_init(struct svc_sock *svsk, struct svc_serv *serv)
 {
-	svc_xprt_init(sock_net(svsk->sk_sock->sk), &svc_udp_class,
-		      &svsk->sk_xprt, serv);
+	if (!svc_xprt_init(sock_net(svsk->sk_sock->sk), &svc_udp_class,
+			   &svsk->sk_xprt, serv))
+		return false;
 	clear_bit(XPT_CACHE_AUTH, &svsk->sk_xprt.xpt_flags);
 	svsk->sk_sk->sk_data_ready = svc_data_ready;
 	svsk->sk_sk->sk_write_space = svc_write_space;
@@ -832,6 +833,7 @@ static void svc_udp_init(struct svc_sock *svsk, struct svc_serv *serv)
 	default:
 		BUG();
 	}
+	return true;
 }
 
 /*
@@ -1475,12 +1477,13 @@ void svc_cleanup_xprt_sock(void)
 	svc_unreg_xprt_class(&svc_udp_class);
 }
 
-static void svc_tcp_init(struct svc_sock *svsk, struct svc_serv *serv)
+static bool svc_tcp_init(struct svc_sock *svsk, struct svc_serv *serv)
 {
 	struct sock	*sk = svsk->sk_sk;
 
-	svc_xprt_init(sock_net(svsk->sk_sock->sk), &svc_tcp_class,
-		      &svsk->sk_xprt, serv);
+	if (!svc_xprt_init(sock_net(svsk->sk_sock->sk), &svc_tcp_class,
+			   &svsk->sk_xprt, serv))
+		return false;
 	set_bit(XPT_CACHE_AUTH, &svsk->sk_xprt.xpt_flags);
 	set_bit(XPT_CONG_CTRL, &svsk->sk_xprt.xpt_flags);
 	if (sk->sk_state == TCP_LISTEN) {
@@ -1511,6 +1514,7 @@ static void svc_tcp_init(struct svc_sock *svsk, struct svc_serv *serv)
 			svc_xprt_deferred_close(&svsk->sk_xprt);
 		}
 	}
+	return true;
 }
 
 void svc_sock_update_bufs(struct svc_serv *serv)
@@ -1553,6 +1557,7 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 	int		pmap_register = !(flags & SVC_SOCK_ANONYMOUS);
 	int		sendpages;
 	unsigned long	pages;
+	int		err;
 
 	sendpages = svc_sock_sendpages(serv, sock, flags);
 	if (sendpages < 0)
@@ -1576,8 +1581,6 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 	inet = sock->sk;
 
 	if (pmap_register) {
-		int err;
-
 		err = svc_register(serv, sock_net(sock->sk), inet->sk_family,
 				     inet->sk_protocol,
 				     ntohs(inet_sk(inet)->inet_sport));
@@ -1602,13 +1605,26 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 	inet->sk_user_data = svsk;
 
 	/* Initialize the socket */
-	if (sock->type == SOCK_DGRAM)
-		svc_udp_init(svsk, serv);
-	else
-		svc_tcp_init(svsk, serv);
+	if (sock->type == SOCK_DGRAM) {
+		if (!svc_udp_init(svsk, serv))
+			goto out_free;
+	} else {
+		if (!svc_tcp_init(svsk, serv))
+			goto out_free;
+	}
 
 	trace_svcsock_new(svsk, sock);
 	return svsk;
+
+out_free:
+	/* Port zero asks rpcbind to UNSET the registration made above. */
+	if (pmap_register)
+		svc_register(serv, sock_net(sock->sk), inet->sk_family,
+			     inet->sk_protocol, 0);
+	inet->sk_user_data = NULL;
+	kfree(svsk->sk_bvec);
+	kfree(svsk);
+	return ERR_PTR(-ENOMEM);
 }
 
 /**

@@ -2,6 +2,7 @@
 #ifndef __SUNRPC_NETNS_H__
 #define __SUNRPC_NETNS_H__
 
+#include <linux/idr.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
 
@@ -34,6 +35,9 @@ struct sunrpc_net {
 	atomic_t pipe_users;
 	struct proc_dir_entry *use_gssp_proc;
 	struct proc_dir_entry *gss_krb5_enctypes;
+
+	struct idr	svc_xprt_ids;
+	spinlock_t	svc_xprt_ids_lock;
 };
 
 extern unsigned int sunrpc_net_id;

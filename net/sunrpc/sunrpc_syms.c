@@ -58,6 +58,8 @@ static __net_init int sunrpc_init_net(struct net *net)
 	spin_lock_init(&sn->rpc_client_lock);
 	spin_lock_init(&sn->rpcb_clnt_lock);
 	mutex_init(&sn->gssp_lock);
+	idr_init(&sn->svc_xprt_ids);
+	spin_lock_init(&sn->svc_xprt_ids_lock);
 	return 0;
 
 err_pipefs:
@@ -74,6 +76,7 @@ static __net_exit void sunrpc_exit_net(struct net *net)
 {
 	struct sunrpc_net *sn = net_generic(net, sunrpc_net_id);
 
+	idr_destroy(&sn->svc_xprt_ids);
 	rpc_pipefs_exit_net(net);
 	unix_gid_cache_destroy(net);
 	ip_map_cache_destroy(net);

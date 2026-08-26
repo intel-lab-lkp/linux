@@ -21,6 +21,8 @@
 #include <linux/netdevice.h>
 #include <trace/events/sunrpc.h>
 
+#include "netns.h"
+
 #define RPCDBG_FACILITY	RPCDBG_SVCXPRT
 
 static unsigned int svc_rpc_per_connection_limit __read_mostly;
@@ -167,7 +169,12 @@ static void svc_xprt_free(struct kref *kref)
 {
 	struct svc_xprt *xprt =
 		container_of(kref, struct svc_xprt, xpt_ref);
+	struct sunrpc_net *sn = net_generic(xprt->xpt_net, sunrpc_net_id);
 	struct module *owner = xprt->xpt_class->xcl_owner;
+
+	spin_lock(&sn->svc_xprt_ids_lock);
+	idr_remove(&sn->svc_xprt_ids, xprt->xpt_id);
+	spin_unlock(&sn->svc_xprt_ids_lock);
 	if (test_bit(XPT_CACHE_AUTH, &xprt->xpt_flags))
 		svcauth_unix_info_release(xprt);
 	put_cred(xprt->xpt_cred);
@@ -188,13 +195,31 @@ void svc_xprt_put(struct svc_xprt *xprt)
 }
 EXPORT_SYMBOL_GPL(svc_xprt_put);
 
-/*
- * Called by transport drivers to initialize the transport independent
- * portion of the transport instance.
+/**
+ * svc_xprt_init - initialize transport-independent portion of a transport
+ * @net: network namespace in which the transport operates
+ * @xcl: transport class providing operations and metadata
+ * @xprt: svc_xprt to initialize
+ * @serv: RPC service that owns this transport
+ *
+ * Assigns @xprt->xpt_id, unique among the transports live in @net. The
+ * value is reused once @xprt is freed.
+ *
+ * On failure, the caller has only to free @xprt's containing structure.
+ *
+ * Context: Process context. May sleep. Takes and releases the
+ *          per-net svc_xprt_ids_lock.
+ *
+ * Return:
+ *   %true: initialization succeeded
+ *   %false: initialization failed
  */
-void svc_xprt_init(struct net *net, struct svc_xprt_class *xcl,
+bool svc_xprt_init(struct net *net, struct svc_xprt_class *xcl,
 		   struct svc_xprt *xprt, struct svc_serv *serv)
 {
+	struct sunrpc_net *sn = net_generic(net, sunrpc_net_id);
+	int id;
+
 	memset(xprt, 0, sizeof(*xprt));
 	xprt->xpt_class = xcl;
 	xprt->xpt_ops = xcl->xcl_ops;
@@ -206,8 +231,20 @@ void svc_xprt_init(struct net *net, struct svc_xprt_class *xcl,
 	mutex_init(&xprt->xpt_mutex);
 	spin_lock_init(&xprt->xpt_lock);
 	set_bit(XPT_BUSY, &xprt->xpt_flags);
-	xprt->xpt_net = get_net_track(net, &xprt->ns_tracker, GFP_ATOMIC);
+	xprt->xpt_net = get_net_track(net, &xprt->ns_tracker, GFP_KERNEL);
 	strcpy(xprt->xpt_remotebuf, "uninitialized");
+
+	idr_preload(GFP_KERNEL);
+	spin_lock(&sn->svc_xprt_ids_lock);
+	id = idr_alloc_cyclic(&sn->svc_xprt_ids, xprt, 1, 0, GFP_NOWAIT);
+	spin_unlock(&sn->svc_xprt_ids_lock);
+	idr_preload_end();
+	if (id < 0) {
+		put_net_track(xprt->xpt_net, &xprt->ns_tracker);
+		return false;
+	}
+	xprt->xpt_id = id;
+	return true;
 }
 EXPORT_SYMBOL_GPL(svc_xprt_init);
 
