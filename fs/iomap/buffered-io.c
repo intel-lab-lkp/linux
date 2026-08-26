@@ -2100,3 +2100,37 @@ iomap_writepages(struct iomap_writepage_ctx *wpc)
 	return error;
 }
 EXPORT_SYMBOL_GPL(iomap_writepages);
+
+int iomap_symlink_write(struct inode *inode, const char *target, int len,
+		const struct iomap_ops *ops,
+		const struct iomap_write_ops *write_ops, void *private)
+{
+	struct kvec vec = {
+		.iov_base	= (void *)target,
+		.iov_len	= len - 1,
+	};
+	struct iomap_iter iter = {
+		.inode		= inode,
+		.pos		= 0,
+		.len		= len - 1,
+		.flags		= IOMAP_WRITE,
+		.private	= private,
+	};
+	struct iov_iter iov;
+	int ret;
+
+	iov_iter_kvec(&iov, ITER_SOURCE, &vec, 1, len - 1);
+
+	while ((ret = iomap_iter(&iter, ops)) > 0)
+		iter.status = iomap_write_iter(&iter, &iov, write_ops);
+
+	if (ret < 0)
+		return ret;
+
+	if (unlikely(iter.pos == 0))
+		return -EIO;
+
+	mark_inode_dirty(inode);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(iomap_symlink_write);
