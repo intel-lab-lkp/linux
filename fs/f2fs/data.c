@@ -4211,6 +4211,117 @@ out:
 	return 0;
 }
 
+static int prepare_large_folio_atomic_write_begin(struct inode *inode,
+		struct address_space *mapping, struct folio *folio, loff_t pos,
+		unsigned int len)
+{
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	struct inode *cow_inode = F2FS_I(inode)->cow_inode;
+	size_t ori_off = offset_in_folio(folio, pos);
+	size_t need_off = ori_off;
+	pgoff_t index;
+	int err = 0;
+	unsigned int orig_order;
+	bool need_balance = false;
+
+	len = min_t(unsigned int, len, folio_size(folio) - ori_off);
+
+	f2fs_ffs_find_or_alloc(folio);
+
+	/* Inline data must have been converted before reaching here. */
+	f2fs_bug_on(sbi, f2fs_has_inline_data(inode));
+
+	/* Reserve COW blocks for all covered 4K subpages first. */
+	pgoff_t start_index = folio->index + (ori_off >> PAGE_SHIFT);
+	pgoff_t end_index = folio->index +
+		((ori_off + len - 1) >> PAGE_SHIFT);
+
+	for (index = start_index; index <= end_index; index++) {
+		block_t cow_blkaddr = NULL_ADDR;
+		bool node_changed = false;
+		int ret;
+
+		ret = __find_data_block(cow_inode, index, &cow_blkaddr);
+		if (ret)
+			return ret;
+		if (cow_blkaddr != NULL_ADDR)
+			continue;
+
+		ret = __reserve_data_block(cow_inode, index, &cow_blkaddr,
+					   &node_changed);
+		if (ret)
+			return ret;
+
+		inc_atomic_write_cnt(inode);
+		need_balance |= node_changed;
+	}
+
+	if (need_balance && !IS_NOQUOTA(inode) &&
+				       has_not_enough_free_secs(sbi, 0, 0)) {
+		orig_order = folio_order(folio);
+		folio_unlock(folio);
+		f2fs_balance_fs(sbi, true);
+		folio_lock(folio);
+		if (unlikely(folio->mapping != mapping ||
+			     folio_order(folio) != orig_order))
+			return -EAGAIN;
+	}
+
+	if (folio_test_uptodate(folio) || len == folio_size(folio))
+		return 0;
+
+	/* Then read partial 4K subpages. */
+	while (find_next_valid_block(folio, ori_off, &need_off, len)) {
+		size_t off;
+		block_t cow_blkaddr = NULL_ADDR;
+		block_t ori_blkaddr = NULL_ADDR;
+		struct inode *read_inode = NULL;
+		block_t read_blkaddr = NULL_ADDR;
+
+		index = folio->index + (need_off >> PAGE_SHIFT);
+		off = offset_in_folio(folio, index << PAGE_SHIFT);
+
+		err = __find_data_block(cow_inode, index, &cow_blkaddr);
+		if (err)
+			return err;
+
+		if (__is_valid_data_blkaddr(cow_blkaddr)) {
+			if (!f2fs_is_valid_blkaddr(sbi, cow_blkaddr,
+						  DATA_GENERIC_ENHANCE_READ))
+				return -EFSCORRUPTED;
+			read_inode = cow_inode;
+			read_blkaddr = cow_blkaddr;
+		} else if (is_inode_flag_set(inode, FI_ATOMIC_REPLACE)) {
+			folio_zero_segment(folio, off, off + PAGE_SIZE);
+			f2fs_ffs_mark_subrange_uptodate(folio, off, PAGE_SIZE);
+			continue;
+		} else {
+			err = __find_data_block(inode, index, &ori_blkaddr);
+			if (err)
+				return err;
+
+			if (!__is_valid_data_blkaddr(ori_blkaddr)) {
+				folio_zero_segment(folio, off, off + PAGE_SIZE);
+				f2fs_ffs_mark_subrange_uptodate(folio, off, PAGE_SIZE);
+				continue;
+			}
+
+			if (!f2fs_is_valid_blkaddr(sbi, ori_blkaddr,
+						  DATA_GENERIC_ENHANCE_READ))
+				return -EFSCORRUPTED;
+			read_inode = inode;
+			read_blkaddr = ori_blkaddr;
+		}
+
+		err = f2fs_submit_page_read_sync(read_inode, folio,
+						 index, read_blkaddr);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 static int f2fs_write_begin(const struct kiocb *iocb,
 			    struct address_space *mapping,
 			    loff_t pos, unsigned len, struct folio **foliop,
@@ -4282,7 +4393,7 @@ repeat:
 
 	*foliop = folio;
 
-	if (f2fs_is_atomic_file(inode))
+	if (f2fs_is_atomic_file(inode) && !folio_test_large(folio))
 		err = prepare_atomic_write_begin(sbi, folio, pos, len,
 					&blkaddr, &need_balance);
 	else if (!folio_test_large(folio))
@@ -4307,10 +4418,18 @@ repeat:
 	f2fs_folio_wait_writeback(folio, DATA, false, true);
 
 	if (folio_test_large(folio)) {
-		err = prepare_large_folio_write_begin(inode,
+		if (f2fs_is_atomic_file(inode))
+			err = prepare_large_folio_atomic_write_begin(inode,
+					mapping, folio, pos, len);
+		else
+			err = prepare_large_folio_write_begin(inode,
 					folio, pos, len);
 		if (!err)
 			return 0;
+		if (err == -EAGAIN) {
+			f2fs_folio_put(folio, true);
+			goto repeat;
+		}
 		goto put_folio;
 	}
 
