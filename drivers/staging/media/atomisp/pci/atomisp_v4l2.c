@@ -25,6 +25,7 @@
 
 #include "atomisp_cmd.h"
 #include "atomisp_common.h"
+#include "atomisp_csi2.h"
 #include "atomisp_fops.h"
 #include "atomisp_ioctl.h"
 #include "atomisp_internal.h"
@@ -71,6 +72,11 @@ MODULE_PARM_DESC(pad_w, "extra data for ISP processing");
 int pad_h = 16;
 module_param(pad_h, int, 0644);
 MODULE_PARM_DESC(pad_h, "extra data for ISP processing");
+
+bool atomisp_allow_raw_output;
+module_param_named(allow_raw_output, atomisp_allow_raw_output, bool, 0644);
+MODULE_PARM_DESC(allow_raw_output,
+		 "allow experimental raw Bayer output (default:false)");
 
 /*
  * FIXME: this is a hack to make easier to support ISP2401 variant.
@@ -888,6 +894,15 @@ static void atomisp_init_sensor(struct atomisp_input_subdev *input)
 	struct v4l2_subdev_selection sel = { };
 	struct v4l2_subdev_state *try_sd_state, *act_sd_state;
 	int i, err;
+
+	input->padding_override =
+		atomisp_csi2_get_sensor_padding(input->sensor->dev,
+						&input->padding_w,
+						&input->padding_h);
+	if (input->padding_override)
+		dev_info(input->sensor->dev,
+			 "using ISP input padding %ux%u\n",
+			 input->padding_w, input->padding_h);
 
 	/*
 	 * FIXME: Drivers are not supposed to use __v4l2_subdev_state_alloc()

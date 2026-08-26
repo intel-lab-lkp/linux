@@ -554,8 +554,10 @@ static int atomisp_enum_framesizes(struct file *file, void *priv,
 		return ret;
 
 	fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-	fsize->discrete.width = fse.max_width - pad_w;
-	fsize->discrete.height = fse.max_height - pad_h;
+	fsize->discrete.width = fse.max_width -
+		(input->padding_override ? input->padding_w : pad_w);
+	fsize->discrete.height = fse.max_height -
+		(input->padding_override ? input->padding_h : pad_h);
 
 	return 0;
 }
@@ -629,8 +631,11 @@ static int atomisp_enum_fmt_cap(struct file *file, void *fh,
 		 *
 		 * FIXME: fix the pipeline to allow sensor format too.
 		 */
-		if (format->sh_fmt == IA_CSS_FRAME_FORMAT_RAW)
-			continue;
+		if (format->sh_fmt == IA_CSS_FRAME_FORMAT_RAW) {
+			if (!atomisp_allow_raw_output ||
+			    format->mbus_code != code.code)
+				continue;
+		}
 
 		/* Found a match. Now let's pick f->index'th one. */
 		if (fi < f->index) {
