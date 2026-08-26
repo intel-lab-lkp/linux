@@ -557,6 +557,39 @@ conveyed in the error returns from file operations. E.g.
 	  [inherit_user]
 	  assign_global_enable_per_cpu:ctrl=assign;mon=assign;group=//
 
+	Writes use the same line format as read, without square brackets and
+	with a trailing newline. To select inherit_user, write that mode name
+	alone.
+
+	For assign_global_enable_per_cpu:
+
+	- Writing the mode name alone selects ctrl=assign, mon=assign, and the
+	  default CTRL_MON group.
+	- ctrl=, mon=, and group= are optional, use the same syntax as on read,
+	  and may appear in any order. ctrl= and mon= default to assign;
+	  group= defaults to the default CTRL_MON group.
+	- Empty ctrl=, mon=, or group= values are rejected.
+	- A write with both ctrl=inherit and mon=inherit is a no-op.
+
+	Selecting a new mode, assignment state, or group tears down any active
+	assign_global_enable_per_cpu association before programming the new
+	one. Writing inherit_user clears the active kernel mode association.
+	The mode name must match a supported value exactly. Errors are
+	reported in "info/last_cmd_status". Example::
+
+	  # mkdir ctrl1
+	  # echo "assign_global_enable_per_cpu:ctrl=assign;mon=assign;group=ctrl1//" \
+	         > info/kernel_mode
+
+	  # cat info/kernel_mode
+	  inherit_user
+	  [assign_global_enable_per_cpu:ctrl=assign;mon=assign;group=ctrl1//]
+
+	  # echo "inherit_user" > info/kernel_mode
+	  # cat info/kernel_mode
+	  [inherit_user]
+	  assign_global_enable_per_cpu:ctrl=assign;mon=assign;group=//
+
 Resource alloc and monitor groups
 =================================
 

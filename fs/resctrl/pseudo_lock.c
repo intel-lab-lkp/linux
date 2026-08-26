@@ -536,6 +536,11 @@ int rdtgroup_locksetup_enter(struct rdtgroup *rdtgrp)
 		return -EINVAL;
 	}
 
+	if (rdtgrp->kmode) {
+		rdt_last_cmd_puts("Group has an active kernel-mode association\n");
+		return -EINVAL;
+	}
+
 	if (rdtgroup_locksetup_user_restrict(rdtgrp)) {
 		rdt_last_cmd_puts("Unable to modify resctrl permissions\n");
 		return -EIO;
