@@ -125,18 +125,40 @@ void *amdxdna_cmd_get_payload(struct amdxdna_gem_obj *abo, u32 *size)
 	else
 		num_masks = 1 + FIELD_GET(AMDXDNA_CMD_EXTRA_CU_MASK, cmd->header);
 
-	if (size) {
-		count = FIELD_GET(AMDXDNA_CMD_COUNT, cmd->header);
-		if (unlikely(count <= num_masks ||
-			     count * sizeof(u32) +
-			     offsetof(struct amdxdna_cmd, data[0]) >
-			     abo->mem.size)) {
-			*size = 0;
-			return NULL;
-		}
-		*size = (count - num_masks) * sizeof(u32);
+	count = FIELD_GET(AMDXDNA_CMD_COUNT, cmd->header);
+	if (unlikely(count <= num_masks ||
+		     count * sizeof(u32) +
+		     offsetof(struct amdxdna_cmd, data[0]) >
+		     abo->mem.size)) {
+		*size = 0;
+		return NULL;
 	}
+	*size = (count - num_masks) * sizeof(u32);
+
 	return &cmd->data[num_masks];
+}
+
+/*
+ * Returns the chain payload of @abo, with @count set to a command count that
+ * has been checked to fit. The chain fields live in a BO user space keeps
+ * mapped, so nothing may read them without going through here.
+ */
+struct amdxdna_cmd_chain *
+amdxdna_cmd_get_chain(struct amdxdna_gem_obj *abo, u32 *count)
+{
+	struct amdxdna_cmd_chain *cc;
+	u32 len, ccnt;
+
+	cc = amdxdna_cmd_get_payload(abo, &len);
+	if (!cc || len < sizeof(*cc))
+		return NULL;
+
+	ccnt = cc->command_count;
+	if (len < struct_size(cc, data, ccnt))
+		return NULL;
+
+	*count = ccnt;
+	return cc;
 }
 
 u32 amdxdna_cmd_get_cu_idx(struct amdxdna_gem_obj *abo)
@@ -177,8 +199,13 @@ int amdxdna_cmd_set_error(struct amdxdna_gem_obj *abo,
 	cmd->header |= FIELD_PREP(AMDXDNA_CMD_STATE, error_state);
 
 	if (amdxdna_cmd_get_op(abo) == ERT_CMD_CHAIN) {
-		cc = amdxdna_cmd_get_payload(abo, NULL);
-		cc->error_index = (cmd_idx < cc->command_count) ? cmd_idx : 0;
+		u32 ccnt;
+
+		cc = amdxdna_cmd_get_chain(abo, &ccnt);
+		if (!cc || !ccnt)
+			return -EINVAL;
+
+		cc->error_index = (cmd_idx < ccnt) ? cmd_idx : 0;
 		abo = amdxdna_gem_get_obj(client, cc->data[0], AMDXDNA_BO_SHARE);
 		if (!abo)
 			return -EINVAL;
