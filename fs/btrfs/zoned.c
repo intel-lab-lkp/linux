@@ -2564,6 +2564,7 @@ static int do_zone_finish(struct btrfs_block_group *block_group, bool fully_writ
 	const bool is_metadata = (block_group->flags &
 			(BTRFS_BLOCK_GROUP_METADATA | BTRFS_BLOCK_GROUP_SYSTEM));
 	struct btrfs_dev_replace *dev_replace = &fs_info->dev_replace;
+	bool bg_ro = false;
 	int ret = 0;
 	int i;
 
@@ -2571,6 +2572,11 @@ static int do_zone_finish(struct btrfs_block_group *block_group, bool fully_writ
 	if (!test_bit(BLOCK_GROUP_FLAG_ZONE_IS_ACTIVE, &block_group->runtime_flags)) {
 		spin_unlock(&block_group->lock);
 		return 0;
+	}
+
+	if (test_bit(BLOCK_GROUP_FLAG_ZONE_FINISHING, &block_group->runtime_flags)) {
+		spin_unlock(&block_group->lock);
+		goto wait_finish;
 	}
 
 	/* Check if we have unwritten allocated space */
@@ -2597,6 +2603,7 @@ static int do_zone_finish(struct btrfs_block_group *block_group, bool fully_writ
 		ret = btrfs_inc_block_group_ro(block_group, false);
 		if (ret)
 			return ret;
+		bg_ro = true;
 
 		/* Ensure all writes in this block group finish */
 		btrfs_wait_block_group_reservations(block_group);
@@ -2619,6 +2626,12 @@ static int do_zone_finish(struct btrfs_block_group *block_group, bool fully_writ
 			return 0;
 		}
 
+		if (test_bit(BLOCK_GROUP_FLAG_ZONE_FINISHING,
+			     &block_group->runtime_flags)) {
+			spin_unlock(&block_group->lock);
+			goto wait_finish;
+		}
+
 		if (block_group->reserved ||
 		    test_bit(BLOCK_GROUP_FLAG_ZONED_DATA_RELOC,
 			     &block_group->runtime_flags)) {
@@ -2628,7 +2641,7 @@ static int do_zone_finish(struct btrfs_block_group *block_group, bool fully_writ
 		}
 	}
 
-	clear_bit(BLOCK_GROUP_FLAG_ZONE_IS_ACTIVE, &block_group->runtime_flags);
+	set_bit(BLOCK_GROUP_FLAG_ZONE_FINISHING, &block_group->runtime_flags);
 	block_group->alloc_offset = block_group->zone_capacity;
 	if (block_group->flags & (BTRFS_BLOCK_GROUP_METADATA | BTRFS_BLOCK_GROUP_SYSTEM))
 		block_group->meta_write_pointer = block_group->start +
@@ -2652,8 +2665,13 @@ static int do_zone_finish(struct btrfs_block_group *block_group, bool fully_writ
 		btrfs_dec_block_group_ro(block_group);
 
 	spin_lock(&fs_info->zone_active_bgs_lock);
+	spin_lock(&block_group->lock);
+	clear_bit(BLOCK_GROUP_FLAG_ZONE_IS_ACTIVE, &block_group->runtime_flags);
 	ASSERT(!list_empty(&block_group->active_bg_list));
 	list_del_init(&block_group->active_bg_list);
+	clear_and_wake_up_bit(BLOCK_GROUP_FLAG_ZONE_FINISHING,
+			      &block_group->runtime_flags);
+	spin_unlock(&block_group->lock);
 	spin_unlock(&fs_info->zone_active_bgs_lock);
 
 	/* For active_bg_list */
@@ -2662,6 +2680,15 @@ static int do_zone_finish(struct btrfs_block_group *block_group, bool fully_writ
 	clear_and_wake_up_bit(BTRFS_FS_NEED_ZONE_FINISH, &fs_info->flags);
 
 	return ret;
+
+wait_finish:
+	wait_on_bit_io(&block_group->runtime_flags,
+		       BLOCK_GROUP_FLAG_ZONE_FINISHING,
+		       TASK_UNINTERRUPTIBLE);
+	if (bg_ro)
+		btrfs_dec_block_group_ro(block_group);
+
+	return 0;
 }
 
 int btrfs_zone_finish(struct btrfs_block_group *block_group)
