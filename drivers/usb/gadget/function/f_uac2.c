@@ -2032,6 +2032,10 @@ static ssize_t f_uac2_opts_##name##_store(struct config_item *item,	\
 		if (ret)						\
 			goto end;					\
 									\
+		if (i >= UAC_MAX_RATES) {				\
+			ret = -E2BIG;					\
+			goto end;					\
+		}							\
 		opts->name##s[i++] = num;				\
 		ret = len;						\
 	};								\
