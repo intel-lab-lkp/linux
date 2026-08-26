@@ -897,17 +897,20 @@ free_cus:
 	return ret;
 }
 
-static void aie2_cmd_wait(struct amdxdna_hwctx *hwctx, u64 seq)
+static int aie2_cmd_wait(struct amdxdna_hwctx *hwctx, u64 seq)
 {
 	struct dma_fence *out_fence = aie2_cmd_get_out_fence(hwctx, seq);
+	long ret;
 
 	if (!out_fence) {
 		XDNA_ERR(hwctx->client->xdna, "Failed to get fence");
-		return;
+		return -EINVAL;
 	}
 
-	dma_fence_wait_timeout(out_fence, false, MAX_SCHEDULE_TIMEOUT);
+	ret = dma_fence_wait_timeout(out_fence, true, MAX_SCHEDULE_TIMEOUT);
 	dma_fence_put(out_fence);
+
+	return ret < 0 ? ret : 0;
 }
 
 static int aie2_hwctx_cfg_debug_bo(struct amdxdna_hwctx *hwctx, u32 bo_hdl,
@@ -954,7 +957,10 @@ static int aie2_hwctx_cfg_debug_bo(struct amdxdna_hwctx *hwctx, u32 bo_hdl,
 		goto put_cmd;
 	}
 
-	aie2_cmd_wait(hwctx, seq);
+	ret = aie2_cmd_wait(hwctx, seq);
+	if (ret)
+		goto put_cmd;
+
 	if (cmd->result) {
 		XDNA_ERR(xdna, "Response failure 0x%x", cmd->result);
 		ret = -EINVAL;
@@ -1014,7 +1020,10 @@ int aie2_hwctx_sync_debug_bo(struct amdxdna_hwctx *hwctx, u32 debug_bo_hdl)
 		goto put_cmd;
 	}
 
-	aie2_cmd_wait(hwctx, seq);
+	ret = aie2_cmd_wait(hwctx, seq);
+	if (ret)
+		goto put_cmd;
+
 	if (cmd->result) {
 		XDNA_ERR(xdna, "Response failure 0x%x", cmd->result);
 		ret = -EINVAL;
