@@ -218,7 +218,19 @@ static inline void NVolClear##flag(struct ntfs_volume *vol)	\
 }
 
 /* Emit the ntfs volume bitops functions. */
-DEFINE_NVOL_BIT_OPS(Errors)
+static inline int NVolErrors(struct ntfs_volume *vol)
+{
+	return test_bit(NV_Errors, &vol->flags);
+}
+
+/* Out of line, it also reports the corruption to fsnotify. */
+void NVolSetErrors(struct ntfs_volume *vol);
+
+static inline void NVolClearErrors(struct ntfs_volume *vol)
+{
+	clear_bit(NV_Errors, &vol->flags);
+}
+
 DEFINE_NVOL_BIT_OPS(ShowSystemFiles)
 DEFINE_NVOL_BIT_OPS(CaseSensitive)
 DEFINE_NVOL_BIT_OPS(LogFileEmpty)

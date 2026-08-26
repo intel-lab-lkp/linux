@@ -14,6 +14,7 @@
 #include <linux/sched/mm.h>
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
+#include <linux/fserror.h>
 
 #include "sysctl.h"
 #include "logfile.h"
@@ -329,6 +330,13 @@ const struct option_t on_errors_arr[] = {
 	{ ON_ERRORS_CONTINUE,	"continue", },
 	{ 0,			NULL }
 };
+
+/* Mark the volume as corrupt and notify fanotify(FAN_FS_ERROR) listeners. */
+void NVolSetErrors(struct ntfs_volume *vol)
+{
+	set_bit(NV_Errors, &vol->flags);
+	fserror_report_metadata(vol->sb, -EFSCORRUPTED, GFP_ATOMIC);
+}
 
 void ntfs_handle_error(struct super_block *sb)
 {
