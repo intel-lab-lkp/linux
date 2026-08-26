@@ -763,6 +763,8 @@ int p54_parse_eeprom(struct ieee80211_hw *dev, void *eeprom, int len)
 		case PDR_PRISM_PA_CAL_CURVE_DATA: {
 			struct pda_pa_curve_data *curve_data =
 				(struct pda_pa_curve_data *)entry->data;
+			size_t needed;
+
 			if (data_len < sizeof(*curve_data)) {
 				err = -EINVAL;
 				goto err;
@@ -770,9 +772,23 @@ int p54_parse_eeprom(struct ieee80211_hw *dev, void *eeprom, int len)
 
 			switch (curve_data->cal_method_rev) {
 			case 0:
+				needed = curve_data->channels *
+					(sizeof(struct pda_pa_curve_data_sample_rev0) *
+					 curve_data->points_per_channel + 2);
+				if (data_len - sizeof(*curve_data) < needed) {
+					err = -EINVAL;
+					goto err;
+				}
 				err = p54_convert_rev0(dev, curve_data);
 				break;
 			case 1:
+				needed = curve_data->channels *
+					(sizeof(struct pda_pa_curve_data_sample_rev1) *
+					 curve_data->points_per_channel + 3);
+				if (data_len - sizeof(*curve_data) < needed) {
+					err = -EINVAL;
+					goto err;
+				}
 				err = p54_convert_rev1(dev, curve_data);
 				break;
 			default:
