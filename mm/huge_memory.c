@@ -3955,19 +3955,14 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 			      MTHP_STAT_NR_ANON_PARTIALLY_MAPPED, -1);
 	}
 
-	if (mapping) {
+	if (mapping && folio_test_pmd_mappable(folio) &&
+	    new_order < HPAGE_PMD_ORDER) {
 		int nr = folio_nr_pages(folio);
 
-		if (folio_test_pmd_mappable(folio) &&
-		    new_order < HPAGE_PMD_ORDER) {
-			if (folio_test_swapbacked(folio)) {
-				lruvec_stat_mod_folio(folio,
-						      NR_SHMEM_THPS, -nr);
-			} else {
-				lruvec_stat_mod_folio(folio,
-						      NR_FILE_THPS, -nr);
-			}
-		}
+		if (folio_test_swapbacked(folio))
+			lruvec_stat_mod_folio(folio, NR_SHMEM_THPS, -nr);
+		else
+			lruvec_stat_mod_folio(folio, NR_FILE_THPS, -nr);
 	}
 
 	if (folio_test_swapcache(folio)) {
