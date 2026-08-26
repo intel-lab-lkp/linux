@@ -9,6 +9,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
@@ -716,6 +717,84 @@ void ufshcd_pltfrm_remove(struct platform_device *pdev)
 	pm_runtime_put_noidle(&pdev->dev);
 }
 EXPORT_SYMBOL_GPL(ufshcd_pltfrm_remove);
+
+/**
+ * ufshcd_check_hibern8 - Check if all TX lanes entered Hibern8 state
+ * @hba: host controller instance
+ * @num_lanes: number of TX lanes to check
+ * @timeout_ms: timeout in milliseconds for all lanes
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+int ufshcd_check_hibern8(struct ufs_hba *hba, unsigned int num_lanes,
+			 unsigned int timeout_ms)
+{
+	unsigned long timeout;
+	u32 tx_fsm_val = 0;
+	unsigned int i;
+	bool success;
+	int err;
+
+	if (!num_lanes)
+		return -EINVAL;
+
+	timeout = jiffies + msecs_to_jiffies(timeout_ms);
+
+	do {
+		success = true;
+
+		for (i = 0; i < num_lanes; i++) {
+			err = ufshcd_dme_get(hba,
+					UIC_ARG_MIB_SEL(TX_FSM_STATE,
+						UIC_ARG_MPHY_TX_GEN_SEL_INDEX(i)),
+					&tx_fsm_val);
+			if (err) {
+				dev_err(hba->dev,
+						"%s: unable to get TX_FSM_STATE for lane %u, err %d\n",
+						__func__, i, err);
+				return err;
+			}
+
+			if (tx_fsm_val != TX_STATE_HIBERN8) {
+				success = false;
+				break;
+			}
+		}
+
+		if (success)
+			return 0;
+
+		/* sleep for max. 200us */
+		usleep_range(100, 200);
+	} while (time_before(jiffies, timeout));
+
+	/*
+	 * We might have been scheduled out for long during polling, so do
+	 * one final check before reporting timeout.
+	 */
+	for (i = 0; i < num_lanes; i++) {
+		err = ufshcd_dme_get(hba,
+				UIC_ARG_MIB_SEL(TX_FSM_STATE,
+					UIC_ARG_MPHY_TX_GEN_SEL_INDEX(i)),
+				&tx_fsm_val);
+		if (err) {
+			dev_err(hba->dev,
+					"%s: unable to get TX_FSM_STATE for lane %u, err %d\n",
+					__func__, i, err);
+			return err;
+		}
+
+		if (tx_fsm_val != TX_STATE_HIBERN8) {
+			dev_err(hba->dev,
+					"%s: timeout waiting for lane %u to enter HIBERN8, TX_FSM_STATE=%u\n",
+					__func__, i, tx_fsm_val);
+			return -ETIMEDOUT;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ufshcd_check_hibern8);
 
 MODULE_AUTHOR("Santosh Yaragnavi <santosh.sy@samsung.com>");
 MODULE_AUTHOR("Vinayak Holikatti <h.vinayak@samsung.com>");
