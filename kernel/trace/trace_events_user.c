@@ -865,8 +865,11 @@ void user_event_mm_remove(struct task_struct *t)
 
 void user_event_mm_dup(struct task_struct *t, struct user_event_mm *old_mm)
 {
-	struct user_event_mm *mm = user_event_mm_alloc(t);
+	struct user_event_mm *mm;
 	struct user_event_enabler *enabler;
+
+	t->user_event_mm = NULL;
+	mm = user_event_mm_alloc(t);
 
 	if (!mm)
 		return;
