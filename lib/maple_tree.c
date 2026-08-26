@@ -586,6 +586,35 @@ static inline unsigned long *ma_pivots(struct maple_node *node,
 }
 
 /*
+ * ma_pivot_rcu() - Read a pivot from a node that may be concurrently
+ * freed via RCU.
+ * @pivots: The pointer to the maple node pivots
+ * @offset: The offset into the pivot array
+ *
+ * Lockless readers may walk a node that the writer has already marked
+ * dead and queued for RCU freeing.  The rcu_head used to queue the
+ * node for freeing shares storage with pivot[0] and pivot[1] (see
+ * struct maple_node), so arming the rcu_head races with reads of
+ * those pivots.
+ *
+ * Such reads are safe: the writer marks the node dead with an
+ * smp_wmb() before arming the rcu_head (see mte_set_node_dead()) and
+ * the walkers re-check ma_dead_node() with an smp_rmb() after reading
+ * the node, restarting the walk when the node is dead.  Any pivot
+ * read that raced with the rcu_head stores is discarded.
+ *
+ * Annotate the read so that KCSAN does not report this race.
+ *
+ * Return: The pivot at @offset.
+ */
+static inline unsigned long ma_pivot_rcu(unsigned long *pivots,
+					 unsigned char offset)
+{
+	/* Data race with rcu_head arming of a dying node, see above. */
+	return data_race(pivots[offset]);
+}
+
+/*
  * ma_gaps() - Get a pointer to the maple node gaps.
  * @node: the maple node
  * @type: the node type
@@ -1022,12 +1051,12 @@ static int mas_ascend(struct ma_state *mas)
 
 		if (!set_min && a_slot) {
 			set_min = true;
-			min = pivots[a_slot - 1] + 1;
+			min = ma_pivot_rcu(pivots, a_slot - 1) + 1;
 		}
 
 		if (!set_max && a_slot < mt_pivots[a_type]) {
 			set_max = true;
-			max = pivots[a_slot];
+			max = ma_pivot_rcu(pivots, a_slot);
 		}
 
 		if (unlikely(ma_dead_node(a_node)))
@@ -2029,22 +2058,22 @@ static inline void *mtree_range_walk(struct ma_state *mas)
 		end = ma_data_end(node, type, pivots, max);
 		prev_min = min;
 		prev_max = max;
-		if (pivots[0] >= mas->index) {
+		if (ma_pivot_rcu(pivots, 0) >= mas->index) {
 			offset = 0;
-			max = pivots[0];
+			max = ma_pivot_rcu(pivots, 0);
 			goto next;
 		}
 
 		offset = 1;
 		while (offset < end) {
-			if (pivots[offset] >= mas->index) {
-				max = pivots[offset];
+			if (ma_pivot_rcu(pivots, offset) >= mas->index) {
+				max = ma_pivot_rcu(pivots, offset);
 				break;
 			}
 			offset++;
 		}
 
-		min = pivots[offset - 1] + 1;
+		min = ma_pivot_rcu(pivots, offset - 1) + 1;
 next:
 		slots = ma_slots(node, type);
 		next = mt_slot(mas->tree, slots, offset);
@@ -2979,7 +3008,7 @@ static inline void *mtree_lookup_walk(struct ma_state *mas)
 		end = mt_pivots[type];
 		offset = 0;
 		do {
-			if (pivots[offset] >= mas->index)
+			if (ma_pivot_rcu(pivots, offset) >= mas->index)
 				break;
 		} while (++offset < end);
 
@@ -3911,7 +3940,7 @@ static int mas_prev_node(struct ma_state *mas, unsigned long min)
 		return 1;
 
 	if (likely(offset))
-		mas->min = pivots[offset - 1] + 1;
+		mas->min = ma_pivot_rcu(pivots, offset - 1) + 1;
 	mas->max = max;
 	mas->offset = mas_data_end(mas);
 	if (unlikely(mte_dead_node(mas->node)))
@@ -3985,7 +4014,7 @@ again:
 		node = mas_mn(mas);
 		type = mte_node_type(mas->node);
 		pivots = ma_pivots(node, type);
-		mas->index = pivots[mas->offset - 1] + 1;
+		mas->index = ma_pivot_rcu(pivots, mas->offset - 1) + 1;
 	}
 
 	slots = ma_slots(node, type);
@@ -4126,7 +4155,7 @@ retry:
 
 	if (mas->max >= max) {
 		if (likely(mas->offset < mas->end))
-			pivot = pivots[mas->offset];
+			pivot = ma_pivot_rcu(pivots, mas->offset);
 		else
 			pivot = mas->max;
 
@@ -4140,11 +4169,11 @@ retry:
 	}
 
 	if (likely(mas->offset < mas->end)) {
-		mas->index = pivots[mas->offset] + 1;
+		mas->index = ma_pivot_rcu(pivots, mas->offset) + 1;
 again:
 		mas->offset++;
 		if (likely(mas->offset < mas->end))
-			mas->last = pivots[mas->offset];
+			mas->last = ma_pivot_rcu(pivots, mas->offset);
 		else
 			mas->last = mas->max;
 	} else  {
@@ -4166,7 +4195,7 @@ again:
 		node = mas_mn(mas);
 		type = mte_node_type(mas->node);
 		pivots = ma_pivots(node, type);
-		mas->last = pivots[0];
+		mas->last = ma_pivot_rcu(pivots, 0);
 	}
 
 	slots = ma_slots(node, type);
