@@ -177,9 +177,12 @@ int amdxdna_cmd_set_error(struct amdxdna_gem_obj *abo,
 	cmd->header |= FIELD_PREP(AMDXDNA_CMD_STATE, error_state);
 
 	if (amdxdna_cmd_get_op(abo) == ERT_CMD_CHAIN) {
+		u32 err_idx;
+
 		cc = amdxdna_cmd_get_payload(abo, NULL);
-		cc->error_index = (cmd_idx < cc->command_count) ? cmd_idx : 0;
-		abo = amdxdna_gem_get_obj(client, cc->data[0], AMDXDNA_BO_SHARE);
+		err_idx = (cmd_idx < cc->command_count) ? cmd_idx : 0;
+		cc->error_index = err_idx;
+		abo = amdxdna_gem_get_obj(client, cc->data[err_idx], AMDXDNA_BO_SHARE);
 		if (!abo)
 			return -EINVAL;
 		cmd = amdxdna_gem_vmap(abo);
