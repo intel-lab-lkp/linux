@@ -63,6 +63,12 @@
 	status = "okay";
 };
 
+&ufshc {
+	nxp,mphy-boot-mode = "rom";
+	lanes-per-direction = <2>;
+	status = "okay";
+};
+
 &usdhc0 {
 	disable-wp;
 	no-sdio;
