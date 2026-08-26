@@ -351,7 +351,8 @@ static const struct reg_value ov5645_global_init_setting[] = {
 	{ 0x3008, 0x02 },
 	{ OV5645_IO_MIPI_CTRL00, 0x40 },
 	{ OV5645_MIPI_CTRL00, 0x24 },
-	{ OV5645_PAD_OUTPUT00, 0x70 }
+	{ OV5645_PAD_OUTPUT00, 0x70 },
+	{ 0x3008, 0x42 }
 };
 
 static const struct reg_value ov5645_setting_sxga[] = {
