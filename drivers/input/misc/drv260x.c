@@ -434,6 +434,13 @@ static const struct regmap_config drv260x_regmap_config = {
 	.cache_type = REGCACHE_NONE,
 };
 
+/* ACPI DRV2604 devices describe enable as their first GPIO resource. */
+static const struct acpi_gpio_params drv260x_enable_gpio = { 0, 0, false };
+static const struct acpi_gpio_mapping drv260x_acpi_gpios[] = {
+	{ "enable-gpios", &drv260x_enable_gpio, 1 },
+	{ }
+};
+
 static void drv260x_power_off(void *data)
 {
 	struct drv260x_data *haptics = data;
@@ -447,6 +454,14 @@ static int drv260x_probe(struct i2c_client *client)
 	struct drv260x_data *haptics;
 	u32 voltage;
 	int error;
+
+	if (has_acpi_companion(dev)) {
+		error = devm_acpi_dev_add_driver_gpios(dev,
+						       drv260x_acpi_gpios);
+		if (error)
+			return dev_err_probe(dev, error,
+					     "Failed to add ACPI GPIO mapping\n");
+	}
 
 	haptics = devm_kzalloc(dev, sizeof(*haptics), GFP_KERNEL);
 	if (!haptics)
