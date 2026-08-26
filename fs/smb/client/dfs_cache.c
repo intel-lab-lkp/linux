@@ -389,6 +389,9 @@ static int copy_ref_data(const struct dfs_info3_param *refs, int numrefs,
 	struct cache_dfs_tgt *target;
 	int i;
 
+	if (WARN_ON_ONCE(numrefs <= 0))
+		return -EINVAL;
+
 	for (i = 0; i < numrefs; i++) {
 		struct cache_dfs_tgt *t;
 
