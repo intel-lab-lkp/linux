@@ -82,8 +82,9 @@ static int drr_change_class(struct Qdisc *sch, u32 classid, u32 parentid,
 			NL_SET_ERR_MSG(extack, "Specified DRR quantum cannot be zero");
 			return -EINVAL;
 		}
+		quantum = max(256U, quantum);
 	} else
-		quantum = psched_mtu(qdisc_dev(sch));
+		quantum = max(256U, (u32)psched_mtu(qdisc_dev(sch)));
 
 	if (cl != NULL) {
 		if (tca[TCA_RATE]) {

@@ -636,7 +636,7 @@ static int ets_qdisc_change(struct Qdisc *sch, struct nlattr *opt,
 	 */
 	for (i = nstrict; i < nbands; i++) {
 		if (!quanta[i])
-			quanta[i] = psched_mtu(qdisc_dev(sch));
+			quanta[i] = max(256U, (u32)psched_mtu(qdisc_dev(sch)));
 	}
 
 	/* Before commit, make sure we can allocate all new qdiscs */
