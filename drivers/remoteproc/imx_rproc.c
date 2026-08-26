@@ -552,7 +552,7 @@ static int imx_rproc_da_to_sys(struct imx_rproc *priv, u64 da,
 				continue;
 		}
 
-		if (da >= att->da && da + len < att->da + att->size) {
+		if (da >= att->da && da + len <= att->da + att->size) {
 			unsigned int offset = da - att->da;
 
 			*sys = att->sa + offset;
@@ -585,7 +585,7 @@ static void *imx_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *i
 		return NULL;
 
 	for (i = 0; i < IMX_RPROC_MEM_MAX; i++) {
-		if (sys >= priv->mem[i].sys_addr && sys + len <
+		if (sys >= priv->mem[i].sys_addr && sys + len <=
 		    priv->mem[i].sys_addr +  priv->mem[i].size) {
 			unsigned int offset = sys - priv->mem[i].sys_addr;
 			/* __force to make sparse happy with type conversion */
