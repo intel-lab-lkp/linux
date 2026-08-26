@@ -606,7 +606,8 @@ found_entry:
 	}
 
 out_trace:
-	trace_nfsd_drc_found(nn, rqstp, rtn);
+	trace_nfsd_drc_found(nn, atomic_read(&nn->num_drc_entries),
+			     rqstp, rtn);
 out_unlock:
 	spin_unlock(&b->cache_lock);
 out:
