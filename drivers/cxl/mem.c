@@ -50,11 +50,20 @@ static int cxl_debugfs_poison_inject(void *data, u64 dpa)
 	struct cxl_memdev *cxlmd = data;
 	int rc;
 
-	ACQUIRE(device_intr, devlock)(&cxlmd->dev);
-	if ((rc = ACQUIRE_ERR(device_intr, &devlock)))
-		return rc;
+	/*
+	 * The debugfs proxy holds a debugfs_file_get() reference across this
+	 * callback, and cxl_mem unbind removes this file from devres while
+	 * holding the same device lock. Blocking here would let unbind wait
+	 * in debugfs_remove() for a reference that cannot be dropped until
+	 * unbind releases the lock, so never wait for the lock.
+	 */
+	if (!device_trylock(&cxlmd->dev))
+		return -EBUSY;
 
-	return cxl_inject_poison(cxlmd, dpa);
+	rc = cxl_inject_poison(cxlmd, dpa);
+	device_unlock(&cxlmd->dev);
+
+	return rc;
 }
 
 DEFINE_DEBUGFS_ATTRIBUTE(cxl_poison_inject_fops, NULL,
@@ -65,11 +74,14 @@ static int cxl_debugfs_poison_clear(void *data, u64 dpa)
 	struct cxl_memdev *cxlmd = data;
 	int rc;
 
-	ACQUIRE(device_intr, devlock)(&cxlmd->dev);
-	if ((rc = ACQUIRE_ERR(device_intr, &devlock)))
-		return rc;
+	/* Avoid the unbind deadlock described in the inject path above. */
+	if (!device_trylock(&cxlmd->dev))
+		return -EBUSY;
 
-	return cxl_clear_poison(cxlmd, dpa);
+	rc = cxl_clear_poison(cxlmd, dpa);
+	device_unlock(&cxlmd->dev);
+
+	return rc;
 }
 
 DEFINE_DEBUGFS_ATTRIBUTE(cxl_poison_clear_fops, NULL,
