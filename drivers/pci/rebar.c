@@ -190,6 +190,7 @@ int pci_rebar_get_current_size(struct pci_dev *pdev, int bar)
 	pci_read_config_dword(pdev, pos + PCI_REBAR_CTRL, &ctrl);
 	return FIELD_GET(PCI_REBAR_CTRL_BAR_SIZE, ctrl);
 }
+EXPORT_SYMBOL_GPL(pci_rebar_get_current_size);
 
 /**
  * pci_rebar_set_size - set a new size for a Resizable BAR

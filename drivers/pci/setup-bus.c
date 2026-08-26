@@ -2179,6 +2179,59 @@ static void pci_prepare_next_assign_round(struct list_head *fail_head,
  * Second and later try will clear small leaf bridge res.
  * Will stop till to the max depth if can not find good one.
  */
+static int pci_reserve_rebar_cb(struct pci_dev *dev, void *data)
+{
+	struct resource *r;
+	unsigned int i;
+	int max, cur;
+
+	if ((dev->class >> 16) != PCI_BASE_CLASS_DISPLAY)
+		return 0;
+	max = pci_rebar_get_max_size(dev, 0);
+	if (max < 0)
+		return 0;
+	cur = pci_rebar_get_current_size(dev, 0);
+	if (cur < 0 || cur >= max)
+		return 0;
+	pci_resize_resource_set_size(dev, 0, max);
+
+	/*
+	 * Release every prefetchable BAR so the 64-bit prefetchable window
+	 * enclosing them empties and can be re-sized for the enlarged BAR0.
+	 * The hardware BAR is left untouched for the driver to resize.
+	 */
+	pci_dev_for_each_resource(dev, r, i) {
+		if (i >= PCI_BRIDGE_RESOURCES)
+			break;
+		if (r->parent && (r->flags & IORESOURCE_MEM_64) &&
+		    (r->flags & IORESOURCE_PREFETCH))
+			pci_release_resource(dev, i);
+	}
+	return 0;
+}
+
+/*
+ * Release the prefetchable bridge windows emptied by pci_reserve_rebar_cb() so
+ * the assignment pass re-sizes them to fit the reserved BARs. Recurse first so
+ * windows are released bottom-up; the !child test skips windows that still hold
+ * other devices' resources.
+ */
+static void pci_release_rebar_windows(struct pci_bus *bus)
+{
+	struct pci_dev *dev;
+	struct resource *w;
+
+	list_for_each_entry(dev, &bus->devices, bus_list)
+		if (dev->subordinate)
+			pci_release_rebar_windows(dev->subordinate);
+
+	if (!bus->self)
+		return;
+	w = &bus->self->resource[PCI_BRIDGE_PREF_MEM_WINDOW];
+	if (w->parent && (w->flags & IORESOURCE_MEM_64) && !w->child)
+		pci_release_resource(bus->self, PCI_BRIDGE_PREF_MEM_WINDOW);
+}
+
 void pci_assign_unassigned_root_bus_resources(struct pci_bus *bus)
 {
 	LIST_HEAD(realloc_head);
@@ -2189,6 +2242,15 @@ void pci_assign_unassigned_root_bus_resources(struct pci_bus *bus)
 	LIST_HEAD(fail_head);
 	int pci_try_num = 1;
 	enum enable_type enable_local;
+
+	/*
+	 * Reserve window space for resizable device BARs at their maximum
+	 * size before sizing the bridge windows, so the windows fit the BARs
+	 * a driver will later grow. Only the resource size is set here; the
+	 * hardware BAR is left untouched for the driver to resize.
+	 */
+	pci_walk_bus(bus, pci_reserve_rebar_cb, NULL);
+	pci_release_rebar_windows(bus);
 
 	/* Don't realloc if asked to do so */
 	enable_local = pci_realloc_detect(bus, pci_realloc_enable);

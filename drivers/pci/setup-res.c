@@ -280,6 +280,13 @@ resource_size_t pci_align_resource(struct pci_dev *dev,
 		return res->start;
 
 	remainder = size - ALIGN_DOWN(size, align);
+	/*
+	 * A window holding several align-sized resources has one tail per
+	 * resource, but only the lowest can tuck below the first aligned
+	 * boundary; the rest sit above it. Relocate a single tail's worth.
+	 */
+	if (ALIGN_DOWN(size, align) > align)
+		remainder /= ALIGN_DOWN(size, align) / align;
 	/* Don't mess with size that doesn't align with window size granularity */
 	if (!IS_ALIGNED(remainder, pci_min_window_alignment(dev->bus, res->flags)))
 		return res->start;
