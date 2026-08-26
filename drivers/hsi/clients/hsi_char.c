@@ -96,6 +96,7 @@ struct hsc_channel {
  * @usecnt: Use count for claiming the HSI port (mutex protected)
  * @cl: Referece to the HSI client
  * @channels: Array of channels accessible by the client
+ * @kref: Reference count for the client data lifetime
  */
 struct hsc_client_data {
 	struct cdev		cdev;
@@ -104,6 +105,7 @@ struct hsc_client_data {
 	unsigned int		usecnt;
 	struct hsi_client	*cl;
 	struct hsc_channel	channels[HSC_DEVS];
+	struct kref		kref;
 };
 
 /* Stores the major number dynamically allocated for hsi_char */
@@ -576,6 +578,11 @@ static long hsc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	return ret;
 }
 
+static void hsc_client_data_release(struct kref *kref)
+{
+	kfree(container_of(kref, struct hsc_client_data, kref));
+}
+
 static inline void __hsc_port_release(struct hsc_client_data *cl_data)
 {
 	BUG_ON(cl_data->usecnt == 0);
@@ -613,10 +620,12 @@ static int hsc_open(struct inode *inode, struct file *file)
 		hsi_setup(cl_data->cl);
 	}
 	cl_data->usecnt++;
+	kref_get(&cl_data->kref);
 
 	ret = hsc_msgs_alloc(channel);
 	if (ret < 0) {
 		__hsc_port_release(cl_data);
+		kref_put(&cl_data->kref, hsc_client_data_release);
 		goto out;
 	}
 
@@ -649,6 +658,8 @@ static int hsc_release(struct inode *inode __maybe_unused, struct file *file)
 	wake_up(&channel->rx_wait);
 	wake_up(&channel->tx_wait);
 	mutex_unlock(&cl_data->lock);
+
+	kref_put(&cl_data->kref, hsc_client_data_release);
 
 	return 0;
 }
@@ -703,6 +714,7 @@ static int hsc_probe(struct device *dev)
 		goto out1;
 	}
 	mutex_init(&cl_data->lock);
+	kref_init(&cl_data->kref);
 	hsi_client_set_drvdata(cl, cl_data);
 	cdev_init(&cl_data->cdev, &hsc_fops);
 	cl_data->cdev.owner = THIS_MODULE;
@@ -739,7 +751,7 @@ static int hsc_remove(struct device *dev)
 	cdev_del(&cl_data->cdev);
 	unregister_chrdev_region(hsc_dev, HSC_DEVS);
 	hsi_client_set_drvdata(cl, NULL);
-	kfree(cl_data);
+	kref_put(&cl_data->kref, hsc_client_data_release);
 
 	return 0;
 }
