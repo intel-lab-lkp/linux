@@ -12909,6 +12909,7 @@ R:	Pierre-Louis Bossart <pierre-louis.bossart@linux.dev>
 L:	linux-sound@vger.kernel.org
 S:	Supported
 F:	sound/soc/intel/
+F:	sound/soc/intel/boards/cht_yogabook.c
 
 INTEL ATOMISP2 DUMMY / POWER-MANAGEMENT DRIVER
 M:	Hans de Goede <hansg@kernel.org>
