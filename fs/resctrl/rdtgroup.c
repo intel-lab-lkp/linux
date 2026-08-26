@@ -312,6 +312,9 @@ static int rdtgroup_add_file(struct kernfs_node *parent_kn, struct rftype *rft)
 		return ret;
 	}
 
+	if (rft->hidden)
+		kernfs_show(kn, false);
+
 	return 0;
 }
 
@@ -2375,6 +2378,33 @@ error:
 			kernfs_remove_by_name(kn, rft->name);
 	}
 	return ret;
+}
+
+/*
+ * resctrl_hidden_files_set_visible() - Show or hide files marked hidden
+ * @kn: resource group kernfs_node
+ * @show: whether to show or hide
+ *
+ * Iterate res_common_files entries marked hidden and show or hide the
+ * corresponding file under @kn.
+ */
+void resctrl_hidden_files_set_visible(struct kernfs_node *kn, bool show)
+{
+	struct rftype *rft, *rfts = res_common_files;
+	struct kernfs_node *kn_file;
+	int len;
+
+	len = ARRAY_SIZE(res_common_files);
+	for (rft = rfts; rft < rfts + len; rft++) {
+		if (!rft->hidden)
+			continue;
+
+		kn_file = kernfs_find_and_get(kn, rft->name);
+		if (!kn_file)
+			continue;
+		kernfs_show(kn_file, show);
+		kernfs_put(kn_file);
+	}
 }
 
 static struct rftype *rdtgroup_get_rftype_by_name(const char *name)
