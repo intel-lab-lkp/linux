@@ -1672,6 +1672,7 @@ static inline bool retpoline_seq_enabled(void) { return false; }
 #define SPECTRE_V2_LFENCE_MSG "WARNING: LFENCE mitigation is not recommended for this CPU, data leaks possible!\n"
 #define SPECTRE_V2_EIBRS_EBPF_MSG "WARNING: Unprivileged eBPF is enabled with eIBRS on, data leaks possible via Spectre v2 BHB attacks!\n"
 #define SPECTRE_V2_EIBRS_LFENCE_EBPF_SMT_MSG "WARNING: Unprivileged eBPF is enabled with eIBRS+LFENCE mitigation and SMT, data leaks possible via Spectre v2 BHB attacks!\n"
+#define SPECTRE_V2_EIBRS_SNP_PERF_MSG "WARNING: eIBRS mitigation enables AutoIBRS on SEV-SNP enabled CPU, this may cause performance loss\n"
 #define SPECTRE_V2_IBRS_PERF_MSG "WARNING: IBRS mitigation selected on Enhanced IBRS CPU, this may cause unnecessary performance loss\n"
 
 #ifdef CONFIG_BPF_SYSCALL
@@ -2194,7 +2195,15 @@ static void __init spectre_v2_select_mitigation(void)
 			break;
 		fallthrough;
 	case SPECTRE_V2_CMD_FORCE:
-		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED)) {
+		/*
+		 * Prefer retpoline when SNP is enabled because AutoIBRS
+		 * degrades host userspace indirect branch performance.  Only
+		 * do so if retpoline is actually built in, otherwise AutoIBRS
+		 * is better than leaving the system unmitigated.
+		 */
+		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED) &&
+		    !(boot_cpu_has(X86_FEATURE_SEV_SNP) &&
+		      IS_ENABLED(CONFIG_MITIGATION_RETPOLINE))) {
 			spectre_v2_enabled = SPECTRE_V2_EIBRS;
 			break;
 		}
@@ -2285,6 +2294,10 @@ static void __init spectre_v2_apply_mitigation(void)
 			update_spec_ctrl(x86_spec_ctrl_base);
 		}
 	}
+
+	if (spectre_v2_in_eibrs_mode(spectre_v2_enabled) &&
+	    boot_cpu_has(X86_FEATURE_SEV_SNP))
+		pr_warn(SPECTRE_V2_EIBRS_SNP_PERF_MSG);
 
 	switch (spectre_v2_enabled) {
 	case SPECTRE_V2_NONE:
