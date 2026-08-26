@@ -2162,20 +2162,17 @@ kfree_rcu_shrink_count(struct shrinker *shrink, struct shrink_control *sc)
 static unsigned long
 kfree_rcu_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
 {
-	int cpu, freed = 0;
+	int cpu;
+	unsigned long freed = 0;
 
 	for_each_possible_cpu(cpu) {
-		int count;
 		struct kfree_rcu_cpu *krcp = per_cpu_ptr(&krc, cpu);
 
-		count = krc_count(krcp);
-		count += drain_page_cache(krcp);
+		freed += krc_count(krcp);
+		freed += drain_page_cache(krcp);
 		kfree_rcu_monitor(&krcp->monitor_work.work);
 
-		sc->nr_to_scan -= count;
-		freed += count;
-
-		if (sc->nr_to_scan <= 0)
+		if (freed >= sc->nr_to_scan)
 			break;
 	}
 
