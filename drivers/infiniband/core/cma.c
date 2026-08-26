@@ -5556,6 +5556,7 @@ static void cma_query_ib_service_handler(int status,
 {
 	struct cma_work *work = context;
 	struct rdma_id_private *id_priv = work->id;
+	struct sa_service_rec *service_recs;
 	struct sockaddr_ib *addr;
 
 	if (status)
@@ -5571,15 +5572,20 @@ static void cma_query_ib_service_handler(int status,
 		goto fail;
 	}
 
-	id_priv->id.route.service_recs =
-		kmalloc_objs(*recs, num_recs);
-	if (!id_priv->id.route.service_recs) {
+	service_recs = kmalloc_objs(*recs, num_recs);
+	if (!service_recs) {
 		status = -ENOMEM;
 		goto fail;
 	}
 
+	memcpy(service_recs, recs, sizeof(*recs) * num_recs);
 	id_priv->id.route.num_service_recs = num_recs;
-	memcpy(id_priv->id.route.service_recs, recs, sizeof(*recs) * num_recs);
+	/*
+	 * Readers such as ucma_query_ib_service() are not serialized against
+	 * this handler and gate on service_recs, so publish it only once the
+	 * records and the count are fully written.
+	 */
+	smp_store_release(&id_priv->id.route.service_recs, service_recs);
 
 	addr = (struct sockaddr_ib *)&id_priv->id.route.addr.dst_addr;
 	addr->sib_family = AF_IB;

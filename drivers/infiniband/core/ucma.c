@@ -1025,12 +1025,15 @@ static ssize_t ucma_query_ib_service(struct ucma_context *ctx,
 				     void __user *response, int out_len)
 {
 	struct rdma_ucm_query_ib_service_resp *resp;
+	struct sa_service_rec *service_recs;
 	int n, ret = 0;
 
 	if (out_len < sizeof(struct rdma_ucm_query_ib_service_resp))
 		return -ENOSPC;
 
-	if (!ctx->cm_id->route.service_recs)
+	/* Pairs with the release store in cma_query_ib_service_handler() */
+	service_recs = smp_load_acquire(&ctx->cm_id->route.service_recs);
+	if (!service_recs)
 		return -ENODATA;
 
 	resp = kzalloc(out_len, GFP_KERNEL);
@@ -1048,8 +1051,7 @@ static ssize_t ucma_query_ib_service(struct ucma_context *ctx,
 	if (n > ctx->cm_id->route.num_service_recs)
 		n = ctx->cm_id->route.num_service_recs;
 
-	memcpy(resp->recs, ctx->cm_id->route.service_recs,
-	       sizeof(*resp->recs) * n);
+	memcpy(resp->recs, service_recs, sizeof(*resp->recs) * n);
 	if (copy_to_user(response, resp, struct_size(resp, recs, n)))
 		ret = -EFAULT;
 
