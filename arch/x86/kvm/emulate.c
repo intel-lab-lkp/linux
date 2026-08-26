@@ -2184,24 +2184,36 @@ static int em_call_near_abs(struct x86_emulate_ctxt *ctxt)
 	return rc;
 }
 
+#define em_cmpxchg8b_16b(__c, rbits, mbits)\
+do {												\
+	u##mbits old = __c->dst.orig_val##mbits;						\
+												\
+	BUILD_BUG_ON(rbits * 2 != mbits);							\
+												\
+	if (((u##rbits) (old >> 0) != (u##rbits) reg_read(ctxt, VCPU_REGS_RAX)) ||		\
+	    ((u##rbits) (old >> rbits) != (u##rbits) reg_read(ctxt, VCPU_REGS_RDX))) {		\
+		*reg_write(ctxt, VCPU_REGS_RAX) = (u##rbits) (old >> 0);			\
+		*reg_write(ctxt, VCPU_REGS_RDX) = (u##rbits) (old >> rbits);			\
+		ctxt->eflags &= ~X86_EFLAGS_ZF;							\
+	} else {										\
+		ctxt->dst.val##mbits = ((u##mbits)reg_read(ctxt, VCPU_REGS_RCX) << rbits) |	\
+					(u##rbits) reg_read(ctxt, VCPU_REGS_RBX);		\
+												\
+		ctxt->eflags |= X86_EFLAGS_ZF;							\
+	}											\
+} while(0)
+
 static int em_cmpxchg8b(struct x86_emulate_ctxt *ctxt)
 {
-	u64 old = ctxt->dst.orig_val64;
-
-	if (ctxt->dst.bytes == 16)
+	if (WARN_ON_ONCE(8 + !!(ctxt->rex_bits & REX_W) * 8 != ctxt->dst.bytes))
 		return X86EMUL_UNHANDLEABLE;
 
-	if (((u32) (old >> 0) != (u32) reg_read(ctxt, VCPU_REGS_RAX)) ||
-	    ((u32) (old >> 32) != (u32) reg_read(ctxt, VCPU_REGS_RDX))) {
-		*reg_write(ctxt, VCPU_REGS_RAX) = (u32) (old >> 0);
-		*reg_write(ctxt, VCPU_REGS_RDX) = (u32) (old >> 32);
-		ctxt->eflags &= ~X86_EFLAGS_ZF;
-	} else {
-		ctxt->dst.val64 = ((u64)reg_read(ctxt, VCPU_REGS_RCX) << 32) |
-			(u32) reg_read(ctxt, VCPU_REGS_RBX);
-
-		ctxt->eflags |= X86_EFLAGS_ZF;
-	}
+	if (!(ctxt->rex_bits & REX_W))
+		em_cmpxchg8b_16b(ctxt, 32, 64);
+#ifdef CONFIG_X86_64
+	else
+		em_cmpxchg8b_16b(ctxt, 64, 128);
+#endif
 	return X86EMUL_CONTINUE;
 }
 
@@ -5414,8 +5426,14 @@ int x86_emulate_insn(struct x86_emulate_ctxt *ctxt, bool check_intercepts)
 			goto done;
 		}
 	}
-	/* Copy full 64-bit value for CMPXCHG8B.  */
-	ctxt->dst.orig_val64 = ctxt->dst.val64;
+	/* Copy full 64/128-bit value for CMPXCHG8B.  */
+
+#ifdef CONFIG_X86_64
+	if (ctxt->dst.bytes == 16)
+		ctxt->dst.orig_val128 = ctxt->dst.val128;
+	else
+#endif
+		ctxt->dst.orig_val64 = ctxt->dst.val64;
 
 special_insn:
 
