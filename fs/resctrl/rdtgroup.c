@@ -892,6 +892,19 @@ static int rdtgroup_rmid_show(struct kernfs_open_file *of,
 	return ret;
 }
 
+/**
+ * resctrl_set_kmode_support() - Register a supported kernel mode
+ * @kmode:	Kernel mode policy supported by the architecture.
+ *
+ * Set the corresponding bit in resctrl_kcfg.caps.kmode_sup so @kmode
+ * is visible to the resctrl file system.
+ */
+void resctrl_set_kmode_support(enum resctrl_kernel_mode kmode)
+{
+	if (kmode < RESCTRL_NUM_KERNEL_MODES)
+		__set_bit(kmode, resctrl_kcfg.caps.kmode_sup);
+}
+
 #ifdef CONFIG_PROC_CPU_RESCTRL
 /*
  * A task can only be part of one resctrl control group and of one monitor
