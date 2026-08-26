@@ -173,12 +173,30 @@ static inline int has_ebcdic_char(const char *str)
 	return 0;
 }
 
+static inline bool has_nonprintable_char(const char *str)
+{
+	for (int i = 0; str[i]; i++) {
+		unsigned char c = (unsigned char)str[i];
+
+		/*
+		 * Open-code ASCII range comparisons, since isprint() accepts
+		 * high Latin-1 bytes
+		 */
+		if ((c < 0x09 || c > 0x0d) && (c < 0x20 || c > 0x7e))
+			return true;
+	}
+	return false;
+}
+
 void setup_boot_command_line(void)
 {
 	parmarea.command_line[COMMAND_LINE_SIZE - 1] = 0;
 	/* convert arch command line to ascii if necessary */
-	if (has_ebcdic_char(parmarea.command_line))
+	if (has_ebcdic_char(parmarea.command_line)) {
 		EBCASC(parmarea.command_line, COMMAND_LINE_SIZE);
+		if (has_nonprintable_char(parmarea.command_line))
+			boot_warn("Kernel command line was treated as EBCDIC, but contains non-printable characters\n");
+	}
 	/* copy arch command line */
 	strscpy(early_command_line, strim(parmarea.command_line));
 
