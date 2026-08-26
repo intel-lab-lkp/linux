@@ -1606,13 +1606,12 @@ static inline void nvme_update_cq_head(struct nvme_queue *nvmeq)
 	}
 }
 
-static inline bool nvme_poll_cq(struct nvme_queue *nvmeq,
-			        struct io_comp_batch *iob)
+static inline unsigned int nvme_poll_cq(struct nvme_queue *nvmeq,
+					struct io_comp_batch *iob)
 {
-	bool found = false;
+	unsigned int found = 0;
 
 	while (nvme_cqe_pending(nvmeq)) {
-		found = true;
 		/*
 		 * load-load control dependency between phase and the rest of
 		 * the cqe requires a full read memory barrier
@@ -1620,6 +1619,7 @@ static inline bool nvme_poll_cq(struct nvme_queue *nvmeq,
 		dma_rmb();
 		nvme_handle_cqe(nvmeq, iob, nvmeq->cq_head);
 		nvme_update_cq_head(nvmeq);
+		found++;
 	}
 
 	if (found)
@@ -1627,17 +1627,22 @@ static inline bool nvme_poll_cq(struct nvme_queue *nvmeq,
 	return found;
 }
 
+static irqreturn_t nvme_irq_complete_batch(struct io_comp_batch *iob,
+					   unsigned int completions)
+{
+	if (!completions)
+		return IRQ_NONE;
+	if (!rq_list_empty(&iob->req_list))
+		nvme_pci_complete_batch(iob);
+	return IRQ_HANDLED;
+}
+
 static irqreturn_t nvme_irq(int irq, void *data)
 {
 	struct nvme_queue *nvmeq = data;
 	DEFINE_IO_COMP_BATCH(iob);
 
-	if (nvme_poll_cq(nvmeq, &iob)) {
-		if (!rq_list_empty(&iob.req_list))
-			nvme_pci_complete_batch(&iob);
-		return IRQ_HANDLED;
-	}
-	return IRQ_NONE;
+	return nvme_irq_complete_batch(&iob, nvme_poll_cq(nvmeq, &iob));
 }
 
 static irqreturn_t nvme_irq_check(int irq, void *data)
