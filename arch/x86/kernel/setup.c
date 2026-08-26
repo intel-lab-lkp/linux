@@ -333,7 +333,7 @@ static void __init relocate_initrd(void)
 	initrd_start = relocated_ramdisk + PAGE_OFFSET;
 	initrd_end   = initrd_start + ramdisk_size;
 	printk(KERN_INFO "Allocated new RAMDISK: [mem %#010llx-%#010llx]\n",
-	       relocated_ramdisk, relocated_ramdisk + ramdisk_size - 1);
+	       relocated_ramdisk, relocated_ramdisk + area_size - 1);
 
 	ret = copy_from_early_mem((void *)initrd_start, ramdisk_image, ramdisk_size);
 	if (ret)
