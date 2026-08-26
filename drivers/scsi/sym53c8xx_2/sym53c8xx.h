@@ -128,7 +128,7 @@ struct sym_driver_setup {
 /*
  *  Initial setup.
  *
- *  Can be overriden at startup by a command line.
+ *  Can be overridden at startup by a command line.
  */
 #define SYM_LINUX_DRIVER_SETUP	{				\
 	.max_tag	= CONFIG_SCSI_SYM53C8XX_DEFAULT_TAGS,	\

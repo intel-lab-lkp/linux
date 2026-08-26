@@ -2194,7 +2194,7 @@ static void __iomem *bar2_address(struct adapter *adapter,
  *	@rspq: pointer to the new rxq's Response Queue to be filled in
  *	@iqasynch: if 0, a normal rspq; if 1, an asynchronous event queue
  *	@dev: the network device associated with the new rspq
- *	@intr_dest: MSI-X vector index (overriden in MSI mode)
+ *	@intr_dest: MSI-X vector index (overridden in MSI mode)
  *	@fl: pointer to the new rxq's Free List to be filled in
  *	@hnd: the interrupt handler to invoke for the rspq
  */

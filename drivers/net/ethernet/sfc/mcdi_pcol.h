@@ -13547,7 +13547,7 @@
  * an ancestor of the current user (see MC_CMD_SET_VI_USER). Note that LL
  * queues require this to be called after allocation but before initialisation
  * of the queue. TLP options of a queue are fixed after queue is initialised,
- * with the values set to current global value or they can be overriden using
+ * with the values set to current global value or they can be overridden using
  * this command. At LL queue allocation, all overrides are cleared.
  */
 #define MC_CMD_SET_VI_TLP_PROCESSING 0xb1
