@@ -65,8 +65,7 @@ static inline void nf_ct_set_acct(struct net *net, bool enable)
 #endif
 }
 
-void nf_ct_acct_add(struct nf_conn *ct, u32 dir, unsigned int packets,
-		    unsigned int bytes);
+void nf_ct_acct_add(struct nf_conn *ct, u32 dir, u64 packets, u64 bytes);
 
 static inline void nf_ct_acct_update(struct nf_conn *ct, u32 dir,
 				     unsigned int bytes)

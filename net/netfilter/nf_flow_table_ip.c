@@ -509,8 +509,10 @@ static int nf_flow_offload_forward(struct nf_flowtable_ctx *ctx,
 	ip_decrease_ttl(iph);
 	skb_clear_tstamp(skb);
 
-	if (flow_table->flags & NF_FLOWTABLE_COUNTER)
-		nf_ct_acct_update(flow->ct, tuplehash->tuple.dir, skb->len);
+	if (flow_table->flags & NF_FLOWTABLE_COUNTER) {
+		atomic64_add(1, &tuplehash->tuple.packets);
+		atomic64_add(skb->len, &tuplehash->tuple.bytes);
+	}
 
 	return 1;
 }
@@ -1104,8 +1106,10 @@ static int nf_flow_offload_ipv6_forward(struct nf_flowtable_ctx *ctx,
 	ip6h->hop_limit--;
 	skb_clear_tstamp(skb);
 
-	if (flow_table->flags & NF_FLOWTABLE_COUNTER)
-		nf_ct_acct_update(flow->ct, tuplehash->tuple.dir, skb->len);
+	if (flow_table->flags & NF_FLOWTABLE_COUNTER) {
+		atomic64_add(1, &tuplehash->tuple.packets);
+		atomic64_add(skb->len, &tuplehash->tuple.bytes);
+	}
 
 	return 1;
 }

@@ -726,8 +726,10 @@ static bool tcf_ct_flow_table_lookup(struct tcf_ct_params *p,
 
 	nf_conntrack_get(&ct->ct_general);
 	nf_ct_set(skb, ct, ctinfo);
-	if (nf_ft->flags & NF_FLOWTABLE_COUNTER)
-		nf_ct_acct_update(ct, dir, skb->len);
+	if (nf_ft->flags & NF_FLOWTABLE_COUNTER) {
+		atomic64_add(1, &tuplehash->tuple.packets);
+		atomic64_add(skb->len, &tuplehash->tuple.bytes);
+	}
 
 	return true;
 }

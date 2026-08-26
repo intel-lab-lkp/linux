@@ -171,6 +171,9 @@ struct flow_offload_tuple {
 			u32		iifidx;
 		} tc;
 	};
+
+	atomic64_t			packets;
+	atomic64_t			bytes;
 };
 
 struct flow_offload_tuple_rhash {

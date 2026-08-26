@@ -921,8 +921,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(nf_conntrack_hash_check_insert);
 
-void nf_ct_acct_add(struct nf_conn *ct, u32 dir, unsigned int packets,
-		    unsigned int bytes)
+void nf_ct_acct_add(struct nf_conn *ct, u32 dir, u64 packets, u64 bytes)
 {
 	struct nf_conn_acct *acct;
 

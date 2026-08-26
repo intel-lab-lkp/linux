@@ -13,6 +13,7 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_l4proto.h>
 #include <net/netfilter/nf_conntrack_tuple.h>
+#include <net/netfilter/nf_conntrack_acct.h>
 
 static DEFINE_MUTEX(flowtable_lock);
 static LIST_HEAD(flowtables);
@@ -565,6 +566,21 @@ static void nf_flow_table_extend_ct_timeout(struct nf_conn *ct)
 	nf_ct_put(ct);
 }
 
+static void __nf_flow_sync_ct_stats(struct flow_offload *flow, int dir)
+{
+	u64 pkts, bytes;
+
+	pkts = atomic64_xchg(&flow->tuplehash[dir].tuple.packets, 0);
+	bytes = atomic64_xchg(&flow->tuplehash[dir].tuple.bytes, 0);
+	nf_ct_acct_add(flow->ct, dir, pkts, bytes);
+}
+
+static void nf_flow_sync_ct_stats(struct flow_offload *flow)
+{
+	__nf_flow_sync_ct_stats(flow, FLOW_OFFLOAD_DIR_ORIGINAL);
+	__nf_flow_sync_ct_stats(flow, FLOW_OFFLOAD_DIR_REPLY);
+}
+
 static void nf_flow_offload_gc_step(struct nf_flowtable *flow_table,
 				    struct flow_offload *flow, void *data)
 {
@@ -580,6 +596,8 @@ static void nf_flow_offload_gc_step(struct nf_flowtable *flow_table,
 	} else if (!teardown) {
 		nf_flow_table_extend_ct_timeout(flow->ct);
 	}
+
+	nf_flow_sync_ct_stats(flow);
 
 	if (teardown) {
 		if (test_bit(NF_FLOW_HW, &flow->flags)) {
