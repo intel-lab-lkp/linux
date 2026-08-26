@@ -138,6 +138,7 @@ struct geni_i2c_dev {
 	u32 num_msgs;
 	struct geni_i2c_gpi_multi_desc_xfer i2c_multi_desc_config;
 	const struct geni_i2c_desc *dev_data;
+	struct i2c_bus_recovery_info rinfo;
 };
 
 struct geni_i2c_err_log {
@@ -956,6 +957,90 @@ static int geni_i2c_fifo_xfer(struct geni_i2c_dev *gi2c,
 	return num;
 }
 
+static int geni_i2c_fifo_bus_cmd(struct geni_i2c_dev *gi2c, u32 cmd)
+{
+	unsigned long time_left;
+	unsigned long flags;
+
+	/*
+	 * Clear cur so the IRQ handler does not attempt FIFO watermark
+	 * filling or draining while the recovery opcode is in flight.
+	 * cur and err are shared with geni_i2c_irq(), which reads cur and
+	 * writes err under gi2c->lock, so take the lock around this reset.
+	 */
+	spin_lock_irqsave(&gi2c->lock, flags);
+	gi2c->cur = NULL;
+	gi2c->err = 0;
+	spin_unlock_irqrestore(&gi2c->lock, flags);
+	geni_se_select_mode(&gi2c->se, GENI_SE_FIFO);
+	reinit_completion(&gi2c->done);
+
+	geni_se_setup_m_cmd(&gi2c->se, cmd, 0);
+	time_left = wait_for_completion_timeout(&gi2c->done, XFER_TIMEOUT);
+	if (!time_left) {
+		dev_err(gi2c->se.dev, "timeout waiting for bus cmd %u\n", cmd);
+		gi2c->abort_done = false;
+		geni_se_abort_m_cmd(&gi2c->se);
+		time_left = ABORT_TIMEOUT;
+		do {
+			time_left = wait_for_completion_timeout(&gi2c->done, time_left);
+		} while (!gi2c->abort_done && time_left);
+
+		if (!time_left)
+			dev_err(gi2c->se.dev, "abort timed out for bus cmd %u\n", cmd);
+
+		return -ETIMEDOUT;
+	}
+
+	/*
+	 * ARB_LOST and BUS_PROTO interrupts may be reported while the bus
+	 * transitions from stuck to idle during the recovery sequence.
+	 * The opcode completed successfully so treat these as success.
+	 */
+	if (gi2c->err == -EAGAIN || gi2c->err == -EPROTO)
+		return 0;
+
+	return gi2c->err;
+}
+
+static int geni_i2c_recover_bus(struct i2c_adapter *adap)
+{
+	struct geni_i2c_dev *gi2c = i2c_get_adapdata(adap);
+	int ret;
+
+	ret = pm_runtime_get_sync(gi2c->se.dev);
+	if (ret < 0) {
+		dev_err(gi2c->se.dev, "bus recovery failed, error turning SE resources:%d\n", ret);
+		pm_runtime_put_noidle(gi2c->se.dev);
+		return ret;
+	}
+
+	/* SDA is high means bus is free */
+	if (readl_relaxed(gi2c->se.base + SE_GENI_IOS) & RX_DATA_IN) {
+		pm_runtime_put_autosuspend(gi2c->se.dev);
+		return 0;
+	}
+
+	ret = geni_i2c_fifo_bus_cmd(gi2c, I2C_BUS_CLEAR);
+	if (!ret)
+		ret = geni_i2c_fifo_bus_cmd(gi2c, I2C_STOP_ON_BUS);
+
+	/*
+	 * Recovery succeeds only once the slave releases SDA, so the bus
+	 * state is the authority: RX_DATA_IN high means the bus is free,
+	 * while a clean opcode status with SDA still low is a failed
+	 * recovery.
+	 */
+	if (readl_relaxed(gi2c->se.base + SE_GENI_IOS) & RX_DATA_IN)
+		ret = 0;
+	else if (!ret)
+		ret = -EBUSY;
+
+	pm_runtime_put_autosuspend(gi2c->se.dev);
+
+	return ret;
+}
+
 static int geni_i2c_xfer(struct i2c_adapter *adap,
 			 struct i2c_msg msgs[],
 			 int num)
@@ -980,6 +1065,25 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 		ret = geni_i2c_gpi_xfer(gi2c, msgs, num);
 	else
 		ret = geni_i2c_fifo_xfer(gi2c, msgs, num);
+
+	if (!gi2c->gpi_mode &&
+	    (ret == -EPROTO || ret == -ETIMEDOUT || ret == -EAGAIN)) {
+		/*
+		 * Only attempt recovery if SDA is stuck low. -EPROTO and
+		 * -ETIMEDOUT indicate bus errors where the target may be
+		 * holding SDA low. ARB_LOST (-EAGAIN) on a single-controller
+		 * bus indicates a stuck target, not a real arbitration loss.
+		 * GPI DMA mode extends this trigger separately.
+		 */
+		if (!(readl_relaxed(gi2c->se.base + SE_GENI_IOS) & RX_DATA_IN)) {
+			int recovery_ret = i2c_recover_bus(adap);
+
+			if (recovery_ret)
+				dev_err(gi2c->se.dev,
+					"bus recovery failed: %d (xfer error: %d)\n",
+					recovery_ret, ret);
+		}
+	}
 
 	pm_runtime_put_autosuspend(gi2c->se.dev);
 	gi2c->cur = NULL;
@@ -1187,6 +1291,11 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	ret = geni_i2c_init(gi2c);
 	if (ret < 0)
 		return ret;
+
+	if (!gi2c->gpi_mode) {
+		gi2c->rinfo.recover_bus = geni_i2c_recover_bus;
+		gi2c->adap.bus_recovery_info = &gi2c->rinfo;
+	}
 
 	ret = i2c_add_adapter(&gi2c->adap);
 	if (ret)
