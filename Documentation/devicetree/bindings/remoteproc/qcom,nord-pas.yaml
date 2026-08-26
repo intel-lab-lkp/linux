@@ -24,17 +24,11 @@ properties:
 
   power-domains:
     minItems: 2
-    items:
-      - description: CX power domain
-      - description: MX power domain
-      - description: NSP power domain
+    maxItems: 3
 
   power-domain-names:
     minItems: 2
-    items:
-      - const: cx
-      - const: mx
-      - const: nsp
+    maxItems: 3
 
   reg:
     maxItems: 1
@@ -104,15 +98,25 @@ allOf:
     then:
       properties:
         power-domains:
-          maxItems: 2
+          items:
+            - description: CX power domain
+            - description: MX power domain
         power-domain-names:
-          maxItems: 2
+          items:
+            - const: cx
+            - const: mx
     else:
       properties:
         power-domains:
-          minItems: 3
+          items:
+            - description: CX power domain
+            - description: NMXC power domain
+            - description: NSP power domain
         power-domain-names:
-          minItems: 3
+          items:
+            - const: cx
+            - const: nmxc
+            - const: nsp
 
 unevaluatedProperties: false
 
