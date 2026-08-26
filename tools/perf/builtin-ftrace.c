@@ -1146,6 +1146,11 @@ static int __cmd_latency(struct perf_ftrace *ftrace)
 
 	line[0] = '\0';
 	while (!done) {
+		if (ftrace->target.use_bpf) {
+			usleep(1000);
+			continue;
+		}
+
 		if (poll(&pollfd, 1, -1) < 0)
 			break;
 
