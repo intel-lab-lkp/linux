@@ -2724,8 +2724,9 @@ static void intel_cdclk_pcode_pre_notify(struct intel_atomic_state *state)
 		intel_atomic_get_old_cdclk_state(state);
 	const struct intel_cdclk_state *new_cdclk_state =
 		intel_atomic_get_new_cdclk_state(state);
-	unsigned int cdclk = 0; u8 voltage_level, num_active_pipes = 0;
+	u8 voltage_level, num_active_pipes = 0;
 	bool change_cdclk, update_pipe_count;
+	unsigned int cdclk_mhz = 0;
 
 	if (!intel_cdclk_changed(&old_cdclk_state->actual,
 				 &new_cdclk_state->actual) &&
@@ -2746,8 +2747,12 @@ static void intel_cdclk_pcode_pre_notify(struct intel_atomic_state *state)
 	 * if CDCLK is decreasing or not changing, set bits 25:16 to current CDCLK,
 	 * which basically means we choose the maximum of old and new CDCLK, if we know both
 	 */
-	if (change_cdclk)
-		cdclk = max(new_cdclk_state->actual.cdclk, old_cdclk_state->actual.cdclk);
+	if (change_cdclk) {
+		unsigned int cdclk = max(new_cdclk_state->actual.cdclk,
+					 old_cdclk_state->actual.cdclk);
+
+		cdclk_mhz = DIV_ROUND_UP(cdclk, 1000);
+	}
 
 	/*
 	 * According to "Sequence For Pipe Count Change",
@@ -2758,7 +2763,7 @@ static void intel_cdclk_pcode_pre_notify(struct intel_atomic_state *state)
 	if (update_pipe_count)
 		num_active_pipes = dg2_power_well_count(display, new_cdclk_state);
 
-	intel_pcode_notify(display, voltage_level, num_active_pipes, cdclk,
+	intel_pcode_notify(display, voltage_level, num_active_pipes, cdclk_mhz,
 			   change_cdclk, update_pipe_count);
 }
 
@@ -2769,8 +2774,9 @@ static void intel_cdclk_pcode_post_notify(struct intel_atomic_state *state)
 		intel_atomic_get_new_cdclk_state(state);
 	const struct intel_cdclk_state *old_cdclk_state =
 		intel_atomic_get_old_cdclk_state(state);
-	unsigned int cdclk = 0; u8 voltage_level, num_active_pipes = 0;
+	u8 voltage_level, num_active_pipes = 0;
 	bool update_cdclk, update_pipe_count;
+	unsigned int cdclk_mhz = 0;
 
 	/* According to "Sequence After Frequency Change", set voltage to used level */
 	voltage_level = new_cdclk_state->actual.voltage_level;
@@ -2783,8 +2789,11 @@ static void intel_cdclk_pcode_post_notify(struct intel_atomic_state *state)
 	 * According to "Sequence After Frequency Change",
 	 * set bits 25:16 to current CDCLK
 	 */
-	if (update_cdclk)
-		cdclk = new_cdclk_state->actual.cdclk;
+	if (update_cdclk) {
+		unsigned int cdclk = new_cdclk_state->actual.cdclk;
+
+		cdclk_mhz = DIV_ROUND_UP(cdclk, 1000);
+	}
 
 	/*
 	 * According to "Sequence For Pipe Count Change",
@@ -2795,7 +2804,7 @@ static void intel_cdclk_pcode_post_notify(struct intel_atomic_state *state)
 	if (update_pipe_count)
 		num_active_pipes = dg2_power_well_count(display, new_cdclk_state);
 
-	intel_pcode_notify(display, voltage_level, num_active_pipes, cdclk,
+	intel_pcode_notify(display, voltage_level, num_active_pipes, cdclk_mhz,
 			   update_cdclk, update_pipe_count);
 }
 
