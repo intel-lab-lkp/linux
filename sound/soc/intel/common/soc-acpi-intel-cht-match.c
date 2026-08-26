@@ -143,6 +143,7 @@ struct snd_soc_acpi_mach  snd_soc_acpi_intel_cherrytrail_machines[] = {
 		.drv_name = "cht-yogabook",
 		.fw_filename = "intel/fw_sst_22a8.bin",
 		.board = "cht-yogabook",
+		.sof_tplg_filename = "sof-cht-rt5677.tplg",
 	},
 	{
 		.comp_ids = &rt5645_comp_ids,
