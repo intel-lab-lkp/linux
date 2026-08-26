@@ -6,6 +6,7 @@
  */
 
 #include "minix.h"
+#include <linux/iomap.h>
 
 static int add_nondir(struct dentry *dentry, struct inode *inode)
 {
@@ -84,12 +85,16 @@ static int minix_symlink(struct mnt_idmap *idmap, struct inode *dir,
 		return PTR_ERR(inode);
 
 	minix_set_inode(inode, 0);
-	err = page_symlink(inode, symname, i);
+	err = iomap_symlink_write(inode, symname, i, minix_iomap_ops_ver(inode), NULL, NULL);
+
 	if (unlikely(err)) {
 		inode_dec_link_count(inode);
 		iput(inode);
 		return err;
 	}
+
+	i_size_write(inode, i - 1);
+
 	return add_nondir(dentry, inode);
 }
 

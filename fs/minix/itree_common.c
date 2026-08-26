@@ -311,7 +311,15 @@ static inline void truncate (struct inode * inode)
 	long iblock;
 
 	iblock = (inode->i_size + sb->s_blocksize -1) >> sb->s_blocksize_bits;
-	block_truncate_page(inode->i_mapping, inode->i_size, get_block);
+
+	/* Depending on whether the inode being truncated is a directory or not,
+	 * we need to either call iomap_truncate_page or block_truncate_page.
+	 */
+	if (S_ISDIR(inode->i_mode))
+		block_truncate_page(inode->i_mapping, inode->i_size, get_block);
+	else
+		iomap_truncate_page(inode, inode->i_size, NULL,
+			minix_iomap_ops_ver(inode), NULL, NULL);
 
 	n = block_to_path(inode, iblock, offsets);
 	if (!n)
