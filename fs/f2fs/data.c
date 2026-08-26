@@ -2955,7 +2955,7 @@ static int f2fs_read_data_large_folio(struct inode *inode,
 	int ret = 0;
 	bool folio_in_bio = false;
 
-	if (!IS_IMMUTABLE(inode) || f2fs_compressed_file(inode)) {
+	if (f2fs_compressed_file(inode)) {
 		if (folio)
 			folio_unlock(folio);
 		return -EOPNOTSUPP;
@@ -3320,6 +3320,13 @@ int f2fs_encrypt_one_page(struct f2fs_io_info *fio)
 
 	if (fscrypt_inode_uses_inline_crypto(inode))
 		return 0;
+
+	if (folio_test_large(page_folio(page))) {
+		f2fs_warn_ratelimited(F2FS_I_SB(inode),
+			"large folio does not support fs-layer encryption, ino=%llu",
+			(unsigned long long)inode->i_ino);
+		return -EOPNOTSUPP;
+	}
 
 	fio->encrypted_page = fscrypt_encrypt_pagecache_blocks(page_folio(page),
 					PAGE_SIZE, 0, GFP_NOFS);
