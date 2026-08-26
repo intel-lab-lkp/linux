@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/acpi.h>
+#include <linux/dmi.h>
 #include <linux/reset.h>
 #include <linux/suspend.h>
 #include <linux/bitfield.h>
@@ -25,6 +26,17 @@
 #define SSIC_PORT_CFG2_OFFSET	0x30
 #define PROG_DONE		(1 << 30)
 #define SSIC_PORT_UNUSED	(1 << 31)
+#define SSIC_RETRAIN_TIMEOUT	GENMASK(24, 21)
+#define SSIC_SS_PORT_LINK_CTRL	0x80ec
+#define SSIC_SS_PORT_LINK_CTRL_U3_MASK	GENMASK(11, 9)
+#define SSIC_ACCESS_CTRL	0x4
+#define SSIC_ACCESS_CTRL_OFFSET	0x110
+#define SSIC_ACCESS_CTRL_REGISTER_BANK_VALID	BIT(25)
+#define XHCI_EXT_CAPS_INTEL_HOST	192
+#define XHCI_EXT_CAPS_INTEL_SSIC	196
+#define XHCI_EXT_CAPS_INTEL_SSIC_PROFILE	197
+#define DUAL_ROLE_CFG0		0x68
+#define EN_PIPE_4_1_SYNC_PHY_STATUS	BIT(23)
 #define SPARSE_DISABLE_BIT	17
 #define SPARSE_CNTL_ENABLE	0xC12C
 
@@ -98,6 +110,87 @@
 static const char hcd_name[] = "xhci_hcd";
 
 static struct hc_driver __read_mostly xhci_pci_hc_driver;
+
+static const struct dmi_system_id xhci_yogabook_ssic_dmi_table[] = {
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Lenovo YB1-X91L"),
+		},
+	},
+	{ }
+};
+
+static int xhci_yogabook_ssic_ext_cap(struct xhci_hcd *xhci, int id)
+{
+	return xhci_find_next_ext_cap(xhci->cap_regs, 0, id);
+}
+
+static void xhci_yogabook_ssic_restore_banks(struct xhci_hcd *xhci)
+{
+	u8 __iomem *base = (u8 __iomem *)xhci->cap_regs;
+	int offset;
+	int i;
+
+	offset = xhci_yogabook_ssic_ext_cap(xhci,
+					    XHCI_EXT_CAPS_INTEL_SSIC_PROFILE);
+	if (!offset) {
+		xhci_warn(xhci, "Yoga Book SSIC profile capability is missing\n");
+		return;
+	}
+
+	for (i = 0; i < SSIC_PORT_NUM; i++) {
+		void __iomem *reg = base + offset + SSIC_ACCESS_CTRL +
+				    i * SSIC_ACCESS_CTRL_OFFSET;
+		u32 val = readl(reg);
+
+		writel(val | SSIC_ACCESS_CTRL_REGISTER_BANK_VALID, reg);
+		readl(reg);
+	}
+}
+
+static void xhci_yogabook_ssic_prepare_reset(struct xhci_hcd *xhci)
+{
+	u8 __iomem *base = (u8 __iomem *)xhci->cap_regs;
+	void __iomem *reg;
+	int host_cap;
+	u32 val;
+
+	host_cap = xhci_yogabook_ssic_ext_cap(xhci,
+					      XHCI_EXT_CAPS_INTEL_HOST);
+	if (!host_cap) {
+		xhci_warn(xhci, "Yoga Book Intel host capability is missing\n");
+		return;
+	}
+
+	reg = base + host_cap + DUAL_ROLE_CFG0;
+	val = readl(reg) | EN_PIPE_4_1_SYNC_PHY_STATUS;
+	writel(val, reg);
+	readl(reg);
+}
+
+static void xhci_yogabook_ssic_configure(struct xhci_hcd *xhci)
+{
+	u8 __iomem *base = (u8 __iomem *)xhci->cap_regs;
+	void __iomem *reg;
+	u32 val;
+
+	if (!xhci_yogabook_ssic_ext_cap(xhci, XHCI_EXT_CAPS_INTEL_SSIC))
+		xhci_warn(xhci, "Yoga Book Intel SSIC capability is missing\n");
+
+	reg = base + SSIC_PORT_CFG2;
+	val = readl(reg) & ~SSIC_RETRAIN_TIMEOUT;
+	writel(val, reg);
+	readl(reg);
+
+	reg = base + SSIC_SS_PORT_LINK_CTRL;
+	val = readl(reg) & ~SSIC_SS_PORT_LINK_CTRL_U3_MASK;
+	writel(val, reg);
+	readl(reg);
+
+	xhci_yogabook_ssic_restore_banks(xhci);
+	xhci_info(xhci, "Yoga Book XMM7260 SSIC initialization applied\n");
+}
 
 static int xhci_pci_setup(struct usb_hcd *hcd);
 static int xhci_pci_run(struct usb_hcd *hcd);
@@ -384,6 +477,12 @@ static void xhci_pci_quirks(struct device *dev, struct xhci_hcd *xhci)
 	    pdev->device == PCI_DEVICE_ID_INTEL_CHERRYVIEW_XHCI)
 		xhci->quirks |= XHCI_SSIC_PORT_UNUSED;
 	if (pdev->vendor == PCI_VENDOR_ID_INTEL &&
+	    pdev->device == PCI_DEVICE_ID_INTEL_CHERRYVIEW_XHCI &&
+	    dmi_check_system(xhci_yogabook_ssic_dmi_table)) {
+		xhci->quirks |= XHCI_YOGABOOK_SSIC;
+		xhci_yogabook_ssic_prepare_reset(xhci);
+	}
+	if (pdev->vendor == PCI_VENDOR_ID_INTEL &&
 	    (pdev->device == PCI_DEVICE_ID_INTEL_CHERRYVIEW_XHCI ||
 	     pdev->device == PCI_DEVICE_ID_INTEL_SUNRISEPOINT_LP_XHCI ||
 	     pdev->device == PCI_DEVICE_ID_INTEL_APOLLO_LAKE_XHCI))
@@ -585,6 +684,9 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
 		return 0;
 
 	xhci->allow_single_roothub = 1;
+
+	if (xhci->quirks & XHCI_YOGABOOK_SSIC)
+		xhci_yogabook_ssic_configure(xhci);
 
 	if (xhci->quirks & XHCI_PME_STUCK_QUIRK)
 		xhci_pme_acpi_rtd3_enable(pdev);
@@ -857,6 +959,7 @@ static int xhci_pci_resume(struct usb_hcd *hcd, pm_message_t msg)
 	struct pci_dev *pdev = to_pci_dev(hcd->self.controller);
 	bool power_lost = msg.event == PM_EVENT_RESTORE;
 	bool is_auto_resume = msg.event == PM_EVENT_AUTO_RESUME;
+	int ret;
 
 	reset_control_reset(xhci->reset);
 
@@ -881,13 +984,22 @@ static int xhci_pci_resume(struct usb_hcd *hcd, pm_message_t msg)
 	if (pdev->vendor == PCI_VENDOR_ID_INTEL)
 		usb_enable_intel_xhci_ports(pdev);
 
+	if (xhci->quirks & XHCI_YOGABOOK_SSIC) {
+		xhci_yogabook_ssic_prepare_reset(xhci);
+		xhci_yogabook_ssic_restore_banks(xhci);
+	}
+
 	if (xhci->quirks & XHCI_SSIC_PORT_UNUSED)
 		xhci_ssic_port_unused_quirk(hcd, false);
 
 	if (xhci->quirks & XHCI_PME_STUCK_QUIRK)
 		xhci_pme_quirk(hcd);
 
-	return xhci_resume(xhci, power_lost, is_auto_resume);
+	ret = xhci_resume(xhci, power_lost, is_auto_resume);
+	if (!ret && (xhci->quirks & XHCI_YOGABOOK_SSIC))
+		xhci_yogabook_ssic_configure(xhci);
+
+	return ret;
 }
 
 static int xhci_pci_poweroff_late(struct usb_hcd *hcd, bool do_wakeup)

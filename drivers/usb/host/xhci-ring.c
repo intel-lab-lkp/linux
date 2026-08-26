@@ -62,9 +62,39 @@
 #include "xhci.h"
 #include "xhci-trace.h"
 
+#define YOGABOOK_SSIC_RETRAIN_CFG2	0x880c
+#define YOGABOOK_SSIC_RETRAIN_TIMEOUT	GENMASK(24, 21)
+#define YOGABOOK_SSIC_USB3_PORT		5
+
 static int queue_command(struct xhci_hcd *xhci, struct xhci_command *cmd,
 			 u32 field1, u32 field2,
 			 u32 field3, u32 field4, bool command_must_succeed);
+
+static void xhci_yogabook_ssic_update_retrain(struct xhci_hcd *xhci,
+					      struct xhci_port *port,
+					      u32 portsc)
+{
+	u8 __iomem *base = (u8 __iomem *)xhci->cap_regs;
+	void __iomem *reg = base + YOGABOOK_SSIC_RETRAIN_CFG2;
+	u32 val;
+
+	if (!(xhci->quirks & XHCI_YOGABOOK_SSIC) ||
+	    port->rhub != &xhci->usb3_rhub ||
+	    port->hcd_portnum + 1 != YOGABOOK_SSIC_USB3_PORT ||
+	    !(portsc & (PORT_CSC | PORT_PLC)))
+		return;
+
+	val = readl(reg);
+	if (!(portsc & PORT_CONNECT))
+		val &= ~YOGABOOK_SSIC_RETRAIN_TIMEOUT;
+	else if ((portsc & PORT_PLS_MASK) == XDEV_U0)
+		val |= YOGABOOK_SSIC_RETRAIN_TIMEOUT;
+	else
+		return;
+
+	writel(val, reg);
+	readl(reg);
+}
 
 /*
  * Returns zero if the TRB isn't in this segment, otherwise it returns the DMA
@@ -2035,6 +2065,7 @@ static void handle_port_status(struct xhci_hcd *xhci, union xhci_trb *event)
 		 hcd->self.busnum, hcd_portnum + 1, port_id, portsc);
 
 	trace_xhci_handle_port_status(port, portsc);
+	xhci_yogabook_ssic_update_retrain(xhci, port, portsc);
 
 	if (hcd->state == HC_STATE_SUSPENDED) {
 		xhci_dbg(xhci, "resume root hub\n");
