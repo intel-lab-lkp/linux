@@ -1093,11 +1093,9 @@ static long ntfs_fallocate(struct file *file, int mode, loff_t offset, loff_t le
 	}
 
 	inode_dio_wait(vi);
-	if (mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_COLLAPSE_RANGE |
-		    FALLOC_FL_INSERT_RANGE)) {
-		filemap_invalidate_lock(vi->i_mapping);
-		map_locked = true;
-	}
+	/* Take invalidate_lock for all fallocate operations to prevent races */
+	filemap_invalidate_lock(vi->i_mapping);
+	map_locked = true;
 
 	switch (mode & FALLOC_FL_MODE_MASK) {
 	case FALLOC_FL_ALLOCATE_RANGE:
