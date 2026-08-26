@@ -45,6 +45,8 @@ int atomisp_mipi_csi2_register_entities(struct atomisp_mipi_csi2_device *csi2,
 					struct v4l2_device *vdev);
 int atomisp_csi2_bridge_init(struct atomisp_device *isp);
 int atomisp_csi2_bridge_parse_firmware(struct atomisp_device *isp);
+bool atomisp_csi2_get_sensor_padding(struct device *dev, u32 *padding_w,
+				     u32 *padding_h);
 
 void atomisp_csi2_configure(struct atomisp_sub_device *asd);
 

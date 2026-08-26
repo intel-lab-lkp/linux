@@ -77,6 +77,11 @@ static struct gmin_cfg_var lenovo_ideapad_miix_310_vars[] = {
 static struct gmin_cfg_var lenovo_yogabook_x91_vars[] = {
 	/* The vendor driver and sensor modes use two CSI data lanes. */
 	{ "OVTI2740:00", "CsiLanes", "2" },
+	/* The vendor 1932x1092 mode uses a 576 Mbps two-lane link. */
+	{ "OVTI2740:00", "CsiLinkFreq", "288000000" },
+	/* Crop the vendor mode's 1932x1092 transport frame to 1920x1080. */
+	{ "OVTI2740:00", "CsiPaddingWidth", "12" },
+	{ "OVTI2740:00", "CsiPaddingHeight", "12" },
 	{}
 };
 
@@ -205,6 +210,49 @@ out_use_default:
 	acpi_handle_info(adev->handle, "%s: Using default %s=%d\n",
 			 dev_name(&adev->dev), key, default_val);
 	return default_val;
+}
+
+bool atomisp_csi2_get_sensor_padding(struct device *dev, u32 *padding_w,
+				     u32 *padding_h)
+{
+	struct acpi_device *adev = ACPI_COMPANION(dev);
+	bool override = false;
+	char *str_val;
+	unsigned int val;
+
+	*padding_w = pad_w;
+	*padding_h = pad_h;
+
+	if (!adev)
+		return false;
+
+	str_val = gmin_cfg_get(adev, "CsiPaddingWidth");
+	if (str_val) {
+		if (!kstrtouint(str_val, 0, &val) && val <= 64 && !(val & 1)) {
+			*padding_w = val;
+			override = true;
+		} else {
+			acpi_handle_warn(adev->handle,
+					 "%s: Invalid CSI padding width %s\n",
+					 dev_name(dev), str_val);
+		}
+		kfree(str_val);
+	}
+
+	str_val = gmin_cfg_get(adev, "CsiPaddingHeight");
+	if (str_val) {
+		if (!kstrtouint(str_val, 0, &val) && val <= 64 && !(val & 1)) {
+			*padding_h = val;
+			override = true;
+		} else {
+			acpi_handle_warn(adev->handle,
+					 "%s: Invalid CSI padding height %s\n",
+					 dev_name(dev), str_val);
+		}
+		kfree(str_val);
+	}
+
+	return override;
 }
 
 static int atomisp_csi2_get_pmc_clk_nr_from_acpi_pr0(struct acpi_device *adev)
@@ -383,6 +431,8 @@ static int atomisp_csi2_parse_sensor_fwnode(struct acpi_device *adev,
 					    struct ipu_sensor *sensor)
 {
 	const struct acpi_device_id *id;
+	char *link_freq_str;
+	unsigned long long link_freq;
 	int ret, clock_num;
 	bool vcm = false;
 	int lanes = 1;
@@ -420,6 +470,21 @@ static int atomisp_csi2_parse_sensor_fwnode(struct acpi_device *adev,
 		acpi_handle_err(adev->handle, "%s: Invalid lane-count: %d\n",
 				dev_name(&adev->dev), sensor->lanes);
 		return -EINVAL;
+	}
+
+	link_freq_str = gmin_cfg_get(adev, "CsiLinkFreq");
+	if (link_freq_str) {
+		ret = kstrtoull(link_freq_str, 0, &link_freq);
+		kfree(link_freq_str);
+		if (ret || !link_freq) {
+			acpi_handle_err(adev->handle,
+					"%s: Invalid CSI link frequency\n",
+					dev_name(&adev->dev));
+			return ret ?: -EINVAL;
+		}
+
+		sensor->link_freqs[0] = link_freq;
+		sensor->nr_link_freqs = 1;
 	}
 
 	ret = atomisp_csi2_add_gpio_mappings(adev);
