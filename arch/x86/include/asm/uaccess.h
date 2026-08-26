@@ -407,6 +407,25 @@ do {									\
 	if (unlikely(!success))						\
 		*_old = __old;						\
 	likely(success);					})
+#else // !CONFIG_X86_32
+#define __try_cmpxchg128_user_asm(_ptr, _pold, _new, label)	({	\
+	bool success;							\
+	__typeof__(_ptr) _old = (__typeof__(_ptr))(_pold);		\
+	__typeof__(*(_ptr)) __old = *_old;				\
+	__typeof__(*(_ptr)) __new = (_new);				\
+	asm_goto_output("\n"						\
+		     "1: " LOCK_PREFIX "cmpxchg16b %[ptr]\n"		\
+		     _ASM_EXTABLE_UA(1b, %l[label])			\
+		     : "=@ccz" (success),				\
+		       "+A" (__old),					\
+		       [ptr] "+m" (*_ptr)				\
+		     : "b" ((u64)__new),				\
+		       "c" ((u64)((u128)__new >> 64))			\
+		     : "memory"						\
+		     : label);						\
+	if (unlikely(!success))						\
+		*_old = __old;						\
+	likely(success);					})
 #endif // CONFIG_X86_32
 #else  // !CONFIG_CC_HAS_ASM_GOTO_TIED_OUTPUT
 #define __try_cmpxchg_user_asm(itype, ltype, _ptr, _pold, _new, label)	({ \
@@ -457,6 +476,30 @@ do {									\
 		       [ptr] "+m" (*_ptr)				\
 		     : "b" ((u32)__new),				\
 		       "c" ((u32)((u64)__new >> 32))			\
+		     : "memory", "cc");					\
+	if (unlikely(__result < 0))					\
+		goto label;						\
+	if (unlikely(!__result))					\
+		*_old = __old;						\
+	likely(__result);					})
+#else //!CONFIG_X86_32
+#define __try_cmpxchg128_user_asm(_ptr, _pold, _new, label)	({	\
+	int __result;							\
+	__typeof__(_ptr) _old = (__typeof__(_ptr))(_pold);		\
+	__typeof__(*(_ptr)) __old = *_old;				\
+	__typeof__(*(_ptr)) __new = (_new);				\
+	asm volatile("\n"						\
+		     "1: " LOCK_PREFIX "cmpxchg16b %[ptr]\n"		\
+		     "mov $0, %[result]\n\t"				\
+		     "setz %b[result]\n"				\
+		     "2:\n"						\
+		     _ASM_EXTABLE_TYPE_REG(1b, 2b, EX_TYPE_EFAULT_REG,	\
+					   %[result])			\
+		     : [result] "=q" (__result),			\
+		       "+A" (__old),					\
+		       [ptr] "+m" (*_ptr)				\
+		     : "b" ((u64)__new),				\
+		       "c" ((u64)((u128)__new >> 64))			\
 		     : "memory", "cc");					\
 	if (unlikely(__result < 0))					\
 		goto label;						\
@@ -551,10 +594,17 @@ do {										\
 
 extern void __try_cmpxchg_user_wrong_size(void);
 
-#ifndef CONFIG_X86_32
+#ifdef CONFIG_X86_32
+/* Always fail on 32 bit arch as it do not support 128 cmpxchg (i.e. cmpxchg16b
+ * instruction).
+ */
+#define __try_cmpxchg128_user_asm(_ptr, _pold, _new, label) ({ BUILD_BUG_ON(1); 0; })
+#else
 #define __try_cmpxchg64_user_asm(_ptr, _oldp, _nval, _label)		\
 	__try_cmpxchg_user_asm("q", "r", (_ptr), (_oldp), (_nval), _label)
+
 #endif
+
 
 /*
  * Force the pointer to u<size> to match the size expected by the asm helper.
@@ -579,6 +629,10 @@ extern void __try_cmpxchg_user_wrong_size(void);
 		break;								\
 	case 8:	__ret = __try_cmpxchg64_user_asm((__force u64 *)(_ptr), (_oldp),\
 						 (_nval), _label);		\
+		break;								\
+	case 16:								\
+		__ret = __try_cmpxchg128_user_asm((__force u128 *)(_ptr),	\
+						  (_oldp), (_nval), _label);	\
 		break;								\
 	default: __try_cmpxchg_user_wrong_size();				\
 	}									\
