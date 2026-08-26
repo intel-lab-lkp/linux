@@ -1675,11 +1675,15 @@ static int append_midi1_in_jack(struct f_midi2 *midi2,
 				struct midi1_cable_mapping *map,
 				unsigned int type)
 {
-	struct usb_midi_in_jack_descriptor *jack =
-		&config->jack_ins[config->jack_in++];
-	int id = ++config->jack_id;
+	struct usb_midi_in_jack_descriptor *jack;
+	int id;
 	int err;
 
+	if (config->jack_in >= MAX_CABLES)
+		return -EINVAL;
+
+	id = ++config->jack_id;
+	jack = &config->jack_ins[config->jack_in++];
 	jack->bLength = 0x06;
 	jack->bDescriptorType = USB_DT_CS_INTERFACE;
 	jack->bDescriptorSubtype = USB_MS_MIDI_IN_JACK;
@@ -1700,11 +1704,15 @@ static int append_midi1_out_jack(struct f_midi2 *midi2,
 				 struct midi1_cable_mapping *map,
 				 unsigned int type, unsigned int source)
 {
-	struct usb_midi_out_jack_descriptor_1 *jack =
-		&config->jack_outs[config->jack_out++];
-	int id = ++config->jack_id;
+	struct usb_midi_out_jack_descriptor_1 *jack;
+	int id;
 	int err;
 
+	if (config->jack_out >= MAX_CABLES)
+		return -EINVAL;
+
+	id = ++config->jack_id;
+	jack = &config->jack_outs[config->jack_out++];
 	jack->bLength = 0x09;
 	jack->bDescriptorType = USB_DT_CS_INTERFACE;
 	jack->bDescriptorSubtype = USB_MS_MIDI_OUT_JACK;
