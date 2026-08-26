@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/hwmon/ti,tmp102.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: TMP102 temperature sensor
+title: TMP102/TMP103 temperature sensor
 
 maintainers:
   - Krzysztof Kozlowski <krzk@kernel.org>
@@ -13,6 +13,7 @@ properties:
   compatible:
     enum:
       - ti,tmp102
+      - ti,tmp103
 
   interrupts:
     maxItems: 1
@@ -25,7 +26,7 @@ properties:
       A descriptive name for this channel, like "ambient" or "psu".
 
   "#thermal-sensor-cells":
-    const: 1
+    enum: [0, 1]
 
   vcc-supply:
     description: Power supply for tmp102
