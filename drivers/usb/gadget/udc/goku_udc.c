@@ -20,6 +20,7 @@
 // #define	VERBOSE		/* extra debug messages (success too) */
 // #define	USB_TRACE	/* packet-level success messages */
 
+#include <linux/container_of.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -1052,8 +1053,6 @@ static inline const char *dmastr(void)
 
 #ifdef CONFIG_USB_GADGET_DEBUG_FILES
 
-static const char proc_node_name [] = "driver/udc";
-
 #define FOURBITS "%s%s%s%s"
 #define EIGHTBITS FOURBITS FOURBITS
 
@@ -1701,7 +1700,7 @@ done:
 
 static void gadget_release(struct device *_dev)
 {
-	struct goku_udc	*dev = dev_get_drvdata(_dev);
+	struct goku_udc *dev = container_of(_dev, struct goku_udc, gadget.dev);
 
 	kfree(dev);
 }
@@ -1714,12 +1713,13 @@ static void goku_remove(struct pci_dev *pdev)
 
 	DBG(dev, "%s\n", __func__);
 
-	usb_del_gadget_udc(&dev->gadget);
+	if (dev->added)
+		usb_del_gadget(&dev->gadget);
 
 	BUG_ON(dev->driver);
 
 #ifdef CONFIG_USB_GADGET_DEBUG_FILES
-	remove_proc_entry(proc_node_name, NULL);
+	proc_remove(dev->proc_entry);
 #endif
 	if (dev->regs)
 		udc_reset(dev);
@@ -1736,6 +1736,8 @@ static void goku_remove(struct pci_dev *pdev)
 	dev->regs = NULL;
 
 	INFO(dev, "unbind\n");
+
+	usb_put_gadget(&dev->gadget);
 }
 
 /* wrap this driver around the specified pci device, but
@@ -1748,19 +1750,19 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	unsigned long		resource, len;
 	void __iomem		*base = NULL;
 	int			retval;
+#ifdef CONFIG_USB_GADGET_DEBUG_FILES
+	char			proc_node_name[64];
+#endif
 
 	if (!pdev->irq) {
 		printk(KERN_ERR "Check PCI %s IRQ setup!\n", pci_name(pdev));
-		retval = -ENODEV;
-		goto err;
+		return -ENODEV;
 	}
 
 	/* alloc, and start init */
 	dev = kzalloc_obj(*dev);
-	if (!dev) {
-		retval = -ENOMEM;
-		goto err;
-	}
+	if (!dev)
+		return -ENOMEM;
 
 	pci_set_drvdata(pdev, dev);
 	spin_lock_init(&dev->lock);
@@ -1770,6 +1772,8 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	/* the "gadget" abstracts/virtualizes the controller */
 	dev->gadget.name = driver_name;
+
+	usb_initialize_gadget(&pdev->dev, &dev->gadget, gadget_release);
 
 	/* now all the pci goodies ... */
 	retval = pci_enable_device(pdev);
@@ -1815,21 +1819,21 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 
 #ifdef CONFIG_USB_GADGET_DEBUG_FILES
-	proc_create_single_data(proc_node_name, 0, NULL, udc_proc_read, dev);
+	snprintf(proc_node_name, sizeof(proc_node_name), "driver/goku_udc-%s",
+		 pci_name(pdev));
+	dev->proc_entry = proc_create_single_data(proc_node_name, 0, NULL,
+						  udc_proc_read, dev);
 #endif
 
-	retval = usb_add_gadget_udc_release(&pdev->dev, &dev->gadget,
-			gadget_release);
+	retval = usb_add_gadget(&dev->gadget);
 	if (retval)
 		goto err;
+	dev->added = 1;
 
 	return 0;
 
 err:
-	if (dev)
-		goku_remove (pdev);
-	/* gadget_release is not registered yet, kfree explicitly */
-	kfree(dev);
+	goku_remove(pdev);
 	return retval;
 }
 

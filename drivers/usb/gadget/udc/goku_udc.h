@@ -247,7 +247,12 @@ struct goku_udc {
 					got_region:1,
 					req_config:1,
 					configured:1,
-					enabled:1;
+					enabled:1,
+					added:1;
+
+#ifdef CONFIG_USB_GADGET_DEBUG_FILES
+	struct proc_dir_entry		*proc_entry;
+#endif
 
 	/* pci state used to access those endpoints */
 	struct pci_dev			*pdev;
@@ -286,4 +291,3 @@ struct goku_udc {
 	xprintk(dev , KERN_WARNING , fmt , ## args)
 #define INFO(dev,fmt,args...) \
 	xprintk(dev , KERN_INFO , fmt , ## args)
-
