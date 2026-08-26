@@ -571,6 +571,7 @@ static int hfsplus_fill_super(struct super_block *sb, struct fs_context *fc)
 		goto out_close_attr_tree;
 	}
 	sbi->alloc_file = inode;
+	mapping_set_stable_writes(inode->i_mapping);
 
 	/* Load the root directory */
 	root = hfsplus_iget(sb, HFSPLUS_ROOT_CNID);
