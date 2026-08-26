@@ -793,10 +793,20 @@ retry:
 		if (cpumask_empty(available_mask)) {
 			/*
 			 * We have cycled through all the CPUs in the node;
-			 * reset the allocated map.
+			 * reset the allocated map. If the allocated map
+			 * has already been cleared, we will try the next numa
+			 * node. Set target_cpu to the default VMBUS_CONNECT_CPU
+			 * instead if the for loop is going to end.
 			 */
-			cpumask_clear(allocated_mask);
-			goto retry;
+			if (!cpumask_empty(allocated_mask)) {
+				cpumask_clear(allocated_mask);
+				goto retry;
+			}
+			if (i > ncpu) {
+				target_cpu = VMBUS_CONNECT_CPU;
+				break;
+			}
+			continue;	/* Try next numa node */
 		}
 
 		target_cpu = cpumask_first(available_mask);
