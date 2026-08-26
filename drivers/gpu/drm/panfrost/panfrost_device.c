@@ -497,6 +497,7 @@ void panfrost_device_reset(struct panfrost_device *pfdev)
 	panfrost_gpu_power_on(pfdev);
 	panfrost_mmu_reset(pfdev);
 	panfrost_jm_reset_interrupts(pfdev);
+	panfrost_perfcnt_reset(pfdev);
 }
 
 static int panfrost_device_runtime_resume(struct device *dev)
