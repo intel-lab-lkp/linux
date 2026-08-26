@@ -898,10 +898,52 @@ static bool b53_vlan_port_may_join_untagged(struct dsa_switch *ds, int port)
 	return dp->bridge == NULL;
 }
 
+static bool b53_vlan_hw_entry(struct dsa_switch *ds, const struct b53_vlan *vl,
+			      struct b53_vlan *hw)
+{
+	struct b53_device *dev = ds->priv;
+	bool standalone = false;
+	struct dsa_port *dp;
+	unsigned int port;
+
+	*hw = *vl;
+
+	if (dev->vlan_filtering)
+		return true;
+
+	hw->members = 0;
+	hw->untag = 0;
+
+	b53_for_each_port(dev, port) {
+		if (!(vl->members & BIT(port)))
+			continue;
+
+		dp = dsa_to_port(ds, port);
+
+		if (!dsa_port_is_cpu(dp)) {
+			if (dp->bridge)
+				continue;
+
+			standalone = true;
+		}
+
+		hw->members |= BIT(port);
+		hw->untag |= vl->untag & BIT(port);
+	}
+
+	if (!standalone) {
+		hw->members = 0;
+		hw->untag = 0;
+	}
+
+	return standalone;
+}
+
 int b53_configure_vlan(struct dsa_switch *ds)
 {
 	struct b53_device *dev = ds->priv;
 	struct b53_vlan vl = { 0 };
+	struct b53_vlan hw;
 	struct b53_vlan *v;
 	int i, def_vid;
 	u16 vid;
@@ -937,20 +979,23 @@ int b53_configure_vlan(struct dsa_switch *ds)
 	}
 	b53_set_vlan_entry(dev, def_vid, &vl);
 
+	/* Upon initial call we have not set-up any VLANs, but upon
+	 * system resume, we need to restore all VLAN entries.
+	 */
+	for (vid = def_vid + 1; vid < dev->num_vlans; vid++) {
+		v = &dev->vlans[vid];
+
+		if (!v->members)
+			continue;
+
+		if (!b53_vlan_hw_entry(ds, v, &hw))
+			continue;
+
+		b53_set_vlan_entry(dev, vid, &hw);
+		b53_fast_age_vlan(dev, vid);
+	}
+
 	if (dev->vlan_filtering) {
-		/* Upon initial call we have not set-up any VLANs, but upon
-		 * system resume, we need to restore all VLAN entries.
-		 */
-		for (vid = def_vid + 1; vid < dev->num_vlans; vid++) {
-			v = &dev->vlans[vid];
-
-			if (!v->members)
-				continue;
-
-			b53_set_vlan_entry(dev, vid, v);
-			b53_fast_age_vlan(dev, vid);
-		}
-
 		b53_for_each_port(dev, i) {
 			if (!dsa_is_cpu_port(ds, i))
 				b53_write16(dev, B53_VLAN_PAGE,
@@ -1720,6 +1765,7 @@ int b53_vlan_add(struct dsa_switch *ds, int port,
 	struct b53_device *dev = ds->priv;
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 	bool pvid = vlan->flags & BRIDGE_VLAN_INFO_PVID;
+	struct b53_vlan hw;
 	struct b53_vlan *vl;
 	u16 old_pvid, new_pvid;
 	int err;
@@ -1751,13 +1797,14 @@ int b53_vlan_add(struct dsa_switch *ds, int port,
 	else
 		vl->untag &= ~BIT(port);
 
-	if (!dev->vlan_filtering)
+	if (!b53_vlan_hw_entry(ds, vl, &hw))
 		return 0;
 
-	b53_set_vlan_entry(dev, vlan->vid, vl);
+	b53_set_vlan_entry(dev, vlan->vid, &hw);
 	b53_fast_age_vlan(dev, vlan->vid);
 
-	if (!dsa_is_cpu_port(ds, port) && new_pvid != old_pvid) {
+	if (dev->vlan_filtering &&
+	    !dsa_is_cpu_port(ds, port) && new_pvid != old_pvid) {
 		b53_write16(dev, B53_VLAN_PAGE, B53_VLAN_PORT_DEF_TAG(port),
 			    new_pvid);
 		b53_fast_age_vlan(dev, old_pvid);
@@ -1772,7 +1819,9 @@ int b53_vlan_del(struct dsa_switch *ds, int port,
 {
 	struct b53_device *dev = ds->priv;
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
+	struct b53_vlan hw;
 	struct b53_vlan *vl;
+	bool needs_hw;
 	u16 pvid;
 
 	if (vlan->vid == 0)
@@ -1781,6 +1830,8 @@ int b53_vlan_del(struct dsa_switch *ds, int port,
 	pvid = dev->ports[port].pvid;
 
 	vl = &dev->vlans[vlan->vid];
+
+	needs_hw = b53_vlan_hw_entry(ds, vl, &hw);
 
 	vl->members &= ~BIT(port);
 
@@ -1791,14 +1842,18 @@ int b53_vlan_del(struct dsa_switch *ds, int port,
 	if (untagged && !b53_vlan_port_needs_forced_tagged(ds, port))
 		vl->untag &= ~(BIT(port));
 
-	if (!dev->vlan_filtering)
+	if (!needs_hw)
 		return 0;
 
-	b53_set_vlan_entry(dev, vlan->vid, vl);
+	b53_vlan_hw_entry(ds, vl, &hw);
+	b53_set_vlan_entry(dev, vlan->vid, &hw);
 	b53_fast_age_vlan(dev, vlan->vid);
 
-	b53_write16(dev, B53_VLAN_PAGE, B53_VLAN_PORT_DEF_TAG(port), pvid);
-	b53_fast_age_vlan(dev, pvid);
+	if (dev->vlan_filtering) {
+		b53_write16(dev, B53_VLAN_PAGE, B53_VLAN_PORT_DEF_TAG(port),
+			    pvid);
+		b53_fast_age_vlan(dev, pvid);
+	}
 
 	return 0;
 }
@@ -2261,6 +2316,28 @@ int b53_mdb_del(struct dsa_switch *ds, int port,
 }
 EXPORT_SYMBOL(b53_mdb_del);
 
+static void b53_standalone_vlan_resync(struct dsa_switch *ds, int port)
+{
+	struct b53_device *dev = ds->priv;
+	struct b53_vlan hw;
+	struct b53_vlan *vl;
+	u16 vid;
+
+	if (dev->vlan_filtering)
+		return;
+
+	for (vid = b53_default_pvid(dev) + 1; vid < dev->num_vlans; vid++) {
+		vl = &dev->vlans[vid];
+
+		if (!(vl->members & BIT(port)))
+			continue;
+
+		b53_vlan_hw_entry(ds, vl, &hw);
+		b53_set_vlan_entry(dev, vid, &hw);
+		b53_fast_age_vlan(dev, vid);
+	}
+}
+
 int b53_br_join(struct dsa_switch *ds, int port, struct dsa_bridge bridge,
 		bool *tx_fwd_offload, struct netlink_ext_ack *extack)
 {
@@ -2324,6 +2401,8 @@ int b53_br_join(struct dsa_switch *ds, int port, struct dsa_bridge bridge,
 	b53_write16(dev, B53_PVLAN_PAGE, B53_PVLAN_PORT_MASK(port), pvlan);
 	dev->ports[port].vlan_ctl_mask = pvlan;
 
+	b53_standalone_vlan_resync(ds, port);
+
 	return 0;
 }
 EXPORT_SYMBOL(b53_br_join);
@@ -2376,6 +2455,8 @@ void b53_br_leave(struct dsa_switch *ds, int port, struct dsa_bridge bridge)
 		vl->members |= BIT(port);
 		b53_set_vlan_entry(dev, pvid, vl);
 	}
+
+	b53_standalone_vlan_resync(ds, port);
 }
 EXPORT_SYMBOL(b53_br_leave);
 
@@ -3213,6 +3294,7 @@ struct b53_device *b53_switch_alloc(struct device *base,
 	 * devices. (not hardware supported)
 	 */
 	ds->vlan_filtering_is_global = true;
+	ds->needs_standalone_vlan_offload = true;
 
 	mutex_init(&dev->reg_mutex);
 	mutex_init(&dev->stats_mutex);
