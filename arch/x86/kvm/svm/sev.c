@@ -3260,6 +3260,14 @@ out:
 	if (sev_snp_enabled) {
 		sev_supported_vmsa_features |= SVM_SEV_FEAT_SNP_ACTIVE;
 
+		/*
+		 * Unlike Secure TSC and IBPB-on-Entry below, BTB Isolation has
+		 * no host enumeration bit to gate on: the APM defines it as
+		 * architecturally present on every SEV-SNP-capable processor.
+		 * If SNP is supported, BTB Isolation is available.
+		 */
+		sev_supported_vmsa_features |= SVM_SEV_FEAT_BTB_ISOLATION;
+
 		if (tsc_khz && cpu_feature_enabled(X86_FEATURE_SNP_SECURE_TSC))
 			sev_supported_vmsa_features |= SVM_SEV_FEAT_SECURE_TSC;
 
