@@ -9,6 +9,12 @@
 
 #include <drm/drm_fourcc.h>
 
+/*
+ * drm_format_info_block_width() must return 0 for invalid arguments:
+ * a NULL format info, a negative plane index, or a plane index
+ * beyond the number of planes, instead of crashing or returning
+ * garbage.
+ */
 static void drm_test_format_block_width_invalid(struct kunit *test)
 {
 	const struct drm_format_info *info = NULL;
@@ -18,6 +24,11 @@ static void drm_test_format_block_width_invalid(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_format_info_block_width(info, 1), 0);
 }
 
+/*
+ * Check the block width of each plane of a single-plane, non-tiled
+ * format (XRGB4444): plane 0 is made of 1x1 blocks, and plane indexes
+ * beyond the number of planes report a width of 0.
+ */
 static void drm_test_format_block_width_one_plane(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_XRGB4444);
@@ -29,6 +40,11 @@ static void drm_test_format_block_width_one_plane(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_format_info_block_width(info, -1), 0);
 }
 
+/*
+ * Check the block width of each plane of a two-plane, non-tiled
+ * format (NV12): both planes are made of 1x1 blocks, and plane
+ * indexes beyond the number of planes report a width of 0.
+ */
 static void drm_test_format_block_width_two_plane(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_NV12);
@@ -41,6 +57,11 @@ static void drm_test_format_block_width_two_plane(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_format_info_block_width(info, -1), 0);
 }
 
+/*
+ * Check the block width of each plane of a three-plane, non-tiled
+ * format (YUV422): all three planes are made of 1x1 blocks, and plane
+ * indexes beyond the number of planes report a width of 0.
+ */
 static void drm_test_format_block_width_three_plane(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_YUV422);
@@ -54,6 +75,11 @@ static void drm_test_format_block_width_three_plane(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_format_info_block_width(info, -1), 0);
 }
 
+/*
+ * Check the block width of a tiled format (X0L0), whose pixels are
+ * stored in 2x2 blocks: plane 0 reports a width of 2, and plane
+ * indexes beyond the number of planes report a width of 0.
+ */
 static void drm_test_format_block_width_tiled(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_X0L0);
@@ -65,6 +91,12 @@ static void drm_test_format_block_width_tiled(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_format_info_block_width(info, -1), 0);
 }
 
+/*
+ * drm_format_info_block_height() must return 0 for invalid arguments:
+ * a NULL format info, a negative plane index, or a plane index
+ * beyond the number of planes, instead of crashing or returning
+ * garbage.
+ */
 static void drm_test_format_block_height_invalid(struct kunit *test)
 {
 	const struct drm_format_info *info = NULL;
@@ -74,6 +106,11 @@ static void drm_test_format_block_height_invalid(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_format_info_block_height(info, 1), 0);
 }
 
+/*
+ * Check the block height of each plane of a single-plane, non-tiled
+ * format (XRGB4444): plane 0 is made of 1x1 blocks, and plane indexes
+ * beyond the number of planes report a height of 0.
+ */
 static void drm_test_format_block_height_one_plane(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_XRGB4444);
@@ -85,6 +122,11 @@ static void drm_test_format_block_height_one_plane(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_format_info_block_height(info, 1), 0);
 }
 
+/*
+ * Check the block height of each plane of a two-plane, non-tiled
+ * format (NV12): both planes are made of 1x1 blocks, and plane
+ * indexes beyond the number of planes report a height of 0.
+ */
 static void drm_test_format_block_height_two_plane(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_NV12);
@@ -97,6 +139,11 @@ static void drm_test_format_block_height_two_plane(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_format_info_block_height(info, -1), 0);
 }
 
+/*
+ * Check the block height of each plane of a three-plane, non-tiled
+ * format (YUV422): all three planes are made of 1x1 blocks, and plane
+ * indexes beyond the number of planes report a height of 0.
+ */
 static void drm_test_format_block_height_three_plane(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_YUV422);
@@ -110,6 +157,11 @@ static void drm_test_format_block_height_three_plane(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_format_info_block_height(info, -1), 0);
 }
 
+/*
+ * Check the block height of a tiled format (X0L0), whose pixels are
+ * stored in 2x2 blocks: plane 0 reports a height of 2, and plane
+ * indexes beyond the number of planes report a height of 0.
+ */
 static void drm_test_format_block_height_tiled(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_X0L0);
@@ -121,6 +173,12 @@ static void drm_test_format_block_height_tiled(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_format_info_block_height(info, -1), 0);
 }
 
+/*
+ * drm_format_info_min_pitch() must return 0 for invalid arguments:
+ * a NULL format info, a negative plane index, or a plane index
+ * beyond the number of planes, instead of crashing or returning
+ * garbage.
+ */
 static void drm_test_format_min_pitch_invalid(struct kunit *test)
 {
 	const struct drm_format_info *info = NULL;
@@ -130,6 +188,11 @@ static void drm_test_format_min_pitch_invalid(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_format_info_min_pitch(info, 1, 0), 0);
 }
 
+/*
+ * Check the minimum pitch of the single 8-bits-per-pixel plane of
+ * RGB332: one byte per pixel for any width, including odd widths
+ * which must not be rounded, up to the UINT_MAX boundary.
+ */
 static void drm_test_format_min_pitch_one_plane_8bpp(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_RGB332);
@@ -153,6 +216,11 @@ static void drm_test_format_min_pitch_one_plane_8bpp(struct kunit *test)
 			(uint64_t)(UINT_MAX - 1));
 }
 
+/*
+ * Check the minimum pitch of the single 16-bits-per-pixel plane of
+ * XRGB4444: two bytes per pixel for any width, including odd widths
+ * which must not be rounded, up to the UINT_MAX boundary.
+ */
 static void drm_test_format_min_pitch_one_plane_16bpp(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_XRGB4444);
@@ -176,6 +244,11 @@ static void drm_test_format_min_pitch_one_plane_16bpp(struct kunit *test)
 			(uint64_t)(UINT_MAX - 1) * 2);
 }
 
+/*
+ * Check the minimum pitch of the single 24-bits-per-pixel plane of
+ * RGB888: three bytes per pixel for any width, including odd widths
+ * which must not be rounded, up to the UINT_MAX boundary.
+ */
 static void drm_test_format_min_pitch_one_plane_24bpp(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_RGB888);
@@ -199,6 +272,11 @@ static void drm_test_format_min_pitch_one_plane_24bpp(struct kunit *test)
 			(uint64_t)(UINT_MAX - 1) * 3);
 }
 
+/*
+ * Check the minimum pitch of the single 32-bits-per-pixel plane of
+ * ABGR8888: four bytes per pixel for any width, including odd widths
+ * which must not be rounded, up to the UINT_MAX boundary.
+ */
 static void drm_test_format_min_pitch_one_plane_32bpp(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_ABGR8888);
@@ -222,6 +300,12 @@ static void drm_test_format_min_pitch_one_plane_32bpp(struct kunit *test)
 			(uint64_t)(UINT_MAX - 1) * 4);
 }
 
+/*
+ * Check the minimum pitch of both planes of NV12: the first plane
+ * stores one byte per pixel, the second stores two bytes per pixel,
+ * odd widths must not be rounded, and chroma subsampling is not
+ * taken into account.
+ */
 static void drm_test_format_min_pitch_two_plane(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_NV12);
@@ -257,6 +341,11 @@ static void drm_test_format_min_pitch_two_plane(struct kunit *test)
 			(uint64_t)(UINT_MAX - 1));
 }
 
+/*
+ * Check the minimum pitch of all three planes of YUV422, where each
+ * plane stores one byte per pixel: odd widths must not be rounded and
+ * chroma subsampling is not taken into account.
+ */
 static void drm_test_format_min_pitch_three_plane_8bpp(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_YUV422);
@@ -304,6 +393,12 @@ static void drm_test_format_min_pitch_three_plane_8bpp(struct kunit *test)
 			(uint64_t)(UINT_MAX - 1) / 2);
 }
 
+/*
+ * Check the minimum pitch of a tiled format (X0L2), which stores
+ * 8 bytes in 2x2 pixel blocks: two bytes per pixel for any width,
+ * including odd widths which must not be rounded, up to the UINT_MAX
+ * boundary.
+ */
 static void drm_test_format_min_pitch_tiled(struct kunit *test)
 {
 	const struct drm_format_info *info = drm_format_info(DRM_FORMAT_X0L2);
