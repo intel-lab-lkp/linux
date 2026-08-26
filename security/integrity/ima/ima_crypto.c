@@ -491,7 +491,8 @@ int ima_calc_boot_aggregate(struct ima_digest_data *hash)
 			break;
 		}
 
-		if (crypto_id == HASH_ALGO_SHA256)
+		if (crypto_id == HASH_ALGO_SHA256 ||
+		    crypto_id == HASH_ALGO_SHA384)
 			bank_idx = i;
 
 		if (bank_idx == -1 && crypto_id == HASH_ALGO_SHA1)
