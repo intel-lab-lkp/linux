@@ -323,6 +323,7 @@ int panfrost_device_init(struct panfrost_device *pfdev)
 	pm_runtime_set_active(pfdev->base.dev);
 	pm_runtime_mark_last_busy(pfdev->base.dev);
 	pm_runtime_enable(pfdev->base.dev);
+	pm_runtime_get_noresume(pfdev->base.dev);
 	pm_runtime_set_autosuspend_delay(pfdev->base.dev, 50); /* ~3 frames */
 	pm_runtime_use_autosuspend(pfdev->base.dev);
 
@@ -334,9 +335,13 @@ int panfrost_device_init(struct panfrost_device *pfdev)
 	if (err < 0)
 		goto out_devreg;
 
+	pm_runtime_put_autosuspend(pfdev->base.dev);
+
 	return 0;
 
 out_devreg:
+	pm_runtime_dont_use_autosuspend(pfdev->base.dev);
+	pm_runtime_put_noidle(pfdev->base.dev);
 	pm_runtime_disable(pfdev->base.dev);
 	panfrost_device_disable_hw(pfdev);
 	panfrost_gem_fini(pfdev);
@@ -363,6 +368,8 @@ out_pm_domain:
 void panfrost_device_fini(struct panfrost_device *pfdev)
 {
 	pm_runtime_get_sync(pfdev->base.dev);
+	pm_runtime_dont_use_autosuspend(pfdev->base.dev);
+	pm_runtime_put_noidle(pfdev->base.dev);
 	pm_runtime_disable(pfdev->base.dev);
 
 	panfrost_device_disable_hw(pfdev);
