@@ -32,6 +32,7 @@ intel-target-$(CONFIG_INTEL_VSEC)		+= vsec.o
 intel-target-$(CONFIG_INTEL_BYTCRC_PWRSRC)	+= bytcrc_pwrsrc.o
 intel-target-$(CONFIG_INTEL_BXTWC_PMIC_TMU)	+= bxtwc_tmu.o
 intel-target-$(CONFIG_INTEL_CHTDC_TI_PWRBTN)	+= chtdc_ti_pwrbtn.o
+intel-target-$(CONFIG_INTEL_CHT_MODEM)		+= cht_modem.o
 intel-target-$(CONFIG_INTEL_CHTWC_INT33FE)	+= chtwc_int33fe.o
 intel-target-$(CONFIG_X86_ANDROID_TABLETS)	+= crystal_cove_charger.o
 intel-target-$(CONFIG_INTEL_MRFLD_PWRBTN)	+= mrfld_pwrbtn.o

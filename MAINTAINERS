@@ -29578,6 +29578,7 @@ Q:	https://patchwork.kernel.org/project/platform-driver-x86/list/
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/pdx86/platform-drivers-x86.git
 F:	drivers/platform/olpc/
 F:	drivers/platform/x86/
+F:	drivers/platform/x86/intel/cht_modem.c
 F:	include/linux/platform_data/x86/
 
 X86 PLATFORM UV HPE SUPERDOME FLEX

@@ -115,6 +115,22 @@ config INTEL_CHTDC_TI_PWRBTN
 	  To compile this driver as a module, choose M here: the module
 	  will be called intel_chtdc_ti_pwrbtn.
 
+config INTEL_CHT_MODEM
+	tristate "Intel Cherry Trail ACPI modem power driver"
+	depends on ACPI
+	depends on INTEL_SOC_PMIC_CHTWC
+	depends on USB
+	depends on USB_XHCI_PCI
+	help
+	  This driver controls the firmware power sequence for Intel XMM
+	  modems connected to the Cherry Trail xHCI SSIC port and described
+	  by the INT34D0 ACPI device. Currently this supports the Lenovo
+	  Yoga Book YB1-X91L.
+
+	  Build this driver into the kernel when the modem must be powered
+	  before the built-in xHCI controller probes. If built as a module,
+	  it will be called intel-cht_modem.
+
 config INTEL_CHTWC_INT33FE
 	tristate "Intel Cherry Trail Whiskey Cove ACPI INT33FE Driver"
 	depends on X86 && ACPI && I2C && REGULATOR
