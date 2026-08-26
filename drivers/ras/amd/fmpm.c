@@ -528,7 +528,7 @@ update_lengths:
 
 static int save_new_records(void)
 {
-	DECLARE_BITMAP(new_records, FMPM_MAX_NR_FRU);
+	DECLARE_BITMAP(new_records, FMPM_MAX_NR_FRU) = { 0 };
 	struct fru_rec *rec;
 	unsigned int i;
 	int ret = 0;
