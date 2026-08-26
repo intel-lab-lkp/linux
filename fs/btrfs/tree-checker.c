@@ -2313,6 +2313,67 @@ static int check_free_space_bitmap(struct extent_buffer *leaf,
 	return 0;
 }
 
+static int check_qgroup_status_item(const struct extent_buffer *leaf,
+				    const struct btrfs_key *key, int slot)
+{
+	struct btrfs_qgroup_status_item *qsi;
+	const u32 item_size = btrfs_item_size(leaf, slot);
+	/*
+	 * Since the introduction of simple mode, the size of qsi has been
+	 * enlarged. We need to handle both the old and new sizes.
+	 */
+	const unsigned int old_qsi_size =
+		offsetof(struct btrfs_qgroup_status_item, enable_gen);
+	u64 flags;
+
+	if (unlikely(key->objectid != 0 || key->offset != 0)) {
+		const struct btrfs_key expected = { .type = BTRFS_QGROUP_STATUS_KEY };
+
+		generic_err(leaf, slot,
+	"invalid qgroup status item key, has " BTRFS_KEY_FMT " expect " BTRFS_KEY_FMT,
+			    BTRFS_KEY_FMT_VALUE(key),
+			    BTRFS_KEY_FMT_VALUE(&expected));
+		return -EUCLEAN;
+	}
+
+	if (unlikely(item_size < old_qsi_size)) {
+		generic_err(leaf, slot,
+			    "invalid qgroup status item size, has %u expect at least %u",
+			    item_size, old_qsi_size);
+		return -EUCLEAN;
+	}
+
+	qsi = btrfs_item_ptr(leaf, slot, struct btrfs_qgroup_status_item);
+
+	/*
+	 * The version (1) hasn't changed for a long time, but even if we
+	 * are going to support a newer version, it won't suddenly jump
+	 * over 255 in the foreseeable future.
+	 */
+	if (unlikely(btrfs_qgroup_status_version(leaf, qsi) > U8_MAX)) {
+		generic_err(leaf, slot,
+			    "suspicious qgroup status version, has %llu expect %u",
+			    btrfs_qgroup_status_version(leaf, qsi),
+			    BTRFS_QGROUP_STATUS_VERSION);
+		return -EUCLEAN;
+	}
+	flags = btrfs_qgroup_status_flags(leaf, qsi);
+	if (unlikely(flags & ~BTRFS_QGROUP_STATUS_FLAGS_MASK)) {
+		generic_err(leaf, slot,
+			    "unknown qgroup status flags, has 0x%llx unknown flags 0x%llx",
+			    flags, flags & ~BTRFS_QGROUP_STATUS_FLAGS_MASK);
+		return -EUCLEAN;
+	}
+	if (unlikely(flags & BTRFS_QGROUP_STATUS_FLAG_SIMPLE_MODE &&
+		     item_size < sizeof(*qsi))) {
+		generic_err(leaf, slot,
+			    "invalid qgroup status item size, has %u expect at least %zu",
+			    item_size, sizeof(*qsi));
+		return -EUCLEAN;
+	}
+	return 0;
+}
+
 /*
  * Common point to switch the item-specific validation.
  */
@@ -2393,6 +2454,9 @@ static enum btrfs_tree_block_status check_leaf_item(struct extent_buffer *leaf,
 	case BTRFS_REMAP_KEY:
 	case BTRFS_REMAP_BACKREF_KEY:
 		ret = check_remap_key(leaf, key, slot);
+		break;
+	case BTRFS_QGROUP_STATUS_KEY:
+		ret = check_qgroup_status_item(leaf, key, slot);
 		break;
 	}
 
