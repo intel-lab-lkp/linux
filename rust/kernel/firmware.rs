@@ -385,3 +385,240 @@ impl ModInfoBuilder<0> {
         self.n + 1
     }
 }
+
+/// Firmware upload: let userspace hand a driver an image to write to its device.
+///
+/// Registering creates `/sys/class/firmware/<name>/` with the `loading`/`data` handshake plus
+/// `status`, `error`, `remaining_size` and `cancel`, which is the counterpart to [`Firmware`]:
+/// the same image works either way, but this one is pushed by userspace rather than pulled from
+/// `/lib/firmware`. Drivers use it when an image has to be written on demand -- a re-flash, or a
+/// deliberate downgrade -- rather than only when a newer version appears.
+pub mod upload {
+    use super::*;
+    use crate::types::ForeignOwnable;
+
+    /// Why an upload step failed. `None` means success.
+    ///
+    /// The values are the `enum fw_upload_err` the core reports back through `sysfs`, so a driver
+    /// says what went wrong in the vocabulary userspace already reads out of `error`.
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    #[repr(u32)]
+    pub enum Error {
+        /// The device reported a failure; see the kernel log.
+        Hardware = bindings::fw_upload_err_FW_UPLOAD_ERR_HW_ERROR,
+        /// A handshake with the device timed out.
+        Timeout = bindings::fw_upload_err_FW_UPLOAD_ERR_TIMEOUT,
+        /// Userspace wrote `cancel`.
+        Canceled = bindings::fw_upload_err_FW_UPLOAD_ERR_CANCELED,
+        /// Another upload is already running.
+        Busy = bindings::fw_upload_err_FW_UPLOAD_ERR_BUSY,
+        /// The image is not a size this device can take.
+        InvalidSize = bindings::fw_upload_err_FW_UPLOAD_ERR_INVALID_SIZE,
+        /// A read or write to the device failed; see the kernel log.
+        ReadWrite = bindings::fw_upload_err_FW_UPLOAD_ERR_RW_ERROR,
+        /// The flash is wearing out; wait and retry.
+        WearOut = bindings::fw_upload_err_FW_UPLOAD_ERR_WEAROUT,
+        /// The image is not one this device accepts.
+        InvalidFirmware = bindings::fw_upload_err_FW_UPLOAD_ERR_FW_INVALID,
+    }
+
+    /// A driver's side of an upload.
+    ///
+    /// `prepare` runs once with the whole image, which is where a driver rejects one that is not
+    /// for this device; `write` is then called repeatedly until every byte is written.
+    pub trait Upload: Sized {
+        /// Shared driver state, handed back to every callback.
+        type Data: ForeignOwnable + Send + Sync;
+
+        /// Validate the image and get the device ready. Runs before any write.
+        fn prepare(
+            data: <Self::Data as ForeignOwnable>::Borrowed<'_>,
+            image: &[u8],
+        ) -> Result<(), Error>;
+
+        /// Write `chunk`, which starts at `offset` in the image, returning how much was written.
+        ///
+        /// Called repeatedly until the image is consumed, so a driver may write less than it was
+        /// offered and be called again with the remainder.
+        fn write(
+            data: <Self::Data as ForeignOwnable>::Borrowed<'_>,
+            image: &[u8],
+            offset: u32,
+            chunk: &[u8],
+        ) -> Result<u32, Error>;
+
+        /// Report whether the device has finished programming what it was sent.
+        fn poll_complete(data: <Self::Data as ForeignOwnable>::Borrowed<'_>) -> Result<(), Error>;
+
+        /// Asked to stop, from another thread: set a flag the other callbacks observe.
+        fn cancel(data: <Self::Data as ForeignOwnable>::Borrowed<'_>);
+
+        /// Undo whatever `prepare` set up. Runs on success and on failure alike.
+        fn cleanup(_data: <Self::Data as ForeignOwnable>::Borrowed<'_>) {}
+    }
+
+    /// The C vtable for `U`, built once at compile time.
+    struct Vtable<U: Upload>(core::marker::PhantomData<U>);
+
+    impl<U: Upload> Vtable<U> {
+        /// Turn a driver result into the `enum fw_upload_err` the core expects.
+        fn err(r: Result<(), Error>) -> bindings::fw_upload_err {
+            match r {
+                Ok(()) => bindings::fw_upload_err_FW_UPLOAD_ERR_NONE,
+                Err(e) => e as bindings::fw_upload_err,
+            }
+        }
+
+        /// # Safety
+        ///
+        /// Called by the firmware core with a valid `fw_upload` whose `dd_handle` is the pointer
+        /// [`Registration::new`] passed it, and `data` valid for `size` bytes.
+        unsafe extern "C" fn prepare(
+            fw: *mut bindings::fw_upload,
+            data: *const u8,
+            size: u32,
+        ) -> bindings::fw_upload_err {
+            // SAFETY: the core owns `fw` for the duration of the call.
+            let handle = unsafe { (*fw).dd_handle };
+            // SAFETY: `handle` came from `into_foreign()` in `Registration::new` and outlives the
+            // registration; `data`/`size` describe the image the core is holding.
+            let (d, image) = unsafe {
+                (
+                    <U::Data as ForeignOwnable>::borrow(handle.cast()),
+                    core::slice::from_raw_parts(data, size as usize),
+                )
+            };
+            Self::err(U::prepare(d, image))
+        }
+
+        /// # Safety
+        ///
+        /// As [`Self::prepare`]; `written` is a valid out-parameter.
+        unsafe extern "C" fn write(
+            fw: *mut bindings::fw_upload,
+            data: *const u8,
+            offset: u32,
+            size: u32,
+            written: *mut u32,
+        ) -> bindings::fw_upload_err {
+            // SAFETY: as above.
+            let handle = unsafe { (*fw).dd_handle };
+            // SAFETY: as above; `data + offset` is within the image the core holds.
+            let (d, image, chunk) = unsafe {
+                (
+                    <U::Data as ForeignOwnable>::borrow(handle.cast()),
+                    core::slice::from_raw_parts(data, (offset + size) as usize),
+                    core::slice::from_raw_parts(data.add(offset as usize), size as usize),
+                )
+            };
+            match U::write(d, image, offset, chunk) {
+                Ok(n) => {
+                    // SAFETY: the core passes a valid pointer for the result.
+                    unsafe { *written = n };
+                    bindings::fw_upload_err_FW_UPLOAD_ERR_NONE
+                }
+                Err(e) => e as bindings::fw_upload_err,
+            }
+        }
+
+        /// # Safety
+        ///
+        /// As [`Self::prepare`].
+        unsafe extern "C" fn poll_complete(
+            fw: *mut bindings::fw_upload,
+        ) -> bindings::fw_upload_err {
+            // SAFETY: as above.
+            let handle = unsafe { (*fw).dd_handle };
+            // SAFETY: as above.
+            let d = unsafe { <U::Data as ForeignOwnable>::borrow(handle.cast()) };
+            Self::err(U::poll_complete(d))
+        }
+
+        /// # Safety
+        ///
+        /// As [`Self::prepare`]. Runs on a different thread from the rest.
+        unsafe extern "C" fn cancel(fw: *mut bindings::fw_upload) {
+            // SAFETY: as above.
+            let handle = unsafe { (*fw).dd_handle };
+            // SAFETY: as above.
+            let d = unsafe { <U::Data as ForeignOwnable>::borrow(handle.cast()) };
+            U::cancel(d)
+        }
+
+        /// # Safety
+        ///
+        /// As [`Self::prepare`].
+        unsafe extern "C" fn cleanup(fw: *mut bindings::fw_upload) {
+            // SAFETY: as above.
+            let handle = unsafe { (*fw).dd_handle };
+            // SAFETY: as above.
+            let d = unsafe { <U::Data as ForeignOwnable>::borrow(handle.cast()) };
+            U::cleanup(d)
+        }
+
+        const VTABLE: bindings::fw_upload_ops = bindings::fw_upload_ops {
+            prepare: Some(Self::prepare),
+            write: Some(Self::write),
+            poll_complete: Some(Self::poll_complete),
+            cancel: Some(Self::cancel),
+            cleanup: Some(Self::cleanup),
+        };
+    }
+
+    /// A live `/sys/class/firmware/<name>/` upload interface, unregistered when dropped.
+    pub struct Registration<U: Upload> {
+        fw: *mut bindings::fw_upload,
+        data: *mut core::ffi::c_void,
+        _p: core::marker::PhantomData<U>,
+    }
+
+    // SAFETY: the C side is internally locked, and `U::Data` is `Send + Sync`.
+    unsafe impl<U: Upload> Send for Registration<U> {}
+    // SAFETY: as above.
+    unsafe impl<U: Upload> Sync for Registration<U> {}
+
+    impl<U: Upload> Registration<U> {
+        /// Publish an upload interface named `name` under `parent`.
+        pub fn new(
+            module: &'static crate::ThisModule,
+            parent: &Device,
+            name: &CStr,
+            data: U::Data,
+        ) -> Result<Self> {
+            let handle = data.into_foreign();
+            // SAFETY: `parent` and `name` are valid for the call; the vtable is 'static; `handle`
+            // is kept alive by this registration and released in `drop`.
+            let fw = unsafe {
+                bindings::firmware_upload_register(
+                    module.as_ptr(),
+                    parent.as_raw(),
+                    name.as_char_ptr(),
+                    &Vtable::<U>::VTABLE,
+                    handle.cast(),
+                )
+            };
+            let fw = match crate::error::from_err_ptr(fw) {
+                Ok(fw) => fw,
+                Err(e) => {
+                    // SAFETY: registration failed, so nothing else observes `handle`.
+                    drop(unsafe { <U::Data as ForeignOwnable>::from_foreign(handle) });
+                    return Err(e);
+                }
+            };
+            Ok(Self {
+                fw,
+                data: handle.cast(),
+                _p: core::marker::PhantomData,
+            })
+        }
+    }
+
+    impl<U: Upload> Drop for Registration<U> {
+        fn drop(&mut self) {
+            // SAFETY: `self.fw` came from `firmware_upload_register` and is unregistered once.
+            unsafe { bindings::firmware_upload_unregister(self.fw) };
+            // SAFETY: the core no longer holds `dd_handle` after unregistering.
+            drop(unsafe { <U::Data as ForeignOwnable>::from_foreign(self.data.cast()) });
+        }
+    }
+}
