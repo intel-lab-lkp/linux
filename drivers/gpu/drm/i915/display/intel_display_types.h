@@ -1689,6 +1689,9 @@ struct intel_hdmi {
 	} dp_dual_mode;
 	struct intel_connector *attached_connector;
 	struct cec_notifier *cec_notifier;
+
+	/* Debugfs knob to force EDID reads over GPIO bit-banging. */
+	bool force_bit_banging;
 };
 
 struct intel_dp_mst_encoder;

@@ -26,6 +26,7 @@
  *	Jesse Barnes <jesse.barnes@intel.com>
  */
 
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/hdmi.h>
 #include <linux/i2c.h>
@@ -3110,6 +3111,56 @@ void intel_infoframe_init(struct intel_digital_port *dig_port)
 		dig_port->set_infoframes = cpt_set_infoframes;
 		dig_port->infoframes_enabled = cpt_infoframes_enabled;
 	}
+}
+
+static int i915_hdmi_force_bit_banging_show(void *data, u64 *val)
+{
+	struct intel_connector *connector = to_intel_connector(data);
+
+	*val = READ_ONCE(intel_attached_hdmi(connector)->force_bit_banging);
+
+	return 0;
+}
+
+static int i915_hdmi_force_bit_banging_write(void *data, u64 val)
+{
+	struct intel_connector *connector = to_intel_connector(data);
+	struct intel_display *display = to_intel_display(connector);
+	struct intel_hdmi *intel_hdmi = intel_attached_hdmi(connector);
+
+	if (val > 1)
+		return -EINVAL;
+
+	drm_dbg_kms(display->drm,
+		    "[CONNECTOR:%d:%s] %sabling forced GPIO bit-banging for EDID reads\n",
+		    connector->base.base.id, connector->base.name,
+		    val ? "en" : "dis");
+
+	WRITE_ONCE(intel_hdmi->force_bit_banging, val);
+
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(i915_hdmi_force_bit_banging_fops,
+			 i915_hdmi_force_bit_banging_show,
+			 i915_hdmi_force_bit_banging_write, "%llu\n");
+
+/**
+ * intel_hdmi_connector_debugfs_add - add HDMI specific connector debugfs files
+ * @connector: pointer to a registered intel_connector
+ *
+ * Cleanup will be done by drm_connector_unregister() through a call to
+ * drm_debugfs_connector_remove().
+ */
+void intel_hdmi_connector_debugfs_add(struct intel_connector *connector)
+{
+	struct dentry *root = connector->base.debugfs_entry;
+
+	if (connector->base.connector_type != DRM_MODE_CONNECTOR_HDMIA &&
+	    connector->base.connector_type != DRM_MODE_CONNECTOR_HDMIB)
+		return;
+
+	debugfs_create_file("i915_hdmi_force_bit_banging", 0644, root,
+			    connector, &i915_hdmi_force_bit_banging_fops);
 }
 
 bool intel_hdmi_init_connector(struct intel_digital_port *dig_port,
