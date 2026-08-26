@@ -97,6 +97,30 @@ void num_poisoned_pages_sub(unsigned long pfn, long i)
 		memblk_nr_poison_sub(pfn, i);
 }
 
+static void update_per_node_mf_stats(unsigned long pfn, enum mf_result result);
+
+bool __init hwpoison_boot_pfn(unsigned long pfn)
+{
+	struct page *page = pfn_to_online_page(pfn);
+
+	if (!page || PageHWPoison(page))
+		return false;
+
+	if (is_free_buddy_page(page)) {
+		if (!take_page_off_buddy(page))
+			return false;
+		page_ref_inc(page);
+	} else if (!PageReserved(page)) {
+		return false;
+	}
+
+	SetPageHWPoison(page);
+	update_per_node_mf_stats(pfn, MF_RECOVERED);
+	atomic_long_inc(&num_poisoned_pages);
+
+	return true;
+}
+
 /**
  * MF_ATTR_RO - Create sysfs entry for each memory failure statistics.
  * @_name: name of the file in the per NUMA sysfs directory.
