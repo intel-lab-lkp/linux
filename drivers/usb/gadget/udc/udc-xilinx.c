@@ -627,6 +627,24 @@ top:
 		return 0;
 	}
 
+	if (count > bufferspace) {
+		/*
+		 * The host sent a packet larger than the request buffer.
+		 * The PIO path would memcpy_toio() the whole packet into
+		 * req->usb_req.buf (and the DMA path would program a DMA
+		 * transfer of count bytes), overflowing the buffer; only the
+		 * bookkeeping actual += min(count, bufferspace) afterwards
+		 * would be clamped.  Complete the request with -EOVERFLOW
+		 * instead of copying past it.
+		 */
+		if (req->usb_req.status != -EOVERFLOW)
+			dev_dbg(udc->dev, "%s overflow %d into %u\n",
+				ep->ep_usb.name, count, bufferspace);
+		req->usb_req.status = -EOVERFLOW;
+		xudc_done(ep, req, -EOVERFLOW);
+		return 0;
+	}
+
 	ret = xudc_eptxrx(ep, req, buf, count);
 	switch (ret) {
 	case 0:
