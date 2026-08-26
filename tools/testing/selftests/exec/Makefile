@@ -16,6 +16,7 @@ TEST_GEN_PROGS_EXTENDED := false inc set-exec script-exec.inc script-noexec.inc
 TEST_GEN_FILES := execveat.symlink execveat.denatured script subdir
 # Makefile is a run-time dependency, since it's accessed by the execveat test
 TEST_FILES := Makefile
+TEST_INCLUDES := ../kselftest/ktap_helpers.sh
 
 TEST_GEN_PROGS += recursion-depth
 TEST_GEN_PROGS += null-argv
