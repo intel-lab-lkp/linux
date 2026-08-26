@@ -77,6 +77,13 @@ static void rdtgroup_destroy_root(void);
 struct dentry *debugfs_resctrl;
 
 /*
+ * Global kernel mode policy state: supported modes, active mode, assignment
+ * capabilities, assignment state, and the resource group selected for a global
+ * assignment.
+ */
+static struct resctrl_kmode_cfg resctrl_kcfg;
+
+/*
  * Memory bandwidth monitoring event to use for the default CTRL_MON group
  * and each new CTRL_MON group created by the user.  Only relevant when
  * the filesystem is mounted with the "mba_MBps" option so it does not
@@ -2294,6 +2301,30 @@ static void io_alloc_init(void)
 					 RFTYPE_RES_CACHE);
 		resctrl_file_fflags_init("io_alloc_cbm",
 					 RFTYPE_CTRL_INFO | RFTYPE_RES_CACHE);
+	}
+}
+
+/*
+ * Initialize kernel mode policy defaults from architecture capabilities.
+ *
+ * When ctrl_en or mon_en is set, RESCTRL_INHERIT_USER is supported and
+ * selected as the initial active mode. When neither is set, kmode_sup is
+ * left empty, kernel mode policy is unavailable, and kmode_cur remains at
+ * its zero-initialized default (RESCTRL_INHERIT_USER) but is unused.
+ */
+static void resctrl_kmode_init(void)
+{
+	resctrl_kcfg.caps.ctrl_en = resctrl_arch_alloc_capable();
+	resctrl_kcfg.active.ctrl_mode = KMODE_INHERIT;
+	resctrl_kcfg.caps.mon_en = resctrl_arch_mon_capable();
+	resctrl_kcfg.active.mon_mode = KMODE_INHERIT;
+	resctrl_kcfg.active.k_rdtgrp = NULL;
+
+	if (resctrl_kcfg.caps.ctrl_en || resctrl_kcfg.caps.mon_en) {
+		resctrl_kcfg.active.kmode_cur = RESCTRL_INHERIT_USER;
+		__set_bit(RESCTRL_INHERIT_USER, resctrl_kcfg.caps.kmode_sup);
+	} else {
+		bitmap_zero(resctrl_kcfg.caps.kmode_sup, RESCTRL_NUM_KERNEL_MODES);
 	}
 }
 
@@ -4815,6 +4846,8 @@ int resctrl_init(void)
 	ret = resctrl_l3_mon_resource_init();
 	if (ret)
 		return ret;
+
+	resctrl_kmode_init();
 
 	ret = sysfs_create_mount_point(fs_kobj, "resctrl");
 	if (ret) {

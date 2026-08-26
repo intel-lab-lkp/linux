@@ -314,6 +314,57 @@ struct mbm_state {
 	u32	prev_bw;
 };
 
+/**
+ * enum kmode_state - Control or monitoring state for a kernel mode
+ * @KMODE_INHERIT: Inherit from the user space task.
+ * @KMODE_ASSIGN: Use a global assignment for kernel mode.
+ */
+enum kmode_state {
+	KMODE_INHERIT,
+	KMODE_ASSIGN
+};
+
+/**
+ * struct resctrl_kmode_caps - Static kernel mode capabilities
+ * @kmode_sup:	Bitmap of supported kernel modes. Empty when neither
+ *		@ctrl_en nor @mon_en is set and kernel mode policy is
+ *		unavailable on this system.
+ * @ctrl_en:	Whether kernel mode may use global assignment for control.
+ * @mon_en:	Whether kernel mode may use global assignment for monitoring.
+ */
+struct resctrl_kmode_caps {
+	DECLARE_BITMAP(kmode_sup, RESCTRL_NUM_KERNEL_MODES);
+	bool				ctrl_en;
+	bool				mon_en;
+};
+
+/**
+ * struct resctrl_kmode_active - Runtime kernel mode state
+ * @kmode_cur:	Currently selected kernel mode.
+ * @ctrl_mode:	Control assignment state when kernel mode is active.
+ * @mon_mode:	Monitoring assignment state when kernel mode is active.
+ * @k_rdtgrp:	Resource group backing global assignment mode.
+ *
+ * When @kmode_cur is %RESCTRL_INHERIT_USER, assignment state is ignored and
+ * @k_rdtgrp is %NULL.
+ */
+struct resctrl_kmode_active {
+	enum resctrl_kernel_mode	kmode_cur;
+	enum kmode_state		ctrl_mode;
+	enum kmode_state		mon_mode;
+	struct rdtgroup			*k_rdtgrp;
+};
+
+/**
+ * struct resctrl_kmode_cfg - Global kernel mode state
+ * @caps:	Supported modes and assignment capabilities.
+ * @active:	Active mode, assignment state, and assigned group.
+ */
+struct resctrl_kmode_cfg {
+	struct resctrl_kmode_caps	caps;
+	struct resctrl_kmode_active	active;
+};
+
 extern struct mutex rdtgroup_mutex;
 
 static inline const char *rdt_kn_name(const struct kernfs_node *kn)
