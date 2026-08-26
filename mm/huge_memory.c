@@ -3936,6 +3936,7 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 	int ret = 0;
 
 	VM_WARN_ON_ONCE(!mapping && end);
+	VM_WARN_ON_ONCE_FOLIO(mapping && folio_test_swapcache(folio), folio);
 
 	if (!folio_ref_freeze(folio, folio_cache_ref_count(folio) + 1))
 		return -EAGAIN;
@@ -3965,14 +3966,8 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 			lruvec_stat_mod_folio(folio, NR_FILE_THPS, -nr);
 	}
 
-	if (folio_test_swapcache(folio)) {
-		if (mapping) {
-			VM_WARN_ON_ONCE_FOLIO(mapping, folio);
-			return -EINVAL;
-		}
-
+	if (folio_test_swapcache(folio))
 		ci = swap_cluster_get_and_lock(folio);
-	}
 
 	/* lock lru list/PageCompound, ref frozen by page_ref_freeze */
 	if (do_lru)
