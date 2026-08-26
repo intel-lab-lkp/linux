@@ -254,7 +254,7 @@ static void loadparam(struct adapter *padapter)
 
 	registry_par->enable80211d = (u8)rtw_80211d;
 
-	snprintf(registry_par->ifname, 16, "%s", ifname);
+	strscpy(registry_par->ifname, ifname, sizeof(registry_par->ifname));
 
 	registry_par->notch_filter = (u8)rtw_notch_filter;
 
