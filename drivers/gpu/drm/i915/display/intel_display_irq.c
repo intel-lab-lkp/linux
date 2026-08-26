@@ -1976,16 +1976,20 @@ static void _vlv_display_irq_reset(struct intel_display *display)
 	display->irq.vlv_imr_mask = ~0u;
 }
 
-static void vlv_display_irq_reset(struct intel_display *display)
+static void vlv_display_irq_reset(struct intel_display *display, bool keep_hpd)
 {
+	drm_WARN_ON(display->drm, keep_hpd);
+
 	spin_lock_irq(&display->irq.lock);
 	if (display->irq.vlv_display_irqs_enabled)
 		_vlv_display_irq_reset(display);
 	spin_unlock_irq(&display->irq.lock);
 }
 
-static void i9xx_display_irq_reset(struct intel_display *display)
+static void i9xx_display_irq_reset(struct intel_display *display, bool keep_hpd)
 {
+	drm_WARN_ON(display->drm, keep_hpd);
+
 	if (HAS_HOTPLUG(display)) {
 		i915_hotplug_interrupt_update(display, 0xffffffff, 0);
 		intel_de_rmw(display, PORT_HOTPLUG_STAT(display), 0, 0);
@@ -2177,8 +2181,10 @@ static void ibx_display_irq_reset(struct intel_display *display)
 		intel_de_write(display, SERR_INT, 0xffffffff);
 }
 
-static void ilk_display_irq_reset(struct intel_display *display)
+static void ilk_display_irq_reset(struct intel_display *display, bool keep_hpd)
 {
+	drm_WARN_ON(display->drm, keep_hpd);
+
 	irq_reset(display, DE_IRQ_REGS);
 	display->irq.ilk_de_imr_mask = ~0u;
 
@@ -2193,9 +2199,11 @@ static void ilk_display_irq_reset(struct intel_display *display)
 	ibx_display_irq_reset(display);
 }
 
-static void gen8_display_irq_reset(struct intel_display *display)
+static void gen8_display_irq_reset(struct intel_display *display, bool keep_hpd)
 {
 	enum pipe pipe;
+
+	drm_WARN_ON(display->drm, keep_hpd);
 
 	intel_de_write(display, EDP_PSR_IMR, 0xffffffff);
 	intel_de_write(display, EDP_PSR_IIR, 0xffffffff);
@@ -2212,13 +2220,14 @@ static void gen8_display_irq_reset(struct intel_display *display)
 		ibx_display_irq_reset(display);
 }
 
-static void gen11_display_irq_reset(struct intel_display *display)
+static void gen11_display_irq_reset(struct intel_display *display, bool keep_hpd)
 {
 	enum pipe pipe;
 	u32 trans_mask = BIT(TRANSCODER_A) | BIT(TRANSCODER_B) |
 		BIT(TRANSCODER_C) | BIT(TRANSCODER_D);
 
-	intel_de_write(display, GEN11_DISPLAY_INT_CTL, 0);
+	if (!keep_hpd)
+		intel_de_write(display, GEN11_DISPLAY_INT_CTL, 0);
 
 	if (DISPLAY_VER(display) >= 12) {
 		enum transcoder trans;
@@ -2250,13 +2259,20 @@ static void gen11_display_irq_reset(struct intel_display *display)
 	irq_reset(display, GEN8_DE_PORT_IRQ_REGS);
 	irq_reset(display, GEN8_DE_MISC_IRQ_REGS);
 
-	if (DISPLAY_VER(display) >= 14)
-		irq_reset(display, PICAINTERRUPT_IRQ_REGS);
-	else
-		irq_reset(display, GEN11_DE_HPD_IRQ_REGS);
+	/*
+	 * When runtime suspending to D3hot with PME armed, leave the HPD
+	 * interrupt registers programmed so that a hotplug can still
+	 * generate the wake event. Everything else is reset as usual.
+	 */
+	if (!keep_hpd) {
+		if (DISPLAY_VER(display) >= 14)
+			irq_reset(display, PICAINTERRUPT_IRQ_REGS);
+		else
+			irq_reset(display, GEN11_DE_HPD_IRQ_REGS);
 
-	if (INTEL_PCH_TYPE(display) >= PCH_ICP)
-		irq_reset(display, SDE_IRQ_REGS);
+		if (INTEL_PCH_TYPE(display) >= PCH_ICP)
+			irq_reset(display, SDE_IRQ_REGS);
+	}
 }
 
 void gen8_irq_power_well_post_enable(struct intel_display *display,
@@ -2542,7 +2558,7 @@ static void gen11_de_irq_postinstall(struct intel_display *display)
 }
 
 struct intel_display_irq_funcs {
-	void (*reset)(struct intel_display *display);
+	void (*reset)(struct intel_display *display, bool keep_hpd);
 	void (*postinstall)(struct intel_display *display);
 	void (*ack)(struct intel_display *display, struct intel_display_irq_state *state);
 	bool (*handler)(struct intel_display *display, const struct intel_display_irq_state *state);
@@ -2587,12 +2603,12 @@ static const struct intel_display_irq_funcs i915_display_irq_funcs = {
 	.handler = i915_display_irq_handler,
 };
 
-void intel_display_irq_reset(struct intel_display *display)
+void intel_display_irq_reset(struct intel_display *display, bool keep_hpd)
 {
 	if (!HAS_DISPLAY(display))
 		return;
 
-	display->irq.funcs->reset(display);
+	display->irq.funcs->reset(display, keep_hpd);
 }
 
 void intel_display_irq_postinstall(struct intel_display *display)

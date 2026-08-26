@@ -1190,7 +1190,7 @@ void xe_device_shutdown(struct xe_device *xe)
 
 	xe_display_shutdown(xe);
 
-	xe_irq_suspend(xe);
+	xe_irq_suspend(xe, false);
 
 	for_each_gt(gt, xe, id)
 		xe_gt_shutdown(gt);

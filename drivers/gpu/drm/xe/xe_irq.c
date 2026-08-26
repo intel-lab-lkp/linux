@@ -644,7 +644,7 @@ static void vf_irq_reset(struct xe_device *xe)
 	}
 }
 
-static void xe_irq_reset(struct xe_device *xe)
+static void xe_irq_reset(struct xe_device *xe, bool keep_hpd)
 {
 	struct xe_tile *tile;
 	u8 id;
@@ -666,7 +666,7 @@ static void xe_irq_reset(struct xe_device *xe)
 
 	tile = xe_device_get_root_tile(xe);
 	mask_and_disable(tile, GU_MISC_IRQ_OFFSET);
-	xe_display_irq_reset(xe);
+	xe_display_irq_reset(xe, keep_hpd);
 	xe_i2c_irq_reset(xe);
 
 	/*
@@ -789,7 +789,7 @@ static void irq_uninstall(void *arg)
 	if (!atomic_xchg(&xe->irq.enabled, 0))
 		return;
 
-	xe_irq_reset(xe);
+	xe_irq_reset(xe, false);
 
 	if (xe_device_has_msix(xe))
 		xe_irq_msix_free(xe);
@@ -813,7 +813,7 @@ int xe_irq_install(struct xe_device *xe)
 
 	xe_hw_error_init(xe);
 
-	xe_irq_reset(xe);
+	xe_irq_reset(xe, false);
 
 	if (xe_device_has_msix(xe)) {
 		nvec = xe->irq.msix.nvec;
@@ -843,7 +843,7 @@ static void xe_irq_msi_synchronize_irq(struct xe_device *xe)
 	synchronize_irq(to_pci_dev(xe->drm.dev)->irq);
 }
 
-void xe_irq_suspend(struct xe_device *xe)
+void xe_irq_suspend(struct xe_device *xe, bool keep_hpd)
 {
 	atomic_set(&xe->irq.enabled, 0); /* no new irqs */
 
@@ -852,7 +852,7 @@ void xe_irq_suspend(struct xe_device *xe)
 		xe_irq_msix_synchronize_irq(xe);
 	else
 		xe_irq_msi_synchronize_irq(xe);
-	xe_irq_reset(xe); /* turn irqs off */
+	xe_irq_reset(xe, keep_hpd); /* turn irqs off */
 }
 
 void xe_irq_resume(struct xe_device *xe)
@@ -866,7 +866,11 @@ void xe_irq_resume(struct xe_device *xe)
 	 * 2. display is not yet resumed
 	 */
 	atomic_set(&xe->irq.enabled, 1);
-	xe_irq_reset(xe);
+	/*
+	 * Always a full reset here: once awake, HPD is delivered as a normal
+	 * interrupt again and the postinstall below re-arms that path.
+	 */
+	xe_irq_reset(xe, false);
 	xe_irq_postinstall(xe); /* turn irqs on */
 
 	for_each_gt(gt, xe, id)

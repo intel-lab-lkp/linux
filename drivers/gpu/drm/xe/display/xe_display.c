@@ -220,14 +220,14 @@ void xe_display_irq_enable(struct xe_device *xe, u32 gu_misc_iir)
 		intel_opregion_asle_intr(display);
 }
 
-void xe_display_irq_reset(struct xe_device *xe)
+void xe_display_irq_reset(struct xe_device *xe, bool keep_hpd)
 {
 	struct intel_display *display = xe->display;
 
 	if (!xe->info.probe_display)
 		return;
 
-	intel_display_irq_reset(display);
+	intel_display_irq_reset(display, keep_hpd);
 }
 
 void xe_display_irq_postinstall(struct xe_device *xe)

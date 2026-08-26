@@ -202,7 +202,7 @@ int xe_pm_suspend(struct xe_device *xe)
 			goto err_display;
 	}
 
-	xe_irq_suspend(xe);
+	xe_irq_suspend(xe, false);
 
 	xe_display_pm_suspend_late(xe);
 
@@ -639,7 +639,7 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
 			goto out_resume;
 	}
 
-	xe_irq_suspend(xe);
+	xe_irq_suspend(xe, false);
 
 	xe_display_pm_runtime_suspend_late(xe);
 

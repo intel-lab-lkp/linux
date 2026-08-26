@@ -64,7 +64,7 @@ struct intel_display_irq_state {
 	u32 pipe_stats[I915_MAX_PIPES];
 };
 
-void intel_display_irq_reset(struct intel_display *display);
+void intel_display_irq_reset(struct intel_display *display, bool keep_hpd);
 void intel_display_irq_postinstall(struct intel_display *display);
 void intel_display_irq_ack(struct intel_display *display, struct intel_display_irq_state *state);
 bool intel_display_irq_handler(struct intel_display *display, const struct intel_display_irq_state *state);
