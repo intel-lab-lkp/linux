@@ -218,6 +218,7 @@ static struct svcxprt_rdma *svc_rdma_create_xprt(struct svc_serv *serv,
 	 * transports are suitable here.
 	 */
 	set_bit(XPT_CONG_CTRL, &cma_xprt->sc_xprt.xpt_flags);
+	set_bit(XPT_ORDERED, &cma_xprt->sc_xprt.xpt_flags);
 
 	return cma_xprt;
 }

@@ -99,6 +99,7 @@ enum {
 	XPT_LOCAL,		/* connection from loopback interface */
 	XPT_KILL_TEMP,		/* call xpo_kill_temp_xprt before closing */
 	XPT_CONG_CTRL,		/* has congestion control */
+	XPT_ORDERED,		/* connection-oriented, in-order delivery */
 	XPT_HANDSHAKE,		/* xprt requests a handshake */
 	XPT_TLS_SESSION,	/* transport-layer security established */
 	XPT_PEER_AUTH,		/* peer has been authenticated */
