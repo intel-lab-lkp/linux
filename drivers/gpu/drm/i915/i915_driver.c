@@ -1518,7 +1518,7 @@ static int i915_pm_runtime_suspend(struct device *kdev)
 	for_each_gt(gt, dev_priv, i)
 		intel_uncore_suspend(gt->uncore);
 
-	intel_display_driver_pm_runtime_suspend_late(display);
+	intel_display_driver_pm_runtime_suspend_late(display, false);
 
 	ret = vlv_suspend_complete(dev_priv);
 	if (ret) {

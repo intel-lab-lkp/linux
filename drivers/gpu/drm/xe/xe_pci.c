@@ -1391,7 +1391,7 @@ static int xe_pci_runtime_suspend(struct device *dev)
 	xe_assert(xe, !IS_SRIOV_VF(xe));
 	xe_assert(xe, !pci_num_vf(pdev));
 
-	err = xe_pm_runtime_suspend(xe);
+	err = xe_pm_runtime_suspend(xe, false);
 	if (err)
 		return err;
 

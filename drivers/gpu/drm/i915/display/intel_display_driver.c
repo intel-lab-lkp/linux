@@ -904,7 +904,8 @@ void intel_display_driver_pm_runtime_suspend(struct intel_display *display)
 }
 
 /* after irq suspend */
-void intel_display_driver_pm_runtime_suspend_late(struct intel_display *display)
+void intel_display_driver_pm_runtime_suspend_late(struct intel_display *display,
+						  bool pme_capable)
 {
 	intel_display_power_runtime_suspend(display);
 

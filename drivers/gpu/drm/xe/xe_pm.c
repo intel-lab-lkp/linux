@@ -574,10 +574,11 @@ bool xe_pm_runtime_suspended(struct xe_device *xe)
 /**
  * xe_pm_runtime_suspend - Prepare our device for D3hot/D3Cold
  * @xe: xe device instance
+ * @pme_capable: indicates if the device can raise PME from runtime D3hot.
  *
  * Returns 0 for success, negative error code otherwise.
  */
-int xe_pm_runtime_suspend(struct xe_device *xe)
+int xe_pm_runtime_suspend(struct xe_device *xe, bool pme_capable)
 {
 	struct xe_bo *bo, *on;
 	struct xe_gt *gt;
@@ -639,9 +640,9 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
 			goto out_resume;
 	}
 
-	xe_irq_suspend(xe, false);
+	xe_irq_suspend(xe, pme_capable);
 
-	xe_display_pm_runtime_suspend_late(xe);
+	xe_display_pm_runtime_suspend_late(xe, pme_capable);
 
 	xe_i2c_pm_suspend(xe);
 
