@@ -121,6 +121,12 @@ bool __init hwpoison_boot_pfn(unsigned long pfn)
 	return true;
 }
 
+/* The EFI table is the only source of inherited poison today. */
+void __init hwpoison_init_boot(void)
+{
+	efi_offline_poisoned_memory();
+}
+
 /**
  * MF_ATTR_RO - Create sysfs entry for each memory failure statistics.
  * @_name: name of the file in the per NUMA sysfs directory.

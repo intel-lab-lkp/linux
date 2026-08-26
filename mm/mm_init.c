@@ -2667,6 +2667,7 @@ void __init mm_core_init(void)
 	kho_memory_init();
 
 	memblock_free_all();
+	hwpoison_init_boot();
 	mem_init();
 	kmem_cache_init();
 	/*
