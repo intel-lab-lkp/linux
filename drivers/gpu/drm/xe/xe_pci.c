@@ -1216,6 +1216,10 @@ static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *des
 
 	pci_set_master(pdev);
 
+	err = devm_device_init_wakeup(&pdev->dev);
+	if (err)
+		return err;
+
 	err = xe_probe_info_early(xe, desc, &probed_info);
 	if (err)
 		return err;
@@ -1380,6 +1384,7 @@ static int xe_pci_runtime_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct xe_device *xe = pdev_to_xe_device(pdev);
+	bool pme_armed = false;
 	int err;
 
 	/*
@@ -1391,9 +1396,20 @@ static int xe_pci_runtime_suspend(struct device *dev)
 	xe_assert(xe, !IS_SRIOV_VF(xe));
 	xe_assert(xe, !pci_num_vf(pdev));
 
-	err = xe_pm_runtime_suspend(xe, false);
-	if (err)
+	if (xe_pm_pme_capable(xe)) {
+		pme_armed = !pci_enable_wake(pdev, PCI_D3hot, true);
+		if (!pme_armed)
+			drm_warn(&xe->drm,
+				 "Failed to arm PME for D3hot: %d\n", err);
+	}
+
+	err = xe_pm_runtime_suspend(xe, pme_armed);
+	if (err) {
+		if (pme_armed)
+			pci_enable_wake(pdev, PCI_D3hot, false);
+
 		return err;
+	}
 
 	pci_save_state(pdev);
 
@@ -1419,6 +1435,8 @@ static int xe_pci_runtime_resume(struct device *dev)
 	err = pci_set_power_state(pdev, PCI_D0);
 	if (err)
 		return err;
+
+	pci_enable_wake(pdev, PCI_D3hot, false);
 
 	pci_restore_state(pdev);
 

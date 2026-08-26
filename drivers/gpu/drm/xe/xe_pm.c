@@ -556,6 +556,31 @@ struct task_struct *xe_pm_read_callback_task(struct xe_device *xe)
 }
 
 /**
+ * xe_pm_pme_capable - Can the device raise PME from runtime D3hot?
+ * @xe: xe device instance
+ *
+ * Only meaningful on the D3hot runtime suspend path: on D3cold the device
+ * loses power and cannot signal a hotplug. Honours the user-visible
+ * power/wakeup policy via device_may_wakeup(), so a user who disables
+ * wakeup falls back to the normal reset-and-poll behaviour rather than
+ * losing both mechanisms.
+ *
+ * Return: true if PME can be armed for D3hot.
+ */
+bool xe_pm_pme_capable(struct xe_device *xe)
+{
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+
+	if (xe->d3cold.allowed)
+		return false;
+
+	if (!pci_pme_capable(pdev, PCI_D3hot))
+		return false;
+
+	return device_may_wakeup(&pdev->dev);
+}
+
+/**
  * xe_pm_runtime_suspended - Check if runtime_pm state is suspended
  * @xe: xe device instance
  *
