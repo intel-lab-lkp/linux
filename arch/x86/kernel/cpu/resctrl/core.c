@@ -1021,6 +1021,10 @@ static __init bool get_rdt_resources(void)
 	rdt_alloc_capable = get_rdt_alloc_resources();
 	rdt_mon_capable = get_rdt_mon_resources();
 
+	if (rdt_cpu_has(X86_FEATURE_PLZA) &&
+	    (rdt_alloc_capable || rdt_mon_capable))
+		resctrl_set_kmode_support(RESCTRL_ASSIGN_GLOBAL_ENABLE_PER_CPU);
+
 	return (rdt_mon_capable || rdt_alloc_capable);
 }
 
