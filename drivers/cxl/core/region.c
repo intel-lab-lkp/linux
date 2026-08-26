@@ -2954,6 +2954,8 @@ static int poison_by_decoder(struct device *dev, void *arg)
 	cxled = to_cxl_endpoint_decoder(dev);
 	if (!cxled->dpa_res)
 		return rc;
+	if (cxled->part < 0)
+		return -ENODEV;
 
 	cxlmd = cxled_to_memdev(cxled);
 	cxlds = cxlmd->cxlds;
