@@ -5035,6 +5035,21 @@ static void f2fs_tuning_parameters(struct f2fs_sb_info *sbi)
 	sbi->readdir_ra = true;
 }
 
+static bool f2fs_valid_dev_alias_mapping(struct f2fs_sb_info *sbi,
+					 struct inode *inode, int devi)
+{
+	struct extent_info ei;
+
+	if (!IS_DEVICE_ALIASING(inode))
+		return false;
+	if (!F2FS_HAS_BLOCKS(inode))
+		return true;
+	if (!f2fs_lookup_read_extent_cache(inode, 0, &ei))
+		return false;
+	return !ei.fofs && ei.blk == FDEV(devi).start_blk &&
+		ei.len == FDEV(devi).total_segments << sbi->log_blocks_per_seg;
+}
+
 static void f2fs_restore_device_alias(struct f2fs_sb_info *sbi)
 {
 	struct inode *root = d_inode(sbi->sb->s_root);
@@ -5044,6 +5059,39 @@ static void f2fs_restore_device_alias(struct f2fs_sb_info *sbi)
 
 	if (!f2fs_sb_has_device_alias(sbi))
 		return;
+
+	for (i = 1; i < sbi->s_ndevs; i++) {
+		nid_t ino = le32_to_cpu(sbi->raw_super->dev_alias_ino[i]);
+		struct inode *inode;
+		int j;
+
+		if (!ino)
+			continue;
+		FDEV(i).has_alias = true;
+
+		for (j = 0; j < MAX_DEVICES; j++)
+			if (j != i &&
+			    le32_to_cpu(sbi->raw_super->dev_alias_ino[j]) == ino)
+				break;
+		if (j < MAX_DEVICES)
+			goto invalid_mapping;
+
+		inode = f2fs_iget(sbi->sb, ino);
+		if (IS_ERR(inode))
+			goto invalid_mapping;
+		if (!f2fs_valid_dev_alias_mapping(sbi, inode, i)) {
+			iput(inode);
+			goto invalid_mapping;
+		}
+		iput(inode);
+		continue;
+
+invalid_mapping:
+		f2fs_warn(sbi,
+			  "invalid device alias inode mapping: device=%d, ino=%u",
+			  i, ino);
+		set_sbi_flag(sbi, SBI_NEED_FSCK);
+	}
 
 	for (i = 1; i < sbi->s_ndevs; i++) {
 		char *name = strrchr(FDEV(i).path, '/');

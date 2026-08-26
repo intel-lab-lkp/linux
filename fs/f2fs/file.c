@@ -3988,6 +3988,10 @@ static int f2fs_ioc_release_dev_alias(struct file *filp)
 	if (err)
 		goto out_inode_unlock;
 
+	spin_lock(&FREE_I(sbi)->segmap_lock);
+	FDEV(devi).has_alias = true;
+	spin_unlock(&FREE_I(sbi)->segmap_lock);
+
 	f2fs_down_write_trace(&sbi->gc_lock, &glc);
 	f2fs_lock_op(sbi, &lc);
 
