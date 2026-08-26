@@ -222,6 +222,53 @@ union l3_qos_abmc_cfg {
 	unsigned long full;
 };
 
+/*
+ * Privilege Level Zero Association (PLZA) is configured via
+ * MSR_IA32_PQR_PLZA_ASSOC. This MSR must be programmed on every CPU in
+ * a QoS domain. Each domain supports a single PLZA CLOSID and/or RMID
+ * association, and all fields except PLZA_EN must be programmed
+ * identically across the domain to ensure consistent behavior.
+ *
+ * RMID and CLOSID selection are controlled independently. When PLZA is
+ * enabled (plza_en = 1), CPL0 uses CLOSID and RMID values from
+ * MSR_IA32_PQR_PLZA_ASSOC depending on the corresponding enable bits.
+ * When PLZA is disabled (plza_en = 0), the CLOSID and RMID are always
+ * taken from MSR_IA32_PQR_ASSOC regardless of privilege level.
+ *
+ *   - rmid_en = 1: use the RMID programmed in this MSR.
+ *   - rmid_en = 0: use the RMID from MSR_IA32_PQR_ASSOC.
+ *   - closid_en = 1: use the CLOSID programmed in this MSR.
+ *   - closid_en = 0: use the CLOSID from MSR_IA32_PQR_ASSOC.
+ *
+ * This allows PLZA to override only RMID, only CLOSID, or both. If both
+ * rmid_en and closid_en are clear, the effective behavior is the same as
+ * when PLZA is disabled, with RMID and CLOSID derived from
+ * MSR_IA32_PQR_ASSOC irrespective of privilege level.
+ *
+ * @rmid		: RMID programmed for PLZA.
+ * @reserved1		: Reserved.
+ * @rmid_en		: Enable RMID for PLZA.
+ * @closid		: CLOSID programmed for PLZA.
+ * @reserved2		: Reserved.
+ * @closid_en		: Enable CLOSID for PLZA.
+ * @reserved3		: Reserved.
+ * @plza_en		: Enable PLZA. When enabled, PLZA applies to the
+ *			  given CPU.
+ */
+union msr_pqr_plza_assoc {
+	struct {
+		u64	rmid		:12,
+			reserved1	:19,
+			rmid_en		: 1,
+			closid		: 4,
+			reserved2	:11,
+			closid_en	: 1,
+			reserved3	:15,
+			plza_en		: 1;
+	} split;
+	u64	full;
+};
+
 void rdt_ctrl_update(void *arg);
 
 int rdt_get_l3_mon_config(struct rdt_resource *r);
