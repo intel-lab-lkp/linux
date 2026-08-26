@@ -3725,11 +3725,30 @@ static int f2fs_ioc_get_dev_alias_file(struct file *filp, unsigned long arg)
 			(u32 __user *)arg);
 }
 
-static bool f2fs_get_dev_alias_extent(struct f2fs_sb_info *sbi,
-				       struct dentry *dentry,
-				       struct extent_info *ei)
+static int f2fs_get_dev_alias_index(struct f2fs_sb_info *sbi,
+				    struct inode *inode,
+				    struct dentry *dentry)
 {
+	int devi = -ENOENT;
 	int i;
+
+	f2fs_down_read(&sbi->sb_lock);
+	for (i = 0; i < MAX_DEVICES; i++) {
+		if (le32_to_cpu(sbi->raw_super->dev_alias_ino[i]) !=
+							inode->i_ino)
+			continue;
+		if (!i || i >= sbi->s_ndevs) {
+			devi = -EFSCORRUPTED;
+			goto out;
+		}
+		if (devi >= 0) {
+			devi = -EFSCORRUPTED;
+			goto out;
+		}
+		devi = i;
+	}
+	if (devi >= 0)
+		goto out;
 
 	for (i = 1; i < sbi->s_ndevs; i++) {
 		char *name = strrchr(FDEV(i).path, '/');
@@ -3737,13 +3756,13 @@ static bool f2fs_get_dev_alias_extent(struct f2fs_sb_info *sbi,
 		name = name ? name + 1 : FDEV(i).path;
 		if (strcmp(name, dentry->d_name.name))
 			continue;
-
-		ei->blk = FDEV(i).start_blk;
-		ei->len = FDEV(i).total_segments << sbi->log_blocks_per_seg;
-		ei->fofs = 0;
-		return true;
+		devi = sbi->raw_super->dev_alias_ino[i] ?
+						-EFSCORRUPTED : i;
+		break;
 	}
-	return false;
+out:
+	f2fs_up_read(&sbi->sb_lock);
+	return devi;
 }
 
 static int f2fs_ioc_reserve_dev_alias(struct file *filp)
@@ -3756,7 +3775,7 @@ static int f2fs_ioc_reserve_dev_alias(struct file *filp)
 	struct f2fs_lock_context lc, glc;
 	blkcnt_t count;
 	unsigned int start, end;
-	int type, err;
+	int devi, type, err;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -3780,7 +3799,8 @@ static int f2fs_ioc_reserve_dev_alias(struct file *filp)
 		goto out_inode_unlock;
 	}
 
-	if (!f2fs_get_dev_alias_extent(sbi, filp->f_path.dentry, &ei)) {
+	devi = f2fs_get_dev_alias_index(sbi, inode, filp->f_path.dentry);
+	if (devi < 0) {
 		f2fs_warn(sbi, "device alias file (%s, ino=%llu) has no matching device",
 			  filp->f_path.dentry->d_name.name,
 			  (unsigned long long)inode->i_ino);
@@ -3789,6 +3809,10 @@ static int f2fs_ioc_reserve_dev_alias(struct file *filp)
 		err = -EFSCORRUPTED;
 		goto out_inode_unlock;
 	}
+
+	ei.blk = FDEV(devi).start_blk;
+	ei.len = FDEV(devi).total_segments << sbi->log_blocks_per_seg;
+	ei.fofs = 0;
 
 	spin_lock(&sbi->stat_lock);
 	if (sbi->total_valid_block_count + ei.len >
@@ -3801,7 +3825,7 @@ static int f2fs_ioc_reserve_dev_alias(struct file *filp)
 	spin_unlock(&sbi->stat_lock);
 
 	spin_lock(&FREE_I(sbi)->segmap_lock);
-	FDEV(f2fs_target_device_index(sbi, ei.blk)).is_reserving = true;
+	FDEV(devi).is_reserving = true;
 	spin_unlock(&FREE_I(sbi)->segmap_lock);
 
 	start = GET_SEGNO(sbi, ei.blk);
@@ -3853,7 +3877,7 @@ static int f2fs_ioc_reserve_dev_alias(struct file *filp)
 	f2fs_update_inode_page(inode);
 
 	spin_lock(&FREE_I(sbi)->segmap_lock);
-	FDEV(f2fs_target_device_index(sbi, ei.blk)).is_reserving = false;
+	FDEV(devi).is_reserving = false;
 	spin_unlock(&FREE_I(sbi)->segmap_lock);
 
 	f2fs_unlock_op(sbi, &lc);
@@ -3870,13 +3894,51 @@ out_gc_unlock:
 	spin_unlock(&sbi->stat_lock);
 
 	spin_lock(&FREE_I(sbi)->segmap_lock);
-	FDEV(f2fs_target_device_index(sbi, ei.blk)).is_reserving = false;
+	FDEV(devi).is_reserving = false;
 	spin_unlock(&FREE_I(sbi)->segmap_lock);
 	f2fs_up_write_trace(&sbi->gc_lock, &glc);
 
 out_inode_unlock:
 	inode_unlock(inode);
 	mnt_drop_write_file(filp);
+	return err;
+}
+
+static int f2fs_record_dev_alias_inode(struct f2fs_sb_info *sbi,
+				       struct inode *inode, int devi)
+{
+	__le32 old_ino;
+	int err = 0;
+	int i;
+
+	f2fs_down_write(&sbi->sb_lock);
+	old_ino = sbi->raw_super->dev_alias_ino[devi];
+	if (old_ino && le32_to_cpu(old_ino) != inode->i_ino)
+		goto conflict;
+
+	for (i = 0; i < MAX_DEVICES; i++) {
+		if (i != devi &&
+		    le32_to_cpu(sbi->raw_super->dev_alias_ino[i]) ==
+							inode->i_ino)
+			goto conflict;
+	}
+
+	if (!old_ino) {
+		sbi->raw_super->dev_alias_ino[devi] =
+						cpu_to_le32(inode->i_ino);
+		err = f2fs_commit_super(sbi, false);
+		if (err)
+			sbi->raw_super->dev_alias_ino[devi] = old_ino;
+	}
+	goto out;
+
+conflict:
+	f2fs_warn(sbi, "conflicting device alias inode mapping for device %d",
+		  devi);
+	set_sbi_flag(sbi, SBI_NEED_FSCK);
+	err = -EFSCORRUPTED;
+out:
+	f2fs_up_write(&sbi->sb_lock);
 	return err;
 }
 
@@ -3888,6 +3950,7 @@ static int f2fs_ioc_release_dev_alias(struct file *filp)
 	struct extent_info ei = {0, };
 	struct cp_control cpc = { CP_SYNC, 0, 0, 0 };
 	struct f2fs_lock_context lc, glc;
+	int devi;
 	int err;
 
 	if (!capable(CAP_SYS_ADMIN))
@@ -3919,6 +3982,11 @@ static int f2fs_ioc_release_dev_alias(struct file *filp)
 	read_lock(&et->lock);
 	ei = et->largest;
 	read_unlock(&et->lock);
+
+	devi = f2fs_target_device_index(sbi, ei.blk);
+	err = f2fs_record_dev_alias_inode(sbi, inode, devi);
+	if (err)
+		goto out_inode_unlock;
 
 	f2fs_down_write_trace(&sbi->gc_lock, &glc);
 	f2fs_lock_op(sbi, &lc);
