@@ -199,6 +199,28 @@
  */
 static unsigned int bucket_order[ANON_AND_FILE] __read_mostly;
 
+#ifdef CONFIG_LRU_GEN
+/*
+ * LRU_GEN shadow token layout within the eviction field (low to high):
+ *   LRU_REFS_WIDTH bits: refs
+ *   EVICT_SEQ_WIDTH bits: min_seq
+ *   EVICT_TS_WIDTH bits: eviction time in jiffies
+ *
+ * Size the layout for the tighter anon mask so the token fits both file and
+ * anon shadows. Keep at least 16 bits for min_seq so the same-lruvec recency
+ * check does not wrap at the much shorter LRU_GEN_WIDTH interval.
+ */
+#define EVICTION_BITS		(BITS_PER_LONG - EVICTION_SHIFT_ANON)
+#define EVICT_PAYLOAD_BITS	(EVICTION_BITS - LRU_REFS_WIDTH)
+#define EVICT_TS_WIDTH		(EVICT_PAYLOAD_BITS > 40 ? 24 : \
+				 EVICT_PAYLOAD_BITS > 16 ? \
+				 EVICT_PAYLOAD_BITS - 16 : 0)
+#define EVICT_SEQ_WIDTH		(EVICT_PAYLOAD_BITS - EVICT_TS_WIDTH)
+#define EVICT_TS_PGOFF		(LRU_REFS_WIDTH + EVICT_SEQ_WIDTH)
+#define EVICT_SEQ_MASK		((1UL << EVICT_SEQ_WIDTH) - 1)
+#define EVICT_TS_MASK		((1UL << EVICT_TS_WIDTH) - 1)
+#endif
+
 static void *pack_shadow(int memcgid, pg_data_t *pgdat, unsigned long eviction,
 			 bool workingset, bool file)
 {
@@ -250,13 +272,19 @@ static void *lru_gen_eviction(struct folio *folio)
 
 	BUILD_BUG_ON(LRU_GEN_WIDTH + LRU_REFS_WIDTH >
 		     BITS_PER_LONG - max(EVICTION_SHIFT, EVICTION_SHIFT_ANON));
+	BUILD_BUG_ON(EVICT_TS_WIDTH <= 0);
+	BUILD_BUG_ON(EVICT_SEQ_WIDTH < 16);
+	BUILD_BUG_ON(LRU_REFS_WIDTH + EVICT_SEQ_WIDTH +
+		     EVICT_TS_WIDTH != EVICTION_BITS);
 
 	rcu_read_lock();
 	memcg = folio_memcg(folio);
 	lruvec = mem_cgroup_lruvec(memcg, pgdat);
 	lrugen = &lruvec->lrugen;
 	min_seq = READ_ONCE(lrugen->min_seq[type]);
-	token = (min_seq << LRU_REFS_WIDTH) | max(refs - 1, 0);
+	token = ((min_seq & EVICT_SEQ_MASK) << LRU_REFS_WIDTH) |
+		max(refs - 1, 0);
+	token |= (jiffies & EVICT_TS_MASK) << EVICT_TS_PGOFF;
 
 	hist = lru_hist_from_seq(min_seq);
 	atomic_long_add(delta, &lrugen->evicted[hist][type][tier]);
@@ -275,18 +303,21 @@ static bool lru_gen_test_recent(void *shadow, struct lruvec **lruvec,
 {
 	int memcg_id;
 	unsigned long max_seq;
+	unsigned long token_seq;
 	struct mem_cgroup *memcg;
 	struct pglist_data *pgdat;
+
+	(void)file;
 
 	unpack_shadow(shadow, &memcg_id, &pgdat, token, workingset);
 
 	memcg = mem_cgroup_from_private_id(memcg_id);
 	*lruvec = mem_cgroup_lruvec(memcg, pgdat);
 
-	max_seq = READ_ONCE((*lruvec)->lrugen.max_seq);
-	max_seq &= (file ? EVICTION_MASK : EVICTION_MASK_ANON) >> LRU_REFS_WIDTH;
+	max_seq = READ_ONCE((*lruvec)->lrugen.max_seq) & EVICT_SEQ_MASK;
+	token_seq = (*token >> LRU_REFS_WIDTH) & EVICT_SEQ_MASK;
 
-	return abs_diff(max_seq, *token >> LRU_REFS_WIDTH) < MAX_NR_GENS;
+	return abs_diff(max_seq, token_seq) < MAX_NR_GENS;
 }
 
 static void lru_gen_refault(struct folio *folio, void *shadow)
@@ -295,7 +326,10 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	int hist, tier, refs;
 	bool workingset;
 	unsigned long token;
+	unsigned long evict_ts, refault_distance;
+	unsigned long max_seq, middle_seq, birth, window_age;
 	struct lruvec *lruvec;
+	struct lruvec *dst_lruvec;
 	struct lru_gen_folio *lrugen;
 	int type = folio_is_file_lru(folio);
 	int delta = folio_nr_pages(folio);
@@ -303,8 +337,27 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	rcu_read_lock();
 
 	recent = lru_gen_test_recent(shadow, &lruvec, &token, &workingset, type);
-	if (lruvec != folio_lruvec(folio))
-		goto unlock;
+	dst_lruvec = folio_lruvec(folio);
+
+	if (lruvec != dst_lruvec) {
+		/*
+		 * min_seq values from different lruvecs are not comparable.
+		 * Judge a cross-memcg refault by whether it happened within
+		 * the age of the middle generation in the destination
+		 * lruvec's MAX_NR_GENS window.
+		 */
+		lruvec = dst_lruvec;
+		lrugen = &lruvec->lrugen;
+		max_seq = READ_ONCE(lrugen->max_seq);
+		middle_seq = max_seq - MAX_NR_GENS / 2;
+		birth = READ_ONCE(lrugen->timestamps[lru_gen_from_seq(middle_seq)]);
+		window_age = jiffies - birth;
+
+		evict_ts = (token >> EVICT_TS_PGOFF) & EVICT_TS_MASK;
+		refault_distance = ((jiffies & EVICT_TS_MASK) - evict_ts) &
+				   EVICT_TS_MASK;
+		recent = refault_distance <= window_age;
+	}
 
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + type, delta);
 
