@@ -528,6 +528,35 @@ conveyed in the error returns from file operations. E.g.
 	# cat info/last_cmd_status
 	mask f7 has non-consecutive 1-bits
 
+"kernel_mode":
+	In the top level of the "info" directory, "kernel_mode" reports
+	supported and active kernel modes available on the system.
+
+	Reading the file lists one mode per line. The active mode is wrapped in
+	square brackets. inherit_user is shown without options.
+	assign_global_enable_per_cpu is shown as::
+
+	  assign_global_enable_per_cpu:ctrl=<assign|inherit>;mon=<assign|inherit>;group=<ctrl>/<mon>/
+
+	- inherit_user: inherit allocation and monitoring from the user task.
+	- assign_global_enable_per_cpu: kernel mode may use separate
+	  allocation and/or monitoring associations. ctrl= and mon= show
+	  whether each is assigned or inherited, and group= identifies the
+	  associated resource group using <CTRL_MON>/<MON>/ path syntax.
+
+	Only supported modes are listed. On an inactive
+	assign_global_enable_per_cpu line, ctrl= and mon= show platform
+	capability defaults rather than the last active assignment, and
+	group=// is shown. When the mode is active, ctrl= and mon= report
+	the current assignment state and group= identifies the associated
+	resource group.
+
+	Example::
+
+	  # cat info/kernel_mode
+	  [inherit_user]
+	  assign_global_enable_per_cpu:ctrl=assign;mon=assign;group=//
+
 Resource alloc and monitor groups
 =================================
 

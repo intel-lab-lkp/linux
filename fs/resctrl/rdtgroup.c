@@ -1010,6 +1010,114 @@ static int rdt_last_cmd_status_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/* Sysfs lines for info/kernel_mode; indexed by enum resctrl_kernel_mode */
+static const char * const resctrl_mode_str[] = {
+	[RESCTRL_INHERIT_USER]	=			"inherit_user",
+	[RESCTRL_ASSIGN_GLOBAL_ENABLE_PER_CPU] =	"assign_global_enable_per_cpu"
+};
+
+static_assert(ARRAY_SIZE(resctrl_mode_str) == RESCTRL_NUM_KERNEL_MODES);
+
+static const char *resctrl_kmode_state_str(enum kmode_state state)
+{
+	return state == KMODE_ASSIGN ? "assign" : "inherit";
+}
+
+static void resctrl_kmode_group_path(struct rdtgroup *rdtgrp,
+				     const char **ctrl, const char **mon)
+{
+	*ctrl = "";
+	*mon = "";
+
+	if (!rdtgrp)
+		return;
+
+	if (rdtgrp->type == RDTMON_GROUP) {
+		*ctrl = rdt_kn_name(rdtgrp->mon.parent->kn);
+		*mon = rdt_kn_name(rdtgrp->kn);
+	} else {
+		*ctrl = rdt_kn_name(rdtgrp->kn);
+	}
+}
+
+/**
+ * resctrl_kernel_mode_show() - Display supported and active kernel modes
+ * @of: kernfs open file
+ * @seq: output seq_file
+ * @v: unused
+ *
+ * Lists one line per mode set in resctrl_kcfg.caps.kmode_sup. Brackets the
+ * active mode. inherit_user is shown without any options.
+ * assign_global_enable_per_cpu is shown as:
+ *
+ *   assign_global_enable_per_cpu:ctrl=<assign|inherit>;mon=<assign|inherit>;\
+ *					group=<ctrl>/<mon>/
+ *
+ * When assign_global_enable_per_cpu is inactive, ctrl=assign and mon=assign
+ * reflect resctrl_kcfg.caps.ctrl_en and resctrl_kcfg.caps.mon_en, and
+ * group=//. When active, assign state comes from resctrl_kcfg.active.ctrl_mode
+ * and resctrl_kcfg.active.mon_mode.
+ *
+ * Return: 0 on success, or -ENOENT on error.
+ */
+static int resctrl_kernel_mode_show(struct kernfs_open_file *of,
+				    struct seq_file *seq, void *v)
+{
+	const char *ctrl_state, *mon_state;
+	enum resctrl_kernel_mode mode;
+	struct rdtgroup *rdtgrp;
+	const char *ctrl, *mon;
+	bool active;
+	int ret = 0;
+
+	if (!info_kn_lock(of->kn))
+		return -ENOENT;
+
+	for (mode = 0; mode < RESCTRL_NUM_KERNEL_MODES; mode++) {
+		if (!test_bit(mode, resctrl_kcfg.caps.kmode_sup))
+			continue;
+
+		active = (resctrl_kcfg.active.kmode_cur == mode);
+
+		if (mode == RESCTRL_INHERIT_USER) {
+			seq_printf(seq, active ? "[%s]\n" : "%s\n",
+				   resctrl_mode_str[mode]);
+			continue;
+		}
+
+		if (active) {
+			ctrl_state = resctrl_kmode_state_str(resctrl_kcfg.active.ctrl_mode);
+			mon_state = resctrl_kmode_state_str(resctrl_kcfg.active.mon_mode);
+			rdtgrp = resctrl_kcfg.active.k_rdtgrp;
+			if (WARN_ON(!rdtgrp)) {
+				rdt_last_cmd_puts("Invalid kernel mode group\n");
+				ret = -ENOENT;
+				goto out_unlock;
+			}
+			resctrl_kmode_group_path(rdtgrp, &ctrl, &mon);
+		} else {
+			ctrl_state = resctrl_kcfg.caps.ctrl_en ? "assign" : "inherit";
+			mon_state = resctrl_kcfg.caps.mon_en ? "assign" : "inherit";
+			ctrl = "";
+			mon = "";
+		}
+
+		if (active) {
+			seq_printf(seq, "[%s:ctrl=%s;mon=%s;group=%s/%s/]\n",
+				   resctrl_mode_str[mode], ctrl_state, mon_state,
+				   ctrl, mon);
+		} else {
+			seq_printf(seq, "%s:ctrl=%s;mon=%s;group=%s/%s/\n",
+				   resctrl_mode_str[mode], ctrl_state, mon_state,
+				   ctrl, mon);
+		}
+	}
+
+out_unlock:
+	info_kn_unlock(of->kn);
+	return ret;
+}
+
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
 {
 	/*
@@ -1993,6 +2101,13 @@ static struct rftype res_common_files[] = {
 		.mode		= 0444,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdt_last_cmd_status_show,
+		.fflags		= RFTYPE_TOP_INFO,
+	},
+	{
+		.name		= "kernel_mode",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= resctrl_kernel_mode_show,
 		.fflags		= RFTYPE_TOP_INFO,
 	},
 	{
