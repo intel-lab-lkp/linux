@@ -1157,10 +1157,12 @@ void ipv4_sk_update_pmtu(struct sk_buff *skb, struct sock *sk, u32 mtu)
 	bool new = false;
 	struct net *net = sock_net(sk);
 
-	bh_lock_sock(sk);
+	if (!ip_sk_accept_pmtu(sk)) {
+		ipv4_update_pmtu(skb, net, mtu, 0, sk->sk_protocol);
+		return;
+	}
 
-	if (!ip_sk_accept_pmtu(sk))
-		goto out;
+	bh_lock_sock(sk);
 
 	odst = sk_dst_get(sk);
 

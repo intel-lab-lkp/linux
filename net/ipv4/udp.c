@@ -900,6 +900,15 @@ out:
 	return sk;
 }
 
+static void udp_err_no_sk(struct net *net, struct sk_buff *skb, int type,
+			  int code, u32 info)
+{
+	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)
+		ipv4_update_pmtu(skb, net, info, 0, IPPROTO_UDP);
+	else if (type == ICMP_REDIRECT)
+		ipv4_redirect(skb, net, 0, IPPROTO_UDP);
+}
+
 /*
  * This routine is called by the ICMP module when it gets some
  * sort of error condition.  If err < 0 then the socket should
@@ -938,6 +947,7 @@ int udp_err(struct sk_buff *skb, u32 info)
 			sk = ERR_PTR(-ENOENT);
 
 		if (IS_ERR(sk)) {
+			udp_err_no_sk(net, skb, type, code, info);
 			__ICMP_INC_STATS(net, ICMP_MIB_INERRORS);
 			return PTR_ERR(sk);
 		}
