@@ -61,8 +61,17 @@ static int smp_execute_task_sg(struct domain_device *dev,
 	struct sas_internal *i =
 		to_sas_internal(dev->port->ha->shost->transportt);
 	struct sas_ha_struct *ha = dev->port->ha;
+	bool skip_pm = test_bit(SAS_HA_RESUMING, &ha->state);
 
-	pm_runtime_get_sync(ha->dev);
+	/*
+	 * Skip PM get/put during HA resume to avoid deadlock: the host is
+	 * RPM_RESUMING and the drain waits for this SMP IO to finish, but
+	 * pm_runtime_get_sync() would block on RPM_RESUMING. Safe because
+	 * hardware is already initialized by the LLDD before call
+	 * sas_resume_ha().
+	 */
+	if (!skip_pm)
+		pm_runtime_get_sync(ha->dev);
 	mutex_lock(&dev->ex_dev.cmd_mutex);
 	for (retry = 0; retry < 3; retry++) {
 		if (test_bit(SAS_DEV_GONE, &dev->state)) {
@@ -135,7 +144,8 @@ static int smp_execute_task_sg(struct domain_device *dev,
 		}
 	}
 	mutex_unlock(&dev->ex_dev.cmd_mutex);
-	pm_runtime_put_sync(ha->dev);
+	if (!skip_pm)
+		pm_runtime_put_sync(ha->dev);
 
 	BUG_ON(retry == 3 && task != NULL);
 	sas_free_task(task);
