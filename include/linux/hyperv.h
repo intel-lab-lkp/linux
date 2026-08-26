@@ -831,6 +831,13 @@ struct vmbus_channel {
 	 */
 	bool out_full_flag;
 
+	/*
+	 * Check target_cpu in target_cpu_store() to make sure that it is in the
+	 * HK_TYPE_MANAGED_IRQ housekeeping cpumask and reject it if not when
+	 * the flag is set.
+	 */
+	bool check_hkcpu;
+
 	/* Channel callback's invoked in softirq context */
 	struct tasklet_struct callback_event;
 	void (*onchannel_callback)(void *context);

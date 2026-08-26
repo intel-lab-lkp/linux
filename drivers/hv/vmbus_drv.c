@@ -1751,7 +1751,8 @@ int vmbus_channel_set_cpu(struct vmbus_channel *channel, u32 target_cpu)
 	if (target_cpu >= nr_cpumask_bits)
 		return -EINVAL;
 
-	if (!cpumask_test_cpu(target_cpu, housekeeping_cpumask(HK_TYPE_MANAGED_IRQ)))
+	if (channel->check_hkcpu &&
+	    !cpumask_test_cpu(target_cpu, housekeeping_cpumask(HK_TYPE_MANAGED_IRQ)))
 		return -EINVAL;
 
 	if (!cpu_online(target_cpu))

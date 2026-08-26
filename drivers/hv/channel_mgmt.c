@@ -774,6 +774,7 @@ static void init_vp_index(struct vmbus_channel *channel)
 	}
 
 	for (i = 1; i <= ncpu + 1; i++) {
+		channel->check_hkcpu = true;
 		while (true) {
 			numa_node = next_numa_node_id++;
 			if (numa_node == nr_node_ids) {
@@ -788,14 +789,21 @@ static void init_vp_index(struct vmbus_channel *channel)
 
 retry:
 		cpumask_xor(available_mask, allocated_mask, cpumask_of_node(numa_node));
-		cpumask_and(available_mask, available_mask, hk_mask);
+		if (channel->check_hkcpu)
+			cpumask_and(available_mask, available_mask, hk_mask);
 
 		if (cpumask_empty(available_mask)) {
 			/*
 			 * We have cycled through all the CPUs in the node;
-			 * reset the allocated map.
+			 * reset the allocated map. If the allocated map has
+			 * already been cleared, we will have to ignore the
+			 * HK_TYPE_MANAGED_IRQ housekeeping cpumask as its use
+			 * is on a best effort basis, not a must.
 			 */
-			cpumask_clear(allocated_mask);
+			if (!cpumask_empty(allocated_mask))
+				cpumask_clear(allocated_mask);
+			else
+				channel->check_hkcpu = false;
 			goto retry;
 		}
 
