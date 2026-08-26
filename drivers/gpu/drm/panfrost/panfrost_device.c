@@ -226,6 +226,27 @@ err:
 	return err;
 }
 
+void panfrost_device_enable_int(struct panfrost_device *pfdev)
+{
+	panfrost_gpu_enable_interrupts(pfdev);
+	panfrost_mmu_enable_interrupts(pfdev);
+	panfrost_jm_enable_interrupts(pfdev);
+}
+
+static void panfrost_device_enable_hw(struct panfrost_device *pfdev)
+{
+	panfrost_device_enable_int(pfdev);
+	panfrost_devfreq_resume(pfdev);
+}
+
+static void panfrost_device_disable_hw(struct panfrost_device *pfdev)
+{
+	panfrost_devfreq_suspend(pfdev);
+	panfrost_jm_suspend_irq(pfdev);
+	panfrost_mmu_suspend_irq(pfdev);
+	panfrost_gpu_suspend_irq(pfdev);
+}
+
 int panfrost_device_init(struct panfrost_device *pfdev)
 {
 	int err;
@@ -297,6 +318,8 @@ int panfrost_device_init(struct panfrost_device *pfdev)
 	if (err)
 		goto out_perfcnt;
 
+	panfrost_device_enable_hw(pfdev);
+
 	pm_runtime_set_active(pfdev->base.dev);
 	pm_runtime_mark_last_busy(pfdev->base.dev);
 	pm_runtime_enable(pfdev->base.dev);
@@ -315,6 +338,7 @@ int panfrost_device_init(struct panfrost_device *pfdev)
 
 out_devreg:
 	pm_runtime_disable(pfdev->base.dev);
+	panfrost_device_disable_hw(pfdev);
 	panfrost_gem_fini(pfdev);
 out_perfcnt:
 	panfrost_perfcnt_fini(pfdev);
@@ -340,6 +364,8 @@ void panfrost_device_fini(struct panfrost_device *pfdev)
 {
 	pm_runtime_get_sync(pfdev->base.dev);
 	pm_runtime_disable(pfdev->base.dev);
+
+	panfrost_device_disable_hw(pfdev);
 
 	panfrost_gem_fini(pfdev);
 	panfrost_perfcnt_fini(pfdev);
@@ -454,16 +480,12 @@ bool panfrost_exception_needs_reset(const struct panfrost_device *pfdev,
 	return false;
 }
 
-void panfrost_device_reset(struct panfrost_device *pfdev, bool enable_job_int)
+void panfrost_device_reset(struct panfrost_device *pfdev)
 {
 	panfrost_gpu_soft_reset(pfdev);
-
 	panfrost_gpu_power_on(pfdev);
 	panfrost_mmu_reset(pfdev);
-
 	panfrost_jm_reset_interrupts(pfdev);
-	if (enable_job_int)
-		panfrost_jm_enable_interrupts(pfdev);
 }
 
 static int panfrost_device_runtime_resume(struct device *dev)
@@ -477,8 +499,8 @@ static int panfrost_device_runtime_resume(struct device *dev)
 			return ret;
 	}
 
-	panfrost_device_reset(pfdev, true);
-	panfrost_devfreq_resume(pfdev);
+	panfrost_device_reset(pfdev);
+	panfrost_device_enable_hw(pfdev);
 
 	return 0;
 }
@@ -490,10 +512,7 @@ static int panfrost_device_runtime_suspend(struct device *dev)
 	if (!panfrost_jm_is_idle(pfdev))
 		return -EBUSY;
 
-	panfrost_devfreq_suspend(pfdev);
-	panfrost_jm_suspend_irq(pfdev);
-	panfrost_mmu_suspend_irq(pfdev);
-	panfrost_gpu_suspend_irq(pfdev);
+	panfrost_device_disable_hw(pfdev);
 	panfrost_gpu_power_off(pfdev);
 
 	if (pfdev->comp->pm_features & BIT(GPU_PM_RT))

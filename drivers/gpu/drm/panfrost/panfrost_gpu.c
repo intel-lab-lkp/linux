@@ -67,8 +67,6 @@ int panfrost_gpu_soft_reset(struct panfrost_device *pfdev)
 	gpu_write(pfdev, GPU_INT_MASK, 0);
 	gpu_write(pfdev, GPU_INT_CLEAR, GPU_IRQ_RESET_COMPLETED);
 
-	clear_bit(PANFROST_COMP_BIT_GPU, pfdev->is_suspended);
-
 	gpu_write(pfdev, GPU_CMD, GPU_CMD_SOFT_RESET);
 	ret = readl_relaxed_poll_timeout(pfdev->iomem + GPU_INT_RAWSTAT,
 		val, val & GPU_IRQ_RESET_COMPLETED, 10, 10000);
@@ -86,12 +84,6 @@ int panfrost_gpu_soft_reset(struct panfrost_device *pfdev)
 	}
 
 	gpu_write(pfdev, GPU_INT_CLEAR, GPU_IRQ_MASK_ALL);
-
-	/* Only enable the interrupts we care about */
-	gpu_write(pfdev, GPU_INT_MASK,
-		  GPU_IRQ_MASK_ERROR |
-		  GPU_IRQ_PERFCNT_SAMPLE_COMPLETED |
-		  GPU_IRQ_CLEAN_CACHES_COMPLETED);
 
 	/*
 	 * All in-flight jobs should have released their cycle
@@ -502,6 +494,17 @@ void panfrost_gpu_power_off(struct panfrost_device *pfdev)
 				 val, !val, 0, 2000);
 	if (ret)
 		dev_err(pfdev->base.dev, "l2 power transition timeout");
+}
+
+void panfrost_gpu_enable_interrupts(struct panfrost_device *pfdev)
+{
+	clear_bit(PANFROST_COMP_BIT_GPU, pfdev->is_suspended);
+
+	/* Only enable the interrupts we care about */
+	gpu_write(pfdev, GPU_INT_MASK,
+		  GPU_IRQ_MASK_ERROR |
+		  GPU_IRQ_PERFCNT_SAMPLE_COMPLETED |
+		  GPU_IRQ_CLEAN_CACHES_COMPLETED);
 }
 
 void panfrost_gpu_suspend_irq(struct panfrost_device *pfdev)
