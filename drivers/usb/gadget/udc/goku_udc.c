@@ -20,6 +20,8 @@
 // #define	VERBOSE		/* extra debug messages (success too) */
 // #define	USB_TRACE	/* packet-level success messages */
 
+#include <linux/container_of.h>
+#include <linux/debugfs.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -30,9 +32,9 @@
 #include <linux/timer.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>
-#include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/device.h>
+#include <linux/usb.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 #include <linux/prefetch.h>
@@ -1050,9 +1052,7 @@ static inline const char *dmastr(void)
 		return "(dma IN)";
 }
 
-#ifdef CONFIG_USB_GADGET_DEBUG_FILES
-
-static const char proc_node_name [] = "driver/udc";
+#ifdef CONFIG_USB_GADGET_DEBUG_FS
 
 #define FOURBITS "%s%s%s%s"
 #define EIGHTBITS FOURBITS FOURBITS
@@ -1134,7 +1134,7 @@ static const char *udc_ep_status(u32 status)
 	return "?";
 }
 
-static int udc_proc_read(struct seq_file *m, void *v)
+static int goku_debugfs_show(struct seq_file *m, void *v)
 {
 	struct goku_udc			*dev = m->private;
 	struct goku_udc_regs __iomem	*regs = dev->regs;
@@ -1246,7 +1246,33 @@ done:
 	local_irq_restore(flags);
 	return 0;
 }
-#endif	/* CONFIG_USB_GADGET_DEBUG_FILES */
+DEFINE_SHOW_ATTRIBUTE(goku_debugfs);
+
+static void goku_debugfs_create(struct goku_udc *dev)
+{
+	dev->debugfs_root =
+		debugfs_create_dir(dev_name(&dev->pdev->dev), usb_debug_root);
+	debugfs_create_file("goku_udc_state", 0400, dev->debugfs_root, dev,
+			    &goku_debugfs_fops);
+}
+
+static void goku_debugfs_remove(struct goku_udc *dev)
+{
+	debugfs_remove_recursive(dev->debugfs_root);
+	dev->debugfs_root = NULL;
+}
+
+#else
+
+static inline void goku_debugfs_create(struct goku_udc *dev)
+{
+}
+
+static inline void goku_debugfs_remove(struct goku_udc *dev)
+{
+}
+
+#endif	/* CONFIG_USB_GADGET_DEBUG_FS */
 
 /*-------------------------------------------------------------------------*/
 
@@ -1701,7 +1727,7 @@ done:
 
 static void gadget_release(struct device *_dev)
 {
-	struct goku_udc	*dev = dev_get_drvdata(_dev);
+	struct goku_udc *dev = container_of(_dev, struct goku_udc, gadget.dev);
 
 	kfree(dev);
 }
@@ -1714,13 +1740,12 @@ static void goku_remove(struct pci_dev *pdev)
 
 	DBG(dev, "%s\n", __func__);
 
-	usb_del_gadget_udc(&dev->gadget);
+	if (dev->added)
+		usb_del_gadget(&dev->gadget);
 
 	BUG_ON(dev->driver);
 
-#ifdef CONFIG_USB_GADGET_DEBUG_FILES
-	remove_proc_entry(proc_node_name, NULL);
-#endif
+	goku_debugfs_remove(dev);
 	if (dev->regs)
 		udc_reset(dev);
 	if (dev->got_irq)
@@ -1736,6 +1761,8 @@ static void goku_remove(struct pci_dev *pdev)
 	dev->regs = NULL;
 
 	INFO(dev, "unbind\n");
+
+	usb_put_gadget(&dev->gadget);
 }
 
 /* wrap this driver around the specified pci device, but
@@ -1751,16 +1778,13 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	if (!pdev->irq) {
 		printk(KERN_ERR "Check PCI %s IRQ setup!\n", pci_name(pdev));
-		retval = -ENODEV;
-		goto err;
+		return -ENODEV;
 	}
 
 	/* alloc, and start init */
 	dev = kzalloc_obj(*dev);
-	if (!dev) {
-		retval = -ENOMEM;
-		goto err;
-	}
+	if (!dev)
+		return -ENOMEM;
 
 	pci_set_drvdata(pdev, dev);
 	spin_lock_init(&dev->lock);
@@ -1770,6 +1794,8 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	/* the "gadget" abstracts/virtualizes the controller */
 	dev->gadget.name = driver_name;
+
+	usb_initialize_gadget(&pdev->dev, &dev->gadget, gadget_release);
 
 	/* now all the pci goodies ... */
 	retval = pci_enable_device(pdev);
@@ -1814,22 +1840,16 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		pci_set_master(pdev);
 
 
-#ifdef CONFIG_USB_GADGET_DEBUG_FILES
-	proc_create_single_data(proc_node_name, 0, NULL, udc_proc_read, dev);
-#endif
-
-	retval = usb_add_gadget_udc_release(&pdev->dev, &dev->gadget,
-			gadget_release);
+	retval = usb_add_gadget(&dev->gadget);
 	if (retval)
 		goto err;
+	dev->added = 1;
+	goku_debugfs_create(dev);
 
 	return 0;
 
 err:
-	if (dev)
-		goku_remove (pdev);
-	/* gadget_release is not registered yet, kfree explicitly */
-	kfree(dev);
+	goku_remove(pdev);
 	return retval;
 }
 
