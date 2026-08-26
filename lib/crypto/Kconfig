@@ -36,6 +36,16 @@ config CRYPTO_LIB_AES_CBC_MACS
 	  this if your module uses any of the functions from
 	  <crypto/aes-cbc-macs.h>.
 
+config RUST_CRYPTO_LIB_AES
+	bool
+	depends on RUST
+	select CRYPTO_LIB_AES
+	select CRYPTO_LIB_AES_CBC_MACS
+	help
+	  Enable the Rust bindings for the synchronous AES library functions.
+	  The selected C libraries are built into the kernel because Rust
+	  abstractions are part of the built-in kernel crate.
+
 config CRYPTO_LIB_AESGCM
 	tristate
 	select CRYPTO_LIB_AES
@@ -215,6 +225,15 @@ config CRYPTO_LIB_SHA256
 	  The SHA-224, SHA-256, HMAC-SHA224, and HMAC-SHA256 library functions.
 	  Select this if your module uses any of these functions from
 	  <crypto/sha2.h>.
+
+config RUST_CRYPTO_LIB_SHA256
+	bool
+	depends on RUST
+	select CRYPTO_LIB_SHA256
+	help
+	  Enable the Rust bindings for the synchronous SHA-256 and HMAC-SHA256
+	  library functions. The selected C library is built into the kernel
+	  because Rust abstractions are part of the built-in kernel crate.
 
 config CRYPTO_LIB_SHA256_ARCH
 	bool

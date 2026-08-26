@@ -9,18 +9,75 @@
 //! synchronously in the calling context with no allocation; the hashes and the
 //! MAC are infallible.
 //!
-//! C headers: [`include/crypto/aes.h`](srctree/include/crypto/aes.h),
+//! Public-key ciphers are available through [`akcipher`] when
+//! `CONFIG_RUST_CRYPTO_AKCIPHER` is enabled.
+//!
+//! C headers: [`include/crypto/akcipher.h`](srctree/include/crypto/akcipher.h),
+//! [`include/crypto/aes.h`](srctree/include/crypto/aes.h),
 //! [`include/crypto/aes-cbc-macs.h`](srctree/include/crypto/aes-cbc-macs.h),
 //! [`include/crypto/sha2.h`](srctree/include/crypto/sha2.h).
 
-use crate::{bindings, error::to_result, prelude::*};
+use core::ops::{Deref, DerefMut};
+
+use crate::bindings;
+#[cfg(any(
+    CONFIG_RUST_CRYPTO_AKCIPHER,
+    CONFIG_RUST_CRYPTO_LIB_AES,
+    CONFIG_RUST_CRYPTO_LIB_SHA256
+))]
+use crate::{error::to_result, prelude::*};
+
+#[cfg(CONFIG_RUST_CRYPTO_AKCIPHER)]
+pub mod akcipher;
 
 /// Size of a SHA-256 / HMAC-SHA256 digest, in bytes.
 pub const SHA256_DIGEST_SIZE: usize = 32;
 /// AES-128 block and key size, in bytes.
 pub const AES128_BLOCK_SIZE: usize = 16;
 
+/// A fixed-size byte string which is wiped when dropped.
+///
+/// This is intended for cryptographic keys and other sensitive intermediate
+/// values. Borrowing the contained bytes can still create copies which this
+/// type cannot track; callers should avoid copying them unnecessarily.
+pub struct Secret<const N: usize>([u8; N]);
+
+impl<const N: usize> Secret<N> {
+    /// Wraps bytes which should be wiped when their owner is dropped.
+    pub const fn new(bytes: [u8; N]) -> Self {
+        Self(bytes)
+    }
+
+    /// Creates an all-zero byte string.
+    pub const fn zeroed() -> Self {
+        Self([0; N])
+    }
+}
+
+impl<const N: usize> Deref for Secret<N> {
+    type Target = [u8; N];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<const N: usize> DerefMut for Secret<N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<const N: usize> Drop for Secret<N> {
+    fn drop(&mut self) {
+        // SAFETY: `self.0` is valid for exactly `N` writable bytes. The helper
+        // uses `memzero_explicit()`, so the wipe is not optimised away.
+        unsafe { bindings::memzero_explicit(self.0.as_mut_ptr().cast(), N) };
+    }
+}
+
 /// Returns the SHA-256 digest of `data`.
+#[cfg(CONFIG_RUST_CRYPTO_LIB_SHA256)]
 pub fn sha256(data: &[u8]) -> [u8; SHA256_DIGEST_SIZE] {
     let mut out = [0u8; SHA256_DIGEST_SIZE];
     // SAFETY: `data` is valid for `data.len()` reads and `out` is a valid
@@ -30,6 +87,7 @@ pub fn sha256(data: &[u8]) -> [u8; SHA256_DIGEST_SIZE] {
 }
 
 /// Returns `HMAC-SHA256(key, data)`.
+#[cfg(CONFIG_RUST_CRYPTO_LIB_SHA256)]
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; SHA256_DIGEST_SIZE] {
     let mut out = [0u8; SHA256_DIGEST_SIZE];
     // SAFETY: `key` and `data` are valid for their respective lengths and `out`
@@ -51,6 +109,7 @@ pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; SHA256_DIGEST_SIZE] {
 /// prepared and wiped internally; the call is infallible.
 ///
 /// [`include/crypto/aes-cbc-macs.h`]: srctree/include/crypto/aes-cbc-macs.h
+#[cfg(CONFIG_RUST_CRYPTO_LIB_AES)]
 pub fn aes_cmac(key: &[u8; AES128_BLOCK_SIZE], data: &[u8]) -> [u8; AES128_BLOCK_SIZE] {
     let mut out = [0u8; AES128_BLOCK_SIZE];
     // SAFETY: `key` is a valid 16-byte key, `data` is valid for `data.len()`
@@ -77,8 +136,10 @@ pub fn aes_cmac(key: &[u8; AES128_BLOCK_SIZE], data: &[u8]) -> [u8; AES128_BLOCK
 /// let _ct = cipher.encrypt_block(&[0u8; 16]);
 /// # Ok::<(), Error>(())
 /// ```
+#[cfg(CONFIG_RUST_CRYPTO_LIB_AES)]
 pub struct Aes128(bindings::aes_enckey);
 
+#[cfg(CONFIG_RUST_CRYPTO_LIB_AES)]
 impl Aes128 {
     /// Expands an AES-128 key from 16 raw key bytes.
     pub fn new(key: &[u8; AES128_BLOCK_SIZE]) -> Result<Self> {
@@ -105,11 +166,10 @@ impl Aes128 {
     }
 }
 
+#[cfg(CONFIG_RUST_CRYPTO_LIB_AES)]
 impl Drop for Aes128 {
     fn drop(&mut self) {
-        // SAFETY: `self.0` is a valid, owned `aes_enckey`; overwriting it with
-        // an all-zero `aes_enckey` clears the expanded key schedule.
-        // `write_volatile` keeps the store from being optimised away.
-        unsafe { core::ptr::write_volatile(&mut self.0, core::mem::zeroed()) };
+        // SAFETY: `self.0` is a valid, owned `aes_enckey`.
+        unsafe { bindings::aes_enckey_zero(&mut self.0) };
     }
 }

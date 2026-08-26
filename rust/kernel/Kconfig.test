@@ -83,4 +83,18 @@ config RUST_BITFIELD_KUNIT_TEST
 
 	  If unsure, say N.
 
+config RUST_CRYPTO_KUNIT_TEST
+	bool "KUnit tests for Rust crypto APIs" if !KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
+	select CRYPTO_RSA
+	select RUST_CRYPTO_AKCIPHER
+	select RUST_CRYPTO_LIB_SHA256
+	help
+	  This option enables KUnit tests for the safe Rust crypto APIs,
+	  including public-key encoding and encryption. The tests include
+	  published known-answer vectors and are intended for development and
+	  testing rather than regular kernel use cases.
+
+	  If unsure, say N.
+
 endif
