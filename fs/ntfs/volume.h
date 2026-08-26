@@ -238,7 +238,20 @@ DEFINE_NVOL_BIT_OPS(UsnJrnlStamped)
 DEFINE_NVOL_BIT_OPS(ReadOnly)
 DEFINE_NVOL_BIT_OPS(Compression)
 DEFINE_NVOL_BIT_OPS(FreeClusterKnown)
-DEFINE_NVOL_BIT_OPS(Shutdown)
+
+static inline int NVolShutdown(struct ntfs_volume *vol)
+{
+	return test_bit(NV_Shutdown, &vol->flags);
+}
+
+/* Out of line, it also reports the shutdown to fsnotify. */
+void NVolSetShutdown(struct ntfs_volume *vol);
+
+static inline void NVolClearShutdown(struct ntfs_volume *vol)
+{
+	clear_bit(NV_Shutdown, &vol->flags);
+}
+
 DEFINE_NVOL_BIT_OPS(SysImmutable)
 DEFINE_NVOL_BIT_OPS(ShowHiddenFiles)
 DEFINE_NVOL_BIT_OPS(HideDotFiles)

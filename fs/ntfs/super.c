@@ -338,6 +338,13 @@ void NVolSetErrors(struct ntfs_volume *vol)
 	fserror_report_metadata(vol->sb, -EFSCORRUPTED, GFP_ATOMIC);
 }
 
+/* Shut the volume down and notify fanotify(FAN_FS_ERROR) listeners. */
+void NVolSetShutdown(struct ntfs_volume *vol)
+{
+	set_bit(NV_Shutdown, &vol->flags);
+	fserror_report_shutdown(vol->sb, GFP_ATOMIC);
+}
+
 void ntfs_handle_error(struct super_block *sb)
 {
 	struct ntfs_volume *vol = NTFS_SB(sb);
