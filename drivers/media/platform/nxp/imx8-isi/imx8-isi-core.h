@@ -179,6 +179,7 @@ struct mxc_isi_plat_data {
 	u32 format_mask;
 	bool buf_active_reverse;
 	bool has_36bit_dma;
+	bool raw_out_lsb;
 };
 
 struct mxc_isi_dma_buffer {
