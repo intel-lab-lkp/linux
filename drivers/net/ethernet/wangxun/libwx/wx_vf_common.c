@@ -16,9 +16,13 @@ int wxvf_suspend(struct device *dev_d)
 	struct pci_dev *pdev = to_pci_dev(dev_d);
 	struct wx *wx = pci_get_drvdata(pdev);
 
+	rtnl_lock();
 	netif_device_detach(wx->netdev);
+	if (netif_running(wx->netdev))
+		wxvf_close(wx->netdev);
 	wx_clear_interrupt_scheme(wx);
 	pci_disable_device(pdev);
+	rtnl_unlock();
 
 	return 0;
 }
@@ -34,12 +38,36 @@ int wxvf_resume(struct device *dev_d)
 {
 	struct pci_dev *pdev = to_pci_dev(dev_d);
 	struct wx *wx = pci_get_drvdata(pdev);
+	int err;
+
+	err = pci_enable_device_mem(pdev);
+	if (err) {
+		dev_err(&pdev->dev, "Cannot enable PCI device from suspend\n");
+		return err;
+	}
 
 	pci_set_master(pdev);
-	wx_init_interrupt_scheme(wx);
+	rtnl_lock();
+
+	err = wx_init_interrupt_scheme(wx);
+	if (err)
+		goto err_pci;
+
+	if (netif_running(wx->netdev)) {
+		err = wxvf_open(wx->netdev);
+		if (err)
+			goto err_clear_int;
+	}
 	netif_device_attach(wx->netdev);
+	rtnl_unlock();
 
 	return 0;
+err_clear_int:
+	wx_clear_interrupt_scheme(wx);
+err_pci:
+	rtnl_unlock();
+	pci_disable_device(pdev);
+	return err;
 }
 EXPORT_SYMBOL(wxvf_resume);
 

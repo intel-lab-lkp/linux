@@ -171,6 +171,11 @@ static int ngbevf_probe(struct pci_dev *pdev,
 		goto err_pci_release_regions;
 	}
 
+	if (!device_link_add(&pdev->dev, &pdev->physfn->dev,
+			     DL_FLAG_PM_RUNTIME | DL_FLAG_AUTOREMOVE_CONSUMER))
+		dev_warn(&pdev->dev, "Failed to create device link to PF %s\n",
+			 pci_name(pdev->physfn));
+
 	SET_NETDEV_DEV(netdev, &pdev->dev);
 
 	wx = netdev_priv(netdev);
