@@ -1530,6 +1530,16 @@ static struct vsie_page *alloc_vsie_page(struct kvm *kvm)
 	return vsie_page;
 }
 
+/* Reset shadow state after a vsie_page has been (re)initialised for a new SCB. */
+static void reset_vsie_page(struct kvm *kvm, struct vsie_page *vsie_page)
+{
+	memset(&vsie_page->scb_s, 0, sizeof(struct kvm_s390_sie_block));
+	release_gmap_shadow_safe(kvm, vsie_page);
+	prefix_unmapped(vsie_page);
+	vsie_page->fault_addr = 0;
+	vsie_page->scb_s.ihcpu = 0xffffU;
+}
+
 /*
  * Get or create a vsie page for a scb address.
  *
@@ -1595,11 +1605,8 @@ static struct vsie_page *get_vsie_page(struct kvm *kvm, unsigned long addr)
 	vsie_page->scb_gpa = addr;
 	mutex_unlock(&kvm->arch.vsie.mutex);
 
-	memset(&vsie_page->scb_s, 0, sizeof(struct kvm_s390_sie_block));
-	release_gmap_shadow_safe(kvm, vsie_page);
-	prefix_unmapped(vsie_page);
-	vsie_page->fault_addr = 0;
-	vsie_page->scb_s.ihcpu = 0xffffU;
+	reset_vsie_page(kvm, vsie_page);
+
 	return vsie_page;
 }
 
