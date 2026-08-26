@@ -249,6 +249,10 @@ struct goku_udc {
 					configured:1,
 					enabled:1;
 
+#ifdef CONFIG_USB_GADGET_DEBUG_FS
+	struct dentry			*debugfs_root;
+#endif
+
 	/* pci state used to access those endpoints */
 	struct pci_dev			*pdev;
 	struct goku_udc_regs __iomem	*regs;
@@ -286,4 +290,3 @@ struct goku_udc {
 	xprintk(dev , KERN_WARNING , fmt , ## args)
 #define INFO(dev,fmt,args...) \
 	xprintk(dev , KERN_INFO , fmt , ## args)
-
