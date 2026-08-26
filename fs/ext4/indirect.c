@@ -574,6 +574,7 @@ int ext4_ind_map_blocks(handle_t *handle, struct inode *inode,
 	/* Next simple case - plain lookup failed */
 	if ((flags & EXT4_GET_BLOCKS_CREATE) == 0) {
 		unsigned epb = inode->i_sb->s_blocksize / sizeof(u32);
+		struct extent_status es;
 		int i;
 
 		/*
@@ -589,6 +590,21 @@ int ext4_ind_map_blocks(handle_t *handle, struct inode *inode,
 		/* Fill in size of a hole we found */
 		map->m_pblk = 0;
 		map->m_len = umin(map->m_len, count);
+
+		/*
+		 * The hole was measured on the on-disk indirect tree, which
+		 * knows nothing about delayed allocation.  Trim it at the
+		 * first delayed extent, the way the extent-mapped path does
+		 * in ext4_ext_determine_insert_hole(), so that callers do not
+		 * mistake data that is not written back yet for a hole.  The
+		 * extent found is not clipped to the queried range, so it may
+		 * begin before m_lblk or past the end of the hole.
+		 */
+		ext4_es_find_extent_range(inode, &ext4_es_is_delayed,
+					  map->m_lblk,
+					  map->m_lblk + map->m_len - 1, &es);
+		if (es.es_len && es.es_lblk > map->m_lblk)
+			map->m_len = umin(map->m_len, es.es_lblk - map->m_lblk);
 		goto cleanup;
 	}
 
