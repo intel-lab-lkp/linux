@@ -125,6 +125,12 @@ struct dma_buf *amdxdna_get_ubuf(struct drm_device *dev,
 	}
 
 	ubuf->nr_pages = exp_info.size >> PAGE_SHIFT;
+	if (ubuf->nr_pages > INT_MAX) {
+		XDNA_ERR(xdna, "Too many pages %lld", ubuf->nr_pages);
+		ret = -EINVAL;
+		goto free_ent;
+	}
+
 	lock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
 	new_pinned = atomic64_add_return(ubuf->nr_pages, &ubuf->mm->pinned_vm);
 	if (new_pinned > lock_limit && !capable(CAP_IPC_LOCK)) {
