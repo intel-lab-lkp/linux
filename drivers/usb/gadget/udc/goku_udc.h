@@ -247,7 +247,8 @@ struct goku_udc {
 					got_region:1,
 					req_config:1,
 					configured:1,
-					enabled:1;
+					enabled:1,
+					added:1;
 
 #ifdef CONFIG_USB_GADGET_DEBUG_FS
 	struct dentry			*debugfs_root;
