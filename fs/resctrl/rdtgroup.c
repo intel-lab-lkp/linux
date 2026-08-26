@@ -415,6 +415,131 @@ static int rdtgroup_kmode_cpus_show(struct kernfs_open_file *of,
 	return ret;
 }
 
+/**
+ * kmode_cpus_write() - Update @rdtgrp's kmode_cpu_mask from @newmask
+ * @rdtgrp:	Resctrl group whose kmode_cpu_mask is being updated.
+ * @newmask:	New CPUs for @rdtgrp's kernel mode association.
+ * @tmpmask:	Caller-allocated scratch cpumask used to compute the
+ *		incremental enable/disable deltas; contents on entry are
+ *		ignored and on return are unspecified.
+ *
+ * Reprogram kernel-mode association only on CPUs added to or removed from
+ * @rdtgrp->kmode_cpu_mask, then update the mask to @newmask.
+ */
+static void kmode_cpus_write(struct rdtgroup *rdtgrp,
+			     cpumask_var_t newmask, cpumask_var_t tmpmask)
+{
+	bool assign_ctrl = (resctrl_kcfg.active.ctrl_mode == KMODE_ASSIGN);
+	bool assign_mon = (resctrl_kcfg.active.mon_mode == KMODE_ASSIGN);
+	u32 closid, rmid;
+
+	closid = rdtgrp->closid;
+	rmid = rdtgrp->mon.rmid;
+
+	/* CPUs dropped from this group: old & ~newmask. */
+	cpumask_andnot(tmpmask, &rdtgrp->kmode_cpu_mask, newmask);
+	if (!cpumask_empty(tmpmask))
+		resctrl_arch_configure_kmode(tmpmask, closid, assign_ctrl, rmid,
+					     assign_mon, false);
+
+	/* CPUs newly added: newmask & ~old. */
+	cpumask_andnot(tmpmask, newmask, &rdtgrp->kmode_cpu_mask);
+	if (!cpumask_empty(tmpmask))
+		resctrl_arch_configure_kmode(tmpmask, closid, assign_ctrl, rmid,
+					     assign_mon, true);
+
+	cpumask_copy(&rdtgrp->kmode_cpu_mask, newmask);
+}
+
+/**
+ * rdtgroup_kmode_cpus_write() - Write kmode_cpus or kmode_cpus_list
+ * @of: kernfs open file
+ * @buf: CPU bitmask or list from userspace
+ * @nbytes: length of @buf
+ * @off: unused
+ *
+ * Parse and validate @buf for the group associated through info/kernel_mode,
+ * then update kernel-mode association via kmode_cpus_write().
+ *
+ * Return: @nbytes on success, negative errno on error.
+ */
+static ssize_t rdtgroup_kmode_cpus_write(struct kernfs_open_file *of,
+					 char *buf, size_t nbytes, loff_t off)
+{
+	cpumask_var_t tmpmask, newmask;
+	struct rdtgroup *rdtgrp;
+	int ret;
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+	if (!rdtgrp) {
+		ret = -ENOENT;
+		goto out_unlock;
+	}
+
+	if (!buf) {
+		rdt_last_cmd_printf("%s: Invalid input\n",
+				    is_cpu_list(of) ? "kmode_cpus_list" :
+						      "kmode_cpus");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	if (!zalloc_cpumask_var(&tmpmask, GFP_KERNEL) ||
+	    !zalloc_cpumask_var(&newmask, GFP_KERNEL)) {
+		rdt_last_cmd_printf("%s: Kernel allocation failure\n",
+				    is_cpu_list(of) ? "kmode_cpus_list" :
+						      "kmode_cpus");
+		ret = -ENOMEM;
+		goto out_free;
+	}
+
+	if (resctrl_kcfg.active.kmode_cur == RESCTRL_INHERIT_USER) {
+		rdt_last_cmd_puts("No active kernel-mode association\n");
+		ret = -EBUSY;
+		goto out_free;
+	}
+
+	if (resctrl_kcfg.active.k_rdtgrp != rdtgrp) {
+		rdt_last_cmd_puts("Group is not associated with kernel mode\n");
+		ret = -EBUSY;
+		goto out_free;
+	}
+
+	if (!rdtgrp->kmode) {
+		rdt_last_cmd_puts("Kernel mode is not active on this group\n");
+		ret = -EBUSY;
+		goto out_free;
+	}
+
+	if (is_cpu_list(of))
+		ret = cpulist_parse(buf, newmask);
+	else
+		ret = cpumask_parse(buf, newmask);
+
+	if (ret) {
+		rdt_last_cmd_puts("Bad CPU list/mask\n");
+		goto out_free;
+	}
+
+	/* kernel-mode association is only programmed on online CPUs. */
+	cpumask_andnot(tmpmask, newmask, cpu_online_mask);
+	if (!cpumask_empty(tmpmask)) {
+		rdt_last_cmd_puts("Can only assign online CPUs\n");
+		ret = -EINVAL;
+		goto out_free;
+	}
+
+	kmode_cpus_write(rdtgrp, newmask, tmpmask);
+
+out_free:
+	free_cpumask_var(tmpmask);
+	free_cpumask_var(newmask);
+out_unlock:
+	rdtgroup_kn_unlock(of->kn);
+
+	return ret ?: nbytes;
+}
+
 /*
  * Update the PGR_ASSOC MSR on all cpus in @cpu_mask,
  *
@@ -2677,17 +2802,19 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "kmode_cpus",
-		.mode		= 0444,
+		.mode		= 0644,
 		.hidden		= true,
 		.kf_ops		= &rdtgroup_kf_single_ops,
+		.write		= rdtgroup_kmode_cpus_write,
 		.seq_show	= rdtgroup_kmode_cpus_show,
 		.fflags		= RFTYPE_BASE,
 	},
 	{
 		.name		= "kmode_cpus_list",
-		.mode		= 0444,
+		.mode		= 0644,
 		.hidden		= true,
 		.kf_ops		= &rdtgroup_kf_single_ops,
+		.write		= rdtgroup_kmode_cpus_write,
 		.seq_show	= rdtgroup_kmode_cpus_show,
 		.flags		= RFTYPE_FLAGS_CPUS_LIST,
 		.fflags		= RFTYPE_BASE,

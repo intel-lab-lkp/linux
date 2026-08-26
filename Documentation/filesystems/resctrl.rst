@@ -658,6 +658,36 @@ All groups contain the following files:
 "cpus_list":
 	Just like "cpus", only using ranges of CPUs instead of bitmasks.
 
+"kmode_cpus":
+	Accessible only within the resource group currently associated with
+	the active kernel mode (see "info/kernel_mode").
+
+	Bitmask of the logical CPUs associated with the group's kernel mode.
+	When kernel mode is activated through info/kernel_mode, every currently
+	online CPU is included. CPUs that come online later are automatically
+	added to the association.
+
+	Writing a mask reprograms the association: it enables on the CPUs newly
+	added by the write and disables on the CPUs dropped from the previous
+	mask. An empty mask disables the association on all currently online
+	CPUs, but CPUs that come online later are still automatically
+	associated. The mask must contain only online CPUs; masks naming offline
+	CPUs are rejected. Errors are reported in "info/last_cmd_status".
+	Example::
+
+	  # mkdir ctrl1
+	  # echo "assign_global_enable_per_cpu:ctrl=assign;mon=assign;group=ctrl1//" \
+	        > info/kernel_mode
+	  # echo 0-3 > ctrl1/kmode_cpus_list
+	  # cat ctrl1/kmode_cpus
+	  f
+	  # cat ctrl1/kmode_cpus_list
+	  0-3
+
+"kmode_cpus_list":
+	Just like "kmode_cpus", only using ranges of CPUs instead of bitmasks.
+	Writable with the same semantics and restrictions as "kmode_cpus".
+
 
 When control is enabled all CTRL_MON groups will also contain:
 
