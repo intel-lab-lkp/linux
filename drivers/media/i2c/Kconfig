@@ -949,6 +949,14 @@ config VIDEO_DW9807_VCM
 	  capability. This is designed for linear control of
 	  voice coil motors, controlled via I2C serial interface.
 
+config VIDEO_WV517S
+	tristate "WV517S lens voice coil support"
+	help
+	  This is a driver for the WV517S camera lens voice coil. It supports
+	  the 10-bit focus control used by the Lenovo Yoga Book rear camera.
+	  The driver exposes the actuator through the standard V4L2 lens
+	  sub-device interface.
+
 endif
 
 menu "Flash devices"
