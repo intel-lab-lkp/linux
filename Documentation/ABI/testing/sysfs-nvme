@@ -11,3 +11,20 @@ Description:
 		(REPLACETLSPSK) with the target. After a reauthentication
 		the value returned by tls_configured_key will be the new
 		serial.
+
+What:		/sys/class/nvme/nvmeX/adaptive_irq_polling
+Date:		August 2026
+KernelVersion:	7.3
+Contact:	Linux NVMe mailing list <linux-nvme@lists.infradead.org>
+Description:
+		Set the adaptive IRQ polling policy (0 or 1) for eligible
+		I/O queues of one PCI NVMe controller. Reading returns the
+		policy, not whether a queue is currently polling. Changing it
+		freezes the namespace request queues and waits for outstanding
+		namespace I/O. Writes fail with EBUSY unless the controller is
+		live.
+
+		Eligible queues use non-threaded MSI-X with a dedicated vector.
+		The attribute is unavailable with threaded interrupts. The
+		module parameter supplies only the initial policy for new
+		controllers.
