@@ -914,6 +914,13 @@ static void svc_handle_xprt(struct svc_rqst *rqstp, struct svc_xprt *xprt)
 
 		clear_bit(XPT_OLD, &xprt->xpt_flags);
 
+		/*
+		 * A deferred request is a replay of one that arrived
+		 * earlier, not fresh client activity on this connection.
+		 */
+		if (!rqstp->rq_deferred)
+			WRITE_ONCE(xprt->xpt_last_recv, jiffies);
+
 		rqstp->rq_chandle.defer = svc_defer;
 
 		if (serv->sv_stats)
