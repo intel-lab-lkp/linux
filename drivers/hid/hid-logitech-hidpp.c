@@ -209,6 +209,9 @@ struct hidpp_device {
 	int hires_wheel_multiplier;
 	u8 hires_wheel_feature_index;
 
+	u8 multiplatform_feature_index;
+	struct mutex multiplatform_lock;
+
 	bool connected_once;
 };
 
@@ -4423,6 +4426,598 @@ static bool hidpp_application_equals(struct hid_device *hdev,
 	return report && report->application == application;
 }
 
+/* -------------------------------------------------------------------------- */
+/* 0x4531: Multi-Platform Support                                             */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Some Logitech devices expose the HID++ feature 0x4531 (Multi-Platform) allowing
+ * the host to specify which operating system platform to use on the device. Changing device's
+ * platform may alter the behavior of the device to match the specified platform.
+ *
+ * Devices that implement this feature expose a per-device sysfs attribute
+ * "platform". Writing one of (windows|winemb|linux|chrome|android|
+ * macos|ios|webos|tizen) selects the matching platform descriptor on the device.
+ * Reading it reports the platform currently selected by the device as the
+ * space separated list of the platform names the selected platform descriptor covers.
+ */
+
+#define HIDPP_MULTIPLATFORM_FEAT_ID			0x4531
+#define HIDPP_MULTIPLATFORM_GET_FEATURE_INFO		0x00
+#define HIDPP_MULTIPLATFORM_GET_PLATFORM_DESCRIPTOR	0x10
+#define HIDPP_MULTIPLATFORM_GET_CURRENT_PLATFORM	0x20
+#define HIDPP_MULTIPLATFORM_SET_CURRENT_PLATFORM	0x30
+
+/* Host index selecting the host the device is currently connected to. */
+#define HIDPP_MULTIPLATFORM_HOST_CURRENT		0xFF
+
+/* Platform index reported for a host that has no platform configured. */
+#define HIDPP_MULTIPLATFORM_PLAT_IDX_UNDEFINED		0xFF
+
+/*
+ * Bit positions of the platforms within the 16-bit platform mask reported by
+ * the platform descriptors. The mask of a given platform is BIT(value).
+ */
+enum hidpp_multiplatform_platform {
+	HIDPP_MULTIPLATFORM_PLATFORM_TIZEN	= 0,
+	HIDPP_MULTIPLATFORM_PLATFORM_WINDOWS	= 8,
+	HIDPP_MULTIPLATFORM_PLATFORM_WINEMB	= 9,
+	HIDPP_MULTIPLATFORM_PLATFORM_LINUX	= 10,
+	HIDPP_MULTIPLATFORM_PLATFORM_CHROME	= 11,
+	HIDPP_MULTIPLATFORM_PLATFORM_ANDROID	= 12,
+	HIDPP_MULTIPLATFORM_PLATFORM_MACOS	= 13,
+	HIDPP_MULTIPLATFORM_PLATFORM_IOS	= 14,
+	HIDPP_MULTIPLATFORM_PLATFORM_WEBOS	= 15,
+};
+
+struct hidpp_platform_desc {
+	u8 plat_idx;
+	u8 desc_idx;
+	u16 plat_mask;
+};
+
+/*
+ * Platform names exposed through the "platform" sysfs attribute, indexed by
+ * their bit position in the platform mask. Bit positions the specification
+ * does not assign a platform to are left as NULL holes and must be skipped
+ * when walking the array.
+ */
+static const char * const multiplatform_names[] = {
+	[HIDPP_MULTIPLATFORM_PLATFORM_TIZEN]	= "tizen",
+	[HIDPP_MULTIPLATFORM_PLATFORM_WINDOWS]	= "windows",
+	[HIDPP_MULTIPLATFORM_PLATFORM_WINEMB]	= "winemb",
+	[HIDPP_MULTIPLATFORM_PLATFORM_LINUX]	= "linux",
+	[HIDPP_MULTIPLATFORM_PLATFORM_CHROME]	= "chrome",
+	[HIDPP_MULTIPLATFORM_PLATFORM_ANDROID]	= "android",
+	[HIDPP_MULTIPLATFORM_PLATFORM_MACOS]	= "macos",
+	[HIDPP_MULTIPLATFORM_PLATFORM_IOS]	= "ios",
+	[HIDPP_MULTIPLATFORM_PLATFORM_WEBOS]	= "webos",
+};
+
+/**
+ * hidpp_multiplatform_errno() - Convert HID++ protocol error codes to Linux errno
+ * @err: HID++ protocol error code (positive) or Linux errno (negative or zero)
+ *
+ * Converts a HID++ protocol error code to the corresponding Linux errno. If @err is
+ * already a negative or zero Linux errno, it is returned unchanged. Otherwise, if @err
+ * is a positive HID++ error code, it is mapped to the appropriate negative Linux errno
+ * based on the HID++ specification error codes.
+ *
+ * This is used to ensure that functions interacting with the Multi-Platform feature can
+ * return consistent Linux error codes even when they encounter errors defined by the HID++
+ * protocol when the platform is set from the sysfs attribute.
+ *
+ * Return: Negative Linux errno corresponding to the HID++ error code, or @err if it is
+ * already a Linux errno.
+ */
+static int hidpp_multiplatform_errno(int err)
+{
+	if (err <= 0)
+		return err;
+
+	switch (err) {
+	case HIDPP20_ERROR_INVALID_ARGS:
+	case HIDPP20_ERROR_OUT_OF_RANGE:
+	case HIDPP20_ERROR_INVALID_FEATURE_INDEX:
+	case HIDPP20_ERROR_INVALID_FUNCTION_ID:
+		return -EINVAL;
+	case HIDPP20_ERROR_NOT_ALLOWED:
+		return -EPERM;
+	case HIDPP20_ERROR_BUSY:
+		return -EBUSY;
+	case HIDPP20_ERROR_UNSUPPORTED:
+		return -EOPNOTSUPP;
+	case HIDPP20_ERROR_HW_ERROR:
+	case HIDPP20_ERROR_UNKNOWN:
+	default:
+		return -EIO;
+	}
+}
+
+/**
+ * hidpp_multiplatform_get_num_pdesc() - Retrieve number of platform descriptors
+ * @hidpp: Pointer to the hidpp_device instance
+ * @feat_index: Feature index of the Multi-Platform feature
+ * @num_desc: Pointer to store the number of platform descriptors
+ *
+ * Retrieves the number of platform descriptors supported by the device through
+ * the Multi-Platform feature and stores it in @num_desc.
+ *
+ * Return: 0 on success, or a negative Linux errno on failure.
+ */
+static int hidpp_multiplatform_get_num_pdesc(struct hidpp_device *hidpp,
+					     u8 feat_index, u8 *num_desc)
+{
+	int ret;
+	struct hidpp_report response;
+	struct hid_device *hdev = hidpp->hid_dev;
+
+	ret = hidpp_send_fap_command_sync(hidpp, feat_index,
+					  HIDPP_MULTIPLATFORM_GET_FEATURE_INFO,
+					  NULL, 0, &response);
+	if (ret) {
+		hid_warn(hdev, "Multiplatform: GET_FEATURE_INFO failed (err=%d)", ret);
+		return hidpp_multiplatform_errno(ret);
+	}
+
+	*num_desc = response.fap.params[3];
+	hid_dbg(hdev, "Multiplatform: Device supports %d platform descriptors", *num_desc);
+
+	return 0;
+}
+
+/**
+ * hidpp_multiplatform_get_platform_desc() - Retrieve a platform descriptor entry
+ * @hidpp: Pointer to the hidpp_device instance
+ * @feat_index: Feature index of the Multi-Platform feature
+ * @platform_idx: Index of the platform descriptor to retrieve
+ * @pdesc: Pointer to store the retrieved platform descriptor
+ *
+ * Retrieves a single platform descriptor identified by @platform_idx from the
+ * device and stores the parsed descriptor fields in @pdesc.
+ *
+ * Return: 0 on success, or a negative Linux errno on failure.
+ */
+static int hidpp_multiplatform_get_platform_desc(struct hidpp_device *hidpp, u8 feat_index,
+						 u8 platform_idx, struct hidpp_platform_desc *pdesc)
+{
+	int ret;
+	struct hidpp_report response;
+	u8 params[1] = { platform_idx };
+	struct hid_device *hdev = hidpp->hid_dev;
+
+	ret = hidpp_send_fap_command_sync(hidpp, feat_index,
+					  HIDPP_MULTIPLATFORM_GET_PLATFORM_DESCRIPTOR,
+					  params, sizeof(params), &response);
+
+	if (ret) {
+		hid_warn(hdev,
+			 "Multiplatform: GET_PLATFORM_DESCRIPTOR failed for index %d (err=%d)",
+			 platform_idx, ret);
+		return hidpp_multiplatform_errno(ret);
+	}
+
+	pdesc->plat_idx = response.fap.params[0];
+	pdesc->desc_idx = response.fap.params[1];
+	pdesc->plat_mask = get_unaligned_be16(&response.fap.params[2]);
+
+	hid_dbg(hdev,
+		"Multiplatform: descriptor %d: plat_idx=%d, desc_idx=%d, plat_mask=0x%04x",
+		platform_idx, pdesc->plat_idx, pdesc->desc_idx, pdesc->plat_mask);
+
+	return 0;
+}
+
+/**
+ * hidpp_multiplatform_get_platform_index() - Find platform index for a mask
+ * @hidpp: Pointer to the hidpp_device instance
+ * @feat_index: Feature index of the Multi-Platform feature
+ * @plat_mask: Platform mask to search for
+ * @plat_index: Pointer to store the matched platform index
+ *
+ * Iterates through all platform descriptors exposed by the device via the
+ * Multi-Platform feature, retrieving each descriptor and comparing its
+ * platform mask to @plat_mask. A descriptor matches if its mask overlaps with
+ * the requested @plat_mask (i.e. (pdesc.plat_mask & plat_mask) is non-zero).
+ *
+ * When a matching descriptor is found, its platform index (plat_idx) is
+ * written to @plat_index and the function returns success.
+ *
+ * Return: 0 on success; -EOPNOTSUPP if the device exposes no descriptor
+ *         matching @plat_mask; or another negative Linux errno on transport
+ *         failure.
+ */
+static int hidpp_multiplatform_get_platform_index(struct hidpp_device *hidpp,
+						  u8 feat_index, u16 plat_mask,
+						  u8 *plat_index)
+{
+	int i;
+	int ret;
+	u8 num_desc;
+	struct hidpp_platform_desc pdesc;
+	struct hid_device *hdev = hidpp->hid_dev;
+
+	ret = hidpp_multiplatform_get_num_pdesc(hidpp, feat_index, &num_desc);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < num_desc; i++) {
+		ret = hidpp_multiplatform_get_platform_desc(hidpp, feat_index, i, &pdesc);
+		if (ret)
+			return ret;
+
+		if (pdesc.plat_mask & plat_mask) {
+			*plat_index = pdesc.plat_idx;
+			hid_dbg(hdev,
+				"Multiplatform: Selected platform index %d for mask 0x%04x",
+				*plat_index, plat_mask);
+			return 0;
+		}
+	}
+
+	hid_dbg(hdev,
+		"Multiplatform: No matching platform descriptor for mask 0x%04x",
+		plat_mask);
+	return -EOPNOTSUPP;
+}
+
+/**
+ * hidpp_multiplatform_get_platform_mask() - Find the platform mask for a platform index
+ * @hidpp: Pointer to the hidpp_device instance
+ * @feat_index: Feature index of the Multi-Platform feature
+ * @plat_index: Platform index to find the platform mask of
+ * @plat_mask: Pointer to store the found platform mask
+ *
+ * A platform is the union of one or more platform descriptors, each covering
+ * its own set of operating systems. This walks all platform descriptors exposed
+ * by the device and accumulates the platform masks of every descriptor
+ * belonging to @plat_index, yielding the full set of platforms covered by it.
+ *
+ * Return: 0 on success; -EOPNOTSUPP if the device exposes no descriptor
+ *         belonging to @plat_index; or another negative Linux errno on
+ *         transport failure.
+ */
+static int hidpp_multiplatform_get_platform_mask(struct hidpp_device *hidpp,
+						 u8 feat_index, u8 plat_index,
+						 u16 *plat_mask)
+{
+	int i;
+	int ret;
+	u8 num_desc;
+	u16 mask = 0;
+	struct hidpp_platform_desc pdesc;
+	struct hid_device *hdev = hidpp->hid_dev;
+
+	ret = hidpp_multiplatform_get_num_pdesc(hidpp, feat_index, &num_desc);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < num_desc; i++) {
+		ret = hidpp_multiplatform_get_platform_desc(hidpp, feat_index, i, &pdesc);
+		if (ret)
+			return ret;
+
+		if (pdesc.plat_idx == plat_index)
+			mask |= pdesc.plat_mask;
+	}
+
+	if (!mask) {
+		hid_dbg(hdev,
+			"Multiplatform: No platform descriptor for platform index %d",
+			plat_index);
+		return -EOPNOTSUPP;
+	}
+
+	hid_dbg(hdev, "Multiplatform: Platform index %d covers mask 0x%04x",
+		plat_index, mask);
+	*plat_mask = mask;
+
+	return 0;
+}
+
+/**
+ * hidpp_multiplatform_get_current_platform_index() - Query the device current platform index
+ * @hidpp: Pointer to the hidpp_device instance
+ * @feat_index: Feature index of the Multi-Platform feature
+ * @plat_index: Pointer to store the platform index reported by the device
+ *
+ * Sends the HID++ Multi-Platform 'GET_CURRENT_PLATFORM' command for the host
+ * the device is currently connected to and stores the platform index it reports
+ * in @plat_index.
+ *
+ * Return: 0 on success; -ENODATA if the host has no platform configured; or
+ *         another negative Linux errno on failure.
+ */
+static int hidpp_multiplatform_get_current_platform_index(struct hidpp_device *hidpp,
+						    u8 feat_index, u8 *plat_index)
+{
+	int ret;
+	struct hidpp_report response;
+	u8 params[1] = { HIDPP_MULTIPLATFORM_HOST_CURRENT };
+	struct hid_device *hdev = hidpp->hid_dev;
+
+	ret = hidpp_send_fap_command_sync(hidpp, feat_index,
+					  HIDPP_MULTIPLATFORM_GET_CURRENT_PLATFORM,
+					  params, sizeof(params), &response);
+	if (ret) {
+		hid_warn(hdev, "Multiplatform: GET_CURRENT_PLATFORM failed (err=%d)", ret);
+		return hidpp_multiplatform_errno(ret);
+	}
+
+	if (response.fap.params[2] == HIDPP_MULTIPLATFORM_PLAT_IDX_UNDEFINED) {
+		hid_dbg(hdev, "Multiplatform: Current host has no platform configured");
+		return -ENODATA;
+	}
+
+	*plat_index = response.fap.params[2];
+	hid_dbg(hdev, "Multiplatform: Current platform index is %d", *plat_index);
+
+	return 0;
+}
+
+/**
+ * hidpp_multiplatform_update_device_platform() - Update the device platform
+ * @hidpp: Pointer to the hidpp_device instance
+ * @feat_index: Feature index of the Multi-Platform feature
+ * @plat_index: Platform index to set on the device
+ *
+ * Sends the HID++ Multi-Platform 'SET_CURRENT_PLATFORM' command to the device to
+ * update its platform index to @plat_index.
+ *
+ * Return: 0 on success, or a negative Linux errno on failure.
+ */
+static int hidpp_multiplatform_update_device_platform(struct hidpp_device *hidpp,
+						      u8 feat_index, u8 plat_index)
+{
+	int ret;
+	struct hidpp_report response;
+	u8 params[2] = { HIDPP_MULTIPLATFORM_HOST_CURRENT, plat_index };
+
+	ret = hidpp_send_fap_command_sync(hidpp, feat_index,
+					  HIDPP_MULTIPLATFORM_SET_CURRENT_PLATFORM,
+					  params, sizeof(params), &response);
+
+	if (ret)
+		hid_warn(hidpp->hid_dev,
+			 "Multiplatform: SET_CURRENT_PLATFORM failed for index %d (err=%d)",
+			 plat_index, ret);
+
+	return hidpp_multiplatform_errno(ret);
+}
+
+/**
+ * hidpp_multiplatform_set_platform() - Apply a platform to the device
+ * @hidpp: Pointer to the hidpp_device instance
+ * @mask: A single BIT(HIDPP_MULTIPLATFORM_PLATFORM_*) mask to apply
+ *
+ * Looks up the device's platform descriptor whose platform mask matches @mask
+ * and instructs the device to switch to it via SET_CURRENT_PLATFORM.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if the device does not implement feature
+ *         0x4531 or exposes no descriptor matching @mask, or another negative
+ *         Linux errno from the underlying HID++ command.
+ */
+static int hidpp_multiplatform_set_platform(struct hidpp_device *hidpp, u16 mask)
+{
+	u8 plat_index;
+	int ret;
+
+	if (!hidpp->multiplatform_feature_index)
+		return -EOPNOTSUPP;
+
+	ret = hidpp_multiplatform_get_platform_index(hidpp,
+			hidpp->multiplatform_feature_index, mask, &plat_index);
+	if (ret)
+		return ret;
+
+	ret = hidpp_multiplatform_update_device_platform(hidpp,
+			hidpp->multiplatform_feature_index, plat_index);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+/**
+ * hidpp_multiplatform_get_current_platform_mask() - Query the device current platform mask
+ * @hidpp: Pointer to the hidpp_device instance
+ * @mask: Pointer to store the device platform mask in use
+ *
+ * Asks the device which platform is configured for the current host and
+ * resolves it into the mask of operating systems that platform covers.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if the device does not implement feature
+ *         0x4531 or exposes no descriptor for its current platform, or another
+ *         negative Linux errno from the underlying HID++ command.
+ */
+static int hidpp_multiplatform_get_current_platform_mask(struct hidpp_device *hidpp, u16 *mask)
+{
+	u8 plat_index;
+	int ret;
+
+	if (!hidpp->multiplatform_feature_index)
+		return -EOPNOTSUPP;
+
+	ret = hidpp_multiplatform_get_current_platform_index(hidpp,
+			hidpp->multiplatform_feature_index, &plat_index);
+	if (ret)
+		return ret;
+
+	return hidpp_multiplatform_get_platform_mask(hidpp,
+			hidpp->multiplatform_feature_index, plat_index, mask);
+}
+
+/**
+ * platform_show() - Report the device's current platform
+ * @dev: Pointer to the device instance
+ * @attr: Pointer to the device attribute
+ * @buf: Buffer to store the platform names in
+ *
+ * Queries the platform mask the device is configured with for the current host and
+ * emits the names of all the platforms it covers as a space separated list.
+ *
+ * Return: Number of bytes written to @buf on success, or a negative Linux errno
+ * on failure.
+ */
+static ssize_t platform_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct hidpp_device *hidpp = hid_get_drvdata(hdev);
+	unsigned long mask;
+	unsigned int idx;
+	int len = 0;
+	u16 plat_mask;
+	int ret;
+
+	mutex_lock(&hidpp->multiplatform_lock);
+	ret = hidpp_multiplatform_get_current_platform_mask(hidpp, &plat_mask);
+	mutex_unlock(&hidpp->multiplatform_lock);
+	if (ret)
+		return ret;
+
+	/* Mask bits the specification assigns no platform to are skipped. */
+	mask = plat_mask;
+	for_each_set_bit(idx, &mask, ARRAY_SIZE(multiplatform_names))
+		if (multiplatform_names[idx])
+			len += sysfs_emit_at(buf, len, "%s%s",
+					     len ? " " : "", multiplatform_names[idx]);
+
+	return len + sysfs_emit_at(buf, len, "\n");
+}
+
+/**
+ * platform_store() - Set the device platform based on user input
+ * @dev: Pointer to the device instance
+ * @attr: Pointer to the device attribute
+ * @buf: Buffer containing the platform name string
+ * @count: Size of the input buffer
+ *
+ * Parses the platform name from the input buffer, converts it to a platform mask,
+ * and applies it to the device using the HID++ Multi-Platform feature. The function
+ * handles errors gracefully, returning appropriate Linux errno values if the input
+ * is invalid or if the device does not support the requested platform.
+ *
+ * Return: Number of bytes consumed from the input buffer on success, or a negative
+ * Linux errno on failure.
+ */
+static ssize_t platform_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct hidpp_device *hidpp = hid_get_drvdata(hdev);
+	char platform[16];
+	unsigned int idx;
+	int ret;
+
+	strscpy(platform, buf, sizeof(platform));
+	string_lower(platform, platform);
+
+	/*
+	 * multiplatform_names[] contains NULL holes, so sysfs_match_string()
+	 * cannot be used here: it stops at the first NULL entry.
+	 */
+	for (idx = 0; idx < ARRAY_SIZE(multiplatform_names); idx++)
+		if (multiplatform_names[idx] &&
+		    sysfs_streq(multiplatform_names[idx], platform))
+			break;
+
+	if (idx == ARRAY_SIZE(multiplatform_names))
+		return -EINVAL;
+
+	mutex_lock(&hidpp->multiplatform_lock);
+	ret = hidpp_multiplatform_set_platform(hidpp, BIT(idx));
+	mutex_unlock(&hidpp->multiplatform_lock);
+	if (ret)
+		return ret;
+
+	hid_dbg(hdev, "Multiplatform: Device platform set to '%s'\n",
+		multiplatform_names[idx]);
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(platform);
+
+static struct attribute *multiplatform_attrs[] = {
+	&dev_attr_platform.attr,
+	NULL
+};
+
+/**
+ * multiplatform_is_visible() - Determine whether the platform attribute should be exposed
+ * @kobj: kobject of the device the group is being evaluated for
+ * @attr: Attribute being evaluated
+ * @n: Index of the attribute within the group
+ *
+ * The "platform" attribute is only meaningful for devices that support the
+ * HID++ Multi-Platform feature (0x4531), which is only known once probe() has
+ * queried it. Hiding it via this callback, rather than creating/removing the
+ * sysfs group at runtime, lets the group be registered as one of the driver's
+ * default device attribute groups so it is added atomically by the driver
+ * core as part of binding instead of racing with userspace.
+ *
+ * Return: The attribute's mode if the attribute should be visible, or 0 to hide it.
+ */
+static umode_t multiplatform_is_visible(struct kobject *kobj, struct attribute *attr, int n)
+{
+	struct hid_device *hdev = to_hid_device(kobj_to_dev(kobj));
+	struct hidpp_device *hidpp = hid_get_drvdata(hdev);
+
+	if (!hidpp || !hidpp->multiplatform_feature_index)
+		return 0;
+
+	return attr->mode;
+}
+
+static const struct attribute_group multiplatform_attribute_group = {
+	.attrs = multiplatform_attrs,
+	.is_visible = multiplatform_is_visible,
+};
+
+static const struct attribute_group *hidpp_groups[] = {
+	&multiplatform_attribute_group,
+	NULL
+};
+
+/**
+ * hidpp_multiplatform_init() - Initialize HID++ Multi-Platform support
+ * @hidpp: Pointer to the hidpp_device instance
+ *
+ * Checks if the device supports the HID++ Multi-Platform feature (0x4531) and, if so,
+ * initializes the hidpp_device structure to track the feature index.
+ */
+static void hidpp_multiplatform_init(struct hidpp_device *hidpp)
+{
+	u8 feat_index;
+	int ret;
+
+	ret = hidpp_root_get_feature(hidpp, HIDPP_MULTIPLATFORM_FEAT_ID, &feat_index);
+	if (ret)
+		return;
+
+	hidpp->multiplatform_feature_index = feat_index;
+
+	mutex_init(&hidpp->multiplatform_lock);
+}
+
+/**
+ * hidpp_multiplatform_cleanup() - Cleanup HID++ Multi-Platform support
+ * @hidpp: Pointer to the hidpp_device instance
+ *
+ * Destroys the mutex used for synchronizing access to the Multi-Platform feature.
+ * This function should be called during device removal or driver cleanup to ensure
+ * proper resource management.
+ */
+static void hidpp_multiplatform_cleanup(struct hidpp_device *hidpp)
+{
+	if (!hidpp->multiplatform_feature_index)
+		return;
+
+	mutex_destroy(&hidpp->multiplatform_lock);
+}
+
 static int hidpp_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	struct hidpp_device *hidpp;
@@ -4545,6 +5140,8 @@ static int hidpp_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		}
 	}
 
+	hidpp_multiplatform_init(hidpp);
+
 	/*
 	 * This relies on logi_dj_ll_close() being a no-op so that DJ connection
 	 * events will still be received.
@@ -4557,6 +5154,7 @@ hid_hw_init_fail:
 hid_hw_open_fail:
 	hid_hw_stop(hdev);
 hid_hw_start_fail:
+	hidpp_multiplatform_cleanup(hidpp);
 	sysfs_remove_group(&hdev->dev.kobj, &ps_attribute_group);
 	cancel_work_sync(&hidpp->work);
 	mutex_destroy(&hidpp->send_mutex);
@@ -4570,6 +5168,7 @@ static void hidpp_remove(struct hid_device *hdev)
 	if (!hidpp)
 		return hid_hw_stop(hdev);
 
+	hidpp_multiplatform_cleanup(hidpp);
 	sysfs_remove_group(&hdev->dev.kobj, &ps_attribute_group);
 
 	hid_hw_stop(hdev);
@@ -4782,6 +5381,9 @@ static struct hid_driver hidpp_driver = {
 	.input_configured = hidpp_input_configured,
 	.input_mapping = hidpp_input_mapping,
 	.input_mapped = hidpp_input_mapped,
+	.driver = {
+		.dev_groups = hidpp_groups,
+	},
 };
 
 module_hid_driver(hidpp_driver);
