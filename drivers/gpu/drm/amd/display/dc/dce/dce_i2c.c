@@ -72,9 +72,16 @@ bool dce_i2c_submit_command(
 
 	dce_i2c_hw = acquire_i2c_hw_engine(pool, ddc);
 
-	if (dce_i2c_hw)
-		return dce_i2c_submit_command_hw(pool, ddc, cmd, dce_i2c_hw);
+	if (dce_i2c_hw && dce_i2c_submit_command_hw(pool, ddc, cmd, dce_i2c_hw))
+		return true;
 
+	/*
+	 * The hardware I2C engine on DCE6 can fail to complete longer
+	 * transfers, such as a 128 byte EDID block read, even when the slave
+	 * acknowledges its address. dce_i2c_submit_command_hw() releases the
+	 * engine and closes the DDC line on every exit path, so retry the
+	 * transfer on the bit-banging software engine instead of giving up.
+	 */
 	dce_i2c_sw.ctx = ddc->ctx;
 	if (dce_i2c_engine_acquire_sw(&dce_i2c_sw, ddc)) {
 		return dce_i2c_submit_command_sw(pool, ddc, cmd, &dce_i2c_sw);
