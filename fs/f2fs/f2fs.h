@@ -1357,6 +1357,8 @@ struct f2fs_io_info {
 	blk_opf_t op_flags;	/* req_flag_bits */
 	block_t new_blkaddr;	/* new block address to be written */
 	block_t old_blkaddr;	/* old block address before Cow */
+	pgoff_t folio_offset;	/* offset in large folio */
+	unsigned int folio_blkcnt;	/* block count in large folio */
 	union {
 		struct page *page;	/* page to be written */
 		struct folio *folio;
@@ -1377,6 +1379,15 @@ struct f2fs_io_info {
 	struct bio **bio;		/* bio for ipu */
 	sector_t *last_block;		/* last block number in bio */
 };
+
+#define F2FS_FIO_LBLK(folio, fio)					\
+	((folio)->index + (fio)->folio_offset)
+#define F2FS_FIO_BLKCNT(fio)						\
+	((fio)->folio_blkcnt ? (fio)->folio_blkcnt : 1)
+#define F2FS_FIO_BIO_OFFSET(fio)					\
+	((fio)->folio_offset << PAGE_SHIFT)
+#define F2FS_FIO_BIO_SIZE(fio)					\
+	F2FS_BLK_TO_BYTES(F2FS_FIO_BLKCNT(fio))
 
 struct bio_entry {
 	struct bio *bio;
