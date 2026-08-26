@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (c) 2025 Valve Corporation */
 
+#include <linux/device/faux.h>
+
 #include "sched_tests.h"
 
 /*
@@ -9,6 +11,8 @@
  *
  * Test cases are implemented in a separate file.
  */
+
+static atomic_t drm_mock_sched_instance = ATOMIC_INIT(0);
 
 /**
  * drm_mock_sched_entity_new - Create a new mock scheduler entity
@@ -296,10 +300,19 @@ struct drm_mock_scheduler *drm_mock_sched_new(struct kunit *test, long timeout)
 		.name		= "drm-mock-scheduler",
 	};
 	struct drm_mock_scheduler *sched;
+	char name[64];
 	int ret;
 
 	sched = kunit_kzalloc(test, sizeof(*sched), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, sched);
+
+	snprintf(name, sizeof(name), "drm-mock-scheduler-%d",
+		 atomic_inc_return(&drm_mock_sched_instance));
+
+	sched->faux_dev = faux_device_create(name, NULL, NULL);
+	KUNIT_ASSERT_NOT_NULL(test, sched->faux_dev);
+
+	args.dev = &sched->faux_dev->dev;
 
 	ret = drm_sched_init(&sched->base, &args);
 	KUNIT_ASSERT_EQ(test, ret, 0);
@@ -323,6 +336,7 @@ struct drm_mock_scheduler *drm_mock_sched_new(struct kunit *test, long timeout)
 void drm_mock_sched_fini(struct drm_mock_scheduler *sched)
 {
 	drm_sched_fini(&sched->base);
+	faux_device_destroy(sched->faux_dev);
 }
 
 /**
