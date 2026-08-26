@@ -169,19 +169,22 @@ amdxdna_cmd_get_op(struct amdxdna_gem_obj *abo)
 	if (!cmd)
 		return ERT_INVALID_CMD;
 
-	return FIELD_GET(AMDXDNA_CMD_OPCODE, cmd->header);
+	return FIELD_GET(AMDXDNA_CMD_OPCODE, READ_ONCE(cmd->header));
 }
 
 static inline void
 amdxdna_cmd_set_state(struct amdxdna_gem_obj *abo, enum ert_cmd_state s)
 {
 	struct amdxdna_cmd *cmd = amdxdna_gem_vmap(abo);
+	u32 header;
 
 	if (!cmd)
 		return;
 
-	cmd->header &= ~AMDXDNA_CMD_STATE;
-	cmd->header |= FIELD_PREP(AMDXDNA_CMD_STATE, s);
+	header = READ_ONCE(cmd->header);
+	header &= ~AMDXDNA_CMD_STATE;
+	header |= FIELD_PREP(AMDXDNA_CMD_STATE, s);
+	WRITE_ONCE(cmd->header, header);
 }
 
 static inline enum ert_cmd_state
@@ -192,7 +195,7 @@ amdxdna_cmd_get_state(struct amdxdna_gem_obj *abo)
 	if (!cmd)
 		return ERT_CMD_STATE_INVALID;
 
-	return FIELD_GET(AMDXDNA_CMD_STATE, cmd->header);
+	return FIELD_GET(AMDXDNA_CMD_STATE, READ_ONCE(cmd->header));
 }
 
 void *amdxdna_cmd_get_payload(struct amdxdna_gem_obj *abo, u32 *size);
