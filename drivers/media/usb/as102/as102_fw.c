@@ -37,20 +37,28 @@ static unsigned char atohx(unsigned char *dst, char *src)
 /*
  * Parse INTEL HEX firmware file to extract address and data.
  */
-static int parse_hex_line(unsigned char *fw_data, unsigned char *addr,
-			  unsigned char *data, int *dataLength,
-			  unsigned char *addr_has_changed) {
+static int parse_hex_line(unsigned char *fw_data, size_t fw_size,
+			  unsigned char *addr, unsigned char *data,
+			  size_t data_size, int *dataLength,
+			  unsigned char *addr_has_changed)
+{
 
 	int count = 0;
 	unsigned char *src, dst;
 
-	if (*fw_data++ != ':') {
+	if (fw_size < 1 || *fw_data++ != ':') {
 		pr_err("invalid firmware file\n");
 		return -EFAULT;
 	}
+	fw_size--;
 
 	/* locate end of line */
 	for (src = fw_data; *src != '\n'; src += 2) {
+		if (src + 1 >= fw_data + fw_size ||
+		    count >= 4 + (int)data_size) {
+			pr_err("invalid firmware file\n");
+			return -EFAULT;
+		}
 		atohx(&dst, src);
 		/* parse line to split addr / data */
 		switch (count) {
@@ -107,8 +115,9 @@ static int as102_firmware_upload(struct as10x_bus_adapter_t *bus_adap,
 		/* parse intel hex line */
 		read_bytes = parse_hex_line(
 				(u8 *) (firmware->data + total_read_bytes),
+				firmware->size - total_read_bytes,
 				fw_pkt->raw.address,
-				fw_pkt->raw.data,
+				fw_pkt->raw.data, sizeof(fw_pkt->raw.data),
 				&data_len,
 				&addr_has_changed);
 
