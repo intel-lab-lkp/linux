@@ -2145,11 +2145,6 @@ static int cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 		}
 
 		cdns_bridge_state = to_cdns_mhdp_bridge_state(state);
-		if (!cdns_bridge_state) {
-			ret = -EINVAL;
-			goto out;
-		}
-
 		current_mode = cdns_bridge_state->current_mode;
 		if (!current_mode) {
 			ret = -EINVAL;
