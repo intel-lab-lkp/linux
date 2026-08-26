@@ -908,20 +908,30 @@ free_cus:
 	return ret;
 }
 
-static void aie2_cmd_wait(struct amdxdna_hwctx *hwctx, u64 seq)
+static int aie2_cmd_wait(struct amdxdna_hwctx *hwctx, u64 seq)
 {
 	struct dma_fence *out_fence = aie2_cmd_get_out_fence(hwctx, seq);
 	struct amdxdna_dev *xdna = hwctx->client->xdna;
+	long ret;
 
 	if (!out_fence) {
 		XDNA_ERR(xdna, "Failed to get fence");
-		return;
+		return 0;
 	}
 
 	mutex_unlock(&xdna->dev_lock);
-	dma_fence_wait_timeout(out_fence, false, MAX_SCHEDULE_TIMEOUT);
+	ret = dma_fence_wait_timeout(out_fence, true, MAX_SCHEDULE_TIMEOUT);
 	mutex_lock(&xdna->dev_lock);
 	dma_fence_put(out_fence);
+
+	/*
+	 * The command is still in flight. If the ioctl were restarted it
+	 * would submit a second one.
+	 */
+	if (ret == -ERESTARTSYS)
+		return -EINTR;
+
+	return ret < 0 ? ret : 0;
 }
 
 static int aie2_hwctx_cfg_debug_bo(struct amdxdna_hwctx *hwctx, u32 bo_hdl,
@@ -968,7 +978,17 @@ static int aie2_hwctx_cfg_debug_bo(struct amdxdna_hwctx *hwctx, u32 bo_hdl,
 		goto put_cmd;
 	}
 
-	aie2_cmd_wait(hwctx, seq);
+	ret = aie2_cmd_wait(hwctx, seq);
+	if (ret) {
+		/*
+		 * The command may still attach the BO. Record it as attached,
+		 * or DETACH will refuse it and there is no way back.
+		 */
+		if (attach)
+			abo->assigned_hwctx = hwctx->id;
+		goto put_cmd;
+	}
+
 	if (cmd->result) {
 		XDNA_ERR(xdna, "Response failure 0x%x", cmd->result);
 		ret = -EINVAL;
@@ -1028,7 +1048,10 @@ int aie2_hwctx_sync_debug_bo(struct amdxdna_hwctx *hwctx, u32 debug_bo_hdl)
 		goto put_cmd;
 	}
 
-	aie2_cmd_wait(hwctx, seq);
+	ret = aie2_cmd_wait(hwctx, seq);
+	if (ret)
+		goto put_cmd;
+
 	if (cmd->result) {
 		XDNA_ERR(xdna, "Response failure 0x%x", cmd->result);
 		ret = -EINVAL;
