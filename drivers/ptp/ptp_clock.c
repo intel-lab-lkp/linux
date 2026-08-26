@@ -158,6 +158,8 @@ static int ptp_clock_adjtime(struct posix_clock *pc, struct __kernel_timex *tx)
 
 		kt = timespec64_to_ktime(ts);
 		delta = ktime_to_ns(kt);
+		if (!ops->adjtime)
+			return -EOPNOTSUPP;
 		err = ops->adjtime(ops, delta);
 	} else if (tx->modes & ADJ_FREQUENCY) {
 		long ppb;
@@ -174,6 +176,8 @@ static int ptp_clock_adjtime(struct posix_clock *pc, struct __kernel_timex *tx)
 		ppb = scaled_ppm_to_ppb(tx->freq);
 		if (ppb > ops->max_adj || ppb < -ops->max_adj)
 			return -ERANGE;
+		if (!ops->adjfine)
+			return -EOPNOTSUPP;
 		err = ops->adjfine(ops, tx->freq);
 		if (!err)
 			ptp->dialed_frequency = tx->freq;
