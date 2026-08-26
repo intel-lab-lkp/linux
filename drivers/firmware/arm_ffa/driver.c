@@ -2222,9 +2222,16 @@ static void ffa_remove(struct platform_device *pdev)
 	drv_info = NULL;
 }
 
+static void ffa_shutdown(struct platform_device *pdev)
+{
+	ffa_notifications_cleanup();
+	ffa_rxtx_unmap();
+}
+
 static struct platform_driver ffa_driver = {
 	.probe = ffa_probe,
 	.remove = ffa_remove,
+	.shutdown = ffa_shutdown,
 	.driver = {
 		.name = FFA_PLATFORM_NAME,
 	},
