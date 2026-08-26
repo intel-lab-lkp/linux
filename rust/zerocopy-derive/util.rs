@@ -713,22 +713,6 @@ impl<'a> ImplBlockBuilder<'a> {
 // The `#[allow(unused)]` is necessary because, on sufficiently recent toolchain
 // versions, `b.then_some(...)` resolves to the inherent method rather than to
 // this trait, and so this trait is considered unused.
-//
-// FIXME(#67): Remove this once our MSRV is >= 1.62.
-#[allow(unused)]
-trait BoolExt {
-    fn then_some<T>(self, t: T) -> Option<T>;
-}
-
-impl BoolExt for bool {
-    fn then_some<T>(self, t: T) -> Option<T> {
-        if self {
-            Some(t)
-        } else {
-            None
-        }
-    }
-}
 
 pub(crate) fn const_block(items: impl IntoIterator<Item = Option<TokenStream>>) -> TokenStream {
     let items = items.into_iter().flatten();
