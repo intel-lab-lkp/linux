@@ -2162,6 +2162,8 @@ int phy_device_register(struct phy_device *phy);
 int phy_device_register_locked(struct phy_device *phy);
 void phy_device_free(struct phy_device *phydev);
 void phy_device_remove(struct phy_device *phydev);
+void phy_pse_control_lock(void);
+void phy_pse_control_unlock(void);
 int phy_get_c45_ids(struct phy_device *phydev);
 int phy_init_hw(struct phy_device *phydev);
 int phy_suspend(struct phy_device *phydev);

@@ -1113,18 +1113,21 @@ struct phy_device *get_phy_device(struct mii_bus *bus, int addr, bool is_c45)
 }
 EXPORT_SYMBOL(get_phy_device);
 
+/* Serialises phydev->psec against the PSE notifier and ethtool, not rtnl. */
+static DEFINE_MUTEX(phy_pse_lock);
+
 /* Best-effort attach of phydev->psec from a DT `pses = <&...>` phandle.
- * Caller must hold rtnl. A missing phandle (-ENOENT) or a not-yet-registered
- * controller (-EPROBE_DEFER) is silent; the notifier retries the latter at
- * PSE_REGISTERED time. Any other error means a broken binding and is warned
- * about, but left non-fatal so the phy still registers.
+ * Caller must hold phy_pse_lock. A missing phandle (-ENOENT) or a
+ * not-yet-registered controller (-EPROBE_DEFER) is silent; the notifier
+ * retries the latter at PSE_REGISTERED time. Any other error means a broken
+ * binding and is warned about, but left non-fatal so the phy still registers.
  */
 static void phy_try_attach_pse(struct phy_device *phydev)
 {
 	struct pse_control *psec;
 	struct device_node *np;
 
-	ASSERT_RTNL();
+	lockdep_assert_held(&phy_pse_lock);
 
 	np = phydev->mdio.dev.of_node;
 	if (!np)
@@ -1146,7 +1149,7 @@ static void phy_try_attach_pse(struct phy_device *phydev)
 
 static int phy_pse_attach_one(struct device *dev, void *data __maybe_unused)
 {
-	ASSERT_RTNL();
+	lockdep_assert_held(&phy_pse_lock);
 
 	if (dev->type != &mdio_bus_phy_type)
 		return 0;
@@ -1161,7 +1164,7 @@ static int phy_pse_detach_one(struct device *dev, void *data)
 	struct phy_device *phydev;
 	struct pse_control *psec;
 
-	ASSERT_RTNL();
+	lockdep_assert_held(&phy_pse_lock);
 
 	if (dev->type != &mdio_bus_phy_type)
 		return 0;
@@ -1181,16 +1184,16 @@ static int phy_pse_notifier_event(struct notifier_block *nb,
 {
 	switch (event) {
 	case PSE_REGISTERED:
-		rtnl_lock();
+		mutex_lock(&phy_pse_lock);
 		bus_for_each_dev(&mdio_bus_type, NULL, NULL,
 				 phy_pse_attach_one);
-		rtnl_unlock();
+		mutex_unlock(&phy_pse_lock);
 		return NOTIFY_OK;
 	case PSE_UNREGISTERED:
-		rtnl_lock();
+		mutex_lock(&phy_pse_lock);
 		bus_for_each_dev(&mdio_bus_type, NULL, data,
 				 phy_pse_detach_one);
-		rtnl_unlock();
+		mutex_unlock(&phy_pse_lock);
 		return NOTIFY_OK;
 	default:
 		return NOTIFY_DONE;
@@ -1200,6 +1203,28 @@ static int phy_pse_notifier_event(struct notifier_block *nb,
 static struct notifier_block phy_pse_notifier __read_mostly = {
 	.notifier_call = phy_pse_notifier_event,
 };
+
+/**
+ * phy_pse_control_lock - hold phydev->psec stable against PSE controller teardown
+ *
+ * The PSE_UNREGISTERED notifier detaches phydev->psec and drops its last
+ * reference. Callers that dereference phydev->psec (the ethtool PSE paths) must
+ * hold this lock across the access so the detach cannot run underneath them.
+ */
+void phy_pse_control_lock(void)
+{
+	mutex_lock(&phy_pse_lock);
+}
+EXPORT_SYMBOL_GPL(phy_pse_control_lock);
+
+/**
+ * phy_pse_control_unlock - release the lock taken by phy_pse_control_lock()
+ */
+void phy_pse_control_unlock(void)
+{
+	mutex_unlock(&phy_pse_lock);
+}
+EXPORT_SYMBOL_GPL(phy_pse_control_unlock);
 
 /* Core registration: add the phy to the MDIO bus. Does not touch rtnl or
  * PSE. phydev->psec is attached by the callers below, after device_add()
@@ -1260,7 +1285,9 @@ int phy_device_register_locked(struct phy_device *phydev)
 	if (err)
 		return err;
 
+	mutex_lock(&phy_pse_lock);
 	phy_try_attach_pse(phydev);
+	mutex_unlock(&phy_pse_lock);
 
 	return 0;
 }
@@ -1280,9 +1307,9 @@ int phy_device_register(struct phy_device *phydev)
 	if (err)
 		return err;
 
-	rtnl_lock();
+	mutex_lock(&phy_pse_lock);
 	phy_try_attach_pse(phydev);
-	rtnl_unlock();
+	mutex_unlock(&phy_pse_lock);
 
 	return 0;
 }
