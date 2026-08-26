@@ -729,6 +729,39 @@ enum resctrl_kernel_mode {
 
 #define RESCTRL_NUM_KERNEL_MODES (RESCTRL_KMODE_LAST + 1)
 
+/**
+ * resctrl_arch_configure_kmode() - Program kernel mode association
+ * @cpu_mask:	CPUs to assign the kernel mode on.
+ * @closid:	CLOSID that matches the RMID to program kernel mode. Depending
+ *		on the architecture, the counter may match traffic of both
+ *		@closid and @rmid, or @rmid only.
+ * @assign_ctrl: true to assign @closid for kernel mode; false to inherit
+ *		association from the user-space task.
+ * @rmid:	RMID to program the kernel mode. Some architectures may use
+ *		CLOSID/RMID separately, others will consider them together.
+ * @assign_mon:	true to assign @rmid for kernel mode; false to inherit
+ *		monitoring association from the user-space task.
+ * @enable:	true to enable kernel mode association on CPUs in @cpu_mask;
+ *		false to disable kernel mode.
+ *
+ * The function can be called in the following scenarios:
+ * - If a per-cpu kernel mode is active when user space switches to a new
+ *   per-cpu kernel mode then resctrl_arch_configure_kmode() will first be
+ *   called to de-activate the active kernel mode on all CPUs that the
+ *   kernel mode is active on.
+ * - When user space switches to a new per-cpu kernel mode then
+ *   resctrl_arch_configure_kmode() is called with cpu_online_mask.
+ * - When user space adds a CPU to an active per-cpu kernel mode.
+ * - When user space removes a CPU from an active per-cpu kernel mode.
+ * - resctrl fs will always provide the same closid, assign_ctrl, rmid,
+ *   and assign_mon parameters when activating a kernel mode, all
+ *   interactions (adding/removing CPU) while the kernel mode is active,
+ *   as well as when de-activating the kernel mode.
+ */
+void resctrl_arch_configure_kmode(const struct cpumask *cpu_mask, u32 closid,
+				  bool assign_ctrl, u32 rmid, bool assign_mon,
+				  bool enable);
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 
