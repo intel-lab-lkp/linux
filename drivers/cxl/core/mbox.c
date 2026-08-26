@@ -1061,8 +1061,8 @@ free_pl:
 	return rc;
 }
 
-static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
-				    enum cxl_event_log_type type)
+static int cxl_mem_get_records_log(struct cxl_memdev_state *mds,
+				   enum cxl_event_log_type type, bool *drained)
 {
 	struct cxl_mailbox *cxl_mbox = &mds->cxlds.cxl_mbox;
 	struct cxl_memdev *cxlmd = mds->cxlds.cxlmd;
@@ -1070,12 +1070,15 @@ static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 	struct cxl_get_event_payload *payload;
 	u8 log_type = type;
 	u16 nr_rec;
+	int rc = 0;
+
+	*drained = false;
 
 	mutex_lock(&mds->event.log_lock);
 	payload = mds->event.buf;
 
 	do {
-		int rc, i;
+		int i;
 		struct cxl_mbox_cmd mbox_cmd = (struct cxl_mbox_cmd) {
 			.opcode = CXL_MBOX_OP_GET_EVENT_RECORD,
 			.payload_in = &log_type,
@@ -1096,6 +1099,7 @@ static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 		nr_rec = le16_to_cpu(payload->record_count);
 		if (!nr_rec)
 			break;
+		*drained = true;
 
 		for (i = 0; i < nr_rec; i++)
 			__cxl_event_trace_record(cxlmd, type,
@@ -1114,31 +1118,59 @@ static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 	} while (nr_rec);
 
 	mutex_unlock(&mds->event.log_lock);
+
+	return rc;
 }
 
 /**
  * cxl_mem_get_event_records - Get Event Records from the device
  * @mds: The driver data for the operation
  * @status: Event Status register value identifying which events are available.
+ * @drained: Optional mask of the logs in @status that returned records.
  *
  * Retrieve all event records available on the device, report them as trace
- * events, and clear them.
+ * events, and clear them.  Every log named in @status is drained even if
+ * another one fails, so that a broken log does not suppress reporting from
+ * the rest.
+ *
+ * Return: 0, or the first error encountered.
  *
  * See CXL rev 3.0 @8.2.9.2.2 Get Event Records
  * See CXL rev 3.0 @8.2.9.2.3 Clear Event Records
  */
-void cxl_mem_get_event_records(struct cxl_memdev_state *mds, u32 status)
+int cxl_mem_get_event_records(struct cxl_memdev_state *mds, u32 status,
+			      u32 *drained)
 {
+	static const struct {
+		u32 status;
+		enum cxl_event_log_type type;
+	} logs[] = {
+		{ CXLDEV_EVENT_STATUS_FATAL, CXL_EVENT_TYPE_FATAL },
+		{ CXLDEV_EVENT_STATUS_FAIL, CXL_EVENT_TYPE_FAIL },
+		{ CXLDEV_EVENT_STATUS_WARN, CXL_EVENT_TYPE_WARN },
+		{ CXLDEV_EVENT_STATUS_INFO, CXL_EVENT_TYPE_INFO },
+	};
+	int ret = 0;
+
 	dev_dbg(mds->cxlds.dev, "Reading event logs: %x\n", status);
 
-	if (status & CXLDEV_EVENT_STATUS_FATAL)
-		cxl_mem_get_records_log(mds, CXL_EVENT_TYPE_FATAL);
-	if (status & CXLDEV_EVENT_STATUS_FAIL)
-		cxl_mem_get_records_log(mds, CXL_EVENT_TYPE_FAIL);
-	if (status & CXLDEV_EVENT_STATUS_WARN)
-		cxl_mem_get_records_log(mds, CXL_EVENT_TYPE_WARN);
-	if (status & CXLDEV_EVENT_STATUS_INFO)
-		cxl_mem_get_records_log(mds, CXL_EVENT_TYPE_INFO);
+	if (drained)
+		*drained = 0;
+
+	for (int i = 0; i < ARRAY_SIZE(logs); i++) {
+		bool got_records;
+		int rc;
+
+		if (!(status & logs[i].status))
+			continue;
+
+		rc = cxl_mem_get_records_log(mds, logs[i].type, &got_records);
+		if (got_records && drained)
+			*drained |= logs[i].status;
+		ret = ret ?: rc;
+	}
+
+	return ret;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_mem_get_event_records, "CXL");
 

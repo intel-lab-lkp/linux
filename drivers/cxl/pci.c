@@ -515,21 +515,46 @@ static irqreturn_t cxl_event_thread(int irq, void *id)
 	struct cxl_dev_id *dev_id = id;
 	struct cxl_dev_state *cxlds = dev_id->cxlds;
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
-	u32 status;
+	u32 mask = CXLDEV_EVENT_STATUS_ALL;
 
-	do {
+	while (mask) {
+		u32 status, drained, stuck;
+		int rc;
+
 		/*
 		 * CXL 3.0 8.2.8.3.1: The lower 32 bits are the status;
 		 * ignore the reserved upper 32 bits
 		 */
 		status = readl(cxlds->regs.status + CXLDEV_DEV_EVENT_STATUS_OFFSET);
-		/* Ignore logs unknown to the driver */
-		status &= CXLDEV_EVENT_STATUS_ALL;
+		/* Ignore logs unknown to the driver, and logs given up on */
+		status &= mask;
 		if (!status)
 			break;
-		cxl_mem_get_event_records(mds, status);
+
+		/*
+		 * A failed drain leaves the log's status bit set, so another
+		 * pass would resend the same query forever.
+		 */
+		rc = cxl_mem_get_event_records(mds, status, &drained);
+		if (rc)
+			break;
+
+		/*
+		 * The Event Status register is device owned and read only, so
+		 * it cannot bound this loop; records read can.  A device that
+		 * leaves a bit set with an empty log makes no progress, and
+		 * only the device can clear that state, so stop polling that
+		 * log rather than spin on it.
+		 */
+		stuck = status & ~drained;
+		if (stuck) {
+			dev_warn_once(cxlds->dev,
+				      "Event status %#x set with no records to read\n",
+				      stuck);
+			mask &= ~stuck;
+		}
 		cond_resched();
-	} while (status);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -683,7 +708,7 @@ static int cxl_event_config(struct pci_host_bridge *host_bridge,
 	if (rc)
 		return rc;
 
-	cxl_mem_get_event_records(mds, CXLDEV_EVENT_STATUS_ALL);
+	cxl_mem_get_event_records(mds, CXLDEV_EVENT_STATUS_ALL, NULL);
 
 	return 0;
 }

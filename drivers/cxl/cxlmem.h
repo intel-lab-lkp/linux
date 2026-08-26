@@ -801,7 +801,8 @@ void set_exclusive_cxl_commands(struct cxl_memdev_state *mds,
 				unsigned long *cmds);
 void clear_exclusive_cxl_commands(struct cxl_memdev_state *mds,
 				  unsigned long *cmds);
-void cxl_mem_get_event_records(struct cxl_memdev_state *mds, u32 status);
+int cxl_mem_get_event_records(struct cxl_memdev_state *mds, u32 status,
+			      u32 *drained);
 void cxl_event_trace_record(struct cxl_memdev *cxlmd,
 			    enum cxl_event_log_type type,
 			    enum cxl_event_type event_type,
