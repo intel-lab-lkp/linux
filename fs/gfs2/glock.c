@@ -2562,9 +2562,15 @@ static void gfs2_glockfd_seq_stop(struct seq_file *seq, void *iter_ptr)
 static void gfs2_glockfd_seq_show_flock(struct seq_file *seq,
 					struct gfs2_glockfd_iter *i)
 {
-	struct gfs2_file *fp = i->file->private_data;
-	struct gfs2_holder *fl_gh = &fp->f_fl_gh;
+	struct gfs2_file *fp;
+	struct gfs2_holder *fl_gh;
 	struct lm_lockname gl_name = { .ln_type = LM_TYPE_RESERVED };
+
+	if (i->file->f_op != &gfs2_file_fops)
+		return;
+
+	fp = i->file->private_data;
+	fl_gh = &fp->f_fl_gh;
 
 	if (!READ_ONCE(fl_gh->gh_gl))
 		return;
