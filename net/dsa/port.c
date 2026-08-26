@@ -831,6 +831,9 @@ int dsa_port_vlan_filtering(struct dsa_port *dp, bool vlan_filtering,
 			if (!user)
 				continue;
 
+			if (ds->needs_standalone_vlan_offload)
+				continue;
+
 			err = dsa_user_manage_vlan_filtering(user,
 							     vlan_filtering);
 			if (err)
@@ -839,10 +842,12 @@ int dsa_port_vlan_filtering(struct dsa_port *dp, bool vlan_filtering,
 	} else {
 		dp->vlan_filtering = vlan_filtering;
 
-		err = dsa_user_manage_vlan_filtering(dp->user,
-						     vlan_filtering);
-		if (err)
-			goto restore;
+		if (!ds->needs_standalone_vlan_offload) {
+			err = dsa_user_manage_vlan_filtering(dp->user,
+							     vlan_filtering);
+			if (err)
+				goto restore;
+		}
 	}
 
 	return 0;
@@ -1445,10 +1450,13 @@ int dsa_port_change_conduit(struct dsa_port *dp, struct net_device *conduit,
 
 	/* The port might still be VLAN filtering even if it's no longer
 	 * under a bridge, either due to ds->vlan_filtering_is_global or
-	 * ds->needs_standalone_vlan_filtering. In turn this means VLANs
-	 * on the CPU port.
+	 * ds->needs_standalone_vlan_filtering, and every port of a
+	 * ds->needs_standalone_vlan_offload switch keeps its 8021q upper
+	 * VLANs whether bridged or not. In turn this means VLANs on the
+	 * CPU port.
 	 */
-	vlan_filtering = dsa_port_is_vlan_filtering(dp);
+	vlan_filtering = dsa_port_is_vlan_filtering(dp) ||
+			 ds->needs_standalone_vlan_offload;
 	if (vlan_filtering) {
 		err = dsa_user_manage_vlan_filtering(dev, false);
 		if (err) {
