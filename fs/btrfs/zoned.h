@@ -95,7 +95,7 @@ void btrfs_zoned_release_data_reloc_bg(struct btrfs_fs_info *fs_info, u64 logica
 				       u64 length);
 int btrfs_zone_finish_one_bg(struct btrfs_fs_info *fs_info);
 int btrfs_zoned_activate_one_bg(struct btrfs_space_info *space_info, bool do_finish);
-void btrfs_check_active_zone_reservation(struct btrfs_fs_info *fs_info);
+int btrfs_restore_active_nondata_bgs(struct btrfs_fs_info *fs_info);
 int btrfs_reset_unused_block_groups(struct btrfs_space_info *space_info, u64 num_bytes);
 void btrfs_show_zoned_stats(struct btrfs_fs_info *fs_info, struct seq_file *seq);
 
@@ -279,7 +279,10 @@ static inline int btrfs_zoned_activate_one_bg(struct btrfs_space_info *space_inf
 	return 0;
 }
 
-static inline void btrfs_check_active_zone_reservation(struct btrfs_fs_info *fs_info) { }
+static inline int btrfs_restore_active_nondata_bgs(struct btrfs_fs_info *fs_info)
+{
+	return 0;
+}
 
 static inline int btrfs_reset_unused_block_groups(struct btrfs_space_info *space_info,
 						  u64 num_bytes)
