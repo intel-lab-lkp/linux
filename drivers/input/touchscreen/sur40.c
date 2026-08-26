@@ -237,6 +237,7 @@ static const struct video_device sur40_video_device;
 static const struct vb2_queue sur40_queue;
 static void sur40_process_video(struct sur40_state *sur40);
 static int sur40_s_ctrl(struct v4l2_ctrl *ctrl);
+static void sur40_video_release(struct video_device *vdev);
 
 static const struct v4l2_ctrl_ops sur40_ctrl_ops = {
 	.s_ctrl = sur40_s_ctrl,
@@ -750,6 +751,7 @@ static int sur40_probe(struct usb_interface *interface,
 	sur40->vdev.v4l2_dev = &sur40->v4l2;
 	sur40->vdev.lock = &sur40->lock;
 	sur40->vdev.queue = &sur40->queue;
+	sur40->vdev.release = sur40_video_release;
 	video_set_drvdata(&sur40->vdev, sur40);
 
 	/* initialize the control handler for 4 controls */
@@ -806,6 +808,8 @@ static int sur40_probe(struct usb_interface *interface,
 
 err_unreg_video:
 	video_unregister_device(&sur40->vdev);
+	input_free_device(input);
+	return error;
 err_free_ctrl:
 	v4l2_ctrl_handler_free(&sur40->hdl);
 err_unreg_v4l2:
@@ -820,19 +824,23 @@ err_free_dev:
 	return error;
 }
 
-/* Unregister device & clean up. */
+static void sur40_video_release(struct video_device *vdev)
+{
+	struct sur40_state *sur40 = container_of(vdev, struct sur40_state, vdev);
+
+	v4l2_ctrl_handler_free(&sur40->hdl);
+	v4l2_device_unregister(&sur40->v4l2);
+	kfree(sur40->bulk_in_buffer);
+	kfree(sur40);
+}
+
 static void sur40_disconnect(struct usb_interface *interface)
 {
 	struct sur40_state *sur40 = usb_get_intfdata(interface);
 
 	input_unregister_device(sur40->input);
 
-	v4l2_ctrl_handler_free(&sur40->hdl);
 	video_unregister_device(&sur40->vdev);
-	v4l2_device_unregister(&sur40->v4l2);
-
-	kfree(sur40->bulk_in_buffer);
-	kfree(sur40);
 
 	usb_set_intfdata(interface, NULL);
 	dev_dbg(&interface->dev, "%s is now disconnected\n", DRIVER_DESC);
