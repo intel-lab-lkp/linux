@@ -247,10 +247,10 @@ hpet_fasync(int argc, const char **argv)
 		return;
 	}
 
-
-	if ((fcntl(fd, F_SETOWN, getpid()) == 1) ||
-		((value = fcntl(fd, F_GETFL)) == 1) ||
-		(fcntl(fd, F_SETFL, value | O_ASYNC) == 1)) {
+	value = fcntl(fd, F_GETFL);
+	if ((fcntl(fd, F_SETOWN, getpid()) < 0) ||
+		(value  < 0) ||
+		(fcntl(fd, F_SETFL, value | O_ASYNC) < 0)) {
 		fprintf(stderr, "hpet_fasync: fcntl failed\n");
 		goto out;
 	}
