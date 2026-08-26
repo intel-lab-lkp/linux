@@ -311,9 +311,26 @@ static int uevent_net_broadcast_untagged(struct kobj_uevent_env *env,
 {
 	struct sk_buff *skb = NULL;
 	struct uevent_sock *ue_sk;
+	bool has_listeners = false;
 	int retval = 0;
 
-	/* send netlink message */
+	mutex_lock(&uevent_sock_mutex);
+	list_for_each_entry(ue_sk, &uevent_sock_list, list) {
+		if (!netlink_has_listeners(ue_sk->sk, 1))
+			continue;
+
+		has_listeners = true;
+		break;
+	}
+	mutex_unlock(&uevent_sock_mutex);
+
+	if (has_listeners) {
+		skb = alloc_uevent_skb(env, action_string, devpath);
+		if (!skb)
+			return -ENOMEM;
+	}
+
+	/* Keep send-side ordering, but avoid sleeping while holding the mutex. */
 	mutex_lock(&uevent_sock_mutex);
 	list_for_each_entry(ue_sk, &uevent_sock_list, list) {
 		struct sock *uevent_sock = ue_sk->sk;
@@ -321,15 +338,8 @@ static int uevent_net_broadcast_untagged(struct kobj_uevent_env *env,
 		if (!netlink_has_listeners(uevent_sock, 1))
 			continue;
 
-		if (!skb) {
-			retval = -ENOMEM;
-			skb = alloc_uevent_skb(env, action_string, devpath);
-			if (!skb)
-				continue;
-		}
-
 		retval = netlink_broadcast(uevent_sock, skb_get(skb), 0, 1,
-					   GFP_KERNEL);
+					   GFP_NOWAIT);
 		/* ENOBUFS should be handled in userspace */
 		if (retval == -ENOBUFS || retval == -ESRCH)
 			retval = 0;
