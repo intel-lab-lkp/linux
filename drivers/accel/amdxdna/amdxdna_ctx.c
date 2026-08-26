@@ -123,9 +123,10 @@ void *amdxdna_cmd_get_payload(struct amdxdna_gem_obj *abo, u32 *size)
 	if (amdxdna_cmd_get_op(abo) == ERT_CMD_CHAIN)
 		num_masks = 0;
 	else
-		num_masks = 1 + FIELD_GET(AMDXDNA_CMD_EXTRA_CU_MASK, cmd->header);
+		num_masks = 1 + FIELD_GET(AMDXDNA_CMD_EXTRA_CU_MASK,
+					  READ_ONCE(cmd->header));
 
-	count = FIELD_GET(AMDXDNA_CMD_COUNT, cmd->header);
+	count = FIELD_GET(AMDXDNA_CMD_COUNT, READ_ONCE(cmd->header));
 	if (unlikely(count <= num_masks ||
 		     count * sizeof(u32) +
 		     offsetof(struct amdxdna_cmd, data[0]) >
@@ -173,7 +174,7 @@ u32 amdxdna_cmd_get_cu_idx(struct amdxdna_gem_obj *abo)
 	if (amdxdna_cmd_get_op(abo) == ERT_CMD_CHAIN)
 		return INVALID_CU_IDX;
 
-	num_masks = 1 + FIELD_GET(AMDXDNA_CMD_EXTRA_CU_MASK, cmd->header);
+	num_masks = 1 + FIELD_GET(AMDXDNA_CMD_EXTRA_CU_MASK, READ_ONCE(cmd->header));
 	cu_mask = cmd->data;
 	for (i = 0; i < num_masks; i++) {
 		if (cu_mask[i])
@@ -191,12 +192,15 @@ int amdxdna_cmd_set_error(struct amdxdna_gem_obj *abo,
 	struct amdxdna_client *client = job->hwctx->client;
 	struct amdxdna_cmd *cmd = amdxdna_gem_vmap(abo);
 	struct amdxdna_cmd_chain *cc = NULL;
+	u32 header;
 
 	if (!cmd)
 		return -ENOMEM;
 
-	cmd->header &= ~AMDXDNA_CMD_STATE;
-	cmd->header |= FIELD_PREP(AMDXDNA_CMD_STATE, error_state);
+	header = READ_ONCE(cmd->header);
+	header &= ~AMDXDNA_CMD_STATE;
+	header |= FIELD_PREP(AMDXDNA_CMD_STATE, error_state);
+	WRITE_ONCE(cmd->header, header);
 
 	if (amdxdna_cmd_get_op(abo) == ERT_CMD_CHAIN) {
 		u32 ccnt;
