@@ -2555,13 +2555,23 @@ intel_hdmi_set_edid(struct drm_connector *_connector)
 	struct i2c_adapter *ddc = connector->base.ddc;
 	struct ref_tracker *wakeref;
 	const struct drm_edid *drm_edid;
+	bool force_bit_banging = READ_ONCE(intel_hdmi->force_bit_banging);
 	bool connected = false;
 
 	wakeref = intel_display_power_get(display, POWER_DOMAIN_GMBUS);
 
+	if (force_bit_banging) {
+		drm_dbg_kms(display->drm,
+			    "[CONNECTOR:%d:%s] HDMI EDID read forced to GPIO bit-banging\n",
+			    connector->base.base.id, connector->base.name);
+		intel_gmbus_force_bit(ddc, true);
+	}
+
 	drm_edid = drm_edid_read_ddc(&connector->base, ddc);
 
-	if (!drm_edid && !intel_gmbus_is_forced_bit(ddc)) {
+	if (force_bit_banging)
+		intel_gmbus_force_bit(ddc, false);
+	else if (!drm_edid && !intel_gmbus_is_forced_bit(ddc)) {
 		drm_dbg_kms(display->drm,
 			    "HDMI GMBUS EDID read failed, retry using GPIO bit-banging\n");
 		intel_gmbus_force_bit(ddc, true);
