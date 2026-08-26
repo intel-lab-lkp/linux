@@ -1073,7 +1073,14 @@ netmem_ref page_pool_alloc_frag_netmem(struct page_pool *pool,
 	if (WARN_ON(size > max_size))
 		return 0;
 
-	size = ALIGN(size, dma_get_cache_alignment());
+	/* dma_get_cache_alignment() is 1 on DMA-coherent architectures, so on
+	 * its own it cannot keep frag_offset aligned.  Callers build objects
+	 * on these fragments -- skb_pp_cow_data() turns one into skb->head,
+	 * where skb_shinfo() must be aligned -- and the pool is shared, so an
+	 * odd-sized request must not skew every fragment that follows it.
+	 */
+	size = ALIGN(size, max_t(unsigned int, dma_get_cache_alignment(),
+				 sizeof(long)));
 	*offset = pool->frag_offset;
 
 	if (netmem && *offset + size > max_size) {
