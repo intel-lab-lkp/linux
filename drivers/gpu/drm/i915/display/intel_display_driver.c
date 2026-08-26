@@ -932,7 +932,8 @@ void intel_display_driver_pm_runtime_suspend_late(struct intel_display *display,
 		intel_opregion_notify_adapter(display, PCI_D1);
 	}
 
-	if (!display->platform.valleyview && !display->platform.cherryview)
+	if (!display->platform.valleyview && !display->platform.cherryview &&
+	    !pme_capable)
 		intel_hpd_poll_enable(display);
 }
 
