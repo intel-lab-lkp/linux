@@ -881,8 +881,6 @@ err_exit:
  * Close down a SLIP channel.
  * This means flushing out any pending queues, and then returning. This
  * call is serialized against other ldisc functions.
- *
- * We also use this method fo a hangup event
  */
 
 static void slip_close(struct tty_struct *tty)
@@ -909,11 +907,6 @@ static void slip_close(struct tty_struct *tty)
 	/* Flush network side */
 	unregister_netdev(sl->dev);
 	/* This will complete via sl_free_netdev */
-}
-
-static void slip_hangup(struct tty_struct *tty)
-{
-	slip_close(tty);
 }
  /************************************************************************
   *			STANDARD SLIP ENCAPSULATION		  	 *
@@ -1275,7 +1268,6 @@ static struct tty_ldisc_ops sl_ldisc = {
 	.name 		= "slip",
 	.open 		= slip_open,
 	.close	 	= slip_close,
-	.hangup	 	= slip_hangup,
 	.ioctl		= slip_ioctl,
 	.receive_buf	= slip_receive_buf,
 	.write_wakeup	= slip_write_wakeup,
