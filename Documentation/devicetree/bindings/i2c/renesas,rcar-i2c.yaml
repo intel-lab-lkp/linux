@@ -78,14 +78,14 @@ properties:
 
   dmas:
     minItems: 2
-    maxItems: 4
+    maxItems: 6
     description:
       Must contain a list of pairs of references to DMA specifiers, one for
       transmission, and one for reception.
 
   dma-names:
     minItems: 2
-    maxItems: 4
+    maxItems: 6
     items:
       enum:
         - tx
@@ -131,6 +131,20 @@ allOf:
       properties:
         dmas: false
         dma-names: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - renesas,rcar-gen3-i2c
+              - renesas,rcar-gen4-i2c
+    then:
+      properties:
+        dmas:
+          maxItems: 4
+        dma-names:
+          maxItems: 4
 
   - if:
       properties:
