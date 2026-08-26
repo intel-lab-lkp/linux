@@ -690,6 +690,17 @@ out:
 	return sk;
 }
 
+static void udpv6_err_no_sk(struct net *net, struct sk_buff *skb, u8 type,
+			    __be32 info)
+{
+	if (type == ICMPV6_PKT_TOOBIG)
+		ip6_update_pmtu(skb, net, info, skb->dev->ifindex, 0,
+				sock_net_uid(net, NULL));
+	else if (type == NDISC_REDIRECT)
+		ip6_redirect(skb, net, skb->dev->ifindex, 0,
+			     sock_net_uid(net, NULL));
+}
+
 static int udpv6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 		     u8 type, u8 code, int offset, __be32 info)
 {
@@ -719,6 +730,7 @@ static int udpv6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 			sk = ERR_PTR(-ENOENT);
 
 		if (IS_ERR(sk)) {
+			udpv6_err_no_sk(net, skb, type, info);
 			__ICMP6_INC_STATS(net, __in6_dev_get(skb->dev),
 					  ICMP6_MIB_INERRORS);
 			return PTR_ERR(sk);
@@ -731,8 +743,11 @@ static int udpv6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 	np = inet6_sk(sk);
 
 	if (type == ICMPV6_PKT_TOOBIG) {
-		if (!ip6_sk_accept_pmtu(sk))
+		if (!ip6_sk_accept_pmtu(sk)) {
+			ip6_update_pmtu(skb, net, info, skb->dev->ifindex, 0,
+					sock_net_uid(net, NULL));
 			goto out;
+		}
 		ip6_sk_update_pmtu(skb, sk, info);
 		if (READ_ONCE(np->pmtudisc) != IPV6_PMTUDISC_DONT)
 			harderr = 1;
