@@ -220,6 +220,11 @@ static int vbi_start_streaming(struct vb2_queue *vq, unsigned int count)
 	struct cx231xx_dmaqueue *vidq = &dev->vbi_mode.vidq;
 	int ret;
 
+	if (dev->state & DEV_DISCONNECTED) {
+		return_all_buffers(dev, VB2_BUF_STATE_QUEUED);
+		return -ENODEV;
+	}
+
 	vidq->sequence = 0;
 	ret = cx231xx_init_vbi_isoc(dev, CX231XX_NUM_VBI_PACKETS,
 				    CX231XX_NUM_VBI_BUFS,

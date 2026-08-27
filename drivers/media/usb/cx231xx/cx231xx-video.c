@@ -767,6 +767,11 @@ static int start_streaming(struct vb2_queue *vq, unsigned int count)
 	struct cx231xx_dmaqueue *vidq = &dev->video_mode.vidq;
 	int ret = 0;
 
+	if (dev->state & DEV_DISCONNECTED) {
+		return_all_buffers(dev, VB2_BUF_STATE_QUEUED);
+		return -ENODEV;
+	}
+
 	vidq->sequence = 0;
 	dev->mode_tv = 0;
 
@@ -791,7 +796,8 @@ static void stop_streaming(struct vb2_queue *vq)
 {
 	struct cx231xx *dev = vb2_get_drv_priv(vq);
 
-	call_all(dev, video, s_stream, 0);
+	if (!(dev->state & DEV_DISCONNECTED))
+		call_all(dev, video, s_stream, 0);
 	return_all_buffers(dev, VB2_BUF_STATE_ERROR);
 }
 
@@ -1499,6 +1505,10 @@ static int cx231xx_v4l2_open(struct file *filp)
 
 	if (mutex_lock_interruptible(&dev->lock))
 		return -ERESTARTSYS;
+	if (dev->state & DEV_DISCONNECTED) {
+		mutex_unlock(&dev->lock);
+		return -ENODEV;
+	}
 
 	ret = v4l2_fh_open(filp);
 	if (ret) {
@@ -1580,6 +1590,12 @@ static int cx231xx_close(struct file *filp)
 	struct video_device *vdev = video_devdata(filp);
 
 	_vb2_fop_release(filp, NULL);
+
+	if (dev->state & DEV_DISCONNECTED) {
+		--dev->users;
+		wake_up_interruptible(&dev->open);
+		return 0;
+	}
 
 	if (--dev->users == 0) {
 		/* Save some power by putting tuner to sleep */

@@ -1396,6 +1396,11 @@ static int start_streaming(struct vb2_queue *vq, unsigned int count)
 	struct cx231xx_dmaqueue *vidq = &dev->video_mode.vidq;
 	int ret = 0;
 
+	if (dev->state & DEV_DISCONNECTED) {
+		return_all_buffers(dev, VB2_BUF_STATE_QUEUED);
+		return -ENODEV;
+	}
+
 	vidq->sequence = 0;
 	dev->mode_tv = 1;
 
@@ -1429,20 +1434,22 @@ static void stop_streaming(struct vb2_queue *vq)
 	struct cx231xx *dev = vb2_get_drv_priv(vq);
 	unsigned long flags;
 
-	call_all(dev, video, s_stream, 0);
-
-	cx231xx_stop_TS1(dev);
+	if (!(dev->state & DEV_DISCONNECTED)) {
+		call_all(dev, video, s_stream, 0);
+		cx231xx_stop_TS1(dev);
+	}
 
 	/* do this before setting alternate! */
 	if (dev->USE_ISO)
 		cx231xx_uninit_isoc(dev);
 	else
 		cx231xx_uninit_bulk(dev);
-	cx231xx_set_mode(dev, CX231XX_SUSPEND);
-
-	cx231xx_api_cmd(dev, CX2341X_ENC_STOP_CAPTURE, 3, 0,
-			CX231xx_END_NOW, CX231xx_MPEG_CAPTURE,
-			CX231xx_RAW_BITS_NONE);
+	if (!(dev->state & DEV_DISCONNECTED)) {
+		cx231xx_set_mode(dev, CX231XX_SUSPEND);
+		cx231xx_api_cmd(dev, CX2341X_ENC_STOP_CAPTURE, 3, 0,
+				CX231xx_END_NOW, CX231xx_MPEG_CAPTURE,
+				CX231xx_RAW_BITS_NONE);
+	}
 
 	spin_lock_irqsave(&dev->video_mode.slock, flags);
 	if (dev->USE_ISO)
@@ -1593,9 +1600,25 @@ static int vidioc_log_status(struct file *file, void *priv)
 	return v4l2_ctrl_log_status(file, priv);
 }
 
+static int cx231xx_mpeg_open(struct file *file)
+{
+	struct cx231xx *dev = video_drvdata(file);
+	int ret;
+
+	if (mutex_lock_interruptible(&dev->lock))
+		return -ERESTARTSYS;
+	if (dev->state & DEV_DISCONNECTED)
+		ret = -ENODEV;
+	else
+		ret = v4l2_fh_open(file);
+	mutex_unlock(&dev->lock);
+
+	return ret;
+}
+
 static const struct v4l2_file_operations mpeg_fops = {
 	.owner	       = THIS_MODULE,
-	.open	       = v4l2_fh_open,
+	.open	       = cx231xx_mpeg_open,
 	.release       = vb2_fop_release,
 	.read	       = vb2_fop_read,
 	.poll          = vb2_fop_poll,
