@@ -298,6 +298,18 @@ config QCOM_INLINE_CRYPTO_ENGINE
 	tristate
 	select QCOM_SCM
 
+config QCOM_CRYPTO_VIRT
+	tristate "Qualcomm Technologies, Inc. Crypto Virt driver"
+	depends on VIRTBLK_CRYPTO_VIRTUALIZATION
+	depends on QCOM_SCM
+	default VIRTBLK_CRYPTO_VIRTUALIZATION if ARCH_QCOM
+	help
+	  GVM-side hardware-wrapped-key SCM operations exposed to
+	  virtio_blk's inline crypto layer: per-slot key programming and
+	  eviction, and key derive/generate/prepare/import.
+	  Say Y here to compile the driver as a part of kernel or M to compile
+	  as a module.
+
 config QCOM_KRYO_L2_ACCESSORS
 	bool
 	depends on ARM64
