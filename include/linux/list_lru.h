@@ -79,10 +79,10 @@ static inline int list_lru_init_memcg_key(struct list_lru *lru, struct shrinker 
 	return list_lru_init_memcg(lru, shrinker);
 }
 
+#ifdef CONFIG_MEMCG
 int memcg_list_lru_alloc(struct mem_cgroup *memcg, struct list_lru *lru,
 			 gfp_t gfp);
 
-#ifdef CONFIG_MEMCG
 /**
  * folio_memcg_list_lru_alloc - allocate list_lru heads for shrinkable folio
  * @folio: the newly allocated & charged folio
@@ -103,6 +103,11 @@ int folio_memcg_list_lru_alloc(struct folio *folio, struct list_lru *lru,
 #else
 static inline int folio_memcg_list_lru_alloc(struct folio *folio,
 					     struct list_lru *lru, gfp_t gfp)
+{
+	return 0;
+}
+
+static inline int memcg_list_lru_alloc(struct mem_cgroup *memcg, struct list_lru *lru, gfp_t gfp)
 {
 	return 0;
 }
