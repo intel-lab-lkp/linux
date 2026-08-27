@@ -73,41 +73,6 @@ found:
 	return i2c_dev;
 }
 
-static struct i2c_dev *get_free_i2c_dev(struct i2c_adapter *adap)
-{
-	struct i2c_dev *i2c_dev;
-
-	if (adap->nr >= I2C_MINORS) {
-		pr_err("Out of device minors (%d)\n", adap->nr);
-		return ERR_PTR(-ENODEV);
-	}
-
-	i2c_dev = kzalloc_obj(*i2c_dev);
-	if (!i2c_dev)
-		return ERR_PTR(-ENOMEM);
-	i2c_dev->adap = adap;
-
-	spin_lock(&i2c_dev_list_lock);
-	list_add_tail(&i2c_dev->list, &i2c_dev_list);
-	spin_unlock(&i2c_dev_list_lock);
-	return i2c_dev;
-}
-
-static void put_i2c_dev(struct i2c_dev *i2c_dev, bool del_cdev)
-{
-	spin_lock(&i2c_dev_list_lock);
-	list_del(&i2c_dev->list);
-	spin_unlock(&i2c_dev_list_lock);
-	if (del_cdev)
-		cdev_device_del(&i2c_dev->cdev, &i2c_dev->dev);
-
-	scoped_guard(rwsem_write, &i2c_dev->rwsem) {
-		i2c_dev->adap = NULL;
-	}
-
-	put_device(&i2c_dev->dev);
-}
-
 static ssize_t name_show(struct device *dev,
 			 struct device_attribute *attr, char *buf)
 {
@@ -724,11 +689,17 @@ static int i2cdev_attach_adapter(struct device *dev)
 		return NOTIFY_DONE;
 	adap = to_i2c_adapter(dev);
 
-	i2c_dev = get_free_i2c_dev(adap);
-	if (IS_ERR(i2c_dev))
+	if (adap->nr >= I2C_MINORS) {
+		pr_err("Out of device minors (%d)\n", adap->nr);
+		return NOTIFY_DONE;
+	}
+
+	i2c_dev = kzalloc_obj(*i2c_dev);
+	if (!i2c_dev)
 		return NOTIFY_DONE;
 
 	init_rwsem(&i2c_dev->rwsem);
+	i2c_dev->adap = adap;
 
 	cdev_init(&i2c_dev->cdev, &i2cdev_fops);
 	i2c_dev->cdev.owner = adap->owner;
@@ -745,13 +716,21 @@ static int i2cdev_attach_adapter(struct device *dev)
 
 	res = cdev_device_add(&i2c_dev->cdev, &i2c_dev->dev);
 	if (res)
-		goto err_put_i2c_dev;
+		goto err_clear_adap;
+
+	spin_lock(&i2c_dev_list_lock);
+	list_add_tail(&i2c_dev->list, &i2c_dev_list);
+	spin_unlock(&i2c_dev_list_lock);
 
 	pr_debug("adapter [%s] registered as minor %d\n", adap->name, adap->nr);
 	return NOTIFY_OK;
 
+err_clear_adap:
+	scoped_guard(rwsem_write, &i2c_dev->rwsem) {
+		i2c_dev->adap = NULL;
+	}
 err_put_i2c_dev:
-	put_i2c_dev(i2c_dev, false);
+	put_device(&i2c_dev->dev);
 	return NOTIFY_DONE;
 }
 
@@ -768,7 +747,17 @@ static int i2cdev_detach_adapter(struct device *dev)
 	if (!i2c_dev) /* attach_adapter must have failed */
 		return NOTIFY_DONE;
 
-	put_i2c_dev(i2c_dev, true);
+	spin_lock(&i2c_dev_list_lock);
+	list_del(&i2c_dev->list);
+	spin_unlock(&i2c_dev_list_lock);
+
+	cdev_device_del(&i2c_dev->cdev, &i2c_dev->dev);
+
+	scoped_guard(rwsem_write, &i2c_dev->rwsem) {
+		i2c_dev->adap = NULL;
+	}
+
+	put_device(&i2c_dev->dev);
 
 	pr_debug("adapter [%s] unregistered\n", adap->name);
 	return NOTIFY_OK;
