@@ -45,6 +45,7 @@
 
 #define _THIS_IP_ ({ unsigned long __ip; asm volatile("adr %0, ." : "=r" (__ip)); __ip; })
 
+#define __rodata_pgtbl __section(".pgtbl.ro_after_init") __aligned(PAGE_SIZE)
 #define __bss_pgtbl __section(".bss..pgtbl") __aligned(PAGE_SIZE)
 
 #endif
