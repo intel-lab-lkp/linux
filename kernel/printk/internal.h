@@ -3,6 +3,7 @@
  * internal.h - printk internal definitions
  */
 #include <linux/console.h>
+#include <linux/stop_machine.h>
 #include <linux/types.h>
 #include <linux/sysctl.h>
 
@@ -206,7 +207,13 @@ static inline void printk_get_console_flush_type(struct console_flush_type *ft)
 
 		/* Legacy consoles are flushed directly when possible. */
 		if (have_legacy_console || have_boot_console) {
-			if (!is_printk_legacy_deferred())
+			/*
+			 * Offload while this CPU runs a stopper callback so that a
+			 * slow flush cannot starve RT kthreads (e.g. the watchdog
+			 * pet) or stall the multi_cpu_stop() state machine.
+			 * Flushed once the stopper exits.
+			 */
+			if (!is_printk_legacy_deferred() && !in_cpu_stop())
 				ft->legacy_direct = true;
 			else if (!console_irqwork_blocked)
 				ft->legacy_offload = true;

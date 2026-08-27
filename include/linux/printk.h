@@ -166,6 +166,7 @@ __printf(1, 2) __cold int _printk_deferred(const char *fmt, ...);
 
 extern void __printk_deferred_enter(void);
 extern void __printk_deferred_exit(void);
+void printk_defer_console_output(void);
 
 extern void printk_force_console_enter(void);
 extern void printk_force_console_exit(void);
@@ -236,6 +237,10 @@ static inline void printk_deferred_enter(void)
 }
 
 static inline void printk_deferred_exit(void)
+{
+}
+
+static inline void printk_defer_console_output(void)
 {
 }
 

@@ -49,6 +49,7 @@
 #include <linux/sched/debug.h>
 #include <linux/sched/task_stack.h>
 #include <linux/panic.h>
+#include <linux/stop_machine.h>
 
 #include <linux/uaccess.h>
 #include <asm/sections.h>
@@ -4602,6 +4603,16 @@ static void wake_up_klogd_work_func(struct irq_work *irq_work)
 {
 	int pending = this_cpu_xchg(printk_pending, 0);
 
+	/*
+	 * Don't flush the legacy console from irq_work while this CPU runs a
+	 * stopper callback; keep the bit pending and re-run once it exits (see
+	 * cpu_stopper_thread()).
+	 */
+	if ((pending & PRINTK_PENDING_OUTPUT) && in_cpu_stop()) {
+		this_cpu_or(printk_pending, PRINTK_PENDING_OUTPUT);
+		pending &= ~PRINTK_PENDING_OUTPUT;
+	}
+
 	if (pending & PRINTK_PENDING_OUTPUT) {
 		if (force_legacy_kthread()) {
 			if (printk_legacy_kthread)
@@ -4685,6 +4696,18 @@ void defer_console_output(void)
 	 * using vprintk_store(), so wake any waiters as well.
 	 */
 	__wake_up_klogd(PRINTK_PENDING_WAKEUP | PRINTK_PENDING_OUTPUT);
+}
+
+void printk_defer_console_output(void)
+{
+	bool pending_output;
+
+	preempt_disable();
+	pending_output = this_cpu_read(printk_pending) & PRINTK_PENDING_OUTPUT;
+	preempt_enable();
+
+	if (pending_output)
+		defer_console_output();
 }
 
 /**

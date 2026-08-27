@@ -22,6 +22,7 @@
 #include <linux/smpboot.h>
 #include <linux/atomic.h>
 #include <linux/nmi.h>
+#include <linux/printk.h>
 #include <linux/sched/wake_q.h>
 
 /*
@@ -529,6 +530,12 @@ repeat:
 		this_cpu_write(cpu_stop_active, true);
 		ret = fn(arg);
 		this_cpu_write(cpu_stop_active, false);
+
+		/*
+		 * Flush console output that was deferred while the callback ran,
+		 * now that it is safe to do so from this CPU.
+		 */
+		printk_defer_console_output();
 
 		if (done) {
 			if (ret)
