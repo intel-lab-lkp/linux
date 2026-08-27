@@ -759,6 +759,7 @@ static void svm_recalc_pmu_msr_intercepts(struct kvm_vcpu *vcpu)
 	bool intercept = !kvm_vcpu_has_mediated_pmu(vcpu);
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
 	unsigned long gp_mask = kvm_gp_pmc_mask(pmu);
+	unsigned long host_only_gp_mask;
 	int i;
 
 	if (!enable_mediated_pmu)
@@ -777,7 +778,8 @@ static void svm_recalc_pmu_msr_intercepts(struct kvm_vcpu *vcpu)
 		svm_set_intercept_for_msr(vcpu, MSR_F15H_PERF_CTR + 2 * i,
 					  MSR_TYPE_RW, intercept);
 
-	for ( ; i < kvm_pmu_cap.num_counters_gp; i++)
+	host_only_gp_mask = kvm_pmu_cap.cntr_mask64 & ~gp_mask;
+	kvm_for_each_gp_counter(i, host_only_gp_mask)
 		svm_enable_intercept_for_msr(vcpu, MSR_F15H_PERF_CTR + 2 * i,
 					     MSR_TYPE_RW);
 
@@ -5581,9 +5583,8 @@ static __init void svm_set_cpu_caps(void)
 		 * access to enough counters to virtualize "core" support,
 		 * otherwise limit vPMU support to the legacy number of counters.
 		 */
-		if (kvm_pmu_cap.num_counters_gp < AMD64_NUM_COUNTERS_CORE)
-			kvm_pmu_cap.num_counters_gp = min(AMD64_NUM_COUNTERS,
-							  kvm_pmu_cap.num_counters_gp);
+		if (hweight64(kvm_pmu_cap.cntr_mask64) < AMD64_NUM_COUNTERS_CORE)
+			kvm_pmu_cap.cntr_mask64 &= GENMASK_ULL(AMD64_NUM_COUNTERS - 1, 0);
 		else
 			kvm_cpu_cap_check_and_set(X86_FEATURE_PERFCTR_CORE);
 

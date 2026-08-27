@@ -203,7 +203,7 @@ static void amd_pmu_refresh(struct kvm_vcpu *vcpu)
 	}
 
 	pmu->pmc_exists64 = (BIT_ULL(nr_gp_counters) - 1) &
-			    (BIT_ULL(kvm_pmu_cap.num_counters_gp) - 1);
+			    kvm_pmu_cap.cntr_mask64;
 
 	if (pmu->version > 1) {
 		pmu->global_ctrl_rsvd = ~pmu->pmc_exists64;

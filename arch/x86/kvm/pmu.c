@@ -20,7 +20,6 @@
 #include <asm/perf_event.h>
 #include <asm/cpu_device_id.h>
 #include "x86.h"
-#include "cpuid.h"
 #include "lapic.h"
 #include "pmu.h"
 
@@ -156,8 +155,8 @@ void kvm_init_pmu_capability(struct kvm_pmu_ops *pmu_ops)
 		 * there are a non-zero number of counters, but fewer than what
 		 * is architecturally required.
 		 */
-		if (!kvm_host_pmu.num_counters_gp ||
-		    WARN_ON_ONCE(kvm_host_pmu.num_counters_gp < min_nr_gp_ctrs))
+		if (!kvm_host_pmu.cntr_mask64 ||
+		    WARN_ON_ONCE(hweight64(kvm_host_pmu.cntr_mask64) < min_nr_gp_ctrs))
 			enable_pmu = false;
 		else if (is_intel && !kvm_host_pmu.version)
 			enable_pmu = false;
@@ -177,10 +176,14 @@ void kvm_init_pmu_capability(struct kvm_pmu_ops *pmu_ops)
 
 	memcpy(&kvm_pmu_cap, &kvm_host_pmu, sizeof(kvm_host_pmu));
 	kvm_pmu_cap.version = min(kvm_pmu_cap.version, 2);
-	kvm_pmu_cap.num_counters_gp = min(kvm_pmu_cap.num_counters_gp,
-					  pmu_ops->MAX_NR_GP_COUNTERS);
-	kvm_pmu_cap.num_counters_fixed = min(kvm_pmu_cap.num_counters_fixed,
-					     KVM_MAX_NR_FIXED_COUNTERS);
+	kvm_pmu_cap.cntr_mask64 &=
+		GENMASK_ULL(pmu_ops->MAX_NR_GP_COUNTERS - 1, 0);
+	kvm_pmu_cap.fixed_cntr_mask64 &=
+		GENMASK_ULL(KVM_MAX_NR_FIXED_COUNTERS - 1, 0);
+
+	/* Legacy vPMU exposes at most 3 fixed counters. */
+	if (!enable_mediated_pmu)
+		kvm_pmu_cap.fixed_cntr_mask64 &= GENMASK_ULL(2, 0);
 
 	kvm_pmu_eventsel.INSTRUCTIONS_RETIRED =
 		perf_get_hw_event_config(PERF_COUNT_HW_INSTRUCTIONS);
@@ -786,8 +789,8 @@ static bool kvm_need_any_pmc_intercept(struct kvm_vcpu *vcpu)
 	 * KVM's capabilities are constrained based on KVM support, i.e. KVM's
 	 * capabilities themselves may be a subset of hardware capabilities.
 	 */
-	return kvm_gp_pmc_mask(pmu) != BIT_ULL(kvm_host_pmu.num_counters_gp) - 1 ||
-	       kvm_fixed_pmc_mask(pmu) != BIT_ULL(kvm_host_pmu.num_counters_fixed) - 1;
+	return kvm_gp_pmc_mask(pmu) != kvm_host_pmu.cntr_mask64 ||
+	       kvm_fixed_pmc_mask(pmu) != kvm_host_pmu.fixed_cntr_mask64;
 }
 
 bool kvm_need_perf_global_ctrl_intercept(struct kvm_vcpu *vcpu)

@@ -4230,6 +4230,7 @@ static void vmx_recalc_pmu_msr_intercepts(struct kvm_vcpu *vcpu)
 	bool has_mediated_pmu = kvm_vcpu_has_mediated_pmu(vcpu);
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	unsigned long host_only_gp_mask, host_only_fixed_mask;
 	unsigned long fixed_mask = kvm_fixed_pmc_mask(pmu);
 	unsigned long gp_mask = kvm_gp_pmc_mask(pmu);
 	bool intercept = !has_mediated_pmu;
@@ -4252,23 +4253,25 @@ static void vmx_recalc_pmu_msr_intercepts(struct kvm_vcpu *vcpu)
 
 	vm_exit_controls_changebit(vmx, vm_exit_controls_bits, has_mediated_pmu);
 
+	host_only_gp_mask = kvm_host_pmu.cntr_mask64 & ~gp_mask;
 	kvm_for_each_gp_counter(i, gp_mask) {
 		vmx_set_intercept_for_msr(vcpu, MSR_IA32_PERFCTR0 + i,
 					  MSR_TYPE_RW, intercept);
 		vmx_set_intercept_for_msr(vcpu, MSR_IA32_PMC0 + i, MSR_TYPE_RW,
 					  intercept || !fw_writes_is_enabled(vcpu));
 	}
-	for ( ; i < kvm_pmu_cap.num_counters_gp; i++) {
+	for_each_set_bit(i, &host_only_gp_mask, INTEL_PMC_MAX_GENERIC) {
 		vmx_set_intercept_for_msr(vcpu, MSR_IA32_PERFCTR0 + i,
 					  MSR_TYPE_RW, true);
 		vmx_set_intercept_for_msr(vcpu, MSR_IA32_PMC0 + i,
 					  MSR_TYPE_RW, true);
 	}
 
+	host_only_fixed_mask = kvm_host_pmu.fixed_cntr_mask64 & ~fixed_mask;
 	kvm_for_each_fixed_counter(i, fixed_mask)
 		vmx_set_intercept_for_msr(vcpu, MSR_CORE_PERF_FIXED_CTR0 + i,
 					  MSR_TYPE_RW, intercept);
-	for ( ; i < kvm_pmu_cap.num_counters_fixed; i++)
+	for_each_set_bit(i, &host_only_fixed_mask, INTEL_PMC_MAX_FIXED)
 		vmx_set_intercept_for_msr(vcpu, MSR_CORE_PERF_FIXED_CTR0 + i,
 					  MSR_TYPE_RW, true);
 

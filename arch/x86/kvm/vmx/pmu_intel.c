@@ -491,7 +491,8 @@ static __always_inline u64 intel_get_fixed_pmc_eventsel(unsigned int index)
 	 * have a known encoding for the associated general purpose event.
 	 */
 	eventsel = perf_get_hw_event_config(fixed_pmc_perf_ids[index]);
-	WARN_ON_ONCE(!eventsel && index < kvm_pmu_cap.num_counters_fixed);
+	WARN_ON_ONCE(!eventsel &&
+		     (kvm_pmu_cap.fixed_cntr_mask64 & BIT_ULL(index)));
 	return eventsel;
 }
 
@@ -548,7 +549,7 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 	pmu->available_event_types = ~entry->ebx & (BIT_ULL(eax.split.mask_length) - 1);
 
 	fixed_cntr_mask = BIT_ULL(edx.split.num_counters_fixed) - 1;
-	fixed_cntr_mask &= BIT_ULL(kvm_pmu_cap.num_counters_fixed) - 1;
+	fixed_cntr_mask &= kvm_pmu_cap.fixed_cntr_mask64;
 
 	/*
 	 * The number of counters comes from guest CPUID data. Clamp the value
@@ -556,7 +557,7 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 	 */
 	nr_gp_counters = min_t(int, eax.split.num_counters, X86_PMC_IDX_MAX - 1);
 	pmu->pmc_exists64 = (BIT_ULL(nr_gp_counters) - 1) &
-			    (BIT_ULL(kvm_pmu_cap.num_counters_gp) - 1);
+			    kvm_pmu_cap.cntr_mask64;
 
 	entry = kvm_find_cpuid_entry_index(vcpu, 7, 0);
 	if (entry &&
