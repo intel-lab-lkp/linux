@@ -1561,21 +1561,21 @@ void cx231xx_release_analog_resources(struct cx231xx *dev)
 
 	/*FIXME: I2C IR should be disconnected */
 
+	if (dev->board.has_417)
+		cx231xx_417_unregister(dev);
+
 	if (video_is_registered(&dev->radio_dev))
 		video_unregister_device(&dev->radio_dev);
 	if (video_is_registered(&dev->vbi_dev)) {
 		dev_info(dev->dev, "V4L2 device %s deregistered\n",
 			video_device_node_name(&dev->vbi_dev));
-		video_unregister_device(&dev->vbi_dev);
+		vb2_video_unregister_device(&dev->vbi_dev);
 	}
 	if (video_is_registered(&dev->vdev)) {
 		dev_info(dev->dev, "V4L2 device %s deregistered\n",
 			video_device_node_name(&dev->vdev));
 
-		if (dev->board.has_417)
-			cx231xx_417_unregister(dev);
-
-		video_unregister_device(&dev->vdev);
+		vb2_video_unregister_device(&dev->vdev);
 	}
 }
 

@@ -873,6 +873,7 @@ void cx231xx_stop_TS1(struct cx231xx *dev);
 void cx231xx_start_TS1(struct cx231xx *dev);
 void cx231xx_uninit_isoc(struct cx231xx *dev);
 void cx231xx_uninit_bulk(struct cx231xx *dev);
+void cx231xx_uninit_vbi_isoc(struct cx231xx *dev);
 int cx231xx_set_mode(struct cx231xx *dev, enum cx231xx_mode set_mode);
 int cx231xx_unmute_audio(struct cx231xx *dev);
 int cx231xx_ep5_bulkout(struct cx231xx *dev, u8 *firmware, u16 size);

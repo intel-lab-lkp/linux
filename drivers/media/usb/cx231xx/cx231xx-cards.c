@@ -1946,7 +1946,6 @@ err_video_alt:
 	cx231xx_close_extension(dev);
 	cx231xx_ir_exit(dev);
 	cx231xx_release_analog_resources(dev);
-	cx231xx_417_unregister(dev);
 	cx231xx_remove_from_devlist(dev);
 	cx231xx_dev_uninit(dev);
 err_init:
@@ -1970,7 +1969,8 @@ err_if:
 /*
  * cx231xx_usb_disconnect()
  * called when the device gets disconnected
- * video device will be unregistered on v4l2_close in case it is still open
+ * Device nodes are unregistered immediately. Their backing memory remains
+ * alive until the last open file descriptor is closed.
  */
 static void cx231xx_usb_disconnect(struct usb_interface *interface)
 {
@@ -1997,7 +1997,7 @@ static void cx231xx_usb_disconnect(struct usb_interface *interface)
 
 	if (dev->users) {
 		dev_warn(dev->dev,
-			 "device %s is open! Deregistration and memory deallocation are deferred on close.\n",
+			 "device %s is open; disconnecting it now\n",
 			 video_device_node_name(&dev->vdev));
 
 		/* Even having users, it is safe to remove the RC i2c driver */
@@ -2007,17 +2007,16 @@ static void cx231xx_usb_disconnect(struct usb_interface *interface)
 			cx231xx_uninit_isoc(dev);
 		else
 			cx231xx_uninit_bulk(dev);
+		cx231xx_uninit_vbi_isoc(dev);
 		wake_up_interruptible(&dev->wait_frame);
 		wake_up_interruptible(&dev->wait_stream);
-	} else {
 	}
 
 	cx231xx_close_extension(dev);
 
 	mutex_unlock(&dev->lock);
 
-	if (!dev->users)
-		cx231xx_release_resources(dev);
+	cx231xx_release_resources(dev);
 }
 
 static struct usb_driver cx231xx_usb_driver = {
