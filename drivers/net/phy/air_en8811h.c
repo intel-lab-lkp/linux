@@ -145,10 +145,22 @@
 
 #define AN8811HB_GPIO_OUTPUT		0x5cf8b8
 #define   AN8811HB_GPIO_OUTPUT_345		(BIT(3) | BIT(4) | BIT(5))
+#define   AN8811HB_GPIO_OUTPUT_0115		(BIT(0) | BIT(1) | BIT(15))
+
+#define AN8811HB_GPIO_SEL1		0x5cf8bc
+#define   AN8811HB_GPIO_SEL1_0_MASK		GENMASK(3, 0)
+#define   AN8811HB_GPIO_SEL1_1_MASK		GENMASK(7, 4)
+#define   AN8811HB_GPIO_SEL1_0			BIT(0)
+#define   AN8811HB_GPIO_SEL1_1			0
+
+#define AN8811HB_GPIO_SEL2		0x5cf8c0
+#define   AN8811HB_GPIO_SEL2_15_MASK		GENMASK(31, 28)
+#define   AN8811HB_GPIO_SEL2_15			BIT(29)
 
 #define AN8811HB_HWTRAP1		0x5cf910
 #define AN8811HB_HWTRAP2		0x5cf914
 #define   AN8811HB_HWTRAP2_CKO			BIT(28)
+#define   AN8811HB_HWTRAP2_PKG			GENMASK(14, 12)
 
 #define AN8811HB_CLK_DRV		0x5cf9e4
 #define AN8811HB_CLK_DRV_CKO_MASK		GENMASK(14, 12)
@@ -202,6 +214,7 @@ struct en8811h_priv {
 	struct phy_device	*phydev;
 	unsigned int		cko_is_enabled;
 	struct mdio_device	*pbusdev;
+	unsigned int		pkg_sel;
 };
 
 enum {
@@ -1071,10 +1084,49 @@ static int en8811h_leds_setup(struct phy_device *phydev)
 	return ret;
 }
 
+static int an8811hb_led_gpio_setup(struct phy_device *phydev)
+{
+	struct en8811h_priv *priv = phydev->priv;
+	int ret;
+
+	if (priv->pkg_sel) {
+		/* AN8811HBCN: LED GPIOs are 0, 1, 15 */
+		ret = air_phy_buckpbus_reg_modify(phydev, AN8811HB_GPIO_OUTPUT,
+						  AN8811HB_GPIO_OUTPUT_0115,
+						  AN8811HB_GPIO_OUTPUT_0115);
+		if (ret < 0)
+			return ret;
+
+		ret = air_phy_buckpbus_reg_modify(phydev, AN8811HB_GPIO_SEL1,
+						  AN8811HB_GPIO_SEL1_0_MASK |
+						  AN8811HB_GPIO_SEL1_1_MASK,
+						  AN8811HB_GPIO_SEL1_0 |
+						  AN8811HB_GPIO_SEL1_1);
+		if (ret < 0)
+			return ret;
+
+		ret = air_phy_buckpbus_reg_modify(phydev, AN8811HB_GPIO_SEL2,
+						  AN8811HB_GPIO_SEL2_15_MASK,
+						  AN8811HB_GPIO_SEL2_15);
+		if (ret < 0)
+			return ret;
+	} else {
+		/* AN8811HBN: LED GPIOs are 3, 4, 5 */
+		ret = air_phy_buckpbus_reg_modify(phydev, AN8811HB_GPIO_OUTPUT,
+						  AN8811HB_GPIO_OUTPUT_345,
+						  AN8811HB_GPIO_OUTPUT_345);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int an8811hb_probe(struct phy_device *phydev)
 {
 	struct mdio_device *mdiodev;
 	struct en8811h_priv *priv;
+	u32 reg_val;
 	int ret;
 
 	priv = devm_kzalloc(&phydev->mdio.dev, sizeof(struct en8811h_priv),
@@ -1115,6 +1167,15 @@ static int an8811hb_probe(struct phy_device *phydev)
 	/* MDIO_DEVS1/2 empty, so set mmds_present bits here */
 	phydev->c45_ids.mmds_present |= MDIO_DEVS_PMAPMD | MDIO_DEVS_AN;
 
+	/* Detect package variant */
+	ret = air_phy_buckpbus_reg_read(phydev, AN8811HB_HWTRAP2, &reg_val);
+	if (ret < 0)
+		goto err_dev_create;
+	priv->pkg_sel = FIELD_GET(AN8811HB_HWTRAP2_PKG, reg_val);
+
+	phydev_info(phydev, "%s detected\n",
+		    priv->pkg_sel ? "AN8811HBCN" : "AN8811HBN");
+
 	ret = en8811h_leds_setup(phydev);
 	if (ret < 0)
 		goto err_dev_create;
@@ -1123,13 +1184,6 @@ static int an8811hb_probe(struct phy_device *phydev)
 	/* Co-Clock Output */
 	ret = an8811hb_clk_provider_setup(&phydev->mdio.dev, &priv->hw);
 	if (ret)
-		goto err_dev_create;
-
-	/* Configure led gpio pins as output */
-	ret = air_phy_buckpbus_reg_modify(phydev, AN8811HB_GPIO_OUTPUT,
-					  AN8811HB_GPIO_OUTPUT_345,
-					  AN8811HB_GPIO_OUTPUT_345);
-	if (ret < 0)
 		goto err_dev_create;
 
 	return 0;
@@ -1267,6 +1321,10 @@ static int an8811hb_config_init(struct phy_device *phydev)
 	}
 
 	ret = an8811hb_config_serdes_polarity(phydev);
+	if (ret < 0)
+		return ret;
+
+	ret = an8811hb_led_gpio_setup(phydev);
 	if (ret < 0)
 		return ret;
 
