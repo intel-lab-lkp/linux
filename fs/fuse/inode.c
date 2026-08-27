@@ -666,7 +666,7 @@ static int fuse_statfs(struct dentry *dentry, struct kstatfs *buf)
 	err = fuse_simple_request(fm, &args);
 	if (!err)
 		convert_fuse_statfs(buf, &outarg.st);
-	return err;
+	return fuse_stale_inode_err(err);
 }
 
 static struct fuse_sync_bucket *fuse_sync_bucket_alloc(void)

@@ -279,6 +279,17 @@ static int fuse_open(struct inode *inode, struct file *file)
 		fuse_set_nowrite(inode);
 
 	err = fuse_do_open(fm, get_node_id(inode), file, false);
+	/*
+	 * This open reached the server through a path walk, so a refusal
+	 * for the live nodeid is reported as EOPENSTALE rather than the
+	 * ESTALE the nodeid-only requests say: path_openat() picks the
+	 * cheapest retry for the walk in progress, ECHILD under LOOKUP_RCU
+	 * and ESTALE otherwise. fuse_file_open() is left alone because
+	 * fuse_priv_ioctl_prepare() reaches it to serve FS_IOC_GETFLAGS,
+	 * with no open behind it to translate the internal errno.
+	 */
+	if (err == -ENOENT)
+		err = -EOPENSTALE;
 	if (!err) {
 		ff = file->private_data;
 		err = fuse_finish_open(inode, file);

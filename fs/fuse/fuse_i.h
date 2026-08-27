@@ -1250,6 +1250,25 @@ void fuse_inode_uncached_io_end(struct fuse_inode *fi);
 int fuse_file_io_open(struct file *file, struct inode *inode);
 void fuse_file_io_release(struct fuse_file *ff, struct inode *inode);
 
+/*
+ * Report a request refused for a live nodeid as stale.
+ *
+ * A request that names a nodeid and nothing else is only sent for an
+ * inode the client has looked up and holds a reference to, and the
+ * server owes the client that inode until it is sent FUSE_FORGET.
+ * ENOENT from the server describes the inode itself rather than a name
+ * that has gone away. Report the handle as stale, which the caller
+ * answers by resolving the name again under LOOKUP_REVAL and acting on
+ * whatever it refers to now. A name that really has gone fails that
+ * second lookup and the caller still sees ENOENT.
+ */
+static inline int fuse_stale_inode_err(int err)
+{
+	if (err == -ENOENT)
+		return -ESTALE;
+	return err;
+}
+
 /* file.c */
 struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 				 unsigned int open_flags, bool isdir);

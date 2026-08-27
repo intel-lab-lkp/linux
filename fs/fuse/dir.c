@@ -1532,6 +1532,8 @@ static int fuse_do_getattr(struct mnt_idmap *idmap, struct inode *inode,
 			if (stat)
 				fuse_fillattr(idmap, inode, &outarg.attr, stat);
 		}
+	} else {
+		err = fuse_stale_inode_err(err);
 	}
 	return err;
 }
@@ -1848,6 +1850,7 @@ static int fuse_readlink_folio(struct inode *inode, struct folio *folio)
 
 	fuse_invalidate_atime(inode);
 
+	res = fuse_stale_inode_err(res);
 	if (res < 0)
 		return res;
 
@@ -1910,6 +1913,12 @@ static int fuse_dir_open(struct inode *inode, struct file *file)
 		return err;
 
 	err = fuse_do_open(fm, get_node_id(inode), file, true);
+	/*
+	 * As in fuse_open_common(): a path walk stands behind this open,
+	 * so the refusal is EOPENSTALE for path_openat() to answer.
+	 */
+	if (err == -ENOENT)
+		err = -EOPENSTALE;
 	if (!err) {
 		struct fuse_file *ff = file->private_data;
 
@@ -2249,6 +2258,7 @@ int fuse_do_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	if (err) {
 		if (err == -EINTR)
 			fuse_invalidate_attr(inode);
+		err = fuse_stale_inode_err(err);
 		goto error;
 	}
 
