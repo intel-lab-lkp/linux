@@ -371,13 +371,23 @@ static int ethosu_probe(struct platform_device *pdev)
 
 	ret = ethosu_init(ethosudev);
 	if (ret)
-		return ret;
+		goto err_job_fini;
 
 	ret = drm_dev_register(&ethosudev->base, 0);
 	if (ret)
-		pm_runtime_dont_use_autosuspend(ethosudev->base.dev);
+		goto err_pm_runtime;
 
 	pm_runtime_put_autosuspend(ethosudev->base.dev);
+	return 0;
+
+err_pm_runtime:
+	pm_runtime_dont_use_autosuspend(ethosudev->base.dev);
+	pm_runtime_put_autosuspend(ethosudev->base.dev);
+	if (ethosudev->sram)
+		gen_pool_free(ethosudev->srampool, (unsigned long)ethosudev->sram,
+			      ethosudev->npu_info.sram_size);
+err_job_fini:
+	ethosu_job_fini(ethosudev);
 	return ret;
 }
 
