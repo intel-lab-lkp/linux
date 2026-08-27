@@ -539,7 +539,7 @@ static int __ads1015_read_info_raw(struct ads1015_data *data,
 		return -EBUSY;
 
 	ret = ads1015_set_power_state(data, true);
-	if (ret < 0)
+	if (ret)
 		return ret;
 
 	ret = ads1015_get_adc_result(data, chan->address, val);
@@ -727,7 +727,7 @@ static int ads1015_enable_event_config(struct ads1015_data *data,
 		return ret;
 
 	ret = ads1015_set_power_state(data, true);
-	if (ret < 0)
+	if (ret)
 		return ret;
 
 	ads1015_event_channel_enable(data, chan->address, comp_mode);
@@ -994,7 +994,7 @@ static int ads1015_probe(struct i2c_client *client)
 	ret = devm_iio_triggered_buffer_setup(dev, indio_dev, NULL,
 					      ads1015_trigger_handler,
 					      &ads1015_buffer_setup_ops);
-	if (ret < 0)
+	if (ret)
 		return dev_err_probe(dev, ret,
 				     "iio triggered buffer setup failed\n");
 
