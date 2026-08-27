@@ -656,7 +656,9 @@ static int cx231xx_audio_init(struct cx231xx *dev)
 	dev_info(dev->dev,
 		"audio EndPoint Addr 0x%x, Alternate settings: %i\n",
 		adev->end_point_addr, adev->num_alt);
-	adev->alt_max_pkt_size = kmalloc_array(32, adev->num_alt, GFP_KERNEL);
+	adev->alt_max_pkt_size = kmalloc_array(adev->num_alt,
+					       sizeof(*adev->alt_max_pkt_size),
+					       GFP_KERNEL);
 	if (!adev->alt_max_pkt_size) {
 		err = -ENOMEM;
 		goto err_free_card;

@@ -1606,7 +1606,9 @@ static int cx231xx_init_v4l2(struct cx231xx *dev,
 		 dev->video_mode.num_alt);
 
 	dev->video_mode.alt_max_pkt_size =
-		kmalloc_array(32, dev->video_mode.num_alt, GFP_KERNEL);
+		kmalloc_array(dev->video_mode.num_alt,
+			      sizeof(*dev->video_mode.alt_max_pkt_size),
+			      GFP_KERNEL);
 	if (dev->video_mode.alt_max_pkt_size == NULL)
 		return -ENOMEM;
 
@@ -1648,7 +1650,9 @@ static int cx231xx_init_v4l2(struct cx231xx *dev,
 
 	/* compute alternate max packet sizes for vbi */
 	dev->vbi_mode.alt_max_pkt_size =
-		kmalloc_array(32, dev->vbi_mode.num_alt, GFP_KERNEL);
+		kmalloc_array(dev->vbi_mode.num_alt,
+			      sizeof(*dev->vbi_mode.alt_max_pkt_size),
+			      GFP_KERNEL);
 	if (dev->vbi_mode.alt_max_pkt_size == NULL)
 		return -ENOMEM;
 
@@ -1691,7 +1695,9 @@ static int cx231xx_init_v4l2(struct cx231xx *dev,
 		 dev->sliced_cc_mode.end_point_addr,
 		 dev->sliced_cc_mode.num_alt);
 	dev->sliced_cc_mode.alt_max_pkt_size =
-		kmalloc_array(32, dev->sliced_cc_mode.num_alt, GFP_KERNEL);
+		kmalloc_array(dev->sliced_cc_mode.num_alt,
+			      sizeof(*dev->sliced_cc_mode.alt_max_pkt_size),
+			      GFP_KERNEL);
 	if (dev->sliced_cc_mode.alt_max_pkt_size == NULL)
 		return -ENOMEM;
 
@@ -1887,7 +1893,9 @@ static int cx231xx_usb_probe(struct usb_interface *interface,
 			 dev->ts1_mode.num_alt);
 
 		dev->ts1_mode.alt_max_pkt_size =
-			kmalloc_array(32, dev->ts1_mode.num_alt, GFP_KERNEL);
+			kmalloc_array(dev->ts1_mode.num_alt,
+				      sizeof(*dev->ts1_mode.alt_max_pkt_size),
+				      GFP_KERNEL);
 		if (dev->ts1_mode.alt_max_pkt_size == NULL) {
 			retval = -ENOMEM;
 			goto err_video_alt;
