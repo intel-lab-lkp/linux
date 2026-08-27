@@ -1184,6 +1184,7 @@ static void __init map_mem(void)
 	phys_addr_t init_begin = __pa_symbol(__init_begin);
 	phys_addr_t init_end = __pa_symbol(__init_end);
 	phys_addr_t kernel_end = __pa_symbol(__bss_stop);
+	phys_addr_t fixmap_pte_base = __pa_symbol(fixmap_bm_pte);
 	phys_addr_t start, end;
 	int flags = NO_EXEC_MAPPINGS;
 	u64 i;
@@ -1224,6 +1225,9 @@ static void __init map_mem(void)
 	/* Map the kernel data/bss so it can be remapped later */
 	__map_memblock(init_end, kernel_end, pgprot_tagged(PAGE_KERNEL),
 		       flags);
+
+	__map_memblock(fixmap_pte_base, fixmap_pte_base + fixmap_bm_pte_size,
+		       pgprot_tagged(PAGE_KERNEL), flags);
 
 	/* map all the memory banks */
 	for_each_mem_range(i, &start, &end) {
@@ -1267,6 +1271,10 @@ void mark_rodata_ro(void)
 	update_mapping_prot(__pa_symbol(_text), (unsigned long)_text,
 			    (unsigned long)_stext - (unsigned long)_text,
 			    PAGE_KERNEL_RO);
+
+	update_mapping_prot(__pa_symbol(fixmap_bm_pte),
+			    (unsigned long)lm_alias(fixmap_bm_pte),
+			    fixmap_bm_pte_size, PAGE_KERNEL_RO);
 
 	/* Map the kernel data/bss as invalid in the linear map */
 	mark_linear_data_alias_valid(false);

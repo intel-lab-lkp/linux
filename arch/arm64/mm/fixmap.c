@@ -31,13 +31,15 @@ static_assert(NR_BM_PMD_TABLES == 1);
 
 #define BM_PTE_TABLE_IDX(addr)	__BM_TABLE_IDX(addr, PMD_SHIFT)
 
-static pte_t bm_pte[NR_BM_PTE_TABLES][PTRS_PER_PTE] __bss_pgtbl;
+pte_t fixmap_bm_pte[NR_BM_PTE_TABLES][PTRS_PER_PTE] __bss_pgtbl;
 static pmd_t bm_pmd[PTRS_PER_PMD] __bss_pgtbl __maybe_unused;
 static pud_t bm_pud[PTRS_PER_PUD] __bss_pgtbl __maybe_unused;
 
+const size_t fixmap_bm_pte_size = sizeof(fixmap_bm_pte);
+
 static inline pte_t *fixmap_pte(unsigned long addr)
 {
-	return &bm_pte[BM_PTE_TABLE_IDX(addr)][pte_index(addr)];
+	return &fixmap_bm_pte[BM_PTE_TABLE_IDX(addr)][pte_index(addr)];
 }
 
 static void __init early_fixmap_init_pte(pmd_t *pmdp, unsigned long addr)
@@ -46,7 +48,7 @@ static void __init early_fixmap_init_pte(pmd_t *pmdp, unsigned long addr)
 	pte_t *ptep;
 
 	if (pmd_none(pmd)) {
-		ptep = bm_pte[BM_PTE_TABLE_IDX(addr)];
+		ptep = fixmap_bm_pte[BM_PTE_TABLE_IDX(addr)];
 		__pmd_populate(pmdp, __pa_symbol(ptep),
 			       PMD_TYPE_TABLE | PMD_TABLE_AF);
 	}

@@ -112,6 +112,9 @@ enum fixed_addresses {
 
 void __init early_fixmap_init(void);
 
+extern pte_t fixmap_bm_pte[][PTRS_PER_PTE];
+extern const size_t fixmap_bm_pte_size;
+
 #define __early_set_fixmap __set_fixmap
 
 extern void __set_fixmap(enum fixed_addresses idx, phys_addr_t phys, pgprot_t prot);
