@@ -243,6 +243,11 @@ static const struct intel_pinctrl_soc_data dnv_soc_data = {
 	.ncommunities = ARRAY_SIZE(dnv_communities),
 };
 
+static int dnv_pinctrl_probe(struct platform_device *pdev)
+{
+	return intel_pinctrl_probe(pdev, &dnv_soc_data);
+}
+
 static const struct acpi_device_id dnv_pinctrl_acpi_match[] = {
 	{ "INTC3000", (kernel_ulong_t)&dnv_soc_data },
 	{ }
@@ -256,7 +261,7 @@ static const struct platform_device_id dnv_pinctrl_platform_ids[] = {
 MODULE_DEVICE_TABLE(platform, dnv_pinctrl_platform_ids);
 
 static struct platform_driver dnv_pinctrl_driver = {
-	.probe = intel_pinctrl_probe_by_hid,
+	.probe = dnv_pinctrl_probe,
 	.driver = {
 		.name = "denverton-pinctrl",
 		.acpi_match_table = dnv_pinctrl_acpi_match,
