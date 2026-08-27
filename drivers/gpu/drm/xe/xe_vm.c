@@ -497,6 +497,11 @@ static void preempt_rebind_work_func(struct work_struct *w)
 	}
 
 retry:
+	if (xe_device_io_blocked(vm->xe)) {
+		err = 0;
+		goto out_unlock_outer;
+	}
+
 	if (!try_wait_for_completion(&vm->xe->pm_block) && vm_suspend_rebind_worker(vm)) {
 		up_write(&vm->lock);
 		/* We don't actually block but don't make progress. */
@@ -518,6 +523,12 @@ retry:
 	drm_exec_until_all_locked(&exec) {
 		bool done = false;
 
+		if (xe_device_io_blocked(vm->xe)) {
+			xe_validation_ctx_fini(&ctx);
+			err = 0;
+			goto out_unlock_outer;
+		}
+
 		err = xe_preempt_work_begin(&exec, vm, &done);
 		drm_exec_retry_on_contention(&exec);
 		xe_validation_retry_on_oom(&ctx, &err);
@@ -530,6 +541,11 @@ retry:
 	err = alloc_preempt_fences(vm, &preempt_fences, &fence_count);
 	if (err)
 		goto out_unlock;
+
+	if (xe_device_io_blocked(vm->xe)) {
+		err = 0;
+		goto out_unlock;
+	}
 
 	xe_vm_set_validation_exec(vm, &exec);
 	err = xe_vm_rebind(vm, true);

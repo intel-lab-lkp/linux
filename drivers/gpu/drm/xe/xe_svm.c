@@ -11,6 +11,7 @@
 #include <drm/drm_pagemap_util.h>
 
 #include "xe_bo.h"
+#include "xe_device.h"
 #include "xe_exec_queue_types.h"
 #include "xe_gt_stats.h"
 #include "xe_migrate.h"
@@ -288,8 +289,11 @@ static void xe_svm_invalidate(struct drm_gpusvm *gpusvm,
 
 	err = xe_tlb_inval_range_tilemask_submit(xe, vm->usm.asid, adj_start, adj_end,
 						 tile_mask, &batch);
-	if (!WARN_ON_ONCE(err))
+	if (!err)
 		xe_tlb_inval_batch_wait(&batch);
+	else if (!(err == -ECANCELED &&
+		   xe_device_io_blocked(xe)))
+		WARN_ON_ONCE(err);
 
 range_notifier_event_end:
 	r = first;
@@ -630,6 +634,11 @@ static int xe_svm_copy(struct page **pages,
 			xe = vr->xe;
 		}
 		XE_WARN_ON(spage && xe_page_to_vr(spage) != vr);
+
+		if (vr && xe_device_io_blocked(xe)) {
+			err = -ECANCELED;
+			goto err_out;
+		}
 
 		/*
 		 * CPU page and device page valid, capture physical address on
@@ -1125,6 +1134,11 @@ static int xe_drm_pagemap_populate_mm(struct drm_pagemap *dpagemap,
 	if (!drm_dev_enter(&xe->drm, &idx))
 		return -ENODEV;
 
+	if (xe_device_io_blocked(xe)) {
+		err = -ECANCELED;
+		goto out_drm;
+	}
+
 	xe_pm_runtime_get(xe);
 
 	xe_validation_guard(&vctx, &xe->val, &exec, (struct xe_val_flags) {}, err) {
@@ -1165,6 +1179,8 @@ static int xe_drm_pagemap_populate_mm(struct drm_pagemap *dpagemap,
 		xe_bo_put(bo);
 	}
 	xe_pm_runtime_put(xe);
+
+out_drm:
 	drm_dev_exit(idx);
 
 	return err;
@@ -1300,6 +1316,9 @@ retry:
 		mutex_unlock(&range->lock);
 		drm_gpusvm_range_put(&range->base);
 	}
+
+	if (xe_device_io_blocked(vm->xe))
+		return -ECANCELED;
 
 	/* Always process UNMAPs first so view SVM ranges is current */
 	err = xe_svm_garbage_collector(vm);
