@@ -1423,6 +1423,8 @@ static int a5xx_pm_suspend(struct msm_gpu *gpu)
 		gpu_write(gpu, REG_A5XX_RBBM_BLOCK_SW_RESET_CMD, 0x00000000);
 	}
 
+	adreno_save_timestamp(gpu);
+
 	ret = msm_gpu_pm_suspend(gpu);
 	if (ret)
 		return ret;

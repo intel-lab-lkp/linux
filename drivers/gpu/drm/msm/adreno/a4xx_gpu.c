@@ -593,6 +593,8 @@ static int a4xx_pm_suspend(struct msm_gpu *gpu) {
 	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
 	int ret;
 
+	adreno_save_timestamp(gpu);
+
 	ret = msm_gpu_pm_suspend(gpu);
 	if (ret)
 		return ret;
