@@ -555,6 +555,7 @@ config X86_CPU_RESCTRL_INTEL_AET
 config X86_FRED
 	bool "Flexible Return and Event Delivery"
 	depends on X86_64
+	select ARCH_HAS_IN_IRQENTRY_TEXT
 	help
 	  When enabled, use Flexible Return and Event Delivery
 	  instead of the legacy SYSCALL/SYSENTER/IDT architecture for

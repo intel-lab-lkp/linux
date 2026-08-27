@@ -9,6 +9,7 @@
 #include <linux/stacktrace.h>
 #include <linux/export.h>
 #include <linux/uaccess.h>
+#include <asm/sections.h>
 #include <asm/stacktrace.h>
 #include <asm/unwind.h>
 
@@ -128,3 +129,15 @@ void arch_stack_walk_user(stack_trace_consume_fn consume_entry, void *cookie,
 	}
 }
 
+#ifdef CONFIG_X86_FRED
+bool arch_in_irqentry_text(unsigned long addr)
+{
+	/*
+	 * FRED delivers events to entry points in .noinstr.text, which
+	 * __irqentry_text_start..__irqentry_text_end does not cover.  See
+	 * __fred_entry_text_start in entry_64_fred.S.
+	 */
+	return addr >= (unsigned long)__fred_entry_text_start &&
+	       addr < (unsigned long)__fred_entry_text_end;
+}
+#endif
