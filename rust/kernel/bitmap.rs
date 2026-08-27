@@ -459,7 +459,13 @@ impl Bitmap {
 
     /// Finds next set bit, starting from `start`.
     ///
-    /// Returns `None` if `start` is greater or equal to `self.nbits`.
+    /// If `CONFIG_RUST_BITMAP_HARDENED` is not enabled and `start` is greater
+    /// than or equal to `self.len()`, returns `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `CONFIG_RUST_BITMAP_HARDENED` is enabled and `start` is
+    /// greater than or equal to `self.len()`.
     #[inline]
     pub fn next_bit(&self, start: usize) -> Option<usize> {
         bitmap_assert!(
@@ -479,7 +485,14 @@ impl Bitmap {
     }
 
     /// Finds next zero bit, starting from `start`.
-    /// Returns `None` if `start` is greater than or equal to `self.len()`.
+    ///
+    /// If `CONFIG_RUST_BITMAP_HARDENED` is not enabled and `start` is greater
+    /// than or equal to `self.len()`, returns `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `CONFIG_RUST_BITMAP_HARDENED` is enabled and `start` is
+    /// greater than or equal to `self.len()`.
     #[inline]
     pub fn next_zero_bit(&self, start: usize) -> Option<usize> {
         bitmap_assert!(
