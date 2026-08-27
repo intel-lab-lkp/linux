@@ -576,8 +576,16 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 			 ((BIT_ULL(pmu->nr_arch_fixed_counters) - 1) << KVM_FIXED_PMC_BASE_IDX));
 	pmu->global_ctrl_rsvd = counter_rsvd;
 
-	pmu->global_status_rsvd = pmu->global_ctrl_rsvd
-			& ~(GLOBAL_STATUS_BUFFER_OVF | GLOBAL_STATUS_COND_CHG);
+	/*
+	 * Layout of bits 48:0 in IA32_PERF_GLOBAL_CTRL is identical to
+	 * IA32_PERF_GLOBAL_STATUS, but IA32_PERF_GLOBAL_STATUS has additional
+	 * bits.
+	 */
+	pmu->global_status_rsvd = pmu->global_ctrl_rsvd;
+	if (guest_cpu_cap_has(vcpu, X86_FEATURE_DS))
+		pmu->global_status_rsvd &= ~GLOBAL_STATUS_BUFFER_OVF;
+	pmu->global_status_rsvd &= ~GLOBAL_STATUS_COND_CHG;
+
 	if (vmx_pt_mode_is_host_guest())
 		pmu->global_status_rsvd &= ~GLOBAL_STATUS_TRACE_TOPAPMI;
 
