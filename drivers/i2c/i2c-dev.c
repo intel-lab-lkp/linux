@@ -28,6 +28,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
+#include <linux/rwsem.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
@@ -41,9 +42,15 @@
  */
 struct i2c_dev {
 	struct list_head list;
+	struct rw_semaphore rwsem;
 	struct i2c_adapter *adap;
 	struct device dev;
 	struct cdev cdev;
+};
+
+struct i2c_dev_data {
+	struct i2c_dev *i2c_dev;
+	struct i2c_client client;
 };
 
 #define I2C_MINORS	(MINORMASK + 1)
@@ -90,8 +97,14 @@ static void put_i2c_dev(struct i2c_dev *i2c_dev, bool del_cdev)
 	spin_lock(&i2c_dev_list_lock);
 	list_del(&i2c_dev->list);
 	spin_unlock(&i2c_dev_list_lock);
-	if (del_cdev)
+	if (del_cdev) {
 		cdev_device_del(&i2c_dev->cdev, &i2c_dev->dev);
+
+		scoped_guard(rwsem_write, &i2c_dev->rwsem) {
+			i2c_dev->adap = NULL;
+		}
+	}
+
 	put_device(&i2c_dev->dev);
 }
 
@@ -134,10 +147,16 @@ ATTRIBUTE_GROUPS(i2c);
 static ssize_t i2cdev_read(struct file *file, char __user *buf, size_t count,
 		loff_t *offset)
 {
+	struct i2c_dev_data *data = file->private_data;
+	struct i2c_client *client = &data->client;
+	struct i2c_dev *i2c_dev = data->i2c_dev;
 	char *tmp;
 	int ret;
 
-	struct i2c_client *client = file->private_data;
+	guard(rwsem_read)(&i2c_dev->rwsem);
+
+	if (!i2c_dev->adap)
+		return -ENODEV;
 
 	/* Adapter must support I2C transfers */
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
@@ -163,9 +182,16 @@ static ssize_t i2cdev_read(struct file *file, char __user *buf, size_t count,
 static ssize_t i2cdev_write(struct file *file, const char __user *buf,
 		size_t count, loff_t *offset)
 {
+	struct i2c_dev_data *data = file->private_data;
+	struct i2c_client *client = &data->client;
+	struct i2c_dev *i2c_dev = data->i2c_dev;
 	int ret;
 	char *tmp;
-	struct i2c_client *client = file->private_data;
+
+	guard(rwsem_read)(&i2c_dev->rwsem);
+
+	if (!i2c_dev->adap)
+		return -ENODEV;
 
 	/* Adapter must support I2C transfers */
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
@@ -397,10 +423,14 @@ static noinline int i2cdev_ioctl_smbus(struct i2c_client *client,
 	return res;
 }
 
-static long i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static long i2cdev_ioctl_locked(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	struct i2c_client *client = file->private_data;
+	struct i2c_dev_data *data = file->private_data;
+	struct i2c_client *client = &data->client;
+	struct i2c_dev *i2c_dev = data->i2c_dev;
 	unsigned long funcs;
+
+	lockdep_assert_held(&i2c_dev->rwsem);
 
 	dev_dbg(&client->adapter->dev, "ioctl, cmd=0x%02x, arg=0x%02lx\n",
 		cmd, arg);
@@ -507,6 +537,19 @@ static long i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	return 0;
 }
 
+static long i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct i2c_dev_data *data = file->private_data;
+	struct i2c_dev *i2c_dev = data->i2c_dev;
+
+	guard(rwsem_read)(&i2c_dev->rwsem);
+
+	if (!i2c_dev->adap)
+		return -ENODEV;
+
+	return i2cdev_ioctl_locked(file, cmd, arg);
+}
+
 #ifdef CONFIG_COMPAT
 
 struct i2c_smbus_ioctl_data32 {
@@ -530,8 +573,16 @@ struct i2c_rdwr_ioctl_data32 {
 
 static long compat_i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	struct i2c_client *client = file->private_data;
+	struct i2c_dev_data *data = file->private_data;
+	struct i2c_client *client = &data->client;
+	struct i2c_dev *i2c_dev = data->i2c_dev;
 	unsigned long funcs;
+
+	guard(rwsem_read)(&i2c_dev->rwsem);
+
+	if (!i2c_dev->adap)
+		return -ENODEV;
+
 	switch (cmd) {
 	case I2C_FUNCS:
 		funcs = i2c_get_functionality(client->adapter);
@@ -588,7 +639,7 @@ static long compat_i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned lo
 					  compat_ptr(data32.data));
 	}
 	default:
-		return i2cdev_ioctl(file, cmd, arg);
+		return i2cdev_ioctl_locked(file, cmd, arg);
 	}
 }
 #else
@@ -597,13 +648,10 @@ static long compat_i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned lo
 
 static int i2cdev_open(struct inode *inode, struct file *file)
 {
-	unsigned int minor = iminor(inode);
+	struct i2c_dev *i2c_dev = container_of(inode->i_cdev, struct i2c_dev, cdev);
+	struct i2c_adapter *adap = i2c_dev->adap;
+	struct i2c_dev_data *data;
 	struct i2c_client *client;
-	struct i2c_adapter *adap;
-
-	adap = i2c_get_adapter(minor);
-	if (!adap)
-		return -ENODEV;
 
 	/* This creates an anonymous i2c_client, which may later be
 	 * pointed to some address using I2C_SLAVE or I2C_SLAVE_FORCE.
@@ -612,26 +660,27 @@ static int i2cdev_open(struct inode *inode, struct file *file)
 	 * or I2C core code!!  It just holds private copies of addressing
 	 * information and maybe a PEC flag.
 	 */
-	client = kzalloc_obj(*client);
-	if (!client) {
-		i2c_put_adapter(adap);
+	data = kzalloc_obj(*data);
+	if (!data)
 		return -ENOMEM;
-	}
+
+	data->i2c_dev = i2c_dev;
+
+	client = &data->client;
+
 	snprintf(client->name, I2C_NAME_SIZE, "i2c-dev %d", adap->nr);
 
 	client->adapter = adap;
-	file->private_data = client;
+	file->private_data = data;
 
 	return 0;
 }
 
 static int i2cdev_release(struct inode *inode, struct file *file)
 {
-	struct i2c_client *client = file->private_data;
+	struct i2c_dev_data *data = file->private_data;
 
-	i2c_put_adapter(client->adapter);
-	kfree(client);
-	file->private_data = NULL;
+	kfree(data);
 
 	return 0;
 }
@@ -675,8 +724,10 @@ static int i2cdev_attach_adapter(struct device *dev)
 	if (IS_ERR(i2c_dev))
 		return NOTIFY_DONE;
 
+	init_rwsem(&i2c_dev->rwsem);
+
 	cdev_init(&i2c_dev->cdev, &i2cdev_fops);
-	i2c_dev->cdev.owner = THIS_MODULE;
+	i2c_dev->cdev.owner = adap->owner;
 
 	device_initialize(&i2c_dev->dev);
 	i2c_dev->dev.devt = MKDEV(I2C_MAJOR, adap->nr);
