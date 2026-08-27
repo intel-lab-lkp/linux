@@ -497,33 +497,25 @@ static int meson_pwm_init_channels_meson8b_v2(struct pwm_chip *chip)
 	return meson_pwm_init_clocks_meson8b(chip, mux_parent_data);
 }
 
-static void meson_pwm_s4_put_clk(void *data)
-{
-	struct clk *clk = data;
-
-	clk_put(clk);
-}
-
-static int meson_pwm_init_channels_s4(struct pwm_chip *chip)
+static int meson_pwm_init_channels_per_channel_clk(struct pwm_chip *chip)
 {
 	struct device *dev = pwmchip_parent(chip);
-	struct device_node *np = dev->of_node;
 	struct meson_pwm *meson = to_meson_pwm(chip);
-	int i, ret;
+	struct clk_bulk_data *clks;
+	unsigned int i;
+	int num;
 
-	for (i = 0; i < chip->npwm; i++) {
-		meson->channels[i].clk = of_clk_get(np, i);
-		if (IS_ERR(meson->channels[i].clk))
-			return dev_err_probe(dev,
-					     PTR_ERR(meson->channels[i].clk),
-					     "Failed to get clk\n");
+	num = devm_clk_bulk_get_all(dev, &clks);
+	if (num < 0)
+		return dev_err_probe(dev, num, "Failed to get clocks\n");
 
-		ret = devm_add_action_or_reset(dev, meson_pwm_s4_put_clk,
-					       meson->channels[i].clk);
-		if (ret)
-			return dev_err_probe(dev, ret,
-					     "Failed to add clk_put action\n");
-	}
+	if (num != chip->npwm)
+		return dev_err_probe(dev, -EINVAL,
+				"expected %u clocks, got %d\n",
+				chip->npwm, num);
+
+	for (i = 0; i < chip->npwm; i++)
+		meson->channels[i].clk = clks[i].clk;
 
 	return 0;
 }
@@ -597,7 +589,7 @@ static const struct meson_pwm_data pwm_meson_axg_v2_data = {
 };
 
 static const struct meson_pwm_data pwm_s4_data = {
-	.channels_init = meson_pwm_init_channels_s4,
+	.channels_init = meson_pwm_init_channels_per_channel_clk,
 	.has_constant = true,
 	.has_polarity = true,
 	.npwm = 2,
