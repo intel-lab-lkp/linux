@@ -120,8 +120,27 @@ struct blk_crypto_key {
 #define BLK_CRYPTO_DUN_ARRAY_SIZE	(BLK_CRYPTO_MAX_IV_SIZE / sizeof(u64))
 
 /**
+ * struct blk_crypto_slot - physical slot context for slot-based inline crypto
+ * @phy_slot:           Physical ICE keyslot index (already resolved from virt).
+ * @data_unit_size_bits: log2 of the encryption data unit size; used by
+ *                       __bio_crypt_advance() to increment the DUN correctly
+ *                       when a bio is split.  0 means unknown/unset.
+ *
+ * Used when a bio carries inline crypto context by physical slot index rather
+ * than by a blk_crypto_key pointer (i.e. bc_key == NULL in bio_crypt_ctx).
+ * Set by crypto_vblk when building the bio for a GVM VIRTIO_BLK_T_CRYPTO_IN/OUT
+ * request; left zeroed for all other bio types.
+ */
+struct blk_crypto_slot {
+	unsigned int phy_slot;
+	unsigned int data_unit_size_bits;
+};
+
+/**
  * struct bio_crypt_ctx - an inline encryption context
  * @bc_key: the key, algorithm, and data unit size to use
+ * @bc_slot: physical slot + data_unit_size_bits for slot-based crypto
+ *           (used when bc_key == NULL)
  * @bc_dun: the data unit number (starting IV) to use
  *
  * A bio_crypt_ctx specifies that the contents of the bio will be encrypted (for
@@ -130,6 +149,7 @@ struct blk_crypto_key {
  */
 struct bio_crypt_ctx {
 	const struct blk_crypto_key	*bc_key;
+	struct blk_crypto_slot		 bc_slot;
 	u64				bc_dun[BLK_CRYPTO_DUN_ARRAY_SIZE];
 };
 
@@ -151,6 +171,11 @@ static inline struct bio_crypt_ctx *bio_crypt_ctx(struct bio *bio)
 void bio_crypt_set_ctx(struct bio *bio, const struct blk_crypto_key *key,
 		       const u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE],
 		       gfp_t gfp_mask);
+
+void bio_crypt_set_ctx_by_slot(struct bio *bio,
+			       const struct blk_crypto_slot *slot,
+			       const u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE],
+			       gfp_t gfp_mask);
 
 bool bio_crypt_dun_is_contiguous(const struct bio_crypt_ctx *bc,
 				 unsigned int bytes,

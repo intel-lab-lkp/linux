@@ -113,10 +113,30 @@ void bio_crypt_set_ctx(struct bio *bio, const struct blk_crypto_key *key,
 
 	bc->bc_key = key;
 	memcpy(bc->bc_dun, dun, sizeof(bc->bc_dun));
+	memset(&bc->bc_slot, 0, sizeof(bc->bc_slot));
 
 	bio->bi_crypt_context = bc;
 }
 EXPORT_SYMBOL_GPL(bio_crypt_set_ctx);
+
+void bio_crypt_set_ctx_by_slot(struct bio *bio,
+			       const struct blk_crypto_slot *slot,
+			       const u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE],
+			       gfp_t gfp_mask)
+{
+	struct bio_crypt_ctx *bc;
+
+	WARN_ON_ONCE(!(gfp_mask & __GFP_DIRECT_RECLAIM));
+
+	bc = mempool_alloc(bio_crypt_ctx_pool, gfp_mask);
+
+	bc->bc_key = NULL;
+	bc->bc_slot = *slot;
+	memcpy(bc->bc_dun, dun, sizeof(bc->bc_dun));
+
+	bio->bi_crypt_context = bc;
+}
+EXPORT_SYMBOL_GPL(bio_crypt_set_ctx_by_slot);
 
 void __bio_crypt_free_ctx(struct bio *bio)
 {
@@ -156,8 +176,12 @@ void __bio_crypt_advance(struct bio *bio, unsigned int bytes)
 {
 	struct bio_crypt_ctx *bc = bio->bi_crypt_context;
 
-	bio_crypt_dun_increment(bc->bc_dun,
-				bytes >> bc->bc_key->data_unit_size_bits);
+	if (bc->bc_key)
+		bio_crypt_dun_increment(bc->bc_dun,
+					bytes >> bc->bc_key->data_unit_size_bits);
+	else if (bc->bc_slot.data_unit_size_bits)
+		bio_crypt_dun_increment(bc->bc_dun,
+					bytes >> bc->bc_slot.data_unit_size_bits);
 }
 
 /*
@@ -169,7 +193,14 @@ bool bio_crypt_dun_is_contiguous(const struct bio_crypt_ctx *bc,
 				 const u64 next_dun[BLK_CRYPTO_DUN_ARRAY_SIZE])
 {
 	int i;
-	unsigned int carry = bytes >> bc->bc_key->data_unit_size_bits;
+	unsigned int carry;
+
+	if (bc->bc_key)
+		carry = bytes >> bc->bc_key->data_unit_size_bits;
+	else if (bc->bc_slot.data_unit_size_bits) {
+		carry = bytes >> bc->bc_slot.data_unit_size_bits;
+	} else
+		return false;
 
 	for (i = 0; i < BLK_CRYPTO_DUN_ARRAY_SIZE; i++) {
 		if (bc->bc_dun[i] + carry != next_dun[i])
@@ -198,7 +229,12 @@ static bool bio_crypt_ctx_compatible(struct bio_crypt_ctx *bc1,
 	if (!bc1)
 		return !bc2;
 
-	return bc2 && bc1->bc_key == bc2->bc_key;
+	if (bc1->bc_key)
+		return bc2 && bc1->bc_key == bc2->bc_key;
+	else
+		return bc2 && !bc2->bc_key &&
+		       bc1->bc_slot.phy_slot == bc2->bc_slot.phy_slot &&
+		       bc1->bc_slot.data_unit_size_bits == bc2->bc_slot.data_unit_size_bits;
 }
 
 bool bio_crypt_rq_ctx_compatible(struct request *rq, struct bio *bio)
@@ -258,6 +294,19 @@ bool __blk_crypto_submit_bio(struct bio *bio)
 	if (WARN_ON_ONCE(!bio_has_data(bio))) {
 		bio_io_error(bio);
 		return false;
+	}
+
+	if (!bc_key) {
+		/*
+		* Slot path: the ICE keyslot was pre-programmed by the
+		* hypervisor. The target device must natively support inline
+		* encryption; there is no fallback for slot-based crypto.
+		*/
+		if (!bdev_get_queue(bdev)->crypto_profile) {
+			bio_endio_status(bio, BLK_STS_NOTSUPP);
+			return false;
+		}
+		return true;
 	}
 
 	/*

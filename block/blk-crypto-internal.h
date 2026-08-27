@@ -176,7 +176,7 @@ static inline void bio_crypt_do_front_merge(struct request *rq,
 blk_status_t __blk_crypto_rq_get_keyslot(struct request *rq);
 static inline blk_status_t blk_crypto_rq_get_keyslot(struct request *rq)
 {
-	if (blk_crypto_rq_is_encrypted(rq))
+	if (blk_crypto_rq_is_encrypted(rq) && rq->crypt_ctx->bc_key)
 		return __blk_crypto_rq_get_keyslot(rq);
 	return BLK_STS_OK;
 }
