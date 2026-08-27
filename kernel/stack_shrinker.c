@@ -26,28 +26,41 @@ struct repopulate_work {
 
 static DEFINE_PER_CPU(struct repopulate_work, repopulate_work);
 
-// TODO: replace with shrinker
-struct stack_reclaim_work {
-	struct task_struct *tsk;
-	struct irq_work irq_work;
-	struct work_struct work;
-};
+static DEFINE_RAW_SPINLOCK(new_reclaimable_stacks_lock);
+static LIST_HEAD(new_reclaimable_stacks);
 
-static void schedule_stack_reclaim_work(struct irq_work *w)
+static struct list_lru reclaimable_stacks_lru;
+
+/*
+ * do_shrink_slab() wants us to scan (nr_obj / (1 << priority)), but unless
+ * reclaim is really struggling, that can round down to 0 for a lot of
+ * memcgs. Compensate for that by scaling count and batch size.
+ */
+#define STACK_COUNT_SHIFT DEF_PRIORITY
+/*
+ * Large batch sizes (like the 128 default) can result in spiky behavior, where
+ * deferred work acculmulates and then all of a memcg's stacks get scanned all
+ * at once.
+ */
+#define STACK_BATCH_SIZE 4
+
+/*
+ * For purposes of shrinker iteration, a stack allocated with NUMA_NO_NODE is
+ * associated with the node that created it. This extra bit allows us to
+ * determine if NUMA_NO_NODE or the saved node should be used for repopulation.
+ */
+#define TASK_NUMA_NO_NODE_FLAG BIT(15)
+
+static int task_shrinker_node(struct task_struct *tsk)
 {
-	struct stack_reclaim_work *work = container_of(w, typeof(*work), irq_work);
-
-	if (!queue_work(system_wq, &work->work))
-		put_task_struct(work->tsk);
+	return tsk->stack_reclaim_state.node & ~TASK_NUMA_NO_NODE_FLAG;
 }
 
-static void do_reclaim_stack(struct task_struct *tsk);
-
-static void do_stack_reclaim_work(struct work_struct *w)
+static int task_alloc_node(struct task_struct *tsk)
 {
-	struct task_struct *tsk = container_of(w, struct stack_reclaim_work, work)->tsk;
-
-	do_reclaim_stack(tsk);
+	if (tsk->stack_reclaim_state.node & TASK_NUMA_NO_NODE_FLAG)
+		return NUMA_NO_NODE;
+	return tsk->stack_reclaim_state.node;
 }
 
 #ifdef CONFIG_MEMCG
@@ -85,17 +98,13 @@ void add_to_stack_shrinker(struct task_struct *tsk, int node)
 
 	tsk->stack_reclaim_state.val = 0;
 	tsk->stack_reclaim_state.stack_state = STACK_IN_USE;
-	tsk->stack_reclaim_state.node = node;
+	tsk->stack_reclaim_state.lru_state = STACK_LRU_NOT_PRESENT;
 	set_stack_obj_cgroup(tsk);
-	init_llist_node(&tsk->stack_reclaim_list.refill_entry);
+	INIT_LIST_HEAD(&tsk->stack_reclaim_list.reclaim_entry);
 
-	// TODO: replace with shrinker
-	tsk->stack_reclaim_work = kmalloc_obj(*tsk->stack_reclaim_work, GFP_KERNEL);
-	BUG_ON(!tsk->stack_reclaim_work);
-
-	tsk->stack_reclaim_work->tsk = tsk;
-	init_irq_work(&tsk->stack_reclaim_work->irq_work, schedule_stack_reclaim_work);
-	INIT_WORK(&tsk->stack_reclaim_work->work, do_stack_reclaim_work);
+	if (node == NUMA_NO_NODE)
+		node = numa_node_id() | TASK_NUMA_NO_NODE_FLAG;
+	tsk->stack_reclaim_state.node = node;
 }
 
 static inline int calculate_num_unused_pages(struct task_struct *tsk)
@@ -118,8 +127,7 @@ static bool repopulate_stack(struct task_struct *tsk, bool is_deferred,
 	struct vm_struct *vm_area = tsk->stack_vm_area;
 	unsigned long addr = (unsigned long)vm_area->addr;
 	struct mem_cgroup *tsk_memcg, *old_active_memcg;
-	int node = tsk->stack_reclaim_state.node == U16_MAX ? NUMA_NO_NODE
-							    : tsk->stack_reclaim_state.node;
+	int node = task_alloc_node(tsk);
 
 	num_missing_pages = (THREAD_SIZE >> PAGE_SHIFT) - vm_area->nr_pages;
 	if (num_missing_pages == 0)
@@ -239,21 +247,6 @@ static void do_reclaim_stack(struct task_struct *tsk)
 {
 	union stack_reclaim_state prev_state, target_state;
 
-	prev_state.val = READ_ONCE(tsk->stack_reclaim_state.val);
-	do {
-		target_state.val = prev_state.val;
-		if (prev_state.stack_state == STACK_RECLAIMABLE)
-			target_state.stack_state = STACK_RECLAIMING;
-	} while (!try_cmpxchg(&tsk->stack_reclaim_state.val, &prev_state.val, target_state.val));
-
-	/*
-	 * If target_state.stack_state == STACK_RECLAIMING, we know tsk is still
-	 * alive and can't run until we're done, so putting the ref here is safe.
-	 */
-	put_task_struct(tsk);
-	if (target_state.stack_state != STACK_RECLAIMING)
-		return;
-
 	release_stack(tsk);
 
 	prev_state.val = READ_ONCE(tsk->stack_reclaim_state.val);
@@ -271,6 +264,245 @@ static void do_reclaim_stack(struct task_struct *tsk)
 	}
 }
 
+static void process_one_new_reclaimable_stack(struct task_struct *tsk, struct list_head *new_stacks)
+{
+	union stack_reclaim_state prev_state, target_state;
+
+	prev_state.val = READ_ONCE(tsk->stack_reclaim_state.val);
+	do {
+		target_state.val = prev_state.val;
+
+		switch (prev_state.stack_state) {
+		case STACK_IN_USE:
+		case STACK_PREPARE_RECLAIM:
+			target_state.lru_state = STACK_LRU_NOT_PRESENT;
+			break;
+		case STACK_RECLAIMABLE:
+			target_state.lru_state = STACK_LRU_NEW;
+			break;
+		case STACK_RECLAIMING:
+		case STACK_RECLAIMING_IN_USE:
+		case STACK_RECLAIMED:
+			/*
+			 * These states only happen after a shrinker has started
+			 * processing a stack, so seeing one of these means
+			 * multiple shrinkers are somehow targeting one stack.
+			 */
+			WARN(1, "task with stack state %x on list\n", prev_state.val);
+			put_task_struct(tsk);
+			return;
+		}
+	} while (!try_cmpxchg(&tsk->stack_reclaim_state.val, &prev_state.val, target_state.val));
+
+	if (target_state.stack_state == STACK_RECLAIMABLE)
+		list_add(&tsk->stack_reclaim_list.reclaim_entry, new_stacks);
+	else
+		put_task_struct(tsk);
+}
+
+static void process_new_reclaimable_stacks(void)
+{
+	LIST_HEAD(new_stacks);
+	struct task_struct *tsk, *tmp;
+
+	scoped_guard(raw_spinlock_irq, &new_reclaimable_stacks_lock) {
+		while ((tsk = list_first_entry_or_null(&new_reclaimable_stacks,
+						       typeof(*tsk),
+						       stack_reclaim_list.reclaim_entry))) {
+			list_del_init(&tsk->stack_reclaim_list.reclaim_entry);
+
+			/*
+			 * We hold a ref on the task during the interval when a
+			 * stack is being moved from new_reclaimable_stacks
+			 * onto the lru, to avoid needing to deal with races
+			 * against remove_from_stack_shrinker(). If tryget
+			 * fails here, tsk is about to be deleted, so we can
+			 * just skip it.
+			 */
+			if (!tryget_task_struct(tsk))
+				continue;
+
+			raw_spin_unlock_irq(&new_reclaimable_stacks_lock);
+
+			process_one_new_reclaimable_stack(tsk, &new_stacks);
+
+			raw_spin_lock_irq(&new_reclaimable_stacks_lock);
+		}
+	}
+
+	list_for_each_entry_safe(tsk, tmp, &new_stacks, stack_reclaim_list.reclaim_entry) {
+		struct mem_cgroup *memcg = get_stack_memcg(tsk);
+
+		list_del_init(&tsk->stack_reclaim_list.reclaim_entry);
+
+		if (memcg_list_lru_alloc(memcg, &reclaimable_stacks_lru, GFP_ATOMIC) == 0) {
+			local_bh_disable();
+			list_lru_add(&reclaimable_stacks_lru,
+				     &tsk->stack_reclaim_list.reclaim_entry,
+				     task_shrinker_node(tsk), memcg);
+			local_bh_enable();
+		} else {
+			union stack_reclaim_state prev_state, target_state;
+
+			pr_warn_ratelimited("failed to allocate stack reclaim metadata\n");
+
+			/*
+			 * Just give up if memcg_list_lru_alloc() fails. We
+			 * could try immediately reclaiming the stack, but
+			 * reclaiming a single stack isn't going to help if
+			 * things are so bad a GFP_ATOMIC slab allocation fails.
+			 */
+			prev_state.val = READ_ONCE(tsk->stack_reclaim_state.val);
+			do {
+				target_state.val = prev_state.val;
+				if (prev_state.stack_state == STACK_RECLAIMABLE)
+					target_state.stack_state = STACK_RECLAIMED;
+				target_state.lru_state = STACK_LRU_NOT_PRESENT;
+			} while (!try_cmpxchg(&tsk->stack_reclaim_state.val,
+					      &prev_state.val, target_state.val));
+		}
+
+		mem_cgroup_put(memcg);
+		put_task_struct(tsk);
+	}
+}
+
+static enum lru_status isolate_lru_stack(struct list_head *item,
+					 struct list_lru_one *lru, void *arg)
+{
+	struct list_head *to_reclaim = arg;
+	struct task_struct *tsk = container_of(item, struct task_struct,
+					       stack_reclaim_list.reclaim_entry);
+	union stack_reclaim_state prev_state, target_state;
+	enum lru_status ret;
+	bool is_isolated = false;
+
+	prev_state.val = READ_ONCE(tsk->stack_reclaim_state.val);
+	do {
+		target_state.val = prev_state.val;
+
+		switch (prev_state.stack_state) {
+		case STACK_IN_USE:
+		case STACK_PREPARE_RECLAIM:
+			target_state.lru_state = STACK_LRU_NOT_PRESENT;
+			ret = LRU_REMOVED;
+			break;
+		case STACK_RECLAIMABLE:
+			switch (prev_state.lru_state) {
+			case STACK_LRU_NEW:
+				target_state.lru_state = STACK_LRU_OLD;
+				ret = LRU_ROTATE;
+				break;
+			case STACK_LRU_OLD:
+				target_state.stack_state = STACK_RECLAIMING;
+				target_state.lru_state = STACK_LRU_NOT_PRESENT;
+				ret = LRU_REMOVED;
+				break;
+			case STACK_LRU_NOT_PRESENT:
+			case STACK_LRU_PENDING:
+				WARN(1, "item on stack reclaim lru with bad state\n");
+				list_lru_isolate(lru, item);
+				return LRU_REMOVED;
+			}
+			break;
+		case STACK_RECLAIMING:
+		case STACK_RECLAIMING_IN_USE:
+		case STACK_RECLAIMED:
+			/*
+			 * These states only happen after a shrinker has started
+			 * processing a stack, so seeing one of these means
+			 * multiple shrinkers are somehow targeting one stack.
+			 */
+			WARN(1, "stack with state %x on list\n", prev_state.val);
+			list_lru_isolate(lru, item);
+			return LRU_REMOVED;
+		}
+
+		/*
+		 * We need to isolate the item before the cmpxchg to prevent
+		 * races with process_one_new_reclaimable_stack() adding the
+		 * entry to its new_stacks list.
+		 */
+		if (ret == LRU_REMOVED && !is_isolated) {
+			is_isolated = true;
+			list_lru_isolate(lru, item);
+		}
+	} while (!try_cmpxchg(&tsk->stack_reclaim_state.val, &prev_state.val, target_state.val));
+
+	if (target_state.stack_state == STACK_RECLAIMING) {
+		/*
+		 * The task can't be freed since STACK_RECLAIMING prevents
+		 * it from running and exiting, so no need to hold a ref.
+		 */
+		list_add_tail(item, to_reclaim);
+	} else if (target_state.stack_state == STACK_RECLAIMABLE) {
+		/*
+		 * If we isolated but then lost a cmpxchg race against
+		 * __allow_stack_reclaim(), we need to undo the isolation.
+		 *
+		 * STACK_RECLAIMABLE means we observed the task blocked (i.e.
+		 * not dead). Even if the task dies and its refcount hits zero,
+		 * RCU cleanup of the task will be delayed because the lru walk
+		 * is guarded by local_bh_disable(), so unlocking won't cause
+		 * races with remove_from_stack_shrinker().
+		 */
+		if (is_isolated) {
+			struct mem_cgroup *lru_memcg;
+
+			spin_unlock(&lru->lock);
+
+			lru_memcg = get_stack_memcg(tsk);
+			list_lru_add(&reclaimable_stacks_lru, item,
+				     task_shrinker_node(tsk), lru_memcg);
+			mem_cgroup_put(lru_memcg);
+
+			ret = LRU_REMOVED_RETRY;
+
+		} else {
+			WARN(target_state.lru_state != STACK_LRU_OLD,
+			     "Reclaimable stack with bad state %x\n", target_state.val);
+		}
+	} else {
+		WARN(target_state.lru_state != STACK_LRU_NOT_PRESENT,
+		     "Isolate stack with bad state %x\n", target_state.val);
+	}
+
+	return ret;
+}
+
+static unsigned long scan_reclaimable_stacks(struct shrinker *shrinker,
+					     struct shrink_control *sc)
+{
+	unsigned long freed = 0;
+	LIST_HEAD(to_reclaim);
+	struct task_struct *tsk, *tmp;
+
+	sc->nr_to_scan >>= STACK_COUNT_SHIFT;
+	local_bh_disable();
+	list_lru_shrink_walk(&reclaimable_stacks_lru, sc,
+			     isolate_lru_stack, &to_reclaim);
+	local_bh_enable();
+
+	list_for_each_entry_safe(tsk, tmp, &to_reclaim, stack_reclaim_list.reclaim_entry) {
+		freed++;
+		list_del_init(&tsk->stack_reclaim_list.reclaim_entry);
+		do_reclaim_stack(tsk);
+	}
+
+	return freed << STACK_COUNT_SHIFT;
+}
+
+static unsigned long get_reclaimable_stack_count(struct shrinker *shrinker,
+						 struct shrink_control *sc)
+{
+	unsigned long count;
+
+	process_new_reclaimable_stacks();
+	count = list_lru_shrink_count(&reclaimable_stacks_lru, sc);
+
+	return count ? (unsigned long)(count << STACK_COUNT_SHIFT) : SHRINK_EMPTY;
+}
+
 static void do_repopulate_stacks(struct work_struct *w)
 {
 	struct repopulate_work *work = container_of(w, struct repopulate_work, work);
@@ -285,7 +517,7 @@ static void do_repopulate_stacks(struct work_struct *w)
 				wake_up_state(tsk, TASK_STACK_RECLAIM);
 			} else {
 				/*
-				 * Repopulate only failes due to low memory. If
+				 * Repopulate only fails due to low memory. If
 				 * that happens, give the rest of the system a
 				 * chance to free some memory.
 				 */
@@ -387,6 +619,7 @@ void __prepare_stack_for_reclaim(struct task_struct *tsk)
 void __allow_stack_reclaim(struct task_struct *tsk)
 {
 	union stack_reclaim_state prev_state, target_state;
+	bool add_to_list = false;
 
 	if (WARN_ON_ONCE(tsk->__state == TASK_DEAD))
 		return;
@@ -401,14 +634,17 @@ void __allow_stack_reclaim(struct task_struct *tsk)
 			return;
 		}
 		target_state.stack_state = STACK_RECLAIMABLE;
+		if (prev_state.lru_state == STACK_LRU_NOT_PRESENT) {
+			target_state.lru_state = STACK_LRU_PENDING;
+			add_to_list = true;
+		} else if (prev_state.lru_state == STACK_LRU_OLD) {
+			target_state.lru_state = STACK_LRU_NEW;
+		}
 	} while (!try_cmpxchg(&tsk->stack_reclaim_state.val, &prev_state.val, target_state.val));
 
-	if (irq_work_queue(&tsk->stack_reclaim_work->irq_work)) {
-		/*
-		 * Take a ref that gets released by do_reclaim_stack() so we don't
-		 * have to worry about races with remove_from_stack_shrinker().
-		 */
-		get_task_struct(tsk);
+	if (add_to_list) {
+		guard(raw_spinlock_irqsave)(&new_reclaimable_stacks_lock);
+		list_add(&tsk->stack_reclaim_list.reclaim_entry, &new_reclaimable_stacks);
 	}
 }
 
@@ -421,8 +657,34 @@ void __allow_stack_reclaim(struct task_struct *tsk)
  */
 void remove_from_stack_shrinker(struct task_struct *tsk)
 {
+	struct mem_cgroup *lru_memcg;
+
+	/*
+	 * Since tsk is being deleted, the tryget_task_struct() call in
+	 * process_new_reclaimable_stacks() excludes racing with a shrinker
+	 * moving the task from STACK_LRU_PENDING -> STACK_LRU_NEW. A race can
+	 * just result in the delete operation being a no-op.
+	 */
+	switch (READ_ONCE(tsk->stack_reclaim_state.lru_state)) {
+	case STACK_LRU_NOT_PRESENT:
+		break;
+	case STACK_LRU_PENDING:
+		scoped_guard(raw_spinlock_irqsave, &new_reclaimable_stacks_lock) {
+			if (!list_empty(&tsk->stack_reclaim_list.reclaim_entry))
+				list_del_init(&tsk->stack_reclaim_list.reclaim_entry);
+		}
+		break;
+	case STACK_LRU_NEW:
+	case STACK_LRU_OLD:
+		lru_memcg = get_stack_memcg(tsk);
+		local_bh_disable();
+		list_lru_del(&reclaimable_stacks_lru, &tsk->stack_reclaim_list.reclaim_entry,
+			     task_shrinker_node(tsk), lru_memcg);
+		local_bh_enable();
+		mem_cgroup_put(lru_memcg);
+		break;
+	}
 	put_stack_obj_cgroup(tsk);
-	kfree(tsk->stack_reclaim_work);
 }
 
 void wake_stack_repopulate(void)
@@ -430,6 +692,8 @@ void wake_stack_repopulate(void)
 	queue_work(system_highpri_wq, &this_cpu_ptr(&repopulate_work)->work);
 	preempt_enable();
 }
+
+static struct lock_class_key stack_shrinker_key;
 
 static int stack_shrinker_cpuhp_setup(unsigned int cpu)
 {
@@ -448,16 +712,48 @@ static int stack_shrinker_cpuhp_teardown(unsigned int cpu)
 
 static int __init fork_late_init(void)
 {
+	struct shrinker *shrinker;
+	const char *msg;
 	int ret;
+	enum cpuhp_state cpuhp_val;
 
 	ret = cpuhp_setup_state(CPUHP_BP_PREPARE_DYN, "stack_shrinker",
 				stack_shrinker_cpuhp_setup,
 				stack_shrinker_cpuhp_teardown);
 	if (ret < 0) {
-		WARN(1, "Failed to initialize stack_shrinker cpuhp %d\n", ret);
-		return 0;
+		msg = "cpuhp failure";
+		goto cpuhp_setup_fail;
+	}
+	cpuhp_val = ret;
+
+	shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE | SHRINKER_MEMCG_AWARE,
+				  "stack_shrinker");
+	if (!shrinker) {
+		msg = "shrinker alloc failure";
+		ret = -ENOMEM;
+		goto shrinker_alloc_fail;
 	}
 
+	ret = list_lru_init_memcg_key(&reclaimable_stacks_lru, shrinker,
+				      &stack_shrinker_key);
+	if (ret != 0) {
+		msg = "list_lru_init failure";
+		goto list_lru_init_fail;
+	}
+
+	shrinker->count_objects = get_reclaimable_stack_count;
+	shrinker->scan_objects = scan_reclaimable_stacks;
+	shrinker->seeks = 4;
+	shrinker->batch = STACK_BATCH_SIZE << STACK_COUNT_SHIFT;
+	shrinker_register(shrinker);
+	return 0;
+
+list_lru_init_fail:
+	shrinker_free(shrinker);
+shrinker_alloc_fail:
+	cpuhp_remove_state(cpuhp_val);
+cpuhp_setup_fail:
+	WARN(1, "Failed to initialize stack_shrinker %s: %d\n", msg, ret);
 	return 0;
 }
 

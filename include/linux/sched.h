@@ -83,7 +83,6 @@ struct sched_dl_entity;
 struct seq_file;
 struct sighand_struct;
 struct signal_struct;
-struct stack_reclaim_work;
 struct task_delay_info;
 struct task_exec_state;
 struct task_group;
@@ -835,9 +834,17 @@ enum stack_reclaim_enum {
 	STACK_RECLAIMED		= 5,
 } __packed;
 
+enum stack_reclaim_lru_state_enum {
+	STACK_LRU_NOT_PRESENT	= 0,
+	STACK_LRU_PENDING	= 1,
+	STACK_LRU_NEW		= 2,
+	STACK_LRU_OLD		= 3,
+} __packed;
+
 union stack_reclaim_state {
 	struct {
 		enum stack_reclaim_enum stack_state;
+		enum stack_reclaim_lru_state_enum lru_state;
 		u16 node;
 	};
 	u32 val;
@@ -845,6 +852,7 @@ union stack_reclaim_state {
 
 union stack_reclaim_list {
 	struct llist_node refill_entry;
+	struct list_head reclaim_entry;
 };
 #endif
 
@@ -1618,9 +1626,6 @@ struct task_struct {
 #ifdef CONFIG_MEMCG
 	struct obj_cgroup		*stack_obj_cgroup;
 #endif
-
-	// TODO: Replace these with a shrinker
-	struct stack_reclaim_work	*stack_reclaim_work;
 #endif
 #endif
 #ifdef CONFIG_THREAD_INFO_IN_TASK
