@@ -172,6 +172,7 @@ extern void kernel_restart(char *cmd);
 extern void kernel_halt(void);
 extern void kernel_power_off(void);
 extern bool kernel_can_power_off(void);
+void reboot_log_initiator(void);
 
 void ctrl_alt_del(void);
 
