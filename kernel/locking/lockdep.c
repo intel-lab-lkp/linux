@@ -6243,8 +6243,7 @@ static void remove_class_from_lock_chains(struct pending_free *pf,
  */
 static void zap_class(struct pending_free *pf, struct lock_class *class)
 {
-	struct lock_list *entry;
-	int i;
+	struct lock_list *entry, *tmp, *other, *other_tmp;
 
 	WARN_ON_ONCE(!class->key);
 
@@ -6252,11 +6251,29 @@ static void zap_class(struct pending_free *pf, struct lock_class *class)
 	 * Remove all dependencies this lock is
 	 * involved in:
 	 */
-	for_each_set_bit(i, list_entries_in_use, ARRAY_SIZE(list_entries)) {
-		entry = list_entries + i;
-		if (entry->class != class && entry->links_to != class)
-			continue;
-		__clear_bit(i, list_entries_in_use);
+	list_for_each_entry_safe(entry, tmp, &class->locks_after, entry) {
+		list_for_each_entry_safe(other, other_tmp, &entry->links_to->locks_before, entry) {
+			if (other->links_to == class) {
+				__clear_bit(other - list_entries, list_entries_in_use);
+				nr_list_entries--;
+				list_del_rcu(&other->entry);
+				break;
+			}
+		}
+		__clear_bit(entry - list_entries, list_entries_in_use);
+		nr_list_entries--;
+		list_del_rcu(&entry->entry);
+	}
+	list_for_each_entry_safe(entry, tmp, &class->locks_before, entry) {
+		list_for_each_entry_safe(other, other_tmp, &entry->links_to->locks_after, entry) {
+			if (other->links_to == class) {
+				__clear_bit(other - list_entries, list_entries_in_use);
+				nr_list_entries--;
+				list_del_rcu(&other->entry);
+				break;
+			}
+		}
+		__clear_bit(entry - list_entries, list_entries_in_use);
 		nr_list_entries--;
 		list_del_rcu(&entry->entry);
 	}
