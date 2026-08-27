@@ -2489,6 +2489,7 @@ static void tb_handle_hotplug(struct work_struct *work)
 			tb_xdomain_remove(xd);
 			port->xdomain = NULL;
 			__tb_disconnect_xdomain_paths(tb, xd, -1, -1, -1, -1);
+			__tb_domain_reset_interface_locked(tb);
 			tb_xdomain_put(xd);
 			tb_port_unconfigure_xdomain(port);
 		} else if (tb_port_is_dpout(port) || tb_port_is_dpin(port)) {
