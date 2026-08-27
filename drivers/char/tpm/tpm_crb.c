@@ -13,6 +13,7 @@
 
 #include <linux/acpi.h>
 #include <linux/highmem.h>
+#include <linux/mm.h>
 #include <linux/rculist.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -557,6 +558,39 @@ static int crb_check_resource(struct acpi_resource *ares, void *data)
 	return 1;
 }
 
+/*
+ * Try to map a resource region. If devm_ioremap_resource() fails with
+ * -EBUSY because the region falls inside an ACPI NVS area (common on
+ * certain Lenovo/AMD firmware), fall back to devm_memremap() which
+ * does not require exclusive resource reservation. This is analogous
+ * to the approach used by the WDAT watchdog driver (wdat_wdt_map_mem).
+ */
+static void __iomem *crb_try_nvs_fallback(struct device *dev, u64 start,
+					   u32 size)
+{
+	struct resource res = {
+		.start	= start,
+		.end	= start + size - 1,
+		.flags	= IORESOURCE_MEM,
+	};
+	void *addr;
+
+	if (region_intersects(res.start, resource_size(&res), IORESOURCE_MEM,
+			     IORES_DESC_ACPI_NV_STORAGE) !=
+			     REGION_INTERSECTS)
+		return NULL;
+
+	dev_warn(dev,
+		 "%pR is inside ACPI NVS, mapping without reservation\n",
+		 &res);
+
+	addr = devm_memremap(dev, res.start, resource_size(&res), MEMREMAP_WB);
+	if (IS_ERR(addr))
+		return IOMEM_ERR_PTR(PTR_ERR(addr));
+
+	return (void __iomem __force *)addr;
+}
+
 static void __iomem *crb_map_res(struct device *dev, struct resource *iores,
 				 void __iomem **iobase_ptr, u64 start, u32 size)
 {
@@ -565,18 +599,30 @@ static void __iomem *crb_map_res(struct device *dev, struct resource *iores,
 		.end	= start + size - 1,
 		.flags	= IORESOURCE_MEM,
 	};
+	void __iomem *p;
 
 	/* Detect a 64 bit address on a 32 bit system */
 	if (start != new_res.start)
 		return IOMEM_ERR_PTR(-EINVAL);
 
-	if (!iores)
+	if (!iores) {
+		p = crb_try_nvs_fallback(dev, start, size);
+		if (p)
+			return p;
 		return devm_ioremap_resource(dev, &new_res);
+	}
 
 	if (!*iobase_ptr) {
 		*iobase_ptr = devm_ioremap_resource(dev, iores);
-		if (IS_ERR(*iobase_ptr))
+		if (IS_ERR(*iobase_ptr)) {
+			p = crb_try_nvs_fallback(dev, iores->start,
+						 resource_size(iores));
+			if (p) {
+				*iobase_ptr = p;
+				return p + (new_res.start - iores->start);
+			}
 			return *iobase_ptr;
+		}
 	}
 
 	return *iobase_ptr + (new_res.start - iores->start);
