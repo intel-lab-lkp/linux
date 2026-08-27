@@ -557,7 +557,7 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 		lbr_desc->records.nr = 0;
 
 	if (lbr_desc->records.nr)
-		bitmap_set(pmu->all_valid_pmc_idx, INTEL_PMC_IDX_FIXED_VLBR, 1);
+		bitmap_set(pmu->pmc_exists, INTEL_PMC_IDX_FIXED_VLBR, 1);
 
 	if (pmu->version == 1)
 		return;
