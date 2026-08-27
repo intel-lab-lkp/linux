@@ -911,7 +911,8 @@ static int dw_pcie_iatu_setup(struct dw_pcie_rp *pp)
 	resource_list_for_each_entry(entry, &pp->bridge->windows) {
 		resource_size_t res_size;
 
-		if (resource_type(entry->res) != IORESOURCE_MEM)
+		if (pp->bypass_ob_mem_iatu ||
+		    resource_type(entry->res) != IORESOURCE_MEM)
 			continue;
 
 		atu.type = PCIE_TLP_TYPE_MEM_RDWR;
@@ -964,8 +965,7 @@ static int dw_pcie_iatu_setup(struct dw_pcie_rp *pp)
 
 			ret = dw_pcie_prog_outbound_atu(pci, &atu);
 			if (ret) {
-				dev_err(pci->dev, "Failed to set IO range %pr\n",
-					entry->res);
+				dev_err(pci->dev, "Failed to set IO range\n");
 				return ret;
 			}
 			ob_iatu_index++;
