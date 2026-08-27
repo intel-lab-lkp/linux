@@ -15,8 +15,10 @@ void rvu_switch_enable_lbk_link(struct rvu *rvu, u16 pcifunc, bool enable)
 
 	nix_hw = get_nix_hw(rvu->hw, pfvf->nix_blkaddr);
 	/* Enable LBK links with channel 63 for TX MCAM rule */
+	mutex_lock(&rvu->rsrc_lock);
 	rvu_nix_tx_tl2_cfg(rvu, pfvf->nix_blkaddr, pcifunc,
 			   &nix_hw->txsch[NIX_TXSCH_LVL_TL2], enable);
+	mutex_unlock(&rvu->rsrc_lock);
 }
 
 static int rvu_switch_install_rx_rule(struct rvu *rvu, u16 pcifunc,
