@@ -77,6 +77,7 @@ enum ttm_bo_type {
  * @bdev: Pointer to the buffer object device structure.
  * @type: The bo type.
  * @page_alignment: Page alignment.
+ * @individual_resv: Individual resv for destruction
  * @destroy: Destruction function. If NULL, kfree is used.
  * @kref: Reference count of this buffer object. When this refcount reaches
  * zero, the object is destroyed or put on the delayed delete list.
@@ -107,6 +108,7 @@ struct ttm_buffer_object {
 	struct ttm_device *bdev;
 	enum ttm_bo_type type;
 	uint32_t page_alignment;
+	struct dma_resv *individual_resv;
 	void (*destroy) (struct ttm_buffer_object *);
 
 	/*

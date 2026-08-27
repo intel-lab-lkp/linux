@@ -207,7 +207,7 @@ static void ttm_transfered_destroy(struct ttm_buffer_object *bo)
 	struct ttm_transfer_obj *fbo;
 
 	fbo = container_of(bo, struct ttm_transfer_obj, base);
-	dma_resv_put(&fbo->base.base._resv);
+	dma_resv_put(fbo->base.individual_resv);
 	ttm_bo_put(fbo->bo);
 	kfree(fbo);
 }
@@ -237,12 +237,23 @@ static int ttm_buffer_object_transfer(struct ttm_buffer_object *bo,
 	if (!fbo)
 		return -ENOMEM;
 
-	fbo->base = *bo;
 
 	/**
 	 * Fix up members that we shouldn't copy directly:
 	 * TODO: Explicit member copy would probably be better here.
 	 */
+	fbo->base = *bo;
+
+	fbo->base.individual_resv = dma_resv_alloc();
+	if (!fbo->base.individual_resv) {
+		ret = -ENOMEM;
+		goto error_free;
+	}
+
+	if (bo->type != ttm_bo_type_sg)
+		fbo->base.base.resv = dma_resv_get(fbo->base.individual_resv);
+	else
+		dma_resv_get(fbo->base.base.resv);
 
 	atomic_inc(&ttm_glob.bo_count);
 	drm_vma_node_reset(&fbo->base.base.vma_node);
@@ -250,19 +261,16 @@ static int ttm_buffer_object_transfer(struct ttm_buffer_object *bo,
 	kref_init(&fbo->base.kref);
 	fbo->base.destroy = &ttm_transfered_destroy;
 	fbo->base.pin_count = 0;
-	if (bo->type != ttm_bo_type_sg)
-		fbo->base.base.resv = &fbo->base.base._resv;
 
-	dma_resv_init(&fbo->base.base._resv);
 	fbo->base.base.dev = NULL;
-	ret = dma_resv_trylock(&fbo->base.base._resv);
+	ret = dma_resv_trylock(fbo->base.individual_resv);
 	WARN_ON(!ret);
 
-	ret = dma_resv_reserve_fences(&fbo->base.base._resv, TTM_NUM_MOVE_FENCES);
+	ret = dma_resv_reserve_fences(fbo->base.individual_resv,
+				      TTM_NUM_MOVE_FENCES);
 	if (ret) {
-		dma_resv_unlock(&fbo->base.base._resv);
-		kfree(fbo);
-		return ret;
+		dma_resv_unlock(fbo->base.individual_resv);
+		goto error_unref;
 	}
 
 	if (fbo->base.resource) {
@@ -280,6 +288,14 @@ static int ttm_buffer_object_transfer(struct ttm_buffer_object *bo,
 
 	*new_obj = &fbo->base;
 	return 0;
+
+error_unref:
+	dma_resv_put(fbo->base.individual_resv);
+	dma_resv_put(fbo->base.base.resv);
+
+error_free:
+	kfree(fbo);
+	return ret;
 }
 
 /**
@@ -617,7 +633,7 @@ static int ttm_bo_move_to_ghost(struct ttm_buffer_object *bo,
 	if (ret)
 		return ret;
 
-	dma_resv_add_fence(&ghost_obj->base._resv, fence,
+	dma_resv_add_fence(ghost_obj->individual_resv, fence,
 			   DMA_RESV_USAGE_KERNEL);
 
 	/**
@@ -631,7 +647,7 @@ static int ttm_bo_move_to_ghost(struct ttm_buffer_object *bo,
 	else
 		bo->ttm = NULL;
 
-	dma_resv_unlock(&ghost_obj->base._resv);
+	dma_resv_unlock(ghost_obj->individual_resv);
 	ttm_bo_put(ghost_obj);
 	return 0;
 }
@@ -801,14 +817,14 @@ int ttm_bo_pipeline_gutting(struct ttm_buffer_object *bo)
 	if (ret)
 		goto error_destroy_tt;
 
-	ret = dma_resv_copy_fences(&ghost->base._resv, bo->base.resv);
+	ret = dma_resv_copy_fences(ghost->individual_resv, bo->base.resv);
 	/* Last resort, wait for the BO to be idle when we are OOM */
 	if (ret) {
 		dma_resv_wait_timeout(bo->base.resv, DMA_RESV_USAGE_BOOKKEEP,
 				      false, MAX_SCHEDULE_TIMEOUT);
 	}
 
-	dma_resv_unlock(&ghost->base._resv);
+	dma_resv_unlock(ghost->individual_resv);
 	ttm_bo_put(ghost);
 	bo->ttm = ttm;
 	return 0;

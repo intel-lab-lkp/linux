@@ -235,9 +235,11 @@ int drm_gem_private_object_init(struct drm_device *dev,
 	obj->handle_count = 0;
 	obj->size = size;
 	mutex_init(&obj->gpuva.lock);
-	dma_resv_init(&obj->_resv);
-	if (!obj->resv)
-		obj->resv = dma_resv_get(&obj->_resv);
+	if (!obj->resv) {
+		obj->resv = dma_resv_alloc();
+		if (!obj->resv)
+			return -ENOMEM;
+	}
 
 	drm_gem_gpuva_init(obj);
 
@@ -259,7 +261,6 @@ void drm_gem_private_object_fini(struct drm_gem_object *obj)
 	WARN_ON(obj->dma_buf);
 
 	dma_resv_put(obj->resv);
-	dma_resv_put(&obj->_resv);
 	mutex_destroy(&obj->gpuva.lock);
 }
 EXPORT_SYMBOL(drm_gem_private_object_fini);

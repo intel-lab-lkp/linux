@@ -193,13 +193,13 @@ static int ttm_bo_individualize_resv(struct ttm_buffer_object *bo)
 {
 	int r;
 
-	if (bo->base.resv == &bo->base._resv)
+	if (bo->base.resv == bo->individual_resv)
 		return 0;
 
-	BUG_ON(!dma_resv_trylock(&bo->base._resv));
+	BUG_ON(!dma_resv_trylock(bo->individual_resv));
 
-	r = dma_resv_copy_fences(&bo->base._resv, bo->base.resv);
-	dma_resv_unlock(&bo->base._resv);
+	r = dma_resv_copy_fences(bo->individual_resv, bo->base.resv);
+	dma_resv_unlock(bo->individual_resv);
 	if (r)
 		return r;
 
@@ -209,7 +209,7 @@ static int ttm_bo_individualize_resv(struct ttm_buffer_object *bo)
 		 * the resv object while holding the lru_lock.
 		 */
 		spin_lock(&bo->bdev->lru_lock);
-		drm_gem_object_set_resv(&bo->base, &bo->base._resv);
+		drm_gem_object_set_resv(&bo->base, bo->individual_resv);
 		spin_unlock(&bo->bdev->lru_lock);
 	}
 
@@ -218,7 +218,7 @@ static int ttm_bo_individualize_resv(struct ttm_buffer_object *bo)
 
 static void ttm_bo_flush_all_fences(struct ttm_buffer_object *bo)
 {
-	struct dma_resv *resv = &bo->base._resv;
+	struct dma_resv *resv = bo->individual_resv;
 	struct dma_resv_iter cursor;
 	struct dma_fence *fence;
 
@@ -238,8 +238,8 @@ static void ttm_bo_delayed_delete(struct work_struct *work)
 
 	bo = container_of(work, typeof(*bo), delayed_delete);
 
-	dma_resv_wait_timeout(&bo->base._resv, DMA_RESV_USAGE_BOOKKEEP, false,
-			      MAX_SCHEDULE_TIMEOUT);
+	dma_resv_wait_timeout(bo->individual_resv, DMA_RESV_USAGE_BOOKKEEP,
+			      false, MAX_SCHEDULE_TIMEOUT);
 	dma_resv_lock(bo->base.resv, NULL);
 	ttm_bo_cleanup_memtype_use(bo);
 	dma_resv_unlock(bo->base.resv);
@@ -273,7 +273,7 @@ static void ttm_bo_release(struct kref *kref)
 		drm_vma_offset_remove(bdev->vma_manager, &bo->base.vma_node);
 		ttm_mem_io_free(bdev, bo->resource);
 
-		if (!dma_resv_test_signaled(&bo->base._resv,
+		if (!dma_resv_test_signaled(bo->individual_resv,
 					    DMA_RESV_USAGE_BOOKKEEP) ||
 		    (want_init_on_free() && (bo->ttm != NULL)) ||
 		    bo->type == ttm_bo_type_sg ||
@@ -316,6 +316,8 @@ static void ttm_bo_release(struct kref *kref)
 	}
 
 	atomic_dec(&ttm_glob.bo_count);
+	dma_resv_put(bo->individual_resv);
+	bo->individual_resv = NULL;
 	bo->destroy(bo);
 }
 
@@ -1197,7 +1199,11 @@ int ttm_bo_init_reserved(struct ttm_device *bdev, struct ttm_buffer_object *bo,
 	bo->pin_count = 0;
 	bo->sg = sg;
 	bo->bulk_move = NULL;
-	drm_gem_object_set_resv(&bo->base, resv ?: &bo->base._resv);
+
+	/* Save the original resv object before overwriting it */
+	bo->individual_resv = dma_resv_get(bo->base.resv);
+	if (resv)
+		drm_gem_object_set_resv(&bo->base, resv);
 	atomic_inc(&ttm_glob.bo_count);
 
 	/*

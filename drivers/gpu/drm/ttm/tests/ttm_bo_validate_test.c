@@ -637,7 +637,7 @@ static void ttm_bo_validate_no_placement_not_signaled(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ctx.bytes_moved, 0);
 
 	if (bo->type != ttm_bo_type_sg)
-		KUNIT_ASSERT_PTR_EQ(test, bo->base.resv, &bo->base._resv);
+		KUNIT_ASSERT_PTR_EQ(test, bo->base.resv, &bo->individual_resv);
 
 	/* Make sure we have an idle object at this point */
 	dma_resv_wait_timeout(bo->base.resv, usage, false, MAX_SCHEDULE_TIMEOUT);

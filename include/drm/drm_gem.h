@@ -386,15 +386,6 @@ struct drm_gem_object {
 	struct dma_resv *resv;
 
 	/**
-	 * @_resv:
-	 *
-	 * A reservation object for this GEM object.
-	 *
-	 * This is unused for imported GEM objects.
-	 */
-	struct dma_resv _resv;
-
-	/**
 	 * @gpuva: Fields used by GPUVM to manage mappings pointing to this GEM object.
 	 *
 	 * When DRM_GPUVM_IMMEDIATE_MODE is set, this list is protected by the

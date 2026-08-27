@@ -1319,7 +1319,7 @@ void amdgpu_bo_release_notify(struct ttm_buffer_object *bo)
 	 * So when this locking here fails something is wrong with the reference
 	 * counting.
 	 */
-	if (WARN_ON_ONCE(!dma_resv_trylock(&bo->base._resv)))
+	if (WARN_ON_ONCE(!dma_resv_trylock(bo->individual_resv)))
 		return;
 
 	amdgpu_amdkfd_remove_all_eviction_fences(abo);
@@ -1329,22 +1329,22 @@ void amdgpu_bo_release_notify(struct ttm_buffer_object *bo)
 	    adev->in_suspend || drm_dev_is_unplugged(adev_to_drm(adev)))
 		goto out;
 
-	r = dma_resv_reserve_fences(&bo->base._resv, 1);
+	r = dma_resv_reserve_fences(bo->individual_resv, 1);
 	if (r)
 		goto out;
 
 	r = amdgpu_ttm_clear_buffer(amdgpu_ttm_next_clear_entity(adev),
-				    abo, &bo->base._resv, &fence,
-				    false, AMDGPU_KERNEL_JOB_ID_CLEAR_ON_RELEASE);
+				    abo, bo->individual_resv, &fence, false,
+				    AMDGPU_KERNEL_JOB_ID_CLEAR_ON_RELEASE);
 	if (WARN_ON(r))
 		goto out;
 
 	amdgpu_vram_mgr_set_cleared(bo->resource);
-	dma_resv_add_fence(&bo->base._resv, fence, DMA_RESV_USAGE_KERNEL);
+	dma_resv_add_fence(bo->individual_resv, fence, DMA_RESV_USAGE_KERNEL);
 	dma_fence_put(fence);
 
 out:
-	dma_resv_unlock(&bo->base._resv);
+	dma_resv_unlock(bo->individual_resv);
 }
 
 /**
