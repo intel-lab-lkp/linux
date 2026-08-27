@@ -347,6 +347,21 @@ static bool cpc_reg_is_writable(unsigned int reg_idx)
 	}
 }
 
+static bool cpc_reg_is_write_only(const struct cpc_desc *cpc_desc,
+				  unsigned int reg_idx)
+{
+	return cpc_desc->version >= CPPC_V4_REV &&
+	       (reg_idx == DESIRED_PERF || reg_idx == OSPM_NOMINAL_PERF);
+}
+
+static void cpc_disable_reg(struct cpc_desc *cpc_desc, unsigned int reg_idx)
+{
+	struct cpc_register_resource *reg = &cpc_desc->cpc_regs[reg_idx];
+
+	reg->type = ACPI_TYPE_INTEGER;
+	reg->cpc_entry.int_value = 0;
+}
+
 static bool cpc_sysmem_reg_needs_rmw(const struct cpc_register_resource *reg)
 {
 	const struct cpc_reg *gas = &reg->cpc_entry.reg;
@@ -493,6 +508,14 @@ static int cpc_validate_sysmem_pair(const struct cpc_desc *a_desc,
 	    (b_writable && !cpc_sysmem_reg_needs_rmw(b)) ||
 	    cpc_sysmem_fields_overlap(a, b) ||
 	    (a_desc != b_desc && a_writable && b_writable))
+		goto conflict;
+
+	/*
+	 * RMW of either writer preserves the other field.  If that field is
+	 * write-only, its readback is undefined and cannot safely be replayed.
+	 */
+	if ((cpc_reg_is_write_only(a_desc, a_idx) && b_writable) ||
+	    (cpc_reg_is_write_only(b_desc, b_idx) && a_writable))
 		goto conflict;
 
 	return 0;
@@ -1336,6 +1359,17 @@ int acpi_cppc_processor_probe(struct acpi_processor *pr)
 					size_t access_width;
 
 					err = cpc_validate_sysmem_reg(cpc_ptr, gas_t, i - 2);
+					if (err && (i - 2 == DESIRED_PERF ||
+						    i - 2 == OSPM_NOMINAL_PERF)) {
+						const char *name = i - 2 == DESIRED_PERF ?
+								   "Desired Performance" :
+								   "OSPM Nominal Performance";
+
+						pr_warn("CPU%d: disabling inaccessible %s register\n",
+							pr->id, name);
+						cpc_disable_reg(cpc_ptr, i - 2);
+						continue;
+					}
 					if (err) {
 						ret = err;
 						goto out_free;
@@ -1726,6 +1760,10 @@ static int cpc_write(int cpu, struct cpc_register_resource *reg_res, u64 val)
 		}
 
 		if (reg->bit_offset || reg->bit_width != size) {
+			/*
+			 * MASK_VAL_WRITE() discards the field's old bits, so undefined
+			 * readback from a write-only field is not propagated.
+			 */
 			switch (size) {
 			case 8:
 				prev_val = readb_relaxed(vaddr);
@@ -1817,6 +1855,8 @@ static int cppc_get_reg_val(int cpu, enum cppc_regs reg_idx, u64 *val)
 		pr_debug("No CPC descriptor for CPU:%d\n", cpu);
 		return -ENODEV;
 	}
+	if (cpc_reg_is_write_only(cpc_desc, reg_idx))
+		return -EOPNOTSUPP;
 
 	reg = &cpc_desc->cpc_regs[reg_idx];
 
