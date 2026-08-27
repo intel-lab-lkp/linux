@@ -3572,10 +3572,17 @@ void atomisp_get_padding(struct atomisp_device *isp, u32 width, u32 height,
 	u32 min_pad_w = ISP2400_MIN_PAD_W;
 	u32 min_pad_h = ISP2400_MIN_PAD_H;
 	struct v4l2_mbus_framefmt *sink;
+	u32 input_padding_w = pad_w;
+	u32 input_padding_h = pad_h;
+
+	if (input->padding_override) {
+		input_padding_w = input->padding.width;
+		input_padding_h = input->padding.height;
+	}
 
 	if (!input->crop_support) {
-		*padding_w = pad_w;
-		*padding_h = pad_h;
+		*padding_w = input_padding_w;
+		*padding_h = input_padding_h;
 		return;
 	}
 
@@ -3588,8 +3595,10 @@ void atomisp_get_padding(struct atomisp_device *isp, u32 width, u32 height,
 		native_rect.height /= 2;
 	}
 
-	*padding_w = min_t(u32, (native_rect.width - width) & ~1, pad_w);
-	*padding_h = min_t(u32, (native_rect.height - height) & ~1, pad_h);
+	*padding_w = min_t(u32, (native_rect.width - width) & ~1,
+			   input_padding_w);
+	*padding_h = min_t(u32, (native_rect.height - height) & ~1,
+			   input_padding_h);
 
 	/* The below minimum padding requirements are for BYT / ISP2400 only */
 	if (IS_ISP2401)
@@ -3804,8 +3813,7 @@ int atomisp_try_fmt(struct atomisp_device *isp, struct v4l2_pix_format *f,
 	int ret;
 
 	fmt = atomisp_get_format_bridge(f->pixelformat);
-	/* Currently, raw formats are broken!!! */
-	if (!fmt || fmt->sh_fmt == IA_CSS_FRAME_FORMAT_RAW) {
+	if (!fmt) {
 		f->pixelformat = V4L2_PIX_FMT_YUV420;
 
 		fmt = atomisp_get_format_bridge(f->pixelformat);
@@ -3827,7 +3835,13 @@ int atomisp_try_fmt(struct atomisp_device *isp, struct v4l2_pix_format *f,
 	 * resolution + padding. Add padding here and remove it again after
 	 * the set_fmt call, like atomisp_set_fmt_to_snr() does.
 	 */
-	atomisp_get_padding(isp, f->width, f->height, &padding_w, &padding_h);
+	if (fmt->sh_fmt == IA_CSS_FRAME_FORMAT_RAW) {
+		padding_w = 0;
+		padding_h = 0;
+	} else {
+		atomisp_get_padding(isp, f->width, f->height,
+				    &padding_w, &padding_h);
+	}
 	v4l2_fill_mbus_format(&ffmt, f, fmt->mbus_code);
 	ffmt.width += padding_w;
 	ffmt.height += padding_h;
@@ -3845,6 +3859,11 @@ int atomisp_try_fmt(struct atomisp_device *isp, struct v4l2_pix_format *f,
 		dev_err(isp->dev, "unknown sensor format 0x%8.8x\n",
 			ffmt.code);
 		return -EINVAL;
+	}
+	if (fmt->sh_fmt == IA_CSS_FRAME_FORMAT_RAW &&
+	    fmt->mbus_code != snr_fmt->mbus_code) {
+		fmt = snr_fmt;
+		f->pixelformat = fmt->pixelformat;
 	}
 
 	f->width = ffmt.width - padding_w;
