@@ -1180,9 +1180,9 @@ static int resume(struct intel_gt *gt)
 
 bool intel_gt_gpu_reset_clobbers_display(struct intel_gt *gt)
 {
-	struct drm_i915_private *i915 = gt->i915;
+	struct intel_display *display = gt->i915->display;
 
-	return INTEL_INFO(i915)->gpu_reset_clobbers_display;
+	return intel_display_reset_needed_after_gpu_reset(display);
 }
 
 /**

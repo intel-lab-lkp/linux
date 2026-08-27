@@ -23,6 +23,14 @@ bool intel_display_reset_supported(struct intel_display *display)
 	return display && HAS_DISPLAY(display);
 }
 
+bool intel_display_reset_needed_after_gpu_reset(struct intel_display *display)
+{
+	/* aka gpu_reset_clobbers_display */
+	return intel_display_reset_supported(display) &&
+		DISPLAY_VER(display) <= 4 &&
+		!display->platform.g45 && !display->platform.gm45;
+}
+
 bool intel_display_reset_test(struct intel_display *display)
 {
 	return display && HAS_DISPLAY(display) &&

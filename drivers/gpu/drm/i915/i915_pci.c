@@ -80,7 +80,6 @@ __diag_ignore_all("-Woverride-init", "Allow field initialization overrides for d
 #define I830_FEATURES \
 	GEN(2), \
 	.is_mobile = 1, \
-	.gpu_reset_clobbers_display = true, \
 	.has_3d_pipeline = 1, \
 	.hws_needs_physical = 1, \
 	.unfenced_needs_alignment = 1, \
@@ -96,7 +95,6 @@ __diag_ignore_all("-Woverride-init", "Allow field initialization overrides for d
 #define I845_FEATURES \
 	GEN(2), \
 	.has_3d_pipeline = 1, \
-	.gpu_reset_clobbers_display = true, \
 	.hws_needs_physical = 1, \
 	.unfenced_needs_alignment = 1, \
 	.platform_engine_mask = BIT(RCS0), \
@@ -130,7 +128,6 @@ static const struct intel_device_info i865g_info = {
 
 #define GEN3_FEATURES \
 	GEN(3), \
-	.gpu_reset_clobbers_display = true, \
 	.platform_engine_mask = BIT(RCS0), \
 	.has_3d_pipeline = 1, \
 	.has_snoop = true, \
@@ -193,7 +190,6 @@ static const struct intel_device_info pnv_m_info = {
 
 #define GEN4_FEATURES \
 	GEN(4), \
-	.gpu_reset_clobbers_display = true, \
 	.platform_engine_mask = BIT(RCS0), \
 	.has_3d_pipeline = 1, \
 	.has_snoop = true, \
@@ -223,7 +219,6 @@ static const struct intel_device_info g45_info = {
 	GEN4_FEATURES,
 	PLATFORM(INTEL_G45),
 	.platform_engine_mask = BIT(RCS0) | BIT(VCS0),
-	.gpu_reset_clobbers_display = false,
 };
 
 static const struct intel_device_info gm45_info = {
@@ -231,7 +226,6 @@ static const struct intel_device_info gm45_info = {
 	PLATFORM(INTEL_GM45),
 	.is_mobile = 1,
 	.platform_engine_mask = BIT(RCS0) | BIT(VCS0),
-	.gpu_reset_clobbers_display = false,
 };
 
 #define GEN5_FEATURES \
