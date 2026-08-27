@@ -8612,7 +8612,7 @@ static unsigned int vmx_handle_intel_pt_intr(void)
 		return 0;
 
 	kvm_make_request(KVM_REQ_PMI, vcpu);
-	__set_bit(MSR_CORE_PERF_GLOBAL_OVF_CTRL_TRACE_TOPA_PMI_BIT,
+	__set_bit(GLOBAL_STATUS_TRACE_TOPAPMI_BIT,
 		  (unsigned long *)&vcpu->arch.pmu.global_status);
 	return 1;
 }
