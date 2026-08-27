@@ -50,7 +50,6 @@
 #include "g4x_dp.h"
 #include "g4x_hdmi.h"
 #include "hsw_ips.h"
-#include "i915_config.h"
 #include "i9xx_plane.h"
 #include "i9xx_plane_regs.h"
 #include "i9xx_wm.h"
@@ -7234,7 +7233,7 @@ static void intel_atomic_commit_fence_wait(struct intel_atomic_state *state)
 
 	if (intel_display_reset_needed_after_gpu_reset(display) ||
 	    intel_display_reset_test(display))
-		timeout = i915_fence_timeout();
+		timeout = 10 * HZ;
 	else
 		timeout = MAX_SCHEDULE_TIMEOUT;
 
