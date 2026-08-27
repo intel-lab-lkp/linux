@@ -478,6 +478,35 @@ static __always_inline bool rb_need_aux_wakeup(struct perf_buffer *rb)
 }
 
 /*
+ * Emit an empty PERF_RECORD_AUX only for flags that report conditions which
+ * userspace needs to observe. Keep an explicit list so that future flags
+ * are evaluated before they are permitted to generate empty records.
+ *
+ * TRUNCATED, PARTIAL and COLLISION report trace loss, gaps or collisions and
+ * remain meaningful even when the record contains no trace data.
+ *
+ * OVERWRITE records by themselves are not considered useful, as they don't
+ * communicate any *new* information, aside from the short-lived offset, that
+ * becomes history at the next event sched-in and therefore isn't useful. The
+ * userspace that needs to copy out AUX data in overwrite mode should know to
+ * use user_page::aux_head for the actual offset. So, from now on we don't
+ * output AUX records that have *only* OVERWRITE flag set.
+ *
+ * PMU format flags describe how to interpret an AUX payload and provide no
+ * useful information when there is no payload, so don't include them.
+ */
+static __always_inline
+bool perf_aux_flags_need_record(struct perf_output_handle *handle)
+{
+	if (handle->aux_flags & (PERF_AUX_FLAG_TRUNCATED |
+				 PERF_AUX_FLAG_PARTIAL |
+				 PERF_AUX_FLAG_COLLISION))
+		return true;
+
+	return false;
+}
+
+/*
  * Commit the data written by hardware into the ring buffer by adjusting
  * aux_head and posting a PERF_RECORD_AUX into the perf buffer. It is the
  * pmu driver's responsibility to observe ordering rules of the hardware,
@@ -506,19 +535,8 @@ void perf_aux_output_end(struct perf_output_handle *handle, unsigned long size)
 		rb->aux_head += size;
 	}
 
-	/*
-	 * Only send RECORD_AUX if we have something useful to communicate
-	 *
-	 * Note: the OVERWRITE records by themselves are not considered
-	 * useful, as they don't communicate any *new* information,
-	 * aside from the short-lived offset, that becomes history at
-	 * the next event sched-in and therefore isn't useful.
-	 * The userspace that needs to copy out AUX data in overwrite
-	 * mode should know to use user_page::aux_head for the actual
-	 * offset. So, from now on we don't output AUX records that
-	 * have *only* OVERWRITE flag set.
-	 */
-	if (size || (handle->aux_flags & ~(u64)PERF_AUX_FLAG_OVERWRITE))
+	/* Only send RECORD_AUX if we have something useful to communicate */
+	if (size || perf_aux_flags_need_record(handle))
 		perf_event_aux_event(handle->event, aux_head, size,
 				     handle->aux_flags);
 
