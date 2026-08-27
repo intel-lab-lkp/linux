@@ -89,9 +89,10 @@ static struct dst_ops sch_frag_dst_ops = {
 static int sch_fragment(struct net *net, struct sk_buff *skb,
 			u16 mru, int (*xmit)(struct sk_buff *skb))
 {
+	int hlen = skb_network_offset(skb);
 	int ret = -1;
 
-	if (skb_network_offset(skb) > VLAN_ETH_HLEN) {
+	if (hlen < 0 || hlen > VLAN_ETH_HLEN) {
 		net_warn_ratelimited("L2 header too long to fragment\n");
 		goto err;
 	}
