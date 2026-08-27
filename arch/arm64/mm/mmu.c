@@ -65,17 +65,27 @@ long __section(".mmuoff.data.write") __early_cpu_boot_status;
 
 static DEFINE_MUTEX(fixmap_lock);
 
+static struct range kimg_ropgtbl_range __ro_after_init;
+
 void noinstr try_set_readonly_ptval(ptval_t *ptvalp, ptval_t ptval)
 {
 	static DEFINE_SPINLOCK(lock);
+	bool is_lm = __is_lm_address(ptvalp);
+	u64 pa = is_lm ? __pa(ptvalp) : __pa_symbol(ptvalp);
 
-	BUG_ON(!in_swapper_pgdir(ptvalp));
+	if (!range_contains(&kimg_ropgtbl_range,
+			    &DEFINE_RANGE(pa, pa + sizeof(ptval_t))))
+		BUG();
 
 	/*
-	 * Don't bother with the fixmap if swapper_pg_dir is still mapped
+	 * Don't bother with the fixmap if .rodata is still mapped
 	 * writable in the kernel mapping.
 	 */
 	if (rodata_is_rw) {
+		/* no fault should have occurred for a kimg address */
+		BUG_ON(!is_lm);
+
+		ptvalp = (ptval_t *)__phys_to_kimg(pa);
 		WRITE_ONCE(*ptvalp, ptval);
 		dsb(ishst);
 		isb();
@@ -83,7 +93,7 @@ void noinstr try_set_readonly_ptval(ptval_t *ptvalp, ptval_t ptval)
 	}
 
 	guard(spinlock)(&lock);
-	ptvalp = (ptval_t *)set_fixmap_offset(FIX_PTVAL, __pa_symbol(ptvalp));
+	ptvalp = (ptval_t *)set_fixmap_offset(FIX_PTVAL, pa);
 	WRITE_ONCE(*ptvalp, ptval);
 	/*
 	 * We need dsb(ishst) here to ensure the page-table-walker sees
@@ -1177,6 +1187,14 @@ static inline void arm64_kfence_map_pool(void) { }
 
 #endif /* CONFIG_KFENCE */
 
+static void __init record_ropgtbl_phys_range(void)
+{
+	extern const char __rodata_pgtbl_start[], __rodata_pgtbl_end[];
+
+	kimg_ropgtbl_range = DEFINE_RANGE(__pa_symbol(__rodata_pgtbl_start),
+					  __pa_symbol(__rodata_pgtbl_end));
+}
+
 static void __init map_mem(void)
 {
 	static const u64 direct_map_end = _PAGE_END(VA_BITS_MIN);
@@ -1188,6 +1206,8 @@ static void __init map_mem(void)
 	phys_addr_t start, end;
 	int flags = NO_EXEC_MAPPINGS;
 	u64 i;
+
+	record_ropgtbl_phys_range();
 
 	/*
 	 * Setting hierarchical PXNTable attributes on table entries covering

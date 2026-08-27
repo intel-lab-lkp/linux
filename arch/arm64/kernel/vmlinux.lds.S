@@ -243,8 +243,14 @@ SECTIONS
 	reserved_pg_dir = .;
 	. += PAGE_SIZE;
 
+	__rodata_pgtbl_start = .;
 	swapper_pg_dir = .;
 	. += PAGE_SIZE;
+
+	.pgtbl.ro_after_init : ALIGN(PAGE_SIZE) {
+		*(.pgtbl.ro_after_init)
+	}
+	__rodata_pgtbl_end = .;
 
 	. = ALIGN(SEGMENT_ALIGN);
 	__init_begin = .;

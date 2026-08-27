@@ -817,12 +817,6 @@ extern pgd_t reserved_pg_dir[];
 
 void try_set_readonly_ptval(ptval_t *ptvalp, ptval_t ptval);
 
-static inline bool in_swapper_pgdir(void *addr)
-{
-	return ((unsigned long)addr & PAGE_MASK) ==
-	        ((unsigned long)swapper_pg_dir & PAGE_MASK);
-}
-
 static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
 {
 	__put_kernel_nofault(pmdp, &pmd, pmd_t, fault);
