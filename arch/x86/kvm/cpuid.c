@@ -1542,7 +1542,7 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 					    KVM_MAX_NR_FIXED_COUNTERS);
 		edx.split.bit_width_fixed = kvm_pmu_cap.bit_width_fixed;
 
-		if (kvm_pmu_cap.version)
+		if (kvm_pmu_cap.version >= 5)
 			edx.split.anythread_deprecated = 1;
 
 		entry->eax = eax.full;
