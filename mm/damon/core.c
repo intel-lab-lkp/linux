@@ -1922,8 +1922,6 @@ out:
 	return max_region_sz;
 }
 
-static int kdamond_fn(void *data);
-
 /*
  * __damon_start() - Starts monitoring with given context.
  * @ctx:	monitoring context
