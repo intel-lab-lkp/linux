@@ -18,7 +18,7 @@
 #include "intel_hotplug.h"
 #include "intel_pps.h"
 
-bool intel_display_reset_supported(struct intel_display *display)
+static bool intel_display_reset_supported(struct intel_display *display)
 {
 	return display && HAS_DISPLAY(display);
 }

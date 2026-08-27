@@ -1424,8 +1424,7 @@ static void intel_gt_reset_global(struct intel_gt *gt,
 		bool reset_display;
 
 		need_display_reset =
-			intel_display_reset_supported(display) &&
-			intel_gt_gpu_reset_clobbers_display(gt) &&
+			intel_display_reset_needed_after_gpu_reset(display) &&
 			intel_has_gpu_reset(gt);
 
 		reset_display =
