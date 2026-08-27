@@ -780,6 +780,66 @@ static bool virtio_fs_verify_response(struct fuse_req *req, unsigned int len)
 	return true;
 }
 
+/*
+ * Report a request refused for a live nodeid as stale.
+ *
+ * These requests carry a nodeid and no name, so the client only sends them for
+ * an inode it has already looked up and holds a reference to, and a server owes
+ * the client that inode until it is sent FUSE_FORGET. A server answering with
+ * ENOENT is describing a handle it was obliged to honour rather than a name
+ * that has gone away, and the caller has no reason to doubt it.
+ *
+ * Saying the handle is stale is something the caller knows how to answer: it
+ * repeats the lookup under LOOKUP_REVAL and acts on whatever the name refers to
+ * now. A name that genuinely has gone fails the retried lookup, so a caller
+ * still learns it is gone. retry_estale() is what does this, and fs/namei.c,
+ * fs/open.c, fs/stat.c, fs/statfs.c, fs/utimes.c and fs/xattr.c all reach it,
+ * which is what makes the conversion useful rather than a rename of the error.
+ *
+ * A request that names something which can itself be absent is left alone,
+ * because ENOENT is then ambiguous and is frequently the answer the caller
+ * asked for. FUSE_LOOKUP reports a missing name in a living directory and the
+ * directory operations carry a parent nodeid beside one, so neither can be
+ * read as a statement about the inode. The extended attribute requests belong
+ * with them: they carry an attribute name, and while a server should report a
+ * missing attribute as ENODATA, one that answers ENOENT instead would have a
+ * correct reply turned into a retry that cannot succeed.
+ *
+ * Requests against an already open descriptor are also left alone, since there
+ * is no equivalent retry to reach and converting the error would rename a
+ * failure rather than repair it, and FUSE_IOCTL and FUSE_POLL hand the
+ * server's errno to userspace verbatim.
+ */
+static void virtio_fs_fixup_stale_error(struct fuse_req *req)
+{
+	if (req->out.h.error != -ENOENT)
+		return;
+
+	switch (req->in.h.opcode) {
+	case FUSE_OPEN:
+	case FUSE_OPENDIR:
+		/*
+		 * An open says EOPENSTALE, and path_openat() decides what the
+		 * walk in progress should make of it: ECHILD under LOOKUP_RCU
+		 * so it drops to REF-walk, ESTALE otherwise so the name is
+		 * resolved again under LOOKUP_REVAL. Naming ESTALE here would
+		 * take the second in both cases and skip a cheaper retry.
+		 */
+		req->out.h.error = -EOPENSTALE;
+		break;
+	case FUSE_GETATTR:
+	case FUSE_SETATTR:
+	case FUSE_READLINK:
+	case FUSE_STATFS:
+		/*
+		 * Nothing translates EOPENSTALE outside the open path, so
+		 * these say ESTALE directly, which retry_estale() answers.
+		 */
+		req->out.h.error = -ESTALE;
+		break;
+	}
+}
+
 /* Work function for request completion */
 static void virtio_fs_request_complete(struct fuse_req *req,
 				       struct virtio_fs_vq *fsvq)
@@ -809,6 +869,8 @@ static void virtio_fs_request_complete(struct fuse_req *req,
 	}
 
 	clear_bit(FR_SENT, &req->flags);
+
+	virtio_fs_fixup_stale_error(req);
 
 	fuse_request_end(req);
 	spin_lock(&fsvq->lock);
