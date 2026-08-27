@@ -199,10 +199,8 @@ static void folio_batch_move_lru(struct folio_batch *fbatch, move_fn_t move_fn)
 		lruvec_unlock_irqrestore(lruvec, flags);
 
 	/* Cleanup filtered dead folios. */
-	if (is_lru_add) {
-		mem_cgroup_uncharge_folios(&free_fbatch);
+	if (is_lru_add)
 		free_unref_folios(&free_fbatch);
-	}
 
 	folios_put(fbatch);
 }
@@ -1030,7 +1028,6 @@ void folios_put_refs(struct folio_batch *folios, unsigned int *refs)
 	}
 
 	folios->nr = j;
-	mem_cgroup_uncharge_folios(folios);
 	free_unref_folios(folios);
 }
 EXPORT_SYMBOL(folios_put_refs);

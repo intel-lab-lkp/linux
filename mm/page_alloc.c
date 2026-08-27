@@ -3013,6 +3013,7 @@ void free_unref_folios(struct folio_batch *folios)
 	struct zone *locked_zone = NULL;
 	int i, j;
 
+	mem_cgroup_uncharge_folios(folios);
 	/* Prepare folios for freeing */
 	for (i = 0, j = 0; i < folios->nr; i++) {
 		struct folio *folio = folios->folios[i];

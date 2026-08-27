@@ -1506,7 +1506,6 @@ free_it:
 
 		folio_unqueue_deferred_split(folio);
 		if (folio_batch_add(&free_folios, folio) == 0) {
-			mem_cgroup_uncharge_folios(&free_folios);
 			try_to_unmap_flush();
 			free_unref_folios(&free_folios);
 		}
@@ -1575,7 +1574,6 @@ keep:
 
 	pgactivate = stat->nr_activate[0] + stat->nr_activate[1];
 
-	mem_cgroup_uncharge_folios(&free_folios);
 	try_to_unmap_flush();
 	free_unref_folios(&free_folios);
 
@@ -1902,7 +1900,6 @@ static unsigned int move_folios_to_lru(struct list_head *list)
 			folio_unqueue_deferred_split(folio);
 			if (folio_batch_add(&free_folios, folio) == 0) {
 				lruvec_unlock_irq(lruvec);
-				mem_cgroup_uncharge_folios(&free_folios);
 				free_unref_folios(&free_folios);
 				lruvec = NULL;
 			}
@@ -1920,10 +1917,8 @@ static unsigned int move_folios_to_lru(struct list_head *list)
 	if (lruvec)
 		lruvec_unlock_irq(lruvec);
 
-	if (free_folios.nr) {
-		mem_cgroup_uncharge_folios(&free_folios);
+	if (free_folios.nr)
 		free_unref_folios(&free_folios);
-	}
 
 	return nr_moved;
 }
