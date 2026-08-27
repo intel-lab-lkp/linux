@@ -312,6 +312,19 @@ config VIRTIO_BLK
 	  This is the virtual block driver for virtio.  It can be used with
           QEMU based VMMs (like KVM or Xen).  Say Y or M.
 
+config VIRTBLK_CRYPTO_VIRTUALIZATION
+	tristate "Virtio block inline encryption virtualization support"
+	depends on VIRTIO_BLK && BLK_INLINE_ENCRYPTION
+	help
+	  Say 'Y or M' to enable routing of crypto requests to a different
+	  operating system in a virtualized environment. This option by
+	  itself does not provide a working backend: enable a
+	  platform-specific driver that implements struct
+	  virtblk_crypto_variant_ops as well (e.g. QCOM_CRYPTO_VIRT on
+	  Qualcomm platforms). Without one, VIRTIO_BLK_F_INLINE_ENCRYPTION is
+	  still negotiated and advertised to the block layer, but every
+	  inline-crypto operation fails with -EOPNOTSUPP at runtime.
+
 config BLK_DEV_RBD
 	tristate "Rados block device (RBD)"
 	depends on INET && BLOCK

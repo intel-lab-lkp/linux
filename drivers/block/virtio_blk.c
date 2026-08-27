@@ -16,6 +16,8 @@
 #include <linux/numa.h>
 #include <linux/vmalloc.h>
 #include <uapi/linux/virtio_ring.h>
+#include <linux/blk-crypto-profile.h>
+#include <linux/virtio_blk_crypto_ext.h>
 
 #define PART_BITS 4
 #define VQ_NAME_LEN 16
@@ -87,7 +89,14 @@ struct virtio_blk {
 
 struct virtblk_req {
 	/* Out header */
-	struct virtio_blk_outhdr out_hdr;
+	union {
+		struct virtio_blk_outhdr base;
+		struct {
+			struct virtio_blk_outhdr base;
+			/* Crypto message (if VIRTIO_BLK_F_INLINE_ENCRYPTION) */
+			struct virtio_blk_crypto_msg msg;
+		} crypto_append;
+	} out_hdr;
 
 	/* In header */
 	union {
@@ -140,12 +149,17 @@ static int virtblk_add_req(struct virtqueue *vq, struct virtblk_req *vbr)
 {
 	struct scatterlist out_hdr, in_hdr, *sgs[3];
 	unsigned int num_out = 0, num_in = 0;
+	size_t out_hdr_len = sizeof(vbr->out_hdr.base);
 
-	sg_init_one(&out_hdr, &vbr->out_hdr, sizeof(vbr->out_hdr));
+	if (vbr->out_hdr.base.type == cpu_to_virtio32(vq->vdev, VIRTIO_BLK_T_CRYPTO_IN) ||
+	    vbr->out_hdr.base.type == cpu_to_virtio32(vq->vdev, VIRTIO_BLK_T_CRYPTO_OUT))
+		out_hdr_len = sizeof(vbr->out_hdr.crypto_append);
+
+	sg_init_one(&out_hdr, &vbr->out_hdr, out_hdr_len);
 	sgs[num_out++] = &out_hdr;
 
 	if (vbr->sg_table.nents) {
-		if (vbr->out_hdr.type & cpu_to_virtio32(vq->vdev, VIRTIO_BLK_T_OUT))
+		if (vbr->out_hdr.base.type & cpu_to_virtio32(vq->vdev, VIRTIO_BLK_T_OUT))
 			sgs[num_out++] = vbr->sg_table.sgl;
 		else
 			sgs[num_out + num_in++] = vbr->sg_table.sgl;
@@ -235,6 +249,15 @@ static void virtblk_cleanup_cmd(struct request *req)
 		kfree(bvec_virt(&req->special_vec));
 }
 
+static bool is_crypto_request(struct virtio_device *vdev, struct request *req)
+{
+	if (!IS_ENABLED(CONFIG_VIRTBLK_CRYPTO_VIRTUALIZATION) ||
+	    !virtio_has_feature(vdev, VIRTIO_BLK_F_INLINE_ENCRYPTION))
+		return false;
+
+	return req->crypt_ctx && req->crypt_keyslot;
+}
+
 static blk_status_t virtblk_setup_cmd(struct virtio_device *vdev,
 				      struct request *req,
 				      struct virtblk_req *vbr)
@@ -248,15 +271,21 @@ static blk_status_t virtblk_setup_cmd(struct virtio_device *vdev,
 		return BLK_STS_NOTSUPP;
 
 	/* Set fields for all request types */
-	vbr->out_hdr.ioprio = cpu_to_virtio32(vdev, req_get_ioprio(req));
+	vbr->out_hdr.base.ioprio = cpu_to_virtio32(vdev, req_get_ioprio(req));
 
 	switch (req_op(req)) {
 	case REQ_OP_READ:
-		type = VIRTIO_BLK_T_IN;
+		if (is_crypto_request(vdev, req))
+			type = VIRTIO_BLK_T_CRYPTO_IN;
+		else
+			type = VIRTIO_BLK_T_IN;
 		sector = blk_rq_pos(req);
 		break;
 	case REQ_OP_WRITE:
-		type = VIRTIO_BLK_T_OUT;
+		if (is_crypto_request(vdev, req))
+			type = VIRTIO_BLK_T_CRYPTO_OUT;
+		else
+			type = VIRTIO_BLK_T_OUT;
 		sector = blk_rq_pos(req);
 		break;
 	case REQ_OP_FLUSH:
@@ -298,8 +327,9 @@ static blk_status_t virtblk_setup_cmd(struct virtio_device *vdev,
 		break;
 	case REQ_OP_DRV_IN:
 		/*
-		 * Out header has already been prepared by the caller (virtblk_get_id()
-		 * or virtblk_submit_zone_report()), nothing to do here.
+		 * Out header has already been prepared by the caller (virtblk_get_id(),
+		 * virtblk_submit_zone_report() or virtblk_get_crypto_modes()), nothing
+		 * to do here.
 		 */
 		return 0;
 	default:
@@ -309,13 +339,24 @@ static blk_status_t virtblk_setup_cmd(struct virtio_device *vdev,
 
 	/* Set fields for non-REQ_OP_DRV_IN request types */
 	vbr->in_hdr_len = in_hdr_len;
-	vbr->out_hdr.type = cpu_to_virtio32(vdev, type);
-	vbr->out_hdr.sector = cpu_to_virtio64(vdev, sector);
+	vbr->out_hdr.base.type = cpu_to_virtio32(vdev, type);
+	vbr->out_hdr.base.sector = cpu_to_virtio64(vdev, sector);
 
 	if (type == VIRTIO_BLK_T_DISCARD || type == VIRTIO_BLK_T_WRITE_ZEROES ||
 	    type == VIRTIO_BLK_T_SECURE_ERASE) {
 		if (virtblk_setup_discard_write_zeroes_erase(req, unmap))
 			return BLK_STS_RESOURCE;
+	}
+
+	if (type == VIRTIO_BLK_T_CRYPTO_IN || type == VIRTIO_BLK_T_CRYPTO_OUT) {
+		unsigned int slot = blk_crypto_keyslot_index(req->crypt_keyslot);
+		unsigned int data_unit_size_bits = req->crypt_ctx->bc_key->data_unit_size_bits;
+		u64 dun = req->crypt_ctx->bc_dun[0];
+
+		vbr->out_hdr.crypto_append.msg.slot = cpu_to_virtio32(vdev, slot);
+		vbr->out_hdr.crypto_append.msg.data_unit_size_bits =
+				cpu_to_virtio32(vdev, data_unit_size_bits);
+		vbr->out_hdr.crypto_append.msg.dun = cpu_to_virtio64(vdev, dun);
 	}
 
 	return 0;
@@ -568,8 +609,8 @@ static int virtblk_submit_zone_report(struct virtio_blk *vblk,
 
 	vbr = blk_mq_rq_to_pdu(req);
 	vbr->in_hdr_len = sizeof(vbr->in_hdr.status);
-	vbr->out_hdr.type = cpu_to_virtio32(vblk->vdev, VIRTIO_BLK_T_ZONE_REPORT);
-	vbr->out_hdr.sector = cpu_to_virtio64(vblk->vdev, sector);
+	vbr->out_hdr.base.type = cpu_to_virtio32(vblk->vdev, VIRTIO_BLK_T_ZONE_REPORT);
+	vbr->out_hdr.base.sector = cpu_to_virtio64(vblk->vdev, sector);
 
 	err = blk_rq_map_kern(req, report_buf, report_len, GFP_KERNEL);
 	if (err)
@@ -817,8 +858,8 @@ static int virtblk_get_id(struct gendisk *disk, char *id_str)
 
 	vbr = blk_mq_rq_to_pdu(req);
 	vbr->in_hdr_len = sizeof(vbr->in_hdr.status);
-	vbr->out_hdr.type = cpu_to_virtio32(vblk->vdev, VIRTIO_BLK_T_GET_ID);
-	vbr->out_hdr.sector = 0;
+	vbr->out_hdr.base.type = cpu_to_virtio32(vblk->vdev, VIRTIO_BLK_T_GET_ID);
+	vbr->out_hdr.base.sector = 0;
 
 	err = blk_rq_map_kern(req, id_str, VIRTIO_BLK_ID_BYTES, GFP_KERNEL);
 	if (err)
@@ -861,6 +902,70 @@ static int virtblk_getgeo(struct gendisk *disk, struct hd_geometry *geo)
 out:
 	mutex_unlock(&vblk->vdev_mutex);
 	return ret;
+}
+
+/* Maps VIRTIO_BLK_CRYPTO_MODE_* values to the kernel's internal enum. */
+static const enum blk_crypto_mode_num
+	virtio_blk_crypto_mode_map[VIRTIO_BLK_CRYPTO_MODE_MAX + 1] = {
+	[VIRTIO_BLK_CRYPTO_MODE_INVALID]	= BLK_ENCRYPTION_MODE_INVALID,
+	[VIRTIO_BLK_CRYPTO_MODE_AES_256_XTS]	= BLK_ENCRYPTION_MODE_AES_256_XTS,
+};
+
+static int virtblk_get_crypto_modes(struct virtio_blk *vblk,
+				    unsigned int *crypto_modes_supported)
+{
+	struct request_queue *q = vblk->disk->queue;
+	unsigned int nr_modes = VIRTIO_BLK_CRYPTO_MODE_MAX + 1;
+	size_t buf_size = sizeof(struct virtio_blk_crypto_modes);
+	struct virtio_blk_crypto_modes *virtblk_cmodes;
+	struct request *req;
+	struct virtblk_req *vbr;
+	unsigned int i;
+	int err;
+
+	virtblk_cmodes = kzalloc(buf_size, GFP_KERNEL);
+	if (!virtblk_cmodes)
+		return -ENOMEM;
+
+	req = blk_mq_alloc_request(q, REQ_OP_DRV_IN, 0);
+	if (IS_ERR(req)) {
+		err = PTR_ERR(req);
+		goto out_free;
+	}
+
+	vbr = blk_mq_rq_to_pdu(req);
+	vbr->in_hdr_len = sizeof(vbr->in_hdr.status);
+	vbr->out_hdr.base.type = cpu_to_virtio32(vblk->vdev,
+						 VIRTIO_BLK_T_GET_CRYPTO_MODES);
+	vbr->out_hdr.base.sector = 0;
+
+	err = blk_rq_map_kern(req, virtblk_cmodes, buf_size, GFP_KERNEL);
+	if (err)
+		goto out_req;
+
+	blk_execute_rq(req, false);
+	err = blk_status_to_errno(virtblk_result(vbr->in_hdr.status));
+	if (err)
+		goto out_req;
+
+	for (i = 1; i < nr_modes; i++) {
+		u32 mode_mask = virtio32_to_cpu(vblk->vdev, virtblk_cmodes->modes[i]);
+		enum blk_crypto_mode_num mode = virtio_blk_crypto_mode_map[i];
+
+		if (!mode_mask)
+			continue;
+		if (!mode) {
+			dev_warn(&vblk->vdev->dev,
+				 "ignoring unknown crypto mode %u\n", i);
+			continue;
+		}
+		crypto_modes_supported[mode] = mode_mask;
+	}
+out_req:
+	blk_mq_free_request(req);
+out_free:
+	kfree(virtblk_cmodes);
+	return err;
 }
 
 static void virtblk_free_disk(struct gendisk *disk)
@@ -1435,6 +1540,51 @@ static int virtblk_read_limits(struct virtio_blk *vblk,
 	return 0;
 }
 
+static int virtblk_init_crypto(struct virtio_blk *vblk)
+{
+	struct virtio_device *vdev = vblk->vdev;
+	unsigned int crypto_modes_supported[BLK_ENCRYPTION_MODE_MAX] = { 0 };
+	/* virtio_cread() requires the variable size to match the config field exactly */
+	u16 max_slots;
+	u8 max_dun_bytes, key_types;
+	int err;
+
+	virtio_cread(vdev, struct virtio_blk_config,
+		     enc_characteristics.max_slots, &max_slots);
+	virtio_cread(vdev, struct virtio_blk_config,
+		     enc_characteristics.max_dun_bytes, &max_dun_bytes);
+	virtio_cread(vdev, struct virtio_blk_config,
+		     enc_characteristics.key_types, &key_types);
+
+	dev_dbg(&vdev->dev,
+		 "max_slots = %u, max_dun_bytes = %u, key_types = 0x%x\n",
+		 max_slots, max_dun_bytes, key_types);
+
+	if (!max_slots)
+		return -EINVAL;
+	if (!(key_types & (VIRTIO_BLK_CRYPTO_KEY_TYPE_RAW |
+			   VIRTIO_BLK_CRYPTO_KEY_TYPE_HW_WRAPPED)))
+		return -EINVAL;
+	/*
+	 * struct virtio_blk_crypto_msg.dun is a fixed __virtio64, i.e. this
+	 * driver can only ever transmit 8 bytes of DUN per request. Refuse
+	 * to advertise more than that as supported, or blk-crypto could
+	 * negotiate a larger dun_bytes with the filesystem and have the
+	 * high-order bytes of req->crypt_ctx->bc_dun silently dropped in
+	 * virtblk_setup_cmd(), reusing the same IV across data units that
+	 * only differ in those high-order bytes.
+	 */
+	if (max_dun_bytes > sizeof(u64))
+		return -EINVAL;
+
+	err = virtblk_get_crypto_modes(vblk, crypto_modes_supported);
+	if (err)
+		return err;
+
+	return virtblk_init_inline_crypto(max_slots, max_dun_bytes, key_types,
+					   crypto_modes_supported, &vdev->dev);
+}
+
 static int virtblk_probe(struct virtio_device *vdev)
 {
 	struct virtio_blk *vblk;
@@ -1538,6 +1688,26 @@ static int virtblk_probe(struct virtio_device *vdev)
 		err = blk_revalidate_disk_zones(vblk->disk);
 		if (err)
 			goto out_cleanup_disk;
+	}
+
+	if (IS_ENABLED(CONFIG_VIRTBLK_CRYPTO_VIRTUALIZATION) &&
+	    virtio_has_feature(vblk->vdev, VIRTIO_BLK_F_INLINE_ENCRYPTION)) {
+		if (virtio_has_feature(vblk->vdev, VIRTIO_BLK_F_ZONED)) {
+			dev_warn(&vdev->dev,
+				 "zoned device does not support inline encryption, disabling it\n");
+		} else {
+			/* Initialize supported crypto capabilities */
+			err = virtblk_init_crypto(vblk);
+			if (!err) {
+				if (!virtblk_crypto_register(vblk->disk->queue))
+					dev_warn(&vdev->dev,
+						"failed to register inline crypto profile with the block layer, continuing without inline crypto support\n");
+			} else {
+				dev_warn(&vdev->dev,
+					"inline crypto init failed: %d, continuing without inline crypto support\n",
+					err);
+			}
+		}
 	}
 
 	err = device_add_disk(&vdev->dev, vblk->disk, virtblk_attr_groups);
@@ -1672,6 +1842,7 @@ static unsigned int features[] = {
 	VIRTIO_BLK_F_FLUSH, VIRTIO_BLK_F_TOPOLOGY, VIRTIO_BLK_F_CONFIG_WCE,
 	VIRTIO_BLK_F_MQ, VIRTIO_BLK_F_DISCARD, VIRTIO_BLK_F_WRITE_ZEROES,
 	VIRTIO_BLK_F_SECURE_ERASE, VIRTIO_BLK_F_ZONED,
+	VIRTIO_BLK_F_INLINE_ENCRYPTION,
 };
 
 static struct virtio_driver virtio_blk = {
