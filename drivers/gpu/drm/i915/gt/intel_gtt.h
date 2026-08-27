@@ -266,7 +266,7 @@ struct i915_address_space {
 	struct mutex mutex; /* protects vma and our lists */
 
 	struct kref resv_ref; /* kref to keep the reservation lock alive. */
-	struct dma_resv _resv; /* reservation lock for all pd objects, and buffer pool */
+	struct dma_resv *_resv; /* reservation lock for all pd objects, and buffer pool */
 #define VM_CLASS_GGTT 0
 #define VM_CLASS_PPGTT 1
 #define VM_CLASS_DPT 2
@@ -504,7 +504,7 @@ static inline void assert_vm_alive(struct i915_address_space *vm)
 static inline struct dma_resv *i915_vm_resv_get(struct i915_address_space *vm)
 {
 	kref_get(&vm->resv_ref);
-	return &vm->_resv;
+	return vm->_resv;
 }
 
 void i915_vm_release(struct kref *kref);
@@ -525,7 +525,7 @@ static inline void i915_vm_resv_put(struct i915_address_space *vm)
 	kref_put(&vm->resv_ref, i915_vm_resv_release);
 }
 
-void i915_address_space_init(struct i915_address_space *vm, int subclass);
+int i915_address_space_init(struct i915_address_space *vm, int subclass);
 void i915_address_space_fini(struct i915_address_space *vm);
 
 static inline u32 i915_pte_index(u64 address, unsigned int pde_shift)
@@ -583,7 +583,7 @@ i915_page_dir_dma_addr(const struct i915_ppgtt *ppgtt, const unsigned int n)
 	return __px_dma(pt ? px_base(pt) : ppgtt->vm.scratch[ppgtt->vm.top]);
 }
 
-void ppgtt_init(struct i915_ppgtt *ppgtt, struct intel_gt *gt,
+int ppgtt_init(struct i915_ppgtt *ppgtt, struct intel_gt *gt,
 		unsigned long lmem_pt_obj_flags);
 void intel_ggtt_bind_vma(struct i915_address_space *vm,
 			 struct i915_vm_pt_stash *stash,

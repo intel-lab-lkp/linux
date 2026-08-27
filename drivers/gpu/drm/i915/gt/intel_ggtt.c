@@ -56,8 +56,11 @@ static void i915_ggtt_color_adjust(const struct drm_mm_node *node,
 static int ggtt_init_hw(struct i915_ggtt *ggtt)
 {
 	struct drm_i915_private *i915 = ggtt->vm.i915;
+	int ret;
 
-	i915_address_space_init(&ggtt->vm, VM_CLASS_GGTT);
+	ret = i915_address_space_init(&ggtt->vm, VM_CLASS_GGTT);
+	if (ret)
+		return ret;
 
 	ggtt->vm.is_ggtt = true;
 
@@ -1140,7 +1143,7 @@ void i915_ggtt_driver_late_release(struct drm_i915_private *i915)
 	struct i915_ggtt *ggtt = to_gt(i915)->ggtt;
 
 	GEM_WARN_ON(kref_read(&ggtt->vm.resv_ref) != 1);
-	dma_resv_put(&ggtt->vm._resv);
+	dma_resv_put(ggtt->vm._resv);
 }
 
 static unsigned int gen6_get_total_gtt_size(u16 snb_gmch_ctl)
@@ -1514,7 +1517,10 @@ static int ggtt_probe_hw(struct i915_ggtt *ggtt, struct intel_gt *gt)
 	ggtt->vm.gt = gt;
 	ggtt->vm.i915 = i915;
 	ggtt->vm.dma = i915->drm.dev;
-	dma_resv_init(&ggtt->vm._resv);
+
+	ggtt->vm._resv = dma_resv_alloc();
+	if (!ggtt->vm._resv)
+		return -ENOMEM;
 
 	if (GRAPHICS_VER(i915) >= 8)
 		ret = gen8_gmch_probe(ggtt);
@@ -1524,7 +1530,7 @@ static int ggtt_probe_hw(struct i915_ggtt *ggtt, struct intel_gt *gt)
 		ret = intel_ggtt_gmch_probe(ggtt);
 
 	if (ret) {
-		dma_resv_put(&ggtt->vm._resv);
+		dma_resv_put(ggtt->vm._resv);
 		return ret;
 	}
 

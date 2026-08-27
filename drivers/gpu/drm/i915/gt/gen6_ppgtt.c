@@ -437,7 +437,12 @@ struct i915_ppgtt *gen6_ppgtt_create(struct intel_gt *gt)
 
 	mutex_init(&ppgtt->flush);
 
-	ppgtt_init(&ppgtt->base, gt, 0);
+	err = ppgtt_init(&ppgtt->base, gt, 0);
+	if (err) {
+		kfree(ppgtt);
+		return ERR_PTR(err);
+	}
+
 	ppgtt->base.vm.pd_shift = ilog2(SZ_4K * SZ_4K / sizeof(gen6_pte_t));
 	ppgtt->base.vm.top = 1;
 

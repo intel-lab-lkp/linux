@@ -1010,7 +1010,12 @@ struct i915_ppgtt *gen8_ppgtt_create(struct intel_gt *gt,
 	if (!ppgtt)
 		return ERR_PTR(-ENOMEM);
 
-	ppgtt_init(ppgtt, gt, lmem_pt_obj_flags);
+	err = ppgtt_init(ppgtt, gt, lmem_pt_obj_flags);
+	if (err) {
+		kfree(ppgtt);
+		return ERR_PTR(err);
+	}
+
 	ppgtt->vm.top = i915_vm_is_4lvl(&ppgtt->vm) ? 3 : 2;
 	ppgtt->vm.pd_shift = ilog2(SZ_4K * SZ_4K / sizeof(gen8_pte_t));
 

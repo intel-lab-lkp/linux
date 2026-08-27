@@ -197,7 +197,7 @@ static void __i915_vm_close(struct i915_address_space *vm)
 int i915_vm_lock_objects(struct i915_address_space *vm,
 			 struct i915_gem_ww_ctx *ww)
 {
-	if (vm->scratch[0]->base.resv == &vm->_resv) {
+	if (vm->scratch[0]->base.resv == vm->_resv) {
 		return i915_gem_object_lock(vm->scratch[0], ww);
 	} else {
 		struct i915_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
@@ -225,7 +225,7 @@ void i915_vm_resv_release(struct kref *kref)
 	struct i915_address_space *vm =
 		container_of(kref, typeof(*vm), resv_ref);
 
-	dma_resv_put(&vm->_resv);
+	dma_resv_put(vm->_resv);
 	mutex_destroy(&vm->mutex);
 
 	kfree(vm);
@@ -258,7 +258,7 @@ void i915_vm_release(struct kref *kref)
 	queue_work(vm->i915->wq, &vm->release_work);
 }
 
-void i915_address_space_init(struct i915_address_space *vm, int subclass)
+int i915_address_space_init(struct i915_address_space *vm, int subclass)
 {
 	kref_init(&vm->ref);
 
@@ -295,7 +295,10 @@ void i915_address_space_init(struct i915_address_space *vm, int subclass)
 		might_alloc(GFP_KERNEL);
 		mutex_release(&vm->mutex.dep_map, _THIS_IP_);
 	}
-	dma_resv_init(&vm->_resv);
+
+	vm->_resv = dma_resv_alloc();
+	if (!vm->_resv)
+		return -ENOMEM;
 
 	GEM_BUG_ON(!vm->total);
 	drm_mm_init(&vm->mm, 0, vm->total);
@@ -312,6 +315,8 @@ void i915_address_space_init(struct i915_address_space *vm, int subclass)
 
 	INIT_LIST_HEAD(&vm->bound_list);
 	INIT_LIST_HEAD(&vm->unbound_list);
+
+	return 0;
 }
 
 void *__px_vaddr(struct drm_i915_gem_object *p)
