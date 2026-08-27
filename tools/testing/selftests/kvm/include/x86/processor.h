@@ -827,6 +827,7 @@ static __always_inline bool this_cpu_has_p(struct kvm_x86_cpu_property property)
 
 static inline bool this_pmu_has(struct kvm_x86_pmu_feature feature)
 {
+	u8 pmu_version;
 	u32 nr_bits;
 
 	if (feature.f.reg == KVM_CPUID_EBX) {
@@ -836,7 +837,10 @@ static inline bool this_pmu_has(struct kvm_x86_pmu_feature feature)
 
 	GUEST_ASSERT(feature.f.reg == KVM_CPUID_ECX);
 	nr_bits = this_cpu_property(X86_PROPERTY_PMU_NR_FIXED_COUNTERS);
-	return nr_bits > feature.f.bit || this_cpu_has(feature.f);
+	pmu_version = this_cpu_property(X86_PROPERTY_PMU_VERSION);
+
+	return (pmu_version < 5) ? nr_bits > feature.f.bit :
+	       nr_bits > feature.f.bit || this_cpu_has(feature.f);
 }
 
 static __always_inline u64 this_cpu_supported_xcr0(void)

@@ -3,6 +3,7 @@
  * Copyright (C) 2023, Tencent, Inc.
  */
 #include <x86intrin.h>
+#include <linux/bitmap.h>
 
 #include "pmu.h"
 #include "processor.h"
@@ -631,23 +632,36 @@ static void __test_fixed_counters(struct kvm_vcpu *vcpu, u8 nr_fixed_counters,
 static void test_fixed_counters(u8 pmu_version, u64 perf_capabilities)
 {
 	u8 nr_fixed_counters = kvm_cpu_property(X86_PROPERTY_PMU_NR_FIXED_COUNTERS);
+	unsigned long fixed_subset;
 	struct kvm_vcpu **vcpus;
 	struct kvm_vm *vm;
+	u32 fixed_bitmap;
 	int i = 0;
-	u32 k;
-	u8 j;
 
 	pr_info("Testing %u fixed counters, PMU version %u, perf_caps = %lx\n",
 		nr_fixed_counters, pmu_version, perf_capabilities);
 
+	fixed_bitmap = BIT_ULL(nr_fixed_counters) - 1;
+	if (pmu_version >= 5)
+		fixed_bitmap |= kvm_cpu_property(X86_PROPERTY_PMU_FIXED_COUNTERS_BITMASK);
 
-	vm = pmu_vm_create_with_vcpus((nr_fixed_counters + 1) * BIT(nr_fixed_counters),
+	vm = pmu_vm_create_with_vcpus((1 << __builtin_popcount(fixed_bitmap)),
 				      guest_test_fixed_counters,
 				      pmu_version, perf_capabilities, &vcpus);
 
-	for (j = 0; j <= nr_fixed_counters; j++) {
-		for (k = 0; k <= (BIT(nr_fixed_counters) - 1); k++)
-			__test_fixed_counters(vcpus[i++], j, k);
+	for (fixed_subset = 0; fixed_subset <= fixed_bitmap; fixed_subset++) {
+		u32 nr_contiguous;
+
+		/*
+		 * The loop walks all values from 0 to fixed_bitmap, so skip any
+		 * value that is not a subset of fixed_bitmap.
+		 */
+		if (fixed_subset & ~fixed_bitmap)
+			continue;
+
+		nr_contiguous = find_first_zero_bit(&fixed_subset,
+						    MAX_NR_FIXED_COUNTERS);
+		__test_fixed_counters(vcpus[i++], nr_contiguous, fixed_subset);
 	}
 
 	pmu_vm_free(vm, vcpus);
