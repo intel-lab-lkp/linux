@@ -254,6 +254,10 @@ struct drm_gpusvm {
  * @allow_mixed: Allow mixed mappings in get pages. Mixing between system and
  *               single dpagemap is supported, mixing between multiple dpagemap
  *               is unsupported.
+ * @no_dma_map: Only fault the CPU pages for the range; skip the device DMA
+ *              mapping step. Used by drivers (e.g. AMDXDNA userptr) that
+ *              consume the faulted pages without needing a DMA mapping. In
+ *              this mode @drm on the drm_gpusvm_pages is not required.
  *
  * Context that is DRM GPUSVM is operating in (i.e. user arguments).
  */
@@ -266,6 +270,7 @@ struct drm_gpusvm_ctx {
 	unsigned int devmem_possible :1;
 	unsigned int devmem_only :1;
 	unsigned int allow_mixed :1;
+	unsigned int no_dma_map :1;
 };
 
 int drm_gpusvm_init(struct drm_gpusvm *gpusvm,

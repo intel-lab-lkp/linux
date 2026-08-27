@@ -1703,11 +1703,11 @@ int drm_gpusvm_get_pages(struct drm_gpusvm *gpusvm,
 	int err = 0;
 	enum dma_data_direction dma_dir = ctx->read_only ? DMA_TO_DEVICE :
 							   DMA_BIDIRECTIONAL;
+	const bool map_dma = !ctx->no_dma_map;
 	unsigned int p;
-	bool all_valid;
 
 	for (p = 0; p < num_pages; ++p)
-		if (!svm_pages[p].drm)
+		if (map_dma && !svm_pages[p].drm)
 			return -EINVAL;
 
 retry:
@@ -1716,12 +1716,24 @@ retry:
 
 	hmm_range.notifier_seq = mmu_interval_read_begin(notifier);
 
-	all_valid = true;
-	for (p = 0; p < num_pages; ++p)
-		if (!drm_gpusvm_pages_valid_unlocked(gpusvm, &svm_pages[p]))
-			all_valid = false;
-	if (all_valid)
-		goto set_seqno;
+	/*
+	 * The HMM fault is shared by all the drm_gpusvm_pages instances (they
+	 * all mirror the same CPU range); only the DMA mapping below is
+	 * per-instance. In no_dma_map mode there is no DMA mapping state to
+	 * validate, so the fault is always redone. Otherwise skip the fault
+	 * entirely if every instance is already valid.
+	 * drm_gpusvm_pages_valid_unlocked() also drops the stale dma_addr array
+	 * of any instance that is no longer valid.
+	 */
+	if (map_dma) {
+		bool all_valid = true;
+
+		for (p = 0; p < num_pages; ++p)
+			if (!drm_gpusvm_pages_valid_unlocked(gpusvm, &svm_pages[p]))
+				all_valid = false;
+		if (all_valid)
+			goto set_seqno;
+	}
 
 	pfns = kvmalloc_array(npages, sizeof(*pfns), GFP_KERNEL);
 	if (!pfns)
@@ -1731,17 +1743,24 @@ retry:
 	if (err)
 		goto err_free;
 
-	for (p = 0; p < num_pages; ++p) {
-		if (svm_pages[p].dma_addr)
-			continue;
-		svm_pages[p].dma_addr =
-			kvmalloc_objs(*svm_pages[p].dma_addr, npages);
-		if (!svm_pages[p].dma_addr) {
-			err = -ENOMEM;
-			goto err_free;
+	/*
+	 * Allocate the dma_addr array of each instance outside the notifier
+	 * lock. A still-valid instance keeps its existing dma_addr array and
+	 * is not reallocated. Skipped entirely in no_dma_map mode.
+	 */
+	if (map_dma) {
+		for (p = 0; p < num_pages; ++p) {
+			if (svm_pages[p].dma_addr)
+				continue;
+			svm_pages[p].dma_addr =
+				kvmalloc_objs(*svm_pages[p].dma_addr, npages);
+			if (!svm_pages[p].dma_addr) {
+				err = -ENOMEM;
+				goto err_free;
+			}
+			svm_pages[p].state = (struct dma_iova_state){};
+			svm_pages[p].state_offset = 0;
 		}
-		svm_pages[p].state = (struct dma_iova_state){};
-		svm_pages[p].state_offset = 0;
 	}
 
 	/*
@@ -1765,6 +1784,14 @@ retry:
 		goto retry;
 	}
 
+	/*
+	 * no_dma_map: the caller only needs the HMM fault, not a device DMA
+	 * mapping. The fault has been validated under the notifier lock
+	 * above; skip the per-instance DMA mapping entirely.
+	 */
+	if (!map_dma)
+		goto done_mapping;
+
 	for (p = 0; p < num_pages; ++p) {
 		if (drm_gpusvm_pages_valid(gpusvm, &svm_pages[p]))
 			continue;
@@ -1784,6 +1811,7 @@ retry:
 		}
 	}
 
+done_mapping:
 	drm_gpusvm_notifier_unlock(gpusvm);
 	kvfree(pfns);
 set_seqno:
