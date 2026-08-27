@@ -16,6 +16,7 @@
 #include <linux/dmi.h>
 #include <linux/fwnode.h>
 #include <linux/gpio/consumer.h>
+#include <linux/gpio/driver.h>
 #include <linux/gpio/machine.h>
 #include <linux/irq.h>
 #include <linux/module.h>
@@ -364,9 +365,10 @@ static const struct software_node *cherryview_gpiochip_node_group[] = {
 
 static void gpio_secondary_unset(void *data)
 {
-	struct device *dev = data;
+	struct gpio_device *gdev = data;
 
-	set_secondary_fwnode(dev, NULL);
+	set_secondary_fwnode(gpio_device_to_device(gdev), NULL);
+	gpio_device_put(gdev);
 }
 
 static void gpio_secondary_unregister_node_group(void *data)
@@ -396,20 +398,23 @@ static int gpio_secondary_fwnode_init(struct device *parent)
 		return ret;
 
 	for (swnode = gpiochip_node_group; *swnode; swnode++) {
-		struct device *dev __free(put_device) =
-				acpi_bus_find_device_by_name((*swnode)->name);
-		if (!dev)
+		struct gpio_device *gdev;
+
+		gdev = gpio_device_find_by_label((*swnode)->name);
+		if (!gdev)
 			return dev_err_probe(parent,
 					     -ENODEV, "Failed to find the required GPIO controller: %s\n",
 					     (*swnode)->name);
 
 		fwnode = software_node_fwnode(*swnode);
-		if (WARN_ON(!fwnode))
+		if (WARN_ON(!fwnode)) {
+			gpio_device_put(gdev);
 			return -ENOENT;
+		}
 
-		set_secondary_fwnode(dev, fwnode);
+		set_secondary_fwnode(gpio_device_to_device(gdev), fwnode);
 
-		ret = devm_add_action_or_reset(parent, gpio_secondary_unset, dev);
+		ret = devm_add_action_or_reset(parent, gpio_secondary_unset, gdev);
 		if (ret)
 			return ret;
 	}
