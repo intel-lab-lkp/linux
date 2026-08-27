@@ -168,7 +168,9 @@ psb_gem_create(struct drm_device *dev, u64 size, const char *name, bool stolen, 
 	obj->funcs = &psb_gem_object_funcs;
 
 	if (stolen) {
-		drm_gem_private_object_init(dev, obj, size);
+		ret = drm_gem_private_object_init(dev, obj, size);
+		if (ret)
+			goto err_release_resource;
 	} else {
 		ret = drm_gem_object_init(dev, obj, size);
 		if (ret)

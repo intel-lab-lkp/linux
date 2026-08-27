@@ -66,11 +66,15 @@ static int mock_object_init(struct intel_memory_region *mem,
 {
 	static struct lock_class_key lock_class;
 	struct drm_i915_private *i915 = mem->i915;
+	int ret;
 
 	if (size > resource_size(&mem->region))
 		return -E2BIG;
 
-	drm_gem_private_object_init(&i915->drm, &obj->base, size);
+	ret = drm_gem_private_object_init(&i915->drm, &obj->base, size);
+	if (ret)
+		return ret;
+
 	i915_gem_object_init(obj, &mock_region_obj_ops, &lock_class, flags);
 
 	obj->bo_offset = offset;

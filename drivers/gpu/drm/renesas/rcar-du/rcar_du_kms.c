@@ -389,7 +389,11 @@ struct drm_gem_object *rcar_du_gem_prime_import_sg_table(struct drm_device *dev,
 	gem_obj = &dma_obj->base;
 	gem_obj->funcs = &rcar_du_gem_funcs;
 
-	drm_gem_private_object_init(dev, gem_obj, attach->dmabuf->size);
+	ret = drm_gem_private_object_init(dev, gem_obj, attach->dmabuf->size);
+	if (ret) {
+		kfree(dma_obj);
+		return ERR_PTR(ret);
+	}
 	dma_obj->map_noncoherent = false;
 
 	ret = drm_gem_create_mmap_offset(gem_obj);

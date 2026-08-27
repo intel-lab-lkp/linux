@@ -56,7 +56,8 @@ static void test_lock(struct kunit *test)
 	struct drm_exec exec;
 	int ret;
 
-	drm_gem_private_object_init(priv->drm, &gobj, PAGE_SIZE);
+	ret = drm_gem_private_object_init(priv->drm, &gobj, PAGE_SIZE);
+	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
 	drm_exec_until_all_locked(&exec) {
@@ -76,7 +77,8 @@ static void test_lock_unlock(struct kunit *test)
 	struct drm_exec exec;
 	int ret;
 
-	drm_gem_private_object_init(priv->drm, &gobj, PAGE_SIZE);
+	ret = drm_gem_private_object_init(priv->drm, &gobj, PAGE_SIZE);
+	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
 	drm_exec_until_all_locked(&exec) {
@@ -103,7 +105,8 @@ static void test_duplicates(struct kunit *test)
 	struct drm_exec exec;
 	int ret;
 
-	drm_gem_private_object_init(priv->drm, &gobj, PAGE_SIZE);
+	ret = drm_gem_private_object_init(priv->drm, &gobj, PAGE_SIZE);
+	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	drm_exec_init(&exec, DRM_EXEC_IGNORE_DUPLICATES, 0);
 	drm_exec_until_all_locked(&exec) {
@@ -130,7 +133,8 @@ static void test_prepare(struct kunit *test)
 	struct drm_exec exec;
 	int ret;
 
-	drm_gem_private_object_init(priv->drm, &gobj, PAGE_SIZE);
+	ret = drm_gem_private_object_init(priv->drm, &gobj, PAGE_SIZE);
+	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
 	drm_exec_until_all_locked(&exec) {
@@ -162,8 +166,10 @@ static void test_prepare_array(struct kunit *test)
 		return;
 	}
 
-	drm_gem_private_object_init(priv->drm, gobj1, PAGE_SIZE);
-	drm_gem_private_object_init(priv->drm, gobj2, PAGE_SIZE);
+	ret = drm_gem_private_object_init(priv->drm, gobj1, PAGE_SIZE);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+	ret = drm_gem_private_object_init(priv->drm, gobj2, PAGE_SIZE);
+	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
 	drm_exec_until_all_locked(&exec)

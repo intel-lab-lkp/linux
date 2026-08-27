@@ -92,7 +92,7 @@ __drm_gem_dma_create(struct drm_device *drm, size_t size, bool private)
 		gem_obj->funcs = &drm_gem_dma_default_funcs;
 
 	if (private) {
-		drm_gem_private_object_init(drm, gem_obj, size);
+		ret = drm_gem_private_object_init(drm, gem_obj, size);
 
 		/* Always use writecombine for dma-buf mappings */
 		dma_obj->map_noncoherent = false;

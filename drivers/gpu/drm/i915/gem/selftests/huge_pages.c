@@ -178,6 +178,7 @@ huge_pages_object(struct drm_i915_private *i915,
 	static struct lock_class_key lock_class;
 	struct drm_i915_gem_object *obj;
 	unsigned int cache_level;
+	int ret;
 
 	GEM_BUG_ON(!size);
 	GEM_BUG_ON(!IS_ALIGNED(size, BIT(__ffs(page_mask))));
@@ -192,7 +193,12 @@ huge_pages_object(struct drm_i915_private *i915,
 	if (!obj)
 		return ERR_PTR(-ENOMEM);
 
-	drm_gem_private_object_init(&i915->drm, &obj->base, size);
+	ret = drm_gem_private_object_init(&i915->drm, &obj->base, size);
+	if (ret) {
+		i915_gem_object_free(obj);
+		return ERR_PTR(ret);
+	}
+
 	i915_gem_object_init(obj, &huge_page_ops, &lock_class, 0);
 	obj->mem_flags |= I915_BO_FLAG_STRUCT_PAGE;
 	i915_gem_object_set_volatile(obj);
@@ -329,6 +335,7 @@ fake_huge_pages_object(struct drm_i915_private *i915, u64 size, bool single)
 {
 	static struct lock_class_key lock_class;
 	struct drm_i915_gem_object *obj;
+	int ret;
 
 	GEM_BUG_ON(!size);
 	GEM_BUG_ON(!IS_ALIGNED(size, I915_GTT_PAGE_SIZE));
@@ -343,7 +350,11 @@ fake_huge_pages_object(struct drm_i915_private *i915, u64 size, bool single)
 	if (!obj)
 		return ERR_PTR(-ENOMEM);
 
-	drm_gem_private_object_init(&i915->drm, &obj->base, size);
+	ret = drm_gem_private_object_init(&i915->drm, &obj->base, size);
+	if (ret) {
+		i915_gem_object_free(obj);
+		return ERR_PTR(ret);
+	}
 
 	if (single)
 		i915_gem_object_init(obj, &fake_ops_single, &lock_class, 0);

@@ -1348,7 +1348,9 @@ struct drm_gem_object *omap_gem_new(struct drm_device *dev,
 
 	/* Initialize the GEM object. */
 	if (!(flags & OMAP_BO_MEM_SHMEM)) {
-		drm_gem_private_object_init(dev, obj, size);
+		ret = drm_gem_private_object_init(dev, obj, size);
+		if (ret)
+			goto err_free;
 	} else {
 		ret = drm_gem_object_init(dev, obj, size);
 		if (ret)

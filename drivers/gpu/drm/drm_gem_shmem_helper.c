@@ -61,7 +61,7 @@ static int __drm_gem_shmem_init(struct drm_device *dev, struct drm_gem_shmem_obj
 		obj->funcs = &drm_gem_shmem_funcs;
 
 	if (private) {
-		drm_gem_private_object_init(dev, obj, size);
+		ret = drm_gem_private_object_init(dev, obj, size);
 		shmem->map_wc = false; /* dma-buf mappings use always writecombine */
 	} else {
 		ret = drm_gem_object_init(dev, obj, size);

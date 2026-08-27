@@ -1301,7 +1301,10 @@ int __i915_gem_ttm_object_init(struct intel_memory_region *mem,
 	enum ttm_bo_type bo_type;
 	int ret;
 
-	drm_gem_private_object_init(&i915->drm, &obj->base, size);
+	ret = drm_gem_private_object_init(&i915->drm, &obj->base, size);
+	if (ret)
+		return ret;
+
 	i915_gem_object_init(obj, &i915_gem_ttm_obj_ops, &lock_class, flags);
 
 	obj->bo_offset = offset;

@@ -737,7 +737,10 @@ static int __i915_gem_object_create_stolen(struct intel_memory_region *mem,
 	 */
 	flags = I915_BO_ALLOC_CONTIGUOUS;
 
-	drm_gem_private_object_init(&mem->i915->drm, &obj->base, stolen->size);
+	err = drm_gem_private_object_init(&mem->i915->drm, &obj->base, stolen->size);
+	if (err)
+		return err;
+
 	i915_gem_object_init(obj, &i915_gem_object_stolen_ops, &lock_class, flags);
 
 	obj->stolen = stolen;

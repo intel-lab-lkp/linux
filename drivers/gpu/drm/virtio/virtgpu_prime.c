@@ -363,7 +363,11 @@ struct drm_gem_object *virtgpu_gem_prime_import(struct drm_device *dev,
 	obj = &bo->base.base;
 	drm_gem_object_set_resv(obj, buf->resv);
 	obj->funcs = &virtgpu_gem_dma_buf_funcs;
-	drm_gem_private_object_init(dev, obj, buf->size);
+	ret = drm_gem_private_object_init(dev, obj, buf->size);
+	if (ret) {
+		kfree(bo);
+		return ERR_PTR(ret);
+	}
 
 	attach = dma_buf_dynamic_attach(buf, dev->dev,
 					&virtgpu_dma_buf_attach_ops, obj);

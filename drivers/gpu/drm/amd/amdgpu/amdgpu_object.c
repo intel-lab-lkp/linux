@@ -663,7 +663,11 @@ int amdgpu_bo_create(struct amdgpu_device *adev,
 	bo = kvzalloc(bp->bo_ptr_size, GFP_KERNEL);
 	if (bo == NULL)
 		return -ENOMEM;
-	drm_gem_private_object_init(adev_to_drm(adev), &bo->tbo.base, size);
+	r = drm_gem_private_object_init(adev_to_drm(adev), &bo->tbo.base, size);
+	if (r) {
+		kvfree(bo);
+		return r;
+	}
 	bo->tbo.base.funcs = &amdgpu_gem_object_funcs;
 	bo->vm_bo = NULL;
 	bo->preferred_domains = bp->preferred_domain ? bp->preferred_domain :

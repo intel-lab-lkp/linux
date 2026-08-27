@@ -656,7 +656,11 @@ int etnaviv_gem_new_private(struct drm_device *dev, size_t size, u32 flags,
 	if (ret)
 		return ret;
 
-	drm_gem_private_object_init(dev, obj, size);
+	ret = drm_gem_private_object_init(dev, obj, size);
+	if (ret) {
+		kfree(to_etnaviv_bo(obj));
+		return ret;
+	}
 
 	*res = to_etnaviv_bo(obj);
 

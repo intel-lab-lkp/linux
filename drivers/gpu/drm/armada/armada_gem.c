@@ -197,6 +197,7 @@ struct armada_gem_object *
 armada_gem_alloc_private_object(struct drm_device *dev, size_t size)
 {
 	struct armada_gem_object *obj;
+	int ret;
 
 	size = roundup_gem_size(size);
 
@@ -206,7 +207,11 @@ armada_gem_alloc_private_object(struct drm_device *dev, size_t size)
 
 	obj->obj.funcs = &armada_gem_object_funcs;
 
-	drm_gem_private_object_init(dev, &obj->obj, size);
+	ret = drm_gem_private_object_init(dev, &obj->obj, size);
+	if (ret) {
+		kfree(obj);
+		return NULL;
+	}
 
 	DRM_DEBUG_DRIVER("alloc private obj %p size %zu\n", obj, size);
 

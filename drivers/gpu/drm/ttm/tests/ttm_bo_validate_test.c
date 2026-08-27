@@ -119,7 +119,8 @@ static void ttm_bo_init_reserved_sys_man(struct kunit *test)
 	place = ttm_place_kunit_init(test, TTM_PL_SYSTEM, 0);
 	placement = ttm_placement_kunit_init(test, place, 1);
 
-	drm_gem_private_object_init(priv->drm, &bo->base, size);
+	err = drm_gem_private_object_init(priv->drm, &bo->base, size);
+	KUNIT_ASSERT_EQ(test, err, 0);
 
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo, bo_type, placement,
 				   PAGE_SIZE, &ctx, NULL, NULL,
@@ -168,7 +169,8 @@ static void ttm_bo_init_reserved_mock_man(struct kunit *test)
 	place = ttm_place_kunit_init(test, mem_type, 0);
 	placement = ttm_placement_kunit_init(test, place, 1);
 
-	drm_gem_private_object_init(priv->drm, &bo->base, size);
+	err = drm_gem_private_object_init(priv->drm, &bo->base, size);
+	KUNIT_ASSERT_EQ(test, err, 0);
 
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo, bo_type, placement,
 				   PAGE_SIZE, &ctx, NULL, NULL,
@@ -208,7 +210,8 @@ static void ttm_bo_init_reserved_resv(struct kunit *test)
 	place = ttm_place_kunit_init(test, TTM_PL_SYSTEM, 0);
 	placement = ttm_placement_kunit_init(test, place, 1);
 
-	drm_gem_private_object_init(priv->drm, &bo->base, size);
+	err = drm_gem_private_object_init(priv->drm, &bo->base, size);
+	KUNIT_ASSERT_EQ(test, err, 0);
 	dma_resv_init(&resv);
 	dma_resv_lock(&resv, NULL);
 
@@ -244,7 +247,8 @@ static void ttm_bo_validate_basic(struct kunit *test)
 	bo = kunit_kzalloc(test, sizeof(*bo), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo);
 
-	drm_gem_private_object_init(priv->drm, &bo->base, size);
+	err = drm_gem_private_object_init(priv->drm, &bo->base, size);
+	KUNIT_ASSERT_EQ(test, err, 0);
 
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo, params->bo_type,
 				   fst_placement, PAGE_SIZE, &ctx_init, NULL,
@@ -390,7 +394,8 @@ static void ttm_bo_validate_same_placement(struct kunit *test)
 	bo = kunit_kzalloc(test, sizeof(*bo), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo);
 
-	drm_gem_private_object_init(priv->drm, &bo->base, size);
+	err = drm_gem_private_object_init(priv->drm, &bo->base, size);
+	KUNIT_ASSERT_EQ(test, err, 0);
 
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo, params->bo_type,
 				   placement, PAGE_SIZE, &ctx_init, NULL,
@@ -431,7 +436,8 @@ static void ttm_bo_validate_busy_placement(struct kunit *test)
 	bo = kunit_kzalloc(test, sizeof(*bo), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo);
 
-	drm_gem_private_object_init(priv->drm, &bo->base, size);
+	err = drm_gem_private_object_init(priv->drm, &bo->base, size);
+	KUNIT_ASSERT_EQ(test, err, 0);
 
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo, bo_type, placement_init,
 				   PAGE_SIZE, &ctx_init, NULL, NULL,
@@ -478,7 +484,8 @@ static void ttm_bo_validate_multihop(struct kunit *test)
 	bo = kunit_kzalloc(test, sizeof(*bo), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo);
 
-	drm_gem_private_object_init(priv->drm, &bo->base, size);
+	err = drm_gem_private_object_init(priv->drm, &bo->base, size);
+	KUNIT_ASSERT_EQ(test, err, 0);
 
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo, params->bo_type,
 				   placement_init, PAGE_SIZE, &ctx_init, NULL,
@@ -717,7 +724,8 @@ static void ttm_bo_validate_move_fence_not_signaled(struct kunit *test)
 	bo = kunit_kzalloc(test, sizeof(*bo), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo);
 
-	drm_gem_private_object_init(priv->drm, &bo->base, size);
+	err = drm_gem_private_object_init(priv->drm, &bo->base, size);
+	KUNIT_ASSERT_EQ(test, err, 0);
 
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo, bo_type, placement_init,
 				   PAGE_SIZE, &ctx_init, NULL, NULL,
@@ -782,7 +790,8 @@ static void ttm_bo_validate_swapout(struct kunit *test)
 	bo = kunit_kzalloc(test, sizeof(*bo), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo);
 
-	drm_gem_private_object_init(priv->drm, &bo->base, MANAGER_SIZE);
+	err = drm_gem_private_object_init(priv->drm, &bo->base, MANAGER_SIZE);
+	KUNIT_ASSERT_EQ(test, err, 0);
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo, bo_type, placement,
 				   PAGE_SIZE, &ctx_init, NULL, NULL,
 				   &dummy_ttm_bo_destroy);
@@ -826,7 +835,8 @@ static void ttm_bo_validate_happy_evict(struct kunit *test)
 
 	memset(bos, 0, sizeof(*bos) * bo_no);
 	for (i = 0; i < bo_no; i++) {
-		drm_gem_private_object_init(priv->drm, &bos[i].base, bo_sizes[i]);
+		err = drm_gem_private_object_init(priv->drm, &bos[i].base, bo_sizes[i]);
+		KUNIT_ASSERT_EQ(test, err, 0);
 		err = ttm_bo_init_reserved(priv->ttm_dev, &bos[i], bo_type, placement,
 					   PAGE_SIZE, &ctx_init, NULL, NULL,
 					   &dummy_ttm_bo_destroy);
@@ -875,7 +885,8 @@ static void ttm_bo_validate_all_pinned_evict(struct kunit *test)
 	bo_big = kunit_kzalloc(test, sizeof(*bo_big), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo_big);
 
-	drm_gem_private_object_init(priv->drm, &bo_big->base, MANAGER_SIZE);
+	err = drm_gem_private_object_init(priv->drm, &bo_big->base, MANAGER_SIZE);
+	KUNIT_ASSERT_EQ(test, err, 0);
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo_big, bo_type, placement,
 				   PAGE_SIZE, &ctx_init, NULL, NULL,
 				   &dummy_ttm_bo_destroy);
@@ -926,7 +937,8 @@ static void ttm_bo_validate_allowed_only_evict(struct kunit *test)
 	bo_pinned = kunit_kzalloc(test, sizeof(*bo_pinned), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo_pinned);
 
-	drm_gem_private_object_init(priv->drm, &bo_pinned->base, size);
+	err = drm_gem_private_object_init(priv->drm, &bo_pinned->base, size);
+	KUNIT_ASSERT_EQ(test, err, 0);
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo_pinned, bo_type, placement,
 				   PAGE_SIZE, &ctx_init, NULL, NULL,
 				   &dummy_ttm_bo_destroy);
@@ -937,7 +949,8 @@ static void ttm_bo_validate_allowed_only_evict(struct kunit *test)
 	bo_evictable = kunit_kzalloc(test, sizeof(*bo_evictable), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo_evictable);
 
-	drm_gem_private_object_init(priv->drm, &bo_evictable->base, size);
+	err = drm_gem_private_object_init(priv->drm, &bo_evictable->base, size);
+	KUNIT_ASSERT_EQ(test, err, 0);
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo_evictable, bo_type, placement,
 				   PAGE_SIZE, &ctx_init, NULL, NULL,
 				   &dummy_ttm_bo_destroy);
@@ -991,7 +1004,8 @@ static void ttm_bo_validate_deleted_evict(struct kunit *test)
 	bo_big = kunit_kzalloc(test, sizeof(*bo_big), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo_big);
 
-	drm_gem_private_object_init(priv->drm, &bo_big->base, big);
+	err = drm_gem_private_object_init(priv->drm, &bo_big->base, big);
+	KUNIT_ASSERT_EQ(test, err, 0);
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo_big, bo_type, placement,
 				   PAGE_SIZE, &ctx_init, NULL, NULL,
 				   &dummy_ttm_bo_destroy);
@@ -1048,7 +1062,8 @@ static void ttm_bo_validate_busy_domain_evict(struct kunit *test)
 	bo_init = kunit_kzalloc(test, sizeof(*bo_init), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo_init);
 
-	drm_gem_private_object_init(priv->drm, &bo_init->base, MANAGER_SIZE);
+	err = drm_gem_private_object_init(priv->drm, &bo_init->base, MANAGER_SIZE);
+	KUNIT_ASSERT_EQ(test, err, 0);
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo_init, bo_type, placement,
 				   PAGE_SIZE, &ctx_init, NULL, NULL,
 				   &dummy_ttm_bo_destroy);
@@ -1092,7 +1107,8 @@ static void ttm_bo_validate_evict_gutting(struct kunit *test)
 	bo_evict = kunit_kzalloc(test, sizeof(*bo_evict), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo_evict);
 
-	drm_gem_private_object_init(priv->drm, &bo_evict->base, MANAGER_SIZE);
+	err = drm_gem_private_object_init(priv->drm, &bo_evict->base, MANAGER_SIZE);
+	KUNIT_ASSERT_EQ(test, err, 0);
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo_evict, bo_type, placement,
 				   PAGE_SIZE, &ctx_init, NULL, NULL,
 				   &dummy_ttm_bo_destroy);
@@ -1143,14 +1159,16 @@ static void ttm_bo_validate_recrusive_evict(struct kunit *test)
 	bo_mock = kunit_kzalloc(test, sizeof(*bo_mock), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, bo_mock);
 
-	drm_gem_private_object_init(priv->drm, &bo_tt->base, MANAGER_SIZE);
+	err = drm_gem_private_object_init(priv->drm, &bo_tt->base, MANAGER_SIZE);
+	KUNIT_ASSERT_EQ(test, err, 0);
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo_tt, bo_type, placement_tt,
 				   PAGE_SIZE, &ctx_init, NULL, NULL,
 				   &dummy_ttm_bo_destroy);
 	KUNIT_EXPECT_EQ(test, err, 0);
 	dma_resv_unlock(bo_tt->base.resv);
 
-	drm_gem_private_object_init(priv->drm, &bo_mock->base, MANAGER_SIZE);
+	err = drm_gem_private_object_init(priv->drm, &bo_mock->base, MANAGER_SIZE);
+	KUNIT_ASSERT_EQ(test, err, 0);
 	err = ttm_bo_init_reserved(priv->ttm_dev, bo_mock, bo_type, placement_mock,
 				   PAGE_SIZE, &ctx_init, NULL, NULL,
 				   &dummy_ttm_bo_destroy);

@@ -1060,13 +1060,18 @@ struct drm_gem_object *
 drm_gpuvm_resv_object_alloc(struct drm_device *drm)
 {
 	struct drm_gem_object *obj;
+	int ret;
 
 	obj = kzalloc_obj(*obj);
 	if (!obj)
 		return NULL;
 
 	obj->funcs = &drm_gpuvm_object_funcs;
-	drm_gem_private_object_init(drm, obj, 0);
+	ret = drm_gem_private_object_init(drm, obj, 0);
+	if (ret) {
+		kfree(obj);
+		return NULL;
+	}
 
 	return obj;
 }

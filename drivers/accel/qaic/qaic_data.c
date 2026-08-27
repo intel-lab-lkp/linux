@@ -770,7 +770,11 @@ int qaic_create_bo_ioctl(struct drm_device *dev, void *data, struct drm_file *fi
 	}
 	obj = &bo->base;
 
-	drm_gem_private_object_init(dev, obj, size);
+	ret = drm_gem_private_object_init(dev, obj, size);
+	if (ret) {
+		kfree(bo);
+		goto unlock_dev_srcu;
+	}
 
 	obj->funcs = &qaic_gem_funcs;
 	ret = create_sgt(qdev, &bo->sgt, size);
@@ -867,7 +871,9 @@ struct drm_gem_object *qaic_gem_prime_import(struct drm_device *dev, struct dma_
 		goto size_align_fail;
 	}
 
-	drm_gem_private_object_init(dev, obj, attach->dmabuf->size);
+	ret = drm_gem_private_object_init(dev, obj, attach->dmabuf->size);
+	if (ret)
+		goto size_align_fail;
 	/*
 	 * skipping dma_buf_map_attachment() as we do not know the direction
 	 * just yet. Once the direction is known in the subsequent IOCTL to

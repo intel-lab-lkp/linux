@@ -2363,7 +2363,9 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
 	/* Initialize purge advisory state */
 	bo->purgeable.state = XE_MADV_PURGEABLE_WILLNEED;
 
-	drm_gem_private_object_init(&xe->drm, &bo->ttm.base, size);
+	err = drm_gem_private_object_init(&xe->drm, &bo->ttm.base, size);
+	if (err)
+		return ERR_PTR(err);
 
 	if (resv) {
 		ctx.allow_res_evict = !(flags & XE_BO_FLAG_NO_RESV_EVICT);

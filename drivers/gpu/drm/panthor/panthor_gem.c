@@ -1047,7 +1047,11 @@ panthor_gem_prime_import_sg_table(struct drm_device *dev,
 	if (IS_ERR(bo))
 		return ERR_CAST(bo);
 
-	drm_gem_private_object_init(dev, &bo->base, attach->dmabuf->size);
+	ret = drm_gem_private_object_init(dev, &bo->base, attach->dmabuf->size);
+	if (ret) {
+		kfree(bo);
+		return ERR_PTR(ret);
+	}
 
 	ret = drm_gem_create_mmap_offset(&bo->base);
 	if (ret)

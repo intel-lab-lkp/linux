@@ -1296,7 +1296,11 @@ struct drm_gem_object *msm_gem_import(struct drm_device *dev,
 	if (ret)
 		return ERR_PTR(ret);
 
-	drm_gem_private_object_init(dev, obj, size);
+	ret = drm_gem_private_object_init(dev, obj, size);
+	if (ret) {
+		kfree(to_msm_bo(obj));
+		return ERR_PTR(ret);
+	}
 
 	npages = size / PAGE_SIZE;
 

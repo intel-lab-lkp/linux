@@ -202,13 +202,19 @@ static struct drm_i915_gem_object *vgpu_create_gem(struct drm_device *dev,
 	static struct lock_class_key lock_class;
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct drm_i915_gem_object *obj;
+	int ret;
 
 	obj = i915_gem_object_alloc();
 	if (obj == NULL)
 		return NULL;
 
-	drm_gem_private_object_init(dev, &obj->base,
+	ret = drm_gem_private_object_init(dev, &obj->base,
 		roundup(info->size, PAGE_SIZE));
+	if (ret) {
+		i915_gem_object_free(obj);
+		return NULL;
+	}
+
 	i915_gem_object_init(obj, &intel_vgpu_gem_ops, &lock_class, 0);
 	i915_gem_object_set_readonly(obj);
 

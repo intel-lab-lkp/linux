@@ -585,7 +585,10 @@ pvr_vm_create_context(struct pvr_device *pvr_dev, bool is_userspace_context)
 			goto err_page_table_destroy;
 	}
 
-	drm_gem_private_object_init(&pvr_dev->base, &vm_ctx->dummy_gem, 0);
+	err = drm_gem_private_object_init(&pvr_dev->base, &vm_ctx->dummy_gem, 0);
+	if (err)
+		goto err_fw_object_destroy;
+
 	drm_gpuvm_init(&vm_ctx->gpuvm_mgr,
 		       is_userspace_context ? "PowerVR-user-VM" : "PowerVR-FW-VM",
 		       0, &pvr_dev->base, &vm_ctx->dummy_gem,
@@ -596,6 +599,9 @@ pvr_vm_create_context(struct pvr_device *pvr_dev, bool is_userspace_context)
 
 	return vm_ctx;
 
+err_fw_object_destroy:
+	if (is_userspace_context)
+		pvr_fw_object_destroy(vm_ctx->fw_mem_ctx_obj);
 err_page_table_destroy:
 	pvr_mmu_context_destroy(vm_ctx->mmu_ctx);
 

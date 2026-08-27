@@ -426,7 +426,9 @@ static int vmw_bo_init(struct vmw_private *dev_priv,
 	atomic_set(&vmw_bo->map_count, 0);
 
 	params->size = ALIGN(params->size, PAGE_SIZE);
-	drm_gem_private_object_init(vdev, &vmw_bo->tbo.base, params->size);
+	ret = drm_gem_private_object_init(vdev, &vmw_bo->tbo.base, params->size);
+	if (ret)
+		return ret;
 
 	vmw_bo_placement_set(vmw_bo, params->domain, params->busy_domain);
 	ret = ttm_bo_init_reserved(bdev, &vmw_bo->tbo, params->bo_type,

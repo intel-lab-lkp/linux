@@ -1023,7 +1023,11 @@ amdxdna_drm_create_dev_bo(struct drm_device *dev,
 		return ERR_PTR(ret);
 	}
 
-	drm_gem_private_object_init(dev, gobj, aligned_sz);
+	ret = drm_gem_private_object_init(dev, gobj, aligned_sz);
+	if (ret) {
+		amdxdna_gem_destroy_obj(abo);
+		return ERR_PTR(ret);
+	}
 
 	return abo;
 }

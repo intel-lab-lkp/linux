@@ -187,8 +187,11 @@ int drm_gem_object_init(struct drm_device *dev, struct drm_gem_object *obj,
 	struct vfsmount *huge_mnt;
 	struct file *filp;
 	const vma_flags_t flags = mk_vma_flags(VMA_NORESERVE_BIT);
+	int ret;
 
-	drm_gem_private_object_init(dev, obj, size);
+	ret = drm_gem_private_object_init(dev, obj, size);
+	if (ret)
+		return ret;
 
 	huge_mnt = drm_gem_get_huge_mnt(dev);
 	if (huge_mnt)
@@ -215,11 +218,15 @@ EXPORT_SYMBOL(drm_gem_object_init);
  * Initialize an already allocated GEM object of the specified size with
  * no GEM provided backing store. Instead the caller is responsible for
  * backing the object and handling it.
+ *
+ * Returns:
+ * 0 on success, or a negative error code on failure.
  */
-void drm_gem_private_object_init(struct drm_device *dev,
-				 struct drm_gem_object *obj, size_t size)
+int drm_gem_private_object_init(struct drm_device *dev,
+				struct drm_gem_object *obj, size_t size)
 {
-	BUG_ON((size & (PAGE_SIZE - 1)) != 0);
+	if ((size & (PAGE_SIZE - 1)) != 0)
+		return -EINVAL;
 
 	obj->dev = dev;
 	obj->filp = NULL;
@@ -236,6 +243,8 @@ void drm_gem_private_object_init(struct drm_device *dev,
 
 	drm_vma_node_reset(&obj->vma_node);
 	INIT_LIST_HEAD(&obj->lru_node);
+
+	return 0;
 }
 EXPORT_SYMBOL(drm_gem_private_object_init);
 

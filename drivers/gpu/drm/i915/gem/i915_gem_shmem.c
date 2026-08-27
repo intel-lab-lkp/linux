@@ -508,8 +508,11 @@ static int __create_shmem(struct drm_i915_private *i915,
 	const vma_flags_t shmem_flags = mk_vma_flags(VMA_NORESERVE_BIT);
 	struct vfsmount *huge_mnt;
 	struct file *filp;
+	int ret;
 
-	drm_gem_private_object_init(&i915->drm, obj, size);
+	ret = drm_gem_private_object_init(&i915->drm, obj, size);
+	if (ret)
+		return ret;
 
 	/* XXX: The __shmem_file_setup() function returns -EINVAL if size is
 	 * greater than MAX_LFS_FILESIZE.

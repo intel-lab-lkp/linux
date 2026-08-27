@@ -86,7 +86,11 @@ struct xe_mmio_gem *xe_mmio_gem_create(struct xe_device *xe, struct drm_file *fi
 	base->funcs = &xe_mmio_gem_funcs;
 	obj->phys_addr = phys_addr;
 
-	drm_gem_private_object_init(&xe->drm, base, size);
+	err = drm_gem_private_object_init(&xe->drm, base, size);
+	if (err) {
+		kfree(obj);
+		return ERR_PTR(err);
+	}
 
 	err = drm_gem_create_mmap_offset(base);
 	if (err)

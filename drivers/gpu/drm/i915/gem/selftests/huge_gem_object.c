@@ -105,6 +105,7 @@ huge_gem_object(struct drm_i915_private *i915,
 	static struct lock_class_key lock_class;
 	struct drm_i915_gem_object *obj;
 	unsigned int cache_level;
+	int ret;
 
 	GEM_BUG_ON(!phys_size || phys_size > dma_size);
 	GEM_BUG_ON(!IS_ALIGNED(phys_size, PAGE_SIZE));
@@ -117,7 +118,12 @@ huge_gem_object(struct drm_i915_private *i915,
 	if (!obj)
 		return ERR_PTR(-ENOMEM);
 
-	drm_gem_private_object_init(&i915->drm, &obj->base, dma_size);
+	ret = drm_gem_private_object_init(&i915->drm, &obj->base, dma_size);
+	if (ret) {
+		i915_gem_object_free(obj);
+		return ERR_PTR(ret);
+	}
+
 	i915_gem_object_init(obj, &huge_ops, &lock_class, 0);
 	obj->mem_flags |= I915_BO_FLAG_STRUCT_PAGE;
 

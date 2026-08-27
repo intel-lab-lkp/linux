@@ -211,7 +211,11 @@ int virtio_gpu_vram_create(struct virtio_gpu_device *vgdev,
 	INIT_LIST_HEAD(&vram->base.restore_node);
 
 	params->size = PAGE_ALIGN(params->size);
-	drm_gem_private_object_init(vgdev->ddev, obj, params->size);
+	ret = drm_gem_private_object_init(vgdev->ddev, obj, params->size);
+	if (ret) {
+		kfree(vram);
+		return ret;
+	}
 
 	/* Create fake offset */
 	ret = drm_gem_create_mmap_offset(obj);
