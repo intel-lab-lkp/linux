@@ -918,7 +918,7 @@ static int alloc_bts_buffer(int cpu)
 
 	buffer = dsalloc_pages(BTS_BUFFER_SIZE, GFP_KERNEL | __GFP_NOWARN, cpu);
 	if (unlikely(!buffer)) {
-		WARN_ONCE(1, "%s: BTS buffer allocation failure\n", __func__);
+		pr_err_once(1, "%s: BTS buffer allocation failure\n", __func__);
 		return -ENOMEM;
 	}
 	hwev->ds_bts_vaddr = buffer;
