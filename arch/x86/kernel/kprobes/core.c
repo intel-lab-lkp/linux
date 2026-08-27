@@ -511,9 +511,11 @@ NOKPROBE_SYMBOL(kprobe_emulate_ret);
 static void kprobe_emulate_call(struct kprobe *p, struct pt_regs *regs)
 {
 	unsigned long func = regs->ip - INT3_INSN_SIZE + p->ainsn.size;
+	unsigned long ip = func;
 
 	func += p->ainsn.rel32;
-	int3_emulate_call(regs, func);
+	int3_emulate_push(regs, ip);
+	int3_emulate_jmp(regs, func);
 }
 NOKPROBE_SYMBOL(kprobe_emulate_call);
 
