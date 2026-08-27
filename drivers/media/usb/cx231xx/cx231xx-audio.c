@@ -448,10 +448,17 @@ static int snd_cx231xx_pcm_close(struct snd_pcm_substream *substream)
 		return -ENODEV;
 	}
 
-	dev_dbg(dev->dev, "closing device\n");
-
 	/* inform hardware to stop streaming */
 	mutex_lock(&dev->lock);
+	dev->adev.capture_pcm_substream = NULL;
+	if (dev->state & DEV_DISCONNECTED) {
+		dev->adev.users--;
+		mutex_unlock(&dev->lock);
+		cancel_work_sync(&dev->wq_trigger);
+		return 0;
+	}
+
+	dev_dbg(dev->dev, "closing device\n");
 	ret = cx231xx_capture_start(dev, 0, Audio);
 
 	/* set alternate setting for audio interface */
@@ -485,6 +492,9 @@ static int snd_cx231xx_prepare(struct snd_pcm_substream *substream)
 {
 	struct cx231xx *dev = snd_pcm_substream_chip(substream);
 
+	if (dev->state & DEV_DISCONNECTED)
+		return -ENODEV;
+
 	dev->adev.hwptr_done_capture = 0;
 	dev->adev.capture_transfer_done = 0;
 
@@ -494,6 +504,14 @@ static int snd_cx231xx_prepare(struct snd_pcm_substream *substream)
 static void audio_trigger(struct work_struct *work)
 {
 	struct cx231xx *dev = container_of(work, struct cx231xx, wq_trigger);
+
+	if (dev->state & DEV_DISCONNECTED) {
+		if (dev->USE_ISO)
+			cx231xx_isoc_audio_deinit(dev);
+		else
+			cx231xx_bulk_audio_deinit(dev);
+		return;
+	}
 
 	if (atomic_read(&dev->stream_started)) {
 		dev_dbg(dev->dev, "starting capture");
@@ -545,6 +563,8 @@ static snd_pcm_uframes_t snd_cx231xx_capture_pointer(struct snd_pcm_substream
 	snd_pcm_uframes_t hwptr_done;
 
 	dev = snd_pcm_substream_chip(substream);
+	if (dev->state & DEV_DISCONNECTED)
+		return SNDRV_PCM_POS_XRUN;
 
 	spin_lock_irqsave(&dev->adev.slock, flags);
 	hwptr_done = dev->adev.hwptr_done_capture;
@@ -689,6 +709,13 @@ static int cx231xx_audio_fini(struct cx231xx *dev)
 	if (dev->adev.sndcard) {
 		card = dev->adev.sndcard;
 		dev->adev.sndcard = NULL;
+		snd_card_disconnect(card);
+		atomic_set(&dev->stream_started, 0);
+		cancel_work_sync(&dev->wq_trigger);
+		if (dev->USE_ISO)
+			cx231xx_isoc_audio_deinit(dev);
+		else
+			cx231xx_bulk_audio_deinit(dev);
 		snd_card_free_when_closed(card);
 	}
 
