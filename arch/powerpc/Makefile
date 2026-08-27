@@ -352,6 +352,38 @@ ppc64_randconfig:
 	$(Q)$(MAKE) KCONFIG_ALLCONFIG=$(srctree)/arch/powerpc/configs/64-bit.config \
 		-f $(srctree)/Makefile randconfig
 
+generated_configs += pseries_debug_defconfig
+pseries_debug_defconfig:
+	$(call merge_into_defconfig,ppc64_defconfig,le guest kvm_guest common_debug)
+
+generated_configs += pseries_locks_debug_defconfig
+pseries_locks_debug_defconfig:
+	$(call merge_into_defconfig,ppc64_defconfig,le guest kvm_guest locks_debug)
+
+generated_configs += pseries_mm_debug_defconfig
+pseries_mm_debug_defconfig:
+	$(call merge_into_defconfig,ppc64_defconfig,le guest kvm_guest mm_debug)
+
+generated_configs += pseries_lockup_debug_defconfig
+pseries_lockup_debug_defconfig:
+	$(call merge_into_defconfig,ppc64_defconfig,le guest kvm_guest lockup_debug)
+
+generated_configs += powernv_debug_defconfig
+powernv_debug_defconfig:
+	$(call merge_into_defconfig,powernv_defconfig,le guest kvm_guest common_debug)
+
+generated_configs += powernv_locks_debug_defconfig
+powernv_locks_debug_defconfig:
+	$(call merge_into_defconfig,powernv_defconfig,le guest kvm_guest locks_debug)
+
+generated_configs += powernv_mm_debug_defconfig
+powernv_mm_debug_defconfig:
+	$(call merge_into_defconfig,powernv_defconfig,le guest kvm_guest mm_debug)
+
+generated_configs += powernv_lockup_debug_defconfig
+powernv_lockup_debug_defconfig:
+	$(call merge_into_defconfig,powernv_defconfig,le guest kvm_guest lockup_debug)
+
 PHONY += $(generated_configs)
 
 define archhelp
