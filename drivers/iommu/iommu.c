@@ -56,6 +56,7 @@ struct iommu_group {
 	struct list_head devices;
 	struct xarray pasid_array;
 	struct mutex mutex;
+	struct mutex reset_mutex;
 	void *iommu_data;
 	void (*iommu_data_release)(void *iommu_data);
 	char *name;
@@ -1080,6 +1081,7 @@ struct iommu_group *iommu_group_alloc(void)
 
 	group->kobj.kset = iommu_group_kset;
 	mutex_init(&group->mutex);
+	mutex_init(&group->reset_mutex);
 	INIT_LIST_HEAD(&group->devices);
 	INIT_LIST_HEAD(&group->entry);
 	xa_init(&group->pasid_array);
@@ -2476,6 +2478,7 @@ static int __iommu_group_set_domain_internal(struct iommu_group *group,
 	 * pci_dev_reset_iommu_done() attaches the device to group->domain, if
 	 * IOMMU_SET_DOMAIN_MUST_SUCCEED is not set.
 	 */
+	guard(mutex)(&group->reset_mutex);
 	if (group->recovery_cnt && !(flags & IOMMU_SET_DOMAIN_MUST_SUCCEED))
 		return -EBUSY;
 
@@ -3652,6 +3655,7 @@ int iommu_attach_device_pasid(struct iommu_domain *domain,
 	 * This is a concurrent attach during device recovery. Reject it until
 	 * pci_dev_reset_iommu_done() attaches the device to group->domain.
 	 */
+	guard(mutex)(&group->reset_mutex);
 	if (group->recovery_cnt) {
 		ret = -EBUSY;
 		goto out_unlock;
@@ -3745,6 +3749,7 @@ int iommu_replace_device_pasid(struct iommu_domain *domain,
 	 * This is a concurrent attach during device recovery. Reject it until
 	 * pci_dev_reset_iommu_done() attaches the device to group->domain.
 	 */
+	guard(mutex)(&group->reset_mutex);
 	if (group->recovery_cnt) {
 		ret = -EBUSY;
 		goto out_unlock;
@@ -4042,7 +4047,7 @@ int pci_dev_reset_iommu_prepare(struct pci_dev *pdev)
 	if (!pci_ats_supported(pdev) || !dev_has_iommu(&pdev->dev))
 		return 0;
 
-	guard(mutex)(&group->mutex);
+	guard(mutex)(&group->reset_mutex);
 
 	gdev = __dev_to_gdev(&pdev->dev);
 	if (WARN_ON(!gdev))
@@ -4153,7 +4158,7 @@ void pci_dev_reset_iommu_done(struct pci_dev *pdev)
 	if (!pci_ats_supported(pdev) || !dev_has_iommu(&pdev->dev))
 		return;
 
-	guard(mutex)(&group->mutex);
+	guard(mutex)(&group->reset_mutex);
 
 	gdev = __dev_to_gdev(&pdev->dev);
 	if (WARN_ON(!gdev))
