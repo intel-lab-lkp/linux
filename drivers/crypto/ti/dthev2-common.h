@@ -18,6 +18,7 @@
 #include <crypto/internal/hash.h>
 #include <crypto/internal/skcipher.h>
 
+#include <linux/atomic.h>
 #include <linux/delay.h>
 #include <linux/dmaengine.h>
 #include <linux/dmapool.h>
@@ -53,6 +54,7 @@ enum dthe_aes_mode {
  * @dma_aes_rx: AES Rx DMA Channel
  * @dma_aes_tx: AES Tx DMA Channel
  * @dma_sha_tx: SHA Tx DMA Channel
+ * @refcnt: Count of transform contexts currently holding a reference to this instance
  */
 struct dthe_data {
 	struct device *dev;
@@ -64,6 +66,8 @@ struct dthe_data {
 	struct dma_chan *dma_aes_tx;
 
 	struct dma_chan *dma_sha_tx;
+
+	atomic_t refcnt;
 };
 
 /**
@@ -113,6 +117,7 @@ struct dthe_aes_req_ctx {
 /* Struct definitions end */
 
 struct dthe_data *dthe_get_dev(struct dthe_tfm_ctx *ctx);
+void dthe_put_dev(struct dthe_tfm_ctx *ctx);
 
 /**
  * dthe_copy_sg - Copy sg entries from src to dst

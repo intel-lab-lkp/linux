@@ -27,6 +27,10 @@
 
 #define DRIVER_NAME	"dthev2"
 
+/* Interval and timeout for polling dthe_data::refcnt on removal */
+#define DTHE_REFCNT_POLL_INTERVAL_US	20000
+#define DTHE_REFCNT_POLL_TIMEOUT_US	1000000
+
 static struct dthe_list dthe_dev_list = {
 	.dev_list = LIST_HEAD_INIT(dthe_dev_list.dev_list),
 	.lock = __SPIN_LOCK_UNLOCKED(dthe_dev_list.lock),
@@ -41,11 +45,19 @@ struct dthe_data *dthe_get_dev(struct dthe_tfm_ctx *ctx)
 
 	spin_lock(&dthe_dev_list.lock);
 	dev_data = list_first_entry_or_null(&dthe_dev_list.dev_list, struct dthe_data, list);
-	if (dev_data)
+	if (dev_data) {
 		list_move_tail(&dev_data->list, &dthe_dev_list.dev_list);
+		atomic_inc(&dev_data->refcnt);
+	}
 	spin_unlock(&dthe_dev_list.lock);
 
 	return dev_data;
+}
+
+void dthe_put_dev(struct dthe_tfm_ctx *ctx)
+{
+	atomic_dec(&ctx->dev_data->refcnt);
+	ctx->dev_data = NULL;
 }
 
 struct scatterlist *dthe_copy_sg(struct scatterlist *dst,
@@ -200,8 +212,16 @@ probe_dma_err:
 static void dthe_remove(struct platform_device *pdev)
 {
 	struct dthe_data *dev_data = platform_get_drvdata(pdev);
+	int refcnt, ret;
 
 	dthe_unregister_algs();
+
+	ret = readx_poll_timeout(atomic_read, &dev_data->refcnt, refcnt, !refcnt,
+				 DTHE_REFCNT_POLL_INTERVAL_US, DTHE_REFCNT_POLL_TIMEOUT_US);
+	if (ret)
+		dev_warn(dev_data->dev,
+			 "removing with %d transform context(s) still active\n",
+			 refcnt);
 
 	spin_lock(&dthe_dev_list.lock);
 	list_del(&dev_data->list);
