@@ -6,6 +6,7 @@
 #ifndef _XE_DEVICE_TYPES_H_
 #define _XE_DEVICE_TYPES_H_
 
+#include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/srcu.h>
 
@@ -265,6 +266,9 @@ struct xe_device {
 	struct {
 		/** @irq.lock: lock for processing irq's on this device */
 		spinlock_t lock;
+
+		/** @irq.pm_lock: Serializes IRQ suspend and resume */
+		struct mutex pm_lock;
 
 		/** @irq.enabled: interrupts enabled on this device */
 		atomic_t enabled;
