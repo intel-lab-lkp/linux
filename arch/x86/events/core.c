@@ -3132,8 +3132,6 @@ void perf_get_x86_pmu_capability(struct x86_pmu_capability *cap)
 	 * base PMU holds the correct number of counters for P-cores.
 	 */
 	cap->version		= x86_pmu.version;
-	cap->num_counters_gp	= x86_pmu_num_counters(NULL);
-	cap->num_counters_fixed	= x86_pmu_num_counters_fixed(NULL);
 	cap->cntr_mask64	= x86_pmu.cntr_mask64;
 	cap->fixed_cntr_mask64	= x86_pmu.fixed_cntr_mask64;
 	cap->bit_width_gp	= cap->cntr_mask64 ? x86_pmu.cntval_bits : 0;
