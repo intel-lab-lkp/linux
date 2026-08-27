@@ -710,7 +710,10 @@ static bool max_link_limits_valid(struct intel_dp_link_caps *link_caps,
 	    !is_power_of_2(max_link_limits->lane_count))
 		return false;
 
-	/* TODO: Validate max_link_limits->rate against the source supported rates. */
+	if (intel_dp_rate_index(link_caps->dp->source_rates,
+				link_caps->dp->num_source_rates,
+				max_link_limits->rate) < 0)
+		return false;
 
 	intel_dp_link_caps_get_forced_params(link_caps, &forced_params);
 	allowed_configs = calc_allowed_config_filter(link_caps, link_caps->enabled_configs,
