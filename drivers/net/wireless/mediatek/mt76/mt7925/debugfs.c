@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /* Copyright (C) 2023 MediaTek Inc. */
 
+#include <linux/math64.h>
+
 #include "mt7925.h"
 #include "mcu.h"
+#include "stats.h"
 
 static int
 mt7925_reg_set(void *data, u64 val)
@@ -286,6 +289,346 @@ static int mt7925_chip_reset(void *data, u64 val)
 
 DEFINE_DEBUGFS_ATTRIBUTE(fops_reset, NULL, mt7925_chip_reset, "%lld\n");
 
+static const u32 stats_query_mib_counters[] = {
+	UNI_CMD_MIB_CNT_RX_FCS_ERR,
+	UNI_CMD_MIB_CNT_RX_FIFO_OVERFLOW,
+	UNI_CMD_MIB_CNT_RX_MPDU,
+	UNI_CMD_MIB_CNT_AMPDU_RX_COUNT,
+	UNI_CMD_MIB_CNT_PF_DROP,
+	UNI_CMD_MIB_CNT_LEN_MISMATCH,
+	UNI_CMD_MIB_CNT_CHANNEL_IDLE,
+	UNI_CMD_MIB_CNT_CCA_NAV_TX_TIME,
+	UNI_CMD_MIB_CNT_MDRDY,
+	UNI_CMD_MIB_CNT_RX_CCK_MDRDY_TIME,
+	UNI_CMD_MIB_CNT_RX_OFDM_LG_MIXED_MDRDY_TIME,
+	UNI_CMD_MIB_CNT_RX_OFDM_GREEN_MDRDY_TIME,
+	UNI_CMD_MIB_CNT_P_CCA_TIME,
+	UNI_CMD_MIB_CNT_S_CCA_TIME,
+	UNI_CMD_MIB_CNT_P_ED_TIME,
+	UNI_CMD_MIB_CNT_BCN_TX,
+	UNI_CMD_MIB_CNT_TX_BW_40MHZ,
+	UNI_CMD_MIB_CNT_TX_BW_80MHZ,
+	UNI_CMD_MIB_CNT_TX_BW_160MHZ,
+	UNI_CMD_MIB_CNT_BSS0_BA_MISS,
+	UNI_CMD_MIB_CNT_BSS0_RTS_TX_CNT,
+	UNI_CMD_MIB_CNT_BSS0_FRAME_RETRY,
+	UNI_CMD_MIB_CNT_BSS0_FRAME_RETRY_2,
+	UNI_CMD_MIB_CNT_BSS0_RTS_RETRY,
+	UNI_CMD_MIB_CNT_BSS0_ACK_FAIL,
+	UNI_CMD_MIB_CNT_AMPDU,
+	UNI_CMD_MIB_CNT_AMPDU_MPDU,
+	UNI_CMD_MIB_CNT_AMPDU_ACKED,
+};
+
+/* Dump the whole firmware auto-rate table and mark the entry currently in use
+ * with "-->"
+ */
+static void
+mt7925_dump_auto_rate_table(struct seq_file *s,
+			    const struct mt7925_wtbl_rate *wr)
+{
+	u8 fcap = wr->fcap;
+	u8 rate_idx = wr->rate_idx;
+	u8 cbrn = wr->cbrn;
+	int i;
+
+	seq_printf(s, "%-22s  Cur Rate Index = %u\n", " ", rate_idx);
+
+	for (i = 0; i < MT7925_AUTO_RATE_NUM; i++) {
+		u16 rate_code = le16_to_cpu(wr->rate_code[i]);
+		u8 txmode = MT7925_HW_RATE_TO_MODE(rate_code);
+		u8 rate = MT7925_HW_RATE_TO_MCS(rate_code);
+		u8 nsts = MT7925_HW_RATE_TO_NSS(rate_code) + 1;
+		u8 stbc = MT7925_HW_RATE_TO_STBC(rate_code);
+		u8 dcm = MT7925_HW_RATE_TO_DCM(rate_code);
+		u8 ersu106t = MT7925_HW_RATE_TO_106T(rate_code);
+		u8 sgi = mt7925_wtbl_get_sgi(wr, txmode, fcap);
+		u8 ldpc = mt7925_wtbl_get_ldpc(wr, txmode);
+		const char *mode_str = "N/A";
+
+		if (dcm)
+			rate = MT7925_HW_RATE_UNMASK_DCM(rate);
+		if (ersu106t)
+			rate = MT7925_HW_RATE_UNMASK_106T(rate);
+
+		if (txmode < ARRAY_SIZE(mt7925_tx_mode_str))
+			mode_str = mt7925_tx_mode_str[txmode];
+
+		seq_printf(s, "Rate index[%d]    %s", i,
+			   rate_idx == i ? "--> " : "    ");
+
+		/* rate/MCS field */
+		if (txmode == MT7925_TX_RATE_MODE_CCK)
+			seq_printf(s, "%s, ",
+				   mt7925_tx_rate_cck_str[rate & 0x3]);
+		else if (txmode == MT7925_TX_RATE_MODE_OFDM)
+			seq_printf(s, "%s, ", mt7925_hw_rate_ofdm_str(rate));
+		else if (txmode == MT7925_TX_RATE_MODE_HTMIX ||
+			 txmode == MT7925_TX_RATE_MODE_HTGF)
+			seq_printf(s, "MCS%d, ", rate);
+		else
+			seq_printf(s, "%s%d_MCS%d, ",
+				   stbc ? "NSTS" : "NSS", nsts, rate);
+
+		/* bandwidth: mirror the CCK/OFDM -> BW20 and cbrn handling */
+		if (txmode == MT7925_TX_RATE_MODE_CCK ||
+		    txmode == MT7925_TX_RATE_MODE_OFDM)
+			seq_printf(s, "%s, ", mt7925_tx_rate_bw_str[0]);
+		else if (i > cbrn)
+			seq_printf(s, "%s, ",
+				   fcap < 5 ?
+				   (fcap > MT7925_BW_20 ?
+				    mt7925_tx_rate_bw_str[fcap - 1] :
+				    mt7925_tx_rate_bw_str[fcap]) :
+				   mt7925_tx_rate_bw_str[5]);
+		else
+			seq_printf(s, "%s, ",
+				   fcap < 5 ? mt7925_tx_rate_bw_str[fcap] :
+				   mt7925_tx_rate_bw_str[5]);
+
+		/* GI / preamble */
+		if (txmode == MT7925_TX_RATE_MODE_CCK)
+			seq_printf(s, "%s, ", rate < 4 ? "LP" : "SP");
+		else if (txmode == MT7925_TX_RATE_MODE_OFDM)
+			; /* OFDM has no GI/preamble to print */
+		else if (txmode == MT7925_TX_RATE_MODE_HTMIX ||
+			 txmode == MT7925_TX_RATE_MODE_HTGF ||
+			 txmode == MT7925_TX_RATE_MODE_VHT ||
+			 txmode == MT7925_TX_RATE_MODE_PLR)
+			seq_printf(s, "%s, ", sgi == 0 ? "LGI" : "SGI");
+		else
+			seq_printf(s, "%s, ",
+				   sgi == 0 ? "SGI" :
+				   (sgi == 1 ? "MGI" : "LGI"));
+
+		/* mode, DCM, 106t, STBC, coding */
+		seq_printf(s, "%s%s%s%s%s\n",
+			   mode_str,
+			   dcm ? ", DCM" : "", ersu106t ? ", 106t" : "",
+			   stbc ? ", STBC, " : ", ",
+			   (ldpc == 0 ||
+			    txmode == MT7925_TX_RATE_MODE_CCK ||
+			    txmode == MT7925_TX_RATE_MODE_OFDM) ?
+			   "BCC" : "LDPC");
+	}
+}
+
+static int mt792x_stats(struct seq_file *s, void *data)
+{
+	s8 rssi = 0;
+	u8 band_idx = 0;
+	bool wtbl_rate_valid = false;
+	int ret = 0;
+	int i = 0;
+	u32 stats_value = 0;
+	u32 tx_link_speed_kbps = 0;
+	u64 tx_total = 0;
+	u64 tx_fail = 0;
+	u64 tx_per = 0;
+	u32 tx_per_rem = 0;
+	/* UNI_CMD_MIB_DATA */
+	u64 mib_values[ARRAY_SIZE(stats_query_mib_counters)];
+	struct mt792x_dev *dev = dev_get_drvdata(s->private);
+	struct mt7925_wtbl_rate wtbl_rate;
+	struct mt7925_sta_stats *stats = NULL;
+
+	band_idx = dev->mphy.band_idx;
+
+	 stats = kzalloc(sizeof(*stats), GFP_KERNEL);
+	if (!stats)
+		return -ENOMEM;
+
+	/* Get STA_STATS */
+	mt792x_mutex_acquire(dev);
+	ret = mt792x_mcu_get_stat(dev, stats);
+	mt792x_mutex_release(dev);
+	if (ret)
+		goto out;
+
+	/* Get MIB_STATS */
+	mt792x_mutex_acquire(dev);
+	ret = mt7925_mcu_get_mib_info(dev, band_idx, stats_query_mib_counters,
+				      ARRAY_SIZE(stats_query_mib_counters), mib_values);
+	mt792x_mutex_release(dev);
+	if (ret)
+		goto out;
+
+	/* Get Link_Speed and RSSI */
+	mt792x_mutex_acquire(dev);
+	ret = mt7925_mcu_get_link_quality(dev, stats->bss_idx, &rssi, &tx_link_speed_kbps);
+	mt792x_mutex_release(dev);
+	if (ret)
+		goto out;
+
+	/* Get the firmware auto-rate table (best effort; do not abort the
+	 * whole stats dump if the WTBL query is not available).
+	 */
+	mt792x_mutex_acquire(dev);
+	if (!mt792x_mcu_get_wtbl_rate(dev, stats->wtbl_idx, &wtbl_rate))
+		wtbl_rate_valid = true;
+	mt792x_mutex_release(dev);
+
+	/* Print STA_STATS info */
+	seq_printf(s, "(STA) connected AP MAC Address = %pM\n", stats->mac_addr);
+	seq_printf(s, "%-22s  BssIdx = [%u]\n", " ", stats->bss_idx);
+	seq_printf(s, "%-22s  StaRecIdx = [%u]\n",
+		   " ", stats->sta_idx);
+	seq_printf(s, "%-22s  RSSI = %d\n", " ", rssi);
+	seq_printf(s, "%-22s  Link_Speed = %u (kbit/s)\n", " ", tx_link_speed_kbps);
+
+	seq_printf(s, "%-22s  temperature = %u\n",
+		   " ", stats->temperature);
+
+	stats_value = le32_to_cpu(stats->transmit_count) - le32_to_cpu(stats->transmit_fail_count);
+	seq_printf(s, "%-22s  Tx success = %u\n",
+		   " ", stats_value);
+
+	stats_value = le32_to_cpu(stats->tx_fail_count) - le32_to_cpu(stats->tx_life_timeout_count);
+	seq_printf(s, "%-22s  Tx fail to Rcv ACK after retry = %u\n",
+		   " ", stats_value);
+
+	seq_printf(s, "%-22s  Rx Mpdu = %u\n",
+		   " ", le32_to_cpu(stats->mib[band_idx].rx_mpdu_cnt));
+
+	seq_printf(s, "%-22s  Rx Fcs Error = %u (MPDU)\n",
+		   " ", le32_to_cpu(stats->mib[band_idx].fcs_error));
+	seq_printf(s, "%-22s  Rx FIFO full = %u (MPDU)\n",
+		   " ", le32_to_cpu(stats->mib[band_idx].rx_fifo_full));
+
+	for (i = 0; i < STAT_MIB_CNT_TRX_AGG_RANGE_MAX_NUM; i++)
+		seq_printf(s, "%-22s  TRX_AGG_RANGE[%d] = %u (PPDU)\n",
+			   " ", i, le32_to_cpu(stats->mib[band_idx].tx_range_ampdu_cnt[i]));
+
+	seq_printf(s, "%-22s  MPDUs in AMPDUs transmitted = %u (MPDU)\n",
+		   " ", le32_to_cpu(stats->mib[band_idx].ampdu_tx_sf_cnt));
+	seq_printf(s, "%-22s  MPDUs in AMPDUs transmitted with ACK reply = %u (MPDU)\n",
+		   " ", le32_to_cpu(stats->mib[band_idx].ampdu_tx_ack_sf_cnt));
+	seq_printf(s, "%-22s  rate1_tx_cnt = %u\n",
+		   " ", le32_to_cpu(stats->rate1_tx_cnt));
+	seq_printf(s, "%-22s  rate1_fail_cnt = %u\n",
+		   " ", le32_to_cpu(stats->rate1_fail_cnt));
+	seq_printf(s, "%-22s  train_up = %u\n",
+		   " ", le16_to_cpu(stats->train_up));
+	seq_printf(s, "%-22s  train_down = %u\n",
+		   " ", le16_to_cpu(stats->train_down));
+	seq_printf(s, "%-22s  is_force_tx_stream = %u\n",
+		   " ", stats->is_force_tx_stream);
+	seq_printf(s, "%-22s  is_force_se_off = %u\n",
+		   " ", stats->is_force_se_off);
+	seq_printf(s, "%-22s  max_ampdu_factor = %u\n",
+		   " ", stats->max_ampdu_factor);
+	seq_printf(s, "%-22s  tx_rate_up_penalty = %u\n",
+		   " ", stats->tx_rate_up_penalty);
+	seq_printf(s, "%-22s  low_traffic_mode = %u\n",
+		   " ", stats->low_traffic_mode);
+	seq_printf(s, "%-22s  low_traffic_count = %u\n",
+		   " ", stats->low_traffic_count);
+	seq_printf(s, "%-22s  low_traffic_dashboard = %u\n",
+		   " ", stats->low_traffic_dashboard);
+	seq_printf(s, "%-22s  dynamic_sgi_state = %u\n",
+		   " ", stats->dynamic_sgi_state);
+	seq_printf(s, "%-22s  dynamic_sgi_score = %u\n",
+		   " ", stats->dynamic_sgi_score);
+	seq_printf(s, "%-22s  dynamic_bw_state = %u\n",
+		   " ", stats->dynamic_bw_state);
+	seq_printf(s, "%-22s  dynamic_gband_256qam_state = %u\n",
+		   " ", stats->dynamic_gband_256qam_state);
+	seq_printf(s, "%-22s  vht_non_sp_rate_state = %u\n",
+		   " ", stats->vht_non_sp_rate_state);
+
+	/* Decode the TX Vector BBP latch to show the current TX MCS rate */
+	if (band_idx < MT7925_STA_STATS_BAND_NUM)
+		mt7925_print_last_tx_rate(s, stats->tx_vector[band_idx].txv);
+
+	/* Dump the whole firmware auto-rate table and mark the entry currently */
+	if (wtbl_rate_valid)
+		mt7925_dump_auto_rate_table(s, &wtbl_rate);
+
+	seq_puts(s, "\nmib state:\n");
+	/* ===Rx Related Counters=== */
+	seq_puts(s, "=== Rx Related Counters ===\n");
+	seq_printf(s, "%-22s  Rx with CRC = %llu (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_RX_FCS_ERR]);
+	seq_printf(s, "%-22s  Rx drop due to out of resource = %llu (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_RX_FIFO_OVERFLOW]);
+	seq_printf(s, "%-22s  Rx Mpdu = %llu (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_RX_MPDU]);
+	seq_printf(s, "%-22s  Rx AMpdu = %llu (PPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_AMPDU_RX_COUNT]);
+	seq_printf(s, "%-22s  Rx PF Drop = %llu (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_PF_DROP]);
+	seq_printf(s, "%-22s  Rx Len Mismatch = %llu (PPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_LEN_MISMATCH]);
+
+	/* ===Phy/Timing Related Counters=== */
+	seq_puts(s, "\n=== Phy/Timing Related Counters ===\n");
+	seq_printf(s, "%-22s  ChannelIdleCnt = %llu\n",
+		   " ", mib_values[QUERY_MIB_CNT_CHANNEL_IDLE]);
+	seq_printf(s, "%-22s  CCA_NAV_Tx_Time = %llu\n",
+		   " ", mib_values[QUERY_MIB_CNT_CCA_NAV_TX_TIME]);
+	seq_printf(s, "%-22s  Rx_MDRDY_CNT = %llu (PPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_MDRDY]);
+	seq_printf(s, "%-22s  CCK_MDRDY = %llu\n",
+		   " ", mib_values[QUERY_MIB_CNT_RX_CCK_MDRDY_TIME]);
+	seq_printf(s, "%-22s  OFDM_MDRDY = %llu\n",
+		   " ", mib_values[QUERY_MIB_CNT_RX_OFDM_LG_MIXED_MDRDY_TIME]);
+	seq_printf(s, "%-22s  OFDM_GREEN_MDRDY = %llu\n",
+		   " ", mib_values[QUERY_MIB_CNT_RX_OFDM_GREEN_MDRDY_TIME]);
+	seq_printf(s, "%-22s  Prim CCA Time = %llu\n",
+		   " ", mib_values[QUERY_MIB_CNT_P_CCA_TIME]);
+	seq_printf(s, "%-22s  Sec CCA Time = %llu\n",
+		   " ", mib_values[QUERY_MIB_CNT_S_CCA_TIME]);
+	seq_printf(s, "%-22s  Prim ED Time = %llu\n",
+		   " ", mib_values[QUERY_MIB_CNT_P_ED_TIME]);
+
+	/* ===Tx Related Counters(Generic)=== */
+	seq_puts(s, "\n=== Tx Related Counters(Generic) ===\n");
+	seq_printf(s, "%-22s  BeaconTxCnt = %llu\n",
+		   " ", mib_values[QUERY_MIB_CNT_BCN_TX]);
+	seq_printf(s, "%-22s  Tx 40MHz Cnt = %llu  (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_TX_BW_40MHZ]);
+	seq_printf(s, "%-22s  Tx 80MHz Cnt = %llu  (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_TX_BW_80MHZ]);
+	seq_printf(s, "%-22s  Tx 160MHz Cnt = %llu  (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_TX_BW_160MHZ]);
+
+	/* ===BSSID[0] Related Counters=== */
+	seq_puts(s, "\n=== BSSID[0] Related Counters ===\n");
+	seq_printf(s, "%-22s  BA Miss Cnt = %llu  (PPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_BSS0_BA_MISS]);
+	seq_printf(s, "%-22s  RTS Tx Cnt = %llu  (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_BSS0_RTS_TX_CNT]);
+	seq_printf(s, "%-22s  Frame Retry Cnt = %llu (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_BSS0_FRAME_RETRY]);
+	seq_printf(s, "%-22s  Frame Retry 2 Cnt = %llu (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_BSS0_FRAME_RETRY_2]);
+	seq_printf(s, "%-22s  RTS Retry Cnt = %llu (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_BSS0_RTS_RETRY]);
+	seq_printf(s, "%-22s  Ack Failed Cnt = %llu (PPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_BSS0_ACK_FAIL]);
+
+	/* ===AMPDU Related Counters=== */
+	seq_puts(s, "\n=== AMPDU Related Counters ===\n");
+	seq_printf(s, "%-22s  Tx AMPDU_Pkt_Cnt = %llu  (PPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_AMPDU]);
+	seq_printf(s, "%-22s  Tx AMPDU_MPDU_Pkt_Cnt = %llu  (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_AMPDU_MPDU]);
+	seq_printf(s, "%-22s  AMPDU Tx success = %llu (MPDU)\n",
+		   " ", mib_values[QUERY_MIB_CNT_AMPDU_ACKED]);
+
+	tx_total = mib_values[QUERY_MIB_CNT_AMPDU_MPDU];
+	tx_fail =  mib_values[QUERY_MIB_CNT_AMPDU_MPDU] - mib_values[QUERY_MIB_CNT_AMPDU_ACKED];
+	tx_per = tx_total == 0 ? 0 : div64_u64(1000 * tx_fail, tx_total);
+	seq_printf(s, "%-22s  AMPDU Tx fail count   = %llu  (MPDU), PER=%llu.%1llu%%\n",
+		   " ",
+		   tx_fail,
+		   div_u64_rem(tx_per, 10, &tx_per_rem), (u64)tx_per_rem);
+
+out:
+	kfree(stats);
+	return ret;
+}
+
 int mt7925_init_debugfs(struct mt792x_dev *dev)
 {
 	struct dentry *dir;
@@ -312,6 +655,9 @@ int mt7925_init_debugfs(struct mt792x_dev *dev)
 	debugfs_create_devm_seqfile(dev->mt76.dev, "runtime_pm_stats", dir,
 				    mt792x_pm_stats);
 	debugfs_create_file("deep-sleep", 0600, dir, dev, &fops_ds);
+
+	debugfs_create_devm_seqfile(dev->mt76.dev, "stats", dir,
+				    mt792x_stats);
 
 	return 0;
 }
