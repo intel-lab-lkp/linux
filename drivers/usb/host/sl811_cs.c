@@ -177,6 +177,7 @@ failed:
 static int sl811_cs_probe(struct pcmcia_device *link)
 {
 	local_info_t *local;
+	int ret;
 
 	local = kzalloc_obj(local_info_t);
 	if (!local)
@@ -184,7 +185,11 @@ static int sl811_cs_probe(struct pcmcia_device *link)
 	local->p_dev = link;
 	link->priv = local;
 
-	return sl811_cs_config(link);
+	ret = sl811_cs_config(link);
+	if (ret)
+		kfree(local);
+
+	return ret;
 }
 
 static const struct pcmcia_device_id sl811_ids[] = {
