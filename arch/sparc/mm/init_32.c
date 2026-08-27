@@ -255,7 +255,6 @@ void __init arch_mm_preinit(void)
 		prom_printf("mem_init: Cannot alloc valid_addr_bitmap.\n");
 		prom_halt();
 	}
-	memset(sparc_valid_addr_bitmap, 0, i << 2);
 
 	taint_real_pages();
 }
