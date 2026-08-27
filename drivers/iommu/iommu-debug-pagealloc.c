@@ -15,6 +15,8 @@
 
 static bool needed;
 DEFINE_STATIC_KEY_FALSE(iommu_debug_initialized);
+/* The generic_pt format code using the key can be built as a module */
+EXPORT_SYMBOL_GPL(iommu_debug_initialized);
 
 struct iommu_debug_metadata {
 	atomic_t ref;
@@ -96,7 +98,8 @@ void __iommu_debug_check_unmapped(const struct page *page, int numpages)
 	}
 }
 
-void __iommu_debug_map(struct iommu_domain *domain, phys_addr_t phys, size_t size)
+static void __iommu_debug_update_phys(struct iommu_domain *domain,
+				      phys_addr_t phys, size_t size, bool inc)
 {
 	size_t off, end;
 	size_t page_size = iommu_debug_page_size(domain);
@@ -104,9 +107,30 @@ void __iommu_debug_map(struct iommu_domain *domain, phys_addr_t phys, size_t siz
 	if (WARN_ON(!phys || check_add_overflow(phys, size, &end)))
 		return;
 
-	for (off = 0 ; off < size ; off += page_size)
-		iommu_debug_inc_page(phys + off);
+	for (off = 0 ; off < size ; off += page_size) {
+		if (inc)
+			iommu_debug_inc_page(phys + off);
+		else
+			iommu_debug_dec_page(phys + off);
+	}
 }
+
+void __iommu_debug_map(struct iommu_domain *domain, phys_addr_t phys, size_t size)
+{
+	__iommu_debug_update_phys(domain, phys, size, true);
+}
+
+/*
+ * Physical address counterpart of __iommu_debug_map(), for teardown paths
+ * that destroy mapped entries without an IOVA.  The OAs must have been
+ * accounted by a prior iommu_map().
+ */
+void __iommu_debug_unmap_phys(struct iommu_domain *domain, phys_addr_t phys,
+			      size_t size)
+{
+	__iommu_debug_update_phys(domain, phys, size, false);
+}
+EXPORT_SYMBOL_GPL(__iommu_debug_unmap_phys);
 
 static void __iommu_debug_update_iova(struct iommu_domain *domain,
 				      unsigned long iova, size_t size, bool inc)
