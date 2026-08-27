@@ -4411,12 +4411,11 @@ void init_numa_balancing(u64 clone_flags, struct task_struct *p)
 	 * already by arch_dup_task_struct but stagger when scans start.
 	 */
 	if (mm) {
-		unsigned int delay;
+		u64 delay_ms;
 
-		delay = min_t(unsigned int, task_scan_max(current),
-			current->numa_scan_period * mm_users * NSEC_PER_MSEC);
-		delay += 2 * TICK_NSEC;
-		p->node_stamp = delay;
+		delay_ms = (u64)current->numa_scan_period * mm_users;
+		delay_ms = min_t(u64, delay_ms, task_scan_max(current));
+		p->node_stamp = delay_ms * NSEC_PER_MSEC + 2 * TICK_NSEC;
 	}
 }
 
