@@ -280,7 +280,15 @@ mt792x_asar_get_geo_pwr(struct mt792x_phy *phy,
 		return dyn_power;
 
 	geo_power = (band_pwr + idx)->pwr;
-	dyn_power += (band_pwr + idx)->offset;
+	/*
+	 * ASUS (and some other OEM) ACPI MTGS tables fill unused geo
+	 * slots with 0xFF. Windows treats that as "no cap". Linux took
+	 * it as s8 -1 dBm and min()'d every rate down to ~3 dBm tmac.
+	 */
+	if ((u8)geo_power == 0xff)
+		return dyn_power;
+	if ((band_pwr + idx)->offset != 0xff)
+		dyn_power += (band_pwr + idx)->offset;
 
 	return min(geo_power, dyn_power);
 }
