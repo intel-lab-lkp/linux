@@ -23651,6 +23651,7 @@ L:	linux-trace-kernel@vger.kernel.org
 S:	Maintained
 F:	Documentation/trace/rv/
 F:	include/linux/rv.h
+F:	include/linux/rv_edge_stat.h
 F:	include/rv/
 F:	kernel/trace/rv/
 F:	tools/testing/selftests/verification/
