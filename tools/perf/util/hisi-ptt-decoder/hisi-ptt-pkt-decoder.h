@@ -31,6 +31,45 @@
 #define HISI_PTT_HEAD0_8DW_TYPE		GENMASK_U32(28, 24)
 #define HISI_PTT_HEAD0_8DW_FORMAT	GENMASK_U32(31, 29)
 
+/* Header DW2 fields for MWr/Msg/MsgD/FetchAdd/Swap/CAS/IORd/IOWr TLPs
+ *   bits   [   31   ][     30:23      ][22][21][20][  19:16  ][   15:0   ]
+ *          |---------|----------------|----|---|--|-----------|----------|
+ *   fields [Reserved][Request Segment][RSV][TV][T][Tag<13:10>][Header DW2]
+ */
+#define HISI_PTT_HEAD2_HEADER_DW2	GENMASK_U32(15, 0)
+#define HISI_PTT_HEAD2_TAG		GENMASK_U32(19, 16)
+#define HISI_PTT_HEAD2_T		BIT_U32(20)
+#define HISI_PTT_HEAD2_TV		BIT_U32(21)
+#define HISI_PTT_HEAD2_RSV		BIT_U32(22)
+#define HISI_PTT_HEAD2_REQ_SEG		GENMASK_U32(30, 23)
+#define HISI_PTT_HEAD2_RESERVED		BIT_U32(31)
+
+/* Header DW3 fields for CfgRd0/CfgWr0/CfgRd1/CfgWr1 TLPs
+ *   bits   [   31   ][       30:23        ][22][21][20][  19:16  ][   15:0   ]
+ *          |---------|--------------------|----|---|--|-----------|----------|
+ *   fields [Reserved][Destination Segment][DSV][TV][T][Tag<13:10>][Header DW3]
+ */
+#define HISI_PTT_HEAD3_CFG_HEADER_DW3	GENMASK_U32(15, 0)
+#define HISI_PTT_HEAD3_CFG_TAG		GENMASK_U32(19, 16)
+#define HISI_PTT_HEAD3_CFG_T		BIT_U32(20)
+#define HISI_PTT_HEAD3_CFG_TV		BIT_U32(21)
+#define HISI_PTT_HEAD3_CFG_DSV		BIT_U32(22)
+#define HISI_PTT_HEAD3_CFG_DST_SEG	GENMASK_U32(30, 23)
+#define HISI_PTT_HEAD3_CFG_RESERVED	BIT_U32(31)
+
+/* Header DW3 fields for Cpl/CplD/CplLk/CplDlk TLPs
+ *   bits   [       31:24       ][       23:16      ][15][  14:6   ][5][4][   3:0    ]
+ *          |--------------------|------------------|----|---------|--|---|----------|
+ *   fields [Destination Segment][Completer Segment][DSV][Reserved][TV][T][Tag<13:10>]
+ */
+#define HISI_PTT_HEAD3_CPL_TAG		GENMASK_U32(3, 0)
+#define HISI_PTT_HEAD3_CPL_T		BIT_U32(4)
+#define HISI_PTT_HEAD3_CPL_TV		BIT_U32(5)
+#define HISI_PTT_HEAD3_CPL_RESERVED	GENMASK_U32(14, 6)
+#define HISI_PTT_HEAD3_CPL_DSV		BIT_U32(15)
+#define HISI_PTT_HEAD3_CPL_CPL_SEG	GENMASK_U32(23, 16)
+#define HISI_PTT_HEAD3_CPL_DST_SEG	GENMASK_U32(31, 24)
+
 enum hisi_ptt_pkt_type {
 	HISI_PTT_4DW_PKT,
 	HISI_PTT_8DW_PKT,
