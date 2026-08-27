@@ -31,6 +31,7 @@
 #define AP_QUEUE_IN_USE "in use"
 
 #define AP_RESET_INTERVAL		20	/* Reset sleep interval (20ms)		*/
+#define AP_RESET_MAX_WAIT		2000	/* Maximum wait for reset (2000ms)	*/
 
 static int vfio_ap_mdev_reset_queues(struct ap_matrix_mdev *matrix_mdev);
 static int vfio_ap_mdev_reset_qlist(struct list_head *qlist);
@@ -2016,8 +2017,32 @@ static void apq_reset_check(struct work_struct *reset_work)
 		elapsed += AP_RESET_INTERVAL;
 		status = ap_tapq(q->apqn, NULL);
 		ret = apq_status_check(q->apqn, &status);
-		if (ret == -EIO)
+		if (ret == -EIO) {
+			memcpy(&q->reset_status, &status, sizeof(status));
 			return;
+		}
+		if (elapsed >= AP_RESET_MAX_WAIT) {
+		/*
+		 * Timed out waiting for reset to complete.
+		 *
+		 * The AQIC resources associated with this queue - the pinned page
+		 * containing the NIB and the registered guest ISC - cannot be freed
+		 * here. The NIB is the active DMA target for AP interrupt delivery
+		 * until the reset completes; freeing the pinned page while the
+		 * hardware may still write to it would result in a use-after-free
+		 * kernel crash.
+		 *
+		 * If the reset eventually completes, interrupts will be terminated
+		 * and the pinned NIB page and ISC registration will be leaked. This
+		 * is preferable to either a use-after-free or waiting indefinitely:
+		 * the caller of apq_reset_check() holds mdevs_lock while flush_work()
+		 * blocks holds the matrix_dev->mdevs_lock mutex, which
+		 * serializes access to all mdev objects system-wide, so blocking
+		 * here would stall all other guests using AP queues.
+		 */
+			memcpy(&q->reset_status, &status, sizeof(status));
+			return;
+		}
 		if (ret == -EBUSY) {
 			pr_notice_ratelimited(WAIT_MSG, elapsed,
 					      AP_QID_CARD(q->apqn),
