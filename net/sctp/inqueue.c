@@ -212,6 +212,11 @@ new_skb:
 	chunk->chunk_end = ((__u8 *)ch) + SCTP_PAD4(ntohs(ch->length));
 	skb_pull(chunk->skb, sizeof(*ch));
 	chunk->subh.v = NULL; /* Subheader is no longer valid.  */
+	if (unlikely(ntohs(ch->length) < sizeof(*ch))) {
+		chunk->pdiscard = 1;
+		chunk->chunk_end = chunk->skb->data;
+		return chunk;
+	}
 
 	if (chunk->chunk_end + sizeof(*ch) <= skb_tail_pointer(chunk->skb)) {
 		/* This is not a singleton */
