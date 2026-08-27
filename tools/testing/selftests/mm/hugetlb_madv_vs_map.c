@@ -15,13 +15,20 @@
  *
  *  Touching the first page after thread3's allocation will raise a SIGBUS
  *
+ *  We setup a 2nd test where we create a child process, then unmap the page in
+ *  the parent while the child waits and verify that there is no underflow
+ *  of the reserved count.
+ *
  *  Author: Breno Leitao <leitao@debian.org>
  */
+#include <limits.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "vm_util.h"
@@ -86,7 +93,7 @@ int main(void)
 	int max = 10;
 
 	ksft_print_header();
-	ksft_set_plan(1);
+	ksft_set_plan(3);
 
 	if (!hugetlb_setup_default_exact(1))
 		ksft_exit_skip("This test needs one and only one page to execute. Got %lu\n",
@@ -120,5 +127,80 @@ int main(void)
 	}
 
 	ksft_test_result_pass("No unexpected huge page allocations\n");
+	huge_ptr = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+
+	if ((unsigned long)huge_ptr == -1)
+		ksft_exit_fail_msg("Failed to allocate huge page\n");
+
+	{
+		pid_t pid;
+		int pipe_fds[2];
+		unsigned long nr_reserved = 0;
+
+		nr_reserved = hugetlb_nr_resv_pages(default_huge_page_size());
+		if (nr_reserved != 1)
+			ksft_exit_fail_msg("Unexpected number of reserved pages: %lu, expected 1\n",
+					   nr_reserved);
+
+		/* Force the fault to ensure the reservation is consumed */
+		*huge_ptr = 0;
+		nr_reserved = hugetlb_nr_resv_pages(default_huge_page_size());
+		if (nr_reserved != 0)
+			ksft_exit_fail_msg("Unexpected number of reserved pages: %lu, expected 0\n",
+					   nr_reserved);
+
+		if (pipe(pipe_fds) != 0)
+			ksft_exit_fail_msg("pipe failed");
+
+		pid = fork();
+		if (pid < 0)
+			ksft_exit_fail_msg("fork failed");
+
+		if (pid == 0) {
+			/* Child: Simply wait for the parent */
+			char b;
+
+			close(pipe_fds[1]);
+			if (read(pipe_fds[0], &b, 1) < 0)
+				ksft_exit_fail_msg("child read failed");
+			return 0;
+		}
+
+		/* Parent */
+		close(pipe_fds[0]);
+
+		/* First unmap, this will close the vma */
+		if (munmap(huge_ptr, mmap_size) != 0) {
+			kill(pid, SIGKILL);
+			ksft_exit_fail_msg("munmap failed");
+		}
+
+		nr_reserved = hugetlb_nr_resv_pages(default_huge_page_size());
+		if (nr_reserved == ULONG_MAX) {
+			ksft_test_result_fail("After the munmap, HugePages_Rsvd underflowed!\n");
+		} else if (nr_reserved == 0) {
+			ksft_test_result_pass("Underflow not present!\n");
+		} else {
+			ksft_exit_fail_msg("Unexpected HugePages_Rsvd=%ld after munmap, should be 0 or -1.  Repeat the test\n",
+					   nr_reserved);
+		}
+		/* Make the child exit, this should restore HugePages_Rsvd to 0 */
+		if (write(pipe_fds[1], &nr_reserved, 1) < 0) {
+			kill(pid, SIGKILL);
+			ksft_exit_fail_msg("write failed");
+		}
+		close(pipe_fds[1]);
+		if (waitpid(pid, NULL, 0) <= 0)
+			ksft_exit_fail_msg("write failed");
+
+		nr_reserved = hugetlb_nr_resv_pages(default_huge_page_size());
+		if (nr_reserved == 0) {
+			ksft_test_result_pass("After the child dies, HugePages_Rsvd is properly set to 0\n");
+		} else {
+			ksft_exit_fail_msg("Unexpected HugePages_Rsvd=%ld after the child termination munmap, should be 0 or -1.  Repeat the test\n",
+					   nr_reserved);
+		}
+	}
 	ksft_finished();
 }
