@@ -386,6 +386,15 @@ static void nf_static_key_dec(const struct nf_hook_ops *reg, int pf)
 #endif
 }
 
+static void bump_hook_base_seq(struct net *net)
+{
+	unsigned int base_seq = READ_ONCE(net->nf.hook_base_seq);
+
+	while (++base_seq == 0)
+		;
+	smp_store_release(&net->nf.hook_base_seq, base_seq);
+}
+
 static int __nf_register_net_hook(struct net *net, int pf,
 				  const struct nf_hook_ops *reg)
 {
@@ -428,6 +437,7 @@ static int __nf_register_net_hook(struct net *net, int pf,
 	new_hooks = nf_hook_entries_grow(p, reg);
 
 	if (!IS_ERR(new_hooks)) {
+		bump_hook_base_seq(net);
 		hooks_validate(new_hooks);
 		rcu_assign_pointer(*pp, new_hooks);
 	}
@@ -506,6 +516,7 @@ static void __nf_unregister_net_hook(struct net *net, int pf,
 			net_dec_egress_queue();
 #endif
 		nf_static_key_dec(reg, pf);
+		bump_hook_base_seq(net);
 	} else {
 		WARN_ONCE(1, "hook not found, pf %d num %d", pf, reg->hooknum);
 	}
@@ -784,6 +795,8 @@ static int __net_init netfilter_net_init(struct net *net)
 		return -ENOMEM;
 	}
 #endif
+	net->nf.hook_base_seq = 1;
+	net->nf.nat_hook_base_seq = 1;
 
 	return 0;
 }
