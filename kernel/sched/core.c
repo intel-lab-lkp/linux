@@ -181,7 +181,7 @@ __read_mostly unsigned int sysctl_sched_features =
  * If sysctl_resched_latency_warn_once is set, only one warning will be shown
  * per boot.
  */
-__read_mostly int sysctl_resched_latency_warn_ms = 100;
+__read_mostly unsigned int sysctl_resched_latency_warn_ms = 100;
 __read_mostly int sysctl_resched_latency_warn_once = 1;
 
 /*
@@ -5709,7 +5709,8 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 
 static u64 cpu_resched_latency(struct rq *rq)
 {
-	int latency_warn_ms = READ_ONCE(sysctl_resched_latency_warn_ms);
+	unsigned int latency_warn_ms = READ_ONCE(sysctl_resched_latency_warn_ms);
+	u64 latency_warn_ns;
 	u64 resched_latency, now = rq_clock(rq);
 	static bool warned_once;
 
@@ -5730,7 +5731,8 @@ static u64 cpu_resched_latency(struct rq *rq)
 
 	rq->ticks_without_resched++;
 	resched_latency = now - rq->last_seen_need_resched_ns;
-	if (resched_latency <= latency_warn_ms * NSEC_PER_MSEC)
+	latency_warn_ns = (u64)latency_warn_ms * NSEC_PER_MSEC;
+	if (resched_latency <= latency_warn_ns)
 		return 0;
 
 	warned_once = true;
@@ -5740,9 +5742,9 @@ static u64 cpu_resched_latency(struct rq *rq)
 
 static int __init setup_resched_latency_warn_ms(char *str)
 {
-	long val;
+	unsigned int val;
 
-	if ((kstrtol(str, 0, &val))) {
+	if (kstrtouint(str, 0, &val)) {
 		pr_warn("Unable to set resched_latency_warn_ms\n");
 		return 1;
 	}
