@@ -175,7 +175,21 @@ void kvm_init_pmu_capability(struct kvm_pmu_ops *pmu_ops)
 	}
 
 	memcpy(&kvm_pmu_cap, &kvm_host_pmu, sizeof(kvm_host_pmu));
-	kvm_pmu_cap.version = min(kvm_pmu_cap.version, 2);
+
+	if (is_intel && enable_mediated_pmu) {
+		kvm_pmu_cap.version = min(kvm_pmu_cap.version, 5);
+
+		/*
+		 * PMU v3/v4 has AnyThread support, which KVM cannot safely
+		 * virtualize. Expose PMU v2 instead of advertising a partially
+		 * functional PMU v3/v4 to guests.
+		 */
+		if (kvm_pmu_cap.version == 3 || kvm_pmu_cap.version == 4)
+			kvm_pmu_cap.version = 2;
+	} else {
+		kvm_pmu_cap.version = min(kvm_pmu_cap.version, 2);
+	}
+
 	kvm_pmu_cap.cntr_mask64 &=
 		GENMASK_ULL(pmu_ops->MAX_NR_GP_COUNTERS - 1, 0);
 	kvm_pmu_cap.fixed_cntr_mask64 &=
