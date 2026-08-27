@@ -592,6 +592,38 @@ static void xe_pagefault_save_to_vm(struct xe_device *xe, struct xe_pagefault *p
 	xe_vm_put(vm);
 }
 
+static bool
+xe_pagefault_drop_if_blocked(struct xe_pagefault_queue *pf_queue,
+			     struct xe_pagefault_work *pf_work,
+			     struct xe_pagefault *pf,
+			     u64 *cache_start)
+{
+	struct xe_pagefault *next;
+
+	if (!xe_device_io_blocked(pf_work->xe))
+		return false;
+
+	/*
+	 * cache_start is private to this worker invocation. pf_work->cache is
+	 * shared with fault producers and must be invalidated under the queue
+	 * lock.
+	 */
+	xe_pagefault_cache_start_invalidate(*cache_start);
+
+	guard(spinlock_irq)(&pf_queue->lock);
+
+	xe_pagefault_cache_invalidate(pf_queue, pf_work);
+
+	while (pf) {
+		next = pf->consumer.next;
+		pf->consumer.next = NULL;
+		pf->consumer.alloc_state = XE_PAGEFAULT_ALLOC_STATE_FREE;
+		pf = next;
+	}
+
+	return true;
+}
+
 static void xe_pagefault_queue_work(struct work_struct *w)
 {
 	struct xe_pagefault_work *pf_work =
@@ -615,6 +647,10 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 		int err = 0;
 		bool invalidated = false;
 
+		if (xe_pagefault_drop_if_blocked(pf_queue, pf_work, pf,
+						 &cache_start))
+			continue;
+
 		/* Last fault same address, ack immediately */
 		if (xe_pagefault_match(pf, cache_start, cache_end, cache_asid)) {
 			xe_gt_stats_incr(gt, XE_GT_STATS_ID_LAST_PAGEFAULT_COUNT, 1);
@@ -622,6 +658,10 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 		}
 
 		err = xe_pagefault_service(pf);
+
+		if (xe_pagefault_drop_if_blocked(pf_queue, pf_work, pf,
+						 &cache_start))
+			continue;
 
 		if (err) {
 			if (!(pf->consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
