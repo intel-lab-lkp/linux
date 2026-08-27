@@ -7,6 +7,15 @@
  * lockdep subsystem internal functions and variables.
  */
 
+#include <linux/types.h>
+#include <linux/reciprocal_div.h>
+#include <linux/log2.h>
+#include <asm/barrier.h>
+
+#define LOCKDEP_SLAB_SIZE	(64 * 1024)
+#define LOCKDEP_MAX_SLABS	512
+#define LOCKDEP_DEFAULT_SLABS	64
+
 /*
  * Lock-class usage-state bits:
  */
@@ -122,19 +131,25 @@ enum {
 #define MAX_LOCKDEP_CHAINS	(1UL << MAX_LOCKDEP_CHAINS_BITS)
 
 #define AVG_LOCKDEP_CHAIN_DEPTH		5
-#include <linux/reciprocal_div.h>
+#define MAX_LOCKDEP_CHAIN_HLOCKS (MAX_LOCKDEP_CHAINS * AVG_LOCKDEP_CHAIN_DEPTH)
 
-#define LOCKDEP_SLAB_SIZE	(64 * 1024)
-#define LOCKDEP_MAX_SLABS	512
-#define LOCKDEP_DEFAULT_SLABS	64
+/*
+ * Compile-time precomputation of struct reciprocal_value using the canonical
+ * Granlund-Montgomery algorithm matching lib/math/reciprocal_div.c.
+ */
+#define RECIPROCAL_VALUE_INIT(d) { \
+	.m = (u32)((((1ULL << 32) * ((1ULL << (ilog2((d) - 1) + 1)) - (d))) / (d)) + 1), \
+	.sh1 = (ilog2((d) - 1) + 1) > 0 ? 1 : 0, \
+	.sh2 = (ilog2((d) - 1) + 1) > 1 ? (ilog2((d) - 1) + 1) - 1 : 0, \
+}
 
 /*
  * Chunked Array Tables:
  * Replaces flat monolithic BSS arrays with 2D chunk pointer matrices.
  * Chunk 0 is statically allocated in BSS for early boot, while subsequent
  * chunks are claimed from the memblock reservoir via lockdep_claim_slab().
- * Indexing uses compile-time Granlund-Montgomery reciprocal divide
- * (~3-cycle multiply+shift, zero division instructions).
+ * Indexing uses a compile-time hybrid: single-cycle bit shifts for power-of-2
+ * elements, and Granlund-Montgomery reciprocal divide for non-power-of-2.
  */
 #define DECLARE_CHUNKED_ARRAY(name, type)					\
 	enum {									\
@@ -156,20 +171,16 @@ enum {
 		return &chunk_ptr[offset];					\
 	}
 
-#define DEFINE_CHUNKED_ARRAY(name, type)					\
+#define DEFINE_CHUNKED_ARRAY(name, type)						\
 	static type name##_chunk0[name##_PER_CHUNK];				\
 	type *name##_chunks[LOCKDEP_MAX_SLABS] = { name##_chunk0 };		\
 	static unsigned int nr_##name##_chunks = 1;				\
 	const struct reciprocal_value name##_rv =				\
 		RECIPROCAL_VALUE_INIT(name##_PER_CHUNK)
 
-struct lockdep_slab_usage {
-	unsigned int lock_classes;
-	unsigned int direct_deps;
-	unsigned int lock_chains;
-	unsigned int chain_hlocks;
-	unsigned int stack_traces;
-};
+DECLARE_CHUNKED_ARRAY(lock_chain, struct lock_chain);
+DECLARE_CHUNKED_ARRAY(chain_hlock, u16);
+void lockdep_chain_stats(unsigned int *nr_chunks, size_t *chunk_size, size_t *tail_used);
 
 #define LOCK_USAGE_CHARS (2*XXX_LOCK_USAGE_STATES + 1)
 
@@ -201,8 +212,26 @@ extern unsigned int max_lockdep_depth;
 extern unsigned int max_bfs_queue_depth;
 extern unsigned long max_lock_class_idx;
 
-extern struct lock_class lock_classes[MAX_LOCKDEP_KEYS];
+DECLARE_2D_RADIX(lock_class, struct lock_class);
 extern unsigned long lock_classes_in_use[];
+
+struct lockdep_slab_usage {
+	unsigned int lock_classes;
+	unsigned int direct_deps;
+	unsigned int lock_chains;
+	unsigned int chain_hlocks;
+	unsigned int stack_traces;
+};
+
+struct lockdep_slab_stats {
+	unsigned int total_slabs;
+	unsigned int used_slabs;
+	struct lockdep_slab_usage usage;
+};
+
+unsigned int chain_hlocks_used(void);
+unsigned long lock_chain_count(void);
+void lockdep_get_slab_stats(struct lockdep_slab_stats *st);
 
 #ifdef CONFIG_PROVE_LOCKING
 extern unsigned long lockdep_count_forward_deps(struct lock_class *);
@@ -286,7 +315,7 @@ static inline void debug_class_ops_inc(struct lock_class *class)
 {
 	int idx;
 
-	idx = class - lock_classes;
+	idx = class->class_idx;
 	__debug_atomic_inc(lock_class_ops[idx]);
 }
 
@@ -295,7 +324,7 @@ static inline unsigned long debug_class_ops_read(struct lock_class *class)
 	int idx, cpu;
 	unsigned long ops = 0;
 
-	idx = class - lock_classes;
+	idx = class->class_idx;
 	for_each_possible_cpu(cpu)
 		ops += per_cpu(lockdep_stats.lock_class_ops[idx], cpu);
 	return ops;
