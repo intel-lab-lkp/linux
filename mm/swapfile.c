@@ -52,6 +52,8 @@
 #include "swap.h"
 #include <linux/debugfs.h>
 
+#define DEF_SWAP_PRIO  -1
+
 static DEFINE_SPINLOCK(swap_lock);
 
 #ifdef CONFIG_XSWAP
@@ -159,9 +161,11 @@ static void xswap_debugfs_del(struct swap_info_struct *si)
 }
 
 #ifdef CONFIG_SYSFS
-static int xswap_create(int percent);
+static int xswap_create(int percent, int prio);
 static int xswap_destroy(int type);
 /* /sys/kernel/mm/xswap/: create.
+ * Write "<percent> [<prio>]" to add a zswap-backed swap device; a missing
+ * priority means DEF_SWAP_PRIO.
  * Per-device runtime size is tuned via debugfs type<N>_cluster_limit.
  */
 
@@ -169,21 +173,25 @@ static ssize_t xswap_create_store(struct kobject *kobj,
 				  struct kobj_attribute *attr,
 				  const char *buf, size_t count)
 {
-	unsigned long percent;
-	int err;
+	long percent;
+	int prio = DEF_SWAP_PRIO;
+	int nr, err;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	err = kstrtoul(buf, 0, &percent);
-	if (err)
-		return err;
+	/* "<percent> [<prio>]"; a missing prio means DEF_SWAP_PRIO.
+	 * %li keeps kstrtoul(buf, 0)'s base-0 behavior for percent.
+	 */
+	nr = sscanf(buf, "%li %d", &percent, &prio);
+	if (nr < 1)
+		return -EINVAL;
 
 	/* 0 means "use the default percent" */
 	if (percent == 0)
 		percent = XSWAP_DEFAULT_CLUSTER_PERCENT;
 
-	err = xswap_create(percent);
+	err = xswap_create(percent, prio);
 	if (err < 0)
 		return err;
 
@@ -275,7 +283,6 @@ atomic_t nr_real_swapfiles;
 EXPORT_SYMBOL_GPL(nr_swap_pages);
 /* protected with swap_lock. reading in vm_swap_full() doesn't need lock */
 long total_swap_pages;
-#define DEF_SWAP_PRIO  -1
 unsigned long swapfile_maximum_size;
 #ifdef CONFIG_MIGRATION
 bool swap_migration_ad_supported;
@@ -4340,13 +4347,15 @@ err:
 /* Create a file-less xswap device. si->max = full RAM; @percent sets the
  * runtime nr_clusters ceiling.
  */
-static int xswap_create(int percent)
+static int xswap_create(int percent, int prio)
 {
 	struct swap_info_struct *si;
 	unsigned long ram, maxpages, init_clusters;
 	int error;
 
 	if (percent < 1 || percent > 100)
+		return -EINVAL;
+	if (prio != DEF_SWAP_PRIO && (prio < 0 || prio > SWAP_FLAG_PRIO_MASK))
 		return -EINVAL;
 
 	/* xswap has no backing store, it relies on zswap. */
@@ -4391,15 +4400,15 @@ static int xswap_create(int percent)
 		goto bad_swap;
 
 	mutex_lock(&swapon_mutex);
-	si->prio = DEF_SWAP_PRIO;
+	si->prio = prio;
 	si->list.prio = -si->prio;
 	si->avail_list.prio = -si->prio;
 	/* si->swap_file stays NULL: this is a file-less device */
 	enable_swap_info(si);
 	mutex_unlock(&swapon_mutex);
 
-	pr_info("xswap: adding extendable swap type %d (%d%% of %lu pages = %u pages, max %lu)\n",
-		si->type, percent, ram, si->pages, maxpages);
+	pr_info("xswap: adding extendable swap type %d (prio %d, %d%% of %lu pages = %u pages, max %lu)\n",
+		si->type, prio, percent, ram, si->pages, maxpages);
 	atomic_inc(&proc_poll_event);
 	wake_up_interruptible(&proc_poll_wait);
 
