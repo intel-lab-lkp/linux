@@ -128,6 +128,9 @@ int kvm_vm_ioctl_register_coalesced_mmio(struct kvm *kvm,
 	if (zone->pio != 1 && zone->pio != 0)
 		return -EINVAL;
 
+	if (zone->size > INT_MAX || zone->addr + zone->size < zone->addr)
+		return -EINVAL;
+
 	dev = kzalloc_obj(struct kvm_coalesced_mmio_dev, GFP_KERNEL_ACCOUNT);
 	if (!dev)
 		return -ENOMEM;
