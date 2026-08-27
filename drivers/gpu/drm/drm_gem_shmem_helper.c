@@ -977,7 +977,7 @@ struct drm_gem_object *drm_gem_shmem_prime_import_no_map(struct drm_device *dev,
 	drm_dbg_prime(dev, "size = %zu\n", size);
 
 	shmem->base.import_attach = attach;
-	shmem->base.resv = dma_buf->resv;
+	drm_gem_object_set_resv(&shmem->base, dma_buf->resv);
 
 	return &shmem->base;
 

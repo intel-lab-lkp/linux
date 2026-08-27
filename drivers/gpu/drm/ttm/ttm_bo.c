@@ -209,7 +209,7 @@ static int ttm_bo_individualize_resv(struct ttm_buffer_object *bo)
 		 * the resv object while holding the lru_lock.
 		 */
 		spin_lock(&bo->bdev->lru_lock);
-		bo->base.resv = &bo->base._resv;
+		drm_gem_object_set_resv(&bo->base, &bo->base._resv);
 		spin_unlock(&bo->bdev->lru_lock);
 	}
 
@@ -1197,10 +1197,7 @@ int ttm_bo_init_reserved(struct ttm_device *bdev, struct ttm_buffer_object *bo,
 	bo->pin_count = 0;
 	bo->sg = sg;
 	bo->bulk_move = NULL;
-	if (resv)
-		bo->base.resv = resv;
-	else
-		bo->base.resv = &bo->base._resv;
+	drm_gem_object_set_resv(&bo->base, resv ?: &bo->base._resv);
 	atomic_inc(&ttm_glob.bo_count);
 
 	/*

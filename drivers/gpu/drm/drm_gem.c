@@ -230,7 +230,7 @@ void drm_gem_private_object_init(struct drm_device *dev,
 	mutex_init(&obj->gpuva.lock);
 	dma_resv_init(&obj->_resv);
 	if (!obj->resv)
-		obj->resv = &obj->_resv;
+		obj->resv = dma_resv_get(&obj->_resv);
 
 	drm_gem_gpuva_init(obj);
 
@@ -249,10 +249,39 @@ void drm_gem_private_object_fini(struct drm_gem_object *obj)
 {
 	WARN_ON(obj->dma_buf);
 
+	dma_resv_put(obj->resv);
 	dma_resv_put(&obj->_resv);
 	mutex_destroy(&obj->gpuva.lock);
 }
 EXPORT_SYMBOL(drm_gem_private_object_fini);
+
+/**
+ * drm_gem_object_set_resv - Set the reservation object for a GEM object
+ * @obj: GEM object
+ * @resv: reservation object to assign
+ *
+ * This function safely assigns a new reservation object to a GEM object.
+ * It releases the old reservation object reference (if any) and acquires
+ * a reference to the new one.
+ *
+ * This should be used when changing the reservation object of an already
+ * initialized GEM object, for example when importing a dma-buf or sharing
+ * a reservation object with another object.
+ *
+ * Returns:
+ * The new reservation object pointer for convenience.
+ */
+struct dma_resv *drm_gem_object_set_resv(struct drm_gem_object *obj,
+					  struct dma_resv *resv)
+{
+	struct dma_resv *old_resv = obj->resv;
+
+	obj->resv = dma_resv_get(resv);
+	dma_resv_put(old_resv);
+
+	return obj->resv;
+}
+EXPORT_SYMBOL(drm_gem_object_set_resv);
 
 static void drm_gem_object_handle_get(struct drm_gem_object *obj)
 {

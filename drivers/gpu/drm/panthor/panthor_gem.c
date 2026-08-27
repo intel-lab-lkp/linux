@@ -1024,7 +1024,7 @@ panthor_gem_create(struct drm_device *dev, size_t size, uint32_t flags,
 	if (exclusive_vm) {
 		bo->exclusive_vm_root_gem = panthor_vm_root_gem(exclusive_vm);
 		drm_gem_object_get(bo->exclusive_vm_root_gem);
-		bo->base.resv = bo->exclusive_vm_root_gem->resv;
+		drm_gem_object_set_resv(&bo->base, bo->exclusive_vm_root_gem->resv);
 	}
 
 	panthor_gem_debugfs_set_usage_flags(bo, usage_flags);

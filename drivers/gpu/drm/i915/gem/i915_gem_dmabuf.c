@@ -320,7 +320,7 @@ struct drm_gem_object *i915_gem_prime_import(struct drm_device *dev,
 	i915_gem_object_init(obj, &i915_gem_object_dmabuf_ops, &lock_class,
 			     I915_BO_ALLOC_USER);
 	obj->base.import_attach = attach;
-	obj->base.resv = dma_buf->resv;
+	drm_gem_object_set_resv(&obj->base, dma_buf->resv);
 
 	/* We use GTT as shorthand for a coherent domain, one that is
 	 * neither in the GPU cache nor in the CPU cache, where all

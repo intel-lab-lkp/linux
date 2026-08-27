@@ -529,6 +529,8 @@ int drm_gem_object_init(struct drm_device *dev,
 void drm_gem_private_object_init(struct drm_device *dev,
 				 struct drm_gem_object *obj, size_t size);
 void drm_gem_private_object_fini(struct drm_gem_object *obj);
+struct dma_resv *drm_gem_object_set_resv(struct drm_gem_object *obj,
+					  struct dma_resv *resv);
 void drm_gem_vm_open(struct vm_area_struct *vma);
 void drm_gem_vm_close(struct vm_area_struct *vma);
 int drm_gem_mmap_obj(struct drm_gem_object *obj, unsigned long obj_size,

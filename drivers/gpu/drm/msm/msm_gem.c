@@ -1151,7 +1151,7 @@ int msm_gem_new_handle(struct drm_device *dev, struct drm_file *file,
 
 		drm_gem_object_get(r_obj);
 
-		obj->resv = r_obj->resv;
+		drm_gem_object_set_resv(obj, r_obj->resv);
 	}
 
 	ret = drm_gem_handle_create(file, obj, handle);

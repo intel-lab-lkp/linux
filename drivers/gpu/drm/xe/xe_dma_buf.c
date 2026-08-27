@@ -293,7 +293,7 @@ xe_dma_buf_create_obj(struct drm_device *dev, struct dma_buf *dma_buf)
 	if (!dummy_obj)
 		return ERR_PTR(-ENOMEM);
 
-	dummy_obj->resv = resv;
+	drm_gem_object_set_resv(dummy_obj, resv);
 	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {}, ret) {
 		ret = drm_exec_lock_obj(&exec, dummy_obj);
 		drm_exec_retry_on_contention(&exec);

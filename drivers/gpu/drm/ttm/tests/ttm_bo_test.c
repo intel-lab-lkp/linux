@@ -461,7 +461,7 @@ static void ttm_bo_fini_shared_resv(struct kunit *test)
 
 	bo = ttm_bo_kunit_init(test, test->priv, BO_SIZE, NULL);
 	bo->type = ttm_bo_type_device;
-	bo->base.resv = external_resv;
+	drm_gem_object_set_resv(&bo->base, external_resv);
 
 	ttm_bo_fini(bo);
 }
