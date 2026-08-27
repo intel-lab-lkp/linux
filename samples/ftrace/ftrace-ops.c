@@ -44,11 +44,11 @@ MODULE_PARM_DESC(save_regs, "Register ops with FTRACE_OPS_FL_SAVE_REGS (save all
 
 static bool assist_recursion;
 module_param(assist_recursion, bool, 0);
-MODULE_PARM_DESC(assist_reursion, "Register ops with FTRACE_OPS_FL_RECURSION");
+MODULE_PARM_DESC(assist_recursion, "Register ops with FTRACE_OPS_FL_RECURSION");
 
 static bool assist_rcu;
 module_param(assist_rcu, bool, 0);
-MODULE_PARM_DESC(assist_reursion, "Register ops with FTRACE_OPS_FL_RCU");
+MODULE_PARM_DESC(assist_rcu, "Register ops with FTRACE_OPS_FL_RCU");
 
 /*
  * By default, a trivial tracer is used which immediately returns to mimimize
