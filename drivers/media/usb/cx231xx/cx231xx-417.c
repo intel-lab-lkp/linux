@@ -1650,7 +1650,6 @@ void cx231xx_417_unregister(struct cx231xx *dev)
 
 	if (video_is_registered(&dev->v4l_device)) {
 		video_unregister_device(&dev->v4l_device);
-		v4l2_ctrl_handler_free(&dev->mpeg_ctrl_handler.hdl);
 	}
 }
 

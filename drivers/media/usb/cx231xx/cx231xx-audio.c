@@ -561,6 +561,15 @@ static const struct snd_pcm_ops snd_cx231xx_pcm_capture = {
 	.pointer = snd_cx231xx_capture_pointer,
 };
 
+static void cx231xx_audio_card_free(struct snd_card *card)
+{
+	struct cx231xx *dev = card->private_data;
+
+	kfree(dev->adev.alt_max_pkt_size);
+	dev->adev.alt_max_pkt_size = NULL;
+	v4l2_device_put(&dev->v4l2_dev);
+}
+
 static int cx231xx_audio_init(struct cx231xx *dev)
 {
 	struct cx231xx_audio *adev = &dev->adev;
@@ -585,6 +594,9 @@ static int cx231xx_audio_init(struct cx231xx *dev)
 			   THIS_MODULE, 0, &card);
 	if (err < 0)
 		return err;
+	v4l2_device_get(&dev->v4l2_dev);
+	card->private_data = dev;
+	card->private_free = cx231xx_audio_card_free;
 
 	spin_lock_init(&adev->slock);
 	err = snd_pcm_new(card, "Cx231xx Audio", 0, 0, 1, &pcm);
@@ -603,11 +615,6 @@ static int cx231xx_audio_init(struct cx231xx *dev)
 
 	INIT_WORK(&dev->wq_trigger, audio_trigger);
 
-	err = snd_card_register(card);
-	if (err < 0)
-		goto err_free_card;
-
-	adev->sndcard = card;
 	adev->udev = dev->udev;
 
 	/* compute alternate max packet sizes for Audio */
@@ -640,7 +647,7 @@ static int cx231xx_audio_init(struct cx231xx *dev)
 
 		if (uif->altsetting[i].desc.bNumEndpoints < isoc_pipe + 1) {
 			err = -ENODEV;
-			goto err_free_pkt_size;
+			goto err_free_card;
 		}
 
 		tmp = le16_to_cpu(uif->altsetting[i].endpoint[isoc_pipe].desc.
@@ -652,10 +659,13 @@ static int cx231xx_audio_init(struct cx231xx *dev)
 			adev->alt_max_pkt_size[i]);
 	}
 
+	err = snd_card_register(card);
+	if (err < 0)
+		goto err_free_card;
+
+	adev->sndcard = card;
 	return 0;
 
-err_free_pkt_size:
-	kfree(adev->alt_max_pkt_size);
 err_free_card:
 	snd_card_free(card);
 
@@ -664,6 +674,8 @@ err_free_card:
 
 static int cx231xx_audio_fini(struct cx231xx *dev)
 {
+	struct snd_card *card;
+
 	if (dev == NULL)
 		return 0;
 
@@ -675,9 +687,9 @@ static int cx231xx_audio_fini(struct cx231xx *dev)
 	}
 
 	if (dev->adev.sndcard) {
-		snd_card_free_when_closed(dev->adev.sndcard);
-		kfree(dev->adev.alt_max_pkt_size);
+		card = dev->adev.sndcard;
 		dev->adev.sndcard = NULL;
+		snd_card_free_when_closed(card);
 	}
 
 	return 0;

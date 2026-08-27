@@ -1567,8 +1567,6 @@ void cx231xx_release_analog_resources(struct cx231xx *dev)
 
 		video_unregister_device(&dev->vdev);
 	}
-	v4l2_ctrl_handler_free(&dev->ctrl_handler);
-	v4l2_ctrl_handler_free(&dev->radio_ctrl_handler);
 }
 
 /*

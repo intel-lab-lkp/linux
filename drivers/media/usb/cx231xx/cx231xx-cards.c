@@ -1339,13 +1339,41 @@ void cx231xx_config_i2c(struct cx231xx *dev)
 static void cx231xx_unregister_media_device(struct cx231xx *dev)
 {
 #ifdef CONFIG_MEDIA_CONTROLLER
-	if (dev->media_dev) {
+	if (dev->media_dev)
 		media_device_unregister(dev->media_dev);
+#endif
+}
+
+static void cx231xx_cleanup_media_device(struct cx231xx *dev)
+{
+#ifdef CONFIG_MEDIA_CONTROLLER
+	if (dev->media_dev) {
 		media_device_cleanup(dev->media_dev);
 		kfree(dev->media_dev);
 		dev->media_dev = NULL;
 	}
 #endif
+}
+
+static void cx231xx_free_device(struct cx231xx *dev)
+{
+	kfree(dev->video_mode.alt_max_pkt_size);
+	kfree(dev->vbi_mode.alt_max_pkt_size);
+	kfree(dev->sliced_cc_mode.alt_max_pkt_size);
+	kfree(dev->ts1_mode.alt_max_pkt_size);
+	kfree(dev);
+}
+
+static void cx231xx_v4l2_release(struct v4l2_device *v4l2_dev)
+{
+	struct cx231xx *dev = container_of(v4l2_dev, struct cx231xx, v4l2_dev);
+
+	v4l2_ctrl_handler_free(&dev->mpeg_ctrl_handler.hdl);
+	v4l2_ctrl_handler_free(&dev->radio_ctrl_handler);
+	v4l2_ctrl_handler_free(&dev->ctrl_handler);
+	v4l2_device_unregister(v4l2_dev);
+	cx231xx_cleanup_media_device(dev);
+	cx231xx_free_device(dev);
 }
 
 /*
@@ -1359,18 +1387,23 @@ void cx231xx_release_resources(struct cx231xx *dev)
 
 	cx231xx_release_analog_resources(dev);
 
+	/* Wait for file operations that started before node removal. */
+	mutex_lock(&dev->lock);
+	v4l2_device_disconnect(&dev->v4l2_dev);
+	mutex_unlock(&dev->lock);
+
 	cx231xx_remove_from_devlist(dev);
 
 	/* Release I2C buses */
 	cx231xx_dev_uninit(dev);
 
-	/* delete v4l2 device */
-	v4l2_device_unregister(&dev->v4l2_dev);
-
 	cx231xx_unregister_media_device(dev);
 
-	/* Mark device as unused */
+	/* Mark the board slot unused before the final put can free dev. */
 	clear_bit(dev->devno, &cx231xx_devused);
+
+	/* Drop the initial reference after all nodes are unregistered. */
+	v4l2_device_put(&dev->v4l2_dev);
 }
 
 static int cx231xx_media_device_init(struct cx231xx *dev,
@@ -1544,7 +1577,6 @@ static void flush_request_modules(struct cx231xx *dev)
 
 static int cx231xx_init_v4l2(struct cx231xx *dev,
 			     struct usb_device *udev,
-			     struct usb_interface *interface,
 			     int isoc_pipe)
 {
 	struct usb_interface *uif;
@@ -1573,8 +1605,8 @@ static int cx231xx_init_v4l2(struct cx231xx *dev,
 		 dev->video_mode.end_point_addr,
 		 dev->video_mode.num_alt);
 
-	dev->video_mode.alt_max_pkt_size = devm_kmalloc_array(&interface->dev, 32,
-							      dev->video_mode.num_alt, GFP_KERNEL);
+	dev->video_mode.alt_max_pkt_size =
+		kmalloc_array(32, dev->video_mode.num_alt, GFP_KERNEL);
 	if (dev->video_mode.alt_max_pkt_size == NULL)
 		return -ENOMEM;
 
@@ -1615,8 +1647,8 @@ static int cx231xx_init_v4l2(struct cx231xx *dev,
 		 dev->vbi_mode.num_alt);
 
 	/* compute alternate max packet sizes for vbi */
-	dev->vbi_mode.alt_max_pkt_size = devm_kmalloc_array(&interface->dev, 32,
-							    dev->vbi_mode.num_alt, GFP_KERNEL);
+	dev->vbi_mode.alt_max_pkt_size =
+		kmalloc_array(32, dev->vbi_mode.num_alt, GFP_KERNEL);
 	if (dev->vbi_mode.alt_max_pkt_size == NULL)
 		return -ENOMEM;
 
@@ -1658,9 +1690,8 @@ static int cx231xx_init_v4l2(struct cx231xx *dev,
 		 "sliced CC EndPoint Addr 0x%x, Alternate settings: %i\n",
 		 dev->sliced_cc_mode.end_point_addr,
 		 dev->sliced_cc_mode.num_alt);
-	dev->sliced_cc_mode.alt_max_pkt_size = devm_kmalloc_array(&interface->dev, 32,
-								  dev->sliced_cc_mode.num_alt,
-								  GFP_KERNEL);
+	dev->sliced_cc_mode.alt_max_pkt_size =
+		kmalloc_array(32, dev->sliced_cc_mode.num_alt, GFP_KERNEL);
 	if (dev->sliced_cc_mode.alt_max_pkt_size == NULL)
 		return -ENOMEM;
 
@@ -1724,7 +1755,7 @@ static int cx231xx_usb_probe(struct usb_interface *interface,
 	udev = interface_to_usbdev(interface);
 
 	/* allocate memory for our device state and initialize it */
-	dev = devm_kzalloc(&interface->dev, sizeof(*dev), GFP_KERNEL);
+	dev = kzalloc_obj(*dev);
 	if (dev == NULL) {
 		retval = -ENOMEM;
 		goto err_if;
@@ -1818,15 +1849,16 @@ static int cx231xx_usb_probe(struct usb_interface *interface,
 		dev_err(d, "v4l2_device_register failed\n");
 		goto err_v4l2;
 	}
+	dev->v4l2_dev.release = cx231xx_v4l2_release;
 
 	/* allocate device struct */
 	retval = cx231xx_init_dev(dev, udev, nr);
 	if (retval)
 		goto err_init;
 
-	retval = cx231xx_init_v4l2(dev, udev, interface, isoc_pipe);
+	retval = cx231xx_init_v4l2(dev, udev, isoc_pipe);
 	if (retval)
-		goto err_init;
+		goto err_video_alt;
 
 	if (dev->current_pcb_config.ts1_source != 0xff) {
 		/* compute alternate max packet sizes for TS1 */
@@ -1854,9 +1886,8 @@ static int cx231xx_usb_probe(struct usb_interface *interface,
 			 dev->ts1_mode.end_point_addr,
 			 dev->ts1_mode.num_alt);
 
-		dev->ts1_mode.alt_max_pkt_size = devm_kmalloc_array(&interface->dev, 32,
-								    dev->ts1_mode.num_alt,
-								    GFP_KERNEL);
+		dev->ts1_mode.alt_max_pkt_size =
+			kmalloc_array(32, dev->ts1_mode.num_alt, GFP_KERNEL);
 		if (dev->ts1_mode.alt_max_pkt_size == NULL) {
 			retval = -ENOMEM;
 			goto err_video_alt;
@@ -1900,12 +1931,18 @@ static int cx231xx_usb_probe(struct usb_interface *interface,
 	if (!retval)
 		retval = media_device_register(dev->media_dev);
 #endif
-	if (retval < 0)
+	if (retval < 0) {
+		dev->state |= DEV_DISCONNECTED;
+		flush_request_modules(dev);
+		cx231xx_close_extension(dev);
+		usb_set_intfdata(interface, NULL);
 		cx231xx_release_resources(dev);
+	}
 	return retval;
 
 err_video_alt:
 	/* cx231xx_uninit_dev: */
+	dev->state |= DEV_DISCONNECTED;
 	cx231xx_close_extension(dev);
 	cx231xx_ir_exit(dev);
 	cx231xx_release_analog_resources(dev);
@@ -1913,13 +1950,20 @@ err_video_alt:
 	cx231xx_remove_from_devlist(dev);
 	cx231xx_dev_uninit(dev);
 err_init:
-	v4l2_device_unregister(&dev->v4l2_dev);
+	dev->state |= DEV_DISCONNECTED;
+	usb_set_intfdata(interface, NULL);
+	clear_bit(nr, &cx231xx_devused);
+	v4l2_device_disconnect(&dev->v4l2_dev);
+	v4l2_device_put(&dev->v4l2_dev);
+	return retval;
 err_v4l2:
-	cx231xx_unregister_media_device(dev);
+	cx231xx_cleanup_media_device(dev);
 err_media_init:
 	usb_set_intfdata(interface, NULL);
 err_if:
 	clear_bit(nr, &cx231xx_devused);
+	if (dev)
+		cx231xx_free_device(dev);
 	return retval;
 }
 
