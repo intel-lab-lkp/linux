@@ -13,6 +13,7 @@
 #include <linux/security.h>
 #include <linux/fs.h>
 #include <linux/backing-file.h>
+#include <linux/sched/mm.h>
 #include "overlayfs.h"
 
 static char ovl_whatisit(struct inode *inode, struct inode *realinode)
@@ -465,6 +466,30 @@ static int ovl_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 		return vfs_fsync_range(upperfile, start, end, datasync);
 }
 
+static unsigned long ovl_get_unmapped_area(struct file *file,
+					   unsigned long addr, unsigned long len,
+					   unsigned long pgoff, unsigned long flags)
+{
+	struct ovl_file *of = file->private_data;
+	struct file *realfile = of->realfile;
+
+	/*
+	 * ovl_mmap() hands realfile to the underlying filesystem, so the vma
+	 * ends up backed by realfile.  Let that filesystem pick the address
+	 * too, or one that needs a specific alignment - to allow PMD mappings,
+	 * for example - never gets asked for one.
+	 */
+	if (realfile->f_op->get_unmapped_area)
+		return realfile->f_op->get_unmapped_area(realfile, addr, len,
+							 pgoff, flags);
+
+#ifdef CONFIG_MMU
+	return mm_get_unmapped_area(file, addr, len, pgoff, flags);
+#endif
+
+	return addr;
+}
+
 static int ovl_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct ovl_file *of = file->private_data;
@@ -654,6 +679,7 @@ const struct file_operations ovl_file_operations = {
 	.write_iter	= ovl_write_iter,
 	.fsync		= ovl_fsync,
 	.mmap		= ovl_mmap,
+	.get_unmapped_area = ovl_get_unmapped_area,
 	.fallocate	= ovl_fallocate,
 	.fadvise	= ovl_fadvise,
 	.flush		= ovl_flush,
