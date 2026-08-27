@@ -74,6 +74,7 @@
 #include "intel_display_driver.h"
 #include "intel_display_power.h"
 #include "intel_display_regs.h"
+#include "intel_display_reset.h"
 #include "intel_display_rpm.h"
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
@@ -7228,15 +7229,20 @@ static void intel_atomic_commit_fence_wait(struct intel_atomic_state *state)
 	struct intel_display *display = to_intel_display(state);
 	struct drm_plane *plane;
 	struct drm_plane_state *new_plane_state;
-	long ret;
+	long timeout, ret;
 	int i;
+
+	if (intel_display_reset_needed_after_gpu_reset(display) ||
+	    intel_display_reset_test(display))
+		timeout = i915_fence_timeout();
+	else
+		timeout = MAX_SCHEDULE_TIMEOUT;
 
 	for_each_new_plane_in_state(&state->base, plane, new_plane_state, i) {
 		if (!new_plane_state->fence)
 			continue;
 
-		ret = dma_fence_wait_timeout(new_plane_state->fence, false,
-					     i915_fence_timeout());
+		ret = dma_fence_wait_timeout(new_plane_state->fence, false, timeout);
 		if (!ret)
 			ret = -ETIMEDOUT;
 		if (ret < 0) {
