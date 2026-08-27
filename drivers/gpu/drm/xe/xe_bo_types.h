@@ -20,6 +20,7 @@
 struct xe_device;
 struct xe_mem_pool_node;
 struct xe_vm;
+struct page;
 
 #define XE_BO_MAX_PLACEMENTS	3
 
@@ -105,6 +106,9 @@ struct xe_bo {
 
 	/** @vram_userfault_link: Link into @mem_access.vram_userfault.list */
 	struct list_head vram_userfault_link;
+
+	/** @wedged_dummy_page: Zeroed page used for faults after device wedge */
+	struct page *wedged_dummy_page;
 
 	/**
 	 * @min_align: minimum alignment needed for this BO if different
