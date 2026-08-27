@@ -32,16 +32,17 @@
  * bitmap and max_lock_class_idx.
  */
 #define iterate_lock_classes(idx, class)				\
-	for (idx = 0, class = lock_classes; idx <= max_lock_class_idx;	\
-	     idx++, class++)
+	for (idx = 0, class = idx_to_lock_class(0);			\
+	     idx <= max_lock_class_idx;					\
+	     idx++, class = idx_to_lock_class(idx))
 
 static void *l_next(struct seq_file *m, void *v, loff_t *pos)
 {
-	struct lock_class *class = v;
+	unsigned long idx = ++*pos;
 
-	++class;
-	*pos = class - lock_classes;
-	return (*pos > max_lock_class_idx) ? NULL : class;
+	if (idx > max_lock_class_idx)
+		return NULL;
+	return idx_to_lock_class(idx);
 }
 
 static void *l_start(struct seq_file *m, loff_t *pos)
@@ -50,7 +51,7 @@ static void *l_start(struct seq_file *m, loff_t *pos)
 
 	if (idx > max_lock_class_idx)
 		return NULL;
-	return lock_classes + idx;
+	return idx_to_lock_class(idx);
 }
 
 static void l_stop(struct seq_file *m, void *v)
@@ -59,7 +60,7 @@ static void l_stop(struct seq_file *m, void *v)
 
 static void print_name(struct seq_file *m, struct lock_class *class)
 {
-	char str[KSYM_NAME_LEN];
+	char str[128];
 	const char *name = class->name;
 
 	if (!name) {
@@ -79,9 +80,9 @@ static int l_show(struct seq_file *m, void *v)
 	struct lock_class *class = v;
 	struct lock_list *entry;
 	char usage[LOCK_USAGE_CHARS];
-	int idx = class - lock_classes;
+	int idx = class->class_idx;
 
-	if (v == lock_classes)
+	if (idx == 0)
 		seq_printf(m, "all lock classes:\n");
 
 	if (!test_bit(idx, lock_classes_in_use))
@@ -133,7 +134,7 @@ static void *lc_start(struct seq_file *m, loff_t *pos)
 	if (*pos == 0)
 		return SEQ_START_TOKEN;
 
-	return lock_chains + (*pos - 1);
+	return idx_to_lock_chain(*pos - 1);
 }
 
 static void *lc_next(struct seq_file *m, void *v, loff_t *pos)

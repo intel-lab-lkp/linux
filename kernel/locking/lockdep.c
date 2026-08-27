@@ -6992,6 +6992,77 @@ void __init lockdep_init(void)
 	       sizeof(((struct task_struct *)NULL)->held_locks));
 }
 
+static int lockdep_shutdown_notify(struct notifier_block *nb,
+				   unsigned long code, void *unused)
+{
+	unsigned int used = lockdep_slabs_used - lockdep_nr_free_slabs;
+	unsigned int total = lockdep_nr_slabs;
+	unsigned int free_slabs = total > used ? total - used : 0;
+	unsigned int headroom_pct = used ? (free_slabs * 100) / used : 0;
+
+	pr_info("lockdep: shutdown summary : %u/%u slabs (%u kB/%u kB, %u%% headroom left), %lu classes, %lu chains, %u hlocks\n",
+		used, total,
+		(used * LOCKDEP_SLAB_SIZE) / 1024,
+		(total * LOCKDEP_SLAB_SIZE) / 1024,
+		headroom_pct,
+		nr_lock_classes, lock_chain_count(), chain_hlocks_used());
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block lockdep_reboot_nb = {
+	.notifier_call = lockdep_shutdown_notify,
+};
+
+static int __init lockdep_post_init_trim(void)
+{
+	unsigned int used = lockdep_slabs_used - lockdep_nr_free_slabs;
+	unsigned int initial_slabs = lockdep_nr_slabs;
+	unsigned int target_slabs, kept_headroom_slabs;
+	unsigned int freed_slabs = 0;
+	unsigned int i;
+
+	if (!lockdep_nr_slabs)
+		return 0;
+
+	/* Compute headroom requirement (default 100% or custom percentage) with 32-slab floor */
+	kept_headroom_slabs = DIV_ROUND_UP(used * requested_lockdep_headroom_pct, 100);
+	if (kept_headroom_slabs < 32)
+		kept_headroom_slabs = 32;
+
+	target_slabs = used + kept_headroom_slabs;
+
+	/* Satisfy both: target_slabs >= requested_lockdep_slabs AND headroom >= M% */
+	if (requested_lockdep_slabs > target_slabs)
+		target_slabs = requested_lockdep_slabs;
+
+	target_slabs = clamp_t(unsigned int, target_slabs, used, lockdep_nr_slabs);
+
+	/* Release excess slabs to buddy allocator */
+	if (target_slabs < lockdep_nr_slabs) {
+		for (i = target_slabs; i < lockdep_nr_slabs; i++) {
+			struct page *page = virt_to_page(lockdep_slabs[i]);
+			unsigned long p;
+
+			for (p = 0; p < (LOCKDEP_SLAB_SIZE >> PAGE_SHIFT); p++)
+				free_reserved_page(page + p);
+
+			lockdep_slabs[i] = NULL;
+		}
+		freed_slabs = lockdep_nr_slabs - target_slabs;
+		lockdep_nr_slabs = target_slabs;
+	}
+
+	pr_info("lockdep: boot complete : %u/%u slabs used, %u kept (%u%% headroom), %u returned to buddy (%u kB freed)\n",
+		used, initial_slabs, lockdep_nr_slabs,
+		lockdep_nr_slabs > used ? ((lockdep_nr_slabs - used) * 100) / used : 0,
+		freed_slabs, (freed_slabs * LOCKDEP_SLAB_SIZE) / 1024);
+
+	register_reboot_notifier(&lockdep_reboot_nb);
+	return 0;
+}
+late_initcall_sync(lockdep_post_init_trim);
+
 static void
 print_freed_lock_bug(struct task_struct *curr, const void *mem_from,
 		     const void *mem_to, struct held_lock *hlock)
