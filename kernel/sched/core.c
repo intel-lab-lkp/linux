@@ -5949,7 +5949,7 @@ static void sched_tick_stop(int cpu)
 int __init sched_tick_offload_init(void)
 {
 	tick_work_cpu = alloc_percpu(struct tick_work);
-	BUG_ON(!tick_work_cpu);
+	WARN_ON_ONCE(!tick_work_cpu);
 	return 0;
 }
 
@@ -7582,7 +7582,7 @@ asmlinkage __visible void __sched preempt_schedule_irq(void)
 	enum ctx_state prev_state;
 
 	/* Catch callers which need to be fixed */
-	BUG_ON(preempt_count() || !irqs_disabled());
+	WARN_ON_ONCE(preempt_count() || !irqs_disabled());
 
 	prev_state = exception_enter();
 
@@ -8619,7 +8619,7 @@ static inline void sched_set_rq_online(struct rq *rq, int cpu)
 
 	rq_lock_irqsave(rq, &rf);
 	if (rq->rd) {
-		BUG_ON(!cpumask_test_cpu(cpu, rq->rd->span));
+		WARN_ON_ONCE(!cpumask_test_cpu(cpu, rq->rd->span));
 		set_rq_online(rq);
 	}
 	rq_unlock_irqrestore(rq, &rf);
@@ -8631,7 +8631,7 @@ static inline void sched_set_rq_offline(struct rq *rq, int cpu)
 
 	rq_lock_irqsave(rq, &rf);
 	if (rq->rd) {
-		BUG_ON(!cpumask_test_cpu(cpu, rq->rd->span));
+		WARN_ON_ONCE(!cpumask_test_cpu(cpu, rq->rd->span));
 		set_rq_offline(rq);
 	}
 	rq_unlock_irqrestore(rq, &rf);
@@ -8954,13 +8954,13 @@ void __init sched_init(void)
 	int i;
 
 	/* Make sure the linker didn't screw up */
-	BUG_ON(!sched_class_above(&stop_sched_class, &dl_sched_class));
-	BUG_ON(!sched_class_above(&dl_sched_class, &rt_sched_class));
-	BUG_ON(!sched_class_above(&rt_sched_class, &fair_sched_class));
-	BUG_ON(!sched_class_above(&fair_sched_class, &idle_sched_class));
+	WARN_ON_ONCE(!sched_class_above(&stop_sched_class, &dl_sched_class));
+	WARN_ON_ONCE(!sched_class_above(&dl_sched_class, &rt_sched_class));
+	WARN_ON_ONCE(!sched_class_above(&rt_sched_class, &fair_sched_class));
+	WARN_ON_ONCE(!sched_class_above(&fair_sched_class, &idle_sched_class));
 #ifdef CONFIG_SCHED_CLASS_EXT
-	BUG_ON(!sched_class_above(&fair_sched_class, &ext_sched_class));
-	BUG_ON(!sched_class_above(&ext_sched_class, &idle_sched_class));
+	WARN_ON_ONCE(!sched_class_above(&fair_sched_class, &ext_sched_class));
+	WARN_ON_ONCE(!sched_class_above(&ext_sched_class, &idle_sched_class));
 #endif
 
 	wait_bit_init();
