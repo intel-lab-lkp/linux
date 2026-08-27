@@ -8,6 +8,7 @@
 
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
+#include <linux/overflow.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 
@@ -278,13 +279,15 @@ void pci_epf_free_space(struct pci_epf *epf, void *addr, enum pci_barno bar,
 	}
 
 	dev = epc->dev.parent;
-	dma_free_coherent(dev, epf_bar[bar].mem_size, addr,
-			  epf_bar[bar].phys_addr);
+	dma_free_coherent(dev, epf_bar[bar].mem_size,
+			  (u8 *)addr - epf_bar[bar].alloc_offset,
+			  epf_bar[bar].phys_addr - epf_bar[bar].alloc_offset);
 
 	epf_bar[bar].phys_addr = 0;
 	epf_bar[bar].addr = NULL;
 	epf_bar[bar].size = 0;
 	epf_bar[bar].mem_size = 0;
+	epf_bar[bar].alloc_offset = 0;
 	epf_bar[bar].barno = 0;
 	epf_bar[bar].flags = 0;
 }
@@ -308,8 +311,10 @@ void *pci_epf_alloc_space(struct pci_epf *epf, size_t size, enum pci_barno bar,
 {
 	struct pci_epf_bar *epf_bar;
 	dma_addr_t phys_addr;
+	size_t alloc_offset = 0;
 	struct pci_epc *epc;
 	struct device *dev;
+	size_t alloc_size;
 	size_t mem_size;
 	void *space;
 
@@ -326,16 +331,31 @@ void *pci_epf_alloc_space(struct pci_epf *epf, size_t size, enum pci_barno bar,
 	}
 
 	dev = epc->dev.parent;
-	space = dma_alloc_coherent(dev, mem_size, &phys_addr, GFP_KERNEL);
-	if (!space) {
-		dev_err(dev, "failed to allocate mem space\n");
-		return NULL;
+	alloc_size = mem_size;
+	space = dma_alloc_coherent(dev, alloc_size, &phys_addr, GFP_KERNEL);
+	if (!space)
+		goto err_alloc;
+	if (!IS_ALIGNED(phys_addr, mem_size)) {
+		dma_free_coherent(dev, alloc_size, space, phys_addr);
+
+		if (check_add_overflow(mem_size, mem_size - 1, &alloc_size))
+			return NULL;
+
+		space = dma_alloc_coherent(dev, alloc_size, &phys_addr,
+					   GFP_KERNEL);
+		if (!space)
+			goto err_alloc;
+
+		alloc_offset = ALIGN(phys_addr, mem_size) - phys_addr;
+		space = (u8 *)space + alloc_offset;
+		phys_addr += alloc_offset;
 	}
 
 	epf_bar[bar].phys_addr = phys_addr;
 	epf_bar[bar].addr = space;
 	epf_bar[bar].size = size;
-	epf_bar[bar].mem_size = mem_size;
+	epf_bar[bar].mem_size = alloc_size;
+	epf_bar[bar].alloc_offset = alloc_offset;
 	epf_bar[bar].barno = bar;
 	if (upper_32_bits(size) || epc_features->bar[bar].only_64bit)
 		epf_bar[bar].flags |= PCI_BASE_ADDRESS_MEM_TYPE_64;
@@ -343,6 +363,10 @@ void *pci_epf_alloc_space(struct pci_epf *epf, size_t size, enum pci_barno bar,
 		epf_bar[bar].flags |= PCI_BASE_ADDRESS_MEM_TYPE_32;
 
 	return space;
+
+err_alloc:
+	dev_err(dev, "failed to allocate mem space\n");
+	return NULL;
 }
 EXPORT_SYMBOL_GPL(pci_epf_alloc_space);
 
@@ -413,6 +437,7 @@ int pci_epf_assign_bar_space(struct pci_epf *epf, size_t size,
 	epf_bar[bar].addr = NULL;
 	epf_bar[bar].size = bar_size;
 	epf_bar[bar].mem_size = aligned_mem_size;
+	epf_bar[bar].alloc_offset = 0;
 	epf_bar[bar].barno = bar;
 	if (upper_32_bits(size) || epc_features->bar[bar].only_64bit)
 		epf_bar[bar].flags |= PCI_BASE_ADDRESS_MEM_TYPE_64;

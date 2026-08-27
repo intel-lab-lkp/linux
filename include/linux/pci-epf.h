@@ -131,8 +131,10 @@ struct pci_epf_bar_submap {
  * @phys_addr: physical address that should be mapped to the BAR
  * @addr: virtual address corresponding to the @phys_addr
  * @size: the size of the address space present in BAR
- * @mem_size: the size actually allocated to accommodate the iATU alignment
- *            requirement
+ * @mem_size: size of the coherent allocation, including alignment padding, or
+ *            the required aligned backing size for assigned BAR space
+ * @alloc_offset: offset from the coherent allocation's CPU and DMA base
+ *                addresses to @addr and @phys_addr
  * @barno: BAR number
  * @flags: flags that are set for the BAR
  * @num_submap: number of entries in @submap
@@ -144,6 +146,7 @@ struct pci_epf_bar {
 	void		*addr;
 	size_t		size;
 	size_t		mem_size;
+	size_t		alloc_offset;
 	enum pci_barno	barno;
 	int		flags;
 
