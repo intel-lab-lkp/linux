@@ -431,7 +431,9 @@ static int radeon_ttm_backend_bind(struct ttm_device *bdev,
 		return 0;
 
 	if (gtt->userptr) {
-		radeon_ttm_tt_pin_userptr(bdev, ttm);
+		r = radeon_ttm_tt_pin_userptr(bdev, ttm);
+		if (r)
+			return r;
 		flags &= ~RADEON_GART_PAGE_WRITE;
 	}
 
