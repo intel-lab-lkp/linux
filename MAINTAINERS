@@ -11338,6 +11338,7 @@ F:	drivers/greybus/
 F:	drivers/staging/greybus/
 F:	include/linux/greybus.h
 F:	include/linux/greybus/
+F:	rust/kernel/greybus/
 
 GREYBUS UART PROTOCOLS DRIVERS
 M:	David Lin <dtwlin@gmail.com>

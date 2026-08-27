@@ -15,6 +15,13 @@ menuconfig GREYBUS
 	  To compile this code as a module, choose M here: the module
 	  will be called greybus.ko
 
+config RUST_GREYBUS_ABSTRACTIONS
+	bool "Rust greybus abstractions"
+	depends on RUST
+	select GREYBUS
+	help
+	  This enables the Rust abstraction for the Greybus API.
+
 if GREYBUS
 
 config GREYBUS_BEAGLEPLAY
