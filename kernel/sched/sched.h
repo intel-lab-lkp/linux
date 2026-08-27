@@ -79,6 +79,7 @@
 #include <trace/events/sched.h>
 
 #include "../workqueue_internal.h"
+#include "../stack_shrinker.h"
 
 struct rq;
 struct cfs_rq;
@@ -3038,6 +3039,8 @@ static inline void __block_task(struct rq *rq, struct task_struct *p)
 		atomic_inc(&rq->nr_iowait);
 		delayacct_blkio_start();
 	}
+
+	prepare_stack_for_reclaim(p);
 
 	ASSERT_EXCLUSIVE_WRITER(p->on_rq);
 

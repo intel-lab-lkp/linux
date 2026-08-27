@@ -1534,6 +1534,24 @@ config VMAP_STACK
 	  backing virtual mappings with real shadow memory, and KASAN_VMALLOC
 	  must be enabled.
 
+config HAVE_ARCH_RECLAIMABLE_STACK
+	def_bool n
+
+config RECLAIMABLE_STACK
+	default !PREEMPT_RT && !PROC_KCORE
+	bool "Allow stacks of some blocked threads to be reclaimed"
+	depends on VMAP_STACK && !STACK_GROWSUP
+	depends on HAVE_ARCH_RECLAIMABLE_STACK
+	depends on !DEBUG_STACK_USAGE
+	depends on !KASAN_VMALLOC # TODO: add support for this
+	depends on !DEBUG_KMEMLEAK # TODO: add support for this
+	help
+	  Enable this to allow the unused portion of kernel stacks of most
+	  blocked tasks to be reclaimed.
+
+	  The wakeup latency of tasks with reclaimed stacks may increase,
+	  especially while the system is under memory pressure.
+
 config HAVE_ARCH_RANDOMIZE_KSTACK_OFFSET
 	def_bool n
 	help

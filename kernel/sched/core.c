@@ -4252,6 +4252,7 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 {
 	guard(preempt)();
 	int cpu, success = 0;
+	bool need_deferred_repopulate, do_deferred_repopulate_wake = false;
 
 	wake_flags |= WF_TTWU;
 
@@ -4295,8 +4296,6 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		if (!ttwu_state_match(p, state, &success))
 			break;
 
-		trace_sched_waking(p);
-
 		/*
 		 * Ensure we load p->on_rq _after_ p->state, otherwise it would
 		 * be possible to, falsely, observe p->on_rq == 0 and get stuck
@@ -4320,8 +4319,18 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		 * A similar smp_rmb() lives in __task_needs_rq_lock().
 		 */
 		smp_rmb();
-		if (READ_ONCE(p->on_rq) && ttwu_runnable(p, wake_flags))
+		if (READ_ONCE(p->on_rq) && ttwu_runnable(p, wake_flags)) {
+			trace_sched_waking(p);
 			break;
+		}
+
+		if (!ensure_stack_is_present(p, &need_deferred_repopulate)) {
+			WRITE_ONCE(p->__state, TASK_STACK_RECLAIM);
+			do_deferred_repopulate_wake = need_deferred_repopulate;
+			break;
+		}
+
+		trace_sched_waking(p);
 
 		/*
 		 * Ensure we load p->on_cpu _after_ p->on_rq, otherwise it would be
@@ -4418,6 +4427,8 @@ out:
 	if (success)
 		ttwu_stat(p, task_cpu(p), wake_flags);
 
+	if (unlikely(do_deferred_repopulate_wake))
+		wake_stack_repopulate();
 	return success;
 }
 
@@ -5354,6 +5365,7 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	prev_state = READ_ONCE(prev->__state);
 	vtime_task_switch(prev);
 	perf_event_task_sched_in(prev, current);
+	allow_stack_reclaim(prev);
 	finish_task(prev);
 	tick_nohz_task_switch();
 	finish_lock_switch(rq);

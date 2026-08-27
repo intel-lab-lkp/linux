@@ -83,6 +83,7 @@ struct sched_dl_entity;
 struct seq_file;
 struct sighand_struct;
 struct signal_struct;
+struct stack_reclaim_work;
 struct task_delay_info;
 struct task_exec_state;
 struct task_group;
@@ -124,7 +125,8 @@ struct user_event_mm;
 #define TASK_FREEZABLE			0x00002000
 #define __TASK_FREEZABLE_UNSAFE	       (0x00004000 * IS_ENABLED(CONFIG_LOCKDEP))
 #define TASK_FROZEN			0x00008000
-#define TASK_STATE_MAX			0x00010000
+#define TASK_STACK_RECLAIM		0x00010000
+#define TASK_STATE_MAX			0x00020000
 
 #define TASK_ANY			(TASK_STATE_MAX-1)
 
@@ -822,6 +824,29 @@ struct kmap_ctrl {
 	pte_t				pteval[KM_MAX_IDX];
 #endif
 };
+
+#ifdef CONFIG_RECLAIMABLE_STACK
+enum stack_reclaim_enum {
+	STACK_IN_USE		= 0,
+	STACK_PREPARE_RECLAIM	= 1,
+	STACK_RECLAIMABLE	= 2,
+	STACK_RECLAIMING	= 3,
+	STACK_RECLAIMING_IN_USE = 4,
+	STACK_RECLAIMED		= 5,
+} __packed;
+
+union stack_reclaim_state {
+	struct {
+		enum stack_reclaim_enum stack_state;
+		u16 node;
+	};
+	u32 val;
+};
+
+union stack_reclaim_list {
+	struct llist_node refill_entry;
+};
+#endif
 
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
@@ -1587,6 +1612,16 @@ struct task_struct {
 #endif
 #ifdef CONFIG_VMAP_STACK
 	struct vm_struct		*stack_vm_area;
+#ifdef CONFIG_RECLAIMABLE_STACK
+	union stack_reclaim_state	stack_reclaim_state;
+	union stack_reclaim_list	stack_reclaim_list;
+#ifdef CONFIG_MEMCG
+	struct obj_cgroup		*stack_obj_cgroup;
+#endif
+
+	// TODO: Replace these with a shrinker
+	struct stack_reclaim_work	*stack_reclaim_work;
+#endif
 #endif
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/* A live task holds one reference: */
@@ -1796,7 +1831,7 @@ extern struct pid *cad_pid;
 						 * I am cleaning dirty pages from some other bdi. */
 #define PF_KTHREAD		0x00200000	/* I am a kernel thread */
 #define PF_RANDOMIZE		0x00400000	/* Randomize virtual address space */
-#define PF__HOLE__00800000	0x00800000
+#define PF_RECLAIMABLE_STACK	0x00800000	/* This task's stack is reclaimable */
 #define PF__HOLE__01000000	0x01000000
 #define PF__HOLE__02000000	0x02000000
 #define PF_NO_SETAFFINITY	0x04000000	/* Userland is not allowed to meddle with cpus_mask */

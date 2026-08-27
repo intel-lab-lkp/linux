@@ -120,6 +120,8 @@
 /* For dup_mmap(). */
 #include "../mm/internal.h"
 
+#include "stack_shrinker.h"
+
 #include <trace/events/sched.h>
 
 #define CREATE_TRACE_POINTS
@@ -460,6 +462,7 @@ static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 
 		tsk->stack_vm_area = vm_area;
 		tsk->stack = stack;
+		add_to_stack_shrinker(tsk, node);
 		return 0;
 	}
 
@@ -472,6 +475,7 @@ static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 		free_vmap_stack(vm_area);
 		return -ENOMEM;
 	}
+
 	/*
 	 * We can't call find_vm_area() in interrupt context, and
 	 * free_thread_stack() can be called in interrupt context,
@@ -480,6 +484,7 @@ static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 	tsk->stack_vm_area = vm_area;
 	stack = kasan_reset_tag(stack);
 	tsk->stack = stack;
+	add_to_stack_shrinker(tsk, node);
 	return 0;
 }
 
@@ -898,6 +903,7 @@ void __put_task_struct(struct task_struct *tsk)
 	delayacct_tsk_free(tsk);
 	put_signal_struct(tsk->signal);
 	sched_core_free(tsk);
+	remove_from_stack_shrinker(tsk);
 	free_task(tsk);
 }
 EXPORT_SYMBOL_GPL(__put_task_struct);
@@ -1124,6 +1130,7 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 free_stack:
 	exit_task_stack_account(tsk);
 	free_thread_stack(tsk);
+	remove_from_stack_shrinker(tsk);
 free_tsk:
 	free_task_struct(tsk);
 	return NULL;

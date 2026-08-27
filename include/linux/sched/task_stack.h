@@ -6,6 +6,7 @@
  * task->stack (kernel stack) handling interfaces:
  */
 
+#include <linux/cleanup.h>
 #include <linux/sched.h>
 #include <linux/magic.h>
 #include <linux/refcount.h>
@@ -83,6 +84,10 @@ static inline void put_task_stack(struct task_struct *tsk) {}
 
 void exit_task_stack_account(struct task_struct *tsk);
 
+/*
+ * Must only be called on current or from inside __schedule() on
+ * prev, to avoid crashing when CONFIG_RECLAIM_STACK is enabled.
+ */
 #define task_stack_end_corrupted(task) \
 		(*(end_of_stack(task)) != STACK_END_MAGIC)
 
@@ -113,5 +118,23 @@ static inline int kstack_end(void *addr)
 	 */
 	return !(((unsigned long)addr+sizeof(void*)-1) & (THREAD_SIZE-sizeof(void*)));
 }
+
+#ifdef CONFIG_RECLAIMABLE_STACK
+
+DEFINE_CLASS(allow_stack_reclaim, bool,
+	     ({
+		if (!_T)
+			current->flags &= ~PF_RECLAIMABLE_STACK;
+	      }),
+	     ({
+		bool was_set = current->flags & PF_RECLAIMABLE_STACK;
+
+		current->flags |= PF_RECLAIMABLE_STACK;
+		was_set;
+	      }),
+	     void)
+#else /* !CONFIG_RECLAIMABLE_STACK */
+DEFINE_CLASS(allow_stack_reclaim, bool, ({ (void)_T; }), ({ false; }), void)
+#endif /* !CONFIG_VMAP_STACK */
 
 #endif /* _LINUX_SCHED_TASK_STACK_H */

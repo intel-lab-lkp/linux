@@ -12,6 +12,8 @@ obj-y     = fork.o exec_domain.o exec_state.o panic.o \
 	    notifier.o ksysfs.o cred.o reboot.o \
 	    async.o range.o smpboot.o ucount.o regset.o ksyms_common.o
 
+obj-$(CONFIG_RECLAIMABLE_STACK) += stack_shrinker.o
+
 obj-$(CONFIG_MULTIUSER) += groups.o
 obj-$(CONFIG_VHOST_TASK) += vhost_task.o
 
