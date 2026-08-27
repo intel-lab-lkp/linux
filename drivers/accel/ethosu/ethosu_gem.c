@@ -321,6 +321,15 @@ static int calc_sizes(struct drm_device *ddev,
 			st->weight[0].base + st->weight[0].length - 1);
 		if (buffer_size(info, &st->weight[0], st->weight[0].region))
 			return -EINVAL;
+
+		for (int i = 1; i < ARRAY_SIZE(st->weight); i++) {
+			if (st->weight[i].base == U64_MAX &&
+			    st->weight[i].length == U32_MAX)
+				continue;
+
+			if (buffer_size(info, &st->weight[i], st->weight[0].region))
+				return -EINVAL;
+		}
 	}
 
 	if (scale) {
@@ -328,6 +337,12 @@ static int calc_sizes(struct drm_device *ddev,
 			op, st->scale[0].region, st->scale[0].base,
 			st->scale[0].base + st->scale[0].length - 1);
 		if (buffer_size(info, &st->scale[0], st->scale[0].region))
+			return -EINVAL;
+
+		if (ethosu_is_u65(edev) &&
+		    (st->scale[1].base != U64_MAX ||
+		     st->scale[1].length != U32_MAX) &&
+		    buffer_size(info, &st->scale[1], st->scale[0].region))
 			return -EINVAL;
 	}
 
