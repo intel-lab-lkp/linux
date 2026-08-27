@@ -166,6 +166,19 @@ impl Alignment {
     }
 }
 
+impl crate::num::FromConst for Alignment {
+    #[inline]
+    fn from_const<const V: i128>() -> Self {
+        const_assert!(
+            V > 0 && V <= usize::MAX as i128,
+            "Constant cannot be represented as an Alignment."
+        );
+
+        // The unwrap fails the build if `V` is not a power of two.
+        const { Alignment::new_checked(V as usize).unwrap() }
+    }
+}
+
 /// Trait for items that can be aligned against an [`Alignment`].
 pub trait Alignable: Sized {
     /// Aligns `self` down to `alignment`.
