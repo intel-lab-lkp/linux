@@ -434,6 +434,14 @@ static int teo_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		idx = constraint_idx;
 
 	/*
+	 * If the state selected above is disabled, which is only possible if
+	 * it is state 0 (all of the enabled states violate the latency
+	 * constraint in that case), fall back to the shallowest enabled one.
+	 */
+	if (dev->states_usage[idx].disable)
+		idx = idx0;
+
+	/*
 	 * If the tick has not been stopped and either the candidate state is
 	 * state 0 or its target residency is low enough, there is basically
 	 * nothing more to do, but if the sleep length is not updated, the
