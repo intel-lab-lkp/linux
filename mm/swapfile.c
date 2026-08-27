@@ -4349,6 +4349,10 @@ static int xswap_create(int percent)
 	if (percent < 1 || percent > 100)
 		return -EINVAL;
 
+	/* xswap has no backing store, it relies on zswap. */
+	if (!zswap_is_enabled())
+		return -EOPNOTSUPP;
+
 	si = alloc_swap_info();
 	if (IS_ERR(si))
 		return PTR_ERR(si);
