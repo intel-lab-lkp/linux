@@ -495,6 +495,7 @@ struct dw_pcie_ep_func {
 	u8			func_no;
 	u8			msi_cap;	/* MSI capability offset */
 	u8			msix_cap;	/* MSI-X capability offset */
+	bool			msix_hw_owned;
 	u8			bar_to_atu[PCI_STD_NUM_BARS];
 	struct pci_epf_bar	*epf_bar[PCI_STD_NUM_BARS];
 
