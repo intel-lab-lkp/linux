@@ -136,6 +136,16 @@ struct rv_reactor {
 };
 #endif
 
+/**
+ * struct rv_edge_cfg - per-edge dwell-time statistics for a monitor
+ * @n_edges:	number of automaton edges (STATE_MAX * EVENT_MAX)
+ * @edge_name:	optional, write a human name for @edge into @buf (may be NULL)
+ */
+struct rv_edge_cfg {
+	unsigned int	n_edges;
+	void		(*edge_name)(unsigned int edge, char *buf, size_t len);
+};
+
 struct rv_monitor {
 	const char		*name;
 	const char		*description;
@@ -146,6 +156,10 @@ struct rv_monitor {
 #ifdef CONFIG_RV_REACTORS
 	struct rv_reactor	*reactor;
 	__printf(1, 0) void	(*react)(const char *msg, va_list args);
+#endif
+#ifdef CONFIG_RV_EDGE_STAT
+	const struct rv_edge_cfg	*edge_cfg;
+	void __percpu			*edge_pcpu;
 #endif
 	struct list_head	list;
 	struct rv_monitor	*parent;

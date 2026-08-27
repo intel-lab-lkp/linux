@@ -142,6 +142,12 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/seq_file.h>
+#ifdef CONFIG_RV_EDGE_STAT
+#include <linux/percpu.h>
+#include <linux/rv_edge_stat.h>
+#include <linux/smp.h>
+#endif
 
 #ifdef CONFIG_RV_MON_EVENTS
 #define CREATE_TRACE_POINTS
@@ -278,6 +284,9 @@ static void rv_disable_single(struct rv_monitor *mon)
 	__rv_disable_monitor(mon, true);
 }
 
+static int rv_edge_setup(struct rv_monitor *mon);
+static void rv_edge_reset(struct rv_monitor *mon);
+
 static int rv_enable_single(struct rv_monitor *mon)
 {
 	int retval;
@@ -289,8 +298,14 @@ static int rv_enable_single(struct rv_monitor *mon)
 
 	retval = mon->enable();
 
-	if (!retval)
+	if (!retval) {
 		mon->enabled = 1;
+
+		if (rv_edge_setup(mon))
+			pr_warn("rv: %s: edge statistics unavailable (out of memory)\n",
+				mon->name);
+		rv_edge_reset(mon);
+	}
 
 	return retval;
 }
@@ -411,6 +426,101 @@ static const struct file_operations interface_desc_fops = {
 	.open   = simple_open,
 	.read	= monitor_desc_read_data,
 };
+
+#ifdef CONFIG_RV_EDGE_STAT
+static size_t rv_edge_blob_size(const struct rv_monitor *mon)
+{
+	return mon->edge_cfg->n_edges * sizeof(struct rv_edge_stat);
+}
+
+static void rv_edge_reset_ipi(void *info)
+{
+	struct rv_monitor *mon = info;
+
+	memset(this_cpu_ptr(mon->edge_pcpu), 0, rv_edge_blob_size(mon));
+}
+
+/* rv_edge_reset - zero the statistics; call from a monitor reset/enable. */
+static void rv_edge_reset(struct rv_monitor *mon)
+{
+	if (mon->edge_pcpu)
+		on_each_cpu(rv_edge_reset_ipi, mon, 1);
+}
+
+/*
+ * The counters are per-CPU and only the owning CPU writes them, so a reader on
+ * any CPU can snapshot them with local64_read().
+ */
+static int rv_edge_stats_show(struct seq_file *seq, void *v)
+{
+	struct rv_monitor *mon = seq->private;
+	const struct rv_edge_cfg *cfg = mon->edge_cfg;
+	unsigned int e;
+	int cpu;
+
+	seq_puts(seq, "# cpu edge label count max_ns sum_ns\n");
+
+	if (!mon->edge_pcpu)
+		return 0;
+
+	for_each_online_cpu(cpu) {
+		struct rv_edge_stat *s = per_cpu_ptr(mon->edge_pcpu, cpu);
+
+		for (e = 0; e < cfg->n_edges; e++) {
+			char lbl[48] = "";
+
+			if (cfg->edge_name)
+				cfg->edge_name(e, lbl, sizeof(lbl));
+			seq_printf(seq, "%d %u %s %llu %llu %llu\n",
+				   cpu, e, lbl,
+				   (u64)local64_read(&s[e].count),
+				   (u64)local64_read(&s[e].max_ns),
+				   (u64)local64_read(&s[e].sum_ns));
+		}
+	}
+	return 0;
+}
+
+static int rv_edge_stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, rv_edge_stats_show, inode->i_private);
+}
+
+static const struct file_operations rv_edge_stats_fops = {
+	.open		= rv_edge_stats_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+/*
+ * Allocate the per-CPU buffer and expose stats. Done on first enable
+ * rather than at registration because a DA/HA monitor's edge_cfg is bound by
+ * da_monitor_init(), which runs from the monitor's enable path.
+ */
+static int rv_edge_setup(struct rv_monitor *mon)
+{
+	if (!mon->edge_cfg || !mon->edge_cfg->n_edges || mon->edge_pcpu)
+		return 0;
+
+	mon->edge_pcpu = __alloc_percpu(rv_edge_blob_size(mon),
+					__alignof__(struct rv_edge_stat));
+	if (!mon->edge_pcpu)
+		return -ENOMEM;
+
+	if (!rv_create_file("stats", RV_MODE_READ, mon->root_d, mon,
+			    &rv_edge_stats_fops)) {
+		free_percpu(mon->edge_pcpu);
+		mon->edge_pcpu = NULL;
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+#else
+static int rv_edge_setup(struct rv_monitor *mon) { return 0; }
+static void rv_edge_reset(struct rv_monitor *mon) { }
+#endif /* CONFIG_RV_EDGE_STAT */
 
 /*
  * During the registration of a monitor, this function creates
@@ -747,6 +857,10 @@ static const struct file_operations monitoring_on_fops = {
 
 static void destroy_monitor_dir(struct rv_monitor *mon)
 {
+#ifdef CONFIG_RV_EDGE_STAT
+	free_percpu(mon->edge_pcpu);
+	mon->edge_pcpu = NULL;
+#endif
 	rv_remove(mon->root_d);
 }
 

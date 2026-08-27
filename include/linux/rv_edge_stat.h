@@ -9,14 +9,11 @@
 #define _LINUX_RV_EDGE_STAT_H
 
 #include <linux/compiler.h>
+#include <linux/percpu.h>
+#include <linux/rv.h>
 #include <linux/types.h>
 #include <asm/local64.h>
 
-/*
- * Per-CPU counters kept in local64_t so accounting is safe against interrupt
- * and NMI nesting on the owning CPU without disabling interrupts -- the same
- * approach the trace ring buffer uses. Only the owning CPU writes.
- */
 struct rv_edge_stat {
 	local64_t	count;
 	local64_t	sum_ns;
@@ -41,5 +38,23 @@ void rv_edge_stat_account(struct rv_edge_stat *s, u64 dwell_ns)
 		max = prev;
 	}
 }
+
+#ifdef CONFIG_RV_EDGE_STAT
+/**
+ * rv_edge_account - record a dwell of @dwell_ns on @edge of monitor @mon
+ *
+ * Cheap and lock-free: the local64_t counters make this safe against interrupt
+ * and NMI nesting on the current CPU without disabling interrupts, so it does
+ * not perturb the latency being measured. The caller only needs to stay on its
+ * CPU for the call (as tracepoint probes already do).
+ */
+static __always_inline void
+rv_edge_account(struct rv_monitor *mon, unsigned int edge, u64 dwell_ns)
+{
+	struct rv_edge_stat *e = this_cpu_ptr(mon->edge_pcpu);
+
+	rv_edge_stat_account(&e[edge], dwell_ns);
+}
+#endif /* CONFIG_RV_EDGE_STAT */
 
 #endif /* _LINUX_RV_EDGE_STAT_H */

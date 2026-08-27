@@ -59,6 +59,17 @@ config RV_PER_TASK_MONITORS
 	  This option configures the maximum number of per-task RV monitors that can run
 	  simultaneously.
 
+config RV_EDGE_STAT
+	bool "Per-edge dwell-time statistics"
+	depends on RV
+	help
+	  Record per-edge dwell-time statistics for per-cpu DA/HA monitors and
+	  expose them through a per-monitor "stats" tracefs file. This times
+	  each monitored automaton transition with local_clock(), so leave it
+	  off if you do not need the statistics.
+
+	  If unsure, say N.
+
 source "kernel/trace/rv/monitors/wip/Kconfig"
 source "kernel/trace/rv/monitors/wwnr/Kconfig"
 
