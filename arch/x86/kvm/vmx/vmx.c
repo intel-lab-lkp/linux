@@ -4282,6 +4282,10 @@ static void vmx_recalc_pmu_msr_intercepts(struct kvm_vcpu *vcpu)
 				  MSR_TYPE_RW, intercept);
 	vmx_set_intercept_for_msr(vcpu, MSR_CORE_PERF_GLOBAL_OVF_CTRL,
 				  MSR_TYPE_RW, intercept);
+	vmx_set_intercept_for_msr(vcpu, MSR_CORE_PERF_GLOBAL_STATUS_SET,
+				  MSR_TYPE_RW, intercept || pmu->version < 4);
+	vmx_set_intercept_for_msr(vcpu, MSR_CORE_PERF_GLOBAL_INUSE,
+				  MSR_TYPE_RW, intercept || pmu->version < 4);
 }
 
 static void vmx_recalc_msr_intercepts(struct kvm_vcpu *vcpu)

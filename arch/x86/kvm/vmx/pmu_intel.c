@@ -194,6 +194,8 @@ static bool intel_is_valid_msr(struct kvm_vcpu *vcpu, u32 msr)
 	switch (msr) {
 	case MSR_CORE_PERF_FIXED_CTR_CTRL:
 		return kvm_pmu_has_perf_global_ctrl(pmu);
+	case MSR_CORE_PERF_GLOBAL_INUSE:
+		return pmu->version >= 4;
 	case MSR_IA32_PEBS_ENABLE:
 		ret = vcpu_get_perf_capabilities(vcpu) & PERF_CAP_PEBS_FORMAT;
 		break;
@@ -341,6 +343,38 @@ dummy:
 	return true;
 }
 
+static u64 intel_pmu_get_global_inuse(struct kvm_vcpu *vcpu)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	unsigned long fixed_mask = kvm_fixed_pmc_mask(pmu);
+	unsigned long gp_mask = kvm_gp_pmc_mask(pmu);
+	bool pmi_inuse = false;
+	u64 eventsel, data = 0;
+	u32 fixed_ctrl;
+	int i;
+
+	kvm_for_each_gp_counter(i, gp_mask) {
+		eventsel = pmu->gp_counters[i].eventsel;
+
+		if (eventsel & ARCH_PERFMON_EVENTSEL_EVENT)
+			data |= BIT_ULL(i);
+		pmi_inuse |= eventsel & ARCH_PERFMON_EVENTSEL_INT;
+	}
+	kvm_for_each_fixed_counter(i, fixed_mask) {
+		fixed_ctrl = fixed_ctrl_field(pmu->fixed_ctr_ctrl, i);
+
+		if (fixed_ctrl & (INTEL_FIXED_0_KERNEL | INTEL_FIXED_0_USER))
+			data |= BIT_ULL(KVM_FIXED_PMC_BASE_IDX + i);
+		pmi_inuse |= fixed_ctrl & INTEL_FIXED_0_ENABLE_PMI;
+	}
+	pmi_inuse |= pmu->pebs_enable;
+
+	if (pmi_inuse)
+		data |= PERF_GLOBAL_INUSE_PMI_INUSE;
+
+	return data;
+}
+
 static int intel_pmu_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
@@ -350,6 +384,9 @@ static int intel_pmu_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	switch (msr) {
 	case MSR_CORE_PERF_FIXED_CTR_CTRL:
 		msr_info->data = pmu->fixed_ctr_ctrl;
+		break;
+	case MSR_CORE_PERF_GLOBAL_INUSE:
+		msr_info->data = intel_pmu_get_global_inuse(vcpu);
 		break;
 	case MSR_IA32_PEBS_ENABLE:
 		msr_info->data = pmu->pebs_enable;
