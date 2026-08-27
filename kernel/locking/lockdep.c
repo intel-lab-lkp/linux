@@ -6992,6 +6992,53 @@ void __init lockdep_init(void)
 	       sizeof(((struct task_struct *)NULL)->held_locks));
 }
 
+static void lockdep_report_stage(const char *domain, const char *stage_name)
+{
+	unsigned int used = lockdep_slabs_used - lockdep_nr_free_slabs;
+	unsigned int class_per_chunk = lock_class_PER_CHUNK;
+	unsigned int entry_per_chunk = LOCKDEP_SLAB_SIZE / sizeof(struct lock_list);
+	unsigned int chain_per_chunk = lock_chain_PER_CHUNK;
+	unsigned int hlock_per_chunk = chain_hlock_PER_CHUNK;
+	unsigned int trace_per_chunk = LOCKDEP_SLAB_SIZE / sizeof(unsigned long);
+
+	unsigned int cl_w = nr_lock_classes / class_per_chunk;
+	unsigned int cl_f = ((nr_lock_classes % class_per_chunk) * 100) / class_per_chunk;
+
+	unsigned int en_w = nr_list_entries / entry_per_chunk;
+	unsigned int en_f = ((nr_list_entries % entry_per_chunk) * 100) / entry_per_chunk;
+
+	unsigned long chains = lock_chain_count();
+	unsigned int ch_w = chains / chain_per_chunk;
+	unsigned int ch_f = ((chains % chain_per_chunk) * 100) / chain_per_chunk;
+
+	unsigned int hlocks = chain_hlocks_used();
+	unsigned int hl_w = hlocks / hlock_per_chunk;
+	unsigned int hl_f = ((hlocks % hlock_per_chunk) * 100) / hlock_per_chunk;
+
+	unsigned int tr_w = nr_stack_trace_entries / trace_per_chunk;
+	unsigned int tr_f = ((nr_stack_trace_entries % trace_per_chunk) * 100) / trace_per_chunk;
+
+	pr_info("lockdep: %-8s [%-9s] : %u/%u slabs : classes=%u.%02u entries=%u.%02u chains=%u.%02u hlocks=%u.%02u trace=%u.%02u\n",
+		domain, stage_name, used, lockdep_nr_slabs,
+		cl_w, cl_f, en_w, en_f, ch_w, ch_f, hl_w, hl_f, tr_w, tr_f);
+}
+
+#define DEFINE_LOCKDEP_LEVEL_REPORT(lvl, name)			\
+	static int __init lockdep_report_##name(void)		\
+	{							\
+		lockdep_report_stage("initcall", #name);	\
+		return 0;					\
+	}							\
+	lvl(lockdep_report_##name)
+
+DEFINE_LOCKDEP_LEVEL_REPORT(core_initcall_sync, core);
+DEFINE_LOCKDEP_LEVEL_REPORT(postcore_initcall_sync, postcore);
+DEFINE_LOCKDEP_LEVEL_REPORT(arch_initcall_sync, arch);
+DEFINE_LOCKDEP_LEVEL_REPORT(subsys_initcall_sync, subsys);
+DEFINE_LOCKDEP_LEVEL_REPORT(fs_initcall_sync, fs);
+DEFINE_LOCKDEP_LEVEL_REPORT(device_initcall_sync, device);
+DEFINE_LOCKDEP_LEVEL_REPORT(late_initcall_sync, late);
+
 static int lockdep_shutdown_notify(struct notifier_block *nb,
 				   unsigned long code, void *unused)
 {

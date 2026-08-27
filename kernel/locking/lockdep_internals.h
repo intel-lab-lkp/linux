@@ -223,7 +223,7 @@ extern unsigned int max_lockdep_depth;
 extern unsigned int max_bfs_queue_depth;
 extern unsigned long max_lock_class_idx;
 
-DECLARE_2D_RADIX(lock_class, struct lock_class);
+DECLARE_CHUNKED_ARRAY(lock_class, struct lock_class);
 extern unsigned long lock_classes_in_use[];
 
 struct lockdep_slab_usage {
@@ -239,6 +239,8 @@ struct lockdep_slab_stats {
 	unsigned int used_slabs;
 	struct lockdep_slab_usage usage;
 };
+
+void lockdep_get_slab_stats(struct lockdep_slab_stats *st);
 
 unsigned int chain_hlocks_used(void);
 unsigned long lock_chain_count(void);

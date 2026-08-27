@@ -380,17 +380,37 @@ static int lockdep_stats_show(struct seq_file *m, void *v)
 			debug_locks);
 
 	/*
-	 * Zapped classes and lockdep data buffers reuse statistics.
+	 * Shared Memblock Slab Reservoir Statistics
 	 */
-	seq_puts(m, "\n");
-	seq_printf(m, " zapped classes:                %11lu\n",
-			nr_zapped_classes);
-#ifdef CONFIG_PROVE_LOCKING
-	seq_printf(m, " zapped lock chains:            %11lu\n",
-			nr_zapped_lock_chains);
-	seq_printf(m, " large chain blocks:            %11u\n",
-			nr_large_chain_blocks);
-#endif
+	{
+		struct lockdep_slab_stats st;
+
+		lockdep_get_slab_stats(&st);
+		if (st.total_slabs) {
+			unsigned int free_slabs = st.total_slabs > st.used_slabs ?
+						  st.total_slabs - st.used_slabs : 0;
+			unsigned int headroom_pct = (free_slabs * 100) / st.total_slabs;
+
+			seq_puts(m, "\n lockdep memblock slab reservoir:\n");
+			seq_printf(m, "   total slabs:                 %11u (%zu kB)\n",
+				   st.total_slabs, (size_t)st.total_slabs * 64);
+			seq_printf(m, "   used slabs:                  %11u (%zu kB)\n",
+				   st.used_slabs, (size_t)st.used_slabs * 64);
+			seq_printf(m, "     - lock_classes slabs:      %11u (%zu kB)\n",
+				   st.usage.lock_classes, (size_t)st.usage.lock_classes * 64);
+			seq_printf(m, "     - direct deps slabs:       %11u (%zu kB)\n",
+				   st.usage.direct_deps, (size_t)st.usage.direct_deps * 64);
+			seq_printf(m, "     - dependency chains slabs: %11u (%zu kB)\n",
+				   st.usage.lock_chains, (size_t)st.usage.lock_chains * 64);
+			seq_printf(m, "     - chain hlocks slabs:      %11u (%zu kB)\n",
+				   st.usage.chain_hlocks, (size_t)st.usage.chain_hlocks * 64);
+			seq_printf(m, "     - stack_trace slabs:       %11u (%zu kB)\n",
+				   st.usage.stack_traces, (size_t)st.usage.stack_traces * 64);
+			seq_printf(m, "   free slabs (headroom):       %11u (%zu kB, %u%%)\n",
+				   free_slabs, (size_t)free_slabs * 64, headroom_pct);
+		}
+	}
+
 	return 0;
 }
 
