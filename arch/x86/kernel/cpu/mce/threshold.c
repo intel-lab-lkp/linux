@@ -4,6 +4,7 @@
  */
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
+#include <linux/ratelimit.h>
 
 #include <asm/irq_vectors.h>
 #include <asm/traps.h>
@@ -111,6 +112,13 @@ void cmci_storm_end(unsigned int bank)
 		mce_timer_kick(false);
 }
 
+/*
+ * Shared by both transitions so that a bank flapping between them cannot
+ * outrun the console.
+ */
+static DEFINE_RATELIMIT_STATE(storm_rs, DEFAULT_RATELIMIT_INTERVAL,
+			      DEFAULT_RATELIMIT_BURST);
+
 void mce_track_storm(struct mce *mce)
 {
 	struct mca_storm_desc *storm = this_cpu_ptr(&storm_desc);
@@ -150,13 +158,17 @@ void mce_track_storm(struct mce *mce)
 	if (storm->banks[mce->bank].in_storm_mode) {
 		if (history & GENMASK_ULL(STORM_END_POLL_THRESHOLD, 0))
 			return;
-		printk_deferred(KERN_NOTICE "CPU%d BANK%d CMCI storm subsided\n", smp_processor_id(), mce->bank);
+		if (__ratelimit(&storm_rs))
+			printk_deferred(KERN_NOTICE "CPU%d BANK%d CMCI storm subsided\n",
+					smp_processor_id(), mce->bank);
 		mce_handle_storm(mce->bank, false);
 		cmci_storm_end(mce->bank);
 	} else {
 		if (hweight64(history) < STORM_BEGIN_THRESHOLD)
 			return;
-		printk_deferred(KERN_NOTICE "CPU%d BANK%d CMCI storm detected\n", smp_processor_id(), mce->bank);
+		if (__ratelimit(&storm_rs))
+			printk_deferred(KERN_NOTICE "CPU%d BANK%d CMCI storm detected\n",
+					smp_processor_id(), mce->bank);
 		mce_handle_storm(mce->bank, true);
 		cmci_storm_begin(mce->bank);
 	}
