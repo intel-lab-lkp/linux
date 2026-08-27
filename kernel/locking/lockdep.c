@@ -58,11 +58,95 @@
 #include <linux/context_tracking.h>
 #include <linux/console.h>
 #include <linux/kasan.h>
+#include <linux/memblock.h>
 
 #include <asm/sections.h>
 
 #include "lockdep_internals.h"
 #include "lock_events.h"
+
+static void *lockdep_slabs[LOCKDEP_MAX_SLABS];
+static unsigned int lockdep_nr_slabs;
+static unsigned int lockdep_slabs_used;
+static struct lockdep_slab_usage ld_slabs;
+
+static unsigned int requested_lockdep_slabs;
+static unsigned int requested_lockdep_headroom_pct = 100; /* default 100% headroom */
+static bool lockdep_headroom_specified;
+static bool lockdep_disabled_early;
+
+static int __init setup_lockdep_slabs(char *str)
+{
+	unsigned long val;
+
+	if (!str)
+		return -EINVAL;
+
+	if (!strcmp(str, "off") || !strcmp(str, "0")) {
+		lockdep_disabled_early = true;
+		return 0;
+	}
+
+	if (kstrtoul(str, 0, &val))
+		return -EINVAL;
+
+	if (val > 10000) {
+		pr_warn("lockdep: ignoring unrealistic lockdep_slabs=%lu\n",
+			val);
+		return -EINVAL;
+	}
+
+	requested_lockdep_slabs = clamp_t(unsigned int, val, 2, LOCKDEP_MAX_SLABS);
+	return 0;
+}
+early_param("lockdep_slabs", setup_lockdep_slabs);
+
+static int __init setup_lockdep_headroom(char *str)
+{
+	unsigned long val;
+
+	if (!str || kstrtoul(str, 0, &val))
+		return -EINVAL;
+
+	requested_lockdep_headroom_pct = clamp_t(unsigned int, val, 10, 900);
+	lockdep_headroom_specified = true;
+	return 0;
+}
+early_param("lockdep_headroom", setup_lockdep_headroom);
+
+static void *lockdep_free_slabs[LOCKDEP_MAX_SLABS];
+static unsigned int lockdep_nr_free_slabs;
+
+/*
+ * Claim a 64KB slab from the pre-allocated memblock reservoir.
+ * Must be called with graph_lock held. Completely lockless and deadlock-free.
+ */
+static void *lockdep_claim_slab(unsigned int *table_counter)
+{
+	void *slab;
+
+	if (lockdep_nr_free_slabs > 0)
+		slab = lockdep_free_slabs[--lockdep_nr_free_slabs];
+	else if (lockdep_slabs_used < lockdep_nr_slabs)
+		slab = lockdep_slabs[lockdep_slabs_used++];
+	else
+		return NULL;
+
+	if (table_counter)
+		(*table_counter)++;
+
+	return slab;
+}
+
+static void lockdep_release_slab(void *slab, unsigned int *table_counter)
+{
+	if (!slab || lockdep_nr_free_slabs >= LOCKDEP_MAX_SLABS)
+		return;
+
+	lockdep_free_slabs[lockdep_nr_free_slabs++] = slab;
+	if (table_counter && *table_counter > 0)
+		(*table_counter)--;
+}
 
 #include <trace/events/lock.h>
 
@@ -6645,6 +6729,53 @@ void lockdep_unregister_key(struct lock_class_key *key)
 	synchronize_rcu_expedited();
 }
 EXPORT_SYMBOL_GPL(lockdep_unregister_key);
+
+void __init lockdep_early_init(void)
+{
+	unsigned int nr_slabs, i;
+	phys_addr_t phys_mem;
+	size_t slab_bytes;
+	void *pool;
+
+	if (lockdep_disabled_early) {
+		pr_info("lockdep: disabled by early boot parameter, 0 bytes reserved\n");
+		return;
+	}
+
+	phys_mem = memblock_phys_mem_size();
+
+	/* Auto-tune based on physical memory and CPU count */
+	if (phys_mem && phys_mem < (512ULL << 20))
+		nr_slabs = 32;   /* 2 MB on small systems (<512MB RAM) */
+	else if (num_possible_cpus() >= 64 || phys_mem > (64ULL << 30))
+		nr_slabs = 128;  /* 8 MB on large servers (>64GB RAM or >64 CPUs) */
+	else
+		nr_slabs = LOCKDEP_DEFAULT_SLABS; /* 64 slabs = 4 MB default */
+
+	/* Ensure initial reservation satisfies requested floor or headroom */
+	if (requested_lockdep_slabs > nr_slabs)
+		nr_slabs = requested_lockdep_slabs;
+
+	if (lockdep_headroom_specified && requested_lockdep_headroom_pct > 100)
+		nr_slabs = (nr_slabs * (100 + requested_lockdep_headroom_pct)) / 100;
+
+	nr_slabs = clamp_t(unsigned int, nr_slabs, 8, LOCKDEP_MAX_SLABS);
+
+	slab_bytes = (size_t)nr_slabs * LOCKDEP_SLAB_SIZE;
+	pool = memblock_alloc(slab_bytes, PAGE_SIZE);
+	if (!pool) {
+		pr_err("lockdep: failed to allocate %u slabs (%zu KB) from memblock\n",
+		       nr_slabs, slab_bytes / 1024);
+		return;
+	}
+
+	for (i = 0; i < nr_slabs; i++)
+		lockdep_slabs[i] = (char *)pool + (i * LOCKDEP_SLAB_SIZE);
+
+	lockdep_nr_slabs = nr_slabs;
+	pr_info("lockdep: reserved %u slabs (%zu KB) from memblock\n",
+		nr_slabs, slab_bytes / 1024);
+}
 
 void __init lockdep_init(void)
 {

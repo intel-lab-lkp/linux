@@ -125,7 +125,8 @@ enum {
 #include <linux/reciprocal_div.h>
 
 #define LOCKDEP_SLAB_SIZE	(64 * 1024)
-#define LOCKDEP_MAX_SLABS	64
+#define LOCKDEP_MAX_SLABS	512
+#define LOCKDEP_DEFAULT_SLABS	64
 
 /*
  * Chunked Array Tables:

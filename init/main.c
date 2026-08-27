@@ -1031,6 +1031,7 @@ void start_kernel(void)
 	vfs_caches_init_early();
 	sort_main_extable();
 	trap_init();
+	lockdep_early_init();
 	mm_core_init();
 	maple_tree_init();
 	poking_init();
