@@ -124,6 +124,7 @@ static int dthe_cipher_init_tfm(struct crypto_skcipher *tfm)
 	if (IS_ERR(ctx->skcipher_fb)) {
 		dev_err(dev_data->dev, "fallback driver %s couldn't be loaded\n",
 			alg_name);
+		dthe_put_dev(ctx);
 		return PTR_ERR(ctx->skcipher_fb);
 	}
 
@@ -135,6 +136,7 @@ static void dthe_cipher_exit_tfm(struct crypto_skcipher *tfm)
 	struct dthe_tfm_ctx *ctx = crypto_skcipher_ctx(tfm);
 
 	crypto_free_sync_skcipher(ctx->skcipher_fb);
+	dthe_put_dev(ctx);
 }
 
 static int dthe_aes_setkey(struct crypto_skcipher *tfm, const u8 *key, unsigned int keylen)
@@ -577,6 +579,7 @@ static int dthe_aead_init_tfm(struct crypto_aead *tfm)
 	if (IS_ERR(ctx->aead_fb)) {
 		dev_err(dev_data->dev, "fallback driver %s couldn't be loaded\n",
 			alg_name);
+		dthe_put_dev(ctx);
 		return PTR_ERR(ctx->aead_fb);
 	}
 
@@ -588,6 +591,7 @@ static void dthe_aead_exit_tfm(struct crypto_aead *tfm)
 	struct dthe_tfm_ctx *ctx = crypto_aead_ctx(tfm);
 
 	crypto_free_sync_aead(ctx->aead_fb);
+	dthe_put_dev(ctx);
 }
 
 /**
