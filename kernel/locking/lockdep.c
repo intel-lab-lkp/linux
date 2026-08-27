@@ -3953,7 +3953,7 @@ static struct lock_chain *alloc_lock_chain(void)
 	if (unlikely(idx >= MAX_LOCKDEP_CHAINS))
 		return NULL;
 
-	chunk_idx = reciprocal_divide(idx, lock_chain_rv);
+	chunk_idx = idx / lock_chain_PER_CHUNK;
 	if (chunk_idx >= LOCKDEP_MAX_SLABS)
 		return NULL;
 

@@ -154,14 +154,25 @@ enum {
 #define DECLARE_CHUNKED_ARRAY(name, type)					\
 	enum {									\
 		name##_PER_CHUNK = (LOCKDEP_SLAB_SIZE / sizeof(type)),		\
+		name##_IS_P2     = (!(name##_PER_CHUNK & (name##_PER_CHUNK - 1))), \
+		name##_SHIFT     = (__builtin_ctz(name##_PER_CHUNK)),		\
+		name##_MASK      = (name##_PER_CHUNK - 1),			\
 	};									\
 	extern type * name##_chunks[LOCKDEP_MAX_SLABS];				\
 	extern const struct reciprocal_value name##_rv;				\
 	static __always_inline type *idx_to_##name(unsigned int idx)		\
 	{									\
-		unsigned int chunk = reciprocal_divide(idx, name##_rv);		\
-		unsigned int offset = idx - (chunk * name##_PER_CHUNK);		\
+		unsigned int chunk, offset;					\
 		type *chunk_ptr;						\
+										\
+		if (name##_IS_P2) {						\
+			chunk = idx >> name##_SHIFT;				\
+			offset = idx & name##_MASK;				\
+		} else {							\
+			chunk = reciprocal_divide(idx, name##_rv);		\
+			offset = idx - (chunk * name##_PER_CHUNK);		\
+		}								\
+										\
 		if (unlikely(chunk >= LOCKDEP_MAX_SLABS))			\
 			return NULL;						\
 		/* Pairs with smp_store_release() when new chunk slabs are published */ \
