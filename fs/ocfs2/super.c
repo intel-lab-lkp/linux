@@ -1779,6 +1779,9 @@ out_system_inodes:
 	if (osb->local_alloc_state == OCFS2_LA_ENABLED)
 		ocfs2_shutdown_local_alloc(osb);
 	ocfs2_release_system_inodes(osb);
+	/* Drain pending suballoc reclaim work before the journal goes away */
+	if (osb->ocfs2_wq)
+		flush_workqueue(osb->ocfs2_wq);
 	/* before journal shutdown, we should release slot_info */
 	ocfs2_free_slot_info(osb);
 	ocfs2_journal_shutdown(osb);
@@ -1849,6 +1852,10 @@ static void ocfs2_dismount_volume(struct super_block *sb, int mnt_err)
 		ocfs2_super_unlock(osb, 1);
 
 	ocfs2_release_system_inodes(osb);
+
+	/* Drain pending suballoc reclaim work before the journal goes away */
+	if (osb->ocfs2_wq)
+		flush_workqueue(osb->ocfs2_wq);
 
 	ocfs2_journal_shutdown(osb);
 
@@ -2133,6 +2140,11 @@ static int ocfs2_initialize_super(struct super_block *sb,
 
 	INIT_WORK(&osb->dquot_drop_work, ocfs2_drop_dquot_refs);
 	init_llist_head(&osb->dquot_drop_list);
+
+	spin_lock_init(&osb->os_suballoc_reclaim_lock);
+	INIT_LIST_HEAD(&osb->os_suballoc_reclaim_list);
+	INIT_WORK(&osb->os_suballoc_reclaim_work,
+		  ocfs2_suballoc_reclaim_worker);
 
 	/* get some pseudo constants for clustersize bits */
 	osb->s_clustersize_bits =
