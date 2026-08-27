@@ -857,6 +857,7 @@ static int rs5c372_probe(struct i2c_client *client)
 		break;
 	default:
 		dev_err(&client->dev, "unknown RTC type\n");
+		err = -ENODEV;
 		goto exit;
 	}
 
