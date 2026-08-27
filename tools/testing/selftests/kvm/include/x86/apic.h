@@ -79,6 +79,26 @@ void apic_disable(void);
 void xapic_enable(void);
 void x2apic_enable(void);
 
+/*
+ * Reads the APIC ID of a vCPU from the host, e.g. to target an IPI at it.
+ *
+ * In xAPIC mode the guest can change its own ID, so read it back from KVM,
+ * where it lives in bits 31:24 of APIC_ID.  In x2APIC mode KVM ties the ID to
+ * the vCPU ID, and reports it in APIC_ID either as-is or shifted left by 24
+ * depending on KVM_X2APIC_API_USE_32BIT_IDS, so use the vCPU ID instead of
+ * having to know which format the VM opted into.
+ */
+static inline u32 vcpu_get_apic_id(struct kvm_vcpu *vcpu)
+{
+	struct kvm_lapic_state lapic;
+
+	if (vcpu_get_msr(vcpu, MSR_IA32_APICBASE) & MSR_IA32_APICBASE_EXTD)
+		return vcpu->id;
+
+	vcpu_ioctl(vcpu, KVM_GET_LAPIC, &lapic);
+	return GET_APIC_ID_FIELD(*(u32 *)&lapic.regs[APIC_ID]);
+}
+
 static inline u32 get_bsp_flag(void)
 {
 	return rdmsr(MSR_IA32_APICBASE) & MSR_IA32_APICBASE_BSP;
