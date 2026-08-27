@@ -60,7 +60,9 @@
 #include <linux/kasan.h>
 #include <linux/mm.h>
 #include <linux/memblock.h>
+#include <linux/oom.h>
 #include <linux/reboot.h>
+#include <linux/workqueue.h>
 
 #include <asm/sections.h>
 
@@ -638,6 +640,82 @@ static int verbose(struct lock_class *class)
 	return 0;
 }
 
+/*
+ * Release all memblock slabs (used and unused) back to the buddy allocator
+ * when lockdep is disabled or during system OOM emergencies.
+ * Must run in process context (workqueue or OOM notifier).
+ */
+static unsigned int lockdep_release_slabs_to_buddy(void)
+{
+	unsigned int freed_slabs = 0;
+	unsigned int nr = lockdep_nr_slabs;
+	unsigned long flags;
+	unsigned int i;
+
+	if (!nr)
+		return 0;
+
+	/* Invalidate table bounds under graph_lock */
+	raw_local_irq_save(flags);
+	if (!graph_lock()) {
+		raw_local_irq_restore(flags);
+		return 0;
+	}
+	lockdep_nr_slabs = 0;
+	lockdep_slabs_used = 0;
+	graph_unlock();
+	raw_local_irq_restore(flags);
+
+	for (i = 0; i < nr; i++) {
+		struct page *page;
+		unsigned long p;
+
+		if (!lockdep_slabs[i])
+			continue;
+
+		page = virt_to_page(lockdep_slabs[i]);
+		for (p = 0; p < (LOCKDEP_SLAB_SIZE >> PAGE_SHIFT); p++)
+			free_reserved_page(page + p);
+
+		lockdep_slabs[i] = NULL;
+		freed_slabs++;
+	}
+
+	if (freed_slabs)
+		pr_info("lockdep: emergency sacrifice — released %u slabs (%u kB) to buddy allocator\n",
+			freed_slabs, (freed_slabs * LOCKDEP_SLAB_SIZE) / 1024);
+
+	return freed_slabs;
+}
+
+static void lockdep_sacrifice_work_fn(struct work_struct *work)
+{
+	lockdep_release_slabs_to_buddy();
+}
+static DECLARE_WORK(lockdep_sacrifice_work, lockdep_sacrifice_work_fn);
+
+static int lockdep_oom_notify(struct notifier_block *self,
+			      unsigned long dummy, void *parm)
+{
+	unsigned long *freed = parm;
+	unsigned int freed_slabs;
+
+	if (!lockdep_nr_slabs)
+		return NOTIFY_OK;
+
+	/* Turn off lockdep before sacrificing tables */
+	debug_locks_off();
+	freed_slabs = lockdep_release_slabs_to_buddy();
+	if (freed && freed_slabs)
+		*freed += (freed_slabs * (LOCKDEP_SLAB_SIZE >> PAGE_SHIFT));
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block lockdep_oom_nb = {
+	.notifier_call = lockdep_oom_notify,
+};
+
 static void print_lockdep_off(const char *bug_msg)
 {
 	printk(KERN_DEBUG "%s\n", bug_msg);
@@ -645,6 +723,8 @@ static void print_lockdep_off(const char *bug_msg)
 #ifdef CONFIG_LOCK_STAT
 	printk(KERN_DEBUG "Please attach the output of /proc/lock_stat to the bug report\n");
 #endif
+	if (system_state >= SYSTEM_RUNNING)
+		schedule_work(&lockdep_sacrifice_work);
 }
 
 unsigned long nr_stack_trace_entries;
@@ -7105,6 +7185,7 @@ static int __init lockdep_post_init_trim(void)
 		lockdep_nr_slabs > used ? ((lockdep_nr_slabs - used) * 100) / used : 0,
 		freed_slabs, (freed_slabs * LOCKDEP_SLAB_SIZE) / 1024);
 
+	register_oom_notifier(&lockdep_oom_nb);
 	register_reboot_notifier(&lockdep_reboot_nb);
 	return 0;
 }
