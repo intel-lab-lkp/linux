@@ -757,6 +757,7 @@ normal_tx:
 		if (free_size >= bp->tx_wake_thresh)
 			txbd0->tx_bd_len_flags_type |=
 				cpu_to_le32(TX_BD_FLAGS_NO_CMPL);
+		txr->kick_prod = txr->tx_prod - (last_frag + 2);
 		txr->kick_pending = 1;
 	}
 

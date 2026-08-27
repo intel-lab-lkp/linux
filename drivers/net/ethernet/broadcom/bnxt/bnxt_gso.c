@@ -69,7 +69,7 @@ netdev_tx_t bnxt_sw_udp_gso_xmit(struct bnxt *bp,
 	if (unlikely(bnxt_tx_avail(bp, txr) < bds_needed)) {
 		netif_txq_try_stop(txq, bnxt_tx_avail(bp, txr),
 				   bp->tx_wake_thresh);
-		return NETDEV_TX_BUSY;
+		goto tx_busy;
 	}
 
 	/* BD backpressure alone cannot prevent overwriting in-flight
@@ -77,7 +77,7 @@ netdev_tx_t bnxt_sw_udp_gso_xmit(struct bnxt *bp,
 	 */
 	if (!netif_txq_maybe_stop(txq, bnxt_inline_avail(txr),
 				  num_segs, num_segs))
-		return NETDEV_TX_BUSY;
+		goto tx_busy;
 
 	if (unlikely(tso_dma_map_init(&map, &pdev->dev, skb, hdr_len)))
 		goto drop;
@@ -235,4 +235,17 @@ drop:
 	dev_kfree_skb_any(skb);
 	dev_core_stats_tx_dropped_inc(bp->dev);
 	return NETDEV_TX_OK;
+
+tx_busy:
+	if (txr->kick_pending) {
+		u16 kick_prod = txr->kick_prod;
+		struct tx_bd *txbd0;
+
+		txbd0 = &txr->tx_desc_ring[TX_RING(bp, kick_prod)]
+					  [TX_IDX(kick_prod)];
+		txbd0->tx_bd_len_flags_type &=
+			cpu_to_le32(~TX_BD_FLAGS_NO_CMPL);
+	}
+
+	return NETDEV_TX_BUSY;
 }
