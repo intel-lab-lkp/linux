@@ -350,6 +350,13 @@ static void xe_pm_runtime_init(struct xe_device *xe)
 	pm_runtime_put(dev);
 }
 
+static void xe_vram_userfault_srcu_fini(struct drm_device *drm, void *arg)
+{
+	struct srcu_struct *srcu = arg;
+
+	cleanup_srcu_struct(srcu);
+}
+
 /**
  * xe_pm_init_early() - Initialize Xe Power Management
  * @xe: the &xe_device instance
@@ -369,6 +376,16 @@ int xe_pm_init_early(struct xe_device *xe)
 	INIT_LIST_HEAD(&xe->mem_access.vram_userfault.list);
 
 	err = drmm_mutex_init(&xe->drm, &xe->mem_access.vram_userfault.lock);
+	if (err)
+		return err;
+
+	err = init_srcu_struct(&xe->mem_access.vram_userfault.srcu);
+	if (err)
+		return err;
+
+	err = drmm_add_action_or_reset(&xe->drm,
+				       xe_vram_userfault_srcu_fini,
+				       &xe->mem_access.vram_userfault.srcu);
 	if (err)
 		return err;
 

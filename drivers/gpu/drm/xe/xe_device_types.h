@@ -7,6 +7,7 @@
 #define _XE_DEVICE_TYPES_H_
 
 #include <linux/pci.h>
+#include <linux/srcu.h>
 
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
@@ -391,6 +392,12 @@ struct xe_device {
 		 * related stuff
 		 */
 		struct {
+			/**
+			 * @mem_access.vram_userfault.srcu: Serializes CPU faults
+			 * against wedge-time mapping invalidation
+			 */
+			struct srcu_struct srcu;
+
 			/**
 			 * @mem_access.vram_userfault.lock: Protects access to
 			 * @mem_access.vram_userfault.list Using mutex instead of spinlock

@@ -964,6 +964,9 @@ static void xe_device_wedged_work(struct work_struct *work)
 			container_of(work, struct xe_device, wedged.work);
 	unsigned long method;
 
+	/* Drain faults and invalidate existing VRAM mappings. */
+	xe_bo_wedged_invalidate_mmaps(xe);
+
 	/* Report at most one recovery method per worker invocation. */
 	method = READ_ONCE(xe->wedged.method);
 	if (method != READ_ONCE(xe->wedged.reported_method)) {

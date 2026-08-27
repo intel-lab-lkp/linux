@@ -2140,9 +2140,14 @@ static vm_fault_t xe_bo_cpu_fault(struct vm_fault *vmf)
 	vm_fault_t ret;
 	int err = 0;
 	int idx;
+	int srcu_idx;
 
-	if (xe_device_io_blocked(xe) || !drm_dev_enter(&xe->drm, &idx))
+	srcu_idx = srcu_read_lock(&xe->mem_access.vram_userfault.srcu);
+	if (xe_device_io_blocked(xe) || !drm_dev_enter(&xe->drm, &idx)) {
+		srcu_read_unlock(&xe->mem_access.vram_userfault.srcu,
+				 srcu_idx);
 		return xe_bo_vm_dummy_page(vmf, bo);
+	}
 
 	ret = xe_bo_cpu_fault_fastpath(vmf, xe, bo, needs_rpm);
 	if (ret != VM_FAULT_RETRY)
@@ -2229,6 +2234,7 @@ static vm_fault_t xe_bo_cpu_fault(struct vm_fault *vmf)
 		xe_bo_put(bo);
 out:
 	drm_dev_exit(idx);
+	srcu_read_unlock(&xe->mem_access.vram_userfault.srcu, srcu_idx);
 
 	return ret;
 }
@@ -4134,6 +4140,28 @@ void xe_bo_runtime_pm_release_mmap_offset(struct xe_bo *bo)
 	drm_vma_node_unmap(&tbo->base.vma_node, bdev->dev_mapping);
 
 	list_del_init(&bo->vram_userfault_link);
+}
+
+/**
+ * xe_bo_wedged_invalidate_mmaps - Invalidate CPU mappings backed by VRAM
+ * @xe: xe device instance
+ *
+ * Wait for faults which may have observed the device before it was wedged,
+ * then remove all tracked VRAM mappings. Faults which start after the wedge
+ * map the per-BO dummy page and do not join the tracking list.
+ */
+void xe_bo_wedged_invalidate_mmaps(struct xe_device *xe)
+{
+	struct xe_bo *bo, *next;
+
+	synchronize_srcu(&xe->mem_access.vram_userfault.srcu);
+
+	mutex_lock(&xe->mem_access.vram_userfault.lock);
+	list_for_each_entry_safe(bo, next,
+				 &xe->mem_access.vram_userfault.list,
+				 vram_userfault_link)
+		xe_bo_runtime_pm_release_mmap_offset(bo);
+	mutex_unlock(&xe->mem_access.vram_userfault.lock);
 }
 
 #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
