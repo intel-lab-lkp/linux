@@ -591,6 +591,10 @@ put_userns_no_common:
 		key_remove_domain(net->key_domain);
 #endif
 		put_user_ns(user_ns);
+		/* setup_net() failure is not routed through __put_net(), so the
+		 * refcnt_tracker (and its debugfs file) has to be released here.
+		 */
+		ref_tracker_dir_exit(&net->refcnt_tracker);
 		net_passive_dec(net);
 dec_ucounts:
 		dec_net_namespaces(ucounts);
