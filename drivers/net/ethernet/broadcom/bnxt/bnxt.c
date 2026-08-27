@@ -13791,6 +13791,16 @@ static bool bnxt_uc_list_updated(struct bnxt *bp,
 	struct netdev_hw_addr *ha;
 	int off = 0;
 
+	/* In the overflow state all unicast is accepted through the
+	 * promiscuous RX mask and no secondary L2 filters are in use,
+	 * so the list only needs reprogramming once it fits the
+	 * available filters again.  Reporting an update here would
+	 * resend an identical SET_RX_MASK on every callback, which
+	 * causes brief RX packet loss on some chips.
+	 */
+	if (vnic->flags & BNXT_VNIC_UC_PROMISC_FLAG)
+		return netdev_hw_addr_list_count(uc) <= (BNXT_MAX_UC_ADDRS - 1);
+
 	if (netdev_hw_addr_list_count(uc) != (vnic->uc_filter_count - 1))
 		return true;
 
@@ -13824,6 +13834,13 @@ static int bnxt_set_rx_mode(struct net_device *dev,
 		  CFA_L2_SET_RX_MASK_REQ_MASK_BCAST);
 
 	if (dev->flags & IFF_PROMISC)
+		mask |= CFA_L2_SET_RX_MASK_REQ_MASK_PROMISCUOUS;
+
+	/* Keep the promiscuous bit while the UC list is longer than the
+	 * available L2 filters, so that an unchanged rx mode is not
+	 * treated as a mask change.
+	 */
+	if ((vnic->flags & BNXT_VNIC_UC_PROMISC_FLAG) && bnxt_promisc_ok(bp))
 		mask |= CFA_L2_SET_RX_MASK_REQ_MASK_PROMISCUOUS;
 
 	uc_update = bnxt_uc_list_updated(bp, uc);
@@ -13869,7 +13886,11 @@ static int bnxt_cfg_rx_mode(struct bnxt *bp, struct netdev_hw_addr_list *uc,
 	netif_addr_lock_bh(dev);
 	if (netdev_hw_addr_list_count(uc) > (BNXT_MAX_UC_ADDRS - 1)) {
 		vnic->rx_mask |= CFA_L2_SET_RX_MASK_REQ_MASK_PROMISCUOUS;
+		vnic->flags |= BNXT_VNIC_UC_PROMISC_FLAG;
 	} else {
+		vnic->flags &= ~BNXT_VNIC_UC_PROMISC_FLAG;
+		if (!(dev->flags & IFF_PROMISC))
+			vnic->rx_mask &= ~CFA_L2_SET_RX_MASK_REQ_MASK_PROMISCUOUS;
 		netdev_hw_addr_list_for_each(ha, uc) {
 			memcpy(vnic->uc_list + off, ha->addr, ETH_ALEN);
 			off += ETH_ALEN;
