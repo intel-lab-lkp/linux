@@ -14,6 +14,7 @@
 #include <linux/export.h>
 #include <linux/iommu.h>
 #include "../iommu-pages.h"
+#include "../iommu-priv.h"
 #include <linux/cleanup.h>
 #include <linux/dma-mapping.h>
 
@@ -379,6 +380,8 @@ struct pt_iommu_collect_args {
 	struct iommupt_pending_gather pending;
 	/* Fail if any OAs are within the range */
 	u8 check_mapped : 1;
+	/* Drop the IOMMU_DEBUG_PAGEALLOC references of any OAs in the range */
+	u8 debug_unmap : 1;
 };
 
 static int __collect_tables(struct pt_range *range, void *arg,
@@ -388,7 +391,8 @@ static int __collect_tables(struct pt_range *range, void *arg,
 	struct pt_iommu_collect_args *collect = arg;
 	int ret;
 
-	if (!collect->check_mapped && !pt_can_have_table(&pts))
+	if (!collect->check_mapped && !collect->debug_unmap &&
+	    !pt_can_have_table(&pts))
 		return 0;
 
 	for_each_pt_level_entry(&pts) {
@@ -400,8 +404,19 @@ static int __collect_tables(struct pt_range *range, void *arg,
 				return ret;
 			continue;
 		}
-		if (pts.type == PT_ENTRY_OA && collect->check_mapped)
-			return -EADDRINUSE;
+		if (pts.type == PT_ENTRY_OA) {
+			if (collect->check_mapped)
+				return -EADDRINUSE;
+			if (collect->debug_unmap) {
+				struct pt_iommu *iommu_table =
+					iommu_from_common(range->common);
+				size_t oasz = log2_to_int_t(size_t,
+						pt_entry_oa_lg2sz(&pts));
+
+				iommu_debug_unmap_phys(&iommu_table->domain,
+						       pt_entry_oa(&pts), oasz);
+			}
+		}
 	}
 	return 0;
 }
@@ -1162,6 +1177,7 @@ static void NS(deinit)(struct pt_iommu *iommu_table)
 	struct pt_common *common = common_from_iommu(iommu_table);
 	struct pt_range range = pt_all_range(common);
 	struct pt_iommu_collect_args collect = {
+		.debug_unmap = iommu_debug_pagealloc_enabled(),
 		.pending.free_list = IOMMU_PAGES_LIST_INIT(
 			collect.pending.free_list),
 	};
