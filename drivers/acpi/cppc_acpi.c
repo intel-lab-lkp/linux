@@ -129,6 +129,21 @@ static DEFINE_PER_CPU(struct cpc_desc *, cpc_desc_ptr);
 				!!(cpc)->cpc_entry.int_value :		\
 				!IS_NULL_REG(&(cpc)->cpc_entry.reg))
 
+static bool cpc_is_writable(const struct cpc_register_resource *cpc)
+{
+	return cpc->type == ACPI_TYPE_BUFFER &&
+	       !IS_NULL_REG(&cpc->cpc_entry.reg);
+}
+
+static bool cpc_entry_present(const struct cpc_register_resource *cpc)
+{
+	if (cpc->type == ACPI_TYPE_INTEGER)
+		return true;
+
+	return cpc->type == ACPI_TYPE_BUFFER &&
+	       !IS_NULL_REG(&cpc->cpc_entry.reg);
+}
+
 /*
  * Each bit indicates the optionality of the register in per-cpu
  * cpc_regs[] with the corresponding index. 0 means mandatory and 1
@@ -142,6 +157,29 @@ static DEFINE_PER_CPU(struct cpc_desc *, cpc_desc_ptr);
  */
 #define IS_OPTIONAL_CPC_REG(reg_idx) (REG_OPTIONAL & (1U << (reg_idx)))
 
+static bool cpc_integer_entry_valid(unsigned int reg_idx, u64 value)
+{
+	switch (reg_idx) {
+	case HIGHEST_PERF:
+	case NOMINAL_PERF:
+	case LOW_NON_LINEAR_PERF:
+	case LOWEST_PERF:
+	case CTR_WRAP_TIME:
+	case REFERENCE_PERF:
+	case LOWEST_FREQ:
+	case NOMINAL_FREQ:
+		return value <= U32_MAX;
+	case AUTO_SEL_ENABLE:
+		return value <= 1;
+	case DESIRED_PERF:
+		/* Validated against Autonomous Selection after parsing. */
+		return value == 0;
+	default:
+		/* Tolerate the customary Integer 0 for an absent option. */
+		return value == 0 && IS_OPTIONAL_CPC_REG(reg_idx);
+	}
+}
+
 /*
  * Arbitrary Retries in case the remote processor is slow to respond
  * to PCC commands. Keeping it high enough to cover emulators where
@@ -150,6 +188,8 @@ static DEFINE_PER_CPU(struct cpc_desc *, cpc_desc_ptr);
 #define NUM_RETRIES 500ULL
 
 #define OVER_16BTS_MASK ~0xFFFFULL
+#define CPC_GENERIC_REGISTER_DESCRIPTOR 0x82
+#define CPC_GENERIC_REGISTER_LENGTH (sizeof(struct cpc_reg) - 3)
 
 #define define_one_cppc_ro(_name)		\
 static struct kobj_attribute _name =		\
@@ -871,11 +911,32 @@ int acpi_cppc_processor_probe(struct acpi_processor *pr)
 		cpc_obj = &out_obj->package.elements[i];
 
 		if (cpc_obj->type == ACPI_TYPE_INTEGER)	{
-			cpc_ptr->cpc_regs[i-2].type = ACPI_TYPE_INTEGER;
-			cpc_ptr->cpc_regs[i-2].cpc_entry.int_value = cpc_obj->integer.value;
+			if (!cpc_integer_entry_valid(i - 2,
+						     cpc_obj->integer.value)) {
+				pr_debug("Invalid Integer _CPC register %u for CPU:%d\n",
+					 i - 2, pr->id);
+				ret = -EINVAL;
+				goto out_free;
+			}
+			cpc_ptr->cpc_regs[i - 2].type = ACPI_TYPE_INTEGER;
+			cpc_ptr->cpc_regs[i - 2].cpc_entry.int_value = cpc_obj->integer.value;
 		} else if (cpc_obj->type == ACPI_TYPE_BUFFER) {
+			if (cpc_obj->buffer.length < sizeof(*gas_t)) {
+				pr_debug("Invalid register descriptor for CPU:%d\n",
+					 pr->id);
+				ret = -EINVAL;
+				goto out_free;
+			}
+
 			gas_t = (struct cpc_reg *)
 				cpc_obj->buffer.pointer;
+			if (gas_t->descriptor != CPC_GENERIC_REGISTER_DESCRIPTOR ||
+			    gas_t->length != CPC_GENERIC_REGISTER_LENGTH) {
+				pr_debug("Invalid register resource for CPU:%d\n",
+					 pr->id);
+				ret = -EINVAL;
+				goto out_free;
+			}
 
 			/*
 			 * The PCC Subspace index is encoded inside
@@ -962,14 +1023,34 @@ int acpi_cppc_processor_probe(struct acpi_processor *pr)
 	per_cpu(cpu_pcc_subspace_idx, pr->id) = pcc_subspace_id;
 
 	/*
+	 * Performance Limited is required by the specification, but tolerate a
+	 * NULL descriptor used by firmware which cannot report limiting events.
+	 * CPPC control does not depend on this status.
+	 */
+	for (i = 0; i < num_ent - 2; i++) {
+		if (i != DESIRED_PERF && i != PERF_LIMITED &&
+		    !IS_OPTIONAL_CPC_REG(i) &&
+		    !cpc_entry_present(&cpc_ptr->cpc_regs[i])) {
+			pr_debug("CPU:%d lacks mandatory _CPC register %u\n",
+				 pr->id, i);
+			ret = -EINVAL;
+			goto out_free;
+		}
+	}
+
+	/*
 	 * In CPPC v1, DESIRED_PERF is mandatory. In CPPC v2, it is optional
 	 * only when AUTO_SEL_ENABLE is supported.
 	 */
-	if (!CPC_SUPPORTED(&cpc_ptr->cpc_regs[DESIRED_PERF]) &&
+	if (!cpc_is_writable(&cpc_ptr->cpc_regs[DESIRED_PERF]) &&
 	    (!osc_sb_cppc2_support_acked ||
-	     !CPC_SUPPORTED(&cpc_ptr->cpc_regs[AUTO_SEL_ENABLE])))
-		pr_warn("Desired perf. register is mandatory if CPPC v2 is not supported "
-			"or autonomous selection is disabled\n");
+	     cpc_ptr->cpc_regs[AUTO_SEL_ENABLE].type != ACPI_TYPE_INTEGER ||
+	     cpc_ptr->cpc_regs[AUTO_SEL_ENABLE].cpc_entry.int_value != 1)) {
+		pr_debug("CPU:%d lacks a writable Desired Performance register\n",
+			 pr->id);
+		ret = -EINVAL;
+		goto out_free;
+	}
 
 	/*
 	 * Initialize the remaining cpc_regs as unsupported.
@@ -1027,6 +1108,8 @@ int acpi_cppc_processor_probe(struct acpi_processor *pr)
 	return 0;
 
 out_free:
+	pr_err("CPU%d: failed to initialize _CPC: %d\n", pr->id, ret);
+
 	/* Free all the mapped sys mem areas for this CPU */
 	for (i = 2; i < cpc_ptr->num_entries; i++) {
 		void __iomem *addr = cpc_ptr->cpc_regs[i-2].sys_mem_vaddr;
@@ -1217,10 +1300,17 @@ static int cpc_write(int cpu, struct cpc_register_resource *reg_res, u64 val)
 	u64 prev_val;
 	void __iomem *vaddr = NULL;
 	int pcc_ss_id = per_cpu(cpu_pcc_subspace_idx, cpu);
-	struct cpc_reg *reg = &reg_res->cpc_entry.reg;
+	struct cpc_reg *reg;
 	struct cpc_desc *cpc_desc;
 	unsigned long flags;
 	bool locked = false;
+
+	if (reg_res->type != ACPI_TYPE_BUFFER)
+		return -EOPNOTSUPP;
+
+	reg = &reg_res->cpc_entry.reg;
+	if (IS_NULL_REG(reg))
+		return -EOPNOTSUPP;
 
 	size = GET_BIT_WIDTH(reg);
 
@@ -1364,7 +1454,9 @@ static int cppc_get_reg_val(int cpu, enum cppc_regs reg_idx, u64 *val)
 
 	reg = &cpc_desc->cpc_regs[reg_idx];
 
-	if ((reg->type == ACPI_TYPE_INTEGER && IS_OPTIONAL_CPC_REG(reg_idx) &&
+	/* Desired may be absent for immutable autonomous selection. */
+	if ((reg->type == ACPI_TYPE_INTEGER &&
+	     (IS_OPTIONAL_CPC_REG(reg_idx) || reg_idx == DESIRED_PERF) &&
 	     !reg->cpc_entry.int_value) || (reg->type != ACPI_TYPE_INTEGER &&
 	     IS_NULL_REG(&reg->cpc_entry.reg))) {
 		pr_debug("CPC register is not supported\n");
@@ -1415,7 +1507,7 @@ static int cppc_set_reg_val(int cpu, enum cppc_regs reg_idx, u64 val)
 	reg = &cpc_desc->cpc_regs[reg_idx];
 
 	/* if a register is writeable, it must be a buffer and not null */
-	if ((reg->type != ACPI_TYPE_BUFFER) || IS_NULL_REG(&reg->cpc_entry.reg)) {
+	if (!cpc_is_writable(reg)) {
 		pr_debug("CPC register is not supported\n");
 		return -EOPNOTSUPP;
 	}
@@ -1505,7 +1597,7 @@ int cppc_get_perf_caps(int cpunum, struct cppc_perf_caps *perf_caps)
 	struct cpc_register_resource *highest_reg, *lowest_reg,
 		*lowest_non_linear_reg, *nominal_reg, *reference_reg,
 		*guaranteed_reg, *low_freq_reg = NULL, *nom_freq_reg = NULL;
-	u64 high, low, guaranteed, nom, ref, min_nonlinear,
+	u64 high, low, guaranteed = 0, nom, ref, min_nonlinear,
 	    low_f = 0, nom_f = 0;
 	int pcc_ss_id = per_cpu(cpu_pcc_subspace_idx, cpunum);
 	struct cppc_pcc_data *pcc_ss_data = NULL;
@@ -1588,7 +1680,9 @@ int cppc_get_perf_caps(int cpunum, struct cppc_perf_caps *perf_caps)
 		goto out_err;
 	perf_caps->lowest_nonlinear_perf = min_nonlinear;
 
-	if (!high || !low || !nom || !ref || !min_nonlinear) {
+	if (!high || !nom || !ref || !min_nonlinear ||
+	    high > U32_MAX || low > U32_MAX || guaranteed > U32_MAX ||
+	    nom > U32_MAX || ref > U32_MAX || min_nonlinear > U32_MAX) {
 		ret = -EFAULT;
 		goto out_err;
 	}
@@ -1604,6 +1698,10 @@ int cppc_get_perf_caps(int cpunum, struct cppc_perf_caps *perf_caps)
 		ret = cpc_read(cpunum, nom_freq_reg, &nom_f);
 		if (ret)
 			goto out_err;
+	}
+	if (low_f > U32_MAX || nom_f > U32_MAX) {
+		ret = -EFAULT;
+		goto out_err;
 	}
 
 	perf_caps->lowest_freq = low_f;
@@ -1791,13 +1889,13 @@ int cppc_set_epp_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls, bool enable)
 			return -ENODEV;
 		}
 
-		if (CPC_SUPPORTED(auto_sel_reg)) {
+		if (cpc_is_writable(auto_sel_reg)) {
 			ret = cpc_write(cpu, auto_sel_reg, enable);
 			if (ret)
 				return ret;
 		}
 
-		if (CPC_SUPPORTED(epp_set_reg)) {
+		if (cpc_is_writable(epp_set_reg)) {
 			ret = cpc_write(cpu, epp_set_reg, perf_ctrls->energy_perf);
 			if (ret)
 				return ret;
