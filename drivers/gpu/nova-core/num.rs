@@ -240,8 +240,7 @@ macro_rules! bounded_enum {
         impl core::convert::From<$enum_type> for kernel::num::Bounded<$width, $length> {
             fn from(value: $enum_type) -> Self {
                 match value {
-                    $($enum_type::$variant =>
-                        kernel::num::Bounded::<$width, _>::new::<{ $value }>()),*
+                    $($enum_type::$variant => kernel::num::cv!($value)),*
                 }
             }
         }

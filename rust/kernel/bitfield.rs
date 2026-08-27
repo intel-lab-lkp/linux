@@ -21,7 +21,7 @@
 //! }
 //!
 //! // Valid value for the `blue` field.
-//! let blue = Bounded::<u16, 5>::new::<0x18>();
+//! let blue: Bounded<u16, 5> = cv!(0x18);
 //!
 //! // Setters can be chained. Values ranges are checked at compile-time.
 //! let color = Rgb::zeroed()
@@ -229,9 +229,9 @@
 //! impl From<Mode> for Bounded<u32, 2> {
 //!     fn from(m: Mode) -> Self {
 //!         match m {
-//!             Mode::Low => Bounded::<u32, _>::new::<0>(),
-//!             Mode::High => Bounded::<u32, _>::new::<1>(),
-//!             Mode::Auto => Bounded::<u32, _>::new::<2>(),
+//!             Mode::Low => cv!(0),
+//!             Mode::High => cv!(1),
+//!             Mode::Auto => cv!(2),
 //!         }
 //!     }
 //! }
