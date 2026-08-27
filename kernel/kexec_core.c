@@ -1189,6 +1189,7 @@ int kernel_kexec(void)
 #endif
 	{
 		kexec_in_progress = true;
+		reboot_log_initiator();
 		kernel_restart_prepare("kexec reboot");
 		migrate_to_reboot_cpu();
 		syscore_shutdown();
