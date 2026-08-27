@@ -1272,6 +1272,7 @@ void sctp_assoc_update_retran_path(struct sctp_association *asoc)
 {
 	struct sctp_transport *trans = asoc->peer.retran_path;
 	struct sctp_transport *trans_next = NULL;
+	bool last = false;
 
 	/* We're done as we only have the one and only path. */
 	if (asoc->peer.transport_count == 1)
@@ -1289,18 +1290,20 @@ void sctp_assoc_update_retran_path(struct sctp_association *asoc)
 		/* Manually skip the head element. */
 		if (&trans->transports == &asoc->peer.transport_addr_list)
 			continue;
-		if (trans->state == SCTP_UNCONFIRMED)
-			continue;
-		trans_next = sctp_trans_elect_best(trans, trans_next);
-		/* Active is good enough for immediate return. */
-		if (trans_next->state == SCTP_ACTIVE)
-			break;
+		last = trans == asoc->peer.retran_path;
+		if (trans->state != SCTP_UNCONFIRMED) {
+			trans_next = sctp_trans_elect_best(trans, trans_next);
+			/* Active is good enough for immediate return. */
+			if (trans_next->state == SCTP_ACTIVE)
+				break;
+		}
 		/* We've reached the end, time to update path. */
-		if (trans == asoc->peer.retran_path)
+		if (last)
 			break;
 	}
 
-	asoc->peer.retran_path = trans_next;
+	if (trans_next)
+		asoc->peer.retran_path = trans_next;
 
 	pr_debug("%s: association:%p updated new path to addr:%pISpc\n",
 		 __func__, asoc, &asoc->peer.retran_path->ipaddr.sa);
