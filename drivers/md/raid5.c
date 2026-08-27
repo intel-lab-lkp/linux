@@ -2642,6 +2642,7 @@ static int resize_stripes(struct r5conf *conf, int newsize)
 		} else {
 			kfree(conf->disks);
 			conf->disks = ndisks;
+			conf->pool_size = newsize;
 		}
 	} else
 		err = -ENOMEM;
@@ -2685,8 +2686,6 @@ static int resize_stripes(struct r5conf *conf, int newsize)
 	}
 	/* critical section pass, GFP_NOIO no longer needed */
 
-	if (!err)
-		conf->pool_size = newsize;
 	mutex_unlock(&conf->cache_size_mutex);
 
 	return err;
