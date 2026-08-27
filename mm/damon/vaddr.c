@@ -361,7 +361,8 @@ static void __damon_va_prepare_access_check(struct mm_struct *mm,
 					struct damon_region *r,
 					struct damon_ctx *ctx)
 {
-	r->sampling_addr = damon_rand(ctx, r->ar.start, r->ar.end);
+	r->sampling_addr = PAGE_ALIGN_DOWN(damon_rand(ctx, r->ar.start,
+						      r->ar.end));
 
 	damon_va_mkold(mm, r->sampling_addr);
 }
