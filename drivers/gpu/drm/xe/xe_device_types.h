@@ -534,6 +534,10 @@ struct xe_device {
 		unsigned long method;
 		/** @wedged.inconsistent_reset: Inconsistent reset policy state between GTs */
 		bool inconsistent_reset;
+		/** @wedged.work: Runs sleepable wedge handling */
+		struct work_struct work;
+		/** @wedged.reported_method: Last recovery method reported to userspace */
+		unsigned long reported_method;
 	} wedged;
 
 	/** @devres_group: devres group */
