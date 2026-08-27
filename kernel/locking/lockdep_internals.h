@@ -122,9 +122,53 @@ enum {
 #define MAX_LOCKDEP_CHAINS	(1UL << MAX_LOCKDEP_CHAINS_BITS)
 
 #define AVG_LOCKDEP_CHAIN_DEPTH		5
-#define MAX_LOCKDEP_CHAIN_HLOCKS (MAX_LOCKDEP_CHAINS * AVG_LOCKDEP_CHAIN_DEPTH)
+#include <linux/reciprocal_div.h>
 
-extern struct lock_chain lock_chains[];
+#define LOCKDEP_SLAB_SIZE	(64 * 1024)
+#define LOCKDEP_MAX_SLABS	64
+
+/*
+ * Chunked Array Tables:
+ * Replaces flat monolithic BSS arrays with 2D chunk pointer matrices.
+ * Chunk 0 is statically allocated in BSS for early boot, while subsequent
+ * chunks are claimed from the memblock reservoir via lockdep_claim_slab().
+ * Indexing uses compile-time Granlund-Montgomery reciprocal divide
+ * (~3-cycle multiply+shift, zero division instructions).
+ */
+#define DECLARE_CHUNKED_ARRAY(name, type)					\
+	enum {									\
+		name##_PER_CHUNK = (LOCKDEP_SLAB_SIZE / sizeof(type)),		\
+	};									\
+	extern type * name##_chunks[LOCKDEP_MAX_SLABS];				\
+	extern const struct reciprocal_value name##_rv;				\
+	static __always_inline type *idx_to_##name(unsigned int idx)		\
+	{									\
+		unsigned int chunk = reciprocal_divide(idx, name##_rv);		\
+		unsigned int offset = idx - (chunk * name##_PER_CHUNK);		\
+		type *chunk_ptr;						\
+		if (unlikely(chunk >= LOCKDEP_MAX_SLABS))			\
+			return NULL;						\
+		/* Pairs with smp_store_release() when new chunk slabs are published */ \
+		chunk_ptr = smp_load_acquire(&name##_chunks[chunk]);		\
+		if (unlikely(!chunk_ptr))					\
+			return NULL;						\
+		return &chunk_ptr[offset];					\
+	}
+
+#define DEFINE_CHUNKED_ARRAY(name, type)					\
+	static type name##_chunk0[name##_PER_CHUNK];				\
+	type *name##_chunks[LOCKDEP_MAX_SLABS] = { name##_chunk0 };		\
+	static unsigned int nr_##name##_chunks = 1;				\
+	const struct reciprocal_value name##_rv =				\
+		RECIPROCAL_VALUE_INIT(name##_PER_CHUNK)
+
+struct lockdep_slab_usage {
+	unsigned int lock_classes;
+	unsigned int direct_deps;
+	unsigned int lock_chains;
+	unsigned int chain_hlocks;
+	unsigned int stack_traces;
+};
 
 #define LOCK_USAGE_CHARS (2*XXX_LOCK_USAGE_STATES + 1)
 

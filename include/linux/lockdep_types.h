@@ -121,6 +121,7 @@ struct lock_class {
 
 	unsigned int			subclass;
 	unsigned int			dep_gen_id;
+	unsigned int			class_idx;
 
 	/*
 	 * IRQ/softirq usage tracking bits:
