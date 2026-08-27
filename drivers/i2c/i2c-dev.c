@@ -47,6 +47,7 @@ struct i2c_dev {
 	struct device dev;
 	struct cdev cdev;
 };
+#define to_i2c_dev(d) container_of((d), struct i2c_dev, dev)
 
 struct i2c_dev_data {
 	struct i2c_dev *i2c_dev;
@@ -111,10 +112,8 @@ static void put_i2c_dev(struct i2c_dev *i2c_dev, bool del_cdev)
 static ssize_t name_show(struct device *dev,
 			 struct device_attribute *attr, char *buf)
 {
-	struct i2c_dev *i2c_dev = i2c_dev_get_by_minor(MINOR(dev->devt));
+	struct i2c_dev *i2c_dev = to_i2c_dev(dev);
 
-	if (!i2c_dev)
-		return -ENODEV;
 	return sysfs_emit(buf, "%s\n", i2c_dev->adap->name);
 }
 static DEVICE_ATTR_RO(name);
@@ -704,9 +703,8 @@ static const struct class i2c_dev_class = {
 
 static void i2cdev_dev_release(struct device *dev)
 {
-	struct i2c_dev *i2c_dev;
+	struct i2c_dev *i2c_dev = to_i2c_dev(dev);
 
-	i2c_dev = container_of(dev, struct i2c_dev, dev);
 	kfree(i2c_dev);
 }
 
