@@ -35,6 +35,7 @@
 #include <asm/cmpxchg.h>
 #include <asm/fixmap.h>
 #include <asm/por.h>
+#include <asm/uaccess.h>
 #include <linux/mmdebug.h>
 #include <linux/mm_types.h>
 #include <linux/sched.h>
@@ -814,7 +815,7 @@ extern pgd_t idmap_pg_dir[];
 extern pgd_t tramp_pg_dir[];
 extern pgd_t reserved_pg_dir[];
 
-extern void set_swapper_pgd(pgd_t *pgdp, pgd_t pgd);
+void try_set_readonly_ptval(ptval_t *ptvalp, ptval_t ptval);
 
 static inline bool in_swapper_pgdir(void *addr)
 {
@@ -824,17 +825,14 @@ static inline bool in_swapper_pgdir(void *addr)
 
 static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
 {
-#ifdef __PAGETABLE_PMD_FOLDED
-	if (in_swapper_pgdir(pmdp)) {
-		set_swapper_pgd((pgd_t *)pmdp, __pgd(pmd_val(pmd)));
-		return;
-	}
-#endif /* __PAGETABLE_PMD_FOLDED */
-
-	WRITE_ONCE(*pmdp, pmd);
+	__put_kernel_nofault(pmdp, &pmd, pmd_t, fault);
 
 	if (pmd_valid(pmd))
 		queue_pte_barriers();
+	return;
+
+fault:
+	try_set_readonly_ptval(&pmd_val(*pmdp), pmd_val(pmd));
 }
 
 static inline void pmd_clear(pmd_t *pmdp)
@@ -890,15 +888,14 @@ static inline bool pgtable_l4_enabled(void);
 
 static inline void set_pud(pud_t *pudp, pud_t pud)
 {
-	if (!pgtable_l4_enabled() && in_swapper_pgdir(pudp)) {
-		set_swapper_pgd((pgd_t *)pudp, __pgd(pud_val(pud)));
-		return;
-	}
-
-	WRITE_ONCE(*pudp, pud);
+	__put_kernel_nofault(pudp, &pud, pud_t, fault);
 
 	if (pud_valid(pud))
 		queue_pte_barriers();
+	return;
+
+fault:
+	try_set_readonly_ptval(&pud_val(*pudp), pud_val(pud));
 }
 
 static inline void pud_clear(pud_t *pudp)
@@ -971,13 +968,12 @@ static inline bool mm_pud_folded(const struct mm_struct *mm)
 
 static inline void set_p4d(p4d_t *p4dp, p4d_t p4d)
 {
-	if (in_swapper_pgdir(p4dp)) {
-		set_swapper_pgd((pgd_t *)p4dp, __pgd(p4d_val(p4d)));
-		return;
-	}
-
-	WRITE_ONCE(*p4dp, p4d);
+	__put_kernel_nofault(p4dp, &p4d, p4d_t, fault);
 	queue_pte_barriers();
+	return;
+
+fault:
+	try_set_readonly_ptval(&p4d_val(*p4dp), p4d_val(p4d));
 }
 
 static inline void p4d_clear(p4d_t *p4dp)
@@ -1099,13 +1095,12 @@ static inline bool mm_p4d_folded(const struct mm_struct *mm)
 
 static inline void set_pgd(pgd_t *pgdp, pgd_t pgd)
 {
-	if (in_swapper_pgdir(pgdp)) {
-		set_swapper_pgd(pgdp, __pgd(pgd_val(pgd)));
-		return;
-	}
-
-	WRITE_ONCE(*pgdp, pgd);
+	__put_kernel_nofault(pgdp, &pgd, pgd_t, fault);
 	queue_pte_barriers();
+	return;
+
+fault:
+	try_set_readonly_ptval(&pgd_val(*pgdp), pgd_val(pgd));
 }
 
 static inline void pgd_clear(pgd_t *pgdp)
