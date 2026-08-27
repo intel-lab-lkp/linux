@@ -785,6 +785,9 @@ static void cx231xx_isoc_irq_callback(struct urb *urb)
 	unsigned long flags;
 	int i;
 
+	if (dev->state & DEV_DISCONNECTED)
+		return;
+
 	switch (urb->status) {
 	case 0:		/* success */
 	case -ETIMEDOUT:	/* NAK */
@@ -829,6 +832,9 @@ static void cx231xx_bulk_irq_callback(struct urb *urb)
 	    container_of(dma_q, struct cx231xx_video_mode, vidq);
 	struct cx231xx *dev = container_of(vmode, struct cx231xx, video_mode);
 	unsigned long flags;
+
+	if (dev->state & DEV_DISCONNECTED)
+		return;
 
 	switch (urb->status) {
 	case 0:		/* success */
@@ -895,7 +901,7 @@ void cx231xx_uninit_isoc(struct cx231xx *dev)
 		dev->video_mode.isoc_ctl.transfer_buffer[i] = NULL;
 	}
 
-	if (broken_pipe) {
+	if (broken_pipe && !(dev->state & DEV_DISCONNECTED)) {
 		cx231xx_isocdbg("Reset endpoint to recover broken pipe.");
 		usb_reset_endpoint(dev->udev, dev->video_mode.end_point_addr);
 	}
@@ -907,6 +913,9 @@ void cx231xx_uninit_isoc(struct cx231xx *dev)
 	dev->video_mode.isoc_ctl.transfer_buffer = NULL;
 	dev->video_mode.isoc_ctl.num_bufs = 0;
 	dma_q->p_left_data = NULL;
+
+	if (dev->state & DEV_DISCONNECTED)
+		return;
 
 	if (dev->mode_tv == 0)
 		cx231xx_capture_start(dev, 0, Raw_Video);
@@ -954,7 +963,7 @@ void cx231xx_uninit_bulk(struct cx231xx *dev)
 		dev->video_mode.bulk_ctl.transfer_buffer[i] = NULL;
 	}
 
-	if (broken_pipe) {
+	if (broken_pipe && !(dev->state & DEV_DISCONNECTED)) {
 		cx231xx_isocdbg("Reset endpoint to recover broken pipe.");
 		usb_reset_endpoint(dev->udev, dev->video_mode.end_point_addr);
 	}
@@ -966,6 +975,9 @@ void cx231xx_uninit_bulk(struct cx231xx *dev)
 	dev->video_mode.bulk_ctl.transfer_buffer = NULL;
 	dev->video_mode.bulk_ctl.num_bufs = 0;
 	dma_q->p_left_data = NULL;
+
+	if (dev->state & DEV_DISCONNECTED)
+		return;
 
 	if (dev->mode_tv == 0)
 		cx231xx_capture_start(dev, 0, Raw_Video);

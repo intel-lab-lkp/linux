@@ -260,6 +260,9 @@ static void cx231xx_irq_vbi_callback(struct urb *urb)
 	struct cx231xx *dev = container_of(vmode, struct cx231xx, vbi_mode);
 	unsigned long flags;
 
+	if (dev->state & DEV_DISCONNECTED)
+		return;
+
 	switch (urb->status) {
 	case 0:		/* success */
 	case -ETIMEDOUT:	/* NAK */
@@ -327,6 +330,9 @@ void cx231xx_uninit_vbi_isoc(struct cx231xx *dev)
 	dev->vbi_mode.bulk_ctl.urb = NULL;
 	dev->vbi_mode.bulk_ctl.transfer_buffer = NULL;
 	dev->vbi_mode.bulk_ctl.num_bufs = 0;
+
+	if (dev->state & DEV_DISCONNECTED)
+		return;
 
 	cx231xx_capture_start(dev, 0, Vbi);
 }
