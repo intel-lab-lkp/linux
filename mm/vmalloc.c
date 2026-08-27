@@ -3280,7 +3280,7 @@ struct vm_struct *__get_vm_area_caller(unsigned long size, unsigned long flags,
  * @flags:	 %VM_IOREMAP for I/O mappings or VM_ALLOC
  *
  * Search an area of @size in the kernel virtual mapping area,
- * and reserved it for out purposes.  Returns the area descriptor
+ * and reserved it for our purposes.  Returns the area descriptor
  * on success or %NULL on failure.
  *
  * Return: the area descriptor on success or %NULL on failure.
@@ -3299,6 +3299,28 @@ struct vm_struct *get_vm_area_caller(unsigned long size, unsigned long flags,
 	return __get_vm_area_node(size, 1, PAGE_SHIFT, flags,
 				  VMALLOC_START, VMALLOC_END,
 				  NUMA_NO_NODE, GFP_KERNEL, caller);
+}
+
+/**
+ * get_vm_area_node - reserve a contiguous kernel virtual area
+ * @size:	 size of the area
+ * @align:	 alignment of the area
+ * @flags:	 %VM_IOREMAP for I/O mappings or VM_ALLOC
+ * @node:	 node from which to allocate data structures
+ *
+ * Search an area of @size in the kernel virtual mapping area,
+ * and reserve it for our purposes.  Returns the area descriptor
+ * on success or %NULL on failure.
+ *
+ * Return: the area descriptor on success or %NULL on failure.
+ */
+struct vm_struct *get_vm_area_node(unsigned long size, unsigned long align,
+				   unsigned long flags, int node)
+{
+	return __get_vm_area_node(size, align, PAGE_SHIFT, flags,
+				  VMALLOC_START, VMALLOC_END,
+				  node, GFP_KERNEL,
+				  __builtin_return_address(0));
 }
 
 /**
