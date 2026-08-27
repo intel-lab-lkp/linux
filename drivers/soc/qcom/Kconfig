@@ -294,6 +294,24 @@ endif
 # Options selected by other drivers from different subsystems must be outside
 # of the menuconfig if-block:
 
+config QCOM_ICE_SLOTS
+	tristate "Qualcomm ICE keyslot partitioning for VM guests"
+	depends on ARCH_QCOM || COMPILE_TEST
+	depends on BLK_CRYPTO_PROXY
+	depends on BLK_INLINE_ENCRYPTION
+	help
+	  Parses the qcom,ice-keyslot-map device-tree node and provides
+	  per-VM ICE keyslot accounting and virtual-to-physical slot
+	  translation for guest VMs sharing ICE hardware on Qualcomm
+	  platforms.
+
+	  When enabled, guest virtual keyslot indices are mapped to the
+	  physical ICE keyslot range allocated to each VM, preventing one
+	  VM from accessing another VM's keyslots.
+
+	  Say M here when multiple VMs share ICE keyslots on a Qualcomm
+	  platform.  If unsure, say N.
+
 config QCOM_INLINE_CRYPTO_ENGINE
 	tristate
 	select QCOM_SCM
