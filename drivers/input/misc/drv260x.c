@@ -243,8 +243,6 @@ static int drv260x_haptics_play(struct input_dev *input, void *data,
 {
 	struct drv260x_data *haptics = input_get_drvdata(input);
 
-	haptics->mode = DRV260X_LRA_NO_CAL_MODE;
-
 	/* Scale u16 magnitude into u8 register value */
 	if (effect->u.rumble.strong_magnitude > 0)
 		haptics->magnitude = effect->u.rumble.strong_magnitude >> 8;
@@ -426,6 +424,21 @@ static int drv260x_init(struct drv260x_data *haptics)
 	return 0;
 }
 
+static int drv260x_open(struct input_dev *input)
+{
+	struct drv260x_data *haptics = input_get_drvdata(input);
+	int error;
+
+	gpiod_set_value(haptics->enable_gpio, 1);
+	usleep_range(250, 500);
+
+	error = drv260x_init(haptics);
+	if (error)
+		gpiod_set_value(haptics->enable_gpio, 0);
+
+	return error;
+}
+
 static const struct regmap_config drv260x_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
@@ -528,6 +541,7 @@ static int drv260x_probe(struct i2c_client *client)
 	}
 
 	haptics->input_dev->name = "drv260x:haptics";
+	haptics->input_dev->open = drv260x_open;
 	haptics->input_dev->close = drv260x_close;
 	input_set_drvdata(haptics->input_dev, haptics);
 	input_set_capability(haptics->input_dev, EV_FF, FF_RUMBLE);
