@@ -379,7 +379,8 @@ static inline bool in_irqentry_text(unsigned long ptr)
 	return (ptr >= (unsigned long)&__irqentry_text_start &&
 		ptr < (unsigned long)&__irqentry_text_end) ||
 		(ptr >= (unsigned long)&__softirqentry_text_start &&
-		 ptr < (unsigned long)&__softirqentry_text_end);
+		 ptr < (unsigned long)&__softirqentry_text_end) ||
+		arch_in_irqentry_text(ptr);
 }
 
 /**

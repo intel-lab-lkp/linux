@@ -62,6 +62,22 @@ void arch_stack_walk_user(stack_trace_consume_fn consume_entry, void *cookie,
 			  const struct pt_regs *regs);
 #endif /* CONFIG_ARCH_STACKWALK */
 
+/*
+ * Optional arch provided check for additional IRQ entry text, called
+ * in addition to the .irqentry.text and .softirqentry.text range
+ * checks in in_irqentry_text().  Implement this if the architecture
+ * delivers interrupts or exceptions through entry code which cannot
+ * reside in those sections.
+ */
+#ifdef CONFIG_ARCH_HAS_IN_IRQENTRY_TEXT
+bool arch_in_irqentry_text(unsigned long addr);
+#else
+static inline bool arch_in_irqentry_text(unsigned long addr)
+{
+	return false;
+}
+#endif
+
 #ifdef CONFIG_STACKTRACE
 void stack_trace_print(const unsigned long *trace, unsigned int nr_entries,
 		       int spaces);

@@ -551,6 +551,9 @@ config ARCH_HAS_COPY_MC
 config ARCH_STACKWALK
        bool
 
+config ARCH_HAS_IN_IRQENTRY_TEXT
+	bool
+
 config STACKDEPOT
 	bool
 	select STACKTRACE
