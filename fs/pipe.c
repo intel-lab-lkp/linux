@@ -27,6 +27,7 @@
 #include <linux/watch_queue.h>
 #include <linux/sysctl.h>
 #include <linux/sort.h>
+#include <linux/sched/task_stack.h>
 
 #include <linux/uaccess.h>
 #include <asm/ioctls.h>
@@ -469,16 +470,23 @@ anon_pipe_read(struct kiocb *iocb, struct iov_iter *to)
 			break;
 		}
 		mutex_unlock(&pipe->mutex);
-		/*
-		 * We only get here if we didn't actually read anything.
-		 *
-		 * But because we didn't read anything, at this point we can
-		 * just return directly with -ERESTARTSYS if we're interrupted,
-		 * since we've done any required wakeups and there's no need
-		 * to mark anything accessed. And we've dropped the lock.
-		 */
-		if (wait_event_interruptible_exclusive(pipe->rd_wait, pipe_readable(pipe)) < 0)
-			return -ERESTARTSYS;
+
+		{
+			guard(allow_stack_reclaim)();
+			/*
+			 * We only get here if we didn't actually read
+			 * anything.
+			 *
+			 * But because we didn't read anything, at this point
+			 * we can just return directly with -ERESTARTSYS if
+			 * we're interrupted, since we've done any required
+			 * wakeups and there's no need to mark anything
+			 * accessed. And we've dropped the lock.
+			 */
+			if (wait_event_interruptible_exclusive(pipe->rd_wait,
+							       pipe_readable(pipe)) < 0)
+				return -ERESTARTSYS;
+		}
 
 		wake_next_reader = true;
 		mutex_lock(&pipe->mutex);

@@ -19,6 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/rt.h>
+#include <linux/sched/task_stack.h>
 #include <linux/syscalls.h>
 #include <linux/export.h>
 #include <linux/slab.h>
@@ -235,6 +236,8 @@ static int poll_schedule_timeout(struct poll_wqueues *pwq, int state,
 			  ktime_t *expires, unsigned long slack)
 {
 	int rc = -EINTR;
+
+	guard(allow_stack_reclaim)();
 
 	set_current_state(state);
 	if (!READ_ONCE(pwq->triggered))

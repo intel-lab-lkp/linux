@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched/signal.h>
+#include <linux/sched/task_stack.h>
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/signal.h>
@@ -2301,6 +2302,8 @@ static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
 
 		if (signal_pending(current))
 			return -EINTR;
+
+		guard(allow_stack_reclaim)();
 
 		/*
 		 * Internally init_wait() uses autoremove_wake_function(),

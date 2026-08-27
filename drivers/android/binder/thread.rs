@@ -538,13 +538,21 @@ impl Thread {
 
         // Loop waiting only on the local queue (i.e., not registering with the process queue).
         let mut inner = self.inner.lock();
+        // SAFETY: Only accessed locally in this function
+        let current = unsafe { Task::current() };
         loop {
             if let Some(work) = inner.pop_work() {
                 return Ok(Some(work));
             }
 
             inner.looper_flags |= LOOPER_WAITING;
+
+            current.set_flag_bits(bindings::PF_RECLAIMABLE_STACK);
+
             let signal_pending = self.work_condvar.wait_interruptible_freezable(&mut inner);
+
+            current.clear_flag_bits(bindings::PF_RECLAIMABLE_STACK);
+
             inner.looper_flags &= !LOOPER_WAITING;
 
             if signal_pending {
@@ -592,14 +600,20 @@ impl Thread {
         };
 
         let mut inner = self.inner.lock();
+        // SAFETY: Only accessed locally in this function
+        let current = unsafe { Task::current() };
         loop {
             if let Some(work) = inner.pop_work() {
                 return Ok(Some(work));
             }
 
+            current.set_flag_bits(bindings::PF_RECLAIMABLE_STACK);
+
             inner.looper_flags |= LOOPER_WAITING | LOOPER_WAITING_PROC;
             let signal_pending = self.work_condvar.wait_interruptible_freezable(&mut inner);
             inner.looper_flags &= !(LOOPER_WAITING | LOOPER_WAITING_PROC);
+
+            current.clear_flag_bits(bindings::PF_RECLAIMABLE_STACK);
 
             if signal_pending || inner.looper_need_return {
                 // We need to return now. We need to pull the thread off the list of ready threads

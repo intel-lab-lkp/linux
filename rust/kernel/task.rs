@@ -344,6 +344,22 @@ impl CurrentTask {
         // only be used while `current` is still valid, thus still running.
         unsafe { &*ptr.cast() }
     }
+
+    /// Sets the given task flag bits on the current task.
+    #[inline]
+    pub fn set_flag_bits(&self, set: u32) {
+            // SAFETY: The `flags` field of `current` is not modified from other threads, so
+	    // the non-atomic update isn't a race.
+	    unsafe { (*self.as_ptr()).flags |= set }
+    }
+
+    /// Clears the given task flag bits on the current task.
+    #[inline]
+    pub fn clear_flag_bits(&self, clear: u32) {
+            // SAFETY: The `flags` field of `current` is not modified from other threads, so
+	    // the non-atomic update isn't a race.
+	    unsafe { (*self.as_ptr()).flags &= !clear }
+    }
 }
 
 // SAFETY: The type invariants guarantee that `Task` is always refcounted.

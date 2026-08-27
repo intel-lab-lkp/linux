@@ -2718,17 +2718,21 @@ static void do_freezer_trap(void)
 		return;
 	}
 
-	/*
-	 * Now we're sure that there is no pending fatal signal and no
-	 * pending traps. Clear TIF_SIGPENDING to not get out of schedule()
-	 * immediately (if there is a non-fatal signal pending), and
-	 * put the task into sleep.
-	 */
-	__set_current_state(TASK_INTERRUPTIBLE|TASK_FREEZABLE);
-	clear_thread_flag(TIF_SIGPENDING);
-	spin_unlock_irq(&current->sighand->siglock);
-	cgroup_enter_frozen();
-	schedule();
+	{
+		guard(allow_stack_reclaim)();
+
+		/*
+		 * Now we're sure that there is no pending fatal signal and no
+		 * pending traps. Clear TIF_SIGPENDING to not get out of schedule()
+		 * immediately (if there is a non-fatal signal pending), and
+		 * put the task into sleep.
+		 */
+		__set_current_state(TASK_INTERRUPTIBLE | TASK_FREEZABLE);
+		clear_thread_flag(TIF_SIGPENDING);
+		spin_unlock_irq(&current->sighand->siglock);
+		cgroup_enter_frozen();
+		schedule();
+	}
 
 	/*
 	 * We could've been woken by task_work, run it to clear
@@ -3788,9 +3792,13 @@ static int do_sigtimedwait(const sigset_t *which, kernel_siginfo_t *info,
 		recalc_sigpending();
 		spin_unlock_irq(&tsk->sighand->siglock);
 
-		__set_current_state(TASK_INTERRUPTIBLE|TASK_FREEZABLE);
-		ret = schedule_hrtimeout_range(to, tsk->timer_slack_ns,
-					       HRTIMER_MODE_REL);
+		{
+			guard(allow_stack_reclaim)();
+			__set_current_state(TASK_INTERRUPTIBLE | TASK_FREEZABLE);
+			ret = schedule_hrtimeout_range(to, tsk->timer_slack_ns,
+						       HRTIMER_MODE_REL);
+		}
+
 		spin_lock_irq(&tsk->sighand->siglock);
 		__set_task_blocked(tsk, &tsk->real_blocked);
 		sigemptyset(&tsk->real_blocked);
