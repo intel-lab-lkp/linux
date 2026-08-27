@@ -5294,6 +5294,9 @@ static void show_numa_info(struct seq_file *m, struct vm_struct *v,
 	if (!counters)
 		return;
 
+	if (v->flags & VM_SPARSE)
+		return;
+
 	memset(counters, 0, nr_node_ids * sizeof(unsigned int));
 
 	for (nr = 0; nr < v->nr_pages; nr += step)
