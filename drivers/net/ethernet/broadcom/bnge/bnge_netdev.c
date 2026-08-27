@@ -3155,6 +3155,9 @@ static void bnge_close_core(struct bnge_net *bn)
 {
 	struct bnge_dev *bd = bn->bd;
 
+	if (!bn->bnapi)
+		return;
+
 	bnge_tx_disable(bn);
 
 	clear_bit(BNGE_STATE_OPEN, &bd->state);
@@ -3267,6 +3270,44 @@ static const struct netdev_stat_ops bnge_stat_ops = {
 	.get_base_stats		= bnge_get_base_stats,
 };
 
+static int bnge_set_features(struct net_device *dev, netdev_features_t features)
+{
+	struct bnge_net *bn = netdev_priv(dev);
+	struct bnge_dev *bd = bn->bd;
+	u32 old_flags = bn->priv_flags;
+	u32 flags = old_flags;
+	int rc;
+
+	flags &= ~BNGE_NET_EN_TPA;
+	if (features & NETIF_F_GRO_HW)
+		flags |= BNGE_NET_EN_GRO;
+	else if (features & NETIF_F_LRO)
+		flags |= BNGE_NET_EN_LRO;
+
+	if (flags == old_flags)
+		return 0;
+
+	if (!netif_running(dev)) {
+		bn->priv_flags = flags;
+		bnge_set_ring_params(bd);
+		return 0;
+	}
+
+	bnge_close_core(bn);
+	bn->priv_flags = flags;
+	bnge_set_ring_params(bd);
+
+	rc = bnge_open_core(bn);
+	if (rc) {
+		netdev_err(dev, "bnge_open_core err: %d\n", rc);
+		bn->priv_flags = old_flags;
+		bnge_set_ring_params(bd);
+		netif_close(dev);
+	}
+
+	return rc;
+}
+
 static const struct net_device_ops bnge_netdev_ops = {
 	.ndo_open		= bnge_open,
 	.ndo_stop		= bnge_close,
@@ -3274,6 +3315,7 @@ static const struct net_device_ops bnge_netdev_ops = {
 	.ndo_get_stats64	= bnge_get_stats64,
 	.ndo_set_rx_mode_async	= bnge_set_rx_mode,
 	.ndo_features_check	= bnge_features_check,
+	.ndo_set_features	= bnge_set_features,
 };
 
 static void bnge_init_mac_addr(struct bnge_dev *bd)
