@@ -88,6 +88,30 @@ static inline bool kvm_vcpu_has_mediated_pmu(struct kvm_vcpu *vcpu)
 	return enable_mediated_pmu && vcpu_to_pmu(vcpu)->version;
 }
 
+static inline unsigned long kvm_gp_pmc_mask(struct kvm_pmu *pmu)
+{
+	return pmu->pmc_exists64 &
+	       GENMASK_ULL(KVM_MAX_NR_GP_COUNTERS - 1, 0);
+}
+
+static inline unsigned long kvm_fixed_pmc_mask(struct kvm_pmu *pmu)
+{
+	return (pmu->pmc_exists64 >> KVM_FIXED_PMC_BASE_IDX) &
+		GENMASK_ULL(KVM_MAX_NR_FIXED_COUNTERS - 1, 0);
+}
+
+static inline bool kvm_is_gp_pmc_supported(struct kvm_pmu *pmu, unsigned int idx)
+{
+	return idx < KVM_MAX_NR_GP_COUNTERS &&
+	       test_bit(idx, pmu->pmc_exists);
+}
+
+static inline bool kvm_is_fixed_pmc_supported(struct kvm_pmu *pmu, unsigned int idx)
+{
+	return idx < KVM_MAX_NR_FIXED_COUNTERS &&
+	       test_bit(KVM_FIXED_PMC_BASE_IDX + idx, pmu->pmc_exists);
+}
+
 /*
  * KVM tracks all counters in 64-bit bitmaps, with general purpose counters
  * mapped to bits 31:0 and fixed counters mapped to 63:32, e.g. fixed counter 0
@@ -104,11 +128,11 @@ static inline bool kvm_vcpu_has_mediated_pmu(struct kvm_vcpu *vcpu)
  */
 static inline struct kvm_pmc *kvm_pmc_idx_to_pmc(struct kvm_pmu *pmu, int idx)
 {
-	if (idx < pmu->nr_arch_gp_counters)
+	if (kvm_is_gp_pmc_supported(pmu, idx))
 		return &pmu->gp_counters[idx];
 
 	idx -= KVM_FIXED_PMC_BASE_IDX;
-	if (idx >= 0 && idx < pmu->nr_arch_fixed_counters)
+	if (kvm_is_fixed_pmc_supported(pmu, idx))
 		return &pmu->fixed_counters[idx];
 
 	return NULL;
@@ -119,6 +143,17 @@ static inline struct kvm_pmc *kvm_pmc_idx_to_pmc(struct kvm_pmu *pmu, int idx)
 		if (!(pmc = kvm_pmc_idx_to_pmc(pmu, i)))	\
 			continue;				\
 		else						\
+
+/*
+ * @mask is expected to be a scalar unsigned long derived from pmu->pmc_exists,
+ * which is already constrained by KVM_MAX_NR_{AMD,INTEL}_{GP,FIXED}_COUNTERS,
+ * so iteration up to KVM's maximum counter count is safe.
+ */
+#define kvm_for_each_gp_counter(i, mask)	\
+	for_each_set_bit((i), &(mask), KVM_MAX_NR_GP_COUNTERS)
+
+#define kvm_for_each_fixed_counter(i, mask)	\
+	for_each_set_bit((i), &(mask), KVM_MAX_NR_FIXED_COUNTERS)
 
 static inline u64 pmc_bitmask(struct kvm_pmc *pmc)
 {
@@ -168,9 +203,12 @@ static inline bool kvm_valid_perf_global_ctrl(struct kvm_pmu *pmu,
 static inline struct kvm_pmc *get_gp_pmc(struct kvm_pmu *pmu, u32 msr,
 					 u32 base)
 {
-	if (msr >= base && msr < base + pmu->nr_arch_gp_counters) {
+	if (msr >= base && msr < base + KVM_MAX_NR_GP_COUNTERS) {
 		u32 index = array_index_nospec(msr - base,
-					       pmu->nr_arch_gp_counters);
+					       KVM_MAX_NR_GP_COUNTERS);
+
+		if (!kvm_is_gp_pmc_supported(pmu, index))
+			return NULL;
 
 		return &pmu->gp_counters[index];
 	}
@@ -183,9 +221,12 @@ static inline struct kvm_pmc *get_fixed_pmc(struct kvm_pmu *pmu, u32 msr)
 {
 	int base = MSR_CORE_PERF_FIXED_CTR0;
 
-	if (msr >= base && msr < base + pmu->nr_arch_fixed_counters) {
+	if (msr >= base && msr < base + KVM_MAX_NR_FIXED_COUNTERS) {
 		u32 index = array_index_nospec(msr - base,
-					       pmu->nr_arch_fixed_counters);
+					       KVM_MAX_NR_FIXED_COUNTERS);
+
+		if (!kvm_is_fixed_pmc_supported(pmu, index))
+			return NULL;
 
 		return &pmu->fixed_counters[index];
 	}
