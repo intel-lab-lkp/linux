@@ -33,6 +33,15 @@ struct cachefiles_vol_xattr {
 	__u8	data[];		/* netfs volume coherency data */
 } __packed;
 
+static u64 cachefiles_xattr_get_aux(const struct cachefiles_xattr *buf,
+				    unsigned int len)
+{
+	__be64 aux = 0;
+
+	memcpy(&aux, buf->data, min_t(unsigned int, len, sizeof(aux)));
+	return be64_to_cpu(aux);
+}
+
 /*
  * set the state xattr on a cache file
  */
@@ -77,7 +86,7 @@ int cachefiles_set_object_xattr(struct cachefiles_object *object)
 		trace_cachefiles_vfs_error(object, file_inode(file), ret,
 					   cachefiles_trace_setxattr_error);
 		trace_cachefiles_coherency(object, file_inode(file)->i_ino,
-					   be64_to_cpup((__be64 *)buf->data),
+					   cachefiles_xattr_get_aux(buf, len),
 					   buf->content,
 					   cachefiles_coherency_set_fail);
 		if (ret != -ENOMEM)
@@ -86,7 +95,7 @@ int cachefiles_set_object_xattr(struct cachefiles_object *object)
 				"Failed to set xattr with error %d", ret);
 	} else {
 		trace_cachefiles_coherency(object, file_inode(file)->i_ino,
-					   be64_to_cpup((__be64 *)buf->data),
+					   cachefiles_xattr_get_aux(buf, len),
 					   buf->content,
 					   cachefiles_coherency_set_ok);
 	}
@@ -106,6 +115,8 @@ int cachefiles_check_auxdata(struct cachefiles_object *object, struct file *file
 	unsigned int len = object->cookie->aux_len, tlen;
 	const void *p = fscache_get_aux(object->cookie);
 	enum cachefiles_coherency_trace why;
+	enum cachefiles_content content = CACHEFILES_CONTENT_NO_DATA;
+	u64 disk_aux = 0;
 	ssize_t xlen;
 	int ret = -ESTALE;
 
@@ -131,6 +142,9 @@ int cachefiles_check_auxdata(struct cachefiles_object *object, struct file *file
 		goto out;
 	}
 
+	content = buf->content;
+	disk_aux = cachefiles_xattr_get_aux(buf, len);
+
 	if (buf->type != CACHEFILES_COOKIE_TYPE_DATA) {
 		why = cachefiles_coherency_check_type;
 	} else if (memcmp(buf->data, p, len) != 0) {
@@ -148,8 +162,7 @@ int cachefiles_check_auxdata(struct cachefiles_object *object, struct file *file
 
 out:
 	trace_cachefiles_coherency(object, file_inode(file)->i_ino,
-				   be64_to_cpup((__be64 *)buf->data),
-				   buf->content, why);
+				   disk_aux, content, why);
 	kfree(buf);
 	return ret;
 }
