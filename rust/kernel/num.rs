@@ -18,7 +18,6 @@ pub use bounded::*;
 /// ```
 /// use core::num::NonZero;
 /// use kernel::num::Bounded;
-/// use kernel::num::cv;
 /// use kernel::ptr::Alignment;
 ///
 /// let v: NonZero<usize> = cv!(8);
