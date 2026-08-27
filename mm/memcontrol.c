@@ -133,7 +133,7 @@ static DEFINE_SPINLOCK(objcg_lock);
 
 bool mem_cgroup_kmem_disabled(void)
 {
-	return cgroup_memory_nokmem;
+	return cgroup_memory_nokmem || mem_cgroup_disabled();
 }
 
 static void memcg_uncharge(struct mem_cgroup *memcg, unsigned int nr_pages);
