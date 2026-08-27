@@ -4026,7 +4026,7 @@ static void iscsit_get_rx_pdu(struct iscsit_conn *conn)
 {
 	int ret;
 	u8 *buffer, *tmp_buf, opcode;
-	u32 checksum = 0, digest = 0;
+	u32 checksum = 0, digest = 0, header_length;
 	struct iscsi_hdr *hdr;
 	struct kvec iov;
 
@@ -4053,8 +4053,10 @@ static void iscsit_get_rx_pdu(struct iscsit_conn *conn)
 		}
 
 		hdr = (struct iscsi_hdr *) buffer;
+		header_length = ISCSI_HDR_LEN;
 		if (hdr->hlength) {
 			iov.iov_len = hdr->hlength * 4;
+			header_length = ISCSI_HDR_LEN + iov.iov_len;
 			tmp_buf = krealloc(buffer,
 					  ISCSI_HDR_LEN + iov.iov_len,
 					  GFP_KERNEL);
@@ -4081,7 +4083,7 @@ static void iscsit_get_rx_pdu(struct iscsit_conn *conn)
 				break;
 			}
 
-			checksum = iscsit_crc_buf(buffer, ISCSI_HDR_LEN, 0,
+			checksum = iscsit_crc_buf(buffer, header_length, 0,
 						  NULL);
 			if (digest != checksum) {
 				pr_err("HeaderDigest CRC32C failed,"
