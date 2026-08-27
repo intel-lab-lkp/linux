@@ -76,7 +76,8 @@ struct ieee802154_local {
 	struct work_struct rx_mac_cmd_work;
 
 	/* Association */
-	struct ieee802154_pan_device *assoc_dev;
+	spinlock_t assoc_lock; /* protects association address and active bit */
+	__le64 assoc_dev_extended_addr;
 	struct completion assoc_done;
 	__le16 assoc_addr;
 	u8 assoc_status;
