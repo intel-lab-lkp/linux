@@ -16,6 +16,8 @@
 
 #include <rv/automata.h>
 #include <linux/rv.h>
+#include <linux/rv_edge_stat.h>
+#include <linux/sched/clock.h>
 #include <linux/stringify.h>
 #include <linux/bug.h>
 #include <linux/sched.h>
@@ -29,6 +31,54 @@
 #define DA_MON_NAME CONCATENATE(da_mon_, MONITOR_NAME)
 
 static struct rv_monitor rv_this;
+
+/* per-edge dwell statistics, wired up for per-cpu monitors. */
+#if defined(CONFIG_RV_EDGE_STAT) && RV_MON_TYPE == RV_MON_PER_CPU
+static void
+rv_this_edge_name(unsigned int edge, char *buf, size_t len)
+{
+	snprintf(buf, len, "%s:%s", model_get_state_name(edge / EVENT_MAX),
+		 model_get_event_name(edge % EVENT_MAX));
+}
+
+static const struct rv_edge_cfg rv_this_edge_cfg = {
+	.n_edges   = STATE_MAX * EVENT_MAX,
+	.edge_name = rv_this_edge_name,
+};
+
+/* Hand the model's edge descriptor to the core; called from da_monitor_init(). */
+static inline void rv_edge_bind(void)
+{
+	rv_this.edge_cfg = &rv_this_edge_cfg;
+}
+
+/* Stamp the moment a state is entered, so its dwell can be timed on exit. */
+static __always_inline void rv_da_edge_enter(struct da_monitor *da_mon)
+{
+	da_mon->state_ns = local_clock();
+}
+
+/* Account the dwell in @curr, then stamp entry into the next state. */
+static __always_inline void
+rv_da_edge_account(struct da_monitor *da_mon, enum states curr, enum events ev)
+{
+	u64 now = local_clock();
+	u64 prev = da_mon->state_ns;
+
+	da_mon->state_ns = now;
+	/*
+	 * local_clock() is not guaranteed monotonic; drop the sample if it did
+	 * not advance so a backward step cannot underflow into a bogus dwell.
+	 */
+	if (rv_this.edge_pcpu && prev && now > prev)
+		rv_edge_account(&rv_this, curr * EVENT_MAX + ev, now - prev);
+}
+#else
+static inline void rv_edge_bind(void) { }
+static inline void rv_da_edge_enter(struct da_monitor *da_mon) { }
+static inline void
+rv_da_edge_account(struct da_monitor *da_mon, enum states curr, enum events ev) { }
+#endif /* CONFIG_RV_EDGE_STAT && RV_MON_PER_CPU */
 
 /*
  * Hook to allow the implementation of hybrid automata: define it with a
@@ -113,6 +163,7 @@ static inline void da_monitor_reset(struct da_monitor *da_mon)
 static inline void da_monitor_start(struct da_monitor *da_mon)
 {
 	da_mon->curr_state = model_get_initial_state();
+	rv_da_edge_enter(da_mon);
 	da_monitor_init_hook(da_mon);
 	/* Pairs with smp_load_acquire in da_monitoring(). */
 	smp_store_release(&da_mon->monitoring, 1);
@@ -275,6 +326,7 @@ static inline void da_monitor_reset_state_all(void)
  */
 static inline int da_monitor_init(void)
 {
+	rv_edge_bind();
 	da_monitor_reset_state_all();
 	return 0;
 }
@@ -696,6 +748,7 @@ static inline bool da_event(struct da_monitor *da_mon, enum events event, da_id_
 		if (likely(try_cmpxchg(&da_mon->curr_state, &curr_state, next_state))) {
 			if (!da_monitor_event_hook(da_mon, curr_state, event, next_state, id))
 				return false;
+			rv_da_edge_account(da_mon, curr_state, event);
 			da_trace_event(da_mon, model_get_state_name(curr_state),
 				       model_get_event_name(event),
 				       model_get_state_name(next_state),

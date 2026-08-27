@@ -27,6 +27,10 @@
 struct da_monitor {
 	bool		monitoring;
 	unsigned int	curr_state;
+#ifdef CONFIG_RV_EDGE_STAT
+	/* local_clock() ns when curr_state was entered; 0 = not yet stamped. */
+	u64		state_ns;
+#endif
 };
 
 #ifdef CONFIG_RV_LTL_MONITOR
