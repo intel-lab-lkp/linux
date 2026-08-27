@@ -138,7 +138,6 @@ void * __init prom_early_alloc(unsigned long size)
 		 */
 		res = memblock_alloc_or_panic(chunk_size, SMP_CACHE_BYTES);
 		prom_early_allocated += chunk_size;
-		memset(res, 0, chunk_size);
 		free_mem = chunk_size;
 		mem = res;
 	}
