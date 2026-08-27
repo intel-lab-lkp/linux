@@ -365,6 +365,26 @@ but higher overhead. The timer wheel (``HA_TIMER_WHEEL``) is a good alternative
 for monitors with several instances (e.g. per-task) that achieves lower
 overhead with increased latency, yet without compromising precision.
 
+Reactors
+--------
+
+A reactor is a callback triggered by a monitor when a violation is
+detected. Reactors are registered via ``/sys/kernel/tracing/rv/reactors/``
+and enabled per monitor.
+
+Reactor Locking Rules
++++++++++++++++++++++
+
+A reactor callback may be invoked from various contexts (process,
+softirq, hardirq, NMI) depending on the tracepoint to which its
+monitor is attached.
+
+Lockdep uses a fixed wait type: ``LD_WAIT_SPIN``. This allows
+``raw_spinlock_t`` but disallows sleepable locks. ``LD_WAIT_FREE`` is
+not viable in preemptible contexts because scheduler preemption takes
+``rq->__lock`` (``LD_WAIT_SPIN``), which would cause false-positive
+warnings.
+
 Final remarks
 -------------
 
