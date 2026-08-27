@@ -586,6 +586,17 @@ int ext4_ind_map_blocks(handle_t *handle, struct inode *inode,
 		for (i = partial - chain + 1; i < depth; i++)
 			count = count * epb + (epb - offsets[i] - 1);
 		count++;
+
+		/*
+		 * The count knows nothing about delayed allocation, so let
+		 * the common helper reconcile it with the extent status
+		 * tree.  Clamp it first: with a large block size a subtree
+		 * can be bigger than the logical block space.
+		 */
+		count = umin(count, EXT_MAX_BLOCKS - map->m_lblk);
+		count = ext4_determine_insert_hole(inode, map->m_lblk,
+						   map->m_lblk, count);
+
 		/* Fill in size of a hole we found */
 		map->m_pblk = 0;
 		map->m_len = umin(map->m_len, count);
