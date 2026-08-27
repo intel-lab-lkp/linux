@@ -1427,7 +1427,8 @@ void nested_svm_vmexit(struct vcpu_svm *svm)
 	kvm_rsp_write(vcpu, vmcb01->save.rsp);
 	kvm_rip_write(vcpu, vmcb01->save.rip);
 
-	svm->vcpu.arch.dr7 = DR7_FIXED_1;
+	svm->vcpu.arch.dr6 = vmcb01->save.dr6;
+	svm->vcpu.arch.dr7 = vmcb01->save.dr7;
 	kvm_update_dr7(&svm->vcpu);
 
 	nested_svm_transition_tlb_flush(vcpu);
