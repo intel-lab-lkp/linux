@@ -1,4 +1,22 @@
 # SPDX-License-Identifier: GPL-2.0-only
+
+config ECONET_FE_SOC_PHY
+	tristate "EcoNet 10/100 SoC Ethernet PHYs"
+	depends on ECONET || COMPILE_TEST
+	select MTK_NET_PHYLIB
+	select PHY_PACKAGE
+	help
+	  Supports EcoNet SoC built-in 10/100 Ethernet PHYs.
+
+	  Include support for built-in Ethernet PHYs which are present in
+	  EN751221 SoCs and bear the ID 03a2.9414 or 03a2.9412. These PHYs
+	  exist in groups of three or four depending on SoC variant.
+	  Their MMIO IDs are always 11, 10, 9, and if ID is 9412, 8. The lowest
+	  numbered PHY of the group is necessary for certain common calibration
+	  for the group, so PHY 9 (or 8) must be configured in the device tree
+	  in order for any other phy in the group to calibrate.
+	  Calibration is automatic and no e-fuse is required.
+
 config MEDIATEK_2P5GE_PHY
 	tristate "MediaTek 2.5Gb Ethernet PHYs"
 	depends on (ARM64 && ARCH_MEDIATEK) || COMPILE_TEST
