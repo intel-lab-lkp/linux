@@ -52,6 +52,10 @@ int io_uring_cmd_import_fixed_vec(struct io_uring_cmd *ioucmd,
 				  int ddir, struct iov_iter *iter,
 				  unsigned issue_flags);
 
+/* One of these must be called prior to io_uring_cmd_done() */
+void io_uring_cmd_set_res(struct io_uring_cmd *, s32 ret);
+void io_uring_cmd_set_res32(struct io_uring_cmd *, s32 ret, u64 res2);
+
 /*
  * Completes the request, i.e. posts an io_uring CQE and deallocates @ioucmd
  * and the corresponding io_uring request.
@@ -59,8 +63,7 @@ int io_uring_cmd_import_fixed_vec(struct io_uring_cmd *ioucmd,
  * Note: the caller should never hard code @issue_flags and is only allowed
  * to pass the mask provided by the core io_uring code.
  */
-void __io_uring_cmd_done(struct io_uring_cmd *cmd, s32 ret, u64 res2,
-			 unsigned issue_flags, bool is_cqe32);
+void io_uring_cmd_done(struct io_uring_cmd *, unsigned issue_flags);
 
 void __io_uring_cmd_do_in_task(struct io_uring_cmd *ioucmd,
 			    io_req_tw_func_t task_work_cb,
@@ -107,8 +110,15 @@ static inline int io_uring_cmd_import_fixed_vec(struct io_uring_cmd *ioucmd,
 {
 	return -EOPNOTSUPP;
 }
-static inline void __io_uring_cmd_done(struct io_uring_cmd *cmd, s32 ret,
-		u64 ret2, unsigned issue_flags, bool is_cqe32)
+static inline void io_uring_cmd_set_res(struct io_uring_cmd *cmd, s32 ret)
+{
+}
+static inline void io_uring_cmd_set_res32(struct io_uring_cmd *cmd, s32 ret,
+					  u64 res2)
+{
+}
+static inline void io_uring_cmd_done(struct io_uring_cmd *cmd,
+				     unsigned issue_flags)
 {
 }
 static inline void __io_uring_cmd_do_in_task(struct io_uring_cmd *ioucmd,
@@ -168,18 +178,6 @@ static inline struct task_struct *io_uring_cmd_get_task(struct io_uring_cmd *cmd
 static inline void *io_uring_cmd_ctx_handle(struct io_uring_cmd *cmd)
 {
 	return cmd_to_io_kiocb(cmd)->ctx;
-}
-
-static inline void io_uring_cmd_done(struct io_uring_cmd *ioucmd, s32 ret,
-				     unsigned issue_flags)
-{
-	return __io_uring_cmd_done(ioucmd, ret, 0, issue_flags, false);
-}
-
-static inline void io_uring_cmd_done32(struct io_uring_cmd *ioucmd, s32 ret,
-				       u64 res2, unsigned issue_flags)
-{
-	return __io_uring_cmd_done(ioucmd, ret, res2, issue_flags, true);
 }
 
 int io_buffer_register_bvec(struct io_uring_cmd *cmd, struct request *rq,

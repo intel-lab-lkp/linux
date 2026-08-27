@@ -60,8 +60,8 @@ static void scsi_bsg_uring_task_cb(struct io_tw_req tw_req, io_tw_token_t tw)
 				  scmd->resid_len);
 
 	blk_mq_free_request(rq);
-	io_uring_cmd_done32(ioucmd, ret, res2,
-			    IO_URING_CMD_TASK_WORK_ISSUE_FLAGS);
+	io_uring_cmd_set_res32(ioucmd, ret, res2);
+	io_uring_cmd_done(ioucmd, IO_URING_CMD_TASK_WORK_ISSUE_FLAGS);
 }
 
 static enum rq_end_io_ret scsi_bsg_uring_cmd_done(struct request *req,

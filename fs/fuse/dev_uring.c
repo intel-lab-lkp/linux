@@ -366,8 +366,10 @@ static void fuse_uring_entry_teardown(struct fuse_ring_ent *ent)
 	ent->state = FRRS_RELEASED;
 	spin_unlock(&queue->lock);
 
-	if (cmd)
-		io_uring_cmd_done(cmd, -ENOTCONN, IO_URING_F_UNLOCKED);
+	if (cmd) {
+		io_uring_cmd_set_res(cmd, -ENOTCONN);
+		io_uring_cmd_done(cmd, IO_URING_F_UNLOCKED);
+	}
 
 	if (req)
 		fuse_uring_stop_fuse_req_end(req);
@@ -531,7 +533,8 @@ static void fuse_uring_cancel(struct io_uring_cmd *cmd,
 
 	if (need_cmd_done) {
 		/* no queue lock to avoid lock order issues */
-		io_uring_cmd_done(cmd, -ENOTCONN, issue_flags);
+		io_uring_cmd_set_res(cmd, -ENOTCONN);
+		io_uring_cmd_done(cmd, issue_flags);
 		kfree(ent);
 		if (atomic_dec_and_test(&queue->ring->queue_refs))
 			wake_up_all(&queue->ring->stop_waitq);
@@ -942,7 +945,8 @@ static void fuse_uring_send(struct fuse_ring_ent *ent, struct io_uring_cmd *cmd,
 	fuse_uring_add_to_pq(ent);
 	spin_unlock(&queue->lock);
 
-	io_uring_cmd_done(cmd, ret, issue_flags);
+	io_uring_cmd_set_res(cmd, ret);
+	io_uring_cmd_done(cmd, issue_flags);
 }
 
 /* FUSE_URING_CMD_COMMIT_AND_FETCH handler */
@@ -1309,7 +1313,8 @@ static void fuse_uring_send_in_task(struct io_tw_req tw_req, io_tw_token_t tw)
 		list_del_init(&ent->list);
 		spin_unlock(&queue->lock);
 
-		io_uring_cmd_done(cmd, err, issue_flags);
+		io_uring_cmd_set_res(cmd, err);
+		io_uring_cmd_done(cmd, issue_flags);
 
 		fuse_uring_req_end(ent, ent->fuse_req, err);
 		kfree(ent);

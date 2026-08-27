@@ -871,9 +871,10 @@ static void blk_cmd_complete(struct io_tw_req tw_req, io_tw_token_t tw)
 
 	if (bic->res == -EAGAIN && bic->nowait)
 		io_uring_cmd_issue_blocking(cmd);
-	else
-		io_uring_cmd_done(cmd, bic->res,
-				  IO_URING_CMD_TASK_WORK_ISSUE_FLAGS);
+	else {
+		io_uring_cmd_set_res(cmd, bic->res);
+		io_uring_cmd_done(cmd, IO_URING_CMD_TASK_WORK_ISSUE_FLAGS);
+	}
 }
 
 static void bio_cmd_bio_end_io(struct bio *bio)

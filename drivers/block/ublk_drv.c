@@ -839,7 +839,8 @@ static void ublk_batch_deinit_fetch_buf(struct ublk_queue *ubq,
 	__ublk_release_fcmd(ubq);
 	spin_unlock(&ubq->evts_lock);
 
-	io_uring_cmd_done(fcmd->cmd, res, data->issue_flags);
+	io_uring_cmd_set_res(fcmd->cmd, res);
+	io_uring_cmd_done(fcmd->cmd, data->issue_flags);
 	ublk_batch_free_fcmd(fcmd);
 }
 
@@ -1642,7 +1643,8 @@ static void ublk_complete_io_cmd(struct ublk_io *io, struct request *req,
 	struct io_uring_cmd *cmd = __ublk_prep_compl_io_cmd(io, req);
 
 	/* tell ublksrv one io request is coming */
-	io_uring_cmd_done(cmd, res, issue_flags);
+	io_uring_cmd_set_res(cmd, res);
+	io_uring_cmd_done(cmd, issue_flags);
 }
 
 #define UBLK_REQUEUE_DELAY_MS	3
@@ -1728,7 +1730,8 @@ static void ublk_auto_buf_dispatch(const struct ublk_queue *ubq,
 
 	if (res != AUTO_BUF_REG_FAIL) {
 		ublk_auto_buf_io_setup(ubq, req, io, cmd, res);
-		io_uring_cmd_done(cmd, UBLK_IO_RES_OK, issue_flags);
+		io_uring_cmd_set_res(cmd, UBLK_IO_RES_OK);
+		io_uring_cmd_done(cmd, issue_flags);
 	}
 }
 
@@ -2789,8 +2792,10 @@ static void ublk_cancel_cmd(struct ublk_queue *ubq, u16 tag,
 	}
 	spin_unlock(&ubq->cancel_lock);
 
-	if (!done && cmd)
-		io_uring_cmd_done(cmd, UBLK_IO_RES_ABORT, issue_flags);
+	if (!done && cmd) {
+		io_uring_cmd_set_res(cmd, UBLK_IO_RES_ABORT);
+		io_uring_cmd_done(cmd, issue_flags);
+	}
 }
 
 /*
@@ -2816,7 +2821,8 @@ static void ublk_batch_cancel_cmd(struct ublk_queue *ubq,
 	spin_unlock(&ubq->evts_lock);
 
 	if (done) {
-		io_uring_cmd_done(fcmd->cmd, UBLK_IO_RES_ABORT, issue_flags);
+		io_uring_cmd_set_res(fcmd->cmd, UBLK_IO_RES_ABORT);
+		io_uring_cmd_done(fcmd->cmd, issue_flags);
 		ublk_batch_free_fcmd(fcmd);
 	}
 }
@@ -3526,8 +3532,10 @@ static void ublk_ch_uring_cmd_cb(struct io_tw_req tw_req, io_tw_token_t tw)
 
 	if (!tw.cancel)
 		ret = ublk_ch_uring_cmd_local(cmd, issue_flags);
-	if (ret != -EIOCBQUEUED)
-		io_uring_cmd_done(cmd, ret, issue_flags);
+	if (ret != -EIOCBQUEUED) {
+		io_uring_cmd_set_res(cmd, ret);
+		io_uring_cmd_done(cmd, issue_flags);
+	}
 }
 
 static int ublk_ch_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
