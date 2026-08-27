@@ -27,8 +27,9 @@
 /* This is enough to filter the vast majority of currently defined events. */
 #define KVM_PMU_EVENT_FILTER_MAX_EVENTS 300
 
-/* Unadultered PMU capabilities of the host, i.e. of hardware. */
-static struct x86_pmu_capability __read_mostly kvm_host_pmu;
+/* Unadulterated PMU capabilities of the host, i.e. of hardware. */
+struct x86_pmu_capability __read_mostly kvm_host_pmu;
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_host_pmu);
 
 /* KVM's PMU capabilities, i.e. the intersection of KVM and hardware support. */
 struct x86_pmu_capability __read_mostly kvm_pmu_cap;

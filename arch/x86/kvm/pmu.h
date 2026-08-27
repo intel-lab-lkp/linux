@@ -252,6 +252,7 @@ static inline bool pmc_is_locally_enabled(struct kvm_pmc *pmc)
 	return !kvm_pmu_call(pmc_is_disabled_in_current_mode)(pmc);
 }
 
+extern struct x86_pmu_capability kvm_host_pmu;
 extern struct x86_pmu_capability kvm_pmu_cap;
 
 void kvm_init_pmu_capability(struct kvm_pmu_ops *pmu_ops);
