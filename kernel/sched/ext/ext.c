@@ -4681,6 +4681,10 @@ static s32 init_dsq(struct scx_dispatch_q *dsq, u64 dsq_id,
 	dsq->id = dsq_id;
 	dsq->sched = sch;
 
+	/* Deferred reenqueue tracking is only supported for user DSQs */
+	if (dsq_id & SCX_DSQ_FLAG_BUILTIN)
+		return 0;
+
 	dsq->pcpu = alloc_percpu(struct scx_dsq_pcpu);
 	if (!dsq->pcpu)
 		return -ENOMEM;
@@ -4698,6 +4702,9 @@ static s32 init_dsq(struct scx_dispatch_q *dsq, u64 dsq_id,
 static void exit_dsq(struct scx_dispatch_q *dsq)
 {
 	s32 cpu;
+
+	if (!dsq->pcpu)
+		return;
 
 	for_each_possible_cpu(cpu) {
 		struct scx_dsq_pcpu *pcpu = per_cpu_ptr(dsq->pcpu, cpu);
