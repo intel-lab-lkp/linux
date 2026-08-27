@@ -538,6 +538,7 @@ int xe_device_init_early(struct xe_device *xe)
 	int err;
 
 	INIT_WORK(&xe->wedged.work, xe_device_wedged_work);
+	init_completion(&xe->wedged.prepared);
 	xe->wedged.reported_method = ~0UL;
 
 	err = ttm_device_init(&xe->ttm, &xe_ttm_funcs, xe->drm.dev,
@@ -958,14 +959,44 @@ static int xe_debug_page_size_alloc_ctrl_init(struct xe_device *xe)
 }
 #endif
 
+/*
+ * Isolate a permanently wedged device.
+ *
+ * May sleep and must be called from process context.
+ */
+static void xe_device_wedged_isolate(struct xe_device *xe)
+{
+	/*
+	 * Wait until xe_device_declare_wedged() has finished scanning GT
+	 * submission state before isolating the device.
+	 */
+	wait_for_completion(&xe->wedged.prepared);
+
+	if (!xe->wedged.isolated) {
+		xe_display_shutdown(xe);
+		xe_display_unregister(xe);
+
+		/*
+		 * Drain faults and unmap VRAM before disabling IRQs and
+		 * DMA.
+		 */
+		xe_bo_wedged_invalidate_mmaps(xe);
+
+		/* Drain handlers before preventing any further device DMA. */
+		xe_irq_suspend(xe);
+		pci_clear_master(to_pci_dev(xe->drm.dev));
+
+		xe->wedged.isolated = true;
+	}
+}
+
 static void xe_device_wedged_work(struct work_struct *work)
 {
 	struct xe_device *xe =
 			container_of(work, struct xe_device, wedged.work);
 	unsigned long method;
 
-	/* Drain faults and invalidate existing VRAM mappings. */
-	xe_bo_wedged_invalidate_mmaps(xe);
+	xe_device_wedged_isolate(xe);
 
 	/* Report at most one recovery method per worker invocation. */
 	method = READ_ONCE(xe->wedged.method);
@@ -1556,6 +1587,9 @@ void xe_device_declare_wedged(struct xe_device *xe)
 	    READ_ONCE(xe->wedged.method) !=
 	    READ_ONCE(xe->wedged.reported_method))
 		queue_work(xe->unordered_wq, &xe->wedged.work);
+
+	if (first)
+		complete_all(&xe->wedged.prepared);
 }
 
 /**

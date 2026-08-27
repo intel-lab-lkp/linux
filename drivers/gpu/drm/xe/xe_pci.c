@@ -1331,6 +1331,16 @@ static int xe_pci_suspend(struct device *dev)
 	if (xe_survivability_mode_is_boot_enabled(xe))
 		return -EBUSY;
 
+	/*
+	 * Wait until wedge work is queued, then wait for isolation to
+	 * finish before skipping normal suspend.
+	 */
+	if (xe_device_wedged(xe)) {
+		wait_for_completion(&xe->wedged.prepared);
+		flush_work(&xe->wedged.work);
+		return 0;
+	}
+
 	err = xe_pm_suspend(xe);
 	if (err)
 		return err;
@@ -1352,6 +1362,7 @@ static int xe_pci_suspend(struct device *dev)
 static int xe_pci_resume(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
+	struct xe_device *xe = pdev_to_xe_device(pdev);
 	int err;
 
 	/* Give back the D3Cold decision to the runtime P M*/
@@ -1363,13 +1374,23 @@ static int xe_pci_resume(struct device *dev)
 
 	pci_restore_state(pdev);
 
+	/*
+	 * Suspend skipped PCI disable for an already isolated device. Avoid
+	 * incrementing enable_cnt and clear bus mastering restored from the
+	 * saved configuration.
+	 */
+	if (xe_device_wedged(xe)) {
+		pci_clear_master(pdev);
+		return 0;
+	}
+
 	err = pci_enable_device(pdev);
 	if (err)
 		return err;
 
 	pci_set_master(pdev);
 
-	err = xe_pm_resume(pdev_to_xe_device(pdev));
+	err = xe_pm_resume(xe);
 	if (err)
 		return err;
 

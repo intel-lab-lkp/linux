@@ -154,21 +154,28 @@ void xe_display_register(struct xe_device *xe)
 {
 	struct intel_display *display = xe->display;
 
-	if (!xe->info.probe_display)
+	if (!xe->info.probe_display || xe->display_registered)
 		return;
 
 	intel_display_driver_register(display);
 	intel_display_driver_runtime_pm_enable(display);
+
+	xe->display_registered = true;
 }
 
 void xe_display_unregister(struct xe_device *xe)
 {
 	struct intel_display *display = xe->display;
 
-	if (!xe->info.probe_display)
+	if (!xe->info.probe_display || !xe->display_registered)
 		return;
 
-	intel_display_driver_runtime_pm_disable(display);
+	/* Make display unregister idempotent. */
+	xe->display_registered = false;
+
+	if (!xe->display_shutdown)
+		intel_display_driver_runtime_pm_disable(display);
+
 	intel_display_driver_unregister(display);
 }
 
@@ -176,7 +183,8 @@ void xe_display_shutdown(struct xe_device *xe)
 {
 	struct intel_display *display = xe->display;
 
-	if (!xe->info.probe_display)
+	if (!xe->info.probe_display || !xe->display_registered ||
+	    xe->display_shutdown)
 		return;
 
 	intel_display_driver_shutdown(display);
@@ -184,6 +192,8 @@ void xe_display_shutdown(struct xe_device *xe)
 	intel_opregion_suspend(display, PCI_D3cold);
 
 	intel_dmc_suspend(display);
+
+	xe->display_shutdown = true;
 }
 
 void xe_display_shutdown_late(struct xe_device *xe)
