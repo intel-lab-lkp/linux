@@ -1444,13 +1444,13 @@ static struct eth_plat_info *ixp4xx_of_get_platdata(struct device *dev)
 
 	plat = devm_kzalloc(dev, sizeof(*plat), GFP_KERNEL);
 	if (!plat)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	ret = of_parse_phandle_with_fixed_args(np, "intel,npe-handle", 1, 0,
 					       &npe_spec);
 	if (ret) {
 		dev_err(dev, "no NPE engine specified\n");
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 	/* NPE ID 0x00, 0x10, 0x20... */
 	plat->npe = (npe_spec.args[0] << 4);
@@ -1468,7 +1468,7 @@ static struct eth_plat_info *ixp4xx_of_get_platdata(struct device *dev)
 					       &queue_spec);
 	if (ret) {
 		dev_err(dev, "no rx queue phandle\n");
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 	plat->rxq = queue_spec.args[0];
 
@@ -1477,11 +1477,13 @@ static struct eth_plat_info *ixp4xx_of_get_platdata(struct device *dev)
 					       &queue_spec);
 	if (ret) {
 		dev_err(dev, "no txready queue phandle\n");
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 	plat->txreadyq = queue_spec.args[0];
 
 	ret = of_get_mac_address(np, mac);
+	if (ret == -EPROBE_DEFER)
+		return ERR_PTR(ret);
 	if (!ret) {
 		dev_info(dev, "Setting macaddr from DT %pM\n", mac);
 		memcpy(plat->hwaddr, mac, ETH_ALEN);
@@ -1501,8 +1503,8 @@ static int ixp4xx_eth_probe(struct platform_device *pdev)
 	int err;
 
 	plat = ixp4xx_of_get_platdata(dev);
-	if (!plat)
-		return -ENODEV;
+	if (IS_ERR(plat))
+		return PTR_ERR(plat);
 
 	if (!(ndev = devm_alloc_etherdev(dev, sizeof(struct port))))
 		return -ENOMEM;
