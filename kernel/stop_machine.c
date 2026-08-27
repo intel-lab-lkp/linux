@@ -48,7 +48,20 @@ struct cpu_stopper {
 };
 
 static DEFINE_PER_CPU(struct cpu_stopper, cpu_stopper);
+static DEFINE_PER_CPU(bool, cpu_stop_active);
 static bool stop_machine_initialized = false;
+
+bool in_cpu_stop(void)
+{
+	bool ret;
+
+	preempt_disable();
+	ret = READ_ONCE(*this_cpu_ptr(&cpu_stop_active));
+	preempt_enable();
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(in_cpu_stop);
 
 void print_stop_info(const char *log_lvl, struct task_struct *task)
 {
@@ -507,7 +520,16 @@ repeat:
 		stopper->caller = work->caller;
 		stopper->fn = fn;
 		preempt_count_inc();
+
+		/*
+		 * Set before the callback runs so an interrupt taken during it,
+		 * and any softirq run on irq exit, sees the CPU as inside a
+		 * stopper callback.
+		 */
+		this_cpu_write(cpu_stop_active, true);
 		ret = fn(arg);
+		this_cpu_write(cpu_stop_active, false);
+
 		if (done) {
 			if (ret)
 				done->ret = ret;

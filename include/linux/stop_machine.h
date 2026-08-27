@@ -38,6 +38,14 @@ void stop_machine_park(int cpu);
 void stop_machine_unpark(int cpu);
 void stop_machine_yield(const struct cpumask *cpumask);
 
+/*
+ * True while the current CPU is executing a cpu stopper callback. The
+ * stopper runs above every other scheduling class, so nothing else on the
+ * CPU is scheduled until the callback returns. Callers use this to defer
+ * work that could hold the CPU too long (e.g. slow console flushes).
+ */
+bool in_cpu_stop(void);
+
 extern void print_stop_info(const char *log_lvl, struct task_struct *task);
 
 #else	/* CONFIG_SMP */
@@ -83,6 +91,11 @@ static inline void stop_one_cpu_nowait(unsigned int cpu,
 }
 
 static inline void print_stop_info(const char *log_lvl, struct task_struct *task) { }
+
+static inline bool in_cpu_stop(void)
+{
+	return false;
+}
 
 #endif	/* CONFIG_SMP */
 
