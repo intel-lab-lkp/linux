@@ -472,6 +472,11 @@ static int rxe_ib_prefetch_sg_list(struct ib_pd *ibpd,
 			return -EINVAL;
 		}
 
+		if (unlikely(!is_odp_mr(mr))) {
+			rxe_put(mr);
+			return -EOPNOTSUPP;
+		}
+
 		if (advice == IB_UVERBS_ADVISE_MR_ADVICE_PREFETCH_WRITE &&
 		    !mr->umem->writable) {
 			rxe_dbg_mr(mr, "missing write permission\n");
@@ -533,6 +538,12 @@ static int rxe_ib_advise_mr_prefetch(struct ib_pd *ibpd,
 			       sg_list[i].lkey, RXE_LOOKUP_LOCAL);
 		if (!mr) {
 			mr = ERR_PTR(-EINVAL);
+			goto err;
+		}
+
+		if (unlikely(!is_odp_mr(mr))) {
+			rxe_put(mr);
+			mr = ERR_PTR(-EOPNOTSUPP);
 			goto err;
 		}
 
