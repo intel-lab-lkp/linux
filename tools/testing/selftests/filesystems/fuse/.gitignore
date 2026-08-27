@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 fuse_acl_cache_test
 fuse_mnt
+fuse_estale_test
 fusectl_test
 write_extend_eof_test

@@ -11,6 +11,7 @@ FUSE3_CFLAGS := $(shell pkg-config fuse3 --cflags 2>/dev/null)
 FUSE3_LDLIBS := $(shell pkg-config fuse3 --libs 2>/dev/null)
 ifneq ($(FUSE3_CFLAGS),)
 TEST_GEN_PROGS += fuse_acl_cache_test
+TEST_GEN_PROGS += fuse_estale_test
 endif
 
 include ../../lib.mk
@@ -32,3 +33,6 @@ $(OUTPUT)/fuse_mnt: LDLIBS += $(VAR_LDLIBS)
 
 $(OUTPUT)/fuse_acl_cache_test: CFLAGS += $(FUSE3_CFLAGS)
 $(OUTPUT)/fuse_acl_cache_test: LDLIBS += $(FUSE3_LDLIBS)
+
+$(OUTPUT)/fuse_estale_test: CFLAGS += $(FUSE3_CFLAGS)
+$(OUTPUT)/fuse_estale_test: LDLIBS += $(FUSE3_LDLIBS)
