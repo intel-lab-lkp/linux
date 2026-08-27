@@ -785,8 +785,8 @@ static bool kvm_need_any_pmc_intercept(struct kvm_vcpu *vcpu)
 	 * KVM's capabilities are constrained based on KVM support, i.e. KVM's
 	 * capabilities themselves may be a subset of hardware capabilities.
 	 */
-	return pmu->nr_arch_gp_counters != kvm_host_pmu.num_counters_gp ||
-	       pmu->nr_arch_fixed_counters != kvm_host_pmu.num_counters_fixed;
+	return kvm_gp_pmc_mask(pmu) != BIT_ULL(kvm_host_pmu.num_counters_gp) - 1 ||
+	       kvm_fixed_pmc_mask(pmu) != BIT_ULL(kvm_host_pmu.num_counters_fixed) - 1;
 }
 
 bool kvm_need_perf_global_ctrl_intercept(struct kvm_vcpu *vcpu)
@@ -985,8 +985,6 @@ void kvm_pmu_refresh(struct kvm_vcpu *vcpu)
 	kvm_pmu_reset(vcpu);
 
 	pmu->version = 0;
-	pmu->nr_arch_gp_counters = 0;
-	pmu->nr_arch_fixed_counters = 0;
 	pmu->counter_bitmask[KVM_PMC_GP] = 0;
 	pmu->counter_bitmask[KVM_PMC_FIXED] = 0;
 	/*
@@ -1014,16 +1012,12 @@ void kvm_pmu_refresh(struct kvm_vcpu *vcpu)
 	 * in the global controls).  Emulate that behavior when refreshing the
 	 * PMU so that userspace doesn't need to manually set PERF_GLOBAL_CTRL.
 	 */
-	if (pmu->nr_arch_gp_counters &&
+	if (kvm_gp_pmc_mask(pmu) &&
 	    (kvm_pmu_has_perf_global_ctrl(pmu) || kvm_vcpu_has_mediated_pmu(vcpu)))
-		pmu->global_ctrl = GENMASK_ULL(pmu->nr_arch_gp_counters - 1, 0);
+		pmu->global_ctrl = kvm_gp_pmc_mask(pmu);
 
 	if (kvm_vcpu_has_mediated_pmu(vcpu))
 		kvm_pmu_call(write_global_ctrl)(pmu->global_ctrl);
-
-	bitmap_set(pmu->pmc_exists, 0, pmu->nr_arch_gp_counters);
-	bitmap_set(pmu->pmc_exists, KVM_FIXED_PMC_BASE_IDX,
-		   pmu->nr_arch_fixed_counters);
 }
 
 void kvm_pmu_init(struct kvm_vcpu *vcpu)
@@ -1332,6 +1326,8 @@ static __always_inline u32 gp_eventsel_msr(u32 idx)
 static void kvm_pmu_load_guest_pmcs(struct kvm_vcpu *vcpu)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	unsigned long fixed_mask = kvm_fixed_pmc_mask(pmu);
+	unsigned long gp_mask = kvm_gp_pmc_mask(pmu);
 	struct kvm_pmc *pmc;
 	u32 i;
 
@@ -1340,14 +1336,14 @@ static void kvm_pmu_load_guest_pmcs(struct kvm_vcpu *vcpu)
 	 * is intercepted if hardware has counters that aren't visible to the
 	 * guest (KVM will inject #GP as appropriate).
 	 */
-	for (i = 0; i < pmu->nr_arch_gp_counters; i++) {
+	kvm_for_each_gp_counter(i, gp_mask) {
 		pmc = &pmu->gp_counters[i];
 
 		if (pmc->counter != rdpmc(i))
 			wrmsrq(gp_counter_msr(i), pmc->counter);
 		wrmsrq(gp_eventsel_msr(i), pmc->eventsel_hw);
 	}
-	for (i = 0; i < pmu->nr_arch_fixed_counters; i++) {
+	kvm_for_each_fixed_counter(i, fixed_mask) {
 		pmc = &pmu->fixed_counters[i];
 
 		if (pmc->counter != rdpmc(INTEL_PMC_FIXED_RDPMC_BASE | i))
@@ -1390,6 +1386,8 @@ void kvm_mediated_pmu_load(struct kvm_vcpu *vcpu)
 static void kvm_pmu_put_guest_pmcs(struct kvm_vcpu *vcpu)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	unsigned long fixed_mask = kvm_fixed_pmc_mask(pmu);
+	unsigned long gp_mask = kvm_gp_pmc_mask(pmu);
 	struct kvm_pmc *pmc;
 	u32 i;
 
@@ -1397,7 +1395,7 @@ static void kvm_pmu_put_guest_pmcs(struct kvm_vcpu *vcpu)
 	 * Clear selectors and counters to ensure hardware doesn't count using
 	 * guest controls when the host (perf) restores its state.
 	 */
-	for (i = 0; i < pmu->nr_arch_gp_counters; i++) {
+	kvm_for_each_gp_counter(i, gp_mask) {
 		pmc = &pmu->gp_counters[i];
 
 		pmc->counter = rdpmc(i);
@@ -1407,7 +1405,7 @@ static void kvm_pmu_put_guest_pmcs(struct kvm_vcpu *vcpu)
 			wrmsrq(gp_eventsel_msr(i), 0);
 	}
 
-	for (i = 0; i < pmu->nr_arch_fixed_counters; i++) {
+	kvm_for_each_fixed_counter(i, fixed_mask) {
 		pmc = &pmu->fixed_counters[i];
 
 		pmc->counter = rdpmc(INTEL_PMC_FIXED_RDPMC_BASE | i);

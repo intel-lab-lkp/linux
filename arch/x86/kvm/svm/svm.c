@@ -758,18 +758,22 @@ static void svm_recalc_pmu_msr_intercepts(struct kvm_vcpu *vcpu)
 {
 	bool intercept = !kvm_vcpu_has_mediated_pmu(vcpu);
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	unsigned long gp_mask = kvm_gp_pmc_mask(pmu);
 	int i;
 
 	if (!enable_mediated_pmu)
 		return;
 
 	/* Legacy counters are always available for AMD CPUs with a PMU. */
-	for (i = 0; i < min(pmu->nr_arch_gp_counters, AMD64_NUM_COUNTERS); i++)
+	for_each_set_bit(i, &gp_mask, AMD64_NUM_COUNTERS)
 		svm_set_intercept_for_msr(vcpu, MSR_K7_PERFCTR0 + i,
 					  MSR_TYPE_RW, intercept);
+	for_each_clear_bit(i, &gp_mask, AMD64_NUM_COUNTERS)
+		svm_enable_intercept_for_msr(vcpu, MSR_K7_PERFCTR0 + i,
+					     MSR_TYPE_RW);
 
 	intercept |= !guest_cpu_cap_has(vcpu, X86_FEATURE_PERFCTR_CORE);
-	for (i = 0; i < pmu->nr_arch_gp_counters; i++)
+	kvm_for_each_gp_counter(i, gp_mask)
 		svm_set_intercept_for_msr(vcpu, MSR_F15H_PERF_CTR + 2 * i,
 					  MSR_TYPE_RW, intercept);
 
