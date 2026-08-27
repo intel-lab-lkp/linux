@@ -6,6 +6,7 @@
  * Author: Kishon Vijay Abraham I <kishon@ti.com>
  */
 
+#include <linux/bitops.h>
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/module.h>
@@ -112,6 +113,84 @@ enum pci_barno pci_epc_get_next_free_bar(const struct pci_epc_features
 	return NO_BAR;
 }
 EXPORT_SYMBOL_GPL(pci_epc_get_next_free_bar);
+
+static int pci_epc_get_msix_region(const struct pci_epc_features *epc_features,
+				   enum pci_epc_bar_rsvd_region_type type,
+				   enum pci_barno *bar, u32 *offset,
+				   resource_size_t *size)
+{
+	const struct pci_epc_bar_rsvd_region *region;
+	const struct pci_epc_bar_desc *bar_desc;
+	bool found = false;
+	int i, j;
+
+	if (!epc_features)
+		return -ENOENT;
+
+	for (i = BAR_0; i < PCI_STD_NUM_BARS; i++) {
+		bar_desc = &epc_features->bar[i];
+		if (bar_desc->nr_rsvd_regions && !bar_desc->rsvd_regions)
+			return -EINVAL;
+
+		for (j = 0; j < bar_desc->nr_rsvd_regions; j++) {
+			region = &bar_desc->rsvd_regions[j];
+			if (region->type != type)
+				continue;
+
+			if (found || bar_desc->type != BAR_RESERVED || !region->size ||
+			    region->offset > PCI_MSIX_TABLE_OFFSET ||
+			    !IS_ALIGNED(region->offset, 8))
+				return -EINVAL;
+
+			found = true;
+			*bar = i;
+			*offset = region->offset;
+			*size = region->size;
+		}
+	}
+
+	return found ? 0 : -ENOENT;
+}
+
+/**
+ * pci_epc_get_hw_msix_layout() - get a hardware-owned MSI-X table and PBA layout
+ * @epc_features: features provided by an EPC for an endpoint function
+ * @layout: layout to populate
+ *
+ * Return: 0 if the EPC describes both hardware-owned MSI-X regions, -ENOENT if
+ * neither region is described, or an error if the description is invalid.
+ */
+int pci_epc_get_hw_msix_layout(const struct pci_epc_features *epc_features,
+			       struct pci_epc_msix_layout *layout)
+{
+	struct pci_epc_msix_layout hw_layout;
+	int table_ret, pba_ret;
+
+	if (!layout)
+		return -EINVAL;
+
+	table_ret = pci_epc_get_msix_region(epc_features,
+					    PCI_EPC_BAR_RSVD_MSIX_TBL_RAM,
+					    &hw_layout.table_bar,
+					    &hw_layout.table_offset,
+					    &hw_layout.table_size);
+	pba_ret = pci_epc_get_msix_region(epc_features,
+					  PCI_EPC_BAR_RSVD_MSIX_PBA_RAM,
+					  &hw_layout.pba_bar,
+					  &hw_layout.pba_offset,
+					  &hw_layout.pba_size);
+
+	if (table_ret == -ENOENT && pba_ret == -ENOENT)
+		return -ENOENT;
+
+	if (table_ret || pba_ret)
+		return -EINVAL;
+
+	*layout = hw_layout;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_epc_get_hw_msix_layout);
 
 static bool pci_epc_function_is_valid(struct pci_epc *epc,
 				      u8 func_no, u8 vfunc_no)
@@ -443,14 +522,14 @@ EXPORT_SYMBOL_GPL(pci_epc_get_msix);
  * @func_no: the physical endpoint function number in the EPC device
  * @vfunc_no: the virtual endpoint function number in the physical function
  * @nr_irqs: number of MSI-X interrupts required by the EPF
- * @bir: BAR where the MSI-X table resides
- * @offset: Offset pointing to the start of MSI-X table
+ * @layout: MSI-X table and PBA layout selected by the EPF
  *
  * Invoke to set the required number of MSI-X interrupts.
  */
 int pci_epc_set_msix(struct pci_epc *epc, u8 func_no, u8 vfunc_no, u16 nr_irqs,
-		     enum pci_barno bir, u32 offset)
+		     const struct pci_epc_msix_layout *layout)
 {
+	size_t table_size, pba_size;
 	int ret;
 
 	if (!pci_epc_function_is_valid(epc, func_no, vfunc_no))
@@ -459,11 +538,26 @@ int pci_epc_set_msix(struct pci_epc *epc, u8 func_no, u8 vfunc_no, u16 nr_irqs,
 	if (nr_irqs < 1 || nr_irqs > 2048)
 		return -EINVAL;
 
+	if (!layout || layout->table_bar < BAR_0 ||
+	    layout->table_bar >= PCI_STD_NUM_BARS ||
+	    layout->pba_bar < BAR_0 || layout->pba_bar >= PCI_STD_NUM_BARS ||
+	    !IS_ALIGNED(layout->table_offset, 8) ||
+	    !IS_ALIGNED(layout->pba_offset, 8) ||
+	    layout->table_offset > PCI_MSIX_TABLE_OFFSET ||
+	    layout->pba_offset > PCI_MSIX_PBA_OFFSET)
+		return -EINVAL;
+
+	table_size = nr_irqs * PCI_MSIX_ENTRY_SIZE;
+	pba_size = BITS_TO_U64(nr_irqs) * sizeof(u64);
+
+	if (layout->table_size < table_size || layout->pba_size < pba_size)
+		return -ENOSPC;
+
 	if (!epc->ops->set_msix)
 		return 0;
 
 	mutex_lock(&epc->lock);
-	ret = epc->ops->set_msix(epc, func_no, vfunc_no, nr_irqs, bir, offset);
+	ret = epc->ops->set_msix(epc, func_no, vfunc_no, nr_irqs, layout);
 	mutex_unlock(&epc->lock);
 
 	return ret;
