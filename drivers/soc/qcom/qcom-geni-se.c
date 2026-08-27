@@ -1039,8 +1039,8 @@ EXPORT_SYMBOL_GPL(geni_icc_disable);
  * geni_se_resources_deactivate() - Deactivate GENI SE device resources
  * @se: Pointer to the geni_se structure
  *
- * Deactivates device resources for power saving: OPP rate to 0, pin control
- * to sleep state, turns off clocks, and disables interconnect. Skips ACPI devices.
+ * Deactivates device resources for power saving: pin control to sleep
+ * state, turns off clocks, and disables interconnect. Skips ACPI devices.
  *
  * Return: 0 on success, negative error code on failure
  */
@@ -1050,9 +1050,6 @@ int geni_se_resources_deactivate(struct geni_se *se)
 
 	if (has_acpi_companion(se->dev))
 		return 0;
-
-	if (se->has_opp)
-		dev_pm_opp_set_rate(se->dev, 0);
 
 	ret = pinctrl_pm_select_sleep_state(se->dev);
 	if (ret)
