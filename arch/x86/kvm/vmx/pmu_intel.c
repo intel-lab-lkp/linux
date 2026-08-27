@@ -585,7 +585,10 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 				      kvm_pmu_cap.events_mask_len);
 	pmu->available_event_types = ~entry->ebx & (BIT_ULL(eax.split.mask_length) - 1);
 
+	/* FxCtr[i]_is_supported := ECX[i] || (EDX[4:0] > i) */
 	fixed_cntr_mask = BIT_ULL(edx.split.num_counters_fixed) - 1;
+	if (pmu->version >= 5)
+		fixed_cntr_mask |= entry->ecx;
 	fixed_cntr_mask &= kvm_pmu_cap.fixed_cntr_mask64;
 
 	/*

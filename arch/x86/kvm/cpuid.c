@@ -1547,7 +1547,10 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 
 		entry->eax = eax.full;
 		entry->ebx = kvm_pmu_cap.events_mask;
-		entry->ecx = 0;
+		if (kvm_pmu_cap.version >= 5)
+			entry->ecx &= (u32)kvm_pmu_cap.fixed_cntr_mask64;
+		else
+			entry->ecx = 0;
 		entry->edx = edx.full;
 		break;
 	}
