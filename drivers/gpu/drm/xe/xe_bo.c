@@ -2245,9 +2245,25 @@ static int xe_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
 	struct ttm_buffer_object *ttm_bo = vma->vm_private_data;
 	struct xe_bo *bo = ttm_to_xe_bo(ttm_bo);
 	struct xe_device *xe = xe_bo_device(bo);
+	int idx, srcu_idx, ret = -EIO;
 
-	guard(xe_pm_runtime)(xe);
-	return ttm_bo_vm_access(vma, addr, buf, len, write);
+	srcu_idx = srcu_read_lock(&xe->mem_access.vram_userfault.srcu);
+
+	if (xe_device_io_blocked(xe) || !drm_dev_enter(&xe->drm, &idx))
+		goto out_srcu;
+
+	/*
+	 * Keep the drm_dev_enter() protection until the runtime PM
+	 * reference has been released.
+	 */
+	scoped_guard(xe_pm_runtime, xe)
+		ret = ttm_bo_vm_access(vma, addr, buf, len, write);
+
+	drm_dev_exit(idx);
+
+out_srcu:
+	srcu_read_unlock(&xe->mem_access.vram_userfault.srcu, srcu_idx);
+	return ret;
 }
 
 /**
