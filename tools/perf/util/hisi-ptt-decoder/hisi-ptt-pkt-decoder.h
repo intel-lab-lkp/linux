@@ -16,6 +16,8 @@
 #define HISI_PTT_IS_8DW_PKT		GENMASK(31, 11)
 #define HISI_PTT_MAX_SPACE_LEN		10
 #define HISI_PTT_FIELD_LENGTH		4
+#define HISI_PTT_PATTERN_LEGACY		0
+#define HISI_PTT_PATTERN_V1		1
 
 /* Header DW0 fields for 4DW format */
 #define HISI_PTT_HEAD0_4DW_TIME		GENMASK_U32(10, 0)
@@ -76,11 +78,6 @@ enum hisi_ptt_pkt_type {
 	HISI_PTT_PKT_MAX
 };
 
-static int hisi_ptt_pkt_size[] = {
-	[HISI_PTT_4DW_PKT]	= 16,
-	[HISI_PTT_8DW_PKT]	= 32,
-};
-
 enum hisi_ptt_pkt_msg_type {
 	HISI_PTT_PKT_TYPE_UNKNOWN,       /* Types do not support analysis */
 	HISI_PTT_PKT_TYPE_MWR,           /* P-(MemWr) */
@@ -98,6 +95,7 @@ struct hisi_ptt_pkt_buf {
 	size_t len;
 	enum hisi_ptt_pkt_type pkt_type;
 	enum hisi_ptt_pkt_msg_type pkt_msg_type;
+	size_t pattern;
 };
 
 int hisi_ptt_pkt_desc(struct hisi_ptt_pkt_buf *pkt_buf);

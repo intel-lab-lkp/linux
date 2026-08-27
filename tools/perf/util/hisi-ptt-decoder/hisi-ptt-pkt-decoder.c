@@ -20,7 +20,7 @@
 /*
  * For 8DW format, the bit[31:11] of DW0 is always 0x1fffff, which can be
  * used to distinguish the data format.
- * 8DW format is like:
+ * 8DW format legacy pattern is like:
  *   bits [                 31:11                 ][       10:0       ]
  *        |---------------------------------------|-------------------|
  *    DW0 [                0x1fffff               ][ Reserved (0x7ff) ]
@@ -32,7 +32,7 @@
  *    DW6 [                   Reserved (0x0)                          ]
  *    DW7 [                        Time                               ]
  *
- * 4DW format is like:
+ * 4DW format legacy pattern is like:
  *   bits [31:30] [ 29:25 ][24][23][22][21][    20:11   ][    10:0    ]
  *        |-----|---------|---|---|---|---|-------------|-------------|
  *    DW0 [ Fmt ][  Type  ][T9][T8][TH][SO][   Length   ][    Time    ]
@@ -77,6 +77,11 @@ static const char * const hisi_ptt_4dw_pkt_field_name[] = {
 	[HISI_PTT_4DW_HEAD1]	= "Header DW1",
 	[HISI_PTT_4DW_HEAD2]	= "Header DW2",
 	[HISI_PTT_4DW_HEAD3]	= "Header DW3",
+};
+
+static int hisi_ptt_pkt_size[] = {
+	[HISI_PTT_4DW_PKT]	= 16,
+	[HISI_PTT_8DW_PKT]	= 32,
 };
 
 /* TLP message parsers below according to PCIe r6.4 sec 2.2.1.1 & 2.2.1.2 */
@@ -207,15 +212,20 @@ static void hisi_ptt_print_head1(struct hisi_ptt_pkt_buf *pkt_buf)
 static void hisi_ptt_print_head2(struct hisi_ptt_pkt_buf *pkt_buf)
 {
 	const char *color = PERF_COLOR_BLUE;
+	const char *desc = pkt_buf->pkt_type == HISI_PTT_4DW_PKT ?
+			   hisi_ptt_4dw_pkt_field_name[HISI_PTT_4DW_HEAD2] :
+			   hisi_ptt_8dw_pkt_field_name[HISI_PTT_8DW_HEAD2];
 	uint32_t dw;
 
 	dw = get_unaligned_le32(pkt_buf->buf + pkt_buf->pos);
 	hisi_ptt_print_raw_record(pkt_buf->pos, dw);
 
-	if (pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_MWR ||
-	    pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_MSG ||
-	    pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_ATOM ||
-	    pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_IO)
+	if (pkt_buf->pattern < HISI_PTT_PATTERN_V1)
+		color_fprintf(stdout, color, "  %s\n", desc);
+	else if (pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_MWR ||
+		 pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_MSG ||
+		 pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_ATOM ||
+		 pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_IO)
 		color_fprintf(stdout, color,
 			      "  %s %x %s %x %s %x %s %x %s %x %s %x %s %x\n",
 			      "Reserved",
@@ -229,10 +239,7 @@ static void hisi_ptt_print_head2(struct hisi_ptt_pkt_buf *pkt_buf)
 			      "Header DW2",
 			      FIELD_GET(HISI_PTT_HEAD2_HEADER_DW2, dw));
 	else
-		color_fprintf(stdout, color, "  %s\n",
-			      pkt_buf->pkt_type == HISI_PTT_4DW_PKT ?
-			      hisi_ptt_4dw_pkt_field_name[HISI_PTT_4DW_HEAD2] :
-			      hisi_ptt_8dw_pkt_field_name[HISI_PTT_8DW_HEAD2]);
+		color_fprintf(stdout, color, "  %s\n", desc);
 
 	pkt_buf->pos += HISI_PTT_FIELD_LENGTH;
 }
@@ -240,12 +247,17 @@ static void hisi_ptt_print_head2(struct hisi_ptt_pkt_buf *pkt_buf)
 static void hisi_ptt_print_head3(struct hisi_ptt_pkt_buf *pkt_buf)
 {
 	const char *color = PERF_COLOR_BLUE;
+	const char *desc = pkt_buf->pkt_type == HISI_PTT_4DW_PKT ?
+			   hisi_ptt_4dw_pkt_field_name[HISI_PTT_4DW_HEAD3] :
+			   hisi_ptt_8dw_pkt_field_name[HISI_PTT_8DW_HEAD3];
 	uint32_t dw;
 
 	dw = get_unaligned_le32(pkt_buf->buf + pkt_buf->pos);
 	hisi_ptt_print_raw_record(pkt_buf->pos, dw);
 
-	if (pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_CPL)
+	if (pkt_buf->pattern < HISI_PTT_PATTERN_V1)
+		color_fprintf(stdout, color, "  %s\n", desc);
+	else if (pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_CPL)
 		color_fprintf(stdout, color,
 			      "  %s %x %s %x %s %x %s %x %s %x %s %x %s %x\n",
 			      "Destination Segment",
@@ -272,10 +284,7 @@ static void hisi_ptt_print_head3(struct hisi_ptt_pkt_buf *pkt_buf)
 			      "Header DW3",
 			      FIELD_GET(HISI_PTT_HEAD3_CFG_HEADER_DW3, dw));
 	else
-		color_fprintf(stdout, color, "  %s\n",
-			      pkt_buf->pkt_type == HISI_PTT_4DW_PKT ?
-			      hisi_ptt_4dw_pkt_field_name[HISI_PTT_4DW_HEAD3] :
-			      hisi_ptt_8dw_pkt_field_name[HISI_PTT_8DW_HEAD3]);
+		color_fprintf(stdout, color, "  %s\n", desc);
 
 	pkt_buf->pos += HISI_PTT_FIELD_LENGTH;
 }
