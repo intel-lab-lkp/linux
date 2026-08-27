@@ -421,6 +421,18 @@ static int intel_pmu_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	return 0;
 }
 
+static u64 intel_pmu_fixed_ctrl_bits(struct kvm_pmu *pmu, u64 bits)
+{
+	unsigned long fixed_mask = kvm_fixed_pmc_mask(pmu);
+	u64 fixed_ctrl_bits = 0;
+	int i;
+
+	kvm_for_each_fixed_counter(i, fixed_mask)
+		fixed_ctrl_bits |= intel_fixed_bits_by_idx(i, bits);
+
+	return fixed_ctrl_bits;
+}
+
 static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
@@ -533,20 +545,12 @@ static __always_inline u64 intel_get_fixed_pmc_eventsel(unsigned int index)
 	return eventsel;
 }
 
-static void intel_pmu_enable_fixed_counter_bits(struct kvm_pmu *pmu, u64 bits)
-{
-	unsigned long fixed_mask = kvm_fixed_pmc_mask(pmu);
-	int i;
-
-	kvm_for_each_fixed_counter(i, fixed_mask)
-		pmu->fixed_ctr_ctrl_rsvd &= ~intel_fixed_bits_by_idx(i, bits);
-}
-
 static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
 	struct lbr_desc *lbr_desc = vcpu_to_lbr_desc(vcpu);
 	struct kvm_cpuid_entry2 *entry;
+	u64 fixed_enable_bits = 0;
 	union cpuid10_eax eax;
 	union cpuid10_edx edx;
 	u64 perf_capabilities;
@@ -625,9 +629,8 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 					  kvm_pmu_cap.bit_width_fixed);
 	pmu->counter_bitmask[KVM_PMC_FIXED] = BIT_ULL(edx.split.bit_width_fixed) - 1;
 
-	intel_pmu_enable_fixed_counter_bits(pmu, INTEL_FIXED_0_KERNEL |
-						 INTEL_FIXED_0_USER |
-						 INTEL_FIXED_0_ENABLE_PMI);
+	fixed_enable_bits |= INTEL_FIXED_0_KERNEL | INTEL_FIXED_0_USER |
+			     INTEL_FIXED_0_ENABLE_PMI;
 
 	counter_rsvd = ~(kvm_gp_pmc_mask(pmu) |
 			((u64)kvm_fixed_pmc_mask(pmu) << KVM_FIXED_PMC_BASE_IDX));
@@ -651,11 +654,14 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 			pmu->pebs_enable_rsvd = counter_rsvd;
 			pmu->eventsel_rsvd &= ~ICL_EVENTSEL_ADAPTIVE;
 			pmu->pebs_data_cfg_rsvd = ~0xff00000full;
-			intel_pmu_enable_fixed_counter_bits(pmu, ICL_FIXED_0_ADAPTIVE);
+			fixed_enable_bits |= ICL_FIXED_0_ADAPTIVE;
 		} else {
 			pmu->pebs_enable_rsvd = ~kvm_gp_pmc_mask(pmu);
 		}
 	}
+
+	pmu->fixed_ctr_ctrl_rsvd &=
+		~intel_pmu_fixed_ctrl_bits(pmu, fixed_enable_bits);
 }
 
 static void intel_pmu_init(struct kvm_vcpu *vcpu)
