@@ -1581,7 +1581,7 @@ static int temac_probe(struct platform_device *pdev)
 		rc = of_get_mac_address(temac_np, addr);
 		if (rc) {
 			dev_err(&pdev->dev, "could not find MAC address\n");
-			return -ENODEV;
+			return rc;
 		}
 		temac_init_mac_address(ndev, addr);
 	} else if (pdata) {
