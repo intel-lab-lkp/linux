@@ -1443,6 +1443,50 @@ static bool drm_gpusvm_pages_valid_unlocked(struct drm_gpusvm *gpusvm,
 }
 
 /**
+ * drm_gpusvm_hmm_fault() - Run the shared HMM fault for a CPU range
+ * @gpusvm: Pointer to the GPU SVM structure
+ * @mm: The mm corresponding to the CPU range
+ * @hmm_range: The hmm_range to fault.
+ * @pfns: The pfn array to populate (size @npages)
+ * @timeout: jiffies deadline for the -EBUSY retry loop
+ *
+ * Fault the CPU pages of the range into @pfns. This is the MM level step.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+static int drm_gpusvm_hmm_fault(struct drm_gpusvm *gpusvm,
+				struct mm_struct *mm,
+				struct hmm_range *hmm_range,
+				unsigned long *pfns,
+				unsigned long timeout)
+{
+	int err;
+
+	if (!mmget_not_zero(mm))
+		return -EFAULT;
+
+	hmm_range->hmm_pfns = pfns;
+	while (true) {
+		mmap_read_lock(mm);
+		err = hmm_range_fault(hmm_range);
+		mmap_read_unlock(mm);
+
+		if (err == -EBUSY) {
+			if (time_after(jiffies, timeout))
+				break;
+
+			hmm_range->notifier_seq =
+				mmu_interval_read_begin(hmm_range->notifier);
+			continue;
+		}
+		break;
+	}
+	mmput(mm);
+
+	return err;
+}
+
+/**
  * drm_gpusvm_get_pages() - Get pages and populate GPU SVM pages struct
  * @gpusvm: Pointer to the GPU SVM structure
  * @svm_pages: The SVM pages to populate. This will contain the dma-addresses
@@ -1503,28 +1547,7 @@ retry:
 	if (!pfns)
 		return -ENOMEM;
 
-	if (!mmget_not_zero(mm)) {
-		err = -EFAULT;
-		goto err_free;
-	}
-
-	hmm_range.hmm_pfns = pfns;
-	while (true) {
-		mmap_read_lock(mm);
-		err = hmm_range_fault(&hmm_range);
-		mmap_read_unlock(mm);
-
-		if (err == -EBUSY) {
-			if (time_after(jiffies, timeout))
-				break;
-
-			hmm_range.notifier_seq =
-				mmu_interval_read_begin(notifier);
-			continue;
-		}
-		break;
-	}
-	mmput(mm);
+	err = drm_gpusvm_hmm_fault(gpusvm, mm, &hmm_range, pfns, timeout);
 	if (err)
 		goto err_free;
 
