@@ -204,6 +204,11 @@ struct thread_struct {
 #endif
 };
 
+static inline unsigned long top_of_blocked_task_stack(struct thread_struct *thread)
+{
+	return thread->cpu_context.sp;
+}
+
 static inline unsigned int thread_get_vl(struct thread_struct *thread,
 					 enum vec_type type)
 {
