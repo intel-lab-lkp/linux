@@ -2575,8 +2575,11 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 	 */
 	for (i = start; i < end; i++) {
 		r = xa_reserve(&kvm->mem_attr_array, i, GFP_KERNEL_ACCOUNT);
-		if (r)
+		if (r) {
+			while (i-- > start)
+				xa_release(&kvm->mem_attr_array, i);
 			goto out_unlock;
+		}
 
 		cond_resched();
 	}
