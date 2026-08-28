@@ -490,8 +490,21 @@ static int ssm2518_set_power(struct ssm2518 *ssm2518, bool enable)
 	if (enable) {
 		ret = regmap_update_bits(ssm2518->regmap, SSM2518_REG_POWER1,
 			SSM2518_POWER1_SPWDN | SSM2518_POWER1_RESET, 0x00);
-		regcache_sync(ssm2518->regmap);
+		if (ret)
+			goto err_power_off;
+
+		ret = regcache_sync(ssm2518->regmap);
+		if (ret)
+			goto err_power_off;
 	}
+
+	return ret;
+
+err_power_off:
+	regcache_cache_only(ssm2518->regmap, true);
+	regcache_mark_dirty(ssm2518->regmap);
+	if (ssm2518->enable_gpio)
+		gpiod_set_value_cansleep(ssm2518->enable_gpio, 0);
 
 	return ret;
 }
