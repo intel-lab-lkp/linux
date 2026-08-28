@@ -276,6 +276,7 @@ struct vkms_plane *vkms_plane_init(struct vkms_device *vkmsdev,
 {
 	struct drm_device *dev = &vkmsdev->drm;
 	struct vkms_plane *plane;
+	int ret;
 
 	plane = drmm_universal_plane_alloc(dev, struct vkms_plane, base, 0,
 					   &vkms_plane_funcs,
@@ -286,6 +287,15 @@ struct vkms_plane *vkms_plane_init(struct vkms_device *vkmsdev,
 		return plane;
 
 	drm_plane_helper_add(&plane->base, &vkms_plane_helper_funcs);
+
+	/*
+	 * The vkms composer only blends premultiplied alpha, see
+	 * pre_mul_alpha_blend(), so that is the only supported mode.
+	 */
+	ret = drm_plane_create_blend_mode_property(&plane->base,
+						   BIT(DRM_MODE_BLEND_PREMULTI));
+	if (ret)
+		return ERR_PTR(ret);
 
 	drm_plane_create_rotation_property(&plane->base, DRM_MODE_ROTATE_0,
 					   DRM_MODE_ROTATE_MASK | DRM_MODE_REFLECT_MASK);
