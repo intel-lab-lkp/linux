@@ -1107,9 +1107,6 @@ static int es9356_sdca_dev_resume(struct device *dev)
 	struct es9356_sdw_priv *es9356 = dev_get_drvdata(dev);
 	int ret;
 
-	if (!slave->unattach_request)
-		es9356->disable_irq = false;
-
 	ret = sdw_slave_wait_for_init(slave, es9356_PROBE_TIMEOUT);
 	if (ret) {
 		sdw_show_ping_status(slave->bus, true);
@@ -1117,7 +1114,16 @@ static int es9356_sdca_dev_resume(struct device *dev)
 	}
 
 	regcache_cache_only(es9356->regmap, false);
-	regcache_sync(es9356->regmap);
+	ret = regcache_sync(es9356->regmap);
+	if (ret) {
+		regcache_cache_only(es9356->regmap, true);
+		regcache_mark_dirty(es9356->regmap);
+		return ret;
+	}
+
+	if (!slave->unattach_request)
+		scoped_guard(mutex, &es9356->disable_irq_lock)
+			es9356->disable_irq = false;
 	return 0;
 }
 
