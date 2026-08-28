@@ -1648,14 +1648,17 @@ static int ov7670_s_register(struct v4l2_subdev *sd, const struct v4l2_dbg_regis
 }
 #endif
 
-static void ov7670_power_on(struct v4l2_subdev *sd)
+static int ov7670_power_on(struct v4l2_subdev *sd)
 {
 	struct ov7670_info *info = to_state(sd);
+	int ret;
 
 	if (info->on)
-		return;
+		return 0;
 
-	clk_prepare_enable(info->clk);
+	ret = clk_prepare_enable(info->clk);
+	if (ret)
+		return ret;
 
 	if (info->pwdn_gpio)
 		gpiod_set_value(info->pwdn_gpio, 0);
@@ -1668,6 +1671,8 @@ static void ov7670_power_on(struct v4l2_subdev *sd)
 		usleep_range(3000, 5000);
 
 	info->on = true;
+
+	return 0;
 }
 
 static void ov7670_power_off(struct v4l2_subdev *sd)
@@ -1688,12 +1693,15 @@ static void ov7670_power_off(struct v4l2_subdev *sd)
 static int ov7670_s_power(struct v4l2_subdev *sd, int on)
 {
 	struct ov7670_info *info = to_state(sd);
+	int ret;
 
 	if (info->on == on)
 		return 0;
 
 	if (on) {
-		ov7670_power_on(sd);
+		ret = ov7670_power_on(sd);
+		if (ret)
+			return ret;
 		ov7670_init(sd, 0);
 		ov7670_apply_fmt(sd);
 		ov7675_apply_framerate(sd);
@@ -1873,7 +1881,9 @@ static int ov7670_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
-	ov7670_power_on(sd);
+	ret = ov7670_power_on(sd);
+	if (ret)
+		return ret;
 
 	if (info->clk) {
 		info->clock_speed = clk_get_rate(info->clk) / 1000000;
