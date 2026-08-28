@@ -555,6 +555,37 @@ out:
 }
 
 /**
+ * drm_pagemap_src_pfn_nr_pages() - Decode src entry and return base-page count
+ * @src_pfn: Source migrate entry
+ * @src_page: Optional decoded source page when MIGRATE_PFN_VALID is set
+ *
+ * Decode @src_pfn to compute how many base pages it represents: use folio
+ * page count for valid entries, HPAGE_PMD_NR for COMPOUND-only entries,
+ * otherwise 1.
+ *
+ * Return: Number of base pages represented by @src_pfn.
+ */
+static unsigned long drm_pagemap_src_pfn_nr_pages(unsigned long src_pfn,
+						   struct page **src_page)
+{
+	struct page *page = NULL;
+	unsigned long nr_pages = 1;
+
+	if (src_pfn & MIGRATE_PFN_VALID) {
+		page = migrate_pfn_to_page(src_pfn);
+		if (page)
+			nr_pages = NR_PAGES(folio_order(page_folio(page)));
+	} else if (src_pfn & MIGRATE_PFN_COMPOUND) {
+		nr_pages = HPAGE_PMD_NR;
+	}
+
+	if (src_page)
+		*src_page = page;
+
+	return nr_pages;
+}
+
+/**
  * drm_pagemap_cpages() - Count collected pages
  * @migrate_pfn: Array of migrate_pfn entries to account
  * @npages: Number of entries in @migrate_pfn
@@ -570,20 +601,14 @@ static int drm_pagemap_cpages(unsigned long *migrate_pfn, unsigned long npages)
 	unsigned long i, cpages = 0;
 
 	for (i = 0; i < npages;) {
-		struct page *page = migrate_pfn_to_page(migrate_pfn[i]);
-		struct folio *folio;
-		unsigned int order = 0;
+		unsigned long src_pfn = migrate_pfn[i];
+		struct page *page;
+		unsigned long nr_pages = drm_pagemap_src_pfn_nr_pages(src_pfn, &page);
 
-		if (page) {
-			folio = page_folio(page);
-			order = folio_order(folio);
-			cpages += NR_PAGES(order);
-		} else if (migrate_pfn[i] & MIGRATE_PFN_COMPOUND) {
-			order = HPAGE_PMD_ORDER;
-			cpages += NR_PAGES(order);
-		}
+		if (page || (src_pfn & MIGRATE_PFN_COMPOUND))
+			cpages += nr_pages;
 
-		i += NR_PAGES(order);
+		i += nr_pages;
 	}
 
 	return cpages;
@@ -703,8 +728,9 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 
 	/* Count device-private pages to migrate */
 	for (i = 0; i < npages;) {
-		struct page *src_page = migrate_pfn_to_page(migrate.src[i]);
-		unsigned long nr_pages = src_page ? NR_PAGES(folio_order(page_folio(src_page))) : 1;
+		unsigned long src_pfn = migrate.src[i];
+		struct page *src_page;
+		unsigned long nr_pages = drm_pagemap_src_pfn_nr_pages(src_pfn, &src_page);
 
 		if (src_page && is_zone_device_page(src_page)) {
 			if (page_pgmap(src_page) == pagemap)
@@ -813,10 +839,10 @@ err_aborted_migration:
 	migrate_vma_pages(&migrate);
 
 	for (i = 0; !err && i < npages;) {
-		struct page *page = migrate_pfn_to_page(migrate.src[i]);
-		unsigned long nr_pages = page ? NR_PAGES(folio_order(page_folio(page))) : 1;
+		unsigned long src_pfn = migrate.src[i];
+		unsigned long nr_pages = drm_pagemap_src_pfn_nr_pages(src_pfn, NULL);
 
-		if (migrate.src[i] & MIGRATE_PFN_MIGRATE)
+		if (src_pfn & MIGRATE_PFN_MIGRATE)
 			migrated_pages += nr_pages;
 
 		i += nr_pages;
