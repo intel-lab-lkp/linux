@@ -3288,6 +3288,42 @@ static bool split_huge_pmd_anon_rmap(const struct split_pmd_state *state,
 }
 
 /*
+ * Build the leaf entry for the PTE entry describing @pfn, for a huge PMD entry
+ * which is not restored as a present mapping.
+ */
+static softleaf_t split_pmd_make_softleaf(const struct split_pmd_state *state,
+					  unsigned long pfn)
+{
+	softleaf_t entry;
+
+	if (state->is_device_private && !state->freeze) {
+		/*
+		 * anon_exclusive was already propagated to the pages backing
+		 * the PTE entries by split_huge_pmd_anon_rmap(), and accessed
+		 * and dirty bits are not propagated via device private
+		 * entries.
+		 */
+		if (state->write)
+			return make_writable_device_private_entry(pfn);
+		return make_readable_device_private_entry(pfn);
+	}
+
+	if (state->write)
+		entry = make_writable_migration_entry(pfn);
+	else if (state->anon_exclusive)
+		entry = make_readable_exclusive_migration_entry(pfn);
+	else
+		entry = make_readable_migration_entry(pfn);
+
+	if (state->young)
+		entry = make_migration_entry_young(entry);
+	if (state->dirty)
+		entry = make_migration_entry_dirty(entry);
+
+	return entry;
+}
+
+/*
  * Replace an anonymous huge PMD entry with a page table mapping the same
  * folio at PTE granularity.
  */
@@ -3323,53 +3359,14 @@ static void split_huge_pmd_to_ptes(struct vm_area_struct *vma,
 	 * Note that NUMA hinting access restrictions are not transferred to
 	 * avoid any possibility of altering permissions across VMAs.
 	 */
-	if (state->freeze ||
-	    (!state->is_present && !state->is_device_private)) {
-		pte_t entry;
-		swp_entry_t swp_entry;
+	if (state->freeze || !state->is_present) {
+		for (i = 0, addr = haddr; i < HPAGE_PMD_NR;
+		     i++, addr += PAGE_SIZE) {
+			const unsigned long pfn = page_to_pfn(page + i);
+			const softleaf_t leaf =
+				split_pmd_make_softleaf(state, pfn);
+			pte_t entry = softleaf_to_pte(leaf);
 
-		for (i = 0, addr = haddr; i < HPAGE_PMD_NR; i++, addr += PAGE_SIZE) {
-			if (state->write)
-				swp_entry = make_writable_migration_entry(
-							page_to_pfn(page + i));
-			else if (state->anon_exclusive)
-				swp_entry = make_readable_exclusive_migration_entry(
-							page_to_pfn(page + i));
-			else
-				swp_entry = make_readable_migration_entry(
-							page_to_pfn(page + i));
-			if (state->young)
-				swp_entry = make_migration_entry_young(swp_entry);
-			if (state->dirty)
-				swp_entry = make_migration_entry_dirty(swp_entry);
-			entry = swp_entry_to_pte(swp_entry);
-			if (state->soft_dirty)
-				entry = pte_swp_mksoft_dirty(entry);
-			if (state->uffd)
-				entry = pte_swp_mkuffd(entry);
-			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
-			set_pte_at(mm, addr, pte + i, entry);
-		}
-	} else if (state->is_device_private) {
-		pte_t entry;
-		swp_entry_t swp_entry;
-
-		for (i = 0, addr = haddr; i < HPAGE_PMD_NR; i++, addr += PAGE_SIZE) {
-			/*
-			 * anon_exclusive was already propagated to the relevant
-			 * pages corresponding to the pte entries when freeze
-			 * is false.
-			 */
-			if (state->write)
-				swp_entry = make_writable_device_private_entry(
-							page_to_pfn(page + i));
-			else
-				swp_entry = make_readable_device_private_entry(
-							page_to_pfn(page + i));
-			/*
-			 * Young and dirty bits are not progated via swp_entry
-			 */
-			entry = swp_entry_to_pte(swp_entry);
 			if (state->soft_dirty)
 				entry = pte_swp_mksoft_dirty(entry);
 			if (state->uffd)
