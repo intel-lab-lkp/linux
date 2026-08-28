@@ -14163,6 +14163,7 @@ F:	include/uapi/linux/nfsd/
 F:	include/uapi/linux/sunrpc/
 F:	net/sunrpc/
 F:	tools/net/sunrpc/
+F:	tools/testing/selftests/nfsd/
 
 KERNEL NFSD BLOCK and SCSI LAYOUT DRIVER
 R:	Christoph Hellwig <hch@lst.de>
