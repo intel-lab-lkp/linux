@@ -228,6 +228,9 @@ static int tlclk_open(struct inode *inode, struct file *filp)
 	else
 		inb(TLCLK_REG6);	/* Clear interrupt events */
 
+	if (result)
+		clear_bit(0, &useflags);
+
 out:
 	mutex_unlock(&tlclk_mutex);
 	return result;
