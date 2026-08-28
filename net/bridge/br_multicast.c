@@ -4967,15 +4967,19 @@ int br_multicast_list_adjacent(struct net_device *dev,
 		if (!port->dev || port->dev == dev)
 			continue;
 
-		hlist_for_each_entry_rcu(group, &port->mglist, mglist) {
+		spin_lock_bh(&br->multicast_lock);
+		hlist_for_each_entry(group, &port->mglist, mglist) {
 			entry = kmalloc_obj(*entry, GFP_ATOMIC);
-			if (!entry)
+			if (!entry) {
+				spin_unlock_bh(&br->multicast_lock);
 				goto unlock;
+			}
 
 			entry->addr = group->key.addr;
 			list_add(&entry->list, br_ip_list);
 			count++;
 		}
+		spin_unlock_bh(&br->multicast_lock);
 	}
 
 unlock:
