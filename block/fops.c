@@ -87,6 +87,12 @@ static ssize_t __blkdev_direct_IO_simple(struct kiocb *iocb,
 	ret = blkdev_iov_iter_get_pages(&bio, iter, bdev);
 	if (unlikely(ret))
 		goto out;
+	if ((iocb->ki_flags & IOCB_ATOMIC) && iov_iter_count(iter)) {
+		/* a short atomic write would be torn by definition */
+		bio_release_pages(&bio, false);
+		ret = -EFAULT;
+		goto out;
+	}
 	ret = bio.bi_iter.bi_size;
 
 	if (iov_iter_rw(iter) == WRITE)
@@ -352,6 +358,12 @@ static ssize_t __blkdev_direct_IO_async(struct kiocb *iocb,
 		ret = blkdev_iov_iter_get_pages(bio, iter, bdev);
 		if (unlikely(ret))
 			goto out_bio_put;
+		if ((iocb->ki_flags & IOCB_ATOMIC) && iov_iter_count(iter)) {
+			/* a short atomic write would be torn by definition */
+			bio_release_pages(bio, false);
+			ret = -EFAULT;
+			goto out_bio_put;
+		}
 	}
 	dio->size = bio->bi_iter.bi_size;
 
@@ -691,8 +703,15 @@ blkdev_direct_write(struct kiocb *iocb, struct iov_iter *from)
 
 	written = kiocb_invalidate_pages(iocb, count);
 	if (written) {
-		if (written == -EBUSY)
+		/*
+		 * The buffered write fallback cannot provide torn-write
+		 * protection, so atomic writes must fail instead.
+		 */
+		if (written == -EBUSY) {
+			if (iocb->ki_flags & IOCB_ATOMIC)
+				return -EAGAIN;
 			return 0;
+		}
 		return written;
 	}
 
