@@ -549,8 +549,8 @@ EXPORT_SYMBOL_GPL(mmb_has_buffers);
  *
  * Do this in two main stages: first we copy dirty buffers to a
  * temporary inode list, queueing the writes as we go. Then we clean
- * up, waiting for those writes to complete. mark_buffer_dirty_inode()
- * doesn't touch b_assoc_buffers list if b_mmb is not NULL so we are sure the
+ * up, waiting for those writes to complete. mmb_mark_buffer_dirty()
+ * doesn't touch b_assoc_buffers list if b_mmb is set so we are sure the
  * buffer stays on our list until IO completes (at which point it can be
  * reaped).
  */
@@ -571,7 +571,7 @@ int mmb_sync(struct mapping_metadata_bhs *mmb)
 		bh = BH_ENTRY(mmb->list.next);
 		WARN_ON_ONCE(bh->b_mmb != mmb);
 		__remove_assoc_queue(mmb, bh);
-		/* Avoid race with mark_buffer_dirty_inode() which does
+		/* Avoid race with mmb_mark_buffer_dirty() which does
 		 * a lockless check and we rely on seeing the dirty bit */
 		smp_mb();
 		if (buffer_dirty(bh) || buffer_locked(bh)) {
@@ -609,7 +609,7 @@ int mmb_sync(struct mapping_metadata_bhs *mmb)
 		bh = BH_ENTRY(tmp.prev);
 		get_bh(bh);
 		__remove_assoc_queue(mmb, bh);
-		/* Avoid race with mark_buffer_dirty_inode() which does
+		/* Avoid race with mmb_mark_buffer_dirty() which does
 		 * a lockless check and we rely on seeing the dirty bit */
 		smp_mb();
 		if (buffer_dirty(bh)) {
