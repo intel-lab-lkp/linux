@@ -71,6 +71,7 @@ static const char * const page_owner_print_mode_strings[] = {
 /* PID_MAX_LIMIT = 4,194,304 (7 decimal digits) */
 #define PID_MAX_DIGITS  	7
 #define MAX_FILTER_PIDS 	16
+#define MAX_FILTER_TGIDS	16
 
 struct page_owner_filter_state {
 	enum page_owner_print_mode print_mode;
@@ -78,7 +79,9 @@ struct page_owner_filter_state {
 	bool proc_filter_enabled;
 	nodemask_t nid_filter;
 	int pid_count;
+	int tgid_count;
 	pid_t pid_list[MAX_FILTER_PIDS];
+	pid_t tgid_list[MAX_FILTER_TGIDS];
 };
 
 static int cmp_pid_t(const void *a, const void *b)
@@ -837,11 +840,19 @@ read_page_owner(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 		if (state->proc_filter_enabled) {
 			bool proc_match = false;
 
-			proc_match = bsearch(&page_owner->pid,
-					    state->pid_list,
-					    state->pid_count,
-					    sizeof(pid_t),
-					    cmp_pid_t) != NULL;
+			if (state->pid_count > 0)
+				proc_match = bsearch(&page_owner->pid,
+						    state->pid_list,
+						    state->pid_count,
+						    sizeof(pid_t),
+						    cmp_pid_t) != NULL;
+
+			if (!proc_match && state->tgid_count > 0)
+				proc_match = bsearch(&page_owner->tgid,
+						    state->tgid_list,
+						    state->tgid_count,
+						    sizeof(pid_t),
+						    cmp_pid_t) != NULL;
 
 			if (!proc_match)
 				goto ext_put_continue;
@@ -1010,7 +1021,9 @@ static ssize_t page_owner_write(struct file *file,
 	bool new_nid_filter_enabled;
 	bool new_proc_filter_enabled;
 	pid_t new_pid_list[MAX_FILTER_PIDS];
+	pid_t new_tgid_list[MAX_FILTER_TGIDS];
 	int new_pid_count = 0;
+	int new_tgid_count = 0;
 
 	/*
 	 * Maximum input length for filter commands:
@@ -1021,7 +1034,8 @@ static ssize_t page_owner_write(struct file *file,
 	 * - For list filters: (digit+comma) * count + prefix
 	 */
 	if (count > 32 + 6 * MAX_NUMNODES +
-			(PID_MAX_DIGITS + 1) * MAX_FILTER_PIDS + 4)
+			(PID_MAX_DIGITS + 1) * MAX_FILTER_PIDS + 4 +
+			(PID_MAX_DIGITS + 1) * MAX_FILTER_TGIDS + 5)
 		return -EINVAL;
 
 	kbuf = memdup_user_nul(buf, count);
@@ -1037,6 +1051,10 @@ static ssize_t page_owner_write(struct file *file,
 	if (state->pid_count > 0) {
 		memcpy(new_pid_list, state->pid_list, sizeof(state->pid_list));
 		new_pid_count = state->pid_count;
+	}
+	if (state->tgid_count > 0) {
+		memcpy(new_tgid_list, state->tgid_list, sizeof(state->tgid_list));
+		new_tgid_count = state->tgid_count;
 	}
 
 	while ((token = strsep(&kbuf, " \t\n")) != NULL) {
@@ -1073,6 +1091,10 @@ static ssize_t page_owner_write(struct file *file,
 			ret = parse_pid_t_list(token + 4, new_pid_list, &new_pid_count);
 			if (ret < 0)
 				goto out_free;
+		} else if (!strncmp(token, "tgid=", 5)) {
+			ret = parse_pid_t_list(token + 5, new_tgid_list, &new_tgid_count);
+			if (ret < 0)
+				goto out_free;
 		} else {
 			ret = -EINVAL;
 			goto out_free;
@@ -1083,13 +1105,20 @@ static ssize_t page_owner_write(struct file *file,
 	state->print_mode = new_print_mode;
 	state->nid_filter = new_nid_filter;
 	state->nid_filter_enabled = new_nid_filter_enabled;
-	state->proc_filter_enabled = new_pid_count > 0;
+	state->proc_filter_enabled = new_pid_count > 0 || new_tgid_count > 0;
 	if (new_pid_count > 0) {
 		memcpy(state->pid_list, new_pid_list, sizeof(state->pid_list));
 		state->pid_count = new_pid_count;
 	}
 	if (state->pid_count > 1)
 		sort(state->pid_list, state->pid_count, sizeof(pid_t),
+		     cmp_pid_t, NULL);
+	if (new_tgid_count > 0) {
+		memcpy(state->tgid_list, new_tgid_list, sizeof(state->tgid_list));
+		state->tgid_count = new_tgid_count;
+	}
+	if (state->tgid_count > 1)
+		sort(state->tgid_list, state->tgid_count, sizeof(pid_t),
 		     cmp_pid_t, NULL);
 
 	ret = count;
