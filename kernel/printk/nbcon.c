@@ -1849,6 +1849,8 @@ void nbcon_free(struct console *con)
 			printk_kthreads_running = false;
 	}
 
+	irq_work_sync(&con->irq_work);
+
 	nbcon_state_set(con, &state);
 
 	/* Boot consoles share global printk buffers. */
