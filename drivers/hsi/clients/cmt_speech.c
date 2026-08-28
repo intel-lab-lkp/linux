@@ -732,6 +732,17 @@ error:
 	return ret;
 }
 
+static struct cs_hsi_iface *cs_char_hsi_get(struct cs_char *csdata)
+{
+	struct cs_hsi_iface *hi;
+
+	spin_lock_bh(&csdata->lock);
+	hi = csdata->hi;
+	spin_unlock_bh(&csdata->lock);
+
+	return hi;
+}
+
 static unsigned int cs_hsi_get_state(struct cs_hsi_iface *hi)
 {
 	return hi->iface_state;
@@ -1180,6 +1191,7 @@ static ssize_t cs_char_write(struct file *file, const char __user *buf,
 	u32 data;
 	int err;
 	ssize_t	retval;
+	struct cs_hsi_iface *hi;
 
 	if (count < sizeof(data))
 		return -EINVAL;
@@ -1189,7 +1201,10 @@ static ssize_t cs_char_write(struct file *file, const char __user *buf,
 	else
 		retval = count;
 
-	err = cs_hsi_command(csdata->hi, data);
+	hi = cs_char_hsi_get(csdata);
+	if (!hi)
+		return -ENODEV;
+	err = cs_hsi_command(hi, data);
 	if (err < 0)
 		retval = err;
 
@@ -1205,8 +1220,11 @@ static long cs_char_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 	case CS_GET_STATE: {
 		unsigned int state;
+		struct cs_hsi_iface *hi = cs_char_hsi_get(csdata);
 
-		state = cs_hsi_get_state(csdata->hi);
+		if (!hi)
+			return -ENODEV;
+		state = cs_hsi_get_state(hi);
 		if (copy_to_user((void __user *)arg, &state, sizeof(state)))
 			r = -EFAULT;
 
@@ -1214,6 +1232,7 @@ static long cs_char_ioctl(struct file *file, unsigned int cmd,
 	}
 	case CS_SET_WAKELINE: {
 		unsigned int state;
+		struct cs_hsi_iface *hi;
 
 		if (copy_from_user(&state, (void __user *)arg, sizeof(state))) {
 			r = -EFAULT;
@@ -1225,7 +1244,10 @@ static long cs_char_ioctl(struct file *file, unsigned int cmd,
 			break;
 		}
 
-		cs_hsi_set_wakeline(csdata->hi, !!state);
+		hi = cs_char_hsi_get(csdata);
+		if (!hi)
+			return -ENODEV;
+		cs_hsi_set_wakeline(hi, !!state);
 
 		break;
 	}
@@ -1239,12 +1261,17 @@ static long cs_char_ioctl(struct file *file, unsigned int cmd,
 	}
 	case CS_CONFIG_BUFS: {
 		struct cs_buffer_config buf_cfg;
+		struct cs_hsi_iface *hi;
 
 		if (copy_from_user(&buf_cfg, (void __user *)arg,
-							sizeof(buf_cfg)))
+							sizeof(buf_cfg))) {
 			r = -EFAULT;
-		else
-			r = cs_hsi_buf_config(csdata->hi, &buf_cfg);
+			break;
+		}
+		hi = cs_char_hsi_get(csdata);
+		if (!hi)
+			return -ENODEV;
+		r = cs_hsi_buf_config(hi, &buf_cfg);
 
 		break;
 	}
@@ -1334,10 +1361,16 @@ static void cs_free_char_queue(struct list_head *head)
 static int cs_char_release(struct inode *unused, struct file *file)
 {
 	struct cs_char *csdata = file->private_data;
+	struct cs_hsi_iface *hi;
 
-	cs_hsi_stop(csdata->hi);
 	spin_lock_bh(&csdata->lock);
+	hi = csdata->hi;
 	csdata->hi = NULL;
+	spin_unlock_bh(&csdata->lock);
+
+	if (hi)
+		cs_hsi_stop(hi);
+	spin_lock_bh(&csdata->lock);
 	free_page(csdata->mmap_base);
 	cs_free_char_queue(&csdata->chardev_queue);
 	cs_free_char_queue(&csdata->dataind_queue);
