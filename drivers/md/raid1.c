@@ -1674,6 +1674,7 @@ err_dec_pending:
 static bool raid1_make_request(struct mddev *mddev, struct bio *bio)
 {
 	sector_t sectors;
+	blk_status_t status;
 
 	if (unlikely(bio->bi_opf & REQ_PREFLUSH)
 	    && md_flush_request(mddev, bio))
@@ -1692,11 +1693,36 @@ static bool raid1_make_request(struct mddev *mddev, struct bio *bio)
 	if (bio_data_dir(bio) == READ)
 		raid1_read_request(mddev, bio, sectors, NULL);
 	else {
+		int err;
+
 		md_write_start(mddev, bio);
-		if (!raid1_write_request(mddev, bio, sectors))
+		err = mddev_lock(mddev);
+
+		if (err < 0) {
+			md_write_end(mddev);
+			status = BLK_STS_IOERR;
+			goto done;
+		}
+
+		if (!mddev->private) {
+			mddev_unlock(mddev);
+			md_write_end(mddev);
+			status = BLK_STS_OFFLINE;
+			goto done;
+		}
+
+		err = raid1_write_request(mddev, bio, sectors);
+		mddev_unlock(mddev);
+
+		if (!err)
 			md_write_end(mddev);
 	}
+out:
 	return true;
+done:
+	bio->bi_status = status;
+	bio_endio(bio);
+	goto out;
 }
 
 static void raid1_status(struct seq_file *seq, struct mddev *mddev)
