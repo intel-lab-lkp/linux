@@ -67,11 +67,17 @@ static struct kernfs_open_node *of_on(struct kernfs_open_file *of)
 static struct kernfs_open_file *kernfs_get_active_of(struct kernfs_open_file *of)
 {
 	/* Skip if file was already released */
-	if (unlikely(of->released))
+	if (unlikely(READ_ONCE(of->released)))
 		return NULL;
 
 	if (!kernfs_get_active(of->kn))
 		return NULL;
+
+	/* @of may have been drained in between: recheck. */
+	if (unlikely(READ_ONCE(of->released))) {
+		kernfs_put_active(of->kn);
+		return NULL;
+	}
 
 	return of;
 }
@@ -755,7 +761,7 @@ static void kernfs_release_file(struct kernfs_node *kn,
 		 * and being drained.  Don't use kernfs_ops().
 		 */
 		kn->attr.ops->release(of);
-		of->released = true;
+		WRITE_ONCE(of->released, true);
 		of_on(of)->nr_to_release--;
 	}
 }
