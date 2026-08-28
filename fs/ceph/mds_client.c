@@ -4024,6 +4024,19 @@ int ceph_mdsc_wait_request(struct ceph_mds_client *mdsc,
 		if (req->r_parent &&
 		    (req->r_op & CEPH_MDS_OP_WRITE))
 			ceph_invalidate_dir_request(req);
+
+		/*
+		 * The waiter is about to drop its reference, which is
+		 * the last one held by the request's caller.  Make sure
+		 * the request is no longer parked on a wait list or
+		 * registered in the request tree, or it could be walked
+		 * (and in the tree case, replied to) after it is freed.
+		 * A racing reply may already have unregistered it, in
+		 * which case it is no longer in the tree.
+		 */
+		list_del_init(&req->r_wait);
+		if (lookup_request(&mdsc->request_tree, req->r_tid) == req)
+			__unregister_request(mdsc, req);
 	} else {
 		err = req->r_err;
 	}
