@@ -198,12 +198,18 @@ EXPORT_SYMBOL_GPL(qcom_q6v5_wait_for_start);
 static irqreturn_t q6v5_handover_interrupt(int irq, void *data)
 {
 	struct qcom_q6v5 *q6v5 = data;
+	bool previously_issued;
 
+	previously_issued = q6v5->handover_issued;
 	q6v5->handover_issued = true;
 
 	q6v5_handover_irq_disable(q6v5, false);
 
-	if (q6v5->handover)
+	/*
+	 * Skip the handover callback if it was already issued (e.g. attach
+	 * path), as the proxy resources were never acquired in that case.
+	 */
+	if (!previously_issued && q6v5->handover)
 		q6v5->handover(q6v5);
 
 	icc_set_bw(q6v5->path, 0, 0);
