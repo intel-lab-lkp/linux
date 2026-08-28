@@ -483,12 +483,45 @@ void init_intel_cacheinfo(struct cpuinfo_x86 *c)
 }
 
 /*
+ * Find the leaf of @cpu that describes the same cache level and type as
+ * @this_leaf, or NULL if it has none.
+ *
+ * The number of cache leaves is per-CPU since commit 9677be09e5e4
+ * ("x86/cacheinfo: Delete global num_cache_leaves"), so CPUs that the APIC-ID
+ * tests below treat as cache siblings may enumerate different leaves - on
+ * hybrid parts, or under a VMM that does not normalise CPUID leaf 4 across
+ * vCPUs. A leaf index is therefore only meaningful on the CPU it came from:
+ * index N need not describe the same cache on a sibling, and need not exist
+ * there at all. Match on level and type instead, the way
+ * cache_shared_cpu_map_setup() does in drivers/base/cacheinfo.c.
+ */
+static struct cacheinfo *sibling_cache_leaf(unsigned int cpu,
+					    const struct cacheinfo *this_leaf)
+{
+	struct cpu_cacheinfo *sib_cpu_ci = get_cpu_cacheinfo(cpu);
+	unsigned int i;
+
+	if (!sib_cpu_ci->info_list)
+		return NULL;
+
+	for (i = 0; i < sib_cpu_ci->num_leaves; i++) {
+		struct cacheinfo *sibling_ci = sib_cpu_ci->info_list + i;
+
+		if (sibling_ci->level == this_leaf->level &&
+		    sibling_ci->type == this_leaf->type)
+			return sibling_ci;
+	}
+
+	return NULL;
+}
+
+/*
  * <linux/cacheinfo.h> shared_cpu_map setup, AMD/Hygon
  */
 static int __cache_amd_cpumap_setup(unsigned int cpu, int index,
-				    const struct _cpuid4_info *id4)
+				    const struct _cpuid4_info *id4,
+				    const struct cacheinfo *this_leaf)
 {
-	struct cpu_cacheinfo *this_cpu_ci;
 	struct cacheinfo *ci;
 	int i, sibling;
 
@@ -498,19 +531,10 @@ static int __cache_amd_cpumap_setup(unsigned int cpu, int index,
 	 */
 	if (index == 3) {
 		for_each_cpu(i, cpu_llc_shared_mask(cpu)) {
-			this_cpu_ci = get_cpu_cacheinfo(i);
-			if (!this_cpu_ci->info_list)
+			ci = sibling_cache_leaf(i, this_leaf);
+			if (!ci)
 				continue;
 
-			/*
-			 * The leaf count is per-CPU, so a CPU sharing the LLC
-			 * may have enumerated fewer leaves than this one.
-			 * Never index past the end of its array.
-			 */
-			if (index >= this_cpu_ci->num_leaves)
-				continue;
-
-			ci = this_cpu_ci->info_list + index;
 			for_each_cpu(sibling, cpu_llc_shared_mask(cpu)) {
 				if (!cpu_online(sibling))
 					continue;
@@ -526,19 +550,13 @@ static int __cache_amd_cpumap_setup(unsigned int cpu, int index,
 		last = first + nshared - 1;
 
 		for_each_online_cpu(i) {
-			this_cpu_ci = get_cpu_cacheinfo(i);
-			if (!this_cpu_ci->info_list)
-				continue;
-
 			apicid = cpu_data(i).topo.apicid;
 			if ((apicid < first) || (apicid > last))
 				continue;
 
-			/* Same per-CPU leaf count caveat as above. */
-			if (index >= this_cpu_ci->num_leaves)
+			ci = sibling_cache_leaf(i, this_leaf);
+			if (!ci)
 				continue;
-
-			ci = this_cpu_ci->info_list + index;
 
 			for_each_online_cpu(sibling) {
 				apicid = cpu_data(sibling).topo.apicid;
@@ -561,16 +579,16 @@ static void __cache_cpumap_setup(unsigned int cpu, int index,
 {
 	struct cpu_cacheinfo *this_cpu_ci = get_cpu_cacheinfo(cpu);
 	struct cpuinfo_x86 *c = &cpu_data(cpu);
-	struct cacheinfo *ci, *sibling_ci;
+	struct cacheinfo *ci = this_cpu_ci->info_list + index;
+	struct cacheinfo *sibling_ci;
 	unsigned long num_threads_sharing;
 	int index_msb, i;
 
 	if (c->x86_vendor == X86_VENDOR_AMD || c->x86_vendor == X86_VENDOR_HYGON) {
-		if (__cache_amd_cpumap_setup(cpu, index, id4))
+		if (__cache_amd_cpumap_setup(cpu, index, id4, ci))
 			return;
 	}
 
-	ci = this_cpu_ci->info_list + index;
 	num_threads_sharing = 1 + id4->eax.split.num_threads_sharing;
 
 	cpumask_set_cpu(cpu, &ci->shared_cpu_map);
@@ -581,23 +599,17 @@ static void __cache_cpumap_setup(unsigned int cpu, int index,
 
 	for_each_online_cpu(i)
 		if (cpu_data(i).topo.apicid >> index_msb == c->topo.apicid >> index_msb) {
-			struct cpu_cacheinfo *sib_cpu_ci = get_cpu_cacheinfo(i);
-
-			/* Skip if itself or no cacheinfo */
-			if (i == cpu || !sib_cpu_ci->info_list)
+			if (i == cpu)
 				continue;
 
 			/*
-			 * CPUs that the APIC-ID test treats as cache siblings
-			 * may still enumerate a different number of leaves,
-			 * e.g. on hybrid parts or under a VMM that does not
-			 * normalise CPUID leaf 4 across vCPUs. Never index
-			 * past the end of the sibling's array.
+			 * Skip siblings without cacheinfo yet, and those that
+			 * have no cache of this level and type.
 			 */
-			if (index >= sib_cpu_ci->num_leaves)
+			sibling_ci = sibling_cache_leaf(i, ci);
+			if (!sibling_ci)
 				continue;
 
-			sibling_ci = sib_cpu_ci->info_list + index;
 			cpumask_set_cpu(i, &ci->shared_cpu_map);
 			cpumask_set_cpu(cpu, &sibling_ci->shared_cpu_map);
 		}
