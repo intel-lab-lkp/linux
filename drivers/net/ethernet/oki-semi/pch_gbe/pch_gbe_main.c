@@ -2449,7 +2449,7 @@ static int pch_gbe_resume(struct device *device)
 	struct net_device *netdev = pci_get_drvdata(pdev);
 	struct pch_gbe_adapter *adapter = netdev_priv(netdev);
 	struct pch_gbe_hw *hw = &adapter->hw;
-	u32 err;
+	int err;
 
 	err = pci_enable_device(pdev);
 	if (err) {
@@ -2462,8 +2462,14 @@ static int pch_gbe_resume(struct device *device)
 	/* Clear wake on lan control and status */
 	pch_gbe_mac_set_wol_event(hw, 0);
 
-	if (netif_running(netdev))
-		pch_gbe_up(adapter);
+	if (netif_running(netdev)) {
+		err = pch_gbe_up(adapter);
+		if (err) {
+			pch_gbe_phy_power_down(hw);
+			pci_disable_device(pdev);
+			return err;
+		}
+	}
 	netif_device_attach(netdev);
 
 	return 0;
