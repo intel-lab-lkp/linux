@@ -134,6 +134,7 @@ struct virtnet_rq_stats {
 	u64_stats_t xdp_redirects;
 	u64_stats_t xdp_drops;
 	u64_stats_t kicks;
+	u64_stats_t rx_timeouts;
 };
 
 #define VIRTNET_SQ_STAT(name, m) {name, offsetof(struct virtnet_sq_stats, m), -1}
@@ -167,6 +168,7 @@ static const struct virtnet_stat_desc virtnet_rq_stats_desc[] = {
 	VIRTNET_RQ_STAT("xdp_redirects", xdp_redirects),
 	VIRTNET_RQ_STAT("xdp_drops",     xdp_drops),
 	VIRTNET_RQ_STAT("kicks",         kicks),
+	VIRTNET_RQ_STAT("rx_timeouts",   rx_timeouts),
 };
 
 static const struct virtnet_stat_desc virtnet_sq_stats_desc_qstat[] = {
@@ -3069,8 +3071,9 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
  *
  * This watchdog detects that state: a queue is considered stalled when
  * it has a non-zero backlog, makes no consumption progress and receives
- * no new interrupt for rx_watchdog_timeo seconds. On detection it logs
- * a warning.
+ * no new interrupt for rx_watchdog_timeo seconds. On detection it
+ * records the event in the per-queue rx_timeouts statistic and logs a
+ * warning.
  */
 static void virtnet_rx_watchdog(struct timer_list *t)
 {
@@ -3101,6 +3104,10 @@ static void virtnet_rx_watchdog(struct timer_list *t)
 		if (time_after(jiffies, rq->watchdog_jiffies + timeout)) {
 			unsigned int stall_ms =
 				jiffies_to_msecs(jiffies - rq->watchdog_jiffies);
+
+			u64_stats_update_begin(&rq->stats.syncp);
+			u64_stats_inc(&rq->stats.rx_timeouts);
+			u64_stats_update_end(&rq->stats.syncp);
 
 			netdev_warn(vi->dev, "RX queue %u stalled for %u ms\n",
 				    i, stall_ms);
