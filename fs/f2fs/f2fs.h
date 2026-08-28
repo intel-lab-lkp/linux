@@ -4938,6 +4938,15 @@ static inline bool f2fs_lfs_mode(struct f2fs_sb_info *sbi)
 	return F2FS_OPTION(sbi).fs_mode == FS_MODE_LFS;
 }
 
+static inline bool f2fs_should_opu(struct inode *inode)
+{
+	/* pinned files must keep their block addresses */
+	if (f2fs_is_pinned_file(inode))
+		return false;
+
+	return f2fs_lfs_mode(F2FS_I_SB(inode));
+}
+
 static inline bool f2fs_is_sequential_zone_area(struct f2fs_sb_info *sbi,
 					  block_t blkaddr)
 {

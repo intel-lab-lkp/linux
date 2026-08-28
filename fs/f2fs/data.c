@@ -1644,7 +1644,7 @@ int f2fs_map_blocks(struct inode *inode, struct f2fs_map_blocks *map, int flag)
 	if (!maxblocks)
 		return 0;
 
-	lfs_dio_write = (flag == F2FS_GET_BLOCK_DIO && f2fs_lfs_mode(sbi) &&
+	lfs_dio_write = (flag == F2FS_GET_BLOCK_DIO && f2fs_should_opu(inode) &&
 				map->m_may_create);
 
 	if (!map->m_may_create && f2fs_map_blocks_cached(inode, map, flag)) {
@@ -1717,8 +1717,8 @@ next_block:
 
 	/* use out-place-update for direct IO under LFS mode */
 	if (map->m_may_create && (is_hole ||
-		(flag == F2FS_GET_BLOCK_DIO && f2fs_lfs_mode(sbi) &&
-		!f2fs_is_pinned_file(inode) && map->m_last_pblk != blkaddr))) {
+		(flag == F2FS_GET_BLOCK_DIO && f2fs_should_opu(inode) &&
+		map->m_last_pblk != blkaddr))) {
 		if (unlikely(f2fs_cp_error(sbi))) {
 			err = -EIO;
 			goto sync_out;
@@ -1810,7 +1810,7 @@ next_block:
 		ofs++;
 		map->m_len++;
 	} else {
-		if (lfs_dio_write && !f2fs_is_pinned_file(inode))
+		if (lfs_dio_write)
 			map->m_last_pblk = blkaddr;
 		goto sync_out;
 	}
@@ -4513,11 +4513,14 @@ static int f2fs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 	}
 
 	/*
-	 * If the blocks being overwritten are already allocated,
-	 * f2fs_map_lock and f2fs_balance_fs are not necessary.
+	 * Out-place-update must not reuse the existing block, so ask for an
+	 * allocation even when the range is already mapped.  Otherwise, if the
+	 * blocks being overwritten are already allocated, f2fs_map_lock and
+	 * f2fs_balance_fs are not necessary.
 	 */
 	if ((flags & IOMAP_WRITE) &&
-		!__f2fs_overwrite_io(inode, offset, length, true))
+		(f2fs_should_opu(inode) ||
+		 !__f2fs_overwrite_io(inode, offset, length, true)))
 		map.m_may_create = true;
 
 	err = f2fs_map_blocks(inode, &map, F2FS_GET_BLOCK_DIO);

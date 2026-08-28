@@ -5022,7 +5022,7 @@ static int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *iter,
 	int ret;
 
 	/* If it will be an out-of-place direct write, don't bother. */
-	if (dio && f2fs_lfs_mode(sbi))
+	if (dio && f2fs_should_opu(inode))
 		return 0;
 	/*
 	 * Don't preallocate holes aligned to DIO_SKIP_HOLES which turns into
@@ -5166,7 +5166,7 @@ static ssize_t f2fs_dio_write_iter(struct kiocb *iocb, struct iov_iter *from,
 	struct inode *inode = file_inode(file);
 	struct f2fs_inode_info *fi = F2FS_I(inode);
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
-	const bool do_opu = f2fs_lfs_mode(sbi) && !f2fs_is_pinned_file(inode);
+	const bool do_opu = f2fs_should_opu(inode);
 	const loff_t pos = iocb->ki_pos;
 	const ssize_t count = iov_iter_count(from);
 	unsigned int dio_flags;
@@ -5182,18 +5182,13 @@ static ssize_t f2fs_dio_write_iter(struct kiocb *iocb, struct iov_iter *from,
 
 	if (iocb->ki_flags & IOCB_NOWAIT) {
 		/* f2fs_convert_inline_inode() and block allocation can block */
-		if (f2fs_has_inline_data(inode) ||
+		if (do_opu || f2fs_has_inline_data(inode) ||
 		    !f2fs_overwrite_io(inode, pos, count)) {
 			ret = -EAGAIN;
 			goto out;
 		}
 
 		if (!f2fs_down_read_trylock(&fi->i_gc_rwsem[WRITE])) {
-			ret = -EAGAIN;
-			goto out;
-		}
-		if (do_opu && !f2fs_down_read_trylock(&fi->i_gc_rwsem[READ])) {
-			f2fs_up_read(&fi->i_gc_rwsem[WRITE]);
 			ret = -EAGAIN;
 			goto out;
 		}
