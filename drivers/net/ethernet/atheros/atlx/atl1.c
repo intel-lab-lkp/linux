@@ -3128,6 +3128,9 @@ static void atl1_remove(struct pci_dev *pdev)
 
 	adapter = netdev_priv(netdev);
 
+	cancel_work_sync(&adapter->reset_dev_task);
+	cancel_work_sync(&adapter->link_chg_task);
+
 	/*
 	 * Some atl1 boards lack persistent storage for their MAC, and get it
 	 * from the BIOS during POST.  If we've been messing with the MAC
