@@ -755,7 +755,6 @@ int acpi_device_modalias(struct device *, char *, int);
 
 struct platform_device *acpi_create_platform_device(struct acpi_device *,
 						    const struct property_entry *);
-#define ACPI_PTR(_ptr)	(_ptr)
 
 static inline void acpi_device_set_enumerated(struct acpi_device *adev)
 {
@@ -1073,8 +1072,6 @@ static inline int acpi_dma_configure_id(struct device *dev,
 	return 0;
 }
 
-#define ACPI_PTR(_ptr)	(NULL)
-
 static inline void acpi_device_set_enumerated(struct acpi_device *adev)
 {
 }
@@ -1151,6 +1148,8 @@ static inline int acpi_mrrm_max_mem_region(void)
 #define cmos_rtc_platform_device_present	false
 
 #endif	/* !CONFIG_ACPI */
+
+#define ACPI_PTR(_ptr) PTR_IF(IS_BUILTIN(CONFIG_ACPI), _ptr)
 
 #ifdef CONFIG_ACPI_HMAT
 int hmat_get_extended_linear_cache_size(struct resource *backing_res, int nid,
