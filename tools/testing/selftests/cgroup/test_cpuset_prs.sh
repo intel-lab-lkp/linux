@@ -1420,6 +1420,97 @@ test_housekeeping_cpu_return()
 }
 
 #
+# A local type change that fails the boot housekeeping constraint must release
+# the partition CPUs and preserve their boot-isolated state.
+#
+test_partition_type_failure()
+{
+	TEST_NAME="Local partition type-change validation failure"
+	get_boot_isolated_cpu "$TEST_NAME" || return 0
+	echo "Running $TEST_NAME test ..."
+
+	cd $CGROUP2/test
+	echo member > cpuset.cpus.partition
+	echo $BOOT_CPU > cpuset.cpus
+	[[ $(cat cpuset.cpus.effective) = "$BOOT_CPU" ]] || {
+		echo "$TEST_NAME test SKIPPED: CPU $BOOT_CPU is unavailable"
+		echo "" > cpuset.cpus
+		cd $CGROUP2
+		return 0
+	}
+	test_partition isolated
+	echo root > cpuset.cpus.partition
+	grep -q '^root invalid (partition config conflicts with housekeeping setup)$' \
+		cpuset.cpus.partition || {
+		echo "Partition type failure did not produce the expected state"
+		exit 1
+	}
+	[[ $(cat $CGROUP2/cpuset.cpus.effective) = "$CPULIST" ]] || {
+		echo "Partition type failure did not release CPU $BOOT_CPU"
+		exit 1
+	}
+	check_isolcpus "." || {
+		echo "Partition type failure lost boot-isolated CPU $BOOT_CPU"
+		exit 1
+	}
+	echo member > cpuset.cpus.partition
+	echo "" > cpuset.cpus
+	cd $CGROUP2
+	echo "$TEST_NAME test PASSED."
+}
+
+#
+# Exercise the same type-change validation failure for a remote partition.
+#
+test_remote_partition_type_failure()
+{
+	TEST_NAME="Remote partition type-change validation failure"
+	get_boot_isolated_cpu "$TEST_NAME" || return 0
+	echo "Running $TEST_NAME test ..."
+
+	cd $CGROUP2/test
+	echo member > cpuset.cpus.partition
+	echo +cpuset > cgroup.subtree_control
+	echo $BOOT_CPU > cpuset.cpus
+	echo $BOOT_CPU > cpuset.cpus.exclusive
+	[[ $(cat cpuset.cpus.effective) = "$BOOT_CPU" ]] || {
+		echo "$TEST_NAME test SKIPPED: CPU $BOOT_CPU is unavailable"
+		echo "" > cpuset.cpus.exclusive
+		echo "" > cpuset.cpus
+		cd $CGROUP2
+		return 0
+	}
+	mkdir A1
+	cd A1
+	echo $BOOT_CPU > cpuset.cpus
+	echo $BOOT_CPU > cpuset.cpus.exclusive
+	test_partition isolated
+	echo root > cpuset.cpus.partition
+	grep -q '^root invalid (partition config conflicts with housekeeping setup)$' \
+		cpuset.cpus.partition || {
+		echo "Remote type failure did not produce the expected state"
+		exit 1
+	}
+	[[ $(cat $CGROUP2/cpuset.cpus.effective) = "$CPULIST" ]] || {
+		echo "Remote type failure did not release CPU $BOOT_CPU"
+		exit 1
+	}
+	check_isolcpus "." || {
+		echo "Remote type failure lost boot-isolated CPU $BOOT_CPU"
+		exit 1
+	}
+	echo member > cpuset.cpus.partition
+	echo "" > cpuset.cpus.exclusive
+	echo "" > cpuset.cpus
+	cd ..
+	rmdir A1
+	echo "" > cpuset.cpus.exclusive
+	echo "" > cpuset.cpus
+	cd $CGROUP2
+	echo "$TEST_NAME test PASSED."
+}
+
+#
 # Wait for inotify event for the given file and read it
 # $1: cgroup file to wait for
 # $2: file to store the read result
@@ -1493,5 +1584,7 @@ test_isolated
 test_boot_isolated
 test_child_owned_cpus
 test_housekeeping_cpu_return
+test_partition_type_failure
+test_remote_partition_type_failure
 test_inotify
 echo "All tests PASSED."
