@@ -17,7 +17,7 @@
 #include <media/ipu-bridge.h>
 #include <media/v4l2-fwnode.h>
 
-#define ADEV_DEV(adev) ACPI_PTR(&((adev)->dev))
+#define ADEV_DEV(adev) &(adev)->dev
 
 /*
  * 92335fcf-3203-4472-af93-7b4453ac29da
@@ -239,12 +239,12 @@ static struct acpi_device *ipu_bridge_get_ivsc_acpi_dev(struct acpi_device *adev
 	for (i = 0; i < ARRAY_SIZE(ivsc_acpi_ids); i++) {
 		const struct acpi_device_id *acpi_id = &ivsc_acpi_ids[i];
 		struct acpi_device *consumer, *ivsc_adev;
-		acpi_handle handle = acpi_device_handle(ACPI_PTR(adev));
+		acpi_handle handle = acpi_device_handle(adev);
 
 		for_each_acpi_dev_match(ivsc_adev, acpi_id->id, NULL, -1)
 			/* camera sensor depends on IVSC in DSDT if exist */
 			for_each_acpi_consumer_dev(ivsc_adev, consumer)
-				if (ACPI_PTR(consumer->handle) == handle) {
+				if (consumer->handle == handle) {
 					acpi_dev_put(consumer);
 					return ivsc_adev;
 				}
@@ -322,8 +322,7 @@ static int ipu_bridge_read_acpi_buffer(struct acpi_device *adev, char *id,
 	acpi_status status;
 	int ret = 0;
 
-	status = acpi_evaluate_object(ACPI_PTR(adev->handle),
-				      id, NULL, &buffer);
+	status = acpi_evaluate_object(adev->handle, id, NULL, &buffer);
 	if (ACPI_FAILURE(status))
 		return -ENODEV;
 
@@ -379,7 +378,7 @@ static enum v4l2_fwnode_orientation ipu_bridge_parse_orientation(struct acpi_dev
 	enum v4l2_fwnode_orientation orientation;
 	struct acpi_pld_info *pld = NULL;
 
-	if (!acpi_get_physical_device_location(ACPI_PTR(adev->handle), &pld)) {
+	if (!acpi_get_physical_device_location(adev->handle, &pld)) {
 		dev_warn(ADEV_DEV(adev), "_PLD call failed, using default orientation\n");
 		return V4L2_FWNODE_ORIENTATION_EXTERNAL;
 	}
@@ -785,7 +784,7 @@ static int ipu_bridge_connect_sensor(const struct ipu_sensor_config *cfg,
 	int ret;
 
 	for_each_acpi_dev_match(adev, cfg->hid, NULL, -1) {
-		if (!ACPI_PTR(adev->status.enabled))
+		if (!adev->status.enabled)
 			continue;
 
 		if (bridge->n_sensors >= IPU_MAX_PORTS) {
@@ -821,7 +820,7 @@ static int ipu_bridge_connect_sensor(const struct ipu_sensor_config *cfg,
 			goto err_free_swnodes;
 		}
 
-		sensor->adev = ACPI_PTR(acpi_dev_get(adev));
+		sensor->adev = acpi_dev_get(adev);
 
 		primary = acpi_fwnode_handle(adev);
 		primary->secondary = fwnode;
@@ -881,7 +880,7 @@ static int ipu_bridge_ivsc_is_ready(void)
 			&ipu_supported_sensors[i];
 
 		for_each_acpi_dev_match(sensor_adev, cfg->hid, NULL, -1) {
-			if (!ACPI_PTR(sensor_adev->status.enabled))
+			if (!sensor_adev->status.enabled)
 				continue;
 
 			adev = ipu_bridge_get_ivsc_acpi_dev(sensor_adev);
