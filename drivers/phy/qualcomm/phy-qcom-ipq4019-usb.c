@@ -30,7 +30,12 @@ static int ipq4019_ss_phy_power_off(struct phy *_phy)
 {
 	struct ipq4019_usb_phy *phy = phy_get_drvdata(_phy);
 
-	reset_control_assert(phy->por_rst);
+	int ret;
+
+	ret = reset_control_assert(phy->por_rst);
+	if (ret)
+		return ret;
+
 	msleep(10);
 
 	return 0;
@@ -40,11 +45,13 @@ static int ipq4019_ss_phy_power_on(struct phy *_phy)
 {
 	struct ipq4019_usb_phy *phy = phy_get_drvdata(_phy);
 
-	ipq4019_ss_phy_power_off(_phy);
+	int ret;
 
-	reset_control_deassert(phy->por_rst);
+	ret = ipq4019_ss_phy_power_off(_phy);
+	if (ret)
+		return ret;
 
-	return 0;
+	return reset_control_deassert(phy->por_rst);
 }
 
 static const struct phy_ops ipq4019_usb_ss_phy_ops = {
@@ -56,10 +63,20 @@ static int ipq4019_hs_phy_power_off(struct phy *_phy)
 {
 	struct ipq4019_usb_phy *phy = phy_get_drvdata(_phy);
 
-	reset_control_assert(phy->por_rst);
+	int ret;
+
+	ret = reset_control_assert(phy->por_rst);
+	if (ret)
+		return ret;
+
 	msleep(10);
 
-	reset_control_assert(phy->srif_rst);
+	ret = reset_control_assert(phy->srif_rst);
+	if (ret) {
+		reset_control_deassert(phy->por_rst);
+		return ret;
+	}
+
 	msleep(10);
 
 	return 0;
@@ -69,14 +86,23 @@ static int ipq4019_hs_phy_power_on(struct phy *_phy)
 {
 	struct ipq4019_usb_phy *phy = phy_get_drvdata(_phy);
 
-	ipq4019_hs_phy_power_off(_phy);
+	int ret;
 
-	reset_control_deassert(phy->srif_rst);
+	ret = ipq4019_hs_phy_power_off(_phy);
+	if (ret)
+		return ret;
+
+	ret = reset_control_deassert(phy->srif_rst);
+	if (ret)
+		return ret;
+
 	msleep(10);
 
-	reset_control_deassert(phy->por_rst);
+	ret = reset_control_deassert(phy->por_rst);
+	if (ret)
+		reset_control_assert(phy->srif_rst);
 
-	return 0;
+	return ret;
 }
 
 static const struct phy_ops ipq4019_usb_hs_phy_ops = {
