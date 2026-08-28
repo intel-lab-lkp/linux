@@ -1973,7 +1973,15 @@ static int wm8904_set_bias_level(struct snd_soc_component *component,
 			}
 
 			regcache_cache_only(wm8904->regmap, false);
-			regcache_sync(wm8904->regmap);
+			ret = regcache_sync(wm8904->regmap);
+			if (ret) {
+				regcache_cache_only(wm8904->regmap, true);
+				regcache_mark_dirty(wm8904->regmap);
+				clk_disable_unprepare(wm8904->mclk);
+				regulator_bulk_disable(ARRAY_SIZE(wm8904->supplies),
+						       wm8904->supplies);
+				return ret;
+			}
 
 			/* Enable bias */
 			snd_soc_component_update_bits(component, WM8904_BIAS_CONTROL_0,
