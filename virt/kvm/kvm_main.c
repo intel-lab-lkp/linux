@@ -4999,7 +4999,7 @@ static int kvm_vm_ioctl_reset_dirty_pages(struct kvm *kvm)
 {
 	unsigned long i;
 	struct kvm_vcpu *vcpu;
-	int cleared = 0, r;
+	int cleared = 0, r = 0;
 
 	if (!kvm->dirty_ring_size)
 		return -EINVAL;
@@ -5017,7 +5017,12 @@ static int kvm_vm_ioctl_reset_dirty_pages(struct kvm *kvm)
 	if (cleared)
 		kvm_flush_remote_tlbs(kvm);
 
-	return cleared;
+	/*
+	 * Preserve partial-success semantics if KVM made forward progress, but
+	 * don't squash errors when nothing was reset, e.g. if a signal was
+	 * already pending.
+	 */
+	return cleared ? cleared : r;
 }
 
 int __attribute__((weak)) kvm_vm_ioctl_enable_cap(struct kvm *kvm,
