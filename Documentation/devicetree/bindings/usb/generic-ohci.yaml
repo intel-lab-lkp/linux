@@ -49,6 +49,8 @@ properties:
               - ingenic,jz4740-ohci
               - rockchip,rk3588-ohci
               - snps,hsdk-v1.0-ohci
+              - st,stm32mp13-ohci
+              - st,stm32mp15-ohci
           - const: generic-ohci
       - enum:
           - generic-ohci
