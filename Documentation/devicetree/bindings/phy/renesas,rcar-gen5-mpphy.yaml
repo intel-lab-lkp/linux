@@ -1,0 +1,125 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/renesas,rcar-gen5-mpphy.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Renesas R-Car Generation 5 Multi-Protocol PHY
+
+maintainers:
+  - Marek Vasut <marek.vasut+renesas@mailbox.org>
+  - Yoshihiro Shimoda <yoshihiro.shimoda.uh@renesas.com>
+
+properties:
+  compatible:
+    items:
+      - const: renesas,r8a78000-mpphy   # R-Car X5H MPPHY
+      - const: renesas,rcar-gen5-mpphy  # R-Car Gen5 MPPHY
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    minItems: 5
+    maxItems: 5
+
+  clock-names:
+    items:
+      - const: mpphy01
+      - const: mpphy11
+      - const: mpphy21
+      - const: mpphy31
+      - const: mpphy02
+
+  power-domains:
+    minItems: 4
+    maxItems: 4
+
+  power-domain-names:
+    items:
+      - const: mpp0
+      - const: mpp1
+      - const: mpp2
+      - const: mpp3
+
+  resets:
+    minItems: 5
+    maxItems: 5
+
+  reset-names:
+    items:
+      - const: mpphy01
+      - const: mpphy11
+      - const: mpphy21
+      - const: mpphy31
+      - const: mpphy02
+
+  '#phy-cells':
+    const: 1
+
+  renesas,num-lanes:
+    description: PCIe lane count for each PHY input.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 4
+    maxItems: 4
+
+  renesas,phy-type:
+    description: PHY multiplexing configuration for each output.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 8
+    maxItems: 8
+
+  renesas,external-ref-clock:
+    description: PHY external reference clock select for each output.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 4
+    maxItems: 4
+
+  renesas,output-repeat-ref-clock:
+    description: PHY repeat reference clock select for each output.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 4
+    maxItems: 4
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - power-domains
+  - power-domain-names
+  - resets
+  - reset-names
+  - '#phy-cells'
+  - renesas,num-lanes
+  - renesas,phy-type
+  - renesas,external-ref-clock
+  - renesas,output-repeat-ref-clock
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/phy/phy.h>
+
+    phy@c9a00000 {
+      compatible = "renesas,r8a78000-mpphy", "renesas,rcar-gen5-mpphy";
+      reg = <0xc9a00000 0x100000>;
+      #phy-cells = <1>;
+
+      clocks = <&scmi_clk 340>, <&scmi_clk 341>, <&scmi_clk 342>,
+               <&scmi_clk 343>, <&scmi_clk 344>;
+      clock-names = "mpphy01", "mpphy11", "mpphy21", "mpphy31", "mpphy02";
+      power-domains = <&scmi_devpd 17>, <&scmi_devpd 18>,
+                      <&scmi_devpd 19>, <&scmi_devpd 20>;
+      power-domain-names = "mpp0", "mpp1", "mpp2", "mpp3";
+      resets = <&scmi_reset 340>, <&scmi_reset 341>, <&scmi_reset 342>,
+               <&scmi_reset 343>, <&scmi_reset 344>;
+      reset-names = "mpphy01", "mpphy11", "mpphy21", "mpphy31", "mpphy02";
+
+      renesas,num-lanes = <4 4 0 0>;
+      renesas,phy-type = <PHY_TYPE_PCIE 0>, <PHY_TYPE_PCIE 0>,
+                         <PHY_TYPE_XPCS 2>, <PHY_TYPE_USB3 1>;
+      renesas,external-ref-clock = <1 1 1 1>;
+      renesas,output-repeat-ref-clock = <0 0 0 0>;
+    };
