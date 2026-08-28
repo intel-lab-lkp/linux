@@ -517,7 +517,12 @@ static int wm8770_set_bias_level(struct snd_soc_component *component,
 				return ret;
 			}
 
-			regcache_sync(wm8770->regmap);
+			ret = regcache_sync(wm8770->regmap);
+			if (ret) {
+				regulator_bulk_disable(ARRAY_SIZE(wm8770->supplies),
+						       wm8770->supplies);
+				return ret;
+			}
 
 			/* global powerup */
 			snd_soc_component_write(component, WM8770_PWDNCTRL, 0);
