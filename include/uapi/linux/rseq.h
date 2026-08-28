@@ -13,6 +13,11 @@
 #include <linux/types.h>
 #include <asm/byteorder.h>
 
+/*
+ * Maximum number of nodes walked in the rseq operation list.
+ */
+#define RSEQ_OP_LIST_LIMIT	2048
+
 enum rseq_cpu_id_state {
 	RSEQ_CPU_ID_UNINITIALIZED		= -1,
 	RSEQ_CPU_ID_REGISTRATION_FAILED		= -2,
@@ -33,6 +38,8 @@ enum rseq_cs_flags_bit {
 	/* User read only feature flags */
 	RSEQ_CS_FLAG_SLICE_EXT_AVAILABLE_BIT	= 4,
 	RSEQ_CS_FLAG_SLICE_EXT_ENABLED_BIT	= 5,
+	RSEQ_CS_FLAG_RSEQ_OP_AVAILABLE_BIT	= 6,
+	RSEQ_CS_FLAG_RSEQ_OP_ENABLED_BIT	= 7,
 };
 
 enum rseq_cs_flags {
@@ -47,6 +54,10 @@ enum rseq_cs_flags {
 		(1U << RSEQ_CS_FLAG_SLICE_EXT_AVAILABLE_BIT),
 	RSEQ_CS_FLAG_SLICE_EXT_ENABLED		=
 		(1U << RSEQ_CS_FLAG_SLICE_EXT_ENABLED_BIT),
+	RSEQ_CS_FLAG_RSEQ_OP_AVAILABLE		=
+		(1U << RSEQ_CS_FLAG_RSEQ_OP_AVAILABLE_BIT),
+	RSEQ_CS_FLAG_RSEQ_OP_ENABLED		=
+		(1U << RSEQ_CS_FLAG_RSEQ_OP_ENABLED_BIT),
 };
 
 /*
@@ -84,6 +95,77 @@ struct rseq_slice_ctrl {
 			__u16	__reserved;
 		};
 	};
+};
+
+/*
+ * enum rseq_op_type - Type of an rseq operation
+ * @RSEQ_OP_RESET:			Plain reset. Uses struct rseq_op_reset.
+ * @RSEQ_OP_RESET_WITH_STRIDE_CPUID:	Reset indexed by the current CPU ID.
+ *					Uses struct rseq_op_reset_with_stride.
+ * @RSEQ_OP_RESET_WITH_STRIDE_MMCID:	Reset indexed by the current MM CID.
+ *					Uses struct rseq_op_reset_with_stride.
+ */
+enum rseq_op_type {
+	RSEQ_OP_RESET,
+	RSEQ_OP_RESET_WITH_STRIDE_CPUID,
+	RSEQ_OP_RESET_WITH_STRIDE_MMCID,
+	RSEQ_OP_NR,
+};
+
+/*
+ * struct rseq_op_node - Common header linking an rseq operation into the list
+ * @next:	Address of the next node. Owned by the kernel.
+ * @prev:	Address of the previous node. Owned by the kernel.
+ * @type:	Operation type. See enum rseq_op_type.
+ * @reserved:	Must be zero on registration.
+ *
+ * User space allocates the node, sets @type and zeroes @next, @prev and
+ * @reserved before passing it to prctl(PR_RSEQ_OP, PR_RSEQ_OP_REGISTER, node).
+ * The kernel owns @next and @prev for the lifetime of the registration and
+ * links the node into a circular doubly-linked list anchored by an internal
+ * sentinel in struct rseq. User space must not touch @next or @prev while the
+ * node is registered.
+ */
+struct rseq_op_node {
+	__u64 next;
+	__u64 prev;
+	struct {
+		__u8  type; /* enum rseq_op_type */
+		__u8  reserved[7];
+	};
+};
+
+/*
+ * struct rseq_op_reset - Reset one word to a value on return to user space
+ * @node:	Operation list node.
+ * @src:	Address of the source word, or 0 to reset @dst to zero.
+ * @dst:	Address of the destination word.
+ * @len:	Word length in bytes. Must be 4 or 8 (8 is 64-bit only).
+ */
+struct rseq_op_reset {
+	struct rseq_op_node	node;
+	__u64			src;
+	__u64			dst;
+	__u32			len;
+};
+
+/*
+ * struct rseq_op_reset_with_stride - Reset one word in a strided array
+ * @node:	Operation list node.
+ * @src:	Address of the source word, or 0 to reset the slot to zero.
+ * @dst:	Base address of the strided destination array.
+ * @dst_stride:	Stride in bytes between consecutive array slots.
+ * @len:	Word length in bytes. Must be 4 or 8 (8 is 64-bit only).
+ *
+ * The destination slot is @dst + @dst_stride * index, where index is the
+ * current CPU ID or MM CID depending on the operation type.
+ */
+struct rseq_op_reset_with_stride {
+	struct rseq_op_node	node;
+	__u64			src;
+	__u64			dst;
+	__u64			dst_stride;
+	__u32			len;
 };
 
 /*
@@ -191,15 +273,21 @@ struct rseq {
 	struct rseq_slice_ctrl slice_ctrl;
 
 	/*
-	 * Before rseq became extensible, its original size was 32 bytes even
-	 * though the active rseq area was only 20 bytes.
-	 * Exposing a 32 bytes feature size would make life needlessly painful
-	 * for userspace. Therefore, add a reserved byte after byte 32
-	 * to bump the rseq feature size from 32 to 33.
-	 * The next field to be added to the rseq area will be larger
-	 * than one byte, and will replace this reserved byte.
+	 * Sentinel of the circular doubly-linked list of rseq operations
+	 * registered via prctl(PR_RSEQ_OP, ...). Fully owned and maintained by
+	 * the kernel: it is initialized to point to itself on registration and
+	 * user space must never read or write it directly.
+	 *
+	 * The kernel only use next and prev from rseq_op_list.  The rest of the
+	 * bytes are reserved for later usage and should be zeroed.
 	 */
-	__u8 __reserved;
+	union {
+		struct rseq_op_node rseq_op_list;
+		struct {
+			__u64	op_used[2];
+			__u64	reserved;
+		};
+	};
 
 	/*
 	 * Flexible array member at end of structure, after last feature field.

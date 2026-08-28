@@ -397,6 +397,18 @@ struct prctl_mm_map {
 # define PR_RSEQ_SLICE_EXT_ENABLE		0x01
 
 /*
+ * RSEQ operation registration.
+ *
+ * arg3 is the user address of a struct rseq_op_node embedded in one of the
+ * rseq operation structures (see uapi/linux/rseq.h). Registering the first
+ * operation enables rseq operation processing for the thread; unregistering
+ * the last one disables it.
+ */
+#define PR_RSEQ_OP				82
+# define PR_RSEQ_OP_REGISTER			1
+# define PR_RSEQ_OP_UNREGISTER			2
+
+/*
  * Get or set the control flow integrity (CFI) configuration for the
  * current thread.
  *
