@@ -40,9 +40,29 @@ static void signal_handler(int signum)
 {
 }
 
+static unsigned int get_timeout_multiplier(void)
+{
+	const char *mul_str = getenv("KSFT_TIMEOUT_MUL");
+	const char *slow_str = getenv("KSFT_MACHINE_SLOW");
+	unsigned int mul = 1;
+
+	if (slow_str)
+		mul = 10;
+
+	if (mul_str) {
+		int val;
+
+		val = atoi(mul_str);
+		if (val > 0)
+			mul = (unsigned int)val;
+	}
+
+	return mul;
+}
+
 static void kill_timeout(struct epoll_mtcontext *ctx)
 {
-	usleep(1000000);
+	usleep(1000000 * get_timeout_multiplier());
 	pthread_kill(ctx->main, SIGUSR1);
 	pthread_kill(ctx->waiter, SIGUSR1);
 }
