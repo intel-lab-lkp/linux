@@ -971,7 +971,12 @@ static int wm8985_set_bias_level(struct snd_soc_component *component,
 				return ret;
 			}
 
-			regcache_sync(wm8985->regmap);
+			ret = regcache_sync(wm8985->regmap);
+			if (ret) {
+				regulator_bulk_disable(ARRAY_SIZE(wm8985->supplies),
+						       wm8985->supplies);
+				return ret;
+			}
 
 			/* enable anti-pop features */
 			snd_soc_component_update_bits(component, WM8985_OUT4_TO_ADC,
