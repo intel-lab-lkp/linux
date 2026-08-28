@@ -24,10 +24,14 @@ xhci_ring_to_sgtable(struct xhci_sideband *sb, struct xhci_ring *ring)
 	struct device *dev;
 	size_t sz;
 	int i;
+	unsigned int first_seg_offset = 0;
 
 	dev = xhci_to_hcd(sb->xhci)->self.sysdev;
 	sz = ring->num_segs * TRB_SEGMENT_SIZE;
 	n_pages = PAGE_ALIGN(sz) >> PAGE_SHIFT;
+
+	/* TRB_SEGMENT_SIZE may be smaller than PAGE_SIZE; need one entry per segment */
+	n_pages = max_t(unsigned int, n_pages, ring->num_segs);
 	pages = kvmalloc_objs(struct page *, n_pages);
 	if (!pages)
 		return NULL;
@@ -51,11 +55,13 @@ xhci_ring_to_sgtable(struct xhci_sideband *sb, struct xhci_ring *ring)
 		dma_get_sgtable(dev, sgt, seg->trbs, seg->dma,
 				TRB_SEGMENT_SIZE);
 		pages[i] = sg_page(sgt->sgl);
+		if (i == 0)
+			first_seg_offset = sgt->sgl->offset;
 		sg_free_table(sgt);
 		seg = seg->next;
 	}
 
-	if (sg_alloc_table_from_pages(sgt, pages, n_pages, 0, sz, GFP_KERNEL))
+	if (sg_alloc_table_from_pages(sgt, pages, n_pages, first_seg_offset, sz, GFP_KERNEL))
 		goto err;
 
 	kvfree(pages);
