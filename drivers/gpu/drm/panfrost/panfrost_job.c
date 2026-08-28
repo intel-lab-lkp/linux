@@ -747,7 +747,7 @@ panfrost_reset(struct panfrost_device *pfdev,
 	panfrost_stop_jobs(pfdev);
 
 	/* Proceed with reset now. */
-	panfrost_device_reset(pfdev, false);
+	panfrost_device_reset(pfdev);
 
 	/* GPU has been reset, we can clear the reset pending bit. */
 	atomic_set(&pfdev->reset.pending, 0);
@@ -768,8 +768,8 @@ panfrost_reset(struct panfrost_device *pfdev,
 	for (i = 0; i < NUM_JOB_SLOTS; i++)
 		drm_sched_start(&pfdev->js->queue[i].sched, 0);
 
-	/* Re-enable job interrupts now that everything has been restarted. */
-	panfrost_jm_enable_interrupts(pfdev);
+	/* Re-enable interrupts now that everything has been restarted. */
+	panfrost_device_enable_int(pfdev);
 
 	dma_fence_end_signalling(cookie);
 }
@@ -923,7 +923,6 @@ int panfrost_jm_init(struct panfrost_device *pfdev)
 	}
 
 	panfrost_jm_reset_interrupts(pfdev);
-	panfrost_jm_enable_interrupts(pfdev);
 
 	return 0;
 

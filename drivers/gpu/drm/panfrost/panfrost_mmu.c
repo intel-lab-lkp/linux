@@ -340,7 +340,7 @@ void panfrost_mmu_reset(struct panfrost_device *pfdev)
 {
 	struct panfrost_mmu *mmu, *mmu_tmp;
 
-	clear_bit(PANFROST_COMP_BIT_MMU, pfdev->is_suspended);
+	mmu_write(pfdev, MMU_INT_MASK, 0);
 
 	spin_lock(&pfdev->as_lock);
 
@@ -356,7 +356,6 @@ void panfrost_mmu_reset(struct panfrost_device *pfdev)
 	spin_unlock(&pfdev->as_lock);
 
 	mmu_write(pfdev, MMU_INT_CLEAR, ~0);
-	mmu_write(pfdev, MMU_INT_MASK, ~0);
 }
 
 static size_t get_pgsize(u64 addr, size_t size, size_t *count)
@@ -979,6 +978,12 @@ int panfrost_mmu_init(struct panfrost_device *pfdev)
 void panfrost_mmu_fini(struct panfrost_device *pfdev)
 {
 	mmu_write(pfdev, MMU_INT_MASK, 0);
+}
+
+void panfrost_mmu_enable_interrupts(struct panfrost_device *pfdev)
+{
+	clear_bit(PANFROST_COMP_BIT_MMU, pfdev->is_suspended);
+	mmu_write(pfdev, MMU_INT_MASK, ~0);
 }
 
 void panfrost_mmu_suspend_irq(struct panfrost_device *pfdev)

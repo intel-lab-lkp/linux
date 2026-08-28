@@ -15,6 +15,8 @@ void panfrost_mmu_unmap(struct panfrost_gem_mapping *mapping);
 int panfrost_mmu_init(struct panfrost_device *pfdev);
 void panfrost_mmu_fini(struct panfrost_device *pfdev);
 void panfrost_mmu_reset(struct panfrost_device *pfdev);
+
+void panfrost_mmu_enable_interrupts(struct panfrost_device *pfdev);
 void panfrost_mmu_suspend_irq(struct panfrost_device *pfdev);
 
 int panfrost_mmu_as_get(struct panfrost_device *pfdev, struct panfrost_mmu *mmu);

@@ -250,7 +250,8 @@ int panfrost_unstable_ioctl_check(void);
 
 int panfrost_device_init(struct panfrost_device *pfdev);
 void panfrost_device_fini(struct panfrost_device *pfdev);
-void panfrost_device_reset(struct panfrost_device *pfdev, bool enable_job_int);
+void panfrost_device_enable_int(struct panfrost_device *pfdev);
+void panfrost_device_reset(struct panfrost_device *pfdev);
 
 extern const struct dev_pm_ops panfrost_pm_ops;
 
