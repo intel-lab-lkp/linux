@@ -1207,6 +1207,11 @@ static int ip6mr_cache_unresolved(struct mr_table *mrt, mifi_t mifi,
 		/*
 		 *	Create a new entry if allowable
 		 */
+		if (mrt->cache_resolve_queue_len >= MFC_UNRES_QUEUE_LEN_MAX) {
+			c = NULL;
+			err = -ENOBUFS;
+			goto err;
+		}
 
 		c = ip6mr_cache_alloc_unres();
 		if (!c) {

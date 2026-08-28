@@ -224,6 +224,9 @@ struct mr_table_ops {
 	void *cmparg_any;
 };
 
+/* Bound unresolved MFC entries and their queued skbs. */
+#define MFC_UNRES_QUEUE_LEN_MAX	10
+
 /**
  * struct mr_table - a multicast routing table
  * @work: used for table destruction

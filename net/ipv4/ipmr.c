@@ -1165,6 +1165,12 @@ static int ipmr_cache_unresolved(struct mr_table *mrt, vifi_t vifi,
 
 	if (!found) {
 		/* Create a new entry if allowable */
+		if (mrt->cache_resolve_queue_len >= MFC_UNRES_QUEUE_LEN_MAX) {
+			c = NULL;
+			err = -ENOBUFS;
+			goto err;
+		}
+
 		c = ipmr_cache_alloc_unres();
 		if (!c) {
 			err = -ENOBUFS;
