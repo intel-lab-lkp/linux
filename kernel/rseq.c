@@ -253,17 +253,18 @@ efault:
 static void rseq_slowpath_update_usr(struct pt_regs *regs)
 {
 	/*
-	 * Preserve has_rseq and user_irq state. The generic entry code clears
-	 * user_irq on the way out, the non-generic entry architectures are not
-	 * setting user_irq.
+	 * Preserve has_rseq, rseq_op and user_irq state. The generic entry
+	 * code clears user_irq on the way out, the non-generic entry
+	 * architectures are not setting user_irq.
 	 */
 	const struct rseq_event evt_mask = {
 		.has_rseq	= RSEQ_HAS_RSEQ_VERSION_MASK,
+		.rseq_op	= true,
 		.user_irq	= true,
 	};
 	struct task_struct *t = current;
 	struct rseq_ids ids;
-	bool event;
+	bool event, should_fault = false;
 
 	if (unlikely(t->flags & PF_EXITING))
 		return;
@@ -300,7 +301,12 @@ static void rseq_slowpath_update_usr(struct pt_regs *regs)
 
 	ids.node_id = cpu_to_node(ids.cpu_id);
 
-	if (unlikely(!rseq_update_usr(t, regs, &ids))) {
+	if (unlikely(!rseq_update_usr(t, regs, &ids)))
+		should_fault = true;
+	else if (t->rseq.event.rseq_op && unlikely(!rseq_apply_ops(t)))
+		should_fault = true;
+
+	if (should_fault) {
 		/*
 		 * Clear the errors just in case this might survive magically, but
 		 * leave the rest intact.
@@ -329,8 +335,20 @@ void __rseq_handle_slowpath(struct pt_regs *regs)
 	rseq_slowpath_update_usr(regs);
 }
 
+static inline void force_fault(int sig)
+{
+	/*
+	 * Clear the errors just in case this might survive magically, but leave
+	 * the rest intact.
+	 */
+	current->rseq.event.error = 0;
+	force_sigsegv(sig);
+}
+
 void __rseq_signal_deliver(int sig, struct pt_regs *regs)
 {
+	bool should_fault = false;
+
 	rseq_stat_inc(rseq_stats.signal);
 
 	/*
@@ -339,14 +357,13 @@ void __rseq_signal_deliver(int sig, struct pt_regs *regs)
 	 * the interrupted context as after this point the instruction
 	 * pointer in @regs points to the signal handler.
 	 */
-	if (unlikely(!rseq_handle_cs(current, regs))) {
-		/*
-		 * Clear the errors just in case this might survive
-		 * magically, but leave the rest intact.
-		 */
-		current->rseq.event.error = 0;
-		force_sigsegv(sig);
-	}
+	if (unlikely(!rseq_handle_cs(current, regs)))
+		should_fault = true;
+	else if (current->rseq.event.rseq_op && unlikely(!rseq_apply_ops(current)))
+		should_fault = true;
+
+	if (should_fault)
+		force_fault(sig);
 
 	/*
 	 * In legacy mode, force the update of IDs before returning to user
@@ -436,6 +453,8 @@ static long rseq_register(struct rseq __user * rseq, u32 rseq_len, int flags, u3
 				rseqfl |= RSEQ_CS_FLAG_SLICE_EXT_ENABLED;
 		}
 	}
+	if (version > 1)
+		rseqfl |= RSEQ_CS_FLAG_RSEQ_OP_AVAILABLE;
 
 	scoped_user_write_access(rseq, efault) {
 		/*
@@ -458,8 +477,16 @@ static long rseq_register(struct rseq __user * rseq, u32 rseq_len, int flags, u3
 		 * registrations.
 		 */
 		if (version > 1) {
+			u64 sentinel = (u64)&rseq->rseq_op_list;
+
 			if (IS_ENABLED(CONFIG_RSEQ_SLICE_EXTENSION))
 				unsafe_put_user(0U, &rseq->slice_ctrl.all, efault);
+			/*
+			 * Initialize the rseq operation list sentinel as an
+			 * empty circular doubly-linked list pointing to itself.
+			 */
+			unsafe_put_user(sentinel, &rseq->rseq_op_list.next, efault);
+			unsafe_put_user(sentinel, &rseq->rseq_op_list.prev, efault);
 		}
 	}
 
@@ -474,6 +501,12 @@ static long rseq_register(struct rseq __user * rseq, u32 rseq_len, int flags, u3
 #ifdef CONFIG_RSEQ_SLICE_EXTENSION
 	current->rseq.slice.state.enabled = !!(rseqfl & RSEQ_CS_FLAG_SLICE_EXT_ENABLED);
 #endif
+	/*
+	 * A fresh registration starts with no operations, so operation
+	 * processing is disabled until the first one is registered.
+	 */
+	current->rseq.event.rseq_op = false;
+	current->rseq.nr_ops = 0;
 
 	/*
 	 * Ensure the cpu_id_start and cpu_id fields are updated before
@@ -887,3 +920,164 @@ device_initcall(rseq_slice_init);
 #else
 static void rseq_slice_ext_init(struct dentry *root_dir) { }
 #endif /* CONFIG_RSEQ_SLICE_EXTENSION */
+
+/*
+ * Reflect the operation enabled state into the user visible flags field.
+ * Called on the 0<->1 transition of nr_ops. The kill path is taken on fault
+ * because losing this update leaves user space and kernel state inconsistent.
+ */
+static int rseq_op_update_enabled(struct task_struct *t, bool enable)
+{
+	struct rseq __user *rseq = t->rseq.usrptr;
+	u32 rflags;
+
+	if (get_user(rflags, &rseq->flags))
+		return -EFAULT;
+
+	rflags &= ~RSEQ_CS_FLAG_RSEQ_OP_ENABLED;
+	rflags |= RSEQ_CS_FLAG_RSEQ_OP_AVAILABLE;
+	if (enable)
+		rflags |= RSEQ_CS_FLAG_RSEQ_OP_ENABLED;
+
+	if (put_user(rflags, &rseq->flags))
+		return -EFAULT;
+
+	t->rseq.event.rseq_op = enable;
+	return 0;
+}
+
+/*
+ * Register @node at the head of the circular doubly-linked operation list
+ * anchored by the kernel owned sentinel in struct rseq.
+ */
+static int rseq_op_register(struct task_struct *t, struct rseq_op_node __user *node)
+{
+	struct rseq_op_node __user *sentinel = &t->rseq.usrptr->rseq_op_list;
+	struct rseq_op_node __user *first;
+	u64 next, prev, first_addr;
+	u8 type, i;
+
+	if (t->rseq.nr_ops >= RSEQ_OP_LIST_LIMIT)
+		return -ENOSPC;
+
+	if (!IS_ALIGNED((unsigned long)node, __alignof__(struct rseq_op_node)))
+		return -EINVAL;
+	if (!access_ok(node, sizeof(*node)))
+		return -EFAULT;
+
+	/*
+	 * The node links are owned by the kernel. User space must present a
+	 * pristine node: next, prev and the reserved bytes all zeroed, and a
+	 * known operation type.
+	 */
+	if (get_user(next, &node->next) || get_user(prev, &node->prev) ||
+	    get_user(type, &node->type))
+		return -EFAULT;
+	if (next || prev)
+		return -EINVAL;
+	if (type >= RSEQ_OP_NR)
+		return -EINVAL;
+	for (i = 1; i < sizeof(node->reserved); i++) {
+		u8 r;
+
+		if (get_user(r, &node->reserved[i]))
+			return -EFAULT;
+		if (r)
+			return -EINVAL;
+	}
+
+	/* Splice the node in right after the sentinel. */
+	if (get_user(first_addr, &sentinel->next))
+		goto die;
+	first = (struct rseq_op_node __user *)first_addr;
+
+	if (put_user((u64)(unsigned long)first, &node->next) ||
+	    put_user((u64)(unsigned long)sentinel, &node->prev) ||
+	    put_user((u64)(unsigned long)node, &first->prev) ||
+	    put_user((u64)(unsigned long)node, &sentinel->next))
+		goto die;
+
+	t->rseq.nr_ops += 1;
+
+	if (t->rseq.nr_ops == 1)
+		return rseq_op_update_enabled(t, true) ? -EFAULT : 0;
+	return 0;
+die:
+	force_sig(SIGSEGV);
+	return -EFAULT;
+}
+
+/*
+ * Unregister @node from the operation list. The node links are validated
+ * against its neighbours to reject bogus or double unregistration.
+ */
+static int rseq_op_unregister(struct task_struct *t, struct rseq_op_node __user *node)
+{
+	struct rseq_op_node __user *prev, *next;
+	u64 prev_addr, next_addr, tmp;
+
+	if (!t->rseq.nr_ops)
+		return -ENOENT;
+
+	if (!IS_ALIGNED((unsigned long)node, __alignof__(struct rseq_op_node)))
+		return -EINVAL;
+	if (!access_ok(node, sizeof(*node)))
+		return -EFAULT;
+
+	if (get_user(next_addr, &node->next) || get_user(prev_addr, &node->prev))
+		return -EFAULT;
+	prev = (struct rseq_op_node __user *)prev_addr;
+	next = (struct rseq_op_node __user *)next_addr;
+
+	/* A registered node always has both links set. */
+	if (!prev || !next)
+		return -EINVAL;
+
+	/* Verify the node is properly linked between its neighbours. */
+	if (get_user(tmp, &prev->next))
+		goto die;
+	if (tmp != (u64)(unsigned long)node)
+		return -EINVAL;
+	if (get_user(tmp, &next->prev))
+		goto die;
+	if (tmp != (u64)(unsigned long)node)
+		return -EINVAL;
+
+	/* Unsplice and clear the node links so it can be reused. */
+	if (put_user(next_addr, &prev->next) ||
+	    put_user(prev_addr, &next->prev) ||
+	    put_user(0ULL, &node->next) ||
+	    put_user(0ULL, &node->prev))
+		goto die;
+
+	t->rseq.nr_ops -= 1;
+
+	if (t->rseq.nr_ops == 0)
+		return rseq_op_update_enabled(t, false) ? -EFAULT : 0;
+	return 0;
+die:
+	force_sig(SIGSEGV);
+	return -EFAULT;
+}
+
+int rseq_op_prctl(unsigned long arg2, unsigned long arg3)
+{
+	struct rseq_op_node __user *node = (struct rseq_op_node __user *)arg3;
+	struct task_struct *t = current;
+
+	if (!t->rseq.usrptr)
+		return -ENXIO;
+	if (!rseq_v2(t))
+		return -ENOTSUPP;
+	if (!node)
+		return -EINVAL;
+
+	switch (arg2) {
+	case PR_RSEQ_OP_REGISTER:
+		return rseq_op_register(t, node);
+	case PR_RSEQ_OP_UNREGISTER:
+		return rseq_op_unregister(t, node);
+	default:
+		return -EINVAL;
+	}
+}

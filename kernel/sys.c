@@ -2889,6 +2889,11 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 			return -EINVAL;
 		error = rseq_slice_extension_prctl(arg2, arg3);
 		break;
+	case PR_RSEQ_OP:
+		if (arg4 || arg5)
+			return -EINVAL;
+		error = rseq_op_prctl(arg2, arg3);
+		break;
 	case PR_GET_CFI:
 		if (arg2 != PR_CFI_BRANCH_LANDING_PADS)
 			return -EINVAL;
