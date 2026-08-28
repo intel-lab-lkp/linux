@@ -2249,7 +2249,7 @@ static int msb_resume(struct memstick_dev *card)
 
 	if (msb->logical_block_count != new_msb->logical_block_count ||
 		memcmp(msb->lba_to_pba_table, new_msb->lba_to_pba_table,
-						msb->logical_block_count))
+			msb->logical_block_count * sizeof(*msb->lba_to_pba_table)))
 		goto out;
 
 	if (msb->block_count != new_msb->block_count ||
