@@ -1445,7 +1445,19 @@ static int xgbe_phy_start(struct xgbe_prv_data *pdata)
 	xgbe_an_init(pdata);
 	xgbe_an_enable_interrupts(pdata);
 
-	return xgbe_phy_config_aneg(pdata);
+	ret = xgbe_phy_config_aneg(pdata);
+	if (ret) {
+		/* Tear down what was just brought up above (including
+		 * freeing the an_irq) instead of returning with phy_started
+		 * left set and an_irq still registered - otherwise a retry
+		 * calls devm_request_irq() on an already-owned an_irq and
+		 * gets stuck in a permanent -EBUSY loop.
+		 */
+		xgbe_phy_stop(pdata);
+		return ret;
+	}
+
+	return 0;
 
 err_irq:
 	if (pdata->dev_irq != pdata->an_irq)
