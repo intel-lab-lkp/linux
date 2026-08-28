@@ -827,13 +827,18 @@ int cs35l56_runtime_resume_common(struct cs35l56_base *cs35l56_base, bool is_sou
 		goto err;
 
 	/* BOOT_DONE will be 1 if the amp reset */
-	regmap_read(cs35l56_base->regmap, CS35L56_IRQ1_EINT_4, &val);
+	ret = regmap_read(cs35l56_base->regmap, CS35L56_IRQ1_EINT_4, &val);
+	if (ret)
+		goto err;
+
 	if (val & CS35L56_OTP_BOOT_DONE_MASK) {
 		dev_dbg(cs35l56_base->dev, "Registers reset in suspend\n");
 		regcache_mark_dirty(cs35l56_base->regmap);
 	}
 
-	regcache_sync(cs35l56_base->regmap);
+	ret = regcache_sync(cs35l56_base->regmap);
+	if (ret)
+		goto err;
 
 	dev_dbg(cs35l56_base->dev, "Resumed");
 
