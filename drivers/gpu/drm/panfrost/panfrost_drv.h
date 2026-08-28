@@ -4,6 +4,10 @@
 #ifndef __PANFROST_DRV_H__
 #define __PANFROST_DRV_H__
 
+#if IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)
 extern bool panfrost_transparent_hugepage;
+#else
+#define panfrost_transparent_hugepage false
+#endif
 
 #endif
