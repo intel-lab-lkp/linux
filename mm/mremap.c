@@ -1334,6 +1334,14 @@ static void dontunmap_complete(struct vma_remap_struct *vrm,
 	unsigned long old_start = vrm->vma->vm_start;
 	unsigned long old_end = vrm->vma->vm_end;
 
+	/*
+	 * vrm_stat_account() accounted the new VMA while the source VMA
+	 * was still locked.  Since DONTUNMAP leaves the source VMA in
+	 * place after clearing VMA_LOCKED_MASK, undo that accounting here.
+	 */
+	if (vma_test(vrm->vma, VMA_LOCKED_BIT))
+		vrm->vma->vm_mm->locked_vm -= vrm->old_len >> PAGE_SHIFT;
+
 	/* We always clear VMA_LOCKED[ONFAULT]_BIT on the old VMA. */
 	vma_clear_flags_mask(vrm->vma, VMA_LOCKED_MASK);
 
@@ -1343,8 +1351,6 @@ static void dontunmap_complete(struct vma_remap_struct *vrm,
 	 */
 	if (new_vma != vrm->vma && start == old_start && end == old_end)
 		unlink_anon_vmas(vrm->vma);
-
-	/* Because we won't unmap we don't need to touch locked_vm. */
 }
 
 static unsigned long move_vma(struct vma_remap_struct *vrm)
