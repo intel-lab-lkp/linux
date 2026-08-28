@@ -2723,6 +2723,8 @@
 			clock-names = "core",
 				      "iface";
 			power-domains = <&gcc GCC_UFS_PHY_GDSC>;
+
+			status = "disabled";
 		};
 
 		crypto: crypto@1dfa000 {
