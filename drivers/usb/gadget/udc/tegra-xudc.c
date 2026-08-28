@@ -696,28 +696,43 @@ static void tegra_xudc_restore_port_speed(struct tegra_xudc *xudc)
 	xudc_writel(xudc, val, SSPX_CORE_CNT72);
 }
 
-static void tegra_xudc_device_mode_on(struct tegra_xudc *xudc)
+static int tegra_xudc_device_mode_on(struct tegra_xudc *xudc)
 {
 	int err;
 
-	pm_runtime_get_sync(xudc->dev);
+	err = pm_runtime_resume_and_get(xudc->dev);
+	if (err < 0)
+		return err;
 
 	tegra_phy_xusb_utmi_pad_power_on(xudc->curr_utmi_phy);
 
 	err = phy_power_on(xudc->curr_utmi_phy);
 	if (err < 0)
-		dev_err(xudc->dev, "UTMI power on failed: %d\n", err);
+		goto power_down_pad;
 
 	err = phy_power_on(xudc->curr_usb3_phy);
 	if (err < 0)
-		dev_err(xudc->dev, "USB3 PHY power on failed: %d\n", err);
+		goto power_off_utmi;
 
 	dev_dbg(xudc->dev, "device mode on\n");
 
-	phy_set_mode_ext(xudc->curr_utmi_phy, PHY_MODE_USB_OTG,
-			 USB_ROLE_DEVICE);
+	err = phy_set_mode_ext(xudc->curr_utmi_phy, PHY_MODE_USB_OTG,
+			       USB_ROLE_DEVICE);
+	if (err < 0)
+		goto power_off_usb3;
 
 	xudc->current_device_mode = true;
+
+	return 0;
+
+power_off_usb3:
+	phy_power_off(xudc->curr_usb3_phy);
+power_off_utmi:
+	phy_power_off(xudc->curr_utmi_phy);
+power_down_pad:
+	tegra_phy_xusb_utmi_pad_power_down(xudc->curr_utmi_phy);
+	pm_runtime_put(xudc->dev);
+	return err;
 }
 
 static void tegra_xudc_device_mode_off(struct tegra_xudc *xudc)
@@ -779,11 +794,16 @@ static void tegra_xudc_usb_role_sw_work(struct work_struct *work)
 {
 	struct tegra_xudc *xudc = container_of(work, struct tegra_xudc,
 					       usb_role_sw_work);
+	int err;
 
-	if (xudc->device_mode)
-		tegra_xudc_device_mode_on(xudc);
-	else
+	if (xudc->device_mode) {
+		err = tegra_xudc_device_mode_on(xudc);
+
+		if (err)
+			dev_err(xudc->dev, "failed to enter device mode: %d\n", err);
+	} else {
 		tegra_xudc_device_mode_off(xudc);
+	}
 }
 
 static int tegra_xudc_get_phy_index(struct tegra_xudc *xudc,
