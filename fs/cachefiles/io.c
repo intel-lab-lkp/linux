@@ -269,7 +269,8 @@ static void cachefiles_write_complete(struct kiocb *iocb, long ret)
 					  cachefiles_trace_write_error);
 
 	atomic_long_sub(ki->b_writing, &object->volume->cache->b_writing);
-	set_bit(FSCACHE_COOKIE_HAVE_DATA, &object->cookie->flags);
+	if (ret > 0)
+		set_bit(FSCACHE_COOKIE_HAVE_DATA, &object->cookie->flags);
 	if (ki->term_func)
 		ki->term_func(ki->term_func_priv, ret);
 	cachefiles_put_kiocb(ki);
