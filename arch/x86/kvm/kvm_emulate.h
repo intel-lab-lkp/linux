@@ -354,8 +354,9 @@ struct x86_emulate_ctxt {
 	bool have_exception;
 	struct x86_exception exception;
 
-	/* GPA available */
+	/* GPA and write access supplied by a hardware page fault. */
 	bool gpa_available;
+	bool gpa_write;
 	gpa_t gpa_val;
 
 	/*
