@@ -338,20 +338,58 @@ static inline void bforget(struct buffer_head *bh)
 		__bforget(bh);
 }
 
-static inline struct buffer_head *
-sb_bread(struct super_block *sb, sector_t block)
+/**
+ * sb_bread - Read a block.
+ * @sb: The superblock to read from.
+ * @block: Block number in units of block size.
+ *
+ * Read a specified block, and return the buffer head that refers
+ * to it.  The memory is allocated from the movable area so that it can
+ * be migrated.  The returned buffer head has its refcount increased.
+ * The caller should call brelse() when it has finished with the buffer.
+ *
+ * Context: May sleep waiting for I/O.
+ * Return: NULL if the block was unreadable.
+ */
+static inline
+struct buffer_head *sb_bread(struct super_block *sb, sector_t block)
 {
 	return __bread_gfp(sb->s_bdev, block, sb->s_blocksize, __GFP_MOVABLE);
 }
 
-static inline struct buffer_head *
-sb_bread_unmovable(struct super_block *sb, sector_t block)
+/**
+ * sb_bread_unmovable - Read a block.
+ * @sb: The superblock to read from.
+ * @block: Block number in units of block size.
+ *
+ * Read a specified block, and return the buffer head that refers to it.
+ * The memory is allocated from the unmovable area so that pointers into
+ * it remain valid after compaction runs.  The returned buffer head has
+ * its refcount increased.  The caller should call brelse() when it has
+ * finished with the buffer.
+ *
+ * Context: May sleep waiting for I/O.
+ * Return: NULL if the block was unreadable.
+ */
+static inline
+struct buffer_head *sb_bread_unmovable(struct super_block *sb, sector_t block)
 {
 	return __bread_gfp(sb->s_bdev, block, sb->s_blocksize, 0);
 }
 
-static inline void
-sb_breadahead(struct super_block *sb, sector_t block)
+/**
+ * sb_breadahead - Start readahead.
+ * @sb: Superblock identifying the block device.
+ * @block: The block to read.
+ *
+ * Read this block.  The I/O will be flagged as being readahead rather
+ * than immediate read, but (unlike the page cache), surrounding blocks
+ * will not be read.
+ *
+ * Context: May sleep in order to allocate memory.
+ */
+static inline
+void sb_breadahead(struct super_block *sb, sector_t block)
 {
 	__breadahead(sb->s_bdev, block, sb->s_blocksize);
 }
