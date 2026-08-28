@@ -54,6 +54,8 @@ properties:
               - qca,ar7100-ehci
               - rockchip,rk3588-ehci
               - snps,hsdk-v1.0-ehci
+              - st,stm32mp13-ehci
+              - st,stm32mp15-ehci
               - socionext,uniphier-ehci
           - const: generic-ehci
       - items:
