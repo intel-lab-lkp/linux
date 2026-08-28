@@ -30,6 +30,9 @@
 #define AP_QUEUE_UNASSIGNED "unassigned"
 #define AP_QUEUE_IN_USE "in use"
 
+#define AP_IRQ_DISABLED	0
+#define AP_IRQ_ENABLED	1
+
 #define AP_RESET_INTERVAL		20	/* Reset sleep interval (20ms)		*/
 
 static int vfio_ap_mdev_reset_queues(struct ap_matrix_mdev *matrix_mdev);
@@ -226,16 +229,27 @@ static struct vfio_ap_queue *vfio_ap_mdev_get_queue(
 }
 
 /**
- * vfio_ap_wait_for_irqclear - clears the IR bit or gives up after 5 tries
- * @apqn: The AP Queue number
+ * vfio_ap_wait_for_irqstate - wait for the IR bit to reach the requested state
  *
- * Checks the IRQ bit for the status of this APQN using ap_tapq.
- * Returns if the ap_tapq function succeeded and the bit is clear.
- * Returns if ap_tapq function failed with invalid, deconfigured or
- * checkstopped AP.
- * Otherwise retries up to 5 times after waiting 20ms.
+ * @apqn: the APQN of the queue
+ * @ir: the expected state of the IR bit: AP_IRQ_DISABLED or AP_IRQ_ENABLED
+ *
+ * Repeatedly polls the AP queue status via PQAP(TAPQ) every 20ms until the IR
+ * bit matches @ir, the queue becomes non-operational, or 5 retries are
+ * exhausted.
+ *
+ * Because PQAP(AQIC) initiates an asynchronous process, a condition-code 0
+ * completion does not guarantee the IR bit has reached the requested state.
+ * The caller must use this function to confirm the state before proceeding.
+ *
+ * Return:
+ * - true if the IR bit matches @ir, or the AP is non-operational (in which
+ *   case no further interrupts can be generated)
+ *
+ * - false if the IR bit still does not match @ir after all retries are
+ *   exhausted
  */
-static void vfio_ap_wait_for_irqclear(int apqn)
+static bool vfio_ap_wait_for_irqstate(int apqn, int ir)
 {
 	struct ap_queue_status status;
 	int retry = 5;
@@ -245,8 +259,8 @@ static void vfio_ap_wait_for_irqclear(int apqn)
 		switch (status.response_code) {
 		case AP_RESPONSE_NORMAL:
 		case AP_RESPONSE_RESET_IN_PROGRESS:
-			if (!status.irq_enabled)
-				return;
+			if (status.irq_enabled == ir)
+				return true;
 			fallthrough;
 		case AP_RESPONSE_BUSY:
 			msleep(20);
@@ -257,12 +271,15 @@ static void vfio_ap_wait_for_irqclear(int apqn)
 		default:
 			WARN_ONCE(1, "%s: tapq rc %02x: %04x\n", __func__,
 				  status.response_code, apqn);
-			return;
+			return true;
 		}
 	} while (--retry);
 
-	WARN_ONCE(1, "%s: tapq rc %02x: %04x could not clear IR bit\n",
-		  __func__, status.response_code, apqn);
+	WARN_ONCE(1, "%s: tapq rc %02x: timed out waiting for interrupts %s for %02x.%04x\n",
+		  __func__, status.response_code,
+		  ir ? "enabled" : "disabled",
+		  AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+	return false;
 }
 
 /**
@@ -317,8 +334,30 @@ static struct ap_queue_status vfio_ap_irq_disable(struct vfio_ap_queue *q)
 		switch (status.response_code) {
 		case AP_RESPONSE_OTHERWISE_CHANGED:
 		case AP_RESPONSE_NORMAL:
-			vfio_ap_wait_for_irqclear(q->apqn);
-			goto end_free;
+			/*
+			 * AQIC disable was accepted (NORMAL), or the queue was
+			 * already disabled or a prior async request is still
+			 * completing (OTHERWISE_CHANGED).  In both cases, we must
+			 * wait until interrupt processing has been disabled
+			 * before proceeding.
+			 */
+			if (vfio_ap_wait_for_irqstate(q->apqn, AP_IRQ_DISABLED))
+				goto end_free;
+			/*
+			 * Timed out waiting to confirm interrupts are disabled.
+			 * If ap_aqic returned NORMAL, the guest would incorrectly
+			 * interpret that as a successful disable and may free or
+			 * reuse the NIB while hardware can still write to it.
+			 * Zero the status word and set OTHERWISE_CHANGED to mimic
+			 * what the hardware does for that response code. This
+			 * signals to the guest that the reset operation did not
+			 * complete.
+			 */
+			if (status.response_code == AP_RESPONSE_NORMAL) {
+				memset(&status, 0, sizeof(status));
+				status.response_code = AP_RESPONSE_OTHERWISE_CHANGED;
+			}
+			goto end_fail;
 		case AP_RESPONSE_RESET_IN_PROGRESS:
 		case AP_RESPONSE_BUSY:
 			msleep(20);
@@ -326,18 +365,46 @@ static struct ap_queue_status vfio_ap_irq_disable(struct vfio_ap_queue *q)
 		case AP_RESPONSE_Q_NOT_AVAIL:
 		case AP_RESPONSE_DECONFIGURED:
 		case AP_RESPONSE_CHECKSTOPPED:
-		case AP_RESPONSE_INVALID_ADDRESS:
-		default:
-			/* All cases in default means AP not operational */
+			/* AP not operational; no further interrupts possible */
 			WARN_ONCE(1, "%s: ap_aqic status %d\n", __func__,
 				  status.response_code);
 			goto end_free;
+		case AP_RESPONSE_INVALID_ADDRESS:
+		default:
+			/*
+			 * The AQIC disable was rejected; IRQ is still enabled
+			 * and the hardware still holds the NIB address. Do not
+			 * free resources.
+			 */
+			WARN_ONCE(1, "%s: ap_aqic status %d\n", __func__,
+				  status.response_code);
+			goto end_fail;
 		}
 	} while (retries--);
 
 	WARN_ONCE(1, "%s: ap_aqic status %d\n", __func__,
 		  status.response_code);
+
+end_fail:
+	/*
+	 * We are here either because of a failure to verify that
+	 * interrupts have been disabled, or because the AQIC instruction
+	 * failed to disable them. The AQIC resources - the pinned NIB page
+	 * and the registered guest ISC - cannot be freed here. The hardware
+	 * may still write to the NIB; freeing the pinned page would result
+	 * in a use-after-free kernel crash. The resources will therefore be
+	 * leaked. This is preferable to a use-after-free.
+	 */
+	return status;
+
 end_free:
+	/*
+	 * This label is reached because the queue was successfully disabled,
+	 * or because the queue is not operational, in which case interrupts
+	 * can not be processed, so free the AQIC resources - the pinned NIB
+	 * page and the registered guest ISC - used to enable interrupts
+	 * so they will not be leaked.
+	 */
 	vfio_ap_free_aqic_resources(q);
 	return status;
 }
@@ -432,6 +499,7 @@ static struct ap_queue_status vfio_ap_irq_enable(struct vfio_ap_queue *q,
 	struct kvm *kvm;
 	phys_addr_t h_nib;
 	dma_addr_t nib;
+	char *msg;
 	int ret;
 
 	/* Verify that the notification indicator byte address is valid */
@@ -489,13 +557,49 @@ static struct ap_queue_status vfio_ap_irq_enable(struct vfio_ap_queue *q,
 	status = ap_aqic(q->apqn, aqic_gisa, h_nib);
 	switch (status.response_code) {
 	case AP_RESPONSE_NORMAL:
-		/* See if we did clear older IRQ configuration */
+		/*
+		 * AQIC initiates an asynchronous process; however, AP_RESPONSE_NORMAL
+		 * does not guarantee the IR bit is set yet.  Wait to confirm before
+		 * committing the new NIB and freeing the old resources.
+		 */
+		if (!vfio_ap_wait_for_irqstate(q->apqn, AP_IRQ_ENABLED)) {
+			/*
+			 * Timed out: the hardware may not have accepted the new
+			 * NIB.  Clean up the new resources and return
+			 * OTHERWISE_CHANGED to signal the guest to retry.
+			 */
+			ret = kvm_s390_gisc_unregister(kvm, isc);
+			if (ret) {
+				msg = "%s: kvm_s390_gisc_unregister: rc=%d isc=%d, apqn=%#04x\n";
+				VFIO_AP_DBF_WARN(msg, __func__, ret, isc, q->apqn);
+			}
+			vfio_unpin_pages(&q->matrix_mdev->vdev, nib, 1);
+			memset(&status, 0, sizeof(status));
+			status.response_code = AP_RESPONSE_OTHERWISE_CHANGED;
+			break;
+		}
+		/*
+		 * IR bit confirmed set. AQIC enable initiates an asynchronous
+		 * process; a CC=0 completion does not guarantee the process is
+		 * done. If the queue was already enabled for interrupts, the old
+		 * NIB (q->saved_iova) must not be freed until IR=1 is observed,
+		 * because until then the hardware has not completed its
+		 * transition to the new NIB. Now that IR=1 is confirmed, the
+		 * new NIB is in use for this queue, so no interrupts can be made
+		 * pending via any previously-registered NIB and the old
+		 * resources can be safely freed.
+		 */
 		vfio_ap_free_aqic_resources(q);
 		q->saved_iova = nib;
 		q->saved_isc = isc;
 		break;
 	case AP_RESPONSE_OTHERWISE_CHANGED:
-		/* We could not modify IRQ settings: clear new configuration */
+		/*
+		 * IRQ control is already set as requested or a prior async
+		 * request has not yet completed; in either case, this response
+		 * comes with CC=3 indicating the new NIB and ISC were not accepted by
+		 * the hardware, so clean them up.
+		 */
 		ret = kvm_s390_gisc_unregister(kvm, isc);
 		if (ret)
 			VFIO_AP_DBF_WARN("%s: kvm_s390_gisc_unregister: rc=%d isc=%d, apqn=%#04x\n",
@@ -503,9 +607,12 @@ static struct ap_queue_status vfio_ap_irq_enable(struct vfio_ap_queue *q,
 		vfio_unpin_pages(&q->matrix_mdev->vdev, nib, 1);
 		break;
 	default:
-		pr_warn("%s: apqn %04x: response: %02x\n", __func__, q->apqn,
-			status.response_code);
-		vfio_ap_irq_disable(q);
+		/* We could not modify IRQ settings: clear new configuration */
+		ret = kvm_s390_gisc_unregister(kvm, isc);
+		if (ret)
+			VFIO_AP_DBF_WARN("%s: kvm_s390_gisc_unregister: rc=%d isc=%d, apqn=%#04x\n",
+					 __func__, ret, isc, q->apqn);
+		vfio_unpin_pages(&q->matrix_mdev->vdev, nib, 1);
 		break;
 	}
 
@@ -635,7 +742,6 @@ static int handle_pqap(struct kvm_vcpu *vcpu)
 	}
 
 	status = vcpu->run->s.regs.gprs[1];
-
 	/* If IR bit(16) is set we enable the interrupt */
 	if ((status >> (63 - 16)) & 0x01)
 		qstatus = vfio_ap_irq_enable(q, status & 0x07, vcpu);
