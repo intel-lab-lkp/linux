@@ -7,6 +7,7 @@
 #include <linux/configfs.h>
 #include <linux/module.h>
 #include <linux/sysfs.h>
+#include "kexec_internal.h"
 
 #define KEY_NUM_MAX 128	/* maximum dm crypt keys */
 #define KEY_SIZE_MAX 256	/* maximum dm crypt key size */
@@ -296,14 +297,20 @@ static ssize_t config_keys_reuse_store(struct config_item *item,
 	bool val;
 	int r;
 
+	if (!kexec_trylock()) {
+		r = -EBUSY;
+		goto unlock;
+	}
+
+	r = -EINVAL;
 	if (!kexec_crash_image || !kexec_crash_image->dm_crypt_keys_addr) {
 		kexec_dprintk(
 			"dm-crypt keys haven't be saved to crash-reserved memory\n");
-		return -EINVAL;
+		goto unlock;
 	}
 
 	if (kstrtobool(page, &val) || !val)
-		return -EINVAL;
+		goto unlock;
 
 	if (is_dm_key_reused) {
 		pr_info("Already got dm-crypt keys, please continue with kexec_file_load syscall\n");
@@ -311,12 +318,15 @@ static ssize_t config_keys_reuse_store(struct config_item *item,
 		r = get_keys_from_kdump_reserved_memory();
 		if (r) {
 			pr_warn("Failed to get dm-crypt keys from reserved memory\n");
-			return r;
+			goto unlock;
 		}
 		is_dm_key_reused = true;
 	}
 
-	return count;
+	r = count;
+unlock:
+	kexec_unlock();
+	return r;
 }
 
 CONFIGFS_ATTR(config_keys_, reuse);
@@ -421,6 +431,8 @@ static int build_keys_header(void)
 	return 0;
 }
 
+static bool mutex_acquired;
+
 int crash_load_dm_crypt_keys(struct kimage *image)
 {
 	struct kexec_buf kbuf = {
@@ -431,6 +443,9 @@ int crash_load_dm_crypt_keys(struct kimage *image)
 		.random = true,
 	};
 	int r = 0;
+
+	mutex_lock(&config_keys_subsys.su_mutex);
+	mutex_acquired = true;
 
 	if (key_count <= 0) {
 		kexec_dprintk("No dm-crypt keys\n");
@@ -480,6 +495,11 @@ void kexec_file_post_load_cleanup_dm_crypt(struct kimage *image)
 	if (!is_dm_key_reused) {
 		kfree_sensitive(keys_header);
 		keys_header = NULL;
+	}
+
+	if (mutex_acquired) {
+		mutex_unlock(&config_keys_subsys.su_mutex);
+		mutex_acquired = false;
 	}
 }
 
