@@ -93,6 +93,8 @@ struct __xfsstats {
 	uint32_t		xs_xstrat_split;
 	uint32_t		xs_write_calls;
 	uint32_t		xs_read_calls;
+	uint32_t		xs_write_completions;
+	uint32_t		xs_read_completions;
 	uint32_t		xs_attr_get;
 	uint32_t		xs_attr_set;
 	uint32_t		xs_attr_remove;
