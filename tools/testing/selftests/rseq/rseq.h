@@ -18,6 +18,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <string.h>
+#include <sys/prctl.h>
+#include <linux/kernel.h>
 #include "rseq-abi.h"
 #include "compiler.h"
 
@@ -393,6 +396,78 @@ int rseq_cmpeqv_trymemcpy_storev(enum rseq_mo rseq_mo, enum rseq_percpu_mode per
 	default:
 		return -1;
 	}
+}
+
+/*
+ * prctl commands for the rseq operation list. The kernel owns the list: the
+ * feature is enabled implicitly by registering the first operation and
+ * disabled by unregistering the last one. There is no explicit enable knob.
+ */
+#ifndef PR_RSEQ_OP
+#define PR_RSEQ_OP			82
+#define PR_RSEQ_OP_REGISTER		1
+#define PR_RSEQ_OP_UNREGISTER		2
+#endif
+
+/*
+ * Initialize a plain reset operation. Sets the operation type, the destination
+ * and source words, the word length, and leaves the node in a pristine state
+ * (next, prev and reserved bytes zeroed) as required by the kernel at
+ * registration time.
+ */
+static inline
+void rseq_op_reset_init(struct rseq_abi_op_reset *op,
+			void *dst, void *src, size_t len)
+{
+	op->node.next = 0;
+	op->node.prev = 0;
+	op->node.type = RSEQ_ABI_OP_RESET;
+	memset(op->node.reserved, 0, sizeof(op->node.reserved));
+	op->src = (__u64)(unsigned long)src;
+	op->dst = (__u64)(unsigned long)dst;
+	op->len = len;
+}
+
+/*
+ * Initialize a strided reset operation indexed by the current CPU ID or MM CID
+ * depending on @type.
+ */
+static inline
+void rseq_op_reset_with_stride_init(struct rseq_abi_op_reset_with_stride *op,
+				    enum rseq_abi_op_type type,
+				    void *dst, void *src,
+				    size_t dst_stride, size_t len)
+{
+	op->node.next = 0;
+	op->node.prev = 0;
+	op->node.type = type;
+	memset(op->node.reserved, 0, sizeof(op->node.reserved));
+	op->src = (__u64)(unsigned long)src;
+	op->dst = (__u64)(unsigned long)dst;
+	op->dst_stride = (__u64)dst_stride;
+	op->len = len;
+}
+
+/*
+ * Register an rseq operation node. The kernel links the pristine node into its
+ * internal list and enables operation processing when the first node is
+ * registered. Returns the prctl() return value (0 on success).
+ */
+static inline
+int rseq_op_register(struct rseq_abi_op_node *node)
+{
+	return prctl(PR_RSEQ_OP, PR_RSEQ_OP_REGISTER, (unsigned long)node, 0, 0);
+}
+
+/*
+ * Unregister an rseq operation node. The kernel unlinks the node, clears its
+ * next/prev links, and disables operation processing when the last node is
+ * unregistered. Returns the prctl() return value (0 on success).
+ */
+static inline
+int rseq_op_unregister(struct rseq_abi_op_node *node)
+{
+	return prctl(PR_RSEQ_OP, PR_RSEQ_OP_UNREGISTER, (unsigned long)node, 0, 0);
 }
 
 #endif  /* RSEQ_H_ */

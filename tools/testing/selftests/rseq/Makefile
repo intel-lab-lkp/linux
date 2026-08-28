@@ -22,12 +22,14 @@ TEST_GEN_PROGS_EXTENDED = librseq.so \
 	param_test_compare_twice \
 	param_test_mm_cid \
 	param_test_mm_cid_compare_twice \
+	rseq_op_test \
 	syscall_errors_test \
 	legacy_check \
 	slice_test \
 	check_optimized
 
-TEST_PROGS = run_param_test.sh run_syscall_errors_test.sh run_legacy_check.sh run_timeslice_test.sh
+TEST_PROGS = run_param_test.sh run_syscall_errors_test.sh run_legacy_check.sh run_timeslice_test.sh \
+	run_rseq_op_test.sh
 
 TEST_FILES := settings
 

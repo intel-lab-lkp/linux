@@ -116,6 +116,17 @@ bool rseq_available(void)
 	}
 }
 
+/* The rseq areas need to be at least 32 bytes. */
+static
+unsigned int get_rseq_min_alloc_size(void)
+{
+	unsigned int alloc_size = rseq_size;
+
+	if ((int) alloc_size < ORIG_RSEQ_ALLOC_SIZE)
+		alloc_size = ORIG_RSEQ_ALLOC_SIZE;
+	return alloc_size;
+}
+
 /*
  * Return the feature size supported by the kernel.
  *
@@ -261,12 +272,14 @@ void rseq_init(void)
 
 	/* rseq flags are deprecated, always set to 0. */
 	rseq_flags = 0;
+	{
+		unsigned int rseq_kernel_feature_size = get_rseq_kernel_feature_size();
 
-	/*
-	 * Set the size to 0 until at least one thread registers to mimic the
-	 * libc behavior.
-	 */
-	rseq_size = 0;
+		if (rseq_kernel_feature_size <= RSEQ_THREAD_AREA_ALLOC_SIZE)
+			rseq_size = rseq_kernel_feature_size;
+		else
+			rseq_size = ORIG_RSEQ_ALLOC_SIZE;
+	}
 }
 
 static __attribute__((destructor))

@@ -26,6 +26,10 @@ enum rseq_abi_cs_flags_bit {
 	RSEQ_ABI_CS_FLAG_NO_RESTART_ON_PREEMPT_BIT	= 0,
 	RSEQ_ABI_CS_FLAG_NO_RESTART_ON_SIGNAL_BIT	= 1,
 	RSEQ_ABI_CS_FLAG_NO_RESTART_ON_MIGRATE_BIT	= 2,
+	RSEQ_ABI_CS_FLAG_SLICE_EXT_AVAILABLE_BIT	= 4,
+	RSEQ_ABI_CS_FLAG_SLICE_EXT_ENABLED_BIT		= 5,
+	RSEQ_ABI_CS_FLAG_RSEQ_OP_AVAILABLE_BIT		= 6,
+	RSEQ_ABI_CS_FLAG_RSEQ_OP_ENABLED_BIT		= 7,
 };
 
 enum rseq_abi_cs_flags {
@@ -35,6 +39,14 @@ enum rseq_abi_cs_flags {
 		(1U << RSEQ_ABI_CS_FLAG_NO_RESTART_ON_SIGNAL_BIT),
 	RSEQ_ABI_CS_FLAG_NO_RESTART_ON_MIGRATE	=
 		(1U << RSEQ_ABI_CS_FLAG_NO_RESTART_ON_MIGRATE_BIT),
+	RSEQ_ABI_CS_FLAG_SLICE_EXT_AVAILABLE	=
+		(1U << RSEQ_ABI_CS_FLAG_SLICE_EXT_AVAILABLE_BIT),
+	RSEQ_ABI_CS_FLAG_SLICE_EXT_ENABLED	=
+		(1U << RSEQ_ABI_CS_FLAG_SLICE_EXT_ENABLED_BIT),
+	RSEQ_ABI_CS_FLAG_RSEQ_OP_AVAILABLE	=
+		(1U << RSEQ_ABI_CS_FLAG_RSEQ_OP_AVAILABLE_BIT),
+	RSEQ_ABI_CS_FLAG_RSEQ_OP_ENABLED	=
+		(1U << RSEQ_ABI_CS_FLAG_RSEQ_OP_ENABLED_BIT),
 };
 
 /*
@@ -72,6 +84,103 @@ struct rseq_abi_slice_ctrl {
 			__u16	__reserved;
 		};
 	};
+};
+
+union rseq_ptr {
+	__u64 ptr64;
+
+	/*
+	 * The "arch" field provides architecture accessor for
+	 * the ptr field based on architecture pointer size and
+	 * endianness.
+	 */
+	struct {
+#ifdef __LP64__
+		__u64 ptr;
+#elif defined(__BYTE_ORDER) ? (__BYTE_ORDER == __BIG_ENDIAN) : defined(__BIG_ENDIAN)
+		__u32 padding;		/* Initialized to zero. */
+		__u32 ptr;
+#else
+		__u32 ptr;
+		__u32 padding;		/* Initialized to zero. */
+#endif
+	} arch;
+};
+
+/*
+ * Maximum number of nodes walked in the rseq operation list.
+ */
+#define RSEQ_ABI_OP_LIST_LIMIT	2048
+
+/*
+ * enum rseq_abi_op_type - Type of an rseq operation
+ * @RSEQ_ABI_OP_RESET:			Plain reset. Uses struct rseq_abi_op_reset.
+ * @RSEQ_ABI_OP_RESET_WITH_STRIDE_CPUID:	Reset indexed by the current CPU ID.
+ *					Uses struct rseq_abi_op_reset_with_stride.
+ * @RSEQ_ABI_OP_RESET_WITH_STRIDE_MMCID:	Reset indexed by the current MM CID.
+ *					Uses struct rseq_abi_op_reset_with_stride.
+ */
+enum rseq_abi_op_type {
+	RSEQ_ABI_OP_RESET,
+	RSEQ_ABI_OP_RESET_WITH_STRIDE_CPUID,
+	RSEQ_ABI_OP_RESET_WITH_STRIDE_MMCID,
+	RSEQ_ABI_OP_NR,
+};
+
+/*
+ * struct rseq_abi_op_node - Common header linking an rseq operation into the list
+ * @next:	Address of the next node. Owned by the kernel.
+ * @prev:	Address of the previous node. Owned by the kernel.
+ * @type:	Operation type. See enum rseq_abi_op_type.
+ * @reserved:	Must be zero on registration.
+ *
+ * User space allocates the node, sets @type and zeroes @next, @prev and
+ * @reserved before passing it to prctl(PR_RSEQ_OP, PR_RSEQ_OP_REGISTER, node).
+ * The kernel owns @next and @prev for the lifetime of the registration and
+ * links the node into a circular doubly-linked list anchored by an internal
+ * sentinel in struct rseq_abi. User space must not touch @next or @prev while
+ * the node is registered.
+ */
+struct rseq_abi_op_node {
+	__u64 next;
+	__u64 prev;
+	struct {
+		__u8  type; /* enum rseq_abi_op_type */
+		__u8  reserved[7];
+	};
+};
+
+/*
+ * struct rseq_abi_op_reset - Reset one word to a value on return to user space
+ * @node:	Operation list node.
+ * @src:	Address of the source word, or 0 to reset @dst to zero.
+ * @dst:	Address of the destination word.
+ * @len:	Word length in bytes. Must be 4 or 8.
+ */
+struct rseq_abi_op_reset {
+	struct rseq_abi_op_node	node;
+	__u64			src;
+	__u64			dst;
+	__u32			len;
+};
+
+/*
+ * struct rseq_abi_op_reset_with_stride - Reset one word in a strided array
+ * @node:	Operation list node.
+ * @src:	Address of the source word, or 0 to reset the slot to zero.
+ * @dst:	Base address of the strided destination array.
+ * @dst_stride:	Stride in bytes between consecutive array slots.
+ * @len:	Word length in bytes. Must be 4 or 8.
+ *
+ * The destination slot is @dst + @dst_stride * index, where index is the
+ * current CPU ID or MM CID depending on the operation type.
+ */
+struct rseq_abi_op_reset_with_stride {
+	struct rseq_abi_op_node	node;
+	__u64			src;
+	__u64			dst;
+	__u64			dst_stride;
+	__u32			len;
 };
 
 /*
@@ -127,26 +236,7 @@ struct rseq_abi {
 	 * atomicity semantics. This field should only be updated by the
 	 * thread which registered this data structure. Aligned on 64-bit.
 	 */
-	union {
-		__u64 ptr64;
-
-		/*
-		 * The "arch" field provides architecture accessor for
-		 * the ptr field based on architecture pointer size and
-		 * endianness.
-		 */
-		struct {
-#ifdef __LP64__
-			__u64 ptr;
-#elif defined(__BYTE_ORDER) ? (__BYTE_ORDER == __BIG_ENDIAN) : defined(__BIG_ENDIAN)
-			__u32 padding;		/* Initialized to zero. */
-			__u32 ptr;
-#else
-			__u32 ptr;
-			__u32 padding;		/* Initialized to zero. */
-#endif
-		} arch;
-	} rseq_cs;
+	union rseq_ptr rseq_cs;
 
 	/*
 	 * Restartable sequences flags field.
@@ -192,9 +282,21 @@ struct rseq_abi {
 	struct rseq_abi_slice_ctrl slice_ctrl;
 
 	/*
-	 * Place holder to push the size above 32 bytes.
+	 * Sentinel of the circular doubly-linked list of rseq operations
+	 * registered via prctl(PR_RSEQ_OP, ...). Fully owned and maintained by
+	 * the kernel: it is initialized to point to itself on registration and
+	 * user space must never read or write it directly.
+	 *
+	 * The kernel only use next and prev from rseq_op_list.  The rest of the
+	 * bytes are reserved for later usage and should be zeroed.
 	 */
-	__u8 __reserved;
+	union {
+		struct rseq_abi_op_node rseq_op_list;
+		struct {
+			__u64	op_used[2];
+			__u64	reserved;
+		};
+	};
 
 	/*
 	 * Flexible array member at end of structure, after last feature field.
