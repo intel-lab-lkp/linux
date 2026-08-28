@@ -193,8 +193,10 @@ static int max77705_add_led(struct device *dev, struct regmap *regmap, struct fw
 
 		fwnode_for_each_child_node(np, child) {
 			ret = max77705_parse_subled(dev, child, &info[i]);
-			if (ret < 0)
+			if (ret < 0) {
+				fwnode_handle_put(child);
 				return ret;
+			}
 
 			info[i].intensity = 0;
 			i++;
