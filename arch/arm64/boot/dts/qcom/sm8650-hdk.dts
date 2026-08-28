@@ -973,6 +973,10 @@
 	};
 };
 
+&ice {
+	status = "okay";
+};
+
 &ipa {
 	firmware-name = "qcom/sm8650/ipa_fws.mbn";
 
