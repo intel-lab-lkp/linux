@@ -247,6 +247,137 @@ static __always_inline bool rseq_grant_slice_extension(unsigned long ti_work, un
 #define rseq_slice_clear_user(rseq, efault) do { } while (0)
 #endif /* !CONFIG_RSEQ_SLICE_EXTENSION */
 
+/*
+ * Validate and perform a single reset word operation: reset @dst to *@src,
+ * or to zero when @src is 0. @len, @src and @dst come from user memory and
+ * are re-validated on every application, since user space may have changed
+ * them since registration. A broken ABI contract returns false, which faults
+ * the process.
+ */
+static __always_inline bool rseq_op_reset_word(u64 src, u64 dst, u32 len,
+					       void __user *node)
+{
+	if (unlikely(!IS_ALIGNED(dst, len) || (src && !IS_ALIGNED(src, len)))) {
+		pr_info_ratelimited("rseq: bad operation alignment len=%u src=%llx dst=%llx from %p\n",
+				len, src, dst, node);
+		return false;
+	}
+
+	switch (len) {
+	case 4: {
+		u32 __user *udst = (u32 __user *)dst;
+		u32 v = 0;
+
+		if (src) {
+			u32 __user *usrc = (u32 __user *)src;
+
+			scoped_user_read_access(usrc, efault)
+				unsafe_get_user(v, usrc, efault);
+		}
+		scoped_user_write_access(udst, efault)
+			unsafe_put_user(v, udst, efault);
+		return true;
+	}
+	case 8: {
+		u64 __user *udst = (u64 __user *)dst;
+		u64 v = 0;
+
+		if (src) {
+			u64 __user *usrc = (u64 __user *)src;
+
+			scoped_user_read_access(usrc, efault)
+				unsafe_get_user(v, usrc, efault);
+		}
+		scoped_user_write_access(udst, efault)
+			unsafe_put_user(v, udst, efault);
+		return true;
+	}
+	default:
+		pr_info("rseq: bad operation length=%u from %p\n", len, node);
+		return false;
+	}
+efault:
+	pr_info("rseq: fault while applying operation from %p\n", node);
+	return false;
+}
+
+static __always_inline bool rseq_apply_ops(struct task_struct *t)
+{
+	struct rseq __user *rseq = t->rseq.usrptr;
+	struct rseq_op_node __user *sentinel = &rseq->rseq_op_list;
+	struct rseq_op_node __user *node;
+	unsigned int limit = RSEQ_OP_LIST_LIMIT;
+	u64 next;
+
+	WARN_ONCE(!t->rseq.event.rseq_op, "rseq operations not enabled");
+
+	scoped_user_read_access(sentinel, efault)
+		unsafe_get_user(next, &sentinel->next, efault);
+
+	node = (struct rseq_op_node __user *)next;
+
+	while (node != sentinel && limit--) {
+		u8 type;
+
+		scoped_user_read_access(node, efault) {
+			unsafe_get_user(type, &node->type, efault);
+			unsafe_get_user(next, &node->next, efault);
+		}
+
+		switch (type) {
+		case RSEQ_OP_RESET: {
+			struct rseq_op_reset __user *op =
+				(struct rseq_op_reset __user *)node;
+			u64 src, dst;
+			u32 len;
+
+			scoped_user_read_access(op, efault) {
+				unsafe_get_user(src, &op->src, efault);
+				unsafe_get_user(dst, &op->dst, efault);
+				unsafe_get_user(len, &op->len, efault);
+			}
+
+			if (!rseq_op_reset_word(src, dst, len, node))
+				return false;
+			break;
+		}
+		case RSEQ_OP_RESET_WITH_STRIDE_CPUID: /* fall through */
+		case RSEQ_OP_RESET_WITH_STRIDE_MMCID: {
+			struct rseq_op_reset_with_stride __user *op =
+				(struct rseq_op_reset_with_stride __user *)node;
+			u64 src, dst, dst_stride;
+			u32 len, index;
+
+			scoped_user_read_access(op, efault) {
+				unsafe_get_user(src, &op->src, efault);
+				unsafe_get_user(dst, &op->dst, efault);
+				unsafe_get_user(dst_stride, &op->dst_stride, efault);
+				unsafe_get_user(len, &op->len, efault);
+			}
+			index = (type == RSEQ_OP_RESET_WITH_STRIDE_CPUID) ?
+				t->rseq.ids.cpu_id : t->rseq.ids.mm_cid;
+			dst += dst_stride * index;
+
+			if (!rseq_op_reset_word(src, dst, len, node))
+				return false;
+
+			break;
+		}
+		default:
+			pr_info("rseq: bad operation type=%u from %p\n",
+				type, node);
+			return false;
+		}
+
+		node = (struct rseq_op_node __user *)next;
+	}
+
+	return node == sentinel;
+efault:
+	pr_info("rseq: fault while walking operation list\n");
+	return false;
+}
+
 bool rseq_debug_update_user_cs(struct task_struct *t, struct pt_regs *regs, unsigned long csaddr);
 
 static __always_inline void rseq_note_user_irq_entry(void)
@@ -632,6 +763,10 @@ static __always_inline bool rseq_exit_user_update(struct pt_regs *regs, struct t
 			if (unlikely(!rseq_update_user_cs(t, regs, csaddr)))
 				return false;
 		}
+
+		if (t->rseq.event.rseq_op && !rseq_apply_ops(t))
+			return false;
+
 		return true;
 	}
 
@@ -642,9 +777,20 @@ static __always_inline bool rseq_exit_user_update(struct pt_regs *regs, struct t
 		.node_id = cpu_to_node(cpu),
 	};
 
-	return rseq_update_usr(t, regs, &ids);
+	if (!rseq_update_usr(t, regs, &ids))
+		return false;
+
+	if (t->rseq.event.rseq_op && !rseq_apply_ops(t))
+		return false;
+
+	return true;
 efault:
 	return false;
+}
+
+static __always_inline void rseq_clear_one_shot_events(struct rseq_event *ev)
+{
+	ev->events &= (struct rseq_event){ .rseq_op = true }.events;
 }
 
 static __always_inline bool __rseq_exit_to_user_mode_restart(struct pt_regs *regs)
@@ -674,8 +820,9 @@ static __always_inline bool __rseq_exit_to_user_mode_restart(struct pt_regs *reg
 		if (unlikely(!rseq_exit_user_update(regs, t)))
 			return true;
 	}
-	/* Clear state so next entry starts from a clean slate */
-	t->rseq.event.events = 0;
+	/* Clear one-shot events so next entry starts from a clean slate */
+	rseq_clear_one_shot_events(&t->rseq.event);
+
 	return false;
 }
 
@@ -730,7 +877,7 @@ static __always_inline void rseq_syscall_exit_to_user_mode(void)
 	/* Needed to remove the store for the !lockdep case */
 	if (IS_ENABLED(CONFIG_LOCKDEP)) {
 		WARN_ON_ONCE(ev->sched_switch);
-		ev->events = 0;
+		rseq_clear_one_shot_events(ev);
 	}
 }
 
@@ -747,7 +894,7 @@ static __always_inline void rseq_irqentry_exit_to_user_mode(void)
 	 * interrupt did not result in a schedule and therefore the
 	 * rseq processing could not clear it.
 	 */
-	ev->events = 0;
+	rseq_clear_one_shot_events(ev);
 }
 
 void __rseq_debug_syscall_return(struct pt_regs *regs);
