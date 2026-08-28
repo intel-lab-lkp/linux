@@ -987,6 +987,46 @@ static bool azx_is_pm_ready(struct snd_card *card)
 	return true;
 }
 
+static bool hp_envy_27_needs_reset(struct azx *chip)
+{
+	struct pci_dev *pci = chip->pci;
+
+	return pci->subsystem_vendor == 0x103c &&
+	       pci->subsystem_device == 0x2b3e;
+}
+
+static u16 hp_envy_27_reset_link(struct azx *chip)
+{
+	struct hdac_bus *bus = azx_bus(chip);
+	u32 gctl;
+	u16 statests;
+	int timeout;
+
+	snd_hdac_bus_stop_chip(bus);
+
+	gctl = snd_hdac_chip_readl(bus, GCTL);
+	snd_hdac_chip_writel(bus, GCTL, gctl & ~AZX_GCTL_RESET);
+	for (timeout = 250; timeout; timeout--) {
+		if (!(snd_hdac_chip_readl(bus, GCTL) & AZX_GCTL_RESET))
+			break;
+		udelay(1);
+	}
+
+	gctl = snd_hdac_chip_readl(bus, GCTL);
+	snd_hdac_chip_writel(bus, GCTL, gctl | AZX_GCTL_RESET);
+	for (timeout = 250; timeout; timeout--) {
+		if (snd_hdac_chip_readl(bus, GCTL) & AZX_GCTL_RESET)
+			break;
+		udelay(1);
+	}
+
+	statests = snd_hdac_chip_readw(bus, STATESTS);
+	bus->codec_mask |= statests;
+	snd_hdac_bus_init_chip(bus, false);
+
+	return statests;
+}
+
 static void __azx_runtime_resume(struct azx *chip)
 {
 	struct hda_intel *hda = container_of(chip, struct hda_intel, chip);
@@ -1003,6 +1043,8 @@ static void __azx_runtime_resume(struct azx *chip)
 
 	azx_init_pci(chip);
 	hda_intel_init_chip(chip, true);
+	if (chip->pm_prepared && hp_envy_27_needs_reset(chip))
+		hp_envy_27_reset_link(chip);
 
 	/* Avoid codec resume if runtime resume is for system suspend */
 	if (!chip->pm_prepared) {
@@ -2356,6 +2398,34 @@ static const unsigned int azx_max_codecs[AZX_NUM_DRIVERS] = {
 	[AZX_DRIVER_TERA] = 1,
 };
 
+static int hp_envy_27_probe_codec(struct azx *chip)
+{
+	struct hdac_bus *bus = azx_bus(chip);
+	struct hda_codec *codec = NULL;
+	bool use_pio;
+	int probe_mask;
+	int err;
+
+	if (!hp_envy_27_needs_reset(chip) || (bus->codec_mask & BIT(0)))
+		return 0;
+	if (!(hp_envy_27_reset_link(chip) & BIT(0)))
+		return -ENODEV;
+
+	probe_mask = chip->codec_probe_mask;
+	use_pio = bus->use_pio_for_commands;
+	chip->codec_probe_mask = BIT(0);
+	bus->use_pio_for_commands = true;
+	err = snd_hda_codec_new(&chip->bus, chip->card, 0, &codec);
+	chip->codec_probe_mask = probe_mask;
+	if (!err && codec)
+		err = snd_hda_codec_configure(codec);
+	else if (!err)
+		err = -ENODEV;
+	bus->use_pio_for_commands = use_pio;
+
+	return err;
+}
+
 static int azx_probe_continue(struct azx *chip)
 {
 	struct hda_intel *hda = container_of(chip, struct hda_intel, chip);
@@ -2428,6 +2498,11 @@ static int azx_probe_continue(struct azx *chip)
 		}
 	}
 
+	err = hp_envy_27_probe_codec(chip);
+	if (err < 0 && err != -ENODEV)
+		dev_warn(chip->card->dev,
+			 "failed to probe HP ENVY 27 analog codec: %d\n", err);
+
 	err = snd_card_register(chip->card);
 	if (err < 0)
 		goto out_free;
@@ -2444,6 +2519,8 @@ static int azx_probe_continue(struct azx *chip)
 		pm_runtime_allow(&pci->dev);
 		pm_runtime_put_autosuspend(&pci->dev);
 	}
+	if (hp_envy_27_needs_reset(chip))
+		pm_runtime_forbid(&pci->dev);
 
 out_free:
 	if (err < 0) {
