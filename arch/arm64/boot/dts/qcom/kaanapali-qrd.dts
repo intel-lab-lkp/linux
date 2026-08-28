@@ -736,6 +736,10 @@
 	};
 };
 
+&ice {
+	status = "okay";
+};
+
 &pmh0101_flash {
 	status = "okay";
 
