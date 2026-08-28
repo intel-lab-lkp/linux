@@ -692,7 +692,11 @@ static int wm8804_runtime_resume(struct device *dev)
 		return ret;
 	}
 
-	regcache_sync(wm8804->regmap);
+	ret = regcache_sync(wm8804->regmap);
+	if (ret) {
+		regulator_bulk_disable(ARRAY_SIZE(wm8804->supplies), wm8804->supplies);
+		return ret;
+	}
 
 	/* Power up OSCCLK */
 	regmap_update_bits(wm8804->regmap, WM8804_PWRDN, 0x8, 0x0);
