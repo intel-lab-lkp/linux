@@ -2990,6 +2990,7 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 	struct cpuset *parent = parent_cs(cs);
 	struct cpuset *invalidated = NULL;
 	struct tmpmasks tmpmask;
+	bool disable_partition = false;
 	bool isolcpus_updated = false;
 
 	if (old_prs == new_prs)
@@ -3052,15 +3053,21 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 						tmpmask.new_cpus);
 		if (((new_prs == PRS_ISOLATED) &&
 		     !isolated_cpus_can_update(tmpmask.new_cpus, NULL)) ||
-		    prstate_housekeeping_conflict(new_prs, tmpmask.new_cpus))
+		    prstate_housekeeping_conflict(new_prs, tmpmask.new_cpus)) {
 			err = PERR_HKEEPING;
-		else
+			disable_partition = true;
+		} else {
 			isolcpus_updated = true;
+		}
 	} else {
 		/*
 		 * Switching back to member is always allowed even if it
 		 * disables child partitions.
 		 */
+		disable_partition = true;
+	}
+
+	if (disable_partition) {
 		if (old_prs == PRS_ROOT &&
 		    parent->partition_root_state == PRS_ISOLATED &&
 		    !isolated_cpus_can_update(cs->effective_xcpus, NULL))
