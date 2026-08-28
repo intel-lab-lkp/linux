@@ -75,6 +75,7 @@ struct loop_device {
 	struct gendisk		*lo_disk;
 	struct mutex		lo_mutex;
 	bool			idr_visible;
+	struct work_struct	lo_clr_work;
 };
 
 struct loop_cmd {
@@ -1134,12 +1135,34 @@ out_putf:
 	return error;
 }
 
-static void __loop_clr_fd(struct loop_device *lo)
+static void __loop_clr_fd(struct work_struct *work)
 {
+	struct loop_device *lo = container_of(work, struct loop_device, lo_clr_work);
+	struct gendisk *disk = lo->lo_disk;
 	struct queue_limits lim;
 	struct file *filp;
 	gfp_t gfp = lo->old_gfp_mask;
 	int err;
+
+	/* Step 1: Flush all outstanding I/O, without open_mutex held. */
+	/*
+	 * Now that loop_queue_rq() sees lo->lo_state != Lo_bound,
+	 * wait for already started loop_queue_rq() to complete.
+	 */
+	synchronize_rcu();
+	/*
+	 * Now that no more works are scheduled by loop_queue_rq(),
+	 * wait for already scheduled works to complete.
+	 */
+	drain_workqueue(lo->workqueue);
+	/*
+	 * Now that no more AIO requests are scheduled by lo_rw_aio(),
+	 * wait for already started AIO to complete.
+	 */
+	blk_mq_unfreeze_queue(lo->lo_queue, blk_mq_freeze_queue(lo->lo_queue));
+
+	/* Step 2: Perform remaining cleanup, with open_mutex held. */
+	mutex_lock(&disk->open_mutex);
 
 	spin_lock_irq(&lo->lo_lock);
 	filp = lo->lo_backing_file;
@@ -1151,12 +1174,7 @@ static void __loop_clr_fd(struct loop_device *lo)
 	lo->lo_sizelimit = 0;
 	memset(lo->lo_file_name, 0, LO_NAME_SIZE);
 
-	/*
-	 * Reset the block size to the default.
-	 *
-	 * No queue freezing needed because this is called from the final
-	 * ->release call only, so there can't be any outstanding I/O.
-	 */
+	/* Reset the block size to the default. */
 	lim = queue_limits_start_update(lo->lo_queue);
 	lim.logical_block_size = SECTOR_SIZE;
 	lim.physical_block_size = SECTOR_SIZE;
@@ -1168,8 +1186,6 @@ static void __loop_clr_fd(struct loop_device *lo)
 	/* let user-space know about this change */
 	kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
 	mapping_set_gfp_mask(filp->f_mapping, gfp);
-	/* This is safe: open() is still holding a reference. */
-	module_put(THIS_MODULE);
 
 	disk_force_media_change(lo->lo_disk);
 
@@ -1199,12 +1215,24 @@ static void __loop_clr_fd(struct loop_device *lo)
 	WRITE_ONCE(lo->lo_state, Lo_unbound);
 	mutex_unlock(&lo->lo_mutex);
 
-	/*
-	 * Need not hold lo_mutex to fput backing file. Calling fput holding
-	 * lo_mutex triggers a circular lock dependency possibility warning as
-	 * fput can take open_mutex which is usually taken before lo_mutex.
-	 */
+	/* Step 3: Drop refcounts, without open_mutex held. */
+	mutex_unlock(&disk->open_mutex);
+
 	fput(filp);
+
+	/*
+	 * Drop all references that would have been dropped as soon as
+	 * returning from lo_release() and releasing disk->open_mutex.
+	 */
+	module_put(disk->fops->owner);
+	put_device(disk_to_dev(disk));
+
+	/*
+	 * This is safe: flush_work() from loop_remove() from loop_exit() waits
+	 * until this function returns; effectively dropping the final module
+	 * references synchronously.
+	 */
+	module_put(THIS_MODULE);
 }
 
 static int loop_clr_fd(struct loop_device *lo)
@@ -1769,8 +1797,20 @@ static void lo_release(struct gendisk *disk)
 	need_clear = (lo->lo_state == Lo_rundown);
 	mutex_unlock(&lo->lo_mutex);
 
-	if (need_clear)
-		__loop_clr_fd(lo);
+	/*
+	 * In order to flush pending I/O requests before clearing the backing
+	 * device, defer __loop_clr_fd() to WQ context. The Lo_rundown state
+	 * guarantees that lo_open() will fail with -ENXIO.
+	 */
+	if (need_clear) {
+		/*
+		 * Grab all references that will be dropped as soon as
+		 * returning from lo_release() and releasing disk->open_mutex.
+		 */
+		get_device(disk_to_dev(disk));
+		__module_get(disk->fops->owner);
+		queue_work(system_long_wq, &lo->lo_clr_work);
+	}
 }
 
 static void lo_free_disk(struct gendisk *disk)
@@ -2034,6 +2074,7 @@ static int loop_add(int i)
 	lo = kzalloc_obj(*lo);
 	if (!lo)
 		goto out;
+	INIT_WORK(&lo->lo_clr_work, __loop_clr_fd);
 	lo->worker_tree = RB_ROOT;
 	INIT_LIST_HEAD(&lo->idle_worker_list);
 	timer_setup(&lo->timer, loop_free_idle_workers_timer, TIMER_DEFERRABLE);
@@ -2138,6 +2179,9 @@ out:
 
 static void loop_remove(struct loop_device *lo)
 {
+	/* Wait for __loop_clr_fd() to complete. */
+	flush_work(&lo->lo_clr_work);
+
 	/* Make this loop device unreachable from pathname. */
 	del_gendisk(lo->lo_disk);
 	blk_mq_free_tag_set(&lo->tag_set);
