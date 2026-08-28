@@ -55,6 +55,8 @@ properties:
               - rockchip,rk3588-ehci
               - snps,hsdk-v1.0-ehci
               - socionext,uniphier-ehci
+              - st,stm32mp13-ehci
+              - st,stm32mp15-ehci
           - const: generic-ehci
       - items:
           - enum:
