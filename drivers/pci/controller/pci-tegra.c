@@ -1002,6 +1002,8 @@ static int tegra_pcie_port_phy_power_on(struct tegra_pcie_port *port)
 		err = phy_power_on(port->phys[i]);
 		if (err < 0) {
 			dev_err(dev, "failed to power on PHY#%u: %d\n", i, err);
+			while (i--)
+				phy_power_off(port->phys[i]);
 			return err;
 		}
 	}
@@ -1051,6 +1053,8 @@ static int tegra_pcie_phy_power_on(struct tegra_pcie *pcie)
 			dev_err(dev,
 				"failed to power on PCIe port %u PHY: %d\n",
 				port->index, err);
+			list_for_each_entry_continue_reverse(port, &pcie->ports, list)
+				tegra_pcie_port_phy_power_off(port);
 			return err;
 		}
 	}
