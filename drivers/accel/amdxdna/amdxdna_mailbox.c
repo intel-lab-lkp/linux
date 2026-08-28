@@ -60,6 +60,7 @@ struct mailbox_channel {
 	struct xarray			chan_xa;
 	u32				next_msgid;
 	u32				x2i_tail;
+	spinlock_t			lock;
 
 	/* Received msg related fields */
 	struct workqueue_struct		*work_q;
@@ -203,8 +204,10 @@ mailbox_send_msg(struct mailbox_channel *mb_chann, struct mailbox_msg *mb_msg)
 	u32 head, tail;
 	u32 start_addr;
 	u32 tmp_tail;
+	unsigned long flags;
 	int ret;
 
+	spin_lock_irqsave(&mb_chann->lock, flags);
 	head = mailbox_get_headptr(mb_chann, CHAN_RES_X2I);
 	tail = mb_chann->x2i_tail;
 	ringbuf_size = mailbox_get_ringbuf_size(mb_chann, CHAN_RES_X2I) - sizeof(u32);
@@ -225,8 +228,10 @@ check_again:
 		ret = read_poll_timeout(mailbox_get_headptr, head,
 					tmp_tail < head || tail >= head,
 					1, 100, false, mb_chann, CHAN_RES_X2I);
-		if (ret)
+		if (ret) {
+			spin_unlock_irqrestore(&mb_chann->lock, flags);
 			return ret;
+		}
 
 		if (tail >= head)
 			goto check_again;
@@ -240,6 +245,7 @@ check_again:
 			    mb_msg->pkg.header.opcode,
 			    mb_msg->pkg.header.id);
 
+	spin_unlock_irqrestore(&mb_chann->lock, flags);
 	return 0;
 }
 
@@ -487,6 +493,7 @@ struct mailbox_channel *xdna_mailbox_alloc_channel(struct mailbox *mb)
 		goto free_chann;
 	}
 	mb_chann->mb = mb;
+	spin_lock_init(&mb_chann->lock);
 
 	return mb_chann;
 
