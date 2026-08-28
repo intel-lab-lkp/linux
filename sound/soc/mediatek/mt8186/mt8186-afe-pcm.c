@@ -2737,13 +2737,18 @@ static int mt8186_afe_runtime_resume(struct device *dev)
 
 	ret = mt8186_afe_enable_cgs(afe);
 	if (ret)
-		return ret;
+		goto disable_clock;
 
 	if (!afe->regmap || afe_priv->pm_runtime_bypass_reg_ctl)
 		goto skip_regmap;
 
 	regcache_cache_only(afe->regmap, false);
-	regcache_sync(afe->regmap);
+	ret = regcache_sync(afe->regmap);
+	if (ret) {
+		regcache_cache_only(afe->regmap, true);
+		regcache_mark_dirty(afe->regmap);
+		goto disable_cgs;
+	}
 
 	/* enable audio sys DCM for power saving */
 	regmap_update_bits(afe_priv->infracfg, PERI_BUS_DCM_CTRL, BIT(29), BIT(29));
@@ -2761,6 +2766,12 @@ static int mt8186_afe_runtime_resume(struct device *dev)
 
 skip_regmap:
 	return 0;
+
+disable_cgs:
+	mt8186_afe_disable_cgs(afe);
+disable_clock:
+	mt8186_afe_disable_clock(afe);
+	return ret;
 }
 
 static int mt8186_afe_component_probe(struct snd_soc_component *component)

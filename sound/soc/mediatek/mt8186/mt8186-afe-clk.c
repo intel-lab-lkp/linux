@@ -221,6 +221,8 @@ int mt8186_afe_enable_cgs(struct mtk_base_afe *afe)
 		if (ret) {
 			dev_err(afe->dev, "%s clk_prepare_enable %s fail %d\n",
 				__func__, aud_clks[i], ret);
+			while (--i >= CLK_I2S1_BCLK)
+				clk_disable_unprepare(afe_priv->clk[i]);
 			return ret;
 		}
 	}
