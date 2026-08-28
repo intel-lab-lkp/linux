@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "path.h"
-#include <linux/kernel.h>
+
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+
 #include <dirent.h>
+#include <linux/kernel.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 static char *cleanup_path(char *path)
