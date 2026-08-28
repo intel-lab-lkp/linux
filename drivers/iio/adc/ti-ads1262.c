@@ -25,6 +25,7 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/regulator/driver.h>
 #include <linux/spi/spi.h>
 #include <linux/string.h>
 #include <linux/types.h>
@@ -1132,6 +1133,120 @@ static irqreturn_t ads1262_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static int ads1262_vbias_enable(struct regulator_dev *rdev)
+{
+	struct ads1262 *st = rdev_get_drvdata(rdev);
+
+	guard(mutex)(&st->xfer_lock);
+
+	return regmap_set_bits(st->regmap, ADS1262_POWER_REG,
+			       ADS1262_POWER_VBIAS_MASK);
+}
+
+static int ads1262_vbias_disable(struct regulator_dev *rdev)
+{
+	struct ads1262 *st = rdev_get_drvdata(rdev);
+
+	guard(mutex)(&st->xfer_lock);
+
+	return regmap_clear_bits(st->regmap, ADS1262_POWER_REG,
+				 ADS1262_POWER_VBIAS_MASK);
+}
+
+static int ads1262_vbias_is_enabled(struct regulator_dev *rdev)
+{
+	struct ads1262 *st = rdev_get_drvdata(rdev);
+
+	guard(mutex)(&st->xfer_lock);
+
+	return regmap_test_bits(st->regmap, ADS1262_POWER_REG,
+				ADS1262_POWER_VBIAS_MASK);
+}
+
+static int ads1262_vbias_get_voltage(struct regulator_dev *rdev)
+{
+	struct ads1262 *st = rdev_get_drvdata(rdev);
+	int avdd_uV, avss_uV;
+
+	avdd_uV = regulator_get_voltage(st->avdd_supply);
+	if (avdd_uV < 0)
+		return avdd_uV;
+
+	avss_uV = st->avss_supply ? regulator_get_voltage(st->avss_supply) : 0;
+	if (avss_uV < 0)
+		return avss_uV;
+
+	return DIV_ROUND_CLOSEST(avdd_uV - avss_uV, 2);
+}
+
+static const struct regulator_ops ads1262_vbias_regulator_ops = {
+	.enable = ads1262_vbias_enable,
+	.disable = ads1262_vbias_disable,
+	.is_enabled = ads1262_vbias_is_enabled,
+	.get_voltage = ads1262_vbias_get_voltage,
+};
+
+static int ads1262_refout_is_enabled(struct regulator_dev *rdev)
+{
+	struct ads1262 *st = rdev_get_drvdata(rdev);
+
+	guard(mutex)(&st->xfer_lock);
+
+	return regmap_test_bits(st->regmap, ADS1262_POWER_REG,
+				ADS1262_POWER_INTREF_MASK);
+}
+
+static const struct regulator_ops ads1262_refout_regulator_ops = {
+	.is_enabled = ads1262_refout_is_enabled,
+};
+
+static const struct regulator_desc ads1262_vbias_regulator_desc = {
+	.name = "vbias",
+	.of_match = "vbias",
+	.regulators_node = "regulators",
+	.supply_name = "avdd",
+	.ops = &ads1262_vbias_regulator_ops,
+	.type = REGULATOR_VOLTAGE,
+	.owner = THIS_MODULE,
+};
+
+static const struct regulator_desc ads1262_refout_regulator_desc = {
+	.name = "refout",
+	.of_match = "refout",
+	.regulators_node = "regulators",
+	.supply_name = "avdd",
+	.n_voltages = 1,
+	.fixed_uV = 2500000,
+	.ops = &ads1262_refout_regulator_ops,
+	.type = REGULATOR_VOLTAGE,
+	.owner = THIS_MODULE,
+};
+
+static int ads1262_register_regulators(struct ads1262 *st)
+{
+	struct device *dev = &st->spi->dev;
+	struct regulator_config config = {
+		.dev = dev,
+		.driver_data = st,
+	};
+	struct regulator_dev *rdev;
+
+	struct fwnode_handle *reg_node __free(fwnode_handle) =
+		device_get_named_child_node(dev, "regulators");
+	if (!reg_node)
+		return 0;
+
+	rdev = devm_regulator_register(dev, &ads1262_refout_regulator_desc,
+				       &config);
+	if (IS_ERR(rdev))
+		return PTR_ERR(rdev);
+
+	rdev = devm_regulator_register(dev, &ads1262_vbias_regulator_desc,
+				       &config);
+
+	return PTR_ERR_OR_ZERO(rdev);
+}
+
 static int ads1262_dev_configure(struct ads1262 *st)
 {
 	struct device *dev = &st->spi->dev;
@@ -1938,6 +2053,10 @@ static int ads1262_spi_probe(struct spi_device *spi)
 		return dev_err_probe(dev, ret, "failed to configure device\n");
 
 	indio_dev->name = ads1262_device_id_to_name[st->dev_id];
+
+	ret = ads1262_register_regulators(st);
+	if (ret)
+		return ret;
 
 	ret = ads1262_populate_tables(indio_dev);
 	if (ret)
