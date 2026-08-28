@@ -3236,6 +3236,20 @@ static void unmap_huge_pmd_entry(struct vm_area_struct *vma,
 		folio_put(folio);
 }
 
+struct split_pmd_state {
+	struct folio *folio;
+	struct page *page;
+	bool is_present;
+	bool is_device_private;
+	bool freeze;
+	bool write;
+	bool young;
+	bool dirty;
+	bool soft_dirty;
+	bool uffd;
+	bool anon_exclusive;
+};
+
 /*
  * Convert the folio's PMD-level anonymous rmap into PTE-level ones.
  *
@@ -3255,37 +3269,38 @@ static void unmap_huge_pmd_entry(struct vm_area_struct *vma,
  *
  * Returns: whether the mapping may still be frozen.
  */
-static bool split_huge_pmd_anon_rmap(struct folio *folio, struct page *page,
-		struct vm_area_struct *vma, unsigned long haddr, bool freeze,
-		bool anon_exclusive)
+static bool split_huge_pmd_anon_rmap(const struct split_pmd_state *state,
+		struct vm_area_struct *vma, unsigned long haddr)
 {
 	rmap_t rmap_flags = RMAP_NONE;
 
-	if (freeze &&
-	    (!anon_exclusive || !folio_try_share_anon_rmap_pmd(folio, page)))
+	if (state->freeze &&
+	    (!state->anon_exclusive ||
+	     !folio_try_share_anon_rmap_pmd(state->folio, state->page)))
 		return true;
 
-	folio_ref_add(folio, HPAGE_PMD_NR - 1);
-	if (anon_exclusive)
+	folio_ref_add(state->folio, HPAGE_PMD_NR - 1);
+	if (state->anon_exclusive)
 		rmap_flags |= RMAP_EXCLUSIVE;
-	folio_add_anon_rmap_ptes(folio, page, HPAGE_PMD_NR, vma, haddr,
-				 rmap_flags);
+	folio_add_anon_rmap_ptes(state->folio, state->page, HPAGE_PMD_NR, vma,
+				 haddr, rmap_flags);
 	return false;
 }
 
 static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 		unsigned long haddr, bool freeze)
 {
-	struct mm_struct *mm = vma->vm_mm;
-	pmd_t old_pmd = *pmd;
+	const pmd_t old_pmd = *pmd;
 	const bool is_present = pmd_present(old_pmd);
+	struct mm_struct *mm = vma->vm_mm;
+	struct split_pmd_state state = {
+		.is_present = is_present,
+		.freeze = freeze,
+	};
 	struct folio *folio;
-	struct page *page;
+	unsigned long addr;
 	pgtable_t pgtable;
 	pmd_t _pmd;
-	bool soft_dirty, uffd_wp = false, young = false, write = false;
-	bool anon_exclusive = false, dirty = false;
-	unsigned long addr;
 	pte_t *pte;
 	int i;
 
@@ -3328,38 +3343,39 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 		return;
 	}
 
+	state.folio = folio;
+
 	if (pmd_is_migration_entry(old_pmd)) {
-		softleaf_t entry;
+		const softleaf_t entry = softleaf_from_pmd(old_pmd);
 
-		entry = softleaf_from_pmd(old_pmd);
-		page = softleaf_to_page(entry);
+		state.page = softleaf_to_page(entry);
 
-		soft_dirty = pmd_swp_soft_dirty(old_pmd);
-		uffd_wp = pmd_swp_uffd(old_pmd);
+		state.soft_dirty = pmd_swp_soft_dirty(old_pmd);
+		state.uffd = pmd_swp_uffd(old_pmd);
 
-		write = softleaf_is_migration_write(entry);
-		anon_exclusive = softleaf_is_migration_read_exclusive(entry);
-		young = softleaf_is_migration_young(entry);
-		dirty = softleaf_is_migration_dirty(entry);
+		state.write = softleaf_is_migration_write(entry);
+		state.anon_exclusive =
+			softleaf_is_migration_read_exclusive(entry);
+		state.young = softleaf_is_migration_young(entry);
+		state.dirty = softleaf_is_migration_dirty(entry);
 	} else if (pmd_is_device_private_entry(old_pmd)) {
-		softleaf_t entry;
+		const softleaf_t entry = softleaf_from_pmd(old_pmd);
 
-		entry = softleaf_from_pmd(old_pmd);
-		page = softleaf_to_page(entry);
+		state.is_device_private = true;
+		state.page = softleaf_to_page(entry);
 
-		soft_dirty = pmd_swp_soft_dirty(old_pmd);
-		uffd_wp = pmd_swp_uffd(old_pmd);
+		state.soft_dirty = pmd_swp_soft_dirty(old_pmd);
+		state.uffd = pmd_swp_uffd(old_pmd);
 
-		write = softleaf_is_device_private_write(entry);
-		anon_exclusive = PageAnonExclusive(page);
+		state.write = softleaf_is_device_private_write(entry);
+		state.anon_exclusive = PageAnonExclusive(state.page);
 
 		/*
 		 * Device private folios are treated the same as regular folios
 		 * w.r.t. anon exclusive handling, see
 		 * split_huge_pmd_anon_rmap().
 		 */
-		freeze = split_huge_pmd_anon_rmap(folio, page, vma, haddr,
-						  freeze, anon_exclusive);
+		state.freeze = split_huge_pmd_anon_rmap(&state, vma, haddr);
 	} else {
 		/*
 		 * Up to this point the pmd is present and huge and userland has
@@ -3387,22 +3403,22 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 		 * This must also happen before PageAnonExclusive() is read
 		 * below, see folio_try_share_anon_rmap_pmd().
 		 */
-		old_pmd = pmdp_invalidate(vma, haddr, pmd);
-		page = pmd_page(old_pmd);
-		if (pmd_dirty(old_pmd)) {
-			dirty = true;
+		const pmd_t pmdval = pmdp_invalidate(vma, haddr, pmd);
+
+		state.page = pmd_page(pmdval);
+		state.write = pmd_write(pmdval);
+		state.young = pmd_young(pmdval);
+		state.dirty = pmd_dirty(pmdval);
+		state.soft_dirty = pmd_soft_dirty(pmdval);
+		state.uffd = pmd_uffd(pmdval);
+		state.anon_exclusive = PageAnonExclusive(state.page);
+
+		if (state.dirty)
 			folio_set_dirty(folio);
-		}
-		write = pmd_write(old_pmd);
-		young = pmd_young(old_pmd);
-		soft_dirty = pmd_soft_dirty(old_pmd);
-		uffd_wp = pmd_uffd(old_pmd);
 
 		VM_WARN_ON_FOLIO(!folio_ref_count(folio), folio);
 
-		anon_exclusive = PageAnonExclusive(page);
-		freeze = split_huge_pmd_anon_rmap(folio, page, vma, haddr,
-						  freeze, anon_exclusive);
+		state.freeze = split_huge_pmd_anon_rmap(&state, vma, haddr);
 	}
 
 	/*
@@ -3419,33 +3435,33 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 	 * Note that NUMA hinting access restrictions are not transferred to
 	 * avoid any possibility of altering permissions across VMAs.
 	 */
-	if (freeze || pmd_is_migration_entry(old_pmd)) {
+	if (state.freeze || (!state.is_present && !state.is_device_private)) {
 		pte_t entry;
 		swp_entry_t swp_entry;
 
 		for (i = 0, addr = haddr; i < HPAGE_PMD_NR; i++, addr += PAGE_SIZE) {
-			if (write)
+			if (state.write)
 				swp_entry = make_writable_migration_entry(
-							page_to_pfn(page + i));
-			else if (anon_exclusive)
+						page_to_pfn(state.page + i));
+			else if (state.anon_exclusive)
 				swp_entry = make_readable_exclusive_migration_entry(
-							page_to_pfn(page + i));
+						page_to_pfn(state.page + i));
 			else
 				swp_entry = make_readable_migration_entry(
-							page_to_pfn(page + i));
-			if (young)
+						page_to_pfn(state.page + i));
+			if (state.young)
 				swp_entry = make_migration_entry_young(swp_entry);
-			if (dirty)
+			if (state.dirty)
 				swp_entry = make_migration_entry_dirty(swp_entry);
 			entry = swp_entry_to_pte(swp_entry);
-			if (soft_dirty)
+			if (state.soft_dirty)
 				entry = pte_swp_mksoft_dirty(entry);
-			if (uffd_wp)
+			if (state.uffd)
 				entry = pte_swp_mkuffd(entry);
 			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
 			set_pte_at(mm, addr, pte + i, entry);
 		}
-	} else if (pmd_is_device_private_entry(old_pmd)) {
+	} else if (state.is_device_private) {
 		pte_t entry;
 		swp_entry_t swp_entry;
 
@@ -3455,19 +3471,19 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 			 * pages corresponding to the pte entries when freeze
 			 * is false.
 			 */
-			if (write)
+			if (state.write)
 				swp_entry = make_writable_device_private_entry(
-							page_to_pfn(page + i));
+						page_to_pfn(state.page + i));
 			else
 				swp_entry = make_readable_device_private_entry(
-							page_to_pfn(page + i));
+						page_to_pfn(state.page + i));
 			/*
 			 * Young and dirty bits are not progated via swp_entry
 			 */
 			entry = swp_entry_to_pte(swp_entry);
-			if (soft_dirty)
+			if (state.soft_dirty)
 				entry = pte_swp_mksoft_dirty(entry);
-			if (uffd_wp)
+			if (state.uffd)
 				entry = pte_swp_mkuffd(entry);
 			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
 			set_pte_at(mm, addr, pte + i, entry);
@@ -3475,21 +3491,21 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 	} else {
 		pte_t entry;
 
-		entry = mk_pte(page, READ_ONCE(vma->vm_page_prot));
-		if (write)
+		entry = mk_pte(state.page, READ_ONCE(vma->vm_page_prot));
+		if (state.write)
 			entry = pte_mkwrite(entry, vma);
-		if (!young)
+		if (!state.young)
 			entry = pte_mkold(entry);
 		/* NOTE: this may set soft-dirty too on some archs */
-		if (dirty)
+		if (state.dirty)
 			entry = pte_mkdirty(entry);
-		if (soft_dirty)
+		if (state.soft_dirty)
 			entry = pte_mksoft_dirty(entry);
-		if (uffd_wp)
+		if (state.uffd)
 			entry = pte_mkuffd(entry);
 
 		/* Restore PAGE_NONE so an RWP marker keeps trapping */
-		if (userfaultfd_rwp(vma) && uffd_wp)
+		if (userfaultfd_rwp(vma) && state.uffd)
 			entry = pte_modify(entry, PAGE_NONE);
 
 		for (i = 0; i < HPAGE_PMD_NR; i++)
@@ -3499,10 +3515,10 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 	}
 	pte_unmap(pte);
 
-	if (!pmd_is_migration_entry(old_pmd))
-		folio_remove_rmap_pmd(folio, page, vma);
-	if (freeze)
-		put_page(page);
+	if (state.is_present || state.is_device_private)
+		folio_remove_rmap_pmd(state.folio, state.page, vma);
+	if (state.freeze)
+		put_page(state.page);
 
 	smp_wmb(); /* make pte visible before pmd */
 	pmd_populate(mm, pmd, pgtable);
