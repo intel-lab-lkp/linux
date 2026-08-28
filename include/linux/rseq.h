@@ -69,7 +69,9 @@ static __always_inline void rseq_sched_switch_event(struct task_struct *t)
 		 * was via interrupt from user space. ev->has_rseq does not have
 		 * to be evaluated here because rseq_v2() implies has_rseq.
 		 */
-		bool raise = ev->user_irq | ev->ids_changed;
+		bool raise = (ev->user_irq |
+			      ev->ids_changed |
+			      ev->rseq_op);
 
 		if (raise) {
 			ev->sched_switch = true;
@@ -172,6 +174,8 @@ static inline unsigned int rseq_alloc_align(void)
 	return 1U << get_count_order(offsetof(struct rseq, end));
 }
 
+int rseq_op_prctl(unsigned long arg2, unsigned long arg3);
+
 #else /* CONFIG_RSEQ */
 static inline bool rseq_v2(struct task_struct *t) { return false; }
 static inline void rseq_handle_slowpath(struct pt_regs *regs) { }
@@ -182,6 +186,10 @@ static inline void rseq_force_update(void) { }
 static inline void rseq_virt_userspace_exit(void) { }
 static inline void rseq_fork(struct task_struct *t, u64 clone_flags) { }
 static inline void rseq_execve(struct task_struct *t) { }
+static inline int rseq_op_prctl(unsigned long arg2, unsigned long arg3)
+{
+	return -ENOTSUPP;
+}
 #endif  /* !CONFIG_RSEQ */
 
 #ifdef CONFIG_DEBUG_RSEQ

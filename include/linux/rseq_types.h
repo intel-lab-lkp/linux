@@ -23,6 +23,7 @@ struct rseq;
  *			exit to user
  * @ids_changed:	Indicator that IDs need to be updated
  * @user_irq:		True on interrupt entry from user mode
+ * @rseq_op:		Rseq operation processing is enabled for the task
  * @has_rseq:		Greater than 0 if the task has a rseq pointer installed.
  *			Contains the RSEQ version number
  * @error:		Compound error code for the slow path to analyze
@@ -44,6 +45,7 @@ struct rseq_event {
 					u8	sched_switch;
 					u8	ids_changed;
 					u8	user_irq;
+					u8	rseq_op;
 				};
 			};
 
@@ -115,6 +117,7 @@ struct rseq_slice {
  * @event:	Storage for event management
  * @ids:	Storage for cached CPU ID and MM CID
  * @slice:	Storage for time slice extension data
+ * @nr_ops:	Number of registered rseq operations
  */
 struct rseq_data {
 	struct rseq __user		*usrptr;
@@ -125,6 +128,12 @@ struct rseq_data {
 #ifdef CONFIG_RSEQ_SLICE_EXTENSION
 	struct rseq_slice		slice;
 #endif
+	/*
+	 * Number of rseq operations registered for the task. Edge triggered:
+	 * the 0<->1 transition enables/disables rseq_event::rseq_op and the
+	 * RSEQ_CS_FLAG_RSEQ_OP_ENABLED user flag.
+	 */
+	u32				nr_ops;
 };
 
 #else /* CONFIG_RSEQ */
