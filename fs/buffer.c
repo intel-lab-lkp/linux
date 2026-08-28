@@ -1680,7 +1680,7 @@ void clean_bdev_aliases(struct block_device *bdev, sector_t block, sector_t len)
 			/* Recheck when the folio is locked which pins bhs */
 			head = folio_buffers(folio);
 			if (!head)
-				goto unlock_page;
+				goto unlock_folio;
 			bh = head;
 			do {
 				if (!buffer_mapped(bh) || (bh->b_blocknr < block))
@@ -1693,7 +1693,7 @@ void clean_bdev_aliases(struct block_device *bdev, sector_t block, sector_t len)
 next:
 				bh = bh->b_this_page;
 			} while (bh != head);
-unlock_page:
+unlock_folio:
 			folio_unlock(folio);
 		}
 		folio_batch_release(&fbatch);
