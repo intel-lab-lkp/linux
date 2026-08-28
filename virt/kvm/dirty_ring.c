@@ -122,6 +122,7 @@ int kvm_dirty_ring_reset(struct kvm *kvm, struct kvm_dirty_ring *ring,
 	u64 cur_offset, next_offset;
 	unsigned long mask = 0;
 	struct kvm_dirty_gfn *entry;
+	int r = 0;
 
 	/*
 	 * Ensure concurrent calls to KVM_RESET_DIRTY_RINGS are serialized,
@@ -132,8 +133,10 @@ int kvm_dirty_ring_reset(struct kvm *kvm, struct kvm_dirty_ring *ring,
 	lockdep_assert_held(&kvm->slots_lock);
 
 	while (likely((*nr_entries_reset) < INT_MAX)) {
-		if (signal_pending(current))
-			return -EINTR;
+		if (signal_pending(current)) {
+			r = -EINTR;
+			break;
+		}
 
 		entry = &ring->dirty_gfns[ring->reset_index & (ring->size - 1)];
 
@@ -213,7 +216,7 @@ int kvm_dirty_ring_reset(struct kvm *kvm, struct kvm_dirty_ring *ring,
 
 	trace_kvm_dirty_ring_reset(ring);
 
-	return 0;
+	return r;
 }
 
 void kvm_dirty_ring_push(struct kvm_vcpu *vcpu, u32 slot, u64 offset)
