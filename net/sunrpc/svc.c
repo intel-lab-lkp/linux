@@ -1258,6 +1258,10 @@ int svc_register(struct svc_serv *serv, struct net *net,
 				break;
 			}
 		}
+
+		/* Give up on trying to register anything if it didn't respond */
+		if (noanswer)
+			break;
 	}
 
 	if (noanswer)
