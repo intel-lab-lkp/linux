@@ -5,6 +5,8 @@
 
 #include <linux/sort.h>
 
+#include <drm/drm_print.h>
+
 #include "intel_engine_regs.h"
 #include "intel_gt_clock_utils.h"
 
@@ -79,13 +81,14 @@ static void measure_clocks(struct intel_engine_cs *engine,
 static int live_gt_clocks(void *arg)
 {
 	struct intel_gt *gt = arg;
+	struct drm_i915_private *i915 = gt->i915;
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 	intel_wakeref_t wakeref;
 	int err = 0;
 
 	if (!gt->clock_frequency) { /* unknown */
-		pr_info("CS_TIMESTAMP frequency unknown\n");
+		drm_info(&i915->drm, "CS_TIMESTAMP frequency unknown\n");
 		return 0;
 	}
 
@@ -109,20 +112,23 @@ static int live_gt_clocks(void *arg)
 		time = intel_gt_clock_interval_to_ns(engine->gt, cycles);
 		expected = intel_gt_ns_to_clock_interval(engine->gt, dt);
 
-		pr_info("%s: TIMESTAMP %d cycles [%lldns] in %lldns [%d cycles], using CS clock frequency of %uKHz\n",
-			engine->name, cycles, time, dt, expected,
-			engine->gt->clock_frequency / 1000);
+		drm_info(&i915->drm,
+			 "%s: TIMESTAMP %d cycles [%lldns] in %lldns [%d cycles], using CS clock frequency of %uKHz\n",
+			 engine->name, cycles, time, dt, expected,
+			 engine->gt->clock_frequency / 1000);
 
 		if (9 * time < 8 * dt || 8 * time > 9 * dt) {
-			pr_err("%s: CS ticks did not match walltime!\n",
-			       engine->name);
+			drm_err(&i915->drm,
+				"%s: CS ticks did not match walltime!\n",
+				engine->name);
 			err = -EINVAL;
 			break;
 		}
 
 		if (9 * expected < 8 * cycles || 8 * expected > 9 * cycles) {
-			pr_err("%s: walltime did not match CS ticks!\n",
-			       engine->name);
+			drm_err(&i915->drm,
+				"%s: walltime did not match CS ticks!\n",
+				engine->name);
 			err = -EINVAL;
 			break;
 		}
@@ -137,6 +143,7 @@ static int live_gt_clocks(void *arg)
 static int live_gt_resume(void *arg)
 {
 	struct intel_gt *gt = arg;
+	struct drm_i915_private *i915 = gt->i915;
 	IGT_TIMEOUT(end_time);
 	int err;
 
@@ -146,7 +153,8 @@ static int live_gt_resume(void *arg)
 		intel_gt_suspend_late(gt);
 
 		if (gt->rc6.enabled) {
-			pr_err("rc6 still enabled after suspend!\n");
+			drm_err(&i915->drm,
+				"rc6 still enabled after suspend!\n");
 			intel_gt_set_wedged_on_init(gt);
 			err = -EINVAL;
 			break;
@@ -157,7 +165,8 @@ static int live_gt_resume(void *arg)
 			break;
 
 		if (gt->rc6.supported && !gt->rc6.enabled) {
-			pr_err("rc6 not enabled upon resume!\n");
+			drm_err(&i915->drm,
+				"rc6 not enabled upon resume!\n");
 			intel_gt_set_wedged_on_init(gt);
 			err = -EINVAL;
 			break;
@@ -165,7 +174,8 @@ static int live_gt_resume(void *arg)
 
 		err = st_llc_verify(&gt->llc);
 		if (err) {
-			pr_err("llc state not restored upon resume!\n");
+			drm_err(&i915->drm,
+				"llc state not restored upon resume!\n");
 			intel_gt_set_wedged_on_init(gt);
 			break;
 		}

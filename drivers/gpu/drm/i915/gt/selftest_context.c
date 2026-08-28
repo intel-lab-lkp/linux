@@ -136,7 +136,9 @@ static int __live_context_size(struct intel_engine_cs *engine)
 		goto err_unpin;
 
 	if (memchr_inv(vaddr, POISON_INUSE, I915_GTT_PAGE_SIZE)) {
-		pr_err("%s context overwrote trailing red-zone!", engine->name);
+		drm_err(&engine->i915->drm,
+			"%s context overwrote trailing red-zone!",
+			engine->name);
 		err = -EINVAL;
 	}
 
@@ -196,6 +198,7 @@ static int live_context_size(void *arg)
 
 static int __live_active_context(struct intel_engine_cs *engine)
 {
+	struct drm_i915_private *i915 = engine->i915;
 	unsigned long saved_heartbeat;
 	struct intel_context *ce;
 	int pass;
@@ -221,8 +224,8 @@ static int __live_active_context(struct intel_engine_cs *engine)
 		return 0;
 
 	if (intel_engine_pm_is_awake(engine)) {
-		pr_err("%s is awake before starting %s!\n",
-		       engine->name, __func__);
+		drm_err(&i915->drm, "%s is awake before starting %s!\n",
+			engine->name, __func__);
 		return -EINVAL;
 	}
 
@@ -250,15 +253,17 @@ static int __live_active_context(struct intel_engine_cs *engine)
 
 		/* Context will be kept active until after an idle-barrier. */
 		if (i915_active_is_idle(&ce->active)) {
-			pr_err("context is not active; expected idle-barrier (%s pass %d)\n",
-			       engine->name, pass);
+			drm_err(&i915->drm,
+				"context is not active; expected idle-barrier (%s pass %d)\n",
+				engine->name, pass);
 			err = -EINVAL;
 			goto out_engine;
 		}
 
 		if (!intel_engine_pm_is_awake(engine)) {
-			pr_err("%s is asleep before idle-barrier\n",
-			       engine->name);
+			drm_err(&i915->drm,
+				"%s is asleep before idle-barrier\n",
+				engine->name);
 			err = -EINVAL;
 			goto out_engine;
 		}
@@ -280,14 +285,14 @@ out_engine:
 		goto err;
 
 	if (!i915_active_is_idle(&ce->active)) {
-		pr_err("context is still active!");
+		drm_err(&i915->drm, "context is still active!");
 		err = -EINVAL;
 	}
 
 	intel_engine_pm_flush(engine);
 
 	if (intel_engine_pm_is_awake(engine)) {
-		struct drm_printer p = drm_dbg_printer(&engine->i915->drm,
+		struct drm_printer p = drm_dbg_printer(&i915->drm,
 						       DRM_UT_DRIVER, NULL);
 
 		intel_engine_dump(engine, &p,
@@ -356,6 +361,7 @@ unpin:
 
 static int __live_remote_context(struct intel_engine_cs *engine)
 {
+	struct drm_i915_private *i915 = engine->i915;
 	struct intel_context *local, *remote;
 	unsigned long saved_heartbeat;
 	int pass;
@@ -374,8 +380,8 @@ static int __live_remote_context(struct intel_engine_cs *engine)
 		return 0;
 
 	if (intel_engine_pm_is_awake(engine)) {
-		pr_err("%s is awake before starting %s!\n",
-		       engine->name, __func__);
+		drm_err(&i915->drm, "%s is awake before starting %s!\n",
+			engine->name, __func__);
 		return -EINVAL;
 	}
 
@@ -403,8 +409,9 @@ static int __live_remote_context(struct intel_engine_cs *engine)
 			break;
 
 		if (i915_active_is_idle(&remote->active)) {
-			pr_err("remote context is not active; expected idle-barrier (%s pass %d)\n",
-			       engine->name, pass);
+			drm_err(&i915->drm,
+				"remote context is not active; expected idle-barrier (%s pass %d)\n",
+				engine->name, pass);
 			err = -EINVAL;
 			break;
 		}

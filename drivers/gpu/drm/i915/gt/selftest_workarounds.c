@@ -16,6 +16,8 @@
 #include "selftests/intel_scheduler_helpers.h"
 #include "selftests/mock_drm.h"
 
+#include <drm/drm_print.h>
+
 #include "gem/selftests/igt_gem_utils.h"
 #include "gem/selftests/mock_context.h"
 
@@ -193,8 +195,9 @@ print_results(const struct intel_engine_cs *engine, const u32 *results)
 		u32 expected = get_whitelist_reg(engine, i);
 		u32 actual = results[i];
 
-		pr_info("RING_NONPRIV[%d]: expected 0x%08x, found 0x%08x\n",
-			i, expected, actual);
+		drm_info(&engine->i915->drm,
+			 "RING_NONPRIV[%d]: expected 0x%08x, found 0x%08x\n",
+			 i, expected, actual);
 	}
 }
 
@@ -233,8 +236,9 @@ static int check_whitelist(struct intel_context *ce)
 
 		if (expected != actual) {
 			print_results(engine, vaddr);
-			pr_err("Invalid RING_NONPRIV[%d], expected 0x%08x, found 0x%08x\n",
-			       i, expected, actual);
+			drm_err(&engine->i915->drm,
+				"Invalid RING_NONPRIV[%d], expected 0x%08x, found 0x%08x\n",
+				i, expected, actual);
 
 			err = -EINVAL;
 			break;
@@ -298,14 +302,16 @@ static int check_whitelist_across_reset(struct intel_engine_cs *engine,
 					int (*reset)(struct intel_engine_cs *),
 					const char *name)
 {
+	struct drm_i915_private *i915 = engine->i915;
 	struct intel_context *ce, *tmp;
 	struct igt_spinner spin;
 	struct i915_request *rq;
 	intel_wakeref_t wakeref;
 	int err;
 
-	pr_info("Checking %d whitelisted registers on %s (RING_NONPRIV) [%s]\n",
-		engine->whitelist.count, engine->name, name);
+	drm_info(&i915->drm,
+		 "Checking %d whitelisted registers on %s (RING_NONPRIV) [%s]\n",
+		 engine->whitelist.count, engine->name, name);
 
 	ce = intel_context_create(engine);
 	if (IS_ERR(ce))
@@ -317,7 +323,8 @@ static int check_whitelist_across_reset(struct intel_engine_cs *engine,
 
 	err = check_whitelist(ce);
 	if (err) {
-		pr_err("Invalid whitelist *before* %s reset!\n", name);
+		drm_err(&i915->drm,
+			"Invalid whitelist *before* %s reset!\n", name);
 		goto out_spin;
 	}
 
@@ -327,7 +334,8 @@ static int check_whitelist_across_reset(struct intel_engine_cs *engine,
 
 	/* Ensure the spinner hasn't aborted */
 	if (i915_request_completed(rq)) {
-		pr_err("%s spinner failed to start\n", name);
+		drm_err(&i915->drm, "%s spinner failed to start\n",
+			name);
 		err = -ETIMEDOUT;
 		goto out_spin;
 	}
@@ -342,14 +350,15 @@ static int check_whitelist_across_reset(struct intel_engine_cs *engine,
 	igt_spinner_end(&spin);
 
 	if (err) {
-		pr_err("%s reset failed\n", name);
+		drm_err(&i915->drm, "%s reset failed\n", name);
 		goto out_spin;
 	}
 
 	err = check_whitelist(ce);
 	if (err) {
-		pr_err("Whitelist not preserved in context across %s reset!\n",
-		       name);
+		drm_err(&i915->drm,
+			"Whitelist not preserved in context across %s reset!\n",
+			name);
 		goto out_spin;
 	}
 
@@ -363,8 +372,9 @@ static int check_whitelist_across_reset(struct intel_engine_cs *engine,
 
 	err = check_whitelist(ce);
 	if (err) {
-		pr_err("Invalid whitelist *after* %s reset in fresh context!\n",
-		       name);
+		drm_err(&i915->drm,
+			"Invalid whitelist *after* %s reset in fresh context!\n",
+			name);
 		goto out_spin;
 	}
 
@@ -500,6 +510,7 @@ static int check_dirty_whitelist(struct intel_context *ce)
 		0xffffffff,
 	};
 	struct intel_engine_cs *engine = ce->engine;
+	struct drm_i915_private *i915 = engine->i915;
 	struct i915_vma *scratch;
 	struct i915_vma *batch;
 	int err = 0, i, v, sz;
@@ -565,8 +576,8 @@ retry:
 		if (GRAPHICS_VER(engine->i915) >= 8)
 			lrm++, srm++;
 
-		pr_debug("%s: Writing garbage to %x\n",
-			 engine->name, reg);
+		drm_dbg(&i915->drm, "%s: Writing garbage to %x\n",
+			engine->name, reg);
 
 		/* SRM original */
 		*cs++ = srm;
@@ -646,8 +657,9 @@ retry:
 err_request:
 		err = request_add_sync(rq, err);
 		if (err) {
-			pr_err("%s: Futzing %x timedout; cancelling test\n",
-			       engine->name, reg);
+			drm_err(&i915->drm,
+				"%s: Futzing %x timedout; cancelling test\n",
+				engine->name, reg);
 			intel_gt_set_wedged(engine->gt);
 			goto out_unmap_scratch;
 		}
@@ -657,8 +669,9 @@ err_request:
 			/* detect write masking */
 			rsvd = results[ARRAY_SIZE(values)];
 			if (!rsvd) {
-				pr_err("%s: Unable to write to whitelisted register %x\n",
-				       engine->name, reg);
+				drm_err(&i915->drm,
+					"%s: Unable to write to whitelisted register %x\n",
+					engine->name, reg);
 				err = -EINVAL;
 				goto out_unmap_scratch;
 			}
@@ -689,15 +702,18 @@ err_request:
 			idx++;
 		}
 		if (err) {
-			pr_err("%s: %d mismatch between values written to whitelisted register [%x], and values read back!\n",
-			       engine->name, err, reg);
+			drm_err(&i915->drm,
+				"%s: %d mismatch between values written to whitelisted register [%x], and values read back!\n",
+				engine->name, err, reg);
 
 			if (ro_reg)
-				pr_info("%s: Whitelisted read-only register: %x, original value %08x\n",
-					engine->name, reg, results[0]);
+				drm_info(&i915->drm,
+					 "%s: Whitelisted read-only register: %x, original value %08x\n",
+					 engine->name, reg, results[0]);
 			else
-				pr_info("%s: Whitelisted register: %x, original value %08x, rsvd %08x\n",
-					engine->name, reg, results[0], rsvd);
+				drm_info(&i915->drm,
+					 "%s: Whitelisted register: %x, original value %08x, rsvd %08x\n",
+					 engine->name, reg, results[0], rsvd);
 
 			expect = results[0];
 			idx = 1;
@@ -708,8 +724,9 @@ err_request:
 					expect = results[0];
 				else
 					expect = reg_write(expect, w, rsvd);
-				pr_info("Wrote %08x, read %08x, expect %08x\n",
-					w, results[idx], expect);
+				drm_info(&i915->drm,
+					 "Wrote %08x, read %08x, expect %08x\n",
+					 w, results[idx], expect);
 				idx++;
 			}
 			for (v = 0; v < ARRAY_SIZE(values); v++) {
@@ -719,8 +736,9 @@ err_request:
 					expect = results[0];
 				else
 					expect = reg_write(expect, w, rsvd);
-				pr_info("Wrote %08x, read %08x, expect %08x\n",
-					w, results[idx], expect);
+				drm_info(&i915->drm,
+					 "Wrote %08x, read %08x, expect %08x\n",
+					 w, results[idx], expect);
 				idx++;
 			}
 
@@ -985,8 +1003,9 @@ static bool result_eq(struct intel_engine_cs *engine,
 		      u32 a, u32 b, i915_reg_t reg)
 {
 	if (a != b && !pardon_reg(engine->i915, reg)) {
-		pr_err("Whitelisted register 0x%4x not context saved: A=%08x, B=%08x\n",
-		       i915_mmio_reg_offset(reg), a, b);
+		drm_err(&engine->i915->drm,
+			"Whitelisted register 0x%4x not context saved: A=%08x, B=%08x\n",
+			i915_mmio_reg_offset(reg), a, b);
 		return false;
 	}
 
@@ -1007,8 +1026,9 @@ static bool result_neq(struct intel_engine_cs *engine,
 		       u32 a, u32 b, i915_reg_t reg)
 {
 	if (a == b && !writeonly_reg(engine->i915, reg)) {
-		pr_err("Whitelist register 0x%4x:%08x was unwritable\n",
-		       i915_mmio_reg_offset(reg), a);
+		drm_err(&engine->i915->drm,
+			"Whitelist register 0x%4x:%08x was unwritable\n",
+			i915_mmio_reg_offset(reg), a);
 		return false;
 	}
 
@@ -1211,7 +1231,7 @@ live_gpu_reset_workarounds(void *arg)
 	if (!lists)
 		return -ENOMEM;
 
-	pr_info("Verifying after GPU reset...\n");
+	drm_info(&gt->i915->drm, "Verifying after GPU reset...\n");
 
 	igt_global_reset_lock(gt);
 	wakeref = intel_runtime_pm_get(gt->uncore->rpm);
@@ -1239,6 +1259,7 @@ static int
 live_engine_reset_workarounds(void *arg)
 {
 	struct intel_gt *gt = arg;
+	struct drm_i915_private *i915 = gt->i915;
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 	struct intel_context *ce;
@@ -1266,7 +1287,8 @@ live_engine_reset_workarounds(void *arg)
 		bool ok;
 		int ret2;
 
-		pr_info("Verifying after %s reset...\n", engine->name);
+		drm_info(&i915->drm, "Verifying after %s reset...\n",
+			 engine->name);
 		ret = intel_selftest_modify_policy(engine, &saved,
 						   SELFTEST_SCHEDULER_MODIFY_FAST_RESET);
 		if (ret)
@@ -1287,7 +1309,9 @@ live_engine_reset_workarounds(void *arg)
 
 			ret = intel_engine_reset(engine, "live_workarounds:idle");
 			if (ret) {
-				pr_err("%s: Reset failed while idle\n", engine->name);
+				drm_err(&i915->drm,
+					"%s: Reset failed while idle\n",
+					engine->name);
 				goto err;
 			}
 
@@ -1311,7 +1335,8 @@ live_engine_reset_workarounds(void *arg)
 
 		ret = request_add_spin(rq, &spin);
 		if (ret) {
-			pr_err("%s: Spinner failed to start\n", engine->name);
+			drm_err(&i915->drm,
+				"%s: Spinner failed to start\n", engine->name);
 			igt_spinner_fini(&spin);
 			goto err;
 		}
@@ -1325,8 +1350,9 @@ live_engine_reset_workarounds(void *arg)
 		if (!using_guc) {
 			ret = intel_engine_reset(engine, "live_workarounds:active");
 			if (ret) {
-				pr_err("%s: Reset failed on an active spinner\n",
-				       engine->name);
+				drm_err(&i915->drm,
+					"%s: Reset failed on an active spinner\n",
+					engine->name);
 				igt_spinner_fini(&spin);
 				goto err;
 			}

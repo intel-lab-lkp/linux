@@ -207,8 +207,8 @@ out:
 		if (err)
 			break;
 
-		pr_info("%s: MI_BB_START cycles: %u\n",
-			engine->name, trifilter(cycles));
+		drm_info(&gt->i915->drm, "%s: MI_BB_START cycles: %u\n",
+			 engine->name, trifilter(cycles));
 	}
 	if (perf_end(gt, wakeref))
 		err = -EIO;
@@ -365,8 +365,8 @@ out:
 		if (err)
 			break;
 
-		pr_info("%s: 16K MI_NOOP cycles: %u\n",
-			engine->name, trifilter(cycles));
+		drm_info(&gt->i915->drm, "%s: 16K MI_NOOP cycles: %u\n",
+			 engine->name, trifilter(cycles));
 	}
 	if (perf_end(gt, wakeref))
 		err = -EIO;
