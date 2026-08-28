@@ -168,6 +168,17 @@ struct clk {
 	struct hlist_node clks_node;
 };
 
+#ifdef CONFIG_LOCKDEP
+static int __init lockdep_ignore_clk_prepare_lock_setup(char *__unused)
+{
+	lockdep_set_novalidate_class(&prepare_lock);
+	pr_warn("lockdep: ignoring prepare_lock class in clock subsystem\n");
+	return 1;
+}
+__setup("lockdep_ignore_clk_prepare_lock",
+	lockdep_ignore_clk_prepare_lock_setup);
+#endif
+
 /***           runtime pm          ***/
 static int clk_pm_runtime_get(struct clk_core *core)
 {
