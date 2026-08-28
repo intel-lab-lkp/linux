@@ -3056,22 +3056,77 @@ int btrfs_zoned_activate_one_bg(struct btrfs_space_info *space_info, bool do_fin
 	return 0;
 }
 
+static int finish_extra_active_nondata_bgs(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_block_group *block_group;
+	struct btrfs_block_group *next;
+	u64 tail_unusable;
+	int ret;
+
+	list_for_each_entry_safe(block_group, next, &fs_info->zone_active_bgs,
+				 active_bg_list) {
+		if (!(block_group->flags &
+		      (BTRFS_BLOCK_GROUP_METADATA | BTRFS_BLOCK_GROUP_SYSTEM)))
+			continue;
+
+		if (block_group == fs_info->active_meta_bg ||
+		    block_group == fs_info->active_system_bg)
+			continue;
+
+		btrfs_get_block_group(block_group);
+		spin_lock(&block_group->lock);
+		tail_unusable = block_group->zone_capacity - block_group->alloc_offset;
+		spin_unlock(&block_group->lock);
+
+		ret = do_zone_finish(block_group, true);
+		if (!ret) {
+			struct btrfs_space_info *space_info = block_group->space_info;
+
+			/* Account for the unused tail abandoned by ZONE_FINISH. */
+			spin_lock(&space_info->lock);
+			spin_lock(&block_group->lock);
+			block_group->zone_unusable += tail_unusable;
+			btrfs_space_info_update_bytes_zone_unusable(space_info,
+								    tail_unusable);
+			spin_unlock(&block_group->lock);
+			spin_unlock(&space_info->lock);
+		}
+		btrfs_put_block_group(block_group);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 /*
- * Reserve zones for one metadata block group, one tree-log block group, and one
- * system block group.
+ * Restore one active block group for normal metadata and system writes.
+ *
+ * The tree-log block group identity is not persisted, so recovered active
+ * metadata block groups cannot be distinguished by their previous role. Keep
+ * one for the normal metadata role and leave one reservation for a new
+ * tree-log block group.
+ *
+ * Older kernels rebuilt zone_active_bgs at mount without recovering the role
+ * assignments, which could result in multiple active metadata or system block
+ * groups. Finish all but the selected block group for each role.
  */
-void btrfs_check_active_zone_reservation(struct btrfs_fs_info *fs_info)
+int btrfs_restore_active_nondata_bgs(struct btrfs_fs_info *fs_info)
 {
 	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
 	struct btrfs_block_group *block_group;
+	struct btrfs_block_group *active_meta_bg = NULL;
+	struct btrfs_block_group *active_system_bg = NULL;
 	struct btrfs_device *device;
+	u64 active_meta_avail = 0;
+	u64 active_system_avail = 0;
 	/* Reserve zones for normal SINGLE metadata and tree-log block group. */
 	unsigned int metadata_reserve = 2;
 	/* Reserve a zone for SINGLE system block group. */
 	unsigned int system_reserve = 1;
 
 	if (!test_bit(BTRFS_FS_ACTIVE_ZONE_TRACKING, &fs_info->flags))
-		return;
+		return 0;
 
 	/*
 	 * This function is called from the mount context. So, there is no
@@ -3093,14 +3148,38 @@ void btrfs_check_active_zone_reservation(struct btrfs_fs_info *fs_info)
 	}
 	mutex_unlock(&fs_devices->device_list_mutex);
 
-	/* Release reservation for currently active block groups. */
+	/*
+	 * Account all active non-data block groups before selecting one for each role.
+	 * Finishing the extra block groups releases their reservations again.
+	 */
 	spin_lock(&fs_info->zone_active_bgs_lock);
 	list_for_each_entry(block_group, &fs_info->zone_active_bgs, active_bg_list) {
 		struct btrfs_chunk_map *map = block_group->physical_map;
+		struct btrfs_block_group **active_bg;
+		u64 *active_avail;
+		u64 avail;
 
-		if (!(block_group->flags &
-		      (BTRFS_BLOCK_GROUP_METADATA | BTRFS_BLOCK_GROUP_SYSTEM)))
+		if (block_group->flags & BTRFS_BLOCK_GROUP_METADATA) {
+			active_bg = &active_meta_bg;
+			active_avail = &active_meta_avail;
+		} else if (block_group->flags & BTRFS_BLOCK_GROUP_SYSTEM) {
+			active_bg = &active_system_bg;
+			active_avail = &active_system_avail;
+		} else {
 			continue;
+		}
+
+		spin_lock(&block_group->lock);
+		avail = block_group->zone_capacity - block_group->alloc_offset;
+		spin_unlock(&block_group->lock);
+
+		if (!*active_bg || avail > *active_avail) {
+			if (*active_bg)
+				btrfs_put_block_group(*active_bg);
+			*active_bg = block_group;
+			*active_avail = avail;
+			btrfs_get_block_group(*active_bg);
+		}
 
 		for (int i = 0; i < map->num_stripes; i++) {
 			struct btrfs_device *device = map->stripes[i].dev;
@@ -3115,7 +3194,11 @@ void btrfs_check_active_zone_reservation(struct btrfs_fs_info *fs_info)
 			device->zone_info->reserved_active_zones--;
 		}
 	}
+	fs_info->active_meta_bg = active_meta_bg;
+	fs_info->active_system_bg = active_system_bg;
 	spin_unlock(&fs_info->zone_active_bgs_lock);
+
+	return finish_extra_active_nondata_bgs(fs_info);
 }
 
 /*

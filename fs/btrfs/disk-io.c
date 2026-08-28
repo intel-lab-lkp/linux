@@ -3713,7 +3713,12 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 
 	btrfs_free_zone_cache(fs_info);
 
-	btrfs_check_active_zone_reservation(fs_info);
+	ret = btrfs_restore_active_nondata_bgs(fs_info);
+	if (ret) {
+		btrfs_err(fs_info, "failed to restore active non-data block groups: %pe",
+			  ERR_PTR(ret));
+		goto fail_sysfs;
+	}
 
 	if (!sb_rdonly(sb) && fs_info->fs_devices->missing_devices &&
 	    !btrfs_check_rw_degradable(fs_info, NULL)) {
