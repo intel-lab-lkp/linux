@@ -1854,6 +1854,33 @@ static int is_sdca_aux_dev_present(struct device *dev,
 	return 0;
 }
 
+static bool is_peripheral_attached(struct device *dev,
+				    const struct snd_soc_acpi_link_adr *adr_link,
+				    int adr_index)
+{
+	const char *sdw_codec_name;
+	struct sdw_slave *slave;
+
+	sdw_codec_name = _asoc_sdw_get_codec_name(dev, adr_link, adr_index);
+	if (!sdw_codec_name)
+		return true;
+
+	struct device *sdw_dev __free(put_device) =
+	  bus_find_device_by_name(&sdw_bus_type, NULL, sdw_codec_name);
+	if (!sdw_dev)
+		return true;
+
+	slave = dev_to_sdw_dev(sdw_dev);
+
+	if (slave->status == SDW_SLAVE_UNATTACHED) {
+		dev_dbg(dev, "%s not present on the bus, skipping\n",
+		  sdw_codec_name);
+		return false;
+	}
+
+	return true;
+}
+
 int asoc_sdw_count_sdw_endpoints(struct snd_soc_card *card,
 				 int *num_devs, int *num_ends, int *num_aux)
 {
@@ -1869,6 +1896,11 @@ int asoc_sdw_count_sdw_endpoints(struct snd_soc_card *card,
 		for (i = 0; i < adr_link->num_adr; i++) {
 			const struct snd_soc_acpi_adr_device *adr_dev = &adr_link->adr_d[i];
 			struct asoc_sdw_codec_info *codec_info;
+
+			if (!is_peripheral_attached(dev, adr_link, i)) {
+				(*num_devs)--;
+				continue;
+			}
 
 			*num_ends += adr_dev->num_endpoints;
 
@@ -2028,6 +2060,9 @@ int asoc_sdw_parse_sdw_endpoints(struct device *dev,
 					adr_dev->adr);
 				return -EINVAL;
 			}
+
+			if (!is_peripheral_attached(dev, adr_link, i))
+				continue;
 
 			codec_info = asoc_sdw_find_codec_info_part(adr_dev->adr);
 			if (!codec_info)
