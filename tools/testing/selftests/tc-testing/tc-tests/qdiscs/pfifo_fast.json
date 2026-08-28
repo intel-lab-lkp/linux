@@ -9,8 +9,7 @@
         "plugins": {
             "requires": "nsPlugin"
         },
-        "setup": [
-        ],
+        "setup": [],
         "cmdUnderTest": "$TC qdisc add dev $DUMMY handle 1: root pfifo_fast",
         "expExitCode": "0",
         "verifyCmd": "$TC qdisc show dev $DUMMY",
@@ -30,8 +29,7 @@
         "plugins": {
             "requires": "nsPlugin"
         },
-        "setup": [
-        ],
+        "setup": [],
         "cmdUnderTest": "$TC qdisc add dev $DUMMY handle 1: root pfifo_fast",
         "expExitCode": "0",
         "verifyCmd": "$TC -s qdisc show dev $DUMMY",
@@ -81,8 +79,7 @@
         "verifyCmd": "$TC qdisc show dev $DUMMY",
         "matchPattern": "qdisc pfifo_fast 1: root refcnt [0-9]+ bands 3 priomap",
         "matchCount": "0",
-        "teardown": [
-        ]
+        "teardown": []
     },
     {
         "id": "4385",
@@ -104,6 +101,48 @@
         "matchCount": "1",
         "teardown": [
             "$TC qdisc del dev $DUMMY handle 1: root"
+        ]
+    },
+    {
+        "id": "ed33",
+        "name": "Reject tx_queue_len exceeding S16_MAX at set time",
+        "category": [
+            "qdisc",
+            "pfifo_fast"
+        ],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [],
+        "cmdUnderTest": "$IP link set dev $DUMMY txqueuelen 100000000",
+        "expExitCode": "2",
+        "verifyCmd": "$IP link show dev $DUMMY",
+        "matchPattern": "qlen 1000$",
+        "matchCount": "1",
+        "teardown": []
+    },
+    {
+        "id": "04b5",
+        "name": "Reject tx_queue_len resize exceeding S16_MAX, rollback to original",
+        "category": [
+            "qdisc",
+            "pfifo_fast"
+        ],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$IP link set dev $DUMMY txqueuelen 500",
+            "$TC qdisc add dev $DUMMY handle 1: root pfifo_fast"
+        ],
+        "cmdUnderTest": "$IP link set dev $DUMMY txqueuelen 100000000",
+        "expExitCode": "2",
+        "verifyCmd": "$IP link show dev $DUMMY",
+        "matchPattern": "qlen 500$",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY handle 1: root",
+            "$IP link set dev $DUMMY txqueuelen 1000"
         ]
     }
 ]
