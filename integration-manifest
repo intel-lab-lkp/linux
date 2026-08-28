@@ -1,0 +1,42 @@
+drm drm-fixes 8d3ae59288f1e7d58d76558a6ee96d533bc5019f
+	Linux 7.2
+drm-misc drm-misc-fixes 20839d02c0cf7437bc508d4c5430538d9dc4f428
+	drm/tegra: Add blend mode properties
+drm-rust drm-rust-fixes 8cdeaa50eae8dad34885515f62559ee83e7e8dda
+	Linux 7.2-rc2
+drm-intel drm-intel-fixes 266ebacffc5809478a2e80d61ddc58c921dbe2b4
+	drm/i915/lt_phy: program DDI_CLK_VALFREQ with DDI clock frequency
+drm-xe drm-xe-fixes ef526d122b62af5afa437f095aa6661a953676c4
+	drm/xe: Fix xe_device_probe() failure
+drm-amdgpu drm-amdgpu-fixes 8d3ae59288f1e7d58d76558a6ee96d533bc5019f
+	Linux 7.2
+drm drm-next a8b02aa825803e6c5b6b27340f583900afa0861d
+	Merge tag 'amd-drm-next-7.3-2026-08-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 271e90eb5f9ff34951647e5ed33c1775eebcca50
+	drm: use drm_warn() in validate_blend_mode_for_alpha_formats()
+drm-rust drm-rust-next-fixes 4c9ba407018e8deb06dbc643112bac8f40404f95
+	gpu: nova-core: falcon: use I/O projection to check transfer bounds
+drm-intel drm-intel-next-fixes 65b92bc671db7c222f8de1146c88e40fe8764d95
+	Merge tag 'drm-xe-next-fixes-2026-08-13' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-xe drm-xe-next-fixes a62212b35a214c2ff3bd1c785a440d7ad8205ec9
+	drm/xe/sysctrl: Read mailbox phase bit from hardware
+drm-amdgpu drm-amdgpu-next-fixes 1ff8d3e3165fd077faa4259fd232bdddcd30249f
+	Merge tag 'drm-xe-next-fixes-2026-08-20' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next f9c2f70ee41544717b3c209083073db1e21f919b
+	drm/gpusvm: Assign maintainers to the DRM GPUSVM helpers
+drm-rust drm-rust-next d53bc149eea6213e9c4a4604df5521db7b7296ca
+	gpu: nova-core: Extract PMC registers definitions
+drm-intel drm-intel-next 050e8067dcb8f5787be41753832d4a023d0ffe74
+	drm/i915/cdclk: Hoist intel_cdclk_{pre,post}_notify() calls upwards
+drm-intel drm-intel-gt-next 7536eb9ea9058ce0dbcce7c862e586c2034a4c6e
+	drm/i915/gem: Use simpler versions of min*()
+drm-xe drm-xe-next 6a8789e948c15f6daea4961e73e8ba01016716b2
+	drm/xe: Add debugfs knob to control GPGPU preemption granularity
+drm-amdgpu drm-amdgpu-next 1ff8d3e3165fd077faa4259fd232bdddcd30249f
+	Merge tag 'drm-xe-next-fixes-2026-08-20' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-intel topic/core-for-CI d8451c92a4da76aa7cabb07864ef2a601c482ca7
+	Revert "lockdep: Enable PROVE_RAW_LOCK_NESTING with PROVE_LOCKING."
+drm-xe topic/xe-for-CI b275cb3f07a7ab3ef3bd419db86bd42fa95dcedb
+	topic/xe-for-CI: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
