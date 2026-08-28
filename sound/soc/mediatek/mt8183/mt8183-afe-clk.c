@@ -265,6 +265,9 @@ static int apll1_mux_setting(struct mtk_base_afe *afe, bool enable)
 			goto ERR_SELECT_CLK_TOP_MUX_AUD_ENG1;
 		}
 	} else {
+		clk_disable_unprepare(afe_priv->clk[CLK_TOP_MUX_AUD_ENG1]);
+		clk_disable_unprepare(afe_priv->clk[CLK_TOP_MUX_AUD_1]);
+
 		ret = clk_set_parent(afe_priv->clk[CLK_TOP_MUX_AUD_ENG1],
 				     afe_priv->clk[CLK_CLK26M]);
 		if (ret) {
@@ -273,7 +276,6 @@ static int apll1_mux_setting(struct mtk_base_afe *afe, bool enable)
 				aud_clks[CLK_CLK26M], ret);
 			goto EXIT;
 		}
-		clk_disable_unprepare(afe_priv->clk[CLK_TOP_MUX_AUD_ENG1]);
 
 		ret = clk_set_parent(afe_priv->clk[CLK_TOP_MUX_AUD_1],
 				     afe_priv->clk[CLK_CLK26M]);
@@ -283,7 +285,6 @@ static int apll1_mux_setting(struct mtk_base_afe *afe, bool enable)
 				aud_clks[CLK_CLK26M], ret);
 			goto EXIT;
 		}
-		clk_disable_unprepare(afe_priv->clk[CLK_TOP_MUX_AUD_1]);
 	}
 
 	return 0;
@@ -339,6 +340,9 @@ static int apll2_mux_setting(struct mtk_base_afe *afe, bool enable)
 			goto ERR_SELECT_CLK_TOP_MUX_AUD_ENG2;
 		}
 	} else {
+		clk_disable_unprepare(afe_priv->clk[CLK_TOP_MUX_AUD_ENG2]);
+		clk_disable_unprepare(afe_priv->clk[CLK_TOP_MUX_AUD_2]);
+
 		ret = clk_set_parent(afe_priv->clk[CLK_TOP_MUX_AUD_ENG2],
 				     afe_priv->clk[CLK_CLK26M]);
 		if (ret) {
@@ -347,7 +351,6 @@ static int apll2_mux_setting(struct mtk_base_afe *afe, bool enable)
 				aud_clks[CLK_CLK26M], ret);
 			goto EXIT;
 		}
-		clk_disable_unprepare(afe_priv->clk[CLK_TOP_MUX_AUD_ENG2]);
 
 		ret = clk_set_parent(afe_priv->clk[CLK_TOP_MUX_AUD_2],
 				     afe_priv->clk[CLK_CLK26M]);
@@ -357,7 +360,6 @@ static int apll2_mux_setting(struct mtk_base_afe *afe, bool enable)
 				aud_clks[CLK_CLK26M], ret);
 			goto EXIT;
 		}
-		clk_disable_unprepare(afe_priv->clk[CLK_TOP_MUX_AUD_2]);
 	}
 
 	return 0;
