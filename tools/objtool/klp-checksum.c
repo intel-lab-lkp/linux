@@ -129,6 +129,14 @@ static void checksum_update_insn(struct objtool_file *file, struct symbol *func,
 		goto alts;
 	}
 
+	if (strstarts(sym->name, ".LC")) {
+		void *cst;
+
+		cst = sym->sec->data->d_buf + sym->offset + offset;
+		__checksum_update_insn(func, insn, cst, sym->sec->sh.sh_entsize);
+		goto alts;
+	}
+
 	if (is_sec_sym(sym)) {
 		sym = find_symbol_containing(reloc->sym->sec, offset);
 		if (!sym)
