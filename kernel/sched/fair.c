@@ -10521,12 +10521,13 @@ static inline long migrate_degrades_locality(struct task_struct *p,
 #endif /* !CONFIG_NUMA_BALANCING */
 
 /*
- * Check whether the task is ineligible on the destination cpu
+ * Check whether @p would be ineligible if migrated to @dest_cpu.
  *
- * When the PLACE_LAG scheduling feature is enabled and
- * dst_cfs_rq->nr_queued is greater than 1, if the task
- * is ineligible, it will also be ineligible when
- * it is migrated to the destination cpu.
+ * Eligibility is evaluated on the source runqueue, because place_entity()
+ * preserves the lag over a migration: a task that is ineligible on the
+ * source stays ineligible on the destination.  It only matters when the
+ * destination has something queued, as a task joining an empty runqueue is
+ * eligible either way.
  */
 static inline int task_is_ineligible_on_dst_cpu(struct task_struct *p, int dest_cpu)
 {
