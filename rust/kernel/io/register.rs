@@ -71,7 +71,7 @@
 //!
 //! // Read from the register's defined offset (0x100).
 //! let boot0 = io.read(BOOT_0);
-//! pr_info!("chip revision: {}.{}", boot0.major_revision().get(), boot0.minor_revision().get());
+//! pr_info!("chip revision: {}.{}\n", boot0.major_revision().get(), boot0.minor_revision().get());
 //!
 //! // Update some fields and write the new value back.
 //! let new_boot0 = boot0
