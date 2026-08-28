@@ -524,6 +524,7 @@ static int qcom_pas_attach(struct rproc *rproc)
 	int ret;
 
 	pas->q6v5.handover_issued = true;
+	pas->q6v5.handover_irq_enabled = true;
 	enable_irq(pas->q6v5.handover_irq);
 
 	pas->q6v5.running = true;
@@ -570,6 +571,7 @@ unroll_attach:
 	pas->rproc->state = RPROC_OFFLINE;
 	ret = -EINVAL;
 disable_running:
+	pas->q6v5.handover_irq_enabled = false;
 	disable_irq(pas->q6v5.handover_irq);
 	pas->q6v5.running = false;
 
