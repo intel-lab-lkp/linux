@@ -5088,8 +5088,13 @@ static int emulator_read_write_onepage(unsigned long addr, void *val,
 	 * Note, this cannot be used on string operations since string
 	 * operation using rep will only have the initial GPA from the NPF
 	 * occurred.
+	 *
+	 * The guest may have changed the instruction since the fault.  Reuse
+	 * the GPA for writes only if hardware reported a write access;
+	 * otherwise, recheck permissions for the decoded access.
 	 */
-	if (ctxt->gpa_available && emulator_can_use_gpa(ctxt) &&
+	if ((ctxt->gpa_access & (write ? ACC_WRITE_MASK : ACC_READ_MASK)) &&
+	    emulator_can_use_gpa(ctxt) &&
 	    (addr & ~PAGE_MASK) == (ctxt->gpa_val & ~PAGE_MASK)) {
 		gpa = ctxt->gpa_val;
 		ret = vcpu_is_mmio_gpa(vcpu, addr, gpa, write);
@@ -5938,7 +5943,7 @@ static void init_emulate_ctxt(struct kvm_vcpu *vcpu)
 
 	kvm_x86_call(get_cs_db_l_bits)(vcpu, &cs_db, &cs_l);
 
-	ctxt->gpa_available = false;
+	ctxt->gpa_access = 0;
 	ctxt->eflags = kvm_get_rflags(vcpu);
 	ctxt->tf = (ctxt->eflags & X86_EFLAGS_TF) != 0;
 
@@ -6454,7 +6459,10 @@ restart:
 
 		/* With shadow page tables, cr2 contains a GVA or nGPA. */
 		if (vcpu->arch.mmu->root_role.direct) {
-			ctxt->gpa_available = true;
+			/* A write fault can require a read for RMW emulation. */
+			ctxt->gpa_access = ACC_READ_MASK;
+			if (emulation_type & EMULTYPE_PF_WRITE)
+				ctxt->gpa_access |= ACC_WRITE_MASK;
 			ctxt->gpa_val = cr2_or_gpa;
 		}
 	} else {
