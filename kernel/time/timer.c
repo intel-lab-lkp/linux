@@ -897,10 +897,12 @@ static inline void detach_timer(struct timer_list *timer, bool clear_pending)
 static int detach_if_pending(struct timer_list *timer, struct timer_base *base,
 			     bool clear_pending)
 {
-	unsigned idx = timer_get_idx(timer);
+	unsigned int idx;
 
 	if (!timer_pending(timer))
 		return 0;
+
+	idx = timer_get_idx(timer);
 
 	if (hlist_is_singular_node(&timer->entry, base->vectors + idx)) {
 		__clear_bit(idx, base->pending_map);
