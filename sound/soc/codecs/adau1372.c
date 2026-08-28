@@ -787,12 +787,13 @@ static int adau1372_enable_pll(struct adau1372 *adau1372)
 
 static int adau1372_set_power(struct adau1372 *adau1372, bool enable)
 {
+	int ret;
+
 	if (adau1372->enabled == enable)
 		return 0;
 
 	if (enable) {
 		unsigned int clk_ctrl = ADAU1372_CLK_CTRL_MCLK_EN;
-		int ret;
 
 		ret = clk_prepare_enable(adau1372->mclk);
 		if (ret)
@@ -811,24 +812,21 @@ static int adau1372_set_power(struct adau1372 *adau1372, bool enable)
 		 */
 		if (adau1372->use_pll) {
 			ret = adau1372_enable_pll(adau1372);
-			if (ret) {
-				if (!adau1372->pd_gpio)
-					regmap_update_bits(adau1372->regmap,
-							   ADAU1372_REG_CLK_CTRL,
-							   ADAU1372_CLK_CTRL_PLL_EN,
-							   0);
-				regcache_cache_only(adau1372->regmap, true);
-				if (adau1372->pd_gpio)
-					gpiod_set_value(adau1372->pd_gpio, 1);
-				clk_disable_unprepare(adau1372->mclk);
-				return ret;
-			}
+			if (ret)
+				goto err_power_down;
 			clk_ctrl |= ADAU1372_CLK_CTRL_CLKSRC;
 		}
 
-		regmap_update_bits(adau1372->regmap, ADAU1372_REG_CLK_CTRL,
-				   ADAU1372_CLK_CTRL_MCLK_EN | ADAU1372_CLK_CTRL_CLKSRC, clk_ctrl);
-		regcache_sync(adau1372->regmap);
+		ret = regmap_update_bits(adau1372->regmap, ADAU1372_REG_CLK_CTRL,
+					 ADAU1372_CLK_CTRL_MCLK_EN |
+					 ADAU1372_CLK_CTRL_CLKSRC,
+					 clk_ctrl);
+		if (ret)
+			goto err_power_down;
+
+		ret = regcache_sync(adau1372->regmap);
+		if (ret)
+			goto err_power_down;
 	} else {
 		if (adau1372->pd_gpio) {
 			/*
@@ -849,6 +847,20 @@ static int adau1372_set_power(struct adau1372 *adau1372, bool enable)
 	adau1372->enabled = enable;
 
 	return 0;
+
+err_power_down:
+	if (!adau1372->pd_gpio)
+		regmap_update_bits(adau1372->regmap, ADAU1372_REG_CLK_CTRL,
+				   ADAU1372_CLK_CTRL_MCLK_EN |
+				   ADAU1372_CLK_CTRL_PLL_EN, 0);
+
+	regcache_cache_only(adau1372->regmap, true);
+	regcache_mark_dirty(adau1372->regmap);
+	if (adau1372->pd_gpio)
+		gpiod_set_value(adau1372->pd_gpio, 1);
+	clk_disable_unprepare(adau1372->mclk);
+
+	return ret;
 }
 
 static int adau1372_set_bias_level(struct snd_soc_component *component,
