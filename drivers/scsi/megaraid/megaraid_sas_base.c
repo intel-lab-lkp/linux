@@ -7875,8 +7875,9 @@ megasas_resume(struct device *dev)
 			goto fail_init_mfi;
 	}
 
-	if (megasas_get_ctrl_info(instance) != DCMD_SUCCESS)
-		goto fail_init_mfi;
+	scoped_guard(mutex, &instance->reset_mutex)
+		if (megasas_get_ctrl_info(instance) != DCMD_SUCCESS)
+			goto fail_init_mfi;
 
 	tasklet_init(&instance->isr_tasklet, instance->instancet->tasklet,
 		     (unsigned long)instance);
