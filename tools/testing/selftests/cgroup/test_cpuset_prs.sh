@@ -107,6 +107,17 @@ then
 	echo "Pre-isolated CPUs: $BOOT_ISOLCPUS"
 fi
 
+# Cache the CPUs isolated from scheduler domains at boot.
+BOOT_ISOLATED_FILE=/sys/devices/system/cpu/isolated
+BOOT_CPUS=
+BOOT_CPU=
+if [[ -r $BOOT_ISOLATED_FILE ]]
+then
+	BOOT_CPUS=$(cat $BOOT_ISOLATED_FILE)
+	[[ -n "$BOOT_CPUS" ]] &&
+		BOOT_CPU=$(echo "$BOOT_CPUS" | sed -e 's/[,-].*//')
+fi
+
 cleanup()
 {
 	online_cpus
@@ -1158,25 +1169,22 @@ test_isolated()
 }
 
 #
-# Select an online CPU isolated from scheduler domains at boot.
+# Check that a boot-isolated CPU selected during initialization is online.
 # $1: test name used in the skip message
 #
 get_boot_isolated_cpu()
 {
 	TEST_NAME=$1
-	BOOT_ISOLATED_FILE=/sys/devices/system/cpu/isolated
 
 	[[ -r $BOOT_ISOLATED_FILE ]] || {
 		echo "$TEST_NAME test SKIPPED: boot isolation state unavailable"
 		return 1
 	}
-	BOOT_CPUS=$(cat $BOOT_ISOLATED_FILE)
 	[[ -n "$BOOT_CPUS" ]] || {
 		echo "$TEST_NAME test SKIPPED: no boot-isolated CPU"
 		return 1
 	}
 
-	BOOT_CPU=$(echo "$BOOT_CPUS" | sed -e 's/[,-].*//')
 	CPU_ONLINE=/sys/devices/system/cpu/cpu${BOOT_CPU}/online
 	[[ ! -e $CPU_ONLINE || $(cat $CPU_ONLINE) -eq 1 ]] || {
 		echo "$TEST_NAME test SKIPPED: CPU $BOOT_CPU is offline"
@@ -1209,6 +1217,58 @@ test_boot_isolated()
 		echo "Boot-isolated CPU $BOOT_CPU was lost after partition release"
 		exit 1
 	}
+	echo "" > cpuset.cpus
+	cd $CGROUP2
+	echo "$TEST_NAME test PASSED."
+}
+
+#
+# A parent's type and CPU-mask changes must check only CPUs owned directly by
+# the parent, not a boot-isolated CPU owned by a valid child partition.
+#
+test_child_owned_cpus()
+{
+	TEST_NAME="Child-owned CPU type change"
+	get_boot_isolated_cpu "$TEST_NAME" || return 0
+	echo "Running $TEST_NAME test ..."
+
+	cd $CGROUP2/test
+	echo member > cpuset.cpus.partition
+	echo +cpuset > cgroup.subtree_control
+	echo 2,$BOOT_CPU > cpuset.cpus
+	[[ $(cat cpuset.cpus.effective) = "2,$BOOT_CPU" ]] || {
+		echo "$TEST_NAME test SKIPPED: CPUs 2,$BOOT_CPU are unavailable"
+		echo "" > cpuset.cpus
+		cd $CGROUP2
+		return 0
+	}
+	test_partition isolated
+	mkdir A1
+	cd A1
+	echo $BOOT_CPU > cpuset.cpus
+	test_partition isolated
+	cd ..
+	test_effective_cpus 2
+	test_partition root
+	echo 2-3,$BOOT_CPU > cpuset.cpus
+	test_effective_cpus 2-3
+	[[ $(cat cpuset.cpus.partition) = root ]] || {
+		echo "Parent partition became invalid during CPU update"
+		exit 1
+	}
+	[[ $(cat A1/cpuset.cpus.partition) = isolated ]] || {
+		echo "Child partition changed during parent update"
+		exit 1
+	}
+	check_isolcpus "." || {
+		echo "Parent update corrupted child isolation"
+		exit 1
+	}
+	cd A1
+	test_partition member
+	cd ..
+	rmdir A1
+	test_partition member
 	echo "" > cpuset.cpus
 	cd $CGROUP2
 	echo "$TEST_NAME test PASSED."
@@ -1286,5 +1346,6 @@ run_state_test TEST_MATRIX
 run_remote_state_test REMOTE_TEST_MATRIX
 test_isolated
 test_boot_isolated
+test_child_owned_cpus
 test_inotify
 echo "All tests PASSED."
