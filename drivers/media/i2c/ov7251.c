@@ -1809,7 +1809,7 @@ MODULE_DEVICE_TABLE(acpi, ov7251_acpi_match);
 static struct i2c_driver ov7251_i2c_driver = {
 	.driver = {
 		.of_match_table = ov7251_of_match,
-		.acpi_match_table = ov7251_acpi_match,
+		.acpi_match_table = ACPI_PTR(ov7251_acpi_match),
 		.name  = "ov7251",
 		.pm = &ov7251_pm_ops,
 	},

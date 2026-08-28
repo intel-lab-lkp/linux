@@ -939,7 +939,7 @@ static struct i2c_driver ov02e10_i2c_driver = {
 	.driver = {
 		.name = "ov02e10",
 		.pm = pm_sleep_ptr(&ov02e10_pm_ops),
-		.acpi_match_table = ov02e10_acpi_ids,
+		.acpi_match_table = ACPI_PTR(ov02e10_acpi_ids),
 		.of_match_table = ov02e10_of_match,
 	},
 	.probe = ov02e10_probe,

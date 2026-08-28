@@ -1470,7 +1470,7 @@ MODULE_DEVICE_TABLE(acpi, ov2740_acpi_ids);
 static struct i2c_driver ov2740_i2c_driver = {
 	.driver = {
 		.name = "ov2740",
-		.acpi_match_table = ov2740_acpi_ids,
+		.acpi_match_table = ACPI_PTR(ov2740_acpi_ids),
 		.pm = pm_sleep_ptr(&ov2740_pm_ops),
 	},
 	.probe = ov2740_probe,

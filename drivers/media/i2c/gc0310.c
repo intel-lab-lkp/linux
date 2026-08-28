@@ -768,7 +768,7 @@ static struct i2c_driver gc0310_driver = {
 	.driver = {
 		.name = "gc0310",
 		.pm = pm_sleep_ptr(&gc0310_pm_ops),
-		.acpi_match_table = gc0310_acpi_match,
+		.acpi_match_table = ACPI_PTR(gc0310_acpi_match),
 	},
 	.probe = gc0310_probe,
 	.remove = gc0310_remove,

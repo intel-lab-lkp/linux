@@ -973,7 +973,7 @@ MODULE_DEVICE_TABLE(acpi, intel_cvs_acpi_match);
 static struct i2c_driver cvs_driver = {
 	.driver = {
 		.name = "intel_cvs",
-		.acpi_match_table = intel_cvs_acpi_match,
+		.acpi_match_table = ACPI_PTR(intel_cvs_acpi_match),
 		.pm = pm_ptr(&cvs_pm_ops),
 	},
 	.probe = cvs_probe,
@@ -1000,7 +1000,7 @@ static void cvs_platform_remove(struct platform_device *pdev)
 static struct platform_driver cvs_platform_driver = {
 	.driver = {
 		.name = "cvs_platform",
-		.acpi_match_table = intel_cvs_acpi_match,
+		.acpi_match_table = ACPI_PTR(intel_cvs_acpi_match),
 		.pm = pm_ptr(&cvs_pm_ops),
 	},
 	.probe = cvs_platform_probe,

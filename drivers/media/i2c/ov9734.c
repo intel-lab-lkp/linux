@@ -980,7 +980,7 @@ MODULE_DEVICE_TABLE(acpi, ov9734_acpi_ids);
 static struct i2c_driver ov9734_i2c_driver = {
 	.driver = {
 		.name = "ov9734",
-		.acpi_match_table = ov9734_acpi_ids,
+		.acpi_match_table = ACPI_PTR(ov9734_acpi_ids),
 	},
 	.probe = ov9734_probe,
 	.remove = ov9734_remove,

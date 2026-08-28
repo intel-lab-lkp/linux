@@ -3679,7 +3679,7 @@ static const struct dev_pm_ops ccs_pm_ops = {
 
 static struct i2c_driver ccs_i2c_driver = {
 	.driver	= {
-		.acpi_match_table = ccs_acpi_table,
+		.acpi_match_table = ACPI_PTR(ccs_acpi_table),
 		.of_match_table = ccs_of_table,
 		.name = CCS_NAME,
 		.pm = &ccs_pm_ops,

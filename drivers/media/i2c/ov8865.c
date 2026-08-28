@@ -3144,7 +3144,7 @@ static struct i2c_driver ov8865_driver = {
 	.driver = {
 		.name = "ov8865",
 		.of_match_table = ov8865_of_match,
-		.acpi_match_table = ov8865_acpi_match,
+		.acpi_match_table = ACPI_PTR(ov8865_acpi_match),
 		.pm = &ov8865_pm_ops,
 	},
 	.probe = ov8865_probe,

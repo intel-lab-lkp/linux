@@ -1312,7 +1312,7 @@ static struct i2c_driver ov2680_i2c_driver = {
 		.name  = "ov2680",
 		.pm = pm_sleep_ptr(&ov2680_pm_ops),
 		.of_match_table	= ov2680_dt_ids,
-		.acpi_match_table = ov2680_acpi_ids,
+		.acpi_match_table = ACPI_PTR(ov2680_acpi_ids),
 	},
 	.probe		= ov2680_probe,
 	.remove		= ov2680_remove,

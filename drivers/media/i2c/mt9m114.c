@@ -2684,7 +2684,7 @@ static struct i2c_driver mt9m114_driver = {
 		.name	= "mt9m114",
 		.pm	= &mt9m114_pm_ops,
 		.of_match_table = mt9m114_of_ids,
-		.acpi_match_table = mt9m114_acpi_ids,
+		.acpi_match_table = ACPI_PTR(mt9m114_acpi_ids),
 	},
 	.probe		= mt9m114_probe,
 	.remove		= mt9m114_remove,
