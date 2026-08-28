@@ -1104,9 +1104,6 @@ out:
 	if (ret < 0 && new_map.nr_extents > UID_GID_MAP_MAX_BASE_EXTENTS) {
 		kfree(new_map.forward);
 		kfree(new_map.reverse);
-		map->forward = NULL;
-		map->reverse = NULL;
-		map->nr_extents = 0;
 	}
 
 	mutex_unlock(&userns_state_mutex);
