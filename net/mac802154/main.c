@@ -276,6 +276,11 @@ void ieee802154_unregister_hw(struct ieee802154_hw *hw)
 
 	tasklet_kill(&local->tasklet);
 	flush_workqueue(local->workqueue);
+	/*
+	 * Drain mac_wq before unregistering interfaces; some workers access
+	 * sub-interface data and acquire rtnl themselves.
+	 */
+	drain_workqueue(local->mac_wq);
 
 	rtnl_lock();
 
