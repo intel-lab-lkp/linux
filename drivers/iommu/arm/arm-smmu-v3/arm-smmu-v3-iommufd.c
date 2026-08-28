@@ -379,10 +379,13 @@ int arm_vsmmu_cache_invalidate(struct iommufd_viommu *viommu,
 	int ret;
 
 	cmds = kzalloc_objs(*cmds, array->entry_num);
-	if (!cmds)
+	if (!cmds) {
+		array->entry_num = 0;
 		return -ENOMEM;
+	}
 	cur = cmds;
 	end = cmds + array->entry_num;
+	last = cmds;
 
 	static_assert(sizeof(*cmds) == 2 * sizeof(u64));
 	ret = iommu_copy_struct_from_full_user_array(
@@ -391,7 +394,6 @@ int arm_vsmmu_cache_invalidate(struct iommufd_viommu *viommu,
 	if (ret)
 		goto out;
 
-	last = cmds;
 	while (cur != end) {
 		ret = arm_vsmmu_convert_user_cmd(vsmmu, cur);
 		if (ret)
@@ -405,14 +407,12 @@ int arm_vsmmu_cache_invalidate(struct iommufd_viommu *viommu,
 		/* FIXME always uses the main cmdq rather than trying to group by type */
 		ret = __arm_smmu_cmdq_issue_cmdlist(smmu, &smmu->cmdq, &last->cmd,
 						    cur - last, true);
-		if (ret) {
-			cur--;
+		if (ret)
 			goto out;
-		}
 		last = cur;
 	}
 out:
-	array->entry_num = cur - cmds;
+	array->entry_num = last - cmds;
 	kfree(cmds);
 	return ret;
 }
