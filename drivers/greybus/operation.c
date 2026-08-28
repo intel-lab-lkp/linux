@@ -364,13 +364,20 @@ gb_operation_message_alloc(struct gb_host_device *hd, u8 type,
 {
 	struct gb_message *message;
 	struct gb_operation_msg_hdr *header;
-	size_t message_size = payload_size + sizeof(*header);
+	size_t message_size;
 
-	if (message_size > hd->buffer_size_max) {
+	/*
+	 * Reject a payload size that would make the total message size
+	 * overflow, before it wraps around and bypasses the maximum
+	 * buffer size check.
+	 */
+	if (payload_size > hd->buffer_size_max - sizeof(*header)) {
 		dev_warn(&hd->dev, "requested message size too big (%zu > %zu)\n",
-			 message_size, hd->buffer_size_max);
+			 payload_size, hd->buffer_size_max - sizeof(*header));
 		return NULL;
 	}
+
+	message_size = payload_size + sizeof(*header);
 
 	/* Allocate the message structure and buffer. */
 	message = kmem_cache_zalloc(gb_message_cache, gfp_flags);
@@ -1047,6 +1054,11 @@ void gb_connection_recv(struct gb_connection *connection,
 	/* Use memcpy as data may be unaligned */
 	memcpy(&header, data, sizeof(header));
 	msg_size = le16_to_cpu(header.size);
+	if (msg_size < sizeof(header)) {
+		dev_err_ratelimited(dev, "%s: short message received (%zu < %zu)\n",
+				    connection->name, msg_size, sizeof(header));
+		return;
+	}
 	if (size < msg_size) {
 		dev_err_ratelimited(dev,
 				    "%s: incomplete message 0x%04x of type 0x%02x received (%zu < %zu)\n",
