@@ -1637,9 +1637,7 @@ EXPORT_SYMBOL(create_empty_buffers);
  * moment when something will explicitly mark the buffer dirty (hopefully that
  * will not happen until we will free that block ;-) We don't even need to mark
  * it not-uptodate - nobody can expect anything from a newly allocated buffer
- * anyway. We used to use unmap_buffer() for such invalidation, but that was
- * wrong. We definitely don't want to mark the alias unmapped, for example - it
- * would confuse anyone who might pick it with bread() afterwards...
+ * anyway.
  *
  * Also..  Note that bforget() doesn't lock the buffer.  So there can be
  * writeout I/O going on against recently-freed buffers.  We don't wait on that
