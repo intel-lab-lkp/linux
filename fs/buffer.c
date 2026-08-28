@@ -647,6 +647,14 @@ void write_boundary_block(struct block_device *bdev,
 	}
 }
 
+/**
+ * mmb_mark_buffer_dirty - Mark a metadata buffer dirty.
+ * @bh: The buffer to mark dirty.
+ * @mmb: The list of buffers to add the buffer to.
+ *
+ * Mark the buffer dirty and add it to the list if it is not already on
+ * a list.
+ */
 void mmb_mark_buffer_dirty(struct buffer_head *bh,
 			   struct mapping_metadata_bhs *mmb)
 {
