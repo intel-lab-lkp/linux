@@ -818,9 +818,23 @@ static ssize_t btrfs_dio_read(struct kiocb *iocb, struct iov_iter *iter,
 			      size_t done_before)
 {
 	struct btrfs_dio_data data = { 0 };
+	unsigned int dio_flags = IOMAP_DIO_PARTIAL | IOMAP_DIO_FSBLOCK_ALIGNED;
+
+	/*
+	 * Data checksum requires stable buffer.
+	 *
+	 * And unlike dio writes, reads are always from one single
+	 * mirror, so there is no need to consider mirror/parity profiles.
+	 */
+	if (!(BTRFS_I(file_inode(iocb->ki_filp))->flags & BTRFS_INODE_NODATASUM)) {
+		/* Bounce will allocate memory, breaking NOWAIT. */
+		if (iocb->ki_flags & IOCB_NOWAIT)
+			return -EAGAIN;
+		dio_flags |= IOMAP_DIO_BOUNCE;
+	}
 
 	return iomap_dio_rw(iocb, iter, &btrfs_dio_iomap_ops, &btrfs_dio_ops,
-			    IOMAP_DIO_PARTIAL | IOMAP_DIO_FSBLOCK_ALIGNED, &data, done_before);
+			    dio_flags, &data, done_before);
 }
 
 static bool need_stable_write(struct btrfs_inode *inode)
