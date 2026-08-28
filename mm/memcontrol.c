@@ -2306,6 +2306,30 @@ static bool is_memcg_drain_needed(struct memcg_stock_pcp *stock,
 	return flush;
 }
 
+static bool memcg_stock_should_drain(struct memcg_stock_pcp *stock,
+				       struct mem_cgroup *root_memcg)
+{
+	if (test_bit(FLUSHING_CACHED_CHARGE, &stock->flags))
+		return false;
+	if (!is_memcg_drain_needed(stock, root_memcg))
+		return false;
+	if (test_and_set_bit(FLUSHING_CACHED_CHARGE, &stock->flags))
+		return false;
+	return true;
+}
+
+static bool obj_stock_should_drain(struct obj_stock_pcp *stock,
+				  struct mem_cgroup *root_memcg)
+{
+	if (test_bit(FLUSHING_CACHED_CHARGE, &stock->flags))
+		return false;
+	if (!obj_stock_flush_required(stock, root_memcg))
+		return false;
+	if (test_and_set_bit(FLUSHING_CACHED_CHARGE, &stock->flags))
+		return false;
+	return true;
+}
+
 static void schedule_drain_work(int cpu, struct work_struct *work)
 {
 	/*
@@ -2342,20 +2366,14 @@ void drain_all_stock(struct mem_cgroup *root_memcg)
 		struct memcg_stock_pcp *memcg_st = &per_cpu(memcg_stock, cpu);
 		struct obj_stock_pcp *obj_st = &per_cpu(obj_stock, cpu);
 
-		if (!test_bit(FLUSHING_CACHED_CHARGE, &memcg_st->flags) &&
-		    is_memcg_drain_needed(memcg_st, root_memcg) &&
-		    !test_and_set_bit(FLUSHING_CACHED_CHARGE,
-				      &memcg_st->flags)) {
+		if (memcg_stock_should_drain(memcg_st, root_memcg)) {
 			if (cpu == curcpu)
 				drain_local_memcg_stock(&memcg_st->work);
 			else
 				schedule_drain_work(cpu, &memcg_st->work);
 		}
 
-		if (!test_bit(FLUSHING_CACHED_CHARGE, &obj_st->flags) &&
-		    obj_stock_flush_required(obj_st, root_memcg) &&
-		    !test_and_set_bit(FLUSHING_CACHED_CHARGE,
-				      &obj_st->flags)) {
+		if (obj_stock_should_drain(obj_st, root_memcg)) {
 			if (cpu == curcpu)
 				drain_local_obj_stock(&obj_st->work);
 			else
