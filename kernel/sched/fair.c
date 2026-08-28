@@ -10848,10 +10848,12 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	 * We do not migrate tasks that are:
 	 * 1) delayed dequeued unless we migrate load, or
 	 * 2) target cfs_rq is in throttled hierarchy, or
-	 * 3) cannot be migrated to this CPU due to cpus_ptr, or
-	 * 4) running (obviously), or
-	 * 5) are cache-hot on their current CPU, or
-	 * 6) are blocked on mutexes (if SCHED_PROXY_EXEC is enabled)
+	 * 3) ineligible, while this domain has not failed to balance yet, or
+	 * 4) per-CPU kthreads, or
+	 * 5) blocked on mutexes (if SCHED_PROXY_EXEC is enabled), or
+	 * 6) cannot be migrated to this CPU due to cpus_ptr, or
+	 * 7) running (obviously), or
+	 * 8) are cache-hot on their current CPU
 	 */
 	if ((p->se.sched_delayed) && (env->migration_type != migrate_load))
 		return 0;
