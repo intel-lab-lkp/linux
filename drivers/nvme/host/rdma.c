@@ -45,6 +45,24 @@ static LIST_HEAD_GUARDED(device_list, device_list_mutex);
 
 static DEFINE_MUTEX(nvme_rdma_ctrl_mutex);
 static LIST_HEAD_GUARDED(nvme_rdma_ctrl_list, nvme_rdma_ctrl_mutex);
+static LIST_HEAD_GUARDED(nvme_rdma_removing_list, nvme_rdma_ctrl_mutex);
+
+struct nvme_rdma_removing_device {
+	struct list_head	entry
+		__guarded_by(&nvme_rdma_ctrl_mutex);
+	struct ib_device	*dev;
+};
+
+static bool nvme_rdma_device_removing(struct ib_device *ib_device)
+	__must_hold(&nvme_rdma_ctrl_mutex)
+{
+	struct nvme_rdma_removing_device *removing;
+
+	list_for_each_entry(removing, &nvme_rdma_removing_list, entry)
+		if (removing->dev == ib_device)
+			return true;
+	return false;
+}
 
 struct nvme_rdma_device {
 	struct ib_device	*dev;
@@ -53,6 +71,8 @@ struct nvme_rdma_device {
 	struct list_head	entry
 		__guarded_by(&device_list_mutex);
 	unsigned int		num_inline_segments;
+	bool			dying
+		__guarded_by(&device_list_mutex);
 };
 
 struct nvme_rdma_qe {
@@ -378,6 +398,11 @@ nvme_rdma_find_get_device(struct rdma_cm_id *cm_id)
 
 	mutex_lock(&device_list_mutex);
 	list_for_each_entry(ndev, &device_list, entry) {
+		if (ndev->dying) {
+			if (ndev->dev == cm_id->device)
+				goto out_err;
+			continue;
+		}
 		if (ndev->dev->node_guid == cm_id->device->node_guid &&
 		    nvme_rdma_dev_get(ndev))
 			goto out_unlock;
@@ -2380,6 +2405,15 @@ static struct nvme_ctrl *nvme_rdma_create_ctrl(struct device *dev,
 		nvmf_ctrl_subsysnqn(&ctrl->ctrl), &ctrl->addr, opts->host->nqn);
 
 	mutex_lock(&nvme_rdma_ctrl_mutex);
+	if (nvme_rdma_device_removing(ctrl->device->dev)) {
+		mutex_unlock(&nvme_rdma_ctrl_mutex);
+		dev_info(ctrl->ctrl.device,
+			 "hca %s is being removed, aborting connect\n",
+			 dev_name(ctrl->device->dev->dma_device));
+		nvme_delete_ctrl_sync(&ctrl->ctrl);
+		nvme_put_ctrl(&ctrl->ctrl);
+		return ERR_PTR(-ECONNREFUSED);
+	}
 	list_add_tail(&ctrl->list, &nvme_rdma_ctrl_list);
 	mutex_unlock(&nvme_rdma_ctrl_mutex);
 
@@ -2407,6 +2441,7 @@ static struct nvmf_transport_ops nvme_rdma_transport = {
 
 static void nvme_rdma_remove_one(struct ib_device *ib_device, void *client_data)
 {
+	struct nvme_rdma_removing_device removing = { .dev = ib_device };
 	struct nvme_rdma_ctrl *ctrl;
 	struct nvme_rdma_device *ndev;
 	bool found = false;
@@ -2414,6 +2449,7 @@ static void nvme_rdma_remove_one(struct ib_device *ib_device, void *client_data)
 	mutex_lock(&device_list_mutex);
 	list_for_each_entry(ndev, &device_list, entry) {
 		if (ndev->dev == ib_device) {
+			ndev->dying = true;
 			found = true;
 			break;
 		}
@@ -2425,6 +2461,7 @@ static void nvme_rdma_remove_one(struct ib_device *ib_device, void *client_data)
 
 	/* Delete all controllers using this device */
 	mutex_lock(&nvme_rdma_ctrl_mutex);
+	list_add(&removing.entry, &nvme_rdma_removing_list);
 	list_for_each_entry(ctrl, &nvme_rdma_ctrl_list, list) {
 		if (ctrl->device->dev != ib_device)
 			continue;
@@ -2433,6 +2470,10 @@ static void nvme_rdma_remove_one(struct ib_device *ib_device, void *client_data)
 	mutex_unlock(&nvme_rdma_ctrl_mutex);
 
 	flush_workqueue(nvme_delete_wq);
+
+	mutex_lock(&nvme_rdma_ctrl_mutex);
+	list_del(&removing.entry);
+	mutex_unlock(&nvme_rdma_ctrl_mutex);
 }
 
 static struct ib_client nvme_rdma_ib_client = {
