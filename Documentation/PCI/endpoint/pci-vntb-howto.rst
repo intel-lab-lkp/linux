@@ -90,9 +90,9 @@ of the function device and is populated with the following NTB specific
 attributes that can be configured by the user::
 
 	# ls functions/pci_epf_vntb/func1/pci_epf_vntb.0/
-	ctrl_bar  db_count  mw1_bar  mw2_bar  mw3_bar  mw4_bar	spad_count
-	db_bar	  mw1	    mw2      mw3      mw4      num_mws	vbus_number
-	vntb_vid  vntb_pid
+	ctrl_bar  dma_bar  mw2      mw3_bar  num_mws     vbus_number
+	db_bar    mw1      mw2_bar  mw4      spad_count  vntb_pid
+	db_count  mw1_bar  mw3      mw4_bar  use_dma     vntb_vid
 
 A sample configuration for NTB function is given below::
 
@@ -104,6 +104,23 @@ A sample configuration for NTB function is given below::
 By default, each construct is assigned a BAR, as needed and in order.
 Should a specific BAR setup be required by the platform, BAR may be assigned
 to each construct using the related ``XYZ_bar`` entry.
+
+To export DMA channels, enable the feature before binding the function::
+
+	# echo 1 > functions/pci_epf_vntb/func1/pci_epf_vntb.0/use_dma
+
+This currently supports the unrolled DesignWare eDMA layout. If any DMA
+resource has no fixed BAR assignment, the EPC must support subrange and
+dynamic inbound mappings.
+
+When ``use_dma`` is enabled, ``dma_bar`` selects the BAR used for such DMA
+resources. It defaults to an unused BAR.
+With a separate DMA BAR, an older ``ntb_hw_epf`` peer can ignore the extension
+and continue using legacy NTB. A peer that understands the extension treats the
+advertised DMA type as required and fails probe if its support is unavailable.
+Setting ``dma_bar`` to an MW BAR appends the DMA resources after the MW range.
+This requires an updated peer because older peers treat the whole BAR as an MW.
+The control and doorbell BARs cannot be shared.
 
 A sample configuration for virtual NTB driver for virtual PCI bus::
 
