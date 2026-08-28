@@ -555,9 +555,72 @@ static struct kunit_suite drm_sched_credits = {
 	.test_cases = drm_sched_credits_tests,
 };
 
+/*
+ * Reproduce the drm_sched_fence get_timeline_name() lifetime bug.
+ *
+ * drm_sched_fence_get_timeline_name() dereferences fence->sched->name, and the
+ * drm_sched_fence ops keep .release set, so the fence is NOT ops-detached on
+ * signal (unlike stub fences). A driver that frees a per-context
+ * drm_gpu_scheduler while userspace still holds the exported ->finished fence
+ * (via sync_file / drm_syncobj) leaves fence->sched dangling; reading the
+ * timeline name then touches freed slab memory (arbitrary-read once the slab is
+ * re-sprayed). Confirmed instances: amdxdna, nouveau, msm. Same class as
+ * CVE-2025-38703 (xe) and CVE-2025-71302 (panthor). KASAN reports a
+ * slab-use-after-free READ in drm_sched_fence_get_timeline_name.
+ */
+static void drm_sched_fence_get_timeline_name_uaf(struct kunit *test)
+{
+	struct drm_mock_sched_entity *entity;
+	struct drm_mock_scheduler *sched;
+	struct drm_mock_sched_job *job;
+	struct dma_fence *finished;
+	const char *name;
+	bool done;
+
+	sched = drm_mock_sched_new(test, MAX_SCHEDULE_TIMEOUT);
+	entity = drm_mock_sched_entity_new(test, DRM_SCHED_PRIORITY_NORMAL,
+					   sched);
+	job = drm_mock_sched_job_new(test, entity);
+
+	/* Arm + submit first; the s_fence is only created by drm_sched_job_arm(). */
+	drm_mock_sched_job_submit(job);
+
+	/* Independent reference on the finished fence == userspace sync_file. */
+	finished = dma_fence_get(&job->base.s_fence->finished);
+
+	/* Let the job get picked up (hw_fence created), then signal + finish. */
+	done = drm_mock_sched_job_wait_scheduled(job, HZ);
+	KUNIT_ASSERT_TRUE(test, done);
+	drm_mock_sched_advance(sched, 1);
+	done = drm_mock_sched_job_wait_finished(job, HZ);
+	KUNIT_ASSERT_TRUE(test, done);
+
+	/* Free the per-context scheduler while the finished fence is held. */
+	drm_mock_sched_entity_free(entity);
+	drm_mock_sched_fini(sched);
+	kunit_kfree(test, sched);
+
+	/* UAF read: fence->sched->name is read from the freed scheduler. */
+	name = finished->ops->get_timeline_name(finished);
+	kunit_info(test, "get_timeline_name() on stale fence returned %p\n", name);
+
+	dma_fence_put(finished);
+}
+
+static struct kunit_case drm_sched_fence_uaf_tests[] = {
+	KUNIT_CASE(drm_sched_fence_get_timeline_name_uaf),
+	{}
+};
+
+static struct kunit_suite drm_sched_fence_uaf = {
+	.name = "drm_sched_fence_uaf_tests",
+	.test_cases = drm_sched_fence_uaf_tests,
+};
+
 kunit_test_suites(&drm_sched_basic,
 		  &drm_sched_timeout,
 		  &drm_sched_cancel,
 		  &drm_sched_priority,
 		  &drm_sched_modify_sched,
-		  &drm_sched_credits);
+		  &drm_sched_credits,
+		  &drm_sched_fence_uaf);
