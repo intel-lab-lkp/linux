@@ -1455,12 +1455,23 @@ int analogix_dp_resume(struct analogix_dp_device *dp)
 	if (dp->plat_data->power_on)
 		dp->plat_data->power_on(dp->plat_data);
 
-	phy_set_mode(dp->phy, PHY_MODE_DP);
-	phy_power_on(dp->phy);
+	ret = phy_set_mode(dp->phy, PHY_MODE_DP);
+	if (ret)
+		goto power_off;
+
+	ret = phy_power_on(dp->phy);
+	if (ret)
+		goto power_off;
 
 	analogix_dp_init_dp(dp);
 
 	return 0;
+
+power_off:
+	if (dp->plat_data->power_off)
+		dp->plat_data->power_off(dp->plat_data);
+	clk_disable_unprepare(dp->clock);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(analogix_dp_resume);
 
