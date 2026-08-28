@@ -2804,6 +2804,15 @@ static enum scan_result collapse_single_pmd(unsigned long addr,
 		goto end;
 	}
 
+	/*
+	 * Userfaultfd-minor-registered VMAs should not be collapsed, as
+	 * userspace is expecting to explicitly install PTEs.
+	 */
+	if (userfaultfd_minor(vma)) {
+		result = SCAN_PTE_UFFD;
+		goto end;
+	}
+
 	file = get_file(vma->vm_file);
 	pgoff = linear_page_index(vma, addr);
 
