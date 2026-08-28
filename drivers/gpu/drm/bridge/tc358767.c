@@ -640,7 +640,7 @@ static int tc_pxl_pll_calc(struct tc_data *tc, u32 refclk, u32 pixelclock,
 				if (iclk < 6000000 || iclk > 40000000)
 					continue;
 
-				tmp = pixelclock * ext_div[i_pre] *
+				tmp = (u64)pixelclock * ext_div[i_pre] *
 				      ext_div[i_post] * div;
 				do_div(tmp, refclk);
 				mul = tmp;
