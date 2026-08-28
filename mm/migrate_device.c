@@ -16,11 +16,16 @@
 #include <linux/leafops.h>
 #include <linux/pgalloc.h>
 #include <asm/tlbflush.h>
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/migrate_device.h>
+
 #include "internal.h"
 
 static int migrate_vma_collect_skip(unsigned long start,
 				    unsigned long end,
-				    struct mm_walk *walk)
+				    struct mm_walk *walk,
+				    enum migrate_vma_walk_reason reason)
 {
 	struct migrate_vma *migrate = walk->private;
 	unsigned long addr;
@@ -30,6 +35,7 @@ static int migrate_vma_collect_skip(unsigned long start,
 		migrate->src[migrate->npages++] = 0;
 	}
 
+	trace_migrate_vma_collect_skip(migrate, start, end, reason);
 	return 0;
 }
 
@@ -43,7 +49,8 @@ static int migrate_vma_collect_hole(unsigned long start,
 
 	/* Only allow populating anonymous memory. */
 	if (!vma_is_anonymous(walk->vma))
-		return migrate_vma_collect_skip(start, end, walk);
+		return migrate_vma_collect_skip(start, end, walk,
+						MIGRATE_VMA_WALK_SKIP_NOT_ANON);
 
 	if (thp_migration_supported() &&
 		(migrate->flags & MIGRATE_VMA_SELECT_COMPOUND) &&
@@ -55,11 +62,15 @@ static int migrate_vma_collect_hole(unsigned long start,
 		migrate->npages++;
 		migrate->cpages++;
 
+		trace_migrate_vma_collect_hole(migrate, start, end,
+					       MIGRATE_VMA_WALK_HOLE_COMPOUND);
+
 		/*
 		 * Collect the remaining entries as holes, in case we
 		 * need to split later
 		 */
-		return migrate_vma_collect_skip(start + PAGE_SIZE, end, walk);
+		return migrate_vma_collect_skip(start + PAGE_SIZE, end, walk,
+						MIGRATE_VMA_WALK_SKIP_COMPOUND_TAIL);
 	}
 
 	for (addr = start; addr < end; addr += PAGE_SIZE) {
@@ -69,6 +80,8 @@ static int migrate_vma_collect_hole(unsigned long start,
 		migrate->cpages++;
 	}
 
+	trace_migrate_vma_collect_hole(migrate, start, end,
+				       MIGRATE_VMA_WALK_HOLE);
 	return 0;
 }
 
@@ -154,7 +167,8 @@ static int migrate_vma_collect_huge_pmd(pmd_t *pmdp, unsigned long start,
 	if (pmd_trans_huge(*pmdp)) {
 		if (!(migrate->flags & MIGRATE_VMA_SELECT_SYSTEM)) {
 			spin_unlock(ptl);
-			return migrate_vma_collect_skip(start, end, walk);
+			return migrate_vma_collect_skip(start, end, walk,
+					MIGRATE_VMA_WALK_SKIP_NOT_SELECTED);
 		}
 
 		folio = pmd_folio(*pmdp);
@@ -170,13 +184,15 @@ static int migrate_vma_collect_huge_pmd(pmd_t *pmdp, unsigned long start,
 		if (!softleaf_is_device_private(entry) ||
 		    !(migrate->flags & MIGRATE_VMA_SELECT_DEVICE_PRIVATE)) {
 			spin_unlock(ptl);
-			return migrate_vma_collect_skip(start, end, walk);
+			return migrate_vma_collect_skip(start, end, walk,
+					MIGRATE_VMA_WALK_SKIP_NOT_SELECTED);
 		}
 
 		folio = softleaf_to_folio(entry);
 		if (folio->pgmap->owner != migrate->pgmap_owner) {
 			spin_unlock(ptl);
-			return migrate_vma_collect_skip(start, end, walk);
+			return migrate_vma_collect_skip(start, end, walk,
+					MIGRATE_VMA_WALK_SKIP_OWNER_MISMATCH);
 		}
 
 		if (softleaf_is_device_private_write(entry))
@@ -190,7 +206,8 @@ static int migrate_vma_collect_huge_pmd(pmd_t *pmdp, unsigned long start,
 	if (folio != fault_folio && unlikely(!folio_trylock(folio))) {
 		spin_unlock(ptl);
 		folio_put(folio);
-		return migrate_vma_collect_skip(start, end, walk);
+		return migrate_vma_collect_skip(start, end, walk,
+					MIGRATE_VMA_WALK_SKIP_LOCK_CONTENDED);
 	}
 
 	if (thp_migration_supported() &&
@@ -220,8 +237,12 @@ static int migrate_vma_collect_huge_pmd(pmd_t *pmdp, unsigned long start,
 			migrate->dst[migrate->npages] = 0;
 			goto fallback;
 		}
-		migrate_vma_collect_skip(start + PAGE_SIZE, end, walk);
+		migrate_vma_collect_skip(start + PAGE_SIZE, end, walk,
+					 MIGRATE_VMA_WALK_SKIP_COMPOUND_TAIL);
 		spin_unlock(ptl);
+
+		trace_migrate_vma_collect_huge_pmd(migrate, start, end,
+						   MIGRATE_VMA_WALK_HUGE_PMD);
 		return 0;
 	}
 
@@ -234,7 +255,8 @@ fallback:
 		folio_unlock(folio);
 	folio_put(folio);
 	if (ret)
-		return migrate_vma_collect_skip(start, end, walk);
+		return migrate_vma_collect_skip(start, end, walk,
+					MIGRATE_VMA_WALK_SKIP_SPLIT_FAILED);
 	if (pmd_none(pmdp_get_lockless(pmdp)))
 		return migrate_vma_collect_hole(start, end, -1, walk);
 
@@ -323,7 +345,9 @@ again:
 					if (unmapped)
 						flush_tlb_range(walk->vma, start, end);
 
-					return migrate_vma_collect_skip(addr, end, walk);
+					return migrate_vma_collect_skip(addr,
+						end, walk,
+						MIGRATE_VMA_WALK_SKIP_SPLIT_FAILED);
 				}
 
 				goto again;
@@ -369,7 +393,9 @@ again:
 					if (unmapped)
 						flush_tlb_range(walk->vma, start, end);
 
-					return migrate_vma_collect_skip(addr, end, walk);
+					return migrate_vma_collect_skip(addr,
+						end, walk,
+						MIGRATE_VMA_WALK_SKIP_SPLIT_FAILED);
 				}
 
 				goto again;
@@ -514,6 +540,8 @@ static void migrate_vma_collect(struct migrate_vma *migrate)
 {
 	struct mmu_notifier_range range;
 
+	trace_migrate_vma_collect_start(migrate);
+
 	/*
 	 * Note that the pgmap_owner is passed to the mmu notifier callback so
 	 * that the registered device driver can skip invalidating device
@@ -529,6 +557,7 @@ static void migrate_vma_collect(struct migrate_vma *migrate)
 
 	mmu_notifier_invalidate_range_end(&range);
 	migrate->end = migrate->start + (migrate->npages << PAGE_SHIFT);
+	trace_migrate_vma_collect_done(migrate);
 }
 
 /*
@@ -653,6 +682,7 @@ next:
 		restore--;
 	}
 
+	trace_migrate_device_unmap_done(src_pfns, NULL, npages);
 	return unmapped;
 }
 
@@ -763,11 +793,13 @@ int migrate_vma_setup(struct migrate_vma *args)
 	memset(args->src, 0, sizeof(*args->src) * nr_pages);
 	args->cpages = 0;
 	args->npages = 0;
+	trace_migrate_vma_setup_start(args);
 
 	migrate_vma_collect(args);
 
 	if (args->cpages)
 		migrate_vma_unmap(args);
+	trace_migrate_vma_setup_done(args);
 
 	/*
 	 * At this point pages are locked and unmapped, and thus they have
@@ -1115,7 +1147,9 @@ static void __migrate_device_pages(unsigned long *src_pfns,
 	bool notified = false;
 	unsigned long addr;
 
-	for (i = 0; i < npages; ) {
+	trace_migrate_device_pages_start(src_pfns, dst_pfns, npages);
+
+	for (i = 0; i < npages;) {
 		struct page *newpage = migrate_pfn_to_page(dst_pfns[i]);
 		struct page *page = migrate_pfn_to_page(src_pfns[i]);
 		struct address_space *mapping;
@@ -1257,6 +1291,8 @@ next:
 
 	if (notified)
 		mmu_notifier_invalidate_range_end(&range);
+
+	trace_migrate_device_pages_done(src_pfns, dst_pfns, npages);
 }
 
 /**
@@ -1285,7 +1321,9 @@ EXPORT_SYMBOL(migrate_device_pages);
  */
 void migrate_vma_pages(struct migrate_vma *migrate)
 {
+	trace_migrate_vma_pages_start(migrate);
 	__migrate_device_pages(migrate->src, migrate->dst, migrate->npages, migrate);
+	trace_migrate_vma_pages_done(migrate);
 }
 EXPORT_SYMBOL(migrate_vma_pages);
 
@@ -1298,10 +1336,23 @@ static void __migrate_device_finalize(unsigned long *src_pfns,
 		page_folio(fault_page) : NULL;
 	unsigned long i;
 
+	trace_migrate_device_finalize_start(src_pfns, dst_pfns, npages);
+
 	for (i = 0; i < npages; i++) {
 		struct folio *dst = NULL, *src = NULL;
 		struct page *newpage = migrate_pfn_to_page(dst_pfns[i]);
 		struct page *page = migrate_pfn_to_page(src_pfns[i]);
+
+		if (trace_migrate_device_folio_finalize_enabled() &&
+		    (page || newpage)) {
+			unsigned long nr_pages = page ?
+						 folio_nr_pages(page_folio(page)) :
+						 folio_nr_pages(page_folio(newpage));
+
+			trace_migrate_device_folio_finalize(i, nr_pages,
+							    src_pfns[i],
+							    dst_pfns[i]);
+		}
 
 		if (newpage)
 			dst = page_folio(newpage);
@@ -1339,6 +1390,8 @@ static void __migrate_device_finalize(unsigned long *src_pfns,
 			folio_put(dst);
 		}
 	}
+
+	trace_migrate_device_finalize_done(src_pfns, dst_pfns, npages);
 }
 
 /*
@@ -1371,8 +1424,10 @@ EXPORT_SYMBOL(migrate_device_finalize);
  */
 void migrate_vma_finalize(struct migrate_vma *migrate)
 {
+	trace_migrate_vma_finalize_start(migrate);
 	__migrate_device_finalize(migrate->src, migrate->dst, migrate->npages,
 				  migrate->fault_page);
+	trace_migrate_vma_finalize_done(migrate);
 }
 EXPORT_SYMBOL(migrate_vma_finalize);
 
