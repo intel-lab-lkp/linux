@@ -5443,7 +5443,7 @@ STATIC_IFN_KUNIT int dm_update_crtc_state(struct amdgpu_display_manager *dm,
 					  struct drm_crtc_state *old_crtc_state,
 					  struct drm_crtc_state *new_crtc_state,
 					  bool enable,
-					  bool *lock_and_validation_needed)
+					  bool *needs_dc_state_realloc)
 {
 	struct dm_atomic_state *dm_state = NULL;
 	struct dm_crtc_state *dm_old_crtc_state, *dm_new_crtc_state;
@@ -5616,7 +5616,7 @@ STATIC_IFN_KUNIT int dm_update_crtc_state(struct amdgpu_display_manager *dm,
 
 		amdgpu_dm_reset_freesync_config_for_crtc(dm_new_crtc_state);
 
-		*lock_and_validation_needed = true;
+		*needs_dc_state_realloc = true;
 
 	} else {/* Add stream for any updated/enabled CRTC */
 		/*
@@ -5654,7 +5654,7 @@ STATIC_IFN_KUNIT int dm_update_crtc_state(struct amdgpu_display_manager *dm,
 				goto fail;
 			}
 
-			*lock_and_validation_needed = true;
+			*needs_dc_state_realloc = true;
 		}
 	}
 
@@ -5886,7 +5886,7 @@ dm_update_plane_state(struct dc *dc,
 		      struct drm_plane_state *old_plane_state,
 		      struct drm_plane_state *new_plane_state,
 		      bool enable,
-		      bool *lock_and_validation_needed,
+		      bool *needs_dc_state_realloc,
 		      bool *is_top_most_overlay)
 {
 
@@ -5957,7 +5957,7 @@ dm_update_plane_state(struct dc *dc,
 
 		dm_new_plane_state->dc_state = NULL;
 
-		*lock_and_validation_needed = true;
+		*needs_dc_state_realloc = true;
 
 	} else { /* Add new planes */
 		struct dc_plane_state *dc_new_plane_state;
@@ -6035,7 +6035,7 @@ dm_update_plane_state(struct dc *dc,
 		 */
 		dm_new_plane_state->dc_state->update_bits.full_update = 1;
 
-		*lock_and_validation_needed = true;
+		*needs_dc_state_realloc = true;
 	}
 
 out:
@@ -6192,7 +6192,7 @@ STATIC_IFN_KUNIT int amdgpu_dm_atomic_check(struct drm_device *dev,
 	struct drm_plane_state *old_plane_state, *new_plane_state, *new_cursor_state;
 	enum dc_status status;
 	int ret, i;
-	bool lock_and_validation_needed = false;
+	bool needs_dc_state_realloc = false;
 	bool is_top_most_overlay = true;
 	struct dm_crtc_state *dm_old_crtc_state, *dm_new_crtc_state;
 	struct drm_dp_mst_topology_mgr *mgr;
@@ -6366,7 +6366,7 @@ STATIC_IFN_KUNIT int amdgpu_dm_atomic_check(struct drm_device *dev,
 					    old_plane_state,
 					    new_plane_state,
 					    false,
-					    &lock_and_validation_needed,
+					    &needs_dc_state_realloc,
 					    &is_top_most_overlay);
 		if (ret) {
 			drm_dbg_atomic(dev, "dm_update_plane_state() failed: %pe\n", ERR_PTR(ret));
@@ -6380,7 +6380,7 @@ STATIC_IFN_KUNIT int amdgpu_dm_atomic_check(struct drm_device *dev,
 					   old_crtc_state,
 					   new_crtc_state,
 					   false,
-					   &lock_and_validation_needed);
+					   &needs_dc_state_realloc);
 		if (ret) {
 			drm_dbg_atomic(dev, "DISABLE: dm_update_crtc_state() failed: %pe\n", ERR_PTR(ret));
 			goto fail;
@@ -6393,7 +6393,7 @@ STATIC_IFN_KUNIT int amdgpu_dm_atomic_check(struct drm_device *dev,
 					   old_crtc_state,
 					   new_crtc_state,
 					   true,
-					   &lock_and_validation_needed);
+					   &needs_dc_state_realloc);
 		if (ret) {
 			drm_dbg_atomic(dev, "ENABLE: dm_update_crtc_state() failed: %pe\n", ERR_PTR(ret));
 			goto fail;
@@ -6406,7 +6406,7 @@ STATIC_IFN_KUNIT int amdgpu_dm_atomic_check(struct drm_device *dev,
 					    old_plane_state,
 					    new_plane_state,
 					    true,
-					    &lock_and_validation_needed,
+					    &needs_dc_state_realloc,
 					    &is_top_most_overlay);
 		if (ret) {
 			drm_dbg_atomic(dev, "dm_update_plane_state() failed: %pe\n", ERR_PTR(ret));
@@ -6521,7 +6521,7 @@ STATIC_IFN_KUNIT int amdgpu_dm_atomic_check(struct drm_device *dev,
 		if (!is_scaling_state_different(dm_new_con_state, dm_old_con_state))
 			continue;
 
-		lock_and_validation_needed = true;
+		needs_dc_state_realloc = true;
 	}
 
 	/* set the slot info for each mst_state based on the link encoding format */
@@ -6557,7 +6557,7 @@ STATIC_IFN_KUNIT int amdgpu_dm_atomic_check(struct drm_device *dev,
 	 *
 	 * TODO: Remove this stall and drop DM state private objects.
 	 */
-	if (lock_and_validation_needed) {
+	if (needs_dc_state_realloc) {
 		ret = dm_atomic_get_state(state, &dm_state);
 		if (ret) {
 			drm_dbg_atomic(dev, "dm_atomic_get_state() failed: %pe\n", ERR_PTR(ret));
@@ -6658,7 +6658,7 @@ STATIC_IFN_KUNIT int amdgpu_dm_atomic_check(struct drm_device *dev,
 		 * the FB pitch, the DCC state, rotation, mem_type, etc.
 		 */
 		if (new_crtc_state->async_flip &&
-		    (lock_and_validation_needed ||
+		    (needs_dc_state_realloc ||
 		     amdgpu_dm_crtc_mem_type_changed(dev, state, new_crtc_state))) {
 			drm_dbg_atomic(crtc->dev,
 				       "[CRTC:%d:%s] async flips are only supported for fast updates\n",
@@ -6667,7 +6667,7 @@ STATIC_IFN_KUNIT int amdgpu_dm_atomic_check(struct drm_device *dev,
 			goto fail;
 		}
 
-		dm_new_crtc_state->update_type = lock_and_validation_needed ?
+		dm_new_crtc_state->update_type = needs_dc_state_realloc ?
 			UPDATE_TYPE_FULL : UPDATE_TYPE_FAST;
 	}
 
