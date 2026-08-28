@@ -514,9 +514,7 @@ static int cs42l42_sdw_resume(struct device *dev)
 	if (ret < 0)
 		return ret;
 
-	cs42l42_resume_restore(dev);
-
-	return 0;
+	return cs42l42_resume_restore(dev);
 }
 
 static int cs42l42_sdw_probe(struct sdw_slave *peripheral, const struct sdw_device_id *id)
