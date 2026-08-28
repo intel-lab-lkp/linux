@@ -1733,6 +1733,30 @@ static int __open_session(struct ceph_mds_client *mdsc,
 	return 0;
 }
 
+/* Is this rank still occupied by a session being torn down? */
+static bool __mds_rank_closing(struct ceph_mds_client *mdsc, int mds)
+{
+	return mds < mdsc->max_sessions && mdsc->sessions[mds] &&
+		mdsc->sessions[mds]->s_state == CEPH_MDS_SESSION_CLOSED;
+}
+
+/*
+ * Wait until the rank is no longer occupied by a CLOSED session.
+ *
+ * The caller must hold mdsc->mutex.  The mutex is dropped while sleeping and
+ * held again on return.  Another session may occupy the rank by then.  The
+ * wait also ends when shutdown starts, so the caller must check
+ * mdsc->stopping before proceeding.
+ */
+static void wait_for_mds_rank_not_closing(struct ceph_mds_client *mdsc,
+					  int mds)
+{
+	wait_event_cmd(mdsc->session_close_wq,
+		       !__mds_rank_closing(mdsc, mds) || mdsc->stopping,
+		       mutex_unlock(&mdsc->mutex),
+		       mutex_lock(&mdsc->mutex));
+}
+
 /*
  * open sessions for any export targets for the given mds
  *
@@ -1749,6 +1773,16 @@ __open_export_target_session(struct ceph_mds_client *mdsc, int target)
 		session = register_session(mdsc, target);
 		if (IS_ERR(session))
 			return session;
+	}
+	if (session->s_state == CEPH_MDS_SESSION_CLOSED) {
+		/*
+		 * handle_session() is currently closing this session;
+		 * it stays registered until its caps are gone.  Do
+		 * not return it to our caller because we don't want
+		 * it to attach new caps to it.
+		 */
+		ceph_put_mds_session(session);
+		return ERR_PTR(-EAGAIN);
 	}
 	if (session->s_state == CEPH_MDS_SESSION_NEW ||
 	    session->s_state == CEPH_MDS_SESSION_CLOSING) {
@@ -1769,7 +1803,19 @@ ceph_mdsc_open_export_target_session(struct ceph_mds_client *mdsc, int target)
 	doutc(cl, "to mds%d\n", target);
 
 	mutex_lock(&mdsc->mutex);
-	session = __open_export_target_session(mdsc, target);
+	for (;;) {
+		session = __open_export_target_session(mdsc, target);
+		if (session != ERR_PTR(-EAGAIN) || mdsc->stopping)
+			break;
+
+		/*
+		 * Keep the exported cap on its old session until the
+		 * target rank is vacant.  Dropping it here can discard a
+		 * dirty auth cap; handle_session() wakes us after removing
+		 * the old target session's caps and unregistering it.
+		 */
+		wait_for_mds_rank_not_closing(mdsc, target);
+	}
 	mutex_unlock(&mdsc->mutex);
 
 	return session;
@@ -4492,8 +4538,20 @@ skip_cap_auths:
 			ceph_metric_bind_session(mdsc, session);
 	}
 	if (op == CEPH_SESSION_CLOSE) {
+		/*
+		 * Pin the session for the rest of this function.  The
+		 * __unregister_session() call is deferred until after
+		 * remove_session_caps() below, or else other
+		 * processes may find caps still assigned to this
+		 * session while working with a new session object.
+		 */
 		ceph_get_mds_session(session);
-		__unregister_session(mdsc, session);
+
+		if (session->s_state == CEPH_MDS_SESSION_RECONNECTING)
+			pr_info_client(cl, "mds%d reconnect denied\n",
+				       session->s_mds);
+
+		session->s_state = CEPH_MDS_SESSION_CLOSED;
 	}
 	/* FIXME: this ttl calculation is generous */
 	session->s_ttl = jiffies + HZ*mdsc->mdsmap->m_session_autoclose;
@@ -4551,12 +4609,24 @@ skip_cap_auths:
 		break;
 
 	case CEPH_SESSION_CLOSE:
-		if (session->s_state == CEPH_MDS_SESSION_RECONNECTING)
-			pr_info_client(cl, "mds%d reconnect denied\n",
-				       session->s_mds);
-		session->s_state = CEPH_MDS_SESSION_CLOSED;
 		cleanup_session_requests(mdsc, session);
 		remove_session_caps(session);
+
+		/*
+		 * Now that all caps are removed, it is safe release
+		 * the MDS rank and allow other processes to create a
+		 * new session object.
+		 *
+		 * A concurrent ceph_mdsc_close_sessions() or
+		 * check_new_map() may have unregistered the session
+		 * already, so check __verify_registered_session()
+		 * first.
+		 */
+		mutex_lock(&mdsc->mutex);
+		if (!__verify_registered_session(mdsc, session))
+			__unregister_session(mdsc, session);
+		mutex_unlock(&mdsc->mutex);
+
 		wake = 2; /* for good measure */
 		wake_up_all(&mdsc->session_close_wq);
 		break;
@@ -5802,6 +5872,10 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		s = __ceph_lookup_mds_session(mdsc, i);
 		if (!s)
 			continue;
+		if (s->s_state == CEPH_MDS_SESSION_CLOSED) {
+			ceph_put_mds_session(s);
+			continue;
+		}
 		oldstate = ceph_mdsmap_get_state(oldmap, i);
 		newstate = ceph_mdsmap_get_state(newmap, i);
 
@@ -5814,18 +5888,24 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 
 		if (i >= newmap->possible_max_rank) {
 			/* force close session for stopped mds */
-			__unregister_session(mdsc, s);
-			__wake_requests(mdsc, &s->s_waiting);
+			s->s_state = CEPH_MDS_SESSION_CLOSED;
 			mutex_unlock(&mdsc->mutex);
 
 			mutex_lock(&s->s_mutex);
 			cleanup_session_requests(mdsc, s);
 			remove_session_caps(s);
-			mutex_unlock(&s->s_mutex);
-
-			ceph_put_mds_session(s);
 
 			mutex_lock(&mdsc->mutex);
+			if (!__verify_registered_session(mdsc, s))
+				__unregister_session(mdsc, s);
+			mutex_unlock(&mdsc->mutex);
+			mutex_unlock(&s->s_mutex);
+
+			wake_up_all(&mdsc->session_close_wq);
+
+			mutex_lock(&mdsc->mutex);
+			__wake_requests(mdsc, &s->s_waiting);
+			ceph_put_mds_session(s);
 			if (mdsc->mdsmap->m_epoch != map_epoch)
 				return;
 			kick_requests(mdsc, i);
@@ -5843,6 +5923,16 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 				mutex_unlock(&s->s_mutex);
 				ceph_put_mds_session(s);
 				return;
+			}
+			if (s->s_state == CEPH_MDS_SESSION_CLOSED) {
+				/*
+				 * handle_session() set state=CLOSED
+				 * in the mutex gap above and is tearing it
+				 * down
+				 */
+				mutex_unlock(&s->s_mutex);
+				ceph_put_mds_session(s);
+				continue;
 			}
 			ceph_con_close(&s->s_con);
 			mutex_unlock(&s->s_mutex);
@@ -5902,6 +5992,9 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 	 * Only open and reconnect sessions that don't exist yet.
 	 */
 	for (i = 0; i < newmap->possible_max_rank; i++) {
+		if (mdsc->stopping)
+			return;
+
 		/*
 		 * In case the import MDS is crashed just after
 		 * the EImportStart journal is flushed, so when
@@ -5927,6 +6020,19 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		 * reconnection request in up:reconnect state.
 		 */
 		s = __ceph_lookup_mds_session(mdsc, i);
+		if (s && s->s_state == CEPH_MDS_SESSION_CLOSED) {
+			/*
+			 * Wait for handle_session() to remove the caps and
+			 * unregister this session, so the reconnect below
+			 * uses a fresh session on the now vacant rank
+			 */
+			ceph_put_mds_session(s);
+			wait_for_mds_rank_not_closing(mdsc, i);
+			if (mdsc->stopping ||
+			    mdsc->mdsmap->m_epoch != map_epoch)
+				return;
+			s = NULL;
+		}
 		if (likely(!s)) {
 			s = __open_export_target_session(mdsc, i);
 			if (IS_ERR(s)) {
@@ -7087,9 +7193,7 @@ static void mds_peer_reset(struct ceph_connection *con)
 	 * Snapshot session state with READ_ONCE, then revalidate under
 	 * mdsc->mutex before acting.  The subsequent mdsc->mutex
 	 * section rechecks s_state to catch concurrent transitions, so
-	 * the lockless snapshot here is safe.  s->s_mutex is taken
-	 * separately for cleanup after unregistration, which avoids
-	 * introducing a new s->s_mutex + mdsc->mutex nesting.
+	 * the lockless snapshot here is safe.
 	 */
 	session_state = READ_ONCE(s->s_state);
 
@@ -7114,18 +7218,24 @@ static void mds_peer_reset(struct ceph_connection *con)
 
 		ceph_get_mds_session(s);
 		s->s_state = CEPH_MDS_SESSION_CLOSED;
-		__unregister_session(mdsc, s);
-		__wake_requests(mdsc, &s->s_waiting);
 		mutex_unlock(&mdsc->mutex);
 
 		mutex_lock(&s->s_mutex);
 		cleanup_session_requests(mdsc, s);
 		remove_session_caps(s);
+
+		/* Keep the rank occupied until all old-session caps are gone. */
+		mutex_lock(&mdsc->mutex);
+		if (!__verify_registered_session(mdsc, s))
+			__unregister_session(mdsc, s);
+		mutex_unlock(&mdsc->mutex);
+
 		mutex_unlock(&s->s_mutex);
 
 		wake_up_all(&mdsc->session_close_wq);
 
 		mutex_lock(&mdsc->mutex);
+		__wake_requests(mdsc, &s->s_waiting);
 		kick_requests(mdsc, s->s_mds);
 		mutex_unlock(&mdsc->mutex);
 
