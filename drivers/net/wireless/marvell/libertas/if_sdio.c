@@ -1359,7 +1359,9 @@ static int if_sdio_resume(struct device *dev)
 	dev_info(dev, "%s: resume: we're back\n", sdio_func_id(func));
 
 	if (card->priv->power_up_on_resume) {
-		if_sdio_power_on(card);
+		ret = if_sdio_power_on(card);
+		if (ret)
+			return ret;
 		wait_event(card->pwron_waitq, card->priv->fw_ready);
 	}
 
