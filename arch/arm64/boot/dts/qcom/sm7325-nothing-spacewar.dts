@@ -970,6 +970,10 @@
 	};
 };
 
+&ice {
+	status = "okay";
+};
+
 &ipa {
 	firmware-name = "qcom/sm7325/nothing/spacewar/ipa_fws.mbn";
 

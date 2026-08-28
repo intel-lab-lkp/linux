@@ -638,6 +638,10 @@
 	};
 };
 
+&ice {
+	status = "okay";
+};
+
 &ipa {
 	firmware-name = "qcom/sm7325/xiaomi/taoyao/ipa_fws.mbn";
 

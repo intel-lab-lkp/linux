@@ -774,6 +774,10 @@
 	};
 };
 
+&ice {
+	status = "okay";
+};
+
 &ipa {
 	/delete-property/ memory-region;
 };

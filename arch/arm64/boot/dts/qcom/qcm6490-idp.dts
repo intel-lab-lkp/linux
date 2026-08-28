@@ -619,6 +619,10 @@
 	firmware-name = "qcom/qcm6490/a660_zap.mbn";
 };
 
+&ice {
+	status = "okay";
+};
+
 &lpass_rx_macro {
 	status = "okay";
 };

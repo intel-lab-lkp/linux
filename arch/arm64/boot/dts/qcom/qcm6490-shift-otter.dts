@@ -552,6 +552,10 @@
 	/* focaltech FT3658U @ 38 */
 };
 
+&ice {
+	status = "okay";
+};
+
 &ipa {
 	firmware-name = "qcom/qcm6490/SHIFT/otter/ipa_fws.mbn";
 

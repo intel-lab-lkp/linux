@@ -937,6 +937,10 @@
 	/* VL53L3 ToF @ 29 */
 };
 
+&ice {
+	status = "okay";
+};
+
 &ipa {
 	firmware-name = "qcom/qcm6490/fairphone5/ipa_fws.mbn";
 

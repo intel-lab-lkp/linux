@@ -373,6 +373,10 @@
 	status = "okay";
 };
 
+&ice {
+	status = "okay";
+};
+
 &lpass_cpu {
 	status = "okay";
 

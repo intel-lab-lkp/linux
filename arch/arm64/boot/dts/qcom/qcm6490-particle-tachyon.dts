@@ -499,6 +499,10 @@
 	status = "okay";
 };
 
+&ice {
+	status = "okay";
+};
+
 &ipa {
 	firmware-name = "qcom/qcm6490/particle/tachyon/ipa_fws.mbn";
 
