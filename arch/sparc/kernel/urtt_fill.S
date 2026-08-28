@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+#include <asm/asi.h>
 #include <asm/thread_info.h>
 #include <asm/trap_block.h>
 #include <asm/spitfire.h>
@@ -31,6 +32,20 @@ user_rtt_fill_fixup_common:
 
 		sethi	%hi(KERNBASE), %g1
 		flush	%g1
+
+		/* rtrap set %asi to ASI_AIUP for the window fill, and
+		 * we re-enter the kernel here without passing through
+		 * etrap, which would have re-established ASI_AIUS via
+		 * the TSTATE it synthesizes.  The primary context was
+		 * just restored to the kernel's above, so a leftover
+		 * ASI_AIUP makes every %asi-based user access (put_user,
+		 * get_user) translate in the kernel context: user
+		 * addresses below the VA hole then fault forever
+		 * (nothing ever fills a context-zero translation for
+		 * them), and addresses above it silently alias the
+		 * kernel linear mapping.  Restore the kernel invariant.
+		 */
+		wr	%g0, ASI_AIUS, %asi
 
 		mov	%g4, %l4
 		mov	%g5, %l5
