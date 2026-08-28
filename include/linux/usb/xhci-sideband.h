@@ -13,7 +13,19 @@
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
 
-#define	EP_CTX_PER_DEV		31	/* FIXME defined twice, from xhci.h */
+/*
+ * Constants shared with the xHCI host driver (drivers/usb/host/xhci.h),
+ * which includes this header for its canonical definitions.
+ */
+#define EP_CTX_PER_DEV      31
+
+/*
+ * TRBS_PER_SEGMENT must be a multiple of 4,
+ * since the command ring is 64-byte aligned.
+ * It must also be greater than 16.
+ */
+#define TRBS_PER_SEGMENT    256
+#define TRB_SEGMENT_SIZE    (TRBS_PER_SEGMENT * 16)
 
 struct xhci_sideband;
 
@@ -59,6 +71,13 @@ struct xhci_sideband {
 	/* Synchronizing xHCI sideband operations with client drivers operations */
 	struct mutex			mutex;
 
+	/*
+	 * Separate sideband segment pool for sideband rings, supplied by and
+	 * owned by the sideband client: created before xhci_sideband_register()
+	 * and destroyed after xhci_sideband_unregister().
+	 */
+	struct dma_pool	*segment_pool;
+
 	struct usb_interface		*intf;
 	int (*notify_client)(struct usb_interface *intf,
 			     struct xhci_sideband_event *evt);
@@ -66,6 +85,7 @@ struct xhci_sideband {
 
 struct xhci_sideband *
 xhci_sideband_register(struct usb_interface *intf, enum xhci_sideband_type type,
+		       struct dma_pool *segment_pool,
 		       int (*notify_client)(struct usb_interface *intf,
 				    struct xhci_sideband_event *evt));
 void

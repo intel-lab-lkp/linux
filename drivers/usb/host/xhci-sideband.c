@@ -10,6 +10,7 @@
 
 #include <linux/usb/xhci-sideband.h>
 #include <linux/dma-direct.h>
+#include <linux/dmapool.h>
 
 #include "xhci.h"
 
@@ -342,8 +343,8 @@ xhci_sideband_create_interrupter(struct xhci_sideband *sb, int num_seg,
 		return -EBUSY;
 
 	sb->ir = xhci_create_secondary_interrupter(xhci_to_hcd(sb->xhci),
-						   num_seg, imod_interval,
-						   intr_num);
+						   num_seg, sb->segment_pool,
+						   imod_interval, intr_num);
 	if (!sb->ir)
 		return -ENOMEM;
 
@@ -397,6 +398,11 @@ EXPORT_SYMBOL_GPL(xhci_sideband_interrupter_id);
 /**
  * xhci_sideband_register - register a sideband for a usb device
  * @intf: usb interface associated with the sideband device
+ * @type: xHCI sideband type
+ * @segment_pool: dma pool for sideband ring segments, created and owned by
+ *                the caller. The caller must destroy it after calling
+ *                xhci_sideband_unregister().
+ * @notify_client: callback for xHCI sideband sequences
  *
  * Allows for clients to utilize XHCI interrupters and fetch transfer and event
  * ring parameters for executing data transfers.
@@ -405,6 +411,7 @@ EXPORT_SYMBOL_GPL(xhci_sideband_interrupter_id);
  */
 struct xhci_sideband *
 xhci_sideband_register(struct usb_interface *intf, enum xhci_sideband_type type,
+		       struct dma_pool *segment_pool,
 		       int (*notify_client)(struct usb_interface *intf,
 				    struct xhci_sideband_event *evt))
 {
@@ -425,6 +432,8 @@ xhci_sideband_register(struct usb_interface *intf, enum xhci_sideband_type type,
 	sb = kzalloc_node(sizeof(*sb), GFP_KERNEL, dev_to_node(hcd->self.sysdev));
 	if (!sb)
 		return NULL;
+
+	sb->segment_pool = segment_pool;
 
 	mutex_init(&sb->mutex);
 
@@ -449,6 +458,7 @@ xhci_sideband_register(struct usb_interface *intf, enum xhci_sideband_type type,
 	vdev->sideband = sb;
 
 	spin_unlock_irq(&xhci->lock);
+
 
 	return sb;
 }

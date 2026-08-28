@@ -7,6 +7,7 @@
 #include <linux/ctype.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-map-ops.h>
+#include <linux/dmapool.h>
 #include <linux/init.h>
 #include <linux/iommu.h>
 #include <linux/module.h>
@@ -1786,6 +1787,7 @@ static void qc_usb_audio_offload_probe(struct snd_usb_audio *chip)
 	struct usb_interface_descriptor *altsd;
 	struct usb_host_interface *alts;
 	struct snd_soc_usb_device *sdev;
+	struct dma_pool *segment_pool;
 	struct xhci_sideband *sb;
 
 	/*
@@ -1804,10 +1806,19 @@ static void qc_usb_audio_offload_probe(struct snd_usb_audio *chip)
 		if (!sdev)
 			return;
 
-		sb = xhci_sideband_register(intf, XHCI_SIDEBAND_VENDOR,
-					    uaudio_sideband_notifier);
-		if (!sb)
+		segment_pool = dma_pool_create("xHCI sideband ring segments",
+						interface_to_usbdev(intf)->bus->sysdev,
+						TRB_SEGMENT_SIZE, TRB_SEGMENT_SIZE,
+						TRB_SEGMENT_SIZE);
+		if (!segment_pool)
 			goto free_sdev;
+
+		sb = xhci_sideband_register(intf, XHCI_SIDEBAND_VENDOR, segment_pool,
+					    uaudio_sideband_notifier);
+		if (!sb) {
+			dma_pool_destroy(segment_pool);
+			goto free_sdev;
+		}
 	} else {
 		sb = uadev[chip->card->number].sb;
 		sdev = uadev[chip->card->number].sdev;
@@ -1844,7 +1855,9 @@ static void qc_usb_audio_offload_probe(struct snd_usb_audio *chip)
 	return;
 
 unreg_xhci:
+	segment_pool = sb->segment_pool;
 	xhci_sideband_unregister(sb);
+	dma_pool_destroy(segment_pool);
 	uadev[chip->card->number].sb = NULL;
 free_sdev:
 	kfree(sdev);
@@ -1905,8 +1918,12 @@ done:
 	 * This is to accommodate for devices w/ multiple UAC functions.
 	 */
 	if (chip->num_interfaces == 1) {
+		struct dma_pool *segment_pool = dev->sb->segment_pool;
+
 		snd_soc_usb_disconnect(uaudio_qdev->auxdev->dev.parent, dev->sdev);
 		xhci_sideband_unregister(dev->sb);
+		dma_pool_destroy(segment_pool);
+		dev->sb = NULL;
 		dev->chip = NULL;
 		kfree(dev->sdev->ppcm_idx);
 		kfree(dev->sdev);
