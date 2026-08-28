@@ -1140,11 +1140,24 @@ static void free_skb_resources(struct gfar_private *priv)
 			free_skb_rx_queue(rx_queue);
 	}
 
-	dma_free_coherent(priv->dev,
-			  sizeof(struct txbd8) * priv->total_tx_ring_size +
-			  sizeof(struct rxbd8) * priv->total_rx_ring_size,
-			  priv->tx_queue[0]->tx_bd_base,
-			  priv->tx_queue[0]->tx_bd_dma_base);
+	if (priv->tx_queue[0]->tx_bd_base) {
+		dma_free_coherent(priv->dev,
+				  sizeof(struct txbd8) *
+				  priv->total_tx_ring_size +
+				  sizeof(struct rxbd8) *
+				  priv->total_rx_ring_size,
+				  priv->tx_queue[0]->tx_bd_base,
+				  priv->tx_queue[0]->tx_bd_dma_base);
+
+		for (i = 0; i < priv->num_tx_queues; i++) {
+			priv->tx_queue[i]->tx_bd_base = NULL;
+			priv->tx_queue[i]->tx_bd_dma_base = 0;
+		}
+		for (i = 0; i < priv->num_rx_queues; i++) {
+			priv->rx_queue[i]->rx_bd_base = NULL;
+			priv->rx_queue[i]->rx_bd_dma_base = 0;
+		}
+	}
 }
 
 void stop_gfar(struct net_device *dev)
@@ -2003,6 +2016,7 @@ static int gfar_set_mac_address(struct net_device *dev)
 static int gfar_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct gfar_private *priv = netdev_priv(dev);
+	int err = 0;
 
 	while (test_and_set_bit_lock(GFAR_RESETTING, &priv->state))
 		cpu_relax();
@@ -2013,24 +2027,27 @@ static int gfar_change_mtu(struct net_device *dev, int new_mtu)
 	WRITE_ONCE(dev->mtu, new_mtu);
 
 	if (dev->flags & IFF_UP)
-		startup_gfar(dev);
+		err = startup_gfar(dev);
 
 	clear_bit_unlock(GFAR_RESETTING, &priv->state);
 
-	return 0;
+	return err;
 }
 
-static void reset_gfar(struct net_device *ndev)
+static int reset_gfar(struct net_device *ndev)
 {
 	struct gfar_private *priv = netdev_priv(ndev);
+	int ret;
 
 	while (test_and_set_bit_lock(GFAR_RESETTING, &priv->state))
 		cpu_relax();
 
 	stop_gfar(ndev);
-	startup_gfar(ndev);
+	ret = startup_gfar(ndev);
 
 	clear_bit_unlock(GFAR_RESETTING, &priv->state);
+
+	return ret;
 }
 
 /* gfar_reset_task gets scheduled when a packet has not been
@@ -2058,6 +2075,7 @@ static int gfar_hwtstamp_set(struct net_device *netdev,
 			     struct netlink_ext_ack *extack)
 {
 	struct gfar_private *priv = netdev_priv(netdev);
+	int ret = 0;
 
 	switch (config->tx_type) {
 	case HWTSTAMP_TX_OFF:
@@ -2076,7 +2094,7 @@ static int gfar_hwtstamp_set(struct net_device *netdev,
 	case HWTSTAMP_FILTER_NONE:
 		if (priv->hwts_rx_en) {
 			priv->hwts_rx_en = 0;
-			reset_gfar(netdev);
+			ret = reset_gfar(netdev);
 		}
 		break;
 	default:
@@ -2084,13 +2102,13 @@ static int gfar_hwtstamp_set(struct net_device *netdev,
 			return -ERANGE;
 		if (!priv->hwts_rx_en) {
 			priv->hwts_rx_en = 1;
-			reset_gfar(netdev);
+			ret = reset_gfar(netdev);
 		}
 		config->rx_filter = HWTSTAMP_FILTER_ALL;
 		break;
 	}
 
-	return 0;
+	return ret;
 }
 
 static int gfar_hwtstamp_get(struct net_device *netdev,
