@@ -326,6 +326,10 @@
 	};
 };
 
+&ice {
+	status = "okay";
+};
+
 &mdss_dsi0 {
 	vdda-supply = <&vreg_l3e_1p2>;
 };

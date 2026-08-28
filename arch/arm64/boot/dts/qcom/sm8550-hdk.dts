@@ -1024,6 +1024,10 @@
 	status = "okay";
 };
 
+&ice {
+	status = "okay";
+};
+
 &ipa {
 	firmware-name = "qcom/sm8550/ipa_fws.mbn";
 	status = "okay";
