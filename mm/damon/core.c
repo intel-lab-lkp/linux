@@ -2347,14 +2347,15 @@ static bool damos_skip_charged_region(struct damon_target *t,
 	if (quota->charge_target_from) {
 		if (t != quota->charge_target_from)
 			return true;
-		if (r == damon_last_region(t)) {
-			quota->charge_target_from = NULL;
-			quota->charge_addr_from = 0;
+		if (quota->charge_addr_from &&
+				r->ar.end <= quota->charge_addr_from) {
+			if (r->ar.end == quota->charge_addr_from ||
+					damon_is_last_region(r, t)) {
+				quota->charge_target_from = NULL;
+				quota->charge_addr_from = 0;
+			}
 			return true;
 		}
-		if (quota->charge_addr_from &&
-				r->ar.end <= quota->charge_addr_from)
-			return true;
 
 		if (quota->charge_addr_from && r->ar.start <
 				quota->charge_addr_from) {
