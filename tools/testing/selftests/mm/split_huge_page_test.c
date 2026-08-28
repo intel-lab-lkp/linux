@@ -180,6 +180,10 @@ static void verify_rss_anon_split_huge_page_all_zeroes(char *one_page, int nr_hp
 	if (!rss_anon_before)
 		ksft_exit_fail_msg("No RssAnon is allocated before split\n");
 
+	/* Prevent khugepaged from collapsing the pages. */
+	if (madvise(one_page, len, MADV_NOHUGEPAGE))
+		ksft_print_msg("madvise(MADV_NOHUGEPAGE) failed\n");
+
 	/* split all THPs */
 	write_debugfs(PID_FMT, getpid(), (uint64_t)one_page,
 		      (uint64_t)one_page + len, 0);
@@ -226,6 +230,10 @@ static void split_pmd_thp_to_order(int order)
 
 	if (!check_huge_anon(one_page, 4 * pmd_pagesize, 4, pmd_pagesize))
 		ksft_exit_fail_msg("No THP is allocated\n");
+
+	/* Prevent khugepaged from collapsing the pages. */
+	if (madvise(one_page, len, MADV_NOHUGEPAGE))
+		ksft_print_msg("madvise(MADV_NOHUGEPAGE) failed\n");
 
 	/* split all THPs */
 	write_debugfs(PID_FMT, getpid(), (uint64_t)one_page,
@@ -312,6 +320,10 @@ static void split_pte_mapped_thp(void)
 		ksft_test_result_fail("THP %zu missing after mremap\n", i);
 		goto out;
 	}
+
+	/* Prevent khugepaged from collapsing the pages. */
+	if (madvise(thp_area, thp_area_size, MADV_NOHUGEPAGE))
+		ksft_print_msg("madvise(MADV_NOHUGEPAGE) failed\n");
 
 	/* Split all THPs through the remapped pages. */
 	write_debugfs(PID_FMT, getpid(), (uint64_t)page_area,
@@ -542,6 +554,9 @@ static int create_pagecache_thp_and_fd(const char *testfile, size_t fd_size,
 		ksft_test_result_skip("Pagecache folio split skipped\n");
 		return -2;
 	}
+	/* Prevent khugepaged from collapsing the pages. */
+	if (madvise(*addr, fd_size, MADV_NOHUGEPAGE))
+		ksft_print_msg("madvise(MADV_NOHUGEPAGE) failed\n");
 	return 0;
 err_out_close:
 	close(*fd);
