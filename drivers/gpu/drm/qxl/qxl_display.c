@@ -30,6 +30,7 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_blend.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_encoder.h>
 #include <drm/drm_framebuffer.h>
@@ -991,13 +992,25 @@ static struct drm_plane *qxl_create_plane(struct qxl_device *qdev,
 	if (err)
 		goto free_plane;
 
+	/*
+	 * Both planes expose formats with an alpha channel. Blending is
+	 * done by the host with premultiplied alpha, which is also the
+	 * property's default value.
+	 */
+	err = drm_plane_create_blend_mode_property(plane,
+						   BIT(DRM_MODE_BLEND_PREMULTI));
+	if (err) {
+		drm_plane_cleanup(plane);
+		goto free_plane;
+	}
+
 	drm_plane_helper_add(plane, helper_funcs);
 
 	return plane;
 
 free_plane:
 	kfree(plane);
-	return ERR_PTR(-EINVAL);
+	return ERR_PTR(err);
 }
 
 static int qdev_crtc_init(struct drm_device *dev, int crtc_id)
