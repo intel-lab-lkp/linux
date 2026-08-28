@@ -3558,6 +3558,9 @@ static int f2fs_ioc_set_pin_file(struct file *filp, unsigned long arg)
 		goto done;
 	} else if (f2fs_is_pinned_file(inode)) {
 		goto done;
+	} else if (f2fs_is_opu_file(inode)) {
+		ret = -EINVAL;
+		goto out;
 	}
 
 	if (F2FS_HAS_BLOCKS(inode)) {
@@ -3604,6 +3607,62 @@ static int f2fs_ioc_get_pin_file(struct file *filp, unsigned long arg)
 	if (is_inode_flag_set(inode, FI_PIN_FILE))
 		pin = F2FS_I(inode)->i_gc_failures;
 	return put_user(pin, (u32 __user *)arg);
+}
+
+static int f2fs_ioc_set_opu_file(struct file *filp, unsigned long arg)
+{
+	struct inode *inode = file_inode(filp);
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	struct f2fs_inode_info *fi = F2FS_I(inode);
+	__u32 opu;
+	int ret;
+
+	if (get_user(opu, (__u32 __user *)arg))
+		return -EFAULT;
+
+	if (!S_ISREG(inode->i_mode))
+		return -EINVAL;
+
+	if (f2fs_readonly(sbi->sb))
+		return -EROFS;
+
+	ret = mnt_want_write_file(filp);
+	if (ret)
+		return ret;
+
+	inode_lock(inode);
+
+	if (!opu) {
+		/*
+		 * Direct writes issued while the flag was set may still be in
+		 * flight with their blocks unwritten, so drain them before
+		 * f2fs_file_read_iter() stops serializing against them.
+		 */
+		if (f2fs_is_opu_file(inode))
+			inode_dio_wait(inode);
+		fi->i_flags &= ~F2FS_OPU_FL;
+		goto done;
+	}
+
+	if (f2fs_is_pinned_file(inode) || IS_DEVICE_ALIASING(inode)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	fi->i_flags |= F2FS_OPU_FL;
+done:
+	f2fs_mark_inode_dirty_sync(inode, true);
+	f2fs_update_time(sbi, REQ_TIME);
+out:
+	inode_unlock(inode);
+	mnt_drop_write_file(filp);
+	return ret;
+}
+
+static int f2fs_ioc_get_opu_file(struct file *filp, unsigned long arg)
+{
+	return put_user(f2fs_is_opu_file(file_inode(filp)) ? 1 : 0,
+			(__u32 __user *)arg);
 }
 
 static int f2fs_ioc_get_dev_alias_file(struct file *filp, unsigned long arg)
@@ -4740,6 +4799,10 @@ static long __f2fs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return f2fs_ioc_get_dev_alias_file(filp, arg);
 	case F2FS_IOC_IO_PRIO:
 		return f2fs_ioc_io_prio(filp, arg);
+	case F2FS_IOC_SET_OPU_FILE:
+		return f2fs_ioc_set_opu_file(filp, arg);
+	case F2FS_IOC_GET_OPU_FILE:
+		return f2fs_ioc_get_opu_file(filp, arg);
 	default:
 		return -ENOTTY;
 	}
@@ -4936,8 +4999,8 @@ static ssize_t f2fs_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 
 	dio = f2fs_should_use_dio(inode, iocb, to);
 
-	/* In LFS mode, if there is inflight dio, wait for its completion */
-	if (f2fs_lfs_mode(F2FS_I_SB(inode)) &&
+	/* For OPU direct writes, wait for any inflight dio to complete */
+	if ((f2fs_lfs_mode(F2FS_I_SB(inode)) || f2fs_is_opu_file(inode)) &&
 	    get_pages(F2FS_I_SB(inode), F2FS_DIO_WRITE) &&
 		(!f2fs_is_pinned_file(inode) || !dio))
 		inode_dio_wait(inode);
@@ -5522,6 +5585,8 @@ long f2fs_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case F2FS_IOC_COMPRESS_FILE:
 	case F2FS_IOC_GET_DEV_ALIAS_FILE:
 	case F2FS_IOC_IO_PRIO:
+	case F2FS_IOC_SET_OPU_FILE:
+	case F2FS_IOC_GET_OPU_FILE:
 		break;
 	default:
 		return -ENOIOCTLCMD;

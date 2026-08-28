@@ -1639,12 +1639,13 @@ int f2fs_map_blocks(struct inode *inode, struct f2fs_map_blocks *map, int flag)
 	unsigned int start_pgofs;
 	int bidx = 0;
 	bool is_hole;
-	bool lfs_dio_write;
+	bool opu_dio_write;
 
 	if (!maxblocks)
 		return 0;
 
-	lfs_dio_write = (flag == F2FS_GET_BLOCK_DIO && f2fs_should_opu(inode) &&
+	opu_dio_write = (flag == F2FS_GET_BLOCK_DIO &&
+				f2fs_should_opu(inode) &&
 				map->m_may_create);
 
 	if (!map->m_may_create && f2fs_map_blocks_cached(inode, map, flag)) {
@@ -1685,7 +1686,7 @@ map_more:
 
 next_dnode:
 	if (map->m_may_create) {
-		if (f2fs_lfs_mode(sbi))
+		if (f2fs_lfs_mode(sbi) || f2fs_is_opu_file(inode))
 			f2fs_balance_fs(sbi, true);
 		f2fs_map_lock(sbi, &lc, flag);
 	}
@@ -1715,9 +1716,10 @@ next_block:
 		goto sync_out;
 	}
 
-	/* use out-place-update for direct IO under LFS mode */
+	/* use out-place-update for direct IO under LFS mode or on OPU files */
 	if (map->m_may_create && (is_hole ||
-		(flag == F2FS_GET_BLOCK_DIO && f2fs_should_opu(inode) &&
+		(flag == F2FS_GET_BLOCK_DIO &&
+		f2fs_should_opu(inode) &&
 		map->m_last_pblk != blkaddr))) {
 		if (unlikely(f2fs_cp_error(sbi))) {
 			err = -EIO;
@@ -1804,13 +1806,13 @@ next_block:
 		if (map->m_multidev_dio)
 			map->m_bdev = FDEV(bidx).bdev;
 
-		if (lfs_dio_write)
+		if (opu_dio_write)
 			map->m_last_pblk = NULL_ADDR;
 	} else if (map_is_mergeable(sbi, map, blkaddr, flag, bidx, ofs)) {
 		ofs++;
 		map->m_len++;
 	} else {
-		if (lfs_dio_write)
+		if (opu_dio_write)
 			map->m_last_pblk = blkaddr;
 		goto sync_out;
 	}
@@ -2862,6 +2864,9 @@ bool f2fs_should_update_inplace(struct inode *inode, struct f2fs_io_info *fio)
 	if (f2fs_is_pinned_file(inode))
 		return true;
 
+	if (f2fs_is_opu_file(inode))
+		return false;
+
 	/* if this is cold file, we should overwrite to avoid fragmentation */
 	if (file_is_cold(inode) && !is_inode_flag_set(inode, FI_OPU_WRITE))
 		return true;
@@ -2897,6 +2902,9 @@ bool f2fs_should_update_outplace(struct inode *inode, struct f2fs_io_info *fio)
 		return true;
 
 	if (is_inode_flag_set(inode, FI_OPU_WRITE))
+		return true;
+
+	if (f2fs_is_opu_file(inode))
 		return true;
 
 	if (fio) {
@@ -4356,6 +4364,9 @@ static int f2fs_swap_activate(struct swap_info_struct *sis, struct file *file,
 
 	if (f2fs_readonly(sbi->sb))
 		return -EROFS;
+
+	if (f2fs_is_opu_file(inode))
+		return -EINVAL;
 
 	if (f2fs_lfs_mode(sbi) && !f2fs_sb_has_blkzoned(sbi)) {
 		f2fs_err(sbi, "Swapfile not supported in LFS mode");
