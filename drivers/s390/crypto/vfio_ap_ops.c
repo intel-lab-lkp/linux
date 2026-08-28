@@ -34,6 +34,7 @@
 #define AP_IRQ_ENABLED	1
 
 #define AP_RESET_INTERVAL		20	/* Reset sleep interval (20ms)		*/
+#define AP_RESET_MAX_WAIT		2000	/* Maximum wait for reset (2000ms)	*/
 
 static int vfio_ap_mdev_reset_queues(struct ap_matrix_mdev *matrix_mdev);
 static int vfio_ap_mdev_reset_qlist(struct list_head *qlist);
@@ -2067,6 +2068,37 @@ static void apq_reset_check(struct work_struct *reset_work)
 		ret = apq_status_check(q->apqn, &status);
 		if (ret == -EIO)
 			return;
+		if (elapsed >= AP_RESET_MAX_WAIT) {
+			/*
+			 * If the status check determined that the reset completed
+			 * successfully or the queue is not operational, clean up
+			 * the AQIC resources because queue reset disables
+			 * interrupts, or because interrupts are not possible on a
+			 * non-operational queue.
+			 */
+			if (!ret)
+				goto done;
+			/*
+			 * Timed out without being able to verify reset completed.
+			 *
+			 * The AQIC resources associated with this queue - the pinned page
+			 * containing the NIB and the registered guest ISC - cannot be freed
+			 * here. The NIB is the active DMA target for AP interrupt delivery
+			 * until the reset completes; freeing the pinned page while the
+			 * hardware may still write to it would result in a use-after-free
+			 * kernel crash.
+			 *
+			 * If the reset eventually completes, interrupts will be terminated
+			 * and the pinned NIB page and ISC registration will be leaked. This
+			 * is preferable to either a use-after-free or waiting indefinitely:
+			 * the caller of apq_reset_check() holds mdevs_lock while flush_work()
+			 * blocks holds the matrix_dev->mdevs_lock mutex, which
+			 * serializes access to all mdev objects system-wide, so blocking
+			 * here would stall all other guests using AP queues.
+			 */
+
+			return;
+		}
 		if (ret == -EBUSY) {
 			pr_notice_ratelimited(WAIT_MSG, elapsed,
 					      AP_QID_CARD(q->apqn),
@@ -2083,11 +2115,13 @@ static void apq_reset_check(struct work_struct *reset_work)
 				memcpy(&q->reset_status, &status, sizeof(status));
 				continue;
 			}
-			if (q->saved_isc != VFIO_AP_ISC_INVALID)
-				vfio_ap_free_aqic_resources(q);
-			break;
+			goto done;
 		}
 	}
+
+done:
+	if (q->saved_isc != VFIO_AP_ISC_INVALID)
+		vfio_ap_free_aqic_resources(q);
 }
 
 static void vfio_ap_mdev_reset_queue(struct vfio_ap_queue *q)
