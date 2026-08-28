@@ -1222,6 +1222,30 @@ test_boot_isolated()
 	echo "$TEST_NAME test PASSED."
 }
 
+# Return success if CPU $2 is present in cpulist $1.
+cpulist_contains()
+{
+	local CPULIST_ARG=$1
+	local CPU_ARG=$2
+	local ITEM FIRST LAST
+	local OLD_IFS=$IFS
+
+	IFS=,
+	for ITEM in $CPULIST_ARG
+	do
+		FIRST=${ITEM%-*}
+		LAST=${ITEM#*-}
+		[[ $ITEM != *-* ]] && LAST=$FIRST
+		if [[ $CPU_ARG -ge $FIRST && $CPU_ARG -le $LAST ]]
+		then
+			IFS=$OLD_IFS
+			return 0
+		fi
+	done
+	IFS=$OLD_IFS
+	return 1
+}
+
 #
 # A parent's type and CPU-mask changes must check only CPUs owned directly by
 # the parent, not a boot-isolated CPU owned by a valid child partition.
@@ -1269,6 +1293,127 @@ test_child_owned_cpus()
 	cd ..
 	rmdir A1
 	test_partition member
+	echo "" > cpuset.cpus
+	cd $CGROUP2
+	echo "$TEST_NAME test PASSED."
+}
+
+#
+# Returning the last housekeeping CPU to an isolated parent must invalidate
+# the isolated partition instead of adding that CPU to the isolated mask.
+#
+test_housekeeping_cpu_return()
+{
+	TEST_NAME="Housekeeping CPU return"
+	NOHZ_FILE=/sys/devices/system/cpu/nohz_full
+	[[ -r $NOHZ_FILE ]] || {
+		echo "$TEST_NAME test SKIPPED: no nohz_full state"
+		return 0
+	}
+	NOHZ_CPUS=$(cat $NOHZ_FILE)
+	[[ -n "$NOHZ_CPUS" && "$NOHZ_CPUS" != "(null)" ]] || {
+		echo "$TEST_NAME test SKIPPED: no nohz_full CPUs"
+		return 0
+	}
+
+	HK_CPU=
+	HK_COUNT=0
+	TYPE_CPUS=()
+	for ((CPU=0; CPU < NR_CPUS; CPU++))
+	do
+		CPU_ONLINE=/sys/devices/system/cpu/cpu${CPU}/online
+		[[ ! -e $CPU_ONLINE || $(cat $CPU_ONLINE) -eq 1 ]] || continue
+		cpulist_contains "$BOOT_CPUS" $CPU && continue
+		if cpulist_contains "$NOHZ_CPUS" $CPU
+		then
+			[[ ${#TYPE_CPUS[@]} -lt 3 ]] && TYPE_CPUS+=("$CPU")
+		else
+			HK_CPU=$CPU
+			((HK_COUNT++))
+		fi
+	done
+
+	[[ $HK_COUNT -eq 1 && ${#TYPE_CPUS[@]} -ge 2 ]] || {
+		echo "$TEST_NAME test SKIPPED: requires one full housekeeping CPU"
+		return 0
+	}
+	echo "Running $TEST_NAME test ..."
+
+	cd $CGROUP2/test
+	echo member > cpuset.cpus.partition
+	echo +cpuset > cgroup.subtree_control
+	echo $HK_CPU,${TYPE_CPUS[0]},${TYPE_CPUS[1]} > cpuset.cpus
+	test_partition root
+	mkdir A1
+	cd A1
+	echo $HK_CPU > cpuset.cpus
+	test_partition root
+	cd ..
+	test_partition isolated
+	cd A1
+	test_partition member
+	cd ..
+	grep -q '^isolated invalid (partition config conflicts with housekeeping setup)$' \
+		cpuset.cpus.partition || {
+		echo "Isolated parent remained valid after housekeeping CPU return"
+		exit 1
+	}
+	[[ $(cat $CGROUP2/cpuset.cpus.effective) = "$CPULIST" ]] || {
+		echo "Housekeeping CPU return did not release the partition CPUs"
+		exit 1
+	}
+	check_isolcpus "." || {
+		echo "Housekeeping CPU was added to the isolated mask"
+		exit 1
+	}
+	rmdir A1
+	echo member > cpuset.cpus.partition
+	echo "" > cpuset.cpus
+
+	if [[ ${#TYPE_CPUS[@]} -lt 3 ]]
+	then
+		echo "Nested $TEST_NAME test SKIPPED: requires three nohz_full CPUs"
+		cd $CGROUP2
+		echo "$TEST_NAME test PASSED."
+		return 0
+	fi
+
+	# Repeat the check with two isolated ancestors.
+	echo $HK_CPU,${TYPE_CPUS[0]},${TYPE_CPUS[1]},${TYPE_CPUS[2]} > cpuset.cpus
+	test_partition root
+	mkdir A1
+	cd A1
+	echo $HK_CPU,${TYPE_CPUS[1]},${TYPE_CPUS[2]} > cpuset.cpus
+	test_partition root
+	echo +cpuset > cgroup.subtree_control
+	mkdir A2
+	cd A2
+	echo $HK_CPU > cpuset.cpus
+	test_partition root
+	cd ..
+	test_partition isolated
+	cd ..
+	test_partition isolated
+	cd A1/A2
+	test_partition member
+	cd ../..
+	grep -q '^isolated invalid (partition config conflicts with housekeeping setup)$' \
+		cpuset.cpus.partition || {
+		echo "Outermost isolated partition remained valid after housekeeping CPU return"
+		exit 1
+	}
+	[[ $(cat $CGROUP2/cpuset.cpus.effective) = "$CPULIST" ]] || {
+		echo "Nested housekeeping CPU return did not release the partition CPUs"
+		exit 1
+	}
+	check_isolcpus "." || {
+		echo "Nested housekeeping CPU return added the CPU to the isolated mask"
+		exit 1
+	}
+	rmdir A1/A2
+	echo member > A1/cpuset.cpus.partition
+	rmdir A1
+	echo member > cpuset.cpus.partition
 	echo "" > cpuset.cpus
 	cd $CGROUP2
 	echo "$TEST_NAME test PASSED."
@@ -1347,5 +1492,6 @@ run_remote_state_test REMOTE_TEST_MATRIX
 test_isolated
 test_boot_isolated
 test_child_owned_cpus
+test_housekeeping_cpu_return
 test_inotify
 echo "All tests PASSED."
