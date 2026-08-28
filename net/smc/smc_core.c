@@ -1083,6 +1083,7 @@ static int smc_switch_cursor(struct smc_sock *smc, struct smc_cdc_tx_pend *pend,
 void smc_switch_link_and_count(struct smc_connection *conn,
 			       struct smc_link *to_lnk)
 {
+	spin_lock_bh(&conn->lgr_lnk_lock);
 	atomic_dec(&conn->lnk->conn_cnt);
 	/* link_hold in smc_conn_create() */
 	smcr_link_put(conn->lnk);
@@ -1090,6 +1091,7 @@ void smc_switch_link_and_count(struct smc_connection *conn,
 	atomic_inc(&conn->lnk->conn_cnt);
 	/* link_put in smc_conn_free() */
 	smcr_link_hold(conn->lnk);
+	spin_unlock_bh(&conn->lgr_lnk_lock);
 }
 
 struct smc_link *smc_switch_conns(struct smc_link_group *lgr,
@@ -1255,6 +1257,7 @@ static void smc_buf_unuse(struct smc_connection *conn,
 void smc_conn_free(struct smc_connection *conn)
 {
 	struct smc_link_group *lgr = conn->lgr;
+	struct smc_link *lnk;
 
 	if (!lgr || conn->freed)
 		/* Connection has never been registered in a
@@ -1287,8 +1290,13 @@ void smc_conn_free(struct smc_connection *conn)
 	if (!lgr->conns_num)
 		smc_lgr_schedule_free_work(lgr);
 lgr_put:
+	spin_lock_bh(&conn->lgr_lnk_lock);
+	lnk = conn->lnk;
+	conn->lnk = NULL;
+	conn->lgr = NULL;
+	spin_unlock_bh(&conn->lgr_lnk_lock);
 	if (!lgr->is_smcd)
-		smcr_link_put(conn->lnk); /* link_hold in smc_conn_create() */
+		smcr_link_put(lnk); /* link_hold in smc_conn_create() */
 	smc_lgr_put(lgr); /* lgr_hold in smc_conn_create() */
 }
 

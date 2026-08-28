@@ -408,6 +408,7 @@ void smc_sk_init(struct net *net, struct sock *sk, int protocol)
 	sock_lock_init_class_and_name(sk, "slock-AF_SMC", &smc_slock_key,
 				      "sk_lock-AF_SMC", &smc_key);
 	spin_lock_init(&smc->accept_q_lock);
+	spin_lock_init(&smc->conn.lgr_lnk_lock);
 	spin_lock_init(&smc->conn.send_lock);
 	mutex_init(&smc->clcsock_release_lock);
 	smc_init_saved_callbacks(smc);
