@@ -12,7 +12,6 @@ struct drm_syncobj;
 struct dma_fence;
 struct dma_fence_chain;
 struct drm_xe_sync;
-struct user_fence;
 
 struct xe_sync_entry {
 	struct drm_syncobj *syncobj;
@@ -28,4 +27,3 @@ struct xe_sync_entry {
 	u32 flags;
 };
 
-#endif
