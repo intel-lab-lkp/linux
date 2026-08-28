@@ -501,7 +501,7 @@ static int fsl_pwm_resume(struct device *dev)
 {
 	struct pwm_chip *chip = dev_get_drvdata(dev);
 	struct fsl_pwm_chip *fpc = to_fsl_chip(chip);
-	int i;
+	int i, ret;
 
 	for (i = 0; i < chip->npwm; i++) {
 		struct pwm_device *pwm = &chip->pwms[i];
@@ -509,20 +509,52 @@ static int fsl_pwm_resume(struct device *dev)
 		if (!test_bit(PWMF_REQUESTED, &pwm->flags))
 			continue;
 
-		clk_prepare_enable(fpc->ipg_clk);
+		ret = clk_prepare_enable(fpc->ipg_clk);
+		if (ret)
+			goto unwind;
 
 		if (!pwm_is_enabled(pwm))
 			continue;
 
-		clk_prepare_enable(fpc->clk[fpc->period.clk_select]);
-		clk_prepare_enable(fpc->clk[FSL_PWM_CLK_CNTEN]);
+		ret = clk_prepare_enable(fpc->clk[fpc->period.clk_select]);
+		if (ret) {
+			clk_disable_unprepare(fpc->ipg_clk);
+			goto unwind;
+		}
+
+		ret = clk_prepare_enable(fpc->clk[FSL_PWM_CLK_CNTEN]);
+		if (ret) {
+			clk_disable_unprepare(fpc->clk[fpc->period.clk_select]);
+			clk_disable_unprepare(fpc->ipg_clk);
+			goto unwind;
+		}
 	}
 
 	/* restore all registers from cache */
 	regcache_cache_only(fpc->regmap, false);
-	regcache_sync(fpc->regmap);
+	ret = regcache_sync(fpc->regmap);
+	if (!ret)
+		return 0;
 
-	return 0;
+	regcache_cache_only(fpc->regmap, true);
+	regcache_mark_dirty(fpc->regmap);
+
+unwind:
+	while (i--) {
+		struct pwm_device *pwm = &chip->pwms[i];
+
+		if (!test_bit(PWMF_REQUESTED, &pwm->flags))
+			continue;
+
+		if (pwm_is_enabled(pwm)) {
+			clk_disable_unprepare(fpc->clk[FSL_PWM_CLK_CNTEN]);
+			clk_disable_unprepare(fpc->clk[fpc->period.clk_select]);
+		}
+
+		clk_disable_unprepare(fpc->ipg_clk);
+	}
+
+	return ret;
 }
 #endif
 
