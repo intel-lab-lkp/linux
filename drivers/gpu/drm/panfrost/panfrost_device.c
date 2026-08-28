@@ -341,6 +341,8 @@ void panfrost_device_fini(struct panfrost_device *pfdev)
 	pm_runtime_get_sync(pfdev->base.dev);
 	pm_runtime_disable(pfdev->base.dev);
 
+	panfrost_jm_stop_sched_jobs(pfdev);
+
 	panfrost_gem_fini(pfdev);
 	panfrost_perfcnt_fini(pfdev);
 	panfrost_jm_fini(pfdev);

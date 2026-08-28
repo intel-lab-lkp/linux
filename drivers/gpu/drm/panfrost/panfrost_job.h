@@ -73,6 +73,7 @@ int panfrost_jm_is_idle(struct panfrost_device *pfdev);
 int panfrost_job_get_slot(struct panfrost_job *job);
 int panfrost_job_push(struct panfrost_job *job);
 void panfrost_job_put(struct panfrost_job *job);
+void panfrost_jm_stop_sched_jobs(struct panfrost_device *pfdev);
 
 #ifdef CONFIG_DEBUG_FS
 void panfrost_sched_debugfs_init(struct drm_minor *minor);

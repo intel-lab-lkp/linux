@@ -655,38 +655,11 @@ static u32 panfrost_active_slots(struct panfrost_device *pfdev,
 	return js_state & *js_state_mask;
 }
 
-static void
-panfrost_reset(struct panfrost_device *pfdev,
-	       struct drm_sched_job *bad)
+static void panfrost_stop_jobs(struct panfrost_device *pfdev)
 {
 	u32 js_state, js_state_mask = 0xffffffff;
 	unsigned int i, j;
-	bool cookie;
 	int ret;
-
-	if (!atomic_read(&pfdev->reset.pending))
-		return;
-
-	/* Stop the schedulers.
-	 *
-	 * FIXME: We temporarily get out of the dma_fence_signalling section
-	 * because the cleanup path generate lockdep splats when taking locks
-	 * to release job resources. We should rework the code to follow this
-	 * pattern:
-	 *
-	 *	try_lock
-	 *	if (locked)
-	 *		release
-	 *	else
-	 *		schedule_work_to_release_later
-	 */
-	for (i = 0; i < NUM_JOB_SLOTS; i++)
-		drm_sched_stop(&pfdev->js->queue[i].sched, bad);
-
-	cookie = dma_fence_begin_signalling();
-
-	if (bad)
-		drm_sched_increase_karma(bad);
 
 	/* Mask job interrupts and synchronize to make sure we won't be
 	 * interrupted during our reset.
@@ -730,6 +703,48 @@ panfrost_reset(struct panfrost_device *pfdev,
 	}
 	memset(pfdev->jobs, 0, sizeof(pfdev->jobs));
 	spin_unlock(&pfdev->js->job_lock);
+}
+
+void panfrost_jm_stop_sched_jobs(struct panfrost_device *pfdev)
+{
+	for (u32 i = 0; i < NUM_JOB_SLOTS; i++)
+		drm_sched_wqueue_stop(&pfdev->js->queue[i].sched);
+
+	panfrost_stop_jobs(pfdev);
+}
+
+static void
+panfrost_reset(struct panfrost_device *pfdev,
+	       struct drm_sched_job *bad)
+{
+	unsigned int i;
+	bool cookie;
+
+	if (!atomic_read(&pfdev->reset.pending))
+		return;
+
+	/* Stop the schedulers.
+	 *
+	 * FIXME: We temporarily get out of the dma_fence_signalling section
+	 * because the cleanup path generate lockdep splats when taking locks
+	 * to release job resources. We should rework the code to follow this
+	 * pattern:
+	 *
+	 *	try_lock
+	 *	if (locked)
+	 *		release
+	 *	else
+	 *		schedule_work_to_release_later
+	 */
+	for (i = 0; i < NUM_JOB_SLOTS; i++)
+		drm_sched_stop(&pfdev->js->queue[i].sched, bad);
+
+	cookie = dma_fence_begin_signalling();
+
+	if (bad)
+		drm_sched_increase_karma(bad);
+
+	panfrost_stop_jobs(pfdev);
 
 	/* Proceed with reset now. */
 	panfrost_device_reset(pfdev, false);
