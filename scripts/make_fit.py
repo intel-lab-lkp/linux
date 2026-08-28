@@ -288,7 +288,7 @@ def process_dtb(fname, args):
         path, basename = os.path.split(fname)
         cmd_fname = os.path.join(path, f'.{basename}.cmd')
         with open(cmd_fname, 'r', encoding='ascii') as inf:
-            cmd = inf.read()
+            cmd = inf.readline()
 
         if 'scripts/dtc/fdtoverlay' in cmd:
             # This depends on the structure of the composite DTB command
