@@ -66,8 +66,15 @@ pub use crate::{
     build_assert_macro as build_assert,
     build_error,
     const_assert,
-    static_assert, //
+    static_assert,
+    //
 };
+
+#[doc(inline)]
+pub use build_error::assert_in_const_eval;
+
+#[doc(inline)]
+pub use macros::const_eval;
 
 #[doc(hidden)]
 pub use build_error::build_error as build_error_fn;

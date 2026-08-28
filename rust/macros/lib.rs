@@ -15,6 +15,7 @@
 #![cfg_attr(not(CONFIG_RUSTC_HAS_SPAN_FILE), feature(proc_macro_span))]
 
 mod concat_idents;
+mod const_eval;
 mod export;
 mod fmt;
 mod for_lt;
@@ -336,6 +337,26 @@ pub fn fmt(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn concat_idents(input: TokenStream) -> TokenStream {
     concat_idents::concat_idents(parse_macro_input!(input)).into()
+}
+
+/// Mark a function as usable from const evaluation only.
+///
+/// Build will fail if the function is used for runtime code.
+///
+/// # Examples
+///
+/// ```
+/// #[const_eval]
+/// const fn call_for_const_eval_only() {
+///     // This code will be executed only during const eval!
+/// }
+///
+/// const _: () = call_for_const_eval_only();
+/// ```
+#[proc_macro_attribute]
+pub fn const_eval(attr: TokenStream, input: TokenStream) -> TokenStream {
+    parse_macro_input!(attr as syn::parse::Nothing);
+    const_eval::const_eval(parse_macro_input!(input)).into()
 }
 
 /// Paste identifiers together.

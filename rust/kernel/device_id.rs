@@ -10,6 +10,8 @@ use core::{
     mem::MaybeUninit, //
 };
 
+use crate::build_assert::const_eval;
+
 /// Marker trait to indicate a Rust device ID type represents a corresponding C device ID type.
 ///
 /// This is meant to be implemented by buses/subsystems so that they can use [`IdTable`] to
@@ -108,6 +110,7 @@ impl<T: RawDeviceId + RawDeviceIdIndex, U: 'static, const N: usize> IdArray<T, U
     /// Creates a new instance of the array.
     ///
     /// The contents are derived from the given identifiers and context information.
+    #[const_eval]
     pub const fn new(ids: [(T, &'static U); N]) -> Self {
         let mut raw_ids = [const { MaybeUninit::<T::RawType>::uninit() }; N];
 
@@ -144,6 +147,7 @@ impl<T: RawDeviceId, const N: usize> IdArray<T, (), N> {
     ///
     /// The contents are derived from the given identifiers and context information.
     /// If the device implements [`RawDeviceIdIndex`], consider using [`IdArray::new`] instead.
+    #[const_eval]
     pub const fn new_without_index(ids: [T; N]) -> Self {
         // SAFETY: `T` is layout-wise compatible with `T::RawType`, so is the array of them.
         let raw_ids: [MaybeUninit<T::RawType>; N] = unsafe { core::mem::transmute_copy(&ids) };

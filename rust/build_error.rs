@@ -29,3 +29,10 @@
 pub const fn build_error(msg: &'static str) -> ! {
     panic!("{}", msg);
 }
+
+/// Assert that the code is in const evaluation.
+///
+/// Triggers a build error if called at runtime.
+#[inline(never)]
+#[export_name = "rust_const_eval_called_at_runtime"]
+pub const fn assert_in_const_eval() {}
