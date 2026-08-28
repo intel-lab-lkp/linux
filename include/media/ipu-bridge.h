@@ -135,10 +135,12 @@ struct ipu_sensor {
 
 	u8 link;
 	u8 lanes;
+	u8 nr_link_freqs;
 	u32 mclkspeed;
 	u32 rotation;
 	enum v4l2_fwnode_orientation orientation;
 	const char *vcm_type;
+	u64 link_freqs[MAX_NUM_LINK_FREQS];
 
 	struct ipu_property_names prop_names;
 	struct property_entry ep_properties[5];
