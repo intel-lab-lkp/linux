@@ -17,7 +17,7 @@ use kernel::{
         io_write,
         Io, //
     },
-    num::casts,
+    num::casts::FromSafeCast,
     pci,
     prelude::*, //
 };
@@ -92,7 +92,7 @@ impl<const NUM_PAGES: usize> PteArray<NUM_PAGES> {
         for i in 0..NUM_PAGES {
             io_write!(view, .0[build: i],
                 start
-                    .checked_add(casts::usize_as_u64(i) << GSP_PAGE_SHIFT)
+                    .checked_add(u64::from_safe_cast(i) << GSP_PAGE_SHIFT)
                     .ok_or(EOVERFLOW)?
             );
         }

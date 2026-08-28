@@ -23,7 +23,10 @@ use kernel::{
         Io, //
     },
     new_mutex,
-    num::casts,
+    num::casts::{
+        self,
+        FromSafeCast, //
+    },
     prelude::*,
     ptr,
     sync::{
@@ -289,10 +292,10 @@ impl DmaGspMem {
         unsafe {
             (
                 core::slice::from_raw_parts_mut(
-                    data.add(casts::u32_as_usize(tx)),
-                    casts::u32_as_usize(tail_end - tx),
+                    data.add(usize::from_safe_cast(tx)),
+                    usize::from_safe_cast(tail_end - tx),
                 ),
-                core::slice::from_raw_parts_mut(data, casts::u32_as_usize(wrap_end)),
+                core::slice::from_raw_parts_mut(data, usize::from_safe_cast(wrap_end)),
             )
         }
     }
@@ -307,7 +310,7 @@ impl DmaGspMem {
         // `cpu_write_ptr`. The minimum value case is where `rx == 0` and `tx == MSGQ_NUM_PAGES -
         // 1`, which gives `0 + MSGQ_NUM_PAGES - (MSGQ_NUM_PAGES - 1) - 1 == 0`.
         let slots = (rx + MSGQ_NUM_PAGES - tx - 1) % MSGQ_NUM_PAGES;
-        casts::u32_as_usize(slots) * GSP_PAGE_SIZE
+        usize::from_safe_cast(slots) * GSP_PAGE_SIZE
     }
 
     /// Returns the region of the GSP message queue that the driver is currently allowed to read
@@ -343,10 +346,10 @@ impl DmaGspMem {
         unsafe {
             (
                 core::slice::from_raw_parts(
-                    data.add(casts::u32_as_usize(rx)),
-                    casts::u32_as_usize(tail_end - rx),
+                    data.add(usize::from_safe_cast(rx)),
+                    usize::from_safe_cast(tail_end - rx),
                 ),
-                core::slice::from_raw_parts(data, casts::u32_as_usize(wrap_end)),
+                core::slice::from_raw_parts(data, usize::from_safe_cast(wrap_end)),
             )
         }
     }

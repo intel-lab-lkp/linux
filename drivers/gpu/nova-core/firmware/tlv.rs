@@ -5,7 +5,7 @@ use kernel::{
     device,
     firmware,
     num::casts::{
-        self,
+        FromSafeCast,
         IntoSafeCast, //
     },
     prelude::*,
@@ -52,7 +52,7 @@ impl TlvBlockHeader {
             return None;
         }
         let len_arr = <[u8; 4]>::try_from(hdr.get(4..Self::SIZE)?).ok()?;
-        let length = casts::u32_as_usize(u32::from_le_bytes(len_arr));
+        let length = usize::from_safe_cast(u32::from_le_bytes(len_arr));
         Some(Self { tag, length })
     }
 }

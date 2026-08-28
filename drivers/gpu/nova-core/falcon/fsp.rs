@@ -16,7 +16,7 @@ use kernel::{
         },
         Io, //
     },
-    num::casts,
+    num::casts::FromSafeCast,
     prelude::*,
     sizes::SZ_1K,
     time::Delta,
@@ -165,7 +165,7 @@ impl<'a> Falcon<'a, Fsp> {
             Delta::from_millis(10),
             Delta::from_millis(FSP_MSG_TIMEOUT_MS),
         )
-        .map(casts::u32_as_usize)?;
+        .map(usize::from_safe_cast)?;
 
         // Don't blindly allocate more than the maximum we expect from FSP.
         if msg_size > FSP_EMEM_CHANNEL_0_SIZE {

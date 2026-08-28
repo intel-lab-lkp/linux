@@ -681,7 +681,7 @@ impl LibosMemoryRegionInitArgument {
         let init_inner = init!(bindings::LibosMemoryRegionInitArgument {
             id8: id8(name),
             pa: obj.dma_address(),
-            size: casts::usize_as_u64(obj.size()),
+            size: u64::from_safe_cast(obj.size()),
             kind: casts::u32_into_u8::<
                 { bindings::LibosMemoryRegionKind_LIBOS_MEMORY_REGION_CONTIGUOUS },
             >(),
@@ -851,7 +851,7 @@ impl GspMsgElement {
     /// Returns the length of the message's payload.
     pub(crate) fn payload_length(&self) -> usize {
         // `rpc.length` includes the length of the RPC message header.
-        casts::u32_as_usize(self.inner.rpc.length)
+        usize::from_safe_cast(self.inner.rpc.length)
             .saturating_sub(size_of::<bindings::rpc_message_header_v>())
     }
 
@@ -948,8 +948,8 @@ impl MessageQueueInitArguments {
         init!(MessageQueueInitArguments {
             sharedMemPhysAddr: cmdq.dma_addr,
             pageTableEntryCount: casts::usize_into_u32::<{ Cmdq::NUM_PTES }>(),
-            cmdQueueOffset: casts::usize_as_u64(Cmdq::CMDQ_OFFSET),
-            statQueueOffset: casts::usize_as_u64(Cmdq::STATQ_OFFSET),
+            cmdQueueOffset: u64::from_safe_cast(Cmdq::CMDQ_OFFSET),
+            statQueueOffset: u64::from_safe_cast(Cmdq::STATQ_OFFSET),
             ..Zeroable::init_zeroed()
         })
     }
