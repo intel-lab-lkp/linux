@@ -1611,6 +1611,8 @@
 			clock-names = "core",
 				      "iface";
 			power-domains = <&gcc UFS_PHY_GDSC>;
+
+			status = "disabled";
 		};
 
 		ipa: ipa@1e40000 {
