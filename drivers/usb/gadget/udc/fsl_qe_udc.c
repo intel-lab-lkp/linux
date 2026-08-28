@@ -911,16 +911,37 @@ static int qe_ep_rxframe_handle(struct qe_ep *ep)
 
 		cp = (u8 *)(req->req.buf) + req->req.actual;
 		if (cp) {
-			memcpy(cp, pframe->data, fsize);
-			req->req.actual += fsize;
-			if ((fsize < ep->ep.maxpacket) ||
-					(req->req.actual >= req->req.length)) {
+			if (req->req.actual >= req->req.length ||
+			    fsize > req->req.length - req->req.actual) {
+				/*
+				 * The host sent a frame larger than the
+				 * request can hold; drop it and complete with
+				 * -EOVERFLOW instead of copying past the
+				 * request buffer.
+				 */
+				dev_err(ep->udc->dev,
+					"%s: rx frame %u exceeds remaining %u\n",
+					ep->name, fsize,
+					req->req.length - req->req.actual);
+				qe_frame_clean(pframe);
 				if (ep->epnum == 0)
 					ep0_req_complete(ep->udc, req);
 				else
-					done(ep, req, 0);
+					done(ep, req, -EOVERFLOW);
 				if (list_empty(&ep->queue) && ep->epnum != 0)
 					qe_eprx_nack(ep);
+			} else {
+				memcpy(cp, pframe->data, fsize);
+				req->req.actual += fsize;
+				if ((fsize < ep->ep.maxpacket) ||
+						(req->req.actual >= req->req.length)) {
+					if (ep->epnum == 0)
+						ep0_req_complete(ep->udc, req);
+					else
+						done(ep, req, 0);
+					if (list_empty(&ep->queue) && ep->epnum != 0)
+						qe_eprx_nack(ep);
+				}
 			}
 		}
 	}
@@ -1518,15 +1539,36 @@ static int ep_req_rx(struct qe_ep *ep, struct qe_req *req)
 
 				cp = (u8 *)(req->req.buf) + req->req.actual;
 				if (cp) {
-					memcpy(cp, pframe->data, fsize);
-					req->req.actual += fsize;
-					if ((fsize < ep->ep.maxpacket)
-						|| (req->req.actual >=
-							req->req.length)) {
+					if (req->req.actual >= req->req.length ||
+					    fsize > req->req.length - req->req.actual) {
+						/*
+						 * The host sent a frame
+						 * larger than the request
+						 * can hold; drop it and
+						 * complete with -EOVERFLOW
+						 * instead of copying past
+						 * the request buffer.
+						 */
+						dev_err(udc->dev,
+							"%s: rx frame %u exceeds remaining %u\n",
+							ep->name, fsize,
+							req->req.length - req->req.actual);
+						qe_frame_clean(pframe);
 						finish_req = 1;
-						done(ep, req, 0);
+						done(ep, req, -EOVERFLOW);
 						if (list_empty(&ep->queue))
 							qe_eprx_nack(ep);
+					} else {
+						memcpy(cp, pframe->data, fsize);
+						req->req.actual += fsize;
+						if ((fsize < ep->ep.maxpacket)
+							|| (req->req.actual >=
+								req->req.length)) {
+							finish_req = 1;
+							done(ep, req, 0);
+							if (list_empty(&ep->queue))
+								qe_eprx_nack(ep);
+						}
 					}
 				}
 				qe_ep_toggledata01(ep);
