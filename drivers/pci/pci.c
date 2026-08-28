@@ -5058,6 +5058,7 @@ static void pci_dev_save_and_disable(struct pci_dev *dev)
 	 */
 	pci_set_power_state(dev, PCI_D0);
 
+	pci_reset_lmr(dev);
 	pci_save_state(dev);
 	/*
 	 * Disable the device by clearing the Command register, except for

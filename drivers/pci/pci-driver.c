@@ -743,6 +743,8 @@ static int pci_pm_prepare(struct device *dev)
 
 	dev_pm_set_strict_midlayer(dev, true);
 
+	pci_suspend_lmr(pci_dev);
+
 	if (pm && pm->prepare) {
 		int error = pm->prepare(dev);
 		if (error < 0)

@@ -796,6 +796,11 @@ static inline bool pci_dev_test_and_set_removed(struct pci_dev *dev)
 	return test_and_set_bit(PCI_DEV_REMOVED, &dev->priv_flags);
 }
 
+static inline bool pci_dev_is_removed(struct pci_dev *dev)
+{
+	return test_bit(PCI_DEV_REMOVED, &dev->priv_flags);
+}
+
 static inline void pci_dev_allow_binding(struct pci_dev *dev)
 {
 	set_bit(PCI_DEV_ALLOW_BINDING, &dev->priv_flags);
@@ -1021,6 +1026,18 @@ static inline void pci_restore_tph_state(struct pci_dev *dev) { }
 static inline void pci_save_tph_state(struct pci_dev *dev) { }
 static inline void pci_no_tph(void) { }
 static inline void pci_tph_init(struct pci_dev *dev) { }
+#endif
+
+#ifdef CONFIG_PCIE_LMR
+void pci_lmr_init(struct pci_dev *dev);
+void pci_lmr_exit(struct pci_dev *dev);
+void pci_suspend_lmr(struct pci_dev *dev);
+void pci_reset_lmr(struct pci_dev *dev);
+#else
+static inline void pci_lmr_init(struct pci_dev *dev) { }
+static inline void pci_lmr_exit(struct pci_dev *dev) { }
+static inline void pci_suspend_lmr(struct pci_dev *dev) { }
+static inline void pci_reset_lmr(struct pci_dev *dev) { }
 #endif
 
 #ifdef CONFIG_PCIE_PTM
