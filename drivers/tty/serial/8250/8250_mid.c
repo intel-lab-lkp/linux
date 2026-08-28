@@ -210,6 +210,7 @@ static void mid8250_set_termios(struct uart_port *p, struct ktermios *termios,
 {
 	unsigned int baud = tty_termios_baud_rate(termios);
 	struct mid8250 *mid = p->private_data;
+	struct uart_8250_port *up = up_to_u8250p(p);
 	unsigned short ps = 16;
 	unsigned long fuart = baud * ps;
 	unsigned long w = BIT(24) - 1;
@@ -218,6 +219,7 @@ static void mid8250_set_termios(struct uart_port *p, struct ktermios *termios,
 	/* Gracefully handle the B0 case: fall back to B9600 */
 	fuart = fuart ? fuart : 9600 * 16;
 
+	uart_port_lock_irq(p);
 	if (mid->board->freq < fuart) {
 		/* Find prescaler value that satisfies Fuart < Fref */
 		if (mid->board->freq > baud)
@@ -231,11 +233,14 @@ static void mid8250_set_termios(struct uart_port *p, struct ktermios *termios,
 	}
 
 	rational_best_approximation(fuart, mid->board->freq, w, w, &mul, &div);
+
+	serial8250_wait_for_xmitr(up, UART_LSR_BOTH_EMPTY);
 	p->uartclk = fuart * 16 / ps;		/* core uses ps = 16 always */
 
 	writel(ps, p->membase + INTEL_MID_UART_PS);		/* set PS */
 	writel(mul, p->membase + INTEL_MID_UART_MUL);		/* set MUL */
 	writel(div, p->membase + INTEL_MID_UART_DIV);
+	uart_port_unlock_irq(p);
 
 	serial8250_do_set_termios(p, termios, old);
 }
