@@ -3214,7 +3214,7 @@ static void unmap_huge_pmd_entry(struct vm_area_struct *vma,
 	 * We are going to unmap this huge page. So
 	 * just go ahead and zap it
 	 */
-	if (arch_needs_pgtable_deposit())
+	if (has_deposited_pgtable(vma, old_pmd, folio))
 		zap_deposited_table(mm, pmd);
 
 	if (!folio)
@@ -3241,6 +3241,7 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 {
 	struct mm_struct *mm = vma->vm_mm;
 	pmd_t old_pmd = *pmd;
+	const bool is_present = pmd_present(old_pmd);
 	struct folio *folio;
 	struct page *page;
 	pgtable_t pgtable;
@@ -3274,16 +3275,18 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 		return;
 	}
 
+	folio = normal_or_softleaf_folio_pmd(vma, haddr, old_pmd, is_present);
+
+	/*
+	 * A non-present entry which is neither a migration nor a device
+	 * private entry is corrupt, and pmd_to_softleaf_folio() has already
+	 * warned about it. Leave it alone rather than act on a PFN which
+	 * means nothing.
+	 */
+	if (unlikely(!is_present && !folio))
+		return;
+
 	if (!vma_is_anonymous(vma)) {
-		const bool is_present = pmd_present(old_pmd);
-
-		if (vma_is_special_huge(vma) || is_huge_zero_pmd(old_pmd))
-			folio = NULL;
-		else if (is_present)
-			folio = page_folio(pmd_page(old_pmd));
-		else
-			folio = softleaf_to_folio(softleaf_from_pmd(old_pmd));
-
 		unmap_huge_pmd_entry(vma, haddr, pmd, folio, is_present);
 		return;
 	}
