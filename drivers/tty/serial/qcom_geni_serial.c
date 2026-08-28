@@ -1979,7 +1979,6 @@ static int qcom_geni_serial_probe(struct platform_device *pdev)
 						port->wakeup_irq);
 		if (ret) {
 			device_init_wakeup(&pdev->dev, false);
-			ida_free(&port_ida, uport->line);
 			goto error;
 		}
 	}
@@ -2003,6 +2002,8 @@ static int qcom_geni_serial_probe(struct platform_device *pdev)
 	return 0;
 
 error:
+	if (!data->console)
+		ida_free(&port_ida, uport->line);
 	if (port->rx_dma_addr) {
 		dma_unmap_single(pdev->dev.parent, port->rx_dma_addr,
 				 DMA_RX_BUF_SIZE, DMA_FROM_DEVICE);
@@ -2024,7 +2025,8 @@ static void qcom_geni_serial_remove(struct platform_device *pdev)
 	irq_work_sync(&port->tx_kick);
 	dev_pm_clear_wake_irq(&pdev->dev);
 	device_init_wakeup(&pdev->dev, false);
-	ida_free(&port_ida, uport->line);
+	if (!port->dev_data->console)
+		ida_free(&port_ida, uport->line);
 	uart_remove_one_port(drv, &port->uport);
 
 	if (port->rx_dma_addr) {
