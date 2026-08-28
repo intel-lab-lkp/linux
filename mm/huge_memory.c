@@ -3287,22 +3287,222 @@ static bool split_huge_pmd_anon_rmap(const struct split_pmd_state *state,
 	return false;
 }
 
-static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
-		unsigned long haddr, bool freeze)
+/*
+ * Replace an anonymous huge PMD entry with a page table mapping the same
+ * folio at PTE granularity.
+ */
+static void split_huge_pmd_to_ptes(struct vm_area_struct *vma,
+		unsigned long haddr, pmd_t *pmd, struct split_pmd_state *state)
 {
-	const pmd_t old_pmd = *pmd;
-	const bool is_present = pmd_present(old_pmd);
+	/* Present mappings and device private entries hold a PMD-level rmap. */
+	const bool rmapped = state->is_present || state->is_device_private;
 	struct mm_struct *mm = vma->vm_mm;
-	struct split_pmd_state state = {
-		.is_present = is_present,
-		.freeze = freeze,
-	};
-	struct folio *folio;
+	struct page *page = state->page;
 	unsigned long addr;
 	pgtable_t pgtable;
 	pmd_t _pmd;
 	pte_t *pte;
 	int i;
+
+	if (rmapped)
+		state->freeze = split_huge_pmd_anon_rmap(state, vma, haddr);
+
+	/*
+	 * The caller has already invalidated a present entry, and a softleaf
+	 * entry is not present to begin with. Either way the entry is out of
+	 * service before we withdraw the deposited page table, which is
+	 * critical for some architectures (Power).
+	 */
+	pgtable = pgtable_trans_huge_withdraw(mm, pmd);
+	pmd_populate(mm, &_pmd, pgtable);
+
+	pte = pte_offset_map(&_pmd, haddr);
+	VM_BUG_ON(!pte);
+
+	/*
+	 * Note that NUMA hinting access restrictions are not transferred to
+	 * avoid any possibility of altering permissions across VMAs.
+	 */
+	if (state->freeze ||
+	    (!state->is_present && !state->is_device_private)) {
+		pte_t entry;
+		swp_entry_t swp_entry;
+
+		for (i = 0, addr = haddr; i < HPAGE_PMD_NR; i++, addr += PAGE_SIZE) {
+			if (state->write)
+				swp_entry = make_writable_migration_entry(
+							page_to_pfn(page + i));
+			else if (state->anon_exclusive)
+				swp_entry = make_readable_exclusive_migration_entry(
+							page_to_pfn(page + i));
+			else
+				swp_entry = make_readable_migration_entry(
+							page_to_pfn(page + i));
+			if (state->young)
+				swp_entry = make_migration_entry_young(swp_entry);
+			if (state->dirty)
+				swp_entry = make_migration_entry_dirty(swp_entry);
+			entry = swp_entry_to_pte(swp_entry);
+			if (state->soft_dirty)
+				entry = pte_swp_mksoft_dirty(entry);
+			if (state->uffd)
+				entry = pte_swp_mkuffd(entry);
+			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
+			set_pte_at(mm, addr, pte + i, entry);
+		}
+	} else if (state->is_device_private) {
+		pte_t entry;
+		swp_entry_t swp_entry;
+
+		for (i = 0, addr = haddr; i < HPAGE_PMD_NR; i++, addr += PAGE_SIZE) {
+			/*
+			 * anon_exclusive was already propagated to the relevant
+			 * pages corresponding to the pte entries when freeze
+			 * is false.
+			 */
+			if (state->write)
+				swp_entry = make_writable_device_private_entry(
+							page_to_pfn(page + i));
+			else
+				swp_entry = make_readable_device_private_entry(
+							page_to_pfn(page + i));
+			/*
+			 * Young and dirty bits are not progated via swp_entry
+			 */
+			entry = swp_entry_to_pte(swp_entry);
+			if (state->soft_dirty)
+				entry = pte_swp_mksoft_dirty(entry);
+			if (state->uffd)
+				entry = pte_swp_mkuffd(entry);
+			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
+			set_pte_at(mm, addr, pte + i, entry);
+		}
+	} else {
+		pte_t entry;
+
+		entry = mk_pte(page, READ_ONCE(vma->vm_page_prot));
+		if (state->write)
+			entry = pte_mkwrite(entry, vma);
+		if (!state->young)
+			entry = pte_mkold(entry);
+		/* NOTE: this may set soft-dirty too on some archs */
+		if (state->dirty)
+			entry = pte_mkdirty(entry);
+		if (state->soft_dirty)
+			entry = pte_mksoft_dirty(entry);
+		if (state->uffd)
+			entry = pte_mkuffd(entry);
+
+		/* Restore PAGE_NONE so an RWP marker keeps trapping */
+		if (userfaultfd_rwp(vma) && state->uffd)
+			entry = pte_modify(entry, PAGE_NONE);
+
+		for (i = 0; i < HPAGE_PMD_NR; i++)
+			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
+
+		set_ptes(mm, haddr, pte, entry, HPAGE_PMD_NR);
+	}
+	pte_unmap(pte);
+
+	if (rmapped)
+		folio_remove_rmap_pmd(state->folio, page, vma);
+	if (state->freeze)
+		put_page(page);
+
+	smp_wmb(); /* make pte visible before pmd */
+	pmd_populate(mm, pmd, pgtable);
+}
+
+static void split_present_huge_pmd(struct vm_area_struct *vma,
+		unsigned long haddr, pmd_t *pmd, struct folio *folio,
+		bool freeze)
+{
+	struct split_pmd_state state = {
+		.folio = folio,
+		.is_present = true,
+		.freeze = freeze,
+	};
+
+	/*
+	 * Up to this point the pmd is present and huge and userland has the
+	 * whole access to the hugepage during the split (which happens in
+	 * place). If we overwrite the pmd with the not-huge version pointing
+	 * to the pte here (which of course we could if all CPUs were bug
+	 * free), userland could trigger a small page size TLB miss on the
+	 * small sized TLB while the hugepage TLB entry is still established in
+	 * the huge TLB. Some CPU doesn't like that. See
+	 * http://support.amd.com/TechDocs/41322_10h_Rev_Gd.pdf, Erratum 383 on
+	 * page 105. Intel should be safe but is also warns that it's only safe
+	 * if the permission and cache attributes of the two entries loaded in
+	 * the two TLB is identical (which should be the case here). But it is
+	 * generally safer to never allow small and huge TLB entries for the
+	 * same virtual address to be loaded simultaneously. So instead of
+	 * doing "pmd_populate(); flush_pmd_tlb_range();" we first mark the
+	 * current pmd notpresent (atomically because here the pmd_trans_huge
+	 * must remain set at all times on the pmd until the split is complete
+	 * for this pmd), then we flush the SMP TLB and finally we write the
+	 * non-huge version of the pmd entry with pmd_populate.
+	 *
+	 * This must also happen before PageAnonExclusive() is read below, see
+	 * folio_try_share_anon_rmap_pmd().
+	 */
+	const pmd_t pmdval = pmdp_invalidate(vma, haddr, pmd);
+
+	state.page = pmd_page(pmdval);
+	state.write = pmd_write(pmdval);
+	state.young = pmd_young(pmdval);
+	state.dirty = pmd_dirty(pmdval);
+	state.soft_dirty = pmd_soft_dirty(pmdval);
+	state.uffd = pmd_uffd(pmdval);
+	state.anon_exclusive = PageAnonExclusive(state.page);
+
+	if (state.dirty)
+		folio_set_dirty(folio);
+
+	VM_WARN_ON_FOLIO(!folio_ref_count(folio), folio);
+
+	split_huge_pmd_to_ptes(vma, haddr, pmd, &state);
+}
+
+static void split_non_present_huge_pmd(struct vm_area_struct *vma,
+		unsigned long haddr, pmd_t *pmd, pmd_t old_pmd,
+		struct folio *folio, bool freeze)
+{
+	const softleaf_t entry = softleaf_from_pmd(old_pmd);
+	struct split_pmd_state state = {
+		.folio = folio,
+		.page = softleaf_to_page(entry),
+		.is_device_private = softleaf_is_device_private(entry),
+		.freeze = freeze,
+		.soft_dirty = pmd_swp_soft_dirty(old_pmd),
+		.uffd = pmd_swp_uffd(old_pmd),
+	};
+
+	if (state.is_device_private) {
+		/*
+		 * Device private folios are treated the same as regular folios
+		 * w.r.t. anon exclusive handling, see
+		 * split_huge_pmd_anon_rmap().
+		 */
+		state.write = softleaf_is_device_private_write(entry);
+		state.anon_exclusive = PageAnonExclusive(state.page);
+	} else {
+		state.write = softleaf_is_migration_write(entry);
+		state.young = softleaf_is_migration_young(entry);
+		state.dirty = softleaf_is_migration_dirty(entry);
+		state.anon_exclusive =
+			softleaf_is_migration_read_exclusive(entry);
+	}
+
+	split_huge_pmd_to_ptes(vma, haddr, pmd, &state);
+}
+
+static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
+		unsigned long haddr, bool freeze)
+{
+	const pmd_t old_pmd = *pmd;
+	const bool is_present = pmd_present(old_pmd);
+	struct folio *folio;
 
 	VM_BUG_ON(haddr & ~HPAGE_PMD_MASK);
 	VM_BUG_ON_VMA(vma->vm_start > haddr, vma);
@@ -3343,185 +3543,11 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 		return;
 	}
 
-	state.folio = folio;
-
-	if (pmd_is_migration_entry(old_pmd)) {
-		const softleaf_t entry = softleaf_from_pmd(old_pmd);
-
-		state.page = softleaf_to_page(entry);
-
-		state.soft_dirty = pmd_swp_soft_dirty(old_pmd);
-		state.uffd = pmd_swp_uffd(old_pmd);
-
-		state.write = softleaf_is_migration_write(entry);
-		state.anon_exclusive =
-			softleaf_is_migration_read_exclusive(entry);
-		state.young = softleaf_is_migration_young(entry);
-		state.dirty = softleaf_is_migration_dirty(entry);
-	} else if (pmd_is_device_private_entry(old_pmd)) {
-		const softleaf_t entry = softleaf_from_pmd(old_pmd);
-
-		state.is_device_private = true;
-		state.page = softleaf_to_page(entry);
-
-		state.soft_dirty = pmd_swp_soft_dirty(old_pmd);
-		state.uffd = pmd_swp_uffd(old_pmd);
-
-		state.write = softleaf_is_device_private_write(entry);
-		state.anon_exclusive = PageAnonExclusive(state.page);
-
-		/*
-		 * Device private folios are treated the same as regular folios
-		 * w.r.t. anon exclusive handling, see
-		 * split_huge_pmd_anon_rmap().
-		 */
-		state.freeze = split_huge_pmd_anon_rmap(&state, vma, haddr);
-	} else {
-		/*
-		 * Up to this point the pmd is present and huge and userland has
-		 * the whole access to the hugepage during the split (which
-		 * happens in place). If we overwrite the pmd with the not-huge
-		 * version pointing to the pte here (which of course we could if
-		 * all CPUs were bug free), userland could trigger a small page
-		 * size TLB miss on the small sized TLB while the hugepage TLB
-		 * entry is still established in the huge TLB. Some CPU doesn't
-		 * like that. See
-		 * http://support.amd.com/TechDocs/41322_10h_Rev_Gd.pdf, Erratum
-		 * 383 on page 105. Intel should be safe but is also warns that
-		 * it's only safe if the permission and cache attributes of the
-		 * two entries loaded in the two TLB is identical (which should
-		 * be the case here). But it is generally safer to never allow
-		 * small and huge TLB entries for the same virtual address to be
-		 * loaded simultaneously. So instead of doing "pmd_populate();
-		 * flush_pmd_tlb_range();" we first mark the current pmd
-		 * notpresent (atomically because here the pmd_trans_huge must
-		 * remain set at all times on the pmd until the split is
-		 * complete for this pmd), then we flush the SMP TLB and finally
-		 * we write the non-huge version of the pmd entry with
-		 * pmd_populate.
-		 *
-		 * This must also happen before PageAnonExclusive() is read
-		 * below, see folio_try_share_anon_rmap_pmd().
-		 */
-		const pmd_t pmdval = pmdp_invalidate(vma, haddr, pmd);
-
-		state.page = pmd_page(pmdval);
-		state.write = pmd_write(pmdval);
-		state.young = pmd_young(pmdval);
-		state.dirty = pmd_dirty(pmdval);
-		state.soft_dirty = pmd_soft_dirty(pmdval);
-		state.uffd = pmd_uffd(pmdval);
-		state.anon_exclusive = PageAnonExclusive(state.page);
-
-		if (state.dirty)
-			folio_set_dirty(folio);
-
-		VM_WARN_ON_FOLIO(!folio_ref_count(folio), folio);
-
-		state.freeze = split_huge_pmd_anon_rmap(&state, vma, haddr);
-	}
-
-	/*
-	 * Withdraw the table only after we mark the pmd entry invalid.
-	 * This's critical for some architectures (Power).
-	 */
-	pgtable = pgtable_trans_huge_withdraw(mm, pmd);
-	pmd_populate(mm, &_pmd, pgtable);
-
-	pte = pte_offset_map(&_pmd, haddr);
-	VM_BUG_ON(!pte);
-
-	/*
-	 * Note that NUMA hinting access restrictions are not transferred to
-	 * avoid any possibility of altering permissions across VMAs.
-	 */
-	if (state.freeze || (!state.is_present && !state.is_device_private)) {
-		pte_t entry;
-		swp_entry_t swp_entry;
-
-		for (i = 0, addr = haddr; i < HPAGE_PMD_NR; i++, addr += PAGE_SIZE) {
-			if (state.write)
-				swp_entry = make_writable_migration_entry(
-						page_to_pfn(state.page + i));
-			else if (state.anon_exclusive)
-				swp_entry = make_readable_exclusive_migration_entry(
-						page_to_pfn(state.page + i));
-			else
-				swp_entry = make_readable_migration_entry(
-						page_to_pfn(state.page + i));
-			if (state.young)
-				swp_entry = make_migration_entry_young(swp_entry);
-			if (state.dirty)
-				swp_entry = make_migration_entry_dirty(swp_entry);
-			entry = swp_entry_to_pte(swp_entry);
-			if (state.soft_dirty)
-				entry = pte_swp_mksoft_dirty(entry);
-			if (state.uffd)
-				entry = pte_swp_mkuffd(entry);
-			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
-			set_pte_at(mm, addr, pte + i, entry);
-		}
-	} else if (state.is_device_private) {
-		pte_t entry;
-		swp_entry_t swp_entry;
-
-		for (i = 0, addr = haddr; i < HPAGE_PMD_NR; i++, addr += PAGE_SIZE) {
-			/*
-			 * anon_exclusive was already propagated to the relevant
-			 * pages corresponding to the pte entries when freeze
-			 * is false.
-			 */
-			if (state.write)
-				swp_entry = make_writable_device_private_entry(
-						page_to_pfn(state.page + i));
-			else
-				swp_entry = make_readable_device_private_entry(
-						page_to_pfn(state.page + i));
-			/*
-			 * Young and dirty bits are not progated via swp_entry
-			 */
-			entry = swp_entry_to_pte(swp_entry);
-			if (state.soft_dirty)
-				entry = pte_swp_mksoft_dirty(entry);
-			if (state.uffd)
-				entry = pte_swp_mkuffd(entry);
-			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
-			set_pte_at(mm, addr, pte + i, entry);
-		}
-	} else {
-		pte_t entry;
-
-		entry = mk_pte(state.page, READ_ONCE(vma->vm_page_prot));
-		if (state.write)
-			entry = pte_mkwrite(entry, vma);
-		if (!state.young)
-			entry = pte_mkold(entry);
-		/* NOTE: this may set soft-dirty too on some archs */
-		if (state.dirty)
-			entry = pte_mkdirty(entry);
-		if (state.soft_dirty)
-			entry = pte_mksoft_dirty(entry);
-		if (state.uffd)
-			entry = pte_mkuffd(entry);
-
-		/* Restore PAGE_NONE so an RWP marker keeps trapping */
-		if (userfaultfd_rwp(vma) && state.uffd)
-			entry = pte_modify(entry, PAGE_NONE);
-
-		for (i = 0; i < HPAGE_PMD_NR; i++)
-			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
-
-		set_ptes(mm, haddr, pte, entry, HPAGE_PMD_NR);
-	}
-	pte_unmap(pte);
-
-	if (state.is_present || state.is_device_private)
-		folio_remove_rmap_pmd(state.folio, state.page, vma);
-	if (state.freeze)
-		put_page(state.page);
-
-	smp_wmb(); /* make pte visible before pmd */
-	pmd_populate(mm, pmd, pgtable);
+	if (is_present)
+		split_present_huge_pmd(vma, haddr, pmd, folio, freeze);
+	else
+		split_non_present_huge_pmd(vma, haddr, pmd, old_pmd, folio,
+					   freeze);
 }
 
 void split_huge_pmd_locked(struct vm_area_struct *vma, unsigned long address,
