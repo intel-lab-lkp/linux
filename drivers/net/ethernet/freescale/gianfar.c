@@ -1064,21 +1064,41 @@ static void free_skb_tx_queue(struct gfar_priv_tx_q *tx_queue)
 	txbdp = tx_queue->tx_bd_base;
 
 	for (i = 0; i < tx_queue->tx_ring_size; i++) {
-		if (!tx_queue->tx_skbuff[i])
+		struct sk_buff *skb = tx_queue->tx_skbuff[i];
+		bool do_tstamp;
+		int buflen;
+
+		if (!skb)
 			continue;
 
+		do_tstamp = (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) &&
+			    priv->hwts_tx_en;
+
+		/* Sending a time stamped frame requires two additional
+		 * buffers, the time stamp buffer itself being between the
+		 * FCB and the actual frame data, all mapped together.
+		 */
+		if (unlikely(do_tstamp))
+			buflen = be16_to_cpu(txbdp[1].length) +
+				 GMAC_FCB_LEN + GMAC_TXPAL_LEN;
+		else
+			buflen = be16_to_cpu(txbdp->length);
+
 		dma_unmap_single(priv->dev, be32_to_cpu(txbdp->bufPtr),
-				 be16_to_cpu(txbdp->length), DMA_TO_DEVICE);
+				 buflen, DMA_TO_DEVICE);
 		txbdp->lstatus = 0;
-		for (j = 0; j < skb_shinfo(tx_queue->tx_skbuff[i])->nr_frags;
-		     j++) {
+
+		if (unlikely(do_tstamp))
+			txbdp++;
+
+		for (j = 0; j < skb_shinfo(skb)->nr_frags; j++) {
 			txbdp++;
 			dma_unmap_page(priv->dev, be32_to_cpu(txbdp->bufPtr),
 				       be16_to_cpu(txbdp->length),
 				       DMA_TO_DEVICE);
 		}
 		txbdp++;
-		dev_kfree_skb_any(tx_queue->tx_skbuff[i]);
+		dev_kfree_skb_any(skb);
 		tx_queue->tx_skbuff[i] = NULL;
 	}
 	kfree(tx_queue->tx_skbuff);
