@@ -23,6 +23,7 @@ use kernel::{
         Io, //
     },
     new_mutex,
+    num::casts,
     prelude::*,
     ptr,
     sync::{
@@ -57,7 +58,6 @@ use crate::{
         GSP_PAGE_SHIFT,
         GSP_PAGE_SIZE, //
     },
-    num,
     sbuffer::SBufferIter, //
 };
 
@@ -162,7 +162,7 @@ pub(crate) const MSGQ_NUM_PAGES: u32 = 0x3f;
 #[repr(C, align(0x1000))]
 #[derive(Debug)]
 struct MsgqData {
-    data: [[u8; GSP_PAGE_SIZE]; num::u32_as_usize(MSGQ_NUM_PAGES)],
+    data: [[u8; GSP_PAGE_SIZE]; casts::u32_as_usize(MSGQ_NUM_PAGES)],
 }
 
 // Annoyingly we are forced to use a literal to specify the alignment of
@@ -235,8 +235,8 @@ struct DmaGspMem(Coherent<GspMem>);
 impl DmaGspMem {
     /// Allocate a new instance and map it for `dev`.
     fn new(dev: &device::Device<device::Bound>) -> Result<Self> {
-        const MSGQ_SIZE: u32 = num::usize_into_u32::<{ size_of::<Msgq>() }>();
-        const RX_HDR_OFF: u32 = num::usize_into_u32::<{ mem::offset_of!(Msgq, rx) }>();
+        const MSGQ_SIZE: u32 = casts::usize_into_u32::<{ size_of::<Msgq>() }>();
+        const RX_HDR_OFF: u32 = casts::usize_into_u32::<{ mem::offset_of!(Msgq, rx) }>();
 
         let mut gsp_mem = CoherentBox::<GspMem>::zeroed(dev, GFP_KERNEL)?;
         gsp_mem.cpuq.tx = MsgqTxHeader::new(MSGQ_SIZE, RX_HDR_OFF, MSGQ_NUM_PAGES);
@@ -289,10 +289,10 @@ impl DmaGspMem {
         unsafe {
             (
                 core::slice::from_raw_parts_mut(
-                    data.add(num::u32_as_usize(tx)),
-                    num::u32_as_usize(tail_end - tx),
+                    data.add(casts::u32_as_usize(tx)),
+                    casts::u32_as_usize(tail_end - tx),
                 ),
-                core::slice::from_raw_parts_mut(data, num::u32_as_usize(wrap_end)),
+                core::slice::from_raw_parts_mut(data, casts::u32_as_usize(wrap_end)),
             )
         }
     }
@@ -307,7 +307,7 @@ impl DmaGspMem {
         // `cpu_write_ptr`. The minimum value case is where `rx == 0` and `tx == MSGQ_NUM_PAGES -
         // 1`, which gives `0 + MSGQ_NUM_PAGES - (MSGQ_NUM_PAGES - 1) - 1 == 0`.
         let slots = (rx + MSGQ_NUM_PAGES - tx - 1) % MSGQ_NUM_PAGES;
-        num::u32_as_usize(slots) * GSP_PAGE_SIZE
+        casts::u32_as_usize(slots) * GSP_PAGE_SIZE
     }
 
     /// Returns the region of the GSP message queue that the driver is currently allowed to read
@@ -343,10 +343,10 @@ impl DmaGspMem {
         unsafe {
             (
                 core::slice::from_raw_parts(
-                    data.add(num::u32_as_usize(rx)),
-                    num::u32_as_usize(tail_end - rx),
+                    data.add(casts::u32_as_usize(rx)),
+                    casts::u32_as_usize(tail_end - rx),
                 ),
-                core::slice::from_raw_parts(data, num::u32_as_usize(wrap_end)),
+                core::slice::from_raw_parts(data, casts::u32_as_usize(wrap_end)),
             )
         }
     }

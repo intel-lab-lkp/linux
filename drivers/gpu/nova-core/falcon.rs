@@ -20,6 +20,10 @@ use kernel::{
         },
         Io,
     },
+    num::casts::{
+        self,
+        FromSafeCast, //
+    },
     prelude::*,
     time::Delta,
 };
@@ -29,11 +33,7 @@ use crate::{
     driver::Bar0,
     falcon::hal::LoadMethod,
     gpu::Chipset,
-    num::{
-        self,
-        FromSafeCast, //
-    },
-    regs,
+    regs, //
 };
 
 pub(crate) mod fsp;
@@ -510,7 +510,7 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
         target_mem: FalconMem,
         load_offsets: FalconDmaLoadTarget,
     ) -> Result {
-        const DMA_LEN: u32 = num::usize_into_u32::<{ MEM_BLOCK_ALIGNMENT }>();
+        const DMA_LEN: u32 = casts::usize_into_u32::<{ MEM_BLOCK_ALIGNMENT }>();
 
         // DMA transfers can only be done in units of 256 bytes. Compute how many such transfers we
         // need to perform.

@@ -9,6 +9,7 @@ use core::ops::Deref;
 
 use kernel::{
     firmware,
+    num::casts::IntoSafeCast,
     prelude::*, //
 };
 
@@ -18,8 +19,7 @@ use crate::{
         FalconFirmware, //
     },
     gpu,
-    gsp::boot_firmware_files,
-    num::IntoSafeCast, //
+    gsp::boot_firmware_files, //
 };
 
 pub(crate) mod booter;

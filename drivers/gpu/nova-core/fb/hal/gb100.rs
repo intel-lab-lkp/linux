@@ -11,7 +11,10 @@ use kernel::{
         },
         Io, //
     },
-    num::Bounded,
+    num::{
+        casts::usize_into_u32,
+        Bounded, //
+    },
     prelude::*,
     ptr::{
         const_align_up,
@@ -26,7 +29,6 @@ use crate::{
         hal::FbHal,
         regs, //
     },
-    num::usize_into_u32,
 };
 
 struct Gb100;

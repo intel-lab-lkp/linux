@@ -13,6 +13,7 @@ use kernel::{
     },
     dma::Coherent,
     io::{register::WithBase, Io},
+    num::casts::FromSafeCast,
     prelude::*,
     ptr::{
         Alignable,
@@ -45,8 +46,7 @@ use crate::{
         },
     },
     gpu::Chipset,
-    num::FromSafeCast, //
-    regs,
+    regs, //
 };
 
 /// Structure used by the boot-loader to load the rest of the code.

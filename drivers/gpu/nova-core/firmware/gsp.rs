@@ -9,6 +9,10 @@ use kernel::{
         DmaAddress, //
     },
     firmware,
+    num::casts::{
+        arch::FromSafeCastArch,
+        FromSafeCast, //
+    },
     prelude::*,
     scatterlist::{
         Owned,
@@ -26,8 +30,7 @@ use crate::{
         },
     },
     gpu::Chipset,
-    gsp::GSP_PAGE_SIZE,
-    num::FromSafeCast,
+    gsp::GSP_PAGE_SIZE, //
 };
 
 /// GSP firmware with 3-level radix page tables for the GSP bootloader.
@@ -154,7 +157,7 @@ impl GspFirmware {
 fn map_into_lvl(sg_table: &SGTable<Owned<VVec<u8>>>, mut dst: VVec<u8>) -> Result<VVec<u8>> {
     for sg_entry in sg_table.iter() {
         // Number of pages we need to map.
-        let num_pages = usize::from_safe_cast(sg_entry.dma_len()).div_ceil(GSP_PAGE_SIZE);
+        let num_pages = usize::from_safe_cast_arch(sg_entry.dma_len()).div_ceil(GSP_PAGE_SIZE);
 
         for i in 0..num_pages {
             let entry = sg_entry.dma_address()

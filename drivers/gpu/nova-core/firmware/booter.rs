@@ -10,6 +10,7 @@ use core::marker::PhantomData;
 use kernel::{
     device,
     dma::Coherent,
+    num::casts::IntoSafeCast,
     prelude::*, //
 };
 
@@ -32,8 +33,7 @@ use crate::{
         Signed,
         Unsigned, //
     },
-    gpu::Chipset,
-    num::IntoSafeCast,
+    gpu::Chipset, //
 };
 
 /// Signature for Booter firmware. Their size is encoded into the header and not known a compile

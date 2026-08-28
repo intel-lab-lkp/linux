@@ -11,6 +11,7 @@ use kernel::{
         poll::read_poll_timeout,
         Io, //
     },
+    num::casts::FromSafeCast,
     prelude::*,
     time::{
         delay::fsleep,
@@ -35,7 +36,6 @@ use crate::{
         GspBootContext,
         LibosMemoryRegionInitArgument, //
     },
-    num::FromSafeCast,
     sbuffer::SBufferIter,
 };
 
