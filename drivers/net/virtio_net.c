@@ -36,6 +36,10 @@ module_param(csum, bool, 0444);
 module_param(gso, bool, 0444);
 module_param(napi_tx, bool, 0644);
 
+/* RX queue stall timeout in seconds; 0 disables the watchdog. */
+static unsigned int rx_watchdog_timeo = 5;
+module_param(rx_watchdog_timeo, uint, 0644);
+
 #define VIRTIO_OFFLOAD_MAP_MIN	46
 #define VIRTIO_OFFLOAD_MAP_MAX	47
 #define VIRTIO_FEATURES_MAP_MIN	65
@@ -330,6 +334,11 @@ struct receive_queue {
 	/* The number of rx notifications */
 	u16 calls;
 
+	/* RX watchdog state for lost-interrupt detection. */
+	u16 watchdog_last_used_idx;
+	u16 watchdog_calls;
+	unsigned long watchdog_jiffies;
+
 	/* Is dynamic interrupt moderation enabled? */
 	bool dim_enabled;
 
@@ -440,6 +449,9 @@ struct virtnet_info {
 
 	/* Work struct for setting rx mode */
 	struct work_struct rx_mode_work;
+
+	/* RX watchdog timer for lost-interrupt detection */
+	struct timer_list rx_watchdog;
 
 	/* OK to queue work setting RX mode? */
 	bool rx_mode_work_enabled;
@@ -3046,6 +3058,85 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
 	return received;
 }
 
+/*
+ * The RX path is entirely event driven: the driver relies on the
+ * hypervisor injecting an interrupt for every used buffer. If an
+ * interrupt is lost (e.g. a transient KVM failure), NAPI is never
+ * scheduled, the driver stops consuming buffers, the backend fills the
+ * ring and, once it runs out of descriptors, stops sending further
+ * notifications. Both sides then wait for the other and the queue is
+ * permanently stuck.
+ *
+ * This watchdog detects that state: a queue is considered stalled when
+ * it has a non-zero backlog, makes no consumption progress and receives
+ * no new interrupt for rx_watchdog_timeo seconds. On detection it logs
+ * a warning.
+ */
+static void virtnet_rx_watchdog(struct timer_list *t)
+{
+	struct virtnet_info *vi = timer_container_of(vi, t, rx_watchdog);
+	unsigned long timeout = rx_watchdog_timeo * HZ;
+	int i;
+
+	if (!rx_watchdog_timeo)
+		return;
+
+	for (i = 0; i < vi->curr_queue_pairs; i++) {
+		struct receive_queue *rq = &vi->rq[i];
+		u16 last_used = virtqueue_get_last_used_idx(rq->vq);
+		u16 calls = rq->calls;
+		bool backlog = virtqueue_poll(rq->vq, last_used);
+
+		if (!backlog || last_used != rq->watchdog_last_used_idx ||
+		    calls != rq->watchdog_calls) {
+			/* No pending data, or the queue made progress, or a
+			 * new interrupt arrived: restart the window.
+			 */
+			rq->watchdog_last_used_idx = last_used;
+			rq->watchdog_calls = calls;
+			rq->watchdog_jiffies = jiffies;
+			continue;
+		}
+
+		if (time_after(jiffies, rq->watchdog_jiffies + timeout)) {
+			unsigned int stall_ms =
+				jiffies_to_msecs(jiffies - rq->watchdog_jiffies);
+
+			netdev_warn(vi->dev, "RX queue %u stalled for %u ms\n",
+				    i, stall_ms);
+
+			/* Rate-limit to one event per timeout. */
+			rq->watchdog_jiffies = jiffies;
+		}
+	}
+
+	mod_timer(&vi->rx_watchdog, jiffies + HZ);
+}
+
+static void virtnet_rx_watchdog_start(struct virtnet_info *vi)
+{
+	int i;
+
+	if (!rx_watchdog_timeo)
+		return;
+
+	for (i = 0; i < vi->curr_queue_pairs; i++) {
+		struct receive_queue *rq = &vi->rq[i];
+
+		rq->watchdog_last_used_idx =
+			virtqueue_get_last_used_idx(rq->vq);
+		rq->watchdog_calls = rq->calls;
+		rq->watchdog_jiffies = jiffies;
+	}
+
+	mod_timer(&vi->rx_watchdog, jiffies + HZ);
+}
+
+static void virtnet_rx_watchdog_stop(struct virtnet_info *vi)
+{
+	timer_delete_sync(&vi->rx_watchdog);
+}
+
 static void virtnet_disable_queue_pair(struct virtnet_info *vi, int qp_index)
 {
 	virtnet_napi_tx_disable(&vi->sq[qp_index]);
@@ -3208,6 +3299,8 @@ static int virtnet_open(struct net_device *dev)
 		vi->status = VIRTIO_NET_S_LINK_UP;
 		netif_carrier_on(dev);
 	}
+
+	virtnet_rx_watchdog_start(vi);
 
 	return 0;
 
@@ -3801,6 +3894,8 @@ static int virtnet_close(struct net_device *dev)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
 	int i;
+
+	virtnet_rx_watchdog_stop(vi);
 
 	/* Prevent the config change callback from changing carrier
 	 * after close
@@ -6869,6 +6964,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 
 	INIT_WORK(&vi->config_work, virtnet_config_changed_work);
 	INIT_WORK(&vi->rx_mode_work, virtnet_rx_mode_work);
+	timer_setup(&vi->rx_watchdog, virtnet_rx_watchdog, 0);
 
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_MRG_RXBUF)) {
 		vi->mergeable_rx_bufs = true;
