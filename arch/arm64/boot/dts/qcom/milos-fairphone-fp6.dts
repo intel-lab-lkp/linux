@@ -700,6 +700,10 @@
 	};
 };
 
+&ice {
+	status = "okay";
+};
+
 &ipa {
 	firmware-name = "qcom/milos/fairphone/fp6/ipa_fws.mbn";
 	memory-region = <&ipa_fw_mem>;
