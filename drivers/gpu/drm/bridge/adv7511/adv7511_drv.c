@@ -341,18 +341,31 @@ static void __adv7511_power_on(struct adv7511 *adv7511)
 				   ADV7511_REG_POWER2_HPD_SRC_NONE);
 }
 
-static void adv7511_power_on(struct adv7511 *adv7511)
+static int adv7511_power_on(struct adv7511 *adv7511)
 {
+	int ret;
 	__adv7511_power_on(adv7511);
 
 	/*
 	 * Most of the registers are reset during power down or when HPD is low.
 	 */
-	regcache_sync(adv7511->regmap);
+	ret = regcache_sync(adv7511->regmap);
+	if (ret) {
+		regmap_update_bits(adv7511->regmap, ADV7511_REG_POWER,
+				   ADV7511_POWER_POWER_DOWN,
+				   ADV7511_POWER_POWER_DOWN);
+		regcache_mark_dirty(adv7511->regmap);
+		adv7511->powered = false;
+		dev_err(&adv7511->i2c_main->dev,
+			"failed to sync register cache: %d\n", ret);
+		return ret;
+	}
 
 	if (adv7511->info->has_dsi)
 		adv7533_dsi_power_on(adv7511);
 	adv7511->powered = true;
+
+	return 0;
 }
 
 static void __adv7511_power_off(struct adv7511 *adv7511)
@@ -425,7 +438,8 @@ static void adv7511_hpd_work(struct work_struct *work)
 	    adv7511->status == connector_status_disconnected &&
 	    adv7511->powered) {
 		regcache_mark_dirty(adv7511->regmap);
-		adv7511_power_on(adv7511);
+		if (adv7511_power_on(adv7511))
+			return;
 	}
 
 	if (adv7511->status != status) {
@@ -634,7 +648,8 @@ adv7511_detect(struct adv7511 *adv7511)
 	 * has to be reinitialized. */
 	if (status == connector_status_connected && hpd && adv7511->powered) {
 		regcache_mark_dirty(adv7511->regmap);
-		adv7511_power_on(adv7511);
+		if (adv7511_power_on(adv7511))
+			status = connector_status_disconnected;
 		if (adv7511->status == connector_status_connected)
 			status = connector_status_disconnected;
 	} else {
@@ -788,7 +803,8 @@ static void adv7511_bridge_atomic_enable(struct drm_bridge *bridge,
 	struct drm_connector_state *conn_state;
 	struct drm_crtc_state *crtc_state;
 
-	adv7511_power_on(adv);
+	if (adv7511_power_on(adv))
+		return;
 
 	connector = drm_atomic_get_new_connector_for_encoder(state, bridge->encoder);
 	if (WARN_ON(!connector))
