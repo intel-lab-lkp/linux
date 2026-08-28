@@ -262,7 +262,7 @@ int i915_active_live_selftests(struct drm_i915_private *i915)
 	if (intel_gt_is_wedged(to_gt(i915)))
 		return 0;
 
-	return i915_subtests(tests, i915);
+	return i915_subtests(tests, i915, &i915->drm);
 }
 
 static struct intel_engine_cs *node_to_barrier(struct active_node *it)

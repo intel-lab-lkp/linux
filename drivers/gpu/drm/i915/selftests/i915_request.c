@@ -572,7 +572,7 @@ int i915_request_mock_selftests(void)
 		return -ENOMEM;
 
 	with_intel_runtime_pm(&i915->runtime_pm, wakeref)
-		err = i915_subtests(tests, i915);
+		err = i915_subtests(tests, i915, &i915->drm);
 
 	mock_destroy_device(i915);
 
@@ -1928,7 +1928,7 @@ int i915_request_live_selftests(struct drm_i915_private *i915)
 	if (intel_gt_is_wedged(to_gt(i915)))
 		return 0;
 
-	return i915_live_subtests(tests, i915);
+	return i915_live_subtests(tests, i915, &i915->drm);
 }
 
 static int switch_to_kernel_sync(struct intel_context *ce, int err)
@@ -3354,5 +3354,5 @@ int i915_request_perf_selftests(struct drm_i915_private *i915)
 	if (intel_gt_is_wedged(to_gt(i915)))
 		return 0;
 
-	return i915_subtests(tests, i915);
+	return i915_subtests(tests, i915, &i915->drm);
 }

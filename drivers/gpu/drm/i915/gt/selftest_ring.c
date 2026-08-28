@@ -106,5 +106,5 @@ int intel_ring_mock_selftests(void)
 		SUBTEST(igt_ring_direction),
 	};
 
-	return i915_subtests(tests, NULL);
+	return i915_subtests(tests, NULL, NULL);
 }

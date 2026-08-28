@@ -295,5 +295,5 @@ int intel_ring_submission_live_selftests(struct drm_i915_private *i915)
 	if (to_gt(i915)->submission_method > INTEL_SUBMISSION_RING)
 		return 0;
 
-	return intel_gt_live_subtests(tests, to_gt(i915));
+	return intel_gt_live_subtests(tests, to_gt(i915), &i915->drm);
 }

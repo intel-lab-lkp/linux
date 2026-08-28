@@ -612,5 +612,5 @@ int i915_syncmap_mock_selftests(void)
 		SUBTEST(igt_syncmap_random),
 	};
 
-	return i915_subtests(tests, NULL);
+	return i915_subtests(tests, NULL, NULL);
 }

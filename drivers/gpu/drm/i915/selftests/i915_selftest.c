@@ -224,7 +224,8 @@ static struct mm_struct *get_selftest_mm(int u_pid_nr)
 static int __run_selftests(const char *name,
 			   struct selftest *st,
 			   unsigned int count,
-			   void *data)
+			   void *data,
+			   struct drm_device *device)
 {
 	struct mm_struct *mm = NULL;
 	int u_pid_nr = -1;
@@ -243,8 +244,15 @@ static int __run_selftests(const char *name,
 
 	set_default_test_all(st, count);
 
-	pr_info(DRIVER_NAME ": Performing %s selftests with st_random_seed=0x%x st_timeout=%u\n",
-		name, i915_selftest.random_seed, i915_selftest.timeout_ms);
+	if (device)
+		drm_info(device, "Performing %s selftests with st_random_seed=0x%x st_timeout=%u\n",
+			 name, i915_selftest.random_seed,
+			 i915_selftest.timeout_ms);
+	else
+		pr_info(DRIVER_NAME
+			": Performing %s selftests with st_random_seed=0x%x st_timeout=%u\n",
+			name, i915_selftest.random_seed,
+			i915_selftest.timeout_ms);
 
 	/*
 	 * If we are running in a kthread on a multi NUMA system and the user passed
@@ -258,7 +266,11 @@ static int __run_selftests(const char *name,
 			if (unlikely(!current->mm)) {
 				mmput(mm);
 				mm = NULL;
-				pr_warn("Could not set mm as current->mm\n");
+				if (device)
+					drm_warn(device,
+						 "Could not set mm as current->mm\n");
+				else
+					pr_warn("Could not set mm as current->mm\n");
 			}
 		}
 	}
@@ -277,7 +289,11 @@ static int __run_selftests(const char *name,
 			return -EINTR;
 		}
 
-		pr_info(DRIVER_NAME ": Running %s\n", st->name);
+		if (device)
+			drm_info(device, "Running %s\n", st->name);
+		else
+			pr_info(DRIVER_NAME ": Running %s\n", st->name);
+
 		if (data)
 			err = st->live(data);
 		else
@@ -301,8 +317,9 @@ static int __run_selftests(const char *name,
 	return err;
 }
 
-#define run_selftests(x, data) \
-	__run_selftests(#x, x##_selftests, ARRAY_SIZE(x##_selftests), data)
+#define run_selftests(x, data, device) \
+	__run_selftests(#x, x##_selftests, ARRAY_SIZE(x##_selftests), \
+			data, device)
 
 int i915_mock_selftests(void)
 {
@@ -311,7 +328,7 @@ int i915_mock_selftests(void)
 	if (!i915_selftest.mock)
 		return 0;
 
-	err = run_selftests(mock, NULL);
+	err = run_selftests(mock, NULL, NULL);
 	if (err) {
 		i915_selftest.mock = err;
 		return 1;
@@ -352,7 +369,7 @@ int i915_live_selftests(struct pci_dev *pdev)
 	__wait_gsc_proxy_completed(i915);
 	__wait_gsc_huc_load_completed(i915);
 
-	err = run_selftests(live, i915);
+	err = run_selftests(live, i915, &i915->drm);
 	if (err) {
 		i915_selftest.live = err;
 		return err;
@@ -377,7 +394,7 @@ int i915_perf_selftests(struct pci_dev *pdev)
 	__wait_gsc_proxy_completed(i915);
 	__wait_gsc_huc_load_completed(i915);
 
-	err = run_selftests(perf, i915);
+	err = run_selftests(perf, i915, &i915->drm);
 	if (err) {
 		i915_selftest.perf = err;
 		return err;
@@ -495,7 +512,8 @@ int __i915_subtests(const char *caller,
 		    int (*teardown)(int err, void *data),
 		    const struct i915_subtest *st,
 		    unsigned int count,
-		    void *data)
+		    void *data,
+		    struct drm_device *device)
 {
 	int err;
 
@@ -509,18 +527,31 @@ int __i915_subtests(const char *caller,
 
 		err = setup(data);
 		if (err) {
-			pr_err(DRIVER_NAME "/%s: setup failed for %s\n",
-			       caller, st->name);
+			if (device)
+				drm_err(device, "%s: setup failed for %s\n",
+					caller, st->name);
+			else
+				pr_err(DRIVER_NAME "/%s: setup failed for %s\n",
+				       caller, st->name);
 			return err;
 		}
 
-		pr_info(DRIVER_NAME ": Running %s/%s\n", caller, st->name);
+		if (device)
+			drm_info(device, "Running %s/%s\n", caller, st->name);
+		else
+			pr_info(DRIVER_NAME ": Running %s/%s\n", caller, st->name);
+
 		GEM_TRACE("Running %s/%s\n", caller, st->name);
 
 		err = teardown(st->func(data), data);
 		if (err && err != -EINTR) {
-			pr_err(DRIVER_NAME "/%s: %s failed with error %d\n",
-			       caller, st->name, err);
+			if (device)
+				drm_err(device, "%s: %s failed with error %d\n",
+					caller, st->name, err);
+			else
+				pr_err(DRIVER_NAME
+				       "/%s: %s failed with error %d\n",
+				       caller, st->name, err);
 			return err;
 		}
 	}

@@ -59,5 +59,5 @@ int shmem_utils_mock_selftests(void)
 		SUBTEST(igt_shmem_basic),
 	};
 
-	return i915_subtests(tests, NULL);
+	return i915_subtests(tests, NULL, NULL);
 }

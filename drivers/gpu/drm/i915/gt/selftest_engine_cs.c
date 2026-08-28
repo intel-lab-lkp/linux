@@ -384,7 +384,7 @@ int intel_engine_cs_perf_selftests(struct drm_i915_private *i915)
 	if (intel_gt_is_wedged(to_gt(i915)))
 		return 0;
 
-	return intel_gt_live_subtests(tests, to_gt(i915));
+	return intel_gt_live_subtests(tests, to_gt(i915), &i915->drm);
 }
 
 static int intel_mmio_bases_check(void *arg)
@@ -439,5 +439,5 @@ int intel_engine_cs_mock_selftests(void)
 		SUBTEST(intel_mmio_bases_check),
 	};
 
-	return i915_subtests(tests, NULL);
+	return i915_subtests(tests, NULL, NULL);
 }

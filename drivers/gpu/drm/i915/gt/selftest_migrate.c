@@ -824,7 +824,7 @@ int intel_migrate_live_selftests(struct drm_i915_private *i915)
 	if (!gt->migrate.context)
 		return 0;
 
-	return intel_gt_live_subtests(tests, gt);
+	return intel_gt_live_subtests(tests, gt, &i915->drm);
 }
 
 static struct drm_i915_gem_object *
@@ -1046,5 +1046,5 @@ int intel_migrate_perf_selftests(struct drm_i915_private *i915)
 	if (!gt->migrate.context)
 		return 0;
 
-	return intel_gt_live_subtests(tests, gt);
+	return intel_gt_live_subtests(tests, gt, &i915->drm);
 }

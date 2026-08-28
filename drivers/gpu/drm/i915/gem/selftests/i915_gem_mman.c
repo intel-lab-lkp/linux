@@ -1860,12 +1860,12 @@ int i915_gem_mman_live_selftests(struct drm_i915_private *i915)
 		SUBTEST(igt_mmap_gpu),
 	};
 
-	ret = i915_live_subtests(tests, i915);
+	ret = i915_live_subtests(tests, i915, &i915->drm);
 	if (ret)
 		return ret;
 
 	if (current->mm)
-		ret = i915_live_subtests(vma_tests, i915);
+		ret = i915_live_subtests(vma_tests, i915, &i915->drm);
 	else
 		pr_warn("No current->mm to safely borrow userspace memory from. Skipping VMA tests.\n");
 

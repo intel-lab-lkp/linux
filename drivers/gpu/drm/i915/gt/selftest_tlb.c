@@ -405,7 +405,7 @@ int intel_tlb_live_selftests(struct drm_i915_private *i915)
 		if (intel_gt_is_wedged(gt))
 			continue;
 
-		err = intel_gt_live_subtests(tests, gt);
+		err = intel_gt_live_subtests(tests, gt, &i915->drm);
 		if (err)
 			return err;
 	}

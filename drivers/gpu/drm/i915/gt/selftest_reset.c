@@ -398,5 +398,5 @@ int intel_reset_live_selftests(struct drm_i915_private *i915)
 	if (intel_gt_is_wedged(gt))
 		return -EIO; /* we're long past hope of a successful reset */
 
-	return intel_gt_live_subtests(tests, gt);
+	return intel_gt_live_subtests(tests, gt, &i915->drm);
 }

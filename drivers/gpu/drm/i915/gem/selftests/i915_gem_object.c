@@ -83,7 +83,7 @@ int i915_gem_object_mock_selftests(void)
 	if (!i915)
 		return -ENOMEM;
 
-	err = i915_subtests(tests, i915);
+	err = i915_subtests(tests, i915, &i915->drm);
 
 	mock_destroy_device(i915);
 	return err;
@@ -95,5 +95,5 @@ int i915_gem_object_live_selftests(struct drm_i915_private *i915)
 		SUBTEST(igt_gem_huge),
 	};
 
-	return i915_live_subtests(tests, i915);
+	return i915_live_subtests(tests, i915, &i915->drm);
 }

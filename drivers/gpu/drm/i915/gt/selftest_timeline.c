@@ -448,7 +448,7 @@ int intel_timeline_mock_selftests(void)
 		SUBTEST(bench_sync),
 	};
 
-	return i915_subtests(tests, NULL);
+	return i915_subtests(tests, NULL, NULL);
 }
 
 static int emit_ggtt_store_dw(struct i915_request *rq, u32 addr, u32 value)
@@ -1425,5 +1425,5 @@ int intel_timeline_live_selftests(struct drm_i915_private *i915)
 	if (intel_gt_is_wedged(to_gt(i915)))
 		return 0;
 
-	return intel_gt_live_subtests(tests, to_gt(i915));
+	return intel_gt_live_subtests(tests, to_gt(i915), &i915->drm);
 }

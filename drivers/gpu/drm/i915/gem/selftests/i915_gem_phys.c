@@ -80,7 +80,7 @@ int i915_gem_phys_mock_selftests(void)
 	if (!i915)
 		return -ENOMEM;
 
-	err = i915_subtests(tests, i915);
+	err = i915_subtests(tests, i915, &i915->drm);
 
 	mock_destroy_device(i915);
 	return err;

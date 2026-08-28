@@ -434,5 +434,5 @@ int live_engine_pm_selftests(struct intel_gt *gt)
 		SUBTEST(live_engine_pm),
 	};
 
-	return intel_gt_live_subtests(tests, gt);
+	return intel_gt_live_subtests(tests, gt, &gt->i915->drm);
 }

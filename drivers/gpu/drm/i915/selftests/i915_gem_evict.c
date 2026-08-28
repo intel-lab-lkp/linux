@@ -571,7 +571,7 @@ int i915_gem_evict_mock_selftests(void)
 		return -ENOMEM;
 
 	with_intel_runtime_pm(&i915->runtime_pm, wakeref)
-		err = i915_subtests(tests, to_gt(i915));
+		err = i915_subtests(tests, to_gt(i915), &i915->drm);
 
 	mock_destroy_device(i915);
 	return err;
@@ -586,5 +586,5 @@ int i915_gem_evict_live_selftests(struct drm_i915_private *i915)
 	if (intel_gt_is_wedged(to_gt(i915)))
 		return 0;
 
-	return intel_gt_live_subtests(tests, to_gt(i915));
+	return intel_gt_live_subtests(tests, to_gt(i915), &i915->drm);
 }

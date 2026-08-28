@@ -2028,7 +2028,7 @@ int intel_hangcheck_live_selftests(struct drm_i915_private *i915)
 
 	wakeref = intel_runtime_pm_get(gt->uncore->rpm);
 
-	err = intel_gt_live_subtests(tests, gt);
+	err = intel_gt_live_subtests(tests, gt, &i915->drm);
 
 	intel_runtime_pm_put(gt->uncore->rpm, wakeref);
 

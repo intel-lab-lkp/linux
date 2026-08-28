@@ -380,5 +380,5 @@ int scatterlist_mock_selftests(void)
 		SUBTEST(igt_sg_trim),
 	};
 
-	return i915_subtests(tests, NULL);
+	return i915_subtests(tests, NULL, NULL);
 }

@@ -763,5 +763,5 @@ int i915_sw_fence_mock_selftests(void)
 		SUBTEST(test_dma_fence),
 	};
 
-	return i915_subtests(tests, NULL);
+	return i915_subtests(tests, NULL, NULL);
 }

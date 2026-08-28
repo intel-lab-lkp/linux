@@ -458,5 +458,5 @@ int intel_context_live_selftests(struct drm_i915_private *i915)
 	if (intel_gt_is_wedged(gt))
 		return 0;
 
-	return intel_gt_live_subtests(tests, gt);
+	return intel_gt_live_subtests(tests, gt, &i915->drm);
 }

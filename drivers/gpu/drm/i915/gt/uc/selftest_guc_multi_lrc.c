@@ -180,5 +180,5 @@ int intel_guc_multi_lrc_live_selftests(struct drm_i915_private *i915)
 	if (!intel_uc_uses_guc_submission(&gt->uc))
 		return 0;
 
-	return intel_gt_live_subtests(tests, gt);
+	return intel_gt_live_subtests(tests, gt, &i915->drm);
 }
