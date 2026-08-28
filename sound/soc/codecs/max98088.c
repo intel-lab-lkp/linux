@@ -1323,8 +1323,13 @@ static int max98088_set_bias_level(struct snd_soc_component *component,
 		break;
 
 	case SND_SOC_BIAS_STANDBY:
-		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_OFF)
-			regcache_sync(max98088->regmap);
+		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_OFF) {
+			ret = regcache_sync(max98088->regmap);
+			if (ret) {
+				regcache_mark_dirty(max98088->regmap);
+				return ret;
+			}
+		}
 
 		snd_soc_component_update_bits(component, M98088_REG_4C_PWR_EN_IN,
 				   M98088_MBEN, M98088_MBEN);
