@@ -72,7 +72,7 @@ int cs42l42_mute_stream(struct snd_soc_dai *dai, int mute, int stream);
 irqreturn_t cs42l42_irq_thread(int irq, void *data);
 int cs42l42_suspend(struct device *dev);
 int cs42l42_resume(struct device *dev);
-void cs42l42_resume_restore(struct device *dev);
+int cs42l42_resume_restore(struct device *dev);
 int cs42l42_common_probe(struct cs42l42_private *cs42l42,
 			 const struct snd_soc_component_driver *component_drv,
 			 struct snd_soc_dai_driver *dai);
