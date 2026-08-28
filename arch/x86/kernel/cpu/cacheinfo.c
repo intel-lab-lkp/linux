@@ -502,6 +502,14 @@ static int __cache_amd_cpumap_setup(unsigned int cpu, int index,
 			if (!this_cpu_ci->info_list)
 				continue;
 
+			/*
+			 * The leaf count is per-CPU, so a CPU sharing the LLC
+			 * may have enumerated fewer leaves than this one.
+			 * Never index past the end of its array.
+			 */
+			if (index >= this_cpu_ci->num_leaves)
+				continue;
+
 			ci = this_cpu_ci->info_list + index;
 			for_each_cpu(sibling, cpu_llc_shared_mask(cpu)) {
 				if (!cpu_online(sibling))
@@ -524,6 +532,10 @@ static int __cache_amd_cpumap_setup(unsigned int cpu, int index,
 
 			apicid = cpu_data(i).topo.apicid;
 			if ((apicid < first) || (apicid > last))
+				continue;
+
+			/* Same per-CPU leaf count caveat as above. */
+			if (index >= this_cpu_ci->num_leaves)
 				continue;
 
 			ci = this_cpu_ci->info_list + index;
@@ -573,6 +585,16 @@ static void __cache_cpumap_setup(unsigned int cpu, int index,
 
 			/* Skip if itself or no cacheinfo */
 			if (i == cpu || !sib_cpu_ci->info_list)
+				continue;
+
+			/*
+			 * CPUs that the APIC-ID test treats as cache siblings
+			 * may still enumerate a different number of leaves,
+			 * e.g. on hybrid parts or under a VMM that does not
+			 * normalise CPUID leaf 4 across vCPUs. Never index
+			 * past the end of the sibling's array.
+			 */
+			if (index >= sib_cpu_ci->num_leaves)
 				continue;
 
 			sibling_ci = sib_cpu_ci->info_list + index;
