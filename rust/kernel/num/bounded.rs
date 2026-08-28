@@ -13,6 +13,7 @@ use core::{
 };
 
 use kernel::{
+    build_assert::const_eval,
     num::Integer,
     prelude::*, //
 };
@@ -261,7 +262,27 @@ macro_rules! impl_const_new {
                 // `N` bits.
                 unsafe { Self::__new(VALUE) }
             }
+
+            #[doc(hidden)]
+            #[const_eval]
+            pub const fn __from_const(self: super::FromConstMethod<Self>, v: i128) -> Self {
+                assert!(
+                    v >= <$type>::MIN as i128 && v <= <$type>::MAX as i128,
+                    concat!("constant cannot be represented by `", stringify!($type), "`"),
+                );
+
+                assert!(
+                    fits_within!(v as $type, $type, N),
+                    "constant cannot be represented within given bits",
+                );
+
+                // SAFETY: the asserts above confirmed that `V` can be represented within `N`
+                // bits.
+                unsafe { Self::__new(v as $type) }
+            }
         }
+
+        impl<const N: u32> super::FromConst for Bounded<$type, N> {}
         )*
     };
 }

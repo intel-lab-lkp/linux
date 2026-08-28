@@ -11,7 +11,10 @@ use core::mem::{
 };
 use core::num::NonZero;
 
-use crate::const_assert;
+use crate::{
+    build_assert::const_eval, //
+    prelude::*,
+};
 
 /// Type representing an alignment, which is always a power of two.
 ///
@@ -164,7 +167,23 @@ impl Alignment {
         // non-zero.
         !(self.as_usize() - 1)
     }
+
+    #[doc(hidden)]
+    #[const_eval]
+    pub const fn __from_const(self: crate::num::FromConstMethod<Self>, v: i128) -> Self {
+        assert!(
+            v >= 0 && v <= usize::MAX as i128,
+            "constant cannot be represented by `usize`"
+        );
+
+        match Alignment::new_checked(v as usize) {
+            Some(v) => v,
+            None => panic!("constant is not power of 2"),
+        }
+    }
 }
+
+impl crate::num::FromConst for Alignment {}
 
 /// Trait for items that can be aligned against an [`Alignment`].
 pub trait Alignable: Sized {
