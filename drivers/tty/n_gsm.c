@@ -2711,6 +2711,22 @@ static inline void dlci_put(struct gsm_dlci *dlci)
 	tty_port_put(&dlci->port);
 }
 
+static struct gsm_dlci *gsm_dlci_get_or_alloc(struct gsm_mux *gsm,
+					      unsigned int addr)
+{
+	struct gsm_dlci *dlci;
+
+	mutex_lock(&gsm->mutex);
+	dlci = gsm->dlci[addr];
+	if (!dlci)
+		dlci = gsm_dlci_alloc(gsm, addr);
+	if (dlci)
+		dlci_get(dlci);
+	mutex_unlock(&gsm->mutex);
+
+	return dlci;
+}
+
 static void gsm_destroy_network(struct gsm_dlci *dlci);
 
 /**
@@ -3862,29 +3878,29 @@ static int gsmld_ioctl(struct tty_struct *tty, unsigned int cmd,
 		if (dc.channel == 0 || dc.channel >= NUM_DLCI)
 			return -EINVAL;
 		addr = array_index_nospec(dc.channel, NUM_DLCI);
-		dlci = gsm->dlci[addr];
-		if (!dlci) {
-			dlci = gsm_dlci_alloc(gsm, addr);
-			if (!dlci)
-				return -ENOMEM;
-		}
+		dlci = gsm_dlci_get_or_alloc(gsm, addr);
+		if (!dlci)
+			return -ENOMEM;
 		gsm_dlci_copy_config_values(dlci, &dc);
+		dlci_put(dlci);
 		if (copy_to_user((void __user *)arg, &dc, sizeof(dc)))
 			return -EFAULT;
 		return 0;
-	case GSMIOC_SETCONF_DLCI:
+	case GSMIOC_SETCONF_DLCI: {
+		int ret;
+
 		if (copy_from_user(&dc, (void __user *)arg, sizeof(dc)))
 			return -EFAULT;
 		if (dc.channel == 0 || dc.channel >= NUM_DLCI)
 			return -EINVAL;
 		addr = array_index_nospec(dc.channel, NUM_DLCI);
-		dlci = gsm->dlci[addr];
-		if (!dlci) {
-			dlci = gsm_dlci_alloc(gsm, addr);
-			if (!dlci)
-				return -ENOMEM;
-		}
-		return gsm_dlci_config(dlci, &dc, 0);
+		dlci = gsm_dlci_get_or_alloc(gsm, addr);
+		if (!dlci)
+			return -ENOMEM;
+		ret = gsm_dlci_config(dlci, &dc, 0);
+		dlci_put(dlci);
+		return ret;
+	}
 	default:
 		return n_tty_ioctl_helper(tty, cmd, arg);
 	}
