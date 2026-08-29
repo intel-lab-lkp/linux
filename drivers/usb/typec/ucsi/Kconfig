@@ -104,4 +104,15 @@ config UCSI_HUAWEI_GAOKUN
 	  To compile the driver as a module, choose M here: the module will be
 	  called ucsi_huawei_gaokun.
 
+config UCSI_ITE
+	tristate "UCSI Interface Driver for ITE885x"
+	depends on ACPI && I2C
+	help
+	  This driver enables UCSI support on platforms that expose an ITE8853
+	  or ITE8800-ITE8805 USB Type-C controller over I2C, commonly found
+	  on ASUS Z690/Z790/X670E motherboards.
+
+	  To compile the driver as a module, choose M here: the module will be
+	  called ucsi_ite.
+
 endif
