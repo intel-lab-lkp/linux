@@ -284,6 +284,9 @@ static inline long scx_hotplug_seq(void)
 	SCX_BUG_ON(!__oskel, "Could not open " #__scx_name);			\
 	__oskel->struct_ops.__ops_name->hotplug_seq = scx_hotplug_seq();	\
 	SCX_ENUM_INIT(__oskel);							\
+	if (__COMPAT_has_ksym("bpf_scx_reg_cid"))				\
+		bpf_program__set_autoload(					\
+			(__oskel)->progs.scx_lib_init_probe_cid, true);		\
 	__oskel;								\
 })
 

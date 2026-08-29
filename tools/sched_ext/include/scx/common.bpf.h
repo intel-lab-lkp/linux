@@ -530,37 +530,29 @@ static __always_inline const struct cpumask *cast_mask(struct bpf_cpumask *mask)
 }
 
 /*
- * True if the non-sleepable BPF trampoline prolog (__bpf_prog_enter) calls
- * migrate_disable() for the current task. Recorded once by
- * scx_lib_init_probe, an fentry program on bpf_scx_reg() that fires during
- * the natural scheduler-attach call chain (auto-attached by scx_ops_attach!).
+ * True if the non-sleepable BPF prolog (__bpf_prog_enter) calls
+ * migrate_disable() for the current task. Set by the probes below.
  *
- * Defaults to true (conservative). Over-reporting in is_migration_disabled()
- * causes local-only dispatch, which is safe. Under-reporting can crash the
- * scheduler, so we err high if the probe somehow fails to run.
+ * Only affects is_migration_disabled(current): set attributes
+ * migration_disabled == 1 to the prolog (returns false), clear takes it at
+ * face value (returns true). Under-reporting can crash the scheduler, so the
+ * default is false for loaders that never attach the probes.
  */
-bool __scx_prolog_disables_migration __weak = true;
+bool __scx_prolog_disables_migration __weak;
 
 /*
- * scx_lib_init_probe - non-sleepable prolog probe.
+ * Prolog probes. Each struct_ops type needs its own: bpf_scx_reg() serves
+ * bpf_sched_ext_ops, bpf_scx_reg_cid() serves bpf_sched_ext_ops_cid, and the
+ * two are separate functions. Both run before ops.init() and are vtable
+ * entries, so neither can be inlined away.
  *
- * Attached to bpf_scx_reg(), the .reg callback in bpf_sched_ext_ops
- * (kernel/sched/ext.c). The kernel's struct_ops machinery invokes
- * bpf_scx_reg when userspace creates the scheduler link, before
- * ops.init() fires. Its address is taken in the vtable, so the symbol
- * is non-inlinable and has been stable since introduction.
+ * bpf_scx_reg_cid() only exists from v7.2, so that probe is "?" and
+ * __SCX_OPS_OPEN() enables it when the symbol is present.
  *
- * Entering via fentry runs us through __bpf_prog_enter -- the
- * non-sleepable prolog that consumers of is_migration_disabled() live
- * under.
- *
- * Loud warning: the prolog adds at most 1 to migration_disabled.
- * Reading > 1 means something upstream in the
- * bpf_struct_ops_link_create -> bpf_scx_reg path disabled migration
- * before the prolog ran, invalidating the probe; audit and adjust.
+ * The prolog adds at most 1 to migration_disabled. Reading > 1 means
+ * something disabled migration before it ran and the result is unreliable.
  */
-SEC("fentry/bpf_scx_reg") __weak
-int scx_lib_init_probe(void *ctx)
+static __always_inline void __scx_record_prolog_migration(void)
 {
 	if (bpf_core_field_exists(((struct task_struct *)0)->migration_disabled)) {
 		const struct task_struct *p = bpf_get_current_task_btf();
@@ -573,6 +565,19 @@ int scx_lib_init_probe(void *ctx)
 
 		__scx_prolog_disables_migration = md > 0;
 	}
+}
+
+SEC("fentry/bpf_scx_reg") __weak
+int scx_lib_init_probe(void *ctx)
+{
+	__scx_record_prolog_migration();
+	return 0;
+}
+
+SEC("?fentry/bpf_scx_reg_cid") __weak
+int scx_lib_init_probe_cid(void *ctx)
+{
+	__scx_record_prolog_migration();
 	return 0;
 }
 
