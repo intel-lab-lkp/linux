@@ -130,7 +130,7 @@ out:
 
 int dwc3_host_init(struct dwc3 *dwc)
 {
-	struct property_entry	props[6];
+	struct property_entry	props[7];
 	struct platform_device	*xhci;
 	int			ret, irq;
 	int			prop_idx = 0;
@@ -185,6 +185,9 @@ int dwc3_host_init(struct dwc3 *dwc)
 	 */
 	if (DWC3_VER_IS_WITHIN(DWC3, ANY, 300A))
 		props[prop_idx++] = PROPERTY_ENTRY_BOOL("quirk-broken-port-ped");
+
+	if (dwc->xhci_no_soft_retry)
+		props[prop_idx++] = PROPERTY_ENTRY_BOOL("xhci-no-soft-retry-quirk");
 
 	props[prop_idx++] = PROPERTY_ENTRY_U16("num-hc-interrupters",
 					       dwc->num_hc_interrupters);
