@@ -3432,7 +3432,7 @@ sub process {
 
 			my $input = $line;
 			if ($line =~ /(?:\bcommit\s+[0-9a-f]{5,}|\bcommit\s*$)/i) {
-				for (my $n = 0; $n < 2; $n++) {
+				for (my $n = 0; $n < 3; $n++) {
 					if ($input =~ /\bcommit\s+[0-9a-f]{5,}\s*($balanced_parens)/i) {
 						$orig_desc = $1;
 						$has_parens = 1;
