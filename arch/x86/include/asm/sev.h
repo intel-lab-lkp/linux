@@ -605,6 +605,8 @@ static inline void sev_evict_cache(void *va, int npages)
 	}
 }
 
+bool sev_prepare(void);
+
 #else	/* !CONFIG_AMD_MEM_ENCRYPT */
 
 #define snp_vmpl 0
@@ -652,6 +654,7 @@ static inline enum es_result savic_register_gpa(u64 gpa) { return ES_UNSUPPORTED
 static inline enum es_result savic_unregister_gpa(u64 *gpa) { return ES_UNSUPPORTED; }
 static inline void sev_apic_ghcb_msr_write(u32 reg, u64 value) { }
 static inline u64 sev_apic_ghcb_msr_read(u32 reg) { return 0; }
+static inline bool sev_prepare(void) { return false; }
 
 #endif	/* CONFIG_AMD_MEM_ENCRYPT */
 

@@ -783,19 +783,6 @@ static efi_status_t exit_boot(struct boot_params *boot_params, void *handle)
 	return EFI_SUCCESS;
 }
 
-static bool have_unsupported_snp_features(void)
-{
-	u64 unsupported;
-
-	unsupported = snp_get_unsupported_features(sev_get_status());
-	if (unsupported) {
-		efi_err("Unsupported SEV-SNP features detected: 0x%llx\n",
-			unsupported);
-		return true;
-	}
-	return false;
-}
-
 static void efi_get_seed(void *seed, int size)
 {
 	efi_get_random_bytes(size, seed);
@@ -919,6 +906,7 @@ void __noreturn efi_stub_entry(efi_handle_t handle,
 	unsigned long kernel_entry;
 	struct setup_header *hdr;
 	efi_status_t status;
+	bool err;
 
 	efi_system_table = sys_table_arg;
 	/* Check if we were booted by the EFI firmware */
@@ -933,7 +921,8 @@ void __noreturn efi_stub_entry(efi_handle_t handle,
 
 	hdr = &boot_params->hdr;
 
-	if (have_unsupported_snp_features())
+	err = sev_prepare();
+	if (err)
 		efi_exit(handle, EFI_UNSUPPORTED);
 
 	if (IS_ENABLED(CONFIG_EFI_DXE_MEM_ATTRIBUTES)) {
