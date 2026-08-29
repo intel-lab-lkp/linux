@@ -1013,10 +1013,17 @@ static __init void check_quirks(void)
 
 static __init bool get_rdt_resources(void)
 {
+	bool succeed;
+
+	erdt_init();
 	rdt_alloc_capable = get_rdt_alloc_resources();
 	rdt_mon_capable = get_rdt_mon_resources();
 
-	return (rdt_mon_capable || rdt_alloc_capable);
+	succeed = (rdt_mon_capable || rdt_alloc_capable);
+	if (!succeed)
+		erdt_exit();
+
+	return succeed;
 }
 
 static __init void rdt_init_res_defs_intel(void)
@@ -1138,12 +1145,15 @@ static int __init resctrl_arch_late_init(void)
 				  "x86/resctrl/cat:online:",
 				  resctrl_arch_online_cpu,
 				  resctrl_arch_offline_cpu);
-	if (state < 0)
+	if (state < 0) {
+		erdt_exit();
 		return state;
+	}
 
 	ret = resctrl_init();
 	if (ret) {
 		cpuhp_remove_state(state);
+		erdt_exit();
 		return ret;
 	}
 	rdt_online = state;
@@ -1166,6 +1176,8 @@ static void __exit resctrl_arch_exit(void)
 	cpuhp_remove_state(rdt_online);
 
 	resctrl_exit();
+
+	erdt_exit();
 }
 
 __exitcall(resctrl_arch_exit);
