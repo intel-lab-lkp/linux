@@ -458,7 +458,7 @@ struct ieee80211_fragment_entry {
 	struct sk_buff_head skb_list;
 	unsigned long first_frag_time;
 	u16 seq;
-	u16 extra_len;
+	unsigned int extra_len;
 	u16 last_frag;
 	u8 rx_queue;
 	u8 check_sequential_pn:1, /* needed for CCMP/GCMP */
