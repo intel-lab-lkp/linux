@@ -3267,6 +3267,7 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 		}
 	}
 }
+EXPORT_IF_KUNIT(amdgpu_dm_connector_init_helper);
 
 STATIC_IFN_KUNIT int amdgpu_dm_i2c_xfer(struct i2c_adapter *i2c_adap,
 			      struct i2c_msg *msgs, int num)
