@@ -380,6 +380,7 @@ static const struct acpi_device_id i2c_acpi_force_100khz_device_ids[] = {
 	{ "ELAN0678", 0 },
 	{ "ELAN06FA", 0 },
 	{ "ELAN1300", 0 },
+	{ "ELAN0672", 0 },
 	{}
 };
 
