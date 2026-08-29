@@ -1532,6 +1532,7 @@ void wq_worker_tick(struct task_struct *task)
 	struct worker *worker = kthread_data(task);
 	struct pool_workqueue *pwq = worker->current_pwq;
 	struct worker_pool *pool = worker->pool;
+	u64 dur;
 
 	if (!pwq)
 		return;
@@ -1557,9 +1558,10 @@ void wq_worker_tick(struct task_struct *task)
 	 * double decrements. The task is releasing the CPU anyway. Let's skip.
 	 * We probably want to make this prettier in the future.
 	 */
+	dur = (READ_ONCE(worker->task->se.sum_exec_runtime) - worker->current_at) /
+	      NSEC_PER_USEC;
 	if ((worker->flags & WORKER_NOT_RUNNING) || READ_ONCE(worker->sleeping) ||
-	    READ_ONCE(worker->task->se.sum_exec_runtime) - worker->current_at <
-	    wq_cpu_intensive_thresh_us * NSEC_PER_USEC)
+	    dur < wq_cpu_intensive_thresh_us)
 		return;
 
 	raw_spin_lock(&pool->lock);
@@ -1572,6 +1574,9 @@ void wq_worker_tick(struct task_struct *task)
 		pwq->stats[PWQ_STAT_CM_WAKEUP]++;
 
 	raw_spin_unlock(&pool->lock);
+
+	trace_workqueue_cpu_intensive(pwq, worker->current_work,
+				      worker->current_func, dur);
 }
 
 /**
