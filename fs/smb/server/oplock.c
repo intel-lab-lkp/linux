@@ -9,6 +9,7 @@
 
 #include "glob.h"
 #include "oplock.h"
+#include "vfs_cache.h"
 
 #include "smb_common.h"
 #include "../common/smb2status.h"
@@ -236,6 +237,8 @@ static void __free_opinfo(struct oplock_info *opinfo)
 {
 	if (opinfo->is_lease)
 		free_lease(opinfo);
+	if (opinfo->o_ci)
+		ksmbd_inode_put(opinfo->o_ci);
 	ksmbd_conn_put(opinfo->conn);
 	kfree(opinfo);
 }
@@ -924,6 +927,30 @@ out:
 	ksmbd_conn_put(conn);
 }
 
+/*
+ * Select and pin the connection used for an oplock break before doing any
+ * allocations which may sleep.  opinfo->conn is cleared under ci->m_lock by
+ * session_fd_check() when the durable handle owning the oplock is
+ * disconnected, and the last ksmbd_conn_put() frees the connection.  The
+ * oplock_info holds its own reference on the inode (o_ci, taken when the
+ * oplock was granted), so the lock is always reachable here without
+ * dereferencing opinfo->o_fp, which a concurrent close may free.
+ */
+static struct ksmbd_conn *smb2_oplock_break_conn_get(struct oplock_info *opinfo)
+{
+	struct ksmbd_conn *conn;
+
+	down_read(&opinfo->o_ci->m_lock);
+	conn = READ_ONCE(opinfo->conn);
+	if (conn && !ksmbd_conn_releasing(conn))
+		conn = ksmbd_conn_get(conn);
+	else
+		conn = NULL;
+	up_read(&opinfo->o_ci->m_lock);
+
+	return conn;
+}
+
 /**
  * smb2_oplock_break_noti() - send smb2 exclusive/batch to level2 oplock
  *		break command from server to client
@@ -938,17 +965,20 @@ static int smb2_oplock_break_noti(struct oplock_info *opinfo)
 	int ret = 0;
 	struct ksmbd_work *work;
 
-	conn = READ_ONCE(opinfo->conn);
+	conn = smb2_oplock_break_conn_get(opinfo);
 	if (!conn)
 		return ksmbd_invalidate_durable_fd(opinfo->fid);
 
 	work = ksmbd_alloc_work_struct();
-	if (!work)
+	if (!work) {
+		ksmbd_conn_put(conn);
 		return -ENOMEM;
+	}
 
 	br_info = kmalloc_obj(struct oplock_break_info, KSMBD_DEFAULT_GFP);
 	if (!br_info) {
 		ksmbd_free_work_struct(work);
+		ksmbd_conn_put(conn);
 		return -ENOMEM;
 	}
 
@@ -957,7 +987,8 @@ static int smb2_oplock_break_noti(struct oplock_info *opinfo)
 	br_info->open_trunc = opinfo->open_trunc;
 
 	work->request_buf = (char *)br_info;
-	work->conn = ksmbd_conn_get(conn);
+	/* Transfer the reference acquired by smb2_oplock_break_conn_get(). */
+	work->conn = conn;
 	work->sess = opinfo->sess;
 
 	ksmbd_conn_r_count_inc(conn);
@@ -1724,6 +1755,7 @@ out:
 	 * lease_table first.
 	 */
 	opinfo->o_fp = fp;
+	opinfo->o_ci = ksmbd_inode_ref(fp->f_ci);
 	if (new_lease) {
 		new_lb = alloc_lease_table(opinfo);
 		if (!new_lb) {

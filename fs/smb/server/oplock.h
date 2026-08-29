@@ -64,6 +64,7 @@ struct oplock_info {
 	struct ksmbd_session	*sess;
 	struct ksmbd_work	*work;
 	struct ksmbd_file	*o_fp;
+	struct ksmbd_inode	*o_ci;	/* inode ref held while the oplock lives */
 	int                     level;
 	int                     op_state;
 	spinlock_t		state_lock;
