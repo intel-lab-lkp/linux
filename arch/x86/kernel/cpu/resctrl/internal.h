@@ -158,7 +158,11 @@ struct msr_param {
  *			which has been corrected for features like CDP.
  * @msr_base:		Base MSR address for CBMs
  * @msr_update:		Function pointer to update QOS MSRs
- * @mon_scale:		cqm counter * mon_scale = occupancy in bytes
+ * @mon_scale:		Scale factor applied to a raw counter value on the
+ *			MSR-based read path: CMT occupancy counter * mon_scale =
+ *			occupancy in bytes, and MBM chunk count * mon_scale = bytes
+ *			transferred. ERDT reads occupancy via MMIO and applies its
+ *			own firmware-provided scale instead.
  * @mbm_width:		Monitor width, to detect and correct for overflow.
  * @cdp_enabled:	CDP state of this resource
  * @mbm_cntr_assign_enabled:	ABMC feature is enabled
@@ -186,6 +190,8 @@ static inline struct rdt_hw_resource *resctrl_to_arch_res(struct rdt_resource *r
 }
 
 extern struct rdt_hw_resource rdt_resources_all[];
+
+extern int snc_nodes_per_l3_cache;
 
 void arch_mon_domain_online(struct rdt_resource *r, struct rdt_l3_mon_domain *d);
 
@@ -291,6 +297,7 @@ static inline bool intel_handle_aet_option(bool force_off, char *tok) { return f
 
 bool erdt_support(int flag);
 unsigned int erdt_get_max_rmid(void);
+int erdt_mon_read(struct rdt_domain_hdr *hdr, enum resctrl_event_id evtid, u32 rmid, u64 *val);
 int erdt_init(void);
 void erdt_exit(void);
 

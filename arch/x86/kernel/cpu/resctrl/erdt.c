@@ -26,6 +26,10 @@ static bool erdt_enabled;
 #define CMRC_SUPPORTED_INDEX_FN		1
 #define RMDD_FLAG_CPU_L3_DOMAIN		BIT(0)
 
+/* Set in a monitoring counter when it holds no valid data to report. */
+#define UNAVAILABLE_COUNTER		BIT_ULL(63)
+#define CMRC_FLAG_UNAVAILABLE_BIT	BIT(0)
+
 /* Bitmask of valid sub-tables found in the first RMDD, used to ensure all RMDDs match. */
 static u32 valid_subtbl_mask;
 
@@ -50,7 +54,12 @@ static unsigned int erdt_scale;
 
 bool erdt_support(int flag)
 {
-	return false;
+	switch (flag) {
+	case X86_FEATURE_CQM_OCCUP_LLC:
+		return valid_subtbl_mask & BIT(ACPI_ERDT_TYPE_CMRC);
+	default:
+		return false;
+	}
 }
 
 unsigned int erdt_get_max_rmid(void)
@@ -60,7 +69,67 @@ unsigned int erdt_get_max_rmid(void)
 
 unsigned int erdt_get_scale(void)
 {
-	return erdt_scale;
+	/* Divided by snc_nodes_per_l3_cache, see erdt_read_l3_occupancy(). */
+	return erdt_scale / snc_nodes_per_l3_cache;
+}
+
+static u32 cmrc_index_function_1(struct acpi_erdt_cmrc *cmrc, u32 rmid)
+{
+	/*
+	 * MMIO_offset_for_RMID# =
+	 *   (RMID / ClumpSize) * Stride +
+	 *   (RMID % ClumpSize) * 8
+	 */
+	return (rmid / cmrc->clump_size) * cmrc->clump_stride +
+	       (rmid % cmrc->clump_size) * 8;
+}
+
+static int erdt_read_l3_occupancy(const struct erdt_domain_info *d, u32 rmid, u64 *val)
+{
+	struct acpi_erdt_cmrc *cmrc;
+	u64 l3_cmt_count;
+	u32 offset;
+
+	cmrc = d->cmrc;
+	if (!cmrc)
+		return -EIO;
+
+	offset = cmrc_index_function_1(cmrc, rmid);
+	/* Overflow of cmt_reg_size * SZ_4K already validated in erdt_ioremap(). */
+	if (offset + sizeof(u64) > (u32)cmrc->cmt_reg_size * SZ_4K)
+		return -EINVAL;
+
+	l3_cmt_count = readq(d->base[ERDT_MMIO_CMRC_BASE] + offset);
+	if ((cmrc->flags & CMRC_FLAG_UNAVAILABLE_BIT) &&
+	    (l3_cmt_count & UNAVAILABLE_COUNTER))
+		return -EINVAL;
+
+	/*
+	 * In legacy mode, scale is divided by snc_nodes_per_l3_cache to
+	 * prevent over-calculation of aggregated monitor data.
+	 * FIXME: This scaling factor needs to be revisited/tuned for future
+	 * platforms that support both SNC and MMIO-based monitoring
+	 * simultaneously.
+	 */
+	*val = l3_cmt_count * cmrc->up_scale / snc_nodes_per_l3_cache;
+
+	return 0;
+}
+
+int erdt_mon_read(struct rdt_domain_hdr *hdr, enum resctrl_event_id evtid, u32 rmid, u64 *val)
+{
+	struct rdt_hw_l3_mon_domain *hw_dom;
+	const struct erdt_domain_info *d;
+
+	hw_dom = resctrl_to_arch_mon_dom(container_of(hdr, struct rdt_l3_mon_domain, hdr));
+	d = hw_dom->d_info;
+	if (!d)
+		return -EIO;
+
+	if (evtid == QOS_L3_OCCUP_EVENT_ID)
+		return erdt_read_l3_occupancy(d, rmid, val);
+
+	return -EIO;
 }
 
 static void __iomem *erdt_ioremap(resource_size_t base, u32 num_pages, const char *desc)
