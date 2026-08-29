@@ -124,10 +124,15 @@ static int cp2615_check_status(enum cp2615_i2c_status status)
 static int
 cp2615_i2c_send(struct usb_interface *usbif, struct cp2615_i2c_transfer *i2c_w)
 {
-	struct cp2615_iop_msg *msg = kzalloc_obj(*msg);
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
-	int res = cp2615_init_i2c_msg(msg, i2c_w);
+	struct cp2615_iop_msg *msg;
+	int res;
 
+	msg = kzalloc_obj(*msg);
+	if (!msg)
+		return -ENOMEM;
+
+	res = cp2615_init_i2c_msg(msg, i2c_w);
 	if (!res)
 		res = usb_bulk_msg(usbdev, usb_sndbulkpipe(usbdev, IOP_EP_OUT),
 				   msg, ntohs(msg->length), NULL, 0);
@@ -171,11 +176,16 @@ cp2615_i2c_recv(struct usb_interface *usbif, unsigned char tag, void *buf)
 /* Checks if the IOP is functional by querying the part's ID */
 static int cp2615_check_iop(struct usb_interface *usbif)
 {
-	struct cp2615_iop_msg *msg = kzalloc_obj(*msg);
-	struct cp2615_iop_accessory_info *info = (struct cp2615_iop_accessory_info *)&msg->data;
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
-	int res = cp2615_init_iop_msg(msg, iop_GetAccessoryInfo, NULL, 0);
+	struct cp2615_iop_msg *msg;
+	struct cp2615_iop_accessory_info *info;
+	int res;
 
+	msg = kzalloc_obj(*msg);
+	if (!msg)
+		return -ENOMEM;
+
+	res = cp2615_init_iop_msg(msg, iop_GetAccessoryInfo, NULL, 0);
 	if (res)
 		goto out;
 
@@ -194,6 +204,7 @@ static int cp2615_check_iop(struct usb_interface *usbif)
 		goto out;
 	}
 
+	info = (struct cp2615_iop_accessory_info *)&msg->data;
 	switch (ntohs(info->part_id)) {
 	case PART_ID_A01:
 		dev_dbg(&usbif->dev, "Found A01 part. (WARNING: errata exists!)\n");
