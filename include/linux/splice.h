@@ -108,4 +108,7 @@ extern void splice_shrink_spd(struct splice_pipe_desc *);
 
 extern const struct pipe_buf_operations page_cache_pipe_buf_ops;
 extern const struct pipe_buf_operations default_pipe_buf_ops;
+extern const struct pipe_buf_operations zero_pipe_buf_ops;
+size_t splice_zeropage_into_pipe(struct pipe_inode_info *pipe, loff_t fpos,
+				 size_t size);
 #endif

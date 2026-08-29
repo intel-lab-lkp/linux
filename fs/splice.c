@@ -398,6 +398,68 @@ ssize_t copy_splice_read(struct file *in, loff_t *ppos,
 }
 EXPORT_SYMBOL(copy_splice_read);
 
+/*
+ * Pipe buffer operations for splicing zero pages into a pipe, used to
+ * optimize reads from sparse holes in files and from zero devices such as
+ * /dev/zero and /dev/full.
+ */
+static bool zero_pipe_buf_get(struct pipe_inode_info *pipe,
+			      struct pipe_buffer *buf)
+{
+	return true;
+}
+
+static void zero_pipe_buf_release(struct pipe_inode_info *pipe,
+				  struct pipe_buffer *buf)
+{
+}
+
+static bool zero_pipe_buf_try_steal(struct pipe_inode_info *pipe,
+				    struct pipe_buffer *buf)
+{
+	return false;
+}
+
+const struct pipe_buf_operations zero_pipe_buf_ops = {
+	.release	= zero_pipe_buf_release,
+	.try_steal	= zero_pipe_buf_try_steal,
+	.get		= zero_pipe_buf_get,
+};
+
+/**
+ * splice_zeropage_into_pipe - splice a zero page into a pipe
+ * @pipe: pipe to splice into
+ * @fpos: file position
+ * @size: number of bytes to splice
+ *
+ * Splice at most one page of zeroes into the pipe.  The zero page is not
+ * refcounted, so @zero_pipe_buf_ops must be used to avoid taking a
+ * reference on it.
+ *
+ * Return: the number of bytes spliced.
+ */
+size_t splice_zeropage_into_pipe(struct pipe_inode_info *pipe,
+				 loff_t fpos, size_t size)
+{
+	size_t offset = fpos & ~PAGE_MASK;
+
+	size = min_t(size_t, size, PAGE_SIZE - offset);
+
+	if (!pipe_is_full(pipe)) {
+		struct pipe_buffer *buf = pipe_head_buf(pipe);
+
+		*buf = (struct pipe_buffer) {
+			.ops	= &zero_pipe_buf_ops,
+			.page	= ZERO_PAGE(0),
+			.offset	= offset,
+			.len	= size,
+		};
+		pipe->head++;
+	}
+
+	return size;
+}
+
 const struct pipe_buf_operations default_pipe_buf_ops = {
 	.release	= generic_pipe_buf_release,
 	.try_steal	= generic_pipe_buf_try_steal,

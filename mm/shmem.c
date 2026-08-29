@@ -3432,51 +3432,6 @@ unlock:
 	return ret;
 }
 
-static bool zero_pipe_buf_get(struct pipe_inode_info *pipe,
-			      struct pipe_buffer *buf)
-{
-	return true;
-}
-
-static void zero_pipe_buf_release(struct pipe_inode_info *pipe,
-				  struct pipe_buffer *buf)
-{
-}
-
-static bool zero_pipe_buf_try_steal(struct pipe_inode_info *pipe,
-				    struct pipe_buffer *buf)
-{
-	return false;
-}
-
-static const struct pipe_buf_operations zero_pipe_buf_ops = {
-	.release	= zero_pipe_buf_release,
-	.try_steal	= zero_pipe_buf_try_steal,
-	.get		= zero_pipe_buf_get,
-};
-
-static size_t splice_zeropage_into_pipe(struct pipe_inode_info *pipe,
-					loff_t fpos, size_t size)
-{
-	size_t offset = fpos & ~PAGE_MASK;
-
-	size = min_t(size_t, size, PAGE_SIZE - offset);
-
-	if (!pipe_is_full(pipe)) {
-		struct pipe_buffer *buf = pipe_head_buf(pipe);
-
-		*buf = (struct pipe_buffer) {
-			.ops	= &zero_pipe_buf_ops,
-			.page	= ZERO_PAGE(0),
-			.offset	= offset,
-			.len	= size,
-		};
-		pipe->head++;
-	}
-
-	return size;
-}
-
 static ssize_t shmem_file_splice_read(struct file *in, loff_t *ppos,
 				      struct pipe_inode_info *pipe,
 				      size_t len, unsigned int flags)
