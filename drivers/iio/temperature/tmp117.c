@@ -12,13 +12,12 @@
 #include <linux/array_size.h>
 #include <linux/bitops.h>
 #include <linux/delay.h>
-#include <linux/dev_printk.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/limits.h>
 #include <linux/minmax.h>
 #include <linux/module.h>
-#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/types.h>
 
