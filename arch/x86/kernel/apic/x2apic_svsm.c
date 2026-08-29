@@ -69,14 +69,17 @@ static u32 __svsm_apic_msr_rw(u32 reg, u32 v, bool write)
 		call.rdx = v;
 
 		ret = svsm_perform_call_protocol(&call);
-		if (ret) {
+		if (ret) { 
 			pr_err("%s: 0x%x, error: %d\n", call_reg_str, reg, ret);
 			sev_es_terminate(SEV_TERM_SET_LINUX, GHCB_TERM_ALT_INJ_FAIL);
 		}
 		break;
 	default:
-		pr_err("%s 0x%x not supported\n", call_reg_str, reg);
-		return 0;
+		if (write) {
+			sev_apic_ghcb_msr_write(reg, v);
+		} else {
+			return sev_apic_ghcb_msr_read(reg);
+		}
 	}
 
 	return call.rdx_out;
