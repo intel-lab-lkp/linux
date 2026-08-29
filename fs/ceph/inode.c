@@ -2334,12 +2334,37 @@ retry:
 	 * possibly truncate them.. so write AND block!
 	 */
 	if (ci->i_wrbuffer_ref_head < ci->i_wrbuffer_ref) {
-		spin_unlock(&ci->i_ceph_lock);
-		doutc(cl, "%p %llx.%llx flushing snaps first\n", inode,
-		      ceph_vinop(inode));
-		filemap_write_and_wait_range(&inode->i_data, 0,
-					     inode->i_sb->s_maxbytes);
-		goto retry;
+		struct ceph_cap_snap *capsnap;
+		int snap_dirty = 0;
+
+		list_for_each_entry(capsnap, &ci->i_cap_snaps, ci_item)
+			snap_dirty += capsnap->dirty_pages;
+
+		/*
+		 * i_wrbuffer_ref - i_wrbuffer_ref_head should equal
+		 * the sum of capsnap->dirty_pages.  A session loss
+		 * removes all cap_snaps (ceph_purge_inode_cap()) while
+		 * the dirty folios referencing their contexts survive
+		 * in the page cache, leaving orphaned refs that no
+		 * flush can drain: get_oldest_context() returns NULL
+		 * and ceph_writepages_start() bails out with -ENODATA.
+		 * Waiting here would spin forever while holding
+		 * i_truncate_mutex.  In that case skip the flush and let
+		 * truncate_pagecache() discard the folios and drop the
+		 * refs; ceph_put_wrbuffer_cap_refs() tolerates the
+		 * missing cap_snap.
+		 */
+		if (ci->i_wrbuffer_ref - ci->i_wrbuffer_ref_head > snap_dirty) {
+			doutc(cl, "%p %llx.%llx orphaned dirty refs\n",
+			      inode, ceph_vinop(inode));
+		} else {
+			spin_unlock(&ci->i_ceph_lock);
+			doutc(cl, "%p %llx.%llx flushing snaps first\n", inode,
+			      ceph_vinop(inode));
+			filemap_write_and_wait_range(&inode->i_data, 0,
+						     inode->i_sb->s_maxbytes);
+			goto retry;
+		}
 	}
 
 	/* there should be no reader or writer */
