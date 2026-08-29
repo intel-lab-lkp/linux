@@ -3600,7 +3600,27 @@ int tb_switch_resume(struct tb_switch *sw, bool runtime)
 
 		if (tb_wait_for_port(port, true) <= 0) {
 			tb_port_warn(port,
-				     "lost during suspend, disconnecting\n");
+				    "lost during suspend, disconnecting\n");
+			/*
+			 * If a directly connected USB4/thunderbolt device did not restore
+			 * its link after a runtime suspend, assert a downstream
+			 * port reset. This drives SBTX low and makes the partner
+			 * observe a real USB4 disconnect. A dual-mode device and
+			 * the Type-C/PD firmware will then try to renegotiate
+			 * the connection in a native USB 3.x mode.
+			 *
+			 * Restrict this to the host router's downstream port.
+			 * Resetting an intermediate router would not cause the Type-C
+			 * to be renegotiated.
+			 */
+			if (runtime && !tb_route(sw) &&
+			    tb_switch_is_usb4(sw) && port->cap_usb4) {
+				err = tb_port_reset(port);
+				if (err)
+					tb_port_warn(port,
+						     "failed to reset port for USB3 fallback: %d\n",
+						     err);
+			}
 			if (tb_port_has_remote(port))
 				tb_sw_set_unplugged(port->remote->sw);
 			else if (port->xdomain)
