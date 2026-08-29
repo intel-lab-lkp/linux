@@ -422,6 +422,7 @@ static void tk_setup_internals(struct timekeeper *tk, struct clocksource *clock)
 	tk->tkr_mono.mult = clock->mult;
 	tk->tkr_raw.mult = clock->mult;
 	tk->ntp_err_mult = 0;
+	tk->ntp_err_frac = 0;
 	tk->skip_second_overflow = 0;
 	tk->skew_delta = 0;
 
@@ -1230,6 +1231,51 @@ static inline u64 tk_clock_read_snapshot(const struct tk_read_base *tkr,
 	return clock->read(clock);
 }
 
+/*
+ * snapshot_ntp_error - record how far a snapshot's ::systime is from the
+ * ideal NTP-disciplined time at @now, in signed nanoseconds, so a caller
+ * can land exactly on the ideal line by adding it to ::systime.
+ *
+ * The value is summed in ns << NTP_SCALE_SHIFT from four parts:
+ *
+ *  - tk->ntp_error, the deviation accumulated as of the last timekeeping
+ *    update (tkr_mono.cycle_last);
+ *  - (cycle_delta * ntp_err_frac), the fractional-mult drift accrued over
+ *    the cycles read since then -- at most a tick on a tickful kernel, but
+ *    potentially many ticks' worth under NO_HZ;
+ *  - (cycle_delta * ntp_err_mult), subtracting the applied +1 mult dither
+ *    over the same span;
+ *  - the sub-nanosecond fraction that ::systime dropped when the read was
+ *    truncated to whole ns (the low @shift bits, exact even though the
+ *    multiply overflows).
+ *
+ * CLOCK_MONOTONIC_RAW is not NTP-disciplined and carries no error. Every
+ * other clock id uses its own timekeeper @tk -- including the AUX clocks,
+ * which each have their own NTP instance.
+ */
+static s64 snapshot_ntp_error(const struct timekeeper *tk, clockid_t clock_id,
+			      u64 now)
+{
+	u64 cycle_delta;
+	u32 nes;
+	s64 tmp, err;
+
+	if (clock_id == CLOCK_MONOTONIC_RAW)
+		return 0;
+
+	cycle_delta = (now - tk->tkr_mono.cycle_last) & tk->tkr_mono.mask;
+	nes = tk->ntp_error_shift;
+
+	err = tk->ntp_error;
+	err += ((s64)mul_u64_u64_shr(cycle_delta, tk->ntp_err_frac, 32) -
+		(s64)(cycle_delta * tk->ntp_err_mult)) << nes;
+
+	tmp = (s64)(cycle_delta * tk->tkr_mono.mult + tk->tkr_mono.xtime_nsec);
+	tmp &= (1ULL << tk->tkr_mono.shift) - 1;
+	err += tmp << nes;
+
+	return (err + (1LL << (NTP_SCALE_SHIFT - 1))) >> NTP_SCALE_SHIFT;
+}
 
 /**
  * ktime_get_snapshot_id -  Simultaneously snapshot a given clock ID with
@@ -1253,6 +1299,7 @@ void ktime_get_snapshot_id(clockid_t clock_id, struct system_time_snapshot *syst
 {
 	ktime_t base_raw, base_sys, offs_sys, *offs, offs_zero = 0;
 	u64 nsec_raw, nsec_sys, now;
+	s64 ntp_error;
 	struct timekeeper *tk;
 	struct tk_data *tkd;
 	unsigned int seq;
@@ -1315,10 +1362,12 @@ void ktime_get_snapshot_id(clockid_t clock_id, struct system_time_snapshot *syst
 
 		nsec_sys = timekeeping_cycles_to_ns(&tk->tkr_mono, now);
 		nsec_raw = timekeeping_cycles_to_ns(&tk->tkr_raw, now);
+
+		ntp_error = snapshot_ntp_error(tk, clock_id, now);
 	} while (read_seqcount_retry(&tkd->seq, seq));
 
 	systime_snapshot->cycles = now;
-	systime_snapshot->systime = ktime_add_ns(base_sys, offs_sys + nsec_sys);
+	systime_snapshot->systime = ktime_add_ns(base_sys, offs_sys + nsec_sys) + ntp_error;
 	systime_snapshot->monoraw = ktime_add_ns(base_raw, nsec_raw);
 
 	/*
@@ -1570,6 +1619,7 @@ int get_device_system_crosststamp(int (*get_time_fn)
 	ktime_t base_sys, base_raw, *offs;
 	u32 clock_was_set_seq = 0;
 	u64 nsec_sys, nsec_raw;
+	s64 ntp_error;
 	u8 cs_was_changed_seq;
 	unsigned int seq;
 	bool do_interp;
@@ -1636,9 +1686,10 @@ int get_device_system_crosststamp(int (*get_time_fn)
 
 		nsec_sys = timekeeping_cycles_to_ns(&tk->tkr_mono, cycles);
 		nsec_raw = timekeeping_cycles_to_ns(&tk->tkr_raw, cycles);
+		ntp_error = snapshot_ntp_error(tk, xtstamp->clock_id, cycles);
 	} while (read_seqcount_retry(&tkd->seq, seq));
 
-	xtstamp->sys_systime = ktime_add_ns(base_sys, nsec_sys);
+	xtstamp->sys_systime = ktime_add_ns(base_sys, nsec_sys) + ntp_error;
 	xtstamp->sys_monoraw = ktime_add_ns(base_raw, nsec_raw);
 
 	/*
@@ -2433,6 +2484,7 @@ static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 {
 	u64 ntp_tl = ntp_tick_length(tk->id);
 	s64 skew = ntp_get_skew_delta(tk->id);
+	u64 dividend;
 	u32 mult;
 
 	/*
@@ -2451,8 +2503,18 @@ static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 		 * scale it back up to the full per-tick rate for the mult bias.
 		 */
 		skew *= NTP_INTERVAL_FREQ;
-		mult = div64_u64((tk->ntp_tick + skew) >> tk->ntp_error_shift,
-				 tk->cycle_interval);
+		dividend = (tk->ntp_tick + skew) >> tk->ntp_error_shift;
+		mult = div64_u64(dividend, tk->cycle_interval);
+		/*
+		 * Stash the fractional part of the per-cycle ideal mult that
+		 * the integer @mult discards, scaled by 2^32, in clock-shifted
+		 * ns per cycle. The lockless snapshot readers use it to
+		 * extrapolate @ntp_error forward over the cycles accumulated
+		 * since the last tick (which on a NO_HZ kernel may be many
+		 * ticks' worth).
+		 */
+		dividend -= (u64)mult * tk->cycle_interval;
+		tk->ntp_err_frac = div64_u64(dividend << 32, tk->cycle_interval);
 	}
 
 	/*
