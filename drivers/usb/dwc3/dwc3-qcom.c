@@ -607,8 +607,19 @@ static struct dwc3_glue_ops dwc3_qcom_glue_ops = {
 	.pre_run_stop	= dwc3_qcom_run_stop_notifier,
 };
 
+/*
+ * The dwc3 instances on IPQ4019 mishandle xHCI Soft Retry: a Stop
+ * Endpoint command landing on a just-soft-retry-reset endpoint wedges the
+ * command ring and the host is killed by the stop-endpoint watchdog.
+ */
+static const struct dwc3_properties dwc3_qcom_ipq4019_properties = {
+	.gsbuscfg0_reqinfo = DWC3_GSBUSCFG0_REQINFO_UNSPECIFIED,
+	.xhci_no_soft_retry = 1,
+};
+
 static int dwc3_qcom_probe(struct platform_device *pdev)
 {
+	const struct dwc3_properties *properties;
 	struct dwc3_probe_data	probe_data = {};
 	struct device		*dev = &pdev->dev;
 	struct dwc3_qcom	*qcom;
@@ -704,7 +715,10 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	probe_data.dwc = &qcom->dwc;
 	probe_data.res = &res;
 	probe_data.ignore_clocks_and_resets = true;
-	probe_data.properties = DWC3_DEFAULT_PROPERTIES;
+
+	properties = of_device_get_match_data(dev);
+	probe_data.properties = properties ? *properties : DWC3_DEFAULT_PROPERTIES;
+
 	ret = dwc3_core_probe(&probe_data);
 	if (ret)  {
 		ret = dev_err_probe(dev, ret, "failed to register DWC3 Core\n");
@@ -839,6 +853,7 @@ static const struct dev_pm_ops dwc3_qcom_dev_pm_ops = {
 };
 
 static const struct of_device_id dwc3_qcom_of_match[] = {
+	{ .compatible = "qcom,ipq4019-dwc3", .data = &dwc3_qcom_ipq4019_properties },
 	{ .compatible = "qcom,snps-dwc3" },
 	{ }
 };
