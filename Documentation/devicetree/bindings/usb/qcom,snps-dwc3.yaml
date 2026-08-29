@@ -137,11 +137,11 @@ properties:
                                only on SoCs with non-QUSB2 targets with
                                exception of SDM670/SDM845/SM6350.
         - ss_phy_irq: Used for remote wakeup in Super Speed mode of operation.
-    minItems: 3
+    minItems: 1
     maxItems: 19
 
   interrupt-names:
-    minItems: 3
+    minItems: 1
     maxItems: 19
 
   qcom,select-utmi-as-pipe-clk:
@@ -508,6 +508,25 @@ allOf:
           contains:
             enum:
               - qcom,ipq4019-dwc3
+    then:
+      properties:
+        interrupts:
+          minItems: 1
+          maxItems: 6
+        interrupt-names:
+          minItems: 1
+          items:
+            - const: dwc_usb3
+            - const: pwr_event
+            - const: hs_phy_irq
+            - const: dp_hs_phy_irq
+            - const: dm_hs_phy_irq
+            - const: ss_phy_irq
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
               - qcom,ipq8064-dwc3
               - qcom,kaanapali-dwc3
               - qcom,qcs615-dwc3
