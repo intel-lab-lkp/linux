@@ -520,7 +520,10 @@ bool sev_prepare(void)
 		return true;
 	}
 
-	/* Register Alternate Injection */
+	/* When the guest is running at VMPL2 with Alternate Injection enabled,
+	 * register Alternate Injection, and configure all of interrupts as
+	 * permissive by default.
+	 */
 	if (early_is_sevsnp_guest() && snp_vmpl) {
 		struct svsm_call call = {};
 		int ret;
@@ -534,6 +537,13 @@ bool sev_prepare(void)
 
 		ret = svsm_call_msr_protocol(&call);
 		if (ret)
+			sev_es_terminate(SEV_TERM_SET_LINUX, GHCB_TERM_ALT_INJ_FAIL);
+
+		call.rax = SVSM_APIC_CALL(SVSM_APIC_CONFIG_VECTOR);
+		call.rcx = SVSM_IRQ_ENABLE_ALL;
+
+		ret = svsm_call_msr_protocol(&call);
+		if (svsm_call_msr_protocol(&call))
 			sev_es_terminate(SEV_TERM_SET_LINUX, GHCB_TERM_ALT_INJ_FAIL);
 	}
 
