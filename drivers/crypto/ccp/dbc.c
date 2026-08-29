@@ -240,11 +240,11 @@ int dbc_dev_init(struct psp_device *psp)
 	dbc_dev->char_dev.name = "dbc";
 	dbc_dev->char_dev.fops = &dbc_fops;
 	dbc_dev->char_dev.mode = 0600;
+	mutex_init(&dbc_dev->ioctl_mutex);
+
 	ret = misc_register(&dbc_dev->char_dev);
 	if (ret)
 		goto cleanup_mbox;
-
-	mutex_init(&dbc_dev->ioctl_mutex);
 
 	return 0;
 
