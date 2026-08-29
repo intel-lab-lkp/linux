@@ -15,10 +15,26 @@ int wxvf_suspend(struct device *dev_d)
 {
 	struct pci_dev *pdev = to_pci_dev(dev_d);
 	struct wx *wx = pci_get_drvdata(pdev);
+	struct net_device *netdev;
 
-	netif_device_detach(wx->netdev);
+	netdev = wx->netdev;
+	timer_delete_sync(&wx->service_timer);
+	cancel_work_sync(&wx->service_task);
+	clear_bit(WX_STATE_SERVICE_SCHED, wx->state);
+
+	rtnl_lock();
+	netif_device_detach(netdev);
+	if (netif_running(netdev)) {
+		netif_tx_disable(netdev);
+		netif_carrier_off(netdev);
+		wx_napi_disable_all(wx);
+		wx_free_irq(wx);
+		wx_free_resources(wx);
+	}
 	wx_clear_interrupt_scheme(wx);
+	pci_clear_master(pdev);
 	pci_disable_device(pdev);
+	rtnl_unlock();
 
 	return 0;
 }
@@ -34,12 +50,52 @@ int wxvf_resume(struct device *dev_d)
 {
 	struct pci_dev *pdev = to_pci_dev(dev_d);
 	struct wx *wx = pci_get_drvdata(pdev);
+	struct net_device *netdev;
+	int err;
+
+	netdev = wx->netdev;
+	err = pci_enable_device_mem(pdev);
+	if (err) {
+		dev_err(&pdev->dev, "Cannot enable PCI device from suspend\n");
+		return err;
+	}
 
 	pci_set_master(pdev);
-	wx_init_interrupt_scheme(wx);
-	netif_device_attach(wx->netdev);
+	rtnl_lock();
+
+	err = wx_init_interrupt_scheme(wx);
+	if (err)
+		goto err_pci;
+
+	/* Since vf resume before than pf, only the vf interrupt and software
+	 * resources need to be initialized. The hardware configuration will be
+	 * reconfigured in reset subtask.
+	 */
+	if (netif_running(netdev)) {
+		err = wx_setup_resources(wx);
+		if (err)
+			goto err_clear_int;
+
+		err = wx_request_msix_irqs_vf(wx);
+		if (err)
+			goto err_free_resources;
+
+		wxvf_up_complete(wx);
+		set_bit(WX_FLAG_NEED_DO_RESET, wx->flags);
+	}
+
+	netif_device_attach(netdev);
+	rtnl_unlock();
 
 	return 0;
+err_free_resources:
+	wx_free_resources(wx);
+err_clear_int:
+	wx_clear_interrupt_scheme(wx);
+err_pci:
+	rtnl_unlock();
+	pci_disable_device(pdev);
+	return err;
 }
 EXPORT_SYMBOL(wxvf_resume);
 
