@@ -59,6 +59,7 @@ struct firmware;
 
 int air_fw_write_buf(struct mii_bus *bus, int addr, u32 address,
 		     const struct firmware *fw);
+bool air_en8811h_mcu_running(struct mii_bus *bus, int addr, bool is_c45);
 int air_en8811h_wait_mcu_ready(struct mii_bus *bus, int addr, bool is_c45,
 			       struct device *dev);
 int air_en8811h_fw_download(struct mii_bus *bus, int addr, bool is_c45,

@@ -374,6 +374,12 @@ static int air_mmd_status_read(struct mii_bus *bus, int addr, bool is_c45)
 	return ret;
 }
 
+bool air_en8811h_mcu_running(struct mii_bus *bus, int addr, bool is_c45)
+{
+	return air_mmd_status_read(bus, addr, is_c45) == EN8811H_PHY_READY;
+}
+EXPORT_SYMBOL_GPL(air_en8811h_mcu_running);
+
 int air_en8811h_wait_mcu_ready(struct mii_bus *bus, int addr, bool is_c45,
 			       struct device *dev)
 {
@@ -408,6 +414,28 @@ int air_en8811h_fw_download(struct mii_bus *bus, int addr, bool is_c45,
 {
 	const struct firmware *fw1, *fw2;
 	int ret;
+
+	if (air_en8811h_mcu_running(bus, addr, is_c45)) {
+		/* Loaded by a bootloader, an earlier bind, or another
+		 * device serving the chip. The wait below is what makes
+		 * trusting the status register safe: a chip that was not
+		 * in fact running fails there instead of coming up
+		 * misprogrammed.
+		 */
+		ret = air_en8811h_wait_mcu_ready(bus, addr, is_c45, dev);
+		if (ret < 0)
+			return ret;
+
+		ret = air_mdio_buckpbus_reg_read(bus, addr,
+						 EN8811H_FW_VERSION,
+						 fw_version);
+		if (ret < 0)
+			return ret;
+
+		dev_info(dev, "MD32 already running, firmware %08x\n",
+			 *fw_version);
+		return 0;
+	}
 
 	ret = request_firmware_direct(&fw1, EN8811H_MD32_DM, dev);
 	if (ret < 0)

@@ -1030,7 +1030,10 @@ static int en8811h_probe(struct phy_device *phydev)
 	if (ret < 0)
 		return ret;
 
-	/* mcu has just restarted after firmware load */
+	/* Freshly downloaded firmware has just started; firmware adopted
+	 * from the bootloader is already past its own start. Neither needs
+	 * the restart a later resume would.
+	 */
 	priv->mcu_needs_restart = false;
 
 	/* MDIO_DEVS1/2 empty, so set mmds_present bits here */
