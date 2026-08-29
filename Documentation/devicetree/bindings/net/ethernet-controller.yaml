@@ -113,6 +113,15 @@ properties:
     description:
       Specifies a reference to a node representing an IEEE 1588 PTP device.
 
+  slow-to-probe:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      The PHY referenced by phy-handle may not exist, or may not have a
+      usable driver, when this controller connects to it, because the
+      driver or firmware arrives later (for example from a filesystem
+      mounted after the controller probed). Instead of failing, keep
+      the port and connect the PHY once it becomes usable.
+
   rx-fifo-depth:
     $ref: /schemas/types.yaml#/definitions/uint32
     description:
