@@ -966,12 +966,9 @@ static void atkbd_disconnect(struct serio *serio)
 	input_unregister_device(atkbd->dev);
 
 	/*
-	 * Make sure we don't have a command in flight.
-	 * Note that since atkbd->enabled is false event work will keep
-	 * rescheduling itself until it gets canceled and will not try
-	 * accessing freed input device or serio port.
+	 * Prevent work from being rescheduled after atkbd is marked disabled
 	 */
-	cancel_delayed_work_sync(&atkbd->event_work);
+	disable_delayed_work_sync(&atkbd->event_work);
 
 	serio_close(serio);
 	serio_set_drvdata(serio, NULL);
