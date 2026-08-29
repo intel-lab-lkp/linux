@@ -11,6 +11,16 @@ Supported chips:
 
     Datasheet: Not publicly available
 
+  * IT8613E
+
+    Prefix: 'it8613'
+
+    Addresses scanned: from Super I/O config space (8 I/O ports)
+
+    Datasheet: Not publicly available
+
+    Only fan input monitoring is currently supported.
+
   * IT8620E
 
     Prefix: 'it8620'

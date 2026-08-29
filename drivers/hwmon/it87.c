@@ -12,6 +12,7 @@
  *  similar parts.  The other devices are supported by different drivers.
  *
  *  Supports: IT8603E  Super I/O chip w/LPC interface
+ *            IT8613E  Super I/O chip w/LPC interface (fan inputs only)
  *            IT8620E  Super I/O chip w/LPC interface
  *            IT8622E  Super I/O chip w/LPC interface
  *            IT8623E  Super I/O chip w/LPC interface
@@ -65,7 +66,7 @@
 
 enum chips { it87, it8712, it8716, it8718, it8720, it8721, it8728, it8732,
 	     it8771, it8772, it8781, it8782, it8783, it8786, it8790,
-	     it8792, it8603, it8620, it8622, it8628, it8689, it87952 };
+	     it8792, it8603, it8613, it8620, it8622, it8628, it8689, it87952 };
 
 static struct platform_device *it87_pdev[2];
 
@@ -159,6 +160,7 @@ static inline void superio_exit(int ioreg, bool noexit)
 #define IT8786E_DEVID 0x8786
 #define IT8790E_DEVID 0x8790
 #define IT8603E_DEVID 0x8603
+#define IT8613E_DEVID 0x8613
 #define IT8620E_DEVID 0x8620
 #define IT8622E_DEVID 0x8622
 #define IT8623E_DEVID 0x8623
@@ -328,6 +330,7 @@ struct it87_devices {
 #define FEAT_FOUR_PWM		BIT(21)	/* Supports four fan controls */
 #define FEAT_FOUR_TEMP		BIT(22)
 #define FEAT_FANCTL_ONOFF	BIT(23)	/* chip has FAN_CTL ON/OFF */
+#define FEAT_FAN_INPUT_ONLY	BIT(24)	/* only fan inputs are supported */
 
 static const struct it87_devices it87_devices[] = {
 	[it87] = {
@@ -476,6 +479,12 @@ static const struct it87_devices it87_devices[] = {
 		  | FEAT_AVCC3 | FEAT_PWM_FREQ2,
 		.peci_mask = 0x07,
 	},
+	[it8613] = {
+		.name = "it8613",
+		.model = "IT8613E",
+		.features = FEAT_16BIT_FANS | FEAT_FIVE_FANS
+		  | FEAT_FAN_INPUT_ONLY,
+	},
 	[it8620] = {
 		.name = "it8620",
 		.model = "IT8620E",
@@ -560,6 +569,7 @@ static const struct it87_devices it87_devices[] = {
 #define has_scaling(data)	((data)->features & (FEAT_12MV_ADC | \
 						     FEAT_10_9MV_ADC))
 #define has_fanctl_onoff(data)	((data)->features & FEAT_FANCTL_ONOFF)
+#define has_fan_input_only(data)	((data)->features & FEAT_FAN_INPUT_ONLY)
 
 struct it87_sio_data {
 	int sioaddr;
@@ -2427,6 +2437,9 @@ static umode_t it87_is_visible(struct kobject *kobj,
 	struct device *dev = kobj_to_dev(kobj);
 	struct it87_data *data = dev_get_drvdata(dev);
 
+	if (has_fan_input_only(data))
+		return 0;
+
 	if ((index == 2 || index == 3) && !data->has_vid)
 		return 0;
 
@@ -2467,6 +2480,9 @@ static umode_t it87_fan_is_visible(struct kobject *kobj,
 	}
 
 	if (!(data->has_fan & BIT(i)))
+		return 0;
+
+	if (has_fan_input_only(data) && a != 0)
 		return 0;
 
 	if (a == 3) {				/* beep */
@@ -2790,6 +2806,9 @@ static int __init it87_find(int sioaddr, unsigned short *address,
 	case IT8623E_DEVID:
 		sio_data->type = it8603;
 		break;
+	case IT8613E_DEVID:
+		sio_data->type = it8613;
+		break;
 	case IT8620E_DEVID:
 		sio_data->type = it8620;
 		break;
@@ -2944,6 +2963,28 @@ static int __init it87_find(int sioaddr, unsigned short *address,
 
 		sio_data->beep_pin = superio_inb(sioaddr,
 						 IT87_SIO_BEEP_PIN_REG) & 0x3f;
+	} else if (sio_data->type == it8613) {
+		int reg27, reg29, reg2a;
+
+		superio_select(sioaddr, GPIO);
+
+		reg27 = superio_inb(sioaddr, IT87_SIO_GPIO3_REG);
+		reg29 = superio_inb(sioaddr, IT87_SIO_GPIO5_REG);
+		reg2a = superio_inb(sioaddr, IT87_SIO_PINX1_REG);
+
+		/* fan1 is not available on IT8613E. */
+		sio_data->skip_fan |= BIT(0);
+		if (reg29 & BIT(2))
+			sio_data->skip_fan |= BIT(1);
+		if (reg27 & BIT(7))
+			sio_data->skip_fan |= BIT(2);
+		if (!(reg2a & BIT(0)) || (reg29 & BIT(7)))
+			sio_data->skip_fan |= BIT(3);
+		if (!(reg27 & BIT(1)))
+			sio_data->skip_fan |= BIT(4);
+
+		/* PWM control is not yet supported. */
+		sio_data->skip_pwm |= GENMASK(5, 0);
 	} else if (sio_data->type == it8603) {
 		int reg27, reg29;
 
@@ -3355,7 +3396,8 @@ static void it87_init_device(struct platform_device *pdev)
 		data->auto_pwm[i][3] = 0x7f;	/* Full speed, hard-coded */
 	}
 
-	it87_check_limit_regs(data);
+	if (!has_fan_input_only(data))
+		it87_check_limit_regs(data);
 
 	/*
 	 * Temperature channels are not forcibly enabled, as they can be
@@ -3364,7 +3406,8 @@ static void it87_init_device(struct platform_device *pdev)
 	 * run-time through the temp{1-3}_type sysfs accessors if needed.
 	 */
 
-	it87_check_voltage_monitors_reset(data);
+	if (!has_fan_input_only(data))
+		it87_check_voltage_monitors_reset(data);
 
 	it87_check_tachometers_reset(pdev);
 
@@ -3525,10 +3568,14 @@ static int it87_probe(struct platform_device *pdev)
 	}
 
 	/* Check PWM configuration */
-	enable_pwm_interface = it87_check_pwm(dev);
-	if (!enable_pwm_interface)
-		dev_info(dev,
-			 "Detected broken BIOS defaults, disabling PWM interface\n");
+	if (has_fan_input_only(data)) {
+		enable_pwm_interface = 0;
+	} else {
+		enable_pwm_interface = it87_check_pwm(dev);
+		if (!enable_pwm_interface)
+			dev_info(dev,
+				 "Detected broken BIOS defaults, disabling PWM interface\n");
+	}
 
 	/* Starting with IT8721F, we handle scaling of internal voltages */
 	if (has_scaling(data)) {
@@ -3579,6 +3626,10 @@ static int it87_probe(struct platform_device *pdev)
 			data->has_in |= BIT(11);
 		if (((reg >> 4) & 0x03) == 0x01)
 			data->has_in |= BIT(12);
+	}
+	if (has_fan_input_only(data)) {
+		data->has_in = 0;
+		data->has_temp = 0;
 	}
 
 	data->has_beep = !!sio_data->beep_pin;
@@ -3660,9 +3711,11 @@ static int it87_resume(struct device *dev)
 	if (err)
 		return err;
 
-	it87_check_pwm(dev);
-	it87_check_limit_regs(data);
-	it87_check_voltage_monitors_reset(data);
+	if (!has_fan_input_only(data)) {
+		it87_check_pwm(dev);
+		it87_check_limit_regs(data);
+		it87_check_voltage_monitors_reset(data);
+	}
 	it87_check_tachometers_reset(pdev);
 	it87_check_tachometers_16bit_mode(pdev);
 
