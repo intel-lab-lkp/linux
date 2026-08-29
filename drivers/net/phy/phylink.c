@@ -2284,6 +2284,12 @@ EXPORT_SYMBOL_GPL(phylink_connect_phy);
 /* Ceiling that interval backs off to once a connect attempt has failed. */
 #define PHYLINK_SLOW_PHY_POLL_MAX_MS	30000
 
+/* True while a PHY declared slow-to-probe has not been connected yet. */
+static bool phylink_slow_phy_pending(struct phylink *pl)
+{
+	return pl->slow_phy_fwnode && !pl->phydev;
+}
+
 /* A phy-handle has resolved only once it names a device with its own driver
  * bound. A device that is absent, or present with the generic driver bound to
  * it, is equally unusable: this is the state slow-to-probe waits out, and both
@@ -3106,6 +3112,17 @@ int phylink_ethtool_ksettings_get(struct phylink *pl,
 	else
 		kset->base.port = pl->link_port;
 
+	/* Until the PHY arrives the port can do nothing, so report no link
+	 * modes at all rather than the MAC's own capabilities, which is what
+	 * an empty SFP cage reports.
+	 */
+	if (phylink_slow_phy_pending(pl)) {
+		linkmode_zero(kset->link_modes.supported);
+		kset->base.speed = SPEED_UNKNOWN;
+		kset->base.duplex = DUPLEX_UNKNOWN;
+		return 0;
+	}
+
 	linkmode_copy(kset->link_modes.supported, pl->supported);
 
 	switch (pl->act_link_an_mode) {
@@ -3172,6 +3189,12 @@ int phylink_ethtool_ksettings_set(struct phylink *pl,
 	struct phylink_link_state config;
 
 	ASSERT_RTNL();
+
+	/* Without a PHY and without an SFP bus this would configure the MAC
+	 * on its own, for a link that cannot come up yet.
+	 */
+	if (phylink_slow_phy_pending(pl))
+		return -EINVAL;
 
 	if (pl->phydev) {
 		struct ethtool_link_ksettings phy_kset = *kset;
