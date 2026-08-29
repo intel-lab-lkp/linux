@@ -3673,6 +3673,29 @@ int of_genpd_parse_idle_states(struct device_node *dn,
 }
 EXPORT_SYMBOL_GPL(of_genpd_parse_idle_states);
 
+/*
+ * Drop the stay-on constraint that kept a genpd, found powered-on at
+ * initialization, from being powered-off during boot, then try a power-off.
+ *
+ * The pd_ignore_unused command line option asks for PM domains that no driver
+ * has claimed to be left on, so skip the power-off for those. Such a PM domain
+ * has no other power-off trigger either, as genpd_power_off_unused() bails out
+ * on the same option.
+ *
+ * The constraint itself is always dropped, so that the PM domains that do have
+ * a consumer attached stay under the control of runtime PM - the option has
+ * never covered those - and so that a PM domain gaining a consumer after this
+ * point is not left pinned.
+ */
+static void genpd_sync_state_power_off(struct generic_pm_domain *genpd)
+{
+	genpd_lock(genpd);
+	genpd->stay_on = false;
+	if (!pd_ignore_unused || genpd->device_count)
+		genpd_power_off(genpd, false, 0);
+	genpd_unlock(genpd);
+}
+
 /**
  * of_genpd_sync_state() - A common sync_state function for genpd providers
  * @np: The device node the genpd provider is associated with.
@@ -3690,12 +3713,8 @@ void of_genpd_sync_state(struct device_node *np)
 
 	mutex_lock(&gpd_list_lock);
 	list_for_each_entry(genpd, &gpd_list, gpd_list_node) {
-		if (genpd->provider == of_fwnode_handle(np)) {
-			genpd_lock(genpd);
-			genpd->stay_on = false;
-			genpd_power_off(genpd, false, 0);
-			genpd_unlock(genpd);
-		}
+		if (genpd->provider == of_fwnode_handle(np))
+			genpd_sync_state_power_off(genpd);
 	}
 	mutex_unlock(&gpd_list_lock);
 }
@@ -3719,10 +3738,7 @@ static void genpd_provider_sync_state(struct device *dev)
 		break;
 
 	case GENPD_SYNC_STATE_SIMPLE:
-		genpd_lock(genpd);
-		genpd->stay_on = false;
-		genpd_power_off(genpd, false, 0);
-		genpd_unlock(genpd);
+		genpd_sync_state_power_off(genpd);
 		break;
 
 	default:
