@@ -2326,6 +2326,7 @@ static void update_fs_metadata(struct f2fs_sb_info *sbi, int secs)
 	SM_I(sbi)->segment_count = (int)SM_I(sbi)->segment_count + segs;
 	MAIN_SEGS(sbi) = (int)MAIN_SEGS(sbi) + segs;
 	MAIN_SECS(sbi) += secs;
+	f2fs_adjust_pinned_area_boundary(sbi);
 	if (sbi->allocate_section_hint > MAIN_SECS(sbi))
 		sbi->allocate_section_hint = MAIN_SECS(sbi);
 	FREE_I(sbi)->free_sections = (int)FREE_I(sbi)->free_sections + secs;
@@ -2347,6 +2348,19 @@ static void update_fs_metadata(struct f2fs_sb_info *sbi, int secs)
 					div_u64(blks, sbi->blocks_per_blkz);
 #endif
 	}
+}
+
+static bool f2fs_resize_tail_invalid(struct f2fs_sb_info *sbi,
+				     unsigned int secs)
+{
+	if (MAIN_SECS(sbi) >
+			secs + F2FS_OPTION(sbi).resizable_tail_secno)
+		return false;
+
+	f2fs_err(sbi, "Invalid resize: main %u, shrink %u, tail %u",
+		 MAIN_SECS(sbi), secs,
+		 F2FS_OPTION(sbi).resizable_tail_secno);
+	return true;
 }
 
 int f2fs_resize_fs(struct file *filp, __u64 block_count)
@@ -2392,12 +2406,14 @@ int f2fs_resize_fs(struct file *filp, __u64 block_count)
 		return -EINVAL;
 	}
 
+	shrunk_blocks = old_block_count - block_count;
+	secs = div_u64(shrunk_blocks, BLKS_PER_SEC(sbi));
+	if (f2fs_resize_tail_invalid(sbi, secs))
+		return -EINVAL;
+
 	err = mnt_want_write_file(filp);
 	if (err)
 		return err;
-
-	shrunk_blocks = old_block_count - block_count;
-	secs = div_u64(shrunk_blocks, BLKS_PER_SEC(sbi));
 
 	/* stop other GC */
 	if (!f2fs_down_write_trylock_trace(&sbi->gc_lock, &glc)) {
@@ -2441,6 +2457,11 @@ out_drop_write:
 
 	f2fs_down_write_trace(&sbi->gc_lock, &glc);
 	f2fs_down_write_trace(&sbi->cp_global_sem, &clc);
+
+	if (f2fs_resize_tail_invalid(sbi, secs)) {
+		err = -EINVAL;
+		goto out_err;
+	}
 
 	spin_lock(&sbi->stat_lock);
 	if (shrunk_blocks + valid_user_blocks(sbi) +
