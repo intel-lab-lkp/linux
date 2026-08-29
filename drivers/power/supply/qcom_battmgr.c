@@ -1690,6 +1690,14 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 			return dev_err_probe(dev, PTR_ERR(battmgr->wls_psy),
 					     "failed to register wireless charing power supply\n");
 	} else {
+		/*
+		 * The SM8350-class firmware has no BATTMGR_BAT_INFO request, so
+		 * @unit is never populated from the firmware. It reports charge
+		 * domain values, so set it statically here - otherwise the
+		 * CHARGE_* properties are rejected with -ENODATA.
+		 */
+		battmgr->unit = QCOM_BATTMGR_UNIT_mAh;
+
 		if (battmgr->variant == QCOM_BATTMGR_SM8550)
 			psy_desc = &sm8550_bat_psy_desc;
 		else
