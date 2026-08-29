@@ -15,7 +15,7 @@ RISC-V Linux上的虚拟内存布局
 :作者: Alexandre Ghiti <alex@ghiti.fr>
 :日期: 12 February 2021
 
-这份文件描述了RISC-V Linux内核使用的虚拟内存布局。
+这份文件描述了 RISC-V Linux 内核使用的虚拟内存布局。
 
 32位 RISC-V Linux 内核
 ======================
@@ -28,9 +28,9 @@ TODO
 64位 RISC-V Linux 内核
 ======================
 
-RISC-V特权架构文档指出，64位地址 "必须使第63-48位值都等于第47位，否则将发生缺页异常。"：这将虚
-拟地址空间分成两半，中间有一个非常大的洞，下半部分是用户空间所在的地方，上半部分是RISC-V Linux
-内核所在的地方。
+RISC-V 特权架构文档指出，64 位地址“必须使第 63-48 位值都等于第 47 位，否则将发生缺页异常。”：
+这将虚拟地址空间分成两半，中间有一个非常大的洞，下半部分是用户空间所在的地方，上半部分是 RISC-V
+Linux 内核所在的地方。
 
 RISC-V Linux Kernel SV39
 ------------------------
@@ -52,11 +52,11 @@ RISC-V Linux Kernel SV39
                                                               | 内核空间的虚拟内存，在所有进程之间共享:
   ____________________________________________________________|___________________________________________________________
                     |            |                  |         |
-   ffffffc6fee00000 | -228    GB | ffffffc6feffffff |    2 MB | fixmap
-   ffffffc6ff000000 | -228    GB | ffffffc6ffffffff |   16 MB | PCI io
-   ffffffc700000000 | -228    GB | ffffffc7ffffffff |    4 GB | vmemmap
-   ffffffc800000000 | -224    GB | ffffffd7ffffffff |   64 GB | vmalloc/ioremap space
-   ffffffd800000000 | -160    GB | fffffff6ffffffff |  124 GB | 直接映射所有物理内存
+   ffffffc4fea00000 | -236    GB | ffffffc4feffffff |    6 MB | fixmap
+   ffffffc4ff000000 | -236    GB | ffffffc4ffffffff |   16 MB | PCI io
+   ffffffc500000000 | -236    GB | ffffffc5ffffffff |    4 GB | vmemmap
+   ffffffc600000000 | -232    GB | ffffffd5ffffffff |   64 GB | vmalloc/ioremap space
+   ffffffd600000000 | -168    GB | fffffff5ffffffff |  128 GB | 直接映射所有物理内存
    fffffff700000000 |  -36    GB | fffffffeffffffff |   32 GB | kasan
   __________________|____________|__________________|_________|____________________________________________________________
                                                               |
