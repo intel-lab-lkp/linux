@@ -11,7 +11,6 @@
 #include <linux/bitops.h>
 #include <linux/completion.h>
 #include <linux/container_of.h>
-#include <linux/dev_printk.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
