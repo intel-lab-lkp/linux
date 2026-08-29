@@ -3447,10 +3447,17 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 
 		if (!capsnap) {
 			/*
-			 * The capsnap should already be removed when removing
-			 * auth cap in the case of a forced unmount.
+			 * The cap_snap may be gone even though the auth cap
+			 * is present: a session loss removes all cap_snaps
+			 * (ceph_purge_inode_cap()), but the dirty folios
+			 * referencing their contexts can survive in the
+			 * page cache.  Once the session reconnects and the
+			 * inode gets a new auth cap, those folios write
+			 * back and no longer find a matching cap_snap
+			 * here.  There is nothing left to account for.
 			 */
-			WARN_ON_ONCE(ci->i_auth_cap);
+			doutc(cl, "%p %llx.%llx snapc %p no cap_snap\n",
+			      inode, ceph_vinop(inode), snapc);
 			goto unlock;
 		}
 

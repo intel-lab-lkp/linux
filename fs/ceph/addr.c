@@ -769,7 +769,7 @@ static int write_folio_nounlock(struct folio *folio,
 		return 0;
 	}
 	oldest = get_oldest_context(inode, &ceph_wbc, snapc);
-	if (snapc->seq > oldest->seq) {
+	if (oldest && snapc->seq > oldest->seq) {
 		doutc(cl, "%llx.%llx folio %p snapc %p not writeable - noop\n",
 		      ceph_vinop(inode), folio, snapc);
 		/* we should only noop if called by kswapd */
@@ -779,6 +779,21 @@ static int write_folio_nounlock(struct folio *folio,
 		return 0;
 	}
 	ceph_put_snap_context(oldest);
+
+	if (!oldest) {
+		/*
+		 * No dirty capsnap and no head writeback refs: there is
+		 * nothing to conflict with and the folio is writable.
+		 * Fill in the ctl as for the head context, since
+		 * get_oldest_context() only does so on the capsnap and
+		 * head paths.
+		 */
+		ceph_wbc.i_size = i_size_read(inode);
+		ceph_wbc.truncate_size = ci->i_truncate_size;
+		ceph_wbc.truncate_seq = ci->i_truncate_seq;
+		ceph_wbc.size_stable = false;
+		ceph_wbc.head_snapc = true;
+	}
 
 	/* is this a partial page at end of file? */
 	if (page_off >= ceph_wbc.i_size) {
@@ -1869,7 +1884,7 @@ ceph_find_incompatible(struct folio *folio)
 		 * context!  is it writeable now?
 		 */
 		oldest = get_oldest_context(inode, NULL, NULL);
-		if (snapc->seq > oldest->seq) {
+		if (oldest && snapc->seq > oldest->seq) {
 			/* not writeable -- return it for the caller to deal with */
 			ceph_put_snap_context(oldest);
 			doutc(cl, " %llx.%llx folio %p snapc %p not current or oldest\n",
