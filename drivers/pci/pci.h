@@ -409,6 +409,8 @@ extern unsigned long pci_hotplug_io_size;
 extern unsigned long pci_hotplug_mmio_size;
 extern unsigned long pci_hotplug_mmio_pref_size;
 extern unsigned long pci_hotplug_bus_size;
+extern bool pci_rebar_no_reserve;
+extern bool pci_bar_demote_disabled;
 
 static inline bool pci_is_cardbus_bridge(struct pci_dev *dev)
 {

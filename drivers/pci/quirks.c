@@ -6423,3 +6423,92 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9750, pci_mask_replay_timer_timeout);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9755, pci_mask_replay_timer_timeout);
 #endif
+
+/*
+ * A small prefetchable BAR sharing a bridge's single prefetchable window with a
+ * much larger one inflates that window past the large BAR's alignment.  Clear
+ * PREFETCH on such small BARs at enumeration so they land in the
+ * non-prefetchable window and the prefetchable window packs to the large BAR
+ * alone.  pci=no_bar_demote disables this.
+ */
+#define PCI_BAR_PACK_MIN	SZ_64M	/* device must have a pref BAR at least this big */
+#define PCI_BAR_PACK_CAP	SZ_16M	/* only demote small pref BARs up to this size */
+
+/* Demote only if the host's 32-bit aperture has room (tracked per host). */
+static bool pci_pack_low_reserve(struct pci_dev *dev, resource_size_t bytes)
+{
+	static struct { struct pci_bus *root; u64 used; } budget[32];
+	static int nbudget;
+	struct pci_bus *root = dev->bus;
+	struct resource *r;
+	u64 aperture = 0, *usedp = NULL;
+	int i;
+
+	while (root->parent)
+		root = root->parent;
+	pci_bus_for_each_resource(root, r, i) {
+		if (r && (r->flags & (IORESOURCE_MEM | IORESOURCE_PREFETCH)) ==
+		    IORESOURCE_MEM && (u64)r->end < SZ_4G)
+			aperture += resource_size(r);
+	}
+	if (!aperture)
+		return false;
+
+	for (i = 0; i < nbudget; i++) {
+		if (budget[i].root == root) {
+			usedp = &budget[i].used;
+			break;
+		}
+	}
+	if (!usedp) {
+		if (nbudget >= (int)ARRAY_SIZE(budget))
+			return false;
+		budget[nbudget].root = root;
+		budget[nbudget].used = 0;
+		usedp = &budget[nbudget].used;
+		nbudget++;
+	}
+	if (*usedp + bytes > aperture / 2)
+		return false;
+	*usedp += bytes;
+	return true;
+}
+
+static void quirk_pci_pack_prefetch(struct pci_dev *dev)
+{
+	resource_size_t max_align = 0;
+	struct resource *r;
+	int i;
+
+	if (pci_bar_demote_disabled)
+		return;
+
+	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
+		r = pci_resource_n(dev, i);
+		if ((r->flags & (IORESOURCE_MEM | IORESOURCE_PREFETCH)) ==
+		    (IORESOURCE_MEM | IORESOURCE_PREFETCH))
+			max_align = max(max_align, pci_resource_alignment(dev, r));
+	}
+	if (max_align < PCI_BAR_PACK_MIN)
+		return;
+
+	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
+		r = pci_resource_n(dev, i);
+		if ((r->flags & (IORESOURCE_MEM | IORESOURCE_PREFETCH)) !=
+		    (IORESOURCE_MEM | IORESOURCE_PREFETCH))
+			continue;
+		if (r->flags & IORESOURCE_PCI_FIXED)
+			continue;
+		if (pci_resource_alignment(dev, r) >= max_align)
+			continue;		/* an alignment-setting BAR, keep it */
+		if (resource_size(r) > PCI_BAR_PACK_CAP)
+			continue;		/* not a small control BAR */
+
+		if (!pci_pack_low_reserve(dev, resource_size(r)))
+			continue;	/* no room below 4G: leave it prefetchable (fallback) */
+		r->flags &= ~IORESOURCE_PREFETCH;
+		pci_info(dev, "%pR: assigned from the non-prefetchable window to pack the prefetchable window\n",
+			 r);
+	}
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_ANY_ID, PCI_ANY_ID, quirk_pci_pack_prefetch);
