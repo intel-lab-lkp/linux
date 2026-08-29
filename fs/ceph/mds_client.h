@@ -359,6 +359,28 @@ struct ceph_mds_request {
 #define CEPH_MDS_R_PARENT_LOCKED	(7) /* is r_parent->i_rwsem wlocked? */
 #define CEPH_MDS_R_ASYNC		(8) /* async request */
 #define CEPH_MDS_R_FSCRYPT_FILE		(9) /* must marshal fscrypt_file field */
+/*
+ * A dispatch owner has claimed the right to rebuild and send
+ * req->r_request (__do_request() past the send gate, or
+ * replay_unsafe_requests()).  Set and cleared under mdsc->mutex;
+ * held across the unlocked send window, cleared by the owner when it
+ * re-acquires the mutex and releases ownership.
+ */
+#define CEPH_MDS_R_DISPATCHING		(10)
+/*
+ * Another context observed a session/request state change while a
+ * dispatch owner was in flight and wants a re-evaluation.  It is a
+ * request to re-evaluate, not a guarantee that a resend is still
+ * needed.
+ *
+ * If RESEND is set while DISPATCHING is held, the current dispatcher
+ * consumes it on release and redispatches.
+ * If RESEND is set after DISPATCHING has been cleared, the producer
+ * must itself trigger a redispatch: cleanup_session_requests() is
+ * followed by kick_requests(), while handle_forward() calls
+ * __do_request() directly.
+ */
+#define CEPH_MDS_R_RESEND		(11)
 	unsigned long	r_req_flags;
 
 	struct mutex r_fill_mutex;
@@ -428,7 +450,13 @@ struct ceph_mds_request {
 	struct completion r_safe_completion;
 	ceph_mds_request_callback_t r_callback;
 	struct list_head  r_unsafe_item;  /* per-session unsafe list item */
-	struct list_head  r_aux_item;     /* auxiliary local list item */
+	/*
+	 * Auxiliary walk list for the dispatch collectors; doubles as
+	 * the collector-ownership token.  INIT_LIST_HEAD() is done
+	 * before publication; afterwards, all accesses are serialized
+	 * by mdsc->mutex.
+	 */
+	struct list_head  r_aux_item;
 
 	long long	  r_dir_release_cnt;
 	long long	  r_dir_ordered_cnt;
