@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/airoha,en8811h-mcu.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Airoha EN8811H PHY MCU
+
+maintainers:
+  - Aleksei Sviridkin <f@lex.la>
+
+description: |
+  The Airoha EN8811H 2.5G PHY is driven by an MD32 MCU that executes
+  firmware loaded over MDIO into volatile RAM. Until that firmware runs,
+  the chip answers its PHY ID but cannot bring up a link, and the
+  firmware files may live on a filesystem that is not yet mounted when
+  the MDIO bus is scanned.
+
+  This node describes the MCU as an MDIO device in its own right. The
+  driver downloads the firmware once the files become available (or
+  detects firmware already left running by the bootloader) and only
+  then registers the child MDIO bus, so the PHY node below never
+  becomes visible before the chip is able to serve it.
+
+  The reset line is owned by this node rather than by the PHY node:
+  the MD32 keeps its firmware only in volatile RAM, so the reset may
+  be asserted only while the MCU is not executing firmware. A PHY-node
+  reset would be pulsed by phy_detach() on every unbind and wipe the
+  running firmware.
+
+properties:
+  compatible:
+    const: airoha,en8811h-mcu
+
+  reg:
+    maxItems: 1
+
+  reset-gpios:
+    maxItems: 1
+
+  reset-assert-us: true
+
+  reset-deassert-us: true
+
+  mdio:
+    $ref: mdio.yaml#
+    unevaluatedProperties: false
+    description:
+      The child bus holding the PHY itself, at the same address the
+      chip answers on the parent bus.
+
+required:
+  - compatible
+  - reg
+  - mdio
+
+additionalProperties: false
+
+examples:
+  - |
+    mdio {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        ethernet-phy-mcu@d {
+            compatible = "airoha,en8811h-mcu";
+            reg = <0xd>;
+            reset-gpios = <&pio 14 1>;
+            reset-assert-us = <10000>;
+            reset-deassert-us = <20000>;
+
+            mdio {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                ethernet-phy@d {
+                    compatible = "ethernet-phy-id03a2.a411";
+                    reg = <0xd>;
+                    interrupts-extended = <&pio 15 8>;
+                };
+            };
+        };
+    };
