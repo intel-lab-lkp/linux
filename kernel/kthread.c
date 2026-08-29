@@ -987,13 +987,6 @@ int kthread_worker_fn(void *worker_ptr)
 	struct kthread_worker *worker = worker_ptr;
 	struct kthread_work *work;
 
-	/*
-	 * FIXME: Update the check and remove the assignment when all kthread
-	 * worker users are created using kthread_create_worker*() functions.
-	 */
-	WARN_ON(worker->task && worker->task != current);
-	worker->task = current;
-
 	if (worker->flags & KTW_FREEZABLE)
 		set_freezable();
 
