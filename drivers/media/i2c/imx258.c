@@ -1129,6 +1129,7 @@ static int imx258_power_on(struct device *dev)
 		dev_err(dev, "failed to enable clock\n");
 		regulator_bulk_disable(IMX258_NUM_SUPPLIES, imx258->supplies);
 	}
+	fsleep(400);
 
 	return ret;
 }
