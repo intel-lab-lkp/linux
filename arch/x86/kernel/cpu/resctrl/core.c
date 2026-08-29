@@ -895,6 +895,29 @@ bool rdt_cpu_has(int flag)
 	return ret;
 }
 
+bool erdt_cpu_has(int flag)
+{
+	struct rdt_options *o;
+	bool ret;
+
+	ret = erdt_support(flag);
+
+	if (!ret)
+		return ret;
+
+	for (o = rdt_options; o < &rdt_options[NUM_RDT_OPTIONS]; o++) {
+		if (flag == o->flag) {
+			if (o->force_off)
+				ret = false;
+			if (o->force_on)
+				ret = true;
+			break;
+		}
+	}
+
+	return ret;
+}
+
 bool resctrl_arch_is_evt_configurable(enum resctrl_event_id evt)
 {
 	if (!rdt_cpu_has(X86_FEATURE_BMEC))
