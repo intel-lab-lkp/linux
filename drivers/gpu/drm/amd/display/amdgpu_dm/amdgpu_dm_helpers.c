@@ -372,6 +372,7 @@ bool dm_helpers_dp_mst_write_payload_allocation_table(
 	struct drm_dp_mst_topology_state *mst_state;
 	struct drm_dp_mst_atomic_payload *target_payload, *new_payload, old_payload;
 	struct drm_dp_mst_topology_mgr *mst_mgr;
+	int ret;
 
 	aconnector = (struct amdgpu_dm_connector *)stream->dm_stream_context;
 	/* Accessing the connector state is required for vcpi_slots allocation
@@ -388,11 +389,23 @@ bool dm_helpers_dp_mst_write_payload_allocation_table(
 	new_payload = drm_atomic_get_mst_payload_state(mst_state, aconnector->mst_output_port);
 
 	if (enable) {
+		ret = drm_dp_link_power_up(&aconnector->mst_output_port->aux,
+					   aconnector->mst_output_port->dpcd_rev);
+		if (ret < 0)
+			drm_dbg_dp(mst_mgr->dev,
+				   "Failed to power up remote MST sink: %d\n", ret);
+
 		target_payload = new_payload;
 
 		/* It's OK for this to fail */
 		drm_dp_add_payload_part1(mst_mgr, mst_state, new_payload);
 	} else {
+		ret = drm_dp_link_power_down(&aconnector->mst_output_port->aux,
+					     aconnector->mst_output_port->dpcd_rev);
+		if (ret < 0)
+			drm_dbg_dp(mst_mgr->dev,
+				   "Failed to power down remote MST sink: %d\n", ret);
+
 		/* construct old payload by VCPI*/
 		dm_helpers_construct_old_payload(mst_mgr, mst_state,
 						 new_payload, &old_payload);
