@@ -2878,8 +2878,14 @@ static int tegra_dc_runtime_suspend(struct host1x_client *client)
 		return err;
 	}
 
-	if (dc->soc->has_powergate)
-		tegra_pmc_powergate_power_off(dc->pmc, dc->powergate);
+	if (dc->soc->has_powergate) {
+		err = tegra_pmc_powergate_power_off(dc->pmc, dc->powergate);
+		if (err < 0) {
+			dev_err(dev, "failed to powergate partition: %d\n", err);
+			reset_control_deassert(dc->rst);
+			return err;
+		}
+	}
 
 	clk_disable_unprepare(dc->clk);
 	pm_runtime_put_sync(dev);
