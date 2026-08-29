@@ -1718,6 +1718,48 @@ static void mt_yogabook9_fixup(struct hid_device *hdev, __u8 *rdesc,
 static const __u8 *mt_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 			     unsigned int *size)
 {
+	/*
+	 * ELAN 04f3:2dd2 delays populating its 64-bit Transducer Serial
+	 * Number until after tip-down. The generic HID input path can only
+	 * extract 32-bit values and exports the resulting mid-contact change
+	 * through MSC_SERIAL, causing userspace to switch tablet tools while a
+	 * stroke is active.
+	 *
+	 * Keep the field's full 64 bits in the report layout, but describe them
+	 * as two 32-bit constant values. This prevents both MSC_SERIAL events
+	 * and hid_field_extract(..., 64), without moving any later fields.
+	 */
+	if (hdev->vendor == USB_VENDOR_ID_ELAN && hdev->product == 0x2dd2) {
+		static const u8 elan_bad_serial[] = {
+			0x09, 0x5b,       /* Usage (Transducer Serial Number) */
+			0x25, 0xff,       /* Logical Maximum (255) */
+			0x75, 0x40,       /* Report Size (64) */
+			0x81, 0x02,       /* Input (Data,Var,Abs) */
+		};
+		static const u8 elan_ignored_serial[] = {
+			0x09, 0x00,       /* Usage (Undefined) */
+			0x75, 0x20,       /* Report Size (32) */
+			0x95, 0x02,       /* Report Count (2) */
+			0x81, 0x03,       /* Input (Const,Var,Abs) */
+		};
+		unsigned int i;
+
+		for (i = 0; i + sizeof(elan_bad_serial) <= *size; i++) {
+			if (!memcmp(&rdesc[i], elan_bad_serial,
+				    sizeof(elan_bad_serial))) {
+				memcpy(&rdesc[i], elan_ignored_serial,
+				       sizeof(elan_ignored_serial));
+				hid_info(hdev,
+					 "ignoring unstable 64-bit pen serial number\n");
+				break;
+			}
+		}
+
+		if (i + sizeof(elan_bad_serial) > *size)
+			hid_warn(hdev,
+				 "expected pen serial descriptor pattern not found\n");
+	}
+
 	if (hdev->vendor == I2C_VENDOR_ID_GOODIX &&
 	    (hdev->product == I2C_DEVICE_ID_GOODIX_01E8 ||
 	     hdev->product == I2C_DEVICE_ID_GOODIX_01E9)) {
