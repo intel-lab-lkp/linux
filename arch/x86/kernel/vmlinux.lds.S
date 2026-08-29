@@ -94,8 +94,11 @@ const_cpu_current_top_of_stack = cpu_current_top_of_stack;
  * decrypted to avoid exposing more than we wish.
  */
 #define BSS_DECRYPTED						\
+	. = ALIGN(PAGE_SIZE);					\
+	__start_bss_decrypted_gap = .;				\
 	. = ALIGN(PMD_SIZE);					\
 	__start_bss_decrypted = .;				\
+	__end_bss_decrypted_gap = .;				\
 	__pi___start_bss_decrypted = .;				\
 	*(.bss..decrypted);					\
 	. = ALIGN(PAGE_SIZE);					\
@@ -105,7 +108,10 @@ const_cpu_current_top_of_stack = cpu_current_top_of_stack;
 	__pi___end_bss_decrypted = .;				\
 
 #else
-#define BSS_DECRYPTED
+#define BSS_DECRYPTED						\
+	. = ALIGN(PAGE_SIZE);					\
+	__start_bss_decrypted_gap = .;				\
+	__end_bss_decrypted_gap = .;
 #endif
 
 #if defined(CONFIG_X86_64) && defined(CONFIG_KEXEC_CORE)

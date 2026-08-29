@@ -1400,6 +1400,8 @@ void mark_rodata_ro(void)
 				(void *)text_end, (void *)rodata_start);
 	free_kernel_image_pages("unused kernel image (rodata/data gap)",
 				(void *)rodata_end, (void *)_sdata);
+	free_kernel_image_pages("unused kernel image (bss_decrypted gap)",
+				__start_bss_decrypted_gap, __end_bss_decrypted_gap);
 }
 
 /*
