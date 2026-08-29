@@ -612,9 +612,12 @@ static int i2c_imx_trx_complete(struct imx_i2c_struct *i2c_imx, bool atomic)
 	return 0;
 }
 
-static int i2c_imx_acked(struct imx_i2c_struct *i2c_imx)
+static int i2c_imx_acked(struct imx_i2c_struct *i2c_imx, bool ignore_nak)
 {
 	if (imx_i2c_read_reg(i2c_imx, IMX_I2C_I2SR) & I2SR_RXAK) {
+		if (ignore_nak)
+			return 0;
+
 		dev_dbg(&i2c_imx->adapter.dev, "<%s> No ACK\n", __func__);
 		return -ENXIO;  /* No ACK */
 	}
@@ -968,11 +971,15 @@ static int i2c_imx_unreg_slave(struct i2c_client *client)
 	return ret;
 }
 
-static inline int i2c_imx_isr_acked(struct imx_i2c_struct *i2c_imx)
+static inline int i2c_imx_isr_acked(struct imx_i2c_struct *i2c_imx,
+				    bool ignore_nak)
 {
 	i2c_imx->isr_result = 0;
 
 	if (imx_i2c_read_reg(i2c_imx, IMX_I2C_I2SR) & I2SR_RXAK) {
+		if (ignore_nak)
+			return 0;
+
 		i2c_imx->state = IMX_I2C_STATE_FAILED;
 		i2c_imx->isr_result = -ENXIO;
 		wake_up(&i2c_imx->queue);
@@ -985,7 +992,7 @@ static inline int i2c_imx_isr_write(struct imx_i2c_struct *i2c_imx)
 {
 	int result;
 
-	result = i2c_imx_isr_acked(i2c_imx);
+	result = i2c_imx_isr_acked(i2c_imx, i2c_imx->msg->flags & I2C_M_IGNORE_NAK);
 	if (result)
 		return result;
 
@@ -1002,7 +1009,8 @@ static inline int i2c_imx_isr_read(struct imx_i2c_struct *i2c_imx)
 	int result;
 	unsigned int temp;
 
-	result = i2c_imx_isr_acked(i2c_imx);
+	/* Read path always checks NAK; I2C_M_IGNORE_NAK is write-only. */
+	result = i2c_imx_isr_acked(i2c_imx, false);
 	if (result)
 		return result;
 
@@ -1213,7 +1221,7 @@ static int i2c_imx_dma_write(struct imx_i2c_struct *i2c_imx,
 	if (result)
 		return result;
 
-	return i2c_imx_acked(i2c_imx);
+	return i2c_imx_acked(i2c_imx, msgs->flags & I2C_M_IGNORE_NAK);
 }
 
 static int i2c_imx_prepare_read(struct imx_i2c_struct *i2c_imx,
@@ -1227,7 +1235,8 @@ static int i2c_imx_prepare_read(struct imx_i2c_struct *i2c_imx,
 	result = i2c_imx_trx_complete(i2c_imx, !use_dma);
 	if (result)
 		return result;
-	result = i2c_imx_acked(i2c_imx);
+	/* Read address NAK must always be reported; I2C_M_IGNORE_NAK is write-only. */
+	result = i2c_imx_acked(i2c_imx, false);
 	if (result)
 		return result;
 
@@ -1358,7 +1367,7 @@ static int i2c_imx_atomic_write(struct imx_i2c_struct *i2c_imx,
 	result = i2c_imx_trx_complete(i2c_imx, true);
 	if (result)
 		return result;
-	result = i2c_imx_acked(i2c_imx);
+	result = i2c_imx_acked(i2c_imx, msgs->flags & I2C_M_IGNORE_NAK);
 	if (result)
 		return result;
 	dev_dbg(&i2c_imx->adapter.dev, "<%s> write data\n", __func__);
@@ -1372,7 +1381,7 @@ static int i2c_imx_atomic_write(struct imx_i2c_struct *i2c_imx,
 		result = i2c_imx_trx_complete(i2c_imx, true);
 		if (result)
 			return result;
-		result = i2c_imx_acked(i2c_imx);
+		result = i2c_imx_acked(i2c_imx, msgs->flags & I2C_M_IGNORE_NAK);
 		if (result)
 			return result;
 	}
@@ -1697,7 +1706,7 @@ static int i2c_imx_init_recovery_info(struct imx_i2c_struct *i2c_imx,
 static u32 i2c_imx_func(struct i2c_adapter *adapter)
 {
 	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL
-		| I2C_FUNC_SMBUS_READ_BLOCK_DATA;
+		| I2C_FUNC_SMBUS_READ_BLOCK_DATA | I2C_FUNC_PROTOCOL_MANGLING;
 }
 
 static const struct i2c_algorithm i2c_imx_algo = {
