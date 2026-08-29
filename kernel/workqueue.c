@@ -3765,6 +3765,9 @@ static void bh_worker(struct worker *worker)
 	struct worker_pool *pool = worker->pool;
 	int nr_restarts = BH_WORKER_RESTARTS;
 	unsigned long end = jiffies + BH_WORKER_JIFFIES;
+	bool budget_exhausted = false;
+	bool timeout = false;
+	int executed_restarts = 0;
 
 	worker_lock_callback(pool);
 	raw_spin_lock_irq(&pool->lock);
@@ -3790,12 +3793,22 @@ static void bh_worker(struct worker *worker)
 	} while (keep_working(pool) &&
 		 --nr_restarts && time_before(jiffies, end));
 
+	if (keep_working(pool)) {
+		budget_exhausted = true;
+		timeout = !time_before(jiffies, end);
+		executed_restarts = BH_WORKER_RESTARTS - nr_restarts;
+	}
+
 	worker_set_flags(worker, WORKER_PREP);
 done:
 	worker_enter_idle(worker);
 	kick_pool(pool);
 	raw_spin_unlock_irq(&pool->lock);
 	worker_unlock_callback(pool);
+
+	if (budget_exhausted)
+		trace_workqueue_bh_budget_yield(pool, executed_restarts, timeout,
+						pool->attrs->nice == HIGHPRI_NICE_LEVEL);
 }
 
 /*
