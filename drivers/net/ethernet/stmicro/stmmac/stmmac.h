@@ -258,6 +258,12 @@ struct stmmac_msi {
 	char int_name_tx_irq[MTL_MAX_TX_QUEUES][IFNAMSIZ + 18];
 };
 
+enum stmmac_qdisc_type {
+	STMMAC_QDISC_NONE = 0,
+	STMMAC_QDISC_MQPRIO,
+	STMMAC_QDISC_TAPRIO,
+};
+
 struct stmmac_priv {
 	/* Frequently used values are kept adjacent for cache effect */
 	u32 tx_coal_frames[MTL_MAX_TX_QUEUES];
@@ -299,6 +305,7 @@ struct stmmac_priv {
 	/* Protect est parameters */
 	struct mutex est_lock;
 	struct stmmac_est *est;
+	enum stmmac_qdisc_type qdisc_type;
 	struct dma_features dma_cap;
 	struct stmmac_counters mmc;
 	int hw_cap_support;

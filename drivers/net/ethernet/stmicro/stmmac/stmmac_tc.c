@@ -1103,6 +1103,8 @@ static int tc_taprio_configure(struct stmmac_priv *priv,
 	if (ret)
 		goto disable;
 
+	priv->qdisc_type = STMMAC_QDISC_TAPRIO;
+
 	return 0;
 
 disable:
@@ -1120,7 +1122,11 @@ disable:
 		mutex_unlock(&priv->est_lock);
 	}
 
-	stmmac_fpe_map_preemption_class(priv, priv->dev, extack, 0);
+	if (priv->qdisc_type == STMMAC_QDISC_TAPRIO &&
+	    qopt->cmd == TAPRIO_CMD_DESTROY) {
+		stmmac_fpe_map_preemption_class(priv, priv->dev, extack, 0);
+		priv->qdisc_type = STMMAC_QDISC_NONE;
+	}
 
 	return ret;
 }
@@ -1266,9 +1272,15 @@ static void stmmac_reset_tc_mqprio(struct net_device *ndev,
 {
 	struct stmmac_priv *priv = netdev_priv(ndev);
 
-	netdev_reset_tc(ndev);
-	netif_set_real_num_tx_queues(ndev, priv->plat->tx_queues_to_use);
-	stmmac_fpe_map_preemption_class(priv, ndev, extack, 0);
+	if (priv->qdisc_type != STMMAC_QDISC_TAPRIO)
+		stmmac_fpe_map_preemption_class(priv, ndev, extack, 0);
+
+	if (priv->qdisc_type == STMMAC_QDISC_MQPRIO) {
+		netdev_reset_tc(ndev);
+		netif_set_real_num_tx_queues(ndev,
+					     priv->plat->tx_queues_to_use);
+		priv->qdisc_type = STMMAC_QDISC_NONE;
+	}
 }
 
 static int tc_setup_dwmac510_mqprio(struct stmmac_priv *priv,
@@ -1317,6 +1329,8 @@ static int tc_setup_dwmac510_mqprio(struct stmmac_priv *priv,
 					      mqprio->preemptible_tcs);
 	if (err)
 		goto error_reset_num_tx_queues;
+
+	priv->qdisc_type = STMMAC_QDISC_MQPRIO;
 
 	return 0;
 
