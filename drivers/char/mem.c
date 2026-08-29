@@ -471,6 +471,31 @@ static ssize_t read_iter_zero(struct kiocb *iocb, struct iov_iter *iter)
 	return written;
 }
 
+static ssize_t splice_read_zero(struct file *in, loff_t *ppos,
+				struct pipe_inode_info *pipe, size_t len,
+				unsigned int flags)
+{
+	size_t total = 0;
+	loff_t pos = 0;
+	size_t used, npages;
+
+	used = pipe_buf_usage(pipe);
+	if (used >= pipe->max_usage)
+		return -EAGAIN;
+	npages = pipe->max_usage - used;
+	len = min_t(size_t, len, npages * PAGE_SIZE);
+
+	while (len) {
+		size_t n = splice_zeropage_into_pipe(pipe, pos, len);
+
+		pos += n;
+		total += n;
+		len -= n;
+	}
+
+	return total;
+}
+
 static ssize_t read_zero(struct file *file, char __user *buf,
 			 size_t count, loff_t *ppos)
 {
@@ -669,7 +694,7 @@ static const struct file_operations zero_fops = {
 	.read_iter	= read_iter_zero,
 	.read		= read_zero,
 	.write_iter	= write_iter_zero,
-	.splice_read	= copy_splice_read,
+	.splice_read	= splice_read_zero,
 	.splice_write	= splice_write_zero,
 	.mmap_prepare	= mmap_zero_prepare,
 	.get_unmapped_area = get_unmapped_area_zero,
@@ -682,7 +707,7 @@ static const struct file_operations full_fops = {
 	.llseek		= full_lseek,
 	.read_iter	= read_iter_zero,
 	.write		= write_full,
-	.splice_read	= copy_splice_read,
+	.splice_read	= splice_read_zero,
 };
 
 static const struct memdev {
