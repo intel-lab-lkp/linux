@@ -23,6 +23,7 @@ static LIST_HEAD(domain_info_list);
 static bool erdt_enabled;
 
 #define ERDT_VALID_VERSION		1
+#define CMRC_SUPPORTED_INDEX_FN		1
 #define RMDD_FLAG_CPU_L3_DOMAIN		BIT(0)
 
 /* Bitmask of valid sub-tables found in the first RMDD, used to ensure all RMDDs match. */
@@ -37,9 +38,24 @@ static u16 first_rmdd_domain_id;
  */
 static unsigned int erdt_max_rmid;
 
+/*
+ * Used only by the limbo handler to round resctrl_rmid_realloc_threshold.
+ * resctrl_rmid_realloc_threshold is a single global value, and
+ * resctrl_arch_round_mon_val() takes no domain argument, so a single scale has
+ * to be derived from the per-domain cmrc->up_scale. max() is chosen because the
+ * rounding is a floor: a larger scale yields a slightly lower threshold, i.e. an
+ * RMID has to drop to a slightly lower occupancy before it is reused.
+ */
+static unsigned int erdt_scale;
+
 unsigned int erdt_get_max_rmid(void)
 {
 	return erdt_max_rmid;
+}
+
+unsigned int erdt_get_scale(void)
+{
+	return erdt_scale;
 }
 
 static void __iomem *erdt_ioremap(resource_size_t base, u32 num_pages, const char *desc)
@@ -71,6 +87,7 @@ static void erdt_iounmap_domain(struct erdt_domain_info *domain)
 static void cleanup_one_domain(struct erdt_domain_info *d)
 {
 	erdt_iounmap_domain(d);
+	kfree(d->cmrc);
 	kfree(d);
 }
 
@@ -101,6 +118,49 @@ static __init int cacd_init(struct acpi_subtbl_hdr_16 *subtbl,
 
 		cpumask_set_cpu(cpu, &domain_info->cpu_mask);
 	}
+
+	return 0;
+}
+
+static __init int cmrc_init(struct acpi_subtbl_hdr_16 *subtbl,
+			    struct erdt_domain_info *domain_info)
+{
+	struct acpi_erdt_cmrc *cmrc = (struct acpi_erdt_cmrc *)subtbl;
+
+	if (cmrc->header.length < sizeof(*cmrc)) {
+		pr_warn(FW_BUG "Truncated CMRC sub-table\n");
+		return -EIO;
+	}
+
+	if (cmrc->index_fn != CMRC_SUPPORTED_INDEX_FN) {
+		pr_info("Unsupported CMRC index function %u\n", cmrc->index_fn);
+		return -EIO;
+	}
+
+	if (!cmrc->clump_size) {
+		pr_warn(FW_BUG "CMRC clump_size is zero\n");
+		return -EIO;
+	}
+
+	/* resctrl scales monitoring values with an unsigned int. */
+	if (cmrc->up_scale > UINT_MAX) {
+		pr_warn(FW_BUG "Insane CMRC up_scale value 0x%llx\n", cmrc->up_scale);
+		return -EIO;
+	}
+
+	domain_info->base[ERDT_MMIO_CMRC_BASE] =
+		erdt_ioremap(cmrc->cmt_reg_base, cmrc->cmt_reg_size, "CMRC base");
+	if (!domain_info->base[ERDT_MMIO_CMRC_BASE])
+		return -EIO;
+
+	domain_info->cmrc = kmemdup(cmrc, cmrc->header.length, GFP_KERNEL);
+	if (!domain_info->cmrc) {
+		iounmap(domain_info->base[ERDT_MMIO_CMRC_BASE]);
+		domain_info->base[ERDT_MMIO_CMRC_BASE] = NULL;
+		return -ENOMEM;
+	}
+
+	erdt_scale = max(erdt_scale, cmrc->up_scale);
 
 	return 0;
 }
@@ -169,6 +229,19 @@ static __init bool parse_rmdd_table(struct acpi_subtbl_hdr_16 *rmdd_hdr)
 				goto cleanup;
 
 			subtbl_mask |= BIT(ACPI_ERDT_TYPE_CACD);
+			break;
+		case ACPI_ERDT_TYPE_CMRC:
+			/*
+			 * Only one CMRC is supported per domain as there is no
+			 * method to distinguish different CMRCs within a domain.
+			 */
+			if (subtbl_mask & BIT(ACPI_ERDT_TYPE_CMRC))
+				break;
+
+			if (cmrc_init(subtbl, domain_info))
+				goto cleanup;
+
+			subtbl_mask |= BIT(ACPI_ERDT_TYPE_CMRC);
 			break;
 		default:
 			break;
