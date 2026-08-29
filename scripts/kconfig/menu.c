@@ -4,7 +4,6 @@
  */
 
 #include <ctype.h>
-#include <errno.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -255,17 +254,13 @@ static int menu_validate_number(struct symbol *sym, struct symbol *sym2,
 		return 1;
 	}
 
-	errno = 0;
-	if (sym->type == S_INT) {
+	if (sym->type == S_INT)
 		type_bounds = "64-bit signed integer";
-		strtoll(sym2->name, NULL, 10);
-	} else {
+	else
 		/* hex */
 		type_bounds = "64-bit unsigned integer";
-		strtoull(sym2->name, NULL, 16);
-	}
 
-	if (errno == ERANGE) {
+	if (!sym_string_check_bounds(sym, sym2->name)) {
 		fprintf(stderr,
 			"%s:%d: error: %s constant '%s' is outside the %s bounds\n",
 			prop->filename, prop->lineno, sym_type_name(sym->type),
