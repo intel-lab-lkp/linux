@@ -1039,10 +1039,14 @@ static int sk_psock_verdict_apply(struct sk_psock *psock, struct sk_buff *skb,
 				goto out_free;
 		}
 		break;
-	case __SK_REDIRECT:
-		tcp_eat_skb(psock->sk, skb);
+	case __SK_REDIRECT: {
+		struct sock *dst = skb_bpf_redirect_fetch(skb);
+
+		if (dst != psock->sk)
+			tcp_eat_skb(psock->sk, skb);
 		err = sk_psock_skb_redirect(psock, skb);
 		break;
+	}
 	case __SK_DROP:
 	default:
 out_free:
