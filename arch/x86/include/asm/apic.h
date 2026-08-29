@@ -54,6 +54,7 @@ static inline void x86_32_probe_apic(void) { }
 #endif
 
 extern u32 cpuid_to_apicid[];
+int topo_lookup_cpuid(u32 apic_id);
 
 #define CPU_ACPIID_INVALID	U32_MAX
 
