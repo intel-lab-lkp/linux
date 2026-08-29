@@ -1602,6 +1602,11 @@ static void enc28j60_remove(struct spi_device *spi)
 
 	unregister_netdev(priv->netdev);
 	free_irq(spi->irq, priv);
+	cancel_work_sync(&priv->tx_work);
+	cancel_work_sync(&priv->setrx_work);
+	cancel_work_sync(&priv->restart_work);
+	if (priv->tx_skb)
+		dev_kfree_skb(priv->tx_skb);
 	free_netdev(priv->netdev);
 }
 
