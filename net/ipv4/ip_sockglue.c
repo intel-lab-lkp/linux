@@ -174,6 +174,9 @@ void ip_cmsg_recv_offset(struct msghdr *msg, struct sock *sk,
 	if (!flags)
 		return;
 
+	if (unlikely(ip_hdr(skb)->version != IPVERSION))
+		return;
+
 	/* Ordered by supposed usage frequency */
 	if (flags & IP_CMSG_PKTINFO) {
 		ip_cmsg_recv_pktinfo(msg, skb);
