@@ -1771,6 +1771,11 @@ static bool acpi_device_enumeration_by_parent(struct acpi_device *device)
 	 */
 		{"MSHW0028", },
 	/*
+	 * MSFT8000 is a Windows Resource Hub Proxy device. Its SerialBus
+	 * resources grant userspace access and do not describe a slave.
+	 */
+		{"MSFT8000", },
+	/*
 	 * HIDs of device with an UartSerialBusV2 resource for which userspace
 	 * expects a regular tty cdev to be created (instead of the in kernel
 	 * serdev) and which have a kernel driver which expects a platform_dev
