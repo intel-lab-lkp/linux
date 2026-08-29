@@ -1061,6 +1061,19 @@ static void enable_phy_v3_hw(struct hisi_hba *hisi_hba, int phy_no)
 	hisi_sas_phy_write32(hisi_hba, phy_no, PHY_CFG, cfg);
 }
 
+static void clear_phy_err_cnt_v3_hw(struct hisi_hba *hisi_hba, int phy_no)
+{
+	static const u32 msk = BIT(CHL_INT2_RX_DISP_ERR_OFF) |
+			       BIT(CHL_INT2_RX_CODE_ERR_OFF) |
+			       BIT(CHL_INT2_RX_INVLD_DW_OFF);
+
+	hisi_sas_phy_read32(hisi_hba, phy_no, ERR_CNT_INVLD_DW);
+	hisi_sas_phy_read32(hisi_hba, phy_no, ERR_CNT_DISP_ERR);
+	hisi_sas_phy_read32(hisi_hba, phy_no, ERR_CNT_CODE_ERR);
+
+	hisi_sas_phy_write32(hisi_hba, phy_no, CHL_INT2, msk);
+}
+
 static void disable_phy_v3_hw(struct hisi_hba *hisi_hba, int phy_no)
 {
 	u32 cfg = hisi_sas_phy_read32(hisi_hba, phy_no, PHY_CFG);
@@ -1085,11 +1098,7 @@ static void disable_phy_v3_hw(struct hisi_hba *hisi_hba, int phy_no)
 
 	udelay(1);
 
-	hisi_sas_phy_read32(hisi_hba, phy_no, ERR_CNT_INVLD_DW);
-	hisi_sas_phy_read32(hisi_hba, phy_no, ERR_CNT_DISP_ERR);
-	hisi_sas_phy_read32(hisi_hba, phy_no, ERR_CNT_CODE_ERR);
-
-	hisi_sas_phy_write32(hisi_hba, phy_no, CHL_INT2, msk);
+	clear_phy_err_cnt_v3_hw(hisi_hba, phy_no);
 	hisi_sas_phy_write32(hisi_hba, phy_no, CHL_INT2_MSK, irq_msk);
 }
 
@@ -1673,6 +1682,8 @@ static irqreturn_t phy_up_v3_hw(int phy_no, struct hisi_hba *hisi_hba)
 	phy->phy_attached = 1;
 	spin_unlock(&phy->lock);
 
+	clear_phy_err_cnt_v3_hw(hisi_hba, phy_no);
+
 	/*
 	 * Call pm_runtime_get_noresume() which pairs with
 	 * hisi_sas_phyup_pm_work() -> pm_runtime_put_sync().
@@ -1926,15 +1937,18 @@ static void handle_chl_int2_v3_hw(struct hisi_hba *hisi_hba, int phy_no)
 
 		phy_get_events_v3_hw(hisi_hba, phy_no);
 
-		if (irq_value & BIT(CHL_INT2_RX_INVLD_DW_OFF))
+		if ((irq_value & BIT(CHL_INT2_RX_INVLD_DW_OFF)) &&
+		    sphy->invalid_dword_count > 0)
 			dev_info(dev, "phy%d invalid dword cnt:   %u\n", phy_no,
 				 sphy->invalid_dword_count);
 
-		if (irq_value & BIT(CHL_INT2_RX_CODE_ERR_OFF))
+		if ((irq_value & BIT(CHL_INT2_RX_CODE_ERR_OFF)) &&
+		    phy->code_violation_err_count > 0)
 			dev_info(dev, "phy%d code violation cnt:  %u\n", phy_no,
 				 phy->code_violation_err_count);
 
-		if (irq_value & BIT(CHL_INT2_RX_DISP_ERR_OFF))
+		if ((irq_value & BIT(CHL_INT2_RX_DISP_ERR_OFF)) &&
+		    sphy->running_disparity_error_count > 0)
 			dev_info(dev, "phy%d disparity error cnt: %u\n", phy_no,
 				 sphy->running_disparity_error_count);
 	}
