@@ -175,7 +175,8 @@ static u64 rapl_unit_xlate(struct rapl_domain *rd,
 			   enum unit_type type, u64 value, int to_raw);
 static void package_power_limit_irq_save(struct rapl_package *rp);
 
-static LIST_HEAD(rapl_packages);	/* guarded by CPU hotplug lock */
+static DEFINE_MUTEX(rapl_packages_lock);
+static LIST_HEAD(rapl_packages);	/* guarded by rapl_packages_lock */
 
 static const char *const rapl_domain_names[] = {
 	"package",
@@ -1360,12 +1361,14 @@ static int rapl_pmu_event_init(struct perf_event *event)
 		return -EINVAL;
 
 	/* Find out which Package the event belongs to */
+	mutex_lock(&rapl_packages_lock);
 	list_for_each_entry(pos, &rapl_packages, plist) {
 		if (is_rp_pmu_cpu(pos, event->cpu)) {
 			rp = pos;
 			break;
 		}
 	}
+	mutex_unlock(&rapl_packages_lock);
 	if (!rp)
 		return -ENODEV;
 
@@ -1445,9 +1448,11 @@ static ssize_t cpumask_show(struct device *dev,
 	cpumask_clear(cpu_mask);
 
 	/* Choose a cpu for each RAPL Package */
+	mutex_lock(&rapl_packages_lock);
 	list_for_each_entry(rp, &rapl_packages, plist) {
 		set_pmu_cpumask(rp, cpu_mask);
 	}
+	mutex_unlock(&rapl_packages_lock);
 	cpus_read_unlock();
 
 	ret = sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(cpu_mask));
@@ -1655,11 +1660,15 @@ void rapl_package_remove_pmu_locked(struct rapl_package *rp)
 	if (!rp->has_pmu)
 		return;
 
+	mutex_lock(&rapl_packages_lock);
 	list_for_each_entry(pos, &rapl_packages, plist) {
 		/* PMU is still needed */
-		if (pos->has_pmu && pos != rp)
+		if (pos->has_pmu && pos != rp) {
+			mutex_unlock(&rapl_packages_lock);
 			return;
+		}
 	}
+	mutex_unlock(&rapl_packages_lock);
 
 	if (rapl_pmu.registered)
 		perf_pmu_unregister(&rapl_pmu.pmu);
@@ -1704,7 +1713,9 @@ void rapl_remove_package_cpuslocked(struct rapl_package *rp)
 	/* do parent zone last */
 	powercap_unregister_zone(rp->priv->control_type,
 				 &rd_package->power_zone);
+	mutex_lock(&rapl_packages_lock);
 	list_del(&rp->plist);
+	mutex_unlock(&rapl_packages_lock);
 	kfree(rp);
 }
 EXPORT_SYMBOL_NS_GPL(rapl_remove_package_cpuslocked, "INTEL_RAPL");
@@ -1749,11 +1760,15 @@ struct rapl_package *rapl_find_package_domain_cpuslocked(int id, struct rapl_if_
 	else
 		uid = id;
 
+	mutex_lock(&rapl_packages_lock);
 	list_for_each_entry(rp, &rapl_packages, plist) {
-		if (rp->id == uid
-		    && rp->priv->control_type == priv->control_type)
+		if (rp->id == uid &&
+		    rp->priv->control_type == priv->control_type) {
+			mutex_unlock(&rapl_packages_lock);
 			return rp;
+		}
 	}
+	mutex_unlock(&rapl_packages_lock);
 
 	return NULL;
 }
@@ -1810,7 +1825,9 @@ struct rapl_package *rapl_add_package_cpuslocked(int id, struct rapl_if_priv *pr
 	ret = rapl_package_register_powercap(rp);
 	if (!ret) {
 		INIT_LIST_HEAD(&rp->plist);
+		mutex_lock(&rapl_packages_lock);
 		list_add(&rp->plist, &rapl_packages);
+		mutex_unlock(&rapl_packages_lock);
 		return rp;
 	}
 
@@ -1835,6 +1852,7 @@ static void power_limit_state_save(void)
 	int ret, i;
 
 	cpus_read_lock();
+	mutex_lock(&rapl_packages_lock);
 	list_for_each_entry(rp, &rapl_packages, plist) {
 		if (!rp->power_zone)
 			continue;
@@ -1846,6 +1864,7 @@ static void power_limit_state_save(void)
 				rd->rpl[i].last_power_limit = 0;
 		}
 	}
+	mutex_unlock(&rapl_packages_lock);
 	cpus_read_unlock();
 }
 
@@ -1856,6 +1875,7 @@ static void power_limit_state_restore(void)
 	int i;
 
 	cpus_read_lock();
+	mutex_lock(&rapl_packages_lock);
 	list_for_each_entry(rp, &rapl_packages, plist) {
 		if (!rp->power_zone)
 			continue;
@@ -1865,6 +1885,7 @@ static void power_limit_state_restore(void)
 				rapl_write_pl_data(rd, i, PL_LIMIT,
 					       rd->rpl[i].last_power_limit);
 	}
+	mutex_unlock(&rapl_packages_lock);
 	cpus_read_unlock();
 }
 
