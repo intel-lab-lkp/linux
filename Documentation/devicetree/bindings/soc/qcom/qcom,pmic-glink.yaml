@@ -45,6 +45,11 @@ properties:
           - const: qcom,pmic-glink
       - items:
           - enum:
+              - qcom,sm8475-pmic-glink
+          - const: qcom,sm8450-pmic-glink
+          - const: qcom,pmic-glink
+      - items:
+          - enum:
               - qcom,eliza-pmic-glink
               - qcom,milos-pmic-glink
               - qcom,sm8650-pmic-glink
