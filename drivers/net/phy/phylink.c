@@ -73,6 +73,24 @@ struct phylink {
 	struct phylink_link_state phy_state;
 	unsigned int phy_ib_mode;
 	struct work_struct resolve;
+	/* Set while waiting for a PHY that is expected to probe late.
+	 * Written and read under rtnl only: phylink_disconnect_phy() puts
+	 * and clears it there, which is what makes the poller's dereference
+	 * safe.
+	 */
+	struct fwnode_handle *slow_phy_fwnode;
+	u32 slow_phy_flags;
+	struct delayed_work slow_phy_poll;
+	/* Interval before the next poll. Set when the poller is armed and
+	 * thereafter owned by it, since a delayed work never runs twice at
+	 * once.
+	 */
+	unsigned int slow_phy_poll_ms;
+	unsigned int slow_phy_waited_ms;
+	/* Written under rtnl, read unlocked by the poller; a stale read only
+	 * costs an extra poll cycle.
+	 */
+	bool slow_phy_stop;
 	unsigned int pcs_neg_mode;
 	unsigned int pcs_state;
 
@@ -1829,6 +1847,8 @@ int phylink_set_fixed_link(struct phylink *pl,
 }
 EXPORT_SYMBOL_GPL(phylink_set_fixed_link);
 
+static void phylink_slow_phy_poll(struct work_struct *work);
+
 /**
  * phylink_create() - create a phylink instance
  * @config: a pointer to the target &struct phylink_config
@@ -1867,6 +1887,7 @@ struct phylink *phylink_create(struct phylink_config *config,
 	mutex_init(&pl->phydev_mutex);
 	mutex_init(&pl->state_mutex);
 	INIT_WORK(&pl->resolve, phylink_resolve);
+	INIT_DELAYED_WORK(&pl->slow_phy_poll, phylink_slow_phy_poll);
 
 	pl->config = config;
 	if (config->type == PHYLINK_NETDEV) {
@@ -1949,6 +1970,10 @@ void phylink_destroy(struct phylink *pl)
 	sfp_bus_del_upstream(pl->sfp_bus);
 	if (pl->link_gpio)
 		gpiod_put(pl->link_gpio);
+
+	WRITE_ONCE(pl->slow_phy_stop, true);
+	cancel_delayed_work_sync(&pl->slow_phy_poll);
+	fwnode_handle_put(pl->slow_phy_fwnode);
 
 	cancel_work_sync(&pl->resolve);
 	kfree(pl);
@@ -2201,10 +2226,8 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 }
 
 static int phylink_attach_phy(struct phylink *pl, struct phy_device *phy,
-			      phy_interface_t interface)
+			      phy_interface_t interface, u32 flags)
 {
-	u32 flags = 0;
-
 	if (WARN_ON(pl->cfg_link_an_mode == MLO_AN_FIXED))
 		return -EINVAL;
 
@@ -2242,7 +2265,7 @@ int phylink_connect_phy(struct phylink *pl, struct phy_device *phy)
 		pl->link_config.interface = pl->link_interface;
 	}
 
-	ret = phylink_attach_phy(pl, phy, pl->link_interface);
+	ret = phylink_attach_phy(pl, phy, pl->link_interface, 0);
 	if (ret < 0)
 		return ret;
 
@@ -2253,6 +2276,129 @@ int phylink_connect_phy(struct phylink *pl, struct phy_device *phy)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(phylink_connect_phy);
+
+/* How often to re-check whether a late-probing PHY has turned up. */
+#define PHYLINK_SLOW_PHY_POLL_MS	1000
+#define PHYLINK_SLOW_PHY_WARN_MS	60000
+
+/* Ceiling that interval backs off to once a connect attempt has failed. */
+#define PHYLINK_SLOW_PHY_POLL_MAX_MS	30000
+
+/* A phy-handle has resolved only once it names a device with its own driver
+ * bound. A device that is absent, or present with the generic driver bound to
+ * it, is equally unusable: this is the state slow-to-probe waits out, and both
+ * the arming site and the poller must agree on it.
+ *
+ * Bound is not probed. phy_probe() assigns phydev->drv before it calls the
+ * driver's own probe(), and only fills phydev->supported from get_features()
+ * once that has returned; a device connected in between is validated against
+ * an empty link-mode mask. PHY_DOWN is the documented state of a device whose
+ * probe has not completed, and phy_probe() leaves it in PHY_READY.
+ */
+static bool phylink_phy_is_usable(struct phy_device *phy_dev)
+{
+	return phy_dev && phy_dev->drv && phy_dev->state != PHY_DOWN &&
+	       !phy_driver_is_genphy(phy_dev);
+}
+
+static void phylink_slow_phy_poll(struct work_struct *work)
+{
+	struct phylink *pl = container_of(to_delayed_work(work), struct phylink,
+					  slow_phy_poll);
+	struct phy_device *phy_dev;
+	int ret;
+
+	if (READ_ONCE(pl->slow_phy_stop))
+		return;
+
+	/* phylink_disconnect_phy() cancels this work while holding rtnl, so
+	 * blocking on rtnl here would deadlock against it. Requeue instead and
+	 * let the canceller finish.
+	 */
+	if (!rtnl_trylock())
+		goto requeue;
+
+	if (READ_ONCE(pl->slow_phy_stop)) {
+		rtnl_unlock();
+		return;
+	}
+
+	/* Do not "optimize" the lookup out from under rtnl: rtnl is what
+	 * makes phylink_disconnect_phy()'s put-and-clear of slow_phy_fwnode
+	 * safe against this dereference. The uncontended trylock above is
+	 * cheaper than the use-after-free.
+	 */
+	phy_dev = fwnode_phy_find_device(pl->slow_phy_fwnode);
+	if (!phylink_phy_is_usable(phy_dev)) {
+		if (phy_dev)
+			phy_device_free(phy_dev);
+
+		/* A PHY that never turns up would otherwise wait in complete
+		 * silence: one breadcrumb after a minute, like the connect
+		 * failure below gets, and like a missing firmware file gets
+		 * from the MDIO side.
+		 */
+		pl->slow_phy_waited_ms += pl->slow_phy_poll_ms;
+		if (pl->slow_phy_waited_ms >= PHYLINK_SLOW_PHY_WARN_MS &&
+		    pl->slow_phy_waited_ms - pl->slow_phy_poll_ms <
+		    PHYLINK_SLOW_PHY_WARN_MS)
+			phylink_warn(pl,
+				     "still waiting for the slow-to-probe PHY (%pfw)\n",
+				     pl->slow_phy_fwnode);
+		rtnl_unlock();
+		goto requeue;
+	}
+
+	if (pl->link_interface == PHY_INTERFACE_MODE_NA) {
+		pl->link_interface = phy_dev->interface;
+		pl->link_config.interface = pl->link_interface;
+	}
+
+	ret = phylink_attach_phy(pl, phy_dev, pl->link_interface,
+				 pl->slow_phy_flags);
+	phy_device_free(phy_dev);
+	if (!ret) {
+		ret = phylink_bringup_phy(pl, phy_dev,
+					  pl->link_config.interface);
+		if (ret)
+			phy_detach(phy_dev);
+		else if (!test_bit(PHYLINK_DISABLE_STOPPED,
+				   &pl->phylink_disable_state))
+			/* phylink_start() starts the PHY it finds attached,
+			 * and ran long before this one turned up.
+			 */
+			phy_start(phy_dev);
+	}
+	if (ret) {
+		/* Whether this is permanent cannot be read off the errno: the
+		 * same -EINVAL comes out of phylink_validate_phy() for a PHY
+		 * that is still filling in its link modes and for one that
+		 * genuinely cannot speak this interface. What decides it is
+		 * the PHY's supported mask, and only the driver binding again
+		 * changes that, so keep polling - giving up here loses the
+		 * port for the lifetime of this phylink. Back off instead: a
+		 * failed bringup ends in phy_detach(), which asserts the PHY's
+		 * reset line. Report the first failure only, so a PHY that
+		 * will never fit costs one line rather than a stream of them.
+		 */
+		if (pl->slow_phy_poll_ms == PHYLINK_SLOW_PHY_POLL_MS)
+			phylink_err(pl, "failed to connect late PHY: %pe\n",
+				    ERR_PTR(ret));
+
+		WRITE_ONCE(pl->slow_phy_poll_ms,
+			   min_t(unsigned int, pl->slow_phy_poll_ms * 2,
+				 PHYLINK_SLOW_PHY_POLL_MAX_MS));
+	}
+	rtnl_unlock();
+
+	if (!ret)
+		return;
+
+requeue:
+	queue_delayed_work(system_freezable_power_efficient_wq,
+			   &pl->slow_phy_poll,
+			   msecs_to_jiffies(READ_ONCE(pl->slow_phy_poll_ms)));
+}
 
 /**
  * phylink_of_phy_connect() - connect the PHY specified in the DT mode.
@@ -2282,7 +2428,13 @@ EXPORT_SYMBOL_GPL(phylink_of_phy_connect);
  * Connect the phy specified @fwnode to the phylink instance specified
  * by @pl.
  *
- * Returns 0 on success or a negative errno.
+ * If the port node carries the slow-to-probe property and the PHY is not
+ * usable yet, 0 is returned with no PHY connected: a poller connects it
+ * once its driver has probed. Until then the MAC runs without a PHY and
+ * ethtool reports no link modes.
+ *
+ * Returns 0 on success - the PHY connected, or the deferred connect
+ * armed - or a negative errno.
  */
 int phylink_fwnode_phy_connect(struct phylink *pl,
 			       const struct fwnode_handle *fwnode,
@@ -2304,6 +2456,32 @@ int phylink_fwnode_phy_connect(struct phylink *pl,
 	}
 
 	phy_dev = fwnode_phy_find_device(phy_fwnode);
+	if (!phylink_phy_is_usable(phy_dev) &&
+	    fwnode_property_present(fwnode, "slow-to-probe")) {
+		/* The PHY is known to appear late, so keep the node and poll
+		 * for it rather than failing the port for good. Returning an
+		 * error here would also send DSA off to look for the PHY on
+		 * the switch's own MDIO bus.
+		 */
+		if (phy_dev)
+			phy_device_free(phy_dev);
+
+		pl->slow_phy_fwnode = phy_fwnode;
+		pl->slow_phy_flags = flags;
+		WRITE_ONCE(pl->slow_phy_poll_ms, PHYLINK_SLOW_PHY_POLL_MS);
+		pl->slow_phy_waited_ms = 0;
+		WRITE_ONCE(pl->slow_phy_stop, false);
+		/* mod_ rather than queue_: a poll that a disconnect cancelled
+		 * mid-backoff may still be pending with seconds left on it.
+		 */
+		/* Freezable: attaching and starting a PHY has no place in
+		 * the middle of a system suspend transition.
+		 */
+		mod_delayed_work(system_freezable_power_efficient_wq,
+				 &pl->slow_phy_poll, 0);
+		return 0;
+	}
+
 	/* We're done with the phy_node handle */
 	fwnode_handle_put(phy_fwnode);
 	if (!phy_dev)
@@ -2344,6 +2522,18 @@ void phylink_disconnect_phy(struct phylink *pl)
 	struct phy_device *phy;
 
 	ASSERT_RTNL();
+
+	/* Cannot cancel synchronously: the poller takes rtnl, which is held. */
+	WRITE_ONCE(pl->slow_phy_stop, true);
+	cancel_delayed_work(&pl->slow_phy_poll);
+	/* The next connect re-arms from its own fwnode lookup; holding on to
+	 * this one would leak a reference per connect cycle and keep the
+	 * pending state - and its empty-ksettings window - alive on an
+	 * interface whose PHY is long since usable. The poller cannot race
+	 * this: it reads the node only under rtnl, after the stop check.
+	 */
+	fwnode_handle_put(pl->slow_phy_fwnode);
+	pl->slow_phy_fwnode = NULL;
 
 	mutex_lock(&pl->phydev_mutex);
 	phy = pl->phydev;
@@ -3730,7 +3920,7 @@ static int phylink_sfp_config_phy(struct phylink *pl, struct phy_device *phy)
 	/* Attach the PHY so that the PHY is present when we do the major
 	 * configuration step.
 	 */
-	ret = phylink_attach_phy(pl, phy, config.interface);
+	ret = phylink_attach_phy(pl, phy, config.interface, 0);
 	if (ret < 0)
 		return ret;
 
