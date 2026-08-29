@@ -69,15 +69,6 @@ enum {
 	 */
 	BTRFS_INODE_NO_XATTRS,
 	/*
-	 * Set when we are in a context where we need to start a transaction and
-	 * have dirty pages with the respective file range locked. This is to
-	 * ensure that when reserving space for the transaction, if we are low
-	 * on available space and need to flush delalloc, we will not flush
-	 * delalloc for this inode, because that could result in a deadlock (on
-	 * the file range, inode's io_tree).
-	 */
-	BTRFS_INODE_NO_DELALLOC_FLUSH,
-	/*
 	 * Set when we are working on enabling verity for a file. Computing and
 	 * writing the whole Merkle tree can take a while so we want to prevent
 	 * races where two separate tasks attempt to simultaneously start verity
@@ -531,9 +522,8 @@ int btrfs_add_link(struct btrfs_trans_handle *trans,
 int btrfs_delete_subvolume(struct btrfs_inode *dir, struct dentry *dentry);
 int btrfs_truncate_block(struct btrfs_inode *inode, u64 offset, u64 start, u64 end);
 
-int btrfs_start_delalloc_snapshot(struct btrfs_root *root, bool in_reclaim_context);
-int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, long nr,
-			       bool in_reclaim_context);
+int btrfs_start_delalloc_snapshot(struct btrfs_root *root);
+int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, long nr);
 int btrfs_set_extent_delalloc(struct btrfs_inode *inode, u64 start, u64 end,
 			      unsigned int extra_bits,
 			      struct extent_state **cached_state);

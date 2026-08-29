@@ -926,7 +926,7 @@ static noinline int btrfs_mksnapshot(struct dentry *parent,
 	 */
 	btrfs_drew_read_lock(&root->snapshot_lock);
 
-	ret = btrfs_start_delalloc_snapshot(root, false);
+	ret = btrfs_start_delalloc_snapshot(root);
 	if (ret)
 		goto out;
 
@@ -5586,7 +5586,7 @@ long btrfs_ioctl(struct file *file, unsigned int
 	case BTRFS_IOC_SYNC: {
 		int ret;
 
-		ret = btrfs_start_delalloc_roots(fs_info, LONG_MAX, false);
+		ret = btrfs_start_delalloc_roots(fs_info, LONG_MAX);
 		if (ret)
 			return ret;
 		ret = btrfs_sync_fs(inode->i_sb, 1);

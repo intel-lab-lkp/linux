@@ -1321,7 +1321,7 @@ static int flush_reservations(struct btrfs_fs_info *fs_info)
 {
 	int ret;
 
-	ret = btrfs_start_delalloc_roots(fs_info, LONG_MAX, false);
+	ret = btrfs_start_delalloc_roots(fs_info, LONG_MAX);
 	if (ret)
 		return ret;
 	btrfs_wait_ordered_roots(fs_info, U64_MAX, NULL);
@@ -4228,7 +4228,7 @@ static int try_flush_qgroup(struct btrfs_root *root)
 		return 0;
 	}
 
-	ret = btrfs_start_delalloc_snapshot(root, true);
+	ret = btrfs_start_delalloc_snapshot(root);
 	if (ret < 0)
 		goto out;
 	btrfs_wait_ordered_extents(root, U64_MAX, NULL);

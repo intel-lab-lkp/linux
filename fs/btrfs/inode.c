@@ -8901,7 +8901,7 @@ static struct btrfs_delalloc_work *btrfs_alloc_delalloc_work(struct inode *inode
  * of all the inodes with pending delalloc and forces them to disk.
  */
 static int start_delalloc_inodes(struct btrfs_root *root, long *nr_to_write,
-				 bool snapshot, bool in_reclaim_context)
+				 bool snapshot)
 {
 	struct btrfs_delalloc_work *work, *next;
 	LIST_HEAD(works);
@@ -8918,10 +8918,6 @@ static int start_delalloc_inodes(struct btrfs_root *root, long *nr_to_write,
 		inode = list_first_entry(&splice, struct btrfs_inode, delalloc_inodes);
 
 		list_move_tail(&inode->delalloc_inodes, &root->delalloc_inodes);
-
-		if (in_reclaim_context &&
-		    test_bit(BTRFS_INODE_NO_DELALLOC_FLUSH, &inode->runtime_flags))
-			continue;
 
 		tmp_inode = igrab(&inode->vfs_inode);
 		if (!tmp_inode) {
@@ -8971,17 +8967,16 @@ out:
 	return ret;
 }
 
-int btrfs_start_delalloc_snapshot(struct btrfs_root *root, bool in_reclaim_context)
+int btrfs_start_delalloc_snapshot(struct btrfs_root *root)
 {
 	struct btrfs_fs_info *fs_info = root->fs_info;
 
 	if (unlikely(BTRFS_FS_ERROR(fs_info)))
 		return -EROFS;
-	return start_delalloc_inodes(root, NULL, true, in_reclaim_context);
+	return start_delalloc_inodes(root, NULL, true);
 }
 
-int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, long nr,
-			       bool in_reclaim_context)
+int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, long nr)
 {
 	long *nr_to_write = nr == LONG_MAX ? NULL : &nr;
 	struct btrfs_root *root;
@@ -9003,8 +8998,7 @@ int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, long nr,
 			       &fs_info->delalloc_roots);
 		spin_unlock(&fs_info->delalloc_root_lock);
 
-		ret = start_delalloc_inodes(root, nr_to_write, false,
-				in_reclaim_context);
+		ret = start_delalloc_inodes(root, nr_to_write, false);
 		btrfs_put_root(root);
 		if (ret < 0 || nr <= 0)
 			goto out;

@@ -4403,7 +4403,7 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 	 * getting delayed iputs than are never run. So flush delalloc and wait
 	 * for ordered extents.
 	 */
-	btrfs_start_delalloc_roots(fs_info, LONG_MAX, false);
+	btrfs_start_delalloc_roots(fs_info, LONG_MAX);
 	btrfs_wait_ordered_roots(fs_info, U64_MAX, NULL);
 
 	/*

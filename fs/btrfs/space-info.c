@@ -770,7 +770,7 @@ static void shrink_delalloc(struct btrfs_space_info *space_info,
 		long nr_pages = min_t(u64, temp, LONG_MAX);
 		int async_pages;
 
-		btrfs_start_delalloc_roots(fs_info, nr_pages, true);
+		btrfs_start_delalloc_roots(fs_info, nr_pages);
 
 		/*
 		 * We need to make sure any outstanding async pages are now

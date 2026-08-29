@@ -899,7 +899,7 @@ static int btrfs_dev_replace_finishing(struct btrfs_fs_info *fs_info,
 	 * flush all outstanding I/O and inode extent mappings before the
 	 * copy operation is declared as being finished
 	 */
-	ret = btrfs_start_delalloc_roots(fs_info, LONG_MAX, false);
+	ret = btrfs_start_delalloc_roots(fs_info, LONG_MAX);
 	if (ret) {
 		/* Stays started/resumable; keep both denied. */
 		mutex_unlock(&dev_replace->lock_finishing_cancel_unmount);

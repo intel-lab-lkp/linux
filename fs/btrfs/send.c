@@ -7908,7 +7908,7 @@ static int flush_delalloc_roots(struct send_ctx *sctx)
 	int i;
 
 	if (root) {
-		ret = btrfs_start_delalloc_snapshot(root, false);
+		ret = btrfs_start_delalloc_snapshot(root);
 		if (ret)
 			return ret;
 		btrfs_wait_ordered_extents(root, U64_MAX, NULL);
@@ -7916,7 +7916,7 @@ static int flush_delalloc_roots(struct send_ctx *sctx)
 
 	for (i = 0; i < sctx->clone_roots_cnt; i++) {
 		root = sctx->clone_roots[i].root;
-		ret = btrfs_start_delalloc_snapshot(root, false);
+		ret = btrfs_start_delalloc_snapshot(root);
 		if (ret)
 			return ret;
 		btrfs_wait_ordered_extents(root, U64_MAX, NULL);
