@@ -1069,26 +1069,6 @@ static bool f2fs_check_discard_tree(struct f2fs_sb_info *sbi)
 	return true;
 }
 
-static struct discard_cmd *__lookup_discard_cmd(struct f2fs_sb_info *sbi,
-						block_t blkaddr)
-{
-	struct discard_cmd_control *dcc = SM_I(sbi)->dcc_info;
-	struct rb_node *node = dcc->root.rb_root.rb_node;
-	struct discard_cmd *dc;
-
-	while (node) {
-		dc = rb_entry(node, struct discard_cmd, rb_node);
-
-		if (blkaddr < dc->di.lstart)
-			node = node->rb_left;
-		else if (blkaddr >= dc->di.lstart + dc->di.len)
-			node = node->rb_right;
-		else
-			return dc;
-	}
-	return NULL;
-}
-
 static struct discard_cmd *__lookup_discard_cmd_ret(struct rb_root_cached *root,
 				block_t blkaddr,
 				struct discard_cmd **prev_entry,
@@ -1114,7 +1094,7 @@ static struct discard_cmd *__lookup_discard_cmd_ret(struct rb_root_cached *root,
 
 		if (blkaddr < dc->di.lstart)
 			pnode = &(*pnode)->rb_left;
-		else if (blkaddr >= dc->di.lstart + dc->di.len)
+		else if ((u64)blkaddr >= (u64)dc->di.lstart + dc->di.len)
 			pnode = &(*pnode)->rb_right;
 		else
 			goto lookup_neighbors;
@@ -1472,40 +1452,54 @@ static void __relocate_discard_cmd(struct discard_cmd_control *dcc,
 	list_move_tail(&dc->list, &dcc->pend_list[plist_idx(dc->di.len)]);
 }
 
-static void __punch_discard_cmd(struct f2fs_sb_info *sbi,
-				struct discard_cmd *dc, block_t blkaddr)
+static void __punch_discard_cmd_range(struct f2fs_sb_info *sbi,
+				      struct discard_cmd *dc, block_t lstart,
+				      unsigned int len)
 {
 	struct discard_cmd_control *dcc = SM_I(sbi)->dcc_info;
 	struct discard_info di = dc->di;
+	u64 end = (u64)lstart + len;
+	u64 di_end = (u64)di.lstart + di.len;
 	bool modified = false;
 
-	if (dc->state == D_DONE || dc->di.len == 1) {
+	f2fs_bug_on(sbi, dc->state != D_PREP || !len ||
+		    lstart < di.lstart || end > di_end);
+
+	if (lstart == di.lstart && end == di_end) {
 		__remove_discard_cmd(sbi, dc);
 		return;
 	}
 
 	dcc->undiscard_blks -= di.len;
-
-	if (blkaddr > di.lstart) {
-		dc->di.len = blkaddr - dc->di.lstart;
+	if (lstart > di.lstart) {
+		dc->di.len = lstart - di.lstart;
 		dcc->undiscard_blks += dc->di.len;
 		__relocate_discard_cmd(dcc, dc);
 		modified = true;
 	}
 
-	if (blkaddr < di.lstart + di.len - 1) {
+	if (end < di_end) {
+		block_t right_lstart = (block_t)end;
+		unsigned int right_len = (unsigned int)(di_end - end);
+		block_t right_start = di.start + right_lstart - di.lstart;
+
 		if (modified) {
-			__insert_discard_cmd(sbi, dc->bdev, blkaddr + 1,
-					di.start + blkaddr + 1 - di.lstart,
-					di.lstart + di.len - 1 - blkaddr);
+			__insert_discard_cmd(sbi, dc->bdev, right_lstart,
+					     right_start, right_len);
 		} else {
-			dc->di.lstart++;
-			dc->di.len--;
-			dc->di.start++;
-			dcc->undiscard_blks += dc->di.len;
+			dc->di.lstart = right_lstart;
+			dc->di.start = right_start;
+			dc->di.len = right_len;
+			dcc->undiscard_blks += right_len;
 			__relocate_discard_cmd(dcc, dc);
 		}
 	}
+}
+
+static void __punch_discard_cmd(struct f2fs_sb_info *sbi,
+				struct discard_cmd *dc, block_t blkaddr)
+{
+	__punch_discard_cmd_range(sbi, dc, blkaddr, 1);
 }
 
 static void __update_discard_tree_range(struct f2fs_sb_info *sbi,
@@ -1872,48 +1866,82 @@ static unsigned int __wait_all_discard_cmd(struct f2fs_sb_info *sbi,
 }
 
 /* This should be covered by global mutex, &sit_i->sentry_lock */
-static void f2fs_wait_discard_bio(struct f2fs_sb_info *sbi, block_t blkaddr)
+static void f2fs_wait_discard_bios(struct f2fs_sb_info *sbi,
+				   block_t blkaddr, unsigned int len)
 {
 	struct discard_cmd_control *dcc = SM_I(sbi)->dcc_info;
-	struct discard_cmd *dc;
-	bool need_wait = false;
+	u64 cursor = blkaddr;
+	u64 end = cursor + len;
 
-	mutex_lock(&dcc->cmd_lock);
-	dc = __lookup_discard_cmd(sbi, blkaddr);
+	f2fs_bug_on(sbi, end > (u64)U32_MAX + 1);
+
+	while (cursor < end) {
+		struct discard_cmd *prev_dc = NULL, *next_dc = NULL;
+		struct discard_cmd *dc;
+		struct rb_node **insert_p = NULL, *insert_parent = NULL;
+		u64 dc_end, overlap_end;
+		unsigned int overlap_len;
+		bool need_wait = false;
+
+		mutex_lock(&dcc->cmd_lock);
+		dc = __lookup_discard_cmd_ret(&dcc->root, (block_t)cursor,
+					      &prev_dc, &next_dc, &insert_p, &insert_parent);
+		if (!dc)
+			dc = next_dc;
+		if (!dc || (u64)dc->di.lstart >= end) {
+			mutex_unlock(&dcc->cmd_lock);
+			break;
+		}
+
+		if (cursor < dc->di.lstart)
+			cursor = dc->di.lstart;
+		dc_end = (u64)dc->di.lstart + dc->di.len;
+		overlap_end = min(end, dc_end);
+		overlap_len = (unsigned int)(overlap_end - cursor);
+
 #ifdef CONFIG_BLK_DEV_ZONED
-	if (dc && f2fs_sb_has_blkzoned(sbi) && bdev_is_zoned(dc->bdev)) {
-		int devi = f2fs_bdev_index(sbi, dc->bdev);
+		if (f2fs_sb_has_blkzoned(sbi) && bdev_is_zoned(dc->bdev)) {
+			int devi = f2fs_bdev_index(sbi, dc->bdev);
 
-		if (devi < 0) {
-			mutex_unlock(&dcc->cmd_lock);
-			return;
-		}
+			if (devi < 0) {
+				mutex_unlock(&dcc->cmd_lock);
+				return;
+			}
 
-		if (f2fs_blkz_is_seq(sbi, devi, dc->di.start)) {
-			/* force submit zone reset */
-			if (dc->state == D_PREP)
-				__submit_zone_reset_cmd(sbi, dc, REQ_SYNC,
-							&dcc->wait_list, NULL);
-			dc->ref++;
-			mutex_unlock(&dcc->cmd_lock);
-			/* wait zone reset */
-			__wait_one_discard_bio(sbi, dc);
-			return;
+			if (f2fs_blkz_is_seq(sbi, devi, dc->di.start)) {
+				if (dc->state == D_PREP)
+					__submit_zone_reset_cmd(sbi, dc, REQ_SYNC,
+								&dcc->wait_list, NULL);
+				dc->ref++;
+				need_wait = true;
+			}
 		}
-	}
 #endif
-	if (dc) {
-		if (dc->state == D_PREP) {
-			__punch_discard_cmd(sbi, dc, blkaddr);
-		} else {
-			dc->ref++;
-			need_wait = true;
+		if (!need_wait) {
+			if (dc->state == D_PREP) {
+				if (len == 1)
+					__punch_discard_cmd(sbi, dc,
+							    (block_t)cursor);
+				else
+					__punch_discard_cmd_range(sbi, dc,
+								  (block_t)cursor,
+								  overlap_len);
+			} else {
+				dc->ref++;
+				need_wait = true;
+			}
 		}
+		mutex_unlock(&dcc->cmd_lock);
+		if (need_wait)
+			__wait_one_discard_bio(sbi, dc);
+		cursor = overlap_end;
 	}
-	mutex_unlock(&dcc->cmd_lock);
+}
 
-	if (need_wait)
-		__wait_one_discard_bio(sbi, dc);
+static void f2fs_wait_discard_bio(struct f2fs_sb_info *sbi,
+				  block_t blkaddr)
+{
+	f2fs_wait_discard_bios(sbi, blkaddr, 1);
 }
 
 void f2fs_stop_discard_thread(struct f2fs_sb_info *sbi)
@@ -2684,6 +2712,7 @@ void f2fs_reserve_device_alias(struct f2fs_sb_info *sbi, block_t addr,
 	seg_num = GET_SEGNO(sbi, addr_end) - segno + 1;
 
 	down_write(&sit_i->sentry_lock);
+	f2fs_wait_discard_bios(sbi, addr, len);
 
 	if (seg_num == 1)
 		cnt = len;
