@@ -54,7 +54,7 @@ void nf_dup_ipv4(struct net *net, struct sk_buff *skb, unsigned int hooknum,
 	struct iphdr *iph;
 
 	local_bh_disable();
-	if (current->in_nf_duplicate)
+	if (current->in_nf_duplicate || skb->nf_duplicated)
 		goto out;
 	/*
 	 * Copy the skb, and route the copy. Will later return %XT_CONTINUE for
@@ -86,6 +86,7 @@ void nf_dup_ipv4(struct net *net, struct sk_buff *skb, unsigned int hooknum,
 		--iph->ttl;
 
 	if (nf_dup_ipv4_route(net, skb, gw, oif)) {
+		skb->nf_duplicated = 1;
 		current->in_nf_duplicate = true;
 		ip_local_out(net, skb->sk, skb);
 		current->in_nf_duplicate = false;
