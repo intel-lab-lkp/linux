@@ -3818,8 +3818,9 @@ l3mdev_accept - BOOLEAN
 ``/proc/sys/net/unix/*``
 ========================
 
-max_dgram_qlen - INTEGER
+max_dgram_qlen - UNSIGNED INTEGER
 	The maximum length of dgram socket receive queue
 
-	Default: 10
+	Negative values are rejected.
 
+	Default: 10

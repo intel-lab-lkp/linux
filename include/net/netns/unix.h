@@ -15,7 +15,7 @@ struct unix_table {
 struct ctl_table_header;
 struct netns_unix {
 	struct unix_table	table;
-	int			sysctl_max_dgram_qlen;
+	unsigned int		sysctl_max_dgram_qlen;
 	struct ctl_table_header	*ctl;
 };
 
