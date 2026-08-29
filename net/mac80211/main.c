@@ -289,9 +289,14 @@ void ieee80211_emulate_remove_chanctx(struct ieee80211_hw *hw,
 {
 	struct ieee80211_local *local = hw_to_local(hw);
 
+	/*
+	 * With no context left there is nothing to configure: nothing is on
+	 * the air, and the next context sets the channel. Parking the radio
+	 * on the default channel here only to move it again when the next
+	 * context is added costs drivers without native channel contexts a
+	 * full channel change per retune.
+	 */
 	local->hw.conf.radar_enabled = false;
-
-	_ieee80211_hw_conf_chan(local, NULL);
 }
 EXPORT_SYMBOL(ieee80211_emulate_remove_chanctx);
 
