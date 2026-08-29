@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config RISCV_RPMI_DEVICE_POWER
+	bool "RISC-V RPMI Based Device Power driver"
+	depends on MAILBOX || COMPILE_TEST
+	default RISCV
+	select PM_GENERIC_DOMAINS if PM
+	help
+	  Support for device power domains based on the device power service
+	  group defined by the RISC-V platform management interface (RPMI)
+	  specification. The power domains advertised by the platform
+	  microcontroller are registered as generic power domains, so that
+	  devices can reference them through the "power-domains" property.
