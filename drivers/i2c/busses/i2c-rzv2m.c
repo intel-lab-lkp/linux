@@ -433,7 +433,9 @@ static int rzv2m_i2c_probe(struct platform_device *pdev)
 	 * The reset also affects other HW that is not under the control
 	 * of Linux. Therefore, all we can do is deassert the reset.
 	 */
-	reset_control_deassert(rstc);
+	ret = reset_control_deassert(rstc);
+	if (ret)
+		return ret;
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
@@ -461,7 +463,11 @@ static int rzv2m_i2c_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(dev);
 
-	pm_runtime_get_sync(dev);
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret < 0) {
+		pm_runtime_disable(dev);
+		return ret;
+	}
 	rzv2m_i2c_init(priv);
 	pm_runtime_put(dev);
 
