@@ -1420,7 +1420,7 @@ static void cxgbit_lro_hskb_reset(struct cxgbit_sock *csk)
 	skb->len = 0;
 }
 
-static void
+static int
 cxgbit_lro_skb_merge(struct cxgbit_sock *csk, struct sk_buff *skb, u8 pdu_idx)
 {
 	struct sk_buff *hskb = csk->lro_hskb;
@@ -1429,6 +1429,15 @@ cxgbit_lro_skb_merge(struct cxgbit_sock *csk, struct sk_buff *skb, u8 pdu_idx)
 	struct skb_shared_info *hssi = skb_shinfo(hskb);
 	struct skb_shared_info *ssi = skb_shinfo(skb);
 	unsigned int len = 0;
+	u8 nr_frags = 0;
+
+	if (pdu_cb->flags & PDUCBF_RX_HDR)
+		nr_frags++;
+	if (pdu_cb->flags & PDUCBF_RX_DATA)
+		nr_frags += pdu_cb->nr_dfrags;
+	if (hssi->nr_frags > MAX_SKB_FRAGS ||
+	    nr_frags > MAX_SKB_FRAGS - hssi->nr_frags)
+		return -EMSGSIZE;
 
 	if (pdu_cb->flags & PDUCBF_RX_HDR) {
 		u8 hfrag_idx = hssi->nr_frags;
@@ -1489,6 +1498,8 @@ cxgbit_lro_skb_merge(struct cxgbit_sock *csk, struct sk_buff *skb, u8 pdu_idx)
 		hpdu_cb->ddigest = pdu_cb->ddigest;
 		hpdu_cb->pdulen = pdu_cb->pdulen;
 	}
+
+	return 0;
 }
 
 static int cxgbit_process_lro_skb(struct cxgbit_sock *csk, struct sk_buff *skb)
@@ -1499,7 +1510,11 @@ static int cxgbit_process_lro_skb(struct cxgbit_sock *csk, struct sk_buff *skb)
 	int ret = 0;
 
 	if (!pdu_cb->complete) {
-		cxgbit_lro_skb_merge(csk, skb, 0);
+		ret = cxgbit_lro_skb_merge(csk, skb, 0);
+		if (ret < 0) {
+			cxgbit_lro_hskb_reset(csk);
+			goto out;
+		}
 
 		if (pdu_cb->flags & PDUCBF_RX_STATUS) {
 			struct sk_buff *hskb = csk->lro_hskb;
@@ -1524,8 +1539,11 @@ static int cxgbit_process_lro_skb(struct cxgbit_sock *csk, struct sk_buff *skb)
 			goto out;
 	}
 
-	if ((!lro_cb->complete) && lro_cb->pdu_idx)
-		cxgbit_lro_skb_merge(csk, skb, lro_cb->pdu_idx);
+	if (!lro_cb->complete && lro_cb->pdu_idx) {
+		ret = cxgbit_lro_skb_merge(csk, skb, lro_cb->pdu_idx);
+		if (ret < 0)
+			cxgbit_lro_hskb_reset(csk);
+	}
 
 out:
 	return ret;
