@@ -379,7 +379,9 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 		goto put_pm;
 	}
 
-	reset_control_deassert(pc->rst);
+	ret = reset_control_deassert(pc->rst);
+	if (ret)
+		goto put_pm;
 
 	chip->ops = &tegra_pwm_ops;
 
