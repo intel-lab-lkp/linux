@@ -75,11 +75,6 @@ struct drm_i915_private;
 	__idx;								\
 })
 
-static inline bool is_power_of_2_u64(u64 n)
-{
-	return (n != 0 && ((n & (n - 1)) == 0));
-}
-
 void add_taint_for_CI(struct drm_i915_private *i915, unsigned int taint);
 static inline void __add_taint_for_CI(unsigned int taint)
 {

@@ -48,6 +48,22 @@ bool is_power_of_2(unsigned long n)
 }
 
 /**
+ * is_power_of_2_u64() - check if a 64-bit value is a power of two
+ * @n: the value to check
+ *
+ * Determine whether some value is a power of two, where zero is
+ * *not* considered a power of two. Unlike is_power_of_2, this version
+ * always operates on 64-bit values, even on 32-bit architectures where
+ * long is 32-bit.
+ * Return: true if @n is a power of 2, otherwise false.
+ */
+static __always_inline __attribute_const__
+bool is_power_of_2_u64(u64 n)
+{
+	return n - 1 < (n ^ (n - 1));
+}
+
+/**
  * __roundup_pow_of_two() - round up to nearest power of two
  * @n: value to round up
  */
@@ -194,6 +210,63 @@ unsigned long __rounddown_pow_of_two(unsigned long n)
 		(1UL << ilog2(n))) :		\
 	__rounddown_pow_of_two(n)		\
  )
+
+/**
+ * __rounddown_pow_of_two_64() - round a 64-bit value down to nearest power of two
+ * @n: value to round down
+ */
+static inline __attribute_const__
+u64 __rounddown_pow_of_two_u64(u64 n)
+{
+	return 1ULL << ilog2(n);
+}
+
+/**
+ * rounddown_pow_of_two_u64 - round a 64-bit value down to nearest power of two
+ * @n: parameter
+ *
+ * round the given value down to the nearest power of two
+ * - this always operates on 64-bit values, even on 32-bit systems
+ * - the result is undefined when n == 0
+ * - this can be used to initialise global variables from constant data
+ */
+#define rounddown_pow_of_two_u64(n)		\
+(						\
+	__builtin_constant_p(n) ? (		\
+		((n) == 1) ? 1ULL :		\
+		(1ULL << ilog2((n)))		\
+				   ) :		\
+	__rounddown_pow_of_two_u64(n)		\
+)
+
+
+/**
+ * __roundup_pow_of_two_u64() - round a 64-bit value up to nearest power of two
+ * @n: value to round up
+ */
+static inline __attribute_const__
+u64 __roundup_pow_of_two_u64(u64 n)
+{
+	return 1ULL << (ilog2(n - 1) + 1);
+}
+
+/**
+ * roundup_pow_of_two_u64 - round a 64-bit value up to nearest power of two
+ * @n: parameter
+ *
+ * round the given value up to the nearest power of two
+ * - this always operates on 64-bit values, even on 32-bit systems
+ * - the result is undefined when n == 0
+ * - this can be used to initialise global variables from constant data
+ */
+#define roundup_pow_of_two_u64(n)		\
+(						\
+	__builtin_constant_p(n) ? (		\
+		((n) == 1) ? 1ULL :		\
+		(1ULL << (ilog2((n) - 1) + 1))	\
+				   ) :		\
+	__roundup_pow_of_two_u64(n)		\
+)
 
 static inline __attribute_const__
 int __order_base_2(unsigned long n)
