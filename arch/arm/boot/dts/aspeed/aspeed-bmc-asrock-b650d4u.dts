@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+
+#include "aspeed-g6.dtsi"
+
+/ {
+	model = "ASRock Rack B650D4U BMC";
+	compatible = "asrock,b650d4u-bmc", "aspeed,ast2600";
+
+	aliases {
+		serial0 = &uart5;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x80000000 0x20000000>;
+	};
+};
+
+&fmc {
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+		label = "bmc";
+		m25p,fast-read;
+		spi-max-frequency = <50000000>;
+		spi-rx-bus-width = <4>;
+		status = "okay";
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			u-boot@0 {
+				reg = <0x00000000 0x000e0000>;
+				label = "u-boot";
+				read-only;
+			};
+
+			u-boot-env@e0000 {
+				reg = <0x000e0000 0x00020000>;
+				label = "u-boot-env";
+			};
+
+			kernel@200000 {
+				reg = <0x00200000 0x00800000>;
+				label = "kernel";
+			};
+
+			rofs@a00000 {
+				reg = <0x00a00000 0x02000000>;
+				label = "rofs";
+				read-only;
+			};
+
+			rwfs@2a00000 {
+				reg = <0x02a00000 0x01600000>;
+				label = "rwfs";
+			};
+		};
+	};
+};
+
+&mac0 {
+	status = "okay";
+
+	/*
+	 * The RTL8211F provides the required RGMII RX delay. No additional
+	 * TX delay is required for this board.
+	 */
+	phy-mode = "rgmii-rxid";
+	phy-handle = <&ethphy0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_rgmii1_default>;
+};
+
+&mdio0 {
+	status = "okay";
+
+	ethphy0: ethernet-phy@0 {
+		compatible = "ethernet-phy-ieee802.3-c22";
+		reg = <0>;
+	};
+};
+
+&uart5 {
+	status = "okay";
+};
