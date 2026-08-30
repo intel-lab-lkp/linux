@@ -2386,6 +2386,20 @@ config SENSORS_SPD5118_DETECT
 
 	  If unsure, say Y.
 
+config SENSORS_STARFIVE_FAN_TACH
+	tristate "StarFive Fan-Tach driver"
+	depends on ARCH_STARFIVE || COMPILE_TEST
+	depends on HAS_IOMEM
+	help
+	  This driver provides support for the fan tachometer controller
+	  found on StarFive SoCs such as the JHB100. The controller supports
+	  up to 16 independent fan tachometer inputs and reports fan speed
+	  in RPM through the hwmon sysfs interface, along with stall and
+	  low-speed alarms.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called starfive-fan-tach.
+
 config SENSORS_TC74
 	tristate "Microchip TC74"
 	depends on I2C
