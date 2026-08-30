@@ -270,6 +270,7 @@ static int rzg2l_cru_probe(struct platform_device *pdev)
 
 	cru->dev = dev;
 	cru->info = of_device_get_match_data(dev);
+	spin_lock_init(&cru->hw_lock);
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
