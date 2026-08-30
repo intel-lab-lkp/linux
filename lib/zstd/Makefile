@@ -11,6 +11,7 @@
 obj-$(CONFIG_ZSTD_COMPRESS) += zstd_compress.o
 obj-$(CONFIG_ZSTD_DECOMPRESS) += zstd_decompress.o
 obj-$(CONFIG_ZSTD_COMMON) += zstd_common.o
+ccflags-$(CONFIG_X86) += -DZSTD_USE_KERNEL_CPU_FEATURES
 
 zstd_compress-y := \
 		zstd_compress_module.o \

@@ -260,7 +260,11 @@ static void ZSTD_initDCtx_internal(ZSTD_DCtx* dctx)
     dctx->oversizedDuration = 0;
     dctx->isFrameDecompression = 1;
 #if DYNAMIC_BMI2
+# if defined(ZSTD_USE_KERNEL_CPU_FEATURES)
+    dctx->bmi2 = 0;
+# else
     dctx->bmi2 = ZSTD_cpuSupportsBmi2();
+# endif
 #endif
     dctx->ddictSet = NULL;
     ZSTD_DCtx_resetParameters(dctx);

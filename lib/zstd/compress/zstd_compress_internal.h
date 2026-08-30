@@ -537,6 +537,15 @@ struct ZSTD_CCtx_s {
     size_t extSeqBufCapacity;
 };
 
+MEM_STATIC int ZSTD_CCtx_get_bmi2(const struct ZSTD_CCtx_s *cctx) {
+#if !defined(ZSTD_USE_KERNEL_CPU_FEATURES)
+    return cctx->bmi2;
+#else
+    (void)cctx;
+    return 0;
+#endif
+}
+
 typedef enum { ZSTD_dtlm_fast, ZSTD_dtlm_full } ZSTD_dictTableLoadMethod_e;
 typedef enum { ZSTD_tfp_forCCtx, ZSTD_tfp_forCDict } ZSTD_tableFillPurpose_e;
 
