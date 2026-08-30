@@ -7273,6 +7273,7 @@ static int perf_mmap_rb(struct vm_area_struct *vma, struct perf_event *event,
 	long extra = 0, user_extra = nr_pages;
 	struct perf_buffer *rb;
 	int rb_flags = 0;
+	bool raced = false;
 
 	nr_pages -= 1;
 
@@ -7314,6 +7315,7 @@ static int perf_mmap_rb(struct vm_area_struct *vma, struct perf_event *event,
 		 * event and continue as if !event->rb
 		 */
 		ring_buffer_attach(event, NULL);
+		raced = true;
 	}
 
 	if (!perf_mmap_calc_limits(vma, &user_extra, &extra))
@@ -7338,7 +7340,21 @@ static int perf_mmap_rb(struct vm_area_struct *vma, struct perf_event *event,
 	perf_event_update_userpage(event);
 
 	perf_mmap_account(vma, user_extra, extra);
-	refcount_set(&event->mmap_count, 1);
+
+	/*
+	 * On the raced path above, a concurrent perf_mmap_close() can
+	 * still have a pending decrement of event->mmap_count: it sits
+	 * blocked inside refcount_dec_and_mutex_lock() on event->mmap_mutex
+	 * (which we hold) with the count still at 1. Using
+	 * refcount_set(..., 1) here would make that closer observe a 1->0
+	 * transition once we drop the mutex, causing it to detach and free
+	 * the buffer we just installed, while this mmap() still maps it.
+	 * The count is guaranteed non-zero on the raced path, so increment.
+	 */
+	if (raced)
+		refcount_inc(&event->mmap_count);
+	else
+		refcount_set(&event->mmap_count, 1);
 
 	return 0;
 }
