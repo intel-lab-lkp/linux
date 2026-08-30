@@ -244,11 +244,7 @@ struct e1000_adapter {
 	u32 tx_hwtstamp_skipped;
 
 	/* Rx */
-	bool (*clean_rx)(struct e1000_ring *ring, int *work_done,
-			 int work_to_do) ____cacheline_aligned_in_smp;
-	void (*alloc_rx_buf)(struct e1000_ring *ring, int cleaned_count,
-			     gfp_t gfp);
-	struct e1000_ring *rx_ring;
+	struct e1000_ring *rx_ring ____cacheline_aligned_in_smp;
 
 	u32 rx_int_delay;
 	u32 rx_abs_int_delay;
@@ -436,7 +432,6 @@ s32 e1000e_get_base_timinca(struct e1000_adapter *adapter, u32 *timinca);
 
 #define FLAG2_CRC_STRIPPING               BIT(0)
 #define FLAG2_HAS_PHY_WAKEUP              BIT(1)
-#define FLAG2_IS_DISCARDING               BIT(2)
 #define FLAG2_DISABLE_ASPM_L1             BIT(3)
 #define FLAG2_HAS_PHY_STATS               BIT(4)
 #define FLAG2_HAS_EEE                     BIT(5)
