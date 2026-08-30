@@ -20,11 +20,16 @@
 #include "ufshcd-pltfrm.h"
 #include "ufs-rockchip.h"
 
-static void ufs_rockchip_controller_reset(struct ufs_rockchip_host *host)
+static int ufs_rockchip_controller_reset(struct ufs_rockchip_host *host)
 {
-	reset_control_assert(host->rst);
+	int ret;
+
+	ret = reset_control_assert(host->rst);
+	if (ret)
+		return ret;
 	udelay(1);
-	reset_control_deassert(host->rst);
+
+	return reset_control_deassert(host->rst);
 }
 
 static int ufs_rockchip_hce_enable_notify(struct ufs_hba *hba,
@@ -46,9 +51,7 @@ static int ufs_rockchip_hce_enable_notify(struct ufs_hba *hba,
 	}
 
 	/* PRE_CHANGE */
-	ufs_rockchip_controller_reset(host);
-
-	return 0;
+	return ufs_rockchip_controller_reset(host);
 }
 
 static void ufs_rockchip_set_pm_lvl(struct ufs_hba *hba)
@@ -167,7 +170,9 @@ static int ufs_rockchip_common_init(struct ufs_hba *hba)
 		return dev_err_probe(dev, PTR_ERR(host->rst),
 				"failed to get reset control\n");
 
-	ufs_rockchip_controller_reset(host);
+	err = ufs_rockchip_controller_reset(host);
+	if (err)
+		return dev_err_probe(dev, err, "failed to reset controller\n");
 
 	host->ref_out_clk = devm_clk_get_enabled(dev, "ref_out");
 	if (IS_ERR(host->ref_out_clk))
@@ -291,7 +296,11 @@ static int ufs_rockchip_runtime_resume(struct device *dev)
 		return err;
 	}
 
-	ufs_rockchip_controller_reset(host);
+	err = ufs_rockchip_controller_reset(host);
+	if (err) {
+		clk_disable_unprepare(host->ref_out_clk);
+		return err;
+	}
 
 	return ufshcd_runtime_resume(dev);
 }
