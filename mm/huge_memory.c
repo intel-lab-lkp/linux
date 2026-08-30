@@ -3760,7 +3760,7 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
 		VM_WARN_ON_ONCE_PAGE(new_folio->private, new_head);
 
 		if (folio_test_swapcache(folio))
-			new_folio->swap.val = folio->swap.val + i;
+			new_folio->swap = folio_swap_entry(folio, i);
 
 		/* Page flags must be visible before we make the page non-compound. */
 		smp_wmb();
