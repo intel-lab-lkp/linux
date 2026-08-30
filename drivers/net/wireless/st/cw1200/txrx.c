@@ -1018,6 +1018,11 @@ void cw1200_rx_cb(struct cw1200_common *priv,
 		/* STA is stopped. */
 		goto drop;
 	}
+	if (skb->len < sizeof(struct ieee80211_pspoll)) {
+		wiphy_warn(priv->hw->wiphy,
+			   "Malformed SDU rx'ed. Size is lesser than IEEE header.\n");
+		goto drop;
+	}
 
 	if (link_id && link_id <= CW1200_MAX_STA_IN_AP_MODE) {
 		entry =	&priv->link_id_db[link_id - 1];
@@ -1060,11 +1065,6 @@ void cw1200_rx_cb(struct cw1200_common *priv,
 				 arg->status);
 			goto drop;
 		}
-	}
-
-	if (skb->len < sizeof(struct ieee80211_pspoll)) {
-		wiphy_warn(priv->hw->wiphy, "Malformed SDU rx'ed. Size is lesser than IEEE header.\n");
-		goto drop;
 	}
 
 	if (ieee80211_is_pspoll(frame->frame_control))
