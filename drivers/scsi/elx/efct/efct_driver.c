@@ -338,6 +338,10 @@ efct_request_firmware_update(struct efct *efct)
 		efc_log_debug(efct, "Firmware file(%s) not found.\n", file_name);
 		return rc;
 	}
+	if (fw->size < sizeof(*fw_image)) {
+		rc = -EINVAL;
+		goto exit;
+	}
 
 	fw_image = (struct efct_hw_grp_hdr *)fw->data;
 
