@@ -1792,7 +1792,6 @@ static int isc_async_complete(struct v4l2_async_notifier *notifier)
 
 	/* Init video dma queues */
 	INIT_LIST_HEAD(&isc->dma_queue);
-	spin_lock_init(&isc->dma_queue_lock);
 	spin_lock_init(&isc->awb_lock);
 
 	ret = isc_set_default_fmt(isc);
