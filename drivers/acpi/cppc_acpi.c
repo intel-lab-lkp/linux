@@ -407,6 +407,17 @@ static void cppc_complete_pcc_write(struct cppc_pcc_data *pcc_ss_data,
 	wake_up_all(&pcc_ss_data->pcc_write_wait_q);
 }
 
+/* The caller must hold pcc_lock for write. */
+static void cppc_abort_pending_pcc_write(struct cppc_pcc_data *pcc_ss_data,
+					 int ret)
+{
+	if (!pcc_ss_data->pending_pcc_write_cmd)
+		return;
+
+	pcc_ss_data->pending_pcc_write_cmd = false;
+	cppc_complete_pcc_write(pcc_ss_data, ret);
+}
+
 /*
  * This function transfers the ownership of the PCC to the platform
  * So it must be called while holding write_lock(pcc_lock)
@@ -1507,7 +1518,7 @@ static int cppc_get_reg_val(int cpu, enum cppc_regs reg_idx, u64 *val)
 static int cppc_set_reg_val_in_pcc(int cpu, struct cpc_register_resource *reg, u64 val)
 {
 	int pcc_ss_id = per_cpu(cpu_pcc_subspace_idx, cpu);
-	struct cppc_pcc_data *pcc_ss_data = NULL;
+	struct cppc_pcc_data *pcc_ss_data;
 	int ret;
 
 	if (pcc_ss_id < 0) {
@@ -1515,15 +1526,26 @@ static int cppc_set_reg_val_in_pcc(int cpu, struct cpc_register_resource *reg, u
 		return -ENODEV;
 	}
 
-	ret = cpc_write(cpu, reg, val);
-	if (ret)
-		return ret;
-
 	pcc_ss_data = pcc_data[pcc_ss_id];
+	if (!pcc_ss_data)
+		return -ENODEV;
 
 	down_write(&pcc_ss_data->pcc_lock);
+
+	ret = check_pcc_chan(pcc_ss_id, false);
+	if (ret)
+		goto out;
+
+	ret = cpc_write(cpu, reg, val);
+	if (ret)
+		goto out;
+
 	/* after writing CPC, transfer the ownership of PCC to platform */
 	ret = send_pcc_cmd(pcc_ss_id, CMD_WRITE);
+
+out:
+	if (ret)
+		cppc_abort_pending_pcc_write(pcc_ss_data, ret);
 	up_write(&pcc_ss_data->pcc_lock);
 
 	return ret;
