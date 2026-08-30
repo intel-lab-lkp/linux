@@ -330,6 +330,7 @@ static int c3_isp_probe(struct platform_device *pdev)
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
 		return irq;
+	isp->irq = irq;
 
 	ret = c3_isp_get_clocks(isp);
 	if (ret)
@@ -355,18 +356,20 @@ static int c3_isp_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_resizers_unregister;
 
-	ret = devm_request_irq(dev, irq,
-			       c3_isp_irq_handler, IRQF_SHARED,
-			       dev_driver_string(dev), isp);
-	if (ret)
-		goto err_nf_unregister;
-
 	ret = c3_isp_videos_register(isp);
 	if (ret)
 		goto err_nf_unregister;
 
+	ret = devm_request_irq(dev, irq,
+			       c3_isp_irq_handler, IRQF_SHARED,
+			       dev_driver_string(dev), isp);
+	if (ret)
+		goto err_videos_unregister;
+
 	return 0;
 
+err_videos_unregister:
+	c3_isp_videos_unregister(isp);
 err_nf_unregister:
 	c3_isp_async_nf_unregister(isp);
 err_resizers_unregister:
@@ -384,6 +387,7 @@ static void c3_isp_remove(struct platform_device *pdev)
 {
 	struct c3_isp_device *isp = platform_get_drvdata(pdev);
 
+	devm_free_irq(isp->dev, isp->irq, isp);
 	c3_isp_videos_unregister(isp);
 	c3_isp_async_nf_unregister(isp);
 	c3_isp_core_unregister(isp);

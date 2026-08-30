@@ -293,6 +293,7 @@ struct c3_isp_info {
  * @stats: ISP stats device
  * @params: ISP params device
  * @caps: array of ISP capture device
+ * @irq: ISP interrupt number
  * @frm_sequence: used to record frame id
  * @info: version-specific ISP information
  */
@@ -312,6 +313,7 @@ struct c3_isp_device {
 	struct c3_isp_params params;
 	struct c3_isp_capture caps[C3_ISP_NUM_CAP_DEVS];
 
+	int irq;
 	u32 frm_sequence;
 	const struct c3_isp_info *info;
 };
