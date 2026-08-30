@@ -227,17 +227,7 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 	gfp_t gfp_mask = readahead_gfp_mask(mapping);
 	unsigned long mark = ULONG_MAX, i = 0;
 	unsigned int min_nrpages = mapping_min_folio_nrpages(mapping);
-
-	/*
-	 * Partway through the readahead operation, we will have added
-	 * locked pages to the page cache, but will not yet have submitted
-	 * them for I/O.  Adding another page may need to allocate memory,
-	 * which can trigger memory reclaim.  Telling the VM we're in
-	 * the middle of a filesystem operation will cause it to not
-	 * touch file-backed pages, preventing a deadlock.  Most (all?)
-	 * filesystems already specify __GFP_NOFS in their mapping's
-	 * gfp_mask, but let's be explicit here.
-	 */
+	/* Allocating with locked folios */
 	unsigned int nofs = memalloc_nofs_save();
 
 	lockdep_assert_held(&mapping->invalidate_lock);
@@ -512,7 +502,7 @@ void page_cache_ra_order(struct readahead_control *ractl,
 
 	ra->order = new_order;
 
-	/* See comment in page_cache_ra_unbounded() */
+	/* Allocating with locked folios */
 	nofs = memalloc_nofs_save();
 	filemap_invalidate_lock_shared(mapping);
 	/*

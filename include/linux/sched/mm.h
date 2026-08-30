@@ -372,13 +372,26 @@ static inline void memalloc_noio_restore(unsigned int flags)
 }
 
 /**
- * memalloc_nofs_save - Marks implicit GFP_NOFS allocation scope.
+ * memalloc_nofs_save - Prevent recursion into the filesystem.
  *
- * This functions marks the beginning of the GFP_NOFS allocation scope.
- * All further allocations will implicitly drop __GFP_FS flag and so
- * they are safe for the FS critical section from the allocation recursion
- * point of view. Use memalloc_nofs_restore to end the scope with flags
- * returned by this function.
+ * All memory allocations between calling this function and calling
+ * memalloc_nofs_restore() will be prevented from calling into filesystems
+ * to reclaim memory.  Clean page cache memory can still be reclaimed,
+ * but (for example) inodes will not be.
+ *
+ * The primary reason to do this is that the caller has taken a lock
+ * which would be needed by FS reclaim.  While we could theoretically
+ * call into a different filesystem in this case, it can be a deep call
+ * stack so it is better to avoid all filesystems.
+ *
+ * Filesystems often choose to incorporate a call to this function as part
+ * of starting a journal transaction.  While not a lock in the normal
+ * sense, it has much the same effect as nested journal transactions
+ * are either prohibited or expensive.
+ *
+ * Also call this function if you need to allocate memory while holding
+ * a file folio locked.  High order allocations (such as those requested
+ * by slab) can trigger compaction which will attempt to lock the folio.
  *
  * Context: This function is safe to be used from any context.
  * Return: The saved flags to be passed to memalloc_nofs_restore.
@@ -389,10 +402,12 @@ static inline unsigned int memalloc_nofs_save(void)
 }
 
 /**
- * memalloc_nofs_restore - Ends the implicit GFP_NOFS scope.
+ * memalloc_nofs_restore - End filesystem reclaim scope.
  * @flags: Flags to restore.
  *
- * Ends the implicit GFP_NOFS scope started by memalloc_nofs_save function.
+ * Ends the implicit memory allocation scope started by
+ * memalloc_nofs_save().  This may not enable access to filesystem reclaim
+ * if it was already disabled at the time memalloc_nofs_save() was called.
  * Always make sure that the given flags is the return value from the
  * pairing memalloc_nofs_save call.
  */
