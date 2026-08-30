@@ -465,8 +465,23 @@ rx_ring_summary:
 					(unsigned long long)buffer_info->dma,
 					buffer_info->skb, next_desc);
 
+				/* Jumbo buffers land in the page; a cleaned
+				 * jumbo slot keeps only its small shell skb
+				 * until it is refilled, so only dump an skb
+				 * that can hold a whole buffer.
+				 */
 				if (netif_msg_pktdata(adapter) &&
-				    buffer_info->skb)
+				    buffer_info->page)
+					print_hex_dump(KERN_INFO, "",
+						       DUMP_PREFIX_ADDRESS, 16,
+						       1,
+						       page_address(buffer_info->page),
+						       adapter->rx_buffer_len,
+						       true);
+				else if (netif_msg_pktdata(adapter) &&
+					 buffer_info->skb &&
+					 skb_tailroom(buffer_info->skb) >=
+					 adapter->rx_buffer_len)
 					print_hex_dump(KERN_INFO, "",
 						       DUMP_PREFIX_ADDRESS, 16,
 						       1,
