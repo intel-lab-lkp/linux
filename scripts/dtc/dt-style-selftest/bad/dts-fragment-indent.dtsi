@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+/* Incorrect indentation inside an indented include fragment. */
+
+	bus@10000 {
+		compatible = "simple-bus";
+		reg = <0x10000 0x1000>;
+
+		device@100 {
+				compatible = "example,test";
+				reg = <0x100 0x10>;
+		};
+	};

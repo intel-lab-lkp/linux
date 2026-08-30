@@ -486,6 +486,7 @@ def check_indent_consistent(ctx):
         if unit != '\t':
             return
 
+    prefix = detect_fragment_offset(ctx)
     for dl in ctx.lines:
         if dl.linetype in (LineType.BLANK, LineType.PREPROCESSOR):
             continue
@@ -498,7 +499,7 @@ def check_indent_consistent(ctx):
         # The indent must be 'unit' repeated dl.depth times, exactly.
         # NODE_CLOSE lines have depth equal to the post-decrement value,
         # which matches the indent expected.
-        expected = unit * dl.depth
+        expected = prefix + unit * dl.depth
         if dl.indent_str != expected:
             yield (dl.lineno,
                    'indent mismatch (expected depth %d * %r)' %
