@@ -412,9 +412,14 @@ static int rk_rng_probe(struct platform_device *pdev)
 		if (IS_ERR(rst))
 			return dev_err_probe(dev, PTR_ERR(rst), "Failed to get reset property\n");
 
-		reset_control_assert(rst);
+		ret = reset_control_assert(rst);
+		if (ret)
+			return ret;
+
 		udelay(2);
-		reset_control_deassert(rst);
+		ret = reset_control_deassert(rst);
+		if (ret)
+			return ret;
 	}
 
 	platform_set_drvdata(pdev, rk_rng);
