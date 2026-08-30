@@ -3,12 +3,14 @@
  * Copyright (c) 2024 AIROHA Inc
  * Author: Lorenzo Bianconi <lorenzo@kernel.org>
  */
+#include <linux/ktime.h>
 #include <linux/of.h>
 #include <linux/of_net.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/tcp.h>
 #include <linux/u64_stats_sync.h>
+#include <linux/workqueue.h>
 #include <net/dst_metadata.h>
 #include <net/page_pool/helpers.h>
 #include <net/pkt_cls.h>
@@ -657,6 +659,47 @@ airoha_qdma_get_gdm_dev(struct airoha_eth *eth, struct airoha_qdma_desc *desc)
 	return port->devs[d] ? port->devs[d] : ERR_PTR(-ENODEV);
 }
 
+/* number of consecutive polls where hw completion (RX_DMA_IDX) advances
+ * while the sw consumer (tail) doesn't, before declaring the ring stuck
+ */
+#define AIROHA_RX_STALL_THRESHOLD	3
+
+/* Detect an RX ring where hw's own completion pointer (RX_DMA_IDX) keeps
+ * moving while the sw consumer (q->tail) doesn't - i.e. hw has written
+ * further descriptors somewhere in the ring, but the strictly sequential
+ * consumer can never reach them because the one at q->head, which it is
+ * waiting on, was never marked DONE. This happens when hw writes a
+ * completed descriptor past q->head before airoha_qdma_fill_rx_queue()
+ * has posted a fresh buffer there, decoupled from sw's own posting
+ * bookkeeping.
+ *
+ * Deliberately does not inspect ring/descriptor memory content to detect
+ * this: an earlier version scanned ahead for a DONE descriptor and trusted
+ * its content, which caused a real OOM panic after it wandered into
+ * genuinely uninitialized DMA memory that coincidentally had the DONE bit
+ * set. RX_DMA_IDX is a hw register with a well-defined value regardless of
+ * ring content, so this can't misfire on garbage memory, and idle rings
+ * (no hw progress either) are naturally left alone.
+ */
+static void airoha_qdma_rx_check_stall(struct airoha_queue *q)
+{
+	struct airoha_qdma *qdma = q->qdma;
+	int qid = q - &qdma->q_rx[0];
+	u32 dma_idx = airoha_qdma_get(qdma, REG_RX_DMA_IDX(qid),
+				      RX_RING_DMA_IDX_MASK);
+
+	if (q->stall_tail == q->tail && dma_idx != q->stall_dma_idx) {
+		if (++q->stall_count >= AIROHA_RX_STALL_THRESHOLD &&
+		    !test_and_set_bit(qid, qdma->rx_recover_mask))
+			schedule_work(&qdma->rx_recover_work);
+	} else {
+		q->stall_count = 0;
+	}
+
+	q->stall_tail = q->tail;
+	q->stall_dma_idx = dma_idx;
+}
+
 static int airoha_qdma_rx_process(struct airoha_queue *q, int budget)
 {
 	enum dma_data_direction dir = page_pool_get_dma_dir(q->page_pool);
@@ -675,8 +718,10 @@ static int airoha_qdma_rx_process(struct airoha_queue *q, int budget)
 		struct page *page;
 
 		desc_ctrl = le32_to_cpu(READ_ONCE(desc->ctrl));
-		if (!(desc_ctrl & QDMA_DESC_DONE_MASK))
+		if (!(desc_ctrl & QDMA_DESC_DONE_MASK)) {
+			airoha_qdma_rx_check_stall(q);
 			break;
+		}
 
 		dma_rmb();
 
@@ -892,6 +937,75 @@ static void airoha_qdma_cleanup_rx_queue(struct airoha_queue *q)
 			FIELD_PREP(RX_RING_CPU_IDX_MASK, q->head));
 	airoha_qdma_rmw(qdma, REG_RX_DMA_IDX(qid), RX_RING_DMA_IDX_MASK,
 			FIELD_PREP(RX_RING_DMA_IDX_MASK, q->tail));
+}
+
+static void airoha_qdma_rx_recover_work(struct work_struct *work)
+{
+	struct airoha_qdma *qdma = container_of(work, struct airoha_qdma,
+						 rx_recover_work);
+	int qid;
+
+	for_each_set_bit(qid, qdma->rx_recover_mask, AIROHA_NUM_RX_RING) {
+		struct airoha_queue *q = &qdma->q_rx[qid];
+		ktime_t rx_dma_off_ts;
+		s64 rx_dma_off_us;
+		u32 status;
+
+		if (!q->ndesc)
+			goto next;
+
+		napi_disable(&q->napi);
+
+		/* GLOBAL_CFG_RX_DMA_EN_MASK is per-QDMA, not per-ring, so
+		 * this pauses every RX ring on this QDMA instance, not just
+		 * the stalled one - track how long for, since that's the
+		 * real-world cost of recovery on unrelated rings.
+		 */
+		rx_dma_off_ts = ktime_get();
+
+		airoha_qdma_clear(qdma, REG_QDMA_GLOBAL_CFG,
+				  GLOBAL_CFG_RX_DMA_EN_MASK);
+		if (read_poll_timeout(airoha_qdma_rr, status,
+				      !(status & GLOBAL_CFG_RX_DMA_BUSY_MASK),
+				      USEC_PER_MSEC, 50 * USEC_PER_MSEC, true,
+				      qdma, REG_QDMA_GLOBAL_CFG))
+			dev_warn(qdma->eth->dev,
+				 "qid=%d RX DMA busy timeout during recovery\n",
+				 qid);
+
+		/* Drop whatever is currently in flight on this ring and
+		 * re-arm it from a known-clean state. cleanup_rx_queue()
+		 * only ever touches the sw-owned [tail, head) window and
+		 * resyncs both RX_CPU_IDX and RX_DMA_IDX to it, which is
+		 * what un-wedges a ring where hw wrote past the sw head
+		 * without the consumer ever advancing - no need to figure
+		 * out which descriptor hw actually used.
+		 */
+		airoha_qdma_cleanup_rx_queue(q);
+		if (q->skb) {
+			/* discard whatever scatter-gather frame was
+			 * mid-assembly when the stall was hit, cleanup_rx_queue()
+			 * above only resyncs the ring, not this
+			 */
+			dev_kfree_skb(q->skb);
+			q->skb = NULL;
+		}
+		airoha_qdma_fill_rx_queue(q);
+
+		airoha_qdma_set(qdma, REG_QDMA_GLOBAL_CFG,
+				GLOBAL_CFG_RX_DMA_EN_MASK);
+		rx_dma_off_us = ktime_us_delta(ktime_get(), rx_dma_off_ts);
+
+		q->stall_count = 0;
+		napi_enable(&q->napi);
+		napi_schedule(&q->napi);
+
+		dev_warn_ratelimited(qdma->eth->dev,
+				     "qid=%d RX ring recovered after hw stall (RX DMA paused for %lld us on this QDMA instance)\n",
+				     qid, rx_dma_off_us);
+next:
+		clear_bit(qid, qdma->rx_recover_mask);
+	}
 }
 
 static int airoha_qdma_init_rx(struct airoha_qdma *qdma)
@@ -1594,6 +1708,8 @@ static void airoha_qdma_cleanup(struct airoha_eth *eth,
 {
 	int i;
 
+	cancel_work_sync(&qdma->rx_recover_work);
+
 	if (test_bit(DEV_STATE_INITIALIZED, &eth->state)) {
 		u32 status;
 
@@ -1651,6 +1767,15 @@ static int airoha_hw_init(struct platform_device *pdev,
 	if (err)
 		return err;
 
+	/* INIT_WORK() every instance up front, before any of them can fail
+	 * init and jump to the error path below, since that path tears down
+	 * every eth->qdma[] slot unconditionally, including ones this loop
+	 * never reached.
+	 */
+	for (i = 0; i < ARRAY_SIZE(eth->qdma); i++)
+		INIT_WORK(&eth->qdma[i].rx_recover_work,
+			  airoha_qdma_rx_recover_work);
+
 	for (i = 0; i < ARRAY_SIZE(eth->qdma); i++) {
 		err = airoha_qdma_init(pdev, eth, &eth->qdma[i]);
 		if (err)
@@ -1698,6 +1823,14 @@ static void airoha_qdma_start_napi(struct airoha_qdma *qdma)
 static void airoha_qdma_stop_napi(struct airoha_qdma *qdma)
 {
 	int i;
+
+	/* Make sure rx_recover_work is neither running nor able to re-arm
+	 * before any napi_disable() below: it also calls napi_disable()/
+	 * napi_enable() on q_rx[].napi, and napi_disable() on an
+	 * already-disabled NAPI spins in napi_disable_locked() forever,
+	 * since only napi_enable() clears the state it waits on.
+	 */
+	disable_work_sync(&qdma->rx_recover_work);
 
 	for (i = 0; i < ARRAY_SIZE(qdma->q_tx_irq); i++)
 		napi_disable(&qdma->q_tx_irq[i].napi);

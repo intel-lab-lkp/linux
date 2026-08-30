@@ -207,6 +207,15 @@ struct airoha_queue {
 	bool txq_stopped;
 	bool flushing;
 
+	/* RX hw stall detection: last REG_RX_DMA_IDX/tail snapshot taken
+	 * whenever the head-of-line descriptor isn't DONE, and how many
+	 * consecutive times hw made progress (DMA_IDX moved) while the
+	 * consumer (tail) didn't. See airoha_qdma_rx_check_stall().
+	 */
+	u32 stall_dma_idx;
+	u16 stall_tail;
+	u8 stall_count;
+
 	struct napi_struct napi;
 	struct page_pool *page_pool;
 	struct sk_buff *skb;
@@ -566,6 +575,13 @@ struct airoha_qdma {
 
 	struct airoha_queue q_tx[AIROHA_NUM_TX_RING];
 	struct airoha_queue q_rx[AIROHA_NUM_RX_RING];
+
+	/* recovery for RX rings whose hw completion pointer (RX_DMA_IDX)
+	 * keeps moving while the sw consumer is stuck; see
+	 * airoha_qdma_rx_check_stall() and airoha_qdma_rx_recover_work().
+	 */
+	struct work_struct rx_recover_work;
+	DECLARE_BITMAP(rx_recover_mask, AIROHA_NUM_RX_RING);
 
 	DECLARE_BITMAP(qos_channel_map, AIROHA_NUM_QOS_CHANNELS);
 };
