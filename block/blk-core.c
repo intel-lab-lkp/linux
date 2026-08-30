@@ -757,11 +757,8 @@ static void __submit_bio_noacct_mq(struct bio *bio)
 	current->bio_list = NULL;
 }
 
-void submit_bio_noacct_nocheck(struct bio *bio, bool split)
+void __submit_bio_noacct_nocheck(struct bio *bio, bool split)
 {
-	if (unlikely(blk_error_inject(bio)))
-		return;
-
 	blk_cgroup_bio_start(bio);
 
 	if (!bio_flagged(bio, BIO_TRACE_COMPLETION)) {
@@ -789,6 +786,14 @@ void submit_bio_noacct_nocheck(struct bio *bio, bool split)
 	} else {
 		__submit_bio_noacct(bio);
 	}
+}
+
+void submit_bio_noacct_nocheck(struct bio *bio, bool split)
+{
+	if (unlikely(blk_error_inject(bio)))
+		return;
+
+	__submit_bio_noacct_nocheck(bio, split);
 }
 
 static blk_status_t blk_validate_atomic_write_op_size(struct request_queue *q,
