@@ -82,6 +82,8 @@ static void appledisplay_complete(struct urb *urb)
 	switch (status) {
 	case 0:
 		/* success */
+		if (urb->actual_length < ACD_URB_BUFFER_LEN)
+			goto exit;
 		break;
 	case -EOVERFLOW:
 		dev_err(dev,
