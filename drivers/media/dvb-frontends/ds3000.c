@@ -374,6 +374,8 @@ static int ds3000_load_firmware(struct dvb_frontend *fe,
 	int ret = 0;
 
 	dprintk("%s\n", __func__);
+	if (fw->size < 2)
+		return -EINVAL;
 	dprintk("Firmware is %zu bytes (%02x %02x .. %02x %02x)\n",
 			fw->size,
 			fw->data[0],
