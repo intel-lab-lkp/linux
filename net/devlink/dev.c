@@ -1169,17 +1169,25 @@ int devlink_nl_flash_update_doit(struct sk_buff *skb, struct genl_info *info)
 
 	nla_file_name = info->attrs[DEVLINK_ATTR_FLASH_UPDATE_FILE_NAME];
 	file_name = nla_data(nla_file_name);
+	devl_unlock(devlink);
 	ret = request_firmware(&params.fw, file_name, devlink->dev);
+	devl_lock(devlink);
 	if (ret) {
 		NL_SET_ERR_MSG_ATTR(info->extack, nla_file_name,
 				    "failed to locate the requested firmware file");
 		return ret;
+	}
+	/* The device may have been unregistered while the lock was dropped. */
+	if (!devl_is_registered(devlink)) {
+		ret = -ENODEV;
+		goto out_release;
 	}
 
 	devlink_flash_update_begin_notify(devlink);
 	ret = devlink->ops->flash_update(devlink, &params, info->extack);
 	devlink_flash_update_end_notify(devlink);
 
+out_release:
 	release_firmware(params.fw);
 
 	return ret;
@@ -1244,15 +1252,24 @@ int devlink_compat_flash_update(struct devlink *devlink, const char *file_name)
 		ret = -EOPNOTSUPP;
 		goto out_unlock;
 	}
+	devl_unlock(devlink);
 
 	ret = request_firmware(&params.fw, file_name, devlink->dev);
+	devl_lock(devlink);
 	if (ret)
 		goto out_unlock;
+
+	/* The device may have been unregistered while the lock was dropped. */
+	if (!devl_is_registered(devlink)) {
+		ret = -ENODEV;
+		goto out_release;
+	}
 
 	devlink_flash_update_begin_notify(devlink);
 	ret = devlink->ops->flash_update(devlink, &params, NULL);
 	devlink_flash_update_end_notify(devlink);
 
+out_release:
 	release_firmware(params.fw);
 out_unlock:
 	devl_unlock(devlink);
