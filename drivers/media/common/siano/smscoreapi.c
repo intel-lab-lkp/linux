@@ -909,12 +909,23 @@ static int smscore_load_firmware_family2(struct smscore_device_t *coredev,
 {
 	struct sms_firmware *firmware = (struct sms_firmware *) buffer;
 	struct sms_msg_data5 *msg;
+	size_t payload_size;
 	u32 mem_address,  calc_checksum = 0;
 	u32 i, *ptr;
-	u8 *payload = firmware->payload;
+	u8 *payload;
 	int rc = 0;
+
+	if (size < sizeof(*firmware))
+		return -EINVAL;
+
 	firmware->start_address = le32_to_cpup((__le32 *)&firmware->start_address);
 	firmware->length = le32_to_cpup((__le32 *)&firmware->length);
+	payload_size = size - sizeof(*firmware);
+	if (firmware->length > payload_size)
+		return -EINVAL;
+
+	payload = firmware->payload;
+	size = firmware->length;
 
 	mem_address = firmware->start_address;
 
@@ -932,6 +943,11 @@ static int smscore_load_firmware_family2(struct smscore_device_t *coredev,
 		return -ENOMEM;
 
 	if (coredev->mode != DEVICE_MODE_NONE) {
+		if (size < 24) {
+			rc = -EINVAL;
+			goto exit_fw_download;
+		}
+
 		pr_debug("sending reload command.\n");
 		SMS_INIT_MSG(&msg->x_msg_header, MSG_SW_RELOAD_START_REQ,
 			     sizeof(struct sms_msg_hdr));
