@@ -736,6 +736,26 @@ static int dw_pcie_ep_get_msix(struct pci_epc *epc, u8 func_no, u8 vfunc_no)
 	return val + 1;
 }
 
+static bool
+dw_pcie_ep_msix_layout_is_hw_owned(struct dw_pcie_ep *ep,
+				   const struct pci_epc_msix_layout *layout)
+{
+	const struct pci_epc_features *features;
+	struct pci_epc_msix_layout hw_layout;
+
+	if (!ep->ops->get_features)
+		return false;
+
+	features = ep->ops->get_features(ep);
+	if (pci_epc_get_hw_msix_layout(features, &hw_layout))
+		return false;
+
+	return layout->table_bar == hw_layout.table_bar &&
+	       layout->table_offset == hw_layout.table_offset &&
+	       layout->pba_bar == hw_layout.pba_bar &&
+	       layout->pba_offset == hw_layout.pba_offset;
+}
+
 static int dw_pcie_ep_set_msix(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 			       u16 nr_irqs,
 			       const struct pci_epc_msix_layout *layout)
@@ -764,6 +784,7 @@ static int dw_pcie_ep_set_msix(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	reg = ep_func->msix_cap + PCI_MSIX_PBA;
 	val = layout->pba_offset | layout->pba_bar;
 	dw_pcie_ep_writel_dbi(ep, func_no, reg, val);
+	ep_func->msix_hw_owned = dw_pcie_ep_msix_layout_is_hw_owned(ep, layout);
 
 	dw_pcie_dbi_ro_wr_dis(pci);
 
@@ -1109,6 +1130,8 @@ int dw_pcie_ep_raise_msix_irq(struct dw_pcie_ep *ep, u8 func_no,
 	ep_func = dw_pcie_ep_get_func_from_ep(ep, func_no);
 	if (!ep_func || !ep_func->msix_cap)
 		return -EINVAL;
+	if (ep_func->msix_hw_owned)
+		return -EOPNOTSUPP;
 
 	reg = ep_func->msix_cap + PCI_MSIX_TABLE;
 	tbl_offset = dw_pcie_ep_readl_dbi(ep, func_no, reg);

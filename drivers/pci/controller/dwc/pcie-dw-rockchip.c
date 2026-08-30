@@ -120,6 +120,7 @@ struct rockchip_pcie {
 struct rockchip_pcie_of_data {
 	enum dw_pcie_device_mode mode;
 	const struct pci_epc_features *epc_features;
+	bool msix_doorbell;
 };
 
 static int rockchip_pcie_readl_apb(struct rockchip_pcie *rockchip, u32 reg)
@@ -481,6 +482,8 @@ static int rockchip_pcie_raise_irq(struct dw_pcie_ep *ep, u8 func_no,
 				   unsigned int type, u16 interrupt_num)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
+	struct rockchip_pcie *rockchip = to_rockchip_pcie(pci);
+	struct dw_pcie_ep_func *ep_func;
 
 	switch (type) {
 	case PCI_IRQ_INTX:
@@ -488,6 +491,12 @@ static int rockchip_pcie_raise_irq(struct dw_pcie_ep *ep, u8 func_no,
 	case PCI_IRQ_MSI:
 		return dw_pcie_ep_raise_msi_irq(ep, func_no, interrupt_num);
 	case PCI_IRQ_MSIX:
+		ep_func = dw_pcie_ep_get_func_from_ep(ep, func_no);
+		if (rockchip->data->msix_doorbell && ep_func &&
+		    ep_func->msix_hw_owned)
+			return dw_pcie_ep_raise_msix_irq_doorbell(ep, func_no,
+							      interrupt_num);
+
 		return dw_pcie_ep_raise_msix_irq(ep, func_no, interrupt_num);
 	default:
 		dev_err(pci->dev, "UNKNOWN IRQ type\n");
@@ -517,12 +526,24 @@ static const struct pci_epc_bar_rsvd_region rk3588_bar4_rsvd[] = {
 		.offset = 0x0,
 		.size = 0x2000,
 	},
+	{
+		/* MSI-X Table (BAR4: MSI-X Table) */
+		.type = PCI_EPC_BAR_RSVD_MSIX_TBL_RAM,
+		.offset = 0x4000,
+		.size = SZ_4K,
+	},
+	{
+		/* MSI-X PBA (BAR4: MSI-X PBA) */
+		.type = PCI_EPC_BAR_RSVD_MSIX_PBA_RAM,
+		.offset = 0x5000,
+		.size = SZ_4K,
+	},
 };
 
 /*
- * BAR4 on rk3588 exposes the ATU Port Logic Structure to the host regardless of
- * iATU settings for BAR4. This means that BAR4 cannot be used by an EPF driver,
- * so mark it as RESERVED.
+ * BAR4 on RK3588 exposes the DMA and ATU Port Logic Structures and the MSI-X
+ * table and PBA to the host regardless of iATU settings for BAR4. This means
+ * that BAR4 cannot be used by an EPF driver, so mark it as RESERVED.
  */
 static const struct pci_epc_features rockchip_pcie_epc_features_rk3588 = {
 	DWC_EPC_COMMON_FEATURES,
@@ -841,6 +862,7 @@ static const struct rockchip_pcie_of_data rockchip_pcie_ep_of_data_rk3568 = {
 static const struct rockchip_pcie_of_data rockchip_pcie_ep_of_data_rk3588 = {
 	.mode = DW_PCIE_EP_TYPE,
 	.epc_features = &rockchip_pcie_epc_features_rk3588,
+	.msix_doorbell = true,
 };
 
 static const struct of_device_id rockchip_pcie_of_match[] = {
