@@ -536,6 +536,30 @@ static size_t kvaser_usb_hydra_cmd_size(struct kvaser_cmd *cmd)
 	return ret;
 }
 
+static int kvaser_usb_hydra_cmd_len(const void *buf, size_t len,
+				    size_t *cmd_len)
+{
+	const struct kvaser_cmd *cmd = buf;
+
+	if (len < sizeof(cmd->header))
+		return -EMSGSIZE;
+
+	if (cmd->header.cmd_no != CMD_EXTENDED) {
+		*cmd_len = sizeof(*cmd);
+		return 0;
+	}
+
+	if (len < offsetofend(struct kvaser_cmd_ext, len))
+		return -EMSGSIZE;
+
+	*cmd_len = le16_to_cpu(((const struct kvaser_cmd_ext *)cmd)->len);
+	if (*cmd_len < offsetofend(struct kvaser_cmd_ext, cmd_no_ext) ||
+	    *cmd_len > KVASER_USB_HYDRA_MAX_CMD_LEN)
+		return -EINVAL;
+
+	return 0;
+}
+
 static struct kvaser_usb_net_priv *
 kvaser_usb_hydra_net_priv_from_cmd(const struct kvaser_usb *dev,
 				   const struct kvaser_cmd *cmd)
@@ -675,8 +699,10 @@ static int kvaser_usb_hydra_wait_cmd(const struct kvaser_usb *dev, u8 cmd_no,
 			size_t cmd_len;
 
 			tmp_cmd = buf + pos;
-			cmd_len = kvaser_usb_hydra_cmd_size(tmp_cmd);
-			if (pos + cmd_len > actual_len) {
+			err = kvaser_usb_hydra_cmd_len(tmp_cmd, actual_len - pos,
+						       &cmd_len);
+			if (err || cmd_len > actual_len - pos ||
+			    cmd_len > sizeof(*cmd)) {
 				dev_err_ratelimited(&dev->intf->dev,
 						    "Format error\n");
 				break;
@@ -2121,12 +2147,44 @@ static void kvaser_usb_hydra_read_bulk_callback(struct kvaser_usb *dev,
 	usb_rx_leftover_len = card_data->usb_rx_leftover_len;
 	if (usb_rx_leftover_len) {
 		int remaining_bytes;
+		int err;
+		size_t needed;
 
 		cmd = (struct kvaser_cmd *)card_data->usb_rx_leftover;
 
-		cmd_len = kvaser_usb_hydra_cmd_size(cmd);
+		while (true) {
+			err = kvaser_usb_hydra_cmd_len(cmd, usb_rx_leftover_len,
+						       &cmd_len);
+			if (err != -EMSGSIZE)
+				break;
 
-		remaining_bytes = min_t(unsigned int, len,
+			needed = sizeof(cmd->header);
+			if (usb_rx_leftover_len >= needed &&
+			    cmd->header.cmd_no == CMD_EXTENDED)
+				needed = offsetofend(struct kvaser_cmd_ext, len);
+
+			remaining_bytes = min_t(unsigned int, len - pos,
+						needed - usb_rx_leftover_len);
+			memcpy(card_data->usb_rx_leftover + usb_rx_leftover_len,
+			       buf + pos, remaining_bytes);
+			usb_rx_leftover_len += remaining_bytes;
+			pos += remaining_bytes;
+
+			if (remaining_bytes == 0) {
+				card_data->usb_rx_leftover_len = usb_rx_leftover_len;
+				spin_unlock_irqrestore(usb_rx_leftover_lock, irq_flags);
+				return;
+			}
+		}
+
+		if (err) {
+			dev_err(&dev->intf->dev, "Format error\n");
+			card_data->usb_rx_leftover_len = 0;
+			spin_unlock_irqrestore(usb_rx_leftover_lock, irq_flags);
+			return;
+		}
+
+		remaining_bytes = min_t(unsigned int, len - pos,
 					cmd_len - usb_rx_leftover_len);
 		/* Make sure we do not overflow usb_rx_leftover */
 		if (remaining_bytes + usb_rx_leftover_len >
@@ -2152,11 +2210,17 @@ static void kvaser_usb_hydra_read_bulk_callback(struct kvaser_usb *dev,
 	spin_unlock_irqrestore(usb_rx_leftover_lock, irq_flags);
 
 	while (pos < len) {
+		int err;
+
 		cmd = buf + pos;
 
-		cmd_len = kvaser_usb_hydra_cmd_size(cmd);
+		err = kvaser_usb_hydra_cmd_len(cmd, len - pos, &cmd_len);
+		if (err == -EINVAL) {
+			dev_err(&dev->intf->dev, "Format error\n");
+			return;
+		}
 
-		if (pos + cmd_len > len) {
+		if (err == -EMSGSIZE || cmd_len > len - pos) {
 			/* We got first part of a command */
 			int leftover_bytes;
 
