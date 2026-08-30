@@ -13,6 +13,10 @@
  * You may select, at your option, one of the above-listed licenses.
 ****************************************************************** */
 
+#if defined(ZSTD_USE_KERNEL_CPU_FEATURES)
+#include <asm/cpufeature.h>
+#endif
+
 /* **************************************************************
 *  Compiler specifics
 ****************************************************************/
@@ -1138,9 +1142,10 @@ HUF_compress1X_usingCTable_internal(void* dst, size_t dstSize,
                               const void* src, size_t srcSize,
                               const HUF_CElt* CTable, const int flags)
 {
-    if (flags & HUF_flags_bmi2) {
+    if (ZSTD_USE_BMI2(flags & HUF_flags_bmi2)) {
         return HUF_compress1X_usingCTable_internal_bmi2(dst, dstSize, src, srcSize, CTable);
     }
+    (void)flags;
     return HUF_compress1X_usingCTable_internal_default(dst, dstSize, src, srcSize, CTable);
 }
 

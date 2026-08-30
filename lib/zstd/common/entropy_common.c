@@ -13,6 +13,10 @@
  * You may select, at your option, one of the above-listed licenses.
 ****************************************************************** */
 
+#if defined(ZSTD_USE_KERNEL_CPU_FEATURES)
+#include <asm/cpufeature.h>
+#endif
+
 /* *************************************
 *  Dependencies
 ***************************************/
@@ -210,11 +214,9 @@ size_t FSE_readNCount_bmi2(
         short* normalizedCounter, unsigned* maxSVPtr, unsigned* tableLogPtr,
         const void* headerBuffer, size_t hbSize, int bmi2)
 {
-#if DYNAMIC_BMI2
-    if (bmi2) {
+    if (ZSTD_USE_BMI2(bmi2)) {
         return FSE_readNCount_body_bmi2(normalizedCounter, maxSVPtr, tableLogPtr, headerBuffer, hbSize);
     }
-#endif
     (void)bmi2;
     return FSE_readNCount_body_default(normalizedCounter, maxSVPtr, tableLogPtr, headerBuffer, hbSize);
 }
@@ -335,11 +337,9 @@ size_t HUF_readStats_wksp(BYTE* huffWeight, size_t hwSize, U32* rankStats,
                      void* workSpace, size_t wkspSize,
                      int flags)
 {
-#if DYNAMIC_BMI2
-    if (flags & HUF_flags_bmi2) {
+    if (ZSTD_USE_BMI2(flags & HUF_flags_bmi2)) {
         return HUF_readStats_body_bmi2(huffWeight, hwSize, rankStats, nbSymbolsPtr, tableLogPtr, src, srcSize, workSpace, wkspSize);
     }
-#endif
     (void)flags;
     return HUF_readStats_body_default(huffWeight, hwSize, rankStats, nbSymbolsPtr, tableLogPtr, src, srcSize, workSpace, wkspSize);
 }

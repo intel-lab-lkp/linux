@@ -204,7 +204,7 @@ struct ZSTD_DCtx_s
 };  /* typedef'd to ZSTD_DCtx within "zstd.h" */
 
 MEM_STATIC int ZSTD_DCtx_get_bmi2(const struct ZSTD_DCtx_s *dctx) {
-#if DYNAMIC_BMI2
+#if DYNAMIC_BMI2 && !defined(ZSTD_USE_KERNEL_CPU_FEATURES)
     return dctx->bmi2;
 #else
     (void)dctx;
