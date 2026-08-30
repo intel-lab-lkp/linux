@@ -713,7 +713,7 @@ static struct sk_buff *e1000_build_rx_skb(const struct libeth_fqe *fqe,
 
 static void e1000_put_txbuf(struct e1000_ring *tx_ring,
 			    struct e1000_buffer *buffer_info,
-			    bool drop)
+			    bool drop, int budget)
 {
 	struct e1000_adapter *adapter = tx_ring->adapter;
 
@@ -730,7 +730,7 @@ static void e1000_put_txbuf(struct e1000_ring *tx_ring,
 		if (drop)
 			dev_kfree_skb_any(buffer_info->skb);
 		else
-			dev_consume_skb_any(buffer_info->skb);
+			napi_consume_skb(buffer_info->skb, budget);
 		buffer_info->skb = NULL;
 	}
 	buffer_info->time_stamp = 0;
@@ -860,11 +860,12 @@ static void e1000e_tx_hwtstamp_work(struct work_struct *work)
 /**
  * e1000_clean_tx_irq - Reclaim resources after transmit completes
  * @tx_ring: Tx descriptor ring
+ * @napi_budget: NAPI polling budget, or 0 when called outside NAPI context
  *
  * the return value indicates whether actual cleaning was done, there
  * is no guarantee that everything was cleaned
  **/
-static bool e1000_clean_tx_irq(struct e1000_ring *tx_ring)
+static bool e1000_clean_tx_irq(struct e1000_ring *tx_ring, int napi_budget)
 {
 	struct e1000_adapter *adapter = tx_ring->adapter;
 	struct net_device *netdev = adapter->netdev;
@@ -899,7 +900,8 @@ static bool e1000_clean_tx_irq(struct e1000_ring *tx_ring)
 				}
 			}
 
-			e1000_put_txbuf(tx_ring, buffer_info, false);
+			e1000_put_txbuf(tx_ring, buffer_info, false,
+					napi_budget);
 			tx_desc->upper.data = 0;
 
 			i++;
@@ -1340,7 +1342,7 @@ static irqreturn_t e1000_intr_msix_tx(int __always_unused irq, void *data)
 	adapter->total_tx_bytes = 0;
 	adapter->total_tx_packets = 0;
 
-	if (!e1000_clean_tx_irq(tx_ring))
+	if (!e1000_clean_tx_irq(tx_ring, 0))
 		/* Ring was not completely cleaned, so fire another interrupt */
 		ew32(ICS, tx_ring->ims_val);
 
@@ -1816,7 +1818,7 @@ static void e1000_clean_tx_ring(struct e1000_ring *tx_ring)
 
 	for (i = 0; i < tx_ring->count; i++) {
 		buffer_info = &tx_ring->buffer_info[i];
-		e1000_put_txbuf(tx_ring, buffer_info, false);
+		e1000_put_txbuf(tx_ring, buffer_info, false, 0);
 	}
 
 	netdev_reset_queue(adapter->netdev);
@@ -2060,7 +2062,7 @@ static int e1000e_poll(struct napi_struct *napi, int budget)
 
 	if (!adapter->msix_entries ||
 	    (adapter->rx_ring->ims_val & adapter->tx_ring->ims_val))
-		tx_cleaned = e1000_clean_tx_irq(adapter->tx_ring);
+		tx_cleaned = e1000_clean_tx_irq(adapter->tx_ring, budget);
 
 	e1000_clean_rx_irq(adapter->rx_ring, &work_done, budget);
 
@@ -5019,7 +5021,7 @@ dma_error:
 			i += tx_ring->count;
 		i--;
 		buffer_info = &tx_ring->buffer_info[i];
-		e1000_put_txbuf(tx_ring, buffer_info, true);
+		e1000_put_txbuf(tx_ring, buffer_info, true, 0);
 	}
 
 	return 0;
