@@ -1419,6 +1419,8 @@ static ssize_t calibrate_config_store(struct device *dev,
 	ret = sysfs_match_string(cal_enabled_text, buf);
 	if (ret < 0)
 		return ret;
+	if (ret == CAL_UNKNOWN)
+		return -EINVAL;
 
 	val = ret;
 	if (!val)
