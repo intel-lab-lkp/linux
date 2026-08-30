@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/thunderbolt/apple,t8103-usb4-nhi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Apple Silicon USB4/Thunderbolt Native Host Interface (NHI)
+
+maintainers:
+  - Sven Peter <sven@kernel.org>
+
+description: |
+  On Apple Silicon SoCs the Native Host Interface (NHI) is part of the ACIO
+  host router. It provides the transmit and receive rings used by the software
+  connection manager.
+
+  The ACIO co-processor exposes its registers to the main SoC bus while it is
+  running. The NHI is therefore represented as a child of the ACIO node.
+
+properties:
+  compatible:
+    oneOf:
+      - const: apple,t8103-usb4-nhi
+      - items:
+          - enum:
+              - apple,t6000-usb4-nhi
+              - apple,t6020-usb4-nhi
+              - apple,t6030-usb4-nhi
+              - apple,t6031-usb4-nhi
+              - apple,t8112-usb4-nhi
+              - apple,t8122-usb4-nhi
+          - const: apple,t8103-usb4-nhi
+
+  reg:
+    items:
+      - description: NHI registers with the transmit and receive rings
+      - description:
+          Protocol Defined Field (PDF) bitmasks selecting which frames are
+          accepted by each receive ring
+
+  reg-names:
+    items:
+      - const: nhi
+      - const: pdf
+
+  interrupts:
+    description:
+      One interrupt for each of the 12 transmit rings followed by one for each
+      of the 12 receive rings.
+    maxItems: 24
+
+  interrupt-names:
+    items:
+      - const: txring0
+      - const: txring1
+      - const: txring2
+      - const: txring3
+      - const: txring4
+      - const: txring5
+      - const: txring6
+      - const: txring7
+      - const: txring8
+      - const: txring9
+      - const: txring10
+      - const: txring11
+      - const: rxring0
+      - const: rxring1
+      - const: rxring2
+      - const: rxring3
+      - const: rxring4
+      - const: rxring5
+      - const: rxring6
+      - const: rxring7
+      - const: rxring8
+      - const: rxring9
+      - const: rxring10
+      - const: rxring11
+
+  iommus:
+    minItems: 1
+    maxItems: 24
+    description: |
+      T8103 and T8112 use a single IOMMU for all DMA transactions.
+
+      T6000 and T6020 use two IOMMUs: The first is used for transmit ring 0
+      and receive ring 0 which carry control traffic. The second is shared by
+      all other rings which are only used for XDomain connections to other
+      hosts.
+
+      T6030, T6031 and T8122 use 24 IOMMUs. These are most likely one DART
+      stream for each of the 12 transmit and 12 receive rings.
+
+  apple,thunderbolt-drom:
+    $ref: /schemas/types.yaml#/definitions/uint8-array
+    description:
+      DROM of the host router built by the bootloader from Apple's Device Tree.
+
+  apple,tunable-nhi:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    items:
+      items:
+        - description: Register offset
+        - description: Mask of bits to clear
+        - description: Bits to set
+    description: |
+      List of (register offset, mask, value) tuples copied from Apple's Device
+      Tree, converted by the bootloader and used to configure the NHI after
+      the co-processor has booted.
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - interrupts
+  - interrupt-names
+  - iommus
+  - apple,thunderbolt-drom
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - apple,t6030-usb4-nhi
+              - apple,t6031-usb4-nhi
+              - apple,t8122-usb4-nhi
+    then:
+      properties:
+        iommus:
+          minItems: 24
+          maxItems: 24
+    else:
+      if:
+        properties:
+          compatible:
+            contains:
+              enum:
+                - apple,t6000-usb4-nhi
+                - apple,t6020-usb4-nhi
+      then:
+        properties:
+          iommus:
+            minItems: 2
+            maxItems: 2
+      else:
+        properties:
+          iommus:
+            maxItems: 1
+
+additionalProperties: false
