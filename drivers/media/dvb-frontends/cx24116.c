@@ -556,6 +556,8 @@ static int cx24116_load_firmware(struct dvb_frontend *fe,
 	unsigned char vers[4];
 
 	dprintk("%s\n", __func__);
+	if (fw->size < 2)
+		return -EINVAL;
 	dprintk("Firmware is %zu bytes (%02x %02x .. %02x %02x)\n",
 			fw->size,
 			fw->data[0],
@@ -1494,4 +1496,3 @@ static const struct dvb_frontend_ops cx24116_ops = {
 MODULE_DESCRIPTION("DVB Frontend module for Conexant cx24116/cx24118 hardware");
 MODULE_AUTHOR("Steven Toth");
 MODULE_LICENSE("GPL");
-
