@@ -244,6 +244,7 @@ static int pcan_usb_pro_wait_rsp(struct peak_usb_device *dev,
 	for (i = 0; !err && i < PCAN_USBPRO_RSP_SUBMIT_MAX; i++) {
 		struct pcan_usb_pro_msg rsp;
 		union pcan_usb_pro_rec *pr;
+		u8 *msg_end;
 		u32 r, rec_cnt;
 		u16 rec_len;
 		u8 *pc;
@@ -270,11 +271,18 @@ static int pcan_usb_pro_wait_rsp(struct peak_usb_device *dev,
 
 		pc = pcan_msg_init(&rsp, pum->u.rec_buffer,
 			actual_length);
+		msg_end = pum->u.rec_buffer + actual_length;
 
 		rec_cnt = le32_to_cpu(*rsp.u.rec_cnt);
 
 		/* loop on records stored into message */
 		for (r = 0; r < rec_cnt; r++) {
+			if (pc >= msg_end) {
+				netdev_err(dev->netdev,
+					   "record header exceeds response\n");
+				break;
+			}
+
 			pr = (union pcan_usb_pro_rec *)pc;
 			rec_len = pcan_usb_pro_sizeof_rec[pr->data_type];
 			if (!rec_len) {
@@ -282,6 +290,11 @@ static int pcan_usb_pro_wait_rsp(struct peak_usb_device *dev,
 					   "got unprocessed record in msg\n");
 				pcan_dump_mem("rcvd rsp msg", pum->u.rec_buffer,
 					      actual_length);
+				break;
+			}
+			if (rec_len > msg_end - pc) {
+				netdev_err(dev->netdev,
+					   "record exceeds response\n");
 				break;
 			}
 
@@ -727,7 +740,14 @@ static int pcan_usb_pro_decode_buf(struct peak_usb_device *dev, struct urb *urb)
 	msg_end = urb->transfer_buffer + urb->actual_length;
 	rec_cnt = le16_to_cpu(*usb_msg.u.rec_cnt_rd);
 	for (; rec_cnt > 0; rec_cnt--) {
-		union pcan_usb_pro_rec *pr = (union pcan_usb_pro_rec *)rec_ptr;
+		union pcan_usb_pro_rec *pr;
+
+		if (rec_ptr >= msg_end) {
+			err = -EBADMSG;
+			break;
+		}
+
+		pr = (union pcan_usb_pro_rec *)rec_ptr;
 		u16 sizeof_rec = pcan_usb_pro_sizeof_rec[pr->data_type];
 
 		if (!sizeof_rec) {
