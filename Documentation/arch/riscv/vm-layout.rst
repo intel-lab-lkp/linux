@@ -16,7 +16,33 @@ RISC-V Linux Kernel 32bit
 RISC-V Linux Kernel SV32
 ------------------------
 
-TODO
+Sv32 provides a 4GB virtual address space, with the upper part used by the
+kernel. Unlike the 64-bit layouts, the kernel image is part of the direct
+mapping. The following layout is produced by ``rv32_defconfig``.
+
+::
+
+  ========================================================================================================================
+      Start addr    |   Offset   |     End addr     |  Size   | VM area description
+  ========================================================================================================================
+                    |            |                  |         |
+           00000000 |    0       |         9c7fffff | 2504 MB | user-space virtual memory, different per mm
+  __________________|____________|__________________|_________|___________________________________________________________
+                                                              |
+                                                              | Kernel-space virtual memory, shared between all processes:
+  ____________________________________________________________|___________________________________________________________
+                    |            |                  |         |
+           9c800000 | -1592   MB |         9cffffff |    8 MB | fixmap
+           9d000000 | -1584   MB |         9dffffff |   16 MB | PCI io
+           9e000000 | -1568   MB |         9fffffff |   32 MB | vmemmap-sized reserved area
+           a0000000 |   -1.5  GB |         bfffffff |  512 MB | vmalloc/ioremap/modules; BPF JIT uses the last 128 MB
+           c0000000 |   -1    GB |         ffffffff |    1 GB | direct mapping of physical memory
+  __________________|____________|__________________|_________|___________________________________________________________
+
+The layout before ``VMALLOC_START`` depends on the configured size of
+``struct page``. The direct mapping row shows its maximum range; usable RAM is
+limited by its mapped portion and the 32-bit ``phys_addr_t``, despite the
+34-bit physical addresses encoded by Sv32 page table entries.
 
 RISC-V Linux Kernel 64bit
 =========================
