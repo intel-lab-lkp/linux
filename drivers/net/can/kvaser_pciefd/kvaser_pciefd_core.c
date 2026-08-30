@@ -1552,6 +1552,7 @@ static int kvaser_pciefd_read_packet(struct kvaser_pciefd *pcie, int *start_pos,
 				     int dma_buf)
 {
 	__le32 *buffer = pcie->dma_data[dma_buf];
+	const int buffer_words = KVASER_PCIEFD_DMA_SIZE / sizeof(*buffer);
 	__le64 timestamp;
 	struct kvaser_pciefd_rx_packet packet;
 	struct kvaser_pciefd_rx_packet *p = &packet;
@@ -1560,11 +1561,16 @@ static int kvaser_pciefd_read_packet(struct kvaser_pciefd *pcie, int *start_pos,
 	int size;
 	int ret = 0;
 
+	if (*start_pos < 0 || *start_pos >= buffer_words)
+		return -EIO;
+
 	size = le32_to_cpu(buffer[pos++]);
 	if (!size) {
 		*start_pos = 0;
 		return 0;
 	}
+	if (size < 5 || size > buffer_words - *start_pos)
+		return -EIO;
 
 	p->header[0] = le32_to_cpu(buffer[pos++]);
 	p->header[1] = le32_to_cpu(buffer[pos++]);
@@ -1577,13 +1583,22 @@ static int kvaser_pciefd_read_packet(struct kvaser_pciefd *pcie, int *start_pos,
 	type = FIELD_GET(KVASER_PCIEFD_PACKET_TYPE_MASK, p->header[1]);
 	switch (type) {
 	case KVASER_PCIEFD_PACK_TYPE_DATA:
+		if (!(p->header[0] & KVASER_PCIEFD_RPACKET_RTR)) {
+			u8 data_len, data_words;
+
+			data_len = can_fd_dlc2len(FIELD_GET(KVASER_PCIEFD_RPACKET_DLC_MASK,
+							    p->header[1]));
+			data_words = DIV_ROUND_UP(data_len, sizeof(*buffer));
+			if (data_words > *start_pos + size - pos)
+				return -EIO;
+		}
 		ret = kvaser_pciefd_handle_data_packet(pcie, p, &buffer[pos]);
 		if (!(p->header[0] & KVASER_PCIEFD_RPACKET_RTR)) {
 			u8 data_len;
 
 			data_len = can_fd_dlc2len(FIELD_GET(KVASER_PCIEFD_RPACKET_DLC_MASK,
 							    p->header[1]));
-			pos += DIV_ROUND_UP(data_len, 4);
+			pos += DIV_ROUND_UP(data_len, sizeof(*buffer));
 		}
 		break;
 
@@ -1640,7 +1655,8 @@ static int kvaser_pciefd_read_buffer(struct kvaser_pciefd *pcie, int dma_buf)
 
 	do {
 		res = kvaser_pciefd_read_packet(pcie, &pos, dma_buf);
-	} while (!res && pos > 0 && pos < KVASER_PCIEFD_DMA_SIZE);
+	} while (!res && pos > 0 &&
+		 pos < KVASER_PCIEFD_DMA_SIZE / sizeof(__le32));
 
 	/* Report ACKs in this buffer to BQL en masse for correct periods */
 	for (i = 0; i < pcie->nr_channels; ++i) {
