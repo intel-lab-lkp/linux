@@ -455,12 +455,19 @@ static int es8375_set_bias_level(struct snd_soc_component *component,
 			dev_err(component->dev, "unable to prepare mclk\n");
 			return  ret;
 		}
-		regmap_write(es8375->regmap, ES8375_CSM1, 0xA6);
+		ret = regmap_write(es8375->regmap, ES8375_CSM1, 0xA6);
+		if (ret) {
+			clk_disable_unprepare(es8375->mclk);
+			return ret;
+		}
 		break;
 	case SND_SOC_BIAS_PREPARE:
 		break;
 	case SND_SOC_BIAS_STANDBY:
-		regmap_write(es8375->regmap, ES8375_CSM1, 0x96);
+		ret = regmap_write(es8375->regmap, ES8375_CSM1, 0x96);
+		if (ret)
+			return ret;
+
 		clk_disable_unprepare(es8375->mclk);
 		break;
 	case SND_SOC_BIAS_OFF:
@@ -521,46 +528,56 @@ static struct snd_soc_dai_driver es8375_dai = {
 	.symmetric_rate = 1,
 };
 
-static void es8375_init(struct snd_soc_component *component)
+static const struct reg_sequence es8375_init_sequence[] = {
+	{ ES8375_CLK_MGR10, 0x95 },
+	{ ES8375_CLK_MGR3, 0x48 },
+	{ ES8375_DIV_SPKCLK, 0x18 },
+	{ ES8375_CLK_MGR4, 0x02 },
+	{ ES8375_CLK_MGR5, 0x05 },
+	{ ES8375_CSM1, 0x82 },
+	{ ES8375_VMID_CHARGE2, 0x20 },
+	{ ES8375_VMID_CHARGE3, 0x20 },
+	{ ES8375_DAC_CAL, 0x28 },
+	{ ES8375_ANALOG_SPK1, 0xFC },
+	{ ES8375_ANALOG_SPK2, 0xE0 },
+	{ ES8375_VMID_SEL, 0xFE },
+	{ ES8375_ANALOG1, 0xB8 },
+	{ ES8375_SYS_CTRL2, 0x03 },
+	{ ES8375_CLK_MGR2, 0x16 },
+	{ ES8375_RESET1, 0x00, 80000 },
+	{ ES8375_CLK_MGR3, 0x00 },
+	{ ES8375_CSM1, 0x86 },
+	{ ES8375_CLK_MGR4, 0x0B },
+	{ ES8375_CLK_MGR5, 0x00 },
+	{ ES8375_CLK_MGR6, 0x31 },
+	{ ES8375_CLK_MGR7, 0x11 },
+	{ ES8375_CLK_MGR8, 0x1F },
+	{ ES8375_CLK_MGR9, 0x00 },
+	{ ES8375_ADC_OSR_GAIN, 0x1F },
+	{ ES8375_ADC2, 0x00 },
+	{ ES8375_DAC2, 0x00 },
+	{ ES8375_DAC_OTP, 0x88 },
+	{ ES8375_ANALOG_SPK2, 0xE7 },
+	{ ES8375_ANALOG2, 0xF0 },
+	{ ES8375_ANALOG3, 0x40 },
+	{ ES8375_CLK_MGR2, 0xFE },
+};
+
+static int es8375_init(struct snd_soc_component *component)
 {
 	struct es8375_priv *es8375 = snd_soc_component_get_drvdata(component);
+	int ret;
 
-	regmap_write(es8375->regmap, ES8375_CLK_MGR10, 0x95);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR3, 0x48);
-	regmap_write(es8375->regmap, ES8375_DIV_SPKCLK, 0x18);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR4, 0x02);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR5, 0x05);
-	regmap_write(es8375->regmap, ES8375_CSM1, 0x82);
-	regmap_write(es8375->regmap, ES8375_VMID_CHARGE2, 0x20);
-	regmap_write(es8375->regmap, ES8375_VMID_CHARGE3, 0x20);
-	regmap_write(es8375->regmap, ES8375_DAC_CAL, 0x28);
-	regmap_write(es8375->regmap, ES8375_ANALOG_SPK1, 0xFC);
-	regmap_write(es8375->regmap, ES8375_ANALOG_SPK2, 0xE0);
-	regmap_write(es8375->regmap, ES8375_VMID_SEL, 0xFE);
-	regmap_write(es8375->regmap, ES8375_ANALOG1, 0xB8);
-	regmap_write(es8375->regmap, ES8375_SYS_CTRL2, 0x03);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR2, 0x16);
-	regmap_write(es8375->regmap, ES8375_RESET1, 0x00);
-	msleep(80);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR3, 0x00);
-	regmap_write(es8375->regmap, ES8375_CSM1, 0x86);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR4, 0x0B);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR5, 0x00);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR6, 0x31);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR7, 0x11);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR8, 0x1F);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR9, 0x00);
-	regmap_write(es8375->regmap, ES8375_ADC_OSR_GAIN, 0x1F);
-	regmap_write(es8375->regmap, ES8375_ADC2, 0x00);
-	regmap_write(es8375->regmap, ES8375_DAC2, 0x00);
-	regmap_write(es8375->regmap, ES8375_DAC_OTP, 0x88);
-	regmap_write(es8375->regmap, ES8375_ANALOG_SPK2, 0xE7);
-	regmap_write(es8375->regmap, ES8375_ANALOG2, 0xF0);
-	regmap_write(es8375->regmap, ES8375_ANALOG3, 0x40);
-	regmap_write(es8375->regmap, ES8375_CLK_MGR2, 0xFE);
+	ret = regmap_multi_reg_write(es8375->regmap, es8375_init_sequence,
+				     ARRAY_SIZE(es8375_init_sequence));
+	if (ret)
+		return ret;
 
-	regmap_update_bits(es8375->regmap, ES8375_SDP, 0x40, 0x40);
-	regmap_update_bits(es8375->regmap, ES8375_SDP2, 0x20, 0x20);
+	ret = regmap_update_bits(es8375->regmap, ES8375_SDP, 0x40, 0x40);
+	if (ret)
+		return ret;
+
+	return regmap_update_bits(es8375->regmap, ES8375_SDP2, 0x20, 0x20);
 }
 
 static int es8375_suspend(struct snd_soc_component *component)
@@ -570,6 +587,7 @@ static int es8375_suspend(struct snd_soc_component *component)
 	regmap_write(es8375->regmap, ES8375_CSM1, 0x96);
 	regcache_cache_only(es8375->regmap, true);
 	regcache_mark_dirty(es8375->regmap);
+
 	return 0;
 }
 
@@ -577,20 +595,23 @@ static int es8375_resume(struct snd_soc_component *component)
 {
 	struct es8375_priv *es8375 = snd_soc_component_get_drvdata(component);
 	unsigned int reg;
+	int ret;
 
 	regcache_cache_only(es8375->regmap, false);
 	regcache_cache_bypass(es8375->regmap, true);
-	regmap_read(es8375->regmap, ES8375_CLK_MGR2, &reg);
+	ret = regmap_read(es8375->regmap, ES8375_CLK_MGR2, &reg);
 	regcache_cache_bypass(es8375->regmap, false);
+	if (ret)
+		return ret;
 
 	if (reg == 0x00)
-		es8375_init(component);
+		ret = es8375_init(component);
 	else
-		es8375_set_bias_level(component, SND_SOC_BIAS_ON);
+		ret = es8375_set_bias_level(component, SND_SOC_BIAS_ON);
+	if (ret)
+		return ret;
 
-	regcache_sync(es8375->regmap);
-
-	return 0;
+	return regcache_sync(es8375->regmap);
 }
 
 static int es8375_codec_probe(struct snd_soc_component *component)
@@ -599,9 +620,7 @@ static int es8375_codec_probe(struct snd_soc_component *component)
 
 	es8375->mastermode = 0;
 
-	es8375_init(component);
-
-	return 0;
+	return es8375_init(component);
 }
 
 static bool es8375_writeable_register(struct device *dev, unsigned int reg)
