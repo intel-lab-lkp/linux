@@ -5420,6 +5420,8 @@ attach_task_ctx_data(struct task_struct *task, struct kmem_cache *ctx_cache,
 	if (!cd)
 		return -ENOMEM;
 
+	/* @old, loaded by the try_cmpxchg() below, is only stable under RCU. */
+	guard(rcu)();
 	for (;;) {
 		if (try_cmpxchg(&task->perf_ctx_data, &old, cd)) {
 			if (old)

@@ -2398,9 +2398,13 @@ struct sched_cache_stat {
 	int cpu;
 } ____cacheline_aligned_in_smp;
 
+void sched_cache_exec_done(void);
+
 #else
 
 struct sched_cache_stat { };
+
+static inline void sched_cache_exec_done(void) { }
 
 #endif
 

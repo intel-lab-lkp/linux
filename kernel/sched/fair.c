@@ -1987,6 +1987,22 @@ void init_sched_mm(struct task_struct *p)
 	p->preferred_llc = -1;
 }
 
+/* exec() has switched to the new mm and is about to drop the old one. */
+void sched_cache_exec_done(void)
+{
+	struct rq_flags rf;
+	struct rq *rq;
+
+	/*
+	 * account_mm_sched() dereferences rq->curr->mm under this rq's lock,
+	 * so a remote CPU can still be using the old mm. The lock cycle waits
+	 * for it, and the store to tsk->mm cannot be reordered past the
+	 * release, so later acquirers see the new mm.
+	 */
+	rq = this_rq_lock_irq(&rf);
+	rq_unlock_irq(rq, &rf);
+}
+
 #else /* CONFIG_SCHED_CACHE */
 
 static inline void account_mm_sched(struct rq *rq, struct task_struct *p,
