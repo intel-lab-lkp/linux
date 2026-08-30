@@ -1095,6 +1095,8 @@ int uni_player_init(struct platform_device *pdev,
 		}
 	}
 
+	spin_lock_init(&player->irq_lock);
+
 	ret = devm_request_irq(&pdev->dev, player->irq,
 			       uni_player_irq_handler, IRQF_SHARED,
 			       dev_name(&pdev->dev), player);
@@ -1104,8 +1106,6 @@ int uni_player_init(struct platform_device *pdev,
 	}
 
 	mutex_init(&player->ctrl_lock);
-	spin_lock_init(&player->irq_lock);
-
 	/* Ensure that disabled by default */
 	SET_UNIPERIF_CONFIG_BACK_STALL_REQ_DISABLE(player);
 	SET_UNIPERIF_CTRL_ROUNDING_OFF(player);
