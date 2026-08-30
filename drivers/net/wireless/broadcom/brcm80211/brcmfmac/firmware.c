@@ -37,6 +37,7 @@ enum nvram_parser_state {
  *
  * @state: current parser state.
  * @data: input buffer being parsed.
+ * @data_len: size of the input buffer.
  * @nvram: output buffer with parse result.
  * @nvram_len: length of parse result.
  * @line: current line.
@@ -51,6 +52,7 @@ enum nvram_parser_state {
 struct nvram_parser {
 	enum nvram_parser_state state;
 	const u8 *data;
+	u32 data_len;
 	u8 *nvram;
 	u32 nvram_len;
 	u32 line;
@@ -171,12 +173,15 @@ brcmf_nvram_handle_value(struct nvram_parser *nvp)
 static enum nvram_parser_state
 brcmf_nvram_handle_comment(struct nvram_parser *nvp)
 {
-	char *eoc, *sol;
+	char *eoc;
+	char *sol;
+	size_t remaining;
 
 	sol = (char *)&nvp->data[nvp->pos];
-	eoc = strchr(sol, '\n');
+	remaining = nvp->data_len - nvp->pos;
+	eoc = memchr(sol, '\n', remaining);
 	if (!eoc) {
-		eoc = strchr(sol, '\0');
+		eoc = memchr(sol, '\0', remaining);
 		if (!eoc)
 			return END;
 	}
@@ -215,6 +220,7 @@ static int brcmf_init_nvram_parser(struct nvram_parser *nvp,
 		size = BRCMF_FW_MAX_NVRAM_SIZE;
 	else
 		size = data_len;
+	nvp->data_len = size;
 	/* Add space for properties we may add */
 	size += strlen(BRCMF_FW_DEFAULT_BOARDREV) + 1;
 	size += BRCMF_FW_MACADDR_LEN + 1;
@@ -408,7 +414,7 @@ static void *brcmf_fw_nvram_strip(const u8 *data, size_t data_len,
 	if (eth_platform_get_mac_address(dev, mac) == 0)
 		nvp.strip_mac = true;
 
-	while (nvp.pos < data_len) {
+	while (nvp.pos < nvp.data_len) {
 		nvp.state = nv_parser_states[nvp.state](&nvp);
 		if (nvp.state == END)
 			break;
