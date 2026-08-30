@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2021 Purism SPC
 
-#include <linux/unaligned.h>
+#include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
@@ -11,6 +11,7 @@
 #include <linux/pm.h>
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
+#include <linux/unaligned.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-fwnode.h>
@@ -219,8 +220,8 @@ struct hi846_mode {
 	/* Horizontal timing size */
 	u32 llp;
 
-	/* Link frequency needed for this resolution */
-	u8 link_freq_index;
+	u8 mipi_clk_div_2lane;
+	u8 mipi_clk_div_4lane;
 
 	u16 fps;
 
@@ -1040,13 +1041,6 @@ static const char * const hi846_test_pattern_menu[] = {
 	"Resolution Pattern",
 };
 
-#define FREQ_INDEX_640	0
-#define FREQ_INDEX_1280	1
-static const s64 hi846_link_freqs[] = {
-	[FREQ_INDEX_640] = 80000000,
-	[FREQ_INDEX_1280] = 200000000,
-};
-
 static const struct hi846_reg_list hi846_init_regs_list_2lane = {
 	.num_of_regs = ARRAY_SIZE(hi846_init_2lane),
 	.regs = hi846_init_2lane,
@@ -1061,7 +1055,13 @@ static const struct hi846_mode supported_modes[] = {
 	{
 		.width = 640,
 		.height = 480,
-		.link_freq_index = FREQ_INDEX_640,
+		.mipi_clk_div_2lane = 4,
+		/*
+		 * Dummy but necessary if we set this mode default, otherwise
+		 * hi846_calc_pixel_rate() will be broken in
+		 * hi846_init_controls()
+		 */
+		.mipi_clk_div_4lane = 8,
 		.fps = 120,
 		.frame_len = 631,
 		.llp = HI846_LINE_LENGTH,
@@ -1086,7 +1086,8 @@ static const struct hi846_mode supported_modes[] = {
 	{
 		.width = 1280,
 		.height = 720,
-		.link_freq_index = FREQ_INDEX_1280,
+		.mipi_clk_div_2lane = 2,
+		.mipi_clk_div_4lane = 4,
 		.fps = 90,
 		.frame_len = 842,
 		.llp = HI846_LINE_LENGTH,
@@ -1112,7 +1113,8 @@ static const struct hi846_mode supported_modes[] = {
 	{
 		.width = 1632,
 		.height = 1224,
-		.link_freq_index = FREQ_INDEX_1280,
+		.mipi_clk_div_2lane = 2,
+		.mipi_clk_div_4lane = 4,
 		.fps = 30,
 		.frame_len = 2526,
 		.llp = HI846_LINE_LENGTH,
@@ -1167,6 +1169,9 @@ struct hi846 {
 	struct v4l2_ctrl *hblank;
 	struct v4l2_ctrl *exposure;
 
+	s64 link_freqs[ARRAY_SIZE(supported_modes)];
+	int num_link_freqs;
+
 	struct mutex mutex; /* protect cur_mode, streaming and chip access */
 	const struct hi846_mode *cur_mode;
 	bool streaming;
@@ -1192,21 +1197,41 @@ static const struct hi846_datafmt *hi846_find_datafmt(u32 code)
 	return NULL;
 }
 
-static inline u8 hi846_get_link_freq_index(struct hi846 *hi846)
+static u64
+hi846_get_link_freq(const struct hi846 *hi846, const struct hi846_mode *mode)
 {
-	return hi846->cur_mode->link_freq_index;
+	u64 mclk = clk_get_rate(hi846->clock);
+	u8 mipi_clk_div;
+
+	if (hi846->nr_lanes == 2)
+		mipi_clk_div = mode->mipi_clk_div_2lane;
+	else
+		mipi_clk_div = mode->mipi_clk_div_4lane;
+
+	/*
+	 * HI846_REG_PLL_CFG_MIPI1_H = 0x025a, it is fixed in listed modes
+	 * [11:8]: 0x02 => pre_div = 3
+	 * [7:0]: 0x5a => multiplier = 90
+	 */
+	return mul_u64_u32_div(mclk, 90, 3 * mipi_clk_div);
 }
 
-static u64 hi846_get_link_freq(struct hi846 *hi846)
+static int hi846_get_link_freq_index(const struct hi846 *hi846,
+				     const struct hi846_mode *mode)
 {
-	u8 index = hi846_get_link_freq_index(hi846);
+	u64 link_freq = hi846_get_link_freq(hi846, mode);
+	int i;
 
-	return hi846_link_freqs[index];
+	for (i = 0; i < hi846->num_link_freqs; i++)
+		if (hi846->link_freqs[i] == link_freq)
+			return i;
+
+	return -EINVAL;
 }
 
 static u64 hi846_calc_pixel_rate(struct hi846 *hi846)
 {
-	u64 link_freq = hi846_get_link_freq(hi846);
+	u64 link_freq = hi846_get_link_freq(hi846, hi846->cur_mode);
 	u64 pixel_rate = link_freq * 2 * hi846->nr_lanes;
 
 	do_div(pixel_rate, HI846_RGB_DEPTH);
@@ -1429,8 +1454,8 @@ static int hi846_init_controls(struct hi846 *hi846)
 	hi846->link_freq =
 		v4l2_ctrl_new_int_menu(ctrl_hdlr, &hi846_ctrl_ops,
 				       V4L2_CID_LINK_FREQ,
-				       ARRAY_SIZE(hi846_link_freqs) - 1,
-				       0, hi846_link_freqs);
+				       hi846->num_link_freqs - 1,
+				       0, hi846->link_freqs);
 	if (hi846->link_freq)
 		hi846->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
@@ -1503,10 +1528,9 @@ static int hi846_set_video_mode(struct hi846 *hi846, int fps)
 	u64 frame_length;
 	int ret = 0;
 	int dummy_lines;
-	u64 link_freq = hi846_get_link_freq(hi846);
+	u64 link_freq = hi846_get_link_freq(hi846, hi846->cur_mode);
 
-	dev_dbg(&client->dev, "%s: link freq: %llu\n", __func__,
-		hi846_get_link_freq(hi846));
+	dev_dbg(&client->dev, "%s: link freq: %llu\n", __func__, link_freq);
 
 	do_div(link_freq, fps);
 	frame_length = link_freq;
@@ -1699,6 +1723,7 @@ static int hi846_set_format(struct v4l2_subdev *sd,
 	const struct hi846_datafmt *fmt = hi846_find_datafmt(mf->code);
 	u32 tgt_fps;
 	s32 vblank_def, h_blank;
+	int idx;
 
 	if (!fmt) {
 		mf->code = hi846_colour_fmts[0].code;
@@ -1749,7 +1774,14 @@ static int hi846_set_format(struct v4l2_subdev *sd,
 	mf->code = HI846_MEDIA_BUS_FORMAT;
 	mf->field = V4L2_FIELD_NONE;
 
-	__v4l2_ctrl_s_ctrl(hi846->link_freq, hi846_get_link_freq_index(hi846));
+	idx = hi846_get_link_freq_index(hi846, hi846->cur_mode);
+	if (idx < 0) {
+		dev_err(&client->dev,
+			"failed to get link freq index: %d\n", idx);
+		return -EINVAL;
+	}
+
+	__v4l2_ctrl_s_ctrl(hi846->link_freq, idx);
 	__v4l2_ctrl_s_ctrl_int64(hi846->pixel_rate,
 				 hi846_calc_pixel_rate(hi846));
 
@@ -1947,20 +1979,33 @@ static int hi846_identify_module(struct hi846 *hi846)
 	return 0;
 }
 
-static s64 hi846_check_link_freqs(struct hi846 *hi846,
-				  struct v4l2_fwnode_endpoint *ep)
+static int hi846_add_link_freqs(struct hi846 *hi846, struct device *dev,
+				struct v4l2_fwnode_endpoint *ep)
 {
-	const s64 *freqs = hi846_link_freqs;
-	int freqs_count = ARRAY_SIZE(hi846_link_freqs);
-	int i, j;
+	s64 hi846_link_freqs[ARRAY_SIZE(supported_modes)];
+	unsigned long freq_bitmap;
+	int ret, i;
 
-	for (i = 0; i < freqs_count; i++) {
-		for (j = 0; j < ep->nr_of_link_frequencies; j++)
-			if (freqs[i] == ep->link_frequencies[j])
-				break;
-		if (j == ep->nr_of_link_frequencies)
-			return freqs[i];
-	}
+	/*
+	 * Since the MCLK freq varies between platforms, calculating driver
+	 * supported link freqs here.
+	 */
+	for (i = 0; i < ARRAY_SIZE(supported_modes); i++)
+		hi846_link_freqs[i] = hi846_get_link_freq(hi846, &supported_modes[i]);
+
+	ret = v4l2_link_freq_to_bitmap(dev, ep->link_frequencies,
+				       ep->nr_of_link_frequencies,
+				       hi846_link_freqs,
+				       ARRAY_SIZE(hi846_link_freqs),
+				       &freq_bitmap);
+	if (ret || !freq_bitmap)
+		return ret;
+
+	for (i = 0; i < ARRAY_SIZE(hi846_link_freqs); i++)
+		if (BIT(i) & freq_bitmap) {
+			hi846->link_freqs[hi846->num_link_freqs++] = hi846_link_freqs[i];
+			dev_dbg(dev, "Add supported link frequency %lld\n", hi846_link_freqs[i]);
+		}
 
 	return 0;
 }
@@ -1973,7 +2018,6 @@ static int hi846_parse_dt(struct hi846 *hi846, struct device *dev)
 		.bus_type = V4L2_MBUS_CSI2_DPHY
 	};
 	int ret;
-	s64 fq;
 
 	ep = fwnode_graph_get_next_endpoint(fwnode, NULL);
 	if (!ep) {
@@ -2004,11 +2048,10 @@ static int hi846_parse_dt(struct hi846 *hi846, struct device *dev)
 		goto check_hwcfg_error;
 	}
 
-	/* Check that link frequences for all the modes are in device tree */
-	fq = hi846_check_link_freqs(hi846, &bus_cfg);
-	if (fq) {
-		dev_err(dev, "Link frequency of %lld is not supported\n", fq);
-		ret = -EINVAL;
+	/* Add link frequencies which are supported by both DT and the driver */
+	ret = hi846_add_link_freqs(hi846, dev, &bus_cfg);
+	if (ret) {
+		dev_err(dev, "failed to add link frequency %d\n", ret);
 		goto check_hwcfg_error;
 	}
 
@@ -2041,11 +2084,17 @@ static int hi846_probe(struct i2c_client *client)
 	struct hi846 *hi846;
 	int ret;
 	int i;
-	u32 mclk_freq;
 
 	hi846 = devm_kzalloc(&client->dev, sizeof(*hi846), GFP_KERNEL);
 	if (!hi846)
 		return -ENOMEM;
+
+	/* Get the MCLK first, since we need it to calculate link freqs */
+	hi846->clock = devm_v4l2_sensor_clk_get(&client->dev, NULL);
+	if (IS_ERR(hi846->clock))
+		return dev_err_probe(&client->dev, PTR_ERR(hi846->clock),
+				     "failed to get clock: %pe\n",
+				     hi846->clock);
 
 	ret = hi846_parse_dt(hi846, &client->dev);
 	if (ret) {
@@ -2053,18 +2102,6 @@ static int hi846_probe(struct i2c_client *client)
 			ret);
 		return ret;
 	}
-
-	hi846->clock = devm_v4l2_sensor_clk_get(&client->dev, NULL);
-	if (IS_ERR(hi846->clock))
-		return dev_err_probe(&client->dev, PTR_ERR(hi846->clock),
-				     "failed to get clock: %pe\n",
-				     hi846->clock);
-
-	mclk_freq = clk_get_rate(hi846->clock);
-	if (mclk_freq != 25000000)
-		dev_warn(&client->dev,
-			 "External clock freq should be 25000000, not %u.\n",
-			 mclk_freq);
 
 	for (i = 0; i < HI846_NUM_SUPPLIES; i++)
 		hi846->supplies[i].supply = hi846_supply_names[i];
