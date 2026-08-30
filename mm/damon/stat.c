@@ -47,6 +47,11 @@ module_param(aggr_interval_us, ulong, 0400);
 MODULE_PARM_DESC(aggr_interval_us,
 		"Current tuned aggregation interval in microseconds");
 
+static bool aging_flush __read_mostly;
+module_param(aging_flush, bool, 0600);
+MODULE_PARM_DESC(aging_flush,
+		"Flush TLBs when clearing access bits (applied at enable time)");
+
 static struct damon_ctx *damon_stat_context;
 
 static unsigned long damon_stat_last_refresh_jiffies;
@@ -178,6 +183,7 @@ static struct damon_ctx *damon_stat_build_ctx(void)
 
 	if (damon_select_ops(ctx, DAMON_OPS_PADDR))
 		goto free_out;
+	ctx->aging_flush = aging_flush;
 
 	target = damon_new_target();
 	if (!target)
