@@ -1504,7 +1504,7 @@ static ssize_t vcnl4000_read_near_level(struct iio_dev *indio_dev,
 {
 	struct vcnl4000_data *data = iio_priv(indio_dev);
 
-	return sprintf(buf, "%u\n", data->near_level);
+	return sysfs_emit(buf, "%u\n", data->near_level);
 }
 
 static irqreturn_t vcnl4010_irq_thread(int irq, void *p)
