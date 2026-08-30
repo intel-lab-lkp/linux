@@ -1,0 +1,2 @@
+# mode=relaxed
+bad/dts-fragment-missing-prefix.dtsi:5: [indent-unit-dts] indent does not start with fragment offset

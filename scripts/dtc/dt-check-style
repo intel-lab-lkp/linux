@@ -380,12 +380,43 @@ def check_mixed_indent_chars(ctx):
                 yield (cont.lineno, 'mixed tabs and spaces in indent')
 
 
+def detect_fragment_offset(ctx):
+    """Return the indentation inherited from an include context.
+
+    A fragment has neither a root nor top-level reference nodes and all
+    its top-level lines share the same tabs-only indentation.
+    """
+    if ctx.file_type != 'dts':
+        return ''
+    offset = None
+    for dl in ctx.lines:
+        if dl.depth != 0:
+            continue
+        if dl.linetype not in (LineType.NODE_OPEN, LineType.NODE_CLOSE,
+                               LineType.PROPERTY):
+            continue
+        if dl.linetype == LineType.NODE_OPEN and \
+                (dl.node_name == '/' or dl.ref_name is not None):
+            return ''
+        if offset is None:
+            offset = dl.indent_str
+        elif dl.indent_str != offset:
+            return ''
+    if not offset:
+        return ''
+    if any(char != '\t' for char in offset):
+        return ''
+    return offset
+
+
 def detect_indent_unit(ctx):
     """Find the indent unit used at depth 1 in this block.
 
     Returns tuple of string (one of: '  ' (2 spaces), '    ' (4 spaces),
-    '\\t' (tab), or None if depth-1 is empty or ambiguous) and line number when
-    detection was made)."""
+    '\\t' (tab), or None if depth-1 is empty or ambiguous), line number when
+    detection was made, and whether the detected fragment prefix is valid.
+    """
+    prefix = detect_fragment_offset(ctx)
     for dl in ctx.lines:
         if dl.depth != 1:
             continue
@@ -395,20 +426,25 @@ def detect_indent_unit(ctx):
             continue
         if not dl.indent_str:
             continue
-        if dl.indent_str == '\t':
-            return ('\t', dl.lineno)
-        if dl.indent_str == '    ':
-            return ('    ', dl.lineno)
-        if dl.indent_str == '  ':
-            return ('  ', dl.lineno)
+        indent = dl.indent_str
+        if prefix and not indent.startswith(prefix):
+            return (indent, dl.lineno, False)
+        if prefix:
+            indent = indent[len(prefix):]
+        if indent == '\t':
+            return ('\t', dl.lineno, True)
+        if indent == '    ':
+            return ('    ', dl.lineno, True)
+        if indent == '  ':
+            return ('  ', dl.lineno, True)
         # Anything else at depth 1 is non-canonical; flag elsewhere.
-        return (dl.indent_str, dl.lineno)
-    return (None, None)
+        return (indent, dl.lineno, True)
+    return (None, None, True)
 
 
 def check_indent_unit_relaxed(ctx):
     """YAML examples: 2 or 4 spaces. Never tabs or other widths."""
-    (unit, lineno) = detect_indent_unit(ctx)
+    (unit, lineno, _) = detect_indent_unit(ctx)
     if unit is None:
         return
     if unit not in ('  ', '    '):
@@ -417,7 +453,10 @@ def check_indent_unit_relaxed(ctx):
 
 def check_indent_unit_dts(ctx):
     """DTS files: 1 tab per level. Always required."""
-    (unit, lineno) = detect_indent_unit(ctx)
+    (unit, lineno, prefix_valid) = detect_indent_unit(ctx)
+    if not prefix_valid:
+        yield (lineno, 'indent does not start with fragment offset')
+        return
     if unit is None:
         return
     if unit != '\t':
@@ -426,7 +465,7 @@ def check_indent_unit_dts(ctx):
 
 def check_indent_unit_strict(ctx):
     """YAML: must be exactly 4 spaces. DTS: 1 tab (same as relaxed)."""
-    (unit, lineno) = detect_indent_unit(ctx)
+    (unit, lineno, _) = detect_indent_unit(ctx)
     if unit is None:
         return
     if ctx.file_type == 'yaml':
@@ -437,8 +476,8 @@ def check_indent_unit_strict(ctx):
 
 def check_indent_consistent(ctx):
     """All indented lines must be a multiple of the detected unit."""
-    (unit, lineno) = detect_indent_unit(ctx)
-    if unit is None:
+    (unit, lineno, prefix_valid) = detect_indent_unit(ctx)
+    if unit is None or not prefix_valid:
         return
     if ctx.file_type == 'yaml':
         if unit not in ('  ', '    '):

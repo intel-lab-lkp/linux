@@ -1,0 +1,2 @@
+# mode=strict
+bad/dts-indented-ref-node.dtsi:5: [indent-unit-dts] indent unit must be 1 tab in DTS, got '\t\t'
