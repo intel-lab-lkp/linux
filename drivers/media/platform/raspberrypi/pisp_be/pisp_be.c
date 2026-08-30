@@ -1695,6 +1695,7 @@ static int pispbe_probe(struct platform_device *pdev)
 	dev_set_drvdata(&pdev->dev, pispbe);
 	pispbe->dev = &pdev->dev;
 	platform_set_drvdata(pdev, pispbe);
+	spin_lock_init(&pispbe->hw_lock);
 
 	pispbe->be_reg_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(pispbe->be_reg_base)) {
@@ -1732,7 +1733,6 @@ static int pispbe_probe(struct platform_device *pdev)
 		goto pm_runtime_disable_err;
 
 	pispbe->hw_busy = false;
-	spin_lock_init(&pispbe->hw_lock);
 	ret = pispbe_hw_init(pispbe);
 	if (ret)
 		goto pm_runtime_suspend_err;
