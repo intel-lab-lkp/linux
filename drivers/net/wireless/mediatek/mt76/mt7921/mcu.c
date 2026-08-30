@@ -515,21 +515,38 @@ out:
 	return ret;
 }
 
+struct mt7921_tx_resource {
+	__le32 version;
+	__le32 pse_data_quota;
+	__le32 pse_mcu_quota;
+	__le32 ple_data_quota;
+	__le32 ple_mcu_quota;
+	__le16 pse_page_size;
+	__le16 ple_page_size;
+	u8 pp_padding;
+	u8 pad[3];
+} __packed;
+
+struct mt7921_phy_cap {
+	u8 ht;
+	u8 vht;
+	u8 _5g;
+	u8 max_bw;
+	u8 nss;
+	u8 dbdc;
+	u8 tx_ldpc;
+	u8 rx_ldpc;
+	u8 tx_stbc;
+	u8 rx_stbc;
+	u8 hw_path;
+	u8 he;
+} __packed;
+
 static void mt7921_mcu_parse_tx_resource(struct mt76_dev *dev,
 					 struct sk_buff *skb)
 {
 	struct mt76_sdio *sdio = &dev->sdio;
-	struct mt7921_tx_resource {
-		__le32 version;
-		__le32 pse_data_quota;
-		__le32 pse_mcu_quota;
-		__le32 ple_data_quota;
-		__le32 ple_mcu_quota;
-		__le16 pse_page_size;
-		__le16 ple_page_size;
-		u8 pp_padding;
-		u8 pad[3];
-	} __packed * tx_res;
+	struct mt7921_tx_resource *tx_res;
 
 	tx_res = (struct mt7921_tx_resource *)skb->data;
 	sdio->sched.pse_data_quota = le32_to_cpu(tx_res->pse_data_quota);
@@ -545,20 +562,7 @@ static void mt7921_mcu_parse_tx_resource(struct mt76_dev *dev,
 static void mt7921_mcu_parse_phy_cap(struct mt76_dev *dev,
 				     struct sk_buff *skb)
 {
-	struct mt7921_phy_cap {
-		u8 ht;
-		u8 vht;
-		u8 _5g;
-		u8 max_bw;
-		u8 nss;
-		u8 dbdc;
-		u8 tx_ldpc;
-		u8 rx_ldpc;
-		u8 tx_stbc;
-		u8 rx_stbc;
-		u8 hw_path;
-		u8 he;
-	} __packed * cap;
+	struct mt7921_phy_cap *cap;
 
 	enum {
 		WF0_24G,
@@ -603,31 +607,56 @@ static int mt7921_mcu_get_nic_capability(struct mt792x_phy *mphy)
 		} __packed * tlv = (struct tlv_hdr *)skb->data;
 		int len;
 
-		if (skb->len < sizeof(*tlv))
-			break;
+		if (skb->len < sizeof(*tlv)) {
+			ret = -EINVAL;
+			goto out;
+		}
 
 		skb_pull(skb, sizeof(*tlv));
 
 		len = le32_to_cpu(tlv->len);
-		if (skb->len < len)
-			break;
+		if (skb->len < len) {
+			ret = -EINVAL;
+			goto out;
+		}
 
 		switch (le32_to_cpu(tlv->type)) {
 		case MT_NIC_CAP_6G:
+			if (len < sizeof(skb->data[0])) {
+				ret = -EINVAL;
+				goto out;
+			}
 			phy->cap.has_6ghz = skb->data[0];
 			break;
 		case MT_NIC_CAP_MAC_ADDR:
+			if (len < ETH_ALEN) {
+				ret = -EINVAL;
+				goto out;
+			}
 			memcpy(phy->macaddr, (void *)skb->data, ETH_ALEN);
 			break;
 		case MT_NIC_CAP_PHY:
+			if (len < sizeof(struct mt7921_phy_cap)) {
+				ret = -EINVAL;
+				goto out;
+			}
 			mt7921_mcu_parse_phy_cap(phy->dev, skb);
 			break;
 		case MT_NIC_CAP_TX_RESOURCE:
-			if (mt76_is_sdio(phy->dev))
+			if (mt76_is_sdio(phy->dev)) {
+				if (len < sizeof(struct mt7921_tx_resource)) {
+					ret = -EINVAL;
+					goto out;
+				}
 				mt7921_mcu_parse_tx_resource(phy->dev,
 							     skb);
+			}
 			break;
 		case MT_NIC_CAP_CHIP_CAP:
+			if (len < sizeof(mphy->chip_cap)) {
+				ret = -EINVAL;
+				goto out;
+			}
 			memcpy(&mphy->chip_cap, (void *)skb->data, sizeof(u64));
 			break;
 		default:
