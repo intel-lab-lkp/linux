@@ -193,10 +193,20 @@ static bool damon_folio_mkold_one(struct folio *folio,
 
 	while (page_vma_mapped_walk(&pvmw)) {
 		addr = pvmw.address;
-		if (pvmw.pte)
-			damon_ptep_mkold(pvmw.pte, vma, addr);
-		else
+		if (pvmw.pte) {
+			/*
+			 * For hugetlb folios, page_vma_mapped_walk() sets
+			 * pvmw.pte to the huge PTE with its page table lock
+			 * held.
+			 */
+			if (folio_test_hugetlb(folio))
+				damon_hugetlb_mkold(pvmw.pte, vma->vm_mm, vma,
+						addr);
+			else
+				damon_ptep_mkold(pvmw.pte, vma, addr);
+		} else {
 			damon_pmdp_mkold(pvmw.pmd, vma, addr);
+		}
 	}
 	return true;
 }
@@ -221,6 +231,24 @@ void damon_folio_mkold(struct folio *folio)
 
 }
 
+#ifdef CONFIG_HUGETLB_PAGE
+static bool damon_hugetlb_young(pte_t *pte, struct vm_area_struct *vma,
+		unsigned long addr, struct folio *folio)
+{
+	pte_t entry = huge_ptep_get(vma->vm_mm, addr, pte);
+
+	return (pte_present(entry) && pte_young(entry)) ||
+		!folio_test_idle(folio) ||
+		mmu_notifier_test_young(vma->vm_mm, addr);
+}
+#else
+static bool damon_hugetlb_young(pte_t *pte, struct vm_area_struct *vma,
+		unsigned long addr, struct folio *folio)
+{
+	return false;
+}
+#endif	/* CONFIG_HUGETLB_PAGE */
+
 static bool damon_folio_young_one(struct folio *folio,
 		struct vm_area_struct *vma, unsigned long addr, void *arg)
 {
@@ -232,16 +260,29 @@ static bool damon_folio_young_one(struct folio *folio,
 	while (page_vma_mapped_walk(&pvmw)) {
 		addr = pvmw.address;
 		if (pvmw.pte) {
-			pte = ptep_get(pvmw.pte);
-
 			/*
-			 * PFN swap PTEs, such as device-exclusive ones, that
-			 * actually map pages are "old" from a CPU perspective.
-			 * The MMU notifier takes care of any device aspects.
+			 * For hugetlb folios, page_vma_mapped_walk() sets
+			 * pvmw.pte to the huge PTE with its page table lock
+			 * held.
 			 */
-			*accessed = (pte_present(pte) && pte_young(pte)) ||
-				!folio_test_idle(folio) ||
-				mmu_notifier_test_young(vma->vm_mm, addr);
+			if (folio_test_hugetlb(folio)) {
+				*accessed = damon_hugetlb_young(pvmw.pte, vma,
+						addr, folio);
+			} else {
+				pte = ptep_get(pvmw.pte);
+
+				/*
+				 * PFN swap PTEs, such as device-exclusive
+				 * ones, that actually map pages are "old"
+				 * from a CPU perspective. The MMU notifier
+				 * takes care of any device aspects.
+				 */
+				*accessed = (pte_present(pte) &&
+						pte_young(pte)) ||
+					!folio_test_idle(folio) ||
+					mmu_notifier_test_young(vma->vm_mm,
+							addr);
+			}
 		} else {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 			pmd_t pmd = pmdp_get(pvmw.pmd);
