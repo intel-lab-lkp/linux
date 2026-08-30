@@ -319,6 +319,19 @@ static void vc4_bo_userspace_cache_purge(struct drm_device *dev)
 		struct drm_gem_object *obj = &bo->base.base;
 		size_t purged_size = 0;
 
+		/*
+		 * The last GEM reference can be dropped concurrently. Its free
+		 * callback removes the BO from this list before releasing it, so
+		 * the list lock makes an unless-zero get safe. Never carry only a
+		 * raw list pointer across the lock drop below.
+		 */
+		if (!kref_get_unless_zero(&obj->refcount)) {
+			mutex_unlock(&vc4->purgeable.lock);
+			cond_resched();
+			mutex_lock(&vc4->purgeable.lock);
+			continue;
+		}
+
 		vc4_bo_remove_from_purgeable_pool_locked(bo);
 
 		/* Release the purgeable lock while we're purging the BO so
@@ -345,6 +358,7 @@ static void vc4_bo_userspace_cache_purge(struct drm_device *dev)
 			vc4_bo_purge(obj);
 		}
 		mutex_unlock(&bo->madv_lock);
+		drm_gem_object_put(obj);
 		mutex_lock(&vc4->purgeable.lock);
 
 		if (purged_size) {
