@@ -749,7 +749,7 @@ static int mtk_cqdma_probe(struct platform_device *pdev)
 	struct mtk_cqdma_vchan *vc;
 	struct dma_device *dd;
 	int err;
-	u32 i;
+	u32 i, nr_tasklets = 0, nr_irqs = 0;
 
 	cqdma = devm_kzalloc(&pdev->dev, sizeof(*cqdma), GFP_KERNEL);
 	if (!cqdma)
@@ -805,41 +805,54 @@ static int mtk_cqdma_probe(struct platform_device *pdev)
 	if (!cqdma->pc)
 		return -ENOMEM;
 
-	/* initialization for PCs */
+	/* Initialize all PCs before registering any IRQ. */
 	for (i = 0; i < cqdma->dma_channels; ++i) {
 		cqdma->pc[i] = devm_kcalloc(&pdev->dev, 1,
 					    sizeof(**cqdma->pc), GFP_KERNEL);
-		if (!cqdma->pc[i])
-			return -ENOMEM;
+		if (!cqdma->pc[i]) {
+			err = -ENOMEM;
+			goto err_tasklets;
+		}
 
 		INIT_LIST_HEAD(&cqdma->pc[i]->queue);
 		spin_lock_init(&cqdma->pc[i]->lock);
 		refcount_set(&cqdma->pc[i]->refcnt, 0);
+		tasklet_setup(&cqdma->pc[i]->tasklet, mtk_cqdma_tasklet_cb);
+		nr_tasklets++;
 		cqdma->pc[i]->base = devm_platform_ioremap_resource(pdev, i);
-		if (IS_ERR(cqdma->pc[i]->base))
-			return PTR_ERR(cqdma->pc[i]->base);
+		if (IS_ERR(cqdma->pc[i]->base)) {
+			err = PTR_ERR(cqdma->pc[i]->base);
+			goto err_tasklets;
+		}
 
 		/* allocate IRQ resource */
 		err = platform_get_irq(pdev, i);
 		if (err < 0)
-			return err;
+			goto err_tasklets;
 		cqdma->pc[i]->irq = err;
+	}
 
+	/* Register IRQs only after all PCs are initialized. */
+	for (i = 0; i < cqdma->dma_channels; ++i) {
 		err = devm_request_irq(&pdev->dev, cqdma->pc[i]->irq,
 				       mtk_cqdma_irq, 0, dev_name(&pdev->dev),
 				       cqdma);
 		if (err) {
 			dev_err(&pdev->dev,
 				"request_irq failed with err %d\n", err);
-			return -EINVAL;
+			err = -EINVAL;
+			goto err_tasklets;
 		}
+		nr_irqs++;
 	}
 
 	/* allocate resource for VCs */
 	cqdma->vc = devm_kcalloc(&pdev->dev, cqdma->dma_requests,
 				 sizeof(*cqdma->vc), GFP_KERNEL);
-	if (!cqdma->vc)
-		return -ENOMEM;
+	if (!cqdma->vc) {
+		err = -ENOMEM;
+		goto err_tasklets;
+	}
 
 	for (i = 0; i < cqdma->dma_requests; i++) {
 		vc = &cqdma->vc[i];
@@ -850,7 +863,7 @@ static int mtk_cqdma_probe(struct platform_device *pdev)
 
 	err = dma_async_device_register(dd);
 	if (err)
-		return err;
+		goto err_tasklets;
 
 	err = of_dma_controller_register(pdev->dev.of_node,
 					 of_dma_xlate_by_chan_id, cqdma);
@@ -864,21 +877,35 @@ static int mtk_cqdma_probe(struct platform_device *pdev)
 	if (err) {
 		dev_err(&pdev->dev,
 			"MediaTek CQDMA HW initialization failed %d\n", err);
-		goto err_unregister;
+		goto err_of_unregister;
 	}
 
 	platform_set_drvdata(pdev, cqdma);
-
-	/* initialize tasklet for each PC */
-	for (i = 0; i < cqdma->dma_channels; ++i)
-		tasklet_setup(&cqdma->pc[i]->tasklet, mtk_cqdma_tasklet_cb);
 
 	dev_info(&pdev->dev, "MediaTek CQDMA driver registered\n");
 
 	return 0;
 
+err_of_unregister:
+	of_dma_controller_free(pdev->dev.of_node);
+
 err_unregister:
 	dma_async_device_unregister(dd);
+
+err_tasklets:
+	/* Prevent IRQ handlers from accessing channel state during cleanup. */
+	for (i = 0; i < nr_irqs; i++)
+		disable_irq(cqdma->pc[i]->irq);
+
+	for (i = 0; i < nr_tasklets; i++)
+		tasklet_kill(&cqdma->pc[i]->tasklet);
+
+	if (cqdma->vc)
+		for (i = 0; i < cqdma->dma_requests; i++)
+			tasklet_kill(&cqdma->vc[i].vc.task);
+
+	for (i = 0; i < nr_irqs; i++)
+		devm_free_irq(&pdev->dev, cqdma->pc[i]->irq, cqdma);
 
 	return err;
 }
