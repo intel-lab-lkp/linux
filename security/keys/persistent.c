@@ -63,6 +63,12 @@ static key_ref_t key_create_persistent(struct user_namespace *ns, kuid_t uid,
 	if (IS_ERR(persistent))
 		return ERR_CAST(persistent);
 
+	/* Set the expiry now: if the caller then fails to link the keyring to
+	 * its destination, the register is left holding a collectible key
+	 * rather than a permanent, quota-exempt one.
+	 */
+	key_set_timeout(persistent, persistent_keyring_expiry);
+
 	return make_key_ref(persistent, true);
 }
 
