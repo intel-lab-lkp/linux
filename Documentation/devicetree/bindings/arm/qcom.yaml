@@ -87,6 +87,7 @@ properties:
       - items:
           - enum:
               - asus,zenbook-a16-ux3607oa
+              - hp,omnibook-ultra-kg0xxx
               - qcom,glymur-crd
           - const: qcom,glymur
 
