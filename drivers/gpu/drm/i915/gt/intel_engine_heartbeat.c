@@ -81,10 +81,18 @@ heartbeat_create(struct intel_context *ce, gfp_t gfp)
 
 static void idle_pulse(struct intel_engine_cs *engine, struct i915_request *rq)
 {
+	struct i915_request *systole;
+
 	engine->wakeref_serial = READ_ONCE(engine->serial) + 1;
 	i915_request_add_active_barriers(rq);
-	if (!engine->heartbeat.systole && intel_engine_has_heartbeat(engine))
-		engine->heartbeat.systole = i915_request_get(rq);
+	if (READ_ONCE(engine->heartbeat.systole) ||
+	    !intel_engine_has_heartbeat(engine))
+		return;
+
+	systole = i915_request_get(rq);
+	/* The worker may have restored its detached systole in the meantime. */
+	if (cmpxchg(&engine->heartbeat.systole, NULL, systole))
+		i915_request_put(systole);
 }
 
 static void heartbeat_commit(struct i915_request *rq,
@@ -152,9 +160,11 @@ static void heartbeat(struct work_struct *wrk)
 	if (rq) {
 		if (i915_request_completed(rq))
 			i915_request_put(rq);
-		else
-			engine->heartbeat.systole = rq;
+		/* Keep a newer pulse that raced with the detached systole. */
+		else if (cmpxchg(&engine->heartbeat.systole, NULL, rq))
+			i915_request_put(rq);
 	}
+	rq = READ_ONCE(engine->heartbeat.systole);
 
 	if (!intel_engine_pm_get_if_awake(engine))
 		return;
@@ -163,11 +173,11 @@ static void heartbeat(struct work_struct *wrk)
 		goto out;
 
 	if (i915_sched_engine_disabled(engine->sched_engine)) {
-		reset_engine(engine, engine->heartbeat.systole);
+		reset_engine(engine, rq);
 		goto out;
 	}
 
-	if (engine->heartbeat.systole) {
+	if (rq) {
 		long delay = READ_ONCE(engine->props.heartbeat_interval_ms);
 
 		/* Safeguard against too-fast worker invocations */
