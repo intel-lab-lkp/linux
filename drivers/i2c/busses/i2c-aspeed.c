@@ -1023,7 +1023,9 @@ static int aspeed_i2c_probe_bus(struct platform_device *pdev)
 			"missing or invalid reset controller device tree entry\n");
 		return PTR_ERR(bus->rst);
 	}
-	reset_control_deassert(bus->rst);
+	ret = reset_control_deassert(bus->rst);
+	if (ret)
+		return ret;
 
 	ret = of_property_read_u32(pdev->dev.of_node,
 				   "bus-frequency", &bus->bus_frequency);
