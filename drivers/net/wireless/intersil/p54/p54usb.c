@@ -143,6 +143,7 @@ static void p54u_rx_cb(struct urb *urb)
 	struct p54u_rx_info *info = (struct p54u_rx_info *)skb->cb;
 	struct ieee80211_hw *dev = info->dev;
 	struct p54u_priv *priv = dev->priv;
+	unsigned int prefix_len = 0;
 
 	skb_unlink(skb, &priv->rx_queue);
 
@@ -151,8 +152,18 @@ static void p54u_rx_cb(struct urb *urb)
 		return;
 	}
 
-	skb_put(skb, urb->actual_length);
+	if (priv->hw_type == P54U_NET2280)
+		prefix_len += priv->common.tx_hdr_len;
+	if (priv->common.fw_interface == FW_LM87)
+		prefix_len += 4;
+	if (urb->actual_length < prefix_len) {
+		skb_reset_tail_pointer(skb);
+		skb_trim(skb, 0);
+		urb->transfer_buffer = skb_tail_pointer(skb);
+		goto resubmit;
+	}
 
+	skb_put(skb, urb->actual_length);
 	if (priv->hw_type == P54U_NET2280)
 		skb_pull(skb, priv->common.tx_hdr_len);
 	if (priv->common.fw_interface == FW_LM87) {
@@ -183,6 +194,7 @@ static void p54u_rx_cb(struct urb *urb)
 		skb_trim(skb, 0);
 		urb->transfer_buffer = skb_tail_pointer(skb);
 	}
+resubmit:
 	skb_queue_tail(&priv->rx_queue, skb);
 	usb_anchor_urb(urb, &priv->submitted);
 	if (usb_submit_urb(urb, GFP_ATOMIC)) {
