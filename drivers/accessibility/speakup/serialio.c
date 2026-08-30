@@ -277,7 +277,16 @@ static unsigned char spk_serial_in_nowait(struct spk_synth *in_synth)
 
 static void spk_serial_flush_buffer(struct spk_synth *in_synth)
 {
-	/* TODO: flush the UART 16550 buffer */
+	
+	unsigned long flags;
+
+	spin_lock_irqsave(&speakup_info.spinlock,flags);
+
+	while (inb_p(speakup_info.port_tts + UART_LSR) & UART_LSR_DR)
+		inb_p(speakup_info.port_tts + UART_RX);
+
+  	spin_unlock_irqrestore(&speakup_info.spinlock,flags);
+
 }
 
 static int spk_serial_out(struct spk_synth *in_synth, const char ch)
