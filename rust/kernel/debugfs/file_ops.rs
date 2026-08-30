@@ -20,14 +20,12 @@ use crate::{
 
 use core::marker::PhantomData;
 
-#[cfg(CONFIG_DEBUG_FS)]
-use core::ops::Deref;
-
-/// # Invariant
+/// # Invariants
 ///
-/// `FileOps<T>` will always contain an `operations` which is safe to use for a file backed
-/// off an inode which has a pointer to a `T` in its private data that is safe to convert
-/// into a reference.
+/// - `FileOps<T>` will always contain an `operations` which is safe to use for a file backed
+///   off an inode which has a pointer to a `T` in its private data that is safe to convert
+///   into a reference.
+/// - Every instance of `FileOps<T>` resides in static storage.
 pub(super) struct FileOps<T> {
     #[cfg(CONFIG_DEBUG_FS)]
     operations: bindings::file_operations,
@@ -39,9 +37,13 @@ pub(super) struct FileOps<T> {
 impl<T> FileOps<T> {
     /// # Safety
     ///
-    /// The caller asserts that the provided `operations` is safe to use for a file whose
-    /// inode has a pointer to `T` in its private data that is safe to convert into a reference.
+    /// - The caller asserts that the provided `operations` is safe to use for a file whose
+    ///   inode has a pointer to `T` in its private data that is safe to convert into a reference.
+    /// - Must only be used to initialize a `const` or `static` item, to uphold the type invariant
+    ///   that all `FileOps` instances reside in static storage.
     const unsafe fn new(operations: bindings::file_operations, mode: u16) -> Self {
+        // INVARIANT: The caller is required to only use this in a `const` or `static` item,
+        // ensuring that all `FileOps` instances reside in static storage.
         Self {
             #[cfg(CONFIG_DEBUG_FS)]
             operations,
@@ -65,11 +67,11 @@ impl<T: Adapter> FileOps<T> {
 }
 
 #[cfg(CONFIG_DEBUG_FS)]
-impl<T> Deref for FileOps<T> {
-    type Target = bindings::file_operations;
-
-    fn deref(&self) -> &Self::Target {
-        &self.operations
+impl<T> FileOps<T> {
+    /// Returns a `'static` reference to the inner `file_operations`.
+    pub(crate) fn fops(&self) -> &'static bindings::file_operations {
+        // SAFETY: By the type invariant, `self` resides in static storage.
+        unsafe { core::mem::transmute(&self.operations) }
     }
 }
 
@@ -138,9 +140,10 @@ impl<T: Writer + Sync> ReadFile<T> for T {
             ..pin_init::zeroed()
         };
         // SAFETY: `operations` is all stock `seq_file` implementations except for `writer_open`.
-        // `open`'s only requirement beyond what is provided to all open functions is that the
-        // inode's data pointer must point to a `T` that will outlive it, which matches the
-        // `FileOps` requirements.
+        // - `open`'s only requirement beyond what is provided to all open functions is that the
+        //   inode's data pointer must point to a `T` that will outlive it, which matches the
+        //   `FileOps` requirements.
+        // - This is a `const` item, satisfying the static storage invariant.
         unsafe { FileOps::new(operations, 0o400) }
     };
 }
@@ -194,9 +197,10 @@ impl<T: Writer + Reader + Sync> ReadWriteFile<T> for T {
         // `writer_open`'s only requirement beyond what is provided to all open functions is that
         // the inode's data pointer must point to a `T` that will outlive it, which matches the
         // `FileOps` requirements.
-        // `write` only requires that the file's private data pointer points to `seq_file`
-        // which points to a `T` that will outlive it, which matches what `writer_open`
-        // provides.
+        // - `write` only requires that the file's private data pointer points to `seq_file`
+        //   which points to a `T` that will outlive it, which matches what `writer_open`
+        //   provides.
+        // - This is a `const` item, satisfying the static storage invariant.
         unsafe { FileOps::new(operations, 0o600) }
     };
 }
@@ -245,10 +249,11 @@ impl<T: Reader + Sync> WriteFile<T> for T {
             ..pin_init::zeroed()
         };
         // SAFETY:
-        // * `write_only_open` populates the file private data with the inode private data
-        // * `write_only_write`'s only requirement is that the private data of the file point to
+        // - `write_only_open` populates the file private data with the inode private data
+        // - `write_only_write`'s only requirement is that the private data of the file point to
         //   a `T` and be legal to convert to a shared reference, which `write_only_open`
         //   satisfies.
+        // - This is a `const` item, satisfying the static storage invariant.
         unsafe { FileOps::new(operations, 0o200) }
     };
 }
@@ -303,6 +308,7 @@ impl<T: BinaryWriter + Sync> BinaryReadFile<T> for T {
         //   corresponding `struct file`.
         // - `blob_read()` re-creates a reference to `T` from the `struct file`'s private data.
         // - `default_llseek()` does not access the `struct file`'s private data.
+        // - This is a `const` item, satisfying the static storage invariant.
         unsafe { FileOps::new(operations, 0o400) }
     };
 }
@@ -357,6 +363,7 @@ impl<T: BinaryReader + Sync> BinaryWriteFile<T> for T {
         //   corresponding `struct file`.
         // - `blob_write()` re-creates a reference to `T` from the `struct file`'s private data.
         // - `default_llseek()` does not access the `struct file`'s private data.
+        // - This is a `const` item, satisfying the static storage invariant.
         unsafe { FileOps::new(operations, 0o200) }
     };
 }
@@ -383,6 +390,7 @@ impl<T: BinaryWriter + BinaryReader + Sync> BinaryReadWriteFile<T> for T {
         // - `blob_read()` re-creates a reference to `T` from the `struct file`'s private data.
         // - `blob_write()` re-creates a reference to `T` from the `struct file`'s private data.
         // - `default_llseek()` does not access the `struct file`'s private data.
+        // - This is a `const` item, satisfying the static storage invariant.
         unsafe { FileOps::new(operations, 0o600) }
     };
 }
