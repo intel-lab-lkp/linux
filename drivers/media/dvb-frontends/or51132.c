@@ -119,24 +119,30 @@ static int or51132_load_firmware (struct dvb_frontend* fe, const struct firmware
 	struct or51132_state* state = fe->demodulator_priv;
 	static const u8 run_buf[] = {0x7F,0x01};
 	u8 rec_buf[8];
-	u32 firmwareAsize, firmwareBsize;
+	u32 firmware_a_size, firmware_b_size;
 	int i,ret;
 
 	dprintk("Firmware is %zd bytes\n",fw->size);
+	if (fw->size < 8)
+		return -EINVAL;
 
 	/* Get size of firmware A and B */
-	firmwareAsize = le32_to_cpu(*((__le32*)fw->data));
-	dprintk("FirmwareA is %i bytes\n",firmwareAsize);
-	firmwareBsize = le32_to_cpu(*((__le32*)(fw->data+4)));
-	dprintk("FirmwareB is %i bytes\n",firmwareBsize);
+	firmware_a_size = le32_to_cpu(*((__le32 *)fw->data));
+	dprintk("FirmwareA is %i bytes\n", firmware_a_size);
+	firmware_b_size = le32_to_cpu(*((__le32 *)(fw->data + 4)));
+	dprintk("FirmwareB is %i bytes\n", firmware_b_size);
+	if (firmware_a_size > fw->size - 8 ||
+	    firmware_b_size > fw->size - 8 - firmware_a_size)
+		return -EINVAL;
 
 	/* Upload firmware */
-	if ((ret = or51132_writebuf(state, &fw->data[8], firmwareAsize))) {
+	ret = or51132_writebuf(state, &fw->data[8], firmware_a_size);
+	if (ret) {
 		printk(KERN_WARNING "or51132: load_firmware error 1\n");
 		return ret;
 	}
-	if ((ret = or51132_writebuf(state, &fw->data[8+firmwareAsize],
-				    firmwareBsize))) {
+	ret = or51132_writebuf(state, &fw->data[8 + firmware_a_size], firmware_b_size);
+	if (ret) {
 		printk(KERN_WARNING "or51132: load_firmware error 2\n");
 		return ret;
 	}
