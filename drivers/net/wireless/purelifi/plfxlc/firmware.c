@@ -166,8 +166,13 @@ int plfxlc_download_xl_firmware(struct usb_interface *intf)
 		dev_err(&intf->dev, "Request_firmware failed (%d)\n", r);
 		return -EINVAL;
 	}
+	if (fwp->size < sizeof(u32) || fwp->size > U32_MAX) {
+		r = -EINVAL;
+		goto out_release;
+	}
+
 	file.total_files = get_unaligned_le32(&fwp->data[0]);
-	file.total_size = get_unaligned_le32(&fwp->size);
+	file.total_size = fwp->size;
 
 	dev_dbg(&intf->dev, "XL Firmware (%d, %d)\n",
 		file.total_files, file.total_size);
@@ -178,18 +183,32 @@ int plfxlc_download_xl_firmware(struct usb_interface *intf)
 		return -ENOMEM;
 	}
 
-	if (file.total_files > 10) {
+	if (file.total_files > 10 ||
+	    file.total_files > (file.total_size - sizeof(u32)) / sizeof(u32)) {
 		dev_err(&intf->dev, "Too many files (%d)\n", file.total_files);
-		release_firmware(fwp);
-		kfree(buf);
-		return -EINVAL;
+		r = -EINVAL;
+		goto out_free;
 	}
 
 	/* Download firmware files in multiple steps */
 	for (s = 0; s < file.total_files; s++) {
+		u32 copy_len, end_addr;
+
 		buf[0] = s;
 		r = send_vendor_command(udev, PLF_VNDR_XL_FILE_CMD, buf,
 					PLF_XL_BUF_LEN);
+		if (r)
+			goto out_free;
+
+		file.start_addr = get_unaligned_le32(&fwp->data[4 + (s * 4)]);
+		if (s < file.total_files - 1)
+			end_addr = get_unaligned_le32(&fwp->data[4 + ((s + 1) * 4)]);
+		else
+			end_addr = file.total_size;
+		if (file.start_addr > end_addr || end_addr > file.total_size) {
+			r = -EINVAL;
+			goto out_free;
+		}
 
 		if (s < file.total_files - 1)
 			file.size = get_unaligned_le32(&fwp->data[4 + ((s + 1) * 4)])
@@ -200,35 +219,41 @@ int plfxlc_download_xl_firmware(struct usb_interface *intf)
 
 		if (file.size > file.total_size || file.size > 60000) {
 			dev_err(&intf->dev, "File size is too large (%d)\n", file.size);
-			break;
+			r = -EINVAL;
+			goto out_free;
 		}
 
-		file.start_addr = get_unaligned_le32(&fwp->data[4 + (s * 4)]);
-
-		if (file.size % PLF_XL_BUF_LEN && s < 2)
-			file.size += PLF_XL_BUF_LEN - file.size % PLF_XL_BUF_LEN;
-
-		file.control_packets = file.size / PLF_XL_BUF_LEN;
+		if (s < 2)
+			file.control_packets =
+				DIV_ROUND_UP(file.size, PLF_XL_BUF_LEN);
+		else
+			file.control_packets = file.size / PLF_XL_BUF_LEN;
 
 		for (i = 0; i < file.control_packets; i++) {
+			copy_len = min_t(u32, PLF_XL_BUF_LEN,
+					 file.size - i * PLF_XL_BUF_LEN);
+			memset(buf, 0, PLF_XL_BUF_LEN);
 			memcpy(buf,
 			       &fwp->data[file.start_addr + (i * PLF_XL_BUF_LEN)],
-			       PLF_XL_BUF_LEN);
+			       copy_len);
 			r = send_vendor_command(udev, PLF_VNDR_XL_DATA_CMD, buf,
 						PLF_XL_BUF_LEN);
+			if (r)
+				goto out_free;
 		}
 		dev_dbg(&intf->dev, "fw-dw step=%d,r=%d size=%d\n", s, r,
 			file.size);
 	}
-	release_firmware(fwp);
-	kfree(buf);
-
 	/* Code for single pack file download ends fw download finish */
 
 	r = send_vendor_command(udev, PLF_VNDR_XL_EX_CMD, NULL, 0);
 	dev_dbg(&intf->dev, "Download fpga (4) (%d)\n", r);
 
-	return 0;
+out_free:
+	kfree(buf);
+out_release:
+	release_firmware(fwp);
+	return r;
 }
 
 int plfxlc_upload_mac_and_serial(struct usb_interface *intf,
@@ -273,4 +298,3 @@ int plfxlc_upload_mac_and_serial(struct usb_interface *intf,
 
 	return 0;
 }
-
