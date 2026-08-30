@@ -1702,6 +1702,15 @@ static inline int drv_net_setup_tc(struct ieee80211_local *local,
 
 	might_sleep();
 
+	/*
+	 * AP_VLAN interfaces are only linked to a bss opportunistically at
+	 * creation; an unbound one has sdata->bss == NULL, and
+	 * get_bss_sdata()'s container_of() on that yields a bogus pointer
+	 * rather than NULL, which the tracepoint below then dereferences.
+	 */
+	if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN && !sdata->bss)
+		return -EIO;
+
 	sdata = get_bss_sdata(sdata);
 	trace_drv_net_setup_tc(local, sdata, type);
 	if (local->ops->net_setup_tc)
