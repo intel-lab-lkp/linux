@@ -398,6 +398,7 @@ void squashfs_copy_cache(struct folio *folio,
 	struct squashfs_sb_info *msblk = inode->i_sb->s_fs_info;
 	int i, mask = (1 << (msblk->block_log - PAGE_SHIFT)) - 1;
 	int start_index = folio->index & ~mask, end_index = start_index | mask;
+	unsigned int nofs = memalloc_nofs_save();
 
 	/*
 	 * Loop copying datablock into pages.  As the datablock likely covers
@@ -415,7 +416,7 @@ void squashfs_copy_cache(struct folio *folio,
 
 		push_folio = (i == folio->index) ? folio :
 			__filemap_get_folio(mapping, i,
-					FGP_LOCK|FGP_CREAT|FGP_NOFS|FGP_NOWAIT,
+					FGP_LOCK | FGP_CREAT | FGP_NOWAIT,
 					mapping_gfp_mask(mapping));
 
 		if (IS_ERR(push_folio))
@@ -430,6 +431,8 @@ skip_folio:
 		if (i != folio->index)
 			folio_put(push_folio);
 	}
+
+	memalloc_nofs_restore(nofs);
 }
 
 /* Read datablock stored packed inside a fragment (tail-end packed block) */
