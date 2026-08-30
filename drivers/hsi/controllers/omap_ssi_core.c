@@ -366,6 +366,7 @@ static int ssi_add_controller(struct hsi_controller *ssi,
 	if (err < 0)
 		goto out_err;
 	omap_ssi->gdd_irq = err;
+	spin_lock_init(&omap_ssi->lock);
 	tasklet_init(&omap_ssi->gdd_tasklet, ssi_gdd_tasklet,
 							(unsigned long)ssi);
 	err = devm_request_irq(&ssi->device, omap_ssi->gdd_irq, ssi_gdd_isr,
@@ -396,7 +397,6 @@ static int ssi_add_controller(struct hsi_controller *ssi,
 	omap_ssi->get_loss = NULL;
 
 	omap_ssi->max_speed = UINT_MAX;
-	spin_lock_init(&omap_ssi->lock);
 	err = hsi_register_controller(ssi);
 
 	if (err < 0)
