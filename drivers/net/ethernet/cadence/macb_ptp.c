@@ -330,6 +330,8 @@ void gem_ptp_init(struct net_device *netdev)
 
 	bp->ptp_clock_info = gem_ptp_caps_template;
 
+	spin_lock_init(&bp->tsu_clk_lock);
+
 	/* nominal frequency and maximum adjustment in ppb */
 	bp->tsu_rate = bp->ptp_info->get_tsu_rate(bp);
 	bp->ptp_clock_info.max_adj = bp->ptp_info->get_ptp_max_adj();
@@ -344,8 +346,6 @@ void gem_ptp_init(struct net_device *netdev)
 		pr_err("ptp clock register failed\n");
 		return;
 	}
-
-	spin_lock_init(&bp->tsu_clk_lock);
 
 	gem_ptp_init_tsu(bp);
 
@@ -467,4 +467,3 @@ int gem_set_hwtst(struct net_device *netdev,
 
 	return 0;
 }
-
