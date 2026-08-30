@@ -2981,11 +2981,14 @@ static int intel_cdclk_update_crtc_min_cdclk(struct intel_atomic_state *state,
 	bool allow_cdclk_decrease = intel_any_crtc_needs_modeset(state);
 	int ret;
 
-	if (new_min_cdclk == old_min_cdclk)
-		return 0;
-
-	if (!allow_cdclk_decrease && new_min_cdclk < old_min_cdclk)
-		return 0;
+	/*
+	 * old_min_cdclk comes from the previous crtc_state, which after
+	 * boot-time readout reflects whatever firmware/GOP left running,
+	 * not what this driver has programmed. For an inherited pipe it
+	 * equals new_min_cdclk by construction (same mode, same formula),
+	 * so an early return here would skip the recalculation that
+	 * matters. Always continue on to the cdclk_state check below.
+	 */
 
 	cdclk_state = intel_atomic_get_cdclk_state(state);
 	if (IS_ERR(cdclk_state))
@@ -3026,12 +3029,10 @@ static int intel_cdclk_update_crtc_min_voltage_level(struct intel_atomic_state *
 	bool allow_voltage_level_decrease = intel_any_crtc_needs_modeset(state);
 	int ret;
 
-	if (new_min_voltage_level == old_min_voltage_level)
-		return 0;
-
-	if (!allow_voltage_level_decrease &&
-	    new_min_voltage_level < old_min_voltage_level)
-		return 0;
+	/*
+	 * old_min_voltage_level is unreliable for the same reason; see
+	 * intel_cdclk_update_crtc_min_cdclk().
+	 */
 
 	cdclk_state = intel_atomic_get_cdclk_state(state);
 	if (IS_ERR(cdclk_state))
@@ -3703,6 +3704,28 @@ void intel_cdclk_update_hw_state(struct intel_display *display)
 	}
 
 	cdclk_state->dbuf_bw_min_cdclk = intel_dbuf_bw_min_cdclk(display, dbuf_bw_state);
+}
+
+/*
+ * intel_cdclk_update_hw_state() seeds min_cdclk[]/min_voltage_level[]
+ * from readout's crtc_state, i.e. from whatever firmware/GOP left
+ * running, not from anything this driver has programmed. A pipe's
+ * first real modeset usually targets the same native mode, so the
+ * freshly computed value matches this seeded baseline and
+ * intel_cdclk_update_crtc_min_cdclk()/_min_voltage_level() conclude
+ * nothing changed, skipping the recalculation that matters. Call
+ * this after readout so the first real commit sees a difference.
+ */
+void intel_cdclk_invalidate_min_tracking(struct intel_display *display)
+{
+	struct intel_cdclk_state *cdclk_state =
+		to_intel_cdclk_state(display->cdclk.obj.state);
+	enum pipe pipe;
+
+	for_each_pipe(display, pipe) {
+		cdclk_state->min_cdclk[pipe] = 0;
+		cdclk_state->min_voltage_level[pipe] = 0;
+	}
 }
 
 void intel_cdclk_crtc_disable_noatomic(struct intel_crtc *crtc)

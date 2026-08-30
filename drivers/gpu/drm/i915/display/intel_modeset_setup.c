@@ -880,6 +880,7 @@ static void intel_modeset_readout_hw_state(struct intel_display *display)
 	intel_bw_update_hw_state(display);
 	intel_dbuf_bw_update_hw_state(display);
 	intel_cdclk_update_hw_state(display);
+	intel_cdclk_invalidate_min_tracking(display);
 
 	intel_pmdemand_init_pmdemand_params(display, pmdemand_state);
 }
