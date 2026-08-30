@@ -443,6 +443,22 @@ static int cpc_validate_sysmem_reg(struct cpc_desc *cpc_desc,
 	if (!cpc_reg_access_aligned(gas, access_size))
 		goto invalid;
 
+	if (reg_idx == PERF_LIMITED) {
+		if (access_width == 64 && !IS_ENABLED(CONFIG_64BIT)) {
+			pr_warn("CPU%d: Performance Limited register cannot be accessed atomically; keeping its range reserved\n",
+				cpc_desc->cpu_id);
+			cpc_desc->cpc_regs[reg_idx].cpc_entry.read_unsupported = true;
+			cpc_desc->cpc_regs[reg_idx].cpc_entry.write_unsupported = true;
+			return 0;
+		}
+
+		if (gas->bit_offset || gas->bit_width != access_width) {
+			pr_warn("CPU%d: Performance Limited register cannot be cleared safely; keeping it readable\n",
+				cpc_desc->cpu_id);
+			cpc_desc->cpc_regs[reg_idx].cpc_entry.write_unsupported = true;
+		}
+	}
+
 	return 0;
 
 invalid:
@@ -452,8 +468,9 @@ invalid:
 		access_size = access_width / 8;
 	if (gas->bit_width)
 		access_size = max(access_size, cpc_sysmem_field_size(gas));
-	if (cpc_reg_is_write_only(cpc_desc, reg_idx) && gas->address &&
-	    access_size && gas->address <= U64_MAX - (access_size - 1)) {
+	if ((cpc_reg_is_write_only(cpc_desc, reg_idx) ||
+	     reg_idx == PERF_LIMITED) && gas->address && access_size &&
+	    gas->address <= U64_MAX - (access_size - 1)) {
 		struct cpc_register_resource *reg = &cpc_desc->cpc_regs[reg_idx];
 
 		pr_warn("CPU%d: _CPC v%d register %u is inaccessible; keeping its range reserved\n",
@@ -501,6 +518,14 @@ static int cpc_resolve_unsupported(struct cpc_desc *cpc_desc,
 	for (i = 0; i < cpc_desc->num_entries - 2; i++) {
 		if (!(unsupported & BIT(i)))
 			continue;
+
+		/* CPPC control does not depend on Performance Limited status. */
+		if (i == PERF_LIMITED) {
+			pr_warn("CPU%d: ignoring inaccessible Performance Limited register\n",
+				cpc_desc->cpu_id);
+			cpc_disable_reg(cpc_desc, i);
+			continue;
+		}
 
 		if (i == DESIRED_PERF && cpc_immutable_autonomous(cpc_desc)) {
 			pr_warn("CPU%d: ignoring inaccessible Desired Performance register in autonomous mode\n",
@@ -803,7 +828,8 @@ static void cpc_mark_rmw_lock_users(struct cpc_desc *cpc_desc)
 	for (i = 0; i < cpc_desc->num_entries - 2; i++) {
 		struct cpc_register_resource *reg = &cpc_desc->cpc_regs[i];
 
-		if (CPC_SUPPORTED(reg) && CPC_IN_SYSTEM_MEMORY(reg))
+		if (CPC_SUPPORTED(reg) && CPC_IN_SYSTEM_MEMORY(reg) &&
+		    cpc_is_writable(reg))
 			reg->cpc_entry.use_rmw_lock =
 				cpc_sysmem_reg_needs_rmw(reg);
 	}
@@ -905,6 +931,7 @@ static int cpc_validate_sysmem_pair(const struct cpc_desc *a_desc,
 	const struct cpc_register_resource *b = &b_desc->cpc_regs[b_idx];
 	bool a_writable, b_writable;
 
+	/* The overlap helper includes each descriptor's conservative claim. */
 	if (!CPC_SUPPORTED(a) || !CPC_IN_SYSTEM_MEMORY(a) ||
 	    !CPC_SUPPORTED(b) || !CPC_IN_SYSTEM_MEMORY(b) ||
 	    !cpc_sysmem_access_units_overlap(a, b))
@@ -932,6 +959,15 @@ static int cpc_validate_sysmem_pair(const struct cpc_desc *a_desc,
 			return 0;
 		goto conflict;
 	}
+
+	/*
+	 * The platform may set Performance Limited asynchronously.  A write to
+	 * another field in the same access unit could write back stale status
+	 * bits, which an OSPM lock cannot prevent.
+	 */
+	if ((a_idx == PERF_LIMITED && b_writable) ||
+	    (b_idx == PERF_LIMITED && a_writable))
+		goto conflict;
 
 	/* A full-width writable register owns its complete access unit. */
 	if ((a_writable && !cpc_sysmem_reg_needs_rmw(a) &&
@@ -2167,6 +2203,9 @@ static int cpc_read(int cpu, struct cpc_register_resource *reg_res, u64 *val)
 	int pcc_ss_id = per_cpu(cpu_pcc_subspace_idx, cpu);
 	struct cpc_reg *reg = &reg_res->cpc_entry.reg;
 
+	if (!cpc_is_readable(reg_res))
+		return -EOPNOTSUPP;
+
 	if (reg_res->type == ACPI_TYPE_INTEGER) {
 		*val = reg_res->cpc_entry.int_value;
 		return 0;
@@ -2268,13 +2307,10 @@ static int cpc_write(int cpu, struct cpc_register_resource *reg_res, u64 val)
 	unsigned int i;
 	bool locked = false;
 
-	if (reg_res->type != ACPI_TYPE_BUFFER)
+	if (!cpc_is_writable(reg_res))
 		return -EOPNOTSUPP;
 
 	reg = &reg_res->cpc_entry.reg;
-	if (IS_NULL_REG(reg))
-		return -EOPNOTSUPP;
-
 	size = GET_BIT_WIDTH(reg);
 
 	if (reg->space_id == ACPI_ADR_SPACE_SYSTEM_IO) {
@@ -2438,9 +2474,13 @@ static int cppc_get_reg_val(int cpu, enum cppc_regs reg_idx, u64 *val)
 
 	reg = &cpc_desc->cpc_regs[reg_idx];
 
-	/* Desired may be absent for immutable autonomous selection. */
+	/*
+	 * Desired and Performance Limited may be disabled despite not being
+	 * generally optional.
+	 */
 	if ((reg->type == ACPI_TYPE_INTEGER &&
-	     (IS_OPTIONAL_CPC_REG(reg_idx) || reg_idx == DESIRED_PERF) &&
+	     (IS_OPTIONAL_CPC_REG(reg_idx) || reg_idx == DESIRED_PERF ||
+	      reg_idx == PERF_LIMITED) &&
 	     !reg->cpc_entry.int_value) || (reg->type != ACPI_TYPE_INTEGER &&
 	     IS_NULL_REG(&reg->cpc_entry.reg))) {
 		pr_debug("CPC register is not supported\n");
@@ -3468,9 +3508,6 @@ EXPORT_SYMBOL_GPL(cppc_get_perf_limited);
  */
 int cppc_set_perf_limited(int cpu, u64 bits_to_clear)
 {
-	u64 current_val, new_val;
-	int ret;
-
 	/* Only bits 0 and 1 are valid */
 	if (bits_to_clear & ~CPPC_PERF_LIMITED_MASK)
 		return -EINVAL;
@@ -3478,14 +3515,13 @@ int cppc_set_perf_limited(int cpu, u64 bits_to_clear)
 	if (!bits_to_clear)
 		return 0;
 
-	ret = cppc_get_perf_limited(cpu, &current_val);
-	if (ret)
-		return ret;
-
-	/* Clear the specified bits */
-	new_val = current_val & ~bits_to_clear;
-
-	return cppc_set_reg_val(cpu, PERF_LIMITED, new_val);
+	/*
+	 * Performance Limited is write-zero-to-clear.  Write one to the other
+	 * defined sticky bits so a concurrently reported event is not cleared
+	 * using a value obtained by an earlier, separate read transaction.
+	 */
+	return cppc_set_reg_val(cpu, PERF_LIMITED,
+				CPPC_PERF_LIMITED_MASK & ~bits_to_clear);
 }
 EXPORT_SYMBOL_GPL(cppc_set_perf_limited);
 
