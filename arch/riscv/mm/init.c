@@ -6,6 +6,11 @@
  *  Nick Kossifidis <mick@ics.forth.gr>
  */
 
+#ifdef CONFIG_64BIT
+/* riscv_has_cap_likely() cannot be used this early */
+#define USE_EARLY_PGTABLE_LEVELS
+#endif
+
 #include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/memblock.h>
@@ -892,6 +897,10 @@ out:
 	memset(early_p4d, 0, PAGE_SIZE);
 	memset(early_pud, 0, PAGE_SIZE);
 	memset(early_pmd, 0, PAGE_SIZE);
+	if (pgtable_l4_enabled())
+		set_bit(RISCV_CAP_PGTABLE_L4 - RISCV_ISA_EXT_MAX, riscv_cap);
+	if (pgtable_l5_enabled())
+		set_bit(RISCV_CAP_PGTABLE_L5 - RISCV_ISA_EXT_MAX, riscv_cap);
 }
 #endif
 

@@ -218,6 +218,7 @@ config RISCV
 	select PCI_ECAM if (ACPI && PCI)
 	select PCI_MSI if PCI
 	select RELOCATABLE if !MMU && !PHYS_RAM_BASE_FIXED
+	select RISCV_ALTERNATIVE_EARLY if 64BIT
 	select RISCV_APLIC
 	select RISCV_IMSIC
 	select RISCV_INTC

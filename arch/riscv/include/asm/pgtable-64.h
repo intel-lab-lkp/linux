@@ -13,6 +13,7 @@
 extern bool _pgtable_l4_enabled;
 extern bool _pgtable_l5_enabled;
 
+#ifdef USE_EARLY_PGTABLE_LEVELS
 static __always_inline bool pgtable_l5_enabled(void)
 {
 	return _pgtable_l5_enabled;
@@ -22,6 +23,17 @@ static __always_inline bool pgtable_l4_enabled(void)
 {
 	return _pgtable_l4_enabled;
 }
+#else
+static __always_inline bool pgtable_l4_enabled(void)
+{
+	return riscv_has_cap_likely(RISCV_CAP_PGTABLE_L4);
+}
+
+static __always_inline bool pgtable_l5_enabled(void)
+{
+	return riscv_has_cap_likely(RISCV_CAP_PGTABLE_L5);
+}
+#endif
 
 #define PGDIR_SHIFT_L3  30
 #define PGDIR_SHIFT_L4  39
