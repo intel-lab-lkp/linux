@@ -7260,6 +7260,7 @@ __refill_objects_node(struct kmem_cache *s, void **p, gfp_t gfp, unsigned int mi
 	struct slab *slab, *slab2;
 	unsigned int refilled = 0;
 	unsigned long flags;
+	bool locked = false;
 	void *object;
 
 	pc.flags = gfp;
@@ -7297,7 +7298,10 @@ __refill_objects_node(struct kmem_cache *s, void **p, gfp_t gfp, unsigned int mi
 			void *tail;
 
 			if (__slab_try_return_freelist(s, slab, head, count)) {
+				/* get_from_partial_node() may be mid-removal of the slab */
+				spin_lock_irqsave(&n->list_lock, flags);
 				list_add(&slab->slab_list, &pc.slabs);
+				locked = true;
 				break;
 			}
 
@@ -7312,9 +7316,12 @@ __refill_objects_node(struct kmem_cache *s, void **p, gfp_t gfp, unsigned int mi
 			break;
 	}
 
-	if (!list_empty(&pc.slabs)) {
+	if (!locked && !list_empty(&pc.slabs)) {
 		spin_lock_irqsave(&n->list_lock, flags);
+		locked = true;
+	}
 
+	if (locked) {
 		list_for_each_entry(slab, &pc.slabs, slab_list)
 			set_node_partial_state(n, slab);
 
