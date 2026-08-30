@@ -393,14 +393,18 @@ int i2c_mux_add_adapter(struct i2c_mux_core *muxc,
 		}
 	}
 
-	WARN(sysfs_create_link(&priv->adap.dev.kobj, &muxc->dev->kobj,
-			       "mux_device"),
-	     "can't create symlink to mux device\n");
+	ret = sysfs_create_link(&priv->adap.dev.kobj, &muxc->dev->kobj,
+				"mux_device");
+	if (ret)
+		dev_err(muxc->dev, "can't create symlink to mux device\n");
 
 	snprintf(symlink_name, sizeof(symlink_name), "channel-%u", chan_id);
-	WARN(sysfs_create_link(&muxc->dev->kobj, &priv->adap.dev.kobj,
-			       symlink_name),
-	     "can't create symlink to channel %u\n", chan_id);
+	ret = sysfs_create_link(&muxc->dev->kobj, &priv->adap.dev.kobj,
+				symlink_name);
+	if (ret)
+		dev_err(muxc->dev,
+			"can't create symlink to channel %u\n", chan_id);
+
 	dev_info(&parent->dev, "Added multiplexed i2c bus %d\n",
 		 i2c_adapter_id(&priv->adap));
 
