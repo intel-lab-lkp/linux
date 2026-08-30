@@ -784,13 +784,15 @@ static int airoha_qdma_rx_napi_poll(struct napi_struct *napi, int budget)
 		int i, qid = q - &qdma->q_rx[0];
 		int intr_reg = qid < RX_DONE_HIGH_OFFSET ? QDMA_INT_REG_IDX1
 							 : QDMA_INT_REG_IDX2;
+		u32 bit = qid % RX_DONE_HIGH_OFFSET;
 
 		for (i = 0; i < ARRAY_SIZE(qdma->irq_banks); i++) {
 			if (!(BIT(qid) & RX_IRQ_BANK_PIN_MASK(i)))
 				continue;
 
 			airoha_qdma_irq_enable(&qdma->irq_banks[i], intr_reg,
-					       BIT(qid % RX_DONE_HIGH_OFFSET));
+					       BIT(bit) |
+					       BIT(bit + RX_NO_CPU_DSCP_LOW_OFFSET));
 		}
 	}
 
@@ -1468,16 +1470,32 @@ static irqreturn_t airoha_irq_handler(int irq, void *dev_instance)
 	if (!test_bit(DEV_STATE_INITIALIZED, &qdma->eth->state))
 		return IRQ_NONE;
 
-	rx_intr1 = intr[1] & RX_DONE_LOW_INT_MASK;
+	/* A ring can also raise NO_CPU_DSCP when it runs out of free RX
+	 * descriptors (e.g. a burst of VIP-classified control traffic
+	 * forced onto a small ring). Once a ring is fully drained no more
+	 * RX_DONE interrupts can fire for it, since there are no free
+	 * descriptors left for hardware to receive into, so without this
+	 * NAPI is never rescheduled and the ring never gets refilled again.
+	 * Treat NO_CPU_DSCP the same as RX_DONE for scheduling NAPI:
+	 * airoha_qdma_rx_process() unconditionally calls
+	 * airoha_qdma_fill_rx_queue() at the end of every poll, even when
+	 * zero descriptors were reaped, so this alone is enough to recover
+	 * the ring.
+	 */
+	rx_intr1 = intr[1] & (RX_DONE_LOW_INT_MASK | RX_NO_CPU_DSCP_LOW_INT_MASK);
 	if (rx_intr1) {
 		airoha_qdma_irq_disable(irq_bank, QDMA_INT_REG_IDX1, rx_intr1);
-		rx_intr_mask |= rx_intr1;
+		rx_intr_mask |= (rx_intr1 & RX_DONE_LOW_INT_MASK) |
+				((rx_intr1 & RX_NO_CPU_DSCP_LOW_INT_MASK) >>
+				 RX_NO_CPU_DSCP_LOW_OFFSET);
 	}
 
-	rx_intr2 = intr[2] & RX_DONE_HIGH_INT_MASK;
+	rx_intr2 = intr[2] & (RX_DONE_HIGH_INT_MASK | RX_NO_CPU_DSCP_HIGH_INT_MASK);
 	if (rx_intr2) {
 		airoha_qdma_irq_disable(irq_bank, QDMA_INT_REG_IDX2, rx_intr2);
-		rx_intr_mask |= (rx_intr2 << 16);
+		rx_intr_mask |= ((rx_intr2 & RX_DONE_HIGH_INT_MASK) |
+				 ((rx_intr2 & RX_NO_CPU_DSCP_HIGH_INT_MASK) >>
+				  RX_NO_CPU_DSCP_LOW_OFFSET)) << 16;
 	}
 
 	for (i = 0; rx_intr_mask && i < ARRAY_SIZE(qdma->q_rx); i++) {
