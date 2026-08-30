@@ -1994,8 +1994,6 @@ no_page:
 
 		if ((fgp_flags & FGP_WRITE) && mapping_can_writeback(mapping))
 			gfp |= __GFP_WRITE;
-		if (fgp_flags & FGP_NOFS)
-			gfp &= ~__GFP_FS;
 		if (fgp_flags & FGP_NOWAIT) {
 			gfp &= ~GFP_KERNEL;
 			gfp |= GFP_NOWAIT;
