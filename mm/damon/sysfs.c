@@ -1403,6 +1403,7 @@ struct damon_sysfs_context {
 	struct kobject kobj;
 	enum damon_ops_id ops_id;
 	unsigned long addr_unit;
+	bool aging_flush;
 	struct damon_sysfs_attrs *attrs;
 	struct damon_sysfs_targets *targets;
 	struct damon_sysfs_schemes *schemes;
@@ -1618,6 +1619,29 @@ static ssize_t pause_store(struct kobject *kobj, struct kobj_attribute *attr,
 	return count;
 }
 
+static ssize_t aging_flush_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	struct damon_sysfs_context *context = container_of(kobj,
+			struct damon_sysfs_context, kobj);
+
+	return sysfs_emit(buf, "%c\n", context->aging_flush ? 'Y' : 'N');
+}
+
+static ssize_t aging_flush_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	struct damon_sysfs_context *context = container_of(kobj,
+			struct damon_sysfs_context, kobj);
+	bool input_aging_flush;
+	int err = kstrtobool(buf, &input_aging_flush);
+
+	if (err)
+		return err;
+
+	context->aging_flush = input_aging_flush;
+	return count;
+}
 
 static void damon_sysfs_context_release(struct kobject *kobj)
 {
@@ -1636,11 +1660,15 @@ static struct kobj_attribute damon_sysfs_context_addr_unit_attr =
 static struct kobj_attribute damon_sysfs_context_pause_attr =
 		__ATTR_RW_MODE(pause, 0600);
 
+static struct kobj_attribute damon_sysfs_context_aging_flush_attr =
+		__ATTR_RW_MODE(aging_flush, 0600);
+
 static struct attribute *damon_sysfs_context_attrs[] = {
 	&damon_sysfs_context_avail_operations_attr.attr,
 	&damon_sysfs_context_operations_attr.attr,
 	&damon_sysfs_context_addr_unit_attr.attr,
 	&damon_sysfs_context_pause_attr.attr,
+	&damon_sysfs_context_aging_flush_attr.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(damon_sysfs_context);
@@ -2102,6 +2130,7 @@ static int damon_sysfs_apply_inputs(struct damon_ctx *ctx,
 	if (err)
 		return err;
 	ctx->addr_unit = READ_ONCE(sys_ctx->addr_unit);
+	ctx->aging_flush = READ_ONCE(sys_ctx->aging_flush);
 	/* addr_unit is respected by only DAMON_OPS_PADDR */
 	if (ops_id == DAMON_OPS_PADDR)
 		ctx->min_region_sz = max(
