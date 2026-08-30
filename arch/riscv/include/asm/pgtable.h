@@ -1231,10 +1231,8 @@ static inline pte_t pte_swp_clear_exclusive(pte_t pte)
 #endif
 
 /*
- * Task size is 0x4000000000 for RV64 or 0x9fc00000 for RV32.
- * Note that PGDIR_SIZE must evenly divide TASK_SIZE.
- * Task size is:
- * -        0x9fc00000	(~2.5GB) for RV32.
+ * For RV32, TASK_SIZE is FIXADDR_START and depends on VMEMMAP_SIZE.
+ * For RV64, task size is:
  * -      0x4000000000	( 256GB) for RV64 using SV39 mmu
  * -    0x800000000000	( 128TB) for RV64 using SV48 mmu
  * - 0x100000000000000	(  64PB) for RV64 using SV57 mmu
