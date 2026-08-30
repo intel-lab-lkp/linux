@@ -282,7 +282,7 @@ static const struct imx471_mode imx471_modes[] = {
 		.height = 1088,
 		.fll_def = 1308,
 		.fll_min = 1308,
-		.llp = 2328,
+		.llp = 5120,
 		.default_mode_regs = mode_1928x1088_regs,
 		.default_mode_regs_length = ARRAY_SIZE(mode_1928x1088_regs),
 	},
@@ -691,8 +691,8 @@ static int imx471_init_controls(struct imx471 *sensor)
 					   0,
 					   link_freq_menu_items);
 
-	/* pixel_rate = link_freq * 2 * nr_of_lanes / bits_per_sample */
-	pixel_rate = div_u64(IMX471_LINK_FREQ_DEFAULT * 2 * 4, 10);
+	/* pixel_rate = 2 * vt_pix_clk, with vt_pix_clk = 19.2 MHz / 2 * 121 / 6 */
+	pixel_rate = 387200000;
 
 	v4l2_ctrl_new_std(ctrl_hdlr, &imx471_ctrl_ops,
 			  V4L2_CID_PIXEL_RATE, pixel_rate,
