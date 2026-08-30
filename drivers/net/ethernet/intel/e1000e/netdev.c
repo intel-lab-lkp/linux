@@ -1631,13 +1631,23 @@ static bool e1000_clean_jumbo_rx_irq(struct e1000_ring *rx_ring, int *work_done,
 			}
 		}
 
+		/* strip the Ethernet CRC; it may span fragments */
+		if (!(adapter->flags2 & FLAG2_CRC_STRIPPING) &&
+		    !(netdev->features & NETIF_F_RXFCS))
+			pskb_trim(skb, skb->len - 4);
+
 		/* Receive Checksum Offload */
 		e1000_rx_checksum(adapter, staterr, skb);
 
 		e1000_rx_hash(netdev, rx_desc->wb.lower.hi_dword.rss, skb);
 
-		/* probably a little skewed due to removing CRC */
 		total_rx_bytes += skb->len;
+		/* If configured to store CRC, keep the FCS bytes out of the
+		 * total_rx_bytes counter
+		 */
+		if (!(adapter->flags2 & FLAG2_CRC_STRIPPING) &&
+		    (netdev->features & NETIF_F_RXFCS))
+			total_rx_bytes -= 4;
 		total_rx_packets++;
 
 		/* eth type trans needs skb->data to point to something */
