@@ -171,15 +171,16 @@ static int match_op(substring_t *args, enum req_op *op)
 static int match_status(substring_t *args, blk_status_t *status)
 {
 	const char *tag;
+	int ret;
 
 	tag = match_strdup(args);
 	if (!tag)
 		return -ENOMEM;
-	*status = tag_to_blk_status(tag);
-	if (!*status)
+	ret = tag_to_blk_status(tag, status);
+	if (ret)
 		pr_warn("invalid status '%s'\n", tag);
 	kfree(tag);
-	return 0;
+	return ret;
 }
 
 static ssize_t blk_error_injection_parse_options(struct gendisk *disk,
