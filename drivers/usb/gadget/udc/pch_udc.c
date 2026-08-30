@@ -3067,6 +3067,7 @@ static int pch_udc_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return retval;
 
 	dev->base_addr = pcim_iomap_table(pdev)[dev->bar];
+	spin_lock_init(&dev->lock);
 
 	/* initialize the hardware */
 	retval = pch_udc_pcd_init(dev);
@@ -3087,7 +3088,6 @@ static int pch_udc_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	pci_try_set_mwi(pdev);
 
 	/* device struct setup */
-	spin_lock_init(&dev->lock);
 	dev->gadget.ops = &pch_udc_ops;
 
 	retval = init_dma_pools(dev);
