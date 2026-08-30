@@ -1000,6 +1000,7 @@ static void airoha_qdma_rx_recover_work(struct work_struct *work)
 		napi_enable(&q->napi);
 		napi_schedule(&q->napi);
 
+		qdma->rx_recover_count++;
 		dev_warn_ratelimited(qdma->eth->dev,
 				     "qid=%d RX ring recovered after hw stall (RX DMA paused for %lld us on this QDMA instance)\n",
 				     qid, rx_dma_off_us);
@@ -2600,6 +2601,46 @@ static void airoha_ethtool_get_drvinfo(struct net_device *netdev,
 	strscpy(info->bus_info, dev_name(eth->dev), sizeof(info->bus_info));
 }
 
+static const char airoha_ethtool_stats_str[][ETH_GSTRING_LEN] = {
+	"rx_stall_recover",
+};
+
+static void airoha_ethtool_get_strings(struct net_device *netdev, u32 sset,
+				       u8 *data)
+{
+	int i;
+
+	if (sset != ETH_SS_STATS)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(airoha_ethtool_stats_str); i++)
+		ethtool_puts(&data, airoha_ethtool_stats_str[i]);
+}
+
+static int airoha_ethtool_get_sset_count(struct net_device *netdev, int sset)
+{
+	return sset == ETH_SS_STATS ?
+	       ARRAY_SIZE(airoha_ethtool_stats_str) : -EOPNOTSUPP;
+}
+
+static void airoha_ethtool_get_ethtool_stats(struct net_device *netdev,
+					     struct ethtool_stats *stats,
+					     u64 *data)
+{
+	struct airoha_gdm_dev *dev = netdev_priv(netdev);
+	struct airoha_qdma *qdma;
+
+	rcu_read_lock();
+	qdma = rcu_dereference(dev->qdma);
+	/* aggregate recovery count for the whole qdma instance: the
+	 * stalled ring can carry traffic for more than one netdev (VIP
+	 * classification shares ring 4 across several protocols/ports),
+	 * so there's no single netdev to attribute an individual event to
+	 */
+	data[0] = qdma ? qdma->rx_recover_count : 0;
+	rcu_read_unlock();
+}
+
 static void airoha_ethtool_get_mac_stats(struct net_device *netdev,
 					 struct ethtool_eth_mac_stats *stats)
 {
@@ -3502,6 +3543,9 @@ static const struct net_device_ops airoha_netdev_ops = {
 
 static const struct ethtool_ops airoha_ethtool_ops = {
 	.get_drvinfo		= airoha_ethtool_get_drvinfo,
+	.get_strings		= airoha_ethtool_get_strings,
+	.get_sset_count		= airoha_ethtool_get_sset_count,
+	.get_ethtool_stats	= airoha_ethtool_get_ethtool_stats,
 	.get_eth_mac_stats      = airoha_ethtool_get_mac_stats,
 	.get_rmon_stats		= airoha_ethtool_get_rmon_stats,
 	.get_link_ksettings	= phy_ethtool_get_link_ksettings,

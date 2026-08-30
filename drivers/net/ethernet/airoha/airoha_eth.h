@@ -582,6 +582,11 @@ struct airoha_qdma {
 	 */
 	struct work_struct rx_recover_work;
 	DECLARE_BITMAP(rx_recover_mask, AIROHA_NUM_RX_RING);
+	/* count of completed hw-stall recoveries, exposed via ethtool -S
+	 * so a recovery event (and the packets it drops) is observable
+	 * without grepping dmesg for the dev_warn_ratelimited() above
+	 */
+	u32 rx_recover_count;
 
 	DECLARE_BITMAP(qos_channel_map, AIROHA_NUM_QOS_CHANNELS);
 };
