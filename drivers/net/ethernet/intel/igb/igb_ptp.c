@@ -1378,6 +1378,7 @@ void igb_ptp_init(struct igb_adapter *adapter)
 		return;
 	}
 
+	spin_lock_init(&adapter->tmreg_lock);
 	adapter->ptp_clock = ptp_clock_register(&adapter->ptp_caps,
 						&adapter->pdev->dev);
 	if (IS_ERR(adapter->ptp_clock)) {
@@ -1388,7 +1389,6 @@ void igb_ptp_init(struct igb_adapter *adapter)
 			 adapter->netdev->name);
 		adapter->ptp_flags |= IGB_PTP_ENABLED;
 
-		spin_lock_init(&adapter->tmreg_lock);
 		INIT_WORK(&adapter->ptp_tx_work, igb_ptp_tx_work);
 
 		if (adapter->ptp_flags & IGB_PTP_OVERFLOW_CHECK)
