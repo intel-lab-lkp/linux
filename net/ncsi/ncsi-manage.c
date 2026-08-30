@@ -10,6 +10,7 @@
 #include <linux/skbuff.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/rcupdate.h>
 
 #include <net/ncsi.h>
 #include <net/net_namespace.h>
@@ -35,17 +36,23 @@ bool ncsi_channel_is_last(struct ncsi_dev_priv *ndp,
 {
 	struct ncsi_package *np;
 	struct ncsi_channel *nc;
+	bool is_last = true;
 
-	NCSI_FOR_EACH_PACKAGE(ndp, np)
+	rcu_read_lock();
+	NCSI_FOR_EACH_PACKAGE(ndp, np) {
 		NCSI_FOR_EACH_CHANNEL(np, nc) {
 			if (nc == channel)
 				continue;
 			if (nc->state == NCSI_CHANNEL_ACTIVE &&
-			    ncsi_channel_has_link(nc))
-				return false;
+			    ncsi_channel_has_link(nc)) {
+				is_last = false;
+				goto out;
+			}
 		}
-
-	return true;
+	}
+ out:
+	rcu_read_unlock();
+	return is_last;
 }
 
 static void ncsi_report_link(struct ncsi_dev_priv *ndp, bool force_down)
@@ -62,6 +69,7 @@ static void ncsi_report_link(struct ncsi_dev_priv *ndp, bool force_down)
 	}
 
 	nd->link_up = 0;
+	rcu_read_lock();
 	NCSI_FOR_EACH_PACKAGE(ndp, np) {
 		NCSI_FOR_EACH_CHANNEL(np, nc) {
 			spin_lock_irqsave(&nc->lock, flags);
@@ -75,12 +83,14 @@ static void ncsi_report_link(struct ncsi_dev_priv *ndp, bool force_down)
 			if (ncsi_channel_has_link(nc)) {
 				spin_unlock_irqrestore(&nc->lock, flags);
 				nd->link_up = 1;
+				rcu_read_unlock();
 				goto report;
 			}
 
 			spin_unlock_irqrestore(&nc->lock, flags);
 		}
 	}
+	rcu_read_unlock();
 
 report:
 	nd->handler(nd);
@@ -242,28 +252,37 @@ struct ncsi_channel *ncsi_add_channel(struct ncsi_package *np, unsigned char id)
 	return nc;
 }
 
+static void ncsi_channel_rcu_free(struct rcu_head *head)
+{
+	struct ncsi_channel *nc = container_of(head, struct ncsi_channel, rcu);
+
+	kfree(nc->mac_filter.addrs);
+	kfree(nc->vlan_filter.vids);
+	kfree(nc);
+}
+
 static void ncsi_remove_channel(struct ncsi_channel *nc)
 {
 	struct ncsi_package *np = nc->package;
+	struct ncsi_dev_priv *ndp = np->ndp;
 	unsigned long flags;
 
-	spin_lock_irqsave(&nc->lock, flags);
-
-	/* Release filters */
-	kfree(nc->mac_filter.addrs);
-	kfree(nc->vlan_filter.vids);
-
-	nc->state = NCSI_CHANNEL_INACTIVE;
-	spin_unlock_irqrestore(&nc->lock, flags);
 	ncsi_stop_channel_monitor(nc);
 
-	/* Remove and free channel */
+	spin_lock_irqsave(&nc->lock, flags);
+	nc->state = NCSI_CHANNEL_INACTIVE;
+	spin_unlock_irqrestore(&nc->lock, flags);
+
+	spin_lock_irqsave(&ndp->lock, flags);
+	list_del_rcu(&nc->link);
+	spin_unlock_irqrestore(&ndp->lock, flags);
+
 	spin_lock_irqsave(&np->lock, flags);
 	list_del_rcu(&nc->node);
 	np->channel_num--;
 	spin_unlock_irqrestore(&np->lock, flags);
 
-	kfree(nc);
+	call_rcu(&nc->rcu, ncsi_channel_rcu_free);
 }
 
 struct ncsi_package *ncsi_find_package(struct ncsi_dev_priv *ndp,
@@ -326,7 +345,7 @@ void ncsi_remove_package(struct ncsi_package *np)
 	ndp->package_num--;
 	spin_unlock_irqrestore(&ndp->lock, flags);
 
-	kfree(np);
+	kfree_rcu(np, rcu);
 }
 
 void ncsi_find_package_and_channel(struct ncsi_dev_priv *ndp,
@@ -409,7 +428,8 @@ void ncsi_free_request(struct ncsi_request *nr)
 	spin_unlock_irqrestore(&ndp->lock, flags);
 
 	if (driven && cmd && --ndp->pending_req_num == 0)
-		schedule_work(&ndp->work);
+		if (!READ_ONCE(ndp->work_cancelled))
+			schedule_work(&ndp->work);
 
 	/* Release command and response */
 	consume_skb(cmd);
@@ -912,6 +932,7 @@ int ncsi_update_tx_channel(struct ncsi_dev_priv *ndp,
 	nca.req_flags = 0;
 
 	/* Find current channel with Tx enabled */
+	rcu_read_lock();
 	NCSI_FOR_EACH_PACKAGE(ndp, np) {
 		if (disable)
 			break;
@@ -924,8 +945,10 @@ int ncsi_update_tx_channel(struct ncsi_dev_priv *ndp,
 				break;
 			}
 	}
+	rcu_read_unlock();
 
 	/* Find a suitable channel for Tx */
+	rcu_read_lock();
 	NCSI_FOR_EACH_PACKAGE(ndp, np) {
 		if (enable)
 			break;
@@ -951,6 +974,7 @@ int ncsi_update_tx_channel(struct ncsi_dev_priv *ndp,
 			}
 		}
 	}
+	rcu_read_unlock();
 
 	if (disable == enable)
 		return -1;
@@ -1253,6 +1277,7 @@ static int ncsi_choose_active_channel(struct ncsi_dev_priv *ndp)
 	 */
 	found = NULL;
 	with_link = false;
+	rcu_read_lock();
 	NCSI_FOR_EACH_PACKAGE(ndp, np) {
 		if (!(ndp->package_whitelist & (0x1 << np->id)))
 			continue;
@@ -1304,6 +1329,7 @@ static int ncsi_choose_active_channel(struct ncsi_dev_priv *ndp)
 		if (with_link && !ndp->multi_package)
 			break;
 	}
+	rcu_read_unlock();
 
 	if (list_empty(&ndp->channel_queue) && found) {
 		netdev_info(ndp->ndev.dev,
@@ -1332,6 +1358,7 @@ static bool ncsi_check_hwa(struct ncsi_dev_priv *ndp)
 	/* The hardware arbitration is disabled if any one channel
 	 * doesn't support explicitly.
 	 */
+	rcu_read_lock();
 	NCSI_FOR_EACH_PACKAGE(ndp, np) {
 		NCSI_FOR_EACH_CHANNEL(np, nc) {
 			has_channel = true;
@@ -1345,6 +1372,7 @@ static bool ncsi_check_hwa(struct ncsi_dev_priv *ndp)
 			}
 		}
 	}
+	rcu_read_unlock();
 
 	if (has_channel) {
 		ndp->flags |= NCSI_DEV_HWA;
@@ -1782,6 +1810,7 @@ struct ncsi_dev *ncsi_register_dev(struct net_device *dev,
 	ndp->package_whitelist = UINT_MAX;
 
 	/* Initialize private NCSI device */
+	kref_init(&ndp->ref);
 	spin_lock_init(&ndp->lock);
 	INIT_LIST_HEAD(&ndp->packages);
 	ndp->request_id = NCSI_REQ_START_IDX;
@@ -1952,23 +1981,65 @@ int ncsi_reset_dev(struct ncsi_dev *nd)
 	return 0;
 }
 
+static void ncsi_dev_release(struct kref *ref)
+{
+	struct ncsi_dev_priv *ndp;
+
+	ndp = container_of(ref, struct ncsi_dev_priv, ref);
+	kfree_rcu(ndp, rcu);
+}
+
+struct ncsi_dev_priv *ncsi_dev_get(struct net_device *dev)
+{
+	struct ncsi_dev_priv *ndp = NULL;
+	struct ncsi_dev *nd;
+
+	rcu_read_lock();
+	nd = ncsi_find_dev(dev);
+	if (nd) {
+		ndp = TO_NCSI_DEV_PRIV(nd);
+		/* Safely grab a reference while under RCU lock */
+		if (!kref_get_unless_zero(&ndp->ref))
+			ndp = NULL;
+	}
+	rcu_read_unlock();
+
+	return ndp;
+}
+
+void ncsi_dev_put(struct ncsi_dev_priv *ndp)
+{
+	if (ndp)
+		kref_put(&ndp->ref, ncsi_dev_release);
+}
+
 void ncsi_unregister_dev(struct ncsi_dev *nd)
 {
 	struct ncsi_dev_priv *ndp = TO_NCSI_DEV_PRIV(nd);
 	struct ncsi_package *np, *tmp;
 	unsigned long flags;
 
-	dev_remove_pack(&ndp->ptype);
-
-	list_for_each_entry_safe(np, tmp, &ndp->packages, node)
-		ncsi_remove_package(np);
-
 	spin_lock_irqsave(&ncsi_dev_lock, flags);
 	list_del_rcu(&ndp->node);
 	spin_unlock_irqrestore(&ncsi_dev_lock, flags);
 
+	spin_lock_irqsave(&ndp->lock, flags);
+	ndp->work_cancelled = true;
+	spin_unlock_irqrestore(&ndp->lock, flags);
+
+	for (int i = 0; i < ARRAY_SIZE(ndp->requests); i++) {
+		struct ncsi_request *nr = &ndp->requests[i];
+
+		if (nr->enabled)
+			ncsi_free_request(nr);
+	}
+
+	dev_remove_pack(&ndp->ptype);
 	disable_work_sync(&ndp->work);
 
-	kfree(ndp);
+	list_for_each_entry_safe(np, tmp, &ndp->packages, node)
+		ncsi_remove_package(np);
+
+	kref_put(&ndp->ref, ncsi_dev_release);
 }
 EXPORT_SYMBOL_GPL(ncsi_unregister_dev);

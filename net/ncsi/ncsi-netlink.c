@@ -35,8 +35,6 @@ static struct ncsi_dev_priv *ndp_from_ifindex(struct net *net, u32 ifindex)
 {
 	struct ncsi_dev_priv *ndp;
 	struct net_device *dev;
-	struct ncsi_dev *nd;
-	struct ncsi_dev;
 
 	if (!net)
 		return NULL;
@@ -47,9 +45,7 @@ static struct ncsi_dev_priv *ndp_from_ifindex(struct net *net, u32 ifindex)
 		return NULL;
 	}
 
-	nd = ncsi_find_dev(dev);
-	ndp = nd ? TO_NCSI_DEV_PRIV(nd) : NULL;
-
+	ndp = ncsi_dev_get(dev);
 	dev_put(dev);
 	return ndp;
 }
@@ -175,13 +171,16 @@ static int ncsi_pkg_info_nl(struct sk_buff *msg, struct genl_info *info)
 		return -ENODEV;
 
 	skb = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
-	if (!skb)
+	if (!skb) {
+		ncsi_dev_put(ndp);
 		return -ENOMEM;
+	}
 
 	hdr = genlmsg_put(skb, info->snd_portid, info->snd_seq,
 			  &ncsi_genl_family, 0, NCSI_CMD_PKG_INFO);
 	if (!hdr) {
 		kfree_skb(skb);
+		ncsi_dev_put(ndp);
 		return -EMSGSIZE;
 	}
 
@@ -190,9 +189,13 @@ static int ncsi_pkg_info_nl(struct sk_buff *msg, struct genl_info *info)
 	attr = nla_nest_start_noflag(skb, NCSI_ATTR_PACKAGE_LIST);
 	if (!attr) {
 		kfree_skb(skb);
+		ncsi_dev_put(ndp);
 		return -EMSGSIZE;
 	}
+
+	rcu_read_lock();
 	rc = ncsi_write_package_info(skb, ndp, package_id);
+	rcu_read_unlock();
 
 	if (rc) {
 		nla_nest_cancel(skb, attr);
@@ -202,10 +205,12 @@ static int ncsi_pkg_info_nl(struct sk_buff *msg, struct genl_info *info)
 	nla_nest_end(skb, attr);
 
 	genlmsg_end(skb, hdr);
+	ncsi_dev_put(ndp);
 	return genlmsg_reply(skb, info);
 
 err:
 	kfree_skb(skb);
+	ncsi_dev_put(ndp);
 	return rc;
 }
 
@@ -235,14 +240,17 @@ static int ncsi_pkg_info_all_nl(struct sk_buff *skb,
 		return -ENODEV;
 
 	package_id = cb->args[0];
+	rcu_read_lock();
 	package = NULL;
 	NCSI_FOR_EACH_PACKAGE(ndp, np)
 		if (np->id == package_id)
 			package = np;
 
-	if (!package)
+	if (!package) {
+		rcu_read_unlock();
+		ncsi_dev_put(ndp);
 		return 0; /* done */
-
+	}
 	hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
 			  &ncsi_genl_family, NLM_F_MULTI,  NCSI_CMD_PKG_INFO);
 	if (!hdr) {
@@ -255,7 +263,9 @@ static int ncsi_pkg_info_all_nl(struct sk_buff *skb,
 		rc = -EMSGSIZE;
 		goto err;
 	}
+
 	rc = ncsi_write_package_info(skb, ndp, package->id);
+
 	if (rc) {
 		nla_nest_cancel(skb, attr);
 		goto err;
@@ -266,9 +276,13 @@ static int ncsi_pkg_info_all_nl(struct sk_buff *skb,
 
 	cb->args[0] = package_id + 1;
 
+	rcu_read_unlock();
+	ncsi_dev_put(ndp);
 	return skb->len;
 err:
+	rcu_read_unlock();
 	genlmsg_cancel(skb, hdr);
+	ncsi_dev_put(ndp);
 	return rc;
 }
 
@@ -297,11 +311,15 @@ static int ncsi_set_interface_nl(struct sk_buff *msg, struct genl_info *info)
 	package_id = nla_get_u32(info->attrs[NCSI_ATTR_PACKAGE_ID]);
 	package = NULL;
 
+	rcu_read_lock();
 	NCSI_FOR_EACH_PACKAGE(ndp, np)
 		if (np->id == package_id)
 			package = np;
+
 	if (!package) {
 		/* The user has set a package that does not exist */
+		rcu_read_unlock();
+		ncsi_dev_put(ndp);
 		return -ERANGE;
 	}
 
@@ -317,6 +335,8 @@ static int ncsi_set_interface_nl(struct sk_buff *msg, struct genl_info *info)
 			netdev_info(ndp->ndev.dev,
 				    "NCSI: Channel %u does not exist!\n",
 				    channel_id);
+			rcu_read_unlock();
+			ncsi_dev_put(ndp);
 			return -ERANGE;
 		}
 	}
@@ -337,6 +357,7 @@ static int ncsi_set_interface_nl(struct sk_buff *msg, struct genl_info *info)
 		package->preferred_channel = NULL;
 	}
 	spin_unlock_irqrestore(&package->lock, flags);
+	rcu_read_unlock();
 
 	if (channel)
 		netdev_info(ndp->ndev.dev,
@@ -350,6 +371,7 @@ static int ncsi_set_interface_nl(struct sk_buff *msg, struct genl_info *info)
 	if (!(ndp->flags & NCSI_DEV_RESET))
 		ncsi_reset_dev(&ndp->ndev);
 
+	ncsi_dev_put(ndp);
 	return 0;
 }
 
@@ -376,6 +398,7 @@ static int ncsi_clear_interface_nl(struct sk_buff *msg, struct genl_info *info)
 	ndp->multi_package = false;
 	spin_unlock_irqrestore(&ndp->lock, flags);
 
+	rcu_read_lock();
 	NCSI_FOR_EACH_PACKAGE(ndp, np) {
 		spin_lock_irqsave(&np->lock, flags);
 		np->multi_channel = false;
@@ -383,18 +406,21 @@ static int ncsi_clear_interface_nl(struct sk_buff *msg, struct genl_info *info)
 		np->preferred_channel = NULL;
 		spin_unlock_irqrestore(&np->lock, flags);
 	}
+	rcu_read_unlock();
+
 	netdev_info(ndp->ndev.dev, "NCSI: Cleared preferred package/channel\n");
 
 	/* Update channel configuration */
 	if (!(ndp->flags & NCSI_DEV_RESET))
 		ncsi_reset_dev(&ndp->ndev);
 
+	ncsi_dev_put(ndp);
 	return 0;
 }
 
 static int ncsi_send_cmd_nl(struct sk_buff *msg, struct genl_info *info)
 {
-	struct ncsi_dev_priv *ndp;
+	struct ncsi_dev_priv *ndp = NULL;
 	struct ncsi_pkt_hdr *hdr;
 	struct ncsi_cmd_arg nca;
 	unsigned char *data;
@@ -480,6 +506,7 @@ out_netlink:
 				      ret);
 	}
 out:
+	ncsi_dev_put(ndp);
 	return ret;
 }
 
@@ -639,6 +666,7 @@ static int ncsi_set_package_mask_nl(struct sk_buff *msg,
 			ncsi_reset_dev(&ndp->ndev);
 	}
 
+	ncsi_dev_put(ndp);
 	return rc;
 }
 
@@ -670,14 +698,17 @@ static int ncsi_set_channel_mask_nl(struct sk_buff *msg,
 
 	package_id = nla_get_u32(info->attrs[NCSI_ATTR_PACKAGE_ID]);
 	package = NULL;
+	rcu_read_lock();
 	NCSI_FOR_EACH_PACKAGE(ndp, np)
 		if (np->id == package_id) {
 			package = np;
 			break;
 		}
-	if (!package)
+	if (!package) {
+		rcu_read_unlock();
+		ncsi_dev_put(ndp);
 		return -ERANGE;
-
+	}
 	spin_lock_irqsave(&package->lock, flags);
 
 	channel = NULL;
@@ -690,6 +721,7 @@ static int ncsi_set_channel_mask_nl(struct sk_buff *msg,
 			}
 		if (!channel) {
 			spin_unlock_irqrestore(&package->lock, flags);
+			ncsi_dev_put(ndp);
 			return -ERANGE;
 		}
 		netdev_dbg(ndp->ndev.dev,
@@ -716,11 +748,13 @@ static int ncsi_set_channel_mask_nl(struct sk_buff *msg,
 	}
 
 	spin_unlock_irqrestore(&package->lock, flags);
+	rcu_read_unlock();
 
 	/* Update channel configuration */
 	if (!(ndp->flags & NCSI_DEV_RESET))
 		ncsi_reset_dev(&ndp->ndev);
 
+	ncsi_dev_put(ndp);
 	return 0;
 }
 
