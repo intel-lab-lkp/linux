@@ -85,7 +85,6 @@ static const struct e1000_stats e1000_gstrings_stats[] = {
 	E1000_STAT("tx_flow_control_xoff", stats.xofftxc),
 	E1000_STAT("rx_csum_offload_good", hw_csum_good),
 	E1000_STAT("rx_csum_offload_errors", hw_csum_err),
-	E1000_STAT("rx_header_split", rx_hdr_split),
 	E1000_STAT("alloc_rx_buff_failed", alloc_rx_buff_failed),
 	E1000_STAT("tx_smbus", stats.mgptc),
 	E1000_STAT("rx_smbus", stats.mgprc),

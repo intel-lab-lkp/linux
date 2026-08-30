@@ -121,11 +121,6 @@ enum e1000_boards {
 	board_pch_ptp
 };
 
-struct e1000_ps_page {
-	struct page *page;
-	u64 dma; /* must be u64 - written to hw */
-};
-
 /* wrappers around a pointer to a socket buffer,
  * so a DMA handle can be stored along with the buffer
  */
@@ -143,11 +138,7 @@ struct e1000_buffer {
 			u16 mapped_as_page;
 		};
 		/* Rx */
-		struct {
-			/* arrays of page information for packet split */
-			struct e1000_ps_page *ps_pages;
-			struct page *page;
-		};
+		struct page *page;
 	};
 };
 
@@ -265,15 +256,12 @@ struct e1000_adapter {
 	/* Rx stats */
 	u64 hw_csum_err;
 	u64 hw_csum_good;
-	u64 rx_hdr_split;
 	u32 gorc;
 	u64 gorc_old;
 	u32 alloc_rx_buff_failed;
 	u32 rx_dma_failed;
 	u32 rx_hwtstamp_cleared;
 
-	unsigned int rx_ps_pages;
-	u16 rx_ps_bsize0;
 	u32 max_frame_size;
 	u32 min_frame_size;
 
@@ -464,8 +452,6 @@ s32 e1000e_get_base_timinca(struct e1000_adapter *adapter, u32 *timinca);
 #define FLAG2_ENABLE_S0IX_FLOWS           BIT(15)
 #define FLAG2_DISABLE_K1		   BIT(16)
 
-#define E1000_RX_DESC_PS(R, i)	    \
-	(&(((union e1000_rx_desc_packet_split *)((R).desc))[i]))
 #define E1000_RX_DESC_EXT(R, i)	    \
 	(&(((union e1000_rx_desc_extended *)((R).desc))[i]))
 #define E1000_GET_DESC(R, i, type)	(&(((struct type *)((R).desc))[i]))
