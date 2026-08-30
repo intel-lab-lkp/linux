@@ -161,6 +161,26 @@ static void req_check_sq_drain_done(struct rxe_qp *qp)
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 }
 
+/* Write back modified WQE fields to the shared queue using
+ * WRITE_ONCE() so the completer observes consistent values.
+ * Only the fields modified by the requester are written back;
+ * state is written last as the publication field.
+ */
+static void rxe_req_writeback_wqe(struct rxe_qp *qp)
+{
+	if (qp->req.send_wqe_valid && qp->req.shared_wqe) {
+		struct rxe_send_wqe *shared = qp->req.shared_wqe;
+		struct rxe_send_wqe *local = &qp->req.send_wqe.wqe;
+
+		WRITE_ONCE(shared->dma.cur_sge, local->dma.cur_sge);
+		WRITE_ONCE(shared->dma.sge_offset, local->dma.sge_offset);
+		WRITE_ONCE(shared->dma.resid, local->dma.resid);
+		WRITE_ONCE(shared->status, local->status);
+		/* Ensure fields above are visible before state transition */
+		smp_store_release(&shared->state, local->state);
+	}
+}
+
 static struct rxe_send_wqe *__req_next_wqe(struct rxe_qp *qp)
 {
 	struct rxe_queue *q = qp->sq.queue;
@@ -178,6 +198,8 @@ static struct rxe_send_wqe *req_next_wqe(struct rxe_qp *qp)
 {
 	struct rxe_send_wqe *wqe;
 	unsigned long flags;
+	unsigned int num_sge;
+	size_t copy_size;
 
 	req_check_sq_drain_done(qp);
 
@@ -193,6 +215,28 @@ static struct rxe_send_wqe *req_next_wqe(struct rxe_qp *qp)
 	}
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 
+	/* If we already have a valid local copy of this WQE, use it.
+	 * This preserves DMA progress state across multi-packet sends.
+	 */
+	if (qp->req.send_wqe_valid && qp->req.shared_wqe == wqe)
+		return &qp->req.send_wqe.wqe;
+
+	/* Copy WQE from userspace-mapped shared queue to kernel-private
+	 * buffer to prevent TOCTOU races on num_sge, SGE entries, and
+	 * inline data offsets. This is the send-path counterpart to
+	 * rxe_get_recv_wqe().
+	 */
+	num_sge = wqe->dma.num_sge;
+	if (unlikely(num_sge > qp->sq.max_sge)) {
+		rxe_dbg_qp(qp, "invalid num_sge in send WQE\n");
+		return NULL;
+	}
+	copy_size = sizeof(*wqe) + num_sge * sizeof(struct rxe_sge);
+	memcpy(&qp->req.send_wqe.wqe, wqe, copy_size);
+	qp->req.shared_wqe = wqe;
+	qp->req.send_wqe_valid = true;
+
+	wqe = &qp->req.send_wqe.wqe;
 	wqe->mask = wr_opcode_mask(wqe->wr.opcode, qp);
 	return wqe;
 }
@@ -582,9 +626,14 @@ static void update_state(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 {
 	qp->req.opcode = pkt->opcode;
 
-	if (pkt->mask & RXE_END_MASK)
+	/* Write back local WQE state before possibly advancing index */
+	rxe_req_writeback_wqe(qp);
+
+	if (pkt->mask & RXE_END_MASK) {
 		qp->req.wqe_index = queue_next_index(qp->sq.queue,
 						     qp->req.wqe_index);
+		qp->req.send_wqe_valid = false;
+	}
 
 	qp->need_req_skb = 0;
 
@@ -635,6 +684,7 @@ static int rxe_do_local_ops(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	wqe->state = wqe_state_done;
 	wqe->status = IB_WC_SUCCESS;
 	qp->req.wqe_index = queue_next_index(qp->sq.queue, qp->req.wqe_index);
+	qp->req.send_wqe_valid = false;
 
 	return 0;
 }
@@ -695,6 +745,7 @@ int rxe_requester(struct rxe_qp *qp)
 	if (unlikely(qp->req.need_retry && !qp->req.wait_for_rnr_timer)) {
 		req_retry(qp);
 		qp->req.need_retry = 0;
+		qp->req.send_wqe_valid = false;
 	}
 
 	wqe = req_next_wqe(qp);
@@ -776,6 +827,7 @@ int rxe_requester(struct rxe_qp *qp)
 						       qp->req.wqe_index);
 			wqe->state = wqe_state_done;
 			wqe->status = IB_WC_SUCCESS;
+			qp->req.send_wqe_valid = false;
 			goto done;
 		}
 		payload = mtu;
@@ -835,12 +887,18 @@ int rxe_requester(struct rxe_qp *qp)
 	 * will continue looping and return to rxe_requester
 	 */
 done:
+	/* Write back local WQE for paths that skip update_state()
+	 * (local ops, UD oversized packets).
+	 */
+	rxe_req_writeback_wqe(qp);
 	ret = 0;
 	goto out;
 err:
 	/* update wqe_index for each wqe completion */
 	qp->req.wqe_index = queue_next_index(qp->sq.queue, qp->req.wqe_index);
 	wqe->state = wqe_state_error;
+	rxe_req_writeback_wqe(qp);
+	qp->req.send_wqe_valid = false;
 	rxe_qp_error(qp);
 exit:
 	ret = -EAGAIN;
