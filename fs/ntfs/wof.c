@@ -464,10 +464,9 @@ static int ntfs_wof_collect_dest(struct address_space *mapping,
 			folio = target;
 			is_target = true;
 		} else {
-			folio = __filemap_get_folio(
-				mapping, index,
-				FGP_LOCK | FGP_CREAT | FGP_NOFS | FGP_NOWAIT,
-				GFP_NOFS);
+			folio = __filemap_get_folio(mapping, index,
+					FGP_LOCK | FGP_CREAT | FGP_NOWAIT,
+					mapping_gfp_mask(mapping));
 			if (IS_ERR(folio))
 				return PTR_ERR(folio);
 			is_target = false;
