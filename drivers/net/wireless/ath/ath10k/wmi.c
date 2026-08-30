@@ -4236,13 +4236,18 @@ void ath10k_wmi_event_dfs(struct ath10k *ar,
 		tlv = (struct phyerr_tlv *)&phyerr->buf[i];
 		tlv_len = __le16_to_cpu(tlv->len);
 		tlv_buf = &phyerr->buf[i + sizeof(*tlv)];
+		if (tlv_len > buf_len - i - sizeof(*tlv)) {
+			ath10k_warn(ar, "tlv length exceeds remaining buffer (%d)\n",
+				    i);
+			return;
+		}
 		ath10k_dbg(ar, ATH10K_DBG_REGULATORY,
 			   "wmi event dfs tlv_len %d tlv_tag 0x%02X tlv_sig 0x%02X\n",
 			   tlv_len, tlv->tag, tlv->sig);
 
 		switch (tlv->tag) {
 		case PHYERR_TLV_TAG_RADAR_PULSE_SUMMARY:
-			if (i + sizeof(*tlv) + sizeof(*rr) > buf_len) {
+			if (tlv_len < sizeof(*rr)) {
 				ath10k_warn(ar, "too short radar pulse summary (%d)\n",
 					    i);
 				return;
@@ -4252,7 +4257,7 @@ void ath10k_wmi_event_dfs(struct ath10k *ar,
 			ath10k_dfs_radar_report(ar, phyerr, rr, tsf);
 			break;
 		case PHYERR_TLV_TAG_SEARCH_FFT_REPORT:
-			if (i + sizeof(*tlv) + sizeof(*fftr) > buf_len) {
+			if (tlv_len < sizeof(*fftr)) {
 				ath10k_warn(ar, "too short fft report (%d)\n",
 					    i);
 				return;
