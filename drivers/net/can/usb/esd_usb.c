@@ -482,6 +482,33 @@ static void esd_usb_tx_done_msg(struct esd_usb_net_priv *priv,
 	netif_wake_queue(netdev);
 }
 
+static bool esd_usb_rx_msg_valid(const union esd_usb_msg *msg, size_t len)
+{
+	size_t data_offset = offsetof(struct esd_usb_rx_msg, data);
+	u32 id;
+	u8 data_len;
+
+	if (msg->hdr.cmd == ESD_USB_CMD_CAN_TX)
+		return len >= sizeof(struct esd_usb_tx_done_msg);
+	if (msg->hdr.cmd != ESD_USB_CMD_CAN_RX)
+		return true;
+	if (len < data_offset)
+		return false;
+
+	id = le32_to_cpu(msg->rx.id);
+	if (id & ESD_USB_EVENT)
+		return len >= data_offset + sizeof(msg->rx.ev_can_err_ext);
+
+	if (msg->rx.dlc & ESD_USB_FD)
+		data_len = can_fd_dlc2len(msg->rx.dlc);
+	else if (msg->rx.dlc & ESD_USB_RTR)
+		data_len = 0;
+	else
+		data_len = can_cc_dlc2len(msg->rx.dlc);
+
+	return len >= data_offset + data_len;
+}
+
 static void esd_usb_read_bulk_callback(struct urb *urb)
 {
 	struct esd_usb *dev = urb->context;
@@ -507,8 +534,20 @@ static void esd_usb_read_bulk_callback(struct urb *urb)
 
 	while (pos < urb->actual_length) {
 		union esd_usb_msg *msg;
+		size_t msg_len;
+		int remaining = urb->actual_length - pos;
 
+		if (remaining < sizeof(msg->hdr)) {
+			dev_err(dev->udev->dev.parent, "format error\n");
+			break;
+		}
 		msg = (union esd_usb_msg *)(urb->transfer_buffer + pos);
+		msg_len = msg->hdr.len * sizeof(u32);
+		if (msg_len < sizeof(msg->hdr) || msg_len > remaining ||
+		    !esd_usb_rx_msg_valid(msg, msg_len)) {
+			dev_err(dev->udev->dev.parent, "format error\n");
+			break;
+		}
 
 		switch (msg->hdr.cmd) {
 		case ESD_USB_CMD_CAN_RX:
@@ -531,12 +570,7 @@ static void esd_usb_read_bulk_callback(struct urb *urb)
 			break;
 		}
 
-		pos += msg->hdr.len * sizeof(u32); /* convert to # of bytes */
-
-		if (pos > urb->actual_length) {
-			dev_err(dev->udev->dev.parent, "format error\n");
-			break;
-		}
+		pos += msg_len;
 	}
 
 resubmit_urb:
