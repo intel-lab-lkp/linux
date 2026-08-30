@@ -293,7 +293,8 @@ static int cdns_pcie_ep_get_msix(struct pci_epc *epc, u8 func_no, u8 vfunc_no)
 }
 
 static int cdns_pcie_ep_set_msix(struct pci_epc *epc, u8 fn, u8 vfn,
-				 u16 nr_irqs, enum pci_barno bir, u32 offset)
+				 u16 nr_irqs,
+				 const struct pci_epc_msix_layout *layout)
 {
 	struct cdns_pcie_ep *ep = epc_get_drvdata(epc);
 	struct cdns_pcie *pcie = &ep->pcie;
@@ -311,12 +312,12 @@ static int cdns_pcie_ep_set_msix(struct pci_epc *epc, u8 fn, u8 vfn,
 
 	/* Set MSI-X BAR and offset */
 	reg = cap + PCI_MSIX_TABLE;
-	val = offset | bir;
+	val = layout->table_offset | layout->table_bar;
 	cdns_pcie_ep_fn_writel(pcie, fn, reg, val);
 
-	/* Set PBA BAR and offset.  BAR must match MSI-X BAR */
+	/* Set PBA BAR and offset */
 	reg = cap + PCI_MSIX_PBA;
-	val = (offset + (nr_irqs * PCI_MSIX_ENTRY_SIZE)) | bir;
+	val = layout->pba_offset | layout->pba_bar;
 	cdns_pcie_ep_fn_writel(pcie, fn, reg, val);
 
 	return 0;

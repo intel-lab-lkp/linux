@@ -201,7 +201,7 @@ struct nvmet_pci_epf {
 	const struct pci_epc_features	*epc_features;
 
 	void				*reg_bar;
-	size_t				msix_table_offset;
+	struct pci_epc_msix_layout	msix_layout;
 
 	unsigned int			irq_type;
 	unsigned int			nr_vectors;
@@ -2187,8 +2187,14 @@ static int nvmet_pci_epf_configure_bar(struct nvmet_pci_epf *nvme_epf)
 		size_t pba_size;
 
 		msix_table_size = PCI_MSIX_ENTRY_SIZE * epf->msix_interrupts;
-		nvme_epf->msix_table_offset = reg_size;
-		pba_size = ALIGN(DIV_ROUND_UP(epf->msix_interrupts, 8), 8);
+		pba_size = BITS_TO_U64(epf->msix_interrupts) * sizeof(u64);
+
+		nvme_epf->msix_layout.table_bar = BAR_0;
+		nvme_epf->msix_layout.table_offset = reg_size;
+		nvme_epf->msix_layout.table_size = msix_table_size;
+		nvme_epf->msix_layout.pba_bar = BAR_0;
+		nvme_epf->msix_layout.pba_offset = reg_size + msix_table_size;
+		nvme_epf->msix_layout.pba_size = pba_size;
 
 		reg_size += msix_table_size + pba_size;
 	}
@@ -2245,8 +2251,8 @@ static int nvmet_pci_epf_init_irq(struct nvmet_pci_epf *nvme_epf)
 	/* Enable MSI-X if supported, otherwise, use MSI. */
 	if (epc_features->msix_capable && epf->msix_interrupts) {
 		ret = pci_epc_set_msix(epf->epc, epf->func_no, epf->vfunc_no,
-				       epf->msix_interrupts, BAR_0,
-				       nvme_epf->msix_table_offset);
+				       epf->msix_interrupts,
+				       &nvme_epf->msix_layout);
 		if (ret) {
 			dev_err(&epf->dev, "Failed to configure MSI-X\n");
 			return ret;

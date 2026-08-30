@@ -82,7 +82,7 @@ struct pci_epf_test {
 	struct pci_epf		*epf;
 	struct config_group	group;
 	enum pci_barno		test_reg_bar;
-	size_t			msix_table_offset;
+	struct pci_epc_msix_layout msix_layout;
 	struct delayed_work	cmd_handler;
 	struct dma_chan		*dma_chan_tx;
 	struct dma_chan		*dma_chan_rx;
@@ -1221,8 +1221,7 @@ static int pci_epf_test_epc_init(struct pci_epf *epf)
 	if (epc_features->msix_capable) {
 		ret = pci_epc_set_msix(epc, epf->func_no, epf->vfunc_no,
 				       epf->msix_interrupts,
-				       epf_test->test_reg_bar,
-				       epf_test->msix_table_offset);
+				       &epf_test->msix_layout);
 		if (ret) {
 			dev_err(dev, "MSI-X configuration failed\n");
 			return ret;
@@ -1288,9 +1287,15 @@ static int pci_epf_test_alloc_space(struct pci_epf *epf)
 
 	if (epc_features->msix_capable) {
 		msix_table_size = PCI_MSIX_ENTRY_SIZE * epf->msix_interrupts;
-		epf_test->msix_table_offset = test_reg_bar_size;
-		/* Align to QWORD or 8 Bytes */
-		pba_size = ALIGN(DIV_ROUND_UP(epf->msix_interrupts, 8), 8);
+		pba_size = BITS_TO_U64(epf->msix_interrupts) * sizeof(u64);
+
+		epf_test->msix_layout.table_bar = test_reg_bar;
+		epf_test->msix_layout.table_offset = test_reg_bar_size;
+		epf_test->msix_layout.table_size = msix_table_size;
+		epf_test->msix_layout.pba_bar = test_reg_bar;
+		epf_test->msix_layout.pba_offset = test_reg_bar_size +
+						   msix_table_size;
+		epf_test->msix_layout.pba_size = pba_size;
 	}
 	test_reg_size = test_reg_bar_size + msix_table_size + pba_size;
 

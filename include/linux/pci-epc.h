@@ -103,6 +103,24 @@ struct pci_epc_aux_resource {
 };
 
 /**
+ * struct pci_epc_msix_layout - layout of an MSI-X table and PBA
+ * @table_bar: BAR containing the MSI-X table
+ * @table_offset: offset of the MSI-X table within @table_bar
+ * @table_size: size of the MSI-X table region
+ * @pba_bar: BAR containing the MSI-X Pending Bit Array (PBA)
+ * @pba_offset: offset of the MSI-X PBA within @pba_bar
+ * @pba_size: size of the MSI-X PBA region
+ */
+struct pci_epc_msix_layout {
+	enum pci_barno		table_bar;
+	u32			table_offset;
+	resource_size_t		table_size;
+	enum pci_barno		pba_bar;
+	u32			pba_offset;
+	resource_size_t		pba_size;
+};
+
+/**
  * struct pci_epc_ops - set of function pointers for performing EPC operations
  * @write_header: ops to populate configuration space header
  * @set_bar: ops to configure the BAR
@@ -147,7 +165,8 @@ struct pci_epc_ops {
 			   u8 nr_irqs);
 	int	(*get_msi)(struct pci_epc *epc, u8 func_no, u8 vfunc_no);
 	int	(*set_msix)(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
-			    u16 nr_irqs, enum pci_barno, u32 offset);
+			    u16 nr_irqs,
+			    const struct pci_epc_msix_layout *layout);
 	int	(*get_msix)(struct pci_epc *epc, u8 func_no, u8 vfunc_no);
 	int	(*raise_irq)(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 			     unsigned int type, u16 interrupt_num);
@@ -381,8 +400,10 @@ void pci_epc_unmap_addr(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 int pci_epc_set_msi(struct pci_epc *epc, u8 func_no, u8 vfunc_no, u8 nr_irqs);
 int pci_epc_get_msi(struct pci_epc *epc, u8 func_no, u8 vfunc_no);
 int pci_epc_set_msix(struct pci_epc *epc, u8 func_no, u8 vfunc_no, u16 nr_irqs,
-		     enum pci_barno, u32 offset);
+		     const struct pci_epc_msix_layout *layout);
 int pci_epc_get_msix(struct pci_epc *epc, u8 func_no, u8 vfunc_no);
+int pci_epc_get_hw_msix_layout(const struct pci_epc_features *epc_features,
+			       struct pci_epc_msix_layout *layout);
 int pci_epc_map_msi_irq(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 			phys_addr_t phys_addr, u8 interrupt_num,
 			u32 entry_size, u32 *msi_data, u32 *msi_addr_offset);

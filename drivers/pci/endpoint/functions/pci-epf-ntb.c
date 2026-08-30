@@ -90,12 +90,11 @@ struct epf_ntb_epc {
 	u8 vfunc_no;
 	bool linkup;
 	bool is_msix;
-	int msix_bar;
 	u32 spad_size;
 	struct pci_epc *epc;
 	struct epf_ntb *epf_ntb;
 	void __iomem *mw_addr[6];
-	size_t msix_table_offset;
+	struct pci_epc_msix_layout msix_layout;
 	struct epf_ntb_ctrl *reg;
 	struct pci_epf_bar *epf_bar;
 	enum pci_barno epf_ntb_bar[6];
@@ -475,9 +474,9 @@ static int epf_ntb_configure_msi(struct epf_ntb *ntb,
  *
  * The MSI-X address is in the MSI-X table of EP CONTROLLER 2 and
  * the count of doorbell is in ctrl->argument of epf_ntb_epc that is connected
- * to HOST2. MSI-X table is stored memory mapped to ntb_epc->msix_bar and the
- * offset is in ntb_epc->msix_table_offset. From this epf_ntb_configure_msix()
- * gets the MSI-X address and data.
+ * to HOST2. The location of the memory-mapped MSI-X table is described by
+ * ntb_epc->msix_layout. From this epf_ntb_configure_msix() gets the MSI-X
+ * address and data.
  *
  * epf_ntb_configure_msix() also stores the MSI-X data to raise each interrupt
  * in db_data of the peer's control region. This helps the peer to raise
@@ -505,8 +504,8 @@ static int epf_ntb_configure_msix(struct epf_ntb *ntb,
 	ntb_epc = ntb->epc[type];
 	epc = ntb_epc->epc;
 
-	epf_bar = &ntb_epc->epf_bar[ntb_epc->msix_bar];
-	msix_tbl = epf_bar->addr + ntb_epc->msix_table_offset;
+	epf_bar = &ntb_epc->epf_bar[ntb_epc->msix_layout.table_bar];
+	msix_tbl = epf_bar->addr + ntb_epc->msix_layout.table_offset;
 
 	peer_ntb_epc = ntb->epc[!type];
 	peer_barno = peer_ntb_epc->epf_ntb_bar[BAR_DB_MW1];
@@ -1036,10 +1035,14 @@ static int epf_ntb_config_spad_bar_alloc(struct epf_ntb *ntb,
 	if (msix_capable) {
 		msix_table_size = PCI_MSIX_ENTRY_SIZE * ntb->db_count;
 		ctrl_size = ALIGN(ctrl_size, 8);
-		ntb_epc->msix_table_offset = ctrl_size;
-		ntb_epc->msix_bar = barno;
-		/* Align to QWORD or 8 Bytes */
-		pba_size = ALIGN(DIV_ROUND_UP(ntb->db_count, 8), 8);
+		pba_size = BITS_TO_U64(ntb->db_count) * sizeof(u64);
+
+		ntb_epc->msix_layout.table_bar = barno;
+		ntb_epc->msix_layout.table_offset = ctrl_size;
+		ntb_epc->msix_layout.table_size = msix_table_size;
+		ntb_epc->msix_layout.pba_bar = barno;
+		ntb_epc->msix_layout.pba_offset = ctrl_size + msix_table_size;
+		ntb_epc->msix_layout.pba_size = pba_size;
 		ctrl_size = ctrl_size + msix_table_size + pba_size;
 	}
 
@@ -1317,10 +1320,9 @@ static int epf_ntb_configure_interrupt(struct epf_ntb *ntb,
 
 	if (msix_capable) {
 		ret = pci_epc_set_msix(epc, func_no, vfunc_no, ntb->db_count,
-				       ntb_epc->msix_bar,
-				       ntb_epc->msix_table_offset);
+				       &ntb_epc->msix_layout);
 		if (ret) {
-			dev_err(dev, "MSI configuration failed\n");
+			dev_err(dev, "MSI-X configuration failed\n");
 			return ret;
 		}
 	}
