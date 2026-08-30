@@ -3769,6 +3769,8 @@ static struct folio *next_uptodate_folio(struct xa_state *xas,
 			goto unlock;
 		if (!folio_test_uptodate(folio))
 			goto unlock;
+		if (folio_test_dropbehind(folio))
+			goto unlock;
 		max_idx = DIV_ROUND_UP(i_size_read(mapping->host), PAGE_SIZE);
 		if (xas->xa_index >= max_idx)
 			goto unlock;
