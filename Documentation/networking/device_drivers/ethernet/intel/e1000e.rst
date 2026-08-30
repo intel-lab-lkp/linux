@@ -163,21 +163,6 @@ It ensures that an interrupt is generated after the initial Packet is sent on
 the wire within the set amount of time. Proper tuning, along with TxIntDelay,
 may improve traffic throughput in specific network conditions.
 
-copybreak
----------
-:Valid Range: 0-xxxxxxx (0=off)
-:Default Value: 256
-
-The driver copies all packets below or equaling this size to a fresh receive
-buffer before handing it up the stack.
-This parameter differs from other parameters because it is a single (not 1,1,1
-etc.) parameter applied to all driver instances and it is also available
-during runtime at /sys/module/e1000e/parameters/copybreak.
-
-To use copybreak, type::
-
-    modprobe e1000e.ko copybreak=128
-
 SmartPowerDownEnable
 --------------------
 :Valid Range: 0,1

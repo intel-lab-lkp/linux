@@ -23,6 +23,7 @@
 #include <linux/mdio.h>
 #include <linux/mutex.h>
 #include <linux/pm_qos.h>
+#include <net/libeth/rx.h>
 #include "hw.h"
 
 struct e1000_info;
@@ -121,25 +122,18 @@ enum e1000_boards {
 	board_pch_ptp
 };
 
-/* wrappers around a pointer to a socket buffer,
+/* wrapper around a pointer to a Tx socket buffer,
  * so a DMA handle can be stored along with the buffer
  */
 struct e1000_buffer {
 	dma_addr_t dma;
 	struct sk_buff *skb;
-	union {
-		/* Tx */
-		struct {
-			unsigned long time_stamp;
-			u16 length;
-			u16 next_to_watch;
-			unsigned int segs;
-			unsigned int bytecount;
-			u16 mapped_as_page;
-		};
-		/* Rx */
-		struct page *page;
-	};
+	unsigned long time_stamp;
+	u16 length;
+	u16 next_to_watch;
+	unsigned int segs;
+	unsigned int bytecount;
+	u16 mapped_as_page;
 };
 
 struct e1000_ring {
@@ -157,6 +151,13 @@ struct e1000_ring {
 
 	/* array of buffer information structs */
 	struct e1000_buffer *buffer_info;
+
+	/* libeth fill queue backing the Rx path */
+	struct page_pool *pp;
+	struct libeth_fqe *rx_fqes;
+	u32 rx_truesize;
+	u32 rx_buf_len;
+	u32 rx_fq_mtu;			/* MTU the fill queue was sized for */
 
 	char name[IFNAMSIZ + 5];
 	u32 ims_val;
@@ -192,7 +193,6 @@ struct e1000_adapter {
 
 	unsigned long active_vlans[BITS_TO_LONGS(VLAN_N_VID)];
 	u32 bd_number;
-	u32 rx_buffer_len;
 	u16 mng_vlan_id;
 	u16 link_speed;
 	u16 link_duplex;
@@ -490,8 +490,6 @@ void e1000e_reset_interrupt_capability(struct e1000_adapter *adapter);
 void e1000e_get_hw_control(struct e1000_adapter *adapter);
 void e1000e_release_hw_control(struct e1000_adapter *adapter);
 void e1000e_write_itr(struct e1000_adapter *adapter, u32 itr);
-
-extern unsigned int copybreak;
 
 extern const struct e1000_info e1000_82571_info;
 extern const struct e1000_info e1000_82572_info;

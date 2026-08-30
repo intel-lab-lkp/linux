@@ -16,12 +16,6 @@
 #define OPTION_DISABLED 0
 #define OPTION_ENABLED  1
 
-#define COPYBREAK_DEFAULT 256
-unsigned int copybreak = COPYBREAK_DEFAULT;
-module_param(copybreak, uint, 0644);
-MODULE_PARM_DESC(copybreak,
-		 "Maximum size of packet that is copied to a new buffer on receive");
-
 /* All parameters are treated the same, as an integer array of values.
  * This macro just reduces the need to repeat the same declaration code
  * over and over (plus this helps to avoid typo bugs).
