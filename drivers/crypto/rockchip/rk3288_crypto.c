@@ -133,7 +133,12 @@ static int rk_crypto_pm_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	reset_control_deassert(rkdev->rst);
+	ret = reset_control_deassert(rkdev->rst);
+	if (ret) {
+		rk_crypto_disable_clk(rkdev);
+		return ret;
+	}
+
 	return 0;
 
 }
@@ -341,9 +346,14 @@ static int rk_crypto_probe(struct platform_device *pdev)
 		goto err_crypto;
 	}
 
-	reset_control_assert(crypto_info->rst);
+	err = reset_control_assert(crypto_info->rst);
+	if (err)
+		goto err_crypto;
+
 	usleep_range(10, 20);
-	reset_control_deassert(crypto_info->rst);
+	err = reset_control_deassert(crypto_info->rst);
+	if (err)
+		goto err_crypto;
 
 	crypto_info->reg = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(crypto_info->reg)) {
@@ -374,7 +384,10 @@ static int rk_crypto_probe(struct platform_device *pdev)
 		goto err_crypto;
 	}
 
-	crypto_engine_start(crypto_info->engine);
+	err = crypto_engine_start(crypto_info->engine);
+	if (err)
+		goto err_pm;
+
 	init_completion(&crypto_info->complete);
 
 	err = rk_crypto_pm_init(crypto_info);
