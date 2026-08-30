@@ -1494,6 +1494,19 @@ static int tegra_dma_probe(struct platform_device *pdev)
 		}
 
 		snprintf(tdc->name, sizeof(tdc->name), "apbdma.%d", i);
+		tdc->tdma = tdma;
+		tdc->id = i;
+		tdc->slave_id = TEGRA_APBDMA_SLAVE_ID_INVALID;
+
+		tasklet_setup(&tdc->tasklet, tegra_dma_tasklet);
+		spin_lock_init(&tdc->lock);
+		init_waitqueue_head(&tdc->wq);
+
+		INIT_LIST_HEAD(&tdc->pending_sg_req);
+		INIT_LIST_HEAD(&tdc->free_sg_req);
+		INIT_LIST_HEAD(&tdc->free_dma_desc);
+		INIT_LIST_HEAD(&tdc->cb_desc);
+
 		ret = devm_request_irq(&pdev->dev, irq, tegra_dma_isr, 0,
 				       tdc->name, tdc);
 		if (ret) {
@@ -1507,18 +1520,6 @@ static int tegra_dma_probe(struct platform_device *pdev)
 		dma_cookie_init(&tdc->dma_chan);
 		list_add_tail(&tdc->dma_chan.device_node,
 			      &tdma->dma_dev.channels);
-		tdc->tdma = tdma;
-		tdc->id = i;
-		tdc->slave_id = TEGRA_APBDMA_SLAVE_ID_INVALID;
-
-		tasklet_setup(&tdc->tasklet, tegra_dma_tasklet);
-		spin_lock_init(&tdc->lock);
-		init_waitqueue_head(&tdc->wq);
-
-		INIT_LIST_HEAD(&tdc->pending_sg_req);
-		INIT_LIST_HEAD(&tdc->free_sg_req);
-		INIT_LIST_HEAD(&tdc->free_dma_desc);
-		INIT_LIST_HEAD(&tdc->cb_desc);
 	}
 
 	dma_cap_set(DMA_SLAVE, tdma->dma_dev.cap_mask);
