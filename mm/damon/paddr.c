@@ -35,14 +35,14 @@ static unsigned long damon_pa_core_addr(
 	return pa / addr_unit;
 }
 
-static void damon_pa_mkold(phys_addr_t paddr)
+static void damon_pa_mkold(phys_addr_t paddr, bool flush)
 {
 	struct folio *folio = damon_get_folio_incl_hugetlb(PHYS_PFN(paddr));
 
 	if (!folio)
 		return;
 
-	damon_folio_mkold(folio);
+	damon_folio_mkold(folio, flush);
 	folio_put(folio);
 }
 
@@ -51,7 +51,8 @@ static void __damon_pa_prepare_access_check(struct damon_region *r,
 {
 	r->sampling_addr = damon_rand(ctx, r->ar.start, r->ar.end);
 
-	damon_pa_mkold(damon_pa_phys_addr(r->sampling_addr, ctx->addr_unit));
+	damon_pa_mkold(damon_pa_phys_addr(r->sampling_addr, ctx->addr_unit),
+			ctx->aging_flush);
 }
 
 static void damon_pa_prepare_access_checks(struct damon_ctx *ctx)

@@ -859,6 +859,7 @@ struct damon_ctx *damon_new_ctx(void)
 	INIT_LIST_HEAD(&ctx->probes);
 
 	ctx->addr_unit = 1;
+	ctx->aging_flush = false;
 	ctx->min_region_sz = DAMON_MIN_REGION_SZ;
 
 	INIT_LIST_HEAD(&ctx->adaptive_targets);
@@ -1800,6 +1801,7 @@ static int __damon_commit_ctx(struct damon_ctx *dst, struct damon_ctx *src)
 	if (err)
 		return err;
 	dst->addr_unit = src->addr_unit;
+	dst->aging_flush = src->aging_flush;
 	dst->min_region_sz = src->min_region_sz;
 
 	dst->maybe_corrupted = false;

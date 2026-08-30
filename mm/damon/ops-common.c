@@ -63,7 +63,8 @@ struct folio *damon_get_folio_incl_hugetlb(unsigned long pfn)
 	return __damon_get_folio(pfn, true);
 }
 
-void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr)
+void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr,
+		bool flush)
 {
 	pte_t pteval = ptep_get(pte);
 	struct folio *folio;
@@ -86,7 +87,12 @@ void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr
 	 */
 	if (likely(pte_present(pteval)))
 		young |= ptep_test_and_clear_young(vma, addr, pte);
-	young |= mmu_notifier_clear_young(vma->vm_mm, addr, addr + PAGE_SIZE);
+	if (flush)
+		young |= mmu_notifier_clear_flush_young(vma->vm_mm, addr,
+				addr + PAGE_SIZE);
+	else
+		young |= mmu_notifier_clear_young(vma->vm_mm, addr,
+				addr + PAGE_SIZE);
 	if (young)
 		folio_set_young(folio);
 
@@ -94,7 +100,8 @@ void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr
 	folio_put(folio);
 }
 
-void damon_pmdp_mkold(pmd_t *pmd, struct vm_area_struct *vma, unsigned long addr)
+void damon_pmdp_mkold(pmd_t *pmd, struct vm_area_struct *vma, unsigned long addr,
+		bool flush)
 {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	pmd_t pmdval = pmdp_get(pmd);
@@ -113,7 +120,12 @@ void damon_pmdp_mkold(pmd_t *pmd, struct vm_area_struct *vma, unsigned long addr
 
 	if (likely(pmd_present(pmdval)))
 		young |= pmdp_test_and_clear_young(vma, addr, pmd);
-	young |= mmu_notifier_clear_young(vma->vm_mm, addr, addr + HPAGE_PMD_SIZE);
+	if (flush)
+		young |= mmu_notifier_clear_flush_young(vma->vm_mm, addr,
+				addr + HPAGE_PMD_SIZE);
+	else
+		young |= mmu_notifier_clear_young(vma->vm_mm, addr,
+				addr + HPAGE_PMD_SIZE);
 	if (young)
 		folio_set_young(folio);
 
@@ -124,7 +136,7 @@ void damon_pmdp_mkold(pmd_t *pmd, struct vm_area_struct *vma, unsigned long addr
 
 #ifdef CONFIG_HUGETLB_PAGE
 void damon_hugetlb_mkold(pte_t *pte, struct mm_struct *mm,
-		struct vm_area_struct *vma, unsigned long addr)
+		struct vm_area_struct *vma, unsigned long addr, bool flush)
 {
 	bool referenced = false;
 	pte_t entry = huge_ptep_get(mm, addr, pte);
@@ -139,8 +151,10 @@ void damon_hugetlb_mkold(pte_t *pte, struct mm_struct *mm,
 		set_huge_pte_at(mm, addr, pte, entry, psize);
 	}
 
-	if (mmu_notifier_clear_young(mm, addr,
-				     addr + huge_page_size(hstate_vma(vma))))
+	if (flush ? mmu_notifier_clear_flush_young(mm, addr,
+				addr + huge_page_size(hstate_vma(vma))) :
+			mmu_notifier_clear_young(mm, addr,
+				addr + huge_page_size(hstate_vma(vma))))
 		referenced = true;
 
 	if (referenced)
@@ -212,6 +226,7 @@ int damon_cold_score(struct damon_ctx *c, struct damon_region *r,
 static bool damon_folio_mkold_one(struct folio *folio,
 		struct vm_area_struct *vma, unsigned long addr, void *arg)
 {
+	bool flush = *(bool *)arg;
 	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, addr, 0);
 
 	while (page_vma_mapped_walk(&pvmw)) {
@@ -224,19 +239,20 @@ static bool damon_folio_mkold_one(struct folio *folio,
 			 */
 			if (folio_test_hugetlb(folio))
 				damon_hugetlb_mkold(pvmw.pte, vma->vm_mm, vma,
-						addr);
+						addr, flush);
 			else
-				damon_ptep_mkold(pvmw.pte, vma, addr);
+				damon_ptep_mkold(pvmw.pte, vma, addr, flush);
 		} else {
-			damon_pmdp_mkold(pvmw.pmd, vma, addr);
+			damon_pmdp_mkold(pvmw.pmd, vma, addr, flush);
 		}
 	}
 	return true;
 }
 
-void damon_folio_mkold(struct folio *folio)
+void damon_folio_mkold(struct folio *folio, bool flush)
 {
 	struct rmap_walk_control rwc = {
+		.arg = &flush,
 		.rmap_one = damon_folio_mkold_one,
 		.anon_lock = folio_lock_anon_vma_read,
 	};
@@ -377,7 +393,7 @@ bool damos_folio_filter_match(struct damos_filter *filter, struct folio *folio)
 	case DAMOS_FILTER_TYPE_YOUNG:
 		matched = damon_folio_young(folio);
 		if (matched)
-			damon_folio_mkold(folio);
+			damon_folio_mkold(folio, false);
 		break;
 	case DAMOS_FILTER_TYPE_HUGEPAGE_SIZE:
 		folio_sz = folio_size(folio);

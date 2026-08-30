@@ -8,18 +8,20 @@
 struct folio *damon_get_folio(unsigned long pfn);
 struct folio *damon_get_folio_incl_hugetlb(unsigned long pfn);
 
-void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr);
-void damon_pmdp_mkold(pmd_t *pmd, struct vm_area_struct *vma, unsigned long addr);
+void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr,
+		bool flush);
+void damon_pmdp_mkold(pmd_t *pmd, struct vm_area_struct *vma, unsigned long addr,
+		bool flush);
 #ifdef CONFIG_HUGETLB_PAGE
 void damon_hugetlb_mkold(pte_t *pte, struct mm_struct *mm,
-		struct vm_area_struct *vma, unsigned long addr);
+		struct vm_area_struct *vma, unsigned long addr, bool flush);
 #else
 static inline void damon_hugetlb_mkold(pte_t *pte, struct mm_struct *mm,
-		struct vm_area_struct *vma, unsigned long addr)
+		struct vm_area_struct *vma, unsigned long addr, bool flush)
 {
 }
 #endif	/* CONFIG_HUGETLB_PAGE */
-void damon_folio_mkold(struct folio *folio);
+void damon_folio_mkold(struct folio *folio, bool flush);
 bool damon_folio_young(struct folio *folio);
 
 int damon_cold_score(struct damon_ctx *c, struct damon_region *r,

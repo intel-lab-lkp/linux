@@ -848,6 +848,7 @@ struct damon_attrs {
  * including damon_call() and damos_walk().
  *
  * @addr_unit:	Scale factor for core to ops address conversion.
+ * @aging_flush:	Flush TLBs when clearing access bits for sampling.
  * @min_region_sz:	Minimum region size.
  * @pause:	Pause kdamond main loop.
  */
@@ -899,6 +900,7 @@ struct damon_ctx {
 
 /* public: */
 	unsigned long addr_unit;
+	bool aging_flush;
 	unsigned long min_region_sz;
 	bool pause;
 

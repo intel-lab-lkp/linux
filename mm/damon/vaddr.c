@@ -276,7 +276,8 @@ static int damon_mkold_pmd_entry(pmd_t *pmd, unsigned long addr,
 		pmd_t pmde = pmdp_get(pmd);
 
 		if (pmd_present(pmde))
-			damon_pmdp_mkold(pmd, walk->vma, addr);
+			damon_pmdp_mkold(pmd, walk->vma, addr,
+					*(bool *)walk->private);
 		spin_unlock(ptl);
 		return 0;
 	}
@@ -286,7 +287,7 @@ static int damon_mkold_pmd_entry(pmd_t *pmd, unsigned long addr,
 		return 0;
 	if (!pte_present(ptep_get(pte)))
 		goto out;
-	damon_ptep_mkold(pte, walk->vma, addr);
+	damon_ptep_mkold(pte, walk->vma, addr, *(bool *)walk->private);
 out:
 	pte_unmap_unlock(pte, ptl);
 	return 0;
@@ -306,7 +307,8 @@ static int damon_mkold_hugetlb_entry(pte_t *pte, unsigned long hmask,
 	if (!pte_present(entry))
 		goto out;
 
-	damon_hugetlb_mkold(pte, walk->mm, walk->vma, addr);
+	damon_hugetlb_mkold(pte, walk->mm, walk->vma, addr,
+			    *(bool *)walk->private);
 
 out:
 	spin_unlock(ptl);
@@ -316,14 +318,15 @@ out:
 #define damon_mkold_hugetlb_entry NULL
 #endif /* CONFIG_HUGETLB_PAGE */
 
-static void damon_va_mkold(struct mm_struct *mm, unsigned long addr)
+static void damon_va_mkold(struct mm_struct *mm, unsigned long addr,
+		bool flush)
 {
 	struct mm_walk_ops damon_mkold_ops = {
 		.pmd_entry = damon_mkold_pmd_entry,
 		.hugetlb_entry = damon_mkold_hugetlb_entry,
 	};
 
-	damon_va_walk_page_range(mm, addr, addr + 1, &damon_mkold_ops, NULL);
+	damon_va_walk_page_range(mm, addr, addr + 1, &damon_mkold_ops, &flush);
 }
 
 /*
@@ -336,7 +339,7 @@ static void __damon_va_prepare_access_check(struct mm_struct *mm,
 {
 	r->sampling_addr = damon_rand(ctx, r->ar.start, r->ar.end);
 
-	damon_va_mkold(mm, r->sampling_addr);
+	damon_va_mkold(mm, r->sampling_addr, ctx->aging_flush);
 }
 
 static void damon_va_prepare_access_checks(struct damon_ctx *ctx)
@@ -508,9 +511,9 @@ static bool damos_va_filter_young_match(struct damos_filter *filter,
 		mmu_notifier_test_young(vma->vm_mm, addr);
 
 	if (young && ptep)
-		damon_ptep_mkold(ptep, vma, addr);
+		damon_ptep_mkold(ptep, vma, addr, false);
 	else if (young && pmdp)
-		damon_pmdp_mkold(pmdp, vma, addr);
+		damon_pmdp_mkold(pmdp, vma, addr, false);
 
 	return young == filter->matching;
 }
