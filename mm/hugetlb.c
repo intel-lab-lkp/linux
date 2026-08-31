@@ -5342,16 +5342,105 @@ void __unmap_hugepage_range(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	huge_pmd_unshare_flush(tlb, vma);
 }
 
+#ifdef CONFIG_HUGETLB_PMD_PAGE_TABLE_SHARING
+static bool
+pmd_sharing_possible_range(struct vm_area_struct *vma, unsigned long start,
+			   unsigned long end, unsigned long *range_start,
+			   unsigned long *range_end)
+{
+	unsigned long v_start = ALIGN(vma->vm_start, PUD_SIZE);
+	unsigned long v_end = ALIGN_DOWN(vma->vm_end, PUD_SIZE);
+
+	/*
+	 * vma needs to span at least one aligned PUD size, and the range
+	 * must be at least partially within it.
+	 */
+	if (!(vma->vm_flags & VM_MAYSHARE) || !(v_end > v_start) ||
+	    (end <= v_start) || (start >= v_end))
+		return false;
+
+	*range_start = max(ALIGN_DOWN(start, PUD_SIZE), v_start);
+	*range_end = min(ALIGN(end, PUD_SIZE), v_end);
+	return true;
+}
+
+static void
+adjust_range_for_pmd_sharing(unsigned long *start, unsigned long *end,
+			     unsigned long range_start, unsigned long range_end)
+{
+	/* Extend the range to be PUD aligned for a worst case scenario */
+	if (*start > range_start)
+		*start = range_start;
+
+	if (*end < range_end)
+		*end = range_end;
+}
+
+static void
+adjust_range_for_shared_pmds_in_range(struct vm_area_struct *vma,
+				      unsigned long *start, unsigned long *end,
+				      unsigned long range_start,
+				      unsigned long range_end)
+{
+	struct hstate *h = hstate_vma(vma);
+	struct mm_struct *mm = vma->vm_mm;
+	unsigned long address;
+
+	hugetlb_vma_assert_locked(vma);
+	i_mmap_assert_write_locked(vma->vm_file->f_mapping);
+
+	for (address = range_start; address < range_end; address += PUD_SIZE) {
+		pte_t *ptep;
+		bool shared;
+
+		ptep = hugetlb_walk(vma, address, PMD_SIZE);
+		if (!ptep)
+			continue;
+
+		spin_lock(huge_pte_lockptr(h, mm, ptep));
+		shared = ptdesc_pmd_is_shared(virt_to_ptdesc(ptep));
+		spin_unlock(huge_pte_lockptr(h, mm, ptep));
+
+		if (shared)
+			adjust_range_for_pmd_sharing(start, end, address,
+						     address + PUD_SIZE);
+	}
+}
+
+static void
+adjust_range_for_shared_pmds(struct vm_area_struct *vma, unsigned long *start,
+			     unsigned long *end)
+{
+	unsigned long range_start, range_end;
+
+	if (huge_page_size(hstate_vma(vma)) != PMD_SIZE)
+		return;
+
+	if (!pmd_sharing_possible_range(vma, *start, *end,
+					&range_start, &range_end))
+		return;
+
+	adjust_range_for_shared_pmds_in_range(vma, start, end, range_start, range_end);
+}
+#else
+static void
+adjust_range_for_shared_pmds(struct vm_area_struct *vma, unsigned long *start,
+			     unsigned long *end)
+{
+}
+#endif
+
 void __hugetlb_zap_begin(struct vm_area_struct *vma,
 			 unsigned long *start, unsigned long *end)
 {
 	if (!vma->vm_file)	/* hugetlbfs_file_mmap error */
 		return;
 
-	adjust_range_if_pmd_sharing_possible(vma, start, end);
 	hugetlb_vma_lock_write(vma);
-	if (vma->vm_file)
+	if (vma->vm_file) {
 		i_mmap_lock_write(vma->vm_file->f_mapping);
+		adjust_range_for_shared_pmds(vma, start, end);
+	}
 }
 
 void __hugetlb_zap_end(struct vm_area_struct *vma,
@@ -5390,7 +5479,12 @@ void unmap_hugepage_range(struct vm_area_struct *vma, unsigned long start,
 
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm,
 				start, end);
-	adjust_range_if_pmd_sharing_possible(vma, &range.start, &range.end);
+	/*
+	 * Only expand for PUDs whose PMD table is actually shared. The callers
+	 * hold i_mmap_rwsem and the hugetlb VMA lock for shared mappings, so PMD
+	 * sharing state cannot change before __unmap_hugepage_range().
+	 */
+	adjust_range_for_shared_pmds(vma, &range.start, &range.end);
 	mmu_notifier_invalidate_range_start(&range);
 	tlb_gather_mmu(&tlb, vma->vm_mm);
 
@@ -6932,23 +7026,13 @@ bool want_pmd_share(struct vm_area_struct *vma, unsigned long addr)
 void adjust_range_if_pmd_sharing_possible(struct vm_area_struct *vma,
 				unsigned long *start, unsigned long *end)
 {
-	unsigned long v_start = ALIGN(vma->vm_start, PUD_SIZE),
-		v_end = ALIGN_DOWN(vma->vm_end, PUD_SIZE);
+	unsigned long range_start, range_end;
 
-	/*
-	 * vma needs to span at least one aligned PUD size, and the range
-	 * must be at least partially within in.
-	 */
-	if (!(vma->vm_flags & VM_MAYSHARE) || !(v_end > v_start) ||
-		(*end <= v_start) || (*start >= v_end))
+	if (!pmd_sharing_possible_range(vma, *start, *end,
+					&range_start, &range_end))
 		return;
 
-	/* Extend the range to be PUD aligned for a worst case scenario */
-	if (*start > v_start)
-		*start = ALIGN_DOWN(*start, PUD_SIZE);
-
-	if (*end < v_end)
-		*end = ALIGN(*end, PUD_SIZE);
+	adjust_range_for_pmd_sharing(start, end, range_start, range_end);
 }
 
 /*
