@@ -180,6 +180,9 @@ static inline void con_debug_leave(void) { }
  *			constraints.
  * @CON_NBCON_ATOMIC_UNSAFE: The write_atomic() callback is not safe and is
  *			therefore only used by nbcon_atomic_flush_unsafe().
+ * @CON_BYPASS_LOGLEVEL	The console bypasses loglevel filtering. Every message
+ *			in the ringbuffer is emitted, regardless of the global
+ *			console_loglevel setting.
  */
 enum cons_flags {
 	CON_PRINTBUFFER		= BIT(0),
@@ -192,6 +195,7 @@ enum cons_flags {
 	CON_SUSPENDED		= BIT(7),
 	CON_NBCON		= BIT(8),
 	CON_NBCON_ATOMIC_UNSAFE	= BIT(9),
+	CON_BYPASS_LOGLEVEL	= BIT(10),
 };
 
 /**

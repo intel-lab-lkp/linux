@@ -3125,7 +3125,9 @@ struct printk_buffers printk_shared_pbufs;
  */
 static bool console_emit_next_record(struct console *con, bool *handover, int cookie)
 {
-	bool is_extended = console_srcu_read_flags(con) & CON_EXTENDED;
+	short console_flags = console_srcu_read_flags(con);
+	bool is_extended = console_flags & CON_EXTENDED;
+	bool may_suppress = !(console_flags & CON_BYPASS_LOGLEVEL);
 	char *outbuf = &printk_shared_pbufs.outbuf[0];
 	struct printk_message pmsg = {
 		.pbufs = &printk_shared_pbufs,
@@ -3134,7 +3136,7 @@ static bool console_emit_next_record(struct console *con, bool *handover, int co
 
 	*handover = false;
 
-	if (!printk_get_next_message(&pmsg, con->seq, is_extended, true))
+	if (!printk_get_next_message(&pmsg, con->seq, is_extended, may_suppress))
 		return false;
 
 	con->dropped += pmsg.dropped;
