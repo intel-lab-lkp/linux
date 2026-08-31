@@ -8135,8 +8135,14 @@ static void bnxt_copy_reserved_rings(struct bnxt *bp, struct bnxt_hw_rings *hwr)
 
 static bool bnxt_rings_ok(struct bnxt *bp, struct bnxt_hw_rings *hwr)
 {
-	return hwr->tx && hwr->rx && hwr->cp && hwr->grp && hwr->vnic &&
-	       hwr->stat && (hwr->cp_p5 || !(bp->flags & BNXT_FLAG_CHIP_P5_PLUS));
+	int min_tx = bp->num_tc ? bp->num_tc : 1;
+
+	if (bp->tx_nr_rings_xdp)
+		min_tx++;
+
+	return hwr->tx >= min_tx && hwr->rx && hwr->cp && hwr->grp &&
+	       hwr->vnic && hwr->stat &&
+	       (hwr->cp_p5 || !(bp->flags & BNXT_FLAG_CHIP_P5_PLUS));
 }
 
 static int bnxt_get_avail_msix(struct bnxt *bp, int num);
@@ -8211,10 +8217,16 @@ static int __bnxt_reserve_rings(struct bnxt *bp)
 		hwr.stat -= bnxt_get_ulp_stat_ctxs(bp);
 	hwr.cp = min_t(int, hwr.cp, hwr.stat);
 	rc = bnxt_trim_rings(bp, &rx_rings, &hwr.tx, hwr.cp, sh);
+	if (rc)
+		return rc;
 	if (bp->flags & BNXT_FLAG_AGG_RINGS)
 		hwr.rx = rx_rings << 1;
 	tx_cp = bnxt_num_tx_to_cp(bp, hwr.tx);
 	hwr.cp = sh ? max_t(int, tx_cp, rx_rings) : tx_cp + rx_rings;
+
+	if (!bnxt_rings_ok(bp, &hwr))
+		return -ENOMEM;
+
 	if (hwr.tx != bp->tx_nr_rings) {
 		netdev_warn(bp->dev,
 			    "Able to reserve only %d out of %d requested TX rings\n",
@@ -8242,9 +8254,6 @@ static int __bnxt_reserve_rings(struct bnxt *bp)
 	if ((bp->rss_cap & BNXT_RSS_CAP_LARGE_RSS_CTX) &&
 	    hwr.rss_ctx < bnxt_get_total_rss_ctxs(bp, &hwr))
 		bp->rss_cap &= ~BNXT_RSS_CAP_LARGE_RSS_CTX;
-
-	if (!bnxt_rings_ok(bp, &hwr))
-		return -ENOMEM;
 
 	if (old_rx_rings != bp->hw_resc.resv_rx_rings &&
 	    !netif_is_rxfh_configured(bp->dev))
@@ -11663,7 +11672,6 @@ int bnxt_reserve_rings(struct bnxt *bp, bool irq_re_init)
 	struct bnxt_en_dev *edev = bp->edev[BNXT_AUXDEV_RDMA];
 	bool irq_cleared = false;
 	bool irq_change = false;
-	int tcs = bp->num_tc;
 	int irqs_required;
 	int rc;
 
@@ -11700,17 +11708,6 @@ int bnxt_reserve_rings(struct bnxt *bp, bool irq_re_init)
 	if (rc) {
 		netdev_err(bp->dev, "ring reservation/IRQ init failure rc: %d\n", rc);
 		return rc;
-	}
-	if (tcs && (bp->tx_nr_rings_per_tc * tcs !=
-		    bp->tx_nr_rings - bp->tx_nr_rings_xdp)) {
-		netdev_err(bp->dev, "tx ring reservation failure\n");
-		netdev_reset_tc(bp->dev);
-		bp->num_tc = 0;
-		if (bp->tx_nr_rings_xdp)
-			bp->tx_nr_rings_per_tc = bp->tx_nr_rings_xdp;
-		else
-			bp->tx_nr_rings_per_tc = bp->tx_nr_rings;
-		return -ENOMEM;
 	}
 	return 0;
 }
@@ -13216,11 +13213,17 @@ static void bnxt_set_xdp_tx_rings(struct bnxt *bp)
 
 static void bnxt_adj_tx_rings(struct bnxt *bp)
 {
+	int tcs = bp->num_tc ? bp->num_tc : 1;
+
 	/* Make adjustments if reserved TX rings are less than requested */
-	bp->tx_nr_rings -= bp->tx_nr_rings_xdp;
-	bp->tx_nr_rings_per_tc = bnxt_tx_nr_rings_per_tc(bp);
-	if (bp->tx_nr_rings_xdp)
-		bnxt_set_xdp_tx_rings(bp);
+	if (bp->tx_nr_rings_xdp) {
+		tcs++;
+		bp->tx_nr_rings_per_tc = bp->tx_nr_rings / tcs;
+		bp->tx_nr_rings_xdp = bp->tx_nr_rings_per_tc;
+	} else {
+		bp->tx_nr_rings_per_tc = bnxt_tx_nr_rings_per_tc(bp);
+	}
+	bp->tx_nr_rings = bp->tx_nr_rings_per_tc * tcs;
 }
 
 static int __bnxt_open_nic(struct bnxt *bp, bool irq_re_init, bool link_re_init)
