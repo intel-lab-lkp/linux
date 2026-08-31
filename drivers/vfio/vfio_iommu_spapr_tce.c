@@ -774,6 +774,85 @@ static long tce_iommu_create_default_window(struct tce_container *container)
 	return ret;
 }
 
+static bool vfio_spapr_eeh_err_needs_addr_normalize(unsigned int type)
+{
+	if (type != EEH_ERR_TYPE_32 && type != EEH_ERR_TYPE_64)
+		return false;
+
+	return true;
+}
+
+static int vfio_spapr_eeh_normalize_addr(struct eeh_pe *pe,
+					 unsigned long addr,
+					 unsigned long *normalized)
+{
+	struct pci_bus_region region;
+	struct eeh_dev *edev, *tmp;
+	struct pci_dev *pdev;
+	struct resource *res;
+	resource_size_t pci_start, pci_len;
+	resource_size_t res_start, res_len;
+	resource_size_t offset;
+	int bar;
+
+	if (!pe || !normalized)
+		return -EINVAL;
+
+	if (!addr) {
+		*normalized = addr;
+		return 0;
+	}
+
+	eeh_pe_for_each_dev(pe, edev, tmp) {
+		pdev = eeh_dev_to_pci_dev(edev);
+		if (!pdev)
+			continue;
+
+		for (bar = 0; bar < PCI_STD_NUM_BARS; bar++) {
+			res = &pdev->resource[bar];
+
+			if (!resource_size(res))
+				continue;
+
+			if (!(res->flags & (IORESOURCE_MEM | IORESOURCE_IO)))
+				continue;
+
+			pcibios_resource_to_bus(pdev->bus, &region, res);
+
+			pci_start = region.start;
+			pci_len = resource_size(res);
+
+			/*
+			 * Case 1: userspace already supplied PCI/IOA
+			 * bus address.
+			 */
+			if ((resource_size_t)addr >= pci_start &&
+			    ((resource_size_t)addr - pci_start) < pci_len) {
+				*normalized = addr;
+				return 0;
+			}
+
+			/*
+			 * Case 2: userspace supplied Linux resource/CPU
+			 * address Convert it back to PCI/IOA bus address
+			 * before calling the platform EEH backend.
+			 */
+			res_start = res->start;
+			res_len = resource_size(res);
+
+			if ((resource_size_t)addr >= res_start &&
+			    ((resource_size_t)addr - res_start) < res_len) {
+				offset = (resource_size_t)addr - res_start;
+				*normalized = region.start + offset;
+
+				return 0;
+			}
+		}
+	}
+
+	return -EINVAL;
+}
+
 static long vfio_spapr_ioctl_eeh_pe_op(struct iommu_group *group,
 				       unsigned long arg)
 {
@@ -817,6 +896,17 @@ static long vfio_spapr_ioctl_eeh_pe_op(struct iommu_group *group,
 			return -EINVAL;
 		if (copy_from_user(&op, (void __user *)arg, minsz))
 			return -EFAULT;
+
+		if (vfio_spapr_eeh_err_needs_addr_normalize(op.err.type)) {
+			unsigned long normalized;
+			long ret;
+
+			ret = vfio_spapr_eeh_normalize_addr(pe, op.err.addr, &normalized);
+			if (ret)
+				return ret;
+
+			op.err.addr = normalized;
+		}
 
 		return eeh_pe_inject_err(pe, op.err.type, op.err.func,
 					 op.err.addr, op.err.mask);
