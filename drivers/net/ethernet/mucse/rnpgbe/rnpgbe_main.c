@@ -43,7 +43,12 @@ static int rnpgbe_configure(struct mucse *mucse)
 	if (err)
 		return err;
 
-	return rnpgbe_configure_rx(mucse);
+	err = rnpgbe_configure_rx(mucse);
+	if (err)
+		return err;
+
+	rnpgbe_set_rx_mode(mucse->netdev);
+	return 0;
 }
 
 /**
@@ -142,9 +147,10 @@ static netdev_tx_t rnpgbe_xmit_frame(struct sk_buff *skb,
 }
 
 static const struct net_device_ops rnpgbe_netdev_ops = {
-	.ndo_open       = rnpgbe_open,
-	.ndo_stop       = rnpgbe_close,
-	.ndo_start_xmit = rnpgbe_xmit_frame,
+	.ndo_open        = rnpgbe_open,
+	.ndo_stop        = rnpgbe_close,
+	.ndo_start_xmit  = rnpgbe_xmit_frame,
+	.ndo_set_rx_mode = rnpgbe_set_rx_mode,
 	.ndo_get_stats64 = rnpgbe_get_stats64,
 };
 
