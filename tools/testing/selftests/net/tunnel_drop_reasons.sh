@@ -26,6 +26,11 @@
 #    GRE_TUNNEL_NOT_FOUND.  It is triggered here by giving the two
 #    endpoints different keys.
 #
+# On the transmit side, the reasons reported while encapsulating are
+# checked too: a packet that does not fit the path MTU, a device in
+# external mode that receives no metadata, and a tunnel whose remote
+# endpoint has no route.
+#
 #  - a header with the routing bit set is reported as GRE_INVALID_HDR,
 #    and a header announcing a GRE version nobody handles is reported as
 #    UNHANDLED_PROTO.  Both are triggered by corrupting the GRE header
@@ -81,6 +86,7 @@ setup_tracing()
 
 setup_ns_pair()
 {
+	PING_ARGS=""
 	cleanup_all_ns
 	setup_ns NS_SND NS_RCV
 
@@ -122,9 +128,15 @@ addr_tunnels()
 	ip -n "$NS_RCV" addr add "$TUN_RCV/24" dev gre_test
 }
 
+# Traffic used by check_reason().  Tests that need something else set
+# PING_ARGS before calling it.
+PING_ARGS=""
+
 send_traffic()
 {
-	ip netns exec "$NS_SND" ping -c 2 -W 1 "$TUN_RCV" >/dev/null 2>&1
+	# shellcheck disable=SC2086
+	ip netns exec "$NS_SND" ping -c 2 -W 1 $PING_ARGS "$TUN_RCV" \
+		>/dev/null 2>&1
 	# Let the tracepoint records reach the trace buffer.
 	sleep 1
 }
@@ -254,6 +266,46 @@ test_corrupted_header()
 	check_reason "$name" "$want"
 }
 
+test_tx_pkt_too_big()
+{
+	setup_ns_pair
+	# The underlay cannot carry what the tunnel advertises, so the
+	# encapsulated packet does not fit the path MTU.  The kernel sends
+	# an ICMP fragmentation needed back and drops it, which is path MTU
+	# discovery working as intended.
+	ip -n "$NS_SND" link set veth_s mtu 1280
+	ip -n "$NS_RCV" link set veth_r mtu 1280
+	add_gre "$NS_SND" "$SND_V4" "$RCV_V4"
+	add_gre "$NS_RCV" "$RCV_V4" "$SND_V4"
+	ip -n "$NS_SND" link set gre_test mtu 1500
+	addr_tunnels
+
+	PING_ARGS="-s 1400 -M do"
+	check_reason "gre: packet does not fit the path MTU" PKT_TOO_BIG
+}
+
+test_tx_no_metadata()
+{
+	setup_ns_pair
+	# A device in external mode expects the destination to come from
+	# the tunnel metadata, which plain traffic does not carry.
+	ip -n "$NS_SND" link add gre_test type gre external
+	ip -n "$NS_SND" link set gre_test up
+	ip -n "$NS_SND" addr add "$TUN_SND/24" dev gre_test
+
+	check_reason "gre: external mode without metadata" TUNNEL_TXINFO
+}
+
+test_tx_no_route()
+{
+	setup_ns_pair
+	# Nothing knows how to reach the remote endpoint of the tunnel.
+	add_gre "$NS_SND" "$SND_V4" 172.31.255.254
+	ip -n "$NS_SND" addr add "$TUN_SND/24" dev gre_test
+
+	check_reason "gre: no route to the remote endpoint" IP_OUTNOROUTES
+}
+
 if [ "$(id -u)" -ne 0 ]; then
 	echo "SKIP: need root"
 	exit "$ksft_skip"
@@ -278,6 +330,10 @@ test_corrupted_header "gre: routing bit set" GRE_INVALID_HDR \
 # PPTP, which has no handler here.
 test_corrupted_header "gre: unhandled GRE version" UNHANDLED_PROTO \
 	offset 21 u8 set 0x01
+
+test_tx_pkt_too_big
+test_tx_no_metadata
+test_tx_no_route
 
 if [ -e /proc/sys/net/ipv6 ]; then
 	test_opts_mismatch ip6gre iseq
