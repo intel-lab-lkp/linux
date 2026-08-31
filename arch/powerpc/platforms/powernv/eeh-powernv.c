@@ -1167,13 +1167,28 @@ static int pnv_eeh_err_inject(struct eeh_pe *pe, int type, int func,
 {
 	struct pci_controller *hose = pe->phb;
 	struct pnv_phb *phb = hose->private_data;
+	int opal_type;
 	s64 rc;
 
-	if (type != OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR &&
-	    type != OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR64) {
-		pr_warn("%s: Invalid error type %d\n",
-			__func__, type);
-		return -ERANGE;
+	/*
+	 * VFIO EEH error injection exposes a generic userspace ABI.
+	 * pSeries maps the generic EEH error types to RTAS ibm,errinjct
+	 * encodings, while PowerNV maps the same generic ABI values to
+	 * OPAL-specific encodings.
+	 *
+	 * Keep EEH_ERR_TYPE_32 and EEH_ERR_TYPE_64 unchanged.  The
+	 * mapping is internal to the platform backend.
+	 */
+	switch (type) {
+	case EEH_ERR_TYPE_32:
+		opal_type = OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR;
+		break;
+	case EEH_ERR_TYPE_64:
+		opal_type = OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR64;
+		break;
+	default:
+		pr_warn("%s: Invalid error type %d\n", __func__, type);
+		return -EINVAL;
 	}
 
 	if (func < OPAL_ERR_INJECT_FUNC_IOA_LD_MEM_ADDR ||
@@ -1192,7 +1207,7 @@ static int pnv_eeh_err_inject(struct eeh_pe *pe, int type, int func,
 
 	/* Do error injection */
 	rc = opal_pci_err_inject(phb->opal_id, pe->addr,
-				 type, func, addr, mask);
+				 opal_type, func, addr, mask);
 	if (rc != OPAL_SUCCESS) {
 		pr_warn("%s: Failure %lld injecting error "
 			"%d-%d to PHB#%x-PE#%x\n",
