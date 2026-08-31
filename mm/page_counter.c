@@ -111,13 +111,15 @@ void page_counter_charge(struct page_counter *counter, unsigned long nr_pages)
  * @counter: counter
  * @nr_pages: number of pages to charge
  * @fail: points first counter to hit its limit, if any
+ * @nr_charged: optional; on success, set to the number of pages actually
+ *		charged to the hierarchy
  *
  * Returns %true on success, or %false and @fail if the counter or one
  * of its ancestors has hit its configured limit.
  */
 bool page_counter_try_charge(struct page_counter *counter,
-			     unsigned long nr_pages,
-			     struct page_counter **fail)
+			     unsigned long nr_pages, struct page_counter **fail,
+			     unsigned long *nr_charged)
 {
 	struct page_counter *c;
 	bool protection = track_protection(counter);
@@ -162,6 +164,10 @@ bool page_counter_try_charge(struct page_counter *counter,
 				WRITE_ONCE(c->watermark, new);
 		}
 	}
+
+	if (nr_charged)
+		*nr_charged = nr_pages;
+
 	return true;
 
 failed:
