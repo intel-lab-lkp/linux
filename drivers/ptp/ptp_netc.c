@@ -798,6 +798,7 @@ static int netc_timer_pci_probe(struct pci_dev *pdev)
 		goto release_mem_regions;
 	}
 
+	spin_lock_init(&priv->lock);
 	pci_set_drvdata(pdev, priv);
 
 	return 0;
@@ -968,7 +969,6 @@ static int netc_timer_probe(struct pci_dev *pdev,
 	priv->caps = netc_timer_ptp_caps;
 	priv->oclk_prsc = NETC_TMR_DEFAULT_PRSC;
 	priv->pps_channel = NETC_TMR_INVALID_CHANNEL;
-	spin_lock_init(&priv->lock);
 	snprintf(priv->irq_name, sizeof(priv->irq_name), "ptp-netc %s",
 		 pci_name(pdev));
 
@@ -1020,6 +1020,56 @@ static struct pci_driver netc_timer_driver = {
 	.remove = netc_timer_remove,
 };
 module_pci_driver(netc_timer_driver);
+
+/**
+ * netc_timer_get_current_time - read the current PTP time from the NETC Timer
+ * @pdev: PCI device of the NETC Timer
+ * @ns: The current PTP clock time in nanoseconds, returned to the caller
+ *
+ * Reads the 64-bit current time register (TMR_CUR_TIME) from the NETC Timer
+ * device associated with @pdev. Returns an error if the Timer driver has not
+ * yet probed or has already been removed.
+ *
+ * Context: Process context only. Acquires the device mutex via device_lock(),
+ *          which may sleep. Must not be called from atomic context, softirq,
+ *          BH, or while holding a spinlock.
+ *
+ * Return: 0 on success, otherwise a negative error code.
+ */
+int netc_timer_get_current_time(struct pci_dev *pdev, u64 *ns)
+{
+	struct device *dev = &pdev->dev;
+	struct netc_timer *priv;
+	unsigned long flags;
+	int err = 0;
+
+	/* Serialize against driver unbind: the remove() callback runs under
+	 * the device lock, so holding it here ensures that priv remains valid
+	 * for the entire duration of the register read.
+	 */
+	device_lock(dev);
+
+	if (pci_dev_driver(pdev) != &netc_timer_driver) {
+		err = -EINVAL;
+		goto unlock_device;
+	}
+
+	priv = pci_get_drvdata(pdev);
+	if (!priv) {
+		err = -ENOMEM;
+		goto unlock_device;
+	}
+
+	spin_lock_irqsave(&priv->lock, flags);
+	*ns = netc_timer_cur_time_read(priv);
+	spin_unlock_irqrestore(&priv->lock, flags);
+
+unlock_device:
+	device_unlock(dev);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(netc_timer_get_current_time);
 
 MODULE_DESCRIPTION("NXP NETC Timer PTP Driver");
 MODULE_LICENSE("Dual BSD/GPL");
