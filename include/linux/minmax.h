@@ -299,6 +299,45 @@ static inline bool in_range32(u32 val, u32 start, u32 len)
 	((sizeof(start) | sizeof(len) | sizeof(val)) <= sizeof(u32) ?	\
 		in_range32(val, start, len) : in_range64(val, start, len))
 
+static inline bool in_range_inclusive64(u64 val, u64 min, u64 max)
+{
+	return (val - min) <= (max - min);
+}
+
+static inline bool in_range_inclusive32(u32 val, u32 min, u32 max)
+{
+	return (val - min) <= (max - min);
+}
+
+/**
+ * in_range_inclusive - Determine if a value lies within an inclusive range.
+ * @val: Value to test.
+ * @min: First value in range.
+ * @max: Last value in range.
+ *
+ * This checks if a value lies within the closed range of [@min, @max]. Note that
+ * "range" refers to values counting up from @min with wraparound at
+ * unsigned-datatype max if encountered, continuing on till @max is reached.
+ *
+ * This macro is not a drop-in replacement for "if (val >= min && val <= max)".
+ * Unsigned arithmetic determines what the 'true' range exactly is depending on
+ * whether @min <= @max holds, and in which reading (signed vs unsigned) as follows::
+ *
+ *     Valid in reading   Example    'True' range is
+ *     Both readings      [5, 10]     interval as written in either reading
+ *     Signed only        [-10, 5]    signed interval
+ *     Unsigned only      [5, -10]    unsigned interval
+ *     Neither reading    [-5, -10]   neither; all values except [unsigned(-9), unsigned(-6)]
+ *
+ * The last two cases provide "surprising" results and are to be used carefully, if
+ * at all. Further, if @max = @min - 1, every @val is in range.
+ *
+ * Return: true or false as described above.
+ */
+#define in_range_inclusive(val, min, max)						\
+	((sizeof(val) | sizeof(min) | sizeof(max)) <= sizeof(u32) ?			\
+	 in_range_inclusive32(val, min, max) : in_range_inclusive64(val, min, max))
+
 /**
  * swap - swap values of @a and @b
  * @a: first value
