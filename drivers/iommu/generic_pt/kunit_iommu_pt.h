@@ -119,19 +119,22 @@ static void test_increase_level(struct kunit *test)
 	/* Add every possible level to the max */
 	while (common->max_vasz_lg2 != pt_top_range(common).max_vasz_lg2) {
 		struct pt_range top_range = pt_top_range(common);
+		pt_vaddr_t va;
 
 		if (top_range.va == 0)
-			do_map(test, top_range.last_va + 1, 0,
-			       priv->smallest_pgsz);
+			va = top_range.last_va + 1;
 		else
-			do_map(test, top_range.va - priv->smallest_pgsz, 0,
-			       priv->smallest_pgsz);
+			va = top_range.va - priv->smallest_pgsz;
+		do_map(test, va, 0, priv->smallest_pgsz);
 
 		KUNIT_ASSERT_EQ(test, pt_top_range(common).top_level,
 				top_range.top_level + 1);
 		KUNIT_ASSERT_GE(test, common->max_vasz_lg2,
 				pt_top_range(common).max_vasz_lg2);
+
+		do_unmap(test, va, priv->smallest_pgsz);
 	}
+	KUNIT_ASSERT_EQ(test, count_valids(test), 0);
 }
 
 static void test_map_simple(struct kunit *test)
@@ -404,6 +407,8 @@ static void test_pgsize_boundary(struct kunit *test)
 		kunit_skip(test, "Format does not have the required range");
 
 	do_map(test, 0xfef80000, 0x208b95d000, 0xfef9ffff - 0xfef80000 + 1);
+	do_unmap(test, 0xfef80000, 0xfef9ffff - 0xfef80000 + 1);
+	KUNIT_ASSERT_EQ(test, count_valids(test), 0);
 }
 
 /* See https://lore.kernel.org/r/20250826143816.38686-1-eugkoira@amazon.com */
@@ -425,6 +430,8 @@ static void test_mixed(struct kunit *test)
 	/* 14 2M, 3 1G, 3 2M */
 	KUNIT_ASSERT_EQ(test, count_valids(test), 20);
 	check_iova(test, start, oa, len);
+	do_unmap(test, start, len);
+	KUNIT_ASSERT_EQ(test, count_valids(test), 0);
 }
 
 static struct kunit_case iommu_test_cases[] = {
@@ -464,6 +471,12 @@ static void pt_kunit_iommu_exit(struct kunit *test)
 
 	if (!test->priv)
 		return;
+
+	/*
+	 * The tests are expected to unmap what they map. Use EXPECT so a
+	 * failure here does not abort the rest of the cleanup.
+	 */
+	KUNIT_EXPECT_EQ(test, count_valids(test), 0);
 
 	pt_iommu_deinit(priv->iommu);
 	/*
