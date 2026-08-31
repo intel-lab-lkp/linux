@@ -541,6 +541,7 @@ struct keyspan_serial_private {
 	struct urb	*glocont_urb;
 	char		*glocont_buf;
 	char		*ctrl_buf;	/* for EP0 control message */
+	struct mutex	lock; /* protects p_priv vs port_remove races */
 };
 
 struct keyspan_port_private {
@@ -1581,8 +1582,15 @@ static void keyspan_close(struct usb_serial_port *port)
 {
 	int			i;
 	struct keyspan_port_private 	*p_priv;
+	struct keyspan_serial_private	*s_priv = usb_get_serial_data(port->serial);
 
+	mutex_lock(&s_priv->lock);
 	p_priv = usb_get_serial_port_data(port);
+	if (!p_priv) {
+		/* port_remove() already ran and freed this */
+		mutex_unlock(&s_priv->lock);
+		return;
+	}
 
 	p_priv->rts_state = 0;
 	p_priv->dtr_state = 0;
@@ -1599,6 +1607,7 @@ static void keyspan_close(struct usb_serial_port *port)
 		usb_kill_urb(p_priv->in_urbs[i]);
 		usb_kill_urb(p_priv->out_urbs[i]);
 	}
+	mutex_unlock(&s_priv->lock);
 }
 
 /* download the firmware to a pre-renumeration device */
@@ -2794,7 +2803,7 @@ static int keyspan_startup(struct usb_serial *serial)
 	s_priv = kzalloc_obj(struct keyspan_serial_private);
 	if (!s_priv)
 		return -ENOMEM;
-
+	mutex_init(&s_priv->lock);
 	s_priv->instat_buf = kzalloc(INSTAT_BUFLEN, GFP_KERNEL);
 	if (!s_priv->instat_buf)
 		goto err_instat_buf;
@@ -2971,10 +2980,14 @@ err_free_in_buffer:
 
 static void keyspan_port_remove(struct usb_serial_port *port)
 {
+	struct keyspan_serial_private *s_priv = usb_get_serial_data(port->serial);
 	struct keyspan_port_private *p_priv;
 	int i;
 
+	mutex_lock(&s_priv->lock);
 	p_priv = usb_get_serial_port_data(port);
+	usb_set_serial_port_data(port, NULL);
+	mutex_unlock(&s_priv->lock);
 
 	usb_kill_urb(p_priv->inack_urb);
 	usb_kill_urb(p_priv->outcont_urb);
