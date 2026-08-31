@@ -626,12 +626,13 @@ static struct nfs4_pnfs_ds_addr *nfs4_pnfs_ds_addr_alloc(gfp_t gfp_flags)
 	return da;
 }
 
-static void nfs4_pnfs_ds_addr_free(struct nfs4_pnfs_ds_addr *da)
+void nfs4_pnfs_ds_addr_free(struct nfs4_pnfs_ds_addr *da)
 {
 	kfree(da->da_remotestr);
 	kfree(da->da_netid);
 	kfree(da);
 }
+EXPORT_SYMBOL_GPL(nfs4_pnfs_ds_addr_free);
 
 static void destroy_ds(struct nfs4_pnfs_ds *ds)
 {
@@ -1230,4 +1231,3 @@ pnfs_nfs_generic_sync(struct inode *inode, bool datasync)
 	return pnfs_layoutcommit_inode(inode, true);
 }
 EXPORT_SYMBOL_GPL(pnfs_nfs_generic_sync);
-

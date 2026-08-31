@@ -415,6 +415,7 @@ int pnfs_generic_commit_pagelist(struct inode *inode,
 							int how));
 int pnfs_generic_scan_commit_lists(struct nfs_commit_info *cinfo, int max);
 void pnfs_generic_write_commit_done(struct rpc_task *task, void *data);
+void nfs4_pnfs_ds_addr_free(struct nfs4_pnfs_ds_addr *da);
 void nfs4_pnfs_ds_put(struct nfs4_pnfs_ds *ds);
 struct nfs4_pnfs_ds *nfs4_pnfs_ds_add(const struct net *net,
 				      struct list_head *dsaddrs,

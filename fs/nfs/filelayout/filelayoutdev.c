@@ -182,8 +182,7 @@ nfs4_fl_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 					      struct nfs4_pnfs_ds_addr,
 					      da_node);
 			list_del_init(&da->da_node);
-			kfree(da->da_remotestr);
-			kfree(da);
+			nfs4_pnfs_ds_addr_free(da);
 		}
 	}
 
@@ -195,8 +194,7 @@ out_err_drain_dsaddrs:
 		da = list_first_entry(&dsaddrs, struct nfs4_pnfs_ds_addr,
 				      da_node);
 		list_del_init(&da->da_node);
-		kfree(da->da_remotestr);
-		kfree(da);
+		nfs4_pnfs_ds_addr_free(da);
 	}
 out_err_free_deviceid:
 	nfs4_fl_free_deviceid(dsaddr);
