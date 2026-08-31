@@ -98,7 +98,8 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 		goto out_err_drain_dsaddrs;
 	version_count = be32_to_cpup(p);
 
-	if (version_count == 0) {
+	if (version_count == 0 ||
+	    version_count > xdr_stream_remaining(&stream) / (5 * XDR_UNIT)) {
 		ret = -EINVAL;
 		goto out_err_drain_dsaddrs;
 	}
@@ -110,9 +111,7 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 		goto out_err_drain_dsaddrs;
 
 	for (i = 0; i < version_count; i++) {
-		/* 20 = version(4) + minor_version(4) + rsize(4) + wsize(4) +
-		 * tightly_coupled(4) */
-		p = xdr_inline_decode(&stream, 20);
+		p = xdr_inline_decode(&stream, 5 * XDR_UNIT);
 		if (unlikely(!p))
 			goto out_err_drain_dsaddrs;
 		ds_versions[i].version = be32_to_cpup(p++);
