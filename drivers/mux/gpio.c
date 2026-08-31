@@ -18,6 +18,7 @@
 
 struct mux_gpio {
 	struct gpio_descs *gpios;
+	struct gpio_desc *enable_gpio;
 };
 
 static int mux_gpio_set(struct mux_control *mux, int state)
@@ -26,9 +27,17 @@ static int mux_gpio_set(struct mux_control *mux, int state)
 	DECLARE_BITMAP(values, BITS_PER_TYPE(state));
 	u32 value = state;
 
+	/* The gpios are not updated atomically, disable the mux meanwhile. */
+	gpiod_set_value_cansleep(mux_gpio->enable_gpio, 0);
+
+	if (state == MUX_IDLE_DISCONNECT)
+		return 0;
+
 	bitmap_from_arr32(values, &value, BITS_PER_TYPE(value));
 
 	gpiod_multi_set_value_cansleep(mux_gpio->gpios, values);
+
+	gpiod_set_value_cansleep(mux_gpio->enable_gpio, 1);
 
 	return 0;
 }
@@ -70,14 +79,27 @@ static int mux_gpio_probe(struct platform_device *pdev)
 	WARN_ON(pins != mux_gpio->gpios->ndescs);
 	mux_chip->mux->states = BIT(pins);
 
-	ret = device_property_read_u32(dev, "idle-state", (u32 *)&idle_state);
-	if (ret >= 0 && idle_state != MUX_IDLE_AS_IS) {
-		if (idle_state < 0 || idle_state >= mux_chip->mux->states) {
-			dev_err(dev, "invalid idle-state %u\n", idle_state);
-			return -EINVAL;
-		}
+	mux_gpio->enable_gpio = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_LOW);
+	if (IS_ERR(mux_gpio->enable_gpio))
+		return dev_err_probe(dev, PTR_ERR(mux_gpio->enable_gpio),
+				     "failed to get optional enable gpio\n");
 
-		mux_chip->mux->idle_state = idle_state;
+	ret = device_property_read_u32(dev, "idle-state", (u32 *)&idle_state);
+	if (ret >= 0) {
+		if (idle_state == MUX_IDLE_DISCONNECT) {
+			if (!mux_gpio->enable_gpio)
+				return dev_err_probe(dev, -EINVAL,
+						     "idle-state disconnect requires enable-gpios\n");
+
+			mux_chip->mux->idle_state = MUX_IDLE_DISCONNECT;
+		} else if (idle_state != MUX_IDLE_AS_IS) {
+			if (idle_state < 0 || idle_state >= mux_chip->mux->states) {
+				return dev_err_probe(dev, -EINVAL,
+						     "invalid idle-state %d\n",
+						     idle_state);
+			}
+			mux_chip->mux->idle_state = idle_state;
+		}
 	}
 
 	ret = devm_regulator_get_enable_optional(dev, "mux");
