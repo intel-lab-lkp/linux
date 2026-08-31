@@ -8,6 +8,7 @@
 #include <linux/dmi.h>
 #include <linux/i2c.h>
 #include <linux/mei_cl_bus.h>
+#include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
@@ -853,6 +854,32 @@ err_put_adev:
 	return ret;
 }
 
+/*
+ * Whether a sensor config applies to the IPU the bridge sits on. A config
+ * naming a PCI product ID only applies to that IPU, and takes precedence over
+ * a generic config for the same sensor, which is skipped so that the sensor is
+ * not connected twice.
+ */
+static bool ipu_bridge_config_matches(const struct ipu_sensor_config *cfg,
+				      struct ipu_bridge *bridge)
+{
+	unsigned int i;
+
+	if (cfg->pci_id)
+		return cfg->pci_id == bridge->pci_id;
+
+	for (i = 0; i < ARRAY_SIZE(ipu_supported_sensors); i++) {
+		const struct ipu_sensor_config *sp =
+			&ipu_supported_sensors[i];
+
+		if (sp->pci_id && sp->pci_id == bridge->pci_id &&
+		    !strcmp(sp->hid, cfg->hid))
+			return false;
+	}
+
+	return true;
+}
+
 static int ipu_bridge_connect_sensors(struct ipu_bridge *bridge)
 {
 	unsigned int i;
@@ -861,6 +888,9 @@ static int ipu_bridge_connect_sensors(struct ipu_bridge *bridge)
 	for (i = 0; i < ARRAY_SIZE(ipu_supported_sensors); i++) {
 		const struct ipu_sensor_config *cfg =
 			&ipu_supported_sensors[i];
+
+		if (!ipu_bridge_config_matches(cfg, bridge))
+			continue;
 
 		ret = ipu_bridge_connect_sensor(cfg, bridge);
 		if (ret)
@@ -948,6 +978,7 @@ int ipu_bridge_init(struct device *dev,
 		sizeof(bridge->ipu_node_name));
 	bridge->ipu_hid_node.name = bridge->ipu_node_name;
 	bridge->dev = dev;
+	bridge->pci_id = dev_is_pci(dev) ? to_pci_dev(dev)->device : 0;
 	bridge->parse_sensor_fwnode = parse_sensor_fwnode;
 
 	ret = software_node_register(&bridge->ipu_hid_node);

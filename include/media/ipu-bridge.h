@@ -17,12 +17,26 @@
 #define IPU_SENSOR_ROTATION_NORMAL		0
 #define IPU_SENSOR_ROTATION_INVERTED		1
 
-#define IPU_SENSOR_CONFIG(_HID, _NR, ...)	\
-	(const struct ipu_sensor_config) {	\
-		.hid = _HID,			\
-		.nr_link_freqs = _NR,		\
-		.link_freqs = { __VA_ARGS__ }	\
+/* Flags for struct ipu_sensor_config */
+#define IPU_BR_FL_NONE				0
+
+/*
+ * Sensor config specific to a single IPU, identified by its PCI product ID,
+ * with flags describing what the sensor needs on that IPU. Where both a
+ * specific and a generic (IPU_SENSOR_CONFIG) entry exist for the same HID,
+ * the specific one takes precedence.
+ */
+#define IPU_SENSOR_CONFIG_MATCH_FL(_HID, _ID, _FLAGS, _NR, ...)	\
+	(const struct ipu_sensor_config) {			\
+		.hid = _HID,					\
+		.pci_id = _ID,					\
+		.flags = IPU_BR_FL_##_FLAGS,			\
+		.nr_link_freqs = _NR,				\
+		.link_freqs = { __VA_ARGS__ }			\
 	}
+
+#define IPU_SENSOR_CONFIG(_HID, _NR, ...)			\
+	IPU_SENSOR_CONFIG_MATCH_FL(_HID, 0, NONE, _NR, __VA_ARGS__)
 
 #define NODE_SENSOR(_HID, _PROPS)		\
 	(const struct software_node) {		\
@@ -132,6 +146,9 @@ struct ipu_node_names {
 
 struct ipu_sensor_config {
 	const char *hid;
+	/* IPU PCI product ID this config is specific to, 0 for any */
+	const u16 pci_id;
+	const u32 flags;
 	const u8 nr_link_freqs;
 	const u64 link_freqs[MAX_NUM_LINK_FREQS];
 };
@@ -177,6 +194,8 @@ typedef int (*ipu_parse_sensor_fwnode_t)(struct acpi_device *adev,
 
 struct ipu_bridge {
 	struct device *dev;
+	/* PCI product ID of the IPU, 0 if it is not a PCI device */
+	u16 pci_id;
 	ipu_parse_sensor_fwnode_t parse_sensor_fwnode;
 	char ipu_node_name[ACPI_ID_LEN];
 	struct software_node ipu_hid_node;
