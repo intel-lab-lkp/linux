@@ -11302,6 +11302,15 @@ sched_change_begin(struct task_struct *p, const struct sched_class *next_class,
 		flags |= DEQUEUE_NOCLOCK;
 	}
 
+	/*
+	 * Don't carry retained proxy state across scheduling class changes.
+	 * Compatible RT/DL PI transitions could preserve the session so that a
+	 * boosted donor continues proxy-executing its lock owner. Defining which
+	 * class transitions can safely retain that state is left for future work.
+	 */
+	if ((flags & DEQUEUE_CLASS) && next_class != p->sched_class)
+		sched_proxy_block_task(rq, p);
+
 	if ((flags & DEQUEUE_CLASS) && p->sched_class->switching_from)
 		p->sched_class->switching_from(rq, p);
 
