@@ -20,6 +20,7 @@
 #include <linux/kthread.h>
 #include <linux/dmi.h>
 #include <linux/dma-map-ops.h>
+#include <linux/pci.h>
 #include <linux/platform_data/x86/apple.h>
 #include <linux/pgtable.h>
 #include <linux/crc32.h>
@@ -2340,6 +2341,7 @@ static int acpi_scan_attach_handler(struct acpi_device *device)
 
 static int attach_subtree(struct acpi_device *device, void *not_used)
 {
+	struct pci_dev *pci;
 	acpi_handle ejd;
 	bool skip;
 	int ret;
@@ -2351,10 +2353,26 @@ static int attach_subtree(struct acpi_device *device, void *not_used)
 	if (ACPI_SUCCESS(acpi_bus_get_ejd(device->handle, &ejd)))
 		register_dock_dependent_device(device, ejd);
 
-	acpi_bus_get_status(device);
-	/* Skip devices that are not ready for enumeration (e.g. not present) */
-	if (!acpi_dev_ready_for_enumeration(device))
-		return 0;
+	/*
+	 * If the given ACPI device object has been already associated with a
+	 * PCI device found on the bus, the device can be regarded as present
+	 * and functional.
+	 */
+	pci = acpi_dev_get_pci_dev(device);
+	if (pci) {
+		acpi_handle_debug(device->handle, "PCI companion %s found\n",
+				  dev_name(&pci->dev));
+
+		pci_dev_put(pci);
+	} else {
+		acpi_bus_get_status(device);
+		/*
+		 * Skip devices that are not ready for enumeration (e.g. not
+		 * present).
+		 */
+		if (!acpi_dev_ready_for_enumeration(device))
+			return 0;
+	}
 
 	acpi_ec_register_opregions(device);
 
