@@ -350,6 +350,9 @@ static void damon_va_mkold(struct mm_struct *mm, unsigned long addr)
 		.hugetlb_entry = damon_mkold_hugetlb_entry,
 	};
 
+	/* Arch helpers can derive a page range from @addr; align it down. */
+	addr = PAGE_ALIGN_DOWN(addr);
+
 	damon_va_walk_page_range(mm, addr, addr + 1, &damon_mkold_ops, NULL);
 }
 
@@ -475,6 +478,9 @@ static bool damon_va_young(struct mm_struct *mm, unsigned long addr)
 		.pmd_entry = damon_young_pmd_entry,
 		.hugetlb_entry = damon_young_hugetlb_entry,
 	};
+
+	/* Arch helpers can derive a page range from @addr; align it down. */
+	addr = PAGE_ALIGN_DOWN(addr);
 
 	damon_va_walk_page_range(mm, addr, addr + 1, &damon_young_ops, &arg);
 	return arg.young;
