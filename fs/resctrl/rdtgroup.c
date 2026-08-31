@@ -685,13 +685,13 @@ static int __rdtgroup_move_task(struct task_struct *tsk,
 
 static bool is_closid_match(struct task_struct *t, struct rdtgroup *r)
 {
-	return (resctrl_arch_alloc_capable() && (r->type == RDTCTRL_GROUP) &&
+	return (resctrl_alloc_capable() && (r->type == RDTCTRL_GROUP) &&
 		resctrl_arch_match_closid(t, r->closid));
 }
 
 static bool is_rmid_match(struct task_struct *t, struct rdtgroup *r)
 {
-	return (resctrl_arch_mon_capable() && (r->type == RDTMON_GROUP) &&
+	return (resctrl_mon_capable() && (r->type == RDTMON_GROUP) &&
 		resctrl_arch_match_rmid(t, r->mon.parent->closid,
 					r->mon.rmid));
 }
@@ -3159,9 +3159,9 @@ static void resctrl_unmount(void)
 		resctrl_arch_reset_all_ctrls(r);
 
 	resctrl_fs_teardown();
-	if (resctrl_arch_alloc_capable())
+	if (resctrl_alloc_capable())
 		resctrl_arch_disable_alloc();
-	if (resctrl_arch_mon_capable())
+	if (resctrl_mon_capable())
 		resctrl_arch_disable_mon();
 	resctrl_mounted = false;
 	mutex_unlock(&rdtgroup_mutex);
@@ -3215,7 +3215,7 @@ static int rdt_get_tree(struct fs_context *fc)
 	if (ret)
 		goto out_schemata_free;
 
-	if (resctrl_arch_mon_capable())
+	if (resctrl_mon_capable())
 		flags |= RFTYPE_MON;
 
 	ret = rdtgroup_add_files(rdtgroup_default.kn, flags);
@@ -3228,7 +3228,7 @@ static int rdt_get_tree(struct fs_context *fc)
 	if (ret < 0)
 		goto out_closid_exit;
 
-	if (resctrl_arch_mon_capable()) {
+	if (resctrl_mon_capable()) {
 		ret = mongroup_create_dir(rdtgroup_default.kn,
 					  &rdtgroup_default, "mon_groups",
 					  &kn_mongrp);
@@ -3248,12 +3248,12 @@ static int rdt_get_tree(struct fs_context *fc)
 	if (ret)
 		goto out_mondata;
 
-	if (resctrl_arch_alloc_capable())
+	if (resctrl_alloc_capable())
 		resctrl_arch_enable_alloc();
-	if (resctrl_arch_mon_capable())
+	if (resctrl_mon_capable())
 		resctrl_arch_enable_mon();
 
-	if (resctrl_arch_alloc_capable() || resctrl_arch_mon_capable())
+	if (resctrl_alloc_capable() || resctrl_mon_capable())
 		resctrl_mounted = true;
 
 	if (resctrl_is_mbm_enabled()) {
@@ -3296,10 +3296,10 @@ static int rdt_get_tree(struct fs_context *fc)
 	return ret;
 
 out_mondata:
-	if (resctrl_arch_mon_capable())
+	if (resctrl_mon_capable())
 		kernfs_remove(kn_mondata);
 out_mongrp:
-	if (resctrl_arch_mon_capable()) {
+	if (resctrl_mon_capable()) {
 		mon_put_kn_priv();
 		rdtgroup_unassign_cntrs(&rdtgroup_default);
 		kernfs_remove(kn_mongrp);
@@ -3888,7 +3888,7 @@ static int mkdir_rdt_prepare_rmid_alloc(struct rdtgroup *rdtgrp)
 {
 	int ret;
 
-	if (!resctrl_arch_mon_capable())
+	if (!resctrl_mon_capable())
 		return 0;
 
 	ret = alloc_rmid(rdtgrp->closid);
@@ -3913,7 +3913,7 @@ static int mkdir_rdt_prepare_rmid_alloc(struct rdtgroup *rdtgrp)
 
 static void mkdir_rdt_prepare_rmid_free(struct rdtgroup *rgrp)
 {
-	if (resctrl_arch_mon_capable()) {
+	if (resctrl_mon_capable()) {
 		rdtgroup_unassign_cntrs(rgrp);
 		free_rmid(rgrp->closid, rgrp->mon.rmid);
 	}
@@ -4004,7 +4004,7 @@ static int mkdir_rdt_prepare(struct kernfs_node *parent_kn,
 
 	if (rtype == RDTCTRL_GROUP) {
 		files = RFTYPE_BASE | RFTYPE_CTRL;
-		if (resctrl_arch_mon_capable())
+		if (resctrl_mon_capable())
 			files |= RFTYPE_MON;
 	} else {
 		files = RFTYPE_BASE | RFTYPE_MON;
@@ -4113,7 +4113,7 @@ static int rdtgroup_mkdir_ctrl_mon(struct kernfs_node *parent_kn,
 
 	list_add(&rdtgrp->rdtgroup_list, &rdt_all_groups);
 
-	if (resctrl_arch_mon_capable()) {
+	if (resctrl_mon_capable()) {
 		/*
 		 * Create an empty mon_groups directory to hold the subset
 		 * of tasks and cpus to monitor.
@@ -4154,11 +4154,11 @@ static int rdtgroup_mkdir(struct kernfs_node *parent_kn, const char *name,
 	 * allocation is supported, add a control and monitoring
 	 * subdirectory
 	 */
-	if (resctrl_arch_alloc_capable() && parent_kn == rdtgroup_default.kn)
+	if (resctrl_alloc_capable() && parent_kn == rdtgroup_default.kn)
 		return rdtgroup_mkdir_ctrl_mon(parent_kn, name, mode);
 
 	/* Else, attempt to add a monitoring subdirectory. */
-	if (resctrl_arch_mon_capable())
+	if (resctrl_mon_capable())
 		return rdtgroup_mkdir_mon(parent_kn, name, mode);
 
 	return -EPERM;
@@ -4573,7 +4573,7 @@ void resctrl_offline_mon_domain(struct rdt_resource *r, struct rdt_domain_hdr *h
 	 * If resctrl is mounted, remove all the
 	 * per domain monitor data directories.
 	 */
-	if (resctrl_mounted && resctrl_arch_mon_capable())
+	if (resctrl_mounted && resctrl_mon_capable())
 		rmdir_mondata_subdir_allrdtgrp(r, hdr);
 
 	if (r->rid != RDT_RESOURCE_L3)
@@ -4710,7 +4710,7 @@ mkdir:
 	 * by rdt_get_tree() calling mkdir_mondata_all().
 	 * If resctrl is mounted, add per domain monitor data directories.
 	 */
-	if (resctrl_mounted && resctrl_arch_mon_capable())
+	if (resctrl_mounted && resctrl_mon_capable())
 		mkdir_mondata_subdir_allrdtgrp(r, hdr);
 
 out_unlock:

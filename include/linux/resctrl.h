@@ -346,6 +346,32 @@ struct rdt_resource {
  */
 struct rdt_resource *resctrl_arch_get_resource(enum resctrl_res_level l);
 
+/*
+ * resctrl_alloc_capable - Are any allocation resources enabled.
+ */
+static inline bool resctrl_alloc_capable(void)
+{
+	struct rdt_resource *r;
+
+	for_each_rdt_resource(r)
+		if ((r)->alloc_capable)
+			return true;
+	return false;
+}
+
+/*
+ * resctrl_mon_capable - Are any monitor resources enabled.
+ */
+static inline bool resctrl_mon_capable(void)
+{
+	struct rdt_resource *r;
+
+	for_each_rdt_resource(r)
+		if ((r)->mon_capable)
+			return true;
+	return false;
+}
+
 /**
  * struct resctrl_schema - configuration abilities of a resource presented to
  *			   user-space

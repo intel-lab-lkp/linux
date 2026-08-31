@@ -75,28 +75,6 @@ static DECLARE_WAIT_QUEUE_HEAD(wait_cacheinfo_ready);
  */
 static bool resctrl_enabled;
 
-bool resctrl_arch_alloc_capable(void)
-{
-	struct mpam_resctrl_res *res;
-	enum resctrl_res_level rid;
-
-	for_each_mpam_resctrl_control(res, rid) {
-		if (res->resctrl_res.alloc_capable)
-			return true;
-	}
-
-	return false;
-}
-
-bool resctrl_arch_mon_capable(void)
-{
-	struct mpam_resctrl_res *res = &mpam_resctrl_controls[RDT_RESOURCE_L3];
-	struct rdt_resource *l3 = &res->resctrl_res;
-
-	/* All monitors are presented as being on the L3 cache */
-	return l3->mon_capable;
-}
-
 bool resctrl_arch_is_evt_configurable(enum resctrl_event_id evt)
 {
 	return false;
@@ -1897,9 +1875,9 @@ int mpam_resctrl_setup(void)
 
 	cpus_read_unlock();
 
-	if (!resctrl_arch_alloc_capable() && !resctrl_arch_mon_capable()) {
+	if (!resctrl_alloc_capable() && !resctrl_mon_capable()) {
 		pr_debug("No alloc(%u) or monitor(%u) found - resctrl not supported\n",
-			 resctrl_arch_alloc_capable(), resctrl_arch_mon_capable());
+			 resctrl_alloc_capable(), resctrl_mon_capable());
 		return -EOPNOTSUPP;
 	}
 
