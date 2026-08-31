@@ -142,6 +142,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/rculist.h>
 
 #ifdef CONFIG_RV_MON_EVENTS
 #define CREATE_TRACE_POINTS
@@ -227,6 +228,18 @@ bool rv_is_container_monitor(struct rv_monitor *mon)
 	next = list_next_entry(mon, list);
 
 	return next->parent == mon || !mon->enable;
+}
+
+struct rv_monitor *rv_get_monitor_by_name(const char *name)
+{
+	struct rv_monitor *m;
+
+	list_for_each_entry_rcu(m, &rv_monitors_list, list,
+				lockdep_is_held(&rv_interface_lock)) {
+		if (strcmp(name, m->name) == 0)
+			return m;
+	}
+	return NULL;
 }
 
 /*
@@ -753,7 +766,6 @@ static void destroy_monitor_dir(struct rv_monitor *mon)
  */
 int rv_register_monitor(struct rv_monitor *monitor, struct rv_monitor *parent)
 {
-	struct rv_monitor *r;
 	int retval = 0;
 
 	if (strnlen(monitor->name, MAX_RV_MONITOR_NAME_SIZE) == MAX_RV_MONITOR_NAME_SIZE) {
@@ -764,11 +776,9 @@ int rv_register_monitor(struct rv_monitor *monitor, struct rv_monitor *parent)
 
 	guard(mutex)(&rv_interface_lock);
 
-	list_for_each_entry(r, &rv_monitors_list, list) {
-		if (strcmp(monitor->name, r->name) == 0) {
-			pr_info("Monitor %s is already registered\n", monitor->name);
-			return -EEXIST;
-		}
+	if (rv_get_monitor_by_name(monitor->name)) {
+		pr_info("Monitor %s is already registered\n", monitor->name);
+		return -EEXIST;
 	}
 
 	if (parent && rv_is_nested_monitor(parent)) {
@@ -785,9 +795,9 @@ int rv_register_monitor(struct rv_monitor *monitor, struct rv_monitor *parent)
 
 	/* keep children close to the parent for easier visualisation */
 	if (parent)
-		list_add(&monitor->list, &parent->list);
+		list_add_rcu(&monitor->list, &parent->list);
 	else
-		list_add_tail(&monitor->list, &rv_monitors_list);
+		list_add_tail_rcu(&monitor->list, &rv_monitors_list);
 
 	return 0;
 }
@@ -803,7 +813,7 @@ int rv_unregister_monitor(struct rv_monitor *monitor)
 	guard(mutex)(&rv_interface_lock);
 
 	rv_disable_monitor(monitor);
-	list_del(&monitor->list);
+	list_del_rcu(&monitor->list);
 	destroy_monitor_dir(monitor);
 
 	return 0;
