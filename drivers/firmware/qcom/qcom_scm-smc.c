@@ -6,7 +6,6 @@
 #include <linux/io.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
-#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/firmware/qcom/qcom_scm.h>
@@ -26,8 +25,6 @@ struct arm_smccc_args {
 
 #define CREATE_TRACE_POINTS
 #include "qcom_scm_trace.h"
-
-static DEFINE_MUTEX(qcom_scm_lock);
 
 #define QCOM_SCM_EBUSY_WAIT_MS 30
 #define QCOM_SCM_EBUSY_MAX_RETRY 20
@@ -135,11 +132,11 @@ static int __scm_smc_do(struct device *dev, struct arm_smccc_args *smc,
 	}
 
 	do {
-		mutex_lock(&qcom_scm_lock);
+		down(&qcom_scm_sem_lock);
 
 		ret = __scm_smc_do_quirk_handle_waitq(dev, smc, res);
 
-		mutex_unlock(&qcom_scm_lock);
+		up(&qcom_scm_sem_lock);
 
 		if (ret)
 			return ret;

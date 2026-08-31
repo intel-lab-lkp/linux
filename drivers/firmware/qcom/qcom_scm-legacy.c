@@ -6,7 +6,6 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/errno.h>
 #include <linux/err.h>
 #include <linux/firmware/qcom/qcom_scm.h>
@@ -14,9 +13,6 @@
 #include <linux/dma-mapping.h>
 
 #include "qcom_scm.h"
-
-static DEFINE_MUTEX(qcom_scm_lock);
-
 
 /**
  * struct arm_smccc_args
@@ -173,11 +169,11 @@ int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 	smc.args[1] = (unsigned long)&context_id;
 	smc.args[2] = cmd_phys;
 
-	mutex_lock(&qcom_scm_lock);
+	down(&qcom_scm_sem_lock);
 	__scm_legacy_do(&smc, &smc_res);
 	if (smc_res.a0)
 		ret = qcom_scm_remap_error(smc_res.a0);
-	mutex_unlock(&qcom_scm_lock);
+	up(&qcom_scm_sem_lock);
 	if (ret)
 		goto out;
 
