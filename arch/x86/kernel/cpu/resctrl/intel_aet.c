@@ -65,10 +65,10 @@ struct pmt_event {
  * @force_on:		True when "rdt" command line overrides disable of this
  *			event group.
  * @guid:		Unique number per XML description file.
- * @num_rmid:		Number of RMIDs supported by this group. May be
- *			adjusted downwards if enumeration from
- *			intel_pmt_get_regions_by_feature() indicates fewer
- *			RMIDs can be tracked simultaneously.
+ * @num_rmid:		Number of RMIDs supported by this group. May be adjusted
+ *			downwards if the system supports fewer RMIDs or
+ *			enumeration from intel_pmt_get_regions_by_feature()
+ *			indicates fewer RMIDs can be tracked simultaneously.
  * @mmio_size:		Number of bytes of MMIO registers for this group.
  * @num_events:		Number of events in this group.
  * @evts:		Array of event descriptors.
@@ -323,6 +323,17 @@ bool intel_aet_get_events(void)
 	}
 
 	return ret;
+}
+
+void __init intel_aet_init(void)
+{
+	u32 max_rmid = resctrl_arch_system_max_rmid_idx();
+	struct event_group **peg, *e;
+
+	for_each_event_group(peg) {
+		e = *peg;
+		e->num_rmid = min(max_rmid, e->num_rmid);
+	}
 }
 
 void __exit intel_aet_exit(void)

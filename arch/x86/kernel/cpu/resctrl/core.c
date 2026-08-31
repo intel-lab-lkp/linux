@@ -1131,6 +1131,8 @@ static int __init resctrl_arch_late_init(void)
 	if (!get_rdt_resources())
 		return -ENODEV;
 
+	intel_aet_init();
+
 	state = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
 				  "x86/resctrl/cat:online:",
 				  resctrl_arch_online_cpu,
