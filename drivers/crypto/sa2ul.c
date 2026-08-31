@@ -143,8 +143,8 @@ struct algo_data {
 	bool inv_key;
 	struct sa_tfm_ctx *ctx;
 	bool keyed_mac;
-	void (*prep_iopad)(struct algo_data *algo, const u8 *key,
-			   u16 key_sz, __be32 *ipad, __be32 *opad);
+	int (*prep_iopad)(struct algo_data *algo, const u8 *key,
+			  u16 key_sz, __be32 *ipad, __be32 *opad);
 };
 
 /**
@@ -433,34 +433,42 @@ static void sa_export_shash(void *state, struct shash_desc *hash,
 	cpu_to_be32_array(out, result, digest_size / 4);
 }
 
-static void sa_prepare_iopads(struct algo_data *data, const u8 *key,
-			      u16 key_sz, __be32 *ipad, __be32 *opad)
+static int sa_prepare_iopads(struct algo_data *data, const u8 *key,
+			     u16 key_sz, __be32 *ipad, __be32 *opad)
 {
 	SHASH_DESC_ON_STACK(shash, data->ctx->shash);
 	int block_size = crypto_shash_blocksize(data->ctx->shash);
 	int digest_size = crypto_shash_digestsize(data->ctx->shash);
-	union {
-		struct sha1_state sha1;
-		struct sha256_state sha256;
-		u8 k_pad[SHA1_BLOCK_SIZE];
-	} sha;
+	int state_size = crypto_shash_statesize(data->ctx->shash);
+	u8 *sha;
+
+	if (key_sz > block_size) {
+		dev_err(sa_k3_dev, "%s: key size: %u exceeds block size: %d\n",
+			__func__, key_sz, block_size);
+		return -EINVAL;
+	}
+
+	sha = kmalloc(state_size, GFP_KERNEL);
+	if (!sha)
+		return -ENOMEM;
 
 	shash->tfm = data->ctx->shash;
 
-	prepare_kipad(sha.k_pad, key, key_sz);
+	prepare_kipad(sha, key, key_sz);
 
 	crypto_shash_init(shash);
-	crypto_shash_update(shash, sha.k_pad, block_size);
-	sa_export_shash(&sha, shash, digest_size, ipad);
+	crypto_shash_update(shash, sha, block_size);
+	sa_export_shash(sha, shash, digest_size, ipad);
 
-	prepare_kopad(sha.k_pad, key, key_sz);
+	prepare_kopad(sha, key, key_sz);
 
 	crypto_shash_init(shash);
-	crypto_shash_update(shash, sha.k_pad, block_size);
+	crypto_shash_update(shash, sha, block_size);
+	sa_export_shash(sha, shash, digest_size, opad);
 
-	sa_export_shash(&sha, shash, digest_size, opad);
+	kfree_sensitive(sha);
 
-	memzero_explicit(&sha, sizeof(sha));
+	return 0;
 }
 
 /* Derive the inverse key used in AES-CBC decryption operation */
@@ -530,8 +538,8 @@ static int sa_set_sc_enc(struct algo_data *ad, const u8 *key, u16 key_sz,
 }
 
 /* Set Security context for the authentication engine */
-static void sa_set_sc_auth(struct algo_data *ad, const u8 *key, u16 key_sz,
-			   u8 *sc_buf)
+static int sa_set_sc_auth(struct algo_data *ad, const u8 *key, u16 key_sz,
+			  u8 *sc_buf)
 {
 	__be32 *ipad = (void *)(sc_buf + 32);
 	__be32 *opad = (void *)(sc_buf + 64);
@@ -544,11 +552,12 @@ static void sa_set_sc_auth(struct algo_data *ad, const u8 *key, u16 key_sz,
 
 	/* Copy the keys or ipad/opad */
 	if (ad->keyed_mac)
-		ad->prep_iopad(ad, key, key_sz, ipad, opad);
-	else {
-		/* basic hash */
-		sc_buf[1] |= SA_BASIC_HASH;
-	}
+		return ad->prep_iopad(ad, key, key_sz, ipad, opad);
+
+	/* basic hash */
+	sc_buf[1] |= SA_BASIC_HASH;
+
+	return 0;
 }
 
 static inline void sa_copy_iv(__be32 *out, const u8 *iv, bool size16)
@@ -763,9 +772,11 @@ int sa_init_sc(struct sa_ctx_info *ctx, const struct sa_match_data *match_data,
 	}
 
 	/* Prepare context for authentication engine */
-	if (ad->auth_eng.sc_size)
-		sa_set_sc_auth(ad, auth_key, auth_key_sz,
-			       &sc_buf[auth_sc_offset]);
+	if (ad->auth_eng.sc_size) {
+		if (sa_set_sc_auth(ad, auth_key, auth_key_sz,
+				   &sc_buf[auth_sc_offset]))
+			return -EINVAL;
+	}
 
 	/* Set the ownership of context to CP_ACE */
 	sc_buf[SA_CTX_SCCTL_OWNER_OFFSET] = 0x80;
