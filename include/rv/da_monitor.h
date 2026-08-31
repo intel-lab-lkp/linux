@@ -14,22 +14,25 @@
 #ifndef _RV_DA_MONITOR_H
 #define _RV_DA_MONITOR_H
 
-#include <rv/automata.h>
-#include <linux/rv.h>
+#ifndef __BPF__
+/* Kernel includes */
 #include <rv/kunit.h>
-#include <linux/stringify.h>
 #include <linux/bug.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/hashtable.h>
+#endif /* __BPF__ */
+
+#include <linux/args.h>
+#include <rv/automata.h>
+#include <linux/rv.h>
+#include <linux/stringify.h>
 
 /*
  * Per-cpu variables require a unique name although static in some
  * configurations (e.g. alpha modules).
  */
 #define DA_MON_NAME CONCATENATE(da_mon_, MONITOR_NAME)
-
-static struct rv_monitor rv_this;
 
 /*
  * Hook to allow the implementation of hybrid automata: define it with a
@@ -75,6 +78,12 @@ static struct rv_monitor rv_this;
  */
 #ifndef da_id_type
 #define da_id_type int
+#endif
+
+#ifdef __BPF__
+#include "da_monitor_bpf.h"
+#else
+static struct rv_monitor rv_this;
 #endif
 
 static void react(enum states curr_state, enum events event)
@@ -128,6 +137,7 @@ static inline bool da_monitoring(struct da_monitor *da_mon)
 	return smp_load_acquire(&da_mon->monitoring);
 }
 
+#ifndef __BPF__
 /*
  * da_monitor_enabled - checks if the monitor is enabled
  */
@@ -143,6 +153,7 @@ static inline bool da_monitor_enabled(void)
 
 	return 1;
 }
+#endif
 
 /*
  * da_monitor_handling_event - checks if the monitor is ready to handle events
@@ -159,6 +170,7 @@ static inline bool da_monitor_handling_event(struct da_monitor *da_mon)
 	return 1;
 }
 
+#ifndef __BPF__
 #if RV_MON_TYPE == RV_MON_GLOBAL
 /*
  * Functions to define, init and get a global monitor.
@@ -685,6 +697,7 @@ static inline void da_trace_error(struct da_monitor *da_mon,
 						model_get_event_name(event));
 }
 #endif /* RV_MON_TYPE */
+#endif /* __BPF__ */
 
 /*
  * da_event - handle an event for the da_mon
@@ -806,7 +819,7 @@ static inline bool da_handle_start_run_event(enum events event)
 	return __da_handle_start_run_event(da_get_monitor(), event, 0);
 }
 
-#elif RV_MON_TYPE == RV_MON_PER_TASK
+#elif !defined(__BPF__) && RV_MON_TYPE == RV_MON_PER_TASK
 /*
  * Handle event for per task.
  */
@@ -847,7 +860,7 @@ static inline bool da_handle_start_run_event(struct task_struct *tsk,
 	return __da_handle_start_run_event(da_get_monitor(tsk), event, tsk->pid);
 }
 
-#elif RV_MON_TYPE == RV_MON_PER_OBJ
+#elif !defined(__BPF__) && RV_MON_TYPE == RV_MON_PER_OBJ
 /*
  * Handle event for per object.
  */
