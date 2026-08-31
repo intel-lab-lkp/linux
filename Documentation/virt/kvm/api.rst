@@ -6566,6 +6566,200 @@ KVM_S390_KEYOP_SSKE
   Sets the storage key for the guest address ``guest_addr`` to the key
   specified in ``key``, returning the previous value in ``key``.
 
+.. _KVM_MIGRATE_CMD:
+
+4.145 KVM_MIGRATE_CMD
+---------------------
+
+:Capability: KVM_CAP_LIVE_MIGRATION
+:Architectures: x86
+:Type: vm ioctl
+:Parameters: struct kvm_migrate_cmd (in/out)
+:Returns: 0 on success, < 0 on error
+
+Allows userspace to send live migration related commands to KVM for vendor
+specific handling.
+
+For confidential computing, live migration related commands may be needed.
+The commands typically use encrypted data that needs to be passed between the
+source and destination hosts. The hosts may also require specific coordination
+steps during migration that must be triggered at precise points in the
+migration process.
+
+The vendor specific implementation handles locking and checks the valid flags
+bits. If KVM_CAP_LIVE_MIGRATION is not available for the VM, -ENOTTY is
+returned.
+
+The KVM_MIGRATE_CMD subcommand passed in struct kvm_migrate_cmd is one of::
+
+  #define KVM_MIGRATE_SETUP		0
+  #define KVM_MIGRATE_ITERATION		1
+  #define KVM_MIGRATE_STOP_AND_COPY	2
+  #define KVM_MIGRATE_ABORT		3
+  #define KVM_MIGRATE_END		4
+
+The kvm_transfer_buffer is::
+
+  /**
+   * @address: Userspace buffer address
+   * @size: Size of the userspace buffer
+   * @reserved: Reserved for future use
+   */
+  struct kvm_transfer_buffer {
+	__u64 address;
+	__u32 size;
+	__u32 reserved;
+  };
+
+The kvm_migrate_cmd is::
+
+  /**
+   * @command: One of the defined KVM_MIGRATE commands
+   * @flags: Hardware specific flags
+   * @reserved: Reserved for future use
+   * @buf: Userspace buffer for hardware specific data
+   */
+  struct kvm_migrate_cmd {
+	__u16 command;
+	__u16 flags;
+	__u32 reserved;
+	struct kvm_transfer_buffer buf;
+  };
+
+.. _KVM_EXPORT_MEMORY:
+
+4.146 KVM_EXPORT_MEMORY
+-----------------------
+
+:Capability: KVM_CAP_LIVE_MIGRATION
+:Architectures: x86
+:Type: vm ioctl
+:Parameters: struct kvm_memory_transfer (in/out)
+:Returns: 0 on success, < 0 on error
+
+Allows userspace to request the host to export an array of memory pages to a
+userspace buffer.
+
+The private memory may not be accessible to KVM because of encryption. For
+confidential computing, the guest memory is encrypted and only accessible to
+the guest.
+
+If KVM_CAP_LIVE_MIGRATION is not available for the VM, -ENOTTY is returned.
+
+The vendor specific ID is used at least for TDX for the migration thread
+index.
+
+The kvm_memory_transfer is::
+
+  /**
+   * @gfns: Userspace address of an array of nr_gfns __u64 GFNs to export
+   * @nr_gfns: Number of GFNs in the @gfns array
+   * @id: Optional vendor specific transfer ID
+   * @flags: Vendor specific flags
+   * @reserved: Reserved for future use
+   * @buf: Userspace buffer to export memory to
+   */
+  struct kvm_memory_transfer {
+       __u64 gfns;
+       __u32 nr_gfns;
+       __u16 id;
+       __u16 flags;
+       __u64 reserved;
+       struct kvm_transfer_buffer buf;
+  };
+
+The transfer buffer size is vendor specific.
+
+For the transfer buffer, seeo :ref:`KVM_MIGRATE_CMD <KVM_MIGRATE_CMD>`.
+
+For memory import, see also :ref:`KVM_IMPORT_MEMORY <KVM_IMPORT_MEMORY>`.
+
+
+.. _KVM_IMPORT_MEMORY:
+
+4.147 KVM_IMPORT_MEMORY
+-----------------------
+
+:Capability: KVM_CAP_LIVE_MIGRATION
+:Architectures: x86
+:Type: vm ioctl
+:Parameters: struct kvm_memory_transfer (in/out)
+:Returns: 0 on success, < 0 on error
+
+Allows userspace to request the host to import an array of memory pages from a
+userspace buffer.
+
+The private memory may not be accessible to KVM because of encryption. For
+confidential computing, the guest memory is encrypted and only accessible to
+the guest.
+
+If KVM_CAP_LIVE_MIGRATION is not available for the VM, -ENOTTY is returned.
+
+The vendor specific ID is used at least for TDX for the migration thread
+index.
+
+The transfer buffer size is vendor specific.
+
+For kvm_memory_transfer, see :ref:`KVM_EXPORT_MEMORY <KVM_EXPORT_MEMORY>`.
+
+For the transfer buffer, seeo :ref:`KVM_MIGRATE_CMD <KVM_MIGRATE_CMD>`.
+
+.. _KVM_EXPORT_VCPU:
+
+4.149 KVM_EXPORT_VCPU
+---------------------
+:Capability: KVM_CAP_LIVE_MIGRATION
+:Architectures: arm64, x86
+:Type: vcpu ioctl
+:Parameters: struct kvm_vcpu_transfer (in/out)
+:Returns: 0 on success, < 0 on error
+
+Allows userspace to request the host to export a VCPU state to a userspace
+buffer.
+
+The VCPU state may not be directly accessible to KVM because of encryption. For
+confidential computing, the VCPU state is encrypted and only accessible to the
+guest.
+
+The vcpu_transfer is::
+
+  /**
+   * @flags: Hardware specific flags
+   * @reserved: Reserved for future use
+   * @buf: Userspace buffer to export VCPU state to
+   */
+  struct kvm_vcpu_transfer {
+        __u32 flags;
+        __u32 reserved;
+	struct kvm_transfer_buffer buf;
+  };
+
+For the transfer buffer, see :ref:`KVM_MIGRATE_CMD <KVM_MIGRATE_CMD>`.
+
+For vCPU import, see also :ref:`KVM_IMPORT_VCPU <KVM_IMPORT_VCPU>`.
+
+.. _KVM_IMPORT_VCPU:
+
+4.148 KVM_IMPORT_VCPU
+---------------------
+
+:Capability: KVM_CAP_LIVE_MIGRATION
+:Architectures: arm64, x86
+:Type: vcpu ioctl
+:Parameters: struct kvm_vcpu_transfer (in/out)
+:Returns: 0 on success, < 0 on error
+
+Allows userspace to request the host to import a VCPU state from a userspace
+buffer.
+
+The VCPU state may not be directly accessible to KVM because of encryption. For
+confidential computing, the VCPU state is encrypted and only accessible to the
+guest.
+
+For vcpu_transfer and vCPU import, see :ref:`KVM_IMPORT_VCPU <KVM_IMPORT_VCPU>`.
+
+For the transfer buffer, see also :ref:`KVM_MIGRATE_CMD <KVM_MIGRATE_CMD>`.
+
 .. _kvm_run:
 
 5. The kvm_run structure
@@ -9492,6 +9686,17 @@ take care to differentiate between these cases.
 
 The presence of this capability indicates that the nested KVM guest can
 start in ESA mode.
+
+8.48 KVM_CAP_LIVE_MIGRATION
+---------------------------
+
+:Architectures: x86
+:Target: VM
+:Parameters: None
+
+Indicates that the VM needs to use KVM calls for live migration, and that the
+KVM_MIGRATE_CMD ioctl and the KVM_EXPORT_MEMORY, KVM_IMPORT_MEMORY,
+KVM_EXPORT_VCPU and KVM_IMPORT_VCPU ioctls are available.
 
 9. Known KVM API problems
 =========================
