@@ -1938,6 +1938,7 @@ oom:
 static void packet_parse_headers(struct sk_buff *skb, struct socket *sock)
 {
 	int depth;
+	bool is_vlan = false;
 
 	/* On TX skb->data is the L2 header; anchor it for all socket types. */
 	skb_reset_mac_header(skb);
@@ -1946,11 +1947,28 @@ static void packet_parse_headers(struct sk_buff *skb, struct socket *sock)
 	    sock->type == SOCK_RAW)
 		skb->protocol = dev_parse_header_protocol(skb);
 
+	if (likely(skb->dev->type == ARPHRD_ETHER)) {
+		is_vlan = eth_type_vlan(skb->protocol);
+
+		/* For non-VLAN SOCK_RAW frames on Ethernet devices whose
+		 * hard_header_len exceeds the on-wire L2 header length
+		 * (min_header_len) -- e.g. software-offload VLAN subinterfaces,
+		 * or Ethernet drivers that reserve extra space in
+		 * hard_header_len for driver-internal wrapping -- the SOCK_RAW
+		 * send paths leave network_header at hard_header_len, while the
+		 * user frame's L3 sits at min_header_len. Move network_header
+		 * to the actual L2/L3 boundary so the transport header probe
+		 * below and subsequent GSO see the right L3.
+		 */
+		if (!is_vlan && sock->type == SOCK_RAW &&
+		    skb->dev->min_header_len < skb->dev->hard_header_len)
+			skb_set_network_header(skb, skb->dev->min_header_len);
+	}
+
 	skb_probe_transport_header(skb);
 
 	/* Move network header to the right position for VLAN tagged packets */
-	if (likely(skb->dev->type == ARPHRD_ETHER) &&
-	    eth_type_vlan(skb->protocol) &&
+	if (is_vlan &&
 	    vlan_get_protocol_and_depth(skb, skb->protocol, &depth) != 0)
 		skb_set_network_header(skb, depth);
 }
