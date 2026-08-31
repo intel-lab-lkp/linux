@@ -27,13 +27,17 @@ endif
 RV		:= $(OUTPUT)rv
 RV_IN		:= $(RV)-in.o
 
+TOOLS_INCLUDES = -I$(srctree)/tools/include
+
 VERSION		:= $(shell sh -c "make -sC ../../.. kernelversion | grep -v make")
 DOCSRC		:= ../../../Documentation/tools/rv/
 
 FEATURE_TESTS	:= libtraceevent
 FEATURE_TESTS	+= libtracefs
+FEATURE_TESTS	+= libbpf
 FEATURE_DISPLAY	:= libtraceevent
 FEATURE_DISPLAY	+= libtracefs
+FEATURE_DISPLAY	+= libbpf
 
 all: $(RV)
 
@@ -55,9 +59,9 @@ ifeq ($(config),1)
   include Makefile.config
 endif
 
-CFLAGS		+= $(INCLUDES) $(LIB_INCLUDES)
+CFLAGS		+= $(INCLUDES) $(LIB_INCLUDES) $(TOOLS_INCLUDES)
 
-export CFLAGS OUTPUT srctree
+export CFLAGS OUTPUT srctree BUILD_BPF
 
 $(RV): $(RV_IN)
 	$(QUIET_LINK)$(CC) $(LDFLAGS) -o $(RV) $(RV_IN) $(EXTLIBS)
