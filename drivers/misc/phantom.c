@@ -48,9 +48,11 @@ struct phantom_device {
 	u32 __iomem *oaddr;
 	unsigned long status;
 	atomic_t counter;
+	unsigned int minor;
+	bool removed;
 
 	wait_queue_head_t wait;
-	struct cdev cdev;
+	struct cdev *cdev;
 
 	struct mutex open_lock;
 	spinlock_t regs_lock;
@@ -60,7 +62,7 @@ struct phantom_device {
 	u32 ctl_reg;
 };
 
-static unsigned char phantom_devices[PHANTOM_MAX_MINORS];
+static struct phantom_device *phantom_devices[PHANTOM_MAX_MINORS];
 
 static int phantom_status(struct phantom_device *dev, unsigned long newstat)
 {
@@ -94,21 +96,31 @@ static long phantom_ioctl(struct file *file, unsigned int cmd,
 	void __user *argp = (void __user *)arg;
 	unsigned long flags;
 	unsigned int i;
+	long retval = 0;
+
+	if (mutex_lock_interruptible(&dev->open_lock))
+		return -ERESTARTSYS;
+
+	if (dev->removed) {
+		retval = -ENODEV;
+		goto out_unlock;
+	}
 
 	switch (cmd) {
 	case PHN_SETREG:
 	case PHN_SET_REG:
 		if (copy_from_user(&r, argp, sizeof(r)))
-			return -EFAULT;
+			goto err_fault;
 
 		if (r.reg > 7)
-			return -EINVAL;
+			goto err_inval;
 
 		spin_lock_irqsave(&dev->regs_lock, flags);
 		if (r.reg == PHN_CONTROL && (r.value & PHN_CTL_IRQ) &&
 				phantom_status(dev, dev->status | PHB_RUNNING)){
 			spin_unlock_irqrestore(&dev->regs_lock, flags);
-			return -ENODEV;
+			retval = -ENODEV;
+			goto out_unlock;
 		}
 
 		pr_debug("phantom: writing %x to %u\n", r.value, r.reg);
@@ -130,7 +142,7 @@ static long phantom_ioctl(struct file *file, unsigned int cmd,
 	case PHN_SETREGS:
 	case PHN_SET_REGS:
 		if (copy_from_user(&rs, argp, sizeof(rs)))
-			return -EFAULT;
+			goto err_fault;
 
 		pr_debug("phantom: SRS %u regs %x\n", rs.count, rs.mask);
 		spin_lock_irqsave(&dev->regs_lock, flags);
@@ -148,22 +160,22 @@ static long phantom_ioctl(struct file *file, unsigned int cmd,
 	case PHN_GETREG:
 	case PHN_GET_REG:
 		if (copy_from_user(&r, argp, sizeof(r)))
-			return -EFAULT;
+			goto err_fault;
 
 		if (r.reg > 7)
-			return -EINVAL;
+			goto err_inval;
 
 		r.value = ioread32(dev->iaddr + r.reg);
 
 		if (copy_to_user(argp, &r, sizeof(r)))
-			return -EFAULT;
+			goto err_fault;
 		break;
 	case PHN_GETREGS:
 	case PHN_GET_REGS: {
 		u32 m;
 
 		if (copy_from_user(&rs, argp, sizeof(rs)))
-			return -EFAULT;
+			goto err_fault;
 
 		m = min(rs.count, 8U);
 
@@ -176,7 +188,7 @@ static long phantom_ioctl(struct file *file, unsigned int cmd,
 		spin_unlock_irqrestore(&dev->regs_lock, flags);
 
 		if (copy_to_user(argp, &rs, sizeof(rs)))
-			return -EFAULT;
+			goto err_fault;
 		break;
 	} case PHN_NOT_OH:
 		spin_lock_irqsave(&dev->regs_lock, flags);
@@ -184,16 +196,26 @@ static long phantom_ioctl(struct file *file, unsigned int cmd,
 			printk(KERN_ERR "phantom: you need to set NOT_OH "
 					"before you start the device!\n");
 			spin_unlock_irqrestore(&dev->regs_lock, flags);
-			return -EINVAL;
+			goto err_inval;
 		}
 		dev->status |= PHB_NOT_OH;
 		spin_unlock_irqrestore(&dev->regs_lock, flags);
 		break;
 	default:
-		return -ENOTTY;
+		retval = -ENOTTY;
+		goto out_unlock;
 	}
 
-	return 0;
+	goto out_unlock;
+
+err_fault:
+	retval = -EFAULT;
+	goto out_unlock;
+err_inval:
+	retval = -EINVAL;
+out_unlock:
+	mutex_unlock(&dev->open_lock);
+	return retval;
 }
 
 #ifdef CONFIG_COMPAT
@@ -212,15 +234,26 @@ static long phantom_compat_ioctl(struct file *filp, unsigned int cmd,
 
 static int phantom_open(struct inode *inode, struct file *file)
 {
-	struct phantom_device *dev = container_of(inode->i_cdev,
-			struct phantom_device, cdev);
+	struct phantom_device *dev;
+	unsigned int minor = iminor(inode);
 
 	mutex_lock(&phantom_mutex);
+	dev = phantom_devices[minor];
+	if (!dev) {
+		mutex_unlock(&phantom_mutex);
+		return -ENODEV;
+	}
 	nonseekable_open(inode, file);
 
 	if (mutex_lock_interruptible(&dev->open_lock)) {
 		mutex_unlock(&phantom_mutex);
 		return -ERESTARTSYS;
+	}
+
+	if (dev->removed) {
+		mutex_unlock(&dev->open_lock);
+		mutex_unlock(&phantom_mutex);
+		return -ENODEV;
 	}
 
 	if (dev->opened) {
@@ -243,14 +276,20 @@ static int phantom_open(struct inode *inode, struct file *file)
 static int phantom_release(struct inode *inode, struct file *file)
 {
 	struct phantom_device *dev = file->private_data;
+	bool removed;
 
 	mutex_lock(&dev->open_lock);
 
 	dev->opened = 0;
-	phantom_status(dev, dev->status & ~PHB_RUNNING);
-	dev->status &= ~PHB_NOT_OH;
+	removed = dev->removed;
+	if (!removed)
+		phantom_status(dev, dev->status & ~PHB_RUNNING);
+	dev->status &= ~(PHB_RUNNING | PHB_NOT_OH);
 
 	mutex_unlock(&dev->open_lock);
+
+	if (removed)
+		kfree(dev);
 
 	return 0;
 }
@@ -263,7 +302,9 @@ static __poll_t phantom_poll(struct file *file, poll_table *wait)
 	pr_debug("phantom_poll: %d\n", atomic_read(&dev->counter));
 	poll_wait(file, &dev->wait, wait);
 
-	if (!(dev->status & PHB_RUNNING))
+	if (READ_ONCE(dev->removed))
+		mask = EPOLLHUP | EPOLLERR;
+	else if (!(dev->status & PHB_RUNNING))
 		mask = EPOLLERR;
 	else if (atomic_read(&dev->counter))
 		mask = EPOLLIN | EPOLLRDNORM;
@@ -353,8 +394,6 @@ static int phantom_probe(struct pci_dev *pdev,
 		goto err_dis;
 	}
 
-	phantom_devices[minor] = 1;
-
 	retval = pci_request_regions(pdev, "phantom");
 	if (retval) {
 		dev_err(&pdev->dev, "pci_request_regions failed!\n");
@@ -387,8 +426,15 @@ static int phantom_probe(struct pci_dev *pdev,
 	mutex_init(&pht->open_lock);
 	spin_lock_init(&pht->regs_lock);
 	init_waitqueue_head(&pht->wait);
-	cdev_init(&pht->cdev, &phantom_file_ops);
-	pht->cdev.owner = THIS_MODULE;
+	pht->minor = minor;
+	pht->cdev = cdev_alloc();
+	if (!pht->cdev) {
+		retval = -ENOMEM;
+		goto err_unmo;
+	}
+	pht->cdev->owner = THIS_MODULE;
+	pht->cdev->ops = &phantom_file_ops;
+	cdev_set_parent(pht->cdev, &pdev->dev.kobj);
 
 	iowrite32(0, pht->caddr + PHN_IRQCTL);
 	ioread32(pht->caddr + PHN_IRQCTL); /* PCI posting */
@@ -399,11 +445,13 @@ static int phantom_probe(struct pci_dev *pdev,
 		goto err_unmo;
 	}
 
-	retval = cdev_add(&pht->cdev, MKDEV(phantom_major, minor), 1);
+	retval = cdev_add(pht->cdev, MKDEV(phantom_major, minor), 1);
 	if (retval) {
 		dev_err(&pdev->dev, "chardev registration failed\n");
 		goto err_irq;
 	}
+
+	phantom_devices[minor] = pht;
 
 	if (IS_ERR(device_create(&phantom_class, &pdev->dev,
 				 MKDEV(phantom_major, minor), NULL,
@@ -416,6 +464,8 @@ static int phantom_probe(struct pci_dev *pdev,
 err_irq:
 	free_irq(pdev->irq, pht);
 err_unmo:
+	if (pht->cdev)
+		kobject_put(&pht->cdev->kobj);
 	pci_iounmap(pdev, pht->oaddr);
 err_unmi:
 	pci_iounmap(pdev, pht->iaddr);
@@ -426,7 +476,7 @@ err_fr:
 err_reg:
 	pci_release_regions(pdev);
 err_null:
-	phantom_devices[minor] = 0;
+	phantom_devices[minor] = NULL;
 err_dis:
 	pci_disable_device(pdev);
 err:
@@ -436,11 +486,19 @@ err:
 static void phantom_remove(struct pci_dev *pdev)
 {
 	struct phantom_device *pht = pci_get_drvdata(pdev);
-	unsigned int minor = MINOR(pht->cdev.dev);
+	unsigned int minor = pht->minor;
+	bool opened;
+
+	mutex_lock(&phantom_mutex);
+
+	phantom_devices[minor] = NULL;
 
 	device_destroy(&phantom_class, MKDEV(phantom_major, minor));
 
-	cdev_del(&pht->cdev);
+	cdev_del(pht->cdev);
+
+	mutex_lock(&pht->open_lock);
+	pht->removed = true;
 
 	iowrite32(0, pht->caddr + PHN_IRQCTL);
 	ioread32(pht->caddr + PHN_IRQCTL); /* PCI posting */
@@ -450,13 +508,18 @@ static void phantom_remove(struct pci_dev *pdev)
 	pci_iounmap(pdev, pht->iaddr);
 	pci_iounmap(pdev, pht->caddr);
 
-	kfree(pht);
+	pht->status &= ~(PHB_RUNNING | PHB_NOT_OH);
+	opened = pht->opened;
+	wake_up_interruptible(&pht->wait);
+	mutex_unlock(&pht->open_lock);
 
 	pci_release_regions(pdev);
 
-	phantom_devices[minor] = 0;
-
 	pci_disable_device(pdev);
+	mutex_unlock(&phantom_mutex);
+
+	if (!opened)
+		kfree(pht);
 }
 
 static int __maybe_unused phantom_suspend(struct device *dev_d)
