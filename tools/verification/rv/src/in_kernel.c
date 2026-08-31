@@ -23,7 +23,7 @@
  * Returns the current status, or -1 if the monitor does not exist,
  * __hence not logging errors.
  */
-static int __ikm_read_enable(char *monitor_name)
+int __ikm_read_enable(char *monitor_name)
 {
 	char path[MAX_PATH];
 	long long enabled;
@@ -132,7 +132,7 @@ static int ikm_write_enable(char *monitor_name, char *enable_disable)
  *
  * Returns -1 on failure. Success otherwise.
  */
-static int ikm_enable(char *monitor_name)
+int ikm_enable(char *monitor_name)
 {
 	return ikm_write_enable(monitor_name, "1");
 }
@@ -142,7 +142,7 @@ static int ikm_enable(char *monitor_name)
  *
  * Returns -1 on failure. Success otherwise.
  */
-static int ikm_disable(char *monitor_name)
+int ikm_disable(char *monitor_name)
 {
 	return ikm_write_enable(monitor_name, "0");
 }
@@ -302,6 +302,42 @@ out_free:
 	free(reactors);
 
 	return curr_reactor;
+}
+
+/*
+ * ikm_set_reactor - set the configured reactor and store the initial one
+ *
+ * Do nothing if we should not set reactors.
+ */
+void ikm_set_reactor(char *monitor_name)
+{
+	int retval;
+
+	if (!config.reactor)
+		return;
+
+	config.initial_reactor = ikm_get_current_reactor(monitor_name);
+	if (!config.initial_reactor)
+		mon_usage(1, monitor_name,
+			  "ikm: failed to read current reactor, are reactors enabled?");
+
+	retval = ikm_write_reactor(monitor_name, config.reactor);
+	if (retval <= 0)
+		mon_usage(1, monitor_name,
+			  "ikm: failed to set %s reactor, is it available?",
+			  config.reactor);
+
+}
+
+/*
+ * ikm_reset_reactor - restore the initially stored reactor
+ *
+ * Do nothing if we should not set reactors.
+ */
+void ikm_reset_reactor(char *monitor_name)
+{
+	if (config.reactor && config.initial_reactor)
+		ikm_write_reactor(monitor_name, config.initial_reactor);
 }
 
 static int ikm_has_id(char *monitor_name)
@@ -698,18 +734,7 @@ int ikm_run_monitor(char *monitor_name, int argc, char **argv)
 	if (retval)
 		mon_usage(1, nested_name, "ikm: failed parsing arguments");
 
-	if (config.reactor) {
-		config.initial_reactor = ikm_get_current_reactor(full_name);
-		if (!config.initial_reactor)
-			mon_usage(1, full_name,
-				  "ikm: failed to read current reactor, are reactors enabled?");
-
-		retval = ikm_write_reactor(full_name, config.reactor);
-		if (retval <= 0)
-			mon_usage(1, full_name,
-				  "ikm: failed to set %s reactor, is it available?",
-				  config.reactor);
-	}
+	ikm_set_reactor(full_name);
 
 	if (config.trace) {
 		inst = ikm_setup_trace_instance(nested_name);
@@ -744,14 +769,12 @@ int ikm_run_monitor(char *monitor_name, int argc, char **argv)
 	ikm_disable(full_name);
 	ikm_destroy_trace_instance(inst);
 
-	if (config.reactor && config.initial_reactor)
-		ikm_write_reactor(full_name, config.initial_reactor);
+	ikm_reset_reactor(full_name);
 
 	return 1;
 
 out_free_instance:
 	ikm_destroy_trace_instance(inst);
-	if (config.reactor && config.initial_reactor)
-		ikm_write_reactor(full_name, config.initial_reactor);
+	ikm_reset_reactor(full_name);
 	return -1;
 }
