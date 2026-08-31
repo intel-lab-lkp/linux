@@ -3085,7 +3085,23 @@ err:
 
 static void ice_ptp_setup_adapter(struct ice_pf *pf)
 {
+	guard(rwsem_write)(&pf->adapter->ctrl_pf_lock);
+
 	rcu_assign_pointer(pf->adapter->ctrl_pf, pf);
+}
+
+static void ice_ptp_cleanup_adapter(struct ice_pf *pf)
+{
+	guard(rwsem_write)(&pf->adapter->ctrl_pf_lock);
+
+	/* Zero out adapter->ctrl_pf pointer when the ctrl_pf itself
+	 * is being removed to prevent any secondary PFs from accessing
+	 * it after it is deleted.
+	 */
+	if (cmpxchg(&pf->adapter->ctrl_pf,
+		    (struct ice_pf __rcu *)pf, NULL) ==
+			(struct ice_pf __rcu *)pf)
+		synchronize_rcu();
 }
 
 static int ice_ptp_setup_pf(struct ice_pf *pf)
@@ -3397,7 +3413,9 @@ void ice_ptp_init(struct ice_pf *pf)
 err_clean_pf:
 	mutex_destroy(&ptp->port.ps_lock);
 	ice_ptp_cleanup_pf(pf);
+
 err_exit:
+	ice_ptp_cleanup_adapter(pf);
 	/* If we registered a PTP clock, release it */
 	if (pf->ptp.clock) {
 		ptp_clock_unregister(ptp->clock);
@@ -3425,6 +3443,7 @@ void ice_ptp_release(struct ice_pf *pf)
 	if (pf->ptp.state != ICE_PTP_READY) {
 		mutex_destroy(&pf->ptp.port.ps_lock);
 		ice_ptp_cleanup_pf(pf);
+		ice_ptp_cleanup_adapter(pf);
 		if (pf->ptp.clock) {
 			ptp_clock_unregister(pf->ptp.clock);
 			pf->ptp.clock = NULL;
@@ -3438,6 +3457,8 @@ void ice_ptp_release(struct ice_pf *pf)
 	ice_ptp_disable_timestamp_mode(pf);
 
 	ice_ptp_cleanup_pf(pf);
+
+	ice_ptp_cleanup_adapter(pf);
 
 	ice_ptp_release_tx_tracker(pf, &pf->ptp.port.tx);
 
