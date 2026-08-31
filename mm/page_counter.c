@@ -8,10 +8,17 @@
 #include <linux/page_counter.h>
 #include <linux/atomic.h>
 #include <linux/kernel.h>
+#include <linux/percpu.h>
 #include <linux/string.h>
 #include <linux/sched.h>
+#include <linux/spinlock.h>
 #include <linux/bug.h>
 #include <asm/page.h>
+
+struct page_counter_stock {
+	raw_spinlock_t lock;
+	unsigned long nr_pages;
+};
 
 static bool track_protection(struct page_counter *c)
 {
@@ -295,6 +302,89 @@ int page_counter_memparse(const char *buf, const char *max,
 	return 0;
 }
 
+/**
+ * page_counter_drain_cpu_stock - release @cpu's cached charges
+ * @counter: counter whose stock to drain
+ * @cpu: CPU whose stock is drained
+ */
+void page_counter_drain_cpu_stock(struct page_counter *counter, int cpu)
+{
+	struct page_counter_stock __percpu *stock = READ_ONCE(counter->stock);
+	struct page_counter_stock *pcp_stock;
+	unsigned long nr_pages;
+	unsigned long flags;
+
+	if (!stock)
+		return;
+
+	pcp_stock = per_cpu_ptr(stock, cpu);
+	raw_spin_lock_irqsave(&pcp_stock->lock, flags);
+	nr_pages = pcp_stock->nr_pages;
+	pcp_stock->nr_pages = 0;
+	raw_spin_unlock_irqrestore(&pcp_stock->lock, flags);
+
+	if (nr_pages)
+		page_counter_uncharge(counter, nr_pages);
+}
+
+/**
+ * page_counter_alloc_stock - allocate the percpu stock for a page_counter
+ * @counter: counter to allocate percpu stock for
+ * @batch: maximum number of pages a CPU may cache
+ *
+ * Failure to allocate is not fatal; @counter falls back to hierarchy charges.
+ * The caller must not (un)charge @counter concurrently with this call, and this
+ * must not be called twice on the same counter. A concurrent drain is fine
+ * since the stock is published with a release store the drain paths pair with.
+ *
+ * Context: Process context. May sleep, the percpu alloc uses GFP_KERNEL.
+ */
+void page_counter_alloc_stock(struct page_counter *counter, unsigned long batch)
+{
+	struct page_counter_stock __percpu *stock;
+	int cpu;
+
+	if (WARN_ON_ONCE(counter->stock))
+		return;
+
+	stock = alloc_percpu_gfp(struct page_counter_stock, GFP_KERNEL_ACCOUNT);
+	if (!stock)
+		return;
+
+	for_each_possible_cpu(cpu) {
+		struct page_counter_stock *pcp_stock = per_cpu_ptr(stock, cpu);
+
+		raw_spin_lock_init(&pcp_stock->lock);
+	}
+
+	counter->batch = batch;
+	/* Publish stock only after percpu allocs / inits are finished */
+	smp_store_release(&counter->stock, stock);
+}
+
+/**
+ * page_counter_free_stock - free @counter's percpu cached charge
+ * @counter: page_counter whose stock to free
+ *
+ * Caller must guarantee no (un)charge or drain of @counter is in flight or can
+ * start. memcg only calls this once the cgroup is dead and unreachable.
+ */
+void page_counter_free_stock(struct page_counter *counter)
+{
+	struct page_counter_stock __percpu *stock = counter->stock;
+	int cpu;
+
+	if (!stock)
+		return;
+
+	/* Stop greedy over-charging before the stock goes away */
+	counter->batch = 0;
+	for_each_possible_cpu(cpu)
+		page_counter_drain_cpu_stock(counter, cpu);
+
+	WRITE_ONCE(counter->stock, NULL);
+	free_percpu(stock);
+}
 
 #if IS_ENABLED(CONFIG_MEMCG) || IS_ENABLED(CONFIG_CGROUP_DMEM)
 /*

@@ -5,7 +5,10 @@
 #include <linux/atomic.h>
 #include <linux/cache.h>
 #include <linux/limits.h>
+#include <linux/workqueue_types.h>
 #include <asm/page.h>
+
+struct page_counter_stock;
 
 struct page_counter {
 	/*
@@ -41,6 +44,13 @@ struct page_counter {
 	unsigned long high;
 	unsigned long max;
 	struct page_counter *parent;
+	struct page_counter_stock __percpu *stock;
+	unsigned long batch;
+
+	/* make sure the work_struct is separate from the read most fields */
+	CACHELINE_PADDING(_pad3_);
+
+	struct work_struct drain_work;
 } ____cacheline_internodealigned_in_smp;
 
 #if BITS_PER_LONG == 32
@@ -61,6 +71,8 @@ static inline void page_counter_init(struct page_counter *counter,
 	counter->parent = parent;
 	counter->protection_support = protection_support;
 	counter->track_failcnt = false;
+	counter->stock = NULL;
+	counter->batch = 0;
 }
 
 static inline unsigned long page_counter_read(struct page_counter *counter)
@@ -98,6 +110,10 @@ static inline void page_counter_reset_watermark(struct page_counter *counter)
 	counter->local_watermark = usage;
 	counter->watermark = usage;
 }
+
+void page_counter_drain_cpu_stock(struct page_counter *counter, int cpu);
+void page_counter_alloc_stock(struct page_counter *counter, unsigned long batch);
+void page_counter_free_stock(struct page_counter *counter);
 
 #if IS_ENABLED(CONFIG_MEMCG) || IS_ENABLED(CONFIG_CGROUP_DMEM)
 void page_counter_calculate_protection(struct page_counter *root,
