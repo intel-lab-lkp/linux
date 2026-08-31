@@ -39,6 +39,7 @@ static int mqprio_enable_offload(struct Qdisc *sch,
 	struct net_device *dev = qdisc_dev(sch);
 	struct tc_mqprio_qopt_offload mqprio = {
 		.qopt = *qopt,
+		.handle = sch->handle,
 		.extack = extack,
 	};
 	int err, i;
@@ -79,7 +80,9 @@ static int mqprio_enable_offload(struct Qdisc *sch,
 
 static void mqprio_disable_offload(struct Qdisc *sch)
 {
-	struct tc_mqprio_qopt_offload mqprio = { { 0 } };
+	struct tc_mqprio_qopt_offload mqprio = {
+		.handle = sch->handle,
+	};
 	struct mqprio_sched *priv = qdisc_priv(sch);
 	struct net_device *dev = qdisc_dev(sch);
 

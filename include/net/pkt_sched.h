@@ -165,6 +165,7 @@ struct tc_mqprio_caps {
 struct tc_mqprio_qopt_offload {
 	/* struct tc_mqprio_qopt must always be the first element */
 	struct tc_mqprio_qopt qopt;
+	u32 handle;
 	struct netlink_ext_ack *extack;
 	u16 mode;
 	u16 shaper;
