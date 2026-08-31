@@ -3986,7 +3986,7 @@ core_scsi3_pri_read_full_status(struct se_cmd *cmd)
 		exp_desc_len = target_get_pr_transport_id_len(se_nacl, pr_reg,
 					&format_code);
 		if (exp_desc_len < 0 ||
-		    exp_desc_len + add_len > cmd->data_length) {
+		    off + 24 + exp_desc_len > cmd->data_length) {
 			pr_warn("SPC-3 PRIN READ_FULL_STATUS ran"
 				" out of buffer: %d\n", cmd->data_length);
 			spin_lock(&pr_tmpl->registration_lock);
