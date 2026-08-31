@@ -1295,6 +1295,11 @@ static inline bool skb_unref(struct sk_buff *skb)
 	return true;
 }
 
+static inline int skb_dataref_bias(const struct sk_buff *skb)
+{
+	return skb->nohdr ? (1 << SKB_DATAREF_SHIFT) + 1 : 1;
+}
+
 static inline bool skb_data_unref(const struct sk_buff *skb,
 				  struct skb_shared_info *shinfo)
 {
@@ -1303,7 +1308,7 @@ static inline bool skb_data_unref(const struct sk_buff *skb,
 	if (!skb->cloned)
 		return true;
 
-	bias = skb->nohdr ? (1 << SKB_DATAREF_SHIFT) + 1 : 1;
+	bias = skb_dataref_bias(skb);
 
 	if (atomic_read(&shinfo->dataref) == bias)
 		smp_rmb();
@@ -2018,6 +2023,12 @@ static inline struct sk_buff *skb_get(struct sk_buff *skb)
 /*
  * If users == 1, we are the only owner and can avoid redundant atomic changes.
  */
+
+static inline bool skb_data_is_shared(const struct sk_buff *skb)
+{
+	return skb->cloned &&
+	       atomic_read(&skb_shinfo(skb)->dataref) != skb_dataref_bias(skb);
+}
 
 /**
  *	skb_cloned - is the buffer a clone

@@ -2331,7 +2331,7 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 	 * is not we can just drop the old head and let the existing refcount
 	 * be since all we did is relocate the values
 	 */
-	if (skb_cloned(skb)) {
+	if (skb_data_is_shared(skb)) {
 		if (skb_orphan_frags(skb, gfp_mask))
 			goto nofrags;
 		if (skb_zcopy(skb))
@@ -6855,7 +6855,7 @@ static int pskb_carve_inside_header(struct sk_buff *skb, const u32 off,
 	       skb_shinfo(skb),
 	       offsetof(struct skb_shared_info,
 			frags[skb_shinfo(skb)->nr_frags]));
-	if (skb_cloned(skb)) {
+	if (skb_data_is_shared(skb)) {
 		/* drop the old head gracefully */
 		if (skb_orphan_frags(skb, gfp_mask)) {
 			skb_kfree_head(data);
