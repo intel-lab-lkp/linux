@@ -300,6 +300,10 @@ struct enetc_si_ops {
 	int (*set_rss_table)(struct enetc_si *si, const u32 *table, int count);
 	int (*setup_cbdr)(struct enetc_si *si);
 	void (*teardown_cbdr)(struct enetc_si *si);
+
+	/* VSI-specific hooks */
+	int (*vf_reg_link_status_notifier)(struct enetc_si *si);
+	int (*vf_unreg_link_status_notifier)(struct enetc_si *si);
 };
 
 /* PCI IEP device data */
@@ -334,6 +338,7 @@ struct enetc_si {
 
 	struct dentry *debugfs_root;
 	struct enetc_msg_swbd msg; /* Only valid for VSI */
+	struct workqueue_struct *workqueue;
 	struct work_struct msg_task;
 	char msg_int_name[ENETC_INT_NAME_MAX];
 
@@ -429,6 +434,7 @@ enum enetc_flags_bit {
 	ENETC_TX_ONESTEP_TSTAMP_IN_PROGRESS = 0,
 	ENETC_TX_DOWN,
 	ENETC_RXBDR_CM,
+	ENETC_LINK_STATUS_NOTIFIER_REGISTERED,
 };
 
 /* interrupt coalescing modes */
