@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <libgen.h>
+#include <getopt.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <bpf/libbpf.h>
@@ -678,4 +679,341 @@ cleanup:
 	bpf_object__close(obj);
 
 	return retval;
+}
+
+/*
+ * register_monitor_from_file - register a single BPF monitor via struct_ops
+ *
+ * Opens, loads, and attaches a BPF monitor's struct_ops map, then pins the
+ * resulting link.
+ *
+ * Returns 0 on success, -1 on error
+ */
+static int register_monitor_from_file(const char *path, const char *name)
+{
+	struct bpf_object *obj = NULL;
+	struct bpf_link *link = NULL;
+	struct bpf_map *map;
+	char map_name[MAX_DA_NAME_LEN + 8];
+	char pin_path[MAX_PATH];
+	int res, retval = -1;
+
+	obj = open_bpf_monitor(name, path);
+	if (!obj)
+		goto cleanup;
+
+	snprintf(map_name, sizeof(map_name), "rv_%s_kern", name);
+	map = bpf_object__find_map_by_name(obj, map_name);
+	if (!map) {
+		err_msg("bpf: error finding struct_ops map for %s\n", name);
+		goto cleanup;
+	}
+
+	link = bpf_map__attach_struct_ops(map);
+	if (!link) {
+		err_msg("bpf: error attaching struct_ops for %s: %s\n",
+			name, strerror(errno));
+		goto cleanup;
+	}
+
+	snprintf(pin_path, sizeof(pin_path), "%s/%s", BPF_PIN_BASE_PATH, map_name);
+	res = bpf_link__pin(link, pin_path);
+	if (res) {
+		err_msg("bpf: error pinning link for %s: %s\n",
+			name, strerror(-res));
+		goto cleanup;
+	}
+
+	debug_msg("bpf: registered %s\n", name);
+	retval = 0;
+
+cleanup:
+	bpf_link__destroy(link);
+	bpf_object__close(obj);
+
+	return retval;
+}
+
+/*
+ * register_monitors_from_path - register all BPF monitors from a path
+ *
+ * Scans directory for *.o files and registers each one via struct_ops.
+ *
+ * Returns number of monitors registered from this path
+ */
+static int register_monitors_from_path(const char *path, bool *error)
+{
+	struct dirent *entry;
+	DIR *dir;
+	char *ext;
+	int count = 0;
+
+	dir = opendir(path);
+	if (!dir)
+		return 0;
+
+	while ((entry = readdir(dir)) != NULL) {
+		char name[MAX_DA_NAME_LEN], mon_path[MAX_PATH];
+		size_t size;
+
+		if (entry->d_name[0] == '.')
+			continue;
+
+		ext = strrchr(entry->d_name, '.');
+		if (!ext || strcmp(ext, ".o") != 0)
+			continue;
+
+		size = snprintf(mon_path, sizeof(mon_path), "%s/%s",
+				path, entry->d_name);
+		if (size >= MAX_PATH) {
+			err_msg("bpf: path too long: %s/%s\n", path, entry->d_name);
+			*error = true;
+			continue;
+		}
+
+		strncpy(name, entry->d_name, sizeof(name) - 1);
+		name[sizeof(name) - 1] = '\0';
+		ext = strrchr(name, '.');
+		if (ext)
+			*ext = '\0';
+
+		if (register_monitor_from_file(mon_path, name) == 0)
+			count++;
+		else
+			*error = true;
+	}
+
+	closedir(dir);
+	return count;
+}
+
+/*
+ * bpf_struct_ops_supported - check if the kernel supports BPF monitors
+ */
+static bool bpf_struct_ops_supported(void)
+{
+	struct btf *btf;
+	int type_id;
+
+	btf = btf__load_vmlinux_btf();
+	if (!btf)
+		return false;
+
+	type_id = btf__find_by_name_kind(btf, "bpf_struct_ops_rv_monitor", BTF_KIND_STRUCT);
+	btf__free(btf);
+
+	if (type_id <= 0)
+		return false;
+
+	return true;
+}
+
+/*
+ * bpf_register_monitors - register all BPF monitors via struct_ops
+ *
+ * Scans known paths for BPF monitor objects, loads them, and attaches their
+ * struct_ops maps. The resulting links are pinned so monitors remain
+ * registered with the kernel RV subsystem even after this process exits.
+ *
+ * Returns command exit status (SUCCESS/FAILURE)
+ */
+static int bpf_register_monitors(void)
+{
+	int count = 0;
+	bool error = false;
+
+	bpf_fill_monitor_paths();
+
+	for (int i = 0; bpf_monitor_paths[i][0]; i++)
+		count += register_monitors_from_path(bpf_monitor_paths[i], &error);
+
+	printf("registered %d BPF monitor(s)\n", count);
+
+	return error ? EXIT_FAILURE : EXIT_SUCCESS;
+}
+
+/*
+ * is_struct_ops - return true if d_name matches rv_<mon>_kern
+ *
+ * Also store <mon> in name_out when returning true.
+ */
+static bool is_struct_ops(char *d_name, char *name_out)
+{
+	const int rvlen = strlen("rv_"), kernlen = strlen("_kern");
+	int len = strlen(d_name);
+
+	if (len > rvlen + kernlen && !strncmp(d_name, "rv_", rvlen) &&
+	    !strcmp(d_name + len - kernlen, "_kern")) {
+		len -= rvlen + kernlen;
+		if (name_out) {
+			if (len >= MAX_DA_NAME_LEN)
+				len = MAX_DA_NAME_LEN - 1;
+			strncpy(name_out, d_name + rvlen, len);
+			name_out[len] = '\0';
+		}
+		return true;
+	}
+	return false;
+}
+
+enum unregister_pass {
+	CHECK_ACTIVE,
+	UNLINK_HANDLERS,
+	UNLINK_STRUCT_OPS,
+	MAX_PASSES,
+};
+
+/*
+ * bpf_unregister_monitors - unregister all BPF monitors
+ *
+ * Removes all pinned links and maps from BPF_PIN_BASE_PATH, including the
+ * struct_ops. This unregisters the monitors from the RV subsystem and cleans
+ * up all associated resources.
+ *
+ * First iterate over the directory to check if any BPF monitor is active,
+ * this is best effort. Then unlink all handlers and at last all struct_ops.
+ *
+ * Returns command exit status (SUCCESS/FAILURE)
+ */
+static int bpf_unregister_monitors(void)
+{
+	struct dirent *entry;
+	DIR *dir;
+	int count = 0;
+
+	dir = opendir(BPF_PIN_BASE_PATH);
+	if (!dir) {
+		err_msg("bpf: cannot open %s: %s\n",
+			BPF_PIN_BASE_PATH, strerror(errno));
+		return EXIT_FAILURE;
+	}
+
+	for (int pass = CHECK_ACTIVE; pass < MAX_PASSES; pass++) {
+		rewinddir(dir);
+		while ((entry = readdir(dir)) != NULL) {
+			char pin_path[MAX_PATH];
+			char mon_name[MAX_DA_NAME_LEN];
+			int is_ops;
+
+			if (entry->d_name[0] == '.')
+				continue;
+
+			is_ops = is_struct_ops(entry->d_name, mon_name);
+
+			switch (pass) {
+			case CHECK_ACTIVE:
+				if (is_ops && __ikm_read_enable(mon_name) == 1) {
+					err_msg("bpf: monitor %s is enabled, cannot unregister\n",
+						mon_name);
+					closedir(dir);
+					return EXIT_FAILURE;
+				}
+				continue;
+			case UNLINK_HANDLERS:
+				if (is_ops)
+					continue;
+				fallthrough;
+			case UNLINK_STRUCT_OPS:
+				snprintf(pin_path, sizeof(pin_path), "%s/%s",
+					 BPF_PIN_BASE_PATH, entry->d_name);
+
+				if (unlink(pin_path)) {
+					err_msg("bpf: failed to unlink %s: %s\n", pin_path,
+						strerror(errno));
+				} else if (is_ops) {
+					count++;
+					debug_msg("bpf: unregistered %s\n", mon_name);
+				}
+				break;
+			}
+		}
+	}
+
+	closedir(dir);
+
+	printf("unregistered %d BPF monitor(s)\n", count);
+	return EXIT_SUCCESS;
+}
+
+/*
+ * rv_bpf - handle BPF monitor registration commands
+ */
+void rv_bpf(int argc, char **argv)
+{
+	static const char *const usage[] = {
+		"",
+		"  usage: rv bpf [-h] [-v] {register,unregister}",
+		"",
+		"\tmanage BPF monitor registration",
+		"",
+		"\t-h/--help: print this menu",
+		"\t-v/--verbose: print debug messages",
+		"",
+		"\tregister:   register all available BPF monitors",
+		"\tunregister: unregister all BPF monitors",
+		NULL,
+	};
+	int print_help = 0, retval = EXIT_SUCCESS;
+
+	while (1) {
+		static struct option long_options[] = {
+			{"help",	no_argument,		0, 'h'},
+			{"verbose",	no_argument,		0, 'v'},
+			{0, 0, 0, 0}
+		};
+		int option_index = 0;
+		int c = getopt_long(argc, argv, "hv", long_options, &option_index);
+
+		/* detect the end of the options */
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 'h':
+			print_help = 1;
+			retval = EXIT_SUCCESS;
+			break;
+		case 'v':
+			config.debug = 1;
+			break;
+		default:
+			print_help = 1;
+			retval = EXIT_FAILURE;
+			break;
+		}
+	}
+
+	/* requires at least one argument after options */
+	if (optind >= argc && !print_help) {
+		print_help = 1;
+		retval = EXIT_FAILURE;
+	}
+
+	if (print_help) {
+		fprintf(stderr, "rv version %s\n", VERSION);
+		for (int i = 0; usage[i]; i++)
+			fprintf(stderr, "%s\n", usage[i]);
+		exit(retval);
+	}
+
+	if (!bpf_struct_ops_supported()) {
+		err_msg("bpf: kernel does not support BPF monitors\n");
+		exit(EXIT_FAILURE);
+	}
+
+	if (!strcmp(argv[optind], "register")) {
+		retval = bpf_register_monitors();
+		exit(retval);
+	}
+
+	if (!strcmp(argv[optind], "unregister")) {
+		retval = bpf_unregister_monitors();
+		exit(retval);
+	}
+
+	/* invalid sub-command */
+	fprintf(stderr, "rv version %s\n", VERSION);
+	for (int i = 0; usage[i]; i++)
+		fprintf(stderr, "%s\n", usage[i]);
+	exit(EXIT_FAILURE);
 }

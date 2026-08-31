@@ -149,6 +149,7 @@ static void usage(int exit_val, const char *fmt, ...)
 		"	command: run one of the following command:",
 		"	  list: list all available monitors",
 		"	  mon:  run a monitor",
+		"	  bpf:  manage BPF monitors registration",
 		"",
 		"	[command options]: each command has its own set of options",
 		"		           run rv command -h for further information",
@@ -188,6 +189,9 @@ int main(int argc, char **argv)
 
 	if (!strcmp(argv[1], "list"))
 		rv_list(--argc, &argv[1]);
+
+	if (!strcmp(argv[1], "bpf"))
+		rv_bpf(argc - 1, &argv[1]);
 
 	if (!strcmp(argv[1], "mon")) {
 		/*
