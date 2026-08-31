@@ -4619,6 +4619,56 @@ int pcie_retrain_link(struct pci_dev *pdev, bool use_lt)
 }
 
 /**
+ * pcie_get_link_endpoints - Identify Upstream and Downstream ends of a PCIe link
+ * @pdev: Any PCIe device on the link (Downstream Port or Endpoint)
+ * @downstream_port: Output pointer to Downstream Port (Upstream Component)
+ * @upstream_port: Output pointer to Upstream Port (Downstream Component)
+ *
+ * Identifies both ends of a point-to-point PCIe link. Increments reference count
+ * on @upstream_port if dynamically discovered on a downstream port. Callers must
+ * release with pcie_put_link_endpoints().
+ *
+ * Return: 0 on success, or -EINVAL if @pdev is NULL or not PCIe.
+ */
+int pcie_get_link_endpoints(struct pci_dev *pdev,
+			    struct pci_dev **downstream_port,
+			    struct pci_dev **upstream_port)
+{
+	if (!pdev || !pci_is_pcie(pdev))
+		return -EINVAL;
+
+	if (pcie_downstream_port(pdev)) {
+		*downstream_port = pdev;
+		down_read(&pci_bus_sem);
+		*upstream_port = pdev->subordinate ?
+			pci_dev_get(list_first_entry_or_null(&pdev->subordinate->devices,
+							     struct pci_dev, bus_list)) : NULL;
+		up_read(&pci_bus_sem);
+	} else {
+		*downstream_port = pci_upstream_bridge(pdev);
+		*upstream_port = pdev;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pcie_get_link_endpoints);
+
+/**
+ * pcie_put_link_endpoints - Release references acquired by pcie_get_link_endpoints
+ * @pdev: Device passed to pcie_get_link_endpoints()
+ * @downstream_port: Downstream Port pointer
+ * @upstream_port: Upstream Port pointer
+ */
+void pcie_put_link_endpoints(struct pci_dev *pdev,
+			     struct pci_dev *downstream_port,
+			     struct pci_dev *upstream_port)
+{
+	if (pdev && pcie_downstream_port(pdev) && upstream_port)
+		pci_dev_put(upstream_port);
+}
+EXPORT_SYMBOL_GPL(pcie_put_link_endpoints);
+
+/**
  * pcie_wait_for_link_delay - Wait until link is active or inactive
  * @pdev: Bridge device
  * @active: waiting for active or inactive?
