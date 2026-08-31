@@ -2341,7 +2341,10 @@ module_exit(loop_exit);
 #ifndef MODULE
 static int __init max_loop_setup(char *str)
 {
-	max_loop = simple_strtol(str, NULL, 0);
+	if (kstrtoint(str, 0, &max_loop)) {
+		pr_warn("loop: invalid max_loop, keeping default\n");
+		return 1;
+	}
 #ifdef CONFIG_BLOCK_LEGACY_AUTOLOAD
 	max_loop_specified = true;
 #endif
