@@ -19,9 +19,6 @@ struct rv_interface {
 
 DEFINE_FREE(rv_remove, struct dentry *, if (_T) rv_remove(_T));
 
-#define MAX_RV_MONITOR_NAME_SIZE	32
-#define MAX_RV_REACTOR_NAME_SIZE	32
-
 extern struct mutex rv_interface_lock;
 extern struct list_head rv_monitors_list;
 

@@ -7,7 +7,10 @@
 #ifndef _LINUX_RV_H
 #define _LINUX_RV_H
 
-#define MAX_DA_NAME_LEN			32
+#define MAX_RV_MONITOR_NAME_SIZE	32
+#define MAX_RV_REACTOR_NAME_SIZE	32
+#define MAX_RV_DESCRIPTION_SIZE		128
+
 #define MAX_DA_RETRY_RACING_EVENTS	3
 
 #define RV_MON_GLOBAL   0
@@ -137,8 +140,8 @@ struct rv_reactor {
 #endif
 
 struct rv_monitor {
-	const char		*name;
-	const char		*description;
+	char			name[MAX_RV_MONITOR_NAME_SIZE];
+	char			description[MAX_RV_DESCRIPTION_SIZE];
 	bool			enabled;
 	int			(*enable)(void);
 	void			(*disable)(void);

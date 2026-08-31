@@ -392,11 +392,11 @@ static ssize_t monitor_desc_read_data(struct file *filp, char __user *user_buf, 
 				      loff_t *ppos)
 {
 	struct rv_monitor *mon = filp->private_data;
-	char buff[256];
+	char buff[MAX_RV_DESCRIPTION_SIZE + 2];
 
 	memset(buff, 0, sizeof(buff));
 
-	snprintf(buff, sizeof(buff), "%s\n", mon->description);
+	snprintf(buff, sizeof(buff), "%.*s\n", MAX_RV_DESCRIPTION_SIZE, mon->description);
 
 	return simple_read_from_buffer(user_buf, count, ppos, buff, strlen(buff) + 1);
 }
@@ -756,9 +756,9 @@ int rv_register_monitor(struct rv_monitor *monitor, struct rv_monitor *parent)
 	struct rv_monitor *r;
 	int retval = 0;
 
-	if (strlen(monitor->name) >= MAX_RV_MONITOR_NAME_SIZE) {
-		pr_info("Monitor %s has a name longer than %d\n", monitor->name,
-			MAX_RV_MONITOR_NAME_SIZE);
+	if (strnlen(monitor->name, MAX_RV_MONITOR_NAME_SIZE) == MAX_RV_MONITOR_NAME_SIZE) {
+		pr_info("Monitor %.*s has a name longer than %d\n", MAX_RV_MONITOR_NAME_SIZE,
+			monitor->name, MAX_RV_MONITOR_NAME_SIZE);
 		return -EINVAL;
 	}
 
