@@ -1255,6 +1255,7 @@ static void drm_core_exit(void)
 	drm_privacy_screen_lookup_exit();
 	drm_panic_exit();
 	accel_core_exit();
+	drm_lease_cleanup();
 	unregister_chrdev(DRM_MAJOR, "drm");
 	drm_debugfs_remove_root();
 	drm_sysfs_destroy();
@@ -1287,6 +1288,10 @@ static int __init drm_core_init(void)
 		goto error;
 
 	drm_panic_init();
+
+	ret = drm_lease_init();
+	if (ret < 0)
+		goto error;
 
 	drm_privacy_screen_lookup_init();
 

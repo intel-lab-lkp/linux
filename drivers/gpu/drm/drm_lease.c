@@ -2,8 +2,12 @@
 /*
  * Copyright © 2017 Keith Packard <keithp@keithp.com>
  */
+#include <linux/device.h>
+#include <linux/idr.h>
 #include <linux/file.h>
+#include <linux/fs.h>
 #include <linux/uaccess.h>
+#include <linux/xarray.h>
 
 #include <drm/drm_auth.h>
 #include <drm/drm_crtc.h>
@@ -70,6 +74,9 @@
 	list_for_each_entry((lessee), &(lessor)->lessees, lessee_list)
 
 static uint64_t drm_lease_idr_object;
+
+static int drm_exposed_lease_major;
+static DEFINE_XARRAY_ALLOC(drm_exposed_lease_minors_xa);
 
 struct drm_master *drm_lease_owner(struct drm_master *master)
 {
@@ -263,9 +270,144 @@ out_lessee:
 	return ERR_PTR(error);
 }
 
+struct drm_exposed_lease {
+	struct file *lessee_file;
+	struct drm_master *lessee;
+	struct file_operations fops;
+	struct device kdev;
+};
+
+static const struct device_type drm_exposed_lease_device_type = {
+	.name = "drm_lease",
+};
+
+void drm_lease_uevent(struct drm_device *dev, char *envp[])
+{
+	struct device *kdev;
+	unsigned long minor = 0;
+
+	for (;;) {
+		struct drm_exposed_lease *exposed;
+
+		kdev = NULL;
+		xa_lock(&drm_exposed_lease_minors_xa);
+		while ((exposed = xa_find(&drm_exposed_lease_minors_xa, &minor,
+					  MINORMASK, XA_PRESENT))) {
+			minor++;
+			if (exposed->lessee->dev == dev) {
+				kdev = get_device(&exposed->kdev);
+				break;
+			}
+		}
+		xa_unlock(&drm_exposed_lease_minors_xa);
+
+		if (!kdev)
+			return;
+
+		kobject_uevent_env(&kdev->kobj, KOBJ_CHANGE, envp);
+		put_device(kdev);
+	}
+}
+
+static void drm_exposed_device_release(struct device *dev)
+{
+	kfree(container_of(dev, struct drm_exposed_lease, kdev));
+}
+
+static int drm_exposed_lease_release(struct inode *inode, struct file *filp)
+{
+	struct drm_exposed_lease *exposed;
+	struct file *lessee_file = NULL;
+
+	xa_lock(&drm_exposed_lease_minors_xa);
+	exposed = xa_load(&drm_exposed_lease_minors_xa, iminor(inode));
+	if (exposed && exposed->lessee_file)
+		lessee_file = exposed->lessee_file;
+	xa_unlock(&drm_exposed_lease_minors_xa);
+
+	if (lessee_file)
+		fput(lessee_file);
+
+	return 0;
+}
+
+static int drm_expose_lease(struct file *lessee_file,
+			    struct drm_master *lessee)
+{
+	int ret = 0;
+	u32 minor;
+	struct drm_exposed_lease *exposed;
+	struct device *drm_kdev;
+	struct device *kdev;
+
+	exposed = kzalloc_obj(*exposed);
+	if (!exposed)
+		return -ENOMEM;
+
+	exposed->lessee_file = lessee_file;
+	exposed->lessee = lessee;
+	exposed->fops = *lessee_file->f_op;
+	exposed->fops.release = drm_exposed_lease_release;
+
+	ret = xa_alloc(&drm_exposed_lease_minors_xa, &minor, exposed,
+		       XA_LIMIT(0, MINORMASK), GFP_KERNEL);
+
+	if (ret < 0) {
+		kfree(exposed);
+		return ret;
+	}
+
+	drm_kdev = lessee->dev->primary->kdev;
+	kdev = &exposed->kdev;
+
+	device_initialize(kdev);
+	kdev->devt = MKDEV(drm_exposed_lease_major, minor);
+	kdev->class = drm_kdev->class;
+	kdev->type = &drm_exposed_lease_device_type;
+	kdev->parent = drm_kdev->parent;
+	kdev->release = drm_exposed_device_release;
+	ret = dev_set_name(kdev, "%s-lessee-%d", dev_name(drm_kdev), lessee->lessee_id);
+	if (ret < 0)
+		goto minor_free;
+	ret = device_add(kdev);
+	if (ret < 0)
+		goto device_put;
+
+	return 0;
+
+device_put:
+	put_device(kdev);
+
+minor_free:
+	xa_erase(&drm_exposed_lease_minors_xa, minor);
+
+	return ret;
+}
+
+static void drm_hide_lease(struct drm_master *master)
+{
+	unsigned long minor;
+	struct drm_exposed_lease *exposed = NULL;
+
+	xa_lock(&drm_exposed_lease_minors_xa);
+	xa_for_each(&drm_exposed_lease_minors_xa, minor, exposed) {
+		if (exposed->lessee == master)
+			break;
+	}
+	if (exposed)
+		__xa_erase(&drm_exposed_lease_minors_xa, minor);
+	xa_unlock(&drm_exposed_lease_minors_xa);
+
+	if (exposed)
+		device_unregister(&exposed->kdev);
+}
+
 void drm_lease_destroy(struct drm_master *master)
 {
 	struct drm_device *dev = master->dev;
+
+	if (master->lessee_id != 0)
+		drm_hide_lease(master);
 
 	mutex_lock(&dev->mode_config.idr_mutex);
 
@@ -491,7 +633,7 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EOPNOTSUPP;
 
-	if (cl->flags && (cl->flags & ~(O_CLOEXEC | O_NONBLOCK))) {
+	if (cl->flags && (cl->flags & ~(O_CLOEXEC | O_NONBLOCK | O_CREAT))) {
 		drm_dbg_lease(dev, "invalid flags\n");
 		return -EINVAL;
 	}
@@ -565,6 +707,14 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 	drm_dbg_lease(dev, "Returning fd %d id %d\n", fd, lessee->lessee_id);
 	cl->fd = fd;
 	cl->lessee_id = lessee->lessee_id;
+
+	if (cl->flags & O_CREAT) {
+		ret = drm_expose_lease(lessee_file, lessee);
+		if (ret) {
+			fput(lessee_file);
+			goto out_leases;
+		}
+	}
 
 	/* Hook up the fd */
 	fd_install(fd, lessee_file);
@@ -729,4 +879,48 @@ fail:
 	drm_master_put(&lessor);
 
 	return ret;
+}
+
+static int drm_lease_open(struct inode *inode, struct file *filp)
+{
+	struct drm_exposed_lease *exposed;
+	struct file *lessee_file = NULL;
+
+	xa_lock(&drm_exposed_lease_minors_xa);
+	exposed = xa_load(&drm_exposed_lease_minors_xa, iminor(inode));
+	if (exposed && exposed->lessee_file && get_file_rcu(&exposed->lessee_file))
+		lessee_file = exposed->lessee_file;
+	xa_unlock(&drm_exposed_lease_minors_xa);
+
+	if (!lessee_file)
+		return -ENODEV;
+
+	replace_fops(filp, &exposed->fops);
+	filp->private_data = lessee_file->private_data;
+
+	return 0;
+}
+
+static const struct file_operations drm_lease_fops = {
+	.owner = THIS_MODULE,
+	.open = drm_lease_open,
+};
+
+int drm_lease_init(void)
+{
+	int ret;
+
+	ret = register_chrdev(0, "drm_lease", &drm_lease_fops);
+	if (ret < 0)
+		return ret;
+
+	drm_exposed_lease_major = ret;
+
+	return 0;
+}
+
+void drm_lease_cleanup(void)
+{
+	if (drm_exposed_lease_major > 0)
+		unregister_chrdev(drm_exposed_lease_major, "drm_lease");
 }

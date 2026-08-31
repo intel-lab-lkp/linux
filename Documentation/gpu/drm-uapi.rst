@@ -48,6 +48,47 @@ DRM Display Resource Leasing
 .. kernel-doc:: drivers/gpu/drm/drm_lease.c
    :doc: drm leasing
 
+Exposing a lease as a device
+----------------------------
+
+By default, :c:macro:`DRM_IOCTL_MODE_CREATE_LEASE` only returns an anonymous
+file descriptor. Passing ``O_CREAT`` in ``drm_mode_create_lease.flags`` also
+registers the lease as a DRM class device. The libdrm wrapper can be used as
+follows::
+
+    uint32_t lessee_id;
+    int lease_fd;
+
+    lease_fd = drmModeCreateLease(lessor_fd, object_ids, object_count,
+                                  O_CLOEXEC | O_CREAT, &lessee_id);
+    if (lease_fd < 0)
+            /* Handle the error. */
+
+The device is a sibling of the primary DRM device and is named after the
+primary node and the lessee ID. For example, lessee 1 of ``card0`` is exposed
+as ``/dev/dri/card0-lessee-1``. Its uevent contains ``DEVTYPE=drm_lease`` so
+that device managers can distinguish it from a DRM primary node.
+
+Opening the device accesses the same lease as the anonymous file descriptor.
+In particular, all opens share the lessee's DRM file private data, including
+its DRM master state, client capabilities and GEM handle namespace. Each open
+device file keeps the lease alive. The device is unregistered after the last
+reference to the lease file is closed. Revoking the lease removes its objects
+but does not unregister the device while references remain open.
+
+Connector hotplug changes generate ``HOTPLUG=1`` change uevents for the
+exposed lease as well as for the primary node. A device manager can make an
+exposed lease available for seat assignment with a rule such as::
+
+    SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_lease", \
+      ENV{ID_FOR_SEAT}="drm-lease-$kernel", TAG+="seat", \
+      TAG+="master-of-seat"
+
+An exposed lease inherits the physical device's path information. Rules which
+create ``dri/by-path/*-card`` links should therefore restrict those links to
+``DEVTYPE=drm_minor`` so that a lease does not replace its primary node's
+link.
+
 Open-Source Userspace Requirements
 ==================================
 
