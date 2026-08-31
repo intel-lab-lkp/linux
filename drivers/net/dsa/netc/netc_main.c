@@ -1707,14 +1707,22 @@ static int netc_port_add_host_flood_rule(struct netc_port *np,
 	u32 cfg;
 	int err;
 
-	if (!uc && !mc) {
-		/* Disable ingress port filter table lookup */
-		netc_port_wr(np, NETC_PIPFCR, 0);
-		np->uc = false;
-		np->mc = false;
+	if (np->ipft_hf_eid != NTMP_NULL_ENTRY_ID) {
+		/* The old rule is the same as the new rule, return directly.
+		 * But if the existing rule differs from the requested one,
+		 * return an error.
+		 */
+		if (np->uc == uc && np->mc == mc)
+			return 0;
 
-		return 0;
+		dev_err(priv->dev,
+			"The old host flood rule has not been removed from port %u\n",
+			np->dp->index);
+		return -EINVAL;
 	}
+
+	if (!uc && !mc)
+		return 0;
 
 	host_flood = kzalloc_obj(*host_flood);
 	if (!host_flood)
@@ -1762,32 +1770,33 @@ free_host_flood:
 	return err;
 }
 
-static void netc_port_remove_host_flood(struct netc_port *np, u32 entry_id)
+static int netc_port_remove_host_flood(struct netc_port *np)
 {
 	struct netc_switch *priv = np->switch_priv;
-	bool disable_host_flood = false;
+	u32 entry_id = np->ipft_hf_eid;
+	int err;
 
 	if (entry_id == NTMP_NULL_ENTRY_ID)
-		return;
+		return 0;
 
-	if (np->ipft_hf_eid == entry_id)
-		disable_host_flood = true;
+	err = ntmp_ipft_delete_entry(&priv->ntmp, entry_id);
+	if (err)
+		return err;
 
-	ntmp_ipft_delete_entry(&priv->ntmp, entry_id);
+	np->ipft_hf_eid = NTMP_NULL_ENTRY_ID;
+	np->uc = false;
+	np->mc = false;
+	netc_port_wr(np, NETC_PIPFCR, 0);
 
-	if (disable_host_flood) {
-		np->ipft_hf_eid = NTMP_NULL_ENTRY_ID;
-		np->uc = false;
-		np->mc = false;
-		netc_port_wr(np, NETC_PIPFCR, 0);
-	}
+	return 0;
 }
 
 static void netc_port_set_host_flood(struct dsa_switch *ds, int port,
 				     bool uc, bool mc)
 {
 	struct netc_port *np = NETC_PORT(ds, port);
-	u32 old_entry_id;
+	bool old_uc = np->uc;
+	bool old_mc = np->mc;
 
 	/* Do not add host flood rule to ingress port filter table when
 	 * the port has joined a bridge. Otherwise, the ingress frames
@@ -1795,7 +1804,12 @@ static void netc_port_set_host_flood(struct dsa_switch *ds, int port,
 	 * will be redirected directly to the CPU port.
 	 */
 	if (dsa_port_bridge_dev_get(np->dp)) {
-		netc_port_remove_host_flood(np, np->ipft_hf_eid);
+		if (!netc_port_remove_host_flood(np))
+			return;
+
+		dev_err(ds->dev,
+			"Failed to delete host flood rule on bridge port %u\n",
+			port);
 
 		return;
 	}
@@ -1804,19 +1818,29 @@ static void netc_port_set_host_flood(struct dsa_switch *ds, int port,
 		return;
 
 	/* IPFT does not support in-place updates to the KEYE element,
-	 * we need to add a new entry and then delete the old one. So
-	 * save the old entry ID first.
+	 * we need to delete the old one and then add the new rule. If
+	 * the deletion fails, return immediately.
 	 */
-	old_entry_id = np->ipft_hf_eid;
+	if (netc_port_remove_host_flood(np)) {
+		dev_err(ds->dev,
+			"Failed to delete old host flood rule on port %u\n",
+			port);
+
+		return;
+	}
 
 	if (netc_port_add_host_flood_rule(np, uc, mc)) {
 		dev_err(ds->dev, "Failed to add host flood rule on port %d\n",
 			port);
-		return;
-	}
 
-	/* Remove the old host flood entry */
-	netc_port_remove_host_flood(np, old_entry_id);
+		/* Try to restore the old flood rule, if the recovery fails,
+		 * there is nothing else we can do; this is a limitation.
+		 */
+		if (netc_port_add_host_flood_rule(np, old_uc, old_mc))
+			dev_err(ds->dev,
+				"Failed to restore host flood rule on port %d\n",
+				port);
+	}
 }
 
 static int netc_single_vlan_aware_bridge(struct dsa_switch *ds,
@@ -1981,6 +2005,8 @@ static int netc_port_bridge_join(struct dsa_switch *ds, int port,
 	struct netc_port *np = NETC_PORT(ds, port);
 	struct netc_switch *priv = ds->priv;
 	u16 vlan_unaware_pvid;
+	bool uc = np->uc;
+	bool mc = np->mc;
 	int err;
 
 	if (!bridge.num) {
@@ -1991,6 +2017,12 @@ static int netc_port_bridge_join(struct dsa_switch *ds, int port,
 	err = netc_single_vlan_aware_bridge(ds, extack);
 	if (err)
 		return err;
+
+	err = netc_port_remove_host_flood(np);
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Failed to delete host flood rule");
+		return err;
+	}
 
 	netc_port_set_mlo(np, MLO_NOT_OVERRIDE);
 
@@ -2005,8 +2037,6 @@ static int netc_port_bridge_join(struct dsa_switch *ds, int port,
 	netc_port_set_pvid(np, vlan_unaware_pvid);
 
 out:
-	netc_port_remove_host_flood(np, np->ipft_hf_eid);
-
 	if (atomic_inc_return(&priv->br_cnt) == 1)
 		schedule_delayed_work(&priv->fdbt_ageing_work,
 				      READ_ONCE(priv->fdbt_ageing_delay));
@@ -2015,6 +2045,11 @@ out:
 
 disable_mlo:
 	netc_port_set_mlo(np, MLO_DISABLE);
+
+	if (netc_port_add_host_flood_rule(np, uc, mc))
+		dev_err(ds->dev,
+			"Failed to restore host flood rule on port %u\n",
+			port);
 
 	return err;
 }
