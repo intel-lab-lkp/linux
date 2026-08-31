@@ -69,4 +69,36 @@ that comes at basically 0 cost we leave that on. We simply disable the
 rbtree front sector lookup when the io scheduler merge function is called.
 
 
+prio_enable	(bool)
+----------------------
+
+Whether to enable I/O priority support that distinguishes real-time (RT),
+best-effort (BE) and idle requests.  When enabled (the default), requests are
+filed into separate per-priority buckets and dispatched in priority order: lower
+priority requests are deferred while any higher priority requests are pending,
+subject to the prio_aging_expire aging mechanism described below.  When disabled,
+every request is filed in the best-effort bucket, the priority aging path is
+bypassed, and the scheduler dispatches from that single bucket.  This lets
+systems that do not want RT/BE/IDLE distinction opt out of the extra overhead.
+Switching the value drains all in-flight I/O (queue freeze and quiesce) to avoid
+priority inversion during the transition.  This parameter can also be set at
+module load time via the prio_enable module parameter.
+
+
+prio_aging_expire	(in ms)
+------------------------------
+
+To prevent lower priority requests from being starved indefinitely by a steady
+stream of higher priority requests, the deadline scheduler ages pending
+requests.  prio_aging_expire is the time after which a best-effort or idle
+request that has been waiting longer than this threshold may be dispatched even
+though real-time requests are still pending.  The default is 10000 ms (10 s).
+
+This parameter only takes effect when prio_enable is enabled and there are
+requests queued in at least two distinct priority buckets.  The value must be
+positive: zero or negative values are rejected with -EINVAL, since a value of
+zero would dispatch best-effort and idle requests ahead of pending real-time
+requests through "now - 0 == now", a classic priority inversion.
+
+
 Nov 11 2002, Jens Axboe <jens.axboe@oracle.com>
