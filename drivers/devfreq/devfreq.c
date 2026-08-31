@@ -348,9 +348,8 @@ static int devfreq_set_target(struct devfreq *devfreq, unsigned long new_freq,
 	unsigned long cur_freq;
 	int err = 0;
 
-	if (devfreq->profile->get_cur_freq)
-		devfreq->profile->get_cur_freq(devfreq->dev.parent, &cur_freq);
-	else
+	if (!devfreq->profile->get_cur_freq ||
+	    devfreq->profile->get_cur_freq(devfreq->dev.parent, &cur_freq))
 		cur_freq = devfreq->previous_freq;
 
 	freqs.old = cur_freq;
