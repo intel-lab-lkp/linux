@@ -113,24 +113,125 @@ void page_counter_charge(struct page_counter *counter, unsigned long nr_pages)
 	}
 }
 
+static bool page_counter_consume_stock(struct page_counter *counter,
+				       unsigned long nr_pages)
+{
+	struct page_counter_stock __percpu *stock = READ_ONCE(counter->stock);
+	struct page_counter_stock *pcp_stock;
+	unsigned long flags;
+	bool charged = false;
+
+	if (!stock || nr_pages > counter->batch)
+		return false;
+
+	/* raw_spin_trylock isn't enough to protect against nested NMI in UP */
+	if (in_nmi())
+		return false;
+
+	/* It's OK to migrate here, since stock is fungible within a counter. */
+	pcp_stock = raw_cpu_ptr(stock);
+
+	if (!raw_spin_trylock_irqsave(&pcp_stock->lock, flags))
+		return false;
+
+	if (pcp_stock->nr_pages >= nr_pages) {
+		pcp_stock->nr_pages -= nr_pages;
+		charged = true;
+	}
+
+	raw_spin_unlock_irqrestore(&pcp_stock->lock, flags);
+	return charged;
+}
+
+/**
+ * page_counter_refill_stock - return pages to a page_counter's stock
+ * @counter: counter to return the pages to
+ * @overage: number of pages to return
+ *
+ * Return: how many of @overage went to the hierarchy rather than the stock.
+ * The flush itself can be larger, since it also returns what earlier callers
+ * stocked.
+ */
+unsigned long page_counter_refill_stock(struct page_counter *counter,
+					unsigned long overage)
+{
+	struct page_counter_stock __percpu *stock = READ_ONCE(counter->stock);
+	struct page_counter_stock *pcp_stock;
+	unsigned long high = counter->batch;
+	unsigned long low = high / 2;
+	unsigned long to_flush = overage;
+	unsigned long stocked;
+	unsigned long flags;
+
+	if (!stock || overage > high)
+		goto uncharge_counter;
+
+	/* See page_counter_consume_stock() for why NMI skips the stock. */
+	if (in_nmi())
+		goto uncharge_counter;
+
+	/* It's OK to migrate here, since stock is fungible within a counter. */
+	pcp_stock = raw_cpu_ptr(stock);
+	if (!raw_spin_trylock_irqsave(&pcp_stock->lock, flags))
+		goto uncharge_counter;
+
+	/*
+	 * Use a high/low watermark here, in the spirit of pcp->{batch, high}.
+	 * If the stock would exceed counter->batch, stock is trimmed to the low
+	 * watermark of counter->batch / 2 so that sequential uncharges don't
+	 * all trigger a hierarchy walk.
+	 */
+	stocked = pcp_stock->nr_pages + overage;
+	if (stocked > high) {
+		pcp_stock->nr_pages = low;
+		to_flush = stocked - low;
+	} else {
+		pcp_stock->nr_pages = stocked;
+		to_flush = 0;
+	}
+	raw_spin_unlock_irqrestore(&pcp_stock->lock, flags);
+
+	if (!to_flush)
+		return 0;
+
+uncharge_counter:
+	page_counter_uncharge(counter, to_flush);
+	return min(overage, to_flush);
+}
+
 /**
  * page_counter_try_charge - try to hierarchically charge pages
  * @counter: counter
  * @nr_pages: number of pages to charge
- * @fail: points first counter to hit its limit, if any
+ * @fail: only written on failure; the first counter to hit its limit
  * @nr_charged: optional; on success, set to the number of pages actually
- *		charged to the hierarchy
+ *		charged to the hierarchy. Set to 0 if stock was served.
  *
- * Returns %true on success, or %false and @fail if the counter or one
- * of its ancestors has hit its configured limit.
+ * A successful charge may still have bumped failcnt on @counter or an
+ * ancestor, since the greedy attempt is retried at the requested size.
+ *
+ * Returns %true on success, or %false and sets @fail if the counter or
+ * one of its ancestors has hit its configured limit.
  */
 bool page_counter_try_charge(struct page_counter *counter,
 			     unsigned long nr_pages, struct page_counter **fail,
 			     unsigned long *nr_charged)
 {
-	struct page_counter *c;
+	struct page_counter *c, *failed_at;
+	unsigned long charge = nr_pages;
 	bool protection = track_protection(counter);
 	bool track_failcnt = counter->track_failcnt;
+
+	/* The stock is skipped in NMI; a greedy charge would just be undone */
+	if (!in_nmi())
+		charge = max(counter->batch, nr_pages);
+
+retry:
+	if (page_counter_consume_stock(counter, nr_pages)) {
+		if (nr_charged)
+			*nr_charged = 0;
+		return true;
+	}
 
 	for (c = counter; c; c = c->parent) {
 		long new;
@@ -148,9 +249,9 @@ bool page_counter_try_charge(struct page_counter *counter,
 		 * we either see the new limit or the setter sees the
 		 * counter has changed and retries.
 		 */
-		new = atomic_long_add_return(nr_pages, &c->usage);
+		new = atomic_long_add_return(charge, &c->usage);
 		if (new > c->max) {
-			atomic_long_sub(nr_pages, &c->usage);
+			atomic_long_sub(charge, &c->usage);
 			/*
 			 * This is racy, but we can live with some
 			 * inaccuracy in the failcnt which is only used
@@ -158,7 +259,7 @@ bool page_counter_try_charge(struct page_counter *counter,
 			 */
 			if (track_failcnt)
 				data_race(c->failcnt++);
-			*fail = c;
+			failed_at = c;
 			goto failed;
 		}
 		if (protection)
@@ -172,15 +273,25 @@ bool page_counter_try_charge(struct page_counter *counter,
 		}
 	}
 
+	if (charge > nr_pages)
+		charge -= page_counter_refill_stock(counter, charge - nr_pages);
+
 	if (nr_charged)
-		*nr_charged = nr_pages;
+		*nr_charged = charge;
 
 	return true;
 
 failed:
-	for (c = counter; c != *fail; c = c->parent)
-		page_counter_cancel(c, nr_pages);
+	for (c = counter; c != failed_at; c = c->parent)
+		page_counter_cancel(c, charge);
 
+	/* Retry the stock & charge with the exact number of pages requested */
+	if (charge > nr_pages) {
+		charge = nr_pages;
+		goto retry;
+	}
+
+	*fail = failed_at;
 	return false;
 }
 
@@ -330,7 +441,7 @@ void page_counter_drain_cpu_stock(struct page_counter *counter, int cpu)
 /**
  * page_counter_alloc_stock - allocate the percpu stock for a page_counter
  * @counter: counter to allocate percpu stock for
- * @batch: maximum number of pages a CPU may cache
+ * @batch: number of pages to precharge and the stock's high watermark
  *
  * Failure to allocate is not fatal; @counter falls back to hierarchy charges.
  * The caller must not (un)charge @counter concurrently with this call, and this

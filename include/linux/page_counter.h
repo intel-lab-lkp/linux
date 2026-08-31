@@ -82,6 +82,8 @@ static inline unsigned long page_counter_read(struct page_counter *counter)
 
 void page_counter_cancel(struct page_counter *counter, unsigned long nr_pages);
 void page_counter_charge(struct page_counter *counter, unsigned long nr_pages);
+unsigned long page_counter_refill_stock(struct page_counter *counter,
+					unsigned long overage);
 bool page_counter_try_charge(struct page_counter *counter,
 			     unsigned long nr_pages, struct page_counter **fail,
 			     unsigned long *nr_charged);
