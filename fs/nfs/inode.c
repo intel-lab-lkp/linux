@@ -2619,7 +2619,8 @@ static void nfsiod_stop(void)
 static int nfsiod_start(void)
 {
 	dprintk("RPC:       creating workqueue nfsiod\n");
-	nfsiod_workqueue = alloc_workqueue("nfsiod", WQ_MEM_RECLAIM | WQ_UNBOUND, 0);
+	nfsiod_workqueue = alloc_workqueue("nfsiod",
+				WQ_MEM_RECLAIM | WQ_UNBOUND | WQ_SYSFS, 0);
 	if (nfsiod_workqueue == NULL)
 		return -ENOMEM;
 #if IS_ENABLED(CONFIG_NFS_LOCALIO)
