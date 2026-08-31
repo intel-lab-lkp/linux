@@ -449,6 +449,13 @@ struct ib_cq *ib_cq_pool_get(struct ib_device *dev, unsigned int nr_cqe,
 		return ERR_PTR(-EINVAL);
 	}
 
+	/*
+	 * ib_alloc_cqs() caps CQ size at max_cqe, so a larger request would
+	 * keep allocating CQs that never fit until allocation fails.
+	 */
+	if (nr_cqe > dev->attrs.max_cqe)
+		return ERR_PTR(-EINVAL);
+
 	num_comp_vectors =
 		min_t(unsigned int, dev->num_comp_vectors, num_online_cpus());
 	/* Project the affinty to the device completion vector range */
