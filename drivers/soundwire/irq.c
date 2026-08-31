@@ -49,8 +49,12 @@ void sdw_irq_delete(struct sdw_bus *bus)
 static void sdw_irq_dispose_mapping(void *data)
 {
 	struct sdw_slave *slave = data;
+	int irq = slave->irq;
 
-	irq_dispose_mapping(slave->irq);
+	slave->irq = 0;
+
+	if (irq)
+		irq_dispose_mapping(irq);
 }
 
 void sdw_irq_create_mapping(struct sdw_slave *slave)
