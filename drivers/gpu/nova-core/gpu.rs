@@ -343,6 +343,13 @@ impl<'gpu> Gpu<'gpu> {
                 // still constructing it, so no concurrent DMA allocations can exist.
                 unsafe { pdev.dma_set_mask_and_coherent(dma_mask)? };
 
+                // Nova re-decomposes SG segments into 4 KiB page-table entries, so it
+                // has no upper bound on segment length; declare that to the DMA layer.
+                //
+                // SAFETY: same invariant as above -- still constructing, no concurrent
+                // DMA mapping can exist.
+                unsafe { pdev.dma_set_max_seg_size(u32::MAX) };
+
                 hal.wait_gfw_boot_completion(bar)
                     .inspect_err(|_| dev_err!(dev, "GFW boot did not complete\n"))?;
             },
