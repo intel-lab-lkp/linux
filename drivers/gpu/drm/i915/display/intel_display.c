@@ -7496,10 +7496,12 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	struct intel_display *display = to_intel_display(state);
 	struct intel_uncore *uncore = to_intel_uncore(display->drm);
 	struct intel_crtc_state *new_crtc_state, *old_crtc_state;
+	struct drm_connector_state *new_conn_state;
+	struct drm_connector *connector;
 	struct intel_crtc *crtc;
 	struct intel_power_domain_mask put_domains[I915_MAX_PIPES] = {};
 	struct ref_tracker *wakeref = NULL;
-	int power_async_delay;
+	int power_async_delay, i;
 
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state)
 		intel_atomic_dsb_prepare(state, crtc);
@@ -7607,6 +7609,9 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 
 	/* Now enable the clocks, plane, pipe, and connectors that we set up. */
 	display->modeset.funcs->commit_modeset_enables(state);
+
+	for_each_new_connector_in_state(&state->base, connector, new_conn_state, i)
+		drm_atomic_helper_connector_apply_luminance(new_conn_state);
 
 	intel_display_power_dc3co_compute(state);
 
