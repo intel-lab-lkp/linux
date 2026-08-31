@@ -33,10 +33,18 @@
 #include <linux/refcount.h>
 #include <linux/nfs_fs.h>
 #include <linux/nfs_page.h>
+#include <linux/sunrpc/xdr.h>
 #include <linux/workqueue.h>
 
 struct nfs4_exception;
 struct nfs4_opendata;
+
+/* A netaddr4 contains at least the length words of its two XDR strings. */
+static inline bool
+nfs4_pnfs_ds_addr_count_valid(const struct xdr_stream *xdr, u32 count)
+{
+	return count <= xdr_stream_remaining(xdr) / (2 * sizeof(__be32));
+}
 
 enum {
 	NFS_LSEG_VALID = 0,	/* cleared when lseg is recalled/returned */
