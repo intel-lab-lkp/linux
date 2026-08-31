@@ -125,6 +125,13 @@ enum drm_driver_feature {
 	 */
 	DRIVER_CONNECTOR_LUMINANCE           = BIT(10),
 
+	/**
+	 * @DRIVER_GEM_GPUVA:
+	 *
+	 * Driver supports GEM GPU virtual addressing.
+	 */
+	DRIVER_GEM_GPUVA               = BIT(11),
+
 	/* IMPORTANT: Below are all the legacy flags, add new ones above. */
 
 	/**

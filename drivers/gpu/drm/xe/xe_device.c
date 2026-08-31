@@ -397,7 +397,8 @@ static const struct drm_driver regular_driver = {
 	    XE_DISPLAY_DRIVER_FEATURES |
 	    DRIVER_GEM |
 	    DRIVER_RENDER | DRIVER_SYNCOBJ |
-	    DRIVER_SYNCOBJ_TIMELINE,
+	    DRIVER_CONNECTOR_LUMINANCE |
+	    DRIVER_SYNCOBJ_TIMELINE | DRIVER_GEM_GPUVA,
 	.open = xe_file_open,
 	.postclose = xe_file_close,
 
