@@ -390,14 +390,16 @@ static struct mei_cl_cb *mei_io_cb_init(struct mei_cl *cl,
  *
  * @head:  an instance of our list structure
  * @cl:    host client
+ * @fp:    file pointer (matching cb file object), may be NULL
  */
 static void mei_io_list_flush_cl(struct list_head *head,
-				 const struct mei_cl *cl)
+				 const struct mei_cl *cl,
+				 const struct file *fp)
 {
 	struct mei_cl_cb *cb, *next;
 
 	list_for_each_entry_safe(cb, next, head, list) {
-		if (cl == cb->cl) {
+		if (cl == cb->cl && (!fp || fp == cb->fp)) {
 			list_del_init(&cb->list);
 			if (cb->fop_type == MEI_FOP_READ)
 				mei_io_cb_free(cb);
@@ -446,16 +448,19 @@ static void mei_io_rd_list_free_fp(struct mei_cl *cl, const struct file *fp)
 }
 
 /**
- * mei_cl_free_pending - free pending cb
+ * mei_cl_free_pending - free pending cbs
  *
  * @cl: host client
+ * @fp: file pointer (matching cb file object), may be NULL
  */
-static void mei_cl_free_pending(struct mei_cl *cl)
+static void mei_cl_free_pending(struct mei_cl *cl, const struct file *fp)
 {
-	struct mei_cl_cb *cb;
+	struct mei_cl_cb *cb, *next;
 
-	cb = list_first_entry_or_null(&cl->rd_pending, struct mei_cl_cb, list);
-	mei_io_cb_free(cb);
+	list_for_each_entry_safe(cb, next, &cl->rd_pending, list) {
+		if (!fp || fp == cb->fp)
+			mei_io_cb_free(cb);
+	}
 }
 
 /**
@@ -565,12 +570,9 @@ int mei_cl_flush_queues(struct mei_cl *cl, const struct file *fp)
 	cl_dbg(dev, cl, "remove list entry belonging to cl\n");
 	mei_io_tx_list_free_cl(&cl->dev->write_list, cl, fp);
 	mei_io_tx_list_free_cl(&cl->dev->write_waiting_list, cl, fp);
-	/* free pending and control cb only in final flush */
-	if (!fp) {
-		mei_io_list_flush_cl(&cl->dev->ctrl_wr_list, cl);
-		mei_io_list_flush_cl(&cl->dev->ctrl_rd_list, cl);
-		mei_cl_free_pending(cl);
-	}
+	mei_io_list_flush_cl(&cl->dev->ctrl_wr_list, cl, fp);
+	mei_io_list_flush_cl(&cl->dev->ctrl_rd_list, cl, fp);
+	mei_cl_free_pending(cl, fp);
 	mei_io_rd_list_free_fp(cl, fp);
 
 	return 0;
@@ -790,8 +792,8 @@ static void mei_cl_set_disconnected(struct mei_cl *cl)
 	cl->state = MEI_FILE_DISCONNECTED;
 	mei_io_tx_list_free_cl(&dev->write_list, cl, NULL);
 	mei_io_tx_list_free_cl(&dev->write_waiting_list, cl, NULL);
-	mei_io_list_flush_cl(&dev->ctrl_rd_list, cl);
-	mei_io_list_flush_cl(&dev->ctrl_wr_list, cl);
+	mei_io_list_flush_cl(&dev->ctrl_rd_list, cl, NULL);
+	mei_io_list_flush_cl(&dev->ctrl_wr_list, cl, NULL);
 	mei_cl_wake_all(cl);
 	cl->rx_flow_ctrl_creds = 0;
 	cl->tx_flow_ctrl_creds = 0;
@@ -1151,8 +1153,8 @@ int mei_cl_connect(struct mei_cl *cl, struct mei_me_client *me_cl,
 
 	if (!mei_cl_is_connected(cl)) {
 		if (cl->state == MEI_FILE_DISCONNECT_REQUIRED) {
-			mei_io_list_flush_cl(&dev->ctrl_rd_list, cl);
-			mei_io_list_flush_cl(&dev->ctrl_wr_list, cl);
+			mei_io_list_flush_cl(&dev->ctrl_rd_list, cl, NULL);
+			mei_io_list_flush_cl(&dev->ctrl_wr_list, cl, NULL);
 			 /* ignore disconnect return valuue;
 			  * in case of failure reset will be invoked
 			  */
