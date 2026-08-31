@@ -2014,6 +2014,8 @@ struct kvm_x86_ops {
 	int (*migrate_cmd)(struct kvm *kvm, struct kvm_migrate_cmd *cmd);
 	int (*export_memory)(struct kvm *kvm, struct kvm_memory_transfer *mem);
 	int (*import_memory)(struct kvm *kvm, struct kvm_memory_transfer *mem);
+	int (*export_vcpu)(struct kvm_vcpu *vcpu, struct kvm_vcpu_transfer *vcpu_state);
+	int (*import_vcpu)(struct kvm_vcpu *vcpu, struct kvm_vcpu_transfer *vcpu_state);
 };
 
 struct kvm_x86_nested_ops {

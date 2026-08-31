@@ -152,6 +152,8 @@ KVM_X86_OP_OPTIONAL_RET0(cap_live_migration)
 KVM_X86_OP_OPTIONAL(migrate_cmd)
 KVM_X86_OP_OPTIONAL(export_memory)
 KVM_X86_OP_OPTIONAL(import_memory)
+KVM_X86_OP_OPTIONAL(export_vcpu)
+KVM_X86_OP_OPTIONAL(import_vcpu)
 #endif
 
 #undef KVM_X86_OP

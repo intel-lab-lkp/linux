@@ -1496,6 +1496,8 @@ struct kvm_enc_region {
 /* Available with KVM_CAP_LIVE_MIGRATION */
 #define KVM_EXPORT_MEMORY	  _IOWR(KVMIO, 0xe5, struct kvm_memory_transfer)
 #define KVM_IMPORT_MEMORY	  _IOWR(KVMIO, 0xe6, struct kvm_memory_transfer)
+#define KVM_EXPORT_VCPU		  _IOWR(KVMIO, 0xe7, struct kvm_vcpu_transfer)
+#define KVM_IMPORT_VCPU		  _IOWR(KVMIO, 0xe8, struct kvm_vcpu_transfer)
 
 #define KVM_DIRTY_LOG_MANUAL_PROTECT_ENABLE    (1 << 0)
 #define KVM_DIRTY_LOG_INITIALLY_SET            (1 << 1)
@@ -1702,6 +1704,12 @@ struct kvm_memory_transfer {
 	__u16 id;
 	__u16 flags;
 	__u64 reserved;
+	struct kvm_transfer_buffer buf;
+};
+
+struct kvm_vcpu_transfer {
+	__u32 flags;
+	__u32 reserved;
 	struct kvm_transfer_buffer buf;
 };
 

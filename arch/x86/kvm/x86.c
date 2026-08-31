@@ -6189,6 +6189,38 @@ static int kvm_get_reg_list(struct kvm_vcpu *vcpu,
 	return 0;
 }
 
+static int kvm_vcpu_ioctl_transfer_vcpu(struct kvm_vcpu *vcpu, bool import,
+					void __user *argp)
+{
+	struct kvm_vcpu_transfer vcpu_state;
+	struct kvm *kvm = vcpu->kvm;
+	int r;
+
+	if (!kvm_x86_call(cap_live_migration)(kvm) ||
+	    (import && !kvm_x86_ops.import_vcpu) ||
+	    (!import && !kvm_x86_ops.export_vcpu))
+		return -ENOTTY;
+
+	if (copy_from_user(&vcpu_state, argp, sizeof(vcpu_state)))
+		return -EFAULT;
+
+	if (vcpu_state.reserved || vcpu_state.buf.reserved)
+		return -EINVAL;
+
+	if (import)
+		r = kvm_x86_call(import_vcpu)(vcpu, &vcpu_state);
+	else
+		r = kvm_x86_call(export_vcpu)(vcpu, &vcpu_state);
+	if (r > 0)
+		r = -EIO;
+
+	/* Copy back also on an error to report a partially done transfer */
+	if (copy_to_user(argp, &vcpu_state, sizeof(vcpu_state)))
+		r = -EFAULT;
+
+	return r;
+}
+
 long kvm_arch_vcpu_ioctl(struct file *filp,
 			 unsigned int ioctl, unsigned long arg)
 {
@@ -6659,6 +6691,14 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 			goto out;
 		r = kvm_x86_ops.vcpu_mem_enc_ioctl(vcpu, argp);
 		break;
+	case KVM_EXPORT_VCPU: {
+		r = kvm_vcpu_ioctl_transfer_vcpu(vcpu, false, argp);
+		break;
+	}
+	case KVM_IMPORT_VCPU: {
+		r = kvm_vcpu_ioctl_transfer_vcpu(vcpu, true, argp);
+		break;
+	}
 	default:
 		r = -EINVAL;
 	}
