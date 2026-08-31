@@ -126,3 +126,13 @@ config RV_MONITORS_KUNIT_TEST
 	  unrelated KUnit test is running.
 
 	  If unsure, say N.
+
+config RV_MON_BPF_STRUCT_OPS
+	bool "BPF struct_ops support for RV monitors"
+	depends on RV && BPF_SYSCALL && BPF_JIT
+	help
+	  Enable BPF programs to register as Runtime Verification monitors
+	  using the BPF struct_ops mechanism. This allows BPF monitors to
+	  be managed through the standard RV interface in sysfs alongside
+	  kernel monitors.
+	  It has no performance impact if not used.
