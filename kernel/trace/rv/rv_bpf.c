@@ -13,7 +13,9 @@
 #include <linux/btf.h>
 #include <linux/btf_ids.h>
 #include <linux/filter.h>
+#include <linux/uaccess.h>
 #include <linux/rv.h>
+#include "rv.h"
 
 static int bpf_rv_monitor_init(struct btf *btf)
 {
@@ -111,8 +113,62 @@ static struct bpf_struct_ops bpf_rv_monitor_ops = {
 	.owner = THIS_MODULE,
 };
 
-static int __init bpf_rv_monitor_init_ops(void)
+__bpf_kfunc_start_defs();
+
+/**
+ * bpf_rv_react - trigger a reactor from BPF
+ * @name: monitor name
+ * @msg: pre-formatted message string
+ * @msg__sz: size of the msg buffer
+ *
+ * This kfunc allows BPF monitors to trigger reactors with a message.
+ * The message should be pre-formatted by the BPF program using bpf_snprintf.
+ */
+__bpf_kfunc void bpf_rv_react(char *name__str, char *msg, u32 msg__sz)
 {
-	return register_bpf_struct_ops(&bpf_rv_monitor_ops, rv_monitor);
+	struct rv_monitor *monitor;
+	char safe_msg[256];
+
+	if (msg__sz == 0)
+		return;
+	msg__sz = min_t(u32, msg__sz, sizeof(safe_msg));
+	if (strncpy_from_kernel_nofault(safe_msg, msg, msg__sz) < 0)
+		return;
+	safe_msg[msg__sz - 1] = '\0';
+
+	guard(rcu)();
+	monitor = rv_get_monitor_by_name(name__str);
+
+	if (monitor)
+		rv_react(monitor, "%s", safe_msg);
 }
-late_initcall(bpf_rv_monitor_init_ops);
+
+__bpf_kfunc_end_defs();
+
+BTF_KFUNCS_START(rv_kfunc_set_ids)
+BTF_ID_FLAGS(func, bpf_rv_react)
+BTF_KFUNCS_END(rv_kfunc_set_ids)
+
+static const struct btf_kfunc_id_set rv_kfunc_set = {
+	.owner = THIS_MODULE,
+	.set = &rv_kfunc_set_ids,
+};
+
+static int __init rv_monitor_init_bpf(void)
+{
+	int ret;
+
+	ret = register_bpf_struct_ops(&bpf_rv_monitor_ops, rv_monitor);
+	if (ret) {
+		pr_err("rv: Failed to register struct_ops (%pe)\n", ERR_PTR(ret));
+		return ret;
+	}
+
+	ret = register_btf_kfunc_id_set(BPF_PROG_TYPE_TRACING, &rv_kfunc_set);
+	if (ret) {
+		pr_err("rv: Failed to register reactor kfunc (%pe)\n", ERR_PTR(ret));
+		return ret;
+	}
+	return 0;
+}
+late_initcall(rv_monitor_init_bpf);
