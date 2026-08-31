@@ -128,6 +128,12 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t idx)
 
 			if (err) {
 				folio_put(folio);
+				/*
+				 * On -EEXIST, a concurrent fault has cached the folio,
+				 * which now owns the reservation; don't unreserve.
+				 */
+				if (err == -EEXIST)
+					return ERR_PTR(err);
 				goto err_unresv;
 			}
 
