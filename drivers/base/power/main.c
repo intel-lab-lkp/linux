@@ -1329,6 +1329,7 @@ out:
 void dpm_complete(pm_message_t state)
 {
 	struct list_head list;
+	ktime_t starttime = ktime_get();
 
 	trace_suspend_resume(TPS("dpm_complete"), state.event, true);
 
@@ -1358,6 +1359,7 @@ void dpm_complete(pm_message_t state)
 	thermal_pm_complete();
 	/* Allow device probing and trigger re-probing of deferred devices */
 	device_unblock_probing();
+	dpm_show_time(starttime, state, NULL, "complete");
 	trace_suspend_resume(TPS("dpm_complete"), state.event, false);
 }
 
@@ -2352,6 +2354,7 @@ int dpm_suspend_start(pm_message_t state)
 	int error;
 
 	error = dpm_prepare(state);
+	dpm_show_time(starttime, state, error, "prepare");
 	if (error)
 		dpm_save_failed_step(SUSPEND_PREPARE);
 	else {
@@ -2359,7 +2362,6 @@ int dpm_suspend_start(pm_message_t state)
 		error = dpm_suspend(state);
 	}
 
-	dpm_show_time(starttime, state, error, "start");
 	return error;
 }
 EXPORT_SYMBOL_GPL(dpm_suspend_start);
