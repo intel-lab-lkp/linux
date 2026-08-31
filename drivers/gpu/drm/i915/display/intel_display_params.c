@@ -139,6 +139,12 @@ intel_display_param_named_unsafe(enable_dmc_wl, int, 0400,
 	"(-1=use per-chip default, 0=disabled, 1=enabled, 2=match any register, 3=always locked) "
 	"Default: -1");
 
+intel_display_param_named_unsafe(periodic_assdp_enable, bool, 0600,
+	"Enable periodic Adaptive-Sync SDP (AS SDP skip frames) for Panel Replay "
+	"to drive the panel down to its minimum refresh rate "
+	"(0=disabled, 1=enabled) "
+	"Default: 0");
+
 __maybe_unused
 static void _param_print_bool(struct drm_printer *p, const char *driver_name,
 			      const char *name, bool val)
