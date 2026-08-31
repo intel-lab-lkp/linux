@@ -424,6 +424,13 @@ static int uinput_validate_absinfo(struct input_dev *dev, unsigned int code,
 	min = abs->minimum;
 	max = abs->maximum;
 
+	if (code == ABS_MT_SLOT && min != 0) {
+		printk(KERN_DEBUG
+		       "%s: abs[%02x] minimum must be 0\n",
+		       UINPUT_NAME, code);
+		return -EINVAL;
+	}
+
 	if ((min != 0 || max != 0) && max < min) {
 		printk(KERN_DEBUG
 		       "%s: invalid abs[%02x] min:%d max:%d\n",
@@ -524,7 +531,7 @@ static int uinput_abs_setup(struct uinput_device *udev,
 		return -EFAULT;
 
 	if (setup.code > ABS_MAX)
-		return -ERANGE;
+		return -EINVAL;
 
 	dev = udev->dev;
 
