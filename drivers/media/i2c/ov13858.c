@@ -63,7 +63,7 @@
 /* Analog gain control */
 #define OV13858_REG_ANALOG_GAIN		0x3508
 #define OV13858_ANA_GAIN_MIN		0
-#define OV13858_ANA_GAIN_MAX		0x1fff
+#define OV13858_ANA_GAIN_MAX		0x07c0
 #define OV13858_ANA_GAIN_STEP		1
 #define OV13858_ANA_GAIN_DEFAULT	0x80
 
