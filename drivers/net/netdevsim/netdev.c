@@ -1113,6 +1113,14 @@ static int nsim_init_netdevsim_vf(struct netdevsim *ns)
 	int err;
 
 	ns->netdev->netdev_ops = &nsim_vf_netdev_ops;
+
+	/* nsim_setup() offers NETIF_F_LOOPBACK to every port, but a VF port
+	 * has neither queues nor NAPI, and looping a frame back means
+	 * receiving it.
+	 */
+	ns->netdev->hw_features &= ~NETIF_F_LOOPBACK;
+	ns->netdev->features &= ~NETIF_F_LOOPBACK;
+
 	rtnl_lock();
 	err = register_netdevice(ns->netdev);
 	rtnl_unlock();
