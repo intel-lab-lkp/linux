@@ -31,7 +31,10 @@ static const int read_expire = HZ / 2;  /* max time before a read is submitted. 
 static const int write_expire = 5 * HZ; /* ditto for writes, these limits are SOFT! */
 /*
  * Time after which to dispatch lower priority requests even if higher
- * priority requests are pending.
+ * priority requests are pending.  Must be > 0: a value of zero would make
+ * the priority aging path dispatch best-effort and idle requests ahead of
+ * pending real-time requests through "now - 0 == now", a classic priority
+ * inversion.
  */
 static const int prio_aging_expire = 10 * HZ;
 static const int writes_starved = 2;    /* max times reads can starve a write */
@@ -770,13 +773,34 @@ static ssize_t __FUNC(struct elevator_queue *e, const char *page, size_t count)	
 	STORE_FUNCTION(__FUNC, __PTR, MIN, MAX, msecs_to_jiffies)
 STORE_JIFFIES(deadline_read_expire_store, &dd->fifo_expire[DD_READ], 0, INT_MAX);
 STORE_JIFFIES(deadline_write_expire_store, &dd->fifo_expire[DD_WRITE], 0, INT_MAX);
-STORE_JIFFIES(deadline_prio_aging_expire_store, &dd->prio_aging_expire, 0, INT_MAX);
 STORE_INT(deadline_writes_starved_store, &dd->writes_starved, INT_MIN, INT_MAX);
 STORE_INT(deadline_front_merges_store, &dd->front_merges, 0, 1);
 STORE_INT(deadline_fifo_batch_store, &dd->fifo_batch, 0, INT_MAX);
 #undef STORE_FUNCTION
 #undef STORE_INT
 #undef STORE_JIFFIES
+
+/*
+ * prio_aging_expire must be positive: a value of zero would make the
+ * priority aging path dispatch best-effort and idle requests ahead of
+ * pending real-time requests through "now - 0 == now", a classic priority
+ * inversion.  Reject zero and negative values instead of clamping, so that
+ * a misconfiguration is reported rather than silently accepted.
+ */
+static ssize_t deadline_prio_aging_expire_store(struct elevator_queue *e,
+						 const char *page, size_t count)
+{
+	struct deadline_data *dd = e->elevator_data;
+	int val, ret;
+
+	ret = kstrtoint(page, 0, &val);
+	if (ret < 0)
+		return ret;
+	if (val <= 0)
+		return -EINVAL;
+	dd->prio_aging_expire = msecs_to_jiffies(val);
+	return count;
+}
 
 #define DD_ATTR(name) \
 	__ATTR(name, 0644, deadline_##name##_show, deadline_##name##_store)
