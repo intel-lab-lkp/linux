@@ -1727,6 +1727,10 @@ struct intel_pps {
 	unsigned long last_backlight_off;
 	ktime_t panel_power_off_time;
 	struct ref_tracker *vdd_wakeref;
+	/* vdd_wakeref was adopted from an already-on VDD at the BIOS/firmware
+	 * handover (boot/resume) and not yet reconciled into normal ownership.
+	 */
+	bool vdd_wakeref_boot;
 
 	union {
 		/*
