@@ -761,10 +761,12 @@ static void smp_chan_destroy(struct l2cap_conn *conn)
 		}
 
 		if (smp->remote_irk) {
-			list_del_rcu(&smp->remote_irk->list);
-			kfree_rcu(smp->remote_irk, rcu);
+			hci_irk_unlink(hcon->hdev, smp->remote_irk);
 		}
 	}
+
+	if (smp->remote_irk)
+		hci_irk_put(smp->remote_irk);
 
 	chan->data = NULL;
 	kfree_sensitive(smp);
@@ -1017,6 +1019,7 @@ static void smp_notify_keys(struct l2cap_conn *conn)
 	struct hci_dev *hdev = hcon->hdev;
 	struct smp_cmd_pairing *req = (void *) &smp->preq[1];
 	struct smp_cmd_pairing *rsp = (void *) &smp->prsp[1];
+	struct smp_irk_data irk_data;
 	bool persistent;
 
 	if (hcon->type == ACL_LINK) {
@@ -1035,15 +1038,16 @@ static void smp_notify_keys(struct l2cap_conn *conn)
 	}
 
 	if (smp->remote_irk) {
-		mgmt_new_irk(hdev, smp->remote_irk, persistent);
+		hci_irk_read(hdev, smp->remote_irk, &irk_data);
+		mgmt_new_irk(hdev, &irk_data, persistent);
 
 		/* Now that user space can be considered to know the
 		 * identity address track the connection based on it
 		 * from now on (assuming this is an LE link).
 		 */
 		if (hcon->type == LE_LINK) {
-			bacpy(&hcon->dst, &smp->remote_irk->bdaddr);
-			hcon->dst_type = smp->remote_irk->addr_type;
+			bacpy(&hcon->dst, &irk_data.bdaddr);
+			hcon->dst_type = irk_data.addr_type;
 			/* Use a short delay to make sure the new address is
 			 * propagated _before_ the channels.
 			 */
@@ -2443,7 +2447,11 @@ int smp_cancel_and_remove_pairing(struct hci_dev *hdev, bdaddr_t *bdaddr,
 		 * remove and free already invalidated rcu list entries. */
 		smp->ltk = NULL;
 		smp->responder_ltk = NULL;
-		smp->remote_irk = NULL;
+		if (smp->remote_irk) {
+			hci_irk_unlink(hdev, smp->remote_irk);
+			hci_irk_put(smp->remote_irk);
+			smp->remote_irk = NULL;
+		}
 
 		if (test_bit(SMP_FLAG_COMPLETE, &smp->flags))
 			smp_failure(conn, 0);
