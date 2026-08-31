@@ -1003,8 +1003,9 @@ out:
 	current_restore_flags(pflags, PF_MEMALLOC);
 }
 
-/*
- * User-visible entry point to the scheduler.
+/**
+ * rpc_execute - Consumer entry point to the RPC scheduler
+ * @task: RPC task to be scheduled
  *
  * This may be called recursively if e.g. an async NFS task updates
  * the attributes and finds that dirty pages must be flushed.
@@ -1014,15 +1015,12 @@ out:
  */
 void rpc_execute(struct rpc_task *task)
 {
-	bool is_async = RPC_IS_ASYNC(task);
+	unsigned int pflags = memalloc_nofs_save();
 
 	rpc_set_active(task);
-	rpc_make_runnable(rpciod_workqueue, task);
-	if (!is_async) {
-		unsigned int pflags = memalloc_nofs_save();
-		__rpc_execute(task);
-		memalloc_nofs_restore(pflags);
-	}
+	rpc_test_and_set_running(task);
+	__rpc_execute(task);
+	memalloc_nofs_restore(pflags);
 }
 
 static void rpc_async_schedule(struct work_struct *work)
