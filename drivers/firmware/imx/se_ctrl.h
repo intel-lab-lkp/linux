@@ -10,20 +10,40 @@
 #include <linux/miscdevice.h>
 #include <linux/mailbox_client.h>
 #include <linux/semaphore.h>
+#include <linux/workqueue.h>
 
 #define MAX_FW_LOAD_RETRIES		50
 #define SE_MSG_WORD_SZ			0x4
 
 #define RES_STATUS(x)			FIELD_GET(0x000000ff, x)
+#define MAX_DATA_SIZE_PER_USER		(128 * 1024)
 #define MAX_NVM_MSG_LEN			(256)
 #define MESSAGING_VERSION_6		0x6
 #define MESSAGING_VERSION_7		0x7
+
+struct se_if_open_gate {
+	struct miscdevice miscdev;
+	struct se_if_priv *priv;
+	/* to lock to update the structure */
+	struct mutex lock;
+	struct kref refcount;
+	bool dying;
+	/* set once misc_register() has succeeded (deferred to probe end) */
+	bool registered;
+};
 
 struct se_clbk_handle {
 	struct se_if_device_ctx *dev_ctx;
 	struct completion done;
 	bool signal_rcvd;
+	/*
+	 * Set under clbk_rx_lock once a real response is copied into rx_msg,
+	 * cleared when a new transaction is armed. Lets ele_msg_rcv() tell a
+	 * genuine response from a teardown-forced complete_all() with no data.
+	 */
+	bool rx_delivered;
 	u32 rx_msg_sz;
+
 	/*
 	 * Assignment of the rx_msg buffer to held till the
 	 * received content as part callback function, is copied.
@@ -45,10 +65,46 @@ struct se_imem_buf {
 	u32 state;
 };
 
+struct se_buf_desc {
+	u8 *shared_buf_ptr;
+	void __user *usr_buf_ptr;
+	u32 size;
+	struct list_head link;
+};
+
+struct se_shared_mem {
+	dma_addr_t dma_addr;
+	u32 size;
+	u32 pos;
+	u8 *ptr;
+};
+
+struct se_shared_mem_mgmt_info {
+	struct list_head mem_pool_buf_list;
+	struct list_head pending_in;
+	struct list_head pending_out;
+
+	struct se_shared_mem non_secure_mem;
+};
+
 /* Private struct for each char device instance. */
 struct se_if_device_ctx {
 	struct se_if_priv *priv;
+	struct miscdevice *miscdev;
 	const char *devname;
+	u32 sess_hdl;
+	u32 strg_hdl;
+	bool cleanup_done;
+	unsigned long rcv_msg_timeout_jiffies;
+
+	/* process one file operation at a time. */
+	struct mutex fops_lock;
+
+	struct se_shared_mem_mgmt_info se_shared_mem_mgmt;
+	struct list_head link;
+
+	/* Add reference counting */
+	struct kref refcount;
 };
 
 /* Header of the messages exchange with the EdgeLock Enclave */
@@ -90,6 +146,29 @@ struct se_fw_load_info {
 	struct mutex load_fw_lock;
 };
 
+struct cmd_rcvr_data_info {
+	/*
+	 * Tracks the last FW export command received by the command receiver
+	 * (ELE_STORAGE_MASTER_EXPORT_REQ or ELE_STORAGE_CHUNK_EXPORT_REQ).
+	 * Set by cmd_receiver_specific_ops() when the FW command arrives via
+	 * read(), cleared at entry. se_cmd_receiver_allowed_rsp() checks it to
+	 * ensure write() can only follow a matching read() for export responses.
+	 * Stored per SE interface (not file-scope static) to prevent a race when
+	 * multiple SE interfaces (e.g. ELE and V2X) run concurrent export flows.
+	 */
+	u8 cmd_rcvr_last_rcvd_cmd_id;
+
+	/*
+	 * Export buffer size communicated by the FW in the preceding
+	 * ELE_STORAGE_MASTER_EXPORT_REQ or ELE_STORAGE_CHUNK_EXPORT_REQ
+	 * command. cmd_receiver_specific_ops() stores it here; se_val_cmd_addrs()
+	 * reads it when size_idx == SE_CMD_RCVR_ADDR_VAR_SIZE to range-check
+	 * the response buffer. Stored per SE interface so concurrent ELE and V2X
+	 * export flows cannot corrupt each other's size.
+	 */
+	u32 cmd_rcvr_var_size;
+};
+
 struct se_if_priv {
 	struct device *dev;
 
@@ -113,9 +192,44 @@ struct se_if_priv {
 	struct se_fw_load_info load_fw;
 
 	atomic_t fw_busy;
+	/*
+	 * Set once teardown begins. New synchronous transactions are rejected
+	 * and a teardown-forced completion is not mistaken for a real firmware
+	 * response.
+	 */
+	atomic_t going_away;
+	/*
+	 * Serialise the fw_busy_dev_ctx and fw_busy state updates between the
+	 * timeout path, late-response callback/work, and teardown.
+	 */
+	spinlock_t fw_busy_lock;
+	struct se_if_device_ctx *fw_busy_dev_ctx;
+	struct work_struct fw_busy_work;
 
 	struct se_if_device_ctx *priv_dev_ctx;
+	struct list_head dev_ctx_list;
+
+	/* prevent modifying priv member variable in parallel. */
+	struct mutex modify_lock;
+	u32 active_devctx_count;
+	u32 dev_ctx_mono_count;
+
+	/* Add reference counting */
+	struct kref refcount;
+
+	/* stable gate used by .open() */
+	struct se_if_open_gate *open_gate;
+	struct cmd_rcvr_data_info crcvr_info;
 };
 
 char *get_se_if_name(u8 se_if_id);
+void unset_dev_ctx_as_command_receiver(struct se_if_device_ctx *dev_ctx);
+int set_dev_ctx_as_command_receiver(struct se_if_device_ctx *dev_ctx);
+bool se_is_fw_busy_ctx(struct se_if_device_ctx *dev_ctx);
+void se_dev_ctx_shared_mem_cleanup(struct se_if_device_ctx *dev_ctx);
+int get_shared_mem_slot(struct se_if_device_ctx *dev_ctx,
+			u32 *length, dma_addr_t *ele_dma_addr, void **ptr);
+int se_get_mem_pool_buf(struct se_if_device_ctx *dev_ctx, void **buf,
+			dma_addr_t *daddr, u32 len);
+void se_cleanup_mem_pool_buf(struct se_if_device_ctx *dev_ctx, bool reclaim);
 #endif
