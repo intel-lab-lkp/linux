@@ -13,6 +13,7 @@
  * (tree=false) socket-pressure path that runs on cgroup v2.
  */
 
+#include <linux/bitops.h>
 #include <linux/cgroup.h>
 #include <linux/log2.h>
 #include <linux/mm.h>
@@ -31,10 +32,63 @@
  * As the vmscan reclaimer logic works with chunks which are multiple of
  * SWAP_CLUSTER_MAX, it makes sense to use it for the window size as well.
  *
- * TODO: Make the window size depend on machine size, as we do for vmstat
- * thresholds. Currently we set it to 512 pages (2MB for 4KB pages).
+ * The window size scales logarithmically with total memory, following the
+ * same approach as calculate_normal_threshold() in mm/vmstat.c.  On small
+ * machines the window stays small for responsiveness; on large machines it
+ * grows to reduce false positives from the higher absolute reclaim activity.
+ *
+ * Sample window sizes (SWAP_CLUSTER_MAX = 32, PAGE_SIZE = 4K):
+ *
+ *   RAM          fls(mem)   multiplier   window (pages)   window (bytes)
+ *   -----------------------------------------------------------------
+ *   <= 4 GB      0-4        4            128              512 KB
+ *   8 GB         6          6            192              768 KB
+ *   16 GB        7          7            224              896 KB
+ *   32 GB        8          8            256              1 MB
+ *   64 GB        9          9            288              1.1 MB
+ *   128 GB       10         10           320              1.3 MB
+ *   256 GB       11         11           352              1.4 MB
+ *   512 GB       12         12           384              1.5 MB
+ *   1 TB         13         13           416              1.6 MB
  */
-const unsigned long vmpressure_win = SWAP_CLUSTER_MAX * 16;
+unsigned long __read_mostly vmpressure_win = SWAP_CLUSTER_MAX * 16;
+
+/*
+ * Initialize vmpressure window size based on machine memory.
+ *
+ * Use fls() for cheap logarithmic scaling, following the same approach
+ * as calculate_normal_threshold() in mm/vmstat.c.  Memory is measured
+ * in 128 MB units so that the window starts growing once total RAM
+ * exceeds a few GB.
+ */
+static int __init vmpressure_win_init(void)
+{
+	unsigned long mem;
+	int multiplier;
+
+	/*
+	 * Convert total pages to 128 MB units, matching the vmstat
+	 * convention: mem = totalram >> (27 - PAGE_SHIFT).
+	 */
+	mem = totalram_pages() >> (27 - PAGE_SHIFT);
+
+	/*
+	 * fls(0) == 0, so for machines with < 128 MB the multiplier
+	 * is clamped to 4, preserving the original 128-page minimum
+	 * (SWAP_CLUSTER_MAX * 4).  The maximum multiplier is clamped
+	 * to 64, yielding a 2048-page (8 MB) ceiling which prevents
+	 * excessively delayed notifications on very large machines.
+	 */
+	multiplier = clamp(fls(mem), 4, 64);
+
+	vmpressure_win = SWAP_CLUSTER_MAX * (unsigned long)multiplier;
+
+	pr_info("vmpressure: window size set to %lu pages (%lu KB)\n",
+		vmpressure_win, vmpressure_win << (PAGE_SHIFT - 10));
+
+	return 0;
+}
+core_initcall(vmpressure_win_init);
 
 /*
  * These thresholds are used when we account memory pressure through
