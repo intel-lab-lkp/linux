@@ -328,30 +328,33 @@ static int __hif_usb_tx(struct hif_device_usb *hif_dev)
 	tx_skb_cnt = min_t(u16, hif_dev->tx.tx_skb_cnt, MAX_TX_AGGR_NUM);
 
 	for (i = 0; i < tx_skb_cnt; i++) {
+		nskb = skb_peek(&hif_dev->tx.tx_skb_queue);
+		if (!nskb)
+			break;
+
+		if (tx_buf->offset + nskb->len + 4 > MAX_TX_BUF_SIZE)
+			break;
+
 		nskb = __skb_dequeue(&hif_dev->tx.tx_skb_queue);
-
-		/* Should never be NULL */
-		BUG_ON(!nskb);
-
 		hif_dev->tx.tx_skb_cnt--;
 
-		buf = tx_buf->buf;
-		buf += tx_buf->offset;
+		buf = tx_buf->buf + tx_buf->offset;
 		hdr = (__le16 *)buf;
 		*hdr++ = cpu_to_le16(nskb->len);
 		*hdr++ = cpu_to_le16(ATH_USB_TX_STREAM_MODE_TAG);
-		buf += 4;
-		memcpy(buf, nskb->data, nskb->len);
-		tx_buf->len = nskb->len + 4;
+		memcpy(buf + 4, nskb->data, nskb->len);
 
-		if (i < (tx_skb_cnt - 1))
-			tx_buf->offset += (((tx_buf->len - 1) / 4) + 1) * 4;
-
-		if (i == (tx_skb_cnt - 1))
-			tx_buf->len += tx_buf->offset;
+		tx_buf->len = tx_buf->offset + nskb->len + 4;
+		tx_buf->offset += (((tx_buf->len - 1) / 4) + 1) * 4;
 
 		__skb_queue_tail(&tx_buf->skb_queue, nskb);
 		TX_STAT_INC(hif_dev, skb_queued);
+	}
+
+	if (!i) {
+		list_move_tail(&tx_buf->list, &hif_dev->tx.tx_buf);
+		hif_dev->tx.tx_buf_cnt++;
+		return 0;
 	}
 
 	usb_fill_bulk_urb(tx_buf->urb, hif_dev->udev,
