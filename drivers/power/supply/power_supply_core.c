@@ -1595,6 +1595,16 @@ int power_supply_register_extension(struct power_supply *psy, const struct power
 
 sysfs_hwmon_failed:
 	power_supply_sysfs_remove_extension(psy, ext);
+	list_del(&reg->list_head);
+	kfree(reg);
+	/*
+	 * update_sysfs_and_hwmon() may have already torn down hwmon before
+	 * failing to recreate it. Recreate without the failed extension.
+	 */
+	if (power_supply_add_hwmon_sysfs(psy))
+		dev_warn(&psy->dev, "failed to restore hwmon after extension error\n");
+	return ret;
+
 sysfs_add_failed:
 	list_del(&reg->list_head);
 	kfree(reg);
