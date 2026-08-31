@@ -228,6 +228,12 @@ nfs4_ff_layout_calc_dss_id(const u64 stripe_unit, const u32 dss_count, const lof
 struct nfs4_ff_layout_ds *
 nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 			    gfp_t gfp_flags);
+#if IS_ENABLED(CONFIG_KUNIT)
+struct pnfs_layout_segment *
+ff_layout_alloc_lseg(struct pnfs_layout_hdr *lh,
+		     struct nfs4_layoutget_res *lgr,
+		     gfp_t gfp_flags);
+#endif
 void nfs4_ff_layout_put_deviceid(struct nfs4_ff_layout_ds *mirror_ds);
 void nfs4_ff_layout_free_deviceid(struct nfs4_ff_layout_ds *mirror_ds);
 int ff_layout_track_ds_error(struct nfs4_flexfile_layout *flo,

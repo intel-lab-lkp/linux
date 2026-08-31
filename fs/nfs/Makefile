@@ -33,6 +33,9 @@ nfsv4-$(CONFIG_SYSCTL)	+= nfs4sysctl.o
 nfsv4-$(CONFIG_NFS_V4_0)	+= nfs40client.o nfs40proc.o
 nfsv4-$(CONFIG_NFS_V4_2)	+= nfs42proc.o nfs42xattr.o
 
+obj-$(CONFIG_NFS_PNFS_DECODE_KUNIT_TEST) += nfs_pnfs_decode_kunit.o
+nfs_pnfs_decode_kunit-y := tests/pnfs_decode_kunit.o
+
 obj-$(CONFIG_PNFS_FILE_LAYOUT) += filelayout/
 obj-$(CONFIG_PNFS_BLOCK) += blocklayout/
 obj-$(CONFIG_PNFS_FLEXFILE_LAYOUT) += flexfilelayout/

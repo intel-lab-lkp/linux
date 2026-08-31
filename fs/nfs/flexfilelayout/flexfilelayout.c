@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/file.h>
 #include <linux/sched/mm.h>
+#include <kunit/visibility.h>
 
 #include <linux/sunrpc/metrics.h>
 
@@ -442,7 +443,7 @@ static void ff_layout_sort_mirrors(struct nfs4_ff_layout_segment *fls)
 	}
 }
 
-static struct pnfs_layout_segment *
+VISIBLE_IF_KUNIT struct pnfs_layout_segment *
 ff_layout_alloc_lseg(struct pnfs_layout_hdr *lh,
 		     struct nfs4_layoutget_res *lgr,
 		     gfp_t gfp_flags)
@@ -660,6 +661,7 @@ out_err_free:
 	dprintk("<-- %s (%d)\n", __func__, rc);
 	goto out_free_page;
 }
+EXPORT_SYMBOL_IF_KUNIT(ff_layout_alloc_lseg);
 
 static void
 ff_layout_free_lseg(struct pnfs_layout_segment *lseg)
