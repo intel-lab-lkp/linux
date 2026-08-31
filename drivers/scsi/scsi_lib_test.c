@@ -18,41 +18,42 @@ static void scsi_lib_test_multiple_sense(struct kunit *test)
 	struct scsi_failure multiple_sense_failure_defs[] = {
 		{
 			.sense_key = DATA_PROTECT,
-			.asc = 0x1,
-			.ascq = 0x1,
+			.sense_code =
+				scsi_sense_code(ASC_NO_INDEX_SECTOR_SIGNAL,
+						0x1),
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
 		{
 			.sense_key = UNIT_ATTENTION,
-			.asc = 0x11,
-			.ascq = 0x0,
+			.sense_code = UNRECOVERED_READ_ERROR,
 			.allowed = SCSI_LIB_TEST_MAX_ALLOWED,
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
 		{
 			.sense_key = NOT_READY,
-			.asc = 0x11,
-			.ascq = 0x22,
+			.sense_code =
+				scsi_sense_code(ASC_UNRECOVERED_READ_ERROR,
+						0x22),
 			.allowed = SCSI_LIB_TEST_MAX_ALLOWED,
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
 		{
 			.sense_key = ABORTED_COMMAND,
-			.asc = 0x11,
-			.ascq = SCMD_FAILURE_ASCQ_ANY,
+			.sense_code =
+				scsi_sense_code(ASC_UNRECOVERED_READ_ERROR,
+						SCMD_FAILURE_ASCQ_ANY),
 			.allowed = SCSI_LIB_TEST_MAX_ALLOWED,
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
 		{
 			.sense_key = HARDWARE_ERROR,
-			.asc = SCMD_FAILURE_ASC_ANY,
+			.sense_code = scsi_sense_code(SCMD_FAILURE_ASC_ANY, 0),
 			.allowed = SCSI_LIB_TEST_MAX_ALLOWED,
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
 		{
 			.sense_key = ILLEGAL_REQUEST,
-			.asc = 0x91,
-			.ascq = 0x36,
+			.sense_code = scsi_sense_code(0x91, 0x36),
 			.allowed = SCSI_LIB_TEST_MAX_ALLOWED,
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
@@ -217,8 +218,8 @@ static void scsi_lib_test_total_allowed(struct kunit *test)
 	struct scsi_failure total_allowed_defs[] = {
 		{
 			.sense_key = UNIT_ATTENTION,
-			.asc = SCMD_FAILURE_ASC_ANY,
-			.ascq = SCMD_FAILURE_ASCQ_ANY,
+			.sense_code = scsi_sense_code(SCMD_FAILURE_ASC_ANY,
+						      SCMD_FAILURE_ASCQ_ANY),
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
 		/* Fail all CCs except the UA above */
@@ -261,12 +262,14 @@ static void scsi_lib_test_mixed_total(struct kunit *test)
 	struct scsi_failure mixed_total_defs[] = {
 		{
 			.sense_key = UNIT_ATTENTION,
-			.asc = 0x28,
+			.sense_code =
+				NOT_READY_TO_READY_CHANGE_MEDIUM_MAY_HAVE_CHANGED,
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
 		{
 			.sense_key = UNIT_ATTENTION,
-			.asc = 0x29,
+			.sense_code =
+				POWER_ON_RESET_OR_BUS_DEVICE_RESET_OCCURRED,
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
 		{
