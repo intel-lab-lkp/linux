@@ -39,6 +39,11 @@
 
 #define NSIM_HDS_THRESHOLD_MAX		1024
 
+#define NSIM_LINK_SPEED_MAX     5000 /* Mbps */
+#define NSIM_LINK_SPEED_UNIT    125000 /* 1 Mbps given in bytes/sec to avoid
+					* u64 overflow during conversion from
+					* bytes to bits.
+					*/
 struct nsim_sa {
 	struct xfrm_state *xs;
 	__be32 ipaddr[4];
@@ -95,6 +100,9 @@ struct nsim_ethtool {
 	struct ethtool_coalesce coalesce;
 	struct ethtool_ringparam ring;
 	struct ethtool_fecparam fec;
+
+	u32 speed;
+	u8 duplex;
 };
 
 struct nsim_rq {

@@ -1138,12 +1138,6 @@ nsim_dev_devlink_trap_policer_counter_get(struct devlink *devlink,
 	return 0;
 }
 
-#define NSIM_LINK_SPEED_MAX     5000 /* Mbps */
-#define NSIM_LINK_SPEED_UNIT    125000 /* 1 Mbps given in bytes/sec to avoid
-					* u64 overflow during conversion from
-					* bytes to bits.
-					*/
-
 static int nsim_rate_bytes_to_units(char *name, u64 *rate, struct netlink_ext_ack *extack)
 {
 	u64 val;

@@ -205,6 +205,30 @@ static int nsim_get_ts_info(struct net_device *dev,
 	return 0;
 }
 
+static int nsim_get_link_ksettings(struct net_device *dev,
+				   struct ethtool_link_ksettings *cmd)
+{
+	struct netdevsim *ns = netdev_priv(dev);
+
+	cmd->base.speed		= ns->ethtool.speed;
+	cmd->base.duplex	= ns->ethtool.duplex;
+	cmd->base.port		= PORT_OTHER;
+	cmd->base.autoneg	= AUTONEG_DISABLE;
+	return 0;
+}
+
+static int nsim_set_link_ksettings(struct net_device *dev,
+				   const struct ethtool_link_ksettings *cmd)
+{
+	struct netdevsim *ns = netdev_priv(dev);
+
+	if (cmd->base.speed > NSIM_LINK_SPEED_MAX)
+		return -EINVAL;
+
+	return ethtool_virtdev_set_link_ksettings(dev, cmd, &ns->ethtool.speed,
+						  &ns->ethtool.duplex);
+}
+
 static const struct ethtool_ops nsim_ethtool_ops = {
 	.supported_coalesce_params	= ETHTOOL_COALESCE_ALL_PARAMS,
 	.supported_ring_params		= ETHTOOL_RING_USE_TCP_DATA_SPLIT |
@@ -223,6 +247,8 @@ static const struct ethtool_ops nsim_ethtool_ops = {
 	.set_fecparam			= nsim_set_fecparam,
 	.get_fec_stats			= nsim_get_fec_stats,
 	.get_ts_info			= nsim_get_ts_info,
+	.get_link_ksettings		= nsim_get_link_ksettings,
+	.set_link_ksettings		= nsim_set_link_ksettings,
 };
 
 static void nsim_ethtool_ring_init(struct netdevsim *ns)
@@ -250,12 +276,16 @@ void nsim_ethtool_init(struct netdevsim *ns)
 	ns->ethtool.fec.active_fec = ETHTOOL_FEC_NONE;
 
 	ns->ethtool.channels = ns->nsim_bus_dev->num_queues;
+	ns->ethtool.duplex = DUPLEX_FULL;
+	ns->ethtool.speed = SPEED_5000;
 
 	ethtool = debugfs_create_dir("ethtool", ns->nsim_dev_port->ddir);
 	ns->ethtool_ddir = ethtool;
 
 	debugfs_create_u32("get_err", 0600, ethtool, &ns->ethtool.get_err);
 	debugfs_create_u32("set_err", 0600, ethtool, &ns->ethtool.set_err);
+	debugfs_create_u32("speed", 0600, ethtool, &ns->ethtool.speed);
+	debugfs_create_u8("duplex", 0600, ethtool, &ns->ethtool.duplex);
 
 	dir = debugfs_create_dir("pause", ethtool);
 	debugfs_create_bool("report_stats_rx", 0600, dir,
