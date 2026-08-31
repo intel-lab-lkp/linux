@@ -2370,16 +2370,11 @@ static int acpi_bus_attach(struct acpi_device *device, void *first_pass)
 	if (ret < 0)
 		return 0;
 
-	if (ret > 0 && !device->flags.enumeration_by_parent) {
+	if (!device->flags.enumeration_by_parent && (ret > 0 ||
+	    (!device->pnp.type.platform_id && !device->pnp.type.backlight)))
 		acpi_device_set_enumerated(device);
-		goto ok;
-	}
-
-	if (device->pnp.type.platform_id || device->pnp.type.backlight ||
-	    device->flags.enumeration_by_parent)
-		acpi_default_enumeration(device);
 	else
-		acpi_device_set_enumerated(device);
+		acpi_default_enumeration(device);
 
 ok:
 	acpi_dev_for_each_child(device, acpi_bus_attach, first_pass);
