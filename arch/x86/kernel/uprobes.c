@@ -1401,7 +1401,8 @@ int arch_uprobe_ptwrite_prepare(struct arch_uprobe *auprobe,
 		return -EINVAL;
 	if (desc->nargs > UPROBE_PTWRITE_MAX_ARGS)
 		return -E2BIG;
-	if (desc->flags & ~UPROBE_PTWRITE_FL_ALLOW_MEM)
+	if (desc->flags & ~(UPROBE_PTWRITE_FL_ALLOW_MEM |
+			     UPROBE_PTWRITE_FL_ALLOW_NOP_RUN))
 		return -EINVAL;
 
 	/* The generic registration path copied these bytes before this hook. */
@@ -1567,6 +1568,7 @@ int arch_uprobe_ptwrite_prepare(struct arch_uprobe *auprobe,
 	ptw->ndata = 1 + n_imm + (n_mem ? 1 : 0);
 	ptw->ft_off = n_mem ? ft_off : 0;
 	ptw->nft = n_mem;
+	ptw->allow_nop_run = !!(desc->flags & UPROBE_PTWRITE_FL_ALLOW_NOP_RUN);
 	return 0;
 }
 #undef PTW_NEED

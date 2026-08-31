@@ -50,6 +50,7 @@ struct uprobe_ptwrite_arch {
 	u8	orig[MAX_UINSN_BYTES];	/* pristine file bytes, before generic analysis */
 	u16	ft_off;	/* fault table offset within the block (0 if none) */
 	u8	nft;		/* number of fault entries */
+	u8	allow_nop_run;	/* accept a five-byte run of 0x90 */
 };
 
 /* Per-mm page holding generated ptwrite stub blocks (mirrors trampolines). */
