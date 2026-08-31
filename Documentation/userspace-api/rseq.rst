@@ -217,16 +217,25 @@ operation.
 
 If the thread issues a syscall other than rseq_slice_yield(2) within the
 granted timeslice extension, the grant is also revoked and the CPU is
-relinquished immediately when entering the kernel. This is required as
-syscalls might consume arbitrary CPU time until they reach a scheduling
-point when the preemption model is either NONE or VOLUNTARY and therefore
-might exceed the grant by far.
+relinquished. For most syscalls, this occurs immediately when entering the
+kernel. This is required as syscalls might consume arbitrary CPU time until
+they reach a scheduling point when the preemption model is either NONE or
+VOLUNTARY and therefore might exceed the grant by far.
 
 The preferred solution for user space is to use rseq_slice_yield(2) which
 is side effect free. The support for arbitrary syscalls is required to
 support onion layer architectured applications, where the code handling the
 critical section and requesting the time slice extension has no control
 over the code within the critical section.
+
+For futex_wake(2), the CPU is instead relinquished when returning to userspace,
+so that it gets a chance to wake any waiting tasks before yielding the CPU.
+This makes it possible to terminate the critical region of a userspace mutex
+using rseq and futexes with futex_wake(2) instead of rseq_slice_yield(2).
+Currently, this is the only syscall that does not relinquish the CPU
+immediately on syscall entry. Note in particular that this applies only to the
+dedicated futex_wake(2) syscall, and not to the futex(2) syscall even when
+using op=FUTEX_WAKE.
 
 The kernel enforces flag consistency and terminates the thread with SIGSEGV
 if it detects a violation.

@@ -723,9 +723,18 @@ void rseq_syscall_enter_work(long syscall)
 		 * the task was already rescheduled before arriving here.
 		 */
 		if (!curr->rseq.event.sched_switch) {
-			rseq_slice_set_need_resched(curr);
+			if (syscall == __NR_futex_wake) {
+				/*
+				 * For this syscall, reschedule on syscall exit
+				 * instead of syscall entry to avoid delaying
+				 * the wakeup.
+				 */
+				set_tsk_need_resched(curr);
+			} else {
+				rseq_slice_set_need_resched(curr);
+			}
 
-			if (syscall == __NR_rseq_slice_yield) {
+			if (syscall == __NR_rseq_slice_yield || syscall == __NR_futex_wake) {
 				rseq_stat_inc(rseq_stats.s_yielded);
 				/* Update the yielded state for syscall return */
 				curr->rseq.slice.yielded = 1;
@@ -735,7 +744,8 @@ void rseq_syscall_enter_work(long syscall)
 		}
 	}
 	/* Reschedule on NONE/VOLUNTARY preemption models */
-	cond_resched();
+	if (syscall != __NR_futex_wake)
+		cond_resched();
 
 	/* Clear the grant in kernel state and user space */
 	curr->rseq.slice.state.granted = false;
