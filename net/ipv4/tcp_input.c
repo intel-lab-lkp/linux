@@ -4844,8 +4844,12 @@ static enum skb_drop_reason tcp_sequence(const struct sock *sk,
 	const struct tcp_sock *tp = tcp_sk(sk);
 	u32 seq_limit;
 
-	if (before(end_seq, tp->rcv_wup))
-		return SKB_DROP_REASON_TCP_OLD_SEQUENCE;
+	if (unlikely(!after(end_seq, tp->rcv_wup))) {
+		if (before(end_seq, tp->rcv_wup) ||
+		    (seq != end_seq &&
+		     !(tcp_flag_byte(th) & (TCPHDR_SYN | TCPHDR_FIN))))
+			return SKB_DROP_REASON_TCP_OLD_SEQUENCE;
+	}
 
 	seq_limit = tp->rcv_nxt + tcp_max_receive_window(tp);
 	if (unlikely(after(end_seq, seq_limit))) {
