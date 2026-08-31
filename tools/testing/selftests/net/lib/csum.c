@@ -2,8 +2,7 @@
 
 /* Test hardware checksum offload: Rx + Tx, IPv4 + IPv6, TCP + UDP.
  *
- * The test runs on two machines to exercise the NIC. For this reason it
- * is not integrated in kselftests.
+ * The test runs on two machines to exercise the NIC.
  *
  *     CMD=$((./csum -[46] -[tu] -S $SADDR -D $DADDR -[RT] -r 1 $EXTRA_ARGS))
  *
@@ -620,6 +619,9 @@ static int recv_verify_packet_tcp(void *th, int len)
 	if (len < sizeof(*tcph) || tcph->dest != htons(cfg_port_dst))
 		return -1;
 
+	if (tcph->source != htons(cfg_port_src))
+		return -1;
+
 	return recv_verify_csum(th, len, ntohs(tcph->source), tcph->check);
 }
 
@@ -647,6 +649,9 @@ static int recv_verify_packet_udp(void *th, int len)
 		return recv_verify_packet_udp_encap(udph + 1,
 						    len - sizeof(*udph));
 
+	if (!cfg_zero_sum && udph->source != htons(cfg_port_src))
+		return -1;
+
 	return recv_verify_csum(th, len, ntohs(udph->source), udph->check);
 }
 
@@ -657,6 +662,9 @@ static int recv_verify_packet_ipv4(void *nh, int len)
 	uint16_t ip_len;
 
 	if (len < sizeof(*iph) || iph->protocol != proto)
+		return -1;
+
+	if (iph->saddr != cfg_saddr4.sin_addr.s_addr)
 		return -1;
 
 	ip_len = ntohs(iph->tot_len);
@@ -678,6 +686,9 @@ static int recv_verify_packet_ipv6(void *nh, int len)
 	uint16_t payload_len;
 
 	if (len < sizeof(*ip6h) || ip6h->nexthdr != proto)
+		return -1;
+
+	if (memcmp(&ip6h->saddr, &cfg_saddr6.sin6_addr, sizeof(ip6h->saddr)))
 		return -1;
 
 	payload_len = ntohs(ip6h->payload_len);
@@ -940,6 +951,9 @@ static void do_tx(void)
 			cfg_payload_len = rand() % MAX_PAYLOAD_LEN;
 			buf = build_packet(_buf, sizeof(_buf), &len);
 		}
+
+		/* avoid bursting */
+		usleep(20);
 	}
 
 	if (close(fd))
