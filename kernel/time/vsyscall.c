@@ -30,10 +30,13 @@ static inline void update_vdso_time_data(struct vdso_time_data *vdata, struct ti
 {
 	struct vdso_clock *vc = vdata->clock_data;
 	struct vdso_timestamp *vdso_ts;
-	u64 nsec, sec;
+	u64 nsec_per_sec, nsec, sec;
 
 	fill_clock_configuration(&vc[CS_HRES_COARSE],	&tk->tkr_mono);
 	fill_clock_configuration(&vc[CS_RAW],		&tk->tkr_raw);
+
+	/* One second in the scaled nanoseconds of tkr_mono */
+	nsec_per_sec = (u64)NSEC_PER_SEC << tk->tkr_mono.shift;
 
 	/* CLOCK_MONOTONIC */
 	vdso_ts		= &vc[CS_HRES_COARSE].basetime[CLOCK_MONOTONIC];
@@ -41,10 +44,7 @@ static inline void update_vdso_time_data(struct vdso_time_data *vdata, struct ti
 
 	nsec = tk->tkr_mono.xtime_nsec;
 	nsec += ((u64)tk->wall_to_monotonic.tv_nsec << tk->tkr_mono.shift);
-	while (nsec >= (((u64)NSEC_PER_SEC) << tk->tkr_mono.shift)) {
-		nsec -= (((u64)NSEC_PER_SEC) << tk->tkr_mono.shift);
-		vdso_ts->sec++;
-	}
+	vdso_ts->sec	+= __iter_div64_u64_rem(nsec, nsec_per_sec, &nsec);
 	vdso_ts->nsec	= nsec;
 
 	/* Copy MONOTONIC time for BOOTTIME */
@@ -55,12 +55,7 @@ static inline void update_vdso_time_data(struct vdso_time_data *vdata, struct ti
 
 	/* CLOCK_BOOTTIME */
 	vdso_ts		= &vc[CS_HRES_COARSE].basetime[CLOCK_BOOTTIME];
-	vdso_ts->sec	= sec;
-
-	while (nsec >= (((u64)NSEC_PER_SEC) << tk->tkr_mono.shift)) {
-		nsec -= (((u64)NSEC_PER_SEC) << tk->tkr_mono.shift);
-		vdso_ts->sec++;
-	}
+	vdso_ts->sec	= sec + __iter_div64_u64_rem(nsec, nsec_per_sec, &nsec);
 	vdso_ts->nsec	= nsec;
 
 	/* CLOCK_MONOTONIC_RAW */
