@@ -1353,7 +1353,7 @@ static struct folio *folio_alloc_greedy(gfp_t gfp, size_t *size,
 	return folio_alloc(gfp, get_order(*size));
 }
 
-static void bio_free_folios(struct bio *bio)
+void bio_free_folios(struct bio *bio)
 {
 	struct bio_vec *bv;
 	int i;
@@ -1366,11 +1366,8 @@ static void bio_free_folios(struct bio *bio)
 	}
 }
 
-static int bio_iov_iter_bounce_write(struct bio *bio, struct iov_iter *iter,
-		size_t maxlen, size_t minsize)
+int bio_alloc_bounce_folios(struct bio *bio, size_t total_len, size_t minsize)
 {
-	size_t total_len = min(maxlen, iov_iter_count(iter));
-
 	if (WARN_ON_ONCE(bio_flagged(bio, BIO_CLONED)))
 		return -EINVAL;
 	if (WARN_ON_ONCE(bio->bi_iter.bi_size))
@@ -1380,7 +1377,6 @@ static int bio_iov_iter_bounce_write(struct bio *bio, struct iov_iter *iter,
 
 	do {
 		size_t this_len = min(total_len, SZ_1M);
-		size_t copied;
 		struct folio *folio;
 
 		if (this_len > minsize * 2)
@@ -1393,32 +1389,44 @@ static int bio_iov_iter_bounce_write(struct bio *bio, struct iov_iter *iter,
 		if (!folio)
 			break;
 		bio_add_folio_nofail(bio, folio, this_len, 0);
-
-		if (iter->nofault)
-			copied = copy_folio_from_iter_atomic(folio, 0, this_len,
-							     iter);
-		else
-			copied = copy_folio_from_iter(folio, 0, this_len, iter);
-		if (copied < this_len) {
-			/*
-			 * Need to revert the iov iter for all bytes we have
-			 * copied.
-			 *
-			 * However the bio size differs from the real copied
-			 * bytes as @this_len is queued but only advanced
-			 * less than that.
-			 * Need to compensate that for the revert.
-			 */
-			iov_iter_revert(iter, bio->bi_iter.bi_size - this_len +
-					copied);
-			bio_free_folios(bio);
-			return -EFAULT;
-		}
 		total_len -= this_len;
 	} while (total_len && bio->bi_vcnt < bio->bi_max_vecs);
 
 	if (!bio->bi_iter.bi_size)
 		return -ENOMEM;
+	return 0;
+}
+
+static int bio_iov_iter_bounce_write(struct bio *bio, struct iov_iter *iter,
+		size_t maxlen, size_t minsize)
+{
+	size_t total_len = min(maxlen, iov_iter_count(iter));
+	size_t total_copied = 0;
+	struct bio_vec *bv;
+	int i, error;
+
+	error = bio_alloc_bounce_folios(bio, total_len, minsize);
+	if (error)
+		return error;
+
+	bio_for_each_bvec_all(bv, bio, i) {
+		struct folio *folio = page_folio(bv->bv_page);
+		size_t copied;
+
+		if (iter->nofault)
+			copied = copy_folio_from_iter_atomic(folio, 0,
+					bv->bv_len, iter);
+		else
+			copied = copy_folio_from_iter(folio, 0, bv->bv_len,
+					iter);
+		total_copied += copied;
+		if (copied < bv->bv_len) {
+			iov_iter_revert(iter, total_copied);
+			bio_free_folios(bio);
+			return -EFAULT;
+		}
+	}
+
 	return bio_iov_iter_align_down(bio, iter,
 			&bio->bi_io_vec[bio->bi_vcnt - 1], minsize - 1);
 }
