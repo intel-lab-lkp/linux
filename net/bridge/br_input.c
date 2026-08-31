@@ -27,6 +27,12 @@ static int
 br_netif_receive_skb(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	br_drop_fake_rtable(skb);
+
+	/* Re-injected for local delivery: do not let generic XDP run on the
+	 * bridge device a second time, it could reallocate the head via
+	 * pskb_expand_head() and free a buffer still in use.
+	 */
+	skb_set_redirected_noclear(skb, false);
 	return netif_receive_skb(skb);
 }
 
