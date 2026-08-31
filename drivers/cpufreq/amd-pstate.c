@@ -993,6 +993,7 @@ static int amd_pstate_init_freq(struct amd_cpudata *cpudata)
 	u32 min_freq, max_freq, nominal_freq, lowest_nonlinear_freq;
 	struct cppc_perf_caps cppc_perf;
 	union perf_cached perf;
+	int max_frequency;
 	int ret;
 
 	ret = cppc_get_perf_caps(cpudata->cpu, &cppc_perf);
@@ -1017,8 +1018,13 @@ static int amd_pstate_init_freq(struct amd_cpudata *cpudata)
 
 	WRITE_ONCE(cpudata->nominal_freq, nominal_freq);
 
+	/* max freq came from BIOS or quirk */
+	max_frequency = amd_get_max_frequency(cpudata->cpu);
+	if (max_frequency > 0)
+		max_freq = max_frequency * 1000;
 	/* max_freq is calculated according to (nominal_freq * highest_perf)/nominal_perf */
-	max_freq = perf_to_freq(perf, nominal_freq, perf.highest_perf);
+	else
+		max_freq = perf_to_freq(perf, nominal_freq, perf.highest_perf);
 	WRITE_ONCE(cpudata->max_freq, max_freq);
 
 	lowest_nonlinear_freq = perf_to_freq(perf, nominal_freq, perf.lowest_nonlinear_perf);
