@@ -3871,10 +3871,8 @@ static void bond_activebackup_arp_mon(struct bonding *bond)
 	rcu_read_unlock();
 
 	if (READ_ONCE(bond->send_peer_notif) || should_notify_rtnl) {
-		if (!rtnl_trylock()) {
-			delta_in_ticks = 1;
+		if (!rtnl_trylock())
 			goto re_arm;
-		}
 
 		if (bond->send_peer_notif)
 			bond_peer_notify_may_events(bond, true);
