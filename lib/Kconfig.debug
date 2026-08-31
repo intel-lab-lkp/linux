@@ -3031,6 +3031,24 @@ config MIN_HEAP_KUNIT_TEST
 
 	  If unsure, say N
 
+config IN_RANGE_INCLUSIVE_KUNIT_TEST
+	tristate "Test minmax in_range_inclusive() logic" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable this option to build the in_range_inclusive KUnit module.
+	  It tests the in_range_inclusive() logic.
+
+	  KUnit tests run during boot and output the results to the debug log
+	  in TAP format (http://testanything.org/). Only useful for kernel devs
+	  running the KUnit test harness, and not intended for inclusion into a
+	  production build.
+
+	  For more information on KUnit and unit tests in general please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
 config IS_SIGNED_TYPE_KUNIT_TEST
 	tristate "Test is_signed_type() macro" if !KUNIT_ALL_TESTS
 	depends on KUNIT
