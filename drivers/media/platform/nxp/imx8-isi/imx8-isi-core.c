@@ -394,6 +394,7 @@ static const struct mxc_isi_plat_data mxc_imx952_data = {
 	.format_mask		= GENMASK(30, 24),
 	.buf_active_reverse	= true,
 	.has_36bit_dma		= true,
+	.raw_out_lsb		= true,
 };
 
 /* -----------------------------------------------------------------------------
