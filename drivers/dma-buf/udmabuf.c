@@ -203,9 +203,10 @@ static __always_inline int init_udmabuf(struct udmabuf *ubuf, pgoff_t pgcnt)
 	return 0;
 }
 
-static __always_inline void deinit_udmabuf(struct udmabuf *ubuf)
+static __always_inline void deinit_udmabuf(struct udmabuf *ubuf, pgoff_t pgcnt)
 {
 	unpin_all_folios(ubuf);
+	user_shm_unlock(pgcnt << PAGE_SHIFT, current_ucounts());
 	kvfree(ubuf->pages);
 }
 
@@ -217,7 +218,7 @@ static void release_udmabuf(struct dma_buf *buf)
 	if (ubuf->sg)
 		put_sg_table(dev, ubuf->sg, ubuf->sg_dir);
 
-	deinit_udmabuf(ubuf);
+	deinit_udmabuf(ubuf, ubuf->pagecount);
 	kfree(ubuf);
 }
 
@@ -385,6 +386,15 @@ static long udmabuf_create(struct miscdevice *device,
 	if (!pgcnt)
 		goto err_noinit;
 
+	if (!user_shm_lock(pgcnt << PAGE_SHIFT, current_ucounts())) {
+		pr_warn_once("%s: User not permitted to pin more than %lu KB "
+			     "of memory, either increase ulimits -l, or "
+			     "obtain CAP_IPC_LOCK capability\n", current->comm,
+			     rlimit(RLIMIT_MEMLOCK) >> 10);
+		ret = -EPERM;
+		goto err_noinit;
+	}
+
 	ret = init_udmabuf(ubuf, pgcnt);
 	if (ret)
 		goto err;
@@ -441,7 +451,7 @@ out_unlock:
 	return ret;
 
 err:
-	deinit_udmabuf(ubuf);
+	deinit_udmabuf(ubuf, pgcnt);
 err_noinit:
 	kfree(ubuf);
 	kvfree(folios);
