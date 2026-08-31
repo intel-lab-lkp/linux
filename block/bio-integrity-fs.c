@@ -31,6 +31,7 @@ unsigned int fs_bio_integrity_alloc(struct bio *bio)
 		bio_integrity_setup_default(bio);
 	return action;
 }
+EXPORT_SYMBOL_GPL(fs_bio_integrity_alloc);
 
 void fs_bio_integrity_free(struct bio *bio)
 {
@@ -43,6 +44,7 @@ void fs_bio_integrity_free(struct bio *bio)
 	bio->bi_integrity = NULL;
 	bio->bi_opf &= ~REQ_INTEGRITY;
 }
+EXPORT_SYMBOL_GPL(fs_bio_integrity_free);
 
 void fs_bio_integrity_generate(struct bio *bio)
 {
