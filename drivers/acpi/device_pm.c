@@ -168,6 +168,12 @@ int acpi_device_set_power(struct acpi_device *device, int state)
 	    || (state < ACPI_STATE_D0) || (state > ACPI_STATE_D3_COLD))
 		return -EINVAL;
 
+	if (device->power.state == ACPI_STATE_UNKNOWN &&
+	    acpi_bus_init_power(device)) {
+		device->flags.power_manageable = 0;
+		return -ENODEV;
+	}
+
 	acpi_handle_debug(device->handle, "Power state change: %s -> %s\n",
 			  acpi_power_state_string(device->power.state),
 			  acpi_power_state_string(state));
@@ -309,15 +315,6 @@ int acpi_bus_init_power(struct acpi_device *device)
 	int state;
 	int result;
 
-	if (!device)
-		return -EINVAL;
-
-	device->power.state = ACPI_STATE_UNKNOWN;
-	if (!acpi_device_is_present(device)) {
-		device->flags.initialized = false;
-		return -ENXIO;
-	}
-
 	result = acpi_device_get_power(device, &state);
 	if (result)
 		return result;
@@ -351,6 +348,10 @@ int acpi_bus_init_power(struct acpi_device *device)
 		state = ACPI_STATE_D0;
 	}
 	device->power.state = state;
+
+	acpi_handle_debug(device->handle, "Initial power state: %s\n",
+			  acpi_power_state_string(state));
+
 	return 0;
 }
 
