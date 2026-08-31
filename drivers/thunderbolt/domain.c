@@ -788,19 +788,33 @@ int tb_domain_approve_xdomain_paths(struct tb *tb, struct tb_xdomain *xd,
 			transmit_ring, receive_path, receive_ring);
 }
 
-static void tb_domain_reset_interface(struct tb *tb)
+/*
+ * __tb_domain_reset_interface_locked - Reset host interface (lock held)
+ *
+ * Caller must hold tb->lock. Used by hotplug path where lock is already held.
+ */
+void __tb_domain_reset_interface_locked(struct tb *tb)
 {
 	struct tb_nhi *nhi = tb->nhi;
+
+	lockdep_assert_held(&tb->lock);
 
 	if (!nhi->ops->reset_interface)
 		return;
 
-	guard(mutex)(&tb->lock);
+	if (!(nhi->quirks & QUIRK_RESET_DMA_ON_TEARDOWN))
+		return;
 
 	/* The reset clears the ring state so stop the control channel */
 	tb_ctl_stop(tb->ctl);
 	nhi->ops->reset_interface(nhi);
 	tb_ctl_start(tb->ctl);
+}
+
+static void tb_domain_reset_interface(struct tb *tb)
+{
+	guard(mutex)(&tb->lock);
+	__tb_domain_reset_interface_locked(tb);
 }
 
 /**
@@ -835,7 +849,7 @@ int tb_domain_disconnect_xdomain_paths(struct tb *tb, struct tb_xdomain *xd,
 	if (ret)
 		return ret;
 
-	if (tb->nhi->quirks & QUIRK_RESET_DMA_ON_TEARDOWN)
+	if (!xd->is_unplugged)
 		tb_domain_reset_interface(tb);
 
 	return 0;
