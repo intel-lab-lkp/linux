@@ -833,15 +833,29 @@ static int do_tls_setsockopt_no_pad(struct sock *sk, sockptr_t optval,
 	return rc;
 }
 
+/* priv_ctx_tx holds a different structure on each TX path, so tx_conf has to
+ * say which open record to look at.
+ */
+static bool tls_tx_record_is_open(struct tls_context *ctx)
+{
+	switch (ctx->tx_conf) {
+	case TLS_SW:
+		return !!tls_sw_ctx_tx(ctx)->open_rec;
+	case TLS_HW:
+		return !!tls_offload_ctx_tx(ctx)->open_record;
+	default:
+		return false;
+	}
+}
+
 static int do_tls_setsockopt_tx_payload_len(struct sock *sk, sockptr_t optval,
 					    unsigned int optlen)
 {
 	struct tls_context *ctx = tls_get_ctx(sk);
-	struct tls_sw_context_tx *sw_ctx = tls_sw_ctx_tx(ctx);
 	u16 value;
 	bool tls_13 = ctx->prot_info.version == TLS_1_3_VERSION;
 
-	if (sw_ctx && sw_ctx->open_rec)
+	if (tls_tx_record_is_open(ctx))
 		return -EBUSY;
 
 	if (sockptr_is_null(optval) || optlen != sizeof(value))
