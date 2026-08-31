@@ -29,6 +29,10 @@ Lists all worker pools indexed by their ID. For each pool:
   workers   number of all workers
   cpu       CPU the pool is associated with (per-cpu pool)
   cpus      CPUs the workers in the pool can run on (unbound pool)
+  flags     pool flags (bh, draining, disassociated)
+
+  If -b|--busy is specified, lists all busy workers currently executing
+  work items, their task PID/comm, workqueue, callback function, and duration.
 
 Workqueue CPU -> pool
 =====================
@@ -49,18 +53,24 @@ import sys
 import argparse
 parser = argparse.ArgumentParser(description=desc,
                                  formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument('-b', '--busy', action='store_true',
+                    help='Show busy workers currently executing work items')
 args = parser.parse_args()
 
 import drgn
-from drgn.helpers.linux.list import list_for_each_entry,list_empty
+from drgn.helpers.linux.list import list_for_each_entry, list_empty, hlist_for_each_entry
 from drgn.helpers.linux.percpu import per_cpu_ptr
-from drgn.helpers.linux.cpumask import for_each_cpu,for_each_possible_cpu
+from drgn.helpers.linux.cpumask import for_each_cpu, for_each_possible_cpu
 from drgn.helpers.linux.nodemask import for_each_node
 from drgn.helpers.linux.idr import idr_for_each
 
 def err(s):
     print(s, file=sys.stderr, flush=True)
     sys.exit(1)
+
+def get_hz():
+    cs = prog['clocksource_jiffies']
+    return round(1000000000 / (cs.mult.value_() >> cs.shift.value_()))
 
 def cpumask_str(cpumask):
     output = ""
@@ -118,9 +128,13 @@ WQ_AFFN_NUMA            = prog['WQ_AFFN_NUMA']
 WQ_AFFN_SYSTEM          = prog['WQ_AFFN_SYSTEM']
 
 POOL_BH                 = prog['POOL_BH']
+POOL_BH_DRAINING        = prog['POOL_BH_DRAINING']
+POOL_DISASSOCIATED      = prog['POOL_DISASSOCIATED']
+HIGHPRI_NICE_LEVEL      = prog['HIGHPRI_NICE_LEVEL']
 
 WQ_NAME_LEN             = prog['WQ_NAME_LEN'].value_()
 cpumask_str_len         = len(cpumask_str(wq_unbound_cpumask))
+hz                      = get_hz()
 
 print('Affinity Scopes')
 print('===============')
@@ -168,13 +182,43 @@ for pi, pool in idr_for_each(worker_pool_idr):
     if pool.cpu >= 0:
         print(f'cpu={pool.cpu.value_():3}', end='')
         if pool.flags & POOL_BH:
-            print(' bh', end='')
+            bh_type = 'bh-hi' if pool.attrs.nice == HIGHPRI_NICE_LEVEL else 'bh'
+            print(f' {bh_type}', end='')
+            if pool.flags & POOL_BH_DRAINING:
+                print(' draining', end='')
+        if pool.flags & POOL_DISASSOCIATED:
+            print(' disassociated', end='')
     else:
         print(f'cpus={cpumask_str(pool.attrs.cpumask)}', end='')
         print(f' pod_cpus={cpumask_str(pool.attrs.__pod_cpumask)}', end='')
         if pool.attrs.affn_strict:
             print(' strict', end='')
+        if pool.flags & POOL_DISASSOCIATED:
+            print(' disassociated', end='')
     print('')
+
+    if args.busy:
+        for bkt in pool.busy_hash:
+            for worker in hlist_for_each_entry('struct worker', bkt.address_of_(), 'hentry'):
+                wq_name = worker.current_pwq.wq.name.string_().decode()
+                fn_name = prog.symbol(worker.current_func.value_()).name
+
+                dur_str = ''
+                if 'jiffies' in prog and worker.current_start.value_():
+                    jiffies = prog['jiffies'].value_()
+                    dur_s = max(0, (jiffies - worker.current_start.value_()) // hz)
+                    dur_str = f' for {dur_s}s'
+
+                if pool.flags & POOL_BH:
+                    w_id = 'bh' if pool.attrs.nice != HIGHPRI_NICE_LEVEL else 'bh-hi'
+                elif worker.task.value_():
+                    w_id = f'PID {worker.task.pid.value_():<6} ({worker.task.comm.string_().decode()})'
+                else:
+                    w_id = f'worker[{worker.id.value_()}]'
+
+                desc = worker.desc.string_().decode()
+                desc_str = f' desc="{desc}"' if desc and desc != wq_name else ''
+                print(f'    busy: {w_id}: {wq_name}:{fn_name}{dur_str}{desc_str}')
 
 print('')
 print('Workqueue CPU -> pool')
