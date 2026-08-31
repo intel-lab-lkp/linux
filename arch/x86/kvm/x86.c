@@ -7258,6 +7258,37 @@ long kvm_arch_vcpu_unlocked_ioctl(struct file *filp, unsigned int ioctl,
 	return -ENOIOCTLCMD;
 }
 
+static int kvm_vm_ioctl_transfer_memory(struct kvm *kvm, bool import,
+					void __user *argp)
+{
+	struct kvm_memory_transfer mem;
+	int r;
+
+	if (!kvm_x86_call(cap_live_migration)(kvm) ||
+	    (import && !kvm_x86_ops.import_memory) ||
+	    (!import && !kvm_x86_ops.export_memory))
+		return -ENOTTY;
+
+	if (copy_from_user(&mem, argp, sizeof(mem)))
+		return -EFAULT;
+
+	if (mem.reserved || mem.buf.reserved || !mem.nr_gfns)
+		return -EINVAL;
+
+	if (import)
+		r = kvm_x86_call(import_memory)(kvm, &mem);
+	else
+		r = kvm_x86_call(export_memory)(kvm, &mem);
+	if (r > 0)
+		r = -EIO;
+
+	/* Copy back also on an error to report a partially done transfer */
+	if (copy_to_user(argp, &mem, sizeof(mem)))
+		return -EFAULT;
+
+	return r;
+}
+
 int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 {
 	struct kvm *kvm = filp->private_data;
@@ -7639,6 +7670,12 @@ set_pit2_out:
 			return -EFAULT;
 		break;
 	}
+	case KVM_EXPORT_MEMORY:
+		r = kvm_vm_ioctl_transfer_memory(kvm, false, argp);
+		break;
+	case KVM_IMPORT_MEMORY:
+		r = kvm_vm_ioctl_transfer_memory(kvm, true, argp);
+		break;
 	default:
 		r = -ENOTTY;
 	}

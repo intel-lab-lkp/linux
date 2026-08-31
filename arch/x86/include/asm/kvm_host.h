@@ -2012,6 +2012,8 @@ struct kvm_x86_ops {
 	int (*gmem_max_mapping_level)(struct kvm *kvm, kvm_pfn_t pfn, bool is_private);
 	bool (*cap_live_migration)(struct kvm *kvm);
 	int (*migrate_cmd)(struct kvm *kvm, struct kvm_migrate_cmd *cmd);
+	int (*export_memory)(struct kvm *kvm, struct kvm_memory_transfer *mem);
+	int (*import_memory)(struct kvm *kvm, struct kvm_memory_transfer *mem);
 };
 
 struct kvm_x86_nested_ops {

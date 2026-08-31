@@ -1493,6 +1493,10 @@ struct kvm_enc_region {
 #define KVM_GET_SREGS2             _IOR(KVMIO,  0xcc, struct kvm_sregs2)
 #define KVM_SET_SREGS2             _IOW(KVMIO,  0xcd, struct kvm_sregs2)
 
+/* Available with KVM_CAP_LIVE_MIGRATION */
+#define KVM_EXPORT_MEMORY	  _IOWR(KVMIO, 0xe5, struct kvm_memory_transfer)
+#define KVM_IMPORT_MEMORY	  _IOWR(KVMIO, 0xe6, struct kvm_memory_transfer)
+
 #define KVM_DIRTY_LOG_MANUAL_PROTECT_ENABLE    (1 << 0)
 #define KVM_DIRTY_LOG_INITIALLY_SET            (1 << 1)
 
@@ -1689,6 +1693,15 @@ struct kvm_migrate_cmd {
 	__u16 command;
 	__u16 flags;
 	__u32 reserved;
+	struct kvm_transfer_buffer buf;
+};
+
+struct kvm_memory_transfer {
+	__u64 gfns;
+	__u32 nr_gfns;
+	__u16 id;
+	__u16 flags;
+	__u64 reserved;
 	struct kvm_transfer_buffer buf;
 };
 
