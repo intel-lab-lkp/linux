@@ -4,6 +4,8 @@
  * Author: Andrew Scull <ascull@google.com>
  */
 
+#include <kvm/arm_hypercalls.h>
+
 #include <hyp/adjust_pc.h>
 #include <hyp/switch.h>
 
@@ -32,6 +34,32 @@ unsigned int hyp_gicv3_nr_lr;
 void __kvm_hyp_host_forward_smc(struct kvm_cpu_context *host_ctxt);
 
 typedef void (*hyp_entry_exit_handler_fn)(struct pkvm_hyp_vcpu *);
+
+static void __maybe_unused handle_pvm_entry_hvc64(struct pkvm_hyp_vcpu *hyp_vcpu)
+{
+	int i;
+
+	for (i = 0; i < 4; i++) {
+		u64 ret =
+			READ_ONCE(hyp_vcpu->host_vcpu->arch.ctxt.regs.regs[i]);
+		vcpu_set_reg(&hyp_vcpu->vcpu, i, ret);
+	}
+}
+
+static void __maybe_unused handle_pvm_exit_hvc64(struct pkvm_hyp_vcpu *hyp_vcpu)
+{
+	struct kvm_vcpu *host_vcpu = hyp_vcpu->host_vcpu;
+	int i;
+
+	WRITE_ONCE(host_vcpu->arch.fault.esr_el2,
+		   hyp_vcpu->vcpu.arch.fault.esr_el2);
+
+	/* Pass the HVC function id (r0) and its arguments. */
+	for (i = 0; i < 8; i++) {
+		WRITE_ONCE(host_vcpu->arch.ctxt.regs.regs[i],
+			   vcpu_get_reg(&hyp_vcpu->vcpu, i));
+	}
+}
 
 static void handle_vm_entry_generic(struct pkvm_hyp_vcpu *hyp_vcpu)
 {
