@@ -1321,9 +1321,9 @@ void rpcrdma_unpin_rqst(struct rpcrdma_rep *rep)
 	req->rl_reply = NULL;
 	rep->rr_rqst = NULL;
 
-	spin_lock(&xprt->queue_lock);
+	spin_lock(&xprt->recv_lock);
 	xprt_unpin_rqst(rqst);
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 }
 
 /**
@@ -1363,10 +1363,10 @@ void rpcrdma_complete_rqst(struct rpcrdma_rep *rep)
 		goto out_badheader;
 
 out:
-	spin_lock(&xprt->queue_lock);
+	spin_lock(&xprt->recv_lock);
 	xprt_complete_rqst(rqst->rq_task, status);
 	xprt_unpin_rqst(rqst);
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 	return;
 
 out_badheader:
@@ -1492,12 +1492,12 @@ void rpcrdma_reply_handler(struct rpcrdma_rep *rep)
 	/* Match incoming rpcrdma_rep to an rpcrdma_req to
 	 * get context for handling any incoming chunks.
 	 */
-	spin_lock(&xprt->queue_lock);
+	spin_lock(&xprt->recv_lock);
 	rqst = xprt_lookup_rqst(xprt, rep->rr_xid);
 	if (!rqst)
 		goto out_norqst;
 	xprt_pin_rqst(rqst);
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 
 	if (buf->rb_credits != credits)
 		rpcrdma_update_cwnd(r_xprt, credits);
@@ -1524,7 +1524,7 @@ out_post:
 	return;
 
 out_norqst:
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 	trace_xprtrdma_reply_rqst_err(rep);
 	rpcrdma_rep_put(buf, rep);
 	goto out_post;

@@ -1061,7 +1061,7 @@ xprt_request_rb_remove(struct rpc_xprt *xprt, struct rpc_rqst *req)
  * @xprt: transport on which the original request was transmitted
  * @xid: RPC XID of incoming reply
  *
- * Caller holds xprt->queue_lock.
+ * Caller holds xprt->recv_lock.
  */
 struct rpc_rqst *xprt_lookup_rqst(struct rpc_xprt *xprt, __be32 xid)
 {
@@ -1092,8 +1092,9 @@ xprt_is_pinned_rqst(struct rpc_rqst *req)
  * xprt_pin_rqst - Pin a request on the transport receive list
  * @req: Request to pin
  *
- * Caller must ensure this is atomic with the call to xprt_lookup_rqst()
- * so should be holding xprt->queue_lock.
+ * Caller must hold the lock that protects the queue through which
+ * it found the request: xprt->recv_lock for the receive path,
+ * xprt->queue_lock for the transmit drain path.
  */
 void xprt_pin_rqst(struct rpc_rqst *req)
 {
@@ -1105,14 +1106,10 @@ EXPORT_SYMBOL_GPL(xprt_pin_rqst);
  * xprt_unpin_rqst - Unpin a request on the transport receive list
  * @req: Request to pin
  *
- * Caller should be holding xprt->queue_lock.
+ * Caller holds the lock it held for the matching xprt_pin_rqst().
  */
 void xprt_unpin_rqst(struct rpc_rqst *req)
 {
-	if (!test_bit(RPC_TASK_MSG_PIN_WAIT, &req->rq_task->tk_runstate)) {
-		atomic_dec(&req->rq_pin);
-		return;
-	}
 	if (atomic_dec_and_test(&req->rq_pin))
 		wake_up_var(&req->rq_pin);
 }
@@ -1155,16 +1152,16 @@ xprt_request_enqueue_receive(struct rpc_task *task)
 	ret = xprt_request_prepare(task->tk_rqstp, &req->rq_rcv_buf);
 	if (ret)
 		return ret;
-	spin_lock(&xprt->queue_lock);
-
-	/* Update the softirq receive buffer */
+	/* Reply handlers cannot find the request until the rb-tree
+	 * insert below publishes it, so the copy needs no lock.
+	 */
 	memcpy(&req->rq_private_buf, &req->rq_rcv_buf,
 			sizeof(req->rq_private_buf));
 
-	/* Add request to the receive list */
+	spin_lock(&xprt->recv_lock);
 	xprt_request_rb_insert(xprt, req);
 	set_bit(RPC_TASK_NEED_RECV, &task->tk_runstate);
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 
 	/* Turn off autodisconnect */
 	timer_delete_sync(&xprt->timer);
@@ -1175,7 +1172,7 @@ xprt_request_enqueue_receive(struct rpc_task *task)
  * xprt_request_dequeue_receive_locked - Remove a request from the receive queue
  * @task: RPC task
  *
- * Caller must hold xprt->queue_lock.
+ * Caller must hold xprt->recv_lock.
  */
 static void
 xprt_request_dequeue_receive_locked(struct rpc_task *task)
@@ -1190,7 +1187,7 @@ xprt_request_dequeue_receive_locked(struct rpc_task *task)
  * xprt_update_rtt - Update RPC RTT statistics
  * @task: RPC request that recently completed
  *
- * Caller holds xprt->queue_lock.
+ * Caller holds xprt->recv_lock.
  */
 void xprt_update_rtt(struct rpc_task *task)
 {
@@ -1212,7 +1209,7 @@ EXPORT_SYMBOL_GPL(xprt_update_rtt);
  * @task: RPC request that recently completed
  * @copied: actual number of bytes received from the transport
  *
- * Caller holds xprt->queue_lock.
+ * Caller holds xprt->recv_lock.
  */
 void xprt_complete_rqst(struct rpc_task *task, int copied)
 {
@@ -1309,7 +1306,7 @@ void xprt_request_wait_receive(struct rpc_task *task)
 	 * The spinlock ensures atomicity between the test of
 	 * req->rq_reply_bytes_recvd, and the call to rpc_sleep_on().
 	 */
-	spin_lock(&xprt->queue_lock);
+	spin_lock(&xprt->recv_lock);
 	if (test_bit(RPC_TASK_NEED_RECV, &task->tk_runstate)) {
 		xprt->ops->wait_for_reply_request(task);
 		/*
@@ -1321,7 +1318,7 @@ void xprt_request_wait_receive(struct rpc_task *task)
 			rpc_wake_up_queued_task_set_status(&xprt->pending,
 					task, -ENOTCONN);
 	}
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 }
 
 static bool
@@ -1439,7 +1436,11 @@ xprt_request_dequeue_transmit(struct rpc_task *task)
  * @task: pointer to rpc_task
  *
  * Remove a task from the transmit and receive queues, and ensure that
- * it is not pinned by the receive work item.
+ * it is not pinned by any concurrent work item.
+ *
+ * Dequeuing from both queues prevents new pins: xprt_lookup_rqst
+ * and xprt_transmit can no longer find the request. The wait for
+ * in-flight pins to drain then needs neither lock.
  */
 void
 xprt_request_dequeue_xprt(struct rpc_task *task)
@@ -1451,16 +1452,18 @@ xprt_request_dequeue_xprt(struct rpc_task *task)
 	    test_bit(RPC_TASK_NEED_RECV, &task->tk_runstate) ||
 	    xprt_is_pinned_rqst(req)) {
 		spin_lock(&xprt->queue_lock);
-		while (xprt_is_pinned_rqst(req)) {
+		xprt_request_dequeue_transmit_locked(task);
+		spin_unlock(&xprt->queue_lock);
+
+		spin_lock(&xprt->recv_lock);
+		xprt_request_dequeue_receive_locked(task);
+		spin_unlock(&xprt->recv_lock);
+
+		if (xprt_is_pinned_rqst(req)) {
 			set_bit(RPC_TASK_MSG_PIN_WAIT, &task->tk_runstate);
-			spin_unlock(&xprt->queue_lock);
 			xprt_wait_on_pinned_rqst(req);
-			spin_lock(&xprt->queue_lock);
 			clear_bit(RPC_TASK_MSG_PIN_WAIT, &task->tk_runstate);
 		}
-		xprt_request_dequeue_transmit_locked(task);
-		xprt_request_dequeue_receive_locked(task);
-		spin_unlock(&xprt->queue_lock);
 		xdr_free_bvec(&req->rq_rcv_buf);
 	}
 }
@@ -2038,6 +2041,7 @@ static void xprt_init(struct rpc_xprt *xprt, struct net *net)
 	spin_lock_init(&xprt->transport_lock);
 	spin_lock_init(&xprt->reserve_lock);
 	spin_lock_init(&xprt->queue_lock);
+	spin_lock_init(&xprt->recv_lock);
 
 	INIT_LIST_HEAD(&xprt->free);
 	xprt->recv_queue = RB_ROOT;

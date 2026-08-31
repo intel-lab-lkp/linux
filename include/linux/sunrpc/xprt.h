@@ -272,7 +272,7 @@ struct rpc_xprt {
 	atomic_long_t		queuelen;
 	spinlock_t		transport_lock;	/* lock transport info */
 	spinlock_t		reserve_lock;	/* lock slot table */
-	spinlock_t		queue_lock;	/* send/receive queue lock */
+	spinlock_t		queue_lock;	/* send queue lock */
 	atomic_t		xid;		/* Most recently issued XID */
 	struct rpc_task *	snd_task;	/* Task blocked in send */
 
@@ -292,6 +292,10 @@ struct rpc_xprt {
 						 * backchannel rpc_rqst's */
 #endif /* CONFIG_SUNRPC_BACKCHANNEL */
 
+	/*
+	 * Receive stuff
+	 */
+	spinlock_t		recv_lock;	/* receive queue lock */
 	struct rb_root		recv_queue;	/* Receive queue */
 
 	struct {
