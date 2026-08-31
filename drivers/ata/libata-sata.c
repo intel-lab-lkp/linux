@@ -1588,7 +1588,7 @@ int ata_eh_get_ncq_success_sense(struct ata_link *link)
 		asc = sense[1];
 		ascq = sense[2];
 
-		if (!ata_scsi_sense_is_valid(sk, asc, ascq)) {
+		if (!ata_scsi_sense_is_valid(sk, scsi_sense_code(asc, ascq))) {
 			ret = -EIO;
 			continue;
 		}
@@ -1684,14 +1684,14 @@ void ata_eh_analyze_ncq_error(struct ata_link *link)
 	 * stored the sense data in qc->result_tf.auxiliary.
 	 */
 	if (qc->result_tf.auxiliary) {
-		char sense_key, asc, ascq;
+		u16 sense_code;
+		u8 sense_key;
 
 		sense_key = (qc->result_tf.auxiliary >> 16) & 0xff;
-		asc = (qc->result_tf.auxiliary >> 8) & 0xff;
-		ascq = qc->result_tf.auxiliary & 0xff;
-		if (ata_scsi_sense_is_valid(sense_key, asc, ascq)) {
-			ata_scsi_set_sense(dev, qc->scsicmd, sense_key, asc,
-					   ascq);
+		sense_code = qc->result_tf.auxiliary & 0xffff;
+		if (ata_scsi_sense_is_valid(sense_key, sense_code)) {
+			ata_scsi_set_sense(dev, qc->scsicmd, sense_key,
+					   sense_code);
 			qc->flags |= ATA_QCFLAG_SENSE_VALID;
 		}
 	}
