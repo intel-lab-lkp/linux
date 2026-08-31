@@ -10,6 +10,7 @@
 #include <hyp/switch.h>
 
 #include <linux/irqchip/arm-gic-v3.h>
+#include <uapi/linux/psci.h>
 
 #include <asm/pgtable-types.h>
 #include <asm/kvm_asm.h>
@@ -26,6 +27,8 @@
 #include <nvhe/trace.h>
 #include <nvhe/trap_handler.h>
 
+#include "../../sys_regs.h"
+
 DEFINE_PER_CPU(struct kvm_nvhe_init_params, kvm_init_params);
 
 /* Number of implemented GICv3 LRs. Used by flush_hyp_vcpu(). */
@@ -37,27 +40,103 @@ typedef void (*hyp_entry_exit_handler_fn)(struct pkvm_hyp_vcpu *);
 
 static void __maybe_unused handle_pvm_entry_hvc64(struct pkvm_hyp_vcpu *hyp_vcpu)
 {
-	int i;
+	u64 ret = READ_ONCE(hyp_vcpu->host_vcpu->arch.ctxt.regs.regs[0]);
+	u32 psci_fn = smccc_get_function(&hyp_vcpu->vcpu);
 
-	for (i = 0; i < 4; i++) {
-		u64 ret =
-			READ_ONCE(hyp_vcpu->host_vcpu->arch.ctxt.regs.regs[i]);
-		vcpu_set_reg(&hyp_vcpu->vcpu, i, ret);
+	switch (psci_fn) {
+	case PSCI_0_2_FN_CPU_ON:
+	case PSCI_0_2_FN64_CPU_ON:
+		/*
+		 * Roll back a CPU_ON the host failed, unless the target
+		 * already reached ON: it is running, and the guest sees
+		 * SUCCESS.
+		 */
+		if (ret != PSCI_RET_SUCCESS) {
+			unsigned long cpu_id = smccc_get_arg1(&hyp_vcpu->vcpu);
+			struct pkvm_hyp_vcpu *target_vcpu;
+			struct pkvm_hyp_vm *hyp_vm;
+			int prev;
+
+			hyp_vm = pkvm_hyp_vcpu_to_hyp_vm(hyp_vcpu);
+			target_vcpu = pkvm_mpidr_to_hyp_vcpu(hyp_vm, cpu_id);
+
+			/*
+			 * pvm_psci_vcpu_on() resolved this MPIDR and vcpus[]
+			 * entries are never removed, so the lookup cannot miss.
+			 */
+			if (WARN_ON(!target_vcpu)) {
+				ret = PSCI_RET_INTERNAL_FAILURE;
+				break;
+			}
+
+			prev = cmpxchg_relaxed(&target_vcpu->power_state,
+					       PSCI_0_2_AFFINITY_LEVEL_ON_PENDING,
+					       PSCI_0_2_AFFINITY_LEVEL_OFF);
+			switch (prev) {
+			case PSCI_0_2_AFFINITY_LEVEL_ON_PENDING:
+				/*
+				 * Leave reset_state.reset set: clearing it
+				 * races a concurrent CPU_ON's re-publish and
+				 * wedges the target at ON_PENDING. The stale
+				 * pc/r0/be are the guest's own.
+				 */
+				ret = PSCI_RET_INTERNAL_FAILURE;
+				break;
+			case PSCI_0_2_AFFINITY_LEVEL_ON:
+			case PSCI_0_2_AFFINITY_LEVEL_OFF:
+				/* Target already ran (and may have stopped). */
+				ret = PSCI_RET_SUCCESS;
+				break;
+			default:
+				ret = PSCI_RET_INTERNAL_FAILURE;
+				break;
+			}
+		}
+
+		break;
+	default:
+		break;
 	}
+
+	vcpu_set_reg(&hyp_vcpu->vcpu, 0, ret);
 }
 
 static void __maybe_unused handle_pvm_exit_hvc64(struct pkvm_hyp_vcpu *hyp_vcpu)
 {
 	struct kvm_vcpu *host_vcpu = hyp_vcpu->host_vcpu;
-	int i;
+	int n, i;
 
-	WRITE_ONCE(host_vcpu->arch.fault.esr_el2,
-		   hyp_vcpu->vcpu.arch.fault.esr_el2);
+	switch (smccc_get_function(&hyp_vcpu->vcpu)) {
+	/* CPU_ON: the host needs only the target MPIDR (x1). */
+	case PSCI_0_2_FN_CPU_ON:
+	case PSCI_0_2_FN64_CPU_ON:
+		n = 2;
+		break;
+
+	case PSCI_0_2_FN_CPU_OFF:
+	case PSCI_0_2_FN_SYSTEM_OFF:
+	case PSCI_0_2_FN_SYSTEM_RESET:
+	case PSCI_0_2_FN_CPU_SUSPEND:
+	case PSCI_0_2_FN64_CPU_SUSPEND:
+		n = 1;
+		break;
+
+	case PSCI_1_1_FN_SYSTEM_RESET2:
+	case PSCI_1_1_FN64_SYSTEM_RESET2:
+		n = 3;
+		break;
+
+	/* Unreachable: kvm_handle_pvm_hvc64() forwards only the calls above. */
+	default:
+		hyp_panic();
+	}
+
+	host_vcpu->arch.fault.esr_el2 = hyp_vcpu->vcpu.arch.fault.esr_el2;
 
 	/* Pass the HVC function id (r0) and its arguments. */
-	for (i = 0; i < 8; i++) {
-		WRITE_ONCE(host_vcpu->arch.ctxt.regs.regs[i],
-			   vcpu_get_reg(&hyp_vcpu->vcpu, i));
+	for (i = 0; i < n; i++) {
+		host_vcpu->arch.ctxt.regs.regs[i] =
+			vcpu_get_reg(&hyp_vcpu->vcpu, i);
 	}
 }
 
@@ -477,14 +556,12 @@ static void handle___kvm_vcpu_run(struct kvm_cpu_context *host_ctxt)
 {
 	struct pkvm_hyp_vcpu *hyp_vcpu;
 	struct kvm_vcpu *host_vcpu;
-	int ret;
+	int ret = ARM_EXCEPTION_IL;
 
 	host_vcpu = get_host_hyp_vcpus(host_ctxt, 1, &hyp_vcpu);
 
-	if (!host_vcpu) {
-		ret = -EINVAL;
+	if (!host_vcpu)
 		goto out;
-	}
 
 	if (unlikely(hyp_vcpu)) {
 		/*
@@ -493,8 +570,22 @@ static void handle___kvm_vcpu_run(struct kvm_cpu_context *host_ctxt)
 		 * loading a vcpu. Therefore, if SME features enabled the host
 		 * is misbehaving.
 		 */
-		if (unlikely(system_supports_sme() && read_sysreg_s(SYS_SVCR))) {
-			ret = -EINVAL;
+		if (unlikely(system_supports_sme() && read_sysreg_s(SYS_SVCR)))
+			goto out;
+
+		/*
+		 * ON has a single writer, pkvm_reset_vcpu() on this CPU, so
+		 * READ_ONCE suffices. ON_PENDING takes the reset; -ECANCELED
+		 * is a rollback that raced it.
+		 */
+		switch (READ_ONCE(hyp_vcpu->power_state)) {
+		case PSCI_0_2_AFFINITY_LEVEL_ON:
+			break;
+		case PSCI_0_2_AFFINITY_LEVEL_ON_PENDING:
+			if (pkvm_reset_vcpu(hyp_vcpu))
+				goto out;
+			break;
+		default:
 			goto out;
 		}
 
