@@ -31,6 +31,12 @@ enum backlight_update_reason {
 	 * @BACKLIGHT_UPDATE_SYSFS: The backlight was updated using sysfs.
 	 */
 	BACKLIGHT_UPDATE_SYSFS,
+
+	/**
+	 * @BACKLIGHT_UPDATE_DRM: The backlight was updated from DRM, i.e. through
+	 * a connector LUMINANCE property rather than the legacy sysfs interface.
+	 */
+	BACKLIGHT_UPDATE_DRM,
 };
 
 /**
@@ -82,6 +88,11 @@ enum backlight_notification {
 	 * @BACKLIGHT_UNREGISTERED: The backlight revice is unregistered.
 	 */
 	BACKLIGHT_UNREGISTERED,
+
+	/**
+	 * @BACKLIGHT_BRIGHTNESS_CHANGED: The backlight brightness has changed.
+	 */
+	BACKLIGHT_BRIGHTNESS_CHANGED,
 };
 
 /** enum backlight_scale - the type of scale used for brightness values
@@ -310,7 +321,18 @@ struct backlight_device {
 	 * @use_count: The number of unblanked displays.
 	 */
 	int use_count;
+
+	/**
+	 * @drm_takeover: Number of luminance-aware DRM clients that have
+	 * taken over brightness control of this device. When non-zero,
+	 * writes to the legacy sysfs ``brightness`` attribute return
+	 * ``-EBUSY``. Managed by the DRM backlight helpers.
+	 */
+	atomic_t drm_takeover;
 };
+
+/* Forward declaration for backlight_update_status */
+void backlight_notify_brightness(struct backlight_device *bd);
 
 /**
  * backlight_update_status - force an update of the backlight device status
@@ -324,6 +346,10 @@ static inline int backlight_update_status(struct backlight_device *bd)
 	if (bd->ops && bd->ops->update_status)
 		ret = bd->ops->update_status(bd);
 	mutex_unlock(&bd->update_lock);
+
+	/* Notify DRM and other listeners that brightness changed */
+	if (ret == 0)
+		backlight_notify_brightness(bd);
 
 	return ret;
 }
@@ -430,6 +456,21 @@ static inline void backlight_notify_blank_all(struct device *display_dev,
 					      bool fb_on, bool prev_fb_on)
 { }
 #endif
+
+int backlight_set_brightness(struct backlight_device *bd, unsigned int value,
+			      enum backlight_update_reason reason);
+
+static inline void backlight_device_ref(struct backlight_device *bd)
+{
+	if (bd)
+		get_device(&bd->dev);
+}
+
+static inline void backlight_device_unref(struct backlight_device *bd)
+{
+	if (bd)
+		put_device(&bd->dev);
+}
 
 #define to_backlight_device(obj) container_of(obj, struct backlight_device, dev)
 

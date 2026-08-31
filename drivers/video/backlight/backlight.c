@@ -126,6 +126,9 @@ static void backlight_generate_event(struct backlight_device *bd,
 	case BACKLIGHT_UPDATE_HOTKEY:
 		envp[0] = "SOURCE=hotkey";
 		break;
+	case BACKLIGHT_UPDATE_DRM:
+		envp[0] = "SOURCE=drm";
+		break;
 	default:
 		envp[0] = "SOURCE=unknown";
 		break;
@@ -213,6 +216,13 @@ static ssize_t brightness_store(struct device *dev,
 	int rc;
 	struct backlight_device *bd = to_backlight_device(dev);
 	unsigned long brightness;
+
+	/* A luminance-aware DRM client has taken over this backlight; the
+	 * legacy sysfs interface is disabled until the last such client
+	 * goes away.
+	 */
+	if (atomic_read(&bd->drm_takeover) > 0)
+		return -EBUSY;
 
 	rc = kstrtoul(buf, 0, &brightness);
 	if (rc)
@@ -515,6 +525,39 @@ static int devm_backlight_device_match(struct device *dev, void *res,
 }
 
 /**
+ * backlight_set_brightness - set brightness on a backlight device
+ * @bd: backlight device to operate on
+ * @value: brightness value to set on the device
+ * @reason: backlight-change reason to use for notifications
+ *
+ * This is the in-kernel API equivalent of writing into the 'brightness' sysfs
+ * file. It calls into the underlying backlight driver to change the brightness
+ * value.
+ * A uevent notification is sent with the reason set to @reason.
+ * Return: 0 if successfully notified, -EINVAL for invalid values
+ */
+int backlight_set_brightness(struct backlight_device *bd, unsigned int value,
+			      enum backlight_update_reason reason)
+{
+	int rc = 0;
+
+	guard(mutex)(&bd->ops_lock);
+	if (bd->ops) {
+		if (value > bd->props.max_brightness)
+			return -EINVAL;
+
+		dev_dbg(&bd->dev, "set brightness to %u\n", value);
+		bd->props.brightness = value;
+		rc = backlight_update_status(bd);
+	}
+	if (rc == 0)
+		backlight_generate_event(bd, reason);
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(backlight_set_brightness);
+
+/**
  * backlight_register_notifier - get notified of backlight (un)registration
  * @nb: notifier block with the notifier to call on backlight (un)registration
  *
@@ -547,6 +590,20 @@ int backlight_unregister_notifier(struct notifier_block *nb)
 	return blocking_notifier_chain_unregister(&backlight_notifier, nb);
 }
 EXPORT_SYMBOL(backlight_unregister_notifier);
+
+/**
+ * backlight_notify_brightness - notify brightness change to listeners
+ * @bd: backlight device that changed
+ *
+ * Notify registered listeners that the backlight brightness has changed.
+ * This is called automatically after successful brightness updates.
+ */
+void backlight_notify_brightness(struct backlight_device *bd)
+{
+	blocking_notifier_call_chain(&backlight_notifier,
+				     BACKLIGHT_BRIGHTNESS_CHANGED, bd);
+}
+EXPORT_SYMBOL(backlight_notify_brightness);
 
 /**
  * devm_backlight_device_register - register a new backlight device
