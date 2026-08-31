@@ -27,6 +27,7 @@
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/list.h>
+#include <linux/rcupdate.h>
 #include <linux/anon_inodes.h>
 #include <linux/signalfd.h>
 #include <linux/syscalls.h>
@@ -39,12 +40,19 @@ void signalfd_cleanup(struct sighand_struct *sighand)
 }
 
 struct signalfd_ctx {
+	/* Serializes shared mask updates with file-local waiter wakeups. */
+	spinlock_t lock;
+	wait_queue_head_t wqh;
+	struct rcu_head rcu;
 	sigset_t sigmask;
 };
 
 static int signalfd_release(struct inode *inode, struct file *file)
 {
-	kfree(file->private_data);
+	struct signalfd_ctx *ctx = file->private_data;
+
+	wake_up_pollfree(&ctx->wqh);
+	kfree_rcu(ctx, rcu);
 	return 0;
 }
 
@@ -53,14 +61,17 @@ static __poll_t signalfd_poll(struct file *file, poll_table *wait)
 	struct signalfd_ctx *ctx = file->private_data;
 	__poll_t events = 0;
 
+	poll_wait(file, &ctx->wqh, wait);
 	poll_wait(file, &current->sighand->signalfd_wqh, wait);
 
-	spin_lock_irq(&current->sighand->siglock);
+	spin_lock_irq(&ctx->lock);
+	spin_lock(&current->sighand->siglock);
 	if (next_signal(&current->pending, &ctx->sigmask) ||
 	    next_signal(&current->signal->shared_pending,
 			&ctx->sigmask))
 		events |= EPOLLIN;
-	spin_unlock_irq(&current->sighand->siglock);
+	spin_unlock(&current->sighand->siglock);
+	spin_unlock_irq(&ctx->lock);
 
 	return events;
 }
@@ -157,8 +168,10 @@ static ssize_t signalfd_dequeue(struct signalfd_ctx *ctx, kernel_siginfo_t *info
 	enum pid_type type;
 	ssize_t ret;
 	DECLARE_WAITQUEUE(wait, current);
+	DECLARE_WAITQUEUE(ctx_wait, current);
 
-	spin_lock_irq(&current->sighand->siglock);
+	spin_lock_irq(&ctx->lock);
+	spin_lock(&current->sighand->siglock);
 	ret = dequeue_signal(&ctx->sigmask, info, &type);
 	switch (ret) {
 	case 0:
@@ -167,10 +180,12 @@ static ssize_t signalfd_dequeue(struct signalfd_ctx *ctx, kernel_siginfo_t *info
 		ret = -EAGAIN;
 		fallthrough;
 	default:
-		spin_unlock_irq(&current->sighand->siglock);
+		spin_unlock(&current->sighand->siglock);
+		spin_unlock_irq(&ctx->lock);
 		return ret;
 	}
 
+	add_wait_queue(&ctx->wqh, &ctx_wait);
 	add_wait_queue(&current->sighand->signalfd_wqh, &wait);
 	for (;;) {
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -181,13 +196,17 @@ static ssize_t signalfd_dequeue(struct signalfd_ctx *ctx, kernel_siginfo_t *info
 			ret = -ERESTARTSYS;
 			break;
 		}
-		spin_unlock_irq(&current->sighand->siglock);
+		spin_unlock(&current->sighand->siglock);
+		spin_unlock_irq(&ctx->lock);
 		schedule();
-		spin_lock_irq(&current->sighand->siglock);
+		spin_lock_irq(&ctx->lock);
+		spin_lock(&current->sighand->siglock);
 	}
-	spin_unlock_irq(&current->sighand->siglock);
+	spin_unlock(&current->sighand->siglock);
+	spin_unlock_irq(&ctx->lock);
 
 	remove_wait_queue(&current->sighand->signalfd_wqh, &wait);
+	remove_wait_queue(&ctx->wqh, &ctx_wait);
 	__set_current_state(TASK_RUNNING);
 
 	return ret;
@@ -232,7 +251,9 @@ static void signalfd_show_fdinfo(struct seq_file *m, struct file *f)
 	struct signalfd_ctx *ctx = f->private_data;
 	sigset_t sigmask;
 
+	spin_lock_irq(&ctx->lock);
 	sigmask = ctx->sigmask;
+	spin_unlock_irq(&ctx->lock);
 	signotset(&sigmask);
 	render_sigset_t(m, "sigmask:\t", &sigmask);
 }
@@ -268,6 +289,8 @@ static int do_signalfd4(int ufd, sigset_t *mask, int flags)
 		if (!ctx)
 			return -ENOMEM;
 
+		spin_lock_init(&ctx->lock);
+		init_waitqueue_head(&ctx->wqh);
 		ctx->sigmask = *mask;
 
 		fd = FD_ADD(flags & O_CLOEXEC,
@@ -286,11 +309,11 @@ static int do_signalfd4(int ufd, sigset_t *mask, int flags)
 		ctx = fd_file(f)->private_data;
 		if (fd_file(f)->f_op != &signalfd_fops)
 			return -EINVAL;
-		spin_lock_irq(&current->sighand->siglock);
+		spin_lock_irq(&ctx->lock);
 		ctx->sigmask = *mask;
-		spin_unlock_irq(&current->sighand->siglock);
+		spin_unlock_irq(&ctx->lock);
 
-		wake_up(&current->sighand->signalfd_wqh);
+		wake_up(&ctx->wqh);
 	}
 
 	return ufd;
