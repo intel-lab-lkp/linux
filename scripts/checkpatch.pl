@@ -2141,7 +2141,7 @@ sub annotate_values {
 			print "DECLARE($1)\n" if ($dbg_values > 1);
 			$type = 'T';
 
-		} elsif ($cur =~ /^($Modifier)\s*/) {
+		} elsif ($cur =~ /^($Modifier)\s*(?=$Ident|[\*\(,;)\[]|\s*$)/) {
 			print "MODIFIER($1)\n" if ($dbg_values > 1);
 			$type = 'T';
 
@@ -4864,7 +4864,7 @@ sub process {
 
 # * goes on variable not on type
 		# (char*[ const])
-		while ($line =~ m{(\($NonptrType(\s*(?:$Modifier\b\s*|\*\s*)+)\))}g) {
+		while ($line =~ m{(\($NonptrType(?!\w)(\s*(?:$Modifier\b\s*|\*\s*)+)\))}g) {
 			#print "AA<$1>\n";
 			my ($ident, $from, $to) = ($1, $2, $2);
 
@@ -4889,7 +4889,7 @@ sub process {
 				}
 			}
 		}
-		while ($line =~ m{(\b$NonptrType(\s*(?:$Modifier\b\s*|\*\s*)+)($Ident))}g) {
+		while ($line =~ m{(\b$NonptrType(?!\w)(\s*(?:$Modifier\b\s*|\*\s*)+)($Ident))}g) {
 			#print "BB<$1>\n";
 			my ($match, $from, $to, $ident) = ($1, $2, $2, $3);
 
