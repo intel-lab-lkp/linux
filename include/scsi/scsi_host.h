@@ -528,15 +528,22 @@ struct scsi_host_template {
  *
  */
 #define DEF_SCSI_QCMD(func_name) \
-	enum scsi_qc_status func_name(struct Scsi_Host *shost,		\
+	enum scsi_qc_status func_name(struct Scsi_Host *shost		\
+				      __maybe_unused,			\
 				      struct scsi_cmnd *cmd)		\
 	{								\
-		unsigned long irq_flags;				\
 		enum scsi_qc_status rc;					\
 									\
-		spin_lock_irqsave(shost->host_lock, irq_flags);		\
+		/*							\
+		 * Help compiler context analysis by using		\
+		 * cmd->device->host instead of the shost argument	\
+		 * for the func_name##_lck() implementations annotated	\
+		 * with __must_hold(cmd->device->host->host_lock).	\
+		 */							\
+		shost = cmd->device->host;				\
+		spin_lock_irq(shost->host_lock);			\
 		rc = func_name##_lck(cmd);				\
-		spin_unlock_irqrestore(shost->host_lock, irq_flags);	\
+		spin_unlock_irq(shost->host_lock);			\
 		return rc;						\
 	}
 
