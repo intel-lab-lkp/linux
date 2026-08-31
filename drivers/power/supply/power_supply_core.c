@@ -907,7 +907,7 @@ int power_supply_get_battery_info(struct power_supply *psy,
 		u32 *propdata __free(kfree) = kcalloc(proplen, sizeof(*propdata), GFP_KERNEL);
 		if (!propdata) {
 			power_supply_put_battery_info(psy, info);
-			err = -EINVAL;
+			err = -ENOMEM;
 			goto out_put_node;
 		}
 		err = fwnode_property_read_u32_array(fwnode, propname, propdata, proplen);
