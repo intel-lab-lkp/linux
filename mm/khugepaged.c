@@ -101,6 +101,7 @@ static DEFINE_READ_MOSTLY_HASHTABLE(mm_slots_hash, MM_SLOTS_HASH_BITS);
 
 static struct kmem_cache *mm_slot_cache __ro_after_init;
 
+#define THP_MIN_FREE_MAX_PAGES		(SZ_1G / PAGE_SIZE)
 #define KHUGEPAGED_MIN_MTHP_ORDER	2
 
 struct collapse_control {
@@ -3120,9 +3121,13 @@ void set_recommended_min_free_kbytes(void)
 	recommended_min += pageblock_nr_pages * nr_zones *
 			   MIGRATE_PCPTYPES * MIGRATE_PCPTYPES;
 
-	/* don't ever allow to reserve more than 5% of the lowmem */
+	/*
+	 * Don't allow the THP recommendation to exceed 5% of lowmem or an
+	 * absolute cap, whichever is smaller.
+	 */
 	recommended_min = min(recommended_min,
 			      (unsigned long) nr_free_buffer_pages() / 20);
+	recommended_min = min(recommended_min, THP_MIN_FREE_MAX_PAGES);
 	recommended_min <<= (PAGE_SHIFT-10);
 
 	if (recommended_min > min_free_kbytes) {
