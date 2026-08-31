@@ -505,6 +505,12 @@ static struct bpf_object *open_bpf_monitor(const char *monitor_name, const char 
 
 	LIBBPF_OPTS(bpf_object_open_opts, opts,
 		.pin_root_path = BPF_PIN_BASE_PATH,
+		/* Define statically as arch is known, Kconfig may not be available */
+#ifdef __x86_64__
+		.kconfig = "CONFIG_X86_64=y\n",
+#else
+		.kconfig = "CONFIG_X86_64=n\n",
+#endif
 	);
 
 	if (!path) {
