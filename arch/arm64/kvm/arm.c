@@ -1751,6 +1751,13 @@ static int kvm_arch_vcpu_ioctl_vcpu_init(struct kvm_vcpu *vcpu,
 	int ret;
 
 	/*
+	 * Re-init would reset the host copy alone and rewrite mp_state
+	 * after EL2 has read it. Pre-run init stays allowed.
+	 */
+	if (kvm_vm_is_protected(vcpu->kvm) && vcpu_has_run_once(vcpu))
+		return -EPERM;
+
+	/*
 	 * Treat the power-off vCPU feature as ephemeral. Clear the bit to avoid
 	 * reflecting it in the finalized feature set, thus limiting its scope
 	 * to a single KVM_ARM_VCPU_INIT call.

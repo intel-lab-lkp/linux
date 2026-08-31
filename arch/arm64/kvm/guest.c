@@ -701,6 +701,10 @@ int kvm_arm_copy_reg_indices(struct kvm_vcpu *vcpu, u64 __user *uindices)
 
 int kvm_arm_get_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 {
+	/* Once the vCPU has run, the host copy is not the guest's state. */
+	if (kvm_vm_is_protected(vcpu->kvm) && vcpu_has_run_once(vcpu))
+		return -EPERM;
+
 	/* We currently use nothing arch-specific in upper 32 bits */
 	if ((reg->id & ~KVM_REG_SIZE_MASK) >> 32 != KVM_REG_ARM64 >> 32)
 		return -EINVAL;
@@ -718,6 +722,10 @@ int kvm_arm_get_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 
 int kvm_arm_set_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 {
+	/* Writes build the boot state; once run, EL2 owns the registers. */
+	if (kvm_vm_is_protected(vcpu->kvm) && vcpu_has_run_once(vcpu))
+		return -EPERM;
+
 	/* We currently use nothing arch-specific in upper 32 bits */
 	if ((reg->id & ~KVM_REG_SIZE_MASK) >> 32 != KVM_REG_ARM64 >> 32)
 		return -EINVAL;
@@ -785,6 +793,13 @@ int __kvm_arm_vcpu_set_events(struct kvm_vcpu *vcpu,
 	bool ext_dabt_pending = events->exception.ext_dabt_pending;
 	u64 esr = events->exception.serror_esr;
 	int ret = 0;
+
+	/*
+	 * EL2 injects an external abort only to complete a forwarded abort.
+	 * SError injection is forwarded.
+	 */
+	if (kvm_vm_is_protected(vcpu->kvm) && ext_dabt_pending)
+		return -EPERM;
 
 	/*
 	 * Immediately commit the pending SEA to the vCPU's architectural
@@ -882,6 +897,10 @@ int kvm_arch_vcpu_ioctl_set_guest_debug(struct kvm_vcpu *vcpu,
 					struct kvm_guest_debug *dbg)
 {
 	trace_kvm_set_guest_debug(vcpu, dbg->control);
+
+	/* A protected guest's debug state is not exposed to the host. */
+	if (kvm_vm_is_protected(vcpu->kvm))
+		return -EPERM;
 
 	if (dbg->control & ~KVM_GUESTDBG_VALID_MASK)
 		return -EINVAL;
