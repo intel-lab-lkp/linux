@@ -524,7 +524,7 @@ static int uinput_abs_setup(struct uinput_device *udev,
 		return -EFAULT;
 
 	if (setup.code > ABS_MAX)
-		return -ERANGE;
+		return -EINVAL;
 
 	dev = udev->dev;
 
