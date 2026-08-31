@@ -1545,7 +1545,7 @@ static int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper)
 	if (ret < 0)
 		return ret;
 
-	strcpy(fb_helper->fb->comm, "[fbcon]");
+	strscpy(fb_helper->fb->comm, "[fbcon]");
 
 	return 0;
 }
