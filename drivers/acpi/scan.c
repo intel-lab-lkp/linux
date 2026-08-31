@@ -2338,7 +2338,7 @@ static int acpi_scan_attach_handler(struct acpi_device *device)
 	return ret;
 }
 
-static int acpi_bus_attach(struct acpi_device *device, void *not_used)
+static int attach_subtree(struct acpi_device *device, void *not_used)
 {
 	acpi_handle ejd;
 	bool skip;
@@ -2374,13 +2374,20 @@ static int acpi_bus_attach(struct acpi_device *device, void *not_used)
 	else
 		acpi_default_enumeration(device);
 
+	acpi_handle_debug(device->handle, "Scanning complete\n");
+
 children:
-	acpi_dev_for_each_child(device, acpi_bus_attach, NULL);
+	acpi_dev_for_each_child(device, attach_subtree, NULL);
 
 	if (!skip && device->handler && device->handler->hotplug.notify_online)
 		device->handler->hotplug.notify_online(device);
 
 	return 0;
+}
+
+static void acpi_scan_attach(struct acpi_device *adev)
+{
+	attach_subtree(adev, NULL);
 }
 
 static int acpi_dev_get_next_consumer_dev_cb(struct acpi_dep_data *dep, void *data)
@@ -2414,7 +2421,7 @@ static void acpi_scan_clear_dep_fn(void *dev, async_cookie_t cookie)
 	struct acpi_device *adev = to_acpi_device(dev);
 
 	acpi_scan_lock_acquire();
-	acpi_bus_attach(adev, (void *)true);
+	acpi_scan_attach(adev);
 	acpi_scan_lock_release();
 
 	acpi_dev_put(adev);
@@ -2427,7 +2434,7 @@ static bool acpi_scan_clear_dep_queue(struct acpi_device *adev)
 
 	/*
 	 * Async schedule the deferred acpi_scan_clear_dep_fn() since:
-	 * - acpi_bus_attach() needs to hold acpi_scan_lock which cannot
+	 * - acpi_scan_attach() needs to run under acpi_scan_lock which cannot
 	 *   be acquired under acpi_dep_list_lock (held here)
 	 * - the deferred work at boot stage is ensured to be finished
 	 *   before userspace init task by the async_synchronize_full()
@@ -2568,7 +2575,7 @@ static void acpi_scan_postponed_branch(acpi_handle handle)
 	 */
 	acpi_mipi_init_crs_csi2_swnodes();
 
-	acpi_bus_attach(adev, NULL);
+	acpi_scan_attach(adev);
 }
 
 static void acpi_scan_postponed(void)
@@ -2725,7 +2732,7 @@ int acpi_bus_scan(acpi_handle handle)
 	acpi_mipi_scan_crs_csi2();
 	acpi_mipi_init_crs_csi2_swnodes();
 
-	acpi_bus_attach(device, (void *)true);
+	acpi_scan_attach(device);
 
 	/* Pass 2: Enumerate all of the remaining devices. */
 
