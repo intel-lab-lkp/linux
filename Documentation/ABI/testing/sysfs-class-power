@@ -34,7 +34,9 @@ Description:
 		Describes the main type of the supply.
 
 		Access: Read
-		Valid values: "Battery", "UPS", "Mains", "USB", "Wireless"
+		Valid values: "Unknown", "Battery", "UPS", "Mains", "USB",
+		"USB_DCP", "USB_CDP", "USB_ACA", "USB_C", "USB_PD",
+		"USB_PD_DRP", "BrickID", "Wireless"
 
 **Battery and USB properties**
 
