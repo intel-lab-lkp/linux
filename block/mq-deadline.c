@@ -37,6 +37,17 @@ static const int write_expire = 5 * HZ; /* ditto for writes, these limits are SO
  * inversion.
  */
 static const int prio_aging_expire = 10 * HZ;
+
+/*
+ * Whether to enable I/O priority support (RT/BE/IDLE distinction).
+ * When false every request is filed in the best-effort bucket and the
+ * priority aging path is bypassed, so systems that do not want RT/BE/IDLE
+ * distinction can opt out.
+ */
+static bool prio_enable = true;
+module_param(prio_enable, bool, 0644);
+MODULE_PARM_DESC(prio_enable,
+		 "Enable I/O priority (RT/BE/IDLE); 0 = best-effort only.");
 static const int writes_starved = 2;    /* max times reads can starve a write */
 static const int fifo_batch = 16;       /* # of sequential requests treated as one
 				     by the above parameters. For throughput. */
@@ -561,7 +572,7 @@ static int dd_init_sched(struct request_queue *q, struct elevator_queue *eq)
 	dd->last_dir = DD_WRITE;
 	dd->fifo_batch = fifo_batch;
 	dd->prio_aging_expire = prio_aging_expire;
-	dd->prio_enable = true;
+	dd->prio_enable = prio_enable;
 	spin_lock_init(&dd->lock);
 
 	/* We dispatch from request queue wide instead of hw queue */
