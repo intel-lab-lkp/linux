@@ -1154,8 +1154,13 @@ static void hisi_acc_vf_pci_reset_prepare(struct pci_dev *pdev)
 {
 	struct hisi_acc_vf_core_device *hisi_acc_vdev = hisi_acc_drvdata(pdev);
 	struct hisi_qm *qm = hisi_acc_vdev->pf_qm;
-	struct device *dev = &qm->pdev->dev;
+	struct device *dev = &pdev->dev;
 	u32 delay = 0;
+
+	if (!qm || !qm->io_base) {
+		dev_err(dev, "PF QM not available for reset\n");
+		return;
+	}
 
 	/* All reset requests need to be queued for processing */
 	while (test_and_set_bit(QM_RESETTING, &qm->misc_ctl)) {
@@ -1174,8 +1179,12 @@ static void hisi_acc_vf_pci_aer_reset_done(struct pci_dev *pdev)
 	struct hisi_acc_vf_core_device *hisi_acc_vdev = hisi_acc_drvdata(pdev);
 	struct hisi_qm *qm = hisi_acc_vdev->pf_qm;
 
-	if (hisi_acc_vdev->set_reset_flag)
-		clear_bit(QM_RESETTING, &qm->misc_ctl);
+	if (hisi_acc_vdev->set_reset_flag) {
+		if (qm && qm->io_base)
+			clear_bit(QM_RESETTING, &qm->misc_ctl);
+		else
+			dev_err(&pdev->dev, "PF QM not available for reset done\n");
+	}
 
 	if (!hisi_acc_vdev->core_device.vdev.mig_ops)
 		return;
@@ -1565,6 +1574,11 @@ static int hisi_acc_vfio_pci_migrn_init_dev(struct vfio_device *core_vdev)
 	struct pci_dev *pdev = to_pci_dev(core_vdev->dev);
 	struct hisi_qm *pf_qm = hisi_acc_get_pf_qm(pdev);
 
+	if (!pf_qm) {
+		dev_err(&pdev->dev, "PF driver not loaded, cannot enable migration\n");
+		return -ENODEV;
+	}
+
 	hisi_acc_vdev->vf_id = pci_iov_vf_id(pdev) + 1;
 	hisi_acc_vdev->pf_qm = pf_qm;
 	hisi_acc_vdev->vf_dev = pdev;
@@ -1670,13 +1684,11 @@ static int hisi_acc_vfio_pci_probe(struct pci_dev *pdev, const struct pci_device
 	struct hisi_acc_vf_core_device *hisi_acc_vdev;
 	const struct vfio_device_ops *ops = &hisi_acc_vfio_pci_ops;
 	struct hisi_qm *pf_qm;
-	int vf_id;
 	int ret;
 
 	pf_qm = hisi_acc_get_pf_qm(pdev);
 	if (pf_qm && pf_qm->ver >= QM_HW_V3) {
-		vf_id = pci_iov_vf_id(pdev);
-		if (vf_id >= 0)
+		if (pdev->is_virtfn)
 			ops = &hisi_acc_vfio_pci_migrn_ops;
 		else
 			pci_warn(pdev, "migration support failed, continue with generic interface\n");
