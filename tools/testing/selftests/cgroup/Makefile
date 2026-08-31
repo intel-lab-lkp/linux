@@ -6,6 +6,7 @@ all: ${HELPER_PROGS}
 TEST_FILES     := with_stress.sh
 TEST_PROGS     := test_stress.sh test_cpuset_prs.sh test_cpuset_v1_hp.sh
 TEST_GEN_FILES := wait_inotify
+TEST_GEN_MODS_DIR := test_modules
 # Keep the lists lexicographically sorted
 TEST_GEN_PROGS  = test_core
 TEST_GEN_PROGS += test_cpu
