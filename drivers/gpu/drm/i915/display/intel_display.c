@@ -1186,6 +1186,14 @@ static void intel_pre_plane_update(struct intel_atomic_state *state,
 		intel_vrr_disable(old_crtc_state);
 		intel_vrr_dcb_reset(old_crtc_state, crtc);
 		intel_crtc_update_active_timings(old_crtc_state, false);
+
+		/*
+		 * VRR is being disabled seamlessly (no modeset, Panel Replay
+		 * stays enabled), so re-apply the AS SDP skip-frame programming
+		 * for the new (VRR off) state.
+		 */
+		if (!intel_crtc_needs_modeset(new_crtc_state))
+			intel_alpm_pr_as_sdp_update(new_crtc_state);
 	}
 
 	if (audio_disabling(old_crtc_state, new_crtc_state))
@@ -6796,8 +6804,17 @@ static void commit_pipe_post_planes(struct intel_atomic_state *state,
 	    HAS_DOUBLE_BUFFERED_LUT(display))
 		intel_color_load_luts(new_crtc_state);
 
-	if (intel_crtc_vrr_enabling(state, crtc))
+	if (intel_crtc_vrr_enabling(state, crtc)) {
 		intel_vrr_enable(new_crtc_state);
+
+		/*
+		 * VRR is being enabled seamlessly (no modeset, Panel Replay
+		 * stays enabled), so re-apply the AS SDP skip-frame programming
+		 * for the new (VRR on) state.
+		 */
+		if (!modeset)
+			intel_alpm_pr_as_sdp_update(new_crtc_state);
+	}
 }
 
 static void intel_enable_crtc(struct intel_atomic_state *state,
