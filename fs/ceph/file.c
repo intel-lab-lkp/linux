@@ -12,6 +12,7 @@
 #include <linux/falloc.h>
 #include <linux/iversion.h>
 #include <linux/ktime.h>
+#include <linux/math64.h>
 #include <linux/splice.h>
 
 #include "super.h"
@@ -3000,6 +3001,22 @@ out:
 	return ERR_PTR(ret);
 }
 
+/*
+ * Default maximum number of in-flight COPY_FROM2 requests.  Can be
+ * overridden at module load time or at runtime via sysfs through the
+ * copyfrom_max_inflight parameter.  The value is snapshotted per
+ * copy_file_range call, so a runtime change only affects new copies.
+ *
+ * Higher values improve throughput over high-latency links, but too many
+ * concurrent requests can saturate OSD disk queues, especially in small
+ * clusters.  Tune this to match the number of OSDs and their concurrency
+ * capability.  For most clusters 16--64 is a reasonable range.
+ */
+static unsigned int copyfrom_max_inflight = 16;
+module_param(copyfrom_max_inflight, uint, 0644);
+MODULE_PARM_DESC(copyfrom_max_inflight,
+		 "Maximum in-flight COPY_FROM2 requests per copy_file_range call");
+
 static ssize_t ceph_do_objects_copy(struct ceph_inode_info *src_ci, u64 *src_off,
 				    struct ceph_inode_info *dst_ci, u64 *dst_off,
 				    struct ceph_fs_client *fsc,
@@ -3008,13 +3025,24 @@ static ssize_t ceph_do_objects_copy(struct ceph_inode_info *src_ci, u64 *src_off
 	struct ceph_object_locator src_oloc, dst_oloc;
 	struct ceph_object_id src_oid, dst_oid;
 	struct ceph_osd_client *osdc;
+	struct ceph_osd_request **reqs = NULL;
 	struct ceph_osd_request *req;
 	ssize_t bytes = 0;
 	u64 src_objnum, src_objoff, dst_objnum, dst_objoff;
 	u32 src_objlen, dst_objlen;
 	u32 object_size = src_ci->i_layout.object_size;
 	struct ceph_client *cl = fsc->client;
+	u64 orig_src_off = *src_off;
+	u64 orig_dst_off = *dst_off;
+	u64 orig_dst_size = i_size_read(&dst_ci->netfs.inode);
+	u64 num_objects, head = 0, tail = 0;
+	u64 first_fail_obj = U64_MAX, alloc_fail_obj = U64_MAX;
+	unsigned int max_inflight;
+	int first_fail_err = 0, alloc_fail_err = 0;
+	unsigned int inflight = 0;
+	u32 slot, rem;
 	int ret;
+	bool have_eopnotsupp = false;
 
 	src_oloc.pool = src_ci->i_layout.pool_id;
 	src_oloc.pool_ns = ceph_try_get_string(src_ci->i_layout.pool_ns);
@@ -3022,54 +3050,233 @@ static ssize_t ceph_do_objects_copy(struct ceph_inode_info *src_ci, u64 *src_off
 	dst_oloc.pool_ns = ceph_try_get_string(dst_ci->i_layout.pool_ns);
 	osdc = &fsc->client->osdc;
 
-	while (len >= object_size) {
-		ceph_calc_file_object_mapping(&src_ci->i_layout, *src_off,
-					      object_size, &src_objnum,
-					      &src_objoff, &src_objlen);
-		ceph_calc_file_object_mapping(&dst_ci->i_layout, *dst_off,
-					      object_size, &dst_objnum,
-					      &dst_objoff, &dst_objlen);
-		ceph_oid_init(&src_oid);
-		ceph_oid_printf(&src_oid, "%llx.%08llx",
-				ceph_ino(&src_ci->netfs.inode), src_objnum);
-		ceph_oid_init(&dst_oid);
-		ceph_oid_printf(&dst_oid, "%llx.%08llx",
-				ceph_ino(&dst_ci->netfs.inode), dst_objnum);
-		/* Do an object remote copy */
-		req = ceph_alloc_copyfrom_request(osdc, ceph_snap(&src_ci->netfs.inode),
-						  &src_oid, &src_oloc,
-						  &dst_oid, &dst_oloc,
-						  dst_ci->i_truncate_seq,
-						  dst_ci->i_truncate_size);
-		if (IS_ERR(req))
-			ret = PTR_ERR(req);
-		else {
-			ceph_osdc_start_request(osdc, req);
-			ret = ceph_osdc_wait_request(osdc, req);
-			ceph_update_copyfrom_metrics(&fsc->mdsc->metric,
-						     req->r_start_latency,
-						     req->r_end_latency,
-						     object_size, ret);
-			ceph_osdc_put_request(req);
-		}
-		if (ret) {
-			if (ret == -EOPNOTSUPP) {
-				fsc->have_copy_from2 = false;
-				pr_notice_client(cl,
-					"OSDs don't support copy-from2; disabling copy offload\n");
-			}
-			doutc(cl, "returned %d\n", ret);
-			if (bytes <= 0)
-				bytes = ret;
-			goto out;
-		}
-		len -= object_size;
-		bytes += object_size;
-		*src_off += object_size;
-		*dst_off += object_size;
+	num_objects = len / object_size;
+	if (!num_objects)
+		goto out;
+
+	/*
+	 * Snapshot the window size once.  A concurrent sysfs write to
+	 * copyfrom_max_inflight must not be able to shift the window bounds
+	 * mid-copy: that would corrupt the ring-buffer bookkeeping and could
+	 * index past reqs[].
+	 *
+	 * Parallel requests can write destination objects beyond the first
+	 * failure before the failure is detected.  Those objects lie beyond
+	 * the result that will be published, but they would become visible
+	 * if the file later grows past that point, so on failure the
+	 * truncate seq/size is bumped to the published EOF: the OSDs then
+	 * discard the speculative data before any future read or write can
+	 * expose it.  That is only safe when the copy starts at or beyond
+	 * the original destination EOF (orig_dst_size), because the
+	 * truncate must not discard data that was already in the file past
+	 * the copied range.  When copying
+	 * into the middle of an existing file, the excess objects would
+	 * clobber live data on failure with no way to undo it, so such
+	 * copies are submitted serially (window of 1).
+	 *
+	 * This assumes the destination size is stable for the duration of
+	 * the copy.  CephFS does not serialize concurrent size updates --
+	 * FILE_WR caps are shared among clients and no inode/MDS lock is
+	 * held across the copies -- but concurrent modification is outside
+	 * copy_file_range()'s guarantees, and the pre-existing serial
+	 * implementation was equally racy in that case.
+	 */
+	max_inflight = READ_ONCE(copyfrom_max_inflight);
+	if (!max_inflight)
+		max_inflight = 1;
+	if (orig_dst_off < orig_dst_size)
+		max_inflight = 1;
+
+	reqs = kvmalloc_array(max_inflight, sizeof(*reqs), GFP_KERNEL);
+	if (!reqs) {
+		bytes = -ENOMEM;
+		goto out;
 	}
 
+	/*
+	 * Sliding window: submit requests up to max_inflight, then wait for
+	 * the oldest in-flight request to complete before submitting more.
+	 * The reqs[] ring buffer is indexed by (slot % max_inflight), so
+	 * memory is bounded to max_inflight regardless of num_objects.
+	 * tail is one past the last submitted object and head the oldest
+	 * object not yet drained, so every object in [head, tail) has a
+	 * live request in its slot: the loop simply stops at head == tail
+	 * once submission can no longer continue.  Requests already in
+	 * the window are drained before returning.
+	 */
+	while (head < tail ||
+	       (tail < num_objects &&
+		first_fail_obj == U64_MAX && alloc_fail_obj == U64_MAX)) {
+		/* Submit new requests while the window has room */
+		while (tail < num_objects &&
+		       first_fail_obj == U64_MAX && alloc_fail_obj == U64_MAX &&
+		       inflight < max_inflight) {
+			u64 object_src_off = orig_src_off +
+					     (u64)tail * object_size;
+			u64 object_dst_off = orig_dst_off +
+					     (u64)tail * object_size;
+
+			ceph_calc_file_object_mapping(&src_ci->i_layout,
+						      object_src_off,
+						      object_size,
+						      &src_objnum,
+						      &src_objoff,
+						      &src_objlen);
+			ceph_calc_file_object_mapping(&dst_ci->i_layout,
+						      object_dst_off,
+						      object_size,
+						      &dst_objnum,
+						      &dst_objoff,
+						      &dst_objlen);
+			ceph_oid_init(&src_oid);
+			ceph_oid_printf(&src_oid, "%llx.%08llx",
+					ceph_ino(&src_ci->netfs.inode),
+					src_objnum);
+			ceph_oid_init(&dst_oid);
+			ceph_oid_printf(&dst_oid, "%llx.%08llx",
+					ceph_ino(&dst_ci->netfs.inode),
+					dst_objnum);
+
+			/* Do an object remote copy */
+			div_u64_rem(tail, max_inflight, &rem);
+			slot = rem;
+			req = ceph_alloc_copyfrom_request(osdc,
+						ceph_snap(&src_ci->netfs.inode),
+						&src_oid, &src_oloc,
+						&dst_oid, &dst_oloc,
+						dst_ci->i_truncate_seq,
+						dst_ci->i_truncate_size);
+			if (IS_ERR(req)) {
+				/*
+				 * Remember the allocation failure and stop
+				 * submitting.  The failed object does not
+				 * enter the ring: tail stays one past the
+				 * last submitted object.  In-flight
+				 * requests may still carry a real I/O
+				 * error for an earlier object; the drain
+				 * loop records it and it takes precedence
+				 * over this failure when the result is
+				 * reported.
+				 */
+				alloc_fail_obj = tail;
+				alloc_fail_err = PTR_ERR(req);
+				break;
+			}
+			ceph_osdc_start_request(osdc, req);
+			reqs[slot] = req;
+			tail++;
+			inflight++;
+		}
+
+		/*
+		 * Wait for the oldest in-flight request (FIFO order).
+		 * This is required for correctness: we must determine the
+		 * first failure in object-offset order to know how many
+		 * bytes were successfully copied.  It does not hurt
+		 * performance because all requests in the window are
+		 * submitted concurrently -- later requests complete in
+		 * the background while we wait, so the wall-clock time
+		 * is dominated by the slowest request, not the sum.
+		 */
+		div_u64_rem(head, max_inflight, &rem);
+		slot = rem;
+		ret = ceph_osdc_wait_request(osdc, reqs[slot]);
+		ceph_update_copyfrom_metrics(&fsc->mdsc->metric,
+					     reqs[slot]->r_start_latency,
+					     reqs[slot]->r_end_latency,
+					     object_size, ret);
+		ceph_osdc_put_request(reqs[slot]);
+		reqs[slot] = NULL;
+		inflight--;
+
+		if (ret == -EOPNOTSUPP)
+			have_eopnotsupp = true;
+
+		if (ret < 0 && first_fail_obj == U64_MAX) {
+			first_fail_obj = head;
+			first_fail_err = ret;
+		}
+		if (ret)
+			doutc(cl, "object %llu returned %d\n", head, ret);
+		head++;
+	}
+
+	/*
+	 * Determine bytes copied: all objects before the first failure
+	 * succeeded.  An allocation failure is only reported if no earlier
+	 * in-flight request failed, so a real I/O error is never masked by
+	 * -ENOMEM.
+	 */
+	if (first_fail_obj == U64_MAX && alloc_fail_obj != U64_MAX) {
+		first_fail_obj = alloc_fail_obj;
+		first_fail_err = alloc_fail_err;
+	}
+
+	/*
+	 * For parallel copies the destination starts at or beyond the
+	 * original EOF, so on failure all speculative writes are at or
+	 * beyond the published EOF.  Bump truncate_seq and set
+	 * truncate_size to that published EOF so the OSDs discard those
+	 * writes before any read or write can expose them: the seq
+	 * travels with every future OSD op.  For a partial copy the
+	 * published EOF is the start of the first failed object, which
+	 * the caller publishes through ceph_inode_set_size(); for a
+	 * total failure it remains orig_dst_size.  Middle-of-file copies
+	 * are serialized and never leave such stray objects, and must
+	 * not bump truncate_seq: a boundary below their unchanged EOF
+	 * would discard pre-existing data.
+	 *
+	 * Do not mark the caps dirty or flush them here.  For a partial
+	 * copy the caller marks FILE_WR dirty with its preallocated cap
+	 * flush right after publishing the new size; dirtying here first
+	 * would consume that flush (ceph_check_caps() swaps it out via
+	 * __mark_caps_flushing()), leaving the caller to re-dirty the
+	 * caps with no preallocated flush at hand, which BUG()s later in
+	 * __mark_caps_flushing().  For a total failure no flush is
+	 * needed at all: the file size is unchanged and the truncate seq
+	 * rides along with every future OSD op.
+	 */
+	if (max_inflight > 1 && first_fail_obj != U64_MAX) {
+		u64 truncate_size;
+
+		if (first_fail_obj == 0)
+			truncate_size = orig_dst_size;
+		else
+			truncate_size = orig_dst_off +
+					first_fail_obj * object_size;
+
+		spin_lock(&dst_ci->i_ceph_lock);
+		dst_ci->i_truncate_size = truncate_size;
+		dst_ci->i_truncate_seq++;
+		spin_unlock(&dst_ci->i_ceph_lock);
+	}
+
+	if (first_fail_obj == U64_MAX)
+		bytes = (ssize_t)num_objects * object_size;
+	else if (first_fail_obj == 0)
+		bytes = first_fail_err;
+	else
+		bytes = (ssize_t)first_fail_obj * object_size;
+
+	/*
+	 * Deferred until after the drain loop, but safe: once EOPNOTSUPP
+	 * is observed no further requests are submitted, and requests
+	 * already in the window are drained before this function returns.
+	 * The flag is cleared here, so no COPY_FROM2 request can be sent
+	 * against it afterwards.
+	 */
+	if (have_eopnotsupp) {
+		fsc->have_copy_from2 = false;
+		pr_notice_client(cl,
+			"OSDs don't support copy-from2; disabling copy offload\n");
+	}
+
+	if (bytes > 0) {
+		*src_off = orig_src_off + bytes;
+		*dst_off = orig_dst_off + bytes;
+	}
 out:
+	kvfree(reqs);
 	ceph_oloc_destroy(&src_oloc);
 	ceph_oloc_destroy(&dst_oloc);
 	return bytes;
