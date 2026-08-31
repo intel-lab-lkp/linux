@@ -1486,6 +1486,41 @@ const struct ksz_chip_data ksz_switch_chips[] = {
 		.gbit_capable	= {true, true, true, true, true, true, true},
 	},
 
+	[KSZ9897S] = {
+		.chip_id = KSZ9897S_CHIP_ID,
+		.dev_name = "KSZ9897S",
+		.num_vlans = 4096,
+		.num_alus = 4096,
+		.num_statics = 16,
+		.cpu_ports = 0x7F,	/* can be configured as cpu port */
+		.port_cnt = 7,		/* total physical port count */
+		.port_nirqs = 2,
+		.num_tx_queues = 4,
+		.num_ipms = 8,
+		.ops = &ksz9477_dev_ops,
+		.switch_ops = &ksz9477_switch_ops,
+		.phylink_mac_ops = &ksz9477_phylink_mac_ops,
+		.phy_errata_9477 = true,
+		.mib_names = ksz9477_mib_names,
+		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
+		.reg_mib_cnt = MIB_COUNTER_NUM,
+		.regs = ksz9477_regs,
+		.masks = ksz9477_masks,
+		.shifts = ksz9477_shifts,
+		.xmii_ctrl0 = ksz9477_xmii_ctrl0,
+		.xmii_ctrl1 = ksz9477_xmii_ctrl1,
+		.supports_mii	= {false, false, false, false,
+				   false, true, true},
+		.supports_rmii	= {false, false, false, false,
+				   false, true, true},
+		.supports_rgmii = {false, false, false, false,
+				   false, true, true},
+		.internal_phy	= {true, true, true, true,
+				   true, false, false},
+		.gbit_capable	= {true, true, true, true, true, true, true},
+		.sgmii_port = 7,
+	},
+
 	[KSZ9893] = {
 		.chip_id = KSZ9893_CHIP_ID,
 		.dev_name = "KSZ9893",
@@ -1851,6 +1886,13 @@ static int ksz_check_device_id(struct ksz_device *dev)
 		expected_chip_data = of_device_get_match_data(dev->dev);
 		expected_chip_id = expected_chip_data->chip_id;
 	}
+
+	/* The KSZ9897S is only told apart from the KSZ9897R at run time, so a
+	 * device tree naming the KSZ9897 matches it as well.
+	 */
+	if (expected_chip_id == KSZ9897_CHIP_ID &&
+	    dev->chip_id == KSZ9897S_CHIP_ID)
+		return 0;
 
 	if (expected_chip_id != dev->chip_id) {
 		dev_err(dev->dev,
@@ -2966,7 +3008,6 @@ static int ksz_switch_detect(struct ksz_device *dev)
 		switch (id32) {
 		case KSZ9477_CHIP_ID:
 		case KSZ9896_CHIP_ID:
-		case KSZ9897_CHIP_ID:
 		case KSZ9567_CHIP_ID:
 		case KSZ8567_CHIP_ID:
 		case LAN9370_CHIP_ID:
@@ -2978,6 +3019,23 @@ static int ksz_switch_detect(struct ksz_device *dev)
 			/* LAN9646 does not have its own chip id. */
 			if (dev->chip_id != LAN9646_CHIP_ID)
 				dev->chip_id = id32;
+			break;
+		case KSZ9897_CHIP_ID:
+			/* Only the KSZ9897S has an SGMII port 7; the KSZ9897R
+			 * has a second RGMII port instead. See the KSZ9897S
+			 * data sheet DS00002394C section 5.2.4.1 and the
+			 * KSZ9897R data sheet DS00002330D section 5.2.3.1.
+			 */
+			ret = ksz_read8(dev, KSZ9897_REG_PORT7_XMII_CTRL_0,
+					&id4);
+			if (ret)
+				return ret;
+
+			if (id4 & KSZ9897_PORT7_SGMII_SEL)
+				dev->chip_id = KSZ9897S_CHIP_ID;
+			else
+				dev->chip_id = KSZ9897_CHIP_ID;
+
 			break;
 		case KSZ9893_CHIP_ID:
 			ret = ksz_read8(dev, REG_CHIP_ID4,
