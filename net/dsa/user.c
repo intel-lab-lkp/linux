@@ -1946,6 +1946,7 @@ static int dsa_user_clear_vlan(struct net_device *vdev, int vid, void *arg)
  *
  * - If standalone (this includes software bridge, software LAG):
  *     - if ds->needs_standalone_vlan_filtering = true, OR if
+ *       ds->needs_standalone_vlan_offload = true, OR if
  *       (ds->vlan_filtering_is_global = true AND there are bridges spanning
  *       this switch chip which have vlan_filtering=1)
  *         - the 8021q upper VLANs
@@ -2717,7 +2718,8 @@ void dsa_user_setup_tagger(struct net_device *user)
 	user->hw_features |= NETIF_F_HW_TC;
 	if (user->needed_tailroom)
 		user->features &= ~(NETIF_F_SG | NETIF_F_FRAGLIST);
-	if (ds->needs_standalone_vlan_filtering)
+	if (ds->needs_standalone_vlan_filtering ||
+	    ds->needs_standalone_vlan_offload)
 		user->features |= NETIF_F_HW_VLAN_CTAG_FILTER;
 
 	user->lltx = true;
