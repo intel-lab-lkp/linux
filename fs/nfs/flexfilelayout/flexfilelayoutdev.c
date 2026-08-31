@@ -78,6 +78,11 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 		goto out_err_drain_dsaddrs;
 	mp_count = be32_to_cpup(p);
 	dprintk("%s: multipath ds count %d\n", __func__, mp_count);
+	if (!nfs4_pnfs_ds_addr_count_valid(&stream, mp_count)) {
+		pr_warn_ratelimited("NFS: %s: multipath address count %u exceeds XDR capacity\n",
+				    __func__, mp_count);
+		goto out_err_drain_dsaddrs;
+	}
 
 	for (i = 0; i < mp_count; i++) {
 		/* multipath ds */
