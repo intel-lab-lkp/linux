@@ -5057,6 +5057,9 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state)
 		if (!acrtc || drm_atomic_crtc_needs_modeset(new_crtc_state))
 			continue;
 
+		drm_connector_update_privacy_screen(new_con_state);
+		drm_atomic_helper_connector_apply_luminance(new_con_state);
+
 		dm_new_crtc_state = to_dm_crtc_state(new_crtc_state);
 		dm_old_crtc_state = to_dm_crtc_state(old_crtc_state);
 
@@ -5136,8 +5139,6 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state)
 					    &stream_update);
 		mutex_unlock(&dm->dc_lock);
 		kfree(dummy_updates);
-
-		drm_connector_update_privacy_screen(new_con_state);
 	}
 
 	/**

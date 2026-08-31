@@ -40,6 +40,7 @@
 
 #include <linux/backlight.h>
 #include <linux/power_supply.h>
+#include <drm/drm_backlight.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_utils.h>
 
@@ -496,6 +497,9 @@ amdgpu_dm_register_backlight_device(struct amdgpu_dm_connector *aconnector)
 			dm->actual_brightness[aconnector->bl_idx] = real_brightness;
 			dm->brightness[aconnector->bl_idx] = real_brightness;
 		}
+		/* Link the registered backlight device to the DRM connector. */
+		drm_backlight_link(&aconnector->base, dm->backlight_dev[aconnector->bl_idx]);
+
 		drm_dbg_driver(drm, "DM: Registered Backlight device: %s\n", bl_name);
 	}
 }
