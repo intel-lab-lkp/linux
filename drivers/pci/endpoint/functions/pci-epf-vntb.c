@@ -44,6 +44,7 @@
 #include <linux/dmaengine.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/overflow.h>
 #include <linux/slab.h>
 
@@ -168,12 +169,13 @@ struct epf_ntb_ctrl {
 } __packed;
 
 struct epf_ntb_dma {
+	struct mutex lock; /* Serialize submap toggles and MW translation updates */
 	struct epf_ntb_dma_ctrl ctrl;
 	struct dma_chan *dchan[EDMA_MAX_RD_CH];
 	void *bar_scratch;
 	dma_addr_t bar_scratch_phys;
 	size_t bar_scratch_size;
-	struct pci_epf_bar_submap submap[EDMA_MAX_RD_CH + 2];
+	struct pci_epf_bar_submap submap[EDMA_MAX_RD_CH + 3];
 	struct pci_epf_bar_submap *reg_submap;
 	unsigned int num_submap;
 	u16 rd_ch_cnt;
@@ -269,16 +271,23 @@ static bool epf_ntb_is_bar_used(struct epf_ntb *ntb,
 	return false;
 }
 
-static int epf_ntb_dma_validate_bar(struct epf_ntb *ntb,
-				    const struct pci_epc_features *features)
+static u64 epf_ntb_dma_bar_offset(struct epf_ntb *ntb,
+				  enum pci_barno barno)
 {
-	enum pci_barno barno = ntb->epf_ntb_bar[BAR_DMA];
+	unsigned int i;
 
-	if (epf_ntb_is_bar_used(ntb, barno) ||
-	    pci_epc_get_next_free_bar(features, barno) != barno)
-		return -EINVAL;
+	for (i = 0; i < ntb->num_mws; i++)
+		if (ntb->epf_ntb_bar[BAR_MW1 + i] == barno)
+			return ntb->mws_size[i];
 
 	return 0;
+}
+
+static bool epf_ntb_dma_shares_bar(struct epf_ntb *ntb,
+				   enum pci_barno barno)
+{
+	return ntb->dma && ntb->dma->num_submap &&
+	       ntb->epf_ntb_bar[BAR_DMA] == barno;
 }
 
 struct epf_ntb_dma_filter {
@@ -428,6 +437,7 @@ epf_ntb_dw_edma_collect(struct epf_ntb *ntb,
 	enum pci_barno barno = ntb->epf_ntb_bar[BAR_DMA];
 	struct device *dma_dev;
 	bool needs_submap;
+	u64 offset;
 	unsigned int i;
 	size_t align;
 	u32 next = 0;
@@ -465,9 +475,24 @@ epf_ntb_dw_edma_collect(struct epf_ntb *ntb,
 		if (!features->subrange_mapping ||
 		    !features->dynamic_inbound_mapping)
 			return -EOPNOTSUPP;
-		ret = epf_ntb_dma_validate_bar(ntb, features);
-		if (ret)
-			return ret;
+
+		offset = epf_ntb_dma_bar_offset(ntb, barno);
+		if (!offset &&
+		    (epf_ntb_is_bar_used(ntb, barno) ||
+		     pci_epc_get_next_free_bar(features, barno) != barno))
+			return -EINVAL;
+		if (offset > U32_MAX)
+			return -EOVERFLOW;
+		dma->ctrl.submap.offset = offset;
+		next = offset;
+		if (next) {
+			/*
+			 * submap[0] covers the fixed-size MW prefix. Leave its target
+			 * at zero until the MW translation is installed.
+			 */
+			dma->submap[0].size = next;
+			dma->num_submap = 1;
+		}
 	}
 
 	dma->ctrl.magic = EPF_NTB_DMA_MAGIC;
@@ -497,7 +522,7 @@ epf_ntb_dw_edma_collect(struct epf_ntb *ntb,
 	}
 	if (dma->num_submap) {
 		dma->ctrl.submap.bar = barno;
-		dma->ctrl.submap.size = next;
+		dma->ctrl.submap.size = next - dma->ctrl.submap.offset;
 	}
 
 	dma_dev = ntb->epf->epc->dev.parent;
@@ -567,6 +592,8 @@ static int epf_ntb_dma_collect(struct epf_ntb *ntb)
 	if (!dma)
 		return -ENOMEM;
 
+	mutex_init(&dma->lock);
+
 	switch (ctrl->u.dma_ctrl.reg_layout) {
 	case PCI_EPC_AUX_DMA_REG_LAYOUT_DW_EDMA:
 		ret = epf_ntb_dw_edma_collect(ntb, dma, ctrl, resources, count);
@@ -621,17 +648,25 @@ static void epf_ntb_dma_release(struct epf_ntb *ntb, bool quiesce)
 	ntb->dma = NULL;
 }
 
-static int epf_ntb_dma_set_bar(struct epf_ntb *ntb, bool active)
+static int epf_ntb_dma_set_bar_locked(struct epf_ntb *ntb, bool active,
+				      const dma_addr_t *mw_addr)
 {
 	struct pci_epf_bar_submap *old_submap;
 	struct epf_ntb_dma *dma = ntb->dma;
 	struct pci_epf_bar *bar;
 	unsigned int old_num_submap;
+	dma_addr_t old_mw_addr;
 	int restore, ret;
+
+	lockdep_assert_held(&dma->lock);
 
 	bar = &ntb->epf->bar[ntb->epf_ntb_bar[BAR_DMA]];
 	old_submap = bar->submap;
 	old_num_submap = bar->num_submap;
+	if (mw_addr) {
+		old_mw_addr = dma->submap[0].phys_addr;
+		dma->submap[0].phys_addr = *mw_addr;
+	}
 	bar->submap = active ? dma->submap : NULL;
 	bar->num_submap = active ? dma->num_submap : 0;
 
@@ -641,13 +676,15 @@ static int epf_ntb_dma_set_bar(struct epf_ntb *ntb, bool active)
 		return 0;
 
 	/* A failed dynamic update may have already removed the old mapping. */
+	if (mw_addr)
+		dma->submap[0].phys_addr = old_mw_addr;
 	bar->submap = old_submap;
 	bar->num_submap = old_num_submap;
 	restore = pci_epc_set_bar(ntb->epf->epc, ntb->epf->func_no,
 				  ntb->epf->vfunc_no, bar);
 	if (restore)
 		dev_warn(&ntb->epf->dev,
-			 "failed to restore DMA BAR mapping: %d\n", restore);
+			 "failed to restore DMA/MW BAR mapping: %d\n", restore);
 
 	return ret;
 }
@@ -660,11 +697,13 @@ static int epf_ntb_dma_set_active(struct epf_ntb *ntb, bool active)
 	if (!dma || !dma->num_submap)
 		return 0;
 
+	guard(mutex)(&dma->lock);
+
 	bar = &ntb->epf->bar[ntb->epf_ntb_bar[BAR_DMA]];
 	if (active == !!bar->num_submap)
 		return 0;
 
-	return epf_ntb_dma_set_bar(ntb, active);
+	return epf_ntb_dma_set_bar_locked(ntb, active, NULL);
 }
 
 /**
@@ -1214,7 +1253,7 @@ static int epf_ntb_dma_bar_init(struct epf_ntb *ntb)
 		return -EOPNOTSUPP;
 
 	barno = ntb->epf_ntb_bar[BAR_DMA];
-	mapped_size = dma->ctrl.submap.size;
+	mapped_size = dma->ctrl.submap.offset + dma->ctrl.submap.size;
 	/*
 	 * Submaps cannot be installed until the host assigns the BAR address.
 	 * Use address 0 for the temporary BAR Match Mode mapping, as is done
@@ -1312,6 +1351,7 @@ static void epf_ntb_db_bar_clear(struct epf_ntb *ntb)
  */
 static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 {
+	bool shared;
 	int ret = 0;
 	int i;
 	u64 size;
@@ -1321,22 +1361,25 @@ static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 	for (i = 0; i < ntb->num_mws; i++) {
 		size = ntb->mws_size[i];
 		barno = ntb->epf_ntb_bar[BAR_MW1 + i];
+		shared = epf_ntb_dma_shares_bar(ntb, barno);
 
-		ntb->epf->bar[barno].barno = barno;
-		ntb->epf->bar[barno].size = size;
-		ntb->epf->bar[barno].addr = NULL;
-		ntb->epf->bar[barno].phys_addr = 0;
-		ntb->epf->bar[barno].flags |= upper_32_bits(size) ?
-				PCI_BASE_ADDRESS_MEM_TYPE_64 :
-				PCI_BASE_ADDRESS_MEM_TYPE_32;
+		if (!shared) {
+			ntb->epf->bar[barno].barno = barno;
+			ntb->epf->bar[barno].size = size;
+			ntb->epf->bar[barno].addr = NULL;
+			ntb->epf->bar[barno].phys_addr = 0;
+			ntb->epf->bar[barno].flags |= upper_32_bits(size) ?
+					PCI_BASE_ADDRESS_MEM_TYPE_64 :
+					PCI_BASE_ADDRESS_MEM_TYPE_32;
 
-		ret = pci_epc_set_bar(ntb->epf->epc,
-				      ntb->epf->func_no,
-				      ntb->epf->vfunc_no,
-				      &ntb->epf->bar[barno]);
-		if (ret) {
-			dev_err(dev, "MW set failed\n");
-			goto err_alloc_mem;
+			ret = pci_epc_set_bar(ntb->epf->epc,
+					      ntb->epf->func_no,
+					      ntb->epf->vfunc_no,
+					      &ntb->epf->bar[barno]);
+			if (ret) {
+				dev_err(dev, "MW set failed\n");
+				goto err_alloc_mem;
+			}
 		}
 
 		/* Allocate EPC outbound memory windows to vpci vntb device */
@@ -1353,10 +1396,11 @@ static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 	return ret;
 
 err_set_bar:
-	pci_epc_clear_bar(ntb->epf->epc,
-			  ntb->epf->func_no,
-			  ntb->epf->vfunc_no,
-			  &ntb->epf->bar[barno]);
+	if (!shared)
+		pci_epc_clear_bar(ntb->epf->epc,
+				  ntb->epf->func_no,
+				  ntb->epf->vfunc_no,
+				  &ntb->epf->bar[barno]);
 err_alloc_mem:
 	epf_ntb_mw_bar_clear(ntb, i);
 	return ret;
@@ -1374,10 +1418,11 @@ static void epf_ntb_mw_bar_clear(struct epf_ntb *ntb, int num_mws)
 
 	for (i = 0; i < num_mws; i++) {
 		barno = ntb->epf_ntb_bar[BAR_MW1 + i];
-		pci_epc_clear_bar(ntb->epf->epc,
-				  ntb->epf->func_no,
-				  ntb->epf->vfunc_no,
-				  &ntb->epf->bar[barno]);
+		if (!epf_ntb_dma_shares_bar(ntb, barno))
+			pci_epc_clear_bar(ntb->epf->epc,
+					  ntb->epf->func_no,
+					  ntb->epf->vfunc_no,
+					  &ntb->epf->bar[barno]);
 
 		pci_epc_mem_free_addr(ntb->epf->epc,
 				      ntb->vpci_mw_phy[i],
@@ -1974,6 +2019,16 @@ static int vntb_epf_mw_set_trans(struct ntb_dev *ndev, int pidx, int idx,
 	dev = &ntb->ntb.dev;
 	barno = ntb->epf_ntb_bar[BAR_MW1 + idx];
 	epf_bar = &ntb->epf->bar[barno];
+	if (epf_ntb_dma_shares_bar(ntb, barno)) {
+		/* DMA submaps follow this MW, so its extent cannot be changed. */
+		if (size != ntb->mws_size[idx])
+			return -EINVAL;
+
+		guard(mutex)(&ntb->dma->lock);
+
+		return epf_ntb_dma_set_bar_locked(ntb, true, &addr);
+	}
+
 	epf_bar->phys_addr = addr;
 	epf_bar->barno = barno;
 	epf_bar->size = size;
