@@ -117,6 +117,7 @@ TEST_PROGS := \
 	test_vxlan_vnifiltering.sh \
 	tfo_passive.sh \
 	traceroute.sh \
+	tunnel_drop_reasons.sh \
 	txtimestamp.sh \
 	udpgro.sh \
 	udpgro_bench.sh \
