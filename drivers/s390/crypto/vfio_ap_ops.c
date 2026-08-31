@@ -34,6 +34,7 @@
 #define AP_IRQ_ENABLED	1
 
 #define AP_RESET_INTERVAL		20	/* Reset sleep interval (20ms)		*/
+#define AP_RESET_MAX_WAIT		2000	/* Maximum wait for reset (2000ms)	*/
 
 static int vfio_ap_mdev_reset_queues(struct ap_matrix_mdev *matrix_mdev);
 static int vfio_ap_mdev_reset_qlist(struct list_head *qlist);
@@ -2025,12 +2026,31 @@ static int apq_status_check(int apqn, struct ap_queue_status *status)
 {
 	switch (status->response_code) {
 	case AP_RESPONSE_NORMAL:
+		/*
+		 * This response code only indicates that the PQAP-ZAPQ has
+		 * been initiated. The following bit settings in the status
+		 * returned from ZAPQ must be verified to indicate that the
+		 * queue has been zeroized.
+		 */
+		if (status->queue_empty && !status->replies_waiting &&
+		    !status->irq_enabled && !status->async)
+			return 0;
+
+		/* Still transitioning; keep waiting */
+		return -EBUSY;
+
 	case AP_RESPONSE_DECONFIGURED:
 	case AP_RESPONSE_CHECKSTOPPED:
+		/*
+		 * If the queue is non-operational, interrupts are not possible
+		 * and AQIC resources can be safely freed.
+		 */
 		return 0;
+
 	case AP_RESPONSE_RESET_IN_PROGRESS:
 	case AP_RESPONSE_BUSY:
 		return -EBUSY;
+
 	case AP_RESPONSE_ASSOC_SECRET_NOT_UNIQUE:
 	case AP_RESPONSE_ASSOC_FAILED:
 		/*
@@ -2041,12 +2061,40 @@ static int apq_status_check(int apqn, struct ap_queue_status *status)
 		 * a value indicating a reset needs to be performed again.
 		 */
 		return -EAGAIN;
+
 	default:
 		WARN(true,
 		     "failed to verify reset of queue %02x.%04x: TAPQ rc=%u\n",
 		     AP_QID_CARD(apqn), AP_QID_QUEUE(apqn),
 		     status->response_code);
 		return -EIO;
+	}
+}
+
+static void report_aqic_resource_leak(struct vfio_ap_queue *q)
+{
+	if (q->saved_isc != VFIO_AP_ISC_INVALID || q->saved_iova) {
+		if (q->matrix_mdev) {
+			dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+					     "Reset timed out for APQN %02x.%04x: leaking AQIC resources (NIB page & GISC) to prevent host crash\n",
+					     AP_QID_CARD(q->apqn),
+					     AP_QID_QUEUE(q->apqn));
+		} else {
+			pr_warn_ratelimited("Reset timed out for APQN %02x.%04x: leaking AQIC resources (NIB page & GISC) to prevent host crash\n",
+					    AP_QID_CARD(q->apqn),
+					    AP_QID_QUEUE(q->apqn));
+		}
+	} else {
+		if (q->matrix_mdev) {
+			dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+					     "Reset timed out for APQN %02x.%04x\n",
+					     AP_QID_CARD(q->apqn),
+					     AP_QID_QUEUE(q->apqn));
+		} else {
+			pr_warn_ratelimited("Reset timed out for APQN %02x.%04x\n",
+					    AP_QID_CARD(q->apqn),
+					    AP_QID_QUEUE(q->apqn));
+		}
 	}
 }
 
@@ -2067,6 +2115,47 @@ static void apq_reset_check(struct work_struct *reset_work)
 		ret = apq_status_check(q->apqn, &status);
 		if (ret == -EIO)
 			return;
+		if (elapsed >= AP_RESET_MAX_WAIT) {
+			/*
+			 * If the status check determined that the reset completed
+			 * successfully or the queue is not operational, clean up
+			 * the AQIC resources because queue reset disables
+			 * interrupts and interrupts are not possible on a
+			 * non-operational queue.
+			 */
+			if (!ret)
+				goto done;
+			/*
+			 * Timed out without being able to verify reset completed.
+			 *
+			 * The AQIC resources associated with this queue - the pinned page
+			 * containing the NIB and the registered guest ISC - cannot be freed
+			 * here. The NIB is the active DMA target for AP interrupt delivery
+			 * until the reset completes; freeing the pinned page while the
+			 * hardware may still write to it would result in a use-after-free
+			 * kernel crash.
+			 *
+			 * If the reset eventually completes, interrupts will be terminated
+			 * and the pinned NIB page and ISC registration will be leaked. This
+			 * is preferable to either a use-after-free or waiting indefinitely:
+			 * the caller of apq_reset_check() holds mdevs_lock while flush_work()
+			 * blocks holds the matrix_dev->mdevs_lock mutex, which
+			 * serializes access to all mdev objects system-wide, so blocking
+			 * here would stall all other guests using AP queues.
+			 */
+			report_aqic_resource_leak(q);
+			/*
+			 * Report the actual non-zero hardware response code, or synthesize
+			 * AP_RESPONSE_RESET_IN_PROGRESS if TAPQ completed normally but
+			 * the status bits failed to transition to their post-reset states.
+			 */
+			if (status.response_code == AP_RESPONSE_NORMAL)
+				q->reset_status.response_code = AP_RESPONSE_RESET_IN_PROGRESS;
+			else
+				q->reset_status.response_code = status.response_code;
+
+			return;
+		}
 		if (ret == -EBUSY) {
 			pr_notice_ratelimited(WAIT_MSG, elapsed,
 					      AP_QID_CARD(q->apqn),
@@ -2083,11 +2172,13 @@ static void apq_reset_check(struct work_struct *reset_work)
 				memcpy(&q->reset_status, &status, sizeof(status));
 				continue;
 			}
-			if (q->saved_isc != VFIO_AP_ISC_INVALID)
-				vfio_ap_free_aqic_resources(q);
-			break;
+			goto done;
 		}
 	}
+
+done:
+	if (q->saved_isc != VFIO_AP_ISC_INVALID)
+		vfio_ap_free_aqic_resources(q);
 }
 
 static void vfio_ap_mdev_reset_queue(struct vfio_ap_queue *q)
