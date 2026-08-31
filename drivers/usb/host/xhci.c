@@ -1083,7 +1083,6 @@ int xhci_resume(struct xhci_hcd *xhci, bool power_lost, bool is_auto_resume)
 	struct xhci_segment	*seg;
 	int			retval = 0;
 	bool			pending_portevent = false;
-	bool			suspended_usb3_devs = false;
 	bool			reset_registers = false;
 
 	if (!hcd->state)
@@ -1245,18 +1244,8 @@ int xhci_resume(struct xhci_hcd *xhci, bool power_lost, bool is_auto_resume)
 
 	/*
 	 * Resume roothubs only if there are pending events.
-	 * USB 3 devices resend U3 LFPS wake after a 100ms delay if
-	 * the first wake signalling failed, give it that chance if
-	 * there are suspended USB 3 devices.
 	 */
-	if (xhci->usb3_rhub.bus_state.suspended_ports || xhci->usb3_rhub.bus_state.bus_suspended)
-		suspended_usb3_devs = true;
-
 	pending_portevent = xhci_pending_portevent(xhci);
-	if (suspended_usb3_devs && !pending_portevent && is_auto_resume) {
-		msleep(120);
-		pending_portevent = xhci_pending_portevent(xhci);
-	}
 
 	if (pending_portevent) {
 		if (xhci->shared_hcd)
