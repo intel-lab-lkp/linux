@@ -180,7 +180,6 @@ struct acpi_device_flags {
 	u32 removable:1;
 	u32 ejectable:1;
 	u32 power_manageable:1;
-	u32 initialized:1;
 	u32 visited:1;
 	u32 hotplug_notify:1;
 	u32 is_dock_station:1;
@@ -189,7 +188,7 @@ struct acpi_device_flags {
 	u32 cca_seen:1;
 	u32 enumeration_by_parent:1;
 	u32 honor_deps:1;
-	u32 reserved:19;
+	u32 reserved:20;
 };
 
 /* File System */
@@ -654,7 +653,7 @@ void acpi_set_modalias(struct acpi_device *adev, const char *default_id,
 
 static inline bool acpi_device_enumerated(struct acpi_device *adev)
 {
-	return adev && adev->flags.initialized && adev->flags.visited;
+	return adev && adev->flags.visited;
 }
 
 /*

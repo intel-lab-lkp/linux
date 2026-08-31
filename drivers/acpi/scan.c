@@ -281,7 +281,6 @@ static int acpi_scan_check_and_detach(struct acpi_device *adev, void *p)
 	 * that.
 	 */
 	acpi_device_set_power(adev, ACPI_STATE_D3_COLD);
-	adev->flags.initialized = false;
 
 	/* For eject this is deferred to acpi_bus_post_eject() */
 	if (!(flags & ACPI_SCAN_CHECK_FLAG_EJECT)) {
@@ -1827,7 +1826,6 @@ void acpi_init_device_object(struct acpi_device *device, acpi_handle handle,
 	acpi_set_pnp_ids(handle, &device->pnp, type);
 	acpi_init_properties(device);
 	acpi_bus_get_flags(device);
-	device->flags.initialized = true;
 	device->flags.enumeration_by_parent =
 		acpi_device_enumeration_by_parent(device);
 	acpi_device_clear_enumerated(device);
