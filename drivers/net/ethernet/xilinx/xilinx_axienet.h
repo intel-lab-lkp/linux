@@ -545,6 +545,7 @@ struct skbuf_dma_descriptor {
  * @tx_ring_tail: TX skb ring buffer tail index.
  * @rx_ring_head: RX skb ring buffer head index.
  * @rx_ring_tail: RX skb ring buffer tail index.
+ * @axienet_config: MAC-type specific configuration and operations.
  */
 struct axienet_local {
 	struct net_device *ndev;
@@ -626,6 +627,57 @@ struct axienet_local {
 	int tx_ring_tail;
 	int rx_ring_head;
 	int rx_ring_tail;
+	const struct axienet_config *axienet_config;
+};
+
+/**
+ * struct axienet_config - MAC-type specific configuration and operations
+ * @mdio: MAC has an MDIO bus for external PHY management
+ * @mac_irq: MAC has a dedicated core interrupt
+ * @legacy_dma: MAC supports the legacy (non-dmaengine) DMA mode
+ * @uc_filter: MAC has unicast address filter registers
+ * @mc_filter: MAC has multicast address filter registers
+ * @vlan: MAC supports VLAN frames by default
+ * @jumbo: MAC supports jumbo frames
+ * @dma_tx_csum: MAC supports TX checksum offload
+ * @sw_padding: Short frames must be padded in software before transmit
+ * @internal_pcs: MAC always drives an internal PCS
+ * @regs_n: Number of MAC registers exposed through ethtool -d
+ * @clk_init: Callback to get and enable the MAC-specific clocks
+ * @setoptions: Callback to program MAC hardware options
+ * @probe_init: Callback for MAC-specific probe-time init, or NULL if unused
+ * @gt_reset: Callback to reset the serial transceiver (GT), or NULL if unused
+ * @mac_init: Callback for MAC-specific bring-up after the DMA reset
+ * @mac_link_up: Callback to program link speed and pause on link up, or NULL
+ * @get_regs: Callback to dump the MAC registers for ethtool -d
+ * @phylink_set_caps: Callback to set phylink MAC capabilities
+ * @pcs_ops: phylink PCS operations for this MAC, or NULL if unused
+ * @stats_update: Callback to latch/accumulate the periodic MAC counters
+ */
+struct axienet_config {
+	bool mdio;
+	bool mac_irq;
+	bool legacy_dma;
+	bool uc_filter;
+	bool mc_filter;
+	bool vlan;
+	bool jumbo;
+	bool dma_tx_csum;
+	bool sw_padding;
+	bool internal_pcs;
+	unsigned int regs_n;
+	int (*clk_init)(struct axienet_local *lp);
+	void (*setoptions)(struct net_device *ndev, u32 options);
+	void (*probe_init)(struct axienet_local *lp);
+	void (*gt_reset)(struct axienet_local *lp);
+	int (*mac_init)(struct net_device *ndev);
+	void (*mac_link_up)(struct net_device *ndev, int speed,
+			    bool tx_pause, bool rx_pause);
+	void (*get_regs)(struct axienet_local *lp, u32 *data);
+	void (*phylink_set_caps)(struct axienet_local *lp,
+				 struct phylink_config *config);
+	const struct phylink_pcs_ops *pcs_ops;
+	void (*stats_update)(struct axienet_local *lp);
 };
 
 /**
