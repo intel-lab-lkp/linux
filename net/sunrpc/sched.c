@@ -1304,6 +1304,7 @@ static int rpciod_start(void)
 	wq = alloc_workqueue("xprtiod", wq_flags, 0);
 	if (!wq)
 		goto free_rpciod;
+	rpc_set_wq_smt_affinity(wq, "xprtiod");
 	xprtiod_workqueue = wq;
 	return 1;
 free_rpciod:
