@@ -491,7 +491,7 @@ void kernel_fpu_begin_mask(unsigned int kfpu_mask)
 	if (likely(kfpu_mask & KFPU_MXCSR) && boot_cpu_has(X86_FEATURE_XMM))
 		ldmxcsr(MXCSR_DEFAULT);
 
-	if (unlikely(kfpu_mask & KFPU_387) && boot_cpu_has(X86_FEATURE_FPU))
+	if (unlikely(kfpu_mask & KFPU_387))
 		asm volatile ("fninit");
 }
 EXPORT_SYMBOL_GPL(kernel_fpu_begin_mask);
