@@ -11,6 +11,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <sched.h>
+#include <signal.h>
 #include <time.h>
 #include <pthread.h>
 #include <linux/ntsync.h>
@@ -1381,6 +1382,13 @@ TEST(wait_args_validation)
 	EXPECT_EQ(-1, ret);
 	EXPECT_EQ(EINVAL, errno);
 
+	wait_args.pad = 0;
+	wait_args.flags = ~NTSYNC_WAIT_REALTIME;
+	ret = ioctl(fd, NTSYNC_IOC_WAIT_ANY, &wait_args);
+	EXPECT_EQ(-1, ret);
+	EXPECT_EQ(EINVAL, errno);
+	wait_args.flags = 0;
+
 	ret = wait_any(fd2, 1, &sem, 123, &index);
 	EXPECT_EQ(-1, ret);
 	EXPECT_EQ(EINVAL, errno);
@@ -1468,6 +1476,94 @@ TEST(wait_any_monotonic_timens)
 	EXPECT_TRUE(WIFEXITED(status));
 	EXPECT_EQ(0, WEXITSTATUS(status));
 
+	close(fd);
+}
+
+TEST(wait_timeout_expired)
+{
+	struct ntsync_wait_args wait_args = {0};
+	struct ntsync_sem_args sem_args = {0};
+	struct timespec start, end;
+	__u64 elapsed_ns;
+	int fd, sem, ret;
+
+	fd = open("/dev/ntsync", O_CLOEXEC | O_RDONLY);
+	ASSERT_LE(0, fd);
+
+	sem_args.count = 0;
+	sem_args.max = 1;
+	sem = ioctl(fd, NTSYNC_IOC_CREATE_SEM, &sem_args);
+	EXPECT_LE(0, sem);
+
+	wait_args.timeout = 0;
+	wait_args.objs = (uintptr_t)&sem;
+	wait_args.count = 1;
+	wait_args.owner = 123;
+	wait_args.index = 0xdeadbeef;
+
+	clock_gettime(CLOCK_MONOTONIC, &start);
+	ret = ioctl(fd, NTSYNC_IOC_WAIT_ANY, &wait_args);
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	EXPECT_EQ(-1, ret);
+	EXPECT_EQ(ETIMEDOUT, errno);
+
+	elapsed_ns = (end.tv_sec - start.tv_sec) * 1000000000ULL +
+		     (end.tv_nsec - start.tv_nsec);
+	EXPECT_LT(elapsed_ns, 50 * 1000000ULL);
+
+	close(sem);
+	close(fd);
+}
+
+static void ntsync_test_signal_handler(int sig)
+{
+}
+
+TEST(wait_interrupted_by_signal)
+{
+	struct ntsync_wait_args wait_args = {0};
+	struct ntsync_sem_args sem_args = {0};
+	struct sigaction sa = {0}, old_sa;
+	struct wait_args thread_args;
+	int fd, sem, ret;
+	pthread_t thread;
+
+	fd = open("/dev/ntsync", O_CLOEXEC | O_RDONLY);
+	ASSERT_LE(0, fd);
+
+	sem_args.count = 0;
+	sem_args.max = 1;
+	sem = ioctl(fd, NTSYNC_IOC_CREATE_SEM, &sem_args);
+	EXPECT_LE(0, sem);
+
+	sa.sa_handler = ntsync_test_signal_handler;
+	ret = sigaction(SIGUSR1, &sa, &old_sa);
+	EXPECT_EQ(0, ret);
+
+	wait_args.timeout = get_abs_timeout(5000);
+	wait_args.objs = (uintptr_t)&sem;
+	wait_args.count = 1;
+	wait_args.owner = 123;
+	wait_args.index = 0xdeadbeef;
+	thread_args.fd = fd;
+	thread_args.args = &wait_args;
+	thread_args.request = NTSYNC_IOC_WAIT_ANY;
+	ret = pthread_create(&thread, NULL, wait_thread, &thread_args);
+	EXPECT_EQ(0, ret);
+
+	ret = wait_for_thread(thread, 50);
+	EXPECT_EQ(ETIMEDOUT, ret);
+
+	ret = pthread_kill(thread, SIGUSR1);
+	EXPECT_EQ(0, ret);
+
+	ret = wait_for_thread(thread, 1000);
+	EXPECT_EQ(0, ret);
+	EXPECT_EQ(-1, thread_args.ret);
+	EXPECT_EQ(EINTR, thread_args.err);
+
+	sigaction(SIGUSR1, &old_sa, NULL);
+	close(sem);
 	close(fd);
 }
 
