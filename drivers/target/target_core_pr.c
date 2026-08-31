@@ -2821,6 +2821,7 @@ core_scsi3_emulate_pro_preempt(struct se_cmd *cmd, int type, int scope, u64 res_
 	u64 pr_res_mapped_lun = 0;
 	int all_reg = 0, calling_it_nexus = 0;
 	bool sa_res_key_unmatched = sa_res_key != 0;
+	bool reg_n_released = false;
 	int prh_type = 0, prh_scope = 0;
 
 	if (!se_sess)
@@ -2924,6 +2925,13 @@ core_scsi3_emulate_pro_preempt(struct se_cmd *cmd, int type, int scope, u64 res_
 				sa_res_key_unmatched = false;
 
 				calling_it_nexus = (pr_reg_n == pr_reg) ? 1 : 0;
+				/*
+				 * dec_holders=1 makes the free path drop the
+				 * reference core_scsi3_locate_pr_reg() took on
+				 * pr_reg_n, so the tail must not put it again.
+				 */
+				if (calling_it_nexus)
+					reg_n_released = true;
 				pr_reg_nacl = pr_reg->pr_reg_nacl;
 				pr_res_mapped_lun = pr_reg->pr_res_mapped_lun;
 				__core_scsi3_free_registration(dev, pr_reg,
@@ -3010,7 +3018,8 @@ core_scsi3_emulate_pro_preempt(struct se_cmd *cmd, int type, int scope, u64 res_
 		if (pr_tmpl->pr_aptpl_active)
 			core_scsi3_update_and_write_aptpl(cmd->se_dev, true);
 
-		core_scsi3_put_pr_reg(pr_reg_n);
+		if (!reg_n_released)
+			core_scsi3_put_pr_reg(pr_reg_n);
 		core_scsi3_pr_generation(cmd->se_dev);
 		return 0;
 	}
