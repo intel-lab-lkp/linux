@@ -249,9 +249,11 @@ static int tilcdc_pm_suspend(struct device *dev)
 static int tilcdc_pm_resume(struct device *dev)
 {
 	struct drm_device *ddev = dev_get_drvdata(dev);
+	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(ddev);
 
 	/* Select default pin state */
 	pinctrl_pm_select_default_state(dev);
+
 	return  drm_mode_config_helper_resume(ddev);
 }
 
