@@ -7649,6 +7649,7 @@ F:	Documentation/driver-api/dmaengine/
 F:	drivers/dma/
 F:	include/dt-bindings/dma/
 F:	include/linux/dma/
+F:	include/linux/dma/engine/
 F:	include/linux/dmaengine.h
 F:	include/linux/of_dma.h
 
