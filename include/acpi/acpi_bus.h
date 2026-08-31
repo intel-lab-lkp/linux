@@ -467,6 +467,7 @@ struct acpi_device {
 	struct list_head physical_node_list;
 	struct mutex physical_node_lock;
 	void (*remove)(struct acpi_device *);
+	bool enumerated;
 };
 
 /* Non-device subnode */
@@ -653,7 +654,7 @@ void acpi_set_modalias(struct acpi_device *adev, const char *default_id,
 
 static inline bool acpi_device_enumerated(struct acpi_device *adev)
 {
-	return adev && adev->flags.visited;
+	return adev && adev->enumerated;
 }
 
 /*

@@ -266,8 +266,8 @@ static int acpi_scan_check_and_detach(struct acpi_device *adev, void *p)
 		if (acpi_device_is_enabled(adev))
 			return 0;
 
-		/* Skip device that have not been enumerated. */
-		if (!acpi_device_enumerated(adev)) {
+		/* Skip device that have not been prepared for enumeration. */
+		if (!adev->flags.visited) {
 			dev_dbg(&adev->dev, "Still not enumerated\n");
 			return 0;
 		}
@@ -286,6 +286,7 @@ static int acpi_scan_check_and_detach(struct acpi_device *adev, void *p)
 	if (!(flags & ACPI_SCAN_CHECK_FLAG_EJECT)) {
 		adev->handler = NULL;
 		acpi_device_clear_enumerated(adev);
+		adev->flags.visited = 0;
 	}
 	return 0;
 }
@@ -304,6 +305,7 @@ static int acpi_bus_post_eject(struct acpi_device *adev, void *not_used)
 	}
 
 	acpi_device_clear_enumerated(adev);
+	adev->flags.visited = 0;
 
 	return 0;
 }
@@ -2336,26 +2338,23 @@ static int acpi_scan_attach_handler(struct acpi_device *device)
 	return ret;
 }
 
-static int acpi_bus_attach(struct acpi_device *device, void *first_pass)
+static int acpi_bus_attach(struct acpi_device *device, void *not_used)
 {
-	bool skip = !first_pass && device->flags.visited;
 	acpi_handle ejd;
+	bool skip;
 	int ret;
 
+	skip = !!device->flags.visited;
 	if (skip)
-		goto ok;
+		goto children;
 
 	if (ACPI_SUCCESS(acpi_bus_get_ejd(device->handle, &ejd)))
 		register_dock_dependent_device(device, ejd);
 
 	acpi_bus_get_status(device);
 	/* Skip devices that are not ready for enumeration (e.g. not present) */
-	if (!acpi_dev_ready_for_enumeration(device)) {
-		acpi_device_clear_enumerated(device);
+	if (!acpi_dev_ready_for_enumeration(device))
 		return 0;
-	}
-	if (device->handler)
-		goto ok;
 
 	acpi_ec_register_opregions(device);
 
@@ -2363,12 +2362,11 @@ static int acpi_bus_attach(struct acpi_device *device, void *first_pass)
 	    device->power.state == ACPI_STATE_UNKNOWN)
 		acpi_device_init_power(device);
 
-	if (device->flags.visited)
-		goto ok;
-
 	ret = acpi_scan_attach_handler(device);
 	if (ret < 0)
 		return 0;
+
+	device->flags.visited = 1;
 
 	if (!device->flags.enumeration_by_parent && (ret > 0 ||
 	    (!device->pnp.type.platform_id && !device->pnp.type.backlight)))
@@ -2376,8 +2374,8 @@ static int acpi_bus_attach(struct acpi_device *device, void *first_pass)
 	else
 		acpi_default_enumeration(device);
 
-ok:
-	acpi_dev_for_each_child(device, acpi_bus_attach, first_pass);
+children:
+	acpi_dev_for_each_child(device, acpi_bus_attach, NULL);
 
 	if (!skip && device->handler && device->handler->hotplug.notify_online)
 		device->handler->hotplug.notify_online(device);

@@ -782,12 +782,12 @@ struct platform_device *acpi_create_platform_device(struct acpi_device *,
 
 static inline void acpi_device_set_enumerated(struct acpi_device *adev)
 {
-	adev->flags.visited = true;
+	adev->enumerated = true;
 }
 
 static inline void acpi_device_clear_enumerated(struct acpi_device *adev)
 {
-	adev->flags.visited = false;
+	adev->enumerated = false;
 }
 
 enum acpi_reconfig_event  {
