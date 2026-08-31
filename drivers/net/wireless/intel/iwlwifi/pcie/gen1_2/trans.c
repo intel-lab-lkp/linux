@@ -2075,7 +2075,7 @@ void iwl_trans_pcie_check_product_reset_mode(struct pci_dev *pdev)
 	ACPI_FREE(res);
 }
 
-static void iwl_trans_pcie_set_product_reset(struct pci_dev *pdev, bool enable,
+static bool iwl_trans_pcie_set_product_reset(struct pci_dev *pdev, bool enable,
 					     bool integrated)
 {
 	union acpi_object *res;
@@ -2089,17 +2089,29 @@ static void iwl_trans_pcie_set_product_reset(struct pci_dev *pdev, bool enable,
 						 DSM_INTERNAL_PLDR_CMD_SET_MODE,
 						 mode);
 	if (IS_ERR(res)) {
-		if (enable)
-			IWL_ERR_DEV(&pdev->dev,
-				    "ACPI _DSM not available (%d), cannot do product reset\n",
-				    (int)PTR_ERR(res));
-		return;
+		IWL_DEBUG_DEV_POWER(&pdev->dev,
+				    "can't %sable product reset via DSM (%d)\n",
+				    enable ? "en" : "dis", (int)PTR_ERR(res));
+		return false;
 	}
 
 	ACPI_FREE(res);
 	IWL_DEBUG_DEV_POWER(&pdev->dev, "%sabled product reset via DSM\n",
 			    enable ? "En" : "Dis");
 	iwl_trans_pcie_check_product_reset_mode(pdev);
+	return true;
+}
+
+void iwl_trans_pcie_arm_product_reset(struct iwl_trans *trans, bool arm)
+{
+	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
+
+	/* discrete only: the integrated arming mask is untested */
+	if (trans->mac_cfg->integrated)
+		return;
+
+	if (iwl_trans_pcie_set_product_reset(trans_pcie->pci_dev, arm, false))
+		trans_pcie->prod_reset_set = arm;
 }
 
 void iwl_trans_pcie_check_product_reset_status(struct pci_dev *pdev)
