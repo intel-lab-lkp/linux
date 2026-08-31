@@ -550,6 +550,8 @@ xrep_metapath_try_unlink(
 	}
 	if (error) {
 		xchk_trans_cancel(sc);
+		if (ip)
+			xchk_irele(sc, ip);
 		return error;
 	}
 
