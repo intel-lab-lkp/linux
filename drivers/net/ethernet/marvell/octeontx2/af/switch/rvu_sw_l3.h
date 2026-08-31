@@ -8,4 +8,6 @@
 #ifndef RVU_SW_L3_H
 #define RVU_SW_L3_H
 
+void rvu_sw_l3_shutdown(void);
+void rvu_sw_l3_clear_shutdown(void);
 #endif
