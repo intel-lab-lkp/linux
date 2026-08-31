@@ -17091,7 +17091,10 @@ static int bnxt_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 */
 	if (is_kdump_kernel()) {
 		pci_clear_master(pdev);
+		pci_save_state(pdev);
 		pcie_flr(pdev);
+		bnxt_clear_bars(pdev);
+		pci_restore_state(pdev);
 	}
 
 	max_irqs = bnxt_get_max_irq(pdev);
