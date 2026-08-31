@@ -903,6 +903,28 @@ struct drm_get_cap {
  */
 #define DRM_CLIENT_CAP_PLANE_COLOR_PIPELINE	7
 
+/**
+ * DRM_CLIENT_CAP_LUMINANCE
+ *
+ * If set to 1, the client declares support for the LUMINANCE connector property
+ * and will control backlight brightness through the DRM atomic interface. This
+ * enables the kernel to expose the LUMINANCE property on connectors that have
+ * an associated backlight device.
+ *
+ * When this capability is enabled:
+ *  - The LUMINANCE property becomes visible on supported connectors
+ *  - Legacy sysfs writes to /sys/class/backlight/{*}/brightness will return
+ *    -EBUSY to prevent conflicts with DRM-based brightness control
+ *  - The client should include luminance values as part of atomic commits
+ *  - Brightness changes are synchronized with display power state (DPMS)
+ *
+ * The LUMINANCE property accepts values from 0 to max_brightness, where 0 turns
+ * off the backlight, and 1 to max_brightness control the brightness level.
+ *
+ * This capability is supported starting in kernel 7.2.
+ */
+#define DRM_CLIENT_CAP_LUMINANCE		8
+
 /* DRM_IOCTL_SET_CLIENT_CAP ioctl argument type */
 struct drm_set_client_cap {
 	__u64 capability;
