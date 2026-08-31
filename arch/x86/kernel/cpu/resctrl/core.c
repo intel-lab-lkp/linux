@@ -138,6 +138,9 @@ struct rdt_resource *resctrl_arch_get_resource(enum resctrl_res_level l)
 	return &rdt_resources_all[l].r_resctrl;
 }
 
+/* Skip regular allocation if cache_alloc_hsw_probe() succeeds. */
+static bool hsw_alloc_capable;
+
 /*
  * cache_alloc_hsw_probe() - Have to probe for Intel haswell server CPUs
  * as they do not have CPUID enumeration support for Cache allocation.
@@ -178,7 +181,7 @@ static inline void cache_alloc_hsw_probe(void)
 	r->cache.arch_has_sparse_bitmasks = false;
 	r->alloc_capable = true;
 
-	rdt_alloc_capable = true;
+	hsw_alloc_capable = true;
 }
 
 /*
@@ -930,7 +933,7 @@ static __init bool get_rdt_alloc_resources(void)
 	struct rdt_resource *r;
 	bool ret = false;
 
-	if (rdt_alloc_capable)
+	if (hsw_alloc_capable)
 		return true;
 
 	if (!boot_cpu_has(X86_FEATURE_RDT_A))
