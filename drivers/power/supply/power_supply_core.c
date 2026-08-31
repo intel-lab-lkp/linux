@@ -1442,7 +1442,7 @@ EXPORT_SYMBOL_GPL(power_supply_get_property);
 int power_supply_get_property_direct(struct power_supply *psy, enum power_supply_property psp,
 				     union power_supply_propval *val)
 {
-        return __power_supply_get_property(psy, psp, val, false);
+	return __power_supply_get_property(psy, psp, val, false);
 }
 EXPORT_SYMBOL_GPL(power_supply_get_property_direct);
 
