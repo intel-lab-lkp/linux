@@ -54,6 +54,12 @@ struct enetc_pf {
 
 	struct enetc_port_caps caps;
 	const struct enetc_pf_ops *ops;
+
+	/* Message lock, prevent concurrent access */
+	struct mutex msg_lock;
+	bool sriov_enabled;
+	bool link_up;
+	u16 link_status_ms_mask;
 };
 
 #define phylink_to_enetc_pf(config) \
