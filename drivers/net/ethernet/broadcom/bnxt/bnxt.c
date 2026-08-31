@@ -17564,7 +17564,7 @@ static pci_ers_result_t bnxt_io_slot_reset(struct pci_dev *pdev)
 
 	netdev_info(bp->dev, "PCI Slot Reset\n");
 
-	if (test_bit(BNXT_STATE_PCI_CHANNEL_IO_FROZEN, &bp->state)) {
+	if (test_and_clear_bit(BNXT_STATE_PCI_CHANNEL_IO_FROZEN, &bp->state)) {
 		/* After DPC, the chip should return CRS when the vendor ID
 		 * config register is read until it is ready.  On all chips,
 		 * this is not happening reliably so add a 5-second delay as a
@@ -17580,17 +17580,15 @@ static pci_ers_result_t bnxt_io_slot_reset(struct pci_dev *pdev)
 			"Cannot re-enable PCI device after reset.\n");
 	} else {
 		pci_set_master(pdev);
-		/* Upon fatal error, our device internal logic that latches to
+		/* Upon PCIe error, our device internal logic that latches to
 		 * BAR value is getting reset and will restore only upon
 		 * rewriting the BARs.
 		 *
 		 * As pci_restore_state() does not re-write the BARs if the
 		 * value is same as saved value earlier, driver needs to
-		 * write the BARs to 0 to force restore, in case of fatal error.
+		 * write the BARs to 0 to force restore.
 		 */
-		if (test_and_clear_bit(BNXT_STATE_PCI_CHANNEL_IO_FROZEN,
-				       &bp->state))
-			bnxt_clear_bars(pdev);
+		bnxt_clear_bars(pdev);
 		pci_restore_state(pdev);
 
 		bnxt_inv_fw_health_reg(bp);
