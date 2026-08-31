@@ -835,7 +835,15 @@ static inline bool acpi_str_uid_match(struct acpi_device *adev, const char *uid2
 {
 	const char *uid1 = acpi_device_uid(adev);
 
-	return uid1 && uid2 && !strcmp(uid1, uid2);
+	if (!uid1 || !uid2)
+		return false;
+
+	if (*uid1 == '\\')
+		uid1++;
+	if (*uid2 == '\\')
+		uid2++;
+
+	return !strcmp(uid1, uid2);
 }
 
 static inline bool acpi_int_uid_match(struct acpi_device *adev, u64 uid2)
