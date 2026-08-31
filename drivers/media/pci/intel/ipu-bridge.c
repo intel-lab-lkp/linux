@@ -930,6 +930,7 @@ static DEFINE_MUTEX(ipu_bridge_mutex);
 int ipu_bridge_init(struct device *dev,
 		    ipu_parse_sensor_fwnode_t parse_sensor_fwnode)
 {
+	const struct software_node *ipu_node;
 	struct fwnode_handle *fwnode;
 	struct ipu_bridge *bridge;
 	unsigned int i;
@@ -939,6 +940,29 @@ int ipu_bridge_init(struct device *dev,
 
 	if (!ipu_bridge_check_fwnode_graph(dev_fwnode(dev)))
 		return 0;
+
+	/*
+	 * The software nodes registered by a previous ipu_bridge_init() call
+	 * are deliberately kept registered when the module is unloaded, and
+	 * the sensors' ACPI fwnodes still have them as their secondary
+	 * fwnodes. If the IPU software node is already registered this is a
+	 * rebind, e.g. after the PCI device was removed and re-scanned,
+	 * which drops the IPU's secondary fwnode link. Registering the nodes
+	 * again would fail with -EEXIST, so instead reuse them and just
+	 * restore the IPU's secondary fwnode link.
+	 */
+	ipu_node = software_node_find_by_name(NULL, IPU_HID);
+	if (ipu_node) {
+		fwnode = software_node_fwnode(ipu_node);
+		set_secondary_fwnode(dev, fwnode);
+		/*
+		 * The node stays registered, it does not need the reference
+		 * software_node_find_by_name() took to stay alive.
+		 */
+		fwnode_handle_put(fwnode);
+		dev_info(dev, "Reusing the previously registered software nodes\n");
+		return 0;
+	}
 
 	if (!ipu_bridge_ivsc_is_ready())
 		return dev_err_probe(dev, -EPROBE_DEFER,
