@@ -118,6 +118,55 @@ unbreak:
 	return ret;
 }
 
+/*
+ * Use the per-device ops lock without RTNL when the device supports it.
+ * Legacy devices and callbacks which explicitly require RTNL retain the
+ * existing locking.
+ */
+static int sysfs_get_link_ksettings(struct device *dev,
+				    struct device_attribute *attr,
+				    struct ethtool_link_ksettings *cmd)
+{
+	struct net_device *netdev = to_net_dev(dev);
+	int ret = -EINVAL;
+	bool need_rtnl;
+
+	/*
+	 * The check is also done in netif_get_link_ksettings(); this helps
+	 * returning early without hitting the locking section below.
+	 */
+	if (!netdev->ethtool_ops->get_link_ksettings)
+		return ret;
+
+	need_rtnl = !netdev_need_ops_lock(netdev) ||
+		    (netdev->ethtool_ops->op_needs_rtnl &
+		     ETHTOOL_OP_NEEDS_RTNL_LINKSETTINGS);
+	if (need_rtnl) {
+		ret = sysfs_rtnl_lock(&dev->kobj, &attr->attr, netdev);
+		if (ret)
+			return ret;
+	}
+	netdev_lock_ops(netdev);
+
+	ret = -EINVAL;
+	if (!dev_isalive(netdev)) {
+		ret = -ENODEV;
+	} else if (netif_running(netdev)) {
+		/*
+		 * Keep the sysfs ABI: report any callback error as -EINVAL
+		 * instead of propagating the driver's error code.
+		 */
+		if (!netif_get_link_ksettings(netdev, cmd))
+			ret = 0;
+	}
+
+	netdev_unlock_ops(netdev);
+	if (need_rtnl)
+		rtnl_unlock();
+
+	return ret;
+}
+
 /* use same locking rules as GIF* ioctl's */
 static ssize_t netdev_show(const struct device *dev,
 			   struct device_attribute *attr, char *buf,
@@ -332,27 +381,13 @@ static DEVICE_ATTR_RW(carrier);
 static ssize_t speed_show(struct device *dev,
 			  struct device_attribute *attr, char *buf)
 {
-	struct net_device *netdev = to_net_dev(dev);
-	int ret = -EINVAL;
+	struct ethtool_link_ksettings cmd;
+	int ret;
 
-	/* The check is also done in __ethtool_get_link_ksettings; this helps
-	 * returning early without hitting the locking section below.
-	 */
-	if (!netdev->ethtool_ops->get_link_ksettings)
-		return ret;
+	ret = sysfs_get_link_ksettings(dev, attr, &cmd);
+	if (!ret)
+		ret = sysfs_emit(buf, fmt_dec, cmd.base.speed);
 
-	ret = sysfs_rtnl_lock(&dev->kobj, &attr->attr, netdev);
-	if (ret)
-		return ret;
-
-	ret = -EINVAL;
-	if (netif_running(netdev)) {
-		struct ethtool_link_ksettings cmd;
-
-		if (!__ethtool_get_link_ksettings(netdev, &cmd))
-			ret = sysfs_emit(buf, fmt_dec, cmd.base.speed);
-	}
-	rtnl_unlock();
 	return ret;
 }
 static DEVICE_ATTR_RO(speed);
@@ -360,41 +395,26 @@ static DEVICE_ATTR_RO(speed);
 static ssize_t duplex_show(struct device *dev,
 			   struct device_attribute *attr, char *buf)
 {
-	struct net_device *netdev = to_net_dev(dev);
-	int ret = -EINVAL;
+	struct ethtool_link_ksettings cmd;
+	const char *duplex;
+	int ret;
 
-	/* The check is also done in __ethtool_get_link_ksettings; this helps
-	 * returning early without hitting the locking section below.
-	 */
-	if (!netdev->ethtool_ops->get_link_ksettings)
-		return ret;
-
-	ret = sysfs_rtnl_lock(&dev->kobj, &attr->attr, netdev);
-	if (ret)
-		return ret;
-
-	ret = -EINVAL;
-	if (netif_running(netdev)) {
-		struct ethtool_link_ksettings cmd;
-
-		if (!__ethtool_get_link_ksettings(netdev, &cmd)) {
-			const char *duplex;
-
-			switch (cmd.base.duplex) {
-			case DUPLEX_HALF:
-				duplex = "half";
-				break;
-			case DUPLEX_FULL:
-				duplex = "full";
-				break;
-			default:
-				duplex = "unknown";
-				break;
-			}
-			ret = sysfs_emit(buf, "%s\n", duplex);
+	ret = sysfs_get_link_ksettings(dev, attr, &cmd);
+	if (!ret) {
+		switch (cmd.base.duplex) {
+		case DUPLEX_HALF:
+			duplex = "half";
+			break;
+		case DUPLEX_FULL:
+			duplex = "full";
+			break;
+		default:
+			duplex = "unknown";
+			break;
 		}
+		ret = sysfs_emit(buf, "%s\n", duplex);
 	}
-	rtnl_unlock();
+
 	return ret;
 }
 static DEVICE_ATTR_RO(duplex);
