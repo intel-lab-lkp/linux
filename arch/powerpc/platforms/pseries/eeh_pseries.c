@@ -12,6 +12,8 @@
  * Copyright Linas Vepstas 2005, 2006
  */
 
+#define pr_fmt(fmt) "EEH: " fmt
+
 #include <linux/atomic.h>
 #include <linux/delay.h>
 #include <linux/export.h>
@@ -785,6 +787,219 @@ static int pseries_notify_resume(struct eeh_dev *edev)
 	return 0;
 }
 #endif
+
+/*
+ * RTAS firmware error-type encodings (PAPR).  These are pseries-private;
+ * user-space sees only the generic EEH_ERR_TYPE_* values from eeh.h.
+ * Only IOA bus-error types are supported; other PAPR encodings are not
+ * reachable through the generic EEH_ERR_TYPE_* UAPI.
+ */
+#define RTAS_ERR_TYPE_IOA_BUS_ERROR		0x07
+#define RTAS_ERR_TYPE_IOA_BUS_ERROR_64		0x0f
+
+/* Size of the ibm,errinjct work buffer as defined by PAPR */
+#define RTAS_ERRINJCT_BUF_SIZE			SZ_1K
+
+/**
+ * pseries_eeh_type_to_rtas - Map generic EEH error type to RTAS encoding
+ * @type: generic EEH error type (EEH_ERR_TYPE_32, EEH_ERR_TYPE_64)
+ *
+ * Translates the generic VFIO/EEH error type passed from userspace into
+ * the RTAS-specific ibm,errinjct error type encoding defined by PAPR.
+ *
+ * Return: RTAS error type on success, -EINVAL for unknown types.
+ */
+static int pseries_eeh_type_to_rtas(int type)
+{
+	switch (type) {
+	case EEH_ERR_TYPE_32:
+		return RTAS_ERR_TYPE_IOA_BUS_ERROR;
+	case EEH_ERR_TYPE_64:
+		return RTAS_ERR_TYPE_IOA_BUS_ERROR_64;
+	default:
+		return -EINVAL;
+	}
+}
+
+/**
+ * validate_addr_mask_in_pe - Validate addr against PCI bus BAR addresses in PE
+ * @pe:   EEH PE containing one or more PCI devices
+ * @addr: PCI bus address to validate
+ * @mask: address mask (passed to firmware unchanged)
+ *
+ * RTAS IOA bus-error injection uses PCI bus addresses.  Linux PCI resources
+ * are CPU/resource addresses and may differ on pseries due to PHB window
+ * translation.  Convert each BAR resource to PCI bus address space before
+ * validating @addr.
+ *
+ * Zero addr and mask are accepted without BAR lookup (no-address injection).
+ *
+ * Return: 0 if valid, -EINVAL on invalid input.
+ */
+static int validate_addr_mask_in_pe(struct eeh_pe *pe, unsigned long addr,
+				    unsigned long mask)
+{
+	struct pci_bus_region region;
+	struct eeh_dev *edev, *tmp;
+	struct pci_dev *pdev;
+	struct resource *res;
+	resource_size_t bus_start;
+	resource_size_t bus_len;
+	int bar;
+
+	if (!addr && !mask)
+		return 0;
+
+	if (!pe)
+		return -EINVAL;
+
+	/*
+	 * RTAS IOA bus-error injection uses PCI bus addresses. Linux PCI
+	 * resources are CPU/resource addresses and may differ on pseries due
+	 * to PHB window translation. Convert each BAR resource to PCI bus
+	 * address space before validating @addr.
+	 */
+	eeh_pe_for_each_dev(pe, edev, tmp) {
+		pdev = eeh_dev_to_pci_dev(edev);
+		if (!pdev)
+			continue;
+
+		for (bar = 0; bar < PCI_STD_NUM_BARS; bar++) {
+			res = &pdev->resource[bar];
+
+			if (!resource_size(res))
+				continue;
+
+			if (!(res->flags & (IORESOURCE_MEM | IORESOURCE_IO)))
+				continue;
+
+			pcibios_resource_to_bus(pdev->bus, &region, res);
+
+			bus_start = region.start;
+			bus_len = resource_size(res);
+
+			if ((resource_size_t)addr >= bus_start &&
+			    ((resource_size_t)addr - bus_start) < bus_len) {
+				pr_debug("addr=0x%lx mask=0x%lx validated in PCI bus BAR[%d] of %s: bus range 0x%llx-0x%llx\n",
+					 addr, mask, bar, pci_name(pdev),
+					 (unsigned long long)region.start,
+					 (unsigned long long)region.end);
+				return 0;
+			}
+		}
+	}
+
+	pr_err("addr=0x%lx mask=0x%lx not within any PCI bus BAR of any device in PE\n",
+	       addr, mask);
+	return -EINVAL;
+}
+
+/**
+ * validate_errinjct_args - Top-level validation for RTAS error injection arguments
+ * @pe:   EEH PE for the target device
+ * @type: generic EEH error type
+ * @func: error function selector
+ * @addr: address argument (type-dependent, may be zero)
+ * @mask: mask argument (type-dependent, may be zero)
+ *
+ * Validates all parameters before opening an RTAS injection session.
+ * Returns Linux errno values; does not return raw RTAS status codes.
+ *
+ * Return: 0 if all parameters are valid, negative errno otherwise.
+ */
+static int validate_errinjct_args(struct eeh_pe *pe, int type, int func,
+				  unsigned long addr, unsigned long mask)
+{
+	if (!pe || !pe->phb)
+		return -EINVAL;
+
+	if (pseries_eeh_type_to_rtas(type) < 0)
+		return -EINVAL;
+
+	if (func < EEH_ERR_FUNC_MIN || func > EEH_ERR_FUNC_MAX)
+		return -EINVAL;
+
+	return 0;
+}
+
+/**
+ * prepare_errinjct_buffer() - Build ibm,errinjct work buffer
+ * @buf: RTAS error-injection work buffer
+ * @pe: EEH PE associated with the injection target
+ * @rtas_type: RTAS firmware error-injection type
+ * @func: Error function selector
+ * @addr: Target PCI bus address
+ * @mask: Address mask passed to firmware
+ *
+ * Zeroes @buf and populates it according to the PAPR layout for the
+ * selected IOA bus-error injection type.
+ *
+ * The caller provides an exclusive per-call RTAS work-area buffer.
+ * Firmware session serialization is handled by pseries_eeh_err_inject().
+ *
+ * Return: 0 on success or a negative errno on invalid input.
+ */
+static int prepare_errinjct_buffer(void *buf, struct eeh_pe *pe,
+				   int rtas_type, int func,
+				   unsigned long addr, unsigned long mask)
+{
+	__be64 *buf64 = (__be64 *)buf;
+	__be32 *buf32 = (__be32 *)buf;
+	int rc;
+
+	if (!buf || !pe || !pe->phb)
+		return -EINVAL;
+
+	memset(buf, 0, RTAS_ERRINJCT_BUF_SIZE);
+
+	switch (rtas_type) {
+	case RTAS_ERR_TYPE_IOA_BUS_ERROR:
+		if (func < EEH_ERR_FUNC_MIN || func > EEH_ERR_FUNC_MAX)
+			return -EINVAL;
+
+		if (upper_32_bits(addr) || upper_32_bits(mask)) {
+			pr_err("32-bit IOA injection cannot encode addr=%#lx mask=%#lx\n",
+			       addr, mask);
+			return -EINVAL;
+		}
+
+		rc = validate_addr_mask_in_pe(pe, addr, mask);
+		if (rc)
+			return rc;
+
+		buf32[0] = cpu_to_be32((u32)addr);
+		buf32[1] = cpu_to_be32((u32)mask);
+		buf32[2] = cpu_to_be32(pe->addr);
+		buf32[3] = cpu_to_be32(BUID_HI(pe->phb->buid));
+		buf32[4] = cpu_to_be32(BUID_LO(pe->phb->buid));
+		buf32[5] = cpu_to_be32(func);
+		break;
+
+	case RTAS_ERR_TYPE_IOA_BUS_ERROR_64:
+		if (func < EEH_ERR_FUNC_MIN || func > EEH_ERR_FUNC_MAX)
+			return -EINVAL;
+
+		rc = validate_addr_mask_in_pe(pe, addr, mask);
+		if (rc)
+			return rc;
+
+		buf64[0] = cpu_to_be64(addr);
+		buf64[1] = cpu_to_be64(mask);
+		buf32[4] = cpu_to_be32(pe->addr);
+		buf32[5] = cpu_to_be32(BUID_HI(pe->phb->buid));
+		buf32[6] = cpu_to_be32(BUID_LO(pe->phb->buid));
+		buf32[7] = cpu_to_be32(func);
+		break;
+
+	default:
+		pr_err("unsupported RTAS error injection type 0x%x\n", rtas_type);
+		return -EINVAL;
+	}
+
+	pr_debug("errinjct buffer ready: rtas_type=0x%x func=%d addr=0x%lx mask=0x%lx\n",
+		 rtas_type, func, addr, mask);
+	return 0;
+}
 
 /**
  * pseries_eeh_err_inject - Inject specified error to the indicated PE
