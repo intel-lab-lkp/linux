@@ -825,7 +825,8 @@ static int ramoops_probe(struct platform_device *pdev)
 		cxt->pstore.max_reason = pdata->max_reason;
 	}
 	if (cxt->console_size)
-		cxt->pstore.flags |= PSTORE_FLAGS_CONSOLE;
+		cxt->pstore.flags |= PSTORE_FLAGS_CONSOLE |
+				     PSTORE_FLAGS_CONSOLE_BYPASS_LOGLEVEL;
 	if (cxt->max_ftrace_cnt)
 		cxt->pstore.flags |= PSTORE_FLAGS_FTRACE;
 	if (cxt->pmsg_size)

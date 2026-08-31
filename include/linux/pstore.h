@@ -206,6 +206,8 @@ struct pstore_info {
 #define PSTORE_FLAGS_CONSOLE	BIT(1)
 #define PSTORE_FLAGS_FTRACE	BIT(2)
 #define PSTORE_FLAGS_PMSG	BIT(3)
+/* Bypass loglevel for fast consoles */
+#define PSTORE_FLAGS_CONSOLE_BYPASS_LOGLEVEL BIT(4)
 
 extern int pstore_register(struct pstore_info *);
 extern void pstore_unregister(struct pstore_info *);
