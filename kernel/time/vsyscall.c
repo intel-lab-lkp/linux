@@ -137,8 +137,8 @@ void vdso_time_update_aux(struct timekeeper *tk)
 	struct vdso_time_data *vdata = vdso_k_time_data;
 	struct vdso_timestamp *vdso_ts;
 	struct vdso_clock *vc;
+	u64 nsec_per_sec, nsec;
 	s32 clock_mode;
-	u64 nsec;
 
 	vc = &vdata->aux_clock_data[tk->id - TIMEKEEPER_AUX_FIRST];
 	vdso_ts = &vc->basetime[VDSO_BASE_AUX];
@@ -156,10 +156,11 @@ void vdso_time_update_aux(struct timekeeper *tk)
 
 		vdso_ts->sec = tk->xtime_sec + tk->monotonic_to_aux.tv_sec;
 
-		nsec = tk->tkr_mono.xtime_nsec >> tk->tkr_mono.shift;
-		nsec += tk->monotonic_to_aux.tv_nsec;
-		vdso_ts->sec += __iter_div_u64_rem(nsec, NSEC_PER_SEC, &nsec);
-		nsec = nsec << tk->tkr_mono.shift;
+		nsec_per_sec = (u64)NSEC_PER_SEC << tk->tkr_mono.shift;
+
+		nsec = tk->tkr_mono.xtime_nsec;
+		nsec += (u64)tk->monotonic_to_aux.tv_nsec << tk->tkr_mono.shift;
+		vdso_ts->sec += __iter_div64_u64_rem(nsec, nsec_per_sec, &nsec);
 		vdso_ts->nsec = nsec;
 	}
 
