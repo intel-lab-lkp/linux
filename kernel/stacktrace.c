@@ -14,6 +14,7 @@
 #include <linux/kallsyms.h>
 #include <linux/stacktrace.h>
 #include <linux/interrupt.h>
+#include <asm/sections.h>
 
 /**
  * stack_trace_print - Print the entries in the stack trace
@@ -374,12 +375,27 @@ unsigned int stack_trace_save_user(unsigned long *store, unsigned int size)
 
 #endif /* !CONFIG_ARCH_STACKWALK */
 
-static inline bool in_irqentry_text(unsigned long ptr)
+/*
+ * Optional arch hook for event entry text which cannot be placed in
+ * .irqentry.text.  filter_irq_stacks() uses this and the section checks
+ * below to find where a trace entered the kernel, so the ranges are not
+ * necessarily irq-only: on x86 they also cover the exception entry stubs,
+ * and an architecture may deliver syscalls through the same entry text.
+ * A caller that has to tell interrupt entry and syscall entry apart
+ * cannot use this.  An architecture overrides it by defining a macro of
+ * the same name in <asm/sections.h>, next to the markers it tests.
+ */
+#ifndef arch_in_event_entry_text
+static inline bool arch_in_event_entry_text(unsigned long addr) { return false; }
+#endif
+
+static inline bool in_event_entry_text(unsigned long ptr)
 {
 	return (ptr >= (unsigned long)&__irqentry_text_start &&
 		ptr < (unsigned long)&__irqentry_text_end) ||
 		(ptr >= (unsigned long)&__softirqentry_text_start &&
-		 ptr < (unsigned long)&__softirqentry_text_end);
+		 ptr < (unsigned long)&__softirqentry_text_end) ||
+		arch_in_event_entry_text(ptr);
 }
 
 /**
@@ -394,7 +410,7 @@ unsigned int filter_irq_stacks(unsigned long *entries, unsigned int nr_entries)
 	unsigned int i;
 
 	for (i = 0; i < nr_entries; i++) {
-		if (in_irqentry_text(entries[i])) {
+		if (in_event_entry_text(entries[i])) {
 			/* Include the irqentry function into the stack. */
 			return i + 1;
 		}
