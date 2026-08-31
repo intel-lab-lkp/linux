@@ -76,6 +76,12 @@
  */
 #define USB_SS_PORT_U0_WAKE_TIME	200  /* ms */
 
+/*
+ * Root hubs have no upstream hub whose wake propagation needs to be
+ * accounted for, but still needs time for USB3 link training to complete.
+ */
+#define USB_SS_ROOT_HUB_U0_WAKE_TIME 120 /* ms */
+
 /* Protect struct usb_device->state and ->children members
  * Note: Both are also protected by ->dev.sem, except that ->state can
  * change to USB_STATE_NOTATTACHED even when the semaphore isn't held. */
@@ -1358,7 +1364,9 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 
 		queue_delayed_work(system_power_efficient_wq,
 				   &hub->post_resume_work,
-				   msecs_to_jiffies(USB_SS_PORT_U0_WAKE_TIME));
+				   msecs_to_jiffies(hdev->parent ?
+			USB_SS_PORT_U0_WAKE_TIME :
+			USB_SS_ROOT_HUB_U0_WAKE_TIME));
 		return;
 	}
 
