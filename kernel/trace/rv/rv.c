@@ -245,13 +245,31 @@ struct rv_monitor *rv_get_monitor_by_name(const char *name)
 /*
  * This section collects the monitor/ files and folders.
  */
+
+bool rv_is_monitor_registered(struct rv_monitor *mon)
+{
+	struct rv_monitor *m;
+
+	list_for_each_entry_rcu(m, &rv_monitors_list, list,
+				lockdep_is_held(&rv_interface_lock)) {
+		if (m == mon)
+			return true;
+	}
+	return false;
+}
+
 static ssize_t monitor_enable_read_data(struct file *filp, char __user *user_buf, size_t count,
 					loff_t *ppos)
 {
 	struct rv_monitor *mon = filp->private_data;
 	const char *buff;
 
-	buff = mon->enabled ? "1\n" : "0\n";
+	scoped_guard(rcu) {
+		if (!rv_is_monitor_registered(mon))
+			return -ENODEV;
+
+		buff = mon->enabled ? "1\n" : "0\n";
+	}
 
 	return simple_read_from_buffer(user_buf, count, ppos, buff, strlen(buff)+1);
 }
@@ -384,6 +402,9 @@ static ssize_t monitor_enable_write_data(struct file *filp, const char __user *u
 
 	guard(mutex)(&rv_interface_lock);
 
+	if (!rv_is_monitor_registered(mon))
+		return -ENODEV;
+
 	if (val)
 		retval = rv_enable_monitor(mon);
 	else
@@ -407,9 +428,14 @@ static ssize_t monitor_desc_read_data(struct file *filp, char __user *user_buf, 
 	struct rv_monitor *mon = filp->private_data;
 	char buff[MAX_RV_DESCRIPTION_SIZE + 2];
 
-	memset(buff, 0, sizeof(buff));
+	scoped_guard(rcu) {
+		if (!rv_is_monitor_registered(mon))
+			return -ENODEV;
 
-	snprintf(buff, sizeof(buff), "%.*s\n", MAX_RV_DESCRIPTION_SIZE, mon->description);
+		memset(buff, 0, sizeof(buff));
+		snprintf(buff, sizeof(buff), "%.*s\n", MAX_RV_DESCRIPTION_SIZE,
+			 mon->description);
+	}
 
 	return simple_read_from_buffer(user_buf, count, ppos, buff, strlen(buff) + 1);
 }

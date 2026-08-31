@@ -142,6 +142,9 @@ static int monitor_reactor_show(struct seq_file *m, void *p)
 	struct rv_monitor *mon = m->private;
 	struct rv_reactor *reactor = container_of(p, struct rv_reactor, list);
 
+	if (!rv_is_monitor_registered(mon))
+		return -ENODEV;
+
 	if (mon->reactor == reactor)
 		seq_printf(m, "[%s]\n", reactor->name);
 	else
@@ -234,6 +237,9 @@ monitor_reactors_write(struct file *file, const char __user *user_buf,
 	mon = seq_f->private;
 
 	guard(mutex)(&rv_interface_lock);
+
+	if (!rv_is_monitor_registered(mon))
+		return -ENODEV;
 
 	list_for_each_entry(reactor, &rv_reactors_list, list) {
 		if (strcmp(ptr, reactor->name) != 0)
