@@ -336,6 +336,8 @@ struct enetc_si {
 	struct enetc_msg_swbd msg; /* Only valid for VSI */
 	struct work_struct msg_task;
 	char msg_int_name[ENETC_INT_NAME_MAX];
+
+	struct enetc_mac_filter mac_filter[MADDR_TYPE];
 };
 
 #define ENETC_SI_ALIGN	32
