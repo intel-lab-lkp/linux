@@ -1987,6 +1987,18 @@ void init_sched_mm(struct task_struct *p)
 	p->preferred_llc = -1;
 }
 
+/* exec() has switched to the new mm and is about to drop the old one. */
+void sched_cache_exec_done(void)
+{
+	/*
+	 * account_mm_sched() dereferences rq->curr->mm with the rq lock held,
+	 * so a remote CPU can still be using the old mm. That section runs with
+	 * preemption disabled and is therefore an RCU read-side critical
+	 * section, so wait for a grace period before the mm goes away.
+	 */
+	synchronize_rcu();
+}
+
 #else /* CONFIG_SCHED_CACHE */
 
 static inline void account_mm_sched(struct rq *rq, struct task_struct *p,
