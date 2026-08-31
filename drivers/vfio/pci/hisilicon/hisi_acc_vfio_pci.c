@@ -1180,10 +1180,12 @@ static void hisi_acc_vf_pci_aer_reset_done(struct pci_dev *pdev)
 	struct hisi_qm *qm = hisi_acc_vdev->pf_qm;
 
 	if (hisi_acc_vdev->set_reset_flag) {
-		if (qm && qm->io_base)
+		if (qm && qm->io_base) {
 			clear_bit(QM_RESETTING, &qm->misc_ctl);
-		else
+			hisi_acc_vdev->set_reset_flag = false;
+		} else {
 			dev_err(&pdev->dev, "PF QM not available for reset done\n");
+		}
 	}
 
 	if (!hisi_acc_vdev->core_device.vdev.mig_ops)
