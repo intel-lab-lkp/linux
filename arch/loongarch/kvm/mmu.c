@@ -893,7 +893,12 @@ retry:
 		 * there is invalid tlb with small page
 		 * need flush these invalid tlbs for current vcpu
 		 */
-		kvm_make_request(KVM_REQ_TLB_FLUSH, vcpu);
+		if (!cpu_has_ptw) {
+			if (!cpu_has_guestid)
+				kvm_make_request(KVM_REQ_TLB_FLUSH, vcpu);
+			else
+				cpumask_set_cpu(vcpu->cpu, &vcpu->kvm->arch.tlb_flush_pending);
+		}
 		++kvm->stat.hugepages;
 	}  else if (kvm_pte_huge(*ptep) && write)
 		ptep = kvm_split_huge(vcpu, ptep, gfn);
@@ -929,8 +934,11 @@ int kvm_handle_mm_fault(struct kvm_vcpu *vcpu, unsigned long gpa, bool write, in
 		 *
 		 * With SW PTW, invalid TLB is added in TLB refill exception.
 		 */
-		vcpu->arch.flush_gpa = gpa;
-		kvm_make_request(KVM_REQ_TLB_FLUSH_GPA, vcpu);
+		if (!cpu_has_guestid) {
+			vcpu->arch.flush_gpa = gpa;
+			kvm_make_request(KVM_REQ_TLB_FLUSH_GPA, vcpu);
+		} else
+			cpumask_set_cpu(vcpu->cpu, &vcpu->kvm->arch.tlb_flush_pending);
 	}
 
 	return 0;
@@ -938,6 +946,22 @@ int kvm_handle_mm_fault(struct kvm_vcpu *vcpu, unsigned long gpa, bool write, in
 
 void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 {
+}
+
+int kvm_arch_flush_remote_tlbs(struct kvm *kvm)
+{
+	/*
+	 * Queue a TLB invalidation for each CPU to perform on next
+	 * vcpu loading
+	 */
+	if (cpu_has_guestid) {
+		cpumask_setall(&kvm->arch.tlb_flush_pending);
+		/* Be sure that other CPUS can watch the changes */
+		smp_wmb();
+	}
+
+	/* Return 1 continue to send ipi to running vCPUs */
+	return 1;
 }
 
 void kvm_arch_flush_remote_tlbs_memslot(struct kvm *kvm,
