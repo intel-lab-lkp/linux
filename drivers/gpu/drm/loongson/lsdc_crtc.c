@@ -390,8 +390,6 @@ static const struct lsdc_crtc_hw_ops ls7a2000_crtc_hw_ops[2] = {
 
 static void lsdc_crtc_reset(struct drm_crtc *crtc)
 {
-	struct lsdc_crtc *lcrtc = to_lsdc_crtc(crtc);
-	const struct lsdc_crtc_hw_ops *ops = lcrtc->hw_ops;
 	struct lsdc_crtc_state *priv_crtc_state;
 
 	if (crtc->state)
@@ -403,9 +401,6 @@ static void lsdc_crtc_reset(struct drm_crtc *crtc)
 		__drm_atomic_helper_crtc_reset(crtc, NULL);
 	else
 		__drm_atomic_helper_crtc_reset(crtc, &priv_crtc_state->base);
-
-	/* Reset the CRTC hardware, this is required for S3 support */
-	ops->reset(lcrtc);
 }
 
 static void lsdc_crtc_atomic_destroy_state(struct drm_crtc *crtc,
@@ -937,6 +932,15 @@ static bool lsdc_crtc_get_scanout_position(struct drm_crtc *crtc,
 	return true;
 }
 
+static void lsdc_crtc_hw_reset(struct drm_crtc *crtc)
+{
+	struct lsdc_crtc *lcrtc = to_lsdc_crtc(crtc);
+
+	/* Reset the CRTC hardware, this is required for S3 support */
+	if (lcrtc->hw_ops->reset)
+		lcrtc->hw_ops->reset(lcrtc);
+}
+
 static const struct drm_crtc_helper_funcs lsdc_crtc_helper_funcs = {
 	.mode_valid = lsdc_crtc_mode_valid,
 	.mode_set_nofb = lsdc_crtc_mode_set_nofb,
@@ -945,6 +949,7 @@ static const struct drm_crtc_helper_funcs lsdc_crtc_helper_funcs = {
 	.atomic_check = lsdc_crtc_helper_atomic_check,
 	.atomic_flush = lsdc_crtc_atomic_flush,
 	.get_scanout_position = lsdc_crtc_get_scanout_position,
+	.hw_reset = lsdc_crtc_hw_reset,
 };
 
 int ls7a1000_crtc_init(struct drm_device *ddev,
