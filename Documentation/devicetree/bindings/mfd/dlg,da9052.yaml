@@ -18,6 +18,10 @@ properties:
           - dlg,da9053-bb
           - dlg,da9053-bc
           - dlg,da9052
+      - items:
+          - enum:
+              - dlg,da9053-aa
+          - const: dlg,da9052
 
   reg:
     maxItems: 1
