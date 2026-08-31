@@ -12,6 +12,7 @@
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
+#include <linux/workqueue.h>
 #include <linux/bug.h>
 #include <asm/page.h>
 
@@ -135,7 +136,7 @@ static bool page_counter_consume_stock(struct page_counter *counter,
 		return false;
 
 	if (pcp_stock->nr_pages >= nr_pages) {
-		pcp_stock->nr_pages -= nr_pages;
+		WRITE_ONCE(pcp_stock->nr_pages, pcp_stock->nr_pages - nr_pages);
 		charged = true;
 	}
 
@@ -183,10 +184,10 @@ unsigned long page_counter_refill_stock(struct page_counter *counter,
 	 */
 	stocked = pcp_stock->nr_pages + overage;
 	if (stocked > high) {
-		pcp_stock->nr_pages = low;
+		WRITE_ONCE(pcp_stock->nr_pages, low);
 		to_flush = stocked - low;
 	} else {
-		pcp_stock->nr_pages = stocked;
+		WRITE_ONCE(pcp_stock->nr_pages, stocked);
 		to_flush = 0;
 	}
 	raw_spin_unlock_irqrestore(&pcp_stock->lock, flags);
@@ -429,13 +430,51 @@ void page_counter_drain_cpu_stock(struct page_counter *counter, int cpu)
 		return;
 
 	pcp_stock = per_cpu_ptr(stock, cpu);
+
+	/*
+	 * Skip the remote lock when empty. Racing with the charge path is why
+	 * nr_pages uses WRITE_ONCE(); a stale read defers to the next drain.
+	 */
+	if (!READ_ONCE(pcp_stock->nr_pages))
+		return;
+
 	raw_spin_lock_irqsave(&pcp_stock->lock, flags);
 	nr_pages = pcp_stock->nr_pages;
-	pcp_stock->nr_pages = 0;
+	WRITE_ONCE(pcp_stock->nr_pages, 0);
 	raw_spin_unlock_irqrestore(&pcp_stock->lock, flags);
 
 	if (nr_pages)
 		page_counter_uncharge(counter, nr_pages);
+}
+
+static void page_counter_drain_work_fn(struct work_struct *work)
+{
+	struct page_counter *counter = container_of(work, struct page_counter,
+						    drain_work);
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		page_counter_drain_cpu_stock(counter, cpu);
+}
+
+/**
+ * page_counter_drain_stock_async - schedule a page_counter stock drain
+ * @counter: page_counter to drain
+ *
+ * Drains any CPU's stock inline, then schedules a drain over every CPU and
+ * returns. Concurrent requests coalesce onto the same queued work. @counter
+ * must outlive that work, which page_counter_free_stock() cancels.
+ * Must not be called from NMI context.
+ */
+void page_counter_drain_stock_async(struct page_counter *counter)
+{
+	/* Pairs with the smp_store_release() in page_counter_alloc_stock() */
+	if (!smp_load_acquire(&counter->stock))
+		return;
+
+	/* Drain any CPU's stock to immediately return pages; migrating is OK */
+	page_counter_drain_cpu_stock(counter, raw_smp_processor_id());
+	queue_work(system_dfl_wq, &counter->drain_work);
 }
 
 /**
@@ -469,6 +508,7 @@ void page_counter_alloc_stock(struct page_counter *counter, unsigned long batch)
 	}
 
 	counter->batch = batch;
+	INIT_WORK(&counter->drain_work, page_counter_drain_work_fn);
 	/* Publish stock only after percpu allocs / inits are finished */
 	smp_store_release(&counter->stock, stock);
 }
@@ -477,8 +517,9 @@ void page_counter_alloc_stock(struct page_counter *counter, unsigned long batch)
  * page_counter_free_stock - free @counter's percpu cached charge
  * @counter: page_counter whose stock to free
  *
- * Caller must guarantee no (un)charge or drain of @counter is in flight or can
- * start. memcg only calls this once the cgroup is dead and unreachable.
+ * Caller must guarantee no (un)charge or drain of @counter can start, and must
+ * be ordered against the last CPU to touch the stock, since the drain peeks at
+ * nr_pages unlocked. memcg's RCU grace period before css_free provides both.
  */
 void page_counter_free_stock(struct page_counter *counter)
 {
@@ -490,6 +531,8 @@ void page_counter_free_stock(struct page_counter *counter)
 
 	/* Stop greedy over-charging before the stock goes away */
 	counter->batch = 0;
+	/* Make sure pending drainers don't run on freed page_counters */
+	cancel_work_sync(&counter->drain_work);
 	for_each_possible_cpu(cpu)
 		page_counter_drain_cpu_stock(counter, cpu);
 

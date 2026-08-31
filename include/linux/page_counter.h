@@ -114,6 +114,7 @@ static inline void page_counter_reset_watermark(struct page_counter *counter)
 }
 
 void page_counter_drain_cpu_stock(struct page_counter *counter, int cpu);
+void page_counter_drain_stock_async(struct page_counter *counter);
 void page_counter_alloc_stock(struct page_counter *counter, unsigned long batch);
 void page_counter_free_stock(struct page_counter *counter);
 
