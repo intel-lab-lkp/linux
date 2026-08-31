@@ -291,7 +291,6 @@ static const struct mxc_isi_set_thd mxc_imx8_isi_thd_v1 = {
 };
 
 static const struct mxc_isi_plat_data mxc_imx8mn_data = {
-	.model			= MXC_ISI_IMX8MN,
 	.num_ports		= 1,
 	.num_channels		= 1,
 	.reg_offset		= 0,
@@ -304,7 +303,6 @@ static const struct mxc_isi_plat_data mxc_imx8mn_data = {
 };
 
 static const struct mxc_isi_plat_data mxc_imx8mp_data = {
-	.model			= MXC_ISI_IMX8MP,
 	.num_ports		= 2,
 	.num_channels		= 2,
 	.reg_offset		= 0x2000,
@@ -317,7 +315,6 @@ static const struct mxc_isi_plat_data mxc_imx8mp_data = {
 };
 
 static const struct mxc_isi_plat_data mxc_imx8qm_data = {
-	.model			= MXC_ISI_IMX8QM,
 	.num_ports		= 5,
 	.num_channels		= 8,
 	.num_vc			= 4,
@@ -330,7 +327,6 @@ static const struct mxc_isi_plat_data mxc_imx8qm_data = {
 };
 
 static const struct mxc_isi_plat_data mxc_imx8qxp_data = {
-	.model			= MXC_ISI_IMX8QXP,
 	.num_ports		= 5,
 	.num_channels		= 6,
 	.num_vc			= 4,
@@ -343,7 +339,6 @@ static const struct mxc_isi_plat_data mxc_imx8qxp_data = {
 };
 
 static const struct mxc_isi_plat_data mxc_imx8ulp_data = {
-	.model			= MXC_ISI_IMX8ULP,
 	.num_ports		= 1,
 	.num_channels		= 1,
 	.reg_offset		= 0x0,
@@ -355,7 +350,6 @@ static const struct mxc_isi_plat_data mxc_imx8ulp_data = {
 };
 
 static const struct mxc_isi_plat_data mxc_imx91_data = {
-	.model			= MXC_ISI_IMX91,
 	.num_ports		= 1,
 	.num_channels		= 1,
 	.reg_offset		= 0,
@@ -367,7 +361,6 @@ static const struct mxc_isi_plat_data mxc_imx91_data = {
 };
 
 static const struct mxc_isi_plat_data mxc_imx93_data = {
-	.model			= MXC_ISI_IMX93,
 	.num_ports		= 1,
 	.num_channels		= 1,
 	.reg_offset		= 0,
@@ -380,7 +373,6 @@ static const struct mxc_isi_plat_data mxc_imx93_data = {
 };
 
 static const struct mxc_isi_plat_data mxc_imx95_data = {
-	.model			= MXC_ISI_IMX95,
 	.num_ports		= 4,
 	.num_channels		= 8,
 	.num_vc			= 8,

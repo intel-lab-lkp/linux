@@ -155,19 +155,7 @@ struct mxc_gasket_ops {
 	void (*disable)(struct mxc_isi_dev *isi, const unsigned int port);
 };
 
-enum model {
-	MXC_ISI_IMX8MN,
-	MXC_ISI_IMX8MP,
-	MXC_ISI_IMX8QM,
-	MXC_ISI_IMX8QXP,
-	MXC_ISI_IMX8ULP,
-	MXC_ISI_IMX91,
-	MXC_ISI_IMX93,
-	MXC_ISI_IMX95,
-};
-
 struct mxc_isi_plat_data {
-	enum model model;
 	unsigned int num_ports;
 	unsigned int num_channels;
 	unsigned int num_vc;		/* Number of VCs, 0 = no VC support */
