@@ -30,6 +30,7 @@
 #include <linux/highmem.h>
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
+#include <linux/workqueue.h>
 
 struct virtio_pci_vq_info {
 	/* the actual virtqueue */
@@ -46,7 +47,9 @@ struct virtio_pci_admin_vq {
 	/* Virtqueue info associated with this admin queue. */
 	struct virtio_pci_vq_info *info;
 	/* Protects virtqueue access. */
-	spinlock_t lock;
+	struct mutex lock;
+	/* Admin command completion work. */
+	struct work_struct work;
 	u64 supported_cmds;
 	u8 max_dev_parts_objects;
 	struct ida dev_parts_ida;

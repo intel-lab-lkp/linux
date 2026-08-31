@@ -47,13 +47,20 @@ static int vp_avq_index(struct virtio_device *vdev, u16 *index, u16 *num)
 void vp_modern_avq_done(struct virtqueue *vq)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vq->vdev);
-	struct virtio_pci_admin_vq *admin_vq = &vp_dev->admin_vq;
+
+	schedule_work(&vp_dev->admin_vq.work);
+}
+
+static void vp_modern_avq_work(struct work_struct *work)
+{
 	unsigned int status_size = sizeof(struct virtio_admin_cmd_status);
+	struct virtio_pci_admin_vq *admin_vq =
+		container_of(work, struct virtio_pci_admin_vq, work);
+	struct virtqueue *vq = admin_vq->info->vq;
 	struct virtio_admin_cmd *cmd;
-	unsigned long flags;
 	unsigned int len;
 
-	spin_lock_irqsave(&admin_vq->lock, flags);
+	mutex_lock(&admin_vq->lock);
 	do {
 		virtqueue_disable_cb(vq);
 		while ((cmd = virtqueue_get_buf(vq, &len))) {
@@ -71,7 +78,7 @@ void vp_modern_avq_done(struct virtqueue *vq)
 			complete(&cmd->completion);
 		}
 	} while (!virtqueue_enable_cb(vq));
-	spin_unlock_irqrestore(&admin_vq->lock, flags);
+	mutex_unlock(&admin_vq->lock);
 }
 
 static int virtqueue_exec_admin_cmd(struct virtio_pci_admin_vq *admin_vq,
@@ -82,7 +89,6 @@ static int virtqueue_exec_admin_cmd(struct virtio_pci_admin_vq *admin_vq,
 				    struct virtio_admin_cmd *cmd)
 {
 	struct virtqueue *vq;
-	unsigned long flags;
 	int ret;
 
 	vq = admin_vq->info->vq;
@@ -100,11 +106,11 @@ again:
 	if (virtqueue_is_broken(vq))
 		return -EIO;
 
-	spin_lock_irqsave(&admin_vq->lock, flags);
+	mutex_lock(&admin_vq->lock);
 	ret = virtqueue_add_sgs(vq, sgs, out_num, in_num, cmd, GFP_KERNEL);
 	if (ret < 0) {
 		if (ret == -ENOSPC) {
-			spin_unlock_irqrestore(&admin_vq->lock, flags);
+			mutex_unlock(&admin_vq->lock);
 			cpu_relax();
 			goto again;
 		}
@@ -112,14 +118,14 @@ again:
 	}
 	if (!virtqueue_kick(vq))
 		goto unlock_err;
-	spin_unlock_irqrestore(&admin_vq->lock, flags);
+	mutex_unlock(&admin_vq->lock);
 
 	wait_for_completion(&cmd->completion);
 
 	return cmd->ret;
 
 unlock_err:
-	spin_unlock_irqrestore(&admin_vq->lock, flags);
+	mutex_unlock(&admin_vq->lock);
 	return -EIO;
 }
 
@@ -350,6 +356,8 @@ static void vp_modern_avq_cleanup(struct virtio_device *vdev)
 	if (!virtio_has_feature(vdev, VIRTIO_F_ADMIN_VQ))
 		return;
 
+	cancel_work_sync(&vp_dev->admin_vq.work);
+
 	vq = vp_dev->admin_vq.info->vq;
 	if (!vq)
 		return;
@@ -554,10 +562,12 @@ static void vp_reset(struct virtio_device *vdev)
 	while (vp_modern_get_status(mdev))
 		msleep(1);
 
-	vp_modern_avq_cleanup(vdev);
-
-	/* Flush pending VQ/configuration callbacks. */
+	/* Flush pending VQ/configuration callbacks before cleanup, so that
+	 * vp_modern_avq_done() can no longer schedule admin_vq.work.
+	 */
 	vp_synchronize_vectors(vdev);
+
+	vp_modern_avq_cleanup(vdev);
 }
 
 static int vp_active_vq(struct virtqueue *vq, u16 msix_vec)
@@ -1284,8 +1294,9 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 	vp_dev->avq_index = vp_avq_index;
 	vp_dev->isr = mdev->isr;
 	vp_dev->vdev.id = mdev->id;
+	mutex_init(&vp_dev->admin_vq.lock);
+	INIT_WORK(&vp_dev->admin_vq.work, vp_modern_avq_work);
 
-	spin_lock_init(&vp_dev->admin_vq.lock);
 	return 0;
 }
 

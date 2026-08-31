@@ -256,6 +256,11 @@ static void vp_del_vq(struct virtqueue *vq, struct virtio_pci_vq_info *info)
 		spin_unlock_irqrestore(&vp_dev->lock, flags);
 	}
 
+	if (vp_is_avq(vq->vdev, vq->index)) {
+		cancel_work_sync(&vp_dev->admin_vq.work);
+		vp_dev->admin_vq.info = NULL;
+	}
+
 	vp_dev->del_vq(info);
 	kfree(info);
 }
