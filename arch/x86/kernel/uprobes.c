@@ -1812,8 +1812,9 @@ get_uprobe_ptwrite_page(struct mm_struct *mm, unsigned long vaddr,
 }
 
 /*
- * A run of short NOPs is accepted only when requested. This validation does
- * not make the three-phase poke safe for threads that already passed byte 0.
+ * A run of short NOPs is accepted only when requested. It is patched with
+ * an aligned eight-byte read-modify-write, preserving the following bytes;
+ * code is not expected to change concurrently.
  */
 static bool pun_site_is_nop(const u8 *orig, bool allow_nop_run)
 {
@@ -1828,6 +1829,13 @@ static bool pun_site_is_nop(const u8 *orig, bool allow_nop_run)
 	if (!allow_nop_run)
 		return false;
 	return orig[0] == 0x90 && orig[1] == 0x90 &&
+		orig[2] == 0x90 && orig[3] == 0x90 && orig[4] == 0x90;
+}
+
+/* Identify the explicitly opted-in run of five one-byte NOPs. */
+static bool ptwrite_site_is_multinop(const u8 *orig, bool allow_nop_run)
+{
+	return allow_nop_run && orig[0] == 0x90 && orig[1] == 0x90 &&
 		orig[2] == 0x90 && orig[3] == 0x90 && orig[4] == 0x90;
 }
 
@@ -2224,6 +2232,9 @@ int arch_uprobe_install_ptwrite(struct arch_uprobe *auprobe,
 	ret = copy_from_vaddr(mm, vaddr, orig, sizeof(orig));
 	if (ret)
 		return ret;
+	if (ptwrite_site_is_multinop(orig, ptw_a->allow_nop_run) &&
+	    (vaddr & 7))
+		return pun_install(auprobe, vma, vaddr, orig);
 	if (ptwrite_is_installed(mm, vaddr, orig))
 		return 0;
 
@@ -2249,9 +2260,13 @@ int arch_uprobe_install_ptwrite(struct arch_uprobe *auprobe,
 			continue;
 		if (!__in_uprobe_ptwrite(mm, ptw->vaddr))
 			continue;
-		ret = ptwrite_text_poke(auprobe, vma, vaddr,
-					ptw->vaddr + ptw->index[b].off);
-		goto out;
+		if (ptwrite_site_is_multinop(orig, ptw_a->allow_nop_run))
+			ret = ptwrite_multinop_text_poke(auprobe, vma, vaddr,
+							ptw->vaddr + ptw->index[b].off);
+		else
+			ret = ptwrite_text_poke(auprobe, vma, vaddr,
+						ptw->vaddr + ptw->index[b].off);
+		return ret;
 	}
 	ptw = get_uprobe_ptwrite_page(mm, vaddr, ptw_a->stub_len);
 	if (!ptw)
@@ -2287,8 +2302,11 @@ int arch_uprobe_install_ptwrite(struct arch_uprobe *auprobe,
 	memcpy(kaddr + block_off + ptw_a->jmp_off, &rel, sizeof(rel));
 	kunmap_local(kaddr);
 
-	ret = ptwrite_text_poke(auprobe, vma, vaddr, stub_addr);
-	if (ret)
+	if (ptwrite_site_is_multinop(orig, ptw_a->allow_nop_run))
+		ret = ptwrite_multinop_text_poke(auprobe, vma, vaddr, stub_addr);
+	else
+		ret = ptwrite_text_poke(auprobe, vma, vaddr, stub_addr);
+	if (ret) {
 		/* Publish rollback before readers use the reduced block count. */
 		smp_store_release(&ptw->nblocks, ptw->nblocks - 1);
 		return ret;
