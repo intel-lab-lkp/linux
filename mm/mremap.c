@@ -1914,6 +1914,7 @@ static unsigned long remap_move(struct vma_remap_struct *vrm)
 	 * with all VMAs in the input range [addr, addr + old_len) being moved
 	 * (and split as necessary).
 	 */
+	rcu_read_lock();
 	for_each_vma_range(vmi, vma, end) {
 		/* Account for start, end not aligned with VMA start, end. */
 		unsigned long addr = max(vma->vm_start, start);
@@ -1922,8 +1923,10 @@ static unsigned long remap_move(struct vma_remap_struct *vrm)
 		bool multi_allowed;
 
 		/* No gap permitted at the start of the range. */
-		if (!seen_vma && start < vma->vm_start)
+		if (!seen_vma && start < vma->vm_start) {
+			rcu_read_unlock();
 			return -EFAULT;
+		}
 
 		/*
 		 * To sensibly move multiple VMAs, accounting for the fact that
@@ -1951,12 +1954,17 @@ static unsigned long remap_move(struct vma_remap_struct *vrm)
 		multi_allowed = vma_multi_allowed(vma);
 		if (!multi_allowed) {
 			/* This is not the first VMA, abort immediately. */
-			if (seen_vma)
+			if (seen_vma) {
+				rcu_read_unlock();
 				return -EFAULT;
+			}
 			/* This is the first, but there are more, abort. */
-			if (vma->vm_end < end)
+			if (vma->vm_end < end) {
+				rcu_read_unlock();
 				return -EFAULT;
+			}
 		}
+		rcu_read_unlock();
 
 		res_vma = check_prep_vma(vrm);
 		if (!res_vma)
@@ -1980,7 +1988,9 @@ static unsigned long remap_move(struct vma_remap_struct *vrm)
 		}
 		seen_vma = true;
 		target_addr = res_vma + vrm->new_len;
+		rcu_read_lock();
 	}
+	rcu_read_unlock();
 
 	return res;
 }

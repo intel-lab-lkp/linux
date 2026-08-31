@@ -540,12 +540,15 @@ static int apply_vma_lock_flags(unsigned long start, size_t len,
 
 	nstart = start;
 	tmp = vma->vm_start;
+	rcu_read_lock();
 	for_each_vma_range(vmi, vma, end) {
 		int error;
 		vma_flags_t newflags;
 
-		if (vma->vm_start != tmp)
+		if (vma->vm_start != tmp) {
+			rcu_read_unlock();
 			return -ENOMEM;
+		}
 
 		newflags = vma->flags;
 		vma_flags_clear_mask(&newflags, VMA_LOCKED_MASK);
@@ -555,12 +558,19 @@ static int apply_vma_lock_flags(unsigned long start, size_t len,
 		tmp = vma->vm_end;
 		if (tmp > end)
 			tmp = end;
+		rcu_read_unlock();
 		error = mlock_fixup(&vmi, vma, &prev, nstart, tmp, &newflags);
 		if (error)
 			return error;
+		/*
+		 * The iterator is always left on a life node, so no
+		 * re-lookup needed after sleep.
+		 */
 		tmp = vma_iter_end(&vmi);
 		nstart = tmp;
+		rcu_read_lock();
 	}
+	rcu_read_unlock();
 
 	if (tmp < end)
 		return -ENOMEM;
@@ -589,6 +599,7 @@ static unsigned long count_mm_mlocked_page_nr(struct mm_struct *mm,
 	else
 		end = start + len;
 
+	guard(rcu)();
 	for_each_vma_range(vmi, vma, end) {
 		if (vma_test(vma, VMA_LOCKED_BIT)) {
 			if (start > vma->vm_start)

@@ -614,10 +614,8 @@ __split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	validate_mm(vma->vm_mm);
 
 	/* Success. */
-	if (new_below)
-		vma_next(vmi);
-	else
-		vma_prev(vmi);
+	vma_iter_set(vmi, vma->vm_start);
+	vma_find(vmi, ULONG_MAX);
 
 	return 0;
 
@@ -1573,7 +1571,12 @@ static int vms_gather_munmap_vmas(struct vma_munmap_struct *vms,
 #endif
 	}
 
-	vms->next = vma_next(vms->vmi);
+	/*
+	 * The loop's cached node may be the one a split's store deferred.
+	 * Continue from the range end.
+	 */
+	vma_iter_set(vms->vmi, vms->end);
+	vms->next = vma_find(vms->vmi, ULONG_MAX);
 	if (vms->next)
 		vms->unmap_end = vms->next->vm_start;
 

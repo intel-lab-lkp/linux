@@ -1184,6 +1184,7 @@ SYSCALL_DEFINE5(remap_file_pages, unsigned long, start, unsigned long, size,
 		VMA_ITERATOR(vmi, mm, vma->vm_end);
 		struct vm_area_struct *next, *prev = vma;
 
+		guard(rcu)();
 		for_each_vma_range(vmi, next, start + size) {
 			/* hole between vmas ? */
 			if (next->vm_start != prev->vm_end)

@@ -1081,7 +1081,20 @@ static int mbind_range(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	if (IS_ERR(vma))
 		return PTR_ERR(vma);
 
+	rcu_read_lock();
+	/*
+	 * The modify might have invalidated the iterators when
+	 * sleeping happened. Do another lookup
+	 */
+	vma_iter_set(vmi, vmstart);
+	vma = vma_find(vmi, vmend);
+	if (!vma) {
+		rcu_read_unlock();
+		return -ENOMEM;
+	}
 	*prev = vma;
+	rcu_read_unlock();
+	/* Iterator still protected by write lock */
 	return vma_replace_policy(vma, new_pol);
 }
 

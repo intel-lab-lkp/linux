@@ -1107,6 +1107,7 @@ static int mwriteprotect_range(struct userfaultfd_ctx *ctx, unsigned long start,
 		goto out_unlock;
 
 	err = -ENOENT;
+	rcu_read_lock();
 	for_each_vma_range(vmi, dst_vma, end) {
 
 		if (!userfaultfd_wp(dst_vma)) {
@@ -1123,14 +1124,18 @@ static int mwriteprotect_range(struct userfaultfd_ctx *ctx, unsigned long start,
 
 		_start = max(dst_vma->vm_start, start);
 		_end = min(dst_vma->vm_end, end);
+		rcu_read_unlock();
 
 		err = uffd_wp_range(dst_vma, _start, _end - _start, enable_wp);
+		rcu_read_lock();
+		/* The iterator is still on a life node */
 
 		/* Return 0 on success, <0 on failures */
 		if (err < 0)
 			break;
 		err = 0;
 	}
+	rcu_read_unlock();
 out_unlock:
 	up_read(&ctx->map_changing_lock);
 	mmap_read_unlock(dst_mm);
@@ -2273,9 +2278,17 @@ static int userfaultfd_register_range(struct userfaultfd_ctx *ctx,
 	if (vma->vm_start < start)
 		prev = vma;
 
+	rcu_read_lock();
 	for_each_vma_range(vmi, vma, end) {
+		rcu_read_unlock();
 		cond_resched();
 
+		rcu_read_lock();
+		/* The cond_resched above may have slept, so re-lookup. */
+		vma_iter_set(&vmi, vma->vm_start);
+		vma = vma_find(&vmi, end);
+		if (!vma)
+			break;
 		VM_WARN_ON_ONCE(!vma_can_userfault(vma, vm_flags, wp_async));
 		VM_WARN_ON_ONCE(vma->vm_userfaultfd_ctx.ctx &&
 				vma->vm_userfaultfd_ctx.ctx != ctx);
@@ -2304,6 +2317,7 @@ static int userfaultfd_register_range(struct userfaultfd_ctx *ctx,
 		new_vma_flags = vma->flags;
 		vma_flags_clear_mask(&new_vma_flags, __VMA_UFFD_FLAGS);
 		vma_flags_set_mask(&new_vma_flags, vma_flags);
+		rcu_read_unlock();
 
 		vma = vma_modify_flags_uffd(&vmi, prev, vma, start, vma_end,
 					    &new_vma_flags,
@@ -2317,15 +2331,31 @@ static int userfaultfd_register_range(struct userfaultfd_ctx *ctx,
 		 * the next vma was merged into the current one and
 		 * the current one has not been updated yet.
 		 */
+		rcu_read_lock();
+		/* The modify may have slept and merged, so re-lookup. */
+		vma_iter_set(&vmi, start);
+		vma = vma_find(&vmi, end);
+		if (!vma)
+			break;
+		rcu_read_unlock();
 		userfaultfd_set_ctx(vma, ctx, vm_flags);
+		rcu_read_lock();
 
-		if (is_vm_hugetlb_page(vma) && uffd_disable_huge_pmd_share(vma))
+		if (is_vm_hugetlb_page(vma) && uffd_disable_huge_pmd_share(vma)) {
+			rcu_read_unlock();
 			hugetlb_unshare_all_pmds(vma);
+			rcu_read_lock();
+			vma_iter_set(&vmi, start);
+			vma = vma_find(&vmi, end);
+			if (!vma)
+				break;
+		}
 
 skip:
 		prev = vma;
 		start = vma->vm_end;
 	}
+	rcu_read_unlock();
 
 	return 0;
 }
@@ -3757,16 +3787,26 @@ static int userfaultfd_register(struct userfaultfd_ctx *ctx,
 	found = false;
 	basic_ioctls = false;
 	cur = vma;
+	rcu_read_lock();
 	do {
+		rcu_read_unlock();
 		cond_resched();
 
+		rcu_read_lock();
+		/* The cond_resched above may have slept, so re-lookup. */
+		vma_iter_set(&vmi, cur->vm_start);
+		cur = vma_find(&vmi, end);
+		if (!cur)
+			break;
 		VM_WARN_ON_ONCE(!!cur->vm_userfaultfd_ctx.ctx ^
 				!!(cur->vm_flags & __VM_UFFD_FLAGS));
 
 		/* check not compatible vmas */
 		ret = -EINVAL;
-		if (!vma_can_userfault(cur, vm_flags, wp_async))
+		if (!vma_can_userfault(cur, vm_flags, wp_async)) {
+			rcu_read_unlock();
 			goto out_unlock;
+		}
 
 		/*
 		 * RWP uses protnone as an access-tracking marker. PROT_NONE
@@ -3776,8 +3816,10 @@ static int userfaultfd_register(struct userfaultfd_ctx *ctx,
 		 * mprotect() must still be unregisterable, so this is not
 		 * part of vma_can_userfault().
 		 */
-		if ((vm_flags & VM_UFFD_RWP) && !vma_is_accessible(cur))
+		if ((vm_flags & VM_UFFD_RWP) && !vma_is_accessible(cur)) {
+			rcu_read_unlock();
 			goto out_unlock;
+		}
 
 		/*
 		 * UFFDIO_COPY will fill file holes even without
@@ -3788,8 +3830,10 @@ static int userfaultfd_register(struct userfaultfd_ctx *ctx,
 		 * F_WRITE_SEAL can be taken until the vma is destroyed.
 		 */
 		ret = -EPERM;
-		if (unlikely(!(cur->vm_flags & VM_MAYWRITE)))
+		if (unlikely(!(cur->vm_flags & VM_MAYWRITE))) {
+			rcu_read_unlock();
 			goto out_unlock;
+		}
 
 		/*
 		 * If this vma contains ending address, and huge pages
@@ -3801,11 +3845,15 @@ static int userfaultfd_register(struct userfaultfd_ctx *ctx,
 
 			ret = -EINVAL;
 
-			if (end & (vma_hpagesize - 1))
+			if (end & (vma_hpagesize - 1)) {
+				rcu_read_unlock();
 				goto out_unlock;
+			}
 		}
-		if ((vm_flags & VM_UFFD_WP) && !(cur->vm_flags & VM_MAYWRITE))
+		if ((vm_flags & VM_UFFD_WP) && !(cur->vm_flags & VM_MAYWRITE)) {
+			rcu_read_unlock();
 			goto out_unlock;
+		}
 
 		/*
 		 * Check that this vma isn't already owned by a
@@ -3815,8 +3863,10 @@ static int userfaultfd_register(struct userfaultfd_ctx *ctx,
 		 */
 		ret = -EBUSY;
 		if (cur->vm_userfaultfd_ctx.ctx &&
-		    cur->vm_userfaultfd_ctx.ctx != ctx)
+		    cur->vm_userfaultfd_ctx.ctx != ctx) {
+			rcu_read_unlock();
 			goto out_unlock;
+		}
 
 		/*
 		 * Mode switches that drop VM_UFFD_WP or VM_UFFD_RWP would
@@ -3825,8 +3875,10 @@ static int userfaultfd_register(struct userfaultfd_ctx *ctx,
 		 * into the other mode. Require an unregister first.
 		 */
 		if (cur->vm_userfaultfd_ctx.ctx == ctx &&
-		    cur->vm_flags & (VM_UFFD_WP | VM_UFFD_RWP) & ~vm_flags)
+		    cur->vm_flags & (VM_UFFD_WP | VM_UFFD_RWP) & ~vm_flags) {
+			rcu_read_unlock();
 			goto out_unlock;
+		}
 
 		/*
 		 * Note vmas containing huge pages
@@ -3836,6 +3888,7 @@ static int userfaultfd_register(struct userfaultfd_ctx *ctx,
 
 		found = true;
 	} for_each_vma_range(vmi, cur, end);
+	rcu_read_unlock();
 	VM_WARN_ON_ONCE(!found);
 
 	ret = userfaultfd_register_range(ctx, vma, vm_flags, start, end,
@@ -3929,9 +3982,17 @@ static int userfaultfd_unregister(struct userfaultfd_ctx *ctx,
 	 */
 	found = false;
 	cur = vma;
+	rcu_read_lock();
 	do {
+		rcu_read_unlock();
 		cond_resched();
 
+		rcu_read_lock();
+		/* The cond_resched above may have slept, so re-lookup. */
+		vma_iter_set(&vmi, cur->vm_start);
+		cur = vma_find(&vmi, end);
+		if (!cur)
+			break;
 		VM_WARN_ON_ONCE(!!cur->vm_userfaultfd_ctx.ctx ^
 				!!(cur->vm_flags & __VM_UFFD_FLAGS));
 
@@ -3940,8 +4001,10 @@ static int userfaultfd_unregister(struct userfaultfd_ctx *ctx,
 		 * the one used for registration.
 		 */
 		if (cur->vm_userfaultfd_ctx.ctx &&
-		    cur->vm_userfaultfd_ctx.ctx != ctx)
+		    cur->vm_userfaultfd_ctx.ctx != ctx) {
+			rcu_read_unlock();
 			goto out_unlock;
+		}
 
 		/*
 		 * Check not compatible vmas, not strictly required
@@ -3950,11 +4013,14 @@ static int userfaultfd_unregister(struct userfaultfd_ctx *ctx,
 		 * provides for more strict behavior to notice
 		 * unregistration errors.
 		 */
-		if (!vma_can_userfault(cur, cur->vm_flags, wp_async))
+		if (!vma_can_userfault(cur, cur->vm_flags, wp_async)) {
+			rcu_read_unlock();
 			goto out_unlock;
+		}
 
 		found = true;
 	} for_each_vma_range(vmi, cur, end);
+	rcu_read_unlock();
 	VM_WARN_ON_ONCE(!found);
 
 	vma_iter_set(&vmi, start);

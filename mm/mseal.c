@@ -22,6 +22,7 @@ static bool range_contains_unmapped(unsigned long start, unsigned long end)
 	unsigned long prev_end = start;
 	struct vm_area_struct *vma;
 
+	guard(rcu)();
 	for_each_vma_range(vmi, vma, end) {
 		if (vma->vm_start > prev_end)
 			return true;
@@ -43,6 +44,7 @@ static int __mseal_range(unsigned long start, unsigned long end)
 	if (start > vma->vm_start)
 		prev = vma;
 
+	rcu_read_lock();
 	for_each_vma_range(vmi, vma, end) {
 		const unsigned long curr_start = max(vma->vm_start, start);
 		const unsigned long curr_end = min(vma->vm_end, end);
@@ -51,17 +53,30 @@ static int __mseal_range(unsigned long start, unsigned long end)
 			vma_flags_t vma_flags = vma->flags;
 
 			vma_flags_set(&vma_flags, VMA_SEALED_BIT);
+			rcu_read_unlock();
 
 			vma = vma_modify_flags(&vmi, prev, vma, curr_start,
 					       curr_end, &vma_flags);
 			if (IS_ERR(vma))
 				return PTR_ERR(vma);
+
+			rcu_read_lock();
+			/* The modify may have slept and merged, so re-lookup. */
+			vma_iter_set(&vmi, curr_start);
+			vma = vma_find(&vmi, curr_end);
+			if (!vma) {
+				rcu_read_unlock();
+				return -ENOMEM;
+			}
+			rcu_read_unlock();
 			vma_start_write(vma);
 			vma_set_flags(vma, VMA_SEALED_BIT);
+			rcu_read_lock();
 		}
 
 		prev = vma;
 	}
+	rcu_read_unlock();
 
 	return 0;
 }

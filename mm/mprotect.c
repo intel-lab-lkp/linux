@@ -941,6 +941,7 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 	tlb_gather_mmu(&tlb, current->mm);
 	nstart = start;
 	tmp = vma->vm_start;
+	rcu_read_lock();
 	for_each_vma_range(vmi, vma, end) {
 		vm_flags_t mask_off_old_flags;
 		vma_flags_t new_vma_flags;
@@ -984,29 +985,49 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 			error = -EINVAL;
 			break;
 		}
+		rcu_read_unlock();
 
 		error = security_file_mprotect(vma, reqprot, prot);
-		if (error)
+		if (error) {
+			rcu_read_lock();
 			break;
-
+		}
+		rcu_read_lock();
+		/*
+		 * The security hook may sleep; re-lookup instead of
+		 * trusting the pre-sleep pointer.
+		 */
+		vma_iter_set(&vmi, vma->vm_start);
+		vma = vma_find(&vmi, end);
+		if (!vma) {
+			error = -ENOMEM;
+			break;
+		}
 		tmp = vma->vm_end;
 		if (tmp > end)
 			tmp = end;
+		rcu_read_unlock();
 
 		if (vma->vm_ops && vma->vm_ops->mprotect) {
 			error = vma->vm_ops->mprotect(vma, nstart, tmp, newflags);
-			if (error)
+			if (error) {
+				rcu_read_lock();
 				break;
+			}
 		}
 
 		error = mprotect_fixup(&vmi, &tlb, vma, &prev, nstart, tmp, newflags);
-		if (error)
+		if (error) {
+			rcu_read_lock();
 			break;
+		}
 
 		tmp = vma_iter_end(&vmi);
 		nstart = tmp;
 		prot = reqprot;
+		rcu_read_lock();
 	}
+	rcu_read_unlock();
 	tlb_finish_mmu(&tlb);
 
 	if (!error && tmp < end)
