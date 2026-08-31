@@ -346,6 +346,7 @@ static int brd_alloc(int i)
 out_cleanup_disk:
 	put_disk(disk);
 out_free_dev:
+	xa_destroy(&brd->brd_pages);
 	brd_free_device(brd);
 	return err;
 }
