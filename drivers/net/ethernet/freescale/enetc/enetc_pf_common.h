@@ -30,6 +30,18 @@ static inline u16 enetc_get_ip_revision(struct enetc_hw *hw)
 	return enetc_global_rd(hw, ENETC_G_EIPBRR0) & EIPBRR0_REVISION;
 }
 
+static inline void enetc_pf_msg_lock(struct enetc_pf *pf)
+{
+	if (pf->total_vfs)
+		mutex_lock(&pf->msg_lock);
+}
+
+static inline void enetc_pf_msg_unlock(struct enetc_pf *pf)
+{
+	if (pf->total_vfs)
+		mutex_unlock(&pf->msg_lock);
+}
+
 #if IS_ENABLED(CONFIG_PCI_IOV)
 int enetc_sriov_configure(struct pci_dev *pdev, int num_vfs);
 void enetc_pf_notify_vf_link_up(struct enetc_pf *pf);
