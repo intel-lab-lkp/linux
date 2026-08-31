@@ -29,15 +29,6 @@ static DEFINE_XARRAY_FLAGS(net_devmem_dmabuf_bindings, XA_FLAGS_ALLOC1);
 
 static const struct memory_provider_ops dmabuf_devmem_ops;
 
-static void
-net_devmem_dmabuf_free_chunk_owner(struct dmabuf_genpool_chunk_owner *owner)
-{
-	if (owner) {
-		kvfree(owner->area.niovs);
-		kfree(owner);
-	}
-}
-
 static void net_devmem_dmabuf_binding_release(struct percpu_ref *ref)
 {
 	struct net_devmem_dmabuf_binding *binding =
@@ -55,7 +46,7 @@ void __net_devmem_dmabuf_binding_free(struct work_struct *wq)
 	     "can't destroy dmabuf binding. total=%zu, free=%zu",
 	     binding->total_niovs, binding->free_count);
 
-	net_devmem_dmabuf_free_chunk_owner(binding->chunk_owner);
+	kvfree(binding->area.niovs);
 	dma_buf_unmap_attachment_unlocked(binding->attachment, binding->sgt,
 					  binding->direction);
 	dma_buf_detach(binding->dmabuf, binding->attachment);
@@ -177,7 +168,6 @@ net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
 	static u32 id_alloc_next;
 	struct scatterlist *sg;
 	struct dma_buf *dmabuf;
-	struct dmabuf_genpool_chunk_owner *owner;
 	unsigned int sg_idx;
 	size_t total_niovs;
 	size_t niov_idx;
@@ -271,22 +261,13 @@ net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
 	}
 	binding->total_niovs = total_niovs;
 
-	owner = kzalloc_node(sizeof(*owner), GFP_KERNEL,
-			     dev_to_node(&dev->dev));
-	if (!owner) {
+	binding->area.num_niovs = total_niovs;
+	binding->area.niovs = kvmalloc_objs(*binding->area.niovs,
+					    binding->area.num_niovs);
+	if (!binding->area.niovs) {
 		err = -ENOMEM;
 		goto err_free_freelist;
 	}
-
-	owner->area.num_niovs = total_niovs;
-	owner->binding = binding;
-	owner->area.niovs = kvmalloc_objs(*owner->area.niovs,
-					  owner->area.num_niovs);
-	if (!owner->area.niovs) {
-		err = -ENOMEM;
-		goto err_free_owner;
-	}
-	binding->chunk_owner = owner;
 
 	niov_idx = 0;
 	for_each_sgtable_dma_sg(binding->sgt, sg, sg_idx) {
@@ -296,8 +277,8 @@ net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
 		size_t nr_niovs = len >> niov_shift;
 
 		for (i = 0; i < nr_niovs; i++, niov_idx++) {
-			niov = &owner->area.niovs[niov_idx];
-			net_iov_init(niov, &owner->area, NET_IOV_DMABUF);
+			niov = &binding->area.niovs[niov_idx];
+			net_iov_init(niov, &binding->area, NET_IOV_DMABUF);
 			page_pool_set_dma_addr_netmem(net_iov_to_netmem(niov),
 						      dma_addr);
 			if (direction == DMA_TO_DEVICE)
@@ -311,17 +292,14 @@ net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
 			      binding, xa_limit_32b, &id_alloc_next,
 			      GFP_KERNEL);
 	if (err < 0)
-		goto err_free_chunk_owner;
+		goto err_free_niovs;
 
 	list_add(&binding->list, &priv->bindings);
 
 	return binding;
 
-err_free_chunk_owner:
-	net_devmem_dmabuf_free_chunk_owner(binding->chunk_owner);
-	goto err_free_freelist;
-err_free_owner:
-	kfree(owner);
+err_free_niovs:
+	kvfree(binding->area.niovs);
 err_free_freelist:
 	kvfree(binding->freelist);
 err_tx_vec:
