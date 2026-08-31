@@ -33,6 +33,24 @@ endmenu
 
 if DRM
 
+config DRM_BACKLIGHT
+	bool "DRM connector backlight (luminance) support"
+	depends on DRM
+	depends on BACKLIGHT_CLASS_DEVICE
+	default DRM
+	help
+	  Expose per-connector backlight brightness control through the DRM
+	  connector LUMINANCE property, backed by the backlight subsystem (and,
+	  in the future, other backends such as DDC/CI). This lets luminance
+	  changes go through the same atomic modeset path as the rest of the
+	  display state.
+
+	  This depends on BACKLIGHT_CLASS_DEVICE. When that is disabled, DRM is
+	  built without this support and does not pull the backlight subsystem
+	  into the kernel.
+
+	  If in doubt, say Y.
+
 config DRM_MIPI_DBI
 	tristate
 	depends on DRM

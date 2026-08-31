@@ -33,6 +33,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_atomic_uapi.h>
+#include <drm/drm_backlight.h>
 #include <drm/drm_blend.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_colorop.h>
@@ -1230,6 +1231,10 @@ drm_atomic_helper_commit_encoder_bridge_disable(struct drm_device *dev,
 		 * it away), so we won't call disable hooks twice.
 		 */
 		bridge = drm_bridge_chain_get_first_bridge(encoder);
+
+		/* Turn the backlight off before disabling the pipeline. */
+		drm_backlight_set_luminance(connector, 0);
+
 		drm_atomic_bridge_chain_disable(bridge, state);
 		drm_bridge_put(bridge);
 
@@ -1744,6 +1749,10 @@ drm_atomic_helper_commit_encoder_bridge_enable(struct drm_device *dev, struct dr
 
 		drm_atomic_bridge_chain_enable(bridge, state);
 		drm_bridge_put(bridge);
+
+		/* Restore the backlight once the pipeline is enabled. */
+		if (connector->state)
+			drm_atomic_helper_connector_apply_luminance(connector->state);
 	}
 }
 EXPORT_SYMBOL(drm_atomic_helper_commit_encoder_bridge_enable);
@@ -1774,6 +1783,24 @@ void drm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 	drm_atomic_helper_commit_writebacks(dev, state);
 }
 EXPORT_SYMBOL(drm_atomic_helper_commit_modeset_enables);
+
+/**
+ * drm_atomic_helper_connector_apply_luminance - apply connector luminance from atomic state
+ * @conn_state: atomic connector state to apply luminance for
+ *
+ * Updates the backlight luminance from the atomic connector state. If the
+ * connector has a linked backlight and is associated with an active CRTC,
+ * push the luminance value to hardware.
+ */
+void drm_atomic_helper_connector_apply_luminance(const struct drm_connector_state *conn_state)
+{
+	struct drm_connector *connector = conn_state->connector;
+
+	if (conn_state->crtc && conn_state->crtc->state &&
+	    conn_state->crtc->state->active)
+		drm_backlight_set_luminance(connector, conn_state->luminance);
+}
+EXPORT_SYMBOL(drm_atomic_helper_connector_apply_luminance);
 
 /*
  * For atomic updates which touch just a single CRTC, calculate the time of the
@@ -1989,12 +2016,18 @@ EXPORT_SYMBOL(drm_atomic_helper_wait_for_flip_done);
 void drm_atomic_helper_commit_tail(struct drm_atomic_commit *state)
 {
 	struct drm_device *dev = state->dev;
+	struct drm_connector *connector;
+	struct drm_connector_state *new_conn_state;
+	int i;
 
 	drm_atomic_helper_commit_modeset_disables(dev, state);
 
 	drm_atomic_helper_commit_planes(dev, state, 0);
 
 	drm_atomic_helper_commit_modeset_enables(dev, state);
+
+	for_each_new_connector_in_state(state, connector, new_conn_state, i)
+		drm_atomic_helper_connector_apply_luminance(new_conn_state);
 
 	drm_atomic_helper_fake_vblank(state);
 
@@ -2019,10 +2052,16 @@ EXPORT_SYMBOL(drm_atomic_helper_commit_tail);
 void drm_atomic_helper_commit_tail_rpm(struct drm_atomic_commit *state)
 {
 	struct drm_device *dev = state->dev;
+	struct drm_connector *connector;
+	struct drm_connector_state *new_conn_state;
+	int i;
 
 	drm_atomic_helper_commit_modeset_disables(dev, state);
 
 	drm_atomic_helper_commit_modeset_enables(dev, state);
+
+	for_each_new_connector_in_state(state, connector, new_conn_state, i)
+		drm_atomic_helper_connector_apply_luminance(new_conn_state);
 
 	drm_atomic_helper_commit_planes(dev, state,
 					DRM_PLANE_COMMIT_ACTIVE_ONLY);

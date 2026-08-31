@@ -28,6 +28,7 @@
 #include <linux/ctype.h>
 #include <linux/hdmi.h>
 #include <linux/notifier.h>
+#include <drm/drm_backlight.h>
 #include <drm/drm_mode_object.h>
 #include <drm/drm_util.h>
 #include <drm/drm_property.h>
@@ -1357,6 +1358,11 @@ struct drm_connector_state {
 	 * @drm_atomic_helper_connector_hdmi_check().
 	 */
 	struct drm_connector_hdmi_state hdmi;
+
+	/**
+	 * @luminance: Luminance for the connector
+	 */
+	unsigned int luminance;
 };
 
 struct drm_connector_hdmi_audio_funcs {
@@ -2593,6 +2599,20 @@ struct drm_connector {
 	 * @cec: CEC-related data.
 	 */
 	struct drm_connector_cec cec;
+
+	/**
+	 * @backlight: DRM backlight state, embedded and initialized by the DRM
+	 * core. Becomes active once a driver links a backend with
+	 * drm_backlight_link().
+	 */
+	struct drm_backlight backlight;
+
+	/**
+	 * @luminance_property: Per-connector range property controlling the
+	 * connector's backlight luminance. Created with the backend's range
+	 * when a backlight is linked; NULL while no backlight is linked.
+	 */
+	struct drm_property *luminance_property;
 };
 
 #define obj_to_connector(x) container_of(x, struct drm_connector, base)
