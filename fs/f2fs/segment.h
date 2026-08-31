@@ -116,7 +116,7 @@ f2fs_start_segno(struct f2fs_sb_info *sbi, unsigned int segno)
 
 #define SECTOR_FROM_BLOCK(sbi, blk_addr)				\
 	(((sector_t)blk_addr) << F2FS_LOG_SECTORS_PER_BLOCK(sbi))
-#define SECTOR_TO_BLOCK(sbi, sectors)					\
+#define SECTOR_TO_BLOCK(sbi, sectors)				\
 	((sectors) >> F2FS_LOG_SECTORS_PER_BLOCK(sbi))
 
 /*
@@ -432,7 +432,7 @@ static inline void seg_info_to_sit_folio(struct f2fs_sb_info *sbi,
 	int i;
 
 	raw_sit = folio_address(folio);
-	memset(raw_sit, 0, PAGE_SIZE);
+	memset(raw_sit, 0, F2FS_BLKSIZE(sbi));
 	for (i = 0; i < end - start; i++) {
 		rs = &raw_sit->entries[i];
 		se = get_seg_entry(sbi, start + i);
