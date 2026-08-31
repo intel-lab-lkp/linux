@@ -1123,6 +1123,13 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 	return 0;
 
 out_unlock:
+	if (lo->lo_backing_file) {
+		mapping_set_gfp_mask(lo->lo_backing_file->f_mapping,
+				     lo->old_gfp_mask);
+		lo->lo_backing_file = NULL;
+		lo->lo_device = NULL;
+	}
+	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
 	loop_global_unlock(lo, is_loop);
 out_bdev:
 	if (!(mode & BLK_OPEN_EXCL))
