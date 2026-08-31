@@ -1599,11 +1599,10 @@ static void scx_dispatch_enqueue(struct scx_sched *sch, struct rq *rq,
 				 struct scx_dispatch_q *dsq, struct task_struct *p,
 				 u64 slice, u64 vtime, u64 enq_flags)
 {
-	bool is_rq_owned = false;
+	bool is_rq_owned = dsq_is_rq_owned(dsq);
 
 	if (dsq->id == SCX_DSQ_LOCAL) {
 		dsq = scx_resolve_local_dsq(sch, rq, p, &enq_flags);
-		is_rq_owned = true;
 	}
 
 	WARN_ON_ONCE(p->scx.dsq || !list_empty(&p->scx.dsq_list.node));
@@ -2017,6 +2016,7 @@ void scx_do_enqueue_task(struct rq *rq, struct task_struct *p, u64 enq_flags,
 			__scx_exit(sch, SCX_EXIT_ERROR_REENQ, 0, cpu_of(rq),
 				   "%s[%d] reenqueued %u times without running",
 				   p->comm, p->pid, p->scx.reenq_cnt);
+			p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
 			return;
 		}
 	}
@@ -2067,6 +2067,8 @@ void scx_do_enqueue_task(struct rq *rq, struct task_struct *p, u64 enq_flags,
 
 	SCX_CALL_OP_TASK(sch, enqueue, rq, p, enq_flags);
 
+	/* The reason is input to ops.enqueue(), not to the resulting placement. */
+	p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
 	*ddsp_taskp = NULL;
 	if (p->scx.ddsp_dsq_id != SCX_DSQ_INVALID)
 		goto direct;
@@ -2085,9 +2087,11 @@ void scx_do_enqueue_task(struct rq *rq, struct task_struct *p, u64 enq_flags,
 	return;
 
 direct:
+	p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
 	direct_dispatch(sch, p, enq_flags);
 	return;
 local_norefill:
+	p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
 	scx_dispatch_enqueue(sch, rq, &rq->scx.local_dsq, p, 0, 0, enq_flags);
 	return;
 local:
@@ -2101,6 +2105,7 @@ bypass:
 	goto enqueue;
 
 enqueue:
+	p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
 	refill_task_slice_dfl(sch, p);
 	clear_direct_dispatch(p);
 	scx_dispatch_enqueue(sch, rq, dsq, p, 0, 0, enq_flags);
@@ -2323,6 +2328,7 @@ static bool dequeue_task_scx(struct rq *rq, struct task_struct *p, int core_deq_
 	sub_nr_running(rq, 1);
 
 	scx_dispatch_dequeue(rq, p);
+	p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
 
 	/* see scx_task_slice_ended() for the save/restore exception */
 	if (!((deq_flags & DEQUEUE_SAVE) && task_current(rq, p)))
@@ -3034,6 +3040,7 @@ static void set_next_task_scx(struct rq *rq, struct task_struct *p, bool first)
 		 */
 		ops_dequeue(rq, p, SCX_DEQ_CORE_SCHED_EXEC);
 		scx_dispatch_dequeue(rq, p);
+		p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
 	}
 
 	p->se.exec_start = rq_clock_task(rq);
@@ -3208,7 +3215,6 @@ static void put_prev_task_scx(struct rq *rq, struct task_struct *p,
 			if (p->scx.flags & SCX_TASK_IMMED) {
 				p->scx.flags |= SCX_TASK_REENQ_PREEMPTED;
 				scx_do_enqueue_task(rq, p, SCX_ENQ_REENQ, -1);
-				p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
 			} else {
 				u64 enq_flags = 0;
 
@@ -4481,8 +4487,7 @@ static u32 reenq_local(struct scx_sched *sch, struct rq *rq, u64 reenq_flags)
 
 		scx_dispatch_dequeue(rq, p);
 
-		if (WARN_ON_ONCE(p->scx.flags & SCX_TASK_REENQ_REASON_MASK))
-			p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
+		WARN_ON_ONCE(p->scx.flags & SCX_TASK_REENQ_REASON_MASK);
 		p->scx.flags |= reason;
 
 		list_add_tail(&p->scx.dsq_list.node, &tasks);
@@ -4493,7 +4498,6 @@ static u32 reenq_local(struct scx_sched *sch, struct rq *rq, u64 reenq_flags)
 
 		scx_do_enqueue_task(rq, p, SCX_ENQ_REENQ, -1);
 
-		p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
 		nr_enqueued++;
 	}
 
@@ -4605,13 +4609,10 @@ static void reenq_user(struct rq *rq, struct scx_dispatch_q *dsq, u64 reenq_flag
 		dispatch_dequeue_locked(p, dsq);
 		raw_spin_unlock(&dsq->lock);
 
-		if (WARN_ON_ONCE(p->scx.flags & SCX_TASK_REENQ_REASON_MASK))
-			p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
+		WARN_ON_ONCE(p->scx.flags & SCX_TASK_REENQ_REASON_MASK);
 		p->scx.flags |= reason;
 
 		scx_do_enqueue_task(task_rq, p, SCX_ENQ_REENQ, -1);
-
-		p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
 
 		if (!(++nr_enqueued % SCX_TASK_ITER_BATCH)) {
 			scx_rq_lock_drop(locked_rq);
@@ -4674,14 +4675,14 @@ static void process_deferred_reenq_users(struct rq *rq)
 	}
 }
 
-#ifdef CONFIG_EXT_SUB_SCHED
 /*
- * Drain @rq->scx.reject_dsq, reenqueueing each task so the BPF re-decides
- * from p->scx.reenq_reason_*.
+ * Drain @rq->scx.reject_dsq and reenqueue each task so that its owning BPF
+ * scheduler chooses placement again.
  *
- * A task can be re-rejected repeatedly. The reenqueue is bounded per task in
- * scx_do_enqueue_task(), which ejects the owning sub past SCX_REENQ_MAX_REPEAT.
- * Rejection can't happen for root.
+ * A task can be re-rejected repeatedly. Reenqueues are bounded per task by
+ * SCX_REENQ_MAX_REPEAT in scx_do_enqueue_task(), which ejects the owning
+ * scheduler. The private list below prevents a task from being revisited in
+ * the same round.
  */
 static void scx_reenq_reject(struct rq *rq)
 {
@@ -4690,23 +4691,19 @@ static void scx_reenq_reject(struct rq *rq)
 
 	lockdep_assert_rq_held(rq);
 
-	if (!scx_has_subs() || list_empty(&rq->scx.reject_dsq.list))
+	if (list_empty(&rq->scx.reject_dsq.list))
 		return;
 
 	/*
-	 * Move to a private list so a task re-rejected by the
+	 * Move tasks to a private list so a task re-rejected by
 	 * scx_do_enqueue_task() below isn't revisited this round.
 	 */
 	list_for_each_entry_safe(p, n, &rq->scx.reject_dsq.list, scx.dsq_list.node) {
 		/* migration_pending tasks should have bypassed to local DSQ */
-		if (WARN_ON_ONCE(p->migration_pending))
-			continue;
+		WARN_ON_ONCE(p->migration_pending);
+		WARN_ON_ONCE(!(p->scx.flags & SCX_TASK_REENQ_REASON_MASK));
 
 		scx_dispatch_dequeue(rq, p);
-
-		if (WARN_ON_ONCE(p->scx.flags & SCX_TASK_REENQ_REASON_MASK))
-			p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
-		p->scx.flags |= SCX_TASK_REENQ_CAP;
 
 		list_add_tail(&p->scx.dsq_list.node, &tasks);
 	}
@@ -4715,13 +4712,8 @@ static void scx_reenq_reject(struct rq *rq)
 		list_del_init(&p->scx.dsq_list.node);
 
 		scx_do_enqueue_task(rq, p, SCX_ENQ_REENQ, -1);
-
-		p->scx.flags &= ~SCX_TASK_REENQ_REASON_MASK;
 	}
 }
-#else
-static void scx_reenq_reject(struct rq *rq) {}
-#endif
 
 static void run_deferred(struct rq *rq)
 {
@@ -8780,8 +8772,8 @@ void __init init_sched_ext_class(void)
 
 		/* local_dsq's sch will be set during scx_root_enable() */
 		BUG_ON(scx_init_dsq(&rq->scx.local_dsq, SCX_DSQ_LOCAL, NULL));
-#ifdef CONFIG_EXT_SUB_SCHED
 		BUG_ON(scx_init_dsq(&rq->scx.reject_dsq, SCX_DSQ_REJECT, NULL));
+#ifdef CONFIG_EXT_SUB_SCHED
 		scx_rescue_init(rq);
 #endif
 
