@@ -109,22 +109,74 @@ static void snd_midi_input_event(struct snd_rawmidi_substream *substream)
 	snd_use_lock_free(&msynth->input_use_lock);
 }
 
-static int dump_midi(struct snd_rawmidi_substream *substream, const char *buf, int count)
+/* context for __dump_midi(), passed as the snd_seq_dump_var_event() ptr arg */
+struct seq_midi_dump_ctx {
+	struct seq_midisynth *msynth;
+	struct snd_rawmidi_substream *substream;
+	bool atomic;
+};
+
+/*
+ * Sleep until the device has drained some of the output buffer.  Returns
+ * early once midisynth_unuse() has cleared output_substream or the card
+ * is gone.
+ */
+static int wait_output_space(struct seq_midisynth *msynth,
+			     struct snd_rawmidi_substream *substream)
 {
+	struct snd_rawmidi_runtime *runtime = substream->runtime;
+	long ret;
+
+	ret = wait_event_interruptible_timeout(runtime->sleep,
+					       READ_ONCE(runtime->avail) > 0 ||
+					       !rcu_access_pointer(msynth->output_substream) ||
+					       substream->rmidi->card->shutdown,
+					       30 * HZ);
+	if (ret < 0)
+		return ret;
+	if (!ret)
+		return -EIO;
+	if (!rcu_access_pointer(msynth->output_substream) ||
+	    substream->rmidi->card->shutdown)
+		return -ENODEV;
+	return 0;
+}
+
+static int dump_midi(struct seq_midi_dump_ctx *ctx, const char *buf, int count)
+{
+	struct snd_rawmidi_substream *substream = ctx->substream;
 	struct snd_rawmidi_runtime *runtime;
-	int tmp;
+	long written;
+	int tmp, err;
 
 	if (snd_BUG_ON(!substream || !buf))
 		return -EINVAL;
 	runtime = substream->runtime;
-	tmp = runtime->avail;
-	if (tmp < count) {
-		if (printk_ratelimit())
-			pr_err("ALSA: seq_midi: MIDI output buffer overrun\n");
-		return -ENOMEM;
+
+	if (ctx->atomic) {
+		tmp = runtime->avail;
+		if (tmp < count) {
+			if (printk_ratelimit())
+				pr_err("ALSA: seq_midi: MIDI output buffer overrun\n");
+			return -ENOMEM;
+		}
+		if (snd_rawmidi_kernel_write(substream, buf, count) < count)
+			return -EINVAL;
+		return 0;
 	}
-	if (snd_rawmidi_kernel_write(substream, buf, count) < count)
-		return -EINVAL;
+
+	while (count > 0) {
+		written = snd_rawmidi_kernel_write(substream, buf, count);
+		if (written < 0)
+			return written;
+		buf += written;
+		count -= written;
+		if (count > 0) {
+			err = wait_output_space(ctx->msynth, substream);
+			if (err < 0)
+				return err;
+		}
+	}
 	return 0;
 }
 
@@ -139,7 +191,7 @@ static int event_process_midi(struct snd_seq_event *ev, int direct,
 {
 	struct seq_midisynth *msynth = private_data;
 	unsigned char msg[10];	/* buffer for constructing midi messages */
-	struct snd_rawmidi_substream *substream;
+	struct seq_midi_dump_ctx ctx = { .msynth = msynth, .atomic = atomic };
 	int err = 0;
 	int len;
 
@@ -147,8 +199,8 @@ static int event_process_midi(struct snd_seq_event *ev, int direct,
 		return -EINVAL;
 
 	scoped_guard(rcu) {
-		substream = rcu_dereference(msynth->output_substream);
-		if (!substream)
+		ctx.substream = rcu_dereference(msynth->output_substream);
+		if (!ctx.substream)
 			return -ENODEV;
 		snd_use_lock_use(&msynth->output_use_lock);
 	}
@@ -159,7 +211,7 @@ static int event_process_midi(struct snd_seq_event *ev, int direct,
 			pr_debug("ALSA: seq_midi: invalid sysex event flags = 0x%x\n", ev->flags);
 			goto out;
 		}
-		snd_seq_dump_var_event(ev, __dump_midi, substream);
+		snd_seq_dump_var_event(ev, __dump_midi, &ctx);
 		snd_midi_event_reset_decode(msynth->parser);
 	} else {
 		if (!msynth->parser) {
@@ -169,7 +221,7 @@ static int event_process_midi(struct snd_seq_event *ev, int direct,
 		len = snd_midi_event_decode(msynth->parser, msg, sizeof(msg), ev);
 		if (len < 0)
 			goto out;
-		if (dump_midi(substream, msg, len) < 0)
+		if (dump_midi(&ctx, msg, len) < 0)
 			snd_midi_event_reset_decode(msynth->parser);
 	}
 
@@ -289,6 +341,7 @@ static int midisynth_unuse(void *private_data, struct snd_seq_port_subscribe *in
 
 	rcu_assign_pointer(msynth->output_substream, NULL);
 	synchronize_rcu();
+	wake_up(&msynth->output_rfile.output->runtime->sleep);
 	snd_use_lock_sync(&msynth->output_use_lock);
 	rfile = msynth->output_rfile;
 	msynth->output_rfile = (struct snd_rawmidi_file){};
