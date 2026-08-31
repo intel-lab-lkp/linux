@@ -3001,6 +3001,50 @@ static void spi_nor_init_fixup_flags(struct spi_nor *nor)
 		nor->flags |= SNOR_F_IO_MODE_EN_VOLATILE;
 }
 
+static int spi_nor_platform_lock(struct spi_nor *nor, loff_t ofs, u64 len)
+{
+	return -EOPNOTSUPP;
+}
+
+static int spi_nor_platform_unlock(struct spi_nor *nor, loff_t ofs, u64 len)
+{
+	return -EOPNOTSUPP;
+}
+
+static int spi_nor_platform_is_locked(struct spi_nor *nor, loff_t ofs, u64 len)
+{
+	struct flash_platform_data *data = dev_get_platdata(nor->dev);
+
+	return data->is_locked(nor->spimem->spi, ofs, len);
+}
+
+static const struct spi_nor_locking_ops spi_nor_platform_locking_ops = {
+	.lock = spi_nor_platform_lock,
+	.unlock = spi_nor_platform_unlock,
+	.is_locked = spi_nor_platform_is_locked,
+};
+
+/**
+ * spi_nor_init_platform_locking_ops() - Use the platform supplied write
+ *	protection query, if there is one.
+ * @nor:	pointer to a 'struct spi_nor'
+ *
+ * Some flashes are write protected by the platform they are attached to rather
+ * than by their own block protection bits, for example by an Intel PCH SPI
+ * controller programmed with protected range registers. In that case the chip's
+ * block protection bits are typically left clear and say nothing about what is
+ * actually enforced, so prefer the platform supplied query when available.
+ */
+static void spi_nor_init_platform_locking_ops(struct spi_nor *nor)
+{
+	struct flash_platform_data *data = dev_get_platdata(nor->dev);
+
+	if (!data || !data->is_locked || !nor->spimem)
+		return;
+
+	nor->params->locking_ops = &spi_nor_platform_locking_ops;
+}
+
 /**
  * spi_nor_late_init_params() - Late initialization of default flash parameters.
  * @nor:	pointer to a 'struct spi_nor'
@@ -3040,9 +3084,13 @@ static int spi_nor_late_init_params(struct spi_nor *nor)
 	spi_nor_init_fixup_flags(nor);
 
 	/*
-	 * NOR protection support. When locking_ops are not provided, we pick
-	 * the default ones.
+	 * NOR protection support. Platform enforced protection is preferred
+	 * over the chip's own, as the chip is not necessarily aware of it.
+	 * When locking_ops are not provided, we pick the default ones.
 	 */
+	if (!nor->params->locking_ops)
+		spi_nor_init_platform_locking_ops(nor);
+
 	if (nor->flags & SNOR_F_HAS_LOCK && !nor->params->locking_ops)
 		spi_nor_init_default_locking_ops(nor);
 
