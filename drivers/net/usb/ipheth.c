@@ -505,6 +505,7 @@ static int ipheth_close(struct net_device *net)
 	 * it, so that such a schedule_delayed_work() is a no-op.
 	 */
 	disable_delayed_work_sync(&dev->carrier_work);
+	ipheth_kill_urbs(dev);
 	return 0;
 }
 
