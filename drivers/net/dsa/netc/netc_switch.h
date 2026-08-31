@@ -84,7 +84,11 @@ struct netc_port {
 	u16 uc:1;
 	u16 mc:1;
 	u16 pvid;
-	struct ipft_entry_data *host_flood;
+	/* ipft_hf_eid applies only to user ports and should be initialized
+	 * to NTMP_NULL_ENTRY_ID. Other ports (such as CPU ports) do not
+	 * require initialization.
+	 */
+	u32 ipft_hf_eid;
 };
 
 struct netc_switch_regs {
