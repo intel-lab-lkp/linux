@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2016-2025 Christoph Hellwig.
+ * Copyright (c) 2016-2026 Christoph Hellwig.
  * All Rights Reserved.
  */
 #include "xfs_platform.h"
@@ -19,14 +19,99 @@
 #include <linux/bio-integrity.h>
 
 static void
-xfs_end_io_read(
+xfs_end_bio_bounced(
+	struct bio		*bio)
+{
+	iomap_finish_ioends(iomap_ioend_from_bio(bio),
+			blk_status_to_errno(bio->bi_status));
+}
+
+static void
+xfs_dio_bounce_end_io(
 	struct bio		*bio)
 {
 	struct iomap_ioend	*ioend = iomap_ioend_from_bio(bio);
 	int			error = blk_status_to_errno(bio->bi_status);
+	struct bio		*orig_bio = bio->bi_private;
 
-	if (!error && (ioend->io_flags & IOMAP_IOEND_INTEGRITY))
+	if ((ioend->io_flags & IOMAP_IOEND_INTEGRITY) && !bio->bi_status)
 		error = iomap_ioend_integrity_verify(ioend);
+	iomap_bounce_read_end_io(ioend, orig_bio, error);
+}
+
+static void
+xfs_bounce_submit_ioend(
+	struct iomap_ioend	*ioend)
+{
+	if (ioend->io_flags & IOMAP_IOEND_INTEGRITY)
+		fs_bio_integrity_alloc(&ioend->io_bio);
+	ioend->io_bio.bi_end_io = xfs_dio_bounce_end_io;
+	bio_set_flag(&ioend->io_bio, BIO_COMPLETE_IN_TASK);
+	submit_bio(&ioend->io_bio);
+}
+
+static void
+xfs_read_bounce_and_resubmit(
+	struct iomap_ioend	*ioend)
+{
+	struct bio		*bio = &ioend->io_bio;
+	unsigned short		vcnt = bio->bi_vcnt;
+	void			*private = bio->bi_private;
+
+	trace_xfs_bounce_reread(XFS_I(ioend->io_inode), ioend->io_offset,
+			ioend->io_size);
+
+	/*
+	 * Free the bio integrity data for the original bio, as we'll allocate
+	 * ons for each sub-I/O, which could deadlock if we keep the original
+	 * one around.
+	 */
+	if (bio_integrity(bio))
+		fs_bio_integrity_free(bio);
+
+	/*
+	 * Reset the bio to submit the bio to the block layer again.  Switch to
+	 * an end_io handler that simply complets the ioend, as all verification
+	 * is done by the end_I/O handlers for the clone bio(s).
+	 */
+	bio_reset(bio, xfs_inode_buftarg(XFS_I(ioend->io_inode))->bt_bdev,
+			bio->bi_opf);
+	bio->bi_vcnt = vcnt;
+	bio->bi_private = private;
+	bio->bi_end_io = xfs_end_bio_bounced;
+	bio->bi_iter = (struct bvec_iter) {
+		.bi_sector	= ioend->io_sector,
+		.bi_size	= ioend->io_size,
+		.bi_offset	= ioend->io_bvec_offset,
+	};
+	iomap_bounce_read(ioend, bdev_logical_block_size(bio->bi_bdev),
+			xfs_bounce_submit_ioend);
+}
+
+static void
+xfs_end_io_read(
+	struct bio		*bio)
+{
+	struct iomap_ioend	*ioend = iomap_ioend_from_bio(bio);
+	struct xfs_inode	*ip = XFS_I(ioend->io_inode);
+	struct xfs_mount	*mp = ip->i_mount;
+	int			error = blk_status_to_errno(bio->bi_status);
+
+	if (!error && (ioend->io_flags & IOMAP_IOEND_INTEGRITY)) {
+		error = iomap_ioend_integrity_verify(ioend);
+		if ((ioend->io_flags & IOMAP_IOEND_DIRECT) &&
+		    READ_ONCE(mp->m_read_bounce) == XFS_READ_BOUNCE_LAZY) {
+			/*
+			 * We only really need to retry for guard tag errors,
+			 * but right now we can't distinguish them from other
+			 * (i.e, reftag) errors.
+			 */
+			if (error) {
+				xfs_read_bounce_and_resubmit(ioend);
+				return;
+			}
+		}
+	}
 
 	iomap_finish_ioends(ioend, error);
 }
@@ -38,7 +123,18 @@ xfs_ioend_submit_read(
 	loff_t			file_offset,
 	u16			ioend_flags)
 {
-	iomap_init_ioend(inode, bio, file_offset, ioend_flags);
+	struct xfs_inode	*ip = XFS_I(inode);
+	struct xfs_mount	*mp = ip->i_mount;
+	struct iomap_ioend	*ioend;
+
+	ioend = iomap_init_ioend(inode, bio, file_offset, ioend_flags);
+	if ((ioend_flags & IOMAP_IOEND_DIRECT) &&
+	    READ_ONCE(mp->m_read_bounce) == XFS_READ_BOUNCE_ALWAYS) {
+		iomap_bounce_read(ioend, bdev_logical_block_size(bio->bi_bdev),
+				xfs_bounce_submit_ioend);
+		return;
+	}
+
 	if (ioend_flags & IOMAP_IOEND_INTEGRITY)
 		fs_bio_integrity_alloc(bio);
 	bio->bi_end_io = xfs_end_io_read;
