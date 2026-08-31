@@ -388,19 +388,18 @@ static const struct lsdc_crtc_hw_ops ls7a2000_crtc_hw_ops[2] = {
 	},
 };
 
-static void lsdc_crtc_reset(struct drm_crtc *crtc)
+static struct drm_crtc_state *lsdc_crtc_create_state(struct drm_crtc *crtc)
 {
 	struct lsdc_crtc_state *priv_crtc_state;
-
-	if (crtc->state)
-		crtc->funcs->atomic_destroy_state(crtc, crtc->state);
 
 	priv_crtc_state = kzalloc_obj(*priv_crtc_state);
 
 	if (!priv_crtc_state)
-		__drm_atomic_helper_crtc_reset(crtc, NULL);
-	else
-		__drm_atomic_helper_crtc_reset(crtc, &priv_crtc_state->base);
+		return ERR_PTR(-ENOMEM);
+
+	__drm_atomic_helper_crtc_state_init(&priv_crtc_state->base, crtc);
+
+	return &priv_crtc_state->base;
 }
 
 static void lsdc_crtc_atomic_destroy_state(struct drm_crtc *crtc,
@@ -707,7 +706,7 @@ static void lsdc_crtc_atomic_print_state(struct drm_printer *p,
 }
 
 static const struct drm_crtc_funcs ls7a1000_crtc_funcs = {
-	.reset = lsdc_crtc_reset,
+	.atomic_create_state = lsdc_crtc_create_state,
 	.destroy = drm_crtc_cleanup,
 	.set_config = drm_atomic_helper_set_config,
 	.page_flip = drm_atomic_helper_page_flip,
@@ -721,7 +720,7 @@ static const struct drm_crtc_funcs ls7a1000_crtc_funcs = {
 };
 
 static const struct drm_crtc_funcs ls7a2000_crtc_funcs = {
-	.reset = lsdc_crtc_reset,
+	.atomic_create_state = lsdc_crtc_create_state,
 	.destroy = drm_crtc_cleanup,
 	.set_config = drm_atomic_helper_set_config,
 	.page_flip = drm_atomic_helper_page_flip,
