@@ -2618,11 +2618,26 @@ static void nfsiod_stop(void)
  */
 static int nfsiod_start(void)
 {
+	struct workqueue_attrs *attrs;
+
 	dprintk("RPC:       creating workqueue nfsiod\n");
 	nfsiod_workqueue = alloc_workqueue("nfsiod",
 				WQ_MEM_RECLAIM | WQ_UNBOUND | WQ_SYSFS, 0);
 	if (nfsiod_workqueue == NULL)
 		return -ENOMEM;
+	attrs = alloc_workqueue_attrs();
+	if (attrs) {
+		int err;
+
+		attrs->affn_scope = WQ_AFFN_SMT;
+		err = apply_workqueue_attrs(nfsiod_workqueue, attrs);
+		free_workqueue_attrs(attrs);
+		if (err)
+			pr_warn("nfsiod: failed to set SMT affinity scope: %d\n",
+				err);
+	} else {
+		pr_warn("nfsiod: failed to allocate workqueue attrs\n");
+	}
 #if IS_ENABLED(CONFIG_NFS_LOCALIO)
 	/*
 	 * localio writes need to use a normal (non-memreclaim) workqueue.
