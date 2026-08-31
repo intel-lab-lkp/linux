@@ -2341,6 +2341,10 @@ static int qcom_pcie_suspend_noirq(struct device *dev)
 {
 	struct qcom_pcie *pcie;
 	int ret = 0;
+	const struct qcom_pcie_cfg *pcie_cfg = of_device_get_match_data(dev);
+
+	if (pcie_cfg && pcie_cfg->firmware_managed)
+		return 0;
 
 	pcie = dev_get_drvdata(dev);
 	if (!pcie)
@@ -2399,6 +2403,10 @@ static int qcom_pcie_resume_noirq(struct device *dev)
 {
 	struct qcom_pcie *pcie;
 	int ret;
+	const struct qcom_pcie_cfg *pcie_cfg = of_device_get_match_data(dev);
+
+	if (pcie_cfg && pcie_cfg->firmware_managed)
+		return 0;
 
 	pcie = dev_get_drvdata(dev);
 	if (!pcie)
