@@ -20,6 +20,17 @@
 # A control case, where both endpoints agree on the options, makes sure
 # that no tunnel drop reason is reported when packets are accepted.
 #
+# The GRE specific reasons are checked as well:
+#
+#  - a packet that matches no tunnel is reported as
+#    GRE_TUNNEL_NOT_FOUND.  It is triggered here by giving the two
+#    endpoints different keys.
+#
+#  - a header with the routing bit set is reported as GRE_INVALID_HDR,
+#    and a header announcing a GRE version nobody handles is reported as
+#    UNHANDLED_PROTO.  Both are triggered by corrupting the GRE header
+#    on ingress with tc pedit, and are skipped if that is not available.
+#
 # Drop reasons are read from the skb:kfree_skb tracepoint.  A dedicated
 # trace instance is used so that the test does not disturb, and is not
 # disturbed by, anything else using the tracing facility.
@@ -202,6 +213,47 @@ test_control()
 	check_reason "gre: matching configuration (control)" ""
 }
 
+# Corrupt one field of the GRE header of every IPv4 packet received by
+# the receiver.  $1 is a tc pedit munge expression, with offsets counted
+# from the start of the IPv4 header.
+corrupt_gre_header()
+{
+	ip netns exec "$NS_RCV" tc qdisc add dev veth_r ingress || return 1
+	ip netns exec "$NS_RCV" tc filter add dev veth_r ingress \
+		protocol ip matchall action pedit ex munge "$@" || return 1
+}
+
+test_tunnel_not_found()
+{
+	setup_ns_pair
+	# The two endpoints use different keys, so the lookup on the
+	# receiver finds no tunnel for the incoming packets.
+	add_gre "$NS_SND" "$SND_V4" "$RCV_V4" okey 1 ikey 1
+	add_gre "$NS_RCV" "$RCV_V4" "$SND_V4" okey 2 ikey 2
+	addr_tunnels
+
+	check_reason "gre: tunnel not found" GRE_TUNNEL_NOT_FOUND
+}
+
+# $1: test name, $2: expected reason, $3...: tc pedit munge expression
+test_corrupted_header()
+{
+	local name=$1 want=$2
+
+	shift 2
+	setup_ns_pair
+	add_gre "$NS_SND" "$SND_V4" "$RCV_V4"
+	add_gre "$NS_RCV" "$RCV_V4" "$SND_V4"
+	addr_tunnels
+
+	if ! corrupt_gre_header "$@" 2>/dev/null; then
+		log_test_skip "$name"
+		return
+	fi
+
+	check_reason "$name" "$want"
+}
+
 if [ "$(id -u)" -ne 0 ]; then
 	echo "SKIP: need root"
 	exit "$ksft_skip"
@@ -216,6 +268,16 @@ test_opts_mismatch gre iseq
 test_opts_mismatch gre icsum
 test_control
 test_old_seq gre
+
+test_tunnel_not_found
+# The routing bit is the second most significant bit of the first byte
+# of the GRE header, which follows the 20 byte IPv4 header.
+test_corrupted_header "gre: routing bit set" GRE_INVALID_HDR \
+	offset 20 u8 set 0x40
+# The GRE version sits in the low bits of the next byte.  Version 1 is
+# PPTP, which has no handler here.
+test_corrupted_header "gre: unhandled GRE version" UNHANDLED_PROTO \
+	offset 21 u8 set 0x01
 
 if [ -e /proc/sys/net/ipv6 ]; then
 	test_opts_mismatch ip6gre iseq
