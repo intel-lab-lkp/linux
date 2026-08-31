@@ -11,3 +11,21 @@ Description:
 		report_length	HID report length
 		subclass	HID device subclass to use
 		=============	============================================
+
+What:		/config/usb-gadget/gadget/functions/hid.name
+Date:		Aug 2026
+KernelVersion:	7.4
+Description:
+		The attributes:
+
+		=============	============================================
+		interval	HID endpoint bInterval for all speeds; if
+				set, it takes precedence over the per-speed
+				attributes below
+		interval_fs	HID endpoint bInterval for full-speed
+				(in milliseconds, default: 10)
+		interval_hs	HID endpoint bInterval for high-speed
+				(in 125 us units, default: 4)
+		interval_ss	HID endpoint bInterval for super-speed
+				(in 125 us units, default: 4)
+		=============	============================================
