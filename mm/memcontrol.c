@@ -2127,8 +2127,10 @@ void drain_all_stock(struct mem_cgroup *root_memcg)
 	if (!mutex_trylock(&percpu_charge_mutex))
 		return;
 
-	for_each_mem_cgroup_tree(memcg, root_memcg)
+	for_each_mem_cgroup_tree(memcg, root_memcg) {
 		page_counter_drain_stock_async(&memcg->memory);
+		page_counter_drain_stock_async(&memcg->memsw);
+	}
 
 	/* Hotplug races are OK; workers only touch their own cpu's obj_stock */
 	migrate_disable();
@@ -2159,8 +2161,10 @@ static int memcg_hotplug_cpu_dead(unsigned int cpu)
 	/* no need for the local lock */
 	drain_obj_stock(obj_st);
 
-	for_each_mem_cgroup_tree(memcg, NULL)
+	for_each_mem_cgroup_tree(memcg, NULL) {
 		page_counter_drain_cpu_stock(&memcg->memory, cpu);
+		page_counter_drain_cpu_stock(&memcg->memsw, cpu);
+	}
 
 	/*
 	 * A drain work queued before the CPU went away is executed by an
@@ -2467,7 +2471,7 @@ retry:
 		goto check_high;
 
 	if (do_memsw_account())
-		page_counter_uncharge(&memcg->memsw, nr_pages);
+		page_counter_refill_stock(&memcg->memsw, nr_pages);
 	mem_over_limit = mem_cgroup_from_counter(counter, memory);
 
 reclaim:
@@ -2926,7 +2930,7 @@ static void obj_cgroup_uncharge_pages(struct obj_cgroup *objcg,
 	if (!mem_cgroup_is_root(memcg)) {
 		page_counter_refill_stock(&memcg->memory, nr_pages);
 		if (do_memsw_account())
-			page_counter_uncharge(&memcg->memsw, nr_pages);
+			page_counter_refill_stock(&memcg->memsw, nr_pages);
 	}
 
 	css_put(&memcg->css);
@@ -3930,6 +3934,8 @@ static void __mem_cgroup_free(struct mem_cgroup *memcg)
 static void mem_cgroup_free(struct mem_cgroup *memcg)
 {
 	page_counter_free_stock(&memcg->memory);
+	/* memsw and swap are the same counter; only memsw is ever stocked */
+	page_counter_free_stock(&memcg->memsw);
 	lru_gen_exit_memcg(memcg);
 	memcg_wb_domain_exit(memcg);
 	__mem_cgroup_free(memcg);
@@ -4098,8 +4104,12 @@ static int mem_cgroup_css_online(struct cgroup_subsys_state *css)
 	css_get(css);
 
 	/* stock allocation failure is nonfatal; fall back to direct charges */
-	if (!mem_cgroup_is_root(memcg))
+	if (!mem_cgroup_is_root(memcg)) {
 		page_counter_alloc_stock(&memcg->memory, MEMCG_CHARGE_BATCH);
+		if (do_memsw_account())
+			page_counter_alloc_stock(&memcg->memsw,
+						 MEMCG_CHARGE_BATCH);
+	}
 
 	/*
 	 * Ensure mem_cgroup_from_private_id() works once we're fully online.
