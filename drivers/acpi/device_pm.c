@@ -169,10 +169,8 @@ int acpi_device_set_power(struct acpi_device *device, int state)
 		return -EINVAL;
 
 	if (device->power.state == ACPI_STATE_UNKNOWN &&
-	    acpi_bus_init_power(device)) {
-		device->flags.power_manageable = 0;
+	    acpi_device_init_power(device))
 		return -ENODEV;
-	}
 
 	acpi_handle_debug(device->handle, "Power state change: %s -> %s\n",
 			  acpi_power_state_string(device->power.state),
@@ -310,10 +308,9 @@ int acpi_bus_set_power(acpi_handle handle, int state)
 }
 EXPORT_SYMBOL(acpi_bus_set_power);
 
-int acpi_bus_init_power(struct acpi_device *device)
+static int __acpi_device_init_power(struct acpi_device *device)
 {
-	int state;
-	int result;
+	int result, state;
 
 	result = acpi_device_get_power(device, &state);
 	if (result)
@@ -353,6 +350,17 @@ int acpi_bus_init_power(struct acpi_device *device)
 			  acpi_power_state_string(state));
 
 	return 0;
+}
+
+int acpi_device_init_power(struct acpi_device *device)
+{
+	int ret;
+
+	ret = __acpi_device_init_power(device);
+	if (ret)
+		device->flags.power_manageable = 0;
+
+	return ret;
 }
 
 /**
@@ -417,7 +425,7 @@ int acpi_device_update_power(struct acpi_device *device, int *state_p)
 	int result;
 
 	if (device->power.state == ACPI_STATE_UNKNOWN) {
-		result = acpi_bus_init_power(device);
+		result = __acpi_device_init_power(device);
 		if (!result && state_p)
 			*state_p = device->power.state;
 

@@ -2362,9 +2362,8 @@ static int acpi_bus_attach(struct acpi_device *device, void *first_pass)
 	acpi_ec_register_opregions(device);
 
 	if (device->flags.power_manageable &&
-	    device->power.state == ACPI_STATE_UNKNOWN &&
-	    acpi_bus_init_power(device))
-		device->flags.power_manageable = 0;
+	    device->power.state == ACPI_STATE_UNKNOWN)
+		acpi_device_init_power(device);
 
 	if (device->flags.visited)
 		goto ok;
