@@ -997,6 +997,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_S390_KEYOP 247
 #define KVM_CAP_S390_VSIE_ESAMODE 248
 #define KVM_CAP_S390_HPAGE_2G 249
+#define KVM_CAP_LIVE_MIGRATION 250
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
@@ -1350,6 +1351,8 @@ struct kvm_s390_keyop {
 #define KVM_GET_DEVICE_ATTR	  _IOW(KVMIO,  0xe2, struct kvm_device_attr)
 #define KVM_HAS_DEVICE_ATTR	  _IOW(KVMIO,  0xe3, struct kvm_device_attr)
 
+#define KVM_MIGRATE_CMD		  _IOWR(KVMIO, 0xe4, struct kvm_migrate_cmd)
+
 /*
  * ioctls for vcpu fds
  */
@@ -1668,6 +1671,25 @@ struct kvm_pre_fault_memory {
 	__u64 size;
 	__u64 flags;
 	__u64 padding[5];
+};
+
+#define KVM_MIGRATE_SETUP		0
+#define KVM_MIGRATE_ITERATION		1
+#define KVM_MIGRATE_STOP_AND_COPY	2
+#define KVM_MIGRATE_ABORT		3
+#define KVM_MIGRATE_END			4
+
+struct kvm_transfer_buffer {
+	__u64 address;
+	__u32 size;
+	__u32 reserved;
+};
+
+struct kvm_migrate_cmd {
+	__u16 command;
+	__u16 flags;
+	__u32 reserved;
+	struct kvm_transfer_buffer buf;
 };
 
 #endif /* __LINUX_KVM_H */

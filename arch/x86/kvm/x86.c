@@ -4973,6 +4973,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_READONLY_MEM:
 		r = kvm ? kvm_arch_has_readonly_mem(kvm) : 1;
 		break;
+	case KVM_CAP_LIVE_MIGRATION:
+		r = kvm ? kvm_x86_call(cap_live_migration)(kvm) : 0;
+		break;
 	default:
 		break;
 	}
@@ -7612,6 +7615,28 @@ set_pit2_out:
 			return -EFAULT;
 
 		r = kvm_vm_ioctl_set_msr_filter(kvm, &filter);
+		break;
+	}
+	case KVM_MIGRATE_CMD: {
+		struct kvm_migrate_cmd cmd;
+
+		if (!kvm_x86_ops.migrate_cmd ||
+		    !kvm_x86_call(cap_live_migration)(kvm))
+			return -ENOTTY;
+
+		if (copy_from_user(&cmd, argp, sizeof(cmd)))
+			return -EFAULT;
+
+		if (cmd.reserved || cmd.buf.reserved)
+			return -EINVAL;
+
+		r = kvm_x86_call(migrate_cmd)(kvm, &cmd);
+		if (r > 0)
+			r = -EIO;
+
+		/* Copy back also on an error to report a partially done command */
+		if (copy_to_user(argp, &cmd, sizeof(cmd)))
+			return -EFAULT;
 		break;
 	}
 	default:
