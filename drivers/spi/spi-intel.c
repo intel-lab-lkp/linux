@@ -1201,26 +1201,76 @@ static int intel_spi_init(struct intel_spi *ispi)
 	return 0;
 }
 
+/*
+ * Read protected range register @idx and decode it, provided any of the
+ * protection bits in @mask are set.
+ */
+static bool intel_spi_pr_range(const struct intel_spi *ispi, int idx, u32 mask,
+			       unsigned int *base, unsigned int *limit)
+{
+	u32 pr_value = readl(ispi->pregs + PR(idx));
+
+	if (!(pr_value & mask))
+		return false;
+
+	*limit = (pr_value & PR_LIMIT_MASK) >> PR_LIMIT_SHIFT;
+	*base = pr_value & PR_BASE_MASK;
+
+	return true;
+}
+
 static bool intel_spi_is_protected(const struct intel_spi *ispi,
 				   unsigned int base, unsigned int limit)
 {
 	int i;
 
 	for (i = 0; i < ispi->pr_num; i++) {
-		u32 pr_base, pr_limit, pr_value;
+		unsigned int pr_base, pr_limit;
 
-		pr_value = readl(ispi->pregs + PR(i));
-		if (!(pr_value & (PR_WPE | PR_RPE)))
+		if (!intel_spi_pr_range(ispi, i, PR_WPE | PR_RPE, &pr_base,
+					&pr_limit))
 			continue;
-
-		pr_limit = (pr_value & PR_LIMIT_MASK) >> PR_LIMIT_SHIFT;
-		pr_base = pr_value & PR_BASE_MASK;
 
 		if (pr_base >= base && pr_limit <= limit)
 			return true;
 	}
 
 	return false;
+}
+
+/*
+ * Unlike intel_spi_is_protected(), which asks whether a flash region contains
+ * any protected range, this asks the opposite: whether the given range is
+ * itself entirely covered by a write protected range. That is what the MTD
+ * layer means by "locked".
+ */
+static bool intel_spi_is_range_protected(const struct intel_spi *ispi,
+					 unsigned int base, unsigned int limit)
+{
+	int i;
+
+	for (i = 0; i < ispi->pr_num; i++) {
+		unsigned int pr_base, pr_limit;
+
+		if (!intel_spi_pr_range(ispi, i, PR_WPE, &pr_base, &pr_limit))
+			continue;
+
+		if (base >= pr_base && limit <= pr_limit)
+			return true;
+	}
+
+	return false;
+}
+
+static int intel_spi_is_locked(struct spi_device *spi, loff_t ofs, u64 len)
+{
+	struct intel_spi *ispi = spi_controller_get_devdata(spi->controller);
+
+	if (!len)
+		return 0;
+
+	return intel_spi_is_range_protected(ispi, ofs >> 12,
+					    (ofs + len - 1) >> 12);
 }
 
 /*
@@ -1394,6 +1444,12 @@ static int intel_spi_populate_chip(struct intel_spi *ispi)
 		return -ENOMEM;
 
 	intel_spi_fill_partition(ispi, pdata->parts);
+
+	/*
+	 * The protected range registers address the first chip, so only it can
+	 * be queried this way.
+	 */
+	pdata->is_locked = intel_spi_is_locked;
 
 	memset(&chip, 0, sizeof(chip));
 	snprintf(chip.modalias, 8, "spi-nor");
