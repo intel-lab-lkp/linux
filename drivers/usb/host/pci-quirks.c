@@ -1191,25 +1191,22 @@ static void quirk_usb_handoff_xhci(struct pci_dev *pdev)
 	if ((pdev->vendor == PCI_VENDOR_ID_TI && pdev->device == 0x8241) ||
 			(pdev->vendor == PCI_VENDOR_ID_RENESAS
 			 && pdev->device == 0x0014)) {
-		val = (val | XHCI_HC_OS_OWNED) & ~XHCI_HC_BIOS_OWNED;
-		writel(val, base + ext_cap_offset);
+		val &= ~XHCI_HC_BIOS_OWNED;
 	}
 
-	/* If the BIOS owns the HC, signal that the OS wants it, and wait */
-	if (val & XHCI_HC_BIOS_OWNED) {
-		writel(val | XHCI_HC_OS_OWNED, base + ext_cap_offset);
+	val |= XHCI_HC_OS_OWNED;
+	writel(val, base + ext_cap_offset);
 
-		/* Wait for 1 second with 10 microsecond polling interval */
-		timeout = handshake(base + ext_cap_offset, XHCI_HC_BIOS_OWNED,
-				0, 1000000, 10);
+	/* Wait for 1 second with 10 microsecond polling interval */
+	timeout = handshake(base + ext_cap_offset, XHCI_HC_BIOS_OWNED,
+			    0, 1000000, 10);
 
-		/* Assume a buggy BIOS and take HC ownership anyway */
-		if (timeout) {
-			dev_warn(&pdev->dev,
-				 "xHCI BIOS handoff failed (BIOS bug ?) %08x\n",
-				 val);
-			writel(val & ~XHCI_HC_BIOS_OWNED, base + ext_cap_offset);
-		}
+	/* Assume a buggy BIOS and take HC ownership anyway */
+	if (timeout && (val & XHCI_HC_BIOS_OWNED)) {
+		dev_warn(&pdev->dev,
+			 "xHCI BIOS handoff failed (BIOS bug ?) %08x\n",
+			 val);
+		writel(val & ~XHCI_HC_BIOS_OWNED, base + ext_cap_offset);
 	}
 
 	val = readl(base + ext_cap_offset + XHCI_LEGACY_CONTROL_OFFSET);
