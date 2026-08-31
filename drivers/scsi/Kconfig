@@ -76,6 +76,15 @@ config SCSI_LIB_KUNIT_TEST
 
 	  If unsure say N.
 
+config SCSI_LOGGING_KUNIT_TEST
+	bool "KUnit tests for SCSI logging functions" if !KUNIT_ALL_TESTS
+	depends on SCSI && KUNIT=y && SCSI_CONSTANTS
+	default KUNIT_ALL_TESTS
+	help
+	  Run SCSI Mid Layer's KUnit tests for scsi_logging.
+
+	  If unsure say N.
+
 comment "SCSI support type (disk, tape, CD-ROM)"
 	depends on SCSI
 

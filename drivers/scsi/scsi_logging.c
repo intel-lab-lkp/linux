@@ -15,6 +15,32 @@
 #include <scsi/scsi_eh.h>
 #include <scsi/scsi_dbg.h>
 
+#if IS_ENABLED(CONFIG_SCSI_LOGGING_KUNIT_TEST)
+static void (*scsi_logging_test_dev_printk)(const char *level,
+					    const struct device *dev,
+					    const char *fmt, va_list args);
+
+static void scsi_logging_dev_printk(const char *level, const struct device *dev,
+				    const char *fmt, ...)
+{
+	va_list args;
+
+	va_start(args, fmt);
+	if (unlikely(scsi_logging_test_dev_printk)) {
+		scsi_logging_test_dev_printk(level, dev, fmt, args);
+	} else {
+		struct va_format vaf = { .fmt = fmt, .va = &args };
+
+		_dev_printk(level, dev, "%pV", &vaf);
+	}
+	va_end(args);
+}
+
+#undef dev_printk
+#define dev_printk(level, dev, fmt, ...) \
+	scsi_logging_dev_printk(level, dev, fmt, ##__VA_ARGS__)
+#endif
+
 static char *scsi_log_reserve_buffer(size_t *len)
 {
 	*len = 128;
@@ -436,3 +462,7 @@ out_printk:
 	scsi_log_release_buffer(logbuf);
 }
 EXPORT_SYMBOL(scsi_print_result);
+
+#if IS_ENABLED(CONFIG_SCSI_LOGGING_KUNIT_TEST)
+#include "scsi_logging_test.c"
+#endif
