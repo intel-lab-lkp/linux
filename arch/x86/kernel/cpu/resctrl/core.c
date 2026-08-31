@@ -1016,10 +1016,11 @@ static __init bool get_rdt_mon_resources(void)
 			ret = true;
 	}
 
-	if (!ret)
-		return false;
+	if (ret)
+		rdt_get_l3_mon_config(r);
 
-	return !rdt_get_l3_mon_config(r);
+	/* Even if there are no L3 monitor events, AET might be supported */
+	return resctrl_arch_system_max_rmid_idx() > 0;
 }
 
 static __init void __check_quirks_intel(void)
