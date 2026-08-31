@@ -1208,10 +1208,14 @@ impl Process {
 
         {
             let inner = self.inner.lock();
-            for (node_ptr, node) in &inner.nodes {
+
+            if let Some(cursor) = inner.nodes.cursor_lower_bound(&ptr) {
+                let (node_ptr, node) = cursor.current();
+
                 if *node_ptr > ptr {
                     node.populate_debug_info(&mut out, &inner);
-                    break;
+                } else if let Some((_, node)) = cursor.peek_next() {
+                    node.populate_debug_info(&mut out, &inner);
                 }
             }
         }
