@@ -16,6 +16,7 @@
 #include <linux/workqueue.h>
 
 #include <media/ipu-bridge.h>
+#include <media/ipu6-pci-table.h>
 #include <media/v4l2-fwnode.h>
 
 #define ADEV_DEV(adev) ACPI_PTR(&((adev)->dev))
@@ -62,6 +63,10 @@ static const struct ipu_sensor_config ipu_supported_sensors[] = {
 	IPU_SENSOR_CONFIG("INT0310", 1, 55692000),
 	/* Omnivision OV5693 */
 	IPU_SENSOR_CONFIG("INT33BE", 1, 419200000),
+	IPU_SENSOR_CONFIG_MATCH_FL("INT33BE", PCI_DEVICE_ID_INTEL_IPU6,
+				   CSI2_CLK_NONCONTINUOUS, 1, 419200000),
+	IPU_SENSOR_CONFIG_MATCH_FL("INT33BE", PCI_DEVICE_ID_INTEL_IPU6EP_ADLP,
+				   CSI2_CLK_NONCONTINUOUS, 1, 419200000),
 	/* Onsemi MT9M114 */
 	IPU_SENSOR_CONFIG("INT33F0", 1, 384000000),
 	/* Omnivision OV2740 */
@@ -98,6 +103,10 @@ static const struct ipu_sensor_config ipu_supported_sensors[] = {
 	IPU_SENSOR_CONFIG("OVTI5675", 1, 450000000),
 	/* Omnivision OV5693 */
 	IPU_SENSOR_CONFIG("OVTI5693", 1, 419200000),
+	IPU_SENSOR_CONFIG_MATCH_FL("OVTI5693", PCI_DEVICE_ID_INTEL_IPU6,
+				   CSI2_CLK_NONCONTINUOUS, 1, 419200000),
+	IPU_SENSOR_CONFIG_MATCH_FL("OVTI5693", PCI_DEVICE_ID_INTEL_IPU6EP_ADLP,
+				   CSI2_CLK_NONCONTINUOUS, 1, 419200000),
 	/* Omnivision OV8856 */
 	IPU_SENSOR_CONFIG("OVTI8856", 3, 180000000, 360000000, 720000000),
 	/* Sony IMX471 */
@@ -525,6 +534,10 @@ static void ipu_bridge_create_fwnode_properties(
 			PROPERTY_ENTRY_U64_ARRAY_LEN(names->link_frequencies,
 						     cfg->link_freqs,
 						     cfg->nr_link_freqs);
+
+	if (cfg->flags & IPU_BR_FL_CSI2_CLK_NONCONTINUOUS)
+		sensor->ep_properties[IPU_NEXT_EP_PROPERTY(i, NUM_OF)] =
+			PROPERTY_ENTRY_BOOL("clock-noncontinuous");
 
 	sensor->ipu_properties[0] = PROPERTY_ENTRY_U32_ARRAY_LEN(
 					sensor->prop_names.data_lanes,

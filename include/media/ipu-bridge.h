@@ -19,6 +19,8 @@
 
 /* Flags for struct ipu_sensor_config */
 #define IPU_BR_FL_NONE				0
+/* The sensor's CSI-2 transmitter needs a non-continuous clock */
+#define IPU_BR_FL_CSI2_CLK_NONCONTINUOUS	BIT(0)
 
 /*
  * Sensor config specific to a single IPU, identified by its PCI product ID,
@@ -83,6 +85,7 @@ enum ipu_sensor_ep_props {
 	IPU_SENSOR_EP_DATA_LANES,
 	IPU_SENSOR_EP_REMOTE_EP,
 	IPU_SENSOR_EP_LINK_FREQUENCIES,
+	IPU_SENSOR_EP_CLOCK_NONCONTINUOUS,
 	IPU_SENSOR_EP_NUM_OF,
 	IPU_SENSOR_EP_NUM_ENTRIES
 };
