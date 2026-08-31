@@ -1099,19 +1099,28 @@ static int e5010_probe(struct platform_device *pdev)
 		goto fail_after_video_register_device;
 	}
 
-	pm_runtime_enable(dev);
+	ret = clk_prepare_enable(e5010->clk);
+	if (ret) {
+		dev_err_probe(dev, ret, "failed to enable clock\n");
+		goto fail_after_video_register_device;
+	}
+
 
 	ret = video_register_device(e5010->vdev, VFL_TYPE_VIDEO, 0);
 	if (ret) {
 		dev_err_probe(dev, ret, "failed to register video device\n");
-		goto fail_after_video_register_device;
+		goto fail_after_clock_enable;
 	}
+
+	pm_runtime_enable(dev);
 
 	v4l2_info(&e5010->v4l2_dev, "Device registered as /dev/video%d\n",
 		  e5010->vdev->num);
 
 	return 0;
 
+fail_after_clock_enable:
+	clk_disable_unprepare(e5010->clk);
 fail_after_video_register_device:
 	v4l2_m2m_release(e5010->m2m_dev);
 fail_after_v4l2_register:
@@ -1126,6 +1135,7 @@ static void e5010_remove(struct platform_device *pdev)
 	struct e5010_dev *e5010 = platform_get_drvdata(pdev);
 
 	pm_runtime_disable(e5010->dev);
+	clk_disable_unprepare(e5010->clk);
 	video_unregister_device(e5010->vdev);
 	v4l2_m2m_release(e5010->m2m_dev);
 	v4l2_device_unregister(&e5010->v4l2_dev);
