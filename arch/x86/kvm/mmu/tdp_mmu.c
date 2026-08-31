@@ -923,6 +923,38 @@ bool kvm_tdp_mmu_zap_possible_nx_huge_page(struct kvm *kvm,
 	return true;
 }
 
+static bool tdp_mmu_zap_completed_empty_leaf_pt(struct kvm *kvm,
+						struct tdp_iter_child_event *event,
+						gfn_t start, gfn_t end,
+						tdp_ptep_t zapped_leaf_pt)
+{
+	struct kvm_mmu_page *child_sp;
+
+	if (event->level != PG_LEVEL_2M ||
+	    !is_shadow_present_pte(event->old_spte) ||
+	    is_last_spte(event->old_spte, event->level))
+		return false;
+
+	if (event->gfn < start ||
+	    event->gfn + KVM_PAGES_PER_HPAGE(event->level) > end)
+		return false;
+
+	/* Leave productive leaf tables in place to avoid refault churn. */
+	if (zapped_leaf_pt == event->sptep)
+		return false;
+
+	child_sp = spte_to_child_sp(event->old_spte);
+	if (is_mirror_sp(child_sp))
+		return false;
+
+	if (child_sp->role.level != PG_LEVEL_4K)
+		return false;
+
+	tdp_mmu_set_spte(kvm, event->sptep, event->old_spte,
+			 SHADOW_NONPRESENT_VALUE, event->gfn, event->level);
+	return true;
+}
+
 /*
  * If can_yield is true, will release the MMU lock and reschedule if the
  * scheduler needs the CPU or there is contention on the MMU lock. If this
@@ -933,7 +965,10 @@ bool kvm_tdp_mmu_zap_possible_nx_huge_page(struct kvm *kvm,
 static bool tdp_mmu_zap_leafs(struct kvm *kvm, struct kvm_mmu_page *root,
 			      gfn_t start, gfn_t end, bool can_yield, bool flush)
 {
+	struct tdp_iter_child_event event = {};
 	struct tdp_iter iter;
+	tdp_ptep_t zapped_leaf_pt = NULL;
+	bool removed_sp = false;
 
 	end = min(end, tdp_mmu_max_gfn_exclusive());
 
@@ -941,33 +976,56 @@ static bool tdp_mmu_zap_leafs(struct kvm *kvm, struct kvm_mmu_page *root,
 
 	rcu_read_lock();
 
-	for_each_tdp_pte_min_level(iter, kvm, root, PG_LEVEL_4K, start, end) {
+	tdp_iter_start(&iter, root, PG_LEVEL_4K, start,
+		       kvm_gfn_root_bits(kvm, root));
+	while (iter.valid && iter.gfn < end) {
 		if (can_yield &&
 		    tdp_mmu_iter_cond_resched(kvm, &iter, flush, false)) {
 			flush = false;
+			tdp_iter_next(&iter);
 			continue;
 		}
 
-		if (!is_shadow_present_pte(iter.old_spte) ||
-		    !is_last_spte(iter.old_spte, iter.level))
-			continue;
+		if (is_shadow_present_pte(iter.old_spte) &&
+		    is_last_spte(iter.old_spte, iter.level)) {
+			if (iter.level == PG_LEVEL_4K) {
+				struct kvm_mmu_page *sp;
 
-		tdp_mmu_iter_set_spte(kvm, &iter, SHADOW_NONPRESENT_VALUE);
+				sp = sptep_to_sp(rcu_dereference(iter.sptep));
+				zapped_leaf_pt = sp->ptep;
+			}
 
-		/*
-		 * Zappings SPTEs in invalid roots doesn't require a TLB flush,
-		 * see kvm_tdp_mmu_zap_invalidated_roots() for details.
-		 */
-		if (!root->role.invalid)
-			flush = true;
+			tdp_mmu_iter_set_spte(kvm, &iter,
+					      SHADOW_NONPRESENT_VALUE);
+
+			/*
+			 * Zappings SPTEs in invalid roots doesn't require a TLB flush,
+			 * see kvm_tdp_mmu_zap_invalidated_roots() for details.
+			 */
+			if (!root->role.invalid)
+				flush = true;
+		}
+
+		tdp_iter_next_post_order(&iter, &event);
+		if (event.valid &&
+		    tdp_mmu_zap_completed_empty_leaf_pt(kvm, &event, start,
+							end, zapped_leaf_pt)) {
+			if (!root->role.invalid)
+				flush = true;
+			removed_sp = true;
+		}
+	}
+
+	/*
+	 * If any shadow pages were removed, service pending TLB flushes before
+	 * dropping RCU protection, as required by the TDP MMU iterator.
+	 */
+	if (removed_sp && flush) {
+		kvm_flush_remote_tlbs(kvm);
+		flush = false;
 	}
 
 	rcu_read_unlock();
-
-	/*
-	 * Because this flow zaps _only_ leaf SPTEs, the caller doesn't need
-	 * to provide RCU protection as no 'struct kvm_mmu_page' will be freed.
-	 */
 	return flush;
 }
 

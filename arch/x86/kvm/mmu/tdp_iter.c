@@ -132,7 +132,8 @@ static bool try_step_side(struct tdp_iter *iter)
  * can continue from the next entry in the parent page table. Returns true on a
  * successful step up, false if already in the root page.
  */
-static bool try_step_up(struct tdp_iter *iter)
+static bool try_step_up(struct tdp_iter *iter,
+			struct tdp_iter_child_event *event)
 {
 	if (iter->level == iter->root_level)
 		return false;
@@ -140,6 +141,14 @@ static bool try_step_up(struct tdp_iter *iter)
 	iter->level++;
 	iter->gfn = gfn_round_for_level(iter->gfn, iter->level);
 	tdp_iter_refresh_sptep(iter);
+
+	if (event && !event->valid) {
+		event->sptep = iter->sptep;
+		event->old_spte = iter->old_spte;
+		event->gfn = iter->gfn;
+		event->level = iter->level;
+		event->valid = true;
+	}
 
 	return true;
 }
@@ -160,8 +169,12 @@ static bool try_step_up(struct tdp_iter *iter)
  *    SPTE will have already been visited, and so the iterator must also step
  *    to the side again.
  */
-void tdp_iter_next(struct tdp_iter *iter)
+static void __tdp_iter_next(struct tdp_iter *iter,
+			    struct tdp_iter_child_event *event)
 {
+	if (event)
+		event->valid = false;
+
 	if (iter->yielded) {
 		tdp_iter_restart(iter);
 		return;
@@ -173,7 +186,17 @@ void tdp_iter_next(struct tdp_iter *iter)
 	do {
 		if (try_step_side(iter))
 			return;
-	} while (try_step_up(iter));
+	} while (try_step_up(iter, event));
 	iter->valid = false;
 }
 
+void tdp_iter_next(struct tdp_iter *iter)
+{
+	__tdp_iter_next(iter, NULL);
+}
+
+void tdp_iter_next_post_order(struct tdp_iter *iter,
+			      struct tdp_iter_child_event *event)
+{
+	__tdp_iter_next(iter, event);
+}

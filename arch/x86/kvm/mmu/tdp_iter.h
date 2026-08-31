@@ -123,6 +123,14 @@ struct tdp_iter {
 	bool yielded;
 };
 
+struct tdp_iter_child_event {
+	tdp_ptep_t sptep;
+	u64 old_spte;
+	gfn_t gfn;
+	int level;
+	bool valid;
+};
+
 /*
  * Iterates over every SPTE mapping the GFN range [start, end) in a
  * preorder traversal.
@@ -145,6 +153,8 @@ tdp_ptep_t spte_to_child_pt(u64 pte, int level);
 void tdp_iter_start(struct tdp_iter *iter, struct kvm_mmu_page *root,
 		    int min_level, gfn_t next_last_level_gfn, gfn_t gfn_bits);
 void tdp_iter_next(struct tdp_iter *iter);
+void tdp_iter_next_post_order(struct tdp_iter *iter,
+			      struct tdp_iter_child_event *event);
 void tdp_iter_restart(struct tdp_iter *iter);
 
 #endif /* __KVM_X86_MMU_TDP_ITER_H */
