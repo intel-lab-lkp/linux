@@ -156,7 +156,7 @@ acpi_debug_print(u32 requested_debug_level,
 	if (thread_id != acpi_gbl_previous_thread_id) {
 		if (ACPI_LV_THREADS & acpi_dbg_level) {
 			acpi_os_printf
-			    ("\n**** Context Switch from TID %u to TID %u ****\n\n",
+			    (ACPI_MSG_DEBUG "\n**** Context Switch from TID %u to TID %u ****\n\n",
 			     (u32)acpi_gbl_previous_thread_id, (u32)thread_id);
 		}
 
@@ -168,7 +168,7 @@ acpi_debug_print(u32 requested_debug_level,
 	 * Display the module name, current line number, thread ID (if requested),
 	 * current procedure nesting level, and the current procedure name
 	 */
-	acpi_os_printf("%9s-%04d ", module_name, line_number);
+	acpi_os_printf(ACPI_MSG_DEBUG "%9s-%04d ", module_name, line_number);
 
 #ifdef ACPI_APPLICATION
 	/*
