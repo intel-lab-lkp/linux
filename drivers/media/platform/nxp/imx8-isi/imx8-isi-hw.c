@@ -410,13 +410,14 @@ void mxc_isi_channel_set_output_format(struct mxc_isi_pipe *pipe,
 				       const struct mxc_isi_format_info *info,
 				       struct v4l2_pix_format_mplane *format)
 {
+	const struct mxc_isi_plat_data *pdata = pipe->isi->pdata;
 	u32 val;
 
 	/* set outbuf format */
 	dev_dbg(pipe->isi->dev, "output format %p4cc", &format->pixelformat);
 
 	val = mxc_isi_read(pipe, CHNL_IMG_CTRL);
-	val &= ~CHNL_IMG_CTRL_FORMAT_MASK;
+	val &= ~pdata->format_mask;
 	val |= CHNL_IMG_CTRL_FORMAT(info->isi_out_format);
 	mxc_isi_write(pipe, CHNL_IMG_CTRL, val);
 

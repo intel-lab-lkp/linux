@@ -175,6 +175,7 @@ struct mxc_isi_plat_data {
 	const struct mxc_isi_ier_reg  *ier_reg;
 	const struct mxc_isi_set_thd *set_thd;
 	const struct mxc_gasket_ops *gasket_ops;
+	u32 format_mask;
 	bool buf_active_reverse;
 	bool has_36bit_dma;
 };
