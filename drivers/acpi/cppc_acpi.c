@@ -1766,10 +1766,18 @@ int cppc_set_epp_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls, bool enable)
 	auto_sel_reg = &cpc_desc->cpc_regs[AUTO_SEL_ENABLE];
 	epp_set_reg = &cpc_desc->cpc_regs[ENERGY_PERF];
 
+	/*
+	 * The flexible address space _OSC ack is only needed for
+	 * SystemMemory/SystemIO; FFH is accessed directly and always available.
+	 */
 	epp_ffh_sysmem = CPC_SUPPORTED(epp_set_reg) &&
-		(CPC_IN_FFH(epp_set_reg) || CPC_IN_SYSTEM_MEMORY(epp_set_reg));
+		(CPC_IN_FFH(epp_set_reg) ||
+		 (CPC_IN_SYSTEM_MEMORY(epp_set_reg) &&
+		  osc_cpc_flexible_adr_space_confirmed));
 	autosel_ffh_sysmem = CPC_SUPPORTED(auto_sel_reg) &&
-		(CPC_IN_FFH(auto_sel_reg) || CPC_IN_SYSTEM_MEMORY(auto_sel_reg));
+		(CPC_IN_FFH(auto_sel_reg) ||
+		 (CPC_IN_SYSTEM_MEMORY(auto_sel_reg) &&
+		  osc_cpc_flexible_adr_space_confirmed));
 
 	if (CPC_IN_PCC(epp_set_reg) || CPC_IN_PCC(auto_sel_reg)) {
 		if (pcc_ss_id < 0) {
@@ -1795,8 +1803,7 @@ int cppc_set_epp_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls, bool enable)
 		/* after writing CPC, transfer the ownership of PCC to platform */
 		ret = send_pcc_cmd(pcc_ss_id, CMD_WRITE);
 		up_write(&pcc_ss_data->pcc_lock);
-	} else if (osc_cpc_flexible_adr_space_confirmed &&
-		   (epp_ffh_sysmem || autosel_ffh_sysmem)) {
+	} else if (epp_ffh_sysmem || autosel_ffh_sysmem) {
 		if (autosel_ffh_sysmem) {
 			ret = cpc_write(cpu, auto_sel_reg, enable);
 			if (ret)
