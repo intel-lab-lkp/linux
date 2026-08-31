@@ -25,6 +25,7 @@
 #include <linux/rbtree.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
+#include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/crash_dump.h>
 
@@ -34,6 +35,7 @@
 #include <asm/machdep.h>
 #include <asm/ppc-pci.h>
 #include <asm/rtas.h>
+#include <asm/rtas-work-area.h>
 
 /* RTAS tokens */
 static int ibm_set_eeh_option;
@@ -958,8 +960,6 @@ static int prepare_errinjct_buffer(void *buf, struct eeh_pe *pe,
 			return -EINVAL;
 
 		if (upper_32_bits(addr) || upper_32_bits(mask)) {
-			pr_err("32-bit IOA injection cannot encode addr=%#lx mask=%#lx\n",
-			       addr, mask);
 			return -EINVAL;
 		}
 
@@ -992,50 +992,117 @@ static int prepare_errinjct_buffer(void *buf, struct eeh_pe *pe,
 		break;
 
 	default:
-		pr_err("unsupported RTAS error injection type 0x%x\n", rtas_type);
+		pr_err("unsupported RTAS error injection type 0x%x\n",
+		       rtas_type);
 		return -EINVAL;
 	}
 
-	pr_debug("errinjct buffer ready: rtas_type=0x%x func=%d addr=0x%lx mask=0x%lx\n",
-		 rtas_type, func, addr, mask);
 	return 0;
 }
+
+/* pseries-local mutex serializes the open/inject/close RTAS session */
+static DEFINE_MUTEX(pseries_errinjct_mutex);
 
 /**
  * pseries_eeh_err_inject - Inject specified error to the indicated PE
  * @pe: the indicated PE
- * @type: error type
- * @func: specific error type
- * @addr: address
- * @mask: address mask
- * The routine is called to inject specified error, which is
- * determined by @type and @func, to the indicated PE
+ * @type: generic EEH error type (EEH_ERR_TYPE_32 or EEH_ERR_TYPE_64)
+ * @func: specific error function
+ * @addr: address argument (type-dependent, may be zero)
+ * @mask: address mask (type-dependent, may be zero)
+ *
+ * Implements PAPR-compliant error injection using:
+ *   ibm,open-errinjct -> ibm,errinjct -> ibm,close-errinjct
+ *
+ * A short-lived RTAS work area is allocated per call; no global buffer
+ * is used.  pseries_errinjct_mutex serializes the open/inject/close
+ * session sequence.
+ *
+ * Return: 0 on success, negative errno on failure.
  */
 static int pseries_eeh_err_inject(struct eeh_pe *pe, int type, int func,
 				  unsigned long addr, unsigned long mask)
 {
-	struct	eeh_dev	*pdev;
+	struct rtas_work_area *area;
+	phys_addr_t area_phys;
+	u32 buf_phys;
+	void *buf;
+	int open_token, errinjct_token, close_token;
+	int session_token;
+	int rtas_type;
+	int close_rc;
+	int rc;
 
-	/* Check on PCI error type */
-	if (type != EEH_ERR_TYPE_32 && type != EEH_ERR_TYPE_64)
+	rc = validate_errinjct_args(pe, type, func, addr, mask);
+	if (rc)
+		return rc;
+
+	rtas_type = pseries_eeh_type_to_rtas(type);
+	if (rtas_type < 0)
 		return -EINVAL;
 
-	switch (func) {
-	case EEH_ERR_FUNC_LD_MEM_ADDR:
-	case EEH_ERR_FUNC_LD_MEM_DATA:
-	case EEH_ERR_FUNC_ST_MEM_ADDR:
-	case EEH_ERR_FUNC_ST_MEM_DATA:
-		/* injects a MMIO error for all pdev's belonging to PE */
-		pci_lock_rescan_remove();
-		list_for_each_entry(pdev, &pe->edevs, entry)
-			eeh_pe_inject_mmio_error(pdev->pdev);
-		pci_unlock_rescan_remove();
-		break;
-	default:
-		return -ERANGE;
+	open_token    = rtas_function_token(RTAS_FN_IBM_OPEN_ERRINJCT);
+	errinjct_token = rtas_function_token(RTAS_FN_IBM_ERRINJCT);
+	close_token   = rtas_function_token(RTAS_FN_IBM_CLOSE_ERRINJCT);
+
+	if (open_token    == RTAS_UNKNOWN_SERVICE ||
+	    errinjct_token == RTAS_UNKNOWN_SERVICE ||
+	    close_token   == RTAS_UNKNOWN_SERVICE)
+		return -ENODEV;
+
+	area = rtas_work_area_alloc(RTAS_ERRINJCT_BUF_SIZE);
+	buf  = rtas_work_area_raw_buf(area);
+	area_phys = rtas_work_area_phys(area);
+
+	if (WARN_ON_ONCE(upper_32_bits(area_phys))) {
+		rc = -ERANGE;
+		goto out_free_area;
 	}
 
-	return 0;
+	buf_phys = lower_32_bits(area_phys);
+
+	rc = prepare_errinjct_buffer(buf, pe, rtas_type, func, addr, mask);
+	if (rc)
+		goto out_free_area;
+
+	mutex_lock(&pseries_errinjct_mutex);
+
+	do {
+		rc = rtas_call(open_token, 0, 2, &session_token);
+	} while (rtas_busy_delay(rc));
+
+	if (rc) {
+		pr_err("ibm,open-errinjct failed: status=%d\n", rc);
+		rc = rtas_error_rc(rc);
+		goto out_unlock;
+	}
+
+	do {
+		rc = rtas_call(errinjct_token, 3, 1, NULL,
+			       rtas_type, session_token, buf_phys);
+	} while (rtas_busy_delay(rc));
+
+	if (rc) {
+		pr_err("ibm,errinjct failed: status=%d\n", rc);
+		rc = rtas_error_rc(rc);
+	}
+
+	do {
+		close_rc = rtas_call(close_token, 1, 1, NULL, session_token);
+	} while (rtas_busy_delay(close_rc));
+
+	if (close_rc) {
+		pr_warn("ibm,close-errinjct failed: status=%d\n", close_rc);
+		if (!rc)
+			rc = rtas_error_rc(close_rc);
+	}
+
+out_unlock:
+	mutex_unlock(&pseries_errinjct_mutex);
+
+out_free_area:
+	rtas_work_area_free(area);
+	return rc;
 }
 
 static struct eeh_ops pseries_eeh_ops = {
