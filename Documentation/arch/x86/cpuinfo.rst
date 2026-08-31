@@ -96,7 +96,7 @@ Flags can be from scattered CPUID-based features
 Hardware features enumerated in sparsely populated CPUID leaves get
 software-defined values. Still, CPUID needs to be queried to determine
 if a given feature is present. This is done in init_scattered_cpuid_features().
-For instance, X86_FEATURE_CQM_LLC is defined as 11*32 + 0 and its presence is
+For instance, X86_FEATURE_L3_MON is defined as 11*32 + 0 and its presence is
 checked at runtime in the respective CPUID leaf [EAX=f, ECX=0] bit EDX[1].
 
 The intent of scattering CPUID leaves is to not bloat struct

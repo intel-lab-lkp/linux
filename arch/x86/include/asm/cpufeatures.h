@@ -252,7 +252,7 @@
 #define X86_FEATURE_ERMS		( 9*32+ 9) /* "erms" Enhanced REP MOVSB/STOSB instructions */
 #define X86_FEATURE_INVPCID		( 9*32+10) /* "invpcid" Invalidate Processor Context ID */
 #define X86_FEATURE_RTM			( 9*32+11) /* "rtm" Restricted Transactional Memory */
-#define X86_FEATURE_CQM			( 9*32+12) /* "cqm" Cache QoS Monitoring */
+#define X86_FEATURE_RDT_M		( 9*32+12) /* "cqm" Resource Director Technology Monitoring */
 #define X86_FEATURE_ZERO_FCS_FDS	( 9*32+13) /* Zero out FPU CS and FPU DS */
 #define X86_FEATURE_MPX			( 9*32+14) /* "mpx" Memory Protection Extension */
 #define X86_FEATURE_RDT_A		( 9*32+15) /* "rdt_a" Resource Director Technology Allocation */
@@ -285,7 +285,7 @@
  *
  * Reuse free bits when adding new feature flags!
  */
-#define X86_FEATURE_CQM_LLC		(11*32+ 0) /* "cqm_llc" LLC QoS if 1 */
+#define X86_FEATURE_L3_MON		(11*32+ 0) /* "cqm_llc" LLC QoS if 1 */
 #define X86_FEATURE_CQM_OCCUP_LLC	(11*32+ 1) /* "cqm_occup_llc" LLC occupancy monitoring */
 #define X86_FEATURE_CQM_MBM_TOTAL	(11*32+ 2) /* "cqm_mbm_total" LLC Total MBM monitoring */
 #define X86_FEATURE_CQM_MBM_LOCAL	(11*32+ 3) /* "cqm_mbm_local" LLC Local MBM monitoring */
