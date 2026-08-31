@@ -233,11 +233,6 @@ static int mlx5i_get_link_ksettings(struct net_device *netdev,
 	return 0;
 }
 
-static u32 mlx5i_flow_type_mask(u32 flow_type)
-{
-	return flow_type & ~(FLOW_EXT | FLOW_MAC_EXT | FLOW_RSS);
-}
-
 static int mlx5i_set_rxfh_fields(struct net_device *dev,
 				 const struct ethtool_rxfh_fields *cmd,
 				 struct netlink_ext_ack *extack)
@@ -260,7 +255,7 @@ static int mlx5i_set_rxnfc(struct net_device *dev, struct ethtool_rxnfc *cmd)
 	struct mlx5e_priv *priv = mlx5i_epriv(dev);
 	struct ethtool_rx_flow_spec *fs = &cmd->fs;
 
-	if (mlx5i_flow_type_mask(fs->flow_type) == ETHER_FLOW)
+	if (ethtool_flow_type_mask(fs->flow_type) == ETHER_FLOW)
 		return -EINVAL;
 
 	return mlx5e_ethtool_set_rxnfc(priv, cmd);
