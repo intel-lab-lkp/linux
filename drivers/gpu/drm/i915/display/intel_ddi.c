@@ -469,9 +469,20 @@ void intel_ddi_set_dp_msa(const struct intel_crtc_state *crtc_state,
 	 * of Color Encoding Format and Content Color Gamut] while sending
 	 * YCBCR 420, HDR BT.2020 signals we should program MSA MISC1 fields
 	 * which indicate VSC SDP for the Pixel Encoding/Colorimetry Format.
+	 * Only set when VSC SDP will actually be transmitted with colorimetry;
+	 * colorimetry_support=false means the sink didn't advertise the cap via
+	 * DPCD 0x2210[3] and intel_dp_compute_vsc_sdp() will skip sending the SDP.
+	 * Setting this bit without a corresponding VSC SDP causes the sink to
+	 * ignore MSA colorimetry and wait for a VSC SDP that never arrives.
 	 */
-	if (intel_dp_needs_vsc_sdp(crtc_state, conn_state))
-		temp |= DP_MSA_MISC_COLOR_VSC_SDP;
+	if (intel_dp_needs_vsc_sdp(crtc_state, conn_state)) {
+		struct intel_connector *connector =
+			to_intel_connector(conn_state->connector);
+		struct intel_dp *intel_dp = intel_attached_dp(connector);
+
+		if (intel_dp->colorimetry_support || crtc_state->has_psr)
+			temp |= DP_MSA_MISC_COLOR_VSC_SDP;
+	}
 
 	intel_de_write(display, TRANS_MSA_MISC(display, cpu_transcoder),
 		       temp);
