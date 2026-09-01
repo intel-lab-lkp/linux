@@ -216,6 +216,47 @@ out_release:
 	return ret;
 }
 
+static int __init hv_vsm_enable_vp_vtl(Elf64_Addr sk_entry_pa)
+{
+	u64 status = 0;
+	unsigned long flags;
+	struct hv_enable_vp_vtl *hvin;
+
+	local_irq_save(flags);
+
+	hvin = *this_cpu_ptr(hyperv_pcpu_input_arg);
+	memset(hvin, 0, sizeof(*hvin));
+
+	hvin->partition_id = HV_PARTITION_ID_SELF;
+	hvin->vp_index = HV_VP_INDEX_SELF;
+	hvin->target_vtl.target_vtl = HV_VTL_SECURE;
+
+	hv_vsm_arch_init_vp(&hvin->vp_context, sk_entry_pa, sk_res.start);
+
+	status = hv_do_hypercall(HVCALL_ENABLE_VP_VTL, hvin, NULL);
+
+	local_irq_restore(flags);
+
+	return hv_result(status);
+}
+
+static int __init hv_vsm_get_vp_status(u16 *enabled_vtl_set, u8 *active_mbec_enabled)
+{
+	u64 result;
+	int ret;
+	union hv_register_vsm_vp_status vsm_vp_status = { 0 };
+
+	ret = hv_vsm_get_register(HV_REGISTER_VSM_VP_STATUS, &result);
+	if (ret)
+		return ret;
+
+	vsm_vp_status = (union hv_register_vsm_vp_status)result;
+	*enabled_vtl_set = vsm_vp_status.enabled_vtl_set;
+	*active_mbec_enabled = vsm_vp_status.active_mbec_enabled;
+
+	return 0;
+}
+
 static int __init hv_vsm_enable_partition_vtl(void)
 {
 	u64 status = 0;
@@ -262,7 +303,8 @@ static int __init hv_vsm_get_partition_status(u16 *enabled_vtl_set, u8 *max_vtl,
 static int __init hv_vsm_bootstrap_vtl(void)
 {
 	u16 partition_enabled_vtl_set = 0, partition_mbec_enabled_vtl_set = 0;
-	u8 partition_max_vtl;
+	u16 vp_enabled_vtl_set = 0;
+	u8 partition_max_vtl, active_mbec_enabled = 0;
 	Elf64_Addr sk_entry_pa;
 	int ret;
 
@@ -300,7 +342,34 @@ static int __init hv_vsm_bootstrap_vtl(void)
 		}
 	}
 
-	return hv_vsm_load_secure_kernel(&sk_entry_pa);
+	ret = hv_vsm_load_secure_kernel(&sk_entry_pa);
+	if (ret)
+		return ret;
+
+	/* Check and enable VTL1 for the primary virtual processor */
+	ret = hv_vsm_get_vp_status(&vp_enabled_vtl_set, &active_mbec_enabled);
+	if (ret)
+		return ret;
+
+	if (vp_enabled_vtl_set & HV_VTL1_ENABLE_BIT) {
+		pr_info("VP VTL1 is already enabled\n");
+	} else {
+		ret = hv_vsm_enable_vp_vtl(sk_entry_pa);
+		if (ret) {
+			pr_err("Enabling VP VTL1 failed with status 0x%x\n", ret);
+			/* TODO: Should we disable VTL1 at partition level in this case? */
+			return -EINVAL;
+		}
+		ret = hv_vsm_get_vp_status(&vp_enabled_vtl_set, &active_mbec_enabled);
+		if (ret)
+			return ret;
+
+		if (!(vp_enabled_vtl_set & HV_VTL1_ENABLE_BIT)) {
+			pr_err("Tried Enabling VP VTL1 and still failed\n");
+			return -EINVAL;
+		}
+	}
+	return 0;
 }
 
 static void __init hv_vsm_get_sk_mem(void)
