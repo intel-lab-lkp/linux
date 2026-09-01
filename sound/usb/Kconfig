@@ -204,6 +204,24 @@ config SND_USB_AUDIO_QMI
 	  To compile this driver as a module, choose M here: the module
 	  will be called snd-usb-audio-qmi.
 
+config SND_USB_BABYFACE_PRO
+	tristate "RME Babyface Pro FS (proprietary mode)"
+	select SND_PCM
+	help
+	  Say Y here to include support for the RME Babyface Pro FS in
+	  its proprietary mode (VID 0x2a39, PID 0x3fc0).
+
+	  The proprietary mode streams PCM over interrupt endpoints
+	  (interface 5, ep 0x01/0x82) instead of the class-compliant
+	  isochronous path handled by snd-usb-audio, so this driver is
+	  standalone (snd-usb-caiaq-style interrupt streaming).  It
+	  exposes the PCM stream plus the output masters, mutes, mic
+	  phantom/PAD and preamp gains as standard ALSA controls.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called snd-usb-babyface-pro.
+
+
 source "sound/usb/line6/Kconfig"
 
 endif	# SND_USB
