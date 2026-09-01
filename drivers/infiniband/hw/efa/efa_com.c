@@ -41,6 +41,7 @@ enum efa_cmd_status {
 	EFA_CMD_ALLOCATED,
 	EFA_CMD_SUBMITTED,
 	EFA_CMD_COMPLETED,
+	EFA_CMD_TIMED_OUT,
 };
 
 struct efa_comp_ctx {
@@ -605,6 +606,10 @@ static int efa_com_wait_and_process_admin_cq_polling(struct efa_comp_ctx *comp_c
 			break;
 
 		if (time_is_before_jiffies(timeout)) {
+			spin_lock_irqsave(&aq->cq.lock, flags);
+			comp_ctx->status = EFA_CMD_TIMED_OUT;
+			spin_unlock_irqrestore(&aq->cq.lock, flags);
+
 			ibdev_err_ratelimited(
 				aq->efa_dev,
 				"Wait for completion (polling) timeout\n");
@@ -639,7 +644,6 @@ static int efa_com_wait_and_process_admin_cq_interrupts(struct efa_comp_ctx *com
 	if (comp_ctx->status == EFA_CMD_SUBMITTED) {
 		spin_lock_irqsave(&aq->cq.lock, flags);
 		efa_com_handle_admin_completion(aq);
-		spin_unlock_irqrestore(&aq->cq.lock, flags);
 
 		atomic64_inc(&aq->stats.no_completion);
 
@@ -659,6 +663,9 @@ static int efa_com_wait_and_process_admin_cq_interrupts(struct efa_comp_ctx *com
 				comp_ctx->cmd_opcode, comp_ctx->status,
 				comp_ctx->cmd_id, aq->sq.pc, aq->sq.cc,
 				aq->cq.cc);
+
+		comp_ctx->status = EFA_CMD_TIMED_OUT;
+		spin_unlock_irqrestore(&aq->cq.lock, flags);
 
 		clear_bit(EFA_AQ_STATE_RUNNING_BIT, &aq->state);
 		return -ETIME;
