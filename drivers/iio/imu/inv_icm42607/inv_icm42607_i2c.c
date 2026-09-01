@@ -64,6 +64,10 @@ static const struct i2c_device_id inv_icm42607_id[] = {
 		.name = "icm42607p",
 		.driver_data = (kernel_ulong_t)&inv_icm42607p_hw_data,
 	},
+	{
+		.name = "icm42370p",
+		.driver_data = (kernel_ulong_t)&inv_icm42370p_hw_data,
+	},
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, inv_icm42607_id);
@@ -75,6 +79,10 @@ static const struct of_device_id inv_icm42607_of_matches[] = {
 	}, {
 		.compatible = "invensense,icm42607p",
 		.data = &inv_icm42607p_hw_data,
+	},
+	{
+		.compatible = "invensense,icm42370p",
+		.data = &inv_icm42370p_hw_data,
 	},
 	{ }
 };

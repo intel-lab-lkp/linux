@@ -368,6 +368,7 @@ struct inv_icm42607_sensor_state {
 #define INV_ICM42607_REG_WHOAMI				0x75
 #define INV_ICM42607P_WHOAMI				0x60
 #define INV_ICM42607_WHOAMI				0x67
+#define INV_ICM42370P_WHOAMI				0x0D
 
 /*
  * Timings as listed in section 3 of datasheet, all values listed in datasheet
@@ -392,6 +393,7 @@ typedef int (*inv_icm42607_bus_setup)(struct inv_icm42607_state *);
 extern const struct regmap_config inv_icm42607_regmap_config;
 extern const struct inv_icm42607_hw inv_icm42607_hw_data;
 extern const struct inv_icm42607_hw inv_icm42607p_hw_data;
+extern const struct inv_icm42607_hw inv_icm42370p_hw_data;
 extern const struct dev_pm_ops inv_icm42607_pm_ops;
 
 const struct iio_mount_matrix *

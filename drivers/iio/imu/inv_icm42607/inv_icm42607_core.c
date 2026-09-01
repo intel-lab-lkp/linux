@@ -92,6 +92,17 @@ static const struct inv_icm42607_conf inv_icm42607_default_conf = {
 	},
 };
 
+/* Chip initial default configuration */
+static const struct inv_icm42607_conf inv_icm42370_default_conf = {
+	.gyro = { },
+	.accel = {
+		.mode = INV_ICM42607_SENSOR_MODE_OFF,
+		.fs = INV_ICM42607_ACCEL_FS_4G,
+		.odr = INV_ICM42607_ODR_100HZ,
+		.filter = INV_ICM42607_FILTER_BW_25HZ,
+	},
+};
+
 const struct inv_icm42607_hw inv_icm42607_hw_data = {
 	.whoami = INV_ICM42607_WHOAMI,
 	.name = "icm42607",
@@ -105,6 +116,13 @@ const struct inv_icm42607_hw inv_icm42607p_hw_data = {
 	.conf = &inv_icm42607_default_conf,
 };
 EXPORT_SYMBOL_NS_GPL(inv_icm42607p_hw_data, "IIO_ICM42607");
+
+const struct inv_icm42607_hw inv_icm42370p_hw_data = {
+	.whoami = INV_ICM42370P_WHOAMI,
+	.name = "icm42370p",
+	.conf = &inv_icm42370_default_conf,
+};
+EXPORT_SYMBOL_NS_GPL(inv_icm42370p_hw_data, "IIO_ICM42607");
 
 const struct iio_mount_matrix *
 inv_icm42607_get_mount_matrix(struct iio_dev *indio_dev,
@@ -617,16 +635,38 @@ int inv_icm42607_core_probe(struct regmap *regmap,
 	pm_runtime_set_autosuspend_delay(dev, INV_ICM42607_SUSPEND_DELAY_MS);
 	pm_runtime_use_autosuspend(dev);
 
-	/* Initialize IIO device for Accel */
-	st->indio_accel = inv_icm42607_accel_init(st);
-	if (IS_ERR(st->indio_accel))
-		return PTR_ERR(st->indio_accel);
+	switch (st->hw->whoami) {
+	case INV_ICM42607_WHOAMI:
+	case INV_ICM42607P_WHOAMI:
+		/*
+		 * Invensense, ICM42607 and ICM42607P both have accelerometer
+		 * and gyroscope functionality.
+		 */
+		st->indio_accel = inv_icm42607_accel_init(st);
+		if (IS_ERR(st->indio_accel))
+			return PTR_ERR(st->indio_accel);
 
-	/* Initialize IIO device for Gyro */
-	st->indio_gyro = inv_icm42607_gyro_init(st);
-	if (IS_ERR(st->indio_gyro))
-		return PTR_ERR(st->indio_gyro);
+		st->indio_gyro = inv_icm42607_gyro_init(st);
+		if (IS_ERR(st->indio_gyro))
+			return PTR_ERR(st->indio_gyro);
 
+		break;
+	case INV_ICM42370P_WHOAMI:
+		/*
+		 * Invensense, ICM42370P has only accelerometer functionality.
+		 * Thus, set the gryo property to NULL.
+		 */
+		st->indio_accel = inv_icm42607_accel_init(st);
+		if (IS_ERR(st->indio_accel))
+			return PTR_ERR(st->indio_accel);
+
+		st->indio_gyro = NULL;
+
+		break;
+	default:
+		/* No WHOAMI value matched */
+		return dev_err_probe(dev, -ENODEV, "Failed to find a matching WHO_AM_I value\n");
+	}
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(inv_icm42607_core_probe, "IIO_ICM42607");
