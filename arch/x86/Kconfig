@@ -1338,18 +1338,17 @@ config MICROCODE_LATE_LOADING
 	  minimal revision check. This minimal revision check can be enforced on
 	  the kernel command line with "microcode=force_minrev".
 
-config MICROCODE_LATE_FORCE_MINREV
-	bool "Enforce late microcode loading minimal revision check"
+config MICROCODE_FORCE_MINREV
+	bool "Enforce microcode loading minimal revision check"
 	default n
-	depends on MICROCODE_LATE_LOADING
+	depends on MICROCODE
 	help
-	  To prevent that users load microcode late which modifies already
-	  in use features, newer microcode patches have a minimum revision field
-	  in the microcode header, which tells the kernel which minimum
-	  revision must be active in the CPU to safely load that new microcode
-	  late into the running system. If disabled the check will not
-	  be enforced but the kernel will be tainted when the minimal
-	  revision check fails.
+	  To prevent that users load microcode which modifies already in use
+	  features, newer microcode patches have a minimum revision field in the
+	  microcode header, which tells the kernel which minimum revision must
+	  be active in the CPU to safely load that new microcode into the system.
+	  If disabled the check will not be enforced but the kernel will be
+	  tainted when the minimal revision check fails.
 
 	  This minimal revision check can also be controlled via the
 	  "microcode=force_minrev" parameter on the kernel command line.

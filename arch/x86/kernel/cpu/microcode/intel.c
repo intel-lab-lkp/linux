@@ -786,7 +786,15 @@ void __init load_ucode_intel_bsp(struct early_load_data *ed)
 	uci.mc = get_microcode_blob(&uci, false);
 	ed->old_rev = uci.cpu_sig.rev;
 
-	if (uci.mc && apply_microcode_early(&uci) == UCODE_UPDATED) {
+	if (!uci.mc)
+		return;
+
+	if (force_minrev) {
+		pr_warn_once("No early load: minimum revision check is not implemented.\n");
+		return;
+	}
+
+	if (apply_microcode_early(&uci) == UCODE_UPDATED) {
 		ucode_patch_va = UCODE_BSP_LOADED;
 		ed->new_rev = uci.cpu_sig.rev;
 	}
@@ -842,9 +850,8 @@ static bool ucode_validate_minrev(struct microcode_header_intel *mc_header)
 	int cur_rev = boot_cpu_data.microcode;
 
 	/*
-	 * When late-loading, ensure the header declares a minimum revision
-	 * required to perform a late-load. The previously reserved field
-	 * is 0 in older microcode blobs.
+	 * Ensure the header declares a minimum revision required to perform a
+	 * load. The previously reserved field is 0 in older microcode blobs.
 	 */
 	if (!mc_header->min_req_ver) {
 		pr_info("Unsafe microcode update: Microcode header does not specify a required min version\n");
@@ -857,7 +864,7 @@ static bool ucode_validate_minrev(struct microcode_header_intel *mc_header)
 	 */
 	if (cur_rev < mc_header->min_req_ver) {
 		pr_info("Unsafe microcode update: Current revision 0x%x too old\n", cur_rev);
-		pr_info("Current should be at 0x%x or higher. Use early loading instead\n", mc_header->min_req_ver);
+		pr_info("Current should be at 0x%x or higher. Update incrementally.\n", mc_header->min_req_ver);
 		return false;
 	}
 	return true;

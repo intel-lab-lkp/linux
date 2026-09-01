@@ -46,7 +46,7 @@
 static struct microcode_ops *microcode_ops;
 static bool dis_ucode_ldr;
 
-bool force_minrev = IS_ENABLED(CONFIG_MICROCODE_LATE_FORCE_MINREV);
+bool force_minrev = IS_ENABLED(CONFIG_MICROCODE_FORCE_MINREV);
 
 /*
  * Those below should be behind CONFIG_MICROCODE_DBG ifdeffery but in
@@ -603,7 +603,7 @@ static int load_late_stop_cpus(bool is_safe)
 
 	if (!is_safe) {
 		pr_err("Late microcode loading without minimal revision check.\n");
-		pr_err("You should switch to early loading, if possible.\n");
+		pr_err("You should update microcode incrementally.\n");
 	}
 
 	/*
@@ -912,8 +912,15 @@ static int __init microcode_init(void)
 
 	pr_info_once("Current revision: 0x%08x\n", (early_data.new_rev ?: early_data.old_rev));
 
-	if (early_data.new_rev)
+	if (early_data.new_rev) {
 		pr_info_once("Updated early from: 0x%08x\n", early_data.old_rev);
+
+		if (!early_data.is_safe) {
+			pr_err("Early microcode loading without minimal revision check.\n");
+			pr_err("You should update microcode incrementally.\n");
+			add_taint(TAINT_CPU_OUT_OF_SPEC, LOCKDEP_STILL_OK);
+		}
+	}
 
 	microcode_fdev = faux_device_create("microcode", NULL, NULL);
 	if (!microcode_fdev)

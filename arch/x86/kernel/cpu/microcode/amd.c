@@ -800,6 +800,11 @@ void __init load_ucode_amd_bsp(struct early_load_data *ed, unsigned int cpuid_1_
 	/* Needed in load_microcode_amd() */
 	ucode_cpu_info[0].cpu_sig.sig = cpuid_1_eax;
 
+	if (force_minrev) {
+		pr_warn_once("No early load: minimum revision check is not implemented.\n");
+		return;
+	}
+
 	if (!find_blobs_in_containers(&cp))
 		return;
 
@@ -1202,7 +1207,8 @@ static int __init save_microcode_in_initrd(void)
 	enum ucode_state ret;
 	struct cpio_data cp;
 
-	if (microcode_loader_disabled() || c->x86_vendor != X86_VENDOR_AMD || c->x86 < 0x10)
+	if (microcode_loader_disabled() || c->x86_vendor != X86_VENDOR_AMD || c->x86 < 0x10 ||
+	    force_minrev)
 		return 0;
 
 	cpuid_1_eax = native_cpuid_eax(1);

@@ -4073,8 +4073,8 @@ Kernel parameters
 
 			force_minrev[=<bool>]:
 			Enable or disable microcode minimal revision enforcement
-			for the runtime microcode loader according to <bool>. If
-			<bool> is not given, enable the enforcement.
+			for the microcode loader according to <bool>. If <bool>
+			is not given, enable the enforcement.
 
 	mini2440=	[ARM,HW,KNL]
 			Format:[0..2][b][c][t]
