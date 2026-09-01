@@ -422,11 +422,23 @@ size_t convert_to_gcda(char *buffer, struct gcov_info *info)
 			pos += store_gcov_u32(buffer, pos,
 				ci_ptr->num * 2 * GCOV_UNIT_SIZE);
 
+#ifdef __LITTLE_ENDIAN
+			/*
+			 * The values are already in memory, just copy them.
+			 * store_gcov_u64 splits each value into two words
+			 * which matches the gcov format on LE. On BE the
+			 * split is still needed so keep the loop there.
+			 */
+			if (buffer)
+				memcpy(buffer + pos, ci_ptr->values,
+				       ci_ptr->num * sizeof(gcov_type));
+			pos += ci_ptr->num * sizeof(gcov_type);
+#else
 			for (cv_idx = 0; cv_idx < ci_ptr->num; cv_idx++) {
 				pos += store_gcov_u64(buffer, pos,
 						      ci_ptr->values[cv_idx]);
 			}
-
+#endif
 			ci_ptr++;
 		}
 	}
