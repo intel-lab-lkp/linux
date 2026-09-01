@@ -33,4 +33,12 @@ ssize_t trigger_may_offload_show(struct device *dev,
 extern struct rw_semaphore leds_list_lock;
 extern struct list_head leds_list;
 
+#ifdef CONFIG_LEDS_TRIGGERS_HW_CHANGED
+void led_trigger_init_hw_changed(struct led_classdev *led_cdev);
+void led_trigger_destroy_hw_changed(struct led_classdev *led_cdev);
+#else /* !CONFIG_LEDS_TRIGGERS_HW_CHANGED */
+static inline void led_trigger_init_hw_changed(struct led_classdev *led_cdev) { }
+static inline void led_trigger_destroy_hw_changed(struct led_classdev *led_cdev) { }
+#endif /* CONFIG_LEDS_TRIGGERS_HW_CHANGED */
+
 #endif	/* __LEDS_H_INCLUDED */

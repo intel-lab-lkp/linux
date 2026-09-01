@@ -611,6 +611,9 @@ int led_classdev_register_ext(struct device *parent,
 	led_trigger_set_default(led_cdev);
 #endif
 
+	if (led_cdev->flags & LED_TRIG_HW_CHANGED)
+		led_trigger_init_hw_changed(led_cdev);
+
 	mutex_unlock(&led_cdev->led_access);
 
 	dev_dbg(parent, "Registered led device: %s\n",
@@ -630,6 +633,9 @@ void led_classdev_unregister(struct led_classdev *led_cdev)
 {
 	if (IS_ERR_OR_NULL(led_cdev->dev))
 		return;
+
+	if (led_cdev->flags & LED_TRIG_HW_CHANGED)
+		led_trigger_destroy_hw_changed(led_cdev);
 
 #ifdef CONFIG_LEDS_TRIGGERS
 	down_write(&led_cdev->trigger_lock);
