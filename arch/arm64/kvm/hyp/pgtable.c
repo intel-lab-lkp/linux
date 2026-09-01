@@ -731,8 +731,12 @@ static int stage2_set_prot_attr(struct kvm_pgtable *pgt, enum kvm_pgtable_prot p
 	if (prot & KVM_PGTABLE_PROT_R)
 		attr |= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R;
 
-	if (prot & KVM_PGTABLE_PROT_W)
-		attr |= KVM_PTE_LEAF_ATTR_HI_S2_DBM | KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W;
+	if (prot & KVM_PGTABLE_PROT_W) {
+		attr |= KVM_PTE_LEAF_ATTR_HI_S2_DBM;
+
+		if (prot & KVM_PGTABLE_PROT_DIRTY)
+			attr |= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W;
+	}
 
 
 	if (!kvm_lpa2_is_enabled())
@@ -754,8 +758,12 @@ enum kvm_pgtable_prot kvm_pgtable_stage2_pte_prot(kvm_pte_t pte)
 
 	if (pte & KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R)
 		prot |= KVM_PGTABLE_PROT_R;
-	if (pte & KVM_PTE_LEAF_ATTR_HI_S2_DBM)
+	if (pte & KVM_PTE_LEAF_ATTR_HI_S2_DBM) {
 		prot |= KVM_PGTABLE_PROT_W;
+
+		if (pte & KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W)
+			prot |= KVM_PGTABLE_PROT_DIRTY;
+	}
 
 	switch (FIELD_GET(KVM_PTE_LEAF_ATTR_HI_S2_XN, pte)) {
 	case 0b00:
@@ -1289,7 +1297,6 @@ static int stage2_update_leaf_attrs(struct kvm_pgtable *pgt, u64 addr,
 int kvm_pgtable_stage2_wrprotect(struct kvm_pgtable *pgt, u64 addr, u64 size)
 {
 	return stage2_update_leaf_attrs(pgt, addr, size, 0,
-					KVM_PTE_LEAF_ATTR_HI_S2_DBM |
 					KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W,
 					NULL, NULL,
 					KVM_PGTABLE_WALK_IGNORE_EAGAIN);
@@ -1369,8 +1376,12 @@ int kvm_pgtable_stage2_relax_perms(struct kvm_pgtable *pgt, u64 addr,
 	if (prot & KVM_PGTABLE_PROT_R)
 		set |= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R;
 
-	if (prot & KVM_PGTABLE_PROT_W)
-		set |= KVM_PTE_LEAF_ATTR_HI_S2_DBM | KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W;
+	if (prot & KVM_PGTABLE_PROT_W) {
+		set |= KVM_PTE_LEAF_ATTR_HI_S2_DBM;
+
+		if (prot & KVM_PGTABLE_PROT_DIRTY)
+			set |= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W;
+	}
 
 	if (prot & KVM_PGTABLE_PROT_X) {
 		ret = stage2_set_xn_attr(prot, &xn);

@@ -265,6 +265,7 @@ enum kvm_pgtable_stage2_flags {
  * @KVM_PGTABLE_PROT_X:		Privileged and unprivileged execute permission.
  * @KVM_PGTABLE_PROT_W:		Write permission.
  * @KVM_PGTABLE_PROT_R:		Read permission.
+ * @KVM_PGTABLE_PROT_DIRTY:	Dirty attribute.
  * @KVM_PGTABLE_PROT_DEVICE:	Device attributes.
  * @KVM_PGTABLE_PROT_NORMAL_NC:	Normal noncacheable attributes.
  * @KVM_PGTABLE_PROT_SW0:	Software bit 0.
@@ -279,9 +280,10 @@ enum kvm_pgtable_prot {
 						  KVM_PGTABLE_PROT_UX,
 	KVM_PGTABLE_PROT_W			= BIT(2),
 	KVM_PGTABLE_PROT_R			= BIT(3),
+	KVM_PGTABLE_PROT_DIRTY			= BIT(4),
 
-	KVM_PGTABLE_PROT_DEVICE			= BIT(4),
-	KVM_PGTABLE_PROT_NORMAL_NC		= BIT(5),
+	KVM_PGTABLE_PROT_DEVICE			= BIT(5),
+	KVM_PGTABLE_PROT_NORMAL_NC		= BIT(6),
 
 	KVM_PGTABLE_PROT_SW0			= BIT(55),
 	KVM_PGTABLE_PROT_SW1			= BIT(56),
@@ -289,7 +291,8 @@ enum kvm_pgtable_prot {
 	KVM_PGTABLE_PROT_SW3			= BIT(58),
 };
 
-#define KVM_PGTABLE_PROT_RW	(KVM_PGTABLE_PROT_R | KVM_PGTABLE_PROT_W)
+#define KVM_PGTABLE_PROT_RW	(KVM_PGTABLE_PROT_R | KVM_PGTABLE_PROT_W | \
+				 KVM_PGTABLE_PROT_DIRTY)
 #define KVM_PGTABLE_PROT_RWX	(KVM_PGTABLE_PROT_RW | KVM_PGTABLE_PROT_X)
 
 #define PKVM_HOST_MEM_PROT	KVM_PGTABLE_PROT_RWX

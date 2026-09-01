@@ -1212,7 +1212,9 @@ int kvm_phys_addr_ioremap(struct kvm *kvm, phys_addr_t guest_ipa,
 	struct kvm_pgtable *pgt = mmu->pgt;
 	enum kvm_pgtable_prot prot = KVM_PGTABLE_PROT_DEVICE |
 				     KVM_PGTABLE_PROT_R |
-				     (writable ? KVM_PGTABLE_PROT_W : 0);
+				     (writable ?
+				      (KVM_PGTABLE_PROT_W | KVM_PGTABLE_PROT_DIRTY) :
+				      0);
 
 	if (is_protected_kvm_enabled())
 		return -EPERM;
@@ -1578,7 +1580,7 @@ static enum kvm_pgtable_prot adjust_nested_fault_perms(struct kvm_s2_trans *nest
 						       enum kvm_pgtable_prot prot)
 {
 	if (!kvm_s2_trans_writable(nested))
-		prot &= ~KVM_PGTABLE_PROT_W;
+		prot &= ~(KVM_PGTABLE_PROT_W | KVM_PGTABLE_PROT_DIRTY);
 	if (!kvm_s2_trans_readable(nested))
 		prot &= ~KVM_PGTABLE_PROT_R;
 
@@ -1649,7 +1651,7 @@ static int gmem_abort(const struct kvm_s2_fault_desc *s2fd)
 	}
 
 	if (!(s2fd->memslot->flags & KVM_MEM_READONLY))
-		prot |= KVM_PGTABLE_PROT_W;
+		prot |= KVM_PGTABLE_PROT_W | KVM_PGTABLE_PROT_DIRTY;
 
 	if (s2fd->nested)
 		prot = adjust_nested_fault_perms(s2fd->nested, prot);
@@ -1681,10 +1683,10 @@ static int gmem_abort(const struct kvm_s2_fault_desc *s2fd)
 	}
 
 out_unlock:
-	kvm_release_faultin_page(kvm, page, !!ret, prot & KVM_PGTABLE_PROT_W);
+	kvm_release_faultin_page(kvm, page, !!ret, prot & KVM_PGTABLE_PROT_DIRTY);
 	kvm_fault_unlock(kvm);
 
-	if ((prot & KVM_PGTABLE_PROT_W) && !ret)
+	if ((prot & KVM_PGTABLE_PROT_DIRTY) && !ret)
 		mark_page_dirty_in_slot(kvm, s2fd->memslot, gfn);
 
 	return ret != -EAGAIN ? ret : 0;
@@ -1984,10 +1986,13 @@ static int kvm_s2_fault_compute_prot(const struct kvm_s2_fault_desc *s2fd,
 
 	*prot = KVM_PGTABLE_PROT_R;
 
-	if (s2vi->map_writable && (s2vi->device ||
-				   !memslot_is_logging(s2fd->memslot) ||
-				   kvm_is_write_fault(s2fd->vcpu)))
+	if (s2vi->map_writable) {
 		*prot |= KVM_PGTABLE_PROT_W;
+
+		if (s2vi->device || !memslot_is_logging(s2fd->memslot) ||
+		    kvm_is_write_fault(s2fd->vcpu))
+			*prot |= KVM_PGTABLE_PROT_DIRTY;
+	}
 
 	if (s2fd->nested)
 		*prot = adjust_nested_fault_perms(s2fd->nested, *prot);
@@ -2019,7 +2024,7 @@ static int kvm_s2_fault_map(const struct kvm_s2_fault_desc *s2fd,
 			    void *memcache)
 {
 	enum kvm_pgtable_walk_flags flags = KVM_PGTABLE_WALK_SHARED;
-	bool writable = prot & KVM_PGTABLE_PROT_W;
+	bool dirty = prot & KVM_PGTABLE_PROT_DIRTY;
 	struct kvm *kvm = s2fd->vcpu->kvm;
 	struct kvm_pgtable *pgt;
 	long perm_fault_granule;
@@ -2082,7 +2087,7 @@ static int kvm_s2_fault_map(const struct kvm_s2_fault_desc *s2fd,
 	}
 
 out_unlock:
-	kvm_release_faultin_page(kvm, s2vi->page, !!ret, writable);
+	kvm_release_faultin_page(kvm, s2vi->page, !!ret, dirty);
 	kvm_fault_unlock(kvm);
 
 	/*
@@ -2090,7 +2095,7 @@ out_unlock:
 	 * making sure we adjust the canonical IPA if the mapping size has
 	 * been updated (via a THP upgrade, for example).
 	 */
-	if (writable && !ret) {
+	if (dirty && !ret) {
 		phys_addr_t ipa = gfn_to_gpa(get_canonical_gfn(s2fd, s2vi));
 		ipa &= ~(mapping_size - 1);
 		mark_page_dirty_in_slot(kvm, s2fd->memslot, gpa_to_gfn(ipa));
