@@ -3192,14 +3192,29 @@ intel_dp_in_hdr_mode(const struct drm_connector_state *conn_state)
 static void
 intel_dp_compute_hdr_metadata_infoframe_sdp(struct intel_dp *intel_dp,
 					    struct intel_crtc_state *crtc_state,
-					    const struct drm_connector_state *conn_state)
+					    const struct drm_connector_state *conn_state,
+					    const struct drm_connector_state *old_conn_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	int ret;
 	struct hdmi_drm_infoframe *drm_infoframe = &crtc_state->infoframes.drm.drm;
 
-	if (!conn_state->hdr_output_metadata)
+	if (!conn_state->hdr_output_metadata) {
+		/*
+		 * CTA-861-H requires ending HDR metadata transmission by
+		 * sending a DRM infoframe with EOTF=0 and all fields zero
+		 * for at least 2 seconds, rather than abruptly stopping.
+		 * Abruptly stopping causes DP-to-HDMI converters to latch
+		 * the previous HDR metadata and forward it to the HDMI sink,
+		 * resulting in color errors on SDR content.
+		 */
+		if (old_conn_state && old_conn_state->hdr_output_metadata) {
+			hdmi_drm_infoframe_init(drm_infoframe);
+			crtc_state->infoframes.enable |=
+				intel_hdmi_infoframe_enable(HDMI_PACKET_TYPE_GAMUT_METADATA);
+		}
 		return;
+	}
 
 	ret = drm_hdmi_infoframe_set_hdr_metadata(drm_infoframe, conn_state);
 
@@ -3615,7 +3630,9 @@ intel_dp_compute_config(struct intel_atomic_state *state,
 	intel_alpm_lobf_compute_config(intel_dp, pipe_config, conn_state);
 	intel_dp_drrs_compute_config(connector, pipe_config, link_bpp_x16);
 	intel_dp_compute_vsc_sdp(intel_dp, pipe_config, conn_state);
-	intel_dp_compute_hdr_metadata_infoframe_sdp(intel_dp, pipe_config, conn_state);
+	intel_dp_compute_hdr_metadata_infoframe_sdp(intel_dp, pipe_config, conn_state,
+						    drm_atomic_get_old_connector_state(&state->base,
+										      conn_state->connector));
 
 	return intel_dp_tunnel_atomic_compute_stream_bw(state, intel_dp, connector,
 							pipe_config);
