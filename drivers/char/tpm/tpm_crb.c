@@ -570,14 +570,11 @@ static void __iomem *crb_map_res(struct device *dev, struct resource *iores,
 	if (start != new_res.start)
 		return IOMEM_ERR_PTR(-EINVAL);
 
+	if ((iores == NULL) != (iobase_ptr == NULL))
+		return IOMEM_ERR_PTR(-EINVAL);
+
 	if (!iores)
 		return devm_ioremap_resource(dev, &new_res);
-
-	if (!*iobase_ptr) {
-		*iobase_ptr = devm_ioremap_resource(dev, iores);
-		if (IS_ERR(*iobase_ptr))
-			return *iobase_ptr;
-	}
 
 	return *iobase_ptr + (new_res.start - iores->start);
 }
