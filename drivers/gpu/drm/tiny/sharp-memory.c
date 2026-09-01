@@ -120,8 +120,8 @@ static inline void sharp_memory_set_tx_buffer_addresses(u8 *buffer,
 							struct drm_rect clip,
 							u32 pitch)
 {
-	for (u32 line = 0; line < clip.y2; ++line)
-		buffer[line * pitch] = line + 1;
+	for (u32 line = 0; line < drm_rect_height(&clip); ++line)
+		buffer[line * pitch] = clip.y1 + line + 1;
 }
 
 static void sharp_memory_set_tx_buffer_data(u8 *buffer,
