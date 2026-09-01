@@ -384,6 +384,14 @@ static inline u32 bytes_per_rt(const struct RESTART_TABLE *rt)
 	       sizeof(struct RESTART_TABLE);
 }
 
+static inline bool rstbl_entry_valid(const struct RESTART_TABLE *rt, u32 off)
+{
+	u16 size = le16_to_cpu(rt->size);
+
+	return size && off >= sizeof(*rt) && off < bytes_per_rt(rt) &&
+	       !((off - sizeof(*rt)) % size);
+}
+
 /* Log record length. */
 static inline u32 lrh_length(const struct LOG_REC_HDR *lr)
 {
@@ -5086,7 +5094,7 @@ find_dirty_page:
 		goto read_next_log_do_action;
 
 	t16 = le16_to_cpu(lrh->target_attr);
-	if (t16 >= bytes_per_rt(oatbl)) {
+	if (!rstbl_entry_valid(oatbl, t16)) {
 		err = -EINVAL;
 		goto out;
 	}
@@ -5231,8 +5239,29 @@ undo_action_next:
 	if (lrh->undo_op == cpu_to_le16(Noop))
 		goto read_next_log_undo_action;
 
-	oe = Add2Ptr(oatbl, le16_to_cpu(lrh->target_attr));
+	/* Skip records with neither target nor LCN work. */
+	t16 = le16_to_cpu(lrh->undo_op);
+	if (!lrh->lcns_follow && !is_target_required(t16) &&
+	    can_skip_action(t16))
+		goto read_next_log_undo_action;
+
+	t16 = le16_to_cpu(lrh->target_attr);
+	if (!rstbl_entry_valid(oatbl, t16)) {
+		err = -EINVAL;
+		goto out;
+	}
+
+	oe = Add2Ptr(oatbl, t16);
+	if (oe->next != RESTART_ENTRY_ALLOCATED_LE) {
+		err = -EINVAL;
+		goto out;
+	}
+
 	oa = oe->ptr;
+	if (!oa) {
+		err = -EINVAL;
+		goto out;
+	}
 
 	t16 = le16_to_cpu(lrh->lcns_follow);
 	if (!t16)
