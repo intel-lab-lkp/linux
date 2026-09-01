@@ -33,6 +33,7 @@ struct most_video_dev {
 	bool mute;
 
 	struct list_head pending_mbos;
+	/* protects pending_mbos; taken from rx completion (softirq) */
 	spinlock_t list_lock;
 
 	struct v4l2_device v4l2_dev;
@@ -40,6 +41,7 @@ struct most_video_dev {
 	struct video_device *vdev;
 	unsigned int ctrl_input;
 
+	/* serializes V4L2 ioctls; used as struct video_device::lock */
 	struct mutex lock;
 
 	wait_queue_head_t wait_data;
