@@ -83,7 +83,7 @@ static u32 final_levels[] = {
 	0, /* T-101 terminator */
 };
 
-struct early_load_data early_data;
+struct early_load_data early_data __initdata;
 
 /*
  * Check the current patch level on this CPU.
