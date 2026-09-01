@@ -23,6 +23,7 @@
 #include <linux/init.h>
 #include <linux/mutex.h>
 #include <linux/err.h>
+#include <linux/pagemap.h>
 #include <net/compat.h>
 #include <net/sock.h>
 #include <linux/uaccess.h>
@@ -696,6 +697,7 @@ static int copy_entries_to_user(unsigned int total_size,
 
 	loc_cpu_entry = private->entries;
 
+	pagefault_disable();
 	/* FIXME: use iterator macros --RR */
 	/* ... then go back and fix counters and names */
 	for (off = 0, num = 0; off < total_size; off += e->next_offset, num++){
@@ -720,6 +722,7 @@ static int copy_entries_to_user(unsigned int total_size,
 	}
 
  free_counters:
+	pagefault_enable();
 	vfree(counters);
 	return ret;
 }
@@ -800,6 +803,7 @@ static int compat_table_info(const struct xt_table_info *info,
 
 static int get_info(struct net *net, void __user *user, const int *len)
 {
+	struct arpt_getinfo info;
 	char name[XT_TABLE_MAXNAMELEN];
 	struct xt_table *t;
 	int ret;
@@ -817,7 +821,6 @@ static int get_info(struct net *net, void __user *user, const int *len)
 #endif
 	t = xt_request_find_table_lock(net, NFPROTO_ARP, name);
 	if (!IS_ERR(t)) {
-		struct arpt_getinfo info;
 		const struct xt_table_info *private = t->private;
 #ifdef CONFIG_NETFILTER_XTABLES_COMPAT
 		struct xt_table_info tmp;
@@ -838,10 +841,7 @@ static int get_info(struct net *net, void __user *user, const int *len)
 		info.size = private->size;
 		strscpy(info.name, name);
 
-		if (copy_to_user(user, &info, *len) != 0)
-			ret = -EFAULT;
-		else
-			ret = 0;
+		ret = 0;
 		xt_table_unlock(t);
 		module_put(t->me);
 	} else
@@ -850,6 +850,8 @@ static int get_info(struct net *net, void __user *user, const int *len)
 	if (in_compat_syscall())
 		xt_compat_unlock(NFPROTO_ARP);
 #endif
+	if (!ret && copy_to_user(user, &info, *len) != 0)
+		ret = -EFAULT;
 	return ret;
 }
 
@@ -859,6 +861,7 @@ static int get_entries(struct net *net, struct arpt_get_entries __user *uptr,
 	int ret;
 	struct arpt_get_entries get;
 	struct xt_table *t;
+	bool faulted = false;
 
 	if (*len < sizeof(get))
 		return -EINVAL;
@@ -869,6 +872,7 @@ static int get_entries(struct net *net, struct arpt_get_entries __user *uptr,
 
 	get.name[sizeof(get.name) - 1] = '\0';
 
+ retry:
 	t = xt_find_table_lock(net, NFPROTO_ARP, get.name);
 	if (!IS_ERR(t)) {
 		const struct xt_table_info *private = t->private;
@@ -883,6 +887,14 @@ static int get_entries(struct net *net, struct arpt_get_entries __user *uptr,
 		xt_table_unlock(t);
 	} else
 		ret = PTR_ERR(t);
+
+	if (ret == -EFAULT && !faulted) {
+		faulted = true;
+		if (fault_in_writeable((char __user *)uptr->entrytable,
+				       get.size))
+			return -EFAULT;
+		goto retry;
+	}
 
 	return ret;
 }
@@ -1363,12 +1375,14 @@ static int compat_copy_entries_to_user(unsigned int total_size,
 
 	pos = userptr;
 	size = total_size;
+	pagefault_disable();
 	xt_entry_foreach(iter, private->entries, total_size) {
 		ret = compat_copy_entry_to_user(iter, &pos,
 						&size, counters, i++);
 		if (ret != 0)
 			break;
 	}
+	pagefault_enable();
 	vfree(counters);
 	return ret;
 }
@@ -1386,6 +1400,7 @@ static int compat_get_entries(struct net *net,
 	int ret;
 	struct compat_arpt_get_entries get;
 	struct xt_table *t;
+	bool faulted = false;
 
 	if (*len < sizeof(get))
 		return -EINVAL;
@@ -1396,6 +1411,7 @@ static int compat_get_entries(struct net *net,
 
 	get.name[sizeof(get.name) - 1] = '\0';
 
+ retry:
 	xt_compat_lock(NFPROTO_ARP);
 	t = xt_find_table_lock(net, NFPROTO_ARP, get.name);
 	if (!IS_ERR(t)) {
@@ -1416,6 +1432,13 @@ static int compat_get_entries(struct net *net,
 		ret = PTR_ERR(t);
 
 	xt_compat_unlock(NFPROTO_ARP);
+	if (ret == -EFAULT && !faulted) {
+		faulted = true;
+		if (fault_in_writeable((char __user *)uptr->entrytable,
+				       get.size))
+			return -EFAULT;
+		goto retry;
+	}
 	return ret;
 }
 #endif
