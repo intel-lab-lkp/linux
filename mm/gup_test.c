@@ -139,10 +139,11 @@ static int __gup_test_ioctl(unsigned int cmd,
 		if (nr != gup->nr_pages_per_call)
 			break;
 
-		next = addr + nr * PAGE_SIZE;
-		if (next > end) {
+		if (nr > (end - addr) / PAGE_SIZE) {
 			next = end;
 			nr = (next - addr) / PAGE_SIZE;
+		} else {
+			next = addr + nr * PAGE_SIZE;
 		}
 
 		switch (cmd) {
