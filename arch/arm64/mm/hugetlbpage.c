@@ -517,6 +517,11 @@ bool __init arch_hugetlb_valid_size(unsigned long size)
 pte_t huge_ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr, pte_t *ptep)
 {
 	unsigned long psize = huge_page_size(hstate_vma(vma));
+	pte_t pte = __ptep_get(ptep);
+
+	/* The break step for contiguous PTEs must include the TLB flush. */
+	if (pte_cont(pte))
+		return huge_ptep_clear_flush(vma, addr, ptep);
 
 	if (alternative_has_cap_unlikely(ARM64_WORKAROUND_2645198)) {
 		/*
@@ -524,7 +529,7 @@ pte_t huge_ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr
 		 * when the permission changes from executable to non-executable
 		 * in cases where cpu is affected with errata #2645198.
 		 */
-		if (pte_user_exec(__ptep_get(ptep)))
+		if (pte_user_exec(pte))
 			return huge_ptep_clear_flush(vma, addr, ptep);
 	}
 	return huge_ptep_get_and_clear(vma->vm_mm, addr, ptep, psize);
