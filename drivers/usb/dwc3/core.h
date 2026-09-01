@@ -179,6 +179,11 @@
 #define DWC3_OEVTEN		0xcc0C
 #define DWC3_OSTS		0xcc10
 
+/* CIO regs */
+#define DWC3_CIO_BASE(n)	(0xcd20 + ((n) * 0x30))
+#define DWC3_CIOCTRL(n)		(DWC3_CIO_BASE(n) + 0x00)
+#define DWC3_CIOCTRL_CIO_EN	BIT(0)
+
 #define DWC3_LLUCTL(n)		(0xd024 + ((n) * 0x80))
 
 /* Bit fields */
@@ -1314,6 +1319,7 @@ struct dwc3 {
 #define DWC31_REVISION_170A	0x3137302a
 #define DWC31_REVISION_180A	0x3138302a
 #define DWC31_REVISION_190A	0x3139302a
+#define DWC31_REVISION_191A	0x3139312a
 #define DWC31_REVISION_200A	0x3230302a
 
 #define DWC32_REVISION_ANY	0x0
@@ -1658,11 +1664,23 @@ static inline void dwc3_pre_run_stop(struct dwc3 *dwc, bool is_on)
 #if IS_ENABLED(CONFIG_USB_DWC3_HOST) || IS_ENABLED(CONFIG_USB_DWC3_DUAL_ROLE)
 int dwc3_host_init(struct dwc3 *dwc);
 void dwc3_host_exit(struct dwc3 *dwc);
+
+/**
+ * dwc3_link_tunnel_mode - Check whether the link is tunneled over TBT/USB4
+ * @dwc: Pointer to DWC3 controller context
+ * @port: 0-based port index
+ *
+ * Returns: USB_LINK_TUNNELED if tunneled, USB_LINK_NATIVE if not, or
+ *          when the controller does not have USB4 capabilities.
+ */
+enum usb_link_tunnel_mode dwc3_link_tunnel_mode(struct dwc3 *dwc, u8 port);
 #else
 static inline int dwc3_host_init(struct dwc3 *dwc)
 { return 0; }
 static inline void dwc3_host_exit(struct dwc3 *dwc)
 { }
+static inline enum usb_link_tunnel_mode dwc3_link_tunnel_mode(struct dwc3 *dwc, u8 port)
+{ return USB_LINK_UNKNOWN; }
 #endif
 
 #if IS_ENABLED(CONFIG_USB_DWC3_GADGET) || IS_ENABLED(CONFIG_USB_DWC3_DUAL_ROLE)
