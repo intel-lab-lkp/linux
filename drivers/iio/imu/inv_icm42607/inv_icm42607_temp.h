@@ -27,7 +27,7 @@ struct iio_chan_spec;
 		.sign = 's',					\
 		.realbits = 16,					\
 		.storagebits = 16,				\
-		.endianness = IIO_BE,				\
+		.endianness = IIO_LE,				\
 	},							\
 }
 

@@ -343,7 +343,7 @@ int inv_icm42607_read_sensor(struct iio_dev *indio_dev,
 	struct inv_icm42607_sensor_state *sensor_st = iio_priv(indio_dev);
 	struct device *dev = regmap_get_device(st->map);
 	unsigned int reg;
-	__be16 data;
+	__le16 data;
 	int ret;
 
 	if ((chan->type != IIO_ANGL_VEL) && (chan->type != IIO_ACCEL))
@@ -391,7 +391,7 @@ int inv_icm42607_read_sensor(struct iio_dev *indio_dev,
 	if (ret)
 		return ret;
 
-	*val = be16_to_cpu(data);
+	*val = le16_to_cpu(data);
 	if (*val == INV_ICM42607_DATA_INVALID)
 		return -EINVAL;
 
@@ -490,7 +490,7 @@ static int inv_icm42607_setup(struct inv_icm42607_state *st,
 	if (ret)
 		return ret;
 
-	ret = regmap_set_bits(st->map, INV_ICM42607_REG_INTF_CONFIG0,
+	ret = regmap_clear_bits(st->map, INV_ICM42607_REG_INTF_CONFIG0,
 			      INV_ICM42607_INTF_CONFIG0_SENSOR_DATA_ENDIAN);
 	if (ret)
 		return ret;

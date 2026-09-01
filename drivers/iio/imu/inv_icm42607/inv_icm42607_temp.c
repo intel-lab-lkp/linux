@@ -58,7 +58,7 @@ static int inv_icm42607_temp_read(struct inv_icm42607_state *st, s16 *temp)
 	if (ret)
 		return ret;
 
-	*temp = get_unaligned_be16(raw);
+	*temp = get_unaligned_le16(raw);
 	if (*temp == INV_ICM42607_DATA_INVALID)
 		return -EINVAL;
 

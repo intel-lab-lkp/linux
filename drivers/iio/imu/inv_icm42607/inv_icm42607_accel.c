@@ -32,7 +32,7 @@
 		.sign = 's',							\
 		.realbits = 16,							\
 		.storagebits = 16,						\
-		.endianness = IIO_BE,						\
+		.endianness = IIO_LE,						\
 	},									\
 	.ext_info = inv_icm42607_accel_ext_infos,				\
 }
