@@ -1108,7 +1108,10 @@ static void tcp_rtt_estimator(struct sock *sk, long mrtt_us)
 		} else {
 			m -= (tp->mdev_us >> 2);   /* similar update on mdev */
 		}
-		tp->mdev_us += m;		/* mdev = 3/4 mdev + 1/4 new */
+		tp->mdev_us += m;		/*
+						 * mdev = (1-g)*mdev + g*new, g=1/4 normally,
+						 * g=1/32 on sharp RTT drop
+						 */
 		if (tp->mdev_us > tp->mdev_max_us) {
 			tp->mdev_max_us = tp->mdev_us;
 			if (tp->mdev_max_us > tp->rttvar_us)
