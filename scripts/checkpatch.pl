@@ -2678,6 +2678,11 @@ sub is_userspace {
 		$realfile =~ m@^arch/.*/tools/@);
 }
 
+sub is_uapi {
+    my ($realfile) = @_;
+    return $realfile =~ m@^include/uapi/@;
+}
+
 sub process {
 	my $filename = shift;
 
@@ -4673,7 +4678,7 @@ sub process {
 				ERROR("MALFORMED_INCLUDE",
 				      "malformed #include filename\n" . $herecurr);
 			}
-			if ($path =~ "^uapi/" && $realfile =~ m@\binclude/uapi/@) {
+			if ($path =~ "^uapi/" && is_uapi($realfile)) {
 				ERROR("UAPI_INCLUDE",
 				      "No #include in ...include/uapi/... should use a uapi/ path prefix\n" . $herecurr);
 			}
@@ -6683,7 +6688,7 @@ sub process {
 		}
 
 # don't use __constant_<foo> functions outside of include/uapi/
-		if ($realfile !~ m@^include/uapi/@ &&
+		if (!is_uapi($realfile) &&
 		    $line =~ /(__constant_(?:htons|ntohs|[bl]e(?:16|32|64)_to_cpu|cpu_to_[bl]e(?:16|32|64)))\s*\(/) {
 			my $constant_func = $1;
 			my $func = $constant_func;
@@ -6846,7 +6851,7 @@ sub process {
 		}
 
 # Check for __inline__ and __inline, prefer inline
-		if ($realfile !~ m@\binclude/uapi/@ &&
+		if (!is_uapi($realfile) &&
 		    $line =~ /\b(__inline__|__inline)\b/) {
 			if (WARN("INLINE",
 				 "plain inline is preferred over $1\n" . $herecurr) &&
@@ -6857,7 +6862,7 @@ sub process {
 		}
 
 # Check for compiler attributes
-		if ($realfile !~ m@\binclude/uapi/@ &&
+		if (!is_uapi($realfile) &&
 		    $rawline =~ /\b__attribute__\s*\(\s*($balanced_parens)\s*\)/) {
 			my $attr = $1;
 			$attr =~ s/\s*\(\s*(.*)\)\s*/$1/;
@@ -6931,7 +6936,7 @@ sub process {
 		}
 
 # check for c99 types like uint8_t used outside of uapi/ and tools/
-		if ($realfile !~ m@\binclude/uapi/@ &&
+		if (!is_uapi($realfile) &&
 		    $realfile !~ m@\btools/@ &&
 		    $line =~ /\b($Declare)\s*$Ident\s*[=;,\[]/) {
 			my $type = $1;
@@ -7424,7 +7429,7 @@ sub process {
 		}
 
 # check for #defines like: 1 << <digit> that could be BIT(digit), it is not exported to uapi
-		if ($realfile !~ m@^include/uapi/@ &&
+		if (!is_uapi($realfile) &&
 		    $line =~ /#\s*define\s+\w+\s+\(?\s*1\s*([ulUL]*)\s*\<\<\s*(?:\d+|$Ident)\s*\)?/) {
 			my $ull = "";
 			$ull = "_ULL" if (defined($1) && $1 =~ /ll/i);
