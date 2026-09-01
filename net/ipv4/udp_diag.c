@@ -24,6 +24,36 @@ static int sk_diag_dump(struct sock *sk, struct sk_buff *skb,
 				 net_admin);
 }
 
+/* Process a maximum of SKARR_SZ hash entries at a time when walking hash
+ * buckets with bh disabled.
+ */
+#define SKARR_SZ 16
+
+static bool udp_diag_cursor_valid(struct udp_table *table,
+				  struct udp_hslot *hslot,
+				  struct sock *sk)
+{
+	if (!sk || hlist_unhashed_lockless(&sk->sk_node))
+		return false;
+
+	return sock_net(sk)->ipv4.udp_table == table &&
+	       udp_hashslot(table, sock_net(sk),
+			    udp_sk(sk)->udp_port_hash) == hslot;
+}
+
+static void udp_diag_dump_done(struct netlink_callback *cb)
+{
+	struct inet_diag_dump_data *cb_data = cb->data;
+	struct sock *sk = (struct sock *)cb->args[2];
+
+	if (sk) {
+		cb->args[2] = 0;
+		sock_put(sk);
+	}
+	cb_data->dump_done = NULL;
+	module_put(THIS_MODULE);
+}
+
 static int udp_diag_dump_one(struct netlink_callback *cb,
 			     const struct inet_diag_req_v2 *req)
 {
@@ -90,55 +120,103 @@ static void udp_diag_dump(struct sk_buff *skb, struct netlink_callback *cb,
 			  const struct inet_diag_req_v2 *r)
 {
 	bool net_admin = netlink_net_capable(cb->skb, CAP_NET_ADMIN);
+	struct sock *cursor = (struct sock *)cb->args[2];
+	struct inet_diag_dump_data *cb_data = cb->data;
 	struct net *net = sock_net(skb->sk);
-	int num, s_num, slot, s_slot;
+	unsigned int slot = cb->args[0];
 	struct udp_table *table;
 
 	table = net->ipv4.udp_table;
-	s_slot = cb->args[0];
-	num = s_num = cb->args[1];
-
-	for (slot = s_slot; slot <= table->mask; s_num = 0, slot++) {
-		struct udp_hslot *hslot = &table->hash[slot];
-		struct sock *sk;
-
-		num = 0;
-
-		if (hlist_empty(&hslot->head))
-			continue;
-
-		spin_lock_bh(&hslot->lock);
-		sk_for_each(sk, &hslot->head) {
-			struct inet_sock *inet = inet_sk(sk);
-
-			if (!net_eq(sock_net(sk), net))
-				continue;
-			if (num < s_num)
-				goto next;
-			if (!(r->idiag_states & (1 << sk->sk_state)))
-				goto next;
-			if (r->sdiag_family != AF_UNSPEC &&
-					sk->sk_family != r->sdiag_family)
-				goto next;
-			if (r->id.idiag_sport != inet->inet_sport &&
-			    r->id.idiag_sport)
-				goto next;
-			if (r->id.idiag_dport != inet->inet_dport &&
-			    r->id.idiag_dport)
-				goto next;
-
-			if (sk_diag_dump(sk, skb, cb, r, net_admin) < 0) {
-				spin_unlock_bh(&hslot->lock);
-				goto done;
-			}
-next:
-			num++;
-		}
-		spin_unlock_bh(&hslot->lock);
+	/* Keep this module loaded until dump_done() drops the cursor. */
+	if (!cb_data->dump_done) {
+		__module_get(THIS_MODULE);
+		cb_data->dump_done = udp_diag_dump_done;
 	}
+
+	for (; slot <= table->mask; slot++) {
+		struct udp_hslot *hslot = &table->hash[slot];
+
+		for (;;) {
+			struct sock *sk, *next_cursor = NULL;
+			int idx, accum = 0, walked = 0, res;
+			struct sock *old_cursor = NULL;
+			struct sock *sk_arr[SKARR_SZ];
+
+			spin_lock_bh(&hslot->lock);
+			sk = cursor;
+			if (sk && !udp_diag_cursor_valid(table, hslot, sk)) {
+				old_cursor = sk;
+				cursor = NULL;
+				sk = NULL;
+			}
+			if (!sk)
+				sk = hlist_entry_safe(hslot->head.first,
+						      struct sock, sk_node);
+
+			while (sk && walked < SKARR_SZ) {
+				struct inet_sock *inet = inet_sk(sk);
+				struct sock *next;
+
+				next = hlist_entry_safe(sk->sk_node.next,
+							struct sock, sk_node);
+				if (net_eq(sock_net(sk), net) &&
+				    (r->idiag_states & (1 << sk->sk_state)) &&
+				    (r->sdiag_family == AF_UNSPEC ||
+				     sk->sk_family == r->sdiag_family) &&
+				    (r->id.idiag_sport == inet->inet_sport ||
+				     !r->id.idiag_sport) &&
+				    (r->id.idiag_dport == inet->inet_dport ||
+				     !r->id.idiag_dport)) {
+					sock_hold(sk);
+					sk_arr[accum++] = sk;
+				}
+
+				walked++;
+				if (walked == SKARR_SZ) {
+					if (next) {
+						sock_hold(next);
+						next_cursor = next;
+					}
+					break;
+				}
+				sk = next;
+			}
+			spin_unlock_bh(&hslot->lock);
+			/* Consume the resume ref; remaining refs are in
+			 * sk_arr / next_cursor.
+			 */
+			if (old_cursor)
+				sock_put(old_cursor);
+			else if (cursor)
+				sock_put(cursor);
+			cursor = NULL;
+
+			for (idx = 0; idx < accum; idx++) {
+				res = sk_diag_dump(sk_arr[idx], skb, cb, r,
+						   net_admin);
+				if (res < 0) {
+					cursor = sk_arr[idx];
+					while (++idx < accum)
+						sock_put(sk_arr[idx]);
+					if (next_cursor)
+						sock_put(next_cursor);
+					goto done;
+				}
+				sock_put(sk_arr[idx]);
+			}
+
+			cursor = next_cursor;
+			if (!cursor)
+				break;
+
+			cond_resched();
+		}
+	}
+
 done:
 	cb->args[0] = slot;
-	cb->args[1] = num;
+	cb->args[1] = 0;
+	cb->args[2] = (unsigned long)cursor;
 }
 
 static void udp_diag_get_info(struct sock *sk, struct inet_diag_msg *r,
