@@ -311,7 +311,7 @@ int gbaudio_module_update(struct gbaudio_codec_info *codec,
 	}
 
 	/* parse dai_id from AIF widget's stream_name */
-	if (sscanf(w->sname, "%s %d %s", intf_name, &dai_id, dir) != 3) {
+	if (sscanf(w->sname, "%31s %d %31s", intf_name, &dai_id, dir) != 3) {
 		dev_err(codec->dev, "Error while parsing dai_id for %s\n", w->name);
 		return -EINVAL;
 	}
