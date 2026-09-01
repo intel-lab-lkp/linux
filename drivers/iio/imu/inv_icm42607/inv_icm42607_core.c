@@ -31,6 +31,7 @@ static bool inv_icm42607_is_readable_reg(struct device *dev, unsigned int reg)
 	case INV_ICM42607_REG_APEX_DATA4 ... INV_ICM42607_REG_INTF_CONFIG1:
 	case INV_ICM42607_REG_INT_STATUS_DRDY ... INV_ICM42607_REG_FIFO_DATA:
 	case INV_ICM42607_REG_WHOAMI:
+	case INV_ICM42607_REG_BLK_SEL_W ... INV_ICM42607_REG_M_R:
 		return true;
 	}
 
@@ -43,6 +44,7 @@ static bool inv_icm42607_is_writeable_reg(struct device *dev, unsigned int reg)
 	case INV_ICM42607_REG_DEVICE_CONFIG ... INV_ICM42607_REG_INT_CONFIG:
 	case INV_ICM42607_REG_PWR_MGMT0 ... INV_ICM42607_REG_INT_SOURCE4:
 	case INV_ICM42607_REG_INTF_CONFIG0 ... INV_ICM42607_REG_INTF_CONFIG1:
+	case INV_ICM42607_REG_BLK_SEL_W ... INV_ICM42607_REG_M_R:
 		return true;
 	}
 
@@ -59,6 +61,7 @@ static bool inv_icm42607_is_volatile_reg(struct device *dev, unsigned int reg)
 	case INV_ICM42607_REG_FIFO_LOST_PKT0 ... INV_ICM42607_REG_APEX_DATA3:
 	case INV_ICM42607_REG_INT_STATUS_DRDY:
 	case INV_ICM42607_REG_INT_STATUS ... INV_ICM42607_REG_FIFO_DATA:
+	case INV_ICM42607_REG_BLK_SEL_W ... INV_ICM42607_REG_M_R:
 		return true;
 	}
 
@@ -71,7 +74,7 @@ const struct regmap_config inv_icm42607_regmap_config = {
 	.writeable_reg = inv_icm42607_is_writeable_reg,
 	.readable_reg = inv_icm42607_is_readable_reg,
 	.volatile_reg = inv_icm42607_is_volatile_reg,
-	.max_register = INV_ICM42607_REG_WHOAMI,
+	.max_register = INV_ICM42607_REG_M_R,
 	.cache_type = REGCACHE_MAPLE,
 };
 EXPORT_SYMBOL_NS_GPL(inv_icm42607_regmap_config, "IIO_ICM42607");
@@ -96,7 +99,7 @@ static const struct inv_icm42607_conf inv_icm42607_default_conf = {
 static const struct inv_icm42607_conf inv_icm42370_default_conf = {
 	.gyro = { },
 	.accel = {
-		.mode = INV_ICM42607_SENSOR_MODE_OFF,
+		.mode = INV_ICM42607_SENSOR_MODE_LOW_POWER,
 		.fs = INV_ICM42607_ACCEL_FS_4G,
 		.odr = INV_ICM42607_ODR_100HZ,
 		.filter = INV_ICM42607_FILTER_BW_25HZ,
@@ -350,6 +353,107 @@ int inv_icm42607_set_sensor_conf(struct inv_icm42607_state *st,
 	default:
 		return -EINVAL;
 	}
+}
+
+static int inv_icm42607_mreg_check(struct inv_icm42607_state *st)
+{
+	struct regmap *map = st->map;
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(map, INV_ICM42607_REG_MCLK_RDY, &val);
+	if (ret)
+		return ret;
+
+	if (val & INV_ICM42607_MCLK_RDY_BIT)
+		return 0;
+
+	/*
+	 * Clock isn't running: we're either in Sleep mode or Accel LP
+	 * mode with WUOSC. Force the RC oscillator on via IDLE, then
+	 * wait for MCLK_RDY.
+	 */
+	ret = regmap_set_bits(map, INV_ICM42607_REG_PWR_MGMT0,
+			       INV_ICM42607_PWR_MGMT0_IDLE);
+	if (ret)
+		return ret;
+
+	/*
+	 * After setting the IDLE bit to 1 in PWR_MGMT0 register, wait for anywhere between
+	 * 10us to 200us which are the ACCEL_STARTUP time and accelerometer transition time
+	 * from OFF respectively.
+	 */
+	return regmap_read_poll_timeout(map, INV_ICM42607_REG_MCLK_RDY, val,
+			val & INV_ICM42607_MCLK_RDY_BIT, 10, 200);
+}
+
+int inv_icm42607_mreg_write(struct inv_icm42607_state *st, const u8 bank,
+			    const u8 addr, const u8 val)
+{
+	int ret;
+
+	ret = inv_icm42607_mreg_check(st);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(st->map, INV_ICM42607_REG_BLK_SEL_W, bank);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(st->map, INV_ICM42607_REG_MADDR_W, addr);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(st->map, INV_ICM42607_REG_M_W, val);
+	if (ret)
+		return ret;
+
+	/*
+	 * As per the Datasheet Section 13 Accessing MREGx Registers,
+	 * there should be no read/writes to the device for 10us
+	 * after performing bank access.
+	 */
+	fsleep(10);
+	return regmap_write(st->map, INV_ICM42607_REG_BLK_SEL_W, 0x00);
+}
+
+int inv_icm42607_mreg_read(struct inv_icm42607_state *st, const u8 bank, const u8 addr, u8 *val)
+{
+	unsigned int read_val;
+	int ret;
+
+	ret = inv_icm42607_mreg_check(st);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(st->map, INV_ICM42607_REG_BLK_SEL_R, bank);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(st->map, INV_ICM42607_REG_MADDR_R, addr);
+	if (ret)
+		return ret;
+
+	/*
+	 * As per the Datasheet Section 13 Accessing MREGx Registers,
+	 * there should be no read/writes to the device for 10us
+	 * after performing bank access.
+	 */
+	fsleep(10);
+	ret = regmap_read(st->map, INV_ICM42607_REG_M_R, &read_val);
+	if (ret)
+		return ret;
+
+	*val = (u8)read_val;
+
+	/*
+	 * As per the Datasheet Section 13 Accessing MREGx Registers,
+	 * there should be no read/writes to the device for 10us
+	 * after performing bank access.
+	 */
+	fsleep(10);
+
+	return regmap_write(st->map, INV_ICM42607_REG_BLK_SEL_R, 0x00);
 }
 
 int inv_icm42607_read_sensor(struct iio_dev *indio_dev,

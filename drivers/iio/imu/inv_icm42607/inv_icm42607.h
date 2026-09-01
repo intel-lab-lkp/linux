@@ -111,6 +111,13 @@ enum inv_icm42607_temp_filter_bw {
 	/* value 7 also corresponds to 4Hz */
 };
 
+enum inv_icm42607_mregs {
+	INV_ICM42607_MREG1,
+	INV_ICM42607_MREG2 = 0x28,
+	INV_ICM42607_MREG3 = 0x50,
+	INV_ICM42370_NB
+};
+
 /* Signed so that negative values can signify an invalid condition. */
 struct inv_icm42607_sensor_conf {
 	int mode;
@@ -170,6 +177,7 @@ struct inv_icm42607_sensor_state {
 
 /* Register Map for User Bank 0 */
 #define INV_ICM42607_REG_MCLK_RDY			0x00
+#define INV_ICM42607_MCLK_RDY_BIT			BIT(3)
 
 #define INV_ICM42607_REG_DEVICE_CONFIG			0x01
 #define INV_ICM42607_DEVICE_CONFIG_SPI_AP_4WIRE		BIT(2)
@@ -370,6 +378,24 @@ struct inv_icm42607_sensor_state {
 #define INV_ICM42607_WHOAMI				0x67
 #define INV_ICM42370P_WHOAMI				0x0D
 
+#define INV_ICM42607_REG_BLK_SEL_W			0x79
+#define INV_ICM42607_REG_MADDR_W			0x7A
+#define INV_ICM42607_REG_M_W				0x7B
+#define INV_ICM42607_REG_BLK_SEL_R			0x7C
+#define INV_ICM42607_REG_MADDR_R			0x7D
+#define INV_ICM42607_REG_M_R				0x7E
+
+/* User Bank MREG 1 registers */
+#define INV_ICM42607_REG_OFFSET_USER0			0x4E
+#define INV_ICM42607_REG_OFFSET_USER1			0x4F
+#define INV_ICM42607_REG_OFFSET_USER2			0x50
+#define INV_ICM42607_REG_OFFSET_USER3			0x51
+#define INV_ICM42607_REG_OFFSET_USER4			0x52
+#define INV_ICM42607_REG_OFFSET_USER5			0x53
+#define INV_ICM42607_REG_OFFSET_USER6			0x54
+#define INV_ICM42607_REG_OFFSET_USER7			0x55
+#define INV_ICM42607_REG_OFFSET_USER8			0x56
+
 /*
  * Timings as listed in section 3 of datasheet, all values listed in datasheet
  * in ms except temp startup time... setting all values in us and using
@@ -399,6 +425,9 @@ extern const struct dev_pm_ops inv_icm42607_pm_ops;
 const struct iio_mount_matrix *
 inv_icm42607_get_mount_matrix(struct iio_dev *indio_dev,
 			      const struct iio_chan_spec *chan);
+
+int inv_icm42607_mreg_read(struct inv_icm42607_state *st, u8 bank, u8 addr, u8 *val);
+int inv_icm42607_mreg_write(struct inv_icm42607_state *st, u8 bank, u8 addr, u8 val);
 
 int inv_icm42607_get_pwr_mgmt0(struct inv_icm42607_state *st,
 			       enum inv_icm42607_sensor_mode *gyro,
