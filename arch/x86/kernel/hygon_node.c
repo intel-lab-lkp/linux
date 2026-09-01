@@ -16,6 +16,8 @@
 #define pr_fmt(fmt) "hygon_node: " fmt
 
 #include <linux/bitops.h>
+#include <linux/cpu.h>
+#include <linux/cpufeature.h>
 #include <linux/export.h>
 #include <linux/init.h>
 #include <linux/pci.h>
@@ -23,6 +25,7 @@
 #include <linux/processor.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
+#include <linux/topology.h>
 
 #include <asm/cpu_device_id.h>
 #include <asm/hygon/node.h>
@@ -555,6 +558,40 @@ static int __init hygon_sort_and_classify(struct hygon_node_cache *cache)
 }
 
 /*
+ * Translate a Hygon Fam18h phys_node_id (CPUID 8000001E ECX[7:0]) to a
+ * dense DF CDD index.  On supported models, the node layer uses
+ * this encoding:
+ *
+ *   phys_node_id = (socket_id << 4) | local_cdd_index_in_dfid_order
+ *
+ * The cache->nodes[] CDD region is sorted by (socket_id ASC, dfid ASC),
+ * so walk it and return the actual cache index of the CDD whose
+ * socket_id matches and whose socket-local ordinal is @local.
+ *
+ * Return -ENODEV if the cache is unavailable or no CDD matches.
+ */
+static int hygon_phys_nid_to_df_node(unsigned int phys_nid)
+{
+	unsigned int socket = phys_nid >> 4;
+	unsigned int local = phys_nid & 0xf;
+	unsigned int ordinal = 0;
+	u16 i;
+
+	if (!hygon_cache.ready)
+		return -ENODEV;
+
+	for (i = 0; i < hygon_cache.num_cdd; i++) {
+		if (hygon_cache.nodes[i].socket_id != socket)
+			continue;
+
+		if (ordinal++ == local)
+			return i;
+	}
+
+	return -ENODEV;
+}
+
+/*
  * Build the global DF node cache.
  *
  * Called once from hygon_node_init() at fs_initcall, so no locking is
@@ -617,6 +654,22 @@ int hygon_node_get_info(u16 node, struct hygon_node_info *info)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(hygon_node_get_info);
+
+int hygon_cpu_to_df_node(unsigned int cpu)
+{
+	if (cpu >= nr_cpu_ids)
+		return -EINVAL;
+
+	/*
+	 * The NodeId reported by CPUID in a guest may not describe the
+	 * physical DF topology.
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_HYPERVISOR))
+		return -ENODEV;
+
+	return hygon_phys_nid_to_df_node(topology_amd_node_id(cpu));
+}
+EXPORT_SYMBOL_GPL(hygon_cpu_to_df_node);
 
 struct pci_dev *hygon_node_get_func(u16 node, u8 func)
 {

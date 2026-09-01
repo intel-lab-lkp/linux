@@ -83,6 +83,22 @@ u16 hygon_cdd_num(void);
 int hygon_node_get_info(u16 node, struct hygon_node_info *info);
 
 /**
+ * hygon_cpu_to_df_node() - map CPU to dense DF CDD index
+ * @cpu: CPU index
+ *
+ * Hygon Fam18h exposes sparse physical node IDs via CPUID 8000001E[7:0].
+ * This function translates the per-CPU physical node ID into a dense
+ * DF CDD index in [0, hygon_cdd_num()). The NodeId reported by CPUID in
+ * a guest may not describe the physical DF topology, so the translation
+ * is unavailable in guests.
+ *
+ * Return: DF CDD index on success, -EINVAL if @cpu is out of range,
+ * -ENODEV if CPU-to-DF mapping is unavailable or the physical node ID
+ * does not map to a known DF node.
+ */
+int hygon_cpu_to_df_node(unsigned int cpu);
+
+/**
  * hygon_node_get_func() - get DF function PCI device for a node
  * @node: DF node index in [0, hygon_node_num())
  * @func: HYGON_DF_F3 or HYGON_DF_F4
@@ -122,6 +138,11 @@ static inline u16 hygon_cdd_num(void)
 }
 
 static inline int hygon_node_get_info(u16 node, struct hygon_node_info *info)
+{
+	return -ENODEV;
+}
+
+static inline int hygon_cpu_to_df_node(unsigned int cpu)
 {
 	return -ENODEV;
 }
