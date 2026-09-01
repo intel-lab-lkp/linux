@@ -1965,6 +1965,9 @@ cfg80211_update_known_bss(struct cfg80211_registered_device *rdev,
 			return false;
 		}
 
+		if (new->pub.hidden_beacon_bss)
+			return true;
+
 		old = rcu_access_pointer(known->pub.beacon_ies);
 
 		rcu_assign_pointer(known->pub.beacon_ies, new->pub.beacon_ies);
