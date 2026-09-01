@@ -896,6 +896,18 @@ static int ytphy_rgmii_clk_delay_config(struct phy_device *phydev)
 	u16 mask, val = 0;
 	int ret;
 
+	/* When firmware provides no delay properties, keep the chip's
+	 * strap/OTP defaults untouched. Rewriting the delay registers here
+	 * would zero the RX internal delay that rgmii-rxid relies on,
+	 * which breaks gigabit links (CRC errors and intermittent link
+	 * training failures).
+	 */
+	if (!device_property_present(&phydev->mdio.dev,
+				     "rx-internal-delay-ps") &&
+	    !device_property_present(&phydev->mdio.dev,
+				     "tx-internal-delay-ps"))
+		return 0;
+
 	rx_reg = ytphy_get_delay_reg_value(phydev, "rx-internal-delay-ps",
 					   ytphy_rgmii_delays, tb_size,
 					   &rxc_dly_en,
