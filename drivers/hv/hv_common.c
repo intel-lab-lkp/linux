@@ -259,7 +259,8 @@ static void hv_kmsg_dump_register(void)
 
 static inline bool hv_output_page_exists(void)
 {
-	return hv_parent_partition() || IS_ENABLED(CONFIG_HYPERV_VTL_MODE);
+	return hv_parent_partition() || IS_ENABLED(CONFIG_HYPERV_VTL_MODE) ||
+		IS_ENABLED(CONFIG_HYPERV_VSM);
 }
 
 void __init hv_get_partition_id(void)
