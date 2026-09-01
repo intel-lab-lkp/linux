@@ -1614,6 +1614,7 @@ int security_path_chroot(const struct path *path)
 
 /**
  * security_inode_create() - Check if creating a file is allowed
+ * @idmap: idmap of the mount
  * @dir: the parent directory
  * @dentry: the file being created
  * @mode: requested file mode
@@ -1622,12 +1623,12 @@ int security_path_chroot(const struct path *path)
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_create(struct inode *dir, struct dentry *dentry,
-			  umode_t mode)
+int security_inode_create(struct mnt_idmap *idmap, struct inode *dir,
+			  struct dentry *dentry, umode_t mode)
 {
 	if (unlikely(IS_PRIVATE(dir)))
 		return 0;
-	return call_int_hook(inode_create, dir, dentry, mode);
+	return call_int_hook(inode_create, idmap, dir, dentry, mode);
 }
 EXPORT_SYMBOL_GPL(security_inode_create);
 
@@ -1648,6 +1649,7 @@ void security_inode_post_create_tmpfile(struct mnt_idmap *idmap,
 
 /**
  * security_inode_link() - Check if creating a hard link is allowed
+ * @idmap: idmap of the mount
  * @old_dentry: existing file
  * @dir: new parent directory
  * @new_dentry: new link
@@ -1656,12 +1658,12 @@ void security_inode_post_create_tmpfile(struct mnt_idmap *idmap,
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_link(struct dentry *old_dentry, struct inode *dir,
-			struct dentry *new_dentry)
+int security_inode_link(struct mnt_idmap *idmap, struct dentry *old_dentry,
+			struct inode *dir, struct dentry *new_dentry)
 {
 	if (unlikely(IS_PRIVATE(d_backing_inode(old_dentry))))
 		return 0;
-	return call_int_hook(inode_link, old_dentry, dir, new_dentry);
+	return call_int_hook(inode_link, idmap, old_dentry, dir, new_dentry);
 }
 
 /**
@@ -1682,6 +1684,7 @@ int security_inode_unlink(struct inode *dir, struct dentry *dentry)
 
 /**
  * security_inode_symlink() - Check if creating a symbolic link is allowed
+ * @idmap: idmap of the mount
  * @dir: parent directory
  * @dentry: symbolic link
  * @old_name: existing filename
@@ -1690,16 +1693,17 @@ int security_inode_unlink(struct inode *dir, struct dentry *dentry)
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_symlink(struct inode *dir, struct dentry *dentry,
-			   const char *old_name)
+int security_inode_symlink(struct mnt_idmap *idmap, struct inode *dir,
+			   struct dentry *dentry, const char *old_name)
 {
 	if (unlikely(IS_PRIVATE(dir)))
 		return 0;
-	return call_int_hook(inode_symlink, dir, dentry, old_name);
+	return call_int_hook(inode_symlink, idmap, dir, dentry, old_name);
 }
 
 /**
  * security_inode_mkdir() - Check if creating a new directory is allowed
+ * @idmap: idmap of the mount
  * @dir: parent directory
  * @dentry: new directory
  * @mode: new directory mode
@@ -1709,11 +1713,12 @@ int security_inode_symlink(struct inode *dir, struct dentry *dentry,
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+int security_inode_mkdir(struct mnt_idmap *idmap, struct inode *dir,
+			 struct dentry *dentry, umode_t mode)
 {
 	if (unlikely(IS_PRIVATE(dir)))
 		return 0;
-	return call_int_hook(inode_mkdir, dir, dentry, mode);
+	return call_int_hook(inode_mkdir, idmap, dir, dentry, mode);
 }
 EXPORT_SYMBOL_GPL(security_inode_mkdir);
 
@@ -1735,6 +1740,7 @@ int security_inode_rmdir(struct inode *dir, struct dentry *dentry)
 
 /**
  * security_inode_mknod() - Check if creating a special file is allowed
+ * @idmap: idmap of the mount
  * @dir: parent directory
  * @dentry: new file
  * @mode: new file mode
@@ -1747,12 +1753,12 @@ int security_inode_rmdir(struct inode *dir, struct dentry *dentry)
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_mknod(struct inode *dir, struct dentry *dentry,
-			 umode_t mode, dev_t dev)
+int security_inode_mknod(struct mnt_idmap *idmap, struct inode *dir,
+			 struct dentry *dentry, umode_t mode, dev_t dev)
 {
 	if (unlikely(IS_PRIVATE(dir)))
 		return 0;
-	return call_int_hook(inode_mknod, dir, dentry, mode, dev);
+	return call_int_hook(inode_mknod, idmap, dir, dentry, mode, dev);
 }
 
 /**
@@ -1823,6 +1829,7 @@ int security_inode_follow_link(struct dentry *dentry, struct inode *inode,
 
 /**
  * security_inode_permission() - Check if accessing an inode is allowed
+ * @idmap: idmap of the mount
  * @inode: inode
  * @mask: access mask
  *
@@ -1835,11 +1842,12 @@ int security_inode_follow_link(struct dentry *dentry, struct inode *inode,
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_permission(struct inode *inode, int mask)
+int security_inode_permission(struct mnt_idmap *idmap, struct inode *inode,
+			      int mask)
 {
 	if (unlikely(IS_PRIVATE(inode)))
 		return 0;
-	return call_int_hook(inode_permission, inode, mask);
+	return call_int_hook(inode_permission, idmap, inode, mask);
 }
 
 /**
