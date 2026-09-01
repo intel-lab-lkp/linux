@@ -10,6 +10,10 @@
 use core::marker::PhantomData;
 use core::num::NonZeroU64;
 use core::ops::Range;
+use core::sync::atomic::{
+    AtomicBool,
+    Ordering, //
+};
 
 use kernel::{
     device::{
@@ -437,6 +441,8 @@ pub(crate) struct Vm<'drm> {
     gpuvm: ARef<GpuVm<GpuVmData<'drm>>>,
     /// VA layout for this VM.
     pub(crate) layout: VmLayout,
+    /// Whether the VM is unusable.
+    unusable: AtomicBool,
 }
 
 impl<'drm> Vm<'drm> {
@@ -496,6 +502,7 @@ impl<'drm> Vm<'drm> {
                 gpuvm,
                 gpuvm_unique <- new_mutex!(gpuvm_unique),
                 layout,
+                unusable: AtomicBool::new(false),
             }),
             GFP_KERNEL,
         )?;
@@ -526,7 +533,7 @@ impl<'drm> Vm<'drm> {
 
     /// Kills the VM by deactivating it and unmapping all regions.
     pub(crate) fn kill(&self) {
-        // TODO: Turn the VM into a state where it can't be used.
+        self.mark_unusable();
         let _ = self.deactivate();
         let _ = self
             .unmap_range(
@@ -536,6 +543,15 @@ impl<'drm> Vm<'drm> {
             .inspect_err(|e| {
                 dev_err!(self.dev, "Failed to unmap range during deactivate: {:?}", e);
             });
+    }
+
+    /// Marks the VM unusable.
+    pub(crate) fn mark_unusable(&self) {
+        self.unusable.store(true, Ordering::Release);
+    }
+
+    pub(crate) fn is_unusable(&self) -> bool {
+        self.unusable.load(Ordering::Acquire)
     }
 
     /// Executes a virtual memory operation.
@@ -649,6 +665,12 @@ impl<'drm> Vm<'drm> {
         };
         let result = {
             let mut gpuvm_unique = self.gpuvm_unique.lock();
+            // Check under the GPUVM lock so a concurrent `mark_unusable()`
+            // teardown cannot race with this operation.
+            if self.is_unusable() {
+                dev_err!(self.dev, "Cannot map on unusable VM\n");
+                return Err(EINVAL);
+            }
             self.exec_op(gpuvm_unique.as_mut().get_mut(), req, &mut resources)
         };
         // We flush the defer cleanup list now. Things will be different in
