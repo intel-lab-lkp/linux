@@ -4937,9 +4937,11 @@ static void arm_smmu_setup_unique_irqs(struct arm_smmu_device *smmu)
 				dev_warn(smmu->dev,
 					 "failed to enable priq irq\n");
 				smmu->priq.q.irq = 0;
+				smmu->features &= ~ARM_SMMU_FEAT_PRI;
 			}
 		} else {
 			dev_warn(smmu->dev, "no priq irq - PRI will be broken\n");
+			smmu->features &= ~ARM_SMMU_FEAT_PRI;
 		}
 	} else {
 		/* An unrequested IRQ (e.g. set by DT) must not be disabled */
@@ -4974,6 +4976,7 @@ static int arm_smmu_setup_irqs(struct arm_smmu_device *smmu)
 		if (ret < 0) {
 			dev_warn(smmu->dev, "failed to enable combined irq\n");
 			smmu->combined_irq = 0;
+			smmu->features &= ~ARM_SMMU_FEAT_PRI;
 		}
 	} else
 		arm_smmu_setup_unique_irqs(smmu);
@@ -5154,6 +5157,10 @@ static int arm_smmu_device_reset(struct arm_smmu_device *smmu)
 		return ret;
 	}
 
+	/* arm_smmu_setup_irqs() might have unset the ARM_SMMU_FEAT_PRI */
+	if (!(smmu->features & ARM_SMMU_FEAT_PRI))
+		enables &= ~CR0_PRIQEN;
+
 	if (is_kdump_kernel())
 		enables &= ~(CR0_EVTQEN | CR0_PRIQEN);
 
@@ -5295,7 +5302,7 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 	}
 
 	/* Boolean feature flags */
-	if (IS_ENABLED(CONFIG_PCI_PRI) && reg & IDR0_PRI)
+	if (IS_ENABLED(CONFIG_PCI_PRI) && reg & IDR0_PRI && !is_kdump_kernel())
 		smmu->features |= ARM_SMMU_FEAT_PRI;
 
 	if (IS_ENABLED(CONFIG_PCI_ATS) && reg & IDR0_ATS)
