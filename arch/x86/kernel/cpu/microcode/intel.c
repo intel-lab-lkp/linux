@@ -309,6 +309,38 @@ static void save_microcode_patch(struct microcode_intel *patch)
 		pr_err("Unable to allocate microcode memory size: %u\n", size);
 }
 
+static bool is_loading_denied(struct cpu_signature *sig, u32 rev)
+{
+	u32 vfm = IFM(x86_family(sig->sig), x86_model(sig->sig));
+
+	/*
+	 * Revision 0x1000405 contains prerequisite changes for subsequent
+	 * microcode updates on Granite Rapids systems. Updates directly from
+	 * an older revision to this or a newer one can result in #MC (GNR98).
+	 *
+	 * This dependency can be indicated from the minimum revision field.
+	 * However, revision 0x1000423 has an incorrect minimum revision in its
+	 * header (GNR101).
+	 *
+	 * Prevent loading 0x1000405 or later unless the CPU has already been
+	 * updated to 0x1000405 or later.
+	 */
+	if (vfm == INTEL_GRANITERAPIDS_X &&
+	    x86_stepping(sig->sig) == 1 &&
+	    sig->pf & 0x95 &&
+	    sig->rev < 0x1000405 &&
+	    rev >= 0x1000405) {
+		if (rev == 0x1000405)
+			pr_err_once("Erratum GNR98: 0x1000405 is not loadable.\n");
+		else
+			pr_err_once("Erratum GNR98: 0x1000405 is required before 0x%x.\n", rev);
+		pr_err_once("Please update the system BIOS or firmware.\n");
+		return true;
+	}
+
+	return false;
+}
+
 /* Scan blob for microcode matching the boot CPUs family, model, stepping */
 static __init struct microcode_intel *scan_microcode(void *data, size_t size,
 						     struct ucode_cpu_info *uci,
@@ -328,6 +360,9 @@ static __init struct microcode_intel *scan_microcode(void *data, size_t size,
 			break;
 
 		if (!intel_find_matching_signature(data, &uci->cpu_sig))
+			continue;
+
+		if (is_loading_denied(&uci->cpu_sig, mc_header->rev))
 			continue;
 
 		/*
@@ -878,6 +913,9 @@ static enum ucode_state parse_microcode_blobs(int cpu, struct iov_iter *iter)
 		if (!intel_find_matching_signature(mc, &uci->cpu_sig))
 			continue;
 
+		if (is_loading_denied(&uci->cpu_sig, mc_header.rev))
+			continue;
+
 		is_safe = ucode_validate_minrev(&mc_header);
 		if (force_minrev && !is_safe)
 			continue;
@@ -905,7 +943,7 @@ fail:
 	return UCODE_ERROR;
 }
 
-static bool is_blacklisted(unsigned int cpu)
+static bool is_late_loading_denied(unsigned int cpu)
 {
 	struct cpuinfo_x86 *c = &cpu_data(cpu);
 
@@ -936,7 +974,7 @@ static enum ucode_state request_microcode_fw(int cpu, struct device *device)
 	struct kvec kvec;
 	char name[30];
 
-	if (is_blacklisted(cpu))
+	if (is_late_loading_denied(cpu))
 		return UCODE_NFOUND;
 
 	sprintf(name, "intel-ucode/%02x-%02x-%02x",
