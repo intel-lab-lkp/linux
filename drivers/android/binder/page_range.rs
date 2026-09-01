@@ -148,9 +148,14 @@ unsafe extern "C" fn binder_vma_may_split(_: *mut bindings::vm_area_struct, _: c
     EINVAL.to_errno()
 }
 
+unsafe extern "C" fn binder_mremap(_: *mut bindings::vm_area_struct) -> c_int {
+    EINVAL.to_errno()
+}
+
 static BINDER_VM_OPS: AssertSync<bindings::vm_operations_struct> = {
     let ops = bindings::vm_operations_struct {
         may_split: Some(binder_vma_may_split),
+        mremap: Some(binder_mremap),
         ..pin_init::zeroed()
     };
     AssertSync(ops)
