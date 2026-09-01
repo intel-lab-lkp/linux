@@ -138,6 +138,11 @@ bool __init microcode_loader_disabled(void)
 	return dis_ucode_ldr;
 }
 
+static inline void advance_option_argument(char **s)
+{
+	strsep(s, "=");
+}
+
 static void __init early_parse_cmdline(void)
 {
 	char cmd_buf[64] = {};
@@ -147,15 +152,19 @@ static void __init early_parse_cmdline(void)
 		while ((s = strsep(&p, ","))) {
 			if (IS_ENABLED(CONFIG_MICROCODE_DBG)) {
 				if (str_has_prefix(s, "base_rev=")) {
-					/* advance to the option arg */
-					strsep(&s, "=");
+					advance_option_argument(&s);
 					if (kstrtouint(s, 16, &base_rev)) { ; }
 					continue;
 				}
 			}
 
-			if (!strcmp("force_minrev", s))
+			if (!strcmp("force_minrev", s)) {
 				force_minrev = true;
+			} else if (str_has_prefix(s, "force_minrev=")) {
+				advance_option_argument(&s);
+				if (kstrtobool(s, &force_minrev)) { ; }
+				continue;
+			}
 
 			if (!strcmp(s, "dis_ucode_ldr"))
 				dis_ucode_ldr = true;
