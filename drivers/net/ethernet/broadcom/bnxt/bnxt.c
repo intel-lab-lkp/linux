@@ -13791,6 +13791,16 @@ static bool bnxt_uc_list_updated(struct bnxt *bp,
 	struct netdev_hw_addr *ha;
 	int off = 0;
 
+	/* In the overflow state no secondary L2 filters are programmed
+	 * and unicast RX relies on the promiscuous mask, so the list
+	 * only needs reprogramming once it fits the available filters
+	 * again.  Reporting an update here would resend an identical
+	 * SET_RX_MASK on every callback, which causes brief RX packet
+	 * loss on some chips.
+	 */
+	if (vnic->flags & BNXT_VNIC_UC_PROMISC_FLAG)
+		return netdev_hw_addr_list_count(uc) <= (BNXT_MAX_UC_ADDRS - 1);
+
 	if (netdev_hw_addr_list_count(uc) != (vnic->uc_filter_count - 1))
 		return true;
 
@@ -13826,6 +13836,13 @@ static int bnxt_set_rx_mode(struct net_device *dev,
 	if (dev->flags & IFF_PROMISC)
 		mask |= CFA_L2_SET_RX_MASK_REQ_MASK_PROMISCUOUS;
 
+	/* Keep the promiscuous bit while the UC list is longer than the
+	 * available L2 filters, so that an unchanged rx mode is not
+	 * treated as a mask change.
+	 */
+	if ((vnic->flags & BNXT_VNIC_UC_PROMISC_FLAG) && bnxt_promisc_ok(bp))
+		mask |= CFA_L2_SET_RX_MASK_REQ_MASK_PROMISCUOUS;
+
 	uc_update = bnxt_uc_list_updated(bp, uc);
 
 	if (dev->flags & IFF_BROADCAST)
@@ -13853,6 +13870,9 @@ static int bnxt_cfg_rx_mode(struct bnxt *bp, struct netdev_hw_addr_list *uc,
 	struct bnxt_vnic_info *vnic = &bp->vnic_info[BNXT_VNIC_DEFAULT];
 	struct netdev_hw_addr *ha;
 	int i, off = 0, rc;
+	bool uc_promisc;
+
+	uc_promisc = !!(vnic->flags & BNXT_VNIC_UC_PROMISC_FLAG);
 
 	if (!uc_update)
 		goto skip_uc;
@@ -13869,7 +13889,12 @@ static int bnxt_cfg_rx_mode(struct bnxt *bp, struct netdev_hw_addr_list *uc,
 	netif_addr_lock_bh(dev);
 	if (netdev_hw_addr_list_count(uc) > (BNXT_MAX_UC_ADDRS - 1)) {
 		vnic->rx_mask |= CFA_L2_SET_RX_MASK_REQ_MASK_PROMISCUOUS;
+		uc_promisc = true;
 	} else {
+		uc_promisc = false;
+		if (!(dev->flags & IFF_PROMISC))
+			vnic->rx_mask &=
+				~CFA_L2_SET_RX_MASK_REQ_MASK_PROMISCUOUS;
 		netdev_hw_addr_list_for_each(ha, uc) {
 			memcpy(vnic->uc_list + off, ha->addr, ETH_ALEN);
 			off += ETH_ALEN;
@@ -13907,11 +13932,24 @@ skip_uc:
 		vnic->mc_list_count = 0;
 		rc = bnxt_hwrm_cfa_l2_set_rx_mask(bp, 0);
 	}
-	if (rc)
+	if (rc) {
 		netdev_err(bp->dev, "HWRM cfa l2 rx mask failure rc: %d\n",
 			   rc);
+		return rc;
+	}
 
-	return rc;
+	/* Commit the overflow state only once the mask is installed, so
+	 * that a failed attempt keeps the state marked as changed and the
+	 * next retry or rx-mode callback programs the mask again.
+	 */
+	netif_addr_lock_bh(dev);
+	if (uc_promisc)
+		vnic->flags |= BNXT_VNIC_UC_PROMISC_FLAG;
+	else
+		vnic->flags &= ~BNXT_VNIC_UC_PROMISC_FLAG;
+	netif_addr_unlock_bh(dev);
+
+	return 0;
 }
 
 static bool bnxt_can_reserve_rings(struct bnxt *bp)
