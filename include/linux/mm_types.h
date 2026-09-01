@@ -1431,11 +1431,12 @@ struct mm_struct {
 	} __randomize_layout;
 
 	/*
-	 * The rss hierarchical counter items, mm_cpumask, and mm_cid
-	 * masks need to be at the end of mm_struct, because they are
+	 * The mm_cpumask, mm_cid masks, and rss hierarchical counter
+	 * items need to be at the end of mm_struct, because they are
 	 * dynamically sized based on nr_cpu_ids.
-	 * The content of the flexible array needs to be placed in
-	 * decreasing alignment requirement order.
+	 * The HPCC counter tree items are placed last and aligned
+	 * with PERCPU_COUNTER_TREE_ITEMS_ALIGN to satisfy their
+	 * cacheline alignment requirement.
 	 */
 	char flexible_array[] __mm_struct_flexible_array_aligned;
 };
@@ -1474,25 +1475,18 @@ static inline void __mm_flags_set_mask_bits_word(struct mm_struct *mm,
 			 MT_FLAGS_USE_RCU)
 extern struct mm_struct init_mm;
 
-#define MM_STRUCT_FLEXIBLE_ARRAY_INIT									\
-{													\
-	[0 ... (PERCPU_COUNTER_TREE_ITEMS_STATIC_SIZE * NR_MM_COUNTERS) + sizeof(cpumask_t) + MM_CID_STATIC_SIZE - 1] = 0	\
-}
-
-static inline size_t get_rss_stat_items_size(void)
-{
-	return percpu_counter_tree_items_size() * NR_MM_COUNTERS;
+#define MM_STRUCT_FLEXIBLE_ARRAY_INIT						\
+{										\
+	[0 ... PERCPU_COUNTER_TREE_ITEMS_ALIGN(					\
+			sizeof(cpumask_t) + MM_CID_STATIC_SIZE)			\
+	       + (PERCPU_COUNTER_TREE_ITEMS_STATIC_SIZE * NR_MM_COUNTERS)	\
+	       - 1] = 0								\
 }
 
 /* Future-safe accessor for struct mm_struct's cpu_vm_mask. */
 static inline cpumask_t *mm_cpumask(struct mm_struct *mm)
 {
-	unsigned long ptr = (unsigned long)mm;
-
-	ptr += offsetof(struct mm_struct, flexible_array);
-	/* Skip RSS stats counters. */
-	ptr += get_rss_stat_items_size();
-	return (struct cpumask *)ptr;
+	return (struct cpumask *)&mm->flexible_array;
 }
 
 static inline void mm_init_cpumask(struct mm_struct *mm)
@@ -1589,8 +1583,6 @@ static inline cpumask_t *mm_cpus_allowed(struct mm_struct *mm)
 	unsigned long bitmap = (unsigned long)mm;
 
 	bitmap += offsetof(struct mm_struct, flexible_array);
-	/* Skip RSS stats counters. */
-	bitmap += get_rss_stat_items_size();
 	/* Skip cpu_bitmap */
 	bitmap += cpumask_size();
 	return (struct cpumask *)bitmap;
@@ -1672,6 +1664,21 @@ static inline int mm_alloc_sched(struct mm_struct *mm) { return 0; }
 static inline void mm_destroy_sched(struct mm_struct *mm) { }
 
 #endif /* CONFIG_SCHED_CACHE */
+
+static inline size_t get_rss_stat_items_size(void)
+{
+	return percpu_counter_tree_items_size() * NR_MM_COUNTERS;
+}
+
+/*
+ * Return the offset of the RSS stat HPCC items within the mm_struct
+ * flexible array. The items are placed after the cpumask and mm_cid,
+ * aligned to the cacheline boundary required by the tree level items.
+ */
+static inline size_t get_rss_stat_items_offset(void)
+{
+	return PERCPU_COUNTER_TREE_ITEMS_ALIGN(cpumask_size() + mm_cid_size());
+}
 
 struct mmu_gather;
 extern void tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm);

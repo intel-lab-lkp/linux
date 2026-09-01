@@ -66,6 +66,8 @@ struct percpu_counter_tree_level_item {
 
 #define PERCPU_COUNTER_TREE_ITEMS_STATIC_SIZE	\
 	(PERCPU_COUNTER_TREE_STATIC_NR_ITEMS * sizeof(struct percpu_counter_tree_level_item))
+#define PERCPU_COUNTER_TREE_ITEMS_ALIGN(offset)	\
+	ALIGN((offset), __alignof__(struct percpu_counter_tree_level_item))
 
 struct percpu_counter_tree {
 	/* Fast-path fields. */
@@ -167,6 +169,7 @@ void percpu_counter_tree_approximate_accuracy_range(struct percpu_counter_tree *
 #else	/* !CONFIG_SMP */
 
 #define PERCPU_COUNTER_TREE_ITEMS_STATIC_SIZE	0
+#define PERCPU_COUNTER_TREE_ITEMS_ALIGN(offset)	(offset)
 
 struct percpu_counter_tree_level_item;
 
