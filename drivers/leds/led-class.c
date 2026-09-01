@@ -96,8 +96,30 @@ static const struct bin_attribute *const led_trigger_bin_attrs[] = {
 	&bin_attr_trigger,
 	NULL,
 };
+
+static DEVICE_ATTR_RO(trigger_may_offload);
+static struct attribute *led_trigger_attrs[] = {
+	&dev_attr_trigger_may_offload.attr,
+	NULL
+};
+
+static umode_t led_trigger_is_visible(struct kobject *kobj,
+				      struct attribute *attr,
+				      int idx)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+
+	if (attr == &dev_attr_trigger_may_offload.attr)
+		return led_cdev->hw_control_trigger ? attr->mode : 0;
+
+	return attr->mode;
+}
+
 static const struct attribute_group led_trigger_group = {
 	.bin_attrs = led_trigger_bin_attrs,
+	.attrs = led_trigger_attrs,
+	.is_visible = led_trigger_is_visible,
 };
 #endif
 
