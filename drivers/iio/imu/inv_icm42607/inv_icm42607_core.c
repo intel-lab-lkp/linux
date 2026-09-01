@@ -118,30 +118,17 @@ inv_icm42607_get_mount_matrix(struct iio_dev *indio_dev,
 static u32 inv_icm42607_odr_to_period_us(enum inv_icm42607_odr odr)
 {
 	static const u32 odr_periods[INV_ICM42607_ODR_NB] = {
-		/* Reserved values */
-		0, 0, 0, 0, 0,
-		/* 1600Hz */
-		625,
-		/* 800Hz */
-		1250,
-		/* 400Hz */
-		2500,
-		/* 200Hz */
-		5000,
-		/* 100 Hz */
-		10000,
-		/* 50Hz */
-		20000,
-		/* 25Hz */
-		40000,
-		/* 12.5Hz */
-		80000,
-		/* 6.25Hz */
-		160000,
-		/* 3.125Hz */
-		320000,
-		/* 1.5625Hz */
-		640000,
+		[INV_ICM42607_ODR_1600HZ]	= 625,
+		[INV_ICM42607_ODR_800HZ]	= 1250,
+		[INV_ICM42607_ODR_400HZ]	= 2500,
+		[INV_ICM42607_ODR_200HZ]	= 5000,
+		[INV_ICM42607_ODR_100HZ]	= 10000,
+		[INV_ICM42607_ODR_50HZ]		= 20000,
+		[INV_ICM42607_ODR_25HZ]		= 40000,
+		[INV_ICM42607_ODR_12_5HZ]	= 80000,
+		[INV_ICM42607_ODR_6_25HZ_LP]	= 160000,
+		[INV_ICM42607_ODR_3_125HZ_LP]	= 320000,
+		[INV_ICM42607_ODR_1_5625HZ_LP]	= 640000,
 	};
 
 	odr = clamp(odr, INV_ICM42607_ODR_1600HZ, INV_ICM42607_ODR_1_5625HZ_LP);
