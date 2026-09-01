@@ -51,7 +51,6 @@ use crate::{
         KernelBoVaAlloc, //
     },
     gpu::GpuInfo,
-
     mmu::Mmu,
     regs::{
         gpu_control::{
@@ -66,7 +65,10 @@ use crate::{
             JOB_IRQ_RAWSTAT, //
         }, //
     },
-    vm::Vm, //
+    vm::{
+        Vm,
+        VmSpec, //
+    }, //
 };
 
 mod parser;
@@ -220,7 +222,7 @@ impl<'drm> Firmware<'drm> {
         mmu: ArcBorrow<'_, Mmu<'drm>>,
         gpu_info: &GpuInfo,
     ) -> Result<Firmware<'drm>> {
-        let vm = Vm::new(dev, ddev, mmu, gpu_info)?;
+        let vm = Vm::new(dev, ddev, mmu, gpu_info, VmSpec::Mcu)?;
         vm.activate()?;
 
         let result = (|| {
