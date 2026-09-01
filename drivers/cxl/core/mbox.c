@@ -1071,6 +1071,8 @@ free_pl:
 	return cxl_event_retry_rc(&mbox_cmd, rc);
 }
 
+#define CXL_EVENT_LOG_MAX_PASSES 128
+
 static int cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 				   enum cxl_event_log_type type, bool *got_records)
 {
@@ -1079,6 +1081,7 @@ static int cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 	struct device *dev = mds->cxlds.dev;
 	struct cxl_get_event_payload *payload;
 	u8 log_type = type;
+	int passes = 0;
 	u16 nr_rec;
 	int rc = 0;
 
@@ -1134,6 +1137,15 @@ static int cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 				type, rc);
 			break;
 		}
+
+		if (++passes == CXL_EVENT_LOG_MAX_PASSES) {
+			dev_warn_ratelimited(dev,
+				"Event log '%d': Still reporting records after %d passes, giving up",
+				type, passes);
+			rc = -EIO;
+			break;
+		}
+		cond_resched();
 	} while (nr_rec);
 
 	mutex_unlock(&mds->event.log_lock);
