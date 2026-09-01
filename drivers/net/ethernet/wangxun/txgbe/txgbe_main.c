@@ -267,8 +267,7 @@ static void txgbe_disable_device(struct wx *wx)
 		wx_set_all_vfs(wx);
 	}
 
-	if (!(((wx->subsystem_device_id & WX_NCSI_MASK) == WX_NCSI_SUP) ||
-	      ((wx->subsystem_device_id & WX_WOL_MASK) == WX_WOL_SUP))) {
+	if (!(wx->ncsi_enabled || wx->wol_hw_supported)) {
 		/* disable mac transmiter */
 		wr32m(wx, WX_MAC_TX_CFG, WX_MAC_TX_CFG_TE, 0);
 	}
@@ -336,6 +335,8 @@ static void txgbe_down_suspend(struct wx *wx)
  **/
 static void txgbe_init_type_code(struct wx *wx)
 {
+	u16 ncsi_mask = wx->subsystem_device_id & WX_NCSI_MASK;
+	u16 wol_mask = wx->subsystem_device_id & WX_WOL_MASK;
 	u8 device_type = wx->subsystem_device_id & 0xF0;
 
 	switch (wx->device_id) {
@@ -381,6 +382,9 @@ static void txgbe_init_type_code(struct wx *wx)
 		wx->media_type = wx_media_unknown;
 		break;
 	}
+
+	wx->wol_hw_supported = ((wol_mask) == WX_WOL_SUP);
+	wx->ncsi_enabled = ((ncsi_mask) == WX_NCSI_SUP);
 }
 
 /**
