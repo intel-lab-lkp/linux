@@ -1059,3 +1059,7 @@ void llc_sk_reset(struct sock *sk)
 	llc->failed_data_req	= 0 ;
 	llc->last_nr		= 0;
 }
+
+#if IS_ENABLED(CONFIG_LLC2_CONN_KUNIT_TEST)
+#include "tests/conn_kunit.c"
+#endif

@@ -8,3 +8,17 @@ config LLC2
 	help
 	  This is a Logical Link Layer type 2, connection oriented support.
 	  Select this if you want to have support for PF_LLC sockets.
+
+config LLC2_CONN_KUNIT_TEST
+	bool "KUnit tests for the LLC type 2 connection state machine" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y && LLC2=y
+	default KUNIT_ALL_TESTS
+	help
+	  This builds the KUnit tests for the LLC type 2 connection state
+	  machine, covering the bounds of the state transition tables and the
+	  handling of events delivered to an out of service connection.
+
+	  For more information on KUnit and unit tests in general, please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
