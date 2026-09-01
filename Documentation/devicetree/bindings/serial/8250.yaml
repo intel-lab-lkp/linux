@@ -109,6 +109,7 @@ properties:
       - const: aspeed,ast2500-vuart
       - const: intel,xscale-uart
       - const: mrvl,pxa-uart
+      - const: marvell,armada-38x-uart
       - const: nuvoton,wpcm450-uart
       - const: nuvoton,npcm750-uart
       - const: nvidia,tegra20-uart
@@ -119,6 +120,9 @@ properties:
               - exar,xr16l2551
               - exar,xr16l2550
           - const: ns8250
+      - items:
+          - const: marvell,armada-38x-uart
+          - const: ns16550a
       - items:
           - enum:
               - altr,16550-FIFO32
