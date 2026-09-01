@@ -134,16 +134,6 @@ static unsigned int of_bus_pci_get_flags(const __be32 *addr)
  * PCI bus specific translator
  */
 
-static bool of_node_is_pcie(const struct device_node *np)
-{
-	bool is_pcie = of_node_name_eq(np, "pcie");
-
-	if (is_pcie)
-		pr_warn_once("%pOF: Missing device_type\n", np);
-
-	return is_pcie;
-}
-
 static int of_bus_pci_match(struct device_node *np)
 {
 	/*
@@ -156,7 +146,7 @@ static int of_bus_pci_match(struct device_node *np)
 	 */
 	return of_node_is_type(np, "pci") || of_node_is_type(np, "pciex") ||
 		of_node_is_type(np, "vci") || of_node_is_type(np, "ht") ||
-		of_node_is_pcie(np);
+		of_node_name_eq(np, "pcie");
 }
 
 static void of_bus_pci_count_cells(struct device_node *np,
