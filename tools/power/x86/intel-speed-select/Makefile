@@ -54,6 +54,8 @@ clean:
 	rm -f $(ALL_PROGRAMS)
 	rm -rf $(OUTPUT)include/linux/isst_if.h
 	find $(or $(OUTPUT),.) -name '*.o' -delete -o -name '\.*.d' -delete
+	find $(or $(OUTPUT),.) -name '.*.o.cmd' -delete -o -name '.*.o.d' -delete
+	find $(or $(OUTPUT),.) -type d -name 'include' -exec rm -rf {} +
 
 install: $(ALL_PROGRAMS)
 	install -d -m 755 $(DESTDIR)$(bindir);		\
