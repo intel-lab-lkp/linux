@@ -985,6 +985,92 @@ static const struct iommu_qos_device_ops rdtgroup_qos_device_ops = {
 	.remove = rdtgroup_remove_device,
 };
 
+static ssize_t rdtgroup_devices_write(struct kernfs_open_file *of,
+				      char *buf, size_t nbytes, loff_t off)
+{
+	struct rdtgroup *rdtgrp;
+	char *token;
+	int ret = 0;
+
+	if (!buf)
+		return -EINVAL;
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+	if (!rdtgrp) {
+		rdtgroup_kn_unlock(of->kn);
+		return -ENOENT;
+	}
+	rdt_last_cmd_clear();
+
+	if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKED ||
+	    rdtgrp->mode == RDT_MODE_PSEUDO_LOCKSETUP) {
+		ret = -EINVAL;
+		rdt_last_cmd_puts("Pseudo-locking in progress\n");
+		goto unlock;
+	}
+
+	while ((token = strsep(&buf, ","))) {
+		struct device *dev;
+
+		token = strim(token);
+		if (!*token) {
+			rdt_last_cmd_puts("Device list parsing error\n");
+			ret = -EINVAL;
+			break;
+		}
+
+		dev = iommu_group_find_device_by_name(token);
+		if (!dev) {
+			rdt_last_cmd_printf("No device %s\n", token);
+			ret = -ENODEV;
+			break;
+		}
+
+		ret = rdtgroup_set_device(dev, rdtgrp);
+		if (ret == -EOPNOTSUPP)
+			rdt_last_cmd_printf("Device %s does not support QoS\n",
+					    token);
+		else if (ret)
+			rdt_last_cmd_printf("Error while processing device %s\n",
+					    token);
+		/*
+		 * rdtgroup_set_device() takes its own reference on a new
+		 * rdtdev; drop the temporary reference returned by the
+		 * lookup regardless of the outcome.
+		 */
+		put_device(dev);
+		if (ret)
+			break;
+	}
+
+unlock:
+	rdtgroup_kn_unlock(of->kn);
+	return ret ?: nbytes;
+}
+
+static int rdtgroup_devices_show(struct kernfs_open_file *of,
+				 struct seq_file *s, void *v)
+{
+	struct rdtgroup *rdtgrp;
+	struct rdtdev *rdtdev;
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+	if (!rdtgrp) {
+		rdtgroup_kn_unlock(of->kn);
+		return -ENOENT;
+	}
+
+	mutex_lock(&rdtdev_mutex);
+	list_for_each_entry(rdtdev, &rdtdev_list, node)
+		if (is_rmid_match_dev(rdtdev, rdtgrp) ||
+		    is_closid_match_dev(rdtdev, rdtgrp))
+			seq_printf(s, "%s\n", kobject_name(&rdtdev->dev->kobj));
+	mutex_unlock(&rdtdev_mutex);
+
+	rdtgroup_kn_unlock(of->kn);
+	return 0;
+}
+
 static void rdt_move_group_devices(struct rdtgroup *from, struct rdtgroup *to)
 {
 	struct rdtdev *rdtdev;
@@ -2296,6 +2382,14 @@ static struct rftype res_common_files[] = {
 		.fflags		= RFTYPE_BASE,
 	},
 	{
+		.name		= "devices",
+		.mode		= 0644,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.write		= rdtgroup_devices_write,
+		.seq_show	= rdtgroup_devices_show,
+		.fflags		= RFTYPE_BASE,
+	},
+	{
 		.name		= "mon_hw_id",
 		.mode		= 0444,
 		.kf_ops		= &rdtgroup_kf_single_ops,
@@ -2363,6 +2457,13 @@ static int rdtgroup_add_files(struct kernfs_node *kn, unsigned long fflags)
 
 	for (rft = rfts; rft < rfts + len; rft++) {
 		if (rft->fflags && ((fflags & rft->fflags) == rft->fflags)) {
+			if (!strcmp(rft->name, "devices") &&
+			    (!resctrl_arch_devices_supported() ||
+			     ((fflags & RFTYPE_CTRL) &&
+			      !resctrl_arch_alloc_capable()) ||
+			     ((fflags & RFTYPE_MON) &&
+			      !resctrl_arch_mon_capable())))
+				continue;
 			ret = rdtgroup_add_file(kn, rft);
 			if (ret)
 				goto error;

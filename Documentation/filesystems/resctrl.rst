@@ -546,8 +546,8 @@ directories can be created to monitor subsets of tasks in the CTRL_MON
 group that is their ancestor. These are called "MON" groups in the rest
 of this document.
 
-Removing a directory will move all tasks and cpus owned by the group it
-represents to the parent. Removing one of the created CTRL_MON groups
+Removing a directory will move all tasks, cpus and devices owned by the
+group it represents to the parent. Removing one of the created CTRL_MON groups
 will automatically remove all MON groups below it.
 
 Moving MON group directories to a new parent CTRL_MON group is supported
@@ -580,6 +580,20 @@ All groups contain the following files:
 	id of 0 will never be shown and there is no representation of the
 	idle tasks. Instead, a CPU's idle task is always considered as a
 	member of the group owning the CPU.
+
+"devices":
+	Reading this file shows the list of all devices that belong to
+	this group. Writing a device name to the file will add a device to
+	the group, tagging its DMA with the group's QoS IDs. Multiple
+	devices can be added by separating the names with commas. A single
+	failure encountered while attempting to assign a device will cause
+	the operation to abort and already added devices before the failure
+	will remain in the group. Failures will be logged to
+	/sys/fs/resctrl/info/last_cmd_status.
+
+	The device name is the one listed under
+	/sys/kernel/iommu_groups/<id>/devices/. This file is only present
+	when an IOMMU can tag the DMA of devices behind it with a QoS class.
 
 "cpus":
 	Reading this file shows a bitmask of the logical CPUs owned by
