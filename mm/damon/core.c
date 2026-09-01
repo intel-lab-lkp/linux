@@ -3122,7 +3122,8 @@ static void damos_set_effective_quota(struct damon_ctx *ctx, struct damos *s)
 		else
 			throughput = PAGE_SIZE * 1024;
 		esz = min(throughput * quota->ms, esz);
-		esz = max(ctx->min_region_sz, esz);
+		if (esz)
+			esz = max(ctx->min_region_sz, esz);
 	}
 
 	if (quota->sz && quota->sz < esz)
