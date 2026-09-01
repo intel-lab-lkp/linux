@@ -6,6 +6,7 @@
 
 #include <dirent.h>
 
+#include <linux/bits.h>
 #include <linux/mempolicy.h>
 
 #include "kvm_syscalls.h"
@@ -73,6 +74,18 @@ static bool is_numa_available(void)
 	 */
 	return !get_mempolicy(NULL, NULL, 0, NULL, 0) ||
 		(errno != ENOSYS && errno != EPERM);
+}
+
+static inline unsigned long get_numa_mem_nodes(void)
+{
+	unsigned long nodemask = 0;
+
+	/* Get set of first 64 numa nodes available */
+	if (get_mempolicy(NULL, &nodemask, BITS_PER_TYPE(nodemask), NULL,
+			  MPOL_F_MEMS_ALLOWED))
+		return 0;
+
+	return nodemask;
 }
 
 static inline bool is_multi_numa_node_system(void)
