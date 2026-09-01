@@ -41,7 +41,8 @@ int llc_build_and_send_pkt(struct sock *sk, struct sk_buff *skb)
 	int rc = -ECONNABORTED;
 	struct llc_sock *llc = llc_sk(sk);
 
-	if (unlikely(llc->state == LLC_CONN_STATE_ADM))
+	if (unlikely(llc->state == LLC_CONN_STATE_ADM ||
+		     llc->state == LLC_CONN_OUT_OF_SVC))
 		goto out_free;
 	rc = -EBUSY;
 	if (unlikely(llc_data_accept_state(llc->state) || /* data_conn_refuse */
@@ -81,6 +82,15 @@ int llc_establish_connection(struct sock *sk, const u8 *lmac, u8 *dmac, u8 dsap)
 	struct sk_buff *skb;
 	struct llc_sock *llc = llc_sk(sk);
 	struct sock *existing;
+
+	/*
+	 * A socket parked in LLC_CONN_OUT_OF_SVC has no state machine to run,
+	 * so there is nothing to establish. Report it as a closed connection
+	 * rather than handing llc_conn_state_process() an event it can only
+	 * throw away.
+	 */
+	if (unlikely(llc->state == LLC_CONN_OUT_OF_SVC))
+		return -ECONNABORTED;
 
 	laddr.lsap = llc->sap->laddr.lsap;
 	daddr.lsap = dsap;
