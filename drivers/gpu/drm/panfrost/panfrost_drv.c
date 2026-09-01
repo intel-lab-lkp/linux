@@ -794,7 +794,7 @@ static const struct file_operations panfrost_drm_driver_fops = {
 };
 
 #ifdef CONFIG_DEBUG_FS
-static int panthor_gems_show(struct seq_file *m, void *data)
+static int panfrost_gems_show(struct seq_file *m, void *data)
 {
 	struct drm_info_node *node = m->private;
 	struct panfrost_device *pfdev = to_panfrost_device(node->minor->dev);
@@ -845,15 +845,15 @@ static int show_file_jm_ctxs(struct panfrost_file_priv *pfile,
 	return 0;
 }
 
-static struct drm_info_list panthor_debugfs_list[] = {
+static struct drm_info_list panfrost_debugfs_list[] = {
 	{"gems",
-	 panthor_gems_show, 0, NULL},
+	 panfrost_gems_show, 0, NULL},
 };
 
-static int panthor_gems_debugfs_init(struct drm_minor *minor)
+static int panfrost_gems_debugfs_init(struct drm_minor *minor)
 {
-	drm_debugfs_create_files(panthor_debugfs_list,
-				 ARRAY_SIZE(panthor_debugfs_list),
+	drm_debugfs_create_files(panfrost_debugfs_list,
+				 ARRAY_SIZE(panfrost_debugfs_list),
 				 minor->debugfs_root, minor);
 
 	return 0;
@@ -915,7 +915,7 @@ static void panfrost_sched_debugfs_init(struct drm_minor *minor)
 
 static void panfrost_debugfs_init(struct drm_minor *minor)
 {
-	panthor_gems_debugfs_init(minor);
+	panfrost_gems_debugfs_init(minor);
 	panfrost_sched_debugfs_init(minor);
 }
 #endif
