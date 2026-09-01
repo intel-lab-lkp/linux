@@ -42,5 +42,5 @@ struct llc_conn_state {
 	const struct llc_conn_state_trans **transitions;
 };
 
-extern struct llc_conn_state llc_conn_state_table[];
+extern struct llc_conn_state llc_conn_state_table[NBR_CONN_STATES];
 #endif /* LLC_C_ST_H */

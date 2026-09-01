@@ -36,10 +36,37 @@ static const struct llc_conn_state_trans *llc_qualify_conn_ev(struct sock *sk,
 /* Offset table on connection states transition diagram */
 static int llc_offset_table[NBR_CONN_STATES][NBR_CONN_EV];
 
+/* Both tables are walked together with the same "state - 1" index. */
+static_assert(ARRAY_SIZE(llc_offset_table) == ARRAY_SIZE(llc_conn_state_table));
+
 int sysctl_llc2_ack_timeout = LLC2_ACK_TIME * HZ;
 int sysctl_llc2_p_timeout = LLC2_P_TIME * HZ;
 int sysctl_llc2_rej_timeout = LLC2_REJ_TIME * HZ;
 int sysctl_llc2_busy_timeout = LLC2_BUSY_TIME * HZ;
+
+/**
+ *	llc_conn_state_in_service - can this state drive the state machine?
+ *	@state: state of connection
+ *
+ *	Connection states are 1-based indexes into llc_conn_state_table[] and
+ *	llc_offset_table[]. LLC_CONN_OUT_OF_SVC is not a state of the state
+ *	machine at all: it marks a connection that has no transition table,
+ *	either because it has not been brought up yet or because it has been
+ *	torn down. Returns true if @state has a row in those tables.
+ */
+static bool llc_conn_state_in_service(u8 state)
+{
+	/*
+	 * The tables are indexed with "state - 1", so the numbering has to be
+	 * dense, start right after the LLC_CONN_OUT_OF_SVC sentinel, and end
+	 * at NBR_CONN_STATES for the bounds below to be the real ones.
+	 */
+	static_assert(LLC_CONN_OUT_OF_SVC == 0);
+	static_assert(LLC_CONN_STATE_ADM == LLC_CONN_OUT_OF_SVC + 1);
+	static_assert(LLC_CONN_STATE_TEMP == NBR_CONN_STATES);
+
+	return state > LLC_CONN_OUT_OF_SVC && state <= NBR_CONN_STATES;
+}
 
 /**
  *	llc_conn_state_process - sends event to connection state machine
@@ -58,6 +85,15 @@ int llc_conn_state_process(struct sock *sk, struct sk_buff *skb)
 	int rc;
 	struct llc_sock *llc = llc_sk(skb->sk);
 	struct llc_conn_state_ev *ev = llc_conn_ev(skb);
+
+	/*
+	 * An out of service connection has no row in llc_conn_state_table[],
+	 * so it cannot be driven by any event.
+	 */
+	if (unlikely(!llc_conn_state_in_service(llc->state))) {
+		kfree_skb(skb);
+		return 1;
+	}
 
 	ev->ind_prim = ev->cfm_prim = 0;
 	/*
@@ -354,7 +390,7 @@ static int llc_conn_service(struct sock *sk, struct sk_buff *skb)
 	struct llc_sock *llc = llc_sk(sk);
 	int rc = 1;
 
-	if (llc->state > NBR_CONN_STATES)
+	if (!llc_conn_state_in_service(llc->state))
 		goto out;
 	rc = 0;
 	trans = llc_qualify_conn_ev(sk, skb);
