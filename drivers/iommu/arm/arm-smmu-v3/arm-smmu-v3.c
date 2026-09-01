@@ -3399,6 +3399,7 @@ void arm_smmu_attach_release(struct arm_smmu_attach_state *state)
 	struct arm_smmu_master_domain *master_domain = state->old_master_domain;
 	struct arm_smmu_master *master = state->master;
 	struct arm_smmu_device *smmu = master->smmu;
+	int ret = 0;
 
 	lockdep_assert_not_held(&arm_smmu_asid_lock);
 	iommu_group_mutex_assert(master->dev);
@@ -3412,8 +3413,40 @@ void arm_smmu_attach_release(struct arm_smmu_attach_state *state)
 	 * up once the IOMMU core swaps the handle, mistakenly resuming it
 	 * against the next domain.
 	 */
-	if (master->stall_enabled)
-		arm_smmu_drain_queue(smmu, &smmu->evtq.q, false);
+	if (master->stall_enabled) {
+		ret = arm_smmu_drain_queue(smmu, &smmu->evtq.q, false);
+		/*
+		 * Ensure pending events have reached the IOPF queue, unless
+		 * the drain timed out: a stuck consumer would also block an
+		 * unbounded wait_event() inside the synchronize_irq().
+		 */
+		if (!ret && smmu->evtq.q.irq)
+			synchronize_irq(smmu->evtq.q.irq);
+		/* Pending events might be in the combined_irq handler */
+		if (!ret && smmu->combined_irq)
+			synchronize_irq(smmu->combined_irq);
+	}
+
+	/*
+	 * Only IOPF-enabled attachments queue fault work, and such work
+	 * references the old domain via its attach handle. Flush it, as
+	 * the IOMMU core might free the old domain once this returns.
+	 */
+	if (master_domain->using_iopf) {
+		/* Lastly, drain the IOPF queue */
+		iopf_queue_flush_dev(master->dev);
+
+		/*
+		 * A timed-out drain may leave fault work in flight, and
+		 * iopf_queue_remove_device() would free iopf groups that
+		 * such work still references. Skip the iopf teardown and
+		 * leak master_domain, rather than risk a UAF.
+		 */
+		if (WARN_ON(ret)) {
+			state->old_master_domain = NULL;
+			return;
+		}
+	}
 
 	arm_smmu_disable_iopf(master, master_domain);
 	kfree(master_domain);
@@ -4397,7 +4430,16 @@ static void arm_smmu_release_device(struct device *dev)
 {
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
 
-	WARN_ON(master->iopf_refcount);
+	/*
+	 * A timed-out drain in arm_smmu_attach_release() leaks the refcount,
+	 * keeping the device on the IOPF queue. Reclaim it here, since every
+	 * attach handle is gone: a straggler fault can no longer queue a new
+	 * fault group, so the queue turns stable once flushed.
+	 */
+	if (WARN_ON(master->iopf_refcount)) {
+		iopf_queue_flush_dev(dev);
+		iopf_queue_remove_device(master->smmu->evtq.iopf, dev);
+	}
 
 	arm_smmu_disable_pasid(master);
 	arm_smmu_remove_master(master);
