@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/axera.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Axera platforms
+
+maintainers:
+  - Shi Zhicheng <shizhicheng@axera-tech.com>
+  - Leng Honglin <lenghonglin@axera-tech.com>
+
+properties:
+  $nodename:
+    const: '/'
+  compatible:
+    oneOf:
+      - items:
+          - const: axera,ax650-demo
+          - const: axera,ax650
+
+additionalProperties: true
+
+...
