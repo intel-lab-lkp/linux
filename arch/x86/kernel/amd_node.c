@@ -88,14 +88,14 @@ static int __amd_smn_rw(u8 i_off, u8 d_off, u16 node, u32 address, u32 *value, b
 	struct pci_dev *root;
 	int err = -ENODEV;
 
+	if (!smn_exclusive)
+		return err;
+
 	if (node >= amd_num_nodes())
 		return err;
 
 	root = amd_roots[node];
 	if (!root)
-		return err;
-
-	if (!smn_exclusive)
 		return err;
 
 	guard(mutex)(&smn_mutex);
@@ -250,6 +250,18 @@ static int __init amd_smn_init(void)
 	struct pci_dev *root;
 
 	if (!cpu_feature_enabled(X86_FEATURE_ZEN))
+		return 0;
+
+	/*
+	 * Hygon models outside this range, including legacy parts, keep the
+	 * existing AMD SMN setup. Models 0x04-0x08 group SMN roots by socket
+	 * instead of amd_num_nodes(), so leave AMD SMN inactive. The Hygon node
+	 * layer, when built, owns their node-to-root mapping.
+	 */
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON &&
+	    boot_cpu_data.x86 == 0x18 &&
+	    boot_cpu_data.x86_model >= 0x04 &&
+	    boot_cpu_data.x86_model <= 0x08)
 		return 0;
 
 	guard(mutex)(&smn_mutex);
