@@ -528,6 +528,7 @@ static irqreturn_t cxl_event_thread(int irq, void *id)
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
 	u32 mask = CXLDEV_EVENT_STATUS_ALL;
 	int attempts = CXL_EVENT_DRAIN_ATTEMPTS;
+	bool handled = false;
 
 	while (mask) {
 		u32 status, drained, stuck;
@@ -542,6 +543,7 @@ static irqreturn_t cxl_event_thread(int irq, void *id)
 		status &= mask;
 		if (!status)
 			break;
+		handled = true;
 
 		rc = cxl_mem_get_event_records(mds, status, &drained);
 		if (rc) {
@@ -579,7 +581,7 @@ static irqreturn_t cxl_event_thread(int irq, void *id)
 		cond_resched();
 	}
 
-	return IRQ_HANDLED;
+	return handled ? IRQ_HANDLED : IRQ_NONE;
 }
 
 static int cxl_event_req_irq(struct cxl_dev_state *cxlds, u8 setting)
