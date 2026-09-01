@@ -117,6 +117,13 @@ static void nft_flow_offload_eval(const struct nft_expr *expr,
 	if (tcph)
 		flow_offload_ct_tcp(ct);
 
+	/* Whatever classified this packet before it reached the flowtable also
+	 * describes every packet the hardware will forward in its place, so
+	 * carry it into the offload rather than losing it with the software
+	 * path.
+	 */
+	flow->priority = pkt->skb->priority;
+
 	__set_bit(NF_FLOW_HW_BIDIRECTIONAL, &flow->flags);
 	ret = flow_offload_add(flowtable, flow);
 	if (ret < 0)
