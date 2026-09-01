@@ -1240,15 +1240,25 @@ int nf_nat_register_fn(struct net *net, u8 pf, const struct nf_hook_ops *ops,
 	nat_ops = nat_proto_net->nat_hook_ops;
 	priv = nat_ops[hooknum].priv;
 	if (WARN_ON_ONCE(!priv)) {
-		mutex_unlock(&nf_nat_proto_mutex);
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
+		goto err_out;
 	}
 
 	ret = nf_hook_entries_insert_raw(&priv->entries, ops);
-	if (ret == 0)
-		nat_proto_net->users++;
+	if (ret)
+		goto err_out;
 
+	nat_proto_net->users++;
 	mutex_unlock(&nf_nat_proto_mutex);
+
+	return 0;
+err_out:
+	if (nat_proto_net->users == 0) {
+		nf_unregister_net_hooks(net, nat_ops, ops_count);
+		mutex_unlock(&nf_nat_proto_mutex);
+		kfree_rcu(nat_ops, rcu);
+	}
+
 	return ret;
 }
 
