@@ -1515,6 +1515,18 @@ config SCSI_VIRTIO
           This is the virtual HBA driver for virtio.  If the kernel will
           be used in a virtual machine, say Y or M.
 
+config VIRTIO_SCSI_PCI_EPF_TARGET
+	tristate "VirtIO SCSI PCI Endpoint target driver"
+	depends on PCI_ENDPOINT
+	select TARGET_CORE
+	help
+	  This driver implements a virtio-scsi target on top of the PCI
+	  Endpoint Function (EPF) framework. The remote PCI Root Complex
+	  sees the function as a virtio-scsi PCI device backed by LUNs
+	  exported from a configfs-configured target portal group.
+
+	  Say M to build this driver as a module called virtio-scsi-pci-epf.
+
 source "drivers/scsi/csiostor/Kconfig"
 
 source "drivers/scsi/pcmcia/Kconfig"

@@ -161,6 +161,7 @@ obj-$(CONFIG_BE2ISCSI)		+= libiscsi.o be2iscsi/
 obj-$(CONFIG_SCSI_ESAS2R)	+= esas2r/
 obj-$(CONFIG_SCSI_PMCRAID)	+= pmcraid.o
 obj-$(CONFIG_SCSI_VIRTIO)	+= virtio_scsi.o
+obj-$(CONFIG_VIRTIO_SCSI_PCI_EPF_TARGET)	+= virtio-scsi-pci-epf.o
 obj-$(CONFIG_VMWARE_PVSCSI)	+= vmw_pvscsi.o
 obj-$(CONFIG_XEN_SCSI_FRONTEND)	+= xen-scsifront.o
 obj-$(CONFIG_HYPERV_STORAGE)	+= hv_storvsc.o
