@@ -15,6 +15,9 @@
 
 int efi_tpm_final_log_size;
 EXPORT_SYMBOL(efi_tpm_final_log_size);
+#ifdef CONFIG_KEXEC_CORE
+static unsigned int efi_tpm_eventlog_size __initdata;
+#endif
 
 static int __init tpm2_calc_event_log_size(void *data, int count, void *size_info)
 {
@@ -68,6 +71,10 @@ int __init efi_tpm_eventlog_init(void)
 		goto out;
 	}
 
+#ifdef CONFIG_KEXEC_CORE
+	efi_tpm_eventlog_size = tbl_size;
+#endif
+
 	if (efi.tpm_final_log == EFI_INVALID_TABLE_ADDR) {
 		pr_info("TPM Final Events table not present\n");
 		goto out;
@@ -113,4 +120,24 @@ out:
 	early_memunmap(log_tbl, sizeof(*log_tbl));
 	return ret;
 }
+
+#ifdef CONFIG_KEXEC_CORE
+static int __init efi_tpm_eventlog_reserve_persistent(void)
+{
+	int ret;
+
+	if (efi.tpm_log == EFI_INVALID_TABLE_ADDR ||
+	    !efi_tpm_eventlog_size)
+		return 0;
+
+	ret = efi_mem_reserve_persistent(efi.tpm_log,
+					 efi_tpm_eventlog_size);
+	if (ret)
+		pr_warn("Failed to persistently reserve TPM Event Log: %d\n",
+			ret);
+
+	return 0;
+}
+late_initcall(efi_tpm_eventlog_reserve_persistent);
+#endif
 
