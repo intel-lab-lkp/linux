@@ -58,6 +58,19 @@ static int npa_aq_enqueue_wait(struct rvu *rvu, struct rvu_block *block,
 	return 0;
 }
 
+static int npa_aura_translate_pool_addr(struct rvu_pfvf *pfvf, u64 *pool_addr)
+{
+	if (!pfvf->pool_ctx)
+		return NPA_AF_ERR_AQ_ENQUEUE;
+
+	if (*pool_addr >= pfvf->pool_ctx->qsize)
+		return NPA_AF_ERR_PARAM;
+
+	*pool_addr = pfvf->pool_ctx->iova +
+		     (*pool_addr * pfvf->pool_ctx->entry_sz);
+	return 0;
+}
+
 int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 			struct npa_aq_enq_rsp *rsp)
 {
@@ -116,6 +129,12 @@ int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 	case NPA_AQ_INSTOP_WRITE:
 		/* Copy context and write mask */
 		if (req->ctype == NPA_AQ_CTYPE_AURA) {
+			if (req->aura_mask.pool_addr) {
+				rc = npa_aura_translate_pool_addr(pfvf,
+								  &req->aura.pool_addr);
+				if (rc)
+					break;
+			}
 			memcpy(mask, &req->aura_mask,
 			       sizeof(struct npa_aura_s));
 			memcpy(ctx, &req->aura, sizeof(struct npa_aura_s));
@@ -127,13 +146,10 @@ int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 		break;
 	case NPA_AQ_INSTOP_INIT:
 		if (req->ctype == NPA_AQ_CTYPE_AURA) {
-			if (req->aura.pool_addr >= pfvf->pool_ctx->qsize) {
-				rc = NPA_AF_ERR_AQ_FULL;
+			rc = npa_aura_translate_pool_addr(pfvf,
+							  &req->aura.pool_addr);
+			if (rc)
 				break;
-			}
-			/* Set pool's context address */
-			req->aura.pool_addr = pfvf->pool_ctx->iova +
-			(req->aura.pool_addr * pfvf->pool_ctx->entry_sz);
 			memcpy(ctx, &req->aura, sizeof(struct npa_aura_s));
 		} else { /* POOL's context */
 			memcpy(ctx, &req->pool, sizeof(struct npa_pool_s));
