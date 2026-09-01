@@ -1110,6 +1110,14 @@ static int cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 		nr_rec = le16_to_cpu(payload->record_count);
 		if (!nr_rec)
 			break;
+
+		if (struct_size(payload, records, nr_rec) > mbox_cmd.size_out) {
+			dev_err_ratelimited(dev,
+				"Event log '%d': record count %u mismatch in %zu byte payload",
+				type, nr_rec, mbox_cmd.size_out);
+			rc = -EIO;
+			break;
+		}
 		*got_records = true;
 
 		for (i = 0; i < nr_rec; i++)
