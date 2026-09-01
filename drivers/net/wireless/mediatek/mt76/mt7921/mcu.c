@@ -483,11 +483,14 @@ static int mt7921_load_clc(struct mt792x_dev *dev, const char *fw_name)
 
 		clc = (const struct mt7921_clc *)(clc_base + offset);
 		clc_len = le32_to_cpu(clc->len);
-		if (clc_len < sizeof(*clc) || clc_len > len - offset ||
-		    clc->idx >= ARRAY_SIZE(phy->clc)) {
+		if (clc_len < sizeof(*clc) || clc_len > len - offset) {
 			ret = -EINVAL;
 			goto out;
 		}
+
+		/* record type newer than this driver */
+		if (clc->idx >= ARRAY_SIZE(phy->clc))
+			continue;
 
 		/* do not init buf again if chip reset triggered */
 		if (phy->clc[clc->idx])
