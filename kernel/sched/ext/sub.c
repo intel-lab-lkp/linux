@@ -2265,6 +2265,9 @@ static s32 sub_cap_preamble(u64 cgroup_id, u64 caps, const struct bpf_prog_aux *
 	if (unlikely(!parent))
 		return -ENODEV;
 
+	if (!scx_kfunc_nmi_safe("sub-cap kfuncs", parent))
+		return -EBUSY;
+
 	if (!scx_is_cid_type()) {
 		scx_error(parent, "sub-cap kfuncs require a cid-form scheduler");
 		return -EOPNOTSUPP;

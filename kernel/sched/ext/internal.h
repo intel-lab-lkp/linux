@@ -2091,6 +2091,28 @@ extern struct scx_sched *scx_enabling_sub_sched;
 #define scx_error(sch, fmt, args...)						\
 	scx_exit((sch), SCX_EXIT_ERROR, 0, fmt, ##args)
 
+/*
+ * sched_ext kfuncs that take scheduler locks are not NMI-safe: a
+ * BPF_PROG_TYPE_TRACING program can be attached to a function that runs in
+ * NMI, and scx_kfunc_context_filter() lets such a program call every kfunc in
+ * the any/cid/idle sets. Acquiring the rq, dsq or pshard raw spinlocks - or
+ * touching the irq-masking-only kick list - from NMI while the interrupted
+ * context on the same CPU already holds them deadlocks (or corrupts) it.
+ * scx_bpf_kick_cpu() was the first guard; route all of them through here.
+ *
+ * Returns true when the caller may proceed, false when running from NMI and
+ * the kfunc must bail without touching locks. scx_error() is NMI-safe (see the
+ * lock-free ->aborting claim).
+ */
+static inline bool scx_kfunc_nmi_safe(const char *who, struct scx_sched *sch)
+{
+	if (unlikely(in_nmi())) {
+		scx_error(sch, "%s called from NMI", who);
+		return false;
+	}
+	return true;
+}
+
 /**
  * scx_root_protected_live - Root sched for paths that only run while live
  *
