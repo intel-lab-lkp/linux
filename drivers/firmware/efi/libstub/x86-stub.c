@@ -1015,6 +1015,8 @@ void __noreturn efi_stub_entry(efi_handle_t handle,
 
 	efi_retrieve_eventlog();
 
+	install_memreserve_table();
+
 	setup_graphics(boot_params);
 
 	setup_efi_pci(boot_params);

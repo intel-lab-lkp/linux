@@ -77,29 +77,6 @@ err_free_primary_display:
 	return NULL;
 }
 
-static void install_memreserve_table(void)
-{
-	struct linux_efi_memreserve *rsv;
-	efi_guid_t memreserve_table_guid = LINUX_EFI_MEMRESERVE_TABLE_GUID;
-	efi_status_t status;
-
-	status = efi_bs_call(allocate_pool, EFI_LOADER_DATA, sizeof(*rsv),
-			     (void **)&rsv);
-	if (status != EFI_SUCCESS) {
-		efi_err("Failed to allocate memreserve entry!\n");
-		return;
-	}
-
-	rsv->next = 0;
-	rsv->size = 0;
-	atomic_set(&rsv->count, 0);
-
-	status = efi_bs_call(install_configuration_table,
-			     &memreserve_table_guid, rsv);
-	if (status != EFI_SUCCESS)
-		efi_err("Failed to install memreserve config table!\n");
-}
-
 static u32 get_supported_rt_services(void)
 {
 	const efi_rt_properties_table_t *rt_prop_table;
