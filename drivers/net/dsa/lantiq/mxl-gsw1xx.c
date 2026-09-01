@@ -13,6 +13,7 @@
 #include <linux/delay.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_mdio.h>
 #include <linux/phy/phy-common-props.h>
@@ -588,6 +589,44 @@ static void gsw150_phylink_get_caps(struct dsa_switch *ds, int port,
 	gsw1xx_phylink_get_lpi_caps(config);
 }
 
+static int gsw1xx_setup(struct dsa_switch *ds)
+{
+	struct gswip_priv *gswip_priv = ds->priv;
+	struct gsw1xx_priv *priv = container_of(gswip_priv, struct gsw1xx_priv, gswip);
+	struct device_node *phy_np;
+	struct dsa_port *dp;
+	u32 phy_reset_mask = 0;
+	int ret;
+
+	dsa_switch_for_each_user_port(dp, ds) {
+		struct phylink_config cfg = {};
+
+		/* Is there an internal PHY on this port? */
+		gswip_priv->hw_info->phylink_get_caps(ds, dp->index, &cfg);
+		if (!test_bit(PHY_INTERFACE_MODE_INTERNAL, cfg.supported_interfaces))
+			continue;
+
+		/* Will the PHY be really used? */
+		phy_np = of_parse_phandle(dp->dn, "phy-handle", 0);
+		if (!phy_np)
+			continue;
+
+		of_node_put(phy_np);
+		phy_reset_mask |= GSW1XX_RST_REQ_PHY(dp->index);
+	}
+
+	if (!phy_reset_mask)
+		return 0;
+
+	/* Deassert resets only for PHYs referenced by active ports */
+	ret = regmap_clear_bits(priv->shell, GSW1XX_SHELL_RST_REQ, phy_reset_mask);
+	if (ret)
+		return ret;
+	msleep(300);
+
+	return 0;
+}
+
 static struct phylink_pcs *gsw1xx_phylink_mac_select_pcs(struct phylink_config *config,
 							 phy_interface_t interface)
 {
@@ -829,6 +868,7 @@ static const struct gswip_hw_info gsw12x_data = {
 		[GSW1XX_MII_PORT] = GSWIP_MII_PCDU0,
 		[GSW1XX_MII_PORT + 1 ... GSWIP_MAX_PORTS - 1] = -1,
 	},
+	.setup			= gsw1xx_setup,
 	.mac_select_pcs		= gsw1xx_phylink_mac_select_pcs,
 	.phylink_get_caps	= &gsw1xx_phylink_get_caps,
 	.supports_2500m		= true,
@@ -851,6 +891,7 @@ static const struct gswip_hw_info gsw140_data = {
 		[GSW1XX_MII_PORT] = GSWIP_MII_PCDU0,
 		[GSW1XX_MII_PORT + 1 ... GSWIP_MAX_PORTS - 1] = -1,
 	},
+	.setup			= gsw1xx_setup,
 	.mac_select_pcs		= gsw1xx_phylink_mac_select_pcs,
 	.phylink_get_caps	= &gsw1xx_phylink_get_caps,
 	.supports_2500m		= true,
@@ -873,6 +914,7 @@ static const struct gswip_hw_info gsw141_data = {
 		[GSW1XX_MII_PORT] = GSWIP_MII_PCDU0,
 		[GSW1XX_MII_PORT + 1 ... GSWIP_MAX_PORTS - 1] = -1,
 	},
+	.setup			= gsw1xx_setup,
 	.mac_select_pcs		= gsw1xx_phylink_mac_select_pcs,
 	.phylink_get_caps	= gsw1xx_phylink_get_caps,
 	.port_setup		= gsw1xx_port_setup,
@@ -894,6 +936,7 @@ static const struct gswip_hw_info gsw150_data = {
 		[5] = 1,
 		[6] = 11,
 	},
+	.setup			= gsw1xx_setup,
 	.phylink_get_caps	= gsw150_phylink_get_caps,
 	/* There is only a single RGMII_SLEW_CFG register in GSW150 and it is
 	 * unknown if RGMII slew configuration affects both RGMII ports
