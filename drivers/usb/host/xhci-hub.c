@@ -769,8 +769,17 @@ enum usb_link_tunnel_mode xhci_port_is_tunneled(struct xhci_hcd *xhci,
 	struct usb_hcd *hcd;
 	void __iomem *base;
 	u32 offset;
+	u32 val;
 
-	/* Don't try and probe this capability for non-Intel hosts */
+	if (xhci->portsc_tunnel_reporting) {
+		val = xhci_portsc_readl(port);
+		if (val & PORT_TM)
+			return USB_LINK_TUNNELED;
+
+		return USB_LINK_NATIVE;
+	}
+
+	/* Fall back to the legacy Intel-specific ext_cap */
 	hcd = xhci_to_hcd(xhci);
 	if (!dev_is_pci(hcd->self.controller) ||
 	    to_pci_dev(hcd->self.controller)->vendor != PCI_VENDOR_ID_INTEL)

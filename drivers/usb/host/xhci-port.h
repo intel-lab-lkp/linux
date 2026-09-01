@@ -5,7 +5,8 @@
 #define PORT_CONNECT	(1 << 0)
 /* true: port enabled */
 #define PORT_PE		(1 << 1)
-/* bit 2 reserved and zeroed */
+/* true: port is tunneling traffic over USB4 */
+#define PORT_TM		(1 << 2)
 /* true: port has an over-current condition */
 #define PORT_OC		(1 << 3)
 /* true: port reset signaling asserted */
