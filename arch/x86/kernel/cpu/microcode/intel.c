@@ -864,13 +864,38 @@ static enum ucode_state apply_microcode_late(int cpu)
 	return ret;
 }
 
+static bool is_revision_candidate(unsigned int cur_rev, unsigned int rev)
+{
+	/*
+	 * A revision must be newer than the active microcode revision to be
+	 * loadable.
+	 */
+	if (rev <= boot_cpu_data.microcode)
+		return false;
+
+	/*
+	 * Iterative loading selects the lowest loadable revision so that
+	 * revisions can be applied incrementally.
+	 */
+	if (iterative_loading)
+		return rev < cur_rev;
+
+	/* Legacy late loading selects the highest loadable revision. */
+	return rev > cur_rev;
+}
+
 static enum ucode_state parse_microcode_blobs(int cpu, struct iov_iter *iter)
 {
 	struct ucode_cpu_info *uci = ucode_cpu_info + cpu;
+	unsigned int cur_rev, curr_mc_size = 0;
 	bool is_safe, new_is_safe = false;
-	int cur_rev = uci->cpu_sig.rev;
-	unsigned int curr_mc_size = 0;
 	u8 *new_mc = NULL, *mc = NULL;
+
+	/*
+	 * Start from the boundary value for the revision search. With iterative
+	 * loading search walks downward but the legacy search walks upward.
+	 */
+	cur_rev = iterative_loading ? UINT_MAX : 0;
 
 	while (iov_iter_count(iter)) {
 		struct microcode_header_intel mc_header;
@@ -908,7 +933,7 @@ static enum ucode_state parse_microcode_blobs(int cpu, struct iov_iter *iter)
 		    intel_microcode_sanity_check(mc, true, MC_HEADER_TYPE_MICROCODE) < 0)
 			goto fail;
 
-		if (cur_rev >= mc_header.rev)
+		if (!is_revision_candidate(cur_rev, mc_header.rev))
 			continue;
 
 		if (!intel_find_matching_signature(mc, &uci->cpu_sig))
@@ -976,9 +1001,6 @@ static enum ucode_state request_microcode_fw(int cpu, struct device *device)
 	char name[30];
 
 	if (is_late_loading_denied(cpu))
-		return UCODE_NFOUND;
-
-	if (iterative_loading)
 		return UCODE_NFOUND;
 
 	sprintf(name, "intel-ucode/%02x-%02x-%02x",
