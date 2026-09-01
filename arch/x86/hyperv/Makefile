@@ -2,6 +2,7 @@
 obj-y			:= hv_init.o mmu.o nested.o irqdomain.o ivm.o
 obj-$(CONFIG_X86_64)	+= hv_apic.o
 obj-$(CONFIG_HYPERV_VTL_MODE)	+= hv_vtl.o mshv_vtl_asm.o
+obj-$(CONFIG_HYPERV_VSM)	+= hv_vtl_vsm.o
 
 $(obj)/mshv_vtl_asm.o: $(obj)/mshv-asm-offsets.h
 

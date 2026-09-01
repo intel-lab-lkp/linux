@@ -7,6 +7,7 @@
 #include <linux/msi.h>
 #include <linux/io.h>
 #include <linux/static_call.h>
+#include <linux/elf.h>
 #include <asm/nospec-branch.h>
 #include <asm/msr.h>
 #include <hyperv/hvhdk.h>
@@ -247,6 +248,14 @@ void hv_crash_asm_end(void);
 #else   /* CONFIG_MSHV_ROOT && CONFIG_CRASH_DUMP */
 static inline void hv_root_crash_init(void) {}
 #endif  /* CONFIG_MSHV_ROOT && CONFIG_CRASH_DUMP */
+
+#ifdef CONFIG_HYPERV_VSM
+void __init hv_vsm_arch_init_vp(struct hv_init_vp_context *vp_ctx, Elf64_Addr sk_entry_pa,
+				phys_addr_t sk_pa);
+#else /* CONFIG_HYPERV_VSM */
+static inline void __init hv_vsm_arch_init_vp(struct hv_init_vp_context *vp_ctx,
+					      Elf64_Addr sk_entry_pa, phys_addr_t sk_pa) {}
+#endif
 
 #else /* CONFIG_HYPERV */
 static inline void hyperv_init(void) {}
