@@ -297,6 +297,30 @@
 					// supply for U8500 CSI/DSI; VANA LDO
 					ab8500_ldo_ana_reg: ab8500_ldo_ana {
 					};
+
+					// 1.2 V I/O and memory supply for DB8500 and peripherals
+					ab8505_buck_vsmpsa: ab8505_buck_smpsa {
+					};
+
+					// 1.8 V I/O and memory supply for DB8500 and peripherals
+					buck_vio18: ab8505_buck_vsmpsb: ab8505_buck_smpsb {
+					};
+
+					// DB8500 VSAFE supply for permanent logic and DDR PHY
+					ab8505_buck_vsafe: ab8505_buck_safe {
+					};
+
+					// DB8500 Cortex-A9 supply
+					ab8505_buck_varm: ab8505_buck_arm {
+					};
+
+					// DB8500 APE logic and multimedia accelerator supply
+					ab8505_buck_vsmpsc: ab8505_buck_smpsc {
+					};
+
+					// DB8500 modem subsystem supply
+					ab8505_buck_vsmpsm: ab8505_buck_smpsm {
+					};
 				};
 			};
 		};
