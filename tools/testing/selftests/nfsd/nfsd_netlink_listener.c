@@ -361,6 +361,28 @@ static int listener_set(const char *attrs, int len)
 	return genl_request(NFSD_CMD_LISTENER_SET, attrs, len);
 }
 
+/*
+ * Enable exactly one NFS version in this netns. NFSD_CMD_VERSION_SET clears
+ * every version first, so one nest is enough to leave the server v4-only.
+ * It refuses once a serv exists, so call it before any listener.
+ */
+static int version_set_only(uint32_t major, uint32_t minor)
+{
+	char attrs[64];
+	struct nlattr *nest = (void *)attrs;
+	int inner = NLA_HDRLEN;
+
+	inner = put_attr(attrs, inner, NFSD_A_VERSION_MAJOR,
+			 &major, sizeof(major));
+	inner = put_attr(attrs, inner, NFSD_A_VERSION_MINOR,
+			 &minor, sizeof(minor));
+	inner = put_attr(attrs, inner, NFSD_A_VERSION_ENABLED, NULL, 0);
+	nest->nla_type = NFSD_A_SERVER_PROTO_VERSION | NLA_F_NESTED;
+	nest->nla_len = inner;
+
+	return genl_request(NFSD_CMD_VERSION_SET, attrs, NLA_ALIGN4(inner));
+}
+
 /* Fetch the current listeners; returns count (>=0) or -errno. */
 static int listener_get(struct listener_ent *out, int max)
 {
@@ -431,6 +453,14 @@ static int threads_set(int n)
  * rpcb_register_call() reports as -EACCES. UNSET is left alone: only
  * svc_unregister() issues it, and it discards the result.
  *
+ * In RPCB_STUB_SILENT mode a SET or an UNSET is read and nothing is written
+ * back, so the kernel waits out its own timeout. That is the only mode that
+ * makes rpcb_register_call() report a call that got no answer, which is what
+ * the per-net failure count records. The NULL procedure is still answered:
+ * rpcb_create_af_local() builds its client without RPC_CLNT_CREATE_NOPING, so
+ * rpc_create() pings, and a ping that goes unanswered drops the kernel onto
+ * the loopback rpcb_create_local_net() client, which never reaches this stub.
+ *
  * The stub also keeps counters and the mode in a page shared with the test, so
  * a test can assert that the kernel never talked to rpcbind at all, or that it
  * dropped the local rpcbind client and had to reconnect.
@@ -448,7 +478,7 @@ static int threads_set(int n)
 #define RPCB_ABSTRACT_NAME	"/run/rpcbind.sock"
 #define RPCB_STUB_MAXCONN	4
 
-enum { RPCB_STUB_ACCEPT, RPCB_STUB_REFUSE };
+enum { RPCB_STUB_ACCEPT, RPCB_STUB_REFUSE, RPCB_STUB_SILENT };
 
 struct rpcb_stub_stats {
 	unsigned int conns;		/* connections accepted */
@@ -563,7 +593,9 @@ static int rpcb_stub_call(int fd)
 	if (ntohl(call[3]) != RPCB_PROGRAM) {
 		rep[5] = htonl(1);	/* PROG_UNAVAIL */
 	} else {
-		switch (ntohl(call[5])) {
+		unsigned int proc = ntohl(call[5]);
+
+		switch (proc) {
 		case RPCB_PROC_NULL:
 			break;
 		case RPCB_PROC_SET:
@@ -577,6 +609,15 @@ static int rpcb_stub_call(int fd)
 		default:
 			rep[5] = htonl(3);	/* PROC_UNAVAIL */
 		}
+
+		/*
+		 * Answer nothing, so the caller waits out its timeout. The
+		 * NULL procedure is answered even here: the kernel pings at
+		 * client creation, and a ping with no answer takes it off
+		 * this socket entirely.
+		 */
+		if (mode == RPCB_STUB_SILENT && proc != RPCB_PROC_NULL)
+			return 0;
 	}
 
 	replen = nrep * sizeof(rep[0]);
@@ -1062,6 +1103,144 @@ TEST_F(nfsd_listener, sem_create_failure_extack)
 	EXPECT_STRNE("", last_extack);
 	EXPECT_EQ(0, listener_get(got, MAX_LISTENERS));
 	close(s);
+}
+
+/* ============ one rpcbind attempt for each request ============ */
+
+/*
+ * Every listener used to register on its own, so a rpcbind that never
+ * answers cost one timeout for each entry. Ask for one listener, then for
+ * three, and compare what the stub saw. Three entries must not cost three
+ * times as much.
+ *
+ * The stub has to stay silent rather than refuse. A refusal is an answer,
+ * and rpcbind refuses one entry at a time, so the count ignores it.
+ */
+TEST_F(nfsd_listener, rpcb_stop_after_failure)
+{
+	int before, one, three, off;
+	char attrs[192];
+
+	rpcb_stub_set_mode(RPCB_STUB_SILENT);
+
+	before = rpcb_calls();
+	off = put_listener(attrs, 0, "tcp", TEST_PORT);
+	listener_set(attrs, off);
+	one = rpcb_calls() - before;
+	ASSERT_GT(one, 0);
+
+	ASSERT_EQ(0, listener_set(attrs, 0));
+
+	before = rpcb_calls();
+	off = put_listener(attrs, 0, "tcp", TEST_PORT);
+	off = put_listener(attrs, off, "tcp", TEST_PORT + 1);
+	off = put_listener(attrs, off, "tcp", TEST_PORT + 2);
+	listener_set(attrs, off);
+	three = rpcb_calls() - before;
+
+	/* the second and third entries must not reach rpcbind at all */
+	EXPECT_LE(three, one);
+}
+
+/*
+ * The entry that finds rpcbind silent is the one that pays for the
+ * discovery, and v3 has no vs_rpcb_optnl to discard the error, so it is the
+ * only entry whose listener would be lost. Nothing distinguishes it from the
+ * rest of the request, and a retry of the same request would fail the same
+ * entry again, so the set would stay short for as long as rpcbind was quiet.
+ *
+ * Ask for three listeners against a silent stub and require the whole set,
+ * a success, and a warning that says why.
+ */
+TEST_F(nfsd_listener, rpcb_silent_set_complete)
+{
+	struct listener_ent got[MAX_LISTENERS];
+	char attrs[192];
+	int off;
+
+	rpcb_stub_set_mode(RPCB_STUB_SILENT);
+
+	off = put_listener(attrs, 0, "tcp", TEST_PORT);
+	off = put_listener(attrs, off, "tcp", TEST_PORT + 1);
+	off = put_listener(attrs, off, "tcp", TEST_PORT + 2);
+	EXPECT_EQ(0, listener_set(attrs, off));
+
+	/* the first entry is not the odd one out */
+	EXPECT_EQ(3, listener_get(got, MAX_LISTENERS));
+	/* no errno reports this, so the ack has to */
+	EXPECT_STRNE("", last_extack);
+}
+
+/*
+ * The case that needs the count rather than a failed listener. NFSv4 sets
+ * vs_rpcb_optnl, so svc_generic_rpcbind_set() discards the error, every
+ * listener comes up, and nothing reports a failure. Without the fix each
+ * entry still waits for rpcbind on its own.
+ *
+ * Make the server v4-only, answer no SET, and require three things: the
+ * listeners come up, the ack warns that they are not registered, and the
+ * stub does not see one round trip for each entry.
+ */
+TEST_F(nfsd_listener, rpcb_v4_only_bounded)
+{
+	struct listener_ent got[MAX_LISTENERS];
+	int before, one, three, off;
+	char attrs[192];
+
+	/* refuses once a serv exists, so this has to come first */
+	ASSERT_EQ(0, version_set_only(4, 1));
+	rpcb_stub_set_mode(RPCB_STUB_SILENT);
+
+	before = rpcb_calls();
+	off = put_listener(attrs, 0, "tcp", TEST_PORT);
+	ASSERT_EQ(0, listener_set(attrs, off));
+	one = rpcb_calls() - before;
+	ASSERT_GT(one, 0);
+
+	/* start over, so the second measurement also builds a serv */
+	ASSERT_EQ(0, listener_set(attrs, 0));
+
+	before = rpcb_calls();
+	off = put_listener(attrs, 0, "tcp", TEST_PORT);
+	off = put_listener(attrs, off, "tcp", TEST_PORT + 1);
+	off = put_listener(attrs, off, "tcp", TEST_PORT + 2);
+	ASSERT_EQ(0, listener_set(attrs, off));
+	three = rpcb_calls() - before;
+
+	/* the listeners are up even though rpcbind never answered */
+	EXPECT_EQ(3, listener_get(got, MAX_LISTENERS));
+	/* and the ack says they are unregistered, since no errno can */
+	EXPECT_STRNE("", last_extack);
+	EXPECT_LE(three, one);
+}
+
+/*
+ * The stop applies to one request only. After rpcbind starts answering,
+ * the next request must register without any other step.
+ */
+TEST_F(nfsd_listener, rpcb_retry_next_request)
+{
+	int before, after, off;
+	char attrs[192];
+
+	rpcb_stub_set_mode(RPCB_STUB_SILENT);
+
+	off = put_listener(attrs, 0, "tcp", TEST_PORT);
+	off = put_listener(attrs, off, "tcp", TEST_PORT + 1);
+	listener_set(attrs, off);
+	ASSERT_EQ(0, listener_set(attrs, 0));
+
+	/* rpcbind recovers */
+	rpcb_stub_set_mode(RPCB_STUB_ACCEPT);
+
+	before = rpcb_calls();
+	off = put_listener(attrs, 0, "tcp", TEST_PORT);
+	EXPECT_EQ(0, listener_set(attrs, off));
+	after = rpcb_calls();
+
+	/* a fresh request starts from a fresh reading and tries again */
+	EXPECT_GT(after, before);
+	EXPECT_STREQ("", last_extack);
 }
 
 /* ===================== threads / -EBUSY semantics ===================== */
