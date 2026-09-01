@@ -1112,6 +1112,23 @@ static void call_xpt_users(struct svc_xprt *xprt)
 }
 
 /*
+ * If rpcbind stops answering, every listener still to be destroyed would
+ * only wait out the same timeout again. Drop the flag on the rest of this
+ * teardown, which is every listener already marked for close.
+ */
+static void svc_xprt_clear_rpcb_unreg(struct svc_serv *serv, struct net *net)
+{
+	struct svc_xprt *xprt;
+
+	spin_lock_bh(&serv->sv_lock);
+	list_for_each_entry(xprt, &serv->sv_permsocks, xpt_list)
+		if (xprt->xpt_net == net &&
+		    test_bit(XPT_CLOSE, &xprt->xpt_flags))
+			clear_bit(XPT_RPCB_UNREG, &xprt->xpt_flags);
+	spin_unlock_bh(&serv->sv_lock);
+}
+
+/*
  * Remove a dead transport
  */
 static void svc_delete_xprt(struct svc_xprt *xprt)
@@ -1125,11 +1142,15 @@ static void svc_delete_xprt(struct svc_xprt *xprt)
 		struct svc_sock *svsk = container_of(xprt, struct svc_sock,
 						     sk_xprt);
 		struct socket *sock = svsk->sk_sock;
+		unsigned int failures = svc_rpcb_failure_count(serv);
 
 		if (svc_register(serv, xprt->xpt_net, sock->sk->sk_family,
 				 sock->sk->sk_protocol, 0) < 0)
 			pr_warn("failed to unregister %s with rpcbind\n",
 				xprt->xpt_class->xcl_name);
+
+		if (svc_rpcb_failure_count(serv) != failures)
+			svc_xprt_clear_rpcb_unreg(serv, xprt->xpt_net);
 	}
 
 	if (test_and_set_bit(XPT_DEAD, &xprt->xpt_flags))
