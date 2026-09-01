@@ -322,6 +322,10 @@ struct bufdesc_ex {
 #define RCMR_CMP(X)		(((X) == 1) ? RCMR_CMP_1 : RCMR_CMP_2)
 #define FEC_TX_BD_FTYPE(X)	(((X) & 0xf) << 20)
 
+/* FEC_QOS_SCHEME bits */
+#define QOS_RX_FLUSH(X)		BIT(3 + (X))
+#define QOS_RX_FLUSH_MASK	(QOS_RX_FLUSH(0) | QOS_RX_FLUSH(1) | QOS_RX_FLUSH(2))
+
 /* The number of Tx and Rx buffers.  These are allocated from the page
  * pool.  The code may assume these are power of two, so it is best
  * to keep them that size.
@@ -603,6 +607,11 @@ struct fec_enet_private {
 	struct mutex ptp_clk_mutex;
 	unsigned int num_tx_queues;
 	unsigned int num_rx_queues;
+
+	/* Bitmask of RX queues with receive flushing enabled */
+	u32 rx_flush_mask;
+	/* Serializes the FEC_QOS_SCHEME read-modify-write */
+	spinlock_t qos_lock;
 
 	struct fec_enet_priv_tx_q *tx_queue[FEC_ENET_MAX_TX_QS];
 	struct fec_enet_priv_rx_q *rx_queue[FEC_ENET_MAX_RX_QS];

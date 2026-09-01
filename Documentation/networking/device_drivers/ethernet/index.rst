@@ -24,6 +24,7 @@ Contents:
    dec/dmfe
    freescale/dpaa
    freescale/dpaa2/index
+   freescale/fec
    freescale/gianfar
    google/gve
    huawei/hinic
