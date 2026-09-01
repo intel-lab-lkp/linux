@@ -340,6 +340,11 @@ struct iommu_pages_list {
 #define IOMMU_PAGES_LIST_INIT(name) \
 	((struct iommu_pages_list){ .pages = LIST_HEAD_INIT(name.pages) })
 
+struct iommu_qos_device_ops {
+	void (*add)(struct device *dev);
+	void (*remove)(struct device *dev);
+};
+
 #ifdef CONFIG_IOMMU_API
 
 /**
@@ -734,6 +739,9 @@ struct iommu_ops {
 	int (*viommu_init)(struct iommufd_viommu *viommu,
 			   struct iommu_domain *parent_domain,
 			   const struct iommu_user_data *user_data);
+
+	int (*set_dev_requestor_id)(struct device *dev, u32 requestor_id,
+				    u8 pmg);
 
 	const struct iommu_domain_ops *default_domain_ops;
 	struct module *owner;
@@ -1225,6 +1233,10 @@ void iommu_free_global_pasid(ioasid_t pasid);
 /* PCI device reset functions */
 int pci_dev_reset_iommu_prepare(struct pci_dev *pdev);
 void pci_dev_reset_iommu_done(struct pci_dev *pdev);
+
+struct device *iommu_group_find_device_by_name(const char *name);
+int iommu_set_dev_requestor_id(struct device *dev, u32 requestor_id, u8 pmg);
+void iommu_register_qos_device_ops(const struct iommu_qos_device_ops *ops);
 #else /* CONFIG_IOMMU_API */
 
 struct iommu_ops {};
@@ -1557,6 +1569,23 @@ static inline int pci_dev_reset_iommu_prepare(struct pci_dev *pdev)
 static inline void pci_dev_reset_iommu_done(struct pci_dev *pdev)
 {
 }
+
+static inline struct device *iommu_group_find_device_by_name(const char *name)
+{
+	return NULL;
+}
+
+static inline int iommu_set_dev_requestor_id(struct device *dev,
+					     u32 requestor_id, u8 pmg)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void
+iommu_register_qos_device_ops(const struct iommu_qos_device_ops *ops)
+{
+}
+
 #endif /* CONFIG_IOMMU_API */
 
 #ifdef CONFIG_IRQ_MSI_IOMMU

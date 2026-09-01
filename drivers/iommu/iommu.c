@@ -43,6 +43,8 @@ static struct kset *iommu_group_kset;
 static DEFINE_IDA(iommu_group_ida);
 static DEFINE_IDA(iommu_global_pasid_ida);
 
+static const struct iommu_qos_device_ops *iommu_qos_dev_ops;
+
 static unsigned int iommu_def_domain_type __read_mostly;
 static bool iommu_dma_strict __read_mostly = IS_ENABLED(CONFIG_IOMMU_DEFAULT_DMA_STRICT);
 static u32 iommu_cmd_line __read_mostly;
@@ -728,7 +730,10 @@ static void __iommu_group_free_device(struct iommu_group *group,
 				      struct group_device *grp_dev)
 {
 	struct device *dev = grp_dev->dev;
+	const struct iommu_qos_device_ops *qos_ops = READ_ONCE(iommu_qos_dev_ops);
 
+	if (qos_ops)
+		qos_ops->remove(dev);
 	sysfs_remove_link(group->devices_kobj, grp_dev->name);
 	sysfs_remove_link(&dev->kobj, "iommu_group");
 
@@ -1266,6 +1271,7 @@ out:
 static struct group_device *iommu_group_alloc_device(struct iommu_group *group,
 						     struct device *dev)
 {
+	const struct iommu_qos_device_ops *qos_ops;
 	int ret, i = 0;
 	struct group_device *device;
 
@@ -1304,6 +1310,9 @@ rename:
 
 	trace_add_device_to_group(group->id, dev);
 
+	qos_ops = READ_ONCE(iommu_qos_dev_ops);
+	if (qos_ops)
+		qos_ops->add(dev);
 	dev_info(dev, "Adding to iommu group %d\n", group->id);
 
 	return device;
@@ -4221,6 +4230,110 @@ void pci_dev_reset_iommu_done(struct pci_dev *pdev)
 		group->recovery_cnt--;
 }
 EXPORT_SYMBOL_GPL(pci_dev_reset_iommu_done);
+
+static struct iommu_group *iommu_group_kset_next_get(struct iommu_group *prev)
+{
+	struct iommu_group *group = NULL;
+	struct kobject *kobj;
+
+	if (!iommu_group_kset)
+		return NULL;
+
+	spin_lock(&iommu_group_kset->list_lock);
+	kobj = prev ? list_next_entry(&prev->kobj, entry) :
+		      list_first_entry_or_null(&iommu_group_kset->list,
+					       struct kobject, entry);
+	if (kobj) {
+		list_for_each_entry_from(kobj, &iommu_group_kset->list, entry) {
+			group = container_of(kobj, struct iommu_group, kobj);
+
+			/* Skip groups already on their way out (refcount 0). */
+			if (kobject_get_unless_zero(&group->kobj))
+				break;
+			group = NULL;
+		}
+	}
+	spin_unlock(&iommu_group_kset->list_lock);
+
+	return group;
+}
+
+struct device *iommu_group_find_device_by_name(const char *name)
+{
+	struct iommu_group *group, *next;
+	struct group_device *gdev;
+	struct device *dev = NULL;
+
+	if (!name)
+		return NULL;
+
+	for (group = iommu_group_kset_next_get(NULL); group; group = next) {
+		mutex_lock(&group->mutex);
+		for_each_group_device(group, gdev) {
+			if (!strcmp(gdev->name, name)) {
+				/*
+				 * Take a reference while still under
+				 * group->mutex: device removal also takes this
+				 * mutex before freeing the device, so the
+				 * pointer cannot vanish until we hold a
+				 * reference. The caller must put_device().
+				 */
+				dev = get_device(gdev->dev);
+				break;
+			}
+		}
+		mutex_unlock(&group->mutex);
+
+		next = dev ? NULL : iommu_group_kset_next_get(group);
+		kobject_put(&group->kobj);
+		if (dev)
+			break;
+	}
+
+	return dev;
+}
+EXPORT_SYMBOL_GPL(iommu_group_find_device_by_name);
+
+int iommu_set_dev_requestor_id(struct device *dev, u32 requestor_id, u8 pmg)
+{
+	const struct iommu_ops *ops;
+
+	if (!dev_has_iommu(dev))
+		return -EOPNOTSUPP;
+
+	ops = dev_iommu_ops(dev);
+	if (!ops->set_dev_requestor_id)
+		return -EOPNOTSUPP;
+
+	return ops->set_dev_requestor_id(dev, requestor_id, pmg);
+}
+EXPORT_SYMBOL_GPL(iommu_set_dev_requestor_id);
+
+void iommu_register_qos_device_ops(const struct iommu_qos_device_ops *ops)
+{
+	struct iommu_group *group, *next;
+	struct group_device *gdev;
+
+	/* Publish the ops first so newly probed devices see them. */
+	WRITE_ONCE(iommu_qos_dev_ops, ops);
+
+	/*
+	 * Registration happens late (e.g. from resctrl's fs_initcall), after
+	 * early IOMMU devices have already been added to their groups. Replay
+	 * the add() callback for every device that is currently on a group so
+	 * none are missed.
+	 */
+	for (group = iommu_group_kset_next_get(NULL); group; group = next) {
+		mutex_lock(&group->mutex);
+		for_each_group_device(group, gdev)
+			ops->add(gdev->dev);
+		mutex_unlock(&group->mutex);
+
+		next = iommu_group_kset_next_get(group);
+		kobject_put(&group->kobj);
+	}
+}
+EXPORT_SYMBOL_GPL(iommu_register_qos_device_ops);
 
 #if IS_ENABLED(CONFIG_IRQ_MSI_IOMMU)
 /**
