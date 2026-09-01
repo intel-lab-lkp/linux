@@ -282,18 +282,34 @@ void vfio_pci_device_reset(struct vfio_pci_device *device)
 	VFIO_ASSERT_EQ(r, 0, "ioctl(device->fd, VFIO_DEVICE_RESET) failed\n");
 }
 
+/*
+ * A prior test's delayed fput can briefly leave the open count elevated, so
+ * group open and cdev bind can see a transient -EBUSY.  Retry to wait out the
+ * fput scheduling latency.
+ */
+#define VFIO_DEVICE_BUSY_RETRIES	200
+#define VFIO_DEVICE_BUSY_INTERVAL_US	100000
+
 void vfio_pci_group_setup(struct vfio_pci_device *device, const char *bdf)
 {
 	struct vfio_group_status group_status = {
 		.argsz = sizeof(group_status),
 	};
 	char group_path[32];
+	int retries = VFIO_DEVICE_BUSY_RETRIES;
 	int group;
 
 	group = sysfs_iommu_group_get(bdf);
 	snprintf_assert(group_path, sizeof(group_path), "/dev/vfio/%d", group);
 
-	device->group_fd = open(group_path, O_RDWR);
+	for (;;) {
+		device->group_fd = open(group_path, O_RDWR);
+		if (device->group_fd >= 0 || errno != EBUSY || retries-- <= 0)
+			break;
+
+		usleep(VFIO_DEVICE_BUSY_INTERVAL_US);
+	}
+
 	VFIO_ASSERT_GE(device->group_fd, 0, "open(%s) failed\n", group_path);
 
 	ioctl_assert(device->group_fd, VFIO_GROUP_GET_STATUS, &group_status);
@@ -432,7 +448,16 @@ int __vfio_device_bind_iommufd(int device_fd, int iommufd, const char *vf_token)
 static void vfio_device_bind_iommufd(int device_fd, int iommufd,
 				     const char *vf_token)
 {
-	int ret = __vfio_device_bind_iommufd(device_fd, iommufd, vf_token);
+	int retries = VFIO_DEVICE_BUSY_RETRIES;
+	int ret;
+
+	for (;;) {
+		ret = __vfio_device_bind_iommufd(device_fd, iommufd, vf_token);
+		if (ret != -EBUSY || retries-- <= 0)
+			break;
+
+		usleep(VFIO_DEVICE_BUSY_INTERVAL_US);
+	}
 
 	VFIO_ASSERT_EQ(ret, 0, "Failed VFIO_DEVICE_BIND_IOMMUFD ioctl\n");
 }
