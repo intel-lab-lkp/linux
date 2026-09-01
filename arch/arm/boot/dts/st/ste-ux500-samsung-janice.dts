@@ -512,7 +512,7 @@
 				/* GPS_ON_OFF on GPIO96 */
 				sirf,onoff-gpios = <&gpio3 0 GPIO_ACTIVE_HIGH>;
 				/* GPS_1V8 (VSMPS2) */
-				vcc-supply = <&db8500_vsmps2_reg>;
+				vcc-supply = <&ab8500_buck_vsmps2>;
 				pinctrl-names = "default";
 				pinctrl-0 = <&gsd4t_janice_default>;
 				/* According to /etc/sirfgps.conf */

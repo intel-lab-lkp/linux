@@ -451,7 +451,7 @@
 			no-sdio;
 			no-sd;
 			vmmc-supply = <&ldo_3v3_reg>;
-			vqmmc-supply = <&db8500_vsmps2_reg>;
+			vqmmc-supply = <&ab8500_buck_vsmps2>;
 			pinctrl-names = "default", "sleep";
 			/*
 			 * This muxing excludes the feedback clock on GPIO130
@@ -503,7 +503,7 @@
 				/* GPS_ON_OFF on GPIO86 */
 				enable-gpios = <&gpio2 22 GPIO_ACTIVE_HIGH>;
 				/* GPS_1V8 (VSMPS2) */
-				vddio-supply = <&db8500_vsmps2_reg>;
+				vddio-supply = <&ab8500_buck_vsmps2>;
 				pinctrl-names = "default";
 				pinctrl-0 = <&bcm4751_codina_default>;
 			};

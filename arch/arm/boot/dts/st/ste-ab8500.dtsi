@@ -228,8 +228,8 @@
 							  "USB_ADP_PROBE_PLUG",
 							  "USB_ADP_PROBE_UNPLUG";
 					vddulpivio18-supply = <&ab8500_ldo_intcore_reg>;
-					v-ape-supply = <&db8500_vape_reg>;
-					musb_1v8-supply = <&db8500_vsmps2_reg>;
+					v-ape-supply = <&ab8500_buck_vape>;
+					musb_1v8-supply = <&ab8500_buck_vsmps2>;
 					clocks = <&prcmu_clk PRCMU_SYSCLK>;
 					clock-names = "sysclk";
 					#phy-cells = <0>;
