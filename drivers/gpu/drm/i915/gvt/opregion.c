@@ -151,7 +151,8 @@ static void virt_vbt_generation(struct vbt *v)
 	v->header.vbt_size = sizeof(struct vbt);
 	v->header.bdb_offset = offsetof(struct vbt, bdb_header);
 
-	strcpy(&v->bdb_header.signature[0], "BIOS_DATA_BLOCK");
+	strscpy(v->bdb_header.signature, "BIOS_DATA_BLOCK",
+		sizeof(v->bdb_header.signature));
 	v->bdb_header.version = 186; /* child_dev_size = 33 */
 	v->bdb_header.header_size = sizeof(v->bdb_header);
 
