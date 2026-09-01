@@ -1191,6 +1191,34 @@ static int ip6_dst_lookup_tail(struct net *net, const struct sock *sk,
 	if (err)
 		goto out_err_release;
 
+	/* Routing packets with a source address not present in the host is
+	 * disallowed unless the ANYSRC flag is set (i.e. with transparent sockets).
+	 * The source address must be in the same L3 domain as the destination device.
+	 */
+	if (!ipv6_addr_any(&fl6->saddr) &&
+	    !(fl6->flowi6_flags & FLOWI_FLAG_ANYSRC)) {
+		struct net_device *oif_dev;
+
+		rcu_read_lock();
+		/* For local routes, (*dst)->dev can be 'lo', which has no l3mdev
+		 * master, so that the L3 domain wouldn't match if the source
+		 * address is in a VRF-enslaved device. To avoid that, check the
+		 * outgoing interface from the flowi6 structure instead.
+		 */
+		if (fl6->flowi6_oif)
+			oif_dev = dev_get_by_index_rcu(net, fl6->flowi6_oif);
+		else
+			oif_dev = (*dst)->dev;
+
+		if (!ipv6_chk_addr_and_flags(net, &fl6->saddr, oif_dev,
+					     1, 1, IFA_F_TENTATIVE))
+			err = -ENETUNREACH;
+		rcu_read_unlock();
+
+		if (err)
+			goto out_err_release;
+	}
+
 #ifdef CONFIG_IPV6_OPTIMISTIC_DAD
 	/*
 	 * Here if the dst entry we've looked up

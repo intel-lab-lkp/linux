@@ -26,11 +26,11 @@ int ip6_route_me_harder(struct net *net, struct sock *sk_partial, struct sk_buff
 	const struct ipv6hdr *iph = ipv6_hdr(skb);
 	struct sock *sk = sk_to_full_sk(sk_partial);
 	struct net_device *dev = skb_dst_dev(skb);
+	int daddr_type = ipv6_addr_type(&iph->daddr);
 	struct flow_keys flkeys;
 	unsigned int hh_len;
 	struct dst_entry *dst;
-	int strict = (ipv6_addr_type(&iph->daddr) &
-		      (IPV6_ADDR_MULTICAST | IPV6_ADDR_LINKLOCAL));
+	int strict = daddr_type & (IPV6_ADDR_MULTICAST | IPV6_ADDR_LINKLOCAL);
 	struct flowi6 fl6 = {
 		.flowi6_l3mdev = l3mdev_master_ifindex(dev),
 		.flowi6_mark = skb->mark,
@@ -40,6 +40,12 @@ int ip6_route_me_harder(struct net *net, struct sock *sk_partial, struct sk_buff
 		.flowlabel = ip6_flowinfo(iph),
 	};
 	int err;
+
+	fl6.flowi6_flags = sk ? inet_sk_flowi_flags(sk) : 0;
+	if (daddr_type & (IPV6_ADDR_UNICAST | IPV6_ADDR_LINKLOCAL))
+		fl6.flowi6_flags |= FLOWI_FLAG_ANYSRC;
+	else
+		fl6.saddr = in6addr_any;
 
 	if (sk && sk->sk_bound_dev_if)
 		fl6.flowi6_oif = sk->sk_bound_dev_if;

@@ -887,6 +887,7 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		fl6.flowi6_oif = READ_ONCE(np->ucast_oif);
 	security_sk_classify_flow(sk, flowi6_to_flowi_common(&fl6));
 
+	fl6.flowi6_flags = inet_sk_flowi_flags(sk);
 	if (hdrincl)
 		fl6.flowi6_flags |= FLOWI_FLAG_KNOWN_NH;
 

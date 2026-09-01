@@ -633,6 +633,8 @@ static int l2tp_ip6_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	else if (!fl6.flowi6_oif)
 		fl6.flowi6_oif = READ_ONCE(np->ucast_oif);
 
+	fl6.flowi6_flags = inet_sk_flowi_flags(sk);
+
 	security_sk_classify_flow(sk, flowi6_to_flowi_common(&fl6));
 
 	fl6.flowlabel = ip6_make_flowinfo(ipc6.tclass, fl6.flowlabel);

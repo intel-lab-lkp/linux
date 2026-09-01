@@ -233,6 +233,7 @@ static int bpf_lwt_xmit_reroute(struct sk_buff *skb)
 		fl6.flowi6_mark = skb->mark;
 		fl6.flowi6_uid = sock_net_uid(net, sk);
 		fl6.flowlabel = ip6_flowinfo(iph6);
+		fl6.flowi6_flags = FLOWI_FLAG_ANYSRC;
 		fl6.flowi6_proto = iph6->nexthdr;
 		fl6.daddr = iph6->daddr;
 		fl6.saddr = iph6->saddr;
