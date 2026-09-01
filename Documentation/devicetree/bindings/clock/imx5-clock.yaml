@@ -35,6 +35,18 @@ properties:
   '#clock-cells':
     const: 1
 
+  assigned-clocks:
+    minItems: 1
+    maxItems: 64
+
+  assigned-clock-parents:
+    minItems: 1
+    maxItems: 64
+
+  assigned-clock-rates:
+    minItems: 1
+    maxItems: 64
+
 required:
   - compatible
   - reg
