@@ -184,9 +184,11 @@ struct qrtr_tx_flow {
 #define QRTR_TX_FLOW_LOW	5
 
 static int qrtr_local_enqueue(struct qrtr_node *node, struct sk_buff *skb,
+			      u32 endpoint_id,
 			      int type, struct sockaddr_qrtr *from,
 			      struct sockaddr_qrtr *to);
 static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
+			      u32 endpoint_id,
 			      int type, struct sockaddr_qrtr *from,
 			      struct sockaddr_qrtr *to);
 static struct qrtr_sock *qrtr_port_lookup(int port);
@@ -393,6 +395,7 @@ static int qrtr_tx_flow_failed(struct qrtr_node *node, int dest_node,
 
 /* Pass an outgoing packet socket buffer to the endpoint driver. */
 static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
+			     u32 endpoint_id,
 			     int type, struct sockaddr_qrtr *from,
 			     struct sockaddr_qrtr *to)
 {
@@ -744,7 +747,8 @@ void qrtr_endpoint_unregister(struct qrtr_endpoint *ep)
 		skb = qrtr_alloc_ctrl_packet(&pkt, GFP_ATOMIC);
 		if (skb) {
 			pkt->cmd = cpu_to_le32(QRTR_TYPE_BYE);
-			qrtr_local_enqueue(NULL, skb, QRTR_TYPE_BYE, &src, &dst);
+			qrtr_local_enqueue(NULL, skb, endpoint_id,
+					   QRTR_TYPE_BYE, &src, &dst);
 		}
 	}
 	spin_unlock_irqrestore(&qrtr_nodes_lock, flags);
@@ -809,8 +813,8 @@ static void qrtr_port_remove(struct qrtr_sock *ipc)
 		pkt->client.port = cpu_to_le32(ipc->us.sq_port);
 
 		skb_set_owner_w(skb, &ipc->sk);
-		qrtr_bcast_enqueue(NULL, skb, QRTR_TYPE_DEL_CLIENT, &ipc->us,
-				   &to);
+		qrtr_bcast_enqueue(NULL, skb, qrtr_local_nid,
+				   QRTR_TYPE_DEL_CLIENT, &ipc->us, &to);
 	}
 
 	if (port == QRTR_PORT_CTRL)
@@ -950,6 +954,7 @@ static int qrtr_bind(struct socket *sock, struct sockaddr_unsized *saddr, int le
 
 /* Queue packet to local peer socket. */
 static int qrtr_local_enqueue(struct qrtr_node *node, struct sk_buff *skb,
+			      u32 endpoint_id,
 			      int type, struct sockaddr_qrtr *from,
 			      struct sockaddr_qrtr *to)
 {
@@ -967,6 +972,7 @@ static int qrtr_local_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	cb = (struct qrtr_cb *)skb->cb;
 	cb->src_node = from->sq_node;
 	cb->src_port = from->sq_port;
+	cb->endpoint_id = endpoint_id;
 
 	if (sock_queue_rcv_skb(&ipc->sk, skb)) {
 		qrtr_port_put(ipc);
@@ -981,6 +987,7 @@ static int qrtr_local_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 
 /* Queue packet for broadcast. */
 static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
+			      u32 endpoint_id,
 			      int type, struct sockaddr_qrtr *from,
 			      struct sockaddr_qrtr *to)
 {
@@ -992,11 +999,11 @@ static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 		if (!skbn)
 			break;
 		skb_set_owner_w(skbn, skb->sk);
-		qrtr_node_enqueue(node, skbn, type, from, to);
+		qrtr_node_enqueue(node, skbn, endpoint_id, type, from, to);
 	}
 	mutex_unlock(&qrtr_node_lock);
 
-	qrtr_local_enqueue(NULL, skb, type, from, to);
+	qrtr_local_enqueue(NULL, skb, endpoint_id, type, from, to);
 
 	return 0;
 }
@@ -1004,12 +1011,15 @@ static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 {
 	DECLARE_SOCKADDR(struct sockaddr_qrtr *, addr, msg->msg_name);
-	int (*enqueue_fn)(struct qrtr_node *, struct sk_buff *, int,
-			  struct sockaddr_qrtr *, struct sockaddr_qrtr *);
+	int (*enqueue_fn)(struct qrtr_node *node, struct sk_buff *skb,
+			  u32 endpoint_id, int type,
+			  struct sockaddr_qrtr *from,
+			  struct sockaddr_qrtr *to);
 	__le32 qrtr_type = cpu_to_le32(QRTR_TYPE_DATA);
 	struct qrtr_sock *ipc = qrtr_sk(sock->sk);
 	struct sock *sk = sock->sk;
 	struct qrtr_node *node;
+	u32 endpoint_id = qrtr_local_nid;
 	struct sk_buff *skb;
 	size_t plen;
 	u32 type;
@@ -1093,7 +1103,7 @@ static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	}
 
 	type = le32_to_cpu(qrtr_type);
-	rc = enqueue_fn(node, skb, type, &ipc->us, addr);
+	rc = enqueue_fn(node, skb, endpoint_id, type, &ipc->us, addr);
 	if (rc >= 0)
 		rc = len;
 
@@ -1127,7 +1137,8 @@ static int qrtr_send_resume_tx(struct qrtr_cb *cb)
 	pkt->client.node = cpu_to_le32(cb->dst_node);
 	pkt->client.port = cpu_to_le32(cb->dst_port);
 
-	ret = qrtr_node_enqueue(node, skb, QRTR_TYPE_RESUME_TX, &local, &remote);
+	ret = qrtr_node_enqueue(node, skb, cb->endpoint_id,
+				QRTR_TYPE_RESUME_TX, &local, &remote);
 
 	qrtr_node_release(node);
 
