@@ -158,6 +158,12 @@ struct nf_flowtable_ctx {
 	} tun;
 };
 
+static bool nf_flow_is_tunnel_ip(struct nf_flowtable_ctx *ctx)
+{
+	return ctx->tun.inner_proto == IPPROTO_IPIP ||
+	       ctx->tun.inner_proto == IPPROTO_IPV6;
+}
+
 static void nf_flow_tuple_encap(struct nf_flowtable_ctx *ctx,
 				struct sk_buff *skb,
 				struct flow_offload_tuple *tuple)
@@ -366,12 +372,13 @@ static bool nf_flow_ip6_tunnel_proto(struct nf_flowtable_ctx *ctx,
 static void nf_flow_ip_tunnel_pop(struct nf_flowtable_ctx *ctx,
 				  struct sk_buff *skb)
 {
-	if (ctx->tun.inner_proto != IPPROTO_IPIP &&
-	    ctx->tun.inner_proto != IPPROTO_IPV6)
-		return;
-
 	skb_pull(skb, ctx->tun.hdr_size);
 	skb_reset_network_header(skb);
+
+	if (ctx->tun.inner_proto == IPPROTO_IPIP)
+		skb->protocol = htons(ETH_P_IP);
+	else
+		skb->protocol = htons(ETH_P_IPV6);
 }
 
 static bool nf_flow_skb_encap_protocol(struct nf_flowtable_ctx *ctx,
@@ -448,8 +455,7 @@ static void nf_flow_encap_pop(struct nf_flowtable_ctx *ctx,
 		}
 	}
 
-	if (skb->protocol == htons(ETH_P_IP) ||
-	    skb->protocol == htons(ETH_P_IPV6))
+	if (unlikely(nf_flow_is_tunnel_ip(ctx)))
 		nf_flow_ip_tunnel_pop(ctx, skb);
 }
 
