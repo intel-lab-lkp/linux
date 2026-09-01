@@ -1907,9 +1907,6 @@ static int logi_dj_probe(struct hid_device *hdev,
 	 * treat these as logitech-dj interfaces then this causes input events
 	 * reported through this extra interface to not be reported correctly.
 	 * To avoid this, we treat these as generic-hid devices.
-	 *
-	 * Bolt receivers only use LOGITECH_DJ_INTERFACE_NUMBER for receiver
-	 * reporting. Treat all other Bolt interfaces as generic-hid devices.
 	 */
 	switch (id->driver_data) {
 	case recvr_type_dj:		no_dj_interfaces = 3; break;
@@ -1920,23 +1917,14 @@ static int logi_dj_probe(struct hid_device *hdev,
 	case recvr_type_27mhz:		no_dj_interfaces = 2; break;
 	case recvr_type_bluetooth:	no_dj_interfaces = 2; break;
 	case recvr_type_dinovo:		no_dj_interfaces = 2; break;
+	case recvr_type_bolt:		no_dj_interfaces = 3; break;
 	}
 	if (hid_is_usb(hdev)) {
 		intf = to_usb_interface(hdev->dev.parent);
-		if (intf) {
-			bool generic_hid_interface;
-
-			if (id->driver_data == recvr_type_bolt)
-				generic_hid_interface =
-					intf->altsetting->desc.bInterfaceNumber !=
-					LOGITECH_DJ_INTERFACE_NUMBER;
-			else
-				generic_hid_interface =
-					intf->altsetting->desc.bInterfaceNumber >= no_dj_interfaces;
-			if (generic_hid_interface) {
-				hdev->quirks |= HID_QUIRK_INPUT_PER_APP;
-				return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
-			}
+		if (intf && intf->altsetting->desc.bInterfaceNumber >=
+							no_dj_interfaces) {
+			hdev->quirks |= HID_QUIRK_INPUT_PER_APP;
+			return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
 		}
 	}
 
