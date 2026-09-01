@@ -4936,13 +4936,15 @@ void br_multicast_set_startup_query_intvl(struct net_bridge_mcast *brmctx,
  * snooping feature on all bridge ports of dev's bridge device, excluding
  * the addresses from dev itself.
  *
- * Returns the number of items added to br_ip_list.
+ * Return: The number of items added to br_ip_list or -ENOMEM on memory
+ *         allocation error
  *
  * Notes:
  * - br_ip_list needs to be initialized by caller
  * - br_ip_list might contain duplicates in the end
  *   (needs to be taken care of by caller)
  * - br_ip_list needs to be freed by caller
+ * - on -ENOMEM the caller must free any allocated entries
  */
 int br_multicast_list_adjacent(struct net_device *dev,
 			       struct list_head *br_ip_list)
@@ -4967,15 +4969,20 @@ int br_multicast_list_adjacent(struct net_device *dev,
 		if (!port->dev || port->dev == dev)
 			continue;
 
-		hlist_for_each_entry_rcu(group, &port->mglist, mglist) {
+		spin_lock_bh(&br->multicast_lock);
+		hlist_for_each_entry(group, &port->mglist, mglist) {
 			entry = kmalloc_obj(*entry, GFP_ATOMIC);
-			if (!entry)
+			if (!entry) {
+				spin_unlock_bh(&br->multicast_lock);
+				count = -ENOMEM;
 				goto unlock;
+			}
 
 			entry->addr = group->key.addr;
 			list_add(&entry->list, br_ip_list);
 			count++;
 		}
+		spin_unlock_bh(&br->multicast_lock);
 	}
 
 unlock:
