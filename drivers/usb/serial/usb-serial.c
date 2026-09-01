@@ -1068,6 +1068,8 @@ static int usb_serial_probe(struct usb_interface *interface,
 		/* Keep this for private driver use for the moment but
 		   should probably go away */
 		INIT_WORK(&port->work, usb_serial_port_work);
+		INIT_DELAYED_WORK(&port->stall_work,
+				  usb_serial_generic_stall_work);
 		serial->port[i] = port;
 		port->dev.parent = &interface->dev;
 		port->dev.driver = NULL;
@@ -1191,6 +1193,7 @@ static void usb_serial_disconnect(struct usb_interface *interface)
 		usb_serial_port_poison_urbs(port);
 		wake_up_interruptible(&port->port.delta_msr_wait);
 		cancel_work_sync(&port->work);
+		cancel_delayed_work_sync(&port->stall_work);
 		if (device_is_registered(&port->dev))
 			device_del(&port->dev);
 	}
@@ -1226,8 +1229,15 @@ int usb_serial_suspend(struct usb_interface *intf, pm_message_t message)
 		}
 	}
 
-	for (i = 0; i < serial->num_ports; ++i)
+	/*
+	 * The URBs are poisoned first so that no further stall can be reported
+	 * before stall recovery, which needs to talk to the device, is
+	 * cancelled.
+	 */
+	for (i = 0; i < serial->num_ports; ++i) {
 		usb_serial_port_poison_urbs(serial->port[i]);
+		cancel_delayed_work_sync(&serial->port[i]->stall_work);
+	}
 
 	return 0;
 }

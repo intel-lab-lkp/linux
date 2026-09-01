@@ -114,6 +114,22 @@ int usb_serial_generic_open(struct tty_struct *tty, struct usb_serial_port *port
 }
 EXPORT_SYMBOL_GPL(usb_serial_generic_open);
 
+/*
+ * Cooldown between attempts to recover a stalled bulk-in endpoint. A stall
+ * caused by a transient fault can persist for a few milliseconds, during which
+ * the resubmitted URBs stall again immediately. Back off a little so that a
+ * persistently halted endpoint is not hammered with control transfers.
+ */
+#define USB_SERIAL_STALL_COOLDOWN	msecs_to_jiffies(10)
+
+static void usb_serial_generic_kill_read_urbs(struct usb_serial_port *port)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(port->read_urbs); ++i)
+		usb_kill_urb(port->read_urbs[i]);
+}
+
 void usb_serial_generic_close(struct usb_serial_port *port)
 {
 	unsigned long flags;
@@ -128,8 +144,16 @@ void usb_serial_generic_close(struct usb_serial_port *port)
 		spin_unlock_irqrestore(&port->lock, flags);
 	}
 	if (port->bulk_in_size) {
-		for (i = 0; i < ARRAY_SIZE(port->read_urbs); ++i)
-			usb_kill_urb(port->read_urbs[i]);
+		usb_serial_generic_kill_read_urbs(port);
+		/*
+		 * The read URBs are dead now so no further stall can be
+		 * reported, but stall recovery may already be running and may
+		 * have resubmitted them. Wait for it to finish before killing
+		 * the URBs for good.
+		 */
+		cancel_delayed_work_sync(&port->stall_work);
+		usb_serial_generic_kill_read_urbs(port);
+		clear_bit(USB_SERIAL_RX_STALLED, &port->flags);
 	}
 }
 EXPORT_SYMBOL_GPL(usb_serial_generic_close);
@@ -370,6 +394,7 @@ void usb_serial_generic_read_bulk_callback(struct urb *urb)
 	struct usb_serial_port *port = urb->context;
 	unsigned char *data = urb->transfer_buffer;
 	bool stopped = false;
+	bool stalled = false;
 	int status = urb->status;
 	int i;
 
@@ -394,9 +419,10 @@ void usb_serial_generic_read_bulk_callback(struct urb *urb)
 		stopped = true;
 		break;
 	case -EPIPE:
-		dev_err(&port->dev, "%s - urb stopped: %d\n",
+		dev_err_ratelimited(&port->dev, "%s - urb stalled: %d\n",
 							__func__, status);
-		stopped = true;
+		set_bit(USB_SERIAL_RX_STALLED, &port->flags);
+		stalled = true;
 		break;
 	default:
 		dev_dbg(&port->dev, "%s - nonzero urb status: %d\n",
@@ -419,6 +445,16 @@ void usb_serial_generic_read_bulk_callback(struct urb *urb)
 	 */
 	smp_mb__after_atomic();
 
+	/*
+	 * Defer stall recovery to a work item as clearing the halt condition
+	 * requires a control transfer, which cannot be issued from here.
+	 */
+	if (stalled) {
+		schedule_delayed_work(&port->stall_work,
+				      USB_SERIAL_STALL_COOLDOWN);
+		return;
+	}
+
 	if (stopped)
 		return;
 
@@ -428,6 +464,49 @@ void usb_serial_generic_read_bulk_callback(struct urb *urb)
 	usb_serial_generic_submit_read_urb(port, i, GFP_ATOMIC);
 }
 EXPORT_SYMBOL_GPL(usb_serial_generic_read_bulk_callback);
+
+/*
+ * Recover from a halted bulk-in endpoint by clearing the halt condition and
+ * restarting the reads.
+ *
+ * Note that this runs from a dedicated work item rather than from port->work,
+ * which must not be cancelled on close as the line discipline depends on it.
+ */
+void usb_serial_generic_stall_work(struct work_struct *work)
+{
+	struct usb_serial_port *port;
+	struct usb_serial *serial;
+	int ret;
+
+	port = container_of(to_delayed_work(work), struct usb_serial_port,
+			    stall_work);
+	serial = port->serial;
+
+	if (!test_and_clear_bit(USB_SERIAL_RX_STALLED, &port->flags))
+		return;
+
+	/*
+	 * The sibling URB may still be queued on the halted pipe, or may have
+	 * been resubmitted before the stall was noticed, so drop both before
+	 * clearing the halt condition.
+	 */
+	usb_serial_generic_kill_read_urbs(port);
+
+	ret = usb_clear_halt(serial->dev,
+			     usb_rcvbulkpipe(serial->dev,
+					     port->bulk_in_endpointAddress));
+	if (ret) {
+		if (ret != -ENODEV && ret != -ESHUTDOWN)
+			dev_err(&port->dev, "failed to clear bulk-in halt: %d\n",
+				ret);
+		return;
+	}
+
+	if (test_bit(USB_SERIAL_THROTTLED, &port->flags))
+		return;
+
+	usb_serial_generic_submit_read_urbs(port, GFP_KERNEL);
+}
 
 void usb_serial_generic_write_bulk_callback(struct urb *urb)
 {

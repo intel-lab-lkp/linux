@@ -21,6 +21,7 @@
 /* USB serial flags */
 #define USB_SERIAL_WRITE_BUSY	0
 #define USB_SERIAL_THROTTLED	1
+#define USB_SERIAL_RX_STALLED	2
 
 /**
  * usb_serial_port: structure for the specific ports of a device.
@@ -59,6 +60,7 @@
  *	port.
  * @flags: usb serial port flags
  * @work: work queue entry for the line discipline waking up.
+ * @stall_work: delayed work entry for bulk-in endpoint stall recovery.
  * @dev: pointer to the serial device
  *
  * This structure is used by the usb-serial core and drivers for the specific
@@ -104,6 +106,7 @@ struct usb_serial_port {
 
 	unsigned long		flags;
 	struct work_struct	work;
+	struct delayed_work	stall_work;
 	unsigned long		sysrq; /* sysrq timeout */
 	struct device		dev;
 };
@@ -350,6 +353,7 @@ unsigned int usb_serial_generic_write_room(struct tty_struct *tty);
 unsigned int usb_serial_generic_chars_in_buffer(struct tty_struct *tty);
 void usb_serial_generic_wait_until_sent(struct tty_struct *tty, long timeout);
 void usb_serial_generic_read_bulk_callback(struct urb *urb);
+void usb_serial_generic_stall_work(struct work_struct *work);
 void usb_serial_generic_write_bulk_callback(struct urb *urb);
 void usb_serial_generic_throttle(struct tty_struct *tty);
 void usb_serial_generic_unthrottle(struct tty_struct *tty);
