@@ -328,7 +328,8 @@ repeat:
 		dfolio = filemap_lock_folio(dmap, index);
 		if (!IS_ERR(dfolio)) {
 			/* overwrite existing folio in the destination cache */
-			WARN_ON(folio_test_dirty(dfolio));
+			if (unlikely(folio_test_dirty(dfolio)))
+				__nilfs_clear_folio_dirty(dfolio);
 			nilfs_copy_folio(dfolio, folio, false);
 			folio_unlock(dfolio);
 			folio_put(dfolio);
