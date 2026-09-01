@@ -26,6 +26,11 @@
 #ifndef ZSTD_DEPS_COMMON
 #define ZSTD_DEPS_COMMON
 
+#if defined(__KERNEL__) && defined(CONFIG_X86) && \
+    !defined(__DISABLE_EXPORTS)
+#define ZSTD_USE_KERNEL_CPU_FEATURES
+#endif
+
 #include <linux/limits.h>
 #include <linux/stddef.h>
 

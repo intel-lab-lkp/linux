@@ -14,6 +14,7 @@
 
 #include <linux/types.h>
 
+#include "zstd_deps.h"
 #include "portability_macros.h"
 
 /*-*******************************************************
@@ -95,6 +96,17 @@
  * We test for bmi1 & bmi2. lzcnt is included in bmi1.
  */
 #define BMI2_TARGET_ATTRIBUTE TARGET_ATTRIBUTE("lzcnt,bmi,bmi2")
+
+#if !DYNAMIC_BMI2
+#  define ZSTD_USE_BMI2(bmi2) 0
+#  define ZSTD_SET_BMI2(state, value) do { } while (0)
+#elif defined(ZSTD_USE_KERNEL_CPU_FEATURES)
+#  define ZSTD_USE_BMI2(bmi2) cpu_feature_enabled(X86_FEATURE_BMI2)
+#  define ZSTD_SET_BMI2(state, value) do { } while (0)
+#else
+#  define ZSTD_USE_BMI2(bmi2) (bmi2)
+#  define ZSTD_SET_BMI2(state, value) do { (state) = (value); } while (0)
+#endif
 
 /* prefetch
  * can be disabled, by declaring NO_PREFETCH build macro */

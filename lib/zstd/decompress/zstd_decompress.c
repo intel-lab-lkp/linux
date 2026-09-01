@@ -259,9 +259,7 @@ static void ZSTD_initDCtx_internal(ZSTD_DCtx* dctx)
     dctx->noForwardProgress = 0;
     dctx->oversizedDuration = 0;
     dctx->isFrameDecompression = 1;
-#if DYNAMIC_BMI2
-    dctx->bmi2 = ZSTD_cpuSupportsBmi2();
-#endif
+    ZSTD_SET_BMI2(dctx->bmi2, ZSTD_cpuSupportsBmi2());
     dctx->ddictSet = NULL;
     ZSTD_DCtx_resetParameters(dctx);
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
