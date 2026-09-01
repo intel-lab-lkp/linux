@@ -103,7 +103,7 @@ static bool scx_idle_test_and_clear_cpu(int cpu)
 		if (cpumask_intersects(smt, idle_smts))
 			cpumask_andnot(idle_smts, idle_smts, smt);
 		else if (cpumask_test_cpu(cpu, idle_smts))
-			__cpumask_clear_cpu(cpu, idle_smts);
+			cpumask_clear_cpu(cpu, idle_smts);
 	}
 
 	return cpumask_test_and_clear_cpu(cpu, idle_cpus);
