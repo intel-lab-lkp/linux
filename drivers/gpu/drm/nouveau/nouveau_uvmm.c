@@ -1318,6 +1318,7 @@ nouveau_uvmm_bind_job_submit(struct nouveau_job *job,
 			op->reg = nouveau_uvma_region_find(uvmm, op->va.addr,
 							   op->va.range);
 			if (!op->reg || op->reg->dirty) {
+				op->reg = NULL;
 				ret = -ENOENT;
 				goto unwind_continue;
 			}
@@ -1327,6 +1328,7 @@ nouveau_uvmm_bind_job_submit(struct nouveau_job *job,
 								op->va.range);
 			if (IS_ERR(op->ops)) {
 				ret = PTR_ERR(op->ops);
+				op->reg = NULL;
 				goto unwind_continue;
 			}
 
