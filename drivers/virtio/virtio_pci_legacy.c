@@ -16,6 +16,7 @@
 
 #include "linux/virtio_pci_legacy.h"
 #include "virtio_pci_common.h"
+#include <linux/virtio_ids.h>
 
 /* virtio config->get_features() implementation */
 static u64 vp_get_features(struct virtio_device *vdev)
@@ -219,6 +220,32 @@ int virtio_pci_legacy_probe(struct virtio_pci_device *vp_dev)
 	vp_dev->vdev.id = ldev->id;
 
 	vp_dev->vdev.config = &virtio_pci_config_ops;
+
+	/*
+	 * Legacy virtio devices only have 32 feature bits and therefore can't
+	 * set the VIRTIO_F_ACCESS_PLATFORM (bit 33) feature. This means the
+	 * vring_use_map_api() function will return false.
+	 *
+	 * Currently Linux endpoint devices use the legacy virtio interface as
+	 * they aren't able to advertise the Common configuration capability.
+	 * This means the device's inbound TLPs fault on the host SMMU because
+	 * the vring descriptors carry raw physical addresses.
+	 *
+	 * This quirk forces a subset of legacy virtio devices to use the
+	 * DMA Map API (vring_use_map_api() will return true), which fixes this
+	 * issue.
+	 *
+	 * This doesn't affect existing devices as we are checking for an
+	 * otherwise invalid vendor ID.
+	 *
+	 * Ideally we would update the endpoint devices (like scsi-pci-epf)
+	 * to not use the legacy virtio interface, but lots of endpoint
+	 * hardware (like the one in the RK3588) doesn't allow us to add
+	 * custom capabilities.
+	 */
+	if (pci_dev->subsystem_vendor == 0xFFFF &&
+	    pci_dev->subsystem_device == VIRTIO_ID_SCSI)
+		vp_dev->vdev.force_use_map_api = true;
 
 	vp_dev->config_vector = vp_config_vector;
 	vp_dev->setup_vq = setup_vq;

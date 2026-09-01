@@ -151,6 +151,10 @@ struct virtio_admin_cmd {
  * @config_driver_disabled: configuration change reporting disabled by
  *                          a driver
  * @config_change_pending: configuration change reported while disabled
+ * @force_use_map_api: A quirk set by certain legacy devices to force us
+ *                     to pretend the VIRTIO_F_ACCESS_PLATFORM feature is
+ *                     enabled. Set by transports that have no way to
+ *                     negotiate ACCESS_PLATFORM but sit behind a real IOMMU.
  * @config_lock: protects configuration change reporting
  * @vqs_list_lock: protects @vqs.
  * @dev: underlying device.
@@ -173,6 +177,7 @@ struct virtio_device {
 	bool config_core_enabled;
 	bool config_driver_disabled;
 	bool config_change_pending;
+	bool force_use_map_api;
 	spinlock_t config_lock;
 	spinlock_t vqs_list_lock;
 	struct device dev;
