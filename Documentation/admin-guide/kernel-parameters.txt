@@ -4076,6 +4076,10 @@ Kernel parameters
 			for the microcode loader according to <bool>. If <bool>
 			is not given, enable the enforcement.
 
+			iterative_loading=<bool>:
+			Enable or disable iterative microcode patch application
+			for the runtime microcode loader according to <bool>.
+
 	mini2440=	[ARM,HW,KNL]
 			Format:[0..2][b][c][t]
 			Default: "0tb"

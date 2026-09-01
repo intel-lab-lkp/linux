@@ -47,6 +47,7 @@ static struct microcode_ops *microcode_ops;
 static bool dis_ucode_ldr;
 
 bool force_minrev = IS_ENABLED(CONFIG_MICROCODE_FORCE_MINREV);
+bool iterative_loading = IS_ENABLED(CONFIG_MICROCODE_LATE_ITERATIVE_LOADING);
 
 /*
  * Those below should be behind CONFIG_MICROCODE_DBG ifdeffery but in
@@ -163,6 +164,12 @@ static void __init early_parse_cmdline(void)
 			} else if (str_has_prefix(s, "force_minrev=")) {
 				advance_option_argument(&s);
 				if (kstrtobool(s, &force_minrev)) { ; }
+				continue;
+			}
+
+			if (str_has_prefix(s, "iterative_loading=")) {
+				advance_option_argument(&s);
+				if (kstrtobool(s, &iterative_loading)) { ; }
 				continue;
 			}
 
@@ -750,16 +757,34 @@ static bool setup_cpus(void)
 	return true;
 }
 
+static void reset_ucode_ctrl(void)
+{
+	struct microcode_ctrl ctrl = { .ctrl = SCTRL_WAIT, .result = -1, };
+	unsigned int cpu;
+
+	for_each_cpu_and(cpu, cpu_present_mask, &cpus_booted_once_mask) {
+		ctrl.ctrl_cpu = per_cpu(ucode_ctrl.ctrl_cpu, cpu);
+		per_cpu(ucode_ctrl, cpu) = ctrl;
+	}
+}
+
 static int load_late_locked(void)
 {
+	enum ucode_state state;
+	int err;
+
 	if (!setup_cpus())
 		return -EBUSY;
 
-	switch (microcode_ops->request_microcode_fw(0, &microcode_fdev->dev)) {
+	state = microcode_ops->request_microcode_fw(0, &microcode_fdev->dev);
+next:
+	switch (state) {
 	case UCODE_NEW:
-		return load_late_stop_cpus(false);
+		err = load_late_stop_cpus(false);
+		break;
 	case UCODE_NEW_SAFE:
-		return load_late_stop_cpus(true);
+		err = load_late_stop_cpus(true);
+		break;
 	case UCODE_NFOUND:
 		return -ENOENT;
 	case UCODE_OK:
@@ -767,6 +792,28 @@ static int load_late_locked(void)
 	default:
 		return -EBADFD;
 	}
+
+	if (err)
+		return err;
+
+	/*
+	 * A multi-blob image is traditionally handled by selecting the highest
+	 * revision to load it in one shot. With iterative loading, the
+	 * vendor-specific parser instead selects the lowest loadable revision.
+	 *
+	 * After each successful update, find the next loadable blob to continue
+	 * the iteration. Stop if no more blobs are found.
+	 */
+	if (iterative_loading) {
+		state = microcode_ops->request_microcode_fw(0, &microcode_fdev->dev);
+		if (state == UCODE_NFOUND)
+			return 0;
+
+		reset_ucode_ctrl();
+		goto next;
+	}
+
+	return 0;
 }
 
 static ssize_t reload_store(struct device *dev,

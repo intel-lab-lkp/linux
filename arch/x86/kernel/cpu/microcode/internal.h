@@ -101,6 +101,7 @@ static inline unsigned int x86_cpuid_family(void)
 }
 
 extern bool force_minrev;
+extern bool iterative_loading;
 
 #ifdef CONFIG_CPU_SUP_AMD
 void load_ucode_amd_bsp(struct early_load_data *ed, unsigned int family);

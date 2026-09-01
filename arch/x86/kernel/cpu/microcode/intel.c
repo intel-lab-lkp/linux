@@ -978,6 +978,9 @@ static enum ucode_state request_microcode_fw(int cpu, struct device *device)
 	if (is_late_loading_denied(cpu))
 		return UCODE_NFOUND;
 
+	if (iterative_loading)
+		return UCODE_NFOUND;
+
 	sprintf(name, "intel-ucode/%02x-%02x-%02x",
 		c->x86, c->x86_model, c->x86_stepping);
 

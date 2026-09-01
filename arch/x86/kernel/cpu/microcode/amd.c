@@ -1251,7 +1251,8 @@ static enum ucode_state request_microcode_amd(int cpu, struct device *device)
 	enum ucode_state ret = UCODE_NFOUND;
 	const struct firmware *fw;
 
-	if (force_minrev)
+	/* The blob parser does not support these features yet. */
+	if (force_minrev || iterative_loading)
 		return UCODE_NFOUND;
 
 	if (c->x86 >= 0x15)
