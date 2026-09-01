@@ -25,3 +25,4 @@ obj-$(subst m,y,$(CONFIG_MSHV_ROOT)) += hv_proc.o
 ifneq ($(CONFIG_MSHV_ROOT)$(CONFIG_MSHV_VTL),)
 	obj-y += mshv_common.o
 endif
+obj-$(subst m,y,$(CONFIG_HYPERV_VSM)) += hv_vsm_securekernel.o
