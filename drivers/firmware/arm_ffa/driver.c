@@ -2146,6 +2146,114 @@ cleanup:
 	ffa_notifications_cleanup();
 }
 
+/*
+ * Backend for FFH Operation Regions declared with an Offset of 0x2, see Arm
+ * DEN0048D (Functional Fixed Hardware Specification v1.3) section 2.3.1.2.
+ * The Operation Region handler itself lives in drivers/acpi/arm64/ffh.c and
+ * is built in, so it reaches this driver, which may be a module, through the
+ * ops registered below.
+ */
+static int ffa_acpi_ffh_partition_id(const uuid_t *uuid, u16 *dst_id)
+{
+	struct ffa_partition_info *pbuf;
+	int count, idx, ret = 0;
+	u16 id;
+
+	count = ffa_partition_probe(uuid, &pbuf);
+	if (count <= 0)
+		return count ? : -ENOENT;
+
+	/*
+	 * DEN0048D only requires the endpoint ID to be unique. A partition may
+	 * be described by more than one entry, so compare IDs rather than
+	 * insisting on a single descriptor.
+	 */
+	id = pbuf[0].id;
+	for (idx = 1; idx < count; idx++) {
+		if (pbuf[idx].id != id) {
+			ret = -ENOTUNIQ;
+			goto out;
+		}
+	}
+
+	*dst_id = id;
+out:
+	kfree(pbuf);
+	return ret;
+}
+
+static int ffa_acpi_ffh_match_id(struct device *dev, const void *data)
+{
+	const u16 *dst_id = data;
+
+	return to_ffa_dev(dev)->vm_id == *dst_id;
+}
+
+static int ffa_acpi_ffh_check_partition(u16 dst_id)
+{
+	struct device *dev;
+	bool supported;
+
+	dev = bus_find_device(&ffa_bus_type, NULL, &dst_id,
+			      ffa_acpi_ffh_match_id);
+	/*
+	 * Only partitions reported by FFA_PARTITION_INFO_GET at probe time have
+	 * a device here. AML may name an endpoint that was never enumerated, so
+	 * an unknown one is left to the callee to reject rather than refused
+	 * outright.
+	 */
+	if (!dev)
+		return 0;
+
+	supported = ffa_partition_supports_direct_req2_recv(to_ffa_dev(dev));
+	put_device(dev);
+
+	return supported ? 0 : -EOPNOTSUPP;
+}
+
+static int ffa_acpi_ffh_direct_req2(u16 dst_id, const uuid_t *uuid,
+				    u64 *payload, unsigned int nr_payload,
+				    u64 resp_regs[3])
+{
+	struct ffa_send_direct_data2 req = {}, resp;
+	int ret;
+
+	BUILD_BUG_ON(sizeof(req.data[0]) != sizeof(*payload));
+
+	if (!drv_info->msg_direct_req2_supp)
+		return -EOPNOTSUPP;
+
+	if (!nr_payload || nr_payload > ARRAY_SIZE(req.data))
+		return -EINVAL;
+
+	ret = ffa_acpi_ffh_check_partition(dst_id);
+	if (ret)
+		return ret;
+
+	/*
+	 * Registers not represented in the Operation Region stay zero, as
+	 * required by DEN0048D.
+	 */
+	memcpy(req.data, payload, nr_payload * sizeof(*payload));
+
+	ret = __ffa_msg_send_direct_req2(drv_info->vm_id, dst_id, uuid, &req,
+					 &resp, resp_regs);
+
+	/*
+	 * DEN0048D asks for the registers to be copied back once the call has
+	 * completed, whatever the outcome, so this runs on the FFA_ERROR path
+	 * too rather than leaving AML looking at its own request.
+	 */
+	memcpy(payload, resp.data, nr_payload * sizeof(*payload));
+
+	return ret;
+}
+
+static const struct acpi_ffh_ffa_ops ffa_acpi_ffh_ops = {
+	.partition_id	= ffa_acpi_ffh_partition_id,
+	.direct_req2	= ffa_acpi_ffh_direct_req2,
+};
+
 static int ffa_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -2228,8 +2336,13 @@ static int ffa_probe(struct platform_device *pdev)
 	ffa_notifications_setup();
 
 	ret = ffa_setup_partitions();
-	if (!ret)
-		return ret;
+	if (!ret) {
+		ret = acpi_ffh_ffa_register(&ffa_acpi_ffh_ops);
+		if (ret && ret != -EOPNOTSUPP)
+			pr_warn("failed to register ACPI FFH backend (%d)\n",
+				ret);
+		return 0;
+	}
 
 	pr_err("failed to setup partitions\n");
 	ffa_notifications_cleanup();
@@ -2249,6 +2362,7 @@ static void ffa_remove(struct platform_device *pdev)
 {
 	struct ffa_drv_info *info = platform_get_drvdata(pdev);
 
+	acpi_ffh_ffa_unregister(&ffa_acpi_ffh_ops);
 	ffa_notifications_cleanup();
 	ffa_partitions_cleanup();
 	ffa_rxtx_unmap();
