@@ -27,7 +27,7 @@ static int cistpl_vers_1(struct mmc_card *card, struct sdio_func *func,
 {
 	u8 major_rev, minor_rev;
 	unsigned i, nr_strings;
-	char **buffer, *string;
+	char **buffer, *string, *string_end;
 
 	if (size < 2)
 		return 0;
@@ -57,10 +57,11 @@ static int cistpl_vers_1(struct mmc_card *card, struct sdio_func *func,
 		return -ENOMEM;
 
 	string = (char*)(buffer + nr_strings);
+	string_end = string + size;
 
 	for (i = 0; i < nr_strings; i++) {
 		buffer[i] = string;
-		strcpy(string, buf);
+		strscpy(string, buf, string_end - string);
 		string += strlen(string) + 1;
 		buf += strlen(buf) + 1;
 	}
