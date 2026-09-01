@@ -1014,8 +1014,21 @@ static struct ffs_ep *ffs_epfile_wait_ep(struct ffs_epfile *epfile, struct file 
 	return ep;
 }
 
-static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
+static int ffs_aio_cancel(struct kiocb *kiocb)
 {
+	struct ffs_io_data *io_data = kiocb->private;
+	int value;
+
+	if (!io_data || !io_data->ep || !io_data->req)
+		return -EINVAL;
+
+	value = usb_ep_dequeue(io_data->ep, io_data->req);
+	return value;
+}
+
+static ssize_t ffs_epfile_io(struct kiocb *kiocb, struct ffs_io_data *io_data)
+{
+	struct file *file = kiocb->ki_filp;
 	struct ffs_epfile *epfile = file->private_data;
 	struct usb_request *req;
 	struct ffs_ep *ep;
@@ -1227,6 +1240,8 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 	 * by ffs_user_copy_worker.
 	 */
 	data = NULL;
+	kiocb->private = io_data;
+	kiocb_set_cancel_fn(kiocb, ffs_aio_cancel);
 
 error_lock:
 	spin_unlock_irq(&epfile->ffs->eps_lock);
@@ -1266,19 +1281,6 @@ ffs_epfile_open(struct inode *inode, struct file *file)
 	return stream_open(inode, file);
 }
 
-static int ffs_aio_cancel(struct kiocb *kiocb)
-{
-	struct ffs_io_data *io_data = kiocb->private;
-	int value;
-
-	if (io_data && io_data->ep && io_data->req)
-		value = usb_ep_dequeue(io_data->ep, io_data->req);
-	else
-		value = -EINVAL;
-
-	return value;
-}
-
 static ssize_t ffs_epfile_write_iter(struct kiocb *kiocb, struct iov_iter *from)
 {
 	struct ffs_io_data io_data, *p = &io_data;
@@ -1299,21 +1301,15 @@ static ssize_t ffs_epfile_write_iter(struct kiocb *kiocb, struct iov_iter *from)
 	p->data = *from;
 	p->mm = current->mm;
 
-	kiocb->private = p;
-
-	if (p->aio) {
+	if (p->aio)
 		mmgrab(p->mm);
-		kiocb_set_cancel_fn(kiocb, ffs_aio_cancel);
-	}
 
-	res = ffs_epfile_io(kiocb->ki_filp, p);
+	res = ffs_epfile_io(kiocb, p);
 	if (res == -EIOCBQUEUED)
 		return res;
 	if (p->aio) {
-		kiocb->ki_complete(kiocb, res);
 		mmdrop(p->mm);
 		kfree(p);
-		return -EIOCBQUEUED;
 	} else {
 		*from = p->data;
 	}
@@ -1349,23 +1345,17 @@ static ssize_t ffs_epfile_read_iter(struct kiocb *kiocb, struct iov_iter *to)
 	}
 	p->mm = current->mm;
 
-	kiocb->private = p;
-
-	if (p->aio) {
+	if (p->aio)
 		mmgrab(p->mm);
-		kiocb_set_cancel_fn(kiocb, ffs_aio_cancel);
-	}
 
-	res = ffs_epfile_io(kiocb->ki_filp, p);
+	res = ffs_epfile_io(kiocb, p);
 	if (res == -EIOCBQUEUED)
 		return res;
 
 	if (p->aio) {
-		kiocb->ki_complete(kiocb, res);
 		mmdrop(p->mm);
 		kfree(p->to_free);
 		kfree(p);
-		return -EIOCBQUEUED;
 	} else {
 		*to = p->data;
 	}
