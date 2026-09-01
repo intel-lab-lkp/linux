@@ -391,29 +391,31 @@ void mt7996_memcpy_fromio(struct mt7996_dev *dev, void *buf, u32 offset,
 			  size_t len)
 {
 	u32 addr = __mt7996_reg_addr(dev, offset);
+	unsigned long flags;
 
 	if (addr != INVALID_REG_ADDR) {
 		memcpy_fromio(buf, dev->mt76.mmio.regs + addr, len);
 		return;
 	}
 
-	spin_lock_bh(&dev->reg_lock);
+	spin_lock_irqsave(&dev->reg_lock, flags);
 	memcpy_fromio(buf, dev->mt76.mmio.regs +
 			   __mt7996_reg_remap_addr(dev, offset), len);
-	spin_unlock_bh(&dev->reg_lock);
+	spin_unlock_irqrestore(&dev->reg_lock, flags);
 }
 
 static u32 mt7996_rr(struct mt76_dev *mdev, u32 offset)
 {
 	struct mt7996_dev *dev = container_of(mdev, struct mt7996_dev, mt76);
 	u32 addr = __mt7996_reg_addr(dev, offset), val;
+	unsigned long flags;
 
 	if (addr != INVALID_REG_ADDR)
 		return dev->bus_ops->rr(mdev, addr);
 
-	spin_lock_bh(&dev->reg_lock);
+	spin_lock_irqsave(&dev->reg_lock, flags);
 	val = dev->bus_ops->rr(mdev, __mt7996_reg_remap_addr(dev, offset));
-	spin_unlock_bh(&dev->reg_lock);
+	spin_unlock_irqrestore(&dev->reg_lock, flags);
 
 	return val;
 }
@@ -422,28 +424,30 @@ static void mt7996_wr(struct mt76_dev *mdev, u32 offset, u32 val)
 {
 	struct mt7996_dev *dev = container_of(mdev, struct mt7996_dev, mt76);
 	u32 addr = __mt7996_reg_addr(dev, offset);
+	unsigned long flags;
 
 	if (addr != INVALID_REG_ADDR) {
 		dev->bus_ops->wr(mdev, addr, val);
 		return;
 	}
 
-	spin_lock_bh(&dev->reg_lock);
+	spin_lock_irqsave(&dev->reg_lock, flags);
 	dev->bus_ops->wr(mdev, __mt7996_reg_remap_addr(dev, offset), val);
-	spin_unlock_bh(&dev->reg_lock);
+	spin_unlock_irqrestore(&dev->reg_lock, flags);
 }
 
 static u32 mt7996_rmw(struct mt76_dev *mdev, u32 offset, u32 mask, u32 val)
 {
 	struct mt7996_dev *dev = container_of(mdev, struct mt7996_dev, mt76);
 	u32 addr = __mt7996_reg_addr(dev, offset);
+	unsigned long flags;
 
 	if (addr != INVALID_REG_ADDR)
 		return dev->bus_ops->rmw(mdev, addr, mask, val);
 
-	spin_lock_bh(&dev->reg_lock);
+	spin_lock_irqsave(&dev->reg_lock, flags);
 	val = dev->bus_ops->rmw(mdev, __mt7996_reg_remap_addr(dev, offset), mask, val);
-	spin_unlock_bh(&dev->reg_lock);
+	spin_unlock_irqrestore(&dev->reg_lock, flags);
 
 	return val;
 }
