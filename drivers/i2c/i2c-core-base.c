@@ -1240,7 +1240,12 @@ unsigned int i2c_adapter_depth(struct i2c_adapter *adapter)
 	unsigned int depth = 0;
 	struct device *parent;
 
-	for (parent = adapter->dev.parent; parent; parent = parent->parent)
+	/* An unregistered device may already be freed; stop there. */
+	if (!device_is_registered(&adapter->dev))
+		return depth;
+
+	for (parent = adapter->dev.parent; parent && device_is_registered(parent);
+	     parent = parent->parent)
 		if (parent->type == &i2c_adapter_type)
 			depth++;
 
