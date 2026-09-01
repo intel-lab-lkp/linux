@@ -20,6 +20,8 @@ static int page_size;
 
 #define PATH_ZSWAP "/sys/module/zswap"
 #define PATH_ZSWAP_ENABLED "/sys/module/zswap/parameters/enabled"
+#define PATH_ZSWAP_SHRINKER_ENABLED \
+	"/sys/module/zswap/parameters/shrinker_enabled"
 #define PATH_ZSWAP_STORED_PAGES "/sys/kernel/debug/zswap/stored_pages"
 
 static int read_int(const char *path, size_t *value)
@@ -444,6 +446,16 @@ static int test_zswap_writeback_disabled(const char *root)
 	return test_zswap_writeback(root, false);
 }
 
+static bool zswap_shrinker_enabled(void)
+{
+	char value[2];
+
+	if (read_text(PATH_ZSWAP_SHRINKER_ENABLED, value, sizeof(value)) <= 0)
+		return false;
+
+	return value[0] == 'Y';
+}
+
 /*
  * When trying to store a memcg page in zswap, if the memcg hits its memory
  * limit in zswap, writeback should affect only the zswapped pages of that
@@ -458,6 +470,16 @@ static int test_no_invasive_cgroup_shrink(const char *root)
 	char zswap_max_buf[32], mem_max_buf[32];
 	char *zw_allocation = NULL, *wb_allocation = NULL;
 	char *zw_group = NULL, *wb_group = NULL;
+
+	/*
+	 * The shrinker can write back zw_group's pages despite not hitting the
+	 * zswap limit. Skip the test if the zswap shrinker is enabled since the
+	 * test cannot distinguish invasive writeback from shrinker work.
+	 */
+	if (zswap_shrinker_enabled()) {
+		ksft_print_msg("zswap shrinker is enabled\n");
+		return KSFT_SKIP;
+	}
 
 	snprintf(zswap_max_buf, sizeof(zswap_max_buf), "%d", page_size);
 	snprintf(mem_max_buf, sizeof(mem_max_buf), "%zu", allocation_size / 2);
