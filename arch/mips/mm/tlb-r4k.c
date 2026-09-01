@@ -432,8 +432,6 @@ void add_wired_entry(unsigned long entrylo0, unsigned long entrylo1,
 #endif
 }
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
-
 int has_transparent_hugepage(void)
 {
 	static unsigned int mask = -1;
@@ -451,8 +449,6 @@ int has_transparent_hugepage(void)
 	return mask == PM_HUGE_MASK;
 }
 EXPORT_SYMBOL(has_transparent_hugepage);
-
-#endif /* CONFIG_TRANSPARENT_HUGEPAGE  */
 
 /*
  * Used for loading TLB entries before trap_init() has started, when we
