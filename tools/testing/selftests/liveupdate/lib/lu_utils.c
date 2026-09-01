@@ -324,3 +324,36 @@ int luo_test(int argc, char *argv[],
 
 	return 0;
 }
+
+int luo_verify_retrieve_into_memfd(int session_fd, int token, int mfd,
+				   const char *expected_data)
+{
+	struct liveupdate_session_retrieve_into_fd retrieve_args = {
+		.size = sizeof(retrieve_args),
+		.token = token,
+		.fd = mfd,
+	};
+	long page_size = getpagesize();
+	void *map = MAP_FAILED;
+	int ret = -1;
+
+	ret = ioctl(session_fd, LIVEUPDATE_SESSION_RETRIEVE_INTO_FD, &retrieve_args);
+	if (ret < 0) {
+		ksft_print_msg("ioctl LIVEUPDATE_SESSION_RETRIEVE_INTO_FD failed\n");
+		return -errno;
+	}
+
+	map = mmap(NULL, page_size, PROT_READ, MAP_SHARED, mfd, 0);
+	if (map == MAP_FAILED)
+		return -errno;
+
+	if (expected_data && strcmp(expected_data, map) != 0) {
+		ksft_print_msg("Data mismatch! Expected '%s', Got '%s'\n",
+			       expected_data, (char *)map);
+		munmap(map, page_size);
+		return -EINVAL;
+	}
+
+	munmap(map, page_size);
+	return 0;
+}
