@@ -580,6 +580,7 @@ static void xiic_read_rx(struct xiic_i2c *i2c)
 {
 	u8 bytes_in_fifo, cr = 0, bytes_to_read = 0;
 	u32 bytes_rem = 0;
+	u32 rx_space;
 	int i;
 
 	bytes_in_fifo = xiic_getreg8(i2c, XIIC_RFO_REG_OFFSET) + 1;
@@ -591,12 +592,49 @@ static void xiic_read_rx(struct xiic_i2c *i2c)
 			xiic_getreg8(i2c, XIIC_SR_REG_OFFSET),
 			xiic_getreg8(i2c, XIIC_CR_REG_OFFSET));
 
-	if (bytes_in_fifo > xiic_rx_space(i2c))
-		bytes_in_fifo = xiic_rx_space(i2c);
+	rx_space = xiic_rx_space(i2c);
+
+	/* Do not read more bytes than are still expected for this message */
+	if (bytes_in_fifo > rx_space)
+		bytes_in_fifo = rx_space;
 
 	bytes_to_read = bytes_in_fifo;
 
-	if (!i2c->dynamic) {
+	if (i2c->dynamic) {
+		/*
+		 * RFD is programmed by xiic_start_recv() and left untouched
+		 * here: reprogramming it mid-transfer emits a spurious SCL
+		 * pulse, causing the STOP condition to be missed.
+		 *
+		 * RX_FULL is therefore always raised at the same threshold.
+		 * When fewer bytes remain outstanding than are held in the
+		 * FIFO, drain only those; the retained bytes plus the final
+		 * incoming bytes restore occupancy to the threshold and raise
+		 * RX_FULL once more. This relies on RFO accounting for every
+		 * byte the controller has received; otherwise the threshold is
+		 * never reached again and the transfer stalls until the
+		 * xiic_xfer() timeout.
+		 */
+		bytes_rem = rx_space - bytes_in_fifo;
+
+		if (!bytes_rem) {
+			/* Every remaining byte is already in the FIFO */
+			bytes_to_read = bytes_in_fifo;
+		} else if (bytes_rem < bytes_in_fifo) {
+			/*
+			 * Drain only the outstanding bytes and leave the
+			 * rest behind, so that they and the bytes still to
+			 * arrive restore occupancy to the threshold.
+			 */
+			bytes_to_read = bytes_rem;
+		} else {
+			/*
+			 * At least as many bytes outstanding as are in the
+			 * FIFO, so it can be drained completely.
+			 */
+			bytes_to_read = bytes_in_fifo;
+		}
+	} else {
 		bytes_rem = xiic_rx_space(i2c) - bytes_in_fifo;
 
 		/* Set msg length if smbus_block_read */
@@ -636,15 +674,6 @@ static void xiic_read_rx(struct xiic_i2c *i2c)
 	for (i = 0; i < bytes_to_read; i++) {
 		i2c->rx_msg->buf[i2c->rx_pos++] =
 			xiic_getreg8(i2c, XIIC_DRR_REG_OFFSET);
-	}
-
-	if (i2c->dynamic) {
-		u8 bytes;
-
-		/* Receive remaining bytes if less than fifo depth */
-		bytes = min_t(u8, xiic_rx_space(i2c), IIC_RX_FIFO_DEPTH);
-		bytes--;
-		xiic_setreg8(i2c, XIIC_RFD_REG_OFFSET, bytes);
 	}
 }
 
