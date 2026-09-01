@@ -17,6 +17,7 @@
 #include <linux/namei.h>
 #include <linux/acpi.h>
 #include <linux/firmware.h>
+#include <linux/kthread.h>
 #include <hyperv/vsm.h>
 #include <asm/e820/types.h>
 #include <asm/mshyperv.h>
@@ -62,6 +63,20 @@ static int hv_vsm_get_register(u32 reg_name, u64 *result)
 
 	*result = reg.value.reg64;
 	return 0;
+}
+
+static __init struct page *hv_vsm_alloc_shared_page(void)
+{
+	struct page *page;
+
+	page = alloc_page(GFP_KERNEL);
+	if (!page) {
+		pr_err("Unable to establish VTL0-VTL1 shared page\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	memset(page_address(page), 0, PAGE_SIZE);
+	return page;
 }
 
 static Elf64_Addr __init hv_vsm_elf_min_load_paddr(void *image)
@@ -326,6 +341,107 @@ static int __init hv_vsm_init_code_page_offsets(void)
 	return 0;
 }
 
+struct hv_vsm_ap_boot_ctx {
+	struct completion done;
+	int ret;
+};
+
+static int __init hv_vsm_boot_sec_vp_thread_fn(void *arg)
+{
+	struct hv_vsm_ap_boot_ctx *ctx = arg;
+	struct hv_vtlcall_param args = {0};
+	int cpu = smp_processor_id();
+	u16 vp_enabled_vtl_set = 0;
+	u8 active_mbec_enabled = 0;
+	s64 sk_status;
+	int ret = 0;
+
+	pr_info("cpu%d entering vtl1 boot thread\n", cpu);
+	sk_status = hv_vsm_vtlcall(&args);
+	if (sk_status)
+		pr_warn("VP%d VTL1 boot returned status %lld\n", cpu, sk_status);
+
+	ret = hv_vsm_get_vp_status(&vp_enabled_vtl_set, &active_mbec_enabled);
+	if (ret)
+		goto out;
+
+	if (!active_mbec_enabled) {
+		pr_err("Failed to enable MBEC for VP%d\n", cpu);
+		hv_vsm_mbec_enabled = false;
+	}
+out:
+	ctx->ret = ret;
+	complete(&ctx->done);
+	return 0;
+}
+
+static int __init hv_vsm_boot_one_ap(unsigned int cpu)
+{
+	struct hv_vsm_ap_boot_ctx ctx;
+	struct task_struct *t;
+
+	init_completion(&ctx.done);
+	ctx.ret = 0;
+
+	t = kthread_create(hv_vsm_boot_sec_vp_thread_fn, &ctx,
+			   "hv-vtl1-ap%u", cpu);
+	if (IS_ERR(t))
+		return PTR_ERR(t);
+
+	kthread_bind(t, cpu);
+	sched_set_fifo(t);
+	wake_up_process(t);
+
+	wait_for_completion(&ctx.done);
+	return ctx.ret;
+}
+
+static int __init hv_vsm_boot_ap_vtl(void)
+{
+	struct hv_vtlcall_param args = {0};
+	struct page *cpu_online_page;
+	unsigned int cpu, cur_cpu = smp_processor_id();
+	s64 sk_status;
+	int ret;
+
+	cpu_online_page = hv_vsm_alloc_shared_page();
+	if (IS_ERR(cpu_online_page))
+		return PTR_ERR(cpu_online_page);
+
+	cpumask_copy(page_address(cpu_online_page), cpu_online_mask);
+
+	/*
+	 * Hand VTL1 the set of APs to expect. VTL1 copies the mask
+	 * synchronously inside this vtlcall and does not reference the
+	 * page after it returns, so freeing it here is safe.
+	 */
+	args.a0 = VSM_VTL_CALL_FUNC_ID_BOOT_APS;
+	args.a1 = page_to_pfn(cpu_online_page);
+	sk_status = hv_vsm_vtlcall(&args);
+	__free_page(cpu_online_page);
+	if (sk_status) {
+		pr_err("VTL1 refused BOOT_APS: status %lld\n", sk_status);
+		return -EIO;
+	}
+
+	/*
+	 * Bring the APs into VTL1 one at a time. Each AP kthread issues
+	 * a single vtlcall on its bound CPU and signals completion; wait
+	 * for it to finish before starting the next so VTL1 entries stay
+	 * serialized.
+	 */
+	for_each_online_cpu(cpu) {
+		if (cpu == cur_cpu)
+			continue;
+		ret = hv_vsm_boot_one_ap(cpu);
+		if (ret) {
+			pr_err("Failed to boot VP%u into VTL1: %d\n", cpu, ret);
+			return ret;
+		}
+	}
+	return 0;
+}
+
 static int __init hv_vsm_boot_vtl1(void)
 {
 	struct hv_vtlcall_param args = {0};
@@ -430,7 +546,14 @@ static int __init hv_vsm_bootstrap_vtl(void)
 		return ret;
 
 	/* Boot primary virtual processor in VTL1 */
-	return hv_vsm_boot_vtl1();
+	ret = hv_vsm_boot_vtl1();
+	if (ret)
+		return ret;
+
+	if (num_present_cpus() == 1)
+		return 0;
+
+	return hv_vsm_boot_ap_vtl();
 }
 
 static void __init hv_vsm_get_sk_mem(void)
