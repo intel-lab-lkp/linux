@@ -531,6 +531,11 @@ int rdtgroup_locksetup_enter(struct rdtgroup *rdtgrp)
 		return -EINVAL;
 	}
 
+	if (rdtgroup_devices_assigned(rdtgrp)) {
+		rdt_last_cmd_puts("Devices assigned to resource group\n");
+		return -EINVAL;
+	}
+
 	if (!cpumask_empty(&rdtgrp->cpu_mask)) {
 		rdt_last_cmd_puts("CPUs assigned to resource group\n");
 		return -EINVAL;

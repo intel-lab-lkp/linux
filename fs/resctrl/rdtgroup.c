@@ -16,6 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/fs.h>
 #include <linux/fs_parser.h>
+#include <linux/iommu.h>
 #include <linux/sysfs.h>
 #include <linux/kernfs.h>
 #include <linux/once.h>
@@ -33,6 +34,9 @@
 /* Mutex to protect rdtgroup access. */
 DEFINE_MUTEX(rdtgroup_mutex);
 
+/* Mutex to protect the rdtdev_list and the rdtdev entries. */
+DEFINE_MUTEX(rdtdev_mutex);
+
 static struct kernfs_root *rdt_root;
 
 struct rdtgroup rdtgroup_default;
@@ -41,6 +45,8 @@ LIST_HEAD(rdt_all_groups);
 
 /* list of entries for the schemata file */
 LIST_HEAD(resctrl_schema_all);
+
+LIST_HEAD(rdtdev_list);
 
 /*
  * List of struct mon_data containing private data of event files for use by
@@ -883,6 +889,137 @@ static int rdtgroup_rmid_show(struct kernfs_open_file *of,
 	rdtgroup_kn_unlock(of->kn);
 
 	return ret;
+}
+
+static bool is_closid_match_dev(struct rdtdev *rdtdev, struct rdtgroup *r)
+{
+	return (resctrl_arch_alloc_capable() && (r->type == RDTCTRL_GROUP) &&
+		(rdtdev->closid == r->closid));
+}
+
+static bool is_rmid_match_dev(struct rdtdev *rdtdev, struct rdtgroup *r)
+{
+	return (resctrl_arch_mon_capable() && (r->type == RDTMON_GROUP) &&
+		rdtdev->rmid == r->mon.rmid && rdtdev->closid == r->mon.parent->closid);
+}
+
+static int rdtdev_set_qos(struct device *dev, u32 closid, u32 rmid)
+{
+	return iommu_set_dev_requestor_id(dev, closid, rmid);
+}
+
+static int rdtgroup_set_device(struct device *dev, struct rdtgroup *rdtgrp)
+{
+	struct rdtdev *rdtdev, *entry = NULL, *tmp;
+	u32 closid, rmid;
+	int ret;
+
+	if (!dev)
+		return -ENODEV;
+
+	if (!rdtgrp)
+		rdtgrp = &rdtgroup_default;
+
+	closid = (rdtgrp->type == RDTMON_GROUP) ?
+			rdtgrp->mon.parent->closid : rdtgrp->closid;
+	rmid = rdtgrp->mon.rmid;
+
+	guard(mutex)(&rdtdev_mutex);
+
+	list_for_each_entry(tmp, &rdtdev_list, node)
+		if (tmp->dev == dev) {
+			entry = tmp;
+			break;
+		}
+
+	if (entry) {
+		ret = rdtdev_set_qos(dev, closid, rmid);
+		if (ret)
+			return ret;
+		entry->closid = closid;
+		entry->rmid = rmid;
+		return 0;
+	}
+
+	rdtdev = kzalloc_obj(*rdtdev);
+	if (!rdtdev)
+		return -ENOMEM;
+
+	rdtdev->dev = get_device(dev);
+	rdtdev->closid = closid;
+	rdtdev->rmid = rmid;
+	list_add_tail(&rdtdev->node, &rdtdev_list);
+
+	ret = rdtdev_set_qos(dev, closid, rmid);
+	if (ret) {
+		list_del(&rdtdev->node);
+		put_device(rdtdev->dev);
+		kfree(rdtdev);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void rdtgroup_remove_device(struct device *dev)
+{
+	struct rdtdev *rdtdev, *entry;
+
+	guard(mutex)(&rdtdev_mutex);
+	list_for_each_entry_safe(rdtdev, entry, &rdtdev_list, node)
+		if (rdtdev->dev == dev) {
+			list_del(&rdtdev->node);
+			put_device(rdtdev->dev);
+			kfree(rdtdev);
+			break;
+		}
+}
+
+static void rdtgroup_qos_device_add(struct device *dev)
+{
+	rdtgroup_set_device(dev, NULL);
+}
+
+static const struct iommu_qos_device_ops rdtgroup_qos_device_ops = {
+	.add	= rdtgroup_qos_device_add,
+	.remove = rdtgroup_remove_device,
+};
+
+static void rdt_move_group_devices(struct rdtgroup *from, struct rdtgroup *to)
+{
+	struct rdtdev *rdtdev;
+
+	guard(mutex)(&rdtdev_mutex);
+	list_for_each_entry(rdtdev, &rdtdev_list, node)
+		if (!from || is_rmid_match_dev(rdtdev, from) ||
+		    is_closid_match_dev(rdtdev, from)) {
+			/*
+			 * The source group is going away and its closid/rmid
+			 * will be freed and reused. Retag the device to @to,
+			 * and move it in the tracking list regardless of the
+			 * hardware result: leaving it on the old ids would
+			 * later match a different group once they are reused.
+			 * Warn if the hardware could not be updated to match.
+			 */
+			if (rdtdev_set_qos(rdtdev->dev, to->closid, to->mon.rmid))
+				pr_warn("Failed to retag device %s while moving group\n",
+					dev_name(rdtdev->dev));
+			rdtdev->closid = to->closid;
+			rdtdev->rmid = to->mon.rmid;
+		}
+}
+
+int rdtgroup_devices_assigned(struct rdtgroup *r)
+{
+	struct rdtdev *rdtdev;
+
+	guard(mutex)(&rdtdev_mutex);
+	list_for_each_entry(rdtdev, &rdtdev_list, node)
+		if (is_rmid_match_dev(rdtdev, r) ||
+		    is_closid_match_dev(rdtdev, r))
+			return 1;
+
+	return 0;
 }
 
 #ifdef CONFIG_PROC_CPU_RESCTRL
@@ -3024,6 +3161,9 @@ static void rmdir_all_sub(void)
 	/* Move all tasks to the default resource group */
 	rdt_move_group_tasks(NULL, &rdtgroup_default, NULL);
 
+	/* Move all devices to the default resource group */
+	rdt_move_group_devices(NULL, &rdtgroup_default);
+
 	list_for_each_entry_safe(rdtgrp, tmp, &rdt_all_groups, rdtgroup_list) {
 		/* Free any child rmids */
 		free_all_child_rdtgrp(rdtgrp);
@@ -4173,6 +4313,9 @@ static int rdtgroup_rmdir_mon(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 	/* Give any tasks back to the parent group */
 	rdt_move_group_tasks(rdtgrp, prdtgrp, tmpmask);
 
+	/* Give any devices back to the parent group */
+	rdt_move_group_devices(rdtgrp, prdtgrp);
+
 	/*
 	 * Update per cpu closid/rmid of the moved CPUs first.
 	 * Note: the closid will not change, but the arch code still needs it.
@@ -4222,6 +4365,9 @@ static int rdtgroup_rmdir_ctrl(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 
 	/* Give any tasks back to the default group */
 	rdt_move_group_tasks(rdtgrp, &rdtgroup_default, tmpmask);
+
+	/* Give any devices back to the default group */
+	rdt_move_group_devices(rdtgrp, &rdtgroup_default);
 
 	/* Give any CPUs back to the default group */
 	cpumask_or(&rdtgroup_default.cpu_mask,
@@ -4825,6 +4971,8 @@ int resctrl_init(void)
 	ret = register_filesystem(&rdt_fs_type);
 	if (ret)
 		goto cleanup_mountpoint;
+
+	iommu_register_qos_device_ops(&rdtgroup_qos_device_ops);
 
 	/*
 	 * Adding the resctrl debugfs directory here may not be ideal since

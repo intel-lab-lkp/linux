@@ -202,6 +202,13 @@ struct mongroup {
 	u32			rmid;
 };
 
+struct rdtdev {
+	struct list_head	node;
+	struct device		*dev;
+	u32			closid;
+	u32			rmid;
+};
+
 /**
  * struct rdtgroup - store rdtgroup's data in resctrl file system.
  * @kn:				kernfs node
@@ -365,6 +372,8 @@ unsigned int rdtgroup_cbm_to_size(struct rdt_resource *r, struct rdt_ctrl_domain
 enum rdtgrp_mode rdtgroup_mode_by_closid(int closid);
 
 int rdtgroup_tasks_assigned(struct rdtgroup *r);
+
+int rdtgroup_devices_assigned(struct rdtgroup *r);
 
 int closids_supported(void);
 
