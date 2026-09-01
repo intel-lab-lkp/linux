@@ -1243,6 +1243,45 @@ TEST_F(nfsd_listener, rpcb_retry_next_request)
 	EXPECT_STREQ("", last_extack);
 }
 
+/*
+ * The same rule on the way out. Removing a listener unregisters it, so a
+ * rpcbind that stops answering used to cost one timeout for each listener
+ * removed. Register one listener while the stub answers, silence the stub,
+ * remove it and count; then do the same with three.
+ *
+ * Both measurements also pay the svc_unregister() sweep that
+ * nfsd_destroy_serv() runs once the last listener is gone, so that cancels
+ * out of the comparison.
+ */
+TEST_F(nfsd_listener, rpcb_unreg_stop_after_failure)
+{
+	int before, one, three, off;
+	char attrs[192];
+
+	off = put_listener(attrs, 0, "tcp", TEST_PORT);
+	ASSERT_EQ(0, listener_set(attrs, off));
+
+	rpcb_stub_set_mode(RPCB_STUB_SILENT);
+	before = rpcb_calls();
+	ASSERT_EQ(0, listener_set(NULL, 0));
+	one = rpcb_calls() - before;
+	ASSERT_GT(one, 0);
+
+	rpcb_stub_set_mode(RPCB_STUB_ACCEPT);
+	off = put_listener(attrs, 0, "tcp", TEST_PORT);
+	off = put_listener(attrs, off, "tcp", TEST_PORT + 1);
+	off = put_listener(attrs, off, "tcp", TEST_PORT + 2);
+	ASSERT_EQ(0, listener_set(attrs, off));
+
+	rpcb_stub_set_mode(RPCB_STUB_SILENT);
+	before = rpcb_calls();
+	ASSERT_EQ(0, listener_set(NULL, 0));
+	three = rpcb_calls() - before;
+
+	/* the second and third removals must not reach rpcbind at all */
+	EXPECT_LE(three, one);
+}
+
 /* ===================== threads / -EBUSY semantics ===================== */
 
 TEST_F(nfsd_listener, sem_busy_on_change)
