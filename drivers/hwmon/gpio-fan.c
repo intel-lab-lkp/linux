@@ -530,8 +530,11 @@ static void gpio_fan_stop(void *data)
 	mutex_lock(&fan_data->lock);
 	set_fan_speed(data, 0);
 	mutex_unlock(&fan_data->lock);
+}
 
-	pm_runtime_disable(fan_data->dev);
+static void gpio_fan_pm_runtime_disable(void *data)
+{
+	pm_runtime_disable(data);
 }
 
 static int gpio_fan_probe(struct platform_device *pdev)
@@ -558,6 +561,17 @@ static int gpio_fan_probe(struct platform_device *pdev)
 	if (IS_ERR(fan_data->supply))
 		return dev_err_probe(dev, PTR_ERR(fan_data->supply),
 				     "Failed to get fan-supply");
+
+	/*
+	 * Reserve this devm slot before gpio_fan_stop()'s so LIFO teardown
+	 * runs gpio_fan_stop() (needs PM enabled to disable the regulator)
+	 * first. pm_runtime_enable() itself still happens at its original
+	 * position below, so this doesn't change when PM actually becomes
+	 * enabled -- only where its eventual disable is queued.
+	 */
+	err = devm_add_action_or_reset(dev, gpio_fan_pm_runtime_disable, dev);
+	if (err)
+		return err;
 
 	/* Configure control GPIOs if available. */
 	if (fan_data->gpios && fan_data->num_gpios > 0) {
