@@ -22,6 +22,11 @@
 #define DMAC_MAX_MASTERS	2
 #define DMAC_MAX_BLK_SIZE	0x200000
 
+static const struct clk_bulk_data dw_axi_dmac_clks[] = {
+	{ .id = "cfgr-clk", },
+	{ .id = "core-clk", },
+};
+
 struct dw_axi_dma_hcfg {
 	u32	nr_channels;
 	u32	nr_masters;
@@ -69,8 +74,7 @@ struct axi_dma_chip {
 	int			irq[DMAC_MAX_CHANNELS];
 	void __iomem		*regs;
 	void __iomem		*apb_regs;
-	struct clk		*core_clk;
-	struct clk		*cfgr_clk;
+	struct clk_bulk_data	clks[ARRAY_SIZE(dw_axi_dmac_clks)];
 	struct dw_axi_dma	*dw;
 };
 
