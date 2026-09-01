@@ -735,6 +735,8 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 	if (!data)
 		return -ENOMEM;
 
+	spin_lock_init(&data->lock);
+
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	data->sfrbase = devm_ioremap_resource(dev, res);
 	if (IS_ERR(data->sfrbase))
@@ -773,7 +775,6 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 		return PTR_ERR(data->clk_master);
 
 	data->sysmmu = dev;
-	spin_lock_init(&data->lock);
 
 	__sysmmu_get_version(data);
 
