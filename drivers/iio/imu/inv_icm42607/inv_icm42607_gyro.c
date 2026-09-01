@@ -13,6 +13,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/types.h>
+#include <linux/units.h>
 
 #include "inv_icm42607.h"
 #include "inv_icm42607_temp.h"
@@ -22,9 +23,11 @@
 	.type = IIO_ANGL_VEL,							\
 	.modified = 1,								\
 	.channel2 = _modifier,							\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),				\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |				\
+		BIT(IIO_CHAN_INFO_CALIBBIAS),					\
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),			\
-	.info_mask_shared_by_type_available = BIT(IIO_CHAN_INFO_SCALE),		\
+	.info_mask_shared_by_type_available = BIT(IIO_CHAN_INFO_SCALE) |	\
+		BIT(IIO_CHAN_INFO_CALIBBIAS),					\
 	.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SAMP_FREQ),		\
 	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 	.scan_index = _index,							\
@@ -61,6 +64,16 @@ static const int inv_icm42607_gyro_scale_nano[][2] = {
 	[INV_ICM42607_GYRO_FS_1000DPS] = { 0, 532632 },
 	[INV_ICM42607_GYRO_FS_500DPS] = { 0, 266316 },
 	[INV_ICM42607_GYRO_FS_250DPS] = { 0, 133158 },
+};
+
+/*
+ * Calibration bias values, IIO range format int + micro.
+ * Value is limited to +/-64 dps coded on 12 bits signed. Step is 1/32 dps.
+ */
+static int inv_icm42607_gyro_calibbias[] = {
+	-1, 117011, /* Min : -2^11 * (1/32) * (pi/180)	    = -1.117011 rad/s	*/
+	 0,    545, /* Step: (1/32) * (pi/180)		    = 0.000545 rad/s	*/
+	 1, 116465, /* Max : (2^11 - 1) * (1/32) * (pi/180) = 1.116465 rad/s	*/
 };
 
 static int inv_icm42607_gyro_read_scale(struct iio_dev *indio_dev,
@@ -173,6 +186,209 @@ static int inv_icm42607_gyro_write_odr(struct iio_dev *indio_dev,
 	return inv_icm42607_set_sensor_conf(st, &conf, IIO_ANGL_VEL);
 }
 
+static int inv_icm42607_gyro_read_offset(struct inv_icm42607_state *st,
+					 struct iio_chan_spec const *chan,
+					 int *val, int *val2)
+{
+	struct device *dev = regmap_get_device(st->map);
+	s16 offset;
+	s64 val64;
+	u8 lo, hi;
+	s32 bias;
+	int ret;
+
+	if (chan->type != IIO_ANGL_VEL)
+		return -EINVAL;
+
+	PM_RUNTIME_ACQUIRE_AUTOSUSPEND(dev, pm);
+	ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+	if (ret)
+		return ret;
+
+	guard(mutex)(&st->lock);
+
+	switch (chan->channel2) {
+	case IIO_MOD_X:
+		ret = inv_icm42607_mreg_read(st, INV_ICM42607_MREG1,
+					     INV_ICM42607_REG_OFFSET_USER0, &lo);
+		if (ret)
+			return ret;
+		ret = inv_icm42607_mreg_read(st, INV_ICM42607_MREG1,
+					     INV_ICM42607_REG_OFFSET_USER1, &hi);
+		if (ret)
+			return ret;
+		offset = sign_extend32(((hi & 0x0F) << 8) | lo, 11);
+		break;
+
+	case IIO_MOD_Y:
+		ret = inv_icm42607_mreg_read(st, INV_ICM42607_MREG1,
+					     INV_ICM42607_REG_OFFSET_USER2, &lo);
+		if (ret)
+			return ret;
+		ret = inv_icm42607_mreg_read(st, INV_ICM42607_MREG1,
+					     INV_ICM42607_REG_OFFSET_USER1, &hi);
+		if (ret)
+			return ret;
+		offset = sign_extend32((((hi & 0xF0) >> 4) << 8) | lo, 11);
+		break;
+
+	case IIO_MOD_Z:
+		ret = inv_icm42607_mreg_read(st, INV_ICM42607_MREG1,
+					     INV_ICM42607_REG_OFFSET_USER3, &lo);
+		if (ret)
+			return ret;
+		ret = inv_icm42607_mreg_read(st, INV_ICM42607_MREG1,
+					     INV_ICM42607_REG_OFFSET_USER4, &hi);
+		if (ret)
+			return ret;
+		offset = sign_extend32(((hi & 0x0F) << 8) | lo, 11);
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	/*
+	 * Convert raw offset to dps then to rad/s
+	 * 12 bits signed raw, step 1/32 dps
+	 * dps to rad/s: pi / 180
+	 * Result in micro (1000000): offset * 5760 / (pi * 1e6)  [inverse below]
+	 * offset * pi * 1e6 / 5760, using pi*1e6 ~= 3141593
+	 */
+	val64 = (s64)offset * 3141593LL;
+	if (val64 >= 0)
+		val64 += 5760LL / 2LL;
+	else
+		val64 -= 5760LL / 2LL;
+
+	bias = div_s64(val64, 5760L);
+	*val = bias / (long)MEGA;
+	*val2 = bias % (long)MEGA;
+
+	return IIO_VAL_INT_PLUS_MICRO;
+}
+
+static int inv_icm42607_gyro_write_offset(struct iio_dev *indio_dev,
+					  struct iio_chan_spec const *chan,
+					  int val, int val2)
+{
+	struct inv_icm42607_state *st = iio_device_get_drvdata(indio_dev);
+	struct device *dev = regmap_get_device(st->map);
+	u8 hi, lo, regval;
+	s64 min64, max64;
+	s16 offset;
+	s64 val64;
+	int ret;
+
+	if (chan->type != IIO_ANGL_VEL)
+		return -EINVAL;
+
+	/* inv_icm42607_gyro_calibbias: min - step - max in micro */
+	min64 = (s64)inv_icm42607_gyro_calibbias[0] * MEGA -
+		inv_icm42607_gyro_calibbias[1];
+	max64 = (s64)inv_icm42607_gyro_calibbias[4] * MEGA +
+		inv_icm42607_gyro_calibbias[5];
+
+	val64 = (s64)val * (s64)MEGA;
+	if (val >= 0)
+		val64 += (s64)val2;
+	else
+		val64 -= (s64)val2;
+
+	if (val64 < min64 || val64 > max64)
+		return -EINVAL;
+
+	/*
+	 * Convert rad/s to dps then to raw 12-bit signed value, step 1/32 dps
+	 * offset = val(rad/s, micro) * 5760 / (pi * 1e6), pi*1e6 ~= 3141593
+	 */
+	val64 = val64 * 5760LL;
+	if (val64 >= 0)
+		val64 += 3141593LL / 2LL;
+	else
+		val64 -= 3141593LL / 2LL;
+	offset = div_s64(val64, 3141593LL);
+
+	if (offset < -2048)
+		offset = -2048;
+	else if (offset > 2047)
+		offset = 2047;
+
+	PM_RUNTIME_ACQUIRE_AUTOSUSPEND(dev, pm);
+	ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+	if (ret)
+		return ret;
+
+	guard(mutex)(&st->lock);
+
+	switch (chan->channel2) {
+	case IIO_MOD_X:
+		/* OFFSET_USER1 register is shared with Y */
+		ret = inv_icm42607_mreg_read(st, INV_ICM42607_MREG1,
+					     INV_ICM42607_REG_OFFSET_USER1, &regval);
+		if (ret)
+			return ret;
+
+		lo = offset & 0xFF;
+		hi = ((offset & 0xF00) >> 8) | (regval & 0xF0);
+
+		ret = inv_icm42607_mreg_write(st, INV_ICM42607_MREG1,
+					      INV_ICM42607_REG_OFFSET_USER0, lo);
+		if (ret)
+			return ret;
+		ret = inv_icm42607_mreg_write(st, INV_ICM42607_MREG1,
+					      INV_ICM42607_REG_OFFSET_USER1, hi);
+		if (ret)
+			return ret;
+		break;
+
+	case IIO_MOD_Y:
+		/* OFFSET_USER1 register is shared with X */
+		ret = inv_icm42607_mreg_read(st, INV_ICM42607_MREG1,
+					     INV_ICM42607_REG_OFFSET_USER1, &regval);
+		if (ret)
+			return ret;
+
+		lo = offset & 0xFF;
+		hi = ((offset & 0xF00) >> 4) | (regval & 0x0F);
+
+		ret = inv_icm42607_mreg_write(st, INV_ICM42607_MREG1,
+					      INV_ICM42607_REG_OFFSET_USER2, lo);
+		if (ret)
+			return ret;
+		ret = inv_icm42607_mreg_write(st, INV_ICM42607_MREG1,
+					      INV_ICM42607_REG_OFFSET_USER1, hi);
+		if (ret)
+			return ret;
+		break;
+
+	case IIO_MOD_Z:
+		/* OFFSET_USER4 register is shared with accel X */
+		ret = inv_icm42607_mreg_read(st, INV_ICM42607_MREG1,
+					     INV_ICM42607_REG_OFFSET_USER4, &regval);
+		if (ret)
+			return ret;
+
+		lo = offset & 0xFF;
+		hi = ((offset & 0xF00) >> 8) | (regval & 0xF0);
+
+		ret = inv_icm42607_mreg_write(st, INV_ICM42607_MREG1,
+					      INV_ICM42607_REG_OFFSET_USER3, lo);
+		if (ret)
+			return ret;
+		ret = inv_icm42607_mreg_write(st, INV_ICM42607_MREG1,
+					      INV_ICM42607_REG_OFFSET_USER4, hi);
+		if (ret)
+			return ret;
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int inv_icm42607_gyro_read_raw(struct iio_dev *indio_dev,
 				      struct iio_chan_spec const *chan,
 				      int *val, int *val2, long mask)
@@ -204,6 +420,8 @@ static int inv_icm42607_gyro_read_raw(struct iio_dev *indio_dev,
 		return inv_icm42607_gyro_read_scale(indio_dev, val, val2);
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		return inv_icm42607_gyro_read_odr(st, val, val2);
+	case IIO_CHAN_INFO_CALIBBIAS:
+		return inv_icm42607_gyro_read_offset(st, chan, val, val2);
 	default:
 		return -EINVAL;
 	}
@@ -228,6 +446,13 @@ static int inv_icm42607_gyro_read_avail(struct iio_dev *indio_dev,
 		*length = (ARRAY_SIZE(inv_icm42607_gyro_odr) -
 			   INV_ICM42607_ODR_1600HZ) * 2;
 		return IIO_AVAIL_LIST;
+	case IIO_CHAN_INFO_CALIBBIAS:
+		if (chan->type != IIO_ANGL_VEL)
+			return -EINVAL;
+		*vals = inv_icm42607_gyro_calibbias;
+		*type = IIO_VAL_INT_PLUS_MICRO;
+		*length = ARRAY_SIZE(inv_icm42607_gyro_calibbias);
+		return IIO_AVAIL_RANGE;
 	default:
 		return -EINVAL;
 	}
@@ -247,6 +472,8 @@ static int inv_icm42607_gyro_write_raw(struct iio_dev *indio_dev,
 		return ret;
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		return inv_icm42607_gyro_write_odr(indio_dev, val, val2);
+	case IIO_CHAN_INFO_CALIBBIAS:
+		return inv_icm42607_gyro_write_offset(indio_dev, chan, val, val2);
 	default:
 		return -EINVAL;
 	}
@@ -262,6 +489,8 @@ static int inv_icm42607_gyro_write_raw_get_fmt(struct iio_dev *indio_dev,
 			return -EINVAL;
 		return IIO_VAL_INT_PLUS_NANO;
 	case IIO_CHAN_INFO_SAMP_FREQ:
+		return IIO_VAL_INT_PLUS_MICRO;
+	case IIO_CHAN_INFO_CALIBBIAS:
 		return IIO_VAL_INT_PLUS_MICRO;
 	default:
 		return -EINVAL;
