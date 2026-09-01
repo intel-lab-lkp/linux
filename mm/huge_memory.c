@@ -42,6 +42,7 @@
 #include <linux/pgalloc_tag.h>
 #include <linux/pagewalk.h>
 #include <linux/cleanup.h>
+#include <linux/set_memory.h>
 
 #include <asm/tlb.h>
 #include "internal.h"
@@ -291,10 +292,16 @@ static int __init huge_zero_init(void)
 	huge_zero_folio = alloc_huge_zero_folio();
 	if (!huge_zero_folio) {
 		pr_warn("Allocating persistent huge zero folio failed\n");
-	} else {
-		huge_zero_pfn = folio_pfn(huge_zero_folio);
-		count_vm_event(THP_ZERO_PAGE_ALLOC);
+		return 0;
 	}
+
+	huge_zero_pfn = folio_pfn(huge_zero_folio);
+	count_vm_event(THP_ZERO_PAGE_ALLOC);
+
+	/* Highmem folios have no permanent direct-map mapping to protect. */
+	if (!folio_test_highmem(huge_zero_folio))
+		set_direct_map_ro(folio_page(huge_zero_folio, 0), HPAGE_PMD_NR);
+
 	return 0;
 }
 

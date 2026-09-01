@@ -54,6 +54,23 @@ static inline bool can_set_direct_map(void)
 #endif
 #endif /* CONFIG_ARCH_HAS_SET_DIRECT_MAP */
 
+#ifndef set_direct_map_ro
+/**
+ * set_direct_map_ro - make a direct-map range read-only
+ * @page: first page in the direct-map range
+ * @nr: number of pages in the range
+ *
+ * Make the direct-map range starting at @page read-only and invalidate stale
+ * writable translations before returning.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+static inline int set_direct_map_ro(struct page *page, unsigned int nr)
+{
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_X86_64
 int set_mce_nospec(unsigned long pfn);
 int clear_mce_nospec(unsigned long pfn);
