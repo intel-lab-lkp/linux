@@ -3931,6 +3931,7 @@ static bool inc_max_seq(struct lruvec *lruvec, unsigned long seq, int swappiness
 	bool success;
 	int prev, next;
 	int type, zone;
+	long old, new;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 restart:
 	if (seq < READ_ONCE(lrugen->max_seq))
@@ -3983,6 +3984,11 @@ restart:
 		reset_ctrl_pos(lruvec, type, false);
 
 	WRITE_ONCE(lrugen->timestamps[next], jiffies);
+	/* decay readahead protection credit so stale signal doesn't persist */
+	old = atomic_long_read(&lrugen->ra_refaults);
+	do {
+		new = (old * 3) / 4;
+	} while (!atomic_long_try_cmpxchg(&lrugen->ra_refaults, &old, new));
 	/* make sure preceding modifications appear */
 	smp_store_release(&lrugen->max_seq, lrugen->max_seq + 1);
 unlock:
@@ -5784,6 +5790,7 @@ void lru_gen_init_lruvec(struct lruvec *lruvec)
 
 	lrugen->max_seq = MIN_NR_GENS + 1;
 	lrugen->enabled = lru_gen_enabled();
+	atomic_long_set(&lrugen->ra_refaults, 0);
 
 	for (i = 0; i <= MIN_NR_GENS + 1; i++)
 		lrugen->timestamps[i] = jiffies;

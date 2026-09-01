@@ -70,6 +70,70 @@ static DEFINE_PER_CPU(struct cpu_fbatches, cpu_fbatches) = {
 	.lock_irq = INIT_LOCAL_LOCK(lock_irq),
 };
 
+#ifdef CONFIG_LRU_GEN
+/* Refill two default readahead windows to amortize shared-counter updates. */
+#define RA_REFAULT_LOCAL_BATCH	(VM_READAHEAD_PAGES * 2)
+
+struct ra_credit_cache {
+	/* Batch shared credit per CPU to avoid a contended atomic RMW per folio. */
+	/* only compared for identity, never dereferenced */
+	struct lru_gen_folio *lrugen;
+	long credit;
+};
+
+static DEFINE_PER_CPU(struct ra_credit_cache, ra_credit_cache);
+
+/*
+ * Spend readahead protection credit from a per-CPU bucket, refilled in batches
+ * from the shared per-lruvec counter, so the fault path avoids an atomic RMW on
+ * a contended cacheline for every folio.
+ */
+static bool lru_gen_take_ra_credit(struct folio *folio)
+{
+	struct lru_gen_folio *lrugen;
+	long nr_pages = folio_nr_pages(folio);
+	struct ra_credit_cache *cache;
+	bool taken = false;
+	long old, new;
+
+	rcu_read_lock();
+	lrugen = &folio_lruvec(folio)->lrugen;
+	cache = get_cpu_ptr(&ra_credit_cache);
+
+	/* credit cached for a different lruvec is forfeited, bounded by the batch */
+	if (cache->lrugen != lrugen) {
+		cache->lrugen = lrugen;
+		cache->credit = 0;
+	}
+
+	if (cache->credit < nr_pages) {
+		old = atomic_long_read(&lrugen->ra_refaults);
+		while (old > 0) {
+			new = old - min_t(long, old, RA_REFAULT_LOCAL_BATCH);
+			if (atomic_long_try_cmpxchg(&lrugen->ra_refaults, &old, new)) {
+				cache->credit += old - new;
+				break;
+			}
+		}
+	}
+
+	if (cache->credit >= nr_pages) {
+		cache->credit -= nr_pages;
+		taken = true;
+	}
+
+	put_cpu_ptr(&ra_credit_cache);
+	rcu_read_unlock();
+
+	return taken;
+}
+#else
+static bool lru_gen_take_ra_credit(struct folio *folio)
+{
+	return false;
+}
+#endif /* CONFIG_LRU_GEN */
+
 static void __page_cache_release(struct folio *folio, struct lruvec **lruvecp,
 		unsigned long *flagsp)
 {
@@ -545,18 +609,22 @@ void folio_add_lru(struct folio *folio)
 	VM_BUG_ON_FOLIO(folio_test_lru(folio), folio);
 
 	/*
-	 * For refaulted workingset folios, set PG_active so they
-	 * can be added to active generations.
-	 * For prefaulted file folios, folio_mark_accessed() sets
-	 * PG_referenced so lru_gen_folio_seq() places them into
-	 * the second oldest generation.
+	 * For refaulted workingset folios, set PG_active so they can be added to
+	 * active generations. For file folios in the fault path, consume refault
+	 * credit to temporarily protect folios that are likely useful readahead.
 	 */
 	if (lru_gen_enabled() && !folio_test_unevictable(folio) &&
 	    lru_gen_in_fault() && !(current->flags & PF_MEMALLOC)) {
-		if (folio_test_workingset(folio))
+		if (folio_test_workingset(folio)) {
 			folio_set_active(folio);
-		else if (!folio_test_referenced(folio))
+		} else if (folio_is_file_lru(folio)) {
+			if (lru_gen_take_ra_credit(folio))
+				folio_set_active(folio);
+			else if (!folio_test_referenced(folio))
+				folio_mark_accessed(folio);
+		} else if (!folio_test_referenced(folio)) {
 			folio_mark_accessed(folio);
+		}
 	}
 
 	folio_batch_add_and_move(folio, lru_add);

@@ -319,6 +319,24 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 
 	atomic_long_add(delta, &lrugen->refaulted[hist][type][tier]);
 
+	if (type == LRU_GEN_FILE) {
+		/*
+		 * Cap credit at total file pages to avoid runaway while
+		 * allowing sustained protection.
+		 */
+		long cap = lruvec_page_state(lruvec, NR_LRU_BASE + LRU_INACTIVE_FILE) +
+			lruvec_page_state(lruvec, NR_LRU_BASE + LRU_ACTIVE_FILE);
+		long add = (long)delta * VM_READAHEAD_PAGES;
+		long old, new;
+
+		old = atomic_long_read(&lrugen->ra_refaults);
+		do {
+			if (old >= cap)
+				break;
+			new = min(cap, old + add);
+		} while (!atomic_long_try_cmpxchg(&lrugen->ra_refaults, &old, new));
+	}
+
 	if (workingset) {
 		/*
 		 * see folio_add_lru(), where folio_set_active() is
