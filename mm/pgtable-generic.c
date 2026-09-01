@@ -386,9 +386,21 @@ pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
  * be read-only/read-write protected.
  *
  * Note that free_pgtables(), used after unmapping detached vmas, or when
- * exiting the whole mm, does not take page table lock before freeing a page
- * table, and may not use RCU at all: "outsiders" like khugepaged should avoid
- * pte_offset_map() and co once the vma is detached from mm or mm_users is zero.
+ * exiting the whole mm, does not take the page table lock before freeing a
+ * table.
+ *
+ * However, the PMD entry is cleared first, and the table freed only after
+ * an RCU grace period, so a walker that mapped the table under
+ * rcu_read_lock() stays safe, and the pmd_same() recheck in
+ * pte_offset_map_lock() detects the teardown.
+ *
+ * Therefore it is safe for "outsiders" like khugepaged to use
+ * pte_offset_map() and co. for VMAs that might be undergoing page table
+ * teardown.
+ *
+ * Note that the PGD itself is freed at mmdrop() time, not under RCU - so the
+ * walker must keep the mm alive via mmgrab(). With that held, walking remains
+ * safe even once mm_users has reached zero.
  */
 pte_t *pte_offset_map_lock(struct mm_struct *mm, pmd_t *pmd,
 			   unsigned long addr, spinlock_t **ptlp)
