@@ -14,10 +14,10 @@ properties:
     oneOf:
       - items:
           - const: ti,tmp102
-          - const: ti,tmp103
           - const: ti,tmp110
       - enum:
           - ti,tmp102
+          - ti,tmp103
 
   interrupts:
     maxItems: 1
