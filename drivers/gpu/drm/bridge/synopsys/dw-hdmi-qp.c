@@ -11,6 +11,7 @@
 #include <linux/export.h>
 #include <linux/i2c.h>
 #include <linux/irq.h>
+#include <linux/math64.h>
 #include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -305,8 +306,15 @@ static unsigned int dw_hdmi_qp_find_n(struct dw_hdmi_qp *hdmi, unsigned long pix
 	return dw_hdmi_qp_compute_n(hdmi, pixel_clk, sample_rate);
 }
 
+static unsigned int dw_hdmi_qp_compute_cts(unsigned long pixel_clk,
+					   unsigned long sample_rate,
+					   unsigned int n)
+{
+	return div64_u64((u64)pixel_clk * n, 128ULL * sample_rate);
+}
+
 static unsigned int dw_hdmi_qp_find_cts(struct dw_hdmi_qp *hdmi, unsigned long pixel_clk,
-					unsigned long sample_rate)
+					unsigned long sample_rate, unsigned int n)
 {
 	const struct dw_hdmi_audio_tmds_cts *tmds_cts = NULL;
 	int i;
@@ -318,23 +326,24 @@ static unsigned int dw_hdmi_qp_find_cts(struct dw_hdmi_qp *hdmi, unsigned long p
 		}
 	}
 
-	if (!tmds_cts)
-		return 0;
-
-	switch (sample_rate) {
-	case 32000:
-		return tmds_cts->cts_32k;
-	case 44100:
-	case 88200:
-	case 176400:
-		return tmds_cts->cts_44k1;
-	case 48000:
-	case 96000:
-	case 192000:
-		return tmds_cts->cts_48k;
-	default:
-		return -ENOENT;
+	if (tmds_cts) {
+		switch (sample_rate) {
+		case 32000:
+			return tmds_cts->cts_32k;
+		case 44100:
+		case 88200:
+		case 176400:
+			return tmds_cts->cts_44k1;
+		case 48000:
+		case 96000:
+		case 192000:
+			return tmds_cts->cts_48k;
+		}
 	}
+
+	dev_dbg(hdmi->dev, "Rate %lu missing; compute CTS dynamically\n", pixel_clk);
+
+	return dw_hdmi_qp_compute_cts(pixel_clk, sample_rate, n);
 }
 
 static void dw_hdmi_qp_set_audio_interface(struct dw_hdmi_qp *hdmi,
@@ -457,7 +466,7 @@ static void dw_hdmi_qp_set_sample_rate(struct dw_hdmi_qp *hdmi, unsigned long lo
 	unsigned int n, cts;
 
 	n = dw_hdmi_qp_find_n(hdmi, tmds_char_rate, sample_rate);
-	cts = dw_hdmi_qp_find_cts(hdmi, tmds_char_rate, sample_rate);
+	cts = dw_hdmi_qp_find_cts(hdmi, tmds_char_rate, sample_rate, n);
 
 	dw_hdmi_qp_set_cts_n(hdmi, cts, n);
 }
