@@ -79,6 +79,7 @@ struct liveupdate_file_ops {
 	int (*freeze)(struct liveupdate_file_op_args *args);
 	void (*unfreeze)(struct liveupdate_file_op_args *args);
 	int (*retrieve)(struct liveupdate_file_op_args *args);
+	int (*retrieve_into)(struct liveupdate_file_op_args *args, struct file *target_file);
 	bool (*can_finish)(struct liveupdate_file_op_args *args);
 	void (*finish)(struct liveupdate_file_op_args *args);
 	unsigned long (*get_id)(struct file *file);

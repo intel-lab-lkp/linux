@@ -278,6 +278,34 @@ static int luo_session_preserve_fd(struct luo_session *session,
 	return err;
 }
 
+static int luo_session_retrieve_into_fd(struct luo_session *session,
+					 struct luo_ucmd *ucmd)
+{
+	struct liveupdate_session_retrieve_into_fd *argp = ucmd->cmd;
+	struct fd target_fd;
+	int err;
+
+	target_fd = fdget(argp->fd);
+	if (fd_empty(target_fd))
+		return -EBADF;
+
+	guard(mutex)(&session->mutex);
+	err = luo_retrieve_into_file(&session->file_set, argp->token, fd_file(target_fd));
+	if (err < 0)
+		goto err_put_fd;
+
+	err = luo_ucmd_respond(ucmd, sizeof(*argp));
+	/*
+	 * If we fail to respond, we cannot easily undo the retrieval. Let the
+	 * normal session cleanup logic handle the file reference eventually.
+	 */
+
+err_put_fd:
+	fdput(target_fd);
+
+	return err;
+}
+
 static int luo_session_retrieve_fd(struct luo_session *session,
 				   struct luo_ucmd *ucmd)
 {
@@ -382,6 +410,8 @@ static const struct luo_ioctl_op luo_session_ioctl_ops[] = {
 		 struct liveupdate_session_retrieve_fd, token, LUO_IOCTL_INCOMING),
 	IOCTL_OP(LIVEUPDATE_SESSION_GET_NAME, luo_session_get_name,
 		 struct liveupdate_session_get_name, name, LUO_IOCTL_ALL),
+	IOCTL_OP(LIVEUPDATE_SESSION_RETRIEVE_INTO_FD, luo_session_retrieve_into_fd,
+		 struct liveupdate_session_retrieve_into_fd, token, LUO_IOCTL_INCOMING),
 };
 
 static bool luo_ioctl_type_valid(struct luo_session *session,

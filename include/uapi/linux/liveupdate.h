@@ -59,7 +59,11 @@ enum {
 	LIVEUPDATE_CMD_SESSION_PRESERVE_FD = LIVEUPDATE_CMD_SESSION_BASE,
 	LIVEUPDATE_CMD_SESSION_RETRIEVE_FD = 0x41,
 	LIVEUPDATE_CMD_SESSION_FINISH = 0x42,
+
 	LIVEUPDATE_CMD_SESSION_GET_NAME = 0x43,
+
+	LIVEUPDATE_CMD_SESSION_RETRIEVE_INTO_FD = 0x44,
+
 };
 
 /**
@@ -183,6 +187,23 @@ struct liveupdate_session_retrieve_fd {
 
 #define LIVEUPDATE_SESSION_RETRIEVE_FD					\
 	_IO(LIVEUPDATE_IOCTL_TYPE, LIVEUPDATE_CMD_SESSION_RETRIEVE_FD)
+
+/**
+ * struct liveupdate_session_retrieve_into_fd - ioctl(LIVEUPDATE_SESSION_RETRIEVE_INTO_FD)
+ * @size:  Input; sizeof(struct liveupdate_session_retrieve_into_fd)
+ * @fd:    Input; The open file descriptor (e.g. empty tmpfs file) to inject the resource into.
+ * @token: Input; An opaque, token that was used to preserve the resource.
+ *
+ * Retrieve a previously preserved file descriptor into an existing file descriptor.
+ */
+struct liveupdate_session_retrieve_into_fd {
+	__u32		size;
+	__s32		fd;
+	__aligned_u64	token;
+};
+
+#define LIVEUPDATE_SESSION_RETRIEVE_INTO_FD					\
+	_IO(LIVEUPDATE_IOCTL_TYPE, LIVEUPDATE_CMD_SESSION_RETRIEVE_INTO_FD)
 
 /**
  * struct liveupdate_session_finish - ioctl(LIVEUPDATE_SESSION_FINISH)
