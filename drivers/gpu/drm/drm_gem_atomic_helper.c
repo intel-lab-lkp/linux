@@ -114,13 +114,15 @@
 int drm_gem_plane_helper_prepare_fb(struct drm_plane *plane,
 				    struct drm_plane_state *state)
 {
-	struct dma_fence *fence = dma_fence_get(state->fence);
+	struct dma_fence *fence;
 	enum dma_resv_usage usage;
 	size_t i;
 	int ret;
 
 	if (!state->fb)
 		return 0;
+
+	fence = dma_fence_get(state->fence);
 
 	/*
 	 * Only add the kernel fences here if there is already a fence set via
@@ -154,6 +156,7 @@ int drm_gem_plane_helper_prepare_fb(struct drm_plane *plane,
 			struct dma_fence_chain *chain = dma_fence_chain_alloc();
 
 			if (!chain) {
+				dma_fence_put(new);
 				ret = -ENOMEM;
 				goto error;
 			}
