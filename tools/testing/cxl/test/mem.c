@@ -372,7 +372,7 @@ static void cxl_mock_event_trigger(struct device *dev)
 			event_reset_log(log);
 	}
 
-	cxl_mem_get_event_records(mdata->mds, mes->ev_status);
+	cxl_mem_get_event_records(mdata->mds, mes->ev_status, NULL);
 }
 
 struct cxl_event_record_raw maint_needed = {
@@ -1805,7 +1805,7 @@ static int cxl_mock_mem_probe(struct platform_device *pdev)
 	if (rc)
 		dev_dbg(dev, "No CXL FWCTL setup\n");
 
-	cxl_mem_get_event_records(mds, CXLDEV_EVENT_STATUS_ALL);
+	cxl_mem_get_event_records(mds, CXLDEV_EVENT_STATUS_ALL, NULL);
 	cxl_mock_test_feat_init(mdata);
 
 	return 0;
