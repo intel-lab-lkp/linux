@@ -386,7 +386,9 @@ static int walk_nested_s2_pgd(struct kvm_vcpu *vcpu, phys_addr_t ipa,
 	out->output = paddr;
 	out->block_size = 1UL << ((3 - level) * stride + wi->pgshift);
 	out->readable = desc & KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R;
-	out->writable = desc & KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W;
+	/* Takes care of both RO/RW and RO/WC/WD encodings */
+	out->writable = desc & (KVM_PTE_LEAF_ATTR_HI_S2_DBM |
+				KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W);
 	out->level = level;
 	out->desc = desc;
 	return 0;
