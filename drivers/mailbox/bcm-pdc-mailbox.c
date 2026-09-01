@@ -935,8 +935,7 @@ static int pdc_rx_list_sg_add(struct pdc_state *pdcs, struct scatterlist *sg)
  */
 static irqreturn_t pdc_irq_handler(int irq, void *data)
 {
-	struct device *dev = (struct device *)data;
-	struct pdc_state *pdcs = dev_get_drvdata(dev);
+	struct pdc_state *pdcs = data;
 	u32 intstatus = ioread32(pdcs->pdc_reg_vbase + PDC_INTSTATUS_OFFSET);
 
 	if (unlikely(intstatus == 0))
@@ -1402,7 +1401,7 @@ static int pdc_interrupts_init(struct pdc_state *pdcs)
 		dev_name(dev), pdcs->pdc_irq, pdcs);
 
 	err = devm_request_irq(dev, pdcs->pdc_irq, pdc_irq_handler, 0,
-			       dev_name(dev), dev);
+			       dev_name(dev), pdcs);
 	if (err)
 		return err;
 	return PDC_SUCCESS;
