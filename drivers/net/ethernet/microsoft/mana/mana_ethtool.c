@@ -681,11 +681,11 @@ static int mana_set_coalesce(struct net_device *ndev,
 	return 0;
 }
 
-/* A reduction leaves every surviving queue configured as it was, so it retires
- * the tail rather than rebuilding; an increase still builds a new set. On
- * failure the existing queues keep running and the requested value is never
- * replaced by a fallback. The vport is never torn down, so RDMA cannot take it
- * mid-reconfiguration.
+/* A count change leaves every surviving queue configured as it was, so
+ * neither direction rebuilds: a reduction retires the tail, an increase
+ * builds only the queues added. On failure the existing queues keep running
+ * and the requested value is never replaced by a fallback. The vport is never
+ * torn down, so RDMA cannot take it mid-reconfiguration.
  */
 static int mana_set_channels(struct net_device *ndev,
 			     struct ethtool_channels *channels)
@@ -693,7 +693,7 @@ static int mana_set_channels(struct net_device *ndev,
 	struct mana_port_context *apc = netdev_priv(ndev);
 	unsigned int new_count = channels->combined_count;
 	struct mana_port_context *scratch;
-	struct mana_qset newq, oldq;
+	struct mana_qset newq, oldq, freshq;
 	int err;
 
 	if (new_count < 1 || new_count > apc->max_queues) {
@@ -788,19 +788,41 @@ static int mana_set_channels(struct net_device *ndev,
 		goto free_scratch;
 	}
 
-	err = mana_alloc_qset(apc, scratch, new_count, apc->rx_queue_size,
-			      apc->tx_queue_size, apc->priv_flags,
-			      apc->configured_mtu, apc->bpf_prog, &newq);
+	/* An increase does not change the queues that already exist either, so
+	 * carry them over as well and build only the queues being added. The
+	 * peak stays at the new count instead of old + new.
+	 */
+	err = mana_grow_qset(apc, scratch, new_count, &newq, &freshq);
 	if (err)
 		goto free_scratch; /* current qset untouched, nothing to undo */
 
 	err = mana_publish_qset(apc, &newq, &oldq);
 	if (err) {
-		mana_free_qset(apc, scratch, &newq);
+		/* The old set is live again. Retire the queues that were just
+		 * built - @freshq names exactly those - and then drop the
+		 * merged containers without touching the carried-over queues.
+		 */
+		mana_free_qset(apc, scratch, &freshq);
+		mana_discard_grow(&newq);
 		goto free_scratch;
 	}
 
-	mana_free_qset(apc, scratch, &oldq);
+	/* Nothing is retired by a grow: every queue @oldq referenced is now
+	 * part of the published set, and so is every queue in @freshq. Only
+	 * the containers of both are released here.
+	 */
+	kfree(oldq.tx_qp);
+	kfree(oldq.rxqs);
+	kfree(oldq.indir_table);
+	kfree(oldq.rxobj_table);
+	kfree(freshq.tx_qp);
+	kfree(freshq.rxqs);
+
+	/* A grow retires nothing, so mana_free_qset() never runs to hand out
+	 * the debugfs names. The queues that were just added are the only
+	 * ones missing a node, and no retiring set is holding their names.
+	 */
+	mana_qset_debugfs_publish(apc);
 
 free_scratch:
 	mana_publish_close_if_needed(apc);
@@ -880,7 +902,7 @@ static int mana_set_ringparam(struct net_device *ndev,
 		goto clear_flag;
 	}
 
-	err = mana_alloc_qset(apc, scratch, apc->num_queues, new_rx, new_tx,
+	err = mana_alloc_qset(apc, scratch, new_rx, new_tx,
 			      apc->priv_flags, apc->configured_mtu,
 			      apc->bpf_prog, &newq);
 	if (err) {
@@ -900,9 +922,6 @@ static int mana_set_ringparam(struct net_device *ndev,
 	mana_free_qset(apc, scratch, &oldq);
 
 free_scratch:
-	/* After the caller-side cleanup above, so the EQ pool outlives the
-	 * CQs that reference it.
-	 */
 	mana_publish_close_if_needed(apc);
 	mana_qset_scratch_free(scratch);
 clear_flag:
@@ -979,7 +998,7 @@ static int mana_set_priv_flags(struct net_device *ndev, u32 priv_flags)
 		goto clear_flag;
 	}
 
-	err = mana_alloc_qset(apc, scratch, apc->num_queues, apc->rx_queue_size,
+	err = mana_alloc_qset(apc, scratch, apc->rx_queue_size,
 			      apc->tx_queue_size, priv_flags,
 			      apc->configured_mtu, apc->bpf_prog, &newq);
 	if (err)
