@@ -1734,11 +1734,22 @@ static int dsa_user_setup_tc(struct net_device *dev, enum tc_setup_type type,
 {
 	struct dsa_port *dp = dsa_user_to_port(dev);
 	struct dsa_switch *ds = dp->ds;
+	int err;
 
 	switch (type) {
 	case TC_SETUP_BLOCK:
 		return dsa_user_setup_tc_block(dev, type_data);
 	case TC_SETUP_FT:
+		/* A switch that owns the flow tables answers for itself; only
+		 * a conduit-side flow engine needs the block forwarded, and
+		 * that forward is gone by the time the port is torn down.
+		 */
+		if (ds->ops->port_setup_tc) {
+			err = ds->ops->port_setup_tc(ds, dp->index, type,
+						     type_data);
+			if (err != -EOPNOTSUPP)
+				return err;
+		}
 		return dsa_user_setup_ft_block(ds, dp->index, type_data);
 	default:
 		break;
