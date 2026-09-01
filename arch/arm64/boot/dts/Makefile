@@ -10,6 +10,7 @@ subdir-y += apm
 subdir-y += apple
 subdir-y += arm
 subdir-y += aspeed
+subdir-y += axera
 subdir-y += axiado
 subdir-y += bitmain
 subdir-y += blaize
