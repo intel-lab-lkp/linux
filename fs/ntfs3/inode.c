@@ -1769,6 +1769,11 @@ int ntfs_create_inode(struct mnt_idmap *idmap, struct inode *dir,
 			}
 
 			asize = SIZEOF_NONRESIDENT + ALIGN(err, 8);
+			if (asize + PtrOffset(rec, attr) + 8 >
+			    sbi->record_size) {
+				err = -EINVAL;
+				goto out5;
+			}
 			/* Write non resident data. */
 			err = ntfs_sb_write_run(sbi, &ni->file.run, 0, rp,
 						nsize, 0);
