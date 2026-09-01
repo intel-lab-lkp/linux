@@ -464,7 +464,7 @@ struct imgu_mmu_info *imgu_mmu_init(struct device *parent, void __iomem *base)
 	 * Allocate the array of L2PT CPU pointers, initialized to zero,
 	 * which means the dummy L2PT allocated above.
 	 */
-	mmu->l2pts = vzalloc(IPU3_PT_PTES * sizeof(*mmu->l2pts));
+	mmu->l2pts = vcalloc(IPU3_PT_PTES, sizeof(*mmu->l2pts));
 	if (!mmu->l2pts)
 		goto fail_l2pt;
 
