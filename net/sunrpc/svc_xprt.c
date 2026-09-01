@@ -1283,6 +1283,8 @@ static struct cache_deferred_req *svc_defer(struct cache_req *req)
 
 	if (rqstp->rq_arg.page_len || !test_bit(RQ_USEDEFERRAL, &rqstp->rq_flags))
 		return NULL; /* if more than a page, give up FIXME */
+	if (rqstp->rq_arg.len < rqstp->rq_arg.head[0].iov_len)
+		return NULL; /* inconsistent lengths */
 	if (rqstp->rq_deferred) {
 		dr = rqstp->rq_deferred;
 		rqstp->rq_deferred = NULL;
