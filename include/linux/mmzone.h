@@ -612,8 +612,10 @@ struct lru_gen_mm_state {
 	struct list_head *head;
 	/* where the last iteration ended before */
 	struct list_head *tail;
-	/* Bloom filters flip after each iteration */
-	unsigned long *filters[NR_BLOOM_FILTERS];
+	/* PMD-level Bloom filters flip after each iteration */
+	unsigned long *pmd_filters[NR_BLOOM_FILTERS];
+	/* PUD-level Bloom filters flip after each iteration */
+	unsigned long *pud_filters[NR_BLOOM_FILTERS];
 	/* the mm stats for debugging */
 	unsigned long stats[NR_HIST_GENS][NR_MM_STATS];
 };
