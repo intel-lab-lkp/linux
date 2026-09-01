@@ -146,10 +146,11 @@ static void __init early_parse_cmdline(void)
 	if (cmdline_find_option(boot_command_line, "microcode", cmd_buf, sizeof(cmd_buf)) > 0) {
 		while ((s = strsep(&p, ","))) {
 			if (IS_ENABLED(CONFIG_MICROCODE_DBG)) {
-				if (strstr(s, "base_rev=")) {
+				if (str_has_prefix(s, "base_rev=")) {
 					/* advance to the option arg */
 					strsep(&s, "=");
 					if (kstrtouint(s, 16, &base_rev)) { ; }
+					continue;
 				}
 			}
 
