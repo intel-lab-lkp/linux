@@ -577,7 +577,12 @@ struct mana_port_context {
 
 	u8 mac_addr[ETH_ALEN];
 
+	/* EQ pool, owned by the port rather than a queue set: EQs are bound to
+	 * MSI-X vectors, which a swap must not double-book. Sized to
+	 * max_queues; num_eqs is how many exist.
+	 */
 	struct mana_eq *eqs;
+	unsigned int num_eqs;
 	struct dentry *mana_eqs_debugfs;
 
 	enum TRI_STATE rss_state;
@@ -684,7 +689,6 @@ struct mana_port_context {
  * never touched by a swap.
  */
 struct mana_qset {
-	struct mana_eq		*eqs;
 	struct mana_tx_qp	**tx_qp;
 	struct mana_rxq		**rxqs;
 
@@ -710,13 +714,14 @@ int mana_attach(struct net_device *ndev);
 int mana_detach(struct net_device *ndev, bool from_close);
 
 /* Pre-allocate + swap reconfiguration. Allocation and teardown run against a
- * scratch context, so the live port context is only ever mutated with TX
- * disabled.
+ * scratch context, so the live port context is mutated only inside
+ * mana_publish_qset() with TX disabled. Both sets share a port-owned EQ pool.
  */
 struct mana_port_context *
 mana_qset_scratch_alloc(struct mana_port_context *apc);
 void mana_qset_scratch_free(struct mana_port_context *scratch);
-int mana_alloc_qset(struct mana_port_context *scratch, unsigned int num_queues,
+int mana_alloc_qset(struct mana_port_context *apc,
+		    struct mana_port_context *scratch, unsigned int num_queues,
 		    unsigned int rx_queue_size, unsigned int tx_queue_size,
 		    u32 priv_flags, struct mana_qset *out);
 void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset);
