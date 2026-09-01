@@ -228,7 +228,7 @@ static int mana_xdp_set(struct net_device *ndev, struct bpf_prog *prog,
 		if (err) {
 			NL_SET_ERR_MSG_MOD(extack,
 					   "XDP: Re-config failed at publish");
-			mana_free_qset(scratch, &newq);
+			mana_free_qset(apc, scratch, &newq);
 			/* After the cleanup above: closing destroys the EQ pool
 			 * those queues' CQs were attached to.
 			 */
@@ -237,7 +237,7 @@ static int mana_xdp_set(struct net_device *ndev, struct bpf_prog *prog,
 			return err;
 		}
 
-		mana_free_qset(scratch, &oldq);
+		mana_free_qset(apc, scratch, &oldq);
 		mana_qset_scratch_free(scratch);
 	} else {
 		/* No queues to rebuild; mana_open() will size the RX buffers

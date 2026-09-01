@@ -968,16 +968,13 @@ static int mana_change_mtu(struct net_device *ndev, int new_mtu)
 
 	err = mana_publish_qset(mpc, &newq, &oldq);
 	if (err) {
-		mana_free_qset(scratch, &newq);
+		mana_free_qset(mpc, scratch, &newq);
 		goto free_scratch;
 	}
 
-	mana_free_qset(scratch, &oldq);
+	mana_free_qset(mpc, scratch, &oldq);
 
 free_scratch:
-	/* After the caller-side cleanup above, so the EQ pool outlives the
-	 * CQs that reference it.
-	 */
 	mana_publish_close_if_needed(mpc);
 	mana_qset_scratch_free(scratch);
 	return err;
@@ -1938,6 +1935,9 @@ void mana_destroy_eq(struct mana_port_context *apc)
 		msi = eq->eq.msix_index;
 		mana_gd_destroy_queue(gc, eq);
 		mana_gd_put_gic(gc, !gc->msi_sharing, msi);
+		apc->eqs[i].eq = NULL;
+		/* Freed with the parent by debugfs_remove_recursive() above. */
+		apc->eqs[i].mana_eq_debugfs = NULL;
 	}
 
 	kfree(apc->eqs);
@@ -1948,15 +1948,16 @@ EXPORT_SYMBOL_NS(mana_destroy_eq, "NET_MANA");
 
 static void mana_create_eq_debugfs(struct mana_port_context *apc, int i)
 {
-	struct mana_eq eq = apc->eqs[i];
+	struct mana_eq *eq = &apc->eqs[i];
 	char eqnum[32];
 
 	sprintf(eqnum, "eq%d", i);
-	eq.mana_eq_debugfs = debugfs_create_dir(eqnum, apc->mana_eqs_debugfs);
-	debugfs_create_u32("head", 0400, eq.mana_eq_debugfs, &eq.eq->head);
-	debugfs_create_u32("tail", 0400, eq.mana_eq_debugfs, &eq.eq->tail);
-	debugfs_create_u32("irq", 0400, eq.mana_eq_debugfs, &eq.eq->eq.irq);
-	debugfs_create_file("eq_dump", 0400, eq.mana_eq_debugfs, eq.eq, &mana_dbg_q_fops);
+	eq->mana_eq_debugfs = debugfs_create_dir(eqnum, apc->mana_eqs_debugfs);
+	debugfs_create_u32("head", 0400, eq->mana_eq_debugfs, &eq->eq->head);
+	debugfs_create_u32("tail", 0400, eq->mana_eq_debugfs, &eq->eq->tail);
+	debugfs_create_u32("irq", 0400, eq->mana_eq_debugfs, &eq->eq->eq.irq);
+	debugfs_create_file("eq_dump", 0400, eq->mana_eq_debugfs, eq->eq,
+			    &mana_dbg_q_fops);
 }
 
 int mana_create_eq(struct mana_port_context *apc)
@@ -2082,6 +2083,37 @@ out:
 	 * own EQs, and the extras are reused by the next attempt.
 	 */
 	return err;
+}
+
+/* Release EQs above @keep, returning the MSI-X vectors freed. Only safe once
+ * no set references them, i.e. after mana_free_qset(), or a live CQ would
+ * point at a destroyed EQ.
+ */
+static void mana_shrink_eqs(struct mana_port_context *apc, unsigned int keep)
+{
+	struct gdma_context *gc = apc->ac->gdma_dev->gdma_context;
+	struct gdma_queue *eq;
+	unsigned int msi;
+	unsigned int i;
+
+	if (!apc->eqs || keep >= apc->num_eqs)
+		return;
+
+	for (i = keep; i < apc->num_eqs; i++) {
+		eq = apc->eqs[i].eq;
+		if (!eq)
+			continue;
+
+		debugfs_remove_recursive(apc->eqs[i].mana_eq_debugfs);
+		apc->eqs[i].mana_eq_debugfs = NULL;
+
+		msi = eq->eq.msix_index;
+		mana_gd_destroy_queue(gc, eq);
+		mana_gd_put_gic(gc, !gc->msi_sharing, msi);
+		apc->eqs[i].eq = NULL;
+	}
+
+	apc->num_eqs = keep;
 }
 
 static int mana_fence_rq(struct mana_port_context *apc, struct mana_rxq *rxq)
@@ -4319,6 +4351,13 @@ cleanup_rxq_array:
 	kfree(scratch->rxqs);
 	scratch->rxqs = NULL;
 out_err:
+	/* Give back any EQ this attempt added to the shared pool rather than
+	 * holding its MSI-X vectors until some later teardown: the live set
+	 * still needs only apc->num_queues of them. Safe here because this
+	 * set's CQs have already been destroyed above.
+	 */
+	mana_shrink_eqs(apc, apc->num_queues);
+
 	netdev_err(ndev, "%s(num_queues=%u) failed: %d\n", __func__,
 		   num_queues, err);
 	return err;
@@ -4649,7 +4688,8 @@ static void mana_qset_debugfs_publish(struct mana_port_context *apc)
 /* Tear down @qset, no longer installed on @apc, against @scratch so the live
  * context never points at queues being freed.
  */
-void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset)
+void mana_free_qset(struct mana_port_context *apc,
+		    struct mana_port_context *scratch, struct mana_qset *qset)
 {
 	struct bpf_prog *retiring_prog;
 	unsigned int retiring_queues;
@@ -4745,12 +4785,19 @@ void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset)
 
 	memset(qset, 0, sizeof(*qset));
 
+	/* This set is gone, so any EQ above the live queue count is now
+	 * unreferenced. Release those vectors instead of holding them at the
+	 * high-water mark. Safe here and only here: the retiring set's CQs
+	 * have just been destroyed.
+	 */
+	mana_shrink_eqs(apc, apc->num_queues);
+
 	/* Queues built through a scratch context carry no debugfs nodes,
 	 * because both sets are alive during the swap and would collide on
 	 * the same names. The retiring set's nodes are gone now, so the
 	 * published queues can finally take those names.
 	 */
-	mana_qset_debugfs_publish(netdev_priv(scratch->ndev));
+	mana_qset_debugfs_publish(apc);
 }
 
 /* --- end of pre-allocate + swap reconfiguration path ---------------------- */
