@@ -265,3 +265,34 @@ int mana_bpf(struct net_device *ndev, struct netdev_bpf *bpf)
 
 	return ret;
 }
+
+/* Read the XDP program a queue set is running, without changing anything. */
+struct bpf_prog *mana_chn_xdp_peek(struct mana_port_context *apc)
+{
+	ASSERT_RTNL();
+
+	if (!apc->rxqs || !apc->rxqs[0])
+		return NULL;
+
+	return rtnl_dereference(apc->rxqs[0]->bpf_prog);
+}
+
+/* Drop the per-queue references a retiring set holds on @prog.
+ *
+ * Kept separate from mana_chn_setxdp() so the pointers can stay in place
+ * until the queues stop polling: clearing them up front would let packets
+ * already sitting in a retiring RQ take the pass path and reach the stack
+ * without the program ever seeing them.
+ */
+void mana_chn_xdp_release(struct bpf_prog *prog, unsigned int num_queues)
+{
+	unsigned int i;
+
+	ASSERT_RTNL();
+
+	if (!prog)
+		return;
+
+	for (i = 0; i < num_queues; i++)
+		bpf_prog_put(prog);
+}
