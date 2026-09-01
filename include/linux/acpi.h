@@ -1649,6 +1649,35 @@ void acpi_init_pcc(void);
 static inline void acpi_init_pcc(void) { }
 #endif
 
+/**
+ * struct acpi_ffh_ffa_ops - FF-A backend for the FFH Operation Region
+ * @partition_id: Resolve @uuid to a unique endpoint ID. Must fail with a
+ *		  negative errno if the UUID resolves to no endpoint or to
+ *		  more than one distinct endpoint.
+ * @direct_req2:  Issue FFA_MSG_SEND_DIRECT_REQ2 towards @dst_id using @uuid
+ *		  as the service UUID. @payload holds the X4-X17 registers
+ *		  taken from the Operation Region and is updated in place
+ *		  with the response payload; @nr_payload is the number of
+ *		  registers in use (1 to 14). @resp_regs is filled with the
+ *		  X1-X3 registers returned by the callee, and @payload with
+ *		  the response, whenever the call was actually made. Returns
+ *		  0 on success, -EIO if the callee returned FFA_ERROR,
+ *		  -EPROTO if it returned something unexpected, or another
+ *		  negative errno if the call could not be made at all. -EIO
+ *		  and -EPROTO both mean the registers hold the callee's
+ *		  response and must be copied back to AML.
+ *
+ * Backend for FFH Operation Regions declared with an Offset of 0x2, as
+ * described in Arm DEN0048D (Functional Fixed Hardware Specification v1.3)
+ * section 2.3.1.2. Registered by the FF-A driver, which may be a module,
+ * while the Operation Region handler itself is built in.
+ */
+struct acpi_ffh_ffa_ops {
+	int (*partition_id)(const uuid_t *uuid, u16 *dst_id);
+	int (*direct_req2)(u16 dst_id, const uuid_t *uuid, u64 *payload,
+			   unsigned int nr_payload, u64 resp_regs[3]);
+};
+
 #ifdef CONFIG_ACPI_FFH
 void acpi_init_ffh(void);
 extern int acpi_ffh_address_space_arch_setup(void *handler_ctxt,
@@ -1657,6 +1686,18 @@ extern int acpi_ffh_address_space_arch_handler(acpi_integer *value,
 					       void *region_context);
 #else
 static inline void acpi_init_ffh(void) { }
+#endif
+
+#if defined(CONFIG_ACPI_FFH) && defined(CONFIG_ARM64)
+int acpi_ffh_ffa_register(const struct acpi_ffh_ffa_ops *ops);
+void acpi_ffh_ffa_unregister(const struct acpi_ffh_ffa_ops *ops);
+#else
+static inline int acpi_ffh_ffa_register(const struct acpi_ffh_ffa_ops *ops)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void acpi_ffh_ffa_unregister(const struct acpi_ffh_ffa_ops *ops) { }
 #endif
 
 #ifdef CONFIG_ACPI
