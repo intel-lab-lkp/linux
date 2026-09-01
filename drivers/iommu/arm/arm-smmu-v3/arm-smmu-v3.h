@@ -59,6 +59,7 @@ struct arm_vsmmu;
 #define IDR1_SIDSIZE			GENMASK(5, 0)
 
 #define ARM_SMMU_IDR3			0xc
+#define IDR3_MPAM			(1 << 7)
 #define IDR3_FWB			(1 << 8)
 #define IDR3_RIL			(1 << 10)
 #define IDR3_BBM			GENMASK(12, 11)
@@ -170,6 +171,10 @@ struct arm_vsmmu;
 #define ARM_SMMU_PRIQ_IRQ_CFG0		0xd0
 #define ARM_SMMU_PRIQ_IRQ_CFG1		0xd8
 #define ARM_SMMU_PRIQ_IRQ_CFG2		0xdc
+
+#define ARM_SMMU_MPAMIDR		0x130
+#define SMMU_MPAMIDR_PARTID_MAX		GENMASK(15, 0)
+#define SMMU_MPAMIDR_PMG_MAX		GENMASK(23, 16)
 
 #define ARM_SMMU_REG_SZ			0xe00
 
@@ -299,6 +304,10 @@ static inline u32 arm_smmu_strtab_l2_idx(u32 sid)
 #define STRTAB_STE_2_S2PTW		(1UL << 54)
 #define STRTAB_STE_2_S2S		(1UL << 57)
 #define STRTAB_STE_2_S2R		(1UL << 58)
+
+#define STRTAB_STE_1_S1MPAM		(1UL << 26)
+#define STRTAB_STE_4_PARTID		GENMASK_ULL(31, 16)
+#define STRTAB_STE_5_PMG		GENMASK_ULL(7, 0)
 
 #define STRTAB_STE_3_S2TTB_MASK		GENMASK_ULL(51, 4)
 
@@ -927,7 +936,11 @@ struct arm_smmu_device {
 #define ARM_SMMU_FEAT_BBML2		(1 << 24)
 #define ARM_SMMU_FEAT_HAFT		(1 << 25)
 #define ARM_SMMU_FEAT_DS		(1 << 26)
+#define ARM_SMMU_FEAT_MPAM		(1 << 27)
 	u32				features;
+
+	u16				partid_max;
+	u8				pmg_max;
 
 #define ARM_SMMU_OPT_SKIP_PREFETCH	(1 << 0)
 #define ARM_SMMU_OPT_PAGE0_REGS_ONLY	(1 << 1)

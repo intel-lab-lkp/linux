@@ -11,6 +11,7 @@
 
 #include <linux/acpi.h>
 #include <linux/acpi_iort.h>
+#include <linux/arm_mpam.h>
 #include <linux/bitops.h>
 #include <linux/crash_dump.h>
 #include <linux/delay.h>
@@ -4374,6 +4375,65 @@ static int arm_smmu_def_domain_type(struct device *dev)
 	return 0;
 }
 
+static int arm_smmu_set_dev_requestor_id(struct device *dev, u32 partid,
+					 u8 pmg)
+{
+	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
+	struct arm_smmu_cmd cmd;
+	struct arm_smmu_cmdq_batch cmds;
+	struct arm_smmu_device *smmu;
+	u64 val;
+	int i;
+
+	/*
+	 * TODO: This writes the PARTID/PMG directly into the live STEs, so the
+	 * tag is lost on any later STE rewrite and can race a concurrent writer.
+	 * It should be stored on arm_smmu_master and stamped in the STE
+	 * generators via a group-mutex-holding path instead.
+	 */
+	if (!master || !master->smmu)
+		return -ENODEV;
+	smmu = master->smmu;
+
+	if (!(smmu->features & ARM_SMMU_FEAT_MPAM))
+		return -EOPNOTSUPP;
+
+	if (partid > smmu->partid_max || pmg > smmu->pmg_max)
+		return -ERANGE;
+
+	/* Program the stream-level PARTID/PMG into every STE the master owns. */
+	arm_smmu_cmdq_batch_init_cmd(smmu, &cmds, &cmd);
+	mutex_lock(&smmu->streams_mutex);
+	for (i = 0; i < master->num_streams; i++) {
+		u32 sid = master->streams[i].id;
+		struct arm_smmu_ste *ste = arm_smmu_get_step_for_sid(smmu, sid);
+
+		if (!ste)
+			continue;
+
+		val = le64_to_cpu(ste->data[1]);
+		val &= ~STRTAB_STE_1_S1MPAM;
+		WRITE_ONCE(ste->data[1], cpu_to_le64(val));
+
+		val = le64_to_cpu(ste->data[4]);
+		val &= ~STRTAB_STE_4_PARTID;
+		val |= FIELD_PREP(STRTAB_STE_4_PARTID, partid);
+		WRITE_ONCE(ste->data[4], cpu_to_le64(val));
+
+		val = le64_to_cpu(ste->data[5]);
+		val &= ~STRTAB_STE_5_PMG;
+		val |= FIELD_PREP(STRTAB_STE_5_PMG, pmg);
+		WRITE_ONCE(ste->data[5], cpu_to_le64(val));
+
+		cmd = arm_smmu_make_cmd_cfgi_ste(sid, true);
+		arm_smmu_cmdq_batch_add_cmd_p(smmu, &cmds, &cmd);
+	}
+
+	mutex_unlock(&smmu->streams_mutex);
+	arm_smmu_cmdq_batch_submit(smmu, &cmds);
+	return 0;
+}
+
 static const struct iommu_ops arm_smmu_ops = {
 	.identity_domain	= &arm_smmu_identity_domain,
 	.blocked_domain		= &arm_smmu_blocked_domain,
@@ -4388,6 +4448,7 @@ static const struct iommu_ops arm_smmu_ops = {
 	.of_xlate		= arm_smmu_of_xlate,
 	.get_resv_regions	= arm_smmu_get_resv_regions,
 	.page_response		= arm_smmu_page_response,
+	.set_dev_requestor_id	= arm_smmu_set_dev_requestor_id,
 	.def_domain_type	= arm_smmu_def_domain_type,
 	.get_viommu_size	= arm_smmu_get_viommu_size,
 	.viommu_init		= arm_vsmmu_init,
@@ -5046,6 +5107,36 @@ static void arm_smmu_get_httu(struct arm_smmu_device *smmu, u32 reg)
 			  hw_features, fw_features);
 }
 
+static void arm_smmu_mpam_register_smmu(struct arm_smmu_device *smmu)
+{
+	u16 partid_max;
+	u8 pmg_max;
+	u32 reg;
+
+	if (!IS_ENABLED(CONFIG_ARM64_MPAM))
+		return;
+
+	if (!(smmu->features & ARM_SMMU_FEAT_MPAM))
+		return;
+
+	reg = readl_relaxed(smmu->base + ARM_SMMU_MPAMIDR);
+	if (!reg)
+		return;
+
+	partid_max = FIELD_GET(SMMU_MPAMIDR_PARTID_MAX, reg);
+	pmg_max = FIELD_GET(SMMU_MPAMIDR_PMG_MAX, reg);
+
+	smmu->partid_max = partid_max;
+	smmu->pmg_max = pmg_max;
+
+	if (mpam_register_requestor(partid_max, pmg_max)) {
+		smmu->features &= ~ARM_SMMU_FEAT_MPAM;
+		return;
+	}
+
+	mpam_register_device_requestor();
+}
+
 static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 {
 	u32 reg;
@@ -5197,6 +5288,9 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 	if (FIELD_GET(IDR3_BBM, reg) == 2)
 		smmu->features |= ARM_SMMU_FEAT_BBML2;
 
+	if (FIELD_GET(IDR3_MPAM, reg))
+		smmu->features |= ARM_SMMU_FEAT_MPAM;
+
 	/* IDR5 */
 	reg = readl_relaxed(smmu->base + ARM_SMMU_IDR5);
 
@@ -5260,6 +5354,8 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 
 	if (arm_smmu_sva_supported(smmu))
 		smmu->features |= ARM_SMMU_FEAT_SVA;
+
+	arm_smmu_mpam_register_smmu(smmu);
 
 	dev_info(smmu->dev, "oas %lu-bit (features 0x%08x)\n",
 		 smmu->oas, smmu->features);
