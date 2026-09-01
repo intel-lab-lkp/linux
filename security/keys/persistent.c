@@ -38,7 +38,8 @@ static int key_create_persistent_register(struct user_namespace *ns)
  * Called with the namespace's sem locked for writing.
  */
 static key_ref_t key_create_persistent(struct user_namespace *ns, kuid_t uid,
-				       struct keyring_index_key *index_key)
+				       struct keyring_index_key *index_key,
+				       bool *created)
 {
 	struct key *persistent;
 	key_ref_t reg_ref, persistent_ref;
@@ -63,6 +64,8 @@ static key_ref_t key_create_persistent(struct user_namespace *ns, kuid_t uid,
 	if (IS_ERR(persistent))
 		return ERR_CAST(persistent);
 
+	*created = true;
+
 	return make_key_ref(persistent, true);
 }
 
@@ -78,6 +81,7 @@ static long key_get_persistent(struct user_namespace *ns, kuid_t uid,
 	key_ref_t reg_ref, persistent_ref;
 	char buf[32];
 	long ret;
+	bool created = false;
 
 	/* Look in the register if it exists */
 	memset(&index_key, 0, sizeof(index_key));
@@ -100,7 +104,7 @@ static long key_get_persistent(struct user_namespace *ns, kuid_t uid,
 	 * also need to create the register.
 	 */
 	down_write(&ns->keyring_sem);
-	persistent_ref = key_create_persistent(ns, uid, &index_key);
+	persistent_ref = key_create_persistent(ns, uid, &index_key, &created);
 	up_write(&ns->keyring_sem);
 	if (!IS_ERR(persistent_ref))
 		goto found;
@@ -108,15 +112,16 @@ static long key_get_persistent(struct user_namespace *ns, kuid_t uid,
 	return PTR_ERR(persistent_ref);
 
 found:
+	persistent = key_ref_to_ptr(persistent_ref);
 	ret = key_task_permission(persistent_ref, current_cred(), KEY_NEED_LINK);
-	if (ret == 0) {
-		persistent = key_ref_to_ptr(persistent_ref);
+	if (ret == 0)
 		ret = key_link(key_ref_to_ptr(dest_ref), persistent);
-		if (ret == 0) {
-			key_set_timeout(persistent, persistent_keyring_expiry);
-			ret = persistent->serial;
-		}
-	}
+
+	if (ret == 0 || created)
+		key_set_timeout(persistent, persistent_keyring_expiry);
+
+	if (ret == 0)
+		ret = persistent->serial;
 
 	key_ref_put(persistent_ref);
 	return ret;
