@@ -1872,6 +1872,41 @@ TEST_F(TRACE_poke, getpid_runs_normally)
 # define ARCH_REGS		struct user_regs_struct
 # define SYSCALL_NUM(_regs)	(_regs).orig_d0
 # define SYSCALL_RET(_regs)	(_regs).d0
+#elif defined(__sparc__) && defined(__arch64__)
+/*
+ * The NT_PRSTATUS regset: %g0-%g7 and %o0-%o7, the 16 window
+ * registers as read back from the stack, then tstate, tpc, tnpc
+ * and y.
+ */
+struct sparc64_user_regs {
+	__u64 u_regs[16];
+	__u64 window[16];
+	__u64 tstate;
+	__u64 tpc;
+	__u64 tnpc;
+	__u64 y;
+};
+# define ARCH_REGS		struct sparc64_user_regs
+# define SYSCALL_NUM(_regs)	(_regs).u_regs[1]	/* %g1 */
+# define SYSCALL_RET(_regs)	(_regs).u_regs[8]	/* %o0 */
+/*
+ * A syscall error is signaled by the carry bit in tstate, with the
+ * errno held in %o0 as a positive value; the carry can only be
+ * written reliably once the syscall has been skipped or has run.
+ */
+# define SPARC64_TSTATE_CARRY	0x0000001100000000UL	/* xcc.c | icc.c */
+# define SYSCALL_RET_SET(_regs, _val)				\
+	do {							\
+		typeof(_val) _result = (_val);			\
+		if (_result < 0) {				\
+			SYSCALL_RET(_regs) = -_result;		\
+			(_regs).tstate |= SPARC64_TSTATE_CARRY;	\
+		} else {					\
+			SYSCALL_RET(_regs) = _result;		\
+			(_regs).tstate &= ~SPARC64_TSTATE_CARRY; \
+		}						\
+	} while (0)
+# define SYSCALL_RET_SET_ON_PTRACE_EXIT
 #else
 # error "Do not know how to find your architecture's registers and syscalls"
 #endif
