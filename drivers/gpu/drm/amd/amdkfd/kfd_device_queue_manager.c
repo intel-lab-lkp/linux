@@ -2100,17 +2100,15 @@ static int start_cpsch(struct device_queue_manager *dqm)
 			      NUM_XCC(dqm->dev->xcc_mask);
 
 	dqm->detect_hang_info_size = num_hw_queue_slots * sizeof(struct dqm_detect_hang_info);
-	dqm->detect_hang_info = kzalloc(dqm->detect_hang_info_size, GFP_KERNEL);
+	dqm->detect_hang_info = kzalloc_objs(*dqm->detect_hang_info, num_hw_queue_slots);
 
 	if (!dqm->detect_hang_info) {
 		retval = -ENOMEM;
 		goto fail_detect_hang_buffer;
 	}
 
-	dqm->hung_db_array = kzalloc(hung_array_size * sizeof(u32), GFP_KERNEL);
-	dqm->hqd_info = kzalloc(
-		hqd_info_size * sizeof(struct amdgpu_mes_hung_queue_hqd_info),
-		GFP_KERNEL);
+	dqm->hung_db_array = kzalloc_objs(*dqm->hung_db_array, hung_array_size);
+	dqm->hqd_info = kzalloc_objs(*dqm->hqd_info, hqd_info_size);
 
 	dqm_unlock(dqm);
 
