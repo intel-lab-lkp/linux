@@ -33,6 +33,8 @@ static bool ufs_read_cylinder(struct super_block *sb,
 	struct ufs_sb_private_info * uspi;
 	struct ufs_cg_private_info * ucpi;
 	struct ufs_cylinder_group * ucg;
+	u64 cg_bytes, free_bitmap_bytes;
+	const char *err;
 	unsigned i, j;
 
 	UFSD("ENTER, cgno %u, bitmap_nr %u\n", cgno, bitmap_nr);
@@ -48,8 +50,10 @@ static bool ufs_read_cylinder(struct super_block *sb,
 	UCPI_UBH(ucpi)->bh[0] = sbi->s_ucg[cgno];
 	for (i = 1; i < UCPI_UBH(ucpi)->count; i++) {
 		UCPI_UBH(ucpi)->bh[i] = sb_bread(sb, UCPI_UBH(ucpi)->fragment + i);
-		if (!UCPI_UBH(ucpi)->bh[i])
+		if (!UCPI_UBH(ucpi)->bh[i]) {
+			err = "can't read cylinder group block %u";
 			goto failed;
+		}
 	}
 	sbi->s_cgno[bitmap_nr] = cgno;
 			
@@ -68,6 +72,16 @@ static bool ufs_read_cylinder(struct super_block *sb,
 	ucpi->c_clustersumoff = fs32_to_cpu(sb, ucg->cg_u.cg_44.cg_clustersumoff);
 	ucpi->c_clusteroff = fs32_to_cpu(sb, ucg->cg_u.cg_44.cg_clusteroff);
 	ucpi->c_nclusterblks = fs32_to_cpu(sb, ucg->cg_u.cg_44.cg_nclusterblks);
+
+	cg_bytes = UCPI_UBH(ucpi)->count * sb->s_blocksize;
+	free_bitmap_bytes = BITS_TO_BYTES((u64)uspi->s_fpg);
+	/* The full free bitmap must fit in the loaded CG buffer. */
+	if (!free_bitmap_bytes ||
+	    (u64)ucpi->c_freeoff + free_bitmap_bytes > cg_bytes) {
+		err = "cylinder group %u has invalid free bitmap";
+		goto failed;
+	}
+
 	UFSD("EXIT\n");
 	return true;
 	
@@ -75,7 +89,7 @@ failed:
 	for (j = 1; j < i; j++)
 		brelse(UCPI_UBH(ucpi)->bh[j]);
 	sbi->s_cgno[bitmap_nr] = UFS_CGNO_EMPTY;
-	ufs_error (sb, "ufs_read_cylinder", "can't read cylinder group block %u", cgno);
+	ufs_error(sb, "ufs_read_cylinder", err, cgno);
 	return false;
 }
 
