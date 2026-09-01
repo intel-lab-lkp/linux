@@ -155,7 +155,7 @@ static int sharp_memory_update_display(struct sharp_memory_device *smd,
 	u32 pitch = smd->pitch;
 	u8 vcom = smd->vcom;
 	u8 *tx_buffer = smd->tx_buffer;
-	u32 tx_buffer_size = smd->tx_buffer_size;
+	u32 tx_len = 1 + (drm_rect_height(&clip) * pitch);
 
 	mutex_lock(&smd->tx_mutex);
 
@@ -165,7 +165,7 @@ static int sharp_memory_update_display(struct sharp_memory_device *smd,
 	sharp_memory_set_tx_buffer_addresses(&tx_buffer[1], clip, pitch);
 	sharp_memory_set_tx_buffer_data(&tx_buffer[2], fb, vmap, clip, pitch, fmtcnv_state);
 
-	ret = sharp_memory_spi_write(smd->spi, tx_buffer, tx_buffer_size);
+	ret = sharp_memory_spi_write(smd->spi, tx_buffer, tx_len);
 
 	mutex_unlock(&smd->tx_mutex);
 
