@@ -12,6 +12,7 @@
 #define COMPILE_OFFSETS
 
 #include <linux/kbuild.h>
+#include <hyperv/vsm.h>
 #include <asm/mshyperv.h>
 
 static void __used common(void)
@@ -33,5 +34,12 @@ static void __used common(void)
 		OFFSET(MSHV_VTL_CPU_CONTEXT_r14, mshv_vtl_cpu_context, r14);
 		OFFSET(MSHV_VTL_CPU_CONTEXT_r15, mshv_vtl_cpu_context, r15);
 		OFFSET(MSHV_VTL_CPU_CONTEXT_cr2, mshv_vtl_cpu_context, cr2);
+	}
+
+	if (IS_ENABLED(CONFIG_HYPERV_VSM)) {
+		OFFSET(HV_VTLCALL_PARAM_a0, hv_vtlcall_param, a0);
+		OFFSET(HV_VTLCALL_PARAM_a1, hv_vtlcall_param, a1);
+		OFFSET(HV_VTLCALL_PARAM_a2, hv_vtlcall_param, a2);
+		OFFSET(HV_VTLCALL_PARAM_a3, hv_vtlcall_param, a3);
 	}
 }

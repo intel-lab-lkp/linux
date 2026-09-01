@@ -15,6 +15,7 @@
 #include <hyperv/vsm.h>
 #include <asm/msr-index.h>
 #include <asm/processor-flags.h>
+#include <hyperv/hvgdk_mini.h>
 #include <asm/mshyperv.h>
 
 /* Define PAGE size and related variables for initial secure kernel pages */
@@ -255,4 +256,32 @@ void __init hv_vsm_arch_init_vp(struct hv_init_vp_context *vp_ctx, Elf64_Addr sk
 	hv_vsm_init_cpu(vp_ctx, sk_entry_pa);
 	hv_vsm_init_gdt(vp_ctx, sk_pa);
 	hv_vsm_init_page_tables(vp_ctx, sk_pa);
+}
+
+/* Implemented in mshv_vtl_asm.S */
+void __hv_vsm_vtlcall(struct hv_vtlcall_param *args);
+
+DEFINE_STATIC_CALL_NULL(__hv_vsm_vtlcall_hypercall, void (*)(void));
+
+void __init hv_vsm_init_vtlcall(u64 vtl_call_offset)
+{
+	static_call_update(__hv_vsm_vtlcall_hypercall,
+			   (void *)((u8 *)hv_hypercall_pg + vtl_call_offset));
+}
+
+s64 hv_vsm_vtlcall(struct hv_vtlcall_param *args)
+{
+	unsigned long flags;
+	u64 cr2;
+
+	local_irq_save(flags);
+	kernel_fpu_begin_mask(0);
+	cr2 = native_read_cr2();
+	__hv_vsm_vtlcall(args);
+	native_write_cr2(cr2);
+	kernel_fpu_end();
+	local_irq_restore(flags);
+
+	/* The secure kernel returns a signed 64-bit status in a3. */
+	return (s64)args->a3;
 }

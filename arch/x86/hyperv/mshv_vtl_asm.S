@@ -15,6 +15,8 @@
 #include <asm/frame.h>
 #include "mshv-asm-offsets.h"
 
+#ifdef CONFIG_HYPERV_VTL_MODE
+
 	.text
 	.section .noinstr.text, "ax"
 /*
@@ -114,3 +116,76 @@ SYM_FUNC_END(__mshv_vtl_return_call)
 	.size	mshv_vtl_return_sym, 8
 mshv_vtl_return_sym:
 	.quad	__SCK____mshv_vtl_return_hypercall
+
+#endif /* CONFIG_HYPERV_VTL_MODE */
+
+#ifdef CONFIG_HYPERV_VSM
+	.text
+/*
+ * void __hv_vsm_vtlcall(struct hv_vtlcall_param *args)
+ *
+ * Perform a VTL call to switch to the upper VTL.
+ *
+ * The %rcx register is zeroed before the call and is clobbered by the
+ * hypercall. %rax is not restored by the upper VTL (passed via the assist
+ * page) but is unused and can be ignored.
+ *
+ * The args pointer is preserved on the stack across the VTL call since all
+ * argument registers are repurposed during the VTL call.
+ *
+ * Microsoft Hypervisor preserves %rsp during VTL switches.
+ */
+SYM_FUNC_START(__hv_vsm_vtlcall)
+	/* Save callee-saved registers */
+	pushq %rbp
+	mov %rsp, %rbp
+	pushq %r12
+	pushq %r13
+	pushq %r14
+	pushq %r15
+	pushq %rbx
+	pushq %rdi
+
+	/* Load struct fields into VTL calling convention registers */
+	mov HV_VTLCALL_PARAM_a3(%rdi), %r8
+	mov HV_VTLCALL_PARAM_a2(%rdi), %rdx
+	mov HV_VTLCALL_PARAM_a1(%rdi), %rsi
+	mov HV_VTLCALL_PARAM_a0(%rdi), %rdi
+
+	/* Zero %rcx */
+	xorl %ecx, %ecx
+
+	/* VTL call */
+	call STATIC_CALL_TRAMP_STR(__hv_vsm_vtlcall_hypercall)
+
+	/* Restore args pointer from stack */
+	popq %rax
+
+	/* Store results back to struct */
+	mov %rdi, HV_VTLCALL_PARAM_a0(%rax)
+	mov %rsi, HV_VTLCALL_PARAM_a1(%rax)
+	mov %rdx, HV_VTLCALL_PARAM_a2(%rax)
+	mov %r8,  HV_VTLCALL_PARAM_a3(%rax)
+
+	/* Restore callee-saved registers */
+	popq %rbx
+	popq %r15
+	popq %r14
+	popq %r13
+	popq %r12
+
+	popq %rbp
+	RET
+SYM_FUNC_END(__hv_vsm_vtlcall)
+
+/*
+ * Ensure static_call_key symbol __SCK____hv_vsm_vtlcall_hypercall is
+ * accessible. Inspired by __ADDRESSABLE(sym) macro.
+ */
+	.section	.discard.addressable,"aw"
+	.align 8
+	.type	hv_vsm_vtlcall_sym, @object
+	.size	hv_vsm_vtlcall_sym, 8
+hv_vsm_vtlcall_sym:
+	.quad	__SCK____hv_vsm_vtlcall_hypercall
+#endif /* CONFIG_HYPERV_VSM */
