@@ -359,17 +359,37 @@ pgtable_t pte_alloc_one(struct mm_struct *mm)
 	return ptep;
 }
 
-void pte_free(struct mm_struct *mm, pgtable_t ptep)
+static void __pte_free(struct mm_struct *mm, pgtable_t ptep)
 {
+	const bool process_context = mm;
 	struct page *page;
 
 	page = pfn_to_page(__nocache_pa((unsigned long)ptep) >> PAGE_SHIFT);
-	spin_lock(&mm->page_table_lock);
+	if (process_context)
+		spin_lock(&mm->page_table_lock);
 	if (page_ref_dec_return(page) == 1)
 		pagetable_dtor(page_ptdesc(page));
-	spin_unlock(&mm->page_table_lock);
+	if (process_context)
+		spin_unlock(&mm->page_table_lock);
 
 	srmmu_free_nocache(ptep, SRMMU_PTE_TABLE_SIZE);
+}
+
+void pte_free(struct mm_struct *mm, pgtable_t ptep)
+{
+	__pte_free(mm, ptep);
+}
+
+void __tlb_remove_table(void *table)
+{
+	const unsigned long encoded = (unsigned long)table;
+	const unsigned long addr = encoded & ~1UL;
+	const bool is_pmd = encoded & 1;
+
+	if (is_pmd)
+		free_pmd_fast((pmd_t *)addr);
+	else /* Called from softirq context, no mm. */
+		__pte_free(NULL, (pgtable_t)addr);
 }
 
 /* context handling - a dynamically sized pool is used */
