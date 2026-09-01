@@ -549,26 +549,32 @@ void luo_file_unfreeze(struct luo_file_set *file_set,
  *         -ENOENT if no file with the matching token is found.
  *         Any error code returned by the handler's .retrieve() op.
  */
+
+static struct luo_file *luo_find_file_by_token(struct luo_file_set *file_set, u64 token)
+{
+	struct luo_file *luo_file;
+
+	if (list_empty(&file_set->files_list))
+		return ERR_PTR(-ENOENT);
+
+	list_for_each_entry(luo_file, &file_set->files_list, list) {
+		if (luo_file->token == token)
+			return luo_file;
+	}
+
+	return ERR_PTR(-ENOENT);
+}
+
 int luo_retrieve_file(struct luo_file_set *file_set, u64 token,
 		      struct file **filep)
 {
 	struct liveupdate_file_op_args args = {0};
 	struct luo_file *luo_file;
-	bool found = false;
 	int err;
 
-	if (list_empty(&file_set->files_list))
-		return -ENOENT;
-
-	list_for_each_entry(luo_file, &file_set->files_list, list) {
-		if (luo_file->token == token) {
-			found = true;
-			break;
-		}
-	}
-
-	if (!found)
-		return -ENOENT;
+	luo_file = luo_find_file_by_token(file_set, token);
+	if (IS_ERR(luo_file))
+		return PTR_ERR(luo_file);
 
 	guard(mutex)(&luo_file->mutex);
 	if (luo_file->retrieve_status < 0) {
