@@ -68,6 +68,26 @@ static bool partid_max_init, partid_max_published;
 static DEFINE_SPINLOCK(partid_max_lock);
 
 /*
+ * Set once an IOMMU (e.g. ARM SMMU v3) has registered that it can tag
+ * device DMA with a PARTID/PMG. resctrl only exposes the "devices" file
+ * when this is true, so unsupported architectures never see it. The flag
+ * only ever flips false -> true and is read with READ_ONCE().
+ */
+static bool mpam_device_requestor_registered;
+
+void mpam_register_device_requestor(void)
+{
+	WRITE_ONCE(mpam_device_requestor_registered, true);
+}
+EXPORT_SYMBOL(mpam_register_device_requestor);
+
+bool mpam_devices_supported(void)
+{
+	return READ_ONCE(mpam_device_requestor_registered);
+}
+EXPORT_SYMBOL(mpam_devices_supported);
+
+/*
  * mpam is enabled once all devices have been probed from CPU online callbacks,
  * scheduled via this work_struct. If access to an MSC depends on a CPU that
  * was not brought online at boot, this can happen surprisingly late.

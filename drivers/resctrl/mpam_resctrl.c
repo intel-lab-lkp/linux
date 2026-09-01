@@ -97,6 +97,11 @@ bool resctrl_arch_mon_capable(void)
 	return l3->mon_capable;
 }
 
+bool resctrl_arch_devices_supported(void)
+{
+	return mpam_devices_supported();
+}
+
 bool resctrl_arch_is_evt_configurable(enum resctrl_event_id evt)
 {
 	return false;

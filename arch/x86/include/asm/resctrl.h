@@ -71,6 +71,11 @@ static inline bool resctrl_arch_mon_capable(void)
 	return rdt_mon_capable;
 }
 
+static inline bool resctrl_arch_devices_supported(void)
+{
+	return false;
+}
+
 static inline void resctrl_arch_enable_mon(void)
 {
 	static_branch_enable_cpuslocked(&rdt_mon_enable_key);
