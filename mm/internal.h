@@ -690,22 +690,14 @@ int user_proactive_reclaim(char *buf,
 pmd_t *mm_find_pmd(struct mm_struct *mm, unsigned long address);
 
 /*
- * in mm/khugepaged.c
- */
-void set_recommended_min_free_kbytes(void);
-
-/*
  * in mm/page_alloc.c
  */
 #define K(x) ((x) << (PAGE_SHIFT-10))
 
 extern char * const zone_names[MAX_NR_ZONES];
 
-extern int min_free_kbytes;
 extern int defrag_mode;
 
-void setup_per_zone_wmarks(void);
-void calculate_min_free_kbytes(void);
 int __meminit init_per_zone_wmark_min(void);
 
 extern int __isolate_free_page(struct page *page, unsigned int order);

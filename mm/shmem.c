@@ -5782,13 +5782,6 @@ static ssize_t thpsize_shmem_enabled_store(struct kobject *kobj,
 		int err = start_stop_khugepaged();
 		if (err)
 			return err;
-	} else {
-		/*
-		 * Recalculate watermarks even when the mode hasn't changed
-		 * to preserve the legacy behavior, as this is always called
-		 * inside start_stop_khugepaged().
-		 */
-		set_recommended_min_free_kbytes();
 	}
 
 	return count;

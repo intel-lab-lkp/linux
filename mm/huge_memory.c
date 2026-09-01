@@ -499,13 +499,6 @@ static ssize_t enabled_store(struct kobject *kobj,
 
 		if (err)
 			return err;
-	} else {
-		/*
-		 * Recalculate watermarks even when the mode didn't
-		 * change, as the previous code always called
-		 * start_stop_khugepaged() which does this internally.
-		 */
-		set_recommended_min_free_kbytes();
 	}
 	return count;
 }
@@ -735,13 +728,6 @@ static ssize_t anon_enabled_store(struct kobject *kobj,
 
 		if (err)
 			return err;
-	} else {
-		/*
-		 * Recalculate watermarks even when the mode didn't
-		 * change, as the previous code always called
-		 * start_stop_khugepaged() which does this internally.
-		 */
-		set_recommended_min_free_kbytes();
 	}
 
 	return count;

@@ -27,7 +27,6 @@
 
 #include <asm/tlb.h>
 #include "internal.h"
-#include "page_alloc.h"
 #include "mm_slot.h"
 
 enum scan_result {
@@ -3086,57 +3085,6 @@ static int khugepaged(void *none)
 	return 0;
 }
 
-void set_recommended_min_free_kbytes(void)
-{
-	struct zone *zone;
-	int nr_zones = 0;
-	unsigned long recommended_min;
-
-	if (!hugepage_enabled()) {
-		calculate_min_free_kbytes();
-		goto update_wmarks;
-	}
-
-	for_each_populated_zone(zone) {
-		/*
-		 * We don't need to worry about fragmentation of
-		 * ZONE_MOVABLE since it only has movable pages.
-		 */
-		if (zone_idx(zone) > gfp_zone(GFP_USER))
-			continue;
-
-		nr_zones++;
-	}
-
-	/* Ensure 2 pageblocks are free to assist fragmentation avoidance */
-	recommended_min = pageblock_nr_pages * nr_zones * 2;
-
-	/*
-	 * Make sure that on average at least two pageblocks are almost free
-	 * of another type, one for a migratetype to fall back to and a
-	 * second to avoid subsequent fallbacks of other types There are 3
-	 * MIGRATE_TYPES we care about.
-	 */
-	recommended_min += pageblock_nr_pages * nr_zones *
-			   MIGRATE_PCPTYPES * MIGRATE_PCPTYPES;
-
-	/* don't ever allow to reserve more than 5% of the lowmem */
-	recommended_min = min(recommended_min,
-			      (unsigned long) nr_free_buffer_pages() / 20);
-	recommended_min <<= (PAGE_SHIFT-10);
-
-	if (recommended_min > min_free_kbytes) {
-		if (user_min_free_kbytes >= 0)
-			pr_info_ratelimited("raising min_free_kbytes from %d to %lu to help transparent hugepage allocations\n",
-					    min_free_kbytes, recommended_min);
-
-		min_free_kbytes = recommended_min;
-	}
-
-update_wmarks:
-	setup_per_zone_wmarks();
-}
-
 int start_stop_khugepaged(void)
 {
 	guard(mutex)(&khugepaged_mutex);
@@ -3160,15 +3108,7 @@ int start_stop_khugepaged(void)
 		kthread_stop(khugepaged_thread);
 		khugepaged_thread = NULL;
 	}
-	set_recommended_min_free_kbytes();
 	return 0;
-}
-
-void khugepaged_min_free_kbytes_update(void)
-{
-	guard(mutex)(&khugepaged_mutex);
-	if (hugepage_enabled() && khugepaged_thread)
-		set_recommended_min_free_kbytes();
 }
 
 bool current_is_khugepaged(void)

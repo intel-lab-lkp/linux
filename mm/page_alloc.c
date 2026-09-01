@@ -50,7 +50,6 @@
 #include <linux/ftrace.h>
 #include <linux/lockdep.h>
 #include <linux/psi.h>
-#include <linux/khugepaged.h>
 #include <linux/delayacct.h>
 #include <linux/cacheinfo.h>
 #include <linux/pgalloc_tag.h>
@@ -272,8 +271,8 @@ const char * const migratetype_names[MIGRATE_TYPES] = {
 #endif
 };
 
-int min_free_kbytes = 1024;
-int user_min_free_kbytes = -1;
+static int min_free_kbytes = 1024;
+static int user_min_free_kbytes = -1;
 static int watermark_boost_factor __read_mostly = 15000;
 static int watermark_scale_factor = 10;
 int defrag_mode;
@@ -6663,7 +6662,7 @@ static void __setup_per_zone_wmarks(void)
  * Ensures that the watermark[min,low,high] values for each zone are set
  * correctly with respect to min_free_kbytes.
  */
-void setup_per_zone_wmarks(void)
+static void setup_per_zone_wmarks(void)
 {
 	struct zone *zone;
 	static DEFINE_SPINLOCK(lock);
@@ -6704,7 +6703,7 @@ void setup_per_zone_wmarks(void)
  * 8192MB:	11584k
  * 16384MB:	16384k
  */
-void calculate_min_free_kbytes(void)
+static void calculate_min_free_kbytes(void)
 {
 	unsigned long lowmem_kbytes;
 	int new_min_free_kbytes;
@@ -6731,8 +6730,6 @@ int __meminit init_per_zone_wmark_min(void)
 	setup_min_unmapped_ratio();
 	setup_min_slab_ratio();
 #endif
-
-	khugepaged_min_free_kbytes_update();
 
 	return 0;
 }
