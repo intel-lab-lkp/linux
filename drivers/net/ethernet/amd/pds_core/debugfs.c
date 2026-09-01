@@ -38,8 +38,9 @@ static int identity_show(struct seq_file *seq, void *v)
 
 	ident = &pdsc->dev_ident;
 
-	seq_printf(seq, "fw_heartbeat:     0x%x\n",
-		   ioread32(&pdsc->info_regs->fw_heartbeat));
+	if (pdsc->info_regs)
+		seq_printf(seq, "fw_heartbeat:     0x%x\n",
+			   ioread32(&pdsc->info_regs->fw_heartbeat));
 
 	seq_printf(seq, "nlifs:            %d\n",
 		   le32_to_cpu(ident->nlifs));
