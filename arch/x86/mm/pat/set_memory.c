@@ -2666,6 +2666,16 @@ int set_direct_map_default_noflush(struct page *page, unsigned int nr)
 	return __set_pages_p(page, nr, 0);
 }
 
+int set_direct_map_ro(struct page *page, unsigned int nr)
+{
+	unsigned long addr = (unsigned long)page_address(page);
+
+	/* Direct-map callers are expected to pass pages without aliases. */
+	return change_page_attr_set_clr(&addr, nr, __pgprot(0),
+					__pgprot(_PAGE_RW | _PAGE_DIRTY), 0,
+					CPA_NO_CHECK_ALIAS, NULL);
+}
+
 #ifdef CONFIG_DEBUG_PAGEALLOC
 void __kernel_map_pages(struct page *page, int numpages, int enable)
 {
