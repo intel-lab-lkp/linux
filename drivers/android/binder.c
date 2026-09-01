@@ -6040,11 +6040,17 @@ static int binder_vma_may_split(struct vm_area_struct *vma, unsigned long addr)
 	return -EINVAL;
 }
 
+static int binder_mremap(struct vm_area_struct *vma)
+{
+	return -EINVAL;
+}
+
 static const struct vm_operations_struct binder_vm_ops = {
 	.open = binder_vma_open,
 	.close = binder_vma_close,
 	.fault = binder_vm_fault,
 	.may_split = binder_vma_may_split,
+	.mremap = binder_mremap,
 };
 
 static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
