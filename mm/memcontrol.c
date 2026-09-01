@@ -4048,14 +4048,28 @@ static void __mem_cgroup_private_id_put(struct mem_cgroup *memcg, unsigned int n
 	}
 }
 
-static void mem_cgroup_private_id_put(unsigned short id, unsigned int n)
+/**
+ * mem_cgroup_private_id_put - put memcgid and get the nearest online memcg
+ * @id: the memcg private id got from mem_cgroup_id_get_online
+ * @n: count of references to put
+ */
+static struct mem_cgroup *mem_cgroup_private_id_put(unsigned short id, unsigned int n)
 {
 	struct mem_cgroup *memcg;
 
 	rcu_read_lock();
 	memcg = mem_cgroup_from_private_id(id);
+	if (!memcg)
+		goto out;
+
 	__mem_cgroup_private_id_put(memcg, n);
+
+	while (memcg_is_dying(memcg) || !mem_cgroup_tryget(memcg))
+		memcg = parent_mem_cgroup(memcg);
+
+out:
 	rcu_read_unlock();
+	return memcg;
 }
 
 static void mem_cgroup_private_id_kill(struct mem_cgroup *memcg)
@@ -5816,7 +5830,7 @@ void __mem_cgroup_uncharge_swap(unsigned short id, unsigned int nr_pages)
 	struct mem_cgroup *memcg;
 
 	rcu_read_lock();
-	memcg = mem_cgroup_from_private_id(id);
+	memcg = mem_cgroup_private_id_put(id, nr_pages);
 	if (memcg) {
 		if (!mem_cgroup_is_root(memcg)) {
 			if (do_memsw_account())
@@ -5825,10 +5839,10 @@ void __mem_cgroup_uncharge_swap(unsigned short id, unsigned int nr_pages)
 				page_counter_uncharge(&memcg->swap, nr_pages);
 		}
 		mod_memcg_state(memcg, MEMCG_SWAP, -nr_pages);
-		mem_cgroup_private_id_put(id, nr_pages);
 	}
 	rcu_read_unlock();
 
+	mem_cgroup_put(memcg);
 }
 
 long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
