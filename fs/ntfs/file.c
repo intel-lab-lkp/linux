@@ -15,6 +15,7 @@
 #include <linux/posix_acl_xattr.h>
 #include <linux/compat.h>
 #include <linux/falloc.h>
+#include <linux/fileattr.h>
 
 #include "lcnalloc.h"
 #include "ntfs.h"
@@ -132,6 +133,59 @@ static int ntfs_file_release(struct inode *vi, struct file *filp)
 	    !NInoWofCompressed(NTFS_I(vi)))
 		return ntfs_trim_prealloc(vi);
 
+	return 0;
+}
+
+/*
+ * ntfs_fileattr_get - inode_operations::fileattr_get
+ * @dentry:	dentry to report the flags of
+ * @fa:		filled in with the flags of @dentry
+ */
+int ntfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
+{
+	struct inode *vi = d_inode(dentry);
+	struct ntfs_inode *ni = NTFS_I(vi);
+	u32 flags = 0;
+
+	if (NInoCompressed(ni) || NInoWofCompressed(ni))
+		flags |= FS_COMPR_FL;
+	if (NInoEncrypted(ni))
+		flags |= FS_ENCRYPT_FL;
+	if (vi->i_flags & S_IMMUTABLE)
+		flags |= FS_IMMUTABLE_FL;
+	if (vi->i_flags & S_APPEND)
+		flags |= FS_APPEND_FL;
+
+	fileattr_fill_flags(fa, flags);
+	return 0;
+}
+
+/*
+ * ntfs_fileattr_set - inode_operations::fileattr_set
+ * @idmap:	idmap of the mount @dentry was found from
+ * @dentry:	dentry to set the flags of
+ * @fa:		flags to set
+ */
+int ntfs_fileattr_set(struct mnt_idmap *idmap, struct dentry *dentry,
+		      struct file_kattr *fa)
+{
+	struct inode *vi = d_inode(dentry);
+	unsigned int new_fl = 0;
+
+	if (fileattr_has_fsx(fa))
+		return -EOPNOTSUPP;
+	if (fa->flags & ~(FS_IMMUTABLE_FL | FS_APPEND_FL))
+		return -EOPNOTSUPP;
+
+	if (fa->flags & FS_IMMUTABLE_FL)
+		new_fl |= S_IMMUTABLE;
+	if (fa->flags & FS_APPEND_FL)
+		new_fl |= S_APPEND;
+
+	inode_set_flags(vi, new_fl, S_IMMUTABLE | S_APPEND);
+
+	inode_set_ctime_current(vi);
+	mark_inode_dirty(vi);
 	return 0;
 }
 
@@ -1220,6 +1274,8 @@ const struct file_operations ntfs_file_ops = {
 const struct inode_operations ntfs_file_inode_ops = {
 	.setattr	= ntfs_setattr,
 	.getattr	= ntfs_getattr,
+	.fileattr_get	= ntfs_fileattr_get,
+	.fileattr_set	= ntfs_fileattr_set,
 	.listxattr	= ntfs_listxattr,
 	.get_acl	= ntfs_get_acl,
 	.set_acl	= ntfs_set_acl,
