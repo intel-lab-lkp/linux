@@ -1279,8 +1279,8 @@ int svc_register(struct svc_serv *serv, struct net *net,
  * any "inet6" entries anyway.  So a PMAP_UNSET should be sufficient
  * in this case to clear all existing entries for [program, version].
  */
-static void __svc_unregister(struct net *net, const u32 program, const u32 version,
-			     const char *progname)
+static int __svc_unregister(struct net *net, const u32 program, const u32 version,
+			    const char *progname)
 {
 	int error;
 
@@ -1294,6 +1294,7 @@ static void __svc_unregister(struct net *net, const u32 program, const u32 versi
 		error = rpcb_register(net, program, version, 0, 0);
 
 	trace_svc_unregister(progname, version, error);
+	return error;
 }
 
 /*
@@ -1320,10 +1321,13 @@ static void svc_unregister(const struct svc_serv *serv, struct net *net)
 				continue;
 			if (progp->pg_vers[i]->vs_hidden)
 				continue;
-			__svc_unregister(net, progp->pg_prog, i, progp->pg_name);
+			if (__svc_unregister(net, progp->pg_prog, i,
+					     progp->pg_name) == -EIO)
+				goto out;
 		}
 	}
 
+out:
 	rcu_read_lock();
 	sighand = rcu_dereference(current->sighand);
 	spin_lock_irqsave(&sighand->siglock, flags);
