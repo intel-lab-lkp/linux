@@ -1256,19 +1256,21 @@ int stm_source_register_device(struct device *parent,
 	pm_runtime_no_callbacks(&src->dev);
 	pm_runtime_forbid(&src->dev);
 
-	err = device_add(&src->dev);
-	if (err)
-		goto err;
-
 	stm_output_init(&src->output);
 	spin_lock_init(&src->link_lock);
 	INIT_LIST_HEAD(&src->link_entry);
 	src->data = data;
 	data->src = src;
 
+	err = device_add(&src->dev);
+	if (err)
+		goto err;
+
 	return 0;
 
 err:
+	stm_source_link_drop(src);
+	data->src = NULL;
 	put_device(&src->dev);
 
 	return err;
