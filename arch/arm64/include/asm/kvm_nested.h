@@ -7,11 +7,16 @@
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_pgtable.h>
 
-static inline bool vcpu_has_nv(const struct kvm_vcpu *vcpu)
+static inline bool kvm_vcpu_has_nv(const struct kvm *kvm)
 {
 	return (!__is_defined(__KVM_NVHE_HYPERVISOR__) &&
 		cpus_have_final_cap(ARM64_HAS_NESTED_VIRT) &&
-		vcpu_has_feature(vcpu, KVM_ARM_VCPU_HAS_EL2));
+		kvm_vcpu_has_feature(kvm, KVM_ARM_VCPU_HAS_EL2));
+}
+
+static inline bool vcpu_has_nv(const struct kvm_vcpu *vcpu)
+{
+	return kvm_vcpu_has_nv(vcpu->kvm);
 }
 
 /* Translation helpers from non-VHE EL2 to EL1 */

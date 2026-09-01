@@ -1683,6 +1683,13 @@ static int kvm_setup_vcpu(struct kvm_vcpu *vcpu)
 	if (!ret && vcpu_has_nv(vcpu))
 		ret = kvm_vcpu_init_nested(vcpu);
 
+	/* Enable HAFDBS by default if VHE && !nested  */
+	if (kvm_supports_hafdbs(kvm) &&
+	    atomic_read(&kvm->nr_memslots_dirty_logging) == 0)
+		kvm->arch.mmu.vtcr |= VTCR_EL2_HD;
+	else
+		kvm->arch.mmu.vtcr &= ~VTCR_EL2_HD;
+
 	return ret;
 }
 

@@ -390,6 +390,12 @@ static inline bool kvm_supports_cacheable_pfnmap(void)
 	       cpus_have_final_cap(ARM64_HAS_CACHE_DIC);
 }
 
+static inline bool kvm_supports_hafdbs(struct kvm *kvm)
+{
+	return IS_ENABLED(CONFIG_ARM64_HW_AFDBM) && has_vhe() &&
+		!kvm_vcpu_has_nv(kvm) && cpus_have_final_cap(ARM64_HW_DBM);
+}
+
 #ifdef CONFIG_PTDUMP_STAGE2_DEBUGFS
 void kvm_s2_ptdump_create_debugfs(struct kvm *kvm);
 void kvm_nested_s2_ptdump_create_debugfs(struct kvm_s2_mmu *mmu);

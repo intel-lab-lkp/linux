@@ -1989,7 +1989,8 @@ static int kvm_s2_fault_compute_prot(const struct kvm_s2_fault_desc *s2fd,
 	if (s2vi->map_writable) {
 		*prot |= KVM_PGTABLE_PROT_W;
 
-		if (s2vi->device || !memslot_is_logging(s2fd->memslot) ||
+		if (s2vi->device ||
+		    !(memslot_is_logging(s2fd->memslot) || kvm_supports_hafdbs(kvm)) ||
 		    kvm_is_write_fault(s2fd->vcpu))
 			*prot |= KVM_PGTABLE_PROT_DIRTY;
 	}
@@ -2577,6 +2578,20 @@ out:
 	return err;
 }
 
+static void kvm_set_hafdbs(struct kvm *kvm, bool set)
+{
+	/* Check if no action required */
+	if (!!(kvm->arch.mmu.vtcr & VTCR_EL2_HD) == set)
+		return;
+
+	if (set)
+		kvm->arch.mmu.vtcr |= VTCR_EL2_HD;
+	else
+		kvm->arch.mmu.vtcr &= ~VTCR_EL2_HD;
+
+	kvm_make_all_cpus_request(kvm, KVM_REQ_RELOAD_STAGE2);
+}
+
 void kvm_arch_commit_memory_region(struct kvm *kvm,
 				   struct kvm_memory_slot *old,
 				   const struct kvm_memory_slot *new,
@@ -2594,6 +2609,10 @@ void kvm_arch_commit_memory_region(struct kvm *kvm,
 		if (change == KVM_MR_DELETE)
 			return;
 
+		/* Disable HAFDBS when dirty-logging starts */
+		if (kvm_supports_hafdbs(kvm))
+			kvm_set_hafdbs(kvm, 0);
+
 		/*
 		 * Huge and normal pages are write-protected and split
 		 * on either of these two cases:
@@ -2610,6 +2629,11 @@ void kvm_arch_commit_memory_region(struct kvm *kvm,
 		kvm_mmu_wp_memory_region(kvm, new->id);
 		kvm_mmu_split_memory_region(kvm, new->id);
 	} else {
+		/* If dirty-logging was canceled, set HAFDBS back on */
+		if (kvm_supports_hafdbs(kvm) &&
+		    atomic_read(&kvm->nr_memslots_dirty_logging) == 0)
+			kvm_set_hafdbs(kvm, 1);
+
 		/*
 		 * Free any leftovers from the eager page splitting cache. Do
 		 * this when deleting, moving, disabling dirty logging, or
