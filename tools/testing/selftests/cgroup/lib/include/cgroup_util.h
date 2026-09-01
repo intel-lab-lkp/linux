@@ -68,6 +68,7 @@ extern int cg_read_strstr(const char *cgroup, const char *control,
 			  const char *needle);
 extern long cg_read_long(const char *cgroup, const char *control);
 extern long cg_read_long_fd(int fd);
+long long cg_read_key_long_long(const char *cgroup, const char *control, const char *key);
 long cg_read_key_long(const char *cgroup, const char *control, const char *key);
 long cg_read_key_long_poll(const char *cgroup, const char *control,
 			   const char *key, long expected, int retries,
