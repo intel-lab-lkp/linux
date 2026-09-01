@@ -543,7 +543,9 @@ ieee80211_get_width_of_link(struct ieee80211_link_data *link)
 	case NL80211_IFTYPE_P2P_DEVICE:
 		break;
 	case NL80211_IFTYPE_MONITOR:
-		WARN_ON_ONCE(!ieee80211_hw_check(&local->hw,
+		WARN_ON_ONCE(!(link->sdata->u.mntr.flags &
+			       MONITOR_FLAG_ACTIVE) &&
+			     !ieee80211_hw_check(&local->hw,
 						 NO_VIRTUAL_MONITOR));
 		fallthrough;
 	case NL80211_IFTYPE_ADHOC:
@@ -1281,7 +1283,9 @@ void ieee80211_recalc_smps_chanctx(struct ieee80211_local *local,
 				continue;
 			break;
 		case NL80211_IFTYPE_MONITOR:
-			if (!ieee80211_hw_check(&local->hw, NO_VIRTUAL_MONITOR))
+			if (!(iter.sdata->u.mntr.flags & MONITOR_FLAG_ACTIVE) &&
+			    !ieee80211_hw_check(&local->hw,
+						NO_VIRTUAL_MONITOR))
 				continue;
 			break;
 		case NL80211_IFTYPE_AP:

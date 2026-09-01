@@ -1064,12 +1064,16 @@ static int ieee80211_set_monitor_channel(struct wiphy *wiphy,
 	struct ieee80211_local *local = wiphy_priv(wiphy);
 	struct ieee80211_sub_if_data *sdata;
 	struct ieee80211_chan_req chanreq = { .oper = *chandef };
+	bool use_virtual_monitor;
 	int ret;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
 	sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-	if (!ieee80211_hw_check(&local->hw, NO_VIRTUAL_MONITOR)) {
+	use_virtual_monitor =
+		!ieee80211_hw_check(&local->hw, NO_VIRTUAL_MONITOR) &&
+		!(sdata->u.mntr.flags & MONITOR_FLAG_ACTIVE);
+	if (use_virtual_monitor) {
 		if (cfg80211_chandef_identical(&local->monitor_chanreq.oper,
 					       &chanreq.oper))
 			return 0;
@@ -1090,7 +1094,8 @@ static int ieee80211_set_monitor_channel(struct wiphy *wiphy,
 	if (ret)
 		return ret;
 done:
-	local->monitor_chanreq = chanreq;
+	if (use_virtual_monitor)
+		local->monitor_chanreq = chanreq;
 	return 0;
 }
 
