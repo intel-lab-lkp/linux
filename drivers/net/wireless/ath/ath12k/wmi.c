@@ -7373,7 +7373,7 @@ static void ath12k_mgmt_rx_event(struct ath12k_base *ab, struct sk_buff *skb)
 			dev_kfree_skb(skb);
 			goto exit;
 		}
-		pubsta = peer->sta;
+		pubsta = ath12k_dp_link_peer_get_sta(peer);
 		if (pubsta && pubsta->valid_links) {
 			status->link_valid = 1;
 			status->link_id = peer->link_id;

@@ -1232,7 +1232,7 @@ void ath12k_mac_peer_cleanup_all(struct ath12k *ar)
 	spin_lock_bh(&dp->dp_lock);
 	list_for_each_entry_safe(peer, tmp, &dp->peers, list) {
 		/* Skip Rx TID cleanup for self peer */
-		if (peer->sta && peer->dp_peer)
+		if (ath12k_dp_link_peer_get_sta(peer))
 			ath12k_dp_rx_peer_tid_cleanup(ar, peer);
 
 		/* cleanup dp peer */
@@ -7005,10 +7005,9 @@ static void ath12k_mac_station_post_remove(struct ath12k *ar,
 
 	peer = ath12k_dp_link_peer_find_by_vdev_and_addr(dp, arvif->vdev_id,
 							 arsta->addr);
-	if (peer && peer->sta == sta) {
+	if (peer && ath12k_dp_link_peer_get_sta(peer) == sta) {
 		ath12k_warn(ar->ab, "Found peer entry %pM n vdev %i after it was supposedly removed\n",
 			    vif->addr, arvif->vdev_id);
-		peer->sta = NULL;
 
 		ath12k_dp_link_peer_free(peer);
 		ar->num_peers--;
@@ -13292,6 +13291,7 @@ ath12k_mac_validate_fixed_rate_settings(struct ath12k *ar, enum nl80211_band ban
 	bool eht_fixed_rate = false, he_fixed_rate = false, vht_fixed_rate = false;
 	const u16 *vht_mcs_mask, *he_mcs_mask, *eht_mcs_mask;
 	struct ieee80211_link_sta *link_sta;
+	struct ieee80211_sta *sta;
 	struct ath12k_dp_link_peer *peer, *tmp;
 	u8 vht_nss, he_nss, eht_nss;
 	int ret = true;
@@ -13321,8 +13321,9 @@ ath12k_mac_validate_fixed_rate_settings(struct ath12k *ar, enum nl80211_band ban
 	rcu_read_lock();
 	spin_lock_bh(&dp->dp_lock);
 	list_for_each_entry_safe(peer, tmp, &dp->peers, list) {
-		if (peer->sta) {
-			link_sta = rcu_dereference(peer->sta->link[link_id]);
+		sta = ath12k_dp_link_peer_get_sta(peer);
+		if (sta) {
+			link_sta = rcu_dereference(sta->link[link_id]);
 			if (!link_sta) {
 				ret = false;
 				goto exit;
