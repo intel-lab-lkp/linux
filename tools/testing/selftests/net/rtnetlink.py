@@ -314,11 +314,67 @@ def ipv6_route_del_reason_absent() -> None:
                         "user deletion must not carry del-reason")
 
 
+def ipv4_verify_addr_order() -> None:
+    """
+    After inserting multiple same scope IPv4 addresses, their order
+    must be the same as the insertion order.
+
+    See function ipv6_verify_addr_order in this file for further details.
+    """
+
+    DEV_NAME = "dummy_dev"
+    TEST_ADDRESSES = ["192.0.2.1", "192.0.2.2", "192.0.2.3"]
+
+    with NetNS() as ns:
+        with NetNSEnter(str(ns)):
+            ip(f"link add name {DEV_NAME} type dummy", ns=str(ns))
+            for addr in TEST_ADDRESSES:
+                ip(f"address add {addr}/24 dev {DEV_NAME}", ns=str(ns))
+            ip(f"link set dev {DEV_NAME} up", ns=str(ns))
+
+            rtnl = RtnlAddrFamily()
+            addrs = rtnl.getaddr({"ifa-family": socket.AF_INET}, dump=True)
+            address_list = [addr["address"] for addr in addrs]
+
+            ksft_eq(TEST_ADDRESSES, address_list, "Incorrect IPv4 address order")
+
+
+def ipv6_verify_addr_order() -> None:
+    """
+    After inserting multiple same scope IPv6 addresses, their order
+    must be the _reverse_ of the insertion order.
+
+    While this behaviour is different from how IPv4 acts,
+    updating the IPv6 implementation to act the same way
+    has proved to cause user-space application regressions
+    (particularly in NetworkManager). This behaviour is being
+    tested for to consolidate it as being expected and correct.
+    """
+
+    DEV_NAME = "dummy_dev"
+    TEST_ADDRESSES = ["2001:db8::1", "2001:db8::2", "2001:db8::3"]
+
+    with NetNS() as ns:
+        with NetNSEnter(str(ns)):
+            ip(f"link add name {DEV_NAME} type dummy", ns=str(ns))
+            for addr in TEST_ADDRESSES:
+                ip(f"address add {addr}/32 dev {DEV_NAME}", ns=str(ns))
+            ip(f"link set dev {DEV_NAME} up", ns=str(ns))
+
+            rtnl = RtnlAddrFamily()
+            addrs = rtnl.getaddr({"ifa-family": socket.AF_INET6}, dump=True)
+            address_list = [addr["address"] for addr in addrs]
+
+            # We ignore the link-local address present by default.
+            ksft_eq(TEST_ADDRESSES[::-1], address_list[:3], "Incorrect IPv6 address order")
+
+
 def main() -> None:
     ksft_run([dump_mcaddr_check, dump_mcaddr6_check, ipv4_devconf_notify,
               ipv6_route_del_reason_expired,
               ipv6_route_del_reason_ra_withdrawn,
-              ipv6_route_del_reason_absent])
+              ipv6_route_del_reason_absent,
+              ipv4_verify_addr_order, ipv6_verify_addr_order])
     ksft_exit()
 
 if __name__ == "__main__":
