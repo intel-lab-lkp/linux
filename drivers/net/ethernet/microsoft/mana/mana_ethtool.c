@@ -242,6 +242,12 @@ static void mana_get_ethtool_stats(struct net_device *ndev,
 	u64 xdp_tx;
 	u64 pkt_len0_err;
 	u64 coalesced_cqe[MANA_CQE_COAL_PKTS_8 - 1];
+	u64 ret_coalesced_cqe[MANA_CQE_COAL_PKTS_8 - 1];
+	u64 ret_packets, ret_bytes;
+	u64 ret_xdp_redirect;
+	u64 ret_pkt_len0_err;
+	u64 ret_xdp_drop;
+	u64 ret_xdp_tx;
 	u64 tso_packets;
 	u64 tso_bytes;
 	u64 tso_inner_packets;
@@ -271,7 +277,7 @@ static void mana_get_ethtool_stats(struct net_device *ndev,
 		data[i++] = *(u64 *)(phy_stats + mana_phy_stats[q].offset);
 
 	for (q = 0; q < num_queues; q++) {
-		rx_stats = &apc->rxqs[q]->stats;
+		rx_stats = &apc->rxq_stats[q];
 
 		do {
 			start = u64_stats_fetch_begin(&rx_stats->syncp);
@@ -285,6 +291,33 @@ static void mana_get_ethtool_stats(struct net_device *ndev,
 				coalesced_cqe[j] = rx_stats->coalesced_cqe[j];
 		} while (u64_stats_fetch_retry(&rx_stats->syncp, start));
 
+		/* Same index, counted by queues that have since retired. Read
+		 * into its own snapshot, since a retry must not add twice.
+		 */
+		rx_stats = &apc->rxq_stats_ret[q];
+
+		do {
+			start = u64_stats_fetch_begin(&rx_stats->syncp);
+			ret_packets = rx_stats->packets;
+			ret_bytes = rx_stats->bytes;
+			ret_xdp_drop = rx_stats->xdp_drop;
+			ret_xdp_tx = rx_stats->xdp_tx;
+			ret_xdp_redirect = rx_stats->xdp_redirect;
+			ret_pkt_len0_err = rx_stats->pkt_len0_err;
+			for (j = 0; j < MANA_CQE_COAL_PKTS_8 - 1; j++)
+				ret_coalesced_cqe[j] =
+					rx_stats->coalesced_cqe[j];
+		} while (u64_stats_fetch_retry(&rx_stats->syncp, start));
+
+		packets += ret_packets;
+		bytes += ret_bytes;
+		xdp_drop += ret_xdp_drop;
+		xdp_tx += ret_xdp_tx;
+		xdp_redirect += ret_xdp_redirect;
+		pkt_len0_err += ret_pkt_len0_err;
+		for (j = 0; j < MANA_CQE_COAL_PKTS_8 - 1; j++)
+			coalesced_cqe[j] += ret_coalesced_cqe[j];
+
 		data[i++] = packets;
 		data[i++] = bytes;
 		data[i++] = xdp_drop;
@@ -296,7 +329,7 @@ static void mana_get_ethtool_stats(struct net_device *ndev,
 	}
 
 	for (q = 0; q < num_queues; q++) {
-		tx_stats = &apc->tx_qp[q]->txq.stats;
+		tx_stats = &apc->txq_stats[q];
 
 		do {
 			start = u64_stats_fetch_begin(&tx_stats->syncp);
