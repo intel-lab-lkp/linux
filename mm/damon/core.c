@@ -2551,6 +2551,8 @@ static bool damos_quota_is_full(struct damos_quota *quota,
 {
 	if (!damos_quota_is_set(quota))
 		return false;
+	if (!quota->esz)
+		return false;
 	if (quota->charged_sz >= quota->esz)
 		return true;
 	/*
