@@ -25,6 +25,15 @@ riscv_probe_decode_insn(probe_opcode_t *addr, struct arch_probe_insn *api)
 	RISCV_INSN_REJECTED(fence,		insn);
 
 	/*
+	 * Reserved branch encodings (funct3 010/011): simulate_branch()
+	 * cannot emulate them and its return value is not checked, so a
+	 * probe would trap on the breakpoint forever.
+	 */
+	if (riscv_insn_is_branch(insn) &&
+	    (RV_EXTRACT_FUNCT3(insn) >> 1) == 0x1)
+		return INSN_REJECTED;
+
+	/*
 	 * Simulate instructions list:
 	 * TODO: the REJECTED ones below need to be implemented
 	 */
