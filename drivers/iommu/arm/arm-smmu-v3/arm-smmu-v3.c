@@ -2506,14 +2506,12 @@ static struct arm_smmu_ril_range arm_smmu_ril_init_end(u64 last_tg, u64 num_tg)
 	return ril;
 }
 
-static void arm_smmu_cmdq_batch_add_ril(struct arm_smmu_device *smmu,
-					struct arm_smmu_cmdq_batch *cmds,
-					struct arm_smmu_cmd *ref_cmd,
-					bool leaf_only,
+static void arm_smmu_tlbi_add_range_cmd(struct arm_smmu_tlbi *tlbi,
 					const struct arm_smmu_ril_range *ril,
 					u8 ttl, u8 tg_enc)
 {
-	struct arm_smmu_cmd cmd;
+	struct arm_smmu_cmd *cmd =
+		&tlbi->range.cmds[tlbi->range.num_cmds++];
 	unsigned int tgsz_lg2 = tg_enc * 2 + 10;
 	u64 iova = ril->start_tg << tgsz_lg2;
 	unsigned int num = ril->num - 1;
@@ -2542,18 +2540,16 @@ static void arm_smmu_cmdq_batch_add_ril(struct arm_smmu_device *smmu,
 	if (!num && !ril->scale && !ttl)
 		tg_enc = 0;
 
-	cmd.data[0] = ref_cmd->data[0] | FIELD_PREP(CMDQ_TLBI_0_NUM, num) |
-		      FIELD_PREP(CMDQ_TLBI_0_SCALE, ril->scale);
-	cmd.data[1] = ref_cmd->data[1] |
-		      FIELD_PREP(CMDQ_TLBI_1_LEAF, leaf_only) |
-		      FIELD_PREP(CMDQ_TLBI_1_TTL, ttl) |
-		      FIELD_PREP(CMDQ_TLBI_1_TG, tg_enc) | iova;
-	arm_smmu_cmdq_batch_add_cmd_p(smmu, cmds, &cmd);
+	cmd->data[0] = FIELD_PREP(CMDQ_TLBI_0_NUM, num) |
+		       FIELD_PREP(CMDQ_TLBI_0_SCALE, ril->scale);
+	cmd->data[1] = FIELD_PREP(CMDQ_TLBI_1_LEAF, tlbi->leaf_only) |
+		       FIELD_PREP(CMDQ_TLBI_1_TTL, ttl) |
+		       FIELD_PREP(CMDQ_TLBI_1_TG, tg_enc) | iova;
 }
 
 /*
- * Issue up to two range TLBI commands covering [iova, iova+size). Returns true
- * if successful, false if the range is too large to fit into RIL commands.
+ * Generate up to two range TLBI command payloads covering [iova, iova+size).
+ * Sets use_full_inv if the range is too large to represent.
  *
  * Normally the first RIL is the largest representable span which does not
  * exceed the requested range. If necessary, the second RIL is the smallest
@@ -2561,14 +2557,12 @@ static void arm_smmu_cmdq_batch_add_ril(struct arm_smmu_device *smmu,
  * excess coverage from the second RIL overlaps the first instead of exceeding
  * the requested range.
  *
- * If a SVA is being invalidated and the SMMU has the ARM_SMMU_OPT_FULL_CONT_RIL
- * errata this produces only a single RIL and overinvalidates to ensure any
- * potential CONT is covered with a single RIL.
+ * For SVA on an invs containing an SMMU with ARM_SMMU_OPT_FULL_CONT_RIL,
+ * produce only a single RIL and overinvalidate so any potential CONT is
+ * covered by one command.
  */
-static bool arm_smmu_cmdq_batch_add_range(struct arm_smmu_device *smmu,
-					  struct arm_smmu_cmdq_batch *cmds,
-					  struct arm_smmu_cmd *cmd,
-					  struct arm_smmu_tlbi *tlbi)
+static void arm_smmu_tlbi_calc_range(struct arm_smmu_tlbi *tlbi,
+				     bool single_ril)
 {
 	u8 tgsz_lg2 = tlbi->tgsz_lg2;
 	struct arm_smmu_ril_range first = { .start_tg = tlbi->iova >>
@@ -2578,9 +2572,6 @@ static bool arm_smmu_cmdq_batch_add_range(struct arm_smmu_device *smmu,
 	u8 tg_enc = (tgsz_lg2 - 10) / 2;
 	struct arm_smmu_ril_range trail;
 	u8 ttl = 0;
-
-	if (!tlbi->size)
-		return false;
 
 	/*
 	 * Determine what level the granule is at. For non-leaf, both
@@ -2602,10 +2593,11 @@ static bool arm_smmu_cmdq_batch_add_range(struct arm_smmu_device *smmu,
 	first.scale = fls64((num_tg - 1) / 32);
 	if (first.scale > 31) {
 		/* Range too large for a single command do full invalidation */
-		return false;
+		tlbi->range.use_full_inv = true;
+		return;
 	}
 
-	if (tlbi->has_cont && (smmu->options & ARM_SMMU_OPT_FULL_CONT_RIL)) {
+	if (single_ril) {
 		/*
 		 * Produce a single invalidation by rounding up and disabling
 		 * the trailer.
@@ -2621,40 +2613,27 @@ static bool arm_smmu_cmdq_batch_add_range(struct arm_smmu_device *smmu,
 		trail = arm_smmu_ril_init_end(
 			last_tg, num_tg - ((u64)first.num << first.scale));
 	}
-	arm_smmu_cmdq_batch_add_ril(smmu, cmds, cmd, tlbi->leaf_only, &first,
-				    ttl, tg_enc);
+	arm_smmu_tlbi_add_range_cmd(tlbi, &first, ttl, tg_enc);
 
 	if (trail.num)
-		arm_smmu_cmdq_batch_add_ril(smmu, cmds, cmd, tlbi->leaf_only,
-					    &trail, ttl, tg_enc);
-	return true;
+		arm_smmu_tlbi_add_range_cmd(tlbi, &trail, ttl, tg_enc);
 }
 
 /*
  * One TLBI command per IOTLB entry, assuming the entries are all at least
- * iopte_granule sized. Returns false if too many commands would be needed which
- * indicates too high a latency. The threshold is similar to MAX_DVM_OPS in
- * arch/arm64/include/asm/tlbflush.h for the 4k PAGE_SIZE.
+ * iopte_granule sized. Sets use_full_inv if too many commands would be needed
+ * which indicates too high a latency. The threshold is similar to MAX_DVM_OPS
+ * in arch/arm64/include/asm/tlbflush.h for the 4k PAGE_SIZE.
  */
-static bool arm_smmu_cmdq_batch_add_single(struct arm_smmu_device *smmu,
-					   struct arm_smmu_cmdq_batch *cmds,
-					   struct arm_smmu_cmd *cmd,
-					   struct arm_smmu_tlbi *tlbi)
+static void arm_smmu_tlbi_calc_single(struct arm_smmu_tlbi *tlbi)
 {
 	unsigned long num_ops = tlbi->size / tlbi->iopte_size;
-	unsigned long iova = tlbi->iova;
-	unsigned long i;
 
-	if (!num_ops || num_ops > 512)
-		return false;
-
-	for (i = 0; i < num_ops; i++) {
-		cmd->data[1] = FIELD_PREP(CMDQ_TLBI_1_LEAF, tlbi->leaf_only) |
-			       (iova & ~GENMASK_U64(11, 0));
-		arm_smmu_cmdq_batch_add_cmd_p(smmu, cmds, cmd);
-		iova += tlbi->iopte_size;
+	if (!num_ops || num_ops > 512) {
+		tlbi->single.use_full_inv = true;
+		return;
 	}
-	return true;
+	tlbi->single.num = num_ops;
 }
 
 static void arm_smmu_inv_all_cmd(struct arm_smmu_inv *inv,
@@ -2674,16 +2653,37 @@ static bool arm_smmu_inv_to_cmdq_batch(struct arm_smmu_inv *inv,
 				       struct arm_smmu_cmd *cmd,
 				       struct arm_smmu_tlbi *tlbi)
 {
+	u64 iova = tlbi->iova;
+	unsigned int i;
+
 	if (inv->smmu->features & ARM_SMMU_FEAT_RANGE_INV) {
-		if (arm_smmu_cmdq_batch_add_range(inv->smmu, cmds, cmd, tlbi))
-			return false;
-	} else {
-		if (arm_smmu_cmdq_batch_add_single(inv->smmu, cmds, cmd, tlbi))
-			return false;
+		if (tlbi->range.use_full_inv) {
+			arm_smmu_inv_all_cmd(inv, cmds, cmd);
+			return true;
+		}
+		for (i = 0; i < tlbi->range.num_cmds; i++) {
+			struct arm_smmu_cmd range_cmd = tlbi->range.cmds[i];
+
+			range_cmd.data[0] |= cmd->data[0];
+			range_cmd.data[1] |= cmd->data[1];
+			arm_smmu_cmdq_batch_add_cmd_p(inv->smmu, cmds,
+						      &range_cmd);
+		}
+		return false;
 	}
 
-	arm_smmu_inv_all_cmd(inv, cmds, cmd);
-	return true;
+	if (tlbi->single.use_full_inv) {
+		arm_smmu_inv_all_cmd(inv, cmds, cmd);
+		return true;
+	}
+
+	for (i = 0; i < tlbi->single.num; i++) {
+		cmd->data[1] = FIELD_PREP(CMDQ_TLBI_1_LEAF, tlbi->leaf_only) |
+			       (iova & ~GENMASK_U64(11, 0));
+		iova += tlbi->iopte_size;
+		arm_smmu_cmdq_batch_add_cmd_p(inv->smmu, cmds, cmd);
+	}
+	return false;
 }
 
 static inline bool arm_smmu_invs_end_batch(struct arm_smmu_inv *cur,
@@ -2702,8 +2702,8 @@ static inline bool arm_smmu_invs_end_batch(struct arm_smmu_inv *cur,
 	return false;
 }
 
-static void __arm_smmu_domain_inv_range(struct arm_smmu_tlbi *tlbi,
-					struct arm_smmu_invs *invs)
+static void arm_smmu_domain_tlbi_inv(struct arm_smmu_tlbi *tlbi,
+				     struct arm_smmu_invs *invs)
 {
 	struct arm_smmu_inv *used_s12_vmall = NULL;
 	struct arm_smmu_cmdq_batch cmds = {};
@@ -2798,10 +2798,16 @@ void arm_smmu_domain_inv_range(struct arm_smmu_domain *smmu_domain,
 		.iova = iova,
 		.size = size,
 		.iopte_size = granule,
-		.has_cont = smmu_domain->stage == ARM_SMMU_DOMAIN_SVA,
 		.leaf_only = leaf,
 	};
 	struct arm_smmu_invs *invs;
+
+	if (!size || size == SIZE_MAX) {
+		tlbi.single.use_full_inv = true;
+		tlbi.range.use_full_inv = true;
+	} else {
+		arm_smmu_tlbi_calc_single(&tlbi);
+	}
 
 	/*
 	 * An invalidation request must follow some IOPTE change and then load
@@ -2834,6 +2840,19 @@ void arm_smmu_domain_inv_range(struct arm_smmu_domain *smmu_domain,
 	invs = rcu_dereference(smmu_domain->invs);
 
 	/*
+	 * Only precalculate RIL if it will be used, invs generation ensures
+	 * this matches the instances used for invalidation.
+	 */
+	if (invs->has_range_inv) {
+		if (!tlbi.range.use_full_inv) {
+			arm_smmu_tlbi_calc_range(
+				&tlbi,
+				smmu_domain->stage == ARM_SMMU_DOMAIN_SVA &&
+					invs->has_full_cont_ril);
+		}
+	}
+
+	/*
 	 * Avoid locking unless ATS is being used. No ATC invalidation can be
 	 * going on after a domain is detached.
 	 */
@@ -2841,10 +2860,10 @@ void arm_smmu_domain_inv_range(struct arm_smmu_domain *smmu_domain,
 		unsigned long flags;
 
 		read_lock_irqsave(&invs->rwlock, flags);
-		__arm_smmu_domain_inv_range(&tlbi, invs);
+		arm_smmu_domain_tlbi_inv(&tlbi, invs);
 		read_unlock_irqrestore(&invs->rwlock, flags);
 	} else {
-		__arm_smmu_domain_inv_range(&tlbi, invs);
+		arm_smmu_domain_tlbi_inv(&tlbi, invs);
 	}
 
 	rcu_read_unlock();
