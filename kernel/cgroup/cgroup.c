@@ -3281,6 +3281,20 @@ restart:
 	}
 }
 
+static bool cgroup_has_dying_csses(struct cgroup *cgrp, u32 ss_mask)
+{
+	int ssid;
+
+	lockdep_assert_held(&cgroup_mutex);
+
+	for (ssid = 0; ssid < CGROUP_SUBSYS_COUNT; ssid++) {
+		if ((ss_mask & (1 << ssid)) && cgrp->nr_dying_subsys[ssid])
+			return true;
+	}
+
+	return false;
+}
+
 /**
  * cgroup_save_control - save control masks and dom_cgrp of a subtree
  * @cgrp: root of the target subtree
@@ -3574,7 +3588,7 @@ static ssize_t cgroup_subtree_control_write(struct kernfs_open_file *of,
 			return -EINVAL;
 	}
 
-	cgrp = cgroup_kn_lock_live(of->kn, true);
+	cgrp = cgroup_kn_lock_live(of->kn, false);
 	if (!cgrp)
 		return -ENODEV;
 
@@ -3613,6 +3627,17 @@ static ssize_t cgroup_subtree_control_write(struct kernfs_open_file *of,
 	ret = cgroup_vet_subtree_control_enable(cgrp, enable);
 	if (ret)
 		goto out_unlock;
+
+	/*
+	 * Disabled controllers are offlined asynchronously. Don't sleep here
+	 * waiting for them to drain while holding the kernfs write context.
+	 * Report the in-flight teardown and let userspace retry once the dying
+	 * csses have gone away.
+	 */
+	if (enable && cgroup_has_dying_csses(cgrp, enable)) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
 
 	/* save and update control masks and prepare csses */
 	cgroup_save_control(cgrp);
@@ -3713,14 +3738,23 @@ static ssize_t cgroup_type_write(struct kernfs_open_file *of, char *buf,
 	if (strcmp(strstrip(buf), "threaded"))
 		return -EINVAL;
 
-	/* drain dying csses before we re-apply (threaded) subtree control */
-	cgrp = cgroup_kn_lock_live(of->kn, true);
+	/*
+	 * Threaded conversion re-applies subtree control, so reject it while a
+	 * prior controller disable is still offlining csses in the subtree.
+	 */
+	cgrp = cgroup_kn_lock_live(of->kn, false);
 	if (!cgrp)
 		return -ENOENT;
+
+	if (cgroup_has_dying_csses(cgrp, cgrp->subtree_ss_mask)) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
 
 	/* threaded can only be enabled */
 	ret = cgroup_enable_threaded(cgrp);
 
+out_unlock:
 	cgroup_kn_unlock(of->kn);
 	return ret ?: nbytes;
 }
