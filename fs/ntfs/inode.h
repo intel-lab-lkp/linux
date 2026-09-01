@@ -145,6 +145,7 @@ struct ntfs_inode {
 	__le32 reparse_tag;
 	__le32 reparse_flags;
 	char *target;
+	bool nodump;
 };
 
 /*

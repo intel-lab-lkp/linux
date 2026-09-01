@@ -155,6 +155,8 @@ int ntfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 		flags |= FS_IMMUTABLE_FL;
 	if (vi->i_flags & S_APPEND)
 		flags |= FS_APPEND_FL;
+	if (ni->nodump)
+		flags |= FS_NODUMP_FL;
 
 	fileattr_fill_flags(fa, flags);
 	return 0;
@@ -174,7 +176,7 @@ int ntfs_fileattr_set(struct mnt_idmap *idmap, struct dentry *dentry,
 
 	if (fileattr_has_fsx(fa))
 		return -EOPNOTSUPP;
-	if (fa->flags & ~(FS_IMMUTABLE_FL | FS_APPEND_FL))
+	if (fa->flags & ~(FS_IMMUTABLE_FL | FS_APPEND_FL | FS_NODUMP_FL))
 		return -EOPNOTSUPP;
 
 	if (fa->flags & FS_IMMUTABLE_FL)
@@ -183,6 +185,7 @@ int ntfs_fileattr_set(struct mnt_idmap *idmap, struct dentry *dentry,
 		new_fl |= S_APPEND;
 
 	inode_set_flags(vi, new_fl, S_IMMUTABLE | S_APPEND);
+	NTFS_I(vi)->nodump = fa->flags & FS_NODUMP_FL;
 
 	inode_set_ctime_current(vi);
 	mark_inode_dirty(vi);
@@ -445,8 +448,12 @@ int ntfs_getattr(struct mnt_idmap *idmap, const struct path *path,
 	if (inode->i_flags & S_APPEND)
 		stat->attributes |= STATX_ATTR_APPEND;
 
+	if (ni->nodump)
+		stat->attributes |= STATX_ATTR_NODUMP;
+
 	stat->attributes_mask |= STATX_ATTR_COMPRESSED | STATX_ATTR_ENCRYPTED |
-				 STATX_ATTR_IMMUTABLE | STATX_ATTR_APPEND;
+				 STATX_ATTR_IMMUTABLE | STATX_ATTR_APPEND |
+				 STATX_ATTR_NODUMP;
 
 	/*
 	 * If it's a compressed or encrypted file, NTFS currently

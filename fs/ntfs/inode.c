@@ -492,6 +492,7 @@ void __ntfs_init_inode(struct super_block *sb, struct ntfs_inode *ni)
 	ni->reparse_tag = 0;
 	ni->reparse_flags = 0;
 	ni->target = NULL;
+	ni->nodump = 0;
 	ni->i_dealloc_clusters = 0;
 }
 
