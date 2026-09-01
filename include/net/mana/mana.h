@@ -639,6 +639,21 @@ struct mana_port_context {
 	 */
 	bool channel_changing;
 
+	/* mana_publish_qset() could neither publish the new set nor restore the
+	 * old one. Vport RX is already off; the port still has to be closed,
+	 * which mana_publish_close_if_needed() does once the caller has
+	 * released the set that failed.
+	 */
+	bool publish_dead_end;
+
+	/* The dead end above took the carrier down for a software reason, not
+	 * a link event, so nothing else will ever put it back: the link
+	 * handler only runs on a real HWC_DATA_HW_LINK_* transition. Remember
+	 * it so the next successful open restores it, which is what makes the
+	 * documented "recoverable with a down/up" actually true.
+	 */
+	bool carrier_forced_off;
+
 	/* Net shaper handle*/
 	struct net_shaper_handle handle;
 
@@ -724,6 +739,9 @@ int mana_alloc_qset(struct mana_port_context *apc,
 		    struct mana_port_context *scratch, unsigned int num_queues,
 		    unsigned int rx_queue_size, unsigned int tx_queue_size,
 		    u32 priv_flags, struct mana_qset *out);
+int mana_publish_qset(struct mana_port_context *apc, struct mana_qset *newq,
+		      struct mana_qset *out_old);
+void mana_publish_close_if_needed(struct mana_port_context *apc);
 void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset);
 
 void mana_dim_change(struct mana_cq *cq, bool enable);
