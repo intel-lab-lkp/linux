@@ -7924,11 +7924,13 @@ static void napi_threaded_poll_loop(struct napi_struct *napi,
 			gro_flush_normal(&napi->gro, HZ >= 1000);
 		local_bh_enable();
 
-		/* Call cond_resched here to avoid watchdog warnings. */
-		if (repoll || busy_poll_last_qs) {
+		if (repoll || busy_poll_last_qs)
 			rcu_softirq_qs_periodic(last_qs);
-			cond_resched();
-		}
+
+		/* napi_thread_wait() can return without scheduling, so yield on
+		 * every exit, not only when the loop iterates.
+		 */
+		cond_resched();
 
 		if (!repoll)
 			break;
