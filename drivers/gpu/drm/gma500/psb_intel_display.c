@@ -9,8 +9,11 @@
 #include <linux/delay.h>
 #include <linux/i2c.h>
 
+#include <drm/drm_fourcc.h>
 #include <drm/drm_modeset_helper.h>
 #include <drm/drm_modeset_helper_vtables.h>
+#include <drm/drm_plane.h>
+#include <drm/drm_plane_helper.h>
 #include <drm/drm_print.h>
 
 #include "framebuffer.h"
@@ -471,11 +474,24 @@ out:
 	REG_WRITE(base[gma_crtc->pipe], 0);
 }
 
+static const uint32_t gma_primary_formats[] = {
+	/*
+	 * The display engine programs the primary plane with
+	 * DISPPLANE_32BPP_NO_ALPHA, so no formats with alpha.
+	 */
+	DRM_FORMAT_XRGB8888,
+};
+
+static const struct drm_plane_funcs gma_primary_plane_funcs = {
+	DRM_PLANE_NON_ATOMIC_FUNCS,
+};
+
 void psb_intel_crtc_init(struct drm_device *dev, int pipe,
 		     struct psb_intel_mode_device *mode_dev)
 {
 	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 	struct gma_crtc *gma_crtc;
+	struct drm_plane *primary;
 	int i;
 
 	/* We allocate a extra array of drm_connector pointers
@@ -494,7 +510,27 @@ void psb_intel_crtc_init(struct drm_device *dev, int pipe,
 		return;
 	}
 
-	drm_crtc_init(dev, &gma_crtc->base, &gma_crtc_funcs);
+	primary = __drm_universal_plane_alloc(dev, sizeof(*primary), 0, 0,
+					      &gma_primary_plane_funcs,
+					      gma_primary_formats,
+					      ARRAY_SIZE(gma_primary_formats),
+					      NULL, DRM_PLANE_TYPE_PRIMARY, NULL);
+	if (IS_ERR(primary)) {
+		dev_err(dev->dev, "Failed to allocate primary plane: %pe\n",
+			primary);
+		kfree(gma_crtc->crtc_state);
+		kfree(gma_crtc);
+		return;
+	}
+
+	if (drm_crtc_init_with_planes(dev, &gma_crtc->base, primary, NULL,
+				      &gma_crtc_funcs, NULL)) {
+		dev_err(dev->dev, "Failed to init CRTC %d\n", pipe);
+		drm_plane_cleanup(primary);
+		kfree(primary);
+		kfree(gma_crtc->crtc_state);
+		return;
+	}
 
 	/* Set the CRTC clock functions from chip specific data */
 	gma_crtc->clock_funcs = dev_priv->ops->clock_funcs;
