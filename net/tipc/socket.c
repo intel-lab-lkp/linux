@@ -647,10 +647,14 @@ static int tipc_release(struct socket *sock)
 	sk_stop_timer(sk, &sk->sk_timer);
 	tipc_sk_remove(tsk);
 
+	/* Purge under the socket lock: a SOCK_WAKEUP looked up before
+	 * tipc_sk_remove() can still reach tipc_dest_del() on this list.
+	 */
+	tipc_dest_list_purge(&tsk->cong_links);
+
 	sock_orphan(sk);
 	/* Reject any messages that accumulated in backlog queue */
 	release_sock(sk);
-	tipc_dest_list_purge(&tsk->cong_links);
 	tsk->cong_link_cnt = 0;
 	call_rcu(&tsk->rcu, tipc_sk_callback);
 	sock->sk = NULL;
