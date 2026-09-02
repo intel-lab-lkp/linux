@@ -129,6 +129,8 @@ static inline void put_file_access(struct file *file)
 
 void fput_close_sync(struct file *);
 void fput_close(struct file *);
+void fput_close_list(struct file *file, struct llist_head *list);
+void fput_list(struct llist_head *list);
 
 /*
  * super.c
@@ -198,6 +200,7 @@ extern struct file *do_file_open_root(const struct path *,
 extern struct open_how build_open_how(int flags, umode_t mode);
 extern int build_open_flags(const struct open_how *how, struct open_flags *op);
 struct file *file_close_fd_locked(struct files_struct *files, unsigned fd);
+int filp_flush(struct file *filp, fl_owner_t id);
 
 int do_ftruncate(struct file *file, loff_t length, unsigned int flags);
 int chmod_common(const struct path *path, umode_t mode);

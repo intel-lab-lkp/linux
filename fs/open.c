@@ -1506,7 +1506,7 @@ SYSCALL_DEFINE2(creat, const char __user *, pathname, umode_t, mode)
  * "id" is the POSIX thread ID. We use the
  * files pointer for this..
  */
-static int filp_flush(struct file *filp, fl_owner_t id)
+int filp_flush(struct file *filp, fl_owner_t id)
 {
 	int retval = 0;
 

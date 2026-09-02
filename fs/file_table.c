@@ -528,11 +528,10 @@ out:
 static LLIST_HEAD(delayed_fput_list);
 static void delayed_fput(struct work_struct *unused)
 {
-	struct llist_node *node = llist_del_all(&delayed_fput_list);
-	struct file *f, *t;
+	/* Detach the shared list once, then drain it like a private one. */
+	struct llist_head list = { .first = llist_del_all(&delayed_fput_list) };
 
-	llist_for_each_entry_safe(f, t, node, f_llist)
-		__fput(f);
+	fput_list(&list);
 }
 
 static void ____fput(struct callback_head *work)
@@ -627,6 +626,24 @@ void fput_close(struct file *file)
 {
 	if (file_ref_put_close(&file->f_ref))
 		__fput_deferred(file);
+}
+
+/* Like fput_close(), but the last reference goes on the caller's @list. */
+void fput_close_list(struct file *file, struct llist_head *list)
+{
+	if (file_ref_put_close(&file->f_ref))
+		__llist_add(&file->f_llist, list);
+}
+
+/* Run the final __fput() for everything on the private @list, right here. */
+void fput_list(struct llist_head *list)
+{
+	struct file *f, *t;
+
+	llist_for_each_entry_safe(f, t, __llist_del_all(list), f_llist) {
+		__fput(f);
+		cond_resched();
+	}
 }
 
 void __init files_init(void)
