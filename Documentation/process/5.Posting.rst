@@ -6,7 +6,7 @@ Posting patches
 Sooner or later, the time comes when your work is ready to be presented to
 the community for review and, eventually, inclusion into the mainline
 kernel.  Unsurprisingly, the kernel development community has evolved a set
-of conventions and procedures which are used in the posting of patches;
+of conventions and procedures that are used in the posting of patches;
 following them will make life much easier for everybody involved.  This
 document will attempt to cover these expectations in reasonable detail;
 more information can also be found in the files
@@ -24,17 +24,17 @@ feedback from the community before the work is complete.  So you should
 consider posting in-progress work, or even making a Git tree available so
 that interested developers can catch up with your work at any time.
 
-When posting code which is not yet considered ready for inclusion, it is a
+When posting code that is not yet considered ready for inclusion, it is a
 good idea to say so in the posting itself.  Also mention any major work
-which remains to be done and any known problems.  Fewer people will look at
-patches which are known to be half-baked, but those who do will come in
+that remains to be done and any known problems.  Fewer people will look at
+patches that are known to be half-baked, but those who do will come in
 with the idea that they can help you drive the work in the right direction.
 
 
 Before creating patches
 -----------------------
 
-There are a number of things which should be done before you consider
+There are a number of things that should be done before you consider
 sending patches to the development community.  These include:
 
  - Test the code to the extent that you can.  Make use of the kernel's
@@ -85,12 +85,12 @@ Only the most simple changes should be formatted as a single patch;
 everything else should be made as a logical series of changes.  Splitting
 up patches is a bit of an art; some developers spend a long time figuring
 out how to do it in the way that the community expects.  There are a few
-rules of thumb, however, which can help considerably:
+rules of thumb, however, that can help considerably:
 
  - The patch series you post will almost certainly not be the series of
    changes found in your working revision control system.  Instead, the
    changes you have made need to be considered in their final form, then
-   split apart in ways which make sense.  The developers are interested in
+   split apart in ways that make sense.  The developers are interested in
    discrete, self-contained changes, not the path you took to get to those
    changes.
 
@@ -98,7 +98,7 @@ rules of thumb, however, which can help considerably:
    patch.  These changes can be small ("add a field to this structure") or
    large (adding a significant new driver, for example), but they should be
    conceptually small and amenable to a one-line description.  Each patch
-   should make a specific change which can be reviewed on its own and
+   should make a specific change that can be reviewed on its own and
    verified to do what it says it does.
 
  - As a way of restating the guideline above: do not mix different types of
@@ -107,7 +107,7 @@ rules of thumb, however, which can help considerably:
    good chance that it will be passed over and the important fix will be
    lost.
 
- - Each patch should yield a kernel which builds and runs properly; if your
+ - Each patch should yield a kernel that builds and runs properly; if your
    patch series is interrupted in the middle, the result should still be a
    working kernel.  Partial application of a patch series is a common
    scenario when the "git bisect" tool is used to find regressions; if the
@@ -115,7 +115,7 @@ rules of thumb, however, which can help considerably:
    users who are engaging in the noble work of tracking down problems.
 
  - Do not overdo it, though.  One developer once posted a set of edits
-   to a single file as 500 separate patches - an act which did not make him
+   to a single file as 500 separate patches - an act that did not make him
    the most popular person on the kernel mailing list.  A single patch can
    be reasonably large as long as it still contains a single *logical*
    change.
@@ -125,11 +125,11 @@ rules of thumb, however, which can help considerably:
    in the series enables the whole thing.  This temptation should be
    avoided if possible; if that series adds regressions, bisection will
    finger the last patch as the one which caused the problem, even though
-   the real bug is elsewhere.  Whenever possible, a patch which adds new
+   the real bug is elsewhere.  Whenever possible, a patch that adds new
    code should make that code active immediately.
 
 Working to create the perfect patch series can be a frustrating process
-which takes quite a bit of time and thought after the "real work" has been
+that takes quite a bit of time and thought after the "real work" has been
 done.  When done properly, though, it is time well spent.
 
 
@@ -137,7 +137,7 @@ Patch formatting and changelogs
 -------------------------------
 
 So now you have a perfect series of patches for posting, but the work is
-not done quite yet.  Each patch needs to be formatted into a message which
+not done quite yet.  Each patch needs to be formatted into a message that
 quickly and clearly communicates its purpose to the rest of the world.  To
 that end, each patch will be composed of the following:
 
@@ -164,7 +164,7 @@ that end, each patch will be composed of the following:
    the author of the patch.  Tags will be described in more detail below.
 
 The items above, together, form the changelog for the patch.  Writing good
-changelogs is a crucial but often-neglected art; it's worth spending
+changelogs is a crucial but often-neglected art; it is worth spending
 another moment discussing this issue.  When writing a changelog, you should
 bear in mind that a number of different people will be reading your words.
 These include subsystem maintainers and reviewers who need to decide
@@ -274,7 +274,7 @@ The tags in common use are:
 
 Be careful in the addition of the aforementioned tags to your patches, as all
 except for Cc:, Reported-by:, and Suggested-by: need explicit permission of the
-person named. For those three implicit permission is sufficient if the person
+person named. For those three, implicit permission is sufficient if the person
 contributed to the Linux kernel using that name and email address according
 to the lore archives or the commit history -- and in case of Reported-by:
 and Suggested-by: did the reporting or suggestion in public. Note,
@@ -303,7 +303,7 @@ take care of:
    comes up with.  Please bear in mind that checkpatch.pl, while being the
    embodiment of a fair amount of thought about what kernel patches should
    look like, is not smarter than you.  If fixing a checkpatch.pl complaint
-   would make the code worse, don't do it.
+   would make the code worse, do not do it.
 
 Patches should always be sent as plain text.  Please do not send them as
 attachments; that makes it much harder for reviewers to quote sections of
@@ -312,7 +312,7 @@ message.
 
 When mailing patches, it is important to send copies to anybody who might
 be interested in it.  Unlike some other projects, the kernel encourages
-people to err on the side of sending too many copies; don't assume that the
+people to err on the side of sending too many copies; do not assume that the
 relevant people will see your posting on the mailing lists.  In particular,
 copies should go to:
 

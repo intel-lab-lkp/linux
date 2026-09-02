@@ -5,11 +5,11 @@ Getting the code right
 
 While there is much to be said for a solid and community-oriented design
 process, the proof of any kernel development project is in the resulting
-code.  It is the code which will be examined by other developers and merged
-(or not) into the mainline tree.  So it is the quality of this code which
+code.  It is the code that will be examined by other developers and merged
+(or not) into the mainline tree.  So it is the quality of this code that
 will determine the ultimate success of the project.
 
-This section will examine the coding process.  We'll start with a look at a
+This section will examine the coding process.  We will start with a look at a
 number of ways in which kernel developers can go wrong.  Then the focus
 will shift toward doing things right and the tools which can help in that
 quest.
@@ -25,7 +25,7 @@ The kernel has long had a standard coding style, described in
 :ref:`Documentation/process/coding-style.rst <codingstyle>`.  For much of
 that time, the policies described in that file were taken as being, at most,
 advisory.  As a result, there is a substantial amount of code in the kernel
-which does not meet the coding style guidelines.  The presence of that code
+that does not meet the coding style guidelines.  The presence of that code
 leads to two independent hazards for kernel developers.
 
 The first of these is to believe that the kernel coding standards do not
@@ -43,7 +43,7 @@ win before the code can be merged.  Putting code into the kernel means
 giving up a degree of control in a number of ways - including control over
 how the code is formatted.
 
-The other trap is to assume that code which is already in the kernel is
+The other trap is to assume that code that is already in the kernel is
 urgently in need of coding style fixes.  Developers may start to generate
 reformatting patches as a way of gaining familiarity with the process, or
 as a way of getting their name into the kernel changelogs - or both.  But
@@ -82,10 +82,10 @@ But experience has shown that excessive or premature abstraction can be
 just as harmful as premature optimization.  Abstraction should be used to
 the level required and no further.
 
-At a simple level, consider a function which has an argument which is
+At a simple level, consider a function that has an argument that is
 always passed as zero by all callers.  One could retain that argument just
 in case somebody eventually needs to use the extra flexibility that it
-provides.  By that time, though, chances are good that the code which
+provides.  By that time, though, chances are good that the code that
 implements this extra argument has been broken in some subtle way which was
 never noticed - because it has never been used.  Or, when the need for
 extra flexibility arises, it does not do so in a way which matches the
@@ -111,12 +111,12 @@ replicating the same code throughout the kernel.
 The C preprocessor seems to present a powerful temptation to some C
 programmers, who see it as a way to efficiently encode a great deal of
 flexibility into a source file.  But the preprocessor is not C, and heavy
-use of it results in code which is much harder for others to read and
+use of it results in code that is much harder for others to read and
 harder for the compiler to check for correctness.  Heavy preprocessor use
-is almost always a sign of code which needs some cleanup work.
+is almost always a sign of code that needs some cleanup work.
 
 Conditional compilation with #ifdef is, indeed, a powerful feature, and it
-is used within the kernel.  But there is little desire to see code which is
+is used within the kernel.  But there is little desire to see code that is
 sprinkled liberally with #ifdef blocks.  As a general rule, #ifdef use
 should be confined to header files whenever possible.
 Conditionally-compiled code can be confined to functions which, if the code
@@ -127,7 +127,7 @@ code which is easier to follow.
 C preprocessor macros present a number of hazards, including possible
 multiple evaluation of expressions with side effects and no type safety.
 If you are tempted to define a macro, consider creating an inline function
-instead.  The code which results will be the same, but inline functions are
+instead.  The code that results will be the same, but inline functions are
 easier to read, do not evaluate their arguments multiple times, and allow
 the compiler to perform type checking on the arguments and return value.
 
@@ -149,7 +149,7 @@ example of premature optimization.
 In general, kernel programmers ignore cache effects at their peril.  The
 classic time/space tradeoff taught in beginning data structures classes
 often does not apply to contemporary hardware.  Space *is* time, in that a
-larger program will run slower than one which is more compact.
+larger program will run slower than one that is more compact.
 
 More recent compilers take an increasingly active role in deciding whether
 a given function should actually be inlined or not.  So the liberal
@@ -181,12 +181,12 @@ single-processor systems, work being done to improve responsiveness will
 raise the level of concurrency within the kernel.  The days when kernel
 code could be written without thinking about locking are long past.
 
-Any resource (data structures, hardware registers, etc.) which could be
+Any resource (data structures, hardware registers, etc.) that could be
 accessed concurrently by more than one thread must be protected by a lock.
 New code should be written with this requirement in mind; retrofitting
 locking after the fact is a rather more difficult task.  Kernel developers
 should take the time to understand the available locking primitives well
-enough to pick the right tool for the job.  Code which shows a lack of
+enough to pick the right tool for the job.  Code that shows a lack of
 attention to concurrency will have a difficult path into the mainline.
 
 
@@ -194,10 +194,10 @@ Regressions
 ***********
 
 One final hazard worth mentioning is this: it can be tempting to make a
-change (which may bring big improvements) which causes something to break
+change (which may bring big improvements) that causes something to break
 for existing users.  This kind of change is called a "regression," and
 regressions have become most unwelcome in the mainline kernel.  With few
-exceptions, changes which cause regressions will be backed out if the
+exceptions, changes that cause regressions will be backed out if the
 regression cannot be fixed in a timely manner.  Far better to avoid the
 regression in the first place.
 
@@ -232,8 +232,8 @@ For now, at least, the writing of error-free code remains an ideal that few
 of us can reach.  What we can hope to do, though, is to catch and fix as
 many of those errors as possible before our code goes into the mainline
 kernel.  To that end, the kernel developers have put together an impressive
-array of tools which can catch a wide variety of obscure problems in an
-automated way.  Any problem caught by the computer is a problem which will
+array of tools that can catch a wide variety of obscure problems in an
+automated way.  Any problem caught by the computer is a problem that will
 not afflict a user later on, so it stands to reason that the automated
 tools should be used whenever possible.
 
@@ -248,7 +248,7 @@ its cause.
 Note that not all compiler warnings are enabled by default.  Build the
 kernel with "make KCFLAGS=-W" to get the full set.
 
-The kernel provides several configuration options which turn on debugging
+The kernel provides several configuration options that turn on debugging
 features; most of these are found in the "kernel hacking" submenu.  Several
 of these options should be turned on for any kernel used for development or
 testing purposes.  In particular, you should turn on:
@@ -259,7 +259,7 @@ testing purposes.  In particular, you should turn on:
 
  - DEBUG_OBJECTS will add code to track the lifetime of various objects
    created by the kernel and warn when things are done out of order.  If
-   you are adding a subsystem which creates (and exports) complex objects
+   you are adding a subsystem that creates (and exports) complex objects
    of its own, consider adding support for the object debugging
    infrastructure.
 
@@ -288,13 +288,13 @@ locking should be run with lockdep enabled before being submitted for
 inclusion.
 
 As a diligent kernel programmer, you will, beyond doubt, check the return
-status of any operation (such as a memory allocation) which can fail.  The
+status of any operation (such as a memory allocation) that can fail.  The
 fact of the matter, though, is that the resulting failure recovery paths
 are, probably, completely untested.  Untested code tends to be broken code;
 you could be much more confident of your code if all those error-handling
 paths had been exercised a few times.
 
-The kernel provides a fault injection framework which can do exactly that,
+The kernel provides a fault injection framework that can do exactly that,
 especially where memory allocations are involved.  With fault injection
 enabled, a configurable percentage of memory allocations will be made to
 fail; these failures can be restricted to a specific range of code.
@@ -349,7 +349,7 @@ understand the patch.  Be sure that the changelog says *why* the patch is
 worth applying; a surprising number of developers fail to provide that
 information.
 
-Any code which adds a new user-space interface - including new sysfs or
+Any code that adds a new user-space interface - including new sysfs or
 /proc files - should include documentation of that interface which enables
 user-space developers to know what they are working with.  See
 Documentation/ABI/README for a description of how this documentation should
@@ -386,7 +386,7 @@ be accompanied by a line explaining why the barrier is necessary.  The
 locking rules for data structures generally need to be explained somewhere.
 Major data structures need comprehensive documentation in general.
 Non-obvious dependencies between separate bits of code should be pointed
-out.  Anything which might tempt a code janitor to make an incorrect
+out.  Anything that might tempt a code janitor to make an incorrect
 "cleanup" needs a comment saying why it is done the way it is.  And so on.
 
 
