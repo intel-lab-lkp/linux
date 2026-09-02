@@ -28,14 +28,14 @@ Applying the patch to a tree
 ============================
 
 Sometimes the patch you are backporting already exists as a git commit,
-in which case you just cherry-pick it directly using
+in that case you just cherry-pick it directly using
 ``git cherry-pick``. However, if the patch comes from an email, as it
 often does for the Linux kernel, you will need to apply it to a tree
 using ``git am``.
 
-If you've ever used ``git am``, you probably already know that it is
+If you have ever used ``git am``, you probably already know that it is
 quite picky about the patch applying perfectly to your source tree. In
-fact, you've probably had nightmares about ``.rej`` files and trying to
+fact, you have probably had nightmares about ``.rej`` files and trying to
 edit the patch to make it apply.
 
 It is strongly recommended to instead find an appropriate base version
@@ -47,9 +47,9 @@ apply a patch that just arrived on LKML to an older stable kernel, you
 can apply it to the most recent mainline kernel and then cherry-pick it
 to your older stable branch.
 
-It's generally better to use the exact same base as the one the patch
-was generated from, but it doesn't really matter that much as long as it
-applies cleanly and isn't too far from the original base. The only
+It is generally better to use the exact same base as the one the patch
+was generated from, but it does not really matter that much as long as it
+applies cleanly and is not too far from the original base. The only
 problem with applying the patch to the "wrong" base is that it may pull
 in more unrelated changes in the context of the diff when cherry-picking
 it to the older branch.
@@ -70,7 +70,7 @@ article will assume that you are doing a plain ``git cherry-pick``.
 .. _b4 presentation: https://youtu.be/mF10hgVIx9o?t=2996
 
 Once you have the patch in Git, you can go ahead and cherry-pick it into
-your source tree. Don't forget to cherry-pick with ``-x`` if you want a
+your source tree. Do not forget to cherry-pick with ``-x`` if you want a
 written record of where the patch came from!
 
 Note that if you are submitting a patch for stable, the format is
@@ -93,8 +93,8 @@ Uh-oh; the cherry-pick failed with a vaguely threatening message::
 What to do now?
 
 In general, conflicts appear when the context of the patch (i.e., the
-lines being changed and/or the lines surrounding the changes) doesn't
-match what's in the tree you are trying to apply the patch *to*.
+lines being changed and/or the lines surrounding the changes) does not
+match what is in the tree you are trying to apply the patch *to*.
 
 For backports, what likely happened was that the branch you are
 backporting from contains patches not in the branch you are backporting
@@ -113,7 +113,7 @@ editor or using a dedicated conflict resolution tool.
 Many people prefer to use their regular text editor and edit the
 conflict directly, as it may be easier to understand what you're doing
 and to control the final result. There are definitely pros and cons to
-each method, and sometimes there's value in using both.
+each method, and sometimes there is value in using both.
 
 We will not cover using dedicated merge tools here beyond providing some
 pointers to various tools that you could use:
@@ -144,7 +144,7 @@ simply diverged -- perhaps your older branch had some other backports
 applied to it that themselves needed conflict resolutions, causing a
 divergence.
 
-It's important to always identify the commit or commits that caused the
+It is important to always identify the commit or commits that caused the
 conflict, as otherwise you cannot be confident in the correctness of
 your resolution. As an added bonus, especially if the patch is in an
 area you're not that familiar with, the changelogs of these commits will
@@ -155,7 +155,7 @@ git log
 ~~~~~~~
 
 A good first step is to look at ``git log`` for the file that has the
-conflict -- this is usually sufficient when there aren't a lot of
+conflict -- this is usually sufficient when there are not a lot of
 patches to the file, but may get confusing if the file is big and
 frequently patched. You should run ``git log`` on the range of commits
 between your currently checked-out branch (``HEAD``) and the parent of
@@ -164,7 +164,7 @@ the patch you are picking (``<commit>``), i.e.::
     git log HEAD..<commit>^ -- <path>
 
 Even better, if you want to restrict this output to a single function
-(because that's where the conflict appears), you can use the following
+(because that is where the conflict appears), you can use the following
 syntax::
 
     git log -L:'\<function\>':<path> HEAD..<commit>^
@@ -236,8 +236,8 @@ not be incidental at all and you need to carefully consider whether the
 patch adding the function should be cherry-picked first.
 
 If you find that there is a necessary prerequisite patch, then you need
-to stop and cherry-pick that instead. If you've already resolved some
-conflicts in a different file and don't want to do it again, you can
+to stop and cherry-pick that instead. If you have already resolved some
+conflicts in a different file and do not want to do it again, you can
 create a temporary copy of that file.
 
 To abort the current cherry-pick, go ahead and run
@@ -250,7 +250,7 @@ Understanding conflict markers
 Combined diffs
 ~~~~~~~~~~~~~~
 
-Let's say you've decided against picking (or reverting) additional
+Let's say you have decided against picking (or reverting) additional
 patches and you just want to resolve the conflict. Git will have
 inserted conflict markers into your file. Out of the box, this will look
 something like::
@@ -365,10 +365,10 @@ part of the conflict, leaving the file essentially unchanged, and apply
 the changes by hand. Perhaps the patch is changing a function call
 argument from ``0`` to ``1`` while a conflicting change added an
 entirely new (and insignificant) parameter to the end of the parameter
-list; in that case, it's easy enough to change the argument from ``0``
+list; in that case, it is easy enough to change the argument from ``0``
 to ``1`` by hand and leave the rest of the arguments alone. This
 technique of manually applying changes is mostly useful if the conflict
-pulled in a lot of unrelated context that you don't really need to care
+pulled in a lot of unrelated context that you do not really need to care
 about.
 
 For particularly nasty conflicts with many conflict markers, you can use
@@ -382,14 +382,14 @@ Dealing with file renames
 
 One of the most annoying things that can happen while backporting a
 patch is discovering that one of the files being patched has been
-renamed, as that typically means Git won't even put in conflict markers,
+renamed, as that typically means Git will not even put in conflict markers,
 but will just throw up its hands and say (paraphrased): "Unmerged path!
 You do the work..."
 
 There are generally a few ways to deal with this. If the patch to the
 renamed file is small, like a one-line change, the easiest thing is to
 just go ahead and apply the change by hand and be done with it. On the
-other hand, if the change is big or complicated, you definitely don't
+other hand, if the change is big or complicated, you definitely do not
 want to do it by hand.
 
 As a first pass, you can try something like this, which will lower the
@@ -400,7 +400,7 @@ an add-delete pair to be a potential rename)::
   git cherry-pick -strategy=recursive -Xrename-threshold=30
 
 Sometimes the right thing to do will be to also backport the patch that
-did the rename, but that's definitely not the most common case. Instead,
+did the rename, but that is definitely not the most common case. Instead,
 what you can do is to temporarily rename the file in the branch you're
 backporting to (using ``git mv`` and committing the result), restart the
 attempt to cherry-pick the patch, rename the file back (``git mv`` and
@@ -416,7 +416,7 @@ Gotchas
 Function arguments
 ~~~~~~~~~~~~~~~~~~
 
-Pay attention to changing function arguments! It's easy to gloss over
+Pay attention to changing function arguments! It is easy to gloss over
 details and think that two lines are the same but actually they differ
 in some small detail like which variable was passed as an argument
 (especially if the two variables are both a single character that look
@@ -438,7 +438,7 @@ other patches.
 A good way to ensure that you review the error paths is to always use
 ``git diff -W`` and ``git show -W`` (AKA ``--function-context``) when
 inspecting your changes.  For C code, this will show you the whole
-function that's being changed in a patch. One of the things that often
+function that is being changed in a patch. One of the things that often
 go wrong during backports is that something else in the function changed
 on either of the branches that you're backporting from or to. By
 including the whole function in the diff you get more context and can
@@ -453,22 +453,22 @@ function. When backporting patches to an area where such a refactoring
 has taken place, you effectively need to do the reverse when
 backporting: a patch to a single location may need to be applied to
 multiple locations in the backported version. (One giveaway for this
-scenario is that a function was renamed -- but that's not always the
+scenario is that a function was renamed -- but that is not always the
 case.)
 
-To avoid incomplete backports, it's worth trying to figure out if the
+To avoid incomplete backports, it is worth trying to figure out if the
 patch fixes a bug that appears in more than one place. One way to do
 this would be to use ``git grep``. (This is actually a good idea to do
 in general, not just for backports.) If you do find that the same kind
-of fix would apply to other places, it's also worth seeing if those
-places exist upstream -- if they don't, it's likely the patch may need
+of fix would apply to other places, it is also worth seeing if those
+places exist upstream -- if they do not, it is likely the patch may need
 to be adjusted. ``git log`` is your friend to figure out what happened
-to these areas as ``git blame`` won't show you code that has been
+to these areas as ``git blame`` will not show you code that has been
 removed.
 
 If you do find other instances of the same pattern in the upstream tree
-and you're not sure whether it's also a bug, it may be worth asking the
-patch author. It's not uncommon to find new bugs during backporting!
+and you're not sure whether it is also a bug, it may be worth asking the
+patch author. It is not uncommon to find new bugs during backporting!
 
 Verifying the result
 ====================
@@ -513,17 +513,17 @@ and running the patched kernel (or program).
 Build testing
 -------------
 
-We won't cover runtime testing here, but it can be a good idea to build
+We will not cover runtime testing here, but it can be a good idea to build
 just the files touched by the patch as a quick sanity check. For the
 Linux kernel you can build single files like this, assuming you have the
 ``.config`` and build environment set up correctly::
 
     make path/to/file.o
 
-Note that this won't discover linker errors, so you should still do a
+Note that this will not discover linker errors, so you should still do a
 full build after verifying that the single file compiles. By compiling
 the single file first you can avoid having to wait for a full build *in
-case* there are compiler errors in any of the files you've changed.
+case* there are compiler errors in any of the files you have changed.
 
 Runtime testing
 ---------------
@@ -571,7 +571,7 @@ format::
   Signed-off-by: <your name and email>
 
 The "Upstream commit" line is sometimes slightly different depending on
-the stable version. Older version used this format::
+the stable version. Older versions used this format::
 
   commit <mainline rev> upstream.
 

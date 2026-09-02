@@ -11,7 +11,7 @@ Background
 As a part of the 2021 Linux Kernel Maintainers’ Summit, there was a
 `discussion <https://lwn.net/Articles/870581/>`_ about the challenges in
 recruiting kernel maintainers as well as maintainer succession.  Some of
-the conclusions from that discussion included that companies which are a
+the conclusions from that discussion included that companies that are a
 part of the Linux Kernel community need to allow engineers to be
 maintainers as part of their job, so they can grow into becoming
 respected leaders and eventually, kernel maintainers.  To support a
@@ -65,7 +65,7 @@ Level 3
   authored by engineers from other companies) as part of their job
   responsibilities
 * Contributing presentations or papers to Linux-related or academic
-  conferences (such those organized by the Linux Foundation, Usenix,
+  conferences (such as those organized by the Linux Foundation, Usenix,
   ACM, etc.), are considered part of an engineer’s work.
 * A Software Engineer’s community contributions will be considered in
   promotion and performance reviews.

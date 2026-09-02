@@ -9,7 +9,7 @@ Deprecated Interfaces, Language Features, Attributes, and Conventions
 In a perfect world, it would be possible to convert all instances of
 some deprecated API into the new API and entirely remove the old API in
 a single development cycle. However, due to the size of the kernel, the
-maintainership hierarchy, and timing, it's not always feasible to do these
+maintainership hierarchy, and timing, it is not always feasible to do these
 kinds of conversions at once. This means that new instances may sneak into
 the kernel while old ones are being removed, only making the amount of
 work to remove the API grow. In order to educate developers about what
@@ -20,12 +20,12 @@ kernel.
 __deprecated
 ------------
 While this attribute does visually mark an interface as deprecated,
-it `does not produce warnings during builds any more
+it `does not produce warnings during builds anymore
 <https://git.kernel.org/linus/771c035372a036f83353eef46dbb829780330234>`_
 because one of the standing goals of the kernel is to build without
-warnings and no one was actually doing anything to remove these deprecated
+warnings and no effort was made to remove these deprecated
 interfaces. While using `__deprecated` is nice to note an old API in
-a header file, it isn't the full solution. Such interfaces must either
+a header file, it is not the full solution. Such interfaces must either
 be fully removed from the kernel, or added to this file to discourage
 others from using them in the future.
 
@@ -206,8 +206,8 @@ Implicit switch case fall-through
 ---------------------------------
 The C language allows switch cases to fall through to the next case
 when a "break" statement is missing at the end of a case. This, however,
-introduces ambiguity in the code, as it's not always clear if the missing
-break is intentional or a bug. For example, it's not obvious just from
+introduces ambiguity in the code, as it is not always clear if the missing
+break is intentional or a bug. For example, it is not obvious just from
 looking at the code if `STATE_ONE` is intentionally designed to fall
 through into `STATE_TWO`::
 
@@ -266,7 +266,7 @@ size problems::
                 struct foo items[0];
         };
 
-But this led to other problems, and didn't solve some problems shared by
+But this led to other problems, and did not solve some problems shared by
 both styles, like not being able to detect when such an array is accidentally
 being used _not_ at the end of a structure (which could happen directly, or
 when such a struct was in unions, structs of structs, etc).

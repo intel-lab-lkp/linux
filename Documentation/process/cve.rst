@@ -33,11 +33,11 @@ for CVE number assignments and have CVE numbers automatically assigned
 to them.  These assignments are published on the linux-cve-announce
 mailing list as announcements on a frequent basis.
 
-Note, due to the layer at which the Linux kernel is in a system, almost
+Note, due to the layer where the Linux kernel is in a system, almost
 any bug might be exploitable to compromise the security of the kernel,
 but the possibility of exploitation is often not evident when the bug is
 fixed.  Because of this, the CVE assignment team is overly cautious and
-assign CVE numbers to any bugfix that they identify.  This
+assigns CVE numbers to any bugfix that they identify.  This
 explains the seemingly large number of CVEs that are issued by the Linux
 kernel team.
 
@@ -53,7 +53,7 @@ process<../process/security-bugs>`.
 No CVEs will be automatically assigned for unfixed security issues in
 the Linux kernel; assignment will only automatically happen after a fix
 is available and applied to a stable kernel tree, and it will be tracked
-that way by the git commit id of the original fix.  If anyone wishes to
+by the Git commit ID of the original fix.  If anyone wishes to
 have a CVE assigned before an issue is resolved with a commit, please
 contact the kernel CVE assignment team at <cve@kernel.org> to get an
 identifier assigned from their batch of reserved identifiers.
@@ -83,7 +83,7 @@ If a security issue is found in a Linux kernel that is only supported by
 a Linux distribution due to the changes that have been made by that
 distribution, or due to the distribution supporting a kernel version
 that is no longer one of the kernel.org supported releases, then a CVE
-can not be assigned by the Linux kernel CVE team, and must be asked for
+cannot be assigned by the Linux kernel CVE team, and must be asked for
 from that Linux distribution itself.
 
 Any CVE that is assigned against the Linux kernel for an actively

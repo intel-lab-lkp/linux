@@ -33,9 +33,9 @@ Technical Advisory Board (TAB) Chair as a backup.
   the expectation that it maximizes the long term health of the project
   and its community.
 
-- Within two weeks, a representative of this group will communicate to the
-  broader community, using the ksummit@lists.linux.dev mailing list, what
-  the next steps will be.
+- Within two weeks, a representative of this group will communicate the 
+  next steps to the broader community via the ksummit@lists.linux.dev
+  mailing list.
 
 The Linux Foundation, as guided by the TAB, will take the steps
 necessary to support and implement this plan.

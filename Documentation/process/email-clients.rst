@@ -25,7 +25,7 @@ attachments, but then the attachments should have content-type
 it makes quoting portions of the patch more difficult in the patch
 review process.
 
-It's also strongly recommended that you use plain text in your email body,
+It is also strongly recommended that you use plain text in your email body,
 for patches and other emails alike. https://useplaintext.email may be useful
 for information on how to configure your preferred email client, as well as
 listing recommended email clients should you not already have a preference.
@@ -34,10 +34,10 @@ Email clients that are used for Linux kernel patches should send the
 patch text untouched.  For example, they should not modify or delete tabs
 or spaces, even at the beginning or end of lines.
 
-Don't send patches with ``format=flowed``.  This can cause unexpected
+Do not send patches with ``format=flowed``.  This can cause unexpected
 and unwanted line breaks.
 
-Don't let your email client do automatic word wrapping for you.
+Do not let your email client do automatic word wrapping for you.
 This can also corrupt your patch.
 
 Email clients should not modify the character set encoding of the text.
@@ -50,14 +50,14 @@ headers so that mail threading is not broken.
 
 Copy-and-paste (or cut-and-paste) usually does not work for patches
 because tabs are converted to spaces.  Using xclipboard, xclip, and/or
-xcutsel may work, but it's best to test this for yourself or just avoid
+xcutsel may work, but it is best to test this for yourself or just avoid
 copy-and-paste.
 
-Don't use PGP/GPG signatures in mail that contains patches.
+Do not use PGP/GPG signatures in mail that contains patches.
 This breaks many scripts that read and apply the patches.
 (This should be fixable.)
 
-It's a good idea to send a patch to yourself, save the received message,
+It is a good idea to send a patch to yourself, save the received message,
 and successfully apply it with 'patch' before sending patches to Linux
 mailing lists.
 
@@ -86,7 +86,7 @@ In the :menuselection:`Sending Preferences` section:
 - :menuselection:`Strip Whitespace Before Sending` must be ``disabled``
 
 When composing the message, the cursor should be placed where the patch
-should appear, and then pressing `CTRL-R` let you specify the patch file
+should appear, and then pressing `CTRL-R` lets you specify the patch file
 to insert into the message.
 
 Claws Mail (GUI)
@@ -180,7 +180,7 @@ Mutt (TUI)
 
 Plenty of Linux developers use ``mutt``, so it must work pretty well.
 
-Mutt doesn't come with an editor, so whatever editor you use should be
+Mutt does not come with an editor, so whatever editor you use should be
 used in a way that there are no automatic linebreaks.  Most editors have
 an :menuselection:`insert file` option that inserts the contents of a file
 unaltered.
@@ -208,7 +208,7 @@ to send them::
 Config options:
 
 It should work with default settings.
-However, it's a good idea to set the ``send_charset`` to::
+However, it is a good idea to set the ``send_charset`` to::
 
   set send_charset="us-ascii:utf-8"
 
@@ -266,9 +266,9 @@ Sylpheed (GUI)
 - Works well for inlining text (or using attachments).
 - Allows use of an external editor.
 - Is slow on large folders.
-- Won't do TLS SMTP auth over a non-SSL connection.
+- Will not do TLS SMTP auth over a non-SSL connection.
 - Has a helpful ruler bar in the compose window.
-- Adding addresses to address book doesn't understand the display name
+- Adding addresses to address book does not understand the display name
   properly.
 
 Thunderbird (GUI)
@@ -283,7 +283,7 @@ you need to restart Thunderbird.
 - Allow use of an external editor:
 
   The easiest thing to do with Thunderbird and patches is to use extensions
-  which open your favorite external editor.
+  that open your favorite external editor.
 
   Here are some example extensions which are capable of doing this.
 
@@ -294,7 +294,7 @@ you need to restart Thunderbird.
     https://addons.thunderbird.net/en-GB/thunderbird/addon/external-editor-revived/
 
     It requires installing a "native messaging host".
-    Please read the wiki which can be found here:
+    Please read the wiki that can be found here:
     https://github.com/Frederick888/external-editor-revived/wiki
 
   - "External Editor"
@@ -317,7 +317,7 @@ you need to restart Thunderbird.
 
 To beat some sense out of the internal editor, do this:
 
-- Edit your Thunderbird config settings so that it won't use ``format=flowed``!
+- Edit your Thunderbird config settings so that it will not use ``format=flowed``!
   Go to your main window and find the button for your main dropdown menu.
   :menuselection:`Main Menu-->Preferences-->General-->Config Editor...`
   to bring up the thunderbird's registry editor.
@@ -333,7 +333,7 @@ To beat some sense out of the internal editor, do this:
 
     to control this registry on the fly.
 
-- Don't write HTML messages! Go to the main window
+- Do not write HTML messages! Go to the main window
   :menuselection:`Main Menu-->Account Settings-->youracc@server.something-->Composition & Addressing`!
   There you can disable the option "Compose messages in HTML format".
 
@@ -362,7 +362,7 @@ HacKerMaiL (TUI)
 ****************
 
 HacKerMaiL (hkml) is a public-inbox based simple mails management tool that
-doesn't require subscription of mailing lists.  It is developed and maintained
+does not require subscription of mailing lists.  It is developed and maintained
 by the DAMON maintainer and aims to support simple development workflows for
 DAMON and general kernel subsystems.  Refer to the README
 (https://github.com/sjp38/hackermail/blob/master/README.md) for details.
