@@ -793,6 +793,9 @@ static int mst_stream_compute_config(struct intel_atomic_state *state,
 			bxt_dpio_phy_calc_lane_lat_optim_mask(pipe_config->lane_count);
 
 	intel_vrr_compute_config(pipe_config, conn_state);
+	intel_dp_compute_as_sdp(intel_dp, pipe_config);
+	intel_dp_compute_vsc_sdp(intel_dp, pipe_config, conn_state);
+	intel_dp_compute_hdr_metadata_infoframe_sdp(intel_dp, pipe_config, conn_state);
 
 	intel_dp_audio_compute_config(encoder, pipe_config, conn_state);
 
@@ -1157,6 +1160,24 @@ static void mst_stream_post_disable(struct intel_atomic_state *state,
 	 * Power down mst path before disabling the port, otherwise we end
 	 * up getting interrupts from the sink upon detecting link loss.
 	 */
+	if (intel_vrr_is_capable(connector)) {
+		u8 val;
+		ssize_t ret;
+
+		ret = drm_dp_mst_dpcd_read(&connector->mst.port->aux,
+					   DP_DOWNSPREAD_CTRL, &val, 1);
+		if (ret < 0) {
+			drm_dbg_kms(display->drm,
+				    "[CONNECTOR:%d:%s] Failed to read DP_DOWNSPREAD_CTRL: %zd\n",
+				    connector->base.base.id,
+				    connector->base.name, ret);
+		} else {
+			val &= ~DP_MSA_TIMING_PAR_IGNORE_EN;
+			drm_dp_mst_dpcd_write(&connector->mst.port->aux,
+					      DP_DOWNSPREAD_CTRL, &val, 1);
+		}
+	}
+
 	drm_dp_send_power_updown_phy(&intel_dp->mst.mgr, connector->mst.port,
 				     false);
 
@@ -1273,6 +1294,24 @@ static void mst_stream_pre_enable(struct intel_atomic_state *state,
 		intel_dp_set_power(intel_dp, DP_SET_POWER_D0);
 
 	drm_dp_send_power_updown_phy(&intel_dp->mst.mgr, connector->mst.port, true);
+
+	if (intel_vrr_is_capable(connector)) {
+		u8 val;
+		ssize_t ret;
+
+		ret = drm_dp_mst_dpcd_read(&connector->mst.port->aux,
+					   DP_DOWNSPREAD_CTRL, &val, 1);
+		if (ret < 0) {
+			drm_dbg_kms(display->drm,
+				    "[CONNECTOR:%d:%s] Failed to read DP_DOWNSPREAD_CTRL: %zd\n",
+				    connector->base.base.id,
+				    connector->base.name, ret);
+		} else {
+			val |= DP_MSA_TIMING_PAR_IGNORE_EN;
+			drm_dp_mst_dpcd_write(&connector->mst.port->aux,
+					      DP_DOWNSPREAD_CTRL, &val, 1);
+		}
+	}
 
 	intel_dp_sink_enable_decompression(state, connector, pipe_config);
 
@@ -1397,6 +1436,8 @@ static void mst_stream_enable(struct intel_atomic_state *state,
 
 	intel_enable_transcoder(pipe_config);
 
+	intel_dp_set_infoframes(encoder, true, pipe_config, conn_state);
+
 	for_each_pipe_crtc_modeset_enable(display, pipe_crtc, pipe_config) {
 		const struct intel_crtc_state *pipe_crtc_state =
 			intel_atomic_get_new_crtc_state(state, pipe_crtc);
@@ -1450,6 +1491,15 @@ static int mst_connector_get_ddc_modes(struct drm_connector *_connector)
 	drm_edid = drm_dp_mst_edid_read(&connector->base, &intel_dp->mst.mgr, connector->mst.port);
 
 	ret = intel_connector_update_modes(&connector->base, drm_edid);
+
+	if (HAS_VRR(display)) {
+		bool vrr_capable = intel_vrr_is_capable(connector);
+
+		drm_dbg_kms(display->drm, "[CONNECTOR:%d:%s] VRR capable: %s\n",
+			    connector->base.base.id, connector->base.name,
+			    str_yes_no(vrr_capable));
+		drm_connector_set_vrr_capable_property(&connector->base, vrr_capable);
+	}
 
 	drm_edid_free(drm_edid);
 
@@ -1735,6 +1785,10 @@ static int mst_topology_add_connector_properties(struct intel_dp *intel_dp,
 
 	intel_attach_force_audio_property(&connector->base);
 	intel_attach_broadcast_rgb_property(&connector->base);
+	intel_attach_dp_colorspace_property(&connector->base);
+
+	if (intel_dp_has_gamut_metadata_dip(&dp_to_dig_port(intel_dp)->base))
+		drm_connector_attach_hdr_output_metadata_property(&connector->base);
 
 	/*
 	 * Reuse the prop from the SST connector because we're
@@ -1744,6 +1798,14 @@ static int mst_topology_add_connector_properties(struct intel_dp *intel_dp,
 		intel_dp->attached_connector->base.max_bpc_property;
 	if (connector->base.max_bpc_property)
 		drm_connector_attach_max_bpc_property(&connector->base, 6, 12);
+
+	/*
+	 * Reuse the vrr_capable prop from the eDP connector (which is always
+	 * initialized during driver load before device registration), because
+	 * we're not allowed to create new props after device registration.
+	 */
+	if (HAS_VRR(display))
+		drm_connector_attach_vrr_capable_property(&connector->base);
 
 	return drm_connector_set_path_property(&connector->base, pathprop);
 }
@@ -1760,6 +1822,9 @@ intel_dp_mst_read_decompression_port_dsc_caps(struct intel_dp *intel_dp,
 
 	if (drm_dp_read_dpcd_caps(connector->dp.dsc_decompression_aux, dpcd_caps) < 0)
 		return;
+
+	connector->dp.mst_msa_timing_par_ignore =
+		drm_dp_sink_can_do_video_without_timing_msa(dpcd_caps);
 
 	if (drm_dp_read_desc(connector->dp.dsc_decompression_aux, &desc,
 			     drm_dp_is_branch(dpcd_caps)) < 0)

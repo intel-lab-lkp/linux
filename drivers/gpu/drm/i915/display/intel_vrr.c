@@ -58,8 +58,27 @@ bool intel_vrr_is_capable(struct intel_connector *connector)
 			return false;
 		fallthrough;
 	case DRM_MODE_CONNECTOR_DisplayPort:
-		if (connector->mst.dp)
-			return false;
+		if (connector->mst.dp) {
+			u8 dpcd[DP_RECEIVER_CAP_SIZE];
+
+			/*
+			 * Use cached MSA timing ignore capability from the DFP
+			 * sink's virtual DPCD, set during connector init.
+			 */
+			if (!connector->dp.mst_msa_timing_par_ignore)
+				return false;
+
+			/*
+			 * Also verify live via LCT=2 REMOTE_DPCD_READ to the
+			 * DFP sink's actual DPCD 0x007.
+			 */
+			if (drm_dp_read_dpcd_caps(&connector->mst.port->aux, dpcd) < 0)
+				return false;
+			if (!drm_dp_sink_can_do_video_without_timing_msa(dpcd))
+				return false;
+
+			break;
+		}
 		intel_dp = intel_attached_dp(connector);
 		/*
 		 * Among non-MST DP branch devices, only an HDMI 2.1 sink connected
