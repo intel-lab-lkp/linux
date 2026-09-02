@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/parser.h>
 #include <uapi/scsi/fc/fc_fs.h>
+#include <uapi/scsi/fc/fc_els.h>
 
 #include "../host/nvme.h"
 #include "../target/nvmet.h"
@@ -21,6 +22,7 @@ enum {
 	NVMF_OPT_FCADDR		= 1 << 3,
 	NVMF_OPT_LPWWNN		= 1 << 4,
 	NVMF_OPT_LPWWPN		= 1 << 5,
+	NVMF_OPT_MARGINAL	= 1 << 6,
 };
 
 struct fcloop_ctrl_options {
@@ -31,6 +33,7 @@ struct fcloop_ctrl_options {
 	u32			fcaddr;
 	u64			lpwwnn;
 	u64			lpwwpn;
+	u32			marginal;
 };
 
 static const match_table_t opt_tokens = {
@@ -40,6 +43,7 @@ static const match_table_t opt_tokens = {
 	{ NVMF_OPT_FCADDR,	"fcaddr=%x"	},
 	{ NVMF_OPT_LPWWNN,	"lpwwnn=%s"	},
 	{ NVMF_OPT_LPWWPN,	"lpwwpn=%s"	},
+	{ NVMF_OPT_MARGINAL,	"marginal=%d"	},
 	{ NVMF_OPT_ERR,		NULL		}
 };
 
@@ -120,6 +124,13 @@ fcloop_parse_options(struct fcloop_ctrl_options *opts,
 			}
 			opts->lpwwpn = token64;
 			break;
+		case NVMF_OPT_MARGINAL:
+			if (match_int(args, &token)) {
+				ret = -EINVAL;
+				goto out_free_options;
+			}
+			opts->marginal = token;
+			break;
 		default:
 			pr_warn("unknown parameter or missing value '%s'\n", p);
 			ret = -EINVAL;
@@ -198,6 +209,9 @@ out_free_options:
 			 NVMF_OPT_LPWWNN | NVMF_OPT_LPWWPN)
 
 #define TGTPORT_OPTS	(NVMF_OPT_WWNN | NVMF_OPT_WWPN)
+
+#define MARGINAL_OPTS	(NVMF_OPT_WWNN | NVMF_OPT_WWPN | \
+			 NVMF_OPT_MARGINAL)
 
 
 static DEFINE_SPINLOCK(fcloop_lock);
@@ -1538,6 +1552,40 @@ fcloop_set_cmd_drop(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
+static ssize_t
+fcloop_set_marginal_rport(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct fcloop_nport *nport;
+	struct fcloop_ctrl_options opts = {};
+	unsigned long flags;
+	int ret;
+
+	ret = fcloop_parse_options(&opts, buf);
+	if (ret)
+		return ret;
+
+	/* everything there ? */
+	if ((opts.mask & MARGINAL_OPTS) != MARGINAL_OPTS)
+		return -EINVAL;
+
+	nport = fcloop_nport_lookup(opts.wwnn, opts.wwpn);
+	if (!nport)
+		return -ENOENT;
+
+	spin_lock_irqsave(&fcloop_lock, flags);
+	if (!nport->rport || !nport->rport->remoteport) {
+		spin_unlock_irqrestore(&fcloop_lock, flags);
+		fcloop_nport_put(nport);
+		return -ENOENT;
+	}
+
+	nvme_fc_set_remoteport_fpin(nport->rport->remoteport, opts.marginal);
+	spin_unlock_irqrestore(&fcloop_lock, flags);
+	fcloop_nport_put(nport);
+
+	return count;
+}
 
 static DEVICE_ATTR(add_local_port, 0200, NULL, fcloop_create_local_port);
 static DEVICE_ATTR(del_local_port, 0200, NULL, fcloop_delete_local_port);
@@ -1546,6 +1594,7 @@ static DEVICE_ATTR(del_remote_port, 0200, NULL, fcloop_delete_remote_port);
 static DEVICE_ATTR(add_target_port, 0200, NULL, fcloop_create_target_port);
 static DEVICE_ATTR(del_target_port, 0200, NULL, fcloop_delete_target_port);
 static DEVICE_ATTR(set_cmd_drop, 0200, NULL, fcloop_set_cmd_drop);
+static DEVICE_ATTR(set_marginal_rport, 0200, NULL, fcloop_set_marginal_rport);
 
 static struct attribute *fcloop_dev_attrs[] = {
 	&dev_attr_add_local_port.attr,
@@ -1555,6 +1604,7 @@ static struct attribute *fcloop_dev_attrs[] = {
 	&dev_attr_add_target_port.attr,
 	&dev_attr_del_target_port.attr,
 	&dev_attr_set_cmd_drop.attr,
+	&dev_attr_set_marginal_rport.attr,
 	NULL
 };
 
