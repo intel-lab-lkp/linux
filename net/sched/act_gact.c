@@ -25,7 +25,6 @@ static struct tc_action_ops act_gact_ops;
 #ifdef CONFIG_GACT_PROB
 static int gact_net_rand(struct tcf_gact *gact)
 {
-	smp_rmb(); /* coupled with smp_wmb() in tcf_gact_init() */
 	if (get_random_u32_below(gact->tcfg_pval))
 		return gact->tcf_action;
 	return gact->tcfg_paction;
@@ -35,7 +34,6 @@ static int gact_determ(struct tcf_gact *gact)
 {
 	u32 pack = atomic_inc_return(&gact->packets);
 
-	smp_rmb(); /* coupled with smp_wmb() in tcf_gact_init() */
 	if (pack % gact->tcfg_pval)
 		return gact->tcf_action;
 	return gact->tcfg_paction;
@@ -133,11 +131,8 @@ static int tcf_gact_init(struct net *net, struct nlattr *nla,
 	if (p_parm) {
 		gact->tcfg_paction = p_parm->paction;
 		gact->tcfg_pval    = max_t(u16, 1, p_parm->pval);
-		/* Make sure tcfg_pval is written before tcfg_ptype
-		 * coupled with smp_rmb() in gact_net_rand() & gact_determ()
-		 */
-		smp_wmb();
-		gact->tcfg_ptype   = p_parm->ptype;
+		/* Pairs with smp_load_acquire() in tcf_gact_act(). */
+		smp_store_release(&gact->tcfg_ptype, p_parm->ptype);
 	}
 #endif
 	spin_unlock_bh(&gact->tcf_lock);
@@ -160,7 +155,8 @@ TC_INDIRECT_SCOPE int tcf_gact_act(struct sk_buff *skb,
 
 #ifdef CONFIG_GACT_PROB
 	{
-	u32 ptype = READ_ONCE(gact->tcfg_ptype);
+	/* Pairs with smp_store_release() in tcf_gact_init() */
+	u32 ptype = smp_load_acquire(&gact->tcfg_ptype);
 
 	if (ptype)
 		action = gact_rand[ptype](gact);
