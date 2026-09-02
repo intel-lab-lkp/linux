@@ -635,6 +635,39 @@ struct ieee80211_sta_removed_link_stats {
 };
 
 /**
+ * struct ieee80211_scs_sta - the SCS rule set of one station
+ *
+ * @rcu_head: for freeing
+ * @n_rules: number of entries in @rule
+ * @rule: the active descriptors, in the order they were installed
+ *
+ * One allocation holds this structure, the descriptors it points to and their
+ * QoS Characteristics octets, so the whole set has one lifetime.
+ */
+struct ieee80211_scs_sta {
+	struct rcu_head rcu_head;
+	u8 n_rules;
+	struct cfg80211_scs_desc *rule[] __counted_by(n_rules);
+};
+
+/**
+ * struct ieee80211_mscs_sta - the MSCS of one station
+ *
+ * @rcu_head: for freeing
+ * @layout: classifier parameters, a bitmap of &enum cfg80211_flow_field
+ * @up_bitmap: user priorities that the AP learns from, one bit each
+ * @up_limit: ceiling for the assigned user priority
+ * @timeout: minimum lifetime of a learned value, in jiffies
+ */
+struct ieee80211_mscs_sta {
+	struct rcu_head rcu_head;
+	u32 layout;
+	u8 up_bitmap;
+	u8 up_limit;
+	unsigned long timeout;
+};
+
+/**
  * struct sta_info - STA information
  *
  * This structure collects information about a station that
@@ -694,6 +727,8 @@ struct ieee80211_sta_removed_link_stats {
  *
  * @fast_tx: TX fastpath information
  * @fast_rx: RX fastpath information
+ * @scs: SCS rule set, or %NULL
+ * @mscs: MSCS parameters, or %NULL
  * @tdls_chandef: a TDLS peer can have a wider chandef that is compatible to
  *	the BSS one.
  * @frags: fragment cache
@@ -729,6 +764,9 @@ struct sta_info {
 
 	struct ieee80211_fast_tx __rcu *fast_tx;
 	struct ieee80211_fast_rx __rcu *fast_rx;
+
+	struct ieee80211_scs_sta __rcu *scs;
+	struct ieee80211_mscs_sta __rcu *mscs;
 
 #ifdef CONFIG_MAC80211_MESH
 	struct mesh_sta *mesh;

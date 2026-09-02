@@ -508,6 +508,7 @@ void sta_info_free(struct ieee80211_local *local, struct sta_info *sta)
 	kfree(sta->mesh);
 #endif
 
+	ieee80211_sta_scs_free(sta);
 	sta_info_free_link(&sta->deflink);
 	kfree(sta);
 }
