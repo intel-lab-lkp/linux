@@ -402,6 +402,13 @@ struct ceph_inode_info {
 #endif
 
 	spinlock_t i_ceph_lock;
+	/* offloaded readdir reply fills pending on this directory, in MDS
+	 * reply order; at most one runs at a time.  Protected by
+	 * i_ceph_lock.
+	 */
+	struct list_head i_fill_chain;
+	atomic_t i_fill_count;	/* number of fills on i_fill_chain */
+	wait_queue_head_t i_fill_wq;  /* woken when i_fill_count hits zero */
 
 	u32 i_time_warp_seq;
 	u64 i_version;

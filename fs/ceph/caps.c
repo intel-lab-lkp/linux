@@ -4446,6 +4446,16 @@ void ceph_handle_caps(struct ceph_mds_session *session,
 	struct ceph_mds_client *mdsc = session->s_mdsc;
 	struct ceph_client *cl = mdsc->fsc->client;
 	struct inode *inode;
+
+	/*
+	 * Readdir replies are filled by workqueue threads, which may still
+	 * be adding the caps granted in the reply's trace.  Wait for any
+	 * earlier offloaded reply fills to finish before applying the cap
+	 * message, preserving the ordering that the old inline reply
+	 * handling provided.
+	 */
+	wait_event(session->s_fill_wq, !atomic_read(&session->s_fill_inflight));
+
 	struct ceph_inode_info *ci;
 	struct ceph_cap *cap;
 	struct ceph_mds_caps *h;

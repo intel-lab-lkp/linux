@@ -634,6 +634,9 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	netfs_inode_init(&ci->netfs, &ceph_netfs_ops, false);
 
 	spin_lock_init(&ci->i_ceph_lock);
+	INIT_LIST_HEAD(&ci->i_fill_chain);
+	atomic_set(&ci->i_fill_count, 0);
+	init_waitqueue_head(&ci->i_fill_wq);
 
 	ci->i_version = 0;
 	ceph_set_inline_version(ci, 0);
