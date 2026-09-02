@@ -1613,12 +1613,14 @@ xlog_write_iclog(
 	if (iclog->ic_flags & XLOG_ICL_NEED_FLUSH) {
 		if (xlog_flush_data_caches(log))
 			goto shutdown;
-		iclog->ic_bio.bi_opf |= REQ_PREFLUSH;
 	}
+	if (iclog->ic_flags & (XLOG_ICL_NEED_FLUSH | XLOG_ICL_NEED_FLUSH_LOG))
+		iclog->ic_bio.bi_opf |= REQ_PREFLUSH;
 	if (iclog->ic_flags & XLOG_ICL_NEED_FUA)
 		iclog->ic_bio.bi_opf |= REQ_FUA;
 
-	iclog->ic_flags &= ~(XLOG_ICL_NEED_FLUSH | XLOG_ICL_NEED_FUA);
+	iclog->ic_flags &= ~(XLOG_ICL_NEED_FLUSH | XLOG_ICL_NEED_FLUSH_LOG |
+			     XLOG_ICL_NEED_FUA);
 
 	if (is_vmalloc_addr(iclog->ic_header)) {
 		if (!bio_add_vmalloc(&iclog->ic_bio, iclog->ic_header, count))
