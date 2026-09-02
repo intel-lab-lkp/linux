@@ -912,14 +912,6 @@ static int wacom_add_shared_data(struct hid_device *hdev)
 	wacom_wac->shared = &data->shared;
 
 	retval = devm_add_action_or_reset(&hdev->dev, wacom_remove_shared_data, wacom);
-	if (retval)
-		return retval;
-
-	if (wacom_wac->features.device_type & WACOM_DEVICETYPE_TOUCH)
-		wacom_wac->shared->touch = hdev;
-	else if (wacom_wac->features.device_type & WACOM_DEVICETYPE_PEN)
-		wacom_wac->shared->pen = hdev;
-
 	return retval;
 }
 
@@ -2343,10 +2335,7 @@ static void wacom_release_resources(struct wacom *wacom)
 
 static void wacom_set_shared_values(struct wacom_wac *wacom_wac)
 {
-	if (wacom_wac->features.device_type & WACOM_DEVICETYPE_TOUCH) {
-		wacom_wac->shared->type = wacom_wac->features.type;
-		wacom_wac->shared->touch_input = wacom_wac->touch_input;
-	}
+	struct wacom *wacom = container_of(wacom_wac, struct wacom, wacom_wac);
 
 	if (wacom_wac->has_mute_touch_switch) {
 		wacom_wac->shared->has_mute_touch_switch = true;
@@ -2359,12 +2348,52 @@ static void wacom_set_shared_values(struct wacom_wac *wacom_wac)
 			wacom_wac->shared->is_touch_on = true;
 	}
 
-	if (wacom_wac->shared->has_mute_touch_switch &&
-	    wacom_wac->shared->touch_input) {
-		set_bit(EV_SW, wacom_wac->shared->touch_input->evbit);
-		input_set_capability(wacom_wac->shared->touch_input, EV_SW,
-				     SW_MUTE_DEVICE);
+	if (wacom_wac->features.device_type & WACOM_DEVICETYPE_TOUCH) {
+		wacom_wac->shared->type = wacom_wac->features.type;
+		wacom_wac->shared->touch_input = wacom_wac->touch_input;
+		wacom_wac->shared->touch = wacom->hdev;
+	} else if (wacom_wac->features.device_type &
+		   (WACOM_DEVICETYPE_PEN | WACOM_DEVICETYPE_PAD)) {
+		wacom_wac->shared->pen = wacom->hdev;
 	}
+}
+
+static bool wacom_sibling_pending(struct wacom *wacom)
+{
+	struct hid_device *hdev = wacom->hdev;
+	const struct wacom_features *features = &wacom->wacom_wac.features;
+	struct usb_host_config *actconfig;
+	int i;
+
+	if (features->type != HID_GENERIC ||
+	    !(features->device_type & WACOM_DEVICETYPE_TOUCH))
+		return false;
+
+	if (wacom->wacom_wac.shared &&
+	    rcu_access_pointer(wacom->wacom_wac.shared->pen))
+		return false;
+
+	if (!hid_is_usb(hdev) || !wacom->usbdev)
+		return false;
+
+	if (features->oPid != HID_ANY_ID && features->oPid != 0)
+		return true;
+
+	actconfig = wacom->usbdev->actconfig;
+	if (actconfig && actconfig->desc.bNumInterfaces > 1) {
+		for (i = 0; i < actconfig->desc.bNumInterfaces; i++) {
+			struct usb_interface *sibling_intf = actconfig->interface[i];
+
+			if (!sibling_intf || sibling_intf == wacom->intf)
+				continue;
+
+			if (sibling_intf->cur_altsetting->desc.bInterfaceClass ==
+			    USB_INTERFACE_CLASS_HID)
+				return true;
+		}
+	}
+
+	return false;
 }
 
 static int wacom_parse_and_register(struct wacom *wacom, bool wireless)
@@ -2443,6 +2472,11 @@ static int wacom_parse_and_register(struct wacom *wacom, bool wireless)
 	error = wacom_add_shared_data(hdev);
 	if (error)
 		goto fail;
+
+	if (wacom_sibling_pending(wacom)) {
+		error = -EPROBE_DEFER;
+		goto fail;
+	}
 
 	error = wacom_setup_inputs(wacom);
 	if (error)
