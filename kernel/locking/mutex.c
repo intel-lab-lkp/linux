@@ -1046,6 +1046,8 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 				next = get_task_struct(donor);
 				__clear_task_blocked_on(next, lock);
 				current->blocked_donor = NULL;
+			} else if (!next_lock) {
+				current->blocked_donor = NULL;
 			}
 			raw_spin_unlock(&donor->blocked_lock);
 		}
