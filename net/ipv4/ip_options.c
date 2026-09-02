@@ -74,10 +74,32 @@ void ip_options_build(struct sk_buff *skb, struct ip_options *opt,
  * NOTE: dopt cannot point to skb.
  */
 
+static int ip_options_echo_len(const unsigned char *sptr,
+			       const struct ip_options *sopt,
+			       const struct ip_options *dopt,
+			       unsigned int offset, unsigned int option,
+			       unsigned int minlen)
+{
+	unsigned int end = sizeof(struct iphdr) + sopt->optlen;
+	unsigned int optlen;
+
+	if (offset < sizeof(struct iphdr) || offset + minlen > end ||
+	    sptr[offset] != option || dopt->optlen > sopt->optlen)
+		return -EINVAL;
+
+	optlen = sptr[offset + 1];
+	if (optlen < minlen || optlen > end - offset ||
+	    optlen > sopt->optlen - dopt->optlen)
+		return -EINVAL;
+
+	return optlen;
+}
+
 int __ip_options_echo(struct net *net, struct ip_options *dopt,
 		      struct sk_buff *skb, const struct ip_options *sopt)
 {
 	unsigned char *sptr, *dptr;
+	unsigned int hlen;
 	int soffset, doffset;
 	int	optlen;
 
@@ -86,11 +108,21 @@ int __ip_options_echo(struct net *net, struct ip_options *dopt,
 	if (sopt->optlen == 0)
 		return 0;
 
+	if (ip_hdr(skb)->version != IPVERSION || ip_hdr(skb)->ihl < 5)
+		return -EINVAL;
+	hlen = ip_hdrlen(skb);
+	if (sopt->optlen != hlen - sizeof(struct iphdr) ||
+	    !pskb_network_may_pull(skb, hlen))
+		return -EINVAL;
+
 	sptr = skb_network_header(skb);
 	dptr = dopt->__data;
 
 	if (sopt->rr) {
-		optlen  = sptr[sopt->rr+1];
+		optlen = ip_options_echo_len(sptr, sopt, dopt,
+					     sopt->rr, IPOPT_RR, 3);
+		if (optlen < 0)
+			return optlen;
 		soffset = sptr[sopt->rr+2];
 		dopt->rr = dopt->optlen + sizeof(struct iphdr);
 		memcpy(dptr, sptr+sopt->rr, optlen);
@@ -104,7 +136,10 @@ int __ip_options_echo(struct net *net, struct ip_options *dopt,
 		dopt->optlen += optlen;
 	}
 	if (sopt->ts) {
-		optlen = sptr[sopt->ts+1];
+		optlen = ip_options_echo_len(sptr, sopt, dopt,
+					     sopt->ts, IPOPT_TIMESTAMP, 4);
+		if (optlen < 0)
+			return optlen;
 		soffset = sptr[sopt->ts+2];
 		dopt->ts = dopt->optlen + sizeof(struct iphdr);
 		memcpy(dptr, sptr+sopt->ts, optlen);
@@ -141,10 +176,16 @@ int __ip_options_echo(struct net *net, struct ip_options *dopt,
 		dopt->optlen += optlen;
 	}
 	if (sopt->srr) {
-		unsigned char *start = sptr+sopt->srr;
+		unsigned char *start;
+		unsigned int option;
 		__be32 faddr;
 
-		optlen  = start[1];
+		option = sopt->is_strictroute ? IPOPT_SSRR : IPOPT_LSRR;
+		optlen = ip_options_echo_len(sptr, sopt, dopt,
+					     sopt->srr, option, 3);
+		if (optlen < 0)
+			return optlen;
+		start = sptr + sopt->srr;
 		soffset = start[2];
 		doffset = 0;
 		if (soffset > optlen)
@@ -173,7 +214,10 @@ int __ip_options_echo(struct net *net, struct ip_options *dopt,
 		}
 	}
 	if (sopt->cipso) {
-		optlen  = sptr[sopt->cipso+1];
+		optlen = ip_options_echo_len(sptr, sopt, dopt,
+					     sopt->cipso, IPOPT_CIPSO, 2);
+		if (optlen < 0)
+			return optlen;
 		dopt->cipso = dopt->optlen+sizeof(struct iphdr);
 		memcpy(dptr, sptr+sopt->cipso, optlen);
 		dptr += optlen;
