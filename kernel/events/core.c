@@ -4781,14 +4781,19 @@ static inline const struct cpumask *perf_scope_cpu_topology_cpumask(unsigned int
 
 static int __perf_event_read_cpu(struct perf_event *event, int event_cpu)
 {
+	struct pmu *pmu = READ_ONCE(event->pmu);
 	int local_cpu = smp_processor_id();
 	u16 local_pkg, event_pkg;
 
 	if ((unsigned)event_cpu >= nr_cpu_ids)
 		return event_cpu;
 
+	if (!pmu)
+		return -ENODEV;
+
 	if (event->group_caps & PERF_EV_CAP_READ_SCOPE) {
-		const struct cpumask *cpumask = perf_scope_cpu_topology_cpumask(event->pmu->scope, event_cpu);
+		const struct cpumask *cpumask = perf_scope_cpu_topology_cpumask(pmu->scope,
+										event_cpu);
 
 		if (cpumask && cpumask_test_cpu(local_cpu, cpumask))
 			return local_cpu;
@@ -4907,6 +4912,11 @@ int perf_event_read_local(struct perf_event *event, u64 *value,
 	if ((event->attach_state & PERF_ATTACH_TASK) &&
 	    event->hw.target != current) {
 		ret = -EINVAL;
+		goto out;
+	}
+
+	if (READ_ONCE(event->state) <= PERF_EVENT_STATE_REVOKED) {
+		ret = -ENODEV;
 		goto out;
 	}
 
