@@ -1744,6 +1744,8 @@ static void ieee80211_reconfig_stations(struct ieee80211_sub_if_data *sdata)
 		     state < sta->sta_state; state++)
 			WARN_ON(drv_sta_state(local, sta->sdata, sta, state,
 					      state + 1));
+
+		ieee80211_sta_scs_reconfig(sta);
 	}
 }
 

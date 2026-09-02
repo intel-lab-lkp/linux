@@ -7,6 +7,7 @@
 #include <linux/ieee80211.h>
 #include <linux/module.h>
 #include <net/cfg80211.h>
+#include "driver-ops.h"
 #include "ieee80211_i.h"
 #include "sta_info.h"
 
@@ -48,6 +49,8 @@ static void *ieee80211_scs_rule_copy(const struct cfg80211_scs_desc *src,
 	struct cfg80211_scs_desc *dst = pos;
 
 	memcpy(dst, src, len);
+	/* A stored rule is in force, so handing it back is an install */
+	dst->req_type = NL80211_SCS_REQ_ADD;
 	pos += len;
 
 	if (src->qos_char_len) {
@@ -72,47 +75,57 @@ static u8 ieee80211_scs_rule_find(struct cfg80211_scs_desc * const *rule,
 	return i;
 }
 
+static size_t ieee80211_scs_sta_head(unsigned int n_rules)
+{
+	struct ieee80211_scs_sta *scs;
+
+	return ALIGN(struct_size(scs, rule, n_rules),
+		     __alignof__(struct cfg80211_scs_desc));
+}
+
+/*
+ * Every rule that could end up in the set, counted before the driver is asked
+ * so that no allocation can fail once it has programmed what it accepted. A
+ * descriptor and the rule it would replace are both counted, because which of
+ * the two survives is the answer that has not been given yet.
+ */
+static size_t ieee80211_scs_sta_size(const struct ieee80211_scs_sta *old,
+				     struct cfg80211_scs_desc * const *desc,
+				     u8 n_desc, unsigned int n_alloc)
+{
+	size_t size = ieee80211_scs_sta_head(n_alloc);
+	unsigned int i;
+
+	for (i = 0; old && i < old->n_rules; i++)
+		size += ieee80211_scs_rule_size(old->rule[i]);
+
+	for (i = 0; i < n_desc; i++)
+		size += ieee80211_scs_rule_size(desc[i]);
+
+	return size;
+}
+
 /*
  * One request is an edit of the rule set, so the result mixes descriptors of
  * this request with descriptors of earlier ones. @rule therefore holds a mix
  * of pointers into the old set and pointers the caller owns, and the block
- * built from it owns a copy of every one of them.
+ * built from it owns a copy of every one of them. It was sized for @n_alloc
+ * of them, which is what places the first copy.
  */
-static struct ieee80211_scs_sta *
-ieee80211_scs_sta_build(struct cfg80211_scs_desc * const *rule, u8 n_rules)
+static void ieee80211_scs_sta_fill(struct ieee80211_scs_sta *scs,
+				   struct cfg80211_scs_desc * const *rule,
+				   u8 n_rules, unsigned int n_alloc)
 {
-	struct ieee80211_scs_sta *scs;
-	size_t head, size;
-	void *pos;
+	void *pos = (void *)scs + ieee80211_scs_sta_head(n_alloc);
 	u8 i;
-
-	if (!n_rules)
-		return NULL;
-
-	head = ALIGN(struct_size(scs, rule, n_rules), __alignof__(**rule));
-
-	size = head;
-	for (i = 0; i < n_rules; i++)
-		size += ieee80211_scs_rule_size(rule[i]);
-
-	/*
-	 * A station may hold 255 rules of 255 classifiers, which is past what
-	 * the page allocator hands out in one piece.
-	 */
-	scs = kvzalloc(size, GFP_KERNEL);
-	if (!scs)
-		return ERR_PTR(-ENOMEM);
 
 	/* Set before the array is filled, for __counted_by() */
 	scs->n_rules = n_rules;
 
-	pos = (void *)scs + head;
 	for (i = 0; i < n_rules; i++) {
 		scs->rule[i] = pos;
 		pos = ieee80211_scs_rule_copy(rule[i], pos);
 	}
-
-	return scs;
 }
 
 /**
@@ -412,7 +425,9 @@ int ieee80211_set_scs(struct wiphy *wiphy, struct net_device *dev,
 	struct ieee80211_scs_sta *scs, *old;
 	struct cfg80211_scs_desc **rule;
 	struct sta_info *sta;
+	unsigned int n_alloc;
 	u8 i, n_rules = 0;
+	int ret;
 
 	lockdep_assert_wiphy(wiphy);
 
@@ -426,10 +441,31 @@ int ieee80211_set_scs(struct wiphy *wiphy, struct net_device *dev,
 	 * Every rule carries an SCSID of its own and an SCSID is 1 to 255, so
 	 * this bounds the working array, and the resulting set with it.
 	 */
-	rule = kcalloc((old ? old->n_rules : 0) + n_desc, sizeof(*rule),
-		       GFP_KERNEL);
+	n_alloc = (old ? old->n_rules : 0) + n_desc;
+
+	rule = kcalloc(n_alloc, sizeof(*rule), GFP_KERNEL);
 	if (!rule)
 		return -ENOMEM;
+
+	scs = kvzalloc(ieee80211_scs_sta_size(old, desc, n_desc, n_alloc),
+		       GFP_KERNEL);
+	if (!scs) {
+		ret = -ENOMEM;
+		goto free;
+	}
+
+	/* Only what the driver takes is installed, so it answers first */
+	if (sdata->local->ops->sta_set_scs && sta->uploaded) {
+		ret = drv_sta_set_scs(sdata->local, sdata, sta, desc, res,
+				      n_desc);
+		if (ret)
+			goto free;
+	} else {
+		/* Only a driver reads a traffic description, so none is served */
+		for (i = 0; i < n_desc; i++)
+			if (desc[i]->qos_char)
+				res[i].status = WLAN_STATUS_REQUEST_DECLINED;
+	}
 
 	if (old) {
 		n_rules = old->n_rules;
@@ -452,22 +488,36 @@ int ieee80211_set_scs(struct wiphy *wiphy, struct net_device *dev,
 			continue;
 		}
 
+		/* 11.25.2 leaves a declined change with its earlier rule */
+		if (res[i].status != WLAN_STATUS_SUCCESS)
+			continue;
+
 		if (at < n_rules)
 			rule[at] = desc[i];
 		else
 			rule[n_rules++] = desc[i];
 	}
 
-	scs = ieee80211_scs_sta_build(rule, n_rules);
+	if (n_rules) {
+		ieee80211_scs_sta_fill(scs, rule, n_rules, n_alloc);
+	} else {
+		kvfree(scs);
+		scs = NULL;
+	}
+
 	kfree(rule);
-	if (IS_ERR(scs))
-		return PTR_ERR(scs);
 
 	rcu_assign_pointer(sta->scs, scs);
 	if (old)
 		kvfree_rcu(old, rcu_head);
 
 	return 0;
+
+free:
+	kvfree(scs);
+	kfree(rule);
+
+	return ret;
 }
 
 int ieee80211_set_mscs(struct wiphy *wiphy, struct net_device *dev,
@@ -534,6 +584,36 @@ int ieee80211_set_mscs(struct wiphy *wiphy, struct net_device *dev,
 	}
 
 	return 0;
+}
+
+/*
+ * A device that was restarted holds none of the streams it was serving, and
+ * 11.25.2 gives an AP no way to tell a station that one of its streams is
+ * gone, so the set goes down again. A refusal changes nothing at this point:
+ * the rule stays and mac80211 keeps classifying for it.
+ */
+void ieee80211_sta_scs_reconfig(struct sta_info *sta)
+{
+	struct ieee80211_local *local = sta->local;
+	struct ieee80211_scs_sta *scs;
+	u8 i;
+
+	lockdep_assert_wiphy(local->hw.wiphy);
+
+	scs = wiphy_dereference(local->hw.wiphy, sta->scs);
+	if (!scs)
+		return;
+
+	/*
+	 * One rule per call, so that the result the op insists on fits a local
+	 * and nothing here can fail. A path that cannot report a failure is
+	 * better off unable to have one.
+	 */
+	for (i = 0; i < scs->n_rules; i++) {
+		struct cfg80211_scs_result res = {};
+
+		drv_sta_set_scs(local, sta->sdata, sta, &scs->rule[i], &res, 1);
+	}
 }
 
 void ieee80211_sta_scs_free(struct sta_info *sta)

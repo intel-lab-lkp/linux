@@ -5083,6 +5083,28 @@ struct ieee80211_ops {
 			  struct cfg80211_pmsr_request *request);
 	void (*abort_pmsr)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			   struct cfg80211_pmsr_request *request);
+	/**
+	 * @sta_set_scs:
+	 * Called with the SCS descriptors one station requests, to answer each
+	 * in the result entry of the same index. Optional, and reached only
+	 * when the wiphy reports %NL80211_EXT_FEATURE_SCS; without it every
+	 * descriptor carrying a QoS Characteristics element is declined.
+	 *
+	 * - Results arrive zeroed, which is acceptance. Write only refusals.
+	 * - A negative return fails the whole request.
+	 * - Decline a traffic description that cannot be served, nothing else.
+	 *   A decline drops the descriptor whole, classifier included.
+	 * - A declined change keeps the previous descriptor of that SCSID.
+	 * - A removal is the cue to drop driver state. mac80211 answers it
+	 *   whatever the driver writes.
+	 * - A descriptor and its qos_char octets last only for the call.
+	 *
+	 * This callback may sleep.
+	 */
+	int (*sta_set_scs)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			   struct ieee80211_sta *sta,
+			   struct cfg80211_scs_desc * const *desc,
+			   struct cfg80211_scs_result *res, u8 n_desc);
 	int (*set_tid_config)(struct ieee80211_hw *hw,
 			      struct ieee80211_vif *vif,
 			      struct ieee80211_sta *sta,
