@@ -228,6 +228,7 @@ struct vxlan_config {
 	unsigned int			addrmax;
 	bool				no_share;
 	enum ifla_vxlan_df		df;
+	bool				ignore_df;
 	struct vxlanhdr			reserved_bits;
 };
 

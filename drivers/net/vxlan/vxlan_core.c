@@ -2510,7 +2510,9 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			if (err)
 				goto out_unlock;
 
-			if (vxlan->cfg.df == VXLAN_DF_SET) {
+			if (vxlan->cfg.ignore_df) {
+				df = 0;
+			} else if (vxlan->cfg.df == VXLAN_DF_SET) {
 				df = htons(IP_DF);
 			} else if (vxlan->cfg.df == VXLAN_DF_INHERIT) {
 				struct ethhdr *eth = eth_hdr(skb);
@@ -2526,7 +2528,9 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		}
 
 		ndst = &rt->dst;
-		err = skb_tunnel_check_pmtu(skb, ndst, vxlan_headroom(flags & VXLAN_F_GPE),
+		err = vxlan->cfg.ignore_df ? 0 :
+		      skb_tunnel_check_pmtu(skb, ndst,
+					    vxlan_headroom(flags & VXLAN_F_GPE),
 					    netif_is_any_bridge_port(dev));
 		if (err < 0) {
 			goto tx_error;
@@ -2598,7 +2602,8 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 				goto out_unlock;
 		}
 
-		err = skb_tunnel_check_pmtu(skb, ndst,
+		err = vxlan->cfg.ignore_df ? 0 :
+		      skb_tunnel_check_pmtu(skb, ndst,
 					    vxlan_headroom((flags & VXLAN_F_GPE) | VXLAN_F_IPV6),
 					    netif_is_any_bridge_port(dev));
 		if (err < 0) {
@@ -2629,6 +2634,9 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			reason = SKB_DROP_REASON_NOMEM;
 			goto tx_error;
 		}
+
+		if (vxlan->cfg.ignore_df)
+			skb->ignore_df = 1;
 
 		udp_tunnel6_xmit_skb(ndst, sock6->sk, skb, dev,
 				     &saddr, &pkey->u.ipv6.dst, tos, ttl,
@@ -3453,6 +3461,7 @@ static const struct nla_policy vxlan_policy[IFLA_VXLAN_MAX + 1] = {
 	[IFLA_VXLAN_REMCSUM_NOPARTIAL]	= { .type = NLA_FLAG },
 	[IFLA_VXLAN_TTL_INHERIT]	= { .type = NLA_FLAG },
 	[IFLA_VXLAN_DF]		= { .type = NLA_U8 },
+	[IFLA_VXLAN_IGNORE_DF]	= { .type = NLA_U8 },
 	[IFLA_VXLAN_VNIFILTER]	= { .type = NLA_U8 },
 	[IFLA_VXLAN_LOCALBYPASS]	= NLA_POLICY_MAX(NLA_U8, 1),
 	[IFLA_VXLAN_LABEL_POLICY]       = NLA_POLICY_MAX(NLA_U32, VXLAN_LABEL_MAX),
@@ -4391,6 +4400,9 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 	if (data[IFLA_VXLAN_DF])
 		conf->df = nla_get_u8(data[IFLA_VXLAN_DF]);
 
+	if (data[IFLA_VXLAN_IGNORE_DF])
+		conf->ignore_df = nla_get_u8(data[IFLA_VXLAN_IGNORE_DF]);
+
 	if (data[IFLA_VXLAN_VNIFILTER]) {
 		err = vxlan_nl2flag(conf, data, IFLA_VXLAN_VNIFILTER,
 				    VXLAN_F_VNIFILTER, changelink, false,
@@ -4547,6 +4559,7 @@ static size_t vxlan_get_size(const struct net_device *dev)
 		nla_total_size(sizeof(__u8)) +	/* IFLA_VXLAN_TTL_INHERIT */
 		nla_total_size(sizeof(__u8)) +	/* IFLA_VXLAN_TOS */
 		nla_total_size(sizeof(__u8)) +	/* IFLA_VXLAN_DF */
+		nla_total_size(sizeof(__u8)) +	/* IFLA_VXLAN_IGNORE_DF */
 		nla_total_size(sizeof(__be32)) + /* IFLA_VXLAN_LABEL */
 		nla_total_size(sizeof(__u32)) +  /* IFLA_VXLAN_LABEL_POLICY */
 		nla_total_size(sizeof(__u8)) +	/* IFLA_VXLAN_LEARNING */
@@ -4623,6 +4636,7 @@ static int vxlan_fill_info(struct sk_buff *skb, const struct net_device *dev)
 		       !!(vxlan->cfg.flags & VXLAN_F_TTL_INHERIT)) ||
 	    nla_put_u8(skb, IFLA_VXLAN_TOS, vxlan->cfg.tos) ||
 	    nla_put_u8(skb, IFLA_VXLAN_DF, vxlan->cfg.df) ||
+	    nla_put_u8(skb, IFLA_VXLAN_IGNORE_DF, vxlan->cfg.ignore_df) ||
 	    nla_put_be32(skb, IFLA_VXLAN_LABEL, vxlan->cfg.label) ||
 	    nla_put_u32(skb, IFLA_VXLAN_LABEL_POLICY, vxlan->cfg.label_policy) ||
 	    nla_put_u8(skb, IFLA_VXLAN_LEARNING,
