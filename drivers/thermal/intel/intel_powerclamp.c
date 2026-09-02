@@ -80,7 +80,7 @@ static unsigned int window_size;
 
 static int duration_set(const char *arg, const struct kernel_param *kp)
 {
-	int ret = 0;
+	int ret;
 	unsigned long new_duration;
 
 	ret = kstrtoul(arg, 10, &new_duration);
@@ -94,7 +94,7 @@ static int duration_set(const char *arg, const struct kernel_param *kp)
 	}
 
 	mutex_lock(&powerclamp_lock);
-	duration = clamp(new_duration, 6ul, 25ul) * 1000;
+	duration = new_duration * 1000;
 	mutex_unlock(&powerclamp_lock);
 exit:
 
