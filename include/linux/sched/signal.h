@@ -81,7 +81,8 @@ struct core_thread {
 struct core_state {
 	atomic_t nr_threads;
 	struct core_thread dumper;
-	struct completion startup;
+	/* Completed by the last thread to park. */
+	struct completion done;
 };
 
 /*
