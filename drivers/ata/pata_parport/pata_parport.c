@@ -612,6 +612,18 @@ int pata_parport_register_driver(struct pi_protocol *pr)
 }
 EXPORT_SYMBOL_GPL(pata_parport_register_driver);
 
+static int pi_remove_by_proto(struct device *dev, void *data)
+{
+	struct pi_protocol *pr = data;
+	struct ata_host *host = dev_get_drvdata(dev);
+	struct pi_adapter *pi = host->private_data;
+
+	if (pi->proto == pr)
+		pi_remove_one(dev);
+
+	return 0;
+}
+
 void pata_parport_unregister_driver(struct pi_protocol *pr)
 {
 	struct pi_protocol *pr_iter;
@@ -623,6 +635,8 @@ void pata_parport_unregister_driver(struct pi_protocol *pr)
 			break;
 	}
 	idr_remove(&protocols, id);
+	/* remove adapters using this protocol while the module is still alive */
+	bus_for_each_dev(&pata_parport_bus_type, NULL, pr, pi_remove_by_proto);
 	driver_unregister(&pr->driver);
 	mutex_unlock(&pi_mutex);
 
