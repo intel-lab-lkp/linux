@@ -372,10 +372,15 @@ KVM_ONE_VCPU_TEST(sync_regs_test, set_and_verify_various, guest_code)
 	/* Set and verify various register values. */
 	run->s.regs.regs.rbx = 0xBAD1DEA;
 	run->s.regs.sregs.apic_base = 1 << 11;
-	/* TODO run->s.regs.events.XYZ = ABC; */
+	/*
+	 * The guest never executes IRET, so masking NMIs is a state change
+	 * KVM has to hand back unchanged, without needing an event injected.
+	 */
+	run->s.regs.events.nmi.masked = 1;
+	run->s.regs.events.flags = 0;
 
 	run->kvm_valid_regs = TEST_SYNC_FIELDS;
-	run->kvm_dirty_regs = KVM_SYNC_X86_REGS | KVM_SYNC_X86_SREGS;
+	run->kvm_dirty_regs = TEST_SYNC_FIELDS;
 	vcpu_run(vcpu);
 	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
 	TEST_ASSERT(run->s.regs.regs.rbx == 0xBAD1DEA + 1,
@@ -384,6 +389,8 @@ KVM_ONE_VCPU_TEST(sync_regs_test, set_and_verify_various, guest_code)
 	TEST_ASSERT(run->s.regs.sregs.apic_base == 1 << 11,
 		    "apic_base sync regs value incorrect 0x%llx.",
 		    run->s.regs.sregs.apic_base);
+	TEST_ASSERT(run->s.regs.events.nmi.masked,
+		    "events sync regs value incorrect, NMIs not masked");
 
 	vcpu_regs_get(vcpu, &regs);
 	compare_regs(&regs, &run->s.regs.regs);
