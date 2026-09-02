@@ -856,8 +856,25 @@ intel_hdmi_compute_drm_infoframe(struct intel_encoder *encoder,
 	if (!crtc_state->has_infoframe)
 		return true;
 
-	if (!conn_state->hdr_output_metadata)
+	if (!conn_state->hdr_output_metadata) {
+		const struct drm_connector_state *old_conn_state =
+			drm_atomic_get_old_connector_state(conn_state->state,
+							   conn_state->connector);
+		/*
+		 * CTA-861-H requires ending HDR metadata transmission by
+		 * sending a DRM infoframe with EOTF=0 and all fields zero
+		 * for at least 2 seconds, rather than abruptly stopping.
+		 * Abruptly stopping causes DP-to-HDMI converters to latch
+		 * the previous HDR metadata and forward it to the HDMI sink,
+		 * resulting in color errors on SDR content.
+		 */
+		if (old_conn_state && old_conn_state->hdr_output_metadata) {
+			hdmi_drm_infoframe_init(frame);
+			crtc_state->infoframes.enable |=
+				intel_hdmi_infoframe_enable(HDMI_INFOFRAME_TYPE_DRM);
+		}
 		return true;
+	}
 
 	crtc_state->infoframes.enable |=
 		intel_hdmi_infoframe_enable(HDMI_INFOFRAME_TYPE_DRM);
