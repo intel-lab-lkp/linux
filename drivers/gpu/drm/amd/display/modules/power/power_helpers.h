@@ -94,6 +94,7 @@ struct pwr_backlight_properties {
 	unsigned int min_backlight_pwm;
 	unsigned int max_backlight_pwm;
 	unsigned int backlight_range;
+	unsigned int brightness_mask;
 
 	/* Describes the panel's min and max luminance in millinits measured
 	 * on full white screen, in min and max backlight settings.

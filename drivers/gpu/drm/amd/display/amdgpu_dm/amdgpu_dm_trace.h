@@ -744,10 +744,11 @@ TRACE_EVENT(amdgpu_dm_brightness,
 		__entry->aux = aux;
 		__entry->ac = ac;
 	),
-	TP_printk("%ps: brightness requested=%u converted=%u aux=%s power=%s",
+	TP_printk("%ps: brightness requested=%u converted=%u unit=%s aux=%s power=%s",
 		  (void *)__entry->function,
 		  (u32)__entry->user_brightness,
 		  (u32)__entry->converted_brightness,
+		  (__entry->aux) ? "millinits" : "millipercent",
 		  (__entry->aux) ? "true" : "false",
 		  (__entry->ac) ? "AC" : "DC"
 	)

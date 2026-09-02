@@ -19,6 +19,7 @@ struct mod_power_init_params {
 
 	unsigned int min_backlight_pwm;
 	unsigned int max_backlight_pwm;
+	unsigned int brightness_mask;
 
 	unsigned int min_abm_backlight;
 	unsigned int num_backlight_levels;

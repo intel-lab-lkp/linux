@@ -529,7 +529,7 @@ static unsigned int backlight_millipercent_to_pwm_legacy(
 		return 0;
 
 	// Bypass the brightness mapping LUT
-	if (core_power->bl_prop->use_linear_backlight_curve) {
+	if (core_power->bl_prop[inst].use_linear_backlight_curve) {
 		pwm = core_power->bl_prop[inst].min_backlight_pwm +
 			(unsigned int) div_u64((unsigned long long) millipercent *
 			core_power->bl_prop[inst].backlight_range,
@@ -1020,6 +1020,10 @@ void fill_backlight_level_params(struct core_power *core_power,
 
 	if (backlight_control_type == BACKLIGHT_CONTROL_AMD_AUX && !is_hdr)
 		backlight_level_params->control_type = BACKLIGHT_CONTROL_PWM;
+
+	if (backlight_level_params->control_type == BACKLIGHT_CONTROL_PWM)
+		backlight_level_params->backlight_pwm_u16_16 |=
+			bl_prop->brightness_mask;
 }
 
 bool mod_power_set_backlight_nits(struct mod_power *mod_power,
