@@ -238,8 +238,29 @@ bool intel_alpm_compute_params(struct intel_dp *intel_dp,
 		io_wake_lines = fast_wake_lines = max_wake_lines;
 
 	/* According to Bspec lower limit should be set as 7 lines. */
-	crtc_state->alpm_state.io_wake_lines = max(io_wake_lines, 7);
-	crtc_state->alpm_state.fast_wake_lines = max(fast_wake_lines, 7);
+	io_wake_lines = max(io_wake_lines, 7);
+	fast_wake_lines = max(fast_wake_lines, 7);
+
+	/*
+	 * On display 20+ the extended fast wake sequence programmed in
+	 * ALPM_CTL has to start strictly before the IO buffer wake programmed
+	 * in PSR2_CTL. Both are derived from the same precharge, preamble,
+	 * PHY wake and tFW exit latency above, so they normally end up on the
+	 * same number of lines. With equal values the
+	 * LG panel (sink OUI 00:22:b9) in the Dell XPS 14/16 DA14260/DA16260
+	 * reports a Link CRC error on every link wake. One extra fast wake
+	 * line is enough to fix it; when we are already at the maximum keep
+	 * the IO buffer wake one line below the fast wake instead.
+	 */
+	if (DISPLAY_VER(display) >= 20 && fast_wake_lines <= io_wake_lines) {
+		if (io_wake_lines < max_wake_lines)
+			fast_wake_lines = io_wake_lines + 1;
+		else
+			io_wake_lines = fast_wake_lines - 1;
+	}
+
+	crtc_state->alpm_state.io_wake_lines = io_wake_lines;
+	crtc_state->alpm_state.fast_wake_lines = fast_wake_lines;
 
 	return true;
 }
