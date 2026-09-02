@@ -18,6 +18,8 @@
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/mux/consumer.h>
+#include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
@@ -73,6 +75,9 @@
 #define AD4134_CH3_OFFSET_MSB_REG		0x3E
 #define AD4134_AIN_OR_ERROR_REG			0x48
 
+#define AD4134_SDO_INPUT			0
+#define AD4134_DOUT0_INPUT			1
+
 /*
  * AD4134 register map ends at address 0x48 and there is no register for
  * retrieving ADC sample data. Though, to make use of Linux regmap API both
@@ -86,6 +91,17 @@
 #define AD4134_SPI_CRC_POLYNOM			0x07
 #define AD4134_SPI_CRC_INIT_VALUE		0xA5
 static unsigned char ad4134_spi_crc_table[CRC8_TABLE_SIZE];
+
+enum ad4134_spi_mode {
+	AD4134_SPI_MODE_NO_CS, /* datasheet calls this "minimum I/O mode" */
+	AD4134_SPI_MODE_4_WIRE,
+};
+
+/* maps adi,spi-mode property value to enum */
+static const char * const ad4134_spi_modes[] = {
+	[AD4134_SPI_MODE_NO_CS] = "no-cs",
+	[AD4134_SPI_MODE_4_WIRE] = "4-wire",
+};
 
 enum ad4134_filter_type {
 	AD4134_WIDEBAND,
@@ -154,11 +170,17 @@ struct ad4134_state {
 	struct gpio_desc *odr_gpio;
 	int refin_mv;
 	bool crc_en;
+	enum ad4134_spi_mode spi_mode;
+	struct mux_state *mux_st[2];
 	/*
 	 * Synchronize access to members the of driver state, and ensure
 	 * atomicity of consecutive register access operations.
 	 */
 	struct mutex lock;
+	/*
+	 * Ensure atomicity of access mode switch operations.
+	 */
+	struct mutex access_mode_lock;
 	/*
 	 * DMA (thus cache coherency maintenance) requires the transfer buffers
 	 * to live in their own cache lines.
@@ -232,6 +254,73 @@ static const struct regmap_access_table ad4134_regmap_wr_table = {
 	.yes_ranges = ad4134_regmap_wr_range,
 	.n_yes_ranges = ARRAY_SIZE(ad4134_regmap_wr_range),
 };
+
+/*
+ * When AD4134 SDO and DOUT0 pins are multiplexed, this function changes the
+ * multiplexer state to route SDO to the SPI controller.
+ */
+static int ad4134_set_register_access(struct ad4134_state *st)
+{
+	int ret;
+
+	guard(mutex)(&st->access_mode_lock);
+	st->spi->mode = SPI_MODE_0;
+	ret = spi_setup(st->spi);
+	if (ret)
+		return ret;
+
+	ret = mux_state_deselect(st->mux_st[AD4134_DOUT0_INPUT]);
+	if (ret)
+		dev_err(&st->spi->dev, "error on DOUT0 deselect: %d\n", ret);
+
+	ret = mux_state_try_select(st->mux_st[AD4134_SDO_INPUT]);
+	if (ret && ret != -EBUSY)
+		return ret;
+
+	return 0;
+}
+
+/*
+ * When AD4134 SDO and DOUT0 pins are multiplexed, this function changes the
+ * multiplexer state to route DOUT0 to the SPI controller. On failure, fall
+ * back to routing SDO to the controller and return an errno.
+ */
+static int ad4134_set_sample_access(struct ad4134_state *st)
+{
+	int ret, ret2;
+
+	guard(mutex)(&st->access_mode_lock);
+	ret = mux_state_deselect(st->mux_st[AD4134_SDO_INPUT]);
+	if (ret)
+		dev_err(&st->spi->dev, "error on SDO deselect: %d\n", ret);
+
+	ret = mux_state_try_select(st->mux_st[AD4134_DOUT0_INPUT]);
+	if (ret) {
+		dev_err(&st->spi->dev, "error on DOUT0 select: %d\n", ret);
+		return mux_state_select(st->mux_st[AD4134_SDO_INPUT]);
+	}
+
+	/*
+	 * Data output on the DOUT lines is sampled on the falling edge
+	 * (SPI mode 1).
+	 */
+	st->spi->mode = SPI_MODE_1;
+	ret = spi_setup(st->spi);
+	if (ret) {
+		dev_err(&st->spi->dev, "failed to setup SPI mode 1: %d\n", ret);
+		ret2 = mux_state_deselect(st->mux_st[AD4134_DOUT0_INPUT]);
+		if (ret2)
+			dev_err(&st->spi->dev, "error on DOUT0 deselect: %d\n", ret2);
+
+		ret2 = mux_state_select(st->mux_st[AD4134_SDO_INPUT]);
+		if (ret2)
+			dev_err(&st->spi->dev, "error on SDO select: %d\n", ret2);
+
+		return ret;
+	}
+
+	return 0;
+}
 
 static int ad4134_calc_spi_crc(u8 inst, u8 data)
 {
@@ -334,9 +423,25 @@ static int ad4134_register_read(struct ad4134_state *st, unsigned int reg,
 static int ad4134_reg_read(void *context, unsigned int reg, unsigned int *val)
 {
 	struct ad4134_state *st = context;
+	int ret, ret2;
 
-	if (reg >= AD4134_CH_VREG(0))
-		return ad4134_data_read(st, reg, val);
+	if (reg >= AD4134_CH_VREG(0)) {
+		if (st->spi_mode == AD4134_SPI_MODE_4_WIRE) {
+			ret = ad4134_set_sample_access(st);
+			if (ret)
+				return ret;
+		}
+
+		ret = ad4134_data_read(st, reg, val);
+
+		if (st->spi_mode == AD4134_SPI_MODE_4_WIRE) {
+			ret2 = ad4134_set_register_access(st);
+			if (ret2)
+				dev_err(&st->spi->dev, "access mode error: %d\n", ret2);
+		}
+
+		return ret;
+	}
 
 	return ad4134_register_read(st, reg, val);
 }
@@ -378,6 +483,21 @@ err_out:
 	iio_trigger_notify_done(indio_dev->trig);
 	return IRQ_HANDLED;
 }
+
+static int ad4134_buffer_postenable(struct iio_dev *indio_dev)
+{
+	return ad4134_set_sample_access(iio_priv(indio_dev));
+}
+
+static int ad4134_buffer_predisable(struct iio_dev *indio_dev)
+{
+	return ad4134_set_register_access(iio_priv(indio_dev));
+}
+
+static const struct iio_buffer_setup_ops ad4134_buffer_setup_ops = {
+	.postenable = &ad4134_buffer_postenable,
+	.predisable = &ad4134_buffer_predisable,
+};
 
 static int ad4134_read_raw(struct iio_dev *indio_dev,
 			   struct iio_chan_spec const *chan,
@@ -590,10 +710,42 @@ static int ad4134_probe(struct spi_device *spi)
 		return dev_err_probe(dev, PTR_ERR(st->regmap),
 				     "failed to initialize regmap");
 
-	ret = ad4134_min_io_mode_setup(st);
-	if (ret)
+	ret = device_property_match_property_string(dev, "adi,spi-mode",
+						    ad4134_spi_modes,
+						    ARRAY_SIZE(ad4134_spi_modes));
+	/* Default to "no-cs" mode if adi,spi-mode is not specified */
+	if (ret == -EINVAL)
+		st->spi_mode = AD4134_SPI_MODE_NO_CS;
+	else if (ret < 0)
 		return dev_err_probe(dev, ret,
-				     "failed to setup minimum I/O mode\n");
+				     "getting adi,spi-mode property failed\n");
+	else
+		st->spi_mode = ret;
+
+	if (st->spi_mode == AD4134_SPI_MODE_NO_CS) {
+		st->mux_st[AD4134_SDO_INPUT] =
+			devm_mux_state_get_optional_selected(dev, "reg_access");
+		if (IS_ERR(st->mux_st[AD4134_SDO_INPUT]))
+			return dev_err_probe(dev, PTR_ERR(st->mux_st[AD4134_SDO_INPUT]),
+					     "failed to get reg_access mux-state\n");
+
+		ret = ad4134_min_io_mode_setup(st);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "failed to setup minimum I/O mode\n");
+	} else {
+		st->mux_st[AD4134_SDO_INPUT] = devm_mux_state_get_selected(dev, "reg_access");
+		if (IS_ERR(st->mux_st[AD4134_SDO_INPUT]))
+			return dev_err_probe(dev, PTR_ERR(st->mux_st[AD4134_SDO_INPUT]),
+					     "failed to get reg_access mux-state\n");
+
+		st->mux_st[AD4134_DOUT0_INPUT] = devm_mux_state_get(dev, "data_read");
+		if (IS_ERR(st->mux_st[AD4134_DOUT0_INPUT]))
+			return dev_err_probe(dev, PTR_ERR(st->mux_st[AD4134_DOUT0_INPUT]),
+					     "failed to get data_read mux-state\n");
+
+		indio_dev->setup_ops = &ad4134_buffer_setup_ops;
+	}
 
 	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
 					      iio_pollfunc_store_time,
