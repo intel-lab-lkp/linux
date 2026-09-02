@@ -10,10 +10,13 @@
 #include <linux/i2c.h>
 #include <linux/gpio/consumer.h>
 #include <linux/acpi.h>
+#include <linux/clk.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/nfc.h>
 #include <linux/of.h>
+#include <linux/property.h>
+#include <linux/regulator/consumer.h>
 
 #include "st-nci.h"
 
@@ -22,9 +25,16 @@
 /* ndlc header */
 #define ST_NCI_FRAME_HEADROOM 1
 #define ST_NCI_FRAME_TAILROOM 0
+#define ST_NCI_RAW_FRAME_HEADROOM 0
 
 #define ST_NCI_I2C_MIN_SIZE 4   /* PCB(1) + NCI Packet header(3) */
+#define ST_NCI_NCI_HDR_SIZE 3   /* raw NCI: MT/PBF/GID + OID + len */
 #define ST_NCI_I2C_MAX_SIZE 250 /* req 4.2.1 */
+
+enum st_nci_i2c_proto {
+	ST_NCI_I2C_PROTO_NDLC = 0,
+	ST_NCI_I2C_PROTO_RAW_NCI,
+};
 
 #define ST_NCI_DRIVER_NAME "st_nci"
 #define ST_NCI_I2C_DRIVER_NAME "st_nci_i2c"
@@ -34,6 +44,7 @@ struct st_nci_i2c_phy {
 	struct llt_ndlc *ndlc;
 
 	bool irq_active;
+	bool raw_nci;
 
 	struct gpio_desc *gpiod_reset;
 
@@ -44,9 +55,20 @@ static int st_nci_i2c_enable(void *phy_id)
 {
 	struct st_nci_i2c_phy *phy = phy_id;
 
-	gpiod_set_value(phy->gpiod_reset, 0);
-	usleep_range(10000, 15000);
-	gpiod_set_value(phy->gpiod_reset, 1);
+	/*
+	 * Existing DTS uses GPIO_ACTIVE_HIGH and treats logical 1 as
+	 * chip-running. GPIO_ACTIVE_LOW: logical 1 asserts reset
+	 * (physical LOW).
+	 */
+	if (gpiod_is_active_low(phy->gpiod_reset)) {
+		gpiod_set_value(phy->gpiod_reset, 1);
+		usleep_range(10000, 15000);
+		gpiod_set_value(phy->gpiod_reset, 0);
+	} else {
+		gpiod_set_value(phy->gpiod_reset, 0);
+		usleep_range(10000, 15000);
+		gpiod_set_value(phy->gpiod_reset, 1);
+	}
 	usleep_range(80000, 85000);
 
 	if (phy->ndlc->powered == 0 && phy->irq_active == 0) {
@@ -110,6 +132,42 @@ static int st_nci_i2c_read(struct st_nci_i2c_phy *phy,
 	u8 len;
 	u8 buf[ST_NCI_I2C_MAX_SIZE];
 	struct i2c_client *client = phy->i2c_dev;
+
+	if (phy->raw_nci) {
+		r = i2c_master_recv(client, buf, ST_NCI_NCI_HDR_SIZE);
+		if (r < 0) {
+			usleep_range(1000, 4000);
+			r = i2c_master_recv(client, buf, ST_NCI_NCI_HDR_SIZE);
+		}
+		if (r != ST_NCI_NCI_HDR_SIZE)
+			return -EREMOTEIO;
+
+		len = buf[2];
+		if (len > ST_NCI_I2C_MAX_SIZE) {
+			nfc_err(&client->dev, "invalid frame len\n");
+			return -EBADMSG;
+		}
+
+		*skb = alloc_skb(ST_NCI_NCI_HDR_SIZE + len, GFP_KERNEL);
+		if (!*skb)
+			return -ENOMEM;
+
+		skb_put(*skb, ST_NCI_NCI_HDR_SIZE);
+		memcpy((*skb)->data, buf, ST_NCI_NCI_HDR_SIZE);
+
+		if (!len)
+			return 0;
+
+		r = i2c_master_recv(client, buf, len);
+		if (r != len) {
+			kfree_skb(*skb);
+			return -EREMOTEIO;
+		}
+
+		skb_put(*skb, len);
+		memcpy((*skb)->data + ST_NCI_NCI_HDR_SIZE, buf, len);
+		return 0;
+	}
 
 	r = i2c_master_recv(client, buf, ST_NCI_I2C_MIN_SIZE);
 	if (r < 0) {  /* Retry, chip was in standby */
@@ -211,12 +269,22 @@ static int st_nci_i2c_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	phy->i2c_dev = client;
+	phy->raw_nci = (uintptr_t)device_get_match_data(dev) ==
+			ST_NCI_I2C_PROTO_RAW_NCI;
 
 	i2c_set_clientdata(client, phy);
 
 	r = devm_acpi_dev_add_driver_gpios(dev, acpi_st_nci_gpios);
 	if (r)
 		dev_dbg(dev, "Unable to add GPIO mapping table\n");
+
+	r = devm_regulator_get_enable_optional(dev, "vdd-io");
+	if (r && r != -ENODEV)
+		return dev_err_probe(dev, r, "failed to enable vdd-io\n");
+
+	r = PTR_ERR_OR_ZERO(devm_clk_get_optional_enabled(dev, NULL));
+	if (r)
+		return dev_err_probe(dev, r, "failed to enable clock\n");
 
 	/* Get RESET GPIO */
 	phy->gpiod_reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
@@ -231,8 +299,10 @@ static int st_nci_i2c_probe(struct i2c_client *client)
 				device_property_read_bool(dev, "uicc-present");
 
 	r = ndlc_probe(phy, &i2c_phy_ops, &client->dev,
-			ST_NCI_FRAME_HEADROOM, ST_NCI_FRAME_TAILROOM,
-			&phy->ndlc, &phy->se_status);
+			phy->raw_nci ? ST_NCI_RAW_FRAME_HEADROOM :
+				       ST_NCI_FRAME_HEADROOM,
+			ST_NCI_FRAME_TAILROOM,
+			&phy->ndlc, &phy->se_status, phy->raw_nci);
 	if (r < 0) {
 		nfc_err(&client->dev, "Unable to register ndlc layer\n");
 		return r;
@@ -273,6 +343,8 @@ static const struct of_device_id of_st_nci_i2c_match[] = {
 	{ .compatible = "st,st21nfcb-i2c" },
 	{ .compatible = "st,st21nfcb_i2c" },
 	{ .compatible = "st,st21nfcc-i2c" },
+	{ .compatible = "st,st21nfcd",
+	  .data = (void *)ST_NCI_I2C_PROTO_RAW_NCI },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, of_st_nci_i2c_match);

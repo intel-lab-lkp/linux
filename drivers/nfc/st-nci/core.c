@@ -18,7 +18,12 @@
 
 static int st_nci_init(struct nci_dev *ndev)
 {
+	struct st_nci_info *info = nci_get_drvdata(ndev);
 	struct nci_mode_set_cmd cmd;
+
+	/* ST21NFCD has no NDLC proprietary SET_NFC_MODE */
+	if (info->ndlc->raw_nci)
+		return 0;
 
 	cmd.cmd_type = ST_NCI_SET_NFC_MODE;
 	cmd.mode = 1;
@@ -84,11 +89,28 @@ static int st_nci_prop_rsp_packet(struct nci_dev *ndev,
 	return 0;
 }
 
+/*
+ * ST21NFCD emits proprietary NCI NTFs (GID 0xf, OID 0x02) on CORE_RESET
+ * and during each RF poll loop. The payload is an RF trace; tags are
+ * still reported with the standard RF_INTF_ACTIVATED_NTF. Consume the
+ * packet so nci_ntf_packet does not log "unsupported ntf opcode 0xf02".
+ */
+static int st_nci_prop_rf_ntf_packet(struct nci_dev *ndev,
+				     struct sk_buff *skb)
+{
+	return 0;
+}
+
 static const struct nci_driver_ops st_nci_prop_ops[] = {
 	{
 		.opcode = nci_opcode_pack(NCI_GID_PROPRIETARY,
 					  ST_NCI_CORE_PROP),
 		.rsp = st_nci_prop_rsp_packet,
+	},
+	{
+		.opcode = nci_opcode_pack(NCI_GID_PROPRIETARY,
+					  ST_NCI_PROP_RF_NTF),
+		.ntf = st_nci_prop_rf_ntf_packet,
 	},
 };
 
