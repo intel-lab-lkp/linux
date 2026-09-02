@@ -123,6 +123,7 @@ struct ehci_hcd {			/* one per controller */
 	struct ehci_caps __iomem *caps;
 	struct ehci_regs __iomem *regs;
 	struct ehci_dbg_port __iomem *debug;
+	u32 __iomem		*port_status;
 
 	__u32			hcs_params;	/* cached register copy */
 	spinlock_t		lock;
@@ -275,6 +276,17 @@ static inline struct usb_hcd *ehci_to_hcd(struct ehci_hcd *ehci)
 /*-------------------------------------------------------------------------*/
 
 #include <linux/usb/ehci_def.h>
+
+/*-------------------------------------------------------------------------*/
+
+static inline u32 __iomem *ehci_portsc(struct ehci_hcd *ehci,
+				       unsigned int port)
+{
+	if (ehci->port_status)
+		return ehci->port_status + port;
+
+	return &ehci->regs->port_status[port];
+}
 
 /*-------------------------------------------------------------------------*/
 
