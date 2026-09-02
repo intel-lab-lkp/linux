@@ -46,6 +46,9 @@
 #include <asm/traps.h>
 #include <asm/virt.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/exceptions.h>
+
 struct fault_info {
 	int	(*fn)(unsigned long far, unsigned long esr,
 		      struct pt_regs *regs);
@@ -612,6 +615,11 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 
 	if (kprobe_page_fault(regs, esr))
 		return 0;
+
+	if (user_mode(regs))
+		trace_page_fault_user(addr, regs, esr);
+	else
+		trace_page_fault_kernel(addr, regs, esr);
 
 	/*
 	 * If we're in an interrupt or have no user context, we must not take
