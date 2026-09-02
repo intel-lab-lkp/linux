@@ -126,6 +126,30 @@ static const struct flash_info issi_nor_parts[] = {
 		.flags = SPI_NOR_QUAD_PP,
 		.fixups = &is25lp256_fixups,
 		.fixup_flags = SPI_NOR_4B_OPCODES,
+	}, {
+		.id = SNOR_ID(0x9d, 0x5b, 0x19),
+		.name = "is25wx256",
+		.size = SZ_256M,
+	}, {
+		.id = SNOR_ID(0x9d, 0x5a, 0x19),
+		.name = "is25lx256",
+		.size = SZ_256M,
+	}, {
+		.id = SNOR_ID(0x9d, 0x5b, 0x1a),
+		.name = "is25wx512m",
+		.size = SZ_512M,
+	}, {
+		.id = SNOR_ID(0x9d, 0x5a, 0x1a),
+		.name = "is25lx512m",
+		.size = SZ_512M,
+	}, {
+		.id = SNOR_ID(0x9d, 0x5b, 0x1b),
+		.name = "is25wx01g",
+		.size = SZ_1G,
+	}, {
+		.id = SNOR_ID(0x9d, 0x5a, 0x1b),
+		.name = "is25lx01g",
+		.size = SZ_1G,
 	}
 };
 
