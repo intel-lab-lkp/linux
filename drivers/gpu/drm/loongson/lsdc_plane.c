@@ -7,6 +7,7 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_blend.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_print.h>
@@ -747,8 +748,9 @@ int ls7a1000_cursor_plane_init(struct drm_device *ddev,
 			       struct drm_plane *plane,
 			       unsigned int index)
 {
-	struct lsdc_cursor *cursor = to_lsdc_cursor(plane);
 	int ret;
+	unsigned int blend_caps = BIT(DRM_MODE_BLEND_PIXEL_NONE) | BIT(DRM_MODE_BLEND_COVERAGE);
+	struct lsdc_cursor *cursor = to_lsdc_cursor(plane);
 
 	ret = drm_universal_plane_init(ddev, plane, 1 << index,
 				       &lsdc_plane_funcs,
@@ -765,15 +767,16 @@ int ls7a1000_cursor_plane_init(struct drm_device *ddev,
 
 	drm_plane_helper_add(plane, &ls7a1000_cursor_plane_helper_funcs);
 
-	return 0;
+	return drm_plane_create_blend_mode_property(plane, blend_caps);
 }
 
 int ls7a2000_cursor_plane_init(struct drm_device *ddev,
 			       struct drm_plane *plane,
 			       unsigned int index)
 {
-	struct lsdc_cursor *cursor = to_lsdc_cursor(plane);
 	int ret;
+	unsigned int blend_caps = BIT(DRM_MODE_BLEND_PIXEL_NONE) | BIT(DRM_MODE_BLEND_COVERAGE);
+	struct lsdc_cursor *cursor = to_lsdc_cursor(plane);
 
 	ret = drm_universal_plane_init(ddev, plane, 1 << index,
 				       &lsdc_plane_funcs,
@@ -790,5 +793,5 @@ int ls7a2000_cursor_plane_init(struct drm_device *ddev,
 
 	drm_plane_helper_add(plane, &ls7a2000_cursor_plane_helper_funcs);
 
-	return 0;
+	return drm_plane_create_blend_mode_property(plane, blend_caps);
 }
