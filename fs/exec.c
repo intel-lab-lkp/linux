@@ -880,6 +880,20 @@ static int exec_mmap(struct linux_binprm *bprm)
 	active_mm = tsk->active_mm;
 	tsk->active_mm = mm;
 	tsk->mm = mm;
+#ifdef CONFIG_SCHED_CACHE
+	{
+		struct sched_cache_group *old_grp, *new_grp;
+
+		old_grp = rcu_dereference_protected(tsk->sched_cache_grp, true);
+
+		/* Acquire the reference before publishing the pointer. */
+		new_grp = sched_cache_group_get(mm->sched_cache_grp);
+
+		rcu_assign_pointer(tsk->sched_cache_grp, new_grp);
+		if (old_grp)
+			sched_cache_group_put(old_grp);
+	}
+#endif
 	mm_init_cid(mm, tsk);
 	exec_state = task_exec_state_replace(tsk, exec_state);
 	/*

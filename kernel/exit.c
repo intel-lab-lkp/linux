@@ -553,23 +553,25 @@ void mm_update_next_owner(struct mm_struct *mm)
  * Subtract the memory footprint of the current task from
  * mm.
  */
-static void exit_mm_sched_cache(struct mm_struct *mm)
+static void exit_mm_sched_cache(void)
 {
+	struct sched_cache_group *grp =
+		rcu_dereference_protected(current->sched_cache_grp, true);
 	unsigned long fp, sub;
 
-	if (!current->total_numa_faults)
+	if (!grp || !current->total_numa_faults)
 		return;
 	/*
 	 * No lock protection due to performance considerations.
 	 * Make sure the group footprint does not become
 	 * negative.
 	 */
-	fp = READ_ONCE(mm->sched_cache_grp->footprint);
+	fp = READ_ONCE(grp->footprint);
 	sub = min(fp, current->total_numa_faults);
-	WRITE_ONCE(mm->sched_cache_grp->footprint, fp - sub);
+	WRITE_ONCE(grp->footprint, fp - sub);
 }
 #else
-static inline void exit_mm_sched_cache(struct mm_struct *mm)
+static inline void exit_mm_sched_cache(void)
 {
 }
 #endif /* CONFIG_SCHED_CACHE CONFIG_NUMA_BALANCING */
@@ -586,7 +588,19 @@ static void exit_mm(void)
 	if (!mm)
 		return;
 
-	exit_mm_sched_cache(mm);
+	exit_mm_sched_cache();
+
+#ifdef CONFIG_SCHED_CACHE
+	{
+		struct sched_cache_group *grp =
+			rcu_dereference_protected(current->sched_cache_grp, true);
+
+		rcu_assign_pointer(current->sched_cache_grp, NULL);
+
+		if (grp)
+			sched_cache_group_put(grp);
+	}
+#endif
 
 	mmap_read_lock(mm);
 	mmgrab_lazy_tlb(mm);

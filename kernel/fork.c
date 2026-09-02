@@ -1599,6 +1599,19 @@ static int copy_mm(u64 clone_flags, struct task_struct *tsk)
 
 	tsk->mm = mm;
 	tsk->active_mm = mm;
+#ifdef CONFIG_SCHED_CACHE
+	{
+		/*
+		 * A task holds its own reference on the group, separate from
+		 * the reference held by its mm_struct. Acquire it before
+		 * publishing the pointer.
+		 */
+		struct sched_cache_group *grp =
+			sched_cache_group_get(mm->sched_cache_grp);
+
+		rcu_assign_pointer(tsk->sched_cache_grp, grp);
+	}
+#endif
 	return 0;
 }
 
@@ -2581,6 +2594,16 @@ bad_fork_cleanup_io:
 bad_fork_cleanup_namespaces:
 	exit_nsproxy_namespaces(p);
 bad_fork_cleanup_mm:
+#ifdef CONFIG_SCHED_CACHE
+	/*
+	 * copy_mm() took a task reference on the cache group; a failed fork
+	 * never reaches exit_mm(), so release it here to avoid leaking the
+	 * group and its per-CPU buffer.
+	 */
+	sched_cache_group_put(rcu_dereference_protected(p->sched_cache_grp, true));
+	RCU_INIT_POINTER(p->sched_cache_grp, NULL);
+#endif
+
 	if (p->mm) {
 		mm_clear_owner(p->mm, p);
 		mmput(p->mm);
