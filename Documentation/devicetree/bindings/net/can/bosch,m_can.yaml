@@ -16,7 +16,9 @@ allOf:
 
 properties:
   compatible:
-    const: bosch,m_can
+    enum:
+      - bosch,m_can
+      - ti,am62-m_can
 
   reg:
     items:
