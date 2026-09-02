@@ -135,6 +135,7 @@ additionalProperties:
         gpios: true
         input: true
         input-enable: true
+        input-disable: true
         output-enable: true
         output-high: true
         output-low: true
