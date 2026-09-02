@@ -3502,9 +3502,15 @@ hash:
 void ieee80211_sta_remove_link(struct sta_info *sta, unsigned int link_id)
 {
 	struct ieee80211_sub_if_data *sdata = sta->sdata;
+	struct link_sta_info *link_sta;
 	u16 old_links = sta->sta.valid_links;
 
 	lockdep_assert_wiphy(sdata->local->hw.wiphy);
+
+	link_sta = wiphy_dereference(sdata->local->hw.wiphy,
+				     sta->link[link_id]);
+	if (link_sta)
+		ieee80211_free_link_sta_keys(sta->local, link_sta);
 
 	sta->sta.valid_links &= ~BIT(link_id);
 

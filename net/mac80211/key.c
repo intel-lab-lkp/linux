@@ -475,7 +475,7 @@ static int ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
 		return -EINVAL;
 
 	if (link_id >= 0) {
-		if (!link) {
+		if (!link && !sta) {
 			link = sdata_dereference(sdata->link[link_id], sdata);
 			if (!link)
 				return -ENOLINK;
@@ -484,7 +484,7 @@ static int ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
 		if (sta) {
 			link_sta = rcu_dereference_protected(sta->link[link_id],
 							     lockdep_is_held(&sta->local->hw.wiphy->mtx));
-			if (!link_sta)
+			if (!link_sta && new)
 				return -ENOLINK;
 		}
 	} else {
@@ -535,7 +535,7 @@ static int ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
 			if (new &&
 			    !(new->conf.flags & IEEE80211_KEY_FLAG_NO_AUTO_TX))
 				_ieee80211_set_tx_key(new, true);
-		} else {
+		} else if (link_sta) {
 			rcu_assign_pointer(link_sta->gtk[idx], new);
 		}
 		/* Only needed for transition from no key -> key.
@@ -1183,23 +1183,57 @@ void ieee80211_free_keys(struct ieee80211_sub_if_data *sdata,
 	}
 }
 
-void ieee80211_free_sta_keys(struct ieee80211_local *local,
-			     struct sta_info *sta)
+static void ieee80211_remove_link_sta_keys(struct ieee80211_local *local,
+					   struct link_sta_info *link_sta,
+					   struct list_head *keys)
 {
 	struct ieee80211_key *key;
 	int i;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	for (i = 0; i < ARRAY_SIZE(sta->deflink.gtk); i++) {
-		key = wiphy_dereference(local->hw.wiphy, sta->deflink.gtk[i]);
+	for (i = 0; i < ARRAY_SIZE(link_sta->gtk); i++) {
+		key = wiphy_dereference(local->hw.wiphy, link_sta->gtk[i]);
 		if (!key)
 			continue;
 		ieee80211_key_replace(key->sdata, NULL, key->sta,
 				      key->conf.flags & IEEE80211_KEY_FLAG_PAIRWISE,
 				      key, NULL);
+		list_add_tail(&key->free_list, keys);
+	}
+}
+
+void ieee80211_free_link_sta_keys(struct ieee80211_local *local,
+				  struct link_sta_info *link_sta)
+{
+	struct ieee80211_key *key, *tmp;
+	LIST_HEAD(keys);
+
+	ieee80211_remove_link_sta_keys(local, link_sta, &keys);
+	if (list_empty(&keys))
+		return;
+
+	synchronize_net();
+	list_for_each_entry_safe(key, tmp, &keys, free_list)
 		__ieee80211_key_destroy(key, key->sdata->vif.type ==
 					NL80211_IFTYPE_STATION);
+}
+
+void ieee80211_free_sta_keys(struct ieee80211_local *local,
+			     struct sta_info *sta)
+{
+	struct ieee80211_key *key, *tmp;
+	LIST_HEAD(keys);
+	int i;
+
+	lockdep_assert_wiphy(local->hw.wiphy);
+
+	for (i = 0; i < ARRAY_SIZE(sta->link); i++) {
+		struct link_sta_info *link_sta;
+
+		link_sta = wiphy_dereference(local->hw.wiphy, sta->link[i]);
+		if (link_sta)
+			ieee80211_remove_link_sta_keys(local, link_sta, &keys);
 	}
 
 	for (i = 0; i < NUM_DEFAULT_KEYS; i++) {
@@ -1209,9 +1243,14 @@ void ieee80211_free_sta_keys(struct ieee80211_local *local,
 		ieee80211_key_replace(key->sdata, NULL, key->sta,
 				      key->conf.flags & IEEE80211_KEY_FLAG_PAIRWISE,
 				      key, NULL);
+		list_add_tail(&key->free_list, &keys);
+	}
+
+	if (!list_empty(&keys))
+		synchronize_net();
+	list_for_each_entry_safe(key, tmp, &keys, free_list)
 		__ieee80211_key_destroy(key, key->sdata->vif.type ==
 					NL80211_IFTYPE_STATION);
-	}
 }
 
 void ieee80211_delayed_tailroom_dec(struct wiphy *wiphy,
