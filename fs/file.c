@@ -798,7 +798,7 @@ static inline void __range_cloexec(struct files_struct *cur_fds,
 }
 
 static inline void __range_close(struct files_struct *files, unsigned int fd,
-				 unsigned int max_fd)
+				 unsigned int max_fd, struct llist_head *list)
 {
 	struct file *file;
 	struct fdtable *fdt;
@@ -815,7 +815,8 @@ static inline void __range_close(struct files_struct *files, unsigned int fd,
 		file = file_close_fd_locked(files, fd);
 		if (file) {
 			spin_unlock(&files->file_lock);
-			filp_close(file, files);
+			filp_flush(file, files);
+			fput_close_list(file, list);
 			cond_resched();
 			spin_lock(&files->file_lock);
 			fdt = files_fdtable(files);
@@ -845,6 +846,7 @@ SYSCALL_DEFINE3(close_range, unsigned int, fd, unsigned int, max_fd,
 {
 	struct task_struct *me = current;
 	struct files_struct *cur_fds = me->files, *fds = NULL;
+	LLIST_HEAD(to_close);
 
 	if (flags & ~(CLOSE_RANGE_UNSHARE | CLOSE_RANGE_CLOEXEC))
 		return -EINVAL;
@@ -876,7 +878,7 @@ SYSCALL_DEFINE3(close_range, unsigned int, fd, unsigned int, max_fd,
 	if (flags & CLOSE_RANGE_CLOEXEC)
 		__range_cloexec(cur_fds, fd, max_fd);
 	else
-		__range_close(cur_fds, fd, max_fd);
+		__range_close(cur_fds, fd, max_fd, &to_close);
 
 	if (fds) {
 		/*
@@ -886,6 +888,7 @@ SYSCALL_DEFINE3(close_range, unsigned int, fd, unsigned int, max_fd,
 		put_files_struct(switch_files_struct(me, cur_fds));
 	}
 
+	fput_list(&to_close);
 	return 0;
 }
 
