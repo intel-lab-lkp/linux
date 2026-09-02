@@ -308,6 +308,7 @@ int irq_domain_alloc_generic_chips(struct irq_domain *d,
 	dgc->gc_flags = info->gc_flags;
 	dgc->exit = info->exit;
 	d->gc = dgc;
+	d->flags |= IRQ_DOMAIN_FLAG_DESTROY_GC;
 
 	/* Calc pointer to the first generic chip */
 	tmp += dgc_sz;
