@@ -29,4 +29,18 @@ enum migrate_reason {
 	MR_TYPES
 };
 
+/**
+ * struct migrate_control - Policy for one migration invocation
+ * @mode: Blocking discipline for migration operations
+ * @reason: Reason the migration was requested
+ *
+ * Per-folio completion state does not belong here.  Callers keep this
+ * structure on the stack; migration must not allocate it under memory
+ * pressure.
+ */
+struct migrate_control {
+	enum migrate_mode mode;
+	enum migrate_reason reason;
+};
+
 #endif		/* MIGRATE_MODE_H_INCLUDED */
