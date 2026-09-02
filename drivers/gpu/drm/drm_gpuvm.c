@@ -1021,7 +1021,8 @@ drm_gpuvm_in_kernel_node(struct drm_gpuvm *gpuvm, u64 addr, u64 range)
  * @addr: the base address
  * @range: the range starting from the base address
  *
- * Checks whether the range is within the GPUVM's managed boundaries.
+ * Checks whether the range is non-zero and within the GPUVM's managed
+ * boundaries.
  *
  * Returns: true for a valid range, false otherwise
  */
@@ -1029,7 +1030,8 @@ bool
 drm_gpuvm_range_valid(struct drm_gpuvm *gpuvm,
 		      u64 addr, u64 range)
 {
-	return !drm_gpuvm_check_overflow(addr, range) &&
+	return range != 0 &&
+	       !drm_gpuvm_check_overflow(addr, range) &&
 	       drm_gpuvm_in_mm_range(gpuvm, addr, range) &&
 	       !drm_gpuvm_in_kernel_node(gpuvm, addr, range);
 }
