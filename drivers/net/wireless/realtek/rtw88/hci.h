@@ -11,6 +11,7 @@ struct rtw_hci_ops {
 			struct rtw_tx_pkt_info *pkt_info,
 			struct sk_buff *skb);
 	void (*tx_kick_off)(struct rtw_dev *rtwdev);
+	void (*tx_stall_check)(struct rtw_dev *rtwdev);
 	void (*flush_queues)(struct rtw_dev *rtwdev, u32 queues, bool drop);
 	int (*setup)(struct rtw_dev *rtwdev);
 	int (*start)(struct rtw_dev *rtwdev);
@@ -43,6 +44,12 @@ static inline int rtw_hci_tx_write(struct rtw_dev *rtwdev,
 static inline void rtw_hci_tx_kick_off(struct rtw_dev *rtwdev)
 {
 	return rtwdev->hci.ops->tx_kick_off(rtwdev);
+}
+
+static inline void rtw_hci_tx_stall_check(struct rtw_dev *rtwdev)
+{
+	if (rtwdev->hci.ops->tx_stall_check)
+		rtwdev->hci.ops->tx_stall_check(rtwdev);
 }
 
 static inline int rtw_hci_setup(struct rtw_dev *rtwdev)

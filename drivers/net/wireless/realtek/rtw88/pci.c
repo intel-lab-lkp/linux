@@ -787,6 +787,72 @@ static void rtw_pci_tx_kick_off_queue(struct rtw_dev *rtwdev,
 	spin_unlock_bh(&rtwpci->irq_lock);
 }
 
+/* The hardware read pointer of a TX ring can stop advancing while the driver
+ * keeps queueing descriptors. Once the ring is full, rtw_pci_tx_write() stops
+ * the mac80211 queue, and because the only wake up is inside the completion
+ * loop of rtw_pci_tx_isr(), which does not run while the read pointer is
+ * frozen, the queue would stay stopped forever. Detect a ring that is not
+ * draining and kick it off again.
+ */
+#define RTW_PCI_TX_STALL_LIMIT 3
+
+static void rtw_pci_tx_stall_check(struct rtw_dev *rtwdev)
+{
+	struct rtw_pci *rtwpci = (struct rtw_pci *)rtwdev->priv;
+	struct rtw_pci_tx_ring *ring;
+	enum rtw_tx_queue_type queue;
+	u32 bd_idx, cur_rp, wp;
+	bool pending, kick, warn, stopped;
+
+	for (queue = 0; queue < RTK_MAX_TX_QUEUE_NUM; queue++) {
+		/* BCN is the reserved page and H2C is managed by the
+		 * firmware, neither is flow controlled through mac80211
+		 */
+		if (queue == RTW_TX_QUEUE_BCN || queue == RTW_TX_QUEUE_H2C)
+			continue;
+
+		ring = &rtwpci->tx_rings[queue];
+		kick = false;
+		warn = false;
+
+		spin_lock_bh(&rtwpci->irq_lock);
+
+		/* nothing in flight, do not touch the device */
+		if (skb_queue_empty(&ring->queue) && !ring->queue_stopped) {
+			ring->stall_cnt = 0;
+			ring->stall_warned = false;
+			spin_unlock_bh(&rtwpci->irq_lock);
+			continue;
+		}
+
+		bd_idx = rtw_read32(rtwdev, rtw_pci_tx_queue_idx_addr[queue]);
+		cur_rp = (bd_idx >> 16) & TRX_BD_IDX_MASK;
+		wp = ring->r.wp;
+		pending = ring->queue_stopped || cur_rp != wp;
+
+		if (pending && cur_rp == ring->last_rp) {
+			if (++ring->stall_cnt >= RTW_PCI_TX_STALL_LIMIT) {
+				ring->stall_cnt = 0;
+				kick = true;
+				warn = !ring->stall_warned;
+				ring->stall_warned = true;
+			}
+		} else {
+			ring->stall_cnt = 0;
+			ring->stall_warned = false;
+		}
+		stopped = ring->queue_stopped;
+		ring->last_rp = cur_rp;
+		spin_unlock_bh(&rtwpci->irq_lock);
+
+		if (warn)
+			rtw_warn(rtwdev, "TX queue %d stalled (rp %u wp %u%s), kicking\n",
+				 queue, cur_rp, wp, stopped ? ", stopped" : "");
+		if (kick)
+			rtw_pci_tx_kick_off_queue(rtwdev, queue);
+	}
+}
+
 static void rtw_pci_tx_kick_off(struct rtw_dev *rtwdev)
 {
 	struct rtw_pci *rtwpci = (struct rtw_pci *)rtwdev->priv;
@@ -1605,6 +1671,7 @@ static void rtw_pci_destroy(struct rtw_dev *rtwdev, struct pci_dev *pdev)
 static const struct rtw_hci_ops rtw_pci_ops = {
 	.tx_write = rtw_pci_tx_write,
 	.tx_kick_off = rtw_pci_tx_kick_off,
+	.tx_stall_check = rtw_pci_tx_stall_check,
 	.flush_queues = rtw_pci_flush_queues,
 	.setup = rtw_pci_setup,
 	.start = rtw_pci_start,
