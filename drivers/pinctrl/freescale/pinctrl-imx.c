@@ -21,6 +21,7 @@
 
 #include <linux/pinctrl/machine.h>
 #include <linux/pinctrl/pinconf.h>
+#include <linux/pinctrl/pinconf-generic.h>
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/pinctrl/pinmux.h>
 
@@ -297,6 +298,35 @@ static int imx_pinconf_get_mmio(struct pinctrl_dev *pctldev, unsigned pin_id,
 	struct imx_pinctrl *ipctl = pinctrl_dev_get_drvdata(pctldev);
 	const struct imx_pinctrl_soc_info *info = ipctl->info;
 	const struct imx_pin_reg *pin_reg = &ipctl->pin_regs[pin_id];
+	enum pin_config_param param = pinconf_to_config_param(*config);
+	unsigned int mask = 0;
+	u32 raw;
+
+	/*
+	 * Only OUTPUT_ENABLE/INPUT_ENABLE are decoded, and only when the SoC
+	 * declares the bits. Everything else still returns the raw conf
+	 * register, the debugfs dump depends on it.
+	 */
+	switch (param) {
+	case PIN_CONFIG_OUTPUT_ENABLE:
+		mask = info->obe_mask;
+		break;
+	case PIN_CONFIG_INPUT_ENABLE:
+		mask = info->ibe_mask;
+		break;
+	default:
+		break;
+	}
+
+	if (mask) {
+		/* pin not configured, nothing to report */
+		if (pin_reg->conf_reg == -1)
+			return -ENOTSUPP;
+
+		raw = readl(ipctl->base + pin_reg->conf_reg);
+		*config = pinconf_to_config_packed(param, !!(raw & mask));
+		return 0;
+	}
 
 	if (pin_reg->conf_reg == -1) {
 		dev_err(ipctl->dev, "Pin(%s) does not support config function\n",
