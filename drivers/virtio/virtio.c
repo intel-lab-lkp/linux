@@ -250,7 +250,7 @@ static int virtio_features_ok(struct virtio_device *dev)
  * call/workqueue/bh.  Invoking virtio_break_device then flushing any such
  * contexts is one way to handle that.
  * */
-void virtio_reset_device(struct virtio_device *dev)
+int virtio_reset_device(struct virtio_device *dev)
 {
 #ifdef CONFIG_VIRTIO_HARDEN_NOTIFICATION
 	/*
@@ -263,7 +263,7 @@ void virtio_reset_device(struct virtio_device *dev)
 	virtio_synchronize_cbs(dev);
 #endif
 
-	dev->config->reset(dev);
+	return dev->config->reset(dev);
 }
 EXPORT_SYMBOL_GPL(virtio_reset_device);
 
@@ -567,7 +567,9 @@ int register_virtio_device(struct virtio_device *dev)
 
 	/* We always start by resetting the device, in case a previous
 	 * driver messed it up.  This also tests that code path a little. */
-	virtio_reset_device(dev);
+	err = virtio_reset_device(dev);
+	if (err)
+		goto out_of_node_put;
 
 	/* Acknowledge that we've seen the device. */
 	virtio_add_status(dev, VIRTIO_CONFIG_S_ACKNOWLEDGE);

@@ -21,6 +21,7 @@
 #include "virtio_pci_common.h"
 
 #define VIRTIO_AVQ_SGS_MAX	4
+#define VIRTIO_PCI_RESET_TIMEOUT_MS 1000
 
 static void vp_get_features(struct virtio_device *vdev, u64 *features)
 {
@@ -543,10 +544,11 @@ static void vp_set_status(struct virtio_device *vdev, u8 status)
 		vp_modern_avq_activate(vdev);
 }
 
-static void vp_reset(struct virtio_device *vdev)
+static int vp_reset(struct virtio_device *vdev)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	struct virtio_pci_modern_device *mdev = &vp_dev->mdev;
+	int timeout = VIRTIO_PCI_RESET_TIMEOUT_MS;
 
 	/* 0 status means a reset. */
 	vp_modern_set_status(mdev, 0);
@@ -555,13 +557,20 @@ static void vp_reset(struct virtio_device *vdev)
 	 * This will flush out the status write, and flush in device writes,
 	 * including MSI-X interrupts, if any.
 	 */
-	while (vp_modern_get_status(mdev))
-		msleep(1);
+	while (vp_modern_get_status(mdev)) {
+		if (!timeout--) {
+			dev_warn(&vdev->dev, "reset timeout");
+			return -ETIMEDOUT;
+		}
+		msleep(1000);
+	}
 
 	vp_modern_avq_cleanup(vdev);
 
 	/* Flush pending VQ/configuration callbacks. */
 	vp_synchronize_vectors(vdev);
+
+	return 0;
 }
 
 static int vp_active_vq(struct virtqueue *vq, u16 msix_vec)
