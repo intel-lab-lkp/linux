@@ -24,23 +24,53 @@ static int tpm2_key_encode(struct trusted_key_payload *payload,
 			   u8 *src, u32 len)
 {
 	const int SCRATCH_SIZE = PAGE_SIZE;
-	u8 *scratch = kmalloc(SCRATCH_SIZE, GFP_KERNEL);
-	u8 *work = scratch, *work1;
-	u8 *end_work = scratch + SCRATCH_SIZE;
+	u8 *scratch;
+	u8 *work, *work1;
+	u8 *end_work;
 	u8 *priv, *pub;
-	u16 priv_len, pub_len;
+	u32 priv_len, pub_len;
 	int ret;
 
-	priv_len = get_unaligned_be16(src) + 2;
+	/*
+	 * TPM2_Create Response Parameters:
+	 *
+	 * outPrivate
+	 * outPublic
+	 * creationData
+	 * creationHash
+	 * creationTicket
+	 *
+	 * Validate outPrivate and outPublic against the response parameter
+	 * length before accessing them.
+	 */
+	if (len < sizeof(__be16))
+		return -EFAULT;
+
+	priv_len = get_unaligned_be16(src);
+	if (priv_len > len - sizeof(__be16))
+		return -EFAULT;
+
+	priv_len += sizeof(__be16);
 	priv = src;
+
+	if (len - priv_len < sizeof(__be16))
+		return -EFAULT;
 
 	src += priv_len;
 
-	pub_len = get_unaligned_be16(src) + 2;
+	pub_len = get_unaligned_be16(src);
+	if (pub_len > len - priv_len - sizeof(__be16))
+		return -EFAULT;
+
+	pub_len += sizeof(__be16);
 	pub = src;
 
+	scratch = kmalloc(SCRATCH_SIZE, GFP_KERNEL);
 	if (!scratch)
 		return -ENOMEM;
+
+	work = scratch;
+	end_work = scratch + SCRATCH_SIZE;
 
 	work = asn1_encode_oid(work, end_work, tpm2key_oid,
 			       asn1_oid_len(tpm2key_oid));
@@ -335,10 +365,11 @@ int tpm2_seal_trusted(struct tpm_chip *chip,
 		goto out;
 
 	blob_len = tpm_buf_read_u32(buf, &offset);
-	if (blob_len > MAX_BLOB_SIZE || buf->flags & TPM_BUF_INVALID) {
-		rc = -E2BIG;
+	if (buf->flags & TPM_BUF_INVALID) {
+		rc = -EFAULT;
 		goto out;
 	}
+
 	if (buf->length - offset < blob_len) {
 		rc = -EFAULT;
 		goto out;
