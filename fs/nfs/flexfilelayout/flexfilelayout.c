@@ -3079,7 +3079,7 @@ static void __exit nfs4flexfilelayout_exit(void)
 }
 
 MODULE_ALIAS("nfs-layouttype4-4");
-
+MODULE_SOFTDEP("pre: nfsv3");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("The NFSv4 flexfile layout driver");
 
