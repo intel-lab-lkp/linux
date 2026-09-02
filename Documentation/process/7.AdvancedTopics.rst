@@ -5,7 +5,7 @@ Advanced topics
 
 At this point, hopefully, you have a handle on how the development process
 works.  There is still more to learn, however!  This section will cover a
-number of topics which can be helpful for developers wanting to become a
+number of topics that can be helpful for developers wanting to become a
 regular part of the Linux kernel development process.
 
 Managing patches with Git
@@ -52,23 +52,23 @@ exercise while coming up to speed.
 When you are ready to start putting up Git trees for others to look at, you
 will, of course, need a server that can be pulled from.  Setting up such a
 server with git-daemon is relatively straightforward if you have a system
-which is accessible to the Internet.  Otherwise, free, public hosting sites
+that is accessible to the Internet.  Otherwise, free, public hosting sites
 (GitHub, for example) are starting to appear on the net.  Established
 developers can get an account on kernel.org, but those are not easy to come
 by; see https://kernel.org/faq/ for more information.
 
 The normal Git workflow involves the use of a lot of branches.  Each line
 of development can be separated into a separate "topic branch" and
-maintained independently.  Branches in Git are cheap, there is no reason to
-not make free use of them.  And, in any case, you should not do your
-development in any branch which you intend to ask others to pull from.
+maintained independently.  Branches in Git are cheap, there is no reason not
+to make free use of them.  And, in any case, you should not do your
+development in any branch that you intend to ask others to pull from.
 Publicly-available branches should be created with care; merge in patches
 from development branches when they are in complete form and ready to go -
 not before.
 
 Git provides some powerful tools which can allow you to rewrite your
-development history.  An inconvenient patch (one which breaks bisection,
-say, or which has some other sort of obvious bug) can be fixed in place or
+development history.  An inconvenient patch (one that breaks bisection,
+say, or that has some other sort of obvious bug) can be fixed in place or
 made to disappear from the history entirely.  A patch series can be
 rewritten as if it had been written on top of today's mainline, even though
 you have been working on it for months.  Changes can be transparently
@@ -81,22 +81,22 @@ a simple obsession for the creation of the perfect project history.
 Rewriting history will rewrite the changes contained in that history,
 turning a tested (hopefully) kernel tree into an untested one.  But, beyond
 that, developers cannot easily collaborate if they do not have a shared
-view of the project history; if you rewrite history which other developers
+view of the project history; if you rewrite history that other developers
 have pulled into their repositories, you will make life much more difficult
 for those developers.  So a simple rule of thumb applies here: history
-which has been exported to others should generally be seen as immutable
+that has been exported to others should generally be seen as immutable
 thereafter.
 
 So, once you push a set of changes to your publicly-available server, those
 changes should not be rewritten.  Git will attempt to enforce this rule if
-you try to push changes which do not result in a fast-forward merge
+you try to push changes that do not result in a fast-forward merge
 (i.e. changes which do not share the same history).  It is possible to
 override this check, and there may be times when it is necessary to rewrite
 an exported tree.  Moving changesets between trees to avoid conflicts in
 linux-next is one example.  But such actions should be rare.  This is one
 of the reasons why development should be done in private branches (which
 can be rewritten if necessary) and only moved into public branches when
-it's in a reasonably advanced state.
+it is in a reasonably advanced state.
 
 As the mainline (or other tree upon which a set of changes is based)
 advances, it is tempting to merge with that tree to stay on the leading
@@ -109,11 +109,11 @@ generally only at specific release points (such as a mainline -rc
 release).  If you are nervous about specific changes, you can always
 perform test merges in a private branch.  The git "rerere" tool can be
 useful in such situations; it remembers how merge conflicts were resolved
-so that you don't have to do the same work twice.
+so that you do not have to do the same work twice.
 
 One of the biggest recurring complaints about tools like Git is this: the
 mass movement of patches from one repository to another makes it easy to
-slip in ill-advised changes which go into the mainline below the review
+slip in ill-advised changes that go into the mainline below the review
 radar.  Kernel developers tend to get unhappy when they see that kind of
 thing happening; putting up a Git tree with unreviewed or off-topic patches
 can affect your ability to get trees pulled in the future.  Quoting Linus:
@@ -135,7 +135,7 @@ occasional summary of the tree to the relevant list, and, when the time is
 right, request that the tree be included in linux-next.
 
 If and when others start to send patches for inclusion into your tree,
-don't forget to review them.  Also ensure that you maintain the correct
+do not forget to review them.  Also ensure that you maintain the correct
 authorship information; the git "am" tool does its best in this regard, but
 you may have to add a "From:" line to the patch if it has been relayed to
 you via a third party.
@@ -161,7 +161,7 @@ whole.
 
 Reviewing code can be an intimidating prospect, especially for a new kernel
 developer who may well feel nervous about questioning code - in public -
-which has been posted by those with more experience.  Even code written by
+that has been posted by those with more experience.  Even code written by
 the most experienced developers can be improved, though.  Perhaps the best
 piece of advice for reviewers (all reviewers) is this: phrase review
 comments as questions rather than criticisms.  Asking "how does the lock
@@ -191,6 +191,6 @@ submission and it looks good to me."
 Some form of a review message or reply is obviously necessary otherwise
 maintainers will not know that the reviewer has looked at the patch at all!
 
-Last but not least patch review may become a negative process, focused
+Last but not least, patch review may become a negative process, focused
 on pointing out problems. Please throw in a compliment once in a while,
 particularly for newbies!

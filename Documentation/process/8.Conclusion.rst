@@ -4,7 +4,7 @@ For more information
 ====================
 
 There are numerous sources of information on Linux kernel development and
-related topics.  First among those will always be the Documentation
+related topics.  First among these will always be the Documentation
 directory found in the kernel source distribution.  Start with the
 top-level :ref:`process/howto.rst <process_howto>`; also read
 :ref:`process/submitting-patches.rst <submittingpatches>`. Many internal
@@ -56,7 +56,7 @@ Congratulations to anybody who has made it through this long-winded
 document.  Hopefully it has provided a helpful understanding of how the
 Linux kernel is developed and how you can participate in that process.
 
-In the end, it's the participation that matters.  Any open source software
+In the end, it is the participation that matters.  Any open source software
 project is no more than the sum of what its contributors put into it.  The
 Linux kernel has progressed as quickly and as well as it has because it has
 been helped by an impressively large group of developers, all of whom are

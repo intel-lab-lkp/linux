@@ -9,7 +9,7 @@ Original by:
 .. note::
 
    This document is obsolete.  In most cases, rather than using ``patch``
-   manually, you'll almost certainly want to look at using Git instead.
+   manually, you will almost certainly want to look at using Git instead.
 
 A frequently asked question on the Linux Kernel Mailing List is how to apply
 a patch to the kernel or, more specifically, what base kernel a patch for
@@ -28,7 +28,7 @@ A patch is a small text document containing a delta of changes between two
 different versions of a source tree. Patches are created with the ``diff``
 program.
 
-To correctly apply a patch you need to know what base it was generated from
+To correctly apply a patch, you need to know what base it was generated from
 and what new version the patch will change the source tree into. These
 should both be present in the patch file metadata or be possible to deduce
 from the filename.
@@ -75,7 +75,7 @@ via stdin using the following syntax::
 
 	patch -p1 < path/to/patch-x.y.z
 
-If you just want to be able to follow the examples below and don't want to
+If you just want to be able to follow the examples below and do not want to
 know of more than one way to use patch, then you can stop reading this
 section here.
 
@@ -84,7 +84,7 @@ this::
 
 	patch -p1 -i path/to/patch-x.y.z
 
-If your patch file is compressed with gzip or xz and you don't want to
+If your patch file is compressed with gzip or xz and you do not want to
 uncompress it before applying it, then you can feed it to patch like this
 instead::
 
@@ -104,7 +104,7 @@ patch via stdin or the ``-i`` argument, as you prefer.
 A few other nice arguments for patch are ``-s`` which causes patch to be silent
 except for errors which is nice to prevent errors from scrolling out of the
 screen too fast, and ``--dry-run`` which causes patch to just print a listing of
-what would happen, but doesn't actually make any changes. Finally ``--verbose``
+what would happen, but does not actually make any changes. Finally ``--verbose``
 tells patch to print more information about the work being done.
 
 
@@ -118,7 +118,7 @@ Checking that the file looks like a valid patch file and checking the code
 around the bits being modified matches the context provided in the patch are
 just two of the basic sanity checks patch does.
 
-If patch encounters something that doesn't look quite right it has two
+If patch encounters something that does not look quite right it has two
 options. It can either refuse to apply the changes and abort or it can try
 to find a way to make the patch apply with a few minor changes.
 
@@ -133,7 +133,7 @@ usually adjust the line numbers and apply the patch.
 Whenever patch applies a patch that it had to modify a bit to make it fit
 it'll tell you about it by saying the patch applied with **fuzz**.
 You should be wary of such changes since even though patch probably got it
-right it doesn't /always/ get it right, and the result will sometimes be
+right it does not /always/ get it right, and the result will sometimes be
 wrong.
 
 When patch encounters a change that it can't fix up with fuzz it rejects it
@@ -141,7 +141,7 @@ outright and leaves a file with a ``.rej`` extension (a reject file). You can
 read this file to see exactly what change couldn't be applied, so you can
 go fix it up by hand if you wish.
 
-If you don't have any third-party patches applied to your kernel source, but
+If you do not have any third-party patches applied to your kernel source, but
 only patches from kernel.org and you apply the patches in the correct order,
 and have made no modifications yourself to the source files, then you should
 never see a fuzz or reject message from patch. If you do see such messages
@@ -154,7 +154,7 @@ Let's look a bit more at some of the messages patch can produce.
 
 If patch stops and presents a ``File to patch:`` prompt, then patch could not
 find a file to be patched. Most likely you forgot to specify -p1 or you are
-in the wrong directory. Less often, you'll find patches that need to be
+in the wrong directory. Less often, you will find patches that need to be
 applied with ``-p0`` instead of ``-p1`` (reading the patch file should reveal if
 this is the case -- if so, then this is an error by the person who created
 the patch but is not fatal).
@@ -412,7 +412,7 @@ tree. The Subsystem maintainers push their patches first to linux-next,
 and, during the merge window, sends them directly to Linus.
 
 The -mm patches serve as a sort of proving ground for new features and other
-experimental patches that aren't merged via a subsystem tree.
+experimental patches that are not merged via a subsystem tree.
 Once such patches has proved its worth in -mm for a while Andrew pushes
 it on to Linus for inclusion in mainline.
 
