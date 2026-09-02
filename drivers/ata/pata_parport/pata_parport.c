@@ -509,6 +509,14 @@ static struct pi_adapter *pi_init_one(struct parport *parport,
 		return NULL;
 	}
 
+	pi->proto = pr;
+
+	if (!try_module_get(pi->proto->owner)) {
+		kfree(pi);
+		ida_free(&pata_parport_bus_dev_ids, id);
+		return NULL;
+	}
+
 	/* set up pi->dev before pi_probe_unit() so it can use dev_printk() */
 	pi->dev.parent = pata_parport_bus;
 	pi->dev.bus = &pata_parport_bus_type;
@@ -517,15 +525,12 @@ static struct pi_adapter *pi_init_one(struct parport *parport,
 	pi->dev.id = id;
 	dev_set_name(&pi->dev, "pata_parport.%u", pi->dev.id);
 	if (device_register(&pi->dev)) {
+		module_put(pi->proto->owner);
 		put_device(&pi->dev);
 		/* pata_parport_dev_release will do ida_free(dev->id) and kfree(pi) */
 		return NULL;
 	}
 
-	pi->proto = pr;
-
-	if (!try_module_get(pi->proto->owner))
-		goto out_unreg_dev;
 	if (pi->proto->init_proto && pi->proto->init_proto(pi) < 0)
 		goto out_module_put;
 
