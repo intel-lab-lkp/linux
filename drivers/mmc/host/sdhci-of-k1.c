@@ -314,7 +314,7 @@ static int spacemit_sdhci_execute_tuning(struct sdhci_host *host, u32 opcode)
 		max_pass_start = current_start;
 	}
 
-	if (max_pass_len < 3) {
+	if (max_pass_len < 50) {
 		dev_err(mmc_dev(host->mmc), "Tuning failed: no stable window found\n");
 		return -EIO;
 	}
