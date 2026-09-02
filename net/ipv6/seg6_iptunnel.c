@@ -446,8 +446,9 @@ static int seg6_do_srh(struct sk_buff *skb, struct dst_entry *cache_dst)
 		if (!skb_mac_header_was_set(skb))
 			return -EINVAL;
 
-		if (pskb_expand_head(skb, skb->mac_len, 0, GFP_ATOMIC) < 0)
-			return -ENOMEM;
+		err = skb_cow_head(skb, skb->mac_len);
+		if (unlikely(err))
+			return err;
 
 		skb_mac_header_rebuild(skb);
 		skb_push(skb, skb->mac_len);
