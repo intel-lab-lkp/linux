@@ -229,6 +229,17 @@ static void do_release_stripe(struct r5conf *conf, struct stripe_head *sh,
 	int i;
 	int injournal = 0;	/* number of date pages with R5_InJournal */
 
+	/*
+	 * Stripe is owned by release_stripe_plug()'s cb->list. A concurrent
+	 * last-ref release can reach here after the stripe was queued for
+	 * unplug (lru may already be non-empty). Do not re-add lru elsewhere;
+	 * restore the reference and let raid5_unplug() finish the release.
+	 */
+	if (test_bit(STRIPE_ON_UNPLUG_LIST, &sh->state)) {
+		atomic_inc(&sh->count);
+		return;
+	}
+
 	BUG_ON(!list_empty(&sh->lru));
 	BUG_ON(atomic_read(&conf->active_stripes)==0);
 
@@ -5760,6 +5771,9 @@ static void release_stripe_plug(struct mddev *mddev,
 		raid5_unplug, mddev,
 		sizeof(struct raid5_plug_cb));
 	struct raid5_plug_cb *cb;
+	struct r5conf *conf = mddev->private;
+	unsigned long flags;
+	bool queued = false;
 
 	if (!blk_cb) {
 		raid5_release_stripe(sh);
@@ -5775,9 +5789,22 @@ static void release_stripe_plug(struct mddev *mddev,
 			INIT_LIST_HEAD(cb->temp_inactive_list + i);
 	}
 
-	if (!test_and_set_bit(STRIPE_ON_UNPLUG_LIST, &sh->state))
-		list_add_tail(&sh->lru, &cb->list);
-	else
+	/*
+	 * Serialize with do_release_stripe() on device_lock so sh->lru cannot
+	 * be added to handle/inactive and cb->list at the same time.
+	 */
+	spin_lock_irqsave(&conf->device_lock, flags);
+	if (!test_and_set_bit(STRIPE_ON_UNPLUG_LIST, &sh->state)) {
+		if (unlikely(!list_empty(&sh->lru))) {
+			clear_bit(STRIPE_ON_UNPLUG_LIST, &sh->state);
+		} else {
+			list_add_tail(&sh->lru, &cb->list);
+			queued = true;
+		}
+	}
+	spin_unlock_irqrestore(&conf->device_lock, flags);
+
+	if (!queued)
 		raid5_release_stripe(sh);
 }
 
