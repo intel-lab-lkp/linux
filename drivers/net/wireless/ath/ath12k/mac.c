@@ -5763,6 +5763,16 @@ abort:
 				continue;
 
 			ar = arvif->ar;
+
+			/* The link vif may have been detached from its radio
+			 * while this scan request was being processed, for
+			 * example by a firmware recovery running concurrently.
+			 * The link is still set in links_map in that case, so
+			 * the radio has to be checked before it is used.
+			 */
+			if (!ar)
+				continue;
+
 			if (ar->scan.arvif == arvif) {
 				wiphy_work_cancel(hw->wiphy, &ar->scan.vdev_clean_wk);
 				spin_lock_bh(&ar->data_lock);
