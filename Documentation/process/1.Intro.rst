@@ -24,7 +24,7 @@ initial exercise.
 :ref:`development_early_stage` covers early-stage project planning, with an
 emphasis on involving the development community as soon as possible.
 
-:ref:`development_coding` is about the coding process; several pitfalls which
+:ref:`development_coding` is about the coding process; several pitfalls that
 have been encountered by other developers are discussed.  Some requirements for
 patches are covered, and there is an introduction to some of the tools
 which can help to ensure that kernel patches are correct.
@@ -53,7 +53,7 @@ What this document is about
 The Linux kernel, at over 8 million lines of code and well over 1000
 contributors to each release, is one of the largest and most active free
 software projects in existence.  Since its humble beginning in 1991, this
-kernel has evolved into a best-of-breed operating system component which
+kernel has evolved into a best-of-breed operating system component that
 runs on pocket-sized digital music players, desktop PCs, the largest
 supercomputers in existence, and all types of systems in between.  It is a
 robust, efficient, and scalable solution for almost any situation.
@@ -84,7 +84,7 @@ difficulties when trying to do kernel work.  The kernel community has
 evolved its own distinct ways of operating which allow it to function
 smoothly (and produce a high-quality product) in an environment where
 thousands of lines of code are being changed every day.  So it is not
-surprising that Linux kernel development process differs greatly from
+surprising that the Linux kernel development process differs greatly from
 proprietary development methods.
 
 The kernel's development process may come across as strange and
@@ -95,8 +95,8 @@ have a frustrating experience in store.  The development community, while
 being helpful to those who are trying to learn, has little time for those
 who will not listen or who do not care about the development process.
 
-It is hoped that those who read this document will be able to avoid that
-frustrating experience.  There is a lot of material here, but the effort
+Those who read this document should be able to avoid that frustrating
+experience.  There is a lot of material here, but the effort
 involved in reading it will be repaid in short order.  The development
 community is always in need of developers who will help to make the kernel
 better; the following text should help you - or those who work for you -
@@ -145,7 +145,7 @@ discussed in greater detail later in this document.  Consider:
   out-of-tree code requires significant amounts of work just to keep that
   code working.
 
-  Code which is in the mainline, instead, does not require this work as the
+  By contrast, code in the mainline does not require this work as the
   result of a simple rule requiring any developer who makes an API change
   to also fix any code that breaks as the result of that change.  So code
   which has been merged into the mainline has significantly lower
@@ -176,7 +176,7 @@ discussed in greater detail later in this document.  Consider:
   out of tree indefinitely, or (2) abandoning your code and migrating your
   users over to the in-tree version.
 
-- Contribution of code is the fundamental action which makes the whole
+- Contribution of code is the fundamental action that makes the whole
   process work.  By contributing your code you can add new functionality to
   the kernel and provide capabilities and examples which are of use to
   other kernel developers.  If you have developed code for Linux (or are
@@ -194,7 +194,7 @@ include:
   are cloudy at best; quite a few kernel copyright holders believe that
   most binary-only modules are derived products of the kernel and that, as
   a result, their distribution is a violation of the GNU General Public
-  License (about which more will be said below).  Your author is not a
+  License (about which more will be said below).  The author is not a 
   lawyer, and nothing in this document can possibly be considered to be
   legal advice.  The true legal status of closed-source modules can only be
   determined by the courts.  But the uncertainty which haunts those modules
@@ -233,7 +233,7 @@ Licensing
 Code is contributed to the Linux kernel under a number of licenses, but all
 code must be compatible with version 2 of the GNU General Public License
 (GPLv2), which is the license covering the kernel distribution as a whole.
-In practice, that means that all code contributions are covered either by
+In practice, this means all code contributions are covered either by
 GPLv2 (with, optionally, language allowing distribution under later
 versions of the GPL) or the three-clause BSD license.  Any contributions
 which are not covered by a compatible license will not be accepted into the

@@ -10,7 +10,7 @@ developers can make is to conclude that their work is now done.  In truth,
 posting patches indicates a transition into the next stage of the process,
 with, possibly, quite a bit of work yet to be done.
 
-It is a rare patch which is so good at its first posting that there is no
+It is a rare patch that is so good at its first posting that there is no
 room for improvement.  The kernel development process recognizes this fact,
 and, as a result, is heavily oriented toward the improvement of posted
 code.  You, as the author of that code, will be expected to work with the
@@ -60,8 +60,8 @@ mind:
 
 What all of this comes down to is that, when reviewers send you comments,
 you need to pay attention to the technical observations that they are
-making.  Do not let their form of expression or your own pride keep that
-from happening.  When you get review comments on a patch, take the time to
+making.  Do not let their tone or your own pride prevent that.
+When you get review comments on a patch, take the time to
 understand what the reviewer is trying to say.  If possible, fix the things
 that the reviewer is asking you to fix.  And respond back to the reviewer:
 thank them, and describe how you will answer their questions.
@@ -96,7 +96,7 @@ through list archives to familiarize themselves with what was said last
 time; if you help them get a running start, they will be in a better mood
 when they revisit your code.
 
-What if you've tried to do everything right and things still aren't going
+What if you've tried to do everything right and things still are not going
 anywhere?  Most technical disagreements can be resolved through discussion,
 but there are times when somebody simply has to make a decision.  If you
 honestly believe that this decision is going against you wrongly, you can
@@ -128,7 +128,7 @@ Inclusion into a subsystem tree can bring a higher level of visibility to a
 patch.  Now other developers working with that tree will get the patch by
 default.  Subsystem trees typically feed linux-next as well, making their
 contents visible to the development community as a whole.  At this point,
-there's a good chance that you will get more comments from a new set of
+there is a good chance that you will get more comments from a new set of
 reviewers; these comments need to be answered as in the previous round.
 
 What may also happen at this point, depending on the nature of your patch,
@@ -142,7 +142,7 @@ blessings: before the advent of the linux-next tree, these conflicts often
 only turned up during the merge window and had to be addressed in a hurry.
 Now they can be resolved at leisure, before the merge window opens.
 
-Some day, if all goes well, you'll log on and see that your patch has been
+Someday, if all goes well, you will log on and see that your patch has been
 merged into the mainline kernel.  Congratulations!  Once the celebration is
 complete (and you have added yourself to the MAINTAINERS file), though, it
 is worth remembering an important little fact: the job still is not done.
@@ -174,7 +174,7 @@ After any regressions have been dealt with, there may be other, ordinary
 bugs to deal with.  The stabilization period is your best opportunity to
 fix these bugs and ensure that your code's debut in a mainline kernel
 release is as solid as possible.  So, please, answer bug reports, and fix
-the problems if at all possible.  That's what the stabilization period is
+the problems if at all possible.  That is what the stabilization period is
 for; you can start creating cool new patches once any problems with the old
 ones have been taken care of.
 
@@ -208,7 +208,7 @@ far.  If you are seen as needlessly blocking good work, those patches will
 eventually flow around you and get into the mainline anyway.  In the Linux
 kernel, nobody has absolute veto power over any code.  Except maybe Linus.
 
-On very rare occasion, you may see something completely different: another
+On very rare occasions, you may see something completely different: another
 developer posts a different solution to your problem.  At that point,
 chances are that one of the two patches will not be merged, and "mine was
 here first" is not considered to be a compelling technical argument.  If

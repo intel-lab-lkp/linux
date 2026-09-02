@@ -58,7 +58,7 @@ creation of a body of code.
 So, when contemplating a kernel development project, one should obtain
 answers to a short set of questions:
 
- - What, exactly, is the problem which needs to be solved?
+ - What, exactly, is the problem that needs to be solved?
 
  - Who are the users affected by this problem?  Which use cases should the
    solution address?
@@ -75,7 +75,7 @@ When planning a kernel development project, it makes great sense to hold
 discussions with the community before launching into implementation.  Early
 communication can save time and trouble in a number of ways:
 
- - It may well be that the problem is addressed by the kernel in ways which
+ - It may well be that the problem is addressed by the kernel in ways that
    you have not understood.  The Linux kernel is large and has a number of
    features and capabilities which are not immediately obvious.  Not all
    kernel capabilities are documented as well as one might like, and it is
@@ -136,7 +136,7 @@ relevant subsystem and the environment may be more supportive.
 Finding maintainers can be a bit harder.  Again, the MAINTAINERS file is
 the place to start.  That file tends to not always be up to date, though,
 and not all subsystems are represented there.  The person listed in the
-MAINTAINERS file may, in fact, not be the person who is actually acting in
+MAINTAINERS file may not, in fact, be the person who is actually acting in
 that role currently.  So, when there is doubt about who to contact, a
 useful trick is to use Git (and "git log" in particular) to see who is
 currently active within the subsystem of interest.  Look at who is writing
@@ -168,12 +168,12 @@ When to post?
 -------------
 
 If possible, posting your plans during the early stages can only be
-helpful.  Describe the problem being solved and any plans that have been
-made on how the implementation will be done.  Any information you can
+helpful.  Describe the problem being solved and how you plan to
+implement the solution. Any information you can
 provide can help the development community provide useful input on the
 project.
 
-One discouraging thing which can happen at this stage is not a hostile
+One discouraging thing that can happen at this stage is not a hostile
 reaction, but, instead, little or no reaction at all.  The sad truth of the
 matter is (1) kernel developers tend to be busy, (2) there is no shortage
 of people with grand plans and little code (or even prospect of code) to
@@ -217,7 +217,7 @@ a non-disclosure agreement.  The Linux Foundation operates an NDA program
 designed to help with this sort of situation; more information can be found
 at:
 
-    https://www.linuxfoundation.org/nda/
+    https://www.linuxfoundation.org/legal/nda/
 
 This kind of review is often enough to avoid serious problems later on
 without requiring public disclosure of the project.
