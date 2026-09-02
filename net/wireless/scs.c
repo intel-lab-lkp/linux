@@ -805,3 +805,113 @@ void cfg80211_scs_evaluate(struct cfg80211_scs_desc * const *desc, u8 n_desc,
 	}
 }
 EXPORT_SYMBOL(cfg80211_scs_evaluate);
+
+/*
+ * Two elements of one Processing 0 descriptor can demand two values for one
+ * parameter, which no MSDU satisfies.
+ */
+static bool tclas_conflict(const struct cfg80211_tclas *a,
+			   const struct cfg80211_tclas *b)
+{
+	struct cfg80211_flow_key ka, kb;
+	u32 common = a->fields & b->fields;
+
+	if (!common)
+		return false;
+
+	flow_key_select(&a->key, common, &ka);
+	flow_key_select(&b->key, common, &kb);
+
+	return memcmp(&ka, &kb, sizeof(ka));
+}
+
+/**
+ * cfg80211_scs_desc_valid - check one SCS descriptor against the standard
+ *
+ * @desc: the descriptor, already parsed
+ *
+ * The checks that a classifier element can fail on its own live in
+ * cfg80211_parse_tclas(). This is what is left: the rules that relate the
+ * request type, the classifier and the traffic description to each other.
+ *
+ * Return: whether the descriptor may be installed. A refusal is a legal
+ *	answer to a legal request, so the caller declines it with a status
+ *	code rather than failing the message.
+ */
+bool cfg80211_scs_desc_valid(const struct cfg80211_scs_desc *desc)
+{
+	bool want_tclas = true;
+	unsigned int i, j;
+
+	/*
+	 * 11.25.2 answers a termination with TCLAS_PROCESSING_TERMINATED and
+	 * makes no exception for a malformed one, and it offers no denial
+	 * status for one either. A removal names an identifier, so anything
+	 * else the station put in the descriptor changes nothing it means.
+	 */
+	if (desc->req_type == NL80211_SCS_REQ_REMOVE)
+		return true;
+
+	/* An uplink or direct link descriptor is a traffic description */
+	if (desc->qos_char &&
+	    ieee80211_qos_char_direction(desc->qos_char) !=
+	    IEEE80211_QOS_CHAR_DIR_DOWNLINK)
+		want_tclas = false;
+
+	if (want_tclas != !!desc->n_tclas)
+		return false;
+
+	/* Such a descriptor holds no classifier, so it relates nothing */
+	if (!want_tclas)
+		return desc->tclas_processing == CFG80211_TCLAS_PROCESSING_ABSENT;
+
+	switch (desc->tclas_processing) {
+	case CFG80211_TCLAS_PROCESSING_ALL:
+	case CFG80211_TCLAS_PROCESSING_ANY:
+		/* A choice between elements needs more than one element */
+		if (desc->n_tclas < 2)
+			return false;
+		break;
+	case CFG80211_TCLAS_PROCESSING_DEFAULT:
+		/* 9.4.2.120 pairs it with no classifier, and there is one */
+		return false;
+	case CFG80211_TCLAS_PROCESSING_ABSENT:
+		break;
+	default:
+		return false;
+	}
+
+	if (desc->tclas_processing != CFG80211_TCLAS_PROCESSING_ALL)
+		return true;
+
+	for (i = 0; i < desc->n_tclas; i++)
+		for (j = i + 1; j < desc->n_tclas; j++)
+			if (tclas_conflict(&desc->tclas[i], &desc->tclas[j]))
+				return false;
+
+	return true;
+}
+EXPORT_SYMBOL_IF_CFG80211_KUNIT(cfg80211_scs_desc_valid);
+
+/**
+ * cfg80211_mscs_desc_valid - check an MSCS descriptor against the standard
+ *
+ * @desc: the descriptor, already parsed
+ *
+ * Return: whether the descriptor may be installed.
+ */
+bool cfg80211_mscs_desc_valid(const struct cfg80211_mscs_desc *desc)
+{
+	bool remove = desc->req_type == NL80211_SCS_REQ_REMOVE;
+
+	if (remove == !!desc->fields)
+		return false;
+
+	/*
+	 * The Stream Timeout is the least time the AP keeps a learned value.
+	 * Zero asks for no guarantee at all, so nothing would ever expire the
+	 * entries of that station and its own table would fill with values for
+	 * flows that ended. 9.4.2.242 reserves the field for a Remove.
+	 */
+	return remove || desc->stream_timeout;
+}

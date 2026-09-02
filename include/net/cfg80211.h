@@ -4237,6 +4237,23 @@ struct cfg80211_scs_desc {
 };
 
 /**
+ * struct cfg80211_mscs_desc - the MSCS of one peer
+ *
+ * @req_type: add, remove or change
+ * @up_bitmap: user priorities that the AP learns from, one bit each
+ * @up_limit: ceiling for the assigned user priority, 0 to 7
+ * @stream_timeout: minimum lifetime of a learned value, in TUs
+ * @fields: classifier parameters, a bitmap of &enum cfg80211_flow_field
+ */
+struct cfg80211_mscs_desc {
+	enum nl80211_scs_req_type req_type;
+	u8 up_bitmap;
+	u8 up_limit;
+	u32 stream_timeout;
+	u32 fields;
+};
+
+/**
  * struct cfg80211_scs_verdict - result of an SCS evaluation
  *
  * @match: an SCS descriptor claimed the MSDU
