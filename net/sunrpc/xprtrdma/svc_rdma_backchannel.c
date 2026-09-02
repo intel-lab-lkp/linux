@@ -28,7 +28,7 @@ void svc_rdma_handle_bc_reply(struct svc_rqst *rqstp,
 	struct rpc_rqst *req;
 	u32 credits;
 
-	spin_lock(&xprt->queue_lock);
+	spin_lock(&xprt->recv_lock);
 	req = xprt_lookup_rqst(xprt, *rdma_resp);
 	if (!req)
 		goto out_unlock;
@@ -39,7 +39,7 @@ void svc_rdma_handle_bc_reply(struct svc_rqst *rqstp,
 		goto out_unlock;
 	memcpy(dst->iov_base, src->iov_base, src->iov_len);
 	xprt_pin_rqst(req);
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 
 	credits = be32_to_cpup(rdma_resp + 2);
 	if (credits == 0)
@@ -50,13 +50,13 @@ void svc_rdma_handle_bc_reply(struct svc_rqst *rqstp,
 	xprt->cwnd = credits << RPC_CWNDSHIFT;
 	spin_unlock(&xprt->transport_lock);
 
-	spin_lock(&xprt->queue_lock);
+	spin_lock(&xprt->recv_lock);
 	xprt_complete_rqst(req->rq_task, rcvbuf->len);
 	xprt_unpin_rqst(req);
 	rcvbuf->len = 0;
 
 out_unlock:
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 }
 
 /* Send a reverse-direction RPC Call.

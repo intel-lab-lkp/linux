@@ -673,25 +673,25 @@ xs_read_stream_reply(struct sock_xprt *transport, struct msghdr *msg, int flags)
 	ssize_t ret = 0;
 
 	/* Look up and lock the request corresponding to the given XID */
-	spin_lock(&xprt->queue_lock);
+	spin_lock(&xprt->recv_lock);
 	req = xprt_lookup_rqst(xprt, transport->recv.xid);
 	if (!req || (transport->recv.copied && !req->rq_private_buf.len)) {
 		msg->msg_flags |= MSG_TRUNC;
 		goto out;
 	}
 	xprt_pin_rqst(req);
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 
 	ret = xs_read_stream_request(transport, msg, flags, req);
 
-	spin_lock(&xprt->queue_lock);
+	spin_lock(&xprt->recv_lock);
 	if (msg->msg_flags & (MSG_EOR|MSG_TRUNC))
 		xprt_complete_rqst(req->rq_task, transport->recv.copied);
 	else
 		req->rq_private_buf.len = transport->recv.copied;
 	xprt_unpin_rqst(req);
 out:
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 	return ret;
 }
 
@@ -1398,13 +1398,13 @@ static void xs_udp_data_read_skb(struct rpc_xprt *xprt,
 		return;
 
 	/* Look up and lock the request corresponding to the given XID */
-	spin_lock(&xprt->queue_lock);
+	spin_lock(&xprt->recv_lock);
 	rovr = xprt_lookup_rqst(xprt, *xp);
 	if (!rovr)
 		goto out_unlock;
 	xprt_pin_rqst(rovr);
 	xprt_update_rtt(rovr->rq_task);
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 	task = rovr->rq_task;
 
 	if ((copied = rovr->rq_private_buf.buflen) > repsize)
@@ -1412,7 +1412,7 @@ static void xs_udp_data_read_skb(struct rpc_xprt *xprt,
 
 	/* Suck it into the iovec, verify checksum if not done by hw. */
 	if (csum_partial_copy_to_xdr(&rovr->rq_private_buf, skb)) {
-		spin_lock(&xprt->queue_lock);
+		spin_lock(&xprt->recv_lock);
 		__UDPX_INC_STATS(sk, UDP_MIB_INERRORS);
 		goto out_unpin;
 	}
@@ -1421,13 +1421,13 @@ static void xs_udp_data_read_skb(struct rpc_xprt *xprt,
 	spin_lock(&xprt->transport_lock);
 	xprt_adjust_cwnd(xprt, task, copied);
 	spin_unlock(&xprt->transport_lock);
-	spin_lock(&xprt->queue_lock);
+	spin_lock(&xprt->recv_lock);
 	xprt_complete_rqst(task, copied);
 	__UDPX_INC_STATS(sk, UDP_MIB_INDATAGRAMS);
 out_unpin:
 	xprt_unpin_rqst(rovr);
  out_unlock:
-	spin_unlock(&xprt->queue_lock);
+	spin_unlock(&xprt->recv_lock);
 }
 
 static void xs_udp_data_receive(struct sock_xprt *transport)
