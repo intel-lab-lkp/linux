@@ -676,7 +676,12 @@ int __list_lru_init(struct list_lru *lru, bool memcg_aware, struct shrinker *shr
 	else
 		lru->shrinker_id = -1;
 
-	if (mem_cgroup_kmem_disabled())
+	/*
+	 * With the memory controller disabled entirely, no object is ever
+	 * charged to a memcg, so collapse to plain per-node lists just
+	 * like under nokmem.
+	 */
+	if (mem_cgroup_disabled() || mem_cgroup_kmem_disabled())
 		memcg_aware = false;
 #endif
 
