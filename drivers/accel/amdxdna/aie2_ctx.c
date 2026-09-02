@@ -850,7 +850,7 @@ void aie2_hwctx_fini(struct amdxdna_hwctx *hwctx)
 
 	mutex_destroy(&hwctx->priv->io_lock);
 	kfree(hwctx->col_list);
-	kfree(hwctx->priv);
+	kfree_rcu(hwctx->priv, rcu);
 	kfree(hwctx->cus);
 }
 

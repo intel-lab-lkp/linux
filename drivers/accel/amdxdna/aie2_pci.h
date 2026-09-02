@@ -107,6 +107,8 @@ struct amdxdna_hwctx_priv {
 	struct amdxdna_gem_obj		*heap;
 	void				*mbox_chann;
 
+	struct rcu_head			rcu;
+
 	struct drm_gpu_scheduler	sched;
 	struct drm_sched_entity		entity;
 
