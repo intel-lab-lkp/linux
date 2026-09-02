@@ -266,7 +266,7 @@ static void macvlan_broadcast(struct sk_buff *skb,
 			      struct net_device *src,
 			      enum macvlan_mode mode)
 {
-	const struct ethhdr *eth = eth_hdr(skb);
+	const struct ethhdr *eth = skb_eth_hdr(skb);
 	const struct macvlan_dev *vlan;
 	struct sk_buff *nskb;
 	unsigned int i;
@@ -424,7 +424,7 @@ static void macvlan_forward_source_one(struct sk_buff *skb,
 	len = nskb->len + ETH_HLEN;
 	nskb->dev = dev;
 
-	if (ether_addr_equal_64bits(eth_hdr(skb)->h_dest, dev->dev_addr))
+	if (ether_addr_equal_64bits(skb_eth_hdr(skb)->h_dest, dev->dev_addr))
 		nskb->pkt_type = PACKET_HOST;
 
 	ret = __netif_rx(nskb);
@@ -557,7 +557,6 @@ static int macvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev)
 
 		/* send to other bridge ports directly */
 		if (is_multicast_ether_addr(eth->h_dest)) {
-			skb_reset_mac_header(skb);
 			macvlan_broadcast(skb, port, dev, MACVLAN_MODE_BRIDGE);
 			goto xmit_world;
 		}
