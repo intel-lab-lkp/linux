@@ -3022,6 +3022,25 @@ static int locks_show(struct seq_file *f, void *v)
 
 	cur = hlist_entry(v, struct file_lock_core, flc_link);
 
+	/*
+	 * OFD locks are reported with pid -1, so the filter below cannot see
+	 * their owner; flc_pid holds the owner tgid, so filter on it.
+	 * Remote locks keep a negative flc_pid and stay visible as before.
+	 */
+	if ((cur->flc_flags & FL_OFDLCK) && cur->flc_pid > 0 &&
+	    proc_pidns != &init_pid_ns) {
+		struct pid *pid;
+		bool visible = false;
+
+		rcu_read_lock();
+		pid = find_pid_ns(cur->flc_pid, &init_pid_ns);
+		if (pid)
+			visible = pid_nr_ns(pid, proc_pidns) != 0;
+		rcu_read_unlock();
+		if (!visible)
+			return 0;
+	}
+
 	if (locks_translate_pid(cur, proc_pidns) == 0)
 		return 0;
 
