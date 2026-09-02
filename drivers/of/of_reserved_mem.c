@@ -32,9 +32,32 @@ static struct reserved_mem *reserved_mem __refdata = reserved_mem_array;
 static int total_reserved_mem_cnt = MAX_RESERVED_REGIONS;
 static int reserved_mem_count;
 
+enum of_rmem_flags {
+	OF_RMEM_NONE		= 0,
+	OF_RMEM_NOMAP		= BIT(0),
+	OF_RMEM_LLMAP		= BIT(1),
+};
+
+static int __init of_reserved_mem_flags(unsigned long node, enum of_rmem_flags *flags)
+{
+	*flags = OF_RMEM_NONE;
+
+	if (of_get_flat_dt_prop(node, "no-map", NULL))
+		*flags |= OF_RMEM_NOMAP;
+	if (of_get_flat_dt_prop(node, "ll-map", NULL))
+		*flags |= OF_RMEM_LLMAP;
+
+	if ((*flags & OF_RMEM_NOMAP) && (*flags & OF_RMEM_LLMAP)) {
+		pr_err("Reserved memory: no-map and ll-map are mutually exclusive\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int __init early_init_dt_alloc_reserved_memory_arch(phys_addr_t size,
-	phys_addr_t align, phys_addr_t start, phys_addr_t end, bool nomap,
-	phys_addr_t *res_base)
+	phys_addr_t align, phys_addr_t start, phys_addr_t end,
+	enum of_rmem_flags flags, phys_addr_t *res_base)
 {
 	phys_addr_t base;
 	int err = 0;
@@ -46,10 +69,21 @@ static int __init early_init_dt_alloc_reserved_memory_arch(phys_addr_t size,
 		return -ENOMEM;
 
 	*res_base = base;
-	if (nomap) {
-		err = memblock_mark_nomap(base, size);
-		if (err)
+	if (flags & OF_RMEM_LLMAP) {
+		err = memblock_mark_llmap(base, size);
+		if (err) {
 			memblock_phys_free(base, size);
+			return err;
+		}
+	}
+
+	if (flags & OF_RMEM_NOMAP) {
+		err = memblock_mark_nomap(base, size);
+		if (err) {
+			if (flags & OF_RMEM_LLMAP)
+				memblock_clear_llmap(base, size);
+			memblock_phys_free(base, size);
+		}
 	}
 
 	if (!err)
@@ -119,17 +153,29 @@ static int fdt_fixup_reserved_mem_node(unsigned long node,
 				       phys_addr_t base, phys_addr_t size);
 
 static int __init early_init_dt_reserve_memory(phys_addr_t base,
-					       phys_addr_t size, bool nomap)
+					       phys_addr_t size,
+					       enum of_rmem_flags flags)
 {
-	if (nomap) {
+	int err;
+
+	if (flags & OF_RMEM_LLMAP) {
+		err = memblock_mark_llmap(base, size);
+		if (err)
+			return err;
+	}
+
+	if (flags & OF_RMEM_NOMAP) {
 		/*
 		 * If the memory is already reserved (by another region), we
 		 * should not allow it to be marked nomap, but don't worry
 		 * if the region isn't memory as it won't be mapped.
 		 */
 		if (memblock_overlaps_region(&memblock.memory, base, size) &&
-		    memblock_is_region_reserved(base, size))
+		    memblock_is_region_reserved(base, size)) {
+			if (flags & OF_RMEM_LLMAP)
+				memblock_clear_llmap(base, size);
 			return -EBUSY;
+		}
 
 		return memblock_mark_nomap(base, size);
 	}
@@ -143,10 +189,10 @@ static int __init early_init_dt_reserve_memory(phys_addr_t base,
 static int __init __reserved_mem_reserve_reg(unsigned long node,
 					     const char *uname)
 {
+	enum of_rmem_flags flags;
 	phys_addr_t base, size;
-	int len, err;
 	const __be32 *prop;
-	bool nomap;
+	int len, err;
 	u64 b, s;
 
 	prop = of_flat_dt_get_addr_size_prop(node, "reg", &len);
@@ -157,7 +203,9 @@ static int __init __reserved_mem_reserve_reg(unsigned long node,
 		pr_warn("Reserved memory: node '%s' has %d <base size> entries, only the first is used\n",
 			uname, len);
 
-	nomap = of_get_flat_dt_prop(node, "no-map", NULL) != NULL;
+	err = of_reserved_mem_flags(node, &flags);
+	if (err)
+		return err;
 
 	err = fdt_validate_reserved_mem_node(node, NULL);
 	if (err && err != -ENODEV)
@@ -167,7 +215,7 @@ static int __init __reserved_mem_reserve_reg(unsigned long node,
 	base = b;
 	size = s;
 
-	if (size && early_init_dt_reserve_memory(base, size, nomap) == 0) {
+	if (size && early_init_dt_reserve_memory(base, size, flags) == 0) {
 		fdt_fixup_reserved_mem_node(node, base, size);
 		pr_debug("Reserved memory: reserved region for node '%s': base %pa, size %lu MiB\n",
 			 uname, &base, (unsigned long)(size / SZ_1M));
@@ -399,8 +447,8 @@ int __init fdt_scan_reserved_mem(void)
  *	reserved regions to keep the reserved memory contiguous if possible.
  */
 static int __init __reserved_mem_alloc_in_range(phys_addr_t size,
-	phys_addr_t align, phys_addr_t start, phys_addr_t end, bool nomap,
-	phys_addr_t *res_base)
+	phys_addr_t align, phys_addr_t start, phys_addr_t end,
+	enum of_rmem_flags flags, phys_addr_t *res_base)
 {
 	bool prev_bottom_up = memblock_bottom_up();
 	bool bottom_up = false, top_down = false;
@@ -435,7 +483,7 @@ static int __init __reserved_mem_alloc_in_range(phys_addr_t size,
 		memblock_set_bottom_up(bottom_up);
 
 	ret = early_init_dt_alloc_reserved_memory_arch(size, align,
-			start, end, nomap, res_base);
+			start, end, flags, res_base);
 
 	/* Restore old setting if needed */
 	if (bottom_up != top_down)
@@ -452,9 +500,9 @@ static int __init __reserved_mem_alloc_size(unsigned long node, const char *unam
 {
 	phys_addr_t start = 0, end = 0;
 	phys_addr_t base = 0, align = 0, size;
+	enum of_rmem_flags flags;
 	int i, len;
 	const __be32 *prop;
-	bool nomap;
 	int ret;
 
 	prop = of_get_flat_dt_prop(node, "size", &len);
@@ -477,7 +525,9 @@ static int __init __reserved_mem_alloc_size(unsigned long node, const char *unam
 		align = dt_mem_next_cell(dt_root_addr_cells, &prop);
 	}
 
-	nomap = of_get_flat_dt_prop(node, "no-map", NULL) != NULL;
+	ret = of_reserved_mem_flags(node, &flags);
+	if (ret)
+		return ret;
 
 	ret = fdt_validate_reserved_mem_node(node, &align);
 	if (ret && ret != -ENODEV)
@@ -495,7 +545,7 @@ static int __init __reserved_mem_alloc_size(unsigned long node, const char *unam
 
 			base = 0;
 			ret = __reserved_mem_alloc_in_range(size, align,
-					start, end, nomap, &base);
+					start, end, flags, &base);
 			if (ret == 0) {
 				pr_debug("allocated memory for '%s' node: base %pa, size %lu MiB\n",
 					uname, &base,
@@ -505,7 +555,7 @@ static int __init __reserved_mem_alloc_size(unsigned long node, const char *unam
 		}
 	} else {
 		ret = early_init_dt_alloc_reserved_memory_arch(size, align,
-							0, 0, nomap, &base);
+							0, 0, flags, &base);
 		if (ret == 0)
 			pr_debug("allocated memory for '%s' node: base %pa, size %lu MiB\n",
 				uname, &base, (unsigned long)(size / SZ_1M));
@@ -635,8 +685,8 @@ static int __init __reserved_mem_init_node(struct reserved_mem *rmem,
 static void __init fdt_init_reserved_mem_node(unsigned long node, const char *uname,
 					      phys_addr_t base, phys_addr_t size)
 {
+	enum of_rmem_flags flags;
 	int err = 0;
-	bool nomap;
 
 	struct reserved_mem *rmem = &reserved_mem[reserved_mem_count];
 
@@ -650,14 +700,19 @@ static void __init fdt_init_reserved_mem_node(unsigned long node, const char *un
 	rmem->base = base;
 	rmem->size = size;
 
-	nomap = of_get_flat_dt_prop(node, "no-map", NULL) != NULL;
+	err = of_reserved_mem_flags(node, &flags);
+	if (err)
+		return;
 
 	err = __reserved_mem_init_node(rmem, node);
 	if (err != 0 && err != -ENODEV) {
 		pr_info("node %s compatible matching fail\n", rmem->name);
 		rmem->name = NULL;
 
-		if (nomap)
+		if (flags & OF_RMEM_LLMAP)
+			memblock_clear_llmap(rmem->base, rmem->size);
+
+		if (flags & OF_RMEM_NOMAP)
 			memblock_clear_nomap(rmem->base, rmem->size);
 		else
 			memblock_phys_free(rmem->base, rmem->size);
@@ -667,9 +722,10 @@ static void __init fdt_init_reserved_mem_node(unsigned long node, const char *un
 		bool reusable =
 			(of_get_flat_dt_prop(node, "reusable", NULL)) != NULL;
 
-		pr_info("%pa..%pa (%lu KiB) %s %s %s\n",
+		pr_info("%pa..%pa (%lu KiB) %s %s %s %s\n",
 			&rmem->base, &end, (unsigned long)(rmem->size / SZ_1K),
-			nomap ? "nomap" : "map",
+			(flags & OF_RMEM_LLMAP) ? "last-level " : "",
+			(flags & OF_RMEM_NOMAP) ? "nomap" : "map",
 			reusable ? "reusable" : "non-reusable",
 			rmem->name ? rmem->name : "unknown");
 	}
