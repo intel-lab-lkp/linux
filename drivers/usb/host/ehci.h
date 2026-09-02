@@ -124,6 +124,12 @@ struct ehci_hcd {			/* one per controller */
 	struct ehci_regs __iomem *regs;
 	struct ehci_dbg_port __iomem *debug;
 	u32 __iomem		*port_status;
+	unsigned int		(*get_port_speed)(struct ehci_hcd *ehci,
+						  unsigned int port);
+	int			(*pre_port_reset)(struct ehci_hcd *ehci,
+						  unsigned int port);
+	int			(*post_port_reset)(struct ehci_hcd *ehci,
+						   unsigned int port);
 
 	__u32			hcs_params;	/* cached register copy */
 	spinlock_t		lock;
@@ -663,38 +669,12 @@ struct ehci_tt {
 
 #ifdef CONFIG_USB_EHCI_ROOT_HUB_TT
 
-/*
- * Some EHCI controllers have a Transaction Translator built into the
- * root hub. This is a non-standard feature.  Each controller will need
- * to add code to the following inline functions, and call them as
- * needed (mostly in root hub code).
- */
-
 #define	ehci_is_TDI(e)			(ehci_to_hcd(e)->has_tt)
-
-/* Returns the speed of a device attached to a port on the root hub. */
-static inline unsigned int
-ehci_port_speed(struct ehci_hcd *ehci, unsigned int portsc)
-{
-	if (ehci_is_TDI(ehci)) {
-		switch ((portsc >> (ehci->has_hostpc ? 25 : 26)) & 3) {
-		case 0:
-			return 0;
-		case 1:
-			return USB_PORT_STAT_LOW_SPEED;
-		case 2:
-		default:
-			return USB_PORT_STAT_HIGH_SPEED;
-		}
-	}
-	return USB_PORT_STAT_HIGH_SPEED;
-}
 
 #else
 
 #define	ehci_is_TDI(e)			(0)
 
-#define	ehci_port_speed(ehci, portsc)	USB_PORT_STAT_HIGH_SPEED
 #endif
 
 /*-------------------------------------------------------------------------*/
