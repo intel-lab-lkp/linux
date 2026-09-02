@@ -1398,6 +1398,261 @@ static void dm_test_brightness_from_user_with_curve(struct kunit *test)
 	amdgpu_dm_set_dc_debug_mask(saved_mask);
 }
 
+/*
+ * The custom curve cases above all use min_input_signal == 0.  There the
+ * firmware minimum is zero and the [0..max] to [min..max] span is the identity,
+ * so an extra application of that mapping cannot be observed.  The cases below
+ * use the default firmware range instead, where min is 0x101 * 12 == 3084 and
+ * max is 0x101 * 255 == 65535.
+ */
+static void dm_test_curve_caps_init(struct amdgpu_dm_backlight_caps *caps)
+{
+	caps->aux_support = false;
+	caps->min_input_signal = AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
+	caps->max_input_signal = AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
+	caps->data_points = 3;
+	caps->luminance_data[0].input_signal = 50;
+	caps->luminance_data[0].luminance = 20;
+	caps->luminance_data[1].input_signal = 128;
+	caps->luminance_data[1].luminance = 50;
+	caps->luminance_data[2].input_signal = 255;
+	caps->luminance_data[2].luminance = 100;
+}
+
+/**
+ * dm_test_custom_brightness_user_domain - Curve output is a userspace value
+ * @test: The KUnit test context
+ *
+ * convert_custom_brightness() reshapes a value inside the userspace [0..max]
+ * domain.  Its caller owns the single conversion to the firmware [min..max]
+ * domain, so the firmware minimum must not appear in this result.
+ */
+static void dm_test_custom_brightness_user_domain(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	uint saved_mask = amdgpu_dm_get_dc_debug_mask();
+	unsigned int min, max;
+	u32 brightness;
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask & ~DC_DISABLE_CUSTOM_BRIGHTNESS_CURVE);
+	dm_test_curve_caps_init(&caps);
+	get_brightness_range(&caps, &min, &max);
+
+	/* Zero stays zero; it is not lifted to the firmware minimum here. */
+	brightness = 0;
+	convert_custom_brightness(&caps, max, &brightness);
+	KUNIT_EXPECT_EQ(test, brightness, (u32)0);
+
+	/* The top of the curve stays inside the userspace range. */
+	brightness = max;
+	convert_custom_brightness(&caps, max, &brightness);
+	KUNIT_EXPECT_LE(test, brightness, (u32)max);
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask);
+}
+
+/**
+ * dm_test_curve_from_user_zero_is_min - Zero maps to the firmware minimum
+ * @test: The KUnit test context
+ *
+ * Zero is the darkest level userspace can ask for and must reach the darkest
+ * level the firmware accepts.
+ */
+static void dm_test_curve_from_user_zero_is_min(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	uint saved_mask = amdgpu_dm_get_dc_debug_mask();
+	unsigned int min, max;
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask & ~DC_DISABLE_CUSTOM_BRIGHTNESS_CURVE);
+	dm_test_curve_caps_init(&caps);
+	get_brightness_range(&caps, &min, &max);
+
+	KUNIT_EXPECT_EQ(test, convert_brightness_from_user(&caps, 0), (u32)min);
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask);
+}
+
+/**
+ * dm_test_curve_from_user_matches_linear_at_zero - Curve keeps the lower endpoint
+ * @test: The KUnit test context
+ *
+ * The curve reshapes the interior of the range.  It does not move either
+ * endpoint, so the curved and linear paths must agree at zero.
+ */
+static void dm_test_curve_from_user_matches_linear_at_zero(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	uint saved_mask = amdgpu_dm_get_dc_debug_mask();
+	u32 with_curve, without_curve;
+
+	dm_test_curve_caps_init(&caps);
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask & ~DC_DISABLE_CUSTOM_BRIGHTNESS_CURVE);
+	with_curve = convert_brightness_from_user(&caps, 0);
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask | DC_DISABLE_CUSTOM_BRIGHTNESS_CURVE);
+	without_curve = convert_brightness_from_user(&caps, 0);
+
+	KUNIT_EXPECT_EQ(test, with_curve, without_curve);
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask);
+}
+
+/**
+ * dm_test_curve_from_user_round_trip_zero - Zero survives a conversion round trip
+ * @test: The KUnit test context
+ */
+static void dm_test_curve_from_user_round_trip_zero(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	uint saved_mask = amdgpu_dm_get_dc_debug_mask();
+	u32 level;
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask & ~DC_DISABLE_CUSTOM_BRIGHTNESS_CURVE);
+	dm_test_curve_caps_init(&caps);
+
+	level = convert_brightness_from_user(&caps, 0);
+	KUNIT_EXPECT_EQ(test, convert_brightness_to_user(&caps, level), (u32)0);
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask);
+}
+
+/**
+ * dm_test_curve_from_user_interpolation - Interpolated point with a non-zero min
+ * @test: The KUnit test context
+ */
+static void dm_test_curve_from_user_interpolation(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	uint saved_mask = amdgpu_dm_get_dc_debug_mask();
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask & ~DC_DISABLE_CUSTOM_BRIGHTNESS_CURVE);
+	dm_test_curve_caps_init(&caps);
+
+	/*
+	 * scale_input_to_fw(65535, 25700) = DIV_ROUND_CLOSEST(25700 * 255, 65535)
+	 * = 100, which falls between the (50, 20) and (128, 50) points:
+	 *   lum = 20 + DIV_ROUND_CLOSEST((50 - 20) * (100 - 50), 128 - 50) = 39
+	 * The curved firmware level is DIV_ROUND_CLOSEST(39 * 100, 101) = 39,
+	 * which is DIV_ROUND_CLOSEST(39 * 65535, 255) = 10023 in the userspace
+	 * domain and 3084 + DIV_ROUND_CLOSEST(62451 * 10023, 65535) = 12635
+	 * once converted to the firmware domain.
+	 */
+	KUNIT_EXPECT_EQ(test, convert_brightness_from_user(&caps, 25700), (u32)12635);
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask);
+}
+
+/**
+ * dm_test_curve_from_user_max - The top of the range stays inside the range
+ * @test: The KUnit test context
+ */
+static void dm_test_curve_from_user_max(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	uint saved_mask = amdgpu_dm_get_dc_debug_mask();
+	unsigned int min, max;
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask & ~DC_DISABLE_CUSTOM_BRIGHTNESS_CURVE);
+	dm_test_curve_caps_init(&caps);
+	get_brightness_range(&caps, &min, &max);
+
+	/*
+	 * scale_input_to_fw(65535, 65535) = 255 matches the last point exactly,
+	 * so lum = 100 and the curved firmware level is
+	 * DIV_ROUND_CLOSEST(100 * 255, 101) = 252.  That is
+	 * DIV_ROUND_CLOSEST(252 * 65535, 255) = 64764 in the userspace domain
+	 * and 3084 + DIV_ROUND_CLOSEST(62451 * 64764, 65535) = 64800 in the
+	 * firmware domain.
+	 */
+	KUNIT_EXPECT_EQ(test, convert_brightness_from_user(&caps, max), (u32)64800);
+	KUNIT_EXPECT_LE(test, convert_brightness_from_user(&caps, max), (u32)max);
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask);
+}
+
+/**
+ * dm_test_curve_from_user_monotonic - A rising curve gives a rising level
+ * @test: The KUnit test context
+ */
+static void dm_test_curve_from_user_monotonic(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	uint saved_mask = amdgpu_dm_get_dc_debug_mask();
+	unsigned int min, max, i;
+	u32 previous = 0;
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask & ~DC_DISABLE_CUSTOM_BRIGHTNESS_CURVE);
+	dm_test_curve_caps_init(&caps);
+	get_brightness_range(&caps, &min, &max);
+
+	for (i = 0; i <= max; i += 1023) {
+		u32 level = convert_brightness_from_user(&caps, i);
+
+		KUNIT_ASSERT_GE(test, level, previous);
+		previous = level;
+	}
+
+	KUNIT_EXPECT_GE(test, convert_brightness_from_user(&caps, max), previous);
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask);
+}
+
+/**
+ * dm_test_curve_from_user_within_range - Curved levels never leave [min..max]
+ * @test: The KUnit test context
+ *
+ * The firmware level is programmed through a 16-bit path, so a converted value
+ * above max would wrap and darken the panel.
+ */
+static void dm_test_curve_from_user_within_range(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	uint saved_mask = amdgpu_dm_get_dc_debug_mask();
+	unsigned int min, max, i;
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask & ~DC_DISABLE_CUSTOM_BRIGHTNESS_CURVE);
+	dm_test_curve_caps_init(&caps);
+	get_brightness_range(&caps, &min, &max);
+
+	for (i = 0; i <= max; i += 1023) {
+		u32 level = convert_brightness_from_user(&caps, i);
+
+		KUNIT_ASSERT_GE(test, level, (u32)min);
+		KUNIT_ASSERT_LE(test, level, (u32)max);
+	}
+
+	KUNIT_EXPECT_LE(test, convert_brightness_from_user(&caps, max), (u32)max);
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask);
+}
+
+/**
+ * dm_test_from_user_no_curve_unchanged - The linear path is untouched
+ * @test: The KUnit test context
+ *
+ * Without luminance data the conversion is the plain
+ * min + DIV_ROUND_CLOSEST((max - min) * brightness, max) mapping.
+ */
+static void dm_test_from_user_no_curve_unchanged(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	unsigned int min, max;
+
+	caps.aux_support = false;
+	caps.min_input_signal = AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
+	caps.max_input_signal = AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
+	caps.data_points = 0;
+
+	get_brightness_range(&caps, &min, &max);
+
+	KUNIT_EXPECT_EQ(test, convert_brightness_from_user(&caps, 0), (u32)3084);
+	KUNIT_EXPECT_EQ(test, convert_brightness_from_user(&caps, 16383), (u32)18696);
+	KUNIT_EXPECT_EQ(test, convert_brightness_from_user(&caps, 32767), (u32)34309);
+	KUNIT_EXPECT_EQ(test, convert_brightness_from_user(&caps, max), (u32)65535);
+}
+
 /**
  * dm_test_brightness_range_zero_signals - Test Brightness range with zero min and max signals
  * @test: The KUnit test context
@@ -1955,6 +2210,15 @@ static struct kunit_case dm_backlight_test_cases[] = {
 	KUNIT_CASE(dm_test_brightness_to_user_above_max),
 	KUNIT_CASE(dm_test_brightness_from_user_midrange),
 	KUNIT_CASE(dm_test_brightness_from_user_with_curve),
+	KUNIT_CASE(dm_test_custom_brightness_user_domain),
+	KUNIT_CASE(dm_test_curve_from_user_zero_is_min),
+	KUNIT_CASE(dm_test_curve_from_user_matches_linear_at_zero),
+	KUNIT_CASE(dm_test_curve_from_user_round_trip_zero),
+	KUNIT_CASE(dm_test_curve_from_user_interpolation),
+	KUNIT_CASE(dm_test_curve_from_user_max),
+	KUNIT_CASE(dm_test_curve_from_user_monotonic),
+	KUNIT_CASE(dm_test_curve_from_user_within_range),
+	KUNIT_CASE(dm_test_from_user_no_curve_unchanged),
 	KUNIT_CASE(dm_test_brightness_range_zero_signals),
 	/* amdgpu_dm_backlight_fill_props */
 	KUNIT_CASE(dm_test_backlight_fill_props_ac_linear),
