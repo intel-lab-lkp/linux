@@ -489,7 +489,7 @@ int unshare_fd(unsigned long unshare_flags, struct files_struct **new_fdp)
 	return 0;
 }
 
-static struct fdtable *close_files(struct files_struct * files)
+static struct fdtable *close_files(struct files_struct *files)
 {
 	/*
 	 * It is safe to dereference the fd table without RCU or
@@ -498,6 +498,7 @@ static struct fdtable *close_files(struct files_struct * files)
 	 */
 	struct fdtable *fdt = rcu_dereference_raw(files->fdt);
 	unsigned int i, j = 0;
+	LLIST_HEAD(to_close);
 
 	for (;;) {
 		unsigned long set;
@@ -509,7 +510,8 @@ static struct fdtable *close_files(struct files_struct * files)
 			if (set & 1) {
 				struct file *file = fdt->fd[i];
 				if (file) {
-					filp_close(file, files);
+					filp_flush(file, files);
+					fput_close_list(file, &to_close);
 					cond_resched();
 				}
 			}
@@ -518,6 +520,7 @@ static struct fdtable *close_files(struct files_struct * files)
 		}
 	}
 
+	fput_list(&to_close);
 	return fdt;
 }
 
