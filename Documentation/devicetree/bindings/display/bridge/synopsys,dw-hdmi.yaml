@@ -61,6 +61,14 @@ properties:
   interrupts:
     maxItems: 1
 
+  ignore-rxsense:
+    type: boolean
+    description:
+      Determine the connector status from the HPD signal alone and ignore RX
+      sense. Set this on boards where a downstream device (for example an HDMI
+      to DP converter) keeps the TMDS lines permanently loaded, so that RX
+      sense is always asserted and can never signal a disconnect.
+
 additionalProperties: true
 
 ...
