@@ -15071,7 +15071,7 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 	if (static_branch_unlikely(&sched_numa_balancing))
 		task_tick_numa(rq, rq->curr);
 
-	task_tick_cache(rq, curr);
+	task_tick_cache(rq, rq->curr);
 
 	update_misfit_status(curr, rq);
 	check_update_overutilized_status(task_rq(curr));
