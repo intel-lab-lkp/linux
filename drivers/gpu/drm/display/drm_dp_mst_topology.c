@@ -2164,6 +2164,7 @@ ssize_t drm_dp_mst_dpcd_read(struct drm_dp_aux *aux,
 	return drm_dp_send_dpcd_read(port->mgr, port,
 				     offset, size, buffer);
 }
+EXPORT_SYMBOL(drm_dp_mst_dpcd_read);
 
 /**
  * drm_dp_mst_dpcd_write() - write a series of bytes to the DPCD via sideband
@@ -2187,6 +2188,7 @@ ssize_t drm_dp_mst_dpcd_write(struct drm_dp_aux *aux,
 	return drm_dp_send_dpcd_write(port->mgr, port,
 				      offset, size, buffer);
 }
+EXPORT_SYMBOL(drm_dp_mst_dpcd_write);
 
 static int drm_dp_check_mstb_guid(struct drm_dp_mst_branch *mstb, guid_t *guid)
 {

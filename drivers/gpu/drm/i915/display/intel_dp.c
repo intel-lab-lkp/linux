@@ -2633,15 +2633,18 @@ intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 
 	limits->pipe.min_bpp = intel_dp_min_bpp(crtc_state->output_format);
 	if (is_mst) {
+		struct intel_connector *mst_connector =
+			to_intel_connector(conn_state->connector);
+		int sink_bpc = mst_connector->base.display_info.bpc ?: 8;
+
 		/*
-		 * FIXME: If all the streams can't fit into the link with their
-		 * current pipe_bpp we should reduce pipe_bpp across the board
-		 * until things start to fit. Until then we limit to <= 8bpc
-		 * since that's what was hardcoded for all MST streams
-		 * previously. This hack should be removed once we have the
-		 * proper retry logic in place.
+		 * For MST streams, use the sink's EDID-reported color depth
+		 * as the max bpp, rather than the pipe_bpp from a previous
+		 * modeset (which may be stale) or a hardcoded 8bpc cap.
+		 * The BW retry loop in intel_dp_mst_atomic_check_link() will
+		 * reduce bpp if the aggregate link bandwidth is insufficient.
 		 */
-		limits->pipe.max_bpp = min(crtc_state->max_pipe_bpp, 24);
+		limits->pipe.max_bpp = sink_bpc * 3;
 	} else {
 		limits->pipe.max_bpp = intel_dp_max_bpp(intel_dp, crtc_state,
 							respect_downstream_limits);
@@ -3063,9 +3066,12 @@ static bool intel_dp_needs_as_sdp(struct intel_dp *intel_dp,
 		return false;
 
 	/*
-	 * #TODO: Add AS SDP v1 support for PCONs (DP branch devices).
+	 * AS-SDP is not yet supported for PCONs (DP-to-HDMI converters).
+	 * MST hubs are also branch devices but do support AS-SDP forwarding
+	 * to downstream sinks; allow it for MST streams.
 	 */
-	if (drm_dp_is_branch(intel_dp->dpcd))
+	if (drm_dp_is_branch(intel_dp->dpcd) &&
+	    !intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP_MST))
 		return false;
 
 	if (intel_psr_needs_alpm_aux_less(intel_dp, crtc_state) &&
@@ -3075,8 +3081,8 @@ static bool intel_dp_needs_as_sdp(struct intel_dp *intel_dp,
 	return intel_vrr_possible(crtc_state);
 }
 
-static void intel_dp_compute_as_sdp(struct intel_dp *intel_dp,
-				    struct intel_crtc_state *crtc_state)
+void intel_dp_compute_as_sdp(struct intel_dp *intel_dp,
+			     struct intel_crtc_state *crtc_state)
 {
 	struct drm_dp_as_sdp *as_sdp = &crtc_state->infoframes.as_sdp;
 	const struct drm_display_mode *adjusted_mode =
@@ -3130,9 +3136,9 @@ static void intel_dp_compute_as_sdp(struct intel_dp *intel_dp,
 		as_sdp->coasting_vtotal = crtc_state->vrr.vmax;
 }
 
-static void intel_dp_compute_vsc_sdp(struct intel_dp *intel_dp,
-				     struct intel_crtc_state *crtc_state,
-				     const struct drm_connector_state *conn_state)
+void intel_dp_compute_vsc_sdp(struct intel_dp *intel_dp,
+			      struct intel_crtc_state *crtc_state,
+			      const struct drm_connector_state *conn_state)
 {
 	struct drm_dp_vsc_sdp *vsc;
 
@@ -3189,7 +3195,7 @@ intel_dp_in_hdr_mode(const struct drm_connector_state *conn_state)
 	return hdr_metadata->hdmi_metadata_type1.eotf == HDMI_EOTF_SMPTE_ST2084;
 }
 
-static void
+void
 intel_dp_compute_hdr_metadata_infoframe_sdp(struct intel_dp *intel_dp,
 					    struct intel_crtc_state *crtc_state,
 					    const struct drm_connector_state *conn_state)
