@@ -1142,10 +1142,15 @@ __bpf_kfunc s32 scx_bpf_select_cpu_and(struct task_struct *p, s32 prev_cpu, u64 
 #ifdef CONFIG_EXT_SUB_SCHED
 	/*
 	 * Disallow if any sub-scheds are attached. There is no way to tell
-	 * which scheduler called us, just error out @p's scheduler.
+	 * which scheduler called us, so error out @p's scheduler -- but read
+	 * it under RCU (@p's locks aren't held here) and fall back to @sch if
+	 * @p isn't on an scx scheduler: a BPF_PROG_TYPE_SYSCALL prog can pass
+	 * any task and p->scx.sched is NULL for one that has exited or is
+	 * managed by another scheduler.
 	 */
 	if (unlikely(!list_empty(&sch->children))) {
-		scx_error(scx_task_sched(p), "__scx_bpf_select_cpu_and() must be used");
+		scx_error(scx_task_sched_rcu(p) ?: sch,
+			  "__scx_bpf_select_cpu_and() must be used");
 		return -EINVAL;
 	}
 #endif
