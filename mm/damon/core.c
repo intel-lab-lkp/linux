@@ -3251,6 +3251,9 @@ static void damos_set_effective_quota(struct damon_ctx *ctx, struct damos *s)
 	if (quota->sz && quota->sz < esz)
 		esz = quota->sz;
 
+	if (!quota->esz_bp)
+		esz = 0;
+
 	quota->esz = esz;
 }
 
