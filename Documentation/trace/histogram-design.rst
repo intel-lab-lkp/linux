@@ -876,7 +876,7 @@ next_pid field on this sched_switch event, we retrieve the
 variables specified in the wakeup_latency() trace action, and use
 them to generate a new wakeup_latency event into the trace stream.
 
-Note that the way the trace handlers such as wakeup_latency() (which
+Note that the way the trace handlers such as wakeup_latency() which
 could equivalently be written trace(wakeup_latency,$wakeup_lat,next_pid)
 are implemented, the parameters specified to the trace handler must be
 variables.  In this case, $wakeup_lat is obviously a variable, but
