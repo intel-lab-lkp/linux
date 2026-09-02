@@ -88,6 +88,8 @@ static int alloc_batch_commit_buf(struct ublk_thread *t)
 	int i, ret, j = 0;
 
 	t->commit = calloc(t->nr_queues, sizeof(*t->commit));
+	if (!t->commit)
+		return -ENOMEM;
 	for (i = 0; i < t->dev->dev_info.nr_hw_queues; i++) {
 		if (t->q_map[i])
 			t->commit[j++].q_id = i;
@@ -184,6 +186,8 @@ static int alloc_batch_fetch_buf(struct ublk_thread *t)
 	/* double fetch buffer for each queue */
 	t->nr_fetch_bufs = t->nr_queues * 2;
 	t->fetch = calloc(t->nr_fetch_bufs, sizeof(*t->fetch));
+	if (!t->fetch)
+		return -ENOMEM;
 
 	/* allocate one buffer for each queue */
 	for (i = 0; i < t->nr_fetch_bufs; i++) {

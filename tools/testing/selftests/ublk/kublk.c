@@ -435,8 +435,13 @@ static void ublk_ctrl_deinit(struct ublk_dev *dev)
 static struct ublk_dev *ublk_ctrl_init(void)
 {
 	struct ublk_dev *dev = (struct ublk_dev *)calloc(1, sizeof(*dev));
-	struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
+	struct ublksrv_ctrl_dev_info *info;
 	int ret;
+
+	if (!dev)
+		return NULL;
+
+	info = &dev->dev_info;
 
 	dev->ctrl_fd = open(CTRL_DEV, O_RDWR);
 	if (dev->ctrl_fd < 0) {
