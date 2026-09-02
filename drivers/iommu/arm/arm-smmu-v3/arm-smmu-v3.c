@@ -4422,7 +4422,10 @@ static struct iommu_dirty_ops arm_smmu_dirty_ops = {
  * arm_smmu_queue_max_n_shift() - pick the log2 depth of a queue
  * @hw_shift: log2 depth the hardware allows, capped for natural alignment
  * @ent_sz_shift: log2 of the queue entry size in bytes
- * @want: number of entries asked for, or zero to use @hw_shift
+ * @want: number of entries asked for, or zero to use the default
+ *
+ * The default is @hw_shift, except in a kdump capture kernel, which defaults
+ * to one page worth of entries.
  *
  * @want is rounded down to a power of two. It never sizes a queue below one
  * page, because coherent DMA is page granular: a shallower queue occupies the
@@ -4432,11 +4435,16 @@ static struct iommu_dirty_ops arm_smmu_dirty_ops = {
 static u32 arm_smmu_queue_max_n_shift(u32 hw_shift, u32 ent_sz_shift, u32 want)
 {
 	u32 page_shift = PAGE_SHIFT - ent_sz_shift;
+	u32 want_shift;
 
-	if (!want)
+	if (want)
+		want_shift = max(ilog2(want), page_shift);
+	else if (is_kdump_kernel())
+		want_shift = page_shift;
+	else
 		return hw_shift;
 
-	return min(hw_shift, max(ilog2(want), page_shift));
+	return min(hw_shift, want_shift);
 }
 
 /*
@@ -5208,10 +5216,13 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 		return -ENXIO;
 	}
 
-	smmu->evtq.q.llq.max_n_shift = min_t(u32, EVTQ_MAX_SZ_SHIFT,
-					     FIELD_GET(IDR1_EVTQS, reg));
-	smmu->priq.q.llq.max_n_shift = min_t(u32, PRIQ_MAX_SZ_SHIFT,
-					     FIELD_GET(IDR1_PRIQS, reg));
+	hw_shift = min_t(u32, EVTQ_MAX_SZ_SHIFT, FIELD_GET(IDR1_EVTQS, reg));
+	smmu->evtq.q.llq.max_n_shift =
+		arm_smmu_queue_max_n_shift(hw_shift, EVTQ_ENT_SZ_SHIFT, 0);
+
+	hw_shift = min_t(u32, PRIQ_MAX_SZ_SHIFT, FIELD_GET(IDR1_PRIQS, reg));
+	smmu->priq.q.llq.max_n_shift =
+		arm_smmu_queue_max_n_shift(hw_shift, PRIQ_ENT_SZ_SHIFT, 0);
 
 	/* SID/SSID sizes */
 	smmu->ssid_bits = FIELD_GET(IDR1_SSIDSIZE, reg);
