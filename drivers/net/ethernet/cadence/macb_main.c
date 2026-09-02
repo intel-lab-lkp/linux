@@ -4297,7 +4297,7 @@ static int macb_taprio_setup_replace(struct net_device *netdev,
 	struct macb_queue_enst_config *enst_queue;
 	struct tc_taprio_sched_entry *entry;
 	struct macb *bp = netdev_priv(netdev);
-	struct ethtool_link_ksettings kset;
+	struct ethtool_link_ksettings kset = {};
 	struct macb_queue *queue;
 	u32 queue_mask;
 	u8 queue_id;
