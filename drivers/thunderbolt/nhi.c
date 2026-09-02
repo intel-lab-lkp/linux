@@ -21,6 +21,8 @@
 #include <linux/string_choices.h>
 #include <linux/string_helpers.h>
 
+#include <kunit/visibility.h>
+
 #include "nhi.h"
 #include "nhi_regs.h"
 #include "tb.h"
@@ -86,7 +88,7 @@ static void nhi_clear_interrupt(struct tb_nhi *nhi, int ring)
  *
  * Return: %true if the caller should warn about the no-op update.
  */
-static bool
+VISIBLE_IF_KUNIT bool
 nhi_ring_interrupt_should_warn(const struct tb_ring *ring, bool active,
 			       bool unchanged)
 {

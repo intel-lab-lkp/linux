@@ -9,6 +9,7 @@
 #include <kunit/test.h>
 #include <linux/idr.h>
 
+#include "nhi.h"
 #include "tb.h"
 #include "tunnel.h"
 
@@ -3095,6 +3096,83 @@ static void tb_test_property_merge(struct kunit *test)
 	tb_property_free_dir(dir1);
 }
 
+static struct tb_ring *alloc_interrupt_test_ring(struct kunit *test,
+						 int nhi_generation,
+						 int ring_generation)
+{
+	struct tb_nhi *nhi;
+	struct tb_ring *ring;
+
+	nhi = kunit_kzalloc(test, sizeof(*nhi), GFP_KERNEL);
+	if (!nhi)
+		return NULL;
+
+	ring = kunit_kzalloc(test, sizeof(*ring), GFP_KERNEL);
+	if (!ring)
+		return NULL;
+
+	ring->nhi = nhi;
+	atomic_set(&nhi->reset_generation, nhi_generation);
+	ring->reset_generation = ring_generation;
+
+	return ring;
+}
+
+static void tb_test_ring_interrupt_warn_duplicate_enable(struct kunit *test)
+{
+	struct tb_ring *ring;
+
+	/* Enabling an already enabled interrupt is always a driver bug */
+	ring = alloc_interrupt_test_ring(test, 7, 7);
+	KUNIT_ASSERT_NOT_NULL(test, ring);
+	KUNIT_EXPECT_TRUE(test, nhi_ring_interrupt_should_warn(ring, true, true));
+
+	/* Including when the host interface was reset in between */
+	ring = alloc_interrupt_test_ring(test, 8, 7);
+	KUNIT_ASSERT_NOT_NULL(test, ring);
+	KUNIT_EXPECT_TRUE(test, nhi_ring_interrupt_should_warn(ring, true, true));
+}
+
+static void tb_test_ring_interrupt_warn_duplicate_disable(struct kunit *test)
+{
+	struct tb_ring *ring;
+
+	/*
+	 * No reset happened while this ring was running, so a redundant
+	 * disable means the driver lost track of the hardware state.
+	 */
+	ring = alloc_interrupt_test_ring(test, 7, 7);
+	KUNIT_ASSERT_NOT_NULL(test, ring);
+	KUNIT_EXPECT_TRUE(test, nhi_ring_interrupt_should_warn(ring, false, true));
+}
+
+static void tb_test_ring_interrupt_no_warn_after_reset(struct kunit *test)
+{
+	struct tb_ring *ring;
+
+	/*
+	 * The ring was started before the host interface was reset, which
+	 * cleared the ring interrupt bit underneath it.
+	 */
+	ring = alloc_interrupt_test_ring(test, 8, 7);
+	KUNIT_ASSERT_NOT_NULL(test, ring);
+	KUNIT_EXPECT_FALSE(test,
+			   nhi_ring_interrupt_should_warn(ring, false, true));
+}
+
+static void tb_test_ring_interrupt_no_warn_when_changed(struct kunit *test)
+{
+	struct tb_ring *ring;
+
+	/* An update that actually changed the register never warns */
+	ring = alloc_interrupt_test_ring(test, 8, 7);
+	KUNIT_ASSERT_NOT_NULL(test, ring);
+	KUNIT_EXPECT_FALSE(test,
+			   nhi_ring_interrupt_should_warn(ring, false, false));
+	KUNIT_EXPECT_FALSE(test,
+			   nhi_ring_interrupt_should_warn(ring, true, false));
+}
+
 static struct kunit_case tb_test_cases[] = {
 	KUNIT_CASE(tb_test_property_parse_u32_wrap),
 	KUNIT_CASE(tb_test_property_parse_recursion),
@@ -3141,6 +3219,10 @@ static struct kunit_case tb_test_cases[] = {
 	KUNIT_CASE(tb_test_property_parse_zero_length),
 	KUNIT_CASE(tb_test_property_parse_rootdir_overflow),
 	KUNIT_CASE(tb_test_property_merge),
+	KUNIT_CASE(tb_test_ring_interrupt_warn_duplicate_enable),
+	KUNIT_CASE(tb_test_ring_interrupt_warn_duplicate_disable),
+	KUNIT_CASE(tb_test_ring_interrupt_no_warn_after_reset),
+	KUNIT_CASE(tb_test_ring_interrupt_no_warn_when_changed),
 	{ }
 };
 

@@ -37,6 +37,10 @@ irqreturn_t ring_msix(int irq, void *data);
 int nhi_probe(struct tb_nhi *nhi);
 void nhi_shutdown(struct tb_nhi *nhi);
 void nhi_reset_interface(struct tb_nhi *nhi);
+#if IS_ENABLED(CONFIG_KUNIT)
+bool nhi_ring_interrupt_should_warn(const struct tb_ring *ring, bool active,
+				    bool unchanged);
+#endif
 
 extern const struct dev_pm_ops nhi_pm_ops;
 
