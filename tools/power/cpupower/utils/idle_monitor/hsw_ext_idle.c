@@ -159,11 +159,15 @@ static struct cpuidle_monitor *hsw_ext_register(void)
 	}
 
 	is_valid = calloc(cpu_count, sizeof(int));
+	if (!is_valid)
+		return NULL;
 	for (num = 0; num < HSW_EXT_CSTATE_COUNT; num++) {
 		previous_count[num] = calloc(cpu_count,
 					sizeof(unsigned long long));
 		current_count[num]  = calloc(cpu_count,
 					sizeof(unsigned long long));
+		if (!previous_count[num] || !current_count[num])
+			return NULL;
 	}
 	intel_hsw_ext_monitor.name_len = strlen(intel_hsw_ext_monitor.name);
 	return &intel_hsw_ext_monitor;

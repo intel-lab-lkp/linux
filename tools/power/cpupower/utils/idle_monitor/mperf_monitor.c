@@ -350,6 +350,11 @@ struct cpuidle_monitor *mperf_register(void)
 	tsc_at_measure_end = calloc(cpu_count, sizeof(unsigned long long));
 	time_start = calloc(cpu_count, sizeof(struct timespec));
 	time_end = calloc(cpu_count, sizeof(struct timespec));
+	if (!is_valid || !mperf_previous_count || !aperf_previous_count ||
+	    !mperf_current_count || !aperf_current_count ||
+	    !tsc_at_measure_start || !tsc_at_measure_end ||
+	    !time_start || !time_end)
+		return NULL;
 	mperf_monitor.name_len = strlen(mperf_monitor.name);
 	return &mperf_monitor;
 }

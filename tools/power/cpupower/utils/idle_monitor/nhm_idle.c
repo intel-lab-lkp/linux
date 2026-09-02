@@ -178,11 +178,15 @@ struct cpuidle_monitor *intel_nhm_register(void)
 
 	/* Free this at program termination */
 	is_valid = calloc(cpu_count, sizeof(int));
+	if (!is_valid)
+		return NULL;
 	for (num = 0; num < NHM_CSTATE_COUNT; num++) {
 		previous_count[num] = calloc(cpu_count,
 					sizeof(unsigned long long));
 		current_count[num]  = calloc(cpu_count,
 					sizeof(unsigned long long));
+		if (!previous_count[num] || !current_count[num])
+			return NULL;
 	}
 
 	intel_nhm_monitor.name_len = strlen(intel_nhm_monitor.name);

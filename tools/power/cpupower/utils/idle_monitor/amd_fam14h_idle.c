@@ -295,6 +295,8 @@ struct cpuidle_monitor *amd_fam14h_register(void)
 					      sizeof(unsigned long long));
 		current_count[num]  = calloc(cpu_count,
 					      sizeof(unsigned long long));
+		if (!previous_count[num] || !current_count[num])
+			return NULL;
 	}
 
 	/* We need PCI device: Slot 18, Func 6, compare with BKDG
