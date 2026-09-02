@@ -173,6 +173,35 @@ static const struct dmi_system_id ucsi_acpi_quirks[] = {
 	{ }
 };
 
+/*
+ * Platforms with a completely broken UCSI implementation in firmware.
+ * Do not register UCSI at all on these machines.
+ *
+ * The Lenovo Legion Pro 7 16IAX10H (DMI product name 83F5) carries
+ * broken UCSI firmware in BIOS versions Q7CN44WW and Q7CN78WW; the
+ * reporter confirmed the issue is unaffected by the BIOS update
+ * between them. Match only the BIOS versions known to be broken so
+ * that a future firmware that fixes UCSI is not wrongly skipped; add
+ * new versions here as they are confirmed.
+ */
+static const struct dmi_system_id ucsi_acpi_ignore[] = {
+	{
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83F5"),
+			DMI_MATCH(DMI_BIOS_VERSION, "Q7CN44WW"),
+		},
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83F5"),
+			DMI_MATCH(DMI_BIOS_VERSION, "Q7CN78WW"),
+		},
+	},
+	{ }
+};
+
 static void ucsi_acpi_notify(acpi_handle handle, u32 event, void *data)
 {
 	struct ucsi_acpi *ua = data;
@@ -198,6 +227,12 @@ static int ucsi_acpi_probe(struct platform_device *pdev)
 
 	if (adev->dep_unmet)
 		return -EPROBE_DEFER;
+
+	if (dmi_check_system(ucsi_acpi_ignore)) {
+		dev_err(&pdev->dev,
+			"UCSI implementation in firmware is broken, ignoring\n");
+		return -ENODEV;
+	}
 
 	ua = devm_kzalloc(&pdev->dev, sizeof(*ua), GFP_KERNEL);
 	if (!ua)
