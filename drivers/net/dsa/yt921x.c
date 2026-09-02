@@ -151,6 +151,8 @@ static const struct yt921x_info yt921x_infos[] = {
 	{}
 };
 
+static const struct yt92xx_series_info yt92xx_series_info_table[];
+
 #define YT921X_NAME	"yt921x"
 
 #define YT921X_VID_UNWARE	4095
@@ -563,7 +565,7 @@ static int yt921x_mbus_int_read(struct mii_bus *mbus, int port, int reg)
 	u16 val;
 	int res;
 
-	if (port >= YT921X_PORT_NUM)
+	if (port >= priv->series_info->max_ports)
 		return U16_MAX;
 
 	mutex_lock(&priv->reg_lock);
@@ -581,7 +583,7 @@ yt921x_mbus_int_write(struct mii_bus *mbus, int port, int reg, u16 data)
 	struct yt921x_priv *priv = mbus->priv;
 	int res;
 
-	if (port >= YT921X_PORT_NUM)
+	if (port >= priv->series_info->max_ports)
 		return -ENODEV;
 
 	mutex_lock(&priv->reg_lock);
@@ -596,6 +598,7 @@ yt921x_mbus_int_init(struct yt921x_priv *priv, struct device_node *mnp)
 {
 	struct device *dev = to_device(priv);
 	struct mii_bus *mbus;
+	u32 max_port;
 	int res;
 
 	mbus = devm_mdiobus_alloc(dev);
@@ -608,7 +611,8 @@ yt921x_mbus_int_init(struct yt921x_priv *priv, struct device_node *mnp)
 	mbus->read = yt921x_mbus_int_read;
 	mbus->write = yt921x_mbus_int_write;
 	mbus->parent = dev;
-	mbus->phy_mask = (u32)~GENMASK(YT921X_PORT_NUM - 1, 0);
+	max_port = priv->series_info->max_ports;
+	mbus->phy_mask = (u32)~GENMASK(max_port - 1, 0);
 
 	res = devm_of_mdiobus_register(dev, mbus, mnp);
 	if (res)
@@ -4430,8 +4434,36 @@ static int yt921x_edata_read(struct yt921x_priv *priv, u8 addr, u8 *valp)
 	return yt921x_edata_read_cont(priv, addr, valp);
 }
 
+static const struct yt92xx_series_info yt92xx_series_info_table[] = {
+	[YT921X] = {
+		.chip_mode = YT921X,
+		.max_ports = YT921X_PORT_NUM,
+		.num_lag_ids = YT921X_LAG_NUM,
+		.ageing_time_min = 1 * 5000,
+		.ageing_time_max = U16_MAX * 5000,
+		.dscp_prio_mapping_is_global = true,
+		.assisted_learning_on_cpu_port = true,
+	},
+};
+
+static const struct yt92xx_series_info *yt92xx_series_lookup_info(u32 major)
+{
+	enum chip_mode mode = YT_MAX;
+	int i;
+
+	if (major == YT9215_MAJOR || major == YT9218_MAJOR)
+		mode = YT921X;
+
+	for (i = 0; i < ARRAY_SIZE(yt92xx_series_info_table); ++i)
+		if (yt92xx_series_info_table[i].chip_mode == mode)
+			return &yt92xx_series_info_table[i];
+
+	return NULL;
+}
+
 static int yt921x_chip_detect(struct yt921x_priv *priv)
 {
+	const struct yt92xx_series_info *series_info;
 	struct device *dev = to_device(priv);
 	const struct yt921x_info *info;
 	u8 extmode;
@@ -4446,6 +4478,11 @@ static int yt921x_chip_detect(struct yt921x_priv *priv)
 		return res;
 
 	major = FIELD_GET(YT921X_CHIP_ID_MAJOR, chipid);
+
+	series_info = yt92xx_series_lookup_info(major);
+	if (!series_info)
+		return -ENODEV;
+	priv->series_info = series_info;
 
 	for (info = yt921x_infos; info->name; info++)
 		if (info->major == major)
@@ -4740,6 +4777,20 @@ static int yt921x_chip_setup(struct yt921x_priv *priv)
 	return 0;
 }
 
+static void yt92xx_register_switch(struct dsa_switch *ds)
+{
+	struct yt921x_priv *priv = to_yt921x_priv(ds);
+
+	ds->assisted_learning_on_cpu_port =
+		priv->series_info->assisted_learning_on_cpu_port;
+	ds->dscp_prio_mapping_is_global =
+		priv->series_info->dscp_prio_mapping_is_global;
+	ds->ageing_time_min = priv->series_info->ageing_time_min;
+	ds->ageing_time_max = priv->series_info->ageing_time_max;
+	ds->num_lag_ids = priv->series_info->num_lag_ids;
+	ds->num_ports = priv->series_info->max_ports;
+}
+
 static int yt921x_dsa_setup(struct dsa_switch *ds)
 {
 	struct yt921x_priv *priv = to_yt921x_priv(ds);
@@ -4785,6 +4836,8 @@ static int yt921x_dsa_setup(struct dsa_switch *ds)
 
 	if (res)
 		return res;
+
+	yt92xx_register_switch(ds);
 
 	return 0;
 }
@@ -4913,10 +4966,15 @@ static void yt921x_mdio_remove(struct mdio_device *mdiodev)
 
 static int yt921x_mdio_probe(struct mdio_device *mdiodev)
 {
+	const struct yt92xx_series_info *compat_info = NULL;
 	struct device *dev = &mdiodev->dev;
 	struct yt921x_reg_mdio *mdio;
 	struct yt921x_priv *priv;
 	struct dsa_switch *ds;
+
+	compat_info = of_device_get_match_data(dev);
+	if (!compat_info)
+		return -EINVAL;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -4932,6 +4990,7 @@ static int yt921x_mdio_probe(struct mdio_device *mdiodev)
 
 	mutex_init(&priv->reg_lock);
 
+	priv->series_info = compat_info;
 	priv->reg_ops = &yt921x_reg_ops_mdio;
 	priv->reg_ctx = mdio;
 
@@ -4944,15 +5003,9 @@ static int yt921x_mdio_probe(struct mdio_device *mdiodev)
 
 	ds = &priv->ds;
 	ds->dev = dev;
-	ds->assisted_learning_on_cpu_port = true;
-	ds->dscp_prio_mapping_is_global = true;
 	ds->priv = priv;
 	ds->ops = &yt921x_dsa_switch_ops;
-	ds->ageing_time_min = 1 * 5000;
-	ds->ageing_time_max = U16_MAX * 5000;
 	ds->phylink_mac_ops = &yt921x_phylink_mac_ops;
-	ds->num_lag_ids = YT921X_LAG_NUM;
-	ds->num_ports = YT921X_PORT_NUM;
 
 	mdiodev_set_drvdata(mdiodev, priv);
 
@@ -4960,8 +5013,11 @@ static int yt921x_mdio_probe(struct mdio_device *mdiodev)
 }
 
 static const struct of_device_id yt921x_of_match[] = {
-	{ .compatible = "motorcomm,yt9215" },
-	{}
+	{
+		.compatible = "motorcomm,yt9215",
+		.data = &yt92xx_series_info_table[YT921X],
+	},
+	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, yt921x_of_match);
 
