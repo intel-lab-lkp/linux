@@ -49,6 +49,10 @@ static int irqtime = -1;
 
 core_param(irqtime, irqtime, int, 0400);
 
+/* Whether to use the absolute counter since the clock hardware reset */
+static bool abs_sched_clock;
+core_param(abs_sched_clock, abs_sched_clock, bool, 0400);
+
 static u64 notrace jiffy_sched_clock_read(void)
 {
 	/*
@@ -200,10 +204,14 @@ void sched_clock_register(u64 (*read)(void), int bits, unsigned long rate)
 
 	rd = cd.read_data[0];
 
-	/* Update epoch for new counter and update 'epoch_ns' from old counter*/
+	/* Update epoch for new counter and update 'epoch_ns' */
 	new_epoch = read();
-	cyc = cd.actual_read_sched_clock();
-	ns = rd.epoch_ns + cyc_to_ns((cyc - rd.epoch_cyc) & rd.sched_clock_mask, rd.mult, rd.shift);
+	if (abs_sched_clock) {
+		ns = cyc_to_ns(new_epoch & new_mask, new_mult, new_shift);
+	} else {
+		cyc = cd.actual_read_sched_clock();
+		ns = rd.epoch_ns + cyc_to_ns((cyc - rd.epoch_cyc) & rd.sched_clock_mask, rd.mult, rd.shift);
+	}
 	cd.actual_read_sched_clock = read;
 
 	rd.read_sched_clock	= read;
