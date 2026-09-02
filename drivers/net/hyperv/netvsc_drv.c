@@ -533,8 +533,7 @@ static int netvsc_xmit(struct sk_buff *skb, struct net_device *net, bool xdp_tx)
 	if (skb->protocol == htons(ETH_P_8021Q)) {
 		u16 vlan_tci;
 
-		skb_reset_mac_header(skb);
-		if (eth_type_vlan(eth_hdr(skb)->h_proto)) {
+		if (eth_type_vlan(skb_eth_hdr(skb)->h_proto)) {
 			if (unlikely(__skb_vlan_pop(skb, &vlan_tci) != 0)) {
 				++net_device_ctx->eth_stats.vlan_error;
 				goto drop;
