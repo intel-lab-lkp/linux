@@ -134,6 +134,10 @@ struct m_can_classdev {
 	struct pinctrl_state *pinctrl_state_wakeup;
 };
 
+struct m_can_pdata {
+	bool out_band_wakeup;
+};
+
 struct m_can_classdev *m_can_class_allocate_dev(struct device *dev, int sizeof_priv);
 void m_can_class_free_dev(struct net_device *net);
 int m_can_class_register(struct m_can_classdev *cdev);
