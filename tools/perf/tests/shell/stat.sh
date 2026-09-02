@@ -583,6 +583,11 @@ test_hide_zero_events_stat() {
   # Check that --metric-only works with --hide-zero-events
   if ! perf stat --hide-zero-events --metric-only -e instructions,cycles true > "${stat_output}" 2>&1
   then
+    grep -q 'No supported events found' "${stat_output}"
+    if [ $? -eq 0 ]; then
+      echo "Hide zero events stat test [Skipped - events not supported]"
+      return
+    fi
     echo "Hide zero events stat test [Failed - metric-only command failed]"
     err=1
     return
