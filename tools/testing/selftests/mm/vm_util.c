@@ -19,6 +19,11 @@
 #define KPAGEFLAGS_PATH "/proc/kpageflags"
 #define MAX_NR_ORDERS 20
 
+#define ALIGN(x, a)		(((x) + (a - 1)) & (~((a) - 1)))
+#define ALIGN_PTR(p, a)		((typeof(p))ALIGN((unsigned long)(p), a))
+#define IS_ALIGNED(x, a)	(((x) & ((typeof(x))(a) - 1)) == 0)
+#define PTR_ALIGNED(p, a)	(IS_ALIGNED((unsigned long)(p), a))
+
 unsigned int __page_size;
 unsigned int __page_shift;
 
@@ -514,6 +519,61 @@ int64_t allocate_transhuge(void *ptr, int pagemap_fd)
 	return -1;
 }
 
+void *alloc_isolated_mem(size_t align, size_t size)
+{
+	char *ptr, *guard, *addr_align;
+	size_t map_size, guard_size, page_size = psize();
+	size_t padding;
+
+	if (__builtin_popcountll((unsigned long)align) > 1)
+		return NULL;
+
+	align = (align > page_size) ? align : page_size;
+	guard_size = page_size;
+	size = ALIGN(size, page_size);
+	map_size = size + align + guard_size;
+
+	ptr = mmap(NULL, map_size, PROT_READ | PROT_WRITE,
+		   MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+	if (ptr == MAP_FAILED)
+		return NULL;
+
+	addr_align = PTR_ALIGNED(ptr, align) ? ptr + align : ALIGN_PTR(ptr, align);
+	padding = addr_align - guard_size - ptr;
+	if (padding) {
+		munmap(ptr, padding);
+		map_size -= padding;
+		ptr += padding;
+	}
+
+	guard = ptr;
+	if (mprotect(guard, guard_size, PROT_NONE))
+		goto err_out;
+
+	guard = addr_align + size;
+	if (mprotect(guard, guard_size, PROT_NONE))
+		goto err_out;
+
+	padding = (ptr + map_size) - (guard + guard_size);
+	if (padding)
+		munmap(guard + guard_size, padding);
+
+	return addr_align;
+
+err_out:
+	munmap(ptr, map_size);
+	return NULL;
+}
+
+void free_isolated_mem(void *addr, size_t size)
+{
+	int guard_size, page_size = psize();
+
+	guard_size = page_size;
+	munmap((char *)addr - guard_size,
+	       guard_size * 2 + ALIGN(size, page_size));
+}
+
 int pageflags_get(unsigned long pfn, int kpageflags_fd, uint64_t *flags)
 {
 	size_t count;
@@ -618,13 +678,12 @@ bool softdirty_supported(void)
 	const size_t pagesize = getpagesize();
 
 	/* New mappings are expected to be marked with VM_SOFTDIRTY (sd). */
-	addr = mmap(0, pagesize, PROT_READ | PROT_WRITE,
-		    MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
-	if (addr == MAP_FAILED)
+	addr = alloc_isolated_mem(pagesize, pagesize);
+	if (!addr)
 		ksft_exit_fail_msg("mmap failed\n");
 
 	supported = check_vmflag(addr, "sd");
-	munmap(addr, pagesize);
+	free_isolated_mem(addr, pagesize);
 	return supported;
 }
 
