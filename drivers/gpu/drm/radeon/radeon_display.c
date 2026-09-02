@@ -30,6 +30,7 @@
 
 #include <asm/div64.h>
 
+#include <drm/drm_blend.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_device.h>
 #include <drm/drm_drv.h>
@@ -38,6 +39,8 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_modeset_helper.h>
+#include <drm/drm_plane.h>
+#include <drm/drm_plane_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 #include <drm/radeon_drm.h>
@@ -664,6 +667,19 @@ radeon_crtc_set_config(struct drm_mode_set *set,
 	return ret;
 }
 
+static const uint32_t radeon_primary_formats[] = {
+	/*
+	 * The display engine programs an ARGB8888 surface format for both
+	 * XRGB8888 and ARGB8888 framebuffers.
+	 */
+	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_ARGB8888,
+};
+
+static const struct drm_plane_funcs radeon_primary_plane_funcs = {
+	DRM_PLANE_NON_ATOMIC_FUNCS,
+};
+
 static const struct drm_crtc_funcs radeon_crtc_funcs = {
 	.cursor_set2 = radeon_crtc_cursor_set2,
 	.cursor_move = radeon_crtc_cursor_move,
@@ -681,6 +697,8 @@ static void radeon_crtc_init(struct drm_device *dev, int index)
 {
 	struct radeon_device *rdev = dev->dev_private;
 	struct radeon_crtc *radeon_crtc;
+	struct drm_plane *primary;
+	int ret;
 
 	radeon_crtc = kzalloc_obj(*radeon_crtc);
 	if (radeon_crtc == NULL)
@@ -693,7 +711,29 @@ static void radeon_crtc_init(struct drm_device *dev, int index)
 		return;
 	}
 
-	drm_crtc_init(dev, &radeon_crtc->base, &radeon_crtc_funcs);
+	primary = __drm_universal_plane_alloc(dev, sizeof(*primary), 0, 0,
+					      &radeon_primary_plane_funcs,
+					      radeon_primary_formats,
+					      ARRAY_SIZE(radeon_primary_formats),
+					      NULL, DRM_PLANE_TYPE_PRIMARY, NULL);
+	if (IS_ERR(primary)) {
+		destroy_workqueue(radeon_crtc->flip_queue);
+		kfree(radeon_crtc);
+		return;
+	}
+
+	ret = drm_crtc_init_with_planes(dev, &radeon_crtc->base, primary, NULL,
+					&radeon_crtc_funcs, NULL);
+	if (ret) {
+		dev_err(dev->dev, "Failed to init CRTC %d: %d\n", index, ret);
+		drm_plane_cleanup(primary);
+		kfree(primary);
+		destroy_workqueue(radeon_crtc->flip_queue);
+		return;
+	}
+
+	drm_plane_create_blend_mode_property(primary,
+					     BIT(DRM_MODE_BLEND_PREMULTI));
 
 	drm_mode_crtc_set_gamma_size(&radeon_crtc->base, 256);
 	radeon_crtc->crtc_id = index;
