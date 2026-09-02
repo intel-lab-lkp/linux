@@ -4181,6 +4181,37 @@ struct cfg80211_tclas {
 };
 
 /**
+ * struct cfg80211_flow_info - classifier parameters of one MSDU
+ *
+ * @key: every parameter the source carries, with nothing masked out
+ * @present: bitmap of &enum cfg80211_flow_field, the parameters that the
+ *	source really carries. A classifier that names an absent parameter
+ *	does not match.
+ */
+struct cfg80211_flow_info {
+	struct cfg80211_flow_key key;
+	u32 present;
+};
+
+bool cfg80211_flow_parse(struct sk_buff *skb, struct cfg80211_flow_info *info);
+
+/**
+ * enum cfg80211_flow_dir - direction of a built flow key
+ *
+ * @CFG80211_FLOW_AS_IS: the key describes the frame that was parsed
+ * @CFG80211_FLOW_MIRRORED: the key describes the reverse direction, so the
+ *	three pairs of IEEE Std 802.11-2024, 11.25.3 item b) are swapped
+ */
+enum cfg80211_flow_dir {
+	CFG80211_FLOW_AS_IS,
+	CFG80211_FLOW_MIRRORED,
+};
+
+bool cfg80211_flow_key_build(const struct cfg80211_flow_info *info, u32 fields,
+			     enum cfg80211_flow_dir dir,
+			     struct cfg80211_flow_key *key);
+
+/**
  * DOC: Neighbor Awareness Networking (NAN)
  *
  * NAN uses two interface types:
