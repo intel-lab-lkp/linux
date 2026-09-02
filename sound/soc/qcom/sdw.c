@@ -131,7 +131,6 @@ int qcom_snd_sdw_prepare(struct snd_pcm_substream *substream,
 	struct sdw_stream_runtime *sruntime;
 	int ret;
 
-
 	if (!qcom_snd_is_sdw_dai(cpu_dai->id))
 		return 0;
 
@@ -159,7 +158,7 @@ int qcom_snd_sdw_prepare(struct snd_pcm_substream *substream,
 		sdw_deprepare_stream(sruntime);
 		return ret;
 	}
-	*stream_prepared  = true;
+	*stream_prepared = true;
 
 	return ret;
 }

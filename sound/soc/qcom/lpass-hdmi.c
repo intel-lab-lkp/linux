@@ -5,7 +5,6 @@
  * lpass-hdmi.c -- ALSA SoC HDMI-CPU DAI driver for QTi LPASS HDMI
  */
 
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <sound/pcm_params.h>

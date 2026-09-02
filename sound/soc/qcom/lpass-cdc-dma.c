@@ -111,7 +111,7 @@ static int __lpass_get_codec_dma_intf_type(int dai_id)
 		ret = LPASS_CDC_DMA_INTERFACE9;
 		break;
 	case LPASS_CDC_DMA_RX9:
-		ret  = LPASS_CDC_DMA_INTERFACE10;
+		ret = LPASS_CDC_DMA_INTERFACE10;
 		break;
 	default:
 		ret = -EINVAL;

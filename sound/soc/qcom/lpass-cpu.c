@@ -468,7 +468,7 @@ static int asoc_qcom_of_xlate_dai_name(struct snd_soc_component *component,
 	int ret = -EINVAL;
 	int i;
 
-	for (i = 0; i  < variant->num_dai; i++) {
+	for (i = 0; i < variant->num_dai; i++) {
 		if (variant->dai_driver[i].id == id) {
 			*dai_name = variant->dai_driver[i].name;
 			ret = 0;
