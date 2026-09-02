@@ -8943,10 +8943,15 @@ __bpf_kfunc void scx_bpf_dsq_insert_vtime(struct task_struct *p, u64 dsq_id,
 #ifdef CONFIG_EXT_SUB_SCHED
 	/*
 	 * Disallow if any sub-scheds are attached. There is no way to tell
-	 * which scheduler called us, just error out @p's scheduler.
+	 * which scheduler called us, so error out @p's scheduler -- but read
+	 * it under RCU (@p's locks aren't necessarily held here) and fall
+	 * back to @sch if @p isn't on an scx scheduler: enqueue/dispatch
+	 * contexts may pass any KF_RCU task, and p->scx.sched is NULL for
+	 * one that has exited or is managed by another scheduler.
 	 */
 	if (unlikely(!list_empty(&sch->children))) {
-		scx_error(scx_task_sched(p), "__scx_bpf_dsq_insert_vtime() must be used");
+		scx_error(scx_task_sched_rcu(p) ?: sch,
+			  "__scx_bpf_dsq_insert_vtime() must be used");
 		return;
 	}
 #endif
