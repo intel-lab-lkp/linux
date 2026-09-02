@@ -192,6 +192,23 @@ static int find_boot_record(struct INFTLrecord *inftl)
 				 ip->lastUnit, ip->flags,
 				 ip->spareUnits);
 
+			/*
+			 * Reject inconsistent partition geometry before it is
+			 * used: lastUnit < firstUnit would make the
+			 * (lastUnit - firstUnit + 1) check below underflow,
+			 * and lastUnit must stay within the device as it later
+			 * bounds the PUtable/VUtable allocations.
+			 */
+			if (ip->lastUnit < ip->firstUnit ||
+			    ip->lastUnit >= inftl->nb_blocks) {
+				pr_warn("INFTL: Media Header "
+					"Partition %d sanity check failed:\n"
+					"        firstUnit %d lastUnit %d "
+					"(nb_blocks %d)\n",
+					i, ip->firstUnit, ip->lastUnit,
+					inftl->nb_blocks);
+				return -1;
+			}
 			if (ip->Reserved0 != ip->firstUnit) {
 				struct erase_info *instr = &inftl->instr;
 
@@ -233,6 +250,18 @@ static int find_boot_record(struct INFTLrecord *inftl)
 			return -1;
 		}
 
+		/*
+		 * The boot record unit must lie within the described
+		 * extent; it is later marked through PUtable[block].
+		 */
+		if (block > ip->lastUnit) {
+			pr_warn("INFTL: Media Header "
+				"Partition %d sanity check failed:\n"
+				"        boot record unit %d beyond "
+				"lastUnit %d\n",
+				i, block, ip->lastUnit);
+			return -1;
+		}
 		inftl->nb_boot_blocks = ip->firstUnit;
 		inftl->numvunits = ip->virtualUnits;
 		if (inftl->numvunits > (inftl->nb_blocks -
