@@ -2860,6 +2860,10 @@ static int soft_offline_in_use_page(struct page *page)
 		.gfp_mask = GFP_USER | __GFP_MOVABLE | __GFP_RETRY_MAYFAIL,
 		.reason = MR_MEMORY_FAILURE,
 	};
+	const struct migrate_control ctl = {
+		.mode = MIGRATE_SYNC,
+		.reason = MR_MEMORY_FAILURE,
+	};
 
 	if (!huge && folio_test_large(folio)) {
 		const int new_order = min_order_for_split(folio);
@@ -2916,7 +2920,7 @@ static int soft_offline_in_use_page(struct page *page)
 
 	if (isolated) {
 		ret = migrate_pages(&pagelist, alloc_migration_target, NULL,
-			(unsigned long)&mtc, MIGRATE_SYNC, MR_MEMORY_FAILURE, NULL);
+			(unsigned long)&mtc, &ctl, NULL);
 		if (!ret) {
 			bool release = !huge;
 

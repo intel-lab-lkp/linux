@@ -1013,6 +1013,10 @@ static unsigned int demote_folio_list(struct list_head *demote_folios,
 		.nmask = &allowed_mask,
 		.reason = MR_DEMOTION,
 	};
+	const struct migrate_control ctl = {
+		.mode = MIGRATE_ASYNC,
+		.reason = MR_DEMOTION,
+	};
 
 	if (list_empty(demote_folios))
 		return 0;
@@ -1031,8 +1035,7 @@ static unsigned int demote_folio_list(struct list_head *demote_folios,
 
 	/* Demotion ignores all cpuset and mempolicy settings */
 	migrate_pages(demote_folios, alloc_demote_folio, NULL,
-		      (unsigned long)&mtc, MIGRATE_ASYNC, MR_DEMOTION,
-		      &nr_succeeded);
+		      (unsigned long)&mtc, &ctl, &nr_succeeded);
 
 	return nr_succeeded;
 }

@@ -2312,9 +2312,8 @@ static int migrate_lru_folios(struct list_head *from, new_folio_t get_new_folio,
  * @put_new_folio:	The function used to free target folios if migration
  *			fails, or NULL if no special handling is necessary.
  * @private:		Private data to be passed on to get_new_folio()
- * @mode:		The migration mode that specifies the constraints for
- *			folio migration, if any.
- * @reason:		The reason for folio migration.
+ * @ctl:		The policy for this migration: blocking discipline,
+ *			and reason.
  * @ret_succeeded:	Set to the number of folios migrated successfully if
  *			the caller passes a non-NULL pointer.
  *
@@ -2330,27 +2329,23 @@ static int migrate_lru_folios(struct list_head *from, new_folio_t get_new_folio,
  */
 int migrate_pages(struct list_head *from, new_folio_t get_new_folio,
 		free_folio_t put_new_folio, unsigned long private,
-		enum migrate_mode mode, enum migrate_reason reason, unsigned int *ret_succeeded)
+		const struct migrate_control *ctl, unsigned int *ret_succeeded)
 {
 	int rc, rc_gather;
 	LIST_HEAD(ret_folios);
 	struct migrate_pages_stats stats;
-	const struct migrate_control ctl = {
-		.mode = mode,
-		.reason = reason,
-	};
 
-	trace_mm_migrate_pages_start(ctl.mode, ctl.reason);
+	trace_mm_migrate_pages_start(ctl->mode, ctl->reason);
 
 	memset(&stats, 0, sizeof(stats));
 
 	rc_gather = migrate_hugetlbs(from, get_new_folio, put_new_folio, private,
-				     &ctl, &stats, &ret_folios);
+				     ctl, &stats, &ret_folios);
 	if (rc_gather < 0)
 		goto out;
 
 	rc = migrate_movable_ops_pages(from, get_new_folio, put_new_folio,
-				       private, &ctl, &stats,
+				       private, ctl, &stats,
 				       &ret_folios);
 	if (rc < 0) {
 		rc_gather = rc;
@@ -2359,7 +2354,7 @@ int migrate_pages(struct list_head *from, new_folio_t get_new_folio,
 	rc_gather += rc;
 
 	rc = migrate_lru_folios(from, get_new_folio, put_new_folio,
-			private, &ctl, &ret_folios, &stats);
+			private, ctl, &ret_folios, &stats);
 	if (rc < 0) {
 		rc_gather = rc;
 		goto out;
@@ -2386,8 +2381,8 @@ out:
 	count_vm_events(THP_MIGRATION_SPLIT, stats.nr_thp_split);
 	trace_mm_migrate_pages(stats.nr_succeeded, stats.nr_failed_pages,
 			       stats.nr_thp_succeeded, stats.nr_thp_failed,
-			       stats.nr_thp_split, stats.nr_split, ctl.mode,
-			       ctl.reason);
+			       stats.nr_thp_split, stats.nr_split, ctl->mode,
+			       ctl->reason);
 
 	if (ret_succeeded)
 		*ret_succeeded = stats.nr_succeeded;
@@ -2454,9 +2449,13 @@ static int do_move_pages_to_node(struct list_head *pagelist, int node)
 		.gfp_mask = GFP_HIGHUSER_MOVABLE | __GFP_THISNODE,
 		.reason = MR_SYSCALL,
 	};
+	const struct migrate_control ctl = {
+		.mode = MIGRATE_SYNC,
+		.reason = MR_SYSCALL,
+	};
 
 	err = migrate_pages(pagelist, alloc_migration_target, NULL,
-		(unsigned long)&mtc, MIGRATE_SYNC, MR_SYSCALL, NULL);
+		(unsigned long)&mtc, &ctl, NULL);
 	if (err)
 		putback_movable_pages(pagelist);
 	return err;
@@ -2961,11 +2960,14 @@ int migrate_misplaced_folio(struct folio *folio, int node)
 	LIST_HEAD(migratepages);
 	struct mem_cgroup *memcg = get_mem_cgroup_from_folio(folio);
 	struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
+	const struct migrate_control ctl = {
+		.mode = MIGRATE_ASYNC,
+		.reason = MR_NUMA_MISPLACED,
+	};
 
 	list_add(&folio->lru, &migratepages);
 	nr_remaining = migrate_pages(&migratepages, alloc_misplaced_dst_folio,
-				     NULL, node, MIGRATE_ASYNC,
-				     MR_NUMA_MISPLACED, &nr_succeeded);
+				     NULL, node, &ctl, &nr_succeeded);
 	if (nr_remaining && !list_empty(&migratepages))
 		putback_movable_pages(&migratepages);
 	if (nr_succeeded) {

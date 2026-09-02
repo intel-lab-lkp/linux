@@ -1901,6 +1901,10 @@ put_folio:
 			.gfp_mask = GFP_KERNEL | __GFP_MOVABLE | __GFP_RETRY_MAYFAIL,
 			.reason = MR_MEMORY_HOTPLUG,
 		};
+		const struct migrate_control ctl = {
+			.mode = MIGRATE_SYNC,
+			.reason = MR_MEMORY_HOTPLUG,
+		};
 		int ret;
 
 		/*
@@ -1918,7 +1922,7 @@ put_folio:
 		if (nodes_empty(nmask))
 			node_set(mtc.nid, nmask);
 		ret = migrate_pages(&source, alloc_migration_target, NULL,
-			(unsigned long)&mtc, MIGRATE_SYNC, MR_MEMORY_HOTPLUG, NULL);
+			(unsigned long)&mtc, &ctl, NULL);
 		if (ret) {
 			list_for_each_entry(folio, &source, lru) {
 				if (__ratelimit(&migrate_rs)) {

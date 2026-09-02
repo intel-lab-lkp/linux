@@ -2566,6 +2566,10 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 	unsigned long end_pfn = zone_end_pfn(cc->zone);
 	unsigned long last_migrated_pfn;
 	const bool sync = cc->mode != MIGRATE_ASYNC;
+	const struct migrate_control ctl = {
+		.mode = cc->mode,
+		.reason = MR_COMPACTION,
+	};
 	bool update_cached;
 	unsigned int nr_succeeded = 0, nr_migratepages;
 	int order;
@@ -2696,8 +2700,8 @@ rescan:
 		 */
 		nr_migratepages = cc->nr_migratepages;
 		err = migrate_pages(&cc->migratepages, compaction_alloc,
-				compaction_free, (unsigned long)cc, cc->mode,
-				MR_COMPACTION, &nr_succeeded);
+				compaction_free, (unsigned long)cc, &ctl,
+				&nr_succeeded);
 
 		trace_mm_compaction_migratepages(nr_migratepages, nr_succeeded);
 

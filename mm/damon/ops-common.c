@@ -315,6 +315,10 @@ static unsigned int __damon_migrate_folio_list(
 			__GFP_NOMEMALLOC | GFP_NOWAIT | __GFP_THISNODE,
 		.nid = target_nid,
 	};
+	const struct migrate_control ctl = {
+		.mode = MIGRATE_ASYNC,
+		.reason = MR_DAMON,
+	};
 
 	if (pgdat->node_id == target_nid || target_nid == NUMA_NO_NODE)
 		return 0;
@@ -324,8 +328,7 @@ static unsigned int __damon_migrate_folio_list(
 
 	/* Migration ignores all cpuset and mempolicy settings */
 	migrate_pages(migrate_folios, alloc_migration_target, NULL,
-		      (unsigned long)&mtc, MIGRATE_ASYNC, MR_DAMON,
-		      &nr_succeeded);
+		      (unsigned long)&mtc, &ctl, &nr_succeeded);
 
 	return nr_succeeded;
 }

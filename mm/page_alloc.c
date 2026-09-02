@@ -7146,6 +7146,10 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 		.gfp_mask = cc->gfp_mask,
 		.reason = MR_CONTIG_RANGE,
 	};
+	const struct migrate_control ctl = {
+		.mode = cc->mode,
+		.reason = MR_CONTIG_RANGE,
+	};
 
 	lru_cache_disable();
 
@@ -7172,7 +7176,7 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 		cc->nr_migratepages -= nr_reclaimed;
 
 		ret = migrate_pages(&cc->migratepages, alloc_migration_target,
-			NULL, (unsigned long)&mtc, cc->mode, MR_CONTIG_RANGE, NULL);
+			NULL, (unsigned long)&mtc, &ctl, NULL);
 
 		/*
 		 * On -ENOMEM, migrate_pages() bails out right away. It is pointless
