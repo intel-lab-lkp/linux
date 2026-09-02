@@ -125,9 +125,8 @@ static void __reuseport_add_sock(struct sock *sk,
 				 struct sock_reuseport *reuse)
 {
 	reuse->socks[reuse->num_socks] = sk;
-	/* paired with smp_rmb() in reuseport_(select|migrate)_sock() */
-	smp_wmb();
-	reuse->num_socks++;
+	/* paired with smp_load_acquire() in reuseport_(select|migrate)_sock() */
+	smp_store_release(&reuse->num_socks, reuse->num_socks + 1);
 	reuseport_get_incoming_cpu(sk, reuse);
 }
 
@@ -140,7 +139,8 @@ static bool __reuseport_detach_sock(struct sock *sk,
 		return false;
 
 	reuse->socks[i] = reuse->socks[reuse->num_socks - 1];
-	reuse->num_socks--;
+	/* paired with smp_load_acquire() in reuseport_(select|migrate)_sock() */
+	smp_store_release(&reuse->num_socks, reuse->num_socks - 1);
 	reuseport_put_incoming_cpu(sk, reuse);
 
 	return true;
@@ -583,11 +583,9 @@ struct sock *reuseport_select_sock(struct sock *sk,
 		goto out;
 
 	prog = rcu_dereference(reuse->prog);
-	socks = READ_ONCE(reuse->num_socks);
+	/* paired with smp_store_release() in __reuseport_add_sock() */
+	socks = smp_load_acquire(&reuse->num_socks);
 	if (likely(socks)) {
-		/* paired with smp_wmb() in __reuseport_add_sock() */
-		smp_rmb();
-
 		if (!prog || !skb)
 			goto select_by_hash;
 
@@ -634,12 +632,10 @@ struct sock *reuseport_migrate_sock(struct sock *sk,
 	if (!reuse)
 		goto out;
 
-	socks = READ_ONCE(reuse->num_socks);
+	/* paired with smp_store_release() in __reuseport_add_sock() */
+	socks = smp_load_acquire(&reuse->num_socks);
 	if (unlikely(!socks))
 		goto failure;
-
-	/* paired with smp_wmb() in __reuseport_add_sock() */
-	smp_rmb();
 
 	hash = migrating_sk->sk_hash;
 	prog = rcu_dereference(reuse->prog);
