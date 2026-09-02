@@ -438,6 +438,8 @@ static inline int spacemit_sdhci_get_clocks(struct device *dev,
 					    struct sdhci_pltfm_host *pltfm_host)
 {
 	struct spacemit_sdhci_host *sdhst = sdhci_pltfm_priv(pltfm_host);
+	struct device_node *np = dev->of_node;
+	u32 freq;
 
 	sdhst->clk_core = devm_clk_get_enabled(dev, "core");
 	if (IS_ERR(sdhst->clk_core))
@@ -446,6 +448,9 @@ static inline int spacemit_sdhci_get_clocks(struct device *dev,
 	sdhst->clk_io = devm_clk_get_enabled(dev, "io");
 	if (IS_ERR(sdhst->clk_io))
 		return -EINVAL;
+
+	if (!of_property_read_u32(np, "clock-frequency", &freq))
+		clk_set_rate(sdhst->clk_io, freq);
 
 	pltfm_host->clk = sdhst->clk_io;
 
