@@ -1292,27 +1292,66 @@ nfsd4_secinfo_no_name_release(union nfsd4_op_u *u)
 }
 
 /*
- * Validate that the requested timestamps are within the acceptable range. If
- * timestamp appears to be in the future, then it will be clamped to
- * current_time().
+ * A client holding a delegation with delegated timestamps is the authority for
+ * the file's timestamps, so a SETATTR from it asserts what they are rather than
+ * reporting that they have advanced. Honor a value that moves a timestamp
+ * backwards: the client could set the same value with an ordinary SETATTR, so
+ * refusing it here only loses data. Clamp a value in the future to the current
+ * time, as RFC 9754 permits.
+ */
+static void
+clamp_deleg_time(struct timespec64 *req, const struct timespec64 *now)
+{
+	if (timespec64_compare(req, now) > 0)
+		*req = *now;
+}
+
+/*
+ * Apply the timestamps that a delegation holder supplied in a SETATTR.
  */
 static void
 vet_deleg_attrs(struct nfsd4_setattr *setattr, struct nfs4_delegation *dp)
 {
-	struct timespec64 now = current_time(dp->dl_stid.sc_file->fi_inode);
+	struct inode *inode = dp->dl_stid.sc_file->fi_inode;
+	struct timespec64 now = current_time(inode);
 	struct iattr *iattr = &setattr->sa_iattr;
 
-	if ((setattr->sa_bmval[2] & FATTR4_WORD2_TIME_DELEG_ACCESS) &&
-	    !nfsd4_vet_deleg_time(&iattr->ia_atime, &dp->dl_atime, &now))
-		iattr->ia_valid &= ~(ATTR_ATIME | ATTR_ATIME_SET);
+	/*
+	 * The client reports the times at every DELEGRETURN, changed or not.
+	 * Drop a report that matches the inode. An untouched file then keeps its
+	 * change attribute, and nfsd_setattr() skips the call into the
+	 * filesystem.
+	 *
+	 * The times are read without i_rwsem. A conflicting writer must break
+	 * the delegation first, and FMODE_NOCMTIME stops the holder's own writes
+	 * from stamping the c/mtime. touch_atime() and a CB_GETATTR can still
+	 * move them here. A stale read then costs at most one extra update.
+	 */
+	if (setattr->sa_bmval[2] & FATTR4_WORD2_TIME_DELEG_ACCESS) {
+		struct timespec64 atime = inode_get_atime(inode);
+
+		clamp_deleg_time(&iattr->ia_atime, &now);
+
+		if (timespec64_equal(&iattr->ia_atime, &atime))
+			iattr->ia_valid &= ~(ATTR_ATIME | ATTR_ATIME_SET);
+	}
 
 	if (setattr->sa_bmval[2] & FATTR4_WORD2_TIME_DELEG_MODIFY) {
-		if (nfsd4_vet_deleg_time(&iattr->ia_mtime, &dp->dl_mtime, &now)) {
+		struct timespec64 mtime = inode_get_mtime(inode);
+
+		clamp_deleg_time(&iattr->ia_mtime, &now);
+
+		if (dp->dl_written ||
+		    !timespec64_equal(&iattr->ia_mtime, &mtime)) {
 			iattr->ia_ctime = iattr->ia_mtime;
-			if (nfsd4_vet_deleg_time(&iattr->ia_ctime, &dp->dl_ctime, &now))
-				dp->dl_setattr = true;
-			else
-				iattr->ia_valid &= ~(ATTR_CTIME | ATTR_CTIME_SET);
+
+			/*
+			 * Keep nfsd4_finalize_deleg_timestamps() from stamping
+			 * over the values the client just supplied. Only the
+			 * branch that carries a c/mtime update may set this, or
+			 * a write after a no-op SETATTR loses its timestamps.
+			 */
+			dp->dl_setattr = true;
 		} else {
 			iattr->ia_valid &= ~(ATTR_CTIME | ATTR_CTIME_SET |
 					     ATTR_MTIME | ATTR_MTIME_SET);
