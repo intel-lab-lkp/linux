@@ -356,9 +356,8 @@ The machine driver sets some additional parameters to the DAI link i.e.
 	.channels_max = 2,
   };
 
+        < ... more DAI links here ... >
   static struct snd_soc_dai_link dais[] = {
-	< ... more DAI links above ... >
-	{
 		.name = "MODEM",
 		.stream_name = "MODEM",
 		.cpu_dai_name = "dai2",
