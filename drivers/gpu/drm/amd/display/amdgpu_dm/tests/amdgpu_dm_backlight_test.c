@@ -23,6 +23,7 @@
 #include "amdgpu_dm_kunit_test_helpers.h"
 #include "amd_shared.h"
 #include "link_service.h"
+#include "modules/power/power_helpers.h"
 #include "dc/inc/hw/panel_cntl.h"
 
 struct dm_backlight_connector_fixture {
@@ -1019,6 +1020,151 @@ static void dm_test_brightness_from_user_aux(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, convert_brightness_from_user(&caps, max), (u32)max);
 }
 
+/* Tests for convert_brightness_for_power_module() */
+
+/**
+ * dm_test_power_module_brightness_invalid_caps - Test invalid PWM range
+ * @test: The KUnit test context
+ */
+static void dm_test_power_module_brightness_invalid_caps(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+
+	KUNIT_EXPECT_EQ(test, convert_brightness_for_power_module(NULL, 100), 100U);
+	KUNIT_EXPECT_EQ(test, convert_brightness_for_power_module(&caps, 100), 0U);
+}
+
+/**
+ * dm_test_power_module_pwm_uses_user_domain - Test PWM input domain
+ * @test: The KUnit test context
+ *
+ * The power module owns the ATIF luminance-to-PWM curve. The display manager
+ * must therefore pass the original userspace percentage rather than first
+ * converting it to a firmware PWM level.
+ */
+static void dm_test_power_module_pwm_uses_user_domain(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	unsigned int min, max;
+
+	caps.min_input_signal = AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
+	caps.max_input_signal = AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
+	caps.data_points = 3;
+	caps.luminance_data[0].input_signal = 50;
+	caps.luminance_data[0].luminance = 20;
+	caps.luminance_data[1].input_signal = 128;
+	caps.luminance_data[1].luminance = 50;
+	caps.luminance_data[2].input_signal = 230;
+	caps.luminance_data[2].luminance = 90;
+	get_brightness_range(&caps, &min, &max);
+
+	KUNIT_EXPECT_EQ(test, min, 3084U);
+	KUNIT_EXPECT_EQ(test, max, 65535U);
+	KUNIT_EXPECT_EQ(test, convert_brightness_for_power_module(&caps, 0), 0U);
+	KUNIT_EXPECT_EQ(test, convert_brightness_for_power_module(&caps, 25700), 39216U);
+	KUNIT_EXPECT_EQ(test, convert_brightness_for_power_module(&caps, 32768), 50001U);
+	KUNIT_EXPECT_EQ(test, convert_brightness_for_power_module(&caps, max), 100000U);
+	KUNIT_EXPECT_EQ(test, convert_brightness_for_power_module(&caps, max + 1), 100000U);
+}
+
+/**
+ * dm_test_power_module_pwm_zero_min - Test zero-minimum range
+ * @test: The KUnit test context
+ */
+static void dm_test_power_module_pwm_zero_min(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	unsigned int min, max;
+
+	caps.min_input_signal = 0;
+	caps.max_input_signal = AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
+	get_brightness_range(&caps, &min, &max);
+
+	KUNIT_EXPECT_EQ(test, min, 0U);
+	KUNIT_EXPECT_EQ(test, convert_brightness_for_power_module(&caps, 0), 0U);
+	KUNIT_EXPECT_EQ(test, convert_brightness_for_power_module(&caps, max), 100000U);
+}
+
+/**
+ * dm_test_power_module_mask_follows_effective_control - Test mask handoff
+ * @test: The KUnit test context
+ */
+static void dm_test_power_module_mask_follows_effective_control(struct kunit *test)
+{
+	struct set_backlight_level_params params = {};
+	struct core_power core_power = {};
+
+	core_power.bl_prop[0].brightness_mask = 3;
+	fill_backlight_level_params(&core_power, &params, 0, 0, 3084,
+				    BACKLIGHT_CONTROL_PWM, 0, 0, false);
+	KUNIT_EXPECT_EQ(test, params.backlight_pwm_u16_16, 3087U);
+
+	fill_backlight_level_params(&core_power, &params, 0, 0, 32896,
+				    BACKLIGHT_CONTROL_PWM, 0, 0, false);
+	KUNIT_EXPECT_EQ(test, params.backlight_pwm_u16_16, 32899U);
+
+	fill_backlight_level_params(&core_power, &params, 0, 0, 65535,
+				    BACKLIGHT_CONTROL_PWM, 0, 0, false);
+	KUNIT_EXPECT_EQ(test, params.backlight_pwm_u16_16, 65535U);
+
+	fill_backlight_level_params(&core_power, &params, 0, 0, 3084,
+				    BACKLIGHT_CONTROL_AMD_AUX, 0, 0, true);
+	KUNIT_EXPECT_EQ(test, params.control_type, BACKLIGHT_CONTROL_AMD_AUX);
+	KUNIT_EXPECT_EQ(test, params.backlight_pwm_u16_16, 3084U);
+
+	fill_backlight_level_params(&core_power, &params, 0, 0, 3084,
+				    BACKLIGHT_CONTROL_AMD_AUX, 0, 0, false);
+	KUNIT_EXPECT_EQ(test, params.control_type, BACKLIGHT_CONTROL_PWM);
+	KUNIT_EXPECT_EQ(test, params.backlight_pwm_u16_16, 3087U);
+}
+
+/**
+ * dm_test_power_module_linear_curve_uses_panel_instance - Test linear bypass
+ * @test: The KUnit test context
+ */
+static void dm_test_power_module_linear_curve_uses_panel_instance(struct kunit *test)
+{
+	struct core_power core_power = {};
+	unsigned int backlight_lut[101] = {};
+
+	core_power.bl_prop[0].backlight_lut = backlight_lut;
+	core_power.bl_prop[0].num_backlight_levels = ARRAY_SIZE(backlight_lut);
+	core_power.bl_prop[1].min_backlight_pwm = 3084;
+	core_power.bl_prop[1].max_backlight_pwm = 65535;
+	core_power.bl_prop[1].backlight_range = 62451;
+	core_power.bl_prop[1].use_linear_backlight_curve = true;
+	backlight_lut[50] = 12345;
+
+	KUNIT_EXPECT_EQ(test, backlight_millipercent_to_pwm(&core_power, 50000, 1),
+			34309U);
+}
+
+/**
+ * dm_test_power_module_aux_keeps_curve_and_mask - Test AUX conversion path
+ * @test: The KUnit test context
+ */
+static void dm_test_power_module_aux_keeps_curve_and_mask(struct kunit *test)
+{
+	struct amdgpu_dm_backlight_caps caps = {};
+	uint saved_mask = amdgpu_dm_get_dc_debug_mask();
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask & ~DC_DISABLE_CUSTOM_BRIGHTNESS_CURVE);
+	caps.aux_support = true;
+	caps.aux_min_input_signal = 1;
+	caps.aux_max_input_signal = 512;
+	caps.brightness_mask = 3;
+	caps.data_points = 2;
+	caps.luminance_data[0].input_signal = 50;
+	caps.luminance_data[0].luminance = 20;
+	caps.luminance_data[1].input_signal = 200;
+	caps.luminance_data[1].luminance = 80;
+
+	KUNIT_EXPECT_EQ(test, convert_brightness_for_power_module(&caps, 200000),
+			81159U);
+
+	amdgpu_dm_set_dc_debug_mask(saved_mask);
+}
+
 /* Tests for convert_custom_brightness() */
 
 /**
@@ -1590,7 +1736,7 @@ static void dm_test_curve_from_user_monotonic(struct kunit *test)
 	for (i = 0; i <= max; i += 1023) {
 		u32 level = convert_brightness_from_user(&caps, i);
 
-		KUNIT_ASSERT_GE(test, level, previous);
+		KUNIT_EXPECT_GE(test, level, previous);
 		previous = level;
 	}
 
@@ -1619,8 +1765,8 @@ static void dm_test_curve_from_user_within_range(struct kunit *test)
 	for (i = 0; i <= max; i += 1023) {
 		u32 level = convert_brightness_from_user(&caps, i);
 
-		KUNIT_ASSERT_GE(test, level, (u32)min);
-		KUNIT_ASSERT_LE(test, level, (u32)max);
+		KUNIT_EXPECT_GE(test, level, (u32)min);
+		KUNIT_EXPECT_LE(test, level, (u32)max);
 	}
 
 	KUNIT_EXPECT_LE(test, convert_brightness_from_user(&caps, max), (u32)max);
@@ -2198,6 +2344,13 @@ static struct kunit_case dm_backlight_test_cases[] = {
 	KUNIT_CASE(dm_test_brightness_from_user_zero),
 	KUNIT_CASE(dm_test_brightness_from_user_max),
 	KUNIT_CASE(dm_test_brightness_from_user_aux),
+	/* convert_brightness_for_power_module */
+	KUNIT_CASE(dm_test_power_module_brightness_invalid_caps),
+	KUNIT_CASE(dm_test_power_module_pwm_uses_user_domain),
+	KUNIT_CASE(dm_test_power_module_pwm_zero_min),
+	KUNIT_CASE(dm_test_power_module_mask_follows_effective_control),
+	KUNIT_CASE(dm_test_power_module_linear_curve_uses_panel_instance),
+	KUNIT_CASE(dm_test_power_module_aux_keeps_curve_and_mask),
 	/* convert_custom_brightness */
 	KUNIT_CASE(dm_test_custom_brightness_no_data_points),
 	KUNIT_CASE(dm_test_custom_brightness_debug_mask_disables),
