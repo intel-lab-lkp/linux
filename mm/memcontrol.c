@@ -688,6 +688,29 @@ struct memcg_vmstats {
 };
 
 /*
+ * The non-hierarchical memcg-wide counters are read back only by the legacy
+ * memory.stat and by reparenting on offline, both of which are v1-only.
+ * They are skipped if the controller sits on the default hierarchy
+ * (mem_cgroup_bind() populates them if it is later moved onto the legacy
+ * hierarchy).
+ */
+static long *memcg_state_local_array(struct mem_cgroup *memcg)
+{
+	if (cgroup_subsys_on_dfl(memory_cgrp_subsys))
+		return NULL;
+
+	return memcg->vmstats->state_local;
+}
+
+static unsigned long *memcg_events_local_array(struct mem_cgroup *memcg)
+{
+	if (cgroup_subsys_on_dfl(memory_cgrp_subsys))
+		return NULL;
+
+	return memcg->vmstats->events_local;
+}
+
+/*
  * memcg and lruvec stats flushing
  *
  * Many codepaths leading to stats update or read are performance sensitive and
@@ -4484,7 +4507,10 @@ static void mem_cgroup_css_reset(struct cgroup_subsys_state *css)
 struct aggregate_control {
 	/* pointer to the aggregated (CPU and subtree aggregated) counters */
 	long *aggregate;
-	/* pointer to the non-hierarchichal (CPU aggregated) counters */
+	/*
+	 * pointer to the non-hierarchical (CPU aggregated) counters or NULL to
+	 * skip updating them (see memcg_state_local_array())
+	 */
 	long *local;
 	/* pointer to the pending child counters during tree propagation */
 	long *pending;
@@ -4523,7 +4549,7 @@ static void mem_cgroup_stat_aggregate(struct aggregate_control *ac)
 		}
 
 		/* Aggregate counts on this level and propagate upwards */
-		if (delta_cpu)
+		if (delta_cpu && ac->local)
 			ac->local[i] += delta_cpu;
 
 		if (delta) {
@@ -4537,6 +4563,7 @@ static void mem_cgroup_stat_aggregate(struct aggregate_control *ac)
 #ifdef CONFIG_MEMCG_NMI_SAFETY_REQUIRES_ATOMIC
 static void flush_nmi_stats(struct mem_cgroup *memcg, struct mem_cgroup *parent)
 {
+	long *state_local = memcg_state_local_array(memcg);
 	int nid;
 
 	if (atomic_read(&memcg->kmem_stat)) {
@@ -4544,7 +4571,8 @@ static void flush_nmi_stats(struct mem_cgroup *memcg, struct mem_cgroup *parent)
 		int index = memcg_stats_index(MEMCG_KMEM);
 
 		memcg->vmstats->state[index] += kmem;
-		memcg->vmstats->state_local[index] += kmem;
+		if (state_local)
+			state_local[index] += kmem;
 		if (parent)
 			parent->vmstats->state_pending[index] += kmem;
 	}
@@ -4566,7 +4594,8 @@ static void flush_nmi_stats(struct mem_cgroup *memcg, struct mem_cgroup *parent)
 			if (plstats)
 				plstats->state_pending[index] += slab;
 			memcg->vmstats->state[index] += slab;
-			memcg->vmstats->state_local[index] += slab;
+			if (state_local)
+				state_local[index] += slab;
 			if (parent)
 				parent->vmstats->state_pending[index] += slab;
 		}
@@ -4579,7 +4608,8 @@ static void flush_nmi_stats(struct mem_cgroup *memcg, struct mem_cgroup *parent)
 			if (plstats)
 				plstats->state_pending[index] += slab;
 			memcg->vmstats->state[index] += slab;
-			memcg->vmstats->state_local[index] += slab;
+			if (state_local)
+				state_local[index] += slab;
 			if (parent)
 				parent->vmstats->state_pending[index] += slab;
 		}
@@ -4604,7 +4634,7 @@ static void mem_cgroup_css_rstat_flush(struct cgroup_subsys_state *css, int cpu)
 
 	ac = (struct aggregate_control) {
 		.aggregate = memcg->vmstats->state,
-		.local = memcg->vmstats->state_local,
+		.local = memcg_state_local_array(memcg),
 		.pending = memcg->vmstats->state_pending,
 		.ppending = parent ? parent->vmstats->state_pending : NULL,
 		.cstat = statc->state,
@@ -4615,7 +4645,7 @@ static void mem_cgroup_css_rstat_flush(struct cgroup_subsys_state *css, int cpu)
 
 	ac = (struct aggregate_control) {
 		.aggregate = memcg->vmstats->events,
-		.local = memcg->vmstats->events_local,
+		.local = memcg_events_local_array(memcg),
 		.pending = memcg->vmstats->events_pending,
 		.ppending = parent ? parent->vmstats->events_pending : NULL,
 		.cstat = statc->events,
@@ -5199,6 +5229,50 @@ static struct cftype memory_files[] = {
 	{ }	/* terminate */
 };
 
+#ifdef CONFIG_MEMCG_V1
+/*
+ * Called after the controller has moved between hierarchies, with the on_dfl
+ * key already in its new state.
+ *
+ * If the controller is moving from the default hierarchy to the legacy
+ * hierarchy, vmstats's state_local and events_local arrays need to be populated
+ * since they get read by the legacy hierarchy. Those values can just be taken
+ * from the vmstats's state and events arrays since rebind_subsystems() only
+ * allows the move when the root is the only memcg.
+ */
+static void mem_cgroup_bind(struct cgroup_subsys_state *root_css)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(root_css);
+	int i;
+
+	if (cgroup_subsys_on_dfl(memory_cgrp_subsys))
+		return;
+
+	/*
+	 * The flush is necessary because there might be descendants that got
+	 * destroyed right before the rebind that may have left counts in the
+	 * pending arrays that haven't yet been folded into the state and events
+	 * arrays
+	 */
+	__mem_cgroup_flush_stats(memcg, true);
+
+	/*
+	 * Not serialized against a concurrent flush. The periodic flusher runs
+	 * on root_mem_cgroup without cgroup_mutex and a flush increments state
+	 * and state_local together. If the flush happens in between when we
+	 * read state and write to state_local, its state_local increment is
+	 * overwritten and the counter stays short, but the difference would be
+	 * a single CPU's accumulated charges since the last flush and the
+	 * counters are approximate values.
+	 */
+	for (i = 0; i < MEMCG_VMSTAT_SIZE; i++)
+		memcg->vmstats->state_local[i] = memcg->vmstats->state[i];
+
+	for (i = 0; i < NR_MEMCG_EVENTS; i++)
+		memcg->vmstats->events_local[i] = memcg->vmstats->events[i];
+}
+#endif /* CONFIG_MEMCG_V1 */
+
 struct cgroup_subsys memory_cgrp_subsys = {
 	.css_alloc = mem_cgroup_css_alloc,
 	.css_online = mem_cgroup_css_online,
@@ -5212,6 +5286,7 @@ struct cgroup_subsys memory_cgrp_subsys = {
 	.exit = mem_cgroup_exit,
 	.dfl_cftypes = memory_files,
 #ifdef CONFIG_MEMCG_V1
+	.bind = mem_cgroup_bind,
 	.legacy_cftypes = mem_cgroup_legacy_files,
 #endif
 	.early_init = 0,
