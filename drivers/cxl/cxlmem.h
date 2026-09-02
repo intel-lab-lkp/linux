@@ -125,6 +125,13 @@ static inline int cxl_memdev_attach_region(struct cxl_memdev *cxlmd)
 #endif
 
 struct cxl_memdev *devm_cxl_add_classdev(struct cxl_dev_state *cxlds);
+
+/* trace-event helpers */
+const char *cxl_trace_memdev_name(struct cxl_port *port);
+const char *cxl_trace_host_name(struct cxl_port *port);
+const char *cxl_trace_port_name(struct cxl_port *port);
+const char *cxl_trace_dport_name(struct cxl_dport *dport);
+
 struct cxl_memdev *__devm_cxl_add_memdev(struct cxl_dev_state *cxlds,
 					 const struct cxl_memdev_attach *attach);
 int devm_cxl_sanitize_setup_notifier(struct device *host,
