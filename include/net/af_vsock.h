@@ -190,6 +190,9 @@ struct vsock_transport {
 
 	/* Zero-copy. */
 	bool (*msgzerocopy_allow)(void);
+
+	/* True if the transport honours IOCTL_VM_SOCKETS_ASSIGN_G2H_NETNS. */
+	bool (*netns_assign_allow)(void);
 };
 
 /**** CORE ****/
@@ -235,6 +238,10 @@ void vsock_for_each_connected_socket(const struct vsock_transport *transport,
 int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk);
 bool vsock_find_cid(unsigned int cid);
 void vsock_linger(struct sock *sk);
+struct net *vsock_g2h_net_get(void);
+bool vsock_g2h_net_reachable(struct net *net);
+bool vsock_g2h_reachable_sk(struct vsock_sock *vsk);
+bool vsock_maybe_set_connected(struct vsock_sock *vsk);
 
 /**** TAP ****/
 

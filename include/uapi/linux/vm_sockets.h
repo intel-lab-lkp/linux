@@ -195,6 +195,12 @@ struct sockaddr_vm {
 
 #define IOCTL_VM_SOCKETS_GET_LOCAL_CID		_IO(7, 0xb9)
 
+/* Assign the guest's vsock device to the network namespace of the calling
+ * process. Requires CAP_NET_ADMIN in the initial user namespace. To undo an
+ * assignment, assign the device to the initial network namespace.
+ */
+#define IOCTL_VM_SOCKETS_ASSIGN_G2H_NETNS	_IO(7, 0xba)
+
 /* MSG_ZEROCOPY notifications are encoded in the standard error format,
  * sock_extended_err. See Documentation/networking/msg_zerocopy.rst in
  * kernel source tree for more details.
