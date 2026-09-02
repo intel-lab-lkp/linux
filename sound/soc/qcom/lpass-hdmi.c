@@ -64,8 +64,8 @@ static int lpass_hdmi_daiops_hw_params(struct snd_pcm_substream *substream,
 		sampling_freq = LPASS_SAMPLING_FREQ48;
 		break;
 	default:
-		dev_err(dai->dev, "%s invalid bit width given : %d\n",
-					__func__, bitwidth);
+		dev_err(dai->dev, "%s invalid sampling rate given : %d\n",
+					__func__, rate);
 		return -EINVAL;
 	}
 	data_format = LPASS_DATA_FORMAT_LINEAR;
