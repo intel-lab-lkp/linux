@@ -4,6 +4,7 @@
 
 #include <linux/sched.h>
 #include <linux/unistd.h>
+#include <linux/llist.h>
 #include <asm/exec.h>
 #include <uapi/linux/binfmts.h>
 
@@ -80,6 +81,9 @@ struct linux_binprm {
 	unsigned interp_flags;
 	int execfd;		/* File descriptor of the executable */
 	unsigned long exec;
+
+	/* Close-on-exec files awaiting their final __fput(), see free_bprm(). */
+	struct llist_head cloexec_files;
 
 	struct rlimit rlim_stack; /* Saved RLIMIT_STACK used during exec. */
 
