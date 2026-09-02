@@ -242,6 +242,21 @@ impl<T: ForeignOwnable> XArray<T> {
 /// A lock guard.
 ///
 /// The lock is unlocked when the guard goes out of scope.
+///
+/// # Temporary lock drops
+///
+/// Unlike a typical Rust lock guard, holding a `Guard` does not guarantee
+/// continuous mutual exclusion for its entire lifetime: [`store`] may drop and
+/// reacquire the lock to allocate memory when called with blocking allocation
+/// flags. Other threads may lock and modify the array in that window, so a
+/// sequence of operations on the guard that spans such a call is not atomic.
+///
+/// To modify the array without dropping the lock, use the entry API with
+/// preallocated memory, see [`entry`] and [`insert_entry`].
+///
+/// [`store`]: Guard::store
+/// [`entry`]: Guard::entry
+/// [`insert_entry`]: Guard::insert_entry
 #[must_use = "the lock unlocks immediately when the guard is unused"]
 pub struct Guard<'a, T: ForeignOwnable> {
     xa: &'a XArray<T>,
@@ -485,7 +500,12 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
 
     /// Stores an element at the given index.
     ///
-    /// May drop the lock if needed to allocate memory, and then reacquire it afterwards.
+    /// If `gfp` contains blocking allocation flags, this method may drop the
+    /// lock to allocate memory and reacquire it afterwards. Other threads may
+    /// lock and modify the array in that window, so callers must not rely on
+    /// this method being atomic with respect to other operations on the
+    /// guard. To store without dropping the lock, use [`Guard::insert_entry`]
+    /// with preallocated memory.
     ///
     /// On success, returns the element which was previously at the given index.
     ///
