@@ -129,6 +129,18 @@ module_param(fnlock_default, bool, 0444);
 #define ASUS_SCREENPAD_BRIGHT_MAX 255
 #define ASUS_SCREENPAD_BRIGHT_DEFAULT 60
 
+/* TUF RGB power state bitfields for DEVS(ASUS_WMI_DEVID_TUF_RGB_STATE) */
+#define TUF_RGB_STATE_CMD		0xbd
+#define TUF_RGB_STATE_SAVE		BIT(8)
+#define TUF_RGB_STATE_BOOT		(0x03 << 16)
+#define TUF_RGB_STATE_AWAKE		(0x0c << 16)
+#define TUF_RGB_STATE_SLEEP		(0x30 << 16)
+#define TUF_RGB_STATE_KEYBOARD		(0xc0 << 16)
+#define TUF_RGB_STATE_ALL_MODES		(TUF_RGB_STATE_BOOT | \
+					 TUF_RGB_STATE_AWAKE | \
+					 TUF_RGB_STATE_SLEEP | \
+					 TUF_RGB_STATE_KEYBOARD)
+
 #define ASUS_MINI_LED_MODE_MASK		0x03
 /* Standard modes for devices with only on/off */
 #define ASUS_MINI_LED_OFF		0x00
@@ -308,6 +320,8 @@ struct asus_wmi {
 	u32 nv_temp_target;
 
 	u32 kbd_rgb_dev;
+	u32 kbd_rgb_state_flags;
+	bool kbd_rgb_state_valid;
 	bool kbd_rgb_state_available;
 	bool oobe_state_available;
 
@@ -1120,7 +1134,12 @@ static ssize_t kbd_rgb_state_store(struct device *dev,
 				 const char *buf, size_t count)
 {
 	u32 flags, cmd, boot, awake, sleep, keyboard;
+	struct led_classdev *led;
+	struct asus_wmi *asus;
 	int err;
+
+	led = dev_get_drvdata(dev);
+	asus = container_of(led, struct asus_wmi, kbd_led);
 
 	if (sscanf(buf, "%d %d %d %d %d", &cmd, &boot, &awake, &sleep, &keyboard) != 5)
 		return -EINVAL;
@@ -1137,6 +1156,9 @@ static ssize_t kbd_rgb_state_store(struct device *dev,
 		flags |= BIT(5);
 	if (keyboard)
 		flags |= BIT(7);
+
+	asus->kbd_rgb_state_flags = flags << 16;
+	asus->kbd_rgb_state_valid = true;
 
 	/* 0xbd is the required default arg0 for the method. Nothing happens otherwise */
 	err = asus_wmi_evaluate_method3(ASUS_WMI_METHODID_DEVS,
@@ -5153,7 +5175,6 @@ static int asus_wmi_add(struct platform_device *pdev)
 
 	asus->egpu_enable_available = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_EGPU);
 	asus->dgpu_disable_available = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_DGPU);
-	asus->kbd_rgb_state_available = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_TUF_RGB_STATE);
 
 	if (asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_MINI_LED_MODE))
 		asus->mini_led_dev_id = ASUS_WMI_DEVID_MINI_LED_MODE;
@@ -5165,6 +5186,19 @@ static int asus_wmi_add(struct platform_device *pdev)
 	else if (asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_GPU_MUX_VIVO))
 		asus->gpu_mux_dev = ASUS_WMI_DEVID_GPU_MUX_VIVO;
 #endif /* IS_ENABLED(CONFIG_ASUS_WMI_DEPRECATED_ATTRS) */
+
+	/*
+	 * FA401 series accepts the TUF RGB-state DEVS command but does not
+	 * advertise the device through DSTS. Keep the normal DSTS probe for
+	 * other models and force registration when the quirk is set.
+	 */
+	asus->kbd_rgb_state_available =
+		asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_TUF_RGB_STATE) ||
+		asus->driver->quirks->kbd_rgb_state_quirk;
+	if (asus->driver->quirks->kbd_rgb_state_quirk) {
+		asus->kbd_rgb_state_flags = TUF_RGB_STATE_ALL_MODES;
+		asus->kbd_rgb_state_valid = true;
+	}
 
 	asus->oobe_state_available = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_OOBE);
 
@@ -5396,11 +5430,36 @@ static int asus_hotk_restore(struct device *device)
 
 static int asus_hotk_prepare(struct device *device)
 {
+	struct asus_wmi *asus = dev_get_drvdata(device);
+
 	if (use_ally_mcu_hack == ASUS_WMI_ALLY_MCU_HACK_ENABLED) {
 		acpi_execute_simple_method(NULL, ASUS_USB0_PWR_EC0_CSEE,
 					   ASUS_USB0_PWR_EC0_CSEE_OFF);
 		msleep(ASUS_USB0_PWR_EC0_CSEE_WAIT);
 	}
+
+	/*
+	 * The display server may blank the keyboard backlight before the
+	 * kernel suspend path runs. Re-assert brightness and power-state
+	 * flags so the EC enters S0ix with the correct state. Always use
+	 * level 3 (max) because kbd_led_wk may already be zeroed by the
+	 * display server at this point, and the sleep strobe requires a
+	 * non-zero brightness to activate.
+	 */
+	if (asus && asus->driver->quirks->kbd_rgb_state_quirk &&
+	    asus->kbd_rgb_state_available && asus->kbd_rgb_state_valid &&
+	    (asus->kbd_rgb_state_flags & TUF_RGB_STATE_SLEEP)) {
+		u8 brightness = 0x80 | 0x03; /* level 3 (max) + light-on bit */
+
+		asus_wmi_set_devstate(ASUS_WMI_DEVID_KBD_BACKLIGHT,
+				      brightness, NULL);
+		asus_wmi_evaluate_method3(ASUS_WMI_METHODID_DEVS,
+					  ASUS_WMI_DEVID_TUF_RGB_STATE,
+					  TUF_RGB_STATE_CMD | TUF_RGB_STATE_SAVE |
+					  asus->kbd_rgb_state_flags,
+					  0, NULL);
+	}
+
 	return 0;
 }
 
