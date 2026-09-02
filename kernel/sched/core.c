@@ -5713,10 +5713,10 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 	 * project cycles that may never be accounted to this
 	 * thread, breaking clock_gettime().
 	 */
-	if (task_current_donor(rq, p) && task_on_rq_queued(p)) {
+	if (task_current(rq, p) && task_on_rq_queued(p)) {
 		prefetch_curr_exec_start(p);
 		update_rq_clock(rq);
-		p->sched_class->update_curr(rq);
+		rq->donor->sched_class->update_curr(rq);
 	}
 	ns = p->se.sum_exec_runtime;
 	task_rq_unlock(rq, p, &rf);
