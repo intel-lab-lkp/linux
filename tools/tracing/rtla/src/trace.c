@@ -440,6 +440,21 @@ static void trace_event_disable_trigger(struct trace_instance *instance,
 			tevent->event ? : "*", tevent->trigger);
 }
 
+static inline struct trace_events *trace_events_tail(struct trace_events *tevent)
+{
+	while (tevent && tevent->next)
+		tevent = tevent->next;
+
+	return tevent;
+}
+
+/*
+ * Events are stashed in LIFO order; flip that to FIFO to process them in the
+ * same order as they are defined by the user on the command line.
+ */
+#define for_each_trace_event(tevent) \
+	for (tevent = trace_events_tail(tevent); tevent; tevent = tevent->prev)
+
 /*
  * trace_events_disable - disable all trace events
  */
@@ -451,7 +466,7 @@ void trace_events_disable(struct trace_instance *instance,
 	if (!events)
 		return;
 
-	while (tevent) {
+	for_each_trace_event(tevent) {
 		debug_msg("Disabling event %s:%s\n", tevent->system, tevent->event ? : "*");
 		if (tevent->enabled) {
 			trace_event_disable_filter(instance, tevent);
@@ -460,7 +475,6 @@ void trace_events_disable(struct trace_instance *instance,
 		}
 
 		tevent->enabled = 0;
-		tevent = tevent->next;
 	}
 }
 
@@ -544,7 +558,10 @@ int trace_events_enable(struct trace_instance *instance,
 	struct trace_events *tevent = events;
 	int retval;
 
-	while (tevent) {
+	if (!events)
+		return 0;
+
+	for_each_trace_event(tevent) {
 		debug_msg("Enabling event %s:%s\n", tevent->system, tevent->event ? : "*");
 		retval = tracefs_event_enable(instance->inst, tevent->system, tevent->event);
 		if (retval < 0) {
@@ -562,7 +579,6 @@ int trace_events_enable(struct trace_instance *instance,
 			return 1;
 
 		tevent->enabled = 1;
-		tevent = tevent->next;
 	}
 
 	return 0;
