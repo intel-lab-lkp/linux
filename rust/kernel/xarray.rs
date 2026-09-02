@@ -219,6 +219,22 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
     }
 
     /// Provides a reference to the element at the given index.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::{prelude::*, xarray::{AllocKind, XArray}};
+    /// let xa = KBox::pin_init(XArray::<KBox<u32>>::new(AllocKind::Alloc1), GFP_KERNEL)?;
+    /// let mut guard = xa.lock();
+    ///
+    /// // Expanding an empty `Alloc1` array stores an internal zero entry at
+    /// // index 0. It must not be visible through the API.
+    /// guard.store(5, KBox::new(0xcafeu32, GFP_ATOMIC)?, GFP_ATOMIC)?;
+    /// assert_eq!(guard.get(0), None);
+    /// assert_eq!(guard.find_next(0).map(|(i, v)| (i, *v)), Some((5, 0xcafe)));
+    ///
+    /// # Ok::<(), kernel::error::Error>(())
+    /// ```
     #[inline]
     pub fn get(&self, index: usize) -> Option<T::Borrowed<'_>> {
         let ptr = self.load(index)?;
@@ -232,6 +248,67 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
         let ptr = self.load(index)?;
         // SAFETY: `ptr` came from `T::into_foreign`.
         Some(unsafe { T::borrow_mut(ptr.as_ptr()) })
+    }
+
+    fn load_next(&self, index: usize) -> Option<(usize, NonNull<c_void>)> {
+        XArrayState::new(self, index).load_next(usize::MAX)
+    }
+
+    /// Finds the next element starting from the given index.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::{prelude::*, xarray::{AllocKind, XArray}};
+    /// let mut xa = KBox::pin_init(XArray::<KBox<u32>>::new(AllocKind::Alloc), GFP_KERNEL)?;
+    /// let mut guard = xa.lock();
+    ///
+    /// guard.store(10, KBox::new(10u32, GFP_ATOMIC)?, GFP_ATOMIC)?;
+    /// guard.store(20, KBox::new(20u32, GFP_ATOMIC)?, GFP_ATOMIC)?;
+    ///
+    /// if let Some((found_index, value)) = guard.find_next(11) {
+    ///     assert_eq!(found_index, 20);
+    ///     assert_eq!(*value, 20);
+    /// }
+    ///
+    /// if let Some((found_index, value)) = guard.find_next(5) {
+    ///     assert_eq!(found_index, 10);
+    ///     assert_eq!(*value, 10);
+    /// }
+    ///
+    /// # Ok::<(), kernel::error::Error>(())
+    /// ```
+    pub fn find_next(&self, index: usize) -> Option<(usize, T::Borrowed<'_>)> {
+        self.load_next(index)
+            // SAFETY: `ptr` came from `T::into_foreign`.
+            .map(|(index, ptr)| (index, unsafe { T::borrow(ptr.as_ptr()) }))
+    }
+
+    /// Finds the next element starting from the given index, returning a mutable reference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::{prelude::*, xarray::{AllocKind, XArray}};
+    /// let mut xa = KBox::pin_init(XArray::<KBox<u32>>::new(AllocKind::Alloc), GFP_KERNEL)?;
+    /// let mut guard = xa.lock();
+    ///
+    /// guard.store(10, KBox::new(10u32, GFP_ATOMIC)?, GFP_ATOMIC)?;
+    /// guard.store(20, KBox::new(20u32, GFP_ATOMIC)?, GFP_ATOMIC)?;
+    ///
+    /// if let Some((found_index, mut_value)) = guard.find_next_mut(5) {
+    ///     assert_eq!(found_index, 10);
+    ///     *mut_value = 0x99;
+    /// }
+    ///
+    /// assert_eq!(guard.get(10).copied(), Some(0x99));
+    ///
+    /// # Ok::<(), kernel::error::Error>(())
+    /// ```
+    pub fn find_next_mut(&mut self, index: usize) -> Option<(usize, T::BorrowedMut<'_>)> {
+        self.load_next(index)
+            // SAFETY: `ptr` came from `T::into_foreign`.
+            .map(move |(index, ptr)| (index, unsafe { T::borrow_mut(ptr.as_ptr()) }))
     }
 
     /// Removes and returns the element at the given index.
@@ -358,6 +435,30 @@ where
         //
         // SAFETY: `xa_zero_to_null` only inspects the value of `ptr`.
         NonNull::new(unsafe { bindings::xa_zero_to_null(ptr) }.cast())
+    }
+
+    fn load_next(&mut self, max: usize) -> Option<(usize, NonNull<c_void>)> {
+        loop {
+            // SAFETY: `self.state` is a valid `xa_state` by the type invariant. By the same
+            // invariant, `self.state.xa` aliases the xarray reachable through `self.guard`,
+            // whose lock we hold.
+            let ptr = unsafe { bindings::xas_find(&raw mut self.state, max) };
+            if ptr.is_null() {
+                break None;
+            }
+
+            // Unlike the normal API, `xas_find` does not filter out internal entries. Arrays
+            // created with [`AllocKind::Alloc1`] store `XA_ZERO_ENTRY` at index 0 when they
+            // are expanded from empty. Skip zero entries and continue the search, like the
+            // `xas_retry` loop in `xa_find` does. Retry entries cannot be observed here
+            // because they require concurrent modification of the array, and we hold the
+            // lock.
+            //
+            // SAFETY: `xa_zero_to_null` only inspects the value of `ptr`.
+            if let Some(ptr) = NonNull::new(unsafe { bindings::xa_zero_to_null(ptr) }) {
+                break Some((self.state.xa_index, ptr));
+            }
+        }
     }
 }
 
