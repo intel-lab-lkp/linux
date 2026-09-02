@@ -32,6 +32,7 @@ static u32 ibs_caps;
 
 /* attr.config2 */
 #define IBS_SW_FILTER_MASK	1
+#define IBS_PHY_ADDR_ONLY_MASK	2
 
 /* attr.config1 */
 #define IBS_OP_CONFIG1_LDLAT_MASK		(0xFFFULL <<  0)
@@ -301,6 +302,13 @@ static bool perf_ibs_strmst_event(struct perf_ibs *perf_ibs,
 	return perf_ibs == &perf_ibs_op &&
 	       (ibs_caps & IBS_CAPS_STRMST_RMTSOCKET) &&
 	       (event->attr.config1 & IBS_OP_CONFIG1_STRMST_MASK);
+}
+
+static bool perf_ibs_phy_addr_only_event(struct perf_ibs *perf_ibs,
+				      struct perf_event *event)
+{
+	return perf_ibs == &perf_ibs_op &&
+	       (event->attr.config2 & IBS_PHY_ADDR_ONLY_MASK);
 }
 
 static int perf_ibs_init(struct perf_event *event)
@@ -721,6 +729,7 @@ static struct attribute_group empty_caps_group = {
 PMU_FORMAT_ATTR(rand_en,	"config:57");
 PMU_FORMAT_ATTR(cnt_ctl,	"config:19");
 PMU_FORMAT_ATTR(swfilt,		"config2:0");
+PMU_FORMAT_ATTR(phy_addr_only,	"config2:1");
 PMU_EVENT_ATTR_STRING(l3missonly, fetch_l3missonly, "config:59");
 PMU_EVENT_ATTR_STRING(l3missonly, op_l3missonly, "config:16");
 PMU_EVENT_ATTR_STRING(ldlat, ibs_op_ldlat_format, "config1:0-11");
@@ -890,6 +899,7 @@ cnt_ctl_is_visible(struct kobject *kobj, struct attribute *attr, int i)
 
 static struct attribute *op_attrs[] = {
 	&format_attr_swfilt.attr,
+	&format_attr_phy_addr_only.attr,
 	NULL,
 };
 
@@ -1337,7 +1347,8 @@ static int perf_ibs_get_offset_max(struct perf_ibs *perf_ibs,
 	if (event->attr.sample_type & PERF_SAMPLE_RAW ||
 	    perf_ibs_is_mem_sample_type(perf_ibs, event) ||
 	    perf_ibs_ldlat_event(perf_ibs, event) ||
-	    perf_ibs_fetch_lat_event(perf_ibs, event))
+	    perf_ibs_fetch_lat_event(perf_ibs, event) ||
+	    perf_ibs_phy_addr_only_event(perf_ibs, event))
 		return perf_ibs->offset_max;
 	else if (check_rip)
 		return 3;
@@ -1474,6 +1485,16 @@ fail:
 		 */
 		if (!op_data3.ld_op || !op_data3.dc_miss ||
 		    op_data3.dc_miss_lat <= (event->attr.config1 & IBS_OP_CONFIG1_LDLAT_MASK)) {
+			throttle = perf_event_account_interrupt(event);
+			goto out;
+		}
+	}
+
+	if (perf_ibs_phy_addr_only_event(perf_ibs, event)) {
+		union ibs_op_data3 op_data3;
+
+		op_data3.val = ibs_data.regs[ibs_op_msr_idx(MSR_AMD64_IBSOPDATA3)];
+		if (!op_data3.dc_phy_addr_valid) {
 			throttle = perf_event_account_interrupt(event);
 			goto out;
 		}
