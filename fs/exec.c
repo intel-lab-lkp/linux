@@ -1220,7 +1220,7 @@ int begin_new_exec(struct linux_binprm * bprm)
 	 * trying to access the should-be-closed file descriptors of a process
 	 * undergoing exec(2).
 	 */
-	do_close_on_exec(me->files);
+	close_cloexec_files(me->files);
 
 	if (bprm->secureexec) {
 		/* Make sure parent cannot signal privileged process. */
