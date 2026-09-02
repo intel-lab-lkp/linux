@@ -2085,6 +2085,26 @@ write_error:
 	return 0;
 }
 
+/*
+ * Return the error that will invalidate a child partition under a proposed
+ * parent partition configuration.
+ */
+static enum prs_errcode
+child_partition_error(struct cpuset *child,
+		      const struct cpumask *partition_cpus,
+		      const struct cpumask *remaining_cpus,
+		      bool parent_populated)
+{
+	if (!cpumask_subset(child->effective_xcpus, partition_cpus))
+		return PERR_INVCPUS;
+
+	if (parent_populated &&
+	    cpumask_subset(remaining_cpus, child->effective_xcpus))
+		return PERR_NOCPUS;
+
+	return PERR_NONE;
+}
+
 /**
  * compute_partition_effective_cpumask - compute effective_cpus for partition
  * @cs: partition root cpuset
@@ -2121,6 +2141,8 @@ static void compute_partition_effective_cpumask(struct cpuset *cs,
 
 	rcu_read_lock();
 	cpuset_for_each_child(child, css, cs) {
+		enum prs_errcode child_err;
+
 		if (!is_partition_valid(child))
 			continue;
 
@@ -2129,15 +2151,13 @@ static void compute_partition_effective_cpumask(struct cpuset *cs,
 		 * partition root.
 		 */
 		WARN_ON_ONCE(is_remote_partition(child));
-		WRITE_ONCE(child->prs_err, 0);
-		if (!cpumask_subset(child->effective_xcpus,
-				    cs->effective_xcpus))
-			WRITE_ONCE(child->prs_err, PERR_INVCPUS);
-		else if (populated &&
-			 cpumask_subset(new_ecpus, child->effective_xcpus))
-			WRITE_ONCE(child->prs_err, PERR_NOCPUS);
+		WRITE_ONCE(child->prs_err, PERR_NONE);
+		child_err = child_partition_error(child, cs->effective_xcpus,
+						  new_ecpus, populated);
+		if (child_err)
+			WRITE_ONCE(child->prs_err, child_err);
 
-		if (child->prs_err) {
+		if (child_err) {
 			int old_prs = child->partition_root_state;
 
 			/*
