@@ -8,7 +8,10 @@ use core::{
     iter,
     marker::PhantomData,
     pin::Pin,
-    ptr::NonNull, //
+    ptr::{
+        null_mut,
+        NonNull, //
+    },
 };
 use kernel::{
     alloc,
@@ -214,10 +217,8 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
     where
         F: FnOnce(NonNull<c_void>) -> U,
     {
-        // SAFETY: `self.xa.xa` is always valid by the type invariant.
-        let ptr = unsafe { bindings::xa_load(self.xa.xa.get(), index) };
-        let ptr = NonNull::new(ptr.cast())?;
-        Some(f(ptr))
+        let mut state = XArrayState::new(self, index);
+        Some(f(state.load()?))
     }
 
     /// Provides a reference to the element at the given index.
@@ -297,6 +298,69 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
             // API; such entries present as `NULL`.
             Ok(unsafe { T::try_from_foreign(old) })
         }
+    }
+}
+
+/// Internal state for XArray iteration and entry operations.
+///
+/// `R` is the borrow held on the guard: either `&Guard` for read-only callers
+/// or `&mut Guard` for entry-style APIs that need to surrender the borrow back
+/// via [`XArrayState::into_guard`].
+///
+/// # Invariants
+///
+/// - `state` is always a valid `bindings::xa_state`.
+/// - `state.xa` aliases the xarray reachable through `guard`.
+pub(crate) struct XArrayState<R> {
+    // The borrow is held to guarantee exclusive access to the array. It is
+    // not read until a later patch adds `into_guard`, so silence the dead
+    // code warning until then.
+    #[expect(dead_code)]
+    guard: R,
+    state: bindings::xa_state,
+}
+
+impl<'a, R, T> XArrayState<R>
+where
+    T: ForeignOwnable + 'a,
+    R: core::ops::Deref<Target = Guard<'a, T>>,
+{
+    #[inline]
+    fn new(guard: R, index: usize) -> Self {
+        let xa_ptr = guard.xa.xa.get();
+        // INVARIANT: `state` is initialized to a valid `xa_state` whose `xa` field aliases the
+        // xarray reachable through `guard`.
+        Self {
+            guard,
+            state: bindings::xa_state {
+                xa: xa_ptr,
+                xa_index: index,
+                xa_shift: 0,
+                xa_sibs: 0,
+                xa_offset: 0,
+                xa_pad: 0,
+                xa_node: bindings::XAS_RESTART as *mut bindings::xa_node,
+                xa_alloc: null_mut(),
+                xa_update: None,
+                xa_lru: null_mut(),
+            },
+        }
+    }
+
+    fn load(&mut self) -> Option<NonNull<c_void>> {
+        // SAFETY: `self.state` is a valid `xa_state` by the type invariant. By the same
+        // invariant, `self.state.xa` aliases the xarray reachable through `self.guard`, whose
+        // lock we hold.
+        let ptr = unsafe { bindings::xas_load(&raw mut self.state) };
+
+        // Unlike the normal API, `xas_load` does not filter out internal entries. Arrays
+        // created with [`AllocKind::Alloc1`] store `XA_ZERO_ENTRY` at index 0 when they are
+        // expanded from empty, so convert zero entries to `NULL` like `xa_load` does. Retry
+        // entries cannot be observed here because they require concurrent modification of the
+        // array, and we hold the lock.
+        //
+        // SAFETY: `xa_zero_to_null` only inspects the value of `ptr`.
+        NonNull::new(unsafe { bindings::xa_zero_to_null(ptr) }.cast())
     }
 }
 
