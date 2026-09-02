@@ -503,8 +503,7 @@ static void macsec_encrypt_finish(struct sk_buff *skb, struct net_device *dev)
 	struct macsec_dev *macsec = netdev_priv(dev);
 
 	skb->dev = macsec->real_dev;
-	skb_reset_mac_header(skb);
-	skb->protocol = eth_hdr(skb)->h_proto;
+	skb->protocol = skb_eth_hdr(skb)->h_proto;
 }
 
 static unsigned int macsec_msdu_len(struct sk_buff *skb)
