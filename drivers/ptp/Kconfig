@@ -219,6 +219,8 @@ config PTP_1588_CLOCK_OCP
 	select NET_DEVLINK
 	select CRC16
 	select DPLL
+	select FW_LOADER
+	select FW_UPLOAD
 	help
 	  This driver adds support for an OpenCompute time card.
 

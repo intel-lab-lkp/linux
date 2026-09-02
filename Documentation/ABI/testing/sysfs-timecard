@@ -30,6 +30,10 @@ Description:	(RO, root only) The status register of the TAP CPLD, in
 		ID of the CPLD is reported as the fixed "cpld.id" version by
 		devlink dev info.
 
+		To program new CPLD firmware use the standard kernel
+		firmware-upload interface, registered per card at:
+		/sys/class/firmware/adva-cpld.N/
+		where N is the index of this ocpN device.
 
 What:		/sys/class/timecard/ocpN/available_clock_sources
 Date:		September 2021
