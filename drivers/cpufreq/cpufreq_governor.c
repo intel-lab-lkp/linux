@@ -126,6 +126,7 @@ unsigned int dbs_update(struct cpufreq_policy *policy)
 	unsigned int ignore_nice = dbs_data->ignore_nice_load;
 	unsigned int max_load = 0, idle_periods = UINT_MAX;
 	unsigned int sampling_rate, io_busy, j;
+	bool all_cpus_idle = true;
 	u64 cur_nice;
 
 	/*
@@ -233,13 +234,15 @@ unsigned int dbs_update(struct cpufreq_policy *policy)
 
 			if (periods < idle_periods)
 				idle_periods = periods;
+		} else {
+			all_cpus_idle = false;
 		}
 
 		if (load > max_load)
 			max_load = load;
 	}
 
-	policy_dbs->idle_periods = idle_periods;
+	policy_dbs->idle_periods = all_cpus_idle ? idle_periods : UINT_MAX;
 
 	return max_load;
 }
