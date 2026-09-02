@@ -121,11 +121,11 @@ struct ad_sigma_delta {
 	/*
 	 * DMA (thus cache coherency maintenance) requires the
 	 * transfer buffers to live in their own cache lines.
-	 * 'tx_buf' is up to 32 bits.
+	 * 'tx_buf' is an 8 bit command plus up to 32 bits of data.
 	 * 'rx_buf' is up to 32 bits per sample + 64 bit timestamp,
 	 * rounded to 16 bytes to take into account padding.
 	 */
-	u8				tx_buf[4] __aligned(IIO_DMA_MINALIGN);
+	u8				tx_buf[5] __aligned(IIO_DMA_MINALIGN);
 	u8				rx_buf[16] __aligned(8);
 	u8				sample_addr;
 };

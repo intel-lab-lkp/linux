@@ -84,6 +84,9 @@ int ad_sd_write_reg(struct ad_sigma_delta *sigma_delta, unsigned int reg,
 	data[0] = (reg << sigma_delta->info->addr_shift) | sigma_delta->comm;
 
 	switch (size) {
+	case 4:
+		put_unaligned_be32(val, &data[1]);
+		break;
 	case 3:
 		put_unaligned_be24(val, &data[1]);
 		break;
