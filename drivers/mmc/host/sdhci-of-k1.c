@@ -407,7 +407,8 @@ static int spacemit_sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
 	if (ret)
 		return ret;
 
-	if (!sdhst->pinctrl)
+	/* No pinctrl or no "uhs" state */
+	if (!sdhst->pinctrl || !sdhst->pinctrl_uhs)
 		return 0;
 
 	/* Select appropriate pinctrl state based on signal voltage */
