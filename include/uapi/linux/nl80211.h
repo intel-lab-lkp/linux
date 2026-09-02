@@ -7127,6 +7127,14 @@ enum nl80211_feature_flags {
  *
  * @NL80211_EXT_FEATURE_PROBE_AP: Driver supports probing the associated AP
  *	in STA mode using @NL80211_CMD_PROBE_PEER.
+ * @NL80211_EXT_FEATURE_SCS: Driver or device supports the stream
+ *	classification service, so it classifies transmitted MSDUs against the
+ *	descriptors given with %NL80211_CMD_SET_SCS. Userspace sets the SCS
+ *	field of the Extended Capabilities element only when this is reported.
+ * @NL80211_EXT_FEATURE_MSCS: Driver or device supports the mirrored stream
+ *	classification service, configured with %NL80211_CMD_SET_MSCS.
+ *	Userspace sets the Mirrored SCS field of the Extended Capabilities
+ *	element only when this is reported.
  *
  * @NUM_NL80211_EXT_FEATURES: number of extended features.
  * @MAX_NL80211_EXT_FEATURES: highest extended feature index.
@@ -7210,6 +7218,8 @@ enum nl80211_ext_feature_index {
 	NL80211_EXT_FEATURE_ROC_ADDR_FILTER,
 	NL80211_EXT_FEATURE_SET_KEY_LTF_SEED,
 	NL80211_EXT_FEATURE_PROBE_AP,
+	NL80211_EXT_FEATURE_SCS,
+	NL80211_EXT_FEATURE_MSCS,
 
 	/* add new features before the definition below */
 	NUM_NL80211_EXT_FEATURES,

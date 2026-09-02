@@ -4237,6 +4237,18 @@ struct cfg80211_scs_desc {
 };
 
 /**
+ * struct cfg80211_scs_result - what one SCS descriptor is answered with
+ *
+ * Parallel to the descriptor array, so a descriptor holds what was asked for
+ * and never what came of it.
+ *
+ * @status: IEEE status code
+ */
+struct cfg80211_scs_result {
+	u16 status;
+};
+
+/**
  * struct cfg80211_mscs_desc - the MSCS of one peer
  *
  * @req_type: add, remove or change
@@ -5359,6 +5371,16 @@ struct mgmt_frame_regs {
  *
  * @set_qos_map: Set QoS mapping information to the driver
  *
+ * @set_scs: Add, change or remove SCS descriptors of one peer. The action
+ *	frame exchange has been handled by userspace, so this just has to make
+ *	the transmit path classify matching MSDUs. The op answers every
+ *	descriptor in the result entry of the same index, and a declined change
+ *	leaves the previously accepted classification of that SCSID in force.
+ *	A negative return fails the request as a whole and answers nothing.
+ * @set_mscs: Install, change or remove the MSCS of one peer. A peer has at
+ *	most one active MSCS, so the result is a single return value rather
+ *	than a per descriptor status.
+ *
  * @set_ap_chanwidth: Set the AP (including P2P GO) mode channel width for the
  *	given interface This is used e.g. for dynamic HT 20/40 MHz channel width
  *	changes during the lifetime of the BSS.
@@ -5762,6 +5784,12 @@ struct cfg80211_ops {
 	int     (*set_qos_map)(struct wiphy *wiphy,
 			       struct net_device *dev,
 			       struct cfg80211_qos_map *qos_map);
+
+	int	(*set_scs)(struct wiphy *wiphy, struct net_device *dev,
+			   const u8 *peer, struct cfg80211_scs_desc * const *desc,
+			   struct cfg80211_scs_result *res, u8 n_desc);
+	int	(*set_mscs)(struct wiphy *wiphy, struct net_device *dev,
+			    const u8 *peer, struct cfg80211_mscs_desc *desc);
 
 	int	(*set_ap_chanwidth)(struct wiphy *wiphy, struct net_device *dev,
 				    unsigned int link_id,
