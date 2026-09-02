@@ -34,7 +34,11 @@ struct badblocks {
 				 */
 	int shift;		/* shift from sectors to block size
 				 * a -ve shift means badblocks are
-				 * disabled.*/
+				 * disabled. Callers that set this from
+				 * untrusted/on-disk data are responsible
+				 * for bounding it so 1 << shift does not
+				 * overflow a sector_t.
+				 */
 	u64 *page;		/* badblock list */
 	int changed;
 	seqlock_t lock;
