@@ -396,6 +396,8 @@ static int pppoatm_assign_vcc(struct atm_vcc *atmvcc, void __user *arg)
 	if (be.encaps != PPPOATM_ENCAPS_AUTODETECT &&
 	    be.encaps != PPPOATM_ENCAPS_VC && be.encaps != PPPOATM_ENCAPS_LLC)
 		return -EINVAL;
+	if (atmvcc->user_back)
+		return -EBUSY;
 	pvcc = kzalloc_obj(*pvcc);
 	if (pvcc == NULL)
 		return -ENOMEM;
