@@ -437,11 +437,6 @@ static unsigned long max_index(void *entry)
 	return (XA_CHUNK_SIZE << xa_to_node(entry)->shift) - 1;
 }
 
-static inline void *xa_zero_to_null(void *entry)
-{
-	return xa_is_zero(entry) ? NULL : entry;
-}
-
 static void xas_shrink(struct xa_state *xas)
 {
 	struct xarray *xa = xas->xa;
@@ -1623,13 +1618,6 @@ void *xa_load(struct xarray *xa, unsigned long index)
 	return entry;
 }
 EXPORT_SYMBOL(xa_load);
-
-static void *xas_result(struct xa_state *xas, void *curr)
-{
-	if (xas_error(xas))
-		curr = xas->xa_node;
-	return curr;
-}
 
 /**
  * __xa_erase() - Erase this entry from the XArray while locked.
