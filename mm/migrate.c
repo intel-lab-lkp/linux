@@ -1629,11 +1629,12 @@ struct migrate_pages_stats {
 };
 
 /*
- * Returns the number of hugetlb folios that were not migrated, or an error code
- * after NR_MAX_MIGRATE_PAGES_RETRY attempts or if no hugetlb folios are movable
- * any more because the list has become empty or no retryable hugetlb folios
- * exist any more. It is caller's responsibility to call putback_movable_pages()
- * only if ret != 0.
+ * Move hugetlb folios from @from to a local list and try to migrate each folio
+ * up to NR_MAX_MIGRATE_PAGES_RETRY times. Any remaining folios are moved to
+ * @ret_folios list.
+ *
+ * Return the number of failed folios, or a negative errno.
+ *
  */
 static int migrate_hugetlbs(struct list_head *from, new_folio_t get_new_folio,
 			    free_folio_t put_new_folio, unsigned long private,
@@ -1646,16 +1647,18 @@ static int migrate_hugetlbs(struct list_head *from, new_folio_t get_new_folio,
 	int nr_retry_pages = 0;
 	int pass = 0;
 	struct folio *folio, *folio2;
-	int rc, nr_pages;
+	int rc, ret, nr_pages;
+	LIST_HEAD(hugetlbs);
+
+	list_for_each_entry_safe(folio, folio2, from, lru)
+		if (folio_test_hugetlb(folio))
+			list_move_tail(&folio->lru, &hugetlbs);
 
 	for (pass = 0; pass < NR_MAX_MIGRATE_PAGES_RETRY && retry; pass++) {
 		retry = 0;
 		nr_retry_pages = 0;
 
-		list_for_each_entry_safe(folio, folio2, from, lru) {
-			if (!folio_test_hugetlb(folio))
-				continue;
-
+		list_for_each_entry_safe(folio, folio2, &hugetlbs, lru) {
 			nr_pages = folio_nr_pages(folio);
 
 			cond_resched();
@@ -1681,18 +1684,19 @@ static int migrate_hugetlbs(struct list_head *from, new_folio_t get_new_folio,
 			/*
 			 * The rules are:
 			 *	0: hugetlb folio will be put back
-			 *	-EAGAIN: stay on the from list
-			 *	-ENOMEM: stay on the from list
+			 *	-EAGAIN: stay on hugetlbs, retried by a later pass
+			 *	-ENOMEM: give up; rest of the list goes to ret_folios
 			 *	Other errno: put on ret_folios list
 			 */
-			switch(rc) {
+			switch (rc) {
 			case -ENOMEM:
 				/*
 				 * When memory is low, don't bother to try to migrate
 				 * other folios, just exit.
 				 */
 				stats->nr_failed_pages += nr_pages + nr_retry_pages;
-				return -ENOMEM;
+				ret = -ENOMEM;
+				goto out;
 			case -EAGAIN:
 				retry++;
 				nr_retry_pages += nr_pages;
@@ -1720,8 +1724,11 @@ static int migrate_hugetlbs(struct list_head *from, new_folio_t get_new_folio,
 	 */
 	nr_failed += retry;
 	stats->nr_failed_pages += nr_retry_pages;
+	ret = nr_failed;
+out:
+	list_splice_tail(&hugetlbs, ret_folios);
 
-	return nr_failed;
+	return ret;
 }
 
 static void migrate_folios_move(struct list_head *src_folios,
@@ -2161,12 +2168,6 @@ int migrate_pages(struct list_head *from, new_folio_t get_new_folio,
 again:
 	nr_pages = 0;
 	list_for_each_entry_safe(folio, folio2, from, lru) {
-		/* Retried hugetlb folios will be kept in list  */
-		if (folio_test_hugetlb(folio)) {
-			list_move_tail(&folio->lru, &ret_folios);
-			continue;
-		}
-
 		nr_pages += folio_nr_pages(folio);
 		if (nr_pages >= NR_MAX_BATCHED_MIGRATION)
 			break;
