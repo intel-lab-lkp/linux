@@ -2112,7 +2112,7 @@ out_error:
 
 #ifdef CONFIG_MIGRATION
 int nfs_migrate_folio(struct address_space *mapping, struct folio *dst,
-		struct folio *src, enum migrate_mode mode)
+		struct folio *src, const struct migrate_control *ctl)
 {
 	/*
 	 * If the private flag is set, the folio is currently associated with
@@ -2123,19 +2123,19 @@ int nfs_migrate_folio(struct address_space *mapping, struct folio *dst,
 	 *        the folio lock.
 	 */
 	if (folio_test_private(src)) {
-		if (mode == MIGRATE_SYNC)
+		if (ctl->mode == MIGRATE_SYNC)
 			nfs_wb_folio(src->mapping->host, src);
 		if (folio_test_private(src))
 			return -EBUSY;
 	}
 
 	if (folio_test_private_2(src)) { /* [DEPRECATED] */
-		if (mode == MIGRATE_ASYNC)
+		if (ctl->mode == MIGRATE_ASYNC)
 			return -EBUSY;
 		folio_wait_private_2(src);
 	}
 
-	return migrate_folio(mapping, dst, src, mode);
+	return migrate_folio(mapping, dst, src, ctl);
 }
 #endif
 

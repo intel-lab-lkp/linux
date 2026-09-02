@@ -673,7 +673,7 @@ void nfs_clear_pnfs_ds_commit_verifiers(struct pnfs_ds_commit_info *cinfo)
 
 #ifdef CONFIG_MIGRATION
 int nfs_migrate_folio(struct address_space *, struct folio *dst,
-		struct folio *src, enum migrate_mode);
+		struct folio *src, const struct migrate_control *);
 #else
 #define nfs_migrate_folio NULL
 #endif

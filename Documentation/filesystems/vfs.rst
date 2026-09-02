@@ -767,7 +767,8 @@ cache in your filesystem.  The following members are defined:
 		void (*free_folio)(struct folio *);
 		ssize_t (*direct_IO)(struct kiocb *, struct iov_iter *iter);
 		int (*migrate_folio)(struct mapping *, struct folio *dst,
-				struct folio *src, enum migrate_mode);
+				struct folio *src,
+				const struct migrate_control *ctl);
 		int (*launder_folio) (struct folio *);
 
 		bool (*is_partially_uptodate) (struct folio *, size_t from,
@@ -939,7 +940,9 @@ cache in your filesystem.  The following members are defined:
 	wants to relocate a folio (maybe from a memory device that is
 	signalling imminent failure) it will pass a new folio and an old
 	folio to this function.  migrate_folio should transfer any private
-	data across and update any references that it has to the folio.
+	data across and update any references that it has to the folio.  The
+	control describes the blocking mode and the reason for migration.  If
+	the mode is ``MIGRATE_ASYNC``, the callback must not block.
 
 ``launder_folio``
 	Called before freeing a folio - it writes back the dirty folio.

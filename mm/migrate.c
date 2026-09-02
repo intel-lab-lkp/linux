@@ -869,7 +869,7 @@ EXPORT_SYMBOL(folio_migrate_flags);
 
 static int __migrate_folio(struct address_space *mapping, struct folio *dst,
 			   struct folio *src, void *src_private,
-			   enum migrate_mode mode)
+			   const struct migrate_control *ctl)
 {
 	int rc, expected_count = folio_expected_ref_count(src) + 1;
 
@@ -897,7 +897,7 @@ static int __migrate_folio(struct address_space *mapping, struct folio *dst,
  * @mapping: The address_space containing the folio.
  * @dst: The folio to migrate the data to.
  * @src: The folio containing the current data.
- * @mode: How to migrate the folio.
+ * @ctl: Migration policy for this folio.
  *
  * Common logic to directly migrate a single LRU folio suitable for
  * folios that do not have private data.
@@ -905,10 +905,10 @@ static int __migrate_folio(struct address_space *mapping, struct folio *dst,
  * Folios are locked upon entry and exit.
  */
 int migrate_folio(struct address_space *mapping, struct folio *dst,
-		  struct folio *src, enum migrate_mode mode)
+		  struct folio *src, const struct migrate_control *ctl)
 {
 	BUG_ON(folio_test_writeback(src));	/* Writeback must be complete */
-	return __migrate_folio(mapping, dst, src, NULL, mode);
+	return __migrate_folio(mapping, dst, src, NULL, ctl);
 }
 EXPORT_SYMBOL(migrate_folio);
 
@@ -947,8 +947,8 @@ unlock:
 }
 
 static int __buffer_migrate_folio(struct address_space *mapping,
-		struct folio *dst, struct folio *src, enum migrate_mode mode,
-		bool check_refs)
+		struct folio *dst, struct folio *src,
+		const struct migrate_control *ctl, bool check_refs)
 {
 	struct buffer_head *bh, *head;
 	int rc;
@@ -956,14 +956,14 @@ static int __buffer_migrate_folio(struct address_space *mapping,
 
 	head = folio_buffers(src);
 	if (!head)
-		return migrate_folio(mapping, dst, src, mode);
+		return migrate_folio(mapping, dst, src, ctl);
 
 	/* Check whether page does not have extra refs before we do more work */
 	expected_count = folio_expected_ref_count(src) + 1;
 	if (folio_ref_count(src) != expected_count)
 		return -EAGAIN;
 
-	if (!buffer_migrate_lock_buffers(head, mode))
+	if (!buffer_migrate_lock_buffers(head, ctl->mode))
 		return -EAGAIN;
 
 	if (check_refs) {
@@ -995,7 +995,7 @@ recheck_buffers:
 		}
 	}
 
-	rc = filemap_migrate_folio(mapping, dst, src, mode);
+	rc = filemap_migrate_folio(mapping, dst, src, ctl);
 	if (rc)
 		goto unlock_buffers;
 
@@ -1022,7 +1022,7 @@ unlock_buffers:
  * @mapping: The address space containing @src.
  * @dst: The folio to migrate to.
  * @src: The folio to migrate from.
- * @mode: How to migrate the folio.
+ * @ctl: Migration policy for this folio.
  *
  * This function can only be used if the underlying filesystem guarantees
  * that no other references to @src exist. For example attached buffer
@@ -1033,9 +1033,10 @@ unlock_buffers:
  * Return: 0 on success or a negative errno on failure.
  */
 int buffer_migrate_folio(struct address_space *mapping,
-		struct folio *dst, struct folio *src, enum migrate_mode mode)
+		struct folio *dst, struct folio *src,
+		const struct migrate_control *ctl)
 {
-	return __buffer_migrate_folio(mapping, dst, src, mode, false);
+	return __buffer_migrate_folio(mapping, dst, src, ctl, false);
 }
 EXPORT_SYMBOL(buffer_migrate_folio);
 
@@ -1044,7 +1045,7 @@ EXPORT_SYMBOL(buffer_migrate_folio);
  * @mapping: The address space containing @src.
  * @dst: The folio to migrate to.
  * @src: The folio to migrate from.
- * @mode: How to migrate the folio.
+ * @ctl: Migration policy for this folio.
  *
  * Like buffer_migrate_folio() except that this variant is more careful
  * and checks that there are also no buffer head references. This function
@@ -1054,17 +1055,19 @@ EXPORT_SYMBOL(buffer_migrate_folio);
  * Return: 0 on success or a negative errno on failure.
  */
 int buffer_migrate_folio_norefs(struct address_space *mapping,
-		struct folio *dst, struct folio *src, enum migrate_mode mode)
+		struct folio *dst, struct folio *src,
+		const struct migrate_control *ctl)
 {
-	return __buffer_migrate_folio(mapping, dst, src, mode, true);
+	return __buffer_migrate_folio(mapping, dst, src, ctl, true);
 }
 EXPORT_SYMBOL_GPL(buffer_migrate_folio_norefs);
 #endif /* CONFIG_BUFFER_HEAD */
 
 int filemap_migrate_folio(struct address_space *mapping,
-		struct folio *dst, struct folio *src, enum migrate_mode mode)
+		struct folio *dst, struct folio *src,
+		const struct migrate_control *ctl)
 {
-	return __migrate_folio(mapping, dst, src, folio_get_private(src), mode);
+	return __migrate_folio(mapping, dst, src, folio_get_private(src), ctl);
 }
 EXPORT_SYMBOL_GPL(filemap_migrate_folio);
 
@@ -1072,7 +1075,8 @@ EXPORT_SYMBOL_GPL(filemap_migrate_folio);
  * Default handling if a filesystem does not provide a migration function.
  */
 static int fallback_migrate_folio(struct address_space *mapping,
-		struct folio *dst, struct folio *src, enum migrate_mode mode)
+		struct folio *dst, struct folio *src,
+		const struct migrate_control *ctl)
 {
 	WARN_ONCE(mapping->a_ops->writepages,
 			"%ps does not implement migrate_folio\n",
@@ -1085,9 +1089,9 @@ static int fallback_migrate_folio(struct address_space *mapping,
 	 * can't migrate automatically.
 	 */
 	if (!filemap_release_folio(src, GFP_KERNEL))
-		return mode == MIGRATE_SYNC ? -EAGAIN : -EBUSY;
+		return ctl->mode == MIGRATE_SYNC ? -EAGAIN : -EBUSY;
 
-	return migrate_folio(mapping, dst, src, mode);
+	return migrate_folio(mapping, dst, src, ctl);
 }
 
 /*
@@ -1112,7 +1116,7 @@ static int move_to_new_folio(struct folio *dst, struct folio *src,
 	VM_BUG_ON_FOLIO(!folio_test_locked(dst), dst);
 
 	if (!mapping)
-		rc = migrate_folio(mapping, dst, src, ctl->mode);
+		rc = migrate_folio(mapping, dst, src, ctl);
 	else if (mapping_inaccessible(mapping))
 		rc = -EOPNOTSUPP;
 	else if (mapping->a_ops->migrate_folio)
@@ -1123,9 +1127,9 @@ static int move_to_new_folio(struct folio *dst, struct folio *src,
 		 * migrate_folio callback. This is the most common path
 		 * for page migration.
 		 */
-		rc = mapping->a_ops->migrate_folio(mapping, dst, src, ctl->mode);
+		rc = mapping->a_ops->migrate_folio(mapping, dst, src, ctl);
 	else
-		rc = fallback_migrate_folio(mapping, dst, src, ctl->mode);
+		rc = fallback_migrate_folio(mapping, dst, src, ctl);
 
 	if (!rc) {
 		/*

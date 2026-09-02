@@ -155,7 +155,7 @@ static inline void dec_io(struct folio *folio, blk_status_t status,
 #ifdef CONFIG_MIGRATION
 static int __metapage_migrate_folio(struct address_space *mapping,
 				    struct folio *dst, struct folio *src,
-				    enum migrate_mode mode)
+				    const struct migrate_control *ctl)
 {
 	struct meta_anchor *src_anchor = src->private;
 	struct metapage *mps[MPS_PER_PAGE] = {0};
@@ -168,7 +168,7 @@ static int __metapage_migrate_folio(struct address_space *mapping,
 			return -EAGAIN;
 	}
 
-	rc = filemap_migrate_folio(mapping, dst, src, mode);
+	rc = filemap_migrate_folio(mapping, dst, src, ctl);
 	if (rc)
 		return rc;
 
@@ -231,7 +231,7 @@ static inline void remove_metapage(struct folio *folio, struct metapage *mp)
 #ifdef CONFIG_MIGRATION
 static int __metapage_migrate_folio(struct address_space *mapping,
 				    struct folio *dst, struct folio *src,
-				    enum migrate_mode mode)
+				    const struct migrate_control *ctl)
 {
 	struct metapage *mp;
 	int page_offset;
@@ -241,7 +241,7 @@ static int __metapage_migrate_folio(struct address_space *mapping,
 	if (metapage_locked(mp))
 		return -EAGAIN;
 
-	rc = filemap_migrate_folio(mapping, dst, src, mode);
+	rc = filemap_migrate_folio(mapping, dst, src, ctl);
 	if (rc)
 		return rc;
 
@@ -645,18 +645,18 @@ static bool metapage_release_folio(struct folio *folio, gfp_t gfp_mask)
  */
 static int metapage_migrate_folio(struct address_space *mapping,
 				  struct folio *dst, struct folio *src,
-				  enum migrate_mode mode)
+				  const struct migrate_control *ctl)
 {
 	int expected_count;
 
 	if (!src->private)
-		return filemap_migrate_folio(mapping, dst, src, mode);
+		return filemap_migrate_folio(mapping, dst, src, ctl);
 
 	/* Check whether page does not have extra refs before we do more work */
 	expected_count = folio_expected_ref_count(src) + 1;
 	if (folio_ref_count(src) != expected_count)
 		return -EAGAIN;
-	return __metapage_migrate_folio(mapping, dst, src, mode);
+	return __metapage_migrate_folio(mapping, dst, src, ctl);
 }
 #else
 #define metapage_migrate_folio NULL

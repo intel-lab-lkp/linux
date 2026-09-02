@@ -457,7 +457,7 @@ static struct file_operations kvm_gmem_fops = {
 
 static int kvm_gmem_migrate_folio(struct address_space *mapping,
 				  struct folio *dst, struct folio *src,
-				  enum migrate_mode mode)
+				  const struct migrate_control *ctl)
 {
 	WARN_ON_ONCE(1);
 	return -EINVAL;

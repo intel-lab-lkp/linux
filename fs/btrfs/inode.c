@@ -7653,10 +7653,10 @@ static bool btrfs_release_folio(struct folio *folio, gfp_t gfp_flags)
 
 #ifdef CONFIG_MIGRATION
 static int btrfs_migrate_folio(struct address_space *mapping,
-			     struct folio *dst, struct folio *src,
-			     enum migrate_mode mode)
+			       struct folio *dst, struct folio *src,
+			       const struct migrate_control *ctl)
 {
-	int ret = filemap_migrate_folio(mapping, dst, src, mode);
+	int ret = filemap_migrate_folio(mapping, dst, src, ctl);
 
 	if (ret)
 		return ret;

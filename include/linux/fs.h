@@ -423,11 +423,11 @@ struct address_space_operations {
 	void (*free_folio)(struct folio *folio);
 	ssize_t (*direct_IO)(struct kiocb *, struct iov_iter *iter);
 	/*
-	 * migrate the contents of a folio to the specified target. If
-	 * migrate_mode is MIGRATE_ASYNC, it must not block.
+	 * Migrate the contents of a folio to the specified target.  The
+	 * callback must not block when ctl->mode is MIGRATE_ASYNC.
 	 */
 	int (*migrate_folio)(struct address_space *, struct folio *dst,
-			struct folio *src, enum migrate_mode);
+			struct folio *src, const struct migrate_control *ctl);
 	int (*launder_folio)(struct folio *);
 	bool (*is_partially_uptodate) (struct folio *, size_t from,
 			size_t count);
