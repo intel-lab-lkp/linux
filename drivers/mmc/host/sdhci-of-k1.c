@@ -169,21 +169,23 @@ static void spacemit_sdhci_reset(struct sdhci_host *host, u8 mask)
 	if (mask != SDHCI_RESET_ALL)
 		return;
 
-	spacemit_sdhci_setbits(host, SDHC_PHY_FUNC_EN | SDHC_PHY_PLL_LOCK,
-			       SPACEMIT_SDHC_PHY_CTRL_REG);
+	if (host->mmc->caps2 & MMC_CAP2_NO_MMC) {
+		/* SD/SDIO: bypass PHY, use TX internal clock */
+		spacemit_sdhci_setbits(host, SDHC_TX_INT_CLK_SEL, SPACEMIT_SDHC_TX_CFG_REG);
 
-	spacemit_sdhci_clrsetbits(host, SDHC_PHY_DRIVE_SEL,
-				  SDHC_RX_BIAS_CTRL | FIELD_PREP(SDHC_PHY_DRIVE_SEL, 4),
-				  SPACEMIT_SDHC_PHY_PADCFG_REG);
-
-	if (!(host->mmc->caps2 & MMC_CAP2_NO_MMC))
-		spacemit_sdhci_setbits(host, SDHC_MMC_CARD_MODE, SPACEMIT_SDHC_MMC_CTRL_REG);
-
-	spacemit_sdhci_setbits(host, SDHC_GEN_PAD_CLK_ON, SPACEMIT_SDHC_LEGACY_CTRL_REG);
-
-	if (host->mmc->caps2 & MMC_CAP2_NO_MMC)
 		spacemit_sdhci_setbits(host, SDHC_OVRRD_CLK_OEN | SDHC_FORCE_CLK_ON,
 				       SPACEMIT_SDHC_OP_EXT_REG);
+	} else {
+		/* eMMC: use PHY function mode */
+		spacemit_sdhci_setbits(host, SDHC_PHY_FUNC_EN | SDHC_PHY_PLL_LOCK,
+				       SPACEMIT_SDHC_PHY_CTRL_REG);
+
+		spacemit_sdhci_clrsetbits(host, SDHC_PHY_DRIVE_SEL,
+					  SDHC_RX_BIAS_CTRL | FIELD_PREP(SDHC_PHY_DRIVE_SEL, 4),
+					  SPACEMIT_SDHC_PHY_PADCFG_REG);
+
+		spacemit_sdhci_setbits(host, SDHC_MMC_CARD_MODE, SPACEMIT_SDHC_MMC_CTRL_REG);
+	}
 }
 
 static void spacemit_sdhci_set_uhs_signaling(struct sdhci_host *host, unsigned int timing)
