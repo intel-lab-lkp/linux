@@ -213,52 +213,6 @@ static inline bool nfsd4_create_is_exclusive(int createmode)
 		createmode == NFS4_CREATE_EXCLUSIVE4_1;
 }
 
-static struct file *do_lookup_open(struct path *parent,
-				   struct qstr *name,
-				   unsigned int oflags,
-				   umode_t mode)
-{
-	struct file *filp = NULL;
-	struct path path;
-	struct dentry *child;
-	int want_write_err = 0;
-
-	want_write_err = mnt_want_write(parent->mnt);
-
-	child = start_creating(&nop_mnt_idmap, parent->dentry, name);
-	if (IS_ERR(child)) {
-		filp = ERR_CAST(child);
-		goto out;
-	}
-	path.mnt = parent->mnt;
-	path.dentry = child;
-
-	if (d_really_is_positive(child)) {
-		/*
-		 * open the file so that we consistently have a valid
-		 * op_filp and consequently a valid ->f_path.dentry.
-		 */
-		int err = nfsd_check_obj_isreg(child);
-
-		if (err)
-			filp = ERR_PTR(err);
-		else
-			filp = dentry_open(&path, oflags, current_cred());
-	} else if (!(oflags & O_CREAT)) {
-		filp = ERR_PTR(-ENOENT);
-	} else if (want_write_err) {
-		filp = ERR_PTR(want_write_err);
-	} else {
-		filp = dentry_create(&path, oflags, mode, current_cred());
-		child = path.dentry;
-	}
-	end_creating(child);
-out:
-	if (!want_write_err)
-		mnt_drop_write(parent->mnt);
-	return filp;
-}
-
 /*
  * Implement NFSv4's unchecked, guarded, and exclusive create
  * semantics for regular files. Open state for this new file is
@@ -390,13 +344,21 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		/* Might still succeed if no create is needed */
 		oflags &= ~O_CREAT;
 
-	open->op_filp = do_lookup_open(&parent,
-				       &QSTR_LEN(open->op_fname,
-						 open->op_fnamelen),
-				       oflags,
-				       open->op_iattr.ia_mode);
+	open->op_filp = vfs_lookup_open(&parent,
+					&QSTR_LEN(open->op_fname,
+						  open->op_fnamelen),
+					oflags,
+					open->op_iattr.ia_mode);
 	if (IS_ERR(open->op_filp)) {
-		status = nfserrno(PTR_ERR(open->op_filp));
+		int hosterr = PTR_ERR(open->op_filp);
+
+		/*
+		 * NFS doesn't differentiate between device files and
+		 * sock/fifo when reporting an error.
+		 */
+		if (hosterr == -ENODEV)
+			hosterr = -EFTYPE;
+		status = nfserrno(hosterr);
 		open->op_filp = NULL;
 		if (status == nfserr_noent && create_status)
 			status = create_status;
