@@ -569,7 +569,7 @@ iommu_copy_struct_from_full_user_array(void *kdst, size_t kdst_entry_size,
 	if (user_array->type != data_type)
 		return -EINVAL;
 	if (!user_array->entry_num)
-		return -EINVAL;
+		return 0;
 	if (likely(user_array->entry_len == kdst_entry_size)) {
 		if (copy_from_user(kdst, user_array->uptr,
 				   user_array->entry_num *
