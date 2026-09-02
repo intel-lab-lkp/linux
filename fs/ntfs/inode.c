@@ -3030,7 +3030,7 @@ int ntfs_inode_attach_all_extents(struct ntfs_inode *ni)
 				prev_attached != MREF_LE(ale->mft_reference)) {
 			if (!ntfs_extent_inode_open(ni, ale->mft_reference)) {
 				ntfs_debug("Couldn't attach extent inode.\n");
-				return -1;
+				return -ENOMEM;
 			}
 			prev_attached = MREF_LE(ale->mft_reference);
 		}
