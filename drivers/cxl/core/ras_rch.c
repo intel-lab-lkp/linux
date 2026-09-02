@@ -89,42 +89,15 @@ static bool cxl_rch_get_aer_info(void __iomem *aer_base,
 	return true;
 }
 
-/* Get AER severity. Return false if there is no error. */
-static bool cxl_rch_get_aer_severity(struct aer_capability_regs *aer_regs,
-				     int *severity)
-{
-	u32 uncor_status = aer_regs->uncor_status & ~aer_regs->uncor_mask;
-
-	if (uncor_status) {
-		*severity = (uncor_status & aer_regs->uncor_severity) ?
-			     AER_FATAL : AER_NONFATAL;
-		return true;
-	}
-
-	if (aer_regs->cor_status & ~aer_regs->cor_mask) {
-		*severity = AER_CORRECTABLE;
-		return true;
-	}
-
-	return false;
-}
-
 void cxl_handle_rdport_errors(struct pci_dev *pdev)
 {
 	struct aer_capability_regs aer_regs;
 	struct cxl_dport *dport;
-	int severity;
 
 	struct cxl_port *port __free(put_cxl_port) = cxl_pci_find_port(pdev, NULL);
 	if (!port)
 		return;
 
-	/*
-	 * The RCH Downstream Port is the Root Port's dport
-	 * (dport free and RAS iomap) is hosted on the CXL Host Bridge
-	 * (port->uport_dev), not &port->dev. Hold that device's lock so the
-	 * dport cannot be freed and its registers unmapped while in use here.
-	 */
 	guard(device)(port->uport_dev);
 	dport = cxl_find_dport_by_dev(port, pdev->dev.parent);
 	if (!dport)
@@ -133,12 +106,39 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 	if (!cxl_rch_get_aer_info(dport->regs.dport_aer, &aer_regs))
 		return;
 
-	if (!cxl_rch_get_aer_severity(&aer_regs, &severity))
-		return;
+	/*
+	 * Snapshot aer_regs before handling the correctable error:
+	 * pci_print_aer() takes it by pointer and rewrites uncor_status/
+	 * uncor_mask in place on the Advisory Non-Fatal Error path. Use the
+	 * copy for the uncorrectable dispatch and logging below so neither is
+	 * corrupted by the correctable pci_print_aer() call.
+	 */
+	struct aer_capability_regs uncor_regs = aer_regs;
+	u32 uncor_status = uncor_regs.uncor_status & ~uncor_regs.uncor_mask;
 
-	pci_print_aer(pdev, severity, &aer_regs);
-	if (severity == AER_CORRECTABLE)
+	/*
+	 * Handle correctable and uncorrectable errors independently; both
+	 * may be set in the same pass and cxl_rch_get_aer_info() has already
+	 * cleared both status registers.
+	 */
+	if (aer_regs.cor_status & ~aer_regs.cor_mask) {
+		pci_print_aer(pdev, AER_CORRECTABLE, &aer_regs);
 		cxl_handle_cor_ras(dport->dport_dev, to_ras_base(port, dport));
-	else
+	}
+
+	if (uncor_status) {
+		int severity = (uncor_status & uncor_regs.uncor_severity) ?
+			       AER_FATAL : AER_NONFATAL;
+
+		/*
+		 * Log unconditionally. The correctable pci_print_aer() only
+		 * logs this via ANFE recursion when aer_compute_anfe_status()
+		 * is non-zero. Testing PCI_ERR_COR_ADV_NFAT alone cannot tell
+		 * whether it fired, and the HW status is already cleared. A
+		 * duplicate line beats a lost error.
+		 */
+		pci_print_aer(pdev, severity, &uncor_regs);
+
 		cxl_do_recovery(pdev, dport->port, dport);
+	}
 }
