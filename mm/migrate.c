@@ -1200,7 +1200,7 @@ static void migrate_folio_undo_dst(struct folio *dst, bool locked,
 static void migrate_folio_done(struct folio *src,
 			       enum migrate_reason reason)
 {
-	if (likely(!page_has_movable_ops(&src->page)) && reason != MR_DEMOTION)
+	if (reason != MR_DEMOTION)
 		mod_node_page_state(folio_pgdat(src), NR_ISOLATED_ANON +
 				    folio_is_file_lru(src), -folio_nr_pages(src));
 
@@ -1309,11 +1309,6 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 		goto out;
 	dst_locked = true;
 
-	if (unlikely(page_has_movable_ops(&src->page))) {
-		__migrate_folio_record(dst, old_folio_state, anon_vma);
-		return 0;
-	}
-
 	/*
 	 * Corner case handling:
 	 * 1. When a new swap-cache page is read into, it is added to the LRU
@@ -1376,13 +1371,6 @@ static int migrate_folio_move(free_folio_t put_new_folio, unsigned long private,
 	prev = dst->lru.prev;
 	list_del(&dst->lru);
 
-	if (unlikely(page_has_movable_ops(&src->page))) {
-		rc = migrate_movable_ops_page(&dst->page, &src->page, mode);
-		if (rc)
-			goto out;
-		goto out_unlock_both;
-	}
-
 	if (folio_order(src) > 1 &&
 	    !data_race(list_empty(&src->_deferred_list))) {
 		src_deferred_split = true;
@@ -1418,7 +1406,6 @@ static int migrate_folio_move(free_folio_t put_new_folio, unsigned long private,
 	if (old_folio_state & FOLIO_WAS_MAPPED)
 		remove_migration_ptes(src, dst, 0);
 
-out_unlock_both:
 	folio_unlock(dst);
 	folio_set_owner_migrate_reason(dst, reason);
 	/*
@@ -1816,6 +1803,135 @@ static void migrate_folios_undo(struct list_head *src_folios,
 	}
 }
 
+/*
+ * Migrate one isolated movable_ops page. Keep @src on its list for retry and
+ * move it to @ret_folios on permanent failure.
+ *
+ * Return 0 on success or a negative error.
+ */
+static int move_movable_ops_page(struct folio *src,
+		new_folio_t get_new_folio, free_folio_t put_new_folio,
+		unsigned long private, enum migrate_mode mode,
+		enum migrate_reason reason, struct list_head *ret_folios)
+{
+	struct folio *dst;
+	int rc = -EAGAIN;
+
+	dst = get_new_folio(src, private);
+	if (!dst)
+		return -ENOMEM;
+
+	if (!folio_trylock(src)) {
+		if (mode == MIGRATE_ASYNC)
+			goto out_put_dst;
+		if (current->flags & PF_MEMALLOC)
+			goto out_put_dst;
+		folio_lock(src);
+	}
+
+	if (unlikely(!folio_trylock(dst)))
+		goto out_unlock_src;
+
+	rc = migrate_movable_ops_page(&dst->page, &src->page, mode);
+	folio_unlock(dst);
+	if (rc)
+		goto out_unlock_src;
+
+	folio_set_owner_migrate_reason(dst, reason);
+	/* Drop migration's reference after transferring ownership to dst. */
+	folio_put(dst);
+
+	list_del(&src->lru);
+	folio_unlock(src);
+
+	if (reason != MR_MEMORY_FAILURE)
+		folio_put(src);
+
+	return 0;
+
+out_unlock_src:
+	folio_unlock(src);
+out_put_dst:
+	if (put_new_folio)
+		put_new_folio(dst, private);
+	else
+		folio_put(dst);
+
+	if (rc != -EAGAIN)
+		list_move_tail(&src->lru, ret_folios);
+
+	return rc;
+}
+
+/*
+ * Move movable_ops pages from @from to a local list and try to migrate each
+ * page up to NR_MAX_MIGRATE_PAGES_RETRY times. Any remaining pages are moved
+ * to @ret_folios.
+ *
+ * Return the number of failed pages, or a negative error.
+ */
+static int migrate_movable_ops_pages(struct list_head *from,
+		new_folio_t get_new_folio, free_folio_t put_new_folio,
+		unsigned long private, enum migrate_mode mode,
+		enum migrate_reason reason, struct migrate_pages_stats *stats,
+		struct list_head *ret_folios)
+{
+	int retry = 1;
+	int nr_failed = 0;
+	int pass;
+	struct folio *folio, *folio2;
+	int rc, ret;
+	LIST_HEAD(movable_ops_pages);
+
+	list_for_each_entry_safe(folio, folio2, from, lru)
+		if (page_has_movable_ops(&folio->page))
+			list_move_tail(&folio->lru, &movable_ops_pages);
+
+	for (pass = 0; pass < NR_MAX_MIGRATE_PAGES_RETRY && retry; pass++) {
+		retry = 0;
+
+		list_for_each_entry_safe(folio, folio2, &movable_ops_pages, lru) {
+			cond_resched();
+
+			rc = move_movable_ops_page(folio, get_new_folio,
+						   put_new_folio, private,
+						   mode, reason, ret_folios);
+			switch (rc) {
+			case -ENOMEM:
+				/* Count this page and those awaiting retry. */
+				nr_failed += 1 + retry;
+				ret = -ENOMEM;
+				goto out;
+			case -EAGAIN:
+				retry++;
+				break;
+			case 0:
+				stats->nr_succeeded++;
+				break;
+			default:
+				nr_failed++;
+				break;
+			}
+		}
+	}
+	/* Count pages that exhausted the retry limit. */
+	nr_failed += retry;
+	ret = nr_failed;
+out:
+	/* movable_ops pages are order-0, so one failed page each. */
+	stats->nr_failed_pages += nr_failed;
+	list_splice_tail(&movable_ops_pages, ret_folios);
+
+	return ret;
+}
+
+/*
+ * Split a large folio after destination allocation fails and queue the resulting
+ * folios on @split_folios.
+ *
+ * Return: 0 on success, -EAGAIN to retry splitting later, or -ENOMEM to stop the
+ * unmap phase.
+ */
 static int migrate_folio_split_on_alloc_fail(struct folio *folio,
 		struct list_head *split_folios, enum migrate_mode mode,
 		enum migrate_reason reason, struct migrate_pages_stats *stats)
@@ -1940,8 +2056,7 @@ static int migrate_folios_unmap(struct list_head *from,
 			 * If we are holding the last folio reference, the folio
 			 * was freed from under us, so just drop our reference.
 			 */
-			if (likely(!page_has_movable_ops(&folio->page)) &&
-			    folio_ref_count(folio) == 1) {
+			if (folio_ref_count(folio) == 1) {
 				folio_clear_active(folio);
 				folio_clear_unevictable(folio);
 				list_del(&folio->lru);
@@ -2164,6 +2279,15 @@ int migrate_pages(struct list_head *from, new_folio_t get_new_folio,
 				     mode, reason, &stats, &ret_folios);
 	if (rc_gather < 0)
 		goto out;
+
+	rc = migrate_movable_ops_pages(from, get_new_folio, put_new_folio,
+				       private, mode, reason, &stats,
+				       &ret_folios);
+	if (rc < 0) {
+		rc_gather = rc;
+		goto out;
+	}
+	rc_gather += rc;
 
 again:
 	nr_pages = 0;
