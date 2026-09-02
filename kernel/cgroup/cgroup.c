@@ -1683,8 +1683,8 @@ void cgroup_kn_unlock(struct kernfs_node *kn)
  * This helper is to be used by a cgroup kernfs method currently servicing
  * @kn.  It breaks the active protection, performs cgroup locking and
  * verifies that the associated cgroup is alive.  Returns the cgroup if
- * alive; otherwise, %NULL.  A successful return should be undone by a
- * matching cgroup_kn_unlock() invocation.  If @drain_offline is %true, the
+ * alive; otherwise, an ERR_PTR value.  A successful return should be undone by
+ * a matching cgroup_kn_unlock() invocation.  If @drain_offline is %true, the
  * cgroup is drained of offlining csses before return.
  *
  * Any cgroup kernfs method implementation which requires locking the
@@ -1708,7 +1708,7 @@ struct cgroup *cgroup_kn_lock_live(struct kernfs_node *kn, bool drain_offline)
 	 * break the active_ref protection.
 	 */
 	if (!cgroup_tryget(cgrp))
-		return NULL;
+		return ERR_PTR(-ENODEV);
 	kernfs_break_active_protection(kn);
 
 	if (drain_offline)
@@ -1720,7 +1720,7 @@ struct cgroup *cgroup_kn_lock_live(struct kernfs_node *kn, bool drain_offline)
 		return cgrp;
 
 	cgroup_kn_unlock(kn);
-	return NULL;
+	return ERR_PTR(-ENODEV);
 }
 
 static void cgroup_rm_file(struct cgroup *cgrp, const struct cftype *cft)
@@ -3575,8 +3575,8 @@ static ssize_t cgroup_subtree_control_write(struct kernfs_open_file *of,
 	}
 
 	cgrp = cgroup_kn_lock_live(of->kn, true);
-	if (!cgrp)
-		return -ENODEV;
+	if (IS_ERR(cgrp))
+		return PTR_ERR(cgrp);
 
 	for_each_subsys(ss, ssid) {
 		if (enable & (1 << ssid)) {
@@ -3715,8 +3715,8 @@ static ssize_t cgroup_type_write(struct kernfs_open_file *of, char *buf,
 
 	/* drain dying csses before we re-apply (threaded) subtree control */
 	cgrp = cgroup_kn_lock_live(of->kn, true);
-	if (!cgrp)
-		return -ENODEV;
+	if (IS_ERR(cgrp))
+		return PTR_ERR(cgrp);
 
 	/* threaded can only be enabled */
 	ret = cgroup_enable_threaded(cgrp);
@@ -3758,8 +3758,8 @@ static ssize_t cgroup_max_descendants_write(struct kernfs_open_file *of,
 		return -ERANGE;
 
 	cgrp = cgroup_kn_lock_live(of->kn, false);
-	if (!cgrp)
-		return -ENODEV;
+	if (IS_ERR(cgrp))
+		return PTR_ERR(cgrp);
 
 	WRITE_ONCE(cgrp->max_descendants, descendants);
 
@@ -3801,8 +3801,8 @@ static ssize_t cgroup_max_depth_write(struct kernfs_open_file *of,
 		return -ERANGE;
 
 	cgrp = cgroup_kn_lock_live(of->kn, false);
-	if (!cgrp)
-		return -ENODEV;
+	if (IS_ERR(cgrp))
+		return PTR_ERR(cgrp);
 
 	WRITE_ONCE(cgrp->max_depth, depth);
 
@@ -4000,8 +4000,8 @@ static ssize_t pressure_write(struct kernfs_open_file *of, char *buf,
 	ssize_t ret = 0;
 
 	cgrp = cgroup_kn_lock_live(of->kn, false);
-	if (!cgrp)
-		return -ENODEV;
+	if (IS_ERR(cgrp))
+		return PTR_ERR(cgrp);
 
 	ctx = of->priv;
 	if (!ctx) {
@@ -4117,8 +4117,8 @@ static ssize_t cgroup_pressure_write(struct kernfs_open_file *of,
 		return -ERANGE;
 
 	cgrp = cgroup_kn_lock_live(of->kn, false);
-	if (!cgrp)
-		return -ENODEV;
+	if (IS_ERR(cgrp))
+		return PTR_ERR(cgrp);
 
 	psi = cgroup_psi(cgrp);
 	if (psi->enabled != enable) {
@@ -4193,8 +4193,8 @@ static ssize_t cgroup_freeze_write(struct kernfs_open_file *of,
 		return -ERANGE;
 
 	cgrp = cgroup_kn_lock_live(of->kn, false);
-	if (!cgrp)
-		return -ENODEV;
+	if (IS_ERR(cgrp))
+		return PTR_ERR(cgrp);
 
 	cgroup_freeze(cgrp, freeze);
 
@@ -4255,8 +4255,8 @@ static ssize_t cgroup_kill_write(struct kernfs_open_file *of, char *buf,
 		return -ERANGE;
 
 	cgrp = cgroup_kn_lock_live(of->kn, false);
-	if (!cgrp)
-		return -ENODEV;
+	if (IS_ERR(cgrp))
+		return PTR_ERR(cgrp);
 
 	/*
 	 * Killing is a process directed operation, i.e. the whole thread-group
@@ -5410,8 +5410,8 @@ static ssize_t __cgroup_procs_write(struct kernfs_open_file *of, char *buf,
 	enum cgroup_attach_lock_mode lock_mode;
 
 	dst_cgrp = cgroup_kn_lock_live(of->kn, false);
-	if (!dst_cgrp)
-		return -ENODEV;
+	if (IS_ERR(dst_cgrp))
+		return PTR_ERR(dst_cgrp);
 
 	task = cgroup_procs_write_start(buf, threadgroup, &lock_mode);
 	ret = PTR_ERR_OR_ZERO(task);
@@ -6045,8 +6045,8 @@ int cgroup_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
 		return -EINVAL;
 
 	parent = cgroup_kn_lock_live(parent_kn, false);
-	if (!parent)
-		return -ENODEV;
+	if (IS_ERR(parent))
+		return PTR_ERR(parent);
 
 	if (!cgroup_check_hierarchy_limits(parent)) {
 		ret = -EAGAIN;
@@ -6322,7 +6322,7 @@ int cgroup_rmdir(struct kernfs_node *kn)
 	int ret = 0;
 
 	cgrp = cgroup_kn_lock_live(kn, false);
-	if (!cgrp)
+	if (IS_ERR(cgrp))
 		return 0;
 
 	ret = cgroup_destroy_locked(cgrp);
