@@ -694,3 +694,114 @@ bool cfg80211_flow_key_build(const struct cfg80211_flow_info *info, u32 fields,
 	return true;
 }
 EXPORT_SYMBOL(cfg80211_flow_key_build);
+
+static bool tclas_match(const struct cfg80211_tclas *t,
+			const struct cfg80211_flow_info *info, bool *undecided)
+{
+	struct cfg80211_flow_key key;
+
+	if (!cfg80211_flow_key_build(info, t->fields, CFG80211_FLOW_AS_IS,
+				     &key)) {
+		*undecided = true;
+
+		return false;
+	}
+
+	return !memcmp(&key, &t->key, sizeof(key));
+}
+
+static u16 tclas_param_count(const struct cfg80211_tclas *t)
+{
+	/* The count is fixed at 3 for classifier type 5 */
+	if (t->type == CFG80211_TCLAS_VLAN)
+		return 3;
+
+	/* The IP version is not counted, and no other type carries it */
+	return hweight32(t->fields & ~FLOW_F(IP_VERSION));
+}
+
+static bool scs_desc_match(const struct cfg80211_scs_desc *desc,
+			   const struct cfg80211_flow_info *info,
+			   bool *undecided)
+{
+	unsigned int i;
+	bool any = false;
+
+	for (i = 0; i < desc->n_tclas; i++) {
+		if (tclas_match(&desc->tclas[i], info, undecided)) {
+			any = true;
+			continue;
+		}
+
+		if (desc->tclas_processing == CFG80211_TCLAS_PROCESSING_ALL)
+			return false;
+	}
+
+	return any;
+}
+
+static u16 scs_desc_param_count(const struct cfg80211_scs_desc *desc)
+{
+	unsigned int i;
+	u16 count;
+
+	if (desc->tclas_processing != CFG80211_TCLAS_PROCESSING_ALL) {
+		count = U16_MAX;
+		for (i = 0; i < desc->n_tclas; i++)
+			count = min(count, tclas_param_count(&desc->tclas[i]));
+
+		return count == U16_MAX ? 0 : count;
+	}
+
+	count = 0;
+	for (i = 0; i < desc->n_tclas; i++)
+		count += tclas_param_count(&desc->tclas[i]);
+
+	return count;
+}
+
+/**
+ * cfg80211_scs_evaluate - pick the SCS descriptor that claims a flow
+ *
+ * @desc: the active descriptors of one peer
+ * @n_desc: number of entries in @desc
+ * @info: the flow, from cfg80211_flow_parse()
+ * @verdict: receives the result
+ *
+ * When several descriptors match, the one that requires the greatest number of
+ * classifier parameters wins. An equal count keeps the first, which 11.25.2
+ * leaves to the implementation.
+ */
+void cfg80211_scs_evaluate(struct cfg80211_scs_desc * const *desc, u8 n_desc,
+			   const struct cfg80211_flow_info *info,
+			   struct cfg80211_scs_verdict *verdict)
+{
+	unsigned int i;
+	int best = -1;
+
+	memset(verdict, 0, sizeof(*verdict));
+
+	for (i = 0; i < n_desc; i++) {
+		bool undecided = false;
+		u16 count;
+
+		if (!scs_desc_match(desc[i], info, &undecided)) {
+			/*
+			 * A descriptor that matched is decided, whichever
+			 * element was skipped. Only this one leaves a question.
+			 */
+			verdict->undecided |= undecided;
+			continue;
+		}
+
+		count = scs_desc_param_count(desc[i]);
+		if (count <= best)
+			continue;
+
+		best = count;
+		verdict->match = true;
+		verdict->scsid = desc[i]->id;
+		verdict->up = desc[i]->up;
+	}
+}
+EXPORT_SYMBOL(cfg80211_scs_evaluate);

@@ -4212,6 +4212,52 @@ bool cfg80211_flow_key_build(const struct cfg80211_flow_info *info, u32 fields,
 			     struct cfg80211_flow_key *key);
 
 /**
+ * struct cfg80211_scs_desc - one SCS descriptor
+ *
+ * @req_type: add, remove or change
+ * @tclas_processing: how the elements of @tclas relate
+ * @qos_char: the whole QoS Characteristics element, or %NULL. Set only once
+ *	ieee80211_qos_char_size_ok() has passed, so the accessors in
+ *	<linux/ieee80211-eht.h> may read it.
+ * @id: SCSID, 1 to 255
+ * @up: user priority to assign to a matching MSDU
+ * @qos_char_len: length of @qos_char
+ * @n_tclas: number of entries in @tclas
+ * @tclas: the classifier
+ */
+struct cfg80211_scs_desc {
+	enum nl80211_scs_req_type req_type;
+	enum cfg80211_tclas_processing tclas_processing;
+	const struct ieee80211_qos_char_elem *qos_char;
+	u8 id;
+	u8 up;
+	u16 qos_char_len;
+	u8 n_tclas;
+	struct cfg80211_tclas tclas[] __counted_by(n_tclas);
+};
+
+/**
+ * struct cfg80211_scs_verdict - result of an SCS evaluation
+ *
+ * @match: an SCS descriptor claimed the MSDU
+ * @undecided: a descriptor named a parameter the caller does not carry and
+ *	did not match anyway. A frame is simply not classified; an offload
+ *	caller cannot answer for the flow at all.
+ * @scsid: identifier of the matching descriptor
+ * @up: user priority to assign
+ */
+struct cfg80211_scs_verdict {
+	bool match;
+	bool undecided;
+	u8 scsid;
+	u8 up;
+};
+
+void cfg80211_scs_evaluate(struct cfg80211_scs_desc * const *desc, u8 n_desc,
+			   const struct cfg80211_flow_info *info,
+			   struct cfg80211_scs_verdict *verdict);
+
+/**
  * DOC: Neighbor Awareness Networking (NAN)
  *
  * NAN uses two interface types:
