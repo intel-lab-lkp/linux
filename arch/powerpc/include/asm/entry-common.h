@@ -222,8 +222,6 @@ static inline void arch_interrupt_enter_prepare(struct pt_regs *regs)
 
 	if (user_mode(regs)) {
 		kuap_lock();
-		account_cpu_user_entry();
-		account_stolen_time();
 	} else {
 		kuap_save_and_lock(regs);
 		/*
@@ -426,6 +424,10 @@ static __always_inline void arch_enter_from_user_mode(struct pt_regs *regs)
 #endif
 	kuap_assert_locked();
 	booke_restore_dbcr0();
+	/*
+	 * User and stolen time is accounted here for every entry from
+	 * user mode. The interrupt prepare hooks must not account again.
+	 */
 	account_cpu_user_entry();
 	account_stolen_time();
 
