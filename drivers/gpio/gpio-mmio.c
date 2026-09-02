@@ -49,6 +49,7 @@ o        `                     ~~~~\___/~~~~    ` controller in FPGA is ,.`
 #include <linux/log2.h>
 #include <linux/module.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/pinctrl/pinconf-generic.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/spinlock.h>
@@ -360,6 +361,28 @@ static int gpio_mmio_dir_return(struct gpio_chip *gc, unsigned int gpio,
 		return pinctrl_gpio_direction_input(gc, gpio);
 }
 
+/*
+ * Without direction registers the direction lives in the pin controller
+ * (Vybrid: the OBE bit in the iomuxc pad), so ask pinctrl.
+ */
+static int gpio_mmio_pinctrl_get_dir(struct gpio_chip *gc, unsigned int gpio)
+{
+	unsigned long config;
+	int ret;
+
+#ifdef CONFIG_PINCTRL
+	if (list_empty(&gc->gpiodev->pin_ranges))
+		return -EOPNOTSUPP;
+#endif
+
+	config = pinconf_to_config_packed(PIN_CONFIG_OUTPUT_ENABLE, 0);
+	ret = pinctrl_gpio_get_config(gc, gpio, &config);
+	if (ret)
+		return ret;
+
+	return config ? GPIO_LINE_DIRECTION_OUT : GPIO_LINE_DIRECTION_IN;
+}
+
 static int gpio_mmio_dir_in_err(struct gpio_chip *gc, unsigned int gpio)
 {
 	return -EINVAL;
@@ -596,6 +619,10 @@ static int gpio_mmio_setup_direction(struct gpio_generic_chip *chip,
 			gc->direction_input = gpio_mmio_dir_in_err;
 		else
 			gc->direction_input = gpio_mmio_simple_dir_in;
+
+		if (IS_ENABLED(CONFIG_PINCTRL) &&
+		    cfg->flags & GPIO_GENERIC_PINCTRL_BACKEND)
+			gc->get_direction = gpio_mmio_pinctrl_get_dir;
 	}
 
 	return 0;
