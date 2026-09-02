@@ -291,6 +291,54 @@
 			pinctrl-0 = <&uart4_pins>;
 			status = "disabled";
 		};
+
+		pwm: pwm@7a00 {
+			#pwm-cells = <2>;
+			compatible = "sunplus,sp7021-pwm";
+			reg = <0x7a00 0x80>;
+			clocks = <&clkc CLK_DISP_PWM>;
+			resets = <&rstc RST_DISP_PWM>;
+			status = "disabled";
+		};
+
+		wdt: watchdog@630 {
+			compatible = "sunplus,sp7021-wdt";
+			reg = <0x630 0x08>, <0x274 0x04>;
+			clocks = <&clkc CLK_STC0>;
+			resets = <&rstc RST_STC0>;
+			status = "disabled";
+		};
+
+		mmc0: mmc@3b00 {
+			compatible = "sunplus,sp7021-mmc";
+			reg = <0x3b00 0x180>;
+			interrupts = <20 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clkc CLK_CARD_CTL0>;
+			resets = <&rstc RST_CARD_CTL0>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&emmc_pins>;
+			bus-width = <8>;
+			max-frequency = <52000000>;
+			non-removable;
+			disable-wp;
+			cap-mmc-highspeed;
+			mmc-ddr-3_3v;
+			no-sdio;
+			no-sd;
+			status = "disabled";
+		};
+
+		l2sw: ethernet@108000 {
+			compatible = "sunplus,sp7021-emac";
+			reg = <0x108000 0x400>;
+			interrupts = <66 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clkc CLK_L2SW>, <&clkc PLL_E_25>,
+				 <&clkc PLL_E_2P5>, <&clkc PLL_E_112P5>;
+			clock-names = "l2sw", "plle_25", "plle_2p5", "plle_112p5";
+			resets = <&rstc RST_L2SW>;
+			status = "disabled";
+		};
+
 	};
 
 	leds {
