@@ -2176,6 +2176,46 @@ static void compute_partition_effective_cpumask(struct cpuset *cs,
 }
 
 /*
+ * Compute CPUs owned directly by a partition.
+ *
+ * effective_xcpus includes CPUs granted to valid child partitions. Exclude
+ * those CPUs when checking or changing this partition's type.
+ */
+static void compute_partition_owned_cpumask(struct cpuset *cs,
+					    const struct cpumask *partition_cpus,
+					    struct cpumask *owned_cpus,
+					    struct cpumask *remaining_cpus)
+{
+	struct cgroup_subsys_state *css;
+	struct cpuset *child;
+	bool populated = partition_is_populated(cs, NULL);
+
+	lockdep_assert_held(&cpuset_mutex);
+	cpumask_copy(owned_cpus, partition_cpus);
+	cpumask_and(remaining_cpus, partition_cpus, cpu_active_mask);
+
+	rcu_read_lock();
+	cpuset_for_each_child(child, css, cs) {
+		if (!is_partition_valid(child))
+			continue;
+
+		/*
+		 * A child that will become invalid under the proposed
+		 * configuration cannot retain ownership of its CPUs.
+		 */
+		if (child_partition_error(child, partition_cpus,
+					  remaining_cpus, populated))
+			continue;
+
+		cpumask_andnot(owned_cpus, owned_cpus,
+			       child->effective_xcpus);
+		cpumask_andnot(remaining_cpus, remaining_cpus,
+			       child->effective_xcpus);
+	}
+	rcu_read_unlock();
+}
+
+/*
  * update_cpumasks_hier - Update effective cpumasks and tasks in the subtree
  * @cs:  the cpuset to consider
  * @tmp: temp variables for calculating effective_cpus & partition setup
@@ -2415,13 +2455,18 @@ static int parse_cpuset_cpulist(const char *buf, struct cpumask *out_mask)
  * validate_partition - Validate a cpuset partition configuration
  * @cs: The cpuset to validate
  * @trialcs: The trial cpuset containing proposed configuration changes
+ * @owned_cpus: Scratch mask for CPUs owned directly by the trial partition
+ * @remaining_cpus: Scratch mask used to predict valid child partitions
  *
  * If any validation check fails, the appropriate error code is set in the
  * cpuset's prs_err field.
  *
  * Return: PRS error code (0 if valid, non-zero error code if invalid)
  */
-static enum prs_errcode validate_partition(struct cpuset *cs, struct cpuset *trialcs)
+static enum prs_errcode validate_partition(struct cpuset *cs,
+					   struct cpuset *trialcs,
+					   struct cpumask *owned_cpus,
+					   struct cpumask *remaining_cpus)
 {
 	struct cpuset *parent = parent_cs(cs);
 
@@ -2431,8 +2476,10 @@ static enum prs_errcode validate_partition(struct cpuset *cs, struct cpuset *tri
 	if (cpumask_empty(trialcs->effective_xcpus))
 		return PERR_INVCPUS;
 
+	compute_partition_owned_cpumask(cs, trialcs->effective_xcpus,
+					owned_cpus, remaining_cpus);
 	if (prstate_housekeeping_conflict(trialcs->partition_root_state,
-					  trialcs->effective_xcpus))
+					  owned_cpus))
 		return PERR_HKEEPING;
 
 	if (tasks_nocpu_error(parent, cs, trialcs->effective_xcpus))
@@ -2458,7 +2505,8 @@ static void partition_cpus_change(struct cpuset *cs, struct cpuset *trialcs,
 	if (cs_is_member(cs))
 		return;
 
-	prs_err = validate_partition(cs, trialcs);
+	prs_err = validate_partition(cs, trialcs, tmp->new_cpus,
+				     tmp->addmask);
 	if (prs_err) {
 		WRITE_ONCE(cs->prs_err, prs_err);
 		trialcs->prs_err = prs_err;
@@ -2937,6 +2985,48 @@ out:
 	return err;
 }
 
+/*
+ * Invalidate the highest isolated partition that contains @cs.
+ *
+ * A root partition returning CPUs to an isolated parent can consume the last
+ * housekeeping CPU. Invalidating the whole chain returns the CPUs to a root
+ * partition instead.
+ */
+static struct cpuset *invalidate_isolated_ancestor(struct cpuset *cs,
+						   struct tmpmasks *tmp)
+{
+	struct cpuset *ancestor = parent_cs(cs);
+	struct cpuset *parent;
+	int err;
+
+	lockdep_assert_held(&cpuset_mutex);
+	if (WARN_ON_ONCE(!ancestor))
+		return NULL;
+
+	while ((ancestor != &top_cpuset) &&
+	       !is_remote_partition(ancestor)) {
+		parent = parent_cs(ancestor);
+		if (!parent ||
+		    parent->partition_root_state != PRS_ISOLATED)
+			break;
+		ancestor = parent;
+	}
+
+	if (WARN_ON_ONCE(ancestor == &top_cpuset))
+		return NULL;
+
+	WRITE_ONCE(ancestor->prs_err, PERR_HKEEPING);
+	if (is_remote_partition(ancestor)) {
+		remote_partition_disable(ancestor, tmp);
+	} else {
+		err = update_parent_effective_cpumask(ancestor,
+						      partcmd_invalidate, NULL, tmp);
+		WARN_ON_ONCE(err);
+	}
+
+	return ancestor;
+}
+
 /**
  * update_prstate - update partition_root_state
  * @cs: the cpuset to update
@@ -2949,6 +3039,8 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 {
 	int err = PERR_NONE, old_prs = cs->partition_root_state;
 	struct cpuset *parent = parent_cs(cs);
+	struct cpuset *invalidated = NULL;
+	struct cpumask *isolcpus_update_cpus = cs->effective_xcpus;
 	struct tmpmasks tmpmask;
 	bool isolcpus_updated = false;
 
@@ -3005,19 +3097,38 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 	} else if (old_prs && new_prs) {
 		/*
 		 * A change in load balance state only, no change in cpumasks.
-		 * Need to update isolated_cpus.
+		 * Need to update isolated_cpus for CPUs owned by this partition,
+		 * excluding CPUs distributed to valid child partitions.
 		 */
+		compute_partition_owned_cpumask(cs, cs->effective_xcpus,
+						tmpmask.new_cpus,
+						tmpmask.addmask);
 		if (((new_prs == PRS_ISOLATED) &&
-		     !isolated_cpus_can_update(cs->effective_xcpus, NULL)) ||
-		    prstate_housekeeping_conflict(new_prs, cs->effective_xcpus))
+		     !isolated_cpus_can_update(tmpmask.new_cpus, NULL)) ||
+		    prstate_housekeeping_conflict(new_prs, tmpmask.new_cpus)) {
 			err = PERR_HKEEPING;
-		else
+		} else {
+			/*
+			 * Only directly owned CPUs change isolation state for a
+			 * successful root <-> isolated type change.
+			 */
+			isolcpus_update_cpus = tmpmask.new_cpus;
 			isolcpus_updated = true;
+		}
 	} else {
 		/*
 		 * Switching back to member is always allowed even if it
-		 * disables child partitions.
+		 * disables child partitions. If returning CPUs to an isolated
+		 * parent would consume the last housekeeping CPU, invalidate
+		 * the outermost isolated ancestor and return its CPUs instead.
 		 */
+		if (old_prs == PRS_ROOT &&
+		    parent->partition_root_state == PRS_ISOLATED &&
+		    !isolated_cpus_can_update(cs->effective_xcpus, NULL))
+			invalidated = invalidate_isolated_ancestor(cs, &tmpmask);
+		if (invalidated)
+			goto out;
+
 		if (is_remote_partition(cs))
 			remote_partition_disable(cs, &tmpmask);
 		else
@@ -3045,11 +3156,18 @@ out:
 	if (!is_partition_valid(cs))
 		reset_partition_data(cs);
 	else if (isolcpus_updated)
-		isolated_cpus_update(old_prs, new_prs, cs->effective_xcpus);
+		isolated_cpus_update(old_prs, new_prs,
+				     isolcpus_update_cpus);
 	spin_unlock_irq(&callback_lock);
 
 	/* Force update if switching back to member & update effective_xcpus */
-	update_cpumasks_hier(cs, &tmpmask, !new_prs);
+	if (invalidated) {
+		update_cpumasks_hier(invalidated, &tmpmask, false);
+		update_partition_sd_lb(invalidated, PRS_ISOLATED);
+		notify_partition_change(invalidated, PRS_ISOLATED);
+	} else {
+		update_cpumasks_hier(cs, &tmpmask, !new_prs);
+	}
 
 	/* A newly created partition must have effective_xcpus set */
 	WARN_ON_ONCE(!old_prs && (new_prs > 0)
