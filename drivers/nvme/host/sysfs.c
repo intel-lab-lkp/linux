@@ -394,6 +394,9 @@ static ssize_t nvme_sysfs_show_state(struct device *dev,
 		[NVME_CTRL_DEAD]	= "dead",
 	};
 
+	if (state == NVME_CTRL_LIVE && nvme_ctrl_is_marginal(ctrl))
+		return sysfs_emit(buf, "%s\n", "marginal");
+
 	if (state < ARRAY_SIZE(state_name) && state_name[state])
 		return sysfs_emit(buf, "%s\n", state_name[state]);
 
