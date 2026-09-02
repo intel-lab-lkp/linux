@@ -274,9 +274,10 @@ int cxl_dvsec_rr_decode(struct cxl_dev_state *cxlds,
 		return -ENXIO;
 	}
 
-	rc = pci_read_config_word(pdev, d + PCI_DVSEC_CXL_CAP, &cap);
-	if (rc)
-		return pcibios_err_to_errno(rc);
+	rc = cxl_pci_get_device_dvsec_cap(pdev, d, &cap);
+	if (rc < 0)
+		return rc;
+	d = rc;
 
 	if (!(cap & PCI_DVSEC_CXL_MEM_CAPABLE)) {
 		dev_dbg(dev, "Not MEM Capable\n");

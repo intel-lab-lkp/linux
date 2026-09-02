@@ -158,6 +158,7 @@ int cxl_pci_get_bandwidth(struct pci_dev *pdev, struct access_coordinate *c);
 int cxl_port_get_switch_dport_bandwidth(struct cxl_port *port,
 					struct access_coordinate *c);
 struct pci_dev *cxl_port_get_uport_pci_dev(struct cxl_port *port);
+int cxl_pci_get_device_dvsec_cap(struct pci_dev *pdev, int dvsec, u16 *cap);
 
 static inline struct device *port_to_host(struct cxl_port *port)
 {
