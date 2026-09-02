@@ -117,8 +117,7 @@ xfs_fsync_flush_log(
 	if (!seq)
 		return 0;
 
-	return xfs_log_force_seq(ip->i_mount, seq, XFS_LOG_SYNC,
-					  log_flushed);
+	return xfs_log_force_seq(ip->i_mount, seq, XFS_LOG_SYNC, log_flushed);
 }
 
 STATIC int
