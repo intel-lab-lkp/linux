@@ -174,6 +174,19 @@ u16 ieee80211_select_queue(struct ieee80211_sub_if_data *sdata,
 		goto downgrade;
 	}
 
+	/*
+	 * Both services classify at the AP, so a non-AP station applies none
+	 * of the descriptors it holds for its driver. A frame the receive path
+	 * forwards between two stations also reaches
+	 * cfg80211_classify8021d() with a priority it must keep, so the
+	 * classifiers run ahead of it rather than behind it.
+	 */
+	if (sta &&
+	    (sdata->vif.type == NL80211_IFTYPE_AP ||
+	     sdata->vif.type == NL80211_IFTYPE_AP_VLAN) &&
+	    ieee80211_flow_classify(sta, skb))
+		goto downgrade;
+
 	/* use the data classifier to determine what 802.1d tag the
 	 * data frame has */
 	qos_map = rcu_dereference(sdata->qos_map);
