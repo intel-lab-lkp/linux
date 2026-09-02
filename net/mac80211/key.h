@@ -63,6 +63,8 @@ struct ieee80211_key {
 
 	/* for sdata list */
 	struct list_head list;
+	/* for temporary lists during batch removal */
+	struct list_head free_list;
 
 	/* protected by key mutex */
 	unsigned int flags;

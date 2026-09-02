@@ -1100,7 +1100,7 @@ static void ieee80211_free_keys_iface(struct ieee80211_sub_if_data *sdata,
 		ieee80211_key_replace(key->sdata, NULL, key->sta,
 				      key->conf.flags & IEEE80211_KEY_FLAG_PAIRWISE,
 				      key, NULL);
-		list_add_tail(&key->list, keys);
+		list_add_tail(&key->free_list, keys);
 	}
 
 	ieee80211_debugfs_key_update_default(sdata);
@@ -1121,7 +1121,7 @@ void ieee80211_remove_link_keys(struct ieee80211_link_data *link,
 		ieee80211_key_replace(key->sdata, link, key->sta,
 				      key->conf.flags & IEEE80211_KEY_FLAG_PAIRWISE,
 				      key, NULL);
-		list_add_tail(&key->list, keys);
+		list_add_tail(&key->free_list, keys);
 	}
 }
 
@@ -1132,7 +1132,7 @@ void ieee80211_free_key_list(struct ieee80211_local *local,
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	list_for_each_entry_safe(key, tmp, keys, list)
+	list_for_each_entry_safe(key, tmp, keys, free_list)
 		__ieee80211_key_destroy(key, false);
 }
 
@@ -1159,7 +1159,7 @@ void ieee80211_free_keys(struct ieee80211_sub_if_data *sdata,
 
 	if (!list_empty(&keys) || force_synchronize)
 		synchronize_net();
-	list_for_each_entry_safe(key, tmp, &keys, list)
+	list_for_each_entry_safe(key, tmp, &keys, free_list)
 		__ieee80211_key_destroy(key, false);
 
 	if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN) {
