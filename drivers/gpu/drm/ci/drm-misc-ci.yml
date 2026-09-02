@@ -1,0 +1,123 @@
+# CI pipeline for drm-misc-next, drm-misc-fixes, and drm-misc-next-fixes.
+#
+# Runs on merge requests only. Compiles the kernel for arm, arm64, and
+# x86_64, and executes the DRM KUnit tests on each architecture.
+#
+# A single container image is built using freedesktop ci-templates with
+# the packages needed for kernel compilation and LLVM for
+# cross-compilation. QEMU is installed at runtime by the KUnit jobs.
+#
+# build.yml and the Mesa container/build pipelines are not included
+# here: they pull in hundreds of Mesa-specific jobs and templates that
+# would each need to be individually stubbed or disabled. The few
+# templates we need (.build:arm32, .build:arm64, .build:x86_64) are
+# simple enough to define inline.
+
+variables:
+  CI_TEMPLATES_COMMIT: &ci-templates-commit aec7a6ce7bb38902c70641526f6611e27141784a
+  # Project whose container registry stores the built images
+  FDO_UPSTREAM_REPO: mripard/kernel
+  KERNEL_BUILD_CONTAINER_TAG: "2026-09-02-01"
+  LLVM_VERSION: "19"
+
+default:
+  before_script: []
+
+include:
+  - project: 'freedesktop/ci-templates'
+    ref: *ci-templates-commit
+    file:
+      - '/templates/debian.yml'
+  - local: drivers/gpu/drm/ci/kunit.yml
+
+stages:
+  - container
+  - build
+  - kunit
+
+# --- Pipeline rules ---
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^drm-misc-(next|fixes|next-fixes)$/
+      when: always
+
+# kunit.yml's jobs inherit .build-rules through the .build:* chain.
+# Pass everything through since the pipeline is already gated by
+# workflow:rules.
+.build-rules:
+  rules:
+    - when: on_success
+
+# --- Container build job ---
+# Single container with all build tools. LLVM handles cross-compilation
+# to arm and arm64, so no architecture-specific containers are needed.
+debian/kernel-build:
+  extends: .fdo.container-build@debian
+  stage: container
+  variables:
+    FDO_DISTRIBUTION_VERSION: trixie
+    FDO_DISTRIBUTION_TAG: "${KERNEL_BUILD_CONTAINER_TAG}"
+    FDO_DISTRIBUTION_PACKAGES: >-
+      bc bison ca-certificates cpio curl
+      clang-${LLVM_VERSION} flex gzip
+      lld-${LLVM_VERSION} llvm-${LLVM_VERSION}
+      libelf-dev libssl-dev
+      make perl pkg-config python3
+      xz-utils
+
+# --- Build templates ---
+.build-base:
+  image: "${CI_REGISTRY}/${FDO_UPSTREAM_REPO}/debian/trixie:${KERNEL_BUILD_CONTAINER_TAG}"
+  needs: ["debian/kernel-build"]
+
+.build:arm32:
+  extends: .build-base
+  variables:
+    KERNEL_ARCH: "arm"
+    DEFCONFIG_ARCH: "arm"
+
+.build:arm64:
+  extends: .build-base
+  variables:
+    KERNEL_ARCH: "arm64"
+    DEFCONFIG_ARCH: "arm64"
+
+.build:x86_64:
+  extends: .build-base
+  variables:
+    KERNEL_ARCH: "x86_64"
+    DEFCONFIG_ARCH: "x86"
+
+# --- Kernel-wide build jobs (LLVM) ---
+.kernel-build:
+  stage: build
+  timeout: 45m
+  variables:
+    GIT_DEPTH: 1
+    DEFCONFIG_URL: https://gitlab.freedesktop.org/drm/tip/-/raw/rerere-cache/drm-misc-${DEFCONFIG_ARCH}_defconfig
+  artifacts: {}
+  before_script:
+    - drivers/gpu/drm/ci/setup-llvm-links.sh
+    - curl -L --retry 4 -f --retry-all-errors --retry-delay 60 -o .config "${DEFCONFIG_URL}"
+
+kernel-build:arm32:
+  extends: [.build:arm32, .kernel-build]
+  script:
+    - make ARCH=arm LLVM=1 olddefconfig
+    - make ARCH=arm LLVM=1 -j$(nproc)
+
+kernel-build:arm64:
+  extends: [.build:arm64, .kernel-build]
+  script:
+    - make ARCH=arm64 LLVM=1 olddefconfig
+    - make ARCH=arm64 LLVM=1 -j$(nproc)
+
+kernel-build:x86_64:
+  extends: [.build:x86_64, .kernel-build]
+  script:
+    - make ARCH=x86 LLVM=1 olddefconfig
+    - make ARCH=x86 LLVM=1 -j$(nproc)
+
+# --- KUnit jobs ---
+# kunit:arm32, kunit:arm64, and kunit:x86_64 are defined in kunit.yml
+# and implicitly enabled here through the .build:* templates above.
