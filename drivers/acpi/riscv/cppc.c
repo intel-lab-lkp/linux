@@ -85,6 +85,20 @@ static void cppc_ffh_csr_write(void *write_data)
 	data->ret.error = -EINVAL;
 }
 
+struct sbi_cppc_fb_ctrs_data {
+	struct sbi_cppc_data first;
+	struct sbi_cppc_data second;
+};
+
+static void cppc_ffh_csr_read_fb_ctrs(void *read_data)
+{
+	struct sbi_cppc_fb_ctrs_data *data = read_data;
+
+	cppc_ffh_csr_read(&data->first);
+	if (!data->first.ret.error)
+		cppc_ffh_csr_read(&data->second);
+}
+
 /*
  * Refer to drivers/acpi/cppc_acpi.c for the description of the functions
  * below.
@@ -123,6 +137,39 @@ int cpc_read_ffh(int cpu, struct cpc_reg *reg, u64 *val)
 	}
 
 	return -EINVAL;
+}
+
+int cpc_read_ffh_fb_ctrs(int cpu, struct cpc_reg *reg1, u64 *val1,
+			 struct cpc_reg *reg2, u64 *val2)
+{
+	struct sbi_cppc_fb_ctrs_data data;
+	int ret;
+
+	if (WARN_ON_ONCE(irqs_disabled()))
+		return -EPERM;
+
+	/* Only CSR counters can be paired within a single IPI. */
+	if (FFH_CPPC_TYPE(reg1->address) != FFH_CPPC_CSR ||
+	    FFH_CPPC_TYPE(reg2->address) != FFH_CPPC_CSR)
+		return -EOPNOTSUPP;
+
+	data.first.reg = FFH_CPPC_CSR_NUM(reg1->address);
+	data.second.reg = FFH_CPPC_CSR_NUM(reg2->address);
+
+	ret = smp_call_function_single(cpu, cppc_ffh_csr_read_fb_ctrs,
+				       &data, 1);
+	if (ret)
+		return ret;
+
+	if (data.first.ret.error)
+		return data.first.ret.error;
+	if (data.second.ret.error)
+		return data.second.ret.error;
+
+	*val1 = data.first.ret.value;
+	*val2 = data.second.ret.value;
+
+	return 0;
 }
 
 int cpc_write_ffh(int cpu, struct cpc_reg *reg, u64 val)
