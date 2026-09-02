@@ -65,9 +65,12 @@
 
 /* PLL */
 #define IMX471_REG_VTPXCK_DIV			CCI_REG8(0x0301)
+#define IMX471_VTPXCK_DIV			6
 #define IMX471_REG_VTSYCK_DIV			CCI_REG8(0x0303)
 #define IMX471_REG_PREPLLCK_VT_DIV		CCI_REG8(0x0305)
+#define IMX471_PREPLLCK_VT_DIV			2
 #define IMX471_REG_PLL_VT_MPY			CCI_REG16(0x0306)
+#define IMX471_PLL_VT_MPY			121
 #define IMX471_REG_OPPXCK_DIV			CCI_REG8(0x0309)
 #define IMX471_REG_OPSYCK_DIV			CCI_REG8(0x030b)
 #define IMX471_REG_PLL_MULT_DRIV		CCI_REG8(0x0310)
@@ -232,10 +235,10 @@ static const struct cci_reg_sequence mode_1928x1088_regs[] = {
 	{ IMX471_REG_DIG_CROP_HEIGHT, 1088 },
 	{ IMX471_REG_X_OUTPUT_SIZE, 1928 },
 	{ IMX471_REG_Y_OUTPUT_SIZE, 1088 },
-	{ IMX471_REG_VTPXCK_DIV, 0x06 },
+	{ IMX471_REG_VTPXCK_DIV, IMX471_VTPXCK_DIV },
 	{ IMX471_REG_VTSYCK_DIV, 0x02 },
-	{ IMX471_REG_PREPLLCK_VT_DIV, 0x02 },
-	{ IMX471_REG_PLL_VT_MPY, 0x0079 },
+	{ IMX471_REG_PREPLLCK_VT_DIV, IMX471_PREPLLCK_VT_DIV },
+	{ IMX471_REG_PLL_VT_MPY, IMX471_PLL_VT_MPY },
 	{ IMX471_REG_OPSYCK_DIV, 0x01 },
 	{ CCI_REG8(0x030d), 0x02 },
 	{ CCI_REG8(0x030e), 0x00 },
@@ -282,7 +285,7 @@ static const struct imx471_mode imx471_modes[] = {
 		.height = 1088,
 		.fll_def = 1308,
 		.fll_min = 1308,
-		.llp = 2328,
+		.llp = 5120,
 		.default_mode_regs = mode_1928x1088_regs,
 		.default_mode_regs_length = ARRAY_SIZE(mode_1928x1088_regs),
 	},
@@ -691,8 +694,9 @@ static int imx471_init_controls(struct imx471 *sensor)
 					   0,
 					   link_freq_menu_items);
 
-	/* pixel_rate = link_freq * 2 * nr_of_lanes / bits_per_sample */
-	pixel_rate = div_u64(IMX471_LINK_FREQ_DEFAULT * 2 * 4, 10);
+	/* The pixel array reads out two pixels per VT pixel clock */
+	pixel_rate = IMX471_EXT_CLK / IMX471_PREPLLCK_VT_DIV *
+		     IMX471_PLL_VT_MPY / IMX471_VTPXCK_DIV * 2;
 
 	v4l2_ctrl_new_std(ctrl_hdlr, &imx471_ctrl_ops,
 			  V4L2_CID_PIXEL_RATE, pixel_rate,
