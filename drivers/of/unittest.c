@@ -10,6 +10,7 @@
 #include <linux/dma-direct.h> /* to test phys_to_dma/dma_to_phys */
 #include <linux/err.h>
 #include <linux/errno.h>
+#include <linux/fwnode.h>
 #include <linux/hashtable.h>
 #include <linux/libfdt.h>
 #include <linux/of.h>
@@ -708,6 +709,71 @@ static void __init of_unittest_parse_phandle_with_args_map(void)
 			 i, prefs[i], OF_KREF_READ(p[i]));
 		of_node_put(p[i]);
 	}
+}
+
+static void __init of_unittest_fw_devlink_supplier(struct device_node *tests,
+						   const char *consumer_name,
+						   const char *supplier_name)
+{
+	struct device_node *consumer, *supplier;
+	struct fwnode_handle *consumer_fwnode;
+	struct fwnode_link *link;
+	unsigned int link_count = 0;
+	bool found = false;
+	int rc;
+
+	consumer = of_get_child_by_name(tests, consumer_name);
+	supplier = of_get_child_by_name(tests, supplier_name);
+	if (!consumer || !supplier) {
+		pr_err("missing consumer %s or supplier %s\n", consumer_name, supplier_name);
+		goto put_nodes;
+	}
+
+	consumer_fwnode = of_fwnode_handle(consumer);
+	fwnode_links_purge(consumer_fwnode);
+	rc = fwnode_call_int_op(consumer_fwnode, add_links);
+	if (unittest(!rc, "failed to add links for %pOF: %d\n", consumer, rc))
+		goto purge_links;
+
+	/*
+	 * fwnode_link_lock is private to the driver core. These test nodes are
+	 * isolated and no one should modify their links now, so it is safe to
+	 * inspect the supplier list without the lock here.
+	 */
+	list_for_each_entry(link, &consumer_fwnode->suppliers, c_hook) {
+		link_count++;
+		if (link->supplier == of_fwnode_handle(supplier))
+			found = true;
+	}
+
+	unittest(link_count == 1, "%pOF has %u suppliers, expected 1\n", consumer, link_count);
+	unittest(found, "%pOF is not linked to supplier %pOF\n", consumer, supplier);
+
+purge_links:
+	fwnode_links_purge(consumer_fwnode);
+put_nodes:
+	of_node_put(consumer);
+	of_node_put(supplier);
+}
+
+static void __init of_unittest_fw_devlink(void)
+{
+	const char *gpio_supplier = "gpio-controller";
+	struct device_node *tests;
+
+	tests = of_find_node_by_path("/testcase-data/phandle-tests/fw-devlink-tests");
+	if (!tests) {
+		pr_err("missing fw_devlink test data\n");
+		return;
+	}
+
+	of_unittest_fw_devlink_supplier(tests, "gpio-compat-consumer", gpio_supplier);
+	of_unittest_fw_devlink_supplier(tests, "gpio-compat-singular-consumer", gpio_supplier);
+	of_unittest_fw_devlink_supplier(tests, "gpio-consumer", gpio_supplier);
+	of_unittest_fw_devlink_supplier(tests, "gpio-direct-consumer", gpio_supplier);
+	of_unittest_fw_devlink_supplier(tests, "gpio-singular-consumer", gpio_supplier);
+
+	of_node_put(tests);
 }
 
 static void __init of_unittest_property_string(void)
@@ -4533,6 +4599,7 @@ static int __init of_unittest(void)
 	of_unittest_dynamic();
 	of_unittest_parse_phandle_with_args();
 	of_unittest_parse_phandle_with_args_map();
+	of_unittest_fw_devlink();
 	of_unittest_printf();
 	of_unittest_property_string();
 	of_unittest_property_copy();
