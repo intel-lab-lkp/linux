@@ -195,9 +195,6 @@ static void spacemit_sdhci_set_uhs_signaling(struct sdhci_host *host, unsigned i
 		spacemit_sdhci_setbits(host, SDHC_MMC_HS400, SPACEMIT_SDHC_MMC_CTRL_REG);
 
 	sdhci_set_uhs_signaling(host, timing);
-
-	if (!(host->mmc->caps2 & MMC_CAP2_NO_SDIO))
-		spacemit_sdhci_setbits(host, SDHCI_CTRL_VDD_180, SDHCI_HOST_CONTROL2);
 }
 
 static void spacemit_sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
