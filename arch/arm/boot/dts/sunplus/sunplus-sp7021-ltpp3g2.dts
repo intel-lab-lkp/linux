@@ -1,0 +1,301 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Device Tree Source for Tibbo LTPP board G2
+ *
+ * Copyright (C) 2021 Sunplus Technology Co.
+ */
+
+/dts-v1/;
+
+#include "sunplus-sp7021-achip.dtsi"
+
+/ {
+	compatible = "tibbo,ltpp3g2", "sunplus,sp7021";
+	model = "Tibbo LTPP3G2";
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		bootargs = "console=ttySUP0,115200 earlycon root=/dev/mmcblk0p8 rootwait";
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x00000000 0x20000000>; /* 512MB */
+	};
+
+	led {
+		compatible = "gpio-leds";
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&gpio_leds_pins>;
+		pinctrl-1 = <&leds_s0_slp>;
+		system-led {
+			label = "system-led";
+			gpios = <&pctl 6 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+			linux,default-trigger = "heartbeat";
+		};
+		led@2 {
+			label = "SG";
+			gpios = <&pctl 7 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "heartbeat";
+			default-state = "off";
+		};
+	};
+
+	i2c_tps: i2c-tps { /* eeprom */
+		compatible = "i2c-gpio";
+		i2c-gpio,scl-open-drain;
+		i2c-gpio,sda-open-drain;
+		i2c-gpio,delay-us = <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pins_i2ctps>;
+		gpios = <&pctl 2 GPIO_ACTIVE_HIGH  /* SDA */
+			 &pctl 1 GPIO_ACTIVE_HIGH  /* SCL */
+			>;
+		eeprom: eeprom@50 {
+			compatible = "at,24c16";
+			reg = <0x50>;
+			pagesize = <16>;
+		};
+	};
+};
+
+&pwm {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pins_pwm>;
+	status = "okay";
+};
+
+&spi_controller0 {
+	spi-cpha;
+	spi-cpol;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pins_spi0>;
+	status = "disabled";
+};
+
+&spi_controller1 {
+	spi-cpha;
+	spi-cpol;
+	status = "disabled";
+};
+
+&spi_controller2 {
+	spi-cpha;
+	spi-cpol;
+	status = "disabled";
+};
+
+&spi_controller3 {
+	spi-slave;
+	status = "disabled";
+};
+
+&uart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pins_uart1>;
+	status = "disabled";
+};
+
+&uart2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pins_uart2>;
+	status = "disabled";
+};
+
+&uart3 {
+	status = "disabled";
+};
+
+&uart4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pins_btuart &pins_bt_reset>;
+	status = "disabled";
+};
+
+&l2sw {
+	pinctrl-names = "default";
+	pinctrl-0 = <&l2sw_ltpp3g2_pins>;
+	status = "okay";
+
+	ethernet-ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			phy-handle = <&eth_phy0>;
+			phy-mode = "rmii";
+			nvmem-cells = <&mac_addr0>;
+			nvmem-cell-names = "mac-address";
+		};
+
+		port@1 {
+			reg = <1>;
+			phy-handle = <&eth_phy1>;
+			phy-mode = "rmii";
+			nvmem-cells = <&mac_addr1>;
+			nvmem-cell-names = "mac-address";
+		};
+	};
+
+	mdio {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		eth_phy0: ethernet-phy@0 {
+			reg = <0>;
+		};
+		eth_phy1: ethernet-phy@1 {
+			reg = <1>;
+		};
+	};
+};
+
+
+&mmc0 {
+	status = "okay";
+};
+
+&rtc {
+	charging-mode = <0xE>;
+	/*
+	 *      0xE     Disable
+	 *      0x1     0.86mA (2K Ohm with diode)
+	 *      0x5     1.81mA (250 Ohm with diode)
+	 *      0x9     2.07mA (50 Ohm with diode)
+	 *      0xD     16.0mA (0 Ohm with diode)
+	 *      0x3     1.36mA (2K Ohm without diode)
+	 *      0x7     3.99mA (250 Ohm without diode)
+	 *      0xB     4.41mA (50 Ohm without diode)
+	 *      0xF     16.0mA (0 Ohm without diode)
+	 */
+};
+
+&pctl {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pins_gpio_nobinded>;
+
+	pins_pwm: pinmux_pwm-pins {
+		sunplus,pins = <
+			SPPCTL_IOPAD(48, SPPCTL_PCTL_G_PMUX, MUXF_PWM0, 0)
+		>;
+	};
+
+	pins_gpio_nobinded: pinmux_gpio_nobinded-pins {
+		sunplus,pins = <
+			SPPCTL_IOPAD(30, SPPCTL_PCTL_G_GPIO, 0, 0)   /* was L2SW_LED_FLASH1 */
+			SPPCTL_IOPAD(39, SPPCTL_PCTL_G_GPIO, 0, 0)   /* was L2SW_LED_ON1  */
+		>;
+	};
+
+	pins_i2ctps: pinmux_i2ctps-pins {
+		sunplus,pins = <
+			SPPCTL_IOPAD(1, SPPCTL_PCTL_G_GPIO, 0,
+				     SPPCTL_PCTL_L_OUT | SPPCTL_PCTL_L_ONV | SPPCTL_PCTL_L_ODR)
+			SPPCTL_IOPAD(2, SPPCTL_PCTL_G_GPIO, 0,
+				     SPPCTL_PCTL_L_OUT | SPPCTL_PCTL_L_ONV | SPPCTL_PCTL_L_ODR)
+		>;
+	};
+
+	l2sw_ltpp3g2_pins: pinmux_l2sw_ltpp3g2-pins {
+		sunplus,pins = <
+			SPPCTL_IOPAD(63, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_CLK_OUT, 0)
+			SPPCTL_IOPAD(71, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_MAC_SMI_MDC, 0)
+			SPPCTL_IOPAD(64, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_MAC_SMI_MDIO, 0)
+			SPPCTL_IOPAD(62, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P0_MAC_RMII_TXEN, 0)
+			SPPCTL_IOPAD(61, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P0_MAC_RMII_TXD0, 0)
+			SPPCTL_IOPAD(60, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P0_MAC_RMII_TXD1, 0)
+			SPPCTL_IOPAD(59, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P0_MAC_RMII_CRSDV, 0)
+			SPPCTL_IOPAD(58, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P0_MAC_RMII_RXD0, 0)
+			SPPCTL_IOPAD(57, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P0_MAC_RMII_RXD1, 0)
+			SPPCTL_IOPAD(55, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P1_MAC_RMII_TXEN, 0)
+			SPPCTL_IOPAD(54, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P1_MAC_RMII_TXD0, 0)
+			SPPCTL_IOPAD(53, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P1_MAC_RMII_TXD1, 0)
+			SPPCTL_IOPAD(52, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P1_MAC_RMII_CRSDV, 0)
+			SPPCTL_IOPAD(51, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P1_MAC_RMII_RXD0, 0)
+			SPPCTL_IOPAD(50, SPPCTL_PCTL_G_PMUX, MUXF_L2SW_P1_MAC_RMII_RXD1, 0)
+		>;
+		sunplus,zerofunc = <
+			MUXF_L2SW_LED_FLASH0
+			MUXF_L2SW_LED_ON0
+			MUXF_L2SW_LED_FLASH1
+			MUXF_L2SW_LED_ON1
+			MUXF_DAISY_MODE
+			MUXF_L2SW_P0_MAC_RMII_RXER
+			MUXF_L2SW_P1_MAC_RMII_RXER
+			GROP_SPI_FLASH
+		>;
+	};
+
+	gpio_leds_pins: pinmux_gpio_leds-pins {
+		sunplus,pins = <
+			SPPCTL_IOPAD(6, SPPCTL_PCTL_G_GPIO, 0, SPPCTL_PCTL_L_OUT)
+			SPPCTL_IOPAD(7, SPPCTL_PCTL_G_GPIO, 0, SPPCTL_PCTL_L_OUT)
+		>;
+	};
+
+	leds_s0_slp: pinmux_user_leds_s0_slp-pins {
+		sunplus,pins = <
+			SPPCTL_IOPAD(6, SPPCTL_PCTL_G_GPIO, 0, 0)
+			SPPCTL_IOPAD(7, SPPCTL_PCTL_G_GPIO, 0, 0)
+		>;
+	};
+
+	pins_uart1: pinmux_uart1-pins {
+		sunplus,pins = <
+			SPPCTL_IOPAD(8, SPPCTL_PCTL_G_PMUX, MUXF_UA1_TX, 0)
+			SPPCTL_IOPAD(9, SPPCTL_PCTL_G_PMUX, MUXF_UA1_RX, 0)
+			SPPCTL_IOPAD(10, SPPCTL_PCTL_G_PMUX, MUXF_UA1_RTS, 0)
+			SPPCTL_IOPAD(11, SPPCTL_PCTL_G_PMUX, MUXF_UA1_CTS, 0)
+		>;
+	};
+
+	pins_uart2: pinmux_uart2-pins {
+		sunplus,pins = <
+			SPPCTL_IOPAD(12, SPPCTL_PCTL_G_PMUX, MUXF_UA2_TX, 0)
+			SPPCTL_IOPAD(13, SPPCTL_PCTL_G_PMUX, MUXF_UA2_RX, 0)
+			SPPCTL_IOPAD(14, SPPCTL_PCTL_G_PMUX, MUXF_UA2_RTS, 0)
+			SPPCTL_IOPAD(15, SPPCTL_PCTL_G_PMUX, MUXF_UA2_CTS, 0)
+		>;
+	};
+
+	pins_uart3: pinmux_uart3-pins {
+		sunplus,pins = <
+			SPPCTL_IOPAD(16, SPPCTL_PCTL_G_PMUX, MUXF_UA3_TX, 0)
+			SPPCTL_IOPAD(17, SPPCTL_PCTL_G_PMUX, MUXF_UA3_RX, 0)
+			SPPCTL_IOPAD(18, SPPCTL_PCTL_G_PMUX, MUXF_UA3_RTS, 0)
+			SPPCTL_IOPAD(19, SPPCTL_PCTL_G_PMUX, MUXF_UA3_CTS, 0)
+		>;
+	};
+
+	/* AP6256 Bluetooth */
+	pins_btuart: pinmux_btuart-pins {
+		sunplus,pins = <
+			SPPCTL_IOPAD(40, SPPCTL_PCTL_G_PMUX, MUXF_UA4_RX, 0)
+			SPPCTL_IOPAD(41, SPPCTL_PCTL_G_PMUX, MUXF_UA4_TX, 0)
+			SPPCTL_IOPAD(56, SPPCTL_PCTL_G_PMUX, MUXF_UA4_RTS, SPPCTL_PCTL_L_ONV)
+			SPPCTL_IOPAD(49, SPPCTL_PCTL_G_PMUX, MUXF_UA4_CTS, 0)
+		>;
+	};
+
+	pins_bt_reset: pinmux_bt_reset-pins {
+		sunplus,pins = < SPPCTL_IOPAD(82, SPPCTL_PCTL_G_GPIO, 0, 0) >;
+	};
+
+	pins_spi0: pinmux_spi0-pins {
+		sunplus,pins = <
+			/*SPPCTL_IOPAD(26, SPPCTL_PCTL_G_PMUX, MUXF_SPI0S_EN, 0) */
+			/*SPPCTL_IOPAD(23, SPPCTL_PCTL_G_PMUX, MUXF_SPI0S_DO, 0) */
+			/*SPPCTL_IOPAD(25, SPPCTL_PCTL_G_PMUX, MUXF_SPI0S_DI, 0) */
+			/*SPPCTL_IOPAD(27, SPPCTL_PCTL_G_PMUX, MUXF_SPI0S_CLK, 0) */
+		>;
+	};
+
+};
