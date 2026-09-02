@@ -63,6 +63,16 @@ properties:
   pinctrl-1:
     description: Optional pinctrl state for 1.8V UHS operation with "uhs" name
 
+  spacemit,tx-delay:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 255
+    description:
+      TX delay line setting applied before RX tuning, compensating for
+      board level trace differences. This is a delay line step count with
+      no fixed time-per-step conversion; determined empirically per board
+      specific, used on SD/SDIO hosts.
+
 required:
   - compatible
   - reg
