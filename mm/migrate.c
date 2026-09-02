@@ -2182,20 +2182,34 @@ out:
 	return rc;
 }
 
-static int migrate_pages_sync(struct list_head *from, new_folio_t get_new_folio,
+/*
+ * Migrate LRU folios.  MIGRATE_ASYNC processes a batch directly.  The
+ * other modes first make a short asynchronous pass, then retry each remaining
+ * folio separately in the requested mode.
+ */
+static int migrate_lru_folios(struct list_head *from, new_folio_t get_new_folio,
 		free_folio_t put_new_folio, unsigned long private,
 		enum migrate_mode mode, enum migrate_reason reason,
-		struct list_head *ret_folios, struct list_head *split_folios,
+		struct list_head *ret_folios,
 		struct migrate_pages_stats *stats)
 {
 	int rc, nr_failed = 0;
 	LIST_HEAD(folios);
+	LIST_HEAD(split_folios);
 	struct migrate_pages_stats astats;
+
+	if (mode == MIGRATE_ASYNC) {
+		rc = migrate_folios_batch(from, get_new_folio, put_new_folio,
+				private, mode, reason, ret_folios,
+				&split_folios, stats,
+				NR_MAX_MIGRATE_PAGES_RETRY);
+		goto out;
+	}
 
 	memset(&astats, 0, sizeof(astats));
 	/* Try to migrate in batch with MIGRATE_ASYNC mode firstly */
 	rc = migrate_folios_batch(from, get_new_folio, put_new_folio, private,
-			MIGRATE_ASYNC, reason, &folios, split_folios, &astats,
+			MIGRATE_ASYNC, reason, &folios, &split_folios, &astats,
 			NR_MAX_MIGRATE_ASYNC_RETRY);
 	stats->nr_succeeded += astats.nr_succeeded;
 	stats->nr_thp_succeeded += astats.nr_thp_succeeded;
@@ -2205,7 +2219,7 @@ static int migrate_pages_sync(struct list_head *from, new_folio_t get_new_folio,
 		stats->nr_failed_pages += astats.nr_failed_pages;
 		stats->nr_thp_failed += astats.nr_thp_failed;
 		list_splice_tail(&folios, ret_folios);
-		return rc;
+		goto out;
 	}
 	stats->nr_thp_failed += astats.nr_thp_split;
 	/*
@@ -2222,15 +2236,31 @@ static int migrate_pages_sync(struct list_head *from, new_folio_t get_new_folio,
 	while (!list_empty(from)) {
 		list_move(from->next, &folios);
 		rc = migrate_folios_batch(&folios, get_new_folio, put_new_folio,
-				private, mode, reason, ret_folios, split_folios,
-				stats, NR_MAX_MIGRATE_SYNC_RETRY);
+				private, mode, reason, ret_folios,
+				&split_folios, stats,
+				NR_MAX_MIGRATE_SYNC_RETRY);
 		list_splice_tail_init(&folios, ret_folios);
 		if (rc < 0)
-			return rc;
+			goto out;
 		nr_failed += rc;
 	}
+	rc = nr_failed;
+out:
+	if (rc < 0) {
+		list_splice_tail(&split_folios, ret_folios);
+	} else if (!list_empty(&split_folios)) {
+		/*
+		 * Folios split along the way get one asynchronous attempt at
+		 * their new order.  Their failure is not counted: the large
+		 * folio they came from was already counted as one failure.
+		 */
+		migrate_folios_batch(&split_folios, get_new_folio, put_new_folio,
+				private, MIGRATE_ASYNC, reason, ret_folios,
+				NULL, stats, 1);
+		list_splice_tail_init(&split_folios, ret_folios);
+	}
 
-	return nr_failed;
+	return rc;
 }
 
 /*
@@ -2268,7 +2298,6 @@ int migrate_pages(struct list_head *from, new_folio_t get_new_folio,
 	struct folio *folio, *folio2;
 	LIST_HEAD(folios);
 	LIST_HEAD(ret_folios);
-	LIST_HEAD(split_folios);
 	struct migrate_pages_stats stats;
 
 	trace_mm_migrate_pages_start(mode, reason);
@@ -2300,31 +2329,12 @@ again:
 		list_cut_before(&folios, from, &folio2->lru);
 	else
 		list_splice_init(from, &folios);
-	if (mode == MIGRATE_ASYNC)
-		rc = migrate_folios_batch(&folios, get_new_folio, put_new_folio,
-				private, mode, reason, &ret_folios,
-				&split_folios, &stats,
-				NR_MAX_MIGRATE_PAGES_RETRY);
-	else
-		rc = migrate_pages_sync(&folios, get_new_folio, put_new_folio,
-				private, mode, reason, &ret_folios,
-				&split_folios, &stats);
+	rc = migrate_lru_folios(&folios, get_new_folio, put_new_folio,
+			private, mode, reason, &ret_folios, &stats);
 	list_splice_tail_init(&folios, &ret_folios);
 	if (rc < 0) {
 		rc_gather = rc;
-		list_splice_tail(&split_folios, &ret_folios);
 		goto out;
-	}
-	if (!list_empty(&split_folios)) {
-		/*
-		 * Failure isn't counted since all split folios of a large folio
-		 * is counted as 1 failure already.  And, we only try to migrate
-		 * with minimal effort, force MIGRATE_ASYNC mode and retry once.
-		 */
-		migrate_folios_batch(&split_folios, get_new_folio,
-				put_new_folio, private, MIGRATE_ASYNC, reason,
-				&ret_folios, NULL, &stats, 1);
-		list_splice_tail_init(&split_folios, &ret_folios);
 	}
 	rc_gather += rc;
 	if (!list_empty(from))
