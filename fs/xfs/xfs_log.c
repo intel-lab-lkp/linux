@@ -1538,6 +1538,47 @@ xlog_bio_end_io(
 		   &iclog->ic_end_io_work);
 }
 
+struct xlog_flush_done {
+	atomic_t		pending;
+	blk_status_t		status;
+	struct completion	done;
+};
+
+static void
+xlog_flush_done(
+	struct xlog_flush_done	*done)
+{
+	if (atomic_dec_and_test(&done->pending))
+		complete(&done->done);
+}
+
+static void
+xlog_flush_end_io(
+	struct bio		*bio)
+{
+	struct xlog_flush_done	*done = bio->bi_private;
+
+	if (bio->bi_status)
+		cmpxchg(&done->status, 0, bio->bi_status);
+	xlog_flush_done(done);
+	bio_put(bio);
+}
+
+static void
+xlog_flush_async(
+	struct xlog_flush_done	*done,
+	struct block_device	*bdev)
+{
+	struct bio		*bio;
+
+	bio = bio_alloc(bdev, 0, REQ_OP_WRITE | REQ_PREFLUSH | REQ_SYNC,
+			GFP_NOFS);
+	bio->bi_private = done;
+	bio->bi_end_io = xlog_flush_end_io;
+	atomic_inc(&done->pending);
+	submit_bio(bio);
+}
+
 /*
  * When using multiple devices, we also need to flush the data and RT device
  * caches first to ensure that all metadata writeback covered by the LSN in
@@ -1551,17 +1592,39 @@ xlog_bio_end_io(
  */
 static int
 xlog_flush_data_caches(
-	struct xlog		*log)
+	struct xlog		*log,
+	struct xlog_in_core	*iclog)
 {
 	struct xfs_mount	*mp = log->l_mp;
+	struct xlog_flush_done done = {
+		.pending	= ATOMIC_INIT(1),
+		.done		= COMPLETION_INITIALIZER_ONSTACK(done.done),
+	};
+	bool			did_flush = false;
 
-	if (log->l_targ != mp->m_ddev_targp) {
-		if (blkdev_issue_flush(mp->m_ddev_targp->bt_bdev))
-			return -EIO;
+	if (mp->m_ddev_targp != log->l_targ &&
+	    bdev_write_cache(mp->m_ddev_targp->bt_bdev)) {
+		xlog_flush_async(&done, mp->m_ddev_targp->bt_bdev);
+		did_flush = true;
 	}
-	if (mp->m_rtdev_targp && mp->m_rtdev_targp != mp->m_ddev_targp) {
-		if (blkdev_issue_flush(mp->m_rtdev_targp->bt_bdev))
+	if (mp->m_rtdev_targp && mp->m_rtdev_targp != mp->m_ddev_targp &&
+	    bdev_write_cache(mp->m_rtdev_targp->bt_bdev)) {
+		xlog_flush_async(&done, mp->m_rtdev_targp->bt_bdev);
+		did_flush = true;
+	}
+
+	if (did_flush) {
+		/*
+		 * If we flushed any other device, also use an async flush for
+		 * the log device so that all flushes happen in parallel.
+		 */
+		xlog_flush_async(&done, log->l_targ->bt_bdev);
+
+		xlog_flush_done(&done);
+		wait_for_completion(&done.done);
+		if (done.status)
 			return -EIO;
+		iclog->ic_flags &= ~XLOG_ICL_NEED_FLUSH;
 	}
 
 	return 0;
@@ -1611,8 +1674,9 @@ xlog_write_iclog(
 	iclog->ic_bio.bi_private = iclog;
 
 	if (iclog->ic_flags & XLOG_ICL_NEED_FLUSH) {
-		if (xlog_flush_data_caches(log))
+		if (xlog_flush_data_caches(log, iclog))
 			goto shutdown;
+		/* xlog_flush_data_caches may clear XLOG_ICL_NEED_FLUSH */
 	}
 	if (iclog->ic_flags & (XLOG_ICL_NEED_FLUSH | XLOG_ICL_NEED_FLUSH_LOG))
 		iclog->ic_bio.bi_opf |= REQ_PREFLUSH;
