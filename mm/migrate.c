@@ -1800,35 +1800,29 @@ static void migrate_folios_undo(struct list_head *src_folios,
 }
 
 /*
- * migrate_pages_batch() first unmaps folios in the from list as many as
- * possible, then move the unmapped folios.
+ * Unmap the folios in @from, queuing successfully unmapped sources on
+ * @unmap_folios and their destination on @dst_folios.  Increment @nr_failed for
+ * each failure.
  *
- * We only batch migration if mode == MIGRATE_ASYNC to avoid to wait a
- * lock or bit when we have locked more than one folio.  Which may cause
- * deadlock (e.g., for loop device).  So, if mode != MIGRATE_ASYNC, the
- * length of the from list must be <= 1.
+ * Return: -ENOMEM on destination allocation failure stop the unmap phase,
+ * otherwise 0.  Folios already unmapped remain queued for the move phase.
  */
-static int migrate_pages_batch(struct list_head *from,
+static int migrate_folios_unmap(struct list_head *from,
 		new_folio_t get_new_folio, free_folio_t put_new_folio,
 		unsigned long private, enum migrate_mode mode, enum migrate_reason reason,
 		struct list_head *ret_folios, struct list_head *split_folios,
-		struct migrate_pages_stats *stats, int nr_pass)
+		struct list_head *unmap_folios, struct list_head *dst_folios,
+		struct migrate_pages_stats *stats, int nr_pass, int *nr_failed)
 {
 	int retry = 1;
 	int thp_retry = 1;
-	int nr_failed = 0;
 	int nr_retry_pages = 0;
 	int pass = 0;
 	bool is_thp = false;
 	bool is_large = false;
 	struct folio *folio, *folio2, *dst = NULL;
-	int rc, rc_saved = 0, nr_pages;
-	LIST_HEAD(unmap_folios);
-	LIST_HEAD(dst_folios);
+	int rc, nr_pages;
 	bool nosplit = (reason == MR_NUMA_MISPLACED);
-
-	VM_WARN_ON_ONCE(mode != MIGRATE_ASYNC &&
-			!list_empty(from) && !list_is_singular(from));
 
 	for (pass = 0; pass < nr_pass && retry; pass++) {
 		retry = 0;
@@ -1869,7 +1863,7 @@ static int migrate_pages_batch(struct list_head *from,
 			   !list_empty(&folio->_deferred_list) &&
 			   folio_test_partially_mapped(folio)) {
 				if (!try_split_folio(folio, split_folios, mode)) {
-					nr_failed++;
+					*nr_failed += 1;
 					stats->nr_thp_failed += is_thp;
 					stats->nr_thp_split += is_thp;
 					stats->nr_split++;
@@ -1888,7 +1882,7 @@ static int migrate_pages_batch(struct list_head *from,
 			 * list is processed.
 			 */
 			if (!thp_migration_supported() && is_thp) {
-				nr_failed++;
+				*nr_failed += 1;
 				stats->nr_thp_failed++;
 				if (!try_split_folio(folio, split_folios, mode)) {
 					stats->nr_thp_split++;
@@ -1925,13 +1919,13 @@ static int migrate_pages_batch(struct list_head *from,
 			 *	-ENOMEM: stay on the from list
 			 *	Other errno: put on ret_folios list
 			 */
-			switch(rc) {
+			switch (rc) {
 			case -ENOMEM:
 				/*
 				 * When memory is low, don't bother to try to migrate
 				 * other folios, move unmapped folios, then exit.
 				 */
-				nr_failed++;
+				*nr_failed += 1;
 				stats->nr_thp_failed += is_thp;
 				/* Large folio NUMA faulting doesn't split to retry. */
 				if (is_large && !nosplit) {
@@ -1951,7 +1945,7 @@ static int migrate_pages_batch(struct list_head *from,
 						thp_retry += is_thp;
 						nr_retry_pages += nr_pages;
 						/* Undo duplicated failure counting. */
-						nr_failed--;
+						*nr_failed -= 1;
 						stats->nr_thp_failed -= is_thp;
 						break;
 					}
@@ -1960,19 +1954,15 @@ static int migrate_pages_batch(struct list_head *from,
 				stats->nr_failed_pages += nr_pages + nr_retry_pages;
 				/* nr_failed isn't updated for not used */
 				stats->nr_thp_failed += thp_retry;
-				rc_saved = rc;
-				if (list_empty(&unmap_folios))
-					goto out;
-				else
-					goto move;
+				return -ENOMEM;
 			case -EAGAIN:
 				retry++;
 				thp_retry += is_thp;
 				nr_retry_pages += nr_pages;
 				break;
 			case 0:
-				list_move_tail(&folio->lru, &unmap_folios);
-				list_add_tail(&dst->lru, &dst_folios);
+				list_move_tail(&folio->lru, unmap_folios);
+				list_add_tail(&dst->lru, dst_folios);
 				break;
 			default:
 				/*
@@ -1981,17 +1971,56 @@ static int migrate_pages_batch(struct list_head *from,
 				 * removed from migration folio list and not
 				 * retried in the next outer loop.
 				 */
-				nr_failed++;
+				*nr_failed += 1;
 				stats->nr_thp_failed += is_thp;
 				stats->nr_failed_pages += nr_pages;
 				break;
 			}
 		}
 	}
-	nr_failed += retry;
+	*nr_failed += retry;
 	stats->nr_thp_failed += thp_retry;
 	stats->nr_failed_pages += nr_retry_pages;
-move:
+
+	return 0;
+}
+
+/*
+ * migrate_pages_batch() first unmaps as many folios in the source list as
+ * possible, flushes the TLBs, then moves the unmapped folios.
+ *
+ * Only MIGRATE_ASYNC may batch multiple folios.  Waiting for a lock or bit
+ * while multiple folios are locked may deadlock (e.g. with a loop device).
+ * Therefore, if mode != MIGRATE_ASYNC, the source list must contain at most
+ * one folio.
+ */
+static int migrate_pages_batch(struct list_head *from,
+		new_folio_t get_new_folio, free_folio_t put_new_folio,
+		unsigned long private, enum migrate_mode mode, enum migrate_reason reason,
+		struct list_head *ret_folios, struct list_head *split_folios,
+		struct migrate_pages_stats *stats, int nr_pass)
+{
+	int retry = 1;
+	int thp_retry = 1;
+	int nr_failed = 0;
+	int nr_retry_pages = 0;
+	int pass = 0;
+	int rc, rc_saved;
+	LIST_HEAD(unmap_folios);
+	LIST_HEAD(dst_folios);
+
+	VM_WARN_ON_ONCE(mode != MIGRATE_ASYNC &&
+			!list_empty(from) && !list_is_singular(from));
+
+	rc_saved = migrate_folios_unmap(from, get_new_folio, put_new_folio,
+			private, mode, reason, ret_folios, split_folios,
+			&unmap_folios, &dst_folios, stats, nr_pass,
+			&nr_failed);
+	if (rc_saved && list_empty(&unmap_folios)) {
+		rc = rc_saved;
+		goto out;
+	}
+
 	/* Flush TLBs for all unmapped folios */
 	try_to_unmap_flush();
 
