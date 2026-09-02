@@ -518,6 +518,24 @@ static int zap_threads(struct task_struct *tsk,
 	return nr;
 }
 
+static void coredump_wait_inactive(struct core_state *core_state)
+{
+	struct core_thread *ptr;
+
+	wait_for_completion_state(&core_state->done,
+				  TASK_UNINTERRUPTIBLE|TASK_FREEZABLE);
+	/*
+	 * Wait for all the threads to become inactive, so that
+	 * all the thread context (extended register state, like
+	 * fpu etc) gets copied to the memory.
+	 */
+	ptr = core_state->dumper.next;
+	while (ptr != NULL) {
+		wait_task_inactive(ptr->task, TASK_ANY);
+		ptr = ptr->next;
+	}
+}
+
 static int coredump_wait(int exit_code, struct core_state *core_state)
 {
 	struct task_struct *tsk = current;
@@ -528,22 +546,8 @@ static int coredump_wait(int exit_code, struct core_state *core_state)
 	core_state->dumper.next = NULL;
 
 	core_waiters = zap_threads(tsk, core_state, exit_code);
-	if (core_waiters > 0) {
-		struct core_thread *ptr;
-
-		wait_for_completion_state(&core_state->done,
-					  TASK_UNINTERRUPTIBLE|TASK_FREEZABLE);
-		/*
-		 * Wait for all the threads to become inactive, so that
-		 * all the thread context (extended register state, like
-		 * fpu etc) gets copied to the memory.
-		 */
-		ptr = core_state->dumper.next;
-		while (ptr != NULL) {
-			wait_task_inactive(ptr->task, TASK_ANY);
-			ptr = ptr->next;
-		}
-	}
+	if (core_waiters > 0)
+		coredump_wait_inactive(core_state);
 
 	return core_waiters;
 }
