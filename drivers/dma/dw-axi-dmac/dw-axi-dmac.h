@@ -21,6 +21,7 @@
 #define DMAC_MAX_CHANNELS	32
 #define DMAC_MAX_MASTERS	2
 #define DMAC_MAX_BLK_SIZE	0x200000
+#define DW_AXI_DMA_MAX_CLKS	2
 
 struct dw_axi_dma_hcfg {
 	u32	nr_channels;
@@ -69,8 +70,7 @@ struct axi_dma_chip {
 	int			irq[DMAC_MAX_CHANNELS];
 	void __iomem		*regs;
 	void __iomem		*apb_regs;
-	struct clk		*core_clk;
-	struct clk		*cfgr_clk;
+	struct clk_bulk_data	clks[DW_AXI_DMA_MAX_CLKS];
 	struct dw_axi_dma	*dw;
 };
 
