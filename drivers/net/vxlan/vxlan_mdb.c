@@ -1619,8 +1619,8 @@ struct vxlan_mdb_entry *vxlan_mdb_entry_skb_get(struct vxlan_dev *vxlan,
 	struct vxlan_mdb_entry *mdb_entry;
 	struct vxlan_mdb_entry_key group;
 
-	if (!is_multicast_ether_addr(eth_hdr(skb)->h_dest) ||
-	    is_broadcast_ether_addr(eth_hdr(skb)->h_dest))
+	if (!is_multicast_ether_addr(skb_eth_hdr(skb)->h_dest) ||
+	    is_broadcast_ether_addr(skb_eth_hdr(skb)->h_dest))
 		return NULL;
 
 	/* When not in collect metadata mode, 'src_vni' is zero, but MDB

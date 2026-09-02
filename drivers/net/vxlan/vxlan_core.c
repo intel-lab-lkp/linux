@@ -1967,7 +1967,7 @@ static struct sk_buff *vxlan_na_create(struct sk_buff *request,
 
 	ns = (struct nd_msg *)(ipv6_hdr(request) + 1);
 
-	daddr = eth_hdr(request)->h_source;
+	daddr = skb_eth_hdr(request)->h_source;
 	ns_olen = request->len - skb_network_offset(request) -
 		sizeof(struct ipv6hdr) - sizeof(*ns);
 	for (i = 0; i < ns_olen-1; i += (ns->opt[i+1]<<3)) {
@@ -2108,11 +2108,11 @@ static bool route_shortcircuit(struct net_device *dev, struct sk_buff *skb)
 	struct vxlan_dev *vxlan = netdev_priv(dev);
 	struct neighbour *n;
 
-	if (is_multicast_ether_addr(eth_hdr(skb)->h_dest))
+	if (is_multicast_ether_addr(skb_eth_hdr(skb)->h_dest))
 		return false;
 
 	n = NULL;
-	switch (ntohs(eth_hdr(skb)->h_proto)) {
+	switch (ntohs(skb_eth_hdr(skb)->h_proto)) {
 	case ETH_P_IP:
 	{
 		struct iphdr *pip;
@@ -2169,15 +2169,15 @@ static bool route_shortcircuit(struct net_device *dev, struct sk_buff *skb)
 		bool diff;
 
 		neigh_ha_snapshot(haddr, n, dev);
-		diff = !ether_addr_equal_unaligned(eth_hdr(skb)->h_dest, haddr);
+		diff = !ether_addr_equal_unaligned(skb_eth_hdr(skb)->h_dest, haddr);
 		if (diff) {
 			if (skb_cow_head(skb, 0)) {
 				neigh_release(n);
 				return false;
 			}
-			memcpy(eth_hdr(skb)->h_source, eth_hdr(skb)->h_dest,
+			memcpy(skb_eth_hdr(skb)->h_source, skb_eth_hdr(skb)->h_dest,
 				dev->addr_len);
-			memcpy(eth_hdr(skb)->h_dest, haddr, dev->addr_len);
+			memcpy(skb_eth_hdr(skb)->h_dest, haddr, dev->addr_len);
 		}
 		neigh_release(n);
 		return diff;
@@ -2296,7 +2296,7 @@ static void vxlan_encap_bypass(struct sk_buff *skb, struct vxlan_dev *src_vxlan,
 	}
 
 	if ((dst_vxlan->cfg.flags & VXLAN_F_LEARN) && snoop)
-		vxlan_snoop(dev, &loopback, eth_hdr(skb)->h_source, 0, vni);
+		vxlan_snoop(dev, &loopback, skb_eth_hdr(skb)->h_source, 0, vni);
 
 	dev_dstats_tx_add(src_vxlan->dev, len);
 	vxlan_vnifilter_count(src_vxlan, vni, NULL, VXLAN_VNI_STATS_TX, len);
@@ -2513,7 +2513,7 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			if (vxlan->cfg.df == VXLAN_DF_SET) {
 				df = htons(IP_DF);
 			} else if (vxlan->cfg.df == VXLAN_DF_INHERIT) {
-				struct ethhdr *eth = eth_hdr(skb);
+				struct ethhdr *eth = skb_eth_hdr(skb);
 
 				if (ntohs(eth->h_proto) == ETH_P_IPV6 ||
 				    (ntohs(eth->h_proto) == ETH_P_IP &&
@@ -2747,8 +2747,6 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	info = skb_tunnel_info(skb);
 
-	skb_reset_mac_header(skb);
-
 	if (vxlan->cfg.flags & VXLAN_F_COLLECT_METADATA) {
 		if (info && info->mode & IP_TUNNEL_INFO_BRIDGE &&
 		    info->mode & IP_TUNNEL_INFO_TX) {
@@ -2764,7 +2762,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (vxlan->cfg.flags & VXLAN_F_PROXY) {
-		eth = eth_hdr(skb);
+		eth = skb_eth_hdr(skb);
 		if (ntohs(eth->h_proto) == ETH_P_ARP)
 			return arp_reduce(dev, skb, vni);
 #if IS_ENABLED(CONFIG_IPV6)
@@ -2799,7 +2797,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 		rcu_read_unlock();
 	}
 
-	eth = eth_hdr(skb);
+	eth = skb_eth_hdr(skb);
 	rcu_read_lock();
 	f = vxlan_find_mac_tx(vxlan, eth->h_dest, vni);
 	did_rsc = false;
@@ -2808,7 +2806,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 	    (ntohs(eth->h_proto) == ETH_P_IP ||
 	     ntohs(eth->h_proto) == ETH_P_IPV6)) {
 		did_rsc = route_shortcircuit(dev, skb);
-		eth = eth_hdr(skb);
+		eth = skb_eth_hdr(skb);
 		if (did_rsc)
 			f = vxlan_find_mac_tx(vxlan, eth->h_dest, vni);
 	}
