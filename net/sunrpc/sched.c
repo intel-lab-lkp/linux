@@ -1268,6 +1268,17 @@ void rpciod_down(void)
 	module_put(THIS_MODULE);
 }
 
+static void rpc_set_wq_smt_affinity(struct workqueue_struct *wq,
+				    const char *name)
+{
+	int err;
+
+	err = workqueue_set_affn_scope(wq, WQ_AFFN_SMT);
+	if (err)
+		pr_warn("%s: failed to set SMT affinity scope: %d\n",
+			name, err);
+}
+
 /*
  * Start up the rpciod workqueue.
  */
@@ -1282,6 +1293,7 @@ static int rpciod_start(void)
 	wq = alloc_workqueue("rpciod", wq_flags, 0);
 	if (!wq)
 		goto out_failed;
+	rpc_set_wq_smt_affinity(wq, "rpciod");
 	rpciod_workqueue = wq;
 	wq = alloc_workqueue("xprtiod", wq_flags, 0);
 	if (!wq)
