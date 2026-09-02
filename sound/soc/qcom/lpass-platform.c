@@ -490,10 +490,10 @@ static int lpass_platform_pcmops_hw_params(struct snd_soc_component *component,
 		break;
 	case LPASS_CDC_DMA_RX0 ... LPASS_CDC_DMA_RX9:
 	case LPASS_CDC_DMA_TX0 ... LPASS_CDC_DMA_TX8:
-	case LPASS_CDC_DMA_VA_TX0 ... LPASS_CDC_DMA_VA_TX0:
+	case LPASS_CDC_DMA_VA_TX0 ... LPASS_CDC_DMA_VA_TX8:
 		break;
 	default:
-		dev_err(soc_runtime->dev, "%s: invalid  interface: %d\n", __func__, dai_id);
+		dev_err(soc_runtime->dev, "%s: invalid interface: %d\n", __func__, dai_id);
 		break;
 	}
 	switch (bitwidth) {

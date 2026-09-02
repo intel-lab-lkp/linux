@@ -180,12 +180,12 @@ static int lpass_cdc_dma_daiops_startup(struct snd_pcm_substream *substream,
 		clk_set_rate(drvdata->codec_mem0, CODEC_MEM_HZ_NORMAL);
 		clk_prepare_enable(drvdata->codec_mem0);
 		break;
-	case LPASS_CDC_DMA_VA_TX0 ... LPASS_CDC_DMA_VA_TX0:
+	case LPASS_CDC_DMA_VA_TX0 ... LPASS_CDC_DMA_VA_TX8:
 		clk_set_rate(drvdata->va_mem0, CODEC_MEM_HZ_NORMAL);
 		clk_prepare_enable(drvdata->va_mem0);
 		break;
 	default:
-		dev_err(soc_runtime->dev, "%s: invalid  interface: %d\n", __func__, dai->id);
+		dev_err(soc_runtime->dev, "%s: invalid interface: %d\n", __func__, dai->id);
 		break;
 	}
 	return 0;
@@ -202,11 +202,11 @@ static void lpass_cdc_dma_daiops_shutdown(struct snd_pcm_substream *substream,
 	case LPASS_CDC_DMA_TX0 ... LPASS_CDC_DMA_TX8:
 		clk_disable_unprepare(drvdata->codec_mem0);
 		break;
-	case LPASS_CDC_DMA_VA_TX0 ... LPASS_CDC_DMA_VA_TX0:
+	case LPASS_CDC_DMA_VA_TX0 ... LPASS_CDC_DMA_VA_TX8:
 		clk_disable_unprepare(drvdata->va_mem0);
 		break;
 	default:
-		dev_err(soc_runtime->dev, "%s: invalid  interface: %d\n", __func__, dai->id);
+		dev_err(soc_runtime->dev, "%s: invalid interface: %d\n", __func__, dai->id);
 		break;
 	}
 }
