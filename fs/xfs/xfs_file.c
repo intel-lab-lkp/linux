@@ -347,8 +347,10 @@ xfs_file_read_iter(
 	else
 		ret = xfs_file_buffered_read(iocb, to);
 
-	if (ret > 0)
+	if (ret > 0) {
 		XFS_STATS_ADD(mp, xs_read_bytes, ret);
+		XFS_STATS_INC(mp, xs_read_completions);
+	}
 	return ret;
 }
 
@@ -375,8 +377,10 @@ xfs_file_splice_read(
 	xfs_ilock(ip, XFS_IOLOCK_SHARED);
 	ret = filemap_splice_read(in, ppos, pipe, len, flags);
 	xfs_iunlock(ip, XFS_IOLOCK_SHARED);
-	if (ret > 0)
+	if (ret > 0) {
 		XFS_STATS_ADD(mp, xs_read_bytes, ret);
+		XFS_STATS_INC(mp, xs_read_completions);
+	}
 	return ret;
 }
 
@@ -663,6 +667,7 @@ xfs_dio_write_end_io(
 	 * for it on submission.
 	 */
 	XFS_STATS_ADD(ip->i_mount, xs_write_bytes, size);
+	XFS_STATS_INC(ip->i_mount, xs_write_completions);
 
 	/*
 	 * We can allocate memory here while doing writeback on behalf of
@@ -1032,6 +1037,7 @@ out:
 
 	if (ret > 0) {
 		XFS_STATS_ADD(ip->i_mount, xs_write_bytes, ret);
+		XFS_STATS_INC(ip->i_mount, xs_write_completions);
 
 		/* Handle various SYNC-type writes */
 		ret = generic_write_sync(iocb, ret);
@@ -1098,6 +1104,7 @@ out:
 
 	if (ret > 0) {
 		XFS_STATS_ADD(ip->i_mount, xs_write_bytes, ret);
+		XFS_STATS_INC(ip->i_mount, xs_write_completions);
 		/* Handle various SYNC-type writes */
 		ret = generic_write_sync(iocb, ret);
 	}
