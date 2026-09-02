@@ -3,6 +3,7 @@
 // Copyright 2026 Advanced Micro Devices, Inc.
 
 #include "dm_services.h"
+#include "dm_helpers.h"
 #include "dc.h"
 #include "mod_power.h"
 #include "core_types.h"
@@ -265,6 +266,16 @@ void mod_power_set_backlight_control_type(struct core_power *core_power,
 
 	core_power->bl_prop[inst].backlight_control_type = backlight_control_type;
 }
+
+STATIC_IFN_KUNIT
+unsigned int backlight_apply_source_mask(struct core_power *core_power,
+					 unsigned int backlight,
+					 unsigned int inst)
+{
+	return backlight | core_power->bl_prop[inst].brightness_mask;
+}
+
+EXPORT_IF_KUNIT(backlight_apply_source_mask);
 
 /* Returns true when the panel uses the VESA AUX backlight control path, which
  * requires zero-anchored linear brightness interpolation.
@@ -529,7 +540,7 @@ static unsigned int backlight_millipercent_to_pwm_legacy(
 		return 0;
 
 	// Bypass the brightness mapping LUT
-	if (core_power->bl_prop->use_linear_backlight_curve) {
+	if (core_power->bl_prop[inst].use_linear_backlight_curve) {
 		pwm = core_power->bl_prop[inst].min_backlight_pwm +
 			(unsigned int) div_u64((unsigned long long) millipercent *
 			core_power->bl_prop[inst].backlight_range,
@@ -615,8 +626,10 @@ static unsigned int backlight_millinit_to_pwm_legacy(
  * 0 nits = 0 PWM and max_brightness_millinits = max_backlight_pwm.
  * Otherwise, falls back to the legacy min→max nits range mapping.
  */
-static unsigned int backlight_millinit_to_pwm(
-		struct core_power *core_power, unsigned int millinit, unsigned int inst)
+STATIC_IFN_KUNIT
+unsigned int backlight_millinit_to_pwm(struct core_power *core_power,
+				       unsigned int millinit,
+				       unsigned int inst)
 {
 	if (!is_vesa_abc(core_power, inst))
 		return backlight_millinit_to_pwm_legacy(core_power, millinit, inst);
@@ -638,6 +651,8 @@ static unsigned int backlight_millinit_to_pwm(
 			core_power->bl_prop[inst].max_backlight_pwm,
 			core_power->bl_prop[inst].max_brightness_millinits);
 }
+
+EXPORT_IF_KUNIT(backlight_millinit_to_pwm);
 
 static bool validate_ext_backlight_caps(
 		struct dm_acpi_atif_backlight_caps *ext_backlight_caps)
@@ -894,6 +909,7 @@ void mod_power_update_backlight_on_mode_change(
     bool is_hdr)
 {
     struct set_backlight_level_params backlight_level_params = { 0 };
+	unsigned int backlight_millinit;
 
 		/* Cache the panel's backlight control type once at mode-change/init
 		 * time. It is a stable per-panel property (decided in the OS shim
@@ -905,9 +921,15 @@ void mod_power_update_backlight_on_mode_change(
 
 		if ((link->dpcd_sink_ext_caps.bits.hdr_aux_backlight_control == 1 ||
 			link->dpcd_sink_ext_caps.bits.sdr_aux_backlight_control == 1) &&
-			link->backlight_control_type == BACKLIGHT_CONTROL_AMD_AUX)
+			link->backlight_control_type == BACKLIGHT_CONTROL_AMD_AUX) {
+			backlight_millinit =
+				core_power->bl_state[panel_inst].backlight_millinit;
+			backlight_millinit =
+				backlight_apply_source_mask(core_power, backlight_millinit,
+							    panel_inst);
 			dc_link_set_backlight_level_nits(link, core_power->bl_state[panel_inst].isHDR,
-				core_power->bl_state[panel_inst].backlight_millinit, 0);
+				backlight_millinit, 0);
+		}
 
 		backlight_level_params.frame_ramp = 0;
 
@@ -918,11 +940,12 @@ void mod_power_update_backlight_on_mode_change(
 		dc_link_set_backlight_level(link, &backlight_level_params);
 }
 
-static bool set_backlight_millinits_aux(struct core_power *core_power,
-		struct dc_stream_state *stream,
-		unsigned int backlight_millinits,
-		unsigned int transition_time_millisec,
-		unsigned int inst)
+STATIC_IFN_KUNIT
+bool set_backlight_millinits_aux(struct core_power *core_power,
+				 struct dc_stream_state *stream,
+				 unsigned int backlight_millinits,
+				 unsigned int transition_time_millisec,
+				 unsigned int inst)
 {
 	struct dc_link *link = NULL;
 
@@ -939,9 +962,16 @@ static bool set_backlight_millinits_aux(struct core_power *core_power,
 		link->dc->caps.dmub_caps.aux_backlight_support)
 		return true;
 
+	if (link->backlight_control_type == BACKLIGHT_CONTROL_AMD_AUX)
+		backlight_millinits =
+			backlight_apply_source_mask(core_power, backlight_millinits,
+						    inst);
+
 	return dc_link_set_backlight_level_nits(link, core_power->bl_state[inst].isHDR,
 			backlight_millinits, transition_time_millisec);
 }
+
+EXPORT_IF_KUNIT(set_backlight_millinits_aux);
 
 static bool set_backlight(struct core_power *core_power,
 		struct dc_stream_state *stream,
@@ -1020,6 +1050,11 @@ void fill_backlight_level_params(struct core_power *core_power,
 
 	if (backlight_control_type == BACKLIGHT_CONTROL_AMD_AUX && !is_hdr)
 		backlight_level_params->control_type = BACKLIGHT_CONTROL_PWM;
+
+	if (backlight_level_params->control_type == BACKLIGHT_CONTROL_PWM)
+		backlight_level_params->backlight_pwm_u16_16 =
+			backlight_apply_source_mask(core_power, backlight_pwm,
+						    panel_inst);
 }
 
 bool mod_power_set_backlight_nits(struct mod_power *mod_power,

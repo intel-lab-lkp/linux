@@ -94,6 +94,7 @@ struct pwr_backlight_properties {
 	unsigned int min_backlight_pwm;
 	unsigned int max_backlight_pwm;
 	unsigned int backlight_range;
+	unsigned int brightness_mask;
 
 	/* Describes the panel's min and max luminance in millinits measured
 	 * on full white screen, in min and max backlight settings.
@@ -203,6 +204,19 @@ unsigned int backlight_millipercent_to_pwm(
 		struct core_power *core_power, unsigned int millipercent, unsigned int inst);
 unsigned int backlight_millipercent_to_millinit(
 		struct core_power *core_power, unsigned int millipercent, unsigned int inst);
+#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+unsigned int backlight_millinit_to_pwm(struct core_power *core_power,
+				       unsigned int millinit,
+				       unsigned int inst);
+unsigned int backlight_apply_source_mask(struct core_power *core_power,
+					 unsigned int backlight,
+					 unsigned int inst);
+bool set_backlight_millinits_aux(struct core_power *core_power,
+				 struct dc_stream_state *stream,
+				 unsigned int backlight_millinits,
+				 unsigned int transition_time_millisec,
+				 unsigned int inst);
+#endif
 void fill_backlight_level_params(struct core_power *core_power,
 	struct set_backlight_level_params *backlight_level_params,
 	int panel_inst, uint8_t aux_inst, unsigned int backlight_pwm,

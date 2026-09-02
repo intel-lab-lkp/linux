@@ -425,7 +425,9 @@ static int amdgpu_dm_init_power_module(struct amdgpu_display_manager *dm)
 			!(amdgpu_dc_feature_mask & DC_DISABLE_FRACTIONAL_PWM_MASK);
 		init_data[i].use_custom_backlight_caps = false;
 		init_data[i].custom_backlight_caps_config_no = 0;
-		init_data[i].use_linear_backlight_curve = false;
+		init_data[i].use_linear_backlight_curve =
+			!!(amdgpu_dc_debug_mask &
+			   DC_DISABLE_CUSTOM_BRIGHTNESS_CURVE);
 		init_data[i].def_varibright_enable = 0;
 		init_data[i].varibright_level = 0;
 		/*
@@ -436,6 +438,8 @@ static int amdgpu_dm_init_power_module(struct amdgpu_display_manager *dm)
 			dm->backlight_caps[i].min_input_signal * 0x101;
 		init_data[i].max_backlight_pwm =
 			dm->backlight_caps[i].max_input_signal * 0x101;
+		init_data[i].brightness_mask =
+			dm->backlight_caps[i].brightness_mask;
 		init_data[i].min_abm_backlight =
 			dm->backlight_caps[i].min_input_signal * 0x101;
 

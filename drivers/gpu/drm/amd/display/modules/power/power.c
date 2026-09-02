@@ -157,6 +157,8 @@ struct mod_power *mod_power_create(struct dc *dc,
 				init_params[inst].use_custom_backlight_caps;
 		core_power->bl_prop[inst].custom_backlight_caps_config_no =
 				init_params[inst].custom_backlight_caps_config_no;
+		core_power->bl_prop[inst].brightness_mask =
+				init_params[inst].brightness_mask;
 
 		// Do not allow less than 101 backlight levels
 		if (init_params[inst].num_backlight_levels < 101)

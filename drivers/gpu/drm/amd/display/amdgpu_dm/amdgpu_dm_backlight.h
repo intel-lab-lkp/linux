@@ -72,6 +72,8 @@ u32 convert_brightness_from_user(const struct amdgpu_dm_backlight_caps *caps,
 				 uint32_t brightness);
 u32 convert_brightness_to_user(const struct amdgpu_dm_backlight_caps *caps,
 			       uint32_t brightness);
+u32 convert_brightness_for_power_module(const struct amdgpu_dm_backlight_caps *caps,
+					u32 user_brightness);
 int amdgpu_dm_backlight_get_device_index(struct amdgpu_display_manager *dm,
 					 struct backlight_device *bd);
 void amdgpu_dm_backlight_fill_props(const struct amdgpu_dm_backlight_caps *caps,

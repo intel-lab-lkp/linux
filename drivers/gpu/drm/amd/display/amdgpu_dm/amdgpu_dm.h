@@ -229,7 +229,7 @@ struct amdgpu_dm_backlight_caps {
 	 */
 	bool aux_support;
 	/**
-	 * @brightness_mask: After deriving brightness, OR it with this mask.
+	 * @brightness_mask: OR this with the final source backlight value.
 	 * Workaround for panels with issues with certain brightness values.
 	 */
 	u32 brightness_mask;

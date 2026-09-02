@@ -218,6 +218,39 @@ u32 convert_brightness_to_user(const struct amdgpu_dm_backlight_caps *caps,
 }
 EXPORT_IF_KUNIT(convert_brightness_to_user);
 
+static u32 convert_brightness_to_millipercent(const struct amdgpu_dm_backlight_caps *caps,
+					      u32 brightness)
+{
+	unsigned int min, max;
+
+	if (!get_brightness_range(caps, &min, &max) || max <= min)
+		return 0;
+
+	if (brightness >= max)
+		return 100 * 1000;
+
+	return DIV_ROUND_CLOSEST_ULL((u64)brightness * 100 * 1000, max);
+}
+
+STATIC_IFN_KUNIT
+u32 convert_brightness_for_power_module(const struct amdgpu_dm_backlight_caps *caps,
+					u32 user_brightness)
+{
+	u32 brightness;
+
+	if (!caps)
+		return user_brightness;
+
+	if (!caps->aux_support)
+		return convert_brightness_to_millipercent(caps, user_brightness);
+
+	brightness = convert_brightness_from_user(caps, user_brightness);
+
+	return brightness;
+}
+
+EXPORT_IF_KUNIT(convert_brightness_for_power_module);
+
 STATIC_IFN_KUNIT
 struct dc_stream_state *dm_find_stream_with_link(
 	struct amdgpu_display_manager *dm,
@@ -262,7 +295,6 @@ void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 	bool rc = false, reallow_idle = false;
 	struct drm_connector *connector;
 	struct dc_stream_state *stream;
-	unsigned int min, max;
 
 	list_for_each_entry(connector, &dm->ddev->mode_config.connector_list, head) {
 		struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
@@ -285,12 +317,9 @@ void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 	/* update scratch register */
 	if (bl_idx == 0)
 		amdgpu_atombios_scratch_regs_set_backlight_level(dm->adev, dm->brightness[bl_idx]);
-	brightness = convert_brightness_from_user(caps, dm->brightness[bl_idx]);
 	link = (struct dc_link *)dm->backlight_link[bl_idx];
-
-	/* Apply brightness quirk */
-	if (caps->brightness_mask)
-		brightness |= caps->brightness_mask;
+	brightness = convert_brightness_for_power_module(caps,
+							 dm->brightness[bl_idx]);
 
 	if (trace_amdgpu_dm_brightness_enabled()) {
 		trace_amdgpu_dm_brightness(__builtin_return_address(0),
@@ -314,9 +343,6 @@ void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 		rc = mod_power_set_backlight_nits(dm->power_module, stream, brightness,
 			AUX_BL_DEFAULT_TRANSITION_TIME_MS, false, true);
 	} else {
-		/* power module uses millipercent */
-		get_brightness_range(caps, &min, &max);
-		brightness = DIV_ROUND_CLOSEST(brightness * 100, (max - min)) * 1000;
 		rc = mod_power_set_backlight_percent(dm->power_module, stream,
 						     brightness, 0, false);
 	}
