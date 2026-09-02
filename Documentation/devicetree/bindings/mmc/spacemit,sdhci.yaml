@@ -29,6 +29,13 @@ properties:
       - description: core clock, used by internal controller
       - description: io clock, output for SD, SDIO, eMMC device
 
+  clock-frequency:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Rate of the io clock in Hz. When present the io clock is programmed to
+      this rate, allowing a board to select the rate its layout was validated
+      at.
+
   clock-names:
     items:
       - const: core
