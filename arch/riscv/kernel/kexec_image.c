@@ -69,7 +69,12 @@ static void *image_load(struct kimage *image,
 	kbuf.buffer = kernel;
 	kbuf.bufsz = kernel_len;
 	kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
-	kbuf.memsz = le64_to_cpu(h->image_size);
+	/*
+	 * The next kernel aligns its image reservation on PMD_SIZE, as
+	 * explained by a comment in setup_bootmem(). Reserve that tail so
+	 * subsequent segments do not overlap it.
+	 */
+	kbuf.memsz = ALIGN(le64_to_cpu(h->image_size), PMD_SIZE);
 	kbuf.buf_align = le64_to_cpu(h->text_offset);
 
 	ret = kexec_add_buffer(&kbuf);
