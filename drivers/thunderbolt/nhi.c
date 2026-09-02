@@ -68,6 +68,43 @@ static void nhi_clear_interrupt(struct tb_nhi *nhi, int ring)
 		iowrite32(~0, nhi->iobase + REG_RING_INT_CLEAR + ring);
 }
 
+/**
+ * nhi_ring_interrupt_should_warn() - Is a no-op interrupt update unexpected?
+ * @ring: Ring whose interrupt state is being updated
+ * @active: %true if the interrupt is being enabled
+ * @unchanged: %true if the register value did not change
+ *
+ * Updating the interrupt mask normally toggles a bit, so an update that
+ * changes nothing means the driver lost track of the hardware state.
+ *
+ * There is one legitimate exception. Hosts with
+ * %QUIRK_RESET_DMA_ON_TEARDOWN reset the host interface as part of
+ * tearing down a DMA path, which clears the ring interrupt bits while
+ * the rings themselves are still running. A ring that was started
+ * before such a reset is therefore expected to find its interrupt
+ * already disabled when it is stopped afterwards.
+ *
+ * Return: %true if the caller should warn about the no-op update.
+ */
+static bool
+nhi_ring_interrupt_should_warn(const struct tb_ring *ring, bool active,
+			       bool unchanged)
+{
+	if (!unchanged)
+		return false;
+
+	/* Enabling an already enabled interrupt is always a driver bug */
+	if (active)
+		return true;
+
+	/*
+	 * Only excuse a redundant disable if the host interface was reset
+	 * while this ring was running.
+	 */
+	return ring->reset_generation ==
+		atomic_read(&ring->nhi->reset_generation);
+}
+
 /*
  * ring_interrupt_active() - activate/deactivate interrupts for a single ring
  *
@@ -138,7 +175,7 @@ static void ring_interrupt_active(struct tb_ring *ring, bool active)
 		"%s interrupt at register %#x bit %d (%#x -> %#x)\n",
 		active ? "enabling" : "disabling", reg, interrupt_bit, old, new);
 
-	if (new == old)
+	if (nhi_ring_interrupt_should_warn(ring, active, new == old))
 		dev_WARN(ring->nhi->dev, "interrupt for %s %d is already %s\n",
 			 RING_TYPE(ring), ring->hop,
 			 str_enabled_disabled(active));
@@ -714,8 +751,15 @@ void tb_ring_start(struct tb_ring *ring)
 		ring_iowrite32options(ring, flags, 0);
 	}
 
-	if (!(ring->flags & RING_FLAG_NO_INTERRUPT))
+	/*
+	 * Sample the reset generation before touching the interrupt so
+	 * that a reset racing with this start is seen as happening after
+	 * the ring started, and the eventual stop does not warn.
+	 */
+	if (!(ring->flags & RING_FLAG_NO_INTERRUPT)) {
+		ring->reset_generation = atomic_read(&ring->nhi->reset_generation);
 		ring_interrupt_active(ring, true);
+	}
 	ring->running = true;
 err:
 	spin_unlock(&ring->lock);
@@ -1199,6 +1243,12 @@ void nhi_reset_interface(struct tb_nhi *nhi)
 		  nhi->iobase + REG_HOST_INTERFACE_RESET);
 	/* Wait for tHIReset (10 ms) to complete */
 	usleep_range(10000, 20000);
+
+	/*
+	 * The reset cleared the ring interrupt state behind the back of
+	 * any ring that is still running, so record that it happened.
+	 */
+	atomic_inc(&nhi->reset_generation);
 }
 
 static struct tb *nhi_select_cm(struct tb_nhi *nhi)

@@ -19,6 +19,7 @@ struct device;
 
 #if IS_REACHABLE(CONFIG_USB4)
 
+#include <linux/atomic.h>
 #include <linux/device.h>
 #include <linux/idr.h>
 #include <linux/list.h>
@@ -519,6 +520,10 @@ void tb_service_properties_changed(struct tb_service *svc);
  *		downstream ports to signal disconnect before tearing down the
  *		router tree. Only Thunderbolt 3 devices are reset; USB4
  *		routers are skipped.
+ * @reset_generation: Incremented every time the host interface is reset by
+ *		      nhi_reset_interface(). Rings sample this when they are
+ *		      started so that they can tell whether their interrupt
+ *		      state was cleared by a reset while they were running.
  */
 struct tb_nhi {
 	spinlock_t lock;
@@ -534,6 +539,7 @@ struct tb_nhi {
 	unsigned long quirks;
 	struct completion domain_released;
 	bool host_reset;
+	atomic_t reset_generation;
 };
 
 /**
@@ -552,6 +558,8 @@ struct tb_nhi {
  * @work: Interrupt work structure
  * @is_tx: Is the ring Tx or Rx
  * @running: Is the ring running
+ * @reset_generation: Host interface reset generation sampled when the ring
+ *		      was started. Protected by the NHI lock.
  * @irq: MSI-X irq number if the ring uses MSI-X. %0 otherwise.
  * @vector: MSI-X vector number the ring uses (only set if @irq is > 0)
  * @flags: Ring specific flags
@@ -580,6 +588,7 @@ struct tb_ring {
 	struct work_struct work;
 	bool is_tx:1;
 	bool running:1;
+	int reset_generation;
 	int irq;
 	u8 vector;
 	unsigned int flags;
