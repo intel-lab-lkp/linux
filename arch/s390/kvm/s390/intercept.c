@@ -11,6 +11,7 @@
 #include <linux/kvm_host.h>
 #include <linux/errno.h>
 #include <linux/pagemap.h>
+#include <linux/slab.h>
 
 #include <asm/asm-offsets.h>
 #include <asm/irq.h>
@@ -438,13 +439,13 @@ int handle_sthyi(struct kvm_vcpu *vcpu)
 	if (!kvm_s390_pv_cpu_is_protected(vcpu) && (addr & ~PAGE_MASK))
 		return kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
 
-	sctns = (void *)get_zeroed_page(GFP_KERNEL_ACCOUNT);
+	sctns = kzalloc(PAGE_SIZE, GFP_KERNEL_ACCOUNT);
 	if (!sctns)
 		return -ENOMEM;
 
 	cc = sthyi_fill(sctns, &rc);
 	if (cc < 0) {
-		free_page((unsigned long)sctns);
+		kfree(sctns);
 		return cc;
 	}
 out:
@@ -454,13 +455,13 @@ out:
 		} else {
 			r = write_guest(vcpu, addr, reg2, sctns, PAGE_SIZE);
 			if (r) {
-				free_page((unsigned long)sctns);
+				kfree(sctns);
 				return kvm_s390_inject_prog_cond(vcpu, r);
 			}
 		}
 	}
 
-	free_page((unsigned long)sctns);
+	kfree(sctns);
 	vcpu->run->s.regs.gprs[reg2 + 1] = rc;
 	kvm_s390_set_psw_cc(vcpu, cc);
 	return r;
