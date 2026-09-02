@@ -120,7 +120,7 @@ static netdev_tx_t aq_ndev_start_xmit(struct sk_buff *skb, struct net_device *nd
 			      udp_hdr(skb)->dest == htons(PTP_GEN_PORT))))
 			return aq_ptp_xmit(aq_nic, skb);
 
-		if (unlikely(eth_hdr(skb)->h_proto == htons(ETH_P_1588)))
+		if (unlikely(skb_eth_hdr(skb)->h_proto == htons(ETH_P_1588)))
 			return aq_ptp_xmit(aq_nic, skb);
 	}
 #endif
