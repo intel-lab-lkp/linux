@@ -84,7 +84,7 @@ static bool hycon_hy46xx_check_checksum(struct hycon_hy46xx_data *tsdata, u8 *bu
 	u8 chksum = 0;
 	int i;
 
-	for (i = 2; i < buf[HY46XX_CHKSUM_LEN]; i++)
+	for (i = 2; i < min_t(int, buf[HY46XX_CHKSUM_LEN], HY46XX_REPORT_PKT_LEN); i++)
 		chksum += buf[i];
 
 	if (chksum == buf[HY46XX_CHKSUM_CODE])
