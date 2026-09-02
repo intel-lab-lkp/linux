@@ -786,6 +786,10 @@ nvme_fc_ctrl_connectivity_loss(struct nvme_fc_ctrl *ctrl)
 		"Reconnect", ctrl->cnum);
 
 	set_bit(ASSOC_FAILED, &ctrl->flags);
+
+	/* clear 'marginal' flag as controller will be reset */
+	nvme_ctrl_assign_marginal(&ctrl->ctrl, false);
+
 	nvme_reset_ctrl(&ctrl->ctrl);
 }
 
