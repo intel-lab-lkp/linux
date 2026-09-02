@@ -564,6 +564,7 @@ struct intel_connector {
 		u8 dsc_hblank_expansion_quirk:1;
 		u8 dsc_throughput_quirk:1;
 		u8 dsc_decompression_enabled:1;
+		u8 mst_msa_timing_par_ignore:1; /* cached from MST virtual DPCD 0x007 */
 
 		struct {
 			struct {

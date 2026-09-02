@@ -58,8 +58,19 @@ bool intel_vrr_is_capable(struct intel_connector *connector)
 			return false;
 		fallthrough;
 	case DRM_MODE_CONNECTOR_DisplayPort:
-		if (connector->mst.dp)
-			return false;
+		if (connector->mst.dp) {
+			/*
+			 * Use cached MSA timing ignore capability from the DFP
+			 * sink's virtual DPCD, set during connector init in
+			 * intel_dp_mst_read_decompression_port_dsc_caps().
+			 * Avoid live sideband reads here as this function is
+			 * called from the atomic check path.
+			 */
+			if (!connector->dp.mst_msa_timing_par_ignore)
+				return false;
+
+			break;
+		}
 		intel_dp = intel_attached_dp(connector);
 		/*
 		 * Among non-MST DP branch devices, only an HDMI 2.1 sink connected
