@@ -1743,7 +1743,7 @@ int ice_tx_csum(struct ice_tx_buf *first, struct ice_tx_offload_params *off)
 	    !(first->tx_flags & ICE_TX_FLAGS_TSO) &&
 	    !skb_csum_is_sctp(skb)) {
 		/* Set GCS */
-		u16 csum_start = (skb->csum_start - skb->mac_header) / 2;
+		u16 csum_start = skb_checksum_start_offset(skb) / 2;
 		u16 csum_offset = skb->csum_offset / 2;
 		u16 gcs_params;
 
@@ -2219,7 +2219,7 @@ ice_xmit_frame_ring(struct sk_buff *skb, struct ice_tx_ring *tx_ring)
 		goto out_drop;
 
 	/* allow CONTROL frames egress from main VSI if FW LLDP disabled */
-	eth = (struct ethhdr *)skb_mac_header(skb);
+	eth = skb_eth_hdr(skb);
 
 	if ((ice_is_switchdev_running(vsi->back) ||
 	     ice_lag_is_switchdev_running(vsi->back)) &&

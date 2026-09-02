@@ -244,7 +244,7 @@ ice_eswitch_set_target_vsi(struct sk_buff *skb,
 	u64 cd_cmd, dst_vsi;
 
 	if (!dst) {
-		struct ethhdr *eth = (struct ethhdr *)skb_mac_header(skb);
+		struct ethhdr *eth = skb_eth_hdr(skb);
 
 		if (unlikely(eth->h_proto == htons(ETH_P_LLDP)))
 			return;
