@@ -36,6 +36,14 @@ properties:
   "#size-cells":
     const: 0
 
+  output-gain:
+    description:
+      Set the output gain controlling the LED current as described in the
+      PCA995x datasheets.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 128
+    maximum: 255
+
   reset-gpios:
     maxItems: 1
 
