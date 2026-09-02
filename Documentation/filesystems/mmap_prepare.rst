@@ -114,7 +114,7 @@ VMA Flags
 Along with ``mmap_prepare``, VMA flags have undergone an overhaul. Where before
 you would invoke one of vm_flags_init(), vm_flags_reset(), vm_flags_set(),
 vm_flags_clear(), and vm_flags_mod() to modify flags (and to have the
-locking done correctly for you, this is no longer necessary.
+locking done correctly for you), this is no longer necessary.
 
 Also, the legacy approach of specifying VMA flags via ``VM_READ``, ``VM_WRITE``,
 etc. - i.e. using a ``-VM_xxx``- macro has changed too.
