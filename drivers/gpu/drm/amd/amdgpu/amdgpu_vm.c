@@ -1140,6 +1140,14 @@ int amdgpu_vm_update_range(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 	struct amdgpu_res_cursor cursor;
 	int r, idx;
 
+	/*
+	 * The page table walk indexes the root PD without masking, so an
+	 * out of range PFN would index past the end of its entry array.
+	 * A reversed range would additionally underflow the cursor size.
+	 */
+	if (start > last || last >= adev->vm_manager.max_pfn)
+		return -EINVAL;
+
 	if (!drm_dev_enter(adev_to_drm(adev), &idx))
 		return -ENODEV;
 
