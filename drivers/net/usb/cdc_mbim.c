@@ -240,13 +240,12 @@ static struct sk_buff *cdc_mbim_tx_fixup(struct usbnet *dev, struct sk_buff *skb
 		 * the accelerated out-of-band tag, but fall back if
 		 * required
 		 */
-		skb_reset_mac_header(skb);
 		if (vlan_get_tag(skb, &tci) < 0 && skb->len > VLAN_ETH_HLEN &&
 		    __vlan_get_tag(skb, &tci) == 0) {
-			is_ip = is_ip_proto(vlan_eth_hdr(skb)->h_vlan_encapsulated_proto);
+			is_ip = is_ip_proto(skb_vlan_eth_hdr(skb)->h_vlan_encapsulated_proto);
 			skb_pull(skb, VLAN_ETH_HLEN);
 		} else {
-			is_ip = is_ip_proto(eth_hdr(skb)->h_proto);
+			is_ip = is_ip_proto(skb_eth_hdr(skb)->h_proto);
 			skb_pull(skb, ETH_HLEN);
 		}
 
