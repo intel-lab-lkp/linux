@@ -5,6 +5,9 @@
 #include <linux/module.h>
 #include <linux/usb.h>
 #include <linux/mutex.h>
+#include <linux/ip.h>
+#include <linux/udp.h>
+#include <linux/unaligned.h>
 #include "main.h"
 #include "debug.h"
 #include "mac.h"
@@ -557,6 +560,43 @@ static int rtw_usb_write_data_h2c(struct rtw_dev *rtwdev, u8 *buf, u32 size)
 	return rtw_usb_write_data(rtwdev, &pkt_info, buf);
 }
 
+static bool rtw_usb_bmc_needs_dtim(struct sk_buff *skb)
+{
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	unsigned int hdrlen = ieee80211_hdrlen(hdr->frame_control);
+	unsigned int paylen = sizeof(rfc1042_header) + sizeof(__be16);
+	const struct udphdr *udp;
+	const struct iphdr *ip;
+	const u8 *snap;
+	__be16 proto;
+
+	if (info->control.hw_key)
+		hdrlen += info->control.hw_key->iv_len;
+
+	if (skb->len < hdrlen + paylen)
+		return false;
+
+	snap = skb->data + hdrlen;
+	proto = get_unaligned((__be16 *)(snap + sizeof(rfc1042_header)));
+
+	if (proto == htons(ETH_P_ARP) || proto == htons(ETH_P_PAE))
+		return true;
+
+	if (proto != htons(ETH_P_IP) || skb->len < hdrlen + paylen + sizeof(*ip))
+		return false;
+
+	ip = (const struct iphdr *)(snap + paylen);
+	if (ip->protocol != IPPROTO_UDP)
+		return false;
+
+	udp = (const struct udphdr *)((const u8 *)ip + ip->ihl * 4);
+	if (skb->len < (unsigned int)((const u8 *)udp - skb->data) + sizeof(*udp))
+		return false;
+
+	return udp->dest == htons(67) || udp->dest == htons(68);
+}
+
 #define RTW_USB_HIQ_RATE	10
 #define RTW_USB_HIQ_BURST	16
 
@@ -600,7 +640,7 @@ static u8 rtw_usb_tx_queue_mapping_to_qsel(struct rtw_usb *rtwusb,
 	else if (is_broadcast_ether_addr(hdr->addr1) ||
 		 is_multicast_ether_addr(hdr->addr1))
 		qsel = (info->flags & IEEE80211_TX_CTL_SEND_AFTER_DTIM) &&
-		       rtw_usb_hiq_take(rtwusb) ?
+		       rtw_usb_bmc_needs_dtim(skb) && rtw_usb_hiq_take(rtwusb) ?
 		       TX_DESC_QSEL_HIGH : skb->priority;
 	else if (skb_get_queue_mapping(skb) <= IEEE80211_AC_BK)
 		qsel = skb->priority;
