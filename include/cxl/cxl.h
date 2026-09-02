@@ -133,6 +133,18 @@ struct cxl_regs {
 	);
 };
 
+#define CXL_HDM_DECODER_MAX_COUNT 32
+
+/**
+ * struct cxl_hdm_info - PCI device HDM decoder programming cache
+ * @decoder_count: number of decoder settings entries
+ * @settings: cached per-decoder programming state
+ */
+struct cxl_hdm_info {
+	int decoder_count;
+	struct cxl_decoder_settings settings[CXL_HDM_DECODER_MAX_COUNT];
+};
+
 struct cxl_reg_map {
 	bool valid;
 	int id;
