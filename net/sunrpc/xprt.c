@@ -1882,18 +1882,13 @@ xprt_init_connect_cookie(struct rpc_rqst *req, struct rpc_xprt *xprt)
 static __be32
 xprt_alloc_xid(struct rpc_xprt *xprt)
 {
-	__be32 xid;
-
-	spin_lock(&xprt->reserve_lock);
-	xid = (__force __be32)xprt->xid++;
-	spin_unlock(&xprt->reserve_lock);
-	return xid;
+	return (__force __be32)atomic_inc_return(&xprt->xid);
 }
 
 static void
 xprt_init_xid(struct rpc_xprt *xprt)
 {
-	xprt->xid = get_random_u32();
+	atomic_set(&xprt->xid, get_random_u32());
 }
 
 static void
