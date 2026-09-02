@@ -2183,11 +2183,11 @@ out:
 }
 
 /*
- * Migrate LRU folios.  MIGRATE_ASYNC processes a batch directly.  The
+ * Migrate one batch of LRU folios.  MIGRATE_ASYNC processes it directly.  The
  * other modes first make a short asynchronous pass, then retry each remaining
  * folio separately in the requested mode.
  */
-static int migrate_lru_folios(struct list_head *from, new_folio_t get_new_folio,
+static int __migrate_lru_folios(struct list_head *from, new_folio_t get_new_folio,
 		free_folio_t put_new_folio, unsigned long private,
 		enum migrate_mode mode, enum migrate_reason reason,
 		struct list_head *ret_folios,
@@ -2264,6 +2264,45 @@ out:
 }
 
 /*
+ * Migrate LRU folios.  The batch engine keeps every folio of a batch locked
+ * at once, so feed it at most NR_MAX_BATCHED_MIGRATION pages at a time
+ * rather than however many the caller supplied.
+ */
+static int migrate_lru_folios(struct list_head *from, new_folio_t get_new_folio,
+		free_folio_t put_new_folio, unsigned long private,
+		enum migrate_mode mode, enum migrate_reason reason,
+		struct list_head *ret_folios,
+		struct migrate_pages_stats *stats)
+{
+	struct folio *folio, *folio2;
+	int rc, nr_failed = 0;
+	int nr_pages;
+	LIST_HEAD(folios);
+
+	while (!list_empty(from)) {
+		nr_pages = 0;
+		list_for_each_entry_safe(folio, folio2, from, lru) {
+			nr_pages += folio_nr_pages(folio);
+			if (nr_pages >= NR_MAX_BATCHED_MIGRATION)
+				break;
+		}
+		if (nr_pages >= NR_MAX_BATCHED_MIGRATION)
+			list_cut_before(&folios, from, &folio2->lru);
+		else
+			list_splice_init(from, &folios);
+
+		rc = __migrate_lru_folios(&folios, get_new_folio, put_new_folio,
+				private, mode, reason, ret_folios, stats);
+		list_splice_tail_init(&folios, ret_folios);
+		if (rc < 0)
+			return rc;
+		nr_failed += rc;
+	}
+
+	return nr_failed;
+}
+
+/*
  * migrate_pages - migrate the folios specified in a list, to the free folios
  *		   supplied as the target for the page migration
  *
@@ -2294,9 +2333,6 @@ int migrate_pages(struct list_head *from, new_folio_t get_new_folio,
 		enum migrate_mode mode, enum migrate_reason reason, unsigned int *ret_succeeded)
 {
 	int rc, rc_gather;
-	int nr_pages;
-	struct folio *folio, *folio2;
-	LIST_HEAD(folios);
 	LIST_HEAD(ret_folios);
 	struct migrate_pages_stats stats;
 
@@ -2318,27 +2354,13 @@ int migrate_pages(struct list_head *from, new_folio_t get_new_folio,
 	}
 	rc_gather += rc;
 
-again:
-	nr_pages = 0;
-	list_for_each_entry_safe(folio, folio2, from, lru) {
-		nr_pages += folio_nr_pages(folio);
-		if (nr_pages >= NR_MAX_BATCHED_MIGRATION)
-			break;
-	}
-	if (nr_pages >= NR_MAX_BATCHED_MIGRATION)
-		list_cut_before(&folios, from, &folio2->lru);
-	else
-		list_splice_init(from, &folios);
-	rc = migrate_lru_folios(&folios, get_new_folio, put_new_folio,
+	rc = migrate_lru_folios(from, get_new_folio, put_new_folio,
 			private, mode, reason, &ret_folios, &stats);
-	list_splice_tail_init(&folios, &ret_folios);
 	if (rc < 0) {
 		rc_gather = rc;
 		goto out;
 	}
 	rc_gather += rc;
-	if (!list_empty(from))
-		goto again;
 out:
 	/*
 	 * Put the permanent failure folio back to migration list, they
