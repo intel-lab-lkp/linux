@@ -611,6 +611,7 @@ int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
 				WRITE_ONCE(sk->sk_prot, &udp_prot);
 				WRITE_ONCE(sk->sk_socket->ops, &inet_dgram_ops);
 				WRITE_ONCE(sk->sk_family, PF_INET);
+				sk_dst_reset(sk);
 			}
 
 			/* Disable all options not to allocate memory anymore,

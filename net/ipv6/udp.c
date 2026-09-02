@@ -1705,6 +1705,12 @@ do_udp_sendmsg:
 		dst = NULL;
 		goto out;
 	}
+	if (unlikely(connected &&
+		     READ_ONCE(sk->sk_family) != AF_INET6)) {
+		sk_dst_reset(sk);
+		err = -EAFNOSUPPORT;
+		goto out;
+	}
 
 	if (ipc6.hlimit < 0)
 		ipc6.hlimit = ip6_sk_dst_hoplimit(np, fl6, dst);
@@ -1729,6 +1735,11 @@ back_from_confirm:
 	}
 
 	lock_sock(sk);
+	if (unlikely(sk->sk_family != AF_INET6)) {
+		release_sock(sk);
+		err = -EAFNOSUPPORT;
+		goto out;
+	}
 	if (unlikely(up->pending)) {
 		/* The socket is already corked while preparing it. */
 		/* ... which is an evident application bug. --ANK */
