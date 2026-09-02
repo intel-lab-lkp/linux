@@ -842,6 +842,15 @@ void drm_sched_job_cleanup(struct drm_sched_job *job)
 		 * been called.
 		 */
 		dma_fence_put(&job->s_fence->finished);
+		/*
+		 * Drop the initial reference on the scheduled fence. It no
+		 * longer has a .release callback dropping it (the finished
+		 * fence's .release was removed to allow ops-detach on signal),
+		 * so the last put here lets drm_sched_fence_release_scheduled()
+		 * run, which drops @parent and the scheduled fence's reference
+		 * on @finished. @finished is freed last, from dma_fence_free().
+		 */
+		dma_fence_put(&job->s_fence->scheduled);
 		drm_sched_entity_stats_put(job->entity_stats);
 	} else {
 		/* The job was aborted before it has been committed to be run;

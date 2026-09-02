@@ -95,15 +95,6 @@ static const char *drm_sched_fence_get_timeline_name(struct dma_fence *f)
 	return (const char *)fence->sched->name;
 }
 
-static void drm_sched_fence_free_rcu(struct rcu_head *rcu)
-{
-	struct dma_fence *f = container_of(rcu, struct dma_fence, rcu);
-	struct drm_sched_fence *fence = to_drm_sched_fence(f);
-
-	if (!WARN_ON_ONCE(!fence))
-		kmem_cache_free(sched_fence_slab, fence);
-}
-
 /**
  * drm_sched_fence_free - free up an uninitialized fence
  *
@@ -132,21 +123,12 @@ static void drm_sched_fence_release_scheduled(struct dma_fence *f)
 	struct drm_sched_fence *fence = to_drm_sched_fence(f);
 
 	dma_fence_put(fence->parent);
-	call_rcu(&fence->finished.rcu, drm_sched_fence_free_rcu);
-}
-
-/**
- * drm_sched_fence_release_finished - drop extra reference
- *
- * @f: fence
- *
- * Drop the extra reference from the scheduled fence to the base fence.
- */
-static void drm_sched_fence_release_finished(struct dma_fence *f)
-{
-	struct drm_sched_fence *fence = to_drm_sched_fence(f);
-
-	dma_fence_put(&fence->scheduled);
+	/*
+	 * Drop the reference the scheduled fence holds on the finished fence.
+	 * The finished fence is released last and frees the shared allocation
+	 * from its dma_fence_free() (see drm_sched_fence_init()).
+	 */
+	dma_fence_put(&fence->finished);
 }
 
 static void drm_sched_fence_set_deadline_finished(struct dma_fence *f,
@@ -189,7 +171,13 @@ static const struct dma_fence_ops drm_sched_fence_ops_scheduled = {
 static const struct dma_fence_ops drm_sched_fence_ops_finished = {
 	.get_driver_name = drm_sched_fence_get_driver_name,
 	.get_timeline_name = drm_sched_fence_get_timeline_name,
-	.release = drm_sched_fence_release_finished,
+	/*
+	 * No .release callback: dma_fence detaches ->ops on signalling for
+	 * fences without .release/.wait, so get_timeline_name() is never called
+	 * on a signalled finished fence and cannot dereference a freed
+	 * scheduler. The shared allocation is freed from dma_fence_free() once
+	 * this fence's refcount drops - it is released last, after @scheduled.
+	 */
 	.set_deadline = drm_sched_fence_set_deadline_finished,
 };
 
@@ -233,6 +221,14 @@ void drm_sched_fence_init(struct drm_sched_fence *fence,
 		       &fence->lock, entity->fence_context, seq);
 	dma_fence_init(&fence->finished, &drm_sched_fence_ops_finished,
 		       &fence->lock, entity->fence_context + 1, seq);
+
+	/*
+	 * Hold a reference on the finished fence from the scheduled fence, so
+	 * the finished fence (and the shared allocation) outlives @scheduled.
+	 * drm_sched_fence_release_scheduled() drops it; the finished fence is
+	 * therefore released last and frees the allocation via dma_fence_free().
+	 */
+	dma_fence_get(&fence->finished);
 }
 
 module_init(drm_sched_fence_slab_init);

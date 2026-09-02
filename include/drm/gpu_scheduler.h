@@ -287,23 +287,33 @@ struct drm_sched_rq {
  * struct drm_sched_fence - fences corresponding to the scheduling of a job.
  */
 struct drm_sched_fence {
-        /**
-         * @scheduled: this fence is what will be signaled by the scheduler
-         * when the job is scheduled.
-         */
-	struct dma_fence		scheduled;
-
-        /**
-         * @finished: this fence is what will be signaled by the scheduler
-         * when the job is completed.
-         *
-         * When setting up an out fence for the job, you should use
-         * this, since it's available immediately upon
-         * drm_sched_job_init(), and the fence returned by the driver
-         * from run_job() won't be created until the dependencies have
-         * resolved.
-         */
+	/**
+	 * @finished: this fence is what will be signaled by the scheduler
+	 * when the job is completed.
+	 *
+	 * When setting up an out fence for the job, you should use
+	 * this, since it's available immediately upon
+	 * drm_sched_job_init(), and the fence returned by the driver
+	 * from run_job() won't be created until the dependencies have
+	 * resolved.
+	 *
+	 * @finished is kept first in the struct: it is the fence exported to
+	 * userspace and therefore the one whose &dma_fence_ops.release is
+	 * dropped so that dma_fence detaches its ops on signalling. It is
+	 * released last (see &drm_sched_fence.scheduled) and frees the whole
+	 * object via dma_fence_free(), which requires it to sit at offset 0.
+	 */
 	struct dma_fence		finished;
+
+	/**
+	 * @scheduled: this fence is what will be signaled by the scheduler
+	 * when the job is scheduled.
+	 *
+	 * It holds a reference on @finished so that the shared allocation is
+	 * released only after @scheduled itself is done; its release drops
+	 * that reference and the @parent one.
+	 */
+	struct dma_fence		scheduled;
 
 	/**
 	 * @deadline: deadline set on &drm_sched_fence.finished which
@@ -311,24 +321,24 @@ struct drm_sched_fence {
 	 */
 	ktime_t				deadline;
 
-        /**
-         * @parent: the fence returned by &drm_sched_backend_ops.run_job
-         * when scheduling the job on hardware. We signal the
-         * &drm_sched_fence.finished fence once parent is signalled.
-         */
+	/**
+	 * @parent: the fence returned by &drm_sched_backend_ops.run_job
+	 * when scheduling the job on hardware. We signal the
+	 * &drm_sched_fence.finished fence once parent is signalled.
+	 */
 	struct dma_fence		*parent;
-        /**
-         * @sched: the scheduler instance to which the job having this struct
-         * belongs to.
-         */
+	/**
+	 * @sched: the scheduler instance to which the job having this struct
+	 * belongs to.
+	 */
 	struct drm_gpu_scheduler	*sched;
-        /**
-         * @lock: the lock used by the scheduled and the finished fences.
-         */
+	/**
+	 * @lock: the lock used by the scheduled and the finished fences.
+	 */
 	spinlock_t			lock;
-        /**
-         * @owner: job owner for debugging
-         */
+	/**
+	 * @owner: job owner for debugging
+	 */
 	void				*owner;
 
 	/**
