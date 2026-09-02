@@ -367,7 +367,7 @@ Calling Parameter
 	  note: each playback channel is mixed to the same numbered output
 	  channel (routed). This is against the ALSA-convention, where all
 	  channels have to be muted on after loading the driver, but was
-	  used before on other cards, so i historically use it again)
+	  used before on other cards, so i historically use it again
 
 
 
