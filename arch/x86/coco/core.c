@@ -22,10 +22,7 @@ SYM_PIC_ALIAS(cc_vendor);
 u64 cc_mask __ro_after_init;
 SYM_PIC_ALIAS(cc_mask);
 
-static struct cc_attr_flags {
-	__u64 host_sev_snp	: 1,
-	      __resv		: 63;
-} cc_flags;
+static bool cc_host_sev_snp;
 
 static bool noinstr intel_cc_platform_has(enum cc_attr attr)
 {
@@ -102,7 +99,7 @@ static bool noinstr amd_cc_platform_has(enum cc_attr attr)
 		return sev_status & MSR_AMD64_SNP_SECURE_TSC;
 
 	case CC_ATTR_HOST_SEV_SNP:
-		return cc_flags.host_sev_snp;
+		return cc_host_sev_snp;
 
 	case CC_ATTR_SNP_SECURE_AVIC:
 		return sev_status & MSR_AMD64_SNP_SECURE_AVIC;
@@ -171,7 +168,7 @@ static void amd_cc_platform_clear(enum cc_attr attr)
 {
 	switch (attr) {
 	case CC_ATTR_HOST_SEV_SNP:
-		cc_flags.host_sev_snp = 0;
+		cc_host_sev_snp = false;
 		break;
 	default:
 		break;
@@ -193,7 +190,7 @@ static void amd_cc_platform_set(enum cc_attr attr)
 {
 	switch (attr) {
 	case CC_ATTR_HOST_SEV_SNP:
-		cc_flags.host_sev_snp = 1;
+		cc_host_sev_snp = true;
 		break;
 	default:
 		break;
