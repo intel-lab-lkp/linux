@@ -23,6 +23,7 @@
 #include <linux/export.h>
 
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_blend.h>
 #include <drm/drm_client_event.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
@@ -159,6 +160,17 @@ int drm_crtc_init(struct drm_device *dev, struct drm_crtc *crtc,
 	 * this helper.
 	 */
 	primary->format_default = true;
+
+	/*
+	 * safe_modeset_formats[] includes ARGB8888, which has an alpha
+	 * channel. Advertise the blend mode userspace has always assumed
+	 * for such planes when the "pixel blend mode" property was absent,
+	 * to satisfy drm_mode_config_validate().
+	 */
+	ret = drm_plane_create_blend_mode_property(primary,
+						   BIT(DRM_MODE_BLEND_PREMULTI));
+	if (ret)
+		goto err_drm_plane_cleanup;
 
 	ret = drm_crtc_init_with_planes(dev, crtc, primary, NULL, funcs, NULL);
 	if (ret)
