@@ -53,7 +53,8 @@ struct cgroup_namespace *copy_cgroup_ns(u64 flags,
 	struct ucounts *ucounts;
 	struct css_set *cset;
 
-	BUG_ON(!old_ns);
+	if (WARN_ON_ONCE(!old_ns))
+		return ERR_PTR(-EINVAL);
 
 	if (!(flags & CLONE_NEWCGROUP)) {
 		get_cgroup_ns(old_ns);
