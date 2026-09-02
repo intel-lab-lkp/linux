@@ -3662,6 +3662,9 @@ void intel_ddi_update_pipe(struct intel_atomic_state *state,
 		intel_ddi_update_pipe_dp(state, encoder, crtc_state,
 					 conn_state);
 
+	if (intel_encoder_is_mst(encoder))
+		intel_dp_set_infoframes(encoder, true, crtc_state, conn_state);
+
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI))
 		intel_ddi_update_pipe_hdmi(encoder, crtc_state,
 					   conn_state);
