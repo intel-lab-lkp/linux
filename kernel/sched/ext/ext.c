@@ -9518,14 +9518,8 @@ void scx_kick_cpu(struct scx_sched *sch, s32 cpu, u64 flags)
 	struct rq *this_rq;
 	unsigned long irq_flags;
 
-	/*
-	 * The per-cpu kick list is guarded only by local_irq_save(), which does
-	 * not mask NMIs, so kicking from NMI could corrupt it and is unsupported.
-	 */
-	if (unlikely(in_nmi())) {
-		scx_error(sch, "scx_bpf_kick_cpu() called from NMI");
+	if (!scx_kf_allowed_ctx(sch))
 		return;
-	}
 
 	local_irq_save(irq_flags);
 
@@ -9693,8 +9687,13 @@ __bpf_kfunc void scx_bpf_destroy_dsq(u64 dsq_id, const struct bpf_prog_aux *aux)
 
 	guard(rcu)();
 	sch = scx_prog_sched(aux);
-	if (sch)
-		destroy_dsq(sch, dsq_id);
+	if (!sch)
+		return;
+
+	if (!scx_kf_allowed_ctx(sch))
+		return;
+
+	destroy_dsq(sch, dsq_id);
 }
 
 /**
@@ -9756,6 +9755,9 @@ __bpf_kfunc struct task_struct *bpf_iter_scx_dsq_next(struct bpf_iter_scx_dsq *i
 	if (!kit->dsq)
 		return NULL;
 
+	if (!scx_kf_allowed_ctx(kit->dsq->sched))
+		return NULL;
+
 	guard(raw_spinlock_irqsave)(&kit->dsq->lock);
 
 	return nldsq_cursor_next_task(&kit->cursor, kit->dsq);
@@ -9776,6 +9778,9 @@ __bpf_kfunc void bpf_iter_scx_dsq_destroy(struct bpf_iter_scx_dsq *it)
 
 	if (!list_empty(&kit->cursor.node)) {
 		unsigned long flags;
+
+		if (!scx_kf_allowed_ctx(kit->dsq->sched))
+			return;
 
 		raw_spin_lock_irqsave(&kit->dsq->lock, flags);
 		list_del_init(&kit->cursor.node);
@@ -9856,6 +9861,9 @@ __bpf_kfunc void scx_bpf_dsq_reenq(u64 dsq_id, u64 reenq_flags,
 		scx_error(sch, "invalid SCX_REENQ flags 0x%llx", reenq_flags);
 		return;
 	}
+
+	if (!scx_kf_allowed_ctx(sch))
+		return;
 
 	/* not specifying any filter bits is the same as %SCX_REENQ_ANY */
 	if (!(reenq_flags & __SCX_REENQ_FILTER_MASK))
@@ -10244,6 +10252,9 @@ __bpf_kfunc void scx_bpf_cpuperf_set(s32 cpu, u32 perf, const struct bpf_prog_au
 	if (unlikely(!sch))
 		return;
 
+	if (!scx_kf_allowed_ctx(sch))
+		return;
+
 	scx_cpuperf_set(sch, cpu, perf);
 }
 
@@ -10269,6 +10280,10 @@ __bpf_kfunc s32 scx_bpf_cidperf_set(s32 cid, u32 perf,
 	sch = scx_prog_sched(aux);
 	if (unlikely(!sch))
 		return -ENODEV;
+
+	if (!scx_kf_allowed_ctx(sch))
+		return -EDEADLK;
+
 	cpu = scx_cid_to_cpu(sch, cid);
 	if (cpu < 0)
 		return cpu;
