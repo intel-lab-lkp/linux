@@ -16,7 +16,9 @@ allOf:
 
 properties:
   compatible:
-    const: socionext,uniphier-efuse
+    enum:
+      - socionext,uniphier-efuse
+      - ti,am62p-efuse
 
   reg:
     maxItems: 1
