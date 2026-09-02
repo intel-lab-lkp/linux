@@ -496,8 +496,7 @@ asmlinkage unsigned long syscall_trace_enter(void)
 	}
 
 #ifdef CONFIG_AUDITSYSCALL
-	audit_syscall_entry(syscall_get_nr(current, regs),
-		regs->r16, regs->r17, regs->r18, regs->r19);
+	audit_syscall_entry(syscall_get_nr(current, regs), regs);
 #endif
 	return syscall_get_nr(current, regs);
 }
