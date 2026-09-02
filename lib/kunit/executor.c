@@ -226,6 +226,8 @@ kunit_filter_suites(const struct kunit_suite_set *suite_set,
 				*err = PTR_ERR(filtered_suite);
 				goto free_filtered_suite;
 			}
+			if (!filtered_suite)
+				continue;
 		}
 		if (filter_count > 0 && parsed_filters != NULL) {
 			for (k = 0; k < filter_count; k++) {

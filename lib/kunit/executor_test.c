@@ -115,6 +115,27 @@ static void filter_suites_to_empty_test(struct kunit *test)
 				"should be empty to indicate no match");
 }
 
+static void filter_suites_glob_and_attr_to_empty_test(struct kunit *test)
+{
+	struct kunit_suite *subsuite[2] = {NULL};
+	struct kunit_suite_set suite_set = {
+		.start = subsuite, .end = &subsuite[1],
+	};
+	struct kunit_suite_set got;
+	char filter[] = "speed>slow";
+	int err = 0;
+
+	subsuite[0] = alloc_fake_suite(test, "suite", dummy_test_cases);
+
+	got = kunit_filter_suites(&suite_set, "suite.not_found", filter, NULL,
+				  &err);
+	KUNIT_ASSERT_EQ(test, err, 0);
+	free_suite_set_at_end(test, &got);
+
+	KUNIT_EXPECT_PTR_EQ_MSG(test, got.start, got.end,
+				"should be empty to indicate no match");
+}
+
 static void parse_filter_attr_test(struct kunit *test)
 {
 	int j, filter_count;
@@ -240,6 +261,7 @@ static struct kunit_case executor_test_cases[] = {
 	KUNIT_CASE(filter_suites_test),
 	KUNIT_CASE(filter_suites_test_glob_test),
 	KUNIT_CASE(filter_suites_to_empty_test),
+	KUNIT_CASE(filter_suites_glob_and_attr_to_empty_test),
 	KUNIT_CASE(parse_filter_attr_test),
 	KUNIT_CASE(filter_attr_test),
 	KUNIT_CASE(filter_attr_empty_test),
