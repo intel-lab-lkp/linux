@@ -27,7 +27,7 @@
 #include "sleep.h"
 
 /*
- * Some HW-full platforms do not have _S5, so they may need
+ * Some HW-full platforms do not have a usable _S5, so they may need
  * to leverage efi power off for a shutdown.
  */
 bool acpi_no_s5;
@@ -170,6 +170,12 @@ bool acpi_sleep_default_s3;
 static int __init init_default_s3(const struct dmi_system_id *d)
 {
 	acpi_sleep_default_s3 = true;
+	return 0;
+}
+
+static int __init init_no_s5(const struct dmi_system_id *d)
+{
+	acpi_no_s5 = true;
 	return 0;
 }
 
@@ -405,6 +411,14 @@ static const struct dmi_system_id acpisleep_dmi_table[] __initconst = {
 	.matches = {
 		DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
 		DMI_MATCH(DMI_PRODUCT_NAME, "20GGA00L00"),
+		},
+	},
+	{
+	.callback = init_no_s5,
+	.ident = "Lenovo ThinkPad T14 Gen 5 (21ML)",
+	.matches = {
+		DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+		DMI_MATCH(DMI_PRODUCT_NAME, "21ML"),
 		},
 	},
 	{},
@@ -1117,13 +1131,15 @@ int __init acpi_sleep_init(void)
 	if (acpi_sleep_state_supported(ACPI_STATE_S5)) {
 		sleep_states[ACPI_STATE_S5] = 1;
 
-		register_sys_off_handler(SYS_OFF_MODE_POWER_OFF_PREPARE,
-					 SYS_OFF_PRIO_FIRMWARE,
-					 acpi_power_off_prepare, NULL);
+		if (!acpi_no_s5) {
+			register_sys_off_handler(SYS_OFF_MODE_POWER_OFF_PREPARE,
+						 SYS_OFF_PRIO_FIRMWARE,
+						 acpi_power_off_prepare, NULL);
 
-		register_sys_off_handler(SYS_OFF_MODE_POWER_OFF,
-					 SYS_OFF_PRIO_FIRMWARE,
-					 acpi_power_off, NULL);
+			register_sys_off_handler(SYS_OFF_MODE_POWER_OFF,
+						 SYS_OFF_PRIO_FIRMWARE,
+						 acpi_power_off, NULL);
+		}
 
 		/*
 		 * Windows uses S5 for reboot, so some BIOSes depend on it to
