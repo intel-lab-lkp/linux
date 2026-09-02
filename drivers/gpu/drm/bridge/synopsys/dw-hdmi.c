@@ -171,6 +171,7 @@ struct dw_hdmi {
 	bool disabled;			/* DRM has disabled our bridge */
 	bool bridge_is_on;		/* indicates the bridge is on */
 	bool rxsense;			/* rxsense state */
+	bool ignore_rxsense;		/* use HPD only, ignore rxsense for detect */
 	u8 phy_mask;			/* desired phy int mask settings */
 	u8 mc_clkdis;			/* clock disable register */
 
@@ -3156,6 +3157,9 @@ static irqreturn_t dw_hdmi_irq(int irq, void *dev_id)
 		if (phy_stat & HDMI_PHY_HPD)
 			status = connector_status_connected;
 
+		if (hdmi->ignore_rxsense)
+			phy_stat &= ~HDMI_PHY_RX_SENSE;
+
 		if (!(phy_stat & (HDMI_PHY_HPD | HDMI_PHY_RX_SENSE)))
 			status = connector_status_disconnected;
 	}
@@ -3361,6 +3365,8 @@ struct dw_hdmi *dw_hdmi_probe(struct platform_device *pdev,
 	mutex_init(&hdmi->audio_mutex);
 	mutex_init(&hdmi->cec_notifier_mutex);
 	spin_lock_init(&hdmi->audio_lock);
+
+	hdmi->ignore_rxsense = of_property_read_bool(np, "ignore-rxsense");
 
 	ddc_node = of_parse_phandle(np, "ddc-i2c-bus", 0);
 	if (ddc_node) {
