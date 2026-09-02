@@ -29,12 +29,11 @@
 #include <asm/sbi.h>
 #include <asm/timex.h>
 
-static DEFINE_STATIC_KEY_FALSE(riscv_sstc_available);
 static bool riscv_timer_cannot_wake_cpu;
 
 static void riscv_clock_event_stop(void)
 {
-	if (static_branch_likely(&riscv_sstc_available)) {
+	if (riscv_has_extension_likely(RISCV_ISA_EXT_SSTC)) {
 		csr_write(CSR_STIMECMP, ULONG_MAX);
 		if (IS_ENABLED(CONFIG_32BIT))
 			csr_write(CSR_STIMECMPH, ULONG_MAX);
@@ -48,7 +47,7 @@ static int riscv_clock_next_event(unsigned long delta,
 {
 	u64 next_tval = get_cycles64() + delta;
 
-	if (static_branch_likely(&riscv_sstc_available)) {
+	if (riscv_has_extension_likely(RISCV_ISA_EXT_SSTC)) {
 #if defined(CONFIG_32BIT)
 		csr_write(CSR_STIMECMP, ULONG_MAX);
 		csr_write(CSR_STIMECMPH, next_tval >> 32);
@@ -116,7 +115,7 @@ static int riscv_timer_starting_cpu(unsigned int cpu)
 	ce->irq = riscv_clock_event_irq;
 	if (riscv_timer_cannot_wake_cpu)
 		ce->features |= CLOCK_EVT_FEAT_C3STOP;
-	if (static_branch_likely(&riscv_sstc_available))
+	if (riscv_has_extension_likely(RISCV_ISA_EXT_SSTC))
 		ce->rating = 450;
 	clockevents_config_and_register(ce, riscv_timebase, 100, ULONG_MAX);
 
@@ -190,10 +189,8 @@ static int __init riscv_timer_init_common(void)
 		return error;
 	}
 
-	if (riscv_isa_extension_available(NULL, SSTC)) {
+	if (riscv_isa_extension_available(NULL, SSTC))
 		pr_info("Timer interrupt in S-mode is available via sstc extension\n");
-		static_branch_enable(&riscv_sstc_available);
-	}
 
 	error = cpuhp_setup_state(CPUHP_AP_RISCV_TIMER_STARTING,
 			 "clockevents/riscv/timer:starting",
