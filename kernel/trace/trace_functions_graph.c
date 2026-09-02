@@ -1492,6 +1492,7 @@ print_graph_function_flags(struct trace_iterator *iter, u32 flags)
 		return print_graph_return(field, s, entry, iter, flags);
 	}
 	case TRACE_STACK:
+	case TRACE_STACK_ID:
 	case TRACE_FN:
 		/* dont trace stack and functions as comments */
 		return TRACE_TYPE_UNHANDLED;
