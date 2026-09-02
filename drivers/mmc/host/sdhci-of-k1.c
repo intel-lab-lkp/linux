@@ -496,6 +496,7 @@ static const struct sdhci_ops spacemit_sdhci_ops = {
 	.reset			= spacemit_sdhci_reset,
 	.set_bus_width		= sdhci_set_bus_width,
 	.set_clock		= spacemit_sdhci_set_clock,
+	.set_power		= sdhci_set_power_and_bus_voltage,
 	.set_uhs_signaling	= spacemit_sdhci_set_uhs_signaling,
 	.platform_execute_tuning = spacemit_sdhci_execute_tuning,
 };
