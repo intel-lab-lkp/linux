@@ -339,7 +339,6 @@ make_static:
 	rm -rf $@ $$TMP_DEST || (cat $@ ; false)
 
 $(run_O):
-	$(call clean)
 	@TMP_O=$$(mktemp -d); \
 	TMP_DEST=$$(mktemp -d); \
 	cmd="cd $(PERF) && $(MAKE_F) $($(patsubst %_O,%,$@)) $(PARALLEL_OPT) O=$$TMP_O DESTDIR=$$TMP_DEST"; \
@@ -363,18 +362,18 @@ endif
 make_kernelsrc:
 	@echo "- make -C <kernelsrc> $(PARALLEL_OPT) $(K_O_OPT) tools/perf"
 	$(call clean); \
-	(make -C ../.. $(PARALLEL_OPT) $(K_O_OPT) tools/perf) > $@ 2>&1 && \
+	($(MAKE) -C ../.. $(PARALLEL_OPT) $(K_O_OPT) tools/perf) > $@ 2>&1 && \
 	test -x $(KERNEL_O)/tools/perf/perf && rm -f $@ || (cat $@ ; false)
 
 make_kernelsrc_tools:
 	@echo "- make -C <kernelsrc>/tools $(PARALLEL_OPT) $(K_O_OPT) perf"
 	$(call clean); \
-	(make -C ../../tools $(PARALLEL_OPT) $(K_O_OPT) perf) > $@ 2>&1 && \
+	($(MAKE) -C ../../tools $(PARALLEL_OPT) $(K_O_OPT) perf) > $@ 2>&1 && \
 	test -x $(KERNEL_O)/tools/perf/perf && rm -f $@ || (cat $@ ; false)
 
 make_libperf:
 	@echo "- make -C lib";
-	make -C lib clean >$@ 2>&1; make -C lib >>$@ 2>&1 && rm $@
+	$(MAKE) -C lib clean >$@ 2>&1; $(MAKE) -C lib >>$@ 2>&1 && rm $@
 
 FEATURES_DUMP_FILE := $(FULL_O)/BUILD_TEST_FEATURE_DUMP
 FEATURES_DUMP_FILE_STATIC := $(FULL_O)/BUILD_TEST_FEATURE_DUMP_STATIC
@@ -383,20 +382,21 @@ all: $(run) $(run_O) tarpkg make_kernelsrc make_kernelsrc_tools
 	@echo OK
 	@rm -f $(FEATURES_DUMP_FILE) $(FEATURES_DUMP_FILE_STATIC)
 
-out: $(run_O)
+out: $(FEATURES_DUMP_FILE) $(FEATURES_DUMP_FILE_STATIC)
+	@$(MAKE) -f tests/make $(run_O) PARALLEL_OPT= -j$(cores)
 	@echo OK
 	@rm -f $(FEATURES_DUMP_FILE) $(FEATURES_DUMP_FILE_STATIC)
 
 ifeq ($(REUSE_FEATURES_DUMP),1)
 $(FEATURES_DUMP_FILE):
 	$(call clean)
-	@cmd="cd $(PERF) && make FEATURE_DUMP_COPY=$@ $(O_OPT) feature-dump"; \
+	@cmd="cd $(PERF) && $(MAKE) FEATURE_DUMP_COPY=$@ $(O_OPT) feature-dump"; \
 	echo "- $@: $$cmd" && echo $$cmd && \
 	( eval $$cmd ) > /dev/null 2>&1
 
 $(FEATURES_DUMP_FILE_STATIC):
 	$(call clean)
-	@cmd="cd $(PERF) && make FEATURE_DUMP_COPY=$@ $(O_OPT) LDFLAGS='-static' feature-dump"; \
+	@cmd="cd $(PERF) && $(MAKE) FEATURE_DUMP_COPY=$@ $(O_OPT) LDFLAGS='-static' feature-dump"; \
 	echo "- $@: $$cmd" && echo $$cmd && \
 	( eval $$cmd ) > /dev/null 2>&1
 
