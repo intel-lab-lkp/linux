@@ -685,7 +685,10 @@ static u32 get_mba_min(struct mpam_props *cprops)
 /* Find the L3 cache that has affinity with this CPU */
 static int find_l3_equivalent_bitmask(int cpu, cpumask_var_t tmp_cpumask)
 {
-	u32 cache_id = get_cpu_cacheinfo_id(cpu, 3);
+	int cache_id = get_cpu_cacheinfo_id(cpu, 3);
+
+	if (cache_id < 0)
+		return -ENOENT;
 
 	lockdep_assert_cpus_held();
 
