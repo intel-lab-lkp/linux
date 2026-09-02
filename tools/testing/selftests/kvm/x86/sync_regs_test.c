@@ -70,13 +70,102 @@ static void compare_regs(struct kvm_regs *left, struct kvm_regs *right)
 #undef REG_COMPARE
 }
 
+static void compare_segment(struct kvm_segment *left, struct kvm_segment *right,
+			    const char *name)
+{
+#define SEG_COMPARE(field) \
+	TEST_ASSERT(left->field == right->field, \
+		    "Segment %s." #field \
+		    " values did not match: 0x%llx, 0x%llx", \
+		    name, (unsigned long long)left->field, \
+		    (unsigned long long)right->field)
+	SEG_COMPARE(base);
+	SEG_COMPARE(limit);
+	SEG_COMPARE(selector);
+	SEG_COMPARE(type);
+	SEG_COMPARE(present);
+	SEG_COMPARE(dpl);
+	SEG_COMPARE(db);
+	SEG_COMPARE(s);
+	SEG_COMPARE(l);
+	SEG_COMPARE(g);
+	SEG_COMPARE(avl);
+	SEG_COMPARE(unusable);
+#undef SEG_COMPARE
+}
+
+static void compare_dtable(struct kvm_dtable *left, struct kvm_dtable *right,
+			   const char *name)
+{
+	TEST_ASSERT(left->base == right->base,
+		    "Descriptor table %s.base values did not match: 0x%llx, 0x%llx",
+		    name, left->base, right->base);
+	TEST_ASSERT(left->limit == right->limit,
+		    "Descriptor table %s.limit values did not match: 0x%x, 0x%x",
+		    name, left->limit, right->limit);
+}
+
 static void compare_sregs(struct kvm_sregs *left, struct kvm_sregs *right)
 {
+#define SREG_COMPARE(reg) \
+	TEST_ASSERT(left->reg == right->reg, \
+		    "Register " #reg \
+		    " values did not match: 0x%llx, 0x%llx", \
+		    left->reg, right->reg)
+	compare_segment(&left->cs, &right->cs, "cs");
+	compare_segment(&left->ds, &right->ds, "ds");
+	compare_segment(&left->es, &right->es, "es");
+	compare_segment(&left->fs, &right->fs, "fs");
+	compare_segment(&left->gs, &right->gs, "gs");
+	compare_segment(&left->ss, &right->ss, "ss");
+	compare_segment(&left->tr, &right->tr, "tr");
+	compare_segment(&left->ldt, &right->ldt, "ldt");
+	compare_dtable(&left->gdt, &right->gdt, "gdt");
+	compare_dtable(&left->idt, &right->idt, "idt");
+	SREG_COMPARE(cr0);
+	SREG_COMPARE(cr2);
+	SREG_COMPARE(cr3);
+	SREG_COMPARE(cr4);
+	SREG_COMPARE(cr8);
+	SREG_COMPARE(efer);
+	SREG_COMPARE(apic_base);
+#undef SREG_COMPARE
+	TEST_ASSERT(!memcmp(left->interrupt_bitmap, right->interrupt_bitmap,
+			    sizeof(left->interrupt_bitmap)),
+		    "interrupt_bitmap values did not match");
 }
 
 static void compare_vcpu_events(struct kvm_vcpu_events *left,
 				struct kvm_vcpu_events *right)
 {
+#define EVENT_COMPARE(field) \
+	TEST_ASSERT(left->field == right->field, \
+		    "Event " #field \
+		    " values did not match: 0x%llx, 0x%llx", \
+		    (unsigned long long)left->field, \
+		    (unsigned long long)right->field)
+	EVENT_COMPARE(exception.injected);
+	EVENT_COMPARE(exception.nr);
+	EVENT_COMPARE(exception.has_error_code);
+	EVENT_COMPARE(exception.pending);
+	EVENT_COMPARE(exception.error_code);
+	EVENT_COMPARE(interrupt.injected);
+	EVENT_COMPARE(interrupt.nr);
+	EVENT_COMPARE(interrupt.soft);
+	EVENT_COMPARE(interrupt.shadow);
+	EVENT_COMPARE(nmi.injected);
+	EVENT_COMPARE(nmi.pending);
+	EVENT_COMPARE(nmi.masked);
+	EVENT_COMPARE(sipi_vector);
+	EVENT_COMPARE(flags);
+	EVENT_COMPARE(smi.smm);
+	EVENT_COMPARE(smi.pending);
+	EVENT_COMPARE(smi.smm_inside_nmi);
+	EVENT_COMPARE(smi.latched_init);
+	EVENT_COMPARE(triple_fault.pending);
+	EVENT_COMPARE(exception_has_payload);
+	EVENT_COMPARE(exception_payload);
+#undef EVENT_COMPARE
 }
 
 #define TEST_SYNC_FIELDS   (KVM_SYNC_X86_REGS|KVM_SYNC_X86_SREGS|KVM_SYNC_X86_EVENTS)
