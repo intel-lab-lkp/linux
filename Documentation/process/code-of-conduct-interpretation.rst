@@ -47,7 +47,7 @@ regarding conduct issues.
 
 Maintainers should be willing to help when problems occur, and work with
 others in the community when needed.  Do not be afraid to reach out to
-the Technical Advisory Board (TAB) or other maintainers if you're
+the Technical Advisory Board (TAB) or other maintainers if you are
 uncertain how to handle situations that come up.  It will not be
 considered a violation report unless you want it to be.  If you are
 uncertain about approaching the TAB or any other maintainers, please
@@ -78,7 +78,7 @@ rejecting unsuitable contributions are not viewed as a violation of the
 Code of Conduct.
 
 While maintainers are in general welcoming to newcomers, their capacity
-of helping contributors overcome the entry hurdles is limited, so they
+to help contributors overcome the entry hurdles is limited, so they
 have to set priorities.  This, also, is not to be seen as a violation of
 the Code of Conduct.  The kernel community is aware of that and provides
 entry level programs in various forms like kernelnewbies.org.
@@ -123,8 +123,8 @@ Enforcement
 
 The address listed in the Code of Conduct goes to the Code of Conduct
 Committee.  The exact members receiving these emails at any given time
-are listed at https://kernel.org/code-of-conduct.html.  Members can not
-access reports made before they joined or after they have left the
+are listed at https://kernel.org/code-of-conduct.html.  Members cannot
+access reports submitted before they joined or after they left the
 committee.
 
 The Code of Conduct Committee consists of volunteer community members
@@ -147,7 +147,7 @@ Any decisions regarding enforcement recommendations will be brought to
 the TAB for implementation of enforcement with the relevant maintainers
 if needed.  Once the TAB approves one or more of the measures outlined
 in the scope of the ban by two-thirds of the members voting for the
-measures, the Code of Conduct Committee will enforce the TAB approved
+measures, the Code of Conduct Committee will enforce the TAB-approved
 measures.  Any Code of Conduct Committee members serving on the TAB will
 not vote on the measures.
 
@@ -177,7 +177,7 @@ Unacceptable behaviors often get resolved when individuals acknowledge their
 behavior and make amends for it in the setting the violation has taken place.
 
 The Code of Conduct Committee receives reports about unacceptable behaviors
-when they don't get resolved through community discussions. The Code of
+when they do not get resolved through community discussions. The Code of
 Conduct committee takes measures to restore productive and respectful
 collaboration when an unacceptable behavior has negatively impacted that
 relationship.
@@ -237,7 +237,7 @@ administrators.  Any Code of Conduct Committee members serving on the TAB
 will not vote on the measures.
 
 The Code of Conduct Committee is mindful of the negative impact of seeking
-public apology and instituting ban could have on individuals. It is also
+a public apology and instituting a ban could have on individuals. It is also
 mindful of the longer term harm to the community that could result from
 not taking action when such serious public violations occur.
 

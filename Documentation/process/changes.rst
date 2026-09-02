@@ -17,14 +17,14 @@ Axel Boldt, Alessandro Sigala, and countless other users all over the
 Current Minimal Requirements
 ****************************
 
-Upgrade to at **least** these software revisions before thinking you've
-encountered a bug!  If you're unsure what version you're currently
+Upgrade to at **least** these software revisions before thinking you have
+encountered a bug!  If you are unsure what version you are currently
 running, the suggested command should tell you. For a list of the programs
-on your system including their version execute ./scripts/ver_linux
+on your system, including their versions, execute ./scripts/ver_linux
 
 Again, keep in mind that this list assumes you are already functionally
 running a Linux kernel.  Also, not all tools are necessary on all
-systems; obviously, if you don't have any PC Card hardware, for example,
+systems; obviously, if you do not have any PC Card hardware, for example,
 you probably do not need to concern yourself with pcmciautils.
 
 ====================== ===============  ========================================
@@ -83,7 +83,7 @@ Clang/LLVM (optional)
 
 The latest formal release of clang and LLVM utils (according to
 `releases.llvm.org <https://releases.llvm.org>`_) are supported for building
-kernels. Older releases aren't guaranteed to work, and we may drop workarounds
+kernels. Older releases are not guaranteed to work, and we may drop workarounds
 from the kernel that were used to support older versions. Please see additional
 docs on :ref:`Building Linux with Clang/LLVM <kbuild_llvm>`.
 
@@ -222,7 +222,7 @@ documentation via specially-formatted comments near their
 definitions in the source.  These comments can be combined with ReST
 files in the Documentation/ directory to make enriched documentation, which can
 then be converted to PostScript, HTML, LaTex, ePUB and PDF files.
-In order to convert from ReST format to a format of your choice, you'll need
+In order to convert from ReST format to a format of your choice, you will need
 Sphinx.
 
 Util-linux
@@ -231,13 +231,13 @@ Util-linux
 New versions of util-linux provide ``fdisk`` support for larger disks,
 support new options to mount, recognize more supported partition
 types, and similar goodies.
-You'll probably want to upgrade.
+You will probably want to upgrade.
 
 Ksymoops
 --------
 
 If the unthinkable happens and your kernel oopses, you may need the
-ksymoops tool to decode it, but in most cases you don't.
+ksymoops tool to decode it, but in most cases you do not.
 It is generally preferred to build the kernel with ``CONFIG_KALLSYMS`` so
 that it produces readable dumps that can be used as-is (this also
 produces better output than ksymoops).  If for some reason your kernel
@@ -255,7 +255,7 @@ E2fsprogs
 ---------
 
 The latest version of ``e2fsprogs`` fixes several bugs in fsck and
-debugfs.  Obviously, it's a good idea to upgrade.
+debugfs.  Obviously, it is a good idea to upgrade.
 
 JFSutils
 --------
@@ -306,7 +306,7 @@ udev you may need to::
   mknod /dev/cpu/microcode c 10 184
   chmod 0644 /dev/cpu/microcode
 
-as root before you can use this.  You'll probably also want to
+as root before you can use this.  You will probably also want to
 get the user-space microcode_ctl utility to use with this.
 
 udev

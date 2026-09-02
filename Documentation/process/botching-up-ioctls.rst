@@ -65,7 +65,7 @@ will have a second iteration or at least an extension for any given interface.
  * Have a plan for extending ioctls with new flags or new fields at the end of
    the structure. The drm core checks the passed-in size for each ioctl call
    and zero-extends any mismatches between kernel and userspace. That helps,
-   but is not a complete solution since newer userspace on older kernels won't
+   but is not a complete solution since newer userspace on older kernels will not
    notice that the newly added fields at the end that get ignored. So this still
    needs a new driver feature flags.
 
