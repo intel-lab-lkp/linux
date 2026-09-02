@@ -1427,6 +1427,24 @@
  * @NL80211_CMD_STOP_PD: Stop the PD operation, identified by
  *	its %NL80211_ATTR_WDEV interface.
  *
+ * @NL80211_CMD_SET_SCS: Add, change or remove stream classification service
+ *	descriptors of the peer given by %NL80211_ATTR_MAC. The descriptors
+ *	are in %NL80211_ATTR_SCS_DESCRIPTORS, and one message can carry
+ *	several with different request types, because one SCS Request frame
+ *	can. Userspace builds and parses the action frames and holds the
+ *	dialog tokens. The reply repeats %NL80211_ATTR_SCS_DESCRIPTORS with
+ *	the identifier and the IEEE status code of each descriptor, so that
+ *	userspace can build the SCS Status List directly. The netlink return
+ *	code stays 0 when the kernel processed the message, even if it
+ *	declined single descriptors.
+ * @NL80211_CMD_SET_MSCS: Install, change or remove the mirrored stream
+ *	classification service of the peer given by %NL80211_ATTR_MAC. The
+ *	parameters are in %NL80211_ATTR_MSCS_DESCRIPTOR. A peer has at most
+ *	one active MSCS, so the reply carries a single
+ *	%NL80211_ATTR_STATUS_CODE. The same command serves both setup paths:
+ *	an MSCS Request frame, and a (Re)Association Request frame that
+ *	carried an MSCS Descriptor element.
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1704,6 +1722,9 @@ enum nl80211_commands {
 
 	NL80211_CMD_START_PD,
 	NL80211_CMD_STOP_PD,
+
+	NL80211_CMD_SET_SCS,
+	NL80211_CMD_SET_MSCS,
 
 	/* add new commands above here */
 
@@ -3184,6 +3205,11 @@ enum nl80211_commands {
  *
  *	The aggregated message always precedes the per-link messages for the
  *	same station within a dump sequence.
+ * @NL80211_ATTR_SCS_DESCRIPTORS: Nested array of SCS descriptors, each one a
+ *	nested set of &enum nl80211_scs_desc_attr attributes. Used with
+ *	%NL80211_CMD_SET_SCS in both directions.
+ * @NL80211_ATTR_MSCS_DESCRIPTOR: Nested set of &enum nl80211_mscs_desc_attr
+ *	attributes. Used with %NL80211_CMD_SET_MSCS.
  *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
@@ -3784,6 +3810,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_NPCA_PUNCT_BITMAP,
 
 	NL80211_ATTR_STA_DUMP_LINK_STATS,
+	NL80211_ATTR_SCS_DESCRIPTORS,
+	NL80211_ATTR_MSCS_DESCRIPTOR,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -6081,6 +6109,78 @@ enum nl80211_scs_req_type {
 	NL80211_SCS_REQ_ADD,
 	NL80211_SCS_REQ_REMOVE,
 	NL80211_SCS_REQ_CHANGE,
+};
+
+/**
+ * enum nl80211_scs_desc_attr - one SCS descriptor
+ *
+ * The scalars that carry policy are typed attributes, because they are the
+ * values that a bad request can make nonsensical, and netlink policy checks
+ * them before any code runs. The classifier travels as the raw element it
+ * arrived as, because no userspace component in this path takes it apart:
+ * wpa_supplicant holds it opaque, and a Multi-AP Agent moves it between
+ * agents verbatim.
+ *
+ * @__NL80211_SCS_DESC_ATTR_INVALID: invalid
+ * @NL80211_SCS_DESC_ATTR_ID: SCSID (u8, 1 to 255)
+ * @NL80211_SCS_DESC_ATTR_REQ_TYPE: request type (u8, see
+ *	&enum nl80211_scs_req_type)
+ * @NL80211_SCS_DESC_ATTR_UP: user priority to assign to a matching MSDU
+ *	(u8, 0 to 7), taken from the Intra-Access Category Priority element.
+ *	Required for add and change, and rejected for remove and for a
+ *	descriptor whose %NL80211_SCS_DESC_ATTR_QOS_CHAR gives a direction
+ *	other than downlink, which carries no such element.
+ * @NL80211_SCS_DESC_ATTR_TCLAS: one or more TCLAS elements and at most one
+ *	TCLAS Processing element (binary), as they arrived over the air
+ * @NL80211_SCS_DESC_ATTR_QOS_CHAR: QoS Characteristics element (binary), whole
+ *	and as it arrived over the air, header included
+ * @NL80211_SCS_DESC_ATTR_STATUS: IEEE status code (u16), kernel to userspace
+ *
+ * @__NL80211_SCS_DESC_ATTR_AFTER_LAST: internal use
+ * @NL80211_SCS_DESC_ATTR_MAX: highest attribute
+ */
+enum nl80211_scs_desc_attr {
+	__NL80211_SCS_DESC_ATTR_INVALID,
+	NL80211_SCS_DESC_ATTR_ID,
+	NL80211_SCS_DESC_ATTR_REQ_TYPE,
+	NL80211_SCS_DESC_ATTR_UP,
+	NL80211_SCS_DESC_ATTR_TCLAS,
+	NL80211_SCS_DESC_ATTR_QOS_CHAR,
+	NL80211_SCS_DESC_ATTR_STATUS,
+
+	__NL80211_SCS_DESC_ATTR_AFTER_LAST,
+	NL80211_SCS_DESC_ATTR_MAX = __NL80211_SCS_DESC_ATTR_AFTER_LAST - 1
+};
+
+/**
+ * enum nl80211_mscs_desc_attr - the MSCS of one peer
+ *
+ * @__NL80211_MSCS_DESC_ATTR_INVALID: invalid
+ * @NL80211_MSCS_DESC_ATTR_REQ_TYPE: request type (u8, see
+ *	&enum nl80211_scs_req_type)
+ * @NL80211_MSCS_DESC_ATTR_UP_BITMAP: user priorities that the AP learns
+ *	from, one bit each (u8)
+ * @NL80211_MSCS_DESC_ATTR_UP_LIMIT: ceiling for the assigned user priority
+ *	(u8, 0 to 7)
+ * @NL80211_MSCS_DESC_ATTR_STREAM_TIMEOUT: minimum lifetime of a learned
+ *	value, in TUs (u32)
+ * @NL80211_MSCS_DESC_ATTR_TCLAS_MASK: one or more TCLAS Mask elements
+ *	(binary), as they arrived over the air. Required for add and change,
+ *	and rejected for remove.
+ *
+ * @__NL80211_MSCS_DESC_ATTR_AFTER_LAST: internal use
+ * @NL80211_MSCS_DESC_ATTR_MAX: highest attribute
+ */
+enum nl80211_mscs_desc_attr {
+	__NL80211_MSCS_DESC_ATTR_INVALID,
+	NL80211_MSCS_DESC_ATTR_REQ_TYPE,
+	NL80211_MSCS_DESC_ATTR_UP_BITMAP,
+	NL80211_MSCS_DESC_ATTR_UP_LIMIT,
+	NL80211_MSCS_DESC_ATTR_STREAM_TIMEOUT,
+	NL80211_MSCS_DESC_ATTR_TCLAS_MASK,
+
+	__NL80211_MSCS_DESC_ATTR_AFTER_LAST,
+	NL80211_MSCS_DESC_ATTR_MAX = __NL80211_MSCS_DESC_ATTR_AFTER_LAST - 1
 };
 
 /**
