@@ -991,6 +991,10 @@ enum {
 };
 
 enum {
+	UNI_CMD_MURU_SET_QOS_CFG = 0xfe,
+};
+
+enum {
 	UNI_VOW_DRR_CTRL,
 	UNI_VOW_RX_AT_AIRTIME_EN = 0x0b,
 	UNI_VOW_RX_AT_AIRTIME_CLR_EN = 0x0e,
