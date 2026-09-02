@@ -5611,6 +5611,43 @@ int apply_workqueue_attrs(struct workqueue_struct *wq,
 }
 
 /**
+ * workqueue_set_affn_scope - change the affinity scope of an unbound workqueue
+ * @wq: the target unbound workqueue
+ * @affn_scope: the new scope, or %WQ_AFFN_DFL for the system default
+ *
+ * Reapply @wq's current attributes with only the affinity scope
+ * replaced, so the nice level, cpumask, and strict affinity the
+ * workqueue already carries survive. Pool-workqueue replacement
+ * proceeds as for apply_workqueue_attrs().
+ *
+ * Context: Process context. Takes wq_pool_mutex and performs
+ * GFP_KERNEL allocations.
+ *
+ * Return: 0 on success and -errno on failure.
+ */
+int workqueue_set_affn_scope(struct workqueue_struct *wq,
+			     enum wq_affn_scope affn_scope)
+{
+	struct workqueue_attrs *attrs;
+	int ret = -ENOMEM;
+
+	if ((unsigned int)affn_scope >= WQ_AFFN_NR_TYPES)
+		return -EINVAL;
+
+	mutex_lock(&wq_pool_mutex);
+	attrs = alloc_workqueue_attrs();
+	if (attrs) {
+		copy_workqueue_attrs(attrs, wq->attrs);
+		attrs->affn_scope = affn_scope;
+		ret = apply_workqueue_attrs_locked(wq, attrs);
+	}
+	mutex_unlock(&wq_pool_mutex);
+	free_workqueue_attrs(attrs);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(workqueue_set_affn_scope);
+
+/**
  * unbound_wq_update_pwq - update a pwq slot for CPU hot[un]plug
  * @wq: the target workqueue
  * @cpu: the CPU to update the pwq slot for
