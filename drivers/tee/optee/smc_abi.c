@@ -19,6 +19,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/rpmb.h>
 #include <linux/sched.h>
@@ -1528,6 +1529,8 @@ static void optee_smc_remove(struct platform_device *pdev)
 	if (optee->smc.memremaped_shm)
 		memunmap(optee->smc.memremaped_shm);
 
+	of_reserved_mem_device_release(&optee->teedev->dev);
+
 	kfree(optee);
 }
 
@@ -1712,16 +1715,22 @@ static int optee_protmem_pool_init(struct optee *optee)
 	if (!protm && !dyn_protm)
 		return 0;
 
+	of_reserved_mem_device_init_by_idx(&optee->teedev->dev,
+					   dev_of_node(optee->teedev->dev.parent), 0);
 	if (protm)
 		pool = static_protmem_pool_init(optee);
 	if (dyn_protm && IS_ERR(pool))
 		pool = optee_protmem_alloc_dyn_pool(optee, heap_id);
-	if (IS_ERR(pool))
+	if (IS_ERR(pool)) {
+		of_reserved_mem_device_release(&optee->teedev->dev);
 		return PTR_ERR(pool);
+	}
 
 	rc = tee_device_register_dma_heap(optee->teedev, heap_id, pool);
-	if (rc)
+	if (rc) {
 		pool->ops->destroy_pool(pool);
+		of_reserved_mem_device_release(&optee->teedev->dev);
+	}
 
 	return rc;
 }
@@ -1833,14 +1842,14 @@ static int optee_probe(struct platform_device *pdev)
 	    (sec_caps & OPTEE_SMC_SEC_CAP_RPMB_PROBE))
 		optee->in_kernel_rpmb_routing = true;
 
-	teedev = tee_device_alloc(&optee_clnt_desc, NULL, pool, optee);
+	teedev = tee_device_alloc(&optee_clnt_desc, &pdev->dev, pool, optee);
 	if (IS_ERR(teedev)) {
 		rc = PTR_ERR(teedev);
 		goto err_free_optee;
 	}
 	optee->teedev = teedev;
 
-	teedev = tee_device_alloc(&optee_supp_desc, NULL, pool, optee);
+	teedev = tee_device_alloc(&optee_supp_desc, &pdev->dev, pool, optee);
 	if (IS_ERR(teedev)) {
 		rc = PTR_ERR(teedev);
 		goto err_unreg_teedev;

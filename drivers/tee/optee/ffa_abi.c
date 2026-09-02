@@ -979,6 +979,7 @@ static void optee_ffa_remove(struct ffa_device *ffa_dev)
 
 	mutex_destroy(&optee->ffa.mutex);
 	rhashtable_free_and_destroy(&optee->ffa.global_ids, rh_free_fn, NULL);
+	ffa_lend_pool_detach(&optee->teedev->dev);
 
 	kfree(optee);
 }
@@ -1042,13 +1043,21 @@ static int optee_ffa_protmem_pool_init(struct optee *optee, u32 sec_caps)
 	int rc = 0;
 
 	if (sec_caps & OPTEE_FFA_SEC_CAP_PROTMEM) {
+		rc = ffa_lend_pool_attach(&optee->teedev->dev);
+		if (rc && rc != -ENODEV)
+			return rc;
+
 		pool = optee_protmem_alloc_dyn_pool(optee, id);
-		if (IS_ERR(pool))
+		if (IS_ERR(pool)) {
+			ffa_lend_pool_detach(&optee->teedev->dev);
 			return PTR_ERR(pool);
+		}
 
 		rc = tee_device_register_dma_heap(optee->teedev, id, pool);
-		if (rc)
+		if (rc) {
 			pool->ops->destroy_pool(pool);
+			ffa_lend_pool_detach(&optee->teedev->dev);
+		}
 	}
 
 	return rc;

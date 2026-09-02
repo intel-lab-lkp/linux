@@ -3,6 +3,7 @@
  * Copyright (c) 2015-2017, 2019-2021 Linaro Limited
  */
 #include <linux/anon_inodes.h>
+#include <linux/arm_ffa.h>
 #include <linux/device.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
@@ -43,6 +44,7 @@ static void tee_shm_release(struct tee_device *teedev, struct tee_shm *shm)
 
 		dma_mem = container_of(shm, struct tee_shm_dma_mem, shm);
 		p = dma_mem;
+		ffa_lend_reclaimed(&teedev->dev, shm->paddr, shm->size);
 		dma_free_pages(&teedev->dev, shm->size, dma_mem->page,
 			       dma_mem->dma_addr, DMA_BIDIRECTIONAL);
 #endif
@@ -288,6 +290,7 @@ struct tee_shm *tee_shm_alloc_dma_mem(struct tee_context *ctx,
 	struct tee_shm_dma_mem *dma_mem;
 	dma_addr_t dma_addr;
 	struct page *page;
+	int ret;
 
 	if (!tee_device_get(teedev))
 		return ERR_PTR(-EINVAL);
@@ -297,9 +300,13 @@ struct tee_shm *tee_shm_alloc_dma_mem(struct tee_context *ctx,
 	if (!page)
 		goto err_put_teedev;
 
+	ret = ffa_prepare_lend(&teedev->dev, page_to_phys(page), page_count * PAGE_SIZE);
+	if (ret && ret != -ENODEV)
+		goto err_free_pages;
+
 	dma_mem = kzalloc_obj(*dma_mem);
 	if (!dma_mem)
-		goto err_free_pages;
+		goto err_map_pages;
 
 	refcount_set(&dma_mem->shm.refcount, 1);
 	dma_mem->shm.ctx = ctx;
@@ -313,6 +320,8 @@ struct tee_shm *tee_shm_alloc_dma_mem(struct tee_context *ctx,
 
 	return &dma_mem->shm;
 
+err_map_pages:
+	ffa_lend_reclaimed(&teedev->dev, page_to_phys(page), page_count * PAGE_SIZE);
 err_free_pages:
 	dma_free_pages(&teedev->dev, page_count * PAGE_SIZE, page, dma_addr,
 		       DMA_BIDIRECTIONAL);
