@@ -1785,7 +1785,7 @@ static netdev_tx_t mtk_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	int tx_num;
 
 	if (skb_vlan_tag_present(skb) &&
-	    !eth_proto_is_802_3(eth_hdr(skb)->h_proto)) {
+	    !eth_proto_is_802_3(skb_eth_hdr(skb)->h_proto)) {
 		skb = __vlan_hwaccel_push_inside(skb);
 		if (!skb)
 			goto dropped;
