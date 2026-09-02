@@ -37,6 +37,8 @@ struct linux_binprm {
 #endif
 	struct mm_struct *mm;
 	struct mm_struct *old_mm;	/* replaced address space, freed by setup_new_exec() */
+	/* Descriptor table displaced by begin_new_exec(), put by free_bprm(). */
+	struct files_struct *old_files;
 	/* user_ns published to task->exec_state at execve, narrowed by would_dump(). */
 	struct user_namespace *user_ns;
 	unsigned long p; /* current top of mem */

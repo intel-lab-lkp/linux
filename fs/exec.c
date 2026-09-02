@@ -1165,7 +1165,7 @@ int begin_new_exec(struct linux_binprm * bprm)
 	if (retval)
 		goto out;
 	if (files)
-		put_files_struct(switch_files_struct(me, files));
+		bprm->old_files = switch_files_struct(me, files);
 
 	/*
 	 * Must be called _before_ exec_mmap() as bprm->mm is
@@ -1472,7 +1472,9 @@ static void free_bprm(struct linux_binprm *bprm)
 		mutex_unlock(&current->signal->cred_guard_mutex);
 		abort_creds(bprm->cred);
 	}
-	/* The exec locks are out of the way now, see close_cloexec_files(). */
+	/* The exec locks are gone, release what begin_new_exec() closed. */
+	if (bprm->old_files)
+		put_files_struct(bprm->old_files);
 	fput_list(&bprm->cloexec_files);
 	/* exec swapped the mm but failed before setup_new_exec() freed it */
 	if (bprm->old_mm)
