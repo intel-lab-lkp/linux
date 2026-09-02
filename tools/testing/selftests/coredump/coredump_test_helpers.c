@@ -1612,7 +1612,8 @@ bool send_coredump_ack(int fd, const struct coredump_req *req,
 #define TEST_REQ_MASK_ALL					\
 	(COREDUMP_KERNEL | COREDUMP_USERSPACE |			\
 	 COREDUMP_REJECT | COREDUMP_WAIT |			\
-	 COREDUMP_RECORDS | COREDUMP_SPARSE | COREDUMP_MEMORY_TYPES)
+	 COREDUMP_RECORDS | COREDUMP_SPARSE | COREDUMP_MEMORY_TYPES | \
+	 COREDUMP_CLOSE_FILES)
 
 bool check_coredump_req(const struct coredump_req *req)
 {
