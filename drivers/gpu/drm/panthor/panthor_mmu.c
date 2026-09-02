@@ -2591,6 +2591,15 @@ panthor_vm_exec_op(struct panthor_vm *vm, struct panthor_vm_op_ctx *op,
 	if (op_type == DRM_PANTHOR_VM_BIND_OP_TYPE_SYNC_ONLY)
 		return 0;
 
+	/*
+	 * A zero-length map or unmap is a no-op. The synchronous bind path
+	 * already short-circuits it in panthor_vm_bind_exec_sync_op(); mirror
+	 * that here so an asynchronous zero-length op does not fail and flag the
+	 * VM as unusable.
+	 */
+	if (!op->va.range)
+		return 0;
+
 	mutex_lock(&vm->op_lock);
 	vm->op_ctx = op;
 
