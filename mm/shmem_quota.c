@@ -54,6 +54,10 @@ struct quota_id {
 
 static int shmem_check_quota_file(struct super_block *sb, int type)
 {
+	/* Verify enabling happens on tmpfs superblock */
+	if (strcmp(sb->s_type->name, "tmpfs"))
+		return 0;
+
 	/* There is no real quota file, nothing to do */
 	return 1;
 }
