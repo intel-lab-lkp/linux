@@ -7368,6 +7368,41 @@ static void intel_atomic_prepare_plane_clear_colors(struct intel_atomic_state *s
 	}
 }
 
+static bool intel_flipq_commit_is_eligible(struct intel_atomic_state *state,
+					   struct intel_crtc *crtc)
+{
+	struct intel_display *display = to_intel_display(state);
+	const struct intel_crtc_state *new_crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+
+	if (!intel_flipq_supported(display))
+		return false;
+
+	if (intel_crtc_needs_modeset(new_crtc_state) ||
+	    intel_crtc_needs_fastset(new_crtc_state) ||
+	    intel_crtc_needs_color_update(new_crtc_state))
+		return false;
+
+	if (!new_crtc_state->update_planes)
+		return false;
+
+	if (new_crtc_state->do_async_flip ||
+	    new_crtc_state->vrr.enable ||
+	    new_crtc_state->has_psr)
+		return false;
+
+	/*
+	 * Flipq is only suitable for simple queued plane updates that do
+	 * not require additional pipe or timing programming.
+	 */
+	if (new_crtc_state->update_pipe ||
+	    new_crtc_state->update_m_n ||
+	    new_crtc_state->update_lrr)
+		return false;
+
+	return true;
+}
+
 static void intel_atomic_dsb_prepare(struct intel_atomic_state *state,
 				     struct intel_crtc *crtc)
 {
@@ -7383,13 +7418,7 @@ static void intel_atomic_dsb_prepare(struct intel_atomic_state *state,
 
 	/* FIXME deal with everything */
 	new_crtc_state->use_flipq =
-		intel_flipq_supported(display) &&
-		!new_crtc_state->do_async_flip &&
-		!new_crtc_state->vrr.enable &&
-		!new_crtc_state->has_psr &&
-		!intel_crtc_needs_modeset(new_crtc_state) &&
-		!intel_crtc_needs_fastset(new_crtc_state) &&
-		!intel_crtc_needs_color_update(new_crtc_state);
+		intel_flipq_commit_is_eligible(state, crtc);
 
 	new_crtc_state->use_dsb =
 		!new_crtc_state->use_flipq &&
