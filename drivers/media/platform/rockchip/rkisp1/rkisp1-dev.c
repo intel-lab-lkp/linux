@@ -165,8 +165,31 @@ static int rkisp1_subdev_notifier_complete(struct v4l2_async_notifier *notifier)
 {
 	struct rkisp1_device *rkisp1 =
 		container_of(notifier, struct rkisp1_device, notifier);
+	struct v4l2_subdev *sd;
+	int ret;
 
-	return v4l2_device_register_subdev_nodes(&rkisp1->v4l2_dev);
+	ret = v4l2_device_register_subdev_nodes(&rkisp1->v4l2_dev);
+	if (ret)
+		return ret;
+
+	ret = media_device_register(&rkisp1->media_dev);
+	if (ret) {
+		dev_err(rkisp1->dev, "Failed to register media device: %d\n", ret);
+		goto err_unreg_v4l2_subdev_nodes;
+	}
+
+	return 0;
+
+err_unreg_v4l2_subdev_nodes:
+	list_for_each_entry(sd, &rkisp1->v4l2_dev.subdevs, list) {
+		if (!sd->devnode)
+			break;
+
+		media_devnode_remove(sd->devnode->intf_devnode);
+		video_unregister_device(sd->devnode);
+	}
+
+	return ret;
 }
 
 static void rkisp1_subdev_notifier_destroy(struct v4l2_async_connection *asc)
@@ -753,16 +776,10 @@ static int rkisp1_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_media_dev_cleanup;
 
-	ret = media_device_register(&rkisp1->media_dev);
-	if (ret) {
-		dev_err(dev, "Failed to register media device: %d\n", ret);
-		goto err_unreg_v4l2_dev;
-	}
-
 	if (rkisp1->info->features & RKISP1_FEATURE_MIPI_CSI2) {
 		ret = rkisp1_csi_init(rkisp1);
 		if (ret)
-			goto err_unreg_media_dev;
+			goto err_unreg_v4l2_dev;
 	}
 
 	ret = rkisp1_entities_register(rkisp1);
@@ -782,8 +799,6 @@ err_unreg_entities:
 err_cleanup_csi:
 	if (rkisp1_has_feature(rkisp1, MIPI_CSI2))
 		rkisp1_csi_cleanup(rkisp1);
-err_unreg_media_dev:
-	media_device_unregister(&rkisp1->media_dev);
 err_unreg_v4l2_dev:
 	v4l2_device_unregister(&rkisp1->v4l2_dev);
 err_media_dev_cleanup:
