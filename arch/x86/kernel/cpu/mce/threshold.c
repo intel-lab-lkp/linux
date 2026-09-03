@@ -86,7 +86,7 @@ void cmci_storm_begin(unsigned int bank)
 {
 	struct mca_storm_desc *storm = this_cpu_ptr(&storm_desc);
 
-	__set_bit(bank, this_cpu_ptr(mce_poll_banks));
+	set_bit(bank, this_cpu_ptr(mce_poll_banks));
 	storm->banks[bank].in_storm_mode = true;
 
 	/*
@@ -102,7 +102,7 @@ void cmci_storm_end(unsigned int bank)
 	struct mca_storm_desc *storm = this_cpu_ptr(&storm_desc);
 
 	if (!mce_flags.amd_threshold)
-		__clear_bit(bank, this_cpu_ptr(mce_poll_banks));
+		clear_bit(bank, this_cpu_ptr(mce_poll_banks));
 	storm->banks[bank].history = 0;
 	storm->banks[bank].in_storm_mode = false;
 
