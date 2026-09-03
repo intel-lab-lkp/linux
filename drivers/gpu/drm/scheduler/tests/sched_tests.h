@@ -7,6 +7,7 @@
 #include <kunit/test.h>
 #include <linux/atomic.h>
 #include <linux/completion.h>
+#include <linux/device/faux.h>
 #include <linux/dma-fence.h>
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
@@ -44,6 +45,7 @@ struct drm_mock_scheduler {
 	struct drm_gpu_scheduler base;
 
 	struct kunit		*test;
+	struct faux_device	*faux_dev;
 
 	spinlock_t		lock;
 	struct list_head	job_list;
