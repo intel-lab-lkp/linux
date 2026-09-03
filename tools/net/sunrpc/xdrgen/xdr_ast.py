@@ -1207,12 +1207,14 @@ def check_aggregate_directives(root: "Specification") -> None:
                     meta,
                 )
             field = fields[marked[1]]
-            # Only the counted-array framing is generated, so any other
-            # member form would emit hook prototypes that nothing calls.
-            if not isinstance(field, _XdrVariableLengthArray):
+            # Any other member form would emit hook prototypes that
+            # nothing calls.
+            if not isinstance(
+                field, (_XdrVariableLengthArray, _XdrOptionalData)
+            ):
                 raise XdrSemanticError(
-                    f"'{value.name}.{marked[1]}' is not a variable-length"
-                    " array",
+                    f"'{value.name}.{marked[1]}' is neither a"
+                    " variable-length array nor an optional-data list",
                     meta,
                 )
             if element_type is None:
