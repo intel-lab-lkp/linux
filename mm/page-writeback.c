@@ -2751,6 +2751,21 @@ bool folio_redirty_for_writepage(struct writeback_control *wbc,
 }
 EXPORT_SYMBOL(folio_redirty_for_writepage);
 
+/*
+ * Hand a dirtied range of @folio to the filesystem.  ->dirty_folio_range() can
+ * express everything ->dirty_folio() can, so a filesystem that implements it
+ * does not need both, and a whole-folio dirty comes through here as a range
+ * covering the folio.
+ */
+static bool mapping_dirty_range(struct address_space *mapping,
+				struct folio *folio, size_t off, size_t len)
+{
+	if (!mapping->a_ops->dirty_folio_range)
+		return mapping->a_ops->dirty_folio(mapping, folio);
+
+	return mapping->a_ops->dirty_folio_range(mapping, folio, off, len);
+}
+
 /**
  * folio_mark_dirty - Mark a folio as being modified.
  * @folio: The folio.
@@ -2782,12 +2797,38 @@ bool folio_mark_dirty(struct folio *folio)
 		 */
 		if (folio_test_reclaim(folio))
 			folio_clear_reclaim(folio);
-		return mapping->a_ops->dirty_folio(mapping, folio);
+		return mapping_dirty_range(mapping, folio, 0,
+					   folio_size(folio));
 	}
 
 	return noop_dirty_folio(mapping, folio);
 }
 EXPORT_SYMBOL(folio_mark_dirty);
+
+/**
+ * folio_mark_dirty_range - Mark part of a folio as being modified.
+ * @folio: The folio.
+ * @off: Offset of the modified range within the folio.
+ * @len: Length of the modified range.
+ *
+ * Like folio_mark_dirty(), but tells a filesystem that tracks dirty state per
+ * block that only [@off, @off + @len) changed, so writeback can skip the rest
+ * of the folio.  Filesystems without that tracking dirty the whole folio.
+ *
+ * Return: True if the folio was newly dirtied, false if it was already dirty.
+ */
+bool folio_mark_dirty_range(struct folio *folio, size_t off, size_t len)
+{
+	struct address_space *mapping = folio_mapping(folio);
+
+	if (likely(mapping)) {
+		if (folio_test_reclaim(folio))
+			folio_clear_reclaim(folio);
+		return mapping_dirty_range(mapping, folio, off, len);
+	}
+
+	return noop_dirty_folio(mapping, folio);
+}
 
 /*
  * folio_mark_dirty() is racy if the caller has no reference against
@@ -2845,6 +2886,41 @@ void __folio_cancel_dirty(struct folio *folio)
 EXPORT_SYMBOL(__folio_cancel_dirty);
 
 /*
+ * Write-protect every mapping of @folio and hand the filesystem the parts that
+ * were dirty in a page table.
+ *
+ * Without ->dirty_folio_range() there is nowhere to put per-block state, so
+ * any PTE dirty bit dirties the whole folio.  Same when the folio is not
+ * already dirty, because then the dirty transition needs the full accounting
+ * in folio_mark_dirty(), and for a folio too large for the bitmap, which the
+ * page cache does not make.
+ */
+static void folio_mkclean_for_io(struct folio *folio,
+				 struct address_space *mapping)
+{
+	DECLARE_BITMAP(map, 1UL << MAX_PAGECACHE_ORDER);
+	unsigned int nr = folio_nr_pages(folio);
+	unsigned int start, end;
+
+	if (!mapping->a_ops->dirty_folio_range || !folio_test_dirty(folio) ||
+	    WARN_ON_ONCE(nr > (1UL << MAX_PAGECACHE_ORDER))) {
+		if (folio_mkclean(folio))
+			folio_mark_dirty(folio);
+		return;
+	}
+
+	bitmap_zero(map, nr);
+	if (!folio_mkclean_dirtymap(folio, map))
+		return;
+
+	for_each_set_bitrange(start, end, map, nr) {
+		mapping_dirty_range(mapping, folio,
+				    (size_t)start << PAGE_SHIFT,
+				    (size_t)(end - start) << PAGE_SHIFT);
+	}
+}
+
+/*
  * Clear a folio's dirty flag, while caring for dirty memory accounting.
  * Returns true if the folio was previously dirty.
  *
@@ -2875,9 +2951,9 @@ bool folio_clear_dirty_for_io(struct folio *folio)
 		 *
 		 * We use this sequence to make sure that
 		 *  (a) we account for dirty stats properly
-		 *  (b) we tell the low-level filesystem to
-		 *      mark the whole folio dirty if it was
-		 *      dirty in a pagetable. Only to then
+		 *  (b) we tell the low-level filesystem which
+		 *      parts of the folio were dirty in a
+		 *      pagetable. Only to then
 		 *  (c) clean the folio again and return 1 to
 		 *      cause the writeback.
 		 *
@@ -2895,8 +2971,7 @@ bool folio_clear_dirty_for_io(struct folio *folio)
 		 * as a serialization point for all the different
 		 * threads doing their things.
 		 */
-		if (folio_mkclean(folio))
-			folio_mark_dirty(folio);
+		folio_mkclean_for_io(folio, mapping);
 		/*
 		 * We carefully synchronise fault handlers against
 		 * installing a dirty pte and marking the folio dirty

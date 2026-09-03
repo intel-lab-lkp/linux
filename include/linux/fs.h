@@ -406,6 +406,9 @@ struct address_space_operations {
 
 	/* Mark a folio dirty.  Return true if this dirtied it */
 	bool (*dirty_folio)(struct address_space *, struct folio *);
+	/* Mark [off, off + len) of a folio dirty */
+	bool (*dirty_folio_range)(struct address_space *mapping,
+				  struct folio *folio, size_t off, size_t len);
 
 	void (*readahead)(struct readahead_control *);
 
