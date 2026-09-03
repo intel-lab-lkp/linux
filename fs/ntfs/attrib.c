@@ -964,6 +964,11 @@ static int ntfs_attr_find(const __le32 type, const __le16 *name,
 	}
 	ntfs_error(vol->sb, "mft %#llx, type %#x is corrupt. Run chkdsk.",
 		   (long long)ctx->ntfs_ino->mft_no, le32_to_cpu(type));
+	/*
+	 * ntfs_attr_lookup() runs with the caller's mrec_lock held, so the
+	 * dirty bit cannot be written here (it would self-deadlock for the
+	 * $Volume inode); record the error flag only.
+	 */
 	NVolSetErrors(vol);
 	return -EIO;
 }
@@ -1501,8 +1506,14 @@ corrupt:
 		err = -EIO;
 	}
 
-	if (err != -ENOMEM)
+	if (err != -ENOMEM) {
+		/*
+		 * ntfs_attr_lookup() runs with the caller's mrec_lock
+		 * held, so the dirty bit cannot be written here; record
+		 * the error flag only.
+		 */
 		NVolSetErrors(vol);
+	}
 	return err;
 not_found:
 	/*
@@ -2236,6 +2247,11 @@ rl_err_out:
 		if (ntfs_cluster_free_from_rl(vol, rl) < 0) {
 			ntfs_error(vol->sb,
 				"Failed to release allocated cluster(s) in error code path.  Run chkdsk to recover the lost cluster(s).");
+			/*
+			 * The caller may hold the mrec_lock of the inode
+			 * being modified, so the dirty bit cannot be
+			 * written here; record the error flag only.
+			 */
 			NVolSetErrors(vol);
 		}
 		kvfree(rl);

@@ -763,7 +763,7 @@ out:
 			ntfs_error(vol->sb,
 				"Failed to rollback (error %i). Leaving inconsistent metadata! Unmount and run chkdsk.",
 				err2);
-			NVolSetErrors(vol);
+			ntfs_mark_volume_dirty_with_error(vol);
 		}
 		/* Free the runlist. */
 		kvfree(rl);
@@ -1044,7 +1044,7 @@ err_out:
 		ntfs_error(vol->sb,
 			"Failed to rollback (error %i).  Leaving inconsistent metadata!  Unmount and run chkdsk.",
 			(int)delta);
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 	}
 	ntfs_dec_free_clusters(vol, delta);
 	up_write(&vol->lcnbmp_lock);

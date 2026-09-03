@@ -1245,7 +1245,7 @@ err_out:
 		ntfs_error(vol->sb,
 			"Failed with error code %i.  Marking corrupt inode 0x%llx as bad.  Run chkdsk.",
 			err, ni->mft_no);
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 	}
 	return err;
 }
@@ -1473,7 +1473,7 @@ err_out:
 			err, ni->mft_no, ni->type, ni->name_len,
 			base_ni->mft_no);
 	if (err != -ENOENT && err != -ENOMEM)
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 	return err;
 }
 
@@ -1725,7 +1725,7 @@ err_out:
 		"Failed with error code %i while reading index inode (mft_no 0x%llx, name_len %i.",
 		err, ni->mft_no, ni->name_len);
 	if (err != -EOPNOTSUPP && err != -ENOMEM)
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 	return err;
 }
 
@@ -2883,7 +2883,7 @@ err_out:
 		mark_inode_dirty(vi);
 	else {
 		ntfs_error(vi->i_sb, "Failed (error %i):  Run chkdsk.", -err);
-		NVolSetErrors(ni->vol);
+		ntfs_mark_volume_dirty_with_error(ni->vol);
 	}
 	if (need_iput)
 		iput(vi);
