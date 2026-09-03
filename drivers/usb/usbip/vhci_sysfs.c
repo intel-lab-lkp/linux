@@ -497,8 +497,27 @@ static void finish_status_attrs(void)
 	kfree(status_attrs);
 }
 
-struct attribute_group vhci_attr_group = {
+static umode_t vhci_attr_is_visible(struct kobject *kobj,
+				    struct attribute *attr, int n)
+{
+	struct platform_device *pdev = to_platform_device(kobj_to_dev(kobj));
+
+	/*
+	 * The attributes control every controller and have always lived on
+	 * vhci_hcd.0 only.  Keep them there now that the driver core creates
+	 * the group for each device.
+	 */
+	return pdev->id == 0 ? attr->mode : 0;
+}
+
+static struct attribute_group vhci_attr_group = {
 	.attrs = NULL,
+	.is_visible = vhci_attr_is_visible,
+};
+
+const struct attribute_group *vhci_groups[] = {
+	&vhci_attr_group,
+	NULL,
 };
 
 int vhci_init_attr_group(void)
