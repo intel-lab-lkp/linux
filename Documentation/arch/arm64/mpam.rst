@@ -87,6 +87,23 @@ The supported features are:
   MBWU monitors can be exposed to the user after support for more monitoring
   scopes is added to resctrl.
 
+arm64.nompam
+============
+Firmware must enable MPAM at the highest implemented exception level and
+leave the MPAM system registers accessible to the kernel, or trap the
+accesses and emulate MPAM as disabled. Where it does neither, the CPUs
+still advertise MPAM in the ID registers, the first kernel access to an
+MPAM register traps to EL3, and the boot fails. ``arm64.nompam`` exists
+for that firmware: it makes the kernel treat the CPUs as not implementing
+MPAM, so no MPAM system register is accessed. Set it only on a machine
+that does not boot without it.
+
+It is not a way to turn MPAM off. On a system whose firmware has enabled
+MPAM at EL3, the option leaves the trap controls in MPAM2_EL2 and
+MPAMHCR_EL2 unwritten, and their reset values are UNKNOWN. KVM still
+hides MPAM from guests but no longer enables the traps that stop a guest
+from using it, so a guest may be able to choose its own PARTID and PMG.
+
 Reporting Bugs
 ==============
 If you are not seeing the counters or controls you expect please share the
