@@ -91,6 +91,7 @@ pub use super::{
         const_assert,
         static_assert, //
     },
+    const_eval::const_call,
     current,
     dev_alert,
     dev_crit,

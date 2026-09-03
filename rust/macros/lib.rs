@@ -339,6 +339,15 @@ pub fn concat_idents(input: TokenStream) -> TokenStream {
     concat_idents::concat_idents(parse_macro_input!(input)).into()
 }
 
+/// Call a trait method in const context.
+///
+/// This is a polyfill for Rust's const trait impl feature. Only work for specific methods that have
+/// dedicated const implementation.
+#[proc_macro]
+pub fn const_call(input: TokenStream) -> TokenStream {
+    const_eval::const_call(parse_macro_input!(input)).into()
+}
+
 /// Mark a function as usable from const evaluation only.
 ///
 /// Build will fail if the function is used for runtime code.
