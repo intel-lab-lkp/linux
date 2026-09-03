@@ -391,18 +391,8 @@ int efivar_init(int (*func)(efi_char16_t *, efi_guid_t, unsigned long, void *),
 	if (err)
 		goto free;
 
-	/*
-	 * A small set of old UEFI implementations reject sizes
-	 * above a certain threshold, the lowest seen in the wild
-	 * is 512.
-	 */
-
 	do {
-		variable_name_size = 512;
-		BUILD_BUG_ON(EFI_VAR_NAME_LEN < 512);
-
-		status = efivar_get_next_variable(&variable_name_size,
-						  variable_name,
+		status = efivar_get_next_variable(&variable_name_size, variable_name,
 						  &vendor_guid);
 		switch (status) {
 		case EFI_SUCCESS:

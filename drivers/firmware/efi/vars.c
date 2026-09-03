@@ -191,11 +191,18 @@ EXPORT_SYMBOL_NS_GPL(efivar_get_variable, "EFIVAR");
 /*
  * efivar_get_next_variable() - enumerate the next name/vendor pair
  *
+ * A small set of old UEFI implementations reject sizes above a certain
+ * threshold, the lowest seen in the wild is 512. Set the name buffer size
+ * to 512 on each call.
+ *
  * Must be called with efivars_lock held.
  */
 efi_status_t efivar_get_next_variable(unsigned long *name_size,
 				      efi_char16_t *name, efi_guid_t *vendor)
 {
+	BUILD_BUG_ON(EFI_VAR_NAME_LEN < 512);
+	*name_size = 512;
+
 	return __efivars->ops->get_next_variable(name_size, name, vendor);
 }
 EXPORT_SYMBOL_NS_GPL(efivar_get_next_variable, "EFIVAR");
