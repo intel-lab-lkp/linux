@@ -59,11 +59,13 @@ typedef int (*pm_callback_t)(struct device *);
 LIST_HEAD(dpm_list);
 static LIST_HEAD(dpm_prepared_list);
 static LIST_HEAD(dpm_suspended_list);
+static LIST_HEAD(dpm_hibernation_skipped_list);
 static LIST_HEAD(dpm_late_early_list);
 static LIST_HEAD(dpm_noirq_list);
 
 static DEFINE_MUTEX(dpm_list_mtx);
 static pm_message_t pm_transition;
+static bool dpm_in_hibernation_thaw;
 
 static DEFINE_MUTEX(async_wip_mtx);
 static int async_error;
@@ -1104,6 +1106,20 @@ EXPORT_SYMBOL_GPL(dpm_resume_start);
 
 static void async_resume(void *data, async_cookie_t cookie);
 
+static bool dpm_skip_hibernation_thaw(struct device *dev, pm_message_t state)
+{
+	if (!dpm_in_hibernation_thaw || state.event != PM_EVENT_THAW ||
+	    !pm_hibernation_snapshot_done())
+		return false;
+
+	return dev_pm_test_driver_flags(dev, DPM_FLAG_SKIP_HIBERNATION_THAW);
+}
+
+static void dpm_set_hibernation_thaw(bool enable)
+{
+	dpm_in_hibernation_thaw = enable;
+}
+
 /**
  * device_resume - Execute "resume" callbacks for given device.
  * @dev: Device to handle.
@@ -1212,7 +1228,11 @@ static void async_resume(void *data, async_cookie_t cookie)
 {
 	struct device *dev = data;
 
+	if (dpm_skip_hibernation_thaw(dev, pm_transition))
+		goto out;
+
 	device_resume(dev, pm_transition, true);
+out:
 	put_device(dev);
 }
 
@@ -1241,12 +1261,22 @@ void dpm_resume(pm_message_t state)
 	 */
 	list_for_each_entry(dev, &dpm_suspended_list, power.entry) {
 		dpm_clear_async_state(dev);
+		if (dpm_skip_hibernation_thaw(dev, state))
+			continue;
+
 		if (dpm_root_device(dev))
 			dpm_async_with_cleanup(dev, async_resume);
 	}
 
 	while (!list_empty(&dpm_suspended_list)) {
 		dev = to_device(dpm_suspended_list.next);
+		if (dpm_skip_hibernation_thaw(dev, state)) {
+			list_move_tail(&dev->power.entry,
+				       &dpm_hibernation_skipped_list);
+			complete_all(&dev->power.completion);
+			continue;
+		}
+
 		list_move_tail(&dev->power.entry, &dpm_prepared_list);
 
 		if (!dpm_async_fn(dev, async_resume)) {
@@ -1270,6 +1300,41 @@ void dpm_resume(pm_message_t state)
 	cpufreq_resume();
 	devfreq_resume();
 	trace_suspend_resume(TPS("dpm_resume"), state.event, false);
+}
+
+/**
+ * dpm_resume_hibernation_thaw - Execute the post-snapshot THAW callbacks.
+ *
+ * Execute THAW callbacks for devices required during hibernation image writeout.
+ * Devices with DPM_FLAG_SKIP_HIBERNATION_THAW set are left suspended.
+ */
+void dpm_resume_hibernation_thaw(void)
+{
+	dpm_set_hibernation_thaw(true);
+	dpm_resume(PMSG_THAW);
+	dpm_set_hibernation_thaw(false);
+}
+
+/**
+ * dpm_resume_skipped_hibernation_devices - Resume devices skipped in THAW.
+ *
+ * Resume devices whose post-snapshot THAW callbacks were skipped because they
+ * are not required during hibernation image writeout.
+ */
+void dpm_resume_skipped_hibernation_devices(void)
+{
+	mutex_lock(&dpm_list_mtx);
+	if (list_empty(&dpm_hibernation_skipped_list)) {
+		mutex_unlock(&dpm_list_mtx);
+		return;
+	}
+
+	list_splice_tail_init(&dpm_hibernation_skipped_list,
+			      &dpm_suspended_list);
+	mutex_unlock(&dpm_list_mtx);
+
+	dpm_resume(PMSG_THAW);
+	dpm_complete(PMSG_THAW);
 }
 
 /**

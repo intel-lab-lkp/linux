@@ -468,7 +468,10 @@ int hibernation_snapshot(int platform_mode)
 	}
 
 	msg = snapshot_done ? (error ? PMSG_RECOVER : PMSG_THAW) : PMSG_RESTORE;
-	dpm_resume(msg);
+	if (msg.event == PM_EVENT_THAW)
+		dpm_resume_hibernation_thaw();
+	else
+		dpm_resume(msg);
 
 	if (error || !snapshot_done)
 		pm_restore_gfp_mask();
@@ -776,6 +779,7 @@ static int load_image_and_restore(void)
 int hibernate(void)
 {
 	bool snapshot_test = false;
+	bool resume_skipped = false;
 	unsigned int sleep_flags;
 	int error;
 
@@ -855,11 +859,14 @@ int hibernate(void)
 		error = swsusp_write(flags);
 		in_suspend = 0;
 		swsusp_free();
-		if (!error) {
+		if (error) {
+			resume_skipped = true;
+		} else {
 			if (hibernation_mode == HIBERNATION_TEST_RESUME)
 				snapshot_test = true;
 			else
 				power_down();
+			resume_skipped = true;
 		}
 		pm_restore_gfp_mask();
 	} else {
@@ -875,7 +882,10 @@ int hibernate(void)
 		error = swsusp_check(false);
 		if (!error)
 			error = load_image_and_restore();
+		resume_skipped = true;
 	}
+	if (resume_skipped)
+		dpm_resume_skipped_hibernation_devices();
 	thaw_processes();
 
 	/* Don't bother checking whether freezer_test_done is true */

@@ -655,6 +655,7 @@ struct pm_subsys_data {
  * SMART_PREPARE: Take the driver ->prepare callback return value into account.
  * SMART_SUSPEND: Avoid resuming the device from runtime suspend.
  * MAY_SKIP_RESUME: Allow driver "noirq" and "early" callbacks to be skipped.
+ * SKIP_HIBERNATION_THAW: Do not resume the device during post-snapshot THAW.
  *
  * See Documentation/driver-api/pm/devices.rst for details.
  */
@@ -662,6 +663,7 @@ struct pm_subsys_data {
 #define DPM_FLAG_SMART_PREPARE		BIT(1)
 #define DPM_FLAG_SMART_SUSPEND		BIT(2)
 #define DPM_FLAG_MAY_SKIP_RESUME	BIT(3)
+#define DPM_FLAG_SKIP_HIBERNATION_THAW	BIT(4)
 
 struct dev_pm_info {
 	pm_message_t		power_state;
@@ -819,6 +821,8 @@ extern void dpm_resume_end(pm_message_t state);
 extern void dpm_resume_noirq(pm_message_t state);
 extern void dpm_resume_early(pm_message_t state);
 extern void dpm_resume(pm_message_t state);
+void dpm_resume_hibernation_thaw(void);
+void dpm_resume_skipped_hibernation_devices(void);
 extern void dpm_complete(pm_message_t state);
 
 extern void device_pm_unlock(void);

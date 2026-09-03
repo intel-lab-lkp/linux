@@ -878,3 +878,20 @@ callback back-to-back with its "late" and "noirq" suspend ones.  [For instance,
 that is not a concern if the driver sets both ``DPM_FLAG_SMART_SUSPEND`` and
 ``DPM_FLAG_MAY_SKIP_RESUME`` and uses the same pair of suspend/resume callback
 functions for runtime PM and system-wide suspend/resume.]
+
+
+The ``DPM_FLAG_SKIP_HIBERNATION_THAW`` Driver Flag
+--------------------------------------------------
+
+During hibernation, the PM core resumes devices with ``PMSG_THAW`` after the
+hibernation snapshot has been created so that the image can be written out.
+Some devices do not need to be resumed during that image-write phase.
+
+Drivers for such devices can set ``DPM_FLAG_SKIP_HIBERNATION_THAW`` to allow
+the PM core to leave the device suspended during the post-snapshot ``THAW``.
+If the original kernel continues running instead of powering down, the PM core
+will resume the skipped devices before userspace is thawed.
+
+Drivers must only set this flag for devices that are not needed for writing the
+hibernation image and can remain suspended until the system either powers off or
+the original kernel continues running.
