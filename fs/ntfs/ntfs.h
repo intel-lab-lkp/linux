@@ -20,6 +20,7 @@
 #include <linux/smp.h>
 #include <linux/pagemap.h>
 #include <linux/uidgid.h>
+#include <linux/blkdev.h>      /* For SECTOR_SHIFT. */
 
 #include "volume.h"
 #include "layout.h"
@@ -71,7 +72,11 @@
 #define NTFS_CLU_TO_POFS(vol, clu) (((u64)(clu) << (vol)->cluster_size_bits) & \
 				    ~PAGE_MASK)
 
-#define NTFS_B_TO_SECTOR(vol, b) ((b) >> ((vol)->sb)->s_blocksize_bits)
+/*
+ * bio->bi_iter.bi_sector and sector_t are always in 512-byte sectors, even
+ * when the filesystem block size is larger (for example 4KiB).
+ */
+#define NTFS_B_TO_SECTOR(vol, b) ntfs_bytes_to_sector(vol, b)
 
 enum {
 	NTFS_BLOCK_SIZE		= 512,
@@ -154,11 +159,15 @@ static inline u64 ntfs_cluster_to_poff(const struct ntfs_volume *vol,
 	return (clu << vol->cluster_size_bits) & ~PAGE_MASK;
 }
 
-/* Convert byte offset to sector (block) number. */
+/* Convert byte offset to a block layer sector number.  Those are always in
+ * units of 512 bytes, never in units of sb->s_blocksize, which is raised to
+ * the device logical block size on 4Kn devices.
+ */
 static inline sector_t ntfs_bytes_to_sector(const struct ntfs_volume *vol,
 		u64 bytes)
 {
-	return bytes >> vol->sb->s_blocksize_bits;
+	(void)vol;
+	return bytes >> SECTOR_SHIFT;
 }
 
 /* Global variables. */
