@@ -532,6 +532,9 @@ static int serial_break(struct tty_struct *tty, int break_state)
 {
 	struct usb_serial_port *port = tty->driver_data;
 
+	if (port->serial->dev->state == USB_STATE_NOTATTACHED)
+		return -ENODEV;
+
 	dev_dbg(&port->dev, "%s\n", __func__);
 
 	if (port->serial->type->break_ctl)
