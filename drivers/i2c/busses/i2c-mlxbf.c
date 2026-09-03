@@ -288,7 +288,6 @@
 	(MLXBF_I2C_SLAVE_BUSY_BIT | MLXBF_I2C_SLAVE_WRITE_BIT)
 
 #define MLXBF_I2C_SLAVE_WRITE_BYTES_MASK  GENMASK(28, 22) /* Number of bytes to write. */
-#define MLXBF_I2C_SLAVE_SEND_PEC_SHIFT    21 /* Send PEC byte shift. */
 
 /* SMBus slave GW Data descriptor. */
 #define MLXBF_I2C_SLAVE_DATA_DESC_ADDR   0x80
@@ -1820,7 +1819,7 @@ static struct i2c_client *mlxbf_i2c_get_slave_from_addr(
 static int mlxbf_i2c_irq_send(struct mlxbf_i2c_priv *priv, u8 recv_bytes)
 {
 	u8 data_desc[MLXBF_I2C_SLAVE_DATA_DESC_SIZE] = { 0 };
-	u8 write_size, pec_en, addr, value, byte_cnt;
+	u8 write_size, addr, value, byte_cnt;
 	struct i2c_client *slave;
 	u32 control32, data32;
 	int ret = 0;
@@ -1886,12 +1885,9 @@ static int mlxbf_i2c_irq_send(struct mlxbf_i2c_priv *priv, u8 recv_bytes)
 	mlxbf_i2c_smbus_write_data(priv, data_desc, byte_cnt,
 				   MLXBF_I2C_SLAVE_DATA_DESC_ADDR, false);
 
-	pec_en = 0; /* Disable PEC since it is not supported. */
-
 	/* Prepare control word. */
 	control32 = MLXBF_I2C_SLAVE_ENABLE;
 	control32 |= FIELD_PREP(MLXBF_I2C_SLAVE_WRITE_BYTES_MASK, write_size);
-	control32 |= rol32(pec_en, MLXBF_I2C_SLAVE_SEND_PEC_SHIFT);
 
 	writel(control32, priv->slv->io + MLXBF_I2C_SMBUS_SLAVE_GW);
 
