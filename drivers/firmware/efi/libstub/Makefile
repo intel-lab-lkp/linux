@@ -75,6 +75,8 @@ libfdt-deps			:= fdt_rw.c fdt_ro.c fdt_wip.c fdt.c \
 lib-$(CONFIG_EFI_PARAMS_FROM_FDT) += fdt.o \
 				     $(patsubst %.c,lib-%.o,$(libfdt-deps))
 
+lib-$(CONFIG_EFI_STUB_BLI)	+= bli.o
+
 $(obj)/lib-%.o: $(srctree)/lib/%.c FORCE
 	$(call if_changed_rule,cc_o_c)
 

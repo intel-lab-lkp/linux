@@ -100,6 +100,21 @@ config EFI_ARMSTUB_DTB_LOADER
 	  functionality for bootloaders that do not have such support
 	  this option is necessary.
 
+config EFI_STUB_BLI
+	bool "EFI stub Boot Loader Interface support"
+	depends on EFI_STUB
+	default y
+	help
+	  The Boot Loader Interface defines EFI variables that expose
+	  information about the boot loader to the running OS.
+
+	  Enable this option to let the EFI stub populate the volatile
+	  LoaderDevicePartUUID EFI variable when it is missing. This allows
+	  user space services such as systemd-gpt-auto-generator to discover
+	  partitions on the disk from which the kernel was loaded.
+
+	  If unsure, say Y.
+
 config EFI_BOOTLOADER_CONTROL
 	tristate "EFI Bootloader Control"
 	select UCS2_STRING

@@ -1072,6 +1072,12 @@ efi_status_t efi_random_alloc(unsigned long size, unsigned long align,
 			      int memory_type, unsigned long alloc_min,
 			      unsigned long alloc_max);
 
+#ifdef CONFIG_EFI_STUB_BLI
+void efi_bli_set_variables(efi_loaded_image_t *image);
+#else
+static inline void efi_bli_set_variables(efi_loaded_image_t *image) { }
+#endif
+
 efi_status_t efi_random_get_seed(void);
 
 efi_status_t check_platform_features(void);
