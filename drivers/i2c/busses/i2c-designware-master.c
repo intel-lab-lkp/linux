@@ -940,6 +940,13 @@ void i2c_dw_configure_master(struct dw_i2c_dev *dev)
 	if ((dev->flags & MODEL_MASK) != MODEL_AMD_NAVI_GPU)
 		dev->functionality |= I2C_FUNC_PROTOCOL_MANGLING;
 
+	/* Controllers without EMPTYFIFO_HOLD_MASTER feature cannot issue SMBUS
+	 * block read because after reading the data length FIFO gets empty and
+	 * STOP is generated automatically
+	 */
+	if (!dev->emptyfifo_hold_master)
+		dev->functionality &= ~I2C_FUNC_SMBUS_READ_BLOCK_DATA;
+
 	dev->master_cfg = DW_IC_CON_MASTER | DW_IC_CON_SLAVE_DISABLE |
 			  DW_IC_CON_RESTART_EN;
 
