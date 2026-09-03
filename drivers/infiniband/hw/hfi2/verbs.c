@@ -1876,7 +1876,7 @@ int hfi2_register_ib_device(struct hfi2_devdata *dd)
 	/*
 	 * Fill in rvt info object.
 	 */
-	dd->verbs_dev.rdi.driver_f.get_pci_dev = hfi2_get_pci_dev;
+	dd->verbs_dev.rdi.driver_f.hfi2_get_pci_dev = hfi2_get_pci_dev;
 	dd->verbs_dev.rdi.driver_f.check_ah = hfi2_check_ah;
 	dd->verbs_dev.rdi.driver_f.notify_new_ah = hfi2_notify_new_ah;
 	dd->verbs_dev.rdi.driver_f.get_guid_be = hfi2_get_guid_be;
@@ -1912,19 +1912,19 @@ int hfi2_register_ib_device(struct hfi2_devdata *dd)
 	dd->verbs_dev.rdi.driver_f.qp_priv_alloc = qp_priv_alloc;
 	dd->verbs_dev.rdi.driver_f.qp_priv_init = hfi2_qp_priv_init;
 	dd->verbs_dev.rdi.driver_f.qp_priv_free = qp_priv_free;
-	dd->verbs_dev.rdi.driver_f.free_all_qps = hfi2_free_all_qps;
-	dd->verbs_dev.rdi.driver_f.notify_qp_reset = hfi2_notify_qp_reset;
+	dd->verbs_dev.rdi.driver_f.hfi2_free_all_qps = hfi2_free_all_qps;
+	dd->verbs_dev.rdi.driver_f.hfi2_notify_qp_reset = hfi2_notify_qp_reset;
 	dd->verbs_dev.rdi.driver_f.do_send = hfi2_do_send_from_rvt;
 	dd->verbs_dev.rdi.driver_f.schedule_send = hfi2_schedule_send;
 	dd->verbs_dev.rdi.driver_f.schedule_send_no_lock = _hfi2_schedule_send;
-	dd->verbs_dev.rdi.driver_f.get_pmtu_from_attr = hfi2_get_pmtu_from_attr;
-	dd->verbs_dev.rdi.driver_f.notify_error_qp = hfi2_notify_error_qp;
-	dd->verbs_dev.rdi.driver_f.flush_qp_waiters = hfi2_flush_qp_waiters;
-	dd->verbs_dev.rdi.driver_f.stop_send_queue = hfi2_stop_send_queue;
-	dd->verbs_dev.rdi.driver_f.quiesce_qp = hfi2_quiesce_qp;
-	dd->verbs_dev.rdi.driver_f.notify_error_qp = hfi2_notify_error_qp;
-	dd->verbs_dev.rdi.driver_f.mtu_from_qp = hfi2_mtu_from_qp;
-	dd->verbs_dev.rdi.driver_f.mtu_to_path_mtu = hfi2_mtu_to_path_mtu;
+	dd->verbs_dev.rdi.driver_f.hfi2_get_pmtu_from_attr = hfi2_get_pmtu_from_attr;
+	dd->verbs_dev.rdi.driver_f.hfi2_notify_error_qp = hfi2_notify_error_qp;
+	dd->verbs_dev.rdi.driver_f.hfi2_flush_qp_waiters = hfi2_flush_qp_waiters;
+	dd->verbs_dev.rdi.driver_f.hfi2_stop_send_queue = hfi2_stop_send_queue;
+	dd->verbs_dev.rdi.driver_f.hfi2_quiesce_qp = hfi2_quiesce_qp;
+	dd->verbs_dev.rdi.driver_f.hfi2_notify_error_qp = hfi2_notify_error_qp;
+	dd->verbs_dev.rdi.driver_f.hfi2_mtu_from_qp = hfi2_mtu_from_qp;
+	dd->verbs_dev.rdi.driver_f.hfi2_mtu_to_path_mtu = hfi2_mtu_to_path_mtu;
 	dd->verbs_dev.rdi.driver_f.check_modify_qp = hfi2_check_modify_qp;
 	dd->verbs_dev.rdi.driver_f.modify_qp = hfi2_modify_qp;
 	dd->verbs_dev.rdi.driver_f.notify_restart_rc = hfi2_restart_rc;
