@@ -847,14 +847,18 @@ void iomap_invalidate_folio(struct folio *folio, size_t offset, size_t len)
 }
 EXPORT_SYMBOL_GPL(iomap_invalidate_folio);
 
+bool iomap_dirty_folio_range(struct address_space *mapping, struct folio *folio,
+		size_t off, size_t len)
+{
+	ifs_alloc(mapping->host, folio, 0);
+	iomap_set_range_dirty(folio, off, len);
+	return filemap_dirty_folio(mapping, folio);
+}
+EXPORT_SYMBOL_GPL(iomap_dirty_folio_range);
+
 bool iomap_dirty_folio(struct address_space *mapping, struct folio *folio)
 {
-	struct inode *inode = mapping->host;
-	size_t len = folio_size(folio);
-
-	ifs_alloc(inode, folio, 0);
-	iomap_set_range_dirty(folio, 0, len);
-	return filemap_dirty_folio(mapping, folio);
+	return iomap_dirty_folio_range(mapping, folio, 0, folio_size(folio));
 }
 EXPORT_SYMBOL_GPL(iomap_dirty_folio);
 
@@ -1804,7 +1808,7 @@ iomap_truncate_page(struct inode *inode, loff_t pos, bool *did_zero,
 EXPORT_SYMBOL_GPL(iomap_truncate_page);
 
 static int iomap_folio_mkwrite_iter(struct iomap_iter *iter,
-		struct folio *folio)
+		struct folio *folio, size_t dirty_off, size_t dirty_len)
 {
 	loff_t length = iomap_length(iter);
 	int ret;
@@ -1817,7 +1821,7 @@ static int iomap_folio_mkwrite_iter(struct iomap_iter *iter,
 		block_commit_write(folio, 0, length);
 	} else {
 		WARN_ON_ONCE(!folio_test_uptodate(folio));
-		folio_mark_dirty(folio);
+		folio_mark_dirty_range(folio, dirty_off, dirty_len);
 	}
 
 	return iomap_iter_advance(iter, length);
@@ -1832,6 +1836,7 @@ vm_fault_t iomap_page_mkwrite(struct vm_fault *vmf, const struct iomap_ops *ops,
 		.private	= private,
 	};
 	struct folio *folio = page_folio(vmf->page);
+	size_t dirty_off, dirty_len;
 	ssize_t ret;
 
 	folio_lock(folio);
@@ -1840,8 +1845,22 @@ vm_fault_t iomap_page_mkwrite(struct vm_fault *vmf, const struct iomap_ops *ops,
 		goto out_unlock;
 	iter.pos = folio_pos(folio);
 	iter.len = ret;
+
+	/*
+	 * Blocks are still allocated for the whole folio, but only the page
+	 * the fault was for has been written, so that is all that has to be
+	 * written back.  A racing truncate can leave that page beyond i_size,
+	 * and then there is nothing to dirty.
+	 */
+	dirty_off = folio_page_idx(folio, vmf->page) << PAGE_SHIFT;
+	if (dirty_off < ret)
+		dirty_len = min_t(size_t, PAGE_SIZE, ret - dirty_off);
+	else
+		dirty_len = 0;
+
 	while ((ret = iomap_iter(&iter, ops)) > 0)
-		iter.status = iomap_folio_mkwrite_iter(&iter, folio);
+		iter.status = iomap_folio_mkwrite_iter(&iter, folio,
+						       dirty_off, dirty_len);
 
 	if (ret < 0)
 		goto out_unlock;
