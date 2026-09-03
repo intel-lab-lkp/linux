@@ -25,6 +25,34 @@
 
 static unsigned int page_size;
 
+static bool enough_free_huge_pages(off_t size)
+{
+	unsigned long free_pages = 0, hpage_size_kb = 0;
+	bool found_free = false, found_size = false;
+	char line[256];
+	FILE *f;
+
+	f = fopen("/proc/meminfo", "r");
+	if (!f)
+		return false;
+
+	while (fgets(line, sizeof(line), f)) {
+		if (sscanf(line, "HugePages_Free: %lu", &free_pages) == 1)
+			found_free = true;
+		if (sscanf(line, "Hugepagesize: %lu kB", &hpage_size_kb) == 1)
+			found_size = true;
+		if (found_free && found_size)
+			break;
+	}
+	fclose(f);
+
+	if (!found_free || !found_size)
+		return false;
+
+	return ((unsigned long long)free_pages * hpage_size_kb * 1024ULL) >=
+	       (unsigned long long)size;
+}
+
 static int create_memfd_with_seals(off_t size, bool hpage)
 {
 	int memfd, ret;
@@ -236,6 +264,13 @@ int main(int argc, char *argv[])
 	/* should work (migration of 2MB size huge pages)*/
 	page_size = getpagesize() * 512; /* 2 MB */
 	size = MEMFD_SIZE * page_size;
+	if (!enough_free_huge_pages(size)) {
+		ksft_test_result_skip("%s: [SKIP,test-6] not enough huge pages\n",
+				      TEST_PREFIX);
+		ksft_test_result_skip("%s: [SKIP,test-7] not enough huge pages\n",
+				      TEST_PREFIX);
+		goto out;
+	}
 	memfd = create_memfd_with_seals(size, true);
 	addr1 = mmap_fd(memfd, size);
 	write_to_memfd(addr1, size, 'a');
@@ -268,6 +303,7 @@ int main(int argc, char *argv[])
 
 	close(buf);
 	close(memfd);
+out:
 	close(devfd);
 
 	ksft_print_msg("%s: ok\n", TEST_PREFIX);
