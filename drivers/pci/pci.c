@@ -2410,6 +2410,7 @@ put_bridge:
 				pm_runtime_put(bdev);
 		} else {
 			list_del(&pme_dev->list);
+			pci_dev_put(pdev);
 			kfree(pme_dev);
 		}
 	}
@@ -2497,7 +2498,7 @@ void pci_pme_active(struct pci_dev *dev, bool enable)
 				pci_warn(dev, "can't enable PME#\n");
 				return;
 			}
-			pme_dev->dev = dev;
+			pme_dev->dev = pci_dev_get(dev);
 			mutex_lock(&pci_pme_list_mutex);
 			list_add(&pme_dev->list, &pci_pme_list);
 			if (list_is_singular(&pci_pme_list))
@@ -2510,6 +2511,7 @@ void pci_pme_active(struct pci_dev *dev, bool enable)
 			list_for_each_entry(pme_dev, &pci_pme_list, list) {
 				if (pme_dev->dev == dev) {
 					list_del(&pme_dev->list);
+					pci_dev_put(pme_dev->dev);
 					kfree(pme_dev);
 					break;
 				}
