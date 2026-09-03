@@ -227,6 +227,16 @@ struct liveupdate_flb {
 
 #ifdef CONFIG_LIVEUPDATE
 
+#define LIVEUPDATE_FEATURE_ENTRY(_id, _name, _supp, _req, _active)	\
+	static const struct liveupdate_feature_entry __lu_feat_##_id	\
+	__used __section(".liveupdate_features") __aligned(8) = {	\
+		.name       = _name,					\
+		.feat_bytes = sizeof(u64),				\
+		.supp       = (_supp),					\
+		.req        = (_req),					\
+		.active     = (_active),				\
+	}
+
 /* Return true if live update orchestrator is enabled */
 bool liveupdate_enabled(void);
 
@@ -248,6 +258,8 @@ int liveupdate_flb_get_outgoing(struct liveupdate_flb *flb, void **objp);
 void liveupdate_flb_put_outgoing(struct liveupdate_flb *flb);
 
 #else /* CONFIG_LIVEUPDATE */
+
+#define LIVEUPDATE_FEATURE_ENTRY(_id, _name, _supp, _req, _active)
 
 static inline bool liveupdate_enabled(void)
 {
