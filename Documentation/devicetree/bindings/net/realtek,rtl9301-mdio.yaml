@@ -56,6 +56,9 @@ patternProperties:
       reg:
         maxItems: 1
 
+      clock-frequency:
+        default: 2500000
+
     required:
       - reg
 
