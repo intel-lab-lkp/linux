@@ -1644,7 +1644,7 @@ struct ext4_sb_info {
 	/* Journaling */
 	struct journal_s *s_journal;
 	unsigned long s_ext4_flags;		/* Ext4 superblock flags */
-	struct mutex s_orphan_lock;	/* Protects on disk list changes */
+	struct mutex s_orphan_lock ____cacheline_aligned_in_smp;
 	struct list_head s_orphan;	/* List of orphaned inodes in on disk
 					   list */
 	struct ext4_orphan_info s_orphan_info;
