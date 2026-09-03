@@ -748,11 +748,25 @@ void ahci_start_fis_rx(struct ata_port *ap)
 	if (hpriv->cap & HOST_CAP_64)
 		writel((pp->cmd_slot_dma >> 16) >> 16,
 		       port_mmio + PORT_LST_ADDR_HI);
+	/*
+	 * On HBAs that do not support 64-bit addressing PxCLBU is read only,
+	 * however, when forcing a HBA that has CAP.S64A in 32-bit only mode,
+	 * the register is RW, and the reset value is Implementation Specific.
+	 */
+	else if (hpriv->flags & AHCI_HFLAG_32BIT_ONLY)
+		writel(0, port_mmio + PORT_LST_ADDR_HI);
 	writel(pp->cmd_slot_dma & 0xffffffff, port_mmio + PORT_LST_ADDR);
 
 	if (hpriv->cap & HOST_CAP_64)
 		writel((pp->rx_fis_dma >> 16) >> 16,
 		       port_mmio + PORT_FIS_ADDR_HI);
+	/*
+	 * On HBAs that do not support 64-bit addressing PxFBU is read only,
+	 * however, when forcing a HBA that has CAP.S64A in 32-bit only mode,
+	 * the register is RW, and the reset value is Implementation Specific.
+	 */
+	else if (hpriv->flags & AHCI_HFLAG_32BIT_ONLY)
+		writel(0, port_mmio + PORT_FIS_ADDR_HI);
 	writel(pp->rx_fis_dma & 0xffffffff, port_mmio + PORT_FIS_ADDR);
 
 	/* enable FIS reception */
