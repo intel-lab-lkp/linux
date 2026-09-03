@@ -1117,11 +1117,8 @@ static int sprd_dma_probe(struct platform_device *pdev)
 
 	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(36));
 	if (ret) {
-		ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
-		if (ret) {
-			dev_err(&pdev->dev, "unable to set coherent mask to 32\n");
-			return ret;
-		}
+		dev_err(&pdev->dev, "unable to set 36-bit DMA mask\n");
+		return ret;
 	}
 
 	/* Parse new and deprecated dma-channels properties */
