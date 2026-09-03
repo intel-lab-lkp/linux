@@ -853,9 +853,9 @@ static int cramfs_read_folio(struct file *file, struct folio *folio)
 			if (uncompressed) {
 				block_len = PAGE_SIZE;
 				/* if last block: cap to file length */
-				if (folio->index == maxblock - 1)
-					block_len =
-						offset_in_page(inode->i_size);
+				if (folio->index == maxblock - 1 &&
+				    offset_in_page(inode->i_size))
+					block_len = offset_in_page(inode->i_size);
 			} else {
 				block_len = *(u16 *)
 					cramfs_read(sb, block_start, 2);
