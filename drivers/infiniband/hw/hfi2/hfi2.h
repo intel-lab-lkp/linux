@@ -691,8 +691,6 @@ struct hfi2_msix_entry {
 	enum irq_type type;
 	int irq;
 	void *arg;
-	cpumask_t mask;
-	struct irq_affinity_notify notify;
 };
 
 struct hfi2_msix_info {
