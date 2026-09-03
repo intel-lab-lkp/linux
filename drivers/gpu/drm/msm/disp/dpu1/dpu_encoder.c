@@ -1573,6 +1573,21 @@ void dpu_encoder_frame_done_callback(
 			| DPU_ENCODER_FRAME_EVENT_PANEL_DEAD)) {
 
 		if (!dpu_enc->frame_busy_mask[0]) {
+			/*
+			 * dpu_crtc_commit_kickoff calls dpu_encoder_kickoff to
+			 * mark busy bits, starts the framedone timer next.
+			 * It is possibile that irq happens between the 2
+			 * operations. Thus timer is running with busy bits
+			 * cleared by irq handler and timer will not be deleted
+			 * anymore. Then false timeout introduces unnecessary
+			 * confusion and visual defect.
+			 * delete the timer here to fix it.
+			 */
+			if (atomic_read(&dpu_enc->frame_done_timeout_ms)) {
+				atomic_set(&dpu_enc->frame_done_timeout_ms, 0);
+				timer_delete(&dpu_enc->frame_done_timer);
+			}
+
 			/**
 			 * suppress frame_done without waiter,
 			 * likely autorefresh
