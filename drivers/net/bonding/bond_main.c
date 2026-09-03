@@ -2284,7 +2284,6 @@ skip_mac_set:
 		}
 	}
 
-	WRITE_ONCE(bond->slave_cnt, bond->slave_cnt + 1);
 	netdev_compute_master_upper_features(bond->dev, true);
 	bond_set_carrier(bond);
 
@@ -2338,6 +2337,8 @@ skip_mac_set:
 		bond_update_slave_arr(bond, NULL);
 
 	bond_xdp_set_features(bond_dev);
+
+	WRITE_ONCE(bond->slave_cnt, bond->slave_cnt + 1);
 
 	slave_info(bond_dev, slave_dev, "Enslaving as %s interface with %s link\n",
 		   bond_is_active_slave(new_slave) ? "an active" : "a backup",
