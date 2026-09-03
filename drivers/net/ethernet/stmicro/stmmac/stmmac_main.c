@@ -6132,6 +6132,7 @@ static int stmmac_change_mtu(struct net_device *dev, int new_mtu)
 		if (ret) {
 			free_dma_desc_resources(priv, dma_conf);
 			kfree(dma_conf);
+			memset(&priv->dma_conf, 0, sizeof(priv->dma_conf));
 			netdev_err(priv->dev, "failed reopening the interface after MTU change\n");
 			return ret;
 		}
