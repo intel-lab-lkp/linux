@@ -1545,8 +1545,13 @@ static irqreturn_t vcnl4010_irq_thread(int irq, void *p)
 					  isr & VCNL4010_INT_THR);
 	}
 
-	if (isr & VCNL4010_INT_DRDY && iio_buffer_enabled(indio_dev))
-		iio_trigger_poll_nested(indio_dev->trig);
+	if ((isr & VCNL4010_INT_DRDY)) {
+		if (iio_buffer_enabled(indio_dev))
+			iio_trigger_poll_nested(indio_dev->trig);
+		else
+			i2c_smbus_write_byte_data(data->client, VCNL4010_ISR,
+						  isr & VCNL4010_INT_DRDY);
+	}
 
 end:
 	return IRQ_HANDLED;
