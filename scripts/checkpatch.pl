@@ -2692,6 +2692,7 @@ sub process {
 	my $author_sob = '';
 	my $is_patch = 0;
 	my $is_binding_patch = -1;
+	my $is_symlink = 0;
 	my $in_header_lines = $file ? 0 : 1;
 	my $in_commit_log = 0;		#Scanning lines before patch
 	my $has_patch_separator = 0;	#Found a --- line
@@ -2904,6 +2905,7 @@ sub process {
 			$realfile = $1;
 			$realfile =~ s@^([^/]*)/@@ if (!$file);
 			$in_commit_log = 0;
+			$is_symlink = 0;
 			$found_file = 1;
 		} elsif ($line =~ /^\+\+\+\s+(\S+)/) {
 			$realfile = $1;
@@ -3493,6 +3495,9 @@ sub process {
 			     "added, moved or deleted file(s), does MAINTAINERS need updating?\n" . $herecurr);
 		}
 
+# Check for symbolic link
+		$is_symlink = 1 if (!$in_commit_log && ($line =~ /^new file mode\s*120000\s*$/));  # S_IFLNK
+
 # Check for adding new DT bindings not in schema format
 		if (!$in_commit_log &&
 		    ($line =~ /^new file mode\s*\d+\s*$/) &&
@@ -3646,8 +3651,8 @@ sub process {
 			}
 		}
 
-# ignore non-hunk lines and lines being removed
-		next if (!$hunk_line || $line =~ /^-/);
+# ignore non-hunk lines and lines being removed and symbolic links
+		next if (!$hunk_line || $line =~ /^-/ || $is_symlink);
 
 #trailing whitespace
 		if ($line =~ /^\+.*\015/) {
