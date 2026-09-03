@@ -2526,6 +2526,16 @@ int btrfs_validate_super(const struct btrfs_fs_info *fs_info,
 		ret = -EINVAL;
 	}
 
+	if (btrfs_fs_incompat(fs_info, RAID56_VSL)) {
+		const u32 data_size = btrfs_super_data_size(sb);
+
+		if (unlikely(!is_power_of_2(data_size) || data_size <= sectorsize)) {
+			btrfs_err(fs_info,
+		"invalid data size, has %u expect power of 2 values larger than %u",
+				  data_size, sectorsize);
+			ret = -EINVAL;
+		}
+	}
 	if (btrfs_fs_incompat(fs_info, REMAP_TREE)) {
 		/*
 		 * Reduce test matrix for remap tree by requiring block-group-tree
@@ -3369,11 +3379,11 @@ static void invalidate_and_check_btree_folios(struct btrfs_fs_info *fs_info)
 	invalidate_inode_pages2(fs_info->btree_inode->i_mapping);
 }
 
-static u32 calc_block_max_order(u32 sectorsize_bits)
+static u32 calc_block_max_order(u32 datasize_bits)
 {
 	u32 max_size;
 
-	max_size = min(BTRFS_MAX_BLOCKS_PER_FOLIO << sectorsize_bits,
+	max_size = min(BTRFS_MAX_BLOCKS_PER_FOLIO << datasize_bits,
 		       BTRFS_MAX_FOLIO_SIZE);
 	return ilog2(round_up(max_size, PAGE_SIZE) >> PAGE_SHIFT);
 }
@@ -3495,11 +3505,14 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 
 	fs_info->nodesize = nodesize;
 	fs_info->nodesize_bits = ilog2(nodesize);
-	fs_info->datasize = sectorsize;
 	fs_info->sectorsize = sectorsize;
-	fs_info->datasize_bits = ilog2(sectorsize);
 	fs_info->sectorsize_bits = ilog2(sectorsize);
-	fs_info->block_min_order = ilog2(round_up(sectorsize, PAGE_SIZE) >> PAGE_SHIFT);
+	if (btrfs_fs_incompat(fs_info, RAID56_VSL))
+		fs_info->datasize = btrfs_super_data_size(disk_super);
+	else
+		fs_info->datasize = sectorsize;
+	fs_info->datasize_bits = ilog2(fs_info->datasize);
+	fs_info->block_min_order = ilog2(round_up(fs_info->datasize, PAGE_SIZE) >> PAGE_SHIFT);
 	/*
 	 * For HIGHMEM, a large folio cannot be mapped in one go, breaking a lot
 	 * of basic assumptions for btrfs IOs.
@@ -3558,8 +3571,8 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 	sb->s_bdi->ra_pages = max(sb->s_bdi->ra_pages, SZ_4M / PAGE_SIZE);
 
 	/* Update the values for the current filesystem. */
-	sb->s_blocksize = sectorsize;
-	sb->s_blocksize_bits = blksize_bits(sectorsize);
+	sb->s_blocksize = fs_info->datasize;
+	sb->s_blocksize_bits = blksize_bits(fs_info->datasize);
 	/*
 	 * When temp_fsid is active, fs_devices->fsid is assigned a random UUID
 	 * at mount. This inconsistent UUID causes issues for layered filesystems

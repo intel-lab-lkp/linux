@@ -188,6 +188,7 @@ BTRFS_FEAT_ATTR_INCOMPAT(extent_tree_v2, EXTENT_TREE_V2);
 BTRFS_FEAT_ATTR_INCOMPAT(raid_stripe_tree, RAID_STRIPE_TREE);
 /* Remove once support for remap tree is feature complete. */
 BTRFS_FEAT_ATTR_INCOMPAT(remap_tree, REMAP_TREE);
+BTRFS_FEAT_ATTR_INCOMPAT(raid56_vsl, RAID56_VSL);
 #endif
 #ifdef CONFIG_FS_VERITY
 BTRFS_FEAT_ATTR_COMPAT_RO(verity, VERITY);
@@ -221,6 +222,7 @@ static struct attribute *btrfs_supported_feature_attrs[] = {
 	BTRFS_FEAT_ATTR_PTR(extent_tree_v2),
 	BTRFS_FEAT_ATTR_PTR(raid_stripe_tree),
 	BTRFS_FEAT_ATTR_PTR(remap_tree),
+	BTRFS_FEAT_ATTR_PTR(raid56_vsl),
 #endif
 #ifdef CONFIG_FS_VERITY
 	BTRFS_FEAT_ATTR_PTR(verity),

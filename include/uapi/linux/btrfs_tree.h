@@ -724,9 +724,10 @@ struct btrfs_super_block {
 	__le64 remap_root;
 	__le64 remap_root_generation;
 	__u8 remap_root_level;
+	__u32 data_size;
 
 	/* Future expansion */
-	__u8 reserved[199];
+	__u8 reserved[195];
 	__u8 sys_chunk_array[BTRFS_SYSTEM_CHUNK_ARRAY_SIZE];
 	struct btrfs_root_backup super_roots[BTRFS_NUM_BACKUP_ROOTS];
 

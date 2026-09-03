@@ -889,6 +889,8 @@ BTRFS_SETGET_STACK_FUNCS(super_remap_root_generation, struct btrfs_super_block,
 			 remap_root_generation, 64);
 BTRFS_SETGET_STACK_FUNCS(super_remap_root_level, struct btrfs_super_block,
 			 remap_root_level, 8);
+BTRFS_SETGET_STACK_FUNCS(super_data_size, struct btrfs_super_block,
+			 data_size, 32);
 
 /* struct btrfs_file_extent_item */
 BTRFS_SETGET_STACK_FUNCS(stack_file_extent_type, struct btrfs_file_extent_item,

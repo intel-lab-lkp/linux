@@ -338,6 +338,28 @@ struct btrfs_ioctl_fs_info_args {
 #define BTRFS_FEATURE_INCOMPAT_SIMPLE_QUOTA	(1ULL << 16)
 #define BTRFS_FEATURE_INCOMPAT_REMAP_TREE	(1ULL << 17)
 
+/*
+ * This feature includes two parts:
+ * - Force data read/writes to be aligned to data size
+ *   And the data size is power of 2 times of sectorsize.
+ *   This feature must be determined at mkfs time, and will limit the number
+ *   of data stripes for RAID56 VSL chunks.
+ *
+ *   This can be implemented as a compat RO feature, but doesn't make much
+ *   sense as an independent feature.
+ *
+ * - Variable stripe length RAID56 profiles
+ *   This forces the full stripe length to match the above data size.
+ *   This will allow all data writes to be full stripe aligned, thus
+ *   no more write holes.
+ *
+ *   The cost is that data stripes will be limited by (datasize / sectorsize),
+ *   and larger IO sizes.
+ *
+ * For now, only the data size part is implemented.
+ */
+#define BTRFS_FEATURE_INCOMPAT_RAID56_VSL	(1ULL << 18)
+
 struct btrfs_ioctl_feature_flags {
 	__u64 compat_flags;
 	__u64 compat_ro_flags;
