@@ -10572,9 +10572,6 @@ static void perf_log_itrace_start(struct perf_event *event)
 	} rec;
 	int ret;
 
-	if (event->parent)
-		event = event->parent;
-
 	if (!(event->pmu->capabilities & PERF_PMU_CAP_ITRACE) ||
 	    event->attach_state & PERF_ATTACH_ITRACE)
 		return;
