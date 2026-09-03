@@ -58,12 +58,17 @@ struct request_sock {
 	struct request_sock		*dl_next;
 	u16				mss;
 	u8				num_retrans; /* number of retransmits */
-	u8				syncookie:1; /* True if
+	union {
+		struct {
+			u8		syncookie:1; /* True if
 						      * 1) tcpopts needs to be encoded in
 						      *    TS of SYN+ACK
 						      * 2) ACK is validated by BPF kfunc.
 						      */
-	u8				num_timeout:7; /* number of timeouts */
+			u8		num_timeout:7; /* number of timeouts */
+		};
+		u8		num_timeout_syncookie;
+	};
 	u32				ts_recent;
 	struct timer_list		rsk_timer;
 	const struct request_sock_ops	*rsk_ops;
@@ -73,6 +78,17 @@ struct request_sock {
 	u32				peer_secid;
 	u32				timeout;
 };
+
+static inline u8 reqsk_num_timeout(const struct request_sock *req)
+{
+	u8 num_timeout = READ_ONCE(req->num_timeout_syncookie);
+
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+	return num_timeout >> 1;
+#else
+	return num_timeout & 0x7f;
+#endif
+}
 
 static inline struct request_sock *inet_reqsk(const struct sock *sk)
 {
