@@ -280,11 +280,12 @@ static inline bool
 dw_edma_core_ch_ignore_irq(struct dw_edma_chan *chan)
 {
 	struct dw_edma *dw = chan->dw;
+	enum dw_edma_ch_irq_mode mode = READ_ONCE(chan->irq_mode);
 
 	if (dw->chip->flags & DW_EDMA_CHIP_LOCAL)
-		return chan->irq_mode == DW_EDMA_CH_IRQ_REMOTE;
+		return mode == DW_EDMA_CH_IRQ_REMOTE;
 	else
-		return chan->irq_mode == DW_EDMA_CH_IRQ_LOCAL;
+		return mode == DW_EDMA_CH_IRQ_LOCAL;
 }
 
 #endif /* _DW_EDMA_CORE_H */
