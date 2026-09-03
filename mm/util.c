@@ -1564,7 +1564,7 @@ EXPORT_SYMBOL(mmap_action_complete);
  *
  * Return: the number of table entries in the batch.
  */
-unsigned int folio_pte_batch(struct folio *folio, pte_t *ptep, pte_t pte,
+unsigned int folio_pte_batch(struct folio *folio, hw_pte_t *ptep, pte_t pte,
 		unsigned int max_nr)
 {
 	return folio_pte_batch_flags(folio, NULL, ptep, &pte, max_nr, 0);

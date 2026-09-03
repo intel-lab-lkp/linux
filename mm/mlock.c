@@ -305,7 +305,7 @@ void munlock_folio(struct folio *folio)
 }
 
 static inline unsigned int folio_mlock_step(struct folio *folio,
-		pte_t *pte, unsigned long addr, unsigned long end)
+		hw_pte_t *pte, unsigned long addr, unsigned long end)
 {
 	unsigned int count = (end - addr) >> PAGE_SHIFT;
 	pte_t ptent = ptep_get(pte);
@@ -353,7 +353,7 @@ static int mlock_pte_range(pmd_t *pmd, unsigned long addr,
 {
 	struct vm_area_struct *vma = walk->vma;
 	spinlock_t *ptl;
-	pte_t *start_pte, *pte;
+	hw_pte_t *start_pte, *pte;
 	pte_t ptent;
 	struct folio *folio;
 	unsigned int step = 1;

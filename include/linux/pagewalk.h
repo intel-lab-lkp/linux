@@ -38,7 +38,7 @@ enum page_walk_lock {
  *			not trigger for any populated ranges.
  * @hugetlb_entry:	if set, called for each hugetlb entry. This hook
  *			function is called with the vma lock held, in order to
- *			protect against a concurrent freeing of the pte_t* or
+ *			protect against a concurrent freeing of the hw_pte_t* or
  *			the ptl. In some cases, the hook function needs to drop
  *			and retake the vma lock in order to avoid deadlocks
  *			while calling other functions. In such cases the hook
@@ -76,11 +76,11 @@ struct mm_walk_ops {
 			 unsigned long next, struct mm_walk *walk);
 	int (*pmd_entry)(pmd_t *pmd, unsigned long addr,
 			 unsigned long next, struct mm_walk *walk);
-	int (*pte_entry)(pte_t *pte, unsigned long addr,
+	int (*pte_entry)(hw_pte_t *pte, unsigned long addr,
 			 unsigned long next, struct mm_walk *walk);
 	int (*pte_hole)(unsigned long addr, unsigned long next,
 			int depth, struct mm_walk *walk);
-	int (*hugetlb_entry)(pte_t *pte, unsigned long hmask,
+	int (*hugetlb_entry)(hw_pte_t *pte, unsigned long hmask,
 			     unsigned long addr, unsigned long next,
 			     struct mm_walk *walk);
 	int (*test_walk)(unsigned long addr, unsigned long next,
@@ -173,7 +173,7 @@ struct folio_walk {
 	struct page *page;
 	enum folio_walk_level level;
 	union {
-		pte_t *ptep;
+		hw_pte_t *ptep;
 		pud_t *pudp;
 		pmd_t *pmdp;
 	};

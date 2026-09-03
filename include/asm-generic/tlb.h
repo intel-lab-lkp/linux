@@ -644,7 +644,8 @@ static inline void tlb_flush_p4d_range(struct mmu_gather *tlb,
 }
 
 #ifndef __tlb_remove_tlb_entry
-static inline void __tlb_remove_tlb_entry(struct mmu_gather *tlb, pte_t *ptep, unsigned long address)
+static inline void __tlb_remove_tlb_entry(struct mmu_gather *tlb,
+		hw_pte_t *ptep, unsigned long address)
 {
 }
 #endif
@@ -670,7 +671,7 @@ static inline void __tlb_remove_tlb_entry(struct mmu_gather *tlb, pte_t *ptep, u
  * consecutive ptes instead of only a single one.
  */
 static inline void tlb_remove_tlb_entries(struct mmu_gather *tlb,
-		pte_t *ptep, unsigned int nr, unsigned long address)
+		hw_pte_t *ptep, unsigned int nr, unsigned long address)
 {
 	tlb_flush_pte_range(tlb, address, PAGE_SIZE * nr);
 	for (;;) {

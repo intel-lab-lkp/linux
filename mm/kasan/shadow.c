@@ -189,7 +189,7 @@ static bool shadow_mapped(unsigned long addr)
 	p4d_t *p4d;
 	pud_t *pud;
 	pmd_t *pmd;
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	if (pgd_none(*pgd))
 		return false;
@@ -297,7 +297,7 @@ struct vmalloc_populate_data {
 	struct page **pages;
 };
 
-static int kasan_populate_vmalloc_pte(pte_t *ptep, unsigned long addr,
+static int kasan_populate_vmalloc_pte(hw_pte_t *ptep, unsigned long addr,
 				      void *_data)
 {
 	struct vmalloc_populate_data *data = _data;
@@ -465,7 +465,7 @@ int __kasan_populate_vmalloc(unsigned long addr, unsigned long size, gfp_t gfp_m
 	return 0;
 }
 
-static int kasan_depopulate_vmalloc_pte(pte_t *ptep, unsigned long addr,
+static int kasan_depopulate_vmalloc_pte(hw_pte_t *ptep, unsigned long addr,
 					void *unused)
 {
 	pte_t pte;

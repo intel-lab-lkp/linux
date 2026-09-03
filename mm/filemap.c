@@ -3490,7 +3490,7 @@ static vm_fault_t filemap_fault_recheck_pte_none(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	vm_fault_t ret = 0;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 
 	/*
 	 * We might have COW'ed a pagecache folio and might now have an mlocked
@@ -3796,7 +3796,7 @@ static vm_fault_t filemap_map_folio_range(struct vm_fault *vmf,
 	vm_fault_t ret = 0;
 	struct page *page = folio_page(folio, start);
 	unsigned int count = 0;
-	pte_t *old_ptep = vmf->pte;
+	hw_pte_t *old_ptep = vmf->pte;
 	unsigned long addr0;
 
 	/*

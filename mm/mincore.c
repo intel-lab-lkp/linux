@@ -24,7 +24,7 @@
 #include "swap.h"
 #include "internal.h"
 
-static int mincore_hugetlb(pte_t *pte, unsigned long hmask, unsigned long addr,
+static int mincore_hugetlb(hw_pte_t *pte, unsigned long hmask, unsigned long addr,
 			unsigned long end, struct mm_walk *walk)
 {
 #ifdef CONFIG_HUGETLB_PAGE
@@ -164,7 +164,7 @@ static int mincore_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 {
 	spinlock_t *ptl;
 	struct vm_area_struct *vma = walk->vma;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 	unsigned char *vec = walk->private;
 	int nr = (end - addr) >> PAGE_SHIFT;
 	int step, i;

@@ -141,7 +141,7 @@ EXPORT_SYMBOL(__totalhigh_pages);
 static int pkmap_count[LAST_PKMAP];
 static  __cacheline_aligned_in_smp DEFINE_SPINLOCK(kmap_lock);
 
-pte_t *pkmap_page_table;
+hw_pte_t *pkmap_page_table;
 
 /*
  * Most architectures have no use for kmap_high_get(), so let's abstract
@@ -532,9 +532,9 @@ static inline bool kmap_high_unmap_local(unsigned long vaddr)
 	return false;
 }
 
-static pte_t *__kmap_pte;
+static hw_pte_t *__kmap_pte;
 
-static pte_t *kmap_get_pte(unsigned long vaddr, int idx)
+static hw_pte_t *kmap_get_pte(unsigned long vaddr, int idx)
 {
 	if (IS_ENABLED(CONFIG_KMAP_LOCAL_NON_LINEAR_PTE_ARRAY))
 		/*
@@ -549,8 +549,9 @@ static pte_t *kmap_get_pte(unsigned long vaddr, int idx)
 
 void *__kmap_local_pfn_prot(unsigned long pfn, pgprot_t prot)
 {
-	pte_t pteval, *kmap_pte;
 	unsigned long vaddr;
+	hw_pte_t *kmap_pte;
+	pte_t pteval;
 	int idx;
 
 	/*
@@ -597,7 +598,7 @@ EXPORT_SYMBOL(__kmap_local_page_prot);
 void kunmap_local_indexed(const void *vaddr)
 {
 	unsigned long addr = (unsigned long) vaddr & PAGE_MASK;
-	pte_t *kmap_pte;
+	hw_pte_t *kmap_pte;
 	int idx;
 
 	if (addr < __fix_to_virt(FIX_KMAP_END) ||
@@ -646,7 +647,7 @@ EXPORT_SYMBOL(kunmap_local_indexed);
 void __kmap_local_sched_out(void)
 {
 	struct task_struct *tsk = current;
-	pte_t *kmap_pte;
+	hw_pte_t *kmap_pte;
 	int i;
 
 	/* Clear kmaps */
@@ -683,7 +684,7 @@ void __kmap_local_sched_out(void)
 void __kmap_local_sched_in(void)
 {
 	struct task_struct *tsk = current;
-	pte_t *kmap_pte;
+	hw_pte_t *kmap_pte;
 	int i;
 
 	/* Restore kmaps */

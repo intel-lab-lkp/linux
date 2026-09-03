@@ -31,7 +31,7 @@ struct wp_walk {
  * The function write-protects a pte and records the range in
  * virtual address space of touched ptes for efficient range TLB flushes.
  */
-static int wp_pte(pte_t *pte, unsigned long addr, unsigned long end,
+static int wp_pte(hw_pte_t *pte, unsigned long addr, unsigned long end,
 		  struct mm_walk *walk)
 {
 	struct wp_walk *wpwalk = walk->private;
@@ -86,7 +86,7 @@ struct clean_walk {
  * in the address_space, as well as the first and last of the bits
  * touched.
  */
-static int clean_record_pte(pte_t *pte, unsigned long addr,
+static int clean_record_pte(hw_pte_t *pte, unsigned long addr,
 			    unsigned long end, struct mm_walk *walk)
 {
 	struct wp_walk *wpwalk = walk->private;

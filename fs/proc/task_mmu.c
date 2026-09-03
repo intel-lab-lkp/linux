@@ -982,7 +982,7 @@ static void smaps_pte_hole_lookup(unsigned long addr, struct mm_walk *walk)
 #endif
 }
 
-static void smaps_pte_entry(pte_t *pte, unsigned long addr,
+static void smaps_pte_entry(hw_pte_t *pte, unsigned long addr,
 		struct mm_walk *walk)
 {
 	struct mem_size_stats *mss = walk->private;
@@ -1076,7 +1076,7 @@ static int smaps_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 			   struct mm_walk *walk)
 {
 	struct vm_area_struct *vma = walk->vma;
-	pte_t *pte;
+	hw_pte_t *pte;
 	spinlock_t *ptl;
 
 	ptl = pmd_trans_huge_lock(pmd, vma);
@@ -1199,7 +1199,7 @@ static void show_smap_vma_flags(struct seq_file *m, struct vm_area_struct *vma)
 }
 
 #ifdef CONFIG_HUGETLB_PAGE
-static int smaps_hugetlb_range(pte_t *pte, unsigned long hmask,
+static int smaps_hugetlb_range(hw_pte_t *pte, unsigned long hmask,
 				 unsigned long addr, unsigned long end,
 				 struct mm_walk *walk)
 {
@@ -1622,7 +1622,7 @@ static inline bool pte_is_pinned(struct vm_area_struct *vma, unsigned long addr,
 }
 
 static inline void clear_soft_dirty(struct vm_area_struct *vma,
-		unsigned long addr, pte_t *pte)
+		unsigned long addr, hw_pte_t *pte)
 {
 	if (!pgtable_supports_soft_dirty())
 		return;
@@ -1690,7 +1690,8 @@ static int clear_refs_pte_range(pmd_t *pmd, unsigned long addr,
 {
 	struct clear_refs_private *cp = walk->private;
 	struct vm_area_struct *vma = walk->vma;
-	pte_t *pte, ptent;
+	hw_pte_t *pte;
+	pte_t ptent;
 	spinlock_t *ptl;
 	struct folio *folio;
 
@@ -2090,7 +2091,7 @@ static int pagemap_pmd_range(pmd_t *pmdp, unsigned long addr, unsigned long end,
 	struct vm_area_struct *vma = walk->vma;
 	struct pagemapread *pm = walk->private;
 	spinlock_t *ptl;
-	pte_t *pte, *orig_pte;
+	hw_pte_t *pte, *orig_pte;
 	int err = 0;
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -2128,7 +2129,7 @@ static int pagemap_pmd_range(pmd_t *pmdp, unsigned long addr, unsigned long end,
 
 #ifdef CONFIG_HUGETLB_PAGE
 /* This function walks within one hugetlb entry in the single call */
-static int pagemap_hugetlb_range(pte_t *ptep, unsigned long hmask,
+static int pagemap_hugetlb_range(hw_pte_t *ptep, unsigned long hmask,
 				 unsigned long addr, unsigned long end,
 				 struct mm_walk *walk)
 {
@@ -2419,7 +2420,7 @@ static unsigned long pagemap_page_category(struct pagemap_scan_private *p,
 }
 
 static void make_uffd_wp_pte(struct vm_area_struct *vma,
-			     unsigned long addr, pte_t *pte, pte_t ptent)
+			     unsigned long addr, hw_pte_t *pte, pte_t ptent)
 {
 	if (pte_present(ptent)) {
 		pte_t old_pte;
@@ -2552,7 +2553,7 @@ static unsigned long pagemap_hugetlb_category(struct vm_area_struct *vma,
 }
 
 static void make_uffd_wp_huge_pte(struct vm_area_struct *vma,
-				  unsigned long addr, pte_t *ptep,
+				  unsigned long addr, hw_pte_t *ptep,
 				  pte_t ptent)
 {
 	const unsigned long psize = huge_page_size(hstate_vma(vma));
@@ -2786,7 +2787,7 @@ static int pagemap_scan_pmd_entry(pmd_t *pmd, unsigned long start,
 	struct pagemap_scan_private *p = walk->private;
 	struct vm_area_struct *vma = walk->vma;
 	unsigned long addr, flush_end = 0;
-	pte_t *pte, *start_pte;
+	hw_pte_t *pte, *start_pte;
 	spinlock_t *ptl;
 	int ret;
 
@@ -2880,7 +2881,7 @@ flush_and_return:
 }
 
 #ifdef CONFIG_HUGETLB_PAGE
-static int pagemap_scan_hugetlb_entry(pte_t *ptep, unsigned long hmask,
+static int pagemap_scan_hugetlb_entry(hw_pte_t *ptep, unsigned long hmask,
 				      unsigned long start, unsigned long end,
 				      struct mm_walk *walk)
 {
@@ -2961,7 +2962,7 @@ static int pagemap_scan_hugetlb_hole_wp(struct vm_area_struct *vma,
 	unsigned long psize = huge_page_size(h);
 	struct mm_struct *mm = vma->vm_mm;
 	spinlock_t *ptl;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 	pte_t pte;
 
 	for (addr = ALIGN_DOWN(addr, psize); addr < end; addr += psize) {
@@ -3345,8 +3346,8 @@ static int gather_pte_stats(pmd_t *pmd, unsigned long addr,
 	struct numa_maps *md = walk->private;
 	struct vm_area_struct *vma = walk->vma;
 	spinlock_t *ptl;
-	pte_t *orig_pte;
-	pte_t *pte;
+	hw_pte_t *orig_pte;
+	hw_pte_t *pte;
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	ptl = pmd_trans_huge_lock(pmd, vma);
@@ -3379,7 +3380,7 @@ static int gather_pte_stats(pmd_t *pmd, unsigned long addr,
 	return 0;
 }
 #ifdef CONFIG_HUGETLB_PAGE
-static int gather_hugetlb_stats(pte_t *pte, unsigned long hmask,
+static int gather_hugetlb_stats(hw_pte_t *pte, unsigned long hmask,
 		unsigned long addr, unsigned long end, struct mm_walk *walk)
 {
 	pte_t huge_pte;
@@ -3402,7 +3403,7 @@ out:
 }
 
 #else
-static int gather_hugetlb_stats(pte_t *pte, unsigned long hmask,
+static int gather_hugetlb_stats(hw_pte_t *pte, unsigned long hmask,
 		unsigned long addr, unsigned long end, struct mm_walk *walk)
 {
 	return 0;

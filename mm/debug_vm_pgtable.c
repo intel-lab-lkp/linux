@@ -50,7 +50,7 @@ struct pgtable_debug_args {
 	p4d_t			*p4dp;
 	pud_t			*pudp;
 	pmd_t			*pmdp;
-	pte_t			*ptep;
+	hw_pte_t		*ptep;
 
 	p4d_t			*start_p4dp;
 	pud_t			*start_pudp;

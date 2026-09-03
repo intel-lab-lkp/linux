@@ -97,7 +97,7 @@ static int vmap_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 			phys_addr_t phys_addr, pgprot_t prot,
 			unsigned int max_page_shift, pgtbl_mod_mask *mask)
 {
-	pte_t *pte;
+	hw_pte_t *pte;
 	u64 pfn;
 	struct page *page;
 	unsigned long size = PAGE_SIZE;
@@ -389,7 +389,7 @@ int ioremap_page_range(unsigned long addr, unsigned long end,
 static void vunmap_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 			     pgtbl_mod_mask *mask)
 {
-	pte_t *pte;
+	hw_pte_t *pte;
 	pte_t ptent;
 	unsigned long size = PAGE_SIZE;
 
@@ -550,7 +550,7 @@ static int vmap_pages_pte_range(pmd_t *pmd, unsigned long addr,
 		pgtbl_mod_mask *mask)
 {
 	int err = 0;
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	/*
 	 * nr is a running index into the array which helps higher level
@@ -827,7 +827,8 @@ struct page *vmalloc_to_page(const void *vmalloc_addr)
 	p4d_t *p4d;
 	pud_t *pud;
 	pmd_t *pmd;
-	pte_t *ptep, pte;
+	hw_pte_t *ptep;
+	pte_t pte;
 
 	/*
 	 * XXX we might need to change this if we add VIRTUAL_BUG_ON for
@@ -3615,7 +3616,7 @@ struct vmap_pfn_data {
 	unsigned int	idx;
 };
 
-static int vmap_pfn_apply(pte_t *pte, unsigned long addr, void *private)
+static int vmap_pfn_apply(hw_pte_t *pte, unsigned long addr, void *private)
 {
 	struct vmap_pfn_data *data = private;
 	unsigned long pfn = data->pfns[data->idx];
