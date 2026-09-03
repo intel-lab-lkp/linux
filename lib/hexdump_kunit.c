@@ -1,11 +1,10 @@
 /*
- * Test cases for lib/hexdump.c module.
+ * KUnit test cases for lib/hexdump.c module.
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/init.h>
+#include <kunit/test.h>
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/random.h>
 #include <linux/string.h>
 
@@ -18,55 +17,52 @@ static const unsigned char data_b[] = {
 
 static const unsigned char data_a[] = ".2.{....p..$}.4...1.....L...C...";
 
-static const char * const test_data_1[] __initconst = {
+static const char * const test_data_1[] = {
 	"be", "32", "db", "7b", "0a", "18", "93", "b2",
 	"70", "ba", "c4", "24", "7d", "83", "34", "9b",
 	"a6", "9c", "31", "ad", "9c", "0f", "ac", "e9",
 	"4c", "d1", "19", "99", "43", "b1", "af", "0c",
 };
 
-static const char * const test_data_2_le[] __initconst = {
+static const char * const test_data_2_le[] = {
 	"32be", "7bdb", "180a", "b293",
 	"ba70", "24c4", "837d", "9b34",
 	"9ca6", "ad31", "0f9c", "e9ac",
 	"d14c", "9919", "b143", "0caf",
 };
 
-static const char * const test_data_2_be[] __initconst = {
+static const char * const test_data_2_be[] = {
 	"be32", "db7b", "0a18", "93b2",
 	"70ba", "c424", "7d83", "349b",
 	"a69c", "31ad", "9c0f", "ace9",
 	"4cd1", "1999", "43b1", "af0c",
 };
 
-static const char * const test_data_4_le[] __initconst = {
+static const char * const test_data_4_le[] = {
 	"7bdb32be", "b293180a", "24c4ba70", "9b34837d",
 	"ad319ca6", "e9ac0f9c", "9919d14c", "0cafb143",
 };
 
-static const char * const test_data_4_be[] __initconst = {
+static const char * const test_data_4_be[] = {
 	"be32db7b", "0a1893b2", "70bac424", "7d83349b",
 	"a69c31ad", "9c0face9", "4cd11999", "43b1af0c",
 };
 
-static const char * const test_data_8_le[] __initconst = {
+static const char * const test_data_8_le[] = {
 	"b293180a7bdb32be", "9b34837d24c4ba70",
 	"e9ac0f9cad319ca6", "0cafb1439919d14c",
 };
 
-static const char * const test_data_8_be[] __initconst = {
+static const char * const test_data_8_be[] = {
 	"be32db7b0a1893b2", "70bac4247d83349b",
 	"a69c31ad9c0face9", "4cd1199943b1af0c",
 };
 
 #define FILL_CHAR	'#'
 
-static unsigned total_tests __initdata;
-static unsigned failed_tests __initdata;
-
-static void __init test_hexdump_prepare_test(size_t len, int rowsize,
-					     int groupsize, char *test,
-					     size_t testlen, bool ascii)
+static void test_hexdump_prepare_test(size_t len, int rowsize,
+				      int groupsize, char *test,
+				      size_t testlen, bool ascii)
 {
 	char *p;
 	const char * const *result;
@@ -122,13 +118,11 @@ static void __init test_hexdump_prepare_test(size_t len, int rowsize,
 
 #define TEST_HEXDUMP_BUF_SIZE		(32 * 3 + 2 + 32 + 1)
 
-static void __init test_hexdump(size_t len, int rowsize, int groupsize,
-				bool ascii)
+static void test_hexdump(struct kunit *test_ctx, size_t len, int rowsize,
+			 int groupsize, bool ascii)
 {
 	char test[TEST_HEXDUMP_BUF_SIZE];
 	char real[TEST_HEXDUMP_BUF_SIZE];
-
-	total_tests++;
 
 	memset(real, FILL_CHAR, sizeof(real));
 	hex_dump_to_buffer(data_b, len, rowsize, groupsize, real, sizeof(real),
@@ -139,27 +133,24 @@ static void __init test_hexdump(size_t len, int rowsize, int groupsize,
 				  ascii);
 
 	if (memcmp(test, real, TEST_HEXDUMP_BUF_SIZE)) {
-		pr_err("Len: %zu row: %d group: %d\n", len, rowsize, groupsize);
-		pr_err("Result: '%s'\n", real);
-		pr_err("Expect: '%s'\n", test);
-		failed_tests++;
+		KUNIT_FAIL(test_ctx, "Len: %zu row: %d group: %d\nResult: '%s'\nExpect: '%s'\n",
+			   len, rowsize, groupsize, real, test);
 	}
 }
 
-static void __init test_hexdump_set(int rowsize, bool ascii)
+static void test_hexdump_set(struct kunit *test_ctx, int rowsize, bool ascii)
 {
 	size_t d = min_t(size_t, sizeof(data_b), rowsize);
 	size_t len = get_random_u32_inclusive(1, d);
 
-	test_hexdump(len, rowsize, 4, ascii);
-	test_hexdump(len, rowsize, 2, ascii);
-	test_hexdump(len, rowsize, 8, ascii);
-	test_hexdump(len, rowsize, 1, ascii);
+	test_hexdump(test_ctx, len, rowsize, 4, ascii);
+	test_hexdump(test_ctx, len, rowsize, 2, ascii);
+	test_hexdump(test_ctx, len, rowsize, 8, ascii);
+	test_hexdump(test_ctx, len, rowsize, 1, ascii);
 }
 
-static void __init test_hexdump_overflow(size_t buflen, size_t len,
-					 int rowsize, int groupsize,
-					 bool ascii)
+static void test_hexdump_overflow(struct kunit *test_ctx, size_t buflen, size_t len,
+				  int rowsize, int groupsize, bool ascii)
 {
 	char test[TEST_HEXDUMP_BUF_SIZE];
 	char buf[TEST_HEXDUMP_BUF_SIZE];
@@ -167,16 +158,10 @@ static void __init test_hexdump_overflow(size_t buflen, size_t len,
 	int ae, he, e, f, r;
 	bool a;
 
-	total_tests++;
-
 	memset(buf, FILL_CHAR, sizeof(buf));
 
 	r = hex_dump_to_buffer(data_b, len, rs, gs, buf, buflen, ascii);
 
-	/*
-	 * Caller must provide the data length multiple of groupsize. The
-	 * calculations below are made with that assumption in mind.
-	 */
 	ae = rs * 2 /* hex */ + rs / gs /* spaces */ + 1 /* space */ + len /* ascii */;
 	he = (gs * 2 /* hex */ + 1 /* space */) * len / gs - 1 /* no trailing space */;
 
@@ -197,15 +182,12 @@ static void __init test_hexdump_overflow(size_t buflen, size_t len,
 	buf[sizeof(buf) - 1] = '\0';
 
 	if (!a) {
-		pr_err("Len: %zu buflen: %zu strlen: %zu\n",
-			len, buflen, strnlen(buf, sizeof(buf)));
-		pr_err("Result: %d '%s'\n", r, buf);
-		pr_err("Expect: %d '%s'\n", e, test);
-		failed_tests++;
+		KUNIT_FAIL(test_ctx, "Len: %zu buflen: %zu strlen: %zu\nResult: %d '%s'\nExpect: %d '%s'\n",
+			   len, buflen, strnlen(buf, sizeof(buf)), r, buf, e, test);
 	}
 }
 
-static void __init test_hexdump_overflow_set(size_t buflen, bool ascii)
+static void test_hexdump_overflow_set(struct kunit *test_ctx, size_t buflen, bool ascii)
 {
 	unsigned int i = 0;
 	int rs = get_random_u32_inclusive(1, 2) * 16;
@@ -214,44 +196,48 @@ static void __init test_hexdump_overflow_set(size_t buflen, bool ascii)
 		int gs = 1 << i;
 		size_t len = get_random_u32_below(rs) + gs;
 
-		test_hexdump_overflow(buflen, rounddown(len, gs), rs, gs, ascii);
+		test_hexdump_overflow(test_ctx, buflen, rounddown(len, gs), rs, gs, ascii);
 	} while (i++ < 3);
 }
 
-static int __init test_hexdump_init(void)
+static void hexdump_test_normal(struct kunit *test)
 {
 	unsigned int i;
 	int rowsize;
 
 	rowsize = get_random_u32_inclusive(1, 2) * 16;
 	for (i = 0; i < 16; i++)
-		test_hexdump_set(rowsize, false);
+		test_hexdump_set(test, rowsize, false);
 
 	rowsize = get_random_u32_inclusive(1, 2) * 16;
 	for (i = 0; i < 16; i++)
-		test_hexdump_set(rowsize, true);
-
-	for (i = 0; i <= TEST_HEXDUMP_BUF_SIZE; i++)
-		test_hexdump_overflow_set(i, false);
-
-	for (i = 0; i <= TEST_HEXDUMP_BUF_SIZE; i++)
-		test_hexdump_overflow_set(i, true);
-
-	if (failed_tests == 0)
-		pr_info("all %u tests passed\n", total_tests);
-	else
-		pr_err("failed %u out of %u tests\n", failed_tests, total_tests);
-
-	return failed_tests ? -EINVAL : 0;
+		test_hexdump_set(test, rowsize, true);
 }
-module_init(test_hexdump_init);
 
-static void __exit test_hexdump_exit(void)
+static void hexdump_test_overflow(struct kunit *test)
 {
-	/* do nothing */
+	unsigned int i;
+	
+	for (i = 0; i <= TEST_HEXDUMP_BUF_SIZE; i++)
+		test_hexdump_overflow_set(test, i, false);
+
+	for (i = 0; i <= TEST_HEXDUMP_BUF_SIZE; i++)
+		test_hexdump_overflow_set(test, i, true);
 }
-module_exit(test_hexdump_exit);
+
+static struct kunit_case hexdump_test_cases[] = {
+	KUNIT_CASE(hexdump_test_normal),
+	KUNIT_CASE(hexdump_test_overflow),
+	{}
+};
+
+static struct kunit_suite hexdump_test_suite = {
+	.name = "hexdump",
+	.test_cases = hexdump_test_cases,
+};
+
+kunit_test_suite(hexdump_test_suite);
 
 MODULE_AUTHOR("Andy Shevchenko <andriy.shevchenko@linux.intel.com>");
-MODULE_DESCRIPTION("Test cases for lib/hexdump.c module");
+MODULE_DESCRIPTION("KUnit Test cases for lib/hexdump.c module");
 MODULE_LICENSE("Dual BSD/GPL");

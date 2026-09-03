@@ -2277,6 +2277,7 @@ config CPUMASK_KUNIT_TEST
 	tristate "KUnit test for cpumask" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  Enable to turn on cpumask tests, running at boot or module load time.
 
@@ -2289,6 +2290,7 @@ config TEST_LIST_SORT
 	tristate "Linked list sorting test" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  Enable this to turn on 'list_sort()' function test. This test is
 	  executed only once during system boot (so affects only boot time),
@@ -2299,6 +2301,7 @@ config TEST_LIST_SORT
 config TEST_SORT
 	tristate "Array-based sort test" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  This option enables the self-test function of 'sort()' at boot,
@@ -2329,6 +2332,7 @@ config TEST_MULDIV64
 config TEST_IOV_ITER
 	tristate "Test iov_iter operation" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	depends on MMU
 	default KUNIT_ALL_TESTS
 	help
@@ -2343,6 +2347,7 @@ config KPROBES_SANITY_TEST
 	depends on DEBUG_KERNEL
 	depends on KPROBES
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	select STACKTRACE if ARCH_CORRECT_STACKTRACE_ON_KRETPROBE
 	default KUNIT_ALL_TESTS
 	help
@@ -2357,6 +2362,7 @@ config FPROBE_SANITY_TEST
 	depends on DEBUG_KERNEL
 	depends on FPROBE
 	depends on KUNIT=y
+	default KUNIT_ALL_TESTS
 	help
 	  This option will enable testing the fprobe when the system boot.
 	  A series of tests are made to verify that the fprobe is functioning
@@ -2444,12 +2450,15 @@ config ASYNC_RAID6_TEST
 
 	  If unsure, say N.
 
-config TEST_HEXDUMP
-	tristate "Test functions located in the hexdump module at runtime"
+config HEXDUMP_KUNIT_TEST
+	tristate "KUnit Test for the hexdump module at runtime" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
 
 config PRINTF_KUNIT_TEST
 	tristate "KUnit test printf() family of functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  Enable this option to test the printf functions at runtime.
@@ -2460,6 +2469,7 @@ config SCANF_KUNIT_TEST
 	tristate "KUnit test scanf() family of functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  Enable this option to test the scanf functions at runtime.
 
@@ -2468,6 +2478,7 @@ config SCANF_KUNIT_TEST
 config SEQ_BUF_KUNIT_TEST
 	tristate "KUnit test for seq_buf" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  This builds unit tests for the seq_buf library.
@@ -2478,10 +2489,12 @@ config STRING_KUNIT_TEST
 	tristate "KUnit test string functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 
 config STRING_HELPERS_KUNIT_TEST
 	tristate "KUnit test string helpers at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 
 config STRING_KUNIT_BENCH
@@ -2498,6 +2511,7 @@ config STRING_KUNIT_BENCH
 config FFS_KUNIT_TEST
 	tristate "KUnit test ffs-family functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  This builds KUnit tests for ffs-family bit manipulation functions
@@ -2544,6 +2558,7 @@ config TEST_IDA
 config TEST_MISC_MINOR
 	bool "miscdevice KUnit test" if !KUNIT_ALL_TESTS
 	depends on KUNIT=y
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  Kunit test for miscdevice API, specially its behavior in respect to
@@ -2693,6 +2708,7 @@ config BITOPS_KUNIT
 	tristate "KUnit test for bitops" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This option enables the KUnit test for the bitops library
 	  which provides functions for bit operations.
@@ -2705,6 +2721,7 @@ config BITOPS_KUNIT
 config BITFIELD_KUNIT
 	tristate "KUnit test bitfield functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  Enable this option to test the bitfield functions at boot.
@@ -2723,6 +2740,7 @@ config CHECKSUM_KUNIT
 	tristate "KUnit test checksum functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  Enable this option to test the checksum functions at boot.
 
@@ -2740,6 +2758,7 @@ config UTIL_MACROS_KUNIT
 	tristate "KUnit test util_macros.h functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  Enable this option to test the util_macros.h function at boot.
 
@@ -2756,6 +2775,7 @@ config UTIL_MACROS_KUNIT
 config HASH_KUNIT_TEST
 	tristate "KUnit Test for integer hash functions" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  Enable this option to test the kernel's string (<linux/stringhash.h>), and
@@ -2776,6 +2796,7 @@ config RESOURCE_KUNIT_TEST
 	tristate "KUnit test for resource API" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	select GET_FREE_REGION
 	help
 	  This builds the resource API unit test.
@@ -2788,6 +2809,7 @@ config RESOURCE_KUNIT_TEST
 config SYSCTL_KUNIT_TEST
 	tristate "KUnit test for sysctl" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  This builds the proc sysctl unit test, which runs on boot.
@@ -2816,6 +2838,7 @@ config KFIFO_KUNIT_TEST
 	tristate "KUnit Test for the generic kernel FIFO implementation" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This builds the generic FIFO implementation KUnit test suite.
 	  It tests that the API and basic functionality of the kfifo type
@@ -2829,6 +2852,7 @@ config KFIFO_KUNIT_TEST
 config LIST_KUNIT_TEST
 	tristate "KUnit Test for Kernel Linked-list structures" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  This builds the linked list KUnit test suite.
@@ -2849,6 +2873,7 @@ config LIST_PRIVATE_KUNIT_TEST
 	tristate "KUnit Test for Kernel Private Linked-list structures" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This builds the KUnit test for the private linked-list primitives
 	  defined in include/linux/list_private.h.
@@ -2863,6 +2888,7 @@ config HASHTABLE_KUNIT_TEST
 	tristate "KUnit Test for Kernel Hashtable structures" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This builds the hashtable KUnit test suite.
 	  It tests the basic functionality of the API defined in
@@ -2875,6 +2901,7 @@ config HASHTABLE_KUNIT_TEST
 config LINEAR_RANGES_TEST
 	tristate "KUnit test for linear_ranges"
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	select LINEAR_RANGES
 	help
 	  This builds the linear_ranges unit test, which runs on boot.
@@ -2925,6 +2952,7 @@ config CMDLINE_KUNIT_TEST
 	tristate "KUnit test for cmdline API" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This builds the cmdline API unit test.
 	  Tests the logic of API provided by cmdline.c.
@@ -2936,6 +2964,7 @@ config CMDLINE_KUNIT_TEST
 config BASE64_KUNIT
 	tristate "KUnit test for base64 decoding and encoding" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  This builds the base64 unit tests.
@@ -2954,6 +2983,7 @@ config BITS_TEST
 	tristate "KUnit test for bit functions and macros" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This builds the bits unit test.
 	  Tests the logic of macros defined in bits.h.
@@ -2965,6 +2995,7 @@ config BITS_TEST
 config SHDI3_KUNIT_TEST
 	tristate "KUnit test for __ashldi3(), __ashrdi3(), and __lshrdi3()"
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	depends on ARM || XTENSA || MICROBLAZE || ((RISCV || SPARC) && !64BIT)
 	help
 	  This builds the unit test for __ashldi3(), __ashrdi3(), and
@@ -2988,6 +3019,7 @@ config RATIONAL_KUNIT_TEST
 	tristate "KUnit test for rational.c" if !KUNIT_ALL_TESTS
 	depends on KUNIT && RATIONAL
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This builds the rational math unit test.
 	  For more information on KUnit and unit tests in general please refer
@@ -2998,6 +3030,7 @@ config RATIONAL_KUNIT_TEST
 config MEMCPY_KUNIT_TEST
 	tristate "Test memcpy(), memmove(), and memset() functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  Builds unit tests for memcpy(), memmove(), and memset() functions.
@@ -3010,6 +3043,7 @@ config MIN_HEAP_KUNIT_TEST
 	tristate "Min heap test" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This option enables the KUnit test suite for the min heap library
 	  which provides functions for creating and managing min heaps.
@@ -3020,6 +3054,7 @@ config MIN_HEAP_KUNIT_TEST
 config IS_SIGNED_TYPE_KUNIT_TEST
 	tristate "Test is_signed_type() macro" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  Builds unit tests for the is_signed_type() macro.
@@ -3032,6 +3067,7 @@ config IS_SIGNED_TYPE_KUNIT_TEST
 config OVERFLOW_KUNIT_TEST
 	tristate "Test check_*_overflow() functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  Builds unit tests for the check_*_overflow(), size_*(), allocation, and
@@ -3046,6 +3082,7 @@ config RANDSTRUCT_KUNIT_TEST
 	tristate "Test randstruct structure layout randomization at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  Builds unit tests for the checking CONFIG_RANDSTRUCT=y, which
 	  randomizes structure layouts.
@@ -3053,6 +3090,7 @@ config RANDSTRUCT_KUNIT_TEST
 config STACKINIT_KUNIT_TEST
 	tristate "Test level of stack variable initialization" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  Test if the kernel is zero-initializing stack variables and
@@ -3063,6 +3101,7 @@ config FORTIFY_KUNIT_TEST
 	tristate "Test fortified str*() and mem*() function internals at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  Builds unit tests for checking internals of FORTIFY_SOURCE as used
 	  by the str*() and mem*() family of functions. For testing runtime
@@ -3071,6 +3110,7 @@ config FORTIFY_KUNIT_TEST
 config LONGEST_SYM_KUNIT_TEST
 	tristate "Test the longest symbol possible" if !KUNIT_ALL_TESTS
 	depends on KUNIT && KPROBES
+	default KUNIT_ALL_TESTS
 	depends on !CALL_PADDING && !CFI && !GCOV_KERNEL
 	default KUNIT_ALL_TESTS
 	help
@@ -3083,6 +3123,7 @@ config HW_BREAKPOINT_KUNIT_TEST
 	depends on HAVE_HW_BREAKPOINT
 	depends on KUNIT=y
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  Tests for hw_breakpoint constraints accounting.
 
@@ -3093,6 +3134,7 @@ source "lib/crypto/tests/Kconfig"
 config SIPHASH_KUNIT_TEST
 	tristate "Perform selftest on siphash functions" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  Enable this option to test the kernel's siphash (<linux/siphash.h>) hash
@@ -3105,6 +3147,7 @@ config USERCOPY_KUNIT_TEST
 	tristate "KUnit Test for user/kernel boundary protections"
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This builds the "usercopy_kunit" module that runs sanity checks
 	  on the copy_to/from_user infrastructure, making sure basic
@@ -3114,6 +3157,7 @@ config BLACKHOLE_DEV_KUNIT_TEST
 	tristate "Test blackhole netdev functionality" if !KUNIT_ALL_TESTS
 	depends on NET
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  This builds the "blackhole_dev_kunit" module that validates the
@@ -3417,6 +3461,7 @@ config RATELIMIT_KUNIT_TEST
 	tristate "KUnit Test for correctness and stress of ratelimit" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This builds the "test_ratelimit" module that should be used
 	  for correctness verification and concurrent testings of rate
@@ -3428,6 +3473,7 @@ config UUID_KUNIT_TEST
 	tristate "KUnit test for UUID" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This option enables the KUnit test suite for the uuid library,
 	  which provides functions for generating and parsing UUID and GUID.
@@ -3438,6 +3484,7 @@ config UUID_KUNIT_TEST
 config INT_POW_KUNIT_TEST
 	tristate "Integer exponentiation (int_pow) test" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  This option enables the KUnit test suite for the int_pow function,
@@ -3455,6 +3502,7 @@ config INT_SQRT_KUNIT_TEST
 	tristate "Integer square root test" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  This option enables the KUnit test suite for the int_sqrt() function,
 	  which performs square root calculation. The test suite checks
@@ -3469,6 +3517,7 @@ config INT_SQRT_KUNIT_TEST
 config INT_LOG_KUNIT_TEST
         tristate "Integer log (int_log) test" if !KUNIT_ALL_TESTS
         depends on KUNIT
+	default KUNIT_ALL_TESTS
         default KUNIT_ALL_TESTS
         help
           This option enables the KUnit test suite for the int_log library, which
@@ -3480,6 +3529,7 @@ config INT_LOG_KUNIT_TEST
 config GCD_KUNIT_TEST
 	tristate "Greatest common divisor test" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  This option enables the KUnit test suite for the gcd() function,
@@ -3493,6 +3543,7 @@ config GCD_KUNIT_TEST
 config POLYNOMIAL_KUNIT_TEST
 	tristate "Polynomial calculation (polynomial_calc) test" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	select POLYNOMIAL
 	default KUNIT_ALL_TESTS
 	help
@@ -3510,6 +3561,7 @@ config POLYNOMIAL_KUNIT_TEST
 config PRIME_NUMBERS_KUNIT_TEST
 	tristate "Prime number generator test" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	depends on PRIME_NUMBERS
 	default KUNIT_ALL_TESTS
 	help
@@ -3526,6 +3578,7 @@ config GLOB_KUNIT_TEST
 	depends on GLOB
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
 	help
 	  Enable this option to test the glob functions at runtime.
 
@@ -3537,6 +3590,7 @@ config GLOB_KUNIT_TEST
 config PRANDOM_KUNIT_TEST
 	tristate "KUnit test for prandom" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	default KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
 	help
 	  Enable this option to test the prandom functions at runtime.
