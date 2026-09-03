@@ -560,6 +560,7 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 			intf->altsetting[0].desc.bInterfaceNumber);
 		return -EINVAL;
 	}
+	dev_pm_set_driver_flags(&intf->dev, DPM_FLAG_SKIP_HIBERNATION_THAW);
 
 	streaming = uvc_stream_new(dev, intf);
 	if (streaming == NULL) {
