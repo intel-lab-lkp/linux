@@ -451,7 +451,7 @@ static void vmw_mob_assign_ppn(u32 **addr, dma_addr_t val)
  * @pt_pages:       Array of page pointers to the page table pages.
  *
  * Returns the number of page table pages actually used.
- * Uses atomic kmaps of highmem pages to avoid TLB thrashing.
+ * Uses local kmaps of highmem pages to avoid TLB thrashing.
  */
 static unsigned long vmw_mob_build_pt(struct vmw_piter *data_iter,
 				      unsigned long num_data_pages,
@@ -467,7 +467,7 @@ static unsigned long vmw_mob_build_pt(struct vmw_piter *data_iter,
 	for (pt_page = 0; pt_page < num_pt_pages; ++pt_page) {
 		page = vmw_piter_page(pt_iter);
 
-		save_addr = addr = kmap_atomic(page);
+		save_addr = addr = kmap_local_page(page);
 
 		for (i = 0; i < PAGE_SIZE / VMW_PPN_SIZE; ++i) {
 			vmw_mob_assign_ppn(&addr,
@@ -476,7 +476,7 @@ static unsigned long vmw_mob_build_pt(struct vmw_piter *data_iter,
 				break;
 			WARN_ON(!vmw_piter_next(data_iter));
 		}
-		kunmap_atomic(save_addr);
+		kunmap_local(save_addr);
 		vmw_piter_next(pt_iter);
 	}
 
