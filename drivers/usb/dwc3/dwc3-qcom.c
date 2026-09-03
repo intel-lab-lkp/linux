@@ -382,7 +382,7 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 
 	ret = clk_bulk_prepare_enable(qcom->num_clocks, qcom->clks);
 	if (ret < 0)
-		return ret;
+		goto enable_irq;
 
 	ret = dwc3_qcom_interconnect_enable(qcom);
 	if (ret)
@@ -398,6 +398,16 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 	qcom->is_suspended = false;
 
 	return 0;
+
+enable_irq:
+	/*
+	 * Re-enable interrupts if they were disabled earlier, so a failed
+	 * resume doesn't leave wakeup interrupts masked.
+	 */
+	if (dwc3_qcom_is_host(qcom) && wakeup)
+		dwc3_qcom_enable_interrupts(qcom);
+
+	return ret;
 }
 
 static irqreturn_t qcom_dwc3_resume_irq(int irq, void *data)
