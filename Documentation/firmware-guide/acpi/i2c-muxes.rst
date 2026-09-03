@@ -35,7 +35,7 @@ which corresponds to the following ASL (in the scope of \_SB)::
                 Device (CLIA)
                 {
                     Name (_HID, ...)
-                    Name (_CRS, ResourceTemplate () {
+                    Name (_CRS, ResourceTemplate ()) {
                         I2cSerialBus (0x50, ControllerInitiated, I2C_SPEED,
                                     AddressingMode7Bit, "\\_SB.SMB1.MUX0.CH00",
                                     0x00, ResourceConsumer,,)

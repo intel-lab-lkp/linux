@@ -374,7 +374,7 @@ For example::
 	{
 		Method (_CRS, 0, NotSerialized)
 		{
-			Name (SBUF, ResourceTemplate()
+			Name (SBUF, ResourceTemplate())
 			{
 				// Used to power on/off the device
 				GpioIo (Exclusive, PullNone, 0, 0, IoRestrictionOutputOnly,
