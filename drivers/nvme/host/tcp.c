@@ -684,6 +684,13 @@ static int nvme_tcp_handle_c2h_data(struct nvme_tcp_queue *queue,
 		return -ENOENT;
 	}
 
+	if (unlikely(rq_data_dir(rq) != READ)) {
+		dev_err(queue->ctrl->ctrl.device,
+			"req %d unexpected c2hdata for a non-read command\n",
+			rq->tag);
+		return -EPROTO;
+	}
+
 	req = blk_mq_rq_to_pdu(rq);
 	if (!blk_rq_payload_bytes(rq) || !req->curr_bio || !req->data_len) {
 		dev_err(queue->ctrl->ctrl.device,
