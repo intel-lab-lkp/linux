@@ -2343,6 +2343,7 @@ retry:
 	 */
 	WARN_ON_ONCE(freeze_inc(sb, who) > 1);
 	sb->s_writers.freeze_owner = freeze_owner;
+	sb->s_writers.freeze_rwsems_locked = true;
 	sb->s_writers.frozen = SB_FREEZE_COMPLETE;
 	wake_up_var(&sb->s_writers.frozen);
 	lockdep_sb_freeze_release(sb);
@@ -2378,7 +2379,7 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who,
 		goto out_unlock;
 	}
 
-	if (sb_rdonly(sb)) {
+	if (!sb->s_writers.freeze_rwsems_locked) {
 		sb->s_writers.frozen = SB_UNFROZEN;
 		sb->s_writers.freeze_owner = NULL;
 		wake_up_var(&sb->s_writers.frozen);
@@ -2401,6 +2402,7 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who,
 	sb->s_writers.freeze_owner = NULL;
 	wake_up_var(&sb->s_writers.frozen);
 	sb_freeze_unlock(sb, SB_FREEZE_FS);
+	sb->s_writers.freeze_rwsems_locked = false;
 out_deactivate:
 	deactivate_locked_super(sb);
 	return 0;

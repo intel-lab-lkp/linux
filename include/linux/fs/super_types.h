@@ -53,6 +53,7 @@ enum {
 
 struct sb_writers {
 	unsigned short			frozen;		/* Is sb frozen? */
+	bool				freeze_rwsems_locked; /* Freeze holds writer rwsems */
 	int				freeze_kcount;	/* How many kernel freeze requests? */
 	int				freeze_ucount;	/* How many userspace freeze requests? */
 	const void			*freeze_owner;	/* Owner of the freeze */
