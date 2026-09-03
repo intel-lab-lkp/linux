@@ -861,6 +861,8 @@ static void mali_c55_remove(struct platform_device *pdev)
 
 	mali_c55_media_frameworks_deinit(mali_c55);
 	if (!pm_runtime_suspended(&pdev->dev)) {
+		if (irq_has_action(mali_c55->irqnum))
+			free_irq(mali_c55->irqnum, &pdev->dev);
 		__mali_c55_power_off(mali_c55);
 		pm_runtime_set_suspended(&pdev->dev);
 	}
