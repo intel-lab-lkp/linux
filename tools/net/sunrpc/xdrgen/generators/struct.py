@@ -13,6 +13,7 @@ from xdr_ast import _XdrFixedLengthOpaque, _XdrVariableLengthOpaque
 from xdr_ast import _XdrFixedLengthArray, _XdrVariableLengthArray
 from xdr_ast import _XdrOptionalData, _XdrStruct, _XdrDeclaration
 from xdr_ast import public_apis, get_header_name
+from xdr_ast import pages_members, pages_member_maxsize
 
 
 def emit_struct_declaration(environment: Environment, node: _XdrStruct) -> None:
@@ -176,8 +177,24 @@ def emit_struct_member_encoder(
     environment: Environment,
     field: _XdrDeclaration,
     struct_name: str,
+    peer: str,
 ) -> None:
     """Emit an encoder for one field in an XDR struct"""
+    if (struct_name, field.name) in pages_members:
+        if peer != "server":
+            raise NotImplementedError(
+                "pragma pages is server-side encode-only; "
+                + peer
+                + " generation is not yet supported"
+            )
+        template = get_jinja2_template(environment, "encoder", "pages_opaque")
+        print(
+            template.render(
+                name=field.name,
+                maxsize=pages_member_maxsize(field),
+            )
+        )
+        return
     if isinstance(field, _XdrBasic):
         template = get_jinja2_template(environment, "encoder", field.template)
         print(
@@ -239,13 +256,13 @@ def emit_struct_member_encoder(
         )
 
 
-def emit_struct_encoder(environment: Environment, node: _XdrStruct) -> None:
+def emit_struct_encoder(environment: Environment, node: _XdrStruct, peer: str) -> None:
     """Emit one encoder function for an XDR struct type"""
     template = get_jinja2_template(environment, "encoder", "open")
     print(template.render(name=node.name))
 
     for field in node.fields:
-        emit_struct_member_encoder(environment, field, node.name)
+        emit_struct_member_encoder(environment, field, node.name, peer)
 
     template = get_jinja2_template(environment, "encoder", "close")
     print(template.render())
@@ -285,7 +302,7 @@ class XdrStructGenerator(SourceGenerator):
 
     def emit_encoder(self, node: _XdrStruct) -> None:
         """Emit one encoder function for an XDR struct type"""
-        emit_struct_encoder(self.environment, node)
+        emit_struct_encoder(self.environment, node, self.peer)
 
     def emit_maxsize(self, node: _XdrStruct) -> None:
         """Emit one maxsize macro for an XDR struct type"""

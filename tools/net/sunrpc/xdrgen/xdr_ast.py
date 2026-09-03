@@ -19,6 +19,21 @@ public_apis = []
 structs = set()
 pass_by_reference = set()
 
+# (type_name, member_name) pairs marked "pragma pages": the member's
+# content resides in the pages of the Reply buffer, so the emitted
+# encoder inserts those pages by reference instead of copying.
+pages_members = set()
+
+# The same pairs, keyed to the directive's identifier node so a
+# diagnostic can point at the directive rather than at the type.
+pages_member_meta = {}
+
+# Typedefs of a variable-length opaque or string, mapped to the length
+# bound. A "pragma pages" member declared through one ("path data;"
+# with "typedef string path<NFS_MAXPATHLEN>") reaches the AST as a
+# basic type reference, so the bound must be recovered from here.
+varlen_object_typedefs = {}
+
 constants = {}
 
 
@@ -427,13 +442,32 @@ class _XdrTypedef(_XdrAst):
         return self.declaration.symbolic_width()
 
     def __post_init__(self):
+        if isinstance(self.declaration, (_XdrVariableLengthOpaque, _XdrString)):
+            varlen_object_typedefs[self.declaration.name] = self.declaration.maxsize
         if isinstance(self.declaration, _XdrBasic):
             new_type = self.declaration
             if isinstance(new_type.spec, _XdrDefinedType):
                 if new_type.spec.type_name in pass_by_reference:
                     pass_by_reference.add(new_type.name)
+                if new_type.spec.type_name in varlen_object_typedefs:
+                    varlen_object_typedefs[new_type.name] = varlen_object_typedefs[
+                        new_type.spec.type_name
+                    ]
                 max_widths[new_type.name] = self.max_width()
                 symbolic_widths[new_type.name] = self.symbolic_width()
+
+
+def pages_member_maxsize(field: _XdrDeclaration):
+    """Return the length bound of a "pragma pages" member.
+
+    Return None when FIELD is neither a variable-length opaque nor a
+    string, whether declared inline or through a typedef.
+    """
+    if isinstance(field, (_XdrVariableLengthOpaque, _XdrString)):
+        return field.maxsize
+    if isinstance(field, _XdrBasic) and field.spec.type_name in varlen_object_typedefs:
+        return varlen_object_typedefs[field.spec.type_name]
+    return None
 
 
 @dataclass
@@ -791,6 +825,15 @@ class ParseToAst(Transformer):
                 header_name = children[1].symbol
             case "public_directive":
                 public_apis.append(children[1].symbol)
+            case "pages_directive":
+                if children[2] is None:
+                    raise XdrSemanticError(
+                        "pragma pages requires a type name and a member name",
+                        children[1],
+                    )
+                marked = (children[1].symbol, children[2].symbol)
+                pages_members.add(marked)
+                pages_member_meta[marked] = children[2]
             case _:
                 raise NotImplementedError("Directive not supported")
         return _Pragma()
@@ -990,12 +1033,100 @@ def check_rpc_number_range(root: "Specification") -> None:
                 )
 
 
+def _pages_candidate_members(value):
+    """Yield (member_name, declaration, container) for a type's members.
+
+    CONTAINER is the AST node holding the declaration; it decides how
+    the member is rendered in the target language.
+    """
+    if isinstance(value, _XdrStruct):
+        for field in value.fields:
+            yield field.name, field, value
+    elif isinstance(value, _XdrPointer):
+        # The trailing field is the self-reference that makes this an
+        # XDR pointer type; the emitter does not encode it.
+        for field in value.fields[0:-1]:
+            yield field.name, field, value
+    elif isinstance(value, _XdrUnion):
+        cases = list(value.cases)
+        if value.default is not None:
+            cases.append(value.default)
+        for case in cases:
+            if not isinstance(case.arm, _XdrVoid):
+                yield case.arm.name, case.arm, value
+
+
+def check_pages_directives(root: "Specification") -> None:
+    """Reject a "pragma pages" directive that cannot be honored.
+
+    Run in the front end so the diagnostic carries the directive's own
+    source position rather than surfacing as a traceback from whichever
+    emitter reaches the member. A directive that binds to nothing would
+    otherwise degrade silently to the copying encoder.
+    """
+    payloads = {}
+    resolved = set()
+    for definition in root.definitions:
+        value = definition.value
+        type_name = getattr(value, "name", None)
+        members = dict(
+            (name, (field, container))
+            for name, field, container in _pages_candidate_members(value)
+        )
+        for marked in sorted(pages_members):
+            if marked[0] != type_name:
+                continue
+            meta = pages_member_meta.get(marked)
+            if marked[1] not in members:
+                raise XdrSemanticError(
+                    f"type '{type_name}' has no member '{marked[1]}'",
+                    meta,
+                )
+            field, container = members[marked[1]]
+            # A union arm declared directly as a string is generated as
+            # a char *, with no length field for the page encoder to
+            # read; inside a struct it becomes a { len, data } object.
+            if isinstance(container, _XdrUnion) and isinstance(field, _XdrString):
+                raise XdrSemanticError(
+                    f"union arm '{type_name}.{marked[1]}' is declared"
+                    " directly as a string and carries no length field;"
+                    " declare it through a typedef instead",
+                    meta,
+                )
+            if pages_member_maxsize(field) is None:
+                raise XdrSemanticError(
+                    f"'{type_name}.{marked[1]}' is neither a"
+                    " variable-length opaque nor a string",
+                    meta,
+                )
+            # svcxdr_encode_opaque_payload() consumes the whole page
+            # vector and moves the stream into the tail; a second
+            # payload would overwrite the first one's framing.
+            first = payloads.get(type_name)
+            if first is not None:
+                raise XdrSemanticError(
+                    f"'{type_name}' already marks member '{first}' as"
+                    " page-resident; an encoder emits at most one"
+                    " page-resident payload",
+                    meta,
+                )
+            payloads[type_name] = marked[1]
+            resolved.add(marked)
+
+    for marked in sorted(pages_members - resolved):
+        raise XdrSemanticError(
+            f"pragma pages names unknown type '{marked[0]}'",
+            pages_member_meta.get(marked),
+        )
+
+
 def transform_parse_tree(parse_tree):
     """Transform productions into an abstract syntax tree"""
     ast = transformer.transform(parse_tree)
     ast.definitions = _merge_consecutive_passthru(ast.definitions)
     check_duplicate_definitions(ast)
     check_rpc_number_range(ast)
+    check_pages_directives(ast)
     return ast
 
 

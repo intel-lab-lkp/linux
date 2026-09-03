@@ -230,6 +230,43 @@ Adds these prototypes in the generated header:
 And, in the generated source code, both of these functions appear
 without the "static __maybe_unused" modifiers.
 
+Pragma pages
+------ -----
+
+  pragma pages <type> <member> ;
+
+A variable-length opaque or string member is normally encoded by
+copying its content into the Reply buffer. When the member carries
+a bulk payload that a server-side read operation has already
+deposited in the pages of the Reply buffer, that copy is wasted
+work, and it prevents a transport capable of direct data placement
+from conveying the payload separately from the rest of the Reply.
+This directive marks such a member so that the emitted encoder
+inserts the payload pages into the encoding stream by reference and
+marks the byte range as a result payload.
+
+The marked member may be a member of a struct or an arm of a union,
+and its type may be named directly or reached through a typedef. A
+union arm declared directly as a string is the one exception: xdrgen
+generates such an arm as a char *, which carries no length field, so
+the directive is rejected there and the arm has to be declared
+through a typedef. For example:
+
+  pragma pages READ3resok data;
+  pragma pages readlinkres data;
+
+The first marks the opaque data member of struct READ3resok; the
+second marks the path arm of union readlinkres, where path is
+"typedef string path<NFS_MAXPATHLEN>".
+
+The emitted encoder reads only the marked member's length field to
+determine how many octets of page content to insert; the member's
+data pointer is not read. The server and client manage payload
+pages differently, so this directive applies only to server-side
+code generation, and so far only to the encoding direction.
+Decode-side handling of a page-resident argument (for example, the
+payload of an NFS WRITE) remains hand-coded.
+
 
 Future Work
 -----------
@@ -242,10 +279,11 @@ Expand the README into a user guide similar to rpcgen(1)
 
 Add more pragma directives:
 
-  * @pages -- use xdr_read/write_pages() for the specified opaque
-    field
   * @skip -- do not decode, but rather skip, the specified argument
     field
+
+Extend pragma pages to the decoding direction and to
+client-side code generation
 
 Enable something like a #include to dynamically insert the content
 of other specification files
