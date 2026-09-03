@@ -885,6 +885,16 @@ int avic_init_vcpu(struct vcpu_svm *svm)
 	return ret;
 }
 
+void avic_vcpu_free(struct kvm_vcpu *vcpu)
+{
+	u32 max_id = x2avic_enabled ? x2avic_max_physical_id : AVIC_MAX_PHYSICAL_ID;
+	struct kvm_svm *kvm_svm = to_kvm_svm(vcpu->kvm);
+	u32 id = vcpu->vcpu_id;
+
+	if (kvm_svm->avic_physical_id_table && id <= max_id)
+		WRITE_ONCE(kvm_svm->avic_physical_id_table[id], 0);
+}
+
 void avic_apicv_post_state_restore(struct kvm_vcpu *vcpu)
 {
 	avic_handle_dfr_update(vcpu);
