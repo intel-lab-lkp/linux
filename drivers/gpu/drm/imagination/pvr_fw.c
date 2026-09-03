@@ -1425,22 +1425,26 @@ pvr_fw_object_create_and_map_offset(struct pvr_device *pvr_dev,
  */
 void pvr_fw_object_destroy(struct pvr_fw_object *fw_obj)
 {
-	struct pvr_gem_object *pvr_obj = fw_obj->gem;
-	struct drm_gem_object *gem_obj = gem_from_pvr_gem(pvr_obj);
-	struct pvr_device *pvr_dev = to_pvr_device(gem_obj->dev);
+	if (!fw_obj)
+		return;
 
-	mutex_lock(&pvr_dev->fw_dev.fw_objs.lock);
-	list_del(&fw_obj->node);
-	mutex_unlock(&pvr_dev->fw_dev.fw_objs.lock);
+	if (fw_obj->gem) {
+		struct pvr_gem_object *pvr_obj = fw_obj->gem;
+		struct drm_gem_object *gem_obj = gem_from_pvr_gem(pvr_obj);
+		struct pvr_device *pvr_dev = to_pvr_device(gem_obj->dev);
 
-	if (drm_mm_node_allocated(&fw_obj->fw_mm_node)) {
-		/* If we can't unmap, leak the memory. */
-		if (WARN_ON(pvr_fw_object_fw_unmap(fw_obj)))
-			return;
-	}
+		mutex_lock(&pvr_dev->fw_dev.fw_objs.lock);
+		list_del(&fw_obj->node);
+		mutex_unlock(&pvr_dev->fw_dev.fw_objs.lock);
 
-	if (fw_obj->gem)
+		if (drm_mm_node_allocated(&fw_obj->fw_mm_node)) {
+			/* If we can't unmap, leak the memory. */
+			if (WARN_ON(pvr_fw_object_fw_unmap(fw_obj)))
+				return;
+		}
+
 		pvr_gem_object_put(fw_obj->gem);
+	}
 
 	kfree(fw_obj);
 }
