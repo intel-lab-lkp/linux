@@ -396,7 +396,7 @@ void drm_sysfb_plane_helper_atomic_disable(struct drm_plane *plane,
 	offset = drm_fb_clip_offset(dst_pitch, dst_format, &dst_clip);
 	for (i = 0; i < lines; ++i)
 		iosys_map_memset(&sysfb->fb_addr, offset + dst_pitch * i, 0,
-				 linepixels * dst_format->cpp[0]);
+				 drm_format_info_min_pitch(dst_format, 0, linepixels));
 
 	drm_dev_exit(idx);
 }
