@@ -12,6 +12,7 @@
 #include <linux/bitmap.h>
 
 #include <rdma/ib.h>
+#include <rdma/ib_verbs.h>
 
 #include "hfi2.h"
 #include "affinity.h"
@@ -23,6 +24,7 @@
 #include "user_exp_rcv.h"
 #include "pinning.h"
 #include "file_ops.h"
+#include "uverbs.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
@@ -93,7 +95,7 @@ struct hfi2_filedata *hfi2_alloc_filedata(struct hfi2_devdata *dd)
 
 	/* The real work is performed later in assign_ctxt() */
 
-	fd = kzalloc_obj(fd, GFP_KERNEL);
+	fd = kzalloc_obj(*fd, GFP_KERNEL);
 
 	if (!fd || init_srcu_struct(&fd->pq_srcu))
 		goto nomem;
@@ -167,19 +169,20 @@ static inline void mmap_cdbg(u16 ctxt, u16 subctxt, u8 type, u8 mapio, u8 vmf,
 		vma->vm_flags);
 }
 
-int hfi2_do_mmap(struct hfi2_filedata *fd, u8 type, struct vm_area_struct *vma)
+int hfi2_do_mmap(struct hfi2_filedata *fd, u8 type, struct vm_area_struct *vma,
+		 struct rdma_user_mmap_entry *rdma_entry,
+		 struct ib_ucontext *ucontext)
 {
+	struct hfi2_user_mmap_entry *entry = to_hfi2_mmap(rdma_entry);
 	struct hfi2_ctxtdata *uctxt = fd->uctxt;
 	struct hfi2_devdata *dd;
 	unsigned long flags;
-	u64 memaddr = 0;
-	void *memvirt = NULL;
-	dma_addr_t memdma = 0;
+	u64 memaddr = entry->address;
+	void *memvirt = entry->memvirt;
+	dma_addr_t memdma = entry->memdma;
 	u8 mapio = 0, vmf = 0;
-	ssize_t memlen = 0;
+	ssize_t memlen = rdma_entry->npages * PAGE_SIZE;
 	int ret = 0;
-	u32 cbi;
-	u32 cbc;
 	u16 ctxt;
 	u16 subctxt;
 
@@ -201,56 +204,20 @@ int hfi2_do_mmap(struct hfi2_filedata *fd, u8 type, struct vm_area_struct *vma)
 	switch (type) {
 	case PIO_BUFS:
 	case PIO_BUFS_SOP:
-		cbi = ctxt_bar_idx(uctxt->sc->hw_context);
-		cbc = ctxt_bar_ctxt(uctxt->sc->hw_context);
-		memaddr = ((dd->bar_maps[cbi].physaddr + TXE_PIO_SEND) +
-			   /* chip pio base */
-			   (cbc * BIT(16))) +
-			  /* 64K PIO space / ctxt */
-			  (type == PIO_BUFS_SOP ? (TXE_PIO_SIZE / 2) :
-						  0); /* sop? */
-		/*
-		 * Map only the amount allocated to the context, not the
-		 * entire available context's PIO space.
-		 */
-		memlen = PAGE_ALIGN(uctxt->sc->credits * PIO_BLOCK_SIZE);
 		flags &= ~VM_MAYREAD;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 		mapio = 1;
 		break;
-	case PIO_CRED: {
-		u64 cr_page_offset;
+	case PIO_CRED:
 		if (flags & VM_WRITE) {
 			ret = -EPERM;
 			goto done;
 		}
-		/*
-		 * The credit return location for this context could be on the
-		 * second or third page allocated for credit returns (if number
-		 * of enabled contexts > 64 and 128 respectively).
-		 */
-		cr_page_offset = ((u64)uctxt->sc->hw_free -
-				  (u64)dd->cr_base[uctxt->numa_id].va) &
-				 PAGE_MASK;
-		memvirt =
-			(void *)dd->cr_base[uctxt->numa_id].va + cr_page_offset;
-		memdma = dd->cr_base[uctxt->numa_id].dma + cr_page_offset;
-		memlen = PAGE_SIZE;
 		flags &= ~VM_MAYWRITE;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
-		/*
-		 * The driver has already allocated memory for credit
-		 * returns and programmed it into the chip. Has that
-		 * memory been flagged as non-cached?
-		 */
-		/* vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot); */
 		break;
-	}
 	case RCV_RHEQ:
-		memlen = rheq_size(uctxt);
-		memvirt = uctxt->rheq;
-		memdma = uctxt->rheq_dma;
 		if (!memvirt) {
 			ret = -EINVAL;
 			goto done;
@@ -261,20 +228,16 @@ int hfi2_do_mmap(struct hfi2_filedata *fd, u8 type, struct vm_area_struct *vma)
 		}
 		break;
 	case RCV_HDRQ:
-		memlen = rcvhdrq_size(uctxt);
-		memvirt = uctxt->rcvhdrq;
-		memdma = uctxt->rcvhdrq_dma;
 		break;
 	case RCV_EGRBUF: {
-		unsigned long vm_start_save;
-		unsigned long vm_end_save;
+		unsigned long addr;
+		struct page *page;
 		int i;
 		/*
 		 * The RcvEgr buffer need to be handled differently
 		 * as multiple non-contiguous pages need to be mapped
 		 * into the user process.
 		 */
-		memlen = uctxt->egrbufs.size;
 		if ((vma->vm_end - vma->vm_start) != memlen) {
 			dd_dev_err(
 				dd,
@@ -289,74 +252,43 @@ int hfi2_do_mmap(struct hfi2_filedata *fd, u8 type, struct vm_area_struct *vma)
 		}
 		vm_flags_clear(vma, VM_MAYWRITE);
 		/*
-		 * Mmap multiple separate allocations into a single vma.  From
-		 * here, dma_mmap_coherent() calls dma_direct_mmap(), which
-		 * requires the mmap to exactly fill the vma starting at
-		 * vma_start.  Adjust the vma start and end for each eager
-		 * buffer segment mapped.  Restore the originals when done.
+		 * The RcvEgr buffer is made up of multiple, independently
+		 * allocated DMA-coherent segments that all need to be
+		 * mapped into a single vma.  This used to be done with
+		 * repeated dma_mmap_coherent() calls that temporarily
+		 * shrank/grew the vma to exactly cover each segment in
+		 * turn, but current kernels track pfn remaps per-vma and
+		 * reject a second remap_pfn_range() call that (as each of
+		 * those calls did) covers the full vma.  Avoid that by
+		 * inserting each segment's pages individually with
+		 * vm_insert_page(), which has no such per-vma restriction.
 		 */
-		vm_start_save = vma->vm_start;
-		vm_end_save = vma->vm_end;
-		vma->vm_end = vma->vm_start;
+		addr = vma->vm_start;
 		for (i = 0; i < uctxt->egrbufs.numbufs; i++) {
+			unsigned long off;
+
 			memlen = uctxt->egrbufs.buffers[i].len;
 			memvirt = uctxt->egrbufs.buffers[i].addr;
 			memdma = uctxt->egrbufs.buffers[i].dma;
-			vma->vm_end += memlen;
 			mmap_cdbg(ctxt, subctxt, type, mapio, vmf, memaddr,
 				  memvirt, memdma, memlen, vma);
-			ret = dma_mmap_coherent(&dd->pcidev->dev, vma, memvirt,
-						memdma, memlen);
-			if (ret < 0) {
-				vma->vm_start = vm_start_save;
-				vma->vm_end = vm_end_save;
-				goto done;
+			for (off = 0; off < memlen; off += PAGE_SIZE) {
+				page = virt_to_page(memvirt + off);
+				ret = vm_insert_page(vma, addr, page);
+				if (ret)
+					goto done;
+				addr += PAGE_SIZE;
 			}
-			vma->vm_start += memlen;
 		}
-		vma->vm_start = vm_start_save;
-		vma->vm_end = vm_end_save;
 		ret = 0;
 		goto done;
 	}
 	case UREGS:
-		/*
-		 * Map the part of BAR0 that contains this context's user
-		 * registers.  RcvHdrTail is the first register in the hardware
-		 * UCTXT block.  The TidFlow table is contained within this
-		 * memory range.
-		 */
-		cbi = ctxt_bar_idx(uctxt->ctxt);
-		cbc = ctxt_bar_ctxt(uctxt->ctxt);
-		memaddr = (unsigned long)dd->bar_maps[cbi].physaddr +
-			  dd->params->rcv_hdr_tail_reg +
-			  (cbc * dd->params->rxe_uctxt_stride);
-		memlen = dd->params->rxe_uctxt_stride;
-		// hack: accept a 4K mmap for uregs
-		{
-			ssize_t sz = vma->vm_end - vma->vm_start;
-			if (sz != memlen && sz == PAGE_SIZE) {
-				printk("%s: UREGS override memlen to 4K\n",
-				       __func__);
-				memlen = PAGE_SIZE;
-			}
-		}
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 		mapio = 1;
 		break;
 	case EVENTS:
-		/*
-		 * Use the page where this context's flags are. User level
-		 * knows where it's own bitmap is within the page.
-		 */
-		memaddr = (unsigned long)(dd->events + uctxt_offset(uctxt)) &
-			  PAGE_MASK;
-		memlen = PAGE_SIZE;
-		/*
-		 * v3.7 removes VM_RESERVED but the effect is kept by
-		 * using VM_IO.
-		 */
 		flags |= VM_IO | VM_DONTEXPAND;
 		vmf = 1;
 		break;
@@ -365,16 +297,12 @@ int hfi2_do_mmap(struct hfi2_filedata *fd, u8 type, struct vm_area_struct *vma)
 			ret = -EPERM;
 			goto done;
 		}
-		memaddr = kvirt_to_phys((void *)dd->status);
-		memlen = PAGE_SIZE;
+		memaddr = kvirt_to_phys(memvirt);
+		memvirt = NULL;
 		flags |= VM_IO | VM_DONTEXPAND;
 		break;
 	case RTAIL:
 		if (!HFI2_CAP_IS_USET(DMA_RTAIL)) {
-			/*
-			 * If the memory allocation failed, the context alloc
-			 * also would have failed, so we would never get here
-			 */
 			ret = -EINVAL;
 			goto done;
 		}
@@ -382,43 +310,29 @@ int hfi2_do_mmap(struct hfi2_filedata *fd, u8 type, struct vm_area_struct *vma)
 			ret = -EPERM;
 			goto done;
 		}
-		memlen = PAGE_SIZE;
-		memvirt = (void *)hfi2_rcvhdrtail_kvaddr(uctxt);
-		memdma = uctxt->rcvhdrqtailaddr_dma;
 		flags &= ~VM_MAYWRITE;
 		break;
 	case SUBCTXT_UREGS:
-		memaddr = (u64)uctxt->subctxt_uregbase;
-		memlen = PAGE_SIZE;
 		flags |= VM_IO | VM_DONTEXPAND;
 		vmf = 1;
 		break;
 	case SUBCTXT_RCV_HDRQ:
-		memaddr = (u64)uctxt->subctxt_rcvhdr_base;
-		memlen = rcvhdrq_size(uctxt) * uctxt->subctxt_cnt;
 		flags |= VM_IO | VM_DONTEXPAND;
 		vmf = 1;
 		break;
 	case SUBCTXT_EGRBUF:
-		memaddr = (u64)uctxt->subctxt_rcvegrbuf;
-		memlen = uctxt->egrbufs.size * uctxt->subctxt_cnt;
 		flags |= VM_IO | VM_DONTEXPAND;
 		flags &= ~VM_MAYWRITE;
 		vmf = 1;
 		break;
-	case SDMA_COMP: {
-		struct hfi2_user_sdma_comp_q *cq = fd->cq;
-
-		if (!cq) {
+	case SDMA_COMP:
+		if (!fd->cq) {
 			ret = -EFAULT;
 			goto done;
 		}
-		memaddr = (u64)cq->comps;
-		memlen = PAGE_ALIGN(sizeof(*cq->comps) * cq->nentries);
 		flags |= VM_IO | VM_DONTEXPAND;
 		vmf = 1;
 		break;
-	}
 	default:
 		ret = -EINVAL;
 		break;
@@ -443,8 +357,8 @@ int hfi2_do_mmap(struct hfi2_filedata *fd, u8 type, struct vm_area_struct *vma)
 		ret = dma_mmap_coherent(&dd->pcidev->dev, vma, memvirt, memdma,
 					memlen);
 	} else if (mapio) {
-		ret = io_remap_pfn_range(vma, vma->vm_start, PFN_DOWN(memaddr),
-					 memlen, vma->vm_page_prot);
+		ret = rdma_user_mmap_io(ucontext, vma, PFN_DOWN(memaddr),
+					memlen, vma->vm_page_prot, rdma_entry);
 	} else if (memvirt) {
 		ret = remap_pfn_range(vma, vma->vm_start,
 				      PFN_DOWN(__pa(memvirt)), memlen,
@@ -535,8 +449,9 @@ void hfi2_dealloc_filedata(struct hfi2_filedata *fdata)
 	 */
 	if (uctxt->sc) {
 		hfi2_sc_disable(uctxt->sc);
-		hfi2_priv_reg_op(dd, uctxt->sc->ppd->hw_pidx, uctxt->sc->hw_context,
-			    uctxt->sc->type, SC_CHK_ADJ_OP, 0);
+		hfi2_priv_reg_op(dd, uctxt->sc->ppd->hw_pidx,
+				 uctxt->sc->hw_context, uctxt->sc->type,
+				 SC_CHK_ADJ_OP, 0);
 	}
 
 	hfi2_free_ctxt_rcv_groups(uctxt);
@@ -1131,7 +1046,7 @@ int hfi2_manage_rcvq(struct hfi2_ctxtdata *uctxt, u16 subctxt, int start_stop)
  * set, if desired, and checks again in future.
  */
 int hfi2_user_event_ack(struct hfi2_ctxtdata *uctxt, u16 subctxt,
-		   unsigned long events)
+			unsigned long events)
 {
 	int i;
 	struct hfi2_devdata *dd = uctxt->dd;

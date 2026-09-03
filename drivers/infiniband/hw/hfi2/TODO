@@ -1,0 +1,6 @@
+Items that still need to be done post hfi2 initial acceptance
+-------------------------------------------------------------
+1. Absorb rdmavt into hfi2 and mark rdmavt deprecated
+2. Remove rdmavt
+3. Remove hfi1
+
