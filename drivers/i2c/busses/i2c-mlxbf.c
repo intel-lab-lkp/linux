@@ -740,8 +740,8 @@ mlxbf_i2c_smbus_start_transaction(struct mlxbf_i2c_priv *priv,
 		 * submitted by the first operation only.
 		 */
 		if (op_idx == 0 && flags & MLXBF_I2C_F_SMBUS_OPERATION) {
-			block_en = flags & MLXBF_I2C_F_SMBUS_BLOCK;
-			pec_en = flags & MLXBF_I2C_F_SMBUS_PEC;
+			block_en = !!(flags & MLXBF_I2C_F_SMBUS_BLOCK);
+			pec_en = !!(flags & MLXBF_I2C_F_SMBUS_PEC);
 		}
 
 		if (flags & MLXBF_I2C_F_WRITE) {
