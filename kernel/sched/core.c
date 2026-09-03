@@ -5802,9 +5802,11 @@ void sched_tick(void)
 
 	donor->sched_class->task_tick(rq, donor, 0);
 
-	if (rq->curr->sched_class == &fair_sched_class &&
-	    static_branch_unlikely(&sched_numa_balancing))
-		task_tick_numa(rq, rq->curr);
+	if (rq->curr->sched_class == &fair_sched_class) {
+		if (static_branch_unlikely(&sched_numa_balancing))
+			task_tick_numa(rq, rq->curr);
+		task_tick_cache(rq, rq->curr);
+	}
 
 	if (sched_feat(LATENCY_WARN))
 		resched_latency = cpu_resched_latency(rq);
@@ -5903,9 +5905,11 @@ static void sched_tick_remote(struct work_struct *work)
 			}
 			curr->sched_class->task_tick(rq, curr, 0);
 
-			if (curr->sched_class == &fair_sched_class &&
-			    static_branch_unlikely(&sched_numa_balancing))
-				task_tick_numa(rq, curr);
+			if (curr->sched_class == &fair_sched_class) {
+				if (static_branch_unlikely(&sched_numa_balancing))
+					task_tick_numa(rq, curr);
+				task_tick_cache(rq, curr);
+			}
 
 			calc_load_nohz_remote(rq);
 		}
