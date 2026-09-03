@@ -2753,6 +2753,8 @@ static void cyapa_pip_report_touches(struct cyapa *cyapa,
 
 	touch_num = report_data->report_head[PIP_NUMBER_OF_TOUCH_OFFSET] &
 			PIP_NUMBER_OF_TOUCH_MASK;
+	if (touch_num > ARRAY_SIZE(report_data->touch_records))
+		touch_num = ARRAY_SIZE(report_data->touch_records);
 
 	for (i = 0; i < touch_num; i++)
 		cyapa_pip_report_slot_data(cyapa,
@@ -2784,7 +2786,8 @@ int cyapa_pip_irq_handler(struct cyapa *cyapa)
 
 	report_len = get_unaligned_le16(
 			&report_data.report_head[PIP_RESP_LENGTH_OFFSET]);
-	if (report_len < PIP_RESP_LENGTH_SIZE) {
+	if (report_len < PIP_RESP_LENGTH_SIZE ||
+	    report_len > sizeof(report_data)) {
 		/* Invalid length or internal reset happened. */
 		dev_err(dev, "invalid report_len=%d. bytes: %02x %02x\n",
 			report_len, report_data.report_head[0],
