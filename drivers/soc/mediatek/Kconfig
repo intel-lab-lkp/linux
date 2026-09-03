@@ -56,9 +56,13 @@ config MTK_PMIC_WRAP
 	  hardware to connect the PMIC.
 
 config MTK_REGULATOR_COUPLER
-	bool "MediaTek SoC Regulator Coupler" if COMPILE_TEST
+	tristate "MediaTek SoC Regulator Coupler"
 	default ARCH_MEDIATEK
 	depends on REGULATOR
+	help
+	  Say yes here to add support for the MediaTek regulator coupler,
+	  which keeps the GPU supply and its coupled GPU SRAM supply
+	  voltage-balanced on the MediaTek SoCs that need it.
 
 config MTK_MMSYS
 	tristate "MediaTek MMSYS Support"
