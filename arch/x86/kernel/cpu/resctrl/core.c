@@ -181,27 +181,6 @@ static inline void cache_alloc_hsw_probe(void)
 	rdt_alloc_capable = true;
 }
 
-/*
- * rdt_get_mb_table() - get a mapping of bandwidth(b/w) percentage values
- * exposed to user interface and the h/w understandable delay values.
- *
- * The non-linear delay values have the granularity of power of two
- * and also the h/w does not guarantee a curve for configured delay
- * values vs. actual b/w enforced.
- * Hence we need a mapping that is pre calibrated so the user can
- * express the memory b/w as a percentage value.
- */
-static inline bool rdt_get_mb_table(struct rdt_resource *r)
-{
-	/*
-	 * There are no Intel SKUs as of now to support non-linear delay.
-	 */
-	pr_info("MBA b/w map not implemented for cpu:%d, model:%d",
-		boot_cpu_data.x86, boot_cpu_data.x86_model);
-
-	return false;
-}
-
 static __init bool __get_mem_config_intel(struct rdt_resource *r)
 {
 	struct rdt_hw_resource *hw_res = resctrl_to_arch_res(r);
@@ -213,16 +192,13 @@ static __init bool __get_mem_config_intel(struct rdt_resource *r)
 	hw_res->num_closid = edx.split.cos_max + 1;
 	max_delay = eax.split.max_delay + 1;
 	r->membw.max_bw = MAX_MBA_BW;
-	r->membw.arch_needs_linear = true;
-	if (ecx & MBA_IS_LINEAR) {
-		r->membw.delay_linear = true;
-		r->membw.min_bw = MAX_MBA_BW - max_delay;
-		r->membw.bw_gran = MAX_MBA_BW - max_delay;
-	} else {
-		if (!rdt_get_mb_table(r))
-			return false;
-		r->membw.arch_needs_linear = false;
-	}
+
+	if (!(ecx & MBA_IS_LINEAR))
+		return false;
+
+	r->membw.delay_linear = true;
+	r->membw.min_bw = MAX_MBA_BW - max_delay;
+	r->membw.bw_gran = MAX_MBA_BW - max_delay;
 
 	if (boot_cpu_has(X86_FEATURE_PER_THREAD_MBA))
 		r->membw.throttle_mode = THREAD_THROTTLE_PER_THREAD;
@@ -255,7 +231,6 @@ static __init bool __rdt_get_mem_config_amd(struct rdt_resource *r)
 
 	/* AMD does not use delay */
 	r->membw.delay_linear = false;
-	r->membw.arch_needs_linear = false;
 
 	/*
 	 * AMD does not use memory delay throttle model to control
