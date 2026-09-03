@@ -4813,14 +4813,14 @@ static bool is_flow_rule_duplicate_allowed(struct net_device *dev,
 	return netif_is_lag_port(dev) && rpriv && rpriv->rep->vport != MLX5_VPORT_UPLINK;
 }
 
-/* As IPsec and TC order is not aligned between software and hardware-offload,
- * either IPsec offload or TC offload, not both, is allowed for a specific interface.
+/* TC offload and accel protocols can overwrite each other's flow_tag with
+ * steering rules and they cannot simultaneously operate on the same interface.
+ * Additionally, as IPsec and TC order is not aligned between software and
+ * hardware-offload, only one is allowed for a specific interface.
  */
-static bool is_tc_ipsec_order_check_needed(struct net_device *filter, struct mlx5e_priv *priv)
+static bool is_tc_accel_check_needed(struct net_device *filter,
+				     struct mlx5e_priv *priv)
 {
-	if (!IS_ENABLED(CONFIG_MLX5_EN_IPSEC))
-		return false;
-
 	if (filter != priv->netdev)
 		return false;
 
@@ -4830,27 +4830,35 @@ static bool is_tc_ipsec_order_check_needed(struct net_device *filter, struct mlx
 	return true;
 }
 
-static int mlx5e_tc_block_ipsec_offload(struct net_device *filter, struct mlx5e_priv *priv)
+static int mlx5e_tc_block_accel_offload(struct net_device *filter,
+					struct mlx5e_priv *priv)
 {
 	struct mlx5_core_dev *mdev = priv->mdev;
+	int ret = 0;
 
-	if (!is_tc_ipsec_order_check_needed(filter, priv))
+	if (!is_tc_accel_check_needed(filter, priv))
 		return 0;
 
-	if (mdev->num_block_tc)
-		return -EBUSY;
+	mutex_lock(&mdev->offload_block.lock);
+	if (mdev->offload_block.num_tc)
+		ret = -EBUSY;
+	else
+		mdev->offload_block.num_accel++;
+	mutex_unlock(&mdev->offload_block.lock);
 
-	mdev->num_block_ipsec++;
-
-	return 0;
+	return ret;
 }
 
-static void mlx5e_tc_unblock_ipsec_offload(struct net_device *filter, struct mlx5e_priv *priv)
+static void mlx5e_tc_unblock_accel_offload(struct net_device *filter,
+					   struct mlx5e_priv *priv)
 {
-	if (!is_tc_ipsec_order_check_needed(filter, priv))
+	if (!is_tc_accel_check_needed(filter, priv))
 		return;
 
-	priv->mdev->num_block_ipsec--;
+	mutex_lock(&priv->mdev->offload_block.lock);
+	if (!WARN_ON_ONCE(!priv->mdev->offload_block.num_accel))
+		priv->mdev->offload_block.num_accel--;
+	mutex_unlock(&priv->mdev->offload_block.lock);
 }
 
 int mlx5e_configure_flower(struct net_device *dev, struct mlx5e_priv *priv,
@@ -4865,7 +4873,7 @@ int mlx5e_configure_flower(struct net_device *dev, struct mlx5e_priv *priv,
 	if (!mlx5_esw_hold(priv->mdev))
 		return -EBUSY;
 
-	err = mlx5e_tc_block_ipsec_offload(dev, priv);
+	err = mlx5e_tc_block_accel_offload(dev, priv);
 	if (err)
 		goto esw_release;
 
@@ -4914,7 +4922,7 @@ rcu_unlock:
 err_free:
 	mlx5e_flow_put(priv, flow);
 out:
-	mlx5e_tc_unblock_ipsec_offload(dev, priv);
+	mlx5e_tc_unblock_accel_offload(dev, priv);
 	mlx5_esw_put(priv->mdev);
 esw_release:
 	mlx5_esw_release(priv->mdev);
@@ -4957,7 +4965,7 @@ int mlx5e_delete_flower(struct net_device *dev, struct mlx5e_priv *priv,
 	trace_mlx5e_delete_flower(f);
 	mlx5e_flow_put(priv, flow);
 
-	mlx5e_tc_unblock_ipsec_offload(dev, priv);
+	mlx5e_tc_unblock_accel_offload(dev, priv);
 	mlx5_esw_put(priv->mdev);
 	return 0;
 
