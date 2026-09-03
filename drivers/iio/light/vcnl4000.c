@@ -217,6 +217,7 @@ struct vcnl4000_chip_spec {
 	int (*measure_light)(struct vcnl4000_data *data, int *val);
 	int (*measure_proximity)(struct vcnl4000_data *data, int *val);
 	int (*set_power_state)(struct vcnl4000_data *data, bool on);
+	int (*disable_irq)(struct vcnl4000_data *data);
 	irqreturn_t (*irq_thread)(int irq, void *priv);
 	irqreturn_t (*trig_buffer_func)(int irq, void *priv);
 
@@ -1466,6 +1467,48 @@ static int vcnl4040_write_event_config(struct iio_dev *indio_dev,
 	}
 }
 
+static int vcnl4010_disable_irq(struct vcnl4000_data *data)
+{
+	int ret;
+
+	guard(mutex)(&data->vcnl4000_lock);
+
+	ret = vcnl4010_stop(data);
+	if (ret < 0)
+		return ret;
+
+	ret = i2c_smbus_read_byte_data(data->client, VCNL4010_ISR);
+	if (ret < 0)
+		return ret;
+
+	ret &= VCNL4010_INT_THR | VCNL4010_INT_DRDY;
+	if (!ret)
+		return 0;
+
+	return i2c_smbus_write_byte_data(data->client, VCNL4010_ISR, ret);
+}
+
+static int vcnl4040_disable_irq(struct vcnl4000_data *data)
+{
+	int ret;
+
+	guard(mutex)(&data->vcnl4000_lock);
+
+	ret = vcnl4040_update_ps_int(data, VCNL4040_PS_CONF2_PS_INT, false);
+	if (ret < 0)
+		return ret;
+
+	ret = vcnl4040_update_als_int(data, VCNL4040_ALS_CONF_INT_EN, false);
+	if (ret < 0)
+		return ret;
+
+	ret = i2c_smbus_read_word_data(data->client, data->chip_spec->int_reg);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
 static irqreturn_t vcnl4040_irq_thread(int irq, void *p)
 {
 	struct iio_dev *indio_dev = p;
@@ -1815,6 +1858,7 @@ static const struct vcnl4000_chip_spec cm36672p_spec = {
 	.init = vcnl4200_init,
 	.measure_proximity = vcnl4200_measure_proximity,
 	.set_power_state = vcnl4200_set_power_state,
+	.disable_irq = vcnl4040_disable_irq,
 	.channels = cm36672p_channels,
 	.num_channels = ARRAY_SIZE(cm36672p_channels),
 	.info = &vcnl4040_info,
@@ -1843,6 +1887,7 @@ static const struct vcnl4000_chip_spec vcnl4010_spec = {
 	.measure_light = vcnl4000_measure_light,
 	.measure_proximity = vcnl4000_measure_proximity,
 	.set_power_state = vcnl4000_set_power_state,
+	.disable_irq = vcnl4010_disable_irq,
 	.channels = vcnl4010_channels,
 	.num_channels = ARRAY_SIZE(vcnl4010_channels),
 	.info = &vcnl4010_info,
@@ -1858,6 +1903,7 @@ static const struct vcnl4000_chip_spec vcnl4040_spec = {
 	.measure_light = vcnl4200_measure_light,
 	.measure_proximity = vcnl4200_measure_proximity,
 	.set_power_state = vcnl4200_set_power_state,
+	.disable_irq = vcnl4040_disable_irq,
 	.channels = vcnl4040_channels,
 	.num_channels = ARRAY_SIZE(vcnl4040_channels),
 	.info = &vcnl4040_info,
@@ -1877,6 +1923,7 @@ static const struct vcnl4000_chip_spec vcnl4200_spec = {
 	.measure_light = vcnl4200_measure_light,
 	.measure_proximity = vcnl4200_measure_proximity,
 	.set_power_state = vcnl4200_set_power_state,
+	.disable_irq = vcnl4040_disable_irq,
 	.channels = vcnl4040_channels,
 	.num_channels = ARRAY_SIZE(vcnl4040_channels),
 	.info = &vcnl4040_info,
@@ -1910,6 +1957,21 @@ static int vcnl4010_probe_trigger(struct iio_dev *indio_dev)
 	iio_trigger_set_drvdata(trigger, indio_dev);
 
 	return devm_iio_trigger_register(&client->dev, trigger);
+}
+
+static void vcnl4000_disable_irq_action(void *data)
+{
+	struct iio_dev *indio_dev = data;
+	struct vcnl4000_data *chip = iio_priv(indio_dev);
+	struct device *dev = &chip->client->dev;
+	int ret;
+
+	if (!chip->chip_spec->disable_irq)
+		return;
+
+	ret = chip->chip_spec->disable_irq(chip);
+	if (ret)
+		dev_warn(dev, "Failed to disable interrupt(%pe)", ERR_PTR(ret));
 }
 
 static void vcnl4000_cleanup(void *data)
@@ -1994,6 +2056,11 @@ static int vcnl4000_probe(struct i2c_client *client)
 
 		ret = vcnl4010_probe_trigger(indio_dev);
 		if (ret < 0)
+			return ret;
+
+		ret = devm_add_action_or_reset(dev, vcnl4000_disable_irq_action,
+					       indio_dev);
+		if (ret)
 			return ret;
 	}
 
