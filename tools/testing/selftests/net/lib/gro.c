@@ -64,6 +64,7 @@
 #define _GNU_SOURCE
 
 #include <arpa/inet.h>
+#include <endian.h>
 #include <errno.h>
 #include <error.h>
 #include <getopt.h>
@@ -79,13 +80,21 @@
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/tcp.h>
+#include <netinet/udp.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+#include <linux/psp.h>
+
+#ifdef HAVE_OPENSSL
+#include <openssl/evp.h>
+#endif
 
 #include "kselftest.h"
 #include "ksft.h"
@@ -109,6 +118,38 @@
 #define EXT_PAYLOAD_2 "\x11\x11\x11\x11\x11\x11"
 
 #define EXIT_OVER_COALESCE	42
+
+/* PSP transport mode encapsulation, as built by the sender:
+ *
+ *	[eth][IP][UDP dport=1000][PSP hdr][encrypted L4][ICV]
+ *
+ * Can't use the kernel-only include/net/psp/types.h header, so copy the
+ * encoding here.
+ */
+struct psphdr {
+	uint8_t		nexthdr;
+	uint8_t		hdrlen;
+	uint8_t		crypt_offset;
+	uint8_t		verfl;
+	uint32_t	spi;		/* big endian */
+	uint64_t	iv;		/* big endian */
+} __packed;
+
+#define PSP_UDP_PORT		1000
+#define PSP_UDP_LEN		sizeof(struct udphdr)
+#define PSP_HDR_LEN		sizeof(struct psphdr)
+#define PSP_ICV_LEN		16
+/* total frame growth: the inserted headers plus the trailing ICV */
+#define PSP_ENCAP_LEN		(PSP_UDP_LEN + PSP_HDR_LEN + PSP_ICV_LEN)
+#define PSP_HDRLEN_NOOPT	1	/* (1 + 1) * 8 == PSP_HDR_LEN */
+#define PSP_VERFL_ONE		0x01
+#define PSP_VERFL_VER_SHIFT	2
+#define PSP_MAX_ASSOC		2
+#define PSP_KEY_LEN_MAX		32
+
+enum {
+	OPT_PSP_ASSOC = 256,
+};
 
 #define ipv6_optlen(p)  (((p)->hdrlen+1) << 3) /* calculate IPv6 extension header len */
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
@@ -143,6 +184,9 @@ static bool pppoe;
 static uint64_t txtime_ns;
 static int num_flows = 4;
 static bool order_check;
+static bool psp_enabled;
+static int psp_idx;
+static int psp_num_assoc;
 
 #define CAPACITY_PAYLOAD_LEN 200
 
@@ -158,7 +202,8 @@ static int max_payload(void)
 
 static int calc_mss(void)
 {
-	return ASSUMED_MTU - (total_hdr_len - ETH_HLEN);
+	return ASSUMED_MTU - (total_hdr_len - ETH_HLEN) -
+		(psp_enabled ? PSP_ENCAP_LEN : 0);
 }
 
 static int num_large_pkt(void)
@@ -384,6 +429,215 @@ static void fill_transportlayer(void *buf, int seq_offset, int ack_offset,
 	tcph->check = tcp_checksum(tcph, payload_len);
 }
 
+#ifdef HAVE_OPENSSL
+
+struct psp_assoc {
+	uint32_t	spi;
+	uint8_t		key[PSP_KEY_LEN_MAX];
+	int		keylen;
+	int		version;
+	EVP_CIPHER_CTX	*ctx;
+};
+
+static struct psp_assoc psp_assocs[PSP_MAX_ASSOC];
+static uint64_t psp_next_iv = 1;
+
+static char psp_scratch[L2_HLEN_MAX + IP_MAXPACKET + PSP_ENCAP_LEN];
+
+static int psp_key_len(int version)
+{
+	switch (version) {
+	case PSP_VERSION_HDR0_AES_GCM_128:
+	case PSP_VERSION_HDR0_AES_GMAC_128:
+		return 16;
+	case PSP_VERSION_HDR0_AES_GCM_256:
+	case PSP_VERSION_HDR0_AES_GMAC_256:
+		return 32;
+	default:
+		error(1, 0, "psp: unknown version %d", version);
+		return 0;
+	}
+}
+
+static bool psp_version_is_gmac(int version)
+{
+	return version == PSP_VERSION_HDR0_AES_GMAC_128 ||
+	       version == PSP_VERSION_HDR0_AES_GMAC_256;
+}
+
+/* Parses one --psp-assoc "version,spi,key".
+ * The SPI and key (both hex) is a PSP RX assoc from the device under test.
+ */
+static void psp_parse_assoc(char *arg)
+{
+	char *ver_s, *spi_s, *key_s, *end;
+	const EVP_CIPHER *cipher;
+	struct psp_assoc *assoc;
+	unsigned long val;
+	size_t len, i;
+
+	if (psp_num_assoc == PSP_MAX_ASSOC)
+		error(1, 0, "psp: at most %d associations", PSP_MAX_ASSOC);
+	assoc = &psp_assocs[psp_num_assoc];
+
+	ver_s = strtok(arg, ",");
+	spi_s = strtok(NULL, ",");
+	key_s = strtok(NULL, ",");
+	if (!ver_s || !spi_s || !key_s || strtok(NULL, ","))
+		error(1, 0, "psp: --psp-assoc wants version,spi,key");
+
+	errno = 0;
+	val = strtoul(ver_s, &end, 10);
+	if (errno || end == ver_s || *end ||
+	    val > PSP_VERSION_HDR0_AES_GMAC_256)
+		error(1, 0, "psp: bad version '%s'", ver_s);
+	assoc->version = val;
+
+	errno = 0;
+	val = strtoul(spi_s, &end, 16);
+	if (errno || end == spi_s || *end || val > 0xffffffffUL)
+		error(1, 0, "psp: bad SPI '%s'", spi_s);
+	assoc->spi = val;
+
+	len = strlen(key_s);
+	if (len != (size_t)psp_key_len(assoc->version) * 2 ||
+	    strspn(key_s, "0123456789abcdefABCDEF") != len)
+		error(1, 0, "psp: version %d needs a %d byte key, got '%s'",
+		      assoc->version, psp_key_len(assoc->version), key_s);
+
+	assoc->keylen = len / 2;
+	for (i = 0; i < len; i += 2) {
+		unsigned int byte;
+
+		if (sscanf(key_s + i, "%2x", &byte) != 1)
+			error(1, 0, "psp: bad key '%s'", key_s);
+		assoc->key[i / 2] = byte;
+	}
+
+	cipher = assoc->keylen == 16 ? EVP_aes_128_gcm() : EVP_aes_256_gcm();
+	assoc->ctx = EVP_CIPHER_CTX_new();
+	if (!assoc->ctx)
+		error(1, 0, "psp: EVP_CIPHER_CTX_new");
+	if (EVP_EncryptInit_ex(assoc->ctx, cipher, NULL, assoc->key,
+			       NULL) != 1)
+		error(1, 0, "psp: EVP_EncryptInit_ex key");
+	psp_num_assoc++;
+	psp_enabled = true;
+}
+
+static void psp_crypt(struct psp_assoc *assoc, const uint8_t *nonce,
+		      const uint8_t *aad, int aad_len,
+		      uint8_t *data, int data_len, uint8_t *icv)
+{
+	uint8_t *crypt_data = psp_version_is_gmac(assoc->version) ? NULL : data;
+	EVP_CIPHER_CTX *ctx = assoc->ctx;
+	int outl;
+
+	if (EVP_EncryptInit_ex(ctx, NULL, NULL, NULL, nonce) != 1)
+		error(1, 0, "psp: EVP_EncryptInit_ex nonce");
+	if (EVP_EncryptUpdate(ctx, NULL, &outl, aad, aad_len) != 1)
+		error(1, 0, "psp: EVP_EncryptUpdate aad");
+	if (EVP_EncryptUpdate(ctx, crypt_data, &outl, data, data_len) != 1)
+		error(1, 0, "psp: EVP_EncryptUpdate data");
+	if (EVP_EncryptFinal_ex(ctx, icv, &outl) != 1)
+		error(1, 0, "psp: EVP_EncryptFinal_ex");
+	if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, PSP_ICV_LEN,
+				icv) != 1)
+		error(1, 0, "psp: EVP_CTRL_GCM_GET_TAG");
+}
+
+/* Encapsulates & encrypts @pkt with PSP transport mode into psp_scratch.
+ * Returns the scratch buffer and updates *@lenp.
+ */
+static char *psp_encapsulate(const char *pkt, int *lenp)
+{
+	struct psp_assoc *assoc = &psp_assocs[psp_idx];
+	int ip_hlen, l4_off, l4_len, aad_len;
+	struct psphdr *psph;
+	struct udphdr *udph;
+	__be16 sport, dport;
+	uint8_t *data, *icv;
+	int len = *lenp;
+	uint8_t nexthdr;
+
+	if (len + PSP_ENCAP_LEN > (int)sizeof(psp_scratch))
+		error(1, 0, "psp: %d byte frame does not fit", len);
+
+	memcpy(psp_scratch, pkt, len);
+
+	if (proto == PF_INET) {
+		struct iphdr *iph = (struct iphdr *)(psp_scratch + ETH_HLEN);
+
+		ip_hlen = iph->ihl * 4;
+		nexthdr = iph->protocol;
+	} else {
+		struct ipv6hdr *ip6h =
+			(struct ipv6hdr *)(psp_scratch + ETH_HLEN);
+
+		ip_hlen = sizeof(*ip6h);
+		nexthdr = ip6h->nexthdr;
+	}
+
+	l4_off = ETH_HLEN + ip_hlen;
+	l4_len = len - l4_off;
+	if (l4_len < 4)
+		error(1, 0, "psp: no room for an L4 header");
+
+	sport = *(__be16 *)(psp_scratch + l4_off);
+	dport = *(__be16 *)(psp_scratch + l4_off + sizeof(sport));
+
+	memmove(psp_scratch + l4_off + PSP_UDP_LEN + PSP_HDR_LEN,
+		psp_scratch + l4_off, l4_len);
+
+	udph = (struct udphdr *)(psp_scratch + l4_off);
+	udph->source = sport ^ dport;
+	udph->dest = htons(PSP_UDP_PORT);
+	udph->len = htons(PSP_UDP_LEN + PSP_HDR_LEN + l4_len + PSP_ICV_LEN);
+	udph->check = 0;
+
+	psph = (struct psphdr *)(udph + 1);
+	psph->nexthdr = nexthdr;
+	psph->hdrlen = PSP_HDRLEN_NOOPT;
+	psph->crypt_offset = 0;  /* Matches the kernel. */
+	psph->verfl = (assoc->version << PSP_VERFL_VER_SHIFT) | PSP_VERFL_ONE;
+	psph->spi = htonl(assoc->spi);
+	psph->iv = htobe64(psp_next_iv++);
+
+	data = (uint8_t *)psph + PSP_HDR_LEN;
+	icv = (uint8_t *)psph + PSP_HDR_LEN + l4_len;
+	aad_len = PSP_HDR_LEN;
+
+	/* The GCM nonce is wire (spi, iv), which are contiguous. */
+	psp_crypt(assoc,
+		  (const uint8_t *)psph + offsetof(struct psphdr, spi),
+		  (const uint8_t *)psph, aad_len, data, l4_len, icv);
+
+	if (proto == PF_INET) {
+		struct iphdr *iph = (struct iphdr *)(psp_scratch + ETH_HLEN);
+
+		iph->tot_len = htons(ntohs(iph->tot_len) + PSP_ENCAP_LEN);
+		iph->protocol = IPPROTO_UDP;
+		iph->check = 0;
+		iph->check = checksum_fold(iph, ip_hlen, 0);
+	} else {
+		struct ipv6hdr *ip6h =
+			(struct ipv6hdr *)(psp_scratch + ETH_HLEN);
+
+		ip6h->payload_len =
+			htons(ntohs(ip6h->payload_len) + PSP_ENCAP_LEN);
+		ip6h->nexthdr = IPPROTO_UDP;
+	}
+
+	*lenp = len + PSP_ENCAP_LEN;
+	return psp_scratch;
+}
+#else
+static void psp_parse_assoc(char *arg)
+{
+	error(1, 0, "gro was built without OpenSSL, PSP is not available");
+}
+#endif  /* HAVE_OPENSSL */
+
 static void write_packet(int fd, char *buf, int len, struct sockaddr_ll *daddr)
 {
 	char control[CMSG_SPACE(sizeof(uint64_t))];
@@ -391,6 +645,11 @@ static void write_packet(int fd, char *buf, int len, struct sockaddr_ll *daddr)
 	struct iovec iov = {};
 	struct cmsghdr *cm;
 	int ret = -1;
+
+#ifdef HAVE_OPENSSL
+	if (psp_enabled)
+		buf = psp_encapsulate(buf, &len);
+#endif
 
 	iov.iov_base = buf;
 	iov.iov_len = len;
@@ -571,6 +830,10 @@ static void send_large(int fd, struct sockaddr_ll *daddr, int remainder)
 	const int num_pkt = num_large_pkt();
 	const int mss = calc_mss();
 	int i;
+
+	if (num_pkt > MAX_LARGE_PKT_CNT)
+		error(1, 0, "too many large packets: %d > %zu", num_pkt,
+		      (size_t)MAX_LARGE_PKT_CNT);
 
 	for (i = 0; i < num_pkt; i++)
 		create_packet(pkts[i], i * mss, 0, mss, 0);
@@ -1111,6 +1374,39 @@ static void send_changed_pppoe_sid(int fd, struct sockaddr_ll *daddr)
 	write_packet(fd, buf, pkt_size, daddr);
 }
 
+/* PSP packets don't coalesce across SPIs or versions. */
+static void send_psp_assoc_switch(int fd, struct sockaddr_ll *daddr)
+{
+	static char buf[MAX_HDR_LEN + PAYLOAD_LEN];
+	int pkt_size = total_hdr_len + PAYLOAD_LEN;
+
+	if (psp_num_assoc < 2)
+		error(1, 0, "%s needs two PSP associations", testname);
+
+	create_packet(buf, 0, 0, PAYLOAD_LEN, 0);
+	write_packet(fd, buf, pkt_size, daddr);
+
+	create_packet(buf, PAYLOAD_LEN, 0, PAYLOAD_LEN, 0);
+	psp_idx = 1;
+	write_packet(fd, buf, pkt_size, daddr);
+	psp_idx = 0;
+}
+
+/* A PSP packet and a cleartext packet of the same flow don't coalesce. */
+static void send_psp_mixed(int fd, struct sockaddr_ll *daddr)
+{
+	static char buf[MAX_HDR_LEN + PAYLOAD_LEN];
+	int pkt_size = total_hdr_len + PAYLOAD_LEN;
+
+	create_packet(buf, 0, 0, PAYLOAD_LEN, 0);
+	write_packet(fd, buf, pkt_size, daddr);
+
+	create_packet(buf, PAYLOAD_LEN, 0, PAYLOAD_LEN, 0);
+	psp_enabled = false;
+	write_packet(fd, buf, pkt_size, daddr);
+	psp_enabled = true;
+}
+
 static void bind_packetsocket(int fd)
 {
 	struct sockaddr_ll daddr = {};
@@ -1559,6 +1855,16 @@ static void gro_sender(void)
 		usleep(fin_delay_us);
 		write_packet(txfd, fin_pkt, total_hdr_len, &daddr);
 
+	/* PSP sub-tests */
+	} else if (strcmp(testname, "psp_spi_diff") == 0 ||
+		   strcmp(testname, "psp_ver_diff") == 0) {
+		send_psp_assoc_switch(txfd, &daddr);
+		usleep(fin_delay_us);
+		write_packet(txfd, fin_pkt, total_hdr_len, &daddr);
+	} else if (strcmp(testname, "psp_mixed") == 0) {
+		send_psp_mixed(txfd, &daddr);
+		usleep(fin_delay_us);
+		write_packet(txfd, fin_pkt, total_hdr_len, &daddr);
 	} else {
 		error(1, 0, "Unknown testcase: %s", testname);
 	}
@@ -1782,6 +2088,22 @@ static void gro_receiver(void)
 		printf("different PPPoE session ID doesn't coalesce: ");
 		check_recv_pkts(rxfd, correct_payload, 2);
 
+	/* PSP sub-tests */
+	} else if (strcmp(testname, "psp_spi_diff") == 0) {
+		correct_payload[0] = PAYLOAD_LEN;
+		correct_payload[1] = PAYLOAD_LEN;
+		printf("different PSP SPI doesn't coalesce: ");
+		check_recv_pkts(rxfd, correct_payload, 2);
+	} else if (strcmp(testname, "psp_ver_diff") == 0) {
+		correct_payload[0] = PAYLOAD_LEN;
+		correct_payload[1] = PAYLOAD_LEN;
+		printf("different PSP version doesn't coalesce: ");
+		check_recv_pkts(rxfd, correct_payload, 2);
+	} else if (strcmp(testname, "psp_mixed") == 0) {
+		correct_payload[0] = PAYLOAD_LEN;
+		correct_payload[1] = PAYLOAD_LEN;
+		printf("PSP and cleartext don't coalesce: ");
+		check_recv_pkts(rxfd, correct_payload, 2);
 	} else {
 		error(1, 0, "Test case error: unknown testname %s", testname);
 	}
@@ -1802,6 +2124,7 @@ static void parse_args(int argc, char **argv)
 		{ "ip6ip6", no_argument, NULL, 'E' },
 		{ "pppoev4", no_argument, NULL, 'p' },
 		{ "pppoev6", no_argument, NULL, 'P' },
+		{ "psp-assoc", required_argument, NULL, OPT_PSP_ASSOC },
 		{ "num-flows", required_argument, NULL, 'n' },
 		{ "rx", no_argument, NULL, 'r' },
 		{ "saddr", required_argument, NULL, 's' },
@@ -1813,8 +2136,12 @@ static void parse_args(int argc, char **argv)
 	};
 	int c;
 
-	while ((c = getopt_long(argc, argv, "46d:D:eEi:n:pPrs:S:t:ov", opts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "46d:D:eEi:n:pPrs:S:t:ov",
+			       opts, NULL)) != -1) {
 		switch (c) {
+		case OPT_PSP_ASSOC:
+			psp_parse_assoc(optarg);
+			break;
 		case '4':
 			proto = PF_INET;
 			ethhdr_proto = htons(ETH_P_IP);
@@ -1903,6 +2230,12 @@ int main(int argc, char **argv)
 	} else {
 		error(1, 0, "Protocol family is not ipv4 or ipv6");
 	}
+
+	if (psp_enabled && (ipip || ip6ip6 || pppoe))
+		error(1, 0, "--psp-assoc doesn't support ipip, ip6ip6 or PPPoE");
+
+	if (!strncmp(testname, "psp_", 4) && !psp_enabled)
+		error(1, 0, "test %s requires --psp-assoc", testname);
 
 	read_MAC(src_mac, smac);
 	read_MAC(dst_mac, dmac);
