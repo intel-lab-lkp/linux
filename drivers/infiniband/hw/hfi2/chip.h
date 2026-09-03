@@ -1424,6 +1424,8 @@ extern struct cntr_entry hfi2_wfr_dev_cntrs[];
 extern struct cntr_entry hfi2_jkr_dev_cntrs[];
 extern struct cntr_entry hfi2_wfr_port_cntrs[];
 extern struct cntr_entry hfi2_jkr_port_cntrs[];
+extern struct cntr_entry hfi2_shared_dev_cntrs[];
+extern struct cntr_entry hfi2_shared_port_cntrs[];
 
 struct flag_table {
 	u64 flag; /* the flag */
