@@ -15170,6 +15170,12 @@ F:	Documentation/devicetree/bindings/hwmon/pmbus/adi,lt3074.yaml
 F:	Documentation/hwmon/lt3074.rst
 F:	drivers/hwmon/pmbus/lt3074.c
 
+LT8491 BATTERY CHARGER DRIVER
+M:	John Erasmus Mari Geronimo <johnerasmusmari.geronimo@analog.com>
+L:	linux-pm@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/power/supply/adi,lt8491.yaml
+
 LTC1660 DAC DRIVER
 M:	Marcus Folkesson <marcus.folkesson@gmail.com>
 L:	linux-iio@vger.kernel.org
