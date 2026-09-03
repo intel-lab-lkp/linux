@@ -5,6 +5,7 @@
 #include "en.h"
 #include "en/fs.h"
 #include "en_accel/en_accel.h"
+#include "en_accel/flow_tag.h"
 #include "eswitch.h"
 #include "ipsec.h"
 #include "fs_core.h"
@@ -190,7 +191,7 @@ static void ipsec_rx_rule_add_match_obj(struct mlx5e_ipsec_sa_entry *sa_entry,
 				 misc_parameters_2.metadata_reg_c_2);
 		MLX5_SET(fte_match_param, spec->match_value,
 			 misc_parameters_2.metadata_reg_c_2,
-			 sa_entry->ipsec_obj_id | BIT(31));
+			 sa_entry->ipsec_obj_id);
 
 		spec->match_criteria_enable |= MLX5_MATCH_MISC_PARAMETERS_2;
 	}
@@ -2066,7 +2067,7 @@ static int rx_add_rule(struct mlx5e_ipsec_sa_entry *sa_entry)
 	if (!attrs->drop) {
 		if (rx != ipsec->rx_esw)
 			err = setup_modify_header(ipsec, attrs->type,
-						  sa_entry->ipsec_obj_id | BIT(31),
+						  sa_entry->ipsec_obj_id,
 						  XFRM_DEV_OFFLOAD_IN, &flow_act);
 		else
 			err = mlx5_esw_ipsec_rx_setup_modify_header(sa_entry, &flow_act);
@@ -2099,6 +2100,12 @@ static int rx_add_rule(struct mlx5e_ipsec_sa_entry *sa_entry)
 		flow_act.action |= MLX5_FLOW_CONTEXT_ACTION_DROP;
 	else
 		flow_act.action |= MLX5_FLOW_CONTEXT_ACTION_FWD_DEST;
+	if (!attrs->drop && rx != ipsec->rx_esw) {
+		spec->flow_context.flags |= FLOW_CONTEXT_HAS_TAG;
+		spec->flow_context.flow_tag =
+			FIELD_PREP(MLX5E_ACCEL_FLOW_TAG_PROTO_MASK,
+				   MLX5E_ACCEL_FLOW_TAG_PROTO_IPSEC);
+	}
 	dest[0].type = MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE;
 	dest[0].ft = rx->ft.status;
 	dest[1].type = MLX5_FLOW_DESTINATION_TYPE_COUNTER;

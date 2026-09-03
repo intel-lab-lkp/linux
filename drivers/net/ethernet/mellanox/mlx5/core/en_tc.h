@@ -36,6 +36,7 @@
 #include <net/pkt_cls.h>
 #include "en.h"
 #include "eswitch.h"
+#include "en_accel/flow_tag.h"
 #include "en/tc_ct.h"
 #include "en/tc_tun.h"
 #include "en/tc/int_port.h"
@@ -370,11 +371,13 @@ struct mlx5e_tc_table *mlx5e_tc_table_alloc(void);
 void mlx5e_tc_table_free(struct mlx5e_tc_table *tc);
 static inline bool mlx5e_cqe_regb_chain(struct mlx5_cqe64 *cqe)
 {
-	u32 chain, reg_b;
+	u32 flow_tag, reg_b, chain;
 
+	flow_tag = mlx5e_accel_flow_tag_proto(cqe);
 	reg_b = be32_to_cpu(cqe->ft_metadata);
 
-	if (reg_b >> (MLX5E_TC_TABLE_CHAIN_TAG_BITS + ESW_ZONE_ID_BITS))
+	if (flow_tag != MLX5E_ACCEL_FLOW_TAG_PROTO_NONE ||
+	    (reg_b >> (MLX5E_TC_TABLE_CHAIN_TAG_BITS + ESW_ZONE_ID_BITS)))
 		return false;
 
 	chain = reg_b & MLX5E_TC_TABLE_CHAIN_TAG_MASK;

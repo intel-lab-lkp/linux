@@ -14,8 +14,9 @@
  *
  *   [23:21] = protocol ID (3 bits):
  *              0 = none (default)
+ *              1 = IPsec
  *              3 = PSP (HW decrypted, PSP header present)
- *              1,2,4-7 = reserved
+ *              2,4-7 = reserved
  *   [20:16] = reserved
  *   [15:0]  = used by other subsystems (e.g. TC).
  */
@@ -24,6 +25,7 @@
 
 enum {
 	MLX5E_ACCEL_FLOW_TAG_PROTO_NONE		= 0,
+	MLX5E_ACCEL_FLOW_TAG_PROTO_IPSEC	= 1,
 	MLX5E_ACCEL_FLOW_TAG_PROTO_PSP		= 3,
 };
 
