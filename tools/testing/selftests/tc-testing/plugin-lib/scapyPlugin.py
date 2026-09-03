@@ -49,6 +49,6 @@ class SubPlugin(TdcPlugin):
             pkt = eval(scapyinfo['packet'])
             if '$' in scapyinfo['iface']:
                 tpl = Template(scapyinfo['iface'])
-                scapyinfo['iface'] = tpl.safe_substitute(NAMES)
+                scapyinfo['iface'] = tpl.safe_substitute(self.args.NAMES)
             for count in range(scapyinfo['count']):
                 sendp(pkt, iface=scapyinfo['iface'])
