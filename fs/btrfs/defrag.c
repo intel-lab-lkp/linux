@@ -263,7 +263,7 @@ again:
 	if (ret < 0)
 		goto cleanup;
 
-	cur = max(cur + fs_info->sectorsize, range.start);
+	cur = max(cur + fs_info->datasize, range.start);
 	goto again;
 
 cleanup:
@@ -737,7 +737,7 @@ static struct extent_map *defrag_lookup_extent(struct inode *inode, u64 start,
 	struct extent_map_tree *em_tree = &BTRFS_I(inode)->extent_tree;
 	struct extent_io_tree *io_tree = &BTRFS_I(inode)->io_tree;
 	struct extent_map *em;
-	const u32 sectorsize = BTRFS_I(inode)->root->fs_info->sectorsize;
+	const u32 sectorsize = BTRFS_I(inode)->root->fs_info->datasize;
 
 	/*
 	 * Hopefully we have this extent in the tree already, try without the
@@ -1170,7 +1170,7 @@ static int defrag_one_range(struct btrfs_inode *inode, u64 start, u32 len,
 	struct defrag_target_range *tmp;
 	LIST_HEAD(target_list);
 	struct folio AUTO_KFREE(*folios);
-	const u32 sectorsize = inode->root->fs_info->sectorsize;
+	const u32 sectorsize = inode->root->fs_info->datasize;
 	u64 cur = start;
 	const unsigned int nr_pages = ((start + len - 1) >> PAGE_SHIFT) -
 				      (start >> PAGE_SHIFT) + 1;
@@ -1266,7 +1266,7 @@ static int defrag_one_cluster(struct btrfs_inode *inode,
 			      unsigned long max_sectors,
 			      u64 *last_scanned_ret)
 {
-	const u32 sectorsize = inode->root->fs_info->sectorsize;
+	const u32 sectorsize = inode->root->fs_info->datasize;
 	struct defrag_target_range *entry;
 	struct defrag_target_range *tmp;
 	LIST_HEAD(target_list);
@@ -1316,7 +1316,7 @@ static int defrag_one_cluster(struct btrfs_inode *inode,
 		if (ret < 0)
 			break;
 		*sectors_defragged += range_len >>
-				      inode->root->fs_info->sectorsize_bits;
+				      inode->root->fs_info->datasize_bits;
 	}
 out:
 	list_for_each_entry_safe(entry, tmp, &target_list, list)
@@ -1400,8 +1400,8 @@ int btrfs_defrag_file(struct btrfs_inode *inode, struct file_ra_state *ra,
 	}
 
 	/* Align the range */
-	cur = round_down(range->start, fs_info->sectorsize);
-	last_byte = round_up(last_byte, fs_info->sectorsize) - 1;
+	cur = round_down(range->start, fs_info->datasize);
+	last_byte = round_up(last_byte, fs_info->datasize) - 1;
 
 	/*
 	 * Make writeback start from the beginning of the range, so that the

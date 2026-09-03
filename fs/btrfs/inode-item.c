@@ -565,8 +565,8 @@ search_again:
 					btrfs_file_extent_num_bytes(leaf, fi);
 				extent_num_bytes = ALIGN(new_size -
 						found_key.offset,
-						fs_info->sectorsize);
-				clear_start = ALIGN(new_size, fs_info->sectorsize);
+						fs_info->datasize);
+				clear_start = ALIGN(new_size, fs_info->datasize);
 
 				btrfs_set_file_extent_num_bytes(leaf, fi,
 							 extent_num_bytes);
@@ -612,7 +612,7 @@ search_again:
 				 * them as a full sector worth in the file
 				 * extent tree just for simplicity sake.
 				 */
-				clear_len = fs_info->sectorsize;
+				clear_len = fs_info->datasize;
 			}
 
 			control->sub_bytes += item_end + 1 - new_size;

@@ -319,7 +319,7 @@ static void dump_extent_map(struct btrfs_fs_info *fs_info, const char *prefix,
 /* Internal sanity checks for btrfs debug builds. */
 static void validate_extent_map(struct btrfs_fs_info *fs_info, struct extent_map *em)
 {
-	const u32 blocksize = fs_info->sectorsize;
+	const u32 blocksize = fs_info->datasize;
 
 	if (!IS_ENABLED(CONFIG_BTRFS_DEBUG))
 		return;

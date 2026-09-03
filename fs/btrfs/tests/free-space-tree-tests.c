@@ -68,7 +68,7 @@ static int __check_free_space_extents(struct btrfs_trans_handle *trans,
 					i++;
 				}
 				prev_bit = bit;
-				offset += fs_info->sectorsize;
+				offset += fs_info->datasize;
 			}
 		}
 		if (prev_bit == 1) {

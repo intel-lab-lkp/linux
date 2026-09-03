@@ -4883,6 +4883,7 @@ int btrfs_reserve_extent(struct btrfs_root *root, u64 ram_bytes,
 	struct find_free_extent_ctl ffe_ctl = {};
 	bool final_tried = num_bytes == min_alloc_size;
 	u64 flags;
+	const u32 blocksize = is_data ? fs_info->datasize : fs_info->sectorsize;
 	int ret;
 	bool for_treelog = (btrfs_root_id(root) == BTRFS_TREE_LOG_OBJECTID);
 	bool for_data_reloc = (btrfs_is_data_reloc_root(root) && is_data);
@@ -4907,8 +4908,7 @@ again:
 	} else if (ret == -ENOSPC) {
 		if (!final_tried && ins->offset) {
 			num_bytes = min(num_bytes >> 1, ins->offset);
-			num_bytes = round_down(num_bytes,
-					       fs_info->sectorsize);
+			num_bytes = round_down(num_bytes, blocksize);
 			num_bytes = max(num_bytes, min_alloc_size);
 			ram_bytes = num_bytes;
 			if (num_bytes == min_alloc_size)

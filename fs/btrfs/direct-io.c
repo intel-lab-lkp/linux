@@ -185,7 +185,7 @@ static struct extent_map *btrfs_new_extent_direct(struct btrfs_inode *inode,
 
 	alloc_hint = btrfs_get_extent_allocation_hint(inode, start, len);
 again:
-	ret = btrfs_reserve_extent(root, len, len, fs_info->sectorsize,
+	ret = btrfs_reserve_extent(root, len, len, fs_info->datasize,
 				   0, alloc_hint, &ins, true, true);
 	if (ret == -EAGAIN) {
 		ASSERT(btrfs_is_zoned(fs_info));
@@ -401,7 +401,7 @@ static int btrfs_dio_iomap_begin(struct inode *inode, loff_t start,
 	 * to allocate a contiguous array for the checksums.
 	 */
 	if (!write)
-		len = min_t(u64, len, fs_info->sectorsize * BIO_MAX_VECS);
+		len = min_t(u64, len, fs_info->datasize * BIO_MAX_VECS);
 
 	lockstart = start;
 	lockend = start + len - 1;
@@ -865,7 +865,7 @@ static struct iomap_dio *btrfs_dio_write(struct kiocb *iocb, struct iov_iter *it
 static ssize_t check_direct_IO(struct btrfs_fs_info *fs_info,
 			       const struct iov_iter *iter, loff_t offset)
 {
-	const u32 blocksize_mask = fs_info->sectorsize - 1;
+	const u32 blocksize_mask = fs_info->datasize - 1;
 
 	if (offset & blocksize_mask)
 		return -EINVAL;

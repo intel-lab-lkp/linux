@@ -996,8 +996,8 @@ int replace_file_extents(struct btrfs_trans_handle *trans,
 				end = key.offset +
 				      btrfs_file_extent_num_bytes(leaf, fi);
 				WARN_ON(!IS_ALIGNED(key.offset,
-						    fs_info->sectorsize));
-				WARN_ON(!IS_ALIGNED(end, fs_info->sectorsize));
+						    fs_info->datasize));
+				WARN_ON(!IS_ALIGNED(end, fs_info->datasize));
 				end--;
 				/* Take mmap lock to serialize with reflinks. */
 				if (!down_read_trylock(&inode->i_mmap_lock))
@@ -1447,7 +1447,7 @@ static int invalidate_extent_cache(struct btrfs_root *root,
 				start = 0;
 			else {
 				start = min_key->offset;
-				WARN_ON(!IS_ALIGNED(start, fs_info->sectorsize));
+				WARN_ON(!IS_ALIGNED(start, fs_info->datasize));
 			}
 		} else {
 			start = 0;
@@ -1462,7 +1462,7 @@ static int invalidate_extent_cache(struct btrfs_root *root,
 				if (max_key->offset == 0)
 					continue;
 				end = max_key->offset;
-				WARN_ON(!IS_ALIGNED(end, fs_info->sectorsize));
+				WARN_ON(!IS_ALIGNED(end, fs_info->datasize));
 				end--;
 			}
 		} else {
@@ -3024,7 +3024,7 @@ again:
 			u64 boundary_start = cluster->boundary[*cluster_nr] -
 						offset;
 			u64 boundary_end = boundary_start +
-					   fs_info->sectorsize - 1;
+					   fs_info->datasize - 1;
 
 			btrfs_set_extent_bit(&BTRFS_I(inode)->io_tree,
 					     boundary_start, boundary_end,
@@ -4284,7 +4284,7 @@ static int move_existing_remap(struct btrfs_fs_info *fs_info,
 	spin_unlock(&sinfo->lock);
 
 	if (is_data)
-		min_size = fs_info->sectorsize;
+		min_size = fs_info->datasize;
 	else
 		min_size = fs_info->nodesize;
 
@@ -4637,7 +4637,7 @@ static int create_remap_tree_entries(struct btrfs_trans_handle *trans,
 
 				read_extent_buffer(leaf, bitmap, offset, data_size);
 
-				parse_bitmap(fs_info->sectorsize, bitmap,
+				parse_bitmap(fs_info->datasize, bitmap,
 					     data_size * BITS_PER_BYTE,
 					     found_key.objectid, space_runs,
 					     &num_space_runs);
@@ -5104,7 +5104,7 @@ static int do_remap_reloc_trans(struct btrfs_fs_info *fs_info,
 	spin_unlock(&sinfo->lock);
 
 	if (is_data)
-		min_size = fs_info->sectorsize;
+		min_size = fs_info->datasize;
 	else
 		min_size = fs_info->nodesize;
 

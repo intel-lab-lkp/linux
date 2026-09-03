@@ -67,11 +67,11 @@ struct workspace {
 
 static u32 workspace_buf_length(const struct btrfs_fs_info *fs_info)
 {
-	return lzo1x_worst_compress(fs_info->sectorsize);
+	return lzo1x_worst_compress(fs_info->datasize);
 }
 static u32 workspace_cbuf_length(const struct btrfs_fs_info *fs_info)
 {
-	return lzo1x_worst_compress(fs_info->sectorsize);
+	return lzo1x_worst_compress(fs_info->datasize);
 }
 
 void lzo_free_workspace(struct list_head *ws)
@@ -180,8 +180,8 @@ static int copy_compressed_data_to_bio(struct btrfs_fs_info *fs_info,
 				       struct folio **out_folio,
 				       u32 *total_out, u32 max_out)
 {
-	const u32 sectorsize = fs_info->sectorsize;
-	const u32 sectorsize_bits = fs_info->sectorsize_bits;
+	const u32 sectorsize = fs_info->datasize;
+	const u32 sectorsize_bits = fs_info->datasize_bits;
 	const u32 fsize = btrfs_min_folio_size(fs_info);
 	const u32 old_size = out_bio->bi_iter.bi_size;
 	u32 copy_start;
@@ -265,7 +265,7 @@ int lzo_compress_bio(struct list_head *ws, struct compressed_bio *cb)
 	struct bio *bio = &cb->bbio.bio;
 	const u64 start = cb->start;
 	const u32 len = cb->len;
-	const u32 sectorsize = fs_info->sectorsize;
+	const u32 sectorsize = fs_info->datasize;
 	const u32 min_folio_size = btrfs_min_folio_size(fs_info);
 	struct address_space *mapping = inode->vfs_inode.i_mapping;
 	struct folio *folio_in = NULL;
@@ -414,7 +414,7 @@ int lzo_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
 {
 	struct workspace *workspace = list_entry(ws, struct workspace, list);
 	struct btrfs_fs_info *fs_info = cb->bbio.inode->root->fs_info;
-	const u32 sectorsize = fs_info->sectorsize;
+	const u32 sectorsize = fs_info->datasize;
 	const u32 compressed_len = bio_get_size(&cb->bbio.bio);
 	struct folio_iter fi;
 	char *kaddr;
@@ -546,7 +546,7 @@ int lzo_decompress(struct list_head *ws, const u8 *data_in,
 {
 	struct workspace *workspace = list_entry(ws, struct workspace, list);
 	struct btrfs_fs_info *fs_info = folio_to_fs_info(dest_folio);
-	const u32 sectorsize = fs_info->sectorsize;
+	const u32 sectorsize = fs_info->datasize;
 	size_t in_len;
 	size_t out_len;
 	size_t max_segment_len = workspace_buf_length(fs_info);

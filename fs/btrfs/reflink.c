@@ -61,7 +61,7 @@ static int copy_inline_to_page(struct btrfs_inode *inode,
 			       const u8 comp_type)
 {
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
-	const u32 block_size = fs_info->sectorsize;
+	const u32 block_size = fs_info->datasize;
 	const u64 range_end = file_offset + block_size - 1;
 	const size_t inline_size = size - btrfs_file_extent_calc_inline_size(0);
 	char *data_start = inline_data + btrfs_file_extent_calc_inline_size(0);
@@ -175,7 +175,7 @@ static int clone_copy_inline_extent(struct btrfs_inode *inode,
 	struct btrfs_root *root = inode->root;
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	const u64 aligned_end = ALIGN(new_key->offset + datal,
-				      fs_info->sectorsize);
+				      fs_info->datasize);
 	struct btrfs_trans_handle *trans = NULL;
 	struct btrfs_drop_extents_args drop_args = { 0 };
 	int ret;
@@ -573,10 +573,10 @@ process_slot:
 			 * the i_size (which implies the whole inlined data).
 			 */
 			ASSERT(key.offset == 0);
-			ASSERT(datal <= fs_info->sectorsize);
+			ASSERT(datal <= fs_info->datasize);
 			if (WARN_ON(type != BTRFS_FILE_EXTENT_INLINE) ||
 			    WARN_ON(key.offset != 0) ||
-			    WARN_ON(datal > fs_info->sectorsize)) {
+			    WARN_ON(datal > fs_info->datasize)) {
 				ret = -EUCLEAN;
 				goto out;
 			}
@@ -609,7 +609,7 @@ process_slot:
 		inode->last_reflink_trans = trans->transid;
 
 		last_dest_end = ALIGN(new_key.offset + datal,
-				      fs_info->sectorsize);
+				      fs_info->datasize);
 		ret = clone_finish_inode_update(trans, inode, last_dest_end,
 						destoff, olen, no_time_update);
 		if (ret)
@@ -689,7 +689,7 @@ static int btrfs_extent_same_range(struct btrfs_inode *src, u64 loff, u64 len,
 {
 	struct extent_state *cached_state = NULL;
 	struct btrfs_fs_info *fs_info = src->root->fs_info;
-	const u32 bs = fs_info->sectorsize;
+	const u32 bs = fs_info->datasize;
 	const u64 end = round_up(dst_loff + len, bs) - 1;
 	int ret;
 
@@ -761,7 +761,7 @@ static noinline int btrfs_clone_files(struct file *file, struct file *file_src,
 	const u64 inode_isize = inode->vfs_inode.i_size;
 	int ret;
 	u64 len = olen;
-	const u32 bs = fs_info->sectorsize;
+	const u32 bs = fs_info->datasize;
 	u64 end;
 
 	/*
@@ -839,7 +839,7 @@ static int btrfs_remap_file_range_prep(struct file *file_in, loff_t pos_in,
 {
 	struct btrfs_inode *inode_in = BTRFS_I(file_inode(file_in));
 	struct btrfs_inode *inode_out = BTRFS_I(file_inode(file_out));
-	const u32 bs = inode_out->root->fs_info->sectorsize;
+	const u32 bs = inode_out->root->fs_info->datasize;
 	u64 wb_len;
 	int ret;
 

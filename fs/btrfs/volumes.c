@@ -8359,7 +8359,7 @@ int btrfs_init_writeback_bio_size(struct btrfs_fs_info *fs_info)
 {
 	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
 	struct btrfs_device *device;
-	u32 writeback_bio_size = fs_info->sectorsize;
+	u32 writeback_bio_size = fs_info->datasize;
 
 	mutex_lock(&fs_devices->device_list_mutex);
 	/*

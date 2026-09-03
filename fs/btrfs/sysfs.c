@@ -1022,7 +1022,7 @@ static ssize_t btrfs_sectorsize_show(struct kobject *kobj,
 {
 	struct btrfs_fs_info *fs_info = to_fs_info(kobj);
 
-	return sysfs_emit(buf, "%u\n", fs_info->sectorsize);
+	return sysfs_emit(buf, "%u\n", fs_info->datasize);
 }
 
 BTRFS_ATTR(, sectorsize, btrfs_sectorsize_show);
@@ -1082,7 +1082,7 @@ static ssize_t btrfs_clone_alignment_show(struct kobject *kobj,
 {
 	struct btrfs_fs_info *fs_info = to_fs_info(kobj);
 
-	return sysfs_emit(buf, "%u\n", fs_info->sectorsize);
+	return sysfs_emit(buf, "%u\n", fs_info->datasize);
 }
 
 BTRFS_ATTR(, clone_alignment, btrfs_clone_alignment_show);
@@ -1329,7 +1329,7 @@ static ssize_t btrfs_read_policy_store(struct kobject *kobj,
 
 	if (index == BTRFS_READ_POLICY_RR) {
 		if (value != -1) {
-			const u32 sectorsize = fs_devices->fs_info->sectorsize;
+			const u32 sectorsize = fs_devices->fs_info->datasize;
 
 			if (!IS_ALIGNED(value, sectorsize)) {
 				u64 temp_value = round_up(value, sectorsize);

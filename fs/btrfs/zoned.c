@@ -780,7 +780,7 @@ int btrfs_check_zoned_mode(struct btrfs_fs_info *fs_info)
 		min3((u64)lim->max_zone_append_sectors << SECTOR_SHIFT,
 		     (u64)lim->max_sectors << SECTOR_SHIFT,
 		     (u64)lim->max_segments << PAGE_SHIFT),
-		fs_info->sectorsize);
+		fs_info->datasize);
 	fs_info->fs_devices->chunk_alloc_policy = BTRFS_CHUNK_ALLOC_ZONED;
 
 	fs_info->max_extent_size = min_not_zero(fs_info->max_extent_size,
@@ -2726,7 +2726,7 @@ int btrfs_zone_finish_endio(struct btrfs_fs_info *fs_info, u64 logical, u64 leng
 
 	/* No MIXED_BG on zoned btrfs. */
 	if (block_group->flags & BTRFS_BLOCK_GROUP_DATA)
-		min_alloc_bytes = fs_info->sectorsize;
+		min_alloc_bytes = fs_info->datasize;
 	else
 		min_alloc_bytes = fs_info->nodesize;
 

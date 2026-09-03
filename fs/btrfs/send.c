@@ -5783,7 +5783,7 @@ static int clone_range(struct send_ctx *sctx, struct btrfs_path *dst_path,
 	 * filesystem has.
 	 */
 	if (clone_root->offset == 0 &&
-	    len == sctx->send_root->fs_info->sectorsize)
+	    len == sctx->send_root->fs_info->datasize)
 		return send_extent_data(sctx, dst_path, offset, len);
 
 	path = alloc_path_for_send();
@@ -6032,7 +6032,7 @@ static int send_write_or_clone(struct send_ctx *sctx,
 	int ret = 0;
 	u64 offset = key->offset;
 	u64 end;
-	const u32 bs = sctx->send_root->fs_info->sectorsize;
+	const u32 bs = sctx->send_root->fs_info->datasize;
 	struct btrfs_file_extent_item *ei;
 	u64 disk_byte;
 	u64 data_offset;

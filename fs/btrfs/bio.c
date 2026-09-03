@@ -857,10 +857,22 @@ static void assert_bbio_alignment(struct btrfs_bio *bbio)
 	struct btrfs_fs_info *fs_info = bbio->inode->root->fs_info;
 	struct bio_vec bvec;
 	struct bvec_iter iter;
-	const u32 blocksize = fs_info->sectorsize;
-	const u32 alignment = min(blocksize, PAGE_SIZE);
+	u32 blocksize;
+	u32 alignment;
 	const u64 logical = bbio->bio.bi_iter.bi_sector << SECTOR_SHIFT;
 	const u32 length = bbio->bio.bi_iter.bi_size;
+
+	if (btrfs_ino(bbio->inode) == BTRFS_BTREE_INODE_OBJECTID ||
+	    bbio->bio.bi_pool == &btrfs_repair_bioset) {
+		/*
+		 * For metadata or repair bios, the alignment requreiment is
+		 * sectorsize.
+		 */
+		blocksize = fs_info->sectorsize;
+	} else {
+		blocksize = fs_info->datasize;
+	}
+	alignment = min(blocksize, PAGE_SIZE);
 
 	/* The logical and length should still be aligned to blocksize. */
 	ASSERT(IS_ALIGNED(logical, blocksize) && IS_ALIGNED(length, blocksize) &&

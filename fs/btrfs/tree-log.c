@@ -717,7 +717,7 @@ static noinline int replay_one_extent(struct walk_control *wc)
 			nbytes = btrfs_file_extent_num_bytes(wc->log_leaf, item);
 	} else if (found_type == BTRFS_FILE_EXTENT_INLINE) {
 		nbytes = btrfs_file_extent_ram_bytes(wc->log_leaf, item);
-		extent_end = ALIGN(start + nbytes, fs_info->sectorsize);
+		extent_end = ALIGN(start + nbytes, fs_info->datasize);
 	} else {
 		btrfs_abort_log_replay(wc, -EUCLEAN,
 		       "unexpected extent type=%d root=%llu inode=%llu offset=%llu",
@@ -2852,7 +2852,7 @@ static int replay_one_buffer(struct extent_buffer *eb,
 					break;
 				}
 				from = ALIGN(i_size_read(&inode->vfs_inode),
-					     root->fs_info->sectorsize);
+					     root->fs_info->datasize);
 				drop_args.start = from;
 				drop_args.end = (u64)-1;
 				drop_args.drop_cache = true;
@@ -5667,7 +5667,7 @@ static int btrfs_log_holes(struct btrfs_trans_handle *trans,
 		u64 hole_len;
 
 		btrfs_release_path(path);
-		hole_len = ALIGN(i_size - prev_extent_end, fs_info->sectorsize);
+		hole_len = ALIGN(i_size - prev_extent_end, fs_info->datasize);
 		ret = btrfs_insert_hole_extent(trans, root->log_root, ino,
 					       prev_extent_end, hole_len);
 		if (ret < 0)

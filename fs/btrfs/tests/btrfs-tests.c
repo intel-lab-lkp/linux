@@ -138,8 +138,8 @@ struct btrfs_fs_info *btrfs_alloc_dummy_fs_info(u32 nodesize, u32 sectorsize)
 	btrfs_init_fs_info(fs_info);
 
 	fs_info->nodesize = nodesize;
-	fs_info->sectorsize = sectorsize;
-	fs_info->sectorsize_bits = ilog2(sectorsize);
+	fs_info->datasize = sectorsize;
+	fs_info->datasize_bits = ilog2(sectorsize);
 
 	/* CRC32C csum size. */
 	fs_info->csum_size = 4;
@@ -217,7 +217,7 @@ btrfs_alloc_dummy_block_group(struct btrfs_fs_info *fs_info,
 
 	cache->start = 0;
 	cache->length = length;
-	cache->full_stripe_len = fs_info->sectorsize;
+	cache->full_stripe_len = fs_info->datasize;
 	cache->fs_info = fs_info;
 
 	INIT_LIST_HEAD(&cache->list);

@@ -397,6 +397,16 @@ static inline bool is_data_inode(const struct btrfs_inode *inode)
 	return btrfs_ino(inode) != BTRFS_BTREE_INODE_OBJECTID;
 }
 
+static inline unsigned int btrfs_blocks_per_folio(const struct btrfs_fs_info *fs_info,
+						  const struct folio *folio)
+{
+	struct address_space *mapping = folio_mapping(folio);
+
+	if (mapping && mapping->host && is_data_inode(BTRFS_I(mapping->host)))
+		return folio_size(folio) >> fs_info->datasize_bits;
+	return folio_size(folio) >> fs_info->sectorsize_bits;
+}
+
 static inline void btrfs_mod_outstanding_extents(struct btrfs_inode *inode,
 						 int mod)
 {

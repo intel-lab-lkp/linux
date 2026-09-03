@@ -528,7 +528,7 @@ static void fragment_free_space(struct btrfs_block_group *block_group)
 	u64 start = block_group->start;
 	u64 len = block_group->length;
 	u64 chunk = block_group->flags & BTRFS_BLOCK_GROUP_METADATA ?
-		fs_info->nodesize : fs_info->sectorsize;
+		fs_info->nodesize : fs_info->datasize;
 	u64 step = chunk << 1;
 
 	while (len > chunk) {

@@ -126,7 +126,7 @@ static u64 file_extent_end(struct extent_buffer *leaf,
 
 	if (btrfs_file_extent_type(leaf, extent) == BTRFS_FILE_EXTENT_INLINE) {
 		len = btrfs_file_extent_ram_bytes(leaf, extent);
-		end = ALIGN(key->offset + len, leaf->fs_info->sectorsize);
+		end = ALIGN(key->offset + len, leaf->fs_info->datasize);
 	} else {
 		len = btrfs_file_extent_num_bytes(leaf, extent);
 		end = key->offset + len;

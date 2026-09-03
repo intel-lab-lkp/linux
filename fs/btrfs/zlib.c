@@ -90,8 +90,8 @@ struct list_head *zlib_alloc_workspace(struct btrfs_fs_info *fs_info, unsigned i
 		workspace->buf_size = ZLIB_DFLTCC_BUF_SIZE;
 	}
 	if (!workspace->buf) {
-		workspace->buf = kmalloc(fs_info->sectorsize, GFP_KERNEL);
-		workspace->buf_size = fs_info->sectorsize;
+		workspace->buf = kmalloc(fs_info->datasize, GFP_KERNEL);
+		workspace->buf_size = fs_info->datasize;
 	}
 	if (!workspace->strm.workspace || !workspace->buf)
 		goto fail;
@@ -238,7 +238,7 @@ int zlib_compress_bio(struct list_head *ws, struct compressed_bio *cb)
 		}
 
 		/* We're making it bigger, give up. */
-		if (workspace->strm.total_in > fs_info->sectorsize * 2 &&
+		if (workspace->strm.total_in > fs_info->datasize * 2 &&
 		    workspace->strm.total_in < workspace->strm.total_out) {
 			ret = -E2BIG;
 			goto out;

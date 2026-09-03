@@ -886,9 +886,23 @@ struct btrfs_fs_info {
 	/* Cached block sizes */
 	u32 nodesize;
 	u32 nodesize_bits;
+
+	/*
+	 * The sectorsize from super block, also the unit of data checksum
+	 * calculation.
+	 */
 	u32 sectorsize;
-	/* ilog2 of sectorsize, use to avoid 64bit division */
-	u32 sectorsize_bits;
+
+	/*
+	 * The minimal data IO size, must equal to sectorsize or power-of-2
+	 * time of sectorsize.
+	 */
+	u32 datasize;
+
+	/* ilog2 of corresponding sizes, use to avoid 64bit division */
+	u16 datasize_bits;
+	u16 sectorsize_bits;
+
 	u32 block_min_order;
 	u32 block_max_order;
 	u32 writeback_bio_size;
@@ -1076,12 +1090,6 @@ static inline u32 count_max_extents(const struct btrfs_fs_info *fs_info, u64 siz
 #endif
 
 	return div_u64(size + fs_info->max_extent_size - 1, fs_info->max_extent_size);
-}
-
-static inline unsigned int btrfs_blocks_per_folio(const struct btrfs_fs_info *fs_info,
-						  const struct folio *folio)
-{
-	return folio_size(folio) >> fs_info->sectorsize_bits;
 }
 
 bool __attribute_const__ btrfs_supported_blocksize(u32 blocksize);

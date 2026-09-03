@@ -318,8 +318,8 @@ void btrfs_submit_compressed_write(struct btrfs_ordered_extent *ordered,
 	struct btrfs_inode *inode = ordered->inode;
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 
-	ASSERT(IS_ALIGNED(ordered->file_offset, fs_info->sectorsize));
-	ASSERT(IS_ALIGNED(ordered->num_bytes, fs_info->sectorsize));
+	ASSERT(IS_ALIGNED(ordered->file_offset, fs_info->datasize));
+	ASSERT(IS_ALIGNED(ordered->num_bytes, fs_info->datasize));
 	/*
 	 * This flag determines if we should clear the writeback flag from the
 	 * page cache. But this function is only utilized by encoded writes, it
@@ -416,7 +416,7 @@ static noinline int add_ra_bio_folios(struct inode *inode, u64 compressed_end,
 
 			folio_put(folio);
 			sectors_missed += (folio_sz - offset) >>
-					  fs_info->sectorsize_bits;
+					  fs_info->datasize_bits;
 
 			/* Beyond threshold, no need to continue */
 			if (sectors_missed > 4)
@@ -472,7 +472,7 @@ static noinline int add_ra_bio_folios(struct inode *inode, u64 compressed_end,
 		 * to this compressed extent on disk.
 		 */
 		if (!em || cur < em->start ||
-		    (cur + fs_info->sectorsize > btrfs_extent_map_end(em)) ||
+		    (cur + fs_info->datasize > btrfs_extent_map_end(em)) ||
 		    (btrfs_extent_map_block_start(em) >> SECTOR_SHIFT) !=
 		    orig_bio->bi_iter.bi_sector) {
 			btrfs_free_extent_map(em);
@@ -549,7 +549,7 @@ void btrfs_submit_compressed_read(struct btrfs_bio *bbio)
 
 	/* we need the actual starting offset of this extent in the file */
 	read_lock(&em_tree->lock);
-	em = btrfs_lookup_extent_mapping(em_tree, file_offset, fs_info->sectorsize);
+	em = btrfs_lookup_extent_mapping(em_tree, file_offset, fs_info->datasize);
 	read_unlock(&em_tree->lock);
 	if (!em) {
 		ret = -EIO;
@@ -1078,7 +1078,7 @@ int btrfs_decompress(int type, const u8 *data_in, struct folio *dest_folio,
 {
 	struct btrfs_fs_info *fs_info = folio_to_fs_info(dest_folio);
 	struct list_head *workspace;
-	const u32 sectorsize = fs_info->sectorsize;
+	const u32 sectorsize = fs_info->datasize;
 	int ret;
 
 	/*

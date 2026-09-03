@@ -130,7 +130,7 @@ int btrfs_alloc_data_chunk_ondemand(const struct btrfs_inode *inode, u64 bytes)
 	enum btrfs_reserve_flush_enum flush = BTRFS_RESERVE_FLUSH_DATA;
 
 	/* Make sure bytes are sectorsize aligned */
-	bytes = ALIGN(bytes, fs_info->sectorsize);
+	bytes = ALIGN(bytes, fs_info->datasize);
 
 	if (btrfs_is_free_space_inode(inode))
 		flush = BTRFS_RESERVE_FLUSH_FREE_SPACE_INODE;
@@ -149,9 +149,9 @@ int btrfs_check_data_free_space(struct btrfs_inode *inode,
 	int ret;
 
 	/* align the range */
-	len = round_up(start + len, fs_info->sectorsize) -
-	      round_down(start, fs_info->sectorsize);
-	start = round_down(start, fs_info->sectorsize);
+	len = round_up(start + len, fs_info->datasize) -
+	      round_down(start, fs_info->datasize);
+	start = round_down(start, fs_info->datasize);
 
 	if (noflush)
 		flush = BTRFS_RESERVE_NO_FLUSH;
@@ -186,7 +186,7 @@ void btrfs_free_reserved_data_space_noquota(struct btrfs_inode *inode, u64 len)
 {
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 
-	ASSERT(IS_ALIGNED(len, fs_info->sectorsize));
+	ASSERT(IS_ALIGNED(len, fs_info->datasize));
 
 	btrfs_space_info_free_bytes_may_use(data_sinfo_for_inode(inode), len);
 }
@@ -204,9 +204,9 @@ void btrfs_free_reserved_data_space(struct btrfs_inode *inode,
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 
 	/* Make sure the range is aligned to sectorsize */
-	len = round_up(start + len, fs_info->sectorsize) -
-	      round_down(start, fs_info->sectorsize);
-	start = round_down(start, fs_info->sectorsize);
+	len = round_up(start + len, fs_info->datasize) -
+	      round_down(start, fs_info->datasize);
+	start = round_down(start, fs_info->datasize);
 
 	btrfs_free_reserved_data_space_noquota(inode, len);
 	btrfs_qgroup_free_data(inode, reserved, start, len, NULL);
@@ -341,8 +341,8 @@ int btrfs_delalloc_reserve_metadata(struct btrfs_inode *inode, u64 num_bytes,
 			flush = BTRFS_RESERVE_FLUSH_LIMIT;
 	}
 
-	num_bytes = ALIGN(num_bytes, fs_info->sectorsize);
-	disk_num_bytes = ALIGN(disk_num_bytes, fs_info->sectorsize);
+	num_bytes = ALIGN(num_bytes, fs_info->datasize);
+	disk_num_bytes = ALIGN(disk_num_bytes, fs_info->datasize);
 
 	/*
 	 * We always want to do it this way, every other way is wrong and ends
@@ -409,7 +409,7 @@ void btrfs_delalloc_release_metadata(struct btrfs_inode *inode, u64 num_bytes,
 {
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 
-	num_bytes = ALIGN(num_bytes, fs_info->sectorsize);
+	num_bytes = ALIGN(num_bytes, fs_info->datasize);
 	spin_lock(&inode->lock);
 	if (!(inode->flags & BTRFS_INODE_NODATASUM))
 		inode->csum_bytes -= num_bytes;

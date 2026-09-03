@@ -2724,8 +2724,8 @@ static long btrfs_ioctl_fs_info(const struct btrfs_fs_info *fs_info,
 
 	memcpy(&fi_args->fsid, fs_devices->fsid, sizeof(fi_args->fsid));
 	fi_args->nodesize = fs_info->nodesize;
-	fi_args->sectorsize = fs_info->sectorsize;
-	fi_args->clone_alignment = fs_info->sectorsize;
+	fi_args->sectorsize = fs_info->datasize;
+	fi_args->clone_alignment = fs_info->datasize;
 
 	if (flags_in & BTRFS_FS_INFO_FLAG_CSUM_INFO) {
 		fi_args->csum_type = btrfs_super_csum_type(fs_info->super_copy);
@@ -4421,7 +4421,7 @@ static int btrfs_ioctl_encoded_read(struct file *file, void __user *argp,
 		bool unlocked = false;
 		u64 start, lockend, count;
 
-		start = ALIGN_DOWN(kiocb.ki_pos, fs_info->sectorsize);
+		start = ALIGN_DOWN(kiocb.ki_pos, fs_info->datasize);
 		lockend = start + BTRFS_MAX_UNCOMPRESSED - 1;
 
 		if (args.compression)
@@ -4831,7 +4831,7 @@ static int btrfs_uring_encoded_read(struct io_uring_cmd *cmd, unsigned int issue
 	if (issue_flags & IO_URING_F_NONBLOCK)
 		kiocb.ki_flags |= IOCB_NOWAIT;
 
-	start = ALIGN_DOWN(pos, fs_info->sectorsize);
+	start = ALIGN_DOWN(pos, fs_info->datasize);
 	lockend = start + BTRFS_MAX_UNCOMPRESSED - 1;
 
 	ret = btrfs_encoded_read(&kiocb, &data->iter, &data->args, &cached_state,
@@ -5276,8 +5276,8 @@ static int btrfs_ioctl_get_csums(struct file *file, void __user *argp)
 	if (copy_from_user(&args, argp, sizeof(args)))
 		return -EFAULT;
 
-	if (!IS_ALIGNED(args.offset, fs_info->sectorsize) ||
-	    !IS_ALIGNED(args.length, fs_info->sectorsize))
+	if (!IS_ALIGNED(args.offset, fs_info->datasize) ||
+	    !IS_ALIGNED(args.length, fs_info->datasize))
 		return -EINVAL;
 	if (args.length == 0)
 		return -EINVAL;

@@ -2916,7 +2916,9 @@ void btrfs_init_fs_info(struct btrfs_fs_info *fs_info)
 
 	/* Usable values until the real ones are cached from the superblock */
 	fs_info->nodesize = 4096;
+	fs_info->datasize = 4096;
 	fs_info->sectorsize = 4096;
+	fs_info->datasize_bits = ilog2(4096);
 	fs_info->sectorsize_bits = ilog2(4096);
 
 	/* Default compress algorithm when user does -o compress */
@@ -3229,10 +3231,10 @@ int btrfs_check_features(struct btrfs_fs_info *fs_info, bool is_rw_mount)
 
 	/* Runtime limitation for mixed block groups. */
 	if ((incompat & BTRFS_FEATURE_INCOMPAT_MIXED_GROUPS) &&
-	    (fs_info->sectorsize != fs_info->nodesize)) {
+	    (fs_info->datasize != fs_info->nodesize)) {
 		btrfs_err(fs_info,
 "unequal nodesize/sectorsize (%u != %u) are not allowed for mixed block groups",
-			fs_info->nodesize, fs_info->sectorsize);
+			fs_info->nodesize, fs_info->datasize);
 		return -EINVAL;
 	}
 
@@ -3291,10 +3293,10 @@ int btrfs_check_features(struct btrfs_fs_info *fs_info, bool is_rw_mount)
 	 * we're already defaulting to v2 cache, no need to bother v1 as it's
 	 * going to be deprecated anyway.
 	 */
-	if (fs_info->sectorsize != PAGE_SIZE && btrfs_test_opt(fs_info, SPACE_CACHE)) {
+	if (fs_info->datasize != PAGE_SIZE && btrfs_test_opt(fs_info, SPACE_CACHE)) {
 		btrfs_warn(fs_info,
 	"v1 space cache is not supported for page size %lu with sectorsize %u",
-			   PAGE_SIZE, fs_info->sectorsize);
+			   PAGE_SIZE, fs_info->datasize);
 		return -EINVAL;
 	}
 
@@ -3493,7 +3495,9 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 
 	fs_info->nodesize = nodesize;
 	fs_info->nodesize_bits = ilog2(nodesize);
+	fs_info->datasize = sectorsize;
 	fs_info->sectorsize = sectorsize;
+	fs_info->datasize_bits = ilog2(sectorsize);
 	fs_info->sectorsize_bits = ilog2(sectorsize);
 	fs_info->block_min_order = ilog2(round_up(sectorsize, PAGE_SIZE) >> PAGE_SHIFT);
 	/*
@@ -3504,14 +3508,14 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 	if (IS_ENABLED(CONFIG_HIGHMEM))
 		fs_info->block_max_order = fs_info->block_min_order;
 	else
-		fs_info->block_max_order = calc_block_max_order(fs_info->sectorsize_bits);
+		fs_info->block_max_order = calc_block_max_order(fs_info->datasize_bits);
 	fs_info->csums_per_leaf = BTRFS_MAX_ITEM_SIZE(fs_info) / fs_info->csum_size;
 	fs_info->fs_devices->fs_info = fs_info;
 
-	if (fs_info->sectorsize > PAGE_SIZE)
+	if (fs_info->datasize > PAGE_SIZE)
 		btrfs_warn(fs_info,
 			   "support for block size %u with page size %lu is experimental, some features may be missing",
-			   fs_info->sectorsize, PAGE_SIZE);
+			   fs_info->datasize, PAGE_SIZE);
 	/*
 	 * Handle the space caching options appropriately now that we have the
 	 * super block loaded and validated.
@@ -3541,7 +3545,7 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 	 * At this point our mount options are validated, if we set ->max_inline
 	 * to something non-standard make sure we truncate it to sectorsize.
 	 */
-	fs_info->max_inline = min_t(u64, fs_info->max_inline, fs_info->sectorsize);
+	fs_info->max_inline = min_t(u64, fs_info->max_inline, fs_info->datasize);
 
 	ret = btrfs_alloc_compress_wsm(fs_info);
 	if (ret)

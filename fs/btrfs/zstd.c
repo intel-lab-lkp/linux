@@ -391,7 +391,7 @@ struct list_head *zstd_alloc_workspace(struct btrfs_fs_info *fs_info, int level)
 	workspace->req_level = level;
 	workspace->last_used = jiffies;
 	workspace->mem = kvmalloc(workspace->size, GFP_KERNEL | __GFP_NOWARN);
-	workspace->buf = kmalloc(fs_info->sectorsize, GFP_KERNEL);
+	workspace->buf = kmalloc(fs_info->datasize, GFP_KERNEL);
 	if (!workspace->mem || !workspace->buf)
 		goto fail;
 
@@ -470,7 +470,7 @@ int zstd_compress_bio(struct list_head *ws, struct compressed_bio *cb)
 		}
 
 		/* Check to see if we are making it bigger. */
-		if (tot_in + workspace->in_buf.pos > fs_info->sectorsize * 2 &&
+		if (tot_in + workspace->in_buf.pos > fs_info->datasize * 2 &&
 		    tot_in + workspace->in_buf.pos < tot_out + workspace->out_buf.pos) {
 			ret = -E2BIG;
 			goto out;
@@ -626,7 +626,7 @@ int zstd_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
 
 	workspace->out_buf.dst = workspace->buf;
 	workspace->out_buf.pos = 0;
-	workspace->out_buf.size = fs_info->sectorsize;
+	workspace->out_buf.size = fs_info->datasize;
 
 	while (1) {
 		size_t ret2;
@@ -711,7 +711,7 @@ int zstd_decompress(struct list_head *ws, const u8 *data_in,
 
 	workspace->out_buf.dst = workspace->buf;
 	workspace->out_buf.pos = 0;
-	workspace->out_buf.size = fs_info->sectorsize;
+	workspace->out_buf.size = fs_info->datasize;
 
 	/*
 	 * Since both input and output buffers should not exceed one sector,

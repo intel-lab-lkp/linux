@@ -190,7 +190,7 @@ static int data_reloc_print_warning_inode(u64 inum, u64 offset, u64 num_bytes,
 		btrfs_warn(fs_info,
 "checksum error at logical %llu mirror %u root %llu inode %llu offset %llu length %u links %u (path: %s)",
 			   warn->logical, warn->mirror_num, root, inum, offset,
-			   fs_info->sectorsize, nlink,
+			   fs_info->datasize, nlink,
 			   (char *)(unsigned long)ipath->fspath->val[i]);
 	}
 
@@ -441,7 +441,7 @@ static int insert_inline_extent(struct btrfs_trans_handle *trans,
 {
 	struct btrfs_root *root = inode->root;
 	struct extent_buffer *leaf;
-	const u32 sectorsize = trans->fs_info->sectorsize;
+	const u32 sectorsize = trans->fs_info->datasize;
 	char *kaddr;
 	unsigned long ptr;
 	struct btrfs_file_extent_item *ei;
@@ -519,7 +519,7 @@ static int insert_inline_extent(struct btrfs_trans_handle *trans,
 	 * sake.
 	 */
 	ret = btrfs_inode_set_file_extent_range(inode, 0,
-					ALIGN(size, root->fs_info->sectorsize));
+					ALIGN(size, root->fs_info->datasize));
 	if (ret)
 		return ret;
 
@@ -564,11 +564,11 @@ static bool can_cow_file_range_inline(struct btrfs_inode *inode,
 		return false;
 
 	/* Inline extents are limited to sectorsize. */
-	if (size > fs_info->sectorsize)
+	if (size > fs_info->datasize)
 		return false;
 
 	/* We do not allow a non-compressed extent to be as large as block size. */
-	if (data_len >= fs_info->sectorsize)
+	if (data_len >= fs_info->datasize)
 		return false;
 
 	/* We cannot exceed the maximum inline data size. */
@@ -632,7 +632,7 @@ static noinline int __cow_file_range_inline(struct btrfs_inode *inode,
 
 	drop_args.path = path;
 	drop_args.start = 0;
-	drop_args.end = fs_info->sectorsize;
+	drop_args.end = fs_info->datasize;
 	drop_args.drop_cache = true;
 	drop_args.replace_extent = true;
 	drop_args.extent_item_size = btrfs_file_extent_calc_inline_size(data_len);
@@ -675,7 +675,7 @@ out:
 	 * to keep the data reservation.
 	 */
 	if (ret <= 0)
-		btrfs_qgroup_free_data(inode, NULL, 0, fs_info->sectorsize, NULL);
+		btrfs_qgroup_free_data(inode, NULL, 0, fs_info->datasize, NULL);
 	btrfs_free_path(path);
 	if (trans)
 		btrfs_end_transaction(trans);
@@ -741,7 +741,7 @@ static inline int inode_need_compress(struct btrfs_inode *inode, u64 start,
 	 * do not even bother try compression, as there will be no space saving
 	 * and will always fallback to regular write later.
 	 */
-	if (end + 1 - start <= fs_info->sectorsize &&
+	if (end + 1 - start <= fs_info->datasize &&
 	    (!check_inline || (start > 0 || end + 1 < inode->disk_i_size)))
 		return 0;
 
@@ -869,7 +869,7 @@ static void compress_file_range(struct btrfs_work *work)
 	struct btrfs_inode *inode = async_chunk->inode;
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	struct compressed_bio *cb = NULL;
-	const u32 blocksize = fs_info->sectorsize;
+	const u32 blocksize = fs_info->datasize;
 	u64 start = async_chunk->start;
 	u64 end = async_chunk->end;
 	u64 actual_end;
@@ -968,7 +968,7 @@ again:
 	 * the page count read with the blocks on disk, compression must free at
 	 * least one sector.
 	 */
-	total_in = round_up(total_in, fs_info->sectorsize);
+	total_in = round_up(total_in, fs_info->datasize);
 	if (total_compressed + blocksize > total_in)
 		goto mark_incompressible;
 
@@ -1354,7 +1354,7 @@ static noinline int cow_file_range(struct btrfs_inode *inode,
 	u64 orig_start = start;
 	u64 num_bytes;
 	u32 min_alloc_size;
-	u32 blocksize = fs_info->sectorsize;
+	u32 blocksize = fs_info->datasize;
 	u32 cur_alloc_size = 0;
 	struct btrfs_key ins;
 	unsigned clear_bits;
@@ -1402,7 +1402,7 @@ static noinline int cow_file_range(struct btrfs_inode *inode,
 	if (btrfs_is_data_reloc_root(root))
 		min_alloc_size = num_bytes;
 	else
-		min_alloc_size = fs_info->sectorsize;
+		min_alloc_size = fs_info->datasize;
 
 	while (num_bytes > 0) {
 		ret = cow_one_range(inode, locked_folio, &ins, &cached, start,
@@ -2315,7 +2315,7 @@ static int run_delalloc_inline(struct btrfs_inode *inode, struct folio *locked_f
 	struct compressed_bio *cb = NULL;
 	struct extent_state *cached = NULL;
 	const u64 i_size = i_size_read(&inode->vfs_inode);
-	const u32 blocksize = fs_info->sectorsize;
+	const u32 blocksize = fs_info->datasize;
 	int compress_type = fs_info->compress_type;
 	int compress_level = fs_info->compress_level;
 	u32 compressed_size = 0;
@@ -2412,7 +2412,7 @@ int btrfs_run_delalloc_range(struct btrfs_inode *inode, struct folio *locked_fol
 	ASSERT(!(end <= folio_pos(locked_folio) ||
 		 start >= folio_next_pos(locked_folio)));
 
-	if (start == 0 && end + 1 <= inode->root->fs_info->sectorsize &&
+	if (start == 0 && end + 1 <= inode->root->fs_info->datasize &&
 	    end + 1 >= inode->disk_i_size) {
 		int ret;
 
@@ -2795,7 +2795,7 @@ int btrfs_set_extent_delalloc(struct btrfs_inode *inode, u64 start, u64 end,
 			      unsigned int extra_bits,
 			      struct extent_state **cached_state)
 {
-	const u32 blocksize = inode->root->fs_info->sectorsize;
+	const u32 blocksize = inode->root->fs_info->datasize;
 
 	/* Basic alignment check. */
 	ASSERT(IS_ALIGNED(start, blocksize), "start=%llu blocksize=%u",
@@ -2848,7 +2848,7 @@ static void btrfs_writepage_fixup_worker(struct work_struct *work)
 	struct btrfs_inode *inode = fixup->inode;
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	const unsigned int blocks_per_folio = btrfs_blocks_per_folio(fs_info, folio);
-	const u32 sectorsize = fs_info->sectorsize;
+	const u32 sectorsize = fs_info->datasize;
 	const u64 page_start = folio_pos(folio);
 	const u64 page_end = folio_next_pos(folio) - 1;
 	unsigned int start_bit;
@@ -2886,7 +2886,7 @@ again:
 
 	for (bit = 0; bit < blocks_per_folio; bit++) {
 		struct btrfs_ordered_extent *ordered;
-		const u64 start = page_start + (bit << fs_info->sectorsize_bits);
+		const u64 start = page_start + (bit << fs_info->datasize_bits);
 
 		if (test_bit(bit, delalloc_bitmap))
 			continue;
@@ -3006,7 +3006,7 @@ void btrfs_queue_writepage_fixup(struct btrfs_inode *inode, struct folio *folio)
 int btrfs_reset_extent_delalloc(struct btrfs_inode *inode, u64 start, u64 end,
 				unsigned int extra_bits, struct extent_state **cached_state)
 {
-	const u32 blocksize = inode->root->fs_info->sectorsize;
+	const u32 blocksize = inode->root->fs_info->datasize;
 
 	/* The @extra_bits can only be EXTENT_NORESERVE for now. */
 	ASSERT(!(extra_bits & ~EXTENT_NORESERVE), "extra_bits=0x%x", extra_bits);
@@ -3051,7 +3051,7 @@ static int insert_reserved_file_extent(struct btrfs_trans_handle *trans,
 				       u64 qgroup_reserved)
 {
 	struct btrfs_root *root = inode->root;
-	const u32 sectorsize = root->fs_info->sectorsize;
+	const u32 sectorsize = root->fs_info->datasize;
 	BTRFS_PATH_AUTO_FREE(path);
 	struct extent_buffer *leaf;
 	struct btrfs_key ins;
@@ -3472,6 +3472,7 @@ void btrfs_csum_one_bio_block(struct btrfs_fs_info *fs_info, struct bio *bio,
 		const u32 cur_len = min(bio_iter_len(bio, iter), blocksize - cur);
 		void *kaddr;
 
+		ASSERT(cur_len > 0);
 		kaddr = kmap_local_page(page) + pg_off;
 		btrfs_csum_update(&cctx, kaddr, cur_len);
 		kunmap_local(kaddr);
@@ -3518,9 +3519,17 @@ bool btrfs_bio_data_csum_ok(struct btrfs_bio *bbio,
 	if (btrfs_is_data_reloc_root(inode->root) &&
 	    btrfs_test_range_bit(&inode->io_tree, file_offset, end, EXTENT_NODATASUM,
 				 NULL)) {
-		/* Skip the range without csum for data reloc inode */
-		btrfs_clear_extent_bit(&inode->io_tree, file_offset, end,
-				       EXTENT_NODATASUM, NULL);
+		/*
+		 * Skip the range without csum for data reloc inode.
+		 *
+		 * For datasize > sectorsize case, we can have multiple
+		 * sectors inside a data block. Only clear the EXTENT_NODATASUM
+		 * flag for the last sector of the block.
+		 */
+		if (IS_ALIGNED(end + 1, fs_info->datasize))
+			btrfs_clear_extent_bit(&inode->io_tree,
+					       round_down(file_offset, fs_info->datasize),
+					       end, EXTENT_NODATASUM, NULL);
 		return true;
 	}
 
@@ -4192,7 +4201,7 @@ cache_acl:
 	if (ret)
 		goto out;
 	btrfs_inode_set_file_extent_range(inode, 0,
-			  round_up(i_size_read(vfs_inode), fs_info->sectorsize));
+			  round_up(i_size_read(vfs_inode), fs_info->datasize));
 
 	if (!maybe_acls)
 		cache_no_acl(vfs_inode);
@@ -5031,7 +5040,7 @@ int btrfs_truncate_block(struct btrfs_inode *inode, u64 offset, u64 start, u64 e
 	struct extent_state *cached_state = NULL;
 	struct extent_changeset *data_reserved = NULL;
 	bool only_release_metadata = false;
-	u32 blocksize = fs_info->sectorsize;
+	u32 blocksize = fs_info->datasize;
 	pgoff_t index = (offset >> PAGE_SHIFT);
 	struct folio *folio;
 	gfp_t mask = btrfs_alloc_write_mask(mapping);
@@ -5269,8 +5278,8 @@ int btrfs_cont_expand(struct btrfs_inode *inode, loff_t oldsize, loff_t size)
 	struct extent_io_tree *io_tree = &inode->io_tree;
 	struct extent_map *em = NULL;
 	struct extent_state *cached_state = NULL;
-	u64 hole_start = ALIGN(oldsize, fs_info->sectorsize);
-	u64 block_end = ALIGN(size, fs_info->sectorsize);
+	u64 hole_start = ALIGN(oldsize, fs_info->datasize);
+	u64 block_end = ALIGN(size, fs_info->datasize);
 	u64 last_byte;
 	u64 cur_offset;
 	u64 hole_size;
@@ -5299,7 +5308,7 @@ int btrfs_cont_expand(struct btrfs_inode *inode, loff_t oldsize, loff_t size)
 			break;
 		}
 		last_byte = min(btrfs_extent_map_end(em), block_end);
-		last_byte = ALIGN(last_byte, fs_info->sectorsize);
+		last_byte = ALIGN(last_byte, fs_info->datasize);
 		hole_size = last_byte - cur_offset;
 
 		if (!(em->flags & EXTENT_FLAG_PREALLOC)) {
@@ -5405,7 +5414,7 @@ static int btrfs_setsize(struct inode *inode, struct iattr *attr)
 
 		if (btrfs_is_zoned(fs_info)) {
 			ret = btrfs_wait_ordered_range(BTRFS_I(inode),
-					ALIGN(newsize, fs_info->sectorsize),
+					ALIGN(newsize, fs_info->datasize),
 					(u64)-1);
 			if (ret)
 				return ret;
@@ -7100,7 +7109,7 @@ static noinline int uncompress_inline(struct btrfs_path *path,
 {
 	int ret;
 	struct extent_buffer *leaf = path->nodes[0];
-	const u32 blocksize = leaf->fs_info->sectorsize;
+	const u32 blocksize = leaf->fs_info->datasize;
 	char *tmp;
 	size_t max_size;
 	unsigned long inline_size;
@@ -7137,7 +7146,7 @@ static noinline int uncompress_inline(struct btrfs_path *path,
 
 static int read_inline_extent(struct btrfs_path *path, struct folio *folio)
 {
-	const u32 blocksize = path->nodes[0]->fs_info->sectorsize;
+	const u32 blocksize = path->nodes[0]->fs_info->datasize;
 	struct btrfs_file_extent_item *fi;
 	void *kaddr;
 	size_t copy_size;
@@ -7332,7 +7341,7 @@ next:
 		 * Other members are not utilized for inline extents.
 		 */
 		ASSERT(em->disk_bytenr == EXTENT_MAP_INLINE);
-		ASSERT(em->len == fs_info->sectorsize);
+		ASSERT(em->len == fs_info->datasize);
 
 		ret = read_inline_extent(path, folio);
 		if (ret < 0)
@@ -7475,7 +7484,7 @@ noinline int can_nocow_extent(struct btrfs_inode *inode, u64 offset, u64 *len,
 		u64 range_end;
 
 		range_end = round_up(offset + nocow_args.file_extent.num_bytes,
-				     root->fs_info->sectorsize) - 1;
+				     root->fs_info->datasize) - 1;
 		ret = btrfs_test_range_bit_exists(io_tree, offset, range_end,
 						  EXTENT_DELALLOC);
 		if (ret)
@@ -7811,8 +7820,8 @@ static int btrfs_truncate(struct btrfs_inode *inode, bool skip_writeback)
 	int ret;
 	struct btrfs_trans_handle *trans;
 	const u64 min_size = btrfs_calc_metadata_size(fs_info, 1);
-	const u64 lock_start = round_down(inode->vfs_inode.i_size, fs_info->sectorsize);
-	const u64 i_size_up = round_up(inode->vfs_inode.i_size, fs_info->sectorsize);
+	const u64 lock_start = round_down(inode->vfs_inode.i_size, fs_info->datasize);
+	const u64 i_size_up = round_up(inode->vfs_inode.i_size, fs_info->datasize);
 
 	/* Our inode is locked and the i_size can't be changed concurrently. */
 	btrfs_assert_inode_locked(inode);
@@ -8196,7 +8205,7 @@ static int btrfs_getattr(struct mnt_idmap *idmap,
 	u64 delalloc_bytes;
 	u64 inode_bytes;
 	struct inode *inode = d_inode(path->dentry);
-	u32 blocksize = btrfs_sb(inode->i_sb)->sectorsize;
+	u32 blocksize = btrfs_sb(inode->i_sb)->datasize;
 	u32 bi_flags = BTRFS_I(inode)->flags;
 	u32 bi_ro_flags = BTRFS_I(inode)->ro_flags;
 
@@ -9015,7 +9024,7 @@ static int btrfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	 * reach block size.
 	 */
 	if (name_len > BTRFS_MAX_INLINE_DATA_SIZE(fs_info) ||
-	    name_len >= fs_info->sectorsize)
+	    name_len >= fs_info->datasize)
 		return -ENAMETOOLONG;
 
 	inode = new_inode(dir->i_sb);
@@ -9282,8 +9291,8 @@ next:
 			 * to truncate disk_i_size to the start of the gap,
 			 * making the persisted size smaller than i_size.
 			 */
-			range_start = round_down(inode->i_size, fs_info->sectorsize);
-			range_end = round_up(i_size, fs_info->sectorsize);
+			range_start = round_down(inode->i_size, fs_info->datasize);
+			range_end = round_up(i_size, fs_info->datasize);
 			ret = btrfs_inode_set_file_extent_range(BTRFS_I(inode),
 					range_start, range_end - range_start);
 			if (ret) {
@@ -9430,10 +9439,10 @@ int btrfs_encoded_io_compression_from_extent(struct btrfs_fs_info *fs_info,
 		 * The LZO format depends on the sector size. 64K is the maximum
 		 * sector size that we support.
 		 */
-		if (fs_info->sectorsize < SZ_4K || fs_info->sectorsize > SZ_64K)
+		if (fs_info->datasize < SZ_4K || fs_info->datasize > SZ_64K)
 			return -EINVAL;
 		return BTRFS_ENCODED_IO_COMPRESSION_LZO_4K +
-		       (fs_info->sectorsize_bits - 12);
+		       (fs_info->datasize_bits - 12);
 	case BTRFS_COMPRESS_ZSTD:
 		return BTRFS_ENCODED_IO_COMPRESSION_ZSTD;
 	default:
@@ -9721,7 +9730,7 @@ ssize_t btrfs_encoded_read(struct kiocb *iocb, struct iov_iter *iter,
 		btrfs_inode_unlock(inode, BTRFS_ILOCK_SHARED);
 		return 0;
 	}
-	start = ALIGN_DOWN(iocb->ki_pos, fs_info->sectorsize);
+	start = ALIGN_DOWN(iocb->ki_pos, fs_info->datasize);
 	/*
 	 * We don't know how long the extent containing iocb->ki_pos is, but if
 	 * it's compressed we know that it won't be longer than this.
@@ -9834,7 +9843,7 @@ ssize_t btrfs_encoded_read(struct kiocb *iocb, struct iov_iter *iter,
 		count = start + *disk_io_size - iocb->ki_pos;
 		encoded->len = count;
 		encoded->unencoded_len = count;
-		*disk_io_size = ALIGN(*disk_io_size, fs_info->sectorsize);
+		*disk_io_size = ALIGN(*disk_io_size, fs_info->datasize);
 	}
 	btrfs_free_extent_map(em);
 	em = NULL;
@@ -9878,7 +9887,7 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 	int compression;
 	size_t orig_count;
 	const u32 min_folio_size = btrfs_min_folio_size(fs_info);
-	const u32 blocksize = fs_info->sectorsize;
+	const u32 blocksize = fs_info->datasize;
 	u64 start, end;
 	u64 num_bytes, ram_bytes, disk_num_bytes;
 	struct btrfs_key ins;
@@ -9901,7 +9910,7 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 		/* The sector size must match for LZO. */
 		if (encoded->compression -
 		    BTRFS_ENCODED_IO_COMPRESSION_LZO_4K + 12 !=
-		    fs_info->sectorsize_bits)
+		    fs_info->datasize_bits)
 			return -EINVAL;
 		compression = BTRFS_COMPRESS_LZO;
 		break;
@@ -9943,7 +9952,7 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 
 	/* The extent must start on a sector boundary. */
 	start = iocb->ki_pos;
-	if (!IS_ALIGNED(start, fs_info->sectorsize))
+	if (!IS_ALIGNED(start, fs_info->datasize))
 		return -EINVAL;
 
 	/*
@@ -9952,15 +9961,15 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 	 * up the extent size and set i_size to the unaligned end.
 	 */
 	if (start + encoded->len < inode->vfs_inode.i_size &&
-	    !IS_ALIGNED(start + encoded->len, fs_info->sectorsize))
+	    !IS_ALIGNED(start + encoded->len, fs_info->datasize))
 		return -EINVAL;
 
 	/* Finally, the offset in the unencoded data must be sector-aligned. */
-	if (!IS_ALIGNED(encoded->unencoded_offset, fs_info->sectorsize))
+	if (!IS_ALIGNED(encoded->unencoded_offset, fs_info->datasize))
 		return -EINVAL;
 
-	num_bytes = ALIGN(encoded->len, fs_info->sectorsize);
-	ram_bytes = ALIGN(encoded->unencoded_len, fs_info->sectorsize);
+	num_bytes = ALIGN(encoded->len, fs_info->datasize);
+	ram_bytes = ALIGN(encoded->unencoded_len, fs_info->datasize);
 	end = start + num_bytes - 1;
 
 	/*
@@ -9968,7 +9977,7 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 	 * sector-aligned. For convenience, we extend it with zeroes if it
 	 * isn't.
 	 */
-	disk_num_bytes = ALIGN(orig_count, fs_info->sectorsize);
+	disk_num_bytes = ALIGN(orig_count, fs_info->datasize);
 
 	cb = btrfs_alloc_compressed_write(inode, start, num_bytes);
 	for (int i = 0; i * min_folio_size < disk_num_bytes; i++) {
@@ -10381,7 +10390,7 @@ static int btrfs_swap_activate(struct swap_info_struct *sis, struct file *file,
 	atomic_inc(&root->nr_swapfiles);
 	spin_unlock(&root->root_item_lock);
 
-	isize = ALIGN_DOWN(inode->i_size, fs_info->sectorsize);
+	isize = ALIGN_DOWN(inode->i_size, fs_info->datasize);
 
 	btrfs_lock_extent(io_tree, 0, isize - 1, &cached_state);
 	while (prev_extent_end < isize) {
@@ -10758,7 +10767,7 @@ static bool btrfs_data_dirty_folio(struct address_space *mapping,
 	const u64 page_start = folio_pos(folio);
 	const u64 range_end = min_t(u64, folio_next_pos(folio),
 				    round_up(i_size_read(&inode->vfs_inode),
-					     fs_info->sectorsize));
+					     fs_info->datasize));
 
 	if (range_end > page_start)
 		btrfs_folio_set_fixup_dirty(fs_info, folio, page_start,
