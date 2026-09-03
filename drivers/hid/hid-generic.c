@@ -20,6 +20,7 @@
 #include <asm/byteorder.h>
 
 #include <linux/hid.h>
+#include <linux/hid-lamparray.h>
 
 static struct hid_driver hid_generic;
 
@@ -60,12 +61,38 @@ static int hid_generic_probe(struct hid_device *hdev,
 			     const struct hid_device_id *id)
 {
 	int ret;
+	struct lamparray *la;
 
 	hdev->quirks |= HID_QUIRK_INPUT_PER_APP;
 
 	ret = hid_parse(hdev);
 	if (ret)
 		return ret;
+
+	/*
+	 * Optional: attach LampArray support if present.
+	 * Never fail probe on LampArray errors; keep device functional.
+	 */
+	if (IS_ENABLED(CONFIG_HID_LAMPARRAY) && lamparray_is_supported_device(hdev)) {
+		/*
+		 * Use HID_CONNECT_DRIVER to claim driver to make sure
+		 * requests are processed. Needed for performing
+		 * hid_hw_request()/hid_hw_wait() to communicate with the
+		 * LampArray device.
+		 */
+		ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT | HID_CONNECT_DRIVER);
+		if (ret)
+			return ret;
+
+		la = lamparray_register(hdev, NULL);
+		if (IS_ERR(la)) {
+			hid_hw_stop(hdev);
+			hid_warn(hdev, "LampArray init failed: %ld\n", PTR_ERR(la));
+		} else {
+			hid_set_drvdata(hdev, la);
+			return 0;
+		}
+	}
 
 	return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
 }
@@ -76,6 +103,16 @@ static int hid_generic_reset_resume(struct hid_device *hdev)
 		hidinput_reset_resume(hdev);
 
 	return 0;
+}
+
+static void hid_generic_remove(struct hid_device *hdev)
+{
+	struct lamparray *la = hid_get_drvdata(hdev);
+
+	if (IS_ENABLED(CONFIG_HID_LAMPARRAY) && la)
+		lamparray_unregister(la);
+
+	hid_hw_stop(hdev);
 }
 
 static const struct hid_device_id hid_table[] = {
@@ -90,6 +127,7 @@ static struct hid_driver hid_generic = {
 	.match = hid_generic_match,
 	.probe = hid_generic_probe,
 	.reset_resume = hid_generic_reset_resume,
+	.remove = hid_generic_remove,
 };
 module_hid_driver(hid_generic);
 

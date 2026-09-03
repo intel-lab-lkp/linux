@@ -82,6 +82,7 @@ config UHID
 
 config HID_GENERIC
 	tristate "Generic HID driver"
+	depends on HID_LAMPARRAY if HID_LAMPARRAY
 	default HID
 	help
 	Support for generic devices on the HID bus. This includes most
