@@ -279,6 +279,7 @@ struct vxlan_vni_group {
 	struct rhashtable	vni_hash;
 	struct list_head	vni_list;
 	u32			num_vnis;
+	struct rcu_head		rcu;
 };
 
 /* Pseudo network device */

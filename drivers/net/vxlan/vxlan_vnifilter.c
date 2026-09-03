@@ -902,6 +902,7 @@ void vxlan_vnigroup_uninit(struct vxlan_dev *vxlan)
 	struct vxlan_vni_group *vg;
 
 	vg = rtnl_dereference(vxlan->vnigrp);
+	rcu_assign_pointer(vxlan->vnigrp, NULL);
 	list_for_each_entry_safe(v, tmp, &vg->vni_list, vlist) {
 		rhashtable_remove_fast(&vg->vni_hash, &v->vnode,
 				       vxlan_vni_rht_params);
@@ -914,7 +915,7 @@ void vxlan_vnigroup_uninit(struct vxlan_dev *vxlan)
 		call_rcu(&v->rcu, vxlan_vni_node_rcu_free);
 	}
 	rhashtable_destroy(&vg->vni_hash);
-	kfree(vg);
+	kfree_rcu(vg, rcu);
 }
 
 int vxlan_vnigroup_init(struct vxlan_dev *vxlan)
