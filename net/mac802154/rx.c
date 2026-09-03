@@ -62,6 +62,7 @@ void mac802154_rx_beacon_worker(struct work_struct *work)
 	mac802154_process_beacon(local, mac_pkt->skb, mac_pkt->page, mac_pkt->channel);
 
 	kfree_skb(mac_pkt->skb);
+	netdev_put(mac_pkt->sdata->dev, &mac_pkt->dev_tracker);
 	kfree(mac_pkt);
 }
 
@@ -141,6 +142,7 @@ void mac802154_rx_mac_cmd_worker(struct work_struct *work)
 
 out:
 	kfree_skb(mac_pkt->skb);
+	netdev_put(mac_pkt->sdata->dev, &mac_pkt->dev_tracker);
 	kfree(mac_pkt);
 }
 
@@ -237,6 +239,7 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 		mac_pkt->sdata = sdata;
 		mac_pkt->page = sdata->local->scan_page;
 		mac_pkt->channel = sdata->local->scan_channel;
+		netdev_hold(sdata->dev, &mac_pkt->dev_tracker, GFP_ATOMIC);
 		spin_lock_bh(&sdata->local->rx_lists_lock);
 		list_add_tail(&mac_pkt->node, &sdata->local->rx_beacon_list);
 		queue_work(sdata->local->mac_wq, &sdata->local->rx_beacon_work);
@@ -251,6 +254,7 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 
 		mac_pkt->skb = skb_get(skb);
 		mac_pkt->sdata = sdata;
+		netdev_hold(sdata->dev, &mac_pkt->dev_tracker, GFP_ATOMIC);
 		spin_lock_bh(&sdata->local->rx_lists_lock);
 		list_add_tail(&mac_pkt->node, &sdata->local->rx_mac_cmd_list);
 		queue_work(sdata->local->mac_wq, &sdata->local->rx_mac_cmd_work);

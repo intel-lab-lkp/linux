@@ -114,6 +114,7 @@ static void mac802154_flush_queued_beacons(struct ieee802154_local *local)
 	list_for_each_entry_safe(mac_pkt, tmp, &mac_pkt_list, node) {
 		list_del(&mac_pkt->node);
 		kfree_skb(mac_pkt->skb);
+		netdev_put(mac_pkt->sdata->dev, &mac_pkt->dev_tracker);
 		kfree(mac_pkt);
 	}
 }
