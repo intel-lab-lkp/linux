@@ -894,7 +894,7 @@ i2c_dw_xfer_common(struct dw_i2c_dev *dev, struct i2c_msg msgs[], int num)
 		 */
 		for (cnt = 1; ; cnt++) {
 			if (!i2c_dw_msg_is_valid(dev, msgs_part, cnt - 1)) {
-				ret = -EINVAL;
+				ret = -EOPNOTSUPP;
 				break;
 			}
 

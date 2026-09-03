@@ -776,11 +776,15 @@ int i2c_dw_handle_tx_abort(struct dw_i2c_dev *dev)
 	unsigned long abort_source = dev->abort_source;
 	int i;
 
-	if (abort_source & DW_IC_TX_ABRT_NOACK) {
+	if (abort_source & (DW_IC_TX_ABRT_ADDR_NOACK | DW_IC_TX_ABRT_TXDATA_NOACK)) {
 		for_each_set_bit(i, &abort_source, ARRAY_SIZE(abort_sources))
 			dev_dbg(dev->dev,
 				"%s: %s\n", __func__, abort_sources[i]);
-		return -EREMOTEIO;
+
+		if (abort_source & DW_IC_TX_ABRT_TXDATA_NOACK)
+			return -EIO;
+		else
+			return -ENXIO;
 	}
 
 	for_each_set_bit(i, &abort_source, ARRAY_SIZE(abort_sources))
