@@ -1384,11 +1384,9 @@ static void shmem_undo_range(struct inode *inode, loff_t lstart, uoff_t lend,
 	if (folio) {
 		same_folio = lend < folio_next_pos(folio);
 		folio_mark_dirty(folio);
-		if (!truncate_inode_partial_folio(folio, lstart, lend)) {
+		if (!truncate_inode_partial_folio(folio, lstart, lend,
+						  same_folio ? &end : NULL))
 			start = folio_next_index(folio);
-			if (same_folio)
-				end = folio->index;
-		}
 		folio_unlock(folio);
 		folio_put(folio);
 		folio = NULL;
@@ -1398,8 +1396,7 @@ static void shmem_undo_range(struct inode *inode, loff_t lstart, uoff_t lend,
 		folio = shmem_get_partial_folio(inode, lend >> PAGE_SHIFT);
 	if (folio) {
 		folio_mark_dirty(folio);
-		if (!truncate_inode_partial_folio(folio, lstart, lend))
-			end = folio->index;
+		truncate_inode_partial_folio(folio, lstart, lend, &end);
 		folio_unlock(folio);
 		folio_put(folio);
 	}
@@ -1467,7 +1464,8 @@ whole_folios:
 
 				if (!folio_test_large(folio)) {
 					truncate_inode_folio(mapping, folio);
-				} else if (truncate_inode_partial_folio(folio, lstart, lend)) {
+				} else if (truncate_inode_partial_folio(folio,
+							lstart, lend, NULL)) {
 					/*
 					 * If we split a page, reset the loop so
 					 * that we pick up the new sub pages.
