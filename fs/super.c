@@ -1026,10 +1026,17 @@ void iterate_supers_type(struct file_system_type *type,
 	struct super_block *sb, *p = NULL;
 
 	spin_lock(&sb_lock);
-	hlist_for_each_entry(sb, &type->fs_supers, s_instances) {
+	/*
+	 * The passive reference keeps the s_list cursor valid while sb_lock
+	 * is dropped. Entries are added at the tail. Walk backwards to retain
+	 * newest-first visitation.
+	 */
+	list_for_each_entry_reverse(sb, &super_blocks, s_list) {
 		bool locked;
 
 		if (super_flags(sb, SB_DYING))
+			continue;
+		if (sb->s_type != type)
 			continue;
 
 		if (!refcount_inc_not_zero(&sb->s_passive))
