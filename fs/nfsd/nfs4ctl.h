@@ -20,8 +20,10 @@
 struct net;
 struct inode;
 struct dentry;
+struct sk_buff;
 struct svc_rqst;
 struct nfsd_net;
+struct netlink_callback;
 
 #ifdef CONFIG_NFSD_V4
 extern unsigned long max_delegations;
@@ -37,6 +39,8 @@ bool nfsd4_spo_must_allow(struct svc_rqst *rqstp);
 int nfsd4_create_laundry_wq(void);
 void nfsd4_destroy_laundry_wq(void);
 bool nfsd_wait_for_delegreturn(struct svc_rqst *rqstp, struct inode *inode);
+int nfsd4_nl_client_get_dumpit(struct sk_buff *skb,
+			       struct netlink_callback *cb);
 
 extern int nfsd4_is_junction(struct dentry *dentry);
 extern int register_cld_notifier(void);
@@ -66,6 +70,12 @@ static inline bool nfsd_wait_for_delegreturn(struct svc_rqst *rqstp,
 					      struct inode *inode)
 {
 	return false;
+}
+
+static inline int nfsd4_nl_client_get_dumpit(struct sk_buff *skb,
+					     struct netlink_callback *cb)
+{
+	return 0;
 }
 
 static inline int nfsd4_is_junction(struct dentry *dentry)

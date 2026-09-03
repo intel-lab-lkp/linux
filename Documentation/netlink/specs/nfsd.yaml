@@ -42,6 +42,24 @@ definitions:
       - none
       - tls
       - mtls
+  -
+    type: enum
+    name: client-state
+    doc: State of an NFSv4 client record.
+    entries:
+      - unconfirmed
+      - active
+      - courtesy
+      - expirable
+  -
+    type: enum
+    name: callback-state
+    doc: State of an NFSv4 client's callback channel.
+    entries:
+      - up
+      - unknown
+      - down
+      - fault
 
 attribute-sets:
   -
@@ -415,6 +433,63 @@ attribute-sets:
         type: nest
         nested-attributes: server-proc-entry
         multi-attr: true
+  -
+    name: client
+    attributes:
+      -
+        name: clientid
+        type: u64
+        doc: >-
+          Server-generated NFSv4 client ID, with the boot value in the upper
+          32 bits and the per-boot ID in the lower 32 bits.
+      -
+        name: pad
+        type: pad
+      -
+        name: address4
+        type: u32
+        byte-order: big-endian
+        display-hint: ipv4
+        doc: IPv4 peer address recorded when the client was created.
+      -
+        name: address6
+        type: binary
+        byte-order: big-endian
+        display-hint: ipv6
+        checks:
+          exact-len: 16
+        doc: IPv6 peer address recorded when the client was created.
+      -
+        name: address-port
+        type: u16
+        byte-order: big-endian
+        doc: Transport peer port recorded when the client was created.
+      -
+        name: address-scope-id
+        type: u32
+        doc: IPv6 scope ID recorded when the client was created, when nonzero.
+      -
+        name: minor-version
+        type: u32
+        doc: Negotiated NFSv4 minor version.
+      -
+        name: state
+        type: u32
+        enum: client-state
+        doc: Confirmation and courtesy-state status of the client record.
+      -
+        name: lease-remaining
+        type: s64
+        doc: Signed seconds until the client's lease expires; negative means overdue.
+      -
+        name: reclaim-complete
+        type: flag
+        doc: The NFSv4.1 or later client sent RECLAIM_COMPLETE.
+      -
+        name: callback-state
+        type: u32
+        enum: callback-state
+        doc: Health of the client's callback channel.
 
 operations:
   list:
@@ -627,6 +702,24 @@ operations:
             - proc4-ops
             - proc4ops-ops
             - proc4cb-ops
+    -
+      name: client-get
+      doc: dump NFSv4 clients
+      attribute-set: client
+      flags: [admin-perm]
+      dump:
+        reply:
+          attributes:
+            - clientid
+            - address4
+            - address6
+            - address-port
+            - address-scope-id
+            - minor-version
+            - state
+            - lease-remaining
+            - reclaim-complete
+            - callback-state
 
 mcast-groups:
   list:

@@ -59,6 +59,7 @@
 #include "pnfs.h"
 #include "filecache.h"
 #include "nfs4xdr_gen.h"
+#include "netlink.h"
 #include "trace.h"
 
 #define NFSDDBG_FACILITY                NFSDDBG_PROC
@@ -2842,6 +2843,14 @@ free_client(struct nfs4_client *clp)
 	nfsd4_put_client(clp);
 }
 
+static void nfsd4_bump_client_generation(struct nfsd_net *nn)
+{
+	lockdep_assert_held(&nn->client_lock);
+
+	if (++nn->nfs4_client_generation == 0)
+		nn->nfs4_client_generation++;
+}
+
 /* must be called under the client_lock */
 static void
 unhash_client_locked(struct nfs4_client *clp)
@@ -2856,6 +2865,7 @@ unhash_client_locked(struct nfs4_client *clp)
 	/* Make it invisible */
 	if (!list_empty(&clp->cl_idhash)) {
 		list_del_init(&clp->cl_idhash);
+		nfsd4_bump_client_generation(nn);
 		if (test_bit(NFSD4_CLIENT_CONFIRMED, &clp->cl_flags))
 			rb_erase(&clp->cl_namenode, &nn->conf_name_tree);
 		else
@@ -3230,6 +3240,253 @@ static const char *cb_state2str(int state)
 		return "FAULT";
 	}
 	return "UNDEFINED";
+}
+
+enum nfsd4_nl_client_table {
+	NFSD4_NL_CLIENT_CONFIRMED,
+	NFSD4_NL_CLIENT_UNCONFIRMED,
+	NFSD4_NL_CLIENT_DONE,
+};
+
+struct nfsd4_nl_client {
+	struct sockaddr_storage	address;
+	u64			clientid;
+	s64			lease_remaining;
+	u32			minor_version;
+	u32			state;
+	u32			callback_state;
+	bool			reclaim_complete;
+};
+
+static u32 nfsd4_nl_client_state(bool confirmed, unsigned int state)
+{
+	if (!confirmed)
+		return NFSD_CLIENT_STATE_UNCONFIRMED;
+
+	switch (state) {
+	case NFSD4_COURTESY:
+		return NFSD_CLIENT_STATE_COURTESY;
+	case NFSD4_EXPIRABLE:
+		return NFSD_CLIENT_STATE_EXPIRABLE;
+	default:
+		return NFSD_CLIENT_STATE_ACTIVE;
+	}
+}
+
+static u32 nfsd4_nl_callback_state(int state)
+{
+	switch (state) {
+	case NFSD4_CB_UP:
+		return NFSD_CALLBACK_STATE_UP;
+	case NFSD4_CB_DOWN:
+		return NFSD_CALLBACK_STATE_DOWN;
+	case NFSD4_CB_FAULT:
+		return NFSD_CALLBACK_STATE_FAULT;
+	default:
+		return NFSD_CALLBACK_STATE_UNKNOWN;
+	}
+}
+
+static struct nfs4_client *
+nfsd_nl_find_client(struct nfsd_net *nn, enum nfsd4_nl_client_table table,
+		    unsigned long bucket, unsigned long skip,
+		    struct netlink_callback *cb)
+{
+	struct nfs4_client *clp = NULL;
+	struct nfs4_client *pos;
+	struct list_head *head;
+	unsigned long index = 0;
+
+	lockdep_assert_held(&nfsd_mutex);
+
+	switch (table) {
+	case NFSD4_NL_CLIENT_CONFIRMED:
+		head = &nn->conf_id_hashtbl[bucket];
+		break;
+	case NFSD4_NL_CLIENT_UNCONFIRMED:
+		head = &nn->unconf_id_hashtbl[bucket];
+		break;
+	default:
+		return NULL;
+	}
+
+	spin_lock(&nn->client_lock);
+	cb->seq = nn->nfs4_client_generation;
+	list_for_each_entry(pos, head, cl_idhash) {
+		if (index++ != skip)
+			continue;
+		kref_get(&pos->cl_nfsdfs.cl_ref);
+		clp = pos;
+		break;
+	}
+	spin_unlock(&nn->client_lock);
+	return clp;
+}
+
+static void nfsd4_nl_client_snapshot(struct nfsd_net *nn,
+				     struct nfs4_client *clp,
+				     struct nfsd4_nl_client *client)
+{
+	unsigned int state;
+	time64_t last_renew;
+	bool confirmed;
+
+	spin_lock(&nn->client_lock);
+	last_renew = clp->cl_time;
+	confirmed = test_bit(NFSD4_CLIENT_CONFIRMED, &clp->cl_flags);
+	state = READ_ONCE(clp->cl_state);
+	spin_unlock(&nn->client_lock);
+
+	memcpy(&client->address, &clp->cl_addr, sizeof(client->address));
+	client->clientid = (u64)clp->cl_clientid.cl_boot << 32 |
+			   clp->cl_clientid.cl_id;
+	client->lease_remaining = last_renew ?
+		last_renew + READ_ONCE(nn->nfsd4_lease) -
+		ktime_get_boottime_seconds() : 0;
+	client->minor_version = clp->cl_minorversion;
+	client->state = nfsd4_nl_client_state(confirmed, state);
+	client->callback_state =
+		nfsd4_nl_callback_state(READ_ONCE(clp->cl_cb_state));
+	client->reclaim_complete =
+		test_bit(NFSD4_CLIENT_RECLAIM_COMPLETE, &clp->cl_flags);
+}
+
+static int
+nfsd4_nl_client_marshal_address(struct sk_buff *skb,
+				const struct sockaddr_storage *address)
+{
+	switch (address->ss_family) {
+	case AF_INET: {
+		const struct sockaddr_in *sin =
+			(const struct sockaddr_in *)address;
+
+		if (nla_put_in_addr(skb, NFSD_A_CLIENT_ADDRESS4,
+				    sin->sin_addr.s_addr) ||
+		    nla_put_be16(skb, NFSD_A_CLIENT_ADDRESS_PORT,
+				 sin->sin_port))
+			return -EMSGSIZE;
+		break;
+	}
+	case AF_INET6: {
+		const struct sockaddr_in6 *sin6 =
+			(const struct sockaddr_in6 *)address;
+
+		if (nla_put_in6_addr(skb, NFSD_A_CLIENT_ADDRESS6,
+				     &sin6->sin6_addr) ||
+		    nla_put_be16(skb, NFSD_A_CLIENT_ADDRESS_PORT,
+				 sin6->sin6_port) ||
+		    (sin6->sin6_scope_id &&
+		     nla_put_u32(skb, NFSD_A_CLIENT_ADDRESS_SCOPE_ID,
+				 sin6->sin6_scope_id)))
+			return -EMSGSIZE;
+		break;
+	}
+	}
+	return 0;
+}
+
+static int nfsd4_nl_client_compose_msg(struct sk_buff *skb,
+				       struct netlink_callback *cb,
+				       const struct nfsd4_nl_client *client)
+{
+	void *hdr;
+
+	hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid,
+			  cb->nlh->nlmsg_seq, &nfsd_nl_family, NLM_F_MULTI,
+			  NFSD_CMD_CLIENT_GET);
+	if (!hdr)
+		return -EMSGSIZE;
+	genl_dump_check_consistent(cb, hdr);
+
+	if (nla_put_u64_64bit(skb, NFSD_A_CLIENT_CLIENTID, client->clientid,
+			      NFSD_A_CLIENT_PAD) ||
+	    nfsd4_nl_client_marshal_address(skb, &client->address) ||
+	    nla_put_u32(skb, NFSD_A_CLIENT_MINOR_VERSION,
+			client->minor_version) ||
+	    nla_put_u32(skb, NFSD_A_CLIENT_STATE, client->state) ||
+	    nla_put_s64(skb, NFSD_A_CLIENT_LEASE_REMAINING,
+			client->lease_remaining, NFSD_A_CLIENT_PAD) ||
+	    (client->reclaim_complete &&
+	     nla_put_flag(skb, NFSD_A_CLIENT_RECLAIM_COMPLETE)) ||
+	    nla_put_u32(skb, NFSD_A_CLIENT_CALLBACK_STATE,
+			client->callback_state))
+		goto err_cancel;
+
+	genlmsg_end(skb, hdr);
+	return 0;
+
+err_cancel:
+	genlmsg_cancel(skb, hdr);
+	return -EMSGSIZE;
+}
+
+/**
+ * nfsd4_nl_client_get_dumpit - dump NFSv4 client information
+ * @skb: reply buffer
+ * @cb: netlink metadata and command arguments
+ *
+ * One netlink message is emitted for each client. cb->args tracks the client
+ * table, hash bucket, and offset within that bucket. Client table changes can
+ * cause an object to be skipped or repeated between calls; in that case the
+ * affected message or NLMSG_DONE is marked with NLM_F_DUMP_INTR.
+ *
+ * Returns the size of the reply or a negative errno.
+ */
+int nfsd4_nl_client_get_dumpit(struct sk_buff *skb,
+			       struct netlink_callback *cb)
+{
+	struct nfsd4_nl_client client;
+	struct nfs4_client *clp;
+	struct nfsd_net *nn;
+	struct net *net;
+	int ret = 0;
+
+	net = sock_net(skb->sk);
+	nn = net_generic(net, nfsd_net_id);
+	mutex_lock(&nfsd_mutex);
+	if (!test_bit(NFSD_NET_UP, &nn->flags)) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
+
+	/*
+	 * Table values are ordered: confirmed clients first, then
+	 * unconfirmed, then done. cb->args[0] tracks which table the
+	 * dump is visiting, args[1] the hash bucket in it, and args[2]
+	 * the client's offset within that bucket.
+	 */
+	while (cb->args[0] < NFSD4_NL_CLIENT_DONE) {
+		if (cb->args[1] >= CLIENT_HASH_SIZE) {
+			cb->args[0]++;
+			cb->args[1] = 0;
+			cb->args[2] = 0;
+			continue;
+		}
+
+		clp = nfsd_nl_find_client(nn, cb->args[0], cb->args[1],
+					  cb->args[2], cb);
+		if (!clp) {
+			cb->args[1]++;
+			cb->args[2] = 0;
+			continue;
+		}
+
+		memset(&client, 0, sizeof(client));
+		nfsd4_nl_client_snapshot(nn, clp, &client);
+		ret = nfsd4_nl_client_compose_msg(skb, cb, &client);
+		nfsd4_put_client(clp);
+		if (ret) {
+			if (skb->len)
+				ret = skb->len;
+			goto out_unlock;
+		}
+		cb->args[2]++;
+	}
+	ret = skb->len;
+
+out_unlock:
+	mutex_unlock(&nfsd_mutex);
+	return ret;
 }
 
 static int client_info_show(struct seq_file *m, void *v)
@@ -4026,6 +4283,7 @@ add_to_unconfirmed(struct nfs4_client *clp)
 	add_clp_to_name_tree(clp, &nn->unconf_name_tree);
 	idhashval = clientid_hashval(clp->cl_clientid.cl_id);
 	list_add(&clp->cl_idhash, &nn->unconf_id_hashtbl[idhashval]);
+	nfsd4_bump_client_generation(nn);
 	renew_client_locked(clp);
 }
 
@@ -4038,6 +4296,7 @@ move_to_confirmed(struct nfs4_client *clp)
 	lockdep_assert_held(&nn->client_lock);
 
 	list_move(&clp->cl_idhash, &nn->conf_id_hashtbl[idhashval]);
+	nfsd4_bump_client_generation(nn);
 	rb_erase(&clp->cl_namenode, &nn->unconf_name_tree);
 	add_clp_to_name_tree(clp, &nn->conf_name_tree);
 	set_bit(NFSD4_CLIENT_CONFIRMED, &clp->cl_flags);
@@ -10160,6 +10419,7 @@ static int nfs4_state_create_net(struct net *net)
 	INIT_LIST_HEAD(&nn->del_recall_lru);
 	spin_lock_init(&nn->deleg_lock);
 	spin_lock_init(&nn->client_lock);
+	nn->nfs4_client_generation = 1;
 	spin_lock_init(&nn->s2s_cp_lock);
 	idr_init(&nn->s2s_cp_stateids);
 	atomic_set(&nn->pending_async_copies, 0);

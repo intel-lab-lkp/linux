@@ -1650,6 +1650,19 @@ out_unlock:
 }
 
 /**
+ * nfsd_nl_client_get_dumpit - dump NFSv4 client information
+ * @skb: reply buffer
+ * @cb: netlink metadata and command arguments
+ *
+ * Returns the size of the reply or a negative errno.
+ */
+int nfsd_nl_client_get_dumpit(struct sk_buff *skb,
+			      struct netlink_callback *cb)
+{
+	return nfsd4_nl_client_get_dumpit(skb, cb);
+}
+
+/**
  * nfsd_nl_fh_key_set - helper to copy fh_key from userspace
  * @attr: nlattr NFSD_A_SERVER_FH_KEY
  * @nn: nfsd_net

@@ -105,6 +105,7 @@ struct nfsd_net {
 	struct list_head *unconf_id_hashtbl;
 	struct rb_root unconf_name_tree;
 	struct list_head *sessionid_hashtbl;
+	u32 nfs4_client_generation;	/* protected by client_lock, never zero */
 	/*
 	 * client_lru holds client queue ordered by nfs4_client.cl_time
 	 * for lease renewal.

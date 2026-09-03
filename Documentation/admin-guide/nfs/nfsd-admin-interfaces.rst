@@ -29,6 +29,22 @@ Between startup and shutdown, the number of threads may be adjusted up
 or down by additional writes to nfsd/threads or by writes to
 nfsd/pool_threads.
 
+NFSv4 client visibility
+=======================
+
+The privileged ``client-get`` dump in the ``nfsd`` Generic Netlink family
+emits one message for each NFSv4 client.  Each message identifies the client
+by its server-generated client ID and transport address, then reports its
+minor version, client and callback states, signed lease time remaining, and
+whether an NFSv4.1 or later client sent RECLAIM_COMPLETE.
+
+Clients can change between messages.  If that can make the dump skip or repeat
+a record, the kernel sets ``NLM_F_DUMP_INTR`` and userspace should retry.
+
+The existing ``/proc/fs/nfsd/clients/`` files remain available for inspection.
+The ``states`` file contains individual stateids, and writing ``expire`` to
+``ctl`` forcibly removes the client and all state it owns.
+
 For more detail about files under nfsd/ and what they control, see
 fs/nfsd/nfsctl.c; most of them have detailed comments.
 
