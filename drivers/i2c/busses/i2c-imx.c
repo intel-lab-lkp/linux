@@ -1607,7 +1607,9 @@ static int i2c_imx_xfer_common(struct i2c_adapter *adapter,
 		if (msgs[i].flags & I2C_M_RD) {
 			int block_data = msgs->flags & I2C_M_RECV_LEN;
 
-			if (atomic)
+			if (!msgs[i].len) /* invalid, would panic */
+				result = -EINVAL;
+			else if (atomic)
 				result = i2c_imx_atomic_read(i2c_imx, &msgs[i], is_lastmsg);
 			else if (use_dma && !block_data)
 				result = i2c_imx_dma_read(i2c_imx, &msgs[i], is_lastmsg);
