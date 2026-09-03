@@ -4983,6 +4983,27 @@ intel_dp_mst_disconnect(struct intel_dp *intel_dp)
 	drm_dp_mst_topology_mgr_set_mst(&intel_dp->mst.mgr, intel_dp->is_mst);
 }
 
+/*
+ * On disconnect, the downstream PCON and its HDMI FRL link state are gone
+ * from the source's perspective. Clear the cached FRL training state so that
+ * intel_dp_check_frl_training() performs a fresh FRL negotiation on the next
+ * connect, rather than skipping training based on stale state.
+ */
+static void
+intel_dp_pcon_disconnect(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+
+	if (!intel_dp_is_hdmi_2_1_sink(intel_dp))
+		return;
+
+	drm_dbg_kms(display->drm,
+		    "PCON HDMI2.1 sink disconnected, resetting FRL state (was trained at %d Gbps)\n",
+		    intel_dp->frl.trained_rate_gbps);
+	intel_dp->frl.is_trained = false;
+	intel_dp->frl.trained_rate_gbps = 0;
+}
+
 #define INTEL_DP_DEVICE_SERVICE_IRQ_MASK_SST	(DP_AUTOMATED_TEST_REQUEST | \
 						 DP_CP_IRQ | \
 						 DP_SINK_SPECIFIC_IRQ)
@@ -6323,6 +6344,8 @@ intel_dp_detect(struct drm_connector *_connector,
 		intel_dp_mst_disconnect(intel_dp);
 
 		intel_dp_tunnel_disconnect(intel_dp);
+
+		intel_dp_pcon_disconnect(intel_dp);
 
 		intel_dp_tunnel_uhbr_lanes_wa_reset(intel_dp);
 
