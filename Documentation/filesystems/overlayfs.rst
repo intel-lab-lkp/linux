@@ -671,6 +671,15 @@ filesystem are not allowed.  If the underlying filesystem is changed,
 the behavior of the overlay is undefined, though it will not result in
 a crash or deadlock.
 
+Note that file locks and leases taken on files through the overlay
+mount only provide mutual exclusion between tasks that access the
+files through the same overlay mount, and a lease taken through the
+overlay is broken by opens through that overlay.  They do not
+conflict with locks taken on the same files by anything that changes
+the underlying filesystems directly, so file locking cannot be relied
+on for mutual exclusion between overlay users and such direct
+changes.
+
 Offline changes, when the overlay is not mounted, are allowed to the
 upper tree.  Offline changes to the lower tree are only allowed if the
 "metacopy", "index", "xino" and "redirect_dir" features
