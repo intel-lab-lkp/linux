@@ -1087,7 +1087,7 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 	/* No need to freeze the queue as the device isn't bound yet. */
 	error = queue_limits_commit_update(lo->lo_queue, &lim);
 	if (error)
-		goto out_unlock;
+		goto out_restore_backing;
 
 	/*
 	 * We might switch to direct I/O mode for the loop device, write back
@@ -1123,6 +1123,13 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 		bd_abort_claiming(bdev, loop_configure);
 
 	return 0;
+
+out_restore_backing:
+	mapping_set_gfp_mask(lo->lo_backing_file->f_mapping,
+			     lo->old_gfp_mask);
+	lo->lo_backing_file = NULL;
+	lo->lo_device = NULL;
+	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
 
 out_unlock:
 	loop_global_unlock(lo, is_loop);
