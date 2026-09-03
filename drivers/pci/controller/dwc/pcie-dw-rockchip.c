@@ -418,6 +418,27 @@ static void rockchip_pcie_stop_link(struct dw_pcie *pci)
 	rockchip_pcie_ltssm_trace(rockchip, false);
 }
 
+/*
+ * (Re)program the Root Complex registers that are cleared by the controller
+ * reset. Called from .init() at probe time and from .reset_root_port().
+ * The INTx irq domain must not be touched here, as downstream devices hold
+ * virqs mapped in it.
+ */
+static void rockchip_pcie_host_hw_init(struct dw_pcie_rp *pp)
+{
+	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+
+	pci->dbi_base2 = pci->dbi_base + PCIE_TYPE0_HDR_DBI2_OFFSET;
+
+	rockchip_pcie_configure_l1ss(pci);
+	rockchip_pcie_enable_l0s(pci);
+	pp->bridge->reset_root_port = rockchip_pcie_rc_reset_root_port;
+
+	/* Disable Root Ports BAR0 and BAR1 as they report bogus size */
+	dw_pcie_writel_dbi2(pci, PCI_BASE_ADDRESS_0, 0x0);
+	dw_pcie_writel_dbi2(pci, PCI_BASE_ADDRESS_1, 0x0);
+}
+
 static int rockchip_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
@@ -429,8 +450,6 @@ static int rockchip_pcie_host_init(struct dw_pcie_rp *pp)
 	if (irq < 0)
 		return irq;
 
-	pci->dbi_base2 = pci->dbi_base + PCIE_TYPE0_HDR_DBI2_OFFSET;
-
 	ret = rockchip_pcie_init_irq_domain(rockchip);
 	if (ret < 0) {
 		dev_err(dev, "failed to init irq domain\n");
@@ -440,13 +459,7 @@ static int rockchip_pcie_host_init(struct dw_pcie_rp *pp)
 	irq_set_chained_handler_and_data(irq, rockchip_pcie_intx_handler,
 					 rockchip);
 
-	rockchip_pcie_configure_l1ss(pci);
-	rockchip_pcie_enable_l0s(pci);
-	pp->bridge->reset_root_port = rockchip_pcie_rc_reset_root_port;
-
-	/* Disable Root Ports BAR0 and BAR1 as they report bogus size */
-	dw_pcie_writel_dbi2(pci, PCI_BASE_ADDRESS_0, 0x0);
-	dw_pcie_writel_dbi2(pci, PCI_BASE_ADDRESS_1, 0x0);
+	rockchip_pcie_host_hw_init(pp);
 
 	return 0;
 }
@@ -920,11 +933,7 @@ static int rockchip_pcie_rc_reset_root_port(struct pci_host_bridge *bridge,
 	if (ret)
 		goto deinit_phy;
 
-	ret = pp->ops->init(pp);
-	if (ret) {
-		dev_err(dev, "Host init failed: %d\n", ret);
-		goto deinit_clk;
-	}
+	rockchip_pcie_host_hw_init(pp);
 
 	/* LTSSM enable control mode */
 	val = FIELD_PREP_WM16(PCIE_LTSSM_ENABLE_ENHANCE, 1);
