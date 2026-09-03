@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/interconnect.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
 #include <linux/phy/phy.h>
 #include <linux/usb/of.h>
 #include <linux/reset.h>
@@ -70,6 +71,7 @@ struct dwc3_qcom_port {
 
 struct dwc3_qcom_priv_data {
 	bool broken_suspend;
+	bool fw_managed;
 };
 
 struct dwc3_qcom {
@@ -92,13 +94,146 @@ struct dwc3_qcom {
 
 	bool			broken_suspend;
 	bool			ignore_pipe_clk;
+
+	bool			fw_managed;
+	struct dev_pm_domain_list *pd_list;
 };
 
 static const struct dwc3_qcom_priv_data sa8255p_dwc3_qcom_priv_data = {
 	.broken_suspend		= true,
+	.fw_managed		= true,
 };
 
 #define to_dwc3_qcom(d) container_of((d), struct dwc3_qcom, dwc)
+
+/*
+ * Firmware-managed resource handling
+ *
+ * On platforms where clocks, interconnects, resets and the GDSC for the USB
+ * controller are owned and sequenced by firmware, access to those resources
+ * is exposed to Linux as two power domains:
+ * - pd_list->pd_devs[0] ("power"): the GDSC supplying the controller
+ * - pd_list->pd_devs[1] ("bus"): the clocks and interconnects used for data
+ *   transfer, which additionally require "power" to be on for register
+ *   accesses to succeed
+ *
+ * Reset signals are controlled separately through the reset control framework
+ * during probe/remove.
+ *
+ * The two domains are voted on/off directly from each PM callback that needs
+ * them; there's no attempt to track or name an aggregate device power state,
+ * since the actual state lives in firmware and is queried by voting through
+ * runtime PM, not by mirroring it in the driver.
+ */
+
+/**
+ * dwc3_qcom_domain_detach() - Detach power domains
+ * @qcom: Pointer to the dwc3_qcom structure
+ *
+ * Detaches all power domains.
+ */
+static void dwc3_qcom_domain_detach(struct dwc3_qcom *qcom)
+{
+	if (qcom->pd_list)
+		dev_pm_domain_detach_list(qcom->pd_list);
+}
+
+/**
+ * dwc3_qcom_domain_attach() - Attach power domains
+ * @qcom: Pointer to the dwc3_qcom structure
+ *
+ * Attaches power domains for firmware managed resource handling.
+ * Returns 0 on success, negative error code on failure.
+ */
+static int dwc3_qcom_domain_attach(struct dwc3_qcom *qcom)
+{
+	struct dev_pm_domain_attach_data pd_data = {
+		.pd_flags	= PD_FLAG_NO_DEV_LINK,
+		.pd_names	= (const char*[]) { "power", "bus" },
+		.num_pd_names	= 2,
+	};
+	struct device *dev = qcom->dev;
+	int ret;
+
+	ret = dev_pm_domain_attach_list(dev, &pd_data, &qcom->pd_list);
+	if (ret != pd_data.num_pd_names) {
+		dev_err(dev, "domain attach failed (%d)\n", ret);
+		return ret < 0 ? ret : -ENODEV;
+	}
+
+	return 0;
+}
+
+/**
+ * dwc3_qcom_domains_get() - Vote the firmware-managed domains on
+ * @qcom: Pointer to the dwc3_qcom structure
+ * @bus_only: If true, leave the power domain untouched and only vote bus
+ *
+ * Votes runtime PM "on" for the domains this call is responsible for. Each
+ * call has exactly one matching dwc3_qcom_domains_put() call with the same
+ * @bus_only value on the corresponding disable path; runtime PM's own usage
+ * counting is what keeps power on for as long as bus needs it, without the
+ * driver tracking or assuming any prior domain state itself.
+ * Returns 0 on success, negative error code on failure.
+ */
+static int dwc3_qcom_domains_get(struct dwc3_qcom *qcom, bool bus_only)
+{
+	struct device *power_dev = qcom->pd_list->pd_devs[0];
+	struct device *bus_dev = qcom->pd_list->pd_devs[1];
+	int ret;
+
+	if (!bus_only) {
+		ret = pm_runtime_resume_and_get(power_dev);
+		if (ret) {
+			dev_err(qcom->dev, "failed to enable power domain: %d\n", ret);
+			return ret;
+		}
+	}
+
+	ret = pm_runtime_resume_and_get(bus_dev);
+	if (ret) {
+		dev_err(qcom->dev, "failed to enable bus domain: %d\n", ret);
+		if (!bus_only)
+			pm_runtime_put_sync(power_dev);
+		return ret;
+	}
+
+	return 0;
+}
+
+/**
+ * dwc3_qcom_domains_put() - Vote the firmware-managed domains off
+ * @qcom: Pointer to the dwc3_qcom structure
+ * @bus_only: If true, leave the power domain untouched and only vote bus
+ *
+ * Releases the votes taken by the matching dwc3_qcom_domains_get() call.
+ * Bus is released before power since bus register accesses require power
+ * to still be on.
+ * Returns 0 on success, negative error code on failure.
+ */
+static int dwc3_qcom_domains_put(struct dwc3_qcom *qcom, bool bus_only)
+{
+	struct device *power_dev = qcom->pd_list->pd_devs[0];
+	struct device *bus_dev = qcom->pd_list->pd_devs[1];
+	int ret;
+
+	ret = pm_runtime_put_sync(bus_dev);
+	if (ret < 0) {
+		dev_err(qcom->dev, "failed to disable bus domain: %d\n", ret);
+		return ret;
+	}
+
+	if (bus_only)
+		return 0;
+
+	ret = pm_runtime_put_sync(power_dev);
+	if (ret < 0) {
+		dev_err(qcom->dev, "failed to disable power domain: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
 
 static inline void dwc3_qcom_setbits(void __iomem *base, u32 offset, u32 val)
 {
@@ -386,11 +521,23 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, pm_message_t msg)
 		if (!(val & PWR_EVNT_LPM_IN_L2_MASK))
 			dev_err(qcom->dev, "port-%d HS-PHY not in L2\n", i + 1);
 	}
-	clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
 
-	ret = dwc3_qcom_interconnect_disable(qcom);
-	if (ret)
-		dev_warn(qcom->dev, "failed to disable interconnect: %d\n", ret);
+	if (!qcom->fw_managed) {
+		clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
+
+		ret = dwc3_qcom_interconnect_disable(qcom);
+		if (ret)
+			dev_warn(qcom->dev, "failed to disable interconnect: %d\n", ret);
+	} else {
+		/*
+		 * Runtime suspend only needs to drop the bus domain; power
+		 * stays voted on so register accesses remain possible for
+		 * whatever briefly resumes it. System suspend drops both.
+		 */
+		ret = dwc3_qcom_domains_put(qcom, PMSG_IS_AUTO(msg));
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * The role is stable during suspend as role switching is done from a
@@ -450,13 +597,25 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, pm_message_t msg)
 	if (dwc3_qcom_is_host(qcom) && wakeup)
 		dwc3_qcom_disable_interrupts(qcom);
 
-	ret = clk_bulk_prepare_enable(qcom->num_clocks, qcom->clks);
-	if (ret < 0)
-		goto enable_irq;
+	if (!qcom->fw_managed) {
+		ret = clk_bulk_prepare_enable(qcom->num_clocks, qcom->clks);
+		if (ret < 0)
+			goto enable_irq;
 
-	ret = dwc3_qcom_interconnect_enable(qcom);
-	if (ret)
-		dev_warn(qcom->dev, "failed to enable interconnect: %d\n", ret);
+		ret = dwc3_qcom_interconnect_enable(qcom);
+		if (ret)
+			dev_warn(qcom->dev, "failed to enable interconnect: %d\n", ret);
+	} else {
+		/*
+		 * Runtime resume only needs to re-vote bus (power was left
+		 * on across runtime suspend). System resume votes both.
+		 */
+		ret = dwc3_qcom_domains_get(qcom, PMSG_IS_AUTO(msg));
+		if (ret) {
+			dev_err(qcom->dev, "failed to enable power domains: %d\n", ret);
+			goto enable_irq;
+		}
+	}
 
 	/* Clear existing events from PHY related to L2 in/out */
 	for (i = 0; i < qcom->num_ports; i++) {
@@ -713,6 +872,9 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 		qcom->broken_suspend = priv_data->broken_suspend;
 	}
 
+	if (priv_data && priv_data->fw_managed)
+		qcom->fw_managed = priv_data->fw_managed;
+
 	qcom->resets = devm_reset_control_array_get_optional_exclusive(dev);
 	if (IS_ERR(qcom->resets)) {
 		ret = dev_err_probe(&pdev->dev, PTR_ERR(qcom->resets),
@@ -720,12 +882,14 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 		goto err_remove_swnode;
 	}
 
-	ret = devm_clk_bulk_get_all(&pdev->dev, &qcom->clks);
-	if (ret < 0) {
-		dev_err_probe(dev, ret, "failed to get clocks\n");
-		goto err_remove_swnode;
+	if (!qcom->fw_managed) {
+		ret = devm_clk_bulk_get_all(&pdev->dev, &qcom->clks);
+		if (ret < 0) {
+			dev_err_probe(dev, ret, "failed to get clocks\n");
+			goto err_remove_swnode;
+		}
+		qcom->num_clocks = ret;
 	}
-	qcom->num_clocks = ret;
 
 	ret = reset_control_assert(qcom->resets);
 	if (ret) {
@@ -741,9 +905,31 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 		goto err_remove_swnode;
 	}
 
-	ret = clk_bulk_prepare_enable(qcom->num_clocks, qcom->clks);
-	if (ret < 0)
-		goto err_remove_swnode;
+	if (!qcom->fw_managed) {
+		ret = clk_bulk_prepare_enable(qcom->num_clocks, qcom->clks);
+		if (ret < 0)
+			goto err_remove_swnode;
+	} else {
+		ret = dwc3_qcom_domain_attach(qcom);
+		if (ret) {
+			dev_err(dev, "Failed to attach domains (%d).\n", ret);
+			goto err_remove_swnode;
+		}
+
+		/*
+		 * Vote both domains on for the remainder of probe. This is a
+		 * plain runtime PM get, not an assumption about what state
+		 * firmware or the bootloader left the domains in beforehand;
+		 * pm_runtime_resume_and_get() is correct regardless of that
+		 * prior state.
+		 */
+		ret = dwc3_qcom_domains_get(qcom, false /* bus_only */);
+		if (ret) {
+			dev_err(dev, "Failed to enable power domains (%d)\n", ret);
+			dwc3_qcom_domain_detach(qcom);
+			goto err_remove_swnode;
+		}
+	}
 
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!r) {
@@ -803,9 +989,15 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 		goto clk_disable;
 	}
 
-	ret = dwc3_qcom_interconnect_init(qcom);
-	if (ret)
-		goto remove_core;
+	/*
+	 * Initialize interconnect paths only for non-firmware managed resource handling.
+	 * In firmware managed resource handling, interconnects are controlled by power domains.
+	 */
+	if (!qcom->fw_managed) {
+		ret = dwc3_qcom_interconnect_init(qcom);
+		if (ret)
+			goto remove_core;
+	}
 
 	wakeup_source = of_property_read_bool(dev->of_node, "wakeup-source");
 	device_init_wakeup(&pdev->dev, wakeup_source);
@@ -817,7 +1009,20 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 remove_core:
 	dwc3_core_remove(&qcom->dwc);
 clk_disable:
-	clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
+	if (!qcom->fw_managed) {
+		clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
+	} else {
+		int cleanup_ret;
+
+		cleanup_ret = dwc3_qcom_domains_put(qcom, false /* bus_only */);
+		if (cleanup_ret)
+			dev_err(dev, "Failed to disable power domains during cleanup: %d\n",
+				cleanup_ret);
+		dwc3_qcom_domain_detach(qcom);
+	}
+
+	/* Assert reset on error */
+	reset_control_assert(qcom->resets);
 
 err_remove_swnode:
 	if (qcom->broken_suspend)
@@ -829,15 +1034,63 @@ static void dwc3_qcom_remove(struct platform_device *pdev)
 {
 	struct dwc3 *dwc = platform_get_drvdata(pdev);
 	struct dwc3_qcom *qcom = to_dwc3_qcom(dwc);
+	bool pm_resumed = false;
+	bool domains_suspended = true;
+	int ret;
 
-	if (pm_runtime_resume_and_get(qcom->dev) < 0)
-		return;
+	ret = pm_runtime_resume_and_get(qcom->dev);
+	if (ret < 0)
+		dev_warn(qcom->dev, "Failed to resume. Perform critical cleanups only.\n");
+	else
+		pm_resumed = true;
 
-	dwc3_core_remove(&qcom->dwc);
-	clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
-	dwc3_qcom_interconnect_exit(qcom);
+	/*
+	 * Disable runtime PM to prevent any automatic PM operations during removal.
+	 * This prevents race conditions where interrupt handlers or other subsystems
+	 * might trigger runtime PM operations while the device is being torn down.
+	 */
+	pm_runtime_disable(qcom->dev);
 
-	pm_runtime_put_noidle(qcom->dev);
+	if (pm_resumed) {
+		/* Only perform operations that require device to be active */
+		dwc3_core_remove(&qcom->dwc);
+
+		if (!qcom->fw_managed) {
+			dwc3_qcom_interconnect_exit(qcom);
+			clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
+		} else {
+			ret = dwc3_qcom_domains_put(qcom, false /* bus_only */);
+			if (ret) {
+				dev_err(qcom->dev, "Failed to disable power domains during remove: %d\n",
+					ret);
+				domains_suspended = false;
+			}
+		}
+	}
+
+	/*
+	 * Critical cleanup operations that must be performed even if
+	 * pm_runtime_resume_and_get failed to prevent resource leaks
+	 * and anomalies during reboot cycles.
+	 */
+	if (qcom->fw_managed) {
+		/* Always detach power domains for firmware-managed case */
+		dwc3_qcom_domain_detach(qcom);
+	}
+
+	/* Always assert reset on remove */
+	reset_control_assert(qcom->resets);
+
+	if (pm_resumed)
+		pm_runtime_put_noidle(qcom->dev);
+
+	/*
+	 * Only report the device as suspended if the domains were actually
+	 * brought down; otherwise leave the runtime PM status untouched so
+	 * it doesn't misreport hardware that may still be powered.
+	 */
+	if (domains_suspended)
+		pm_runtime_set_suspended(qcom->dev);
 
 	if (qcom->broken_suspend)
 		device_remove_software_node(&pdev->dev);
