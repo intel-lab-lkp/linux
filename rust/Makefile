@@ -406,6 +406,12 @@ quiet_cmd_rustdoc_test_kernel = RUSTDOC TK $<
     $(objtree)/scripts/rustdoc_test_gen FORCE
 	+$(call if_changed,rustdoc_test_kernel)
 
+# When building rustdoc tests, instead of using the actual RUSTC_OR_CLIPPY, use a wrapper to build
+# so we can convert line number in diagnostics.
+ACTUAL_RUSTC := $(RUSTC_OR_CLIPPY)
+%/doctests_kernel_generated.o: private RUSTC_OR_CLIPPY = \
+	PYTHONDONTWRITEBYTECODE=1 ACTUAL_RUSTC=$(ACTUAL_RUSTC) $(PYTHON3) $(srctree)/scripts/rustdoc_test_map_source.py
+
 # We cannot use `-Zpanic-abort-tests` because some tests are dynamic,
 # so for the moment we skip `-Cpanic=abort`.
 quiet_cmd_rustc_test = $(RUSTC_OR_CLIPPY_QUIET) T  $<
