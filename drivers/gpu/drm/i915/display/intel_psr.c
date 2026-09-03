@@ -1443,7 +1443,8 @@ static bool wake_lines_fit_into_vblank(struct intel_dp *intel_dp,
 		wake_lines = DISPLAY_VER(display) < 20 ?
 			psr2_block_count_lines(crtc_state->alpm_state.io_wake_lines,
 					       crtc_state->alpm_state.fast_wake_lines) :
-			crtc_state->alpm_state.io_wake_lines;
+			max(crtc_state->alpm_state.io_wake_lines,
+			    crtc_state->alpm_state.fast_wake_lines);
 
 	/*
 	 * Guardband has not been computed yet, so we conservatively check if the
@@ -4569,7 +4570,8 @@ void intel_psr_compute_config_late(struct intel_dp *intel_dp,
 		wake_lines = DISPLAY_VER(display) < 20 ?
 			     psr2_block_count_lines(crtc_state->alpm_state.io_wake_lines,
 						    crtc_state->alpm_state.fast_wake_lines) :
-			     crtc_state->alpm_state.io_wake_lines;
+			     max(crtc_state->alpm_state.io_wake_lines,
+				 crtc_state->alpm_state.fast_wake_lines);
 	else
 		wake_lines = 0;
 
@@ -4625,7 +4627,8 @@ int intel_psr_min_guardband(struct intel_crtc_state *crtc_state)
 		wake_lines = DISPLAY_VER(display) < 20 ?
 			     psr2_block_count_lines(crtc_state->alpm_state.io_wake_lines,
 						    crtc_state->alpm_state.fast_wake_lines) :
-			     crtc_state->alpm_state.io_wake_lines;
+			     max(crtc_state->alpm_state.io_wake_lines,
+				 crtc_state->alpm_state.fast_wake_lines);
 	else
 		return 0;
 
