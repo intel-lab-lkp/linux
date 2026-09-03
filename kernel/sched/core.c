@@ -7881,8 +7881,8 @@ int sched_dynamic_mode(const char *str)
 	return -EINVAL;
 }
 
-# define preempt_dynamic_key_enable(f)	static_key_enable(&sk_dynamic_##f.key)
-# define preempt_dynamic_key_disable(f)	static_key_disable(&sk_dynamic_##f.key)
+# define preempt_dynamic_branch_enable(f)	static_branch_enable(&sk_dynamic_##f)
+# define preempt_dynamic_branch_disable(f)	static_branch_disable(&sk_dynamic_##f)
 
 static DEFINE_MUTEX(sched_dynamic_mutex);
 
@@ -7890,13 +7890,13 @@ static void __sched_dynamic_update(int mode)
 {
 	switch (mode) {
 	case preempt_dynamic_full:
-		preempt_dynamic_key_disable(preempt_lazy);
+		preempt_dynamic_branch_disable(preempt_lazy);
 		if (mode != preempt_dynamic_mode)
 			pr_info("Dynamic Preempt: full\n");
 		break;
 
 	case preempt_dynamic_lazy:
-		preempt_dynamic_key_enable(preempt_lazy);
+		preempt_dynamic_branch_enable(preempt_lazy);
 		if (mode != preempt_dynamic_mode)
 			pr_info("Dynamic Preempt: lazy\n");
 		break;
