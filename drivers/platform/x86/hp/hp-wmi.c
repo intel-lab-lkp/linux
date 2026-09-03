@@ -1771,9 +1771,15 @@ inline int omen_thermal_profile_ec_timer_set(u8 value)
 	return ec_write(HP_OMEN_EC_THERMAL_PROFILE_TIMER_OFFSET, value);
 }
 
+static int victus_s_gpu_thermal_profile_set(bool ctgp_enable,
+					    bool ppab_enable,
+					    u8 dstate);
+
 static int platform_profile_omen_set_ec(enum platform_profile_option profile)
 {
 	int err, tp, tp_version;
+	bool gpu_ctgp_enable;
+	bool gpu_ppab_enable;
 	enum hp_thermal_profile_omen_flags flags = 0;
 
 	tp_version = omen_get_thermal_policy_version();
@@ -1787,19 +1793,31 @@ static int platform_profile_omen_set_ec(enum platform_profile_option profile)
 			tp = HP_OMEN_V0_THERMAL_PROFILE_PERFORMANCE;
 		else
 			tp = HP_OMEN_V1_THERMAL_PROFILE_PERFORMANCE;
+
+		gpu_ctgp_enable = true;
+		gpu_ppab_enable = true;
 		break;
+
 	case PLATFORM_PROFILE_BALANCED:
 		if (tp_version == 0)
 			tp = HP_OMEN_V0_THERMAL_PROFILE_DEFAULT;
 		else
 			tp = HP_OMEN_V1_THERMAL_PROFILE_DEFAULT;
+
+		gpu_ctgp_enable = false;
+		gpu_ppab_enable = true;
 		break;
+
 	case PLATFORM_PROFILE_COOL:
 		if (tp_version == 0)
 			tp = HP_OMEN_V0_THERMAL_PROFILE_COOL;
 		else
 			tp = HP_OMEN_V1_THERMAL_PROFILE_COOL;
+
+		gpu_ctgp_enable = false;
+		gpu_ppab_enable = false;
 		break;
+
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -1807,6 +1825,18 @@ static int platform_profile_omen_set_ec(enum platform_profile_option profile)
 	err = omen_thermal_profile_set(tp);
 	if (err < 0)
 		return err;
+
+	/*
+	 * Configure GPU cTGP / PPAB through WMI 0x22 according to
+	 * the selected platform profile.
+	 */
+	err = victus_s_gpu_thermal_profile_set(gpu_ctgp_enable,
+					       gpu_ppab_enable,
+					       1);
+	if (err < 0) {
+		pr_debug("hp-wmi: GPU cTGP/PPAB set returned %d\n", err);
+		return err;
+	}
 
 	if (has_omen_thermal_profile_ec_timer()) {
 		err = omen_thermal_profile_ec_timer_set(0);
