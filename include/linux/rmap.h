@@ -927,6 +927,7 @@ unsigned long page_address_in_vma(const struct folio *folio,
  * returns the number of cleaned PTEs.
  */
 int folio_mkclean(struct folio *);
+int folio_mkclean_dirtymap(struct folio *folio, unsigned long *dirty_map);
 
 int mapping_wrprotect_range(struct address_space *mapping, pgoff_t pgoff,
 		unsigned long pfn, unsigned long nr_pages);
@@ -987,6 +988,12 @@ static inline void try_to_unmap(struct folio *folio, enum ttu_flags flags)
 }
 
 static inline int folio_mkclean(struct folio *folio)
+{
+	return 0;
+}
+
+static inline int folio_mkclean_dirtymap(struct folio *folio,
+					 unsigned long *dirty_map)
 {
 	return 0;
 }

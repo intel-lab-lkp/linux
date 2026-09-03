@@ -1100,12 +1100,18 @@ int folio_referenced(struct folio *folio, int is_locked,
 	return rwc.contended ? -1 : pra.referenced;
 }
 
-static int page_vma_mkclean_one(struct page_vma_mapped_walk *pvmw)
+struct mkclean_state {
+	unsigned long *dirty_map;
+	int cleaned;
+};
+
+static int page_vma_mkclean_one(struct page_vma_mapped_walk *pvmw,
+				unsigned long *dirty_map)
 {
-	int cleaned = 0;
 	struct vm_area_struct *vma = pvmw->vma;
-	struct mmu_notifier_range range;
 	unsigned long address = pvmw->address;
+	struct mmu_notifier_range range;
+	int cleaned = 0;
 
 	/*
 	 * We have to assume the worse case ie pmd for invalidation. Note that
@@ -1134,6 +1140,15 @@ static int page_vma_mkclean_one(struct page_vma_mapped_walk *pvmw)
 			if (!pte_dirty(entry) && !pte_write(entry))
 				continue;
 
+			if (dirty_map && pte_dirty(entry)) {
+				pgoff_t idx = linear_page_index(vma, address) -
+					      pvmw->pgoff;
+
+				/* The walk only visits pages of this folio */
+				VM_WARN_ON_ONCE(idx >= pvmw->nr_pages);
+				__set_bit(idx, dirty_map);
+			}
+
 			flush_cache_page(vma, address, pte_pfn(entry));
 			entry = ptep_clear_flush(vma, address, pte);
 			entry = pte_wrprotect(entry);
@@ -1154,6 +1169,9 @@ static int page_vma_mkclean_one(struct page_vma_mapped_walk *pvmw)
 				continue;
 			if (!pmd_dirty(entry) && !pmd_write(entry))
 				continue;
+
+			if (dirty_map && pmd_dirty(entry))
+				bitmap_set(dirty_map, 0, pvmw->nr_pages);
 
 			flush_cache_range(vma, address,
 					  address + HPAGE_PMD_SIZE);
@@ -1181,9 +1199,9 @@ static bool page_mkclean_one(struct folio *folio, struct vm_area_struct *vma,
 			     unsigned long address, void *arg)
 {
 	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, address, PVMW_SYNC);
-	int *cleaned = arg;
+	struct mkclean_state *state = arg;
 
-	*cleaned += page_vma_mkclean_one(&pvmw);
+	state->cleaned += page_vma_mkclean_one(&pvmw, state->dirty_map);
 
 	return true;
 }
@@ -1196,12 +1214,23 @@ static bool invalid_mkclean_vma(struct vm_area_struct *vma, void *arg)
 	return true;
 }
 
-int folio_mkclean(struct folio *folio)
+/**
+ * folio_mkclean_dirtymap - Write-protect a folio and report what was dirty.
+ * @folio: The folio to clean.
+ * @dirty_map: Bitmap of at least folio_nr_pages(@folio) bits, or NULL.
+ *
+ * Write-protects and cleans every mapping of @folio.  With @dirty_map, sets a
+ * bit for each page whose entry was dirty; a PMD-mapped folio has one dirty
+ * bit for all of it, so every page is reported.
+ *
+ * Return: the number of page table entries cleaned.
+ */
+int folio_mkclean_dirtymap(struct folio *folio, unsigned long *dirty_map)
 {
-	int cleaned = 0;
+	struct mkclean_state state = { .dirty_map = dirty_map };
 	struct address_space *mapping;
 	struct rmap_walk_control rwc = {
-		.arg = (void *)&cleaned,
+		.arg = (void *)&state,
 		.rmap_one = page_mkclean_one,
 		.invalid_vma = invalid_mkclean_vma,
 	};
@@ -1217,7 +1246,12 @@ int folio_mkclean(struct folio *folio)
 
 	rmap_walk(folio, &rwc);
 
-	return cleaned;
+	return state.cleaned;
+}
+
+int folio_mkclean(struct folio *folio)
+{
+	return folio_mkclean_dirtymap(folio, NULL);
 }
 EXPORT_SYMBOL_GPL(folio_mkclean);
 
@@ -1241,7 +1275,7 @@ static bool mapping_wrprotect_range_one(struct folio *folio,
 		.flags		= PVMW_SYNC,
 	};
 
-	state->cleaned += page_vma_mkclean_one(&pvmw);
+	state->cleaned += page_vma_mkclean_one(&pvmw, NULL);
 
 	return true;
 }
@@ -1324,7 +1358,7 @@ int pfn_mkclean_range(unsigned long pfn, unsigned long nr_pages, pgoff_t pgoff,
 	pvmw.address = vma_address(vma, pgoff, nr_pages);
 	VM_BUG_ON_VMA(pvmw.address == -EFAULT, vma);
 
-	return page_vma_mkclean_one(&pvmw);
+	return page_vma_mkclean_one(&pvmw, NULL);
 }
 
 static void __folio_mod_stat(struct folio *folio, int nr, int nr_pmdmapped)
