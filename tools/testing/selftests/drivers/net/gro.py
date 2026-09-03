@@ -37,88 +37,18 @@ Test cases:
 """
 
 import glob
-import os
 import re
 from lib.py import ksft_run, ksft_exit, ksft_pr
-from lib.py import NetDrvEpEnv, KsftFailEx, KsftXfailEx
+from lib.py import NetDrvEpEnv, KsftXfailEx
 from lib.py import NetdevFamily, EthtoolFamily
-from lib.py import bkg, cmd, defer, ethtool, ip
+from lib.py import defer, ethtool
 from lib.py import ksft_variants, KsftNamedVariant
+from gro_lib import run_gro_bin, run_with_retries, set_ethtool_feat
+from gro_lib import set_mtu_restore, setup_hw_gro, write_defer_restore
 
 
 # gro.c uses hardcoded DPORT=8000
 GRO_DPORT = 8000
-
-
-def _resolve_dmac(cfg, ipver):
-    """
-    Find the destination MAC address remote host should use to send packets
-    towards the local host. It may be a router / gateway address.
-    """
-
-    attr = "dmac" + ipver
-    # Cache the response across test cases
-    if hasattr(cfg, attr):
-        return getattr(cfg, attr)
-
-    route = ip(f"-{ipver} route get {cfg.addr_v[ipver]}",
-               json=True, host=cfg.remote)[0]
-    gw = route.get("gateway")
-    # Local L2 segment, address directly
-    if not gw:
-        setattr(cfg, attr, cfg.dev['address'])
-        return getattr(cfg, attr)
-
-    # ping to make sure neighbor is resolved,
-    # bind to an interface, for v6 the GW is likely link local
-    cmd(f"ping -c1 -W0 -I{cfg.remote_ifname} {gw}", host=cfg.remote)
-
-    neigh = ip(f"neigh get {gw} dev {cfg.remote_ifname}",
-               json=True, host=cfg.remote)[0]
-    setattr(cfg, attr, neigh['lladdr'])
-    return getattr(cfg, attr)
-
-
-def _write_defer_restore(cfg, path, val, defer_undo=False):
-    with open(path, "r", encoding="utf-8") as fp:
-        orig_val = fp.read().strip()
-        if str(val) == orig_val:
-            return
-    with open(path, "w", encoding="utf-8") as fp:
-        fp.write(val)
-    if defer_undo:
-        defer(_write_defer_restore, cfg, path, orig_val)
-
-
-def _set_mtu_restore(dev, mtu, host):
-    if dev['mtu'] < mtu:
-        ip(f"link set dev {dev['ifname']} mtu {mtu}", host=host)
-        defer(ip, f"link set dev {dev['ifname']} mtu {dev['mtu']}", host=host)
-
-
-def _set_ethtool_feat(dev, current, feats, host=None):
-    s2n = {True: "on", False: "off"}
-
-    new = ["-K", dev]
-    old = ["-K", dev]
-    no_change = True
-    for name, state in feats.items():
-        new += [name, s2n[state]]
-        old += [name, s2n[current[name]["active"]]]
-
-        if current[name]["active"] != state:
-            no_change = False
-            if current[name]["fixed"]:
-                raise KsftXfailEx(f"Device does not support {name}")
-    if no_change:
-        return
-
-    eth_cmd = ethtool(" ".join(new), host=host)
-    defer(ethtool, " ".join(old), host=host)
-
-    # If ethtool printed something kernel must have modified some features
-    if eth_cmd.stdout:
-        ksft_pr(eth_cmd)
 
 
 def _get_queue_stats(cfg, queue_id):
@@ -182,47 +112,6 @@ def _setup_queue_count(cfg, num_queues):
     ethtool(f"-L {cfg.ifname} combined {num_queues}")
 
 
-def _run_gro_bin(cfg, test_name, protocol=None, num_flows=None,
-                 order_check=False, verbose=False, fail=False):
-    """Run gro binary with given test and return the process result."""
-    if not hasattr(cfg, "bin_remote"):
-        cfg.bin_local = cfg.net_lib_dir / "gro"
-        cfg.bin_remote = cfg.remote.deploy(cfg.bin_local)
-
-    if protocol is None:
-        ipver = cfg.addr_ipver
-        protocol = f"ipv{ipver}"
-    else:
-        ipver = "6" if protocol[-1] == "6" else "4"
-
-    dmac = _resolve_dmac(cfg, ipver)
-
-    base_args = [
-        f"--{protocol}",
-        f"--dmac {dmac}",
-        f"--smac {cfg.remote_dev['address']}",
-        f"--daddr {cfg.addr_v[ipver]}",
-        f"--saddr {cfg.remote_addr_v[ipver]}",
-        f"--test {test_name}",
-    ]
-    if num_flows:
-        base_args.append(f"--num-flows {num_flows}")
-    if order_check:
-        base_args.append("--order-check")
-    if verbose:
-        base_args.append("--verbose")
-
-    args = " ".join(base_args)
-
-    rx_cmd = f"{cfg.bin_local} {args} --rx --iface {cfg.ifname}"
-    tx_cmd = f"{cfg.bin_remote} {args} --iface {cfg.remote_ifname}"
-
-    with bkg(rx_cmd, ksft_ready=True, exit_wait=True, fail=fail) as rx_proc:
-        cmd(tx_cmd, host=cfg.remote)
-
-    return rx_proc
-
-
 def _setup(cfg, mode, test_name):
     """ Setup hardware loopback mode for GRO testing. """
 
@@ -237,60 +126,39 @@ def _setup(cfg, mode, test_name):
 
     # "large_*" tests need at least 4k MTU
     if test_name.startswith("large_"):
-        _set_mtu_restore(cfg.dev, 4096, None)
-        _set_mtu_restore(cfg.remote_dev, 4096, cfg.remote)
+        set_mtu_restore(cfg.dev, 4096, None)
+        set_mtu_restore(cfg.remote_dev, 4096, cfg.remote)
 
     if mode == "sw":
         flush_path = f"/sys/class/net/{cfg.ifname}/gro_flush_timeout"
         irq_path = f"/sys/class/net/{cfg.ifname}/napi_defer_hard_irqs"
 
-        _write_defer_restore(cfg, flush_path, "200000", defer_undo=True)
-        _write_defer_restore(cfg, irq_path, "10", defer_undo=True)
+        write_defer_restore(cfg, flush_path, "200000", defer_undo=True)
+        write_defer_restore(cfg, irq_path, "10", defer_undo=True)
 
-        _set_ethtool_feat(cfg.ifname, cfg.feat,
-                          {"generic-receive-offload": True,
-                           "rx-gro-hw": False,
-                           "large-receive-offload": False})
+        set_ethtool_feat(cfg.ifname, cfg.feat,
+                         {"generic-receive-offload": True,
+                          "rx-gro-hw": False,
+                          "large-receive-offload": False})
     elif mode == "hw":
-        _set_ethtool_feat(cfg.ifname, cfg.feat,
-                          {"generic-receive-offload": False,
-                           "rx-gro-hw": True,
-                           "large-receive-offload": False})
-
-        # Some NICs treat HW GRO as a GRO sub-feature so disabling GRO
-        # will also clear HW GRO. Use a hack of installing XDP generic
-        # to skip SW GRO, even when enabled.
-        feat = ethtool(f"-k {cfg.ifname}", json=True)[0]
-        if not feat["rx-gro-hw"]["active"]:
-            ksft_pr("Driver clears HW GRO and SW GRO is cleared, using generic XDP workaround")
-            prog = cfg.net_lib_dir / "xdp_dummy.bpf.o"
-            ip(f"link set dev {cfg.ifname} xdpgeneric obj {prog} sec xdp")
-            defer(ip, f"link set dev {cfg.ifname} xdpgeneric off")
-
-            # Attaching XDP may change features, fetch the latest state
-            feat = ethtool(f"-k {cfg.ifname}", json=True)[0]
-
-            _set_ethtool_feat(cfg.ifname, feat,
-                              {"generic-receive-offload": True,
-                               "rx-gro-hw": True,
-                               "large-receive-offload": False})
+        setup_hw_gro(cfg)
     elif mode == "lro":
         # netdevsim advertises LRO for feature inheritance testing with
         # bonding/team tests but it doesn't actually perform the offload
         cfg.require_nsim(nsim_test=False)
 
-        _set_ethtool_feat(cfg.ifname, cfg.feat,
-                          {"generic-receive-offload": False,
-                           "rx-gro-hw": False,
-                           "large-receive-offload": True})
+        set_ethtool_feat(cfg.ifname, cfg.feat,
+                         {"generic-receive-offload": False,
+                          "rx-gro-hw": False,
+                          "large-receive-offload": True})
 
     try:
         # Disable TSO for local tests
         cfg.require_nsim()  # will raise KsftXfailEx if not running on nsim
 
-        _set_ethtool_feat(cfg.remote_ifname, cfg.remote_feat,
-                          {"tcp-segmentation-offload": False},
-                          host=cfg.remote)
+        set_ethtool_feat(cfg.remote_ifname, cfg.remote_feat,
+                         {"tcp-segmentation-offload": False},
+                         host=cfg.remote)
     except KsftXfailEx:
         pass
 
@@ -356,31 +224,7 @@ def test(cfg, mode, protocol, test_name):
 
     _setup(cfg, mode, test_name)
 
-    # Each test is run 6 times to deflake, because given the receive timing,
-    # not all packets that should coalesce will be considered in the same flow
-    # on every try.
-    max_retries = 6
-    for attempt in range(max_retries):
-        fail_now = attempt >= max_retries - 1
-        rx_proc = _run_gro_bin(cfg, test_name, protocol=protocol,
-                               verbose=True, fail=fail_now)
-
-        if rx_proc.ret == 0:
-            return
-
-        ksft_pr(rx_proc)
-
-        # ret==42 means the receiver detected over-coalescing.
-        # This is unambiguous proof of a bug, retries can only cause
-        # false negatives.
-        if rx_proc.ret == 42:
-            raise KsftFailEx(f"GRO over-coalesced in {protocol}/{test_name}")
-
-        if test_name.startswith("large_") and os.environ.get("KSFT_MACHINE_SLOW"):
-            ksft_pr(f"Ignoring {protocol}/{test_name} failure due to slow environment")
-            return
-
-        ksft_pr(f"Attempt {attempt + 1}/{max_retries} failed, retrying...")
+    run_with_retries(cfg, test_name, protocol=protocol, verbose=True)
 
 
 def _capacity_variants():
@@ -420,7 +264,7 @@ def test_gro_capacity(cfg, mode, setup_func):
             if queue_id is not None:
                 stats_before = _get_queue_stats(cfg, queue_id)
 
-            rx_proc = _run_gro_bin(cfg, "capacity", num_flows=num_flows)
+            rx_proc = run_gro_bin(cfg, "capacity", num_flows=num_flows)
             output = rx_proc.stdout
 
             if queue_id is not None:

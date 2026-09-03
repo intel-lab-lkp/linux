@@ -28,6 +28,7 @@ TEST_PROGS := \
 # end of TEST_PROGS
 
 TEST_FILES := \
+	gro_lib.py \
 	psp_lib.py \
 # end of TEST_FILES
 
