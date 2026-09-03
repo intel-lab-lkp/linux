@@ -121,9 +121,14 @@ def setup_hw_gro(cfg):
 
 
 # pylint: disable=too-many-arguments,too-many-positional-arguments
+# pylint: disable=too-many-locals
 def run_gro_bin(cfg, test_name, protocol=None, num_flows=None,
-                order_check=False, verbose=False, fail=False):
-    """Runs gro binary with given test and return the process result."""
+                order_check=False, verbose=False, fail=False,
+                common_args=None):
+    """Runs gro binary with given test and return the process result.
+
+    common_args is a list of extra arguments passed to both ends.
+    """
     if not hasattr(cfg, "bin_remote"):
         cfg.bin_local = cfg.net_lib_dir / "gro"
         cfg.bin_remote = cfg.remote.deploy(cfg.bin_local)
@@ -150,6 +155,8 @@ def run_gro_bin(cfg, test_name, protocol=None, num_flows=None,
         base_args.append("--order-check")
     if verbose:
         base_args.append("--verbose")
+    if common_args:
+        base_args += common_args
 
     args = " ".join(base_args)
 
@@ -169,6 +176,9 @@ def run_with_retries(cfg, test_name, protocol=None, **kwargs):
     packets that should coalesce will be considered in the same flow on
     every try.  Over-coalescing is a hard failure, retries can only
     cause false negatives there.
+
+    Extra keyword arguments (num_flows, order_check, verbose,
+    common_args) are forwarded to run_gro_bin().
     """
     max_retries = 6
     for attempt in range(max_retries):
