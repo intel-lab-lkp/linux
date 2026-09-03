@@ -71,6 +71,7 @@ static const char * const page_owner_print_mode_strings[] = {
 
 struct memcg_info {
 	char name[80];
+	char *path;
 	bool is_slab;
 	bool is_objcg;
 	bool is_online;
@@ -86,6 +87,7 @@ struct page_owner_filter_state {
 	enum page_owner_print_mode print_mode;
 	bool nid_filter_enabled;
 	bool proc_filter_enabled;
+	bool memcg_filter_enabled;
 	nodemask_t nid_filter;
 	int pid_count;
 	int tgid_count;
@@ -93,6 +95,7 @@ struct page_owner_filter_state {
 	pid_t pid_list[MAX_FILTER_PIDS];
 	pid_t tgid_list[MAX_FILTER_TGIDS];
 	char comm_list[MAX_FILTER_COMMS][TASK_COMM_LEN];
+	char *memcg_path;
 };
 
 static int cmp_pid_t(const void *a, const void *b)
@@ -582,7 +585,8 @@ ext_put_continue:
 /*
  * Get memcg information from page
  */
-static void get_page_memcg_info(struct page *page, struct memcg_info *info)
+static void get_page_memcg_info(struct page *page, struct memcg_info *info,
+				 char *path_buf)
 {
 	unsigned long memcg_data;
 	struct obj_cgroup *objcg;
@@ -606,6 +610,10 @@ static void get_page_memcg_info(struct page *page, struct memcg_info *info)
 	info->is_objcg = (memcg_data & MEMCG_DATA_KMEM) != 0;
 	info->is_online = css_is_online(&memcg->css);
 	cgroup_name(memcg->css.cgroup, info->name, sizeof(info->name));
+	if (path_buf) {
+		info->path = path_buf;
+		cgroup_path(memcg->css.cgroup, info->path, PATH_MAX);
+	}
 out_unlock:
 	rcu_read_unlock();
 }
@@ -775,10 +783,22 @@ read_page_owner(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 	struct page_ext *page_ext;
 	struct page_owner *page_owner;
 	depot_stack_handle_t handle;
+	char *memcg_path_buf = NULL;
 	struct page_owner_filter_state *state = file->private_data;
+	ssize_t ret;
 
 	if (!static_branch_unlikely(&page_owner_inited))
 		return -EINVAL;
+
+	/*
+	 * Allocate outside the loop, as GFP_KERNEL allocations may not
+	 * sleep inside the page_ext RCU read-side critical section.
+	 */
+	if (state->memcg_filter_enabled) {
+		memcg_path_buf = kmalloc(PATH_MAX, GFP_KERNEL);
+		if (!memcg_path_buf)
+			return -ENOMEM;
+	}
 
 	page = NULL;
 	if (*ppos == 0)
@@ -899,7 +919,11 @@ read_page_owner(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 		}
 
 #ifdef CONFIG_MEMCG
-		get_page_memcg_info(page, &memcg_info);
+		get_page_memcg_info(page, &memcg_info, memcg_path_buf);
+		if (state->memcg_filter_enabled)
+			if (!memcg_info.path ||
+			    strcmp(memcg_info.path, state->memcg_path) != 0)
+				goto ext_put_continue;
 #endif
 
 		/* Record the next PFN to read in the file offset */
@@ -907,13 +931,16 @@ read_page_owner(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 
 		page_owner_tmp = *page_owner;
 		page_ext_put(page_ext);
-		return print_page_owner(buf, count, pfn, page,
+		ret = print_page_owner(buf, count, pfn, page,
 				&page_owner_tmp, handle, state, &memcg_info);
+		kfree(memcg_path_buf);
+		return ret;
 ext_put_continue:
 		page_ext_put(page_ext);
 		cond_resched();
 	}
 
+	kfree(memcg_path_buf);
 	return 0;
 }
 
@@ -1016,7 +1043,10 @@ static int page_owner_open(struct inode *inode, struct file *file)
 
 static int page_owner_release(struct inode *inode, struct file *file)
 {
-	kfree(file->private_data);
+	struct page_owner_filter_state *state = file->private_data;
+
+	kfree(state->memcg_path);
+	kfree(state);
 	return 0;
 }
 
@@ -1075,9 +1105,11 @@ static ssize_t page_owner_write(struct file *file,
 	nodemask_t new_nid_filter;
 	bool new_nid_filter_enabled;
 	bool new_proc_filter_enabled;
+	bool new_memcg_filter_enabled;
 	pid_t new_pid_list[MAX_FILTER_PIDS];
 	pid_t new_tgid_list[MAX_FILTER_TGIDS];
 	char (*new_comm_list)[TASK_COMM_LEN] = NULL;
+	char *new_memcg_path;
 	int new_pid_count = 0;
 	int new_tgid_count = 0;
 	int new_comm_count = 0;
@@ -1093,16 +1125,24 @@ static ssize_t page_owner_write(struct file *file,
 	if (count > 32 + 6 * MAX_NUMNODES +
 			(PID_MAX_DIGITS + 1) * MAX_FILTER_PIDS + 4 +
 			(PID_MAX_DIGITS + 1) * MAX_FILTER_TGIDS + 5 +
-			TASK_COMM_LEN * MAX_FILTER_COMMS + 5)
+			TASK_COMM_LEN * MAX_FILTER_COMMS + 5 +
+			PATH_MAX + 6)
 		return -EINVAL;
 
 	new_comm_list = kmalloc_array(MAX_FILTER_COMMS, TASK_COMM_LEN, GFP_KERNEL);
 	if (!new_comm_list)
 		return -ENOMEM;
 
+	new_memcg_path = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!new_memcg_path) {
+		kfree(new_comm_list);
+		return -ENOMEM;
+	}
+
 	kbuf = memdup_user_nul(buf, count);
 	if (IS_ERR(kbuf)) {
 		kfree(new_comm_list);
+		kfree(new_memcg_path);
 		return PTR_ERR(kbuf);
 	}
 
@@ -1125,6 +1165,9 @@ static ssize_t page_owner_write(struct file *file,
 				state->comm_count * TASK_COMM_LEN);
 		new_comm_count = state->comm_count;
 	}
+	new_memcg_filter_enabled = state->memcg_filter_enabled;
+	if (state->memcg_filter_enabled && state->memcg_path)
+		strscpy(new_memcg_path, state->memcg_path, PATH_MAX);
 
 	while ((token = strsep(&kbuf, " \t\n")) != NULL) {
 		if (*token == '\0')
@@ -1168,9 +1211,32 @@ static ssize_t page_owner_write(struct file *file,
 			ret = parse_comm_list(token + 5, new_comm_list, &new_comm_count);
 			if (ret < 0)
 				goto out_free;
+#ifdef CONFIG_MEMCG
+		} else if (!strncmp(token, "memcg=", 6)) {
+			if (token[6] == '\0') {
+				ret = -EINVAL;
+				goto out_free;
+			}
+			ret = strscpy(new_memcg_path, token + 6, PATH_MAX);
+			if (ret < 0)
+				goto out_free;
+			new_memcg_filter_enabled = true;
+#endif
 		} else {
 			ret = -EINVAL;
 			goto out_free;
+		}
+	}
+
+	if (new_memcg_filter_enabled) {
+		if (!state->memcg_path) {
+			state->memcg_path = kzalloc(PATH_MAX, GFP_KERNEL);
+			if (!state->memcg_path) {
+				ret = -ENOMEM;
+				goto out_free;
+			}
+		} else {
+			memset(state->memcg_path, 0, PATH_MAX);
 		}
 	}
 
@@ -1200,11 +1266,16 @@ static ssize_t page_owner_write(struct file *file,
 				new_comm_count * TASK_COMM_LEN);
 		state->comm_count = new_comm_count;
 	}
+	if (new_memcg_filter_enabled) {
+		strscpy(state->memcg_path, new_memcg_path, PATH_MAX);
+		state->memcg_filter_enabled = true;
+	}
 
 	ret = count;
 
 out_free:
 	kfree(new_comm_list);
+	kfree(new_memcg_path);
 	kfree(orig);
 	return ret;
 }
