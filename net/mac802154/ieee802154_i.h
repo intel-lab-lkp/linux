@@ -74,6 +74,8 @@ struct ieee802154_local {
 	struct work_struct rx_beacon_work;
 	struct list_head rx_mac_cmd_list;
 	struct work_struct rx_mac_cmd_work;
+	/* Protects rx_beacon_list and rx_mac_cmd_list. */
+	spinlock_t rx_lists_lock;
 
 	/* Association */
 	struct ieee802154_pan_device *assoc_dev;

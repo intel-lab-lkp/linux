@@ -29,20 +29,38 @@ static int ieee802154_deliver_skb(struct sk_buff *skb)
 	return netif_receive_skb(skb);
 }
 
+static struct cfg802154_mac_pkt *
+mac802154_rx_dequeue(struct ieee802154_local *local,
+		     struct list_head *rx_list,
+		     struct work_struct *work)
+{
+	struct cfg802154_mac_pkt *mac_pkt;
+
+	spin_lock_bh(&local->rx_lists_lock);
+	mac_pkt = list_first_entry_or_null(rx_list,
+					   struct cfg802154_mac_pkt, node);
+	if (mac_pkt) {
+		list_del(&mac_pkt->node);
+		if (!list_empty(rx_list))
+			queue_work(local->mac_wq, work);
+	}
+	spin_unlock_bh(&local->rx_lists_lock);
+
+	return mac_pkt;
+}
+
 void mac802154_rx_beacon_worker(struct work_struct *work)
 {
 	struct ieee802154_local *local =
 		container_of(work, struct ieee802154_local, rx_beacon_work);
 	struct cfg802154_mac_pkt *mac_pkt;
 
-	mac_pkt = list_first_entry_or_null(&local->rx_beacon_list,
-					   struct cfg802154_mac_pkt, node);
+	mac_pkt = mac802154_rx_dequeue(local, &local->rx_beacon_list, work);
 	if (!mac_pkt)
 		return;
 
 	mac802154_process_beacon(local, mac_pkt->skb, mac_pkt->page, mac_pkt->channel);
 
-	list_del(&mac_pkt->node);
 	kfree_skb(mac_pkt->skb);
 	kfree(mac_pkt);
 }
@@ -76,8 +94,7 @@ void mac802154_rx_mac_cmd_worker(struct work_struct *work)
 	u8 mac_cmd;
 	int rc;
 
-	mac_pkt = list_first_entry_or_null(&local->rx_mac_cmd_list,
-					   struct cfg802154_mac_pkt, node);
+	mac_pkt = mac802154_rx_dequeue(local, &local->rx_mac_cmd_list, work);
 	if (!mac_pkt)
 		return;
 
@@ -123,7 +140,6 @@ void mac802154_rx_mac_cmd_worker(struct work_struct *work)
 	}
 
 out:
-	list_del(&mac_pkt->node);
 	kfree_skb(mac_pkt->skb);
 	kfree(mac_pkt);
 }
@@ -221,8 +237,10 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 		mac_pkt->sdata = sdata;
 		mac_pkt->page = sdata->local->scan_page;
 		mac_pkt->channel = sdata->local->scan_channel;
+		spin_lock_bh(&sdata->local->rx_lists_lock);
 		list_add_tail(&mac_pkt->node, &sdata->local->rx_beacon_list);
 		queue_work(sdata->local->mac_wq, &sdata->local->rx_beacon_work);
+		spin_unlock_bh(&sdata->local->rx_lists_lock);
 		return NET_RX_SUCCESS;
 
 	case IEEE802154_FC_TYPE_MAC_CMD:
@@ -233,8 +251,10 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 
 		mac_pkt->skb = skb_get(skb);
 		mac_pkt->sdata = sdata;
+		spin_lock_bh(&sdata->local->rx_lists_lock);
 		list_add_tail(&mac_pkt->node, &sdata->local->rx_mac_cmd_list);
 		queue_work(sdata->local->mac_wq, &sdata->local->rx_mac_cmd_work);
+		spin_unlock_bh(&sdata->local->rx_lists_lock);
 		return NET_RX_SUCCESS;
 
 	case IEEE802154_FC_TYPE_ACK:
