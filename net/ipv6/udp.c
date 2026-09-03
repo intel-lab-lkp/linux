@@ -1656,6 +1656,7 @@ do_udp_sendmsg:
 	if (ipv6_addr_any(&fl6->saddr) && !ipv6_addr_any(&np->saddr))
 		fl6->saddr = np->saddr;
 	fl6->fl6_sport = inet->inet_sport;
+	fl6->flowi6_flags = inet_sk_flowi_flags(sk);
 
 	if (cgroup_bpf_enabled(CGROUP_UDP6_SENDMSG) && !connected) {
 		err = BPF_CGROUP_RUN_PROG_UDP6_SENDMSG_LOCK(sk,

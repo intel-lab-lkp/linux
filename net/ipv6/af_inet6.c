@@ -820,6 +820,7 @@ int inet6_sk_rebuild_header(struct sock *sk)
 	fl6->fl6_dport = inet->inet_dport;
 	fl6->fl6_sport = inet->inet_sport;
 	fl6->flowi6_uid = sk_uid(sk);
+	fl6->flowi6_flags = inet_sk_flowi_flags(sk);
 	security_sk_classify_flow(sk, flowi6_to_flowi_common(fl6));
 
 	ip6_ecmp_set_mp_hash(sock_net(sk), fl6, sk->sk_txhash);
