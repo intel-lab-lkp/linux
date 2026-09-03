@@ -5911,16 +5911,16 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 			     wq->name);
 
 	/*
-	 * One among WQ_PERCPU and WQ_UNBOUND must be set, but not both.
-	 * - If neither is set, default to WQ_PERCPU
-	 * - If both are set, default to WQ_UNBOUND
+	 * Every caller that doesn't explicilty specify WQ_PERCPU will be
+	 * unbound (WQ_UNBOUND) by default.
 	 *
-	 * This code can be removed after workqueue are unbound by default
+	 * If both flags are present at the same time, WQ_PERCPU will be
+	 * removed.
 	 */
 	if (unlikely(!(flags & (WQ_UNBOUND | WQ_PERCPU)))) {
-		WARN_ONCE(1, "workqueue: %s is using neither WQ_PERCPU or WQ_UNBOUND. "
-			  "Setting WQ_PERCPU.\n", wq->name);
-		flags |= WQ_PERCPU;
+		pr_warn_once("workqueue: %s is using neither WQ_PERCPU or WQ_UNBOUND. "
+			  "Setting WQ_UNBOUND.\n", wq->name);
+		flags |= WQ_UNBOUND;
 	} else if (unlikely((flags & WQ_PERCPU) && (flags & WQ_UNBOUND))) {
 		WARN_ONCE(1, "workqueue: %s uses both WQ_PERCPU and WQ_UNBOUND. "
 			  "Dropped WQ_PERCPU, keeping WQ_UNBOUND.\n", wq->name);
