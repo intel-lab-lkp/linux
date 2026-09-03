@@ -32,8 +32,7 @@ void rvt_mmap_init(struct rvt_dev_info *rdi)
  */
 void rvt_release_mmap_info(struct kref *ref)
 {
-	struct rvt_mmap_info *ip =
-		container_of(ref, struct rvt_mmap_info, ref);
+	struct rvt_mmap_info *ip = container_of(ref, struct rvt_mmap_info, ref);
 	struct rvt_dev_info *rdi = ib_to_rvt(ip->context->device);
 
 	spin_lock_irq(&rdi->pending_lock);
@@ -91,8 +90,7 @@ int rvt_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	 * CQ, QP, or SRQ is soon followed by a call to mmap().
 	 */
 	spin_lock_irq(&rdi->pending_lock);
-	list_for_each_entry_safe(ip, pp, &rdi->pending_mmaps,
-				 pending_mmaps) {
+	list_for_each_entry_safe(ip, pp, &rdi->pending_mmaps, pending_mmaps) {
 		/* Only the creator is allowed to mmap the object */
 		if (context != ip->context || (__u64)offset != ip->offset)
 			continue;
@@ -115,6 +113,7 @@ int rvt_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 done:
 	return ret;
 }
+EXPORT_SYMBOL(rvt_mmap);
 
 /**
  * rvt_create_mmap_info - allocate information for hfi1_mmap

@@ -248,17 +248,6 @@ struct hfi2_ctxt_info {
 	__u16 sdma_ring_size; /* number of entries in SDMA request ring */
 };
 
-struct hfi1_tid_info {
-	/* virtual address of first page in transfer */
-	__aligned_u64 vaddr;
-	/* pointer to tid array. this array is big enough */
-	__aligned_u64 tidlist;
-	/* number of tids programmed by this request */
-	__u32 tidcnt;
-	/* length of transfer buffer programmed by this request */
-	__u32 length;
-};
-
 #define HFI2_TID_UPDATE_FLAGS_MEMINFO_MASK 0xfUL
 #define HFI2_TID_UPDATE_FLAGS_RESERVED_MASK \
 	(~(__u64)(HFI2_TID_UPDATE_FLAGS_MEMINFO_MASK))
