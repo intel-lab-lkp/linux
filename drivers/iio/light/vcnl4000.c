@@ -1517,7 +1517,11 @@ static irqreturn_t vcnl4040_irq_thread(int irq, void *p)
 
 	ret = i2c_smbus_read_word_data(data->client, data->chip_spec->int_reg);
 	if (ret < 0)
-		return IRQ_HANDLED;
+		return IRQ_NONE;
+
+	if (!(ret & (VCNL4040_PS_IF_CLOSE | VCNL4040_PS_IF_AWAY |
+		     VCNL4040_ALS_FALLING | VCNL4040_ALS_RISING)))
+		return IRQ_NONE;
 
 	if (ret & VCNL4040_PS_IF_CLOSE) {
 		iio_push_event(indio_dev,
@@ -1573,7 +1577,10 @@ static irqreturn_t vcnl4010_irq_thread(int irq, void *p)
 
 	ret = i2c_smbus_read_byte_data(data->client, VCNL4010_ISR);
 	if (ret < 0)
-		goto end;
+		return IRQ_NONE;
+
+	if (!(ret & (VCNL4010_INT_THR | VCNL4010_INT_DRDY)))
+		return IRQ_NONE;
 
 	isr = ret;
 
@@ -1610,7 +1617,6 @@ static irqreturn_t vcnl4010_irq_thread(int irq, void *p)
 						  isr & VCNL4010_INT_DRDY);
 	}
 
-end:
 	return IRQ_HANDLED;
 }
 
@@ -2047,8 +2053,8 @@ static int vcnl4000_probe(struct i2c_client *client)
 	if (client->irq && data->chip_spec->irq_thread) {
 		ret = devm_request_threaded_irq(dev, client->irq, NULL,
 						data->chip_spec->irq_thread,
-						IRQF_TRIGGER_FALLING |
-						IRQF_ONESHOT,
+						IRQF_TRIGGER_LOW |
+						IRQF_ONESHOT | IRQF_SHARED,
 						"vcnl4000_irq",
 						indio_dev);
 		if (ret < 0)
