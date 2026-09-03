@@ -432,8 +432,10 @@ static int rockchip_pcie_host_init(struct dw_pcie_rp *pp)
 	pci->dbi_base2 = pci->dbi_base + PCIE_TYPE0_HDR_DBI2_OFFSET;
 
 	ret = rockchip_pcie_init_irq_domain(rockchip);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(dev, "failed to init irq domain\n");
+		return ret;
+	}
 
 	irq_set_chained_handler_and_data(irq, rockchip_pcie_intx_handler,
 					 rockchip);
