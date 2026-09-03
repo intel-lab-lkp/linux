@@ -856,7 +856,8 @@ void zfcp_scsi_set_prot(struct zfcp_adapter *adapter)
  */
 void zfcp_scsi_dif_sense_error(struct scsi_cmnd *scmd, int ascq)
 {
-	scsi_build_sense(scmd, 1, ILLEGAL_REQUEST, 0x10, ascq);
+	scsi_set_sense(scmd, 1, ILLEGAL_REQUEST,
+		       scsi_sense_code(ASC_ID_CRC_OR_ECC_ERROR, ascq));
 	set_host_byte(scmd, DID_SOFT_ERROR);
 }
 
