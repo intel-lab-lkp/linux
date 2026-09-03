@@ -886,6 +886,15 @@ static const struct i2c_algorithm i2c_dw_algo = {
 #endif
 };
 
+static const struct i2c_algorithm i2c_dw_amd_navi_gpu_algo = {
+	.xfer = amd_i2c_dw_xfer_quirk,
+	.functionality = i2c_dw_func,
+#if IS_ENABLED(CONFIG_I2C_SLAVE)
+	.reg_slave = i2c_dw_reg_slave,
+	.unreg_slave = i2c_dw_unreg_slave,
+#endif
+};
+
 static const struct i2c_adapter_quirks i2c_dw_quirks = {
 	.flags = I2C_AQ_NO_ZERO_LEN,
 };
@@ -922,7 +931,10 @@ int i2c_dw_probe(struct dw_i2c_dev *dev)
 		strscpy(adap->name, "Synopsys DesignWare I2C adapter");
 
 	adap->retries = 3;
-	adap->algo = &i2c_dw_algo;
+	if ((dev->flags & MODEL_MASK) == MODEL_AMD_NAVI_GPU)
+		adap->algo = &i2c_dw_amd_navi_gpu_algo;
+	else
+		adap->algo = &i2c_dw_algo;
 	adap->quirks = &i2c_dw_quirks;
 	adap->dev.parent = dev->dev;
 	i2c_set_adapdata(adap, dev);
