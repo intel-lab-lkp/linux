@@ -7990,6 +7990,8 @@ int ufshcd_try_to_abort_task(struct ufs_hba *hba, int tag)
 		return -EINVAL;
 
 	lrbp = scsi_cmd_priv(cmd);
+	if (ufs_fail_abort(hba))
+		return -EIO;
 
 	for (poll_cnt = 100; poll_cnt; poll_cnt--) {
 		err = ufshcd_issue_tm_cmd(hba, lrbp->lun, tag, UFS_QUERY_TASK,

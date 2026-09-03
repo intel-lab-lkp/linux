@@ -12,6 +12,7 @@ struct ufs_hba;
 void ufs_fault_inject_hba_init(struct ufs_hba *hba);
 bool ufs_trigger_eh(struct ufs_hba *hba);
 bool ufs_fail_completion(struct ufs_hba *hba);
+bool ufs_fail_abort(struct ufs_hba *hba);
 #else
 static inline void ufs_fault_inject_hba_init(struct ufs_hba *hba)
 {
@@ -23,6 +24,11 @@ static inline bool ufs_trigger_eh(struct ufs_hba *hba)
 }
 
 static inline bool ufs_fail_completion(struct ufs_hba *hba)
+{
+	return false;
+}
+
+static inline bool ufs_fail_abort(struct ufs_hba *hba)
 {
 	return false;
 }

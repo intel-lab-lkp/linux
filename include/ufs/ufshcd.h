@@ -1245,6 +1245,7 @@ struct ufs_hba {
 #ifdef CONFIG_SCSI_UFS_FAULT_INJECTION
 	struct fault_attr trigger_eh_attr;
 	struct fault_attr timeout_attr;
+	struct fault_attr abort_attr;
 #endif
 	u32 luns_avail;
 	unsigned int nr_hw_queues;

@@ -34,6 +34,12 @@ MODULE_PARM_DESC(timeout,
 	"Fault injection. timeout=<interval>,<probability>,<space>,<times>");
 static DECLARE_FAULT_ATTR(ufs_timeout_attr);
 
+static char g_abort_str[FAULT_INJ_STR_SIZE];
+module_param_cb(abort, &ufs_fault_ops, g_abort_str, 0644);
+MODULE_PARM_DESC(abort,
+		 "Fault injection. abort=<interval>,<probability>,<space>,<times>");
+static DECLARE_FAULT_ATTR(ufs_abort_attr);
+
 static int ufs_fault_get(char *buffer, const struct kernel_param *kp)
 {
 	const char *fault_str = kp->arg;
@@ -49,6 +55,8 @@ static int ufs_fault_set(const char *val, const struct kernel_param *kp)
 		attr = &ufs_trigger_eh_attr;
 	else if (kp->arg == g_timeout_str)
 		attr = &ufs_timeout_attr;
+	else if (kp->arg == g_abort_str)
+		attr = &ufs_abort_attr;
 
 	if (WARN_ON_ONCE(!attr))
 		return -EINVAL;
@@ -65,9 +73,11 @@ void ufs_fault_inject_hba_init(struct ufs_hba *hba)
 {
 	hba->trigger_eh_attr = ufs_trigger_eh_attr;
 	hba->timeout_attr = ufs_timeout_attr;
+	hba->abort_attr = ufs_abort_attr;
 #ifdef CONFIG_FAULT_INJECTION_DEBUG_FS
 	fault_create_debugfs_attr("trigger_eh_inject", hba->debugfs_root, &hba->trigger_eh_attr);
 	fault_create_debugfs_attr("timeout_inject", hba->debugfs_root, &hba->timeout_attr);
+	fault_create_debugfs_attr("abort_inject", hba->debugfs_root, &hba->abort_attr);
 #endif
 }
 
@@ -79,4 +89,9 @@ bool ufs_trigger_eh(struct ufs_hba *hba)
 bool ufs_fail_completion(struct ufs_hba *hba)
 {
 	return should_fail(&hba->timeout_attr, 1);
+}
+
+bool ufs_fail_abort(struct ufs_hba *hba)
+{
+	return should_fail(&hba->abort_attr, 1);
 }
