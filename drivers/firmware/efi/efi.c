@@ -63,6 +63,18 @@ static unsigned long __initdata mem_reserve = EFI_INVALID_TABLE_ADDR;
 static unsigned long __initdata rt_prop = EFI_INVALID_TABLE_ADDR;
 static unsigned long __initdata initrd = EFI_INVALID_TABLE_ADDR;
 
+/*
+ * Depending on the platform, UpdateCapsule() may update the firmware
+ * immediately if the platform allows to update the firmware while in runtime.
+ * In this case, writing the image to firmware storage may take longer than
+ * EFI_RTS_TIMEOUT (120 seconds).
+ *
+ * To handle this, use a separate timeout for the UpdateCapsule() runtime
+ * service. Wait indefinitely by default, and allow administrators to set
+ * an appropriate timeout in seconds through /sys/firmware/efi/capsule_update_timeout.
+ */
+unsigned long efi_capsule_update_timeout = MAX_SCHEDULE_TIMEOUT;
+
 extern unsigned long primary_display_table;
 
 struct mm_struct efi_mm = {
@@ -163,15 +175,44 @@ static ssize_t fw_platform_size_show(struct kobject *kobj,
 	return sprintf(buf, "%d\n", efi_enabled(EFI_64BIT) ? 64 : 32);
 }
 
+static ssize_t capsule_update_timeout_show(struct kobject *kobj,
+					   struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%lu\n", efi_capsule_update_timeout / HZ);
+}
+
+static ssize_t capsule_update_timeout_store(struct kobject *kobj,
+					    struct kobj_attribute *attr,
+					    const char *buf, size_t count)
+{
+	int ret;
+	unsigned long secs, timeout;
+
+	ret = kstrtoul(buf, 0, &secs);
+	if (ret)
+		return ret;
+	if (check_mul_overflow(secs, HZ, &timeout))
+		timeout = MAX_SCHEDULE_TIMEOUT;
+	if (timeout < EFI_RTS_TIMEOUT)
+		timeout = EFI_RTS_TIMEOUT;
+
+	efi_capsule_update_timeout = timeout;
+
+	return count;
+}
+
 extern __weak struct kobj_attribute efi_attr_fw_vendor;
 extern __weak struct kobj_attribute efi_attr_runtime;
 extern __weak struct kobj_attribute efi_attr_config_table;
 static struct kobj_attribute efi_attr_fw_platform_size =
 	__ATTR_RO(fw_platform_size);
+static struct kobj_attribute efi_attr_capsule_update_timeout =
+	__ATTR_RW_MODE(capsule_update_timeout, 0600);
 
 static struct attribute *efi_subsys_attrs[] = {
 	&efi_attr_systab.attr,
 	&efi_attr_fw_platform_size.attr,
+	&efi_attr_capsule_update_timeout.attr,
 	&efi_attr_fw_vendor.attr,
 	&efi_attr_runtime.attr,
 	&efi_attr_config_table.attr,
