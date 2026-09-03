@@ -1255,7 +1255,7 @@ static void drm_core_exit(void)
 	drm_privacy_screen_lookup_exit();
 	drm_panic_exit();
 	accel_core_exit();
-	unregister_chrdev(DRM_MAJOR, "drm");
+	__unregister_chrdev(DRM_MAJOR, 0, MINORMASK + 1, "drm");
 	drm_debugfs_remove_root();
 	drm_sysfs_destroy();
 	WARN_ON(!xa_empty(&drm_minors_xa));
@@ -1278,7 +1278,7 @@ static int __init drm_core_init(void)
 	drm_debugfs_init_root();
 	drm_debugfs_bridge_params();
 
-	ret = register_chrdev(DRM_MAJOR, "drm", &drm_stub_fops);
+	ret = __register_chrdev(DRM_MAJOR, 0, MINORMASK + 1, "drm", &drm_stub_fops);
 	if (ret < 0)
 		goto error;
 
