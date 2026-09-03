@@ -81,8 +81,27 @@ static inline bool mlx5e_psp_is_rx_flow(struct mlx5_cqe64 *cqe)
 {
 	u32 proto = mlx5e_accel_flow_tag_proto(cqe);
 
-	return proto == MLX5E_ACCEL_FLOW_TAG_PROTO_PSP;
+	return proto == MLX5E_ACCEL_FLOW_TAG_PROTO_PSP ||
+		proto == MLX5E_ACCEL_FLOW_TAG_PROTO_PSP_DECAP;
 
+}
+
+static inline bool mlx5e_psp_is_decap(struct mlx5_cqe64 *cqe)
+{
+	u32 proto = mlx5e_accel_flow_tag_proto(cqe);
+
+	return proto == MLX5E_ACCEL_FLOW_TAG_PROTO_PSP_DECAP;
+}
+
+static inline u8 mlx5e_psp_get_version(struct mlx5_cqe64 *cqe)
+{
+	return FIELD_GET(MLX5E_ACCEL_FLOW_TAG_PSP_VER_MASK,
+			 mlx5e_accel_flow_tag(cqe));
+}
+
+static inline __be32 mlx5e_psp_get_spi(struct mlx5_cqe64 *cqe)
+{
+	return cqe->ft_metadata;
 }
 
 bool mlx5e_psp_offload_handle_rx_skb(struct net_device *netdev, struct sk_buff *skb,
@@ -108,6 +127,21 @@ static inline bool mlx5e_psp_txwqe_build_eseg_csum(struct mlx5e_txqsq *sq, struc
 static inline bool mlx5e_psp_is_rx_flow(struct mlx5_cqe64 *cqe)
 {
 	return false;
+}
+
+static inline bool mlx5e_psp_is_decap(struct mlx5_cqe64 *cqe)
+{
+	return false;
+}
+
+static inline u8 mlx5e_psp_get_version(struct mlx5_cqe64 *cqe)
+{
+	return 0;
+}
+
+static inline __be32 mlx5e_psp_get_spi(struct mlx5_cqe64 *cqe)
+{
+	return 0;
 }
 
 static inline bool mlx5e_psp_offload_handle_rx_skb(struct net_device *netdev,
