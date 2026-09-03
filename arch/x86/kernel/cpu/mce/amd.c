@@ -263,7 +263,7 @@ static DEFINE_PER_CPU(struct threshold_bank **, threshold_banks);
  * A list of the banks enabled on each logical CPU. Controls which respective
  * descriptors to initialize later in mce_threshold_create_device().
  */
-static DEFINE_PER_CPU(u64, bank_map);
+static DEFINE_PER_CPU(mce_banks_t, bank_map);
 
 static void amd_threshold_interrupt(void);
 static void amd_deferred_error_interrupt(void);
@@ -572,7 +572,7 @@ static int prepare_threshold_block(unsigned int bank, unsigned int block, u32 ad
 	int new;
 
 	if (!block)
-		per_cpu(bank_map, cpu) |= BIT_ULL(bank);
+		__set_bit(bank, per_cpu(bank_map, cpu));
 
 	memset(&b, 0, sizeof(b));
 	b.cpu			= cpu;
@@ -1272,7 +1272,7 @@ void mce_threshold_create_device(unsigned int cpu)
 		return;
 
 	for (bank = 0; bank < numbanks; ++bank) {
-		if (!(this_cpu_read(bank_map) & BIT_ULL(bank)))
+		if (!test_bit(bank, this_cpu_ptr(bank_map)))
 			continue;
 		if (threshold_create_bank(bp, cpu, bank)) {
 			__threshold_remove_device(bp);
