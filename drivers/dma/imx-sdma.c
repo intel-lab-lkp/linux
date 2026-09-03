@@ -1241,8 +1241,8 @@ static void sdma_set_watermarklevel_for_p2p(struct sdma_channel *sdmac)
 	int lwml = sdmac->watermark_level & SDMA_WATERMARK_LEVEL_LWML;
 	int hwml = (sdmac->watermark_level & SDMA_WATERMARK_LEVEL_HWML) >> 16;
 
-	set_bit(sdmac->event_id0 % 32, &sdmac->event_mask[1]);
-	set_bit(sdmac->event_id1 % 32, &sdmac->event_mask[0]);
+	__set_bit(sdmac->event_id0 % 32, &sdmac->event_mask[1]);
+	__set_bit(sdmac->event_id1 % 32, &sdmac->event_mask[0]);
 
 	if (sdmac->event_id0 > 31)
 		sdmac->watermark_level |= SDMA_WATERMARK_LEVEL_LWE;
