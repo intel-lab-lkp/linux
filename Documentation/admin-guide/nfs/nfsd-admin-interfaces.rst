@@ -38,6 +38,12 @@ by its server-generated client ID and transport address, then reports its
 minor version, client and callback states, signed lease time remaining, and
 whether an NFSv4.1 or later client sent RECLAIM_COMPLETE.
 
+The dump also reports separate counts for sessions and open, lock, delegation,
+and layout stateids.  A lock stateid represents state for one lock owner and
+file, not necessarily one byte-range lock.  NFSD maintains these counters as
+state changes, so reporting a client does not walk its session or stateid
+tables.
+
 Clients can change between messages.  If that can make the dump skip or repeat
 a record, the kernel sets ``NLM_F_DUMP_INTR`` and userspace should retry.
 

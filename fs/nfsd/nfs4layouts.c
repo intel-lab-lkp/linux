@@ -272,7 +272,7 @@ nfsd4_alloc_layout_stateid(struct nfsd4_compound_state *cstate,
 	}
 
 	spin_lock(&clp->cl_lock);
-	stp->sc_type = SC_TYPE_LAYOUT;
+	nfs4_set_stid_type_locked(stp, SC_TYPE_LAYOUT);
 	list_add(&ls->ls_perclnt, &clp->cl_lo_states);
 	spin_unlock(&clp->cl_lock);
 

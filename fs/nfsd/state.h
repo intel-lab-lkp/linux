@@ -610,6 +610,12 @@ struct nfs4_client {
 
 	/* for nfs41 */
 	struct list_head	cl_sessions;
+	/* State usage counters, protected by cl_lock. */
+	u64			cl_session_count;
+	u64			cl_open_stateid_count;
+	u64			cl_lock_stateid_count;
+	u64			cl_delegation_stateid_count;
+	u64			cl_layout_stateid_count;
 	struct nfsd4_clid_slot	cl_cs_slot;	/* create_session slot */
 	u32			cl_exchange_flags;
 	/* number of rpc's in progress over an associated session: */
@@ -923,6 +929,7 @@ __be32 nfsd4_lookup_stateid(struct nfsd4_compound_state *cstate,
 			    struct nfs4_stid **s, struct nfsd_net *nn);
 struct nfs4_stid *nfs4_alloc_stid(struct nfs4_client *cl, struct kmem_cache *slab,
 				  void (*sc_free)(struct nfs4_stid *));
+void nfs4_set_stid_type_locked(struct nfs4_stid *stid, unsigned short type);
 struct nfsd4_async_copy *nfs4_alloc_copy_stid(struct nfs4_client *clp);
 struct nfs4_cpntf_state *nfs4_alloc_init_cpntf_state(struct nfsd_net *nn,
 			struct nfs4_stid *p_stid);

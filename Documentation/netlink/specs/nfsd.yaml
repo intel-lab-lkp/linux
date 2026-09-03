@@ -490,6 +490,26 @@ attribute-sets:
         type: u32
         enum: callback-state
         doc: Health of the client's callback channel.
+      -
+        name: sessions
+        type: uint
+        doc: Number of NFSv4.1 or later sessions owned by the client.
+      -
+        name: open-stateids
+        type: uint
+        doc: Number of open stateid records owned by the client.
+      -
+        name: lock-stateids
+        type: uint
+        doc: Number of lock-owner/file stateid records, not byte-range locks.
+      -
+        name: delegation-stateids
+        type: uint
+        doc: Number of delegation stateid records owned by the client.
+      -
+        name: layout-stateids
+        type: uint
+        doc: Number of pNFS layout stateid records owned by the client.
 
 operations:
   list:
@@ -704,7 +724,7 @@ operations:
             - proc4cb-ops
     -
       name: client-get
-      doc: dump NFSv4 clients
+      doc: dump NFSv4 clients and their current state usage
       attribute-set: client
       flags: [admin-perm]
       dump:
@@ -720,6 +740,11 @@ operations:
             - lease-remaining
             - reclaim-complete
             - callback-state
+            - sessions
+            - open-stateids
+            - lock-stateids
+            - delegation-stateids
+            - layout-stateids
 
 mcast-groups:
   list:

@@ -984,6 +984,54 @@ out_free:
 	return NULL;
 }
 
+static u64 *nfs4_stid_counter(struct nfs4_client *clp, unsigned short type)
+{
+	switch (type) {
+	case SC_TYPE_OPEN:
+		return &clp->cl_open_stateid_count;
+	case SC_TYPE_LOCK:
+		return &clp->cl_lock_stateid_count;
+	case SC_TYPE_DELEG:
+		return &clp->cl_delegation_stateid_count;
+	case SC_TYPE_LAYOUT:
+		return &clp->cl_layout_stateid_count;
+	default:
+		return NULL;
+	}
+}
+
+void nfs4_set_stid_type_locked(struct nfs4_stid *stid, unsigned short type)
+{
+	struct nfs4_client *clp = stid->sc_client;
+	u64 *counter;
+
+	lockdep_assert_held(&clp->cl_lock);
+
+	if (WARN_ON_ONCE(stid->sc_type))
+		return;
+
+	counter = nfs4_stid_counter(clp, type);
+	if (WARN_ON_ONCE(!counter && type != SC_TYPE_COPY))
+		return;
+
+	stid->sc_type = type;
+	if (counter)
+		(*counter)++;
+}
+
+static void nfs4_remove_stid_locked(struct nfs4_stid *stid)
+{
+	struct nfs4_client *clp = stid->sc_client;
+	u64 *counter;
+
+	lockdep_assert_held(&clp->cl_lock);
+
+	counter = nfs4_stid_counter(clp, stid->sc_type);
+	if (counter && !WARN_ON_ONCE(!*counter))
+		(*counter)--;
+	idr_remove(&clp->cl_stateids, stid->sc_stateid.si_opaque.so_id);
+}
+
 /*
  * Publish a COPY_NOTIFY stateid in nn->s2s_cp_stateids and link it onto the
  * parent's sc_cp_list. That IDR holds only COPY_NOTIFY stateids.
@@ -1046,9 +1094,11 @@ struct nfsd4_async_copy *nfs4_alloc_copy_stid(struct nfs4_client *clp)
 	stid = nfs4_alloc_stid(clp, async_copy_slab, nfsd4_free_async_copy_stid);
 	if (!stid)
 		return NULL;
-	stid->sc_type = SC_TYPE_COPY;
 	/* RFC 7862 Section 4.8: a copy offload stateid's seqid MUST NOT be 0 */
 	stid->sc_stateid.si_generation = 1;
+	spin_lock(&clp->cl_lock);
+	nfs4_set_stid_type_locked(stid, SC_TYPE_COPY);
+	spin_unlock(&clp->cl_lock);
 	return container_of(stid, struct nfsd4_async_copy, cp_stid);
 }
 
@@ -1386,7 +1436,7 @@ nfs4_put_stid(struct nfs4_stid *s)
 		wake_up_all(&close_wq);
 		return;
 	}
-	idr_remove(&clp->cl_stateids, s->sc_stateid.si_opaque.so_id);
+	nfs4_remove_stid_locked(s);
 	if (s->sc_status & SC_STATUS_ADMIN_REVOKED)
 		atomic_dec(&s->sc_client->cl_admin_revoked);
 	/* Read under cl_lock to serialize with drop_stid_export(). */
@@ -1530,7 +1580,7 @@ hash_delegation_locked(struct nfs4_delegation *dp, struct nfs4_file *fp)
 	if (nfs4_delegation_exists(clp, fp))
 		return -EAGAIN;
 	refcount_inc(&dp->dl_stid.sc_count);
-	dp->dl_stid.sc_type = SC_TYPE_DELEG;
+	nfs4_set_stid_type_locked(&dp->dl_stid, SC_TYPE_DELEG);
 	list_add(&dp->dl_perfile, &fp->fi_delegations);
 	list_add(&dp->dl_perclnt, &clp->cl_delegations);
 	clp->cl_deleg_count++;
@@ -1814,7 +1864,7 @@ static void put_ol_stateid_locked(struct nfs4_ol_stateid *stp,
 		return;
 	}
 
-	idr_remove(&clp->cl_stateids, s->sc_stateid.si_opaque.so_id);
+	nfs4_remove_stid_locked(s);
 	if (s->sc_status & SC_STATUS_ADMIN_REVOKED)
 		atomic_dec(&s->sc_client->cl_admin_revoked);
 	list_add(&stp->st_locks, reaplist);
@@ -2634,6 +2684,7 @@ static void init_session(struct svc_rqst *rqstp, struct nfsd4_session *new, stru
 	list_add(&new->se_hash, &nn->sessionid_hashtbl[idx]);
 	spin_lock(&clp->cl_lock);
 	list_add(&new->se_perclnt, &clp->cl_sessions);
+	clp->cl_session_count++;
 	spin_unlock(&clp->cl_lock);
 
 	spin_lock(&nfsd_session_list_lock);
@@ -2707,9 +2758,11 @@ unhash_session(struct nfsd4_session *ses)
 	lockdep_assert_held(&nn->client_lock);
 
 	list_del(&ses->se_hash);
-	spin_lock(&ses->se_client->cl_lock);
+	spin_lock(&clp->cl_lock);
 	list_del(&ses->se_perclnt);
-	spin_unlock(&ses->se_client->cl_lock);
+	if (!WARN_ON_ONCE(!clp->cl_session_count))
+		clp->cl_session_count--;
+	spin_unlock(&clp->cl_lock);
 	spin_lock(&nfsd_session_list_lock);
 	list_del(&ses->se_all_sessions);
 	atomic_dec(&nfsd_total_sessions);
@@ -2822,9 +2875,9 @@ free_client(struct nfs4_client *clp)
 {
 	LIST_HEAD(reaplist);
 
-	/* client_info_show() walks cl_sessions under cl_lock */
 	spin_lock(&clp->cl_lock);
 	list_splice_init(&clp->cl_sessions, &reaplist);
+	clp->cl_session_count = 0;
 	spin_unlock(&clp->cl_lock);
 	while (!list_empty(&reaplist)) {
 		struct nfsd4_session *ses;
@@ -3255,6 +3308,11 @@ struct nfsd4_nl_client {
 	u32			minor_version;
 	u32			state;
 	u32			callback_state;
+	u64			sessions;
+	u64			open_stateids;
+	u64			lock_stateids;
+	u64			delegation_stateids;
+	u64			layout_stateids;
 	bool			reclaim_complete;
 };
 
@@ -3349,6 +3407,14 @@ static void nfsd4_nl_client_snapshot(struct nfsd_net *nn,
 		nfsd4_nl_callback_state(READ_ONCE(clp->cl_cb_state));
 	client->reclaim_complete =
 		test_bit(NFSD4_CLIENT_RECLAIM_COMPLETE, &clp->cl_flags);
+
+	spin_lock(&clp->cl_lock);
+	client->sessions = clp->cl_session_count;
+	client->open_stateids = clp->cl_open_stateid_count;
+	client->lock_stateids = clp->cl_lock_stateid_count;
+	client->delegation_stateids = clp->cl_delegation_stateid_count;
+	client->layout_stateids = clp->cl_layout_stateid_count;
+	spin_unlock(&clp->cl_lock);
 }
 
 static int
@@ -3409,7 +3475,16 @@ static int nfsd4_nl_client_compose_msg(struct sk_buff *skb,
 	    (client->reclaim_complete &&
 	     nla_put_flag(skb, NFSD_A_CLIENT_RECLAIM_COMPLETE)) ||
 	    nla_put_u32(skb, NFSD_A_CLIENT_CALLBACK_STATE,
-			client->callback_state))
+			client->callback_state) ||
+	    nla_put_uint(skb, NFSD_A_CLIENT_SESSIONS, client->sessions) ||
+	    nla_put_uint(skb, NFSD_A_CLIENT_OPEN_STATEIDS,
+			 client->open_stateids) ||
+	    nla_put_uint(skb, NFSD_A_CLIENT_LOCK_STATEIDS,
+			 client->lock_stateids) ||
+	    nla_put_uint(skb, NFSD_A_CLIENT_DELEGATION_STATEIDS,
+			 client->delegation_stateids) ||
+	    nla_put_uint(skb, NFSD_A_CLIENT_LAYOUT_STATEIDS,
+			 client->layout_stateids))
 		goto err_cancel;
 
 	genlmsg_end(skb, hdr);
@@ -6269,7 +6344,7 @@ retry:
 
 	open->op_stp = NULL;
 	refcount_inc(&stp->st_stid.sc_count);
-	stp->st_stid.sc_type = SC_TYPE_OPEN;
+	nfs4_set_stid_type_locked(&stp->st_stid, SC_TYPE_OPEN);
 	INIT_LIST_HEAD(&stp->st_locks);
 	stp->st_stateowner = nfs4_get_stateowner(&oo->oo_owner);
 	get_nfs4_file(fp);
@@ -9551,7 +9626,7 @@ retry:
 	if (retstp)
 		goto out_found;
 	refcount_inc(&stp->st_stid.sc_count);
-	stp->st_stid.sc_type = SC_TYPE_LOCK;
+	nfs4_set_stid_type_locked(&stp->st_stid, SC_TYPE_LOCK);
 	stp->st_stateowner = nfs4_get_stateowner(&lo->lo_owner);
 	get_nfs4_file(fp);
 	stp->st_stid.sc_file = fp;
