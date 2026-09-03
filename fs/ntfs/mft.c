@@ -657,8 +657,15 @@ err_out:
 			"Not enough memory to write mft record. Redirtying so the write is retried later.");
 		mark_mft_record_dirty(ni);
 		err = 0;
-	} else
+	} else {
+		/*
+		 * The writeback path can run with the caller's mrec_lock
+		 * held, so the dirty bit cannot be written here (it would
+		 * self-deadlock for the $Volume inode); record the error
+		 * flag only.
+		 */
 		NVolSetErrors(vol);
+	}
 	return err;
 }
 
@@ -1150,7 +1157,7 @@ static int ntfs_mft_bitmap_extend_allocation_nolock(struct ntfs_volume *vol)
 			if (ntfs_cluster_free_from_rl(vol, rl2)) {
 				ntfs_error(vol->sb, "Failed to deallocate allocated cluster.%s",
 						es);
-				NVolSetErrors(vol);
+				ntfs_mark_volume_dirty_with_error(vol);
 			}
 			kvfree(rl2);
 			return PTR_ERR(rl);
@@ -1285,7 +1292,7 @@ restore_undo_alloc:
 		 * The only thing that is now wrong is ->allocated_size of the
 		 * base attribute extent which chkdsk should be able to fix.
 		 */
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 		return ret;
 	}
 	a = ctx->attr;
@@ -1306,7 +1313,7 @@ undo_alloc:
 	down_write(&vol->lcnbmp_lock);
 	if (ntfs_bitmap_clear_bit(vol->lcnbmp_ino, lcn)) {
 		ntfs_error(vol->sb, "Failed to free allocated cluster.%s", es);
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 	} else
 		ntfs_inc_free_clusters(vol, 1);
 	up_write(&vol->lcnbmp_lock);
@@ -1317,16 +1324,16 @@ undo_alloc:
 				a->data.non_resident.mapping_pairs_offset),
 				rl2, ll, -1, NULL, NULL, NULL)) {
 			ntfs_error(vol->sb, "Failed to restore mapping pairs array.%s", es);
-			NVolSetErrors(vol);
+			ntfs_mark_volume_dirty_with_error(vol);
 		}
 		if (ntfs_attr_record_resize(ctx->mrec, a, old_alen)) {
 			ntfs_error(vol->sb, "Failed to restore attribute record.%s", es);
-			NVolSetErrors(vol);
+			ntfs_mark_volume_dirty_with_error(vol);
 		}
 		mark_mft_record_dirty(ctx->ntfs_ino);
 	} else if (status.mp_extended && ntfs_attr_update_mapping_pairs(mftbmp_ni, 0)) {
 		ntfs_error(vol->sb, "Failed to restore mapping pairs.%s", es);
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 	}
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
@@ -1420,20 +1427,20 @@ static int ntfs_mft_bitmap_extend_initialized_nolock(struct ntfs_volume *vol)
 	mrec = map_mft_record(mft_ni);
 	if (IS_ERR(mrec)) {
 		ntfs_error(vol->sb, "Failed to map mft record.%s", es);
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 		return ret;
 	}
 	ctx = ntfs_attr_get_search_ctx(mft_ni, mrec);
 	if (unlikely(!ctx)) {
 		ntfs_error(vol->sb, "Failed to get search context.%s", es);
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 		goto unm_err_out;
 	}
 	if (ntfs_attr_lookup(mftbmp_ni->type, mftbmp_ni->name,
 			mftbmp_ni->name_len, CASE_SENSITIVE, 0, NULL, 0, ctx)) {
 		ntfs_error(vol->sb,
 			"Failed to find first attribute extent of mft bitmap attribute.%s", es);
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 put_err_out:
 		ntfs_attr_put_search_ctx(ctx);
 unm_err_out:
@@ -1587,7 +1594,7 @@ static int ntfs_mft_data_extend_allocation_nolock(struct ntfs_volume *vol)
 		if (ntfs_cluster_free_from_rl(vol, rl2)) {
 			ntfs_error(vol->sb,
 				"Failed to deallocate clusters from the mft data attribute.%s", es);
-			NVolSetErrors(vol);
+			ntfs_mark_volume_dirty_with_error(vol);
 		}
 		kvfree(rl2);
 		return PTR_ERR(rl);
@@ -1721,7 +1728,7 @@ restore_undo_alloc:
 		 * The only thing that is now wrong is ->allocated_size of the
 		 * base attribute extent which chkdsk should be able to fix.
 		 */
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 		return ret;
 	}
 	ctx->attr->data.non_resident.highest_vcn =
@@ -1729,17 +1736,17 @@ restore_undo_alloc:
 undo_alloc:
 	if (ntfs_cluster_free(mft_ni, old_last_vcn, -1, ctx) < 0) {
 		ntfs_error(vol->sb, "Failed to free clusters from mft data attribute.%s", es);
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 	}
 
 	if (ntfs_rl_truncate_nolock(vol, &mft_ni->runlist, old_last_vcn)) {
 		ntfs_error(vol->sb, "Failed to truncate mft data attribute runlist.%s", es);
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 	}
 	if (mp_extended && ntfs_attr_update_mapping_pairs(mft_ni, 0)) {
 		ntfs_error(vol->sb, "Failed to restore mapping pairs.%s",
 			   es);
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 	}
 	if (ctx) {
 		a = ctx->attr;
@@ -1750,16 +1757,16 @@ undo_alloc:
 					a->data.non_resident.mapping_pairs_offset),
 				rl2, ll, -1, NULL, NULL, NULL)) {
 				ntfs_error(vol->sb, "Failed to restore mapping pairs array.%s", es);
-				NVolSetErrors(vol);
+				ntfs_mark_volume_dirty_with_error(vol);
 			}
 			if (ntfs_attr_record_resize(ctx->mrec, a, old_alen)) {
 				ntfs_error(vol->sb, "Failed to restore attribute record.%s", es);
-				NVolSetErrors(vol);
+				ntfs_mark_volume_dirty_with_error(vol);
 			}
 			mark_mft_record_dirty(ctx->ntfs_ino);
 		} else if (IS_ERR(ctx->mrec)) {
 			ntfs_error(vol->sb, "Failed to restore attribute search context.%s", es);
-			NVolSetErrors(vol);
+			ntfs_mark_volume_dirty_with_error(vol);
 		}
 		ntfs_attr_put_search_ctx(ctx);
 	}
@@ -2322,7 +2329,7 @@ mft_rec_already_initialized:
 			folio_unlock(folio);
 			kunmap_local(m);
 			folio_put(folio);
-			NVolSetErrors(vol);
+			ntfs_mark_volume_dirty_with_error(vol);
 			goto search_free_rec;
 		}
 		/*
@@ -2475,7 +2482,7 @@ undo_mftbmp_alloc:
 undo_mftbmp_alloc_nolock:
 	if (ntfs_bitmap_clear_bit(vol->mftbmp_ino, bit)) {
 		ntfs_error(vol->sb, "Failed to clear bit in mft bitmap.%s", es);
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 	}
 	if (!base_ni || base_ni->mft_no != FILE_MFT)
 		up_write(&vol->mftbmp_lock);
@@ -2815,8 +2822,14 @@ unm_done:
 			iput(ref_inos[nr_ref_inos]);
 	}
 
-	if (unlikely(err && err != -ENOMEM))
+	if (unlikely(err && err != -ENOMEM)) {
+		/*
+		 * The writeback path can run with a caller's mrec_lock
+		 * held, so the dirty bit cannot be written here; record
+		 * the error flag only.
+		 */
 		NVolSetErrors(vol);
+	}
 	if (likely(!err))
 		ntfs_debug("Done.");
 	return err;
