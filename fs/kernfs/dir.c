@@ -740,9 +740,19 @@ struct kernfs_node *kernfs_new_node(struct kernfs_node *parent,
 		/* this code block imitates inode_init_owner() for
 		 * kernfs
 		 */
+		struct kernfs_iattrs *attrs = READ_ONCE(parent->iattr);
 
-		if (parent->iattr)
-			gid = parent->iattr->ia_gid;
+		if (attrs) {
+			/*
+			 * Unlocked on purpose: the gid is inherited onto a
+			 * node that does not exist yet, so nothing orders a
+			 * racing chown against this creation, and either
+			 * value is correct.  The pointer above needs no such
+			 * marking, __kernfs_iattrs() publishes it with
+			 * try_cmpxchg().
+			 */
+			gid = data_race(attrs->ia_gid);
+		}
 
 		if (flags & KERNFS_DIR)
 			mode |= S_ISGID;
