@@ -33,6 +33,7 @@
 #include <linux/vmstat.h>
 #include <linux/kexec_handover.h>
 #include <linux/hugetlb.h>
+#include <linux/memremap.h>
 #include "internal.h"
 #include "mm_init.h"
 #include "page_alloc.h"
@@ -1133,6 +1134,15 @@ void __ref memmap_init_zone_device(struct zone *zone,
 	if (!nr_pages)
 		return;
 
+	if (pgmap_vmemmap_optimizable(pgmap)) {
+		struct page *page = page_address(pgmap->vmemmap_shared_page);
+
+		for (int i = 0; i < PAGE_SIZE / sizeof(struct page); i++)
+			__init_zone_device_page(page + i, start_pfn + i,
+						ZONE_DEVICE, nid, pgmap);
+		goto pageblock_init;
+	}
+
 	/*
 	 * Seed the reusable head-page template from the first real struct
 	 * page. The normal page-init and refcount helpers must operate on
@@ -1164,6 +1174,7 @@ void __ref memmap_init_zone_device(struct zone *zone,
 				     compound_nr_pages(pfn, altmap, pgmap));
 	}
 
+pageblock_init:
 	pageblock_migratetype_init_range(start_pfn, nr_pages, MIGRATE_MOVABLE,
 					 /* isolate */ false, /* atomic */ false);
 

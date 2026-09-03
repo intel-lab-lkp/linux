@@ -37,6 +37,8 @@
  */
 /* Get a ref on the head page struct page, for ZONE_DEVICE compound pages */
 #define VMEMMAP_POPULATE_PAGEREF	0x0001
+/* Read-only shared vmemmap mappings for FS-DAX base pages */
+#define VMEMMAP_POPULATE_FSDAX_SHARED	0x0002
 
 #include "internal.h"
 #include "mm_init.h"
@@ -262,10 +264,11 @@ static pte_t * __meminit vmemmap_pte_populate(pmd_t *pmd, unsigned long addr, in
 			 * and through vmemmap_populate_compound_pages() when
 			 * slab is available.
 			 */
-			if (flags & VMEMMAP_POPULATE_PAGEREF)
+			if (flags & (VMEMMAP_POPULATE_PAGEREF | VMEMMAP_POPULATE_FSDAX_SHARED))
 				get_page(pfn_to_page(ptpfn));
 		}
-		entry = pfn_pte(ptpfn, PAGE_KERNEL);
+		entry = pfn_pte(ptpfn, flags & VMEMMAP_POPULATE_FSDAX_SHARED ?
+				PAGE_KERNEL_RO : PAGE_KERNEL);
 		set_pte_at(&init_mm, addr, pte, entry);
 	} else if (WARN_ON_ONCE(vmemmap_optimizable_pfn(pfn)))
 		return NULL;
@@ -378,6 +381,54 @@ int __meminit vmemmap_populate_basepages(unsigned long start, unsigned long end,
 {
 	return vmemmap_populate_range(start, end, node, altmap, -1, 0);
 }
+
+#ifdef CONFIG_ZONE_DEVICE
+static int __vmemmap_materialize_page(struct page *page)
+{
+	unsigned long addr = PAGE_ALIGN_DOWN((unsigned long)page);
+	struct dev_pagemap *pgmap = page_pgmap(page);
+	struct page *candidate, *template = pgmap->vmemmap_shared_page;
+	pte_t *pte = virt_to_kpte(addr);
+
+	if (pte_page(ptep_get(pte)) != template)
+		return 0;
+
+	candidate = alloc_pages_node(page_to_nid(page), GFP_KERNEL, 0);
+	if (!candidate)
+		return -ENOMEM;
+	copy_page(page_address(candidate), page_address(template));
+
+	spin_lock(&init_mm.page_table_lock);
+	if (pte_page(ptep_get(pte)) != template) {
+		__free_page(candidate);
+		goto out;
+	}
+	/* Make the copied struct page contents visible before the PTE update. */
+	smp_wmb();
+	set_pte_at(&init_mm, addr, pte, mk_pte(candidate, PAGE_KERNEL));
+	flush_tlb_kernel_range(addr, addr + PAGE_SIZE);
+	put_page(template);
+out:
+	spin_unlock(&init_mm.page_table_lock);
+
+	return 0;
+}
+
+int vmemmap_materialize_page(struct page *page, unsigned int order)
+{
+	struct dev_pagemap *pgmap = page_pgmap(page);
+	unsigned long end = (unsigned long)(page + (1UL << order));
+
+	if (!pgmap_vmemmap_optimizable(pgmap))
+		return 0;
+
+	for (unsigned long addr = (unsigned long)page; addr < end; addr += PAGE_SIZE)
+		if (__vmemmap_materialize_page((struct page *)addr))
+			return -ENOMEM;
+
+	return 0;
+}
+#endif /* CONFIG_ZONE_DEVICE */
 
 /*
  * Write protect the mirrored tail page structs for HVO. This will be
@@ -581,7 +632,11 @@ struct page * __meminit __populate_section_memmap(unsigned long pfn,
 		!IS_ALIGNED(nr_pages, PAGES_PER_SUBSECTION)))
 		return NULL;
 
-	if (vmemmap_can_optimize(altmap, pgmap))
+	if (pgmap_vmemmap_optimizable(pgmap))
+		r = vmemmap_populate_range(start, end, nid, NULL,
+					   page_to_pfn(pgmap->vmemmap_shared_page),
+					   VMEMMAP_POPULATE_FSDAX_SHARED);
+	else if (vmemmap_can_optimize(altmap, pgmap))
 		r = vmemmap_populate_compound_pages(pfn, start, end, nid, pgmap);
 	else
 		r = vmemmap_populate(start, end, nid, altmap);
@@ -887,7 +942,8 @@ int __meminit sparse_add_section(int nid, unsigned long start_pfn,
 	 * Poison uninitialized struct pages in order to catch invalid flags
 	 * combinations.
 	 */
-	page_init_poison(memmap, sizeof(struct page) * nr_pages);
+	if (!pgmap_vmemmap_optimizable(pgmap))
+		page_init_poison(memmap, sizeof(struct page) * nr_pages);
 
 	ms = __nr_to_section(section_nr);
 	__section_mark_present(ms, section_nr);

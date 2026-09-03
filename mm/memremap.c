@@ -3,6 +3,7 @@
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/kasan.h>
+#include <linux/memory.h>
 #include <linux/memory_hotplug.h>
 #include <linux/memremap.h>
 #include <linux/swap.h>
@@ -83,6 +84,30 @@ static unsigned long pfn_len(struct dev_pagemap *pgmap, unsigned long range_id)
 		pfn_first(pgmap, range_id)) >> pgmap->vmemmap_shift;
 }
 
+static int pgmap_vmemmap_shared_page_alloc(struct dev_pagemap *pgmap, int nid)
+{
+	const struct range *range = &pgmap->range;
+
+	if (!is_power_of_2(sizeof(struct page)) ||
+	    !IS_ENABLED(CONFIG_ARCH_SUPPORTS_VMEMMAP_REMAP) ||
+	    !(pgmap->flags & PGMAP_VMEMMAP_OPTIMIZATION))
+		return 0;
+
+	if (pgmap->nr_range != 1 ||
+	    !IS_ALIGNED(range->start | range_len(range), MIN_MEMORY_BLOCK_SIZE))
+		return 0;
+
+	pgmap->vmemmap_shared_page = alloc_pages_node(nid, GFP_KERNEL, 0);
+
+	return pgmap->vmemmap_shared_page ? 0 : -ENOMEM;
+}
+
+static inline void pgmap_vmemmap_shared_page_free(struct dev_pagemap *pgmap)
+{
+	if (pgmap->vmemmap_shared_page)
+		put_page(pgmap->vmemmap_shared_page);
+}
+
 static void pageunmap_range(struct dev_pagemap *pgmap, int range_id)
 {
 	struct range *range = &pgmap->ranges[range_id];
@@ -93,8 +118,9 @@ static void pageunmap_range(struct dev_pagemap *pgmap, int range_id)
 
 	/* pages are dead and unused, undo the arch mapping */
 	mem_hotplug_begin();
-	remove_pfn_range_from_zone(page_zone(first_page), PHYS_PFN(range->start),
-				   PHYS_PFN(range_len(range)));
+	if (!pgmap_vmemmap_optimizable(pgmap))
+		remove_pfn_range_from_zone(page_zone(first_page), PHYS_PFN(range->start),
+					   PHYS_PFN(range_len(range)));
 	if (pgmap->type == MEMORY_DEVICE_PRIVATE) {
 		__remove_pages(PHYS_PFN(range->start),
 			       PHYS_PFN(range_len(range)), NULL, pgmap);
@@ -123,6 +149,7 @@ void memunmap_pages(struct dev_pagemap *pgmap)
 
 	for (i = 0; i < pgmap->nr_range; i++)
 		pageunmap_range(pgmap, i);
+	pgmap_vmemmap_shared_page_free(pgmap);
 	percpu_ref_exit(&pgmap->ref);
 
 	WARN_ONCE(pgmap->altmap.alloc, "failed to free all reserved pages\n");
@@ -310,6 +337,9 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 		break;
 	case MEMORY_DEVICE_FS_DAX:
 		params.pgprot = pgprot_decrypted(params.pgprot);
+		error = pgmap_vmemmap_shared_page_alloc(pgmap, nid);
+		if (error)
+			return ERR_PTR(error);
 		break;
 	case MEMORY_DEVICE_GENERIC:
 		break;
@@ -324,8 +354,10 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 	init_completion(&pgmap->done);
 	error = percpu_ref_init(&pgmap->ref, dev_pagemap_percpu_release, 0,
 				GFP_KERNEL);
-	if (error)
+	if (error) {
+		pgmap_vmemmap_shared_page_free(pgmap);
 		return ERR_PTR(error);
+	}
 
 	/*
 	 * Clear the pgmap nr_range as it will be incremented for each

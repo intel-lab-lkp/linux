@@ -9,6 +9,7 @@
 
 struct resource;
 struct device;
+struct page;
 
 /**
  * struct vmem_altmap - pre-allocated storage for vmemmap_populate
@@ -108,7 +109,8 @@ struct dev_pagemap_ops {
 	void (*folio_split)(struct folio *head, struct folio *tail);
 };
 
-#define PGMAP_ALTMAP_VALID	(1 << 0)
+#define PGMAP_ALTMAP_VALID				BIT(0)
+#define PGMAP_VMEMMAP_OPTIMIZATION			BIT(1)
 
 /**
  * struct dev_pagemap - metadata for ZONE_DEVICE mappings
@@ -122,6 +124,7 @@ struct dev_pagemap_ops {
  *	A zero value (default) uses base pages as the vmemmap metadata
  *	representation. A bigger value will set up compound struct pages
  *	of the requested order value.
+ * @vmemmap_shared_page: shared read-only vmemmap page for optimized FS-DAX
  * @ops: method table
  * @owner: an opaque pointer identifying the entity that manages this
  *	instance.  Used by various helpers to make sure that no
@@ -137,6 +140,7 @@ struct dev_pagemap {
 	enum memory_type type;
 	unsigned int flags;
 	unsigned long vmemmap_shift;
+	struct page *vmemmap_shared_page;
 	const struct dev_pagemap_ops *ops;
 	void *owner;
 	int nr_range;
@@ -232,6 +236,7 @@ void *devm_memremap_pages(struct device *dev, struct dev_pagemap *pgmap);
 void devm_memunmap_pages(struct device *dev, struct dev_pagemap *pgmap);
 struct dev_pagemap *get_dev_pagemap(unsigned long pfn);
 bool pgmap_pfn_valid(struct dev_pagemap *pgmap, unsigned long pfn);
+int vmemmap_materialize_page(struct page *page, unsigned int order);
 
 unsigned long memremap_compat_align(void);
 
@@ -307,4 +312,8 @@ static inline void put_dev_pagemap(struct dev_pagemap *pgmap)
 		percpu_ref_put(&pgmap->ref);
 }
 
+static inline bool pgmap_vmemmap_optimizable(struct dev_pagemap *pgmap)
+{
+	return pgmap && pgmap->vmemmap_shared_page != NULL;
+}
 #endif /* _LINUX_MEMREMAP_H_ */
