@@ -1379,6 +1379,14 @@ static bool irq_supports_nmi(struct irq_desc *desc)
 	if (d->chip->irq_bus_lock || d->chip->irq_bus_sync_unlock)
 		return false;
 
+	/*
+	 * NMIs cannot set IRQD_IRQ_INPROGRESS because they cannot acquire
+	 * spinlocks. Synchronous disable and teardown require querying the
+	 * hardware state via ->irq_get_irqchip_state().
+	 */
+	if (!d->chip->irq_get_irqchip_state)
+		return false;
+
 	return d->chip->flags & IRQCHIP_SUPPORTS_NMI;
 }
 
@@ -2034,11 +2042,20 @@ static const void *__cleanup_nmi(unsigned int irq, struct irq_desc *desc)
 	struct irqaction *action = NULL;
 	const char *devname = NULL;
 
+	guard(mutex)(&desc->request_mutex);
+
 	scoped_guard(raw_spinlock_irqsave, &desc->lock) {
-		irq_nmi_teardown(desc);
+		irq_settings_clr_disable_unlazy(desc);
+		irq_shutdown(desc);
+	}
 
-		desc->istate &= ~IRQS_NMI;
+	/*
+	 * Ensure all in-flight NMI handlers on other CPUs complete before
+	 * clearing desc->action or tearing down NMI state.
+	 */
+	__synchronize_hardirq(desc, true);
 
+	scoped_guard(raw_spinlock_irqsave, &desc->lock) {
 		if (!WARN_ON(desc->action == NULL)) {
 			action = desc->action;
 			irq_pm_remove_action(desc, action);
@@ -2046,11 +2063,11 @@ static const void *__cleanup_nmi(unsigned int irq, struct irq_desc *desc)
 		}
 		desc->action = NULL;
 
-		irq_settings_clr_disable_unlazy(desc);
-		irq_shutdown_and_deactivate(desc);
+		irq_nmi_teardown(desc);
+		desc->istate &= ~IRQS_NMI;
+		irq_domain_deactivate_irq(&desc->irq_data);
+		irq_proc_update_valid(desc);
 	}
-
-	irq_proc_update_valid(desc);
 
 	if (action)
 		unregister_handler_proc(irq, action);
@@ -2067,6 +2084,8 @@ static const void *__cleanup_nmi(unsigned int irq, struct irq_desc *desc)
 const void *free_nmi(unsigned int irq, void *dev_id)
 {
 	struct irq_desc *desc = irq_to_desc(irq);
+
+	WARN(in_interrupt(), "Trying to free NMI %d from IRQ context!\n", irq);
 
 	if (!desc || WARN_ON(!irq_is_nmi(desc)))
 		return NULL;
