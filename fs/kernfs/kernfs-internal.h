@@ -117,7 +117,14 @@ static inline bool kernfs_rename_is_locked(const struct kernfs_node *kn)
 
 static inline const char *kernfs_rcu_name(const struct kernfs_node *kn)
 {
-	return rcu_dereference_check(kn->name, kernfs_root_is_locked(kn));
+	/*
+	 * Like kernfs_node::__parent below, the name is only replaced under
+	 * both kernfs_root::kernfs_rwsem and kernfs_root::kernfs_rename_lock,
+	 * so either one keeps it, and the string it points at, stable.
+	 */
+	return rcu_dereference_check(kn->name,
+				     kernfs_root_is_locked(kn) ||
+				     kernfs_rename_is_locked(kn));
 }
 
 static inline struct kernfs_node *kernfs_parent(const struct kernfs_node *kn)

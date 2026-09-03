@@ -1808,6 +1808,7 @@ int kernfs_rename_ns(struct kernfs_node *kn, struct kernfs_node *new_parent,
 	struct kernfs_node *old_parent;
 	struct kernfs_root *root;
 	const char *old_name;
+	bool reparent;
 	int error;
 
 	/* can't move or rename root */
@@ -1857,25 +1858,26 @@ int kernfs_rename_ns(struct kernfs_node *kn, struct kernfs_node *new_parent,
 	 */
 	kernfs_unlink_sibling(kn);
 
-	/* rename_lock protects ->parent accessors */
-	if (old_parent != new_parent) {
+	reparent = old_parent != new_parent;
+	if (reparent)
 		kernfs_get(new_parent);
-		write_lock_irq(&root->kernfs_rename_lock);
 
+	/*
+	 * kernfs_rename_lock protects ->__parent, ->ns and ->name, so take it
+	 * even when the parent does not change.
+	 */
+	write_lock_irq(&root->kernfs_rename_lock);
+
+	if (reparent)
 		rcu_assign_pointer(kn->__parent, new_parent);
+	WRITE_ONCE(kn->ns, new_ns);
+	if (new_name)
+		rcu_assign_pointer(kn->name, new_name);
 
-		WRITE_ONCE(kn->ns, new_ns);
-		if (new_name)
-			rcu_assign_pointer(kn->name, new_name);
+	write_unlock_irq(&root->kernfs_rename_lock);
 
-		write_unlock_irq(&root->kernfs_rename_lock);
+	if (reparent)
 		kernfs_put(old_parent);
-	} else {
-		/* name assignment is RCU protected, parent is the same */
-		WRITE_ONCE(kn->ns, new_ns);
-		if (new_name)
-			rcu_assign_pointer(kn->name, new_name);
-	}
 
 	kn->hash = kernfs_name_hash(new_name ?: old_name, kn->ns);
 	kernfs_link_sibling(kn);
