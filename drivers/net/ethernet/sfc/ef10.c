@@ -105,6 +105,26 @@ static int efx_ef10_get_vf_index(struct efx_nic *efx)
 }
 #endif
 
+static const char *efx_ef10_dpcpu_fw_variant_name(u16 dpcpu_id)
+{
+	switch (dpcpu_id) {
+	case MC_CMD_GET_CAPABILITIES_OUT_RXDP:
+		return "full-feature";
+	case MC_CMD_GET_CAPABILITIES_OUT_RXDP_LOW_LATENCY:
+		return "low-latency";
+	case MC_CMD_GET_CAPABILITIES_OUT_RXDP_PACKED_STREAM:
+		return "packed-stream";
+	case MC_CMD_GET_CAPABILITIES_OUT_TXDP_HIGH_PACKET_RATE:
+		return "high-tx-rate";
+	case MC_CMD_GET_CAPABILITIES_OUT_RXDP_RULES_ENGINE:
+		return "rules-engine";
+	case MC_CMD_GET_CAPABILITIES_OUT_RXDP_DPDK:
+		return "dpdk";
+	default:
+		return "unknown";
+	}
+}
+
 static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_CAPABILITIES_V7_OUT_LEN);
@@ -143,6 +163,13 @@ static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 		MCDI_WORD(outbuf, GET_CAPABILITIES_OUT_RX_DPCPU_FW_ID);
 	nic_data->tx_dpcpu_fw_id =
 		MCDI_WORD(outbuf, GET_CAPABILITIES_OUT_TX_DPCPU_FW_ID);
+
+	pci_info(efx->pci_dev,
+		 "Datapath firmware variant: rx=%s (0x%x) tx=%s (0x%x)\n",
+		 efx_ef10_dpcpu_fw_variant_name(nic_data->rx_dpcpu_fw_id),
+		 nic_data->rx_dpcpu_fw_id,
+		 efx_ef10_dpcpu_fw_variant_name(nic_data->tx_dpcpu_fw_id),
+		 nic_data->tx_dpcpu_fw_id);
 
 	if (!(nic_data->datapath_caps &
 	      (1 << MC_CMD_GET_CAPABILITIES_OUT_RX_PREFIX_LEN_14_LBN))) {
