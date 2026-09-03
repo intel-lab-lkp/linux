@@ -6,6 +6,7 @@
 #include "mlx5_core.h"
 #include "psp.h"
 #include "lib/crypto.h"
+#include "en_accel/en_accel.h"
 #include "en_accel/psp.h"
 #include "fs_core.h"
 
@@ -526,6 +527,7 @@ out_spec:
 static void accel_psp_fs_rx_destroy(struct mlx5e_psp_fs *fs)
 {
 	struct mlx5_ttc_table *ttc = mlx5e_fs_get_ttc(fs->fs, false);
+	bool tc_blocked = fs->rx.ft;
 	int i;
 
 	/* disconnect */
@@ -535,6 +537,8 @@ static void accel_psp_fs_rx_destroy(struct mlx5e_psp_fs *fs)
 	}
 	accel_psp_fs_rx_check_ft_destroy(&fs->check);
 	accel_psp_fs_rx_ft_destroy(&fs->rx);
+	if (tc_blocked)
+		mlx5e_accel_unblock_tc_offload(fs->mdev);
 }
 
 static int accel_psp_fs_rx_create(struct mlx5e_psp_fs *fs,
@@ -543,10 +547,16 @@ static int accel_psp_fs_rx_create(struct mlx5e_psp_fs *fs,
 	struct mlx5_ttc_table *ttc = mlx5e_fs_get_ttc(fs->fs, false);
 	int i, err;
 
+	err = mlx5e_accel_block_tc_offload(fs->mdev);
+	if (err) {
+		NL_SET_ERR_MSG(extack, "TC offload active, cannot enable PSP");
+		return err;
+	}
+
 	err = accel_psp_fs_rx_ft_create(fs, &fs->rx);
 	if (err) {
 		NL_SET_ERR_MSG(extack, "Failed creating RX steering table");
-		return err;
+		goto err_unblock_tc;
 	}
 
 	err = accel_psp_fs_rx_check_ft_create(fs, &fs->check);
@@ -583,6 +593,8 @@ err_decrypt_ft:
 	accel_psp_fs_rx_check_ft_destroy(&fs->check);
 err_ft:
 	accel_psp_fs_rx_ft_destroy(&fs->rx);
+err_unblock_tc:
+	mlx5e_accel_unblock_tc_offload(fs->mdev);
 	return err;
 }
 
