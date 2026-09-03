@@ -1,0 +1,16 @@
+What:		/sys/bus/hid/devices/<bus>:<vid>:<pid>.<n>/use_leds_uapi
+Date:		August 2026
+KernelVersion:	7.3
+Contact:	aer@tuxedocomputers.com
+Description:
+        If a driver uses the hid-lamparray module and a device supporting
+        LampArray is found, one multicolor LED class device is registered under
+        /sys/class/leds/rgb:<function> to expose the single-zone RGB control.
+        Every device gets an incremental unique id.
+
+        Additionally, the use_leds_uapi sysfs attribute to control the LED class
+        device is attached directly to the HID device at
+        /sys/bus/hid/devices/<bus>:<vid>:<pid>.<n>/use_leds_uapi. Writing 0 to
+        use_leds_uapi unregisters the LED class device. The last state is kept
+        cached. Writing 1 registers it again and restores the cached state to
+        hardware.
