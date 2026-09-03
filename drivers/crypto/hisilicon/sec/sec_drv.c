@@ -1285,7 +1285,7 @@ static const __maybe_unused struct of_device_id sec_match[] = {
 MODULE_DEVICE_TABLE(of, sec_match);
 
 static const __maybe_unused struct acpi_device_id sec_acpi_match[] = {
-	{ "HISI02C1", 0 },
+	{ .id = "HISI02C1" },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, sec_acpi_match);
