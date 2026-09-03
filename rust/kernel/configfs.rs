@@ -612,7 +612,7 @@ where
     pub const fn new(name: &'static CStr) -> Self {
         Self {
             attribute: Opaque::new(bindings::configfs_attribute {
-                ca_name: crate::str::as_char_ptr_in_const_context(name),
+                ca_name: const_call!(name.as_char_ptr()),
                 ca_owner: core::ptr::null_mut(),
                 ca_mode: 0o660,
                 show: Some(Self::show),

@@ -107,12 +107,12 @@ macro_rules! kunit_assert {
             unsafe impl Sync for UnaryAssert {}
 
             static LOCATION: Location = Location($crate::bindings::kunit_loc {
-                file: $crate::str::as_char_ptr_in_const_context(FILE),
+                file: $crate::const_eval::Const(FILE).as_char_ptr(),
                 line: LINE,
             });
             static ASSERTION: UnaryAssert = UnaryAssert($crate::bindings::kunit_unary_assert {
                 assert: $crate::bindings::kunit_assert {},
-                condition: $crate::str::as_char_ptr_in_const_context(CONDITION),
+                condition: $crate::const_eval::Const(CONDITION).as_char_ptr(),
                 expected_true: true,
             });
 
@@ -204,7 +204,7 @@ pub const fn kunit_case(
 ) -> kernel::bindings::kunit_case {
     kernel::bindings::kunit_case {
         run_case: Some(run_case),
-        name: kernel::str::as_char_ptr_in_const_context(name),
+        name: const_call!(name.as_char_ptr()),
         attr: kernel::bindings::kunit_attributes {
             speed: kernel::bindings::kunit_speed_KUNIT_SPEED_NORMAL,
         },

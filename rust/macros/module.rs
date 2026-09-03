@@ -149,13 +149,13 @@ impl<'a> ModInfoBuilder<'a> {
                         ::kernel::module_param::KernelParam =
                         ::kernel::module_param::KernelParam::new(
                             ::kernel::bindings::kernel_param {
-                                name: kernel::str::as_char_ptr_in_const_context(
+                                name: ::kernel::const_eval::Const(
                                     if ::core::cfg!(MODULE) {
                                         #param_name_cstr
                                     } else {
                                         #param_name_cstr_with_module
                                     }
-                                ),
+                                ).as_char_ptr(),
                                 // SAFETY: `__this_module` is constructed by the kernel at load
                                 // time and will not be freed until the module is unloaded.
                                 #[cfg(MODULE)]

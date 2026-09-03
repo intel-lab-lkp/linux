@@ -197,14 +197,13 @@ macro_rules! b_str {
     }};
 }
 
-/// Returns a C pointer to the string.
-// It is a free function rather than a method on an extension trait because:
-//
-// - error[E0379]: functions in trait impls cannot be declared const
-#[inline]
-#[expect(clippy::disallowed_methods, reason = "internal implementation")]
-pub const fn as_char_ptr_in_const_context(c_str: &CStr) -> *const c_char {
-    c_str.as_ptr().cast()
+impl crate::const_eval::Const<&CStr> {
+    /// Returns a C pointer to the string.
+    #[inline]
+    #[expect(clippy::disallowed_methods, reason = "internal implementation")]
+    pub const fn as_char_ptr(self) -> *const c_char {
+        self.0.as_ptr().cast()
+    }
 }
 
 mod private {

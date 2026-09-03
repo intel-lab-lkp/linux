@@ -46,7 +46,7 @@ impl MiscDeviceOptions {
     pub const fn into_raw<T: MiscDevice>(self) -> bindings::miscdevice {
         let mut result: bindings::miscdevice = pin_init::zeroed();
         result.minor = bindings::MISC_DYNAMIC_MINOR as ffi::c_int;
-        result.name = crate::str::as_char_ptr_in_const_context(self.name);
+        result.name = const_call!(self.name.as_char_ptr());
         result.fops = MiscdeviceVTable::<T>::build();
         result
     }

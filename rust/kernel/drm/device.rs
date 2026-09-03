@@ -186,8 +186,8 @@ impl<T: drm::Driver> UnregisteredDevice<T> {
         major: T::INFO.major,
         minor: T::INFO.minor,
         patchlevel: T::INFO.patchlevel,
-        name: crate::str::as_char_ptr_in_const_context(T::INFO.name).cast_mut(),
-        desc: crate::str::as_char_ptr_in_const_context(T::INFO.desc).cast_mut(),
+        name: const_call!(T::INFO.name.as_char_ptr()).cast_mut(),
+        desc: const_call!(T::INFO.desc.as_char_ptr()).cast_mut(),
 
         driver_features: Self::compute_features(),
         ioctls: T::IOCTLS.as_ptr(),

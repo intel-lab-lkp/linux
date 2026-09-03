@@ -206,9 +206,9 @@ macro_rules! declare_drm_ioctls {
                         Some($cmd)
                     },
                     flags: $flags,
-                    name: $crate::str::as_char_ptr_in_const_context(
+                    name: $crate::const_eval::Const(
                         $crate::c_str!(::core::stringify!($cmd)),
-                    ),
+                    ).as_char_ptr(),
                 }
             ),*];
             ioctls
