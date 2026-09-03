@@ -1299,6 +1299,17 @@ static bool vcnl4010_is_thr_enabled(struct vcnl4000_data *data)
 	return !!(ret & VCNL4010_INT_THR_EN);
 }
 
+static int vcnl4010_stop(struct vcnl4000_data *data)
+{
+	int ret;
+
+	ret = i2c_smbus_write_byte_data(data->client, VCNL4010_INT_CTRL, 0);
+	if (ret < 0)
+		return ret;
+
+	return i2c_smbus_write_byte_data(data->client, VCNL4000_COMMAND, 0);
+}
+
 static int vcnl4010_read_event_config(struct iio_dev *indio_dev,
 				      const struct iio_chan_spec *chan,
 				      enum iio_event_type type,
@@ -1334,16 +1345,10 @@ static int vcnl4010_config_threshold_enable(struct vcnl4000_data *data)
 
 static int vcnl4010_config_threshold_disable(struct vcnl4000_data *data)
 {
-	int ret;
-
 	if (!vcnl4010_is_thr_enabled(data))
 		return 0;
 
-	ret = i2c_smbus_write_byte_data(data->client, VCNL4000_COMMAND, 0);
-	if (ret < 0)
-		return ret;
-
-	return i2c_smbus_write_byte_data(data->client, VCNL4010_INT_CTRL, 0);
+	return vcnl4010_stop(data);
 }
 
 static int vcnl4010_config_threshold(struct iio_dev *indio_dev, bool state)
@@ -1373,6 +1378,34 @@ static int vcnl4010_write_event_config(struct iio_dev *indio_dev,
 	default:
 		return -EINVAL;
 	}
+}
+
+static int vcnl4040_update_als_int(struct vcnl4000_data *data, u16 mask, bool state)
+{
+	int ret, val;
+
+	ret = i2c_smbus_read_word_data(data->client, VCNL4200_AL_CONF);
+	if (ret < 0)
+		return ret;
+
+	val = state ? (ret | mask) : (ret & ~mask);
+
+	data->als_int = FIELD_GET(VCNL4040_ALS_CONF_INT_EN, val);
+	return i2c_smbus_write_word_data(data->client, VCNL4200_AL_CONF, val);
+}
+
+static int vcnl4040_update_ps_int(struct vcnl4000_data *data, u16 mask, bool state)
+{
+	int ret, val;
+
+	ret = i2c_smbus_read_word_data(data->client, VCNL4200_PS_CONF1);
+	if (ret < 0)
+		return ret;
+
+	val = state ? (ret | mask) : (ret & ~mask);
+
+	data->ps_int = FIELD_GET(VCNL4040_PS_CONF2_PS_INT, val);
+	return i2c_smbus_write_word_data(data->client, VCNL4200_PS_CONF1, val);
 }
 
 static int vcnl4040_read_event_config(struct iio_dev *indio_dev,
@@ -1413,40 +1446,21 @@ static int vcnl4040_write_event_config(struct iio_dev *indio_dev,
 				       enum iio_event_direction dir,
 				       bool state)
 {
-	int ret;
-	u16 val, mask;
+	u16 mask;
 	struct vcnl4000_data *data = iio_priv(indio_dev);
 
 	guard(mutex)(&data->vcnl4000_lock);
 
 	switch (chan->type) {
 	case IIO_LIGHT:
-		ret = i2c_smbus_read_word_data(data->client, VCNL4200_AL_CONF);
-		if (ret < 0)
-			return ret;
-
-		mask = VCNL4040_ALS_CONF_INT_EN;
-		if (state)
-			val = (ret | mask);
-		else
-			val = (ret & ~mask);
-
-		data->als_int = FIELD_GET(VCNL4040_ALS_CONF_INT_EN, val);
-		return i2c_smbus_write_word_data(data->client, VCNL4200_AL_CONF, val);
+		return vcnl4040_update_als_int(data, VCNL4040_ALS_CONF_INT_EN, state);
 	case IIO_PROXIMITY:
-		ret = i2c_smbus_read_word_data(data->client, VCNL4200_PS_CONF1);
-		if (ret < 0)
-			return ret;
-
 		if (dir == IIO_EV_DIR_RISING)
 			mask = VCNL4040_PS_IF_AWAY;
 		else
 			mask = VCNL4040_PS_IF_CLOSE;
 
-		val = state ? (ret | mask) : (ret & ~mask);
-
-		data->ps_int = FIELD_GET(VCNL4040_PS_CONF2_PS_INT, val);
-		return i2c_smbus_write_word_data(data->client, VCNL4200_PS_CONF1, val);
+		return vcnl4040_update_ps_int(data, mask, state);
 	default:
 		return -EINVAL;
 	}
@@ -1629,13 +1643,8 @@ static int vcnl4010_buffer_postenable(struct iio_dev *indio_dev)
 static int vcnl4010_buffer_predisable(struct iio_dev *indio_dev)
 {
 	struct vcnl4000_data *data = iio_priv(indio_dev);
-	int ret;
 
-	ret = i2c_smbus_write_byte_data(data->client, VCNL4010_INT_CTRL, 0);
-	if (ret < 0)
-		return ret;
-
-	return i2c_smbus_write_byte_data(data->client, VCNL4000_COMMAND, 0);
+	return vcnl4010_stop(data);
 }
 
 static const struct iio_buffer_setup_ops vcnl4010_buffer_ops = {
