@@ -535,6 +535,10 @@ static struct ufs_hba_variant_ops ufs_intel_mtl_hba_vops = {
 static int ufs_amd_init(struct ufs_hba *hba)
 {
 	hba->caps |= UFSHCD_CAP_MCQ_INTR_AGGR;
+
+	/* Enable WriteBooster with runtime-PM autosuspend. */
+	hba->caps |= UFSHCD_CAP_WB_EN | UFSHCD_CAP_RPM_AUTOSUSPEND;
+
 	return 0;
 }
 
