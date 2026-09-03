@@ -24,6 +24,15 @@ struct ucsi_acpi {
 	bool check_bogus_event;
 	guid_t guid;
 	u64 cmd;
+	/*
+	 * notify_lock serialises ucsi_acpi_notify() against the start of
+	 * teardown, so that @quiescing is observed by every notify that has
+	 * not yet run. It must not be held across ucsi_unregister(), whose
+	 * drained work may depend on the notify path, nor across
+	 * acpi_remove_notify_handler(), which flushes notify work.
+	 */
+	struct mutex notify_lock;
+	bool quiescing;
 };
 
 static int ucsi_acpi_dsm(struct ucsi_acpi *ua, int func)
@@ -179,11 +188,31 @@ static void ucsi_acpi_notify(acpi_handle handle, u32 event, void *data)
 	u32 cci;
 	int ret;
 
+	mutex_lock(&ua->notify_lock);
+
 	ret = ua->ucsi->ops->read_cci(ua->ucsi, &cci);
 	if (ret)
-		return;
+		goto out_unlock;
+
+	/*
+	 * Once teardown has started the connectors are being unregistered and
+	 * freed, so a connector change must not be reported any more. Command
+	 * and acknowledge completions must still be able to reach the core:
+	 * ucsi_unregister() drains connector and partner work that can be
+	 * blocked in wait_for_completion_timeout() on ucsi->complete, and that
+	 * completion is only signalled from here. Keep exactly the bits that
+	 * ucsi_notify_common() needs for that, which drops the connector
+	 * number and with it the path to ucsi_connector_change(). The busy
+	 * indicator is kept so that bogus CCI data is still ignored.
+	 */
+	if (ua->quiescing)
+		cci &= UCSI_CCI_BUSY | UCSI_CCI_ACK_COMPLETE |
+		       UCSI_CCI_COMMAND_COMPLETE;
 
 	ucsi_notify_common(ua->ucsi, cci);
+
+out_unlock:
+	mutex_unlock(&ua->notify_lock);
 }
 
 static int ucsi_acpi_probe(struct platform_device *pdev)
@@ -218,6 +247,8 @@ static int ucsi_acpi_probe(struct platform_device *pdev)
 		return ret;
 
 	ua->dev = &pdev->dev;
+
+	mutex_init(&ua->notify_lock);
 
 	id = dmi_first_match(ucsi_acpi_quirks);
 	if (id)
@@ -256,11 +287,29 @@ static void ucsi_acpi_remove(struct platform_device *pdev)
 {
 	struct ucsi_acpi *ua = platform_get_drvdata(pdev);
 
-	ucsi_unregister(ua->ucsi);
-	ucsi_destroy(ua->ucsi);
+	/*
+	 * Stop reporting connector changes, but keep the notify handler
+	 * installed so that the work ucsi_unregister() drains can still be
+	 * reached by the command completions it may be waiting for. Any notify
+	 * that already passed this point runs to completion first, so no
+	 * connector work can be queued once ucsi_unregister() starts.
+	 */
+	mutex_lock(&ua->notify_lock);
+	ua->quiescing = true;
+	mutex_unlock(&ua->notify_lock);
 
+	ucsi_unregister(ua->ucsi);
+
+	/*
+	 * Now that no work is left to serve, drop the handler. This unlinks it
+	 * and then calls acpi_os_wait_events_complete(), which flushes
+	 * kacpi_notify_wq, so a notify running on another CPU has returned
+	 * before ucsi_destroy() frees the instance that it dereferences.
+	 */
 	acpi_remove_notify_handler(ACPI_HANDLE(&pdev->dev), ACPI_DEVICE_NOTIFY,
 				   ucsi_acpi_notify);
+
+	ucsi_destroy(ua->ucsi);
 }
 
 static int ucsi_acpi_suspend(struct device *dev)
