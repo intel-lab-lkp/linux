@@ -365,7 +365,7 @@ static ssize_t idle_state_show(struct device *dev,
 	struct i2c_mux_core *muxc = i2c_get_clientdata(client);
 	struct pca954x *data = i2c_mux_priv(muxc);
 
-	return sprintf(buf, "%d\n", READ_ONCE(data->idle_state));
+	return sysfs_emit(buf, "%d\n", READ_ONCE(data->idle_state));
 }
 
 static ssize_t idle_state_store(struct device *dev,
