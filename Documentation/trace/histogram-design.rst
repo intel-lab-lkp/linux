@@ -25,7 +25,7 @@ tracing_map.c.
 
 If the kernel is compiled with CONFIG_HIST_TRIGGERS_DEBUG set, an
 event file named 'hist_debug' will appear in each event's
-subdirectory.  This file can be read at any time and will display some
+
 of the hist trigger internals described in this document. Specific
 examples and output will be described in test cases below.
 
@@ -914,6 +914,13 @@ means it will be automatically converted into a field variable::
 
   # echo 'hist:keys=next_pid:wakeup_lat=common_timestamp.usecs-$ts0: \
           onmatch(sched.sched_waking).wakeup_latency($wakeup_lat,next_pid)' >>
+	  /sys/kernel/tracing/events/sched/sched_switch/trigger
+
+Note that the above is the old way to trigger a synthetic event, whereas the
+newer way is preferred, which uses the trace() action handler::
+
+  # echo 'hist:keys=next_pid:wakeup_lat=common_timestamp.usecs-$ts0: \
+          onmatch(sched.sched_waking).trace(wakeup_latency,$wakeup_lat,next_pid)' >>
 	  /sys/kernel/tracing/events/sched/sched_switch/trigger
 
 The diagram for the sched_switch event is similar to previous examples
