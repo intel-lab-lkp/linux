@@ -166,6 +166,8 @@ void usbip_net_pack_usb_device(int pack, struct usbip_usb_device *udev);
 void usbip_net_pack_usb_interface(int pack, struct usbip_usb_interface *uinf);
 
 ssize_t usbip_net_recv(int sockfd, void *buff, size_t bufflen);
+int usbip_net_recv_busid(int sockfd, char *busid);
+int usbip_net_recv_usb_device(int sockfd, struct usbip_usb_device *udev);
 ssize_t usbip_net_send(int sockfd, void *buff, size_t bufflen);
 int usbip_net_send_op_common(int sockfd, uint32_t code, uint32_t status);
 int usbip_net_recv_op_common(int sockfd, uint16_t *code, int *status);

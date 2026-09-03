@@ -124,6 +124,41 @@ ssize_t usbip_net_recv(int sockfd, void *buff, size_t bufflen)
 	return usbip_net_xmit(sockfd, buff, bufflen, 0);
 }
 
+int usbip_net_recv_busid(int sockfd, char *busid)
+{
+	int rc;
+
+	rc = usbip_net_recv(sockfd, busid, SYSFS_BUS_ID_SIZE);
+	if (rc < 0)
+		return rc;
+
+	if (!memchr(busid, '\0', SYSFS_BUS_ID_SIZE)) {
+		dbg("received malformed busid");
+		return -1;
+	}
+
+	return 0;
+}
+
+int usbip_net_recv_usb_device(int sockfd, struct usbip_usb_device *udev)
+{
+	int rc;
+
+	rc = usbip_net_recv(sockfd, udev, sizeof(*udev));
+	if (rc < 0)
+		return rc;
+
+	if (!memchr(udev->path, '\0', sizeof(udev->path)) ||
+	    !memchr(udev->busid, '\0', sizeof(udev->busid))) {
+		dbg("received malformed usb device");
+		return -1;
+	}
+
+	usbip_net_pack_usb_device(0, udev);
+
+	return 0;
+}
+
 ssize_t usbip_net_send(int sockfd, void *buff, size_t bufflen)
 {
 	return usbip_net_xmit(sockfd, buff, bufflen, 1);

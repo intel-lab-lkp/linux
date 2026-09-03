@@ -86,12 +86,11 @@ static int get_exported_devices(char *host, int sockfd)
 
 	for (i = 0; i < reply.ndev; i++) {
 		memset(&udev, 0, sizeof(udev));
-		rc = usbip_net_recv(sockfd, &udev, sizeof(udev));
+		rc = usbip_net_recv_usb_device(sockfd, &udev);
 		if (rc < 0) {
 			dbg("usbip_net_recv failed: usbip_usb_device[%d]", i);
 			return -1;
 		}
-		usbip_net_pack_usb_device(0, &udev);
 
 		usbip_names_get_product(product_name, sizeof(product_name),
 					udev.idVendor, udev.idProduct);

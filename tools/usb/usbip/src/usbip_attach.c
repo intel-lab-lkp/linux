@@ -153,13 +153,11 @@ static int query_import_device(int sockfd, char *busid)
 		return -1;
 	}
 
-	rc = usbip_net_recv(sockfd, (void *) &reply, sizeof(reply));
+	rc = usbip_net_recv_usb_device(sockfd, &reply.udev);
 	if (rc < 0) {
 		err("recv op_import_reply");
 		return -1;
 	}
-
-	PACK_OP_IMPORT_REPLY(0, &reply);
 
 	/* check the reply */
 	if (strncmp(reply.udev.busid, busid, SYSFS_BUS_ID_SIZE)) {

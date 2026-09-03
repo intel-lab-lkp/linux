@@ -100,12 +100,11 @@ static int recv_request_import(int sockfd)
 
 	memset(&req, 0, sizeof(req));
 
-	rc = usbip_net_recv(sockfd, &req, sizeof(req));
+	rc = usbip_net_recv_busid(sockfd, req.busid);
 	if (rc < 0) {
 		dbg("usbip_net_recv failed: import request");
 		return -1;
 	}
-	PACK_OP_IMPORT_REQUEST(0, &req);
 
 	list_for_each(i, &driver->edev_list) {
 		edev = list_entry(i, struct usbip_exported_device, node);
