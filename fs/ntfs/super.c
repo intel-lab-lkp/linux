@@ -262,6 +262,41 @@ static int ntfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	return 0;
 }
 
+/*
+ * ntfs_mark_volume_dirty_with_error - record an error and mark volume dirty
+ * @vol:	ntfs volume on which an error has been recorded
+ *
+ * To be called when metadata corruption is detected so that chkdsk runs on
+ * the next mount.  NVolSetErrors() is called before the dirty bit is
+ * written, and the mutex acquire/release in ntfs_write_volume_flags()
+ * provides the ordering: a concurrent ntfs_clear_volume_dirty_if_no_errors()
+ * can only run under the lock after the error flag is set and will
+ * therefore leave the dirty bit alone.
+ *
+ * Only for runtime error paths on a writable volume.  Do not call while
+ * holding the mrec_lock of the $Volume inode itself (the ntfs_attr_lookup()
+ * failure paths).  Error paths that run before $Volume is loaded, that may
+ * run with a read-only opened bdev, or on a hibernated volume, which we
+ * must not write to at all, keep calling NVolSetErrors() directly.
+ *
+ * Return 0 on success and -errno on error.
+ */
+static int ntfs_mark_volume_dirty_with_error(struct ntfs_volume *vol)
+{
+	/*
+	 * vol_ino is NULL while the volume is still being mounted.  This is a
+	 * runtime-only helper and no runtime caller can see that state, but if
+	 * one ever does, there is nothing on disk to update yet, so do nothing
+	 * rather than dereference a NULL inode.  Mount-time error paths record
+	 * the error flag with NVolSetErrors() directly instead.
+	 */
+	if (!vol->vol_ino)
+		return 0;
+
+	NVolSetErrors(vol);
+	return ntfs_set_volume_flags(vol, VOLUME_IS_DIRTY);
+}
+
 static int ntfs_reconfigure(struct fs_context *fc)
 {
 	struct super_block *sb = fc->root->d_sb;
@@ -307,7 +342,7 @@ static int ntfs_reconfigure(struct fs_context *fc)
 		if (vol->logfile_ino && !ntfs_empty_logfile(vol->logfile_ino)) {
 			ntfs_error(sb, "Failed to empty journal LogFile%s",
 					es);
-			NVolSetErrors(vol);
+			ntfs_mark_volume_dirty_with_error(vol);
 			return -EROFS;
 		}
 	} else if (!sb_rdonly(sb) && (fc->sb_flags & SB_RDONLY)) {
@@ -1446,6 +1481,11 @@ static bool load_system_files(struct ntfs_volume *vol)
 			ntfs_error(sb, "%s.  Mounting read-only%s",
 					!vol->mftmirr_ino ? es1 : es2, es3);
 		}
+		/*
+		 * $Volume is not loaded yet, so the dirty bit cannot be
+		 * persisted; record the error flag only.  Mount is
+		 * serialized against sync anyway.
+		 */
 		NVolSetErrors(vol);
 	}
 	/* Get mft bitmap attribute inode. */
@@ -1588,6 +1628,11 @@ get_ctx_vol_failed:
 			sb->s_flags |= SB_RDONLY;
 			ntfs_error(sb, "Failed to load LogFile. Mounting read-only.");
 		}
+		/*
+		 * Read-only mounts reach this too with a read-only opened
+		 * bdev, so the dirty bit cannot be written; record the
+		 * error flag only.  Mount is serialized against sync anyway.
+		 */
 		NVolSetErrors(vol);
 	}
 
@@ -1633,7 +1678,7 @@ get_ctx_vol_failed:
 		/* Convert to a read-only mount. */
 		ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
 		sb->s_flags |= SB_RDONLY;
-		NVolSetErrors(vol);
+		ntfs_mark_volume_dirty_with_error(vol);
 	}
 	/* If on NTFS versions before 3.0, we are done. */
 	if (unlikely(vol->major_ver < 3))
