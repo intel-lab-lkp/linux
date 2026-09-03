@@ -462,6 +462,7 @@ int regulator_check_voltage(struct regulator_dev *rdev,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(regulator_check_voltage);
 
 /* return 0 if the state is valid */
 static int regulator_check_states(suspend_state_t state)
@@ -502,6 +503,7 @@ int regulator_check_consumers(struct regulator_dev *rdev,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(regulator_check_consumers);
 
 /* current constraint check */
 static int regulator_check_current_limit(struct regulator_dev *rdev,
@@ -4468,6 +4470,7 @@ int regulator_do_balance_voltage(struct regulator_dev *rdev,
 out:
 	return ret;
 }
+EXPORT_SYMBOL_GPL(regulator_do_balance_voltage);
 
 static int regulator_balance_voltage(struct regulator_dev *rdev,
 				     suspend_state_t state)
@@ -5797,6 +5800,7 @@ int regulator_coupler_register(struct regulator_coupler *coupler)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(regulator_coupler_register);
 
 static struct regulator_coupler *
 regulator_find_coupler(struct regulator_dev *rdev)
