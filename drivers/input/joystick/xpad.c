@@ -400,6 +400,7 @@ static const struct xpad_device {
 	{ 0x3651, 0x1000, "CRKD SG", 0, XTYPE_XBOX360 },
 	{ 0x366c, 0x0005, "ByoWave Proteus Controller", MAP_SHARE_BUTTON, XTYPE_XBOXONE, FLAG_DELAY_INIT },
 	{ 0x3767, 0x0101, "Fanatec Speedster 3 Forceshock Wheel", 0, XTYPE_XBOX },
+	{ 0x37d7, 0x2414, "Flydigi Direwolf 4", MAP_PADDLES, XTYPE_XBOX360 },
 	{ 0x37d7, 0x2501, "Flydigi Apex 5", 0, XTYPE_XBOX360 },
 	{ 0x413d, 0x2104, "Black Shark Green Ghost Gamepad", 0, XTYPE_XBOX360 },
 	{ 0xffff, 0xffff, "Chinese-made Xbox Controller", 0, XTYPE_XBOX },
@@ -934,6 +935,12 @@ static void xpad360_process_packet(struct usb_xpad *xpad, struct input_dev *dev,
 	} else {
 		input_report_abs(dev, ABS_Z, data[4]);
 		input_report_abs(dev, ABS_RZ, data[5]);
+	}
+
+	/* paddle handling */
+	if (data[1] >= 20 && (xpad->mapping & MAP_PADDLES)) {
+		input_report_key(dev, BTN_GRIPL, data[19] & BIT(3));
+		input_report_key(dev, BTN_GRIPR, data[19] & BIT(2));
 	}
 
 	input_sync(dev);
@@ -1947,6 +1954,12 @@ static int xpad_init_input(struct usb_xpad *xpad)
 		input_dev->id.product = 0x02a1;
 	}
 
+	if (xpad->udev->product && strstr(xpad->udev->product, "Flydigi Direwolf 4")) {
+		/* expose true vendor and product id for Direwolf 4 */
+		input_dev->id.vendor = 0x37d7;
+		input_dev->id.product = 0x2414;
+	}
+
 	input_dev->dev.parent = &xpad->intf->dev;
 
 	input_set_drvdata(input_dev, xpad);
@@ -2082,6 +2095,15 @@ static int xpad_probe(struct usb_interface *intf, const struct usb_device_id *id
 	xpad->name = xpad_device[i].name;
 	if (xpad_device[i].flags & FLAG_DELAY_INIT)
 		xpad->delay_init = true;
+
+	/*
+	 * Direwolf 4 enumerates with generic Microsoft Xbox 360 VID/PID
+	 * in PC mode; detect via product string to enable paddles.
+	 */
+	if (udev->product && strstr(udev->product, "Flydigi Direwolf 4")) {
+		xpad->mapping |= MAP_PADDLES;
+		xpad->name = udev->product;
+	}
 
 	xpad->packet_type = PKT_XB;
 	INIT_WORK(&xpad->work, xpad_presence_work);
