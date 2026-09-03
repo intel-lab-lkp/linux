@@ -32,6 +32,9 @@ static void clean_cache_range(void *addr, size_t size)
 	void *vend = addr + size;
 	void *p;
 
+	if (!size)
+		return;
+
 	for (p = (void *)((unsigned long)addr & ~clflush_mask);
 	     p < vend; p += x86_clflush_size)
 		clwb(p);
