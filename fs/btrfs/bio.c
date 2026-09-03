@@ -569,136 +569,7 @@ static int btrfs_bio_csum(struct btrfs_bio *bbio)
 {
 	if (bbio->bio.bi_opf & REQ_META)
 		return btree_csum_one_bio(bbio);
-#ifdef CONFIG_BTRFS_EXPERIMENTAL
-	return btrfs_csum_one_bio(bbio, true);
-#else
-	return btrfs_csum_one_bio(bbio, false);
-#endif
-}
-
-/*
- * Async submit bios are used to offload expensive checksumming onto the worker
- * threads.
- */
-struct async_submit_bio {
-	struct btrfs_bio *bbio;
-	struct btrfs_io_context *bioc;
-	struct btrfs_io_stripe smap;
-	int mirror_num;
-	struct btrfs_work work;
-};
-
-/*
- * In order to insert checksums into the metadata in large chunks, we wait
- * until bio submission time.   All the pages in the bio are checksummed and
- * sums are attached onto the ordered extent record.
- *
- * At IO completion time the csums attached on the ordered extent record are
- * inserted into the btree.
- */
-static void run_one_async_start(struct btrfs_work *work)
-{
-	struct async_submit_bio *async =
-		container_of(work, struct async_submit_bio, work);
-	int ret;
-
-	ret = btrfs_bio_csum(async->bbio);
-	if (ret)
-		async->bbio->bio.bi_status = errno_to_blk_status(ret);
-}
-
-/*
- * In order to insert checksums into the metadata in large chunks, we wait
- * until bio submission time.   All the pages in the bio are checksummed and
- * sums are attached onto the ordered extent record.
- *
- * At IO completion time the csums attached on the ordered extent record are
- * inserted into the tree.
- *
- * If called with @do_free == true, then it will free the work struct.
- */
-static void run_one_async_done(struct btrfs_work *work, bool do_free)
-{
-	struct async_submit_bio *async =
-		container_of(work, struct async_submit_bio, work);
-	struct bio *bio = &async->bbio->bio;
-
-	if (do_free) {
-		kfree(container_of(work, struct async_submit_bio, work));
-		return;
-	}
-
-	/* If an error occurred we just want to clean up the bio and move on. */
-	if (bio->bi_status) {
-		btrfs_bio_end_io(async->bbio, bio->bi_status);
-		return;
-	}
-
-	/*
-	 * All of the bios that pass through here are from async helpers.
-	 * Use REQ_BTRFS_CGROUP_PUNT to issue them from the owning cgroup's
-	 * context.  This changes nothing when cgroups aren't in use.
-	 */
-	bio->bi_opf |= REQ_BTRFS_CGROUP_PUNT;
-	btrfs_submit_bio(bio, async->bioc, &async->smap, async->mirror_num);
-}
-
-static bool should_async_write(struct btrfs_bio *bbio)
-{
-	struct btrfs_fs_info *fs_info = bbio->inode->root->fs_info;
-	bool auto_csum_mode = true;
-
-#ifdef CONFIG_BTRFS_EXPERIMENTAL
-	/*
-	 * Write bios will calculate checksum and submit bio at the same time.
-	 * Unless explicitly required don't offload serial csum calculate and bio
-	 * submit into a workqueue.
-	 */
-	return false;
-#endif
-
-	/* Submit synchronously if the checksum implementation is fast. */
-	if (auto_csum_mode && test_bit(BTRFS_FS_CSUM_IMPL_FAST, &fs_info->flags))
-		return false;
-
-	/*
-	 * Try to defer the submission to a workqueue to parallelize the
-	 * checksum calculation unless the I/O is issued synchronously.
-	 */
-	if (op_is_sync(bbio->bio.bi_opf))
-		return false;
-
-	/* Zoned devices require I/O to be submitted in order. */
-	if ((bbio->bio.bi_opf & REQ_META) && btrfs_is_zoned(fs_info))
-		return false;
-
-	return true;
-}
-
-/*
- * Submit bio to an async queue.
- *
- * Return true if the work has been successfully submitted, else false.
- */
-static bool btrfs_wq_submit_bio(struct btrfs_bio *bbio,
-				struct btrfs_io_context *bioc,
-				struct btrfs_io_stripe *smap, int mirror_num)
-{
-	struct btrfs_fs_info *fs_info = bbio->inode->root->fs_info;
-	struct async_submit_bio *async;
-
-	async = kmalloc_obj(*async, GFP_NOFS);
-	if (!async)
-		return false;
-
-	async->bbio = bbio;
-	async->bioc = bioc;
-	async->smap = *smap;
-	async->mirror_num = mirror_num;
-
-	btrfs_init_work(&async->work, run_one_async_start, run_one_async_done);
-	btrfs_queue_work(fs_info->workers, &async->work);
-	return true;
+	return btrfs_csum_one_bio(bbio);
 }
 
 static u64 btrfs_append_map_length(struct btrfs_bio *bbio, u64 map_length)
@@ -806,10 +677,6 @@ static bool btrfs_submit_chunk(struct btrfs_bio *bbio, int mirror_num)
 		if (!(inode->flags & BTRFS_INODE_NODATASUM) &&
 		    !test_bit(BTRFS_FS_STATE_NO_DATA_CSUMS, &fs_info->fs_state) &&
 		    !btrfs_is_data_reloc_root(inode->root) && !bbio->is_remap) {
-			if (should_async_write(bbio) &&
-			    btrfs_wq_submit_bio(bbio, bioc, &smap, mirror_num))
-				goto done;
-
 			ret = btrfs_bio_csum(bbio);
 			status = errno_to_blk_status(ret);
 			if (status)
@@ -824,7 +691,6 @@ static bool btrfs_submit_chunk(struct btrfs_bio *bbio, int mirror_num)
 	}
 
 	btrfs_submit_bio(bio, bioc, &smap, mirror_num);
-done:
 	return map_length == length;
 
 fail:

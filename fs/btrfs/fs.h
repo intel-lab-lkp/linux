@@ -696,16 +696,6 @@ struct btrfs_fs_info {
 	/* All fs/file tree roots that have delalloc inodes. */
 	struct list_head delalloc_roots;
 
-	/*
-	 * There is a pool of worker threads for checksumming during writes and
-	 * a pool for checksumming after reads.  This is because readers can
-	 * run with FS locks held, and the writers may be waiting for those
-	 * locks.  We don't want ordering in the pending list to cause
-	 * deadlocks, and so the two are serviced separately.
-	 *
-	 * A third pool does submit_bio to avoid deadlocking with the other two.
-	 */
-	struct btrfs_workqueue *workers;
 	struct btrfs_workqueue *delalloc_workers;
 	struct btrfs_workqueue *flush_workers;
 	struct workqueue_struct *endio_workers;
