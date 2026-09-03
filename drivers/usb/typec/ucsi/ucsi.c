@@ -2369,6 +2369,15 @@ void ucsi_unregister(struct ucsi *ucsi)
 
 	ucsi_debugfs_unregister(ucsi);
 
+	/*
+	 * Stop accepting connector-change events before the PPM disable
+	 * command and before freeing connectors. Backends may still deliver
+	 * a late notification (e.g. ACPI) until their own handler is removed;
+	 * with ntfy cleared, ucsi_connector_change() returns early instead of
+	 * scheduling work on a connector that is about to be freed.
+	 */
+	ucsi->ntfy = 0;
+
 	/* Disable notifications */
 	ucsi->ops->async_control(ucsi, cmd);
 
@@ -2382,6 +2391,8 @@ void ucsi_unregister(struct ucsi *ucsi)
 	}
 
 	kfree(ucsi->connector);
+	ucsi->connector = NULL;
+	memset(&ucsi->cap, 0, sizeof(ucsi->cap));
 }
 EXPORT_SYMBOL_GPL(ucsi_unregister);
 

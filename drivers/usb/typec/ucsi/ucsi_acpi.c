@@ -256,11 +256,16 @@ static void ucsi_acpi_remove(struct platform_device *pdev)
 {
 	struct ucsi_acpi *ua = platform_get_drvdata(pdev);
 
-	ucsi_unregister(ua->ucsi);
-	ucsi_destroy(ua->ucsi);
-
+	/*
+	 * Drop the ACPI notify handler before tearing down the UCSI instance.
+	 * Otherwise a concurrent notify can race into ucsi_acpi_notify() and
+	 * use ua->ucsi after it has been freed.
+	 */
 	acpi_remove_notify_handler(ACPI_HANDLE(&pdev->dev), ACPI_DEVICE_NOTIFY,
 				   ucsi_acpi_notify);
+
+	ucsi_unregister(ua->ucsi);
+	ucsi_destroy(ua->ucsi);
 }
 
 static int ucsi_acpi_suspend(struct device *dev)
