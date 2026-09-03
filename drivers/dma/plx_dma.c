@@ -563,8 +563,6 @@ static int plx_dma_probe(struct pci_dev *pdev,
 
 	rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(48));
 	if (rc)
-		rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
-	if (rc)
 		return rc;
 
 	rc = pcim_iomap_regions(pdev, 1, KBUILD_MODNAME);
