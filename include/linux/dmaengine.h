@@ -1551,14 +1551,14 @@ static inline bool async_tx_test_ack(struct dma_async_tx_descriptor *tx)
 static inline void
 __dma_cap_set(enum dma_transaction_type tx_type, dma_cap_mask_t *dstp)
 {
-	set_bit(tx_type, dstp->bits);
+	__set_bit(tx_type, dstp->bits);
 }
 
 #define dma_cap_clear(tx, mask) __dma_cap_clear((tx), &(mask))
 static inline void
 __dma_cap_clear(enum dma_transaction_type tx_type, dma_cap_mask_t *dstp)
 {
-	clear_bit(tx_type, dstp->bits);
+	__clear_bit(tx_type, dstp->bits);
 }
 
 #define dma_cap_zero(mask) __dma_cap_zero(&(mask))
