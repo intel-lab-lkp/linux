@@ -135,6 +135,27 @@ struct i2c_msg {
 					 I2C_FUNC_SMBUS_READ_BLOCK_DATA | \
 					 I2C_FUNC_SMBUS_BLOCK_PROC_CALL)
 
+/* Detailed transfer report */
+
+struct i2c_transfer_report {
+	__s32 fault_msg_idx;		/* In case of a fault, index of the message that caused
+					 * the fault. If the bus driver cannot determine it, it
+					 * puts a negative error code. If there is no fault, the
+					 * value is equal to number of messages transferred.
+					 */
+	__s32 msgs_cplt;		/* Number of messages that are known to be transferred
+					 * successfully. If the bus driver cannot determine it, it
+					 * puts a negative error code. If there is no fault, the
+					 * value is equal to number of messages transferred.
+					 */
+	__s32 bytes_cplt;		/* In case of a fault, number of bytes in the message at
+					 * index `msgs_cplt` that are known to be transferred
+					 * successfully. If the bus driver cannot determine the
+					 * number of bytes, it puts a negative error value.
+					 * If there is no fault, the value is 0.
+					 */
+};
+
 /*
  * Data for SMBus Messages
  */
