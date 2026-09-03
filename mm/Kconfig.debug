@@ -106,6 +106,7 @@ config PAGE_OWNER
 	bool "Track page owner"
 	depends on DEBUG_KERNEL && STACKTRACE_SUPPORT
 	select DEBUG_FS
+	select GLOB
 	select STACKTRACE
 	select STACKDEPOT
 	select PAGE_EXTENSION
