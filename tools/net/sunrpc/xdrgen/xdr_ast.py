@@ -19,6 +19,15 @@ public_apis = []
 structs = set()
 pass_by_reference = set()
 
+# (type_name, member_name) pairs whose variable-length array member is
+# marked "pragma aggregate" -- codec emission streams the member through
+# application hooks instead of iterating a materialized C array.
+aggregate_members = set()
+
+# Source position of each "pragma aggregate" marker, so a directive
+# that cannot be honored is reported where it was written.
+aggregate_member_meta = {}
+
 # (type_name, member_name) pairs marked "pragma pages": the member's
 # content resides in the pages of the Receive or Reply buffer, so
 # the emitted codec captures or inserts those pages by reference
@@ -849,6 +858,15 @@ class ParseToAst(Transformer):
                 header_name = children[1].symbol
             case "public_directive":
                 public_apis.append(children[1].symbol)
+            case "aggregate_directive":
+                if children[2] is None:
+                    raise XdrSemanticError(
+                        "pragma aggregate requires a type name and a member name",
+                        children[1],
+                    )
+                marked = (children[1].symbol, children[2].symbol)
+                aggregate_members.add(marked)
+                aggregate_member_meta[marked] = children[2]
             case "pages_directive":
                 if children[2] is None:
                     raise XdrSemanticError(
@@ -1155,6 +1173,67 @@ def check_pages_directives(root: "Specification") -> None:
         )
 
 
+def check_aggregate_directives(root: "Specification") -> None:
+    """Reject a "pragma aggregate" directive that cannot be honored.
+
+    As with the pages checks, this runs in the front end so a directive
+    naming a missing type or member, or a member with no hook-driven
+    codec, is reported at its own source position. Left to the
+    emitters, an unbound directive would degrade silently to the
+    materializing codec, and a malformed one would surface as a
+    traceback from whichever emitter reached it.
+    """
+    if aggregate_members and header_name == "none":
+        raise XdrSemanticError(
+            "pragma aggregate derives its external hook symbols from the"
+            " pragma header name, which this specification does not set",
+            aggregate_member_meta.get(min(aggregate_members)),
+        )
+
+    resolved = set()
+    for definition in root.definitions:
+        value = definition.value
+        if not isinstance(value, _XdrStruct):
+            continue
+        fields = dict((field.name, field) for field in value.fields)
+        element_type = None
+        for marked in sorted(aggregate_members):
+            if marked[0] != value.name:
+                continue
+            meta = aggregate_member_meta.get(marked)
+            if marked[1] not in fields:
+                raise XdrSemanticError(
+                    f"type '{value.name}' has no member '{marked[1]}'",
+                    meta,
+                )
+            field = fields[marked[1]]
+            # Only the counted-array framing is generated, so any other
+            # member form would emit hook prototypes that nothing calls.
+            if not isinstance(field, _XdrVariableLengthArray):
+                raise XdrSemanticError(
+                    f"'{value.name}.{marked[1]}' is not a variable-length"
+                    " array",
+                    meta,
+                )
+            if element_type is None:
+                element_type = field.spec.type_name
+            elif field.spec.type_name != element_type:
+                raise XdrSemanticError(
+                    f"'{value.name}.{marked[1]}' has element type"
+                    f" '{field.spec.type_name}', but '{value.name}' already"
+                    f" marks a member of element type '{element_type}';"
+                    " one hook set serves all of a type's marked members",
+                    meta,
+                )
+            resolved.add(marked)
+
+    for marked in sorted(aggregate_members - resolved):
+        raise XdrSemanticError(
+            f"pragma aggregate names unknown struct '{marked[0]}'",
+            aggregate_member_meta.get(marked),
+        )
+
+
 def _referenced_type_names(value) -> set:
     """Return the type names an aggregate references through its
     members."""
@@ -1214,6 +1293,7 @@ def transform_parse_tree(parse_tree):
     # the nested aggregates before the directives are validated.
     _expand_argument_types(ast)
     check_pages_directives(ast)
+    check_aggregate_directives(ast)
     return ast
 
 
