@@ -877,7 +877,7 @@ variables specified in the wakeup_latency() trace action, and use
 them to generate a new wakeup_latency event into the trace stream.
 
 Note that the way the trace handlers such as wakeup_latency() (which
-could equivalently be written trace(wakeup_latency,$wakeup_lat,next_pid)
+could equivalently be written trace(wakeup_latency,$wakeup_lat,next_pid))
 are implemented, the parameters specified to the trace handler must be
 variables.  In this case, $wakeup_lat is obviously a variable, but
 next_pid isn't, since it's just naming a field in the sched_switch
@@ -914,6 +914,13 @@ means it will be automatically converted into a field variable::
 
   # echo 'hist:keys=next_pid:wakeup_lat=common_timestamp.usecs-$ts0: \
           onmatch(sched.sched_waking).wakeup_latency($wakeup_lat,next_pid)' >>
+	  /sys/kernel/tracing/events/sched/sched_switch/trigger
+
+Note that the above is the old way to trigger a synthetic event, whereas the
+newer way is preferred, which uses the trace() action handler::
+
+  # echo 'hist:keys=next_pid:wakeup_lat=common_timestamp.usecs-$ts0: \
+          onmatch(sched.sched_waking).trace(wakeup_latency,$wakeup_lat,next_pid)' >>
 	  /sys/kernel/tracing/events/sched/sched_switch/trigger
 
 The diagram for the sched_switch event is similar to previous examples
