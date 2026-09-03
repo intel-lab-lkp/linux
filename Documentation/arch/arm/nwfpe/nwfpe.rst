@@ -33,9 +33,9 @@ double precision and extended double precision formats.  The port of
 SoftFloat to the ARM was done by Phil Blundell, based on an earlier
 port of SoftFloat version 1 by Neil Carson for NetBSD/arm32.
 
-The file README.FPE contains a description of what has been implemented
-so far in the emulator.  The file TODO contains a information on what
-remains to be done, and other ideas for the emulator.
+The :doc:`netwinder-fpe` document contains a description of what has been
+implemented so far in the emulator.  The :doc:`todo` document contains
+information on what remains to be done, and other ideas for the emulator.
 
 Bug reports, comments, suggestions should be directed to me at
 <scottb@netwinder.org>.  General reports of "this program doesn't
