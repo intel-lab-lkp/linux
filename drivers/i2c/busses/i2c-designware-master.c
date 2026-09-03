@@ -651,16 +651,18 @@ static void i2c_dw_process_transfer(struct dw_i2c_dev *dev, unsigned int stat)
 	if (stat & DW_IC_INTR_RX_FULL)
 		i2c_dw_read(dev);
 
-	if (stat & DW_IC_INTR_TX_EMPTY)
-		i2c_dw_xfer_msg(dev);
-
 	/* Abort if we detect a STOP in the middle of a read or a write */
 	if ((stat & DW_IC_INTR_STOP_DET) &&
 	    (dev->status & (STATUS_READ_IN_PROGRESS | STATUS_WRITE_IN_PROGRESS))) {
 		dev_err(dev->dev, "spurious STOP detected\n");
 		dev->rx_outstanding = 0;
 		dev->msg_err = -EIO;
+		__i2c_dw_write_intr_mask(dev, 0);
+		goto tx_aborted;
 	}
+
+	if (stat & DW_IC_INTR_TX_EMPTY)
+		i2c_dw_xfer_msg(dev);
 
 	/*
 	 * No need to modify or disable the interrupt mask here.
