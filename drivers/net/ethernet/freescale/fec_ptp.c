@@ -787,9 +787,12 @@ void fec_ptp_init(struct platform_device *pdev, int irq_idx)
 	if (irq >= 0) {
 		ret = devm_request_irq(&pdev->dev, irq, fec_pps_interrupt,
 				       0, pdev->name, ndev);
-		if (ret < 0)
+		if (ret < 0) {
 			dev_warn(&pdev->dev, "request for pps irq failed(%d)\n",
 				 ret);
+		} else {
+			fep->pps_irq = irq;
+		}
 	}
 
 	fep->ptp_clock = ptp_clock_register(&fep->ptp_caps, &pdev->dev);
@@ -861,6 +864,12 @@ void fec_ptp_stop(struct platform_device *pdev)
 
 	cancel_delayed_work_sync(&fep->time_keep);
 	hrtimer_cancel(&fep->perout_timer);
+
+	if (fep->pps_irq > 0) {
+		devm_free_irq(&pdev->dev, fep->pps_irq, ndev);
+		fep->pps_irq = 0;
+	}
+
 	if (fep->ptp_clock) {
 		ptp_clock_unregister(fep->ptp_clock);
 		fep->ptp_clock = NULL;
