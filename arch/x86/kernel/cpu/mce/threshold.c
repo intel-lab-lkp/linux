@@ -118,10 +118,6 @@ void mce_track_storm(struct mce *mce)
 	unsigned int shift = 1;
 	u64 history = 0;
 
-	/* No tracking needed for banks that do not support CMCI */
-	if (storm->banks[mce->bank].poll_only)
-		return;
-
 	/*
 	 * When a bank is in storm mode it is polled once per second and
 	 * the history mask will record about the last minute of poll results.
