@@ -1377,8 +1377,12 @@ static ssize_t tg_set_conf(struct kernfs_open_file *of,
 	ret = -EINVAL;
 	if (sscanf(ctx.body, "%llu", &v) != 1)
 		goto unprep;
+
+	if (!is_u64 && v > UINT_MAX)
+		goto unprep;
+
 	if (!v)
-		v = U64_MAX;
+		v = is_u64 ? U64_MAX : UINT_MAX;
 
 	tg = blkg_to_tg(ctx.blkg);
 	tg_update_carryover(tg);
