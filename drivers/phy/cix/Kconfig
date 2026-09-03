@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Phy drivers for Cix PHYs
+#
+
+if ARCH_CIX || COMPILE_TEST
+
+config PHY_CIX_USB3
+	tristate "Cix USB3 PHY Driver"
+	depends on OF && HAS_IOMEM
+	select GENERIC_PHY
+	help
+	  Enable this to support the CIX USB3 PHY for TYPEA Connection.
+
+	  This driver provides initialization and power management for
+	  the USB3 PHY found on CIX Sky1 SoCs.
+
+	  If unsure, say N.
+
+endif # ARCH_CIX || COMPILE_TEST
