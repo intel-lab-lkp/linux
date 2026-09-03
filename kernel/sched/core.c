@@ -6756,6 +6756,11 @@ static bool try_to_block_task(struct rq *rq, struct task_struct *p,
 		return false;
 	}
 
+	/* End the current proxy execution episode when the owner blocks. */
+	if (sched_proxy_exec() && !rt_prio(p->prio) &&
+	    rt_prio(rq->donor->prio))
+		p->rt.timeout = 0;
+
 	p->is_blocked = 1;
 
 	/*
@@ -7245,6 +7250,14 @@ pick_again:
 	} else {
 		rq_set_donor(rq, next);
 	}
+
+	/*
+	 * End a previous RT proxy interval when a non-RT execution task is
+	 * selected with a non-RT scheduling context.
+	 */
+	if (sched_proxy_exec() && !rt_prio(next->prio) &&
+	    !rt_prio(rq->donor->prio) && next->rt.timeout)
+		next->rt.timeout = 0;
 
 picked:
 	clear_tsk_need_resched(prev);

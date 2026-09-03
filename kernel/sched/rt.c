@@ -2545,7 +2545,7 @@ static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 	update_curr_rt(rq);
 	update_rt_rq_load_avg(rq_clock_pelt(rq), rq, 1);
 
-	watchdog(rq, p);
+	watchdog(rq, rq->curr);
 
 	/*
 	 * RR tasks need a special form of time-slice management.
