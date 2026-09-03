@@ -337,7 +337,7 @@ static void luo_flb_unregister_one(struct liveupdate_file_handler *fh,
 
 	if (!found) {
 		pr_warn("Failed to unregister FLB '%s': not found in file handler '%s'\n",
-			flb->compatible, fh->compatible);
+			flb->compatible, fh->name);
 		return;
 	}
 

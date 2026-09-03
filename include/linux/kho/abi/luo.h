@@ -132,18 +132,18 @@ struct luo_ser {
 	u64 flbs_pa;
 } __packed;
 
-#define LIVEUPDATE_HNDL_COMPAT_LENGTH	48
+#define LIVEUPDATE_HNDL_NAME_LENGTH	48
 
 /**
  * struct luo_file_ser - Represents the serialized preserves files.
- * @compatible:  File handler compatible string.
+ * @name:        File handler name.
  * @data:        Private data
  * @token:       User provided token for this file
  *
  * If this structure is modified, `LUO_ABI_COMPATIBLE` must be updated.
  */
 struct luo_file_ser {
-	char compatible[LIVEUPDATE_HNDL_COMPAT_LENGTH];
+	char name[LIVEUPDATE_HNDL_NAME_LENGTH];
 	u64 data;
 	u64 token;
 } __packed;
@@ -256,7 +256,7 @@ struct liveupdate_ver_hdr {
  * @active:     Bitmask of active features.
  */
 struct liveupdate_feature_entry {
-	char name[LIVEUPDATE_HNDL_COMPAT_LENGTH];
+	char name[LIVEUPDATE_HNDL_NAME_LENGTH];
 	u32 feat_bytes;
 	u32 reserved;
 	u64 supp;

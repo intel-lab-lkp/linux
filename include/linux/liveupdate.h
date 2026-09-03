@@ -88,10 +88,10 @@ struct liveupdate_file_ops {
 /**
  * struct liveupdate_file_handler - Represents a handler for a live-updatable file type.
  * @ops:                Callback functions
- * @compatible:         The compatibility string (e.g., "memfd-v1", "vfiofd-v1")
- *                      that uniquely identifies the file type this handler
- *                      supports. This is matched against the compatible string
- *                      associated with individual &struct file instances.
+ * @name:               The name (e.g., "memfd", "vfiofd") that uniquely
+ *                      identifies the file type this handler supports. This
+ *                      is matched against the name associated with individual
+ *                      &struct file instances.
  *
  * Modules that want to support live update for specific file types should
  * register an instance of this structure. LUO uses this registration to
@@ -100,7 +100,7 @@ struct liveupdate_file_ops {
  */
 struct liveupdate_file_handler {
 	const struct liveupdate_file_ops *ops;
-	const char compatible[LIVEUPDATE_HNDL_COMPAT_LENGTH];
+	const char name[LIVEUPDATE_HNDL_NAME_LENGTH];
 
 	/* private: */
 

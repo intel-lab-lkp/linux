@@ -11,6 +11,8 @@
 #ifndef _LINUX_KHO_ABI_MEMFD_H
 #define _LINUX_KHO_ABI_MEMFD_H
 
+#include <linux/bits.h>
+#include <linux/kho/abi/luo.h>
 #include <linux/types.h>
 #include <linux/kho/abi/kexec_handover.h>
 
@@ -23,10 +25,19 @@
  * The state is serialized into a packed structure `struct memfd_luo_ser`
  * which is handed over to the next kernel via the KHO mechanism.
  *
- * This interface is a contract. Any modification to the structure layout
- * constitutes a breaking change. Such changes require incrementing the
- * version number in the MEMFD_LUO_FH_COMPATIBLE string.
+ * This interface is a contract. Any changes should be additive using feature
+ * flags to ensure backwards compatibility.
  */
+
+#define MEMFD_LUO_FEATURE_SEALS		BIT_ULL(0)
+#define MEMFD_LUO_FEATURE_FOLIOS	BIT_ULL(1)
+
+#define MEMFD_LUO_FEATURES_SUPP		(MEMFD_LUO_FEATURE_SEALS | \
+					 MEMFD_LUO_FEATURE_FOLIOS)
+#define MEMFD_LUO_FEATURES_REQ		(MEMFD_LUO_FEATURE_SEALS | \
+					 MEMFD_LUO_FEATURE_FOLIOS)
+#define MEMFD_LUO_FEATURES_ACTIVE	(MEMFD_LUO_FEATURE_SEALS | \
+					 MEMFD_LUO_FEATURE_FOLIOS)
 
 /**
  * MEMFD_LUO_FOLIO_DIRTY - The folio is dirty.
@@ -57,18 +68,21 @@ struct memfd_luo_folio_ser {
 } __packed;
 
 /*
- * The set of seals this version supports preserving. If support for any new
- * seals is needed, add it here and bump version.
+ * The set of base seals supported by MEMFD_LUO_FEATURE_SEALS.
+ * If support for new seals is needed, define a dedicated feature bit
+ * (e.g. MEMFD_LUO_FEATURE_SEAL_<NAME>) to allow granular compatibility.
  */
-#define MEMFD_LUO_ALL_SEALS (F_SEAL_SEAL | \
-			     F_SEAL_SHRINK | \
-			     F_SEAL_GROW | \
-			     F_SEAL_WRITE | \
-			     F_SEAL_FUTURE_WRITE | \
-			     F_SEAL_EXEC)
+#define MEMFD_LUO_BASE_SEALS	(F_SEAL_SEAL | \
+				 F_SEAL_SHRINK | \
+				 F_SEAL_GROW | \
+				 F_SEAL_WRITE | \
+				 F_SEAL_FUTURE_WRITE | \
+				 F_SEAL_EXEC)
+#define MEMFD_LUO_ALL_SEALS	MEMFD_LUO_BASE_SEALS
 
 /**
  * struct memfd_luo_ser - Main serialization structure for a memfd.
+ * @features:  Bit mask of supported, required, and active features.
  * @pos:       The file's current position (f_pos).
  * @size:      The total size of the file in bytes (i_size).
  * @seals:     The seals present on the memfd. The seals are uABI so it is safe
@@ -79,6 +93,7 @@ struct memfd_luo_folio_ser {
  *             struct memfd_luo_folio_ser.
  */
 struct memfd_luo_ser {
+	struct luo_feature_hdr features;
 	u64 pos;
 	u64 size;
 	u32 seals;
@@ -87,7 +102,7 @@ struct memfd_luo_ser {
 	struct kho_vmalloc folios;
 } __packed;
 
-/* The compatibility string for memfd file handler */
-#define MEMFD_LUO_FH_COMPATIBLE	"memfd-v2"
+/* The name for memfd file handler */
+#define MEMFD_LUO_FH_NAME	"memfd"
 
 #endif /* _LINUX_KHO_ABI_MEMFD_H */

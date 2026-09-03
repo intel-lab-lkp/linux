@@ -135,7 +135,7 @@ void liveupdate_test_register(struct liveupdate_file_handler *fh)
 	}
 
 	pr_info("Registered %d FLBs with file handler: [%s]\n",
-		TEST_NFLBS, fh->compatible);
+		TEST_NFLBS, fh->name);
 }
 
 MODULE_LICENSE("GPL");

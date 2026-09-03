@@ -52,8 +52,8 @@
  *
  * Seals
  *   File seals set on the memfd are preserved and re-applied on restore.
- *   Only seals known to this LUO version (see ``MEMFD_LUO_ALL_SEALS``) may
- *   be present; preservation fails with ``-EOPNOTSUPP`` otherwise.
+ *   Only base seals supported by this LUO version (see ``MEMFD_LUO_BASE_SEALS``)
+ *   may be present; preservation fails with ``-EOPNOTSUPP`` otherwise.
  *
  * Non-Preserved Properties
  * ========================
@@ -273,6 +273,10 @@ static int memfd_luo_preserve(struct liveupdate_file_op_args *args)
 		goto err_unlock;
 	}
 
+	ser->features.supp = MEMFD_LUO_FEATURES_SUPP;
+	ser->features.req = MEMFD_LUO_FEATURES_REQ;
+	ser->features.active = MEMFD_LUO_FEATURES_ACTIVE;
+
 	seals = memfd_get_seals(args->file);
 	if (seals < 0) {
 		err = seals;
@@ -352,8 +356,9 @@ static void memfd_luo_unpreserve(struct liveupdate_file_op_args *args)
 
 	ser = phys_to_virt(args->serialized_data);
 
-	memfd_luo_unpreserve_folios(&ser->folios, args->private_data,
-				    ser->nr_folios);
+	if (LUO_FEATURE_IS_ACTIVE(ser, MEMFD_LUO_FEATURE_FOLIOS) && ser->nr_folios)
+		memfd_luo_unpreserve_folios(&ser->folios, args->private_data,
+					    ser->nr_folios);
 
 	kho_unpreserve_free(ser);
 	inode_unlock(inode);
@@ -401,7 +406,7 @@ static void memfd_luo_finish(struct liveupdate_file_op_args *args)
 	if (!ser)
 		return;
 
-	if (ser->nr_folios) {
+	if (LUO_FEATURE_IS_ACTIVE(ser, MEMFD_LUO_FEATURE_FOLIOS) && ser->nr_folios) {
 		folios_ser = kho_restore_vmalloc(&ser->folios);
 		if (!folios_ser)
 			goto out;
@@ -526,10 +531,19 @@ static int memfd_luo_retrieve(struct liveupdate_file_op_args *args)
 	if (!ser)
 		return -EINVAL;
 
-	/* Make sure the file only has seals supported by this version. */
-	if (ser->seals & ~MEMFD_LUO_ALL_SEALS) {
+	if (ser->features.req & ~MEMFD_LUO_FEATURES_SUPP) {
+		pr_err("Unsupported required memfd feature (req: 0x%llx, supp: 0x%llx)\n",
+		       ser->features.req, (u64)MEMFD_LUO_FEATURES_SUPP);
 		err = -EOPNOTSUPP;
 		goto free_ser;
+	}
+
+	if (LUO_FEATURE_IS_ACTIVE(ser, MEMFD_LUO_FEATURE_SEALS)) {
+		/* Make sure the file only has seals supported by this version. */
+		if (ser->seals & ~MEMFD_LUO_ALL_SEALS) {
+			err = -EOPNOTSUPP;
+			goto free_ser;
+		}
 	}
 
 	/*
@@ -543,16 +557,18 @@ static int memfd_luo_retrieve(struct liveupdate_file_op_args *args)
 		goto free_ser;
 	}
 
-	err = memfd_add_seals(file, ser->seals);
-	if (err) {
-		pr_err("failed to add seals: %pe\n", ERR_PTR(err));
-		goto put_file;
+	if (LUO_FEATURE_IS_ACTIVE(ser, MEMFD_LUO_FEATURE_SEALS)) {
+		err = memfd_add_seals(file, ser->seals);
+		if (err) {
+			pr_err("failed to add seals: %pe\n", ERR_PTR(err));
+			goto put_file;
+		}
 	}
 
 	vfs_setpos(file, ser->pos, MAX_LFS_FILESIZE);
 	i_size_write(file_inode(file), ser->size);
 
-	if (ser->nr_folios) {
+	if (LUO_FEATURE_IS_ACTIVE(ser, MEMFD_LUO_FEATURE_FOLIOS) && ser->nr_folios) {
 		folios_ser = kho_restore_vmalloc(&ser->folios);
 		if (!folios_ser) {
 			err = -EINVAL;
@@ -601,9 +617,14 @@ static const struct liveupdate_file_ops memfd_luo_file_ops = {
 	.owner = THIS_MODULE,
 };
 
+LIVEUPDATE_FEATURE_ENTRY(memfd_luo, MEMFD_LUO_FH_NAME,
+			 MEMFD_LUO_FEATURES_SUPP,
+			 MEMFD_LUO_FEATURES_REQ,
+			 MEMFD_LUO_FEATURES_ACTIVE);
+
 static struct liveupdate_file_handler memfd_luo_handler = {
 	.ops = &memfd_luo_file_ops,
-	.compatible = MEMFD_LUO_FH_COMPATIBLE,
+	.name = MEMFD_LUO_FH_NAME,
 };
 
 static int __init memfd_luo_init(void)
