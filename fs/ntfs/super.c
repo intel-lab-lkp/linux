@@ -455,6 +455,45 @@ int ntfs_clear_volume_flags(struct ntfs_volume *vol, __le16 flags)
 }
 
 /*
+ * ntfs_mark_volume_dirty_with_error - record an error and mark volume dirty
+ * @vol:	ntfs volume on which an error has been recorded
+ *
+ * To be called when runtime metadata corruption is detected so that chkdsk
+ * runs on the next mount.  NVolErrors() is recorded first, so the in-memory
+ * error state is kept even when the dirty bit cannot be persisted; the
+ * mutex acquire/release in ntfs_write_volume_flags() then provides the
+ * ordering against ntfs_clear_volume_dirty_if_no_errors(), which checks
+ * the flag under the same lock.
+ *
+ * On a read-only mount or before the $Volume inode has been loaded, it
+ * only records the in-memory error state because the dirty bit cannot be
+ * persisted.  On a writable volume it waits for the lock instead of
+ * silently dropping the dirty-bit update, and propagates any write error
+ * to the caller.
+ *
+ * Only for runtime error paths that can race sync and hold no mrec_lock.
+ * The $Volume mrec_lock is a leaf lock: its critical sections never
+ * acquire the locks those paths hold (lcnbmp_lock, runlist locks), so
+ * blocking here cannot deadlock.  Do not call while holding the $Volume
+ * mrec_lock itself (ntfs_attr_lookup() failure and mft writeback paths),
+ * on mount/remount paths (serialized by sb->s_umount, keep using
+ * NVolSetErrors()), or on volumes we must not write to, such as
+ * hibernated ones.
+ *
+ * Return 0 on success and -errno on error.
+ */
+int ntfs_mark_volume_dirty_with_error(struct ntfs_volume *vol)
+{
+	NVolSetErrors(vol);
+
+	/* Nothing to persist on a read-only or still-mounting volume. */
+	if (!vol->vol_ino || sb_rdonly(vol->sb))
+		return 0;
+
+	return ntfs_set_volume_flags(vol, VOLUME_IS_DIRTY);
+}
+
+/*
  * ntfs_clear_volume_dirty_if_no_errors - clear dirty bit if no errors exist
  * @vol:	ntfs volume whose dirty bit should be cleared
  *
@@ -918,7 +957,8 @@ static void ntfs_setup_allocators(struct ntfs_volume *vol)
 }
 
 static struct lock_class_key mftmirr_runlist_lock_key,
-			     mftmirr_mrec_lock_key;
+			     mftmirr_mrec_lock_key,
+			     volume_mrec_lock_key;
 /*
  * load_and_init_mft_mirror - load and setup the mft mirror inode for a volume
  * @vol:	ntfs super block describing device whose mft mirror to load
@@ -1502,6 +1542,15 @@ volume_failed:
 		ntfs_error(sb, "Failed to load $Volume.");
 		goto iput_lcnbmp_err_out;
 	}
+	/*
+	 * Give the $Volume inode its own mrec_lock class: the error paths
+	 * take it while holding locks (lcnbmp_lock, runlist locks) that
+	 * nest inside mrec_lock elsewhere in the driver, and the lock
+	 * validator would otherwise see that as an inversion even though
+	 * the $Volume critical sections never acquire those locks.
+	 */
+	lockdep_set_class(&NTFS_I(vol->vol_ino)->mrec_lock,
+			  &volume_mrec_lock_key);
 	m = map_mft_record(NTFS_I(vol->vol_ino));
 	if (IS_ERR(m)) {
 iput_volume_failed:
