@@ -106,7 +106,7 @@ pub struct PrivateData<'bound, T: Driver> {
     /// Whether `receive_buf_callback` is allowed to call `Driver::receive`.
     ///
     /// If locked, the receive_buf_callback will be blocked on data reception.
-    /// This is the case while the driver is being probed or while [`PrivateData`] is being dropped.
+    /// This is the case while the driver is being probed or removed.
     /// This is necessary, because we need to open the serdev device before the driver has been
     /// probed in order to allow it to be configured, which allows `receive_buf_callback` to be
     /// called. Thus we need to block data until probe completes and the driver data becomes
@@ -127,16 +127,6 @@ pub struct PrivateData<'bound, T: Driver> {
 #[pinned_drop]
 impl<T: Driver> PinnedDrop for PrivateData<'_, T> {
     fn drop(self: Pin<&mut Self>) {
-        let mut active = self.active.lock();
-        if *active {
-            // SAFETY:
-            // - We have exclusive access to `self.driver`.
-            // - `self.driver` is guaranteed to be initialized.
-            unsafe { (*self.driver.get()).assume_init_drop() };
-            *active = false;
-        }
-        drop(active);
-
         // SAFETY: We have exclusive access to `self.open`.
         if unsafe { *self.open.get() } {
             // SAFETY: `self.sdev.as_raw()` is guaranteed to be a pointer to a valid
@@ -176,7 +166,20 @@ impl<T: Driver> Adapter<T> {
             let private_data = unsafe { sdev.as_ref().drvdata_borrow::<PrivateData<'_, T>>() };
             let private_data = ScopeGuard::new_with_data(private_data, |_| {
                 // SAFETY: We just set drvdata to `PrivateData<'_, T>`.
-                drop(unsafe { sdev.as_ref().drvdata_obtain::<PrivateData<'_, T>>() });
+                let private_data = unsafe {
+                    sdev.as_ref()
+                        .drvdata_obtain::<PrivateData<'_, T>>()
+                        .unwrap_unchecked()
+                };
+
+                let mut active = private_data.active.lock();
+                if *active {
+                    // SAFETY:
+                    // - We have exclusive access to `private_data.driver`.
+                    // - `private_data.driver` is guaranteed to be initialized.
+                    unsafe { (*private_data.driver.get()).assume_init_drop() };
+                    *active = false;
+                }
             });
             let mut active = private_data.active.lock();
 
@@ -222,15 +225,21 @@ impl<T: Driver> Adapter<T> {
         // and stored a `Pin<KBox<PrivateData<'_, T>>>`.
         let private_data = unsafe { sdev.as_ref().drvdata_borrow::<PrivateData<'_, T>>() };
 
-        // SAFETY: No one has exclusive access to `private_data.driver`.
-        let data = unsafe { &*private_data.driver.get() };
+        let mut active = private_data.active.lock();
+
+        // SAFETY: We have exclusive access to `private_data.driver`.
+        let data = unsafe { &mut *private_data.driver.get() };
         // SAFETY:
         // - `private_data.driver` is pinned.
         // - `remove_callback` is only ever called after a successful call to `probe_callback`,
         //   hence it's guaranteed that `private_data.driver` was initialized.
-        let data_pinned = unsafe { Pin::new_unchecked(data.assume_init_ref()) };
+        let data_pinned = unsafe { Pin::new_unchecked(data.assume_init_mut()) };
 
         T::unbind(sdev, data_pinned);
+
+        // SAFETY: We already established that `data` is guaranteed to be initialized.
+        unsafe { data.assume_init_drop() };
+        *active = false;
     }
 
     extern "C" fn receive_buf_callback(
@@ -254,13 +263,13 @@ impl<T: Driver> Adapter<T> {
             return length;
         }
 
-        // SAFETY: No one has exclusive access to `private_data.driver`.
-        let data = unsafe { &*private_data.driver.get() };
+        // SAFETY: We have exclusive access to `private_data.driver`.
+        let data = unsafe { &mut *private_data.driver.get() };
         // SAFETY:
         // - `private_data.driver` is pinned.
         // - `receive_buf_callback` is only ever called after a successful call to `probe_callback`,
         //   hence it's guaranteed that `private_data.driver` was initialized.
-        let data_pinned = unsafe { Pin::new_unchecked(data.assume_init_ref()) };
+        let data_pinned = unsafe { Pin::new_unchecked(data.assume_init_mut()) };
 
         // SAFETY: `buf` is guaranteed to be non-null and has the size of `length`.
         let buf = unsafe { core::slice::from_raw_parts(buf, length) };
@@ -365,7 +374,7 @@ pub trait Driver {
     type IdInfo: 'static;
 
     /// The type of the driver's bus device private data.
-    type Data<'bound>: Send + Sync + 'bound;
+    type Data<'bound>: Send + 'bound;
 
     /// The table of OF device ids supported by the driver.
     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = None;
@@ -391,7 +400,7 @@ pub trait Driver {
     /// `&Device<Core>` or `&Device<Bound>` reference. For instance.
     ///
     /// Otherwise, release operations for driver resources should be performed in `Drop`.
-    fn unbind<'bound>(sdev: &'bound Device<device::Core<'_>>, this: Pin<&Self::Data<'bound>>) {
+    fn unbind<'bound>(sdev: &'bound Device<device::Core<'_>>, this: Pin<&mut Self::Data<'bound>>) {
         let _ = (sdev, this);
     }
 
@@ -402,7 +411,7 @@ pub trait Driver {
     /// Returns the number of bytes accepted.
     fn receive<'bound>(
         sdev: &'bound Device<device::Bound>,
-        this: Pin<&Self::Data<'bound>>,
+        this: Pin<&mut Self::Data<'bound>>,
         data: &[u8],
     ) -> usize {
         let _ = (sdev, this, data);

@@ -63,7 +63,7 @@ impl serdev::Driver for SampleDriver {
 
     fn receive<'bound>(
         sdev: &'bound serdev::Device<Bound>,
-        _this: Pin<&Self>,
+        _this: Pin<&mut Self>,
         data: &[u8],
     ) -> usize {
         sdev.write(data).unwrap_or_default() as usize
