@@ -1849,12 +1849,6 @@ static void __mcheck_cpu_cap_init(void)
 
 	b = cap & MCG_BANKCNT_MASK;
 
-	if (b > MAX_NR_BANKS) {
-		pr_warn("CPU%d: Using only %u machine check banks out of %u\n",
-			smp_processor_id(), MAX_NR_BANKS, b);
-		b = MAX_NR_BANKS;
-	}
-
 	this_cpu_write(mce_num_banks, b);
 
 	__mcheck_cpu_mce_banks_init();

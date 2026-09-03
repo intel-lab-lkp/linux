@@ -95,7 +95,7 @@ static bool cmci_supported(int *banks)
 		return false;
 
 	rdmsrq(MSR_IA32_MCG_CAP, cap);
-	*banks = min_t(unsigned, MAX_NR_BANKS, cap & MCG_BANKCNT_MASK);
+	*banks = this_cpu_read(mce_num_banks);
 	return !!(cap & MCG_CMCI_P);
 }
 
