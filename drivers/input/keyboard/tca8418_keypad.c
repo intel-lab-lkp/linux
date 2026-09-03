@@ -201,6 +201,7 @@ static irqreturn_t tca8418_irq_handler(int irq, void *dev_id)
 	struct tca8418_keypad *keypad_data = dev_id;
 	u8 reg;
 	int error;
+	int max_loops = 16;
 
 	error = tca8418_read_byte(keypad_data, REG_INT_STAT, &reg);
 	if (error) {
@@ -214,9 +215,19 @@ static irqreturn_t tca8418_irq_handler(int irq, void *dev_id)
 
 	if (reg & INT_STAT_OVR_FLOW_INT)
 		dev_warn(&keypad_data->client->dev, "overflow occurred\n");
+	do {
+		if (reg & INT_STAT_K_INT)
+			tca8418_read_keypad(keypad_data);
 
-	if (reg & INT_STAT_K_INT)
-		tca8418_read_keypad(keypad_data);
+		/* Re-read interrupt status to check for new events */
+		error = tca8418_read_byte(keypad_data, REG_INT_STAT, &reg);
+		if (error) {
+			dev_err(&keypad_data->client->dev,
+				"unable to re-read REG_INT_STAT\n");
+			return IRQ_HANDLED;
+		}
+
+	} while ((reg & INT_STAT_K_INT) && --max_loops);
 
 	/* Clear all interrupts, even IRQs we didn't check (GPI, CAD, LCK) */
 	reg = 0xff;
