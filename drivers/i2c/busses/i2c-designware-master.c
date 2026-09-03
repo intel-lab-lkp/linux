@@ -11,6 +11,7 @@
 
 #define DEFAULT_SYMBOL_NAMESPACE	"I2C_DW"
 
+#include <linux/bitfield.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -32,6 +33,16 @@
 #define AMD_TIMEOUT_MIN_US	25
 #define AMD_TIMEOUT_MAX_US	250
 #define AMD_MASTERCFG_MASK	GENMASK(15, 0)
+
+static int i2c_dw_fault_report(struct dw_i2c_dev *dev, struct i2c_transfer_report *report);
+
+static inline bool i2c_dw_check_abort_flag(struct dw_i2c_dev *dev)
+{
+	u32 stat;
+
+	regmap_read(dev->map, DW_IC_RAW_INTR_STAT, &stat);
+	return (!!(stat & DW_IC_INTR_TX_ABRT));
+}
 
 static int i2c_dw_set_timings_master(struct dw_i2c_dev *dev)
 {
@@ -197,6 +208,8 @@ static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
 	__i2c_dw_disable(dev);
 
 	i2c_dw_set_mode(dev, DW_IC_MASTER);
+
+	dev->rx_buf_len = 0;
 
 	/* If the slave address is ten bit address, enable 10BITADDR */
 	if (msgs[dev->msg_write_idx].flags & I2C_M_TEN) {
@@ -451,6 +464,21 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 					     cmd | *buf++);
 			}
 			tx_limit--; buf_len--;
+
+			/* If precise fault reporting is required, check if the transfer
+			 * is aborted after writing each byte.
+			 * Otherwise, if it is aborted during filling FIFO, there is no way
+			 * to know how many bytes was written to FIFO after transfer abort
+			 * and thus are not counted in FLUSH_CNT.
+			 * If we are checking abort flag after each byte, we can lose only 1 byte.
+			 */
+			if (dev->need_precise_report) {
+				if (i2c_dw_check_abort_flag(dev)) {
+					dev_warn_ratelimited(dev->dev, "Transfer aborted during FIFO writing. Report may be imprecise.");
+					break;
+				}
+				dev->bytes_written++;
+			}
 		}
 
 		dev->tx_buf = buf;
@@ -542,6 +570,13 @@ i2c_dw_read(struct dw_i2c_dev *dev)
 
 		for (; len > 0 && rx_valid > 0; len--, rx_valid--) {
 			regmap_read(dev->map, DW_IC_DATA_CMD, &tmp);
+			if (dev->need_precise_report) {
+				if (i2c_dw_check_abort_flag(dev)) {
+					dev_warn_ratelimited(dev->dev, "Transfer aborted during FIFO reading. Data byte may be lost");
+					/* It is unknown if the read byte is valid. Drop it. */
+					break;
+				}
+			}
 			tmp &= DW_IC_DATA_CMD_DAT;
 			/* Ensure length byte is a valid value */
 			if (flags & I2C_M_RECV_LEN) {
@@ -568,8 +603,10 @@ i2c_dw_read(struct dw_i2c_dev *dev)
 			dev->rx_buf_len = len;
 			dev->rx_buf = buf;
 			return;
-		} else
+		} else {
 			dev->status &= ~STATUS_READ_IN_PROGRESS;
+			dev->rx_buf_len = 0;
+		}
 	}
 }
 
@@ -765,6 +802,7 @@ __i2c_dw_xfer_one_part(struct dw_i2c_dev *dev, struct i2c_msg *msgs, size_t num)
 	dev->status = 0;
 	dev->abort_source = 0;
 	dev->rx_outstanding = 0;
+	dev->bytes_written = 0;
 
 	ret = i2c_dw_wait_bus_not_busy(dev);
 	if (ret < 0)
@@ -868,11 +906,24 @@ i2c_dw_msg_is_valid(struct dw_i2c_dev *dev, const struct i2c_msg *msgs, size_t i
 }
 
 static int
-i2c_dw_xfer_common(struct dw_i2c_dev *dev, struct i2c_msg msgs[], int num)
+i2c_dw_xfer_common_v2(struct dw_i2c_dev *dev, struct i2c_msg *msgs, int num,
+		      struct i2c_transfer_report *report)
 {
 	struct i2c_msg *msgs_part;
-	size_t cnt;
+	int msgs_in_prev_parts = 0;
+	size_t cnt = 0;
 	int ret;
+
+	if (!report) {
+		dev->need_precise_report = false;
+	} else {
+		dev->need_precise_report = true;
+		report->msgs_cplt = -EOPNOTSUPP;
+		report->bytes_cplt = -EOPNOTSUPP;
+		report->fault_msg_idx = -EOPNOTSUPP;
+	}
+
+	dev->msg_read_idx = 0;
 
 	dev_dbg(dev->dev, "msgs: %d\n", num);
 
@@ -889,6 +940,8 @@ i2c_dw_xfer_common(struct dw_i2c_dev *dev, struct i2c_msg msgs[], int num)
 	 * we do one transaction for each part up to the STOP.
 	 */
 	for (msgs_part = msgs; msgs_part < msgs + num; msgs_part += cnt) {
+		/* Count previously transferred messages*/
+		msgs_in_prev_parts += cnt;
 		/*
 		 * Count the messages in a transaction, up to a STOP or
 		 * the end of the msgs. The last if below guarantees that
@@ -897,6 +950,15 @@ i2c_dw_xfer_common(struct dw_i2c_dev *dev, struct i2c_msg msgs[], int num)
 		 */
 		for (cnt = 1; ; cnt++) {
 			if (!i2c_dw_msg_is_valid(dev, msgs_part, cnt - 1)) {
+				if (report) {
+					report->fault_msg_idx = msgs_in_prev_parts + cnt - 1;
+					report->msgs_cplt = msgs_in_prev_parts;
+					report->bytes_cplt = 0;
+					/* Reset report pointer to avoid
+					 * calling i2c_dw_fault_report later
+					 */
+					report = NULL;
+				}
 				ret = -EOPNOTSUPP;
 				break;
 			}
@@ -918,16 +980,83 @@ i2c_dw_xfer_common(struct dw_i2c_dev *dev, struct i2c_msg msgs[], int num)
 
 	i2c_dw_release_lock(dev);
 
-	if (ret < 0)
+	if (ret < 0) {
+		if (report) {
+			i2c_dw_fault_report(dev, report);
+			report->msgs_cplt += msgs_in_prev_parts;
+			report->fault_msg_idx += msgs_in_prev_parts;
+		}
 		return ret;
+	}
+	if (report) {
+		report->msgs_cplt = num;
+		report->fault_msg_idx = num;
+		report->bytes_cplt = 0;
+	}
+
 	return num;
+}
+
+int i2c_dw_xfer_v2(struct i2c_adapter *adap, struct i2c_msg *msgs, int num,
+		   struct i2c_transfer_report *report)
+{
+	struct dw_i2c_dev *dev = i2c_get_adapdata(adap);
+
+	return i2c_dw_xfer_common_v2(dev, msgs, num, report);
 }
 
 int i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 {
 	struct dw_i2c_dev *dev = i2c_get_adapdata(adap);
 
-	return i2c_dw_xfer_common(dev, msgs, num);
+	return i2c_dw_xfer_common_v2(dev, msgs, num, NULL);
+}
+
+static int i2c_dw_fault_report(struct dw_i2c_dev *dev, struct i2c_transfer_report *report)
+{
+	int idx;
+	int n_flushed = FIELD_GET(DW_IC_TX_ABRT_SOURCE_FLUSH_CNT_MASK, dev->abort_source);
+
+	report->msgs_cplt = -1;
+
+	if (n_flushed <= dev->bytes_written)
+		dev->bytes_written -= n_flushed;
+	else
+		dev->bytes_written = 0;
+
+	/* The last byte that the transmission was interrupted on is not counted as "flushed".
+	 * We should not reported it as transferred successfully, so decrement the counter.
+	 */
+	if (dev->bytes_written)
+		dev->bytes_written--;
+
+	for (idx = 0; idx < dev->msg_write_idx; idx++) {
+		if (dev->msgs[idx].len <= dev->bytes_written)
+			dev->bytes_written -= dev->msgs[idx].len;
+		else
+			break;
+	}
+
+	report->fault_msg_idx = idx;
+	for (int i = dev->msg_read_idx; i <= idx && i < dev->msgs_num; i++) {
+		if (dev->msgs[i].flags & I2C_M_RD) {
+			report->msgs_cplt = i;
+			if (!(dev->rx_buf_len))
+				report->bytes_cplt = 0;
+			else
+				report->bytes_cplt = dev->rx_buf - dev->msgs[i].buf;
+			if ((i < idx) || (report->bytes_cplt < dev->bytes_written))
+				dev_warn_ratelimited(dev->dev, "Read data lost due to FIFO flush");
+			break;
+		}
+	}
+
+	if (report->msgs_cplt < 0) {
+		report->msgs_cplt = idx;
+		report->bytes_cplt = dev->bytes_written;
+	}
+
+	return idx;
 }
 
 void i2c_dw_configure_master(struct dw_i2c_dev *dev)

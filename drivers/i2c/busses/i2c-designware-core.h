@@ -117,6 +117,8 @@
 						 DW_IC_TX_ABRT_10ADDR2_NOACK | \
 						 DW_IC_TX_ABRT_GCALL_NOACK)
 
+#define DW_IC_TX_ABRT_SOURCE_FLUSH_CNT_MASK	GENMASK(31, 23)
+
 struct clk;
 struct device;
 struct reset_control;
@@ -180,6 +182,9 @@ struct reset_control;
  *	to generate the high period and low period of SCL line.
  * @emptyfifo_hold_master: true if the controller acting as master holds
  *	the clock when the Tx FIFO is empty instead of emitting a stop.
+ * @need_precise_report: true if client needs precise fault report
+ * @bytes_written: number of bytes written to FIFO. Used only for precise
+	fault report.
  *
  * HCNT and LCNT parameters can be used if the platform knows more accurate
  * values than the one computed based only on the input clock frequency.
@@ -239,6 +244,8 @@ struct dw_i2c_dev {
 	u32			bus_capacitance_pF;
 	bool			clk_freq_optimized;
 	bool			emptyfifo_hold_master;
+	bool			need_precise_report;
+	u32			bytes_written;
 };
 
 #define ACCESS_INTR_MASK			BIT(0)
@@ -317,6 +324,9 @@ extern int i2c_dw_probe_master(struct dw_i2c_dev *dev);
 
 int i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num);
 int amd_i2c_dw_xfer_quirk(struct i2c_adapter *adap, struct i2c_msg *msgs, int num_msgs);
+
+int i2c_dw_xfer_v2(struct i2c_adapter *adap, struct i2c_msg *msgs, int num,
+		   struct i2c_transfer_report *report);
 
 #if IS_ENABLED(CONFIG_I2C_SLAVE)
 extern void i2c_dw_configure_slave(struct dw_i2c_dev *dev);
