@@ -884,6 +884,33 @@ The "-o userxattr" mount option forces overlayfs to use the
 useful for unprivileged mounting of overlayfs.
 
 
+File locks and leases
+---------------------
+
+File locks (flock, POSIX record locks and OFD locks) and file leases
+taken on a file through the overlay attach to the overlay inode.  The
+same on-disk file opened through its real upper or lower path is a
+different inode object, so locks and leases acquired through one path
+do not conflict with locks and leases acquired through the other.
+
+An "exclusive" lock or a write lease held by a task that opened the
+file through the overlay does not prevent another task from acquiring
+the same lock or opening the file if the latter reaches the file
+through the underlying layer directly, e.g.:
+
+- a tool running outside the container accesses the container's
+  upperdir/workdir or the image layers below it directly,
+- a second overlay mount is stacked over the same upperdir,
+- the same layers are shared between different overlay mounts.
+
+Locks and leases do provide mutual exclusion between tasks that all
+reach the file through the same overlay mount, and a lease taken
+through the overlay is broken by opens through that overlay.
+
+Do not rely on file locking for mutual exclusion between overlay
+users and anything that may touch the underlying layers directly.
+
+
 Testsuite
 ---------
 
