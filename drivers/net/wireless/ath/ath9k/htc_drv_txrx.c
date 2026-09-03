@@ -986,6 +986,7 @@ static bool ath9k_rx_prepare(struct ath9k_htc_priv *priv,
 	if (skb->len < HTC_RX_FRAME_HEADER_SIZE) {
 		ath_err(common, "Corrupted RX frame, dropping (len: %d)\n",
 			skb->len);
+		RX_LEN_ERR_INC(priv);
 		goto rx_next;
 	}
 
@@ -997,6 +998,7 @@ static bool ath9k_rx_prepare(struct ath9k_htc_priv *priv,
 		ath_err(common,
 			"Corrupted RX data len, dropping (dlen: %d, skblen: %d)\n",
 			rs_datalen, skb->len);
+		RX_LEN_ERR_INC(priv);
 		goto rx_next;
 	}
 
@@ -1009,6 +1011,7 @@ static bool ath9k_rx_prepare(struct ath9k_htc_priv *priv,
 		ath_dbg(common, ANY,
 			"Short RX data len, dropping (dlen: %d)\n",
 			rs_datalen);
+		RX_LEN_ERR_INC(priv);
 		goto rx_next;
 	}
 
