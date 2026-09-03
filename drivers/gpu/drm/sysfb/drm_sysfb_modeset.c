@@ -375,13 +375,11 @@ void drm_sysfb_plane_helper_atomic_disable(struct drm_plane *plane,
 {
 	struct drm_device *dev = plane->dev;
 	struct drm_sysfb_device *sysfb = to_drm_sysfb_device(dev);
-	struct iosys_map dst = sysfb->fb_addr;
 	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state, plane);
-	void __iomem *dst_vmap = dst.vaddr_iomem; /* TODO: Use mapping abstraction */
 	unsigned int dst_pitch = sysfb->fb_pitch;
 	const struct drm_format_info *dst_format = sysfb->fb_format;
 	struct drm_rect dst_clip;
-	unsigned long lines, linepixels, i;
+	unsigned long lines, linepixels, i, offset;
 	int idx;
 
 	drm_rect_init(&dst_clip,
@@ -395,11 +393,10 @@ void drm_sysfb_plane_helper_atomic_disable(struct drm_plane *plane,
 		return;
 
 	/* Clear buffer to black if disabled */
-	dst_vmap += drm_fb_clip_offset(dst_pitch, dst_format, &dst_clip);
-	for (i = 0; i < lines; ++i) {
-		memset_io(dst_vmap, 0, linepixels * dst_format->cpp[0]);
-		dst_vmap += dst_pitch;
-	}
+	offset = drm_fb_clip_offset(dst_pitch, dst_format, &dst_clip);
+	for (i = 0; i < lines; ++i)
+		iosys_map_memset(&sysfb->fb_addr, offset + dst_pitch * i, 0,
+				 linepixels * dst_format->cpp[0]);
 
 	drm_dev_exit(idx);
 }
