@@ -11,8 +11,6 @@
 int hfi2_alloc_ucontext(struct ib_ucontext *ucontext, struct ib_udata *udata);
 void hfi2_dealloc_ucontext(struct ib_ucontext *ucontext);
 int hfi2_rdma_mmap(struct ib_ucontext *ucontext, struct vm_area_struct *vma);
-ssize_t hfi2_uverbs_write_iter(struct ib_ucontext *ucontext,
-			       struct iov_iter *from);
 
 extern const struct uapi_definition hfi2_ib_defs[];
 
