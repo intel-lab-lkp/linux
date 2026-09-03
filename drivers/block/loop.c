@@ -67,6 +67,10 @@ struct loop_device {
 	struct list_head        rootcg_cmd_list;
 	struct list_head        idle_worker_list;
 	struct rb_root          worker_tree;
+	struct work_struct      clear_limits_work;
+	atomic_t		clear_limits_mode;
+	atomic_t		rebind_gen;
+	atomic_t		clear_limits_gen;
 	struct timer_list       timer;
 	bool			sysfs_inited;
 
@@ -222,26 +226,44 @@ static void loop_set_size(struct loop_device *lo, loff_t size)
 		kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
 }
 
-static void loop_clear_limits(struct loop_device *lo, int mode)
+static void loop_clear_limits_workfn(struct work_struct *work)
 {
+	struct loop_device *lo =
+		container_of(work, struct loop_device, clear_limits_work);
 	struct queue_limits lim = queue_limits_start_update(lo->lo_queue);
-
-	if (mode & FALLOC_FL_ZERO_RANGE)
-		lim.max_write_zeroes_sectors = 0;
-
-	if (mode & FALLOC_FL_PUNCH_HOLE) {
-		lim.max_hw_discard_sectors = 0;
-		lim.discard_granularity = 0;
-	}
+	unsigned int memflags;
+	int mode = 0;
 
 	/*
-	 * XXX: this updates the queue limits without freezing the queue, which
-	 * is against the locking protocol and dangerous.  But we can't just
-	 * freeze the queue as we're inside the ->queue_rq method here.  So this
-	 * should move out into a workqueue unless we get the file operations to
-	 * advertise if they support specific fallocate operations.
+	 * Commit the unmodified limits if the device was rebound since
+	 * the work item was scheduled.  The freeze excludes a rebind
+	 * through loop_change_fd(), which assigns the new backing file
+	 * under the freeze; the other rebinding paths, loop_configure()
+	 * and __loop_clr_fd(), do not freeze the queue, but they bump
+	 * rebind_gen and reset clear_limits_mode themselves, so the
+	 * generation check and the atomic_xchg() below cover them.
 	 */
+	memflags = blk_mq_freeze_queue(lo->lo_queue);
+	if (atomic_read(&lo->clear_limits_gen) == atomic_read(&lo->rebind_gen)) {
+		mode = atomic_xchg(&lo->clear_limits_mode, 0);
+
+		if (mode & FALLOC_FL_ZERO_RANGE)
+			lim.max_write_zeroes_sectors = 0;
+
+		if (mode & FALLOC_FL_PUNCH_HOLE) {
+			lim.max_hw_discard_sectors = 0;
+			lim.discard_granularity = 0;
+		}
+	}
 	queue_limits_commit_update(lo->lo_queue, &lim);
+	blk_mq_unfreeze_queue(lo->lo_queue, memflags);
+}
+
+static void loop_clear_limits(struct loop_device *lo, int mode)
+{
+	atomic_set(&lo->clear_limits_gen, atomic_read(&lo->rebind_gen));
+	atomic_or(mode, &lo->clear_limits_mode);
+	schedule_work(&lo->clear_limits_work);
 }
 
 static int lo_fallocate(struct loop_device *lo, struct request *rq, loff_t pos,
@@ -518,6 +540,8 @@ static int loop_validate_file(struct file *file, struct block_device *bdev)
 static void loop_assign_backing_file(struct loop_device *lo, struct file *file)
 {
 	lo->lo_backing_file = file;
+	atomic_inc(&lo->rebind_gen);
+	atomic_set(&lo->clear_limits_mode, 0);
 	lo->old_gfp_mask = mapping_gfp_mask(file->f_mapping);
 	mapping_set_gfp_mask(file->f_mapping,
 			lo->old_gfp_mask & ~(__GFP_IO | __GFP_FS));
@@ -1146,6 +1170,12 @@ static void __loop_clr_fd(struct loop_device *lo)
 	spin_lock_irq(&lo->lo_lock);
 	filp = lo->lo_backing_file;
 	lo->lo_backing_file = NULL;
+	/*
+	 * Invalidate any pending clear that was scheduled against the old
+	 * backing file, like loop_assign_backing_file() does on rebind.
+	 */
+	atomic_inc(&lo->rebind_gen);
+	atomic_set(&lo->clear_limits_mode, 0);
 	spin_unlock_irq(&lo->lo_lock);
 
 	lo->lo_device = NULL;
@@ -1783,6 +1813,7 @@ static void lo_free_disk(struct gendisk *disk)
 		destroy_workqueue(lo->workqueue);
 	loop_free_idle_workers(lo, true);
 	timer_shutdown_sync(&lo->timer);
+	cancel_work_sync(&lo->clear_limits_work);
 	mutex_destroy(&lo->lo_mutex);
 	kfree(lo);
 }
@@ -2102,6 +2133,7 @@ static int loop_add(int i)
 	spin_lock_init(&lo->lo_lock);
 	spin_lock_init(&lo->lo_work_lock);
 	INIT_WORK(&lo->rootcg_work, loop_rootcg_workfn);
+	INIT_WORK(&lo->clear_limits_work, loop_clear_limits_workfn);
 	INIT_LIST_HEAD(&lo->rootcg_cmd_list);
 	disk->major		= LOOP_MAJOR;
 	disk->first_minor	= i << part_shift;
@@ -2140,6 +2172,10 @@ out:
 
 static void loop_remove(struct loop_device *lo)
 {
+	/* Cancel early: the queue may be in RCU-delayed freeing
+	 * by the time lo_free_disk() runs. */
+	cancel_work_sync(&lo->clear_limits_work);
+
 	/* Make this loop device unreachable from pathname. */
 	del_gendisk(lo->lo_disk);
 	blk_mq_free_tag_set(&lo->tag_set);
