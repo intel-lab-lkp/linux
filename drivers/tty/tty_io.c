@@ -2429,6 +2429,7 @@ static int tiocgetd(struct tty_struct *tty, int __user *p)
 
 /**
  * send_break - performed time break
+ * @file: file object
  * @tty: device to break on
  * @duration: timeout in mS
  *
@@ -2438,12 +2439,15 @@ static int tiocgetd(struct tty_struct *tty, int __user *p)
  * Locking:
  *	@tty->atomic_write_lock serializes
  */
-static int send_break(struct tty_struct *tty, unsigned int duration)
+static int send_break(struct file *file, struct tty_struct *tty, unsigned int duration)
 {
 	int retval;
 
 	if (tty->ops->break_ctl == NULL)
 		return 0;
+
+	if (tty_hung_up_p(file))
+		return -EIO;
 
 	if (tty->driver->flags & TTY_DRIVER_HARDWARE_BREAK)
 		return tty->ops->break_ctl(tty, duration);
@@ -2455,7 +2459,10 @@ static int send_break(struct tty_struct *tty, unsigned int duration)
 	retval = tty->ops->break_ctl(tty, -1);
 	if (!retval) {
 		msleep_interruptible(duration);
-		retval = tty->ops->break_ctl(tty, 0);
+		if (tty_hung_up_p(file))
+			retval = -EIO;
+		else
+			retval = tty->ops->break_ctl(tty, 0);
 	} else if (retval == -EOPNOTSUPP) {
 		/* some drivers can tell only dynamically */
 		retval = 0;
@@ -2714,10 +2721,14 @@ long tty_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	 * Break handling
 	 */
 	case TIOCSBRK:	/* Turn break on, unconditionally */
+		if (tty_hung_up_p(file))
+			return -EIO;
 		if (tty->ops->break_ctl)
 			return tty->ops->break_ctl(tty, -1);
 		return 0;
 	case TIOCCBRK:	/* Turn break off, unconditionally */
+		if (tty_hung_up_p(file))
+			return -EIO;
 		if (tty->ops->break_ctl)
 			return tty->ops->break_ctl(tty, 0);
 		return 0;
@@ -2727,10 +2738,10 @@ long tty_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		 * This is used by the tcdrain() termios function.
 		 */
 		if (!arg)
-			return send_break(tty, 250);
+			return send_break(file, tty, 250);
 		return 0;
 	case TCSBRKP:	/* support for POSIX tcsendbreak() */
-		return send_break(tty, arg ? arg*100 : 250);
+		return send_break(file, tty, arg ? arg * 100 : 250);
 
 	case TIOCMGET:
 		return tty_tiocmget(tty, p);
