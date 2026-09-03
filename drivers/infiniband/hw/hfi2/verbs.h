@@ -35,12 +35,6 @@ struct hfi2_packet;
 
 #define HFI2_MAX_RDMA_ATOMIC 16
 
-/*
- * Increment this value if any changes that break userspace ABI
- * compatibility are made.
- */
-#define HFI2_UVERBS_ABI_VERSION 2
-
 /* IB Performance Manager status values */
 #define IB_PMA_SAMPLE_STATUS_DONE 0x00
 #define IB_PMA_SAMPLE_STATUS_STARTED 0x01
