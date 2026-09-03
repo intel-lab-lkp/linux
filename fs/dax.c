@@ -469,8 +469,6 @@ static void dax_folio_init(void *entry)
 
 	if (order > 0) {
 		prep_compound_page(&folio->page, order);
-		if (order > 1)
-			INIT_LIST_HEAD(&folio->_deferred_list);
 		WARN_ON_ONCE(folio_ref_count(folio));
 	}
 }
