@@ -467,6 +467,44 @@ static int ntfs_clear_volume_dirty_if_no_errors(struct ntfs_volume *vol)
 	return ntfs_write_volume_flags(vol, 0, VOLUME_IS_DIRTY, true);
 }
 
+/*
+ * ntfs_mark_volume_dirty_with_error - record an error and mark volume dirty
+ * @vol:	ntfs volume on which an error has been recorded
+ *
+ * To be called when runtime metadata corruption is detected so that chkdsk
+ * runs on the next mount.  NVolSetErrors() is called before the dirty bit
+ * is written, and the mutex acquire/release in ntfs_write_volume_flags()
+ * provides the ordering: a concurrent ntfs_clear_volume_dirty_if_no_errors()
+ * can only run under the lock after the error flag is set and will
+ * therefore leave the dirty bit alone.
+ *
+ * Only for runtime error paths that can run concurrently with sync and
+ * hold no mrec_lock.  Do not call while holding the mrec_lock of the
+ * $Volume inode itself (the ntfs_attr_lookup() failure paths and the mft
+ * record writeback paths, which may hold it).  Mount and remount paths
+ * are serialized by sb->s_umount and cannot race sync; error paths that
+ * run before $Volume is loaded, that may run with a read-only opened
+ * bdev, or on a hibernated volume, which we must not write to at all,
+ * keep calling NVolSetErrors() directly.
+ *
+ * Return 0 on success and -errno on error.
+ */
+int ntfs_mark_volume_dirty_with_error(struct ntfs_volume *vol)
+{
+	/*
+	 * vol_ino is NULL while the volume is still being mounted.  This is a
+	 * runtime-only helper and no runtime caller can see that state, but if
+	 * one ever does, there is nothing on disk to update yet, so do nothing
+	 * rather than dereference a NULL inode.  Mount-time error paths record
+	 * the error flag with NVolSetErrors() directly instead.
+	 */
+	if (!vol->vol_ino)
+		return 0;
+
+	NVolSetErrors(vol);
+	return ntfs_set_volume_flags(vol, VOLUME_IS_DIRTY);
+}
+
 int ntfs_write_volume_label(struct ntfs_volume *vol, char *label)
 {
 	struct ntfs_inode *vol_ni = NTFS_I(vol->vol_ino);
