@@ -3768,6 +3768,14 @@ int pci_enable_atomic_ops_to_root(struct pci_dev *dev, u32 cap_mask)
 		return -EINVAL;
 	}
 
+	/*
+	 * Some hypervisors already set AtomicOp Requester Enable.  If it
+	 * is already set, there is nothing more to do.
+	 */
+	pcie_capability_read_dword(dev, PCI_EXP_DEVCTL2, &ctl2);
+	if (ctl2 & PCI_EXP_DEVCTL2_ATOMIC_REQ)
+		return 0;
+
 	root = pcie_find_root_port(dev);
 	if (!root)
 		return -EINVAL;
