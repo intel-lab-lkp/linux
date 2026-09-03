@@ -45,6 +45,9 @@
 #define SPI_NOR_SRST_SLEEP_MIN 200
 #define SPI_NOR_SRST_SLEEP_MAX 400
 
+static void spi_nor_unlock_and_unprep_pe(struct spi_nor *nor, loff_t start, size_t len);
+static void spi_nor_unlock_and_unprep_rd(struct spi_nor *nor, loff_t start, size_t len);
+
 /**
  * spi_nor_get_cmd_ext() - Get the command opcode extension based on the
  *			   extension type.
@@ -1345,8 +1348,15 @@ int spi_nor_prep_and_lock(struct spi_nor *nor)
 	else
 		ret = wait_event_killable(nor->rww.wait,
 					  spi_nor_rww_start_exclusive(nor));
+	if (ret)
+		return ret;
 
-	return ret;
+	if (nor->removed) {
+		spi_nor_unlock_and_unprep(nor);
+		return -ENODEV;
+	}
+
+	return 0;
 }
 
 void spi_nor_unlock_and_unprep(struct spi_nor *nor)
@@ -1416,8 +1426,15 @@ static int spi_nor_prep_and_lock_pe(struct spi_nor *nor, loff_t start, size_t le
 	else
 		ret = wait_event_killable(nor->rww.wait,
 					  spi_nor_rww_start_pe(nor, start, len));
+	if (ret)
+		return ret;
 
-	return ret;
+	if (nor->removed) {
+		spi_nor_unlock_and_unprep_pe(nor, start, len);
+		return -ENODEV;
+	}
+
+	return 0;
 }
 
 static void spi_nor_unlock_and_unprep_pe(struct spi_nor *nor, loff_t start, size_t len)
@@ -1489,8 +1506,15 @@ static int spi_nor_prep_and_lock_rd(struct spi_nor *nor, loff_t start, size_t le
 	else
 		ret = wait_event_killable(nor->rww.wait,
 					  spi_nor_rww_start_rd(nor, start, len));
+	if (ret)
+		return ret;
 
-	return ret;
+	if (nor->removed) {
+		spi_nor_unlock_and_unprep_rd(nor, start, len);
+		return -ENODEV;
+	}
+
+	return 0;
 }
 
 static void spi_nor_unlock_and_unprep_rd(struct spi_nor *nor, loff_t start, size_t len)
@@ -3186,7 +3210,12 @@ static int spi_nor_init_params(struct spi_nor *nor)
 {
 	int ret;
 
-	nor->params = devm_kzalloc(nor->dev, sizeof(*nor->params), GFP_KERNEL);
+	/* Keep params on the kref lifetime so it survives unbind (see probe). */
+	if (nor->refcounted)
+		nor->params = kzalloc(sizeof(*nor->params), GFP_KERNEL);
+	else
+		nor->params = devm_kzalloc(nor->dev, sizeof(*nor->params),
+					   GFP_KERNEL);
 	if (!nor->params)
 		return -ENOMEM;
 
@@ -3420,6 +3449,22 @@ static void spi_nor_resume(struct mtd_info *mtd)
 		dev_err(dev, "resume() failed\n");
 }
 
+static void spi_nor_release(struct kref *kref)
+{
+	struct spi_nor *nor = container_of(kref, struct spi_nor, refcount);
+
+	kfree(nor->bouncebuf);
+	kfree(nor->params);
+	kfree(nor);
+}
+
+static void spi_nor_release_device(void *data)
+{
+	struct spi_nor *nor = data;
+
+	kref_put(&nor->refcount, spi_nor_release);
+}
+
 static int spi_nor_get_device(struct mtd_info *mtd)
 {
 	struct mtd_info *master = mtd_get_master(mtd);
@@ -3434,6 +3479,12 @@ static int spi_nor_get_device(struct mtd_info *mtd)
 	if (!try_module_get(dev->driver->owner))
 		return -ENODEV;
 
+	if (nor->refcounted) {
+		/* Cache the module: the spimem/controller chain may be freed by put time. */
+		nor->controller_module = dev->driver->owner;
+		kref_get(&nor->refcount);
+	}
+
 	return 0;
 }
 
@@ -3442,6 +3493,14 @@ static void spi_nor_put_device(struct mtd_info *mtd)
 	struct mtd_info *master = mtd_get_master(mtd);
 	struct spi_nor *nor = mtd_to_spi_nor(master);
 	struct device *dev;
+
+	if (nor->refcounted) {
+		module_put(nor->controller_module);
+
+		/* Must be last: this may free nor (and the embedded mtd). */
+		kref_put(&nor->refcount, spi_nor_release);
+		return;
+	}
 
 	if (nor->spimem)
 		dev = nor->spimem->spi->controller->dev.parent;
@@ -3655,8 +3714,11 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 	 * than 1KB) after spi_nor_scan() returns.
 	 */
 	nor->bouncebuf_size = PAGE_SIZE;
-	nor->bouncebuf = devm_kmalloc(dev, nor->bouncebuf_size,
-				      GFP_KERNEL);
+	if (nor->refcounted)
+		nor->bouncebuf = kmalloc(nor->bouncebuf_size, GFP_KERNEL);
+	else
+		nor->bouncebuf = devm_kmalloc(dev, nor->bouncebuf_size,
+					      GFP_KERNEL);
 	if (!nor->bouncebuf)
 		return -ENOMEM;
 
@@ -3788,9 +3850,20 @@ static int spi_nor_probe(struct spi_mem *spimem)
 	if (ret)
 		return ret;
 
-	nor = devm_kzalloc(dev, sizeof(*nor), GFP_KERNEL);
+	/*
+	 * An open /dev/mtdX handle can outlive unbind, so manage the spi_nor
+	 * with a kref and drop the probe-time reference from a devres callback.
+	 */
+	nor = kzalloc_obj(*nor, GFP_KERNEL);
 	if (!nor)
 		return -ENOMEM;
+
+	kref_init(&nor->refcount);
+	nor->refcounted = true;
+
+	ret = devm_add_action_or_reset(dev, spi_nor_release_device, nor);
+	if (ret)
+		return ret;
 
 	nor->spimem = spimem;
 	nor->dev = dev;
@@ -3830,9 +3903,8 @@ static int spi_nor_probe(struct spi_mem *spimem)
 	 */
 	if (nor->params->page_size > PAGE_SIZE) {
 		nor->bouncebuf_size = nor->params->page_size;
-		devm_kfree(dev, nor->bouncebuf);
-		nor->bouncebuf = devm_kmalloc(dev, nor->bouncebuf_size,
-					      GFP_KERNEL);
+		kfree(nor->bouncebuf);
+		nor->bouncebuf = kmalloc(nor->bouncebuf_size, GFP_KERNEL);
 		if (!nor->bouncebuf)
 			return -ENOMEM;
 	}
@@ -3852,6 +3924,25 @@ static int spi_nor_probe(struct spi_mem *spimem)
 static int spi_nor_remove(struct spi_mem *spimem)
 {
 	struct spi_nor *nor = spi_mem_get_drvdata(spimem);
+
+	/*
+	 * Drain in-flight operations and set nor->removed under the lock so
+	 * later ones fail with -ENODEV before touching SPI-core state (spimem,
+	 * dirmaps) freed after this returns. The wait is uninterruptible.
+	 */
+	if (!spi_nor_use_parallel_locking(nor))
+		mutex_lock(&nor->lock);
+	else
+		wait_event(nor->rww.wait, spi_nor_rww_start_exclusive(nor));
+
+	nor->removed = true;
+
+	if (!spi_nor_use_parallel_locking(nor)) {
+		mutex_unlock(&nor->lock);
+	} else {
+		spi_nor_rww_end_exclusive(nor);
+		wake_up(&nor->rww.wait);
+	}
 
 	spi_nor_restore(nor);
 

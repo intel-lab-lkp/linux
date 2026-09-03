@@ -7,6 +7,7 @@
 #define __LINUX_MTD_SPI_NOR_H
 
 #include <linux/bitops.h>
+#include <linux/kref.h>
 #include <linux/mtd/mtd.h>
 #include <linux/spi/spi-mem.h>
 
@@ -352,6 +353,18 @@ struct spi_nor_flash_parameter;
  * @rww.used_banks:	bitmap of the banks in use
  * @dev:		pointer to an SPI device or an SPI NOR controller device
  * @spimem:		pointer to the SPI memory device
+ * @refcount:		reference count keeping the kzalloc()'d spi_nor alive
+ *			past driver unbind until the last MTD user releases the
+ *			device. Only valid when @refcounted is set.
+ * @controller_module:	controller module pinned in spi_nor_get_device() so
+ *			spi_nor_put_device() need not walk the possibly freed
+ *			spimem/controller chain. Only valid when @refcounted is
+ *			set.
+ * @refcounted:		true when the spi_nor lifetime is kref-managed (the
+ *			spi-mem spi_nor_probe() path). Legacy controllers that
+ *			embed or devres-allocate spi_nor leave this clear.
+ * @removed:		set on unbind to make subsequent MTD operations fail
+ *			with -ENODEV instead of touching released resources.
  * @bouncebuf:		bounce buffer used when the buffer passed by the MTD
  *                      layer is not DMA-able
  * @bouncebuf_size:	size of the bounce buffer
@@ -393,6 +406,10 @@ struct spi_nor {
 	} rww;
 	struct device		*dev;
 	struct spi_mem		*spimem;
+	struct kref		refcount;
+	struct module		*controller_module;
+	bool			refcounted;
+	bool			removed;
 	u8			*bouncebuf;
 	size_t			bouncebuf_size;
 	u8			*id;
