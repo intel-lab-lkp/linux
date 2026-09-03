@@ -67,6 +67,7 @@ enum {
 	UDP_FLAGS_ACCEPT_FRAGLIST,
 	UDP_FLAGS_ACCEPT_L4,
 	UDP_FLAGS_ENCAP_ENABLED, /* This socket enabled encap */
+	UDP_FLAGS_ADDRFORM,      /* Block IPv6 receive during/after ADDRFORM */
 };
 
 /* per NUMA structure for lockless producer usage. */

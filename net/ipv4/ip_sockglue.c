@@ -533,9 +533,17 @@ int ip_recv_error(struct sock *sk, struct msghdr *msg, int len)
 	int copied;
 
 	err = -EAGAIN;
+again:
 	skb = sock_dequeue_err_skb(sk);
 	if (!skb)
 		goto out;
+	if (unlikely(sk->sk_type == SOCK_DGRAM &&
+		     sk->sk_protocol == IPPROTO_UDP &&
+		     udp_test_bit(ADDRFORM, sk) &&
+		     skb->protocol == htons(ETH_P_IPV6))) {
+		consume_skb(skb);
+		goto again;
+	}
 
 	copied = skb->len;
 	if (copied > len) {

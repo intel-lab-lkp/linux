@@ -822,6 +822,11 @@ static int udpv6_queue_rcv_one_skb(struct sock *sk, struct sk_buff *skb)
 	struct udp_sock *up = udp_sk(sk);
 	struct net *net = sock_net(sk);
 
+	if (unlikely(udp_test_bit(ADDRFORM, sk))) {
+		drop_reason = SKB_DROP_REASON_NO_SOCKET;
+		goto drop;
+	}
+
 	if (!xfrm6_policy_check(sk, XFRM_POLICY_IN, skb)) {
 		drop_reason = SKB_DROP_REASON_XFRM_POLICY;
 		goto drop;

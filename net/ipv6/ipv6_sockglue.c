@@ -373,6 +373,33 @@ sticky_done:
 	return err;
 }
 
+static bool udp6_addrform_queue_has_ipv6(struct sock *sk)
+{
+	struct sk_buff_head *reader_queue = &udp_sk(sk)->reader_queue;
+	struct sk_buff *skb;
+	bool found = false;
+
+	spin_lock_bh(&reader_queue->lock);
+	spin_lock(&sk->sk_receive_queue.lock);
+	skb_queue_walk(reader_queue, skb) {
+		if (skb->protocol == htons(ETH_P_IPV6)) {
+			found = true;
+			goto unlock;
+		}
+	}
+	skb_queue_walk(&sk->sk_receive_queue, skb) {
+		if (skb->protocol == htons(ETH_P_IPV6)) {
+			found = true;
+			break;
+		}
+	}
+unlock:
+	spin_unlock(&sk->sk_receive_queue.lock);
+	spin_unlock_bh(&reader_queue->lock);
+
+	return found;
+}
+
 int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
 		       sockptr_t optval, unsigned int optlen)
 {
@@ -585,6 +612,16 @@ int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
 			    !ipv6_addr_v4mapped(&sk->sk_v6_daddr)) {
 				retv = -EADDRNOTAVAIL;
 				break;
+			}
+
+			if (sk->sk_protocol == IPPROTO_UDP) {
+				udp_set_bit(ADDRFORM, sk);
+				synchronize_net();
+				if (udp6_addrform_queue_has_ipv6(sk)) {
+					udp_clear_bit(ADDRFORM, sk);
+					retv = -EBUSY;
+					break;
+				}
 			}
 
 			__ipv6_sock_mc_close(sk);
