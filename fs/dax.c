@@ -13,6 +13,7 @@
 #include <linux/fs.h>
 #include <linux/highmem.h>
 #include <linux/memcontrol.h>
+#include <linux/memremap.h>
 #include <linux/mm.h>
 #include <linux/mutex.h>
 #include <linux/sched.h>
@@ -1876,6 +1877,10 @@ static vm_fault_t dax_fault_iter(struct vm_fault *vmf,
 	err = dax_iomap_direct_access(iomap, pos, size, &kaddr, &pfn);
 	if (err)
 		return pmd ? VM_FAULT_FALLBACK : dax_fault_return(err);
+
+	err = vmemmap_materialize_page(pfn_to_page(pfn), pmd ? PMD_ORDER : 0);
+	if (err)
+		return dax_fault_return(err);
 
 	*entry = dax_insert_entry(xas, vmf, iter, *entry, pfn, entry_flags);
 
