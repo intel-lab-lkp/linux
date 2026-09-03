@@ -2575,11 +2575,18 @@ void mlx5e_accel_ipsec_fs_read_stats(struct mlx5e_priv *priv, void *ipsec_stats)
 	}
 }
 
+static bool accel_ipsec_should_block_tc(struct mlx5e_ipsec_sa_entry *sa_entry)
+{
+	return sa_entry->attrs.type == XFRM_DEV_OFFLOAD_PACKET ||
+		sa_entry->attrs.dir == XFRM_DEV_OFFLOAD_IN;
+}
+
 int mlx5e_accel_ipsec_fs_add_rule(struct mlx5e_ipsec_sa_entry *sa_entry)
 {
+	bool block_tc = accel_ipsec_should_block_tc(sa_entry);
 	int err;
 
-	if (sa_entry->attrs.type == XFRM_DEV_OFFLOAD_PACKET) {
+	if (block_tc) {
 		err = mlx5e_accel_block_tc_offload(sa_entry->ipsec->mdev);
 		if (err)
 			return err;
@@ -2596,7 +2603,7 @@ int mlx5e_accel_ipsec_fs_add_rule(struct mlx5e_ipsec_sa_entry *sa_entry)
 	return 0;
 
 err_out:
-	if (sa_entry->attrs.type == XFRM_DEV_OFFLOAD_PACKET)
+	if (block_tc)
 		mlx5e_accel_unblock_tc_offload(sa_entry->ipsec->mdev);
 	return err;
 }
@@ -2611,7 +2618,7 @@ void mlx5e_accel_ipsec_fs_del_rule(struct mlx5e_ipsec_sa_entry *sa_entry)
 	if (ipsec_rule->pkt_reformat)
 		mlx5_packet_reformat_dealloc(mdev, ipsec_rule->pkt_reformat);
 
-	if (sa_entry->attrs.type == XFRM_DEV_OFFLOAD_PACKET)
+	if (accel_ipsec_should_block_tc(sa_entry))
 		mlx5e_accel_unblock_tc_offload(mdev);
 
 	if (sa_entry->attrs.dir == XFRM_DEV_OFFLOAD_OUT) {
