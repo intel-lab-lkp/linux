@@ -46,110 +46,23 @@ EXPORT_SYMBOL(rtc_year_days);
  * rtc_time64_to_tm - converts time64_t to rtc_time.
  *
  * @time:	The number of seconds since 01-01-1970 00:00:00.
- *		Works for values since at least 1900
- * @tm:		Pointer to the struct rtc_time.
+ * @rtc_tm:	Pointer to the struct rtc_time.
  */
-void rtc_time64_to_tm(time64_t time, struct rtc_time *tm)
+noinline void rtc_time64_to_tm(time64_t time, struct rtc_time *rtc_tm)
 {
-	int secs;
+	struct tm tm;
 
-	u64 u64tmp;
-	u32 u32tmp, udays, century, day_of_century, year_of_century, year,
-		day_of_year, month, day;
-	bool is_Jan_or_Feb, is_leap_year;
+	time64_to_tm(time, 0, &tm);
 
-	/*
-	 * The time represented by `time` is given in seconds since 1970-01-01
-	 * (UTC). As the division done below might misbehave for negative
-	 * values, we convert it to seconds since 0000-03-01 and then assume it
-	 * will be non-negative.
-	 * Below we do 4 * udays + 3 which should fit into a 32 bit unsigned
-	 * variable. So the latest date this algorithm works for is 1073741823
-	 * days after 0000-03-01 which is in the year 2939805.
-	 */
-	time += (u64)719468 * 86400;
-
-	udays = div_s64_rem(time, 86400, &secs);
-
-	/*
-	 * day of the week, 0000-03-01 was a Wednesday (in the proleptic
-	 * Gregorian calendar)
-	 */
-	tm->tm_wday = (udays + 3) % 7;
-
-	/*
-	 * The following algorithm is, basically, Figure 12 of Neri
-	 * and Schneider [1]. In a few words: it works on the computational
-	 * (fictitious) calendar where the year starts in March, month = 2
-	 * (*), and finishes in February, month = 13. This calendar is
-	 * mathematically convenient because the day of the year does not
-	 * depend on whether the year is leap or not. For instance:
-	 *
-	 * March 1st		0-th day of the year;
-	 * ...
-	 * April 1st		31-st day of the year;
-	 * ...
-	 * January 1st		306-th day of the year; (Important!)
-	 * ...
-	 * February 28th	364-th day of the year;
-	 * February 29th	365-th day of the year (if it exists).
-	 *
-	 * After having worked out the date in the computational calendar
-	 * (using just arithmetics) it's easy to convert it to the
-	 * corresponding date in the Gregorian calendar.
-	 *
-	 * [1] Neri C, Schneider L. Euclidean affine functions and their
-	 *     application to calendar algorithms. Softw Pract Exper.
-	 *     2023;53(4):937-970. doi: 10.1002/spe.3172
-	 *     https://doi.org/10.1002/spe.3172
-	 *
-	 * (*) The numbering of months follows rtc_time more closely and
-	 * thus, is slightly different from [1].
-	 */
-
-	u32tmp		= 4 * udays + 3;
-	century		= u32tmp / 146097;
-	day_of_century	= u32tmp % 146097 / 4;
-
-	u32tmp		= 4 * day_of_century + 3;
-	u64tmp		= 2939745ULL * u32tmp;
-	year_of_century	= upper_32_bits(u64tmp);
-	day_of_year	= lower_32_bits(u64tmp) / 2939745 / 4;
-
-	year		= 100 * century + year_of_century;
-	is_leap_year	= year_of_century != 0 ?
-		year_of_century % 4 == 0 : century % 4 == 0;
-
-	u32tmp		= 2141 * day_of_year + 132377;
-	month		= u32tmp >> 16;
-	day		= ((u16) u32tmp) / 2141;
-
-	/*
-	 * Recall that January 01 is the 306-th day of the year in the
-	 * computational (not Gregorian) calendar.
-	 */
-	is_Jan_or_Feb	= day_of_year >= 306;
-
-	/* Converts to the Gregorian calendar. */
-	year		= year + is_Jan_or_Feb;
-	month		= is_Jan_or_Feb ? month - 12 : month;
-	day		= day + 1;
-
-	day_of_year	= is_Jan_or_Feb ?
-		day_of_year - 306 : day_of_year + 31 + 28 + is_leap_year;
-
-	/* Converts to rtc_time's format. */
-	tm->tm_year	= (int) (year - 1900);
-	tm->tm_mon	= (int) month;
-	tm->tm_mday	= (int) day;
-	tm->tm_yday	= (int) day_of_year + 1;
-
-	tm->tm_hour = secs / 3600;
-	secs -= tm->tm_hour * 3600;
-	tm->tm_min = secs / 60;
-	tm->tm_sec = secs - tm->tm_min * 60;
-
-	tm->tm_isdst = 0;
+	rtc_tm->tm_wday		= tm.tm_wday;
+	rtc_tm->tm_year		= tm.tm_year;
+	rtc_tm->tm_mon		= tm.tm_mon;
+	rtc_tm->tm_mday		= tm.tm_mday;
+	rtc_tm->tm_yday		= tm.tm_yday + 1;
+	rtc_tm->tm_hour		= tm.tm_hour;
+	rtc_tm->tm_min		= tm.tm_min;
+	rtc_tm->tm_sec		= tm.tm_sec;
+	rtc_tm->tm_isdst	= 0;
 }
 EXPORT_SYMBOL(rtc_time64_to_tm);
 
