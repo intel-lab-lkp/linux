@@ -105,8 +105,8 @@ void time64_to_tm(time64_t totalsecs, int offset, struct tm *result)
 	udays	= ((u64) days) + 2305843009213814918ULL;
 
 	u64tmp		= 4 * udays + 3;
-	century		= div64_u64_rem(u64tmp, 146097, &u64tmp);
-	day_of_century	= (u32) (u64tmp / 4);
+	century		= div_u64_rem(u64tmp, 146097, &u32tmp);
+	day_of_century	= u32tmp / 4;
 
 	u32tmp		= 4 * day_of_century + 3;
 	u64tmp		= 2939745ULL * u32tmp;
