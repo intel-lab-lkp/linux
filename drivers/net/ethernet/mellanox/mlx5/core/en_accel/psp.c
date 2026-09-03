@@ -92,6 +92,12 @@ struct mlx5e_psp_fs {
 	struct mlx5e_psp_rx_table rx;
 };
 
+static bool shampo_enabled(struct mlx5e_priv *priv)
+{
+	return priv->channels.params.packet_merge.type ==
+		MLX5E_PACKET_MERGE_SHAMPO;
+}
+
 /* PSP RX flow steering */
 static enum mlx5_traffic_types fs_psp2tt(enum accel_fs_psp_type i)
 {
@@ -767,6 +773,7 @@ static void accel_psp_fs_rx_destroy(struct mlx5e_psp_fs *fs)
 }
 
 static int accel_psp_fs_rx_create(struct mlx5e_psp_fs *fs,
+				  bool decap_enable,
 				  struct netlink_ext_ack *extack)
 {
 	struct mlx5_ttc_table *ttc = mlx5e_fs_get_ttc(fs->fs, false);
@@ -808,7 +815,7 @@ static int accel_psp_fs_rx_create(struct mlx5e_psp_fs *fs,
 		mlx5_ttc_fwd_dest(ttc, fs_psp2tt(i), &dest);
 	}
 
-	accel_psp_fs_rx_reconfigure(fs, false);
+	accel_psp_fs_rx_reconfigure(fs, decap_enable);
 
 	return 0;
 
@@ -1078,7 +1085,8 @@ static int accel_psp_fs_create(struct mlx5e_priv *priv,
 {
 	int err;
 
-	err = accel_psp_fs_rx_create(priv->psp->fs, extack);
+	err = accel_psp_fs_rx_create(priv->psp->fs, shampo_enabled(priv),
+				     extack);
 	if (err)
 		return err;
 
@@ -1354,4 +1362,15 @@ void mlx5e_psp_cleanup(struct mlx5e_priv *priv)
 	mlx5e_accel_psp_fs_cleanup(psp->fs);
 	priv->psp = NULL;
 	kfree(psp);
+}
+
+void mlx5e_psp_update_rx(struct mlx5e_priv *priv)
+{
+	struct mlx5e_psp *psp = priv->psp;
+
+	netdev_assert_locked(priv->netdev);
+	if (!psp || !psp->fs->check.ft)
+		return;
+
+	accel_psp_fs_rx_reconfigure(psp->fs, shampo_enabled(priv));
 }
