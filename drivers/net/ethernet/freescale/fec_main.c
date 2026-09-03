@@ -3337,8 +3337,7 @@ static int fec_enet_get_ts_info(struct net_device *ndev,
 					SOF_TIMESTAMPING_TX_HARDWARE |
 					SOF_TIMESTAMPING_RX_HARDWARE |
 					SOF_TIMESTAMPING_RAW_HARDWARE;
-		if (fep->ptp_clock)
-			info->phc_index = ptp_clock_index(fep->ptp_clock);
+		info->phc_index = ptp_clock_index_by_dev(&fep->pdev->dev);
 
 		info->tx_types = (1 << HWTSTAMP_TX_OFF) |
 				 (1 << HWTSTAMP_TX_ON);

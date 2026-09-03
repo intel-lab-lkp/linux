@@ -861,6 +861,8 @@ void fec_ptp_stop(struct platform_device *pdev)
 
 	cancel_delayed_work_sync(&fep->time_keep);
 	hrtimer_cancel(&fep->perout_timer);
-	if (fep->ptp_clock)
+	if (fep->ptp_clock) {
 		ptp_clock_unregister(fep->ptp_clock);
+		fep->ptp_clock = NULL;
+	}
 }
