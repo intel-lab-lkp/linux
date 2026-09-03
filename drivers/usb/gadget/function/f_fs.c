@@ -1078,11 +1078,12 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 		}
 		data_len = iov_iter_count(&io_data->data);
 		/*
-		 * Controller may require buffer size to be aligned to
-		 * maxpacketsize of an out endpoint.
+		 * To expose a stream like interface for read(), make sure
+		 * the enqueued read request is a multiple of the maxpacketsize
+		 * of an out endpoint.
 		 */
 		if (io_data->read)
-			data_len = usb_ep_align_maybe(gadget, ep->ep, data_len);
+			data_len = usb_ep_align(ep->ep, data_len);
 
 		io_data->use_sg = gadget->sg_supported && data_len > PAGE_SIZE;
 		spin_unlock_irq(&epfile->ffs->eps_lock);
