@@ -260,6 +260,20 @@ static int tca8418_configure(struct tca8418_keypad *keypad_data,
 	return error;
 }
 
+static void tca8418_disable_hw(void *data)
+{
+	struct tca8418_keypad *keypad_data = data;
+	int error;
+
+	error = tca84818_write_byte(keypad_data, REG_CFG, 0);
+	if (error)
+		dev_warn(&keypad_data->client->dev, "unable to disable interrupts: %d\n", error);
+
+	error = tca8418_write_byte(keypad_data, REG_INT_STAT, 0xff);
+	if (error)
+		dev_warn(&keypad_data->client->dev, "unable to clear interrupt status: %d\n", error);
+}
+
 static int tca8418_keypad_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -342,6 +356,10 @@ static int tca8418_keypad_probe(struct i2c_client *client)
 	/* Initialize the chip */
 	error = tca8418_configure(keypad_data, rows, cols);
 	if (error < 0)
+		return error;
+
+	error = devm_add_action_or_reset(dev, tca8418_diable_hw, keypad_data);
+	if (error)
 		return error;
 
 	error = input_register_device(input);
