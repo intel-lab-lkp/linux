@@ -25,7 +25,7 @@
 
 static unsigned int page_size;
 
-static int create_memfd_with_seals(off64_t size, bool hpage)
+static int create_memfd_with_seals(off_t size, bool hpage)
 {
 	int memfd, ret;
 	unsigned int flags = MFD_ALLOW_SEALING;
@@ -54,7 +54,7 @@ static int create_memfd_with_seals(off64_t size, bool hpage)
 	return memfd;
 }
 
-static int create_udmabuf_list(int devfd, int memfd, off64_t memfd_size)
+static int create_udmabuf_list(int devfd, int memfd, off_t memfd_size)
 {
 	struct udmabuf_create_list *list;
 	int ubuf_fd, i;
@@ -84,7 +84,7 @@ static int create_udmabuf_list(int devfd, int memfd, off64_t memfd_size)
 	return ubuf_fd;
 }
 
-static void write_to_memfd(void *addr, off64_t size, char chr)
+static void write_to_memfd(void *addr, off_t size, char chr)
 {
 	int i;
 
@@ -93,7 +93,7 @@ static void write_to_memfd(void *addr, off64_t size, char chr)
 	}
 }
 
-static void *mmap_fd(int fd, off64_t size)
+static void *mmap_fd(int fd, off_t size)
 {
 	void *addr;
 
@@ -106,9 +106,9 @@ static void *mmap_fd(int fd, off64_t size)
 	return addr;
 }
 
-static int compare_chunks(void *addr1, void *addr2, off64_t memfd_size)
+static int compare_chunks(void *addr1, void *addr2, off_t memfd_size)
 {
-	off64_t off;
+	off_t off;
 	int i = 0, j, k = 0, ret = 0;
 	char char1, char2;
 
@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
 {
 	struct udmabuf_create create;
 	int devfd, memfd, buf, ret;
-	off64_t size;
+	off_t size;
 	void *addr1, *addr2;
 
 	ksft_print_header();
