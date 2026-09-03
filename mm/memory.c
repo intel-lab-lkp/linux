@@ -3778,10 +3778,19 @@ static vm_fault_t fault_dirty_shared_page(struct vm_fault *vmf)
 	struct vm_area_struct *vma = vmf->vma;
 	struct address_space *mapping;
 	struct folio *folio = page_folio(vmf->page);
+	size_t off = folio_page_idx(folio, vmf->page) << PAGE_SHIFT;
 	bool dirtied;
 	bool page_mkwrite = vma->vm_ops && vma->vm_ops->page_mkwrite;
 
-	dirtied = folio_mark_dirty(folio);
+	/*
+	 * A PMD entry has one dirty bit for the whole folio, so there is no
+	 * finer information to pass on. A PTE-mapped folio only has the page
+	 * the fault was for dirtied so far.
+	 */
+	if (pmd_trans_huge(pmdp_get_lockless(vmf->pmd)))
+		dirtied = folio_mark_dirty(folio);
+	else
+		dirtied = folio_mark_dirty_range(folio, off, PAGE_SIZE);
 	VM_BUG_ON_FOLIO(folio_test_anon(folio), folio);
 	/*
 	 * Take a local copy of the address_space - folio.mapping may be zeroed
@@ -5625,6 +5634,31 @@ vm_fault_t do_set_pmd(struct vm_fault *vmf, struct folio *folio, struct page *pa
 }
 #endif
 
+/*
+ * May the whole batch be marked dirty?
+ *
+ * Only a shared mapping of a filesystem that tracks dirty state per block says
+ * no. There the page table dirty bits are the only record of which parts of a
+ * large folio were written through the mapping, so pages nobody has stored to
+ * have to stay clean and let the hardware set the bit on the first store.
+ *
+ * Everywhere else nothing ever reads those bits, and on hardware without a
+ * dirty bit leaving them clean costs a fault per page for nothing. That covers
+ * shmem, which has no dirty state below the folio.
+ */
+static bool can_dirty_whole_batch(struct vm_fault *vmf, unsigned int nr,
+				  bool prefault)
+{
+	struct vm_area_struct *vma = vmf->vma;
+
+	if (!(vmf->flags & FAULT_FLAG_WRITE) || prefault || nr == 1)
+		return true;
+	if (!(vma->vm_flags & VM_SHARED))
+		return true;
+
+	return !vma->vm_file->f_mapping->a_ops->dirty_folio_range;
+}
+
 /**
  * set_pte_range - Set a range of PTEs to point to pages in a folio.
  * @vmf: Fault description.
@@ -5639,6 +5673,7 @@ void set_pte_range(struct vm_fault *vmf, struct folio *folio,
 	struct vm_area_struct *vma = vmf->vma;
 	bool write = vmf->flags & FAULT_FLAG_WRITE;
 	bool prefault = !in_range(vmf->address, addr, nr * PAGE_SIZE);
+	bool dirty_batch = can_dirty_whole_batch(vmf, nr, prefault);
 	pte_t entry;
 
 	flush_icache_pages(vma, page, nr);
@@ -5649,10 +5684,13 @@ void set_pte_range(struct vm_fault *vmf, struct folio *folio,
 	else
 		entry = pte_sw_mkyoung(entry);
 
-	if (write)
-		entry = maybe_mkwrite(pte_mkdirty(entry), vma);
-	else if (pte_write(entry) && folio_test_dirty(folio))
+	if (write) {
+		if (dirty_batch)
+			entry = pte_mkdirty(entry);
+		entry = maybe_mkwrite(entry, vma);
+	} else if (pte_write(entry) && folio_test_dirty(folio)) {
 		entry = pte_mkdirty(entry);
+	}
 	if (unlikely(vmf_orig_pte_uffd_wp(vmf)))
 		entry = pte_mkuffd(entry);
 	/* copy-on-write page */
@@ -5664,6 +5702,18 @@ void set_pte_range(struct vm_fault *vmf, struct folio *folio,
 		folio_add_file_rmap_ptes(folio, page, nr, vma);
 	}
 	set_ptes(vma->vm_mm, addr, vmf->pte, entry, nr);
+
+	/*
+	 * The page the fault was for is about to be stored to, so dirty it
+	 * here rather than leave the store to a second page table walk, or to
+	 * a second fault where the dirty bit is maintained in software.
+	 */
+	if (!dirty_batch) {
+		pte_t *ptep = vmf->pte + ((vmf->address - addr) >> PAGE_SHIFT);
+
+		ptep_set_access_flags(vma, vmf->address, ptep,
+				      pte_mkdirty(ptep_get(ptep)), 1);
+	}
 
 	/* no need to invalidate: a not-present page won't be cached */
 	update_mmu_cache_range(vmf, vma, addr, vmf->pte, nr);
