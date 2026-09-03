@@ -69,11 +69,11 @@ static void time64_to_tm_test_date_range(struct kunit *test)
 	time64_t secs;
 	s64 days;
 
-	for (secs = -total_secs; secs <= total_secs; secs += 86400) {
+	for (secs = -total_secs, days = div_s64(secs, 86400);
+	     secs <= total_secs;
+	     secs += 86400, days++) {
 
 		time64_to_tm(secs, 0, &result);
-
-		days = div_s64(secs, 86400);
 
 		#define FAIL_MSG "%05ld/%02d/%02d (%2d) : %lld", \
 			year, month, mdday, yday, days
