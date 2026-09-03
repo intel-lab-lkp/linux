@@ -76,7 +76,7 @@ u8 *p54_find_ie(struct sk_buff *skb, u8 ie)
 	struct ieee80211_mgmt *mgmt = (void *)skb->data;
 	u8 *pos, *end;
 
-	if (skb->len <= sizeof(mgmt))
+	if (skb->len <= sizeof(*mgmt))
 		return NULL;
 
 	pos = (u8 *)mgmt->u.beacon.variable;
