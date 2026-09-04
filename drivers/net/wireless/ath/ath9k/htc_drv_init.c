@@ -273,6 +273,9 @@ static void ath9k_multi_regread(void *hw_priv, u32 *addr,
 	if (unlikely(ret)) {
 		ath_dbg(common, WMI,
 			"Multiple REGISTER READ FAILED (count: %d)\n", count);
+		/* Callers expect what a failed single read returns. */
+		memset(val, 0xff, sizeof(*val) * count);
+		return;
 	}
 
 	for (i = 0; i < count; i++) {
