@@ -8,6 +8,7 @@
 #include <linux/acpi_iort.h>
 #include <linux/cpuhotplug.h>
 #include <linux/idr.h>
+#include <linux/iopoll.h>
 #include <linux/irqdomain.h>
 #include <linux/slab.h>
 #include <linux/wordpart.h>
@@ -974,14 +975,16 @@ static void gicv5_cpu_disable_interrupts(void)
 {
 	u64 cr0;
 
-	cr0 = FIELD_PREP(ICC_CR0_EL1_EN, 0);
+	cr0 = read_sysreg_s(SYS_ICC_CR0_EL1);
+	cr0 &= ~ICC_CR0_EL1_EN_MASK;
 	write_sysreg_s(cr0, SYS_ICC_CR0_EL1);
 	isb();
 }
 
-static void gicv5_cpu_enable_interrupts(void)
+static int gicv5_cpu_enable_interrupts(void)
 {
 	u64 cr0, pcr;
+	int ret;
 
 	write_sysreg_s(0, SYS_ICC_PPI_ENABLER0_EL1);
 	write_sysreg_s(0, SYS_ICC_PPI_ENABLER1_EL1);
@@ -991,19 +994,41 @@ static void gicv5_cpu_enable_interrupts(void)
 	pcr = FIELD_PREP(ICC_PCR_EL1_PRIORITY, GICV5_IRQ_PRI_MI);
 	write_sysreg_s(pcr, SYS_ICC_PCR_EL1);
 
-	cr0 = FIELD_PREP(ICC_CR0_EL1_EN, 1);
+	cr0 = read_sysreg_s(SYS_ICC_CR0_EL1);
+	if (!(cr0 & ICC_CR0_EL1_LINK_MASK)) {
+		cr0 |= ICC_CR0_EL1_LINK_MASK;
+		write_sysreg_s(cr0, SYS_ICC_CR0_EL1);
+	}
+
+	ret = read_poll_timeout_atomic(read_sysreg_s, cr0,
+				       cr0 & ICC_CR0_EL1_LINK_IDLE_MASK,
+				       1, 10 * USEC_PER_MSEC, false,
+				       SYS_ICC_CR0_EL1);
+	if (ret) {
+		pr_err_ratelimited("CPU interface link timeout\n");
+		return ret;
+	}
+
+	cr0 = read_sysreg_s(SYS_ICC_CR0_EL1);
+	cr0 |= ICC_CR0_EL1_EN_MASK;
 	write_sysreg_s(cr0, SYS_ICC_CR0_EL1);
+
+	return 0;
 }
 
 static int base_ipi_virq;
 
 static int gicv5_starting_cpu(unsigned int cpu)
 {
+	int ret;
+
 	if (WARN(!gicv5_cpuif_has_gcie(),
 		 "GICv5 system components present but CPU does not have FEAT_GCIE"))
 		return -ENODEV;
 
-	gicv5_cpu_enable_interrupts();
+	ret = gicv5_cpu_enable_interrupts();
+	if (ret)
+		return ret;
 
 	return gicv5_irs_register_cpu(cpu);
 }
