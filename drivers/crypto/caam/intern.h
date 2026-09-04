@@ -178,24 +178,6 @@ static inline void caam_algapi_hash_exit(void)
 
 #endif /* CONFIG_CRYPTO_DEV_FSL_CAAM_AHASH_API */
 
-#ifdef CONFIG_CRYPTO_DEV_FSL_CAAM_PKC_API
-
-int caam_pkc_init(struct device *dev);
-void caam_pkc_exit(void);
-
-#else
-
-static inline int caam_pkc_init(struct device *dev)
-{
-	return 0;
-}
-
-static inline void caam_pkc_exit(void)
-{
-}
-
-#endif /* CONFIG_CRYPTO_DEV_FSL_CAAM_PKC_API */
-
 #ifdef CONFIG_CRYPTO_DEV_FSL_CAAM_RNG_API
 
 int caam_rng_init(struct device *dev);
