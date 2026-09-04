@@ -3626,7 +3626,13 @@ static int mptcp_disconnect(struct sock *sk, int flags)
 	WRITE_ONCE(msk->flags, 0);
 	spin_unlock_bh(&msk->fallback_lock);
 
-	msk->cb_flags = 0;
+	/* keep a pending join list flush: mptcp_destroy_common()
+	 * leaves the list to mptcp_release_cb(), the data lock
+	 * matches the flag setter in mptcp_finish_join()
+	 */
+	mptcp_data_lock(sk);
+	msk->cb_flags &= BIT(MPTCP_FLUSH_JOIN_LIST);
+	mptcp_data_unlock(sk);
 	msk->recovery = false;
 	WRITE_ONCE(msk->can_ack, false);
 	WRITE_ONCE(msk->fully_established, false);
