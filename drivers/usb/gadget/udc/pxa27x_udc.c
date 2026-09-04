@@ -2091,7 +2091,7 @@ recursion_detected:
  * @config: usb configuration
  *
  * Post the request to upper level.
- * Don't use any pxa specific harware configuration capabilities
+ * Don't use any pxa specific hardware configuration capabilities
  */
 static void pxa27x_change_configuration(struct pxa_udc *udc, int config)
 {
@@ -2121,7 +2121,7 @@ static void pxa27x_change_configuration(struct pxa_udc *udc, int config)
  * @alt: alternate setting number
  *
  * Post the request to upper level.
- * Don't use any pxa specific harware configuration capabilities
+ * Don't use any pxa specific hardware configuration capabilities
  */
 static void pxa27x_change_interface(struct pxa_udc *udc, int iface, int alt)
 {
