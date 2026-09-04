@@ -782,7 +782,7 @@ static int iwl_mvm_mac_ctxt_cmd_ibss(struct iwl_mvm *mvm,
 				       MAC_FILTER_IN_PROBE_REQUEST |
 				       MAC_FILTER_ACCEPT_GRP);
 
-	/* cmd.ibss.beacon_time/cmd.ibss.beacon_tsf are curently ignored */
+	/* cmd.ibss.beacon_time/cmd.ibss.beacon_tsf are currently ignored */
 	cmd.ibss.bi = cpu_to_le32(vif->bss_conf.beacon_int);
 
 	/* TODO: Assumes that the beacon id == mac context id */

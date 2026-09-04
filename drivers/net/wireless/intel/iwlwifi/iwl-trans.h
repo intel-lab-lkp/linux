@@ -628,7 +628,7 @@ struct iwl_pc_data {
  * @tcm_error_event_table: address(es) of TCM error table(s)
  * @rcm_error_event_table: address(es) of RCM error table(s)
  * @error_event_table_tlv_status: bitmap that indicates what error table
- *	pointers was recevied via TLV. uses enum &iwl_error_event_table_status
+ *	pointers was received via TLV. uses enum &iwl_error_event_table_status
  * @internal_ini_cfg: internal debug cfg state. Uses &enum iwl_ini_cfg_state
  * @external_ini_cfg: external debug cfg state. Uses &enum iwl_ini_cfg_state
  * @fw_mon_cfg: debug buffer allocation configuration

@@ -89,7 +89,7 @@ void iwl_mvm_protect_session(struct iwl_mvm *mvm,
  * This functions cancels the session protection which is an act of good
  * citizenship. If it is not needed any more it should be canceled because
  * the other bindings wait for the medium during that time.
- * This funtions doesn't sleep.
+ * This functions doesn't sleep.
  */
 void iwl_mvm_stop_session_protection(struct iwl_mvm *mvm,
 				      struct ieee80211_vif *vif);
