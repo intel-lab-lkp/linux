@@ -355,8 +355,8 @@ with the following files:
 	::
 
 	  # cat /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
-	  [mbm_event]
-	  default
+	  [default]
+	  mbm_event
 
 	"mbm_event":
 
@@ -377,20 +377,30 @@ with the following files:
 	will return 'Unassigned' when read until the user assigns one using
 	"mbm_L3_assignments".
 
-	The mode is beneficial for AMD platforms that support more CTRL_MON
-	and MON groups than available hardware counters. By default, this
-	feature is enabled on AMD platforms with the ABMC (Assignable Bandwidth
-	Monitoring Counters) capability, ensuring counters remain assigned even
-	when the corresponding RMID is not actively used by any processor.
+	The mode is beneficial for AMD platforms that support more CTRL_MON and MON
+	groups than available hardware counters. The mbm_event mode ensures counters
+	remain assigned even when the corresponding RMID is not actively monitored.
 
 	"default":
 
 	In default mode, resctrl assumes there is a hardware counter for each
-	event within every CTRL_MON and MON group. On AMD platforms, it is
-	recommended to use the mbm_event mode, if supported, to prevent reset of MBM
-	events between reads resulting from hardware re-allocating counters. This can
-	result in misleading values or display "Unavailable" if no counter is assigned
-	to the event.
+	event within every CTRL_MON and MON group. This mode is enabled by default.
+
+	Default mode has a long-standing limitation on AMD platforms that support
+	more CTRL_MON and MON groups than hardware counters. Hardware dynamically
+	shares a smaller pool of counters among RMIDs. The size of that pool is
+	not enumerated to software (unlike "num_mbm_cntrs" in mbm_event mode), and
+	"num_rmids" may be much larger. On current AMD platforms this pool can
+	provide more counters than mbm_event mode (for example 64, versus 32 ABMC
+	counters), so more groups can be monitored accurately than with mbm_event.
+	Typical usage with fewer groups keeps a counter attached and readings
+	remain accurate. Creating more groups than that pool (for example 64 or
+	more) can cause hardware to re-allocate counters
+	between reads. Bandwidth values may then be misleading, or reads may return
+	"Unavailable" if no counter is allocated to the event. There is no
+	user-visible indication when this begins. Users who need stable readings
+	for many groups should switch to mbm_event mode, if supported, and assign
+	counters to the groups of interest (rotating assignments as needed).
 
 	* To enable "mbm_event" counter assignment mode:
 	  ::
@@ -474,8 +484,8 @@ with the following files:
 
 	Determines if a counter will automatically be assigned to an RMID, MBM event
 	pair when its associated monitor group is created via mkdir. Enabled by default
-	on boot, also when switched from "default" mode to "mbm_event" counter assignment
-	mode. Users can disable this capability by writing to the interface.
+	when switched to "mbm_event" counter assignment mode. Users can disable this
+	capability by writing to the interface.
 
 	"0":
 		Auto assignment is disabled.
@@ -1792,31 +1802,40 @@ a. Check if MBM counter assignment mode is supported.
   # mount -t resctrl resctrl /sys/fs/resctrl/
 
   # cat /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
+  [default]
+  mbm_event
+
+The "mbm_event" and "default" modes are supported. The "default" mode
+is enabled by default.
+
+b. Enable "mbm_event" counter assignment mode.
+::
+
+  # echo "mbm_event" > /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
+  # cat /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
   [mbm_event]
   default
 
-The "mbm_event" mode is detected and enabled.
-
-b. Check how many assignable counters are supported.
+c. Check how many assignable counters are supported.
 ::
 
   # cat /sys/fs/resctrl/info/L3_MON/num_mbm_cntrs
   0=32;1=32
 
-c. Check how many assignable counters are available for assignment in each domain.
+d. Check how many assignable counters are available for assignment in each domain.
 ::
 
   # cat /sys/fs/resctrl/info/L3_MON/available_mbm_cntrs
   0=30;1=30
 
-d. To list the default group's assign states.
+e. To list the default group's assign states.
 ::
 
   # cat /sys/fs/resctrl/mbm_L3_assignments
   mbm_total_bytes:0=e;1=e
   mbm_local_bytes:0=e;1=e
 
-e.  To unassign the counter associated with the mbm_total_bytes event on domain 0.
+f.  To unassign the counter associated with the mbm_total_bytes event on domain 0.
 ::
 
   # echo "mbm_total_bytes:0=_" > /sys/fs/resctrl/mbm_L3_assignments
@@ -1824,7 +1843,7 @@ e.  To unassign the counter associated with the mbm_total_bytes event on domain 
   mbm_total_bytes:0=_;1=e
   mbm_local_bytes:0=e;1=e
 
-f. To unassign the counter associated with the mbm_total_bytes event on all domains.
+g. To unassign the counter associated with the mbm_total_bytes event on all domains.
 ::
 
   # echo "mbm_total_bytes:*=_" > /sys/fs/resctrl/mbm_L3_assignments
@@ -1832,7 +1851,7 @@ f. To unassign the counter associated with the mbm_total_bytes event on all doma
   mbm_total_bytes:0=_;1=_
   mbm_local_bytes:0=e;1=e
 
-g. To assign a counter associated with the mbm_total_bytes event on all domains in
+h. To assign a counter associated with the mbm_total_bytes event on all domains in
 exclusive mode.
 ::
 
@@ -1841,7 +1860,7 @@ exclusive mode.
   mbm_total_bytes:0=e;1=e
   mbm_local_bytes:0=e;1=e
 
-h. Read the events mbm_total_bytes and mbm_local_bytes of the default group. There is
+i. Read the events mbm_total_bytes and mbm_local_bytes of the default group. There is
 no change in reading the events with the assignment.
 ::
 
@@ -1854,7 +1873,7 @@ no change in reading the events with the assignment.
   # cat /sys/fs/resctrl/mon_data/mon_L3_01/mbm_local_bytes
   121212144
 
-i. Check the event configurations.
+j. Check the event configurations.
 ::
 
   # cat /sys/fs/resctrl/info/L3_MON/event_configs/mbm_total_bytes/event_filter
@@ -1864,7 +1883,7 @@ i. Check the event configurations.
   # cat /sys/fs/resctrl/info/L3_MON/event_configs/mbm_local_bytes/event_filter
   local_reads,local_non_temporal_writes,local_reads_slow_memory
 
-j. Change the event configuration for mbm_local_bytes.
+k. Change the event configuration for mbm_local_bytes.
 ::
 
   # echo "local_reads, local_non_temporal_writes, local_reads_slow_memory, remote_reads" >
@@ -1873,7 +1892,7 @@ j. Change the event configuration for mbm_local_bytes.
   # cat /sys/fs/resctrl/info/L3_MON/event_configs/mbm_local_bytes/event_filter
   local_reads,local_non_temporal_writes,local_reads_slow_memory,remote_reads
 
-k. Now read the local events again. The first read may come back with "Unavailable"
+l. Now read the local events again. The first read may come back with "Unavailable"
 status. The subsequent read of mbm_local_bytes will display the current value.
 ::
 
@@ -1886,9 +1905,9 @@ status. The subsequent read of mbm_local_bytes will display the current value.
   # cat /sys/fs/resctrl/mon_data/mon_L3_01/mbm_local_bytes
   1566565
 
-l. Users have the option to go back to 'default' mbm_assign_mode if required. This can be
-done using the following command. Note that switching the mbm_assign_mode may reset all
-the MBM counters (and thus all MBM events) of all the resctrl groups.
+m. Users have the option to switch back to 'default' mbm_assign_mode if required. This
+can be done using the following command. Note that switching the mbm_assign_mode may
+reset all the MBM counters (and thus all MBM events) of all the resctrl groups.
 ::
 
   # echo "default" > /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
@@ -1896,7 +1915,7 @@ the MBM counters (and thus all MBM events) of all the resctrl groups.
   mbm_event
   [default]
 
-m. Unmount the resctrl filesystem.
+n. Unmount the resctrl filesystem.
 ::
 
   # umount /sys/fs/resctrl/
