@@ -406,7 +406,7 @@ static int exc3000_probe(struct i2c_client *client)
 	 * ensures, that the device probe will not fail for temporary issues
 	 * on the bus.  This is not needed for the sysfs calls (userspace
 	 * will receive the error code and can start another query) and
-	 * cannot be done for touch events (but that only means loosing one
+	 * cannot be done for touch events (but that only means losing one
 	 * or two touch events anyways).
 	 */
 	for (retry = 0; retry < 3; retry++) {

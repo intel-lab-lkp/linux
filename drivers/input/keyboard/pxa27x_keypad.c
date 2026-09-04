@@ -522,7 +522,7 @@ static void pxa27x_keypad_config(struct pxa27x_keypad *keypad)
 		direct_key_num = keypad->direct_key_num;
 
 	/*
-	 * Direct keys usage may not start from KP_DKIN0, check the platfrom
+	 * Direct keys usage may not start from KP_DKIN0, check the platform
 	 * mask data to config the specific.
 	 */
 	if (!keypad->direct_key_mask)

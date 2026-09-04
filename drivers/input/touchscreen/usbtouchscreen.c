@@ -51,7 +51,7 @@ static bool hwcalib_xy;
 module_param(hwcalib_xy, bool, 0644);
 MODULE_PARM_DESC(hwcalib_xy, "If set hw-calibrated X/Y are used if available");
 
-/* device specifc data/functions */
+/* device specific data/functions */
 struct usbtouch_usb;
 struct usbtouch_device_info {
 	int min_xc, max_xc;

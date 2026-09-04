@@ -57,7 +57,7 @@
 
 /*
  * One hard to find application note states that X axis range is 0 to 576
- * and Y axis range is 0 to 384 for harware version 1.
+ * and Y axis range is 0 to 384 for hardware version 1.
  * Edge fuzz might be necessary because of bezel around the touchpad
  */
 #define ETP_EDGE_FUZZ_V1		32
