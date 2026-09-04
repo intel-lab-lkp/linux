@@ -4478,6 +4478,10 @@ static long kvm_vcpu_ioctl(struct file *filp,
 			if (r)
 				break;
 
+#ifdef CONFIG_HAVE_KVM_PV_STEAL_TIME
+			vcpu->last_steal = current->sched_info.run_delay;
+#endif
+
 			newpid = get_task_pid(current, PIDTYPE_PID);
 			write_lock(&vcpu->pid_lock);
 			vcpu->pid = newpid;
