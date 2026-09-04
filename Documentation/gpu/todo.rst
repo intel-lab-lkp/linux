@@ -975,6 +975,45 @@ Contact:
 
 Level: Beginner
 
+Detach the scheduler fence ops on signalling
+--------------------------------------------
+
+The dma-fence contract forbids touching driver-provided data - everything
+reachable through &dma_fence.ops - once a fence is signalled. dma_fence enforces
+that by detaching a fence's ops on signalling, but only for fences that carry
+neither a .release nor a .wait callback (see
+dma_fence_signal_timestamp_locked()).
+
+Both drm_sched fences implement .release, so their ops stay attached forever.
+That leaves the callbacks reachable on a long-signalled fence that userspace
+still holds through a sync_file or drm_syncobj, even after the scheduler is
+gone: get_timeline_name() used to dereference the freed &drm_sched_fence.sched
+(fixed by caching the name), and get_driver_name() can still return a string
+literal belonging to a module that has since been unloaded.
+
+Dropping the .release callbacks so that the ops are detached on signalling is
+the complete fix, and it is what the dma-fence rules ask for. It is not
+straightforward:
+
+Tasks:
+
+- Audit every to_drm_sched_fence() caller. Detaching the ops makes the helper
+  return NULL for a signalled fence, and callers such as
+  amdgpu_cs_p2_dependencies() and amdgpu_ctx_fence_time() dereference the result
+  unconditionally.
+- drm/imagination uses the ops pointer as an identity test in
+  pvr_queue_fence_is_native(); that needs a different mechanism.
+- Rework the reference handling. The scheduled and the finished fence share one
+  allocation, and the finished fence's .release currently drops the scheduled
+  fence's reference, so the callbacks cannot simply be deleted.
+
+Contact:
+
+- Philipp Stanner <phasta@kernel.org>
+- Christian König <christian.koenig@amd.com>
+
+Level: Advanced
+
 Outside DRM
 ===========
 
