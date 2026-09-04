@@ -2084,7 +2084,7 @@ static int sunxi_nand_hw_ecc_ctrl_init(struct nand_chip *nand,
 	if (nanddev->ecc.user_conf.flags & NAND_ECC_MAXIMIZE_STRENGTH) {
 		int bytes = mtd->oobsize;
 
-		ecc->size = 1024;
+		ecc->size = min_t(unsigned int, mtd->writesize, 1024);
 		nsectors = mtd->writesize / ecc->size;
 
 		if (!nfc->caps->reg_user_data_len) {
