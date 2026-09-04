@@ -82,6 +82,27 @@ static bool kvm_pte_table(kvm_pte_t pte, s8 level)
 	return FIELD_GET(KVM_PTE_TYPE, pte) == KVM_PTE_TYPE_TABLE;
 }
 
+/*
+ * Check if BBML3 can be used for this PTE update.
+ * Fallback to software break-before-make for leaf-to-leaf changes.
+ */
+static bool kvm_pgtable_use_bbml3(const struct kvm_pgtable_visit_ctx *ctx,
+				  kvm_pte_t new)
+{
+	if (!system_supports_bbml3())
+		return false;
+
+	if (!kvm_pte_valid(ctx->old) || !kvm_pte_valid(new))
+		return false;
+
+	/* Block <-> Table is ok. */
+	if (kvm_pte_table(new, ctx->level) ||
+	    kvm_pte_table(ctx->old, ctx->level))
+		return true;
+
+	return false;
+}
+
 static kvm_pte_t *kvm_pte_follow(kvm_pte_t pte, struct kvm_pgtable_mm_ops *mm_ops)
 {
 	return mm_ops->phys_to_virt(kvm_pte_to_phys(pte));
@@ -835,24 +856,45 @@ static void stage2_clean_old_pte(const struct kvm_pgtable_visit_ctx *ctx,
 		mm_ops->put_page(ctx->ptep);
 }
 
+/*
+ * Don't use bbml3 for stage-2 if FWB or DIC are not supported
+ * as that means racing cores will issue duplicate CMOs.
+ */
+static bool stage2_use_bbml3(const struct kvm_pgtable_visit_ctx *ctx,
+			     kvm_pte_t new)
+{
+	if (!cpus_have_final_cap(ARM64_HAS_STAGE2_FWB) ||
+	    !cpus_have_final_cap(ARM64_HAS_CACHE_DIC))
+		return false;
+
+	return kvm_pgtable_use_bbml3(ctx, new);
+}
+
 /**
  * stage2_try_break_pte() - Invalidates a pte according to the
  *			    'break-before-make' requirements of the
- *			    architecture.
+ *			    architecture, if BBML3 is supported it
+ *			    will be used and this function won't
+ *			    break the PTE.
  *
  * @ctx: context of the visited pte.
  * @mmu: stage-2 mmu
+ * @new: New pte installed in make.
  *
- * Returns: true if the pte was successfully broken.
+ * Returns: true if the pte was successfully broken or BBML3 is used.
  *
  * If the removed pte was valid, performs the necessary serialization and TLB
  * invalidation for the old value. For counted ptes, drops the reference count
  * on the containing table page.
  */
 static bool stage2_try_break_pte(const struct kvm_pgtable_visit_ctx *ctx,
-				 struct kvm_s2_mmu *mmu)
+				 struct kvm_s2_mmu *mmu, kvm_pte_t new)
 {
 	kvm_pte_t locked_pte;
+
+	/* All handled in stage2_make_pte() */
+	if (stage2_use_bbml3(ctx, new))
+		return true;
 
 	if (stage2_pte_is_locked(ctx->old)) {
 		/*
@@ -873,16 +915,37 @@ static bool stage2_try_break_pte(const struct kvm_pgtable_visit_ctx *ctx,
 	return true;
 }
 
-static void stage2_make_pte(const struct kvm_pgtable_visit_ctx *ctx, kvm_pte_t new)
+static bool stage2_make_pte(const struct kvm_pgtable_visit_ctx *ctx, struct kvm_s2_mmu *mmu,
+			    kvm_pte_t new)
 {
 	struct kvm_pgtable_mm_ops *mm_ops = ctx->mm_ops;
-
-	WARN_ON(!stage2_pte_is_locked(*ctx->ptep));
 
 	if (stage2_pte_is_counted(new))
 		mm_ops->get_page(ctx->ptep);
 
+	if (stage2_use_bbml3(ctx, new)) {
+		if (!kvm_pgtable_walk_shared(ctx)) {
+			/*
+			 * stage2_try_set_pte() uses WRITE_ONCE for non-shared walks,
+			 * lacking release semantics used in the software BBM case.
+			 */
+			smp_wmb();
+		}
+
+		if (!stage2_try_set_pte(ctx, new)) {
+			/* Raced with another core. */
+			if (stage2_pte_is_counted(new))
+				mm_ops->put_page(ctx->ptep);
+			return false;
+		}
+
+		stage2_clean_old_pte(ctx, mmu);
+		return true;
+	}
+
+	WARN_ON(!stage2_pte_is_locked(*ctx->ptep));
 	smp_store_release(ctx->ptep, new);
+	return true;
 }
 
 static bool stage2_unmap_defer_tlb_flush(struct kvm_pgtable *pgt)
@@ -1001,7 +1064,7 @@ static int stage2_map_walker_try_leaf(const struct kvm_pgtable_visit_ctx *ctx,
 		return 0;
 	}
 
-	if (!stage2_try_break_pte(ctx, data->mmu))
+	if (!stage2_try_break_pte(ctx, data->mmu, new))
 		return -EAGAIN;
 
 	/* Perform CMOs before installation of the guest stage-2 PTE */
@@ -1014,7 +1077,8 @@ static int stage2_map_walker_try_leaf(const struct kvm_pgtable_visit_ctx *ctx,
 	    stage2_pte_executable(new))
 		mm_ops->icache_inval_pou(kvm_pte_follow(new, mm_ops), granule);
 
-	stage2_make_pte(ctx, new);
+	if (!stage2_make_pte(ctx, data->mmu, new))
+		return -EAGAIN;
 
 	return 0;
 }
@@ -1057,19 +1121,21 @@ static int stage2_map_walk_leaf(const struct kvm_pgtable_visit_ctx *ctx,
 	childp = mm_ops->zalloc_page(data->memcache);
 	if (!childp)
 		return -ENOMEM;
-
-	if (!stage2_try_break_pte(ctx, data->mmu)) {
-		mm_ops->put_page(childp);
-		return -EAGAIN;
-	}
-
 	/*
 	 * If we've run into an existing block mapping then replace it with
 	 * a table. Accesses beyond 'end' that fall within the new table
 	 * will be mapped lazily.
 	 */
 	new = kvm_init_table_pte(childp, mm_ops);
-	stage2_make_pte(ctx, new);
+	if (!stage2_try_break_pte(ctx, data->mmu, new)) {
+		mm_ops->put_page(childp);
+		return -EAGAIN;
+	}
+
+	if (!stage2_make_pte(ctx, data->mmu, new)) {
+		mm_ops->put_page(childp);
+		return -EAGAIN;
+	}
 
 	return 0;
 }
@@ -1549,18 +1615,21 @@ static int stage2_split_walker(const struct kvm_pgtable_visit_ctx *ctx,
 	if (IS_ERR(childp))
 		return PTR_ERR(childp);
 
-	if (!stage2_try_break_pte(ctx, mmu)) {
-		kvm_pgtable_stage2_free_unlinked(mm_ops, childp, level);
-		return -EAGAIN;
-	}
-
 	/*
 	 * Note, the contents of the page table are guaranteed to be made
 	 * visible before the new PTE is assigned because stage2_make_pte()
 	 * writes the PTE using smp_store_release().
 	 */
 	new = kvm_init_table_pte(childp, mm_ops);
-	stage2_make_pte(ctx, new);
+	if (!stage2_try_break_pte(ctx, mmu, new)) {
+		kvm_pgtable_stage2_free_unlinked(mm_ops, childp, level);
+		return -EAGAIN;
+	}
+
+	if (!stage2_make_pte(ctx, mmu, new)) {
+		kvm_pgtable_stage2_free_unlinked(mm_ops, childp, level);
+		return -EAGAIN;
+	}
 	return 0;
 }
 
