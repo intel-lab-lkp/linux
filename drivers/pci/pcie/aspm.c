@@ -18,6 +18,7 @@
 #include <linux/of.h>
 #include <linux/pci.h>
 #include <linux/pci_regs.h>
+#include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/pm.h>
 #include <linux/init.h>
@@ -245,6 +246,9 @@ struct pcie_link_state {
 	u32 clkpm_enabled:1;		/* Current Clock PM state */
 	u32 clkpm_default:1;		/* Default Clock PM state by BIOS */
 	u32 clkpm_disable:1;		/* Clock PM disabled */
+
+	/* Temporary ASPM Inhibit state */
+	unsigned int aspm_inhibit_cnt;	/* Reference count for ASPM inhibition */
 };
 
 static bool aspm_disabled, aspm_force;
@@ -1055,6 +1059,10 @@ static void pcie_config_aspm_link(struct pcie_link_state *link, u32 state)
 	/* Enable only the states that were not explicitly disabled */
 	state &= (link->aspm_capable & ~link->aspm_disable);
 
+	/* If ASPM is temporarily inhibited, force state to 0 (L0) */
+	if (link->aspm_inhibit_cnt)
+		state = 0;
+
 	/* Can't enable any substates if L1 is not enabled */
 	if (!(state & PCIE_LINK_STATE_L1))
 		state &= ~PCIE_LINK_STATE_L1SS;
@@ -1467,6 +1475,9 @@ static struct pcie_link_state *pcie_aspm_get_link(struct pci_dev *pdev)
 	if (!pci_is_pcie(pdev))
 		return NULL;
 
+	if (pcie_downstream_port(pdev))
+		return pdev->link_state;
+
 	bridge = pci_upstream_bridge(pdev);
 	if (!bridge || !pci_is_pcie(bridge))
 		return NULL;
@@ -1530,6 +1541,95 @@ static int __pci_disable_link_state(struct pci_dev *pdev, int state, bool locked
 
 	return 0;
 }
+
+/*
+ * __pci_aspm_inhibit() - Inhibit or restore ASPM L0s/L1 on a PCIe link.
+ *
+ * PCIe Base Specification Revision 7.0 sec 7.5.3.7 & Table 7-24 ("Link
+ * Control Register Description"):
+ * - To disable ASPM, software on Downstream Component (Endpoint / Upstream
+ *   Port) must disable ASPM prior to disabling ASPM on Upstream Component
+ *   (Root Port / Downstream Port).
+ * - To enable ASPM, software on Upstream Component (Root Port / Downstream
+ *   Port) must enable ASPM prior to enabling ASPM on Downstream Component
+ *   (Endpoint / Upstream Port).
+ */
+static int __pci_aspm_inhibit(struct pci_dev *pdev, bool inhibit, bool locked)
+{
+	struct pcie_link_state *link;
+	int ret = 0;
+
+	if (!pdev || !pci_is_pcie(pdev))
+		return -EINVAL;
+
+	pdev = pci_physfn(pdev);
+
+	if (!locked)
+		down_read(&pci_bus_sem);
+	mutex_lock(&aspm_lock);
+
+	link = pcie_aspm_get_link(pdev);
+	if (!link) {
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	if (aspm_disabled) {
+		pci_warn_once(pdev, "can't inhibit ASPM; OS doesn't have ASPM control\n");
+		ret = -EPERM;
+		goto unlock;
+	}
+
+	if (inhibit) {
+		link->aspm_inhibit_cnt++;
+		if (link->aspm_inhibit_cnt == 1) {
+			pcie_config_aspm_link(link, 0);
+			usleep_range(2000, 3000);
+		}
+	} else {
+		if (WARN_ON_ONCE(link->aspm_inhibit_cnt == 0)) {
+			ret = -EINVAL;
+			goto unlock;
+		}
+
+		link->aspm_inhibit_cnt--;
+		if (link->aspm_inhibit_cnt == 0)
+			pcie_config_aspm_link(link, policy_to_aspm_state(link));
+	}
+
+unlock:
+	mutex_unlock(&aspm_lock);
+	if (!locked)
+		up_read(&pci_bus_sem);
+
+	return ret;
+}
+
+int pci_aspm_inhibit_locked(struct pci_dev *pdev, bool inhibit)
+{
+	lockdep_assert_held_read(&pci_bus_sem);
+
+	return __pci_aspm_inhibit(pdev, inhibit, true);
+}
+EXPORT_SYMBOL_GPL(pci_aspm_inhibit_locked);
+
+/**
+ * pci_aspm_inhibit - Temporarily inhibit or restore ASPM on a PCIe link
+ * @pdev: PCI device on the link
+ * @inhibit: True to inhibit ASPM (transition to L0), false to release
+ *
+ * Increments/decrements a reference counter on the link's ASPM state. When
+ * @inhibit is true, forces the link to L0 on the first inhibitor. When @inhibit
+ * is false, restores the configured ASPM state once all inhibitors have
+ * released their claims.
+ *
+ * Return: 0 on success, or a negative errno.
+ */
+int pci_aspm_inhibit(struct pci_dev *pdev, bool inhibit)
+{
+	return __pci_aspm_inhibit(pdev, inhibit, false);
+}
+EXPORT_SYMBOL_GPL(pci_aspm_inhibit);
 
 int pci_disable_link_state_locked(struct pci_dev *pdev, int state)
 {
