@@ -397,6 +397,8 @@ void br_dev_delete(struct net_device *dev, struct list_head *head)
 	timer_shutdown_sync(&br->tcn_timer);
 	cancel_delayed_work_sync(&br->gc_work);
 
+	br_del_frame_all(br);
+
 	br_sysfs_delbr(br->dev);
 	unregister_netdevice_queue(br->dev, head);
 }

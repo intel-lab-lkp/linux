@@ -468,18 +468,48 @@ rx_handler_func_t *br_get_rx_handler(const struct net_device *dev)
 	return br_handle_frame;
 }
 
-void br_add_frame(struct net_bridge *br, struct br_frame_type *ft)
+int br_add_frame(struct net_bridge *br, __be16 type,
+		 int (*frame_handler)(struct net_bridge_port *port,
+				      struct sk_buff *skb))
 {
+	struct br_frame_type *ft;
+
+	hlist_for_each_entry(ft, &br->frame_type_list, list) {
+		if (ft->type == type)
+			return -EEXIST;
+	}
+
+	ft = kmalloc_obj(*ft);
+	if (!ft)
+		return -ENOMEM;
+
+	ft->type = type;
+	ft->frame_handler = frame_handler;
 	hlist_add_head_rcu(&ft->list, &br->frame_type_list);
+
+	return 0;
 }
 
-void br_del_frame(struct net_bridge *br, struct br_frame_type *ft)
+void br_del_frame(struct net_bridge *br, __be16 type)
 {
-	struct br_frame_type *tmp;
+	struct br_frame_type *ft;
 
-	hlist_for_each_entry(tmp, &br->frame_type_list, list)
-		if (ft == tmp) {
+	hlist_for_each_entry(ft, &br->frame_type_list, list) {
+		if (ft->type == type) {
 			hlist_del_rcu(&ft->list);
+			kfree_rcu(ft, rcu);
 			return;
 		}
+	}
+}
+
+void br_del_frame_all(struct net_bridge *br)
+{
+	struct br_frame_type *ft;
+	struct hlist_node *n;
+
+	hlist_for_each_entry_safe(ft, n, &br->frame_type_list, list) {
+		hlist_del_rcu(&ft->list);
+		kfree_rcu(ft, rcu);
+	}
 }

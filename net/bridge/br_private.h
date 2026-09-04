@@ -937,10 +937,14 @@ struct br_frame_type {
 	int			(*frame_handler)(struct net_bridge_port *port,
 						 struct sk_buff *skb);
 	struct hlist_node	list;
+	struct rcu_head		rcu;
 };
 
-void br_add_frame(struct net_bridge *br, struct br_frame_type *ft);
-void br_del_frame(struct net_bridge *br, struct br_frame_type *ft);
+int br_add_frame(struct net_bridge *br, __be16 type,
+		 int (*frame_handler)(struct net_bridge_port *port,
+				      struct sk_buff *skb));
+void br_del_frame(struct net_bridge *br, __be16 type);
+void br_del_frame_all(struct net_bridge *br);
 
 static inline bool br_rx_handler_check_rcu(const struct net_device *dev)
 {

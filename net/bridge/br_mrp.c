@@ -8,11 +8,6 @@ static const u8 mrp_in_test_dmac[ETH_ALEN] = { 0x1, 0x15, 0x4e, 0x0, 0x0, 0x3 };
 
 static int br_mrp_process(struct net_bridge_port *p, struct sk_buff *skb);
 
-static struct br_frame_type mrp_frame_type __read_mostly = {
-	.type = cpu_to_be16(ETH_P_MRP),
-	.frame_handler = br_mrp_process,
-};
-
 static bool br_mrp_is_ring_port(struct net_bridge_port *p_port,
 				struct net_bridge_port *s_port,
 				struct net_bridge_port *port)
@@ -486,7 +481,7 @@ static void br_mrp_del_impl(struct net_bridge *br, struct br_mrp *mrp)
 	kfree_rcu(mrp, rcu);
 
 	if (hlist_empty(&br->mrp_list))
-		br_del_frame(br, &mrp_frame_type);
+		br_del_frame(br, cpu_to_be16(ETH_P_MRP));
 }
 
 /* Adds a new MRP instance.
@@ -535,12 +530,15 @@ int br_mrp_add(struct net_bridge *br, struct br_mrp_instance *instance)
 	spin_unlock_bh(&br->lock);
 	rcu_assign_pointer(mrp->s_port, p);
 
-	if (hlist_empty(&br->mrp_list))
-		br_add_frame(br, &mrp_frame_type);
-
 	INIT_DELAYED_WORK(&mrp->test_work, br_mrp_test_work_expired);
 	INIT_DELAYED_WORK(&mrp->in_test_work, br_mrp_in_test_work_expired);
 	hlist_add_tail_rcu(&mrp->list, &br->mrp_list);
+
+	if (hlist_is_singular_node(&mrp->list, &br->mrp_list)) {
+		err = br_add_frame(br, cpu_to_be16(ETH_P_MRP), br_mrp_process);
+		if (err)
+			goto delete_mrp;
+	}
 
 	err = br_mrp_switchdev_add(br, mrp);
 	if (err)
