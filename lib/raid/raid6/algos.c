@@ -66,7 +66,7 @@ EXPORT_SYMBOL_GPL(raid6_gen_syndrome);
  * This is used to update parity in place using the following sequence:
  *
  * 1) call raid6_xor_syndrome(disk, start, stop, ...) for the existing data.
- * 2) update the the data in @ptrs[@start..@stop].
+ * 2) update the data in @ptrs[@start..@stop].
  * 3) call raid6_xor_syndrome(disk, start, stop, ...) for the new data.
  *
  * Data between @start and @stop that is not changed should be filled
