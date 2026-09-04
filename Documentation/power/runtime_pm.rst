@@ -11,31 +11,80 @@ Runtime Power Management Framework for I/O Devices
 1. Introduction
 ===============
 
-Support for runtime power management (runtime PM) of I/O devices is provided
-at the power management core (PM core) level by means of:
+Runtime power management (or runtime PM, sometimes shortened to RPM) allows
+individual I/O devices to transition between high and low-power states
+dynamically while the system is running, conserving power without waiting for a
+system-wide sleep state.
 
-* The power management workqueue pm_wq in which bus types and device drivers can
-  put their PM-related work items.  It is strongly recommended that pm_wq be
-  used for queuing all work items related to runtime PM, because this allows
-  them to be synchronized with system-wide power transitions (suspend to RAM,
-  hibernation and resume from system sleep states).  pm_wq is declared in
-  include/linux/pm_runtime.h and defined in kernel/power/main.c.
+Core Concepts
+-------------
 
-* A number of runtime PM fields in the 'power' member of 'struct device' (which
-  is of the type 'struct dev_pm_info', defined in include/linux/pm.h) that can
-  be used for synchronizing runtime PM operations with one another.
+Understanding runtime PM requires distinguishing between several pairs of
+complementary states that operate orthogonally: **active** / **suspended**,
+**enabled** / **disabled**, and **allowed** / **forbidden**.
+
+* **Active**: The PM core tracks a device's runtime status as either **active**
+  (the device is operational, having completed its resume callback) or
+  **suspended** (the device is idle or in a low-power state, having
+  completed its suspend callback), along with transitional **suspending**
+  and **resuming** phases. State transitions are primarily driven by
+  reference counting: drivers call pm_runtime_get() (or related variants)
+  when the hardware is needed (ensuring the device is active) and
+  pm_runtime_put() when work completes, allowing the PM core to initiate
+  suspension (immediately or after an autosuspend delay) once the usage
+  counter and any active child dependencies reach zero.
+
+* **Enabled**: Orthogonal to whether a device is currently active or suspended
+  is whether runtime PM is **enabled** or **disabled**. This is governed by an
+  internal disable counter (``disable_depth``). All devices are initialized
+  with runtime PM disabled (``disable_depth == 1``) and can also be disabled
+  during system sleep transitions or explicitly via pm_runtime_disable(). In
+  the disabled state, the PM core ignores idle and suspend requests and will
+  not execute runtime PM callbacks (->runtime_suspend(), ->runtime_resume(),
+  ->runtime_idle()). A driver activates runtime PM processing during
+  initialization or probe by calling pm_runtime_enable(), decrementing
+  ``disable_depth`` to zero.
+
+* **Allowed**: System policy and user space govern whether dynamic suspension
+  is permitted through the concepts of **allowed** and **forbidden**,
+  manipulated in-kernel via pm_runtime_allow() and pm_runtime_forbid() and
+  exposed to user space through the ``/sys/devices/.../power/control``
+  attribute. When runtime PM is forbidden (``control`` set to ``on``), the PM
+  core increments the device's usage counter, forcing the device to remain
+  active regardless of whether the driver is idle. When runtime PM is allowed
+  (``control`` set to ``auto``), this reference is dropped, permitting the PM
+  core to automatically suspend the device whenever its driver and child
+  devices are no longer using it.
+
+Notably, runtime PM also has a feature called "autosuspend." This is different
+than the ``control`` notion of "auto" (i.e., "allowed"). Autosuspend is
+described in more detail in Section 9.
+
+Implementation Structure
+------------------------
+
+Support for runtime power management is provided at the power management core
+(PM core) level by means of:
 
 * Three device runtime PM callbacks in 'struct dev_pm_ops' (defined in
-  include/linux/pm.h).
+  include/linux/pm.h). See Section 2.
+
+* A number of runtime PM fields in the 'power' member of 'struct device' that
+  can be used for synchronizing runtime PM operations with one another. These
+  are covered in Section 3.
 
 * A set of helper functions defined in drivers/base/power/runtime.c that can be
   used for carrying out runtime PM operations in such a way that the
-  synchronization between them is taken care of by the PM core.  Bus types and
-  device drivers are encouraged to use these functions.
+  synchronization between them is taken care of by the PM core. Bus types and
+  device drivers are encouraged to use these functions. They are covered in
+  Section 4.
 
-The runtime PM callbacks present in 'struct dev_pm_ops', the device runtime PM
-fields of 'struct dev_pm_info' and the core helper functions provided for
-runtime PM are described below.
+* The power management workqueue pm_wq in which bus types and device drivers can
+  put their PM-related work items. It is strongly recommended that pm_wq be
+  used for queuing all work items related to runtime PM, because this allows
+  them to be synchronized with system-wide power transitions (suspend to RAM,
+  hibernation and resume from system sleep states). pm_wq is declared in
+  include/linux/pm_runtime.h and defined in kernel/power/main.c.
 
 2. Device Runtime PM Callbacks
 ==============================
