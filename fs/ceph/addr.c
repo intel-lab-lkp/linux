@@ -2053,8 +2053,64 @@ out:
 	return copied;
 }
 
+static int ceph_read_folio(struct file *file, struct folio *folio)
+{
+	struct inode *inode = folio_inode(folio);
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_file_info *fi = file ? file->private_data : NULL;
+	int got = 0;
+	int ret;
+
+	/*
+	 * Existing Ceph read paths acquire caps before entering the page
+	 * cache.  Keep the legacy inline-data path unchanged.
+	 */
+	if (ceph_has_inline_data(ci) ||
+	    (fi && ceph_find_rw_context(fi)))
+		return netfs_read_folio(file, folio);
+
+	/*
+	 * Cap acquisition can process a pending truncate, which may lock and
+	 * remove this folio.  It must therefore happen without the folio lock.
+	 */
+	folio_unlock(folio);
+	ret = __ceph_get_caps(inode, fi, CEPH_CAP_FILE_RD,
+			      CEPH_CAP_FILE_CACHE, -1, &got);
+	if (ret < 0)
+		return ret;
+
+	if (!(got & CEPH_CAP_FILE_CACHE)) {
+		ret = -EACCES;
+		goto out;
+	}
+
+	folio_lock(folio);
+
+	/*
+	 * After re-locking, check if the folio still belongs to the
+	 * mapping...
+	 */
+	if (folio->mapping != inode->i_mapping) {
+		folio_unlock(folio);
+		ret = AOP_TRUNCATED_PAGE;
+		goto out;
+	}
+
+	/* .. or has been filled already meanwhile */
+	if (folio_test_uptodate(folio)) {
+		folio_unlock(folio);
+		ret = 0;
+		goto out;
+	}
+
+	ret = netfs_read_folio(file, folio);
+out:
+	ceph_put_cap_refs(ci, got);
+	return ret;
+}
+
 const struct address_space_operations ceph_aops = {
-	.read_folio = netfs_read_folio,
+	.read_folio = ceph_read_folio,
 	.readahead = netfs_readahead,
 	.writepages = ceph_writepages_start,
 	.write_begin = ceph_write_begin,
