@@ -75,7 +75,8 @@ endif
 cfgs-to-flags = $(patsubst %,--cfg='%',$1)
 
 core-cfgs := \
-    no_fp_fmt_parse
+    no_fp_fmt_parse \
+    no_io_statics
 
 core-edition := $(if $(call rustc-min-version,108700),2024,2021)
 
