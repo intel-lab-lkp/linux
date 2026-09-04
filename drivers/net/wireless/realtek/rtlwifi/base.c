@@ -2373,7 +2373,7 @@ u8 *rtl_find_ie(u8 *data, unsigned int len, u8 ie)
 
 	pos = (u8 *)mgmt->u.beacon.variable;
 	end = data + len;
-	while (pos < end) {
+	while (pos + 2 <= end) {
 		if (pos + 2 + pos[1] > end)
 			return NULL;
 
@@ -2597,16 +2597,16 @@ static bool rtl_find_221_ie(struct ieee80211_hw *hw, u8 *data,
 
 	pos = (u8 *)mgmt->u.beacon.variable;
 	end = data + len;
-	while (pos < end) {
-		if (pos[0] == 221) {
+	while (pos + 2 <= end) {
+		if (pos + 2 + pos[1] > end)
+			return false;
+
+		if (pos[0] == 221 && pos[1] >= 3) {
 			vendor_ie.length = pos[1];
 			vendor_ie.octet = &pos[2];
 			if (rtl_chk_vendor_ouisub(hw, vendor_ie))
 				return true;
 		}
-
-		if (pos + 2 + pos[1] > end)
-			return false;
 
 		pos += 2 + pos[1];
 	}
