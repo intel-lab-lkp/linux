@@ -3,6 +3,7 @@
 
 #include "idpf.h"
 #include "idpf_devids.h"
+#include "idpf_devlink.h"
 #include "idpf_lan_vf_regs.h"
 #include "idpf_virtchnl.h"
 
@@ -127,12 +128,15 @@ static void idpf_remove(struct pci_dev *pdev)
 
 	set_bit(IDPF_REMOVE_IN_PROG, adapter->flags);
 
+	idpf_devlink_unregister(adapter);
+
 	/* Wait until vc_event_task is done to consider if any hard reset is
 	 * in progress else we may go ahead and release the resources but the
 	 * thread doing the hard reset might continue the init path and
 	 * end up in bad state.
 	 */
 	cancel_delayed_work_sync(&adapter->vc_event_task);
+
 	if (adapter->num_vfs)
 		idpf_sriov_configure(pdev, 0);
 
@@ -184,7 +188,8 @@ destroy_wqs:
 	mutex_destroy(&adapter->vc_buf_lock);
 
 	idpf_decfg_device(adapter);
-	kfree(adapter);
+
+	idpf_devlink_free(adapter);
 }
 
 /**
@@ -263,7 +268,7 @@ static int idpf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct idpf_adapter *adapter;
 	int err;
 
-	adapter = kzalloc_obj(*adapter);
+	adapter = idpf_adapter_alloc(dev);
 	if (!adapter)
 		return -ENOMEM;
 
@@ -349,6 +354,8 @@ static int idpf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	INIT_DELAYED_WORK(&adapter->stats_task, idpf_statistics_task);
 	INIT_DELAYED_WORK(&adapter->vc_event_task, idpf_vc_event_task);
 
+	idpf_devlink_register(adapter);
+
 	adapter->dev_ops.reg_ops.reset_reg_init(adapter);
 	set_bit(IDPF_HR_DRV_LOAD, adapter->flags);
 	queue_delayed_work(adapter->vc_event_wq, &adapter->vc_event_task,
@@ -367,7 +374,7 @@ err_serv_wq_alloc:
 err_init_wq:
 	idpf_decfg_device(adapter);
 err_free:
-	kfree(adapter);
+	idpf_devlink_free(adapter);
 	return err;
 }
 
