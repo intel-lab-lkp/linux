@@ -208,7 +208,7 @@ struct i915_gem_proto_context {
 	/** @legacy_rcs_sseu: Client-set SSEU parameters for the legacy RCS */
 	struct intel_sseu legacy_rcs_sseu;
 
-	/** @single_timeline: See See &i915_gem_context.syncobj */
+	/** @single_timeline: See &i915_gem_context.syncobj */
 	bool single_timeline;
 
 	/** @uses_protected_content: See &i915_gem_context.uses_protected_content */
