@@ -113,7 +113,7 @@ static DECLARE_WAIT_QUEUE_HEAD(jfs_commit_thread_wait);
 static int jfs_commit_thread_waking;
 
 /*
- * Retry logic exist outside these macros to protect from spurrious wakeups.
+ * Retry logic exist outside these macros to protect from spurious wakeups.
  */
 static inline void TXN_SLEEP_DROP_LOCK(wait_queue_head_t * event)
 {

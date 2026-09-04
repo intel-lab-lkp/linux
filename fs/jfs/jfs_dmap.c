@@ -1851,7 +1851,7 @@ static int dbFindCtl(struct bmap * bmp, int l2nb, int level, s64 * blkno)
  *		the dmaps themselves containing the desired contiguous free
  *		space or starting a contiguous free space of desired size
  *		that is made up of the blocks of one or more dmaps. these
- *		calls should not fail due to insufficent resources.
+ *		calls should not fail due to insufficient resources.
  *
  *		this routine is called in some cases where it is not known
  *		whether it will fail due to insufficient resources.  more

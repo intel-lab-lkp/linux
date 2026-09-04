@@ -259,7 +259,7 @@ int diSync(struct inode *ipimap)
  *
  * FUNCTION:	initialize an incore inode from disk.
  *
- *		on entry, the specifed incore inode should itself
+ *		on entry, the specified incore inode should itself
  *		specify the disk inode number corresponding to the
  *		incore inode (i.e. i_number should be initialized).
  *
@@ -560,7 +560,7 @@ void diFreeSpecial(struct inode *ip)
  * FUNCTION:	write the on-disk inode portion of the in-memory inode
  *		to its corresponding on-disk inode.
  *
- *		on entry, the specifed incore inode should itself
+ *		on entry, the specified incore inode should itself
  *		specify the disk inode number corresponding to the
  *		incore inode (i.e. i_number should be initialized).
  *
