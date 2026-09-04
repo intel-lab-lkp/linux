@@ -30,6 +30,15 @@ struct netlink_skb_parms {
 	struct sock		*sk;
 	bool			nsid_is_set;
 	int			nsid;
+	/*
+	 * Sender's struct pid.  netlink_sendmsg() stores a borrowed pointer
+	 * taken from its own scm_cookie.  netlink_skb_set_owner_r() takes a
+	 * reference when it takes ownership of the skb for a receiver, and
+	 * netlink_skb_destructor() drops that reference.  A clone starts out
+	 * borrowing again, because __skb_clone() clears both skb->sk and
+	 * skb->destructor.  NULL for a kernel generated skb.
+	 */
+	struct pid		*pid;
 };
 
 #define NETLINK_CB(skb)		(*(struct netlink_skb_parms*)&((skb)->cb))

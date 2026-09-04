@@ -379,13 +379,24 @@ static void netlink_skb_destructor(struct sk_buff *skb)
 
 		skb->head = NULL;
 	}
-	if (skb->sk != NULL)
+	if (skb->sk) {
+		/*
+		 * The reference is held for as long as skb->sk is set, taken
+		 * in netlink_skb_set_owner_r() and dropped here.  The pointer
+		 * is left in place: do_one_broadcast() orphans an skb one
+		 * listener owned and hands it to the next, which takes its
+		 * own reference, and the sender's scm_cookie keeps the pid
+		 * alive across the whole broadcast.
+		 */
+		put_pid(NETLINK_CB(skb).pid);
 		sock_rfree(skb);
+	}
 }
 
 static void netlink_skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 {
 	WARN_ON(skb->sk != NULL);
+	NETLINK_CB(skb).pid = get_pid(NETLINK_CB(skb).pid);
 	skb->sk = sk;
 	skb->destructor = netlink_skb_destructor;
 	sk_mem_charge(sk, skb->truesize);
@@ -1880,6 +1891,13 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	NETLINK_CB(skb).dst_group = dst_group;
 	NETLINK_CB(skb).creds	= scm.creds;
 	NETLINK_CB(skb).flags	= netlink_skb_flags;
+	/*
+	 * Borrowed here.  scm_destroy() below drops the scm_cookie's own
+	 * reference, and every delivery in between is synchronous, so the
+	 * pointer stays valid until netlink_skb_set_owner_r() takes a
+	 * reference of its own.
+	 */
+	NETLINK_CB(skb).pid	= scm.pid;
 
 	err = -EFAULT;
 	if (memcpy_from_msg(skb_put(skb, len), msg, len)) {
@@ -1971,7 +1989,15 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 		netlink_cmsg_listen_all_nsid(sk, msg, skb);
 
 	memset(&scm, 0, sizeof(scm));
-	scm.creds = *NETLINK_CREDS(skb);
+	/*
+	 * Render the sender's pid in the reader's pid namespace, the way
+	 * unix_skb_to_scm() does through scm_set_cred().  A NULL pid gives 0,
+	 * so a control block that lost its reference reports "unknown" rather
+	 * than the sender's own untranslated number.  scm_recv() below drops
+	 * the reference taken here on both of its paths.
+	 */
+	scm_set_cred(&scm, NETLINK_CB(skb).pid, NETLINK_CREDS(skb)->uid,
+		     NETLINK_CREDS(skb)->gid);
 	if (flags & MSG_TRUNC)
 		copied = data_skb->len;
 
