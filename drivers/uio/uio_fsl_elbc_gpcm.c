@@ -303,7 +303,7 @@ static int uio_fsl_elbc_gpcm_probe(struct platform_device *pdev)
 	char *uio_name = NULL;
 	struct resource *res;
 	void __iomem *base;
-	unsigned int irq;
+	int irq;
 	u32 reg_br_cur;
 	u32 reg_or_cur;
 	u32 reg_br_new;
