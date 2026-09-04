@@ -11,6 +11,7 @@
 #include <linux/bitfield.h>
 #include <linux/bitmap.h>
 #include <linux/cleanup.h>
+#include <linux/clk.h>
 #include <linux/completion.h>
 #include <linux/crc8.h>
 #include <linux/delay.h>
@@ -178,6 +179,8 @@ static const u32 ads112c14_pga_gains_x10[] = {
 	200, 320, 500, 640, 1000, 1280, 2000, 2560,	/* 8 - 15 */
 };
 
+#define ADS112C14_INTERNAL_CLK_Hz 4096000
+
 #define ADS112C14_I2C_CRC8_POLYNOMIAL 0x07
 DECLARE_CRC8_TABLE(ads112c14_crc8_table);
 
@@ -268,6 +271,7 @@ struct ads112c14_data {
 	struct iio_trigger *drdy_trig;
 	/* Synchronizes access to register value fields. */
 	struct mutex lock;
+	long fclk_Hz;
 	int drdy_irq;
 	struct completion drdy_completion;
 	bool continuous_mode;
@@ -1536,6 +1540,7 @@ static int ads112c14_probe(struct i2c_client *client)
 	const struct ads112c14_chip_info *info;
 	struct iio_dev *indio_dev;
 	struct ads112c14_data *data;
+	struct clk *clk;
 	bool need_avdd_ref, need_ext_ref;
 	u32 refp_uV = 0;
 	u32 refn_uV = 0;
@@ -1628,6 +1633,12 @@ static int ads112c14_probe(struct i2c_client *client)
 		return dev_err_probe(dev, -EINVAL,
 				     "external reference measurements require either refp-supply or ti,refp-refn-resistor-ohms property\n");
 
+	clk = devm_clk_get_optional_enabled(dev, NULL);
+	if (IS_ERR(clk))
+		return dev_err_probe(dev, PTR_ERR(clk), "failed to get clk\n");
+
+	data->fclk_Hz = clk ? clk_get_rate(clk) : ADS112C14_INTERNAL_CLK_Hz;
+
 	/* It takes some time for the internal reference to stabilize. */
 	fsleep(10 * USEC_PER_MSEC);
 
@@ -1698,6 +1709,10 @@ static int ads112c14_probe(struct i2c_client *client)
 			return dev_err_probe(dev, data->drdy_irq,
 					     "failed to get drdy interrupt\n");
 
+		if (clk)
+			return dev_err_probe(dev, -EINVAL,
+					     "cannot use both DRDY and CLK - they share the same pin\n");
+
 		/*
 		 * REVISIT: would probably need to implement a pin controller in
 		 * order to support open drain option here.
@@ -1733,6 +1748,20 @@ static int ads112c14_probe(struct i2c_client *client)
 		iio_trigger_set_drvdata(data->drdy_trig, indio_dev);
 
 		ret = devm_iio_trigger_register(dev, data->drdy_trig);
+		if (ret)
+			return ret;
+	}
+
+	if (clk) {
+		ret = regmap_update_bits(data->regmap, ADS112C14_REG_GPIO_CFG,
+					 ADS112C14_GPIO_CFG_GPIO3_CFG,
+					 FIELD_PREP(ADS112C14_GPIO_CFG_GPIO3_CFG,
+						    ADS112C14_GPIO_CFG_GPIO_CFG_INPUT));
+		if (ret)
+			return ret;
+
+		ret = regmap_set_bits(data->regmap, ADS112C14_REG_DEVICE_CFG,
+				      ADS112C14_DEVICE_CFG_CLK_SEL);
 		if (ret)
 			return ret;
 	}
