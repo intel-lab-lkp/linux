@@ -1302,7 +1302,6 @@ static const struct ip_set_type_variant mtype_variant = {
 	.head	= mtype_head,
 	.list	= mtype_list,
 	.uref	= mtype_uref,
-	.resize	= NULL,
 	.same_set = mtype_same_set,
 	.cancel_gc = mtype_cancel_gc,
 };

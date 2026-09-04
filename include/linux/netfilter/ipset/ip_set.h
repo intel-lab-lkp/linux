@@ -166,8 +166,6 @@ struct ip_set_type_variant {
 	/* Low level add/del/test functions */
 	ipset_adtfn adt[IPSET_ADT_MAX];
 
-	/* When adding entries and set is full, try to resize the set */
-	int (*resize)(struct ip_set *set, bool retried);
 	/* Destroy the set */
 	void (*destroy)(struct ip_set *set);
 	/* Flush the elements */
