@@ -35,7 +35,7 @@
 #include <asm/sfafsr.h>
 #include <asm/unistd.h>
 
-/* This section from from _start to sparc64_boot_end should fit into
+/* This section from _start to sparc64_boot_end should fit into
  * 0x0000000000404000 to 0x0000000000408000.
  */
 	.text
