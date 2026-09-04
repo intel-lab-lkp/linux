@@ -1049,7 +1049,7 @@ static int mwifiex_usb_aggr_tx_data(struct mwifiex_adapter *adapter, u8 ep,
 		} else {
 			if (port->tx_aggr.timer_cnxt.hold_tmo_msecs <
 			    MWIFIEX_USB_TX_AGGR_TMO_MAX) {
-				/* Dyanmic fit timeout */
+				/* Dynamic fit timeout */
 				timeout =
 				++port->tx_aggr.timer_cnxt.hold_tmo_msecs;
 				mod_timer(&port->tx_aggr.timer_cnxt.hold_timer,
