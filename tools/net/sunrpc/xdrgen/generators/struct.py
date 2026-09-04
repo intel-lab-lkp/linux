@@ -13,7 +13,7 @@ from xdr_ast import _XdrFixedLengthOpaque, _XdrVariableLengthOpaque
 from xdr_ast import _XdrFixedLengthArray, _XdrVariableLengthArray
 from xdr_ast import _XdrOptionalData, _XdrStruct, _XdrDeclaration
 from xdr_ast import public_apis, get_header_name
-from xdr_ast import pages_members, pages_member_maxsize
+from xdr_ast import pages_members, pages_member_maxsize, pages_member_is_decoded
 
 
 def emit_struct_declaration(environment: Environment, node: _XdrStruct) -> None:
@@ -24,9 +24,13 @@ def emit_struct_declaration(environment: Environment, node: _XdrStruct) -> None:
 
 
 def emit_struct_member_definition(
-    environment: Environment, field: _XdrDeclaration
+    environment: Environment, field: _XdrDeclaration, struct_name: str, peer: str
 ) -> None:
     """Emit a definition for one field in an XDR struct"""
+    if peer == "server" and pages_member_is_decoded(struct_name, field.name):
+        template = get_jinja2_template(environment, "definition", "pages_opaque")
+        print(template.render(name=field.name))
+        return
     if isinstance(field, _XdrBasic):
         template = get_jinja2_template(environment, "definition", field.template)
         print(
@@ -79,13 +83,15 @@ def emit_struct_member_definition(
         )
 
 
-def emit_struct_definition(environment: Environment, node: _XdrStruct) -> None:
+def emit_struct_definition(
+    environment: Environment, node: _XdrStruct, peer: str
+) -> None:
     """Emit one definition for an XDR struct type"""
     template = get_jinja2_template(environment, "definition", "open")
     print(template.render(name=node.name))
 
     for field in node.fields:
-        emit_struct_member_definition(environment, field)
+        emit_struct_member_definition(environment, field, node.name, peer)
 
     template = get_jinja2_template(environment, "definition", "close")
     print(template.render(name=node.name))
@@ -95,8 +101,18 @@ def emit_struct_member_decoder(
     environment: Environment,
     field: _XdrDeclaration,
     struct_name: str,
+    peer: str,
 ) -> None:
     """Emit a decoder for one field in an XDR struct"""
+    if peer == "server" and pages_member_is_decoded(struct_name, field.name):
+        template = get_jinja2_template(environment, "decoder", "pages_opaque")
+        print(
+            template.render(
+                name=field.name,
+                maxsize=pages_member_maxsize(field),
+            )
+        )
+        return
     if isinstance(field, _XdrBasic):
         template = get_jinja2_template(environment, "decoder", field.template)
         print(
@@ -161,13 +177,15 @@ def emit_struct_member_decoder(
         )
 
 
-def emit_struct_decoder(environment: Environment, node: _XdrStruct) -> None:
+def emit_struct_decoder(
+    environment: Environment, node: _XdrStruct, peer: str
+) -> None:
     """Emit one decoder function for an XDR struct type"""
     template = get_jinja2_template(environment, "decoder", "open")
     print(template.render(name=node.name))
 
     for field in node.fields:
-        emit_struct_member_decoder(environment, field, node.name)
+        emit_struct_member_decoder(environment, field, node.name, peer)
 
     template = get_jinja2_template(environment, "decoder", "close")
     print(template.render())
@@ -183,10 +201,13 @@ def emit_struct_member_encoder(
     if (struct_name, field.name) in pages_members:
         if peer != "server":
             raise NotImplementedError(
-                "pragma pages is server-side encode-only; "
+                "pragma pages is server-side only; "
                 + peer
                 + " generation is not yet supported"
             )
+        # Both representations carry the length field, which is all the
+        # pages encoder reads, so pages_member_is_decoded() does not
+        # gate this site.
         template = get_jinja2_template(environment, "encoder", "pages_opaque")
         print(
             template.render(
@@ -294,11 +315,11 @@ class XdrStructGenerator(SourceGenerator):
 
     def emit_definition(self, node: _XdrStruct) -> None:
         """Emit one definition for an XDR struct type"""
-        emit_struct_definition(self.environment, node)
+        emit_struct_definition(self.environment, node, self.peer)
 
     def emit_decoder(self, node: _XdrStruct) -> None:
         """Emit one decoder function for an XDR struct type"""
-        emit_struct_decoder(self.environment, node)
+        emit_struct_decoder(self.environment, node, self.peer)
 
     def emit_encoder(self, node: _XdrStruct) -> None:
         """Emit one encoder function for an XDR struct type"""

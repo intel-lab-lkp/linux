@@ -5,10 +5,16 @@
  * This header defines XDR data type primitives specified in
  * Section 4 of RFC 4506, used by RPC programs implemented
  * in the Linux kernel.
+ *
+ * A generated definition can also embed a struct xdr_buf, which
+ * carries a page-resident payload captured by reference, so this
+ * header pulls in the kernel's XDR types as well.
  */
 
 #ifndef _SUNRPC_XDRGEN__DEFS_H_
 #define _SUNRPC_XDRGEN__DEFS_H_
+
+#include <linux/sunrpc/xdr.h>
 
 #define TRUE	(true)
 #define FALSE	(false)
