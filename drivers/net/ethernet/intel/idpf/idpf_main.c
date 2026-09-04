@@ -112,6 +112,8 @@ static void idpf_decfg_device(struct idpf_adapter *adapter)
 		pci_disable_ptm(pdev);
 
 	libie_pci_unmap_all_mmio_regions(&adapter->ctlq_ctx.mmio_info);
+
+	pci_set_drvdata(pdev, NULL);
 }
 
 /**
@@ -182,7 +184,6 @@ destroy_wqs:
 	mutex_destroy(&adapter->vc_buf_lock);
 
 	idpf_decfg_device(adapter);
-	pci_set_drvdata(pdev, NULL);
 	kfree(adapter);
 }
 
