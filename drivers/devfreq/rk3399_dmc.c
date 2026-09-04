@@ -189,7 +189,7 @@ static int rk3399_dmcfreq_target(struct device *dev, unsigned long *freq,
 	 * Check the dpll rate,
 	 * There only two result we will get,
 	 * 1. Ddr frequency scaling fail, we still get the old rate.
-	 * 2. Ddr frequency scaling sucessful, we get the rate we set.
+	 * 2. Ddr frequency scaling successful, we get the rate we set.
 	 */
 	dmcfreq->rate = clk_get_rate(dmcfreq->dmc_clk);
 
