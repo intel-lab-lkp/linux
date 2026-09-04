@@ -273,13 +273,13 @@ static int mct_u232_calculate_baud_rate(struct usb_serial *serial,
  *  Bit 5: Data Set Ready (DSR). Reflects the state of the DSR line on the UART.
  *  Bit 4: Clear To Send (CTS). Reflects the state of the CTS line on the UART.
  *  Bit 3: Delta Data Carrier Detect (DDCD). Set to "1" if the -DCD line has
- *	   changed state one more more times since the last time the MSR was
+ *	   changed state one more times since the last time the MSR was
  *	   read by the host.
  *  Bit 2: Trailing Edge Ring Indicator (TERI). Set to "1" if the -RI line has
  *	   had a low to high transition since the last time the MSR was read by
  *	   the host.
  *  Bit 1: Delta Data Set Ready (DDSR). Set to "1" if the -DSR line has changed
- *	   state one more more times since the last time the MSR was read by the
+ *	   state one more times since the last time the MSR was read by the
  *	   host.
  *  Bit 0: Delta Clear To Send (DCTS). Set to "1" if the -CTS line has changed
  *	   state one more times since the last time the MSR was read by the
