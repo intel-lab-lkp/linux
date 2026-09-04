@@ -289,9 +289,12 @@ void ieee80211_emulate_remove_chanctx(struct ieee80211_hw *hw,
 {
 	struct ieee80211_local *local = hw_to_local(hw);
 
+	/*
+	 * No context is left, so there is nothing to configure; the next
+	 * context sets the channel. Reconfiguring here would switch the
+	 * driver to the default channel only to switch it again.
+	 */
 	local->hw.conf.radar_enabled = false;
-
-	_ieee80211_hw_conf_chan(local, NULL);
 }
 EXPORT_SYMBOL(ieee80211_emulate_remove_chanctx);
 
