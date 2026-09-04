@@ -574,7 +574,7 @@ static uint32_t onyx_images[][PCXU_IMAGE_SIZE/sizeof(uint32_t)] __ro_after_init 
 0xffffffff,0xffffffff,0xffffffff,0xffffffff,
 0xffffffff,0xffffffff},
 
-/* isnt
+/* isn't
  *
  * ctr0: counts the total number of cycles for which iside_notrans is asserted 
  * ctr1: counts the number of times iside_notrans is asserted for 1-4 cycles 
@@ -2645,7 +2645,7 @@ static uint32_t cuda_images[][PCXW_IMAGE_SIZE/sizeof(uint32_t)] __ro_after_init 
    },
 
 
-/* isnt image  (Image 13)
+/* isn't image  (Image 13)
  * 
  * ctr0 : Total number of cycles for which iside_notrans is asserted. 
  * ctr1 : Total number of times iside_notrans is asserted for 1-4 cycles. 
