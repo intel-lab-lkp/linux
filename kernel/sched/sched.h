@@ -4180,6 +4180,7 @@ extern void sched_cache_active_set(void);
 void sched_domains_free_llc_id(int cpu);
 
 extern void init_sched_mm(struct task_struct *p);
+void task_tick_numa(struct rq *rq, struct task_struct *p);
 
 extern u64 avg_vruntime(struct cfs_rq *cfs_rq);
 extern int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se);

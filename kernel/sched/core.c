@@ -5769,6 +5769,17 @@ static int __init setup_resched_latency_warn_ms(char *str)
 }
 __setup("resched_latency_warn_ms=", setup_resched_latency_warn_ms);
 
+static void sched_tick_exec_ctx(struct rq *rq)
+{
+	struct task_struct *curr = rq->curr;
+
+	if (curr->sched_class != &fair_sched_class)
+		return;
+
+	if (static_branch_unlikely(&sched_numa_balancing))
+		task_tick_numa(rq, curr);
+}
+
 /*
  * This function gets called by the timer code, with HZ frequency.
  * We call it with interrupts disabled.
@@ -5801,6 +5812,8 @@ void sched_tick(void)
 		resched_curr(rq);
 
 	donor->sched_class->task_tick(rq, donor, 0);
+	sched_tick_exec_ctx(rq);
+
 	if (sched_feat(LATENCY_WARN))
 		resched_latency = cpu_resched_latency(rq);
 	calc_global_load_tick(rq);
@@ -5897,6 +5910,7 @@ static void sched_tick_remote(struct work_struct *work)
 				WARN_ON_ONCE(delta > (u64)NSEC_PER_SEC * 30);
 			}
 			curr->sched_class->task_tick(rq, curr, 0);
+			sched_tick_exec_ctx(rq);
 
 			calc_load_nohz_remote(rq);
 		}
