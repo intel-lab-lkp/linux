@@ -2699,7 +2699,7 @@ void kvm_apic_write_nodecode(struct kvm_vcpu *vcpu, u32 offset)
 	 * virtual APIC state, but KVM needs to conditionally modify the value
 	 * in certain cases, e.g. to clear the ICR busy bit.  The cost of extra
 	 * conditional branches is likely a wash relative to the cost of the
-	 * maybe-unecessary write, and both are in the noise anyways.
+	 * maybe-unnecessary write, and both are in the noise anyways.
 	 */
 	if (apic_x2apic_mode(apic) && offset == APIC_ICR)
 		WARN_ON_ONCE(kvm_x2apic_icr_write(apic, kvm_x2apic_icr_read(apic)));
