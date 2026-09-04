@@ -72,7 +72,7 @@ void print_n_spaces(int n)
 }
 
 /*s is filled with left and right spaces
- *to make its length atleast n+1
+ *to make its length at least n+1
  */
 int fill_string_with_spaces(char *s, int n)
 {
@@ -263,7 +263,7 @@ static void parse_monitor_param(char *param)
 			 "try -l option\n"), param);
 		exit(EXIT_FAILURE);
 	}
-	/* Override detected/registerd monitors array with requested one */
+	/* Override detected/registered monitors array with requested one */
 	memcpy(monitors, tmp_mons,
 		sizeof(struct cpuidle_monitor *) * MONITORS_MAX);
 	avail_monitors = hits;

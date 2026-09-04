@@ -276,7 +276,7 @@ static int init_maxfreq_mode(void)
 	    cpupower_cpu_info.vendor == X86_VENDOR_HYGON) {
 		/* MSR_AMD_HWCR tells us whether TSC runs at P0/mperf
 		 * freq.
-		 * A test whether hwcr is accessable/available would be:
+		 * A test whether hwcr is accessible/available would be:
 		 * (cpupower_cpu_info.family > 0x10 ||
 		 *   cpupower_cpu_info.family == 0x10 &&
 		 *   cpupower_cpu_info.model >= 0x2))
