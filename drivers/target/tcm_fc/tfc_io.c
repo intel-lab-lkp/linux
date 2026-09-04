@@ -248,7 +248,7 @@ void ft_recv_write_data(struct ft_cmd *cmd, struct fc_frame *fp)
 		 * header is posted in receive queue.
 		 *
 		 * If "Sequence Initiative (TSI)" bit is not set, means error
-		 * condition w.r.t. DDP, hence drop the packet and let explict
+		 * condition w.r.t. DDP, hence drop the packet and let explicit
 		 * ABORTS from other end of exchange timer trigger the recovery.
 		 */
 		if (f_ctl & FC_FC_SEQ_INIT)

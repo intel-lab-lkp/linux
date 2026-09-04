@@ -57,7 +57,7 @@ struct sock;
 #define TA_CACHE_DYNAMIC_ACLS		0
 /* Enabled by default in demo mode (generic_node_acls=1) */
 #define TA_DEMO_MODE_WRITE_PROTECT	1
-/* Disabled by default in production mode w/ explict ACLs */
+/* Disabled by default in production mode w/ explicit ACLs */
 #define TA_PROD_MODE_WRITE_PROTECT	0
 #define TA_DEMO_MODE_DISCOVERY		1
 #define TA_DEFAULT_ERL			0

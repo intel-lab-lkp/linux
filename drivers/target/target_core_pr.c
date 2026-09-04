@@ -3655,7 +3655,7 @@ target_scsi3_emulate_pr_out(struct se_cmd *cmd)
 	}
 	/*
 	 * If the backend device has been configured to force APTPL metadata
-	 * write-out, go ahead and propigate aptpl=1 down now.
+	 * write-out, go ahead and propagate aptpl=1 down now.
 	 */
 	if (dev->dev_attrib.force_pr_aptpl)
 		aptpl = 1;

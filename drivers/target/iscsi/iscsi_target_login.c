@@ -548,7 +548,7 @@ int iscsi_login_post_auth_non_zero_tsih(
 	 * We use the original ExpStatSN sent in the first login request
 	 * to acknowledge commands for the failed connection.
 	 *
-	 * Also note that an explict logout may have already been sent,
+	 * Also note that an explicit logout may have already been sent,
 	 * but the response may not be sent due to additional connection
 	 * loss.
 	 */
@@ -1261,7 +1261,7 @@ static int __iscsi_target_login_thread(struct iscsi_np *np)
 	} else {
 		/*
 		 * Add a new connection to an existing session.
-		 * We check for a non-existant session in
+		 * We check for a non-existent session in
 		 * iscsi_login_non_zero_tsih_s2() below based
 		 * on ISID/TSIH, but wait until after authentication
 		 * to check for connection reinstatement, etc.
