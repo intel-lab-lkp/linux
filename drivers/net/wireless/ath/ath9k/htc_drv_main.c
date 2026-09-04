@@ -1826,8 +1826,8 @@ struct base_eep_header *ath9k_htc_get_eeprom_base(struct ath9k_htc_priv *priv)
 	struct base_eep_header *pBase = NULL;
 	/*
 	 * This can be done since all the 3 EEPROM families have the
-	 * same base header upto a certain point, and we are interested in
-	 * the data only upto that point.
+	 * same base header up to a certain point, and we are interested in
+	 * the data only up to that point.
 	 */
 
 	if (AR_SREV_9271(priv->ah))
