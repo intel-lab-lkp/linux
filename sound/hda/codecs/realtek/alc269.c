@@ -3740,6 +3740,103 @@ static void alc2xx_fixup_headset_mic(struct hda_codec *codec,
 	}
 }
 
+static void alc295_acer_nitro_mic_autoswitch(struct hda_codec *codec,
+					     struct hda_jack_callback *jack)
+{
+	struct alc_spec *spec = codec->spec;
+	struct hda_jack_tbl *hp_jack, *mic_jack;
+	hda_nid_t hp_pin = alc_get_hp_pin(spec);
+	bool auto_mic = spec->gen.auto_mic;
+	bool hp_present;
+
+	hp_jack = snd_hda_jack_tbl_get(codec, hp_pin);
+	mic_jack = snd_hda_jack_tbl_get(codec, 0x19);
+	if (!hp_jack || !mic_jack) {
+		codec_warn(codec, "failed to find Acer Nitro combo-jack entries\n");
+		return;
+	}
+
+	/* A mic callback must not reuse a possibly stale cached HP sense. */
+	if (jack && jack->nid == 0x19)
+		hp_jack->jack_dirty = 1;
+	hp_present = snd_hda_jack_detect(codec, hp_pin);
+
+	/*
+	 * The codec reports a stale or inverted presence state for mic pin 0x19
+	 * after S3.  Pin 0x21 continues to track the shared combo jack reliably,
+	 * so use it as the presence source for 0x19.  Leave the entry clean so
+	 * the normal report pass does not immediately replace this value with a
+	 * broken raw pin-sense read.
+	 */
+	mic_jack->pin_sense &= ~AC_PINSENSE_PRESENCE;
+	if (hp_present)
+		mic_jack->pin_sense |= AC_PINSENSE_PRESENCE;
+	mic_jack->jack_dirty = 0;
+
+	/* Route the actual capture mux from the corrected jack state. */
+	spec->gen.auto_mic = 1;
+	snd_hda_gen_mic_autoswitch(codec, jack);
+	spec->gen.auto_mic = auto_mic;
+}
+
+static void alc295_acer_nitro_hp_automute(struct hda_codec *codec,
+					  struct hda_jack_callback *jack)
+{
+	/* Refresh the reliable HP jack and the Realtek headset mode first. */
+	alc_update_headset_jack_cb(codec, jack);
+	alc295_acer_nitro_mic_autoswitch(codec, jack);
+}
+
+static void alc295_fixup_acer_nitro_headset_mode(struct hda_codec *codec,
+						 const struct hda_fixup *fix,
+						 int action)
+{
+	struct alc_spec *spec = codec->spec;
+	static const struct hda_pintbl pincfgs[] = {
+		{ 0x19, 0x03a1103c },
+		{ }
+	};
+
+	if (action == HDA_FIXUP_ACT_PRE_PROBE) {
+		snd_hda_apply_pincfgs(codec, pincfgs);
+		alc_update_coef_idx(codec, 0x45, 0xf << 12 | 1 << 10, 5 << 12);
+		spec->parse_flags |= HDA_PINCFG_HEADSET_MIC;
+	}
+
+	alc271_hp_gate_mic_jack(codec, fix, action);
+	alc_fixup_headset_mode_no_hp_mic(codec, fix, action);
+
+	if (action == HDA_FIXUP_ACT_PROBE) {
+		int int_mic_idx = -1, headset_mic_idx = -1;
+		int i;
+
+		for (i = 0; i < spec->gen.input_mux.num_items; i++) {
+			if (spec->gen.imux_pins[i] == 0x12)
+				int_mic_idx = i;
+			else if (spec->gen.imux_pins[i] == 0x19)
+				headset_mic_idx = i;
+		}
+		if (int_mic_idx < 0 || headset_mic_idx < 0) {
+			codec_warn(codec,
+				   "failed to find Acer Nitro mic mux entries\n");
+			return;
+		}
+
+		spec->gen.am_num_entries = 2;
+		spec->gen.am_entry[0] = (struct automic_entry) {
+			.pin = 0x12,
+			.idx = int_mic_idx,
+		};
+		spec->gen.am_entry[1] = (struct automic_entry) {
+			.pin = 0x19,
+			.idx = headset_mic_idx,
+		};
+		spec->gen.hp_automute_hook = alc295_acer_nitro_hp_automute;
+		spec->gen.mic_autoswitch_hook =
+			alc295_acer_nitro_mic_autoswitch;
+	}
+}
+
 static void alc245_fixup_hp_spectre_x360_eu0xxx(struct hda_codec *codec,
 					  const struct hda_fixup *fix, int action)
 {
@@ -4335,6 +4432,7 @@ enum {
 	ALC287_FIXUP_THINKPAD_I2S_SPK,
 	ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD,
 	ALC2XX_FIXUP_HEADSET_MIC,
+	ALC295_FIXUP_ACER_NITRO_HEADSET_MODE,
 	ALC289_FIXUP_DELL_CS35L41_SPI_2,
 	ALC256_FIXUP_ACER_SFG16_MICMUTE_LED,
 	ALC256_FIXUP_HEADPHONE_AMP_VOL,
@@ -6854,6 +6952,10 @@ static const struct hda_fixup alc269_fixups[] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = alc2xx_fixup_headset_mic,
 	},
+	[ALC295_FIXUP_ACER_NITRO_HEADSET_MODE] = {
+		.type = HDA_FIXUP_FUNC,
+		.v.func = alc295_fixup_acer_nitro_headset_mode,
+	},
 	[ALC289_FIXUP_DELL_CS35L41_SPI_2] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = cs35l41_fixup_spi_two,
@@ -7177,7 +7279,8 @@ static const struct hda_quirk alc269_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x1025, 0x1430, "Acer TravelMate B311R-31", ALC256_FIXUP_ACER_MIC_NO_PRESENCE),
 	SND_PCI_QUIRK(0x1025, 0x1466, "Acer Aspire A515-56", ALC255_FIXUP_ACER_HEADPHONE_AND_MIC),
 	SND_PCI_QUIRK(0x1025, 0x1534, "Acer Predator PH315-54", ALC255_FIXUP_ACER_MIC_NO_PRESENCE),
-	SND_PCI_QUIRK(0x1025, 0x1539, "Acer Nitro 5 AN515-57", ALC2XX_FIXUP_HEADSET_MIC),
+	SND_PCI_QUIRK(0x1025, 0x1539, "Acer Nitro 5 AN515-57",
+		      ALC295_FIXUP_ACER_NITRO_HEADSET_MODE),
 	SND_PCI_QUIRK(0x1025, 0x159c, "Acer Nitro 5 AN515-58", ALC287_FIXUP_ACER_MICMUTE_LED),
 	SND_PCI_QUIRK(0x1025, 0x1597, "Acer Nitro 5 AN517-55", ALC2XX_FIXUP_HEADSET_MIC),
 	SND_PCI_QUIRK(0x1025, 0x159e, "Acer Nitro 5 AN515-46", ALC2XX_FIXUP_HEADSET_MIC),
