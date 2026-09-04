@@ -190,6 +190,16 @@ impl<T: Driver> Adapter<T> {
             // SAFETY: We have exclusive access to `private_data.open`.
             unsafe { *private_data.open.get() = true };
 
+            let open_guard = ScopeGuard::new(|| {
+                // SAFETY:
+                // - `private_data.sdev.as_raw()` is guaranteed to be a pointer to a valid
+                //   `struct serdev_device`.
+                // - We just opened the device, thus it is guaranteed to be open.
+                unsafe { bindings::serdev_device_close(private_data.sdev.as_raw()) };
+                // SAFETY: We have exclusive access to `private_data.open`.
+                unsafe { *private_data.open.get() = false };
+            });
+
             let data = T::probe(sdev, info);
 
             // SAFETY: We have exclusive access to `private_data.driver`.
@@ -203,10 +213,12 @@ impl<T: Driver> Adapter<T> {
 
             drop(active);
 
-            result.map(|()| {
-                private_data.dismiss();
-                0
-            })
+            result?;
+
+            open_guard.dismiss();
+            private_data.dismiss();
+
+            Ok(0)
         })
     }
 
