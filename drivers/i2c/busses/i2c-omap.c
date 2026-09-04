@@ -180,7 +180,6 @@ struct omap_i2c_dev {
 	struct device		*dev;
 	void __iomem		*base;		/* virtual */
 	int			irq;
-	int			reg_shift;      /* bit shift for I2C register addresses */
 	struct completion	cmd_complete;
 	struct resource		*ioarea;
 	u32			latency;	/* maximum mpu wkup latency */
@@ -217,23 +216,23 @@ struct omap_i2c_dev {
 
 static const u8 reg_map_ip_v1[] = {
 	[OMAP_I2C_REV_REG] = 0x00,
-	[OMAP_I2C_IE_REG] = 0x01,
-	[OMAP_I2C_STAT_REG] = 0x02,
-	[OMAP_I2C_IV_REG] = 0x03,
-	[OMAP_I2C_WE_REG] = 0x03,
-	[OMAP_I2C_SYSS_REG] = 0x04,
-	[OMAP_I2C_BUF_REG] = 0x05,
-	[OMAP_I2C_CNT_REG] = 0x06,
-	[OMAP_I2C_DATA_REG] = 0x07,
-	[OMAP_I2C_SYSC_REG] = 0x08,
-	[OMAP_I2C_CON_REG] = 0x09,
-	[OMAP_I2C_OA_REG] = 0x0a,
-	[OMAP_I2C_SA_REG] = 0x0b,
-	[OMAP_I2C_PSC_REG] = 0x0c,
-	[OMAP_I2C_SCLL_REG] = 0x0d,
-	[OMAP_I2C_SCLH_REG] = 0x0e,
-	[OMAP_I2C_SYSTEST_REG] = 0x0f,
-	[OMAP_I2C_BUFSTAT_REG] = 0x10,
+	[OMAP_I2C_IE_REG] = 0x04,
+	[OMAP_I2C_STAT_REG] = 0x0c,
+	[OMAP_I2C_IV_REG] = 0x0c,
+	[OMAP_I2C_WE_REG] = 0x0c,
+	[OMAP_I2C_SYSS_REG] = 0x10,
+	[OMAP_I2C_BUF_REG] = 0x14,
+	[OMAP_I2C_CNT_REG] = 0x18,
+	[OMAP_I2C_DATA_REG] = 0x1c,
+	[OMAP_I2C_SYSC_REG] = 0x20,
+	[OMAP_I2C_CON_REG] = 0x24,
+	[OMAP_I2C_OA_REG] = 0x28,
+	[OMAP_I2C_SA_REG] = 0x2c,
+	[OMAP_I2C_PSC_REG] = 0x30,
+	[OMAP_I2C_SCLL_REG] = 0x34,
+	[OMAP_I2C_SCLH_REG] = 0x38,
+	[OMAP_I2C_SYSTEST_REG] = 0x3c,
+	[OMAP_I2C_BUFSTAT_REG] = 0x40,
 };
 
 static const u8 reg_map_ip_v2[] = {
@@ -267,14 +266,12 @@ static int omap_i2c_xfer_data(struct omap_i2c_dev *omap);
 static inline void omap_i2c_write_reg(struct omap_i2c_dev *omap,
 				      int reg, u16 val)
 {
-	writew_relaxed(val, omap->base +
-			(omap->regs[reg] << omap->reg_shift));
+	writew_relaxed(val, omap->base + omap->regs[reg]);
 }
 
 static inline u16 omap_i2c_read_reg(struct omap_i2c_dev *omap, int reg)
 {
-	return readw_relaxed(omap->base +
-				(omap->regs[reg] << omap->reg_shift));
+	return readw_relaxed(omap->base + omap->regs[reg]);
 }
 
 static void __omap_i2c_init(struct omap_i2c_dev *omap)
@@ -1214,19 +1211,16 @@ static struct omap_i2c_bus_platform_data omap2420_pdata = {
 	.rev = OMAP_I2C_IP_VERSION_1,
 	.flags = OMAP_I2C_FLAG_NO_FIFO |
 			OMAP_I2C_FLAG_SIMPLE_CLOCK |
-			OMAP_I2C_FLAG_16BIT_DATA_REG |
-			OMAP_I2C_FLAG_BUS_SHIFT_2,
+			OMAP_I2C_FLAG_16BIT_DATA_REG,
 };
 
 static struct omap_i2c_bus_platform_data omap2430_pdata = {
 	.rev = OMAP_I2C_IP_VERSION_1,
-	.flags = OMAP_I2C_FLAG_BUS_SHIFT_2 |
-			OMAP_I2C_FLAG_FORCE_19200_INT_CLK,
+	.flags = OMAP_I2C_FLAG_FORCE_19200_INT_CLK,
 };
 
 static struct omap_i2c_bus_platform_data omap3_pdata = {
 	.rev = OMAP_I2C_IP_VERSION_1,
-	.flags = OMAP_I2C_FLAG_BUS_SHIFT_2,
 };
 
 static struct omap_i2c_bus_platform_data omap4_pdata = {
@@ -1383,8 +1377,6 @@ omap_i2c_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, omap);
 	init_completion(&omap->cmd_complete);
-
-	omap->reg_shift = (omap->flags >> OMAP_I2C_FLAG_BUS_SHIFT__SHIFT) & 3;
 
 	pm_runtime_enable(omap->dev);
 	pm_runtime_set_autosuspend_delay(omap->dev, OMAP_I2C_PM_TIMEOUT);
