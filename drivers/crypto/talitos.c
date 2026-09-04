@@ -3482,10 +3482,6 @@ static int talitos_probe(struct platform_device *ofdev)
 		stride = TALITOS2_CH_STRIDE;
 	}
 
-	err = talitos_probe_irq(ofdev);
-	if (err)
-		goto err_out;
-
 	if (has_ftr_sec1(priv)) {
 		if (priv->num_channels == 1)
 			tasklet_init(&priv->done_task[0], talitos1_done_ch0,
@@ -3507,6 +3503,10 @@ static int talitos_probe(struct platform_device *ofdev)
 				     (unsigned long)dev);
 		}
 	}
+
+	err = talitos_probe_irq(ofdev);
+	if (err)
+		goto err_out;
 
 	priv->fifo_len = roundup_pow_of_two(priv->chfifo_len);
 
