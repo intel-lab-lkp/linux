@@ -915,7 +915,7 @@ static int inode_getblk(struct inode *inode, struct udf_map_rq *map)
 			iinfo->i_lenExtents += inode->i_sb->s_blocksize;
 	}
 
-	/* if the extent the requsted block is located in contains multiple
+	/* if the extent the requested block is located in contains multiple
 	 * blocks, split the extent into at most three extents. blocks prior
 	 * to requested block, requested block, and blocks after requested
 	 * block */
@@ -2210,7 +2210,7 @@ void udf_write_aext(struct inode *inode, struct extent_position *epos,
 }
 
 /*
- * Only 1 indirect extent in a row really makes sense but allow upto 16 in case
+ * Only 1 indirect extent in a row really makes sense but allow up to 16 in case
  * someone does some weird stuff.
  */
 #define UDF_MAX_INDIR_EXTS 16

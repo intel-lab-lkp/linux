@@ -275,7 +275,7 @@ firmware_map_find_entry_bootmem(u64 start, u64 end, const char *type)
  *
  * Adds a firmware mapping entry. This function is for memory hotplug, it is
  * similar to function firmware_map_add_early(). The only difference is that
- * it will create the syfs entry dynamically.
+ * it will create the sysfs entry dynamically.
  *
  * Return: 0 on success, or -ENOMEM if no memory could be allocated.
  */

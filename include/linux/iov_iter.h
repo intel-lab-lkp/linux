@@ -284,7 +284,7 @@ size_t iterate_discard(struct iov_iter *iter, size_t len, void *priv, void *priv
  * @priv2 and the amount of data so far iterated over (which can, for example,
  * be added to @priv to point to the right part of a second buffer).  The step
  * functions should return the amount of the segment they didn't process (ie. 0
- * indicates complete processsing).
+ * indicates complete processing).
  *
  * This function returns the amount of data processed (ie. 0 means nothing was
  * processed and the value of @len means processes to completion).
@@ -353,7 +353,7 @@ size_t iterate_and_advance(struct iov_iter *iter, size_t len, void *priv,
  * @priv2 and the amount of data so far iterated over (which can, for example,
  * be added to @priv to point to the right part of a second buffer).  The step
  * functions should return the amount of the segment they didn't process (ie. 0
- * indicates complete processsing).
+ * indicates complete processing).
  *
  * This function returns the amount of data processed (ie. 0 means nothing was
  * processed and the value of @len means processes to completion).

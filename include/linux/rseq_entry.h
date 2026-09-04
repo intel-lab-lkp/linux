@@ -165,7 +165,7 @@ static __always_inline bool __rseq_grant_slice_extension(bool work_pending)
 		if (likely(!(usr_ctrl.request)))
 			return false;
 
-		/* Grant the slice extention */
+		/* Grant the slice extension */
 		usr_ctrl.request = 0;
 		usr_ctrl.granted = 1;
 		unsafe_put_user(usr_ctrl.all, &rseq->slice_ctrl.all, efault);

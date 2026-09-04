@@ -300,7 +300,7 @@ void most_deregister_interface(struct most_interface *iface);
 void most_submit_mbo(struct mbo *mbo);
 
 /**
- * most_stop_enqueue - prevents core from enqueing MBOs
+ * most_stop_enqueue - prevents core from enqueuing MBOs
  * @iface: pointer to interface
  * @channel_idx: channel index
  */

@@ -212,7 +212,7 @@ static void __exit_signal(struct release_task_post *post, struct task_struct *ts
 	write_sequnlock(&sig->stats_lock);
 
 	/*
-	 * Ensure that all preceeding state is visible. Pairs with
+	 * Ensure that all preceding state is visible. Pairs with
 	 * the smp_acquire__after_ctrl_dep() in the sighand == NULL
 	 * path of lock_task_sighand().
 	 */

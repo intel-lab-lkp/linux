@@ -1722,7 +1722,7 @@ static int intel_bug_present_check_epp(struct parport *pb)
 				break;
 			}
 		}
-		/* return ECR into the inital state */
+		/* return ECR into the initial state */
 		ECR_WRITE(pb, ecr);
 	}
 

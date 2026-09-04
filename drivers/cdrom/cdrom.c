@@ -1810,7 +1810,7 @@ static int dvd_read_physical(struct cdrom_device_info *cdi, dvd_struct *s,
 
 	/*
 	 * place the data... really ugly, but at least we won't have to
-	 * worry about endianess in userspace.
+	 * worry about endianness in userspace.
 	 */
 	memset(layer, 0, sizeof(*layer));
 	layer->book_version = base[0] & 0xf;
@@ -3141,7 +3141,7 @@ static noinline int mmc_ioctl_cdrom_volume(struct cdrom_device_info *cdi,
 		
 	/* originally the code depended on buffer[1] to determine
 	   how much data is available for transfer. buffer[1] is
-	   unfortunately ambigious and the only reliable way seem
+	   unfortunately ambiguous and the only reliable way seem
 	   to be to simply skip over the block descriptor... */
 	offset = 8 + be16_to_cpu(*(__be16 *)(buffer + 6));
 

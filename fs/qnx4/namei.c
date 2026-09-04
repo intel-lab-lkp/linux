@@ -21,7 +21,7 @@
  * check if the filename is correct. For some obscure reason, qnx writes a
  * new file twice in the directory entry, first with all possible options at 0
  * and for a second time the way it is, they want us not to access the qnx
- * filesystem when whe are using linux.
+ * filesystem when we are using linux.
  */
 static int qnx4_match(int len, const char *name,
 		      struct buffer_head *bh, unsigned long *offset)

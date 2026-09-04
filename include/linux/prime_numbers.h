@@ -8,7 +8,7 @@ bool is_prime_number(unsigned long x);
 unsigned long next_prime_number(unsigned long x);
 
 /**
- * for_each_prime_number - iterate over each prime upto a value
+ * for_each_prime_number - iterate over each prime up to a value
  * @prime: the current prime number in this iteration
  * @max: the upper limit
  *
@@ -22,7 +22,7 @@ unsigned long next_prime_number(unsigned long x);
 	for_each_prime_number_from((prime), 2, (max))
 
 /**
- * for_each_prime_number_from - iterate over each prime upto a value
+ * for_each_prime_number_from - iterate over each prime up to a value
  * @prime: the current prime number in this iteration
  * @from: the initial value
  * @max: the upper limit

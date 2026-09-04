@@ -765,7 +765,7 @@ static int relay_file_mmap_prepare(struct vm_area_desc *desc)
  *	@filp: the file
  *	@wait: poll table
  *
- *	Poll implemention.
+ *	Poll implementation.
  */
 static __poll_t relay_file_poll(struct file *filp, poll_table *wait)
 {

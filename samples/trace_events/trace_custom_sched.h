@@ -89,7 +89,7 @@ TRACE_CUSTOM_EVENT(sched_waking,
 #define TRACE_INCLUDE_PATH .
 
 /*
- * It is requred that the TRACE_INCLUDE_FILE be the same
+ * It is required that the TRACE_INCLUDE_FILE be the same
  * as this file without the ".h".
  */
 #define TRACE_INCLUDE_FILE trace_custom_sched

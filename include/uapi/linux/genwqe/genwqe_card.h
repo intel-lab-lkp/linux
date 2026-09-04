@@ -487,7 +487,7 @@ struct genwqe_mem {
  *         -EINVAL: Invalid parameters (ASIV_LEN, ASV_LEN, illegal fixups
  *                  no mappings found/could not create mappings
  *         -EFAULT: illegal addresses in fixups, purging failed
- *         -EBADMSG: enqueing failed, retc != DDCB_RETC_COMPLETE
+ *         -EBADMSG: enqueuing failed, retc != DDCB_RETC_COMPLETE
  */
 #define GENWQE_EXECUTE_DDCB					\
 	_IOWR(GENWQE_IOC_CODE, 50, struct genwqe_ddcb_cmd)

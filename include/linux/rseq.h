@@ -57,7 +57,7 @@ static __always_inline void rseq_sched_switch_event(struct task_struct *t)
 	/*
 	 * Only apply the user_irq optimization for RSEQ ABI V2 registrations.
 	 * Legacy users like TCMalloc rely on the original ABI V1 behaviour
-	 * which updates IDs on every context swtich.
+	 * which updates IDs on every context switch.
 	 */
 	if (rseq_v2(t)) {
 		/*

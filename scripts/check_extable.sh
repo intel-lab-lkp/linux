@@ -41,7 +41,7 @@ function find_symbol_and_offset_from_reloc()
     # Extract symbol and offset from the objdump output
     eval $(echo $reloc | sed 's/\([^+]\+\)+\?\(0x[0-9a-f]\+\)\?/symbol="\1"; symbol_offset="\2"/')
 
-    # When the relocation points to the begining of a symbol or section, it
+    # When the relocation points to the beginning of a symbol or section, it
     # won't print the offset since it is zero.
     if [ -z "${symbol_offset}" ]; then
 	symbol_offset=0x0
@@ -77,7 +77,7 @@ function handle_suspicious_generic_reloc()
 {
     if is_executable_section ${section}; then
 	# We've got a relocation to a non white listed _executable_
-	# section, print a warning so the developper adds the section to
+	# section, print a warning so the developer adds the section to
 	# the white list or fix his code.  We try to pretty-print the file
 	# and line number where that relocation was added.
 	echo "Warning: found a reference to section \"${section}\" in __ex_table:"
@@ -114,7 +114,7 @@ function diagnose()
 	# When there's a global symbol at the place of the relocation,
 	# objdump will use it instead of giving us a section+offset, so
 	# let's find out which section is this symbol in and the total
-	# offset withing that section.
+	# offset within that section.
 	find_section_offset_from_symbol ${symbol} ${symbol_offset}
 
 	# In this case objdump was presenting us with a reloc to a symbol

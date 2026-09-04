@@ -20,7 +20,7 @@
 #define SXGBE_CSR_350_400M	0x4	/* MDC = clk_scr_i/162 */
 #define SXGBE_CSR_400_500M	0x5	/* MDC = clk_scr_i/202 */
 
-/* Platfrom data for platform device structure's
+/* Platform data for platform device structure's
  * platform_data field
  */
 struct sxgbe_mdio_bus_data {

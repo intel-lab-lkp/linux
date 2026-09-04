@@ -24,7 +24,7 @@
  * CHIOVGPARAMS
  *    query vendor-specific element types
  *
- *    accessing elements works by specifing type and unit of the element.
+ *    accessing elements works by specifying type and unit of the element.
  *    for example, storage elements are addressed with type = CHET_ST and
  *    unit = 0 .. cp_nslots-1
  *

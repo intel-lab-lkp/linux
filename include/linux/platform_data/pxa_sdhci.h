@@ -32,9 +32,9 @@
  * @clk_delay_enable: enable clk_delay or not, used on pxa910
  * @max_speed: the maximum speed supported
  * @host_caps: Standard MMC host capabilities bit field.
- * @quirks: quirks of platfrom
- * @quirks2: quirks2 of platfrom
- * @pm_caps: pm_caps of platfrom
+ * @quirks: quirks of platform
+ * @quirks2: quirks2 of platform
+ * @pm_caps: pm_caps of platform
  */
 struct sdhci_pxa_platdata {
 	unsigned int	flags;

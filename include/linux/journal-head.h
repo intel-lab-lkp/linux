@@ -40,7 +40,7 @@ struct journal_head {
 	 * Journalling list for this buffer [b_state_lock]
 	 * NOTE: We *cannot* combine this with b_modified into a bitfield
 	 * as gcc would then (which the C standard allows but which is
-	 * very unuseful) make 64-bit accesses to the bitfield and clobber
+	 * very useless) make 64-bit accesses to the bitfield and clobber
 	 * b_jcount if its update races with bitfield modification.
 	 */
 	unsigned b_jlist;

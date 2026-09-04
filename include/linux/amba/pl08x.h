@@ -42,7 +42,7 @@ enum {
  * @max_signal: the maximum DMA signal number to be muxed in for
  * the channel. Set to the same as min_signal for
  * devices with static assignments
- * @muxval: a number usually used to poke into some mux regiser to
+ * @muxval: a number usually used to poke into some mux register to
  * mux in the signal to this channel
  * @addr: source/target address in physical memory for this DMA channel,
  * can be the address of a FIFO register for burst requests for example.

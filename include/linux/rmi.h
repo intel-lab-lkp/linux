@@ -75,7 +75,7 @@ enum rmi_sensor_type {
  * (touchscreen).  This is useful when F11_2D_QUERY14 register is not
  * available.
  * @disable_report_mask - Force data to not be reported even if it is supported
- * by the firware.
+ * by the firmware.
  * @topbuttonpad - Used with the "5 buttons touchpads" found on the Lenovo 40
  * series
  * @kernel_tracking - most moderns RMI f11 firmwares implement Multifinger

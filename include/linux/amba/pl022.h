@@ -62,7 +62,7 @@ struct ssp_clock_params {
 };
 
 /**
- * enum ssp_rx_endian - endianess of Rx FIFO Data
+ * enum ssp_rx_endian - endianness of Rx FIFO Data
  * this feature is only available in ST versionf of PL022
  */
 enum ssp_rx_endian {
@@ -71,7 +71,7 @@ enum ssp_rx_endian {
 };
 
 /**
- * enum ssp_tx_endian - endianess of Tx FIFO Data
+ * enum ssp_tx_endian - endianness of Tx FIFO Data
  */
 enum ssp_tx_endian {
 	SSP_TX_MSB,

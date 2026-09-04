@@ -132,7 +132,7 @@ struct pci_msi_desc {
  * @iobase:	Domain specific IOmem pointer
  *
  * The content of this data is implementation defined and used by the MSI
- * domain to store domain specific information which is requried for
+ * domain to store domain specific information which is required for
  * interrupt chip callbacks.
  */
 union msi_domain_cookie {
@@ -373,7 +373,7 @@ static inline void msi_free_msi_descs(struct device *dev)
 
 /*
  * The arch hooks to setup up msi irqs. Default functions are implemented
- * as weak symbols so that they /can/ be overriden by architecture specific
+ * as weak symbols so that they /can/ be overridden by architecture specific
  * code if needed. These hooks can only be enabled by the architecture.
  *
  * If CONFIG_PCI_MSI_ARCH_FALLBACKS is not selected they are replaced by

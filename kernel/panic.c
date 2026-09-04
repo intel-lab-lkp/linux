@@ -704,7 +704,7 @@ void vpanic(const char *fmt, va_list args)
 	 * buffer.  Try to acquire the lock then release it regardless of the
 	 * result.  The release will also print the buffers out.  Locks debug
 	 * should be disabled to avoid reporting bad unlock balance when
-	 * panic() is not being callled from OOPS.
+	 * panic() is not being called from OOPS.
 	 */
 	debug_locks_off();
 	console_flush_on_panic(CONSOLE_FLUSH_PENDING);

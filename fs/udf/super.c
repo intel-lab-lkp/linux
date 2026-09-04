@@ -1341,7 +1341,7 @@ static int udf_load_partdesc(struct super_block *sb, sector_t block)
 	 * PHYSICAL partitions are already set up
 	 */
 	type1_idx = i;
-	map = NULL; /* supress 'maybe used uninitialized' warning */
+	map = NULL; /* suppress 'maybe used uninitialized' warning */
 	for (i = 0; i < sbi->s_partitions; i++) {
 		map = &sbi->s_partmaps[i];
 

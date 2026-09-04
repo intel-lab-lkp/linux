@@ -108,7 +108,7 @@ extern long st_unregister(struct st_proto_s *);
  * @list: the list of protocols registered, only MAX can exist, one protocol
  *	can register only once.
  * @rx_state: states to be maintained inside st's tty receive
- * @rx_count: count to be maintained inside st's tty receieve
+ * @rx_count: count to be maintained inside st's tty receive
  * @rx_skb: the skb where all data for a protocol gets accumulated,
  *	since tty might not call receive when a complete event packet
  *	is received, the states, count and the skb needs to be maintained.

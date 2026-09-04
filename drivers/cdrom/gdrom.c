@@ -443,7 +443,7 @@ static int gdrom_getsense(short *bufstring)
 		pr_info("%s\n", sense_texts[sense_key].text);
 	else
 		pr_err("Unknown sense key: %d\n", sense_key);
-	if (bufstring) /* return addional sense data */
+	if (bufstring) /* return additional sense data */
 		memcpy(bufstring, &sense[4], 2);
 	if (sense_key < 2)
 		err = 0;

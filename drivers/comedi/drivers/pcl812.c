@@ -32,7 +32,7 @@
  *	A-823PGH (a823pgh), A-823PGL (a823pgl), A-826PG (a826pg)
  * Updated: Mon, 06 Aug 2007 12:03:15 +0100
  * Status: works (I hope. My board fire up under my hands
- *	       and I cann't test all features.)
+ *	       and I can't test all features.)
  *
  * This driver supports insn and cmd interfaces. Some boards support only insn
  * because their hardware don't allow more (PCL-813/B, ACL-8113, ISO-813).
@@ -732,7 +732,7 @@ static int pcl812_ai_cmd(struct comedi_device *dev, struct comedi_subdevice *s)
 		devpriv->ai_dma = 1;
 		for (i = 1; i < cmd->chanlist_len; i++)
 			if (cmd->chanlist[0] != cmd->chanlist[i]) {
-				/*  we cann't use DMA :-( */
+				/*  we can't use DMA :-( */
 				devpriv->ai_dma = 0;
 				break;
 			}

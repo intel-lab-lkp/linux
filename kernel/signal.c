@@ -1359,7 +1359,7 @@ struct sighand_struct *lock_task_sighand(struct task_struct *tsk,
 			/*
 			 * Pairs with the smp_store_release() in
 			 * __exit_signal().  It ensures that all state
-			 * modifications to the task preceeding the store are
+			 * modifications to the task preceding the store are
 			 * visible to the callers of lock_task_sighand().
 			 */
 			smp_acquire__after_ctrl_dep();
@@ -2421,7 +2421,7 @@ static int ptrace_stop(int exit_code, int why, unsigned long message,
 
 	/*
 	 * If @why is CLD_STOPPED, we're trapping to participate in a group
-	 * stop.  Do the bookkeeping.  Note that if SIGCONT was delievered
+	 * stop.  Do the bookkeeping.  Note that if SIGCONT was delivered
 	 * across siglock relocks since INTERRUPT was scheduled, PENDING
 	 * could be clear now.  We act as if SIGCONT is received after
 	 * TASK_TRACED is entered - ignore it.
@@ -3569,7 +3569,7 @@ int copy_siginfo_from_user(kernel_siginfo_t *to, const siginfo_t __user *from)
  *
  * Note: This function does not work properly for the SIGCHLD on x32, but
  * fortunately it doesn't have to.  The only valid callers for this function are
- * copy_siginfo_to_user32, which is overriden for x32 and the coredump code.
+ * copy_siginfo_to_user32, which is overridden for x32 and the coredump code.
  * The latter does not care because SIGCHLD will never cause a coredump.
  */
 void copy_siginfo_to_external32(struct compat_siginfo *to,

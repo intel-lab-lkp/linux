@@ -351,7 +351,7 @@ void __init async_init(void)
 {
 	/*
 	 * Async can schedule a number of interdependent work items. However,
-	 * unbound workqueues can handle only upto min_active interdependent
+	 * unbound workqueues can handle only up to min_active interdependent
 	 * work items. The default min_active of 8 isn't sufficient for async
 	 * and can lead to stalls. Let's use a dedicated workqueue with raised
 	 * min_active.

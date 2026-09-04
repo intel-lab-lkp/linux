@@ -104,7 +104,7 @@ struct seccomp_notif {
  * SECCOMP_IOCTL_NOTIF_SEND from earlier filters, essentially allowing all
  * such filtered syscalls to be executed by sending the response
  * SECCOMP_USER_NOTIF_FLAG_CONTINUE. Note that SECCOMP_RET_TRACE can equally
- * be overriden by SECCOMP_USER_NOTIF_FLAG_CONTINUE.
+ * be overridden by SECCOMP_USER_NOTIF_FLAG_CONTINUE.
  */
 #define SECCOMP_USER_NOTIF_FLAG_CONTINUE (1UL << 0)
 

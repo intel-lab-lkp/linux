@@ -107,7 +107,7 @@ static void qnx6_readahead(struct readahead_control *rac)
 
 /*
  * returns the block number for the no-th element in the tree
- * inodebits requred as there are multiple inodes in one inode block
+ * inodebits required as there are multiple inodes in one inode block
  */
 static unsigned qnx6_block_map(struct inode *inode, unsigned no)
 {

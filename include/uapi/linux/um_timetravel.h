@@ -151,8 +151,8 @@ enum um_timetravel_ops {
 	/**
 	 * @UM_TIMETRAVEL_BROADCAST: Send/Receive a broadcast message.
 	 *	This message can be used to sync all components in the system
-	 *	with a single message, if the calender gets the message, the
-	 *	calender broadcast the message to all components, and if a
+	 *	with a single message, if the calendar gets the message, the
+	 *	calendar broadcast the message to all components, and if a
 	 *	component receives it it should act based on it e.g print a
 	 *	message to it's log system.
 	 *	(calendar <-> host)

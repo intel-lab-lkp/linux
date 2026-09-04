@@ -93,7 +93,7 @@ struct wb_completion {
  * using memcg's page ownership for attributing writeback IOs, and every
  * memcg - blkcg combination can be served by its own wb by assigning a
  * dedicated wb to each memcg, which enables isolation across different
- * cgroups and propagation of IO back pressure down from the IO layer upto
+ * cgroups and propagation of IO back pressure down from the IO layer up to
  * the tasks which are generating the dirty pages to be written back.
  *
  * A cgroup wb is indexed on its bdi by the ID of the associated memcg,

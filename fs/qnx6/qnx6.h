@@ -32,7 +32,7 @@ struct qnx6_sb_info {
 	int			s_blks_off;	/* blkoffset fs-startpoint */
 	int			s_ptrbits;	/* indirect pointer bitfield */
 	unsigned long		s_mount_opt;	/* all mount options */
-	int			s_bytesex;	/* holds endianess info */
+	int			s_bytesex;	/* holds endianness info */
 	struct inode *		inodes;
 	struct inode *		longfile;
 };

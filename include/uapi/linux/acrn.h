@@ -264,7 +264,7 @@ struct acrn_descriptor_ptr {
  * @cr4:		Value of register CR4
  * @cr3:		Value of register CR3
  * @ia32_efer:		Value of IA32_EFER MSR
- * @rflags:		Value of regsiter RFLAGS
+ * @rflags:		Value of register RFLAGS
  * @reserved_64:	Reserved and must be 0
  * @cs_ar:		Attribute field of code segment selector
  * @cs_limit:		Limit field of code segment selector
