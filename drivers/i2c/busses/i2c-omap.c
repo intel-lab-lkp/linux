@@ -78,16 +78,7 @@ enum {
 	OMAP_I2C_IP_V2_IRQENABLE_CLR,
 };
 
-/* I2C Interrupt Enable Register (OMAP_I2C_IE): */
-#define OMAP_I2C_IE_XDR		(1 << 14)	/* TX Buffer drain int enable */
-#define OMAP_I2C_IE_RDR		(1 << 13)	/* RX Buffer drain int enable */
-#define OMAP_I2C_IE_XRDY	(1 << 4)	/* TX data ready int enable */
-#define OMAP_I2C_IE_RRDY	(1 << 3)	/* RX data ready int enable */
-#define OMAP_I2C_IE_ARDY	(1 << 2)	/* Access ready int enable */
-#define OMAP_I2C_IE_NACK	(1 << 1)	/* No ack interrupt enable */
-#define OMAP_I2C_IE_AL		(1 << 0)	/* Arbitration lost int ena */
-
-/* I2C Status Register (OMAP_I2C_STAT): */
+/* I2C Status bits (OMAP_I2C_IE, OMAP_I2C_STAT, OMAP_I2C_WE) */
 #define OMAP_I2C_STAT_XDR	(1 << 14)	/* TX Buffer draining */
 #define OMAP_I2C_STAT_RDR	(1 << 13)	/* RX Buffer draining */
 #define OMAP_I2C_STAT_BB	(1 << 12)	/* Bus busy */
@@ -95,29 +86,13 @@ enum {
 #define OMAP_I2C_STAT_XUDF	(1 << 10)	/* Transmit underflow */
 #define OMAP_I2C_STAT_AAS	(1 << 9)	/* Address as slave */
 #define OMAP_I2C_STAT_BF	(1 << 8)	/* Bus Free */
+#define OMAP_I2C_STAT_STC	(1 << 6)	/* Start condition */
+#define OMAP_I2C_STAT_GC	(1 << 5)	/* General call */
 #define OMAP_I2C_STAT_XRDY	(1 << 4)	/* Transmit data ready */
 #define OMAP_I2C_STAT_RRDY	(1 << 3)	/* Receive data ready */
 #define OMAP_I2C_STAT_ARDY	(1 << 2)	/* Register access ready */
-#define OMAP_I2C_STAT_NACK	(1 << 1)	/* No ack interrupt enable */
-#define OMAP_I2C_STAT_AL	(1 << 0)	/* Arbitration lost int ena */
-
-/* I2C WE wakeup enable register */
-#define OMAP_I2C_WE_XDR_WE	(1 << 14)	/* TX drain wakup */
-#define OMAP_I2C_WE_RDR_WE	(1 << 13)	/* RX drain wakeup */
-#define OMAP_I2C_WE_AAS_WE	(1 << 9)	/* Address as slave wakeup*/
-#define OMAP_I2C_WE_BF_WE	(1 << 8)	/* Bus free wakeup */
-#define OMAP_I2C_WE_STC_WE	(1 << 6)	/* Start condition wakeup */
-#define OMAP_I2C_WE_GC_WE	(1 << 5)	/* General call wakeup */
-#define OMAP_I2C_WE_DRDY_WE	(1 << 3)	/* TX/RX data ready wakeup */
-#define OMAP_I2C_WE_ARDY_WE	(1 << 2)	/* Reg access ready wakeup */
-#define OMAP_I2C_WE_NACK_WE	(1 << 1)	/* No acknowledgment wakeup */
-#define OMAP_I2C_WE_AL_WE	(1 << 0)	/* Arbitration lost wakeup */
-
-#define OMAP_I2C_WE_ALL		(OMAP_I2C_WE_XDR_WE | OMAP_I2C_WE_RDR_WE | \
-				OMAP_I2C_WE_AAS_WE | OMAP_I2C_WE_BF_WE | \
-				OMAP_I2C_WE_STC_WE | OMAP_I2C_WE_GC_WE | \
-				OMAP_I2C_WE_DRDY_WE | OMAP_I2C_WE_ARDY_WE | \
-				OMAP_I2C_WE_NACK_WE | OMAP_I2C_WE_AL_WE)
+#define OMAP_I2C_STAT_NACK	(1 << 1)	/* No ack */
+#define OMAP_I2C_STAT_AL	(1 << 0)	/* Arbitration lost */
 
 /* I2C Buffer Configuration Register (OMAP_I2C_BUF): */
 #define OMAP_I2C_BUF_RDMA_EN	(1 << 15)	/* RX DMA channel enable */
@@ -360,7 +335,16 @@ static int omap_i2c_init(struct omap_i2c_dev *omap)
 		 * WFI instruction.
 		 * REVISIT: Some wkup sources might not be needed.
 		 */
-		omap->westate = OMAP_I2C_WE_ALL;
+		omap->westate = (OMAP_I2C_STAT_XDR |
+				 OMAP_I2C_STAT_RDR |
+				 OMAP_I2C_STAT_AAS |
+				 OMAP_I2C_STAT_BF |
+				 OMAP_I2C_STAT_STC |
+				 OMAP_I2C_STAT_GC |
+				 OMAP_I2C_STAT_RRDY |
+				 OMAP_I2C_STAT_ARDY |
+				 OMAP_I2C_STAT_NACK |
+				 OMAP_I2C_STAT_AL);
 	}
 
 	if (omap->flags & OMAP_I2C_FLAG_ALWAYS_ARMXOR_CLK) {
@@ -459,10 +443,14 @@ static int omap_i2c_init(struct omap_i2c_dev *omap)
 		sclh = fclk_rate / (omap->speed * 2) - 7 + psc;
 	}
 
-	omap->iestate = (OMAP_I2C_IE_XRDY | OMAP_I2C_IE_RRDY |
-			OMAP_I2C_IE_ARDY | OMAP_I2C_IE_NACK |
-			OMAP_I2C_IE_AL)  | ((omap->fifo_size) ?
-				(OMAP_I2C_IE_RDR | OMAP_I2C_IE_XDR) : 0);
+	omap->iestate = (OMAP_I2C_STAT_XRDY |
+			 OMAP_I2C_STAT_RRDY |
+			 OMAP_I2C_STAT_ARDY |
+			 OMAP_I2C_STAT_NACK |
+			 OMAP_I2C_STAT_AL);
+
+	if (omap->fifo_size)
+		omap->iestate |= (OMAP_I2C_STAT_RDR | OMAP_I2C_STAT_XDR);
 
 	omap->pscstate = psc;
 	omap->scllstate = scll;
