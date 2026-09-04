@@ -139,15 +139,25 @@ list_set_kadt(struct ip_set *set, const struct sk_buff *skb,
 	return ret;
 }
 
-/* Userspace interfaces: we are protected by the nfnl mutex */
-
 static void
 __list_set_del_rcu(struct rcu_head * rcu)
 {
 	struct set_elem *e = container_of(rcu, struct set_elem, rcu);
 	struct ip_set *set = e->set;
 
+	/* element is no longer public, extensions can
+	 * be removed without lock.  This will trip the
+	 * rcu_dereference_check() call in ip_set_comment_free(),
+	 * so lock/unlock for debug kernels to avoid need to
+	 * add a 'dead' flag to the comment extension.
+	 */
+#ifdef CONFIG_PROVE_RCU
+	spin_lock_bh(&set->lock);
+#endif
 	ip_set_ext_destroy(set, e);
+#ifdef CONFIG_PROVE_RCU
+	spin_unlock_bh(&set->lock);
+#endif
 	kfree(e);
 }
 
@@ -223,6 +233,8 @@ static void
 list_set_init_extensions(struct ip_set *set, const struct ip_set_ext *ext,
 			 struct set_elem *e)
 {
+	lockdep_assert_held(&set->lock);
+
 	if (SET_WITH_COUNTER(set))
 		ip_set_init_counter(ext_counter(e, set), ext);
 	if (SET_WITH_COMMENT(set))
@@ -242,6 +254,8 @@ list_set_uadd(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	struct set_adt_elem *d = value;
 	struct set_elem *e, *n, *prev, *next;
 	bool flag_exist = flags & IPSET_FLAG_EXIST;
+
+	lockdep_assert_held(&set->lock);
 
 	/* Find where to add the new entry */
 	n = prev = next = NULL;
@@ -326,6 +340,8 @@ list_set_udel(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	struct list_set *map = set->data;
 	struct set_adt_elem *d = value;
 	struct set_elem *e, *n, *next, *prev = NULL;
+
+	lockdep_assert_held(&set->lock);
 
 	list_for_each_entry_safe(e, n, &map->members, list) {
 		if (SET_WITH_TIMEOUT(set) &&

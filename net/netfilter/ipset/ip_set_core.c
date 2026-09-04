@@ -62,7 +62,7 @@ MODULE_ALIAS_NFNL_SUBSYS(NFNL_SUBSYS_IPSET);
 #define ip_set(inst, id)		\
 	ip_set_dereference(inst)[id]
 #define ip_set_ref_netlink(inst,id)	\
-	rcu_dereference_raw((inst)->ip_set_list)[id]
+	rcu_dereference((inst)->ip_set_list)[id]
 #define ip_set_dereference_nfnl(p)	\
 	rcu_dereference_check(p, lockdep_nfnl_is_held(NFNL_SUBSYS_IPSET))
 
@@ -323,14 +323,14 @@ ip_set_comment_uget(struct nlattr *tb)
 	return nla_data(tb);
 }
 
-/* Called from uadd only, protected by the set spinlock.
+/* Called from uadd only, protected by the nfnl subsys mutex.
  * The kadt functions don't use the comment extensions in any way.
  */
 void
 ip_set_init_comment(struct ip_set *set, struct ip_set_comment *comment,
 		    const struct ip_set_ext *ext)
 {
-	struct ip_set_comment_rcu *c = rcu_dereference_protected(comment->c, 1);
+	struct ip_set_comment_rcu *c = ip_set_dereference_nfnl(comment->c);
 	size_t len = ext->comment ? strlen(ext->comment) : 0;
 
 	if (unlikely(c)) {
@@ -373,7 +373,9 @@ ip_set_comment_free(struct ip_set *set, void *ptr)
 	struct ip_set_comment *comment = ptr;
 	struct ip_set_comment_rcu *c;
 
-	c = rcu_dereference_protected(comment->c, 1);
+	c = rcu_dereference_check(comment->c,
+				  lockdep_is_held(&set->lock) ||
+				  set->dead);
 	if (unlikely(!c))
 		return;
 	atomic64_sub(sizeof(*c) + strlen(c->str) + 1, &set->ext_size);
@@ -1014,6 +1016,12 @@ static int ip_set_none(struct sk_buff *skb, const struct nfnl_info *info,
 	return -EOPNOTSUPP;
 }
 
+static void ip_set_destroy_set(struct ip_set *set)
+{
+	set->dead = true;
+	set->variant->destroy(set);
+}
+
 static int ip_set_create(struct sk_buff *skb, const struct nfnl_info *info,
 			 const struct nlattr * const attr[])
 {
@@ -1129,7 +1137,7 @@ static int ip_set_create(struct sk_buff *skb, const struct nfnl_info *info,
 
 cleanup:
 	set->variant->cancel_gc(set);
-	set->variant->destroy(set);
+	ip_set_destroy_set(set);
 put_out:
 	module_put(set->type->me);
 out:
@@ -1149,7 +1157,7 @@ ip_set_setname_policy[IPSET_ATTR_CMD_MAX + 1] = {
 static void
 destroy_and_free_set(struct ip_set *set)
 {
-	set->variant->destroy(set);
+	ip_set_destroy_set(set);
 	module_put(set->type->me);
 	kfree(set);
 }
@@ -1189,7 +1197,7 @@ _destroy_all_sets(struct ip_set_net *inst)
 		set = ip_set(inst, i);
 		if (set) {
 			ip_set(inst, i) = NULL;
-			set->variant->destroy(set);
+			ip_set_destroy_set(set);
 			module_put(set->type->me);
 			kfree(set);
 		}

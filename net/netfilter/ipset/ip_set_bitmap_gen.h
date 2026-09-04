@@ -137,6 +137,8 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	void *x = get_ext(set, map, e->id);
 	int ret = mtype_do_add(e, map, flags, set->dsize);
 
+	lockdep_assert_held(&set->lock);
+
 	if (ret == IPSET_ADD_FAILED) {
 		if (SET_WITH_TIMEOUT(set) &&
 		    ip_set_timeout_expired(ext_timeout(x, set))) {
@@ -181,6 +183,8 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	struct mtype *map = set->data;
 	const struct mtype_adt_elem *e = value;
 	void *x = get_ext(set, map, e->id);
+
+	lockdep_assert_held(&set->lock);
 
 	if (mtype_do_del(e, map))
 		return -IPSET_ERR_EXIST;

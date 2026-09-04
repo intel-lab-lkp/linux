@@ -12,8 +12,6 @@
 #include <linux/netfilter/nfnetlink.h>
 #include <linux/netfilter/ipset/ip_set.h>
 
-#define __ipset_dereference(p)		\
-	rcu_dereference_protected(p, 1)
 #define ipset_dereference_nfnl(p)	\
 	rcu_dereference_protected(p,	\
 		lockdep_nfnl_is_held(NFNL_SUBSYS_IPSET))
@@ -353,7 +351,7 @@ mtype_add_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 	struct net_prefix np;
 
 	spin_lock_bh(&set->lock);
-	nets = __ipset_dereference(h->rnets[n]);
+	nets = ipset_dereference_locked(h->rnets[n], set);
 	/* Add in increasing prefix order, so larger cidr first */
 	for (i = 0, found = -1; i < nets->len; i++) {
 		np = READ_ONCE(nets->nets[i]);
@@ -426,7 +424,7 @@ mtype_del_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 	BUILD_BUG_ON(sizeof(struct net_prefix) != sizeof(u32));
 
 	spin_lock_bh(&set->lock);
-	nets = __ipset_dereference(h->rnets[n]);
+	nets = ipset_dereference_locked(h->rnets[n], set);
 	for (i = 0, found = -1; i < nets->len; i++) {
 		np = READ_ONCE(nets->nets[i]);
 		if (np.count && np.cidr == cidr) {

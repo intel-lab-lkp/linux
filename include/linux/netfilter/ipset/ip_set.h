@@ -258,6 +258,8 @@ struct ip_set {
 	u8 extensions;
 	/* Create flags */
 	u8 flags;
+	/* set is being destroyed */
+	bool dead;
 	/* Default timeout value, if enabled */
 	u32 timeout;
 	/* Number of elements (vs timeout) */
@@ -271,6 +273,9 @@ struct ip_set {
 	/* The type specific data */
 	void *data;
 };
+
+#define ipset_dereference_locked(p, set)		\
+	rcu_dereference_protected(p, lockdep_is_held(&set->lock))
 
 static inline void
 ip_set_ext_destroy(struct ip_set *set, void *data)
