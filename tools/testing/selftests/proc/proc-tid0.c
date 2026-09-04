@@ -25,6 +25,8 @@
 
 static pid_t pid = -1;
 
+static volatile sig_atomic_t alarmed;
+
 static void atexit_hook(void)
 {
 	if (pid > 0) {
@@ -39,7 +41,7 @@ static void *f(void *_)
 
 static void sigalrm(int _)
 {
-	exit(0);
+	alarmed = 1;
 }
 
 int main(void)
@@ -62,7 +64,7 @@ int main(void)
 		signal(SIGALRM, sigalrm);
 		alarm(1);
 
-		while (1) {
+		while (!alarmed) {
 			DIR *d = opendir(buf);
 			struct dirent *de;
 			while ((de = readdir(d))) {
