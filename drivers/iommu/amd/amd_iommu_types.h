@@ -121,8 +121,8 @@
 
 /* Note:
  * The current driver only support 16-bit PASID.
- * Currently, hardware only implement upto 16-bit PASID
- * even though the spec says it could have upto 20 bits.
+ * Currently, hardware only implement up to 16-bit PASID
+ * even though the spec says it could have up to 20 bits.
  */
 #define PASID_MASK		0x0000ffff
 
