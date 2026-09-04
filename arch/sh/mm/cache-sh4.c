@@ -354,7 +354,7 @@ static void __flush_cache_one(unsigned long addr, unsigned long phys,
 
 	/*
 	 * We know there will be >=1 iteration, so write as do-while to avoid
-	 * pointless nead-of-loop check for 0 iterations.
+	 * pointless head-of-loop check for 0 iterations.
 	 */
 	do {
 		ea = base_addr + PAGE_SIZE;
