@@ -910,7 +910,7 @@ gf100_gr_fecs_elpg_bind(struct gf100_gr *gr)
 		return ret;
 
 	/*XXX: We need to allocate + map the above into PMU's inst block,
-	 *     which which means we probably need a proper PMU before we
+	 *     which means we probably need a proper PMU before we
 	 *     even bother.
 	 */
 
