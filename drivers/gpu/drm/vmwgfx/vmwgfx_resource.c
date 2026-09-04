@@ -702,7 +702,7 @@ int vmw_resource_validate(struct vmw_resource *res, bool intr,
 
 		spin_lock(&dev_priv->resource_lock);
 		if (list_empty(lru_list) || !res->func->may_evict) {
-			DRM_ERROR("Out of device device resources "
+			DRM_ERROR("Out of device resources "
 				  "for %s.\n", res->func->type_name);
 			ret = -EBUSY;
 			spin_unlock(&dev_priv->resource_lock);
