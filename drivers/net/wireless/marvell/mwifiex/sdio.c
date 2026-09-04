@@ -2795,6 +2795,11 @@ static void mwifiex_sdio_fw_dump(struct mwifiex_adapter *adapter)
 		mwifiex_dbg(adapter, ERROR, "SDIO read memory length err\n");
 		goto done;
 	}
+	if (dump_num > ARRAY_SIZE(mem_type_mapping_tbl)) {
+		mwifiex_dbg(adapter, ERROR,
+			    "Invalid fw dump num: %d\n", dump_num);
+		goto done;
+	}
 
 	/* Read the length of every memory which will dump */
 	for (idx = 0; idx < dump_num; idx++) {
