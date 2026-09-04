@@ -418,6 +418,16 @@ menu "Kernel Features"
 
 menu "ARM errata workarounds via the alternatives framework"
 
+config ALTERA_ERRATUM_AGILEX5
+	bool "Altera Agilex5: GIC600 can not access physical addresses higher than 4GB"
+	default y
+	help
+	  The Altera SoCFPGA Agilex5 GIC600 SoC integration has ACE-lite
+	  addressing limited to the first 32bit of physical address space.
+	  This is documented as Agilex 5 ES Device Errata 2.1.23 (825514).
+
+	  If unsure, say Y.
+
 config AMPERE_ERRATUM_AC03_CPU_38
         bool "AmpereOne: AC03_CPU_38: Certain bits in the Virtualization Translation Control Register and Translation Control Registers do not follow RES0 semantics"
 	default y
