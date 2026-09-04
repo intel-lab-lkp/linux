@@ -1050,7 +1050,7 @@ struct x86_pmu {
 	 * unique capabilities.
 	 */
 	int				num_hybrid_pmus;
-	struct x86_hybrid_pmu		*hybrid_pmu;
+	struct x86_hybrid_pmu		*hybrid_pmu __counted_by_ptr(num_hybrid_pmus);
 	enum intel_cpu_type (*get_hybrid_cpu_type)	(void);
 };
 
