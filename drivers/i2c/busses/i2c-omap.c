@@ -174,11 +174,11 @@ struct omap_i2c_dev {
 						 * if set, should be trsh+1
 						 */
 	u32			rev;
-	unsigned		b_hw:1;		/* bad h/w fixes */
-	unsigned		bb_valid:1;	/* true when BB-bit reflects
+	bool			b_hw;		/* bad h/w fixes */
+	bool			bb_valid;	/* true when BB-bit reflects
 						 * the I2C bus state
 						 */
-	unsigned		receiver:1;	/* true when we're in receiver mode */
+	bool			receiver;	/* true when we're in receiver mode */
 	u16			iestate;	/* Saved interrupt register */
 	u16			pscstate;
 	u16			scllstate;
@@ -313,7 +313,7 @@ static int omap_i2c_reset(struct omap_i2c_dev *omap)
 
 		if (omap->rev > OMAP_I2C_REV_ON_3430_3530) {
 			/* Schedule I2C-bus monitoring on the next transfer */
-			omap->bb_valid = 0;
+			omap->bb_valid = false;
 		}
 	}
 
@@ -458,7 +458,7 @@ static int omap_i2c_init(struct omap_i2c_dev *omap)
 
 	if (omap->rev <= OMAP_I2C_REV_ON_3430_3530) {
 		/* Not implemented */
-		omap->bb_valid = 1;
+		omap->bb_valid = true;
 	}
 
 	__omap_i2c_init(omap);
@@ -531,7 +531,7 @@ static int omap_i2c_wait_for_bb_valid(struct omap_i2c_dev *omap)
 {
 	unsigned long bus_free_timeout = 0;
 	unsigned long timeout;
-	int bus_free = 0;
+	bool bus_free = false;
 	u16 stat, systest;
 
 	if (omap->bb_valid)
@@ -558,7 +558,7 @@ static int omap_i2c_wait_for_bb_valid(struct omap_i2c_dev *omap)
 			if (!bus_free) {
 				bus_free_timeout = jiffies +
 					OMAP_I2C_BUS_FREE_TIMEOUT;
-				bus_free = 1;
+				bus_free = true;
 			}
 
 			/*
@@ -569,7 +569,7 @@ static int omap_i2c_wait_for_bb_valid(struct omap_i2c_dev *omap)
 			if (time_after(jiffies, bus_free_timeout))
 				break;
 		} else {
-			bus_free = 0;
+			bus_free = false;
 		}
 
 		if (time_after(jiffies, timeout)) {
@@ -585,7 +585,7 @@ static int omap_i2c_wait_for_bb_valid(struct omap_i2c_dev *omap)
 		msleep(1);
 	}
 
-	omap->bb_valid = 1;
+	omap->bb_valid = true;
 	return 0;
 }
 
@@ -620,7 +620,7 @@ static void omap_i2c_resize_fifo(struct omap_i2c_dev *omap, u8 size, bool is_rx)
 	omap_i2c_write_reg(omap, OMAP_I2C_BUF_REG, buf);
 
 	if (omap->rev < OMAP_I2C_REV_ON_3630)
-		omap->b_hw = 1; /* Enable hardware fixes */
+		omap->b_hw = true; /* Enable hardware fixes */
 
 	/* calculate wakeup latency constraint for MPU */
 	if (omap->set_mpu_wkup_lat != NULL)
@@ -644,7 +644,7 @@ static void omap_i2c_wait(struct omap_i2c_dev *omap)
  * Low level master read/write transaction.
  */
 static int omap_i2c_xfer_msg(struct i2c_adapter *adap,
-			     struct i2c_msg *msg, int stop, bool polling)
+			     struct i2c_msg *msg, bool stop, bool polling)
 {
 	struct omap_i2c_dev *omap = i2c_get_adapdata(adap);
 	unsigned long time_left;
@@ -684,7 +684,7 @@ static int omap_i2c_xfer_msg(struct i2c_adapter *adap,
 		w |= OMAP_I2C_CON_OPMODE_HS;
 
 	if (msg->flags & I2C_M_STOP)
-		stop = 1;
+		stop = true;
 	if (msg->flags & I2C_M_TEN)
 		w |= OMAP_I2C_CON_XA;
 	if (!(msg->flags & I2C_M_RD))
@@ -1423,7 +1423,7 @@ omap_i2c_probe(struct platform_device *pdev)
 		omap->fifo_size = (omap->fifo_size / 2);
 
 		if (omap->rev < OMAP_I2C_REV_ON_3630)
-			omap->b_hw = 1; /* Enable hardware fixes */
+			omap->b_hw = true; /* Enable hardware fixes */
 
 		/* calculate wakeup latency constraint for MPU */
 		if (omap->set_mpu_wkup_lat != NULL)
