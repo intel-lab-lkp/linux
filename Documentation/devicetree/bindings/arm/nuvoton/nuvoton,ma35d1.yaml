@@ -18,7 +18,11 @@ properties:
     const: '/'
   compatible:
     oneOf:
-
+      - description: NuMaker carrier board with an MA35D1 SoM
+        items:
+          - const: nuvoton,ma35d1-numaker
+          - const: nuvoton,ma35d1-som
+          - const: nuvoton,ma35d1
       - description: MA35D1 based boards
         items:
           - enum:
