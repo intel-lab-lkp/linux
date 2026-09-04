@@ -291,7 +291,7 @@ memcpy:
 	if(noprolog) jump .Lnoprolog32;
 	align = offset;
 }
-/*  upto initial 7 bytes  */
+/*  up to initial 7 bytes  */
 {
 	ldata0 = valignb(dataF8, data70, align);
 	ifbyte = tstbit(shift,#3);
@@ -525,5 +525,5 @@ memcpy:
 	r25:24 = memd(sp+#8);	/*  restore r24+r25  */
 	r17:16 = memd(sp+#0);	/*  restore r16+r17  */
 }
-	deallocframe;	/*  restore r31 and incrment stack by 16  */
+	deallocframe;	/*  restore r31 and increment stack by 16  */
 	jumpr r31

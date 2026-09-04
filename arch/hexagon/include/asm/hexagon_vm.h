@@ -239,7 +239,7 @@ static inline long __vmintop_clear(long i)
 #define HVM_EV_GENEX		2
 #define HVM_EV_TRAP		8
 #define HVM_EV_INTR		15
-/* These shoud be nuked as soon as we know the VM is up to spec v0.1.1 */
+/* These should be nuked as soon as we know the VM is up to spec v0.1.1 */
 #define HVM_EV_INTR_0		16
 #define HVM_MAX_INTR		240
 
