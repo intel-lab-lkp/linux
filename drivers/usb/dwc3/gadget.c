@@ -2181,9 +2181,12 @@ static int dwc3_gadget_ep_dequeue(struct usb_ep *ep,
 		}
 	}
 
-	dev_err(dwc->dev, "request %p was not queued to %s\n",
-		request, ep->name);
-	ret = -EINVAL;
+	/* Dequeuing a completed request is a no-op, not an error. */
+	if (req->status != DWC3_REQUEST_STATUS_COMPLETED || req->dep != dep) {
+		dev_err(dwc->dev, "request %p was not queued to %s\n",
+			request, ep->name);
+		ret = -EINVAL;
+	}
 out:
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
