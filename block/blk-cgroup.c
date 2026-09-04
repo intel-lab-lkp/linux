@@ -1160,7 +1160,7 @@ static void blkcg_print_one_stat(struct blkcg_gq *blkg, struct seq_file *s)
 		dios = bis->cur.ios[BLKG_IOSTAT_DISCARD];
 	} while (u64_stats_fetch_retry(&bis->sync, seq));
 
-	if (rbytes || wbytes || rios || wios) {
+	if (rbytes || wbytes || rios || wios || dbytes || dios) {
 		seq_printf(s, "rbytes=%llu wbytes=%llu rios=%llu wios=%llu dbytes=%llu dios=%llu",
 			rbytes, wbytes, rios, wios,
 			dbytes, dios);
