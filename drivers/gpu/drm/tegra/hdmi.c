@@ -520,7 +520,7 @@ static int tegra_hdmi_setup_audio(struct tegra_hdmi *hdmi)
 
 	/*
 	 * Tegra30 and later use a slightly modified version of the register
-	 * layout to accomodate for changes related to supporting HDA as the
+	 * layout to accommodate for changes related to supporting HDA as the
 	 * audio input source for HDMI. The source select field has moved to
 	 * the SOR_AUDIO_CNTRL0 register, but the error tolerance and frames
 	 * per block fields remain in the AUDIO_CNTRL0 register.
