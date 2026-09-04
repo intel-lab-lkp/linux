@@ -371,8 +371,11 @@ with the following files:
 	of counters available is described in the "num_mbm_cntrs" file. Changing the
 	mode may cause all counters on the resource to reset.
 
-	Moving to mbm_event counter assignment mode requires users to assign the counters
-	to the events. Otherwise, the MBM event counters will return 'Unassigned' when read.
+	Moving to mbm_event counter assignment mode enables "mbm_assign_on_mkdir" and
+	assigns counters to the events of all existing groups, including the default
+	group, for as long as counters remain available. Events left without a counter
+	will return 'Unassigned' when read until the user assigns one using
+	"mbm_L3_assignments".
 
 	The mode is beneficial for AMD platforms that support more CTRL_MON
 	and MON groups than available hardware counters. By default, this

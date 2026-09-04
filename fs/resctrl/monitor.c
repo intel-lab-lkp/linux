@@ -1273,6 +1273,27 @@ void rdtgroup_assign_cntrs(struct rdtgroup *rdtgrp)
 }
 
 /*
+ * resctrl_assign_cntrs_allrdtgrp() - Assign counters to the MBM events of every
+ *				      existing group. Called when "mbm_event" mode
+ *				      is enabled.
+ *
+ * Groups created while in "default" mode have no counter assigned, including the
+ * default group created when resctrl is mounted. Assign counters to them so that
+ * enabling the mode leaves the same assignments that mkdir would have made.
+ */
+static void resctrl_assign_cntrs_allrdtgrp(void)
+{
+	struct rdtgroup *prgrp, *crgrp;
+
+	list_for_each_entry(prgrp, &rdt_all_groups, rdtgroup_list) {
+		rdtgroup_assign_cntrs(prgrp);
+
+		list_for_each_entry(crgrp, &prgrp->mon.crdtgrp_list, mon.crdtgrp_list)
+			rdtgroup_assign_cntrs(crgrp);
+	}
+}
+
+/*
  * rdtgroup_free_unassign_cntr() - Unassign and reset the counter ID configuration
  * for the event pointed to by @mevt within the domain @d and resctrl group @rdtgrp.
  */
@@ -1539,15 +1560,18 @@ ssize_t resctrl_mbm_assign_mode_write(struct kernfs_open_file *of, char *buf,
 									   (READS_TO_LOCAL_MEM |
 									    READS_TO_LOCAL_S_MEM |
 									    NON_TEMP_WRITE_TO_LOCAL_MEM);
-		/* Enable auto assignment when switching to "mbm_event" mode */
-		if (enable)
-			r->mon.mbm_assign_on_mkdir = true;
 		/*
 		 * Reset all the non-achitectural RMID state and assignable counters.
 		 */
 		list_for_each_entry(d, &r->mon_domains, hdr.list) {
 			mbm_cntr_free_all(r, d);
 			resctrl_reset_rmid_all(r, d);
+		}
+
+		if (enable) {
+			/* Enable auto assignment when switching to "mbm_event" mode */
+			r->mon.mbm_assign_on_mkdir = true;
+			resctrl_assign_cntrs_allrdtgrp();
 		}
 	}
 
