@@ -24,7 +24,7 @@ struct i2c_atr;
  * @I2C_ATR_F_STATIC: ATR does not support dynamic mapping, use static mapping.
  *                    Mappings will only be added or removed as a result of
  *                    devices being added or removed from a child bus.
- *                    The ATR pool will have to be big enough to accomodate all
+ *                    The ATR pool will have to be big enough to accommodate all
  *                    devices expected to be added to the child buses.
  * @I2C_ATR_F_PASSTHROUGH: Allow unmapped incoming addresses to pass through
  */
