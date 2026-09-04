@@ -58,7 +58,7 @@ int configfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 			sd_iattr->ia_ctime = current_time(inode);
 		sd->s_iattr = sd_iattr;
 	}
-	/* attributes were changed atleast once in past */
+	/* attributes were changed at least once in past */
 
 	error = simple_setattr(idmap, dentry, iattr);
 	if (error)
