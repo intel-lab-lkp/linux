@@ -735,7 +735,7 @@ out:
 }
 
 /*
- * TI specifiy parts for the power hook.
+ * TI specify parts for the power hook.
  *
  * some TI's with some CB's produces interrupt storm on power on. it has been
  * seen with atheros wlan cards on TI1225 and TI1410. solution is simply to
