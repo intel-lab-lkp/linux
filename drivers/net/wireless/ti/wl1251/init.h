@@ -29,7 +29,7 @@ enum {
 	NUM_ACCESS_CATEGORIES = 4
 };
 
-/* following are defult values for the IE fields*/
+/* following are default values for the IE fields*/
 #define CWMIN_BK  15
 #define CWMIN_BE  15
 #define CWMIN_VI  7

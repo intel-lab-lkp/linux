@@ -671,7 +671,7 @@ enum {
 #define E2P_PWR_INT_GUARD		8
 #define E2P_CHANNEL_COUNT		14
 
-/* If you compare this addresses with the ZYDAS orignal driver, please notify
+/* If you compare this addresses with the ZYDAS original driver, please notify
  * that we use word mapping for the EEPROM.
  */
 

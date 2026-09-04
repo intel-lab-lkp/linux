@@ -534,7 +534,7 @@ out:
 		/*
 		 * This will indirectly result in a call to p54p_remove.
 		 * Hence, we don't need to bother with freeing any
-		 * allocated ressources at all.
+		 * allocated resources at all.
 		 */
 		device_release_driver(&pdev->dev);
 

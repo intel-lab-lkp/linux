@@ -710,7 +710,7 @@ static void rt61pci_config_ant(struct rt2x00_dev *rt2x00dev,
 
 	/*
 	 * We should never come here because rt2x00lib is supposed
-	 * to catch this and send us the correct antenna explicitely.
+	 * to catch this and send us the correct antenna explicitly.
 	 */
 	BUG_ON(ant->rx == ANTENNA_SW_DIVERSITY ||
 	       ant->tx == ANTENNA_SW_DIVERSITY);
@@ -2467,7 +2467,7 @@ static int rt61pci_init_eeprom(struct rt2x00_dev *rt2x00dev)
 	rt2x00dev->freq_offset = rt2x00_get_field16(eeprom, EEPROM_FREQ_OFFSET);
 
 	/*
-	 * Read external LNA informations.
+	 * Read external LNA information.
 	 */
 	eeprom = rt2x00_eeprom_read(rt2x00dev, EEPROM_NIC);
 

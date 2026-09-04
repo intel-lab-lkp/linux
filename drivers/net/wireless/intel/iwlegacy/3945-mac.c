@@ -2559,7 +2559,7 @@ il3945_request_scan(struct il_priv *il, struct ieee80211_vif *vif)
 	}
 
 	/*
-	 * If active scaning is requested but a certain channel is marked
+	 * If active scanning is requested but a certain channel is marked
 	 * passive, we can do active scanning if we detect transmissions. For
 	 * passive only scanning disable switching to active on any channel.
 	 */

@@ -246,7 +246,7 @@ void ath_printk(const char *level, const struct ath_common *common,
  * @ATH_DBG_FATAL: fatal errors, this is the default, DBG_DEFAULT
  * @ATH_DBG_PS: power save processing
  * @ATH_DBG_HWTIMER: hardware timer handling
- * @ATH_DBG_BTCOEX: bluetooth coexistance
+ * @ATH_DBG_BTCOEX: bluetooth coexistence
  * @ATH_DBG_BSTUCK: stuck beacons
  * @ATH_DBG_MCI: Message Coexistence Interface, a private protocol
  *	used exclusively for WLAN-BT coexistence starting from

@@ -568,7 +568,7 @@ static void rtl8180_tx(struct ieee80211_hw *dev,
 	 */
 	wmb();
 	entry->flags = cpu_to_le32(tx_flags);
-	/* We must be sure this has been written before followings HW
+	/* We must be sure this has been written before following HW
 	 * register write, because this write will made the HW attempts
 	 * to DMA the just-written data
 	 */
@@ -931,7 +931,7 @@ static int rtl8180_init_hw(struct ieee80211_hw *dev)
 		rtl818x_iowrite16(priv, ARFR, 0xFFF);
 		rtl818x_ioread16(priv, ARFR);
 
-		/* stop unused queus (no dma alloc) */
+		/* stop unused queues (no dma alloc) */
 		rtl818x_iowrite8(priv, &priv->map->TPPOLL_STOP,
 			       RTL818x_TPPOLL_STOP_MG | RTL818x_TPPOLL_STOP_HI);
 
@@ -973,7 +973,7 @@ static int rtl8180_init_hw(struct ieee80211_hw *dev)
 		reg32 |= 0xb8000054;
 		rtl818x_iowrite32(priv, &priv->map->RF_PARA, reg32);
 	} else
-		/* stop unused queus (no dma alloc) */
+		/* stop unused queues (no dma alloc) */
 		rtl818x_iowrite8(priv, &priv->map->TX_DMA_POLLING,
 			    (1<<1) | (1<<2));
 
@@ -1151,7 +1151,7 @@ static int rtl8180_start(struct ieee80211_hw *dev)
 	rtl8180_int_enable(dev);
 
 	/* in rtl8187se at MAR regs offset there is the management
-	 * TX descriptor DMA addres..
+	 * TX descriptor DMA address..
 	 */
 	if (priv->chip_family != RTL818X_CHIP_FAMILY_RTL8187SE) {
 		rtl818x_iowrite32(priv, &priv->map->MAR[0], ~0);

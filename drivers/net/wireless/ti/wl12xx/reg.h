@@ -124,7 +124,7 @@
  register to clear (acknowledge) the corresp.
  interrupt status bits in the HINT_STS_CLR and
  HINT_STS_ND registers, thus making the
- assotiated interrupt inactive. (0-no effect)
+ associated interrupt inactive. (0-no effect)
 ==============================================*/
 #define WL12XX_REG_INTERRUPT_ACK          (REGISTERS_BASE + 0x04F0)
 

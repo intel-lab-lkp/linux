@@ -402,7 +402,7 @@ static void rt2500pci_config_ant(struct rt2x00_dev *rt2x00dev,
 
 	/*
 	 * We should never come here because rt2x00lib is supposed
-	 * to catch this and send us the correct antenna explicitely.
+	 * to catch this and send us the correct antenna explicitly.
 	 */
 	BUG_ON(ant->rx == ANTENNA_SW_DIVERSITY ||
 	       ant->tx == ANTENNA_SW_DIVERSITY);

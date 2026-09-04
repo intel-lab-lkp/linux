@@ -1109,7 +1109,7 @@ static int brcmf_chip_setup(struct brcmf_chip_priv *chip)
 	cc = list_first_entry(&chip->cores, struct brcmf_core_priv, list);
 	base = cc->pub.base;
 
-	/* get chipcommon capabilites */
+	/* get chipcommon capabilities */
 	pub->cc_caps = chip->ops->read32(chip->ctx,
 					 CORE_CC_REG(base, capabilities));
 	pub->cc_caps_ext = chip->ops->read32(chip->ctx,

@@ -113,7 +113,7 @@ void rt2x00lib_config_antenna(struct rt2x00_dev *rt2x00dev,
 	 * we must update the ANTENNA_RX_DIVERSITY flag to
 	 * enable the antenna diversity in the link tuner.
 	 *
-	 * Secondly, we must guarentee we never send the
+	 * Secondly, we must guarantee we never send the
 	 * software antenna diversity command to the driver.
 	 */
 	if (!(ant->flags & ANTENNA_RX_DIVERSITY)) {

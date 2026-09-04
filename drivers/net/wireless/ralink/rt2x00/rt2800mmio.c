@@ -160,7 +160,7 @@ void rt2800mmio_fill_rxdone(struct queue_entry *entry,
 		} else if (rxdesc->cipher_status == RX_CRYPTO_FAIL_MIC) {
 			/*
 			 * In order to check the Michael Mic, the packet must have
-			 * been decrypted.  Mac80211 doesnt check the MMIC failure 
+			 * been decrypted.  Mac80211 doesn't check the MMIC failure 
 			 * flag to initiate MMIC countermeasures if the decoded flag
 			 * has not been set.
 			 */
@@ -294,7 +294,7 @@ static void rt2800mmio_fetch_txstatus(struct rt2x00_dev *rt2x00dev)
 	 * interrupt fires again during tx status processing).
 	 *
 	 * We also read statuses from tx status timeout timer, use
-	 * lock to prevent concurent writes to fifo.
+	 * lock to prevent concurrent writes to fifo.
 	 */
 
 	spin_lock_irqsave(&rt2x00dev->irqmask_lock, flags);

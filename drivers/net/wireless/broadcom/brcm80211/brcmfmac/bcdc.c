@@ -82,7 +82,7 @@ struct brcmf_proto_bcdc_header {
 #define BRCMF_PROT_FW_SIGNAL_MAX_TXBYTES	12
 
 #define RETRIES 2 /* # of retries to retrieve matching dcmd response */
-#define BUS_HEADER_LEN	(16+64)		/* Must be atleast SDPCM_RESERVE
+#define BUS_HEADER_LEN	(16+64)		/* Must be at least SDPCM_RESERVE
 					 * (amount of header tha might be added)
 					 * plus any space that might be needed
 					 * for bus alignment padding.

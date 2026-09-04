@@ -69,7 +69,7 @@ enum carl9170_cmd_oids {
 	CARL9170_CMD_FREQ_START		= 0x23,
 	CARL9170_CMD_PSM		= 0x24,
 
-	/* Asychronous command flag */
+	/* Asynchronous command flag */
 	CARL9170_CMD_ASYNC_FLAG		= 0x40,
 	CARL9170_CMD_WREG_ASYNC		= (CARL9170_CMD_WREG |
 					   CARL9170_CMD_ASYNC_FLAG),

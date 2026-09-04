@@ -878,7 +878,7 @@ struct cw1200_wsm_event {
 };
 
 /* 3.18 - 3.22 */
-/* Measurement. Skipped for now. Irrelevent. */
+/* Measurement. Skipped for now. Irrelevant. */
 
 typedef void (*wsm_event_cb) (struct cw1200_common *priv,
 			      struct wsm_event *arg);
@@ -1151,7 +1151,7 @@ int wsm_set_uapsd_param(struct cw1200_common *priv,
 			const struct wsm_edca_params *arg);
 
 /* 3.38 */
-/* Set-System info. Skipped for now. Irrelevent. */
+/* Set-System info. Skipped for now. Irrelevant. */
 
 /* 3.40 */
 #define WSM_SWITCH_CHANNEL_REQ_ID 0x0016

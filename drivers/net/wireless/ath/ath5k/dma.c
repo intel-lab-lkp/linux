@@ -548,7 +548,7 @@ ath5k_hw_get_isr(struct ath5k_hw *ah, enum ath5k_int *interrupt_mask)
 		 */
 		*interrupt_mask = (isr & AR5K_INT_COMMON) & ah->ah_imr;
 
-		/* Hanlde INT_FATAL */
+		/* Handle INT_FATAL */
 		if (unlikely(isr & (AR5K_ISR_SSERR | AR5K_ISR_MCABT
 						| AR5K_ISR_DPERR)))
 			*interrupt_mask |= AR5K_INT_FATAL;

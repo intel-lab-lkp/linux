@@ -699,7 +699,7 @@ static s32 brcmf_p2p_escan(struct brcmf_p2p_info *p2p, u32 num_chans,
 	switch (search_state) {
 	case WL_P2P_DISC_ST_SEARCH:
 		/*
-		 * If we in SEARCH STATE, we don't need to set SSID explictly
+		 * If we in SEARCH STATE, we don't need to set SSID explicitly
 		 * because dongle use P2P WILDCARD internally by default, use
 		 * null ssid, which it is already due to kzalloc.
 		 */
@@ -1360,7 +1360,7 @@ brcmf_p2p_stop_wait_next_action_frame(struct brcmf_cfg80211_info *cfg)
  * @p2p: p2p device info struct.
  * @mac: MAC address.
  *
- * return true if recevied action frame is to be dropped.
+ * return true if received action frame is to be dropped.
  */
 static bool
 brcmf_p2p_gon_req_collision(struct brcmf_p2p_info *p2p, u8 *mac)

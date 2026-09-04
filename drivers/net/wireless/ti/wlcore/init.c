@@ -498,7 +498,7 @@ static int wl1271_set_ba_policies(struct wl1271 *wl, struct wl12xx_vif *wlvif)
 	return wl12xx_acx_set_ba_initiator_policy(wl, wlvif);
 }
 
-/* vif-specifc initialization */
+/* vif-specific initialization */
 static int wl12xx_init_sta_role(struct wl1271 *wl, struct wl12xx_vif *wlvif)
 {
 	int ret;

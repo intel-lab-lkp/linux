@@ -840,7 +840,7 @@ void rt2x00lib_rxdone(struct queue_entry *entry, gfp_t gfp)
 
 	/* Ensure that all fields of rx_status are initialized
 	 * properly. The skb->cb array was used for driver
-	 * specific informations, so rx_status might contain
+	 * specific information, so rx_status might contain
 	 * garbage.
 	 */
 	memset(rx_status, 0, sizeof(*rx_status));

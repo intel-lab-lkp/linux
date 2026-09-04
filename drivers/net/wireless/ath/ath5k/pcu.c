@@ -459,7 +459,7 @@ ath5k_hw_set_bssid_mask(struct ath5k_hw *ah, const u8 *mask)
 /**
  * ath5k_hw_set_mcast_filter() - Set multicast filter
  * @ah: The &struct ath5k_hw
- * @filter0: Lower 32bits of muticast filter
+ * @filter0: Lower 32bits of multicast filter
  * @filter1: Higher 16bits of multicast filter
  */
 void

@@ -101,7 +101,7 @@ struct ar5523_cmd_hdr {
 #define	WDCMSG_SET_DEFAULT_KEY		0x43
 
 	__u32		priv;	/* driver private data,
-				   don't care about endianess */
+				   don't care about endianness */
 	__be32		magic;
 	__be32		reserved2[4];
 };

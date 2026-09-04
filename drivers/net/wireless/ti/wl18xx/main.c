@@ -38,7 +38,7 @@ static char *board_type_param = NULL;
 static bool checksum_param = false;
 static int num_rx_desc_param = -1;
 
-/* phy paramters */
+/* phy parameters */
 static int dc2dc_param = -1;
 static int n_antennas_2_param = -1;
 static int n_antennas_5_param = -1;

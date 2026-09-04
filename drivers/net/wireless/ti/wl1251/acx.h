@@ -592,7 +592,7 @@ struct acx_bt_wlan_coex_param {
 	/* range 400-10000(Usec) default: 3000 */
 	u16 next_bt_lp_packet;
 
-	/* Deafult: worst case for BT DH5 traffic */
+	/* Default: worst case for BT DH5 traffic */
 	u16 wake_up_beacon;
 
 	/* range: 0-50000(Usec) default: 1050 */

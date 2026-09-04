@@ -4095,7 +4095,7 @@ static void rt2800_iq_calibrate(struct rt2x00_dev *rt2x00dev, int channel)
 		cal = 0;
 	rt2800_bbp_write(rt2x00dev, 159, cal);
 
-	/* FIXME: possible RX0, RX1 callibration ? */
+	/* FIXME: possible RX0, RX1 calibration ? */
 
 	/* RF IQ compensation control */
 	rt2800_bbp_write(rt2x00dev, 158, 0x04);
@@ -11275,7 +11275,7 @@ static int rt2800_init_eeprom(struct rt2x00_dev *rt2x00dev)
 	}
 
 	/*
-	 * Determine external LNA informations.
+	 * Determine external LNA information.
 	 */
 	if (rt2x00_get_field16(eeprom, EEPROM_NIC_CONF1_EXTERNAL_LNA_5G))
 		__set_bit(CAPABILITY_EXTERNAL_LNA_A, &rt2x00dev->cap_flags);

@@ -167,7 +167,7 @@
 #define B43_MMIO_WEPCTL			0x7C0
 
 /* SPROM boardflags_lo values */
-#define B43_BFL_BTCOEXIST		0x0001	/* implements Bluetooth coexistance */
+#define B43_BFL_BTCOEXIST		0x0001	/* implements Bluetooth coexistence */
 #define B43_BFL_PACTRL			0x0002	/* GPIO 9 controlling the PA */
 #define B43_BFL_AIRLINEMODE		0x0004	/* implements GPIO 13 radio disable indication */
 #define B43_BFL_RSSI			0x0008	/* software calculates nrssi slope. */
@@ -359,7 +359,7 @@ enum {
 #define B43_HF_SYMW		0x000000000002ULL /* G-PHY SYM workaround */
 #define B43_HF_RXPULLW		0x000000000004ULL /* RX pullup workaround */
 #define B43_HF_CCKBOOST		0x000000000008ULL /* 4dB CCK power boost (exclusive with OFDM boost) */
-#define B43_HF_BTCOEX		0x000000000010ULL /* Bluetooth coexistance */
+#define B43_HF_BTCOEX		0x000000000010ULL /* Bluetooth coexistence */
 #define B43_HF_GDCW		0x000000000020ULL /* G-PHY DC canceller filter bw workaround */
 #define B43_HF_OFDMPABOOST	0x000000000040ULL /* Enable PA gain boost for OFDM */
 #define B43_HF_ACPR		0x000000000080ULL /* Disable for Japan, channel 14 */
@@ -372,14 +372,14 @@ enum {
 #define B43_HF_RADARW		0x000000002000ULL /* Radar workaround */
 #define B43_HF_USEDEFKEYS	0x000000004000ULL /* Enable use of default keys */
 #define B43_HF_AFTERBURNER	0x000000008000ULL /* Afterburner enabled */
-#define B43_HF_BT4PRIOCOEX	0x000000010000ULL /* Bluetooth 4-priority coexistance */
+#define B43_HF_BT4PRIOCOEX	0x000000010000ULL /* Bluetooth 4-priority coexistence */
 #define B43_HF_FWKUP		0x000000020000ULL /* Fast wake-up ucode */
 #define B43_HF_VCORECALC	0x000000040000ULL /* Force VCO recalculation when powering up synthpu */
 #define B43_HF_PCISCW		0x000000080000ULL /* PCI slow clock workaround */
 #define B43_HF_4318TSSI		0x000000200000ULL /* 4318 TSSI */
 #define B43_HF_FBCMCFIFO	0x000000400000ULL /* Flush bcast/mcast FIFO immediately */
 #define B43_HF_HWPCTL		0x000000800000ULL /* Enable hardwarre power control */
-#define B43_HF_BTCOEXALT	0x000001000000ULL /* Bluetooth coexistance in alternate pins */
+#define B43_HF_BTCOEXALT	0x000001000000ULL /* Bluetooth coexistence in alternate pins */
 #define B43_HF_TXBTCHECK	0x000002000000ULL /* Bluetooth check during transmission */
 #define B43_HF_SKCFPUP		0x000004000000ULL /* Skip CFP update */
 #define B43_HF_N40W		0x000008000000ULL /* N PHY 40 MHz workaround (rev >= 13 only) */

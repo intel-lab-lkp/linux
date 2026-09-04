@@ -607,7 +607,7 @@
 #define SSB_SPROM8_BWDUPPO		0x0198
 
 /* Values for boardflags_lo read from SPROM */
-#define SSB_BFL_BTCOEXIST		0x0001	/* implements Bluetooth coexistance */
+#define SSB_BFL_BTCOEXIST		0x0001	/* implements Bluetooth coexistence */
 #define SSB_BFL_PACTRL			0x0002	/* GPIO 9 controlling the PA */
 #define SSB_BFL_AIRLINEMODE		0x0004	/* implements GPIO 13 radio disable indication */
 #define SSB_BFL_RSSI			0x0008	/* software calculates nrssi slope. */

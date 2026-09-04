@@ -575,7 +575,7 @@ static int carl9170_init_interface(struct ar9170 *ar,
 	 * NOTE: If the previous main interface has already
 	 * disabled hw crypto offload, we have to keep this
 	 * previous disable_offload setting as it was.
-	 * Altough ideally, we should notify mac80211 and tell
+	 * Although ideally, we should notify mac80211 and tell
 	 * it to forget about any HW crypto offload for now.
 	 */
 	ar->disable_offload |= ((vif->type != NL80211_IFTYPE_STATION) &&
@@ -677,12 +677,12 @@ static int carl9170_op_add_interface(struct ieee80211_hw *hw,
 	if (old_main) {
 		/* We end up in here, if the main interface is being replaced.
 		 * Put the new main interface at the HEAD of the list and the
-		 * previous inteface will automatically become second in line.
+		 * previous interface will automatically become second in line.
 		 */
 		list_add_rcu(&vif_priv->list, &ar->vif_list);
 	} else {
-		/* Add new inteface. If the list is empty, it will become the
-		 * main inteface, otherwise it will be slave.
+		/* Add new interface. If the list is empty, it will become the
+		 * main interface, otherwise it will be slave.
 		 */
 		list_add_tail_rcu(&vif_priv->list, &ar->vif_list);
 	}

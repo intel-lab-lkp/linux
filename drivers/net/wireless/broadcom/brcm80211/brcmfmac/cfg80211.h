@@ -149,7 +149,7 @@ enum brcmf_profile_fwauth {
  * @BRCMF_MGMT_TX_ACK: mgmt frame acked
  * @BRCMF_MGMT_TX_NOACK: mgmt frame not acked
  * @BRCMF_MGMT_TX_OFF_CHAN_COMPLETED: off-channel complete
- * @BRCMF_MGMT_TX_SEND_FRAME: mgmt frame tx is in progres
+ * @BRCMF_MGMT_TX_SEND_FRAME: mgmt frame tx is in progress
  */
 enum brcmf_mgmt_tx_status {
 	BRCMF_MGMT_TX_ACK,

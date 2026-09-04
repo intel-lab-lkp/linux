@@ -314,7 +314,7 @@ static int if_usb_send_fw_pkt(struct if_usb_card *cardp)
 		lbtf_deb_usb2(&cardp->udev->dev, "Downloading FW JUMP BLOCK\n");
 
 		/* Host has finished FW downloading
-		 * Donwloading FW JUMP BLOCK
+		 * Downloading FW JUMP BLOCK
 		 */
 		cardp->fwfinalblk = 1;
 	}

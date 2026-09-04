@@ -2040,7 +2040,7 @@ mwl8k_txq_xmit(struct ieee80211_hw *hw,
 		} else {
 			/* Defer calling mwl8k_start_stream so that the current
 			 * skb can go out before the ADDBA request.  This
-			 * prevents sequence number mismatch at the recepient
+			 * prevents sequence number mismatch at the recipient
 			 * as described above.
 			 */
 			if (mwl8k_ampdu_allowed(sta, tid)) {

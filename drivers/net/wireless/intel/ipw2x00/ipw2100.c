@@ -5328,7 +5328,7 @@ struct ipw2100_wep_key {
 	u8 key[13];
 };
 
-/* Macros to ease up priting WEP keys */
+/* Macros to ease up printing WEP keys */
 #define WEP_FMT_64  "%02X%02X%02X%02X-%02X"
 #define WEP_FMT_128 "%02X%02X%02X%02X-%02X%02X%02X%02X-%02X%02X%02X"
 #define WEP_STR_64(x) x[0],x[1],x[2],x[3],x[4]
@@ -8090,7 +8090,7 @@ static struct iw_statistics *ipw2100_wx_wireless_stats(struct net_device *dev)
 	/* if hw is disabled, then ipw2100_get_ordinal() can't be called.
 	 * ipw2100_wx_wireless_stats seems to be called before fw is
 	 * initialized.  STATUS_ASSOCIATED will only be set if the hw is up
-	 * and associated; if not associcated, the values are all meaningless
+	 * and associated; if not associated, the values are all meaningless
 	 * anyway, so set them all to NULL and INVALID */
 	if (!(priv->status & STATUS_ASSOCIATED)) {
 		wstats->miss.beacon = 0;

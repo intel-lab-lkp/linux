@@ -3360,7 +3360,7 @@ il4965_set_tkip_dynamic_key_info(struct il_priv *il,
 
 	il->stations[sta_id].sta.key.key_flags = key_flags;
 
-	/* This copy is acutally not needed: we get the key with each TX */
+	/* This copy is actually not needed: we get the key with each TX */
 	memcpy(il->stations[sta_id].keyinfo.key, keyconf->key, 16);
 
 	memcpy(il->stations[sta_id].sta.key.key, keyconf->key, 16);

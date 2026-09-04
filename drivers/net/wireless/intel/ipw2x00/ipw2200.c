@@ -747,7 +747,7 @@ static int ipw_get_ordinal(struct ipw_priv *priv, u32 ord, void *val, u32 * len)
 		 *
 		 * This table consist of six values, each containing
 		 *     - dword containing the starting offset of the data
-		 *     - dword containing the lengh in the first 16bits
+		 *     - dword containing the length in the first 16bits
 		 *       and the count in the second 16bits
 		 */
 
@@ -9967,7 +9967,7 @@ static struct iw_statistics *ipw_get_wireless_stats(struct net_device *dev)
 	/* if hw is disabled, then ipw_get_ordinal() can't be called.
 	 * netdev->get_wireless_stats seems to be called before fw is
 	 * initialized.  STATUS_ASSOCIATED will only be set if the hw is up
-	 * and associated; if not associcated, the values are all meaningless
+	 * and associated; if not associated, the values are all meaningless
 	 * anyway, so set them all to NULL and INVALID */
 	if (!(priv->status & STATUS_ASSOCIATED)) {
 		wstats->miss.beacon = 0;

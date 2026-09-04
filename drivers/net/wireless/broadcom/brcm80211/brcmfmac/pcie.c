@@ -118,7 +118,7 @@ static const struct brcmf_firmware_mapping brcmf_pcie_fwnames[] = {
 
 #define BRCMF_PCIE_REG_MAP_SIZE			(32 * 1024)
 
-/* backplane addres space accessed by BAR0 */
+/* backplane address space accessed by BAR0 */
 #define	BRCMF_PCIE_BAR0_WINDOW			0x80
 #define BRCMF_PCIE_BAR0_REG_SIZE		0x1000
 #define	BRCMF_PCIE_BAR0_WRAPPERBASE		0x70
@@ -2174,7 +2174,7 @@ static void brcmf_pcie_setup(struct device *dev, int ret,
 
 	/* Some of the firmwares have the size of the memory of the device
 	 * defined inside the firmware. This is because part of the memory in
-	 * the device is shared and the devision is determined by FW. Parse
+	 * the device is shared and the division is determined by FW. Parse
 	 * the firmware and adjust the chip memory size now.
 	 */
 	brcmf_pcie_adjust_ramsize(devinfo, (u8 *)fw->data, fw->size);

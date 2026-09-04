@@ -982,7 +982,7 @@ typedef enum _ORDINAL_TABLE_1 {	// NS - means Not Supported by FW
 	IPW_ORD_STAT_PSP_SUSPENSION = 137,	// # of times adapter suspended
 	IPW_ORD_STAT_PSP_BCN_TIMEOUT,	// # of beacon timeout
 	IPW_ORD_STAT_PSP_POLL_TIMEOUT,	// # of poll response timeouts
-	IPW_ORD_STAT_PSP_NONDIR_TIMEOUT,	// # of timeouts waiting for last broadcast/muticast pkt
+	IPW_ORD_STAT_PSP_NONDIR_TIMEOUT,	// # of timeouts waiting for last broadcast/multicast pkt
 	IPW_ORD_STAT_PSP_RX_DTIMS,	// # of PSP DTIMs received
 	IPW_ORD_STAT_PSP_RX_TIMS,	// # of PSP TIMs received
 	IPW_ORD_STAT_PSP_STATION_ID,	// PSP Station ID
@@ -1023,7 +1023,7 @@ typedef enum _ORDINAL_TABLE_1 {	// NS - means Not Supported by FW
 // Other statistics
 	IPW_ORD_RSSI_AVG_CURR = 173,	// Current avg RSSI
 	IPW_ORD_STEST_RESULTS_CURR,	//NS // Current self test results word
-	IPW_ORD_STEST_RESULTS_CUM,	//NS // Cummulative self test results word
+	IPW_ORD_STEST_RESULTS_CUM,	//NS // Cumulative self test results word
 	IPW_ORD_SELF_TEST_STATUS,	//NS //
 	IPW_ORD_POWER_MGMT_MODE,	// Power mode - 0=CAM, 1=PSP
 	IPW_ORD_POWER_MGMT_INDEX,	//NS //
