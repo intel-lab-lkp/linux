@@ -3380,7 +3380,7 @@ static sector_t ext4_bmap(struct address_space *mapping, sector_t block)
 		filemap_write_and_wait(mapping);
 	}
 
-	ret = iomap_bmap(mapping, block, &ext4_iomap_ops);
+	ret = iomap_bmap(mapping, block, ext4_iomap_next);
 
 out:
 	inode_unlock_shared(inode);
@@ -3844,11 +3844,7 @@ out:
 	return 0;
 }
 
-static DEFINE_IOMAP_ITER_NEXT(ext4_iomap_next, ext4_iomap_begin);
-
-const struct iomap_ops ext4_iomap_ops = {
-	.iomap_next		= ext4_iomap_next,
-};
+DEFINE_IOMAP_ITER_NEXT(ext4_iomap_next, ext4_iomap_begin);
 
 static int ext4_iomap_begin_report(struct inode *inode, loff_t offset,
 				   loff_t length, unsigned int flags,
@@ -3901,11 +3897,7 @@ set_iomap:
 	return 0;
 }
 
-static DEFINE_IOMAP_ITER_NEXT(ext4_iomap_next_report, ext4_iomap_begin_report);
-
-const struct iomap_ops ext4_iomap_report_ops = {
-	.iomap_next = ext4_iomap_next_report,
-};
+DEFINE_IOMAP_ITER_NEXT(ext4_iomap_next_report, ext4_iomap_begin_report);
 
 /*
  * For data=journal mode, folio should be marked dirty only when it was
@@ -3942,7 +3934,7 @@ static int ext4_iomap_swap_activate(struct swap_info_struct *sis,
 				    struct file *file, sector_t *span)
 {
 	return iomap_swapfile_activate(sis, file, span,
-				       &ext4_iomap_report_ops);
+				       ext4_iomap_next_report);
 }
 
 static const struct address_space_operations ext4_aops = {
@@ -4189,7 +4181,7 @@ static int ext4_block_zero_range(struct inode *inode,
 
 	if (IS_DAX(inode)) {
 		return dax_zero_range(inode, from, length, did_zero,
-				      &ext4_iomap_ops);
+				      ext4_iomap_next);
 	} else if (ext4_should_journal_data(inode)) {
 		return ext4_block_journalled_zero_range(inode, from, length,
 							did_zero);

@@ -1492,7 +1492,7 @@ out_unlock:
 }
 
 int dax_file_unshare(struct inode *inode, loff_t pos, loff_t len,
-		const struct iomap_ops *ops)
+		iomap_iter_next_fn next)
 {
 	struct iomap_iter iter = {
 		.inode		= inode,
@@ -1506,7 +1506,7 @@ int dax_file_unshare(struct inode *inode, loff_t pos, loff_t len,
 		return 0;
 
 	iter.len = min(len, size - pos);
-	while ((ret = iomap_iter(&iter, ops)) > 0)
+	while ((ret = iomap_iter(&iter, next)) > 0)
 		iter.status = dax_unshare_iter(&iter);
 	return ret;
 }
@@ -1584,7 +1584,7 @@ static int dax_zero_iter(struct iomap_iter *iter, bool *did_zero)
 }
 
 int dax_zero_range(struct inode *inode, loff_t pos, loff_t len, bool *did_zero,
-		const struct iomap_ops *ops)
+		iomap_iter_next_fn next)
 {
 	struct iomap_iter iter = {
 		.inode		= inode,
@@ -1594,14 +1594,14 @@ int dax_zero_range(struct inode *inode, loff_t pos, loff_t len, bool *did_zero,
 	};
 	int ret;
 
-	while ((ret = iomap_iter(&iter, ops)) > 0)
+	while ((ret = iomap_iter(&iter, next)) > 0)
 		iter.status = dax_zero_iter(&iter, did_zero);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(dax_zero_range);
 
 int dax_truncate_page(struct inode *inode, loff_t pos, bool *did_zero,
-		const struct iomap_ops *ops)
+		iomap_iter_next_fn next)
 {
 	unsigned int blocksize = i_blocksize(inode);
 	unsigned int off = pos & (blocksize - 1);
@@ -1609,7 +1609,7 @@ int dax_truncate_page(struct inode *inode, loff_t pos, bool *did_zero,
 	/* Block boundary? Nothing to do */
 	if (!off)
 		return 0;
-	return dax_zero_range(inode, pos, blocksize - off, did_zero, ops);
+	return dax_zero_range(inode, pos, blocksize - off, did_zero, next);
 }
 EXPORT_SYMBOL_GPL(dax_truncate_page);
 
@@ -1734,7 +1734,8 @@ static int dax_iomap_iter(struct iomap_iter *iomi, struct iov_iter *iter)
  * dax_iomap_rw - Perform I/O to a DAX file
  * @iocb:	The control block for this I/O
  * @iter:	The addresses to do I/O from or to
- * @ops:	iomap ops passed from the file system
+ * @next:	Callback passed from the file system for advancing to next
+ *		iteration
  *
  * This function performs read and write operations to directly mapped
  * persistent memory.  The callers needs to take care of read/write exclusion
@@ -1742,7 +1743,7 @@ static int dax_iomap_iter(struct iomap_iter *iomi, struct iov_iter *iter)
  */
 ssize_t
 dax_iomap_rw(struct kiocb *iocb, struct iov_iter *iter,
-		const struct iomap_ops *ops)
+		iomap_iter_next_fn next)
 {
 	struct iomap_iter iomi = {
 		.inode		= iocb->ki_filp->f_mapping->host,
@@ -1769,7 +1770,7 @@ dax_iomap_rw(struct kiocb *iocb, struct iov_iter *iter,
 	if (iocb->ki_flags & IOCB_NOWAIT)
 		iomi.flags |= IOMAP_NOWAIT;
 
-	while ((ret = iomap_iter(&iomi, ops)) > 0)
+	while ((ret = iomap_iter(&iomi, next)) > 0)
 		iomi.status = dax_iomap_iter(&iomi, iter);
 
 	done = iomi.pos - iocb->ki_pos;
@@ -1897,7 +1898,7 @@ static vm_fault_t dax_fault_iter(struct vm_fault *vmf,
 }
 
 static vm_fault_t dax_iomap_pte_fault(struct vm_fault *vmf, unsigned long *pfnp,
-			       int *iomap_errp, const struct iomap_ops *ops)
+			       int *iomap_errp, iomap_iter_next_fn next)
 {
 	struct address_space *mapping = vmf->vma->vm_file->f_mapping;
 	XA_STATE(xas, &mapping->i_pages, vmf->pgoff);
@@ -1942,7 +1943,7 @@ static vm_fault_t dax_iomap_pte_fault(struct vm_fault *vmf, unsigned long *pfnp,
 		goto unlock_entry;
 	}
 
-	while ((error = iomap_iter(&iter, ops)) > 0) {
+	while ((error = iomap_iter(&iter, next)) > 0) {
 		if (WARN_ON_ONCE(iomap_length(&iter) < PAGE_SIZE)) {
 			iter.status = -EIO;	/* fs corruption? */
 			continue;
@@ -2007,7 +2008,7 @@ static bool dax_fault_check_fallback(struct vm_fault *vmf, struct xa_state *xas,
 }
 
 static vm_fault_t dax_iomap_pmd_fault(struct vm_fault *vmf, unsigned long *pfnp,
-			       const struct iomap_ops *ops)
+			       iomap_iter_next_fn next)
 {
 	struct address_space *mapping = vmf->vma->vm_file->f_mapping;
 	XA_STATE_ORDER(xas, &mapping->i_pages, vmf->pgoff, PMD_ORDER);
@@ -2064,7 +2065,7 @@ static vm_fault_t dax_iomap_pmd_fault(struct vm_fault *vmf, unsigned long *pfnp,
 	}
 
 	iter.pos = (loff_t)xas.xa_index << PAGE_SHIFT;
-	while (iomap_iter(&iter, ops) > 0) {
+	while (iomap_iter(&iter, next) > 0) {
 		if (iomap_length(&iter) < PMD_SIZE)
 			continue; /* actually breaks out of the loop */
 
@@ -2086,7 +2087,7 @@ out:
 }
 #else
 static vm_fault_t dax_iomap_pmd_fault(struct vm_fault *vmf, unsigned long *pfnp,
-			       const struct iomap_ops *ops)
+			       iomap_iter_next_fn next)
 {
 	return VM_FAULT_FALLBACK;
 }
@@ -2098,7 +2099,7 @@ static vm_fault_t dax_iomap_pmd_fault(struct vm_fault *vmf, unsigned long *pfnp,
  * @order: Order of the page to fault in
  * @pfnp: PFN to insert for synchronous faults if fsync is required
  * @iomap_errp: Storage for detailed error code in case of error
- * @ops: Iomap ops passed from the file system
+ * @next: The iomap iteration function for the filesystem
  *
  * When a page fault occurs, filesystems may call this helper in
  * their fault handler for DAX files. dax_iomap_fault() assumes the caller
@@ -2107,12 +2108,12 @@ static vm_fault_t dax_iomap_pmd_fault(struct vm_fault *vmf, unsigned long *pfnp,
  */
 vm_fault_t dax_iomap_fault(struct vm_fault *vmf, unsigned int order,
 			unsigned long *pfnp, int *iomap_errp,
-			const struct iomap_ops *ops)
+			iomap_iter_next_fn next)
 {
 	if (order == 0)
-		return dax_iomap_pte_fault(vmf, pfnp, iomap_errp, ops);
+		return dax_iomap_pte_fault(vmf, pfnp, iomap_errp, next);
 	else if (order == PMD_ORDER)
-		return dax_iomap_pmd_fault(vmf, pfnp, ops);
+		return dax_iomap_pmd_fault(vmf, pfnp, next);
 	else
 		return VM_FAULT_FALLBACK;
 }
@@ -2240,7 +2241,7 @@ out_unlock:
 
 int dax_dedupe_file_range_compare(struct inode *src, loff_t srcoff,
 		struct inode *dst, loff_t dstoff, loff_t len, bool *same,
-		const struct iomap_ops *ops)
+		iomap_iter_next_fn next)
 {
 	struct iomap_iter src_iter = {
 		.inode		= src,
@@ -2256,8 +2257,8 @@ int dax_dedupe_file_range_compare(struct inode *src, loff_t srcoff,
 	};
 	int ret, status;
 
-	while ((ret = iomap_iter(&src_iter, ops)) > 0 &&
-	       (ret = iomap_iter(&dst_iter, ops)) > 0) {
+	while ((ret = iomap_iter(&src_iter, next)) > 0 &&
+	       (ret = iomap_iter(&dst_iter, next)) > 0) {
 		status = dax_range_compare_iter(&src_iter, &dst_iter,
 				min(src_iter.len, dst_iter.len), same);
 		if (status < 0)
@@ -2270,9 +2271,10 @@ int dax_dedupe_file_range_compare(struct inode *src, loff_t srcoff,
 int dax_remap_file_range_prep(struct file *file_in, loff_t pos_in,
 			      struct file *file_out, loff_t pos_out,
 			      loff_t *len, unsigned int remap_flags,
-			      const struct iomap_ops *ops)
+			      iomap_iter_next_fn next)
 {
 	return __generic_remap_file_range_prep(file_in, pos_in, file_out,
-					       pos_out, len, remap_flags, ops);
+					       pos_out, len, remap_flags,
+					       next);
 }
 EXPORT_SYMBOL_GPL(dax_remap_file_range_prep);
