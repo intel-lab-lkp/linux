@@ -1,96 +1,109 @@
 // SPDX-License-Identifier: GPL-2.0
 
-use std::collections::BTreeSet;
+use std::collections::HashMap;
 
-use proc_macro2::{Ident, TokenStream, TokenTree};
+use proc_macro2::{Ident, TokenStream};
 use quote::quote_spanned;
+use syn::{
+    ext::IdentExt,
+    parse::{Parse, ParseStream},
+    parse_quote, Expr, LitStr, Result, Token,
+};
+
+pub(crate) struct FormatArgs {
+    format_string: LitStr,
+    positional_args: Vec<Expr>,
+    named_args: HashMap<Ident, Expr>,
+}
+
+impl Parse for FormatArgs {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let format_string: LitStr = input.parse()?;
+
+        let mut args = FormatArgs {
+            format_string,
+            positional_args: Vec::new(),
+            named_args: HashMap::new(),
+        };
+
+        if input.is_empty() {
+            return Ok(args);
+        }
+        input.parse::<Token![,]>()?;
+
+        while !input.is_empty() && !input.peek2(Token![=]) {
+            args.positional_args.push(input.parse()?);
+            if input.is_empty() {
+                return Ok(args);
+            }
+            input.parse::<Token![,]>()?;
+        }
+
+        while !input.is_empty() {
+            let name: Ident = input.call(Ident::parse_any)?;
+            input.parse::<Token![=]>()?;
+            let value: Expr = input.parse()?;
+            args.named_args.insert(name, value);
+
+            if input.is_empty() {
+                return Ok(args);
+            }
+            input.parse::<Token![,]>()?;
+        }
+
+        return Ok(args);
+    }
+}
 
 /// Please see [`crate::fmt`] for documentation.
-pub(crate) fn fmt(input: TokenStream) -> TokenStream {
-    let mut input = input.into_iter();
+pub(crate) fn fmt(args: FormatArgs) -> Result<TokenStream> {
+    let FormatArgs {
+        format_string,
+        positional_args,
+        mut named_args,
+    } = args;
 
-    let first_opt = input.next();
-    let first_owned_str;
-    let mut names = BTreeSet::new();
-    let first_span = {
-        let Some((mut first_str, first_span)) = (match first_opt.as_ref() {
-            Some(TokenTree::Literal(first_lit)) => {
-                first_owned_str = first_lit.to_string();
-                Some(first_owned_str.as_str()).and_then(|first| {
-                    let first = first.strip_prefix('"')?;
-                    let first = first.strip_suffix('"')?;
-                    Some((first, first_lit.span()))
-                })
-            }
-            _ => None,
-        }) else {
-            return first_opt.into_iter().chain(input).collect();
-        };
+    let span = format_string.span();
 
-        // Parse `identifier`s from the format string.
-        //
-        // See https://doc.rust-lang.org/std/fmt/index.html#syntax.
-        while let Some((_, rest)) = first_str.split_once('{') {
-            first_str = rest;
-            if let Some(rest) = first_str.strip_prefix('{') {
-                first_str = rest;
+    // Add inline parameters as named arguments, so they are adapted appropriately
+    // Input: fmt!("{name}")
+    // Output: fmt!("{name}", name = ::kernel::fmt::Adapter(&(name)))
+    {
+        let format_string = format_string.value();
+        let mut format_string = format_string.as_str();
+        while let Some((_, rest)) = format_string.split_once('{') {
+            format_string = rest;
+
+            if let Some(rest) = format_string.strip_prefix('{') {
+                format_string = rest;
                 continue;
             }
-            if let Some((name, rest)) = first_str.split_once('}') {
-                first_str = rest;
+
+            if let Some((name, rest)) = format_string.split_once('}') {
+                format_string = rest;
                 let name = name.split_once(':').map_or(name, |(name, _)| name);
                 if !name.is_empty() && !name.chars().all(|c| c.is_ascii_digit()) {
-                    names.insert(name);
+                    let ident = Ident::new(name, span);
+                    let expr = parse_quote!(#ident);
+                    named_args.entry(ident).or_insert(expr);
                 }
             }
         }
-        first_span
-    };
-
-    let adapter = quote_spanned!(first_span => ::kernel::fmt::Adapter);
-
-    let mut args = TokenStream::from_iter(first_opt);
-    {
-        let mut flush = |args: &mut TokenStream, current: &mut TokenStream| {
-            let current = std::mem::take(current);
-            if !current.is_empty() {
-                let (lhs, rhs) = (|| {
-                    let mut current = current.into_iter();
-                    let mut acc = TokenStream::new();
-                    while let Some(tt) = current.next() {
-                        // Split on `=` only once to handle cases like `a = b = c`.
-                        if matches!(&tt, TokenTree::Punct(p) if p.as_char() == '=') {
-                            names.remove(acc.to_string().as_str());
-                            // Include the `=` itself to keep the handling below uniform.
-                            acc.extend([tt]);
-                            return (Some(acc), current.collect::<TokenStream>());
-                        }
-                        acc.extend([tt]);
-                    }
-                    (None, acc)
-                })();
-                args.extend(quote_spanned!(first_span => #lhs #adapter(&(#rhs))));
-            }
-        };
-
-        let mut current = TokenStream::new();
-        for tt in input {
-            match &tt {
-                TokenTree::Punct(p) if p.as_char() == ',' => {
-                    flush(&mut args, &mut current);
-                    &mut args
-                }
-                _ => &mut current,
-            }
-            .extend([tt]);
-        }
-        flush(&mut args, &mut current);
     }
 
-    for name in names {
-        let name = Ident::new(name, first_span);
-        args.extend(quote_spanned!(first_span => , #name = #adapter(&#name)));
-    }
+    // Wrap positional and named arguments with `kernel::fmt::Adapter`
+    let adapter = quote_spanned!(span => ::kernel::fmt::Adapter);
+    let positional_args = positional_args
+        .into_iter()
+        .map(|value| quote_spanned!(span => #adapter(&(#value))));
+    let named_args = named_args
+        .into_iter()
+        .map(|(name, value)| quote_spanned!(span => #name = #adapter(&(#value))));
 
-    quote_spanned!(first_span => ::core::format_args!(#args))
+    let args = [quote_spanned!(span => #format_string)]
+        .into_iter()
+        .chain(positional_args)
+        .chain(named_args);
+
+    Ok(quote_spanned!(span => ::core::format_args!(#(#args),*)))
 }
