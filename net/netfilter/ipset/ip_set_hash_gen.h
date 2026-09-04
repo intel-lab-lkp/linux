@@ -278,10 +278,7 @@ static int mtype_rht_cmpfn(struct rhashtable_compare_arg *arg, const void *obj)
 #ifdef IP_SET_HASH_WITH_MULTI
 	return !mtype_key_equal(&e->elem, (const struct mtype_elem *)arg->key);
 #else
-	u32 multi = 0;
-
-	return !mtype_data_equal(&e->elem,
-				 (const struct mtype_elem *)arg->key, &multi);
+	return !mtype_data_equal(&e->elem, (const struct mtype_elem *)arg->key);
 #endif
 }
 
@@ -737,7 +734,6 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	{
 		struct rhlist_head *tmp, *list;
 		unsigned int seen = 0;
-		u32 multi = 0;
 
 		list = rhltable_lookup(&h->rhlt, d, mtype_rht_params);
 		if (!list)
@@ -749,8 +745,7 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 					ipset_hash_elem_destroy_free(set, old);
 				continue;
 			}
-
-			if (mtype_data_equal(&old->elem, d, &multi))
+			if (mtype_data_equal(&old->elem, d))
 				goto insert;
 			++seen;
 		}
@@ -841,10 +836,9 @@ insert:
 		if (list) {
 			const struct mtype_rht_elem *dup;
 			struct rhlist_head *tmp;
-			u32 multi = 0;
 
 			rhl_for_each_entry_rcu(dup, tmp, list, node) {
-				if (dup == e || !mtype_data_equal(&dup->elem, d, &multi))
+				if (dup == e || !mtype_data_equal(&dup->elem, d))
 					continue;
 
 				/* check for duplicate key insertion: unlikely,
@@ -930,13 +924,12 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 #ifdef IP_SET_HASH_WITH_MULTI
 	{
 		struct rhlist_head *tmp, *list;
-		u32 multi = 0;
 
 		list = rhltable_lookup(&h->rhlt, d, mtype_rht_params);
 		if (!list)
 			goto out_unlock;
 		rhl_for_each_entry_rcu(e, tmp, list, node) {
-			if (!mtype_data_equal(&e->elem, d, &multi))
+			if (!mtype_data_equal(&e->elem, d))
 				continue;
 			if (SET_ELEM_EXPIRED(set, &e->elem))
 				goto out_unlock;
@@ -995,8 +988,8 @@ mtype_test_cidrs(struct ip_set *set, struct mtype_elem *d,
 #else
 	int ret, j;
 #endif
+	bool multi = false;
 	unsigned int seq0;
-	u32 multi;
 
 	pr_debug("test by nets\n");
 retry:
@@ -1035,7 +1028,7 @@ retry:
 		rhl_for_each_entry_rcu(e, tmp, list, node) {
 			if (!SET_ELEM_EXPIRED(set, &e->elem))
 				multi = true;
-			if (!mtype_data_equal(&e->elem, d, &multi))
+			if (!mtype_data_equal(&e->elem, d))
 				continue;
 			ret = mtype_data_match(&e->elem, ext, mext, set, flags);
 			if (ret)
@@ -1100,14 +1093,13 @@ mtype_test(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 #ifdef IP_SET_HASH_WITH_MULTI
 	{
 		struct rhlist_head *tmp, *list;
-		u32 multi = 0;
 
 		list = rhltable_lookup(&h->rhlt, d, mtype_rht_params);
 		if (!list)
 			goto out;
 
 		rhl_for_each_entry_rcu(e, tmp, list, node) {
-			if (!mtype_data_equal(&e->elem, d, &multi))
+			if (!mtype_data_equal(&e->elem, d))
 				continue;
 			ret = mtype_data_match(&e->elem, ext, mext, set, flags);
 			if (ret)

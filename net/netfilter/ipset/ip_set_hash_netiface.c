@@ -74,11 +74,9 @@ hash_netiface4_key_equal(const struct hash_netiface4_elem *ip1,
 
 static bool
 hash_netiface4_data_equal(const struct hash_netiface4_elem *ip1,
-			  const struct hash_netiface4_elem *ip2,
-			  u32 *multi)
+			  const struct hash_netiface4_elem *ip2)
 {
 	return hash_netiface4_key_equal(ip1, ip2) &&
-	       (++*multi) &&
 	       (ip1->wildcard ?
 		strncmp(ip1->iface, ip2->iface, strlen(ip1->iface)) == 0 :
 		strcmp(ip1->iface, ip2->iface) == 0);
@@ -314,11 +312,9 @@ hash_netiface6_key_equal(const struct hash_netiface6_elem *ip1,
 
 static bool
 hash_netiface6_data_equal(const struct hash_netiface6_elem *ip1,
-			  const struct hash_netiface6_elem *ip2,
-			  u32 *multi)
+			  const struct hash_netiface6_elem *ip2)
 {
 	return hash_netiface6_key_equal(ip1, ip2) &&
-	       (++*multi) &&
 	       (ip1->wildcard ?
 		strncmp(ip1->iface, ip2->iface, strlen(ip1->iface)) == 0 :
 		strcmp(ip1->iface, ip2->iface) == 0);

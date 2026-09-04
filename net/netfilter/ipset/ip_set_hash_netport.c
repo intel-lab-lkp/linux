@@ -60,8 +60,7 @@ struct hash_netport4_elem {
 
 static bool
 hash_netport4_data_equal(const struct hash_netport4_elem *ip1,
-			 const struct hash_netport4_elem *ip2,
-			 u32 *multi)
+			 const struct hash_netport4_elem *ip2)
 {
 	return ip1->ip == ip2->ip &&
 	       ip1->port == ip2->port &&
@@ -277,8 +276,7 @@ struct hash_netport6_elem {
 
 static bool
 hash_netport6_data_equal(const struct hash_netport6_elem *ip1,
-			 const struct hash_netport6_elem *ip2,
-			 u32 *multi)
+			 const struct hash_netport6_elem *ip2)
 {
 	return ipv6_addr_equal(&ip1->ip.in6, &ip2->ip.in6) &&
 	       ip1->port == ip2->port &&

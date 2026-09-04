@@ -50,8 +50,7 @@ struct hash_ipmac4_elem {
 
 static bool
 hash_ipmac4_data_equal(const struct hash_ipmac4_elem *e1,
-		       const struct hash_ipmac4_elem *e2,
-		       u32 *multi)
+		       const struct hash_ipmac4_elem *e2)
 {
 	return e1->ip == e2->ip && ether_addr_equal(e1->ether, e2->ether);
 }
@@ -150,8 +149,7 @@ struct hash_ipmac6_elem {
 
 static bool
 hash_ipmac6_data_equal(const struct hash_ipmac6_elem *e1,
-		       const struct hash_ipmac6_elem *e2,
-		       u32 *multi)
+		       const struct hash_ipmac6_elem *e2)
 {
 	return ipv6_addr_equal(&e1->ip.in6, &e2->ip.in6) &&
 		ether_addr_equal(e1->ether, e2->ether);

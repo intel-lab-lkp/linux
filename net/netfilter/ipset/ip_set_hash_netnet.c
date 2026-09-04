@@ -58,8 +58,7 @@ struct hash_netnet4_elem {
 
 static bool
 hash_netnet4_data_equal(const struct hash_netnet4_elem *ip1,
-			const struct hash_netnet4_elem *ip2,
-			u32 *multi)
+			const struct hash_netnet4_elem *ip2)
 {
 	return ip1->ipcmp == ip2->ipcmp &&
 	       ip1->ccmp == ip2->ccmp;
@@ -295,8 +294,7 @@ struct hash_netnet6_elem {
 
 static bool
 hash_netnet6_data_equal(const struct hash_netnet6_elem *ip1,
-			const struct hash_netnet6_elem *ip2,
-			u32 *multi)
+			const struct hash_netnet6_elem *ip2)
 {
 	return ipv6_addr_equal(&ip1->ip[0].in6, &ip2->ip[0].in6) &&
 	       ipv6_addr_equal(&ip1->ip[1].in6, &ip2->ip[1].in6) &&

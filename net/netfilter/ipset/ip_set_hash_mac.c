@@ -40,8 +40,7 @@ struct hash_mac4_elem {
 
 static bool
 hash_mac4_data_equal(const struct hash_mac4_elem *e1,
-		     const struct hash_mac4_elem *e2,
-		     u32 *multi)
+		     const struct hash_mac4_elem *e2)
 {
 	return ether_addr_equal(e1->ether, e2->ether);
 }

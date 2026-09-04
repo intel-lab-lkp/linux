@@ -49,8 +49,7 @@ struct hash_ip4_elem {
 
 static bool
 hash_ip4_data_equal(const struct hash_ip4_elem *e1,
-		    const struct hash_ip4_elem *e2,
-		    u32 *multi)
+		    const struct hash_ip4_elem *e2)
 {
 	return e1->ip == e2->ip;
 }
@@ -181,8 +180,7 @@ struct hash_ip6_elem {
 
 static bool
 hash_ip6_data_equal(const struct hash_ip6_elem *ip1,
-		    const struct hash_ip6_elem *ip2,
-		    u32 *multi)
+		    const struct hash_ip6_elem *ip2)
 {
 	return ipv6_addr_equal(&ip1->ip.in6, &ip2->ip.in6);
 }
