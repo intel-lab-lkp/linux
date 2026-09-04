@@ -1921,7 +1921,7 @@ static void raid10_status(struct seq_file *seq, struct mddev *mddev)
 }
 
 /* check if there are enough drives for
- * every block to appear on atleast one.
+ * every block to appear on at least one.
  * Don't consider the device numbered 'ignore'
  * as we might be about to remove it.
  */

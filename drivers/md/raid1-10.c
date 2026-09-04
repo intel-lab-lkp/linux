@@ -87,7 +87,7 @@ static inline struct resync_pages *get_resync_pages(struct bio *bio)
 	return bio->bi_private;
 }
 
-/* generally called after bio_reset() for reseting bvec */
+/* generally called after bio_reset() for resetting bvec */
 static void md_bio_reset_resync_pages(struct bio *bio, struct resync_pages *rp,
 			       int size)
 {
