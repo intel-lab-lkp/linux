@@ -22,7 +22,7 @@
  * It should be noted that the cache is not used for file datablocks, these
  * are decompressed and cached in the page-cache in the normal way.  The
  * cache is only used to temporarily cache fragment and metadata blocks
- * which have been read as as a result of a metadata (i.e. inode or
+ * which have been read as a result of a metadata (i.e. inode or
  * directory) or fragment access.  Because metadata and fragments are packed
  * together into blocks (to gain greater compression) the read of a particular
  * piece of metadata or fragment will retrieve other metadata/fragments which

@@ -153,7 +153,7 @@ enum um_timetravel_ops {
 	 *	This message can be used to sync all components in the system
 	 *	with a single message, if the calendar gets the message, the
 	 *	calendar broadcast the message to all components, and if a
-	 *	component receives it it should act based on it e.g print a
+	 *	component receives it should act based on it e.g print a
 	 *	message to it's log system.
 	 *	(calendar <-> host)
 	 */

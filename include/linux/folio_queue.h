@@ -206,7 +206,7 @@ static inline unsigned int folioq_append(struct folio_queue *folioq, struct foli
  * Add a folio to the tail of the sequence in a folio queue segment, increasing
  * the occupancy count and returning the slot number for the folio just added.
  * The folio size is extracted and stored in the queue, the first mark is set
- * and and the second and third marks are left unmodified.
+ * and the second and third marks are left unmodified.
  *
  * Note that it's left up to the caller to check that the segment capacity will
  * not be exceeded and to extend the queue.
