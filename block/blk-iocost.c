@@ -68,7 +68,7 @@
  * gets 300/(100+300) or 75% share, and A0 and A1 equally splits the rest,
  * 12.5% each.  The distribution mechanism only cares about these flattened
  * shares.  They're called hweights (hierarchical weights) and always add
- * upto 1 (WEIGHT_ONE).
+ * up to 1 (WEIGHT_ONE).
  *
  * A given cgroup's vtime runs slower in inverse proportion to its hweight.
  * For example, with 12.5% weight, A0's time runs 8 times slower (100/12.5)
@@ -833,7 +833,7 @@ static int ioc_autop_idx(struct ioc *ioc, struct gendisk *disk)
 }
 
 /*
- * Take the followings as input
+ * Take the following as input
  *
  *  @bps	maximum sequential throughput
  *  @seqiops	maximum sequential 4k iops
@@ -2154,7 +2154,7 @@ static void ioc_forgive_debts(struct ioc *ioc, u64 usage_us_sum, int nr_debtors,
 }
 
 /*
- * Check the active iocgs' state to avoid oversleeping and deactive
+ * Check the active iocgs' state to avoid oversleeping and deactivate
  * idle iocgs.
  *
  * Since waiters determine the sleep durations based on the vrate

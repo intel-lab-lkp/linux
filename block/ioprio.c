@@ -153,7 +153,7 @@ out:
  * Return raw IO priority value as set by userspace. We use this for
  * ioprio_get(pid, IOPRIO_WHO_PROCESS) so that we keep historical behavior and
  * also so that userspace can distinguish unset IO priority (which just gets
- * overriden based on task's nice value) from IO priority set to some value.
+ * overridden based on task's nice value) from IO priority set to some value.
  */
 static int get_task_raw_ioprio(struct task_struct *p)
 {

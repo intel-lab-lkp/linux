@@ -2679,7 +2679,7 @@ static int mtip_hw_get_identify(struct driver_data *dd)
 		}
 	}
 
-	/* get write protect progess */
+	/* get write protect progress */
 	memset(&attr242, 0, sizeof(struct smart_attr));
 	if (mtip_get_smart_attr(dd->port, 242, &attr242))
 		dev_warn(&dd->pdev->dev,

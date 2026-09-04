@@ -2529,7 +2529,7 @@ static void ublk_ch_release_work_fn(struct work_struct *work)
 	 *
 	 * Wait until active references are dropped for avoiding use-after-free
 	 *
-	 * registered buffer may be unregistered in io_ring's release hander,
+	 * registered buffer may be unregistered in io_ring's release handler,
 	 * so have to wait by scheduling work function for avoiding the two
 	 * file release dependency.
 	 */
