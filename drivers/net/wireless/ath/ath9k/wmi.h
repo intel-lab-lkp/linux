@@ -158,6 +158,8 @@ struct wmi {
 	u8 *cmd_rsp_buf;
 	u32 cmd_rsp_len;
 	bool stopped;
+	u32 cmds_issued;
+	u32 cmds_timed_out;
 
 	struct list_head pending_tx_events;
 	spinlock_t event_lock;

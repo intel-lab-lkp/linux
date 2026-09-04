@@ -310,6 +310,29 @@ static const struct file_operations fops_slot = {
 	.llseek = default_llseek,
 };
 
+static ssize_t read_file_wmi(struct file *file, char __user *user_buf,
+			     size_t count, loff_t *ppos)
+{
+	struct ath9k_htc_priv *priv = file->private_data;
+	char buf[128];
+	unsigned int len;
+
+	len = scnprintf(buf, sizeof(buf),
+			"%20s : %10u\n"
+			"%20s : %10u\n",
+			"Issued", priv->wmi->cmds_issued,
+			"Timeouts", priv->wmi->cmds_timed_out);
+
+	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
+}
+
+static const struct file_operations fops_wmi = {
+	.read = read_file_wmi,
+	.open = simple_open,
+	.owner = THIS_MODULE,
+	.llseek = default_llseek,
+};
+
 static ssize_t read_file_queue(struct file *file, char __user *user_buf,
 			       size_t count, loff_t *ppos)
 {
@@ -505,6 +528,8 @@ int ath9k_htc_init_debug(struct ath_hw *ah)
 
 	debugfs_create_file("slot", 0400, priv->debug.debugfs_phy,
 			    priv, &fops_slot);
+	debugfs_create_file("wmi", 0400, priv->debug.debugfs_phy,
+			    priv, &fops_wmi);
 	debugfs_create_file("queue", 0400, priv->debug.debugfs_phy,
 			    priv, &fops_queue);
 	debugfs_create_file("debug", 0600, priv->debug.debugfs_phy,
