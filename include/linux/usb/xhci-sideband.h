@@ -13,7 +13,19 @@
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
 
-#define	EP_CTX_PER_DEV		31	/* FIXME defined twice, from xhci.h */
+/*
+ * Constants shared with the xHCI host driver (drivers/usb/host/xhci.h),
+ * which includes this header for its canonical definitions.
+ */
+#define EP_CTX_PER_DEV      31
+
+/*
+ * TRBS_PER_SEGMENT must be a multiple of 4,
+ * since the command ring is 64-byte aligned.
+ * It must also be greater than 16.
+ */
+#define TRBS_PER_SEGMENT    256
+#define TRB_SEGMENT_SIZE    (TRBS_PER_SEGMENT * 16)
 
 struct xhci_sideband;
 
@@ -72,7 +84,8 @@ void
 xhci_sideband_unregister(struct xhci_sideband *sb);
 int
 xhci_sideband_add_endpoint(struct xhci_sideband *sb,
-			   struct usb_host_endpoint *host_ep);
+			   struct usb_host_endpoint *host_ep,
+			   struct dma_pool *pool);
 int
 xhci_sideband_remove_endpoint(struct xhci_sideband *sb,
 			      struct usb_host_endpoint *host_ep);
@@ -94,7 +107,8 @@ static inline bool xhci_sideband_check(struct usb_hcd *hcd)
 
 int
 xhci_sideband_create_interrupter(struct xhci_sideband *sb, int num_seg,
-				 bool ip_autoclear, u32 imod_interval, int intr_num);
+				 struct dma_pool *pool, bool ip_autoclear,
+				 u32 imod_interval, int intr_num);
 void
 xhci_sideband_remove_interrupter(struct xhci_sideband *sb);
 int
