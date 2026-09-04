@@ -7,18 +7,12 @@ from lib.py import KsftSkipEx
 from lib.py import ksft_disruptive
 from lib.py import EthtoolFamily, NetdevFamily
 from lib.py import NetDrvEnv
-from lib.py import cmd, ip, defer
+from lib.py import cmd, ctl_file_write, ip
 
 
 def read_affinity(irq) -> str:
     with open(f'/proc/irq/{irq}/smp_affinity', 'r') as fp:
         return fp.read().lstrip("0,").strip()
-
-
-def write_affinity(irq, what) -> str:
-    if what != read_affinity(irq):
-        with open(f'/proc/irq/{irq}/smp_affinity', 'w') as fp:
-            fp.write(what)
 
 
 def check_irqs_reported(cfg) -> None:
@@ -41,8 +35,7 @@ def _check_reconfig(cfg, reconfig_cb) -> None:
     old = read_affinity(n['irq'])
     # pick an affinity that's not the current one
     new = "3" if old != "3" else "5"
-    write_affinity(n['irq'], new)
-    defer(write_affinity, n['irq'], old)
+    ctl_file_write(f"/proc/irq/{n['irq']}/smp_affinity", new)
 
     reconfig_cb(cfg)
 
