@@ -1204,7 +1204,7 @@
 #define write_sysreg_s(v, r) do {					\
 	u64 __val = (u64)(v);						\
 	u32 __maybe_unused __check_r = (u32)(r);			\
-	if (__builtin_constant_p(__val) && __val == 0)			\
+	if (__builtin_constant_p(v) && (u64)(v) == 0)			\
 		asm volatile(__msr_s(r, "xzr"));			\
 	else								\
 		asm volatile(__msr_s(r, "%x0") : : "r" (__val));	\
