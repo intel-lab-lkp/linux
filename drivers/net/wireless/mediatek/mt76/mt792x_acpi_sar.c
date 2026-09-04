@@ -326,6 +326,9 @@ int mt792x_init_acpi_sar_power(struct mt792x_phy *phy, bool set_default)
 	if (!phy->acpisar || !((struct mt792x_acpi_sar *)phy->acpisar)->dyn)
 		return 0;
 
+	if (!capa || !phy->mt76->frp)
+		return 0;
+
 	/* When ACPI SAR enabled in HW, we should apply rules for .frp
 	 * 1. w/o .sar_specs : set ACPI SAR power as the defatul value
 	 * 2. w/  .sar_specs : set power with min(.sar_specs, ACPI_SAR)
