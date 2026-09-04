@@ -60,7 +60,7 @@
 #define MST_RX_FIFO		0x44
 #define MST_INT_ENABLE		0x48
 #define MST_INT_STATUS		0x4c
-#define   MST_STATUS_RFL	(1 << 13) /* RX FIFO serivce */
+#define   MST_STATUS_RFL	(1 << 13) /* RX FIFO service */
 #define   MST_STATUS_TFL	(1 << 12) /* TX FIFO service */
 #define   MST_STATUS_SNS	(1 << 11) /* Manual mode done */
 #define   MST_STATUS_SS		(1 << 10) /* Automatic mode done */

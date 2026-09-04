@@ -334,7 +334,7 @@ static int cpm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 		tptr++;
 	}
 	/* Start transfer now */
-	/* Enable RX/TX/Error interupts */
+	/* Enable RX/TX/Error interrupts */
 	out_8(&i2c_reg->i2cmr, I2CER_TXE | I2CER_TXB | I2CER_RXB);
 	out_8(&i2c_reg->i2cer, 0xff);	/* Clear interrupt status */
 	/* Chip bug, set enable here */

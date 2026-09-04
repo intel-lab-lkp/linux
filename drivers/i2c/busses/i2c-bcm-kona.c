@@ -12,7 +12,7 @@
 #include <linux/io.h>
 #include <linux/slab.h>
 
-/* Hardware register offsets and field defintions */
+/* Hardware register offsets and field definitions */
 #define CS_OFFSET				0x00000020
 #define CS_ACK_SHIFT				3
 #define CS_ACK_MASK				0x00000008

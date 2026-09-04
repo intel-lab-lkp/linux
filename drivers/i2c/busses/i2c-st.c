@@ -256,7 +256,7 @@ static void st_i2c_flush_rx_fifo(struct st_i2c_dev *i2c_dev)
 static void st_i2c_soft_reset(struct st_i2c_dev *i2c_dev)
 {
 	/*
-	 * FIFO needs to be emptied before reseting the IP,
+	 * FIFO needs to be emptied before resetting the IP,
 	 * else the controller raises a BUSY error.
 	 */
 	st_i2c_flush_rx_fifo(i2c_dev);
