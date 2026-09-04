@@ -2255,6 +2255,11 @@ static struct ath_buf *ath_tx_setup_buffer(struct ath_softc *sc,
 		return NULL;
 	}
 
+	if (fi->bf) {
+		fi->bf->bf_mpdu = NULL;
+		fi->bf->bf_buf_addr = 0;
+		ath_tx_return_buffer(sc, fi->bf);
+	}
 	fi->bf = bf;
 
 	return bf;
