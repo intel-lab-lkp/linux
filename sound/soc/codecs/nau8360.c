@@ -1702,6 +1702,7 @@ static void nau8360_load_fw_work(struct work_struct *work)
 	if (ret) {
 		dev_err(nau8360->dev, "Failed to initialize DSP: %d\n", ret);
 		nau8360_dsp_enable(nau8360->regmap, false);
+		snd_soc_component_write(cp, NAU8360_R12_PATH_CTRL, NAU8360_DAC_SEL_BYP);
 		return;
 	}
 	nau8360->load_fw_done = true;
