@@ -14,6 +14,9 @@
 #include <linux/rpmsg.h>
 #include <linux/soc/qcom/smd-rpm.h>
 
+#define CREATE_TRACE_POINTS
+#include "trace-smd-rpm.h"
+
 #define RPM_REQUEST_TIMEOUT     (5 * HZ)
 
 /**
@@ -106,6 +109,7 @@ int qcom_rpm_smd_write(struct qcom_smd_rpm *rpm,
 		u8 payload[];
 	} *pkt;
 	size_t size = sizeof(*pkt) + count;
+	const struct clk_smd_rpm_req *req = buf;
 
 	/* SMD packets to the RPM may not exceed 256 bytes */
 	if (WARN_ON(size >= 256))
@@ -130,6 +134,8 @@ int qcom_rpm_smd_write(struct qcom_smd_rpm *rpm,
 	ret = rpmsg_send(rpm->rpm_channel, pkt, size);
 	if (ret)
 		goto out;
+
+	trace_rpm_smd_send_msg(pkt->req.msg_id, state, type, id, req);
 
 	left = wait_for_completion_timeout(&rpm->ack, RPM_REQUEST_TIMEOUT);
 	if (!left)
@@ -158,6 +164,7 @@ static int qcom_smd_rpm_callback(struct rpmsg_device *rpdev,
 	const u8 *end = buf + hdr_length;
 	char msgbuf[32];
 	int status = 0;
+	__le32 msg_id = 0;
 	u32 len, msg_length;
 
 	if (le32_to_cpu(hdr->service_type) != RPM_SERVICE_TYPE_REQUEST ||
@@ -171,6 +178,7 @@ static int qcom_smd_rpm_callback(struct rpmsg_device *rpdev,
 		msg_length = le32_to_cpu(msg->length);
 		switch (le32_to_cpu(msg->msg_type)) {
 		case RPM_MSG_TYPE_MSG_ID:
+			msg_id = msg->msg_id;
 			break;
 		case RPM_MSG_TYPE_ERR:
 			len = min_t(u32, ALIGN(msg_length, 4), sizeof(msgbuf));
@@ -186,6 +194,8 @@ static int qcom_smd_rpm_callback(struct rpmsg_device *rpdev,
 
 		buf = PTR_ALIGN(buf + 2 * sizeof(u32) + msg_length, 4);
 	}
+
+	trace_rpm_smd_ack_recvd(msg_id, status);
 
 	rpm->ack_status = status;
 	complete(&rpm->ack);
