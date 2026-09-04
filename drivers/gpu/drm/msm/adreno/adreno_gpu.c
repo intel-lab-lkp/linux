@@ -518,7 +518,7 @@ int adreno_set_param(struct msm_gpu *gpu, struct msm_context *ctx,
 			return UERR(EINVAL, drm, "requires per-process pgtables");
 
 		/*
-		 * We can only swtich to VM_BIND mode if the VM has not yet
+		 * We can only switch to VM_BIND mode if the VM has not yet
 		 * been created:
 		 */
 		if (ctx->vm)

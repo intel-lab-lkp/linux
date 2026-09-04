@@ -241,7 +241,7 @@ static int mdp5_plane_atomic_check_with_state(struct drm_crtc_state *crtc_state,
 			new_hwpipe = true;
 
 		/*
-		 * (re)allocte hw pipe if we're either requesting for 2 hw pipes
+		 * (re)allocate hw pipe if we're either requesting for 2 hw pipes
 		 * or we're switching from 2 hw pipes to 1 hw pipe because the
 		 * new src_w can be supported by 1 hw pipe itself.
 		 */

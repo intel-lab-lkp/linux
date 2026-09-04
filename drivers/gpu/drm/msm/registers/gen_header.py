@@ -576,7 +576,7 @@ class Parser(object):
             raise self.error(e)
 
     def parse_varset(self, attrs):
-        # Inherit the varset from the enclosing domain if not overriden:
+        # Inherit the varset from the enclosing domain if not overridden:
         varset = self.current_varset
         if "varset" in attrs:
             varset = self.enums[attrs["varset"]]

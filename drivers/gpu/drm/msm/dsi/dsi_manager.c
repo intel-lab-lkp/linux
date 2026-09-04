@@ -347,7 +347,7 @@ static void dsi_mgr_bridge_post_disable(struct drm_bridge *bridge,
 	/*
 	 * Do nothing with the host if it is slave-DSI in case of bonded DSI.
 	 * It is safe to call dsi_mgr_phy_disable() here because a single PHY
-	 * won't be diabled until both PHYs request disable.
+	 * won't be disabled until both PHYs request disable.
 	 */
 	if (is_bonded_dsi && !IS_MASTER_DSI_LINK(id))
 		goto disable_phy;

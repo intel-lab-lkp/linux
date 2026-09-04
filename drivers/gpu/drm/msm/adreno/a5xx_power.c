@@ -8,7 +8,7 @@
 /*
  * The GPMU data block is a block of shared registers that can be used to
  * communicate back and forth. These "registers" are by convention with the GPMU
- * firwmare and not bound to any specific hardware design
+ * firmware and not bound to any specific hardware design
  */
 
 #define AGC_INIT_BASE REG_A5XX_GPMU_DATA_RAM_BASE

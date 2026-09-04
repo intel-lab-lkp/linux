@@ -346,7 +346,7 @@ msm_gem_unlock(struct drm_gem_object *obj)
 
 /**
  * msm_gem_lock_vm_and_obj() - Helper to lock an obj + VM
- * @exec: the exec context helper which will be initalized
+ * @exec: the exec context helper which will be initialized
  * @obj: the GEM object to lock
  * @vm: the VM to lock
  *
