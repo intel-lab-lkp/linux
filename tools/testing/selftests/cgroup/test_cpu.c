@@ -733,6 +733,45 @@ cleanup:
 	return ret;
 }
 
+static int test_cpucg_max_burst(const char *root)
+{
+	int ret = KSFT_FAIL;
+	char *cpucg;
+
+	cpucg = cg_name(root, "cpucg_max_burst");
+	if (!cpucg)
+		return KSFT_FAIL;
+
+	if (cg_create(cpucg))
+		goto cleanup;
+
+	if (cg_write(cpucg, "cpu.max", "max 100000") ||
+	    cg_write(cpucg, "cpu.max.burst", "100000000") ||
+	    cg_write(cpucg, "cpu.max", "50000 100000") ||
+	    cg_read_strcmp(cpucg, "cpu.max.burst", "100000000\n"))
+		goto cleanup;
+
+	if (cg_write(cpucg, "cpu.max.burst", "80000") ||
+	    cg_write(cpucg, "cpu.max", "100000 100000") ||
+	    cg_read_strcmp(cpucg, "cpu.max.burst", "80000\n"))
+		goto cleanup;
+
+	if (cg_write(cpucg, "cpu.max.burst", "0") ||
+	    cg_write(cpucg, "cpu.max", "50000 100000") ||
+	    cg_write(cpucg, "cpu.max", "100000 100000") ||
+	    cg_write(cpucg, "cpu.max.burst", "80000") ||
+	    cg_read_strcmp(cpucg, "cpu.max.burst", "80000\n"))
+		goto cleanup;
+
+	ret = KSFT_PASS;
+
+cleanup:
+	cg_destroy(cpucg);
+	free(cpucg);
+
+	return ret;
+}
+
 /*
  * This test verifies that a process inside of a nested cgroup whose parent
  * group has a cpu.max value set, is properly throttled.
@@ -822,6 +861,7 @@ struct cpucg_test {
 	T(test_cpucg_nested_weight_overprovisioned),
 	T(test_cpucg_nested_weight_underprovisioned),
 	T(test_cpucg_max),
+	T(test_cpucg_max_burst),
 	T(test_cpucg_max_nested),
 };
 #undef T
