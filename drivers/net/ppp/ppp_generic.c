@@ -790,7 +790,7 @@ static long ppp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			chan = pch->chan;
 			err = -ENOTTY;
 			if (chan && chan->ops->ioctl)
-				err = chan->ops->ioctl(chan, cmd, arg);
+				err = chan->ops->ioctl(chan->private, cmd, arg);
 			mutex_unlock(&pch->chan_sem);
 		}
 		goto out;
@@ -1603,7 +1603,7 @@ static int ppp_fill_forward_path(struct net_device_path_ctx *ctx,
 	if (!chan->ops->fill_forward_path)
 		return -EOPNOTSUPP;
 
-	return chan->ops->fill_forward_path(ctx, path, chan);
+	return chan->ops->fill_forward_path(ctx, path, chan->private);
 }
 
 static const struct net_device_ops ppp_netdev_ops = {
@@ -1932,7 +1932,7 @@ ppp_push(struct ppp *ppp, struct sk_buff *skb)
 			goto out;
 		}
 
-		ret = chan->ops->start_xmit(chan, skb);
+		ret = chan->ops->start_xmit(chan->private, skb);
 
 out:
 		spin_unlock(&pch->downl);
@@ -2142,7 +2142,7 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 		/* try to send it down the channel */
 		chan = pch->chan;
 		if (!skb_queue_empty(&pch->file.xq) ||
-			!chan->ops->start_xmit(chan, frag))
+			!chan->ops->start_xmit(chan->private, frag))
 			skb_queue_tail(&pch->file.xq, frag);
 		pch->had_frag = 1;
 		p += flen;
@@ -2175,7 +2175,7 @@ static void __ppp_channel_push(struct channel *pch, struct ppp *ppp)
 	if (pch->chan) {
 		while (!skb_queue_empty(&pch->file.xq)) {
 			skb = skb_dequeue(&pch->file.xq);
-			if (!pch->chan->ops->start_xmit(pch->chan, skb)) {
+			if (!pch->chan->ops->start_xmit(pch->chan->private, skb)) {
 				/* put the packet back and try again later */
 				skb_queue_head(&pch->file.xq, skb);
 				break;
@@ -2300,7 +2300,7 @@ static bool ppp_channel_bridge_input(struct channel *pch, struct sk_buff *skb)
 	}
 
 	skb_scrub_packet(skb, !net_eq(pch->chan_net, pchb->chan_net));
-	if (!pchb->chan->ops->start_xmit(pchb->chan, skb))
+	if (!pchb->chan->ops->start_xmit(pchb->chan->private, skb))
 		kfree_skb(skb);
 
 outl:
