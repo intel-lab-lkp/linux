@@ -940,7 +940,7 @@ int orangefs_debugfs_new_client_mask(void __user *arg)
 	client_debug_mask.mask1 = mask2_info.mask1_value;
 	client_debug_mask.mask2 = mask2_info.mask2_value;
 
-	pr_info("%s: client debug mask has been been received "
+	pr_info("%s: client debug mask has been received "
 		":%llx: :%llx:\n",
 		__func__,
 		(unsigned long long)client_debug_mask.mask1,
