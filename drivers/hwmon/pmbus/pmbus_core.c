@@ -2753,7 +2753,7 @@ static int pmbus_identify_common(struct i2c_client *client,
 		 * Not all chips support the VOUT_MODE command,
 		 * so a failure to read it is not an error.
 		 */
-		switch (vout_mode >> 5) {
+		switch ((vout_mode >> 5) & 0x3) {
 		case 0:	/* linear mode      */
 			if (data->info->format[PSC_VOLTAGE_OUT] != linear)
 				return -ENODEV;
