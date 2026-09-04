@@ -5,7 +5,8 @@
 
 config PINCTRL_SPPCTL
 	tristate "Sunplus SP7021 PinMux and GPIO driver"
-	depends on SOC_SP7021
+	default SOC_SP7021
+	depends on SOC_SP7021 || COMPILE_TEST
 	depends on OF && HAS_IOMEM
 	select GENERIC_PINCTRL_GROUPS
 	select GENERIC_PINMUX_FUNCTIONS

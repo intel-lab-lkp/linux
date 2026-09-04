@@ -1113,6 +1113,7 @@ static const struct of_device_id sppctl_match_table[] = {
 	{ .compatible = "sunplus,sp7021-pctl" },
 	{ /* sentinel */ }
 };
+MODULE_DEVICE_TABLE(of, sppctl_match_table);
 
 static struct platform_driver sppctl_pinctrl_driver = {
 	.driver = {
@@ -1121,7 +1122,7 @@ static struct platform_driver sppctl_pinctrl_driver = {
 	},
 	.probe  = sppctl_probe,
 };
-builtin_platform_driver(sppctl_pinctrl_driver)
+module_platform_driver(sppctl_pinctrl_driver);
 
 MODULE_AUTHOR("Dvorkin Dmitry <dvorkin@tibbo.com>");
 MODULE_AUTHOR("Wells Lu <wellslutw@gmail.com>");
