@@ -67,7 +67,7 @@ struct sockaddr_x25 {
  *	DTE/DCE subscription options.
  *
  *      As this is missing lots of options, user should expect major
- *	changes of this structure in 2.5.x which might break compatibilty.
+ *	changes of this structure in 2.5.x which might break compatibility.
  *      The somewhat ugly dimension 200-sizeof() is needed to maintain
  *	backward compatibility.
  */
