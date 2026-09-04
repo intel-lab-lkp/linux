@@ -1479,6 +1479,17 @@ The following nested keys are defined.
 	does not disable demotion. This is best-effort and does not bypass memory
 	protection or other reclaim constraints.
 
+	goal=demote performs best-effort memory tier demotion for LRU folios:
+	successful demotion counts toward the requested amount, nodes without
+	demotion targets are skipped, and folios that cannot be demoted are kept
+	on the LRU instead of being evicted by this request. Slab shrinking is
+	also skipped, as it cannot contribute demotion progress. Demoted folios
+	remain charged to the cgroup, so this is intended for placement control
+	rather than memory.current reduction. It can be combined with swappiness
+	to use the existing anon/file reclaim balancing, for example
+	swappiness=0 to prefer file-LRU folios. If no demotion target is available
+	to the cgroup, this returns -EAGAIN.
+
   memory.peak
 	A read-write single value file which exists on non-root cgroups.
 

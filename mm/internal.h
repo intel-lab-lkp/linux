@@ -75,6 +75,7 @@ unsigned long lruvec_lru_size(struct lruvec *lruvec, enum lru_list lru,
 #define MEMCG_RECLAIM_MAY_SWAP (1 << 1)
 #define MEMCG_RECLAIM_PROACTIVE (1 << 2)
 #define MEMCG_RECLAIM_GOAL_EVICT (1 << 3)
+#define MEMCG_RECLAIM_GOAL_DEMOTE (1 << 4)
 #define MIN_SWAPPINESS 0
 #define MAX_SWAPPINESS 200
 

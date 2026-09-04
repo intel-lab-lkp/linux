@@ -126,6 +126,9 @@ struct scan_control {
 	/* Eviction-oriented proactive reclaim goal */
 	unsigned int evict_goal:1;
 
+	/* Demotion-only proactive reclaim goal */
+	unsigned int demote_goal:1;
+
 	/*
 	 * Cgroup memory below memory.low is protected as long as we
 	 * don't threaten to OOM. If any cgroup is reclaimed at
@@ -189,6 +192,9 @@ struct scan_control {
 
 static unsigned long reclaim_progress(struct scan_control *sc)
 {
+	if (sc->demote_goal)
+		return sc->nr_demoted;
+
 	if (!sc->evict_goal)
 		return sc->nr_reclaimed;
 
@@ -392,6 +398,12 @@ static bool memcg_node_is_demotion_target(int target_nid,
 
 static bool reclaim_skip_node(pg_data_t *pgdat, struct scan_control *sc)
 {
+	if (sc->demote_goal) {
+		if (sc->nr_demoted >= sc->nr_to_reclaim)
+			return true;
+		return !can_demote(pgdat->node_id, sc, sc->target_mem_cgroup);
+	}
+
 	if (!sc->evict_goal || sc->nr_demoted < sc->nr_to_reclaim)
 		return false;
 	if (!can_demote(pgdat->node_id, sc, sc->target_mem_cgroup))
@@ -1315,6 +1327,9 @@ retry:
 			folio_unlock(folio);
 			continue;
 		}
+
+		if (sc->demote_goal)
+			goto keep_locked;
 
 		/*
 		 * Anonymous process memory has backing store?
@@ -5185,7 +5200,8 @@ static int shrink_one(struct lruvec *lruvec, struct scan_control *sc)
 
 	need_rotate = try_to_shrink_lruvec(lruvec, sc);
 
-	shrink_slab(sc->gfp_mask, pgdat->node_id, memcg, sc->priority);
+	if (!sc->demote_goal)
+		shrink_slab(sc->gfp_mask, pgdat->node_id, memcg, sc->priority);
 
 	if (!sc->proactive)
 		vmpressure(sc->gfp_mask, sc->order, memcg, false,
@@ -6288,8 +6304,9 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 
 		shrink_lruvec(lruvec, sc);
 
-		shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
-			    sc->priority);
+		if (!sc->demote_goal)
+			shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
+				    sc->priority);
 
 		/* Record the group's reclaim efficiency */
 		if (!sc->proactive)
@@ -6950,6 +6967,7 @@ unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *memcg,
 		.proactive = !!(reclaim_options & MEMCG_RECLAIM_PROACTIVE),
 		.evict_goal = !!(reclaim_options &
 					MEMCG_RECLAIM_GOAL_EVICT),
+		.demote_goal = !!(reclaim_options & MEMCG_RECLAIM_GOAL_DEMOTE),
 	};
 	/*
 	 * Traverse the ZONELIST_FALLBACK zonelist of the current node to put
@@ -8027,6 +8045,7 @@ enum {
 	MEMORY_RECLAIM_SWAPPINESS_MAX,
 	MEMORY_RECLAIM_GOAL_PROGRESS,
 	MEMORY_RECLAIM_GOAL_EVICT,
+	MEMORY_RECLAIM_GOAL_DEMOTE,
 	MEMORY_RECLAIM_NULL,
 };
 static const match_table_t tokens = {
@@ -8034,6 +8053,7 @@ static const match_table_t tokens = {
 	{ MEMORY_RECLAIM_SWAPPINESS_MAX, "swappiness=max"},
 	{ MEMORY_RECLAIM_GOAL_PROGRESS, "goal=progress"},
 	{ MEMORY_RECLAIM_GOAL_EVICT, "goal=evict"},
+	{ MEMORY_RECLAIM_GOAL_DEMOTE, "goal=demote"},
 	{ MEMORY_RECLAIM_NULL, NULL },
 };
 
@@ -8043,6 +8063,7 @@ int user_proactive_reclaim(char *buf,
 	unsigned int nr_retries = MAX_RECLAIM_RETRIES;
 	unsigned long nr_to_reclaim, nr_reclaimed = 0;
 	bool evict_goal = false;
+	bool demote_goal = false;
 	int swappiness = -1;
 	char *old_buf, *start;
 	substring_t args[MAX_OPT_ARGS];
@@ -8078,19 +8099,34 @@ int user_proactive_reclaim(char *buf,
 			if (!memcg)
 				return -EINVAL;
 			evict_goal = false;
+			demote_goal = false;
 			break;
 		case MEMORY_RECLAIM_GOAL_EVICT:
 			if (!memcg)
 				return -EINVAL;
 			evict_goal = true;
 			break;
+		case MEMORY_RECLAIM_GOAL_DEMOTE:
+			if (!memcg)
+				return -EINVAL;
+			demote_goal = true;
+			break;
 		default:
 			return -EINVAL;
 		}
 	}
 
-	if (nr_to_reclaim && evict_goal && !memcg_has_demotion_target(memcg))
-		evict_goal = false;
+	if (evict_goal && demote_goal)
+		return -EINVAL;
+
+	if (nr_to_reclaim && (evict_goal || demote_goal)) {
+		bool has_demotion_target = memcg_has_demotion_target(memcg);
+
+		if (demote_goal && !has_demotion_target)
+			return -EAGAIN;
+		if (evict_goal && !has_demotion_target)
+			evict_goal = false;
+	}
 
 	while (nr_reclaimed < nr_to_reclaim) {
 		/* Will converge on zero, but reclaim enforces a minimum */
@@ -8125,6 +8161,8 @@ int user_proactive_reclaim(char *buf,
 					  MEMCG_RECLAIM_PROACTIVE;
 			if (evict_goal)
 				reclaim_options |= MEMCG_RECLAIM_GOAL_EVICT;
+			if (demote_goal)
+				reclaim_options |= MEMCG_RECLAIM_GOAL_DEMOTE;
 			reclaimed = try_to_free_mem_cgroup_pages(memcg,
 						 batch_size, gfp_mask,
 						 reclaim_options,
