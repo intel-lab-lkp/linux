@@ -297,6 +297,12 @@ struct dsa_port {
 
 	u8			setup:1;
 
+	/* Flowtable blocks on this user port go to the switch, not the
+	 * conduit; decided at bind time. Written without rtnl, so not one of
+	 * the bit fields above.
+	 */
+	bool			ft_on_switch;
+
 	struct device_node	*dn;
 	unsigned int		ageing_time;
 

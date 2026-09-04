@@ -1718,15 +1718,30 @@ static int dsa_user_setup_tc_block(struct net_device *dev,
 	}
 }
 
-static int dsa_user_setup_ft_block(struct dsa_switch *ds, int port,
-				   void *type_data)
+static int dsa_user_setup_ft_block(struct dsa_port *dp,
+				   struct flow_block_offload *bo)
 {
-	struct net_device *conduit = dsa_port_to_conduit(dsa_to_port(ds, port));
+	struct net_device *conduit = dsa_port_to_conduit(dp);
+	struct dsa_switch *ds = dp->ds;
+	int err;
+
+	/* The unbind goes to the side that took the bind. */
+	if (bo->command == FLOW_BLOCK_BIND) {
+		err = -EOPNOTSUPP;
+		if (ds->ops->port_setup_tc)
+			err = ds->ops->port_setup_tc(ds, dp->index, TC_SETUP_FT,
+						     bo);
+		dp->ft_on_switch = err != -EOPNOTSUPP;
+		if (dp->ft_on_switch)
+			return err;
+	} else if (dp->ft_on_switch) {
+		return ds->ops->port_setup_tc(ds, dp->index, TC_SETUP_FT, bo);
+	}
 
 	if (!conduit->netdev_ops->ndo_setup_tc)
 		return -EOPNOTSUPP;
 
-	return conduit->netdev_ops->ndo_setup_tc(conduit, TC_SETUP_FT, type_data);
+	return conduit->netdev_ops->ndo_setup_tc(conduit, TC_SETUP_FT, bo);
 }
 
 static int dsa_user_setup_tc(struct net_device *dev, enum tc_setup_type type,
@@ -1739,7 +1754,7 @@ static int dsa_user_setup_tc(struct net_device *dev, enum tc_setup_type type,
 	case TC_SETUP_BLOCK:
 		return dsa_user_setup_tc_block(dev, type_data);
 	case TC_SETUP_FT:
-		return dsa_user_setup_ft_block(ds, dp->index, type_data);
+		return dsa_user_setup_ft_block(dp, type_data);
 	default:
 		break;
 	}
