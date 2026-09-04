@@ -245,6 +245,7 @@ static const struct i2c_device_id pmbus_id[] = {
 	{ .name = "tps544b25", .driver_data = (kernel_ulong_t)&pmbus_info_one },
 	{ .name = "tps544c20", .driver_data = (kernel_ulong_t)&pmbus_info_one },
 	{ .name = "tps544c25", .driver_data = (kernel_ulong_t)&pmbus_info_one },
+	{ .name = "tps546e25", .driver_data = (kernel_ulong_t)&pmbus_info_zero },
 	{ .name = "udt020", .driver_data = (kernel_ulong_t)&pmbus_info_one },
 	{ }
 };
