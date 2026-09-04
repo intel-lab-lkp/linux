@@ -378,7 +378,7 @@ static void asc_set_mctrl(struct uart_port *port, unsigned int mctrl)
 static unsigned int asc_get_mctrl(struct uart_port *port)
 {
 	/*
-	 * This routine is used for geting signals of: DTR, DCD, DSR, RI,
+	 * This routine is used for getting signals of: DTR, DCD, DSR, RI,
 	 * and CTS/RTS
 	 */
 	return TIOCM_CAR | TIOCM_DSR | TIOCM_CTS;
@@ -829,7 +829,7 @@ static void asc_console_putchar(struct uart_port *port, unsigned char ch)
 {
 	unsigned int timeout = 1000000;
 
-	/* Wait for upto 1 second in case flow control is stopping us. */
+	/* Wait for up to 1 second in case flow control is stopping us. */
 	while (--timeout && !asc_txfifo_is_half_empty(port))
 		udelay(1);
 

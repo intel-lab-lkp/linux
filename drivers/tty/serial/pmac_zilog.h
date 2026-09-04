@@ -21,7 +21,7 @@ struct uart_pmac_port {
 	 * early inited port)
 	 */
 	struct macio_dev		*dev;
-	/* device node to this port, this points to one of 2 childs
+	/* device node to this port, this points to one of 2 children
 	 * of "escc" node (ie. ch-a or ch-b)
 	 */
 	struct device_node		*node;

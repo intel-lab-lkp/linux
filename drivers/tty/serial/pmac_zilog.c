@@ -368,7 +368,7 @@ static void pmz_transmit_chars(struct uart_pmac_port *uap)
 	 * R3 still signals the interrupts and we see them when taking
 	 * an interrupt for the other channel (this could be a qemu
 	 * bug but since the ESCC doc doesn't specify precsiely whether
-	 * R3 interrup status bits are masked by R1 interrupt enable
+	 * R3 interrupt status bits are masked by R1 interrupt enable
 	 * bits, better safe than sorry). --BenH.
 	 */
 	if (!ZS_IS_OPEN(uap))
@@ -1929,7 +1929,7 @@ static int __init pmz_console_setup(struct console *co, char *options)
 	port = &uap->port;
 
 	/*
-	 * Mark port as beeing a console
+	 * Mark port as being a console
 	 */
 	uap->flags |= PMACZILOG_FLAG_IS_CONS;
 

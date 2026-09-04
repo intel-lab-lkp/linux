@@ -587,7 +587,7 @@ pci_fastcom335_setup(struct exar8250 *priv, struct pci_dev *pcidev,
 }
 
 /**
- * cti_tristate_disable() - Disable RS485 transciever tristate
+ * cti_tristate_disable() - Disable RS485 transceiver tristate
  * @priv: Device's private structure
  * @port_num: Port number to set tristate off
  *

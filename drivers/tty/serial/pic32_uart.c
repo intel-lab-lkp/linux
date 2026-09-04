@@ -547,7 +547,7 @@ static int pic32_uart_startup(struct uart_port *port)
 	pic32_uart_writel(sport, PIC32_CLR(PIC32_UART_STA),
 			PIC32_UART_STA_UTXISEL1);
 
-	/* enable all interrupts and eanable uart */
+	/* enable all interrupts and enable uart */
 	pic32_uart_en_and_unmask(port);
 
 	local_irq_restore(flags);

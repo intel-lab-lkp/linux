@@ -532,7 +532,7 @@ static unsigned int men_z135_get_mctrl(struct uart_port *port)
  * men_z135_stop_tx() - Stop transmitting characters
  * @port: The UART port
  *
- * Stop transmitting characters. This might be due to CTS line becomming
+ * Stop transmitting characters. This might be due to CTS line becoming
  * inactive or the tty layer indicating we want to stop transmission due to
  * an XOFF character.
  */

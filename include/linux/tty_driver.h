@@ -22,7 +22,7 @@ struct serial_struct;
  * These are flags passed to tty_alloc_driver().
  *
  * @TTY_DRIVER_INSTALLED:
- *	Whether this driver was succesfully installed. This is a tty internal
+ *	Whether this driver was successfully installed. This is a tty internal
  *	flag. Do not touch.
  *
  * @TTY_DRIVER_RESET_TERMIOS:

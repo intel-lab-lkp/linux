@@ -1476,7 +1476,7 @@ static int cdns_uart_suspend(struct device *device)
 			readl(port->membase + CDNS_UART_FIFO);
 		/* set RX trigger level to 1 */
 		writel(1, port->membase + CDNS_UART_RXWM);
-		/* disable RX timeout interrups */
+		/* disable RX timeout interrupts */
 		writel(CDNS_UART_IXR_TOUT, port->membase + CDNS_UART_IDR);
 		uart_port_unlock_irqrestore(port, flags);
 	}

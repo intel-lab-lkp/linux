@@ -1009,7 +1009,7 @@ static void mxs_auart_settermios(struct uart_port *u,
 		if (is_imx28_auart(s)
 				&& test_bit(MXS_AUART_RTSCTS, &s->flags)) {
 			if (!mxs_auart_dma_init(s))
-				/* enable DMA tranfer */
+				/* enable DMA transfer */
 				ctrl2 |= AUART_CTRL2_TXDMAE | AUART_CTRL2_RXDMAE
 				       | AUART_CTRL2_DMAONERR;
 		}

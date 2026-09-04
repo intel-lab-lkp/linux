@@ -1142,7 +1142,7 @@ err_free:
 static inline int resize_screen(struct vc_data *vc, int width, int height,
 				bool from_user)
 {
-	/* Resizes the resolution of the display adapater */
+	/* Resizes the resolution of the display adapter */
 	int err = 0;
 
 	if (vc->vc_sw->con_resize)
