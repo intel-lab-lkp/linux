@@ -470,17 +470,21 @@ static struct pnfs_layout_hdr *__bl_alloc_layout_hdr(struct inode *inode,
 	return &bl->bl_layout;
 }
 
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 static struct pnfs_layout_hdr *bl_alloc_layout_hdr(struct inode *inode,
 						   gfp_t gfp_flags)
 {
 	return __bl_alloc_layout_hdr(inode, gfp_flags, false);
 }
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 static struct pnfs_layout_hdr *sl_alloc_layout_hdr(struct inode *inode,
 						   gfp_t gfp_flags)
 {
 	return __bl_alloc_layout_hdr(inode, gfp_flags, true);
 }
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
 
 static void bl_free_lseg(struct pnfs_layout_segment *lseg)
 {
@@ -954,6 +958,7 @@ static const struct nfs_pageio_ops bl_pg_write_ops = {
 	.pg_cleanup = pnfs_generic_pg_cleanup,
 };
 
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 static struct pnfs_layoutdriver_type blocklayout_type = {
 	.id				= LAYOUT_BLOCK_VOLUME,
 	.name				= "LAYOUT_BLOCK_VOLUME",
@@ -977,7 +982,9 @@ static struct pnfs_layoutdriver_type blocklayout_type = {
 	.pg_write_ops			= &bl_pg_write_ops,
 	.sync				= pnfs_generic_sync,
 };
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 static struct pnfs_layoutdriver_type scsilayout_type = {
 	.id				= LAYOUT_SCSI,
 	.name				= "LAYOUT_SCSI",
@@ -1001,6 +1008,7 @@ static struct pnfs_layoutdriver_type scsilayout_type = {
 	.pg_write_ops			= &bl_pg_write_ops,
 	.sync				= pnfs_generic_sync,
 };
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
 
 
 static int __init nfs4blocklayout_init(void)
@@ -1009,6 +1017,7 @@ static int __init nfs4blocklayout_init(void)
 
 	dprintk("%s: NFSv4 Block Layout Driver Registering...\n", __func__);
 
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 	ret = bl_init_pipefs();
 	if (ret)
 		goto out;
@@ -1016,18 +1025,31 @@ static int __init nfs4blocklayout_init(void)
 	ret = pnfs_register_layoutdriver(&blocklayout_type);
 	if (ret)
 		goto out_cleanup_pipe;
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 	ret = pnfs_register_layoutdriver(&scsilayout_type);
 	if (ret)
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 		goto out_unregister_block;
+#else
+		return ret;
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
 	return 0;
 
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 out_unregister_block:
 	pnfs_unregister_layoutdriver(&blocklayout_type);
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 out_cleanup_pipe:
 	bl_cleanup_pipefs();
 out:
 	return ret;
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 }
 
 static void __exit nfs4blocklayout_exit(void)
@@ -1035,13 +1057,21 @@ static void __exit nfs4blocklayout_exit(void)
 	dprintk("%s: NFSv4 Block Layout Driver Unregistering...\n",
 	       __func__);
 
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 	pnfs_unregister_layoutdriver(&scsilayout_type);
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 	pnfs_unregister_layoutdriver(&blocklayout_type);
 	bl_cleanup_pipefs();
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 }
 
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 MODULE_ALIAS("nfs-layouttype4-3");
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 MODULE_ALIAS("nfs-layouttype4-5");
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
 
 module_init(nfs4blocklayout_init);
 module_exit(nfs4blocklayout_exit);

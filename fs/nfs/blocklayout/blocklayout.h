@@ -34,7 +34,9 @@
 
 #include <linux/device-mapper.h>
 #include <linux/nfs_fs.h>
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 #include <linux/sunrpc/rpc_pipe_fs.h>
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 
 #include "../nfs4_fs.h"
 #include "../pnfs.h"
@@ -46,7 +48,9 @@
 
 struct pnfs_block_dev;
 
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 #define PNFS_BLOCK_MAX_UUIDS	4
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 #define PNFS_BLOCK_MAX_DEVICES	64
 
 /*
@@ -58,6 +62,7 @@ struct pnfs_block_dev;
 struct pnfs_block_volume {
 	enum pnfs_block_volume_type	type;
 	union {
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 		struct {
 			int		len;
 			int		nr_sigs;
@@ -67,6 +72,7 @@ struct pnfs_block_volume {
 				u8		sig[PNFS_BLOCK_UUID_LEN];
 			} sigs[PNFS_BLOCK_MAX_UUIDS];
 		} simple;
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 		struct {
 			u64		start;
 			u64		len;
@@ -81,6 +87,7 @@ struct pnfs_block_volume {
 			u32		volumes_count;
 			u32		volumes[PNFS_BLOCK_MAX_DEVICES];
 		} stripe;
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 		struct {
 			enum scsi_code_set		code_set;
 			enum scsi_designator_type	designator_type;
@@ -88,6 +95,7 @@ struct pnfs_block_volume {
 			u8				designator[256];
 			u64				pr_key;
 		} scsi;
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
 	};
 };
 
@@ -161,6 +169,7 @@ BLK_LSEG2EXT(struct pnfs_layout_segment *lseg)
 	return BLK_LO2EXT(lseg->pls_layout);
 }
 
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 struct bl_pipe_msg {
 	struct rpc_pipe_msg msg;
 	wait_queue_head_t *bl_wq;
@@ -176,6 +185,7 @@ struct bl_msg_hdr {
 #define BL_DEVICE_REQUEST_INIT         0x0 /* Start request */
 #define BL_DEVICE_REQUEST_PROC         0x1 /* User level process succeeds */
 #define BL_DEVICE_REQUEST_ERR          0x2 /* User level process fails */
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 
 /* dev.c */
 bool bl_register_dev(struct pnfs_block_dev *d);
@@ -195,10 +205,12 @@ bool ext_tree_lookup(struct pnfs_block_layout *bl, sector_t isect,
 int ext_tree_prepare_commit(struct nfs4_layoutcommit_args *arg);
 void ext_tree_mark_committed(struct nfs4_layoutcommit_args *arg, int status);
 
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 /* rpc_pipefs.c */
 dev_t bl_resolve_deviceid(struct nfs_server *server,
 		struct pnfs_block_volume *b, gfp_t gfp_mask);
 int __init bl_init_pipefs(void);
 void bl_cleanup_pipefs(void);
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 
 #endif /* FS_NFS_NFS4BLOCKLAYOUT_H */

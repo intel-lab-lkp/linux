@@ -15,6 +15,7 @@
 
 #define NFSDBG_FACILITY		NFSDBG_PNFS_LD
 
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 static void bl_unregister_scsi(struct pnfs_block_dev *dev)
 {
 	struct block_device *bdev = file_bdev(dev->bdev_file);
@@ -45,6 +46,7 @@ static bool bl_register_scsi(struct pnfs_block_dev *dev)
 	trace_bl_pr_key_reg(bdev, dev->pr_key);
 	return true;
 }
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
 
 static void bl_unregister_dev(struct pnfs_block_dev *dev)
 {
@@ -56,9 +58,11 @@ static void bl_unregister_dev(struct pnfs_block_dev *dev)
 		return;
 	}
 
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 	if (dev->type == PNFS_BLOCK_VOLUME_SCSI &&
 		test_and_clear_bit(PNFS_BDEV_REGISTERED, &dev->flags))
 		bl_unregister_scsi(dev);
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
 }
 
 bool bl_register_dev(struct pnfs_block_dev *dev)
@@ -76,8 +80,10 @@ bool bl_register_dev(struct pnfs_block_dev *dev)
 		return true;
 	}
 
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 	if (dev->type == PNFS_BLOCK_VOLUME_SCSI)
 		return bl_register_scsi(dev);
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
 	return true;
 }
 
@@ -122,6 +128,7 @@ nfs4_block_decode_volume(struct xdr_stream *xdr, struct pnfs_block_volume *b)
 	b->type = be32_to_cpup(p++);
 
 	switch (b->type) {
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 	case PNFS_BLOCK_VOLUME_SIMPLE:
 		p = xdr_inline_decode(xdr, 4);
 		if (!p)
@@ -155,6 +162,7 @@ nfs4_block_decode_volume(struct xdr_stream *xdr, struct pnfs_block_volume *b)
 				(XDR_QUADLEN(b->simple.sigs[i].sig_len) << 2);
 		}
 		break;
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 	case PNFS_BLOCK_VOLUME_SLICE:
 		p = xdr_inline_decode(xdr, 8 + 8 + 4);
 		if (!p)
@@ -198,6 +206,7 @@ nfs4_block_decode_volume(struct xdr_stream *xdr, struct pnfs_block_volume *b)
 		for (i = 0; i < b->stripe.volumes_count; i++)
 			b->stripe.volumes[i] = be32_to_cpup(p++);
 		break;
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 	case PNFS_BLOCK_VOLUME_SCSI:
 		p = xdr_inline_decode(xdr, 4 + 4 + 4);
 		if (!p)
@@ -216,6 +225,7 @@ nfs4_block_decode_volume(struct xdr_stream *xdr, struct pnfs_block_volume *b)
 			return -EIO;
 		p = xdr_decode_hyper(p, &b->scsi.pr_key);
 		break;
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
 	default:
 		dprintk("unknown volume type!\n");
 		return -EIO;
@@ -293,6 +303,7 @@ bl_parse_deviceid(struct nfs_server *server, struct pnfs_block_dev *d,
 		struct pnfs_block_volume *volumes, int idx, gfp_t gfp_mask);
 
 
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 static int
 bl_parse_simple(struct nfs_server *server, struct pnfs_block_dev *d,
 		struct pnfs_block_volume *volumes, int idx, gfp_t gfp_mask)
@@ -320,7 +331,9 @@ bl_parse_simple(struct nfs_server *server, struct pnfs_block_dev *d,
 		file_bdev(bdev_file)->bd_disk->disk_name);
 	return 0;
 }
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 static bool
 bl_validate_designator(struct pnfs_block_volume *v)
 {
@@ -449,6 +462,7 @@ out_blkdev_put:
 	d->bdev_file = NULL;
 	return error;
 }
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
 
 static int
 bl_parse_slice(struct nfs_server *server, struct pnfs_block_dev *d,
@@ -537,16 +551,20 @@ bl_parse_deviceid(struct nfs_server *server, struct pnfs_block_dev *d,
 	d->type = volumes[idx].type;
 
 	switch (d->type) {
+#ifdef CONFIG_PNFS_BLOCK_LAYOUT
 	case PNFS_BLOCK_VOLUME_SIMPLE:
 		return bl_parse_simple(server, d, volumes, idx, gfp_mask);
+#endif /* CONFIG_PNFS_BLOCK_LAYOUT */
 	case PNFS_BLOCK_VOLUME_SLICE:
 		return bl_parse_slice(server, d, volumes, idx, gfp_mask);
 	case PNFS_BLOCK_VOLUME_CONCAT:
 		return bl_parse_concat(server, d, volumes, idx, gfp_mask);
 	case PNFS_BLOCK_VOLUME_STRIPE:
 		return bl_parse_stripe(server, d, volumes, idx, gfp_mask);
+#ifdef CONFIG_PNFS_SCSI_LAYOUT
 	case PNFS_BLOCK_VOLUME_SCSI:
 		return bl_parse_scsi(server, d, volumes, idx, gfp_mask);
+#endif /* CONFIG_PNFS_SCSI_LAYOUT */
 	default:
 		dprintk("unsupported volume type: %d\n", d->type);
 		return -EIO;

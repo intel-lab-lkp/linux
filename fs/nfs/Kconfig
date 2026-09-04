@@ -123,8 +123,21 @@ config PNFS_FILE_LAYOUT
 
 config PNFS_BLOCK
 	tristate
+	default NFS_V4 if PNFS_BLOCK_LAYOUT || PNFS_SCSI_LAYOUT
+
+config PNFS_BLOCK_LAYOUT
+	bool "NFS client support for pNFS block layouts"
 	depends on NFS_V4 && BLK_DEV_DM
+	default n
+	help
+	  Enable support for the pNFS block-volume layout type (RFC 5663).
+
+config PNFS_SCSI_LAYOUT
+	bool "NFS client support for pNFS SCSI layouts"
+	depends on NFS_V4
 	default NFS_V4
+	help
+	  Enable suport for the pNFS SCSI layout type (RFC 8154).
 
 config PNFS_FLEXFILE_LAYOUT
 	tristate
