@@ -48,8 +48,46 @@ enum scan_result {
 	SCAN_PAGE_DIRTY_OR_WRITEBACK,
 };
 
+/* What a collapse is allowed to do, decided by the caller that asks for it */
+struct collapse_policy {
+	/* Limits, stated per PMD; HPAGE_PMD_NR means "no limit" */
+	unsigned int max_ptes_none;
+	unsigned int max_ptes_swap;
+	unsigned int max_ptes_shared;
+
+	/*
+	 * Hold a sub-PMD window to a stricter rule than a PMD: no swapped-out
+	 * and no shared PTEs at all, and max_ptes_none as
+	 * collapse_max_ptes_none() scales it.
+	 */
+	bool strict_sub_pmd;
+
+	/*
+	 * Collapse only where it looks worth doing: require some sign the
+	 * range is in use, and leave clean lazyfree folios for reclaim rather
+	 * than collapsing them into a folio that is not lazyfree.
+	 */
+	bool skip_lazyfree;
+	bool require_referenced;
+
+	/*
+	 * Finish the job rather than leaving it half done for a fault to pick
+	 * up: map the PMD over a file collapse before returning, and write
+	 * dirty pages back and retry once instead of refusing them.  Both cost
+	 * latency the caller has to be willing to pay.
+	 */
+	bool install_pmd;
+	bool writeback_dirty;
+
+	/* How hard to try for a destination folio */
+	gfp_t gfp;
+
+	/* Which VMAs are eligible, as thp_vma_allowable_orders() spells it */
+	enum tva_type tva_type;
+};
+
 struct collapse_control {
-	bool is_khugepaged;
+	struct collapse_policy policy;
 
 	/* Num pages scanned per node */
 	u32 node_load[MAX_NUMNODES];
