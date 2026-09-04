@@ -1708,7 +1708,7 @@ static int iomap_zero_iter(struct iomap_iter *iter, bool *did_zero,
  * @iomap_flags: Flags to set on the associated iomap to track the batch.
  *
  * Returns the folio count directly. Also returns the associated control flag if
- * the the batch lookup is performed and the expected offset of a subsequent
+ * the batch lookup is performed and the expected offset of a subsequent
  * lookup via out params. The caller is responsible to set the flag on the
  * associated iomap.
  */
