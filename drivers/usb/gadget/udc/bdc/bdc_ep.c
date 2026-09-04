@@ -298,7 +298,7 @@ static int bd_available_ep(struct bdc_ep *ep)
 		return bd_list->max_bdi - bd_list->num_tabs;
 
 	/*
-	 * Depending upon where eqp and dqp pointers are, caculate number
+	 * Depending upon where eqp and dqp pointers are, calculate number
 	 * of avaialble bd's
 	 */
 	if (bd_list->hwd_bdi < bd_list->eqp_bdi) {

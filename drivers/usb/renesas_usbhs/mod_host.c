@@ -1468,7 +1468,7 @@ static int usbhsh_start(struct usbhs_priv *priv)
 	usbhsh_pipe_init_for_host(priv);
 
 	/*
-	 * system config enble
+	 * system config enable
 	 * - HI speed
 	 * - host
 	 * - usb module

@@ -882,7 +882,7 @@ static void ehci_hub_descriptor(struct oxu_hcd *oxu,
  */
 static int oxu_buf_alloc(struct oxu_hcd *oxu, struct ehci_qtd *qtd, int len)
 {
-	int n_blocks;	/* minium blocks needed to hold len */
+	int n_blocks;	/* minimum blocks needed to hold len */
 	int a_blocks;	/* blocks allocated */
 	int i, j;
 

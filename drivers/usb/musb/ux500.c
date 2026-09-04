@@ -80,7 +80,7 @@ static void ux500_musb_set_vbus(struct musb *musb, int is_on)
 	/*
 	 * Devctl values will be updated after vbus goes below
 	 * session_valid. The time taken depends on the capacitance
-	 * on VBUS line. The max discharge time can be upto 1 sec
+	 * on VBUS line. The max discharge time can be up to 1 sec
 	 * as per the spec. Typically on our platform, it is 200ms
 	 */
 	if (!is_on)

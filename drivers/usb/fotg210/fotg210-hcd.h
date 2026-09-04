@@ -283,7 +283,7 @@ struct fotg210_regs {
 #define PORT_RWC_BITS   (PORT_CSC | PORT_PEC)
 	u32     reserved2[19];
 
-	/* OTGCSR: offet 0x70 */
+	/* OTGCSR: offset 0x70 */
 	u32     otgcsr;
 #define OTGCSR_HOST_SPD_TYP     (3 << 22)
 #define OTGCSR_A_BUS_DROP	(1 << 5)

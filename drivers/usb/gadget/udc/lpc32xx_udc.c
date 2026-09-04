@@ -2743,7 +2743,7 @@ static irqreturn_t lpc32xx_usb_lp_irq(int irq, void *_udc)
 		/* All types of errors, from cable removal during transfer to
 		 * misc protocol and bit errors. These are mostly for just info,
 		 * as the USB hardware will work around these. If these errors
-		 * happen alot, something is wrong. */
+		 * happen a lot, something is wrong. */
 		udc_protocol_cmd_w(udc, CMD_RD_ERR_STAT);
 		tmp = udc_protocol_cmd_r(udc, DAT_RD_ERR_STAT);
 		dev_dbg(udc->dev, "Device error (0x%x)!\n", tmp);

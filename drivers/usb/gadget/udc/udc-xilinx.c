@@ -128,7 +128,7 @@ struct xusb_req {
  * @name: name of the endpoint
  * @epnumber: endpoint number
  * @maxpacket: maximum packet size the endpoint can store
- * @buffer0count: the size of the packet recieved in the first buffer
+ * @buffer0count: the size of the packet received in the first buffer
  * @buffer1count: the size of the packet received in the second buffer
  * @curbufnum: current buffer of endpoint that will be processed next
  * @buffer0ready: the busy state of first buffer
@@ -311,7 +311,7 @@ static void xudc_epconfig(struct xusb_ep *ep, struct xusb_udc *udc)
  * Return: 0 on success, error code on failure
  *
  * This function starts DMA transfer by writing to DMA source,
- * destination and lenth registers.
+ * destination and length registers.
  */
 static int xudc_start_dma(struct xusb_ep *ep, dma_addr_t src,
 			  dma_addr_t dst, u32 length)

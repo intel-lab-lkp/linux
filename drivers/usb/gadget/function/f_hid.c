@@ -353,7 +353,7 @@ static ssize_t f_hidg_intout_read(struct file *file, char __user *buffer,
 	list->pos += count;
 
 	/*
-	 * if this request is completely handled and transfered to
+	 * if this request is completely handled and transferred to
 	 * userspace, remove its entry from the list and requeue it
 	 * again. Otherwise, we will revisit it again upon the next
 	 * call, taking into account its current read position.

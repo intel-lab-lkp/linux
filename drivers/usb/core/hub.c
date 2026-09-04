@@ -6393,7 +6393,7 @@ int usb_reset_device(struct usb_device *udev)
 	 * is included in current configuration. The easist
 	 * approach is to do it for every device reset,
 	 * because the device 'memalloc_noio' flag may have
-	 * not been set before reseting the usb device.
+	 * not been set before resetting the usb device.
 	 */
 	noio_flag = memalloc_noio_save();
 

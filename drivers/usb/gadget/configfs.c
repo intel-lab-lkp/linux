@@ -326,7 +326,7 @@ static ssize_t gadget_dev_desc_max_speed_store(struct config_item *item,
 
 	mutex_lock(&gi->lock);
 
-	/* Prevent changing of max_speed after the driver is binded */
+	/* Prevent changing of max_speed after the driver is bound */
 	if (gi->composite.gadget_driver.udc_name)
 		goto err;
 

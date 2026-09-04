@@ -590,7 +590,7 @@ static int sisusb_send_bridge_packet(struct sisusb_usb_data *sisusb, int len,
  * This means that
  *   - the write routines expect "data" in machine endianness format.
  *     The data will be converted to leXX in sisusb_xxx_packet.
- *   - the read routines can expect read data in machine-endianess.
+ *   - the read routines can expect read data in machine-endianness.
  */
 
 static int sisusb_write_memio_byte(struct sisusb_usb_data *sisusb, int type,
@@ -946,7 +946,7 @@ static int sisusb_write_mem_bulk(struct sisusb_usb_data *sisusb, u32 addr,
 	return ret ? -EIO : 0;
 }
 
-/* Remember: Read data in packet is in machine-endianess! So for
+/* Remember: Read data in packet is in machine-endianness! So for
  * byte, word, 24bit, long no endian correction is necessary.
  */
 

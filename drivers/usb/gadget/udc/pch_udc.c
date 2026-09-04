@@ -319,7 +319,7 @@ struct pch_vbus_gpio_data {
  * @ep:			array of endpoints
  * @lock:		protects all state
  * @stall:		stall requested
- * @prot_stall:		protcol stall requested
+ * @prot_stall:		protocol stall requested
  * @suspended:		driver in suspended state
  * @connected:		gadget driver associated
  * @vbus_session:	required vbus_session state
@@ -846,7 +846,7 @@ static inline u32 pch_udc_read_ep_interrupts(struct pch_udc_dev *dev)
 }
 
 /**
- * pch_udc_write_ep_interrupts() - Clear endpoint interupts
+ * pch_udc_write_ep_interrupts() - Clear endpoint interrupts
  * @dev:	Reference to structure of type pch_udc_regs
  * @val:	The value to be written to interrupt register
  */

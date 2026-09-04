@@ -1398,7 +1398,7 @@ __acquires(udc->lock)
 
 	udc_reset_ep_queue(udc, 0);
 
-	/* We process some stardard setup requests here */
+	/* We process some standard setup requests here */
 	switch (setup->bRequest) {
 	case USB_REQ_GET_STATUS:
 		/* Data+Status phase from udc */
@@ -1831,7 +1831,7 @@ static void reset_irq(struct fsl_udc *udc)
 
 	if (fsl_readl(&dr_regs->portsc1) & PORTSCX_PORT_RESET) {
 		dev_vdbg(udc->dev, "Bus reset\n");
-		/* Bus is reseting */
+		/* Bus is resetting */
 		udc->bus_reset = 1;
 		/* Reset all the queues, include XD, dTD, EP queue
 		 * head and TR Queue */

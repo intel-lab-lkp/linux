@@ -329,7 +329,7 @@ struct qe_udc {
 
 	u32 max_pipes;          /* Device max pipes */
 	u32 max_use_endpts;     /* Max endpointes to be used */
-	u32 bus_reset;          /* Device is bus reseting */
+	u32 bus_reset;          /* Device is bus resetting */
 	u32 resume_state;       /* USB state to resume*/
 	u32 usb_state;          /* USB current state */
 	u32 usb_next_state;     /* USB next state */

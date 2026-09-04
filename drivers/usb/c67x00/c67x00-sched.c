@@ -37,7 +37,7 @@ struct c67x00_ep_data {
 /*
  * struct c67x00_td
  *
- * Hardware parts are little endiannes, SW in CPU endianess.
+ * Hardware parts are little endiannes, SW in CPU endianness.
  */
 struct c67x00_td {
 	/* HW specific part */

@@ -426,7 +426,7 @@ static void uas_data_cmplt(struct urb *urb)
 	if (status) {
 		if (status != -ENOENT && status != -ECONNRESET && status != -ESHUTDOWN)
 			uas_log_cmd_state(cmnd, "data cmplt err", status);
-		/* error: no data transfered */
+		/* error: no data transferred */
 		scsi_set_resid(cmnd, sdb->length);
 		set_host_byte(cmnd, DID_ERROR);
 	} else {

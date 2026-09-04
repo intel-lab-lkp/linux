@@ -113,7 +113,7 @@ static void hpi_write_word(struct c67x00_device *dev, u16 reg, u16 value)
 }
 
 /*
- * Only data is little endian, addr has cpu endianess
+ * Only data is little endian, addr has cpu endianness
  */
 static void hpi_write_words_le16(struct c67x00_device *dev, u16 addr,
 				 __le16 *data, u16 count)
@@ -131,7 +131,7 @@ static void hpi_write_words_le16(struct c67x00_device *dev, u16 addr,
 }
 
 /*
- * Only data is little endian, addr has cpu endianess
+ * Only data is little endian, addr has cpu endianness
  */
 static void hpi_read_words_le16(struct c67x00_device *dev, u16 addr,
 				__le16 *data, u16 count)
@@ -397,7 +397,7 @@ int c67x00_ll_reset(struct c67x00_device *dev)
 
 /*
  * c67x00_ll_write_mem_le16 - write into c67x00 memory
- * Only data is little endian, addr has cpu endianess.
+ * Only data is little endian, addr has cpu endianness.
  */
 void c67x00_ll_write_mem_le16(struct c67x00_device *dev, u16 addr,
 			      void *data, int len)
@@ -436,7 +436,7 @@ void c67x00_ll_write_mem_le16(struct c67x00_device *dev, u16 addr,
 
 /*
  * c67x00_ll_read_mem_le16 - read from c67x00 memory
- * Only data is little endian, addr has cpu endianess.
+ * Only data is little endian, addr has cpu endianness.
  */
 void c67x00_ll_read_mem_le16(struct c67x00_device *dev, u16 addr,
 			     void *data, int len)

@@ -1101,7 +1101,7 @@ int usb_gadget_ep_match_desc(struct usb_gadget *gadget,
 EXPORT_SYMBOL_GPL(usb_gadget_ep_match_desc);
 
 /**
- * usb_gadget_check_config - checks if the UDC can support the binded
+ * usb_gadget_check_config - checks if the UDC can support the bound
  *	configuration
  * @gadget: controller to check the USB configuration
  *
@@ -1524,7 +1524,7 @@ EXPORT_SYMBOL_GPL(usb_add_gadget_udc_release);
 /**
  * usb_get_gadget_udc_name - get the name of the first UDC controller
  * This functions returns the name of the first UDC controller in the system.
- * Please note that this interface is usefull only for legacy drivers which
+ * Please note that this interface is useful only for legacy drivers which
  * assume that there is only one UDC controller in the system and they need to
  * get its name before initialization. There is no guarantee that the UDC
  * of the returned name will be still available, when gadget driver registers

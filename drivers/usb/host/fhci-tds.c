@@ -367,7 +367,7 @@ static void fhci_td_transaction_confirm(struct fhci_usb *usb)
  * Arguments:
  * usb          A pointer to the USB structure
  * pkt          A pointer to the user frame structure
- * trans_type   Transaction tyep - IN,OUT or SETUP
+ * trans_type   Transaction type - IN,OUT or SETUP
  * dest_addr    Device address - 0~127
  * dest_ep      Endpoint number of the device - 0~16
  * trans_mode   Pipe type - ISO,Interrupt,bulk or control
