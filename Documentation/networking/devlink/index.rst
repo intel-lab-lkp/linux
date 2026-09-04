@@ -85,6 +85,7 @@ parameters, info versions, and other features it supports.
    hns3
    i40e
    ice
+   idpf
    ionic
    iosm
    ixd
