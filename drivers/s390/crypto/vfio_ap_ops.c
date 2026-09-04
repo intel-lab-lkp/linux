@@ -785,14 +785,14 @@ static bool _queue_passable(struct vfio_ap_queue *q)
 	if (!q)
 		return false;
 
-	switch (q->reset_status.response_code) {
-	case AP_RESPONSE_NORMAL:
-	case AP_RESPONSE_DECONFIGURED:
-	case AP_RESPONSE_CHECKSTOPPED:
-		return true;
-	default:
-		return false;
-	}
+	/*
+	 * A queue is only passable if zeroization was confirmed by
+	 * apq_reset_check() via TAPQ status bit verification. This is
+	 * indicated by reset_status.response_code == AP_RESPONSE_NORMAL (0).
+	 * This is to protect against leaking the internal state of the queue
+	 * to the guest.
+	 */
+	return q->reset_status.response_code == AP_RESPONSE_NORMAL;
 }
 
 /*
@@ -2107,6 +2107,30 @@ static void report_aqic_resource_leak(struct vfio_ap_queue *q)
 
 #define WAIT_MSG "Waited %dms for reset of queue %02x.%04x (%u, %u, %u)"
 
+/**
+ * apq_reset_finalize - store final TAPQ status and free AQIC resources.
+ * @q:      the vfio_ap_queue
+ * @status: the final AP queue status returned by PQAP(TAPQ)
+ * @ret:    the return value from apq_status_check()
+ *
+ * Copies the full TAPQ status word to q->reset_status so that all status
+ * bits reflect the confirmed end state of the queue. If ret == 0,
+ * zeroization was confirmed and the response code is overridden with
+ * AP_RESPONSE_NORMAL so that _queue_passable() returns true. For
+ * ret == -ENODEV (DECONFIGURED or CHECKSTOPPED), the non-zero response
+ * code is left intact so _queue_passable() correctly returns false.
+ * AQIC resources are then freed.
+ */
+static void apq_reset_finalize(struct vfio_ap_queue *q,
+			       struct ap_queue_status *status, int ret)
+{
+	memcpy(&q->reset_status, status, sizeof(*status));
+	if (!ret)
+		q->reset_status.response_code = AP_RESPONSE_NORMAL;
+	if (q->saved_isc != VFIO_AP_ISC_INVALID)
+		vfio_ap_free_aqic_resources(q);
+}
+
 static void apq_reset_check(struct work_struct *reset_work)
 {
 	int ret = -EBUSY, elapsed = 0;
@@ -2129,7 +2153,7 @@ static void apq_reset_check(struct work_struct *reset_work)
 			 */
 			vfio_ap_free_aqic_resources(q);
 			return;
-
+		}
 		if (elapsed >= AP_RESET_MAX_WAIT) {
 			/*
 			 * Zeroization confirmed (ret == 0): the TAPQ status bits
@@ -2143,8 +2167,10 @@ static void apq_reset_check(struct work_struct *reset_work)
 			 * queue cannot generate interrupts, so the NIB page is
 			 * no longer a DMA target and it is safe to free it.
 			 */
-			if (!ret || ret == -ENODEV)
-				goto done;
+			if (!ret || ret == -ENODEV) {
+				apq_reset_finalize(q, &status, ret);
+				return;
+			}
 			/*
 			 * Timed out without being able to verify zapq completed.
 			 *
@@ -2174,7 +2200,10 @@ static void apq_reset_check(struct work_struct *reset_work)
 			 * apq_reset_check() will re-issue the ZAPQ.
 			 */
 			q->reset_status.response_code = AP_RESPONSE_RESET_IN_PROGRESS;
-
+			return;
+		}
+		if (!ret || ret == -ENODEV) {
+			apq_reset_finalize(q, &status, ret);
 			return;
 		}
 		if (ret == -EBUSY) {
@@ -2191,14 +2220,9 @@ static void apq_reset_check(struct work_struct *reset_work)
 			    ret == -EAGAIN) {
 				status = ap_zapq(q->apqn, 0);
 				memcpy(&q->reset_status, &status, sizeof(status));
-				continue;
 			}
 		}
 	}
-
-done:
-	if (q->saved_isc != VFIO_AP_ISC_INVALID)
-		vfio_ap_free_aqic_resources(q);
 }
 
 static void vfio_ap_mdev_reset_queue(struct vfio_ap_queue *q)
@@ -2698,8 +2722,9 @@ int vfio_ap_mdev_probe_queue(struct ap_device *apdev)
 
 	q->apqn = apqn;
 	q->saved_isc = VFIO_AP_ISC_INVALID;
-	memset(&q->reset_status, 0, sizeof(q->reset_status));
 	INIT_WORK(&q->reset_work, apq_reset_check);
+	vfio_ap_mdev_reset_queue(q);
+	flush_work(&q->reset_work);
 
 	if (matrix_mdev) {
 		vfio_ap_mdev_link_queue(matrix_mdev, q);
@@ -2791,8 +2816,8 @@ done:
 		vfio_ap_unlink_queue_fr_mdev(q);
 
 	dev_set_drvdata(&apdev->device, NULL);
-	kfree(q);
 	release_update_locks_for_mdev(matrix_mdev);
+	kfree(q);
 }
 
 /**
