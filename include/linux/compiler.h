@@ -148,6 +148,14 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 	= (unsigned long)&sym;
 #endif
 
+/*
+ * This macro obfuscates arithmetic on a variable address so that the compiler
+ * shouldn't recognize the original var, and make assumptions about it.
+ *
+ * This is needed because the C standard makes it undefined to do pointer
+ * arithmetic on "objects" outside their boundaries and compilers assume
+ * this is the case. In particular they assume such arithmetic does not wrap.
+ */
 #ifndef RELOC_HIDE
 # define RELOC_HIDE(ptr, off) ((typeof(ptr))((unsigned long)(ptr) + (off)))
 #endif
