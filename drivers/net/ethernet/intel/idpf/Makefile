@@ -7,6 +7,7 @@ obj-$(CONFIG_IDPF) += idpf.o
 
 idpf-y := \
 	idpf_dev.o		\
+	idpf_devlink.o		\
 	idpf_ethtool.o		\
 	idpf_idc.o		\
 	idpf_lib.o		\
