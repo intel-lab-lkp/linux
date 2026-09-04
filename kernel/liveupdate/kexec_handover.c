@@ -698,6 +698,17 @@ static void __init kho_reserve_scratch(void)
 	}
 
 	/*
+	 * Calculate the per-node sizes before reserving any scratch areas.
+	 * memblock allocations are marked MEMBLOCK_RSRV_KERN, so calculating
+	 * them later would count the lowmem and global scratch areas as kernel
+	 * allocations and scale them again.
+	 */
+	i = 2;
+	for_each_node_state(nid, N_MEMORY)
+		kho_scratch[i++].size = scratch_size_node(nid);
+	i = 0;
+
+	/*
 	 * reserve scratch area in low memory for lowmem allocations in the
 	 * next kernel
 	 */
@@ -730,7 +741,7 @@ static void __init kho_reserve_scratch(void)
 	 * memoryless nodes, as we can not allocate scratch areas there.
 	 */
 	for_each_node_state(nid, N_MEMORY) {
-		size = scratch_size_node(nid);
+		size = kho_scratch[i].size;
 		addr = memblock_alloc_range_nid(size, SCRATCH_ALIGNMENT_BYTES,
 						0, MEMBLOCK_ALLOC_ACCESSIBLE,
 						nid, true);
