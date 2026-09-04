@@ -1372,7 +1372,7 @@ static struct intel_engine_cs *active_engine(struct intel_context *ce)
 	list_for_each_entry_reverse(rq, &ce->timeline->requests, link) {
 		bool found;
 
-		/* timeline is already completed upto this point? */
+		/* timeline is already completed up to this point? */
 		if (!i915_request_get_rcu(rq))
 			break;
 

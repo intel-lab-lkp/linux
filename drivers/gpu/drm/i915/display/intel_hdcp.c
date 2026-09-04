@@ -787,7 +787,7 @@ int intel_hdcp_auth_downstream(struct intel_connector *connector)
 
 	/*
 	 * When V prime mismatches, DP Spec mandates re-read of
-	 * V prime atleast twice.
+	 * V prime at least twice.
 	 */
 	for (i = 0; i < tries; i++) {
 		ret = intel_hdcp_validate_v_prime(connector, shim,

@@ -643,7 +643,7 @@ calculate_chunk_sz(struct drm_i915_private *i915, bool src_is_lmem,
 {
 	if (ccs_bytes_to_cpy && !src_is_lmem)
 		/*
-		 * When CHUNK_SZ is passed all the pages upto CHUNK_SZ
+		 * When CHUNK_SZ is passed all the pages up to CHUNK_SZ
 		 * will be taken for the blt. in Flat-ccs supported
 		 * platform Smem obj will have more pages than required
 		 * for main memory hence limit it to the required size

@@ -1028,7 +1028,7 @@ static void bxt_dsi_get_pipe_config(struct intel_encoder *encoder,
 	adjusted_mode_sw = &crtc->config->hw.adjusted_mode;
 
 	/*
-	 * Atleast one port is active as encoder->get_config called only if
+	 * At least one port is active as encoder->get_config called only if
 	 * encoder->get_hw_state() returns true.
 	 */
 	for_each_dsi_port(port, intel_dsi->ports) {

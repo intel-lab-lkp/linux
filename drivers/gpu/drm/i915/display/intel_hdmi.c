@@ -3236,7 +3236,7 @@ intel_hdmi_dsc_get_num_slices(const struct drm_display_mode *mode,
 #define HDMI_DSC_PEAK_PIXEL_RATE		2720000
 /*
  * Rates at which the source and sink are required to process pixels in each
- * slice, can be two levels: either atleast 340000KHz or atleast 40000KHz.
+ * slice, can be two levels: either at least 340000KHz or at least 40000KHz.
  */
 #define HDMI_DSC_MAX_ENC_THROUGHPUT_0		340000
 #define HDMI_DSC_MAX_ENC_THROUGHPUT_1		400000
@@ -3269,7 +3269,7 @@ intel_hdmi_dsc_get_num_slices(const struct drm_display_mode *mode,
 
 	/*
 	 * As per spec, the rate at which the source and the sink process
-	 * the pixels per slice are at two levels: atleast 340Mhz or 400Mhz.
+	 * the pixels per slice are at two levels: at least 340Mhz or 400Mhz.
 	 * This depends upon the pixel clock rate and output formats
 	 * (kslice adjust).
 	 * If pixel clock * kslice adjust >= 2720MHz slices can be processed

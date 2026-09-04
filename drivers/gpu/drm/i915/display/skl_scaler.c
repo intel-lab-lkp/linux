@@ -194,7 +194,7 @@ skl_update_scaler(struct intel_crtc_state *crtc_state, bool force_detach,
 
 	/*
 	 * if plane is being disabled or scaler is no more required or force detach
-	 *  - free scaler binded to this plane/crtc
+	 *  - free scaler bound to this plane/crtc
 	 *  - in order to do this, update crtc->scaler_usage
 	 *
 	 * Here scaler state in crtc_state is set free so that

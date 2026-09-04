@@ -378,7 +378,7 @@ int intel_dsc_compute_params(struct intel_crtc_state *pipe_config)
 
 	/*
 	 * From XE_LPD onwards we supports compression bpps in steps of 1
-	 * upto uncompressed bpp-1, hence add calculations for all the rc
+	 * up to uncompressed bpp-1, hence add calculations for all the rc
 	 * parameters
 	 *
 	 * We don't want to calculate all rc parameters when the panel

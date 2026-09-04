@@ -958,7 +958,7 @@ gen11_dsi_set_transcoder_timings(struct intel_encoder *encoder,
 	/* TRANS_HSYNC register to be programmed only for video mode */
 	if (is_vid_mode(intel_dsi)) {
 		if (intel_dsi->video_mode == NON_BURST_SYNC_PULSE) {
-			/* BSPEC: hsync size should be atleast 16 pixels */
+			/* BSPEC: hsync size should be at least 16 pixels */
 			if (hsync_size < 16)
 				drm_err(display->drm,
 					"hsync size < 16 pixels\n");
