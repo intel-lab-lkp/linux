@@ -49,8 +49,7 @@ struct encx24j600_priv {
 	struct mutex              lock; /* device access lock */
 	struct encx24j600_context ctx;
 	struct sk_buff           *tx_skb;
-	struct task_struct       *kworker_task;
-	struct kthread_worker     kworker;
+	struct kthread_worker    *kworker;
 	struct kthread_work       tx_work;
 	struct kthread_work       setrx_work;
 	u16                       next_packet;
@@ -823,7 +822,7 @@ static void encx24j600_set_multicast_list(struct net_device *dev)
 	}
 
 	if (oldfilter != priv->rxfilter)
-		kthread_queue_work(&priv->kworker, &priv->setrx_work);
+		kthread_queue_work(priv->kworker, &priv->setrx_work);
 }
 
 static void encx24j600_hw_tx(struct encx24j600_priv *priv)
@@ -884,7 +883,7 @@ static netdev_tx_t encx24j600_tx(struct sk_buff *skb, struct net_device *dev)
 	/* Remember the skb for deferred processing */
 	priv->tx_skb = skb;
 
-	kthread_queue_work(&priv->kworker, &priv->tx_work);
+	kthread_queue_work(priv->kworker, &priv->tx_work);
 
 	return NETDEV_TX_OK;
 }
@@ -1046,15 +1045,12 @@ static int encx24j600_spi_probe(struct spi_device *spi)
 	/* Initialize the device HW to the consistent state */
 	encx24j600_hw_init(priv);
 
-	kthread_init_worker(&priv->kworker);
 	kthread_init_work(&priv->tx_work, encx24j600_tx_proc);
 	kthread_init_work(&priv->setrx_work, encx24j600_setrx_proc);
 
-	priv->kworker_task = kthread_run(kthread_worker_fn, &priv->kworker,
-					 "encx24j600");
-
-	if (IS_ERR(priv->kworker_task)) {
-		ret = PTR_ERR(priv->kworker_task);
+	priv->kworker = kthread_run_worker(0, "encx24j600");
+	if (IS_ERR(priv->kworker)) {
+		ret = PTR_ERR(priv->kworker);
 		goto out_free;
 	}
 
@@ -1087,7 +1083,7 @@ static int encx24j600_spi_probe(struct spi_device *spi)
 out_unregister:
 	unregister_netdev(priv->ndev);
 out_stop:
-	kthread_stop(priv->kworker_task);
+	kthread_destroy_worker(priv->kworker);
 out_free:
 	free_netdev(ndev);
 
@@ -1100,7 +1096,7 @@ static void encx24j600_spi_remove(struct spi_device *spi)
 	struct encx24j600_priv *priv = dev_get_drvdata(&spi->dev);
 
 	unregister_netdev(priv->ndev);
-	kthread_stop(priv->kworker_task);
+	kthread_destroy_worker(priv->kworker);
 
 	free_netdev(priv->ndev);
 }
