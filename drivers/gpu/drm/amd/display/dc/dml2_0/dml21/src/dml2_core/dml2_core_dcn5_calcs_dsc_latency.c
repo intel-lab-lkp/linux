@@ -133,7 +133,7 @@ static void dscc_bcl_compute_delay(latency_t *p, int bpc, float bpp, int slice_w
 	//this step is necessary as each padded pixel added takes up a clock cycle but is not included in the initialXmitDelay and, therefore, adds to the overall delay
 	ixd_plus_padding = initial_xmit_delay + slice_padded_pixels * lines_to_reach_ixd;
 
-	//convert the the padded initial transmit delay from pixels to groups by rounding up to the nearest group as DSC processes in groups of pixels
+	//convert the padded initial transmit delay from pixels to groups by rounding up to the nearest group as DSC processes in groups of pixels
 	ixd_plus_padding_groups = (ixd_plus_padding + 2) / 3;
 
 	//number of groups required for a slice to reach initial transmit delay is the sum of the padded initial transmit delay plus the ssm group priming delay

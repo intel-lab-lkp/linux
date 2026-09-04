@@ -580,7 +580,7 @@ static void calculate_start_index_num_swaths(
  * ***********************************************************************************************************
  * calculate_hubp_start_end_lines: Function that calculates svp parameters given a target p-state line
  *
- * This function calculates the the svp parameters (vp0 and vp1 programming) in terms of swath index and number
+ * This function calculates the svp parameters (vp0 and vp1 programming) in terms of swath index and number
  * of swaths given an otg p-state target. This function should be called per plane. There are 5 steps:
  *
  * 1. Calculate svp0_start_dst_line and svp0_end_dst_line.
