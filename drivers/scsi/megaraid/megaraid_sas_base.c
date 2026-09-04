@@ -7415,6 +7415,12 @@ void megasas_free_ctrl_dma_buffers(struct megasas_instance *instance)
 				  instance->host_device_list_buf,
 				  instance->host_device_list_buf_h);
 
+	if (instance->hb_host_mem)
+		dma_free_coherent(&pdev->dev,
+				  sizeof(struct MR_CTRL_HB_HOST_MEM),
+				  instance->hb_host_mem,
+				  instance->hb_host_mem_h);
+
 }
 
 /*
@@ -8091,11 +8097,6 @@ skip_firing_dcmds:
 				    sizeof(struct MR_LD_VF_AFFILIATION_111),
 				    instance->vf_affiliation_111,
 				    instance->vf_affiliation_111_h);
-
-	if (instance->hb_host_mem)
-		dma_free_coherent(&pdev->dev, sizeof(struct MR_CTRL_HB_HOST_MEM),
-				    instance->hb_host_mem,
-				    instance->hb_host_mem_h);
 
 	megasas_free_ctrl_dma_buffers(instance);
 
