@@ -1774,7 +1774,7 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 	}
 }
 
-static void task_tick_cache(struct rq *rq, struct task_struct *p)
+void task_tick_cache(struct rq *rq, struct task_struct *p)
 {
 	struct callback_head *work = &p->cache_work;
 	struct mm_struct *mm = p->mm;
@@ -1996,7 +1996,7 @@ static inline void account_mm_sched(struct rq *rq, struct task_struct *p,
 
 void init_sched_mm(struct task_struct *p) { }
 
-static void task_tick_cache(struct rq *rq, struct task_struct *p) { }
+void task_tick_cache(struct rq *rq, struct task_struct *p) { }
 
 static inline int get_pref_llc(struct task_struct *p,
 			       struct mm_struct *mm)
@@ -15068,8 +15068,11 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 	if (queued)
 		return;
 
-	task_tick_cache(rq, curr);
-
+	/*
+	 * Misfit, overutilized and core scheduling state belong to the
+	 * scheduling context, and therefore stay with @curr rather than
+	 * rq->curr. See sched_tick_exec_ctx() for execution-context work.
+	 */
 	update_misfit_status(curr, rq);
 	check_update_overutilized_status(task_rq(curr));
 

@@ -5778,6 +5778,7 @@ static void sched_tick_exec_ctx(struct rq *rq)
 
 	if (static_branch_unlikely(&sched_numa_balancing))
 		task_tick_numa(rq, curr);
+	task_tick_cache(rq, curr);
 }
 
 /*
