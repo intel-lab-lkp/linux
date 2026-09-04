@@ -15,11 +15,10 @@ struct page;
 struct scatterlist;
 
 #define SWIOTLB_VERBOSE	(1 << 0) /* verbose initialization */
-#define SWIOTLB_ANY	(1 << 1) /* allow any memory for the buffer */
 /* Initialize a default-sized pool for devices with limited DMA addressing. */
-#define SWIOTLB_INIT_ADDRESSING_LIMIT	(1 << 2)
+#define SWIOTLB_INIT_ADDRESSING_LIMIT	(1 << 1)
 /* Initialize a default-sized pool that requires architecture remapping. */
-#define SWIOTLB_INIT_REMAP		(1 << 3)
+#define SWIOTLB_INIT_REMAP		(1 << 2)
 
 /*
  * Maximum allowable number of contiguous slabs to map,

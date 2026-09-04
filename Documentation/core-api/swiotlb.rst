@@ -148,10 +148,10 @@ may also be adjusted
 due to other conditions, such as running in a CoCo VM, as described above. If
 CONFIG_SWIOTLB_DYNAMIC is enabled, additional pools may be allocated later in
 the life of the system. Each pool must be a contiguous range of physical
-memory. The default pool is allocated below the 4 GiB physical address line so
-it works for devices that can only address 32-bits of physical memory (unless
-architecture-specific code provides the SWIOTLB_ANY flag). In a CoCo VM, the
-pool memory must be decrypted before swiotlb is used.
+memory. The default pool is allocated below the architecture's low address
+limit when it is needed for devices with limited DMA addressing. Otherwise,
+it may be allocated anywhere in directly mapped memory. In a CoCo VM, the pool
+memory must be decrypted before swiotlb is used.
 
 Each pool is divided into "slots" of size IO_TLB_SIZE, which is 2 KiB with
 current definitions. IO_TLB_SEGSIZE contiguous slots (128 slots) constitute
