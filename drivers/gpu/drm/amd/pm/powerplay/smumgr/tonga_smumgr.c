@@ -1759,7 +1759,7 @@ static int tonga_populate_vr_config(struct pp_hwmgr *hwmgr,
 			table->VRConfig |= config;
 		} else {
 			pr_err("VDDC and VDDGFX should "
-				"be both on SVI2 control in splitted mode !\n");
+				"be both on SVI2 control in split mode !\n");
 		}
 	} else {
 		/* Merged mode  */
