@@ -3550,7 +3550,7 @@ static const char *leds[LED_MAX + 1] = {
 	[LED_KANA] = "Kana",		[LED_SLEEP] = "Sleep",
 	[LED_SUSPEND] = "Suspend",	[LED_MUTE] = "Mute",
 	[LED_MISC] = "Misc",		[LED_MAIL] = "Mail",
-	[LED_CHARGING] = "Charging",
+	[LED_CHARGING] = "Charging",	[LED_MICMUTE] = "Mic Mute",
 };
 
 static const char *repeats[REP_MAX + 1] = {
