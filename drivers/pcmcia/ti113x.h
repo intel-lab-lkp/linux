@@ -758,7 +758,7 @@ static int ti12xx_power_hook(struct pcmcia_socket *sock, int operation)
 	/*
 	 * all serial/tied: only disable when modparm set. always doing it
 	 * would mean a regression for working setups 'cos it disables the
-	 * interrupts for both both slots on 2-slot controllers
+	 * interrupts for both slots on 2-slot controllers
 	 * (and users of single slot controllers where it's save have to
 	 * live with setting the modparm, most don't have to anyway)
 	 */
