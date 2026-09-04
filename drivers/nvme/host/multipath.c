@@ -482,6 +482,15 @@ static bool nvme_available_path(struct nvme_ns_head *head)
 	if (!test_bit(NVME_NSHEAD_DISK_LIVE, &head->flags))
 		return false;
 
+	/*
+	 * The user requested any I/O queued or arriving while no path is
+	 * usable to be failed immediately (e.g. to release I/O held for a
+	 * fabric that retries reconnection indefinitely). The flag is
+	 * cleared when a path becomes live again.
+	 */
+	if (test_bit(NVME_NSHEAD_FAIL_IO_NOW, &head->flags))
+		return false;
+
 	list_for_each_entry_srcu(ns, &head->list, siblings,
 				 srcu_read_lock_held(&head->srcu)) {
 		if (test_bit(NVME_CTRL_FAILFAST_EXPIRED, &ns->ctrl->flags))
@@ -779,6 +788,12 @@ static void nvme_mpath_set_live(struct nvme_ns *ns)
 
 	if (!head->disk)
 		return;
+
+	/*
+	 * A path is usable again, restore the default queue-if-no-path
+	 * behavior in case fail_io_now was set during a fabric outage.
+	 */
+	clear_bit(NVME_NSHEAD_FAIL_IO_NOW, &head->flags);
 
 	/*
 	 * test_and_set_bit() is used because it is protecting against two nvme
@@ -1167,6 +1182,53 @@ static ssize_t delayed_removal_secs_store(struct device *dev,
 }
 
 DEVICE_ATTR_RW(delayed_removal_secs);
+
+static ssize_t fail_io_now_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	struct nvme_ns_head *head = disk->private_data;
+
+	return sysfs_emit(buf, test_bit(NVME_NSHEAD_FAIL_IO_NOW,
+			&head->flags) ? "on\n" : "off\n");
+}
+
+static ssize_t fail_io_now_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	struct nvme_ns_head *head = disk->private_data;
+	bool enable;
+	int ret;
+
+	ret = kstrtobool(buf, &enable);
+	if (ret < 0)
+		return ret;
+
+	mutex_lock(&head->subsys->lock);
+	if (enable)
+		set_bit(NVME_NSHEAD_FAIL_IO_NOW, &head->flags);
+	else
+		clear_bit(NVME_NSHEAD_FAIL_IO_NOW, &head->flags);
+	mutex_unlock(&head->subsys->lock);
+
+	/*
+	 * Ensure that update to NVME_NSHEAD_FAIL_IO_NOW is seen
+	 * by its reader.
+	 */
+	synchronize_srcu(&head->srcu);
+
+	/*
+	 * Kick the requeue list so already-queued I/O re-evaluates path
+	 * availability and fails immediately.
+	 */
+	if (enable)
+		kblockd_schedule_work(&head->requeue_work);
+
+	return count;
+}
+
+DEVICE_ATTR_RW(fail_io_now);
 
 static int nvme_lookup_ana_group_desc(struct nvme_ctrl *ctrl,
 		struct nvme_ana_group_desc *desc, void *data)
