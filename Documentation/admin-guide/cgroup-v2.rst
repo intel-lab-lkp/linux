@@ -1229,7 +1229,10 @@ will be referred to. All time durations are in microseconds.
 	A read-write single value file which exists on non-root
 	cgroups.  The default is "0".
 
-	The burst in the range [0, $MAX].
+	The burst in the range [0, $MAX]. The configured value is retained when
+	the quota changes and may be larger than the current quota. During CFS
+	runtime refill, the effective burst is limited to the current quota.
+	The quota and burst files can therefore be written in either order.
 
 	This file affects only processes under the fair-class scheduler.
 
