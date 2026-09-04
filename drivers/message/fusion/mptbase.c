@@ -4453,7 +4453,7 @@ PrimeIocFifos(MPT_ADAPTER *ioc)
 				    "Request/Reply/Chain and Sense Buffers\n",
 				    ioc->name));
 			} else {
-				/*Reseting DMA mask to 64 bit*/
+				/*Resetting DMA mask to 64 bit*/
 				dma_set_mask(&ioc->pcidev->dev,
 					     DMA_BIT_MASK(64));
 				dma_set_coherent_mask(&ioc->pcidev->dev,

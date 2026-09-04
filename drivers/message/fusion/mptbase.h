@@ -62,7 +62,7 @@
 #include "lsi/mpi_raid.h"	/* Integrated Mirroring support */
 
 #include "lsi/mpi_fc.h"		/* Fibre Channel (lowlevel) support */
-#include "lsi/mpi_targ.h"	/* SCSI/FCP Target protcol support */
+#include "lsi/mpi_targ.h"	/* SCSI/FCP Target protocol support */
 #include "lsi/mpi_tool.h"	/* Tools support */
 #include "lsi/mpi_sas.h"	/* SAS support */
 

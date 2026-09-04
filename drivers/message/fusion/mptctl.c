@@ -213,7 +213,7 @@ mptctl_reply(MPT_ADAPTER *ioc, MPT_FRAME_HDR *req, MPT_FRAME_HDR *reply)
 
 	/*
 	 * Handling continuation of the same reply. Processing the first
-	 * reply, and eating the other replys that come later.
+	 * reply, and eating the other replies that come later.
 	 */
 	if (ioc->ioctl_cmds.msg_context != req->u.hdr.MsgContext)
 		goto out_continuation;
