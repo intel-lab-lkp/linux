@@ -1884,8 +1884,17 @@ static void ath_drain_txq_list(struct ath_softc *sc, struct ath_txq *txq,
 		bf = list_first_entry(list, struct ath_buf, list);
 
 		if (bf->bf_state.stale) {
-			list_del(&bf->list);
+			struct sk_buff *skb = bf->bf_mpdu;
 
+			list_del(&bf->list);
+			if (bf->bf_buf_addr) {
+				dma_unmap_single(sc->dev, bf->bf_buf_addr,
+						 skb ? skb->len : 0,
+						 DMA_TO_DEVICE);
+				bf->bf_buf_addr = 0;
+			}
+			bf->bf_mpdu = NULL;
+			dev_kfree_skb_any(skb);
 			ath_tx_return_buffer(sc, bf);
 			continue;
 		}
