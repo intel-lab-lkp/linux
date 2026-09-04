@@ -1292,32 +1292,69 @@ nfsd4_secinfo_no_name_release(union nfsd4_op_u *u)
 }
 
 /*
- * Validate that the requested timestamps are within the acceptable range. If
- * timestamp appears to be in the future, then it will be clamped to
- * current_time().
+ * A client holding a delegation with delegated timestamps is the authority for
+ * the file's timestamps, so a SETATTR from it asserts what they are rather than
+ * reporting that they have advanced. Honor a value that moves a timestamp
+ * backwards: the client could set the same value with an ordinary SETATTR, so
+ * refusing it here only loses data. Clamp a value in the future to the current
+ * time, as RFC 9754 permits.
  */
 static void
+clamp_deleg_time(struct timespec64 *req, const struct timespec64 *now)
+{
+	if (timespec64_compare(req, now) > 0)
+		*req = *now;
+}
+
+/*
+ * Apply the timestamps that a delegation holder supplied in a SETATTR.
+ *
+ * Returns true if the request carries a c/mtime update, so that the caller can
+ * set dl_setattr once the update has been applied.
+ */
+static bool
 vet_deleg_attrs(struct nfsd4_setattr *setattr, struct nfs4_delegation *dp)
 {
-	struct timespec64 now = current_time(dp->dl_stid.sc_file->fi_inode);
+	struct inode *inode = dp->dl_stid.sc_file->fi_inode;
+	struct timespec64 now = current_time(inode);
 	struct iattr *iattr = &setattr->sa_iattr;
 
-	if ((setattr->sa_bmval[2] & FATTR4_WORD2_TIME_DELEG_ACCESS) &&
-	    !nfsd4_vet_deleg_time(&iattr->ia_atime, &dp->dl_atime, &now))
-		iattr->ia_valid &= ~(ATTR_ATIME | ATTR_ATIME_SET);
+	/*
+	 * The client reports the times at every DELEGRETURN, changed or not.
+	 * Drop a report that matches the inode. An untouched file then keeps its
+	 * change attribute, and nfsd_setattr() skips the call into the
+	 * filesystem. Compare before clamping: a file can carry a time in the
+	 * future, and clamping first would make the report differ from the inode
+	 * and drag the time back to "now".
+	 *
+	 * The times are read without i_rwsem. A conflicting writer must break
+	 * the delegation first, and FMODE_NOCMTIME stops the holder's own writes
+	 * from stamping the c/mtime. touch_atime() and a CB_GETATTR can still
+	 * move them here. A stale read then costs at most one extra update.
+	 */
+	if (setattr->sa_bmval[2] & FATTR4_WORD2_TIME_DELEG_ACCESS) {
+		struct timespec64 atime = inode_get_atime(inode);
+
+		if (timespec64_equal(&iattr->ia_atime, &atime))
+			iattr->ia_valid &= ~(ATTR_ATIME | ATTR_ATIME_SET);
+		else
+			clamp_deleg_time(&iattr->ia_atime, &now);
+	}
 
 	if (setattr->sa_bmval[2] & FATTR4_WORD2_TIME_DELEG_MODIFY) {
-		if (nfsd4_vet_deleg_time(&iattr->ia_mtime, &dp->dl_mtime, &now)) {
+		struct timespec64 mtime = inode_get_mtime(inode);
+
+		if (dp->dl_written ||
+		    !timespec64_equal(&iattr->ia_mtime, &mtime)) {
+			clamp_deleg_time(&iattr->ia_mtime, &now);
 			iattr->ia_ctime = iattr->ia_mtime;
-			if (nfsd4_vet_deleg_time(&iattr->ia_ctime, &dp->dl_ctime, &now))
-				dp->dl_setattr = true;
-			else
-				iattr->ia_valid &= ~(ATTR_CTIME | ATTR_CTIME_SET);
-		} else {
-			iattr->ia_valid &= ~(ATTR_CTIME | ATTR_CTIME_SET |
-					     ATTR_MTIME | ATTR_MTIME_SET);
+			return true;
 		}
+
+		iattr->ia_valid &= ~(ATTR_CTIME | ATTR_CTIME_SET |
+				     ATTR_MTIME | ATTR_MTIME_SET);
 	}
+	return false;
 }
 
 static __be32
@@ -1331,7 +1368,8 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		.na_pacl	= posix_acl_dup(setattr->sa_pacl),
 		.na_dpacl	= posix_acl_dup(setattr->sa_dpacl),
 	};
-	bool save_no_wcc, deleg_attrs;
+	bool save_no_wcc, deleg_attrs, deleg_cmtime = false;
+	struct nfs4_delegation *dp = NULL;
 	struct nfs4_stid *st = NULL;
 	struct inode *inode;
 	__be32 status = nfs_ok;
@@ -1356,17 +1394,15 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	if (deleg_attrs) {
 		status = nfserr_bad_stateid;
 		if (st && (st->sc_type & SC_TYPE_DELEG)) {
-			struct nfs4_delegation *dp = delegstateid(st);
+			dp = delegstateid(st);
 
 			/* Only for *_ATTRS_DELEG flavors */
 			if (deleg_attrs_deleg(dp->dl_type)) {
-				vet_deleg_attrs(setattr, dp);
+				deleg_cmtime = vet_deleg_attrs(setattr, dp);
 				status = nfs_ok;
 			}
 		}
 	}
-	if (st)
-		nfs4_put_stid(st);
 	if (status)
 		goto out_err;
 
@@ -1396,6 +1432,20 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	cstate->current_fh.fh_no_wcc = true;
 	status = nfsd_setattr(rqstp, &cstate->current_fh, &attrs, NULL);
 	cstate->current_fh.fh_no_wcc = save_no_wcc;
+
+	/*
+	 * The times are in place, so keep nfsd4_finalize_deleg_timestamps() from
+	 * stamping over them. Set this only once the update has been applied: a
+	 * failed SETATTR that set it would suppress the fallback stamp at
+	 * DELEGRETURN and lose the timestamps of an earlier write for good.
+	 *
+	 * A DELEGRETURN that races this SETATTR can read dl_setattr before it is
+	 * set and stamp "now" over the times just applied. Only a client that
+	 * pipelines the two can hit that, and it lands on the old behavior.
+	 */
+	if (!status && deleg_cmtime)
+		dp->dl_setattr = true;
+
 	if (!status)
 		status = nfserrno(attrs.na_labelerr);
 	if (!status)
@@ -1405,6 +1455,8 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 out:
 	fh_drop_write(&cstate->current_fh);
 out_err:
+	if (st)
+		nfs4_put_stid(st);
 	nfsd_attrs_free(&attrs);
 	return status;
 }
