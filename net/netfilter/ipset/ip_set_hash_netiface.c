@@ -370,12 +370,6 @@ nla_put_failure:
 	return true;
 }
 
-static void
-hash_netiface6_data_next(struct hash_netiface6_elem *next,
-			 const struct hash_netiface6_elem *d)
-{
-}
-
 #undef MTYPE
 #undef HOST_MASK
 

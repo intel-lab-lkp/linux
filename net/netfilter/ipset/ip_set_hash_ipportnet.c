@@ -375,13 +375,6 @@ nla_put_failure:
 	return true;
 }
 
-static void
-hash_ipportnet6_data_next(struct hash_ipportnet6_elem *next,
-			  const struct hash_ipportnet6_elem *d)
-{
-	next->port = d->port;
-}
-
 #undef MTYPE
 #undef HOST_MASK
 

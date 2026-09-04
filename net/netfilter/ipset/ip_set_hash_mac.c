@@ -57,12 +57,6 @@ nla_put_failure:
 	return true;
 }
 
-static void
-hash_mac4_data_next(struct hash_mac4_elem *next,
-		    const struct hash_mac4_elem *e)
-{
-}
-
 #define MTYPE		hash_mac4
 #define HOST_MASK	32
 #define IP_SET_EMIT_CREATE

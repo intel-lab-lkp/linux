@@ -359,12 +359,6 @@ nla_put_failure:
 	return true;
 }
 
-static void
-hash_netnet6_data_next(struct hash_netnet6_elem *next,
-		       const struct hash_netnet6_elem *d)
-{
-}
-
 #undef MTYPE
 #undef HOST_MASK
 

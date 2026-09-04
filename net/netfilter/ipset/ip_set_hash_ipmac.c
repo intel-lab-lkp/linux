@@ -68,13 +68,6 @@ nla_put_failure:
 	return true;
 }
 
-static void
-hash_ipmac4_data_next(struct hash_ipmac4_elem *next,
-		      const struct hash_ipmac4_elem *e)
-{
-	next->ip = e->ip;
-}
-
 #define MTYPE		hash_ipmac4
 #define PF		4
 #define HOST_MASK	32
@@ -174,12 +167,6 @@ hash_ipmac6_data_list(struct sk_buff *skb, const struct hash_ipmac6_elem *e)
 
 nla_put_failure:
 	return true;
-}
-
-static void
-hash_ipmac6_data_next(struct hash_ipmac6_elem *next,
-		      const struct hash_ipmac6_elem *e)
-{
 }
 
 #undef MTYPE

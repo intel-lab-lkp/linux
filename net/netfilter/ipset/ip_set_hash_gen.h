@@ -135,7 +135,6 @@ static const union nf_inet_addr zeromask = {};
 #undef mtype_data_reset_flags
 #undef mtype_data_netmask
 #undef mtype_data_list
-#undef mtype_data_next
 #undef mtype_elem
 
 #undef mtype_rht_elem
@@ -189,7 +188,6 @@ static const union nf_inet_addr zeromask = {};
 #define mtype_data_reset_flags	IPSET_TOKEN(MTYPE, _data_reset_flags)
 #define mtype_data_netmask	IPSET_TOKEN(MTYPE, _data_netmask)
 #define mtype_data_list		IPSET_TOKEN(MTYPE, _data_list)
-#define mtype_data_next		IPSET_TOKEN(MTYPE, _data_next)
 #define mtype_elem		IPSET_TOKEN(MTYPE, _elem)
 
 #define mtype_rht_elem		IPSET_TOKEN(MTYPE, _rht_elem)
@@ -913,8 +911,6 @@ out_duplicate:
 	if (ret == -EEXIST)
 		ret = flag_exist ? 0 : -IPSET_ERR_EXIST;
 
-	if (0)	/* to be removed */
-		mtype_data_next(&h->next, d);
 out_rcu_unlock:
 	rcu_read_unlock_bh();
 	return ret;

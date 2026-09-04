@@ -198,11 +198,6 @@ nla_put_failure:
 	return true;
 }
 
-static void
-hash_ip6_data_next(struct hash_ip6_elem *next, const struct hash_ip6_elem *e)
-{
-}
-
 #undef MTYPE
 #undef HOST_MASK
 
