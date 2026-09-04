@@ -110,6 +110,7 @@ static const struct slf3s_variant slf3s_variants[] = {
  * @vdd:	supply regulator, disabled while suspended
  * @variant:	pointer into @slf3s_variants for the detected device
  * @medium:	currently active calibration medium
+ * @vdd_on:	tracks whether @vdd is currently enabled by this driver
  * @lock:	serialises the multi-step command/response exchanges
  * @crc_table:	pre-computed CRC-8 lookup table for SLF3S_CRC8_POLY
  */
@@ -118,6 +119,7 @@ struct slf3s_data {
 	struct regulator *vdd;
 	const struct slf3s_variant *variant;
 	enum slf3s_medium medium;
+	bool vdd_on;
 	struct mutex lock;
 	u8 crc_table[CRC8_TABLE_SIZE];
 };
@@ -382,6 +384,12 @@ static void slf3s_disable_vdd(void *data)
 {
 	struct slf3s_data *sf = data;
 
+	guard(mutex)(&sf->lock);
+
+	if (!sf->vdd_on)
+		return;
+
+	sf->vdd_on = false;
 	regulator_disable(sf->vdd);
 }
 
@@ -415,6 +423,8 @@ static int slf3s_probe(struct i2c_client *client)
 	ret = regulator_enable(sf->vdd);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to enable vdd supply\n");
+
+	sf->vdd_on = true;
 
 	ret = devm_add_action_or_reset(dev, slf3s_disable_vdd, sf);
 	if (ret)
@@ -453,10 +463,8 @@ static int slf3s_probe(struct i2c_client *client)
 }
 
 /*
- * The sensor has no low-power state of its own, so stop the measurement
- * and cut the supply while suspended.  Resume powers it back up, waits
- * out the power-up time and restarts with the medium that was active
- * before.
+ * The sensor has no low-power state, so stop measuring and cut the supply.
+ * Resume powers it up again and restarts the previous medium.
  */
 static int slf3s_suspend(struct device *dev)
 {
@@ -466,9 +474,16 @@ static int slf3s_suspend(struct device *dev)
 
 	guard(mutex)(&sf->lock);
 
+	/* A failed resume may have left the supply off, nothing to do then. */
+	if (!sf->vdd_on)
+		return 0;
+
+	/* The supply goes away below anyway, so a failed stop is not fatal. */
 	ret = slf3s_send_cmd(sf->client, slf3s_cmd_stop_meas);
 	if (ret)
-		return ret;
+		dev_warn(dev, "failed to stop measurement: %d\n", ret);
+
+	sf->vdd_on = false;
 
 	return regulator_disable(sf->vdd);
 }
@@ -485,9 +500,17 @@ static int slf3s_resume(struct device *dev)
 	if (ret)
 		return ret;
 
+	sf->vdd_on = true;
+
 	fsleep(SLF3S_POWER_UP_DELAY_US);
 
-	return slf3s_start_meas(sf, sf->medium);
+	ret = slf3s_start_meas(sf, sf->medium);
+	if (ret) {
+		sf->vdd_on = false;
+		regulator_disable(sf->vdd);
+	}
+
+	return ret;
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(slf3s_pm_ops, slf3s_suspend, slf3s_resume);
