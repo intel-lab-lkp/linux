@@ -330,11 +330,6 @@ struct nfs4_delegation {
 		struct nfsd4_cb_notify	dl_cb_notify;
 	};
 
-	/* For delegated timestamps */
-	struct timespec64	dl_atime;
-	struct timespec64	dl_mtime;
-	struct timespec64	dl_ctime;
-
 	/* For dir delegations */
 	u32			dl_notify_mask;
 	u32			dl_child_attrs[2];
@@ -356,9 +351,6 @@ static inline bool deleg_attrs_deleg(u32 dl_type)
 	return dl_type == OPEN_DELEGATE_READ_ATTRS_DELEG ||
 	       dl_type == OPEN_DELEGATE_WRITE_ATTRS_DELEG;
 }
-
-bool nfsd4_vet_deleg_time(struct timespec64 *cb, const struct timespec64 *orig,
-			  const struct timespec64 *now);
 
 #define cb_to_delegation(cb) \
 	container_of(cb, struct nfs4_delegation, dl_recall)

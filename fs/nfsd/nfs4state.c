@@ -7307,9 +7307,6 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 		open->op_delegate_type = deleg_ts ? OPEN_DELEGATE_WRITE_ATTRS_DELEG :
 						    OPEN_DELEGATE_WRITE;
 		dp->dl_cb_fattr.ncf_initial_cinfo = nfsd4_change_attribute(&stat);
-		dp->dl_atime = stat.atime;
-		dp->dl_ctime = stat.ctime;
-		dp->dl_mtime = stat.mtime;
 		spin_lock(&f->f_lock);
 		if (deleg_ts)
 			f->f_mode |= FMODE_NOCMTIME;
@@ -7318,7 +7315,6 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 	} else {
 		open->op_delegate_type = deleg_ts && nfs4_delegation_stat(dp, currentfh, &stat) ?
 					 OPEN_DELEGATE_READ_ATTRS_DELEG : OPEN_DELEGATE_READ;
-		dp->dl_atime = stat.atime;
 		trace_nfsd_deleg_read(&dp->dl_stid.sc_stateid);
 	}
 	nfs4_put_stid(&dp->dl_stid);
@@ -10447,7 +10443,7 @@ nfsd4_get_writestateid(struct nfsd4_compound_state *cstate,
 /**
  * nfsd4_vet_deleg_time - vet and set the timespec for a delegated timestamp update
  * @req: timestamp from the client
- * @orig: original timestamp in the inode
+ * @cur: current timestamp in the inode
  * @now: current time
  *
  * Given a timestamp from the client response, check it against the
@@ -10455,15 +10451,17 @@ nfsd4_get_writestateid(struct nfsd4_compound_state *cstate,
  * if the inode's timestamp needs to be updated, and false otherwise.
  * @req may also be changed if the timestamp needs to be clamped.
  */
-bool nfsd4_vet_deleg_time(struct timespec64 *req, const struct timespec64 *orig,
-			  const struct timespec64 *now)
+static bool nfsd4_vet_deleg_time(struct timespec64 *req,
+				 const struct timespec64 *cur,
+				 const struct timespec64 *now)
 {
-
 	/*
-	 * "When the time presented is before the original time, then the
-	 *  update is ignored." Also no need to update if there is no change.
+	 * RFC 9754 has the server ignore a time that is before the original
+	 * one. Compare against the value in the inode rather than the original:
+	 * an earlier CB_GETATTR or SETATTR may have moved it, and a report that
+	 * does not advance it is stale.
 	 */
-	if (timespec64_compare(req, orig) <= 0)
+	if (timespec64_compare(req, cur) <= 0)
 		return false;
 
 	/*
@@ -10484,30 +10482,45 @@ static int cb_getattr_update_times(struct dentry *dentry, struct nfs4_delegation
 	struct iattr attrs = { };
 	int ret;
 
+	/*
+	 * Take the inode lock first, so that a setattr from a delegation break
+	 * cannot land between the comparison and notify_change(). The atime can
+	 * still move under us: touch_atime() takes no lock, and FMODE_NOCMTIME
+	 * does not cover it.
+	 */
+	inode_lock(inode);
+
 	if (deleg_attrs_deleg(dp->dl_type)) {
 		struct timespec64 now = current_time(inode);
+		struct timespec64 atime = inode_get_atime(inode);
+		struct timespec64 mtime = inode_get_mtime(inode);
 
 		attrs.ia_atime = ncf->ncf_cb_atime;
 		attrs.ia_mtime = ncf->ncf_cb_mtime;
 
-		if (nfsd4_vet_deleg_time(&attrs.ia_atime, &dp->dl_atime, &now))
+		if (nfsd4_vet_deleg_time(&attrs.ia_atime, &atime, &now))
 			attrs.ia_valid |= ATTR_ATIME | ATTR_ATIME_SET;
 
-		if (nfsd4_vet_deleg_time(&attrs.ia_mtime, &dp->dl_mtime, &now)) {
-			attrs.ia_valid |= ATTR_MTIME | ATTR_MTIME_SET;
+		/*
+		 * A change to the mtime must show in the ctime.
+		 * inode_set_ctime_deleg() takes the mtime when it advances the
+		 * ctime, and stamps the current time otherwise.
+		 */
+		if (nfsd4_vet_deleg_time(&attrs.ia_mtime, &mtime, &now)) {
+			attrs.ia_valid |= ATTR_MTIME | ATTR_MTIME_SET |
+					  ATTR_CTIME | ATTR_CTIME_SET;
 			attrs.ia_ctime = attrs.ia_mtime;
-			if (nfsd4_vet_deleg_time(&attrs.ia_ctime, &dp->dl_ctime, &now))
-				attrs.ia_valid |= ATTR_CTIME | ATTR_CTIME_SET;
 		}
 	} else {
 		attrs.ia_valid |= ATTR_MTIME | ATTR_CTIME;
 	}
 
-	if (!attrs.ia_valid)
+	if (!attrs.ia_valid) {
+		inode_unlock(inode);
 		return 0;
+	}
 
 	attrs.ia_valid |= ATTR_DELEG;
-	inode_lock(inode);
 	ret = notify_change(&nop_mnt_idmap, dentry, &attrs, NULL);
 	inode_unlock(inode);
 	return ret;
