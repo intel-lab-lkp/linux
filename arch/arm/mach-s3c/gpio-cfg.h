@@ -36,7 +36,7 @@ struct samsung_gpio_chip;
  * @get_config: Read the current configuration for the GPIO
  *
  * Each chip can have more than one type of GPIO bank available and some
- * have different capabilites even when they have the same control register
+ * have different capabilities even when they have the same control register
  * layouts. Provide an point to vector control routine and provide any
  * per-bank configuration information that other systems such as the
  * external interrupt code will need.
