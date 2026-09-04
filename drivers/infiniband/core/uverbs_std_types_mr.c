@@ -247,6 +247,8 @@ static int UVERBS_HANDLER(UVERBS_METHOD_REG_DMABUF_MR)(
 	mr->pd = pd;
 	mr->type = IB_MR_TYPE_USER;
 	mr->uobject = uobj;
+	mr->iova = iova;
+	mr->length = length;
 	atomic_inc(&pd->usecnt);
 
 	rdma_restrack_new(&mr->res, RDMA_RESTRACK_MR);
@@ -374,6 +376,8 @@ static int UVERBS_HANDLER(UVERBS_METHOD_REG_MR)(
 	mr->pd = pd;
 	mr->type = IB_MR_TYPE_USER;
 	mr->uobject = uobj;
+	mr->iova = iova;
+	mr->length = length;
 	atomic_inc(&pd->usecnt);
 	if (dmah) {
 		mr->dmah = dmah;
