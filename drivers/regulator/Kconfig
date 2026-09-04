@@ -22,7 +22,6 @@ menuconfig REGULATOR
 
 	  If unsure, say no.
 
-
 if REGULATOR
 
 config REGULATOR_DEBUG
@@ -900,16 +899,6 @@ config REGULATOR_MT6315
 	  This driver supports the control of different power rails of device
 	  through regulator interface.
 
-config REGULATOR_MT6316
-	tristate "MT6316 SPMI PMIC regulator driver"
-	depends on SPMI
-	select REGMAP_SPMI
-	help
-	  Say Y here to enable support for 2+2, 3+1 and 4 phase regulators
-	  found in the MediaTek MT6316 BP, CP, DP, HP, VP and TP SPMI PMICs.
-	  This driver supports the control of different power rails of device
-	  through regulator interface.
-
 config REGULATOR_MT6323
 	tristate "MediaTek MT6323 PMIC"
 	depends on MFD_MT6397
@@ -1725,7 +1714,6 @@ config REGULATOR_TPS65185
 	  which is used to provide power to Electronic Paper Displays
 	  so it is found in E-Book readers.
 	  If HWWON is enabled, it also provides temperature measurement.
-
 
 config REGULATOR_TPS65217
 	tristate "TI TPS65217 Power regulators"

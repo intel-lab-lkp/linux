@@ -541,11 +541,3 @@ config ARM_CHARLCD
 
 endif # AUXDISPLAY
 
-#
-# Deprecated options
-#
-config PANEL
-	tristate "Parallel port LCD/Keypad Panel support (OLD OPTION)"
-	depends on PARPORT
-	select AUXDISPLAY
-	select PARPORT_PANEL

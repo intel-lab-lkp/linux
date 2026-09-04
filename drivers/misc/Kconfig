@@ -434,10 +434,6 @@ config XILINX_SDFEC
 
 	  If unsure, say N.
 
-config MISC_RTSX
-	tristate
-	default MISC_RTSX_PCI || MISC_RTSX_USB
-
 config OPEN_DICE
 	tristate "Open Profile for DICE driver"
 	depends on OF_RESERVED_MEM

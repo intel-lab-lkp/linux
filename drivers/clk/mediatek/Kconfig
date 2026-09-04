@@ -181,12 +181,6 @@ config COMMON_CLK_MT6765_CAMSYS
        help
          This driver supports MediaTek MT6765 camsys clocks.
 
-config COMMON_CLK_MT6765_GCESYS
-       tristate "Clock driver for MediaTek MT6765 gcesys"
-       depends on COMMON_CLK_MT6765
-       help
-         This driver supports MediaTek MT6765 gcesys clocks.
-
 config COMMON_CLK_MT6765_MMSYS
        tristate "Clock driver for MediaTek MT6765 mmsys"
        depends on COMMON_CLK_MT6765
@@ -205,47 +199,11 @@ config COMMON_CLK_MT6765_VCODECSYS
        help
          This driver supports MediaTek MT6765 vcodecsys clocks.
 
-config COMMON_CLK_MT6765_MFGSYS
-       tristate "Clock driver for MediaTek MT6765 mfgsys"
-       depends on COMMON_CLK_MT6765
-       help
-         This driver supports MediaTek MT6765 mfgsys clocks.
-
 config COMMON_CLK_MT6765_MIPI0ASYS
        tristate "Clock driver for MediaTek MT6765 mipi0asys"
        depends on COMMON_CLK_MT6765
        help
          This driver supports MediaTek MT6765 mipi0asys clocks.
-
-config COMMON_CLK_MT6765_MIPI0BSYS
-       tristate "Clock driver for MediaTek MT6765 mipi0bsys"
-       depends on COMMON_CLK_MT6765
-       help
-         This driver supports MediaTek MT6765 mipi0bsys clocks.
-
-config COMMON_CLK_MT6765_MIPI1ASYS
-       tristate "Clock driver for MediaTek MT6765 mipi1asys"
-       depends on COMMON_CLK_MT6765
-       help
-         This driver supports MediaTek MT6765 mipi1asys clocks.
-
-config COMMON_CLK_MT6765_MIPI1BSYS
-       tristate "Clock driver for MediaTek MT6765 mipi1bsys"
-       depends on COMMON_CLK_MT6765
-       help
-         This driver supports MediaTek MT6765 mipi1bsys clocks.
-
-config COMMON_CLK_MT6765_MIPI2ASYS
-       tristate "Clock driver for MediaTek MT6765 mipi2asys"
-       depends on COMMON_CLK_MT6765
-      help
-         This driver supports MediaTek MT6765 mipi2asys clocks.
-
-config COMMON_CLK_MT6765_MIPI2BSYS
-       tristate "Clock driver for MediaTek MT6765 mipi2bsys"
-       depends on COMMON_CLK_MT6765
-       help
-         This driver supports MediaTek MT6765 mipi2bsys clocks.
 
 config COMMON_CLK_MT6779
 	tristate "Clock driver for MediaTek MT6779"
