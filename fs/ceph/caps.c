@@ -4261,6 +4261,10 @@ retry:
 		}
 		new_cap = ceph_get_cap(mdsc, NULL);
 	} else {
+		if (tsession == ERR_PTR(-EAGAIN))
+			/* locks already dropped */
+			return;
+
 		WARN_ON(1);
 		tsession = NULL;
 		target = -1;
