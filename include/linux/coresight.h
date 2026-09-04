@@ -320,7 +320,7 @@ struct coresight_device {
  * @nr_idx:		Number of entries already allocated.
  * @pfx:		Prefix pattern for device name.
  * @fwnode_list:	Array of fwnode_handles associated with each allocated
- *			index, upto nr_idx entries.
+ *			index, up to nr_idx entries.
  */
 struct coresight_dev_list {
 	struct list_head	node;

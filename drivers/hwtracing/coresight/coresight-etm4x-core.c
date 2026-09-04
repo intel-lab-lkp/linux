@@ -338,7 +338,7 @@ static void etm4_hisi_config_core_commit(bool enable)
 	 * bit 12 and 13 of HISI_HIP08_CORE_COMMIT_REG are used together
 	 * to set core-commit, 2'b00 means cpu is at full speed, 2'b01,
 	 * 2'b10, 2'b11 mean reduce pipeline speed, and 2'b01 means level-1
-	 * speed(minimun value). So bit 12 and 13 should be cleared together.
+	 * speed(minimum value). So bit 12 and 13 should be cleared together.
 	 */
 	val = read_sysreg_s(HISI_HIP08_CORE_COMMIT_REG);
 	val &= ~HISI_HIP08_CORE_COMMIT_MASK;

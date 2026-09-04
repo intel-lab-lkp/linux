@@ -200,7 +200,7 @@ struct coresight_device *coresight_get_source(struct coresight_path *path)
  * @src:	The source device of the trace path
  * @conn:	The connection of one outport
  *
- * Return false if the connection doesn't have a source binded or source of the
+ * Return false if the connection doesn't have a source bound or source of the
  * path matches the source binds to connection.
  */
 static bool coresight_blocks_source(struct coresight_device *src,

@@ -352,7 +352,7 @@ EXPORT_SYMBOL_GPL(tmc_alloc_sg_table);
 
 /*
  * tmc_sg_table_sync_data_range: Sync the data buffer written
- * by the device from @offset upto a @size bytes.
+ * by the device from @offset up to a @size bytes.
  */
 void tmc_sg_table_sync_data_range(struct tmc_sg_table *table,
 				  u64 offset, u64 size)

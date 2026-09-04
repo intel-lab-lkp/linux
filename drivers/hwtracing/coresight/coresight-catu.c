@@ -45,7 +45,7 @@ struct catu_etr_buf {
  *	------------------------------------
  *
  * Where bit[0] V indicates if the address is valid or not.
- * Each 4K table pages have upto 256 data page pointers, taking upto 2K
+ * Each 4K table pages have up to 256 data page pointers, taking up to 2K
  * size. There are two Link pointers, pointing to the previous and next
  * table pages respectively at the end of the 4K page. (i.e, entry 510
  * and 511).
@@ -202,7 +202,7 @@ catu_populate_table(struct tmc_sg_table *catu_table)
 		/*
 		 * The @offset is always 1M aligned here and we have an
 		 * empty table @table_ptr to fill. Each table can address
-		 * upto 1MB data buffer. The last table may have fewer
+		 * up to 1MB data buffer. The last table may have fewer
 		 * entries if the buffer size is not aligned.
 		 */
 		table_end = (offset + SZ_1M) < buf_size ?
@@ -263,7 +263,7 @@ catu_init_sg_table(struct device *catu_dev, int node,
 	struct tmc_sg_table *catu_table;
 
 	/*
-	 * Each table can address upto 1MB and we can have
+	 * Each table can address up to 1MB and we can have
 	 * CATU_PAGES_PER_SYSPAGE tables in a system page.
 	 */
 	nr_tpages = DIV_ROUND_UP(size, CATU_PAGES_PER_SYSPAGE * SZ_1M);
