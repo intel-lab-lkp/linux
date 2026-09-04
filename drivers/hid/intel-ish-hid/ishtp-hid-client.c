@@ -631,7 +631,7 @@ static int ishtp_get_report_descriptor(struct ishtp_cl *hid_ishtp_cl,
  * @hid_ishtp_cl:	ISHTP client instance
  * @reset:		true if called for init after reset
  *
- * This function complete the initializtion of the client. The summary of
+ * This function complete the initialization of the client. The summary of
  * processing:
  * - Send request to enumerate the hid clients
  *	Get the HID descriptor for each enumearated device

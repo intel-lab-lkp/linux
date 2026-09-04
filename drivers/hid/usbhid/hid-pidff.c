@@ -20,7 +20,7 @@
 #define	PID_EFFECTS_MAX		64
 #define	PID_INFINITE		U16_MAX
 
-/* Linux Force Feedback API uses miliseconds as time unit */
+/* Linux Force Feedback API uses milliseconds as time unit */
 #define FF_TIME_EXPONENT	-3
 #define FF_INFINITE		0
 

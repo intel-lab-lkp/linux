@@ -177,7 +177,7 @@ void ishtp_io_rb_free(struct ishtp_cl_rb *rb)
  *
  * Allocate and initialize request block
  *
- * Return: Allocted IO request block pointer
+ * Return: Allocated IO request block pointer
  */
 struct ishtp_cl_rb *ishtp_io_rb_init(struct ishtp_cl *cl)
 {
