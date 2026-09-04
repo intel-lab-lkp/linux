@@ -969,6 +969,32 @@ static void rx_status_htc_to_ath(struct ath_rx_status *rx_stats,
 	convert_htc_flag(rx_stats, rxstatus);
 }
 
+/*
+ * The firmware reports a frame that failed its CRC as a CRC error even when
+ * the PHY error bit is set as well, so under interference spectral samples
+ * reach the host as CRC errors. A sample is recognisable by its size: one
+ * byte less to two bytes more than the FFT report length for the channel
+ * width, the range the parser accepts.
+ */
+static bool ath9k_htc_is_spectral_sample_len(struct ath9k_htc_priv *priv,
+					     u16 len)
+{
+	enum nl80211_channel_type chan_type;
+	u16 fft_len;
+
+	if (priv->spec_priv.spectral_mode == SPECTRAL_DISABLED)
+		return false;
+
+	chan_type = cfg80211_get_chandef_type(&priv->hw->conf.chandef);
+	if (chan_type == NL80211_CHAN_HT40MINUS ||
+	    chan_type == NL80211_CHAN_HT40PLUS)
+		fft_len = SPECTRAL_HT20_40_TOTAL_DATA_LEN;
+	else
+		fft_len = SPECTRAL_HT20_TOTAL_DATA_LEN;
+
+	return len >= fft_len - 1 && len <= fft_len + 2;
+}
+
 static bool ath9k_rx_prepare(struct ath9k_htc_priv *priv,
 			     struct ath9k_htc_rxbuf *rxbuf,
 			     struct ieee80211_rx_status *rx_status)
@@ -1050,6 +1076,21 @@ static bool ath9k_rx_prepare(struct ath9k_htc_priv *priv,
 			/* TODO: Code to collect spectral scan statistics */
 		}
 		goto rx_next;
+	}
+
+	/*
+	 * Hand a CRC error of sample size to the FFT parser with the error
+	 * code it expects. It returns 0 only for a frame without the spectral
+	 * bit in its trailer; anything else is consumed.
+	 */
+	if (unlikely(rx_stats.rs_status & ATH9K_RXERR_CRC) &&
+	    ath9k_htc_is_spectral_sample_len(priv, rs_datalen)) {
+		struct ath_rx_status sample_rs = rx_stats;
+
+		sample_rs.rs_phyerr = ATH9K_PHYERR_RADAR;
+		if (ath_cmn_process_fft(&priv->spec_priv, hdr, &sample_rs,
+					rx_status->mactime))
+			goto rx_next;
 	}
 
 	if (!ath9k_cmn_rx_accept(common, hdr, rx_status, &rx_stats,
