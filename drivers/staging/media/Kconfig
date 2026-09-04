@@ -16,7 +16,6 @@ menuconfig STAGING_MEDIA
 
 	  If in doubt, say N here.
 
-
 if STAGING_MEDIA && MEDIA_SUPPORT
 
 # Please keep them in alphabetic order
@@ -37,17 +36,5 @@ source "drivers/staging/media/meson/vdec/Kconfig"
 source "drivers/staging/media/sunxi/Kconfig"
 
 source "drivers/staging/media/tegra-video/Kconfig"
-
-menuconfig STAGING_MEDIA_DEPRECATED
-	bool "Media staging drivers (DEPRECATED)"
-	default n
-	help
-	  This option enables deprecated media drivers that are
-	  scheduled for future removal from the kernel.
-
-	  If you wish to work on these drivers to prevent their removal,
-	  then contact the linux-media@vger.kernel.org mailing list.
-
-	  If in doubt, say N here.
 
 endif
