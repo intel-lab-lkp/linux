@@ -30,6 +30,12 @@
 
 #define TESTS_PER_CONTROL 7
 
+/* Suffixes of the SNDRV_CTL_NAME_IEC958() names, not exported to userspace */
+#define IEC958_DEFAULT		"Default"
+#define IEC958_CON_MASK		"Con Mask"
+#define IEC958_PRO_MASK		"Pro Mask"
+#define IEC958_MASK		"Mask"
+
 struct card_data {
 	snd_ctl_t *handle;
 	int card;
@@ -842,6 +848,221 @@ static bool test_ctl_write_valid_enumerated(struct ctl_data *ctl)
 	return !fail;
 }
 
+/*
+ * Find the read only mask control for an IEC958 value control.  The two
+ * share device, subdevice and index but not always the interface.
+ */
+static struct ctl_data *find_iec958_mask_ctl(struct ctl_data *ctl,
+					     const char *suffix)
+{
+	char name[64];
+	int stem;
+	struct ctl_data *mask;
+
+	stem = strlen(ctl->name) - strlen(IEC958_DEFAULT);
+	if (snprintf(name, sizeof(name), "%.*s%s", stem, ctl->name, suffix) >=
+	    (int)sizeof(name))
+		return NULL;
+
+	for (mask = ctl_list; mask != NULL; mask = mask->next) {
+		if (mask->card != ctl->card)
+			continue;
+		if (snd_ctl_elem_info_get_type(mask->info) !=
+		    SND_CTL_ELEM_TYPE_IEC958)
+			continue;
+		if (snd_ctl_elem_info_is_inactive(mask->info))
+			continue;
+		if (!snd_ctl_elem_info_is_readable(mask->info))
+			continue;
+		if (snd_ctl_elem_id_get_device(mask->id) !=
+		    snd_ctl_elem_id_get_device(ctl->id))
+			continue;
+		if (snd_ctl_elem_id_get_subdevice(mask->id) !=
+		    snd_ctl_elem_id_get_subdevice(ctl->id))
+			continue;
+		if (snd_ctl_elem_id_get_index(mask->id) !=
+		    snd_ctl_elem_id_get_index(ctl->id))
+			continue;
+		if (strcmp(mask->name, name) == 0)
+			return mask;
+	}
+
+	return NULL;
+}
+
+/*
+ * Read the bits the device says it implements.  Bit 0 of the first status
+ * byte picks which mask applies, some devices publish only a plain Mask.
+ */
+static bool read_iec958_mask(struct ctl_data *ctl,
+			     const snd_aes_iec958_t *cur,
+			     snd_aes_iec958_t *mask)
+{
+	int err;
+	struct ctl_data *mask_ctl;
+	snd_ctl_elem_value_t *val;
+
+	if (!strend(ctl->name, IEC958_DEFAULT))
+		return false;
+
+	if (cur->status[0] & IEC958_AES0_PROFESSIONAL)
+		mask_ctl = find_iec958_mask_ctl(ctl, IEC958_PRO_MASK);
+	else
+		mask_ctl = find_iec958_mask_ctl(ctl, IEC958_CON_MASK);
+	if (!mask_ctl)
+		mask_ctl = find_iec958_mask_ctl(ctl, IEC958_MASK);
+	if (!mask_ctl)
+		return false;
+
+	snd_ctl_elem_value_alloca(&val);
+	snd_ctl_elem_value_set_id(val, mask_ctl->id);
+
+	err = snd_ctl_elem_read(mask_ctl->card->handle, val);
+	if (err < 0) {
+		ksft_print_msg("snd_ctl_elem_read() failed for %s: %s\n",
+			       mask_ctl->name, snd_strerror(err));
+		return false;
+	}
+
+	snd_ctl_elem_value_get_iec958(val, mask);
+
+	return true;
+}
+
+/*
+ * Pick one bit to toggle.  Bit 0 of the first status byte selects the
+ * layout the others are read in so leave it alone, prefer non audio.
+ */
+static bool pick_iec958_bit(const snd_aes_iec958_t *mask, unsigned int *byte,
+			    unsigned char *bit)
+{
+	unsigned int i;
+	int j;
+
+	if (mask->status[0] & IEC958_AES0_NONAUDIO) {
+		*byte = 0;
+		*bit = IEC958_AES0_NONAUDIO;
+		return true;
+	}
+
+	for (i = 0; i < sizeof(mask->status); i++) {
+		for (j = 0; j < 8; j++) {
+			if (i == 0 && (1 << j) == IEC958_AES0_PROFESSIONAL)
+				continue;
+			if (mask->status[i] & (1 << j)) {
+				*byte = i;
+				*bit = 1 << j;
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/*
+ * Throw away the events from a write we are not grading, one left behind
+ * would make a missing notification look like a notification we got.
+ */
+static int drop_events(struct ctl_data *ctl)
+{
+	int err;
+
+	do {
+		err = wait_for_event(ctl, 0);
+	} while (err > 0);
+
+	return err;
+}
+
+/*
+ * Toggle a single channel status bit and check that userspace is told about
+ * it.  A device need not implement the bit we picked so write the value
+ * without grading it first, then grade against what it gave back.
+ */
+static bool test_ctl_write_valid_iec958(struct ctl_data *ctl)
+{
+	int err;
+	unsigned int byte;
+	unsigned char bit;
+	snd_aes_iec958_t iec958, mask;
+	snd_ctl_elem_value_t *orig_val, *val, *read_val, *w_val;
+	snd_ctl_elem_value_alloca(&orig_val);
+	snd_ctl_elem_value_alloca(&val);
+	snd_ctl_elem_value_alloca(&read_val);
+	snd_ctl_elem_value_alloca(&w_val);
+
+	/*
+	 * The bytes past the ones a driver implements are compared too,
+	 * so start from a read rather than building a value here.
+	 */
+	snd_ctl_elem_value_set_id(orig_val, ctl->id);
+	err = snd_ctl_elem_read(ctl->card->handle, orig_val);
+	if (err < 0) {
+		ksft_print_msg("snd_ctl_elem_read() failed: %s\n",
+			       snd_strerror(err));
+		return false;
+	}
+
+	snd_ctl_elem_value_get_iec958(orig_val, &iec958);
+
+	/* With no mask to go on all we can do is try non audio */
+	memset(&mask, 0, sizeof(mask));
+	if (!read_iec958_mask(ctl, &iec958, &mask))
+		mask.status[0] = IEC958_AES0_NONAUDIO;
+
+	if (!pick_iec958_bit(&mask, &byte, &bit)) {
+		ksft_print_msg("%s implements no settable status bits\n",
+			       ctl->name);
+		return true;
+	}
+
+	iec958.status[byte] ^= bit;
+	snd_ctl_elem_value_copy(val, orig_val);
+	snd_ctl_elem_value_set_iec958(val, &iec958);
+
+	/* Writing can modify the value so keep a copy to write from */
+	snd_ctl_elem_value_copy(w_val, val);
+	err = snd_ctl_elem_write(ctl->card->handle, w_val);
+	if (err < 0) {
+		ksft_print_msg("snd_ctl_elem_write() failed: %s\n",
+			       snd_strerror(err));
+		return false;
+	}
+
+	snd_ctl_elem_value_set_id(read_val, ctl->id);
+	err = snd_ctl_elem_read(ctl->card->handle, read_val);
+	if (err < 0) {
+		ksft_print_msg("snd_ctl_elem_read() failed: %s\n",
+			       snd_strerror(err));
+		return false;
+	}
+
+	/* Put it back where we found it, then forget both writes */
+	snd_ctl_elem_value_copy(w_val, orig_val);
+	err = snd_ctl_elem_write(ctl->card->handle, w_val);
+	if (err < 0) {
+		ksft_print_msg("snd_ctl_elem_write() failed: %s\n",
+			       snd_strerror(err));
+		return false;
+	}
+
+	if (drop_events(ctl) < 0)
+		return false;
+
+	if (snd_ctl_elem_value_compare(val, read_val)) {
+		/* Grade against what came back, the event check still runs */
+		ksft_print_msg("%s does not implement status[%u] 0x%02x\n",
+			       ctl->name, byte, bit);
+		return write_and_verify(ctl, val, read_val) == 0;
+	}
+
+	ksft_print_msg("%s toggling status[%u] 0x%02x\n", ctl->name, byte,
+		       bit);
+
+	return write_and_verify(ctl, val, NULL) == 0;
+}
+
 static void test_ctl_write_valid(struct ctl_data *ctl)
 {
 	bool pass;
@@ -876,6 +1097,10 @@ static void test_ctl_write_valid(struct ctl_data *ctl)
 
 	case SND_CTL_ELEM_TYPE_ENUMERATED:
 		pass = test_ctl_write_valid_enumerated(ctl);
+		break;
+
+	case SND_CTL_ELEM_TYPE_IEC958:
+		pass = test_ctl_write_valid_iec958(ctl);
 		break;
 
 	default:
