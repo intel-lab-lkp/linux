@@ -773,7 +773,7 @@ static long kvm_save_notify(struct kvm_vcpu *vcpu)
 		if (!(data & KVM_STEAL_PHYS_VALID))
 			return 0;
 
-		vcpu->arch.st.last_steal = current->sched_info.run_delay;
+		vcpu->last_steal = current->sched_info.run_delay;
 		kvm_make_request(KVM_REQ_STEAL_UPDATE, vcpu);
 		return 0;
 	default:

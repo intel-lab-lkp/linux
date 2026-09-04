@@ -273,7 +273,6 @@ struct kvm_vcpu_arch {
 	/* SBI steal-time accounting */
 	struct {
 		gpa_t shmem;
-		u64 last_steal;
 	} sta;
 };
 

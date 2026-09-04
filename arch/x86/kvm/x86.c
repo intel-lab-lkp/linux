@@ -2129,9 +2129,8 @@ static void record_steal_time(struct kvm_vcpu *vcpu)
 	smp_wmb();
 
 	unsafe_get_user(steal, &st->steal, out);
-	steal += current->sched_info.run_delay -
-		vcpu->arch.st.last_steal;
-	vcpu->arch.st.last_steal = current->sched_info.run_delay;
+	steal += current->sched_info.run_delay - vcpu->last_steal;
+	vcpu->last_steal = current->sched_info.run_delay;
 	unsafe_put_user(steal, &st->steal, out);
 
 	version += 1;

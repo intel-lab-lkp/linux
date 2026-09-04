@@ -187,8 +187,8 @@ static void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 	smp_wmb();
 
 	unsafe_get_user(steal, &st->steal, out);
-	steal += current->sched_info.run_delay - vcpu->arch.st.last_steal;
-	vcpu->arch.st.last_steal = current->sched_info.run_delay;
+	steal += current->sched_info.run_delay - vcpu->last_steal;
+	vcpu->last_steal = current->sched_info.run_delay;
 	unsafe_put_user(steal, &st->steal, out);
 
 	smp_wmb();
@@ -1205,7 +1205,7 @@ static int kvm_loongarch_pvtime_set_attr(struct kvm_vcpu *vcpu,
 
 	if (!ret) {
 		vcpu->arch.st.guest_addr = gpa;
-		vcpu->arch.st.last_steal = current->sched_info.run_delay;
+		vcpu->last_steal = current->sched_info.run_delay;
 		kvm_make_request(KVM_REQ_STEAL_UPDATE, vcpu);
 	}
 

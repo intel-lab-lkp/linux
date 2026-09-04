@@ -19,13 +19,13 @@
 static void kvm_riscv_vcpu_sbi_sta_reset(struct kvm_vcpu *vcpu)
 {
 	vcpu->arch.sta.shmem = INVALID_GPA;
-	vcpu->arch.sta.last_steal = 0;
+	vcpu->last_steal = 0;
 }
 
 void kvm_riscv_vcpu_record_steal_time(struct kvm_vcpu *vcpu)
 {
 	gpa_t shmem = vcpu->arch.sta.shmem;
-	u64 last_steal = vcpu->arch.sta.last_steal;
+	u64 last_steal = vcpu->last_steal;
 	__le32 __user *sequence_ptr;
 	__le64 __user *steal_ptr;
 	__le32 sequence_le;
@@ -67,8 +67,8 @@ void kvm_riscv_vcpu_record_steal_time(struct kvm_vcpu *vcpu)
 
 	if (!WARN_ON(get_user(steal_le, steal_ptr))) {
 		steal = le64_to_cpu(steal_le);
-		vcpu->arch.sta.last_steal = READ_ONCE(current->sched_info.run_delay);
-		steal += vcpu->arch.sta.last_steal - last_steal;
+		vcpu->last_steal = READ_ONCE(current->sched_info.run_delay);
+		steal += vcpu->last_steal - last_steal;
 		WARN_ON(put_user(cpu_to_le64(steal), steal_ptr));
 	}
 
@@ -115,7 +115,7 @@ static int kvm_sbi_sta_steal_time_set_shmem(struct kvm_vcpu *vcpu)
 		return SBI_ERR_INVALID_ADDRESS;
 
 	vcpu->arch.sta.shmem = shmem;
-	vcpu->arch.sta.last_steal = current->sched_info.run_delay;
+	vcpu->last_steal = current->sched_info.run_delay;
 
 	return 0;
 }

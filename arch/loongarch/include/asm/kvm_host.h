@@ -253,7 +253,6 @@ struct kvm_vcpu_arch {
 	/* paravirt steal time */
 	struct {
 		u64 guest_addr;
-		u64 last_steal;
 		struct gfn_to_hva_cache cache;
 		u8  preempted;
 	} st;
