@@ -351,7 +351,10 @@ void __init arch_mm_preinit(void)
 		swiotlb_adjust_size(min(swiotlb_size_or_default(), size));
 	}
 
-	swiotlb_init(true, flags);
+	if (max_pfn > PFN_DOWN(arm64_dma_phys_limit))
+		flags |= SWIOTLB_INIT_ADDRESSING_LIMIT;
+
+	swiotlb_init(flags);
 
 	/*
 	 * Check boundaries twice: Some fundamental inconsistencies can be

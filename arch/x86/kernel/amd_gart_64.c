@@ -814,6 +814,7 @@ int __init gart_iommu_init(void)
 	dma_ops = &gart_dma_ops;
 	x86_platform.iommu_shutdown = gart_iommu_shutdown;
 	x86_swiotlb_enable = false;
+	x86_swiotlb_flags = 0;
 
 	return 0;
 }

@@ -14,8 +14,10 @@ extern bool amd_iommu_snp_en;
 
 #ifdef CONFIG_SWIOTLB
 extern bool x86_swiotlb_enable;
+extern unsigned int x86_swiotlb_flags;
 #else
 #define x86_swiotlb_enable false
+#define x86_swiotlb_flags 0
 #endif
 
 /* 10 seconds */
