@@ -81,7 +81,7 @@
 struct clk;
 struct stmmac_priv;
 
-/* Platfrom data for platform device structure's platform_data field */
+/* Platform data for platform device structure's platform_data field */
 
 struct stmmac_mdio_bus_data {
 	u32 phy_mask;
