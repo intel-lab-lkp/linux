@@ -5,7 +5,7 @@
 #include <bpf/bpf.h>
 
 struct hid_hw_request_syscall_args {
-	__u8 data[10];
+	__u8 data[MAX_BUF_SIZE];
 	unsigned int hid;
 	int retval;
 	size_t size;
@@ -168,7 +168,7 @@ TEST_F(hid_bpf, raw_event)
 	const struct test_program progs[] = {
 		{ .name = "hid_first_event" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -219,7 +219,7 @@ TEST_F(hid_bpf, subprog_raw_event)
 	const struct test_program progs[] = {
 		{ .name = "hid_subprog_first_event" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -277,7 +277,7 @@ TEST_F(hid_bpf, test_attach_detach)
 		{ .name = "hid_second_event" },
 	};
 	struct bpf_link *link;
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err, link_fd;
 
 	LOAD_PROGRAMS(progs);
@@ -362,7 +362,7 @@ TEST_F(hid_bpf, test_hid_change_report)
 	const struct test_program progs[] = {
 		{ .name = "hid_change_report_id" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -389,13 +389,13 @@ TEST_F(hid_bpf, test_hid_user_input_report_call)
 {
 	struct hid_hw_request_syscall_args args = {
 		.retval = -1,
-		.size = 10,
+		.size = MAX_BUF_SIZE,
 	};
 	DECLARE_LIBBPF_OPTS(bpf_test_run_opts, tattrs,
 			    .ctx_in = &args,
 			    .ctx_size_in = sizeof(args),
 	);
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err, prog_fd;
 
 	LOAD_BPF;
@@ -435,7 +435,7 @@ TEST_F(hid_bpf, test_hid_user_output_report_call)
 {
 	struct hid_hw_request_syscall_args args = {
 		.retval = -1,
-		.size = 10,
+		.size = MAX_BUF_SIZE,
 	};
 	DECLARE_LIBBPF_OPTS(bpf_test_run_opts, tattrs,
 			    .ctx_in = &args,
@@ -484,7 +484,7 @@ TEST_F(hid_bpf, test_hid_user_raw_request_call)
 		.retval = -1,
 		.type = HID_FEATURE_REPORT,
 		.request_type = HID_REQ_GET_REPORT,
-		.size = 10,
+		.size = MAX_BUF_SIZE,
 	};
 	DECLARE_LIBBPF_OPTS(bpf_test_run_opts, tattrs,
 			    .ctx_in = &args,
@@ -517,7 +517,7 @@ TEST_F(hid_bpf, test_hid_filter_raw_request_call)
 	const struct test_program progs[] = {
 		{ .name = "hid_test_filter_raw_request" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -570,7 +570,7 @@ TEST_F(hid_bpf, test_hid_change_raw_request_call)
 	const struct test_program progs[] = {
 		{ .name = "hid_test_hidraw_raw_request" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -596,7 +596,7 @@ TEST_F(hid_bpf, test_hid_infinite_loop_raw_request_call)
 	const struct test_program progs[] = {
 		{ .name = "hid_test_infinite_loop_raw_request" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -619,7 +619,7 @@ TEST_F(hid_bpf, test_hid_filter_output_report_call)
 	const struct test_program progs[] = {
 		{ .name = "hid_test_filter_output_report" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -672,7 +672,7 @@ TEST_F(hid_bpf, test_hid_change_output_report_call)
 	const struct test_program progs[] = {
 		{ .name = "hid_test_hidraw_output_report" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -696,7 +696,7 @@ TEST_F(hid_bpf, test_hid_infinite_loop_output_report_call)
 	const struct test_program progs[] = {
 		{ .name = "hid_test_infinite_loop_output_report" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -722,7 +722,7 @@ TEST_F(hid_bpf, test_multiply_events_wq)
 	const struct test_program progs[] = {
 		{ .name = "hid_test_multiply_events_wq" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -760,7 +760,7 @@ TEST_F(hid_bpf, test_multiply_events)
 	const struct test_program progs[] = {
 		{ .name = "hid_test_multiply_events" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -794,7 +794,7 @@ TEST_F(hid_bpf, test_hid_infinite_loop_input_report_call)
 	const struct test_program progs[] = {
 		{ .name = "hid_test_infinite_loop_input_report" },
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
@@ -848,7 +848,7 @@ TEST_F(hid_bpf, test_hid_attach_flags)
 			.insert_head = 0,
 		},
 	};
-	__u8 buf[10] = {0};
+	__u8 buf[MAX_BUF_SIZE] = {0};
 	int err;
 
 	LOAD_PROGRAMS(progs);
