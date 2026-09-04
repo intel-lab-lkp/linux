@@ -17,9 +17,6 @@
 #define ipset_dereference_nfnl(p)	\
 	rcu_dereference_protected(p,	\
 		lockdep_nfnl_is_held(NFNL_SUBSYS_IPSET))
-#define ipset_dereference_bh_nfnl(p)	\
-	rcu_dereference_bh_check(p, 	\
-		lockdep_nfnl_is_held(NFNL_SUBSYS_IPSET))
 
 /* Kept for backward compatibility */
 #define AHASH_INIT_SIZE			2
@@ -729,7 +726,7 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	int i;
 #endif
 
-	rcu_read_lock_bh();
+	rcu_read_lock();
 #ifdef IP_SET_HASH_WITH_MULTI
 	{
 		struct rhlist_head *tmp, *list;
@@ -906,7 +903,7 @@ out_duplicate:
 		ret = flag_exist ? 0 : -IPSET_ERR_EXIST;
 
 out_rcu_unlock:
-	rcu_read_unlock_bh();
+	rcu_read_unlock();
 	return ret;
 }
 
@@ -920,7 +917,7 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	struct mtype_rht_elem *e;
 	int ret = -IPSET_ERR_EXIST;
 
-	rcu_read_lock_bh();
+	rcu_read_lock();
 #ifdef IP_SET_HASH_WITH_MULTI
 	{
 		struct rhlist_head *tmp, *list;
@@ -954,7 +951,7 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	ip_set_ext_destroy(set, &e->elem);
 	kfree_rcu(e, rcu);
 out_unlock:
-	rcu_read_unlock_bh();
+	rcu_read_unlock();
 	return ret ? -IPSET_ERR_EXIST : 0;
 }
 
@@ -994,10 +991,10 @@ mtype_test_cidrs(struct ip_set *set, struct mtype_elem *d,
 	pr_debug("test by nets\n");
 retry:
 	multi = 0;
-	nets0 = ipset_dereference_bh_nfnl(h->rnets[0]);
+	nets0 = rcu_dereference(h->rnets[0]);
 	seq0 = read_seqcount_begin(&nets0->seq);
 #if IPSET_NET_COUNT == 2
-	nets1 = ipset_dereference_bh_nfnl(h->rnets[1]);
+	nets1 = rcu_dereference(h->rnets[1]);
 	seq1 = read_seqcount_begin(&nets1->seq);
 #endif
 	for (j = 0; j < nets0->len && !multi; j++) {
@@ -1076,7 +1073,7 @@ mtype_test(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	int i;
 #endif
 
-	rcu_read_lock_bh();
+	rcu_read_lock();
 #ifdef IP_SET_HASH_WITH_NETS
 	/* If we test an IP address and not a network address,
 	 * try all possible network sizes
@@ -1114,7 +1111,7 @@ mtype_test(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	ret = mtype_data_match(&e->elem, ext, mext, set, flags);
 #endif
 out:
-	rcu_read_unlock_bh();
+	rcu_read_unlock();
 	return ret;
 }
 
