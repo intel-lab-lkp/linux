@@ -21,7 +21,7 @@ static int uhci_platform_init(struct usb_hcd *hcd)
 	if (!uhci->rh_numports)
 		uhci->rh_numports = uhci_count_ports(hcd);
 
-	/* Set up pointers to to generic functions */
+	/* Set up pointers to generic functions */
 	uhci->reset_hc = uhci_generic_reset_hc;
 	uhci->check_and_reset_hc = uhci_generic_check_and_reset_hc;
 
