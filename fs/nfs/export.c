@@ -18,7 +18,7 @@ enum {
 	FILEID_HIGH_OFF = 0,	/* inode fileid high */
 	FILEID_LOW_OFF,		/* inode fileid low */
 	FILE_I_TYPE_OFF,	/* inode type */
-	EMBED_FH_OFF		/* embeded server fh */
+	EMBED_FH_OFF		/* embedded server fh */
 };
 
 

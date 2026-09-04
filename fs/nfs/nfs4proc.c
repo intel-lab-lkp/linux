@@ -8358,7 +8358,7 @@ int nfs4_proc_fsid_present(struct inode *inode, const struct cred *cred)
 }
 
 /*
- * If 'use_integrity' is true and the state managment nfs_client
+ * If 'use_integrity' is true and the state management nfs_client
  * cl_rpcclient is using krb5i/p, use the integrity protected cl_rpcclient
  * and the machine credential as per RFC3530bis and RFC5661 Security
  * Considerations sections. Otherwise, just use the user cred with the
@@ -10154,7 +10154,7 @@ nfs4_proc_layoutcommit(struct nfs4_layoutcommit_data *data, bool sync)
 }
 
 /*
- * Use the state managment nfs_client cl_rpcclient, which uses krb5i (if
+ * Use the state management nfs_client cl_rpcclient, which uses krb5i (if
  * possible) as per RFC3530bis and RFC5661 Security Considerations sections
  */
 static int _nfs41_proc_secinfo_no_name(struct nfs_server *server,

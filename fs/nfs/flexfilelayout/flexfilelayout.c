@@ -133,7 +133,7 @@ static int decode_nfs_fh(struct xdr_stream *xdr, struct nfs_fh *fh)
  * I.e., kerberos is not supported to the DSes, so no pricipals.
  *
  * That means that one common function will suffice, but when
- * principals are added, this should be split to accomodate
+ * principals are added, this should be split to accommodate
  * calls to both nfs_map_name_to_uid() and nfs_map_group_to_gid().
  */
 static int

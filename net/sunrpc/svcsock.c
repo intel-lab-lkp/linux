@@ -1111,7 +1111,7 @@ static int receive_cb_reply(struct svc_sock *svsk, struct svc_rqst *rqstp)
 	/*
 	 * XXX!: cheating for now!  Only copying HEAD.
 	 * But we know this is good enough for now (in fact, for any
-	 * callback reply in the forseeable future).
+	 * callback reply in the foreseeable future).
 	 */
 	dst = &req->rq_private_buf.head[0];
 	src = &rqstp->rq_arg.head[0];
