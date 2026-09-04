@@ -332,7 +332,7 @@ static int can_ctrlmode_changelink(struct net_device *dev,
 
 	/* do not check for static fd-non-iso if 'fd' is disabled */
 	if (!(maskedflags & CAN_CTRLMODE_FD))
-		ctrlstatic &= ~CAN_CTRLMODE_FD_NON_ISO;
+		ctrlstatic_missing &= ~CAN_CTRLMODE_FD_NON_ISO;
 
 	if (ctrlstatic_missing) {
 		NL_SET_ERR_MSG_FMT(extack,
@@ -357,9 +357,9 @@ static int can_ctrlmode_changelink(struct net_device *dev,
 		priv->ctrlmode &= ~(CAN_CTRLMODE_XL_TDC_MASK |
 				    CAN_CTRLMODE_XL_TMS);
 
-	/* clear bits to be modified and copy the flag values */
+	/* clear bits to be modified, copy flags and restore static modes */
 	priv->ctrlmode &= ~cm->mask;
-	priv->ctrlmode |= maskedflags;
+	priv->ctrlmode |= maskedflags | ctrlstatic;
 
 	/* Wipe potential leftovers from previous CAN FD/XL config */
 	if (!(priv->ctrlmode & CAN_CTRLMODE_FD)) {
