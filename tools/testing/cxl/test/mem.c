@@ -246,7 +246,7 @@ static void mes_add_event(struct mock_event_store *mes,
 }
 
 /*
- * Vary the number of events returned to simulate events occuring while the
+ * Vary the number of events returned to simulate events occurring while the
  * logs are being read.
  */
 static atomic_t event_counter = ATOMIC_INIT(0);
