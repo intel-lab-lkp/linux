@@ -1812,7 +1812,7 @@ _transport_phy_enable(struct sas_phy *phy, int enable)
 		goto out;
 	}
 
-	/* unable to enable/disable phys when when discovery is active */
+	/* unable to enable/disable phys when discovery is active */
 	for (i = 0, discovery_active = 0; i < ioc->sas_hba.num_phys ; i++) {
 		if (sas_iounit_pg0->PhyData[i].PortFlags &
 		    MPI2_SASIOUNIT0_PORTFLAGS_DISCOVERY_IN_PROGRESS) {

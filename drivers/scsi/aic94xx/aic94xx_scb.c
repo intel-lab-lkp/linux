@@ -621,7 +621,7 @@ int asd_init_post_escbs(struct asd_ha_struct *asd_ha)
  * A note on LEDs:
  *  - an LED blinks if there is IO though it,
  *  - if a device is connected to the LED, it is lit,
- *  - if no device is connected to the LED, is is dimmed (off).
+ *  - if no device is connected to the LED, is dimmed (off).
  */
 static void control_phy_tasklet_complete(struct asd_ascb *ascb,
 					 struct done_list_struct *dl)

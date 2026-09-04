@@ -2249,7 +2249,7 @@ static void scsi_disk_free_disk(struct gendisk *disk)
  *
  *	This function is called by the SCSI midlayer before starting
  *	SCSI EH. When counting medium access failures we have to be
- *	careful to register it only only once per device and SCSI EH run;
+ *	careful to register it only once per device and SCSI EH run;
  *	there might be several timed out commands which will cause the
  *	'max_medium_access_timeouts' counter to trigger after the first
  *	SCSI EH run already and set the device to offline.

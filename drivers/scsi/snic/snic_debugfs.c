@@ -360,7 +360,7 @@ void snic_stats_debugfs_init(struct snic *snic)
  *
  * Description:
  * When Debufs is configured this routine removes debugfs file system
- * elements that are specific to to snic stats
+ * elements that are specific to snic stats
  */
 void
 snic_stats_debugfs_remove(struct snic *snic)

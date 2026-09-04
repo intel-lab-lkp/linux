@@ -840,7 +840,7 @@ struct _enclosure_node {
 /**
  * enum reset_type - reset state
  * @FORCE_BIG_HAMMER: issue diagnostic reset
- * @SOFT_RESET: issue message_unit_reset, if fails to to big hammer
+ * @SOFT_RESET: issue message_unit_reset, if fails to big hammer
  */
 enum reset_type {
 	FORCE_BIG_HAMMER,

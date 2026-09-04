@@ -299,7 +299,7 @@ enum vnic_devcmd_cmd {
 	 *
 	 *   intr_timer_cycles = intr_timer_usec * multiplier / divisor
 	 *
-	 * Interrupt coalescing timer in usecs can be be converted/obtained
+	 * Interrupt coalescing timer in usecs can be converted/obtained
 	 * from CPU cycles as follows:
 	 *
 	 *   intr_timer_usec = intr_timer_cycles * divisor / multiplier

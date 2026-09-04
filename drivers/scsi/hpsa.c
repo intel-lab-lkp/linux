@@ -9173,7 +9173,7 @@ static int hpsa_enter_performant_mode(struct ctlr_info *h, u32 trans_support)
 	struct access_method access = SA5_performant_access;
 
 	/* This is a bit complicated.  There are 8 registers on
-	 * the controller which we write to to tell it 8 different
+	 * the controller which we write to tell it 8 different
 	 * sizes of commands which there may be.  It's a way of
 	 * reducing the DMA done to fetch each command.  Encoded into
 	 * each command's tag are 3 bits which communicate to the controller

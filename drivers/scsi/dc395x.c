@@ -3632,7 +3632,7 @@ static void adapter_init_params(struct AdapterCtlBlk *acb)
  * values that we have already stored in the adapter instance. There's
  * some mention that a lot of these are deprecated, so we won't use
  * them (we'll use the ones in the adapter instance) but we'll fill
- * them in in case something else needs them.
+ * them in case something else needs them.
  *
  * The eeprom structure, irq and io ports in the adapter need to have
  * been set before calling this function.

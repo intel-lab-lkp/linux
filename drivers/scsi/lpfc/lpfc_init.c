@@ -13681,7 +13681,7 @@ lpfc_reg_congestion_buf(struct lpfc_hba *phba)
  * This function is called in the SLI4 code path to read the port's
  * sli4 capabilities.
  *
- * This function may be be called from any context that can block-wait
+ * This function may be called from any context that can block-wait
  * for the completion.  The expectation is that this routine is called
  * typically from probe_one or from the online routine.
  **/

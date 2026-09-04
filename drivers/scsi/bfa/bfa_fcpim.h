@@ -67,7 +67,7 @@ void bfa_fcp_res_recfg(struct bfa_s *bfa, u16 num_ioim_fw, u16 max_ioim_fw);
 #define BFA_IOIM_IOTAG_MASK 0x07ff /* 2K IOs */
 #define BFA_IOIM_RETRY_MAX 7
 
-/* Buckets are are 512 bytes to 2MB */
+/* Buckets are 512 bytes to 2MB */
 static inline u32
 bfa_ioim_get_index(u32 n) {
 	int pos = 0;

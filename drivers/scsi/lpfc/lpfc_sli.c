@@ -4797,7 +4797,7 @@ lpfc_sli_brdready_s3(struct lpfc_hba *phba, uint32_t mask)
  *
  * This function checks the host status register to check if HBA is
  * ready. This function will wait in a loop for the HBA to be ready
- * If the HBA is not ready , the function will will reset the HBA PCI
+ * If the HBA is not ready , the function will reset the HBA PCI
  * function again. The function returns 1 when HBA fail to be ready
  * otherwise returns zero.
  **/

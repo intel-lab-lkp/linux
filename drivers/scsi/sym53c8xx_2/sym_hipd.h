@@ -357,7 +357,7 @@ struct sym_tcbh {
 	/*
 	 *  Scripts bus addresses of LUN table accessed from scripts.
 	 *  LUN #0 is a special case, since multi-lun devices are rare, 
-	 *  and we we want to speed-up the general case and not waste 
+	 *  and we want to speed-up the general case and not waste 
 	 *  resources.
 	 */
 	u32	luntbl_sa;	/* bus address of this table	*/
