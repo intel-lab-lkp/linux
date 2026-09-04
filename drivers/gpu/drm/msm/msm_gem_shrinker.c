@@ -47,7 +47,7 @@ with_vm_locks(void (*fn)(struct drm_gem_object *obj),
 	      struct drm_gem_object *obj)
 {
 	/*
-	 * Track last locked entry for for unwinding locks in error and
+	 * Track last locked entry for unwinding locks in error and
 	 * success paths
 	 */
 	struct drm_gpuvm_bo *vm_bo, *last_locked = NULL;

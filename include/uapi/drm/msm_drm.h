@@ -102,7 +102,7 @@ struct drm_msm_timespec {
  *
  * With VM_BIND enabled, userspace does not include a submit_bo table in the
  * SUBMIT ioctl (this will be rejected), the resident set is determined by
- * the the VM_BIND ops.
+ * the VM_BIND ops.
  *
  * Enabling VM_BIND will fail on devices which do not have per-process pgtables.
  * And it is not allowed to disable VM_BIND once it has been enabled.
@@ -366,7 +366,7 @@ struct drm_msm_vm_bind_op {
 	__u64 obj_offset;
 	/** @iova: Address to operate on */
 	__u64 iova;
-	/** @range: Number of bites to to map/unmap */
+	/** @range: Number of bites to map/unmap */
 	__u64 range;
 	/** @flags: Bitmask of MSM_VM_BIND_OP_FLAG_x */
 	__u32 flags;
