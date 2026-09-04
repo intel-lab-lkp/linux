@@ -703,15 +703,13 @@ static int ivtv_init_struct1(struct ivtv *itv)
 	spin_lock_init(&itv->lock);
 	spin_lock_init(&itv->dma_reg_lock);
 
-	kthread_init_worker(&itv->irq_worker);
-	itv->irq_worker_task = kthread_run(kthread_worker_fn, &itv->irq_worker,
-					   "%s", itv->v4l2_dev.name);
-	if (IS_ERR(itv->irq_worker_task)) {
+	itv->irq_worker = kthread_run_worker(0, "%s", itv->v4l2_dev.name);
+	if (IS_ERR(itv->irq_worker)) {
 		IVTV_ERR("Could not create ivtv task\n");
 		return -1;
 	}
 	/* must use the FIFO scheduler as it is realtime sensitive */
-	sched_set_fifo(itv->irq_worker_task);
+	sched_set_fifo(itv->irq_worker->task);
 
 	kthread_init_work(&itv->irq_work, ivtv_irq_work_handler);
 
@@ -1232,7 +1230,7 @@ free_i2c:
 	v4l2_ctrl_handler_free(&itv->cxhdl.hdl);
 	exit_ivtv_i2c(itv);
 free_worker:
-	kthread_stop(itv->irq_worker_task);
+	kthread_destroy_worker(itv->irq_worker);
 err:
 	if (retval == 0)
 		retval = -ENODEV;
@@ -1372,8 +1370,8 @@ static void ivtv_remove(struct pci_dev *pdev)
 	timer_shutdown_sync(&itv->dma_timer);
 
 	/* Kill irq worker */
-	kthread_flush_worker(&itv->irq_worker);
-	kthread_stop(itv->irq_worker_task);
+	kthread_flush_worker(itv->irq_worker);
+	kthread_destroy_worker(itv->irq_worker);
 
 	ivtv_streams_cleanup(itv);
 	ivtv_udma_free(itv);

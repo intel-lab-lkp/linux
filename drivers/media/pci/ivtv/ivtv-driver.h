@@ -668,8 +668,7 @@ struct ivtv {
 	/* Interrupts & DMA */
 	u32 irqmask;                    /* active interrupts */
 	u32 irq_rr_idx;                 /* round-robin stream index */
-	struct kthread_worker irq_worker;		/* kthread worker for PIO/YUV/VBI actions */
-	struct task_struct *irq_worker_task;		/* task for irq_worker */
+	struct kthread_worker *irq_worker;		/* kthread worker for PIO/YUV/VBI actions */
 	struct kthread_work irq_work;	/* kthread work entry */
 	spinlock_t dma_reg_lock;        /* lock access to DMA engine registers */
 	int cur_dma_stream;		/* index of current stream doing DMA (-1 if none) */
