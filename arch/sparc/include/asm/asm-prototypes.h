@@ -18,7 +18,7 @@
 void *__memscan_zero(void *, size_t);
 void *__memscan_generic(void *, int, size_t);
 void *__bzero(void *, size_t);
-void VISenter(void); /* Dummy prototype to supress warning */
+void VISenter(void); /* Dummy prototype to suppress warning */
 #undef memcpy
 #undef memset
 void *memcpy(void *dest, const void *src, size_t n);

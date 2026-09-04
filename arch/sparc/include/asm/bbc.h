@@ -87,7 +87,7 @@
 
 /* Watchdog Action register.  When the watchdog device timer expires
  * a line is enabled to the BBC.  The action BBC takes when this line
- * is asserted can be controlled by this regiser.
+ * is asserted can be controlled by this register.
  */
 #define BBC_WDACTION_RST  0x01	/* When set, watchdog causes system reset.
 				 * When clear, BBC ignores watchdog signal.

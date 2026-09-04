@@ -1291,7 +1291,7 @@ static int __init grab_mblocks(struct mdesc_handle *md)
 					 "address-congruence-offset", NULL);
 
 		/* The address-congruence-offset property is optional.
-		 * Explicity zero it be identifty this.
+		 * Explicitly zero it be identifty this.
 		 */
 		if (val)
 			m->offset = *val;

@@ -200,7 +200,7 @@ phandle prom_searchsiblings(phandle node_start, char *nodename)
 }
 EXPORT_SYMBOL(prom_searchsiblings);
 
-/* Interal version of nextprop that does not alter return values. */
+/* Internal version of nextprop that does not alter return values. */
 static char *__prom_nextprop(phandle node, char * oprop)
 {
 	unsigned long flags;

@@ -562,7 +562,7 @@ barf:
 
 /* Copy a Sparc thread.  The fork() return value conventions
  * under SunOS are nothing short of bletcherous:
- * Parent -->  %o0 == childs  pid, %o1 == 0
+ * Parent -->  %o0 == children  pid, %o1 == 0
  * Child  -->  %o0 == parents pid, %o1 == 1
  *
  * clone3() - Uses regular kernel return value conventions

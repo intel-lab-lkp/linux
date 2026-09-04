@@ -1142,7 +1142,7 @@ static unsigned char cheetah_mtag_syntab[] = {
        NONE, NONE
 };
 
-/* Return the highest priority error conditon mentioned. */
+/* Return the highest priority error condition mentioned. */
 static inline unsigned long cheetah_get_hipri(unsigned long afsr)
 {
 	unsigned long tmp = 0;

@@ -927,7 +927,7 @@ swapper_4m_tsb:
 	/* Some care needs to be exercised if you try to move the
 	 * location of the trap table relative to other things.  For
 	 * one thing there are br* instructions in some of the
-	 * trap table entires which branch back to code in ktlb.S
+	 * trap table entries which branch back to code in ktlb.S
 	 * Those instructions can only handle a signed 16-bit
 	 * displacement.
 	 *

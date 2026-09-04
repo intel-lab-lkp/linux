@@ -172,7 +172,7 @@ void sun4v_mach_sir(void);
  * Service Processor, and/or automatically restarting the gues.
  *
  * The 'timeout' parameter is specified in milliseconds, however the
- * implementated granularity is given by the 'watchdog-resolution'
+ * implemented granularity is given by the 'watchdog-resolution'
  * property in the 'platform' node of the guest's machine description.
  * The largest allowed timeout value is specified by the
  * 'watchdog-max-timeout' property of the 'platform' node.
@@ -1223,7 +1223,7 @@ unsigned long sun4v_con_write(unsigned long buffer,
  *
  * This allows the guest to report its soft state to the hypervisor.  There
  * are two primary components to this state.  The first part states whether
- * the guest software is running or not.  The second containts optional
+ * the guest software is running or not.  The second contains optional
  * details specific to the software.
  *
  * The software state argument is defined below in HV_SOFT_STATE_*, and
@@ -1585,7 +1585,7 @@ struct hv_trap_trace_entry {
  *			      "interrupts" property or "interrupt-map" property
  *			      in the OBP device tree for that device.
  *
- *	sysino		System interrupt number.  A 64-bit unsigned interger
+ *	sysino		System interrupt number.  A 64-bit unsigned integer
  *			representing a unique interrupt within a virtual
  *			machine.
  *
@@ -2925,7 +2925,7 @@ unsigned long sun4v_vintr_set_target(unsigned long dev_handle,
  * endpoint defined by the given channel ID.  The tail offset specified
  * must be aligned on a 64 byte boundary, and calculated so as to increase
  * the number of pending entries on the transmit queue.  Any attempt to
- * decrease the number of pending transmit queue entires is considered
+ * decrease the number of pending transmit queue entries is considered
  * an invalid tail offset and will result in an EINVAL error.
  *
  * Since the tail of the transmit queue may not be moved backwards, the
@@ -3017,7 +3017,7 @@ unsigned long sun4v_vintr_set_target(unsigned long dev_handle,
  * endpoint defined by the given channel ID.  The head offset specified
  * must be aligned on a 64 byte boundary, and calculated so as to decrease
  * the number of pending entries on the receive queue.  Any attempt to
- * increase the number of pending receive queue entires is considered
+ * increase the number of pending receive queue entries is considered
  * an invalid head offset and will result in an EINVAL error.
  *
  * The receive queue may be flushed by setting the head offset equal
