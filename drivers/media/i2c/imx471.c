@@ -701,8 +701,17 @@ static int imx471_init_controls(struct imx471 *sensor)
 					   0,
 					   link_freq_menu_items);
 
-	/* pixel_rate = link_freq * 2 * nr_of_lanes / bits_per_sample */
-	pixel_rate = div_u64(IMX471_LINK_FREQ_DEFAULT * 2 * 4, 10);
+	/*
+	 * The sensor runs in the PLL DUAL mode so the configurations of the
+	 * OP domain are considered. According to the imx471 clock tree,
+	 * the pixel rate can be calculated as follows:
+	 * (exck_freq * IOP_PLL_MPY * DDR factor) /
+	 * (IOP_PREPLLCK_DIV * IOP_SYNCK_DIV * RAW10 bits) = 159.36 MPix/s
+	 */
+	pixel_rate = (IMX471_EXT_CLK * IMX471_PLL_OP_MPY * (u64)2) /
+		     (IMX471_PREPLLCK_OP_DIV * IMX471_OPSYCK_DIV * (u64)10);
+
+	dev_dbg(sensor->dev, "pixel_rate: %llu\n", pixel_rate);
 
 	v4l2_ctrl_new_std(ctrl_hdlr, &imx471_ctrl_ops,
 			  V4L2_CID_PIXEL_RATE, pixel_rate,
