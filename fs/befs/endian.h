@@ -4,7 +4,7 @@
  *
  * Copyright (C) 2001 Will Dyson <will_dyson@pobox.com>
  *
- * Partially based on similar funtions in the sysv driver.
+ * Partially based on similar functions in the sysv driver.
  */
 
 #ifndef LINUX_BEFS_ENDIAN
