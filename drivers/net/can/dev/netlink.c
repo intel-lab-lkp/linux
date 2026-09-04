@@ -321,7 +321,6 @@ static int can_ctrlmode_changelink(struct net_device *dev,
 	maskedflags = cm->flags & cm->mask;
 	deactivated = ~cm->flags & cm->mask;
 	notsupp = maskedflags & ~(priv->ctrlmode_supported | ctrlstatic);
-	ctrlstatic_missing = (maskedflags & ctrlstatic) ^ ctrlstatic;
 
 	if (notsupp) {
 		NL_SET_ERR_MSG_FMT(extack,
@@ -334,6 +333,7 @@ static int can_ctrlmode_changelink(struct net_device *dev,
 	if (!(maskedflags & CAN_CTRLMODE_FD))
 		ctrlstatic &= ~CAN_CTRLMODE_FD_NON_ISO;
 
+	ctrlstatic_missing = (maskedflags & ctrlstatic) ^ ctrlstatic;
 	if (ctrlstatic_missing) {
 		NL_SET_ERR_MSG_FMT(extack,
 				   "missing required %s static control mode",
