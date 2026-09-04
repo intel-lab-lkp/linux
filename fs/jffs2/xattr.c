@@ -39,8 +39,8 @@
  *   memory usage by cache is over c->xdatum_mem_threshold. Currently, this threshold
  *   is hard coded as 32KiB.
  * do_verify_xattr_datum(c, xd)
- *   is used to load the xdatum informations without name/value pair from the medium.
- *   It's necessary once, because those informations are not collected during mounting
+ *   is used to load the xdatum information without name/value pair from the medium.
+ *   It's necessary once, because those information are not collected during mounting
  *   process when EBS is enabled.
  *   0 will be returned, if success. An negative return value means recoverable error, and
  *   positive return value means unrecoverable error. Thus, caller must remove this xdatum
