@@ -479,7 +479,7 @@ static int pd6729_set_mem_map(struct pcmcia_socket *sock,
 	}
 
 	if ((mem->res->start > mem->res->end) || (mem->speed > 1000)) {
-		dev_warn(&sock->dev, "invalid invalid address / speed\n");
+		dev_warn(&sock->dev, "invalid address / speed\n");
 		return -EINVAL;
 	}
 
