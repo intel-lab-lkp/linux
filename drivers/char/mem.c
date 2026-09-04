@@ -76,7 +76,7 @@ static inline bool should_stop_iteration(void)
 }
 
 /*
- * This funcion reads the *physical* memory. The f_pos points directly to the
+ * This function reads the *physical* memory. The f_pos points directly to the
  * memory location.
  */
 static ssize_t read_mem(struct file *file, char __user *buf,
