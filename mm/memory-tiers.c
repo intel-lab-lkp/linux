@@ -24,6 +24,8 @@ struct memory_tier {
 	struct device dev;
 	/* All the nodes that are part of all the lower memory tiers. */
 	nodemask_t lower_tier_mask;
+	/* All the nodes that are part of all the higher memory tiers. */
+	nodemask_t higher_tier_mask;
 };
 
 struct demotion_nodes {
@@ -317,6 +319,22 @@ void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets)
 	rcu_read_unlock();
 }
 
+void node_get_allowed_sources(pg_data_t *pgdat, nodemask_t *sources)
+{
+	struct memory_tier *memtier;
+
+	/*
+	 * See node_get_allowed_targets() for the lifetime rules.
+	 */
+	rcu_read_lock();
+	memtier = rcu_dereference(pgdat->memtier);
+	if (memtier)
+		*sources = memtier->higher_tier_mask;
+	else
+		*sources = NODE_MASK_NONE;
+	rcu_read_unlock();
+}
+
 /**
  * next_demotion_node() - Get the next node in the demotion path
  * @node: The starting node to lookup the next node
@@ -385,8 +403,10 @@ static void disable_all_demotion_targets(void)
 		 * to access pgda->memtier.
 		 */
 		memtier = __node_get_memory_tier(node);
-		if (memtier)
+		if (memtier) {
 			memtier->lower_tier_mask = NODE_MASK_NONE;
+			memtier->higher_tier_mask = NODE_MASK_NONE;
+		}
 	}
 	/*
 	 * Ensure that the "disable" is visible across the system.
@@ -428,7 +448,7 @@ static void establish_demotion_targets(void)
 	struct demotion_nodes *nd;
 	int target = NUMA_NO_NODE, node;
 	int distance, best_distance;
-	nodemask_t tier_nodes, lower_tier;
+	nodemask_t tier_nodes, lower_tier, higher_tier;
 
 	lockdep_assert_held_once(&memory_tier_lock);
 
@@ -512,6 +532,17 @@ static void establish_demotion_targets(void)
 		tier_nodes = get_memtier_nodemask(memtier);
 		nodes_andnot(lower_tier, lower_tier, tier_nodes);
 		memtier->lower_tier_mask = lower_tier;
+	}
+
+	/*
+	 * Build the higher_tier mask for each node collecting node mask from
+	 * all memory tiers above it.
+	 */
+	higher_tier = NODE_MASK_NONE;
+	list_for_each_entry(memtier, &memory_tiers, list) {
+		tier_nodes = get_memtier_nodemask(memtier);
+		memtier->higher_tier_mask = higher_tier;
+		nodes_or(higher_tier, higher_tier, tier_nodes);
 	}
 
 	dump_demotion_targets();

@@ -1454,6 +1454,7 @@ The following nested keys are defined.
 
 	  ==========            ================================
 	  swappiness            Swappiness value to reclaim with
+	  goal                  Reclaim request goal
 	  ==========            ================================
 
 	Specifying a swappiness value instructs the kernel to perform
@@ -1463,6 +1464,20 @@ The following nested keys are defined.
 
 	The valid range for swappiness is [0-200, max], setting
 	swappiness=max exclusively reclaims anonymous memory.
+
+	The goal key controls what kind of progress satisfies the requested
+	reclaim amount. The default is goal=progress, which uses the kernel's
+	normal reclaim progress accounting. On tiered memory systems this can
+	include both eviction and demotion progress.
+
+	goal=evict keeps memory tier demotion enabled as part of reclaim aging,
+	but does not count successfully demoted pages toward completing the
+	requested reclaim amount. Demotion may still be performed on the way,
+	but demotion-only progress is not sufficient to satisfy the request.
+	If no demotion target is available to the cgroup, this behaves like
+	goal=progress. This does not select source or target memory tiers and
+	does not disable demotion. This is best-effort and does not bypass memory
+	protection or other reclaim constraints.
 
   memory.peak
 	A read-write single value file which exists on non-root cgroups.

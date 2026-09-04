@@ -55,6 +55,7 @@ void mt_put_memory_types(struct list_head *memory_types);
 #ifdef CONFIG_NUMA_MIGRATION
 int next_demotion_node(int node, const nodemask_t *allowed_mask);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);
+void node_get_allowed_sources(pg_data_t *pgdat, nodemask_t *sources);
 bool node_is_toptier(int node);
 #else
 static inline int next_demotion_node(int node, const nodemask_t *allowed_mask)
@@ -65,6 +66,12 @@ static inline int next_demotion_node(int node, const nodemask_t *allowed_mask)
 static inline void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets)
 {
 	*targets = NODE_MASK_NONE;
+}
+
+static inline void node_get_allowed_sources(pg_data_t *pgdat,
+					    nodemask_t *sources)
+{
+	*sources = NODE_MASK_NONE;
 }
 
 static inline bool node_is_toptier(int node)
@@ -109,6 +116,12 @@ static inline int next_demotion_node(int node, const nodemask_t *allowed_mask)
 static inline void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets)
 {
 	*targets = NODE_MASK_NONE;
+}
+
+static inline void node_get_allowed_sources(pg_data_t *pgdat,
+					    nodemask_t *sources)
+{
+	*sources = NODE_MASK_NONE;
 }
 
 static inline bool node_is_toptier(int node)
