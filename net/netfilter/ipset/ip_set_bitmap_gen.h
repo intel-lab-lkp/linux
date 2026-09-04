@@ -62,8 +62,8 @@ mtype_destroy(struct ip_set *set)
 
 	if (set->dsize && set->extensions & IPSET_EXT_DESTROY)
 		mtype_ext_cleanup(set);
-	ip_set_free(map->members);
-	ip_set_free(map);
+	kvfree(map->members);
+	kvfree(map);
 
 	set->data = NULL;
 }

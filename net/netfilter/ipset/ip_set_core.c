@@ -255,23 +255,6 @@ ip_set_type_unregister(struct ip_set_type *type)
 }
 EXPORT_SYMBOL_GPL(ip_set_type_unregister);
 
-/* Utility functions */
-void *
-ip_set_alloc(size_t size)
-{
-	return kvzalloc(size, GFP_KERNEL_ACCOUNT);
-}
-EXPORT_SYMBOL_GPL(ip_set_alloc);
-
-void
-ip_set_free(void *members)
-{
-	pr_debug("%p: free with %s\n", members,
-		 is_vmalloc_addr(members) ? "vfree" : "kfree");
-	kvfree(members);
-}
-EXPORT_SYMBOL_GPL(ip_set_free);
-
 static bool
 flag_nested(const struct nlattr *nla)
 {

@@ -318,8 +318,6 @@ extern int ip_set_test(ip_set_id_t id, const struct sk_buff *skb,
 		       struct ip_set_adt_opt *opt);
 
 /* Utility functions */
-extern void *ip_set_alloc(size_t size);
-extern void ip_set_free(void *members);
 extern int ip_set_get_ipaddr4(struct nlattr *nla,  __be32 *ipaddr);
 extern int ip_set_get_ipaddr6(struct nlattr *nla, union nf_inet_addr *ipaddr);
 extern size_t ip_set_elem_len(struct ip_set *set, struct nlattr *tb[],
@@ -332,6 +330,11 @@ extern bool ip_set_match_extensions(struct ip_set *set,
 				    const struct ip_set_ext *ext,
 				    struct ip_set_ext *mext,
 				    u32 flags, void *data);
+
+static inline void *ip_set_alloc(size_t size)
+{
+	return kvzalloc(size, GFP_KERNEL_ACCOUNT);
+}
 
 static inline int
 ip_set_get_hostipaddr4(struct nlattr *nla, u32 *ipaddr)
