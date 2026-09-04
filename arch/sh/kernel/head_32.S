@@ -106,7 +106,7 @@ ENTRY(_stext)
  * PMB entries. This clearing also deals with the fact that PMB entries
  * can persist across reboots. The PMB could have been left in any state
  * when the reboot occurred, so to be safe we clear all entries and start
- * with with a clean slate.
+ * with a clean slate.
  *
  * The uncached mapping is constructed using the smallest possible
  * mapping with a single unbufferable page. Only the kernel text needs to
