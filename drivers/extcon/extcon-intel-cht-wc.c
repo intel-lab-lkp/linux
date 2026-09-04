@@ -145,7 +145,7 @@ static int cht_wc_extcon_get_charger(struct cht_wc_extcon_data *ext,
 	int ret, usbsrc, status;
 	unsigned long timeout;
 
-	/* Charger detection can take upto 600ms, wait 800ms max. */
+	/* Charger detection can take up to 600ms, wait 800ms max. */
 	timeout = jiffies + msecs_to_jiffies(800);
 	do {
 		ret = regmap_read(ext->regmap, CHT_WC_USBSRC, &usbsrc);
@@ -192,7 +192,7 @@ static int cht_wc_extcon_get_charger(struct cht_wc_extcon_data *ext,
 		return EXTCON_CHG_USB_CDP;
 	case CHT_WC_USBSRC_TYPE_DCP:
 	case CHT_WC_USBSRC_TYPE_DCP_EXTPHY:
-	case CHT_WC_USBSRC_TYPE_MHL: /* MHL2+ delivers upto 2A, treat as DCP */
+	case CHT_WC_USBSRC_TYPE_MHL: /* MHL2+ delivers up to 2A, treat as DCP */
 		ext->usb_type = POWER_SUPPLY_USB_TYPE_DCP;
 		return EXTCON_CHG_USB_DCP;
 	case CHT_WC_USBSRC_TYPE_ACA:

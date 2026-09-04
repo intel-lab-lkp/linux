@@ -689,7 +689,7 @@ static int max77693_muic_adc_handler(struct max77693_muic_info *info)
 		 *
 		 * The MAX77693 MUIC device can detect total 34 cable type
 		 * except of charger cable and MUIC device didn't define
-		 * specfic role of cable in the range of from 0x01 to 0x12
+		 * specific role of cable in the range of from 0x01 to 0x12
 		 * of ADC value. So, can use/define cable with no role according
 		 * to schema of hardware board.
 		 */
@@ -708,7 +708,7 @@ static int max77693_muic_adc_handler(struct max77693_muic_info *info)
 		 *
 		 * The MAX77693 MUIC device can detect total 34 cable type
 		 * except of charger cable and MUIC device didn't define
-		 * specfic role of cable in the range of from 0x01 to 0x12
+		 * specific role of cable in the range of from 0x01 to 0x12
 		 * of ADC value. So, can use/define cable with no role according
 		 * to schema of hardware board.
 		 */

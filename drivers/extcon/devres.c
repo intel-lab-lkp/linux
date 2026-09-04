@@ -113,7 +113,7 @@ EXPORT_SYMBOL_GPL(devm_extcon_dev_free);
  * If extcon device is registered with this function and the device needs to be
  * unregistered separately, devm_extcon_dev_unregister() should be used.
  *
- * Returns 0 if success or negaive error number if failure.
+ * Returns 0 if success or negative error number if failure.
  */
 int devm_extcon_dev_register(struct device *dev, struct extcon_dev *edev)
 {
@@ -167,7 +167,7 @@ EXPORT_SYMBOL_GPL(devm_extcon_dev_unregister);
  * "old_state", not the current state. The current state can be retrieved
  * by looking at the third pameter (edev pointer)'s state value.
  *
- * Returns 0 if success or negaive error number if failure.
+ * Returns 0 if success or negative error number if failure.
  */
 int devm_extcon_register_notifier(struct device *dev, struct extcon_dev *edev,
 				unsigned int id, struct notifier_block *nb)
@@ -223,7 +223,7 @@ EXPORT_SYMBOL(devm_extcon_unregister_notifier);
  * device resource management and simplify the control of unregistering
  * the notifier of extcon device. To get more information, refer that function.
  *
- * Returns 0 if success or negaive error number if failure.
+ * Returns 0 if success or negative error number if failure.
  */
 int devm_extcon_register_notifier_all(struct device *dev, struct extcon_dev *edev,
 				struct notifier_block *nb)
