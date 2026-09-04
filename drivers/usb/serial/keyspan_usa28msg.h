@@ -61,7 +61,7 @@
 	with a total data length of 63.
 
 	USB IN (USA28 -> host, receive) messages contain data and parity
-	if parity is configred, thusly:
+	if parity is configured, thusly:
 	
 		DAT PAR DAT PAR DAT PAR ...
 
