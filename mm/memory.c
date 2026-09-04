@@ -5267,6 +5267,14 @@ unlock:
 out:
 	if (si)
 		put_swap_device(si);
+	/*
+	 * Large folio swapin charges with the THP allocation gfp, which may
+	 * not allow blocking, making try_charge skip its synchronous
+	 * memory.high throttling. Settle any over-high debt here instead,
+	 * where sleeping is safe: the folio lock, the page table lock and
+	 * the swap device reference have all been dropped.
+	 */
+	mem_cgroup_handle_over_high(GFP_KERNEL);
 	return ret;
 out_nomap:
 	if (vmf->pte)
