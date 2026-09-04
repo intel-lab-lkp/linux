@@ -306,8 +306,7 @@ struct sc16is7xx_port {
 	unsigned long			gpio_valid_mask;
 #endif
 	u8				mctrl_mask;
-	struct kthread_worker		kworker;
-	struct task_struct		*kworker_task;
+	struct kthread_worker		*kworker;
 	struct kthread_delayed_work	poll_work;
 	bool				polling;
 	struct sc16is7xx_one		p[];
@@ -434,7 +433,7 @@ static void sc16is7xx_ier_clear(struct uart_port *port, u8 bit)
 	one->config.flags |= SC16IS7XX_RECONF_IER;
 	one->config.ier_mask |= bit;
 	one->config.ier_val &= ~bit;
-	kthread_queue_work(&s->kworker, &one->reg_work);
+	kthread_queue_work(s->kworker, &one->reg_work);
 }
 
 static void sc16is7xx_ier_set(struct uart_port *port, u8 bit)
@@ -447,7 +446,7 @@ static void sc16is7xx_ier_set(struct uart_port *port, u8 bit)
 	one->config.flags |= SC16IS7XX_RECONF_IER;
 	one->config.ier_mask |= bit;
 	one->config.ier_val |= bit;
-	kthread_queue_work(&s->kworker, &one->reg_work);
+	kthread_queue_work(s->kworker, &one->reg_work);
 }
 
 static void sc16is7xx_stop_tx(struct uart_port *port)
@@ -813,7 +812,7 @@ static void sc16is7xx_poll_proc(struct kthread_work *ws)
 	sc16is7xx_irq(0, s);
 
 	/* Setup delay based on SC16IS7XX_POLL_PERIOD_MS */
-	kthread_queue_delayed_work(&s->kworker, &s->poll_work,
+	kthread_queue_delayed_work(s->kworker, &s->poll_work,
 				   msecs_to_jiffies(SC16IS7XX_POLL_PERIOD_MS));
 }
 
@@ -900,7 +899,7 @@ static void sc16is7xx_ms_proc(struct kthread_work *ws)
 		scoped_guard(mutex, &one->lock)
 			sc16is7xx_update_mlines(one);
 
-		kthread_queue_delayed_work(&s->kworker, &one->ms_work, HZ);
+		kthread_queue_delayed_work(s->kworker, &one->ms_work, HZ);
 	}
 }
 
@@ -911,7 +910,7 @@ static void sc16is7xx_enable_ms(struct uart_port *port)
 
 	lockdep_assert_held_once(&port->lock);
 
-	kthread_queue_delayed_work(&s->kworker, &one->ms_work, 0);
+	kthread_queue_delayed_work(s->kworker, &one->ms_work, 0);
 }
 
 static void sc16is7xx_start_tx(struct uart_port *port)
@@ -919,7 +918,7 @@ static void sc16is7xx_start_tx(struct uart_port *port)
 	struct sc16is7xx_port *s = dev_get_drvdata(port->dev);
 	struct sc16is7xx_one *one = to_sc16is7xx_one(port);
 
-	kthread_queue_work(&s->kworker, &one->tx_work);
+	kthread_queue_work(s->kworker, &one->tx_work);
 }
 
 static void sc16is7xx_throttle(struct uart_port *port)
@@ -968,7 +967,7 @@ static void sc16is7xx_set_mctrl(struct uart_port *port, unsigned int mctrl)
 	struct sc16is7xx_one *one = to_sc16is7xx_one(port);
 
 	one->config.flags |= SC16IS7XX_RECONF_MD;
-	kthread_queue_work(&s->kworker, &one->reg_work);
+	kthread_queue_work(s->kworker, &one->reg_work);
 }
 
 static void sc16is7xx_break_ctl(struct uart_port *port, int break_state)
@@ -1098,7 +1097,7 @@ static int sc16is7xx_config_rs485(struct uart_port *port, struct ktermios *termi
 	}
 
 	one->config.flags |= SC16IS7XX_RECONF_RS485;
-	kthread_queue_work(&s->kworker, &one->reg_work);
+	kthread_queue_work(s->kworker, &one->reg_work);
 
 	return 0;
 }
@@ -1159,7 +1158,7 @@ static int sc16is7xx_startup(struct uart_port *port)
 	uart_port_unlock_irqrestore(port, flags);
 
 	if (s->polling)
-		kthread_queue_delayed_work(&s->kworker, &s->poll_work,
+		kthread_queue_delayed_work(s->kworker, &s->poll_work,
 					   msecs_to_jiffies(SC16IS7XX_POLL_PERIOD_MS));
 
 	return 0;
@@ -1186,7 +1185,7 @@ static void sc16is7xx_shutdown(struct uart_port *port)
 	if (s->polling)
 		kthread_cancel_delayed_work_sync(&s->poll_work);
 
-	kthread_flush_worker(&s->kworker);
+	kthread_flush_worker(s->kworker);
 }
 
 static const char *sc16is7xx_type(struct uart_port *port)
@@ -1595,14 +1594,12 @@ int sc16is7xx_probe(struct device *dev, const struct sc16is7xx_devtype *devtype,
 	s->devtype = devtype;
 	dev_set_drvdata(dev, s);
 
-	kthread_init_worker(&s->kworker);
-	s->kworker_task = kthread_run(kthread_worker_fn, &s->kworker,
-				      "sc16is7xx");
-	if (IS_ERR(s->kworker_task)) {
-		ret = PTR_ERR(s->kworker_task);
+	s->kworker = kthread_run_worker(0, "sc16is7xx");
+	if (IS_ERR(s->kworker)) {
+		ret = PTR_ERR(s->kworker);
 		goto out_clk;
 	}
-	sched_set_fifo(s->kworker_task);
+	sched_set_fifo(s->kworker->task);
 
 	ret = sc16is7xx_reset(dev, regmaps[0]);
 	if (ret)
@@ -1676,7 +1673,7 @@ out_ports:
 	}
 
 out_kthread:
-	kthread_stop(s->kworker_task);
+	kthread_destroy_worker(s->kworker);
 
 out_clk:
 	clk_disable_unprepare(s->clk);
@@ -1705,8 +1702,8 @@ void sc16is7xx_remove(struct device *dev)
 	if (s->polling)
 		kthread_cancel_delayed_work_sync(&s->poll_work);
 
-	kthread_flush_worker(&s->kworker);
-	kthread_stop(s->kworker_task);
+	kthread_flush_worker(s->kworker);
+	kthread_destroy_worker(s->kworker);
 
 	clk_disable_unprepare(s->clk);
 }
