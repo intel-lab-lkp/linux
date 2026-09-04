@@ -90,7 +90,7 @@ static loff_t zisofs_uncompress_block(struct inode *inode, loff_t block_start,
 	/*
 	 * First block is special since it may be fractional.  We also wait for
 	 * it before grabbing the zlib mutex; odds are that the subsequent
-	 * blocks are going to come in in short order so we don't hold the zlib
+	 * blocks are going to come in short order so we don't hold the zlib
 	 * mutex longer than necessary.
 	 */
 
