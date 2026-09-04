@@ -252,7 +252,7 @@ lsdc_create_device(struct pci_dev *pdev,
 	return ldev;
 }
 
-/* For multiple GPU driver instance co-exixt in the system */
+/* For multiple GPU driver instance co-exist in the system */
 
 static unsigned int lsdc_vga_set_decode(struct pci_dev *pdev, bool state)
 {

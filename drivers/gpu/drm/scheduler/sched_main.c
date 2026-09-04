@@ -413,7 +413,7 @@ void drm_sched_stop(struct drm_gpu_scheduler *sched, struct drm_sched_job *bad)
 		list_add(&bad->list, &sched->pending_list);
 
 	/*
-	 * Iterate the job list from later to  earlier one and either deactive
+	 * Iterate the job list from later to  earlier one and either deactivate
 	 * their HW callbacks or remove them from pending list if they already
 	 * signaled.
 	 * This iteration is thread safe as the scheduler's work items have been
@@ -558,7 +558,7 @@ void drm_sched_resubmit_jobs(struct drm_gpu_scheduler *sched)
 
 			s_job->s_fence->parent = dma_fence_get(fence);
 
-			/* Drop for orignal kref_init */
+			/* Drop for original kref_init */
 			dma_fence_put(fence);
 		}
 	}

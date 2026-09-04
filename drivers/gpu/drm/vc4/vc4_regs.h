@@ -882,7 +882,7 @@ enum {
 # define VC4_HDMI_CEC_TX_CONTINUE		BIT(22)
 /* Set this after a CEC interrupt. */
 # define VC4_HDMI_CEC_CLEAR_RECEIVE_OFF		BIT(21)
-/* Starts a TX.  Will wait for appropriate idel time before CEC
+/* Starts a TX.  Will wait for appropriate idle time before CEC
  * activity. Must be cleared in between transmits.
  */
 # define VC4_HDMI_CEC_START_XMIT_BEGIN		BIT(20)

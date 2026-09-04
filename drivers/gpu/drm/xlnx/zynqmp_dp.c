@@ -1061,7 +1061,7 @@ static int zynqmp_dp_aux_cmd_submit(struct zynqmp_dp *dp, u32 cmd, u16 addr,
 		reg |= (bytes - 1) << ZYNQMP_DP_AUX_COMMAND_BYTES_SHIFT;
 	zynqmp_dp_write(dp, ZYNQMP_DP_AUX_COMMAND, reg);
 
-	/* Wait for reply to be delivered upto 2ms */
+	/* Wait for reply to be delivered up to 2ms */
 	time_left = wait_for_completion_timeout(&dp->aux_done,
 						msecs_to_jiffies(2));
 	if (!time_left)

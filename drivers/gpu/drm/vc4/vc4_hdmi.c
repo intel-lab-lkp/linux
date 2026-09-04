@@ -365,7 +365,7 @@ static void vc4_hdmi_handle_hotplug(struct vc4_hdmi *vc4_hdmi,
 	 * NOTE: This function should really be called with vc4_hdmi->mutex
 	 * held, but doing so results in reentrancy issues since
 	 * cec_s_phys_addr() might call .adap_enable, which leads to that
-	 * funtion being called with our mutex held.
+	 * function being called with our mutex held.
 	 *
 	 * A similar situation occurs with vc4_hdmi_reset_link() that
 	 * will call into our KMS hooks if the scrambling was enabled.

@@ -224,7 +224,7 @@ bool gma_power_begin(struct drm_device *dev, bool force_on)
  *	@dev: Our DRM device
  *
  *	Indicate that one of our gma_power_begin() requested periods when
- *	the diplay island power is needed has completed.
+ *	the display island power is needed has completed.
  */
 void gma_power_end(struct drm_device *dev)
 {

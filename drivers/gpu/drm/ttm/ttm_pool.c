@@ -169,7 +169,7 @@ static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
 	void *vaddr;
 
 	/* Don't set the __GFP_COMP flag for higher order allocations.
-	 * Mapping pages directly into an userspace process and calling
+	 * Mapping pages directly into a userspace process and calling
 	 * put_page() on a TTM allocated page is illegal.
 	 */
 	if (order)

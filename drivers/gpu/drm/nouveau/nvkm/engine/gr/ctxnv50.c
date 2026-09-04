@@ -139,7 +139,7 @@
  * The ctxprog is written in its own kind of microcode, with very small and
  * crappy set of available commands. You upload it to a small [512 insns]
  * area of memory on PGRAPH, and it'll be run when PFIFO wants PGRAPH to
- * switch channel. or when the driver explicitely requests it. Stuff visible
+ * switch channel. or when the driver explicitly requests it. Stuff visible
  * to ctxprog consists of: PGRAPH MMIO registers, PGRAPH context strands,
  * the per-channel context save area in VRAM [known as ctxvals or grctx],
  * 4 flags registers, a scratch register, two grctx pointers, plus many

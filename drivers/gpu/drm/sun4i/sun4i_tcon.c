@@ -875,7 +875,7 @@ static int sun4i_tcon_init_regmap(struct device *dev,
  *
  * We can either identify backends from their compatible strings, which
  * means maintaining a large list of them. Or, since the backend is
- * registered and binded before the TCON, we can just go through the
+ * registered and bound before the TCON, we can just go through the
  * list of registered backends and compare the device node.
  *
  * As the structures now store engines instead of backends, here this

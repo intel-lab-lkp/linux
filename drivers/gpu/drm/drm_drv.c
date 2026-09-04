@@ -230,7 +230,7 @@ static void drm_minor_unregister(struct drm_device *dev, enum drm_minor_type typ
 
 /*
  * Looks up the given minor-ID and returns the respective DRM-minor object. The
- * refence-count of the underlying device is increased so you must release this
+ * reference-count of the underlying device is increased so you must release this
  * object with drm_minor_release().
  *
  * As long as you hold this minor, it is guaranteed that the object and the

@@ -122,7 +122,7 @@ static int nt36672a_panel_power_on(struct nt36672a_panel *pinfo)
 	/*
 	 * As per downstream kernel, Reset sequence of Tianma FHD panel requires the panel to
 	 * be out of reset for 10ms, followed by being held in reset for 10ms. But for Android
-	 * AOSP, we needed to bump it upto 200ms otherwise we get white screen sometimes.
+	 * AOSP, we needed to bump it up to 200ms otherwise we get white screen sometimes.
 	 * FIXME: Try to reduce this 200ms to a lesser value.
 	 */
 	gpiod_set_value(pinfo->reset_gpio, 1);

@@ -405,7 +405,7 @@ void oaktrail_lvds_init(struct drm_device *dev,
 	} else
 		dev_err(dev->dev, "No ddc adapter available!\n");
 	/*
-	 * If we didn't get EDID, try geting panel timing
+	 * If we didn't get EDID, try getting panel timing
 	 * from configuration data
 	 */
 	oaktrail_lvds_get_configuration_mode(dev, mode_dev);

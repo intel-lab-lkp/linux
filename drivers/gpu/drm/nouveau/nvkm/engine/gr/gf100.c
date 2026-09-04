@@ -2080,7 +2080,7 @@ gf100_gr_init_(struct nvkm_gr *base)
 	 *
 	 * A workaround was discovered by Karol, whereby putting GR into
 	 * reset for an extended period right before initialisation
-	 * prevents the problem from occuring.
+	 * prevents the problem from occurring.
 	 *
 	 * XXX: As RM does not require any such workaround, this is more
 	 *      of a hack than a true fix.

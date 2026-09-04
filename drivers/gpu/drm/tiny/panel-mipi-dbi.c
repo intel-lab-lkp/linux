@@ -96,7 +96,7 @@ struct panel_mipi_dbi_config {
 	 *
 	 * Some commands require a pause before the next command can be received.
 	 * Inserting a delay in the command sequence is done by using the NOP command with one
-	 * parameter: delay in miliseconds (the No Operation command is part of the MIPI Display
+	 * parameter: delay in milliseconds (the No Operation command is part of the MIPI Display
 	 * Command Set where it has no parameters).
 	 *
 	 * Example:

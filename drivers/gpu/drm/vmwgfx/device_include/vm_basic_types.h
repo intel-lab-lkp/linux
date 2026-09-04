@@ -125,7 +125,7 @@ typedef __attribute__((aligned(32))) struct MKSGuestStatInfoEntry {
  * interpret the pointers.
  *
  * Because the host side code never acknowledges anything back to the
- * guest there is no strict requirement to maintain compatability
+ * guest there is no strict requirement to maintain compatibility
  * across releases.  If the interface changes the host might not be
  * able to log stats, but the guest will continue to run normally.
  */

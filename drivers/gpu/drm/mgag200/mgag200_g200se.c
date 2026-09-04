@@ -228,7 +228,7 @@ static int mgag200_g200se_04_pixpllc_atomic_check(struct drm_crtc *crtc,
 		clock = 25000;
 	clock = clock * 2;
 
-	/* Permited delta is 0.5% as VESA Specification */
+	/* Permitted delta is 0.5% as VESA Specification */
 	permitteddelta = clock * 5 / 1000;
 
 	for (i = 0 ; i < ARRAY_SIZE(pvalues_e4); i++) {

@@ -32,7 +32,7 @@ static inline u32 nouveau_get_gob_height(u16 family)
 		return NV_TILE_GOB_HEIGHT;
 }
 
-/* Number of blocks to cover the heigth of the framebuffer */
+/* Number of blocks to cover the height of the framebuffer */
 static inline u32 nouveau_get_height_in_blocks(u32 height, u32 gobs_in_block, u16 family)
 {
 	return DIV_ROUND_UP(height, nouveau_get_gob_height(family) * gobs_in_block);

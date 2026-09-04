@@ -1640,7 +1640,7 @@ static int tc_dpi_atomic_check(struct drm_bridge *bridge,
 
 	crtc_state->adjusted_mode.clock = adjusted_clock / 1000;
 
-	/* DSI->DPI interface clock limitation: upto 100 MHz */
+	/* DSI->DPI interface clock limitation: up to 100 MHz */
 	if (crtc_state->adjusted_mode.clock > 100000)
 		return -EINVAL;
 
@@ -1664,7 +1664,7 @@ static int tc_edp_atomic_check(struct drm_bridge *bridge,
 
 	crtc_state->adjusted_mode.clock = adjusted_clock / 1000;
 
-	/* DPI->(e)DP interface clock limitation: upto 154 MHz */
+	/* DPI->(e)DP interface clock limitation: up to 154 MHz */
 	if (crtc_state->adjusted_mode.clock > 154000)
 		return -EINVAL;
 
@@ -1676,7 +1676,7 @@ tc_dpi_mode_valid(struct drm_bridge *bridge,
 		  const struct drm_display_info *info,
 		  const struct drm_display_mode *mode)
 {
-	/* DPI interface clock limitation: upto 100 MHz */
+	/* DPI interface clock limitation: up to 100 MHz */
 	if (mode->clock > 100000)
 		return MODE_CLOCK_HIGH;
 

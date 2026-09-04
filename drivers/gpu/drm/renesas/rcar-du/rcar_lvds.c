@@ -234,7 +234,7 @@ static void rcar_lvds_d3_e3_pll_calc(struct rcar_lvds *lvds, struct clk *clk,
 				unsigned int div;
 
 				/*
-				 * Finally we have a programable divider after
+				 * Finally we have a programmable divider after
 				 * the PLL, followed by a an optional fixed /7
 				 * divider.
 				 */

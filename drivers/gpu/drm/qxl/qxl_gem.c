@@ -75,7 +75,7 @@ int qxl_gem_object_create(struct qxl_device *qdev, int size,
 
 /*
  * If the caller passed a valid gobj pointer, it is responsible to call
- * drm_gem_object_put() when it no longer needs to acess the object.
+ * drm_gem_object_put() when it no longer needs to access the object.
  *
  * If gobj is NULL, it is handled internally.
  */

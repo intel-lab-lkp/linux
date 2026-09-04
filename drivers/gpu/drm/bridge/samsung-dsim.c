@@ -1116,7 +1116,7 @@ static int samsung_dsim_init_link(struct samsung_dsim *dsi)
 	 * Use non-continuous clock mode if the periparal wants and
 	 * host controller supports
 	 *
-	 * In non-continous clock mode, host controller will turn off
+	 * In non-continuous clock mode, host controller will turn off
 	 * the HS clock between high-speed transmissions to reduce
 	 * power consumption.
 	 */

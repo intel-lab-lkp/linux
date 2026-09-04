@@ -1052,7 +1052,7 @@ static int vmw_query_bo_switch_prepare(struct vmw_private *dev_priv,
  * object following that query wait has signaled, we are sure that all preceding
  * queries have finished, and the old query buffer can be unpinned. However,
  * since both the new query buffer and the old one are fenced with that fence,
- * we can do an asynchronus unpin now, and be sure that the old query buffer
+ * we can do an asynchronous unpin now, and be sure that the old query buffer
  * won't be moved until the fence has signaled.
  *
  * As mentioned above, both the new - and old query buffers need to be fenced

@@ -109,7 +109,7 @@ static inline enum vmw_view_type vmw_view_cmd_to_type(u32 id)
  * @id: The SVGA3D command id.
  *
  * For a given state object create or destroy command id,
- * return the corresponding enum vmw_so_type. If the command is uknown,
+ * return the corresponding enum vmw_so_type. If the command is unknown,
  * return vmw_so_max. We should perhaps optimize this function using
  * a similar strategy as vmw_view_cmd_to_type().
  */

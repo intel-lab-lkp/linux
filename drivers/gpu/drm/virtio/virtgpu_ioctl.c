@@ -189,7 +189,7 @@ static int virtio_gpu_resource_create_ioctl(struct drm_device *dev, void *data,
 		return ret;
 	}
 
-	rc->res_handle = qobj->hw_res_handle; /* similiar to a VM address */
+	rc->res_handle = qobj->hw_res_handle; /* similar to a VM address */
 	rc->bo_handle = handle;
 
 	/*

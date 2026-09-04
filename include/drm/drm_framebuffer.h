@@ -59,7 +59,7 @@ struct drm_framebuffer_funcs {
 	 * Create a buffer handle in the driver-specific buffer manager (either
 	 * GEM or TTM) valid for the passed-in &struct drm_file. This is used by
 	 * the core to implement the GETFB IOCTL, which returns (for
-	 * sufficiently priviledged user) also a native buffer handle. This can
+	 * sufficiently privileged user) also a native buffer handle. This can
 	 * be used for seamless transitions between modesetting clients by
 	 * copying the current screen contents to a private buffer and blending
 	 * between that and the new contents.
@@ -164,7 +164,7 @@ struct drm_framebuffer {
 	 * @offsets must at least be tile-size aligned, but hardware often has
 	 * stricter requirements.
 	 *
-	 * This should not be used to specifiy x/y pixel offsets into the buffer
+	 * This should not be used to specify x/y pixel offsets into the buffer
 	 * data (even for linear buffers). Specifying an x/y pixel offset is
 	 * instead done through the source rectangle in &struct drm_plane_state.
 	 */

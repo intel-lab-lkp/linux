@@ -552,7 +552,7 @@ struct drm_nouveau_svm_bind {
 
 /*
  * NOUVEAU_BIND_COMMAND__MIGRATE: synchronous migrate to target memory.
- * result: number of page successfuly migrate to the target memory.
+ * result: number of page successfully migrate to the target memory.
  */
 #define NOUVEAU_SVM_BIND_COMMAND__MIGRATE               0
 

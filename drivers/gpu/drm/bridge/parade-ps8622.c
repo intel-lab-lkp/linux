@@ -360,7 +360,7 @@ static void ps8622_pre_enable(struct drm_bridge *bridge,
 	 * enable the lcd/ps8622 fet. T2 is the range of time in which the
 	 * data sheet specifies we should deassert the reset pin.
 	 *
-	 * If it takes T1.max for the power to rise, we need to wait atleast
+	 * If it takes T1.max for the power to rise, we need to wait at least
 	 * T2.min before deasserting the reset pin. If it takes T1.min for the
 	 * power to rise, we need to wait at most T2.max before deasserting the
 	 * reset pin.

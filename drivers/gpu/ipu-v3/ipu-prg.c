@@ -163,7 +163,7 @@ void ipu_prg_disable(struct ipu_soc *ipu)
 EXPORT_SYMBOL_GPL(ipu_prg_disable);
 
 /*
- * The channel configuartion functions below are not thread safe, as they
+ * The channel configuration functions below are not thread safe, as they
  * must be only called from the atomic commit path in the DRM driver, which
  * is properly serialized.
  */

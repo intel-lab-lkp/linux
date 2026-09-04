@@ -247,7 +247,7 @@ struct psb_offset {
 /*
  *	Register save state. This is used to hold the context when the
  *	device is powered off. In the case of Oaktrail this can (but does not
- *	yet) include screen blank. Operations occuring during the save
+ *	yet) include screen blank. Operations occurring during the save
  *	update the register cache instead.
  */
 
@@ -408,7 +408,7 @@ struct drm_psb_private {
 	/* Register base */
 	uint8_t __iomem *sgx_reg;
 	uint8_t __iomem *vdc_reg;
-	uint8_t __iomem *aux_reg; /* Auxillary vdc pipe regs */
+	uint8_t __iomem *aux_reg; /* Auxiliary vdc pipe regs */
 	uint16_t lpc_gpio_base;
 	uint32_t gatt_free_offset;
 

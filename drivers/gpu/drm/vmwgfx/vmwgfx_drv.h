@@ -446,8 +446,8 @@ enum {
 /**
  * enum vmw_sm_type - Graphics context capability supported by device.
  * @VMW_SM_LEGACY: Pre DX context.
- * @VMW_SM_4: Context support upto SM4.
- * @VMW_SM_4_1: Context support upto SM4_1.
+ * @VMW_SM_4: Context support up to SM4.
+ * @VMW_SM_4_1: Context support up to SM4_1.
  * @VMW_SM_5: Context support up to SM5.
  * @VMW_SM_5_1X: Adds support for sm5_1 and gl43 extensions.
  * @VMW_SM_MAX: Should be the last.
@@ -1011,7 +1011,7 @@ extern int vmw_execbuf_copy_fence_user(struct vmw_private *dev_priv,
 bool vmw_cmd_describe(const void *buf, u32 *size, char const **cmd);
 
 /*
- * IRQs and wating - vmwgfx_irq.c
+ * IRQs and waiting - vmwgfx_irq.c
  */
 
 extern int vmw_irq_install(struct vmw_private *dev_priv);
