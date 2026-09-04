@@ -72,7 +72,7 @@ static void q40kbd_stop(void)
 
 /*
  * q40kbd_open() is called when a port is open by the higher layer.
- * It allocates the interrupt and enables in in the chip.
+ * It allocates the interrupt and enables in the chip.
  */
 
 static int q40kbd_open(struct serio *port)

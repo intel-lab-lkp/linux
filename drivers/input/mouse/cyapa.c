@@ -1322,7 +1322,7 @@ static int cyapa_probe(struct i2c_client *client)
 
 	/*
 	 * Register the device in the input subsystem when it's operational.
-	 * Otherwise, keep in this driver, so it can be be recovered or updated
+	 * Otherwise, keep in this driver, so it can be recovered or updated
 	 * through the sysfs mode and update_fw interfaces by user or apps.
 	 */
 	if (cyapa->operational) {
