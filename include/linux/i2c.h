@@ -907,6 +907,7 @@ static inline bool i2c_client_has_driver(struct i2c_client *client)
 void i2c_clients_command(struct i2c_adapter *adap,
 			 unsigned int cmd, void *arg);
 
+bool __i2c_adapter_get(struct i2c_adapter *adapter);
 struct i2c_adapter *i2c_get_adapter(int nr);
 void i2c_put_adapter(struct i2c_adapter *adap);
 unsigned int i2c_adapter_depth(struct i2c_adapter *adapter);

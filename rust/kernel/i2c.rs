@@ -429,7 +429,9 @@ unsafe impl AlwaysRefCounted for I2cAdapter {
     #[inline]
     fn inc_ref(&self) {
         // SAFETY: The existence of a shared reference guarantees that the refcount is non-zero.
-        unsafe { bindings::i2c_get_adapter(self.index()) };
+        unsafe {
+            bindings::__i2c_adapter_get(&raw mut (*self.as_raw()));
+        }
     }
 
     #[inline]
