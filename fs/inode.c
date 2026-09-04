@@ -2959,11 +2959,17 @@ EXPORT_SYMBOL(inode_set_ctime_current);
  * inode attributes, including the mtime. When updating the mtime, update
  * the ctime to a value at least equal to that.
  *
- * This can race with concurrent updates to the inode, in which
- * case the update is skipped.
+ * The ctime never moves backwards. An @update that does not advance the ctime
+ * records the current time instead, so that the delegated change is still
+ * visible in the ctime.
+ *
+ * This can still race with a concurrent update to the inode. That stamp takes
+ * precedence, and is at least as recent as the one it displaces.
  *
  * Note that this works even when multigrain timestamps are not enabled,
  * so it is used in either case.
+ *
+ * Returns the resulting ctime.
  */
 struct timespec64 inode_set_ctime_deleg(struct inode *inode, struct timespec64 update)
 {
@@ -2975,10 +2981,6 @@ struct timespec64 inode_set_ctime_deleg(struct inode *inode, struct timespec64 u
 	cur_ts.tv_nsec = cur & ~I_CTIME_QUERIED;
 	cur_ts.tv_sec = inode_get_ctime_sec(inode);
 
-	/* If the update is older than the existing value, skip it. */
-	if (timespec64_compare(&update, &cur_ts) <= 0)
-		return cur_ts;
-
 	ktime_get_coarse_real_ts64_mg(&now);
 
 	/* Clamp the update to "now" if it's in the future */
@@ -2987,9 +2989,14 @@ struct timespec64 inode_set_ctime_deleg(struct inode *inode, struct timespec64 u
 
 	update = timestamp_truncate(update, inode);
 
-	/* No need to update if the values are already the same */
-	if (timespec64_equal(&update, &cur_ts))
-		return cur_ts;
+	/*
+	 * The update does not advance the ctime. Stamp the current time, so
+	 * that the delegated change is still visible in the ctime. Compare
+	 * after clamping and truncating, since either can pull an update that
+	 * was ahead of the ctime back onto it.
+	 */
+	if (timespec64_compare(&update, &cur_ts) <= 0)
+		return inode_set_ctime_current(inode);
 
 	/*
 	 * Try to swap the nsec value into place. If it fails, that means
