@@ -273,6 +273,9 @@ struct o2hb_region {
 
 	/* last hb status, 0 for success, other value for error. */
 	int			hr_last_hb_status;
+	/* Serializes dev_store() against itself and region_release() */
+	struct mutex            hr_dev_write_mutex;
+
 };
 
 static inline struct block_device *reg_bdev(struct o2hb_region *reg)
@@ -1616,7 +1619,10 @@ static void o2hb_region_release(struct config_item *item)
 
 	o2hb_quiesce_timeout(reg);
 	o2net_unregister_and_flush_handler_list(&reg->hr_handler_list);
+
+	mutex_lock(&reg->hr_dev_write_mutex);
 	o2hb_unmap_slot_data(reg);
+	mutex_unlock(&reg->hr_dev_write_mutex);
 
 	if (reg->hr_bdev_file)
 		fput(reg->hr_bdev_file);
@@ -1879,9 +1885,6 @@ static ssize_t o2hb_region_dev_store(struct config_item *item,
 	ssize_t ret = -EINVAL;
 	int live_threshold;
 
-	if (reg->hr_bdev_file)
-		return -EINVAL;
-
 	/* We can't heartbeat without having had our node number
 	 * configured yet. */
 	reg->hr_node_num = o2nm_this_node();
@@ -1906,12 +1909,20 @@ static ssize_t o2hb_region_dev_store(struct config_item *item,
 	if (!S_ISBLK(fd_file(f)->f_mapping->host->i_mode))
 		return -EINVAL;
 
+	if (mutex_lock_interruptible(&reg->hr_dev_write_mutex))
+		return -ERESTARTSYS;
+
+	if (reg->hr_bdev_file) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
 	reg->hr_bdev_file = bdev_file_open_by_dev(fd_file(f)->f_mapping->host->i_rdev,
 			BLK_OPEN_WRITE | BLK_OPEN_READ, NULL, NULL);
 	if (IS_ERR(reg->hr_bdev_file)) {
 		ret = PTR_ERR(reg->hr_bdev_file);
 		reg->hr_bdev_file = NULL;
-		return ret;
+		goto out_unlock;
 	}
 
 	sectsize = bdev_logical_block_size(reg_bdev(reg));
@@ -2029,6 +2040,8 @@ out:
 		fput(reg->hr_bdev_file);
 		reg->hr_bdev_file = NULL;
 	}
+out_unlock:
+	mutex_unlock(&reg->hr_dev_write_mutex);
 	return ret;
 }
 
@@ -2148,6 +2161,8 @@ static struct config_item *o2hb_heartbeat_group_make_item(struct config_group *g
 	spin_unlock(&o2hb_live_lock);
 
 	config_item_init_type_name(&reg->hr_item, name, &o2hb_region_type);
+
+	mutex_init(&reg->hr_dev_write_mutex);
 
 	/* this is the same way to generate msg key as dlm, for local heartbeat,
 	 * name is also the same, so make initial crc value different to avoid
