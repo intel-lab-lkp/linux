@@ -610,7 +610,7 @@ static irqreturn_t mhuv2_sender_interrupt(int irq, void *data)
 		 * iteration if the interrupt came right after we cleared it but
 		 * before we read the stat register.
 		 */
-		dev_dbg(dev, "Couldn't find the doorbell (%u) for the Tx interrupt interrupt\n",
+		dev_dbg(dev, "Couldn't find the doorbell (%u) for the Tx interrupt\n",
 			priv->ch_wn_idx);
 		return IRQ_NONE;
 	}
