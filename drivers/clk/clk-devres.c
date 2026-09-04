@@ -123,9 +123,11 @@ struct clk *devm_clk_get_optional_enabled_with_rate(struct device *dev,
 	if (ret)
 		goto out_put_clk;
 
-	ret = devm_add_action_or_reset(dev, devm_clk_disable_unprepare, clk);
-	if (ret)
+	ret = devm_add_action(dev, devm_clk_disable_unprepare, clk);
+	if (ret) {
+		clk_disable_unprepare(clk);
 		goto out_put_clk;
+	}
 
 	return clk;
 
