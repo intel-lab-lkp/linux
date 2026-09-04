@@ -1329,6 +1329,14 @@ static struct folio *vma_alloc_anon_folio_pmd(struct vm_area_struct *vma,
 		return NULL;
 	}
 
+	/*
+	 * The charge gfp encodes THP allocation policy and may not allow
+	 * blocking, which makes try_charge skip its synchronous memory.high
+	 * throttling. Fault context can sleep, so settle any over-high debt
+	 * here instead of letting usage grow unthrottled up to memory.max.
+	 */
+	mem_cgroup_handle_over_high(GFP_KERNEL);
+
 	if (folio_memcg_alloc_deferred(folio)) {
 		folio_put(folio);
 		count_vm_event(THP_FAULT_FALLBACK);

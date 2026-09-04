@@ -5362,6 +5362,8 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 			folio_put(folio);
 			goto next;
 		}
+		/* Same reasoning as in vma_alloc_anon_folio_pmd(). */
+		mem_cgroup_handle_over_high(GFP_KERNEL);
 		if (order > 1 && folio_memcg_alloc_deferred(folio)) {
 			folio_put(folio);
 			goto fallback;
