@@ -481,6 +481,11 @@ static int serial_ir_tx_carrier(struct rc_dev *dev, u32 carrier);
 static int serial_ir_open(struct rc_dev *rcdev);
 static void serial_ir_close(struct rc_dev *rcdev);
 
+static void devm_timer_delete_sync(void *timer)
+{
+	timer_delete_sync(timer);
+}
+
 static int serial_ir_probe(struct platform_device *dev)
 {
 	struct rc_dev *rcdev;
@@ -534,6 +539,11 @@ static int serial_ir_probe(struct platform_device *dev)
 	serial_ir.rcdev = rcdev;
 
 	timer_setup(&serial_ir.timeout_timer, serial_ir_timeout, 0);
+
+	result = devm_add_action_or_reset(&dev->dev, devm_timer_delete_sync,
+					  &serial_ir.timeout_timer);
+	if (result)
+		return result;
 
 	result = devm_request_irq(&dev->dev, irq, serial_ir_irq_handler,
 				  share_irq ? IRQF_SHARED : 0,
@@ -798,7 +808,6 @@ static int __init serial_ir_init_module(void)
 
 static void __exit serial_ir_exit_module(void)
 {
-	timer_delete_sync(&serial_ir.timeout_timer);
 	serial_ir_exit();
 }
 
