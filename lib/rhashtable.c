@@ -1339,6 +1339,133 @@ void rhashtable_destroy(struct rhashtable *ht)
 }
 EXPORT_SYMBOL_GPL(rhashtable_destroy);
 
+struct rht_flush_arg {
+	struct rhashtable *ht;
+	void (*free_fn)(void *ptr, void *arg);
+	void *arg;
+};
+
+static void flush_cb(void *ptr, void *arg)
+{
+	struct rht_flush_arg *fa = arg;
+
+	atomic_dec(&fa->ht->nelems);
+	if (fa->free_fn)
+		fa->free_fn(ptr, fa->arg);
+}
+
+static void rhashtable_flush_one(struct rhashtable *ht, struct rhash_head *obj,
+				 void (*free_fn)(void *ptr, void *arg),
+				 void *arg)
+{
+	struct rht_flush_arg fa = {
+		.ht = ht,
+		.free_fn = free_fn,
+		.arg = arg,
+	};
+
+	rhashtable_free_one(ht, obj, flush_cb, &fa);
+}
+
+static void rhashtable_flush_chain(struct rhashtable *ht,
+				   struct bucket_table *tbl,
+				   unsigned int hash,
+				   void (*free_fn)(void *ptr, void *arg),
+				   void *arg)
+{
+	struct rhash_lock_head __rcu **bkt = rht_bucket_var(tbl, hash);
+	struct rhash_head *pos, *next;
+	unsigned long flags;
+
+	if (!bkt)
+		return;
+
+	flags = rht_lock(tbl, bkt);
+	pos = rht_ptr(bkt, tbl, hash);
+	rht_assign_unlock(tbl, bkt, NULL, flags);
+
+	/* Nothing can reach @pos through @tbl any more: the bucket has
+	 * been emptied above, and @tbl itself is unreachable from ht->tbl
+	 * (see rhashtable_flush_and_free()). Walk it the same way
+	 * rhashtable_free_and_destroy() walks a table it exclusively
+	 * owns.
+	 */
+	while (!rht_is_a_nulls(pos)) {
+		next = rcu_dereference_raw(pos->next);
+		rhashtable_flush_one(ht, pos, free_fn, arg);
+		pos = next;
+	}
+}
+
+/**
+ * rhashtable_flush_and_free - detach and discard all current elements
+ * @ht:		the hash table to flush
+ * @free_fn:	callback to release resources of an element, may be %NULL
+ * @arg:	pointer passed to free_fn
+ *
+ * Swaps the bucket table backing @ht for a new, empty table.
+ *
+ * The detached table is then walked and every element found is
+ * unlinked, and, if @free_fn is given, handed to it for release.
+ * Note that RCU protected readers may still be accessing the elements.
+ * Releasing of resources must occur in a compatible manner.
+ *
+ * Unlike rhashtable_destroy(), @ht is left fully initialized and may
+ * continue to be used for lookups, insertions, and removals.
+ *
+ * This function may sleep, it cannot be called from atomic context or
+ * RCU read-side critical sections.
+ */
+void rhashtable_flush_and_free(struct rhashtable *ht,
+			       void (*free_fn)(void *ptr, void *arg),
+			       void *arg)
+{
+	struct bucket_table *tbl, *old_tbl, *last_tbl, *new_tbl;
+	struct rhashtable_walker *walker;
+	unsigned int i;
+
+	new_tbl = bucket_table_alloc(ht, rounded_hashtable_size(&ht->p),
+				     GFP_KERNEL);
+	if (!new_tbl)
+		new_tbl = bucket_table_alloc(ht, ht->p.min_size,
+					     GFP_KERNEL | __GFP_NOFAIL);
+
+	mutex_lock(&ht->mutex);
+
+	/* Splice the new, empty table onto the tail of the live table ... */
+	old_tbl = rht_dereference(ht->tbl, ht);
+	do {
+		last_tbl = rhashtable_last_table(ht, old_tbl);
+	} while (rhashtable_rehash_attach(ht, last_tbl, new_tbl));
+
+	/* ...then publish it as ht->tbl. */
+	rcu_assign_pointer(ht->tbl, new_tbl);
+	mutex_unlock(&ht->mutex);
+
+	tbl = old_tbl;
+	do {
+		struct bucket_table *next_tbl = rcu_dereference_raw(tbl->future_tbl);
+
+		for (i = 0; i < tbl->size; i++) {
+			cond_resched();
+			rhashtable_flush_chain(ht, tbl, i, free_fn, arg);
+		}
+
+		spin_lock(&ht->lock);
+		list_for_each_entry(walker, &tbl->walkers, list)
+			walker->tbl = NULL;
+		/* See rhashtable_rehash_table(): done under ->lock so
+		 * rhashtable_walk_stop() can use rcu_head_after_call_rcu()
+		 * to decide whether to re-link the walker onto this table.
+		 */
+		call_rcu(&tbl->rcu, bucket_table_free_rcu);
+		spin_unlock(&ht->lock);
+
+		tbl = next_tbl;
+	} while (tbl && tbl != new_tbl);
+}
+EXPORT_SYMBOL_GPL(rhashtable_flush_and_free);
+
 struct rhash_lock_head __rcu **__rht_bucket_nested(
 	const struct bucket_table *tbl, unsigned int hash)
 {
