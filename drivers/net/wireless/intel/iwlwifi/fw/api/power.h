@@ -727,7 +727,7 @@ struct iwl_sar_offset_mapping_cmd {
  *      regardless of whether its temperature has been changed.
  * @bf_enable_beacon_filter: 1, beacon filtering is enabled; 0, disabled.
  * @bf_debug_flag: beacon filtering debug configuration
- * @bf_escape_timer: Send beacons to to driver if no beacons were passed
+ * @bf_escape_timer: Send beacons to driver if no beacons were passed
  *      for a specific period of time. Units: Beacons.
  * @ba_escape_timer: Fully receive and parse beacon if no beacons were passed
  *      for a longer period of time then this escape-timeout. Units: Beacons.
