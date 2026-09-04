@@ -2,6 +2,7 @@
 #ifndef _LINUX_SCHED_SIGNAL_H
 #define _LINUX_SCHED_SIGNAL_H
 
+#include <linux/cleanup.h>
 #include <linux/rculist.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -661,6 +662,24 @@ extern bool current_is_single_threaded(void);
 
 /* Careful: this is a double loop, 'break' won't work as expected. */
 #define for_each_process_thread(p, t)	\
+	for_each_process(p) for_each_thread(p, t)
+
+/*
+ * RCU-internal variants: automatically acquire and release the RCU read
+ * lock around the iteration.  Equivalent to scoped_guard(rcu) combined
+ * with the respective non-_rcu variant.
+ */
+#define for_each_process_rcu(p) \
+	scoped_guard(rcu) \
+	for (p = &init_task ; (p = next_task(p)) != &init_task ; )
+
+#define for_each_thread_rcu(p, t) \
+	scoped_guard(rcu) \
+	__for_each_thread((p)->signal, t)
+
+/* Careful: this is a double loop, 'break' won't work as expected. */
+#define for_each_process_thread_rcu(p, t) \
+	scoped_guard(rcu) \
 	for_each_process(p) for_each_thread(p, t)
 
 typedef int (*proc_visitor)(struct task_struct *p, void *data);
