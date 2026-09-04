@@ -843,12 +843,6 @@ struct page *dax_layout_busy_page_range(struct address_space *mapping,
 }
 EXPORT_SYMBOL_GPL(dax_layout_busy_page_range);
 
-struct page *dax_layout_busy_page(struct address_space *mapping)
-{
-	return dax_layout_busy_page_range(mapping, 0, LLONG_MAX);
-}
-EXPORT_SYMBOL_GPL(dax_layout_busy_page);
-
 static int __dax_invalidate_entry(struct address_space *mapping,
 				  pgoff_t index, bool trunc)
 {
