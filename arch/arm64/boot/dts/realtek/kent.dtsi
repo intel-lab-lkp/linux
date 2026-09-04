@@ -5,6 +5,8 @@
  * Copyright (c) 2024 Realtek Semiconductor Corp.
  */
 
+#include <dt-bindings/clock/realtek,rtd1625-clk.h>
+#include <dt-bindings/reset/realtek,rtd1625.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 
@@ -137,6 +139,7 @@
 	soc@0 {
 		compatible = "simple-bus";
 		ranges = <0x0 0x0 0x0 0x40000>, /* boot code */
+			 <0x88100000 0x0 0x88100000 0x02000000>, /* NOR flash aperture */
 			 <0x98000000 0x0 0x98000000 0xef0000>, /* rbus */
 			 <0xa0000000 0x0 0xa0000000 0x10000000>, /* PCIE */
 			 <0xff000000 0x0 0xff000000 0x200000>; /* GIC */
@@ -146,6 +149,7 @@
 		rbus: bus@98000000 {
 			compatible = "simple-bus";
 			ranges = <0x0 0x98000000 0xef0000>,
+				 <0x88100000 0x88100000 0x02000000>, /* NOR flash aperture */
 				 <0xa0000000 0xa0000000 0x10000000>; /* PCIE */
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -238,6 +242,26 @@
 				#reset-cells = <1>;
 			};
 
+			nor_flash: spi@14b000 {
+				compatible = "realtek,rtd1625-nor";
+				reg = <0x14b000 0x50>, <0x14bf00 0x30>, <0x88100000 0x2000000>;
+				reg-names = "ctrl", "dma", "dirmap";
+				clocks = <&cc RTD1625_CRT_CLK_EN_MD>;
+				resets = <&cc RTD1625_CRT_RSTN_MD>;
+				pinctrl-0 = <&spi_pins>;
+				pinctrl-names = "default";
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				flash@0 {
+					compatible = "jedec,spi-nor";
+					reg = <0>;
+					spi-rx-bus-width = <2>;
+					spi-tx-bus-width = <2>;
+					spi-max-frequency = <64000000>;
+				};
+			};
+
 			ve4_pinctrl: pinctrl@14e000 {
 				compatible = "realtek,rtd1625-ve4-pinctrl";
 				reg = <0x14e000 0x84>;
@@ -256,3 +280,5 @@
 		};
 	};
 };
+
+#include "kent-pinctrl.dtsi"

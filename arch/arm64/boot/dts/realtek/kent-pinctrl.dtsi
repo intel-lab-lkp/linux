@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2026 Realtek Semiconductor Corp.
+ */
+
+&main2_pinctrl {
+	spi_pins: spi-pins {
+		pins = "gpio_64",
+		       "gpio_65",
+		       "gpio_66",
+		       "gpio_67";
+		function = "spi";
+		realtek,drive-strength-p = <3>;
+		realtek,drive-strength-n = <2>;
+	};
+};
