@@ -807,10 +807,9 @@ cleanup:
 /*
  * Get the current frozen_usec for the cgroup.
  */
-static long cg_check_freezetime(const char *cgroup)
+static s64 cg_check_freezetime(const char *cgroup)
 {
-	return cg_read_key_long(cgroup, "cgroup.stat.local",
-				"frozen_usec ");
+	return cg_read_key_s64(cgroup, "cgroup.stat.local", "frozen_usec ");
 }
 
 /*
@@ -820,7 +819,7 @@ static int test_cgfreezer_time_empty(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *cgroup = NULL;
-	long prev, curr;
+	s64 prev, curr;
 
 	cgroup = cg_name(root, "cg_time_test_empty");
 	if (!cgroup)
@@ -839,7 +838,7 @@ static int test_cgfreezer_time_empty(const char *root)
 		goto cleanup;
 	}
 	if (curr > 0) {
-		debug("Expect time (%ld) to be 0\n", curr);
+		debug("Expect time (%lld) to be 0\n", curr);
 		goto cleanup;
 	}
 
@@ -853,8 +852,7 @@ static int test_cgfreezer_time_empty(const char *root)
 	usleep(1000);
 	curr = cg_check_freezetime(cgroup);
 	if (curr < 1000) {
-		debug("Expect time (%ld) to be at least 1000 us\n",
-		      curr);
+		debug("Expect time (%lld) to be at least 1000 us\n", curr);
 		goto cleanup;
 	}
 
@@ -867,7 +865,7 @@ static int test_cgfreezer_time_empty(const char *root)
 	prev = curr;
 	curr = cg_check_freezetime(cgroup);
 	if (curr <= prev) {
-		debug("Expect time (%ld) to be more than previous check (%ld)\n",
+		debug("Expect time (%lld) to be more than previous check (%lld)\n",
 		      curr, prev);
 		goto cleanup;
 	}
@@ -879,7 +877,7 @@ static int test_cgfreezer_time_empty(const char *root)
 	prev = curr;
 	curr = cg_check_freezetime(cgroup);
 	if (curr != prev) {
-		debug("Expect time (%ld) to be unchanged from previous check (%ld)\n",
+		debug("Expect time (%lld) to be unchanged from previous check (%lld)\n",
 		      curr, prev);
 		goto cleanup;
 	}

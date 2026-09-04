@@ -172,7 +172,7 @@ long cg_read_long_fd(int fd)
 	return atol(buf);
 }
 
-long cg_read_key_long(const char *cgroup, const char *control, const char *key)
+s64 cg_read_key_s64(const char *cgroup, const char *control, const char *key)
 {
 	char buf[BUF_SIZE];
 	char *ptr;
@@ -184,18 +184,18 @@ long cg_read_key_long(const char *cgroup, const char *control, const char *key)
 	if (!ptr)
 		return -1;
 
-	return atol(ptr + strlen(key));
+	return atoll(ptr + strlen(key));
 }
 
-long cg_read_key_long_poll(const char *cgroup, const char *control,
-			   const char *key, long expected, int retries,
-			   useconds_t wait_interval_us)
+s64 cg_read_key_s64_poll(const char *cgroup, const char *control,
+			 const char *key, s64 expected, int retries,
+			 useconds_t wait_interval_us)
 {
-	long val = -1;
+	s64 val = -1;
 	int i;
 
 	for (i = 0; i < retries; i++) {
-		val = cg_read_key_long(cgroup, control, key);
+		val = cg_read_key_s64(cgroup, control, key);
 		if (val < 0)
 			return val;
 

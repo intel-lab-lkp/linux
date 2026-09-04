@@ -54,7 +54,8 @@ static int test_kmem_basic(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *cg = NULL;
-	long slab0, slab1, current;
+	s64 slab0, slab1;
+	long current;
 
 	cg = cg_name(root, "kmem_basic_test");
 	if (!cg)
@@ -66,7 +67,7 @@ static int test_kmem_basic(const char *root)
 	if (cg_run(cg, alloc_dcache, (void *)100000))
 		goto cleanup;
 
-	slab0 = cg_read_key_long(cg, "memory.stat", "slab ");
+	slab0 = cg_read_key_s64(cg, "memory.stat", "slab ");
 	if (slab0 < (1 << 20))
 		goto cleanup;
 
@@ -75,7 +76,7 @@ static int test_kmem_basic(const char *root)
 	/* wait for RCU freeing */
 	sleep(1);
 
-	slab1 = cg_read_key_long(cg, "memory.stat", "slab ");
+	slab1 = cg_read_key_s64(cg, "memory.stat", "slab ");
 	if (slab1 < 0)
 		goto cleanup;
 
@@ -167,7 +168,8 @@ static int cg_run_in_subcgroups(const char *parent,
  */
 static int test_kmem_memcg_deletion(const char *root)
 {
-	long current, anon, file, kernel, sock, sum;
+	long current;
+	s64 anon, file, kernel, sock, sum;
 	int ret = KSFT_FAIL;
 	char *parent;
 
@@ -185,23 +187,23 @@ static int test_kmem_memcg_deletion(const char *root)
 		goto cleanup;
 
 	current = cg_read_long(parent, "memory.current");
-	anon = cg_read_key_long(parent, "memory.stat", "anon ");
-	file = cg_read_key_long(parent, "memory.stat", "file ");
-	kernel = cg_read_key_long(parent, "memory.stat", "kernel ");
-	sock = cg_read_key_long(parent, "memory.stat", "sock ");
+	anon = cg_read_key_s64(parent, "memory.stat", "anon ");
+	file = cg_read_key_s64(parent, "memory.stat", "file ");
+	kernel = cg_read_key_s64(parent, "memory.stat", "kernel ");
+	sock = cg_read_key_s64(parent, "memory.stat", "sock ");
 	if (current < 0 || anon < 0 || file < 0 || kernel < 0 || sock < 0)
 		goto cleanup;
 
 	sum = anon + file + kernel + sock;
-	if (labs(sum - current) < MAX_VMSTAT_ERROR) {
+	if (llabs(sum - current) < MAX_VMSTAT_ERROR) {
 		ret = KSFT_PASS;
 	} else {
 		printf("memory.current = %ld\n", current);
-		printf("anon + file + kernel + sock = %ld\n", sum);
-		printf("anon = %ld\n", anon);
-		printf("file = %ld\n", file);
-		printf("kernel = %ld\n", kernel);
-		printf("sock = %ld\n", sock);
+		printf("anon + file + kernel + sock = %lld\n", sum);
+		printf("anon = %lld\n", anon);
+		printf("file = %lld\n", file);
+		printf("kernel = %lld\n", kernel);
+		printf("sock = %lld\n", sock);
 	}
 
 cleanup:
@@ -248,7 +250,7 @@ static int spawn_1000_threads(const char *cgroup, void *arg)
 	int nr_threads = 1000;
 	pthread_t *tinfo;
 	unsigned long i;
-	long stack;
+	s64 stack;
 	int ret = -1;
 
 	tinfo = calloc(nr_threads, sizeof(pthread_t));
@@ -263,7 +265,7 @@ static int spawn_1000_threads(const char *cgroup, void *arg)
 		}
 	}
 
-	stack = cg_read_key_long(cgroup, "memory.stat", "kernel_stack ");
+	stack = cg_read_key_s64(cgroup, "memory.stat", "kernel_stack ");
 	if (stack >= 4096 * 1000)
 		ret = 0;
 
@@ -307,7 +309,7 @@ static int test_kmem_dead_cgroups(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *parent;
-	long dead = -1;
+	s64 dead = -1;
 
 	parent = cg_name(root, "kmem_dead_cgroups_test");
 	if (!parent)
@@ -328,9 +330,10 @@ static int test_kmem_dead_cgroups(const char *root)
 	 * from a specific kernel constant, and can be adjusted if reclaim
 	 * behavior changes in the future.
 	 */
-	dead = cg_read_key_long_poll(parent, "cgroup.stat",
-					"nr_dying_descendants ", 0, KMEM_DEAD_WAIT_RETRIES,
-					DEFAULT_WAIT_INTERVAL_US);
+	dead = cg_read_key_s64_poll(parent, "cgroup.stat",
+				    "nr_dying_descendants ", 0,
+				    KMEM_DEAD_WAIT_RETRIES,
+				    DEFAULT_WAIT_INTERVAL_US);
 	if (dead)
 		goto cleanup;
 
@@ -353,7 +356,8 @@ static int test_percpu_basic(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *parent, *child;
-	long current, percpu, slab;
+	long current;
+	s64 percpu, slab;
 	int i;
 
 	parent = cg_name(root, "percpu_basic_test");
@@ -382,15 +386,15 @@ static int test_percpu_basic(const char *root)
 	}
 
 	current = cg_read_long(parent, "memory.current");
-	percpu = cg_read_key_long(parent, "memory.stat", "percpu ");
-	slab = cg_read_key_long(parent, "memory.stat", "slab ");
+	percpu = cg_read_key_s64(parent, "memory.stat", "percpu ");
+	slab = cg_read_key_s64(parent, "memory.stat", "slab ");
 
 	if (current > 0 && percpu > 0 && slab >= 0 &&
-			labs(current - (percpu + slab)) < MAX_VMSTAT_ERROR)
+	    llabs(current - (percpu + slab)) < MAX_VMSTAT_ERROR)
 		ret = KSFT_PASS;
 	else
-		printf("memory.current %ld\npercpu %ld\nslab %ld\ndelta %ld\n",
-			current, percpu, slab, current - (percpu + slab));
+		printf("memory.current %ld\npercpu %lld\nslab %lld\ndelta %lld\n",
+		       current, percpu, slab, current - (percpu + slab));
 
 cleanup_children:
 	for (i = 0; i < 1000; i++) {

@@ -111,11 +111,10 @@ static int test_pids_events(const char *root)
 	if (kill(pid, SIGINT))
 		goto cleanup;
 
-	if (cg_read_key_long(cg_child, "pids.events", "max ") != 0)
+	if (cg_read_key_s64(cg_child, "pids.events", "max ") != 0)
 		goto cleanup;
-	if (cg_read_key_long(cg_parent, "pids.events", "max ") != 1)
+	if (cg_read_key_s64(cg_parent, "pids.events", "max ") != 1)
 		goto cleanup;
-
 
 	ret = KSFT_PASS;
 

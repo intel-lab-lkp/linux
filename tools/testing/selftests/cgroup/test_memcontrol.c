@@ -192,7 +192,8 @@ static int alloc_anon_50M_check(const char *cgroup, void *arg)
 {
 	size_t size = MB(50);
 	char *buf;
-	long anon, current;
+	s64 anon;
+	long current;
 	int ret = -1;
 
 	buf = alloc_and_populate_anon(size);
@@ -206,7 +207,7 @@ static int alloc_anon_50M_check(const char *cgroup, void *arg)
 	if (!values_close(size, current, 3))
 		goto cleanup;
 
-	anon = cg_read_key_long(cgroup, "memory.stat", "anon ");
+	anon = cg_read_key_s64(cgroup, "memory.stat", "anon ");
 	if (anon < 0)
 		goto cleanup;
 
@@ -223,7 +224,8 @@ static int alloc_pagecache_50M_check(const char *cgroup, void *arg)
 {
 	size_t size = MB(50);
 	int ret = -1;
-	long current, file;
+	long current;
+	s64 file;
 	int fd;
 
 	fd = get_temp_fd();
@@ -237,7 +239,7 @@ static int alloc_pagecache_50M_check(const char *cgroup, void *arg)
 	if (current < size)
 		goto cleanup;
 
-	file = cg_read_key_long(cgroup, "memory.stat", "file ");
+	file = cg_read_key_s64(cgroup, "memory.stat", "file ");
 	if (file < 0)
 		goto cleanup;
 
@@ -623,10 +625,10 @@ static int test_memcg_protection(const char *root, bool min)
 	for (i = 0; i < ARRAY_SIZE(children); i++) {
 		int ignore_low_events_index = has_recursiveprot ? 2 : -1;
 		int no_low_events_index = 1;
-		long low, oom;
+		s64 low, oom;
 
-		oom = cg_read_key_long(children[i], "memory.events", "oom ");
-		low = cg_read_key_long(children[i], "memory.events", "low ");
+		oom = cg_read_key_s64(children[i], "memory.events", "oom ");
+		low = cg_read_key_s64(children[i], "memory.events", "low ");
 
 		if (oom)
 			goto cleanup;
@@ -711,7 +713,7 @@ static int test_memcg_high(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *memcg;
-	long high;
+	s64 high;
 
 	memcg = cg_name(root, "memcg_test");
 	if (!memcg)
@@ -738,7 +740,7 @@ static int test_memcg_high(const char *root)
 	if (cg_run(memcg, alloc_pagecache_max_30M, NULL))
 		goto cleanup;
 
-	high = cg_read_key_long(memcg, "memory.events", "high ");
+	high = cg_read_key_s64(memcg, "memory.events", "high ");
 	if (high <= 0)
 		goto cleanup;
 
@@ -774,8 +776,8 @@ static int test_memcg_high_sync(const char *root)
 {
 	int ret = KSFT_FAIL, pid, fd = -1;
 	char *memcg;
-	long pre_high, pre_max;
-	long post_high, post_max;
+	s64 pre_high, pre_max;
+	s64 post_high, post_max;
 
 	memcg = cg_name(root, "memcg_test");
 	if (!memcg)
@@ -784,8 +786,8 @@ static int test_memcg_high_sync(const char *root)
 	if (cg_create(memcg))
 		goto cleanup;
 
-	pre_high = cg_read_key_long(memcg, "memory.events", "high ");
-	pre_max = cg_read_key_long(memcg, "memory.events", "max ");
+	pre_high = cg_read_key_s64(memcg, "memory.events", "high ");
+	pre_max = cg_read_key_s64(memcg, "memory.events", "max ");
 	if (pre_high < 0 || pre_max < 0)
 		goto cleanup;
 
@@ -808,8 +810,8 @@ static int test_memcg_high_sync(const char *root)
 
 	cg_wait_for(fd);
 
-	post_high = cg_read_key_long(memcg, "memory.events", "high ");
-	post_max = cg_read_key_long(memcg, "memory.events", "max ");
+	post_high = cg_read_key_s64(memcg, "memory.events", "high ");
+	post_max = cg_read_key_s64(memcg, "memory.events", "max ");
 	if (post_high < 0 || post_max < 0)
 		goto cleanup;
 
@@ -836,7 +838,8 @@ static int test_memcg_max(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *memcg;
-	long current, max;
+	long current;
+	s64 max;
 
 	memcg = cg_name(root, "memcg_test");
 	if (!memcg)
@@ -865,7 +868,7 @@ static int test_memcg_max(const char *root)
 	if (current > MB(30) || !current)
 		goto cleanup;
 
-	max = cg_read_key_long(memcg, "memory.events", "max ");
+	max = cg_read_key_s64(memcg, "memory.events", "max ");
 	if (max <= 0)
 		goto cleanup;
 
@@ -1029,7 +1032,8 @@ static int test_memcg_swap_max_peak(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *memcg;
-	long max, peak;
+	s64 max;
+	long peak;
 	struct stat ss;
 	int swap_peak_fd = -1, mem_peak_fd = -1;
 
@@ -1122,10 +1126,10 @@ static int test_memcg_swap_max_peak(const char *root)
 	if (!cg_run(memcg, alloc_anon, (void *)MB(100)))
 		goto cleanup;
 
-	if (cg_read_key_long(memcg, "memory.events", "oom ") != 1)
+	if (cg_read_key_s64(memcg, "memory.events", "oom ") != 1)
 		goto cleanup;
 
-	if (cg_read_key_long(memcg, "memory.events", "oom_kill ") != 1)
+	if (cg_read_key_s64(memcg, "memory.events", "oom_kill ") != 1)
 		goto cleanup;
 
 	peak = cg_read_long(memcg, "memory.peak");
@@ -1186,7 +1190,7 @@ static int test_memcg_swap_max_peak(const char *root)
 	if (cg_run(memcg, alloc_anon_50M_check_swap, (void *)MB(30)))
 		goto cleanup;
 
-	max = cg_read_key_long(memcg, "memory.events", "max ");
+	max = cg_read_key_s64(memcg, "memory.events", "max ");
 	if (max <= 0)
 		goto cleanup;
 
@@ -1248,10 +1252,10 @@ static int test_memcg_oom_events(const char *root)
 	if (cg_read_strcmp(memcg, "cgroup.procs", ""))
 		goto cleanup;
 
-	if (cg_read_key_long(memcg, "memory.events", "oom ") != 1)
+	if (cg_read_key_s64(memcg, "memory.events", "oom ") != 1)
 		goto cleanup;
 
-	if (cg_read_key_long(memcg, "memory.events", "oom_kill ") != 1)
+	if (cg_read_key_s64(memcg, "memory.events", "oom_kill ") != 1)
 		goto cleanup;
 
 	ret = KSFT_PASS;
@@ -1354,13 +1358,14 @@ static int tcp_client(const char *cgroup, unsigned short port)
 	ret = KSFT_FAIL;
 	while (retries--) {
 		uint8_t buf[0x100000];
-		long current, sock;
+		long current;
+		s64 sock;
 
 		if (read(sk, buf, sizeof(buf)) <= 0)
 			goto close_sk;
 
 		current = cg_read_long(cgroup, "memory.current");
-		sock = cg_read_key_long(cgroup, "memory.stat", "sock ");
+		sock = cg_read_key_s64(cgroup, "memory.stat", "sock ");
 
 		if (current < 0 || sock < 0)
 			goto close_sk;
@@ -1392,7 +1397,7 @@ static int test_memcg_sock(const char *root)
 	int bind_retries = 5, ret = KSFT_FAIL, pid, err;
 	unsigned short port;
 	char *memcg;
-	long sock_post = -1;
+	s64 sock_post = -1;
 
 	memcg = cg_name(root, "memcg_test");
 	if (!memcg)
@@ -1459,7 +1464,7 @@ static int test_memcg_sock(const char *root)
 	 * scheduling slack) and require that the "sock " counter
 	 * eventually drops to zero.
 	 */
-	sock_post = cg_read_key_long_poll(memcg, "memory.stat", "sock ", 0,
+	sock_post = cg_read_key_s64_poll(memcg, "memory.stat", "sock ", 0,
 					 MEMCG_SOCKSTAT_WAIT_RETRIES,
 					 DEFAULT_WAIT_INTERVAL_US);
 	if (sock_post)
@@ -1484,7 +1489,7 @@ static int test_memcg_oom_group_leaf_events(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *parent, *child;
-	long parent_oom_events;
+	s64 parent_oom_events;
 
 	parent = cg_name(root, "memcg_test_0");
 	child = cg_name(root, "memcg_test_0/memcg_test_1");
@@ -1519,11 +1524,11 @@ static int test_memcg_oom_group_leaf_events(const char *root)
 	if (cg_test_proc_killed(child))
 		goto cleanup;
 
-	if (cg_read_key_long(child, "memory.events", "oom_kill ") <= 0)
+	if (cg_read_key_s64(child, "memory.events", "oom_kill ") <= 0)
 		goto cleanup;
 
-	parent_oom_events = cg_read_key_long(
-			parent, "memory.events", "oom_kill ");
+	parent_oom_events =
+		cg_read_key_s64(parent, "memory.events", "oom_kill ");
 	/*
 	 * If memory_localevents is not enabled (the default), the parent should
 	 * count OOM events in its children groups. Otherwise, it should not
@@ -1639,7 +1644,7 @@ static int test_memcg_oom_group_score_events(const char *root)
 	if (!cg_run(memcg, alloc_anon, (void *)MB(100)))
 		goto cleanup;
 
-	if (cg_read_key_long(memcg, "memory.events", "oom_kill ") != 3)
+	if (cg_read_key_s64(memcg, "memory.events", "oom_kill ") != 3)
 		goto cleanup;
 
 	if (kill(safe_pid, SIGKILL))
