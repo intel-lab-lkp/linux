@@ -7,6 +7,7 @@ struct device;
 struct fwnode_handle;
 struct gpio_regmap;
 struct gpio_chip;
+struct gpio_irq_chip;
 struct irq_domain;
 struct regmap;
 
@@ -34,6 +35,11 @@ struct regmap;
  * @ngpio_per_reg:	(Optional) Number of GPIOs per register
  * @irq_domain:		(Optional) IRQ domain if the controller is
  *			interrupt-capable
+ * @girq:		(Optional) Interrupt chip settings for the gpio_chip,
+ *			prepared by the driver as for a direct gpiochip
+ *			registration. The gpio_chip will then create and
+ *			manage its own IRQ domain. Mutually exclusive with
+ *			@irq_domain and @regmap_irq_chip.
  * @reg_mask_xlate:     (Optional) Translates base address and GPIO
  *			offset to a register/bitmask pair. If not
  *			given the default gpio_regmap_simple_xlate()
@@ -48,6 +54,11 @@ struct regmap;
  *			(Optional) Bitmap representing the fixed direction of
  *			the GPIO lines. Useful when there are GPIO lines with a
  *			fixed direction mixed together in the same register.
+ * @write_data_after_dir:
+ *			(Optional) Write the output value again after
+ *			switching a line to output in ->direction_output().
+ *			Needed for hardware which ignores data register
+ *			writes while the line is configured as an input.
  * @drvdata:		(Optional) Pointer to driver specific data which is
  *			not used by gpio-remap but is provided "as is" to the
  *			driver callback(s).
@@ -95,8 +106,10 @@ struct gpio_regmap_config {
 	int reg_stride;
 	int ngpio_per_reg;
 	struct irq_domain *irq_domain;
+	const struct gpio_irq_chip *girq;
 	unsigned long *fixed_direction_mask;
 	unsigned long *fixed_direction_output;
+	bool write_data_after_dir;
 
 #ifdef CONFIG_REGMAP_IRQ
 	struct regmap_irq_chip *regmap_irq_chip;

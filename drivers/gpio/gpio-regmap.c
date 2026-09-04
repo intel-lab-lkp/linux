@@ -33,6 +33,7 @@ struct gpio_regmap {
 	unsigned int reg_dir_out_base;
 	unsigned long *fixed_direction_mask;
 	unsigned long *fixed_direction_output;
+	bool write_data_after_dir;
 
 #ifdef CONFIG_REGMAP_IRQ
 	int regmap_irq_line;
@@ -273,7 +274,15 @@ static int gpio_regmap_direction_output(struct gpio_chip *chip,
 
 	gpio_regmap_set(chip, offset, value);
 
-	return gpio_regmap_set_direction(chip, offset, true);
+	ret = gpio_regmap_set_direction(chip, offset, true);
+	if (ret)
+		return ret;
+
+	/* Some controllers ignore data writes while the line is still an input. */
+	if (gpio->write_data_after_dir)
+		gpio_regmap_set(chip, offset, value);
+
+	return 0;
 }
 
 void *gpio_regmap_get_drvdata(struct gpio_regmap *gpio)
@@ -310,6 +319,14 @@ struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config
 	/* we don't support having both registers simultaneously for now */
 	if (config->reg_dir_out_base && config->reg_dir_in_base)
 		return ERR_PTR(-EINVAL);
+
+	if (config->girq && config->irq_domain)
+		return ERR_PTR(-EINVAL);
+
+#ifdef CONFIG_REGMAP_IRQ
+	if (config->girq && config->regmap_irq_chip)
+		return ERR_PTR(-EINVAL);
+#endif
 
 	gpio = kzalloc_obj(*gpio);
 	if (!gpio)
@@ -376,6 +393,8 @@ struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config
 			    config->fixed_direction_output, chip->ngpio);
 	}
 
+	gpio->write_data_after_dir = config->write_data_after_dir;
+
 	/* if not set, assume there is only one register */
 	gpio->ngpio_per_reg = config->ngpio_per_reg;
 	if (!gpio->ngpio_per_reg)
@@ -389,6 +408,9 @@ struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config
 	gpio->reg_mask_xlate = config->reg_mask_xlate;
 	if (!gpio->reg_mask_xlate)
 		gpio->reg_mask_xlate = gpio_regmap_simple_xlate;
+
+	if (config->girq)
+		chip->irq = *config->girq;
 
 	ret = gpiochip_add_data(chip, gpio);
 	if (ret < 0)
