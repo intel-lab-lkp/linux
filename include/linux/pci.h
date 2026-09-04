@@ -1956,6 +1956,8 @@ int pci_disable_link_state(struct pci_dev *pdev, int state);
 int pci_disable_link_state_locked(struct pci_dev *pdev, int state);
 int pci_enable_link_state(struct pci_dev *pdev, int state);
 int pci_enable_link_state_locked(struct pci_dev *pdev, int state);
+int pci_aspm_inhibit(struct pci_dev *pdev, bool inhibit);
+int pci_aspm_inhibit_locked(struct pci_dev *pdev, bool inhibit);
 void pcie_no_aspm(void);
 bool pcie_aspm_support_enabled(void);
 bool pcie_aspm_enabled(struct pci_dev *pdev);
@@ -1967,6 +1969,10 @@ static inline int pci_disable_link_state_locked(struct pci_dev *pdev, int state)
 static inline int pci_enable_link_state(struct pci_dev *pdev, int state)
 { return 0; }
 static inline int pci_enable_link_state_locked(struct pci_dev *pdev, int state)
+{ return 0; }
+static inline int pci_aspm_inhibit(struct pci_dev *pdev, bool inhibit)
+{ return 0; }
+static inline int pci_aspm_inhibit_locked(struct pci_dev *pdev, bool inhibit)
 { return 0; }
 static inline void pcie_no_aspm(void) { }
 static inline bool pcie_aspm_support_enabled(void) { return false; }
