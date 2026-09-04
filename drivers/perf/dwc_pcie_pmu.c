@@ -639,7 +639,7 @@ static void dwc_pcie_pmu_remove_cpuhp_instance(void *hotplug_node)
 }
 
 /*
- * Find the binded DES capability device info of a PCI device.
+ * Find the bound DES capability device info of a PCI device.
  * @pdev: The PCI device.
  */
 static struct dwc_pcie_dev_info *dwc_pcie_find_dev_info(struct pci_dev *pdev)
