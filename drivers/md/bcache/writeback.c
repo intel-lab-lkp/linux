@@ -162,7 +162,7 @@ static bool idle_counter_exceeded(struct cache_set *c)
 	int counter, dev_nr;
 
 	/*
-	 * If c->idle_counter is overflow (idel for really long time),
+	 * If c->idle_counter is overflow (idle for really long time),
 	 * reset as 0 and not set maximum rate this time for code
 	 * simplicity.
 	 */
