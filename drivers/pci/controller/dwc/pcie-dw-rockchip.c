@@ -434,7 +434,6 @@ static void rockchip_pcie_stop_link(struct dw_pcie *pci)
 static int rockchip_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
-	struct rockchip_pcie *rockchip = to_rockchip_pcie(pci);
 
 	pci->dbi_base2 = pci->dbi_base + PCIE_TYPE0_HDR_DBI2_OFFSET;
 
@@ -925,6 +924,16 @@ static int rockchip_pcie_rc_reset_root_port(struct pci_host_bridge *bridge,
 	u32 val;
 	int ret;
 
+	/*
+	 * Devices may keep their INTx line asserted across the reset. Mask
+	 * the INTx IRQ so that the chained handler does not touch the
+	 * unclocked APB bus, which would raise a synchronous external abort.
+	 * The IRQ is re-enabled once the clocks are restored, and is
+	 * deliberately left masked on the error paths where the controller
+	 * remains unclocked.
+	 */
+	disable_irq(rockchip->intx_irq);
+
 	dw_pcie_stop_link(pci);
 	clk_bulk_disable_unprepare(rockchip->clk_cnt, rockchip->clks);
 	rockchip_pcie_phy_deinit(rockchip);
@@ -975,6 +984,7 @@ static int rockchip_pcie_rc_reset_root_port(struct pci_host_bridge *bridge,
 
 	/* Ignore errors, the link may come up later */
 	dw_pcie_wait_for_link(pci);
+	enable_irq(rockchip->intx_irq);
 	dev_dbg(dev, "Root Port reset completed\n");
 	return ret;
 
