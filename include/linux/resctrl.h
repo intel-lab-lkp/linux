@@ -547,7 +547,7 @@ void resctrl_arch_pre_mount(void);
  *
  * Some architectures need to sleep when first programming some of the counters.
  * (specifically: arm64's MPAM cache occupancy counters can return 'not ready'
- *  for a short period of time). Call from a non-migrateable process context on
+ *  for a short period of time). Call from a non-migratable process context on
  * a CPU that belongs to domain @d. e.g. use smp_call_on_cpu() or
  * schedule_work_on(). This function can be called with interrupts masked,
  * e.g. using smp_call_function_any(), but may consistently return an error.
@@ -658,7 +658,7 @@ void resctrl_arch_config_cntr(struct rdt_resource *r, struct rdt_l3_mon_domain *
  * @val:	Result of the counter read in bytes.
  *
  * Called on a CPU that belongs to domain @d when "mbm_event" mode is enabled.
- * Called from a non-migrateable process context via smp_call_on_cpu() unless all
+ * Called from a non-migratable process context via smp_call_on_cpu() unless all
  * CPUs are nohz_full, in which case it is called via IPI (smp_call_function_any()).
  *
  * Return:
