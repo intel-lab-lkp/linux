@@ -91,7 +91,7 @@
 #endif
 
 /*
- * TLB miss handlers temorary stores
+ * TLB miss handlers temporary stores
  */
 #ifdef CONFIG_OPENRISC_HAVE_SHADOW_GPRS
 #define EXCEPTION_STORE_GPR2		l.mtspr r0,r2,SPR_SHADOW_GPR(2)
@@ -194,7 +194,7 @@
  *
  * PRMS: handler	- a function to jump to. it has to save the
  *			remaining registers to kernel stack, call
- *			appropriate arch-independant exception handler
+ *			appropriate arch-independent exception handler
  *			and finaly jump to ret_from_except
  *
  * PREQ: unchanged state from the time exception happened

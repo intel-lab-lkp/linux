@@ -231,7 +231,7 @@ handler:							;\
 /*
  * NOTE: one should never assume that SPR_EPC, SPR_ESR, SPR_EEAR
  *       contain the same values as when exception we're handling
- *	 occured. in fact they never do. if you need them use
+ *	 occurred. in fact they never do. if you need them use
  *	 values saved on stack (for SPR_EPC, SPR_ESR) or content
  *       of r4 (for SPR_EEAR). for details look at EXCEPTION_HANDLE()
  *       in 'arch/openrisc/kernel/head.S'
@@ -1056,8 +1056,8 @@ ENTRY(ret_from_fork)
  */
 
 
-/* _switch MUST never lay on page boundry, cause it runs from
- * effective addresses and beeing interrupted by iTLB miss would kill it.
+/* _switch MUST never lay on page boundary, cause it runs from
+ * effective addresses and being interrupted by iTLB miss would kill it.
  * dTLB miss seems to never accour in the bad place since data accesses
  * are from task structures which are always page aligned.
  *
