@@ -15,6 +15,7 @@
 #include "intel_dp.h"
 #include "intel_dp_aux.h"
 #include "intel_psr.h"
+#include "intel_quirks.h"
 #include "intel_psr_regs.h"
 #include "intel_vrr.h"
 
@@ -238,8 +239,29 @@ bool intel_alpm_compute_params(struct intel_dp *intel_dp,
 		io_wake_lines = fast_wake_lines = max_wake_lines;
 
 	/* According to Bspec lower limit should be set as 7 lines. */
-	crtc_state->alpm_state.io_wake_lines = max(io_wake_lines, 7);
-	crtc_state->alpm_state.fast_wake_lines = max(fast_wake_lines, 7);
+	io_wake_lines = max(io_wake_lines, 7);
+	fast_wake_lines = max(fast_wake_lines, 7);
+
+	/*
+	 * The LG panel (sink OUI 00:22:b9) in the Dell XPS 14/16
+	 * DA14260/DA16260 reports a Link CRC error on every link wake when
+	 * the extended fast wake and the IO buffer wake are programmed to
+	 * the same number of lines, which the formulas above produce for it.
+	 * Neither a larger guardband nor a longer fast wake sync pulse
+	 * changes that; the fast wake has to start strictly before the IO
+	 * buffer wake. Apply that as a quirk for this panel only.
+	 */
+	if (DISPLAY_VER(display) >= 20 &&
+	    intel_has_dpcd_quirk(intel_dp, QUIRK_ALPM_FAST_WAKE_AHEAD) &&
+	    fast_wake_lines <= io_wake_lines) {
+		if (io_wake_lines < max_wake_lines)
+			fast_wake_lines = io_wake_lines + 1;
+		else
+			io_wake_lines = fast_wake_lines - 1;
+	}
+
+	crtc_state->alpm_state.io_wake_lines = io_wake_lines;
+	crtc_state->alpm_state.fast_wake_lines = fast_wake_lines;
 
 	return true;
 }
@@ -256,8 +278,9 @@ int intel_alpm_lobf_min_guardband(struct intel_crtc_state *crtc_state)
 	 * is applicable. Currently this information is not readily
 	 * available in crtc_state, so max will suffice for now.
 	 */
-	waketime_in_lines = max(crtc_state->alpm_state.io_wake_lines,
-				crtc_state->alpm_state.aux_less_wake_lines);
+	waketime_in_lines = max3(crtc_state->alpm_state.io_wake_lines,
+				 crtc_state->alpm_state.fast_wake_lines,
+				 crtc_state->alpm_state.aux_less_wake_lines);
 
 	if (!crtc_state->has_lobf)
 		return 0;
@@ -314,7 +337,8 @@ void intel_alpm_lobf_compute_config_late(struct intel_dp *intel_dp,
 	 */
 	first_sdp_position = adjusted_mode->crtc_vtotal - adjusted_mode->crtc_vsync_start;
 	if (intel_alpm_aux_less_wake_supported(intel_dp))
-		waketime_in_lines = crtc_state->alpm_state.io_wake_lines;
+		waketime_in_lines = max(crtc_state->alpm_state.io_wake_lines,
+					crtc_state->alpm_state.fast_wake_lines);
 	else
 		waketime_in_lines = crtc_state->alpm_state.aux_less_wake_lines;
 
