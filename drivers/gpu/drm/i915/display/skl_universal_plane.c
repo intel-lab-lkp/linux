@@ -893,6 +893,10 @@ static void icl_plane_disable_sel_fetch_arm(struct intel_dsb *dsb,
 	if (!HAS_PSR2_SEL_FETCH(display))
 		return;
 
+	/* Display ver 12 only instantiates these registers for pipe A */
+	if (DISPLAY_VER(display) == 12 && pipe != PIPE_A)
+		return;
+
 	intel_de_write_dsb(display, dsb, SEL_FETCH_PLANE_CTL(pipe, plane->id), 0);
 }
 
