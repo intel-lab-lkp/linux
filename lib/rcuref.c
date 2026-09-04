@@ -4,7 +4,7 @@
  * rcuref - A scalable reference count implementation for RCU managed objects
  *
  * rcuref is provided to replace open coded reference count implementations
- * based on atomic_t. It protects explicitely RCU managed objects which can
+ * based on atomic_t. It protects explicitly RCU managed objects which can
  * be visible even after the last reference has been dropped and the object
  * is heading towards destruction.
  *
@@ -147,7 +147,7 @@
  * All reference count increment/decrement operations are unconditional and
  * only verified after the fact. This optimizes for the good case and takes
  * the occasional race vs. a dead or already saturated refcount into
- * account. The saturation and dead zones are large enough to accomodate
+ * account. The saturation and dead zones are large enough to accommodate
  * for that.
  *
  * Memory ordering

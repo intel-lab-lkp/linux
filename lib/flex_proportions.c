@@ -54,7 +54,7 @@ void fprop_global_destroy(struct fprop_global *p)
 }
 
 /*
- * Declare @periods new periods. It is upto the caller to make sure period
+ * Declare @periods new periods. It is up to the caller to make sure period
  * transitions cannot happen in parallel.
  *
  * The function returns true if the proportions are still defined and false

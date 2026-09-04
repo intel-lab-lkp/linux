@@ -60,7 +60,7 @@
  *   to perform case insensitive matching. But it might slow down
  *   performance of algorithm, so you should use it at own your risk.
  *   The returned configuration may then be used for an arbitrary
- *   amount of times and even in parallel as long as a separate struct
+ *   number of times and even in parallel as long as a separate struct
  *   ts_state variable is provided to every instance.
  *
  *   The actual search is performed by either calling
