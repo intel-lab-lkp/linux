@@ -154,7 +154,7 @@ static int sd_zbc_do_report_zones(struct scsi_disk *sdkp, unsigned char *buf,
  *
  * Try to allocate a reply buffer for the number of requested zones.
  * The size of the buffer allocated may be smaller than requested to
- * satify the device constraint (max_hw_sectors, max_segments, etc).
+ * satisfy the device constraint (max_hw_sectors, max_segments, etc).
  *
  * Return the address of the allocated buffer and update @buflen with
  * the size of the allocated buffer.

@@ -198,7 +198,7 @@ static void fc_exch_els_rrq(struct fc_frame *);
  *
  * To protect against concurrency between a worker thread code and timers,
  * sequence allocation and deallocation must be locked.
- *  - exchange refcnt can be done atomicly without locks.
+ *  - exchange refcnt can be done atomically without locks.
  *  - sequence allocation must be locked by exch lock.
  *  - If the EM pool lock and ex_lock must be taken at the same time, then the
  *    EM pool lock must be taken before the ex_lock.

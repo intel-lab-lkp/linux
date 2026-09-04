@@ -742,7 +742,7 @@ struct bfi_ioim_req_s {
  *					  loss and other reasons
  *					- io-tag cannot be used yet.
  *
- *	BFI_IOIM_STS_DIF_ERR	: Firwmare detected DIF error. ex: DIF
+ *	BFI_IOIM_STS_DIF_ERR	: Firmware detected DIF error. ex: DIF
  *					CRC err or Ref Tag err or App tag err.
  *					- io-tag can be reused.
  *
@@ -772,7 +772,7 @@ enum bfi_ioim_status {
 struct bfi_ioim_rsp_s {
 	struct bfi_mhdr_s	mh;	/*  common msg header		*/
 	__be16	io_tag;		/*  completed IO tag		 */
-	u16	bfa_rport_hndl;	/*  releated rport handle	 */
+	u16	bfa_rport_hndl;	/*  related rport handle	 */
 	u8	io_status;	/*  IO completion status	 */
 	u8	reuse_io_tag;	/*  IO tag can be reused	*/
 	u16	abort_tag;	/*  host abort request tag	*/

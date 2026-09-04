@@ -88,7 +88,7 @@ extern int sg_tablesize;
 extern int interrupt_mode;
 extern int num_io_requests;
 
-/* Macro defintions */
+/* Macro definitions */
 #define ESAS2R_MAX_ID        255
 #define MAX_ADAPTERS         32
 #define ESAS2R_DRVR_NAME     "esas2r"

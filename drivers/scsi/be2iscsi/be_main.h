@@ -81,7 +81,7 @@
 
 /**
  * hardware needs the async PDU buffers to be posted in multiples of 8
- * So have atleast 8 of them by default
+ * So have at least 8 of them by default
  */
 
 #define HWI_GET_ASYNC_PDU_CTX(phwi, ulp_num)	\
@@ -236,7 +236,7 @@ struct hwi_wrb_context {
 	unsigned short free_index;
 	unsigned short wrb_handles_available;
 	unsigned short cid;
-	uint8_t ulp_num;	/* ULP to which CID binded */
+	uint8_t ulp_num;	/* ULP to which CID bound */
 	uint32_t doorbell_offset;
 };
 
@@ -956,7 +956,7 @@ struct be_ring {
 	u32 cidx;		/* consumer index */
 	u32 pidx;		/* producer index -- not used by most rings */
 	u32 item_size;		/* size in bytes of one object */
-	u8 ulp_num;	/* ULP to which CID binded */
+	u8 ulp_num;	/* ULP to which CID bound */
 	u16 register_set;
 	u16 doorbell_format;
 	u32 doorbell_offset;

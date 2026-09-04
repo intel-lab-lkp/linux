@@ -194,7 +194,7 @@ struct scsi_info {
 	struct list_head list;
 	char eye[MAX_EYE];
 
-	/* commands waiting for space on repsonse queue */
+	/* commands waiting for space on response queue */
 	struct list_head waiting_rsp;
 #define NO_QUEUE                    0x00
 #define WAIT_ENABLED                0X01

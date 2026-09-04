@@ -5020,7 +5020,7 @@ static int sgl_map_user_pages(struct st_buffer *STbp,
 		goto out_unmap;
 
         for (i=0; i < nr_pages; i++) {
-                /* FIXME: flush superflous for rw==READ,
+                /* FIXME: flush superfluous for rw==READ,
                  * probably wrong function for rw==WRITE
                  */
 		flush_dcache_page(pages[i]);

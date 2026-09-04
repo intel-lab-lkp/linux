@@ -844,7 +844,7 @@ void	bfa_dconf_modexit(struct bfa_s *bfa);
 bfa_status_t	bfa_dconf_update(struct bfa_s *bfa);
 
 /*
- *	IOC specfic macros
+ *	IOC specific macros
  */
 #define bfa_ioc_pcifn(__ioc)		((__ioc)->pcidev.pci_func)
 #define bfa_ioc_devid(__ioc)		((__ioc)->pcidev.device_id)

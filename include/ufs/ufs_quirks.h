@@ -65,7 +65,7 @@ struct ufs_dev_quirk {
 
 /*
  * It seems some UFS devices may keep drawing more than sleep current
- * (atleast for 500us) from UFS rails (especially from VCCQ rail).
+ * (at least for 500us) from UFS rails (especially from VCCQ rail).
  * To avoid this situation, add 2ms delay before putting these UFS
  * rails in LPM mode.
  */

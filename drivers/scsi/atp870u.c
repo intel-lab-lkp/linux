@@ -1127,7 +1127,7 @@ static void tscam(struct Scsi_Host *host, bool wide_chip, u8 scam_on)
 			}
 	while (1) {
 	/*
-	 * The funny division into multiple delays is to accomodate
+	 * The funny division into multiple delays is to accommodate
 	 * arches like ARM where udelay() multiplies its argument by
 	 * a large number to initialize a loop counter.  To avoid
 	 * overflow, the maximum supported udelay is 2000 microseconds.

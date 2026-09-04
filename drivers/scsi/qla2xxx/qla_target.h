@@ -559,7 +559,7 @@ struct ctio_crc_from_fw {
  * ISP queue - ABTS received/response entries structure definition for 24xx.
  */
 #define ABTS_RECV_24XX		0x54 /* ABTS received (for 24xx) */
-#define ABTS_RESP_24XX		0x55 /* ABTS responce (for 24xx) */
+#define ABTS_RESP_24XX		0x55 /* ABTS response (for 24xx) */
 
 /*
  * ISP queue -	ABTS received IOCB entry structure definition for 24xx.
@@ -814,7 +814,7 @@ struct qla_tgt {
 	int tgt_stop; /* the target mode driver is being stopped */
 	int tgt_stopped; /* the target mode driver has been stopped */
 
-	/* Count of sessions refering qla_tgt. Protected by hardware_lock. */
+	/* Count of sessions referring qla_tgt. Protected by hardware_lock. */
 	int sess_count;
 
 	spinlock_t sess_work_lock;

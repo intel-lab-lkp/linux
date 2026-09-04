@@ -741,7 +741,7 @@ bfa_itnim_sm_cleanup_delete(struct bfa_itnim_s *itnim,
 }
 
 /*
- * Rport offline. Fimrware itnim is being deleted - awaiting f/w response.
+ * Rport offline. Firmware itnim is being deleted - awaiting f/w response.
  */
 static void
 bfa_itnim_sm_fwdelete(struct bfa_itnim_s *itnim, enum bfa_itnim_event event)
@@ -2884,7 +2884,7 @@ bfa_ioim_alloc(struct bfa_s *bfa, struct bfad_ioim_s *dio,
 	struct bfa_iotag_s *iotag = NULL;
 
 	/*
-	 * alocate IOIM resource
+	 * allocate IOIM resource
 	 */
 	bfa_q_deq(&fcpim->fcp->iotag_ioim_free_q, &iotag);
 	if (!iotag) {
@@ -3398,7 +3398,7 @@ bfa_tskim_qresume(void *cbarg)
 }
 
 /*
- * Cleanup IOs associated with a task mangement command on IOC failures.
+ * Cleanup IOs associated with a task management command on IOC failures.
  */
 static void
 bfa_tskim_iocdisable_ios(struct bfa_tskim_s *tskim)

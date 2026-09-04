@@ -211,7 +211,7 @@ struct pmcraid_ioadl_desc {
 
 /* additional IOARCB data which can be CDB or additional request parameters
  * or list of IOADLs. Firmware supports max of 512 bytes for IOARCB, hence then
- * number of IOADLs are limted to 27. In case they are more than 27, they will
+ * number of IOADLs are limited to 27. In case they are more than 27, they will
  * be used in chained form
  */
 struct pmcraid_ioarcb_add_data {

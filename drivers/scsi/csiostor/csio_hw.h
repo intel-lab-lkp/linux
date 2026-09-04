@@ -374,7 +374,7 @@ enum csio_hw_ev {
 struct csio_hw_stats {
 	uint32_t	n_evt_activeq;	/* Number of event in active Q */
 	uint32_t	n_evt_freeq;	/* Number of event in free Q */
-	uint32_t	n_evt_drop;	/* Number of event droped */
+	uint32_t	n_evt_drop;	/* Number of event dropped */
 	uint32_t	n_evt_unexp;	/* Number of unexpected events */
 	uint32_t	n_pcich_offline;/* Number of pci channel offline */
 	uint32_t	n_lnlkup_miss;  /* Number of lnode lookup miss */

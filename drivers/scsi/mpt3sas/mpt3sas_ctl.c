@@ -3324,7 +3324,7 @@ static DEVICE_ATTR_RO(board_tracer);
  * @attr: ?
  * @buf: the buffer returned
  *
- * This is for firmware implemention for deboucing device
+ * This is for firmware implementation for deboucing device
  * removal events.
  *
  * A sysfs 'read-only' shost attribute.
@@ -3346,7 +3346,7 @@ static DEVICE_ATTR_RO(io_delay);
  * @attr: ?
  * @buf: the buffer returned
  *
- * This is for firmware implemention for deboucing device
+ * This is for firmware implementation for deboucing device
  * removal events.
  *
  * A sysfs 'read-only' shost attribute.
@@ -3830,7 +3830,7 @@ host_trace_buffer_enable_store(struct device *cdev,
 }
 static DEVICE_ATTR_RW(host_trace_buffer_enable);
 
-/*********** diagnostic trigger suppport *********************************/
+/*********** diagnostic trigger support *********************************/
 
 /**
  * diag_trigger_master_show - show the diag_trigger_master attribute
@@ -4129,7 +4129,7 @@ diag_trigger_mpi_store(struct device *cdev,
 
 static DEVICE_ATTR_RW(diag_trigger_mpi);
 
-/*********** diagnostic trigger suppport *** END ****************************/
+/*********** diagnostic trigger support *** END ****************************/
 
 /*****************************************/
 

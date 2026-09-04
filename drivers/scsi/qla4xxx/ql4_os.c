@@ -7216,7 +7216,7 @@ static int qla4xxx_sysfs_ddb_is_non_persistent(struct device *dev,
  * @user: if set then this call is made from userland else from kernel
  *
  * Returns:
- * On sucess: QLA_SUCCESS
+ * On success: QLA_SUCCESS
  * On failure: QLA_ERROR
  *
  * This create separate sysfs entries for session and connection attributes of

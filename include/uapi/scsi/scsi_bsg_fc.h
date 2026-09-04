@@ -293,7 +293,7 @@ struct fc_bsg_reply {
 	 */
 	__u32 result;
 
-	/* If there was reply_payload, how much was recevied ? */
+	/* If there was reply_payload, how much was received ? */
 	__u32 reply_payload_rcv_len;
 
 	union {

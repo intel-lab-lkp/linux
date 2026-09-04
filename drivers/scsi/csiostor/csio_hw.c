@@ -480,7 +480,7 @@ csio_hw_flash_wait_op(struct csio_hw *hw, int32_t attempts, int32_t delay)
  *	Read the specified number of 32-bit words from the serial flash.
  *	If @byte_oriented is set the read data is stored as a byte array
  *	(i.e., big-endian), otherwise as 32-bit words in the platform's
- *	natural endianess.
+ *	natural endianness.
  */
 static int
 csio_hw_read_flash(struct csio_hw *hw, uint32_t addr, uint32_t nwords,

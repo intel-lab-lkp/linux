@@ -8247,7 +8247,7 @@ static int ipr_reset_cancel_hcam_done(struct ipr_cmnd *ipr_cmd)
  * ipr_reset_cancel_hcam - Cancel outstanding HCAMs
  * @ipr_cmd:	ipr command struct
  *
- * Description: Cancel any oustanding HCAMs to the IOA.
+ * Description: Cancel any outstanding HCAMs to the IOA.
  *
  * Return value:
  * 	IPR_RC_JOB_CONTINUE / IPR_RC_JOB_RETURN

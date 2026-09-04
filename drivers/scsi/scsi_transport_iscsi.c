@@ -1838,7 +1838,7 @@ static void iscsi_scan_session(struct work_struct *work)
 }
 
 /**
- * iscsi_block_scsi_eh - block scsi eh until session state has transistioned
+ * iscsi_block_scsi_eh - block scsi eh until session state has transitioned
  * @cmd: scsi cmd passed to scsi eh handler
  *
  * If the session is down this function will wait for the recovery

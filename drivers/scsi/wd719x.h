@@ -130,7 +130,7 @@ struct wd719x {
 #define WD719X_SUE_REJECTED	0x01 /* Command Rejected (bad opcode/param) */
 #define WD719X_SUE_SCBQFULL	0x02 /* SCB queue full */
 /* 0x03 is reserved */
-#define WD719X_SUE_TERM		0x04 /* Host terminated SCB via primative cmd */
+#define WD719X_SUE_TERM		0x04 /* Host terminated SCB via primitive cmd */
 #define WD719X_SUE_CHAN1PAR	0x05 /* PCI Channel 1 parity error occurred */
 #define WD719X_SUE_CHAN1ABORT	0x06 /* PCI Channel 1 system abort occurred */
 #define WD719X_SUE_CHAN23PAR	0x07 /* PCI Channel 2/3 parity error occurred */

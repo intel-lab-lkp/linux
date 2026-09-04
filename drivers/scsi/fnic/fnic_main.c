@@ -502,7 +502,7 @@ static int fnic_dev_wait(struct vnic_dev *vdev,
 	* Sometime schedule_timeout_uninterruptible take long time
 	* to wake up so we do not retry as we are only waiting for
 	* 2 seconds in while loop. By adding count, we make sure
-	* we try atleast three times before returning -ETIMEDOUT
+	* we try at least three times before returning -ETIMEDOUT
 	*/
 	time = jiffies + (HZ * 2);
 	do {

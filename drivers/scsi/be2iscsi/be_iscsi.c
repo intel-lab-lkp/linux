@@ -304,7 +304,7 @@ void beiscsi_iface_destroy_default(struct beiscsi_hba *phba)
 /**
  * beiscsi_iface_config_vlan()- Set the VLAN TAG
  * @shost: Scsi Host for the driver instance
- * @iface_param: Interface paramters
+ * @iface_param: Interface parameters
  *
  * Set the VLAN TAG for the adapter or disable
  * the VLAN config

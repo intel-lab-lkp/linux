@@ -2220,7 +2220,7 @@ static	struct script script0 __initdata = {
 
 }/*-------------------------< NO_DATA >--------------------*/,{
 	/*
-	**	The target wants to tranfer too much data
+	**	The target wants to transfer too much data
 	**	or in the wrong direction.
 	**      Remember that in extended error.
 	*/
@@ -7055,7 +7055,7 @@ static struct ccb *ncr_get_ccb(struct ncb *np, struct scsi_cmnd *cmd)
 	}
 
 	/*
-	**	Remember all informations needed to free this CCB.
+	**	Remember all information needed to free this CCB.
 	*/
 	cp->tag	   = tag;
 	cp->target = tn;

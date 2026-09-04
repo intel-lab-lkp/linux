@@ -6202,7 +6202,7 @@ qla25xx_rdp_rsp_reduce_size(struct scsi_qla_host *vha, void *pkt)
 
 	vha->hw->isp_ops->fw_version_str(vha, fwstr, sizeof(fwstr));
 	fwstr[strcspn(fwstr, " ")] = 0;
-	/* if FW version allows RDP response length upto 2048 bytes: */
+	/* if FW version allows RDP response length up to 2048 bytes: */
 	if (strcmp(fwstr, "8.09.00") > 0 || strcmp(fwstr, "8.05.65") == 0)
 		return false;
 
@@ -6442,7 +6442,7 @@ void qla24xx_process_purex_rdp(struct scsi_qla_host *vha,
 	    vha->fabric_port_name,
 	    sizeof(rsp_payload->port_name_direct_desc.WWPN));
 
-	/* Bufer Credit Descriptor */
+	/* Buffer Credit Descriptor */
 	rsp_payload->buffer_credit_desc.desc_tag = cpu_to_be32(0x10006);
 	rsp_payload->buffer_credit_desc.desc_len =
 		cpu_to_be32(RDP_DESC_LEN(rsp_payload->buffer_credit_desc));
@@ -8494,7 +8494,7 @@ qla2x00_module_init(void)
 		goto destroy_cache;
 	} else if (ret > 0) {
 		/*
-		 * If initiator mode is explictly disabled by qlt_init(),
+		 * If initiator mode is explicitly disabled by qlt_init(),
 		 * prevent scsi_transport_fc.c:fc_scsi_scan_rport() from
 		 * performing scsi_scan_target() during LOOP UP event.
 		 */

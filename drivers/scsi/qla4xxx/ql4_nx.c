@@ -3954,7 +3954,7 @@ qla4_8xxx_get_flash_info(struct scsi_qla_host *ha)
  * Remarks:
  * For iSCSI, throws away all I/O and AENs into bit bucket, so they will
  * not be available after successful return.  Driver must cleanup potential
- * outstanding I/O's after calling this funcion.
+ * outstanding I/O's after calling this function.
  **/
 int
 qla4_8xxx_stop_firmware(struct scsi_qla_host *ha)

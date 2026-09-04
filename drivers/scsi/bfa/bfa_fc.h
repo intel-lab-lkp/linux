@@ -218,8 +218,8 @@ enum {
 	FC_ELS_FAN = 0x60,	/* Fabric Address Notification */
 	FC_ELS_RSCN = 0x61,	/* Reg State Change Notification */
 	FC_ELS_SCR = 0x62,	/* State Change Registration. */
-	FC_ELS_RTIN = 0x77,	/* Mangement server request */
-	FC_ELS_RNID = 0x78,	/* Mangement server request */
+	FC_ELS_RTIN = 0x77,	/* Management server request */
+	FC_ELS_RNID = 0x78,	/* Management server request */
 	FC_ELS_RLIR = 0x79,	/* Registered Link Incident Record */
 
 	FC_ELS_RPSC = 0x7D,	/* Report Port Speed Capabilities */
@@ -462,7 +462,7 @@ struct fc_rsi_s {
 };
 
 /*
- * structure for PRLI paramater pages, both request & response
+ * structure for PRLI parameter pages, both request & response
  * see FC-PH-X table 113 & 115 for explanation also FCP table 8
  */
 struct fc_prli_params_s {

@@ -938,12 +938,12 @@ csio_scsis_aborting(struct csio_ioreq *req, enum csio_scsi_ev evt)
 		 *    out etc). FW sent back an appropriate IT nexus loss status
 		 *    for the abort.
 		 * 4. FW sent an abort, but abort timed out (remote device
-		 *    didnt respond). FW replied back with
+		 *    didn't respond). FW replied back with
 		 *    FW_SCSI_ABORT_TIMEDOUT.
 		 * 5. FW couldn't genuinely abort the request for some reason,
 		 *    and sent us an error.
 		 *
-		 * The first 3 scenarios are treated as  succesful abort
+		 * The first 3 scenarios are treated as  successful abort
 		 * operations by the host, while the last 2 are failed attempts
 		 * to abort. Manipulate the return value of the request
 		 * appropriately, so that host can convey these results
@@ -1063,7 +1063,7 @@ csio_scsis_shost_cmpl_await(struct csio_ioreq *req, enum csio_scsi_ev evt)
 		 * FW event. In this interval, if the I/O times out at the upper
 		 * layer, a close can come in. Take the same action as abort:
 		 * return success, and hope that the remote device unregister
-		 * path will cleanup this I/O. If the FW still doesnt send
+		 * path will cleanup this I/O. If the FW still doesn't send
 		 * the msg, the close times out, and the upper layer resorts
 		 * to the next level of error recovery.
 		 */
@@ -1095,7 +1095,7 @@ csio_scsis_shost_cmpl_await(struct csio_ioreq *req, enum csio_scsi_ev evt)
  * the WR, based on WR opcode. Only on a non-good status is the entire
  * WR copied into the WR cache (ioreq->fw_wr).
  * The ioreq corresponding to the WR is returned to the caller.
- * NOTE: The SCSI queue doesnt allocate a freelist today, hence
+ * NOTE: The SCSI queue doesn't allocate a freelist today, hence
  * no freelist buffer is expected.
  */
 struct csio_ioreq *
@@ -1674,7 +1674,7 @@ csio_scsi_err_handler(struct csio_hw *hw, struct csio_ioreq *req)
 	case FW_RDEV_NOT_READY:
 		/*
 		 * In firmware, a RDEV can get into this state
-		 * temporarily, before moving into dissapeared/lost
+		 * temporarily, before moving into disappeared/lost
 		 * state. So, the driver should complete the request equivalent
 		 * to device-disappeared!
 		 */
@@ -1968,7 +1968,7 @@ csio_eh_abort_handler(struct scsi_cmnd *cmnd)
 
 	wait_for_completion_timeout(&ioreq->cmplobj, msecs_to_jiffies(tmo));
 
-	/* FW didnt respond to abort within our timeout */
+	/* FW didn't respond to abort within our timeout */
 	if (((struct scsi_cmnd *)csio_scsi_cmnd(ioreq)) == cmnd) {
 
 		csio_err(hw, "Abort timed out -- req: %p\n", ioreq);
@@ -2010,7 +2010,7 @@ inval_scmnd:
  * @req: IO request.
  *
  * Cache the result in 'cmnd', since ioreq will be freed soon
- * after we return from here, and the waiting thread shouldnt trust
+ * after we return from here, and the waiting thread shouldn't trust
  * the ioreq contents.
  */
 static void

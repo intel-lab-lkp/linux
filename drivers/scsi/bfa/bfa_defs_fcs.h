@@ -72,7 +72,7 @@ struct bfa_lport_symname_s {
 * Roles of FCS port:
  *     - FCP IM and FCP TM roles cannot be enabled together for a FCS port
  *     - Create multiple ports if both IM and TM functions required.
- *     - Atleast one role must be specified.
+ *     - At least one role must be specified.
  */
 enum bfa_lport_role {
 	BFA_LPORT_ROLE_FCP_IM	= 0x01,	/*  FCP initiator role */

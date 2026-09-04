@@ -154,7 +154,7 @@ scsi_4btoul(uint8_t *bytes)
 
 #define IDIROC(x)  ((x) | ~ID_ALL_IROC_MASK)
 
-/* Generate IDs for all 16 possibilites.
+/* Generate IDs for all 16 possibilities.
  * The argument has already masked out
  * the 4 least significant bits of the device id.
  * (e.g., mask: ID_9005_GENERIC_MASK).

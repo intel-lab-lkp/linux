@@ -42,7 +42,7 @@
  * - fix for data out w/o scatter gather
  *
  * Revision 2.0  1999/12/25 15:07:32  fischer
- * - interrupt routine completly reworked
+ * - interrupt routine completely reworked
  * - basic support for new eh code
  *
  * Revision 1.21  1999/11/10 23:46:36  fischer
@@ -1381,7 +1381,7 @@ static irqreturn_t intr(int irqno, void *dev_id)
 
 /*
  * busfree phase
- * - handle completition/disconnection/error of current command
+ * - handle completion/disconnection/error of current command
  * - start selection for next command (if any)
  */
 static void busfree_run(struct Scsi_Host *shpnt)
@@ -1665,7 +1665,7 @@ static void seldi_run(struct Scsi_Host *shpnt)
  *   reconnecting nexus
  * - queue command on DISCONNECTED_SC on DISCONNECT message
  * - set completed flag on COMMAND COMPLETE
- *   (other completition code moved to busfree_run)
+ *   (other completion code moved to busfree_run)
  * - handle response to SDTR
  * - clear synchronous transfer agreements on BUS RESET
  *

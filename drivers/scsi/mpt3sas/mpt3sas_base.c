@@ -1951,7 +1951,7 @@ _base_irqpoll(struct irq_poll *irqpoll, int budget)
 }
 
 /**
- * _base_init_irqpolls - initliaze IRQ polls
+ * _base_init_irqpolls - initialize IRQ polls
  * @ioc: per adapter object
  *
  * Return: nothing

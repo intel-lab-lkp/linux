@@ -619,7 +619,7 @@ static u32 bnx2fc_alloc_conn_id(struct bnx2fc_hba *hba,
 
 	/*
 	 * tgt_ofld_list access is synchronized using
-	 * both hba mutex and hba lock. Atleast hba mutex or
+	 * both hba mutex and hba lock. At least hba mutex or
 	 * hba lock needs to be held for read access.
 	 */
 

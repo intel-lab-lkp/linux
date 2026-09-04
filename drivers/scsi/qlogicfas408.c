@@ -94,7 +94,7 @@ static void ql_zap(struct qlogicfas408_priv *priv)
 }
 
 /*
- *	Do a pseudo-dma tranfer
+ *	Do a pseudo-dma transfer
  */
 
 static int ql_pdma(struct qlogicfas408_priv *priv, int phase, char *request,

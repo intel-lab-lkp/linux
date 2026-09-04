@@ -2231,7 +2231,7 @@ bfa_fcs_rport_process_rpsc(struct bfa_fcs_rport_s *rport,
 		RPSC_SPEED_CAP_8G;
 
 	/*
-	 * get curent speed from pport attributes from BFA
+	 * get current speed from pport attributes from BFA
 	 */
 	bfa_fcport_get_attr(port->fcs->bfa, &pport_attr);
 
@@ -2847,7 +2847,7 @@ bfa_cb_rport_qos_scn_prio(void *cbarg,
 }
 
 /*
- *		Called to process any unsolicted frames from this remote port
+ *		Called to process any unsolicited frames from this remote port
  */
 void
 bfa_fcs_rport_uf_recv(struct bfa_fcs_rport_s *rport,

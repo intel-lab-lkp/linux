@@ -401,7 +401,7 @@ megaraid_exit(void)
  * @id		: pci device id of the class of controllers
  *
  * This routine should be called whenever a new adapter is detected by the
- * PCI hotplug susbsystem.
+ * PCI hotplug subsystem.
  */
 static int
 megaraid_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
@@ -1164,7 +1164,7 @@ megaraid_mbox_setup_dma_pools(adapter_t *adapter)
 	}
 
 	/*
-	 * Allocate memory for each embedded passthru strucuture pointer
+	 * Allocate memory for each embedded passthru structure pointer
 	 * Request for a 128 bytes aligned structure for each passthru command
 	 * structure
 	 * Since passthru and extended passthru commands are exclusive, they
@@ -3299,7 +3299,7 @@ blocked_mailbox:
  * @adapter		: controller's soft state
  * @scb			: SCB to be displayed
  *
- * Diplay information about the given SCB iff the current debug level is
+ * Display information about the given SCB iff the current debug level is
  * verbose.
  */
 static void
@@ -3723,7 +3723,7 @@ megaraid_mbox_mm_done(adapter_t *adapter, scb_t *scb)
 /**
  * gather_hbainfo - HBA characteristics for the applications
  * @adapter		: HBA soft state
- * @hinfo		: pointer to the caller's host info strucuture
+ * @hinfo		: pointer to the caller's host info structure
  */
 static int
 gather_hbainfo(adapter_t *adapter, mraid_hba_info_t *hinfo)

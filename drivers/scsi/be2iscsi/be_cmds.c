@@ -1213,7 +1213,7 @@ error:
 }
 
 /**
- * be_cmd_set_vlan()- Configure VLAN paramters on the adapter
+ * be_cmd_set_vlan()- Configure VLAN parameters on the adapter
  * @phba: device priv structure instance
  * @vlan_tag: TAG to be set
  *

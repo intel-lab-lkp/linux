@@ -385,21 +385,21 @@ extern int fas216_eh_abort(struct scsi_cmnd *SCpnt);
 
 /* Function: int fas216_eh_device_reset(struct scsi_cmnd *SCpnt)
  * Purpose : Reset the device associated with this command
- * Params  : SCpnt - command specifing device to reset
+ * Params  : SCpnt - command specifying device to reset
  * Returns : FAILED if unable to reset
  */
 extern int fas216_eh_device_reset(struct scsi_cmnd *SCpnt);
 
 /* Function: int fas216_eh_bus_reset(struct scsi_cmnd *SCpnt)
  * Purpose : Reset the complete bus associated with this command
- * Params  : SCpnt - command specifing bus to reset
+ * Params  : SCpnt - command specifying bus to reset
  * Returns : FAILED if unable to reset
  */
 extern int fas216_eh_bus_reset(struct scsi_cmnd *SCpnt);
 
 /* Function: int fas216_eh_host_reset(struct scsi_cmnd *SCpnt)
  * Purpose : Reset the host associated with this command
- * Params  : SCpnt - command specifing host to reset
+ * Params  : SCpnt - command specifying host to reset
  * Returns : FAILED if unable to reset
  */
 extern int fas216_eh_host_reset(struct scsi_cmnd *SCpnt);

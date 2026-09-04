@@ -405,7 +405,7 @@ void	bfa_cb_itnim_tov(void *itnim);
 
 /*
  * BFA notification to FCS/driver for second level error recovery.
- * Atleast one I/O request has timedout and target is unresponsive to
+ * At least one I/O request has timedout and target is unresponsive to
  * repeated abort requests. Second level error recovery should be initiated
  * by starting implicit logout and recovery procedures.
  */

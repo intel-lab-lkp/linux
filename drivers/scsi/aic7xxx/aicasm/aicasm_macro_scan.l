@@ -1,6 +1,6 @@
 %{
 /*
- * Sub-Lexical Analyzer for macro invokation in 
+ * Sub-Lexical Analyzer for macro invocation in 
  * the Aic7xxx SCSI Host adapter sequencer assembler.
  *
  * Copyright (c) 2001 Adaptec Inc.

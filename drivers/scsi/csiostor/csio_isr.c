@@ -174,7 +174,7 @@ csio_process_scsi_cmpl(struct csio_hw *hw, void *wr, uint32_t len,
 			 * We call scsi_done for I/Os that driver thinks aborts
 			 * have timed out. If there is a race caused by FW
 			 * completing abort at the exact same time that the
-			 * driver has deteced the abort timeout, the following
+			 * driver has detected the abort timeout, the following
 			 * check prevents calling of scsi_done twice for the
 			 * same command: once from the eh_abort_handler, another
 			 * from csio_scsi_isr_handler(). This also avoids the

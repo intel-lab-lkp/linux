@@ -545,7 +545,7 @@ struct bfa_fcport_s {
 	struct bfa_fcport_ln_s	ln; /*  Link Notification */
 	struct bfa_cb_qe_s	hcb_qe;	/*  BFA callback queue elem */
 	struct bfa_timer_s	timer;	/*  timer */
-	u32		msgtag;	/*  fimrware msg tag for reply */
+	u32		msgtag;	/*  firmware msg tag for reply */
 	u8			*stats_kva;
 	u64		stats_pa;
 	union bfa_fcport_stats_u *stats;

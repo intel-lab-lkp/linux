@@ -5480,7 +5480,7 @@ bfa_uf_start(struct bfa_s *bfa)
 }
 
 /*
- * Register handler for all unsolicted receive frames.
+ * Register handler for all unsolicited receive frames.
  *
  * @param[in]	bfa		BFA instance
  * @param[in]	ufrecv	receive handler function

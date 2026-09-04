@@ -404,7 +404,7 @@ static int aac_get_entry (struct aac_dev * dev, u32 qid, struct aac_entry **entr
  *	@fibptr: Driver fib object to go with fib
  *	@nonotify: Don't notify the adapter
  *
- *	Gets the next free QE off the requested priorty adapter command
+ *	Gets the next free QE off the requested priority adapter command
  *	queue and associates the Fib with the QE. The QE represented by
  *	index is ready to insert on the queue when this routine returns
  *	success.

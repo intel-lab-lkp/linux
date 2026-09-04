@@ -1319,7 +1319,7 @@ struct device_reg_24xx {
 	__le32	unused_6[2];		/* Gap. */
 	__le32	iobase_sdata;
 };
-/* RISC-RISC semaphore register PCI offet */
+/* RISC-RISC semaphore register PCI offset */
 #define RISC_REGISTER_BASE_OFFSET	0x7010
 #define RISC_REGISTER_WINDOW_OFFSET	0x6
 

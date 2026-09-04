@@ -10103,7 +10103,7 @@ static int ufshcd_set_dev_pwr_mode(struct ufs_hba *hba,
 	/*
 	 * Current function would be generally called from the power management
 	 * callbacks hence set the RQF_PM flag so that it doesn't resume the
-	 * already suspended childs.
+	 * already suspended children.
 	 */
 	ret = ufshcd_execute_start_stop(sdp, pwr_mode, &sshdr);
 	if (ret) {
@@ -10188,7 +10188,7 @@ static void ufshcd_vreg_set_lpm(struct ufs_hba *hba)
 
 	/*
 	 * It seems some UFS devices may keep drawing more than sleep current
-	 * (atleast for 500us) from UFS rails (especially from VCCQ rail).
+	 * (at least for 500us) from UFS rails (especially from VCCQ rail).
 	 * To avoid this situation, add 2ms delay before putting these UFS
 	 * rails in LPM mode.
 	 */

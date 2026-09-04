@@ -33,7 +33,7 @@ static inline struct bnx2i_hba *bnx2i_dev_to_hba(struct device *dev)
  * @attr:	device attribute (unused)
  * @buf:	buffer to return current SQ size parameter
  *
- * Returns current SQ size parameter, this paramater determines the number
+ * Returns current SQ size parameter, this parameter determines the number
  * outstanding iSCSI commands supported on a connection
  */
 static ssize_t bnx2i_show_sq_info(struct device *dev,

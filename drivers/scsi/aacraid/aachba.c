@@ -2485,7 +2485,7 @@ static int aac_read(struct scsi_cmnd * scsicmd)
 	if (aac_adapter_bounds(dev,scsicmd,lba))
 		return 0;
 	/*
-	 *	Alocate and initialize a Fib
+	 *	Allocate and initialize a Fib
 	 */
 	cmd_fibcontext = aac_fib_alloc_tag(dev, scsicmd);
 	aac_priv(scsicmd)->owner = AAC_OWNER_FIRMWARE;

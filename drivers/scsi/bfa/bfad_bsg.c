@@ -3383,7 +3383,7 @@ bfad_im_bsg_els_ct_request(struct bsg_job *job)
 	void *req_kbuf = NULL, *rsp_kbuf = NULL;
 	int rc = -EINVAL;
 
-	job->reply_len  = sizeof(uint32_t);	/* Atleast uint32_t reply_len */
+	job->reply_len  = sizeof(uint32_t);	/* At least uint32_t reply_len */
 	bsg_reply->reply_payload_rcv_len = 0;
 
 	/* Get the payload passed in from userspace */

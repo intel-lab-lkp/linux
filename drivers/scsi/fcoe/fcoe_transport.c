@@ -302,7 +302,7 @@ EXPORT_SYMBOL_GPL(fcoe_get_wwn);
 
 /**
  * fcoe_fc_crc() - Calculates the CRC for a given frame
- * @fp: The frame to be checksumed
+ * @fp: The frame to be checksummed
  *
  * This uses crc32() routine to calculate the CRC for a frame
  *

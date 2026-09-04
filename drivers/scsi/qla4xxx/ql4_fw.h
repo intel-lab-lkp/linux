@@ -260,7 +260,7 @@ union external_hw_config_reg {
 	struct {
 		/* FIXME: Do we even need this?	 All values are
 		 * referred to by 16 bit quantities.  Platform and
-		 * endianess issues. */
+		 * endianness issues. */
 		__le32 bReserved0:1;
 		__le32 bSDRAMProtectionMethod:2;
 		__le32 bSDRAMBanks:1;

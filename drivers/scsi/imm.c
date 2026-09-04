@@ -652,7 +652,7 @@ static int imm_completion(struct scsi_cmnd *const cmd)
 		(v == READ_10) || (v == WRITE_6) || (v == WRITE_10));
 
 	/*
-	 * We only get here if the drive is ready to comunicate,
+	 * We only get here if the drive is ready to communicate,
 	 * hence no need for a full imm_wait.
 	 */
 	w_ctr(ppb, 0x0c);
@@ -714,7 +714,7 @@ static int imm_completion(struct scsi_cmnd *const cmd)
 					scsi_pointer->this_residual++;
 			}
 		}
-		/* Now check to see if the drive is ready to comunicate */
+		/* Now check to see if the drive is ready to communicate */
 		w_ctr(ppb, 0x0c);
 		r = (r_str(ppb) & 0xb8);
 

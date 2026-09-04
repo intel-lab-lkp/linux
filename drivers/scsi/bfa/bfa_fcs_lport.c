@@ -1882,7 +1882,7 @@ bfa_fcs_lport_fdmi_build_rhba_pyld(struct bfa_fcs_lport_fdmi_s *fdmi, u8 *pyld)
 	len += sizeof(rhba->hba_attr_blk.attr_count);
 
 	/*
-	 * fill out the invididual entries of the HBA attrib Block
+	 * fill out the individual entries of the HBA attrib Block
 	 */
 	curr_ptr = (u8 *) &rhba->hba_attr_blk.hba_attr;
 
@@ -2214,7 +2214,7 @@ bfa_fcs_lport_fdmi_build_portattr_block(struct bfa_fcs_lport_fdmi_s *fdmi,
 	len = sizeof(port_attrib->attr_count);
 
 	/*
-	 * fill out the invididual entries
+	 * fill out the individual entries
 	 */
 	curr_ptr = (u8 *) &port_attrib->port_attr;
 

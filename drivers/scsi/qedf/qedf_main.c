@@ -187,7 +187,7 @@ static void qedf_handle_link_update(struct work_struct *work)
 		}
 
 		/*
-		 * If we get here then we never received a repsonse to our
+		 * If we get here then we never received a response to our
 		 * fip vlan request so set the vlan_id to the default and
 		 * tell FCoE that the link is up
 		 */
@@ -838,7 +838,7 @@ static int qedf_eh_abort(struct scsi_cmnd *sc_cmd)
 	    io_req->event == QEDF_IOREQ_EV_ABORT_FAILED ||
 	    io_req->event == QEDF_IOREQ_EV_CLEANUP_SUCCESS) {
 		/*
-		 * If we get a reponse to the abort this is success from
+		 * If we get a response to the abort this is success from
 		 * the perspective that all references to the command have
 		 * been removed from the driver and firmware
 		 */

@@ -1953,7 +1953,7 @@ static void qlt_24xx_retry_term_exchange(struct scsi_qla_host *vha,
 }
 
 /* drop cmds for the given lun
- * XXX only looks for cmds on the port through which lun reset was recieved
+ * XXX only looks for cmds on the port through which lun reset was received
  * XXX does not go through the list of other port (which may have cmds
  *     for the same lun)
  */
@@ -3328,7 +3328,7 @@ int qlt_xmit_response(struct qla_tgt_cmd *cmd, int xmit_type,
 			    CTIO7_FLAGS_DONT_RET_CTIO);
 
 			/* qlt_24xx_init_ctio_to_isp will correct
-			 * all neccessary fields that's part of CTIO7.
+			 * all necessary fields that's part of CTIO7.
 			 * There should be no residual of CTIO-CRC2 data.
 			 */
 			qlt_24xx_init_ctio_to_isp((struct ctio7_to_24xx *)ctio,

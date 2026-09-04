@@ -606,7 +606,7 @@ static inline void sym_init_burst(struct sym_hcb *np, u_char bc)
  *  Save initial settings of some IO registers.
  *  Assumed to have been set by BIOS.
  *  We cannot reset the chip prior to reading the 
- *  IO registers, since informations will be lost.
+ *  IO registers, since information will be lost.
  *  Since the SCRIPTS processor may be running, this 
  *  is not safe on paper, but it seems to work quite 
  *  well. :)
@@ -2178,7 +2178,7 @@ static void sym_recover_scsi_int (struct sym_hcb *np, u_char hsts)
 
 	/*
 	 *  If we haven't been interrupted inside the SCRIPTS 
-	 *  critical pathes, we can safely restart the SCRIPTS 
+	 *  critical paths, we can safely restart the SCRIPTS 
 	 *  and trust the DSA value if it matches a CCB.
 	 */
 	if ((!(dsp > SCRIPTA_BA(np, getjob_begin) &&
@@ -4516,7 +4516,7 @@ static void sym_int_sir(struct sym_hcb *np)
 		}
 		goto out;
 	/*
-	 *  The device wants us to tranfer more data than 
+	 *  The device wants us to transfer more data than 
 	 *  expected or in the wrong direction.
 	 *  The number of extra bytes is in scratcha.
 	 *  It is a data overrun condition.
@@ -4913,7 +4913,7 @@ static struct sym_ccb *sym_alloc_ccb(struct sym_hcb *np)
 	sym_insque_head(&cp->link_ccbq, &np->free_ccbq);
 
 	/*
-	 *  Chain into optionnal lists.
+	 *  Chain into optional lists.
 	 */
 #ifdef SYM_OPT_HANDLE_DEVICE_QUEUEING
 	sym_insque_head(&cp->link2_ccbq, &np->dummy_ccbq);

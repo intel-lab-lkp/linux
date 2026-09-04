@@ -683,7 +683,7 @@ static void nsp_reselected(struct scsi_cmnd *SCpnt)
 }
 
 /*
- * count how many data transferd
+ * count how many data transferred
  */
 static int nsp_fifo_count(struct scsi_cmnd *SCpnt)
 {

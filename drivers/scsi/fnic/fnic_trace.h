@@ -100,7 +100,7 @@ void fnic_debugfs_terminate(void);
 void fnic_trace_debugfs_init(void);
 void fnic_trace_debugfs_terminate(void);
 
-/* Fnic FC CTLR Trace releated function */
+/* Fnic FC CTLR Trace related function */
 int fnic_fc_trace_init(void);
 void fnic_fc_trace_free(void);
 int fnic_fc_trace_set_data(u32 host_no, u8 frame_type,

@@ -1,5 +1,5 @@
 /*
-  NinjaSCSI I/O funtions 
+  NinjaSCSI I/O functions 
       By: YOKOTA Hiroshi <yokota@netlab.is.tsukuba.ac.jp>
  
   This software may be used and distributed according to the terms of

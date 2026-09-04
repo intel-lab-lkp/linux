@@ -707,7 +707,7 @@ struct bfa_boot_bootlun_s {
 #pragma pack()
 
 /*
- * BOOT boot configuraton
+ * BOOT boot configuration
  */
 struct bfa_boot_cfg_s {
 	u8		version;

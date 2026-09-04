@@ -3513,7 +3513,7 @@ int qla82xx_fcoe_ctx_reset(scsi_qla_host_t *vha)
  *
  * Return:
  *    Success (fcoe_ctx reset is done) : 0
- *    Failed  (fcoe_ctx reset not completed within max loop timout ) : 1
+ *    Failed  (fcoe_ctx reset not completed within max loop timeout ) : 1
  */
 int qla2x00_wait_for_fcoe_ctx_reset(scsi_qla_host_t *vha)
 {

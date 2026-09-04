@@ -964,7 +964,7 @@ sg_ioctl_common(struct file *filp, Sg_device *sdp, Sg_fd *sfp,
 	case SG_SET_FORCE_LOW_DMA:
 		/*
 		 * N.B. This ioctl never worked properly, but failed to
-		 * return an error value. So returning '0' to keep compability
+		 * return an error value. So returning '0' to keep compatibility
 		 * with legacy applications.
 		 */
 		return 0;

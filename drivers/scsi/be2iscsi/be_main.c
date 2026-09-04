@@ -570,7 +570,7 @@ static int be_ctrl_init(struct beiscsi_hba *phba, struct pci_dev *pdev)
 }
 
 /**
- * beiscsi_get_params()- Set the config paramters
+ * beiscsi_get_params()- Set the config parameters
  * @phba: ptr  device priv structure
  **/
 static void beiscsi_get_params(struct beiscsi_hba *phba)
@@ -4188,7 +4188,7 @@ static void beiscsi_cleanup_port(struct beiscsi_hba *phba)
  * @beiscsi_conn: ptr to the conn to be cleaned up
  * @task: ptr to iscsi_task resource to be freed.
  *
- * Free driver mgmt resources binded to CXN.
+ * Free driver mgmt resources bound to CXN.
  **/
 void
 beiscsi_free_mgmt_task_handles(struct beiscsi_conn *beiscsi_conn,

@@ -32,7 +32,7 @@ struct bfa_iocfc_intr_attr_s {
 };
 
 /*
- * IOC firmware configuraton
+ * IOC firmware configuration
  */
 struct bfa_iocfc_fwcfg_s {
 	u16		num_fabrics;	/*  number of fabrics		*/

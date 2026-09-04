@@ -4380,7 +4380,7 @@ _scsih_block_io_to_pcie_children_attached_directly(struct MPT3SAS_ADAPTER *ioc,
  * using high priority request queue.  It will send a sas iounit
  * control request (MPI2_SAS_OP_REMOVE_DEVICE) from this completion.
  *
- * This is designed to send muliple task management request at the same
+ * This is designed to send multiple task management request at the same
  * time to the fifo. If the fifo is full, we will append the request,
  * and process it in a future completion.
  */
@@ -4684,7 +4684,7 @@ _scsih_sas_control_complete(struct MPT3SAS_ADAPTER *ioc, u16 smid,
  * @handle: device handle
  * Context: interrupt time.
  *
- * This is designed to send muliple task management request at the same
+ * This is designed to send multiple task management request at the same
  * time to the fifo. If the fifo is full, we will append the request,
  * and process it in a future completion.
  */
@@ -4919,7 +4919,7 @@ mpt3sas_check_for_pending_internal_cmds(struct MPT3SAS_ADAPTER *ioc, u16 smid)
  * @smid: system request message index
  *
  * This will check delayed target reset list, and feed the
- * next reqeust.
+ * next request.
  *
  * Return: 1 meaning mf should be freed from _base_interrupt
  *         0 means the mf is freed from this function.
@@ -13028,7 +13028,7 @@ _scsih_probe_devices(struct MPT3SAS_ADAPTER *ioc)
  * @shost: SCSI host pointer
  *
  * The shost has the ability to discover targets on its own instead
- * of scanning the entire bus.  In our implemention, we will kick off
+ * of scanning the entire bus.  In our implementation, we will kick off
  * firmware discovery.
  */
 static void
@@ -13076,7 +13076,7 @@ static void _scsih_complete_devices_scanning(struct MPT3SAS_ADAPTER *ioc)
  * @time: elapsed time of the scan in jiffies
  *
  * This function will be called periodicallyn until it returns 1 with the
- * scsi_host and the elapsed time of the scan in jiffies. In our implemention,
+ * scsi_host and the elapsed time of the scan in jiffies. In our implementation,
  * we wait for firmware discovery to complete, then return 1.
  */
 static int
@@ -14039,7 +14039,7 @@ scsih_init(void)
 
 	mpt3sas_base_initialize_callback_handler();
 
-	 /* queuecommand callback hander */
+	 /* queuecommand callback handler */
 	scsi_io_cb_idx = mpt3sas_base_register_callback_handler(_scsih_io_done);
 
 	/* task management callback handler */

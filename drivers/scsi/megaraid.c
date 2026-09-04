@@ -1009,7 +1009,7 @@ mega_prepare_passthru(adapter_t *adapter, scb_t *scb, struct scsi_cmnd *cmd,
  * @channel: actual channel on the controller
  * @target: actual id on the controller.
  *
- * prepare a command for the scsi physical devices. This rountine prepares
+ * prepare a command for the scsi physical devices. This routine prepares
  * commands for devices which can take extended CDBs (>10 bytes)
  */
 static mega_ext_passthru *
@@ -2986,7 +2986,7 @@ megadev_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	 * mega_m_to_n() copies the data from the user space, so we do not
 	 * have to do it here.
 	 * NOTE: We will need some user address to copyout the data, therefore
-	 * the inteface layer will also provide us with the required user
+	 * the interface layer will also provide us with the required user
 	 * addresses.
 	 */
 	memset(&uioc, 0, sizeof(nitioctl_t));

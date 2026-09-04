@@ -88,7 +88,7 @@ struct snic_stats {
 void snic_stats_debugfs_init(struct snic *);
 void snic_stats_debugfs_remove(struct snic *);
 
-/* Auxillary function to update active IO counter */
+/* Auxiliary function to update active IO counter */
 static inline void
 snic_stats_update_active_ios(struct snic_stats *s_stats)
 {
@@ -102,7 +102,7 @@ snic_stats_update_active_ios(struct snic_stats *s_stats)
 	atomic64_inc(&io->num_ios);
 }
 
-/* Auxillary function to update IO completion counter */
+/* Auxiliary function to update IO completion counter */
 static inline void
 snic_stats_update_io_cmpl(struct snic_stats *s_stats)
 {

@@ -1198,7 +1198,7 @@ poll_work:
 				rc = ibmvscsis_trans_event(vscsi, crq);
 			} else if (vscsi->flags & TRANS_EVENT) {
 				/*
-				 * if a tranport event has occurred leave
+				 * if a transport event has occurred leave
 				 * everything but transport events on the queue
 				 */
 				dev_dbg(&vscsi->dev, "poll_cmd_q, ignoring\n");

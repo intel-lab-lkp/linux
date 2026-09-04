@@ -25,7 +25,7 @@
 #include <linux/build_bug.h> /* static_assert */
 #include <linux/stddef.h> /* offsetof */
 
-/* general boundary defintions */
+/* general boundary definitions */
 #define SENSEINFOBYTES          32 /* may vary between hbas */
 #define SG_ENTRIES_IN_CMD	32 /* Max SG entries excluding chain blocks */
 #define HPSA_SG_CHAIN		0x80000000

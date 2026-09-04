@@ -942,7 +942,7 @@ bfa_msix_lpu_err(struct bfa_s *bfa, int vec)
 		if (pss_isr) {
 			/*
 			 * ERR_PSS bit needs to be cleared as well in case
-			 * interrups are shared so driver's interrupt handler is
+			 * interrupts are shared so driver's interrupt handler is
 			 * still called even though it is already masked out.
 			 */
 			curr_value = readl(

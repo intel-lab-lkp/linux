@@ -405,7 +405,7 @@ static void print_debug_list(void)
 static void fas216_done(FAS216_Info *info, unsigned int result);
 
 /**
- * fas216_get_last_msg - retrive last message from the list
+ * fas216_get_last_msg - retrieve last message from the list
  * @info: interface to search
  * @pos: current fifo position
  *
@@ -2470,7 +2470,7 @@ int fas216_eh_abort(struct scsi_cmnd *SCpnt)
 
 /**
  * fas216_eh_device_reset - Reset the device associated with this command
- * @SCpnt: command specifing device to reset
+ * @SCpnt: command specifying device to reset
  *
  * Reset the device associated with this command.
  * Returns: FAILED if unable to reset.
@@ -2552,7 +2552,7 @@ int fas216_eh_device_reset(struct scsi_cmnd *SCpnt)
 
 /**
  * fas216_eh_bus_reset - Reset the bus associated with the command
- * @SCpnt: command specifing bus to reset
+ * @SCpnt: command specifying bus to reset
  *
  * Reset the bus associated with the command.
  * Returns: FAILED if unable to reset.
@@ -2652,7 +2652,7 @@ static void fas216_init_chip(FAS216_Info *info)
 
 /**
  * fas216_eh_host_reset - Reset the host associated with this command
- * @SCpnt: command specifing host to reset
+ * @SCpnt: command specifying host to reset
  *
  * Reset the host associated with this command.
  * Returns: FAILED if unable to reset.

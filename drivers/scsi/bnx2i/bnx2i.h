@@ -573,7 +573,7 @@ struct bnx2i_5771x_dbell {
 };
 
 /**
- * struct qp_info - QP (share queue region) atrributes structure
+ * struct qp_info - QP (share queue region) attributes structure
  *
  * @ctx_base:           ioremapped pci register base to access doorbell register
  *                      pertaining to this offloaded connection

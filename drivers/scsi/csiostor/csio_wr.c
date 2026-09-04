@@ -80,8 +80,8 @@ static inline void
 csio_wr_ring_fldb(struct csio_hw *hw, struct csio_q *flq)
 {
 	/*
-	 * Ring the doorbell only when we have atleast CSIO_QCREDIT_SZ
-	 * number of bytes in the freelist queue. This translates to atleast
+	 * Ring the doorbell only when we have at least CSIO_QCREDIT_SZ
+	 * number of bytes in the freelist queue. This translates to at least
 	 * 8 freelist buffer pointers (since each pointer is 8 bytes).
 	 */
 	if (flq->inc_idx >= 8) {
@@ -296,7 +296,7 @@ csio_wr_alloc_q(struct csio_hw *hw, uint32_t qsize, uint32_t wrsize,
 				return -1;
 
 			/*
-			 * Make sure in a FLQ, atleast 1 credit (8 FL buffers)
+			 * Make sure in a FLQ, at least 1 credit (8 FL buffers)
 			 * remains unpopulated,otherwise HW thinks
 			 * FLQ is empty.
 			 */
@@ -1235,7 +1235,7 @@ csio_wr_process_iq(struct csio_hw *hw, struct csio_q *q,
 	if (flq) {
 		uint32_t avail  = csio_wr_avail_qcredits(flq);
 		if (avail <= 16) {
-			/* Make sure in FLQ, atleast 1 credit (8 FL buffers)
+			/* Make sure in FLQ, at least 1 credit (8 FL buffers)
 			 * remains unpopulated otherwise HW thinks
 			 * FLQ is empty.
 			 */

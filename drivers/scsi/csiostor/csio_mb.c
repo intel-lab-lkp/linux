@@ -334,7 +334,7 @@ csio_mb_caps_config(struct csio_hw *hw, struct csio_mb *mbp, uint32_t tmo,
  * @portid: Port ID to get/set info
  * @wr: Write/Read PORT information.
  * @fc: Flow control
- * @caps: Port capabilites to set.
+ * @caps: Port capabilities to set.
  * @cbfn: Callback, if any.
  *
  */

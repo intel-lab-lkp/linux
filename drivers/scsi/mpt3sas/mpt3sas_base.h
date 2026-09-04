@@ -1296,14 +1296,14 @@ typedef void (*MPT3SAS_FLUSH_RUNNING_CMDS)(struct MPT3SAS_ADAPTER *ioc);
  * @sense_dma_pool:
  * @reply_depth: hba reply queue depth:
  * @reply_sz: per reply frame size:
- * @reply: pool of replys:
+ * @reply: pool of replies:
  * @reply_dma:
  * @reply_dma_pool:
  * @reply_free_queue_depth: reply free depth
  * @reply_free: pool for reply free queue (32 bit addr)
  * @reply_free_dma:
  * @reply_free_dma_pool:
- * @reply_free_host_index: tail index in pool to insert free replys
+ * @reply_free_host_index: tail index in pool to insert free replies
  * @reply_post_queue_depth: reply post queue depth
  * @reply_post_struct: struct for reply_post_free physical & virt address
  * @rdpq_array_capable: FW supports multiple reply queue addresses in ioc_init

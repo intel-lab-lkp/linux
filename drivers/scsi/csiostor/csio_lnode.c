@@ -259,7 +259,7 @@ csio_append_attrib(uint8_t **ptr, uint16_t type, void *val, size_t val_len)
 }
 
 /*
- * csio_ln_fdmi_done - FDMI registeration completion
+ * csio_ln_fdmi_done - FDMI registration completion
  * @hw: HW context
  * @fdmi_req: fdmi request
  */
@@ -1796,7 +1796,7 @@ csio_ln_mgmt_submit_wr(struct csio_mgmtm *mgmtm, struct csio_ioreq *io_req,
  * @pld_len - Payload len
  *
  *
- * This API used submit managment ELS/CT request.
+ * This API used submit management ELS/CT request.
  * This called with hw lock held
  * Returns: 0 - on success
  *	    -ENOMEM	- on error.

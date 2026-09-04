@@ -860,7 +860,7 @@ static void _pmcraid_fire_command(struct pmcraid_cmd *cmd)
 	unsigned long lock_flags;
 
 	/* Add this command block to pending cmd pool. We do this prior to
-	 * writting IOARCB to ioarrin because IOA might complete the command
+	 * writing IOARCB to ioarrin because IOA might complete the command
 	 * by the time we are about to add it to the list. Response handler
 	 * (isr/tasklet) looks for cmd block in the pending pending list.
 	 */
@@ -2453,7 +2453,7 @@ static void pmcraid_request_sense(struct pmcraid_cmd *cmd)
 
 	/* request sense might be called as part of error response processing
 	 * which runs in tasklets context. It is possible that mid-layer might
-	 * schedule queuecommand during this time, hence, writting to IOARRIN
+	 * schedule queuecommand during this time, hence, writing to IOARRIN
 	 * must be protect by host_lock
 	 */
 	pmcraid_send_cmd(cmd, pmcraid_erp_done,

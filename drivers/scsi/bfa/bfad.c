@@ -52,7 +52,7 @@ int		msix_disable_cb = 0, msix_disable_ct = 0;
 int		max_xfer_size = BFAD_MAX_SECTORS >> 1;
 static int	max_rport_logins = BFA_FCS_MAX_RPORT_LOGINS;
 
-/* Firmware releated */
+/* Firmware related */
 u32	bfi_image_cb_size, bfi_image_ct_size, bfi_image_ct2_size;
 u32	*bfi_image_cb, *bfi_image_ct, *bfi_image_ct2;
 
@@ -1019,7 +1019,7 @@ bfad_start_ops(struct bfad_s *bfad) {
 	}
 
 	/*
-	 * If bfa_linkup_delay is set to -1 default; try to retrive the
+	 * If bfa_linkup_delay is set to -1 default; try to retrieve the
 	 * value using the bfad_get_linkup_delay(); else use the
 	 * passed in module param value as the bfa_linkup_delay.
 	 */

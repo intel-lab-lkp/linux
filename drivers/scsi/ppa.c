@@ -556,7 +556,7 @@ static int ppa_completion(struct scsi_cmnd *const cmd)
 		(v == READ_10) || (v == WRITE_6) || (v == WRITE_10));
 
 	/*
-	 * We only get here if the drive is ready to comunicate,
+	 * We only get here if the drive is ready to communicate,
 	 * hence no need for a full ppa_wait.
 	 */
 	r = (r_str(ppb) & 0xf0);
@@ -624,7 +624,7 @@ static int ppa_completion(struct scsi_cmnd *const cmd)
 					sg_virt(scsi_pointer->buffer);
 			}
 		}
-		/* Now check to see if the drive is ready to comunicate */
+		/* Now check to see if the drive is ready to communicate */
 		r = (r_str(ppb) & 0xf0);
 		/* If not, drop back down to the scheduler and wait a timer tick */
 		if (!(r & 0x80))

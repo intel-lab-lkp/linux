@@ -89,7 +89,7 @@ static void bnx2fc_cmd_timeout(struct work_struct *work)
 				return;
 			}
 		} else {
-			/* Hanlde IO timeout */
+			/* Handle IO timeout */
 			BNX2FC_IO_DBG(io_req, "IO timed out. issue ABTS\n");
 			if (test_and_set_bit(BNX2FC_FLAG_IO_COMPL,
 					     &io_req->req_flags)) {

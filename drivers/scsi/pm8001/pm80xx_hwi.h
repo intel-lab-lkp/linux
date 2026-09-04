@@ -964,7 +964,7 @@ struct dek_mgmt_req {
 
 /**
  * brief the data structure for SET PHY PROFILE COMMAND
- * use to retrive phy specific information
+ * use to retrieve phy specific information
  */
 struct set_phy_profile_req {
 	__le32	tag;
@@ -974,7 +974,7 @@ struct set_phy_profile_req {
 
 /**
  * brief the data structure for GET PHY PROFILE COMMAND
- * use to retrive phy specific information
+ * use to retrieve phy specific information
  */
 struct get_phy_profile_req {
 	__le32	tag;

@@ -1489,7 +1489,7 @@ retry_tur:
  * @done_q:	queue for commands which are finished
  * @try_stu:	boolean on if a STU command should be tried in addition to TUR.
  *
- * Decription:
+ * Description:
  *    Tests if devices are in a working state.  Commands to devices now in
  *    a working state are sent to the done_q while commands to devices which
  *    are still failing to respond are returned to the work_q for more

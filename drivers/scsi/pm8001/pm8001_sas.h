@@ -314,7 +314,7 @@ struct mpi_mem {
 struct mpi_mem_req {
 	/* The number of element in the  mpiMemory array */
 	u32			count;
-	/* The array of structures that define memroy regions*/
+	/* The array of structures that define memory regions*/
 	struct mpi_mem		region[USI_MAX_MEMCNT];
 };
 

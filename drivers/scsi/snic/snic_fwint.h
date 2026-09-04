@@ -95,7 +95,7 @@ struct snic_io_hdr {
 	u16	resvd;
 };
 
-/* auxillary funciton for encoding the snic_io_hdr */
+/* auxiliary function for encoding the snic_io_hdr */
 static inline void
 snic_io_hdr_enc(struct snic_io_hdr *hdr, u8 typ, u8 status, u32 id, u32 hid,
 		u16 sg_cnt, ulong ctx)
@@ -110,7 +110,7 @@ snic_io_hdr_enc(struct snic_io_hdr *hdr, u8 typ, u8 status, u32 id, u32 hid,
 	hdr->flags = 0;
 }
 
-/* auxillary funciton for decoding the snic_io_hdr */
+/* auxiliary function for decoding the snic_io_hdr */
 static inline void
 snic_io_hdr_dec(struct snic_io_hdr *hdr, u8 *typ, u8 *stat, u32 *cmnd_id,
 		u32 *hid, ulong *ctx)
@@ -473,7 +473,7 @@ struct snic_fw_req {
 }; /* end of snic_fw_req structure */
 
 /*
- * Auxillary macro to verify specific snic req/cmpl structures
+ * Auxiliary macro to verify specific snic req/cmpl structures
  * to ensure that it will be aligned to 64 bit, and not using
  * color bit field
  */

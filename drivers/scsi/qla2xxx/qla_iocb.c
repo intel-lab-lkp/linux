@@ -4425,7 +4425,7 @@ qla25xx_build_bidir_iocb(srb_t *sp, struct scsi_qla_host *vha,
 
 		/* Allocate additional continuation packets */
 		if (avail_dsds == 0) {
-			/* Continuation type 1 IOCB can accomodate
+			/* Continuation type 1 IOCB can accommodate
 			 * 5 DSDS
 			 */
 			cont_pkt = qla2x00_prep_cont_type1_iocb(vha,
@@ -4448,7 +4448,7 @@ qla25xx_build_bidir_iocb(srb_t *sp, struct scsi_qla_host *vha,
 
 		/* Allocate additional continuation packets */
 		if (avail_dsds == 0) {
-			/* Continuation type 1 IOCB can accomodate
+			/* Continuation type 1 IOCB can accommodate
 			 * 5 DSDS
 			 */
 			cont_pkt = qla2x00_prep_cont_type1_iocb(vha,

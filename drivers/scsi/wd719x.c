@@ -399,7 +399,7 @@ static int wd719x_chip_init(struct wd719x *wd)
 	/* disable interrupts during initialization of RISC */
 	wd719x_writeb(wd, WD719X_AMR_CMD_PARAM, WD719X_DISABLE_INT);
 
-	/* issue INITIALIZE RISC comand */
+	/* issue INITIALIZE RISC command */
 	wd719x_writeb(wd, WD719X_AMR_COMMAND, WD719X_CMD_INIT_RISC);
 	/* enable advanced mode (wake up RISC) */
 	wd719x_writeb(wd, WD719X_PCI_MODE_SELECT, WD719X_ENABLE_ADVANCE_MODE);

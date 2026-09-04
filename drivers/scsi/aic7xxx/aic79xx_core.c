@@ -4235,7 +4235,7 @@ ahd_update_pending_scbs(struct ahd_softc *ahd)
 	 * has already been setup.  The negotiation changes may
 	 * effect whether we select-out with ATN.  It is only
 	 * safe to clear ENSELO when the bus is not free and no
-	 * selection is in progres or completed.
+	 * selection is in progress or completed.
 	 */
 	saved_modes = ahd_save_modes(ahd);
 	ahd_set_modes(ahd, AHD_MODE_SCSI, AHD_MODE_SCSI);
@@ -7152,7 +7152,7 @@ ahd_init(struct ahd_softc *ahd)
 		goto init_done;
 	}
 
-	/* Diable current sensing. */
+	/* Disable current sensing. */
 	ahd_write_flexport(ahd, FLXADDR_ROMSTAT_CURSENSECTL, 0);
 
 #ifdef AHD_DEBUG

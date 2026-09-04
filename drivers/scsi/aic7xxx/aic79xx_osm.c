@@ -173,7 +173,7 @@ static adapter_tag_info_t aic79xx_tag_info[] =
 
 /*
  * The I/O cell on the chip is very configurable in respect to its analog
- * characteristics.  Set the defaults here; they can be overriden with
+ * characteristics.  Set the defaults here; they can be overridden with
  * the proper insmod parameters.
  */
 struct ahd_linux_iocell_opts
