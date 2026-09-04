@@ -193,10 +193,16 @@ static int madvise_update_vma(vm_flags_t new_flags,
 }
 
 #ifdef CONFIG_SWAP
+struct swapin_walk_ctx {
+	struct vm_area_struct *vma;
+	bool swapped;
+};
+
 static int swapin_walk_pmd_entry(pmd_t *pmd, unsigned long start,
 		unsigned long end, struct mm_walk *walk)
 {
-	struct vm_area_struct *vma = walk->private;
+	struct swapin_walk_ctx *swc = walk->private;
+	struct vm_area_struct *vma = swc->vma;
 	struct swap_io_ctx ctx = {};
 	pte_t *ptep = NULL;
 	spinlock_t *ptl;
@@ -223,8 +229,10 @@ static int swapin_walk_pmd_entry(pmd_t *pmd, unsigned long start,
 
 		folio = read_swap_cache_async(&ctx, entry, GFP_HIGHUSER_MOVABLE,
 					vma, addr);
-		if (folio)
+		if (folio) {
+			swc->swapped = true;
 			folio_put(folio);
+		}
 	}
 
 	if (ptep)
@@ -297,10 +305,22 @@ static long madvise_willneed(struct madvise_behavior *madv_behavior)
 	loff_t offset;
 
 #ifdef CONFIG_SWAP
-	if (!file) {
-		walk_page_range_vma(vma, start, end, &swapin_walk_ops, vma);
-		lru_add_drain(); /* Push any new pages onto the LRU now */
-		return 0;
+	bool private_file = file && !(vma->vm_flags & VM_SHARED);
+
+	/*
+	 * A private file mapping can contain anonymous COW pages. Once such
+	 * pages are swapped out, their PTEs contain swap entries even though
+	 * the VMA still has vm_file set. Prefetch those pages as well; file
+	 * readahead can only fetch the original file contents.
+	 */
+	if (!file || (private_file && vma->anon_vma)) {
+		struct swapin_walk_ctx ctx = { .vma = vma };
+
+		walk_page_range_vma(vma, start, end, &swapin_walk_ops, &ctx);
+		if (ctx.swapped)
+			lru_add_drain(); /* Push any new pages onto the LRU now */
+		if (!file)
+			return 0;
 	}
 
 	if (shmem_mapping(file->f_mapping)) {
