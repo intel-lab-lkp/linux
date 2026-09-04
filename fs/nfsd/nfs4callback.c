@@ -536,7 +536,7 @@ static void update_cb_slot_table(struct nfsd4_session *ses, u32 target)
  *		void;
  *	};
  *
- * Our current back channel implmentation supports a single backchannel
+ * Our current back channel implementation supports a single backchannel
  * with a single slot.
  */
 static int decode_cb_sequence4resok(struct xdr_stream *xdr,

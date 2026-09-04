@@ -556,7 +556,7 @@ nfsd_print_version_support(struct nfsd_net *nn, char *buf, int remaining,
 		supported = false;
 	if (minor == 0 && supported)
 		/*
-		 * special case for backward compatability.
+		 * special case for backward compatibility.
 		 * +4.0 is never reported, it is implied by
 		 * +4, unless -4.0 is present.
 		 */
