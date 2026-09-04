@@ -2,9 +2,9 @@ What:		/sys/bus/coresight/devices/<memory_map>.[etm|ptm]/enable_source
 Date:		November 2014
 KernelVersion:	3.19
 Contact:	Mathieu Poirier <mathieu.poirier@linaro.org>
-Description:	(RW) Enable/disable tracing on this specific trace entiry.
+Description:	(RW) Enable/disable tracing on this specific trace entry.
 		Enabling a source implies the source has been configured
-		properly and a sink has been identidifed for it.  The path
+		properly and a sink has been indentified for it.  The path
 		of coresight components linking the source to the sink is
 		configured and managed automatically by the coresight framework.
 
