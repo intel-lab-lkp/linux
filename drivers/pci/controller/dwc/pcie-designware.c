@@ -894,7 +894,7 @@ static void dw_pcie_link_set_max_link_width(struct dw_pcie *pci, u32 num_lanes)
 		return;
 
 	/* Set the number of lanes */
-	plc = dw_pcie_readl_dbi(pci, PCIE_PORT_LINK_CONTROL);
+	plc = dw_pcie_readl_dbi(pci, PORT_LINK_CTRL_OFF);
 	plc &= ~PORT_LINK_FAST_LINK_MODE;
 	plc &= ~PORT_LINK_MODE_MASK;
 
@@ -922,7 +922,7 @@ static void dw_pcie_link_set_max_link_width(struct dw_pcie *pci, u32 num_lanes)
 		dev_err(pci->dev, "num-lanes %u: invalid value\n", num_lanes);
 		return;
 	}
-	dw_pcie_writel_dbi(pci, PCIE_PORT_LINK_CONTROL, plc);
+	dw_pcie_writel_dbi(pci, PORT_LINK_CTRL_OFF, plc);
 	dw_pcie_writel_dbi(pci, PCIE_LINK_WIDTH_SPEED_CONTROL, lwsc);
 
 	cap = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
@@ -1295,10 +1295,10 @@ void dw_pcie_setup(struct dw_pcie *pci)
 		dw_pcie_writel_dbi(pci, PCIE_PL_CHK_REG_CONTROL_STATUS, val);
 	}
 
-	val = dw_pcie_readl_dbi(pci, PCIE_PORT_LINK_CONTROL);
+	val = dw_pcie_readl_dbi(pci, PORT_LINK_CTRL_OFF);
 	val &= ~PORT_LINK_FAST_LINK_MODE;
 	val |= PORT_LINK_DLL_LINK_EN;
-	dw_pcie_writel_dbi(pci, PCIE_PORT_LINK_CONTROL, val);
+	dw_pcie_writel_dbi(pci, PORT_LINK_CTRL_OFF, val);
 
 	dw_pcie_link_set_max_link_width(pci, pci->num_lanes);
 }
