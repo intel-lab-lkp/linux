@@ -671,8 +671,10 @@ int __list_lru_init(struct list_lru *lru, bool memcg_aware, struct shrinker *shr
 	else
 		lru->shrinker_id = -1;
 
-	if (mem_cgroup_kmem_disabled())
+	if (mem_cgroup_kmem_disabled()) {
 		memcg_aware = false;
+		lru->shrinker_id = -1;
+	}
 #endif
 
 	lru->node = kzalloc_objs(*lru->node, nr_node_ids);
