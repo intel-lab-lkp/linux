@@ -691,7 +691,13 @@ static void cxld_set_interleave(struct cxl_decoder *cxld, u32 *ctrl)
 	if (WARN_ONCE(ways_to_eiw(cxld->interleave_ways, &eiw),
 		      "invalid interleave_ways: %d\n", cxld->interleave_ways))
 		return;
-	if (WARN_ONCE(granularity_to_eig(cxld->interleave_granularity, &eig),
+
+	/*
+	 * A non-interleaving decoder ignores the IG field, so an unencodable
+	 * granularity is a don't-care rather than a failure.
+	 */
+	if (granularity_to_eig(cxld->interleave_granularity, &eig) &&
+	    WARN_ONCE(cxld->interleave_ways > 1,
 		      "invalid interleave_granularity: %d\n",
 		      cxld->interleave_granularity))
 		return;
