@@ -32,7 +32,7 @@
  *
  * Improve Kensington support.
  * Split mouse/kbd
- * Move to syfs
+ * Move to sysfs
  */
 
 #include <linux/module.h>
@@ -604,7 +604,7 @@ adbhid_buttons_input(unsigned char *data, int nb, int autopoll)
 
 			case 0x7f:
 			case 0xff:
-				/* keypad overlay toogle */
+				/* keypad overlay toggle */
 				break;
 
 			default:

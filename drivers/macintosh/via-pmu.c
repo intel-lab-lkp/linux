@@ -482,7 +482,7 @@ static int __init via_pmu_start(void)
 	/* Make sure PMU settle down before continuing. This is _very_ important
 	 * since the IDE probe may shut interrupts down for quite a bit of time. If
 	 * a PMU communication is pending while this happens, the PMU may timeout
-	 * Not that on Core99 machines, the PMU keeps sending us environement
+	 * Not that on Core99 machines, the PMU keeps sending us environment
 	 * messages, we should find a way to either fix IDE or make it call
 	 * pmu_suspend() before masking interrupts. This can also happens while
 	 * scolling with some fbdevs.
@@ -1286,7 +1286,7 @@ pmu_wait_complete(struct adb_request *req)
 
 /* This function loops until the PMU is idle and prevents it from
  * anwsering to ADB interrupts. pmu_request can still be called.
- * This is done to avoid spurrious shutdowns when we know we'll have
+ * This is done to avoid spurious shutdowns when we know we'll have
  * interrupts switched off for a long time
  */
 void
@@ -1549,7 +1549,7 @@ pmu_sr_intr(void)
 			/* 
 			 * For PMU sleep and freq change requests, we lock the
 			 * PMU until it's explicitly unlocked. This avoids any
-			 * spurrious event polling getting in
+			 * spurious event polling getting in
 			 */
 			current_req = req->next;
 			req->reply_len += data_index;

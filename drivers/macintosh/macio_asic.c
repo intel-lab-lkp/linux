@@ -749,7 +749,7 @@ static void macio_pci_remove(struct pci_dev* pdev)
 
 /*
  * MacIO is matched against any Apple ID, it's probe() function
- * will then decide wether it applies or not
+ * will then decide whether it applies or not
  */
 static const struct pci_device_id pci_ids[] = { {
 	.vendor		= PCI_VENDOR_ID_APPLE,

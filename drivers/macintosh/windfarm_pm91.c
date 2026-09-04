@@ -656,7 +656,7 @@ static void wf_smu_remove(struct platform_device *ddev)
 
 	/* Release all sensors */
 	/* One more crappy race: I don't think we have any guarantee here
-	 * that the attribute callback won't race with the sensor beeing
+	 * that the attribute callback won't race with the sensor being
 	 * disposed of, and I'm not 100% certain what best way to deal
 	 * with that except by adding locks all over... I'll do that
 	 * eventually but heh, who ever rmmod this module anyway ?

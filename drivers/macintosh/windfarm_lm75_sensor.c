@@ -108,7 +108,7 @@ static int wf_lm75_probe(struct i2c_client *client)
 		return -ENXIO;
 	}
 
-	/* Usual rant about sensor names not beeing very consistent in
+	/* Usual rant about sensor names not being very consistent in
 	 * the device-tree, oh well ...
 	 * Add more entries below as you deal with more setups
 	 */
