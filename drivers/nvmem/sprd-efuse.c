@@ -5,6 +5,7 @@
 #include <linux/delay.h>
 #include <linux/hwspinlock.h>
 #include <linux/io.h>
+#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/nvmem-provider.h>
 #include <linux/of.h>
@@ -297,8 +298,13 @@ static int sprd_efuse_read(void *context, u32 offset, void *val, size_t bytes)
 	bool blk_double = efuse->data->blk_double;
 	u32 index = offset / SPRD_EFUSE_BLOCK_WIDTH + efuse->data->blk_offset;
 	u32 blk_offset = (offset % SPRD_EFUSE_BLOCK_WIDTH) * BITS_PER_BYTE;
+	u8 *buf = val;
 	u32 data;
+	size_t size = (size_t)efuse->data->blk_nums * SPRD_EFUSE_BLOCK_WIDTH;
 	int ret;
+
+	if (offset > size || bytes > size - offset)
+		return -EINVAL;
 
 	ret = sprd_efuse_lock(efuse);
 	if (ret)
@@ -308,10 +314,19 @@ static int sprd_efuse_read(void *context, u32 offset, void *val, size_t bytes)
 	if (ret)
 		goto unlock;
 
-	ret = sprd_efuse_raw_read(efuse, index, &data, blk_double);
-	if (!ret) {
+	while (bytes) {
+		size_t avail = SPRD_EFUSE_BLOCK_WIDTH - blk_offset / BITS_PER_BYTE;
+		size_t count = min_t(size_t, bytes, avail);
+
+		ret = sprd_efuse_raw_read(efuse, index++, &data, blk_double);
+		if (ret)
+			break;
+
 		data >>= blk_offset;
-		memcpy(val, &data, bytes);
+		memcpy(buf, &data, count);
+		buf += count;
+		bytes -= count;
+		blk_offset = 0;
 	}
 
 	clk_disable_unprepare(efuse->clk);
