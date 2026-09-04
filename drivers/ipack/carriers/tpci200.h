@@ -136,7 +136,7 @@ struct tpci200_slot {
 };
 
 /**
- * struct tpci200_infos - informations specific of the TPCI200 tpci200.
+ * struct tpci200_infos - information specific of the TPCI200 tpci200.
  * @pci_dev		PCI device
  * @interface_regs	Pointer to IP interface space (Bar 2)
  * @ioidint_space	Pointer to IP ID, IO and INT space (Bar 3)
