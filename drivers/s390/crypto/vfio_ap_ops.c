@@ -247,13 +247,65 @@ static struct vfio_ap_queue *vfio_ap_mdev_get_queue(
  *
  * - -ETIMEDOUT	the function timed out before the IR bit was cleared.
  */
-static int vfio_ap_wait_for_irqclear(int apqn)
+static void report_tapq_rc(struct vfio_ap_queue *q, u8 rc)
+{
+	if (q->matrix_mdev)
+		dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+				     "PQAP(TAPQ) for %02x.%04x failed with invalid rc=%#02x\n",
+				     AP_QID_CARD(q->apqn),
+				     AP_QID_QUEUE(q->apqn), rc);
+	else
+		pr_warn_ratelimited("PQAP(TAPQ) for %02x.%04x failed with invalid rc=%#02x\n",
+				    AP_QID_CARD(q->apqn),
+				    AP_QID_QUEUE(q->apqn), rc);
+}
+
+static void report_irqclear_timeout(struct vfio_ap_queue *q, u8 rc)
+{
+	if (q->matrix_mdev)
+		dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+				     "PQAP(TAPQ) timed out waiting for IRQ clear on %02x.%04x: rc=%#02x\n",
+				     AP_QID_CARD(q->apqn),
+				     AP_QID_QUEUE(q->apqn), rc);
+	else
+		pr_warn_ratelimited("PQAP(TAPQ) timed out waiting for IRQ clear on %02x.%04x: rc=%#02x\n",
+				    AP_QID_CARD(q->apqn),
+				    AP_QID_QUEUE(q->apqn), rc);
+}
+
+static void report_aqic_disable_error(struct vfio_ap_queue *q, u8 rc)
+{
+	if (q->matrix_mdev)
+		dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+				     "PQAP(AQIC) disable for %02x.%04x failed with rc=%#02x\n",
+				     AP_QID_CARD(q->apqn),
+				     AP_QID_QUEUE(q->apqn), rc);
+	else
+		pr_warn_ratelimited("PQAP(AQIC) disable for %02x.%04x failed with rc=%#02x\n",
+				    AP_QID_CARD(q->apqn),
+				    AP_QID_QUEUE(q->apqn), rc);
+}
+
+static void report_zapq_rc(struct vfio_ap_queue *q, u8 rc)
+{
+	if (q->matrix_mdev)
+		dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+				     "PQAP(ZAPQ) for %02x.%04x failed with invalid rc=%#02x\n",
+				     AP_QID_CARD(q->apqn),
+				     AP_QID_QUEUE(q->apqn), rc);
+	else
+		pr_warn_ratelimited("PQAP(ZAPQ) for %02x.%04x failed with invalid rc=%#02x\n",
+				    AP_QID_CARD(q->apqn),
+				    AP_QID_QUEUE(q->apqn), rc);
+}
+
+static int vfio_ap_wait_for_irqclear(struct vfio_ap_queue *q)
 {
 	struct ap_queue_status status;
 	int retry = 5;
 
 	do {
-		status = ap_tapq(apqn, NULL);
+		status = ap_tapq(q->apqn, NULL);
 		switch (status.response_code) {
 		case AP_RESPONSE_NORMAL:
 		case AP_RESPONSE_RESET_IN_PROGRESS:
@@ -267,15 +319,12 @@ static int vfio_ap_wait_for_irqclear(int apqn)
 		case AP_RESPONSE_DECONFIGURED:
 		case AP_RESPONSE_CHECKSTOPPED:
 		default:
-			WARN_ONCE(1, "%s: tapq rc %02x: %04x\n", __func__,
-				  status.response_code, apqn);
+			report_tapq_rc(q, status.response_code);
 			return -ENODEV;
 		}
 	} while (--retry);
 
-	WARN_ONCE(1, "%s: tapq rc %02x: timed out waiting for interrupts disabled for %02x.%04x\n",
-		  __func__, status.response_code,
-		  AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+	report_irqclear_timeout(q, status.response_code);
 
 	return -ETIMEDOUT;
 }
@@ -347,7 +396,7 @@ static struct ap_queue_status vfio_ap_irq_disable(struct vfio_ap_queue *q)
 			 * wait until interrupt processing has been disabled
 			 * before proceeding.
 			 */
-			ret = vfio_ap_wait_for_irqclear(q->apqn);
+			ret = vfio_ap_wait_for_irqclear(q);
 			if (ret == 0 || ret == -ENODEV)
 				goto end_free;
 			/*
@@ -374,8 +423,7 @@ static struct ap_queue_status vfio_ap_irq_disable(struct vfio_ap_queue *q)
 		case AP_RESPONSE_DECONFIGURED:
 		case AP_RESPONSE_CHECKSTOPPED:
 			/* AP not operational; no further interrupts possible */
-			WARN_ONCE(1, "%s: ap_aqic status %d\n", __func__,
-				  status.response_code);
+			report_aqic_disable_error(q, status.response_code);
 			goto end_free;
 		case AP_RESPONSE_INVALID_ADDRESS:
 		case AP_RESPONSE_INVALID_GISA:
@@ -387,14 +435,12 @@ static struct ap_queue_status vfio_ap_irq_disable(struct vfio_ap_queue *q)
 			 * and the hardware still holds the NIB address. Do not
 			 * free resources.
 			 */
-			WARN_ONCE(1, "%s: ap_aqic status %d\n", __func__,
-				  status.response_code);
+			report_aqic_disable_error(q, status.response_code);
 			goto end_fail;
 		}
 	} while (retries--);
 
-	WARN_ONCE(1, "%s: ap_aqic status %d\n", __func__,
-		  status.response_code);
+	report_aqic_disable_error(q, status.response_code);
 
 end_fail:
 	/*
@@ -523,7 +569,10 @@ static struct ap_queue_status vfio_ap_irq_enable(struct vfio_ap_queue *q,
 	if (vfio_ap_validate_nib(vcpu, &nib)) {
 		VFIO_AP_DBF_WARN("%s: invalid NIB address: nib=%pad, apqn=%#04x\n",
 				 __func__, &nib, q->apqn);
-
+		dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+				     "PQAP(AQIC) enable for %02x.%04x: invalid NIB address %pad\n",
+				     AP_QID_CARD(q->apqn),
+				     AP_QID_QUEUE(q->apqn), &nib);
 		status.response_code = AP_RESPONSE_INVALID_ADDRESS;
 		return status;
 	}
@@ -538,7 +587,10 @@ static struct ap_queue_status vfio_ap_irq_enable(struct vfio_ap_queue *q,
 		VFIO_AP_DBF_WARN("%s: vfio_pin_pages failed: rc=%d,"
 				 "nib=%pad, apqn=%#04x\n",
 				 __func__, ret, &nib, q->apqn);
-
+		dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+				     "PQAP(AQIC) enable for %02x.%04x: vfio_pin_pages failed rc=%d\n",
+				     AP_QID_CARD(q->apqn),
+				     AP_QID_QUEUE(q->apqn), ret);
 		status.response_code = AP_RESPONSE_INVALID_ADDRESS;
 		return status;
 	}
@@ -561,7 +613,10 @@ static struct ap_queue_status vfio_ap_irq_enable(struct vfio_ap_queue *q,
 	if (nisc < 0) {
 		VFIO_AP_DBF_WARN("%s: gisc registration failed: nisc=%d, isc=%d, apqn=%#04x\n",
 				 __func__, nisc, isc, q->apqn);
-
+		dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+				     "PQAP(AQIC) enable for %02x.%04x: GISC registration failed rc=%d isc=%d\n",
+				     AP_QID_CARD(q->apqn),
+				     AP_QID_QUEUE(q->apqn), nisc, isc);
 		vfio_unpin_pages(&q->matrix_mdev->vdev, nib, 1);
 		status.response_code = AP_RESPONSE_INVALID_ADDRESS;
 		return status;
@@ -596,9 +651,14 @@ static struct ap_queue_status vfio_ap_irq_enable(struct vfio_ap_queue *q,
 		 * ISC that were prepared for this (rejected) request.
 		 */
 		ret = kvm_s390_gisc_unregister(kvm, isc);
-		if (ret)
+		if (ret) {
 			VFIO_AP_DBF_WARN("%s: kvm_s390_gisc_unregister: rc=%d isc=%d, apqn=%#04x\n",
 					 __func__, ret, isc, q->apqn);
+			dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+					     "PQAP(AQIC) enable for %02x.%04x: GISC unregister failed rc=%d isc=%d\n",
+					     AP_QID_CARD(q->apqn),
+					     AP_QID_QUEUE(q->apqn), ret, isc);
+		}
 		vfio_unpin_pages(&q->matrix_mdev->vdev, nib, 1);
 		break;
 	}
@@ -611,6 +671,11 @@ static struct ap_queue_status vfio_ap_irq_enable(struct vfio_ap_queue *q,
 				 aqic_gisa.zone, aqic_gisa.ir, aqic_gisa.gisc,
 				 aqic_gisa.gf, aqic_gisa.gisa, aqic_gisa.isc,
 				 q->apqn);
+		dev_warn_ratelimited(mdev_dev(q->matrix_mdev->mdev),
+				     "PQAP(AQIC) enable for %02x.%04x failed with rc=%#02x\n",
+				     AP_QID_CARD(q->apqn),
+				     AP_QID_QUEUE(q->apqn),
+				     status.response_code);
 	}
 
 	return status;
@@ -695,7 +760,8 @@ static int handle_pqap(struct kvm_vcpu *vcpu)
 	if (!(vcpu->arch.sie_block->eca & ECA_AIV)) {
 		VFIO_AP_DBF_WARN("%s: AIV facility not installed: apqn=0x%04x, eca=0x%04x\n",
 				 __func__, apqn, vcpu->arch.sie_block->eca);
-
+		pr_warn_ratelimited("PQAP(AQIC) for %02x.%04x: AIV facility not installed\n",
+				    AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
 		return -EOPNOTSUPP;
 	}
 
@@ -704,7 +770,8 @@ static int handle_pqap(struct kvm_vcpu *vcpu)
 	if (!vcpu->kvm->arch.crypto.pqap_hook) {
 		VFIO_AP_DBF_WARN("%s: PQAP(AQIC) hook not registered with the vfio_ap driver: apqn=0x%04x\n",
 				 __func__, apqn);
-
+		pr_warn_ratelimited("PQAP(AQIC) for %02x.%04x: hook not registered with the vfio_ap driver\n",
+				    AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
 		goto out_unlock;
 	}
 
@@ -717,6 +784,9 @@ static int handle_pqap(struct kvm_vcpu *vcpu)
 		VFIO_AP_DBF_WARN("%s: mdev %08lx-%04lx-%04lx-%04lx-%04lx%08lx not in use: apqn=0x%04x\n",
 				 __func__, uuid[0],  uuid[1], uuid[2],
 				 uuid[3], uuid[4], uuid[5], apqn);
+		dev_warn_ratelimited(mdev_dev(matrix_mdev->mdev),
+				     "PQAP(AQIC) for %02x.%04x: mdev not in use\n",
+				     AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
 		goto out_unlock;
 	}
 
@@ -725,6 +795,9 @@ static int handle_pqap(struct kvm_vcpu *vcpu)
 		VFIO_AP_DBF_WARN("%s: Queue %02x.%04x not bound to the vfio_ap driver\n",
 				 __func__, AP_QID_CARD(apqn),
 				 AP_QID_QUEUE(apqn));
+		dev_warn_ratelimited(mdev_dev(matrix_mdev->mdev),
+				     "PQAP(AQIC) for %02x.%04x: queue not bound to the vfio_ap driver\n",
+				     AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
 		goto out_unlock;
 	}
 
@@ -2008,7 +2081,8 @@ static struct vfio_ap_queue *vfio_ap_find_queue(int apqn)
 	return q;
 }
 
-static int apq_status_check(int apqn, struct ap_queue_status *status)
+static int apq_status_check(struct vfio_ap_queue *q,
+			    struct ap_queue_status *status)
 {
 	switch (status->response_code) {
 	case AP_RESPONSE_NORMAL:
@@ -2070,10 +2144,7 @@ static int apq_status_check(int apqn, struct ap_queue_status *status)
 		return -EAGAIN;
 
 	default:
-		WARN(true,
-		     "failed to verify reset of queue %02x.%04x: TAPQ rc=%u\n",
-		     AP_QID_CARD(apqn), AP_QID_QUEUE(apqn),
-		     status->response_code);
+		report_tapq_rc(q, status->response_code);
 		return -EIO;
 	}
 }
@@ -2143,7 +2214,7 @@ static void apq_reset_check(struct work_struct *reset_work)
 		msleep(AP_RESET_INTERVAL);
 		elapsed += AP_RESET_INTERVAL;
 		status = ap_tapq(q->apqn, NULL);
-		ret = apq_status_check(q->apqn, &status);
+		ret = apq_status_check(q, &status);
 		if (ret == -EIO) {
 			/*
 			 * TAPQ returned an invalid response code. This
@@ -2255,10 +2326,7 @@ static void vfio_ap_mdev_reset_queue(struct vfio_ap_queue *q)
 		 * AP interrupts or DMA-write to the NIB, free the AQIC resources
 		 * rather than leak them.
 		 */
-		WARN(true,
-		     "PQAP/ZAPQ for %02x.%04x failed with invalid rc=%u\n",
-		     AP_QID_CARD(q->apqn), AP_QID_QUEUE(q->apqn),
-		     status.response_code);
+		report_zapq_rc(q, status.response_code);
 		vfio_ap_free_aqic_resources(q);
 	}
 }
