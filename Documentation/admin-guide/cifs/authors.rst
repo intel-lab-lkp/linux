@@ -40,7 +40,7 @@ Patch Contributors
 - Adrian Bunk (kcalloc cleanups)
 - Miklos Szeredi
 - Kazeon team for various fixes especially for 2.4 version.
-- Asser Ferno (Change Notify support)
+- Assert Ferno (Change Notify support)
 - Shaggy (Dave Kleikamp) for innumerable small fs suggestions and some good cleanup
 - Gunter Kukkukk (testing and suggestions for support of old servers)
 - Igor Mammedov (DFS support)
