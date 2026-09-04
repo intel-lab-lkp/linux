@@ -113,6 +113,7 @@ struct rockchip_pcie {
 	struct reset_control *rst;
 	struct gpio_desc *rst_gpio;
 	struct irq_domain *irq_domain;
+	int intx_irq;
 	const struct rockchip_pcie_of_data *data;
 	bool supports_clkreq;
 	struct delayed_work trace_work;
@@ -187,9 +188,16 @@ static const struct irq_domain_ops intx_domain_ops = {
 	.map = rockchip_pcie_intx_map,
 };
 
-static int rockchip_pcie_init_irq_domain(struct rockchip_pcie *rockchip)
+static void rockchip_pcie_intx_chained_release(void *data)
 {
-	struct device *dev = rockchip->pci.dev;
+	struct rockchip_pcie *rockchip = data;
+
+	irq_set_chained_handler_and_data(rockchip->intx_irq, NULL, NULL);
+}
+
+static int rockchip_pcie_init_irq_domain(struct device *dev,
+					 struct rockchip_pcie *rockchip)
+{
 	struct device_node *intc;
 
 	intc = of_get_child_by_name(dev->of_node, "legacy-interrupt-controller");
@@ -198,12 +206,17 @@ static int rockchip_pcie_init_irq_domain(struct rockchip_pcie *rockchip)
 		return -EINVAL;
 	}
 
-	rockchip->irq_domain = irq_domain_create_linear(of_fwnode_handle(intc), PCI_NUM_INTX,
-							&intx_domain_ops, rockchip);
+	rockchip->irq_domain = devm_irq_domain_instantiate(dev,
+			&(struct irq_domain_info){
+				.fwnode = of_fwnode_handle(intc),
+				.size = PCI_NUM_INTX,
+				.ops = &intx_domain_ops,
+				.host_data = rockchip,
+			});
 	of_node_put(intc);
-	if (!rockchip->irq_domain) {
+	if (IS_ERR(rockchip->irq_domain)) {
 		dev_err(dev, "failed to get a INTx IRQ domain\n");
-		return -EINVAL;
+		return PTR_ERR(rockchip->irq_domain);
 	}
 
 	return 0;
@@ -422,21 +435,8 @@ static int rockchip_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct rockchip_pcie *rockchip = to_rockchip_pcie(pci);
-	struct device *dev = rockchip->pci.dev;
-	int irq, ret;
-
-	irq = of_irq_get_byname(dev->of_node, "legacy");
-	if (irq < 0)
-		return irq;
 
 	pci->dbi_base2 = pci->dbi_base + PCIE_TYPE0_HDR_DBI2_OFFSET;
-
-	ret = rockchip_pcie_init_irq_domain(rockchip);
-	if (ret < 0)
-		dev_err(dev, "failed to init irq domain\n");
-
-	irq_set_chained_handler_and_data(irq, rockchip_pcie_intx_handler,
-					 rockchip);
 
 	rockchip_pcie_configure_l1ss(pci);
 	rockchip_pcie_enable_l0s(pci);
@@ -738,6 +738,33 @@ static int rockchip_pcie_configure_rc(struct platform_device *pdev,
 		dev_err(dev, "failed to initialize host\n");
 		return ret;
 	}
+
+	/*
+	 * This is done here instead of in the host ops .init() callback,
+	 * which is also re-run by .reset_root_port(), so that the INTx irq
+	 * domain is only created once, at probe time.
+	 */
+	rockchip->intx_irq = of_irq_get_byname(dev->of_node, "legacy");
+	if (rockchip->intx_irq < 0)
+		return rockchip->intx_irq;
+
+	ret = rockchip_pcie_init_irq_domain(dev, rockchip);
+	if (ret < 0) {
+		dev_err(dev, "failed to init irq domain\n");
+		return ret;
+	}
+
+	irq_set_chained_handler_and_data(rockchip->intx_irq,
+					 rockchip_pcie_intx_handler, rockchip);
+
+	/*
+	 * Uninstall the chained handler on probe failure, so that it can
+	 * never run against the devm-freed rockchip structure.
+	 */
+	ret = devm_add_action_or_reset(dev, rockchip_pcie_intx_chained_release,
+				       rockchip);
+	if (ret)
+		return ret;
 
 	/* unmask hot reset/link-down reset */
 	val = FIELD_PREP_WM16(PCIE_LINK_REQ_RST_NOT_INT, 0);
