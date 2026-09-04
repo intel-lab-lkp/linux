@@ -1343,6 +1343,10 @@ static int do_proc_bulk(struct usb_dev_state *ps,
 		snoop_urb(dev, NULL, pipe, len2, i, COMPLETE, tbuf, len2);
 
 		if (!i && len2) {
+                        if (len2 > len1) {
+                                dev_warn(&dev->dev, "USB returned more data than expected\n");
+                                len2 = len1;
+                        }
 			if (copy_to_user(bulk->data, tbuf, len2)) {
 				ret = -EFAULT;
 				goto done;
