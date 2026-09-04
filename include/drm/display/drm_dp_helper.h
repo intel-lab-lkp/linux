@@ -816,7 +816,7 @@ enum drm_dp_quirk {
 	 * @DP_DPCD_QUIRK_CONSTANT_N:
 	 *
 	 * The device requires main link attributes Mvid and Nvid to be limited
-	 * to 16 bits. So will give a constant value (0x8000) for compatability.
+	 * to 16 bits. So will give a constant value (0x8000) for compatibility.
 	 */
 	DP_DPCD_QUIRK_CONSTANT_N,
 	/**

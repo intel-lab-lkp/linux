@@ -322,7 +322,7 @@ struct drm_dsc_picture_parameter_set {
 	 * active.
 	 * PPS4[5] - blobk_pred_enable: Indicates if BP is used to code any
 	 * groups in picture
-	 * PPS4[7:6] - Reseved bits
+	 * PPS4[7:6] - Reserved bits
 	 */
 	u8 pps_4;
 	/**
