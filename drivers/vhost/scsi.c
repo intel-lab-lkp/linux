@@ -608,9 +608,10 @@ again:
 		return;
 	}
 
-	if ((vq->iov[out].iov_len != sizeof(struct virtio_scsi_event))) {
+	if (!in ||
+	    vq->iov[out].iov_len != sizeof(struct virtio_scsi_event)) {
 		vq_err(vq, "Expecting virtio_scsi_event, got %zu bytes\n",
-				vq->iov[out].iov_len);
+		       in ? vq->iov[out].iov_len : 0);
 		vs->vs_events_missed = true;
 		return;
 	}
