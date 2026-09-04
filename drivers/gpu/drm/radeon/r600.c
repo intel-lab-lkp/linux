@@ -1367,8 +1367,8 @@ static void r600_mc_program(struct radeon_device *rdev)
 
 /**
  * r600_vram_gtt_location - try to find VRAM & GTT location
- * @rdev: radeon device structure holding all necessary informations
- * @mc: memory controller structure holding memory informations
+ * @rdev: radeon device structure holding all necessary information
+ * @mc: memory controller structure holding memory information
  *
  * Function will place try to place VRAM at same place as in CPU (PCI)
  * address space as some GPU seems to have issue when we reprogram at
@@ -1437,7 +1437,7 @@ static int r600_mc_init(struct radeon_device *rdev)
 	uint32_t h_addr, l_addr;
 	unsigned long long k8_addr;
 
-	/* Get VRAM informations */
+	/* Get VRAM information */
 	rdev->mc.vram_is_ddr = true;
 	tmp = RREG32(RAMCFG);
 	if (tmp & CHANSIZE_OVERRIDE) {

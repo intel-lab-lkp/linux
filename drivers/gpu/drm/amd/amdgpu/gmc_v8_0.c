@@ -478,7 +478,7 @@ static int gmc_v8_0_mc_init(struct amdgpu_device *adev)
 	if (!adev->gmc.vram_width) {
 		int chansize, numchan;
 
-		/* Get VRAM informations */
+		/* Get VRAM information */
 		tmp = RREG32(mmMC_ARB_RAMCFG);
 		if (REG_GET_FIELD(tmp, MC_ARB_RAMCFG, CHANSIZE))
 			chansize = 64;

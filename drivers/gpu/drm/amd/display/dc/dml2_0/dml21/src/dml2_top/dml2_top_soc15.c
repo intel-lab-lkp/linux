@@ -666,7 +666,7 @@ void dml2_top_mcache_assign_global_mcache_ids(struct top_mcache_assign_global_mc
 			params->allocations[i].global_mcache_ids_plane1[j] = next_unused_cache_id++;
 		}
 
-		// The "psuedo-last" slice is always wrapped around
+		// The "pseudo-last" slice is always wrapped around
 		params->allocations[i].global_mcache_ids_plane0[params->allocations[i].num_mcaches_plane0] =
 			params->allocations[i].global_mcache_ids_plane0[0];
 		params->allocations[i].global_mcache_ids_plane1[params->allocations[i].num_mcaches_plane1] =
@@ -681,7 +681,7 @@ void dml2_top_mcache_assign_global_mcache_ids(struct top_mcache_assign_global_mc
 				params->allocations[i].global_mcache_ids_mall_plane1[j] = next_unused_cache_id++;
 			}
 
-			// The "psuedo-last" slice is always wrapped around
+			// The "pseudo-last" slice is always wrapped around
 			params->allocations[i].global_mcache_ids_mall_plane0[params->allocations[i].num_mcaches_plane0] =
 				params->allocations[i].global_mcache_ids_mall_plane0[0];
 			params->allocations[i].global_mcache_ids_mall_plane1[params->allocations[i].num_mcaches_plane1] =

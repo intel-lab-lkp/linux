@@ -1903,7 +1903,7 @@ void amdgpu_atombios_fini(struct amdgpu_device *adev)
  *
  * Initializes the driver info and register access callbacks for the
  * ATOM interpreter (r4xx+).
- * Returns 0 on sucess, -ENOMEM on failure.
+ * Returns 0 on success, -ENOMEM on failure.
  * Called at driver startup.
  */
 int amdgpu_atombios_init(struct amdgpu_device *adev)

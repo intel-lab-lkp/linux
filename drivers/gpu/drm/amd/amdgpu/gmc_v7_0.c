@@ -330,7 +330,7 @@ static int gmc_v7_0_mc_init(struct amdgpu_device *adev)
 		u32 tmp;
 		int chansize, numchan;
 
-		/* Get VRAM informations */
+		/* Get VRAM information */
 		tmp = RREG32(mmMC_ARB_RAMCFG);
 		if (REG_GET_FIELD(tmp, MC_ARB_RAMCFG, CHANSIZE))
 			chansize = 64;

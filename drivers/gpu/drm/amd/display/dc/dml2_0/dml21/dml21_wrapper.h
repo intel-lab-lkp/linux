@@ -54,7 +54,7 @@ struct dc_mcache_params {
 	unsigned int num_mcaches_plane1;
 	/*
 	* Generally, plane0/1 slices must use a disjoint set of caches
-	* but in some cases the final segement of the two planes can
+	* but in some cases the final segment of the two planes can
 	* use the same cache. If plane0_plane1 is set, then this is
 	* allowed.
 	*

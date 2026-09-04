@@ -3630,7 +3630,7 @@ static long kfd_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	/*
 	 * Versions of docker shipped in Ubuntu 18.xx and 20.xx do not support
 	 * CAP_CHECKPOINT_RESTORE, so we also allow access if CAP_SYS_ADMIN as CAP_SYS_ADMIN is a
-	 * more priviledged access.
+	 * more privileged access.
 	 */
 	if (unlikely(ioctl->flags & KFD_IOC_FLAG_CHECKPOINT_RESTORE)) {
 		if (!capable(CAP_CHECKPOINT_RESTORE) &&

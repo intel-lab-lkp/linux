@@ -153,7 +153,7 @@ static int ci_copy_bytes_to_smc(struct pp_hwmgr *hwmgr, uint32_t smc_start_addre
 		extra_shift = 8 * (4 - byte_count);
 
 		while (byte_count > 0) {
-			/* Bytes are written into the SMC addres space with the MSB first. */
+			/* Bytes are written into the SMC address space with the MSB first. */
 			data = (0x100 * data) + *src++;
 			byte_count--;
 		}

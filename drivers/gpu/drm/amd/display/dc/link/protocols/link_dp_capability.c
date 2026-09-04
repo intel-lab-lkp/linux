@@ -580,7 +580,7 @@ static enum dc_link_rate increase_link_rate(struct dc_link *link,
 	case LINK_RATE_HIGH3:
 		return LINK_RATE_UHBR10;
 	case LINK_RATE_UHBR10:
-		/* upto DP2.x specs UHBR13.5 is the only link rate that could be
+		/* up to DP2.x specs UHBR13.5 is the only link rate that could be
 		 * not supported by DPRX when higher link rate is supported.
 		 * so we treat it as a special case for code simplicity. When we
 		 * have new specs with more link rates like this, we should
@@ -642,7 +642,7 @@ static bool decide_fallback_link_setting_max_bw_policy(
 			next_idx++;
 		else if (dp_lt_fallbacks[next_idx].link_rate == LINK_RATE_UHBR13_5 &&
 				link->dpcd_caps.dp_128b_132b_supported_link_rates.bits.UHBR13_5 == 0)
-			/* upto DP2.x specs UHBR13.5 is the only link rate that
+			/* up to DP2.x specs UHBR13.5 is the only link rate that
 			 * could be not supported by DPRX when higher link rate
 			 * is supported. so we treat it as a special case for
 			 * code simplicity. When we have new specs with more

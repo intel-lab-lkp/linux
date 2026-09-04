@@ -45,7 +45,7 @@ static void xgpu_ai_mailbox_set_valid(struct amdgpu_device *adev, bool val)
 }
 
 /*
- * this peek_msg could *only* be called in IRQ routine becuase in IRQ routine
+ * this peek_msg could *only* be called in IRQ routine because in IRQ routine
  * RCV_MSG_VALID filed of BIF_BX_PF0_MAILBOX_CONTROL must already be set to 1
  * by host.
  *
@@ -126,7 +126,7 @@ static void xgpu_ai_mailbox_trans_msg (struct amdgpu_device *adev,
 	 * clear TRN_MSG_VALID valid to clear host's RCV_MSG_ACK
 	 * and with host's RCV_MSG_ACK cleared hw automatically clear host's RCV_MSG_ACK
 	 * which lead to VF's TRN_MSG_ACK cleared, otherwise below xgpu_ai_poll_ack()
-	 * will return immediatly
+	 * will return immediately
 	 */
 	do {
 		xgpu_ai_mailbox_set_valid(adev, false);

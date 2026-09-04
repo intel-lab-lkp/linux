@@ -2342,7 +2342,7 @@ error:
  * ME - Micro Engine
  * CE - Constant Engine
  * The PFP and ME make up what is considered the Drawing Engine (DE).
- * The CE is an asynchronous engine used for updating buffer desciptors
+ * The CE is an asynchronous engine used for updating buffer descriptors
  * used by the DE so that they can be loaded into cache in parallel
  * while the DE is processing state update packets.
  *

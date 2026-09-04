@@ -835,7 +835,7 @@ int radeon_uvd_get_destroy_msg(struct radeon_device *rdev, int ring,
  * @sd: number of SD streams
  * @hd: number of HD streams
  *
- * Count the number of open SD/HD streams as a hint for power mangement
+ * Count the number of open SD/HD streams as a hint for power management
  */
 static void radeon_uvd_count_handles(struct radeon_device *rdev,
 				     unsigned *sd, unsigned *hd)

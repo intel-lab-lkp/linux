@@ -185,7 +185,7 @@ static void check_audio_bandwidth_hdmi(
 
 	/* @todo do it after deep color is implemented
 	 * 8xx - deep color bandwidth scaling
-	 * Extra bandwidth is avaliable in deep color b/c link runs faster than
+	 * Extra bandwidth is available in deep color b/c link runs faster than
 	 * pixel rate. This has the effect of allowing more tmds characters to
 	 * be transmitted during blank
 	 */
@@ -1188,9 +1188,9 @@ void dce_aud_hw_init(
 	if (audio->inst != 0)
 		return;
 
-	/* Suport R5 - 32khz
-	 * Suport R6 - 44.1khz
-	 * Suport R7 - 48khz
+	/* Support R5 - 32khz
+	 * Support R6 - 44.1khz
+	 * Support R7 - 48khz
 	 */
 	/*disable clock gating before write to endpoint register*/
 	value = AZ_REG_READ(AZALIA_F0_CODEC_PIN_CONTROL_HOT_PLUG_CONTROL);

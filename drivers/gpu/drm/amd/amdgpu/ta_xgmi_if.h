@@ -167,7 +167,7 @@ struct ta_xgmi_shared_memory {
 	 * the second set
 	 */
 	uint8_t				flag_extend_link_record;
-	/* bit0: port_num info support flag for GET_EXTEND_PEER_LINKS commmand */
+	/* bit0: port_num info support flag for GET_EXTEND_PEER_LINKS command */
 	uint8_t				caps_flag;
 	uint8_t				reserved[2];
 	union ta_xgmi_cmd_input		xgmi_in_message;

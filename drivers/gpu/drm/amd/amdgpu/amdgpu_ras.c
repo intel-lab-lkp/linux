@@ -1627,7 +1627,7 @@ static int amdgpu_ras_query_error_count_helper(struct amdgpu_device *adev,
 	*ue_count += query_info->ue_count;
 
 	/* some hardware/IP supports read to clear
-	 * no need to explictly reset the err status after the query call */
+	 * no need to explicitly reset the err status after the query call */
 	if (amdgpu_ip_version(adev, MP0_HWIP, 0) != IP_VERSION(11, 0, 2) &&
 	    amdgpu_ip_version(adev, MP0_HWIP, 0) != IP_VERSION(11, 0, 4)) {
 		if (amdgpu_ras_reset_error_status(adev, query_info->head.block))
@@ -3419,7 +3419,7 @@ static void amdgpu_ras_query_poison_mode(struct amdgpu_device *adev)
 
 /*
  * check hardware's ras ability which will be saved in hw_supported.
- * if hardware does not support ras, we can skip some ras initializtion and
+ * if hardware does not support ras, we can skip some ras initialization and
  * forbid some ras operations from IP.
  * if software itself, say boot parameter, limit the ras ability. We still
  * need allow IP do some limited operations, like disable. In such case,

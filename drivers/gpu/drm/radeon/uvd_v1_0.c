@@ -273,7 +273,7 @@ int uvd_v1_0_start(struct radeon_device *rdev)
 	/* disable clock gating */
 	WREG32(UVD_CGC_GATE, 0);
 
-	/* disable interupt */
+	/* disable interrupt */
 	WREG32_P(UVD_MASTINT_EN, 0, ~(1 << 1));
 
 	/* Stall UMC and register bus before resetting VCPU */
@@ -351,7 +351,7 @@ int uvd_v1_0_start(struct radeon_device *rdev)
 		return r;
 	}
 
-	/* enable interupt */
+	/* enable interrupt */
 	WREG32_P(UVD_MASTINT_EN, 3<<1, ~(3 << 1));
 
 	/* force RBC into idle state */

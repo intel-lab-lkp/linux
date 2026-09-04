@@ -105,7 +105,7 @@ struct amdgpu_umc {
 	/* Total number of umc node instance including harvest one */
 	uint32_t node_inst_num;
 
-	/* UMC regiser per channel offset */
+	/* UMC register per channel offset */
 	uint32_t channel_offs;
 	/* how many pages are retired in one UE */
 	uint32_t retire_unit;

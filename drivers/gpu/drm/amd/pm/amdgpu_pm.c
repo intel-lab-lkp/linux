@@ -907,7 +907,7 @@ static ssize_t amdgpu_get_pp_od_clk_voltage(struct device *dev,
  * features to be enabled. The file pp_features is used for this. And
  * this is only available for Vega10 and later dGPUs.
  *
- * Reading back the file will show you the followings:
+ * Reading back the file will show you the following:
  * - Current ppfeature masks
  * - List of the all supported powerplay features with their naming,
  *   bitmasks and enablement status('Y'/'N' means "enabled"/"disabled").
@@ -4044,7 +4044,7 @@ err_out:
  *
  * Reading back the file shows you the current settings(temperature in Celsius
  * degree and fan speed in pwm) applied to every anchor point of the curve line
- * and their permitted ranges if changable.
+ * and their permitted ranges if changeable.
  *
  * Writing a desired string(with the format like "anchor_point_index temperature
  * fan_speed_in_pwm") to the file, change the settings for the specific anchor
@@ -4107,7 +4107,7 @@ static umode_t fan_curve_visible(struct amdgpu_device *adev)
  * acoustic limit in RPM for fan control.
  *
  * Reading back the file shows you the current setting and the permitted
- * ranges if changable.
+ * ranges if changeable.
  *
  * Writing an integer to the file, change the setting accordingly.
  *
@@ -4165,7 +4165,7 @@ static umode_t acoustic_limit_threshold_visible(struct amdgpu_device *adev)
  * acoustic target in RPM for fan control.
  *
  * Reading back the file shows you the current setting and the permitted
- * ranges if changable.
+ * ranges if changeable.
  *
  * Writing an integer to the file, change the setting accordingly.
  *
@@ -4225,7 +4225,7 @@ static umode_t acoustic_target_threshold_visible(struct amdgpu_device *adev)
  * target tempeature in Celsius degree for fan control.
  *
  * Reading back the file shows you the current setting and the permitted
- * ranges if changable.
+ * ranges if changeable.
  *
  * Writing an integer to the file, change the setting accordingly.
  *
@@ -4286,7 +4286,7 @@ static umode_t fan_target_temperature_visible(struct amdgpu_device *adev)
  * minimum fan speed in PWM.
  *
  * Reading back the file shows you the current setting and the permitted
- * ranges if changable.
+ * ranges if changeable.
  *
  * Writing an integer to the file, change the setting accordingly.
  *
@@ -4345,7 +4345,7 @@ static umode_t fan_minimum_pwm_visible(struct amdgpu_device *adev)
  * zero RPM feature.
  *
  * Reading back the file shows you the current setting and the permitted
- * ranges if changable.
+ * ranges if changeable.
  *
  * Writing an integer to the file, change the setting accordingly.
  *
@@ -4399,7 +4399,7 @@ static umode_t fan_zero_rpm_enable_visible(struct amdgpu_device *adev)
  * zero RPM stop temperature feature.
  *
  * Reading back the file shows you the current setting and the permitted
- * ranges if changable.
+ * ranges if changeable.
  *
  * Writing an integer to the file, change the setting accordingly.
  *

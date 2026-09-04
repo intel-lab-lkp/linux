@@ -1903,7 +1903,7 @@ static int smu_v13_0_0_od_edit_dpm_table(struct smu_context *smu,
 		 * The member below instructs PMFW the settings focused in
 		 * this single operation.
 		 * `uint32_t FeatureCtrlMask;`
-		 * It does not contain actual informations about user's custom
+		 * It does not contain actual information about user's custom
 		 * settings. Thus we do not cache it.
 		 */
 		offset_of_voltageoffset = offsetof(OverDriveTable_t, VoltageOffsetPerZoneBoundary);

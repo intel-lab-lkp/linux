@@ -51,7 +51,7 @@
 #define UMC_V6_7_PA_C2_BIT	17
 /* The R14 bit in SOC physical address */
 #define UMC_V6_7_PA_R14_BIT	34
-/* UMC regiser per channel offset */
+/* UMC register per channel offset */
 #define UMC_V6_7_PER_CHANNEL_OFFSET		0x400
 
 /* XOR bit 20, 25, 34 of PA into CH4 bit (bit 12 of PA),

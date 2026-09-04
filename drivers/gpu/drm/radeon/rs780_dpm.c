@@ -872,7 +872,7 @@ int rs780_dpm_init(struct radeon_device *rdev)
 				   &frev, &crev, &data_offset)) {
 		info = (union igp_info *)(rdev->mode_info.atom_context->bios + data_offset);
 
-		/* Get various system informations from bios */
+		/* Get various system information from bios */
 		switch (crev) {
 		case 1:
 			pi->num_of_cycles_in_period =

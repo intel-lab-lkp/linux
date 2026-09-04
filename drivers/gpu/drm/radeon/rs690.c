@@ -75,7 +75,7 @@ void rs690_pm_info(struct radeon_device *rdev)
 				   &frev, &crev, &data_offset)) {
 		info = (union igp_info *)(rdev->mode_info.atom_context->bios + data_offset);
 
-		/* Get various system informations from bios */
+		/* Get various system information from bios */
 		switch (crev) {
 		case 1:
 			tmp.full = dfixed_const(100);
@@ -361,7 +361,7 @@ static void rs690_crtc_bandwidth_compute(struct radeon_device *rdev,
 	wm->active_time.full = dfixed_mul(line_time, b);
 	wm->active_time.full = dfixed_div(wm->active_time, a);
 
-	/* Maximun bandwidth is the minimun bandwidth of all component */
+	/* Maximum bandwidth is the minimum bandwidth of all component */
 	max_bandwidth = core_bandwidth;
 	if (rdev->mc.igp_sideport_enabled) {
 		if (max_bandwidth.full > rdev->pm.sideport_bandwidth.full &&

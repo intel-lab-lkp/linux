@@ -755,7 +755,7 @@ static const struct dc_debug_options debug_defaults_drv = {
 	.disable_dcc = DCC_ENABLE,
 	.vsr_support = true,
 	.performance_trace = false,
-	.max_downscale_src_width = 7680,/*upto 8K*/
+	.max_downscale_src_width = 7680,/*up to 8K*/
 	.disable_pplib_wm_range = false,
 	.scl_reset_length10 = true,
 	.sanity_checks = false,
@@ -1887,7 +1887,7 @@ void dcn32_add_phantom_pipes(struct dc *dc, struct dc_state *context,
 	struct dc_stream_state *phantom_stream = NULL;
 	unsigned int i;
 
-	// The index of the DC pipe passed into this function is guarenteed to
+	// The index of the DC pipe passed into this function is guaranteed to
 	// be a valid candidate for SubVP (i.e. has a plane, stream, doesn't
 	// already have phantom pipe assigned, etc.) by previous checks.
 	phantom_stream = dcn32_enable_phantom_stream(dc, context, pipes, pipe_cnt, index);

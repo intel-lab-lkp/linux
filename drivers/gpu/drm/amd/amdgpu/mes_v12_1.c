@@ -1176,7 +1176,7 @@ static int mes_v12_1_load_microcode(struct amdgpu_device *adev,
 
 	WREG32_SOC15(GC, GET_INST(GC, xcc_id), regCP_MES_IC_BASE_CNTL, 0);
 
-	/* set ucode fimrware address */
+	/* set ucode firmware address */
 	WREG32_SOC15(GC, GET_INST(GC, xcc_id), regCP_MES_IC_BASE_LO,
 		     lower_32_bits(adev->mes.ucode_fw_gpu_addr[inst]));
 	WREG32_SOC15(GC, GET_INST(GC, xcc_id), regCP_MES_IC_BASE_HI,
@@ -1361,7 +1361,7 @@ static int mes_v12_1_mqd_init(struct amdgpu_ring *ring)
 	/*
 	 * Set CP_HQD_GFX_CONTROL.DB_UPDATED_MSG_EN[15] to enable unmapped
 	 * doorbell handling. This is a reserved CP internal register can
-	 * not be accesss by others
+	 * not be access by others
 	 */
 	mqd->cp_hqd_gfx_control = BIT(15);
 

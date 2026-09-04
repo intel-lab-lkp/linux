@@ -519,7 +519,7 @@ struct SOCParametersList {
 	dml_float_t SMNLatency;
 };
 
-/// @brief Struct that represent Plane configration of a display cfg
+/// @brief Struct that represent Plane configuration of a display cfg
 struct dml_plane_cfg_st {
 	//
 	// Pipe/Surface Parameters

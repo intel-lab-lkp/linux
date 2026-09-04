@@ -76,7 +76,7 @@ static enum dml2_status dml2_top_perform_stage_optimization(struct dml2_instance
 	 * means the stage optimizer no longer needs to attempt further optimization. The current worksheet should be
 	 * left unmodified. When the interface returns true, it means the stage optimizer applied new optimization to
 	 * the worksheet. DML top will need to validate and test permissibility again. The worksheet passed in is based
-	 * off the optimization decision from last attempt. It may or may not be validated or permissible. It is upto
+	 * off the optimization decision from last attempt. It may or may not be validated or permissible. It is up to
 	 * DML top to keep track of the last valid permissible worksheet. This interface is also responsible to clear
 	 * corresponding valid bits in worksheet's validation result based on what optimization it gets applied. When
 	 * the valid bits are cleared, it will be revalidated by top. Otherwise, DML top will assume it is safe to skip

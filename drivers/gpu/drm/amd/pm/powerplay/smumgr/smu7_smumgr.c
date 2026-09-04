@@ -61,7 +61,7 @@ int smu7_copy_bytes_to_smc(struct pp_hwmgr *hwmgr, uint32_t smc_start_address,
 	addr = smc_start_address;
 
 	while (byte_count >= 4) {
-	/* Bytes are written into the SMC addres space with the MSB first. */
+	/* Bytes are written into the SMC address space with the MSB first. */
 		data = src[0] * 0x1000000 + src[1] * 0x10000 + src[2] * 0x100 + src[3];
 
 		result = smu7_set_smc_sram_address(hwmgr, addr, limit);
@@ -91,7 +91,7 @@ int smu7_copy_bytes_to_smc(struct pp_hwmgr *hwmgr, uint32_t smc_start_address,
 		extra_shift = 8 * (4 - byte_count);
 
 		while (byte_count > 0) {
-			/* Bytes are written into the SMC addres space with the MSB first. */
+			/* Bytes are written into the SMC address space with the MSB first. */
 			data = (0x100 * data) + *src++;
 			byte_count--;
 		}

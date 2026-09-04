@@ -537,7 +537,7 @@ static int vce_v1_0_early_init(struct amdgpu_ip_block *ip_block)
  * Ensure that the VCPU BO has a 32-bit GPU address,
  * or return an error code when that isn't possible.
  *
- * To accomodate that, we put GART to the LOW address range
+ * To accommodate that, we put GART to the LOW address range
  * and reserve some GART pages where we map the VCPU BO,
  * so that it gets a 32-bit address.
  *

@@ -1750,7 +1750,7 @@ static int tonga_populate_vr_config(struct pp_hwmgr *hwmgr,
 	uint16_t config;
 
 	if (SMU7_VOLTAGE_CONTROL_BY_SVID2 == data->vdd_gfx_control) {
-		/*  Splitted mode */
+		/*  Split mode */
 		config = VR_SVI2_PLANE_1;
 		table->VRConfig |= (config<<VRCONF_VDDGFX_SHIFT);
 

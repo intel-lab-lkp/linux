@@ -1283,7 +1283,7 @@ void evergreen_fix_pci_max_read_req_size(struct radeon_device *rdev)
 	readrq = pcie_get_readrq(rdev->pdev);
 	v = ffs(readrq) - 8;
 	/* if bios or OS sets MAX_READ_REQUEST_SIZE to an invalid value, fix it
-	 * to avoid hangs or perfomance issues
+	 * to avoid hangs or performance issues
 	 */
 	if ((v == 0) || (v == 6) || (v == 7))
 		pcie_set_readrq(rdev->pdev, 512);
@@ -3716,7 +3716,7 @@ int evergreen_mc_init(struct radeon_device *rdev)
 	u32 tmp;
 	int chansize, numchan;
 
-	/* Get VRAM informations */
+	/* Get VRAM information */
 	rdev->mc.vram_is_ddr = true;
 	if ((rdev->family == CHIP_PALM) ||
 	    (rdev->family == CHIP_SUMO) ||

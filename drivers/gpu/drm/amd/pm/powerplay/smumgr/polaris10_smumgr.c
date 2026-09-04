@@ -159,7 +159,7 @@ static int polaris10_setup_graphics_level_structure(struct pp_hwmgr *hwmgr)
 				"[AVFS][Polaris10_SetupGfxLvlStruct] Copying of MCLK DPM table failed!",
 			return -1);
 
-	/* MVDD Boot value - neccessary for getting rid of the hang that occurs during Mclk DPM enablement */
+	/* MVDD Boot value - necessary for getting rid of the hang that occurs during Mclk DPM enablement */
 
 	graphics_level_address = dpm_table_start + offsetof(SMU74_Discrete_DpmTable, BootMVdd);
 

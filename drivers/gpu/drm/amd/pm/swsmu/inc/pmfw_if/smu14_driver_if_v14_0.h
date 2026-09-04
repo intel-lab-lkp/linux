@@ -1208,8 +1208,8 @@ typedef struct {
 
   uint8_t       FoptEnabled;
   uint8_t       DcsSpare2[3];
-  uint32_t      DcsFoptM;             //Tuning paramters to shift Fopt calculation, IEEE754 float
-  uint32_t      DcsFoptB;             //Tuning paramters to shift Fopt calculation, IEEE754 float
+  uint32_t      DcsFoptM;             //Tuning parameters to shift Fopt calculation, IEEE754 float
+  uint32_t      DcsFoptB;             //Tuning parameters to shift Fopt calculation, IEEE754 float
   uint32_t      DcsSpare[9];
 
   // UCLK section

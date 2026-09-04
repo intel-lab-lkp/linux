@@ -358,7 +358,7 @@ static int gfxhub_v2_1_gart_enable(struct amdgpu_device *adev)
 {
 	if (amdgpu_sriov_vf(adev)) {
 		/*
-		 * GCMC_VM_FB_LOCATION_BASE/TOP is NULL for VF, becuase they are
+		 * GCMC_VM_FB_LOCATION_BASE/TOP is NULL for VF, because they are
 		 * VF copy registers so vbios post doesn't program them, for
 		 * SRIOV driver need to program them
 		 */

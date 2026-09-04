@@ -3303,7 +3303,7 @@ static int smu_set_power_profile_mode(void *handle,
 
 	if (param[param_size] == PP_SMC_POWER_PROFILE_CUSTOM) {
 		custom = true;
-		/* clear frontend mask so custom changes propogate */
+		/* clear frontend mask so custom changes propagate */
 		smu->workload_mask = 0;
 	}
 

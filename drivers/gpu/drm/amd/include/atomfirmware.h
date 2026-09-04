@@ -742,7 +742,7 @@ struct atom_gpio_pin_lut_v2_1
 /*
  * VBIOS/PRE-OS always reserve a FB region at the top of frame buffer. driver should not write
  * access that region. driver can allocate their own reservation region as long as it does not
- * overlap firwmare's reservation region.
+ * overlap firmware's reservation region.
  * if (pre-NV1X) atom data table firmwareInfoTable version < 3.3:
  * in this case, atom data table vram_usagebyfirmwareTable version always <= 2.1
  *   if VBIOS/UEFI GOP is posted:

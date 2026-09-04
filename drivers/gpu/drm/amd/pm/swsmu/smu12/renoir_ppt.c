@@ -522,7 +522,7 @@ static int renoir_emit_clk_levels(struct smu_context *smu,
 		break;
 	case SMU_GFXCLK:
 	case SMU_SCLK:
-		/* retirve table returned paramters unit is MHz */
+		/* retirve table returned parameters unit is MHz */
 		cur_value = metrics.ClockFrequency[CLOCK_GFXCLK];
 		ret = renoir_get_dpm_ultimate_freq(smu, SMU_GFXCLK, &min, &max);
 		if (ret)

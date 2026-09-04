@@ -820,7 +820,7 @@ struct mpc_funcs {
 	*
 	* Return:
 	*
-	* bool - wheter DWB is idle or not
+	* bool - whether DWB is idle or not
 	*/
 	bool (*is_dwb_idle)(
 		struct mpc *mpc,
@@ -878,7 +878,7 @@ struct mpc_funcs {
 	* - [in] params - curve parameters for the LUT configuration
 	* - [in] rmu_idx
 	*
-	* bool - wheter LUT was set (set with given parameters) or not (params is NULL and LUT is disabled).
+	* bool - whether LUT was set (set with given parameters) or not (params is NULL and LUT is disabled).
 	*/
 	bool (*program_1dlut)(
 			struct mpc *mpc,
@@ -897,7 +897,7 @@ struct mpc_funcs {
 	*
 	* Return:
 	*
-	* bool - wheter shaper was set (set with given parameters) or not (params is NULL and LUT is disabled).
+	* bool - whether shaper was set (set with given parameters) or not (params is NULL and LUT is disabled).
 	*/
 	bool (*program_shaper)(
 			struct mpc *mpc,
@@ -930,7 +930,7 @@ struct mpc_funcs {
 	* - [in] params - tetrahedral parameters for the LUT configuration
 	* - [in] rmu_idx
 	*
-	* bool - wheter LUT was set (set with given parameters) or not (params is NULL and LUT is disabled).
+	* bool - whether LUT was set (set with given parameters) or not (params is NULL and LUT is disabled).
 	*/
 	bool (*program_3dlut)(
 			struct mpc *mpc,

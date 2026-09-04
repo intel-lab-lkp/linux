@@ -2313,7 +2313,7 @@ static int initialize_plane(struct amdgpu_display_manager *dm,
 /*
  * In this architecture, the association
  * connector -> encoder -> crtc
- * id not really requried. The crtc and connector will hold the
+ * id not really required. The crtc and connector will hold the
  * display_index as an abstraction to use with DAL component
  *
  * Returns 0 on success

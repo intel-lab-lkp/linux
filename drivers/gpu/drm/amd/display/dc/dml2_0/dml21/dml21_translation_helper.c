@@ -977,7 +977,7 @@ bool dml21_map_dc_state_into_dml_display_cfg(const struct dc *in_dc, struct dc_s
 
 void dml21_copy_clocks_to_dc_state(struct dml2_context *in_ctx, struct dc_state *context)
 {
-	/* TODO these should be the max of active, svp prefetch and idle should be tracked seperately */
+	/* TODO these should be the max of active, svp prefetch and idle should be tracked separately */
 	context->bw_ctx.bw.dcn.clk.dispclk_khz = in_ctx->v21.mode_programming.programming->min_clocks.dcn4x.dispclk_khz;
 	context->bw_ctx.bw.dcn.clk.dcfclk_khz = in_ctx->v21.mode_programming.programming->min_clocks.dcn4x.active.dcfclk_khz;
 	context->bw_ctx.bw.dcn.clk.dramclk_khz = in_ctx->v21.mode_programming.programming->min_clocks.dcn4x.active.uclk_khz;

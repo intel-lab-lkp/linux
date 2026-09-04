@@ -1073,7 +1073,7 @@ struct pptable_funcs {
 
 	/**
 	 * @update_pcie_parameters: Update and upload the system's PCIe
-	 *                          capabilites to the SMU.
+	 *                          capabilities to the SMU.
 	 * &pcie_gen_cap: Maximum allowed PCIe generation.
 	 * &pcie_width_cap: Maximum allowed PCIe width.
 	 */
@@ -1148,7 +1148,7 @@ struct pptable_funcs {
 	int (*check_fw_status)(struct smu_context *smu);
 
 	/**
-	 * @set_mp1_state: put SMU into a correct state for comming
+	 * @set_mp1_state: put SMU into a correct state for coming
 	 *                 resume from runpm or gpu reset.
 	 */
 	int (*set_mp1_state)(struct smu_context *smu,
@@ -1348,7 +1348,7 @@ struct pptable_funcs {
 	u32 (*get_gfx_off_residency)(struct smu_context *smu, uint32_t *residency);
 
 	/**
-	 * @register_irq_handler: Register interupt request handlers.
+	 * @register_irq_handler: Register interrupt request handlers.
 	 */
 	int (*register_irq_handler)(struct smu_context *smu);
 

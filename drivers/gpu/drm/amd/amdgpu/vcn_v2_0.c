@@ -879,7 +879,7 @@ static int vcn_v2_0_start_dpg_mode(struct amdgpu_vcn_inst *vinst, bool indirect)
 	WREG32_SOC15_DPG_MODE(0, SOC15_DPG_MODE_OFFSET(
 		UVD, 0, mmUVD_VCPU_CNTL), tmp, 0, indirect);
 
-	/* disable master interupt */
+	/* disable master interrupt */
 	WREG32_SOC15_DPG_MODE(0, SOC15_DPG_MODE_OFFSET(
 		UVD, 0, mmUVD_MASTINT_EN), 0, 0, indirect);
 
@@ -1740,7 +1740,7 @@ void vcn_v2_0_enc_ring_insert_end(struct amdgpu_ring *ring)
  * vcn_v2_0_enc_ring_emit_ib - enc execute indirect buffer
  *
  * @ring: amdgpu_ring pointer
- * @job: job to retrive vmid from
+ * @job: job to retrieve vmid from
  * @ib: indirect buffer to execute
  * @flags: unused
  *

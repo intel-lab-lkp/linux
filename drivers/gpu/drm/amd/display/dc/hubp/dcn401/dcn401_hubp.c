@@ -818,7 +818,7 @@ void hubp401_cursor_set_position(
 	uint32_t x_hotspot_clamped = pos->x_hotspot;
 	hubp->curs_pos = *pos;
 	/* Recout is zero for pipes if the entire dst_rect is contained
-	 * within preceeding ODM slices.
+	 * within preceding ODM slices.
 	 */
 	if (param->recout.width) {
 		x_pos_viewport = pos->x * param->viewport.width / param->recout.width;

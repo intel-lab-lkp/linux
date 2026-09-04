@@ -387,7 +387,7 @@ static bool dcn10_dmcu_init(struct dmcu *dmcu)
 
 	PERF_TRACE();
 	/*  Definition of DC_DMCU_SCRATCH
-	 *  0 : firmare not loaded
+	 *  0 : firmware not loaded
 	 *  1 : PSP load DMCU FW but not initialized
 	 *  2 : Firmware already initialized
 	 */

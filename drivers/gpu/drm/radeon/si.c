@@ -4188,7 +4188,7 @@ static int si_mc_init(struct radeon_device *rdev)
 	u32 tmp;
 	int chansize, numchan;
 
-	/* Get VRAM informations */
+	/* Get VRAM information */
 	rdev->mc.vram_is_ddr = true;
 	tmp = RREG32(MC_ARB_RAMCFG);
 	if (tmp & CHANSIZE_OVERRIDE) {

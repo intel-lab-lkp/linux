@@ -1222,7 +1222,7 @@ unsigned int dcn5_calculate_vm_and_row_bytes(struct dml2_core_shared_calculate_v
 		*p->vmpg_height = *p->PixelPTEReqHeight;
 		*p->vmpg_width = *p->PixelPTEReqWidth;
 	} else {
-		// default for rest of calculation to go through, when vm is disable, the calulated pte related values shouldnt be used anyways
+		// default for rest of calculation to go through, when vm is disable, the calulated pte related values shouldn't be used anyways
 		*p->PixelPTEReqHeight = p->MacroTileHeight;
 		*p->PixelPTEReqWidth = 8 * 1024 * p->GPUVMMinPageSizeKBytes / (p->MacroTileHeight * p->BytePerPixel);
 		*p->PTERequestSize = 64;
@@ -1586,7 +1586,7 @@ void dcn5_calculate_vm_row_and_swath(struct dml2_core_internal_scratch *scratch,
 		p->dpte_row_bytes_per_row_l[k] = s->PixelPTEBytesPerRowY[k];
 		p->dpte_row_bytes_per_row_c[k] = s->PixelPTEBytesPerRowC[k];
 
-		// if one row of dPTEs is meant to span the entire frame, then for these calculations, we will pretend like that one big row is fetched in two halfs
+		// if one row of dPTEs is meant to span the entire frame, then for these calculations, we will pretend like that one big row is fetched in two halves
 		if (p->use_one_row_for_frame[k])
 			p->PixelPTEBytesPerRow[k] = p->PixelPTEBytesPerRow[k] / 2;
 
@@ -3079,7 +3079,7 @@ bool dcn5_calculate_prefetch_schedule(struct dml2_core_internal_scratch *scratch
 	// Tpre_rounded is Tpre rounding to 2-bit fraction
 	// Tvm_trips_rounded is Tvm_trips ceiling to 1/4 line time
 	// Tr0_trips_rounded is Tr0_trips ceiling to 1/4 line time
-	// So that means prefetch bw calculated can be higher since the total time availabe for prefetch is less
+	// So that means prefetch bw calculated can be higher since the total time available for prefetch is less
 	bool min_Lsw_equ_ok = *p->Tpre_rounded >= s->Tvm_trips_rounded + 2.0*s->Tr0_trips_rounded + s->min_Lsw_equ*s->LineTime;
 
 	if (s->dst_y_prefetch_equ > 1 && min_Lsw_equ_ok) {

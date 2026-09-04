@@ -532,7 +532,7 @@ static int amdgpu_ctx_query(struct amdgpu_device *adev,
 	out->state.flags = 0x0;
 	out->state.hangs = 0x0;
 
-	/* determine if a GPU reset has occured since the last call */
+	/* determine if a GPU reset has occurred since the last call */
 	reset_counter = atomic_read(&adev->gpu_reset_counter);
 	/* TODO: this should ideally return NO, GUILTY, or INNOCENT. */
 	if (ctx->reset_counter_query == reset_counter)
@@ -922,7 +922,7 @@ void amdgpu_ctx_mgr_usage(struct amdgpu_ctx_mgr *mgr,
 	/*
 	 * This is a little bit racy because it can be that a ctx or a fence are
 	 * destroyed just in the moment we try to account them. But that is ok
-	 * since exactly that case is explicitely allowed by the interface.
+	 * since exactly that case is explicitly allowed by the interface.
 	 */
 	for (hw_ip = 0; hw_ip < AMDGPU_HW_IP_NUM; ++hw_ip) {
 		uint64_t ns = atomic64_read(&mgr->time_spend[hw_ip]);

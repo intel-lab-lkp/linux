@@ -337,7 +337,7 @@ static int ih_v6_1_irq_init(struct amdgpu_device *adev)
 	WREG32_SOC15(OSSSYS, 0, regIH_INT_FLOOD_CNTL, tmp);
 
 	/* GC/MMHUB UTCL2 page fault interrupts are configured as
-	 * MSI storm capable interrupts by deafult. The delay is
+	 * MSI storm capable interrupts by default. The delay is
 	 * used to avoid ISR being called too frequently
 	 * when page fault happens on several continuous page
 	 * and thus avoid MSI storm */

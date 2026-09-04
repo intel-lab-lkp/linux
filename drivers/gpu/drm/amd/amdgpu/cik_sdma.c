@@ -213,7 +213,7 @@ static void cik_sdma_ring_insert_nop(struct amdgpu_ring *ring, uint32_t count)
  * cik_sdma_ring_emit_ib - Schedule an IB on the DMA engine
  *
  * @ring: amdgpu ring pointer
- * @job: job to retrive vmid from
+ * @job: job to retrieve vmid from
  * @ib: IB object to schedule
  * @flags: unused
  *

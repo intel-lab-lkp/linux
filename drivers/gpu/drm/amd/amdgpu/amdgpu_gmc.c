@@ -297,7 +297,7 @@ void amdgpu_gmc_set_gart_size(struct amdgpu_device *adev, u64 default_size)
  * @gart_placement: GART placement policy with respect to VRAM
  *
  * Function will try to place GART before or after VRAM.
- * If GART size is bigger than space left then we ajust GART size.
+ * If GART size is bigger than space left then we adjust GART size.
  * Thus function will never fails.
  */
 void amdgpu_gmc_gart_location(struct amdgpu_device *adev, struct amdgpu_gmc *mc,

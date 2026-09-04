@@ -229,7 +229,7 @@ bool dce110_link_encoder_validate_output_with_stream(
 
 /****************** HW programming ************************/
 
-/* initialize HW */  /* why do we initialze aux in here? */
+/* initialize HW */  /* why do we initialize aux in here? */
 void dce110_link_encoder_hw_init(struct link_encoder *enc);
 
 void dce110_link_encoder_destroy(struct link_encoder **enc);

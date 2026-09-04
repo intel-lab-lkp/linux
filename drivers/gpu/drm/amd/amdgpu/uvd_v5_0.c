@@ -333,7 +333,7 @@ static int uvd_v5_0_start(struct amdgpu_device *adev)
 
 	uvd_v5_0_mc_resume(adev);
 
-	/* disable interupt */
+	/* disable interrupt */
 	WREG32_P(mmUVD_MASTINT_EN, 0, ~(1 << 1));
 
 	/* stall UMC and register bus before resetting VCPU */

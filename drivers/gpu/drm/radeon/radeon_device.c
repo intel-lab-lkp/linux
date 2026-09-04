@@ -526,8 +526,8 @@ int radeon_wb_init(struct radeon_device *rdev)
 
 /**
  * radeon_vram_location - try to find VRAM location
- * @rdev: radeon device structure holding all necessary informations
- * @mc: memory controller structure holding memory informations
+ * @rdev: radeon device structure holding all necessary information
+ * @mc: memory controller structure holding memory information
  * @base: base address at which to put VRAM
  *
  * Function will try to place VRAM at base address provided
@@ -591,12 +591,12 @@ void radeon_vram_location(struct radeon_device *rdev, struct radeon_mc *mc, u64 
 
 /**
  * radeon_gtt_location - try to find GTT location
- * @rdev: radeon device structure holding all necessary informations
- * @mc: memory controller structure holding memory informations
+ * @rdev: radeon device structure holding all necessary information
+ * @mc: memory controller structure holding memory information
  *
  * Function will try to place GTT before or after VRAM.
  *
- * If GTT size is bigger than space left then we ajust GTT size.
+ * If GTT size is bigger than space left then we adjust GTT size.
  * Thus function will never fails.
  *
  * FIXME: when reducing GTT size align new size on power of 2.
@@ -777,7 +777,7 @@ bool radeon_boot_test_post_card(struct radeon_device *rdev)
  * Allocate the dummy page used by the driver (all asics).
  * This dummy page is used by the driver as a filler for gart entries
  * when pages are taken out of the GART
- * Returns 0 on sucess, -ENOMEM on failure.
+ * Returns 0 on success, -ENOMEM on failure.
  */
 int radeon_dummy_page_init(struct radeon_device *rdev)
 {
@@ -969,7 +969,7 @@ static uint32_t cail_ioreg_read(struct card_info *info, uint32_t reg)
  *
  * Initializes the driver info and register access callbacks for the
  * ATOM interpreter (r4xx+).
- * Returns 0 on sucess, -ENOMEM on failure.
+ * Returns 0 on success, -ENOMEM on failure.
  * Called at driver startup.
  */
 int radeon_atombios_init(struct radeon_device *rdev)
@@ -1045,7 +1045,7 @@ void radeon_atombios_fini(struct radeon_device *rdev)
  * @rdev: radeon_device pointer
  *
  * Initializes the driver info for combios (r1xx-r3xx).
- * Returns 0 on sucess.
+ * Returns 0 on success.
  * Called at driver startup.
  */
 int radeon_combios_init(struct radeon_device *rdev)

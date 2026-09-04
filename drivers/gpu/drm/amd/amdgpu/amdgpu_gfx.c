@@ -2425,7 +2425,7 @@ fence_reset:
 	 */
 	if (!num_hung && queue_input && !ring) {
 		/* MES suspend_all is successful means this bad queue is
-		 * preempted successfuly. Remove it before resume all so it
+		 * preempted successfully. Remove it before resume all so it
 		 * doesn't get mapped back
 		 */
 		if (!down_read_trylock(&adev->reset_domain->sem)) {

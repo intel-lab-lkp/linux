@@ -203,7 +203,7 @@ int amdgpu_ih_wait_on_checkpoint_process_ts(struct amdgpu_device *adev,
  * @adev: amdgpu_device pointer
  * @ih: ih ring to process
  *
- * Interrupt hander (VI), walk the IH ring.
+ * Interrupt handler (VI), walk the IH ring.
  * Returns irq process return code.
  */
 int amdgpu_ih_process(struct amdgpu_device *adev, struct amdgpu_ih_ring *ih)

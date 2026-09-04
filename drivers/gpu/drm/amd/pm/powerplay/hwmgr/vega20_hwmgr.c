@@ -4447,7 +4447,7 @@ static const struct pp_hwmgr_func vega20_hwmgr_funcs = {
 	.get_mclk_od = vega20_get_mclk_od,
 	.set_mclk_od = vega20_set_mclk_od,
 	.odn_edit_dpm_table = vega20_odn_edit_dpm_table,
-	/* for sysfs to retrive/set gfxclk/memclk */
+	/* for sysfs to retrieve/set gfxclk/memclk */
 	.force_clock_level = vega20_force_clock_level,
 	.emit_clock_levels = vega20_emit_clock_levels,
 	.read_sensor = vega20_read_sensor,

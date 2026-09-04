@@ -6221,7 +6221,7 @@ static void gfx_v11_0_ring_emit_gfx_shadow(struct amdgpu_ring *ring,
 
 	/*
 	 * The logic here isn't easy to understand because we need to keep state
-	 * accross multiple executions of the function as well as between the
+	 * across multiple executions of the function as well as between the
 	 * CPU and GPU. The general idea is that the newly written GPU command
 	 * has a condition on the previous one and only executed if really
 	 * necessary.

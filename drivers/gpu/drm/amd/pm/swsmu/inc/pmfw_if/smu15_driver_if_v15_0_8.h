@@ -277,7 +277,7 @@ typedef struct {
 #define IH_INTERRUPT_CONTEXT_ID_THERMAL_THROTTLING  0x7
 #define IH_INTERRUPT_VFFLR_INT                      0xA
 
-/* thermal over-temp mask defines for IH interrup to host */
+/* thermal over-temp mask defines for IH interrupt to host */
 #define THROTTLER_PROCHOT_BIT           0
 #define THROTTLER_RESERVED              1
 /* AID, XCD, CCD throttling */

@@ -415,7 +415,7 @@ typedef struct _ATOM_PPLIB_SUMO_CLOCK_INFO{
       UCHAR  ucEngineClockHigh; //clockfrequency >> 16. 
       UCHAR  vddcIndex;         //2-bit vddc index;
       USHORT tdpLimit;
-      //please initalize to 0
+      //please initialize to 0
       USHORT rsv1;
       //please initialize to 0s
       ULONG rsv2[2];

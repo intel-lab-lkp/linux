@@ -1054,7 +1054,7 @@ static void dc_build_cursor_update_payload0(
 	}
 
 	/* Payload: Cursor Rect is built from position & attribute
-	 * x & y are obtained from postion
+	 * x & y are obtained from position
 	 */
 	payload->cursor_rect.x = hubp->cur_rect.x;
 	payload->cursor_rect.y = hubp->cur_rect.y;

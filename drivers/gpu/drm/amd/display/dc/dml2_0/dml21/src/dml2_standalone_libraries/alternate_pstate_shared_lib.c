@@ -981,7 +981,7 @@ static void populate_lsdma(
 		out->width[1][pipe_idx]  = out->width[0][pipe_idx];
 		out->height[1][pipe_idx] = end_line_next - out->src_y[1][pipe_idx];
 
-		/* Note: If odd_req_width == true (not divisable by 256), then dst_pitch must be rounded up such that
+		/* Note: If odd_req_width == true (not divisible by 256), then dst_pitch must be rounded up such that
 		the total bytes (pitch * bytes_per_element) is divisible by 128 but not 256.
 		Otherwise it must be rounded up such that it is divisible by 256.
 		If out.dst_pitch already meets this requirement on assigning out.dst_pitch = out.width[0],

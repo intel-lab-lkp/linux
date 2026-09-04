@@ -1076,7 +1076,7 @@ static bool subvp_validate_static_schedulability(struct dc *dc,
 		// Static schedulability check for SubVP + SubVP case
 		schedulable = subvp_subvp_admissable(dc, context) && subvp_subvp_schedulable(dc, context);
 	} else if (subvp_count == 1 && non_subvp_pipes == 0) {
-		// Single SubVP configs will be supported by default as long as it's suppported by DML
+		// Single SubVP configs will be supported by default as long as it's supported by DML
 		schedulable = true;
 	} else if (subvp_count == 1 && non_subvp_pipes == 1) {
 		if (dcn32_subvp_drr_admissable(dc, context))

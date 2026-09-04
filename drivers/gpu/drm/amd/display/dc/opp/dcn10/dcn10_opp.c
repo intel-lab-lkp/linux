@@ -200,7 +200,7 @@ static void opp1_set_pixel_encoding(
  *		1 for 8 bpc
  *		2 for 10 bpc
  *		3 for 12 bpc
- *		7 for programable
+ *		7 for programmable
  *	2) Enable clamp if Limited range requested
  *
  * @oppn10: output_pixel_processor struct instance for dcn10.

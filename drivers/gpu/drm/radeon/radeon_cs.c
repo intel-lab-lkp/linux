@@ -839,7 +839,7 @@ void radeon_cs_dump_packet(struct radeon_cs_parser *p,
 /**
  * radeon_cs_packet_next_reloc() - parse next (should be reloc) packet
  * @p:			parser structure holding parsing context.
- * @cs_reloc:		reloc informations
+ * @cs_reloc:		reloc information
  * @nomm:		no memory management for debugging
  *
  * Check if next packet is relocation packet3, do bo validation and compute

@@ -3670,8 +3670,8 @@ failed1:
 failed:
 	/*
 	 * all cleanup jobs (xgmi terminate, ras terminate,
-	 * ring destroy, cmd/fence/fw buffers destory,
-	 * psp->cmd destory) are delayed to psp_hw_fini
+	 * ring destroy, cmd/fence/fw buffers destroy,
+	 * psp->cmd destroy) are delayed to psp_hw_fini
 	 */
 	psp_ring_destroy(psp, PSP_RING_TYPE__KM);
 	return ret;

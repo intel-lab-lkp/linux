@@ -70,7 +70,7 @@
  * Allocate the dummy page used by the driver (all asics).
  * This dummy page is used by the driver as a filler for gart entries
  * when pages are taken out of the GART
- * Returns 0 on sucess, -ENOMEM on failure.
+ * Returns 0 on success, -ENOMEM on failure.
  */
 static int amdgpu_gart_dummy_page_init(struct amdgpu_device *adev)
 {

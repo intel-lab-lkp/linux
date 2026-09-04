@@ -276,7 +276,7 @@ struct dc_mode_flags {
 enum dc_timing_source {
 	TIMING_SOURCE_UNDEFINED,
 
-	/* explicitly specifed by user, most important*/
+	/* explicitly specified by user, most important*/
 	TIMING_SOURCE_USER_FORCED,
 	TIMING_SOURCE_USER_OVERRIDE,
 	TIMING_SOURCE_CUSTOM,

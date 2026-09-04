@@ -3415,7 +3415,7 @@ static void cik_gpu_init(struct radeon_device *rdev)
  * @rdev: radeon_device pointer
  *
  * Set up the number and offset of the CP scratch registers.
- * NOTE: use of CP scratch registers is a legacy inferface and
+ * NOTE: use of CP scratch registers is a legacy interface and
  * is not used by default on newer asics (r6xx+).  On newer asics,
  * memory buffers are used for fences rather than scratch regs.
  */
@@ -3831,7 +3831,7 @@ int cik_ib_test(struct radeon_device *rdev, struct radeon_ring *ring)
 
 /*
  * CP.
- * On CIK, gfx and compute now have independant command processors.
+ * On CIK, gfx and compute now have independent command processors.
  *
  * GFX
  * Gfx consists of a single ring and can process both gfx jobs and
@@ -3840,7 +3840,7 @@ int cik_ib_test(struct radeon_device *rdev, struct radeon_ring *ring)
  * ME - Micro Engine
  * CE - Constant Engine
  * The PFP and ME make up what is considered the Drawing Engine (DE).
- * The CE is an asynchronous engine used for updating buffer desciptors
+ * The CE is an asynchronous engine used for updating buffer descriptors
  * used by the DE so that they can be loaded into cache in parallel
  * while the DE is processing state update packets.
  *
@@ -4078,7 +4078,7 @@ static int cik_cp_gfx_resume(struct radeon_device *rdev)
 	ring->wptr = 0;
 	WREG32(CP_RB0_WPTR, ring->wptr);
 
-	/* set the wb address wether it's enabled or not */
+	/* set the wb address whether it's enabled or not */
 	WREG32(CP_RB0_RPTR_ADDR, (rdev->wb.gpu_addr + RADEON_WB_CP_RPTR_OFFSET) & 0xFFFFFFFC);
 	WREG32(CP_RB0_RPTR_ADDR_HI, upper_32_bits(rdev->wb.gpu_addr + RADEON_WB_CP_RPTR_OFFSET) & 0xFF);
 
@@ -4683,7 +4683,7 @@ static int cik_cp_compute_resume(struct radeon_device *rdev)
 		WREG32(CP_HQD_PQ_WPTR_POLL_ADDR_HI,
 		       mqd->queue_state.cp_hqd_pq_wptr_poll_addr_hi);
 
-		/* set the wb address wether it's enabled or not */
+		/* set the wb address whether it's enabled or not */
 		if (i == 0)
 			wb_gpu_addr = rdev->wb.gpu_addr + RADEON_WB_CP1_RPTR_OFFSET;
 		else
@@ -5330,7 +5330,7 @@ static int cik_mc_init(struct radeon_device *rdev)
 	u32 tmp;
 	int chansize, numchan;
 
-	/* Get VRAM informations */
+	/* Get VRAM information */
 	rdev->mc.vram_is_ddr = true;
 	tmp = RREG32(MC_ARB_RAMCFG);
 	if (tmp & CHANSIZE_MASK) {
@@ -7530,7 +7530,7 @@ static inline u32 cik_get_ih_wptr(struct radeon_device *rdev)
  *
  * @rdev: radeon_device pointer
  *
- * Interrupt hander (CIK).  Walk the IH ring,
+ * Interrupt handler (CIK).  Walk the IH ring,
  * ack interrupts and schedule work to handle
  * interrupt events.
  * Returns irq process return code.

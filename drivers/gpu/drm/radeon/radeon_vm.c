@@ -604,7 +604,7 @@ uint64_t radeon_vm_map_gart(struct radeon_device *rdev, uint64_t addr)
 /**
  * radeon_vm_page_flags - translate page flags to what the hw uses
  *
- * @flags: flags comming from userspace
+ * @flags: flags coming from userspace
  *
  * Translate the flags the userspace ABI uses to hw flags.
  */

@@ -742,7 +742,7 @@ static int uvd_v6_0_start(struct amdgpu_device *adev)
 
 	uvd_v6_0_mc_resume(adev);
 
-	/* disable interupt */
+	/* disable interrupt */
 	WREG32_FIELD(UVD_MASTINT_EN, VCPU_EN, 0);
 
 	/* stall UMC and register bus before resetting VCPU */
@@ -1045,7 +1045,7 @@ static void uvd_v6_0_ring_emit_ib(struct amdgpu_ring *ring,
  * uvd_v6_0_enc_ring_emit_ib - enc execute indirect buffer
  *
  * @ring: amdgpu_ring pointer
- * @job: job to retrive vmid from
+ * @job: job to retrieve vmid from
  * @ib: indirect buffer to execute
  * @flags: unused
  *

@@ -214,7 +214,7 @@ struct spread_spectrum_info {
 
 	union {
 		struct step_and_delay_info step_and_delay_info;
-		/* For mem/engine/uvd, Clock Out frequence (VCO ),
+		/* For mem/engine/uvd, Clock Out frequency (VCO ),
 		in unit of kHz. For TMDS/HDMI/LVDS, it is pixel clock,
 		for DP, it is link clock ( 270000 or 162000 ) */
 		uint32_t target_clock_range; /* in KHz */

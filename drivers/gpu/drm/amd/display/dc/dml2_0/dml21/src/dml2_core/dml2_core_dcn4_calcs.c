@@ -1495,7 +1495,7 @@ static unsigned int dscceComputeDelay(
 		cycles_per_group = 6;
 	else
 		cycles_per_group = 3;
-	//delay of the bit stream contruction layer in pixels is the sum of:
+	//delay of the bit stream construction layer in pixels is the sum of:
 	//1. number of pixel containers in a slice line multipled by the number of lines required to reach initial transmit delay multipled by number of slices to the left of the last horizontal slice
 	//2. number of pixel containers required to reach initial transmit delay (specifically, in the last horizontal slice)
 	//3. additional group of delay if initial transmit delay is reached exactly in a group
@@ -1757,7 +1757,7 @@ static unsigned int CalculateVMAndRowBytes(struct dml2_core_shared_calculate_vm_
 		*p->vmpg_height = *p->PixelPTEReqHeight;
 		*p->vmpg_width = *p->PixelPTEReqWidth;
 	} else {
-		// default for rest of calculation to go through, when vm is disable, the calulated pte related values shouldnt be used anyways
+		// default for rest of calculation to go through, when vm is disable, the calulated pte related values shouldn't be used anyways
 		*p->PixelPTEReqHeight = p->MacroTileHeight;
 		*p->PixelPTEReqWidth = 8 * 1024 * p->GPUVMMinPageSizeKBytes / (p->MacroTileHeight * p->BytePerPixel);
 		*p->PTERequestSize = 64;
@@ -2827,7 +2827,7 @@ static noinline_for_stack void calculate_bandwidth_available(
 	DML_LOG_VERBOSE("DML::%s: fclk_mhz = %f\n", __func__, fclk_mhz);
 	DML_LOG_VERBOSE("DML::%s: dram_bw_mbps = %f\n", __func__, dram_bw_mbps);
 
-	// Calculate all the bandwidth availabe
+	// Calculate all the bandwidth available
 	for (m = 0; m < dml2_core_internal_soc_state_max; m++) {
 		for (n = 0; n < dml2_core_internal_bw_max; n++) {
 			avg_bandwidth_available[m][n] = dml_get_return_bandwidth_available(soc,
@@ -3199,7 +3199,7 @@ static void CalculateVMRowAndSwath(struct dml2_core_internal_scratch *scratch,
 		p->dpte_row_bytes_per_row_l[k] = s->PixelPTEBytesPerRowY[k];
 		p->dpte_row_bytes_per_row_c[k] = s->PixelPTEBytesPerRowC[k];
 
-		// if one row of dPTEs is meant to span the entire frame, then for these calculations, we will pretend like that one big row is fetched in two halfs
+		// if one row of dPTEs is meant to span the entire frame, then for these calculations, we will pretend like that one big row is fetched in two halves
 		if (p->use_one_row_for_frame[k])
 			p->PixelPTEBytesPerRow[k] = p->PixelPTEBytesPerRow[k] / 2;
 
@@ -11030,7 +11030,7 @@ static bool dml_core_mode_programming(struct dml2_core_calcs_mode_programming_ex
 			s->num_active_planes);
 	}
 
-	// Calculate all the bandwidth availabe
+	// Calculate all the bandwidth available
 	calculate_bandwidth_available(
 		mode_lib->mp.avg_bandwidth_available_min,
 		mode_lib->mp.avg_bandwidth_available,

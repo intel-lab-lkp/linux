@@ -4682,7 +4682,7 @@ fail:
  * @dsc_padding_params: Pointer to the DSC padding parameters structure.
  *
  * This function updated the pix_clk for dsc with padding stored in pipe_ctx
- * such that the OTG h_active time fits withing the expected compressed active
+ * such that the OTG h_active time fits within the expected compressed active
  * time calculated according to HDMI spec. H_total is then increased to
  * maintain the same OTG line time as before the increased pix_clk.
  */

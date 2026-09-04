@@ -626,7 +626,7 @@ static const struct dc_debug_options debug_defaults_drv = {
 	.disable_dcc = DCC_ENABLE,
 	.vsr_support = true,
 	.performance_trace = false,
-	.max_downscale_src_width = 7680,/*upto 8K*/
+	.max_downscale_src_width = 7680,/*up to 8K*/
 	.disable_pplib_wm_range = false,
 	.scl_reset_length10 = true,
 	.sanity_checks = false,
@@ -751,7 +751,7 @@ static void assign_global_mcache_ids(struct dc_state *context, const struct dc_m
 			mcache_allocations[plane_idx].global_mcache_ids_plane1[i] = next_unused_cache_id++;
 		}
 
-		// The "psuedo-last" slice is always wrapped around
+		// The "pseudo-last" slice is always wrapped around
 		mcache_allocations[plane_idx].global_mcache_ids_plane0[mcache_params[plane_idx].num_mcaches_plane0] =
 			mcache_allocations[plane_idx].global_mcache_ids_plane0[0];
 		mcache_allocations[plane_idx].global_mcache_ids_plane1[mcache_params[plane_idx].num_mcaches_plane1] =
@@ -766,7 +766,7 @@ static void assign_global_mcache_ids(struct dc_state *context, const struct dc_m
 				mcache_allocations[plane_idx].global_mcache_ids_mall_plane1[i] = next_unused_cache_id++;
 			}
 
-			// The "psuedo-last" slice is always wrapped around
+			// The "pseudo-last" slice is always wrapped around
 			mcache_allocations[plane_idx].global_mcache_ids_mall_plane0[mcache_params[plane_idx].num_mcaches_plane0] =
 				mcache_allocations[plane_idx].global_mcache_ids_mall_plane0[0];
 			mcache_allocations[plane_idx].global_mcache_ids_mall_plane1[mcache_params[plane_idx].num_mcaches_plane1] =

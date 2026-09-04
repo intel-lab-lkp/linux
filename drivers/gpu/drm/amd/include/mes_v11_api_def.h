@@ -530,7 +530,7 @@ enum { QUERY_MES_MAX_SIZE_IN_DWORDS = 20 };
 
 /**
  * Obsolete
- * to be removed once KMD stopped refering to it.
+ * to be removed once KMD stopped referring to it.
  * use MES_API_QUERY_MES__CAPS instead
 */
 struct MES_API_QUERY_MES__CTX_ARRAY_SIZE {

@@ -64,7 +64,7 @@ static ssize_t amdgpu_rap_debugfs_write(struct file *f, const char __user *buf,
 		return ret;
 	}
 
-	/* make sure gfx core is on, RAP TA cann't handle
+	/* make sure gfx core is on, RAP TA can't handle
 	 * GFX OFF case currently.
 	 */
 	amdgpu_gfx_off_ctrl(adev, false);

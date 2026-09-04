@@ -3027,7 +3027,7 @@ bool dc_link_get_pr_state(const struct dc_link *link, uint64_t *state);
  */
 bool dc_link_wait_for_t12(struct dc_link *link);
 
-/* Determine if dp trace has been initialized to reflect upto date result *
+/* Determine if dp trace has been initialized to reflect up to date result *
  * return - true if trace is initialized and has valid data. False dp trace
  * doesn't have valid result.
  */

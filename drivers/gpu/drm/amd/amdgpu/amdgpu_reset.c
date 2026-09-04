@@ -44,7 +44,7 @@ static int amdgpu_reset_xgmi_reset_on_init_suspend(struct amdgpu_device *adev)
 		adev->ip_blocks[i].status.hw = false;
 	}
 
-	/* VCN FW shared region is in frambuffer, there are some flags
+	/* VCN FW shared region is in framebuffer, there are some flags
 	 * initialized in that region during sw_init. Make sure the region is
 	 * backed up.
 	 */

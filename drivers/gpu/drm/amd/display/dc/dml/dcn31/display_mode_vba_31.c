@@ -50,7 +50,7 @@
 // For DML-C changes that hasn't been propagated to VBA yet
 //#define __DML_VBA_ALLOW_DELTA__
 
-// Move these to ip paramaters/constant
+// Move these to ip parameters/constant
 
 // At which vstartup the DML start to try if the mode can be supported
 #define __DML_VBA_MIN_VSTARTUP__    9
@@ -2045,7 +2045,7 @@ static void DISPCLKDPPCLKDCFCLKDeepSleepPrefetchParametersWatermarksAndPerforman
 	v->DISPCLKWithRamping = 0;
 	v->DISPCLKWithoutRamping = 0;
 	v->GlobalDPPCLK = 0.0;
-	/* DAL custom code: need to update ReturnBW in case min dcfclk is overriden */
+	/* DAL custom code: need to update ReturnBW in case min dcfclk is overridden */
 	{
 	double IdealFabricAndSDPPortBandwidthPerState = dml_min(
 			v->ReturnBusWidth * v->DCFCLKState[v->VoltageLevel][v->maxMpcComb],

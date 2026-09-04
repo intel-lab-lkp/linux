@@ -654,7 +654,7 @@ static bool vi_read_bios_from_rom(struct amdgpu_device *adev,
 	/* set rom index to 0 */
 	WREG32(mmSMC_IND_INDEX_11, ixROM_INDEX);
 	WREG32(mmSMC_IND_DATA_11, 0);
-	/* set index to data for continous read */
+	/* set index to data for continuous read */
 	WREG32(mmSMC_IND_INDEX_11, ixROM_DATA);
 	for (i = 0; i < length_dw; i++)
 		dw_ptr[i] = RREG32(mmSMC_IND_DATA_11);

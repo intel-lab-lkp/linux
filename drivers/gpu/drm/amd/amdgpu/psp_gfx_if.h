@@ -98,7 +98,7 @@ enum psp_gfx_cmd_id
     GFX_CMD_ID_DESTROY_VMR        = 0x0000000A,   /* destroy VMR region */
     GFX_CMD_ID_PROG_REG           = 0x0000000B,   /* program regs */
     GFX_CMD_ID_GET_FW_ATTESTATION = 0x0000000F,   /* Query GPUVA of the Fw Attestation DB */
-    /* IDs upto 0x1F are reserved for older programs (Raven, Vega 10/12/20) */
+    /* IDs up to 0x1F are reserved for older programs (Raven, Vega 10/12/20) */
     GFX_CMD_ID_LOAD_TOC           = 0x00000020,   /* Load TOC and obtain TMR size */
     GFX_CMD_ID_AUTOLOAD_RLC       = 0x00000021,   /* Indicates all graphics fw loaded, start RLC autoload */
     GFX_CMD_ID_BOOT_CFG           = 0x00000022,   /* Boot Config */
@@ -505,7 +505,7 @@ struct psp_gfx_rb_frame
     uint32_t    sid_lo;             /* +24 bits [31:0] of SID value (used only for RBI frames) */
     uint32_t    sid_hi;             /* +28 bits [63:32] of SID value (used only for RBI frames) */
     uint8_t     vmid;               /* +32 VMID value used for mapping of all addresses for this frame */
-    uint8_t     frame_type;         /* +33 1: destory context frame, 0: all other frames; used only for RBI frames */
+    uint8_t     frame_type;         /* +33 1: destroy context frame, 0: all other frames; used only for RBI frames */
     uint8_t     reserved1[2];       /* +34 reserved, must be 0 */
     uint32_t    reserved2[7];       /* +36 reserved, must be 0 */
                 /* total 64 bytes */

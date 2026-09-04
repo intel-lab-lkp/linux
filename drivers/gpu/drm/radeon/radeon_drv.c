@@ -71,7 +71,7 @@
  *   2.11.0 - backend map, initial compute support for the CS checker
  *   2.12.0 - RADEON_CS_KEEP_TILING_FLAGS
  *   2.13.0 - virtual memory support, streamout
- *   2.14.0 - add evergreen tiling informations
+ *   2.14.0 - add evergreen tiling information
  *   2.15.0 - add max_pipes query
  *   2.16.0 - fix evergreen 2D tiled surface calculation
  *   2.17.0 - add STRMOUT_BASE_UPDATE for r7xx

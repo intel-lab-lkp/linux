@@ -2199,12 +2199,12 @@ typedef struct _GET_ENGINE_CLOCK_PARAMETERS
 /****************************************************************************/
 // Following Structures and constant may be obsolete
 /****************************************************************************/
-//Maxium 8 bytes,the data read in will be placed in the parameter space.
-//Read operaion successeful when the paramter space is non-zero, otherwise read operation failed
+//Maximum 8 bytes,the data read in will be placed in the parameter space.
+//Read operaion successeful when the parameter space is non-zero, otherwise read operation failed
 typedef struct _READ_EDID_FROM_HW_I2C_DATA_PARAMETERS
 {
   USHORT    usPrescale;         //Ratio between Engine clock and I2C clock
-  USHORT    usVRAMAddress;      //Adress in Frame Buffer where to pace raw EDID
+  USHORT    usVRAMAddress;      //Address in Frame Buffer where to pace raw EDID
   USHORT    usStatus;           //When use output: lower byte EDID checksum, high byte hardware status
                                 //WHen use input:  lower byte as 'byte to read':currently limited to 128byte or 1byte
   UCHAR     ucSlaveAddr;        //Read from which slave
@@ -2420,7 +2420,7 @@ typedef struct _LVDS_ENCODER_CONTROL_PARAMETERS
 typedef struct _LVDS_ENCODER_CONTROL_PARAMETERS_V2
 {
   USHORT usPixelClock;  // in 10KHz; for bios convenient
-  UCHAR  ucMisc;        // see PANEL_ENCODER_MISC_xx defintions below
+  UCHAR  ucMisc;        // see PANEL_ENCODER_MISC_xx definitions below
   UCHAR  ucAction;      // 0: turn off encoder
                         // 1: setup and turn on encoder
   UCHAR  ucTruncate;    // bit0=0: Disable truncate
@@ -2645,10 +2645,10 @@ typedef struct   _SET_VOLTAGE_PARAMETERS_V1_3
 #define ATOM_INIT_VOLTAGE_REGULATOR          3        //Init Regulator
 #define ATOM_SET_VOLTAGE_PHASE               4        //Set Vregulator Phase, only for SVID/PVID regulator
 #define ATOM_GET_MAX_VOLTAGE                 6        //Get Max Voltage, not used from SetVoltageTable v1.3
-#define ATOM_GET_VOLTAGE_LEVEL               6        //Get Voltage level from vitual voltage ID, not used for SetVoltage v1.4
+#define ATOM_GET_VOLTAGE_LEVEL               6        //Get Voltage level from virtual voltage ID, not used for SetVoltage v1.4
 #define ATOM_GET_LEAKAGE_ID                  8        //Get Leakage Voltage Id ( starting from SMU7x IP ), SetVoltage v1.4
 
-// define vitual voltage id in usVoltageLevel
+// define virtual voltage id in usVoltageLevel
 #define ATOM_VIRTUAL_VOLTAGE_ID0             0xff01
 #define ATOM_VIRTUAL_VOLTAGE_ID1             0xff02
 #define ATOM_VIRTUAL_VOLTAGE_ID2             0xff03
@@ -2815,7 +2815,7 @@ typedef struct _ATOM_MASTER_LIST_OF_DATA_TABLES
   USHORT        IntegratedSystemInfo;     // Shared by various SW components
   USHORT        ASIC_ProfilingInfo;       // New table name from R600, used to be called "ASIC_VDDCI_Info" for pre-R600
   USHORT        VoltageObjectInfo;        // Shared by various SW components, latest version 1.1
-  USHORT        PowerSourceInfo;          // Shared by various SW components, latest versoin 1.1
+  USHORT        PowerSourceInfo;          // Shared by various SW components, latest version 1.1
   USHORT        ServiceInfo;
 }ATOM_MASTER_LIST_OF_DATA_TABLES;
 
@@ -4090,7 +4090,7 @@ typedef struct  _ATOM_LCD_RTS_RECORD
   UCHAR     ucRTSValue;
 }ATOM_LCD_RTS_RECORD;
 
-//!! If the record below exits, it shoud always be the first record for easy use in command table!!!
+//!! If the record below exits, it should always be the first record for easy use in command table!!!
 // The record below is only used when LVDS_Info is present. From ATOM_LVDS_INFO_V12, use ucLCDPanel_SpecialHandlingCap instead.
 typedef struct  _ATOM_LCD_MODE_CONTROL_CAP
 {
@@ -4168,7 +4168,7 @@ typedef struct _ATOM_SPREAD_SPECTRUM_INFO
 /****************************************************************************/
 // Structure used in AnalogTV_InfoTable (Top level)
 /****************************************************************************/
-//ucTVBootUpDefaultStd definiton:
+//ucTVBootUpDefaultStd definition:
 
 //ATOM_TV_NTSC                1
 //ATOM_TV_NTSCJ               2
@@ -4213,7 +4213,7 @@ typedef struct _ATOM_DPCD_INFO
 #define ATOM_DPCD_MAX_LANE_MASK    0x1F
 
 /**************************************************************************/
-// VRAM usage and their defintions
+// VRAM usage and their definitions
 
 // One chunk of VRAM used by Bios are for HWICON surfaces,EDID data.
 // Current Mode timing and Dail Timing and/or STD timing data EACH device. They can be broken down as below.
@@ -5115,7 +5115,7 @@ typedef struct _ATOM_VOLTAGE_OBJECT_HEADER_V3{
 
 // ATOM_VOLTAGE_OBJECT_HEADER_V3.ucVoltageMode
 #define VOLTAGE_OBJ_GPIO_LUT                 0        //VOLTAGE and GPIO Lookup table ->ATOM_GPIO_VOLTAGE_OBJECT_V3
-#define VOLTAGE_OBJ_VR_I2C_INIT_SEQ          3        //VOLTAGE REGULATOR INIT sequece through I2C -> ATOM_I2C_VOLTAGE_OBJECT_V3
+#define VOLTAGE_OBJ_VR_I2C_INIT_SEQ          3        //VOLTAGE REGULATOR INIT sequence through I2C -> ATOM_I2C_VOLTAGE_OBJECT_V3
 #define VOLTAGE_OBJ_PHASE_LUT                4        //Set Vregulator Phase lookup table ->ATOM_GPIO_VOLTAGE_OBJECT_V3
 #define VOLTAGE_OBJ_SVID2                    7        //Indicate voltage control by SVID2 ->ATOM_SVID2_VOLTAGE_OBJECT_V3
 #define VOLTAGE_OBJ_EVV                      8
@@ -5157,7 +5157,7 @@ typedef struct  _ATOM_GPIO_VOLTAGE_OBJECT_V3
 {
    ATOM_VOLTAGE_OBJECT_HEADER_V3 sHeader;    // voltage mode = VOLTAGE_OBJ_GPIO_LUT or VOLTAGE_OBJ_PHASE_LUT
    UCHAR  ucVoltageGpioCntlId;               // default is 0 which indicate control through CG VID mode
-   UCHAR  ucGpioEntryNum;                    // indiate the entry numbers of Votlage/Gpio value Look up table
+   UCHAR  ucGpioEntryNum;                    // indicate the entry numbers of Votlage/Gpio value Look up table
    UCHAR  ucPhaseDelay;                      // phase delay in unit of micro second
    UCHAR  ucReserved;
    ULONG  ulGpioMaskVal;                     // GPIO Mask value
@@ -5871,7 +5871,7 @@ ucUMAChannelNumber:                 System memory channel numbers.
 ulCSR_M3_ARB_CNTL_DEFAULT[10]:    Arrays with values for CSR M3 arbiter for default
 ulCSR_M3_ARB_CNTL_UVD[10]:        Arrays with values for CSR M3 arbiter for UVD playback.
 ulCSR_M3_ARB_CNTL_FS3D[10]:       Arrays with values for CSR M3 arbiter for Full Screen 3D applications.
-sAvail_SCLK[5]:                   Arrays to provide availabe list of SLCK and corresponding voltage, order from low to high
+sAvail_SCLK[5]:                   Arrays to provide available list of SLCK and corresponding voltage, order from low to high
 ulGMCRestoreResetTime:            GMC power restore and GMC reset time to calculate data reconnection latency. Unit in ns.
 ulMinimumNClk:                    Minimum NCLK speed among all NB-Pstates to calcualte data reconnection latency. Unit in 10kHz.
 ulIdleNClk:                       NCLK speed while memory runs in self-refresh state. Unit in 10kHz.
@@ -6102,7 +6102,7 @@ ucUMAChannelNumber:                 System memory channel numbers.
 ulCSR_M3_ARB_CNTL_DEFAULT[10]:    Arrays with values for CSR M3 arbiter for default
 ulCSR_M3_ARB_CNTL_UVD[10]:        Arrays with values for CSR M3 arbiter for UVD playback.
 ulCSR_M3_ARB_CNTL_FS3D[10]:       Arrays with values for CSR M3 arbiter for Full Screen 3D applications.
-sAvail_SCLK[5]:                   Arrays to provide availabe list of SLCK and corresponding voltage, order from low to high
+sAvail_SCLK[5]:                   Arrays to provide available list of SLCK and corresponding voltage, order from low to high
 ulGMCRestoreResetTime:            GMC power restore and GMC reset time to calculate data reconnection latency. Unit in ns.
 ulMinimumNClk:                    Minimum NCLK speed among all NB-Pstates to calcualte data reconnection latency. Unit in 10kHz.
 ulIdleNClk:                       NCLK speed while memory runs in self-refresh state. Unit in 10kHz.
@@ -6302,7 +6302,7 @@ ucUMAChannelNumber:                 System memory channel numbers.
 
 strVBIOSMsg[40]:                  VBIOS boot up customized message string
 
-sAvail_SCLK[5]:                   Arrays to provide availabe list of SLCK and corresponding voltage, order from low to high
+sAvail_SCLK[5]:                   Arrays to provide available list of SLCK and corresponding voltage, order from low to high
 
 ulGMCRestoreResetTime:            GMC power restore and GMC reset time to calculate data reconnection latency. Unit in ns.
 ulIdleNClk:                       NCLK speed while memory runs in self-refresh state, used to calculate self-refresh latency. Unit in 10kHz.
@@ -6628,7 +6628,7 @@ typedef struct  _ATOM_ASIC_MVDD_INFO
 
 typedef struct _ATOM_ASIC_SS_ASSIGNMENT
 {
-   ULONG                        ulTargetClockRange;                  //Clock Out frequence (VCO ), in unit of 10Khz
+   ULONG                        ulTargetClockRange;                  //Clock Out frequency (VCO ), in unit of 10Khz
   USHORT              usSpreadSpectrumPercentage;      //in unit of 0.01%
    USHORT                     usSpreadRateInKhz;                  //in unit of kHz, modulation freq
   UCHAR               ucClockIndication;                 //Indicate which clock source needs SS
@@ -6636,7 +6636,7 @@ typedef struct _ATOM_ASIC_SS_ASSIGNMENT
    UCHAR                        ucReserved[2];
 }ATOM_ASIC_SS_ASSIGNMENT;
 
-//Define ucClockIndication, SW uses the IDs below to search if the SS is requried/enabled on a clock branch/signal type.
+//Define ucClockIndication, SW uses the IDs below to search if the SS is required/enabled on a clock branch/signal type.
 //SS is not required or enabled if a match is not found.
 #define ASIC_INTERNAL_MEMORY_SS            1
 #define ASIC_INTERNAL_ENGINE_SS            2
@@ -6653,7 +6653,7 @@ typedef struct _ATOM_ASIC_SS_ASSIGNMENT
 
 typedef struct _ATOM_ASIC_SS_ASSIGNMENT_V2
 {
-   ULONG                        ulTargetClockRange;                  //For mem/engine/uvd, Clock Out frequence (VCO ), in unit of 10Khz
+   ULONG                        ulTargetClockRange;                  //For mem/engine/uvd, Clock Out frequency (VCO ), in unit of 10Khz
                                                     //For TMDS/HDMI/LVDS, it is pixel clock , for DP, it is link clock ( 27000 or 16200 )
   USHORT              usSpreadSpectrumPercentage;      //in unit of 0.01%
    USHORT                     usSpreadRateIn10Hz;                  //in unit of 10Hz, modulation freq
@@ -6684,7 +6684,7 @@ typedef struct _ATOM_ASIC_INTERNAL_SS_INFO_V2
 
 typedef struct _ATOM_ASIC_SS_ASSIGNMENT_V3
 {
-   ULONG                        ulTargetClockRange;                  //For mem/engine/uvd, Clock Out frequence (VCO ), in unit of 10Khz
+   ULONG                        ulTargetClockRange;                  //For mem/engine/uvd, Clock Out frequency (VCO ), in unit of 10Khz
                                                     //For TMDS/HDMI/LVDS, it is pixel clock , for DP, it is link clock ( 27000 or 16200 )
   USHORT              usSpreadSpectrumPercentage;      //in unit of 0.01% or 0.001%, decided by ucSpreadSpectrumMode bit4
    USHORT                     usSpreadRateIn10Hz;                  //in unit of 10Hz, modulation freq
@@ -6771,7 +6771,7 @@ typedef struct _ATOM_ASIC_INTERNAL_SS_INFO_V3
 #define ATOM_S0_SYSTEM_POWER_STATE_VALUE_LITEAC 3
 #define ATOM_S0_SYSTEM_POWER_STATE_VALUE_LIT2AC 4
 
-//Byte aligned defintion for BIOS usage
+//Byte aligned definition for BIOS usage
 #define ATOM_S0_CRT1_MONOb0             0x01
 #define ATOM_S0_CRT1_COLORb0            0x02
 #define ATOM_S0_CRT1_MASKb0             (ATOM_S0_CRT1_MONOb0+ATOM_S0_CRT1_COLORb0)
@@ -6837,7 +6837,7 @@ typedef struct _ATOM_ASIC_INTERNAL_SS_INFO_V3
 #define ATOM_S2_DISPLAY_ROTATION_ANGLE_MASK   0xC0000000L
 
 
-//Byte aligned defintion for BIOS usage
+//Byte aligned definition for BIOS usage
 #define ATOM_S2_TV1_STANDARD_MASKb0     0x0F
 #define ATOM_S2_CURRENT_BL_LEVEL_MASKb1 0xFF
 #define ATOM_S2_DEVICE_DPMS_STATEb2     0x01
@@ -6889,7 +6889,7 @@ typedef struct _ATOM_ASIC_INTERNAL_SS_INFO_V3
 
 
 
-//Byte aligned defintion for BIOS usage
+//Byte aligned definition for BIOS usage
 #define ATOM_S3_CRT1_ACTIVEb0           0x01
 #define ATOM_S3_LCD1_ACTIVEb0           0x02
 #define ATOM_S3_TV1_ACTIVEb0            0x04
@@ -6928,7 +6928,7 @@ typedef struct _ATOM_ASIC_INTERNAL_SS_INFO_V3
 #define ATOM_S4_LCD1_REFRESH_MASK       0x0000FF00L
 #define ATOM_S4_LCD1_REFRESH_SHIFT      8
 
-//Byte aligned defintion for BIOS usage
+//Byte aligned definition for BIOS usage
 #define ATOM_S4_LCD1_PANEL_ID_MASKb0    0x0FF
 #define ATOM_S4_LCD1_REFRESH_MASKb1     ATOM_S4_LCD1_PANEL_ID_MASKb0
 #define ATOM_S4_VRAM_INFO_MASKb2        ATOM_S4_LCD1_PANEL_ID_MASKb0
@@ -7007,7 +7007,7 @@ typedef struct _ATOM_ASIC_INTERNAL_SS_INFO_V3
 #define ATOM_S6_VRI_BRIGHTNESS_CHANGE       0x40000000L
 #define ATOM_S6_CONFIG_DISPLAY_CHANGE_MASK  0x80000000L
 
-//Byte aligned defintion for BIOS usage
+//Byte aligned definition for BIOS usage
 #define ATOM_S6_DEVICE_CHANGEb0         0x01
 #define ATOM_S6_SCALER_CHANGEb0         0x02
 #define ATOM_S6_LID_CHANGEb0            0x04
@@ -7270,7 +7270,7 @@ typedef struct _ENABLE_GRAPH_SURFACE_PS_ALLOCATION
 
 typedef struct _MEMORY_CLEAN_UP_PARAMETERS
 {
-  USHORT  usMemoryStart;                //in 8Kb boundry, offset from memory base address
+  USHORT  usMemoryStart;                //in 8Kb boundary, offset from memory base address
   USHORT  usMemorySize;                 //8Kb blocks aligned
 }MEMORY_CLEAN_UP_PARAMETERS;
 
@@ -9092,7 +9092,7 @@ typedef struct  _ATOM_POWERPLAY_INFO_V3
 /**************************************************************************/
 
 
-// Following definitions are for compatiblity issue in different SW components.
+// Following definitions are for compatibility issue in different SW components.
 #define ATOM_MASTER_DATA_TABLE_REVISION   0x01
 #define Object_Info                       Object_Header
 #define AdjustARB_SEQ                     MC_InitParameter
@@ -9272,8 +9272,8 @@ typedef struct {
 typedef struct {
   AMD_ACPI_DESCRIPTION_HEADER SHeader;
   UCHAR TableUUID[16];    //0x24
-  ULONG VBIOSImageOffset; //0x34. Offset to the first GOP_VBIOS_CONTENT block from the beginning of the stucture.
-  ULONG Lib1ImageOffset;  //0x38. Offset to the first GOP_LIB1_CONTENT block from the beginning of the stucture.
+  ULONG VBIOSImageOffset; //0x34. Offset to the first GOP_VBIOS_CONTENT block from the beginning of the structure.
+  ULONG Lib1ImageOffset;  //0x38. Offset to the first GOP_LIB1_CONTENT block from the beginning of the structure.
   ULONG Reserved[4];      //0x3C
 }UEFI_ACPI_VFCT;
 

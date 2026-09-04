@@ -162,7 +162,7 @@ static void dscc_bcl_compute_delay(latency_t *p, int bpc, float bpp, int slice_w
 	//number of syntax elements per group is 4 in N422 or 3 in all other pixel formats
 	syntax_elements_per_group = (pixel_format == dml2_n422) ? 4 : 3;
 
-	//delay of the bit stream contruction layer in pixels is the sum of:
+	//delay of the bit stream construction layer in pixels is the sum of:
 	//1. number of pixel containers in a slice line multiplied by the number of lines required to reach initial transmit delay multiplied by number of slices to the left of the last horizontal slice
 	group_delay  = (lines_to_reach_ixd_adjusted * slice_width_groups * (num_slices - 1));
 
@@ -302,7 +302,7 @@ static delay_uncertainty_t legacy_dsc_compute_output_pixel_delay(enum dml2_outpu
 	  if (pixel_format == dml2_420 || pixel_format == dml2_n422) {
 		delay += 2;
 	  }
-	} else { //greater than 1 slice configration has two slice streams, 6 cycles to accumulate 2 groups
+	} else { //greater than 1 slice configuration has two slice streams, 6 cycles to accumulate 2 groups
 	//no need to multiply by pixels per container as first half of first slice line is output faster by dscc_if as
 	//the second slice stream has no started yet so we do not need to wait for those pixels to appear at the input
 	  delay += 6;
@@ -373,7 +373,7 @@ static delay_uncertainty_t dsc_compute_output_pixel_delay(enum dml2_output_forma
 	  if (pixel_format == dml2_420 || pixel_format == dml2_n422) {
 		delay += 2;
 	  }
-	} else { //greater than 1 slice configration has two slice streams, 6 cycles to accumulate 2 groups
+	} else { //greater than 1 slice configuration has two slice streams, 6 cycles to accumulate 2 groups
 	//no need to multiply by pixels per container as first half of first slice line is output faster by dscc_if as
 	//the second slice stream has no started yet so we do not need to wait for those pixels to appear at the input
 	  //it takes 12 cycles for 6 pairs to arrive

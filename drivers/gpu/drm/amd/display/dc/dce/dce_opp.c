@@ -357,7 +357,7 @@ static void set_temporal_dither(
  *		1 for 8 bpc
  *		2 for 10 bpc
  *		3 for 12 bpc
- *		7 for programable
+ *		7 for programmable
  *	2) Enable clamp if Limited range requested
  */
 void dce110_opp_set_clamping(
@@ -417,7 +417,7 @@ void dce110_opp_set_clamping(
  *		1 for 8 bpc
  *		2 for 10 bpc
  *		3 for 12 bpc
- *		7 for programable
+ *		7 for programmable
  *	2) Enable clamp if Limited range requested
  */
 static void dce60_opp_set_clamping(

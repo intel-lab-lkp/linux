@@ -33,7 +33,7 @@
  * current OPTC by setting the bit with offset associated with the desired
  * memory instance to 1 in the current OPTC memory map register.
  *
- * It is upto software to decide how to allocate the shared memory resources
+ * It is up to software to decide how to allocate the shared memory resources
  * across different OPTC instances. Driver understands that the total number
  * of memory available is always 2 times the max number of OPP pipes. So each
  * OPP pipe can be mapped 2 pieces of memory. However there exists cases such as

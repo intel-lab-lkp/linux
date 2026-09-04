@@ -2070,7 +2070,7 @@ void dce110_tg_set_colors(struct timing_generator *tg,
 }
 
 /* Gets first line of blank region of the display timing for CRTC
- * and programms is as a trigger to fire vertical interrupt
+ * and programs is as a trigger to fire vertical interrupt
  */
 bool dce110_arm_vert_intr(struct timing_generator *tg, uint8_t width)
 {

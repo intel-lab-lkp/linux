@@ -1350,7 +1350,7 @@ static int mes_v11_0_load_microcode(struct amdgpu_device *adev,
 	WREG32_SOC15(GC, 0, regCP_MES_PRGRM_CNTR_START_HI,
 		     upper_32_bits(ucode_addr));
 
-	/* set ucode fimrware address */
+	/* set ucode firmware address */
 	WREG32_SOC15(GC, 0, regCP_MES_IC_BASE_LO,
 		     lower_32_bits(adev->mes.ucode_fw_gpu_addr[pipe]));
 	WREG32_SOC15(GC, 0, regCP_MES_IC_BASE_HI,

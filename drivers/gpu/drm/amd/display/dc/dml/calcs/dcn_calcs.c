@@ -342,7 +342,7 @@ static void pipe_ctx_to_e2e_pipe_params (
 	input->src.viewport_height     = pipe->plane_res.scl_data.viewport.height;
 	input->src.data_pitch          = pipe->plane_res.scl_data.viewport.width;
 	input->src.data_pitch_c        = pipe->plane_res.scl_data.viewport.width;
-	input->src.cur0_src_width      = 128; /* TODO: Cursor calcs, not curently stored */
+	input->src.cur0_src_width      = 128; /* TODO: Cursor calcs, not currently stored */
 	input->src.cur0_bpp            = 32;
 
 	input->src.macro_tile_size = swizzle_mode_to_macro_tile_size(pipe->plane_state->tiling_info.gfx9.swizzle);

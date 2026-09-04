@@ -63,7 +63,7 @@ void amdgpu_dm_irq_fini(struct amdgpu_device *adev);
  *
  * @adev: AMD DRM device
  * @int_params: parameters for the irq
- * @ih: pointer to the irq hander function
+ * @ih: pointer to the irq handler function
  * @handler_args: arguments which will be passed to ih
  *
  * Returns:

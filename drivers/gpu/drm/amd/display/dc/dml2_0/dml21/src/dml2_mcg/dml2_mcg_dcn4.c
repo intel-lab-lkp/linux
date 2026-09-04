@@ -66,7 +66,7 @@ static bool build_min_clk_table_fine_grained(const struct dml2_soc_bb *soc_bb, s
 	}
 	min_table->dram_bw_table.num_entries = soc_bb->clk_table.uclk.num_clk_values;
 
-	// To create the minium table, effectively shift "up" all the dcfclk/fclk entries by 1, and then replace the lowest entry with min fclk/dcfclk
+	// To create the minimum table, effectively shift "up" all the dcfclk/fclk entries by 1, and then replace the lowest entry with min fclk/dcfclk
 	for (i = min_table->dram_bw_table.num_entries - 1; i > 0; i--) {
 		prev_100 = min_table->dram_bw_table.entries[i - 1].min_fclk_khz;
 		cur_50 = min_table->dram_bw_table.entries[i].min_fclk_khz / 2;

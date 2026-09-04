@@ -815,7 +815,7 @@ static void add_phantom_pipes_for_main_pipe(struct dml2_context *ctx, struct dc_
 	struct dc_stream_state *phantom_stream = NULL;
 	unsigned int i;
 
-	// The index of the DC pipe passed into this function is guarenteed to
+	// The index of the DC pipe passed into this function is guaranteed to
 	// be a valid candidate for SubVP (i.e. has a plane, stream, doesn't
 	// already have phantom pipe assigned, etc.) by previous checks.
 	phantom_stream = enable_phantom_stream(ctx, state, main_pipe_idx, svp_height, vstartup);

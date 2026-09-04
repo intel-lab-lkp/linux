@@ -356,7 +356,7 @@ static int get_vco_frequency_from_reg(struct clk_mgr_internal *clk_mgr)
 
 	/*
 	 * since fractional part is only 16 bit in register definition but is 32 bit
-	 * in our fix point definiton, need to shift left by 16 to obtain correct value
+	 * in our fix point definition, need to shift left by 16 to obtain correct value
 	 */
 	pll_req.value |= fbmult_frac_val << 16;
 

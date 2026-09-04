@@ -2977,7 +2977,7 @@ static int smu_v13_0_6_mode2_reset(struct smu_context *smu)
 
 	/* Certain platforms have switches which assign virtual BAR values to
 	 * devices. OS uses the virtual BAR values and device behind the switch
-	 * is assgined another BAR value. When device's config space registers
+	 * is assigned another BAR value. When device's config space registers
 	 * are queried, switch returns the virtual BAR values. When mode-2 reset
 	 * is performed, switch is unaware of it, and will continue to return
 	 * the same virtual values to the OS.This affects
