@@ -1179,6 +1179,10 @@ void mptcp_pm_data_reset(struct mptcp_sock *msk)
 	u8 pm_type = mptcp_get_pm_type(sock_net((struct sock *)msk));
 	struct mptcp_pm_data *pm = &msk->pm;
 
+	/* the whole PM data is protected by pm->lock, the reset can
+	 * race with the RX path on a disconnecting socket
+	 */
+	spin_lock_bh(&pm->lock);
 	memset(&pm->reset, 0, sizeof(pm->reset));
 	pm->rm_list_tx.nr = 0;
 	pm->rm_list_rx.nr = 0;
@@ -1201,6 +1205,7 @@ void mptcp_pm_data_reset(struct mptcp_sock *msk)
 
 		bitmap_fill(pm->id_avail_bitmap, MPTCP_PM_MAX_ADDR_ID + 1);
 	}
+	spin_unlock_bh(&pm->lock);
 }
 
 void mptcp_pm_data_init(struct mptcp_sock *msk)
