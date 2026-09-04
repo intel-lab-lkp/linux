@@ -234,7 +234,7 @@ struct xsdfec_config {
 };
 
 /**
- * struct xsdfec_stats - Stats retrived by ioctl XSDFEC_GET_STATS. Used
+ * struct xsdfec_stats - Stats retrieved by ioctl XSDFEC_GET_STATS. Used
  *			 to buffer atomic_t variables from struct
  *			 xsdfec_dev. Counts are accumulated until
  *			 the user clears them.
