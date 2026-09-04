@@ -826,7 +826,7 @@ static int fsi_master_gpio_probe(struct platform_device *pdev)
 	master->gpio_mux = gpio;
 
 	/*
-	 * Check if GPIO block is slow enought that no extra delays
+	 * Check if GPIO block is slow enough that no extra delays
 	 * are necessary. This improves performance on ast2500 by
 	 * an order of magnitude.
 	 */
