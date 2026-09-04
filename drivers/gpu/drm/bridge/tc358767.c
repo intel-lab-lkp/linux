@@ -1014,6 +1014,8 @@ static int tc_set_edp_video_mode(struct tc_data *tc,
 	ret = regmap_write(tc->regmap, DP0_VIDSYNCDELAY,
 		 FIELD_PREP(THRESH_DLY, max_tu_symbol) |
 		 FIELD_PREP(VID_SYNC_DLY, vid_sync_dly));
+	if (ret)
+		return ret;
 
 	ret = regmap_write(tc->regmap, DP0_TOTALVAL,
 			   FIELD_PREP(H_TOTAL, mode->htotal) |
@@ -1144,9 +1146,14 @@ static int tc_main_link_enable(struct tc_data *tc)
 	/* Reset/Enable Main Links */
 	dp_phy_ctrl |= DP_PHY_RST | PHY_M1_RST | PHY_M0_RST;
 	ret = regmap_write(tc->regmap, DP_PHY_CTRL, dp_phy_ctrl);
+	if (ret)
+		return ret;
+
 	usleep_range(100, 200);
 	dp_phy_ctrl &= ~(DP_PHY_RST | PHY_M1_RST | PHY_M0_RST);
 	ret = regmap_write(tc->regmap, DP_PHY_CTRL, dp_phy_ctrl);
+	if (ret)
+		return ret;
 
 	ret = tc_poll_timeout(tc, DP_PHY_CTRL, PHY_RDY, PHY_RDY, 500, 100000);
 	if (ret) {
