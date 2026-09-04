@@ -1231,7 +1231,7 @@ ds1685_rtc_probe(struct platform_device *pdev)
 		dev_warn(&pdev->dev,
 			 "Main battery is exhausted! RTC may be invalid!\n");
 
-	/* Check the auxillary battery.  It is optional. */
+	/* Check the auxiliary battery.  It is optional. */
 	if (!(rtc->read(rtc, RTC_EXT_CTRL_4A) & RTC_CTRL_4A_VRT2))
 		dev_warn(&pdev->dev,
 			 "Aux battery is exhausted or not available.\n");
@@ -1395,7 +1395,7 @@ ds1685_rtc_poweroff(struct platform_device *pdev)
 		rtc->write(rtc, RTC_CTRL_A, ctrla);
 
 		/*
-		 * Read Control 4A and check the status of the auxillary
+		 * Read Control 4A and check the status of the auxiliary
 		 * battery.  This must be present and working (VRT2 = 1)
 		 * for wakeup and kickstart functionality to be useful.
 		 */
@@ -1407,7 +1407,7 @@ ds1685_rtc_poweroff(struct platform_device *pdev)
 			rtc->write(rtc, RTC_EXT_CTRL_4A, ctrl4a);
 
 			/*
-			 * The auxillary battery is present and working.
+			 * The auxiliary battery is present and working.
 			 * Enable extended functions (ABE=1), enable
 			 * wake-up (WIE=1), and enable kickstart (KSE=1)
 			 * in Control 4B.

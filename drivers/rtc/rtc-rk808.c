@@ -295,7 +295,7 @@ static int rk808_rtc_alarm_irq_enable(struct device *dev,
 
 /*
  * We will just handle setting the frequency and make use the framework for
- * reading the periodic interupts.
+ * reading the periodic interrupts.
  *
  * @freq: Current periodic IRQ freq:
  * bit 0: every second

@@ -43,7 +43,7 @@
 #define YEARS_UNITS		(0xf<<16)	/* years units position */
 #define YEARS_TENS		(0xf<<20)	/* years tens position */
 #define YEARS_HUNDREDS		(0xf<<24)	/* years hundereds position */
-#define YEARS_MILLENIUMS	(0xf<<28)	/* years millenium position */
+#define YEARS_MILLENIUMS	(0xf<<28)	/* years millennium position */
 
 /* MASK SHIFT TIME_REG & ALARM_TIME_REG*/
 #define SECOND_SHIFT		0x00		/* seconds units */

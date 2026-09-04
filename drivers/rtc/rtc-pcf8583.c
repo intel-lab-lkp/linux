@@ -7,7 +7,7 @@
  *
  *  Driver for PCF8583 RTC & RAM chip
  *
- *  Converted to the generic RTC susbsystem by G. Liakhovetski (2006)
+ *  Converted to the generic RTC subsystem by G. Liakhovetski (2006)
  */
 #include <linux/module.h>
 #include <linux/i2c.h>

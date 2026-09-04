@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * RTC driver for the interal RTC block in the Amlogic Meson6, Meson8,
+ * RTC driver for the internal RTC block in the Amlogic Meson6, Meson8,
  * Meson8b and Meson8m2 SoCs.
  *
  * The RTC is split in to two parts, the AHB front end and a simple serial

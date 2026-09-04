@@ -200,7 +200,7 @@ struct ds1685_rtc_platform_data {
  * access to the extended NV-SRAM by automatically incrementing the address
  * register when they are read from or written to.
  */
-#define RTC_CTRL_4A_VRT2	BIT(7)	/* Auxillary Battery Status */
+#define RTC_CTRL_4A_VRT2	BIT(7)	/* Auxiliary Battery Status */
 #define RTC_CTRL_4A_INCR	BIT(6)	/* Increment-in-Progress Status */
 #define RTC_CTRL_4A_PAB		BIT(3)	/* Power-Active Bar Control */
 #define RTC_CTRL_4A_RF		BIT(2)	/* RAM-Clear Flag */
@@ -215,7 +215,7 @@ struct ds1685_rtc_platform_data {
 /*
  * Bit names in Extended Control Register 4B.
  */
-#define RTC_CTRL_4B_ABE		BIT(7)	/* Auxillary Battery Enable */
+#define RTC_CTRL_4B_ABE		BIT(7)	/* Auxiliary Battery Enable */
 #define RTC_CTRL_4B_E32K	BIT(6)	/* Enable 32.768Hz on SQW Pin */
 #define RTC_CTRL_4B_CS		BIT(5)	/* Crystal Select */
 #define RTC_CTRL_4B_RCE		BIT(4)	/* RAM Clear-Enable */
