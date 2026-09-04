@@ -666,7 +666,7 @@ static void sci_port_invalid_link_up(struct isci_port *iport, struct isci_phy *i
 	struct isci_host *ihost = iport->owning_controller;
 
 	/*
-	 * Check to see if we have alreay reported this link as bad and if
+	 * Check to see if we have already reported this link as bad and if
 	 * not go ahead and tell the SCI_USER that we have discovered an
 	 * invalid link.
 	 */

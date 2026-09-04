@@ -909,13 +909,13 @@ struct scu_iit_entry {
  * To calculate the offset for other functions use
  *       BAR0 + FN# * SystemPageSize * 2
  *
- * The TCA is only accessable from FN#0 (Physical Function) and each
+ * The TCA is only accessible from FN#0 (Physical Function) and each
  * is programmed by (BAR0 + SCU_SMU_TCA_OFFSET + (FN# * 0x04)) or
  *    TCA0 for FN#0 is at BAR0 + 0x0400
  *    TCA1 for FN#1 is at BAR0 + 0x0404
  *    etc.
  * ----------------------------------------------------------------------------
- * Accessable to all FN#s */
+ * Accessible to all FN#s */
 #define SCU_SMU_PCP_OFFSET          0x0000
 #define SCU_SMU_AMR_OFFSET          0x0004
 #define SCU_SMU_ISR_OFFSET          0x0010
@@ -929,7 +929,7 @@ struct scu_iit_entry {
 #define SCU_SMU_CQPR_OFFSET         0x0040
 #define SCU_SMU_CQGR_OFFSET         0x0044
 #define SCU_SMU_CQC_OFFSET          0x0048
-/* Accessable to FN#0 only */
+/* Accessible to FN#0 only */
 #define SCU_SMU_RNCLBAR_OFFSET      0x0080
 #define SCU_SMU_RNCUBAR_OFFSET      0x0084
 #define SCU_SMU_DCC_OFFSET          0x0090
@@ -938,9 +938,9 @@ struct scu_iit_entry {
 #define SCU_SMU_SCUSRCR_OFFSET      0x009C
 #define SCU_SMU_SMAW_OFFSET         0x00A0
 #define SCU_SMU_SMDW_OFFSET         0x00A4
-/* Accessable to FN#0 only */
+/* Accessible to FN#0 only */
 #define SCU_SMU_TCA_OFFSET          0x0400
-/* Accessable to all FN#s */
+/* Accessible to all FN#s */
 #define SCU_SMU_MT_MLAR0_OFFSET     0x2000
 #define SCU_SMU_MT_MUAR0_OFFSET     0x2004
 #define SCU_SMU_MT_MDR0_OFFSET      0x2008
@@ -994,7 +994,7 @@ struct smu_registers {
 	u32 reserved_6x[4];
 	u32 reserved_7x[4];
 /*
- * Accessable to FN#0 only
+ * Accessible to FN#0 only
  * 0x0080 RNCLBAR */
 	u32 remote_node_context_lower;
 /* 0x0084 RNCUBAR */
@@ -1027,7 +1027,7 @@ struct smu_registers {
 	u32 reserved_2xx[64];
 	u32 reserved_3xx[64];
 /*
- * Accessable to FN#0 only
+ * Accessible to FN#0 only
  * 0x0400 TCA */
 	u32 task_context_assignment[256];
 /* MSI-X registers not included */

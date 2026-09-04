@@ -557,7 +557,7 @@ static void sci_apc_agent_configure_ports(struct isci_host *ihost,
 	/*
 	 * Check to see if the start timer operations should instead map to an
 	 * add phy operation.  This is caused because we have been waiting to
-	 * add a phy to a port but could not becuase the automatic port
+	 * add a phy to a port but could not because the automatic port
 	 * configuration engine had a choice of possible ports for the phy.
 	 * Since we have gone through a timeout we are going to restrict the
 	 * choice to the smallest possible port. */

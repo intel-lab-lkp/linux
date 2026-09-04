@@ -130,7 +130,7 @@ enum sci_status sci_unsolicited_frame_control_get_header(struct sci_unsolicited_
 							 void **frame_header)
 {
 	if (frame_index < SCU_MAX_UNSOLICITED_FRAMES) {
-		/* Skip the first word in the frame since this is a controll word used
+		/* Skip the first word in the frame since this is a control word used
 		 * by the hardware.
 		 */
 		*frame_header = &uf_control->buffers.array[frame_index].header->data;

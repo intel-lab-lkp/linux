@@ -342,7 +342,7 @@ enum sci_phy_counter_id {
  *		     machine.
  * @SCI_PHY_STOPPED: phy has successfully been stopped.  In this state
  *		     no new IO operations are permitted on this phy.
- * @SCI_PHY_STARTING: the phy is in the process of becomming ready.  In
+ * @SCI_PHY_STARTING: the phy is in the process of becoming ready.  In
  *		      this state no new IO operations are permitted on
  *		      this phy.
  * @SCI_PHY_SUB_INITIAL: Initial state

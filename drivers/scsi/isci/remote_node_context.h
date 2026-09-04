@@ -102,7 +102,7 @@ typedef void (*scics_sds_remote_node_context_callback)(void *);
  * transition to the posting state.
  *
  * @SCI_RNC_RESUMING: transition state that will post an RNC resume to the
- * hardare.  Once the event notification of resume complete is received the
+ * hardware.  Once the event notification of resume complete is received the
  * remote node context will transition to the ready state.
  *
  * @SCI_RNC_READY: state that the remote node context must be in to accept io

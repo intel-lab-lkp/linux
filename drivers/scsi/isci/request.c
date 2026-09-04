@@ -539,7 +539,7 @@ static void scu_sata_request_construct_task_context(
 	/*
 	 * Copy the physical address for the command buffer to the SCU Task
 	 * Context. We must offset the command buffer by 4 bytes because the
-	 * first 4 bytes are transfered in the body of the TC.
+	 * first 4 bytes are transferred in the body of the TC.
 	 */
 	dma_addr = sci_io_request_get_dma_addr(ireq,
 						((char *) &ireq->stp.cmd) +
@@ -613,7 +613,7 @@ static void sci_stp_optimized_request_construct(struct isci_request *ireq,
 	/* Copy over the SGL elements */
 	sci_request_build_sgl(ireq);
 
-	/* Copy over the number of bytes to be transfered */
+	/* Copy over the number of bytes to be transferred */
 	task_context->transfer_length_bytes = len;
 
 	if (dir == DMA_TO_DEVICE) {
@@ -1310,7 +1310,7 @@ stp_request_non_data_await_h2d_tc_event(struct isci_request *ireq,
 #define SCU_MAX_FRAME_BUFFER_SIZE  0x400  /* 1K is the maximum SCU frame data payload */
 
 /* transmit DATA_FIS from (current sgl + offset) for input
- * parameter length. current sgl and offset is alreay stored in the IO request
+ * parameter length. current sgl and offset is already stored in the IO request
  */
 static enum sci_status sci_stp_request_pio_data_out_trasmit_data_frame(
 	struct isci_request *ireq,
@@ -1458,7 +1458,7 @@ static enum sci_status sci_stp_request_pio_data_in_copy_data(
 		if (status == SCI_SUCCESS)
 			stp_req->pio_len = 0;
 	} else {
-		/* We are transfering the whole frame so copy */
+		/* We are transferring the whole frame so copy */
 		status = sci_stp_request_pio_data_in_copy_data_buffer(
 			stp_req, data_buffer, SCU_MAX_FRAME_BUFFER_SIZE);
 
@@ -3298,7 +3298,7 @@ sci_io_request_construct_smp(struct device *dev,
  * @ireq: This parameter points to the isci_request allocated in the
  *    request construct function.
  *
- * SCI_SUCCESS on successfull completion, or specific failure code.
+ * SCI_SUCCESS on successful completion, or specific failure code.
  */
 static enum sci_status isci_smp_request_build(struct isci_request *ireq)
 {
@@ -3324,7 +3324,7 @@ static enum sci_status isci_smp_request_build(struct isci_request *ireq)
  * @idev: This parameter is the handle for the sci core's remote device
  *    object that is the destination for this request.
  *
- * SCI_SUCCESS on successfull completion, or specific failure code.
+ * SCI_SUCCESS on successful completion, or specific failure code.
  */
 static enum sci_status isci_io_request_build(struct isci_host *ihost,
 					     struct isci_request *request,

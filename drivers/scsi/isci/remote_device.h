@@ -189,7 +189,7 @@ enum sci_status sci_remote_device_stop(
  * requests until this command is complete.
  *
  * @SCI_STP_DEV_NCQ: This is the NCQ state for the STP remote device.
- * This state is entered when the device is processing an NCQ reuqest.
+ * This state is entered when the device is processing an NCQ request.
  * It will remain in this state so long as there is one or more NCQ
  * requests being processed.
  *

@@ -338,7 +338,7 @@ static void sci_controller_unsolicited_frame(struct isci_host *ihost, u32 ent)
 		if (index == SCIC_SDS_REMOTE_NODE_CONTEXT_INVALID_INDEX) {
 			/*
 			 * This is a signature fis or a frame from a direct attached SATA
-			 * device that has not yet been created.  In either case forwared
+			 * device that has not yet been created.  In either case forwarded
 			 * the frame to the PE and let it take care of the frame data. */
 			index = SCU_GET_PROTOCOL_ENGINE_INDEX(ent);
 			iphy = &ihost->phys[index];
@@ -374,7 +374,7 @@ static void sci_controller_event_completion(struct isci_host *ihost, u32 ent)
 
 	switch (scu_get_event_type(ent)) {
 	case SCU_EVENT_TYPE_SMU_COMMAND_ERROR:
-		/* / @todo The driver did something wrong and we need to fix the condtion. */
+		/* / @todo The driver did something wrong and we need to fix the condition. */
 		dev_err(&ihost->pdev->dev,
 			"%s: SCIC Controller 0x%p received SMU command error "
 			"0x%x\n",
