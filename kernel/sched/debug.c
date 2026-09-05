@@ -210,6 +210,55 @@ static const struct file_operations sched_scaling_fops = {
 	.release	= single_release,
 };
 
+#ifdef CONFIG_NUMA_BALANCING
+/*
+ * task_scan_min() divides MAX_SCAN_WINDOW by this, and
+ * task_nr_scan_windows() divides by MB_TO_PAGES() of it.  Zero breaks the
+ * first; a value that overflows the 32-bit shift in MB_TO_PAGES() wraps to
+ * zero and breaks the second.
+ */
+#define NUMA_SCAN_SIZE_MB_MAX	(UINT_MAX >> (20 - PAGE_SHIFT))
+
+static ssize_t sched_numa_scan_size_write(struct file *filp,
+					  const char __user *ubuf,
+					  size_t cnt, loff_t *ppos)
+{
+	unsigned int mb;
+	int ret;
+
+	ret = kstrtouint_from_user(ubuf, cnt, 0, &mb);
+	if (ret)
+		return ret;
+
+	if (!mb || mb > NUMA_SCAN_SIZE_MB_MAX)
+		return -EINVAL;
+
+	sysctl_numa_balancing_scan_size = mb;
+
+	*ppos += cnt;
+	return cnt;
+}
+
+static int sched_numa_scan_size_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%u\n", sysctl_numa_balancing_scan_size);
+	return 0;
+}
+
+static int sched_numa_scan_size_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, sched_numa_scan_size_show, NULL);
+}
+
+static const struct file_operations sched_numa_scan_size_fops = {
+	.open		= sched_numa_scan_size_open,
+	.write		= sched_numa_scan_size_write,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+#endif /* CONFIG_NUMA_BALANCING */
+
 #ifdef CONFIG_SCHED_CACHE
 static ssize_t
 sched_cache_enable_write(struct file *filp, const char __user *ubuf,
@@ -740,7 +789,7 @@ static __init int sched_init_debug(void)
 	debugfs_create_u32("scan_delay_ms", 0644, numa, &sysctl_numa_balancing_scan_delay);
 	debugfs_create_u32("scan_period_min_ms", 0644, numa, &sysctl_numa_balancing_scan_period_min);
 	debugfs_create_u32("scan_period_max_ms", 0644, numa, &sysctl_numa_balancing_scan_period_max);
-	debugfs_create_u32("scan_size_mb", 0644, numa, &sysctl_numa_balancing_scan_size);
+	debugfs_create_file("scan_size_mb", 0644, numa, NULL, &sched_numa_scan_size_fops);
 	debugfs_create_u32("hot_threshold_ms", 0644, numa, &sysctl_numa_balancing_hot_threshold);
 #endif /* CONFIG_NUMA_BALANCING */
 
