@@ -115,6 +115,7 @@ static int ncsi_aen_handler_lsc(struct ncsi_dev_priv *ndp,
 		/* Return Tx to preferred channel */
 		ncsi_update_tx_channel(ndp, nc->package, NULL, nc);
 	} else if (has_link) {
+		rcu_read_lock();
 		NCSI_FOR_EACH_PACKAGE(ndp, np) {
 			NCSI_FOR_EACH_CHANNEL(np, tmp) {
 				/* Enable Tx on this channel if the current Tx
@@ -129,6 +130,7 @@ static int ncsi_aen_handler_lsc(struct ncsi_dev_priv *ndp,
 				}
 			}
 		}
+		rcu_read_unlock();
 	}
 
 	/* Leave configured channels active in a multi-channel scenario so

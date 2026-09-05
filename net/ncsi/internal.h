@@ -239,6 +239,7 @@ struct ncsi_channel {
 	} monitor;
 	struct list_head            node;
 	struct list_head            link;
+	struct rcu_head             rcu; /* RCU cleanup */
 };
 
 struct ncsi_package {
@@ -253,6 +254,7 @@ struct ncsi_package {
 	bool                 multi_channel; /* Enable multiple channels  */
 	u32                  channel_whitelist; /* Channels to configure */
 	struct ncsi_channel  *preferred_channel; /* Primary channel      */
+	struct rcu_head      rcu; /* RCU cleanup */
 };
 
 struct ncsi_request {
@@ -315,6 +317,8 @@ struct vlan_vid {
 };
 
 struct ncsi_dev_priv {
+	struct rcu_head     rcu;             /* RCU cleanup */
+	struct kref         ref;
 	struct ncsi_dev     ndev;            /* Associated NCSI device     */
 	unsigned int        flags;           /* NCSI device flags          */
 #define NCSI_DEV_PROBED		1            /* Finalized NCSI topology    */
@@ -337,6 +341,7 @@ struct ncsi_dev_priv {
 	struct ncsi_channel *active_channel; /* Currently handled channel  */
 	struct list_head    channel_queue;   /* Config queue of channels   */
 	struct work_struct  work;            /* For channel management     */
+	bool                work_cancelled;  /* Work has been cancelled    */
 	struct packet_type  ptype;           /* NCSI packet Rx handler     */
 	struct list_head    node;            /* Form NCSI device list      */
 #define NCSI_MAX_VLAN_VIDS	15
@@ -406,7 +411,8 @@ int ncsi_update_tx_channel(struct ncsi_dev_priv *ndp,
 			   struct ncsi_package *np,
 			   struct ncsi_channel *disable,
 			   struct ncsi_channel *enable);
-
+struct ncsi_dev_priv *ncsi_dev_get(struct net_device *dev);
+void ncsi_dev_put(struct ncsi_dev_priv *ndp);
 /* Packet handlers */
 u32 ncsi_calculate_checksum(unsigned char *data, int len);
 int ncsi_xmit_cmd(struct ncsi_cmd_arg *nca);

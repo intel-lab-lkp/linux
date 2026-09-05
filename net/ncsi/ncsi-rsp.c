@@ -149,11 +149,13 @@ static int ncsi_rsp_handler_dp(struct ncsi_request *nr)
 		return -ENODEV;
 
 	/* Change state of all channels attached to the package */
+	rcu_read_lock();
 	NCSI_FOR_EACH_CHANNEL(np, nc) {
 		spin_lock_irqsave(&nc->lock, flags);
 		nc->state = NCSI_CHANNEL_INACTIVE;
 		spin_unlock_irqrestore(&nc->lock, flags);
 	}
+	rcu_read_unlock();
 
 	return 0;
 }
@@ -1166,7 +1168,6 @@ int ncsi_rcv_rsp(struct sk_buff *skb, struct net_device *dev,
 		 struct packet_type *pt, struct net_device *orig_dev)
 {
 	struct ncsi_rsp_handler *nrh = NULL;
-	struct ncsi_dev *nd;
 	struct ncsi_dev_priv *ndp;
 	struct ncsi_request *nr;
 	struct ncsi_pkt_hdr *hdr;
@@ -1174,8 +1175,7 @@ int ncsi_rcv_rsp(struct sk_buff *skb, struct net_device *dev,
 	int payload, i, ret;
 
 	/* Find the NCSI device */
-	nd = ncsi_find_dev(orig_dev);
-	ndp = nd ? TO_NCSI_DEV_PRIV(nd) : NULL;
+	ndp = ncsi_dev_get(orig_dev);
 	if (!ndp) {
 		ret = -ENODEV;
 		goto err_free_skb;
@@ -1183,8 +1183,11 @@ int ncsi_rcv_rsp(struct sk_buff *skb, struct net_device *dev,
 
 	/* Check if it is AEN packet */
 	hdr = (struct ncsi_pkt_hdr *)skb_network_header(skb);
-	if (hdr->type == NCSI_PKT_AEN)
-		return ncsi_aen_handler(ndp, skb);
+	if (hdr->type == NCSI_PKT_AEN) {
+		ret = ncsi_aen_handler(ndp, skb);
+		ncsi_dev_put(ndp);
+		return ret;
+	}
 
 	/* Find the handler */
 	for (i = 0; i < ARRAY_SIZE(ncsi_rsp_handlers); i++) {
@@ -1199,7 +1202,7 @@ int ncsi_rcv_rsp(struct sk_buff *skb, struct net_device *dev,
 	}
 
 	if (!nrh) {
-		netdev_err(nd->dev, "Received unrecognized packet (0x%x)\n",
+		netdev_err(ndp->ndev.dev, "Received unrecognized packet (0x%x)\n",
 			   hdr->type);
 		ret = -ENOENT;
 		goto err_free_skb;
@@ -1264,9 +1267,11 @@ out_netlink:
 
 out:
 	ncsi_free_request(nr);
+	ncsi_dev_put(ndp);
 	return ret;
 
 err_free_skb:
 	kfree_skb(skb);
+	ncsi_dev_put(ndp);
 	return ret;
 }
