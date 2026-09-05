@@ -126,7 +126,8 @@ enum wmi_event_id {
 };
 
 #define MAX_CMD_NUMBER 62
-#define MAX_RMW_CMD_NUMBER 15
+/* 15 entries make 192 bytes, three full USB packets: never delivered. */
+#define MAX_RMW_CMD_NUMBER 14
 
 struct register_write {
 	__be32 reg;
