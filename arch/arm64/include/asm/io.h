@@ -280,6 +280,10 @@ static inline void __iomem *ioremap_prot(phys_addr_t phys, size_t size,
 	pgprot_t prot;
 	ptval_t user_prot_val = pgprot_val(user_prot);
 
+	if ((user_prot_val & (PTE_VALID | PTE_PRESENT_INVALID)) ==
+	     PTE_PRESENT_INVALID)
+		return NULL;
+
 	if (WARN_ON_ONCE(!(user_prot_val & PTE_USER)))
 		return NULL;
 
