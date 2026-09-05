@@ -19,6 +19,7 @@
 #include <net/gro_cells.h>
 #include <net/macsec.h>
 #include <net/dst_metadata.h>
+#include <net/rtnetlink.h>
 #include <net/netdev_lock.h>
 #include <linux/phy.h>
 #include <linux/byteorder/generic.h>
@@ -3958,6 +3959,13 @@ static int macsec_changelink(struct net_device *dev, struct nlattr *tb[],
 
 	if (!data)
 		return 0;
+
+	if ((data[IFLA_MACSEC_OFFLOAD] || macsec_is_offloaded(macsec)) &&
+	    !rtnl_dev_link_net_capable(dev, dev_net(macsec->real_dev))) {
+		NL_SET_ERR_MSG(extack,
+			       "Changing a MACsec device whose real device is in another network namespace requires CAP_NET_ADMIN in that namespace");
+		return -EPERM;
+	}
 
 	if (data[IFLA_MACSEC_CIPHER_SUITE] ||
 	    data[IFLA_MACSEC_ICV_LEN] ||
