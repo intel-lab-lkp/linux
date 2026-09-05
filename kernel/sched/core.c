@@ -3554,34 +3554,37 @@ EXPORT_SYMBOL_GPL(kick_process);
  */
 static int select_fallback_rq(int cpu, struct task_struct *p)
 {
-	int nid = cpu_to_node(cpu);
-	const struct cpumask *nodemask = NULL;
+	int nid = IS_ENABLED(CONFIG_NUMA) ? cpu_to_node(cpu) : NUMA_NO_NODE;
 	enum { cpuset, possible, fail } state = cpuset;
 	int dest_cpu;
 
-	/*
-	 * If the node that the CPU is on has been offlined, cpu_to_node()
-	 * will return -1. There is no CPU on the node, and we should
-	 * select the CPU on the other node.
-	 */
-	if (nid != -1) {
-		nodemask = cpumask_of_node(nid);
-
-		/* Look for allowed, online CPU in same node. */
-		for_each_cpu(dest_cpu, nodemask) {
-			if (is_cpu_allowed(p, dest_cpu))
-				return dest_cpu;
-		}
-	}
-
 	for (;;) {
-		/* Any allowed, online CPU? */
-		for_each_cpu(dest_cpu, p->cpus_ptr) {
-			if (!is_cpu_allowed(p, dest_cpu))
-				continue;
+		const struct cpumask *prev = cpu_none_mask, *cpus;
 
-			goto out;
+		/* Look for the closest allowed, online CPU. */
+		rcu_read_lock();
+		for_each_numa_hop_mask(cpus, nid) {
+			for_each_cpu_andnot(dest_cpu, cpus, prev) {
+				if (is_cpu_allowed(p, dest_cpu)) {
+					rcu_read_unlock();
+					goto out;
+				}
+			}
+			prev = cpus;
 		}
+
+		/*
+		 * NUMA masks may be unavailable or incomplete while the
+		 * topology is being rebuilt. Search CPUs not covered by them
+		 * before relaxing the task's affinity.
+		 */
+		for_each_cpu_andnot(dest_cpu, p->cpus_ptr, prev) {
+			if (is_cpu_allowed(p, dest_cpu)) {
+				rcu_read_unlock();
+				goto out;
+			}
+		}
+		rcu_read_unlock();
 
 		/* No more Mr. Nice Guy. */
 		switch (state) {
