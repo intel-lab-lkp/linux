@@ -3714,7 +3714,7 @@ static void mellanox_check_broken_intx_masking(struct pci_dev *pdev)
 		return;
 	}
 
-	fw_ver = ioremap(pci_resource_start(pdev, 0), 4);
+	fw_ver = ioremap(pci_resource_start(pdev, 0), 8);
 	if (!fw_ver) {
 		pci_warn(pdev, "Can't map ConnectX-4 initialization segment\n");
 		goto out;
