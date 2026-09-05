@@ -4,10 +4,7 @@
 
 use kernel::{
     acpi,
-    device::{
-        Bound,
-        Core, //
-    },
+    device::Core,
     of,
     prelude::*,
     serdev,
@@ -59,14 +56,6 @@ impl serdev::Driver for SampleDriver {
         sdev.set_parity(serdev::Parity::None)?;
 
         Ok(Self { sdev: sdev.into() })
-    }
-
-    fn receive<'bound>(
-        sdev: &'bound serdev::Device<Bound>,
-        _this: Pin<&Self>,
-        data: &[u8],
-    ) -> usize {
-        sdev.write(data).unwrap_or_default() as usize
     }
 }
 
