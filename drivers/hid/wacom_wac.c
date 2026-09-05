@@ -338,7 +338,7 @@ static int wacom_dtus_irq(struct wacom_wac *wacom)
 	}
 }
 
-static int wacom_graphire_irq(struct wacom_wac *wacom)
+static int wacom_graphire_irq(struct wacom_wac *wacom, size_t len)
 {
 	struct wacom_features *features = &wacom->features;
 	unsigned char *data = wacom->data;
@@ -350,6 +350,12 @@ static int wacom_graphire_irq(struct wacom_wac *wacom)
 	int retval = 0;
 
 	if (features->type == GRAPHIRE_BT) {
+		if (len < WACOM_PKGLEN_PENABLED) {
+			dev_warn(input->dev.parent,
+				 "Graphire BT report too short: %zu bytes\n",
+				 len);
+			goto exit;
+		}
 		if (data[0] != WACOM_REPORT_PENABLED_BT) {
 			dev_dbg(input->dev.parent,
 				"%s: received unknown report #%d\n", __func__,
@@ -3475,7 +3481,7 @@ void wacom_wac_irq(struct wacom_wac *wacom_wac, size_t len)
 	case GRAPHIRE:
 	case GRAPHIRE_BT:
 	case WACOM_MO:
-		sync = wacom_graphire_irq(wacom_wac);
+		sync = wacom_graphire_irq(wacom_wac, len);
 		break;
 
 	case PTU:
