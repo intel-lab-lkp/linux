@@ -796,6 +796,8 @@ static int atlantis_prcm_clocks_register(struct device *dev,
 	if (!clk_data)
 		return -ENOMEM;
 
+	clk_data->num = num_clks;
+
 	for (i = 0; i < data->num; i++) {
 		struct clk_hw *hw = data->hws[i];
 		struct atlantis_clk_common *common =
@@ -808,8 +810,6 @@ static int atlantis_prcm_clocks_register(struct device *dev,
 
 		clk_data->hws[common->clkid] = hw;
 	}
-
-	clk_data->num = num_clks;
 
 	return devm_of_clk_add_hw_provider(dev, of_clk_hw_onecell_get, clk_data);
 }
