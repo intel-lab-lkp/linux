@@ -2060,9 +2060,6 @@ static int elf_validity_cache_secstrings(struct load_info *info)
 
 	for (i = 0; i < info->hdr->e_shnum; i++) {
 		shdr = &info->sechdrs[i];
-		/* SHT_NULL means sh_name has an undefined value */
-		if (shdr->sh_type == SHT_NULL)
-			continue;
 		if (shdr->sh_name >= strhdr->sh_size) {
 			pr_err("Invalid ELF section name in module (section %u type %u)\n",
 			       i, shdr->sh_type);
