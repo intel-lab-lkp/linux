@@ -176,7 +176,7 @@ impl<T: Driver> Adapter<T> {
             let private_data = unsafe { sdev.as_ref().drvdata_borrow::<PrivateData<'_, T>>() };
             let private_data = ScopeGuard::new_with_data(private_data, |_| {
                 // SAFETY: We just set drvdata to `PrivateData<'_, T>`.
-                drop(unsafe { sdev.as_ref().drvdata_obtain::<PrivateData<'_, T>>() });
+                unsafe { sdev.as_ref().drvdata_drop::<PrivateData<'_, T>>() };
             });
             let mut active = private_data.active.lock();
 
