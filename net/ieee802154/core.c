@@ -297,7 +297,7 @@ static int cfg802154_netdev_notifier_call(struct notifier_block *nb,
 
 	rdev = wpan_phy_to_rdev(wpan_dev->wpan_phy);
 
-	/* TODO WARN_ON unspec type */
+	WARN_ON(wpan_dev->iftype == NL802154_IFTYPE_UNSPEC);
 
 	switch (state) {
 	case NETDEV_POST_INIT:
