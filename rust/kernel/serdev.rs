@@ -148,9 +148,13 @@ impl<T: Driver> PinnedDrop for PrivateData<'_, T> {
 
 impl<T: Driver> Adapter<T> {
     const OPS: &'static bindings::serdev_device_ops = &bindings::serdev_device_ops {
-        receive_buf: if T::HAS_RECEIVE {
+        /* receive_buf: if T::HAS_RECEIVE {
             Some(Self::receive_buf_callback)
         } else {
+            None
+        }, */
+        receive_buf: {
+            const_assert!(!T::HAS_RECEIVE);
             None
         },
         write_wakeup: Some(bindings::serdev_device_write_wakeup),
@@ -233,6 +237,7 @@ impl<T: Driver> Adapter<T> {
         T::unbind(sdev, data_pinned);
     }
 
+    #[expect(dead_code)]
     extern "C" fn receive_buf_callback(
         sdev: *mut bindings::serdev_device,
         buf: *const u8,
