@@ -33,7 +33,7 @@ Description:
 		documented here:
 		https://raw.githubusercontent.com/jmesmon/catalog-24x7/master/hv-24x7-catalog.h
 
-What:		/sys/bus/event_source/devices/hv_24x7/interface/catalog_length
+What:		/sys/bus/event_source/devices/hv_24x7/interface/catalog_len
 Date:		February 2014
 Contact:	Linux on PowerPC Developer List <linuxppc-dev@lists.ozlabs.org>
 Description:
