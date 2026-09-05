@@ -219,6 +219,7 @@ impl<'a> Device<CoreInternal<'a>> {
     ///
     /// - The type `T` must match the type of the `ForeignOwnable` previously stored by
     ///   [`Device::set_drvdata`].
+    /// - Must only be called before the device is fully unbound.
     pub(crate) unsafe fn drvdata_obtain<T>(&self) -> Option<Pin<KBox<T>>> {
         // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
         let ptr = unsafe { bindings::dev_get_drvdata(self.as_raw()) };
@@ -235,6 +236,32 @@ impl<'a> Device<CoreInternal<'a>> {
         // - `dev_get_drvdata()` guarantees to return the same pointer given to `dev_set_drvdata()`
         //   in `into_foreign()`.
         Some(unsafe { Pin::<KBox<T>>::from_foreign(ptr.cast()) })
+    }
+
+    /// Drop the private data stored in this [`Device`].
+    ///
+    /// The pointer to the private data remains valid until the drop is complete.
+    ///
+    /// # Safety
+    ///
+    /// - The type `T` must match the type of the `ForeignOwnable` previously stored by
+    ///   [`Device::set_drvdata`].
+    pub(crate) unsafe fn drvdata_drop<T>(&self) {
+        // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
+        let ptr = unsafe { bindings::dev_get_drvdata(self.as_raw()) };
+
+        if ptr.is_null() {
+            return;
+        }
+
+        // SAFETY:
+        // - If `ptr` is not NULL, it comes from a previous call to `into_foreign()`.
+        // - `dev_get_drvdata()` guarantees to return the same pointer given to `dev_set_drvdata()`
+        //   in `into_foreign()`.
+        drop(unsafe { Pin::<KBox<T>>::from_foreign(ptr.cast()) });
+
+        // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
+        unsafe { bindings::dev_set_drvdata(self.as_raw(), core::ptr::null_mut()) };
     }
 }
 

@@ -204,7 +204,7 @@ impl<T: RegistrationOps> Registration<T> {
         //
         // SAFETY: By the safety requirements of the `Driver` trait, `T::DriverData` is the
         // driver's bus device private data type.
-        drop(unsafe { dev.drvdata_obtain::<T::DriverData<'_>>() });
+        unsafe { dev.drvdata_drop::<T::DriverData<'_>>() };
     }
 
     /// Attach generic `struct device_driver` callbacks.
