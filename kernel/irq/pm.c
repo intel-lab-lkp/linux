@@ -141,7 +141,7 @@ void suspend_device_irqs(void)
 	}
 }
 
-static void resume_irq(struct irq_desc *desc)
+static void resume_irq(struct irq_desc *desc, bool restore)
 {
 	struct irq_data *irqd = &desc->irq_data;
 
@@ -160,9 +160,18 @@ static void resume_irq(struct irq_desc *desc)
 	if (desc->istate & IRQS_SUSPENDED)
 		goto resume;
 
-	/* Force resume the interrupt? */
-	if (!desc->force_resume_depth)
+	if (restore && irq_desc_is_chained(desc)) {
+		/*
+		 * Chained interrupts are not suspended to preserve wakeup paths.
+		 * After restoring a hibernation image, the controller may have
+		 * them disabled despite the restored descriptor state. Force
+		 * active chained interrupts through the hardware enable path.
+		 */
+		if (!irqd_is_started(irqd) || irqd_irq_disabled(irqd))
+			return;
+	} else if (!desc->force_resume_depth) {
 		return;
+	}
 
 	/* Pretend that it got disabled ! */
 	desc->depth++;
@@ -173,7 +182,7 @@ resume:
 	__enable_irq(desc);
 }
 
-static void resume_irqs(bool want_early)
+static void resume_irqs(bool want_early, bool restore)
 {
 	struct irq_desc *desc;
 	int irq;
@@ -187,7 +196,7 @@ static void resume_irqs(bool want_early)
 			continue;
 
 		guard(raw_spinlock_irqsave)(&desc->lock);
-		resume_irq(desc);
+		resume_irq(desc, restore);
 	}
 }
 
@@ -217,7 +226,7 @@ void rearm_wake_irq(unsigned int irq)
  */
 static void irq_pm_syscore_resume(void *data)
 {
-	resume_irqs(true);
+	resume_irqs(true, false);
 }
 
 static const struct syscore_ops irq_pm_syscore_ops = {
@@ -238,12 +247,14 @@ device_initcall(irq_pm_init_ops);
 
 /**
  * resume_device_irqs - enable interrupt lines disabled by suspend_device_irqs()
+ * @restore: Whether memory has been restored from a hibernation image
  *
  * Enable all non-%IRQF_EARLY_RESUME interrupt lines previously
  * disabled by suspend_device_irqs() that have the IRQS_SUSPENDED flag
- * set as well as those with %IRQF_FORCE_RESUME.
+ * set as well as those with %IRQF_FORCE_RESUME. Also re-enable active chained
+ * interrupts when restoring a hibernation image.
  */
-void resume_device_irqs(void)
+void resume_device_irqs(bool restore)
 {
-	resume_irqs(false);
+	resume_irqs(false, restore);
 }

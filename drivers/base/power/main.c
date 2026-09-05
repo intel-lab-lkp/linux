@@ -952,7 +952,7 @@ void dpm_resume_noirq(pm_message_t state)
 {
 	dpm_noirq_resume_devices(state);
 
-	resume_device_irqs();
+	resume_device_irqs(state.event == PM_EVENT_RESTORE);
 	device_wakeup_disarm_wake_irqs();
 }
 

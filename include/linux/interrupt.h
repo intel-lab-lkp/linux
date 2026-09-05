@@ -253,7 +253,7 @@ extern int irq_inject_interrupt(unsigned int irq);
 
 /* The following three functions are for the core kernel use only. */
 extern void suspend_device_irqs(void);
-extern void resume_device_irqs(void);
+void resume_device_irqs(bool restore);
 extern void rearm_wake_irq(unsigned int irq);
 
 /**
