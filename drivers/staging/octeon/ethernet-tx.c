@@ -361,6 +361,8 @@ dont_put_skbuff_in_hw:
 
 	/* Check if we can use the hardware checksumming */
 	if ((skb->protocol == htons(ETH_P_IP)) &&
+		(skb_network_offset(skb) >= 0) &&
+		(skb_network_offset(skb) + sizeof(struct iphdr) <= skb_headlen(skb)) &&
 	    (ip_hdr(skb)->version == 4) &&
 	    (ip_hdr(skb)->ihl == 5) &&
 	    ((ip_hdr(skb)->frag_off == 0) ||
@@ -571,6 +573,14 @@ netdev_tx_t cvm_oct_xmit_pow(struct sk_buff *skb, struct net_device *dev)
 	work->packet_ptr.s.back = (copy_location - packet_buffer) >> 7;
 
 	if (skb->protocol == htons(ETH_P_IP)) {
+		if (unlikely(!pskb_may_pull(skb, ETH_HLEN + sizeof(struct iphdr)))) {
+			cvmx_fpa_free(packet_buffer, CVMX_FPA_PACKET_POOL, 0);
+			cvmx_fpa_free(work, CVMX_FPA_WQE_POOL, 1);
+			dev->stats.tx_dropped++;
+			dev_kfree_skb_any(skb);
+			return NETDEV_TX_OK;
+		}
+
 		work->word2.s.ip_offset = 14;
 		work->word2.s.tcp_or_udp =
 		    (ip_hdr(skb)->protocol == IPPROTO_TCP) ||
@@ -587,7 +597,7 @@ netdev_tx_t cvm_oct_xmit_pow(struct sk_buff *skb, struct net_device *dev)
 		 * does.
 		 */
 		memcpy(work->packet_data, skb->data + 10,
-		       sizeof(work->packet_data));
+		       min_t(unsigned int, skb->len - 10, sizeof(work->packet_data)));
 	} else {
 		work->word2.snoip.is_rarp = skb->protocol == htons(ETH_P_RARP);
 		work->word2.snoip.is_arp = skb->protocol == htons(ETH_P_ARP);
@@ -596,7 +606,8 @@ netdev_tx_t cvm_oct_xmit_pow(struct sk_buff *skb, struct net_device *dev)
 		work->word2.snoip.is_mcast =
 		    (skb->pkt_type == PACKET_MULTICAST);
 		work->word2.snoip.not_IP = 1;	/* IP was done up above */
-		memcpy(work->packet_data, skb->data, sizeof(work->packet_data));
+		memcpy(work->packet_data, skb->data,
+		       min_t(unsigned int, skb->len, sizeof(work->packet_data)));
 	}
 
 	/* Submit the packet to the POW */
