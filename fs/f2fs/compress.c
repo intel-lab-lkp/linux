@@ -1795,6 +1795,7 @@ static void f2fs_verify_cluster(struct work_struct *work)
 {
 	struct decompress_io_ctx *dic =
 		container_of(work, struct decompress_io_ctx, verity_work);
+	struct folio *last_rfolio = NULL;
 	int i;
 
 	/* Verify, update, and unlock the decompressed pages. */
@@ -1807,10 +1808,20 @@ static void f2fs_verify_cluster(struct work_struct *work)
 		rfolio = page_folio(rpage);
 		if (fsverity_verify_folio(dic->vi, rfolio))
 			folio_mark_uptodate(rfolio);
-		folio_unlock(rfolio);
+		if (last_rfolio)
+			folio_unlock(last_rfolio);
+		last_rfolio = rfolio;
 	}
 
+	/*
+	 * Drop the decompress_io_ctx before unlocking the last folio: the
+	 * final put still accesses sbi, and once the last folio is
+	 * unlocked, a concurrent unmount can destroy it.  Matches the
+	 * write-path rule in f2fs_compress_write_end_io().
+	 */
 	f2fs_put_dic(dic, true);
+	if (last_rfolio)
+		folio_unlock(last_rfolio);
 }
 
 /*
@@ -1820,6 +1831,7 @@ static void f2fs_verify_cluster(struct work_struct *work)
 void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
 				bool in_task)
 {
+	struct page *last_rpage = NULL;
 	int i;
 
 	if (IS_ENABLED(CONFIG_FS_VERITY) && !failed && dic->vi) {
@@ -1845,14 +1857,19 @@ void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
 			ClearPageUptodate(rpage);
 		else
 			SetPageUptodate(rpage);
-		unlock_page(rpage);
+		if (last_rpage)
+			unlock_page(last_rpage);
+		last_rpage = rpage;
 	}
 
 	/*
 	 * Release the reference to the decompress_io_ctx that was being held
-	 * for I/O completion.
+	 * for I/O completion, before the last unlock_page(): same rule
+	 * as in f2fs_verify_cluster() above.
 	 */
 	f2fs_put_dic(dic, in_task);
+	if (last_rpage)
+		unlock_page(last_rpage);
 }
 
 /*
