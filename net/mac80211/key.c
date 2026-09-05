@@ -144,6 +144,14 @@ static int ieee80211_key_enable_hw_accel(struct ieee80211_key *key)
 		return -EINVAL;
 	}
 
+	if (key->flags & KEY_FLAG_DEFERRED_HW_UPLOAD) {
+		/*
+		 * Deferred keys allow automatic software fallback. Keep ret at
+		 * -EOPNOTSUPP until the station is ready for hardware upload.
+		 */
+		goto out_unsupported;
+	}
+
 	if (!key->local->ops->set_key)
 		goto out_unsupported;
 
@@ -994,6 +1002,36 @@ void ieee80211_reenable_keys(struct ieee80211_sub_if_data *sdata)
 				increment_tailroom_need_count(sdata);
 			ieee80211_key_enable_hw_accel(key);
 		}
+	}
+}
+
+void ieee80211_upload_deferred_sta_keys(struct sta_info *sta)
+{
+	struct ieee80211_local *local = sta->local;
+	struct ieee80211_key *key;
+	int i, ret;
+
+	lockdep_assert_wiphy(local->hw.wiphy);
+
+	for (i = 0; i < ARRAY_SIZE(sta->ptk); i++) {
+		key = wiphy_dereference(local->hw.wiphy, sta->ptk[i]);
+		if (!key || !(key->flags & KEY_FLAG_DEFERRED_HW_UPLOAD))
+			continue;
+
+		/* Capabilities may have changed since key installation. */
+		key->conf.flags &= ~(IEEE80211_KEY_FLAG_RX_MGMT |
+				     IEEE80211_KEY_FLAG_SPP_AMSDU);
+		if (test_sta_flag(sta, WLAN_STA_MFP))
+			key->conf.flags |= IEEE80211_KEY_FLAG_RX_MGMT;
+		if (sta->sta.spp_amsdu)
+			key->conf.flags |= IEEE80211_KEY_FLAG_SPP_AMSDU;
+
+		key->flags &= ~KEY_FLAG_DEFERRED_HW_UPLOAD;
+		ret = ieee80211_key_enable_hw_accel(key);
+		if (ret)
+			sdata_err(key->sdata,
+				  "failed to enable deferred key (%d, %pM): %d\n",
+				  key->conf.keyidx, sta->sta.addr, ret);
 	}
 }
 
