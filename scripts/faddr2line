@@ -111,19 +111,10 @@ find_dir_prefix() {
 
 run_readelf() {
 	local objfile=$1
-	local tmpfile
-	tmpfile=$(mktemp)
 
-	${READELF} --file-header --section-headers --symbols --wide "$objfile" > "$tmpfile"
-
-	# This assumes that readelf first prints the file header, then the section headers, then the symbols.
-	# Note: It seems that GNU readelf does not prefix section headers with the "There are X section headers"
-	# line when multiple options are given, so let's also match with the "Section Headers:" line.
-	ELF_FILEHEADER=$(sed -n '/There are [0-9]* section headers, starting at offset\|Section Headers:/q;p' "$tmpfile")
-	ELF_SECHEADERS=$(sed -n '/There are [0-9]* section headers, starting at offset\|Section Headers:/,$p' "$tmpfile" | sed -n '/Symbol table .* contains [0-9]* entries:/q;p')
-	ELF_SYMS=$(sed -n '/Symbol table .* contains [0-9]* entries:/,$p' "$tmpfile")
-
-	rm -f -- "$tmpfile"
+	ELF_FILEHEADER=$(${READELF} --file-header $objfile)
+	ELF_SECHEADERS=$(${READELF} --section-headers --wide $objfile)
+	ELF_SYMS=$(${READELF} --symbols --wide $objfile)
 }
 
 check_vmlinux() {
