@@ -586,6 +586,9 @@ static int zswap_compressor_param_set(const char *val, const struct kernel_param
 	else
 		ret = -EINVAL;
 
+	if (!ret)
+		static_branch_enable(&zswap_ever_enabled);
+
 	spin_lock_bh(&zswap_pools_lock);
 
 	if (!ret) {
