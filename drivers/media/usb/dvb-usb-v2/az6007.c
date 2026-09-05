@@ -694,8 +694,6 @@ static int az6007_power_ctrl(struct dvb_usb_device *d, int onoff)
 	pr_debug("%s()\n", __func__);
 
 	if (!state->warm) {
-		mutex_init(&state->mutex);
-
 		ret = az6007_write(d, AZ6007_POWER, 0, 2, NULL, 0);
 		if (ret < 0)
 			return ret;
@@ -889,12 +887,22 @@ static int az6007_download_firmware(struct dvb_usb_device *d,
 	return cypress_load_firmware(d->udev, fw, CYPRESS_FX2);
 }
 
+static int az6007_probe(struct dvb_usb_device *d)
+{
+	struct az6007_device_state *state = d_to_priv(d);
+
+	mutex_init(&state->mutex);
+
+	return 0;
+}
+
 /* DVB USB Driver stuff */
 static struct dvb_usb_device_properties az6007_props = {
 	.driver_name         = KBUILD_MODNAME,
 	.owner               = THIS_MODULE,
 	.firmware            = AZ6007_FIRMWARE,
 
+	.probe               = az6007_probe,
 	.adapter_nr          = adapter_nr,
 	.size_of_priv        = sizeof(struct az6007_device_state),
 	.i2c_algo            = &az6007_i2c_algo,
@@ -917,6 +925,7 @@ static struct dvb_usb_device_properties az6007_cablestar_hdci_props = {
 	.owner               = THIS_MODULE,
 	.firmware            = AZ6007_FIRMWARE,
 
+	.probe               = az6007_probe,
 	.adapter_nr          = adapter_nr,
 	.size_of_priv        = sizeof(struct az6007_device_state),
 	.i2c_algo            = &az6007_i2c_algo,
