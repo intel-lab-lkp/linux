@@ -189,6 +189,16 @@ static void ethosu_job_free(struct drm_sched_job *sched_job)
 	ethosu_job_put(job);
 }
 
+static void ethosu_job_cancel(struct drm_sched_job *sched_job)
+{
+	struct ethosu_job *job = to_ethosu_job(sched_job);
+
+	if (!dma_fence_is_signaled(job->done_fence)) {
+		dma_fence_set_error(job->done_fence, -ECANCELED);
+		dma_fence_signal(job->done_fence);
+	}
+}
+
 static void
 ethosu_switch_perfmon(struct ethosu_device *ethosu, struct ethosu_job *job)
 {
@@ -315,7 +325,8 @@ static enum drm_gpu_sched_stat ethosu_job_timedout(struct drm_sched_job *bad)
 static const struct drm_sched_backend_ops ethosu_sched_ops = {
 	.run_job = ethosu_job_run,
 	.timedout_job = ethosu_job_timedout,
-	.free_job = ethosu_job_free
+	.free_job = ethosu_job_free,
+	.cancel_job = ethosu_job_cancel,
 };
 
 int ethosu_job_init(struct ethosu_device *edev)
@@ -363,6 +374,15 @@ int ethosu_job_init(struct ethosu_device *edev)
 
 void ethosu_job_fini(struct ethosu_device *dev)
 {
+	drm_sched_wqueue_stop(&dev->sched);
+	cancel_delayed_work_sync(&dev->sched.work_tdr);
+
+	if (READ_ONCE(dev->in_flight_job)) {
+		WRITE_ONCE(dev->in_flight_job, NULL);
+		ethosu_device_reset(dev);
+	}
+
+	synchronize_irq(dev->irq);
 	drm_sched_fini(&dev->sched);
 }
 

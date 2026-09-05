@@ -216,7 +216,7 @@ static const struct drm_driver ethosu_drm_driver = {
 #define U85_MEM_ATTR0_CFG	0x00000000
 #define U85_MEM_ATTR2_CFG	0x000000b7
 
-static int ethosu_reset(struct ethosu_device *ethosudev)
+int ethosu_device_reset(struct ethosu_device *ethosudev)
 {
 	int ret;
 	u32 reg;
@@ -263,7 +263,7 @@ static int ethosu_device_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	ret = ethosu_reset(ethosudev);
+	ret = ethosu_device_reset(ethosudev);
 	if (!ret)
 		return 0;
 
