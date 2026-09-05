@@ -113,7 +113,6 @@ static void cvm_oct_remove_device(int port)
 		cancel_delayed_work_sync(&priv->port_periodic_work);
 
 		cvm_oct_tx_shutdown_dev(dev);
-		unregister_netdev(dev);
 		free_netdev(dev);
 		cvm_oct_device[port] = NULL;
 	}
@@ -694,6 +693,7 @@ static int cvm_oct_probe(struct platform_device *pdev)
 	struct device_node *pip;
 	int mtu_overhead = ETH_HLEN + ETH_FCS_LEN;
 	struct octeon_ethernet_platform *plat;
+	int port;
 
 	plat = devm_kzalloc(&pdev->dev, sizeof(*plat), GFP_KERNEL);
 	if (!plat)
@@ -729,7 +729,6 @@ static int cvm_oct_probe(struct platform_device *pdev)
 	num_interfaces = cvmx_helper_get_number_of_interfaces();
 	for (interface = 0; interface < num_interfaces; interface++) {
 		int num_ports = cvmx_helper_ports_on_interface(interface);
-		int port;
 
 		for (port = cvmx_helper_get_ipd_port(interface, 0);
 		     port < cvmx_helper_get_ipd_port(interface, num_ports);
@@ -953,8 +952,21 @@ static int cvm_oct_probe(struct platform_device *pdev)
 	return 0;
 
 err_rx:
+	/* Unregister ethernet devices */
+	for (port = 0; port < TOTAL_NUMBER_OF_PORTS; port++)
+		if (cvm_oct_device[port])
+			unregister_netdev(cvm_oct_device[port]);
+
 	cvm_oct_tx_shutdown();
+	goto disable_ipd;
+
 err_tx:
+	/* Unregister ethernet devices */
+	for (port = 0; port < TOTAL_NUMBER_OF_PORTS; port++)
+		if (cvm_oct_device[port])
+			unregister_netdev(cvm_oct_device[port]);
+
+disable_ipd:
 	cvmx_ipd_disable();
 
 	atomic_inc_return(&cvm_oct_poll_queue_stopping);
@@ -983,6 +995,11 @@ static void cvm_oct_remove(struct platform_device *pdev)
 {
 	struct octeon_ethernet_platform *plat = platform_get_drvdata(pdev);
 	int port;
+
+	/* Unregister ethernet devices */
+	for (port = 0; port < TOTAL_NUMBER_OF_PORTS; port++)
+		if (cvm_oct_device[port])
+			unregister_netdev(cvm_oct_device[port]);
 
 	cvmx_ipd_disable();
 
