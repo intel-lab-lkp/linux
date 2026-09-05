@@ -187,6 +187,9 @@ static int do_proc_int_conv_ms_jiffies_minmax(bool *negp, ulong *u_ptr,
 
 static int sysctl_u2k_ulong_conv_ms(const ulong *u_ptr, ulong *k_ptr)
 {
+	if (*u_ptr > INT_MAX)
+		return -EINVAL;
+
 	return proc_ulong_u2k_conv_uop(u_ptr, k_ptr, sysctl_msecs_to_jiffies);
 }
 
@@ -195,10 +198,10 @@ static int sysctl_k2u_ulong_conv_ms(ulong *u_ptr, const ulong *k_ptr)
 	return proc_ulong_k2u_conv_kop(u_ptr, k_ptr, sysctl_jiffies_to_msecs);
 }
 
-static int do_proc_ulong_conv_ms_jiffies(bool *negp, ulong *u_ptr, ulong *k_ptr,
-					 int dir, const struct ctl_table *tbl)
+static int do_proc_ulong_conv_ms_jiffies_minmax(bool *negp, ulong *u_ptr, ulong *k_ptr,
+						int dir, const struct ctl_table *tbl)
 {
-	return proc_ulong_conv(u_ptr, k_ptr, dir, tbl, false,
+	return proc_ulong_conv(u_ptr, k_ptr, dir, tbl, true,
 			       sysctl_u2k_ulong_conv_ms, sysctl_k2u_ulong_conv_ms);
 }
 
@@ -229,8 +232,8 @@ static int do_proc_int_conv_ms_jiffies_minmax(bool *negp, ulong *u_ptr,
 	return -ENOSYS;
 }
 
-static int do_proc_ulong_conv_ms_jiffies(bool *negp, ulong *u_ptr, ulong *k_ptr,
-					 int dir, const struct ctl_table *tbl)
+static int do_proc_ulong_conv_ms_jiffies_minmax(bool *negp, ulong *u_ptr, ulong *k_ptr,
+						int dir, const struct ctl_table *tbl)
 {
 	return -ENOSYS;
 }
@@ -333,7 +336,7 @@ int proc_doulongvec_ms_jiffies_minmax(const struct ctl_table *table, int dir,
 				      void *buffer, size_t *lenp, loff_t *ppos)
 {
 	return proc_doulongvec_conv(table, dir, buffer, lenp, ppos,
-				    do_proc_ulong_conv_ms_jiffies);
+				    do_proc_ulong_conv_ms_jiffies_minmax);
 }
 EXPORT_SYMBOL(proc_doulongvec_ms_jiffies_minmax);
 
