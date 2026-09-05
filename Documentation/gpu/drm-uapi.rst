@@ -707,7 +707,7 @@ VBlank event handling
 The DRM core exposes two vertical blank related ioctls:
 
 :c:macro:`DRM_IOCTL_WAIT_VBLANK`
-    This takes a struct drm_wait_vblank structure as its argument, and
+    This takes a union drm_wait_vblank as its argument, and
     it is used to block or request a signal when a specified vblank
     event occurs.
 
