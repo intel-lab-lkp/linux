@@ -1705,6 +1705,7 @@ struct decompress_io_ctx *f2fs_alloc_dic(struct compress_ctx *cc)
 	dic->log_cluster_size = cc->log_cluster_size;
 	dic->nr_cpages = cc->nr_cpages;
 	refcount_set(&dic->refcnt, 1);
+	atomic_inc(&sbi->nr_decompress_ctx);
 	dic->failed = false;
 	dic->vi = cc->vi;
 
@@ -1769,6 +1770,8 @@ static void f2fs_free_dic(struct decompress_io_ctx *dic,
 
 	page_array_free(sbi, dic->rpages, dic->nr_rpages);
 	kmem_cache_free(dic_entry_slab, dic);
+	if (atomic_dec_and_test(&sbi->nr_decompress_ctx))
+		wake_up_all(&sbi->decompress_io_wait);
 }
 
 static void f2fs_late_free_dic(struct work_struct *work)
@@ -2063,6 +2066,9 @@ void f2fs_destroy_compress_inode(struct f2fs_sb_info *sbi)
 
 int f2fs_init_page_array_cache(struct f2fs_sb_info *sbi)
 {
+	atomic_set(&sbi->nr_decompress_ctx, 0);
+	init_waitqueue_head(&sbi->decompress_io_wait);
+
 	dev_t dev = sbi->sb->s_bdev->bd_dev;
 	char slab_name[35];
 
@@ -2082,6 +2088,15 @@ int f2fs_init_page_array_cache(struct f2fs_sb_info *sbi)
 void f2fs_destroy_page_array_cache(struct f2fs_sb_info *sbi)
 {
 	kmem_cache_destroy(sbi->page_array_slab);
+}
+
+void f2fs_wait_on_decompress_io(struct f2fs_sb_info *sbi)
+{
+	if (!f2fs_sb_has_compression(sbi))
+		return;
+
+	wait_event(sbi->decompress_io_wait,
+		   !atomic_read(&sbi->nr_decompress_ctx));
 }
 
 int __init f2fs_init_compress_cache(void)

@@ -2066,6 +2066,10 @@ struct f2fs_sb_info {
 	struct kmem_cache *page_array_slab;	/* page array entry */
 	unsigned int page_array_slab_size;	/* default page array slab size */
 
+	/* For waiting for in-flight decompression contexts at umount */
+	atomic_t nr_decompress_ctx;
+	wait_queue_head_t decompress_io_wait;
+
 	/* For runtime compression statistics */
 	u64 compr_written_block;
 	u64 compr_saved_block;
@@ -4829,6 +4833,7 @@ int f2fs_init_compress_inode(struct f2fs_sb_info *sbi);
 void f2fs_destroy_compress_inode(struct f2fs_sb_info *sbi);
 int f2fs_init_page_array_cache(struct f2fs_sb_info *sbi);
 void f2fs_destroy_page_array_cache(struct f2fs_sb_info *sbi);
+void f2fs_wait_on_decompress_io(struct f2fs_sb_info *sbi);
 int __init f2fs_init_compress_cache(void);
 void f2fs_destroy_compress_cache(void);
 struct address_space *COMPRESS_MAPPING(struct f2fs_sb_info *sbi);
@@ -4884,6 +4889,7 @@ static inline int f2fs_init_compress_inode(struct f2fs_sb_info *sbi) { return 0;
 static inline void f2fs_destroy_compress_inode(struct f2fs_sb_info *sbi) { }
 static inline int f2fs_init_page_array_cache(struct f2fs_sb_info *sbi) { return 0; }
 static inline void f2fs_destroy_page_array_cache(struct f2fs_sb_info *sbi) { }
+static inline void f2fs_wait_on_decompress_io(struct f2fs_sb_info *sbi) { }
 static inline int __init f2fs_init_compress_cache(void) { return 0; }
 static inline void f2fs_destroy_compress_cache(void) { }
 static inline void f2fs_invalidate_compress_pages_range(struct f2fs_sb_info *sbi,
