@@ -95,6 +95,7 @@ struct pci_epf_test {
 	const struct pci_epc_features *epc_features;
 	struct pci_epf_bar	db_bar;
 	bool			db_bar_programmed;
+	bool			doorbell_irq_registered;
 	size_t			bar_size[PCI_STD_NUM_BARS];
 };
 
@@ -721,6 +722,7 @@ static void pci_epf_test_doorbell_cleanup(struct pci_epf_test *epf_test)
 	struct pci_epf *epf = epf_test->epf;
 
 	reg->doorbell_bar = cpu_to_le32(NO_BAR);
+	epf_test->doorbell_irq_registered = false;
 
 	pci_epf_free_doorbell(epf);
 }
@@ -772,6 +774,7 @@ static void pci_epf_test_enable_doorbell(struct pci_epf_test *epf_test,
 		goto err_doorbell_cleanup;
 	}
 
+	epf_test->doorbell_irq_registered = true;
 	reg->doorbell_data = cpu_to_le32(msg->data);
 	reg->doorbell_bar = cpu_to_le32(bar);
 
@@ -1238,6 +1241,10 @@ static void pci_epf_test_epc_deinit(struct pci_epf *epf)
 
 	cancel_delayed_work_sync(&epf_test->cmd_handler);
 	pci_epf_test_clean_dma_chan(epf_test);
+	if (epf_test->doorbell_irq_registered) {
+		free_irq(epf->db_msg[0].virq, epf_test);
+		pci_epf_test_doorbell_cleanup(epf_test);
+	}
 	pci_epf_test_clear_bar(epf);
 }
 
@@ -1374,6 +1381,10 @@ static void pci_epf_test_unbind(struct pci_epf *epf)
 	struct pci_epc *epc = epf->epc;
 
 	cancel_delayed_work_sync(&epf_test->cmd_handler);
+	if (epf_test->doorbell_irq_registered) {
+		free_irq(epf->db_msg[0].virq, epf_test);
+		pci_epf_test_doorbell_cleanup(epf_test);
+	}
 	if (epc->init_complete) {
 		pci_epf_test_clean_dma_chan(epf_test);
 		pci_epf_test_clear_bar(epf);
