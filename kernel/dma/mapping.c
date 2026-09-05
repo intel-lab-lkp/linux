@@ -656,8 +656,12 @@ void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 		attrs |= __DMA_ATTR_ALLOC_CC_SHARED;
 
 	if (dma_alloc_from_dev_coherent(dev, size, dma_handle, &cpu_addr)) {
-		trace_dma_alloc(dev, cpu_addr, *dma_handle, size,
-				DMA_BIDIRECTIONAL, flag, attrs);
+		if (cpu_addr)
+			trace_dma_alloc(dev, cpu_addr, *dma_handle, size,
+					DMA_BIDIRECTIONAL, flag, attrs);
+		else
+			trace_dma_alloc(dev, NULL, 0, size, DMA_BIDIRECTIONAL,
+					flag, attrs);
 		return cpu_addr;
 	}
 
@@ -676,9 +680,15 @@ void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 		return NULL;
 	}
 
-	trace_dma_alloc(dev, cpu_addr, *dma_handle, size, DMA_BIDIRECTIONAL,
-			flag, attrs);
-	debug_dma_alloc_coherent(dev, size, *dma_handle, cpu_addr, attrs);
+	if (cpu_addr) {
+		trace_dma_alloc(dev, cpu_addr, *dma_handle, size,
+				DMA_BIDIRECTIONAL, flag, attrs);
+		debug_dma_alloc_coherent(dev, size, *dma_handle, cpu_addr,
+					 attrs);
+	} else {
+		trace_dma_alloc(dev, NULL, 0, size, DMA_BIDIRECTIONAL, flag,
+				attrs);
+	}
 	return cpu_addr;
 }
 EXPORT_SYMBOL(dma_alloc_attrs);
