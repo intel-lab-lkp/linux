@@ -728,6 +728,17 @@ err_unprepare_clocks:
 	return err;
 }
 
+static void vsi_iommu_remove(struct platform_device *pdev)
+{
+	struct vsi_iommu *iommu = platform_get_drvdata(pdev);
+
+	iommu_device_unregister(&iommu->iommu);
+	iommu_device_sysfs_remove(&iommu->iommu);
+	devm_free_irq(&pdev->dev, iommu->irq, iommu);
+	pm_runtime_force_suspend(&pdev->dev);
+	clk_bulk_unprepare(iommu->num_clocks, iommu->clocks);
+}
+
 static void vsi_iommu_shutdown(struct platform_device *pdev)
 {
 	struct vsi_iommu *iommu = platform_get_drvdata(pdev);
@@ -776,6 +787,7 @@ static DEFINE_RUNTIME_DEV_PM_OPS(vsi_iommu_pm_ops,
 
 static struct platform_driver rockchip_vsi_iommu_driver = {
 	.probe = vsi_iommu_probe,
+	.remove = vsi_iommu_remove,
 	.shutdown = vsi_iommu_shutdown,
 	.driver = {
 		   .name = "vsi_iommu",
