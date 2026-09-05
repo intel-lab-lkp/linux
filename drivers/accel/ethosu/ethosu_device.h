@@ -91,6 +91,9 @@ struct gen_pool;
 #define NPU_KERNEL_DILATION_X		BIT(3)
 #define NPU_KERNEL_DILATION_Y		BIT(4)
 
+#define NPU_CMD_CTRL_CMD1		BIT(14)
+#define NPU_CMD_RESERVED_MASK		(BIT(15) | GENMASK(13, 10))
+
 enum ethosu_cmds {
 	NPU_OP_STOP = 0x0,
 	NPU_OP_IRQ = 0x1,

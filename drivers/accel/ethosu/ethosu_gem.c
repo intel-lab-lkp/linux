@@ -160,9 +160,9 @@ static void cmd_state_init(struct cmd_state *st)
 
 static void cmd_state_set_reg(struct cmd_state *st, u16 cmd)
 {
-	u16 reg = cmd & ~BIT(14);
+	u16 reg = cmd & ~NPU_CMD_CTRL_CMD1;
 
-	if (cmd & BIT(14)) {
+	if (cmd & NPU_CMD_CTRL_CMD1) {
 		if (reg < NPU_CMD1_REGS)
 			__set_bit(reg, st->cmd1);
 	} else if (reg < NPU_CMD0_REGS) {
@@ -172,9 +172,9 @@ static void cmd_state_set_reg(struct cmd_state *st, u16 cmd)
 
 static bool cmd_state_reg_is_set(struct cmd_state *st, u16 cmd)
 {
-	u16 reg = cmd & ~BIT(14);
+	u16 reg = cmd & ~NPU_CMD_CTRL_CMD1;
 
-	if (cmd & BIT(14))
+	if (cmd & NPU_CMD_CTRL_CMD1)
 		return reg < NPU_CMD1_REGS && test_bit(reg, st->cmd1);
 
 	return reg < NPU_CMD0_REGS && test_bit(reg, st->cmd0);
@@ -702,7 +702,7 @@ static int ethosu_gem_cmdstream_copy_and_validate(struct drm_device *ddev,
 		cmd = cmds[0];
 		param = cmds[0] >> 16;
 
-		if (cmd & 0x4000) {
+		if (cmd & NPU_CMD_CTRL_CMD1) {
 			if (get_user(cmds[1], ucmds++))
 				return -EFAULT;
 
@@ -1023,6 +1023,8 @@ static int ethosu_gem_cmdstream_copy_and_validate(struct drm_device *ddev,
 			st.dma.src.len = st.dma.dst.len = addr;
 			break;
 		default:
+			if (cmd & NPU_CMD_RESERVED_MASK)
+				return -EINVAL;
 			break;
 		}
 	}
