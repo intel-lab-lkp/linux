@@ -16,7 +16,16 @@
 #include <media/v4l2-fwnode.h>
 
 #define OV02C10_LINK_FREQ_400MHZ	400000000ULL
-#define OV02C10_MCLK			19200000
+/*
+ * The PLL register tables target a 19.2 MHz input clock.  On boards that
+ * clock the sensor at 26 MHz the same dividers yield a 26/19.2 = 1.3542x
+ * faster MIPI link (and frame rate).  OmniVision's 26 MHz PLL values are
+ * not public, so rather than re-normalise the link the driver advertises
+ * the real, scaled link frequency: 400 MHz * 26 / 19.2 = 541.667 MHz.
+ */
+#define OV02C10_LINK_FREQ_541MHZ	541666667ULL
+#define OV02C10_MCLK_19_2MHZ		19200000
+#define OV02C10_MCLK_26MHZ		26000000
 #define OV02C10_RGB_DEPTH		10
 
 #define OV02C10_NATIVE_WIDTH		1928
@@ -345,8 +354,14 @@ static const char * const ov02c10_test_pattern_menu[] = {
 	"Color Bar type 4",
 };
 
+enum {
+	OV02C10_LINK_FREQ_400MHZ_IDX,	/* 19.2 MHz external clock */
+	OV02C10_LINK_FREQ_541MHZ_IDX,	/* 26 MHz external clock */
+};
+
 static const s64 link_freq_menu_items[] = {
-	OV02C10_LINK_FREQ_400MHZ,
+	[OV02C10_LINK_FREQ_400MHZ_IDX] = OV02C10_LINK_FREQ_400MHZ,
+	[OV02C10_LINK_FREQ_541MHZ_IDX] = OV02C10_LINK_FREQ_541MHZ,
 };
 
 static const struct ov02c10_mode supported_modes[] = {
@@ -396,6 +411,9 @@ struct ov02c10 {
 	/* MIPI lane info */
 	u32 link_freq_index;
 	u8 mipi_lanes;
+
+	/* External (sensor) clock rate, Hz */
+	u32 xvclk_freq;
 };
 
 static inline struct ov02c10 *to_ov02c10(struct v4l2_subdev *subdev)
@@ -507,7 +525,8 @@ static int ov02c10_init_controls(struct ov02c10 *ov02c10)
 	ov02c10->link_freq = v4l2_ctrl_new_int_menu(ctrl_hdlr,
 						    &ov02c10_ctrl_ops,
 						    V4L2_CID_LINK_FREQ,
-						    ov02c10->link_freq_index, 0,
+						    ov02c10->link_freq_index,
+						    ov02c10->link_freq_index,
 						    link_freq_menu_items);
 	if (ov02c10->link_freq)
 		ov02c10->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
@@ -875,6 +894,21 @@ static int ov02c10_check_hwcfg(struct ov02c10 *ov02c10)
 	/* v4l2_link_freq_to_bitmap() guarantees at least 1 bit is set */
 	ov02c10->link_freq_index = ffs(link_freq_bitmap) - 1;
 
+	/*
+	 * The IPU6 ipu-bridge always describes the nominal 19.2 MHz link
+	 * (400 MHz) in the fwnode, keyed by ACPI HID, even on boards that
+	 * clock the sensor at 26 MHz.  There the real link frequency is
+	 * 26/19.2 higher; advertise it so the CSI-2 receiver programs its
+	 * D-PHY frequency band and bandwidth budget for the rate the sensor
+	 * actually transmits.
+	 */
+	if (ov02c10->xvclk_freq == OV02C10_MCLK_26MHZ)
+		ov02c10->link_freq_index = OV02C10_LINK_FREQ_541MHZ_IDX;
+
+	dev_dbg(dev, "%u Hz external clock, link freq %lld Hz\n",
+		ov02c10->xvclk_freq,
+		link_freq_menu_items[ov02c10->link_freq_index]);
+
 	if (bus_cfg.bus.mipi_csi2.num_data_lanes != 1 &&
 	    bus_cfg.bus.mipi_csi2.num_data_lanes != 2) {
 		ret = dev_err_probe(dev, -EINVAL,
@@ -924,10 +958,11 @@ static int ov02c10_probe(struct i2c_client *client)
 				     "failed to get imaging clock\n");
 
 	freq = clk_get_rate(ov02c10->img_clk);
-	if (freq != OV02C10_MCLK)
+	if (freq != OV02C10_MCLK_19_2MHZ && freq != OV02C10_MCLK_26MHZ)
 		return dev_err_probe(ov02c10->dev, -EINVAL,
-				     "external clock %lu is not supported",
+				     "external clock %lu is not supported\n",
 				     freq);
+	ov02c10->xvclk_freq = freq;
 
 	v4l2_i2c_subdev_init(&ov02c10->sd, client, &ov02c10_subdev_ops);
 
