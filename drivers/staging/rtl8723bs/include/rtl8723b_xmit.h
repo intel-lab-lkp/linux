@@ -365,9 +365,7 @@ struct txdesc_8723b {
 
 #endif
 /*  */
-/*  */
-/* 	Rate */
-/*  */
+/*	Rate */
 /*  */
 /*  CCK Rates, TxHT = 0 */
 #define DESC8723B_RATE1M				0x00
