@@ -228,12 +228,6 @@ enum gdma_page_type {
 
 #define GDMA_INVALID_DMA_REGION 0
 
-struct mana_serv_work {
-	struct work_struct serv_work;
-	struct pci_dev *pdev;
-	enum gdma_eqe_type type;
-};
-
 struct gdma_mem_info {
 	struct device *dev;
 
@@ -420,6 +414,8 @@ struct gdma_irq_context {
 enum gdma_context_flags {
 	GC_PROBE_SUCCEEDED	= 0,
 	GC_IN_SERVICE		= 1,
+	GC_REMOVING		= 2,
+	GC_SERVICE_DURING_PROBE	= 3,
 };
 
 struct gdma_context {
@@ -478,6 +474,12 @@ struct gdma_context {
 	u64 gdma_protocol_ver;
 
 	struct workqueue_struct *service_wq;
+
+	/* The in-flight MANA service cycle, queued on the system workqueue:
+	 * a reset cycle destroys and re-creates @service_wq.
+	 */
+	struct work_struct	serv_work;
+	enum gdma_eqe_type	serv_type;
 
 	unsigned long		flags;
 

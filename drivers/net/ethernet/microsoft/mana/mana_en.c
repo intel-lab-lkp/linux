@@ -924,8 +924,8 @@ static void mana_tx_timeout(struct net_device *netdev, unsigned int txqueue)
 		return;
 	}
 
-	/* Already in service, hence tx queue reset is not required.*/
-	if (test_bit(GC_IN_SERVICE, &gc->flags))
+	if (test_bit(GC_IN_SERVICE, &gc->flags) ||
+	    test_bit(GC_REMOVING, &gc->flags))
 		return;
 
 	/* Note: If there are pending queue reset work for this port(apc),
@@ -4060,9 +4060,12 @@ static void mana_gf_stats_work_handler(struct work_struct *work)
 		dev_warn(gc->dev,
 			 "Gf stats wk handler: gf stats query timed out.\n");
 		/* As HWC timed out, indicating a faulty HW state and needs a
-		 * reset.
+		 * reset.  Never admit service work before the probe has
+		 * completed: a probe that is failing unwinds netdevs and the
+		 * HWC channel itself and cannot drain a cycle.
 		 */
-		mana_schedule_serv_work(gc, GDMA_EQE_HWC_RESET_REQUEST);
+		if (test_bit(GC_PROBE_SUCCEEDED, &gc->flags))
+			mana_schedule_serv_work(gc, GDMA_EQE_HWC_RESET_REQUEST);
 		return;
 	}
 	schedule_delayed_work(&ac->gf_stats_work, MANA_GF_STATS_PERIOD);
