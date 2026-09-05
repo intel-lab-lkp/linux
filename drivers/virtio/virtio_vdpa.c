@@ -27,6 +27,7 @@
 struct virtio_vdpa_device {
 	struct virtio_device vdev;
 	struct vdpa_device *vdpa;
+	rwlock_t callback_lock;
 	u64 features;
 };
 
@@ -123,8 +124,24 @@ static irqreturn_t virtio_vdpa_config_cb(void *private)
 static irqreturn_t virtio_vdpa_virtqueue_cb(void *private)
 {
 	struct virtqueue *vq = private;
+	struct virtio_vdpa_device *vd_dev;
+	unsigned long flags;
+	irqreturn_t ret;
 
-	return vring_interrupt(0, vq);
+	vd_dev = to_virtio_vdpa_device(vq->vdev);
+	read_lock_irqsave(&vd_dev->callback_lock, flags);
+	ret = vring_interrupt(0, vq);
+	read_unlock_irqrestore(&vd_dev->callback_lock, flags);
+
+	return ret;
+}
+
+static void virtio_vdpa_synchronize_cbs(struct virtio_device *vdev)
+{
+	struct virtio_vdpa_device *vd_dev = to_virtio_vdpa_device(vdev);
+
+	write_lock_irq(&vd_dev->callback_lock);
+	write_unlock_irq(&vd_dev->callback_lock);
 }
 
 static struct virtqueue *
@@ -439,6 +456,7 @@ static const struct virtio_config_ops virtio_vdpa_config_ops = {
 	.reset		= virtio_vdpa_reset,
 	.find_vqs	= virtio_vdpa_find_vqs,
 	.del_vqs	= virtio_vdpa_del_vqs,
+	.synchronize_cbs = virtio_vdpa_synchronize_cbs,
 	.get_features	= virtio_vdpa_get_features,
 	.finalize_features = virtio_vdpa_finalize_features,
 	.bus_name	= virtio_vdpa_bus_name,
@@ -472,6 +490,7 @@ static int virtio_vdpa_probe(struct vdpa_device *vdpa)
 	vd_dev->vdev.config = &virtio_vdpa_config_ops;
 	vd_dev->vdev.map = vdpa->map;
 	vd_dev->vdpa = vdpa;
+	rwlock_init(&vd_dev->callback_lock);
 
 	vd_dev->vdev.id.device = ops->get_device_id(vdpa);
 	if (vd_dev->vdev.id.device == 0)

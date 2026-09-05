@@ -11,6 +11,7 @@
 #include <linux/types.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
+#include <linux/srcu.h>
 #include <linux/virtio.h>
 #include <linux/cdev.h>
 #include <linux/completion.h>
@@ -230,6 +231,7 @@ enum rproc_features {
  * @rvdevs: list of remote virtio devices
  * @subdevs: list of subdevices, to following the running state
  * @notifyids: idr for dynamically assigning rproc-wide unique notify ids
+ * @vq_srcu: SRCU domain for virtqueue callbacks
  * @index: index of this rproc device
  * @attach_work: workqueue for attaching rproc
  * @crash_handler: workqueue for handling a crash
@@ -276,6 +278,7 @@ struct rproc {
 	struct list_head rvdevs;
 	struct list_head subdevs;
 	struct idr notifyids;
+	struct srcu_struct vq_srcu;
 	int index;
 	struct work_struct attach_work;
 	struct work_struct crash_handler;
