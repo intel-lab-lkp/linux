@@ -44,14 +44,12 @@ function is_root() {
 	fi
 }
 
-# Check if we can compile the modules before loading them
-function has_kdir() {
-	if [ -z "$KDIR" ]; then
-		KDIR="/lib/modules/$(uname -r)/build"
-	fi
+# Check that the test modules are there before loading them
+function has_test_modules() {
+	local mods=(test_modules/*.ko)
 
-	if [ ! -d "$KDIR" ]; then
-		echo "skip all tests: KDIR ($KDIR) not available to compile modules."
+	if [ ! -e "${mods[0]}" ]; then
+		echo "skip all tests: test modules are not built, run make first" >&2
 		exit $ksft_skip
 	fi
 }
@@ -150,7 +148,7 @@ function cleanup() {
 #		 the ftrace_enabled sysctl.
 function setup_config() {
 	is_root
-	has_kdir
+	has_test_modules
 	push_config
 	set_dynamic_debug
 	set_ftrace_enabled 1
