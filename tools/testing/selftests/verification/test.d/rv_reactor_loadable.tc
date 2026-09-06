@@ -1,0 +1,46 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test a loadable module-based reactor
+# requires: available_reactors insmod:program rmmod:program
+
+MODULE_KO="$FTRACETEST_ROOT/test_modules/rv_test_reactor.ko"
+[ -f "$MODULE_KO" ] || exit_unsupported
+[ -f /proc/modules ] || exit_unsupported
+monitor=$(ls monitors | head -n 1)
+[ -n "$monitor" ] || exit_unsupported
+
+cleanup() {
+	if grep -q '^test_reactors$' available_reactors; then
+		echo nop > "monitors/$monitor/reactors" || true
+		rmmod rv_test_reactor || true
+	fi
+}
+trap cleanup EXIT
+
+test_loadable_reactor() {
+	local monitor="$1"
+
+	insmod "$MODULE_KO"
+	grep -q test_reactor available_reactors
+
+	echo test_reactor > "monitors/$monitor/reactors"
+	grep -q "\[test_reactor\]"  "monitors/$monitor/reactors"
+
+	echo 1 > "monitors/$monitor/enable"
+
+	if rmmod rv_test_reactor 2> /dev/null; then
+		echo "FAIL: rmmod succeeded while the reactor is attached to a monitor"
+		return 1
+	fi
+	grep -q test_reactor available_reactors
+
+	echo nop > "monitors/$monitor/reactors"
+	grep -q "\[nop\]"  "monitors/$monitor/reactors"
+	grep -q 1 "monitors/$monitor/enable"
+
+	echo 0 > "monitors/$monitor/enable"
+	rmmod rv_test_reactor
+	! grep -q test_reactor available_reactors
+}
+
+test_loadable_reactor "$monitor"
