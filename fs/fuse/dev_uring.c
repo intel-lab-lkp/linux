@@ -898,7 +898,7 @@ static int fuse_uring_args_to_ring(struct fuse_req *req,
 
 	if (copy_size > ent->payload.iov_len) {
 		fuse_copy_finish(&cs);
-		return args->opcode == FUSE_SETXATTR ? -E2BIG : -EIO;
+		return fuse_req_too_large_error(args);
 	}
 
 	/* copy the payload */
