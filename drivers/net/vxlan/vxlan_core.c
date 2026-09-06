@@ -4712,8 +4712,14 @@ static int vxlan_fill_info(struct sk_buff *skb, const struct net_device *dev)
 	const struct vxlan_dev *vxlan = netdev_priv(dev);
 	struct ifla_vxlan_port_range ports;
 	const struct vxlan_config *cfg;
+	int err = 0;
 
-	cfg = rtnl_dereference(vxlan->cfg);
+	rcu_read_lock();
+	cfg = rcu_dereference(vxlan->cfg);
+	if (!cfg) {
+		err = -ENODEV;
+		goto out;
+	}
 
 	if (nla_put_u32(skb, IFLA_VXLAN_ID, be32_to_cpu(cfg->vni)))
 		goto nla_put_failure;
@@ -4812,9 +4818,12 @@ static int vxlan_fill_info(struct sk_buff *skb, const struct net_device *dev)
 		    &cfg->reserved_bits))
 		goto nla_put_failure;
 
-	return 0;
+out:
+	rcu_read_unlock();
+	return err;
 
 nla_put_failure:
+	rcu_read_unlock();
 	return -EMSGSIZE;
 }
 
