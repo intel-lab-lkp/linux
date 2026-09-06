@@ -111,12 +111,12 @@ pub struct PrivateData<'bound, T: Driver> {
 }
 
 impl<'bound, T: Driver> PrivateData<'bound, T> {
-    fn driver_data(self: Pin<&Self>) -> Pin<&T::Data<'bound>> {
+    fn driver_data(self: Pin<&mut Self>) -> Pin<&mut T::Data<'bound>> {
         // SAFETY: We treat the result as pinned.
         let inner = unsafe { Pin::into_inner_unchecked(self) };
 
         // SAFETY: `self.driver` is pinned.
-        unsafe { Pin::new_unchecked(&inner.driver) }
+        unsafe { Pin::new_unchecked(&mut inner.driver) }
     }
 }
 
@@ -175,15 +175,18 @@ impl<T: Driver> Adapter<T> {
         // INVARIANT: `sdev` is valid for the duration of `remove_callback()`.
         let sdev = unsafe { &*sdev.cast::<Device<device::CoreInternal<'_>>>() };
 
-        // SAFETY: `remove_callback` is only ever called after a successful call to
-        // `probe_callback`, hence it's guaranteed that `Device::set_drvdata()` has been called
-        // and stored a `Pin<KBox<PrivateData<'_, T>>>`.
-        let private_data = unsafe { sdev.as_ref().drvdata_borrow::<PrivateData<'_, T>>() };
-
-        T::unbind(sdev, private_data.driver_data());
-
         // SAFETY: `sdev.as_raw()` is guaranteed to be a valid pointer to `serdev_device`.
         unsafe { bindings::serdev_device_pause_rx(sdev.as_raw()) };
+
+        // SAFETY:
+        // - `remove_callback` is only ever called after a successful call to `probe_callback`,
+        //   hence it's guaranteed that `Device::set_drvdata()` has been called and stored a
+        //   `Pin<KBox<PrivateData<'_, T>>>`.
+        // - The call to `serdev_device_pause_rx` above guarantees that we do not overlap with
+        //   `receive_buf_callback`, thus it is guaranteed that we have exclusive access.
+        let private_data = unsafe { sdev.as_ref().drvdata_borrow_mut::<PrivateData<'_, T>>() };
+
+        T::unbind(sdev, private_data.driver_data());
     }
 
     extern "C" fn receive_buf_callback(
@@ -200,10 +203,14 @@ impl<T: Driver> Adapter<T> {
         // INVARIANT: `sdev` is valid for the duration of `receive_buf_callback()`.
         let sdev = unsafe { &*sdev.cast::<Device<device::BoundInternal>>() };
 
-        // SAFETY: `receive_buf_callback` is only ever called after a successful call to
-        // `probe_callback`, hence it's guaranteed that `Device::set_drvdata()` has been called
-        // and stored a `Pin<KBox<PrivateData<'_, T>>>`.
-        let private_data = unsafe { sdev.as_ref().drvdata_borrow::<PrivateData<'_, T>>() };
+        // SAFETY:
+        // - `receive_buf_callback` is only ever called after a successful call to `probe_callback`,
+        //   hence it's guaranteed that `Device::set_drvdata()` has been called and stored a
+        //   `Pin<KBox<PrivateData<'_, T>>>`.
+        // - `unbind_callback` calls `serdev_device_pause_rx` before accessing the driver data,
+        //   which guarantees that this function will not overlap with it. Thus we have exclusive
+        //   access.
+        let private_data = unsafe { sdev.as_ref().drvdata_borrow_mut::<PrivateData<'_, T>>() };
 
         T::receive(sdev, private_data.driver_data(), buf)
     }
@@ -305,7 +312,7 @@ pub trait Driver {
     type IdInfo: 'static;
 
     /// The type of the driver's bus device private data.
-    type Data<'bound>: Send + Sync + 'bound;
+    type Data<'bound>: Send + 'bound;
 
     /// The table of OF device ids supported by the driver.
     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = None;
@@ -331,7 +338,7 @@ pub trait Driver {
     /// `&Device<Core>` or `&Device<Bound>` reference. For instance.
     ///
     /// Otherwise, release operations for driver resources should be performed in `Drop`.
-    fn unbind<'bound>(sdev: &'bound Device<device::Core<'_>>, this: Pin<&Self::Data<'bound>>) {
+    fn unbind<'bound>(sdev: &'bound Device<device::Core<'_>>, this: Pin<&mut Self::Data<'bound>>) {
         let _ = (sdev, this);
     }
 
@@ -342,7 +349,7 @@ pub trait Driver {
     /// Returns the number of bytes accepted.
     fn receive<'bound>(
         sdev: &'bound Device<device::Bound>,
-        this: Pin<&Self::Data<'bound>>,
+        this: Pin<&mut Self::Data<'bound>>,
         data: &[u8],
     ) -> usize {
         let _ = (sdev, this, data);
