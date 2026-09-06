@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <linux/compiler.h>
 #include <linux/zalloc.h>
 
 struct perf_gtk_context *pgctx;
@@ -28,27 +29,60 @@ int perf_gtk__deactivate_context(struct perf_gtk_context **ctx)
 	return 0;
 }
 
+static GMainLoop *perf_gtk__error_loop;
+
+void perf_gtk__quit_error_dialog(void)
+{
+	if (perf_gtk__error_loop)
+		g_main_loop_quit(perf_gtk__error_loop);
+}
+
+static void perf_gtk__dialog_response(GtkDialog *dialog,
+				      gint response_id __maybe_unused,
+				      gpointer data __maybe_unused)
+{
+	gtk_window_destroy(GTK_WINDOW(dialog));
+}
+
 static int perf_gtk__error(const char *format, va_list args)
 {
 	char *msg;
 	GtkWidget *dialog;
+	va_list args_copy;
 
+	va_copy(args_copy, args);
 	if (!perf_gtk__is_active_context(pgctx) ||
-	    vasprintf(&msg, format, args) < 0) {
+	    vasprintf(&msg, format, args_copy) < 0) {
+		va_end(args_copy);
 		fprintf(stderr, "Error:\n");
 		vfprintf(stderr, format, args);
 		fprintf(stderr, "\n");
 		return -1;
 	}
+	va_end(args_copy);
 
 	dialog = gtk_message_dialog_new_with_markup(GTK_WINDOW(pgctx->main_window),
 					GTK_DIALOG_DESTROY_WITH_PARENT,
 					GTK_MESSAGE_ERROR,
 					GTK_BUTTONS_CLOSE,
 					"<b>Error</b>\n\n%s", msg);
-	gtk_dialog_run(GTK_DIALOG(dialog));
 
-	gtk_widget_destroy(dialog);
+	/*
+	 * "response" only fires when a button is clicked; DESTROY_WITH_PARENT
+	 * destroys the dialog directly without it. Quit from "destroy"
+	 * instead, which fires either way, so the nested loop below can't
+	 * outlive the dialog and hang.
+	 */
+	perf_gtk__error_loop = g_main_loop_new(NULL, FALSE);
+	g_signal_connect(dialog, "response",
+			 G_CALLBACK(perf_gtk__dialog_response), NULL);
+	g_signal_connect_swapped(dialog, "destroy",
+				 G_CALLBACK(g_main_loop_quit), perf_gtk__error_loop);
+
+	gtk_widget_set_visible(dialog, TRUE);
+	g_main_loop_run(perf_gtk__error_loop);
+	g_clear_pointer(&perf_gtk__error_loop, g_main_loop_unref);
+
 	free(msg);
 	return 0;
 }
@@ -57,14 +91,18 @@ static int perf_gtk__error(const char *format, va_list args)
 static int perf_gtk__warning_info_bar(const char *format, va_list args)
 {
 	char *msg;
+	va_list args_copy;
 
+	va_copy(args_copy, args);
 	if (!perf_gtk__is_active_context(pgctx) ||
-	    vasprintf(&msg, format, args) < 0) {
+	    vasprintf(&msg, format, args_copy) < 0) {
+		va_end(args_copy);
 		fprintf(stderr, "Warning:\n");
 		vfprintf(stderr, format, args);
 		fprintf(stderr, "\n");
 		return -1;
 	}
+	va_end(args_copy);
 
 	gtk_label_set_text(GTK_LABEL(pgctx->message_label), msg);
 	gtk_info_bar_set_message_type(GTK_INFO_BAR(pgctx->info_bar),
@@ -78,14 +116,18 @@ static int perf_gtk__warning_info_bar(const char *format, va_list args)
 static int perf_gtk__warning_statusbar(const char *format, va_list args)
 {
 	char *msg, *p;
+	va_list args_copy;
 
+	va_copy(args_copy, args);
 	if (!perf_gtk__is_active_context(pgctx) ||
-	    vasprintf(&msg, format, args) < 0) {
+	    vasprintf(&msg, format, args_copy) < 0) {
+		va_end(args_copy);
 		fprintf(stderr, "Warning:\n");
 		vfprintf(stderr, format, args);
 		fprintf(stderr, "\n");
 		return -1;
 	}
+	va_end(args_copy);
 
 	gtk_statusbar_pop(GTK_STATUSBAR(pgctx->statbar),
 			  pgctx->statbar_ctx_id);
