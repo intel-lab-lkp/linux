@@ -2716,18 +2716,39 @@ static int _ocfs2_reclaim_suballoc_to_main(handle_t *handle,
 	idx = le16_to_cpu(group->bg_chain);
 	rec = &(cl->cl_recs[idx]);
 
+	/*
+	 * We already hold j_trans_barrier, while everywhere else locks the
+	 * allocator inode before starting a transaction. Trylock here, before
+	 * mutating anything, so a busy lock skips this best-effort reclaim
+	 * instead of inverting that order into an ABBA deadlock.
+	 */
+	main_bm_inode = ocfs2_get_system_file_inode(osb,
+						    GLOBAL_BITMAP_SYSTEM_INODE,
+						    OCFS2_INVALID_SLOT);
+	if (!main_bm_inode)
+		goto bail; /* ignore the error in reclaim path */
+
+	if (!inode_trylock(main_bm_inode)) {
+		iput(main_bm_inode);
+		goto bail; /* ignore the error in reclaim path */
+	}
+
+	status = ocfs2_try_inode_lock(main_bm_inode, &main_bm_bh, 1);
+	if (status < 0)
+		goto free_bm_inode; /* ignore the error in reclaim path */
+
 	status = ocfs2_extend_trans(handle,
 				ocfs2_calc_group_alloc_credits(osb->sb,
 						 le16_to_cpu(cl->cl_cpg)));
 	if (status) {
 		mlog_errno(status);
-		goto bail;
+		goto free_bm_bh;
 	}
 	status = ocfs2_journal_access_di(handle, INODE_CACHE(alloc_inode),
 					 alloc_bh, OCFS2_JOURNAL_ACCESS_WRITE);
 	if (status < 0) {
 		mlog_errno(status);
-		goto bail;
+		goto free_bm_bh;
 	}
 
 	/*
@@ -2795,18 +2816,6 @@ static int _ocfs2_reclaim_suballoc_to_main(handle_t *handle,
 	memset(group, 0, sizeof(struct ocfs2_group_desc));
 
 	/* prepare job for reclaim clusters */
-	main_bm_inode = ocfs2_get_system_file_inode(osb,
-						    GLOBAL_BITMAP_SYSTEM_INODE,
-						    OCFS2_INVALID_SLOT);
-	if (!main_bm_inode)
-		goto bail; /* ignore the error in reclaim path */
-
-	inode_lock(main_bm_inode);
-
-	status = ocfs2_inode_lock(main_bm_inode, &main_bm_bh, 1);
-	if (status < 0)
-		goto free_bm_inode; /* ignore the error in reclaim path */
-
 	ocfs2_block_to_cluster_group(main_bm_inode, start_blk, &bg_blkno,
 				     &start_bit);
 	fe = (struct ocfs2_dinode *) main_bm_bh->b_data;
