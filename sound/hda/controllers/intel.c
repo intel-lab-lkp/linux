@@ -2328,18 +2328,30 @@ static const struct snd_pci_quirk power_save_denylist[] = {
 	{}
 };
 
+static bool azx_is_power_save_denylisted(struct pci_dev *pci)
+{
+	if (snd_pci_quirk_lookup(pci, power_save_denylist))
+		return true;
+
+	/* GU605CW shares the subsystem ID; only GU605CX was tested. */
+	return pci->vendor == PCI_VENDOR_ID_INTEL &&
+	       pci->device == PCI_DEVICE_ID_INTEL_HDA_ARL &&
+	       pci->subsystem_vendor == 0x1043 &&
+	       pci->subsystem_device == 0x1034 &&
+	       dmi_match(DMI_BOARD_VENDOR, "ASUSTeK COMPUTER INC.") &&
+	       dmi_match(DMI_BOARD_NAME, "GU605CX");
+}
+
 static void set_default_power_save(struct azx *chip)
 {
 	struct hda_intel *hda = container_of(chip, struct hda_intel, chip);
 	int val = power_save;
 
 	if (pm_blacklist < 0) {
-		const struct snd_pci_quirk *q;
-
-		q = snd_pci_quirk_lookup(chip->pci, power_save_denylist);
-		if (q && val) {
+		if (val && azx_is_power_save_denylisted(chip->pci)) {
 			dev_info(chip->card->dev, "device %04x:%04x is on the power_save denylist, forcing power_save to 0\n",
-				 q->subvendor, q->subdevice);
+				 chip->pci->subsystem_vendor,
+				 chip->pci->subsystem_device);
 			val = 0;
 			hda->runtime_pm_disabled = 1;
 		}
