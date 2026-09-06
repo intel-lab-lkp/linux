@@ -777,18 +777,7 @@ static struct zorro_driver ariadne_driver = {
 	.remove		= ariadne_remove_one,
 };
 
-static int __init ariadne_init_module(void)
-{
-	return zorro_register_driver(&ariadne_driver);
-}
-
-static void __exit ariadne_cleanup_module(void)
-{
-	zorro_unregister_driver(&ariadne_driver);
-}
-
-module_init(ariadne_init_module);
-module_exit(ariadne_cleanup_module);
+module_driver(ariadne_driver, zorro_register_driver, zorro_unregister_driver);
 
 MODULE_DESCRIPTION("Ariadne Ethernet Driver");
 MODULE_LICENSE("GPL");

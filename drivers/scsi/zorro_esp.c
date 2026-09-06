@@ -946,15 +946,4 @@ static struct zorro_driver zorro_esp_driver = {
 	.remove	  = zorro_esp_remove,
 };
 
-static int __init zorro_esp_scsi_init(void)
-{
-	return zorro_register_driver(&zorro_esp_driver);
-}
-
-static void __exit zorro_esp_scsi_exit(void)
-{
-	zorro_unregister_driver(&zorro_esp_driver);
-}
-
-module_init(zorro_esp_scsi_init);
-module_exit(zorro_esp_scsi_exit);
+module_driver(zorro_esp_driver, zorro_register_driver, zorro_unregister_driver);

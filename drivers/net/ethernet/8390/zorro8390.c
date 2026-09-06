@@ -430,18 +430,7 @@ static struct zorro_driver zorro8390_driver = {
 	.remove		= zorro8390_remove_one,
 };
 
-static int __init zorro8390_init_module(void)
-{
-	return zorro_register_driver(&zorro8390_driver);
-}
-
-static void __exit zorro8390_cleanup_module(void)
-{
-	zorro_unregister_driver(&zorro8390_driver);
-}
-
-module_init(zorro8390_init_module);
-module_exit(zorro8390_cleanup_module);
+module_driver(zorro8390_driver, zorro_register_driver, zorro_unregister_driver);
 
 MODULE_DESCRIPTION("Zorro NS8390-based ethernet driver");
 MODULE_LICENSE("GPL");

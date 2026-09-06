@@ -257,18 +257,7 @@ static void hydra_remove_one(struct zorro_dev *z)
     free_netdev(dev);
 }
 
-static int __init hydra_init_module(void)
-{
-    return zorro_register_driver(&hydra_driver);
-}
-
-static void __exit hydra_cleanup_module(void)
-{
-    zorro_unregister_driver(&hydra_driver);
-}
-
-module_init(hydra_init_module);
-module_exit(hydra_cleanup_module);
+module_driver(hydra_driver, zorro_register_driver, zorro_unregister_driver);
 
 MODULE_DESCRIPTION("Zorro-II Hydra 8390 ethernet driver");
 MODULE_LICENSE("GPL");

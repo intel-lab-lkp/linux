@@ -288,17 +288,7 @@ static struct zorro_driver a2091_driver = {
 	.remove		= a2091_remove,
 };
 
-static int __init a2091_init(void)
-{
-	return zorro_register_driver(&a2091_driver);
-}
-module_init(a2091_init);
-
-static void __exit a2091_exit(void)
-{
-	zorro_unregister_driver(&a2091_driver);
-}
-module_exit(a2091_exit);
+module_driver(a2091_driver, zorro_register_driver, zorro_unregister_driver);
 
 MODULE_DESCRIPTION("Commodore A2091/A590 SCSI");
 MODULE_LICENSE("GPL");

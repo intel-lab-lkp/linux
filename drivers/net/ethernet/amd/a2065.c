@@ -768,18 +768,7 @@ static void a2065_remove_one(struct zorro_dev *z)
 	free_netdev(dev);
 }
 
-static int __init a2065_init_module(void)
-{
-	return zorro_register_driver(&a2065_driver);
-}
-
-static void __exit a2065_cleanup_module(void)
-{
-	zorro_unregister_driver(&a2065_driver);
-}
-
-module_init(a2065_init_module);
-module_exit(a2065_cleanup_module);
+module_driver(a2065_driver, zorro_register_driver, zorro_unregister_driver);
 
 MODULE_DESCRIPTION("Commodore A2065 Ethernet driver");
 MODULE_LICENSE("GPL");

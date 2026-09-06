@@ -461,17 +461,7 @@ static struct zorro_driver gvp11_driver = {
 	.remove		= gvp11_remove,
 };
 
-static int __init gvp11_init(void)
-{
-	return zorro_register_driver(&gvp11_driver);
-}
-module_init(gvp11_init);
-
-static void __exit gvp11_exit(void)
-{
-	zorro_unregister_driver(&gvp11_driver);
-}
-module_exit(gvp11_exit);
+module_driver(gvp11_driver, zorro_register_driver, zorro_unregister_driver);
 
 MODULE_DESCRIPTION("GVP Series II SCSI");
 MODULE_LICENSE("GPL");
