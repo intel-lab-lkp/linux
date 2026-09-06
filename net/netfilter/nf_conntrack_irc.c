@@ -64,6 +64,7 @@ static int parse_dcc(char *data, const char *data_end, __be32 *ip,
 		     u_int16_t *port, char **ad_beg_p, char **ad_end_p)
 {
 	char *tmp;
+	unsigned long tmp_port;
 
 	/* at least 12: "AAAAAAAA P\1\n" */
 	while (*data++ != ' ')
@@ -88,7 +89,10 @@ static int parse_dcc(char *data, const char *data_end, __be32 *ip,
 		data++;
 	}
 
-	*port = simple_strtoul(data, &data, 10);
+	tmp_port = simple_strtoul(data, &data, 10);
+	if (tmp_port > 65535)
+		return -1;
+	*port = tmp_port;
 	*ad_end_p = data;
 
 	return 0;
