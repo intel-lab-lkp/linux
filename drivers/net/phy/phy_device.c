@@ -1114,17 +1114,17 @@ struct phy_device *get_phy_device(struct mii_bus *bus, int addr, bool is_c45)
 EXPORT_SYMBOL(get_phy_device);
 
 /* Best-effort attach of phydev->psec from a DT `pses = <&...>` phandle.
- * Caller must hold rtnl. A missing phandle (-ENOENT) or a not-yet-registered
- * controller (-EPROBE_DEFER) is silent; the notifier retries the latter at
- * PSE_REGISTERED time. Any other error means a broken binding and is warned
- * about, but left non-fatal so the phy still registers.
+ * Caller must hold pse_phy_lock(). A missing phandle (-ENOENT) or a
+ * not-yet-registered controller (-EPROBE_DEFER) is silent; the notifier
+ * retries the latter at PSE_REGISTERED time. Any other error means a broken
+ * binding and is warned about, but left non-fatal so the phy still registers.
  */
 static void phy_try_attach_pse(struct phy_device *phydev)
 {
 	struct pse_control *psec;
 	struct device_node *np;
 
-	ASSERT_RTNL();
+	pse_phy_lock_assert_held();
 
 	np = phydev->mdio.dev.of_node;
 	if (!np)
@@ -1146,7 +1146,7 @@ static void phy_try_attach_pse(struct phy_device *phydev)
 
 static int phy_pse_attach_one(struct device *dev, void *data __maybe_unused)
 {
-	ASSERT_RTNL();
+	pse_phy_lock_assert_held();
 
 	if (dev->type != &mdio_bus_phy_type)
 		return 0;
@@ -1161,7 +1161,7 @@ static int phy_pse_detach_one(struct device *dev, void *data)
 	struct phy_device *phydev;
 	struct pse_control *psec;
 
-	ASSERT_RTNL();
+	pse_phy_lock_assert_held();
 
 	if (dev->type != &mdio_bus_phy_type)
 		return 0;
@@ -1181,16 +1181,16 @@ static int phy_pse_notifier_event(struct notifier_block *nb,
 {
 	switch (event) {
 	case PSE_REGISTERED:
-		rtnl_lock();
+		pse_phy_lock();
 		bus_for_each_dev(&mdio_bus_type, NULL, NULL,
 				 phy_pse_attach_one);
-		rtnl_unlock();
+		pse_phy_unlock();
 		return NOTIFY_OK;
 	case PSE_UNREGISTERED:
-		rtnl_lock();
+		pse_phy_lock();
 		bus_for_each_dev(&mdio_bus_type, NULL, data,
 				 phy_pse_detach_one);
-		rtnl_unlock();
+		pse_phy_unlock();
 		return NOTIFY_OK;
 	default:
 		return NOTIFY_DONE;
@@ -1201,15 +1201,22 @@ static struct notifier_block phy_pse_notifier __read_mostly = {
 	.notifier_call = phy_pse_notifier_event,
 };
 
-/* Core registration: add the phy to the MDIO bus. Does not touch rtnl or
- * PSE. phydev->psec is attached by the callers below, after device_add()
- * has made the phy visible on mdio_bus_type, so that a concurrent PSE
- * notifier walk and the attach can never leave the phy unattached. Keeping
- * device_add() out of rtnl also avoids deadlocking when binding a phy that
- * itself provides an SFP cage (phy_probe() -> phy_sfp_probe() ->
- * sfp_bus_add_upstream() takes rtnl).
+/**
+ * phy_device_register - Register the phy device on the MDIO bus
+ * @phydev: phy_device structure to be added to the MDIO bus
+ *
+ * phydev->psec is attached after device_add() has made the phy visible on
+ * mdio_bus_type, so that a concurrent PSE notifier walk and the attach can
+ * never leave the phy unattached. Neither step takes rtnl: keeping
+ * device_add() out of rtnl avoids deadlocking when binding a phy that itself
+ * provides an SFP cage (phy_probe() -> phy_sfp_probe() ->
+ * sfp_bus_add_upstream() takes rtnl), and pse_phy_lock() rather than rtnl
+ * guards the attach so a bus registered from ndo_init (which already holds
+ * rtnl) does not recurse on it.
+ *
+ * Return: 0 on success, negative error code on failure.
  */
-static int __phy_device_register(struct phy_device *phydev)
+int phy_device_register(struct phy_device *phydev)
 {
 	int err;
 
@@ -1233,6 +1240,10 @@ static int __phy_device_register(struct phy_device *phydev)
 		goto out;
 	}
 
+	pse_phy_lock();
+	phy_try_attach_pse(phydev);
+	pse_phy_unlock();
+
 	return 0;
 
  out:
@@ -1240,51 +1251,6 @@ static int __phy_device_register(struct phy_device *phydev)
 	phy_device_reset(phydev, 1);
 	mdiobus_unregister_device(&phydev->mdio);
 	return err;
-}
-
-/**
- * phy_device_register_locked - Register the phy device on the MDIO bus
- * @phydev: phy_device structure to be added to the MDIO bus
- *
- * Same as phy_device_register() but caller must already hold rtnl_lock().
- *
- * Return: 0 on success, negative error code on failure.
- */
-int phy_device_register_locked(struct phy_device *phydev)
-{
-	int err;
-
-	ASSERT_RTNL();
-
-	err = __phy_device_register(phydev);
-	if (err)
-		return err;
-
-	phy_try_attach_pse(phydev);
-
-	return 0;
-}
-EXPORT_SYMBOL(phy_device_register_locked);
-
-/**
- * phy_device_register - Register the phy device on the MDIO bus
- * @phydev: phy_device structure to be added to the MDIO bus
- *
- * Return: 0 on success, negative error code on failure.
- */
-int phy_device_register(struct phy_device *phydev)
-{
-	int err;
-
-	err = __phy_device_register(phydev);
-	if (err)
-		return err;
-
-	rtnl_lock();
-	phy_try_attach_pse(phydev);
-	rtnl_unlock();
-
-	return 0;
 }
 EXPORT_SYMBOL(phy_device_register);
 

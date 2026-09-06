@@ -391,6 +391,17 @@ bool pse_control_matches_pcdev(struct pse_control *psec,
 int pse_register_notifier(struct notifier_block *nb);
 int pse_unregister_notifier(struct notifier_block *nb);
 
+void pse_phy_lock(void);
+void pse_phy_unlock(void);
+
+#ifdef CONFIG_LOCKDEP
+void pse_phy_lock_assert_held(void);
+#else
+static inline void pse_phy_lock_assert_held(void)
+{
+}
+#endif
+
 #else
 
 static inline struct pse_control *of_pse_control_get(struct device_node *node,
@@ -455,6 +466,18 @@ static inline int pse_register_notifier(struct notifier_block *nb)
 static inline int pse_unregister_notifier(struct notifier_block *nb)
 {
 	return 0;
+}
+
+static inline void pse_phy_lock(void)
+{
+}
+
+static inline void pse_phy_unlock(void)
+{
+}
+
+static inline void pse_phy_lock_assert_held(void)
+{
 }
 
 #endif
