@@ -514,13 +514,21 @@ static int omap2430_runtime_resume(struct device *dev)
 {
 	struct omap2430_glue		*glue = dev_get_drvdata(dev);
 	struct musb			*musb = glue_to_musb(glue);
+	int ret;
 
 	if (!musb)
 		return 0;
 
 	if (!glue->phy_suspended) {
-		phy_init(musb->phy);
-		phy_power_on(musb->phy);
+		ret = phy_init(musb->phy);
+		if (ret)
+			return ret;
+
+		ret = phy_power_on(musb->phy);
+		if (ret) {
+			phy_exit(musb->phy);
+			return ret;
+		}
 	}
 
 	omap2430_low_level_init(musb);
