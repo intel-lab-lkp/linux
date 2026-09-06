@@ -2690,7 +2690,10 @@ static int __maybe_unused nau8825_resume(struct snd_soc_component *component)
 	int ret;
 
 	regcache_cache_only(nau8825->regmap, false);
-	regcache_sync(nau8825->regmap);
+	ret = regcache_sync(nau8825->regmap);
+	if (ret)
+		return ret;
+
 	nau8825->xtalk_protect = true;
 	ret = nau8825_sema_acquire(nau8825, 0);
 	if (ret)
