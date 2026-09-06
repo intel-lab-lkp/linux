@@ -592,7 +592,12 @@ static bool soc15_need_reset_on_resume(struct amdgpu_device *adev)
 	 * 1) S3 suspend aborted in the normal S3 suspend
 	 * 2) S3 suspend aborted in performing pm core test.
 	 */
-	if (adev->in_s3 && !pm_resume_via_firmware())
+	/* Only a real S3 (mem) that firmware did not resume is an abort.
+	 * s2idle never resumes via firmware, so without this gate every
+	 * s2idle resume of a dGPU is misread as an abort and mode1-reset.
+	 */
+	if (adev->in_s3 && !pm_resume_via_firmware() &&
+	    adev->last_suspend_state == PM_SUSPEND_MEM)
 		return true;
 	else
 		return false;
