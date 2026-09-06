@@ -40,6 +40,8 @@ void perf_gtk__init_hpp(void);
 
 void perf_gtk__signal(int sig);
 void perf_gtk__resize_window(GtkWidget *window);
+void perf_gtk__run_main_loop(GtkWidget *window);
+void perf_gtk__quit_main_loop(void);
 const char *perf_gtk__get_percent_color(double percent);
 GtkWidget *perf_gtk__setup_statusbar(void);
 

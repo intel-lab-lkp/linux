@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <linux/compiler.h>
 #include <linux/zalloc.h>
 
 struct perf_gtk_context *pgctx;
@@ -28,10 +29,21 @@ int perf_gtk__deactivate_context(struct perf_gtk_context **ctx)
 	return 0;
 }
 
+static void perf_gtk__dialog_response(GtkDialog *dialog,
+				      gint response_id __maybe_unused,
+				      gpointer data)
+{
+	GMainLoop *loop = data;
+
+	gtk_window_destroy(GTK_WINDOW(dialog));
+	g_main_loop_quit(loop);
+}
+
 static int perf_gtk__error(const char *format, va_list args)
 {
 	char *msg;
 	GtkWidget *dialog;
+	GMainLoop *loop;
 
 	if (!perf_gtk__is_active_context(pgctx) ||
 	    vasprintf(&msg, format, args) < 0) {
@@ -46,9 +58,15 @@ static int perf_gtk__error(const char *format, va_list args)
 					GTK_MESSAGE_ERROR,
 					GTK_BUTTONS_CLOSE,
 					"<b>Error</b>\n\n%s", msg);
-	gtk_dialog_run(GTK_DIALOG(dialog));
 
-	gtk_widget_destroy(dialog);
+	loop = g_main_loop_new(NULL, FALSE);
+	g_signal_connect(dialog, "response",
+			 G_CALLBACK(perf_gtk__dialog_response), loop);
+
+	gtk_widget_set_visible(dialog, TRUE);
+	g_main_loop_run(loop);
+	g_main_loop_unref(loop);
+
 	free(msg);
 	return 0;
 }

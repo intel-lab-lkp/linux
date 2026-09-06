@@ -3,10 +3,9 @@
 #include <gtk/gtk.h>
 #pragma GCC diagnostic error "-Wstrict-prototypes"
 
-int main(int argc, char *argv[])
+int main(void)
 {
-	gtk_init(&argc, &argv);
-	gtk_info_bar_new();
+	gtk_init();
 
-	return 0;
+        return 0;
 }
