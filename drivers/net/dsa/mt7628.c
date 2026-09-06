@@ -34,6 +34,7 @@
 #define MT7628_ESW_REG_VUB(vlan) (0x100 + 4 * ((vlan) / 4))
 #define MT7628_ESW_REG_SOCPC 0x8c
 #define MT7628_ESW_REG_POC0 0x90
+#define MT7628_ESW_REG_POC1 0x94
 #define MT7628_ESW_REG_POC2 0x98
 #define MT7628_ESW_REG_SGC 0x9c
 #define MT7628_ESW_REG_PCR0 0xc0
@@ -91,6 +92,9 @@
 #define MT7628_ESW_SOCPC_DISUN2CPU GENMASK(6, 0)
 
 #define MT7628_ESW_POC0_PORT_DISABLE GENMASK(29, 23)
+
+#define MT7628_ESW_POC1_PORT_BLOCKING_STATE GENMASK(22, 16)
+#define MT7628_ESW_POC1_PORT_DIS_LEARNING GENMASK(14, 8)
 
 #define MT7628_ESW_POC2_PER_VLAN_UNTAG_EN BIT(15)
 
@@ -519,6 +523,8 @@ static int mt7628_setup(struct dsa_switch *ds)
 	for (int i = 0; i < MT7628_ESW_NUM_USER_PORTS + 1; i++)
 		esw->vlans[i].type = MT7628_VLAN_TYPE_UNAWARE;
 
+	ds->max_num_bridges = DSA_TAG_8021Q_MAX_NUM_BRIDGES;
+
 	rtnl_lock();
 	ret = dsa_tag_8021q_register(ds, htons(ETH_P_8021Q));
 	rtnl_unlock();
@@ -599,6 +605,40 @@ static void mt7628_teardown(struct dsa_switch *ds)
 	rtnl_unlock();
 }
 
+static void mt7628_stp_state_set(struct dsa_switch *ds, int port, u8 state)
+{
+	struct mt7628_esw *esw = ds->priv;
+	bool forward_disable;
+	bool learn_disable;
+
+	switch (state) {
+	case BR_STATE_DISABLED:
+	case BR_STATE_BLOCKING:
+	case BR_STATE_LISTENING:
+		forward_disable = true;
+		learn_disable = true;
+		break;
+	case BR_STATE_LEARNING:
+		forward_disable = true;
+		learn_disable = false;
+		break;
+	case BR_STATE_FORWARDING:
+		forward_disable = false;
+		learn_disable = false;
+		break;
+	default:
+		dev_err(ds->dev, "invalid STP state: %d\n", state);
+		return;
+	}
+
+	regmap_assign_bits(esw->regmap, MT7628_ESW_REG_POC1,
+			   FIELD_PREP(MT7628_ESW_POC1_PORT_DIS_LEARNING,
+				      BIT(port)), learn_disable);
+	regmap_assign_bits(esw->regmap, MT7628_ESW_REG_POC1,
+			   FIELD_PREP(MT7628_ESW_POC1_PORT_BLOCKING_STATE,
+				      BIT(port)), forward_disable);
+}
+
 static const struct dsa_switch_ops mt7628_switch_ops = {
 	.get_tag_protocol = mt7628_get_tag_proto,
 	.setup = mt7628_setup,
@@ -608,6 +648,9 @@ static const struct dsa_switch_ops mt7628_switch_ops = {
 	.phylink_get_caps = mt7628_phylink_get_caps,
 	.tag_8021q_vlan_add = mt7628_dsa_8021q_vlan_add,
 	.tag_8021q_vlan_del = mt7628_dsa_8021q_vlan_del,
+	.port_bridge_join = dsa_tag_8021q_bridge_join,
+	.port_bridge_leave = dsa_tag_8021q_bridge_leave,
+	.port_stp_state_set = mt7628_stp_state_set,
 };
 
 static int mt7628_probe(struct platform_device *pdev)
