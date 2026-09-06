@@ -4956,6 +4956,7 @@ static int rt5677_suspend(struct snd_soc_component *component)
 static int rt5677_resume(struct snd_soc_component *component)
 {
 	struct rt5677_priv *rt5677 = snd_soc_component_get_drvdata(component);
+	int ret;
 
 	if (!rt5677->dsp_vad_en) {
 		rt5677->pll_src = 0;
@@ -4967,7 +4968,9 @@ static int rt5677_resume(struct snd_soc_component *component)
 			msleep(10);
 
 		regcache_cache_only(rt5677->regmap, false);
-		regcache_sync(rt5677->regmap);
+		ret = regcache_sync(rt5677->regmap);
+		if (ret)
+			return ret;
 	}
 
 	if (rt5677->irq) {
