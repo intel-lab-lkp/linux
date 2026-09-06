@@ -203,7 +203,7 @@ def classify_lines(text):
             in_block_comment = True
 
         if not prev_complete:
-            dl = DtsLine(i, raw, LineType.CONTINUATION, depth, indent_str, code)
+            dl = DtsLine(i, raw, LineType.CONTINUATION, depth, indent_str, stripped)
             out.append(dl)
             prev_complete = (code.endswith(';') or
                              code.endswith('{') or
