@@ -223,19 +223,8 @@ static void phy_mdio_device_free(struct mdio_device *mdiodev)
 
 static void phy_device_release(struct device *dev)
 {
-	struct phy_device *phydev = to_phy_device(dev);
-
-	/* bus_for_each_dev() holds get_device() across each iteration
-	 * step, deferring this release callback until any in-flight PSE
-	 * notifier walk has advanced past this phy. pse_control_put()
-	 * takes pse_list_mutex, so this path must run in sleepable
-	 * context.
-	 */
-	might_sleep();
-	pse_control_put(phydev->psec);
-
 	fwnode_handle_put(dev->fwnode);
-	kfree(phydev);
+	kfree(to_phy_device(dev));
 }
 
 static void phy_mdio_device_remove(struct mdio_device *mdiodev)
@@ -1265,6 +1254,16 @@ EXPORT_SYMBOL(phy_device_register);
 void phy_device_remove(struct phy_device *phydev)
 {
 	unregister_mii_timestamper(phydev->mii_ts);
+
+	/* Detach synchronously, before the phy leaves the bus, so the put cannot
+	 * outlive the PSE controller (an off-bus but still-pinned phy is missed by
+	 * the PSE_UNREGISTERED walk). pse_phy_lock() serialises against that walk.
+	 */
+	pse_phy_lock();
+	pse_control_put(phydev->psec);
+	phydev->psec = NULL;
+	pse_phy_unlock();
+
 	device_del(&phydev->mdio.dev);
 
 	/* Assert the reset signal */
