@@ -74,14 +74,6 @@
 	};
 };
 
-&dwc_0 {
-	dr_mode = "host";
-};
-
-&dwc_1 {
-	dr_mode = "host";
-};
-
 &pcie2 {
 	pinctrl-0 = <&pcie2_default_state>;
 	pinctrl-names = "default";
@@ -282,10 +274,14 @@
 };
 
 &usb2 {
+	dr_mode = "host";
+
 	status = "okay";
 };
 
 &usb3 {
+	dr_mode = "host";
+
 	status = "okay";
 };
 
