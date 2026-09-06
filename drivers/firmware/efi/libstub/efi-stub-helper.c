@@ -12,6 +12,7 @@
 #include <linux/efi.h>
 #include <linux/kernel.h>
 #include <linux/overflow.h>
+#include <linux/ucs2_string.h>
 #include <asm/efi.h>
 #include <asm/setup.h>
 
@@ -335,10 +336,10 @@ char *efi_convert_cmdline(efi_loaded_image_t *image)
 	const efi_char16_t *options = efi_table_attr(image, load_options);
 	u32 options_size = efi_table_attr(image, load_options_size);
 	int options_bytes = 0, safe_options_bytes = 0;  /* UTF-8 bytes */
-	unsigned long cmdline_addr = 0;
 	const efi_char16_t *s2;
 	bool in_quote = false;
 	efi_status_t status;
+	char *cmdline_addr;
 	u32 options_chars;
 
 	if (options_size > 0)
@@ -351,45 +352,18 @@ char *efi_convert_cmdline(efi_loaded_image_t *image)
 	if (options) {
 		s2 = options;
 		while (options_bytes < COMMAND_LINE_SIZE && options_chars--) {
-			efi_char16_t c = *s2++;
+			efi_char16_t c[2] = { *s2++, L'\0' };
 
-			if (c < 0x80) {
-				if (c == L'\0' || c == L'\n')
-					break;
-				if (c == L'"')
-					in_quote = !in_quote;
-				else if (!in_quote && isspace((char)c))
-					safe_options_bytes = options_bytes;
+			if (c[0] == L'\0' || c[0] == L'\n')
+				break;
 
-				options_bytes++;
-				continue;
-			}
+			// Check whether the current position is a safe
+			// truncation point
+			in_quote ^= (c[0] == L'"');
+			if (!in_quote && isspace((char)c[0]))
+				safe_options_bytes = options_bytes;
 
-			/*
-			 * Get the number of UTF-8 bytes corresponding to a
-			 * UTF-16 character.
-			 * The first part handles everything in the BMP.
-			 */
-			options_bytes += 2 + (c >= 0x800);
-			/*
-			 * Add one more byte for valid surrogate pairs. Invalid
-			 * surrogates will be replaced with 0xfffd and take up
-			 * only 3 bytes.
-			 */
-			if ((c & 0xfc00) == 0xd800) {
-				/*
-				 * If the very last word is a high surrogate,
-				 * we must ignore it since we can't access the
-				 * low surrogate.
-				 */
-				if (!options_chars) {
-					options_bytes -= 3;
-				} else if ((*s2 & 0xfc00) == 0xdc00) {
-					options_bytes++;
-					options_chars--;
-					s2++;
-				}
-			}
+			options_bytes += ucs2_utf8size(c);
 		}
 		if (options_bytes >= COMMAND_LINE_SIZE) {
 			options_bytes = safe_options_bytes;
@@ -405,10 +379,9 @@ char *efi_convert_cmdline(efi_loaded_image_t *image)
 	if (status != EFI_SUCCESS)
 		return NULL;
 
-	snprintf((char *)cmdline_addr, options_bytes, "%.*ls",
-		 options_bytes - 1, options);
+	ucs2_as_utf8(cmdline_addr, options, options_bytes);
 
-	return (char *)cmdline_addr;
+	return cmdline_addr;
 }
 
 /**
