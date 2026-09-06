@@ -20,8 +20,8 @@
  * append a tag_8021q standalone VLAN tag for each port. That means we can
  * safely strip the outer VLAN tag after parsing it.
  *
- * A VLAN tag is constructed on egress to target the standalone VLAN and
- * destination port.
+ * A VLAN tag is constructed on egress to target the standalone or bridge
+ * VLAN and destination port.
  */
 
 #define MT7628_TAG_NAME "mt7628"
@@ -38,7 +38,9 @@ static struct sk_buff *mt7628_tag_xmit(struct sk_buff *skb,
 	__be16 *tag;
 
 	dp = dsa_user_to_port(dev);
-	xmit_vlan = dsa_tag_8021q_standalone_vid(dp);
+	xmit_vlan = skb->offload_fwd_mark ?
+	    dsa_tag_8021q_bridge_vid(dsa_port_bridge_num_get(dp)) :
+	    dsa_tag_8021q_standalone_vid(dp);
 
 	skb_push(skb, MT7628_TAG_LEN);
 	dsa_alloc_etype_header(skb, MT7628_TAG_LEN);
