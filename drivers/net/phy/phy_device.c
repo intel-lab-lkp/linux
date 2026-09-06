@@ -770,6 +770,7 @@ struct phy_device *phy_device_create(struct mii_bus *bus, int addr, u32 phy_id,
 	mdiodev->device_remove = phy_mdio_device_remove;
 	mdiodev->reset_state = -1;
 
+	dev->irq_saved = PHY_POLL;
 	dev->speed = SPEED_UNKNOWN;
 	dev->duplex = DUPLEX_UNKNOWN;
 	dev->pause = false;
@@ -1734,6 +1735,19 @@ static bool phy_drv_supports_irq(const struct phy_driver *phydrv)
 	return phydrv->config_intr && phydrv->handle_interrupt;
 }
 
+/* Give back what phy_probe() took, but not while phy_link_change marks a
+ * consumer: it skipped phy_request_interrupt() on the value it saw, so
+ * phy_disconnect() would free an interrupt nobody requested.
+ */
+static void phy_restore_probe_irq(struct phy_device *phydev)
+{
+	if (phydev->phy_link_change || phydev->irq_saved == PHY_POLL)
+		return;
+
+	phydev->irq = phydev->irq_saved;
+	phydev->irq_saved = PHY_POLL;
+}
+
 /**
  * phy_attach_direct - attach a network device to a given PHY device pointer
  * @dev: network device to attach
@@ -1896,6 +1910,7 @@ error:
 
 error_module_put:
 	module_put(d->driver->owner);
+	phy_restore_probe_irq(phydev);
 	phydev->is_genphy_driven = 0;
 	d->driver = NULL;
 error_put_device:
@@ -3694,8 +3709,10 @@ static int phy_probe(struct device *dev)
 	/* Disable the interrupt if the PHY doesn't support it
 	 * but the interrupt is still a valid one
 	 */
-	if (!phy_drv_supports_irq(phydrv) && phy_interrupt_is_valid(phydev))
+	if (!phy_drv_supports_irq(phydrv) && phy_interrupt_is_valid(phydev)) {
+		phydev->irq_saved = phydev->irq;
 		phydev->irq = PHY_POLL;
+	}
 
 	if (phydrv->flags & PHY_IS_INTERNAL)
 		phydev->is_internal = true;
@@ -3820,6 +3837,8 @@ out:
 	if (!phydev->is_on_sfp_module)
 		phy_led_triggers_unregister(phydev);
 
+	phy_restore_probe_irq(phydev);
+
 	/* Re-assert the reset signal on error */
 	phy_device_reset(phydev, 1);
 
@@ -3847,6 +3866,8 @@ static int phy_remove(struct device *dev)
 
 	if (phydev->drv && phydev->drv->remove)
 		phydev->drv->remove(phydev);
+
+	phy_restore_probe_irq(phydev);
 
 	/* Assert the reset signal */
 	phy_device_reset(phydev, 1);
