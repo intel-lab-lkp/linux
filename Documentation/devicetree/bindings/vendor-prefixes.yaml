@@ -1603,6 +1603,8 @@ patternProperties:
     description: Spansion Inc.
   "^sparkfun,.*":
     description: SparkFun Electronics
+  "^spc,.*":
+    description: Smart Products Connection S.A.
   "^spinalhdl,.*":
     description: SpinalHDL
   "^sprd,.*":
