@@ -5,6 +5,7 @@
 
 #include <linux/kvm_host.h>
 #include <linux/vmalloc.h>
+#include <asm/barrier.h>
 #include <asm/kvm_nacl.h>
 
 DEFINE_STATIC_KEY_FALSE(kvm_riscv_nacl_available);
@@ -42,12 +43,15 @@ again:
 		}
 	}
 
-	entp = shmem + SBI_NACL_SHMEM_HFENCE_ENTRY_CONFIG(i);
-	*entp = cpu_to_lelong(control);
 	entp = shmem + SBI_NACL_SHMEM_HFENCE_ENTRY_PNUM(i);
 	*entp = cpu_to_lelong(page_num);
 	entp = shmem + SBI_NACL_SHMEM_HFENCE_ENTRY_PCOUNT(i);
 	*entp = cpu_to_lelong(page_count);
+
+	/* Publish the payload before setting Config.Pending. */
+	wmb();
+	entp = shmem + SBI_NACL_SHMEM_HFENCE_ENTRY_CONFIG(i);
+	WRITE_ONCE(*entp, cpu_to_lelong(control));
 }
 
 int kvm_riscv_nacl_enable(void)
