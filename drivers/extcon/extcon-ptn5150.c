@@ -256,7 +256,6 @@ static int ptn5150_i2c_probe(struct i2c_client *i2c)
 {
 	struct device *dev = &i2c->dev;
 	struct device_node *np = i2c->dev.of_node;
-	struct fwnode_handle *connector;
 	struct ptn5150_info *info;
 	int ret;
 
@@ -343,7 +342,8 @@ static int ptn5150_i2c_probe(struct i2c_client *i2c)
 	if (ret)
 		return -EINVAL;
 
-	connector = device_get_named_child_node(dev, "connector");
+	struct fwnode_handle *connector __free(fwnode_handle) =
+		device_get_named_child_node(dev, "connector");
 	if (connector) {
 		info->orient_sw = fwnode_typec_switch_get(connector);
 		if (IS_ERR(info->orient_sw))
