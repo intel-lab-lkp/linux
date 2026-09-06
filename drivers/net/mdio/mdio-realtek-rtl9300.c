@@ -831,14 +831,14 @@ static void otto_emdio_notify_phy_detach(struct phy_device *phydev)
 }
 
 static int otto_emdio_probe_one(struct device *dev, struct otto_emdio_priv *priv,
-				 struct fwnode_handle *node)
+				struct device_node *node)
 {
 	struct otto_emdio_chan *chan;
 	struct mii_bus *bus;
 	u32 mdio_bus;
 	int err;
 
-	err = fwnode_property_read_u32(node, "reg", &mdio_bus);
+	err = of_property_read_u32(node, "reg", &mdio_bus);
 	if (err)
 		return dev_err_probe(dev, err, "undefined smi bus number\n");
 
@@ -865,7 +865,7 @@ static int otto_emdio_probe_one(struct device *dev, struct otto_emdio_priv *priv
 
 	snprintf(bus->id, MII_BUS_ID_SIZE, "%s-%d", dev_name(dev), mdio_bus);
 
-	err = devm_of_mdiobus_register(dev, bus, to_of_node(node));
+	err = devm_of_mdiobus_register(dev, bus, node);
 	if (err)
 		return dev_err_probe(dev, err, "cannot register MDIO bus\n");
 
@@ -1027,7 +1027,7 @@ static int otto_emdio_probe(struct platform_device *pdev)
 			return dev_err_probe(dev, err, "failed to setup MDIO bus controller\n");
 	}
 
-	device_for_each_child_node_scoped(dev, child) {
+	for_each_child_of_node_scoped(dev->of_node, child) {
 		err = otto_emdio_probe_one(dev, priv, child);
 		if (err)
 			return err;
