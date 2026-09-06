@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/panel/novatek,nt51021.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Novatek NT51021 based 1200x1920 DSI display panels
+
+maintainers:
+  - Ryan Brue <ryanbrue.dev@gmail.com>
+
+description:
+  The Novatek NT51021 is a DSI panel controller driving 1200x1920 WUXGA
+  panels over four lanes in video mode. The controller carries no readable
+  panel identity, so each panel module it is fitted to needs its own
+  compatible naming the module.
+
+allOf:
+  - $ref: panel-common.yaml#
+
+properties:
+  compatible:
+    items:
+      - const: amazon,suez-boe-nt51021
+      - const: novatek,nt51021
+
+  reg:
+    maxItems: 1
+
+  power-supply: true
+  reset-gpios: true
+  backlight: true
+  port: true
+
+required:
+  - compatible
+  - reg
+  - power-supply
+  - reset-gpios
+  - port
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    dsi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        panel@0 {
+            compatible = "amazon,suez-boe-nt51021", "novatek,nt51021";
+            reg = <0>;
+            backlight = <&backlight_lcd>;
+            power-supply = <&vgp6>;
+            reset-gpios = <&pio 105 GPIO_ACTIVE_LOW>;
+
+            port {
+                endpoint {
+                    remote-endpoint = <&dsi_out>;
+                };
+            };
+        };
+    };
