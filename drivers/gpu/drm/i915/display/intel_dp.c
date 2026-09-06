@@ -1259,8 +1259,14 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 	    connector->panel.vbt.edp.dsc_disable)
 		return false;
 
-	if (!drm_dp_sink_supports_dsc(connector->dp.dsc_dpcd))
-		return false;
+	if (!drm_dp_sink_supports_dsc(connector->dp.dsc_dpcd)) {
+		/*
+		 * PCON passthrough: PCON has no DSC decoder so dsc_dpcd is
+		 * zero, but if pcon_dsc_passthrough is set (cached at connect
+		 * time) the downstream HDMI 2.1 sink will decompress instead.
+		 */
+		return connector->dp.pcon_dsc_passthrough;
+	}
 
 	return true;
 }
@@ -1866,28 +1872,42 @@ static int intel_dp_dsc_compute_params(const struct intel_connector *connector,
 	if (ret)
 		return ret;
 
-	vdsc_cfg->dsc_version_major =
-		(connector->dp.dsc_dpcd[DP_DSC_REV - DP_DSC_SUPPORT] &
-		 DP_DSC_MAJOR_MASK) >> DP_DSC_MAJOR_SHIFT;
-	vdsc_cfg->dsc_version_minor =
-		min(intel_dp_source_dsc_version_minor(display),
-		    intel_dp_sink_dsc_version_minor(connector->dp.dsc_dpcd));
-	if (vdsc_cfg->convert_rgb)
-		vdsc_cfg->convert_rgb =
-			connector->dp.dsc_dpcd[DP_DSC_DEC_COLOR_FORMAT_CAP - DP_DSC_SUPPORT] &
-			DP_DSC_RGB;
+	if (connector->dp.pcon_dsc_passthrough) {
+		/*
+		 * For PCON passthrough the HDMI 2.1 sink decompresses, not the
+		 * PCON. The PCON dsc_dpcd fields reflect passthrough device
+		 * constraints and are not valid for configuring the source VDSC
+		 * engine. Use DSC 1.2 sink defaults instead.
+		 */
+		vdsc_cfg->dsc_version_major = 1;
+		vdsc_cfg->dsc_version_minor = min(intel_dp_source_dsc_version_minor(display), 2);
+		vdsc_cfg->convert_rgb = true;
+		vdsc_cfg->line_buf_depth = min(INTEL_DP_DSC_MAX_LINE_BUF_DEPTH, 13);
+		vdsc_cfg->block_pred_enable = true;
+	} else {
+		vdsc_cfg->dsc_version_major =
+			(connector->dp.dsc_dpcd[DP_DSC_REV - DP_DSC_SUPPORT] &
+			 DP_DSC_MAJOR_MASK) >> DP_DSC_MAJOR_SHIFT;
+		vdsc_cfg->dsc_version_minor =
+			min(intel_dp_source_dsc_version_minor(display),
+			    intel_dp_sink_dsc_version_minor(connector->dp.dsc_dpcd));
+		if (vdsc_cfg->convert_rgb)
+			vdsc_cfg->convert_rgb =
+				connector->dp.dsc_dpcd[DP_DSC_DEC_COLOR_FORMAT_CAP - DP_DSC_SUPPORT] &
+				DP_DSC_RGB;
 
-	vdsc_cfg->line_buf_depth = min(INTEL_DP_DSC_MAX_LINE_BUF_DEPTH,
-				       drm_dp_dsc_sink_line_buf_depth(connector->dp.dsc_dpcd));
-	if (!vdsc_cfg->line_buf_depth) {
-		drm_dbg_kms(display->drm,
-			    "DSC Sink Line Buffer Depth invalid\n");
-		return -EINVAL;
+		vdsc_cfg->line_buf_depth = min(INTEL_DP_DSC_MAX_LINE_BUF_DEPTH,
+					       drm_dp_dsc_sink_line_buf_depth(connector->dp.dsc_dpcd));
+		if (!vdsc_cfg->line_buf_depth) {
+			drm_dbg_kms(display->drm,
+				    "DSC Sink Line Buffer Depth invalid\n");
+			return -EINVAL;
+		}
+
+		vdsc_cfg->block_pred_enable =
+			connector->dp.dsc_dpcd[DP_DSC_BLK_PREDICTION_SUPPORT - DP_DSC_SUPPORT] &
+			DP_DSC_BLK_PREDICTION_IS_SUPPORTED;
 	}
-
-	vdsc_cfg->block_pred_enable =
-		connector->dp.dsc_dpcd[DP_DSC_BLK_PREDICTION_SUPPORT - DP_DSC_SUPPORT] &
-		DP_DSC_BLK_PREDICTION_IS_SUPPORTED;
 
 	return drm_dsc_compute_rc_parameters(vdsc_cfg);
 }
@@ -2316,6 +2336,10 @@ void intel_dp_dsc_reset_config(struct intel_crtc_state *crtc_state)
 	memset(&crtc_state->dsc.config, 0, sizeof(crtc_state->dsc.config));
 }
 
+static bool intel_dp_pcon_passthrough_dsc_slice_config(struct intel_dp *intel_dp,
+						       const struct intel_crtc_state *crtc_state,
+						       struct intel_dsc_slice_config *config_ret);
+
 int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 				struct intel_crtc_state *pipe_config,
 				struct drm_connector_state *conn_state,
@@ -2354,7 +2378,19 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 		}
 	}
 
-	if (!intel_dp_dsc_get_slice_config(connector, adjusted_mode->crtc_clock,
+	if (connector->dp.pcon_dsc_passthrough) {
+		/*
+		 * PCON passthrough: no PCON encoder DPCD, derive slice config
+		 * from the downstream HDMI 2.1 sink DSC capabilities in EDID.
+		 */
+		if (!intel_dp_pcon_passthrough_dsc_slice_config(intel_dp,
+								pipe_config,
+								&pipe_config->dsc.slice_config)) {
+			drm_dbg_kms(display->drm,
+				    "PCON DSC passthrough: no valid slice config\n");
+			return -EINVAL;
+		}
+	} else if (!intel_dp_dsc_get_slice_config(connector, adjusted_mode->crtc_clock,
 					   adjusted_mode->crtc_hdisplay, num_joined_pipes,
 					   &pipe_config->dsc.slice_config))
 		return -EINVAL;
@@ -2683,8 +2719,33 @@ intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 		return false;
 	}
 
-	if (dsc && !intel_dp_dsc_compute_pipe_bpp_limits(connector, limits))
-		return false;
+	if (dsc) {
+		if (connector->dp.pcon_dsc_passthrough) {
+			/*
+			 * PCON passthrough: PCON has no DSC encoder DPCD so
+			 * intel_dp_dsc_compute_pipe_bpp_limits() would see
+			 * all-zero dsc_dpcd and fail.  Use the downstream HDMI
+			 * sink DSC bpc cap to constrain the pipe bpp instead.
+			 */
+			const struct drm_display_info *info =
+				&connector->base.display_info;
+			u8 hdmi_max_bpc = info->hdmi.dsc_cap.bpc_supported ?: 8;
+			int dsc_min_bpc = intel_dp_dsc_min_src_input_bpc();
+			int dsc_max_bpc = min_t(int,
+						intel_dp_dsc_max_src_input_bpc(display),
+						hdmi_max_bpc);
+
+			limits->pipe.min_bpp = max(limits->pipe.min_bpp,
+						   dsc_min_bpc * 3);
+			limits->pipe.max_bpp = min(limits->pipe.max_bpp,
+						   dsc_max_bpc * 3);
+
+			if (limits->pipe.min_bpp > limits->pipe.max_bpp)
+				return false;
+		} else if (!intel_dp_dsc_compute_pipe_bpp_limits(connector, limits)) {
+			return false;
+		}
+	}
 
 	/*
 	 * crtc_state->pipe_bpp is the non-DP specific baseline (platform /
@@ -2697,7 +2758,7 @@ intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 	 */
 	limits->pipe.max_bpp = clamp(crtc_state->pipe_bpp, limits->pipe.min_bpp,
 				     limits->pipe.max_bpp);
-	if (dsc)
+	if (dsc && !connector->dp.pcon_dsc_passthrough)
 		limits->pipe.max_bpp = align_max_sink_dsc_input_bpp(connector,
 								    limits->pipe.max_bpp);
 
@@ -3716,6 +3777,10 @@ intel_dp_sink_set_dsc_decompression(struct intel_connector *connector,
 {
 	struct intel_display *display = to_intel_display(connector);
 
+	/* PCON passthrough: PCON forwards the stream, sink decompresses. */
+	if (!connector->mst.dp && connector->dp.pcon_dsc_passthrough)
+		return;
+
 	if (write_dsc_decompression_flag(connector->dp.dsc_decompression_aux,
 					 DP_DECOMPRESSION_EN, enable) < 0)
 		drm_dbg_kms(display->drm,
@@ -3728,8 +3793,19 @@ intel_dp_sink_set_dsc_passthrough(const struct intel_connector *connector,
 				  bool enable)
 {
 	struct intel_display *display = to_intel_display(connector);
-	struct drm_dp_aux *aux = connector->mst.port ?
-				 connector->mst.port->passthrough_aux : NULL;
+	struct drm_dp_aux *aux = NULL;
+
+	if (!connector->mst.port) {
+		/*
+		 * HDMI 2.1 PCON passthrough: write DP_DSC_PASSTHROUGH_EN on
+		 * the PCON's own aux channel so it forwards the compressed
+		 * stream to the HDMI sink instead of decoding it.
+		 */
+		if (connector->dp.pcon_dsc_passthrough)
+			aux = &intel_attached_dp((struct intel_connector *)connector)->aux;
+	} else {
+		aux = connector->mst.port->passthrough_aux;
+	}
 
 	if (!aux)
 		return;
@@ -3737,7 +3813,7 @@ intel_dp_sink_set_dsc_passthrough(const struct intel_connector *connector,
 	if (write_dsc_decompression_flag(aux,
 					 DP_DSC_PASSTHROUGH_EN, enable) < 0)
 		drm_dbg_kms(display->drm,
-			    "Failed to %s sink compression passthrough state\n",
+			    "Failed to %s DSC passthrough\n",
 			    str_enable_disable(enable));
 }
 
@@ -4259,6 +4335,101 @@ void intel_dp_check_frl_training(struct intel_dp *intel_dp)
 	}
 }
 
+/*
+ * intel_dp_pcon_set_dsc_passthrough_cap - cache PCON DSC passthrough capability
+ *
+ * Called once at connect time (from intel_dp_get_dsc_sink_cap()) after
+ * dsc_dpcd and the HDMI sink EDID have been read. Caches the result in
+ * connector->dp.pcon_dsc_passthrough so modeset paths can read it cheaply
+ * without repeating the DPCD and EDID lookups.
+ *
+ * A PCON supports DSC passthrough when it explicitly advertises
+ * DP_DSC_PASSTHROUGH_IS_SUPPORTED (DPCD 0x060 bit1) and the downstream
+ * HDMI 2.1 sink supports DSC 1.2. The compressed stream produced by the
+ * source VDSC engine is forwarded unchanged through the PCON to the HDMI
+ * sink for decompression (DP_DSC_ENABLE bit1 on the PCON).
+ */
+static void
+intel_dp_pcon_set_dsc_passthrough_cap(struct intel_dp *intel_dp)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+	const struct drm_display_info *info;
+
+	if (!connector)
+		return;
+
+	connector->dp.pcon_dsc_passthrough = false;
+
+	/*
+	 * PCON DSC passthrough is only supported for SST direct connections.
+	 * In MST topologies the intermediate hub may report incorrect virtual
+	 * DPCD for the downstream PCON port, leading to mismatched DSC
+	 * parameters.  Skip passthrough for MST until hub firmware correctly
+	 * reflects the PCON's capabilities.
+	 */
+	if (connector->mst.port)
+		return;
+
+	if (!intel_dp_is_hdmi_2_1_sink(intel_dp))
+		return;
+
+	if (!(connector->dp.dsc_dpcd[0] & DP_DSC_PASSTHROUGH_IS_SUPPORTED))
+		return;
+
+	info = &connector->base.display_info;
+	connector->dp.pcon_dsc_passthrough = info->hdmi.dsc_cap.v_1p2;
+}
+
+static bool
+intel_dp_pcon_passthrough_dsc_slice_config(struct intel_dp *intel_dp,
+					   const struct intel_crtc_state *crtc_state,
+					   struct intel_dsc_slice_config *config_ret)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_connector *connector = intel_dp->attached_connector;
+	const struct drm_display_info *info = &connector->base.display_info;
+	int num_joined_pipes = intel_crtc_num_joined_pipes(crtc_state);
+	int hdmi_throughput = info->hdmi.dsc_cap.clk_per_slice;
+	int hdmi_max_slices = info->hdmi.dsc_cap.max_slices;
+	int target_slices;
+	int slices_per_pipe;
+
+	/*
+	 * Derive the required slice count from the downstream HDMI 2.1 sink
+	 * DSC capabilities in EDID (not from the PCON encoder DPCD which is
+	 * all-zero for passthrough-only devices).
+	 */
+	target_slices = intel_hdmi_dsc_get_num_slices(&crtc_state->hw.adjusted_mode,
+						      crtc_state->output_format,
+						      hdmi_max_slices,
+						      crtc_state->hw.adjusted_mode.hdisplay,
+						      hdmi_max_slices,
+						      hdmi_throughput);
+	if (!target_slices)
+		return false;
+
+	drm_dbg_kms(display->drm,
+		     "PCON DSC passthrough: target %d slices from HDMI sink EDID cap"
+		     " (max_slices=%d clk_per_slice=%d MHz)\n",
+		     target_slices, hdmi_max_slices, hdmi_throughput);
+
+	for (slices_per_pipe = 1; slices_per_pipe <= 4; slices_per_pipe++) {
+		struct intel_dsc_slice_config config;
+
+		if (!intel_dsc_get_slice_config(display,
+						num_joined_pipes, slices_per_pipe,
+						&config))
+			continue;
+
+		if (intel_dsc_line_slice_count(&config) == target_slices) {
+			*config_ret = config;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static int
 intel_dp_pcon_dsc_enc_slice_height(const struct intel_crtc_state *crtc_state)
 {
@@ -4510,6 +4681,7 @@ void intel_dp_get_dsc_sink_cap(u8 dpcd_rev,
 
 	memset(&connector->dp.dsc_branch_caps, 0, sizeof(connector->dp.dsc_branch_caps));
 	connector->dp.dsc_throughput_quirk = false;
+	connector->dp.pcon_dsc_passthrough = false;
 
 	if (dpcd_rev < DP_DPCD_REV_14)
 		return;
@@ -4539,6 +4711,8 @@ void intel_dp_get_dsc_sink_cap(u8 dpcd_rev,
 	if (drm_dp_has_quirk(desc, DP_DPCD_QUIRK_DSC_THROUGHPUT_BPP_LIMIT) &&
 	    desc->ident.hw_rev == 0x10)
 		connector->dp.dsc_throughput_quirk = true;
+
+	intel_dp_pcon_set_dsc_passthrough_cap(intel_attached_dp(connector));
 }
 
 static void intel_edp_get_dsc_sink_cap(u8 edp_dpcd_rev, struct intel_connector *connector)
@@ -6148,6 +6322,12 @@ intel_dp_set_edid(struct intel_dp *intel_dp)
 	intel_dp_update_dfp(intel_dp, drm_edid);
 	intel_dp_update_420(intel_dp);
 
+	/*
+	 * Re-evaluate PCON DSC passthrough capability now that the EDID has
+	 * been parsed and display_info.hdmi.dsc_cap is up to date.
+	 */
+	intel_dp_pcon_set_dsc_passthrough_cap(intel_dp);
+
 	drm_dp_cec_attach(&intel_dp->aux,
 			  connector->base.display_info.source_physical_address);
 }
@@ -6170,6 +6350,7 @@ intel_dp_unset_edid(struct intel_dp *intel_dp)
 
 	intel_dp->dfp.ycbcr_444_to_420 = false;
 	connector->base.ycbcr_420_allowed = false;
+	connector->dp.pcon_dsc_passthrough = false;
 
 	drm_connector_set_vrr_capable_property(&connector->base,
 					       false);
