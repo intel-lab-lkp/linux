@@ -1628,9 +1628,13 @@ static int __maybe_unused nau8821_suspend(struct snd_soc_component *component)
 static int __maybe_unused nau8821_resume(struct snd_soc_component *component)
 {
 	struct nau8821 *nau8821 = snd_soc_component_get_drvdata(component);
+	int ret;
 
 	regcache_cache_only(nau8821->regmap, false);
-	regcache_sync(nau8821->regmap);
+	ret = regcache_sync(nau8821->regmap);
+	if (ret)
+		return ret;
+
 	if (nau8821->irq)
 		enable_irq(nau8821->irq);
 
