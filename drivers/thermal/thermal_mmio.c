@@ -71,8 +71,7 @@ static int thermal_mmio_probe(struct platform_device *pdev)
 						     &thermal_mmio_ops);
 	if (IS_ERR(thermal_zone)) {
 		dev_err(&pdev->dev,
-			"failed to register sensor (%ld)\n",
-			PTR_ERR(thermal_zone));
+			"failed to register sensor (%pe)\n", thermal_zone);
 		return PTR_ERR(thermal_zone);
 	}
 

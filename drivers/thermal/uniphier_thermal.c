@@ -286,8 +286,7 @@ static int uniphier_tm_probe(struct platform_device *pdev)
 	regmap = syscon_node_to_regmap(parent);
 	of_node_put(parent);
 	if (IS_ERR(regmap)) {
-		dev_err(dev, "failed to get regmap (error %ld)\n",
-			PTR_ERR(regmap));
+		dev_err(dev, "failed to get regmap (error %pe)\n", regmap);
 		return PTR_ERR(regmap);
 	}
 	tdev->regmap = regmap;
