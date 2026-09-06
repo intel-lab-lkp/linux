@@ -2826,6 +2826,7 @@ static int rt5640_suspend(struct snd_soc_component *component)
 static int rt5640_resume(struct snd_soc_component *component)
 {
 	struct rt5640_priv *rt5640 = snd_soc_component_get_drvdata(component);
+	int ret = 0;
 
 	if (rt5640->ldo1_en) {
 		gpiod_set_value_cansleep(rt5640->ldo1_en, 1);
@@ -2833,34 +2834,40 @@ static int rt5640_resume(struct snd_soc_component *component)
 	}
 
 	regcache_cache_only(rt5640->regmap, false);
-	regcache_sync(rt5640->regmap);
+	ret = regcache_sync(rt5640->regmap);
+	if (ret)
+		return ret;
 
 	if (rt5640->jack) {
 		if (rt5640->jd_src == RT5640_JD_SRC_HDA_HEADER) {
-			snd_soc_component_update_bits(component,
-				RT5640_GCTL2, 0x1100, 0x1100);
+			ret = snd_soc_component_update_bits(component,
+							    RT5640_GCTL2,
+							    0x1100, 0x1100);
 		} else {
 			if (rt5640->jd_inverted) {
 				if (rt5640->jd_src == RT5640_JD_SRC_JD2_IN4N)
-					snd_soc_component_update_bits(
-						component, RT5640_GCTL2,
-						RT5640_IRQ_JD2_MASK |
-						RT5640_JD2_MASK,
-						RT5640_IRQ_JD2_NOR |
-						RT5640_JD2_EN);
+					ret = snd_soc_component_update_bits(component,
+									    RT5640_GCTL2,
+									    RT5640_IRQ_JD2_MASK |
+									    RT5640_JD2_MASK,
+									    RT5640_IRQ_JD2_NOR |
+									    RT5640_JD2_EN);
 
 			} else {
 				if (rt5640->jd_src == RT5640_JD_SRC_JD2_IN4N)
-					snd_soc_component_update_bits(
-						component, RT5640_GCTL2,
-						RT5640_IRQ_JD2_MASK |
-						RT5640_JD2_P_MASK |
-						RT5640_JD2_MASK,
-						RT5640_IRQ_JD2_NOR |
-						RT5640_JD2_P_INV |
-						RT5640_JD2_EN);
+					ret = snd_soc_component_update_bits(component,
+									    RT5640_GCTL2,
+									    RT5640_IRQ_JD2_MASK |
+									    RT5640_JD2_P_MASK |
+									    RT5640_JD2_MASK,
+									    RT5640_IRQ_JD2_NOR |
+									    RT5640_JD2_P_INV |
+									    RT5640_JD2_EN);
 			}
 		}
+
+		if (ret < 0)
+			return ret;
 
 		enable_irq(rt5640->irq);
 		queue_delayed_work(system_dfl_long_wq, &rt5640->jack_work, 0);
