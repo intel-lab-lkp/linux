@@ -302,7 +302,7 @@ struct vxlan_dev {
 	struct gro_cells  gro_cells;
 	unsigned long	  flags;
 
-	struct vxlan_config	cfg;
+	struct vxlan_config	*cfg;
 
 	struct vxlan_vni_group  __rcu *vnigrp;
 

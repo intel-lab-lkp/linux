@@ -110,20 +110,23 @@ static struct vxlan_dev *vxlan_vs_find_vni(struct vxlan_sock *vs,
 		vni = 0;
 
 	hlist_for_each_entry_rcu(node, vni_head(vs, vni), hlist) {
+		const struct vxlan_config *cfg;
+
 		if (!node->vxlan)
 			continue;
+
+		cfg = node->vxlan->cfg;
+
 		vnode = NULL;
-		if (node->vxlan->cfg.flags & VXLAN_F_VNIFILTER) {
+		if (cfg->flags & VXLAN_F_VNIFILTER) {
 			vnode = vxlan_vnifilter_lookup(node->vxlan, vni);
 			if (!vnode)
 				continue;
-		} else if (node->vxlan->default_dst.remote_vni != vni) {
+		} else if (cfg->vni != vni) {
 			continue;
 		}
 
 		if (IS_ENABLED(CONFIG_IPV6)) {
-			const struct vxlan_config *cfg = &node->vxlan->cfg;
-
 			if ((cfg->flags & VXLAN_F_IPV6_LINKLOCAL) &&
 			    cfg->remote_ifindex != ifindex)
 				continue;
@@ -157,6 +160,7 @@ static int vxlan_fdb_info(struct sk_buff *skb, struct vxlan_dev *vxlan,
 			  u32 portid, u32 seq, int type, unsigned int flags,
 			  const struct vxlan_rdst *rdst)
 {
+	const struct vxlan_config *cfg = vxlan->cfg;
 	unsigned long now = jiffies;
 	struct nda_cacheinfo ci;
 	bool send_ip, send_eth;
@@ -216,10 +220,10 @@ static int vxlan_fdb_info(struct sk_buff *skb, struct vxlan_dev *vxlan,
 			goto nla_put_failure;
 
 		if (rdst->remote_port &&
-		    rdst->remote_port != vxlan->cfg.dst_port &&
+		    rdst->remote_port != cfg->dst_port &&
 		    nla_put_be16(skb, NDA_PORT, rdst->remote_port))
 			goto nla_put_failure;
-		if (rdst->remote_vni != vxlan->default_dst.remote_vni &&
+		if (rdst->remote_vni != cfg->vni &&
 		    nla_put_u32(skb, NDA_VNI, be32_to_cpu(rdst->remote_vni)))
 			goto nla_put_failure;
 		if (rdst->remote_ifindex &&
@@ -227,7 +231,7 @@ static int vxlan_fdb_info(struct sk_buff *skb, struct vxlan_dev *vxlan,
 			goto nla_put_failure;
 	}
 
-	if ((vxlan->cfg.flags & VXLAN_F_COLLECT_METADATA) && fdb->key.vni &&
+	if ((cfg->flags & VXLAN_F_COLLECT_METADATA) && fdb->key.vni &&
 	    nla_put_u32(skb, NDA_SRC_VNI,
 			be32_to_cpu(fdb->key.vni)))
 		goto nla_put_failure;
@@ -418,7 +422,7 @@ static struct vxlan_fdb *vxlan_find_mac(struct vxlan_dev *vxlan,
 	lockdep_assert_held_once(&vxlan->hash_lock);
 
 	rcu_read_lock();
-	f = vxlan_find_mac_rcu(vxlan, &vxlan->cfg, mac, vni);
+	f = vxlan_find_mac_rcu(vxlan, vxlan->cfg, mac, vni);
 	rcu_read_unlock();
 
 	return f;
@@ -459,7 +463,7 @@ int vxlan_fdb_find_uc(struct net_device *dev, const u8 *mac, __be32 vni,
 
 	rcu_read_lock();
 
-	f = vxlan_find_mac_rcu(vxlan, &vxlan->cfg, eth_addr, vni);
+	f = vxlan_find_mac_rcu(vxlan, vxlan->cfg, eth_addr, vni);
 	if (f)
 		rdst = first_remote_rcu(f);
 	if (!rdst) {
@@ -865,12 +869,13 @@ int vxlan_fdb_create(struct vxlan_dev *vxlan,
 		     u32 nhid, struct vxlan_fdb **fdb,
 		     struct netlink_ext_ack *extack)
 {
+	const struct vxlan_config *cfg = vxlan->cfg;
 	struct vxlan_rdst *rd = NULL;
 	struct vxlan_fdb *f;
 	int rc;
 
-	if (vxlan->cfg.addrmax &&
-	    vxlan->addrcnt >= vxlan->cfg.addrmax)
+	if (cfg->addrmax &&
+	    vxlan->addrcnt >= cfg->addrmax)
 		return -ENOSPC;
 
 	netdev_dbg(vxlan->dev, "add %pM -> %pIS\n", mac, ip);
@@ -1150,6 +1155,7 @@ static int vxlan_fdb_parse(struct nlattr *tb[], struct vxlan_dev *vxlan,
 			   __be32 *vni, u32 *ifindex, u32 *nhid,
 			   struct netlink_ext_ack *extack)
 {
+	const struct vxlan_config *cfg = vxlan->cfg;
 	struct net *net = dev_net(vxlan->dev);
 	int err;
 
@@ -1166,7 +1172,7 @@ static int vxlan_fdb_parse(struct nlattr *tb[], struct vxlan_dev *vxlan,
 			return err;
 		}
 	} else {
-		union vxlan_addr *remote = &vxlan->default_dst.remote_ip;
+		const union vxlan_addr *remote = &cfg->remote_ip;
 
 		if (remote->sa.sa_family == AF_INET) {
 			ip->sin.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -1186,7 +1192,7 @@ static int vxlan_fdb_parse(struct nlattr *tb[], struct vxlan_dev *vxlan,
 		}
 		*port = nla_get_be16(tb[NDA_PORT]);
 	} else {
-		*port = vxlan->cfg.dst_port;
+		*port = cfg->dst_port;
 	}
 
 	if (tb[NDA_VNI]) {
@@ -1196,7 +1202,7 @@ static int vxlan_fdb_parse(struct nlattr *tb[], struct vxlan_dev *vxlan,
 		}
 		*vni = cpu_to_be32(nla_get_u32(tb[NDA_VNI]));
 	} else {
-		*vni = vxlan->default_dst.remote_vni;
+		*vni = cfg->vni;
 	}
 
 	if (tb[NDA_SRC_VNI]) {
@@ -1206,7 +1212,7 @@ static int vxlan_fdb_parse(struct nlattr *tb[], struct vxlan_dev *vxlan,
 		}
 		*src_vni = cpu_to_be32(nla_get_u32(tb[NDA_SRC_VNI]));
 	} else {
-		*src_vni = vxlan->default_dst.remote_vni;
+		*src_vni = cfg->vni;
 	}
 
 	if (tb[NDA_IFINDEX]) {
@@ -1396,18 +1402,23 @@ static int vxlan_fdb_get(struct sk_buff *skb,
 			 struct netlink_ext_ack *extack)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
+	const struct vxlan_config *cfg;
 	struct vxlan_fdb *f;
 	__be32 vni;
 	int err;
 
+	cfg = vxlan->cfg;
+
 	if (tb[NDA_VNI])
 		vni = cpu_to_be32(nla_get_u32(tb[NDA_VNI]));
+	else if (cfg)
+		vni = cfg->vni;
 	else
-		vni = vxlan->default_dst.remote_vni;
+		return -ENODEV;
 
 	rcu_read_lock();
 
-	f = vxlan_find_mac_rcu(vxlan, &vxlan->cfg, addr, vni);
+	f = vxlan_find_mac_rcu(vxlan, cfg, addr, vni);
 	if (!f) {
 		NL_SET_ERR_MSG(extack, "Fdb entry not found");
 		err = -ENOENT;
@@ -1510,6 +1521,7 @@ static bool __vxlan_sock_release_prep(struct vxlan_sock *vs)
 
 static void vxlan_sock_release(struct vxlan_dev *vxlan)
 {
+	const struct vxlan_config *cfg = vxlan->cfg;
 	struct vxlan_sock *sock4 = rtnl_dereference(vxlan->vn4_sock);
 #if IS_ENABLED(CONFIG_IPV6)
 	struct vxlan_sock *sock6 = rtnl_dereference(vxlan->vn6_sock);
@@ -1519,7 +1531,7 @@ static void vxlan_sock_release(struct vxlan_dev *vxlan)
 
 	RCU_INIT_POINTER(vxlan->vn4_sock, NULL);
 
-	if (vxlan->cfg.flags & VXLAN_F_VNIFILTER)
+	if (cfg && (cfg->flags & VXLAN_F_VNIFILTER))
 		vxlan_vs_del_vnigrp(vxlan);
 	else
 		vxlan_vs_del_dev(vxlan);
@@ -1692,7 +1704,8 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 		goto drop;
 	}
 
-	cfg = &vxlan->cfg;
+	cfg = vxlan->cfg;
+
 	if (vh->vx_flags & cfg->reserved_bits.vx_flags ||
 	    vh->vx_vni & cfg->reserved_bits.vx_vni) {
 		/* If the header uses bits besides those enabled by the
@@ -1848,7 +1861,8 @@ static int vxlan_err_lookup(struct sock *sk, struct sk_buff *skb)
 	return 0;
 }
 
-static int arp_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni, u32 flags)
+static int arp_reduce(struct net_device *dev, struct sk_buff *skb,
+		      const struct vxlan_config *cfg, __be32 vni)
 {
 	struct neigh_table *tbl = arp_table(dev_net(dev));
 	struct vxlan_dev *vxlan = netdev_priv(dev);
@@ -1862,7 +1876,7 @@ static int arp_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni, u
 
 	if (!pskb_network_may_pull(skb, arp_hdr_len(dev))) {
 		dev_dstats_tx_dropped(dev);
-		vxlan_vnifilter_count(vxlan, &vxlan->cfg, vni, NULL,
+		vxlan_vnifilter_count(vxlan, cfg, vni, NULL,
 				      VXLAN_VNI_STATS_TX_DROPS, 0);
 		goto out;
 	}
@@ -1903,7 +1917,7 @@ static int arp_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni, u
 		neigh_ha_snapshot(ha, n, n->dev);
 
 		rcu_read_lock();
-		f = vxlan_find_mac_tx(vxlan, &vxlan->cfg, ha, vni);
+		f = vxlan_find_mac_tx(vxlan, cfg, ha, vni);
 		if (f)
 			rdst = first_remote_rcu(f);
 		if (rdst && vxlan_addr_any(&rdst->remote_ip)) {
@@ -1929,11 +1943,11 @@ static int arp_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni, u
 
 		if (netif_rx(reply) == NET_RX_DROP) {
 			dev_dstats_rx_dropped(dev);
-			vxlan_vnifilter_count(vxlan, &vxlan->cfg, vni, NULL,
+			vxlan_vnifilter_count(vxlan, cfg, vni, NULL,
 					      VXLAN_VNI_STATS_RX_DROPS, 0);
 		}
 
-	} else if (flags & VXLAN_F_L3MISS) {
+	} else if (cfg->flags & VXLAN_F_L3MISS) {
 		union vxlan_addr ipa = {
 			.sin.sin_addr.s_addr = tip,
 			.sin.sin_family = AF_INET,
@@ -2041,7 +2055,8 @@ static struct sk_buff *vxlan_na_create(struct sk_buff *request,
 	return reply;
 }
 
-static int neigh_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni, u32 flags)
+static int neigh_reduce(struct net_device *dev, struct sk_buff *skb,
+			const struct vxlan_config *cfg, __be32 vni)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
 	const struct in6_addr *daddr;
@@ -2075,7 +2090,7 @@ static int neigh_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni,
 		}
 
 		neigh_ha_snapshot(ha, n, n->dev);
-		f = vxlan_find_mac_tx(vxlan, &vxlan->cfg, ha, vni);
+		f = vxlan_find_mac_tx(vxlan, cfg, ha, vni);
 		if (f)
 			rdst = first_remote_rcu(f);
 		if (rdst && vxlan_addr_any(&rdst->remote_ip)) {
@@ -2094,10 +2109,10 @@ static int neigh_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni,
 
 		if (netif_rx(reply) == NET_RX_DROP) {
 			dev_dstats_rx_dropped(dev);
-			vxlan_vnifilter_count(vxlan, &vxlan->cfg, vni, NULL,
+			vxlan_vnifilter_count(vxlan, cfg, vni, NULL,
 					      VXLAN_VNI_STATS_RX_DROPS, 0);
 		}
-	} else if (flags & VXLAN_F_L3MISS) {
+	} else if (cfg->flags & VXLAN_F_L3MISS) {
 		union vxlan_addr ipa = {
 			.sin6.sin6_addr = msg->target,
 			.sin6.sin6_family = AF_INET6,
@@ -2284,7 +2299,7 @@ static void vxlan_encap_bypass(struct sk_buff *skb, struct vxlan_dev *src_vxlan,
 			       const struct vxlan_config *src_cfg,
 			       __be32 vni, bool snoop)
 {
-	const struct vxlan_config *dst_cfg = &dst_vxlan->cfg;
+	const struct vxlan_config *dst_cfg;
 	union vxlan_addr loopback;
 	unsigned int len = skb->len;
 	struct net_device *dev = dst_vxlan->dev;
@@ -2305,7 +2320,8 @@ static void vxlan_encap_bypass(struct sk_buff *skb, struct vxlan_dev *src_vxlan,
 	}
 
 	rcu_read_lock();
-	if (unlikely(!(dev->flags & IFF_UP))) {
+	dst_cfg = dst_vxlan->cfg;
+	if (unlikely(!dst_cfg || !(dev->flags & IFF_UP))) {
 		kfree_skb_reason(skb, SKB_DROP_REASON_DEV_READY);
 		goto drop;
 	}
@@ -2771,7 +2787,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 	u32 nhid = 0;
 	u32 flags;
 
-	cfg = &vxlan->cfg;
+	cfg = vxlan->cfg;
 	flags = cfg->flags;
 	default_vni = cfg->vni;
 	saddr_family = cfg->saddr.sa.sa_family;
@@ -2797,7 +2813,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (flags & VXLAN_F_PROXY) {
 		eth = eth_hdr(skb);
 		if (ntohs(eth->h_proto) == ETH_P_ARP)
-			return arp_reduce(dev, skb, vni, flags);
+			return arp_reduce(dev, skb, cfg, vni);
 #if IS_ENABLED(CONFIG_IPV6)
 		else if (ntohs(eth->h_proto) == ETH_P_IPV6 &&
 			 pskb_network_may_pull(skb, sizeof(struct ipv6hdr) +
@@ -2807,7 +2823,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 
 			if (m->icmph.icmp6_code == 0 &&
 			    m->icmph.icmp6_type == NDISC_NEIGHBOUR_SOLICITATION)
-				return neigh_reduce(dev, skb, vni, flags);
+				return neigh_reduce(dev, skb, cfg, vni);
 		}
 #endif
 	}
@@ -2890,12 +2906,15 @@ static void vxlan_cleanup(struct timer_list *t)
 {
 	struct vxlan_dev *vxlan = timer_container_of(vxlan, t, age_timer);
 	unsigned long next_timer = jiffies + FDB_AGE_INTERVAL;
+	const struct vxlan_config *cfg;
 	struct vxlan_fdb *f;
 
 	if (!netif_running(vxlan->dev))
 		return;
 
 	rcu_read_lock();
+	cfg = vxlan->cfg;
+
 	hlist_for_each_entry_rcu(f, &vxlan->fdb_list, fdb_node) {
 		unsigned long timeout;
 
@@ -2905,7 +2924,7 @@ static void vxlan_cleanup(struct timer_list *t)
 		if (f->flags & NTF_EXT_LEARNED)
 			continue;
 
-		timeout = READ_ONCE(f->updated) + vxlan->cfg.age_interval * HZ;
+		timeout = READ_ONCE(f->updated) + cfg->age_interval * HZ;
 		if (time_before_eq(timeout, jiffies)) {
 			spin_lock(&vxlan->hash_lock);
 			if (!hlist_unhashed(&f->fdb_node)) {
@@ -2949,13 +2968,16 @@ static void vxlan_vs_add_dev(struct vxlan_sock *vs, struct vxlan_dev *vxlan,
 static int vxlan_init(struct net_device *dev)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
+	const struct vxlan_config *cfg;
 	int err;
+
+	cfg = vxlan->cfg;
 
 	err = rhashtable_init(&vxlan->fdb_hash_tbl, &vxlan_fdb_rht_params);
 	if (err)
 		return err;
 
-	if (vxlan->cfg.flags & VXLAN_F_VNIFILTER) {
+	if (cfg->flags & VXLAN_F_VNIFILTER) {
 		err = vxlan_vnigroup_init(vxlan);
 		if (err)
 			goto err_rhashtable_destroy;
@@ -2975,7 +2997,7 @@ static int vxlan_init(struct net_device *dev)
 err_gro_cells_destroy:
 	gro_cells_destroy(&vxlan->gro_cells);
 err_vnigroup_uninit:
-	if (vxlan->cfg.flags & VXLAN_F_VNIFILTER)
+	if (cfg->flags & VXLAN_F_VNIFILTER)
 		vxlan_vnigroup_uninit(vxlan);
 err_rhashtable_destroy:
 	rhashtable_destroy(&vxlan->fdb_hash_tbl);
@@ -2985,10 +3007,13 @@ err_rhashtable_destroy:
 static void vxlan_uninit(struct net_device *dev)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
+	const struct vxlan_config *cfg;
+
+	cfg = vxlan->cfg;
 
 	vxlan_mdb_fini(vxlan);
 
-	if (vxlan->cfg.flags & VXLAN_F_VNIFILTER)
+	if (cfg && (cfg->flags & VXLAN_F_VNIFILTER))
 		vxlan_vnigroup_uninit(vxlan);
 
 	gro_cells_destroy(&vxlan->gro_cells);
@@ -3000,6 +3025,7 @@ static void vxlan_uninit(struct net_device *dev)
 static int vxlan_open(struct net_device *dev)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
+	const struct vxlan_config *cfg;
 	int ret;
 
 	ret = vxlan_sock_add(vxlan);
@@ -3012,7 +3038,8 @@ static int vxlan_open(struct net_device *dev)
 		return ret;
 	}
 
-	if (vxlan->cfg.age_interval)
+	cfg = vxlan->cfg;
+	if (cfg && cfg->age_interval)
 		mod_timer(&vxlan->age_timer, jiffies + FDB_AGE_INTERVAL);
 
 	return ret;
@@ -3034,8 +3061,10 @@ struct vxlan_fdb_flush_desc {
 static bool vxlan_fdb_is_default_entry(const struct vxlan_fdb *f,
 				       const struct vxlan_dev *vxlan)
 {
+	const struct vxlan_config *cfg = vxlan->cfg;
+
 	return is_zero_ether_addr(f->key.eth_addr) &&
-	       f->key.vni == vxlan->cfg.vni;
+	       f->key.vni == cfg->vni;
 }
 
 static bool vxlan_fdb_nhid_matches(const struct vxlan_fdb *f, u32 nhid)
@@ -3253,14 +3282,18 @@ static int vxlan_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
 	struct vxlan_rdst *dst = &vxlan->default_dst;
-	struct net_device *lowerdev = __dev_get_by_index(vxlan->net,
-							 dst->remote_ifindex);
+	const struct vxlan_config *cfg;
+	struct net_device *lowerdev;
+
+	cfg = vxlan->cfg;
+
+	lowerdev = __dev_get_by_index(vxlan->net, dst->remote_ifindex);
 
 	/* This check is different than dev->max_mtu, because it looks at
 	 * the lowerdev->mtu, rather than the static dev->max_mtu
 	 */
 	if (lowerdev) {
-		int max_mtu = lowerdev->mtu - vxlan_headroom(vxlan->cfg.flags);
+		int max_mtu = lowerdev->mtu - vxlan_headroom(cfg->flags);
 		if (new_mtu > max_mtu)
 			return -EINVAL;
 	}
@@ -3273,11 +3306,14 @@ static int vxlan_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
 	struct ip_tunnel_info *info = skb_tunnel_info(skb);
+	const struct vxlan_config *cfg;
 	__be16 sport, dport;
 
-	sport = udp_flow_src_port(dev_net(dev), skb, vxlan->cfg.port_min,
-				  vxlan->cfg.port_max, true);
-	dport = info->key.tp_dst ? : vxlan->cfg.dst_port;
+	cfg = vxlan->cfg;
+
+	sport = udp_flow_src_port(dev_net(dev), skb, cfg->port_min,
+				  cfg->port_max, true);
+	dport = info->key.tp_dst ? : cfg->dst_port;
 
 	if (ip_tunnel_info_af(info) == AF_INET) {
 		struct vxlan_sock *sock4 = rcu_dereference(vxlan->vn4_sock);
@@ -3387,6 +3423,14 @@ static void vxlan_offload_rx_ports(struct net_device *dev, bool push)
 	}
 }
 
+static void vxlan_free_dev(struct net_device *dev)
+{
+	struct vxlan_dev *vxlan = netdev_priv(dev);
+
+	kfree(vxlan->cfg);
+	vxlan->cfg = NULL;
+}
+
 /* Initialize the device structure. */
 static void vxlan_setup(struct net_device *dev)
 {
@@ -3394,6 +3438,8 @@ static void vxlan_setup(struct net_device *dev)
 
 	eth_hw_addr_random(dev);
 	ether_setup(dev);
+
+	dev->priv_destructor = vxlan_free_dev;
 
 	dev->needs_free_netdev = true;
 	SET_NETDEV_DEVTYPE(dev, &vxlan_type);
@@ -3677,21 +3723,22 @@ static struct vxlan_sock *vxlan_socket_create(struct net *net, bool ipv6,
 
 static int __vxlan_sock_add(struct vxlan_dev *vxlan, bool ipv6)
 {
-	bool metadata = vxlan->cfg.flags & VXLAN_F_COLLECT_METADATA;
+	const struct vxlan_config *cfg = vxlan->cfg;
+	bool metadata = cfg->flags & VXLAN_F_COLLECT_METADATA;
 	struct vxlan_sock *vs = NULL;
 	struct vxlan_dev_node *node;
 	int l3mdev_index = 0;
 
 	ASSERT_RTNL();
 
-	if (vxlan->cfg.remote_ifindex)
+	if (cfg->remote_ifindex)
 		l3mdev_index = l3mdev_master_upper_ifindex_by_index(
-			vxlan->net, vxlan->cfg.remote_ifindex);
+			vxlan->net, cfg->remote_ifindex);
 
-	if (!vxlan->cfg.no_share) {
+	if (!cfg->no_share) {
 		rcu_read_lock();
 		vs = vxlan_find_sock(vxlan->net, ipv6 ? AF_INET6 : AF_INET,
-				     vxlan->cfg.dst_port, vxlan->cfg.flags,
+				     cfg->dst_port, cfg->flags,
 				     l3mdev_index);
 		if (vs && !refcount_inc_not_zero(&vs->refcnt)) {
 			rcu_read_unlock();
@@ -3701,7 +3748,7 @@ static int __vxlan_sock_add(struct vxlan_dev *vxlan, bool ipv6)
 	}
 	if (!vs)
 		vs = vxlan_socket_create(vxlan->net, ipv6,
-					 vxlan->cfg.dst_port, vxlan->cfg.flags,
+					 cfg->dst_port, cfg->flags,
 					 l3mdev_index);
 	if (IS_ERR(vs))
 		return PTR_ERR(vs);
@@ -3716,7 +3763,7 @@ static int __vxlan_sock_add(struct vxlan_dev *vxlan, bool ipv6)
 		node = &vxlan->hlist4;
 	}
 
-	if (metadata && (vxlan->cfg.flags & VXLAN_F_VNIFILTER))
+	if (metadata && (cfg->flags & VXLAN_F_VNIFILTER))
 		vxlan_vs_add_vnigrp(vxlan, vs, ipv6);
 	else
 		vxlan_vs_add_dev(vs, vxlan, node);
@@ -3726,10 +3773,13 @@ static int __vxlan_sock_add(struct vxlan_dev *vxlan, bool ipv6)
 
 static int vxlan_sock_add(struct vxlan_dev *vxlan)
 {
-	bool metadata = vxlan->cfg.flags & VXLAN_F_COLLECT_METADATA;
-	bool ipv6 = vxlan->cfg.flags & VXLAN_F_IPV6 || metadata;
-	bool ipv4 = !ipv6 || metadata;
+	const struct vxlan_config *cfg = vxlan->cfg;
+	bool metadata, ipv6, ipv4;
 	int ret = 0;
+
+	metadata = cfg->flags & VXLAN_F_COLLECT_METADATA;
+	ipv6 = (cfg->flags & VXLAN_F_IPV6) || metadata;
+	ipv4 = !ipv6 || metadata;
 
 	RCU_INIT_POINTER(vxlan->vn4_sock, NULL);
 #if IS_ENABLED(CONFIG_IPV6)
@@ -3754,22 +3804,27 @@ int vxlan_vni_in_use(struct net *src_net, struct vxlan_dev *vxlan,
 	struct vxlan_dev *tmp;
 
 	list_for_each_entry(tmp, &vn->vxlan_list, next) {
+		const struct vxlan_config *tmp_cfg;
+
 		if (tmp == vxlan)
 			continue;
-		if (tmp->cfg.flags & VXLAN_F_VNIFILTER) {
+
+		tmp_cfg = tmp->cfg;
+
+		if (tmp_cfg->flags & VXLAN_F_VNIFILTER) {
 			if (!vxlan_vnifilter_lookup(tmp, vni))
 				continue;
-		} else if (tmp->cfg.vni != vni) {
+		} else if (tmp_cfg->vni != vni) {
 			continue;
 		}
-		if (tmp->cfg.dst_port != conf->dst_port)
+		if (tmp_cfg->dst_port != conf->dst_port)
 			continue;
-		if ((tmp->cfg.flags & (VXLAN_F_RCV_FLAGS | VXLAN_F_IPV6)) !=
+		if ((tmp_cfg->flags & (VXLAN_F_RCV_FLAGS | VXLAN_F_IPV6)) !=
 		    (conf->flags & (VXLAN_F_RCV_FLAGS | VXLAN_F_IPV6)))
 			continue;
 
 		if ((conf->flags & VXLAN_F_IPV6_LINKLOCAL) &&
-		    tmp->cfg.remote_ifindex != conf->remote_ifindex)
+		    tmp_cfg->remote_ifindex != conf->remote_ifindex)
 			continue;
 
 		return -EEXIST;
@@ -3931,7 +3986,7 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 }
 
 static void vxlan_config_apply(struct net_device *dev,
-			       struct vxlan_config *conf,
+			       struct vxlan_config *new_cfg,
 			       struct net_device *lowerdev,
 			       struct net *src_net,
 			       bool changelink)
@@ -3939,8 +3994,9 @@ static void vxlan_config_apply(struct net_device *dev,
 	struct vxlan_dev *vxlan = netdev_priv(dev);
 	struct vxlan_rdst *dst = &vxlan->default_dst;
 	unsigned short needed_headroom = ETH_HLEN;
+	struct vxlan_config *old_cfg;
 	int max_mtu = ETH_MAX_MTU;
-	u32 flags = conf->flags;
+	u32 flags = new_cfg->flags;
 
 	if (!changelink) {
 		if (flags & VXLAN_F_GPE)
@@ -3948,18 +4004,18 @@ static void vxlan_config_apply(struct net_device *dev,
 		else
 			vxlan_ether_setup(dev);
 
-		if (conf->mtu)
-			dev->mtu = conf->mtu;
+		if (new_cfg->mtu)
+			dev->mtu = new_cfg->mtu;
 
 		vxlan->net = src_net;
 	}
 
-	dst->remote_vni = conf->vni;
+	dst->remote_vni = new_cfg->vni;
 
-	memcpy(&dst->remote_ip, &conf->remote_ip, sizeof(conf->remote_ip));
+	memcpy(&dst->remote_ip, &new_cfg->remote_ip, sizeof(new_cfg->remote_ip));
 
 	if (lowerdev) {
-		dst->remote_ifindex = conf->remote_ifindex;
+		dst->remote_ifindex = new_cfg->remote_ifindex;
 
 		netif_inherit_tso_max(dev, lowerdev);
 
@@ -3972,7 +4028,7 @@ static void vxlan_config_apply(struct net_device *dev,
 		if (max_mtu < ETH_MIN_MTU)
 			max_mtu = ETH_MIN_MTU;
 
-		if (!changelink && !conf->mtu)
+		if (!changelink && !new_cfg->mtu)
 			dev->mtu = max_mtu;
 	}
 
@@ -3984,7 +4040,9 @@ static void vxlan_config_apply(struct net_device *dev,
 	needed_headroom += vxlan_headroom(flags);
 	dev->needed_headroom = needed_headroom;
 
-	memcpy(&vxlan->cfg, conf, sizeof(*conf));
+	old_cfg = vxlan->cfg;
+	vxlan->cfg = new_cfg;
+	kfree(old_cfg);
 }
 
 static int vxlan_dev_configure(struct net *src_net, struct net_device *dev,
@@ -3993,13 +4051,18 @@ static int vxlan_dev_configure(struct net *src_net, struct net_device *dev,
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
 	struct net_device *lowerdev;
+	struct vxlan_config *new_cfg;
 	int ret;
 
 	ret = vxlan_config_validate(src_net, conf, &lowerdev, vxlan, extack);
 	if (ret)
 		return ret;
 
-	vxlan_config_apply(dev, conf, lowerdev, src_net, false);
+	new_cfg = kmemdup(conf, sizeof(*conf), GFP_KERNEL);
+	if (!new_cfg)
+		return -ENOMEM;
+
+	vxlan_config_apply(dev, new_cfg, lowerdev, src_net, false);
 
 	return 0;
 }
@@ -4011,6 +4074,7 @@ static int vxlan_dev_create(struct net *net, struct net_device *dev,
 	struct vxlan_net *vn = net_generic(net, vxlan_net_id);
 	struct vxlan_dev *vxlan = netdev_priv(dev);
 	struct net_device *remote_dev = NULL;
+	const struct vxlan_config *cfg;
 	struct vxlan_rdst *dst;
 	int err;
 
@@ -4019,11 +4083,15 @@ static int vxlan_dev_create(struct net *net, struct net_device *dev,
 	if (err)
 		return err;
 
+	cfg = vxlan->cfg;
+
 	dev->ethtool_ops = &vxlan_ethtool_ops;
 
 	err = register_netdevice(dev);
-	if (err)
+	if (err) {
+		vxlan_free_dev(dev);
 		return err;
+	}
 
 	if (dst->remote_ifindex) {
 		remote_dev = __dev_get_by_index(net, dst->remote_ifindex);
@@ -4050,7 +4118,7 @@ static int vxlan_dev_create(struct net *net, struct net_device *dev,
 				       &dst->remote_ip,
 				       NUD_REACHABLE | NUD_PERMANENT,
 				       NLM_F_EXCL | NLM_F_CREATE,
-				       vxlan->cfg.dst_port,
+				       cfg->dst_port,
 				       dst->remote_vni,
 				       dst->remote_vni,
 				       dst->remote_ifindex,
@@ -4114,8 +4182,12 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 	memset(conf, 0, sizeof(*conf));
 
 	/* if changelink operation, start with old existing cfg */
-	if (changelink)
-		memcpy(conf, &vxlan->cfg, sizeof(*conf));
+	if (changelink) {
+		const struct vxlan_config *cfg = vxlan->cfg;
+
+		if (cfg)
+			memcpy(conf, cfg, sizeof(*conf));
+	}
 
 	if (data[IFLA_VXLAN_ID]) {
 		__be32 vni = cpu_to_be32(nla_get_u32(data[IFLA_VXLAN_ID]));
@@ -4462,9 +4534,11 @@ static int vxlan_changelink(struct net_device *dev, struct nlattr *tb[],
 			    struct netlink_ext_ack *extack)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
+	const struct vxlan_config *cfg = vxlan->cfg;
 	bool rem_ip_changed, change_igmp;
 	struct net_device *lowerdev;
 	struct vxlan_config conf;
+	struct vxlan_config *new_cfg;
 	struct vxlan_rdst *dst;
 	int err;
 
@@ -4481,13 +4555,19 @@ static int vxlan_changelink(struct net_device *dev, struct nlattr *tb[],
 	if (err)
 		return err;
 
+	new_cfg = kmemdup(&conf, sizeof(conf), GFP_KERNEL);
+	if (!new_cfg)
+		return -ENOMEM;
+
 	if (dst->remote_dev == lowerdev)
 		lowerdev = NULL;
 
 	err = netdev_adjacent_change_prepare(dst->remote_dev, lowerdev, dev,
 					     extack);
-	if (err)
+	if (err) {
+		kfree(new_cfg);
 		return err;
+	}
 
 	rem_ip_changed = !vxlan_addr_equal(&conf.remote_ip, &dst->remote_ip);
 	change_igmp = vxlan->dev->flags & IFF_UP &&
@@ -4502,7 +4582,7 @@ static int vxlan_changelink(struct net_device *dev, struct nlattr *tb[],
 					       &conf.remote_ip,
 					       NUD_REACHABLE | NUD_PERMANENT,
 					       NLM_F_APPEND | NLM_F_CREATE,
-					       vxlan->cfg.dst_port,
+					       cfg->dst_port,
 					       conf.vni, conf.vni,
 					       conf.remote_ifindex,
 					       NTF_SELF, 0, true, extack);
@@ -4510,13 +4590,14 @@ static int vxlan_changelink(struct net_device *dev, struct nlattr *tb[],
 				spin_unlock_bh(&vxlan->hash_lock);
 				netdev_adjacent_change_abort(dst->remote_dev,
 							     lowerdev, dev);
+				kfree(new_cfg);
 				return err;
 			}
 		}
 		if (!vxlan_addr_any(&dst->remote_ip))
 			__vxlan_fdb_delete(vxlan, all_zeros_mac,
 					   dst->remote_ip,
-					   vxlan->cfg.dst_port,
+					   cfg->dst_port,
 					   dst->remote_vni,
 					   dst->remote_vni,
 					   dst->remote_ifindex,
@@ -4526,12 +4607,13 @@ static int vxlan_changelink(struct net_device *dev, struct nlattr *tb[],
 		/* If vni filtering device, also update fdb entries of
 		 * all vnis that were using default remote ip
 		 */
-		if (vxlan->cfg.flags & VXLAN_F_VNIFILTER) {
+		if (cfg->flags & VXLAN_F_VNIFILTER) {
 			err = vxlan_vnilist_update_group(vxlan, &dst->remote_ip,
 							 &conf.remote_ip, extack);
 			if (err) {
 				netdev_adjacent_change_abort(dst->remote_dev,
 							     lowerdev, dev);
+				kfree(new_cfg);
 				return err;
 			}
 		}
@@ -4540,13 +4622,13 @@ static int vxlan_changelink(struct net_device *dev, struct nlattr *tb[],
 	if (change_igmp && vxlan_addr_multicast(&dst->remote_ip))
 		err = vxlan_multicast_leave(vxlan);
 
-	if (netif_running(dev) && conf.age_interval != vxlan->cfg.age_interval)
+	if (netif_running(dev) && conf.age_interval != cfg->age_interval)
 		mod_timer(&vxlan->age_timer, jiffies);
 
 	netdev_adjacent_change_commit(dst->remote_dev, lowerdev, dev);
 	if (lowerdev && lowerdev != dst->remote_dev)
 		dst->remote_dev = lowerdev;
-	vxlan_config_apply(dev, &conf, lowerdev, vxlan->net, true);
+	vxlan_config_apply(dev, new_cfg, lowerdev, vxlan->net, true);
 
 	if (!err && change_igmp &&
 	    vxlan_addr_multicast(&dst->remote_ip))
@@ -4613,7 +4695,7 @@ static int vxlan_fill_info(struct sk_buff *skb, const struct net_device *dev)
 	struct ifla_vxlan_port_range ports;
 	const struct vxlan_config *cfg;
 
-	cfg = &vxlan->cfg;
+	cfg = vxlan->cfg;
 
 	if (nla_put_u32(skb, IFLA_VXLAN_ID, be32_to_cpu(dst->remote_vni)))
 		goto nla_put_failure;
