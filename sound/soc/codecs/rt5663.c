@@ -3202,9 +3202,12 @@ static int rt5663_suspend(struct snd_soc_component *component)
 static int rt5663_resume(struct snd_soc_component *component)
 {
 	struct rt5663_priv *rt5663 = snd_soc_component_get_drvdata(component);
+	int ret;
 
 	regcache_cache_only(rt5663->regmap, false);
-	regcache_sync(rt5663->regmap);
+	ret = regcache_sync(rt5663->regmap);
+	if (ret)
+		return ret;
 
 	rt5663_irq(0, rt5663);
 
