@@ -2902,18 +2902,7 @@ static struct ecard_driver acornscsi_driver = {
 	},
 };
 
-static int __init acornscsi_init(void)
-{
-	return ecard_register_driver(&acornscsi_driver);
-}
-
-static void __exit acornscsi_exit(void)
-{
-	ecard_remove_driver(&acornscsi_driver);
-}
-
-module_init(acornscsi_init);
-module_exit(acornscsi_exit);
+module_driver(acornscsi_driver, ecard_register_driver, ecard_remove_driver);
 
 MODULE_AUTHOR("Russell King");
 MODULE_DESCRIPTION("AcornSCSI driver");

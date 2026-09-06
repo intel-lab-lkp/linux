@@ -1070,17 +1070,6 @@ static struct ecard_driver ether1_driver = {
 	},
 };
 
-static int __init ether1_init(void)
-{
-	return ecard_register_driver(&ether1_driver);
-}
-
-static void __exit ether1_exit(void)
-{
-	ecard_remove_driver(&ether1_driver);
-}
-
-module_init(ether1_init);
-module_exit(ether1_exit);
+module_driver(ether1_driver, ecard_register_driver, ecard_remove_driver);
 
 MODULE_LICENSE("GPL");

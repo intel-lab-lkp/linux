@@ -504,18 +504,7 @@ static struct ecard_driver cumanascsi2_driver = {
 	},
 };
 
-static int __init cumanascsi2_init(void)
-{
-	return ecard_register_driver(&cumanascsi2_driver);
-}
-
-static void __exit cumanascsi2_exit(void)
-{
-	ecard_remove_driver(&cumanascsi2_driver);
-}
-
-module_init(cumanascsi2_init);
-module_exit(cumanascsi2_exit);
+module_driver(cumanascsi2_driver, ecard_register_driver, ecard_remove_driver);
 
 MODULE_AUTHOR("Russell King");
 MODULE_DESCRIPTION("Cumana SCSI-2 driver for Acorn machines");

@@ -194,20 +194,8 @@ static struct ecard_driver oakscsi_driver = {
 	},
 };
 
-static int __init oakscsi_init(void)
-{
-	return ecard_register_driver(&oakscsi_driver);
-}
-
-static void __exit oakscsi_exit(void)
-{
-	ecard_remove_driver(&oakscsi_driver);
-}
-
-module_init(oakscsi_init);
-module_exit(oakscsi_exit);
+module_driver(oakscsi_driver, ecard_register_driver, ecard_remove_driver);
 
 MODULE_AUTHOR("Russell King");
 MODULE_DESCRIPTION("Oak SCSI driver");
 MODULE_LICENSE("GPL");
-

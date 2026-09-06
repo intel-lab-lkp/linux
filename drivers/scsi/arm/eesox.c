@@ -626,18 +626,7 @@ static struct ecard_driver eesoxscsi_driver = {
 	},
 };
 
-static int __init eesox_init(void)
-{
-	return ecard_register_driver(&eesoxscsi_driver);
-}
-
-static void __exit eesox_exit(void)
-{
-	ecard_remove_driver(&eesoxscsi_driver);
-}
-
-module_init(eesox_init);
-module_exit(eesox_exit);
+module_driver(eesoxscsi_driver, ecard_register_driver, ecard_remove_driver);
 
 MODULE_AUTHOR("Russell King");
 MODULE_DESCRIPTION("EESOX 'Fast' SCSI driver for Acorn machines");

@@ -613,19 +613,8 @@ static struct ecard_driver pata_icside_driver = {
 	},
 };
 
-static int __init pata_icside_init(void)
-{
-	return ecard_register_driver(&pata_icside_driver);
-}
-
-static void __exit pata_icside_exit(void)
-{
-	ecard_remove_driver(&pata_icside_driver);
-}
+module_driver(pata_icside_driver, ecard_register_driver, ecard_remove_driver);
 
 MODULE_AUTHOR("Russell King <rmk@arm.linux.org.uk>");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("ICS PATA driver");
-
-module_init(pata_icside_init);
-module_exit(pata_icside_exit);

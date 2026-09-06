@@ -882,17 +882,6 @@ static struct ecard_driver ether3_driver = {
 	},
 };
 
-static int __init ether3_init(void)
-{
-	return ecard_register_driver(&ether3_driver);
-}
-
-static void __exit ether3_exit(void)
-{
-	ecard_remove_driver(&ether3_driver);
-}
-
-module_init(ether3_init);
-module_exit(ether3_exit);
+module_driver(ether3_driver, ecard_register_driver, ecard_remove_driver);
 
 MODULE_LICENSE("GPL");

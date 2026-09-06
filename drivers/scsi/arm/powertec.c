@@ -432,18 +432,7 @@ static struct ecard_driver powertecscsi_driver = {
 	},
 };
 
-static int __init powertecscsi_init(void)
-{
-	return ecard_register_driver(&powertecscsi_driver);
-}
-
-static void __exit powertecscsi_exit(void)
-{
-	ecard_remove_driver(&powertecscsi_driver);
-}
-
-module_init(powertecscsi_init);
-module_exit(powertecscsi_exit);
+module_driver(powertecscsi_driver, ecard_register_driver, ecard_remove_driver);
 
 MODULE_AUTHOR("Russell King");
 MODULE_DESCRIPTION("Powertec SCSI driver");

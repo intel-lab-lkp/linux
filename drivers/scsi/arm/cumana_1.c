@@ -324,18 +324,7 @@ static struct ecard_driver cumanascsi1_driver = {
 	},
 };
 
-static int __init cumanascsi_init(void)
-{
-	return ecard_register_driver(&cumanascsi1_driver);
-}
-
-static void __exit cumanascsi_exit(void)
-{
-	ecard_remove_driver(&cumanascsi1_driver);
-}
-
-module_init(cumanascsi_init);
-module_exit(cumanascsi_exit);
+module_driver(cumanascsi1_driver, ecard_register_driver, ecard_remove_driver);
 
 MODULE_DESCRIPTION("Cumana SCSI-1 driver for Acorn machines");
 MODULE_LICENSE("GPL");

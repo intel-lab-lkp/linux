@@ -344,20 +344,8 @@ static struct ecard_driver arxescsi_driver = {
 	},
 };
 
-static int __init init_arxe_scsi_driver(void)
-{
-	return ecard_register_driver(&arxescsi_driver);
-}
-
-static void __exit exit_arxe_scsi_driver(void)
-{
-	ecard_remove_driver(&arxescsi_driver);
-}
-
-module_init(init_arxe_scsi_driver);
-module_exit(exit_arxe_scsi_driver);
+module_driver(arxescsi_driver, ecard_register_driver, ecard_remove_driver);
 
 MODULE_AUTHOR("Stefan Hanske");
 MODULE_DESCRIPTION("ARXESCSI driver for Acorn machines");
 MODULE_LICENSE("GPL");
-

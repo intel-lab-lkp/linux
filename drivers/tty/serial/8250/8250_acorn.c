@@ -120,19 +120,8 @@ static struct ecard_driver serial_card_driver = {
 	},
 };
 
-static int __init serial_card_init(void)
-{
-	return ecard_register_driver(&serial_card_driver);
-}
-
-static void __exit serial_card_exit(void)
-{
-	ecard_remove_driver(&serial_card_driver);
-}
+module_driver(serial_card_driver, ecard_register_driver, ecard_remove_driver);
 
 MODULE_AUTHOR("Russell King");
 MODULE_DESCRIPTION("Acorn 8250-compatible serial port expansion card driver");
 MODULE_LICENSE("GPL");
-
-module_init(serial_card_init);
-module_exit(serial_card_exit);
