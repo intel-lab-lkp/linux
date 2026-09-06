@@ -50,6 +50,11 @@
 		};
 	};
 
+	modemsmem {
+		compatible = "google,modemsmem";
+		qcom,smem-id = <134>;
+	};
+
 	reserved-memory {
 		cont_splash_mem: splash@9d400000 {
 			reg = <0 0x9d400000 0 0x02400000>;
