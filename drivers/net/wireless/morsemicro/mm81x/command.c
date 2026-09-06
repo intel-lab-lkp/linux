@@ -209,6 +209,7 @@ int mm81x_cmd_resp_process(struct mm81x *mors, struct sk_buff *skb)
 		length = min_t(int, length,
 			       le16_to_cpu(src_resp->hdr.len) +
 				       sizeof(struct host_cmd_header));
+		length = min_t(int, length, skb->len);
 		memcpy(dest_resp, src_resp, length);
 	} else {
 		ret = le32_to_cpu(src_resp->status);
