@@ -138,6 +138,7 @@
 #define MT7628_ESW_PORTS_CPU BIT(6)
 #define MT7628_ESW_PORTS_ALL GENMASK(6, 0)
 
+#define MT7628_ESW_NUM_USER_PORTS 5
 #define MT7628_ESW_NUM_PORTS 7
 #define MT7628_NUM_VLANS 16
 
@@ -151,8 +152,14 @@ static const struct regmap_config mt7628_esw_regmap_cfg = {
 	.val_format_endian = REGMAP_ENDIAN_LITTLE,
 };
 
+enum {
+	MT7628_VLAN_TYPE_AWARE,
+	MT7628_VLAN_TYPE_UNAWARE,
+	MT7628_VLAN_TYPE_NUM,
+};
+
 struct mt7628_vlan {
-	bool active;
+	unsigned int type;
 	u8 members;
 	u8 untag;
 	u16 vid;
@@ -383,6 +390,82 @@ static void mt7628_esw_set_vub(struct mt7628_esw *esw, unsigned int vlan,
 			   MT7628_ESW_VUB_PREP(vlan, vub));
 }
 
+static struct mt7628_vlan *mt7628_find_vlan_block(struct dsa_switch *ds,
+						  u16 vid, unsigned int type)
+{
+	struct mt7628_esw *esw = ds->priv;
+	struct mt7628_vlan *vlan;
+	int i;
+
+	for (i = 0; i < MT7628_NUM_VLANS; i++) {
+		vlan = &esw->vlans[i];
+		if (vlan->vid == vid && vlan->type == type)
+			return vlan;
+	}
+	return NULL;
+}
+
+static struct mt7628_vlan *mt7628_alloc_vlan_block(struct dsa_switch *ds,
+						   u16 vid, unsigned int type)
+{
+	struct mt7628_esw *esw = ds->priv;
+	struct mt7628_vlan *vlan;
+	int i;
+
+	for (i = 0; i < MT7628_NUM_VLANS; i++) {
+		vlan = &esw->vlans[i];
+		if (vlan->vid)
+			continue;
+		if (vlan->type != type)
+			continue;
+		vlan->vid = vid;
+		return vlan;
+	}
+
+	return NULL;
+}
+
+static int mt7628_port_join_vlan_block(struct dsa_switch *ds, int port, u16 vid,
+				       unsigned int type, u16 flags)
+{
+	struct mt7628_vlan *vlan = mt7628_find_vlan_block(ds, vid, type);
+	struct mt7628_esw *esw = ds->priv;
+
+	if (!vlan)
+		vlan = mt7628_alloc_vlan_block(ds, vid, type);
+
+	if (!vlan)
+		return -ENOSPC;
+
+	vlan->members |= BIT(port);
+	if (flags & BRIDGE_VLAN_INFO_PVID)
+		esw->tag_8021q_pvid[port] = vid;
+	if (flags & BRIDGE_VLAN_INFO_UNTAGGED)
+		vlan->untag |= BIT(port);
+	return 0;
+}
+
+static int mt7628_port_leave_vlan_block(struct dsa_switch *ds, int port,
+					u16 vid, unsigned int type)
+{
+	struct mt7628_vlan *vlan = mt7628_find_vlan_block(ds, vid, type);
+	struct mt7628_esw *esw = ds->priv;
+
+	if (!vlan)
+		return -ENOENT;
+
+	if (esw->tag_8021q_pvid[port] == vid)
+		esw->tag_8021q_pvid[port] = 0;
+	vlan->members &= ~BIT(port);
+	vlan->untag &= ~BIT(port);
+	/*
+	 * Free the vlan if we're the last member of it.
+	 */
+	if (!vlan->members)
+		vlan->vid = 0;
+	return 0;
+}
+
 static void mt7628_vlan_sync(struct dsa_switch *ds)
 {
 	struct mt7628_esw *esw = ds->priv;
@@ -424,6 +507,17 @@ static int mt7628_setup(struct dsa_switch *ds)
 	ret = mt7628_setup_internal_mdio(ds);
 	if (ret)
 		return ret;
+
+	/*
+	 * Dedicate the first num_user_ports + 1 VLAN slots for tag_8021q.
+	 * Since bridges are only offloaded when they have at least one member
+	 * port, the worst case entry requirement is 1 per port. The extra slot
+	 * is needed because when changing the configuration, tag_8021q adds a
+	 * new VLAN before removing the old one. The rest of the VLAN slots can
+	 * be used for filtering.
+	 */
+	for (int i = 0; i < MT7628_ESW_NUM_USER_PORTS + 1; i++)
+		esw->vlans[i].type = MT7628_VLAN_TYPE_UNAWARE;
 
 	rtnl_lock();
 	ret = dsa_tag_8021q_register(ds, htons(ETH_P_8021Q));
@@ -479,67 +573,21 @@ static void mt7628_phylink_get_caps(struct dsa_switch *ds, int port,
 static int mt7628_dsa_8021q_vlan_add(struct dsa_switch *ds, int port,
 				     u16 vid, u16 flags)
 {
-	struct mt7628_esw *esw = ds->priv;
-	struct mt7628_vlan *vlan = NULL;
-	int i;
-
-	for (i = 0; i < MT7628_NUM_VLANS; i++) {
-		struct mt7628_vlan *check_vlan = &esw->vlans[i];
-
-		if (!check_vlan->active && !vlan)
-			vlan = check_vlan;
-
-		if (check_vlan->active && check_vlan->vid == vid) {
-			vlan = check_vlan;
-			break;
-		}
-	}
-
-	if (!vlan)
-		return -ENOSPC;
-
-	vlan->vid = vid;
-	vlan->active = true;
-	vlan->members |= BIT(port);
-
-	if (flags & BRIDGE_VLAN_INFO_PVID)
-		esw->tag_8021q_pvid[port] = vid;
-
-	if (flags & BRIDGE_VLAN_INFO_UNTAGGED)
-		vlan->untag |= BIT(port);
-
+	int ret =
+	    mt7628_port_join_vlan_block(ds, port, vid, MT7628_VLAN_TYPE_UNAWARE,
+					flags);
+	if (ret)
+		return ret;
 	mt7628_vlan_sync(ds);
 	return 0;
 }
 
 static int mt7628_dsa_8021q_vlan_del(struct dsa_switch *ds, int port, u16 vid)
 {
-	struct mt7628_esw *esw = ds->priv;
-	struct mt7628_vlan *vlan = NULL;
-	int i;
-
-	for (i = 0; i < MT7628_NUM_VLANS; i++) {
-		struct mt7628_vlan *check_vlan = &esw->vlans[i];
-
-		if (!check_vlan->active || check_vlan->vid != vid)
-			continue;
-		vlan = check_vlan;
-		break;
-	}
-	if (!vlan)
-		return -ENOENT;
-
-	if (esw->tag_8021q_pvid[port] == vid)
-		esw->tag_8021q_pvid[port] = 0;
-
-	vlan->members &= ~BIT(port);
-	vlan->untag &= ~BIT(port);
-
-	if (!vlan->members) {
-		vlan->active = false;
-		vlan->vid = 0;
-	}
-
+	int ret = mt7628_port_leave_vlan_block(ds, port, vid,
+					       MT7628_VLAN_TYPE_UNAWARE);
+	if (ret)
+		return ret;
 	mt7628_vlan_sync(ds);
 	return 0;
 }
