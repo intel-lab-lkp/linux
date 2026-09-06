@@ -2328,10 +2328,18 @@ static int tegra_xusb_exit_elpg(struct tegra_xusb *tegra, bool is_auto_resume)
 		if (!tegra->phys[i])
 			continue;
 
-		if (!wakeup)
-			phy_init(tegra->phys[i]);
+		if (!wakeup) {
+			err = phy_init(tegra->phys[i]);
+			if (err)
+				goto disable_enabled_phys;
+		}
 
-		phy_power_on(tegra->phys[i]);
+		err = phy_power_on(tegra->phys[i]);
+		if (err) {
+			if (!wakeup)
+				phy_exit(tegra->phys[i]);
+			goto disable_enabled_phys;
+		}
 	}
 	if (tegra->suspended)
 		tegra_xhci_program_utmi_power_lp0_exit(tegra);
@@ -2367,7 +2375,9 @@ static int tegra_xusb_exit_elpg(struct tegra_xusb *tegra, bool is_auto_resume)
 	goto out;
 
 disable_phy:
-	for (i = 0; i < tegra->num_phys; i++) {
+	i = tegra->num_phys;
+disable_enabled_phys:
+	while (i--) {
 		if (!tegra->phys[i])
 			continue;
 
