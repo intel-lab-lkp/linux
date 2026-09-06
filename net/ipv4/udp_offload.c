@@ -148,13 +148,6 @@ static struct sk_buff *udp_tunnel_gro_rcv(struct sock *sk,
 					  struct list_head *head,
 					  struct sk_buff *skb)
 {
-	if (static_branch_likely(&udp_tunnel_static_call)) {
-		if (unlikely(gro_recursion_inc_test(skb))) {
-			NAPI_GRO_CB(skb)->flush |= 1;
-			return NULL;
-		}
-		return static_call(udp_tunnel_gro_rcv)(sk, head, skb);
-	}
 	return call_gro_receive_sk(udp_sk(sk)->gro_receive, sk, head, skb);
 }
 
