@@ -1018,6 +1018,16 @@ static int axienet_tx_poll(struct napi_struct *napi, int budget)
 			netif_wake_queue(ndev);
 	}
 
+	/* Clear stale IOC/DELAY bits and re-check for race-window completions.
+	 * Skipped on budget exhaustion.
+	 */
+	if (packets < budget) {
+		axienet_dma_out32(lp, XAXIDMA_TX_SR_OFFSET,
+				  XAXIDMA_IRQ_IOC_MASK | XAXIDMA_IRQ_DELAY_MASK);
+		if (lp->tx_bd_v[lp->tx_bd_ci].status & XAXIDMA_BD_STS_COMPLETE_MASK)
+			return budget;
+	}
+
 	if (packets < budget && napi_complete_done(napi, packets)) {
 		/* Re-enable TX completion interrupts. This should
 		 * cause an immediate interrupt if any TX packets are
@@ -1300,6 +1310,18 @@ static int axienet_rx_poll(struct napi_struct *napi, int budget)
 
 	if (tail_p)
 		axienet_dma_out_addr(lp, XAXIDMA_RX_TDESC_OFFSET, tail_p);
+
+	/* Clear stale IOC/DELAY bits and re-check for race-window completions.
+	 * Skipped on budget exhaustion and on refill failure (cur_p->skb ==
+	 * NULL) to leave the level-sensitive IRQ armed so the poll is
+	 * rescheduled on the next hardware completion.
+	 */
+	if (packets < budget && cur_p->skb) {
+		axienet_dma_out32(lp, XAXIDMA_RX_SR_OFFSET,
+				  XAXIDMA_IRQ_IOC_MASK | XAXIDMA_IRQ_DELAY_MASK);
+		if (cur_p->status & XAXIDMA_BD_STS_COMPLETE_MASK)
+			return budget;
+	}
 
 	if (packets < budget && napi_complete_done(napi, packets)) {
 		if (READ_ONCE(lp->rx_dim_enabled)) {
