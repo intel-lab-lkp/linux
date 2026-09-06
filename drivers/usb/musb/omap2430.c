@@ -222,8 +222,15 @@ static int omap2430_musb_init(struct musb *musb)
 		return PTR_ERR(musb->phy);
 	}
 	musb->isr = omap2430_musb_interrupt;
-	phy_init(musb->phy);
-	phy_power_on(musb->phy);
+	status = phy_init(musb->phy);
+	if (status)
+		return status;
+
+	status = phy_power_on(musb->phy);
+	if (status) {
+		phy_exit(musb->phy);
+		return status;
+	}
 
 	l = musb_readl(musb->mregs, OTG_INTERFSEL);
 
