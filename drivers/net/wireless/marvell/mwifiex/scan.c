@@ -2137,11 +2137,18 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 	bss_info = scan_rsp->bss_desc_and_tlv_buffer;
 
 	/*
-	 * The size of the TLV buffer is equal to the entire command response
-	 *   size (scan_resp_size) minus the fixed fields (sizeof()'s), the
-	 *   BSS Descriptions (bss_descript_size as bytesLef) and the command
-	 *   response header (S_DS_GEN)
+	 * Validate that bss_descript_size fits within the response to
+	 * prevent an underflow in the TLV buffer size computation below.
 	 */
+	if (bytes_left + sizeof(scan_rsp->bss_descript_size) +
+	    sizeof(scan_rsp->number_of_sets) + S_DS_GEN > scan_resp_size) {
+		mwifiex_dbg(adapter, ERROR,
+			    "SCAN_RESP: bss_descript_size %u exceeds resp size %u\n",
+			    bytes_left, scan_resp_size);
+		ret = -1;
+		goto check_next_scan;
+	}
+
 	tlv_buf_size = scan_resp_size - (bytes_left
 					 + sizeof(scan_rsp->bss_descript_size)
 					 + sizeof(scan_rsp->number_of_sets)
@@ -2158,12 +2165,24 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 					     (struct mwifiex_ie_types_data **)
 					     &tsf_tlv);
 
+	/* Validate TSF TLV has enough data for all reported BSS entries */
+	if (tsf_tlv &&
+	    le16_to_cpu(tsf_tlv->header.len) <
+	    scan_rsp->number_of_sets * TSF_DATA_SIZE)
+		tsf_tlv = NULL;
+
 	/* Search the TLV buffer space in the scan response for any valid
 	   TLVs */
 	mwifiex_ret_802_11_scan_get_tlv_ptrs(adapter, tlv_data, tlv_buf_size,
 					     TLV_TYPE_CHANNELBANDLIST,
 					     (struct mwifiex_ie_types_data **)
 					     &chan_band_tlv);
+
+	/* Validate chan-band TLV has enough entries for all reported BSS */
+	if (chan_band_tlv &&
+	    le16_to_cpu(chan_band_tlv->header.len) <
+	    scan_rsp->number_of_sets * sizeof(struct chan_band_param_set))
+		chan_band_tlv = NULL;
 
 #ifdef CONFIG_PM
 	if (priv->wdev.wiphy->wowlan_config)
