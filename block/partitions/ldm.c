@@ -673,6 +673,7 @@ static u64 ldm_get_vnum (const u8 *block)
 /**
  * ldm_get_vstr - Read a length-prefixed string into a buffer
  * @block:   Pointer to the length marker
+ * @blocklen: Number of bytes available at @block
  * @buffer:  Location to copy string to
  * @buflen:  Size of the output buffer
  *
@@ -680,20 +681,27 @@ static u64 ldm_get_vnum (const u8 *block)
  * they are prefixed by a one byte length marker.  This function copies one of
  * these strings into a buffer.
  *
- * N.B.  This function DOES NOT perform any range checking on the input.
- *       If the buffer is too small, the output will be truncated.
+ * N.B.  The string is clamped to both @blocklen and @buflen; if either
+ *       is too small the output will be truncated.
  *
  * Return:  0, Error and @buffer contents are undefined
  *          n, String length in characters (excluding NULL)
  *          buflen-1, String was truncated.
  */
-static int ldm_get_vstr (const u8 *block, u8 *buffer, int buflen)
+static int ldm_get_vstr(const u8 *block, int blocklen, u8 *buffer, int buflen)
 {
 	int length;
 
 	BUG_ON (!block || !buffer);
 
+	if (blocklen < 1) {
+		buffer[0] = '\0';
+		return 0;
+	}
+
 	length = block[0];
+	if (length > blocklen - 1)
+		length = blocklen - 1;
 	if (length >= buflen) {
 		ldm_error ("Truncating string %d -> %d.", length, buflen);
 		length = buflen - 1;
@@ -744,8 +752,8 @@ static bool ldm_parse_cmp3 (const u8 *buffer, int buflen, struct vblk *vb)
 		return false;
 
 	comp = &vb->vblk.comp;
-	ldm_get_vstr (buffer + 0x18 + r_name, comp->state,
-		sizeof (comp->state));
+	ldm_get_vstr(buffer + 0x18 + r_name, buflen - (0x18 + r_name),
+		comp->state, sizeof(comp->state));
 	comp->type      = buffer[0x18 + r_vstate];
 	comp->children  = ldm_get_vnum (buffer + 0x1D + r_vstate);
 	comp->parent_id = ldm_get_vnum (buffer + 0x2D + r_child);
@@ -790,8 +798,8 @@ static int ldm_parse_dgr3 (const u8 *buffer, int buflen, struct vblk *vb)
 		return false;
 
 	dgrp = &vb->vblk.dgrp;
-	ldm_get_vstr (buffer + 0x18 + r_name, dgrp->disk_id,
-		sizeof (dgrp->disk_id));
+	ldm_get_vstr(buffer + 0x18 + r_name, buflen - (0x18 + r_name),
+		dgrp->disk_id, sizeof(dgrp->disk_id));
 	return true;
 }
 
@@ -829,7 +837,8 @@ static bool ldm_parse_dgr4 (const u8 *buffer, int buflen, struct vblk *vb)
 	if (len != get_unaligned_be32(buffer + 0x14))
 		return false;
 
-	ldm_get_vstr (buffer + 0x18 + r_objid, buf, sizeof (buf));
+	ldm_get_vstr(buffer + 0x18 + r_objid, buflen - (0x18 + r_objid),
+		buf, sizeof(buf));
 	return true;
 }
 
@@ -864,8 +873,8 @@ static bool ldm_parse_dsk3 (const u8 *buffer, int buflen, struct vblk *vb)
 		return false;
 
 	disk = &vb->vblk.disk;
-	ldm_get_vstr (buffer + 0x18 + r_diskid, disk->alt_name,
-		sizeof (disk->alt_name));
+	ldm_get_vstr(buffer + 0x18 + r_diskid, buflen - (0x18 + r_diskid),
+		disk->alt_name, sizeof(disk->alt_name));
 	if (uuid_parse(buffer + 0x19 + r_name, &disk->disk_id))
 		return false;
 
@@ -1072,16 +1081,16 @@ static bool ldm_parse_vol5(const u8 *buffer, int buflen, struct vblk *vb)
 		return false;
 	}
 	volu = &vb->vblk.volu;
-	ldm_get_vstr(buffer + 0x18 + r_name, volu->volume_type,
-			sizeof(volu->volume_type));
+	ldm_get_vstr(buffer + 0x18 + r_name, buflen - (0x18 + r_name),
+			volu->volume_type, sizeof(volu->volume_type));
 	memcpy(volu->volume_state, buffer + 0x18 + r_disable_drive_letter,
 			sizeof(volu->volume_state));
 	volu->size = ldm_get_vnum(buffer + 0x3D + r_child);
 	volu->partition_type = buffer[0x41 + r_size];
 	memcpy(volu->guid, buffer + 0x42 + r_size, sizeof(volu->guid));
 	if (buffer[0x12] & VBLK_FLAG_VOLU_DRIVE) {
-		ldm_get_vstr(buffer + 0x52 + r_size, volu->drive_hint,
-				sizeof(volu->drive_hint));
+		ldm_get_vstr(buffer + 0x52 + r_size, buflen - (0x52 + r_size),
+				volu->drive_hint, sizeof(volu->drive_hint));
 	}
 	return true;
 }
@@ -1115,7 +1124,8 @@ static bool ldm_parse_vblk (const u8 *buf, int len, struct vblk *vb)
 	vb->flags  = buf[0x12];
 	vb->type   = buf[0x13];
 	vb->obj_id = ldm_get_vnum (buf + 0x18);
-	ldm_get_vstr (buf+0x18+r_objid, vb->name, sizeof (vb->name));
+	ldm_get_vstr(buf + 0x18 + r_objid, len - (0x18 + r_objid),
+		vb->name, sizeof(vb->name));
 
 	switch (vb->type) {
 		case VBLK_CMP3:  result = ldm_parse_cmp3 (buf, len, vb); break;
