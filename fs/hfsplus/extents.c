@@ -458,6 +458,15 @@ int hfsplus_file_extend(struct inode *inode, bool zeroout)
 	if (hip->alloc_blocks == hip->first_blocks)
 		goal = hfsplus_ext_lastblock(hip->first_extents);
 	else {
+		/*
+		 * The extents overflow file can't have overflow extents of
+		 * its own; growing it here would re-enter hfs_find_init()
+		 * on the extents tree, whose tree_lock is already held.
+		 */
+		if (inode->i_ino == HFSPLUS_EXT_CNID) {
+			res = -EIO;
+			goto out;
+		}
 		res = hfsplus_ext_read_extent(inode, hip->alloc_blocks);
 		if (res)
 			goto out;
