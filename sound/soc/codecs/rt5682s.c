@@ -2907,9 +2907,12 @@ static int rt5682s_suspend(struct snd_soc_component *component)
 static int rt5682s_resume(struct snd_soc_component *component)
 {
 	struct rt5682s_priv *rt5682s = snd_soc_component_get_drvdata(component);
+	int ret;
 
 	regcache_cache_only(rt5682s->regmap, false);
-	regcache_sync(rt5682s->regmap);
+	ret = regcache_sync(rt5682s->regmap);
+	if (ret)
+		return ret;
 
 	if (rt5682s->hs_jack) {
 		mod_delayed_work(system_power_efficient_wq,
