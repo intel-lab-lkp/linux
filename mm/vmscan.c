@@ -362,6 +362,23 @@ static bool can_demote(int nid, struct scan_control *sc,
 	return !nodes_empty(allowed_mask);
 }
 
+static inline bool reclaimable_anon_is_low(struct mem_cgroup *memcg,
+		int nid, struct scan_control *sc)
+{
+	struct lruvec *lruvec;
+	unsigned long anon_pages, swapcache;
+
+	if (!sc || (sc->gfp_mask & __GFP_IO))
+		return false;
+
+	lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
+	anon_pages = lruvec_page_state(lruvec, NR_INACTIVE_ANON) +
+		     lruvec_page_state(lruvec, NR_ACTIVE_ANON);
+	swapcache = lruvec_page_state(lruvec, NR_SWAPCACHE);
+
+	return swapcache < (anon_pages >> 6);
+}
+
 static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 					  int nid,
 					  struct scan_control *sc)
@@ -371,11 +388,13 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 		 * For non-memcg reclaim, is there
 		 * space in any swap device?
 		 */
-		if (get_nr_swap_pages() > 0)
+		if (get_nr_swap_pages() > 0 &&
+		    !reclaimable_anon_is_low(memcg, nid, sc))
 			return true;
 	} else {
 		/* Is the memcg below its swap limit? */
-		if (mem_cgroup_get_nr_swap_pages(memcg) > 0)
+		if (mem_cgroup_get_nr_swap_pages(memcg) > 0 &&
+		    !reclaimable_anon_is_low(memcg, nid, sc))
 			return true;
 	}
 
