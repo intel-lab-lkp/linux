@@ -91,13 +91,12 @@ MODULE_ALIAS_LDISC(N_PPP);
  * Prototypes.
  */
 static int ppp_async_encode(struct asyncppp *ap);
-static int ppp_async_send(struct ppp_channel *chan, struct sk_buff *skb);
+static int ppp_async_send(void *private, struct sk_buff *skb);
 static int ppp_async_push(struct asyncppp *ap);
 static void ppp_async_flush_output(struct asyncppp *ap);
 static void ppp_async_input(struct asyncppp *ap, const unsigned char *buf,
 			    const u8 *flags, int count);
-static int ppp_async_ioctl(struct ppp_channel *chan, unsigned int cmd,
-			   unsigned long arg);
+static int ppp_async_ioctl(void *private, unsigned int cmd, unsigned long arg);
 static void ppp_async_process(struct tasklet_struct *t);
 
 static void async_lcp_peek(struct asyncppp *ap, unsigned char *data,
@@ -321,10 +320,10 @@ ppp_async_init(void)
  * The following routines provide the PPP channel interface.
  */
 static int
-ppp_async_ioctl(struct ppp_channel *chan, unsigned int cmd, unsigned long arg)
+ppp_async_ioctl(void *private, unsigned int cmd, unsigned long arg)
 {
-	struct asyncppp *ap = chan->private;
 	void __user *argp = (void __user *)arg;
+	struct asyncppp *ap = private;
 	int __user *p = argp;
 	int err, val;
 	u32 accm[8];
@@ -550,9 +549,9 @@ ppp_async_encode(struct asyncppp *ap)
  * at some later time.
  */
 static int
-ppp_async_send(struct ppp_channel *chan, struct sk_buff *skb)
+ppp_async_send(void *private, struct sk_buff *skb)
 {
-	struct asyncppp *ap = chan->private;
+	struct asyncppp *ap = private;
 
 	ppp_async_push(ap);
 

@@ -122,7 +122,7 @@ struct pppol2tp_session {
 	struct sock		*__sk;		/* Copy of .sk, for cleanup */
 };
 
-static int pppol2tp_xmit(struct ppp_channel *chan, struct sk_buff *skb);
+static int pppol2tp_xmit(void *private, struct sk_buff *skb);
 
 static const struct ppp_channel_ops pppol2tp_chan_ops = {
 	.start_xmit =  pppol2tp_xmit,
@@ -327,11 +327,11 @@ error:
  * the skb it supplied, not our cloned skb. So we take care to always
  * leave the original skb unfreed if we return an error.
  */
-static int pppol2tp_xmit(struct ppp_channel *chan, struct sk_buff *skb)
+static int pppol2tp_xmit(void *private, struct sk_buff *skb)
 {
-	struct sock *sk = (struct sock *)chan->private;
 	struct l2tp_session *session;
 	struct l2tp_tunnel *tunnel;
+	struct sock *sk = private;
 	int uhlen, headroom;
 
 	if (sock_flag(sk, SOCK_DEAD) || !(sk->sk_state & PPPOX_CONNECTED))

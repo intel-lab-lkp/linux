@@ -841,9 +841,9 @@ end:
  * sends PPP frame over PPPoE socket
  *
  ***********************************************************************/
-static int pppoe_xmit(struct ppp_channel *chan, struct sk_buff *skb)
+static int pppoe_xmit(void *private, struct sk_buff *skb)
 {
-	struct sock *sk = chan->private;
+	struct sock *sk = private;
 	struct pppox_sock *po = pppox_sk(sk);
 	struct net_device *dev = po->pppoe_dev;
 	struct pppoe_hdr *ph;
@@ -895,9 +895,9 @@ abort:
 
 static int pppoe_fill_forward_path(struct net_device_path_ctx *ctx,
 				   struct net_device_path *path,
-				   const struct ppp_channel *chan)
+				   void *private)
 {
-	struct sock *sk = chan->private;
+	struct sock *sk = private;
 	struct pppox_sock *po = pppox_sk(sk);
 	struct net_device *dev = po->pppoe_dev;
 

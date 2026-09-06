@@ -91,11 +91,6 @@ static inline struct pppoatm_vcc *atmvcc_to_pvcc(const struct atm_vcc *atmvcc)
 	return (struct pppoatm_vcc *) (atmvcc->user_back);
 }
 
-static inline struct pppoatm_vcc *chan_to_pvcc(const struct ppp_channel *chan)
-{
-	return (struct pppoatm_vcc *) (chan->private);
-}
-
 /*
  * We can't do this directly from our _pop handler, since the ppp code
  * doesn't want to be called in interrupt context, so we do it from
@@ -286,9 +281,9 @@ static int pppoatm_may_send(struct pppoatm_vcc *pvcc, int size)
  * as success, just to be clear what we're really doing.
  */
 #define DROP_PACKET 1
-static int pppoatm_send(struct ppp_channel *chan, struct sk_buff *skb)
+static int pppoatm_send(void *private, struct sk_buff *skb)
 {
-	struct pppoatm_vcc *pvcc = chan_to_pvcc(chan);
+	struct pppoatm_vcc *pvcc = private;
 	struct atm_vcc *vcc;
 	int ret;
 
@@ -366,16 +361,16 @@ nospace:
 }
 
 /* This handles ioctls sent to the /dev/ppp interface */
-static int pppoatm_devppp_ioctl(struct ppp_channel *chan, unsigned int cmd,
-	unsigned long arg)
+static int pppoatm_devppp_ioctl(void *private, unsigned int cmd,
+				unsigned long arg)
 {
+	struct pppoatm_vcc *pvcc = private;
+
 	switch (cmd) {
 	case PPPIOCGFLAGS:
-		return put_user(chan_to_pvcc(chan)->flags, (int __user *) arg)
-		    ? -EFAULT : 0;
+		return put_user(pvcc->flags, (int __user *)arg) ? -EFAULT : 0;
 	case PPPIOCSFLAGS:
-		return get_user(chan_to_pvcc(chan)->flags, (int __user *) arg)
-		    ? -EFAULT : 0;
+		return get_user(pvcc->flags, (int __user *)arg) ? -EFAULT : 0;
 	}
 	return -ENOTTY;
 }

@@ -146,9 +146,9 @@ static struct rtable *pptp_route_output(const struct pppox_sock *po,
 	return ip_route_output_flow(net, fl4, sk);
 }
 
-static int pptp_xmit(struct ppp_channel *chan, struct sk_buff *skb)
+static int pptp_xmit(void *private, struct sk_buff *skb)
 {
-	struct sock *sk = chan->private;
+	struct sock *sk = private;
 	struct pppox_sock *po = pppox_sk(sk);
 	struct net *net = sock_net(sk);
 	struct pptp_opt *opt = &po->proto.pptp;
@@ -573,10 +573,9 @@ out:
 	return error;
 }
 
-static int pptp_ppp_ioctl(struct ppp_channel *chan, unsigned int cmd,
-	unsigned long arg)
+static int pptp_ppp_ioctl(void *private, unsigned int cmd, unsigned long arg)
 {
-	struct sock *sk = chan->private;
+	struct sock *sk = private;
 	struct pppox_sock *po = pppox_sk(sk);
 	struct pptp_opt *opt = &po->proto.pptp;
 	void __user *argp = (void __user *)arg;
