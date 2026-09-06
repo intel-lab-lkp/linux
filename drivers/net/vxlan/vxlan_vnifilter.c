@@ -478,24 +478,25 @@ static const struct nla_policy vni_filter_policy[VXLAN_VNIFILTER_MAX + 1] = {
 };
 
 static int vxlan_update_default_fdb_entry(struct vxlan_dev *vxlan, __be32 vni,
-					  union vxlan_addr *old_remote_ip,
-					  union vxlan_addr *remote_ip,
+					  const union vxlan_addr *old_remote_ip,
+					  const union vxlan_addr *remote_ip,
 					  struct netlink_ext_ack *extack)
 {
 	const struct vxlan_config *cfg = rtnl_dereference(vxlan->cfg);
-	struct vxlan_rdst *dst = &vxlan->default_dst;
 	int err = 0;
 
 	spin_lock_bh(&vxlan->hash_lock);
 	if (remote_ip && !vxlan_addr_any(remote_ip)) {
+		union vxlan_addr rip = *remote_ip;
+
 		err = vxlan_fdb_update(vxlan, all_zeros_mac,
-				       remote_ip,
+				       &rip,
 				       NUD_REACHABLE | NUD_PERMANENT,
 				       NLM_F_APPEND | NLM_F_CREATE,
 				       cfg->dst_port,
 				       vni,
 				       vni,
-				       dst->remote_ifindex,
+				       cfg->remote_ifindex,
 				       NTF_SELF, 0, true, extack);
 		if (err) {
 			spin_unlock_bh(&vxlan->hash_lock);
@@ -508,7 +509,7 @@ static int vxlan_update_default_fdb_entry(struct vxlan_dev *vxlan, __be32 vni,
 				   *old_remote_ip,
 				   cfg->dst_port,
 				   vni, vni,
-				   dst->remote_ifindex,
+				   cfg->remote_ifindex,
 				   true);
 	}
 	spin_unlock_bh(&vxlan->hash_lock);
@@ -523,8 +524,8 @@ static int vxlan_vni_update_group(struct vxlan_dev *vxlan,
 				  struct netlink_ext_ack *extack)
 {
 	struct vxlan_net *vn = net_generic(vxlan->net, vxlan_net_id);
-	struct vxlan_rdst *dst = &vxlan->default_dst;
-	union vxlan_addr *newrip = NULL, *oldrip = NULL;
+	const struct vxlan_config *cfg = rtnl_dereference(vxlan->cfg);
+	const union vxlan_addr *newrip = NULL, *oldrip = NULL;
 	union vxlan_addr old_remote_ip;
 	int ret = 0;
 
@@ -536,8 +537,8 @@ static int vxlan_vni_update_group(struct vxlan_dev *vxlan,
 	if (group && !vxlan_addr_any(group)) {
 		newrip = group;
 	} else {
-		if (!vxlan_addr_any(&dst->remote_ip))
-			newrip = &dst->remote_ip;
+		if (!vxlan_addr_any(&cfg->remote_ip))
+			newrip = &cfg->remote_ip;
 	}
 
 	/* if old rip exists, and no newrip,
@@ -565,7 +566,7 @@ static int vxlan_vni_update_group(struct vxlan_dev *vxlan,
 		if (vxlan_addr_multicast(&old_remote_ip) &&
 		    !vxlan_group_used(vn, vxlan, vninode->vni,
 				      &old_remote_ip,
-				      vxlan->default_dst.remote_ifindex)) {
+				      cfg->remote_ifindex)) {
 			ret = vxlan_igmp_leave(vxlan, &old_remote_ip,
 					       0);
 			if (ret)
@@ -589,8 +590,8 @@ out:
 }
 
 int vxlan_vnilist_update_group(struct vxlan_dev *vxlan,
-			       union vxlan_addr *old_remote_ip,
-			       union vxlan_addr *new_remote_ip,
+			       const union vxlan_addr *old_remote_ip,
+			       const union vxlan_addr *new_remote_ip,
 			       struct netlink_ext_ack *extack)
 {
 	struct list_head *headp, *hpos;
@@ -621,20 +622,19 @@ static void vxlan_vni_delete_group(struct vxlan_dev *vxlan,
 {
 	struct vxlan_net *vn = net_generic(vxlan->net, vxlan_net_id);
 	const struct vxlan_config *cfg = rtnl_dereference(vxlan->cfg);
-	struct vxlan_rdst *dst = &vxlan->default_dst;
 
 	/* if per vni remote_ip not present, delete the
 	 * default dst remote_ip previously added for this vni
 	 */
 	if (!vxlan_addr_any(&vninode->remote_ip) ||
-	    !vxlan_addr_any(&dst->remote_ip)) {
+	    !vxlan_addr_any(&cfg->remote_ip)) {
 		spin_lock_bh(&vxlan->hash_lock);
 		__vxlan_fdb_delete(vxlan, all_zeros_mac,
 				   (vxlan_addr_any(&vninode->remote_ip) ?
-				   dst->remote_ip : vninode->remote_ip),
+				   cfg->remote_ip : vninode->remote_ip),
 				   cfg->dst_port,
 				   vninode->vni, vninode->vni,
-				   dst->remote_ifindex,
+				   cfg->remote_ifindex,
 				   true);
 		spin_unlock_bh(&vxlan->hash_lock);
 	}
@@ -643,7 +643,7 @@ static void vxlan_vni_delete_group(struct vxlan_dev *vxlan,
 		if (vxlan_addr_multicast(&vninode->remote_ip) &&
 		    !vxlan_group_used(vn, vxlan, vninode->vni,
 				      &vninode->remote_ip,
-				      dst->remote_ifindex)) {
+				      cfg->remote_ifindex)) {
 			vxlan_igmp_leave(vxlan, &vninode->remote_ip, 0);
 		}
 	}
@@ -854,6 +854,7 @@ static int vxlan_process_vni_filter(struct vxlan_dev *vxlan,
 				    int cmd, struct netlink_ext_ack *extack)
 {
 	struct nlattr *vattrs[VXLAN_VNIFILTER_ENTRY_MAX + 1];
+	const struct vxlan_config *cfg;
 	u32 vni_start = 0, vni_end = 0;
 	union vxlan_addr group;
 	int err;
@@ -891,7 +892,8 @@ static int vxlan_process_vni_filter(struct vxlan_dev *vxlan,
 		memset(&group, 0, sizeof(group));
 	}
 
-	if (vxlan_addr_multicast(&group) && !vxlan->default_dst.remote_ifindex) {
+	cfg = rtnl_dereference(vxlan->cfg);
+	if (vxlan_addr_multicast(&group) && !cfg->remote_ifindex) {
 		NL_SET_ERR_MSG(extack,
 			       "Local interface required for multicast remote group");
 
