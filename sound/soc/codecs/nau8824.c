@@ -1546,7 +1546,10 @@ static int __maybe_unused nau8824_resume(struct snd_soc_component *component)
 	int ret;
 
 	regcache_cache_only(nau8824->regmap, false);
-	regcache_sync(nau8824->regmap);
+	ret = regcache_sync(nau8824->regmap);
+	if (ret)
+		return ret;
+
 	if (nau8824->irq) {
 		/* Hold semaphore to postpone playback happening
 		 * until jack detection done.
