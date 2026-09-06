@@ -378,21 +378,21 @@ static void readahead_cache(struct inode *inode)
 static int io_ctl_init(struct btrfs_io_ctl *io_ctl, struct inode *inode,
 		       int write)
 {
-	int num_pages;
+	int num_folios;
 
-	num_pages = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
+	num_folios = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
 
 	/* Make sure we can fit our crcs and generation into the first page */
-	if (write && (num_pages * sizeof(u32) + sizeof(u64)) > PAGE_SIZE)
+	if (write && (num_folios * sizeof(u32) + sizeof(u64)) > PAGE_SIZE)
 		return -ENOSPC;
 
 	memset(io_ctl, 0, sizeof(struct btrfs_io_ctl));
 
-	io_ctl->pages = kzalloc_objs(struct page *, num_pages, GFP_NOFS);
-	if (!io_ctl->pages)
+	io_ctl->folios = kzalloc_objs(struct folio *, num_folios, GFP_NOFS);
+	if (!io_ctl->folios)
 		return -ENOMEM;
 
-	io_ctl->num_pages = num_pages;
+	io_ctl->num_folios = num_folios;
 	io_ctl->fs_info = inode_to_fs_info(inode);
 	io_ctl->inode = inode;
 
@@ -402,8 +402,8 @@ ALLOW_ERROR_INJECTION(io_ctl_init, ERRNO);
 
 static void io_ctl_free(struct btrfs_io_ctl *io_ctl)
 {
-	kfree(io_ctl->pages);
-	io_ctl->pages = NULL;
+	kfree(io_ctl->folios);
+	io_ctl->folios = NULL;
 }
 
 static void io_ctl_unmap_page(struct btrfs_io_ctl *io_ctl)
@@ -416,9 +416,9 @@ static void io_ctl_unmap_page(struct btrfs_io_ctl *io_ctl)
 
 static void io_ctl_map_page(struct btrfs_io_ctl *io_ctl, int clear)
 {
-	ASSERT(io_ctl->index < io_ctl->num_pages);
-	io_ctl->page = io_ctl->pages[io_ctl->index++];
-	io_ctl->cur = page_address(io_ctl->page);
+	ASSERT(io_ctl->index < io_ctl->num_folios);
+	io_ctl->folio = io_ctl->folios[io_ctl->index++];
+	io_ctl->cur = folio_address(io_ctl->folio);
 	io_ctl->orig = io_ctl->cur;
 	io_ctl->size = PAGE_SIZE;
 	if (clear)
@@ -431,10 +431,10 @@ static void io_ctl_drop_pages(struct btrfs_io_ctl *io_ctl)
 
 	io_ctl_unmap_page(io_ctl);
 
-	for (i = 0; i < io_ctl->num_pages; i++) {
-		if (io_ctl->pages[i]) {
-			unlock_page(io_ctl->pages[i]);
-			put_page(io_ctl->pages[i]);
+	for (i = 0; i < io_ctl->num_folios; i++) {
+		if (io_ctl->folios[i]) {
+			folio_unlock(io_ctl->folios[i]);
+			folio_put(io_ctl->folios[i]);
 		}
 	}
 }
@@ -446,7 +446,7 @@ static int io_ctl_prepare_pages(struct btrfs_io_ctl *io_ctl, bool uptodate)
 	gfp_t mask = btrfs_alloc_write_mask(inode->i_mapping);
 	int i;
 
-	for (i = 0; i < io_ctl->num_pages; i++) {
+	for (i = 0; i < io_ctl->num_folios; i++) {
 		int ret;
 
 		folio = __filemap_get_folio(inode->i_mapping, i,
@@ -465,7 +465,7 @@ static int io_ctl_prepare_pages(struct btrfs_io_ctl *io_ctl, bool uptodate)
 			return ret;
 		}
 
-		io_ctl->pages[i] = &folio->page;
+		io_ctl->folios[i] = folio;
 		if (uptodate && !folio_test_uptodate(folio)) {
 			btrfs_read_folio(NULL, folio);
 			folio_lock(folio);
@@ -484,8 +484,8 @@ static int io_ctl_prepare_pages(struct btrfs_io_ctl *io_ctl, bool uptodate)
 		}
 	}
 
-	for (i = 0; i < io_ctl->num_pages; i++)
-		clear_page_dirty_for_io(io_ctl->pages[i]);
+	for (i = 0; i < io_ctl->num_folios; i++)
+		folio_clear_dirty_for_io(io_ctl->folios[i]);
 
 	return 0;
 }
@@ -498,8 +498,8 @@ static void io_ctl_set_generation(struct btrfs_io_ctl *io_ctl, u64 generation)
 	 * Skip the csum areas.  If we don't check crcs then we just have a
 	 * 64bit chunk at the front of the first page.
 	 */
-	io_ctl->cur += (sizeof(u32) * io_ctl->num_pages);
-	io_ctl->size -= sizeof(u64) + (sizeof(u32) * io_ctl->num_pages);
+	io_ctl->cur += (sizeof(u32) * io_ctl->num_folios);
+	io_ctl->size -= sizeof(u64) + (sizeof(u32) * io_ctl->num_folios);
 
 	put_unaligned_le64(generation, io_ctl->cur);
 	io_ctl->cur += sizeof(u64);
@@ -513,8 +513,8 @@ static int io_ctl_check_generation(struct btrfs_io_ctl *io_ctl, u64 generation)
 	 * Skip the crc area.  If we don't check crcs then we just have a 64bit
 	 * chunk at the front of the first page.
 	 */
-	io_ctl->cur += sizeof(u32) * io_ctl->num_pages;
-	io_ctl->size -= sizeof(u64) + (sizeof(u32) * io_ctl->num_pages);
+	io_ctl->cur += sizeof(u32) * io_ctl->num_folios;
+	io_ctl->size -= sizeof(u64) + (sizeof(u32) * io_ctl->num_folios);
 
 	cache_gen = get_unaligned_le64(io_ctl->cur);
 	if (cache_gen != generation) {
@@ -535,12 +535,12 @@ static void io_ctl_set_crc(struct btrfs_io_ctl *io_ctl, int index)
 	unsigned offset = 0;
 
 	if (index == 0)
-		offset = sizeof(u32) * io_ctl->num_pages;
+		offset = sizeof(u32) * io_ctl->num_folios;
 
 	crc = crc32c(crc, io_ctl->orig + offset, PAGE_SIZE - offset);
 	btrfs_crc32c_final(crc, (u8 *)&crc);
 	io_ctl_unmap_page(io_ctl);
-	tmp = page_address(io_ctl->pages[0]);
+	tmp = folio_address(io_ctl->folios[0]);
 	tmp += index;
 	*tmp = crc;
 }
@@ -551,13 +551,13 @@ static int io_ctl_check_crc(struct btrfs_io_ctl *io_ctl, int index)
 	u32 crc = ~(u32)0;
 	unsigned offset = 0;
 
-	if (index >= io_ctl->num_pages)
+	if (index >= io_ctl->num_folios)
 		return -EIO;
 
 	if (index == 0)
-		offset = sizeof(u32) * io_ctl->num_pages;
+		offset = sizeof(u32) * io_ctl->num_folios;
 
-	tmp = page_address(io_ctl->pages[0]);
+	tmp = folio_address(io_ctl->folios[0]);
 	tmp += index;
 	val = *tmp;
 
@@ -596,7 +596,7 @@ static int io_ctl_add_entry(struct btrfs_io_ctl *io_ctl, u64 offset, u64 bytes,
 	io_ctl_set_crc(io_ctl, io_ctl->index - 1);
 
 	/* No more pages to map */
-	if (io_ctl->index >= io_ctl->num_pages)
+	if (io_ctl->index >= io_ctl->num_folios)
 		return 0;
 
 	/* map the next page */
@@ -615,14 +615,14 @@ static int io_ctl_add_bitmap(struct btrfs_io_ctl *io_ctl, void *bitmap)
 	 */
 	if (io_ctl->cur != io_ctl->orig) {
 		io_ctl_set_crc(io_ctl, io_ctl->index - 1);
-		if (io_ctl->index >= io_ctl->num_pages)
+		if (io_ctl->index >= io_ctl->num_folios)
 			return -ENOSPC;
 		io_ctl_map_page(io_ctl, 0);
 	}
 
 	copy_page(io_ctl->cur, bitmap);
 	io_ctl_set_crc(io_ctl, io_ctl->index - 1);
-	if (io_ctl->index < io_ctl->num_pages)
+	if (io_ctl->index < io_ctl->num_folios)
 		io_ctl_map_page(io_ctl, 0);
 	return 0;
 }
@@ -638,7 +638,7 @@ static void io_ctl_zero_remaining_pages(struct btrfs_io_ctl *io_ctl)
 	else
 		io_ctl_unmap_page(io_ctl);
 
-	while (io_ctl->index < io_ctl->num_pages) {
+	while (io_ctl->index < io_ctl->num_folios) {
 		io_ctl_map_page(io_ctl, 1);
 		io_ctl_set_crc(io_ctl, io_ctl->index - 1);
 	}
@@ -1382,7 +1382,7 @@ static int __btrfs_write_out_cache(struct inode *inode,
 	if (!i_size_read(inode))
 		return -EIO;
 
-	WARN_ON(io_ctl->pages);
+	WARN_ON(io_ctl->folios);
 	ret = io_ctl_init(io_ctl, inode, 1);
 	if (ret)
 		return ret;
@@ -1452,7 +1452,7 @@ static int __btrfs_write_out_cache(struct inode *inode,
 		u64 dirty_start = i * PAGE_SIZE;
 		u64 dirty_len = min_t(u64, dirty_start + PAGE_SIZE, i_size) - dirty_start;
 
-		ret = btrfs_dirty_folio(BTRFS_I(inode), page_folio(io_ctl->pages[i]),
+		ret = btrfs_dirty_folio(BTRFS_I(inode), io_ctl->folios[i],
 					dirty_start, dirty_len, &cached_state, false);
 		if (ret < 0)
 			goto out_nospc;

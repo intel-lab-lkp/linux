@@ -14,7 +14,7 @@
 #include "fs.h"
 
 struct inode;
-struct page;
+struct folio;
 struct btrfs_fs_info;
 struct btrfs_path;
 struct btrfs_trans_handle;
@@ -90,13 +90,13 @@ struct btrfs_free_space_ctl {
 
 struct btrfs_io_ctl {
 	void *cur, *orig;
-	struct page *page;
-	struct page **pages;
+	struct folio *folio;
+	struct folio **folios;
 	struct btrfs_fs_info *fs_info;
 	struct inode *inode;
 	unsigned long size;
 	int index;
-	int num_pages;
+	int num_folios;
 	int entries;
 	int bitmaps;
 };
