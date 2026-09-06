@@ -775,6 +775,9 @@ static int fuse_uring_copy_from_ring(struct fuse_req *req,
 	if (err)
 		return err;
 
+	if (ring_in_out.payload_sz > ent->payload.iov_len)
+		return -EINVAL;
+
 	err = setup_fuse_copy_state(&cs, req, ent, ITER_SOURCE, &iter,
 				    issue_flags);
 	if (err)
@@ -854,6 +857,7 @@ static int fuse_uring_args_to_ring(struct fuse_req *req,
 	int num_args = args->in_numargs;
 	int err;
 	struct iov_iter iter;
+	size_t copy_size;
 	struct fuse_uring_ent_in_out ent_in_out = {
 		.flags = 0,
 		.commit_id = req->in.h.unique,
@@ -885,6 +889,16 @@ static int fuse_uring_args_to_ring(struct fuse_req *req,
 		}
 		in_args++;
 		num_args--;
+	}
+
+	copy_size = fuse_len_args(num_args, (struct fuse_arg *)in_args);
+	/* a zero-copied page arg does not consume the payload buffer */
+	if (cs.skip_folio_copy && args->in_pages && num_args)
+		copy_size -= in_args[num_args - 1].size;
+
+	if (copy_size > ent->payload.iov_len) {
+		fuse_copy_finish(&cs);
+		return args->opcode == FUSE_SETXATTR ? -E2BIG : -EIO;
 	}
 
 	/* copy the payload */
