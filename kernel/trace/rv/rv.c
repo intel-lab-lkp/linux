@@ -803,6 +803,11 @@ int rv_unregister_monitor(struct rv_monitor *monitor)
 	guard(mutex)(&rv_interface_lock);
 
 	rv_disable_monitor(monitor);
+#ifdef CONFIG_RV_REACTORS
+	if (monitor->reactor)
+		module_put(monitor->reactor->owner);
+
+#endif
 	list_del(&monitor->list);
 	destroy_monitor_dir(monitor);
 

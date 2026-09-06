@@ -62,6 +62,7 @@
  */
 
 #include <linux/lockdep.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 
 #include "rv.h"
@@ -159,7 +160,7 @@ static const struct seq_operations monitor_reactors_seq_ops = {
 	.show	= monitor_reactor_show
 };
 
-static void monitor_swap_reactors_single(struct rv_monitor *mon,
+static int monitor_swap_reactors_single(struct rv_monitor *mon,
 					 struct rv_reactor *reactor,
 					 bool nested)
 {
@@ -167,29 +168,39 @@ static void monitor_swap_reactors_single(struct rv_monitor *mon,
 
 	/* nothing to do */
 	if (mon->reactor == reactor)
-		return;
+		return 0;
+
+	if (reactor->owner && !try_module_get(reactor->owner))
+		return -EBUSY;
 
 	monitor_enabled = mon->enabled;
 	if (monitor_enabled)
 		rv_disable_monitor(mon);
 
+	if (mon->reactor)
+		module_put(mon->reactor->owner);
 	mon->reactor = reactor;
 	mon->react = reactor->react;
 
 	/* enable only once if iterating through a container */
 	if (monitor_enabled && !nested)
 		rv_enable_monitor(mon);
+
+	return 0;
 }
 
-static void monitor_swap_reactors(struct rv_monitor *mon, struct rv_reactor *reactor)
+static int monitor_swap_reactors(struct rv_monitor *mon, struct rv_reactor *reactor)
 {
 	struct rv_monitor *p = mon;
+	int ret;
 
 	if (rv_is_container_monitor(mon))
 		list_for_each_entry_continue(p, &rv_monitors_list, list) {
 			if (p->parent != mon)
 				break;
-			monitor_swap_reactors_single(p, reactor, true);
+			ret = monitor_swap_reactors_single(p, reactor, true);
+			if (ret)
+				return ret;
 		}
 	/*
 	 * This call enables and disables the monitor if they were active.
@@ -197,7 +208,7 @@ static void monitor_swap_reactors(struct rv_monitor *mon, struct rv_reactor *rea
 	 * All nested monitors are enabled also if they were off, we may refine
 	 * this logic in the future.
 	 */
-	monitor_swap_reactors_single(mon, reactor, false);
+	return monitor_swap_reactors_single(mon, reactor, false);
 }
 
 static ssize_t
@@ -236,10 +247,14 @@ monitor_reactors_write(struct file *file, const char __user *user_buf,
 	guard(mutex)(&rv_interface_lock);
 
 	list_for_each_entry(reactor, &rv_reactors_list, list) {
+		int ret;
+
 		if (strcmp(ptr, reactor->name) != 0)
 			continue;
 
-		monitor_swap_reactors(mon, reactor);
+		ret = monitor_swap_reactors(mon, reactor);
+		if (ret)
+			return ret;
 
 		return count;
 	}
@@ -314,6 +329,7 @@ int rv_register_reactor(struct rv_reactor *reactor)
 	guard(mutex)(&rv_interface_lock);
 	return __rv_register_reactor(reactor);
 }
+EXPORT_SYMBOL_GPL(rv_register_reactor);
 
 /**
  * rv_unregister_reactor - unregister a rv reactor.
@@ -327,6 +343,7 @@ int rv_unregister_reactor(struct rv_reactor *reactor)
 	list_del(&reactor->list);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(rv_unregister_reactor);
 
 /*
  * reacting_on interface.
@@ -421,6 +438,15 @@ int reactor_populate_monitor(struct rv_monitor *mon, struct dentry *root)
 	 * Configure as the rv_nop reactor.
 	 */
 	mon->reactor = get_reactor_rdef_by_name("nop");
+	if (WARN_ON(!mon->reactor)) {
+		rv_remove(tmp);
+		return -EINVAL;
+	}
+
+	if (mon->reactor->owner && !try_module_get(mon->reactor->owner)) {
+		rv_remove(tmp);
+		return -EBUSY;
+	}
 
 	return 0;
 }

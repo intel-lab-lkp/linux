@@ -128,10 +128,13 @@ union rv_task_monitor {
 };
 
 #ifdef CONFIG_RV_REACTORS
+struct module;
+
 struct rv_reactor {
 	const char		*name;
 	const char		*description;
 	__printf(1, 0) void	(*react)(const char *msg, va_list args);
+	struct module		*owner;
 	struct list_head	list;
 };
 #endif
