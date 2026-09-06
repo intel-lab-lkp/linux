@@ -940,15 +940,25 @@ static int wm8978_resume(struct snd_soc_component *component)
 {
 	struct wm8978_priv *wm8978 = snd_soc_component_get_drvdata(component);
 	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
+	int ret;
 
 	/* Sync reg_cache with the hardware */
-	regcache_sync(wm8978->regmap);
+	ret = regcache_sync(wm8978->regmap);
+	if (ret)
+		return ret;
 
-	snd_soc_dapm_force_bias_level(dapm, SND_SOC_BIAS_STANDBY);
+	ret = snd_soc_dapm_force_bias_level(dapm, SND_SOC_BIAS_STANDBY);
+	if (ret)
+		return ret;
 
-	if (wm8978->f_pllout)
+	if (wm8978->f_pllout) {
 		/* Switch PLL on */
-		snd_soc_component_update_bits(component, WM8978_POWER_MANAGEMENT_1, 0x20, 0x20);
+		ret = snd_soc_component_update_bits(component,
+						    WM8978_POWER_MANAGEMENT_1,
+						    0x20, 0x20);
+		if (ret < 0)
+			return ret;
+	}
 
 	return 0;
 }
