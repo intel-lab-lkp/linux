@@ -91,6 +91,7 @@ static int amanda_help(struct sk_buff *skb,
 	char pbuf[sizeof("65535")], *tmp;
 	u16 len;
 	__be16 port;
+	unsigned long tmp_port;
 	int ret = NF_ACCEPT;
 	nf_nat_amanda_hook_fn *nf_nat_amanda;
 
@@ -132,10 +133,11 @@ static int amanda_help(struct sk_buff *skb,
 			break;
 		pbuf[len] = '\0';
 
-		port = htons(simple_strtoul(pbuf, &tmp, 10));
+		tmp_port = simple_strtoul(pbuf, &tmp, 10);
 		len = tmp - pbuf;
-		if (port == 0 || len > 5)
+		if (tmp_port == 0 || tmp_port > 65535 || len > 5)
 			break;
+		port = htons(tmp_port);
 
 		exp = nf_ct_expect_alloc(ct);
 		if (exp == NULL) {
