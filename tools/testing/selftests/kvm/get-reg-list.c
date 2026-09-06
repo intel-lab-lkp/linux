@@ -189,7 +189,7 @@ static void run_test(struct vcpu_reg_list *c)
 				print_reg(config_name(c), id);
 		}
 		putchar('\n');
-		return;
+		goto free_reg_list;
 	}
 
 	for_each_sublist(c, s)
@@ -306,6 +306,8 @@ static void run_test(struct vcpu_reg_list *c)
 	pr_info("%s: PASS\n", config_name(c));
 	blessed_n = 0;
 	free(blessed_reg);
+
+free_reg_list:
 	free(reg_list);
 	kvm_vm_free(vm);
 }
