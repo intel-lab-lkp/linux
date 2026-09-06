@@ -11,6 +11,8 @@ use crate::{
     prelude::*, //
 };
 
+pub mod consumer;
+
 /// Describes GPIO direction.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]

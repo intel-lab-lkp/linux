@@ -26,6 +26,7 @@
  * This workaround may not be possible in some cases, depending on how the C
  * headers are set up.
  */
+#include <linux/gpio/consumer.h>
 #include <linux/hrtimer_types.h>
 
 #include <linux/acpi.h>
