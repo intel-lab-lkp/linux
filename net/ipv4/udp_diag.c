@@ -86,6 +86,11 @@ out_nosk:
 	return err;
 }
 
+/* Process a maximum of SKARR_SZ sockets at a time when walking hash buckets
+ * with bh disabled.
+ */
+#define SKARR_SZ 16
+
 static void udp_diag_dump(struct sk_buff *skb, struct netlink_callback *cb,
 			  const struct inet_diag_req_v2 *r)
 {
@@ -100,13 +105,18 @@ static void udp_diag_dump(struct sk_buff *skb, struct netlink_callback *cb,
 
 	for (slot = s_slot; slot <= table->mask; s_num = 0, slot++) {
 		struct udp_hslot *hslot = &table->hash[slot];
-		struct sock *sk;
+		struct sock *sk_arr[SKARR_SZ], *sk;
+		int num_arr[SKARR_SZ];
+		int idx, accum, res;
 
 		num = 0;
 
 		if (hlist_empty(&hslot->head))
 			continue;
 
+resume_walk:
+		num = 0;
+		accum = 0;
 		spin_lock_bh(&hslot->lock);
 		sk_for_each(sk, &hslot->head) {
 			struct inet_sock *inet = inet_sk(sk);
@@ -127,14 +137,35 @@ static void udp_diag_dump(struct sk_buff *skb, struct netlink_callback *cb,
 			    r->id.idiag_dport)
 				goto next;
 
-			if (sk_diag_dump(sk, skb, cb, r, net_admin) < 0) {
-				spin_unlock_bh(&hslot->lock);
-				goto done;
-			}
+			sock_hold(sk);
+			num_arr[accum] = num;
+			sk_arr[accum] = sk;
+			if (++accum == SKARR_SZ)
+				break;
 next:
 			num++;
 		}
 		spin_unlock_bh(&hslot->lock);
+
+		res = 0;
+		for (idx = 0; idx < accum; idx++) {
+			if (res >= 0) {
+				res = sk_diag_dump(sk_arr[idx], skb, cb, r,
+						   net_admin);
+				if (res < 0)
+					num = num_arr[idx];
+			}
+			sock_put(sk_arr[idx]);
+		}
+		if (res < 0)
+			goto done;
+
+		cond_resched();
+
+		if (accum == SKARR_SZ) {
+			s_num = num + 1;
+			goto resume_walk;
+		}
 	}
 done:
 	cb->args[0] = slot;
