@@ -3010,23 +3010,42 @@ static int rt5682_suspend(struct snd_soc_component *component)
 static int rt5682_resume(struct snd_soc_component *component)
 {
 	struct rt5682_priv *rt5682 = snd_soc_component_get_drvdata(component);
+	int ret;
 
 	if (rt5682->is_sdw)
 		return 0;
 
 	regcache_cache_only(rt5682->regmap, false);
-	regcache_sync(rt5682->regmap);
+	ret = regcache_sync(rt5682->regmap);
+	if (ret)
+		return ret;
 
 	if (rt5682->hs_jack && (rt5682->jack_type & SND_JACK_HEADSET) == SND_JACK_HEADSET) {
-		snd_soc_component_update_bits(component, RT5682_SAR_IL_CMD_1,
-			RT5682_SAR_BUTDET_MODE_MASK | RT5682_SAR_SEL_MB1_MB2_MASK,
-			RT5682_SAR_BUTDET_POW_NORM | RT5682_SAR_SEL_MB1_MB2_AUTO);
+		ret = snd_soc_component_update_bits(component,
+						    RT5682_SAR_IL_CMD_1,
+						    RT5682_SAR_BUTDET_MODE_MASK |
+						    RT5682_SAR_SEL_MB1_MB2_MASK,
+						    RT5682_SAR_BUTDET_POW_NORM |
+						    RT5682_SAR_SEL_MB1_MB2_AUTO);
+		if (ret < 0)
+			return ret;
+
 		usleep_range(5000, 6000);
-		snd_soc_component_update_bits(component, RT5682_CBJ_CTRL_1,
-			RT5682_MB1_PATH_MASK | RT5682_MB2_PATH_MASK,
-			RT5682_CTRL_MB1_FSM | RT5682_CTRL_MB2_FSM);
-		snd_soc_component_update_bits(component, RT5682_PWR_ANLG_3,
-			RT5682_PWR_CBJ, RT5682_PWR_CBJ);
+		ret = snd_soc_component_update_bits(component,
+						    RT5682_CBJ_CTRL_1,
+						    RT5682_MB1_PATH_MASK |
+						    RT5682_MB2_PATH_MASK,
+						    RT5682_CTRL_MB1_FSM |
+						    RT5682_CTRL_MB2_FSM);
+		if (ret < 0)
+			return ret;
+
+		ret = snd_soc_component_update_bits(component,
+						    RT5682_PWR_ANLG_3,
+						    RT5682_PWR_CBJ,
+						    RT5682_PWR_CBJ);
+		if (ret < 0)
+			return ret;
 	}
 
 	rt5682->jack_type = 0;
