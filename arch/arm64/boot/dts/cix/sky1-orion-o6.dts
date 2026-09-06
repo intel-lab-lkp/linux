@@ -117,3 +117,15 @@
 &uart2 {
 	status = "okay";
 };
+
+&usb3_phy4 {
+	status = "okay";
+
+	usb-port@0 {
+		status = "okay";
+	};
+
+	usb-port@1 {
+		status = "okay";
+	};
+};
