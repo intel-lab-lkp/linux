@@ -1286,8 +1286,11 @@ static int ams_get_ext_chan(struct fwnode_handle *chan_node,
 		if (ret || reg > AMS_PL_MAX_EXT_CHANNEL + 30)
 			continue;
 
-		chan = &channels[num_channels];
 		ext_chan = reg + AMS_PL_MAX_FIXED_CHANNEL - 30;
+		if (ext_chan >= ARRAY_SIZE(ams_pl_channels))
+			continue;
+
+		chan = &channels[num_channels];
 		memcpy(chan, &ams_pl_channels[ext_chan], sizeof(*channels));
 
 		if (fwnode_property_read_bool(child, "xlnx,bipolar"))
