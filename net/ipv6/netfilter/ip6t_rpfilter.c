@@ -72,9 +72,11 @@ static bool rpfilter_lookup_reverse6(struct net *net, const struct sk_buff *skb,
 		goto out;
 	}
 
-	if (rt->rt6i_idev->dev == dev ||
-	    l3mdev_master_ifindex_rcu(rt->rt6i_idev->dev) == dev->ifindex ||
-	    (flags & XT_RPFILTER_LOOSE))
+	if (flags & XT_RPFILTER_LOOSE)
+		ret = true;
+	else if (rt->rt6i_idev &&
+		 (rt->rt6i_idev->dev == dev ||
+		  l3mdev_master_ifindex_rcu(rt->rt6i_idev->dev) == dev->ifindex))
 		ret = true;
  out:
 	ip6_rt_put(rt);
