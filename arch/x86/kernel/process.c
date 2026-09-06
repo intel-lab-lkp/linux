@@ -204,7 +204,7 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 		set_bit(MM_CONTEXT_LOCK_LAM, &p->mm->context.flags);
 #else
 	p->thread.sp0 = (unsigned long) (childregs + 1);
-	savesegment(gs, p->thread.gs);
+	savesegment(gs, p->thread.gsindex);
 	/*
 	 * Clear all status flags including IF and set fixed bit. 64bit
 	 * does not have this initialization as the frame does not contain
