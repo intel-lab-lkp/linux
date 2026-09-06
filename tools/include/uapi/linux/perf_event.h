@@ -629,8 +629,10 @@ struct perf_event_mmap_page {
 	 *     barrier();
 	 *   } while (pc->lock != seq);
 	 *
-	 * NOTE: for obvious reason this only works on self-monitoring
-	 *       processes.
+	 * NOTE: Reading the hardware counter as shown above only works for
+	 *       self-monitoring processes. A reader on another CPU may snapshot
+	 *       the time conversion fields, but must use rmb() around the field
+	 *       reads and retry if lock is odd or changes.
 	 */
 	__u32	lock;			/* seqlock for synchronization */
 	__u32	index;			/* hardware event identifier */

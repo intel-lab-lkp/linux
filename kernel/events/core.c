@@ -6851,7 +6851,8 @@ void perf_event_update_userpage(struct perf_event *event)
 	userpg = rb->user_page;
 
 	++userpg->lock;
-	barrier();
+	/* Publish the odd lock value before updating the payload. */
+	smp_wmb();
 	userpg->index = perf_event_index(event);
 	userpg->offset = perf_event_count(event, false);
 	if (userpg->index)
@@ -6865,7 +6866,8 @@ void perf_event_update_userpage(struct perf_event *event)
 
 	arch_perf_update_userpage(event, userpg, now);
 
-	barrier();
+	/* Publish the payload before the final lock update. */
+	smp_wmb();
 	++userpg->lock;
 	preempt_enable();
 unlock:
