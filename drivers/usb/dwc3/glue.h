@@ -33,6 +33,9 @@ struct dwc3_properties {
  * @skip_core_init_mode: Skip the finial initialization of the target mode, as
  *		it must be managed by the glue
  * @properties: dwc3 software manage properties
+ * @ref_clk_rate: optional reference clock rate for the DWC3 core to compute the
+ *		period and frame length adjustment required if these values
+ *		differ from the hardware default.
  */
 struct dwc3_probe_data {
 	struct dwc3 *dwc;
@@ -40,6 +43,7 @@ struct dwc3_probe_data {
 	bool ignore_clocks_and_resets;
 	bool skip_core_init_mode;
 	struct dwc3_properties properties;
+	unsigned long ref_clk_rate;
 };
 
 /**

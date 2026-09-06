@@ -420,6 +420,9 @@ static void dwc3_ref_clk_period(struct dwc3 *dwc)
 	} else if (dwc->ref_clk_per) {
 		period = dwc->ref_clk_per;
 		rate = NSEC_PER_SEC / period;
+	} else if (dwc->ref_clk_rate) {
+		rate = dwc->ref_clk_rate;
+		period = NSEC_PER_SEC / rate;
 	} else {
 		return;
 	}
@@ -2333,6 +2336,9 @@ int dwc3_core_probe(const struct dwc3_probe_data *data)
 		if (ret)
 			goto err_put_psy;
 	}
+
+	if (data->ref_clk_rate > 0)
+		dwc->ref_clk_rate = data->ref_clk_rate;
 
 	ret = reset_control_deassert(dwc->reset);
 	if (ret)
