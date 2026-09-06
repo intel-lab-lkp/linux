@@ -1111,7 +1111,7 @@ static void wilc_wlan_handle_rx_buff(struct wilc *wilc, u8 *buffer, int size)
 	int is_cfg_packet;
 	u8 *buff_ptr;
 
-	do {
+	while (offset + sizeof(u32) <= size) {
 		buff_ptr = buffer + offset;
 		header = get_unaligned_le32(buff_ptr);
 
@@ -1123,11 +1123,19 @@ static void wilc_wlan_handle_rx_buff(struct wilc *wilc, u8 *buffer, int size)
 		if (pkt_len == 0 || tp_len == 0)
 			break;
 
+		if (tp_len > size - offset)
+			break;
+
 		if (pkt_offset & IS_MANAGMEMENT) {
+			if (tp_len < HOST_HDR_OFFSET || pkt_len > tp_len - HOST_HDR_OFFSET)
+				break;
 			buff_ptr += HOST_HDR_OFFSET;
 			wilc_wfi_mgmt_rx(wilc, buff_ptr, pkt_len,
 					 pkt_offset & IS_MGMT_AUTH_PKT);
 		} else {
+			if (pkt_offset > tp_len ||
+			    pkt_len > tp_len - pkt_offset)
+				break;
 			if (!is_cfg_packet) {
 				wilc_frmw_to_host(wilc, buff_ptr, pkt_len,
 						  pkt_offset);
@@ -1148,7 +1156,7 @@ static void wilc_wlan_handle_rx_buff(struct wilc *wilc, u8 *buffer, int size)
 			}
 		}
 		offset += tp_len;
-	} while (offset < size);
+	}
 }
 
 static void wilc_wlan_handle_rxq(struct wilc *wilc)
