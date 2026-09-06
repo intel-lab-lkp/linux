@@ -345,7 +345,14 @@ static void sd_lag_init(struct mlx5_core_dev *dev)
 		return;
 	}
 
+recheck:
 	mutex_lock(&ldev->lock);
+	if (ldev->mode_changes_in_progress) {
+		mutex_unlock(&ldev->lock);
+		msleep(100);
+		goto recheck;
+	}
+
 	pf = mlx5_lag_pf_by_dev(ldev, primary);
 	if (!pf) {
 		sd_warn(primary, "%s: primary not registered in ldev, skipping\n",
@@ -388,7 +395,13 @@ static void sd_lag_cleanup(struct mlx5_core_dev *dev)
 	if (!ldev)
 		return;
 
+recheck:
 	mutex_lock(&ldev->lock);
+	if (ldev->mode_changes_in_progress) {
+		mutex_unlock(&ldev->lock);
+		msleep(100);
+		goto recheck;
+	}
 	mlx5_sd_for_each_secondary(i, primary, pos)
 		mlx5_ldev_remove_mdev(ldev, pos);
 
