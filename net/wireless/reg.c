@@ -2463,15 +2463,49 @@ static void reg_leave_invalid_chans(struct wiphy *wiphy)
 
 static void reg_check_chans_work(struct work_struct *work)
 {
-	struct cfg80211_registered_device *rdev;
+	struct cfg80211_registered_device *rdev, **snap;
+	int i, n = 0;
 
 	pr_debug("Verifying active interfaces after reg change\n");
-	rtnl_lock();
 
-	for_each_rdev(rdev)
-		reg_leave_invalid_chans(&rdev->wiphy);
+	/*
+	 * Snapshot rdev pointers under RCU with a device reference so they
+	 * cannot be freed between per-device rtnl acquisitions. Using a
+	 * per-device rtnl_lock() instead of holding it across all devices
+	 * avoids starving other rtnl waiters when cfg80211_leave() is slow.
+	 */
+	rcu_read_lock();
+	list_for_each_entry_rcu(rdev, &cfg80211_rdev_list, list)
+		n++;
+	rcu_read_unlock();
 
-	rtnl_unlock();
+	if (!n)
+		return;
+
+	snap = kmalloc_array(n, sizeof(*snap), GFP_KERNEL);
+	if (!snap)
+		return;
+
+	i = 0;
+	rcu_read_lock();
+	list_for_each_entry_rcu(rdev, &cfg80211_rdev_list, list) {
+		if (i >= n)
+			break;
+		get_device(&rdev->wiphy.dev);
+		snap[i++] = rdev;
+	}
+	rcu_read_unlock();
+	n = i;
+
+	for (i = 0; i < n; i++) {
+		rtnl_lock();
+		if (snap[i]->wiphy.registered)
+			reg_leave_invalid_chans(&snap[i]->wiphy);
+		rtnl_unlock();
+		put_device(&snap[i]->wiphy.dev);
+	}
+
+	kfree(snap);
 }
 
 void reg_check_channels(void)
