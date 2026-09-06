@@ -1888,6 +1888,7 @@ static int gl9763e_runtime_resume(struct sdhci_pci_chip *chip)
 	struct sdhci_pci_slot *slot = chip->slots[0];
 	struct sdhci_host *host = slot->host;
 	u16 clock;
+	int ret;
 
 	if (host->mmc->ios.power_mode != MMC_POWER_ON)
 		return 0;
@@ -1899,11 +1900,18 @@ static int gl9763e_runtime_resume(struct sdhci_pci_chip *chip)
 	sdhci_writew(host, clock, SDHCI_CLOCK_CONTROL);
 
 	/* Wait max 150 ms */
-	if (read_poll_timeout(sdhci_readw, clock, (clock & SDHCI_CLOCK_INT_STABLE),
-			      1000, 150000, false, host, SDHCI_CLOCK_CONTROL)) {
+	ret = read_poll_timeout(sdhci_readw, clock,
+				(clock & SDHCI_CLOCK_INT_STABLE),
+				1000, 150000, false, host,
+				SDHCI_CLOCK_CONTROL);
+	if (ret) {
 		pr_err("%s: PLL clock never stabilised.\n",
 		       mmc_hostname(host->mmc));
 		sdhci_dumpregs(host);
+
+		clock &= ~SDHCI_CLOCK_PLL_EN;
+		sdhci_writew(host, clock, SDHCI_CLOCK_CONTROL);
+		return ret;
 	}
 
 	clock |= SDHCI_CLOCK_CARD_EN;
