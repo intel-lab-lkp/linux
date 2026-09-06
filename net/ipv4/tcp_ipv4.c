@@ -1052,6 +1052,10 @@ static void tcp_v4_timewait_ack(struct sock *sk, struct sk_buff *skb,
 		key.traffic_key = snd_other_key(key.ao_key);
 		key.sne = READ_ONCE(ao_info->snd_sne);
 		rnext_key = READ_ONCE(ao_info->rnext_key);
+		if (!rnext_key) {
+			inet_twsk_put(tw);
+			return;
+		}
 		key.rcv_next = rnext_key->rcvid;
 		key.type = TCP_KEY_AO;
 #else

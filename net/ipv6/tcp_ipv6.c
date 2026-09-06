@@ -1182,6 +1182,8 @@ static void tcp_v6_timewait_ack(struct sock *sk, struct sk_buff *skb,
 		key.traffic_key = snd_other_key(key.ao_key);
 		/* rcv_next switches to our rcv_next */
 		rnext_key = READ_ONCE(ao_info->rnext_key);
+		if (!rnext_key)
+			goto out;
 		key.rcv_next = rnext_key->rcvid;
 		key.sne = READ_ONCE(ao_info->snd_sne);
 		key.type = TCP_KEY_AO;

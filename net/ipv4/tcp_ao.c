@@ -857,6 +857,8 @@ int tcp_ao_prepare_reset(const struct sock *sk, struct sk_buff *skb,
 			return -ENOENT;
 		*traffic_key = snd_other_key(*key);
 		rnext_key = READ_ONCE(ao_info->rnext_key);
+		if (!rnext_key)
+			return -ENOENT;
 		*keyid = rnext_key->rcvid;
 		*sne = tcp_ao_compute_sne(READ_ONCE(ao_info->snd_sne),
 					  snd_basis, seq);
@@ -1026,6 +1028,8 @@ tcp_inbound_ao_hash(struct sock *sk, const struct sk_buff *skb,
 		 * matching the rcvid in the mkt.
 		 */
 		key = READ_ONCE(info->rnext_key);
+		if (!key)
+			goto key_not_found;
 		if (key->rcvid != aoh->keyid) {
 			key = tcp_ao_established_key(sk, info, -1, aoh->keyid);
 			if (!key)
@@ -1045,6 +1049,8 @@ tcp_inbound_ao_hash(struct sock *sk, const struct sk_buff *skb,
 		if (err)
 			return err;
 		current_key = READ_ONCE(info->current_key);
+		if (!current_key)
+			return SKB_DROP_REASON_TCP_AOFAILURE;
 		/* Key rotation: the peer asks us to use new key (RNext) */
 		if (unlikely(aoh->rnext_keyid != current_key->sndid)) {
 			trace_tcp_ao_rnext_request(sk, skb, current_key->sndid,
