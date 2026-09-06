@@ -74,6 +74,12 @@ const char *perf_gtk__get_percent_color(double percent)
 	return NULL;
 }
 
+static void perf_gtk__hide_widget(GtkWidget *widget, gint response_id __maybe_unused,
+				   gpointer data __maybe_unused)
+{
+	gtk_widget_set_visible(widget, FALSE);
+}
+
 GtkWidget *perf_gtk__setup_info_bar(void)
 {
 	GtkWidget *info_bar;
@@ -83,14 +89,14 @@ GtkWidget *perf_gtk__setup_info_bar(void)
 	gtk_widget_set_visible(info_bar, FALSE);
 
 	label = gtk_label_new("");
-	gtk_widget_show(label);
+	gtk_widget_set_visible(label, TRUE);
 
 	gtk_info_bar_add_child(GTK_INFO_BAR(info_bar), label);
 
 	gtk_info_bar_add_button(GTK_INFO_BAR(info_bar), "_OK",
 				GTK_RESPONSE_OK);
 	g_signal_connect(info_bar, "response",
-			 G_CALLBACK(gtk_widget_hide), NULL);
+			 G_CALLBACK(perf_gtk__hide_widget), NULL);
 
 	pgctx->info_bar = info_bar;
 	pgctx->message_label = label;

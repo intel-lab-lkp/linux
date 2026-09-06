@@ -2,6 +2,7 @@
 #include "../util.h"
 #include "gtk.h"
 
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,6 +49,25 @@ void perf_gtk__quit_error_dialog(void)
 	g_slist_foreach(perf_gtk__error_loops, perf_gtk__quit_loop, NULL);
 }
 
+/*
+ * perf_gtk__signal() runs perf_gtk__quit_error_dialog() from a signal
+ * handler, which can preempt perf_gtk__error() while it is updating
+ * perf_gtk__error_loops below. Block those signals around the update so
+ * the list is never traversed half-modified.
+ */
+static void perf_gtk__block_exit_signals(sigset_t *old_set)
+{
+	sigset_t set;
+
+	sigemptyset(&set);
+	sigaddset(&set, SIGSEGV);
+	sigaddset(&set, SIGFPE);
+	sigaddset(&set, SIGINT);
+	sigaddset(&set, SIGQUIT);
+	sigaddset(&set, SIGTERM);
+	sigprocmask(SIG_BLOCK, &set, old_set);
+}
+
 static void perf_gtk__dialog_response(GtkDialog *dialog,
 				      gint response_id __maybe_unused,
 				      gpointer data __maybe_unused)
@@ -61,6 +81,7 @@ static int perf_gtk__error(const char *format, va_list args)
 	GtkWidget *dialog;
 	GMainLoop *loop;
 	va_list args_copy;
+	sigset_t old_set;
 
 	va_copy(args_copy, args);
 	if (!perf_gtk__is_active_context(pgctx) ||
@@ -86,7 +107,9 @@ static int perf_gtk__error(const char *format, va_list args)
 	 * outlive the dialog and hang.
 	 */
 	loop = g_main_loop_new(NULL, FALSE);
+	perf_gtk__block_exit_signals(&old_set);
 	perf_gtk__error_loops = g_slist_prepend(perf_gtk__error_loops, loop);
+	sigprocmask(SIG_SETMASK, &old_set, NULL);
 	g_signal_connect(dialog, "response",
 			 G_CALLBACK(perf_gtk__dialog_response), NULL);
 	g_signal_connect_swapped(dialog, "destroy",
@@ -94,7 +117,9 @@ static int perf_gtk__error(const char *format, va_list args)
 
 	gtk_widget_set_visible(dialog, TRUE);
 	g_main_loop_run(loop);
+	perf_gtk__block_exit_signals(&old_set);
 	perf_gtk__error_loops = g_slist_remove(perf_gtk__error_loops, loop);
+	sigprocmask(SIG_SETMASK, &old_set, NULL);
 	g_main_loop_unref(loop);
 
 	free(msg);
@@ -120,7 +145,7 @@ static int perf_gtk__warning_info_bar(const char *format, va_list args)
 	gtk_label_set_text(GTK_LABEL(pgctx->message_label), msg);
 	gtk_info_bar_set_message_type(GTK_INFO_BAR(pgctx->info_bar),
 				      GTK_MESSAGE_WARNING);
-	gtk_widget_show(pgctx->info_bar);
+	gtk_widget_set_visible(pgctx->info_bar, TRUE);
 
 	free(msg);
 	return 0;
