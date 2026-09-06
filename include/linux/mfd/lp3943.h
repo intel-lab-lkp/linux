@@ -53,6 +53,8 @@ enum lp3943_pwm_output {
 	LP3943_PWM_OUT15,
 };
 
+#define LP3943_NUM_OUTPUTS		16
+
 /*
  * struct lp3943_pwm_map
  * @output: Output pins which are mapped to each PWM channel

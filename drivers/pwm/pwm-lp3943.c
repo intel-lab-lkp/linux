@@ -218,7 +218,7 @@ static int lp3943_pwm_parse_dt(struct device *dev,
 	struct lp3943_platform_data *pdata;
 	struct lp3943_pwm_map *pwm_map;
 	enum lp3943_pwm_output *output;
-	int i, err, num_outputs, count = 0;
+	int i, j, err, num_outputs, count = 0;
 
 	if (!node)
 		return -EINVAL;
@@ -246,6 +246,11 @@ static int lp3943_pwm_parse_dt(struct device *dev,
 						 num_outputs);
 		if (err)
 			return err;
+
+		for (j = 0; j < num_outputs; j++) {
+			if (output[j] >= LP3943_NUM_OUTPUTS)
+				return -EINVAL;
+		}
 
 		pwm_map = devm_kzalloc(dev, sizeof(*pwm_map), GFP_KERNEL);
 		if (!pwm_map)
