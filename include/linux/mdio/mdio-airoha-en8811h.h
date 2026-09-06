@@ -17,8 +17,9 @@ struct mdio_device;
 #define EN8811H_MD32_DSP		"airoha/EthMD32.DSP.bin"
 
 /* Returns 1 running, 0 dormant, negative on a failed status read. */
-int air_en8811h_mcu_running(struct mdio_device *mdiodev);
+int air_en8811h_mcu_running(struct mdio_device *mdiodev, bool nested);
 /* Returns 1 when it adopted firmware that was already running. */
-int air_en8811h_fw_download(struct mdio_device *mdiodev, u32 *fw_version);
+int air_en8811h_fw_download(struct mdio_device *mdiodev, u32 *fw_version,
+			    bool nested);
 
 #endif /* __LINUX_MDIO_AIROHA_EN8811H_H */

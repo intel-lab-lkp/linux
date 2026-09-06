@@ -256,7 +256,7 @@ static int __air_pbus_reg_write(struct mdio_device *mdiodev,
 
 static int en8811h_wait_mcu_ready(struct phy_device *phydev)
 {
-	int ret = air_en8811h_wait_mcu_ready(&phydev->mdio);
+	int ret = air_en8811h_wait_mcu_ready(&phydev->mdio, false);
 
 	if (ret < 0)
 		phydev_err(phydev, "MCU not ready: %pe\n", ERR_PTR(ret));
@@ -323,7 +323,7 @@ static int an8811hb_load_file(struct phy_device *phydev, const char *name,
 	if (ret < 0)
 		return ret;
 
-	ret = air_fw_write_buf(&phydev->mdio, address, fw);
+	ret = air_fw_write_buf(&phydev->mdio, address, fw, false);
 	release_firmware(fw);
 	return ret;
 }
@@ -422,7 +422,8 @@ static int en8811h_load_firmware(struct phy_device *phydev)
 	struct en8811h_priv *priv = phydev->priv;
 	int ret;
 
-	ret = air_en8811h_fw_download(&phydev->mdio, &priv->firmware_version);
+	ret = air_en8811h_fw_download(&phydev->mdio, &priv->firmware_version,
+				      false);
 	if (ret < 0)
 		phydev_err(phydev, "Load firmware failed: %d\n", ret);
 
