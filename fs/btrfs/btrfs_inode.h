@@ -502,6 +502,13 @@ static inline void btrfs_set_inode_mapping_order(struct btrfs_inode *inode)
 	/* Metadata inode should not reach here. */
 	ASSERT(is_data_inode(inode));
 
+	/*
+	 * The v1 free space cache operates on PAGE_SIZE chunks and assumes
+	 * one page per folio. Leave it at order 0.
+	 */
+	if (btrfs_is_free_space_inode(inode))
+		return;
+
 	mapping_set_folio_order_range(inode->vfs_inode.i_mapping,
 				      inode->root->fs_info->block_min_order,
 				      inode->root->fs_info->block_max_order);
