@@ -16,21 +16,53 @@ void perf_gtk__signal(int sig)
 void perf_gtk__resize_window(GtkWidget *window)
 {
 	GdkRectangle rect;
-	GdkScreen *screen;
-	int monitor;
+	GdkMonitor *monitor;
+	GdkDisplay *display;
+	GListModel *monitors;
 	int height;
 	int width;
 
-	screen = gtk_widget_get_screen(window);
+	display = gtk_widget_get_display(window);
+	monitors = gdk_display_get_monitors(display);
+	monitor = g_list_model_get_item(monitors, 0);
+	if (!monitor) {
+		gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
+		return;
+	}
 
-	monitor = gdk_screen_get_monitor_at_window(screen, window->window);
-
-	gdk_screen_get_monitor_geometry(screen, monitor, &rect);
+	gdk_monitor_get_geometry(monitor, &rect);
+	g_object_unref(monitor);
 
 	width	= rect.width * 3 / 4;
 	height	= rect.height * 3 / 4;
 
-	gtk_window_resize(GTK_WINDOW(window), width, height);
+	gtk_window_set_default_size(GTK_WINDOW(window), width, height);
+}
+
+static GMainLoop *perf_gtk__main_loop;
+
+void perf_gtk__quit_main_loop(void)
+{
+	if (perf_gtk__main_loop)
+		g_main_loop_quit(perf_gtk__main_loop);
+}
+
+static gboolean perf_gtk__close_request(GtkWidget *widget __maybe_unused,
+					gpointer data __maybe_unused)
+{
+	perf_gtk__quit_main_loop();
+
+	return FALSE;
+}
+
+void perf_gtk__run_main_loop(GtkWidget *window)
+{
+	g_signal_connect(window, "close-request",
+			 G_CALLBACK(perf_gtk__close_request), NULL);
+
+	perf_gtk__main_loop = g_main_loop_new(NULL, FALSE);
+	g_main_loop_run(perf_gtk__main_loop);
+	g_clear_pointer(&perf_gtk__main_loop, g_main_loop_unref);
 }
 
 const char *perf_gtk__get_percent_color(double percent)
@@ -42,23 +74,20 @@ const char *perf_gtk__get_percent_color(double percent)
 	return NULL;
 }
 
-#ifdef HAVE_GTK_INFO_BAR_SUPPORT
 GtkWidget *perf_gtk__setup_info_bar(void)
 {
 	GtkWidget *info_bar;
 	GtkWidget *label;
-	GtkWidget *content_area;
 
 	info_bar = gtk_info_bar_new();
-	gtk_widget_set_no_show_all(info_bar, TRUE);
+	gtk_widget_set_visible(info_bar, FALSE);
 
 	label = gtk_label_new("");
 	gtk_widget_show(label);
 
-	content_area = gtk_info_bar_get_content_area(GTK_INFO_BAR(info_bar));
-	gtk_container_add(GTK_CONTAINER(content_area), label);
+	gtk_info_bar_add_child(GTK_INFO_BAR(info_bar), label);
 
-	gtk_info_bar_add_button(GTK_INFO_BAR(info_bar), GTK_STOCK_OK,
+	gtk_info_bar_add_button(GTK_INFO_BAR(info_bar), "_OK",
 				GTK_RESPONSE_OK);
 	g_signal_connect(info_bar, "response",
 			 G_CALLBACK(gtk_widget_hide), NULL);
@@ -68,7 +97,6 @@ GtkWidget *perf_gtk__setup_info_bar(void)
 
 	return info_bar;
 }
-#endif
 
 GtkWidget *perf_gtk__setup_statusbar(void)
 {

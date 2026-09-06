@@ -161,7 +161,7 @@ static int perf_gtk__annotate_symbol(GtkWidget *window, struct map_symbol *ms,
 			gtk_list_store_set(store, &iter, ANN_COL__LINE, s, -1);
 	}
 
-	gtk_container_add(GTK_CONTAINER(window), view);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(window), view);
 
 	list_for_each_entry_safe(pos, n, &notes->src->source, al.node) {
 		list_del_init(&pos->al.node);
@@ -211,34 +211,30 @@ static int symbol__gtk_annotate(struct map_symbol *ms, struct evsel *evsel,
 		signal(SIGQUIT, perf_gtk__signal);
 		signal(SIGTERM, perf_gtk__signal);
 
-		window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+		window = gtk_window_new();
 		gtk_window_set_title(GTK_WINDOW(window), "perf annotate");
-
-		g_signal_connect(window, "delete_event", gtk_main_quit, NULL);
 
 		pgctx = perf_gtk__activate_context(window);
 		if (!pgctx)
 			return -1;
 
-		vbox = gtk_vbox_new(FALSE, 0);
+		vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 		notebook = gtk_notebook_new();
 		pgctx->notebook = notebook;
 
-		gtk_box_pack_start(GTK_BOX(vbox), notebook, TRUE, TRUE, 0);
+		gtk_widget_set_vexpand(notebook, TRUE);
+		gtk_box_append(GTK_BOX(vbox), notebook);
 
 		infobar = perf_gtk__setup_info_bar();
-		if (infobar) {
-			gtk_box_pack_start(GTK_BOX(vbox), infobar,
-					   FALSE, FALSE, 0);
-		}
+		gtk_box_append(GTK_BOX(vbox), infobar);
 
 		statbar = perf_gtk__setup_statusbar();
-		gtk_box_pack_start(GTK_BOX(vbox), statbar, FALSE, FALSE, 0);
+		gtk_box_append(GTK_BOX(vbox), statbar);
 
-		gtk_container_add(GTK_CONTAINER(window), vbox);
+		gtk_window_set_child(GTK_WINDOW(window), vbox);
 	}
 
-	scrolled_window = gtk_scrolled_window_new(NULL, NULL);
+	scrolled_window = gtk_scrolled_window_new();
 	tab_label = gtk_label_new(sym->name);
 
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
@@ -267,12 +263,11 @@ void perf_gtk__show_annotations(void)
 		return;
 
 	window = pgctx->main_window;
-	gtk_widget_show_all(window);
 
 	perf_gtk__resize_window(window);
-	gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
+	gtk_widget_set_visible(window, TRUE);
 
-	gtk_main();
+	perf_gtk__run_main_loop(window);
 
 	perf_gtk__deactivate_context(&pgctx);
 }
