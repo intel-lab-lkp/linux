@@ -258,6 +258,30 @@ impl<Ctx: InternalBoundContext> Device<Ctx> {
         //   in `into_foreign()`.
         unsafe { Pin::<KBox<T>>::borrow(ptr.cast()) }
     }
+
+    /// Borrow the driver's private data bound to this [`Device`] mutable.
+    ///
+    /// # Safety
+    ///
+    /// - Must only be called after a preceding call to [`Device::set_drvdata`] and before the
+    ///   device is fully unbound.
+    /// - The type `T` must match the type of the `ForeignOwnable` previously stored by
+    ///   [`Device::set_drvdata`].
+    /// - The caller must have exclusive access to `T`.
+    #[expect(clippy::mut_from_ref)]
+    pub unsafe fn drvdata_borrow_mut<T>(&self) -> Pin<&mut T> {
+        // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
+        let ptr = unsafe { bindings::dev_get_drvdata(self.as_raw()) };
+
+        // SAFETY:
+        // - By the safety requirements of this function, `ptr` comes from a previous call to
+        //   `into_foreign()`.
+        // - `dev_get_drvdata()` guarantees to return the same pointer given to `dev_set_drvdata()`
+        //   in `into_foreign()`.
+        // - By the safety requirements of this function, `borrow` and `borrow_mut` do not overlap
+        //   on the same object.
+        unsafe { Pin::<KBox<T>>::borrow_mut(ptr.cast()) }
+    }
 }
 
 impl<Ctx: DeviceContext> Device<Ctx> {
