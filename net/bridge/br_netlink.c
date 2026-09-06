@@ -20,6 +20,17 @@
 #include "br_private_tunnel.h"
 #include "br_private_mcast_eht.h"
 
+/* IFLA_BRIDGE_VLAN_INFO */
+#define BR_VLAN_INFO_SIZE	nla_total_size(sizeof(struct bridge_vlan_info))
+
+/* br_fill_ifvlaninfo_range() emits one entry for a single VLAN and two,
+ * marked RANGE_BEGIN and RANGE_END, for a range.
+ */
+static size_t br_vlan_range_size(u16 vid_start, u16 vid_end)
+{
+	return (vid_end > vid_start ? 2 : 1) * BR_VLAN_INFO_SIZE;
+}
+
 static int __get_num_vlan_infos(struct net_bridge_vlan_group *vg,
 				u32 filter_mask)
 {
@@ -117,10 +128,18 @@ static size_t br_get_link_af_size_filtered(const struct net_device *dev,
 		vinfo_sz += br_get_vlan_tunnel_info_size(vg);
 
 	/* Each VLAN is returned in bridge_vlan_info along with flags */
-	vinfo_sz += num_vlan_infos * nla_total_size(sizeof(struct bridge_vlan_info));
+	vinfo_sz += num_vlan_infos * BR_VLAN_INFO_SIZE;
 
 	if (p && vg && (filter_mask & RTEXT_FILTER_MST))
 		vinfo_sz += br_mst_info_size(vg);
+
+	/* These three lists share the IFLA_AF_SPEC nest, whose length is a
+	 * u16, and br_fill_ifinfo() stops once it is full. Do not size the
+	 * skb for entries that will not be emitted. The CFM size below is
+	 * only added for the bridge device, which carries no tunnel or MST
+	 * entries and so stays far below the clamp.
+	 */
+	vinfo_sz = min_t(size_t, vinfo_sz, U16_MAX);
 
 	if (!(filter_mask & RTEXT_FILTER_CFM_STATUS))
 		return vinfo_sz;
@@ -366,6 +385,7 @@ nla_put_failure:
 }
 
 static int br_fill_ifvlaninfo_compressed(struct sk_buff *skb,
+					 const struct nlattr *af,
 					 struct net_bridge_vlan_group *vg)
 {
 	struct net_bridge_vlan *v;
@@ -395,6 +415,11 @@ static int br_fill_ifvlaninfo_compressed(struct sk_buff *skb,
 			vid_range_end = v->vid;
 			continue;
 		} else {
+			if (!br_af_spec_has_room(skb, af,
+						 br_vlan_range_size(vid_range_start,
+								    vid_range_end)))
+				return 0;
+
 			err = br_fill_ifvlaninfo_range(skb, vid_range_start,
 						       vid_range_end,
 						       vid_range_flags);
@@ -408,7 +433,9 @@ initvars:
 		vid_range_flags = flags;
 	}
 
-	if (vid_range_start != 0) {
+	if (vid_range_start != 0 &&
+	    br_af_spec_has_room(skb, af, br_vlan_range_size(vid_range_start,
+							    vid_range_end))) {
 		/* Call it once more to send any left over vlans */
 		err = br_fill_ifvlaninfo_range(skb, vid_range_start,
 					       vid_range_end,
@@ -420,7 +447,7 @@ initvars:
 	return 0;
 }
 
-static int br_fill_ifvlaninfo(struct sk_buff *skb,
+static int br_fill_ifvlaninfo(struct sk_buff *skb, const struct nlattr *af,
 			      struct net_bridge_vlan_group *vg)
 {
 	struct bridge_vlan_info vinfo;
@@ -431,6 +458,9 @@ static int br_fill_ifvlaninfo(struct sk_buff *skb,
 	list_for_each_entry_rcu(v, &vg->vlan_list, vlist) {
 		if (!br_vlan_should_use(v))
 			continue;
+
+		if (!br_af_spec_has_room(skb, af, BR_VLAN_INFO_SIZE))
+			break;
 
 		vinfo.vid = v->vid;
 		vinfo.flags = 0;
@@ -536,12 +566,12 @@ static int br_fill_ifinfo(struct sk_buff *skb,
 			goto done;
 		}
 		if (filter_mask & RTEXT_FILTER_BRVLAN_COMPRESSED)
-			err = br_fill_ifvlaninfo_compressed(skb, vg);
+			err = br_fill_ifvlaninfo_compressed(skb, af, vg);
 		else
-			err = br_fill_ifvlaninfo(skb, vg);
+			err = br_fill_ifvlaninfo(skb, af, vg);
 
 		if (port && test_bit(BR_VLAN_TUNNEL_BIT, &port->flags))
-			err = br_fill_vlan_tunnel_info(skb, vg);
+			err = br_fill_vlan_tunnel_info(skb, af, vg);
 		rcu_read_unlock();
 		if (err)
 			goto nla_put_failure;
@@ -600,11 +630,16 @@ static int br_fill_ifinfo(struct sk_buff *skb,
 		if (!vg || !vg->num_vlans)
 			goto done;
 
+		/* Do not open the nest unless one entry can follow it */
+		if (!br_af_spec_has_room(skb, af,
+					 nla_total_size(0) + BR_MST_ENTRY_SIZE))
+			goto done;
+
 		mst_nest = nla_nest_start(skb, IFLA_BRIDGE_MST);
 		if (!mst_nest)
 			goto nla_put_failure;
 
-		err = br_mst_fill_info(skb, vg);
+		err = br_mst_fill_info(skb, af, vg);
 		if (err)
 			goto nla_put_failure;
 

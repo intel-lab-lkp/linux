@@ -145,7 +145,16 @@ static int br_fill_vlan_tinfo_range(struct sk_buff *skb,
 	return 0;
 }
 
-int br_fill_vlan_tunnel_info(struct sk_buff *skb,
+/* br_fill_vlan_tinfo_range() emits one entry for a single VLAN and two,
+ * marked RANGE_BEGIN and RANGE_END, for a range.
+ */
+static size_t br_vlan_tinfo_range_size(const struct net_bridge_vlan *vtbegin,
+				       const struct net_bridge_vlan *vtend)
+{
+	return (vtend->vid > vtbegin->vid ? 2 : 1) * __get_vlan_tinfo_size();
+}
+
+int br_fill_vlan_tunnel_info(struct sk_buff *skb, const struct nlattr *af,
 			     struct net_bridge_vlan_group *vg)
 {
 	struct net_bridge_vlan *vtbegin = NULL;
@@ -169,6 +178,11 @@ int br_fill_vlan_tunnel_info(struct sk_buff *skb,
 			vtend = v;
 			continue;
 		} else {
+			if (!br_af_spec_has_room(skb, af,
+						 br_vlan_tinfo_range_size(vtbegin,
+									  vtend)))
+				return 0;
+
 			err = br_fill_vlan_tinfo_range(skb, vtbegin, vtend);
 			if (err)
 				return err;
@@ -178,7 +192,9 @@ initvars:
 		vtend = v;
 	}
 
-	if (vtbegin) {
+	if (vtbegin &&
+	    br_af_spec_has_room(skb, af,
+				br_vlan_tinfo_range_size(vtbegin, vtend))) {
 		err = br_fill_vlan_tinfo_range(skb, vtbegin, vtend);
 		if (err)
 			return err;

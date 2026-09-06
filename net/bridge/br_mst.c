@@ -252,12 +252,7 @@ size_t br_mst_info_size(const struct net_bridge_vlan_group *vg)
 		if (test_bit(v->brvlan->msti, seen))
 			continue;
 
-		/* IFLA_BRIDGE_MST_ENTRY */
-		sz += nla_total_size(0) +
-			/* IFLA_BRIDGE_MST_ENTRY_MSTI */
-			nla_total_size(sizeof(u16)) +
-			/* IFLA_BRIDGE_MST_ENTRY_STATE */
-			nla_total_size(sizeof(u8));
+		sz += BR_MST_ENTRY_SIZE;
 
 		__set_bit(v->brvlan->msti, seen);
 	}
@@ -265,7 +260,7 @@ size_t br_mst_info_size(const struct net_bridge_vlan_group *vg)
 	return sz;
 }
 
-int br_mst_fill_info(struct sk_buff *skb,
+int br_mst_fill_info(struct sk_buff *skb, const struct nlattr *af,
 		     const struct net_bridge_vlan_group *vg)
 {
 	DECLARE_BITMAP(seen, VLAN_N_VID) = { 0 };
@@ -276,6 +271,9 @@ int br_mst_fill_info(struct sk_buff *skb,
 	list_for_each_entry(v, &vg->vlan_list, vlist) {
 		if (test_bit(v->brvlan->msti, seen))
 			continue;
+
+		if (!br_af_spec_has_room(skb, af, BR_MST_ENTRY_SIZE))
+			break;
 
 		nest = nla_nest_start_noflag(skb, IFLA_BRIDGE_MST_ENTRY);
 		if (!nest ||

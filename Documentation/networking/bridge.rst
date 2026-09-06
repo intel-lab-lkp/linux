@@ -41,6 +41,23 @@ Bridge port netlink attributes
 .. kernel-doc:: include/uapi/linux/if_link.h
    :doc: Bridge port enum definition
 
+Size limit of the bridge IFLA_AF_SPEC attribute
+-----------------------------------------------
+
+An ``AF_BRIDGE`` RTM_GETLINK reply and an RTM_NEWLINK notification describe
+the VLANs of a port inside a single IFLA_AF_SPEC attribute. A netlink
+attribute length is a u16, so that one attribute can hold at most 65535
+bytes, and the three lists it carries share the budget: an
+IFLA_BRIDGE_VLAN_INFO costs 8 bytes, an IFLA_BRIDGE_VLAN_TUNNEL_INFO 28 and
+an IFLA_BRIDGE_MST_ENTRY 20, on every architecture. A port with a few
+thousand VLAN tunnel mappings or MST entries therefore does not fit. The
+kernel stops adding entries when the attribute is full, so such a port
+reports shortened lists while the rest of the message stays parsable.
+
+RTM_GETVLAN gives each VLAN entry its own attribute and continues in a new
+message once one fills up, so it has no such limit. Use it to read the VLAN
+and VLAN tunnel configuration of a port that is large enough to hit this.
+
 Bridge sysfs
 ------------
 

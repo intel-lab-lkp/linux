@@ -1954,6 +1954,13 @@ static inline bool br_vlan_state_allowed(u8 state, bool learn_allow)
 #endif
 
 /* br_mst.c */
+/* IFLA_BRIDGE_MST_ENTRY, holding IFLA_BRIDGE_MST_ENTRY_MSTI and
+ * IFLA_BRIDGE_MST_ENTRY_STATE
+ */
+#define BR_MST_ENTRY_SIZE	(nla_total_size(0) + \
+				 nla_total_size(sizeof(u16)) + \
+				 nla_total_size(sizeof(u8)))
+
 #ifdef CONFIG_BRIDGE_VLAN_FILTERING
 DECLARE_STATIC_KEY_FALSE(br_mst_used);
 static inline bool br_mst_is_enabled(const struct net_bridge_port *p)
@@ -1971,7 +1978,7 @@ void br_mst_vlan_init_state(struct net_bridge_vlan *v);
 int br_mst_set_enabled(struct net_bridge *br, bool on,
 		       struct netlink_ext_ack *extack);
 size_t br_mst_info_size(const struct net_bridge_vlan_group *vg);
-int br_mst_fill_info(struct sk_buff *skb,
+int br_mst_fill_info(struct sk_buff *skb, const struct nlattr *af,
 		     const struct net_bridge_vlan_group *vg);
 int br_mst_process(struct net_bridge_port *p, const struct nlattr *mst_attr,
 		   struct netlink_ext_ack *extack);
@@ -1999,7 +2006,7 @@ static inline size_t br_mst_info_size(const struct net_bridge_vlan_group *vg)
 	return 0;
 }
 
-static inline int br_mst_fill_info(struct sk_buff *skb,
+static inline int br_mst_fill_info(struct sk_buff *skb, const struct nlattr *af,
 				   const struct net_bridge_vlan_group *vg)
 {
 	return -EOPNOTSUPP;
@@ -2161,6 +2168,18 @@ static inline int br_cfm_peer_mep_count(struct net_bridge *br, u32 *count)
 #endif
 
 /* br_netlink.c */
+/* The IFLA_AF_SPEC nest that br_fill_ifinfo() builds is a single netlink
+ * attribute, so everything put inside it has to fit in the u16 nla_len.
+ * The entries have fixed sizes, so ask for room before adding one instead
+ * of closing the nest with a length that wrapped.
+ */
+static inline bool br_af_spec_has_room(const struct sk_buff *skb,
+				       const struct nlattr *af, size_t size)
+{
+	return skb_tail_pointer(skb) - (const unsigned char *)af + size <=
+	       U16_MAX;
+}
+
 extern struct rtnl_link_ops br_link_ops;
 int br_netlink_init(void);
 void br_netlink_fini(void);

@@ -25,7 +25,7 @@ int br_process_vlan_tunnel_info(const struct net_bridge *br,
 				struct vtunnel_info *tinfo_last,
 				bool *changed);
 int br_get_vlan_tunnel_info_size(struct net_bridge_vlan_group *vg);
-int br_fill_vlan_tunnel_info(struct sk_buff *skb,
+int br_fill_vlan_tunnel_info(struct sk_buff *skb, const struct nlattr *af,
 			     struct net_bridge_vlan_group *vg);
 bool vlan_tunid_inrange(const struct net_bridge_vlan *v_curr,
 			const struct net_bridge_vlan *v_last);
