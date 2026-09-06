@@ -124,10 +124,11 @@ static void socfpga_a10_fpga_set_cfg_width(struct a10_fpga_priv *priv,
 			   A10_FPGAMGR_IMGCFG_CTL_02_CFGWIDTH, width);
 }
 
-static void socfpga_a10_fpga_generate_dclks(struct a10_fpga_priv *priv,
-					    u32 count)
+static int socfpga_a10_fpga_generate_dclks(struct a10_fpga_priv *priv,
+					   u32 count)
 {
 	u32 val;
+	int ret;
 
 	/* Clear any existing DONE status. */
 	regmap_write(priv->regmap, A10_FPGAMGR_DCLKSTAT_OFST,
@@ -137,12 +138,15 @@ static void socfpga_a10_fpga_generate_dclks(struct a10_fpga_priv *priv,
 	regmap_write(priv->regmap, A10_FPGAMGR_DCLKCNT_OFST, count);
 
 	/* wait till the dclkcnt done */
-	regmap_read_poll_timeout(priv->regmap, A10_FPGAMGR_DCLKSTAT_OFST, val,
-				 val, 1, 100);
+	ret = regmap_read_poll_timeout(priv->regmap,
+				       A10_FPGAMGR_DCLKSTAT_OFST, val,
+				       val, 1, 100);
 
 	/* Clear DONE status. */
 	regmap_write(priv->regmap, A10_FPGAMGR_DCLKSTAT_OFST,
 		     A10_FPGAMGR_DCLKSTAT_DCLKDONE);
+
+	return ret;
 }
 
 #define RBF_ENCRYPTION_MODE_OFFSET		69
@@ -334,7 +338,9 @@ static int socfpga_a10_fpga_write_init(struct fpga_manager *mgr,
 			   A10_FPGAMGR_IMGCFG_CTL_01_S2F_NENABLE_CONFIG, 0);
 
 	/* Send some clocks to clear out any errors */
-	socfpga_a10_fpga_generate_dclks(priv, 256);
+	ret = socfpga_a10_fpga_generate_dclks(priv, 256);
+	if (ret)
+		return ret;
 
 	/* Assert pr_request */
 	regmap_update_bits(priv->regmap, A10_FPGAMGR_IMGCFG_CTL_01_OFST,
@@ -342,7 +348,9 @@ static int socfpga_a10_fpga_write_init(struct fpga_manager *mgr,
 			   A10_FPGAMGR_IMGCFG_CTL_01_S2F_PR_REQUEST);
 
 	/* Provide 2048 DCLKs before starting the config data streaming. */
-	socfpga_a10_fpga_generate_dclks(priv, 0x7ff);
+	ret = socfpga_a10_fpga_generate_dclks(priv, 0x7ff);
+	if (ret)
+		return ret;
 
 	/* Wait for pr_ready */
 	return socfpga_a10_fpga_wait_for_pr_ready(priv);
@@ -393,7 +401,7 @@ static int socfpga_a10_fpga_write_complete(struct fpga_manager *mgr,
 {
 	struct a10_fpga_priv *priv = mgr->priv;
 	u32 reg;
-	int ret;
+	int dclk_ret, ret;
 
 	/* Wait for pr_done */
 	ret = socfpga_a10_fpga_wait_for_pr_done(priv);
@@ -403,7 +411,7 @@ static int socfpga_a10_fpga_write_complete(struct fpga_manager *mgr,
 			   A10_FPGAMGR_IMGCFG_CTL_01_S2F_PR_REQUEST, 0);
 
 	/* Send some clocks to clear out any errors */
-	socfpga_a10_fpga_generate_dclks(priv, 256);
+	dclk_ret = socfpga_a10_fpga_generate_dclks(priv, 256);
 
 	/* Disable s2f dclk and data */
 	regmap_update_bits(priv->regmap, A10_FPGAMGR_IMGCFG_CTL_02_OFST,
@@ -422,6 +430,8 @@ static int socfpga_a10_fpga_write_complete(struct fpga_manager *mgr,
 	/* Return any errors regarding pr_done or pr_error */
 	if (ret)
 		return ret;
+	if (dclk_ret)
+		return dclk_ret;
 
 	/* Final check */
 	reg = socfpga_a10_fpga_read_stat(priv);
