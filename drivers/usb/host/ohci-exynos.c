@@ -231,7 +231,9 @@ static int exynos_ohci_resume(struct device *dev)
 	struct exynos_ohci_hcd *exynos_ohci	= to_exynos_ohci(hcd);
 	int ret;
 
-	clk_prepare_enable(exynos_ohci->clk);
+	ret = clk_prepare_enable(exynos_ohci->clk);
+	if (ret)
+		return ret;
 
 	ret = exynos_ohci_phy_enable(dev);
 	if (ret) {
