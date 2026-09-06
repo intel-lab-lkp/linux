@@ -3275,7 +3275,11 @@ _base_assign_reply_queues(struct MPT3SAS_ADAPTER *ioc)
 
 fall_back:
 	cpu = cpumask_first(cpu_online_mask);
-	nr_msix -= (ioc->high_iops_queues - iopoll_q_count);
+	nr_msix -= (ioc->high_iops_queues + iopoll_q_count);
+	if (!nr_msix) {
+		ioc_warn(ioc, "high_iops_queues and iopoll_q_count exceed available MSI-X vectors\n");
+		return;
+	}
 	index = 0;
 
 	list_for_each_entry(reply_q, &ioc->reply_queue_list, list) {
