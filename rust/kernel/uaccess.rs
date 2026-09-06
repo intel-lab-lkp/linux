@@ -13,7 +13,6 @@ use crate::{
     fs::file,
     prelude::*,
     ptr::KnownSize,
-    transmute::{AsBytes, FromBytes},
 };
 use core::mem::{size_of, MaybeUninit};
 
@@ -525,7 +524,7 @@ impl UserSliceWriter {
     ///     writer.write_dma(alloc, 0, 256)
     /// }
     /// ```
-    pub fn write_dma<T: KnownSize + AsBytes + ?Sized>(
+    pub fn write_dma<T: KnownSize + IntoBytes + ?Sized>(
         &mut self,
         alloc: &Coherent<T>,
         offset: usize,
@@ -599,7 +598,7 @@ impl UserSliceWriter {
     /// Fails with [`EFAULT`] if the write happens on a bad address, or if the write goes out of
     /// bounds of this [`UserSliceWriter`]. This call may modify the associated userspace slice even
     /// if it returns an error.
-    pub fn write<T: AsBytes>(&mut self, value: &T) -> Result {
+    pub fn write<T: IntoBytes>(&mut self, value: &T) -> Result {
         let len = size_of::<T>();
         if len > self.length {
             return Err(EFAULT);
