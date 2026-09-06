@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/*
- * yoga_fan.c - Lenovo Yoga/Legion Fan Hardware Monitoring Driver
+/**
+ * yogafan.c - Lenovo Yoga/Legion Fan Hardware Monitoring Driver
  *
  * Provides fan speed monitoring for Lenovo Yoga, Legion, and IdeaPad
  * laptops by interfacing with the Embedded Controller (EC) via ACPI.
@@ -53,6 +53,17 @@ struct yoga_fan_data {
 };
 
 /* Specific configurations mapped via DMI */
+static const struct yogafan_config yoga_740_15iml_cfg = {
+	.multiplier = 100,
+	.fan_count = 1,
+	.paths = { "\\_SB.PCI0.LPCB.EC0.FANS", NULL }
+};
+
+static const struct yogafan_config ideapad_3_15alc6_82ku_cfg = {
+	.multiplier = 100,
+	.fan_count = 2,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FANS", "\\_SB.PCI0.LPC0.EC0.FA2S" },
+};
 
 static const struct yogafan_config yoga_8bit_fans_cfg = {
 	.multiplier = 100,
@@ -88,17 +99,6 @@ static const struct yogafan_config yoga_pro_7_14iah10_cfg = {
 	.multiplier = 100,
 	.fan_count = 1,
 	.paths = { "\\_SB.PC00.LPCB.EC0.FANS", NULL }
-};
-
-/*
- * Lenovo Yoga Pro 9 16IMH9 (83DN) uses the PC00 namespace and has two
- * 8-bit fan tachometer fields.
- */
-static const struct yogafan_config yoga_pro_83dn_cfg = {
-	.multiplier = 100,
-	.fan_count = 2,
-	.paths = { "\\_SB.PC00.LPCB.EC0.FANS",
-		   "\\_SB.PC00.LPCB.EC0.FA2S" }
 };
 
 static void apply_rllag_filter(struct yoga_fan_data *data, int idx, long raw_rpm)
@@ -201,6 +201,30 @@ static const struct hwmon_chip_info yoga_fan_chip_info = {
 
 static const struct dmi_system_id yogafan_quirks[] = {
 	{
+		.ident = "Lenovo Yoga 740-15IML",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Yoga 740-15IML"),
+		},
+		.driver_data = (void *)&yoga_740_15iml_cfg,
+	},
+	{
+		.ident = "Lenovo IdeaPad 3 15ALC6 Ub",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "IdeaPad 3 15ALC6 Ub"),
+		},
+		.driver_data = (void *)&ideapad_3_15alc6_82ku_cfg,
+	},
+	{
+		.ident = "Yoga 14cACN 2021",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Yoga 14cACN 2021"),
+		},
+		.driver_data = (void *)&yoga_8bit_fans_cfg,
+	},
+	{
 		.ident = "Lenovo LOQ 15IAX9",
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
@@ -247,14 +271,6 @@ static const struct dmi_system_id yogafan_quirks[] = {
 			DMI_MATCH(DMI_PRODUCT_FAMILY, "Yoga 7 16ARP8"),
 		},
 		.driver_data = (void *)&xiaoxin_8bit_dual_cfg,
-	},
-	{
-		.ident = "Lenovo Yoga Pro 9 16IMH9 (83DN)",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "83DN"),
-		},
-		.driver_data = (void *)&yoga_pro_83dn_cfg,
 	},
 	{
 		.ident = "Lenovo Yoga",
