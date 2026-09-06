@@ -25,10 +25,6 @@ use crate::{
     prelude::*,
     ptr::KnownSize,
     sync::aref::ARef,
-    transmute::{
-        AsBytes,
-        FromBytes, //
-    },
     uaccess::UserSliceWriter, //
 };
 use core::{
@@ -417,7 +413,7 @@ impl From<DataDirection> for bindings::dma_data_direction {
 /// ```
 pub struct CoherentBox<T: KnownSize + ?Sized>(Coherent<T>);
 
-impl<T: AsBytes + FromBytes> CoherentBox<[T]> {
+impl<T: IntoBytes + FromBytes> CoherentBox<[T]> {
     /// [`CoherentBox`] variant of [`Coherent::zeroed_slice_with_attrs`].
     #[inline]
     pub fn zeroed_slice_with_attrs(
@@ -454,7 +450,7 @@ impl<T: AsBytes + FromBytes> CoherentBox<[T]> {
 
         // SAFETY:
         // - `ptr` is valid, properly aligned, and within this allocation.
-        // - `T: AsBytes + FromBytes` guarantees all bit patterns are valid, so partial writes on
+        // - `T: IntoBytes + FromBytes` guarantees all bit patterns are valid, so partial writes on
         //   error cannot leave the element in an invalid state.
         // - The DMA address has not been exposed yet, so there is no concurrent device access.
         unsafe { pin_init::raw_try_init(ptr, init)? };
@@ -523,7 +519,7 @@ impl<T: AsBytes + FromBytes> CoherentBox<[T]> {
     }
 }
 
-impl<T: AsBytes + FromBytes> CoherentBox<T> {
+impl<T: IntoBytes + FromBytes> CoherentBox<T> {
     /// Same as [`CoherentBox::zeroed_slice_with_attrs`], but for a single element.
     #[inline]
     pub fn zeroed_with_attrs(
@@ -554,7 +550,7 @@ impl<T: KnownSize + ?Sized> Deref for CoherentBox<T> {
     }
 }
 
-impl<T: AsBytes + FromBytes + KnownSize + ?Sized> DerefMut for CoherentBox<T> {
+impl<T: IntoBytes + FromBytes + KnownSize + ?Sized> DerefMut for CoherentBox<T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY:
@@ -565,7 +561,7 @@ impl<T: AsBytes + FromBytes + KnownSize + ?Sized> DerefMut for CoherentBox<T> {
     }
 }
 
-impl<T: AsBytes + FromBytes + KnownSize + ?Sized> From<CoherentBox<T>> for Coherent<T> {
+impl<T: IntoBytes + FromBytes + KnownSize + ?Sized> From<CoherentBox<T>> for Coherent<T> {
     #[inline]
     fn from(value: CoherentBox<T>) -> Self {
         value.0
@@ -663,7 +659,7 @@ impl<T: KnownSize + ?Sized> Coherent<T> {
     }
 }
 
-impl<T: AsBytes + FromBytes> Coherent<T> {
+impl<T: IntoBytes + FromBytes> Coherent<T> {
     /// Allocates a region of `T` of coherent memory.
     fn alloc_with_attrs(
         dev: &device::Device<Bound>,
@@ -753,7 +749,7 @@ impl<T: AsBytes + FromBytes> Coherent<T> {
         // SAFETY:
         // - `ptr` is valid, properly aligned, and points to exclusively owned memory.
         // - If `raw_try_init` fails, `self` is dropped, which safely frees the underlying
-        //   `Coherent`'s DMA memory. `T: AsBytes + FromBytes` ensures there are no complex `Drop`
+        //   `Coherent`'s DMA memory. `T: IntoBytes + FromBytes` ensures there are no complex `Drop`
         //   requirements we are bypassing.
         unsafe { pin_init::raw_try_init(ptr, init)? };
 
@@ -948,9 +944,9 @@ unsafe impl<T: KnownSize + Send + ?Sized> Send for Coherent<T> {}
 // methods that access the buffer contents (`field_read`, `field_write`, `as_slice`,
 // `as_slice_mut`) are `unsafe`, and callers are responsible for ensuring no data races occur.
 // The safe methods only return metadata or raw pointers whose use requires `unsafe`.
-unsafe impl<T: KnownSize + ?Sized + AsBytes + FromBytes + Sync> Sync for Coherent<T> {}
+unsafe impl<T: KnownSize + ?Sized + IntoBytes + FromBytes + Sync> Sync for Coherent<T> {}
 
-impl<T: KnownSize + AsBytes + ?Sized> debugfs::BinaryWriter for Coherent<T> {
+impl<T: KnownSize + IntoBytes + ?Sized> debugfs::BinaryWriter for Coherent<T> {
     fn write_to_slice(
         &self,
         writer: &mut UserSliceWriter,
