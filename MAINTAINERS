@@ -16781,6 +16781,15 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/i2c/mediatek,mt7621-i2c.yaml
 F:	drivers/i2c/busses/i2c-mt7621.c
 
+MEDIATEK MT7628 SWITCH DRIVER
+M:	Joris Vaisvila <joey@tinyisr.com>
+L:	netdev@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/net/dsa/mediatek,mt7628-esw.yaml
+F:	drivers/net/dsa/mt7628.c
+F:	drivers/net/phy/mediatek/mtk-fe-soc.c
+F:	net/dsa/tag_mt7628.c
+
 MEDIATEK MTMIPS CLOCK DRIVER
 M:	Sergio Paracuellos <sergio.paracuellos@gmail.com>
 S:	Maintained
