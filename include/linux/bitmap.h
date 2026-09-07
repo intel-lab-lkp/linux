@@ -44,6 +44,10 @@ struct device;
  *  bitmap_fill(dst, nbits)                     *dst = ~0UL
  *  bitmap_copy(dst, src, nbits)                *dst = *src
  *  bitmap_and(dst, src1, src2, nbits)          *dst = *src1 & *src2
+ *  bitmap_and_and(dst, src1, src2, src3, nbits)
+ *                                               *dst = *src1 & *src2 & *src3
+ *  bitmap_and_andnot(dst, src1, src2, src3, nbits)
+ *                                               *dst = *src1 & *src2 & ~(*src3)
  *  bitmap_or(dst, src1, src2, nbits)           *dst = *src1 | *src2
  *  bitmap_weighted_or(dst, src1, src2, nbits)	*dst = *src1 | *src2. Returns Hamming Weight of dst
  *  bitmap_weighted_xor(dst, src1, src2, nbits)	*dst = *src1 ^ *src2. Returns Hamming Weight of dst
@@ -166,6 +170,12 @@ void bitmap_cut(unsigned long *dst, const unsigned long *src,
 		unsigned int first, unsigned int cut, unsigned int nbits);
 bool __bitmap_and(unsigned long *dst, const unsigned long *bitmap1,
 		 const unsigned long *bitmap2, unsigned int nbits);
+bool __bitmap_and_and(unsigned long *dst, const unsigned long *bitmap1,
+		      const unsigned long *bitmap2,
+		      const unsigned long *bitmap3, unsigned int nbits);
+bool __bitmap_and_andnot(unsigned long *dst, const unsigned long *bitmap1,
+			 const unsigned long *bitmap2,
+			 const unsigned long *bitmap3, unsigned int nbits);
 void __bitmap_or(unsigned long *dst, const unsigned long *bitmap1,
 		 const unsigned long *bitmap2, unsigned int nbits);
 unsigned int __bitmap_weighted_or(unsigned long *dst, const unsigned long *bitmap1,
@@ -335,6 +345,28 @@ bool bitmap_and(unsigned long *dst, const unsigned long *src1,
 	if (small_const_nbits(nbits))
 		return (*dst = *src1 & *src2 & BITMAP_LAST_WORD_MASK(nbits)) != 0;
 	return __bitmap_and(dst, src1, src2, nbits);
+}
+
+static __always_inline
+bool bitmap_and_and(unsigned long *dst, const unsigned long *src1,
+		    const unsigned long *src2, const unsigned long *src3,
+		    unsigned int nbits)
+{
+	if (small_const_nbits(nbits))
+		return (*dst = *src1 & *src2 & *src3 &
+			       BITMAP_LAST_WORD_MASK(nbits)) != 0;
+	return __bitmap_and_and(dst, src1, src2, src3, nbits);
+}
+
+static __always_inline
+bool bitmap_and_andnot(unsigned long *dst, const unsigned long *src1,
+		       const unsigned long *src2, const unsigned long *src3,
+		       unsigned int nbits)
+{
+	if (small_const_nbits(nbits))
+		return (*dst = *src1 & *src2 & ~(*src3) &
+			       BITMAP_LAST_WORD_MASK(nbits)) != 0;
+	return __bitmap_and_andnot(dst, src1, src2, src3, nbits);
 }
 
 static __always_inline

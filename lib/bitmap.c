@@ -34,6 +34,25 @@
  * for the best explanations of this ordering.
  */
 
+/*
+ * Common helper for bitmap operations.
+ * @FETCH: The expression that fetches and combines each word of the bitmaps
+ * @bits: The bitmap size in bits
+ */
+#define BITMAP_OP(FETCH, bits)							\
+({										\
+	unsigned long idx, val, sz = (bits), result = 0;			\
+										\
+	for (idx = 0; idx * BITS_PER_LONG < sz; idx++) {			\
+		val = (FETCH);							\
+		if (sz - idx * BITS_PER_LONG < BITS_PER_LONG)		\
+			val &= BITMAP_LAST_WORD_MASK(sz);			\
+		result |= (dst[idx] = val);					\
+	}									\
+										\
+	result != 0;								\
+})
+
 bool __bitmap_equal(const unsigned long *bitmap1,
 		    const unsigned long *bitmap2, unsigned int bits)
 {
@@ -230,18 +249,25 @@ EXPORT_SYMBOL(bitmap_cut);
 bool __bitmap_and(unsigned long *dst, const unsigned long *bitmap1,
 				const unsigned long *bitmap2, unsigned int bits)
 {
-	unsigned int k;
-	unsigned int lim = bits/BITS_PER_LONG;
-	unsigned long result = 0;
-
-	for (k = 0; k < lim; k++)
-		result |= (dst[k] = bitmap1[k] & bitmap2[k]);
-	if (bits % BITS_PER_LONG)
-		result |= (dst[k] = bitmap1[k] & bitmap2[k] &
-			   BITMAP_LAST_WORD_MASK(bits));
-	return result != 0;
+	return BITMAP_OP(bitmap1[idx] & bitmap2[idx], bits);
 }
 EXPORT_SYMBOL(__bitmap_and);
+
+bool __bitmap_and_and(unsigned long *dst, const unsigned long *bitmap1,
+		      const unsigned long *bitmap2,
+		      const unsigned long *bitmap3, unsigned int bits)
+{
+	return BITMAP_OP(bitmap1[idx] & bitmap2[idx] & bitmap3[idx], bits);
+}
+EXPORT_SYMBOL(__bitmap_and_and);
+
+bool __bitmap_and_andnot(unsigned long *dst, const unsigned long *bitmap1,
+			 const unsigned long *bitmap2,
+			 const unsigned long *bitmap3, unsigned int bits)
+{
+	return BITMAP_OP(bitmap1[idx] & bitmap2[idx] & ~bitmap3[idx], bits);
+}
+EXPORT_SYMBOL(__bitmap_and_andnot);
 
 void __bitmap_or(unsigned long *dst, const unsigned long *bitmap1,
 				const unsigned long *bitmap2, unsigned int bits)

@@ -193,6 +193,81 @@ static void __init test_zero_clear(void)
 	expect_eq_pbl("", bmap, 1024);
 }
 
+static void __init test_bitmap_and(void)
+{
+	enum { nbits = BITS_PER_LONG + 13 };
+	DECLARE_BITMAP(src1, nbits);
+	DECLARE_BITMAP(src2, nbits);
+	DECLARE_BITMAP(src3, nbits);
+	DECLARE_BITMAP(dst, nbits);
+	DECLARE_BITMAP(expected, nbits);
+	unsigned long small_src1 = ~0UL;
+	unsigned long small_src2 = ~0UL;
+	unsigned long small_src3 = BIT(2);
+	unsigned long small_dst;
+	bool ret;
+
+	ret = bitmap_and_and(&small_dst, &small_src1, &small_src2,
+			     &small_src3, 4);
+	expect_eq_ulong(true, ret);
+	expect_eq_ulong(BIT(2), small_dst);
+
+	ret = bitmap_and_andnot(&small_dst, &small_src1, &small_src2,
+				&small_src3, 4);
+	expect_eq_ulong(true, ret);
+	expect_eq_ulong(GENMASK(3, 0) & ~BIT(2), small_dst);
+
+	bitmap_zero(src1, nbits);
+	bitmap_zero(src2, nbits);
+	bitmap_zero(src3, nbits);
+	bitmap_zero(expected, nbits);
+	__set_bit(1, src1);
+	__set_bit(2, src1);
+	__set_bit(BITS_PER_LONG + 1, src1);
+	__set_bit(BITS_PER_LONG + 12, src1);
+	__set_bit(BITS_PER_LONG + 13, src1);
+	__set_bit(1, src2);
+	__set_bit(BITS_PER_LONG + 1, src2);
+	__set_bit(BITS_PER_LONG + 12, src2);
+	__set_bit(BITS_PER_LONG + 13, src2);
+	__set_bit(BITS_PER_LONG + 1, src3);
+	__set_bit(1, expected);
+	__set_bit(BITS_PER_LONG + 1, expected);
+	__set_bit(BITS_PER_LONG + 12, expected);
+
+	ret = bitmap_and(dst, src1, src2, nbits);
+	expect_eq_ulong(true, ret);
+	expect_eq_bitmap(expected, dst, nbits);
+	expect_eq_ulong(BIT(1) | BIT(12), dst[1]);
+
+	bitmap_zero(expected, nbits);
+	__set_bit(BITS_PER_LONG + 1, expected);
+	ret = bitmap_and_and(dst, src1, src2, src3, nbits);
+	expect_eq_ulong(true, ret);
+	expect_eq_bitmap(expected, dst, nbits);
+	expect_eq_ulong(BIT(1), dst[1]);
+
+	bitmap_zero(expected, nbits);
+	__set_bit(1, expected);
+	__set_bit(2, expected);
+	__set_bit(BITS_PER_LONG + 12, expected);
+	ret = bitmap_andnot(dst, src1, src3, nbits);
+	expect_eq_ulong(true, ret);
+	expect_eq_bitmap(expected, dst, nbits);
+	expect_eq_ulong(BIT(12), dst[1]);
+
+	__clear_bit(2, expected);
+	ret = bitmap_and_andnot(src2, src1, src2, src3, nbits);
+	expect_eq_ulong(true, ret);
+	expect_eq_bitmap(expected, src2, nbits);
+	expect_eq_ulong(BIT(12), src2[1]);
+
+	bitmap_fill(src3, nbits);
+	ret = bitmap_and_andnot(src2, src1, src2, src3, nbits);
+	expect_eq_ulong(false, ret);
+	expect_eq_pbl("", src2, nbits);
+}
+
 static void __init test_find_nth_bit(void)
 {
 	unsigned long b, bit, cnt = 0;
@@ -1533,6 +1608,8 @@ static void __init test_zero_nbits(void)
 	bitmap_zero(NULL, 0);
 
 	ret = bitmap_and(NULL, NULL, NULL, 0);
+	ret = bitmap_and_and(NULL, NULL, NULL, NULL, 0);
+	ret = bitmap_and_andnot(NULL, NULL, NULL, NULL, 0);
 	ret = bitmap_empty(NULL, 0);
 	ret = bitmap_equal(NULL, NULL, 0);
 	ret = bitmap_full(NULL, 0);
@@ -1566,6 +1643,7 @@ static void __init test_zero_nbits(void)
 static void __init selftest(void)
 {
 	test_zero_clear();
+	test_bitmap_and();
 	test_fill_set();
 	test_copy();
 	test_bitmap_region();
