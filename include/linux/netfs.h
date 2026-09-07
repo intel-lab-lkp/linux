@@ -628,7 +628,7 @@ static inline void netfs_write_zero_point(struct inode *inode,
  * @inode: The inode to access
  * @i_size: Where to return the local file size.
  * @remote_i_size: Where to return the size of the file on the server
- * @zero_point: Where to return the the point beyond which the server has no data
+ * @zero_point: Where to return the point beyond which the server has no data
  *
  * Read remote_i_size and zero_point safely without the potential for tearing
  * on 32-bit arches.
