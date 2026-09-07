@@ -118,7 +118,7 @@ static unsigned configure_dma_errata(void)
 	/*
 	 * Erratum ID: i378: OMAP2+: sDMA Channel is not disabled
 	 * after a transaction error.
-	 * Workaround: SW should explicitely disable the channel.
+	 * Workaround: SW should explicitly disable the channel.
 	 */
 	if (cpu_class_is_omap2())
 		SET_DMA_ERRATA(DMA_ERRATA_i378);

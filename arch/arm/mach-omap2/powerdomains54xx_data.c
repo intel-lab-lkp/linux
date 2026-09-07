@@ -216,7 +216,7 @@ static struct powerdomain cam_54xx_pwrdm = {
 	.flags		  = PWRDM_HAS_LOWPOWERSTATECHANGE,
 };
 
-/* l3init_54xx_pwrdm: L3 initators pheripherals power domain  */
+/* l3init_54xx_pwrdm: L3 initiators pheripherals power domain  */
 static struct powerdomain l3init_54xx_pwrdm = {
 	.name		  = "l3init_pwrdm",
 	.voltdm		  = { .name = "core" },
