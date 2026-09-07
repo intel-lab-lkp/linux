@@ -20,6 +20,7 @@
 #include "ieee80211_i.h"
 #include "rate.h"
 #include "debugfs.h"
+#include "debugfs_key.h"
 #include "debugfs_netdev.h"
 #include "driver-ops.h"
 
@@ -1020,6 +1021,8 @@ void ieee80211_debugfs_remove_netdev(struct ieee80211_sub_if_data *sdata)
 	debugfs_remove_recursive(sdata->vif.debugfs_dir);
 	sdata->vif.debugfs_dir = NULL;
 	sdata->debugfs.subdir_stations = NULL;
+	sdata->debugfs.default_unicast_key = NULL;
+	sdata->debugfs.default_multicast_key = NULL;
 }
 
 void ieee80211_debugfs_rename_netdev(struct ieee80211_sub_if_data *sdata)
@@ -1038,6 +1041,7 @@ void ieee80211_debugfs_recreate_netdev(struct ieee80211_sub_if_data *sdata,
 {
 	ieee80211_debugfs_remove_netdev(sdata);
 	ieee80211_debugfs_add_netdev(sdata, mld_vif);
+	ieee80211_debugfs_key_update_default(sdata);
 
 	if (sdata->flags & IEEE80211_SDATA_IN_DRIVER) {
 		drv_vif_add_debugfs(sdata->local, sdata);
