@@ -186,7 +186,8 @@ static int linear_run(struct mddev *mddev)
 	return ret;
 }
 
-static int linear_add(struct mddev *mddev, struct md_rdev *rdev)
+static int linear_add(struct mddev *mddev, struct md_rdev *rdev,
+		      struct queue_limits *lim)
 {
 	/* Adding a drive to a linear array allows the array to grow.
 	 * It is permitted if the new drive has a matching superblock

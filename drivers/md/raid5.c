@@ -8441,7 +8441,8 @@ abort:
 	return err;
 }
 
-static int raid5_add_disk(struct mddev *mddev, struct md_rdev *rdev)
+static int raid5_add_disk(struct mddev *mddev, struct md_rdev *rdev,
+			  struct queue_limits *lim)
 {
 	struct r5conf *conf = mddev->private;
 	int ret, err = -EEXIST;
@@ -8728,7 +8729,7 @@ static int raid5_start_reshape(struct mddev *mddev)
 		rdev_for_each(rdev, mddev)
 			if (rdev->raid_disk < 0 &&
 			    !test_bit(Faulty, &rdev->flags)) {
-				if (raid5_add_disk(mddev, rdev) == 0) {
+				if (raid5_add_disk(mddev, rdev, NULL) == 0) {
 					if (rdev->raid_disk
 					    >= conf->previous_raid_disks)
 						set_bit(In_sync, &rdev->flags);
