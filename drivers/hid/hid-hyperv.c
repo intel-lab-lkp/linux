@@ -657,6 +657,25 @@ static struct mousevsc_dev *mousevsc_kunit_alloc_dev(struct kunit *test)
 	return input_dev;
 }
 
+/*
+ * Address of the report descriptor that mousevsc_on_receive_device_info()
+ * expects immediately after the HID descriptor.
+ *
+ * Computed from the start of @info, mirroring the desc_offset arithmetic in
+ * mousevsc_on_receive_device_info(), rather than from &info->hid_descriptor.
+ * The report lives in the extra bytes the caller allocated past the struct, so
+ * deriving it from the member would leave the fortify checks bounding writes
+ * by sizeof(info->hid_descriptor) and reject them. Note sizeof(*info) cannot
+ * be used instead: hid_descriptor is packed while synthhid_device_info is not,
+ * so the struct may carry trailing padding.
+ */
+static u8 *mousevsc_kunit_report_desc(struct synthhid_device_info *info)
+{
+	return (u8 *)info +
+	       offsetof(struct synthhid_device_info, hid_descriptor) +
+	       info->hid_descriptor.bLength;
+}
+
 static void mousevsc_device_info_zero_blength(struct kunit *test)
 {
 	struct synthhid_device_info *info;
@@ -687,7 +706,7 @@ static void mousevsc_device_info_valid_descriptor(struct kunit *test)
 
 	info->hid_descriptor.bLength = sizeof(struct hid_descriptor);
 	info->hid_descriptor.rpt_desc.wDescriptorLength = cpu_to_le16(4);
-	report = ((u8 *)&info->hid_descriptor) + info->hid_descriptor.bLength;
+	report = mousevsc_kunit_report_desc(info);
 	memset(report, 0x42, 4);
 
 	mousevsc_on_receive_device_info(input_dev, info, sizeof(*info) + 4);
@@ -713,7 +732,7 @@ static void mousevsc_device_info_report_desc_oob(struct kunit *test)
 
 	info->hid_descriptor.bLength = sizeof(struct hid_descriptor);
 	info->hid_descriptor.rpt_desc.wDescriptorLength = cpu_to_le16(64);
-	report = ((u8 *)&info->hid_descriptor) + info->hid_descriptor.bLength;
+	report = mousevsc_kunit_report_desc(info);
 	memset(report, 0x42, 8);
 
 	mousevsc_on_receive_device_info(input_dev, info, sizeof(*info) + 8);
