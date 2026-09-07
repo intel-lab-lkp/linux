@@ -176,14 +176,14 @@ impl Transaction {
             Ok(alloc) => alloc,
             Err(err) => {
                 if !err.is_dead() {
-                    pr_warn!("Failure in copy_transaction_data: {:?}", err);
+                    pr_warn!("Failure in copy_transaction_data: {:?}\n", err);
                 }
                 return Err(err);
             }
         };
         if info.is_oneway() {
             if from_parent.is_some() {
-                pr_warn!("Oneway transaction should not be in a transaction stack.");
+                pr_warn!("Oneway transaction should not be in a transaction stack.\n");
                 return Err(EINVAL.into());
             }
             alloc.set_info_oneway_node(node_ref.node.clone());
@@ -224,7 +224,7 @@ impl Transaction {
             match from.copy_transaction_data(to.clone(), info, info.debug_id, allow_fds, None) {
                 Ok(alloc) => alloc,
                 Err(err) => {
-                    pr_warn!("Failure in copy_transaction_data: {:?}", err);
+                    pr_warn!("Failure in copy_transaction_data: {:?}\n", err);
                     return Err(err);
                 }
             };
@@ -384,7 +384,7 @@ impl Transaction {
                     return Ok(());
                 }
             } else {
-                pr_err!("Failed to submit oneway transaction to node.");
+                pr_err!("Failed to submit oneway transaction to node.\n");
             }
         }
 

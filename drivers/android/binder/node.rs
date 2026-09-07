@@ -405,7 +405,7 @@ impl Node {
             !is_dead && !state.has_count
         } else {
             if state.count < count {
-                pr_err!("Failure: refcount underflow!");
+                pr_err!("Failure: refcount underflow!\n");
                 return None;
             }
             state.count -= count;

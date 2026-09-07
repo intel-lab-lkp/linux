@@ -286,7 +286,7 @@ impl Drop for Allocation {
 
             if info.clear_on_free {
                 if let Err(e) = self.fill_zero() {
-                    pr_warn!("Failed to clear data on free: {:?}", e);
+                    pr_warn!("Failed to clear data on free: {:?}\n", e);
                 }
             }
         }

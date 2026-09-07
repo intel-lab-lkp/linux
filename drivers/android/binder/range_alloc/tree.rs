@@ -166,7 +166,7 @@ impl<T> TreeRangeAllocator<T> {
 
         let (found_size, found_off, tree_node, free_tree_node) = match self.find_best_match(size) {
             None => {
-                pr_warn!("ENOSPC from range_alloc.reserve_new - size: {}", size);
+                pr_warn!("ENOSPC from range_alloc.reserve_new - size: {}\n", size);
                 return Err(ENOSPC);
             }
             Some(desc) => {
