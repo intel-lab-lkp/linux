@@ -198,7 +198,6 @@ bool arm_smmu_sva_supported(struct arm_smmu_device *smmu)
 {
 	unsigned long reg, fld;
 	unsigned long oas;
-	unsigned long asid_bits;
 	u32 feat_mask = ARM_SMMU_FEAT_COHERENCY;
 
 	if (vabits_actual == 52) {
@@ -228,20 +227,7 @@ bool arm_smmu_sva_supported(struct arm_smmu_device *smmu)
 	if (smmu->oas < oas)
 		return false;
 
-	/* We can support bigger ASIDs than the CPU, but not smaller */
-	fld = cpuid_feature_extract_unsigned_field(reg, ID_AA64MMFR0_EL1_ASIDBITS_SHIFT);
-	asid_bits = fld ? 16 : 8;
-	if (smmu->asid_bits < asid_bits)
-		return false;
-
-	/*
-	 * See max_pinned_asids in arch/arm64/mm/context.c. The following is
-	 * generally the maximum number of bindable processes.
-	 */
-	if (arm64_kernel_unmapped_at_el0())
-		asid_bits--;
-	dev_dbg(smmu->dev, "%d shared contexts\n", (1 << asid_bits) -
-		num_possible_cpus() - 2);
+	dev_dbg(smmu->dev, "Max SMMUv3 SVA contexts: %u\n", 1 << smmu->asid_bits);
 
 	return true;
 }
