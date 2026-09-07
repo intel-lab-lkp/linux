@@ -79,7 +79,7 @@ static int etnaviv_open(struct drm_device *dev, struct drm_file *file)
 					      priv->cmdbuf_suballoc);
 	if (!ctx->mmu) {
 		ret = -ENOMEM;
-		goto out_free;
+		goto out_free_id;
 	}
 
 	for (i = 0; i < ETNA_MAX_PIPES; i++) {
@@ -98,6 +98,8 @@ static int etnaviv_open(struct drm_device *dev, struct drm_file *file)
 
 	return 0;
 
+out_free_id:
+	xa_erase(&priv->active_contexts, ctx->id);
 out_free:
 	kfree(ctx);
 	return ret;
