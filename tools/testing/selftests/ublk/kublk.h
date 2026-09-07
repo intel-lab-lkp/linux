@@ -257,7 +257,7 @@ struct ublk_thread {
 	unsigned short nr_bufs;
 	unsigned short auto_buf_stride;
 
-       /* followings are for BATCH_IO */
+       /* following are for BATCH_IO */
 	unsigned short commit_buf_start;
 	unsigned char  commit_buf_elem_size;
        /*
