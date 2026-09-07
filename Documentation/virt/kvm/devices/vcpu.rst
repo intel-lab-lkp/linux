@@ -226,12 +226,14 @@ Returns:
 	 -ENXIO   Stolen time not implemented
 	 -EEXIST  Base address already set for this VCPU
 	 -EINVAL  Base address not 64 byte aligned
+	 -EPERM   The VCPU belongs to a protected VM
 	 =======  ======================================
 
 Specifies the base address of the stolen time structure for this VCPU. The
 base address must be 64 byte aligned and exist within a valid guest memory
 region. See Documentation/virt/kvm/arm/pvtime.rst for more information
-including the layout of the stolen time structure.
+including the layout of the stolen time structure. Stolen time is not
+supported for protected VMs (see Documentation/virt/kvm/arm/pkvm.rst).
 
 4. GROUP: KVM_VCPU_TSC_CTRL
 ===========================
