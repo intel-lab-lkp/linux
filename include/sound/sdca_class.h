@@ -26,9 +26,15 @@ struct sdca_function_data;
  *           before the class regmap is created and before the slave is
  *           ATTACHED; callers needing bus I/O must sdw_slave_wait_for_init()
  *           first.
+ * @populate_function: fill @function (entities, clusters, init_table, ...)
+ *           from static tables in place of sdca_parse_function() on
+ *           DT/non-DisCo platforms.  Must leave @function->desc alone.
+ *           Return 0 on success or a negative errno.  May be NULL.
  */
 struct sdca_class_hw_ops {
 	int (*hw_init)(struct sdw_slave *slave);
+	int (*populate_function)(struct sdw_slave *slave,
+				 struct sdca_function_data *function);
 };
 
 struct sdca_class_drv {
