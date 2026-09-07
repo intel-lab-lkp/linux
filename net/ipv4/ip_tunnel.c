@@ -205,6 +205,11 @@ static void ip_tunnel_del(struct ip_tunnel_net *itn, struct ip_tunnel *t)
 	hlist_del_init_rcu(&t->hash_node);
 }
 
+static bool ip_tunnel_unregistering(struct ip_tunnel *t)
+{
+	return hlist_unhashed(&t->hash_node);
+}
+
 static struct ip_tunnel *ip_tunnel_find(struct ip_tunnel_net *itn,
 					struct ip_tunnel_parm_kern *parms,
 					int type)
@@ -895,20 +900,22 @@ static void ip_tunnel_update(struct ip_tunnel_net *itn,
 	netdev_state_change(dev);
 }
 
-static void __ip_tunnel_dellink(struct net_device *dev, struct list_head *head)
+static void __ip_tunnel_dellink(struct net *net, struct net_device *dev,
+				struct list_head *head)
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
 	struct ip_tunnel_net *itn;
 
 	itn = net_generic(tunnel->net, tunnel->ip_tnl_net_id);
 	ip_tunnel_del(itn, tunnel);
-	unregister_netdevice_queue(dev, head);
+	unregister_netdevice_queue_net(net, dev, head);
 }
 
 int ip_tunnel_ctl(struct net_device *dev, struct ip_tunnel_parm_kern *p,
 		  int cmd)
 {
 	struct ip_tunnel *t = netdev_priv(dev);
+	struct net *orig_net = dev_net(dev);
 	struct ip_tunnel_net *itn;
 	LIST_HEAD(dev_kill_list);
 	struct net *net = t->net;
@@ -979,7 +986,7 @@ int ip_tunnel_ctl(struct net_device *dev, struct ip_tunnel_parm_kern *p,
 			}
 		}
 
-		if (t) {
+		if (t && !ip_tunnel_unregistering(t)) {
 			err = 0;
 			ip_tunnel_update(itn, t, dev, p, true, 0);
 		} else {
@@ -1003,7 +1010,9 @@ int ip_tunnel_ctl(struct net_device *dev, struct ip_tunnel_parm_kern *p,
 			dev = t->dev;
 		}
 
-		__ip_tunnel_dellink(dev, &dev_kill_list);
+		if (!ip_tunnel_unregistering(t))
+			__ip_tunnel_dellink(orig_net, dev, &dev_kill_list);
+
 		err = 0;
 		break;
 
@@ -1111,7 +1120,8 @@ void ip_tunnel_dellink(struct net_device *dev, struct list_head *head)
 
 	if (itn->fb_tunnel_dev != dev) {
 		mutex_lock(&itn->tunnels_lock);
-		__ip_tunnel_dellink(dev, head);
+		if (!ip_tunnel_unregistering(tunnel))
+			__ip_tunnel_dellink(dev_net(dev), dev, head);
 		mutex_unlock(&itn->tunnels_lock);
 	}
 }
@@ -1194,7 +1204,7 @@ void ip_tunnel_delete_net(struct net *net, unsigned int id,
 		struct ip_tunnel *t;
 
 		hlist_for_each_entry_safe(t, n, thead, hash_node)
-			__ip_tunnel_dellink(t->dev, head);
+			__ip_tunnel_dellink(net, t->dev, head);
 	}
 
 	mutex_unlock(&itn->tunnels_lock);
@@ -1302,6 +1312,11 @@ int ip_tunnel_changelink(struct net_device *dev, struct nlattr *tb[],
 				goto out;
 			}
 		}
+	}
+
+	if (ip_tunnel_unregistering(t)) {
+		err = -ENODEV;
+		goto out;
 	}
 
 	ip_tunnel_update(itn, t, dev, p, !tb[IFLA_MTU], fwmark);
