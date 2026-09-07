@@ -1261,6 +1261,7 @@ static inline bool
 remove_and_enqueue_same_base(struct hrtimer *timer, struct hrtimer_clock_base *base,
 			     const enum hrtimer_mode mode, ktime_t expires, u64 delta_ns)
 {
+	ktime_t hard_expires = ktime_add_safe(expires, ns_to_ktime(delta_ns));
 	bool was_first = false;
 
 	/* Remove it from the timer queue if active */
@@ -1268,11 +1269,11 @@ remove_and_enqueue_same_base(struct hrtimer *timer, struct hrtimer_clock_base *b
 		was_first = !timerqueue_linked_prev(&timer->node);
 
 		/* Try to update in place to avoid the de/enqueue dance */
-		if (hrtimer_can_update_in_place(timer, base, expires)) {
+		if (hrtimer_can_update_in_place(timer, base, hard_expires)) {
 			hrtimer_set_expires_range_ns(timer, expires, delta_ns);
 			trace_hrtimer_start(timer, mode, true);
 			if (was_first)
-				base->expires_next = expires;
+				base->expires_next = hard_expires;
 			return was_first;
 		}
 
@@ -1291,7 +1292,7 @@ remove_and_enqueue_same_base(struct hrtimer *timer, struct hrtimer_clock_base *b
 
 	/* If it's the first expiring timer now or again, update base */
 	if (timerqueue_linked_add(&base->active, &timer->node)) {
-		base->expires_next = expires;
+		base->expires_next = hard_expires;
 		return true;
 	}
 
