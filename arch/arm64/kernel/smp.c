@@ -103,7 +103,7 @@ static int boot_secondary(unsigned int cpu, struct task_struct *idle)
 	const struct cpu_operations *ops = get_secondary_cpu_ops();
 
 	if (ops->cpu_boot)
-		return ops->cpu_boot(cpu);
+		return ops->cpu_boot(cpu, 0);
 
 	return -EOPNOTSUPP;
 }

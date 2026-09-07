@@ -56,7 +56,8 @@ static int acpi_parking_protocol_cpu_prepare(unsigned int cpu)
 	return 0;
 }
 
-static int acpi_parking_protocol_cpu_boot(unsigned int cpu)
+static int acpi_parking_protocol_cpu_boot(unsigned int cpu,
+					  unsigned long ignored)
 {
 	struct cpu_mailbox_entry *cpu_entry = &cpu_mailbox_entries[cpu];
 	struct parking_protocol_mailbox __iomem *mailbox;
