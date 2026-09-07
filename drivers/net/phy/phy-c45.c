@@ -1623,8 +1623,7 @@ int genphy_c45_eee_is_active(struct phy_device *phydev, unsigned long *lp)
 	if (lp)
 		linkmode_copy(lp, tmp_lp);
 
-	linkmode_and(common, phydev->advertising_eee, tmp_lp);
-	if (linkmode_empty(common))
+	if (!linkmode_and(common, phydev->advertising_eee, tmp_lp))
 		return 0;
 
 	return phy_check_valid(phydev->speed, phydev->duplex, common);
