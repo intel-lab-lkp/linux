@@ -34,8 +34,8 @@
  */
 
 struct optimistic_spin_node {
-	int next; /* CPU number offset by 1, 0 if no next */
-	int prev; /* CPU number offset by 1, 0 if lock held */
+	unsigned int next; /* CPU number offset by 1, 0 if no next */
+	unsigned int prev; /* CPU number offset by 1, 0 if lock held */
 } __aligned(8);
 
 static DEFINE_PER_CPU(struct optimistic_spin_node, osq_node);
@@ -44,16 +44,15 @@ static DEFINE_PER_CPU(struct optimistic_spin_node, osq_node);
  * We use the value 0 to represent "no CPU", thus the encoded value
  * will be the CPU number incremented by 1.
  */
-static inline int encode_cpu(int cpu_nr)
+static inline unsigned int encode_cpu(unsigned int cpu_nr)
 {
 	return cpu_nr + 1;
 }
 
-static inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
+static inline struct optimistic_spin_node *
+decode_cpu(unsigned int encoded_cpu_val)
 {
-	int cpu_nr = encoded_cpu_val - 1;
-
-	return per_cpu_ptr(&osq_node, cpu_nr);
+	return per_cpu_ptr(&osq_node, encoded_cpu_val - 1);
 }
 
 /*
@@ -72,17 +71,17 @@ static inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
  * When a lock request is being cancelled the caller needs 'next' to
  * set node->prev->next = next.
  */
-static inline int
-osq_unlink_from_next(struct optimistic_spin_queue *lock, int prev)
+static inline unsigned int
+osq_unlink_from_next(struct optimistic_spin_queue *lock, unsigned int prev)
 {
-	int curr = encode_cpu(smp_processor_id());
+	unsigned int curr = encode_cpu(smp_processor_id());
 	struct optimistic_spin_node *node;
-	int next;
+	unsigned int next;
 
 	for (;;) {
-		int tail = atomic_read(&lock->tail);
+		unsigned int tail = READ_ONCE(lock->tail);
 		if (curr == tail &&
-		    atomic_try_cmpxchg_release(&lock->tail, &tail, prev)) {
+		    try_cmpxchg_release(&lock->tail, &tail, prev)) {
 			/*
 			 * We were the last queued, lock->tail now references
 			 * prev (or is 0 if the list is now empty).
@@ -127,8 +126,8 @@ osq_unlink_from_next(struct optimistic_spin_queue *lock, int prev)
 bool osq_lock(struct optimistic_spin_queue *lock)
 {
 	struct optimistic_spin_node *node, *prev_ptr;
-	int curr = encode_cpu(smp_processor_id());
-	int next, prev;
+	unsigned int curr = encode_cpu(smp_processor_id());
+	unsigned int next, prev;
 
 	/*
 	 * We need both ACQUIRE (pairs with corresponding RELEASE in
@@ -136,7 +135,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * the node fields we just initialised) semantics when updating
 	 * the lock tail.
 	 */
-	prev = atomic_xchg(&lock->tail, curr);
+	prev = xchg(&lock->tail, curr);
 	if (prev == OSQ_UNLOCKED_VAL)
 		return true;
 
