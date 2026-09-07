@@ -725,6 +725,12 @@ static bool valid_cgroupcond(const struct inet_diag_bc_op *op, int len,
 }
 #endif
 
+/* ss(8) filters only need a handful of compare/host/mark ops.
+ * Bound the program so dump walks cannot run an arbitrarily long
+ * bytecode sequence under the socket hash bucket locks.
+ */
+#define INET_DIAG_BC_MAX_OPS 64
+
 static int inet_diag_bc_audit(struct inet_diag_dump_data *cb_data,
 			      const struct sk_buff *skb)
 {
@@ -732,6 +738,7 @@ static int inet_diag_bc_audit(struct inet_diag_dump_data *cb_data,
 	const void *bytecode, *bc;
 	int bytecode_len, len;
 	bool net_admin;
+	int ops = 0;
 
 	if (!attr)
 		return 0;
@@ -746,6 +753,9 @@ static int inet_diag_bc_audit(struct inet_diag_dump_data *cb_data,
 	while (len > 0) {
 		int min_len = sizeof(struct inet_diag_bc_op);
 		const struct inet_diag_bc_op *op = bc;
+
+		if (++ops > INET_DIAG_BC_MAX_OPS)
+			return -EINVAL;
 
 		switch (op->code) {
 		case INET_DIAG_BC_S_COND:
