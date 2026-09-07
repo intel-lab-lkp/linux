@@ -58,10 +58,10 @@
  * (must be <= IBMVNIC_ONE_LTB_MAX)
  * IBMVNIC_LTB_SET_SIZE - current size of all LTBs in an ltb_set
  *
- * Each VNIC can have upto 16 Rx, 16 Tx and 16 TSO pools. The TSO pools
+ * Each VNIC can have up to 16 Rx, 16 Tx and 16 TSO pools. The TSO pools
  * are of fixed length (IBMVNIC_TSO_BUF_SZ * IBMVNIC_TSO_BUFS) of 4MB.
  *
- * The Rx and Tx pools can have upto 4096 buffers. The max size of these
+ * The Rx and Tx pools can have up to 4096 buffers. The max size of these
  * buffers is about 9588 (for jumbo frames, including IBMVNIC_BUFFER_HLEN).
  * So, setting the IBMVNIC_LTB_SET_SIZE for a pool to 4096 * 9588 ~= 38MB.
  *

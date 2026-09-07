@@ -521,7 +521,7 @@ extern int smu_queue_i2c(struct smu_i2c_cmd *cmd);
 
 
 /*
- * - SMU "sdb" partitions informations -
+ * - SMU "sdb" partitions information -
  */
 
 
@@ -569,7 +569,7 @@ struct smu_sdbp_fvt {
 };
 
 /* This partition contains voltage & current sensor calibration
- * informations
+ * information
  */
 #define SMU_SDB_CPUVCP_ID		0x21
 
@@ -610,9 +610,9 @@ struct smu_sdbp_sensortree {
 	__u8	unknown[3];
 };
 
-/* This partition contains CPU thermal control PID informations. So far
+/* This partition contains CPU thermal control PID information. So far
  * only single CPU machines have been seen with an SMU, so we assume this
- * carries only informations for those
+ * carries only information for those
  */
 #define SMU_SDB_CPUPIDDATA_ID		0x17
 
@@ -688,7 +688,7 @@ struct smu_user_cmd_hdr
 struct smu_user_reply_hdr
 {
 	__u32		status;			/* Command status */
-	__u32		reply_len;		/* Length of data follwing */
+	__u32		reply_len;		/* Length of data following */
 };
 
 #endif /*  _SMU_H */

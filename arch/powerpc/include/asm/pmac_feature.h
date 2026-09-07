@@ -61,7 +61,7 @@
 #define PMAC_TYPE_UNKNOWN_OHARE		0x2f	/* Unknown, but OHare based */
 
 /* Here are the Heathrow based machines
- * FIXME: Differenciate wallstreet,mainstreet,wallstreetII
+ * FIXME: Differentiate wallstreet,mainstreet,wallstreetII
  */
 #define PMAC_TYPE_GOSSAMER		0x30	/* Gossamer motherboard */
 #define PMAC_TYPE_SILK			0x31	/* Desktop PowerMac G3 */

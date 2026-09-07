@@ -1183,7 +1183,7 @@ EXC_COMMON_BEGIN(machine_check_early_common)
 
 	/*
 	 * Switch to mc_emergency stack and handle re-entrancy (we limit
-	 * the nested MCE upto level 4 to avoid stack overflow).
+	 * the nested MCE up to level 4 to avoid stack overflow).
 	 * Save MCE registers srr1, srr0, dar and dsisr and then set ME=1
 	 *
 	 * We use paca->in_mce to check whether this is the first entry or
@@ -2980,7 +2980,7 @@ TRAMP_REAL_BEGIN(rfscv_flush_fallback)
 	sync
 
 	/*
-	 * The load adresses are at staggered offsets within cachelines,
+	 * The load addresses are at staggered offsets within cachelines,
 	 * which suits some pipelines better (on others it should not
 	 * hurt).
 	 */

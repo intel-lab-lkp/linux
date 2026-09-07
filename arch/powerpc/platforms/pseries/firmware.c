@@ -33,7 +33,7 @@ struct hypertas_fw_feature {
 
 /*
  * The names in this table match names in rtas/ibm,hypertas-functions.  If the
- * entry ends in a '*', only upto the '*' is matched.  Otherwise the entire
+ * entry ends in a '*', only up to the '*' is matched.  Otherwise the entire
  * string must match.
  */
 static __initdata struct hypertas_fw_feature
@@ -90,7 +90,7 @@ static void __init fw_hypertas_feature_init(const char *hypertas,
 
 			/*
 			 * If there is a '*' at the end of name, only check
-			 * upto there
+			 * up to there
 			 */
 			size = strlen(name);
 			if (size && name[size - 1] == '*') {

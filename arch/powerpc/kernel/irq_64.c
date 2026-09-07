@@ -417,7 +417,7 @@ bool prep_irq_for_idle_irqsoff(void)
  * Take the SRR1 wakeup reason, index into this table to find the
  * appropriate irq_happened bit.
  *
- * Sytem reset exceptions taken in idle state also come through here,
+ * System reset exceptions taken in idle state also come through here,
  * but they are NMI interrupts so do not need to wait for IRQs to be
  * restored, and should be taken as early as practical. These are marked
  * with 0xff in the table. The Power ISA specifies 0100b as the system

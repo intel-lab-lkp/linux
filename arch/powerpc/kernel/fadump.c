@@ -1755,7 +1755,7 @@ void __init fadump_setup_param_area(void)
 		 * must meet the following conditions:
 		 * 1. The first memory block size must be higher than the
 		 *    minimum RMA (MIN_RMA) size. Bootloader can use memory
-		 *    upto RMA size. So it should be avoided.
+		 *    up to RMA size. So it should be avoided.
 		 * 2. The range should be between MIN_RMA and RMA size (ppc64_rma_size)
 		 * 3. It must not overlap with the fadump reserved area.
 		 */

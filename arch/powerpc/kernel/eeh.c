@@ -351,7 +351,7 @@ static inline unsigned long eeh_token_to_phys(unsigned long token)
 
 /*
  * On PowerNV platform, we might already have fenced PHB there.
- * For that case, it's meaningless to recover frozen PE. Intead,
+ * For that case, it's meaningless to recover frozen PE. Instead,
  * We have to handle fenced PHB firstly.
  */
 static int eeh_phb_check_failure(struct eeh_pe *pe)
@@ -1084,7 +1084,7 @@ void eeh_remove_device(struct pci_dev *dev)
 	 * During the hotplug for EEH error recovery, we need the EEH
 	 * device attached to the parent PE in order for BAR restore
 	 * a bit later. So we keep it for BAR restore and remove it
-	 * from the parent PE during the BAR resotre.
+	 * from the parent PE during the BAR restore.
 	 */
 	edev->pdev = NULL;
 

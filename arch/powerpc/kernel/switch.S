@@ -11,7 +11,7 @@
 
 #ifdef CONFIG_PPC_BOOK3S_64
 /*
- * Cancel all explict user streams as they will have no use after context
+ * Cancel all explicit user streams as they will have no use after context
  * switch and will stop the HW from creating streams itself
  */
 #define STOP_STREAMS		\

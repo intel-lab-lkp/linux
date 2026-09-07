@@ -26,7 +26,7 @@
  * Coprocessor Request Blocks (CRB)s and submit them using the "copy" and
  * "paste" instructions which were introduced in Power9.
  *
- * A Power node can have (upto?) 8 Power chips. There is one instance of
+ * A Power node can have (up to?) 8 Power chips. There is one instance of
  * VAS in each Power9 chip. Each instance of VAS has 64K windows or ports,
  * Senders and receivers must each connect to a separate window before they
  * can exchange messages through the switchboard.

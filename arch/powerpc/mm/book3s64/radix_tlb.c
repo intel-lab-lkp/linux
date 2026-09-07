@@ -737,7 +737,7 @@ static DEFINE_PER_CPU(unsigned int, mm_cpumask_trim_clock);
  * Interval between flushes at which we send out IPIs to check whether the
  * mm_cpumask can be trimmed for the case where it's not a single-threaded
  * process flushing its own mm. The intent is to reduce the cost of later
- * flushes. Don't want this to be so low that it adds noticable cost to TLB
+ * flushes. Don't want this to be so low that it adds noticeable cost to TLB
  * flushing, or so high that it doesn't help reduce global TLBIEs.
  */
 static unsigned long tlb_mm_cpumask_trim_timer = 1073;
@@ -1384,7 +1384,7 @@ void radix__flush_tlb_all(void)
 	asm volatile(PPC_TLBIE_5(%0, %4, %3, %2, %1)
 		     : : "r"(rb), "i"(r), "i"(1), "i"(ric), "r"(rs) : "memory");
 	/*
-	 * now flush host entires by passing PRS = 0 and LPID == 0
+	 * now flush host entries by passing PRS = 0 and LPID == 0
 	 */
 	asm volatile(PPC_TLBIE_5(%0, %4, %3, %2, %1)
 		     : : "r"(rb), "i"(r), "i"(prs), "i"(ric), "r"(0) : "memory");

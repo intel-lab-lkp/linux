@@ -269,7 +269,7 @@ void slb_dump_contents(struct slb_entry *slb_ptr)
 		/* RR is not so useful as it's often not used for allocation */
 		pr_err("SLB RR allocator index %d\n", get_paca()->stab_rr);
 
-		/* Dump slb cache entires as well. */
+		/* Dump slb cache entries as well. */
 		pr_err("SLB cache ptr value = %d\n", get_paca()->slb_save_cache_ptr);
 		pr_err("Valid SLB cache entries:\n");
 		n = min_t(int, get_paca()->slb_save_cache_ptr, SLB_CACHE_ENTRIES);
@@ -667,7 +667,7 @@ static long slb_allocate_kernel(unsigned long ea, unsigned long id)
 
 	if (id == LINEAR_MAP_REGION_ID) {
 
-		/* We only support upto H_MAX_PHYSMEM_BITS */
+		/* We only support up to H_MAX_PHYSMEM_BITS */
 		if ((ea & EA_MASK) > (1UL << H_MAX_PHYSMEM_BITS))
 			return -EFAULT;
 

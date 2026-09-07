@@ -58,7 +58,7 @@
 
 /*
  * Initial task size value for user applications. For book3s 64 we start
- * with 128TB and conditionally enable upto 512TB
+ * with 128TB and conditionally enable up to 512TB
  */
 #ifdef CONFIG_PPC_BOOK3S_64
 #define DEFAULT_MAP_WINDOW	\

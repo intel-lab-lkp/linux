@@ -234,7 +234,7 @@ static inline unsigned long get_sllp_encoding(int psize)
 /*
  * encode page number shift.
  * in order to fit the 78 bit va in a 64 bit variable we shift the va by
- * 12 bits. This enable us to address upto 76 bit va.
+ * 12 bits. This enable us to address up to 76 bit va.
  * For hpt hash from a va we can ignore the page size bits of va and for
  * hpte encoding we ignore up to 23 bits of va. So ignoring lower 12 bits ensure
  * we work in all cases including 4k page size.
@@ -586,7 +586,7 @@ static inline void slb_set_size(u16 size) { }
  * Now certain config support MAX_PHYSMEM more than 512TB. Hence we will need
  * to use more than one context for linear mapping the kernel.
  * For vmalloc and memmap, we use just one context with 512TB. With 64 byte
- * struct page size, we need ony 32 TB in memmap for 2PB (51 bits (MAX_PHYSMEM_BITS)).
+ * struct page size, we need only 32 TB in memmap for 2PB (51 bits (MAX_PHYSMEM_BITS)).
  */
 #if (H_MAX_PHYSMEM_BITS > MAX_EA_BITS_PER_CONTEXT)
 #define MAX_KERNEL_CTX_CNT	(1UL << (H_MAX_PHYSMEM_BITS - MAX_EA_BITS_PER_CONTEXT))
@@ -701,7 +701,7 @@ static inline void subpage_prot_free(struct mm_struct *mm) {}
 
 /*
  * One bit per slice. We have lower slices which cover 256MB segments
- * upto 4G range. That gets us 16 low slices. For the rest we track slices
+ * up to 4G range. That gets us 16 low slices. For the rest we track slices
  * in 1TB size.
  */
 struct slice_mask {
@@ -756,7 +756,7 @@ static inline unsigned long vsid_scramble(unsigned long protovsid,
 	unsigned long vsid;
 	unsigned long vsid_modulus = ((1UL << vsid_bits) - 1);
 	/*
-	 * We have same multipler for both 256 and 1T segements now
+	 * We have same multiplier for both 256 and 1T segements now
 	 */
 	vsid = protovsid * vsid_multiplier;
 	vsid = (vsid >> vsid_bits) + (vsid & vsid_modulus);

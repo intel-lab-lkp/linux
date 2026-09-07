@@ -1017,7 +1017,7 @@ static int __init opal_init(void)
 	/* Initialise OPAL sensor interface */
 	opal_sensor_init();
 
-	/* Initialise OPAL hypervisor maintainence interrupt handling */
+	/* Initialise OPAL hypervisor maintenance interrupt handling */
 	opal_hmi_handler_init();
 
 	/* Create i2c platform devices */

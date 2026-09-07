@@ -336,7 +336,7 @@ static inline unsigned int fh_partition_stop(unsigned int partition)
  * structures.  The array must be guest physically contiguous.
  *
  * This structure must be aligned on 32-byte boundary, so that no single
- * strucuture can span two pages.
+ * structure can span two pages.
  */
 struct fh_sg_list {
 	uint64_t source;   /**< guest physical address to copy from */

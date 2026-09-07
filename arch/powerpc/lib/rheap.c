@@ -3,7 +3,7 @@
  * heap points to. Normal heap implementations use the memory they manage
  * to place their list. We cannot do that because the memory we manage may
  * have special properties, for example it is uncachable or of different
- * endianess.
+ * endianness.
  *
  * Author: Pantelis Antoniou <panto@intracom.gr>
  *
