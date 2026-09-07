@@ -969,11 +969,16 @@ static void ntb_qp_link_cleanup(struct ntb_transport_qp *qp)
 
 	dev_info(&pdev->dev, "qp %d: Link Cleanup\n", qp->qp_num);
 
-	cancel_delayed_work_sync(&qp->link_work);
+	disable_delayed_work_sync(&qp->link_work);
+	ntb_transport_set_qp_active(qp, false);
+	tasklet_kill(&qp->rxc_db_work);
+
 	ntb_qp_link_down_reset(qp);
 
 	if (qp->event_handler)
 		qp->event_handler(qp->cb_data, qp->link_is_up);
+
+	enable_delayed_work(&qp->link_work);
 }
 
 static void ntb_qp_link_cleanup_work(struct work_struct *work)
