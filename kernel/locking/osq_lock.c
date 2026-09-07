@@ -24,21 +24,21 @@
  * There is no equivalent pointer to the list head - the 'head' is the
  * osq_node of the CPU that acquired the osq lock.
  *
- * The 'next' pointer of the tail must be NULL, all the other 'next' pointers
- * must either be valid or transiently NULL.
- * The 'prev' pointers only need to be valid when node->prev makes sense and,
- * even then, can be transiently invalid (ie refer to the wrong node).
- * They are only used for the node->prev->next = node->next update when
- * 'node' is being removed. Atomically checking node->prev->next == node
+ * The 'next' pointer of the tail must be zero, all the other 'next' pointers
+ * must either be valid or transiently zero.
+ * The 'prev' pointer is zero unless the node is waiting for the lock, when
+ * waiting it may refer to the wrong node (node->prev->next != node).
+ * The 'prev' value is only needed for the node->prev->next = node->next update
+ * when 'node' is being removed. Atomically checking node->prev->next == node
  * ensures the list doesn't get corrupted.
  */
 
 struct optimistic_spin_node {
-	struct optimistic_spin_node *next;
-	int prev; /* CPU number offset by 1 */
-};
+	int next; /* CPU number offset by 1, 0 if no next */
+	int prev; /* CPU number offset by 1, 0 if lock held */
+} __aligned(8);
 
-static DEFINE_PER_CPU_SHARED_ALIGNED(struct optimistic_spin_node, osq_node);
+static DEFINE_PER_CPU(struct optimistic_spin_node, osq_node);
 
 /*
  * We use the value 0 to represent "no CPU", thus the encoded value
@@ -72,11 +72,12 @@ static inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
  * When a lock request is being cancelled the caller needs 'next' to
  * set node->prev->next = next.
  */
-static inline struct optimistic_spin_node *
+static inline int
 osq_unlink_from_next(struct optimistic_spin_queue *lock, int prev)
 {
 	int curr = encode_cpu(smp_processor_id());
-	struct optimistic_spin_node *node, *next;
+	struct optimistic_spin_node *node;
+	int next;
 
 	for (;;) {
 		int tail = atomic_read(&lock->tail);
@@ -88,9 +89,9 @@ osq_unlink_from_next(struct optimistic_spin_queue *lock, int prev)
 			 * If prev was spinning in this loop it can continue.
 			 *
 			 * Since we are the tail of the list, node->next
-			 * must be NULL.
+			 * must be zero.
 			 */
-			return NULL;
+			return 0;
 		}
 
 		node = this_cpu_ptr(&osq_node);
@@ -104,7 +105,7 @@ osq_unlink_from_next(struct optimistic_spin_queue *lock, int prev)
 		 * the concurrent unqueue completes.
 		 */
 		if (node->next) {
-			next = xchg(&node->next, NULL);
+			next = xchg(&node->next, 0);
 			if (next)
 				break;
 		}
@@ -118,16 +119,16 @@ osq_unlink_from_next(struct optimistic_spin_queue *lock, int prev)
 	 * When called while unqueueing in osq_lock() this completes the
 	 * backwards link, the forwards link is done by the caller.
 	 */
-	WRITE_ONCE(next->prev, prev);
+	WRITE_ONCE(decode_cpu(next)->prev, prev);
 
 	return next;
 }
 
 bool osq_lock(struct optimistic_spin_queue *lock)
 {
-	struct optimistic_spin_node *node, *prev_ptr, *next;
+	struct optimistic_spin_node *node, *prev_ptr;
 	int curr = encode_cpu(smp_processor_id());
-	int prev;
+	int next, prev;
 
 	/*
 	 * We need both ACQUIRE (pairs with corresponding RELEASE in
@@ -155,7 +156,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 */
 	smp_wmb();
 
-	WRITE_ONCE(prev_ptr->next, node);
+	WRITE_ONCE(prev_ptr->next, curr);
 
 	/*
 	 * Normally @prev is untouchable after the above store; because at that
@@ -191,8 +192,8 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 
 		prev_ptr = decode_cpu(prev);
 
-		if (data_race(prev_ptr->next) == node &&
-		    cmpxchg(&prev_ptr->next, node, NULL) == node)
+		if (data_race(prev_ptr->next) == curr &&
+		    cmpxchg(&prev_ptr->next, curr, 0) == curr)
 			break;
 
 		/*
