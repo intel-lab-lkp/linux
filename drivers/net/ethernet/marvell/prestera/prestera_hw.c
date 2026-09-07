@@ -2324,6 +2324,11 @@ int prestera_hw_counters_get(struct prestera_switch *sw, u32 idx,
 	if (err)
 		goto free_buff;
 
+	if (__le32_to_cpu(resp->num_counters) > *len) {
+		err = -EINVAL;
+		goto free_buff;
+	}
+
 	for (i = 0; i < __le32_to_cpu(resp->num_counters); i++) {
 		stats[i].packets += __le64_to_cpu(resp->stats[i].packets);
 		stats[i].bytes += __le64_to_cpu(resp->stats[i].bytes);
