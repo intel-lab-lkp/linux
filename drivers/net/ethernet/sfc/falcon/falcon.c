@@ -2638,7 +2638,7 @@ void falcon_start_nic_stats(struct ef4_nic *efx)
 	spin_unlock_bh(&efx->stats_lock);
 }
 
-/* We don't acutally pull stats on falcon. Wait 10ms so that
+/* We don't actually pull stats on falcon. Wait 10ms so that
  * they arrive when we call this just after start_stats
  */
 static void falcon_pull_nic_stats(struct ef4_nic *efx)

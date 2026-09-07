@@ -1176,7 +1176,7 @@ struct gfar_private {
 		extended_hash:1,
 		bd_stash_en:1,
 		rx_filer_enable:1,
-		/* Enable priorty based Tx scheduling in Hw */
+		/* Enable priority based Tx scheduling in Hw */
 		prio_sched_en:1,
 		/* Flow control flags */
 		pause_aneg_en:1,

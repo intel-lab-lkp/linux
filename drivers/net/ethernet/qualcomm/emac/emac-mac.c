@@ -578,7 +578,7 @@ void emac_mac_stop(struct emac_adapter *adpt)
 	emac_reg_update32(adpt->base + EMAC_RXQ_CTRL_0, RXQ_EN, 0);
 	emac_reg_update32(adpt->base + EMAC_TXQ_CTRL_0, TXQ_EN, 0);
 	emac_reg_update32(adpt->base + EMAC_MAC_CTRL, TXEN | RXEN, 0);
-	usleep_range(1000, 1050); /* stopping mac may take upto 1msec */
+	usleep_range(1000, 1050); /* stopping mac may take up to 1msec */
 }
 
 /* Free all descriptors of given transmit queue */

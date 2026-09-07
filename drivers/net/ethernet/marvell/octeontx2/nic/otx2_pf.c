@@ -3007,7 +3007,7 @@ int otx2_realloc_msix_vectors(struct otx2_nic *pf)
 	int num_vec, err;
 
 	/* NPA interrupts are inot registered, so alloc only
-	 * upto NIX vector offset.
+	 * up to NIX vector offset.
 	 */
 	num_vec = hw->nix_msixoff;
 	num_vec += NIX_LF_CINT_VEC_START + hw->max_queues;

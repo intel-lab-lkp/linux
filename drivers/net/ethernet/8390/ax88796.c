@@ -675,7 +675,7 @@ static void ax_initial_setup(struct net_device *dev, struct ei_device *ei_local)
  *
  * initialise the specified device, taking care to note the MAC
  * address it may already have (if configured), ensure
- * the device is ready to be used by lib8390.c and registerd with
+ * the device is ready to be used by lib8390.c and registered with
  * the network layer.
  */
 static int ax_init_dev(struct net_device *dev)

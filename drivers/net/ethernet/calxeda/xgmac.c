@@ -1117,7 +1117,7 @@ static netdev_tx_t xgmac_xmit(struct sk_buff *skb, struct net_device *dev)
 			desc_set_tx_owner(desc, desc_flags);
 	}
 
-	/* Interrupt on completition only for the latest segment */
+	/* Interrupt on completion only for the latest segment */
 	if (desc != first)
 		desc_set_tx_owner(desc, desc_flags |
 			TXDESC_LAST_SEG | irq_flag);

@@ -526,7 +526,7 @@ static int m88e1101_config_aneg(struct phy_device *phydev)
  * reg-page: which register bank to use.
  * reg: the register.
  * mask: if non-zero, ANDed with existing register value.
- * value: ORed with the masked value and written to the regiser.
+ * value: ORed with the masked value and written to the register.
  *
  */
 static int marvell_of_reg_init(struct phy_device *phydev)

@@ -2034,7 +2034,7 @@ static inline int sk_receive_skb(struct sock *sk, struct sk_buff *skb,
 
 static inline void sk_tx_queue_set(struct sock *sk, int tx_queue)
 {
-	/* sk_tx_queue_mapping accept only upto a 16-bit value */
+	/* sk_tx_queue_mapping accept only up to a 16-bit value */
 	if (WARN_ON_ONCE((unsigned short)tx_queue >= USHRT_MAX))
 		return;
 	/* Paired with READ_ONCE() in sk_tx_queue_get() and

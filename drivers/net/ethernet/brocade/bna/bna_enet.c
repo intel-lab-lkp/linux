@@ -1877,13 +1877,13 @@ bna_res_req(struct bna_res_info *res_info)
 	res_info[BNA_RES_MEM_T_ATTR].res_u.mem_info.len =
 				ALIGN(bfa_nw_ioc_meminfo(), PAGE_SIZE);
 
-	/* Virtual memory for retreiving fw_trc */
+	/* Virtual memory for retrieving fw_trc */
 	res_info[BNA_RES_MEM_T_FWTRC].res_type = BNA_RES_T_MEM;
 	res_info[BNA_RES_MEM_T_FWTRC].res_u.mem_info.mem_type = BNA_MEM_T_KVA;
 	res_info[BNA_RES_MEM_T_FWTRC].res_u.mem_info.num = 1;
 	res_info[BNA_RES_MEM_T_FWTRC].res_u.mem_info.len = BNA_DBG_FWTRC_LEN;
 
-	/* DMA memory for retreiving stats */
+	/* DMA memory for retrieving stats */
 	res_info[BNA_RES_MEM_T_STATS].res_type = BNA_RES_T_MEM;
 	res_info[BNA_RES_MEM_T_STATS].res_u.mem_info.mem_type = BNA_MEM_T_DMA;
 	res_info[BNA_RES_MEM_T_STATS].res_u.mem_info.num = 1;

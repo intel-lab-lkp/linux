@@ -1060,7 +1060,7 @@ static void xlgmac_tx_desc_init(struct xlgmac_channel *channel)
 	int start_index = ring->cur;
 	int i;
 
-	/* Initialze all descriptors */
+	/* Initialize all descriptors */
 	for (i = 0; i < ring->dma_desc_count; i++) {
 		desc_data = XLGMAC_GET_DESC_DATA(ring, i);
 

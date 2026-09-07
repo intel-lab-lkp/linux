@@ -28,7 +28,7 @@
  * devid: which sub-device to use.
  * reg: the register.
  * mask: if non-zero, ANDed with existing register value.
- * value: ORed with the masked value and written to the regiser.
+ * value: ORed with the masked value and written to the register.
  *
  */
 static int bcm87xx_of_reg_init(struct phy_device *phydev)

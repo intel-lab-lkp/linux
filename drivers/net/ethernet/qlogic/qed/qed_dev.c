@@ -305,7 +305,7 @@ void qed_db_recovery_execute(struct qed_hwfn *p_hwfn)
 	DP_NOTICE(p_hwfn, "Executing doorbell recovery. Counter was %d\n",
 		  p_hwfn->db_recovery_info.db_recovery_counter);
 
-	/* Track amount of times recovery was executed */
+	/* Track number of times recovery was executed */
 	p_hwfn->db_recovery_info.db_recovery_counter++;
 
 	/* Protect the list */

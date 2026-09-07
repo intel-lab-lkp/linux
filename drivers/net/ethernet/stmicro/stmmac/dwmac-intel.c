@@ -1312,7 +1312,7 @@ static int intel_eth_pci_probe(struct pci_dev *pdev,
 
 	/* Initialize all MSI vectors to invalid so that it can be set
 	 * according to platform data settings below.
-	 * Note: MSI vector takes value from 0 upto 31 (STMMAC_MSI_VEC_MAX)
+	 * Note: MSI vector takes value from 0 up to 31 (STMMAC_MSI_VEC_MAX)
 	 */
 	plat->msi_mac_vec = STMMAC_MSI_VEC_MAX;
 	plat->msi_wol_vec = STMMAC_MSI_VEC_MAX;

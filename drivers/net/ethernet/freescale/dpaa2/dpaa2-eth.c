@@ -1820,7 +1820,7 @@ static void dpaa2_eth_seed_pools(struct dpaa2_eth_priv *priv)
 /*
  * Drain the specified number of buffers from one of the DPNI's private buffer
  * pools.
- * @count must not exceeed DPAA2_ETH_BUFS_PER_CMD
+ * @count must not exceed DPAA2_ETH_BUFS_PER_CMD
  */
 static void dpaa2_eth_drain_bufs(struct dpaa2_eth_priv *priv, int bpid,
 				 int count)

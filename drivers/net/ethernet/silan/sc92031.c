@@ -87,7 +87,7 @@ MODULE_PARM_DESC(media, "Media type (0x00 = autodetect,"
 enum  silan_registers {
    Config0    = 0x00,         // Config0
    Config1    = 0x04,         // Config1
-   RxBufWPtr  = 0x08,         // Rx buffer writer poiter
+   RxBufWPtr  = 0x08,         // Rx buffer writer pointer
    IntrStatus = 0x0C,         // Interrupt status
    IntrMask   = 0x10,         // Interrupt mask
    RxbufAddr  = 0x14,         // Rx buffer start address
@@ -109,8 +109,8 @@ enum  silan_registers {
    TimerIntr  = 0x78,         // Timer interrupt register
    PMConfig   = 0x7C,         // Power Manager configuration
    CRC0       = 0x80,         // Power Manager CRC ( Two 32bit regisers)
-   Wakeup0    = 0x88,         // power Manager wakeup( Eight 64bit regiser)
-   LSBCRC0    = 0xC8,         // power Manager LSBCRC(Two 32bit regiser)
+   Wakeup0    = 0x88,         // power Manager wakeup( Eight 64bit register)
+   LSBCRC0    = 0xC8,         // power Manager LSBCRC(Two 32bit register)
    TestD0     = 0xD0,
    TestD4     = 0xD4,
    TestD8     = 0xD8,

@@ -556,7 +556,7 @@ static void gelic_wl_parse_ie(u8 *data, size_t len,
 
 
 /*
- * translate the scan informations from hypervisor to a
+ * translate the scan information from hypervisor to a
  * independent format
  */
 static char *gelic_wl_translate_scan(struct net_device *netdev,

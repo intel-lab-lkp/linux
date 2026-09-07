@@ -1605,7 +1605,7 @@ bfa_flash_read_start(void __iomem *pci_bar, u32 offset, u32 len,
 {
 	int status;
 
-	/* len must be mutiple of 4 and not exceeding fifo size */
+	/* len must be multiple of 4 and not exceeding fifo size */
 	if (len == 0 || len > BFA_FLASH_FIFO_SIZE || (len & 0x03) != 0)
 		return BFA_FLASH_ERR_LEN;
 
@@ -3023,7 +3023,7 @@ bfa_ioc_poll_fwinit(struct bfa_ioc *ioc)
 /*
  * FLASH DMA buffer should be big enough to hold both MFG block and
  * asic block(64k) at the same time and also should be 2k aligned to
- * avoid write segement to cross sector boundary.
+ * avoid write segment to cross sector boundary.
  */
 #define BFA_FLASH_SEG_SZ	2048
 #define BFA_FLASH_DMA_BUF_SZ	\

@@ -30,7 +30,7 @@ const struct in6_addr addr6 = IN6ADDR_LOOPBACK_INIT;
 #define IP6_HLEN	(sizeof(struct ip6_hdr))
 #define UDP_HLEN	(sizeof(struct udphdr))
 
-/* IPv6 fragment header lenth. */
+/* IPv6 fragment header length. */
 #define FRAG_HLEN	8
 
 static int payload_len;

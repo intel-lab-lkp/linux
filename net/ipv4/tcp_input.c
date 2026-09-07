@@ -5131,7 +5131,7 @@ void tcp_sack_compress_send_ack(struct sock *sk)
 		__sock_put(sk);
 
 	/* Since we have to send one ack finally,
-	 * substract one from tp->compressed_ack to keep
+	 * subtract one from tp->compressed_ack to keep
 	 * LINUX_MIB_TCPACKCOMPRESSED accurate.
 	 */
 	NET_ADD_STATS(sock_net(sk), LINUX_MIB_TCPACKCOMPRESSED,

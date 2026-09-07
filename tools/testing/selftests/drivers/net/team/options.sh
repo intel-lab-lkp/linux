@@ -139,7 +139,7 @@ team_test_option()
         log_test "Set + Get '${option_name}' test"
 }
 
-# Test that getting a non-existant option fails.
+# Test that getting a non-existent option fails.
 # Globals:
 #   RET - Used by testing infra like `check_err`.
 #   EXIT_STATUS - Used by `log_test` for whole script exit value.

@@ -9825,7 +9825,7 @@ int t4_read_cim_obq(struct adapter *adap, unsigned int qid, u32 *data, size_t n)
 		     QUENUMSELECT_V(qid));
 	v = t4_read_reg(adap, CIM_QUEUE_CONFIG_CTRL_A);
 
-	addr = CIMQBASE_G(v) * 64;    /* muliple of 256 -> muliple of 4 */
+	addr = CIMQBASE_G(v) * 64;    /* multiple of 256 -> multiple of 4 */
 	nwords = CIMQSIZE_G(v) * 64;  /* same */
 	if (n > nwords)
 		n = nwords;

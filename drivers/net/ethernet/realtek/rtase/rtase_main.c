@@ -937,7 +937,7 @@ static void rtase_hw_config(struct net_device *dev)
 			  RTASE_RX_MX_DMA_MASK);
 	rtase_w16(tp, RTASE_RX_CONFIG_0, reg_data16);
 
-	/* new rx descritpor */
+	/* new rx descriptor */
 	reg_data16 = rtase_r16(tp, RTASE_RX_CONFIG_1);
 	reg_data16 |= RTASE_RX_NEW_DESC_FORMAT_EN | RTASE_PCIE_NEW_FLOW;
 	u16p_replace_bits(&reg_data16, 0xF, RTASE_RX_MAX_FETCH_DESC_MASK);

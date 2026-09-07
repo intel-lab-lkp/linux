@@ -2317,7 +2317,7 @@ static int netlink_dump(struct sock *sk, bool lock_taken)
 	 */
 	skb_reserve(skb, skb_tailroom(skb) - alloc_size);
 
-	/* Make sure malicious BPF programs can not read unitialized memory
+	/* Make sure malicious BPF programs can not read uninitialized memory
 	 * from skb->head -> skb->data
 	 */
 	skb_reset_network_header(skb);

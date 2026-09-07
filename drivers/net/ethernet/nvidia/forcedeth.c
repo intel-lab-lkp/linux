@@ -794,7 +794,7 @@ struct fe_priv {
 	void __iomem *base;
 
 	/* rx specific fields.
-	 * Locking: Within irq hander or disable_irq+spin_lock(&np->lock);
+	 * Locking: Within irq handler or disable_irq+spin_lock(&np->lock);
 	 */
 	union ring_type get_rx, put_rx, last_rx;
 	struct nv_skb_map *get_rx_ctx, *put_rx_ctx;
@@ -815,7 +815,7 @@ struct fe_priv {
 	struct nv_txrx_stats __percpu *txrx_stats;
 
 	/* media detection workaround.
-	 * Locking: Within irq hander or disable_irq+spin_lock(&np->lock);
+	 * Locking: Within irq handler or disable_irq+spin_lock(&np->lock);
 	 */
 	int need_linktimer;
 	unsigned long link_timeout;

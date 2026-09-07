@@ -37,7 +37,7 @@ setup() {
 
 	# Set up interfaces veth0 and veth1, which are pairs in separate
 	# namespaces. veth0 is veth-router, veth1 is veth-host.
-	# first, set up the inteface's link to the namespace
+	# first, set up the interface's link to the namespace
 	# then, set the interface "up"
 	ip netns exec ${ROUTER_NS} ip link add name ${ROUTER_INTF} \
 		type veth peer name ${HOST_INTF}
@@ -71,7 +71,7 @@ setup_v6() {
 
 	# Set up interfaces veth0 and veth1, which are pairs in separate
 	# namespaces. veth0 is veth-router, veth1 is veth-host.
-	# first, set up the inteface's link to the namespace
+	# first, set up the interface's link to the namespace
 	# then, set the interface "up"
 	ip -n ${ROUTER_NS_V6} link add name ${ROUTER_INTF} \
 		type veth peer name ${HOST_INTF} netns ${HOST_NS_V6}

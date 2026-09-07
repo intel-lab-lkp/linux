@@ -1412,7 +1412,7 @@ static const struct ethtool_ops gelic_ether_ethtool_ops = {
 /**
  * gelic_net_tx_timeout_task - task scheduled by the watchdog timeout
  * function (to be called not under interrupt status)
- * @work: work is context of tx timout task
+ * @work: work is context of tx timeout task
  *
  * called as task when tx hangs, resets interface (if interface is up)
  */

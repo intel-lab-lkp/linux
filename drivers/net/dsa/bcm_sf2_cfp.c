@@ -898,7 +898,7 @@ static int bcm_sf2_cfp_rule_insert(struct dsa_switch *ds, int port,
 
 	/*
 	 * We have a small oddity where Port 6 just does not have a
-	 * valid bit here (so we substract by one).
+	 * valid bit here (so we subtract by one).
 	 */
 	queue_num = ring_cookie % SF2_NUM_EGRESS_QUEUES;
 	if (port_num >= 7)

@@ -363,7 +363,7 @@ static int rtl8366rb_get_mib_counter(struct realtek_priv *priv,
 		mib->offset;
 
 	/* Writing access counter address first
-	 * then ASIC will prepare 64bits counter wait for being retrived
+	 * then ASIC will prepare 64bits counter wait for being retrieved
 	 */
 	ret = regmap_write(priv->map, addr, 0); /* Write whatever */
 	if (ret)

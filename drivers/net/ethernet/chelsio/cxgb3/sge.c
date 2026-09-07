@@ -3273,7 +3273,7 @@ void t3_sge_stop_dma(struct adapter *adap)
 }
 
 /**
- *	t3_sge_stop - disable SGE operation completly
+ *	t3_sge_stop - disable SGE operation completely
  *	@adap: the adapter
  *
  *	Called from process context. Disables the DMA engine and any

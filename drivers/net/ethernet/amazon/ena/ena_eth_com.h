@@ -93,7 +93,7 @@ static inline bool ena_com_sq_have_enough_space(struct ena_com_io_sq *io_sq,
 
 	/* This calculation doesn't need to be 100% accurate. So to reduce
 	 * the calculation overhead just Subtract 2 lines from the free descs
-	 * (one for the header line and one to compensate the devision
+	 * (one for the header line and one to compensate the division
 	 * down calculation.
 	 */
 	temp = required_buffers / io_sq->llq_info.descs_per_entry + 2;

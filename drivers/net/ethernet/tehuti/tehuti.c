@@ -313,7 +313,7 @@ static int bdx_poll(struct napi_struct *napi, int budget)
  * @priv: NIC private structure
  *
  * Firmware is loaded via TXD fifo, so it must be initialized first.
- * Firware must be loaded once per NIC not per PCI device provided by NIC (NIC
+ * Firmware must be loaded once per NIC not per PCI device provided by NIC (NIC
  * can have few of them). So all drivers use semaphore register to choose one
  * that will actually load FW to NIC.
  */
@@ -1184,7 +1184,7 @@ static void bdx_recycle_skb(struct bdx_priv *priv, struct rxd_desc *rxdd)
  * @budget: maximum number of packets to receive
  */
 
-/* TBD: replace memcpy func call by explicite inline asm */
+/* TBD: replace memcpy func call by explicit inline asm */
 
 static int bdx_rx_receive(struct bdx_priv *priv, struct rxd_fifo *f, int budget)
 {
@@ -1324,13 +1324,13 @@ static void print_rxfd(struct rxf_desc *rxfd)
  * 1) TX Free Fifo - TXF - holds ack descriptors for sent packets
  * 2) TX Data Fifo - TXD - holds descriptors of full buffers.
  *
- * Currently NIC supports TSO, checksuming and gather DMA
+ * Currently NIC supports TSO, checksumming and gather DMA
  * UFO and IP fragmentation is on the way
  *
  * RX SW Data Structures
  * ~~~~~~~~~~~~~~~~~~~~~
  * txdb - used to keep track of all skbs owned by SW and their dma addresses.
- * For TX case, ownership lasts from geting packet via hard_xmit and until HW
+ * For TX case, ownership lasts from getting packet via hard_xmit and until HW
  * acknowledges sent by TXF descriptors.
  * Implemented as cyclic buffer.
  * fifo - keeps info about fifo's size and location, relevant HW registers,

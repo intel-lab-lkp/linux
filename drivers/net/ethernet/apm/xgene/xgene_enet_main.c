@@ -1770,7 +1770,7 @@ static int xgene_enet_get_resources(struct xgene_enet_pdata *pdata)
 	if (IS_ERR(pdata->clk)) {
 		if (pdata->phy_mode != PHY_INTERFACE_MODE_SGMII) {
 			/* Abort if the clock is defined but couldn't be
-			 * retrived. Always abort if the clock is missing on
+			 * retrieved. Always abort if the clock is missing on
 			 * DT system as the driver can't cope with this case.
 			 */
 			if (PTR_ERR(pdata->clk) != -ENOENT || dev->of_node)

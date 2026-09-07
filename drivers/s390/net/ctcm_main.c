@@ -497,7 +497,7 @@ static int ctcm_transmit_skb(struct channel *ch, struct sk_buff *skb)
 	}
 	spin_unlock_irqrestore(&ch->collect_lock, saveflags);
 	/*
-	 * Protect skb against beeing free'd by upper
+	 * Protect skb against being free'd by upper
 	 * layers.
 	 */
 	refcount_inc(&skb->users);
@@ -688,7 +688,7 @@ static int ctcmpc_transmit_skb(struct channel *ch, struct sk_buff *skb)
 	}
 
 	/*
-	 * Protect skb against beeing free'd by upper
+	 * Protect skb against being free'd by upper
 	 * layers.
 	 */
 	refcount_inc(&skb->users);

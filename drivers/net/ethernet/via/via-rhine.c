@@ -225,7 +225,7 @@ The chip does not pad to minimum transmit length.
 
 /* This table drives the PCI probe routines. It's mostly boilerplate in all
    of the drivers, and will likely be provided by some future kernel.
-   Note the matching code -- the first table entry matchs all 56** cards but
+   Note the matching code -- the first table entry matches all 56** cards but
    second only the 1234 card.
 */
 

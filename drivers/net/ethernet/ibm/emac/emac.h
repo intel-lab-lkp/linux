@@ -2,7 +2,7 @@
 /*
  * drivers/net/ethernet/ibm/emac/emac.h
  *
- * Register definitions for PowerPC 4xx on-chip ethernet contoller
+ * Register definitions for PowerPC 4xx on-chip ethernet controller
  *
  * Copyright 2007 Benjamin Herrenschmidt, IBM Corp.
  *                <benh@kernel.crashing.org>

@@ -1553,7 +1553,7 @@ void mlx4_release_eq(struct mlx4_dev *dev, int vec)
 	mutex_lock(&priv->msix_ctl.pool_lock);
 	priv->eq_table.eq[eq_vec].ref_count--;
 
-	/* once we allocated EQ, we don't release it because it might be binded
+	/* once we allocated EQ, we don't release it because it might be bound
 	 * to cpu_rmap.
 	 */
 	mutex_unlock(&priv->msix_ctl.pool_lock);

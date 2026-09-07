@@ -1392,8 +1392,8 @@ static int ax88179_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 	 *		pkt_cnt and hdr_off (offset of
 	 *		  <per-packet metadata entry 1>)
 	 *
-	 * pkt_cnt is number of entrys in the per-packet metadata.
-	 * In current firmware there is 2 entrys per packet.
+	 * pkt_cnt is number of entries in the per-packet metadata.
+	 * In current firmware there is 2 entries per packet.
 	 * The first points to the packet and the
 	 *  second is a dummy header.
 	 * This was done probably to align fields in 64-bit and

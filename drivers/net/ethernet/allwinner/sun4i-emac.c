@@ -504,7 +504,7 @@ static void emac_init_device(struct net_device *dev)
 	writel(reg_val | EMAC_CTL_RESET | EMAC_CTL_TX_EN | EMAC_CTL_RX_EN,
 		db->membase + EMAC_CTL_REG);
 
-	/* enable RX/TX0/RX Hlevel interrup */
+	/* enable RX/TX0/RX Hlevel interrupt */
 	reg_val = readl(db->membase + EMAC_INT_CTL_REG);
 	reg_val |= (EMAC_INT_CTL_TX_EN | EMAC_INT_CTL_TX_ABRT_EN | EMAC_INT_CTL_RX_EN);
 	writel(reg_val, db->membase + EMAC_INT_CTL_REG);

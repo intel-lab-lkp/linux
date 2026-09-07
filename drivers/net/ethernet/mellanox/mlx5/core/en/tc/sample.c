@@ -353,7 +353,7 @@ add_post_rule(struct mlx5_eswitch *esw, struct mlx5e_sample_flow *sample_flow,
 	/* Allocate default table per vport, chain and prio. Otherwise, there is
 	 * only one default table for the same sampler object. Rules with different
 	 * prio and chain may overlap. For CT sample action, per vport default
-	 * table is needed to resotre the metadata.
+	 * table is needed to restore the metadata.
 	 */
 	per_vport_tbl_attr.chain = attr->chain;
 	per_vport_tbl_attr.prio = attr->prio;

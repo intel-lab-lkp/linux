@@ -50,7 +50,7 @@ struct mii_phy {
 	struct mii_phy_def *def;
 	u32 advertising;	/* Ethtool ADVERTISED_* defines */
 	u32 features;		/* Copied from mii_phy_def.features
-				   or determined automaticaly */
+				   or determined automatically */
 	int address;		/* PHY address */
 	int mode;		/* PHY mode */
 	int gpcs_address;	/* GPCS PHY address */

@@ -666,7 +666,7 @@ struct bnx2x_fastpath {
 				 MAX_TX_DESC_CNT * NEXT_PAGE_TX_DESC_CNT)
 /* max BDs per tx packet w/o next_pages:
  * START_BD		- describes packed
- * START_BD(splitted)	- includes unpaged data segment for GSO
+ * START_BD(split)	- includes unpaged data segment for GSO
  * PARSING_BD		- for TSO and CSUM data
  * PARSING_BD2		- for encapsulation data
  * Frag BDs		- describes pages for frags

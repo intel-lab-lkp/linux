@@ -227,7 +227,7 @@ int ksz_port_set_default_prio(struct dsa_switch *ds, int port, u8 prio)
  * @port: Port number for which to get the priority
  * @dscp: DSCP value for which to get the priority
  *
- * This function fetches the priority value from switch global DSCP-to-priorty
+ * This function fetches the priority value from switch global DSCP-to-priority
  * mapping table for the specified DSCP value.
  *
  * Return: The priority value for the DSCP on success, or a negative error

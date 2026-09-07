@@ -1835,7 +1835,7 @@ static void ptp_event_failure(struct efx_nic *efx, int expected_frag_len)
 
 /* Process a completed receive event.  Put it on the event queue and
  * start worker thread.  This is required because event and their
- * correspoding packets may come in either order.
+ * corresponding packets may come in either order.
  */
 static void ptp_event_rx(struct efx_nic *efx, struct efx_ptp_data *ptp)
 {

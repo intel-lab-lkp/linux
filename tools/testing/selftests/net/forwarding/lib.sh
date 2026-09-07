@@ -114,7 +114,7 @@ netif_find_driver()
 	done
 }
 
-# Whether to find netdevice according to the driver speficied by the importer
+# Whether to find netdevice according to the driver specified by the importer
 : "${NETIF_FIND_DRIVER:=}"
 
 if [[ $NETIF_FIND_DRIVER ]]; then

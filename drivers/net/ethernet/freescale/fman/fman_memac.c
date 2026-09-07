@@ -1311,7 +1311,7 @@ int memac_initialization(struct mac_device *mac_dev,
 
 	/* Most boards should use MLO_AN_INBAND, but existing boards don't have
 	 * a managed property. Default to MLO_AN_INBAND rather than MLO_AN_PHY.
-	 * Phylink will allow this to be overriden by a fixed link. We need to
+	 * Phylink will allow this to be overridden by a fixed link. We need to
 	 * be careful and not enable this if we are using MII or RGMII, since
 	 * those configurations modes don't use in-band autonegotiation.
 	 */

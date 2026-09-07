@@ -2215,7 +2215,7 @@ static enum sctp_ierror sctp_verify_param(struct net *net,
 		if (!ep->auth_enable)
 			goto unhandled;
 
-		/* SCTP-AUTH: Secion 6.1
+		/* SCTP-AUTH: Section 6.1
 		 * If the random number is not 32 byte long the association
 		 * MUST be aborted.  The ABORT chunk SHOULD contain the error
 		 * cause 'Protocol Violation'.
@@ -2306,7 +2306,7 @@ int sctp_verify_init(struct net *net, const struct sctp_endpoint *ep,
 	}
 
 	/* There is a possibility that a parameter length was bad and
-	 * in that case we would have stoped walking the parameters.
+	 * in that case we would have stopped walking the parameters.
 	 * The current param.p would point at the bad one.
 	 * Current consensus on the mailing list is to generate a PROTOCOL
 	 * VIOLATION error.  We build the ERROR chunk here and let the normal

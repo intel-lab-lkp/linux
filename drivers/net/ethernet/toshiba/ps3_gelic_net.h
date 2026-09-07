@@ -93,7 +93,7 @@ enum gelic_descr_tx_status {
 /* RX descriptor data error bits */
 enum gelic_descr_rx_error {
 	/* bit 31 reserved */
-	GELIC_DESCR_RXALNERR	= 0x40000000, /* alignement error 10/100M */
+	GELIC_DESCR_RXALNERR	= 0x40000000, /* alignment error 10/100M */
 	GELIC_DESCR_RXOVERERR	= 0x20000000, /* oversize error */
 	GELIC_DESCR_RXRNTERR	= 0x10000000, /* Runt error */
 	GELIC_DESCR_RXIPCHKERR	= 0x08000000, /* IP checksum  error */

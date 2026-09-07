@@ -19,7 +19,7 @@
 	number Y1-LM-2015-01.
 */
 
-/* All Typhoon ring positions are specificed in bytes, and point to the
+/* All Typhoon ring positions are specified in bytes, and point to the
  * first "clean" entry in the ring -- ie the next entry we use for whatever
  * purpose.
  */

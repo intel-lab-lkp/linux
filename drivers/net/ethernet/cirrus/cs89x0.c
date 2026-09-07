@@ -257,9 +257,9 @@ control_dc_dc(struct net_device *dev, int on_not_off)
 	struct net_local *lp = netdev_priv(dev);
 	unsigned int selfcontrol;
 	unsigned long timenow = jiffies;
-	/* control the DC to DC convertor in the SelfControl register.
+	/* control the DC to DC converter in the SelfControl register.
 	 * Note: This is hooked up to a general purpose pin, might not
-	 * always be a DC to DC convertor.
+	 * always be a DC to DC converter.
 	 */
 
 	selfcontrol = HCB1_ENBL; /* Enable the HCB1 bit as an output */

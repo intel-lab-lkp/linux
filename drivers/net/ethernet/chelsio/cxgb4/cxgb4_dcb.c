@@ -50,7 +50,7 @@ void cxgb4_dcb_version_init(struct net_device *dev)
 	struct port_info *pi = netdev2pinfo(dev);
 	struct port_dcb_info *dcb = &pi->dcb;
 
-	/* Any writes here are only done on kernels that exlicitly need
+	/* Any writes here are only done on kernels that explicitly need
 	 * a specific version, say < 2.6.38 which only support CEE
 	 */
 	dcb->dcb_version = FW_PORT_DCB_VER_AUTO;

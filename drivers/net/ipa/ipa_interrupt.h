@@ -21,7 +21,7 @@ enum ipa_irq_id;
  * @endpoint_id:	Endpoint whose interrupt should be enabled
  *
  * Note:  The "TX" in the name is from the perspective of the IPA hardware.
- * A TX_SUSPEND interrupt arrives on an AP RX enpoint when packet data can't
+ * A TX_SUSPEND interrupt arrives on an AP RX endpoint when packet data can't
  * be delivered to the endpoint because it is suspended (or its underlying
  * channel is stopped).
  */

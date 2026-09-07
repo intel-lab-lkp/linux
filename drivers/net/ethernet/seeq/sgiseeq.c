@@ -619,7 +619,7 @@ sgiseeq_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	 *    we are changing all of the following.
 	 * 2) Do no allow the HPC to look at a new descriptor until
 	 *    we have completely set up it's state.  This means, do
-	 *    not clear HPCDMA_EOX in the current last descritptor
+	 *    not clear HPCDMA_EOX in the current last descriptor
 	 *    until the one we are adding looks consistent and could
 	 *    be processes right now.
 	 * 3) The tx interrupt code must notice when we've added a new

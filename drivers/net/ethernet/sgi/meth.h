@@ -37,7 +37,7 @@ typedef struct tx_packet_hdr {
 	u64		cat_ptr3_valid:1,	/*Concatination pointer valid flags*/
 			cat_ptr2_valid:1,
 			cat_ptr1_valid:1;
-	u64		tx_int_flag:1;		/*Generate TX intrrupt when packet has been sent*/
+	u64		tx_int_flag:1;		/*Generate TX interrupt when packet has been sent*/
 	u64		term_dma_flag:1;	/*Terminate transmit DMA on transmit abort conditions*/
 	u64		data_offset:7;		/*Starting byte offset in ring data block*/
 	u64		data_len:16;		/*Length of valid data in bytes-1*/

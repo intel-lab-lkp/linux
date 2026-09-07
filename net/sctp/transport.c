@@ -723,7 +723,7 @@ void sctp_transport_lower_cwnd(struct sctp_transport *transport,
 		 * transport address, the cwnd of the transport address
 		 * should be adjusted to max(cwnd/2, 4*MTU) per RTO.
 		 * NOTE: Although the draft recommends that this check needs
-		 * to be done every RTO interval, we do it every hearbeat
+		 * to be done every RTO interval, we do it every heartbeat
 		 * interval.
 		 */
 		transport->cwnd = max(transport->cwnd/2,

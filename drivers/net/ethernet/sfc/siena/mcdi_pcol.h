@@ -6861,7 +6861,7 @@
 /***********************************/
 /* MC_CMD_CLP
  * Perform a CLP related operation, see SF-110495-PS for details of CLP
- * processing. This command has been extended to accomodate the requirements of
+ * processing. This command has been extended to accommodate the requirements of
  * different manufacturers which are to be found in SF-119187-TC, SF-119186-TC,
  * SF-120509-TC and SF-117282-PS.
  */
@@ -16293,7 +16293,7 @@
 
 /***********************************/
 /* MC_CMD_GET_LICENSED_V3_FEATURE_STATES
- * Query the state of an one or more licensed features. (Note that the actual
+ * Query the state of a one or more licensed features. (Note that the actual
  * state may be invalidated by the MC_CMD_LICENSING_V3 OP_UPDATE_LICENSE
  * operation or a reboot of the MC.) Used for V3 licensing (Medford)
  */
@@ -16798,7 +16798,7 @@
 #define          MC_CMD_PRIVILEGE_MASK_IN_GRP_ALL_MULTICAST 0x200 /* enum */
 #define          MC_CMD_PRIVILEGE_MASK_IN_GRP_PROMISCUOUS 0x400 /* enum */
 /* enum: Allows to set the TX packets' source MAC address to any arbitrary MAC
- * adress.
+ * address.
  */
 #define          MC_CMD_PRIVILEGE_MASK_IN_GRP_MAC_SPOOFING_TX 0x800
 /* enum: Privilege that allows a Function to change the MAC address configured

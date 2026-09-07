@@ -67,7 +67,7 @@ static u64 tout_convert_reg_field_to_ms(u32 to_mul, u32 to_val)
 	u64 msec = to_val;
 
 	to_mul &= 0x3;
-	/* convert hours/minutes/seconds to miliseconds */
+	/* convert hours/minutes/seconds to milliseconds */
 	if (to_mul)
 		msec *= 1000 * int_pow(60, to_mul - 1);
 

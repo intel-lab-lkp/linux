@@ -1482,7 +1482,7 @@ static void xgbe_tx_desc_init(struct xgbe_channel *channel)
 
 	DBGPR("-->tx_desc_init\n");
 
-	/* Initialze all descriptors */
+	/* Initialize all descriptors */
 	for (i = 0; i < ring->rdesc_count; i++) {
 		rdata = XGBE_GET_DESC_DATA(ring, i);
 

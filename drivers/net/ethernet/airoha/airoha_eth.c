@@ -900,7 +900,7 @@ static int airoha_qdma_init_rx(struct airoha_qdma *qdma)
 		int err;
 
 		if (!(RX_DONE_INT_MASK & BIT(i))) {
-			/* rx-queue not binded to irq */
+			/* rx-queue not bound to irq */
 			continue;
 		}
 

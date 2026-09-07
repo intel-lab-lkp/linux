@@ -5736,7 +5736,7 @@
 /*            Enum values, see field(s): */
 /*               MC_CMD_ETH_TECH/TECH */
 /* Pause abilities to advertise during auto-negotiation. Valid when auto-
- * negotation is enabled and MC_CMD_SET_MAC_IN/FCTL is set to
+ * negotiation is enabled and MC_CMD_SET_MAC_IN/FCTL is set to
  * MC_CMD_FCNTL_AUTO. If auto-negotiation is disabled the driver must
  * explicitly configure pause mode with MC_CMD_SET_MAC.
  */
@@ -10173,7 +10173,7 @@
  * configuration.
  */
 #define    MC_CMD_GET_FIXED_PORT_PROPERTIES_IN_LEN 4
-/* Handle to the port to from which to retreive properties */
+/* Handle to the port to from which to retrieve properties */
 #define       MC_CMD_GET_FIXED_PORT_PROPERTIES_IN_PORT_HANDLE_OFST 0
 #define       MC_CMD_GET_FIXED_PORT_PROPERTIES_IN_PORT_HANDLE_LEN 4
 
@@ -13547,7 +13547,7 @@
  * an ancestor of the current user (see MC_CMD_SET_VI_USER). Note that LL
  * queues require this to be called after allocation but before initialisation
  * of the queue. TLP options of a queue are fixed after queue is initialised,
- * with the values set to current global value or they can be overriden using
+ * with the values set to current global value or they can be overridden using
  * this command. At LL queue allocation, all overrides are cleared.
  */
 #define MC_CMD_SET_VI_TLP_PROCESSING 0xb1
@@ -21387,7 +21387,7 @@
 #define          MC_CMD_PRIVILEGE_MASK_IN_GRP_ALL_MULTICAST 0x200 /* enum */
 #define          MC_CMD_PRIVILEGE_MASK_IN_GRP_PROMISCUOUS 0x400 /* enum */
 /* enum: Allows to set the TX packets' source MAC address to any arbitrary MAC
- * adress.
+ * address.
  */
 #define          MC_CMD_PRIVILEGE_MASK_IN_GRP_MAC_SPOOFING_TX 0x800
 /* enum: Privilege that allows a Function to change the MAC address configured

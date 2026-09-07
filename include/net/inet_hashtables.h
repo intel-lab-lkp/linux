@@ -282,7 +282,7 @@ struct inet_bind_hashbucket *
 inet_bhash2_addr_any_hashbucket(const struct sock *sk, const struct net *net, int port);
 
 /* This should be called whenever a socket's sk_rcv_saddr (ipv4) or
- * sk_v6_rcv_saddr (ipv6) changes after it has been binded. The socket's
+ * sk_v6_rcv_saddr (ipv6) changes after it has been bound. The socket's
  * rcv_saddr field should already have been updated when this is called.
  */
 int inet_bhash2_update_saddr(struct sock *sk, void *saddr, int family);

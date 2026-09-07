@@ -1392,7 +1392,7 @@ int llc_conn_disc(struct sock *sk, struct sk_buff *skb)
 
 /**
  *	llc_conn_reset - resets connection
- *	@sk : reseting connection.
+ *	@sk : resetting connection.
  *	@skb: occurred event.
  *
  *	Stop all timers, empty all queues and reset all flags.

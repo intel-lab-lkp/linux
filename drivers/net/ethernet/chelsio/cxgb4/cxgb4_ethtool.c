@@ -1614,7 +1614,7 @@ static int set_rss_table(struct net_device *dev,
 	if (!rxfh->indir)
 		return 0;
 
-	/* Interface must be brought up atleast once */
+	/* Interface must be brought up at least once */
 	if (pi->adapter->flags & CXGB4_FULL_INIT_DONE) {
 		for (i = 0; i < pi->rss_size; i++)
 			pi->rss[i] = rxfh->indir[i];

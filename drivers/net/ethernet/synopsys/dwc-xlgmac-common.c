@@ -98,7 +98,7 @@ static int xlgmac_init(struct xlgmac_pdata *pdata)
 		return ret;
 	}
 
-	/* Channel and ring params initializtion
+	/* Channel and ring params initialization
 	 *  pdata->channel_count;
 	 *  pdata->tx_ring_count;
 	 *  pdata->rx_ring_count;

@@ -1201,7 +1201,7 @@ static const char mii_2_8139_map[8] = {
 
 
 #ifdef CONFIG_8139TOO_8129
-/* Syncronize the MII management interface by shifting 32 one bits out. */
+/* Synchronize the MII management interface by shifting 32 one bits out. */
 static void mdio_sync (void __iomem *ioaddr)
 {
 	int i;

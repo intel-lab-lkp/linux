@@ -933,7 +933,7 @@ static void sctp_ulpq_reap_ordered(struct sctp_ulpq *ulpq, __u16 sid)
 }
 
 /* Skip over an SSN. This is used during the processing of
- * Forwared TSN chunk to skip over the abandoned ordered data
+ * Forwarded TSN chunk to skip over the abandoned ordered data
  */
 void sctp_ulpq_skip(struct sctp_ulpq *ulpq, __u16 sid, __u16 ssn)
 {

@@ -165,7 +165,7 @@ static int slic_ds26522_init_configure(struct spi_device *spi)
 	/* Perform RX/TX SRESET,Reset receiver */
 	slic_write(spi, DS26522_RMMR_ADDR, DS26522_RMMR_SFTRST);
 
-	/* Reset tranceiver */
+	/* Reset transceiver */
 	slic_write(spi, DS26522_TMMR_ADDR, DS26522_TMMR_SFTRST);
 
 	usleep_range(100, 120);

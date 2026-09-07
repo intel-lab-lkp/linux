@@ -12,7 +12,7 @@ by shell source'ing.  Namely "functions.sh" and "parameters.sh".
 
 Common parameters
 -----------------
-The parameters.sh file support easy and consistant parameter parsing
+The parameters.sh file support easy and consistent parameter parsing
 across the sample scripts.  Usage example is printed on errors::
 
  Usage: ./pktgen_sample01_simple.sh [-vx] -i ethX

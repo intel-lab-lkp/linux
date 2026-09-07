@@ -1041,7 +1041,7 @@ static void gfar_halt(struct gfar_private *priv)
 	struct gfar __iomem *regs = priv->gfargrp[0].regs;
 	u32 tempval;
 
-	/* Dissable the Rx/Tx hw queues */
+	/* Disable the Rx/Tx hw queues */
 	gfar_write(&regs->rqueue, 0);
 	gfar_write(&regs->tqueue, 0);
 

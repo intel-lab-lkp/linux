@@ -208,7 +208,7 @@ struct qeth_vnicc_info {
 /*not used unless the microcode gets patched*/
 #define QETH_PCI_TIMER_VALUE(card) 3
 
-/* priority queing */
+/* priority queuing */
 #define QETH_PRIOQ_DEFAULT QETH_NO_PRIO_QUEUEING
 #define QETH_DEFAULT_QUEUE    2
 #define QETH_NO_PRIO_QUEUEING 0

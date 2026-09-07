@@ -2709,7 +2709,7 @@ MLXSW_REG_DEFINE(pagt, MLXSW_REG_PAGT_ID, MLXSW_REG_PAGT_LEN);
  * Range 0 .. cap_max_acl_group_size (hard coded to 16 for now)
  * Total number of ACLs in all groups must be lower or equal
  * to cap_max_acl_tot_groups
- * Note: a group which is binded must not be invalidated
+ * Note: a group which is bound must not be invalidated
  * Access: Index
  */
 MLXSW_ITEM32(reg, pagt, size, 0x00, 0, 8);

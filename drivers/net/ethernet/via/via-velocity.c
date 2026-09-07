@@ -302,7 +302,7 @@ VELOCITY_PARAM(DMA_length, "DMA length");
    0: indicate the IP header won't be DWORD byte aligned.(Default) .
    1: indicate the IP header will be DWORD byte aligned.
       In some environment, the IP header should be DWORD byte aligned,
-      or the packet will be droped when we receive it. (eg: IPVS)
+      or the packet will be dropped when we receive it. (eg: IPVS)
 */
 VELOCITY_PARAM(IP_byte_align, "Enable IP header dword aligned");
 
@@ -311,7 +311,7 @@ VELOCITY_PARAM(IP_byte_align, "Enable IP header dword aligned");
 #define FLOW_CNTL_MAX   5
 
 /* flow_control[] is used for setting the flow control ability of NIC.
-   1: hardware deafult - AUTO (default). Use Hardware default value in ANAR.
+   1: hardware default - AUTO (default). Use Hardware default value in ANAR.
    2: enable TX flow control.
    3: enable RX flow control.
    4: enable RX/TX flow control.
@@ -340,10 +340,10 @@ VELOCITY_PARAM(speed_duplex, "Setting the speed and duplex mode");
 #define WOL_OPT_MIN     0
 #define WOL_OPT_MAX     7
 /* wol_opts[] is used for controlling wake on lan behavior.
-   0: Wake up if recevied a magic packet. (Default)
+   0: Wake up if received a magic packet. (Default)
    1: Wake up if link status is on/off.
-   2: Wake up if recevied an arp packet.
-   4: Wake up if recevied any unicast packet.
+   2: Wake up if received an arp packet.
+   4: Wake up if received any unicast packet.
    Those value can be sumed up to support more than one option.
 */
 VELOCITY_PARAM(wol_opts, "Wake On Lan options");

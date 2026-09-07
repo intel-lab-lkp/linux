@@ -660,7 +660,7 @@ enum jme_rxcs_bit_masks {
 	RXCS_WAKEUP	= 0x00000040, /* Enable receive wakeup packet */
 	RXCS_MAGIC	= 0x00000020, /* Enable receive magic packet */
 	RXCS_SHORT	= 0x00000010, /* Enable receive short packet */
-	RXCS_ABORT	= 0x00000008, /* Enable receive errorr packet */
+	RXCS_ABORT	= 0x00000008, /* Enable receive error packet */
 	RXCS_QST	= 0x00000004, /* Receive queue start */
 	RXCS_SUSPEND	= 0x00000002,
 	RXCS_ENABLE	= 0x00000001,

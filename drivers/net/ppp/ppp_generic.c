@@ -2091,7 +2091,7 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 
 		/*
 		 *check if we are on the last channel or
-		 *we exceded the length of the data to
+		 *we exceeded the length of the data to
 		 *fragment
 		 */
 		if ((nfree <= 0) || (flen > len))
@@ -3305,7 +3305,7 @@ find_compressor(int type)
 }
 
 /*
- * Miscelleneous stuff.
+ * Miscellaneous stuff.
  */
 
 static void

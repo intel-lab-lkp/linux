@@ -2394,7 +2394,7 @@ static void set_rx_mode(struct net_device *net_dev)
 		for (i = 0; i < table_entries; i++)
 			mc_filter[i] = 0xffff;
 	} else {
-		/* Accept Broadcast packet, destination address matchs our
+		/* Accept Broadcast packet, destination address matches our
 		 * MAC address, use Receive Filter to reject unwanted MCAST
 		 * packets */
 		struct netdev_hw_addr *ha;

@@ -411,7 +411,7 @@ static enum sctp_scope sctp_v4_scope(union sctp_addr *addr)
 }
 
 /* Returns a valid dst cache entry for the given source and destination ip
- * addresses. If an association is passed, trys to get a dst entry with a
+ * addresses. If an association is passed, tries to get a dst entry with a
  * source address that matches an address in the bind address list.
  */
 static void sctp_v4_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
@@ -1564,7 +1564,7 @@ static __init int sctp_init(void)
 	}
 
 	/* Allocate and initialize the SCTP port hash table.
-	 * Note that order is initalized to start at the max sized
+	 * Note that order is initialized to start at the max sized
 	 * table we want to support.  If we can't get that many pages
 	 * reduce the order and try again
 	 */

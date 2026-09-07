@@ -300,7 +300,7 @@ struct sonic_local {
 	int reg_offset;
 	void *descriptors;
 	/* Crud.  These areas have to be within the same 64K.  Therefore
-       we allocate a desriptors page, and point these to places within it. */
+       we allocate a descriptors page, and point these to places within it. */
 	void *cda;  /* CAM descriptor area */
 	void *tda;  /* Transmit descriptor area */
 	void *rra;  /* Receive resource area */

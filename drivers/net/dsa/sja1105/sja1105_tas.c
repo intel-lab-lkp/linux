@@ -377,7 +377,7 @@ int sja1105_init_scheduling(struct sja1105_private *priv)
  * - Collisions in the future. Events may not collide within one cycle time,
  *   but if two port schedules don't have the same periodicity (aka the cycle
  *   times aren't multiples of one another), they surely will some time in the
- *   future (actually they will collide an infinite amount of times).
+ *   future (actually they will collide an infinite number of times).
  */
 static bool
 sja1105_tas_check_conflicts(struct sja1105_private *priv, int port,

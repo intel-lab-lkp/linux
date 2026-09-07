@@ -704,7 +704,7 @@
 							 0x4 = load 3, 0x5 = load 4
 							 0x6 = last detect
 							 0x7 = wait req
-							 0x8 = wait req statuss 1st
+							 0x8 = wait req status 1st
 							 0x9 = load st
 							 0xa = bubble mac
 							 0xb = error */

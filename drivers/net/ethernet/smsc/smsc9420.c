@@ -563,7 +563,7 @@ static void smsc9420_stop_rx(struct smsc9420_pdata *pd)
 	smsc9420_reg_write(pd, DMAC_INTR_ENA, dma_intr_ena);
 	smsc9420_pci_flush_write(pd);
 
-	/* stop RX MAC prior to stoping DMA */
+	/* stop RX MAC prior to stopping DMA */
 	mac_cr = smsc9420_reg_read(pd, MAC_CR) & (~MAC_CR_RXEN_);
 	smsc9420_reg_write(pd, MAC_CR, mac_cr);
 	smsc9420_pci_flush_write(pd);
