@@ -1058,14 +1058,14 @@ post_msg_err:
 
 	kfree(info);
 
-	if (gpadl->decrypted)
+	if (!ret && gpadl->decrypted) {
 		ret = set_memory_encrypted((unsigned long)gpadl->buffer,
 					PFN_UP(gpadl->size));
-	else
-		ret = 0;
-	if (ret)
-		pr_warn("Fail to set mem host visibility in GPADL teardown %d.\n", ret);
+		if (ret)
+			pr_warn("Fail to set mem host visibility in GPADL teardown %d.\n", ret);
+	}
 
+	/* If error in ret, mark buffer decrypted so it is leaked */
 	gpadl->decrypted = ret;
 
 	return ret;
