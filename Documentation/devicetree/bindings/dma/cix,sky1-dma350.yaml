@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/dma/cix,sky1-dma350.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: CIX Sky1 DMA-350 Integration
+
+maintainers:
+  - CIX Kernel Team <cix-kernel-upstream@cixtech.com>
+
+description:
+  The CIX Sky1 DMA-350 integration driver owns SoC resources around an
+  Arm DMA-350 controller, such as clocks, resets, interrupt routing, and
+  optional reserved memory. Reserved memory is described on this parent node
+  and assigned by the integration driver to the child DMA-350 device. The child
+  node describes the generic DMA-350 IP.
+
+properties:
+  $nodename:
+    pattern: "^dma@[0-9a-f]+$"
+
+  compatible:
+    const: cix,sky1-dma350
+
+  "#address-cells":
+    const: 2
+
+  "#size-cells":
+    const: 2
+
+  ranges: true
+
+  dma-ranges: true
+
+  clocks:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+  power-domains:
+    maxItems: 1
+
+  cix,irq-router:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Syscon phandle for the Sky1 subsystem register block that routes
+      DMA-350 channel interrupts to the AP interrupt controller.
+
+  memory-region:
+    maxItems: 1
+    description:
+      Reserved memory pool assigned by the CIX Sky1 DMA-350 integration driver
+      to the child Arm DMA-350 device.
+
+patternProperties:
+  '^dma-controller@[0-9a-f]+$':
+    $ref: arm,dma-350.yaml#
+
+required:
+  - compatible
+  - "#address-cells"
+  - "#size-cells"
+  - ranges
+  - dma-ranges
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    / {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        interrupt-parent = <&gic>;
+
+        gic: interrupt-controller {
+            #address-cells = <0>;
+            interrupt-controller;
+            #interrupt-cells = <4>;
+        };
+
+        dma@7010000 {
+            compatible = "cix,sky1-dma350";
+            #address-cells = <2>;
+            #size-cells = <2>;
+            ranges = <0x0 0x0 0x0 0x07010000 0x0 0x10000>;
+            dma-ranges = <0x0 0x20000000 0x0 0x07010000 0x0 0x00100000>;
+            clocks = <&clk 9>;
+            resets = <&rst 15>;
+            cix,irq-router = <&audss_cru>;
+
+            dma-controller@0 {
+                compatible = "arm,dma-350";
+                reg = <0x0 0x0 0x0 0x10000>;
+                interrupts = <GIC_SPI 230 IRQ_TYPE_LEVEL_HIGH 0>;
+                #dma-cells = <1>;
+            };
+        };
+    };
