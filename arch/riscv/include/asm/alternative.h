@@ -33,7 +33,7 @@ void __init apply_early_boot_alternatives(void);
 void apply_module_alternatives(void *start, size_t length);
 
 void riscv_alternative_fix_offsets(void *alt_ptr, unsigned int len,
-				   int patch_offset);
+				   int patch_offset, bool early);
 
 struct alt_entry {
 	s32 old_offset;		/* offset relative to original instruction or data  */
