@@ -20,12 +20,25 @@ struct regmap;
 struct sdw_slave;
 struct sdca_function_data;
 
+/**
+ * struct sdca_class_hw_ops - optional codec hardware callbacks
+ * @hw_init: enable supplies, toggle reset, etc.  Runs from sdca_class_probe()
+ *           before the class regmap is created and before the slave is
+ *           ATTACHED; callers needing bus I/O must sdw_slave_wait_for_init()
+ *           first.
+ */
+struct sdca_class_hw_ops {
+	int (*hw_init)(struct sdw_slave *slave);
+};
+
 struct sdca_class_drv {
 	struct device *dev;
 	struct regmap *dev_regmap;
 	struct sdw_slave *sdw;
 
 	struct sdca_interrupt_info *irq_info;
+
+	const struct sdca_class_hw_ops *hw_ops;
 
 	struct mutex regmap_lock;
 	/* Serialise function initialisations */
@@ -35,7 +48,9 @@ struct sdca_class_drv {
 
 /* Library helpers used by codec-specific SDCA SoundWire drivers. */
 int sdca_class_read_prop(struct sdw_slave *sdw);
-int sdca_class_probe(struct sdw_slave *sdw, struct sdca_class_drv *drv);
+int sdca_class_probe(struct sdw_slave *sdw,
+		     struct sdca_class_drv *drv,
+		     const struct sdca_class_hw_ops *hw_ops);
 void sdca_class_remove(struct sdca_class_drv *drv);
 
 /*
