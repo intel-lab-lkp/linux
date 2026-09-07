@@ -2331,6 +2331,7 @@ int3_exception_notify(struct notifier_block *self, unsigned long val, void *data
 	unsigned long selftest = (unsigned long)&int3_selftest_asm;
 	struct die_args *args = data;
 	struct pt_regs *regs = args->regs;
+	unsigned long ip;
 
 	OPTIMIZER_HIDE_VAR(selftest);
 
@@ -2342,8 +2343,14 @@ int3_exception_notify(struct notifier_block *self, unsigned long val, void *data
 
 	if (regs->ip - INT3_INSN_SIZE != selftest)
 		return NOTIFY_DONE;
-
-	int3_emulate_call(regs, (unsigned long)&int3_selftest_callee);
+	/*
+	 * As seen in int3_selftest_asm, the effective return address
+	 * should be placed immediately after the instruction sequence
+	 * [int3; nop; nop; nop; nop.]. Therefore, CALL_INSN_SIZE works
+	 * perfectly well here.
+	 */
+	ip = regs->ip - INT3_INSN_SIZE + CALL_INSN_SIZE;
+	int3_emulate_call(regs, ip, (unsigned long)&int3_selftest_callee);
 	return NOTIFY_STOP;
 }
 
@@ -2911,7 +2918,7 @@ noinstr int smp_text_poke_int3_handler(struct pt_regs *regs)
 		break;
 
 	case CALL_INSN_OPCODE:
-		int3_emulate_call(regs, (long)ip + tpl->disp);
+		int3_emulate_call(regs, (long)ip, (long)ip + tpl->disp);
 		break;
 
 	case JMP32_INSN_OPCODE:
