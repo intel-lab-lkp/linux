@@ -153,7 +153,7 @@ static char *allocate_zero_filled_hugepage(size_t len)
 	char *result;
 	size_t i;
 
-	result = memalign(pmd_pagesize, len);
+	result = alloc_isolated_mem(pmd_pagesize, len);
 	if (!result) {
 		printf("Fail to allocate memory\n");
 		exit(EXIT_FAILURE);
@@ -219,7 +219,7 @@ static void split_pmd_zero_pages(void)
 	one_page = allocate_zero_filled_hugepage(len);
 	verify_rss_anon_split_huge_page_all_zeroes(one_page, nr_hpages, len);
 	ksft_test_result_pass("Split zero filled huge pages successful\n");
-	free(one_page);
+	free_isolated_mem(one_page, len);
 }
 
 static void split_pmd_thp_to_order(int order)
@@ -228,7 +228,7 @@ static void split_pmd_thp_to_order(int order)
 	size_t len = 4 * pmd_pagesize;
 	size_t i;
 
-	one_page = memalign(pmd_pagesize, len);
+	one_page = alloc_isolated_mem(pmd_pagesize, len);
 	if (!one_page)
 		ksft_exit_fail_msg("Fail to allocate memory: %s\n", strerror(errno));
 
@@ -262,7 +262,7 @@ static void split_pmd_thp_to_order(int order)
 		ksft_exit_fail_msg("Still AnonHugePages not split\n");
 
 	ksft_test_result_pass("Split huge pages to order %d successful\n", order);
-	free(one_page);
+	free_isolated_mem(one_page, len);
 }
 
 static void split_pte_mapped_thp(void)

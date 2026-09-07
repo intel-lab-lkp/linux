@@ -92,9 +92,9 @@ static void test_hugepage(int pagemap_fd, int pagesize)
 	if (!hpage_len)
 		ksft_exit_fail_msg("Reading PMD pagesize failed");
 
-	map = memalign(hpage_len, hpage_len);
+	map = alloc_isolated_mem(hpage_len, hpage_len);
 	if (!map)
-		ksft_exit_fail_msg("memalign failed\n");
+		ksft_exit_fail_msg("alloc_isolated_mem failed\n");
 
 	ret = madvise(map, hpage_len, MADV_HUGEPAGE);
 	if (ret)
@@ -130,7 +130,7 @@ static void test_hugepage(int pagemap_fd, int pagesize)
 		ksft_test_result_skip("Test %s huge page allocation\n", __func__);
 		ksft_test_result_skip("Test %s huge page dirty bit\n", __func__);
 	}
-	free(map);
+	free_isolated_mem(map, hpage_len);
 }
 
 static void test_mprotect(int pagemap_fd, int pagesize, bool anon)
