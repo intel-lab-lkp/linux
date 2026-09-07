@@ -73,8 +73,9 @@ static int tsys02d_write_raw(struct iio_dev *indio_dev,
 		if (i < 0)
 			return -EINVAL;
 		mutex_lock(&dev_data->lock);
-		dev_data->res_index = i;
 		ret = ms_sensors_write_resolution(dev_data, i);
+		if (!ret)
+			dev_data->res_index = i;
 		mutex_unlock(&dev_data->lock);
 
 		return ret;
