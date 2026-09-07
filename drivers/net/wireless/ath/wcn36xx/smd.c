@@ -1066,21 +1066,26 @@ static int wcn36xx_smd_process_ptt_msg_rsp(void *buf, size_t len,
 					   void **p_ptt_rsp_msg)
 {
 	struct wcn36xx_hal_process_ptt_msg_rsp_msg *rsp;
+	size_t ptt_msg_len;
 	int ret;
 
 	ret = wcn36xx_smd_rsp_status_check(buf, len);
 	if (ret)
 		return ret;
 
+	if (len < sizeof(*rsp))
+		return -EIO;
+
 	rsp = buf;
+	ptt_msg_len = len - sizeof(*rsp);
 
-	wcn36xx_dbg(WCN36XX_DBG_HAL, "process ptt msg responded with length %d\n",
-		    rsp->header.len);
+	wcn36xx_dbg(WCN36XX_DBG_HAL, "process ptt msg responded with length %zu\n",
+		    ptt_msg_len);
 	wcn36xx_dbg_dump(WCN36XX_DBG_HAL_DUMP, "HAL_PTT_MSG_RSP:", rsp->ptt_msg,
-			 rsp->header.len - sizeof(rsp->ptt_msg_resp_status));
+			 ptt_msg_len);
 
-	if (rsp->header.len > 0) {
-		*p_ptt_rsp_msg = kmemdup(rsp->ptt_msg, rsp->header.len,
+	if (ptt_msg_len > 0) {
+		*p_ptt_rsp_msg = kmemdup(rsp->ptt_msg, ptt_msg_len,
 					 GFP_ATOMIC);
 		if (!*p_ptt_rsp_msg)
 			return -ENOMEM;
