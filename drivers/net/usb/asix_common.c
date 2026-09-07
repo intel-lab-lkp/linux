@@ -148,7 +148,7 @@ int asix_rx_fixup_internal(struct usbnet *dev, struct sk_buff *skb,
 	 * Also avoid unnecessarily discarding a good current netdev socket
 	 * buffer.
 	 */
-	if (rx->remaining && (rx->remaining + sizeof(u32) <= skb->len)) {
+	if (rx->remaining && (((rx->remaining + 1) & 0xfffe) + sizeof(u32) <= skb->len)) {
 		offset = ((rx->remaining + 1) & 0xfffe);
 		rx->header = get_unaligned_le32(skb->data + offset);
 		offset = 0;
