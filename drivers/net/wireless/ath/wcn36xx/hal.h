@@ -2650,7 +2650,7 @@ struct ani_global_class_a_stats_info {
 	 * shall be the same as the supporteRates parameter. */
 	u32 rx_input_sensitivity;
 
-	/* The maximum transmit power in dBm upto one decimal. for eg: if
+	/* The maximum transmit power in dBm up to one decimal. for eg: if
 	 * it is 10.5dBm, the value would be 105 */
 	u32 max_pwr;
 
@@ -3133,7 +3133,7 @@ struct wcn36xx_hal_nv_img_download_req_msg {
 	/* Fragment sequence number of the NV Image. Note that NV Image
 	 * might not fit into one message due to size limitation of the SMD
 	 * channel FIFO. UMAC can hence choose to chop the NV blob into
-	 * multiple fragments starting with seqeunce number 0, 1, 2 etc.
+	 * multiple fragments starting with sequence number 0, 1, 2 etc.
 	 * The last fragment MUST be indicated by marking the
 	 * isLastFragment field to 1. Note that all the NV blobs would be
 	 * concatenated together by HAL without any padding bytes in
@@ -3275,7 +3275,7 @@ struct wcn36xx_hal_send_beacon_req_msg {
 	/* TIM IE offset from the beginning of the template. */
 	u32 tim_ie_offset;
 
-	/* P2P IE offset from the begining of the template */
+	/* P2P IE offset from the beginning of the template */
 	u16 p2p_ie_offset;
 } __packed;
 
@@ -4139,10 +4139,10 @@ struct wcn36xx_hal_dump_cmd_rsp_msg {
 	/* success or failure */
 	u32 status;
 
-	/* Length of the responce message */
+	/* Length of the response message */
 	u32 rsp_length;
 
-	/* FIXME: Currently considering the responce will be less than
+	/* FIXME: Currently considering the response will be less than
 	 * 100bytes */
 	u8 rsp_buffer[DUMPCMD_RSP_BUFFER];
 } __packed;
