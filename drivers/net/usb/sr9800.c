@@ -271,7 +271,7 @@ static int sr_write_medium_mode(struct usbnet *dev, u16 mode)
 	ret = sr_write_cmd(dev, SR_CMD_WRITE_MEDIUM_MODE, mode, 0, 0, NULL);
 	if (ret < 0)
 		netdev_err(dev->net,
-			   "Failed to write Medium Mode mode to 0x%04x:%02x\n",
+			   "Failed to write Medium Mode to 0x%04x:%02x\n",
 			   mode, ret);
 	return ret;
 }

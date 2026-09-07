@@ -413,7 +413,7 @@ int asix_write_medium_mode(struct usbnet *dev, u16 mode, int in_pm)
 	ret = asix_write_cmd(dev, AX_CMD_WRITE_MEDIUM_MODE,
 			     mode, 0, 0, NULL, in_pm);
 	if (ret < 0)
-		netdev_err(dev->net, "Failed to write Medium Mode mode to 0x%04x: %02x\n",
+		netdev_err(dev->net, "Failed to write Medium Mode to 0x%04x: %02x\n",
 			   mode, ret);
 
 	return ret;
