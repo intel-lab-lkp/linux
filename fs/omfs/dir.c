@@ -219,6 +219,7 @@ static int omfs_dir_is_empty(struct inode *inode)
 	struct buffer_head *bh;
 	u64 *ptr;
 	int i;
+	int empty = 1;
 
 	bh = omfs_bread(inode->i_sb, inode->i_ino);
 
@@ -227,12 +228,15 @@ static int omfs_dir_is_empty(struct inode *inode)
 
 	ptr = (u64 *) &bh->b_data[OMFS_DIR_START];
 
-	for (i = 0; i < nbuckets; i++, ptr++)
-		if (*ptr != ~0)
+	for (i = 0; i < nbuckets; i++, ptr++) {
+		if (*ptr != ~0) {
+			empty = 0;
 			break;
+		}
+	}
 
 	brelse(bh);
-	return *ptr != ~0;
+	return empty;
 }
 
 static int omfs_remove(struct inode *dir, struct dentry *dentry)
