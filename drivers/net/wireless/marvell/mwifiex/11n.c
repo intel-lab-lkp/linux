@@ -153,6 +153,8 @@ int mwifiex_ret_11n_addba_req(struct mwifiex_private *priv,
 
 	tid = (block_ack_param_set & IEEE80211_ADDBA_PARAM_TID_MASK)
 	       >> BLOCKACKPARAM_TID_POS;
+	if (tid >= MAX_NUM_TID)
+		return -1;
 
 	tid_down = mwifiex_wmm_downgrade_tid(priv, tid);
 	ra_list = mwifiex_wmm_get_ralist_node(priv, tid_down, add_ba_rsp->

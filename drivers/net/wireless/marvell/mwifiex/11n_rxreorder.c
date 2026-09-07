@@ -478,6 +478,8 @@ int mwifiex_cmd_11n_addba_rsp_gen(struct mwifiex_private *priv,
 	block_ack_param_set = le16_to_cpu(cmd_addba_req->block_ack_param_set);
 	tid = (block_ack_param_set & IEEE80211_ADDBA_PARAM_TID_MASK)
 		>> BLOCKACKPARAM_TID_POS;
+	if (tid >= MAX_NUM_TID)
+		return -1;
 	add_ba_rsp->status_code = cpu_to_le16(ADDBA_RSP_STATUS_ACCEPT);
 	block_ack_param_set &= ~IEEE80211_ADDBA_PARAM_BUF_SIZE_MASK;
 
@@ -707,6 +709,8 @@ int mwifiex_ret_11n_addba_resp(struct mwifiex_private *priv,
 
 	tid = (block_ack_param_set & IEEE80211_ADDBA_PARAM_TID_MASK)
 		>> BLOCKACKPARAM_TID_POS;
+	if (tid >= MAX_NUM_TID)
+		return -1;
 	/*
 	 * Check if we had rejected the ADDBA, if yes then do not create
 	 * the stream
