@@ -28,7 +28,7 @@
  * @zcc: zero condition code
  * @ectl: extended control
  * @pno: path not operational
- * @res: reserved
+ * @qact: qdio active
  * @fctl: function control
  * @actl: activity control
  * @stctl: status control
@@ -50,7 +50,7 @@ struct cmd_scsw {
 	__u32 zcc  : 1;
 	__u32 ectl : 1;
 	__u32 pno  : 1;
-	__u32 res  : 1;
+	__u32 qact : 1;
 	__u32 fctl : 3;
 	__u32 actl : 7;
 	__u32 stctl : 5;

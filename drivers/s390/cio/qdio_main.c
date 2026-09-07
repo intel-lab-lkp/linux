@@ -1140,11 +1140,29 @@ EXPORT_SYMBOL_GPL(qdio_establish);
 /**
  * qdio_activate - activate queues on a qdio subchannel
  * @cdev: associated cdev
+ *
+ * This function must only be called when the QDIO subchannel is in
+ * QDIO_IRQ_STATE_ESTABLISHED state (i.e., after successful qdio_establish()).
+ * Any other state indicates either the subchannel is not ready or an error
+ * condition that requires proper recovery through qdio_shutdown() and
+ * qdio_establish() before activation can be attempted.
+ *
+ * Return:
+ * * 0		- success
+ * * -ENODEV	- device is not initialized
+ * * -EIO	- adapter lacks QDIO activation support, or
+ *                the IRQ state changed unexpectedly during activation
+ * * -EBUSY	- subchannel state is not QDIO_IRQ_STATE_ESTABLISHED
+ *                at call time
+ * * -ETIMEDOUT - subchannel failed to become active within the timeout
+ * * other	- standard error code forwarded from ccw_device_start()
  */
 int qdio_activate(struct ccw_device *cdev)
 {
+	struct subchannel *sch = to_subchannel(cdev->dev.parent);
 	struct qdio_irq *irq_ptr = cdev->private->qdio_data;
 	struct subchannel_id schid;
+	unsigned long timeout;
 	struct ciw *ciw;
 	int rc;
 
@@ -1161,7 +1179,8 @@ int qdio_activate(struct ccw_device *cdev)
 	}
 
 	mutex_lock(&irq_ptr->setup_mutex);
-	if (irq_ptr->state == QDIO_IRQ_STATE_INACTIVE) {
+	if (irq_ptr->state != QDIO_IRQ_STATE_ESTABLISHED) {
+		DBF_ERROR("%4x act WS:%d", schid.sch_no, irq_ptr->state);
 		rc = -EBUSY;
 		goto out;
 	}
@@ -1178,23 +1197,32 @@ int qdio_activate(struct ccw_device *cdev)
 			      0, DOIO_DENY_PREFETCH);
 	spin_unlock_irq(get_ccwdev_lock(cdev));
 	if (rc) {
-		DBF_ERROR("%4x act IO ERR", irq_ptr->schid.sch_no);
-		DBF_ERROR("rc:%4x", rc);
+		DBF_ERROR("%4x act IE:%d", irq_ptr->schid.sch_no, rc);
 		goto out;
 	}
 
-	/* wait for subchannel to become active */
-	msleep(5);
+	rc = -ETIMEDOUT;
+	timeout = jiffies + HZ;
 
-	switch (irq_ptr->state) {
-	case QDIO_IRQ_STATE_STOPPED:
-	case QDIO_IRQ_STATE_ERR:
-		rc = -EIO;
-		break;
-	default:
-		qdio_set_state(irq_ptr, QDIO_IRQ_STATE_ACTIVE);
-		rc = 0;
+	while (time_before(jiffies, timeout)) {
+		msleep(1);
+		if (irq_ptr->state != QDIO_IRQ_STATE_ESTABLISHED) {
+			rc = -EIO;
+			DBF_ERROR("%4x act WS:%d", irq_ptr->schid.sch_no, irq_ptr->state);
+			break;
+		}
+		/* Query hardware */
+		if (cio_update_schib(sch) == 0) {
+			if ((sch->schib.scsw.cmd.actl & SCSW_ACTL_SCHACT)
+					&& sch->schib.scsw.cmd.qact) {
+				qdio_set_state(irq_ptr, QDIO_IRQ_STATE_ACTIVE);
+				rc = 0;
+				break;
+			}
+		}
 	}
+	if (rc == -ETIMEDOUT)
+		DBF_ERROR("%4x act TIMEOUT", irq_ptr->schid.sch_no);
 out:
 	mutex_unlock(&irq_ptr->setup_mutex);
 	return rc;
