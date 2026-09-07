@@ -1112,7 +1112,9 @@ static void ntb_transport_link_work(struct work_struct *work)
 	}
 
 	for (i = 0; i < nt->qp_count; i++) {
-		ntb_transport_setup_qp_mw(nt, i);
+		rc = ntb_transport_setup_qp_mw(nt, i);
+		if (rc)
+			goto out1;
 		ntb_transport_setup_qp_peer_msi(nt, i);
 	}
 
