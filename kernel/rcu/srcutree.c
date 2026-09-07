@@ -1972,6 +1972,9 @@ static void srcu_expedite_current_cb(struct rcu_head *rhp)
  * no current grace period, one might be created.  If the current grace
  * period is currently sleeping, that sleep will complete before expediting
  * will take effect.
+ *
+ * This function must not be invoked on srcu_struct structures that are
+ * used with srcu_read_lock_atomic() and synchronize_srcu_atomic().
  */
 void srcu_expedite_current(struct srcu_struct *ssp)
 {
@@ -1979,6 +1982,9 @@ void srcu_expedite_current(struct srcu_struct *ssp)
 	bool needcb = false;
 	struct srcu_data *sdp;
 
+	// Atomic SRCU has no callbacks, so there is nothing to expedite.
+	if (WARN_ON_ONCE(ssp->srcu_reader_flavor == SRCU_READ_FLAVOR_ATOMIC))
+		return;
 	migrate_disable();
 	sdp = this_cpu_ptr(ssp->sda);
 	raw_spin_lock_irqsave_sdp_contention(sdp, &flags);
@@ -2104,8 +2110,9 @@ static void srcu_advance_state(struct srcu_struct *ssp, bool is_atomic)
  *
  * If synchronize_srcu_atomic() is invoked on a given srcu_struct
  * structure, then none of call_srcu(), synchronize_srcu(),
- * synchronize_srcu_expedited(), or start_poll_synchronize_srcu() may be
- * invoked on that same structure.
+ * synchronize_srcu_expedited(), start_poll_synchronize_srcu(),
+ * srcu_barrier(), or srcu_expedite_current() may be invoked on that
+ * same structure.
  *
  * Because synchronize_srcu_atomic() is even more expedited than is
  * synchronize_srcu_expedited(), there is no expedited counterpart to
