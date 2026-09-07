@@ -359,17 +359,29 @@ struct cgroup_subsys_state *get_mem_cgroup_css_from_folio(struct folio *folio)
  */
 ino_t page_cgroup_ino(struct page *page)
 {
+	struct folio *folio;
 	struct mem_cgroup *memcg;
 	unsigned long ino = 0;
 
 	rcu_read_lock();
 	/* page_folio() is racy here, but the entire function is racy anyway */
-	memcg = folio_memcg_check(page_folio(page));
+	folio = page_folio(page);
+	/*
+	 * After-split folios remain frozen until their metadata, including
+	 * memcg_data, has been initialized.  The acquire load pairs with the
+	 * release store in folio_ref_unfreeze() and makes that metadata
+	 * visible to this caller.
+	 */
+	if (!folio_ref_count_acquire(folio))
+		goto unlock;
+
+	memcg = folio_memcg_check(folio);
 
 	while (memcg && !css_is_online(&memcg->css))
 		memcg = parent_mem_cgroup(memcg);
 	if (memcg)
 		ino = cgroup_ino(memcg->css.cgroup);
+unlock:
 	rcu_read_unlock();
 	return ino;
 }

@@ -107,6 +107,11 @@ static inline int folio_ref_count(const struct folio *folio)
 	return page_ref_count(&folio->page);
 }
 
+static inline int folio_ref_count_acquire(const struct folio *folio)
+{
+	return atomic_read_acquire(&folio->_refcount);
+}
+
 static inline int page_count(const struct page *page)
 {
 	return folio_ref_count(page_folio(page));
