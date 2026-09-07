@@ -104,6 +104,22 @@
 
 #define MMA8452_AUTO_SUSPEND_DELAY_MS		2000
 
+/**
+ * struct mma8452_data - IIO device private data structure
+ * @client:			the I2C client object
+ * @lock:			mutex for synchronziation of register
+ *				read-modify-write and holding chip in STANDBY
+ *				mode while writing to registers
+ * @orientation:		mounting matrix, flipped axis etc
+ * @chip_info:			chip specific data
+ * @vdd_reg:			reference to VDD regulator
+ * @vddio_reg:			reference to VDDIO regulator
+ * @buffer:			triggered buffer
+ * @sleep_val:			time in ms to sleep while waiting for drdy
+ * @ctrl_reg1:			CTRL_REG1 register shadow value
+ * @data_cfg:			DATA_CFG register shadow value
+ * @open_drain:			true for irq pin in open-drain mode
+ */
 struct mma8452_data {
 	struct i2c_client *client;
 	struct mutex lock;
