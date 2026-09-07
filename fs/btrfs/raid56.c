@@ -953,8 +953,8 @@ static void rbio_orig_end_io(struct btrfs_raid_bio *rbio, blk_status_t status)
 
 	/*
 	 * Clear the data bitmap, as the rbio may be cached for later usage.
-	 * do this before unlock_stripe() so there will be no new bio
-	 * for this bio.
+	 * Do this before unlock_stripe() so there will be no new bio for this
+	 * bio.
 	 */
 	bitmap_clear(&rbio->dbitmap, 0, rbio->stripe_nsectors);
 
@@ -1450,10 +1450,7 @@ static int rmw_assemble_write_bios(struct btrfs_raid_bio *rbio,
 	/* We should have at least one data sector. */
 	ASSERT(bitmap_weight(&rbio->dbitmap, rbio->stripe_nsectors));
 
-	/*
-	 * Reset errors, as we may have errors inherited from degraded
-	 * write.
-	 */
+	/* Reset errors, as we may have errors inherited from degraded write. */
 	bitmap_clear(rbio->error_bitmap, 0, rbio->nr_sectors);
 
 	/*
