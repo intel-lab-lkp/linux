@@ -408,22 +408,22 @@ again:
 	switch (sync) {
 	case SYNC_STATE_DEAD:
 		/* CPU is properly dead */
+		atomic_set(st, SYNC_STATE_KICKED);
 		break;
 	case SYNC_STATE_KICKED:
 		/* CPU did not come up in previous attempt */
 		break;
 	case SYNC_STATE_ALIVE:
 		/* CPU is stuck cpuhp_ap_sync_alive(). */
+		if (!atomic_try_cmpxchg_relaxed(st, &sync, SYNC_STATE_KICKED))
+			goto again;
 		break;
 	default:
 		/* CPU failed to report online or dead and is in limbo state. */
 		return false;
 	}
 
-	/* Prepare for booting */
-	if (!atomic_try_cmpxchg(st, &sync, SYNC_STATE_KICKED))
-		goto again;
-
+	/* Continue with booting */
 	return true;
 }
 
