@@ -1316,7 +1316,7 @@ int t7xx_cldma_init(struct cldma_ctrl *md_ctrl)
 		md_cd_queue_struct_init(&md_ctrl->txq[i], md_ctrl, MTK_TX, i);
 		md_ctrl->txq[i].worker =
 			alloc_ordered_workqueue("md_hif%d_tx%d_worker",
-					WQ_MEM_RECLAIM | (i ? 0 : WQ_HIGHPRI),
+					WQ_MEM_RECLAIM | WQ_FREEZABLE | (i ? 0 : WQ_HIGHPRI),
 					md_ctrl->hif_id, i);
 		if (!md_ctrl->txq[i].worker)
 			goto err_workqueue;
@@ -1330,7 +1330,7 @@ int t7xx_cldma_init(struct cldma_ctrl *md_ctrl)
 
 		md_ctrl->rxq[i].worker =
 			alloc_ordered_workqueue("md_hif%d_rx%d_worker",
-						WQ_MEM_RECLAIM,
+						WQ_MEM_RECLAIM | WQ_FREEZABLE,
 						md_ctrl->hif_id, i);
 		if (!md_ctrl->rxq[i].worker)
 			goto err_workqueue;
