@@ -49,10 +49,10 @@ static int psci_boot_secondary(unsigned int cpu, struct task_struct *idle)
 		return psci_ops.cpu_on(cpu_logical_map(cpu),
 			((phys_addr_t)(&secondary_startup)
 			- XIP_VIRT_ADDR(CONFIG_XIP_PHYS_ADDR)
-			+ CONFIG_XIP_PHYS_ADDR));
+			+ CONFIG_XIP_PHYS_ADDR), 0);
 #else
 		return psci_ops.cpu_on(cpu_logical_map(cpu),
-					virt_to_idmap(&secondary_startup));
+					virt_to_idmap(&secondary_startup), 0);
 #endif
 	return -ENODEV;
 }

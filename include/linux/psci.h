@@ -25,7 +25,8 @@ struct psci_operations {
 	u32 (*get_version)(void);
 	int (*cpu_suspend)(u32 state, unsigned long entry_point);
 	int (*cpu_off)(u32 state);
-	int (*cpu_on)(unsigned long cpuid, unsigned long entry_point);
+	int (*cpu_on)(unsigned long cpuid, unsigned long entry_point,
+		      unsigned long context);
 	int (*migrate)(unsigned long cpuid);
 	int (*affinity_info)(unsigned long target_affinity,
 			unsigned long lowest_affinity_level);
