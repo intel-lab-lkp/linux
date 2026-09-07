@@ -485,6 +485,19 @@ xlog_recover_do_reg_buffer(
 			break;
 		nbits = xfs_contig_bits(buf_f->blf_data_map,
 					buf_f->blf_map_size, bit);
+
+		/*
+		 * The bitmap can have more bits set than there are regions
+		 * in ri_buf, so we must check array bounds before using the
+		 * index to access ri_buf[i].
+		 */
+		if (XFS_IS_CORRUPT(mp, i >= item->ri_total)) {
+			xfs_alert(mp,
+		"Buffer log item index (%d) exceeds allocated regions (%d).",
+					i, item->ri_total);
+			return -EFSCORRUPTED;
+		}
+
 		ASSERT(nbits > 0);
 		ASSERT(item->ri_buf[i].iov_base != NULL);
 		ASSERT(item->ri_buf[i].iov_len % XFS_BLF_CHUNK == 0);
@@ -687,6 +700,19 @@ xlog_recover_do_inode_buffer(
 		 */
 		if (next_unlinked_offset < reg_buf_offset)
 			continue;
+
+		/*
+		 * Check array bounds here (right before accessing ri_buf)
+		 * rather than after incrementing item_index. This avoids
+		 * incorrectly rejecting logs when item_index reaches
+		 * ri_total after processing the final valid region.
+		 */
+		if (XFS_IS_CORRUPT(mp, item_index >= item->ri_total)) {
+			xfs_alert(mp,
+		"Inode buffer log item index (%d) exceeds allocated regions (%d).",
+				item_index, item->ri_total);
+			return -EFSCORRUPTED;
+		}
 
 		ASSERT(item->ri_buf[item_index].iov_base != NULL);
 		ASSERT((item->ri_buf[item_index].iov_len % XFS_BLF_CHUNK) == 0);
