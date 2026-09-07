@@ -26,6 +26,15 @@ static inline bool linkmode_and(unsigned long *dst, const unsigned long *a,
 	return bitmap_and(dst, a, b, __ETHTOOL_LINK_MODE_MASK_NBITS);
 }
 
+static inline bool linkmode_and_andnot(unsigned long *dst,
+				       const unsigned long *a,
+				       const unsigned long *b,
+				       const unsigned long *c)
+{
+	return bitmap_and_andnot(dst, a, b, c,
+				 __ETHTOOL_LINK_MODE_MASK_NBITS);
+}
+
 static inline void linkmode_or(unsigned long *dst, const unsigned long *a,
 				const unsigned long *b)
 {

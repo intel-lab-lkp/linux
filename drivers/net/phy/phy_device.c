@@ -1565,8 +1565,7 @@ static int phy_sfp_module_insert(void *upstream, const struct sfp_eeprom_id *id)
 
 	caps = sfp_get_module_caps(phydev->sfp_bus);
 
-	linkmode_and(sfp_support, port->supported, caps->link_modes);
-	if (linkmode_empty(sfp_support)) {
+	if (!linkmode_and(sfp_support, port->supported, caps->link_modes)) {
 		dev_err(&phydev->mdio.dev, "incompatible SFP module inserted, no common linkmode\n");
 		return -EINVAL;
 	}
@@ -3761,15 +3760,14 @@ static int phy_probe(struct device *dev)
 	/* Some PHYs may advertise, by default, not support EEE modes. So,
 	 * we need to clean them. In addition remove all disabled EEE modes.
 	 */
-	linkmode_and(phydev->advertising_eee, phydev->supported_eee,
-		     phydev->advertising_eee);
-	linkmode_andnot(phydev->advertising_eee, phydev->advertising_eee,
-			phydev->eee_disabled_modes);
-
 	/* There is no "enabled" flag. If PHY is advertising, assume it is
 	 * kind of enabled.
 	 */
-	phydev->eee_cfg.eee_enabled = !linkmode_empty(phydev->advertising_eee);
+	phydev->eee_cfg.eee_enabled =
+		linkmode_and_andnot(phydev->advertising_eee,
+				    phydev->advertising_eee,
+				    phydev->supported_eee,
+				    phydev->eee_disabled_modes);
 
 	/* Get master/slave strap overrides */
 	of_set_phy_timing_role(phydev);
