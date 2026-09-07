@@ -40,19 +40,10 @@ struct optimistic_spin_node {
 
 static DEFINE_PER_CPU(struct optimistic_spin_node, osq_node);
 
-/*
- * We use the value 0 to represent "no CPU", thus the encoded value
- * will be the CPU number incremented by 1.
- */
-static inline unsigned int encode_cpu(unsigned int cpu_nr)
-{
-	return cpu_nr + 1;
-}
-
 static inline struct optimistic_spin_node *
-decode_cpu(unsigned int encoded_cpu_val)
+cpu_spin_node(unsigned int offset_cpu_num)
 {
-	return per_cpu_ptr(&osq_node, encoded_cpu_val - 1);
+	return per_cpu_ptr(&osq_node, offset_cpu_num - 1);
 }
 
 /*
@@ -74,7 +65,7 @@ decode_cpu(unsigned int encoded_cpu_val)
 static inline unsigned int
 osq_unlink_from_next(struct optimistic_spin_queue *lock, unsigned int prev)
 {
-	unsigned int curr = encode_cpu(smp_processor_id());
+	unsigned int curr = smp_processor_id() + 1;
 	struct optimistic_spin_node *node;
 	unsigned int next;
 
@@ -118,7 +109,7 @@ osq_unlink_from_next(struct optimistic_spin_queue *lock, unsigned int prev)
 	 * When called while unqueueing in osq_lock() this completes the
 	 * backwards link, the forwards link is done by the caller.
 	 */
-	WRITE_ONCE(decode_cpu(next)->prev, prev);
+	WRITE_ONCE(cpu_spin_node(next)->prev, prev);
 
 	return next;
 }
@@ -126,7 +117,7 @@ osq_unlink_from_next(struct optimistic_spin_queue *lock, unsigned int prev)
 bool osq_lock(struct optimistic_spin_queue *lock)
 {
 	struct optimistic_spin_node *node, *prev_ptr;
-	unsigned int curr = encode_cpu(smp_processor_id());
+	unsigned int curr = smp_processor_id() + 1;
 	unsigned int next, prev;
 
 	/*
@@ -140,7 +131,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 		return true;
 
 	node = this_cpu_ptr(&osq_node);
-	prev_ptr = decode_cpu(prev);
+	prev_ptr = cpu_spin_node(prev);
 	node->prev = prev;
 
 	/*
@@ -189,7 +180,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 			/* Lock acquired */
 			return true;
 
-		prev_ptr = decode_cpu(prev);
+		prev_ptr = cpu_spin_node(prev);
 
 		if (data_race(prev_ptr->next) == curr &&
 		    cmpxchg(&prev_ptr->next, curr, 0) == curr)
