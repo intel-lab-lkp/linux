@@ -1641,9 +1641,13 @@ struct ext4_sb_info {
 	struct super_block *s_sb;
 	struct buffer_head *s_mmp_bh;
 
+	/* timeout in seconds for s_err_report; 0 disables the timer. */
+	unsigned long s_err_report_sec;
+
+	/* Lazy inode table initialization info */
+	struct ext4_li_request *s_li_request;
+
 	/* Journaling */
-	struct journal_s *s_journal;
-	unsigned long s_ext4_flags;		/* Ext4 superblock flags */
 	struct mutex s_orphan_lock;	/* Protects on disk list changes */
 	struct list_head s_orphan;	/* List of orphaned inodes in on disk
 					   list */
@@ -1747,11 +1751,10 @@ struct ext4_sb_info {
 
 	/* timer for periodic error stats printing */
 	struct timer_list s_err_report;
-	/* timeout in seconds for s_err_report; 0 disables the timer. */
-	unsigned long s_err_report_sec;
+	/* Keep journal state away from orphan list updates. */
+	struct journal_s *s_journal;
+	unsigned long s_ext4_flags;		/* Ext4 superblock flags */
 
-	/* Lazy inode table initialization info */
-	struct ext4_li_request *s_li_request;
 	/* Wait multiplier for lazy initialization thread */
 	unsigned int s_li_wait_mult;
 
