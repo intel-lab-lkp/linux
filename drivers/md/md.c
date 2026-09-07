@@ -6310,6 +6310,20 @@ int mddev_stack_rdev_into(struct mddev *mddev, struct md_rdev *rdev,
 }
 EXPORT_SYMBOL_GPL(mddev_stack_rdev_into);
 
+/* for callers that must not wait for q->limits_lock, see md_start_sync() */
+static bool mddev_stack_limits_trylock(struct mddev *mddev,
+				       struct queue_limits *lim)
+{
+	struct request_queue *q;
+
+	if (mddev_is_dm(mddev))
+		return false;
+
+	q = mddev->gendisk->queue;
+
+	return queue_limits_start_update_trylock(q, lim);
+}
+
 /* update the optimal I/O size after a reshape */
 void mddev_update_io_opt(struct mddev *mddev, unsigned int nr_stripes)
 {
@@ -10829,6 +10843,7 @@ err_bitmap:
 
 static void check_sb_changes(struct mddev *mddev, struct md_rdev *rdev)
 {
+	struct queue_limits lim;
 	struct mdp_superblock_1 *sb = page_address(rdev->sb_page);
 	struct md_rdev *rdev2, *tmp;
 	int role, ret;
@@ -10885,7 +10900,24 @@ static void check_sb_changes(struct mddev *mddev, struct md_rdev *rdev)
 					rdev2->saved_raid_disk = -1;
 				else
 					rdev2->saved_raid_disk = role;
-				ret = remove_and_add_spares(mddev, rdev2, NULL);
+				/*
+				 * reconfig_mutex is held, so don't wait for
+				 * q->limits_lock; MD_RECOVERY_NEEDED below
+				 * leaves a skipped add to md_start_sync().
+				 */
+				if (mddev_stack_limits_trylock(mddev, &lim)) {
+					struct request_queue *q =
+						mddev->gendisk->queue;
+
+					ret = remove_and_add_spares(mddev,
+								    rdev2, &lim);
+					queue_limits_commit_update(q, &lim);
+				} else if (mddev_is_dm(mddev)) {
+					ret = remove_and_add_spares(mddev,
+								    rdev2, NULL);
+				} else {
+					ret = remove_spares(mddev, rdev2);
+				}
 				pr_info("Activated spare: %pg\n",
 					rdev2->bdev);
 				/* wakeup mddev->thread here, so array could
