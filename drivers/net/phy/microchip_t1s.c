@@ -33,6 +33,7 @@
 #define LAN86XX_REG_STS1		0x0018
 #define LAN86XX_REG_IMSK1		0x001C
 
+#define LAN86XX_STS1_LINK_STS_CHANGED	BIT(13)
 #define LAN86XX_STS1_PLCA_STS_CHANGED	BIT(11)
 
 /* Collision Detector Control 0 Register */
@@ -40,6 +41,9 @@
 #define COL_DET_CTRL0_ENABLE_BIT_MASK	BIT(15)
 #define COL_DET_ENABLE			BIT(15)
 #define COL_DET_DISABLE			0x0000
+#define COL_DET_CTRL0_CCMFC_MASK	GENMASK(10, 9)
+/* OA default: collisions gated by PLCA_Status in hardware */
+#define COL_DET_CTRL0_CCMFC_OA_DEFAULT	BIT(9)
 
 /* LAN8670/1/2 Rev.D0 Link Status Selection Register */
 #define LAN867X_REG_LINK_STATUS_CTRL	0x0012
@@ -502,6 +506,18 @@ static int lan867x_revd0_config_init(struct phy_device *phydev)
 			return ret;
 	}
 
+	/* AN1760: configure CCMFC to OA default so that the hardware
+	 * automatically gates collision forwarding to the MAC based on
+	 * PLCA_Status. Collisions are neither counted nor forwarded when
+	 * PLCA_Status = OK, eliminating the need for software-driven CDEN
+	 * toggling in the interrupt handler. CDEN remains enabled.
+	 */
+	ret = phy_modify_mmd(phydev, MDIO_MMD_VEND2, LAN86XX_REG_COL_DET_CTRL0,
+			     COL_DET_CTRL0_CCMFC_MASK,
+			     COL_DET_CTRL0_CCMFC_OA_DEFAULT);
+	if (ret)
+		return ret;
+
 	/* Initially the PHY will be in CSMA/CD mode by default. So it is
 	 * required to set the link always active as it doesn't support
 	 * autoneg.
@@ -526,7 +542,11 @@ static int lan86xx_read_status(struct phy_device *phydev)
 
 static int lan86xx_config_intr(struct phy_device *phydev)
 {
+	u16 mask = LAN86XX_STS1_PLCA_STS_CHANGED;
 	int ret;
+
+	if (phydev->phy_id == PHY_ID_LAN867X_REVD0)
+		mask |= LAN86XX_STS1_LINK_STS_CHANGED;
 
 	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
 		/* Read to clear any pending status before enabling. */
@@ -536,12 +556,11 @@ static int lan86xx_config_intr(struct phy_device *phydev)
 
 		/* A mask bit of 0 enables the corresponding interrupt. */
 		return phy_clear_bits_mmd(phydev, MDIO_MMD_VEND2,
-					  LAN86XX_REG_IMSK1,
-					  LAN86XX_STS1_PLCA_STS_CHANGED);
+					  LAN86XX_REG_IMSK1, mask);
 	}
 
 	ret = phy_set_bits_mmd(phydev, MDIO_MMD_VEND2, LAN86XX_REG_IMSK1,
-			       LAN86XX_STS1_PLCA_STS_CHANGED);
+			       mask);
 	if (ret)
 		return ret;
 
@@ -595,6 +614,47 @@ static irqreturn_t lan86xx_handle_interrupt(struct phy_device *phydev)
 	return ret_irq;
 }
 
+static irqreturn_t lan867x_revd0_handle_interrupt(struct phy_device *phydev)
+{
+	struct phy_plca_status plca_st;
+	irqreturn_t ret_irq = IRQ_NONE;
+	int sts1, ret;
+
+	/* Reading the status register clears the latched event bits. */
+	sts1 = phy_read_mmd(phydev, MDIO_MMD_VEND2, LAN86XX_REG_STS1);
+	if (sts1 < 0) {
+		phy_error(phydev);
+		return IRQ_NONE;
+	}
+
+	if (sts1 & LAN86XX_STS1_LINK_STS_CHANGED) {
+		phy_trigger_machine(phydev);
+		ret_irq = IRQ_HANDLED;
+	}
+
+	if (sts1 & LAN86XX_STS1_PLCA_STS_CHANGED) {
+		ret = genphy_c45_plca_get_status(phydev, &plca_st);
+		if (ret < 0) {
+			phy_error(phydev);
+			return IRQ_NONE;
+		}
+
+		/* Collision detection is handled autonomously by the hardware
+		 * via CCMFC. Only the link status selection needs to be updated
+		 * on each PLCA status transition.
+		 */
+		ret = lan867x_revd0_link_active_selection(phydev, plca_st.pst);
+		if (ret < 0) {
+			phy_error(phydev);
+			return IRQ_NONE;
+		}
+
+		ret_irq = IRQ_HANDLED;
+	}
+
+	return ret_irq;
+}
+
 static struct phy_driver microchip_t1s_driver[] = {
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_LAN867X_REVB1),
@@ -637,6 +697,8 @@ static struct phy_driver microchip_t1s_driver[] = {
 		.name               = "LAN867X Rev.D0",
 		.features           = PHY_BASIC_T1S_P2MP_FEATURES,
 		.config_init        = lan867x_revd0_config_init,
+		.config_intr        = lan86xx_config_intr,
+		.handle_interrupt   = lan867x_revd0_handle_interrupt,
 		.get_plca_cfg	    = genphy_c45_plca_get_cfg,
 		.set_plca_cfg	    = lan86xx_plca_set_cfg,
 		.get_plca_status    = genphy_c45_plca_get_status,
