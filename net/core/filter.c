@@ -7162,6 +7162,32 @@ static const struct bpf_func_proto bpf_lwt_seg6_adjust_srh_proto = {
 	.arg2_type	= ARG_ANYTHING,
 	.arg3_type	= ARG_ANYTHING,
 };
+
+BPF_CALL_2(bpf_lwt_seg6_pull_data, struct sk_buff *, skb, u32, len)
+{
+	struct seg6_bpf_srh_state *srh_state =
+		this_cpu_ptr(&seg6_bpf_srh_states);
+	unsigned int srhoff;
+	int ret;
+
+	lockdep_assert_held(&srh_state->bh_lock);
+	if (!srh_state->srh)
+		return ____bpf_skb_pull_data(skb, len);
+
+	srhoff = (unsigned char *)srh_state->srh - skb->data;
+	ret = ____bpf_skb_pull_data(skb, len);
+	srh_state->srh = (struct ipv6_sr_hdr *)(skb->data + srhoff);
+
+	return ret;
+}
+
+static const struct bpf_func_proto bpf_lwt_seg6_pull_data_proto = {
+	.func		= bpf_lwt_seg6_pull_data,
+	.gpl_only	= false,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_PTR_TO_CTX,
+	.arg2_type	= ARG_ANYTHING,
+};
 #endif /* CONFIG_IPV6_SEG6_BPF */
 
 #ifdef CONFIG_INET
@@ -9052,6 +9078,8 @@ lwt_seg6local_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return &bpf_lwt_seg6_action_proto;
 	case BPF_FUNC_lwt_seg6_adjust_srh:
 		return &bpf_lwt_seg6_adjust_srh_proto;
+	case BPF_FUNC_skb_pull_data:
+		return &bpf_lwt_seg6_pull_data_proto;
 #endif
 	default:
 		return lwt_out_func_proto(func_id, prog);
