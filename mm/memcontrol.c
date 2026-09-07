@@ -3796,16 +3796,11 @@ static void memcg_online_kmem(struct mem_cgroup *memcg)
 		return;
 
 	static_branch_enable(&memcg_kmem_online_key);
-
-	memcg->kmemcg_id = memcg->id.id;
 }
 
 static void memcg_offline_kmem(struct mem_cgroup *memcg)
 {
 	struct mem_cgroup *parent;
-
-	if (mem_cgroup_kmem_disabled())
-		return;
 
 	if (unlikely(mem_cgroup_is_root(memcg)))
 		return;
@@ -4241,7 +4236,6 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 	seqlock_init(&memcg->socket_pressure_seqlock);
 #endif
 	memcg1_memcg_init(memcg);
-	memcg->kmemcg_id = -1;
 #ifdef CONFIG_CGROUP_WRITEBACK
 	INIT_LIST_HEAD(&memcg->cgwb_list);
 	for (i = 0; i < MEMCG_CGWB_FRN_CNT; i++)

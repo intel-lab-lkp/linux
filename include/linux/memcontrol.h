@@ -254,7 +254,6 @@ struct mem_cgroup {
 #if BITS_PER_LONG < 64
 	seqlock_t		socket_pressure_seqlock;
 #endif
-	int kmemcg_id;
 
 #ifdef CONFIG_CGROUP_WRITEBACK
 	struct list_head cgwb_list;
@@ -1770,12 +1769,15 @@ static inline void memcg_kmem_uncharge_page(struct page *page, int order)
 }
 
 /*
- * A helper for accessing memcg's kmem_id, used for getting
+ * A helper for accessing the memcg ID, used for getting
  * corresponding LRU lists.
  */
 static inline int memcg_kmem_id(struct mem_cgroup *memcg)
 {
-	return memcg ? memcg->kmemcg_id : -1;
+	if (!memcg || mem_cgroup_is_root(memcg))
+		return -1;
+
+	return memcg->id.id;
 }
 
 struct mem_cgroup *mem_cgroup_from_virt(void *p);
