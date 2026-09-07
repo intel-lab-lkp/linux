@@ -8,6 +8,8 @@
 
 #include <uapi/linux/trace_mmap.h>
 
+#include <linux/ring_buffer_types.h>
+
 struct trace_buffer;
 struct ring_buffer_iter;
 
@@ -281,8 +283,13 @@ static inline struct ring_buffer_desc *__first_ring_buffer_desc(struct trace_buf
 
 static inline size_t trace_buffer_desc_size(size_t buffer_size, unsigned int nr_cpus)
 {
-	unsigned int nr_pages = max(DIV_ROUND_UP(buffer_size, PAGE_SIZE), 2UL) + 1;
+	unsigned long nr_pages =
+		max(DIV_ROUND_UP(buffer_size, PAGE_SIZE - BUF_PAGE_HDR_SIZE), 2UL) + 1;
 	struct ring_buffer_desc *rbdesc;
+
+	/* Capped by ring_buffer_desc::nr_page_va */
+	if (nr_pages > UINT_MAX)
+		return SIZE_MAX;
 
 	return size_add(offsetof(struct trace_buffer_desc, __data),
 			size_mul(nr_cpus, struct_size(rbdesc, page_va, nr_pages)));
