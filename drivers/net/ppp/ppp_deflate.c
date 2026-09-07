@@ -186,7 +186,9 @@ static int z_compress(void *arg, unsigned char *rptr, unsigned char *obuf,
 {
 	struct ppp_deflate_state *state = (struct ppp_deflate_state *) arg;
 	int r, proto, off, olen, oavail;
+	unsigned char discard_buf[64];
 	unsigned char *wptr;
+	bool discard;
 
 	/*
 	 * Check that the protocol is in the range we handle.
@@ -200,20 +202,29 @@ static int z_compress(void *arg, unsigned char *rptr, unsigned char *obuf,
 	if (osize > isize)
 		osize = isize;
 
-	wptr = obuf;
-
 	/*
-	 * Copy over the PPP header and store the 2-byte sequence number.
+	 * Copy over the PPP header and store the 2-byte sequence number only if
+	 * there is room for compressed data.  Otherwise discard the compressed
+	 * output while consuming the input, so the compressor history remains
+	 * synchronized with the peer.
 	 */
-	wptr[0] = PPP_ADDRESS(rptr);
-	wptr[1] = PPP_CONTROL(rptr);
-	put_unaligned_be16(PPP_COMP, wptr + 2);
-	wptr += PPP_HDRLEN;
-	put_unaligned_be16(state->seqno, wptr);
-	wptr += DEFLATE_OVHD;
 	olen = PPP_HDRLEN + DEFLATE_OVHD;
-	state->strm.next_out = wptr;
-	state->strm.avail_out = oavail = osize - olen;
+	discard = osize <= olen;
+	if (discard) {
+		state->strm.next_out = discard_buf;
+		oavail = sizeof(discard_buf);
+	} else {
+		wptr = obuf;
+		wptr[0] = PPP_ADDRESS(rptr);
+		wptr[1] = PPP_CONTROL(rptr);
+		put_unaligned_be16(PPP_COMP, wptr + 2);
+		wptr += PPP_HDRLEN;
+		put_unaligned_be16(state->seqno, wptr);
+		wptr += DEFLATE_OVHD;
+		state->strm.next_out = wptr;
+		oavail = osize - olen;
+	}
+	state->strm.avail_out = oavail;
 	++state->seqno;
 
 	off = (proto > 0xff) ? 2 : 3;	/* skip 1st proto byte if 0 */
@@ -231,8 +242,10 @@ static int z_compress(void *arg, unsigned char *rptr, unsigned char *obuf,
 		}
 		if (state->strm.avail_out == 0) {
 			olen += oavail;
-			state->strm.next_out = NULL;
-			state->strm.avail_out = oavail = 1000000;
+			discard = true;
+			state->strm.next_out = discard_buf;
+			oavail = sizeof(discard_buf);
+			state->strm.avail_out = oavail;
 		} else {
 			break;		/* all done */
 		}
@@ -242,7 +255,7 @@ static int z_compress(void *arg, unsigned char *rptr, unsigned char *obuf,
 	/*
 	 * See if we managed to reduce the size of the packet.
 	 */
-	if (olen < isize && olen <= osize) {
+	if (!discard && olen < isize && olen <= osize) {
 		state->stats.comp_bytes += olen;
 		state->stats.comp_packets++;
 	} else {
@@ -420,6 +433,8 @@ static int z_decompress(void *arg, unsigned char *ibuf, int isize,
 			       state->unit, isize);
 		return DECOMP_ERROR;
 	}
+	if (osize < PPP_HDRLEN)
+		return DECOMP_ERROR;
 
 	/* Check the sequence number. */
 	seq = get_unaligned_be16(ibuf + PPP_HDRLEN);

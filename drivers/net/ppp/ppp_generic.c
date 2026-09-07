@@ -1719,10 +1719,11 @@ pad_compress_skb(struct ppp *ppp, struct sk_buff *skb)
 {
 	struct net_device *dev = netdev_from_priv(ppp);
 	struct sk_buff *new_skb;
+	int mtu = READ_ONCE(dev->mtu);
 	int len;
-	int new_skb_size = dev->mtu +
+	int new_skb_size = mtu +
 		ppp->xcomp->comp_extra + dev->hard_header_len;
-	int compressor_skb_size = dev->mtu +
+	int compressor_skb_size = mtu +
 		ppp->xcomp->comp_extra + PPP_HDRLEN;
 
 	if (skb_linearize(skb))
