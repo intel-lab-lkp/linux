@@ -9560,7 +9560,7 @@
  * DMA synchronizaion. Always the last entry in the DMA buffer and set to the
  * same value as GENERATION_START. The host driver must compare the
  * GENERATION_START and GENERATION_END values to verify that the DMA buffer is
- * consistent upon copying the the DMA buffer. If they do not match, it means
+ * consistent upon copying the DMA buffer. If they do not match, it means
  * that new DMA transfer has started while the host driver was copying the DMA
  * buffer. In this case, the host driver must repeat the copy operation.
  */
