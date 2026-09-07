@@ -721,6 +721,7 @@ static void srcu_torture_init_forbidden_apis(void)
 	cur_ops->call = NULL;
 	cur_ops->cb_barrier = NULL;
 	cur_ops->deferred_free = NULL;
+	cur_ops->exp_current = NULL;
 	cur_ops->start_gp_poll = NULL;
 }
 
