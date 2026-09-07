@@ -1079,7 +1079,7 @@ int idpf_vport_queues_alloc(struct idpf_vport *vport,
 			    struct idpf_q_vec_rsrc *rsrc);
 void idpf_vport_queues_rel(struct idpf_vport *vport,
 			   struct idpf_q_vec_rsrc *rsrc);
-void idpf_vport_intr_rel(struct idpf_q_vec_rsrc *rsrc);
+void idpf_vport_intr_rel(struct idpf_q_vec_rsrc *rsrc, struct libie_irq *irq);
 int idpf_vport_intr_alloc(struct idpf_vport *vport,
 			  struct idpf_q_vec_rsrc *rsrc);
 void idpf_vport_intr_update_itr_ena_irq(struct idpf_q_vector *q_vector);
