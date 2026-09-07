@@ -4,12 +4,33 @@
 #include <linux/osq_lock.h>
 
 /*
- * An MCS like lock especially tailored for optimistic spinning for sleeping
- * lock implementations (mutex, rwsem, etc).
+ * An MCS like spin lock especially tailored for optimistic spinning for
+ * sleeping lock implementations (mutex, rwsem, etc).
+ * Each CPU spins on a local variable to avoid cache-line bounces.
  *
- * Using a single mcs node per CPU is safe because sleeping locks should not be
+ * The CPU that holds the osq_lock checks the mutex/rwsem, the other CPU spin
+ * in osq_lock() until either the osq_lock is obtained or the scheduler
+ * requests the process be preempted.
+ *
+ * Using a single osq node per CPU is safe because sleeping locks should not be
  * called from interrupt context and we have preemption disabled while
  * spinning.
+ *
+ * The osq_nodes for the spinning CPU are put on a double-linked (non circular)
+ * list. The list 'pointers' can either be the address of the osq_node or the
+ * associated CPU number, the CPU numbers are offset by one so that zero can
+ * be used like a NULL ponter.
+ * The mutex/rwsem contains a pointer (CPU number) to the tail of the list.
+ * There is no equivalent pointer to the list head - the 'head' is the
+ * osq_node of the CPU that acquired the osq lock.
+ *
+ * The 'next' pointer of the tail must be NULL, all the other 'next' pointers
+ * must either be valid or transiently NULL.
+ * The 'prev' pointers only need to be valid when node->prev makes sense and,
+ * even then, can be transiently invalid (ie refer to the wrong node).
+ * They are only used for the node->prev->next = node->next update when
+ * 'node' is being removed. Atomically checking node->prev->next == node
+ * ensures the list doesn't get corrupted.
  */
 
 struct optimistic_spin_node {
