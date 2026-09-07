@@ -64,6 +64,8 @@
 #define STMFTS_MASK_KEY_MENU			0x01
 #define STMFTS_MASK_KEY_BACK			0x02
 
+#define STMFTS_RESET_TIMEOUT_MS	300
+
 #define STMFTS_EVENT_SIZE	8
 #define STMFTS_STACK_DEPTH	32
 #define STMFTS_DATA_MAX_SIZE	(STMFTS_EVENT_SIZE * STMFTS_STACK_DEPTH)
@@ -543,13 +545,20 @@ static int stmfts_read_system_info(struct stmfts_data *sdata)
 	return 0;
 }
 
-static void stmfts_reset(struct stmfts_data *sdata)
+static int stmfts_reset(struct stmfts_data *sdata)
 {
 	gpiod_set_value_cansleep(sdata->reset_gpio, 1);
 	msleep(20);
 
+	reinit_completion(&sdata->cmd_done);
 	gpiod_set_value_cansleep(sdata->reset_gpio, 0);
-	msleep(50);
+	enable_irq(sdata->client->irq);
+
+	if (!wait_for_completion_timeout(&sdata->cmd_done,
+					 msecs_to_jiffies(STMFTS_RESET_TIMEOUT_MS)))
+		return -ETIMEDOUT;
+
+	return 0;
 }
 
 static int stmfts_configure(struct stmfts_data *sdata)
@@ -598,16 +607,21 @@ static int stmfts_power_on(struct stmfts_data *sdata)
 	 */
 	msleep(20);
 
-	if (sdata->reset_gpio)
-		stmfts_reset(sdata);
+	if (sdata->reset_gpio) {
+		err = stmfts_reset(sdata);
+		if (err) {
+			dev_err(&sdata->client->dev,
+				"controller not ready after reset: %d\n", err);
+			goto err_disable_irq;
+		}
+	} else {
+		enable_irq(sdata->client->irq);
+		msleep(50);
+	}
 
 	err = stmfts_read_system_info(sdata);
 	if (err)
-		goto err_disable_regulators;
-
-	enable_irq(sdata->client->irq);
-
-	msleep(50);
+		goto err_disable_irq;
 
 	err = stmfts_configure(sdata);
 	if (err)
@@ -623,7 +637,7 @@ static int stmfts_power_on(struct stmfts_data *sdata)
 
 err_disable_irq:
 	disable_irq(sdata->client->irq);
-err_disable_regulators:
+
 	regulator_bulk_disable(ARRAY_SIZE(stmfts_supplies), sdata->supplies);
 	return err;
 }
