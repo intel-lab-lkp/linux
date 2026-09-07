@@ -89,6 +89,7 @@ asmlinkage void secondary_start_kernel(void);
 struct secondary_data {
 	struct task_struct *task;
 	long status;
+	cpumask_t cpu_died_early_mask;
 };
 
 extern struct secondary_data secondary_data;
