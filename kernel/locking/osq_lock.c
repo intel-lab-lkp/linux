@@ -57,52 +57,67 @@ static inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
 }
 
 /*
- * Get a stable @node->next pointer, either for unlock() or unqueue() purposes.
- * Can return NULL in case we were the last queued and we updated @lock instead.
+ * Unlink the current cpu's node from the lock's node->prev list.
  *
- * If osq_lock() is being cancelled there must be a previous node
- * and 'old_cpu' is its CPU #.
- * For osq_unlock() there is never a previous node and old_cpu is
- * set to OSQ_UNLOCKED_VAL.
+ * More specifically atomically write its node->prev over the link that
+ * currently points to node.
+ * This is either:
+ *    lock->tail = node->prev
+ * or:
+ *    node->next->prev = node->prev
+ * The first is a simple cmpxchg(), the second is protected against
+ * node->next trying to unlink itself (after need_resched() is set) by using
+ * an xchg() on node->next that sets it to NULL.
+ *
+ * When a lock request is being cancelled the caller needs 'next' to
+ * set node->prev->next = next.
  */
 static inline struct optimistic_spin_node *
-osq_wait_next(struct optimistic_spin_queue *lock,
-	      struct optimistic_spin_node *node,
-	      int old_cpu)
+osq_unlink_from_next(struct optimistic_spin_queue *lock, int prev)
 {
 	int curr = encode_cpu(smp_processor_id());
+	struct optimistic_spin_node *node, *next;
 
 	for (;;) {
-		if (atomic_read(&lock->tail) == curr &&
-		    atomic_cmpxchg_acquire(&lock->tail, curr, old_cpu) == curr) {
+		int tail = atomic_read(&lock->tail);
+		if (curr == tail &&
+		    atomic_try_cmpxchg_release(&lock->tail, &tail, prev)) {
 			/*
-			 * We were the last queued, we moved @lock back. @prev
-			 * will now observe @lock and will complete its
-			 * unlock()/unqueue().
+			 * We were the last queued, lock->tail now references
+			 * prev (or is 0 if the list is now empty).
+			 * If prev was spinning in this loop it can continue.
 			 */
 			return NULL;
 		}
 
+		node = this_cpu_ptr(&osq_node);
+
 		/*
-		 * We must xchg() the @node->next value, because if we were to
-		 * leave it in, a concurrent unlock()/unqueue() from
-		 * @node->next might complete Step-A and think its @prev is
-		 * still valid.
+		 * We must xchg() the @node->next value to ensure that a
+		 * concurrent unqueue() from @node->next will find an invalid
+		 * @prev value (node_next->prev->next != node_next).
 		 *
-		 * If the concurrent unlock()/unqueue() wins the race, we'll
-		 * wait for either @lock to point to us, through its Step-B, or
-		 * wait for a new @node->next from its Step-C.
+		 * If @node->next is already NULL then we need to wait until
+		 * the concurrent unqueue completes.
 		 */
 		if (node->next) {
-			struct optimistic_spin_node *next;
-
 			next = xchg(&node->next, NULL);
 			if (next)
-				return next;
+				break;
 		}
 
 		cpu_relax();
 	}
+
+	/*
+	 * When called from osq_unlock() prev is zero and this hands
+	 * over the lock ownership.
+	 * When called while unqueueing in osq_lock() this completes the
+	 * backwards link, the forwards link is done by the caller.
+	 */
+	WRITE_ONCE(next->prev, prev);
+
+	return next;
 }
 
 bool osq_lock(struct optimistic_spin_queue *lock)
@@ -130,7 +145,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	/*
 	 * osq_lock()			unqueue
 	 *
-	 * node->prev = prev		osq_wait_next()
+	 * node->prev = prev		osq_unlink_from_next()
 	 * WMB				MB
 	 * prev->next = node		next->prev = prev // unqueue-C
 	 *
@@ -160,8 +175,6 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 				     vcpu_is_preempted(VAL - 1));
 
 	/*
-	 * Step - A
-	 *
 	 * Loop until either node->prev is zero (lock acquired) or we
 	 * atomically change prev->next from node to NULL (stopping prev
 	 * handing on the lock).
@@ -191,59 +204,52 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 
 	/*
 	 * If 'prev' tries to remove itself from the list before we write
-	 * a new value to prev->next it will spin in osq_wait_next().
+	 * a new value to prev->next it will spin in osq_unlink_from_next().
+	 * This means we can no longer be given the lock and always
+	 * return false.
 	 */
 
-	/* Invalidate prev_cpu matching osq_unlock() */
+	/*
+	 * Invalidate prev matching osq_unlock().
+	 * This isn't necessary but ensures that both unlocked and fast-path
+	 * locked nodes (where the initial xchg() returned 0) have prev set
+	 * to zero.
+	 * If nothing else it lets the lock chain be followed from lock->tail
+	 * whch may help diagnostics.
+	 */
 	node->prev = 0;
 
 	/*
-	 * Step - B -- stabilize @next
-	 *
-	 * Similar to unlock(), wait for @node->next or move @lock from @node
-	 * back to @prev.
+	 * Now that the linkage to prev cannot change underneath us
+	 * remove ourselves from the node->prev list.
+	 * This does:
+	 * (node->next ? node->next->prev : lock->tail) = node->prev
 	 */
-
-	next = osq_wait_next(lock, node, prev);
-	if (!next)
-		return false;
+	next = osq_unlink_from_next(lock, prev);
 
 	/*
-	 * Step - C -- unlink
-	 *
-	 * @prev is stable because its still waiting for a new @prev->next
-	 * pointer, @next is stable because our @node->next pointer is NULL and
-	 * it will wait in Step-A.
+	 * Finally mend the node->next list that was 'broken' to
+	 * stop node->prev trying to unlink from us.
+	 * If next is NULL then lock->tail is prev_ptr and another node
+	 * can be added - so we must not re-write the NULL.
 	 */
-
-	WRITE_ONCE(next->prev, prev);
-	WRITE_ONCE(prev_ptr->next, next);
+	if (next) {
+		/*
+		 * This must happen after the write to node->next->prev.
+		 * If swapped then prev could unlink itself before our
+		 * write to node->next->prev and the the wrong value would
+		 * end up in node->next->prev.
+		 * Probably can't actually happen due to re-ordering of writes,
+		 * but could happen without a compiler barrier.
+		 */
+		smp_wmb();
+		WRITE_ONCE(prev_ptr->next, next);
+	}
 
 	return false;
 }
 
 void osq_unlock(struct optimistic_spin_queue *lock)
 {
-	struct optimistic_spin_node *node, *next;
-	int curr = encode_cpu(smp_processor_id());
-
-	/*
-	 * Fast path for the uncontended case.
-	 */
-	if (atomic_try_cmpxchg_release(&lock->tail, &curr, OSQ_UNLOCKED_VAL))
-		return;
-
-	/*
-	 * Second most likely case.
-	 */
-	node = this_cpu_ptr(&osq_node);
-	next = xchg(&node->next, NULL);
-	if (next) {
-		WRITE_ONCE(next->prev, 0);
-		return;
-	}
-
-	next = osq_wait_next(lock, node, OSQ_UNLOCKED_VAL);
-	if (next)
-		WRITE_ONCE(next->prev, 0);
+	osq_unlink_from_next(lock, OSQ_UNLOCKED_VAL);
 }
