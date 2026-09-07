@@ -319,19 +319,6 @@ enum idpf_queue_flags_t {
 	__assign_bit(__IDPF_Q_##f, (q)->flags, v)
 
 /**
- * struct idpf_vec_regs
- * @dyn_ctl_reg: Dynamic control interrupt register offset
- * @itrn_reg: Interrupt Throttling Rate register offset
- * @itrn_index_spacing: Register spacing between ITR registers of the same
- *			vector
- */
-struct idpf_vec_regs {
-	u32 dyn_ctl_reg;
-	u32 itrn_reg;
-	u32 itrn_index_spacing;
-};
-
-/**
  * struct idpf_intr_reg
  * @dyn_ctl: Dynamic control interrupt register
  * @dyn_ctl_intena_m: Mask for dyn_ctl interrupt enable

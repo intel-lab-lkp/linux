@@ -45,7 +45,9 @@ static void idpf_vf_mb_intr_reg_init(struct idpf_adapter *adapter)
 {
 	struct libie_mmio_info *mmio = &adapter->ctlq_ctx.mmio_info;
 	struct idpf_intr_reg *intr = &adapter->mb_vector.intr_reg;
-	u32 dyn_ctl = le32_to_cpu(adapter->caps.mailbox_dyn_ctl);
+	u32 dyn_ctl;
+
+	dyn_ctl = adapter->irq_info.vectors[IDPF_MBX_IRQ_INDEX].regs.dyn_ctl;
 
 	intr->dyn_ctl = libie_pci_get_mmio_addr(mmio, dyn_ctl);
 	intr->dyn_ctl_intena_m = VF_INT_DYN_CTL0_INTENA_M;
@@ -59,39 +61,27 @@ static void idpf_vf_mb_intr_reg_init(struct idpf_adapter *adapter)
  * @vport: virtual port structure
  * @rsrc: pointer to queue and vector resources
  */
-static int idpf_vf_intr_reg_init(struct idpf_vport *vport,
-				 struct idpf_q_vec_rsrc *rsrc)
+static void idpf_vf_intr_reg_init(struct idpf_vport *vport,
+				  struct idpf_q_vec_rsrc *rsrc)
 {
 	struct idpf_adapter *adapter = vport->adapter;
-	u16 num_vecs = rsrc->num_q_vectors;
-	struct idpf_vec_regs *reg_vals;
+	int num_vecs = rsrc->num_q_vectors;
 	struct libie_mmio_info *mmio;
-	int num_regs, i, err = 0;
 	u32 rx_itr, tx_itr, val;
-	u16 total_vecs;
-
-	total_vecs = idpf_get_reserved_vecs(vport->adapter);
-	reg_vals = kzalloc_objs(struct idpf_vec_regs, total_vecs);
-	if (!reg_vals)
-		return -ENOMEM;
-
-	num_regs = idpf_get_reg_intr_vecs(adapter, reg_vals, total_vecs);
-	if (num_regs < num_vecs) {
-		err = -EINVAL;
-		goto free_reg_vals;
-	}
+	int i;
 
 	mmio = &adapter->ctlq_ctx.mmio_info;
 
 	for (i = 0; i < num_vecs; i++) {
 		struct idpf_q_vector *q_vector = &rsrc->q_vectors[i];
-		u16 vec_id = rsrc->q_vector_idxs[i] - IDPF_MBX_Q_VEC;
 		struct idpf_intr_reg *intr = &q_vector->intr_reg;
-		struct idpf_vec_regs *reg = &reg_vals[vec_id];
+		u16 vec_id = rsrc->q_vector_idxs[i];
+		struct idpf_hw_vector *v;
 		u32 spacing;
 
-		intr->dyn_ctl = libie_pci_get_mmio_addr(mmio,
-							reg->dyn_ctl_reg);
+		v = &adapter->irq_info.vectors[vec_id];
+
+		intr->dyn_ctl = libie_pci_get_mmio_addr(mmio, v->regs.dyn_ctl);
 		intr->dyn_ctl_intena_m = VF_INT_DYN_CTLN_INTENA_M;
 		intr->dyn_ctl_intena_msk_m = VF_INT_DYN_CTLN_INTENA_MSK_M;
 		intr->dyn_ctl_itridx_s = VF_INT_DYN_CTLN_ITR_INDX_S;
@@ -101,30 +91,25 @@ static int idpf_vf_intr_reg_init(struct idpf_vport *vport,
 		intr->dyn_ctl_sw_itridx_ena_m =
 			VF_INT_DYN_CTLN_SW_ITR_INDX_ENA_M;
 
-		spacing = IDPF_ITR_IDX_SPACING(reg->itrn_index_spacing,
+		spacing = IDPF_ITR_IDX_SPACING(v->regs.itrn_index_spacing,
 					       IDPF_VF_ITR_IDX_SPACING);
-		rx_itr = VF_INT_ITRN_ADDR(VIRTCHNL2_ITR_IDX_0,
-					  reg->itrn_reg, spacing);
-		tx_itr = VF_INT_ITRN_ADDR(VIRTCHNL2_ITR_IDX_1,
-					  reg->itrn_reg, spacing);
+		rx_itr = VF_INT_ITRN_ADDR(VIRTCHNL2_ITR_IDX_0, v->regs.itrn,
+					  spacing);
+		tx_itr = VF_INT_ITRN_ADDR(VIRTCHNL2_ITR_IDX_1, v->regs.itrn,
+					  spacing);
 		intr->rx_itr = libie_pci_get_mmio_addr(mmio, rx_itr);
 		intr->tx_itr = libie_pci_get_mmio_addr(mmio, tx_itr);
 	}
 
 	/* Data vector for NOIRQ queues */
 
-	val = reg_vals[rsrc->q_vector_idxs[i] - IDPF_MBX_Q_VEC].dyn_ctl_reg;
+	val = adapter->irq_info.vectors[rsrc->q_vector_idxs[i]].regs.dyn_ctl;
 	rsrc->noirq_dyn_ctl =
 		libie_pci_get_mmio_addr(&adapter->ctlq_ctx.mmio_info, val);
 
 	val = VF_INT_DYN_CTLN_WB_ON_ITR_M | VF_INT_DYN_CTLN_INTENA_MSK_M |
 	      FIELD_PREP(VF_INT_DYN_CTLN_ITR_INDX_M, IDPF_NO_ITR_UPDATE_IDX);
 	rsrc->noirq_dyn_ctl_ena = val;
-
-free_reg_vals:
-	kfree(reg_vals);
-
-	return err;
 }
 
 /**
