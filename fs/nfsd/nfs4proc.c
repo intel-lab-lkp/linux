@@ -241,7 +241,9 @@ static struct file *do_lookup_open(struct path *parent,
 		 */
 		int err = nfsd_check_obj_isreg(child);
 
-		if (err)
+		if (oflags & O_EXCL)
+			filp = ERR_PTR(-EEXIST);
+		else if (err)
 			filp = ERR_PTR(err);
 		else
 			filp = dentry_open(&path, oflags, current_cred());
