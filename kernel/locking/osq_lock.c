@@ -34,9 +34,9 @@
  */
 
 struct optimistic_spin_node {
-	struct optimistic_spin_node *next, *prev;
+	struct optimistic_spin_node *next;
 	int locked; /* 1 if lock acquired */
-	int cpu; /* encoded CPU # + 1 value */
+	int prev; /* CPU number offset by 1 */
 };
 
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct optimistic_spin_node, osq_node);
@@ -48,11 +48,6 @@ static DEFINE_PER_CPU_SHARED_ALIGNED(struct optimistic_spin_node, osq_node);
 static inline int encode_cpu(int cpu_nr)
 {
 	return cpu_nr + 1;
-}
-
-static inline int node_cpu(struct optimistic_spin_node *node)
-{
-	return node->cpu - 1;
 }
 
 static inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
@@ -114,13 +109,12 @@ osq_wait_next(struct optimistic_spin_queue *lock,
 bool osq_lock(struct optimistic_spin_queue *lock)
 {
 	struct optimistic_spin_node *node = this_cpu_ptr(&osq_node);
-	struct optimistic_spin_node *prev, *next;
+	struct optimistic_spin_node *prev_ptr, *next;
 	int curr = encode_cpu(smp_processor_id());
-	int old;
+	int prev;
 
 	node->locked = 0;
 	node->next = NULL;
-	node->cpu = curr;
 
 	/*
 	 * We need both ACQUIRE (pairs with corresponding RELEASE in
@@ -128,11 +122,11 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * the node fields we just initialised) semantics when updating
 	 * the lock tail.
 	 */
-	old = atomic_xchg(&lock->tail, curr);
-	if (old == OSQ_UNLOCKED_VAL)
+	prev = atomic_xchg(&lock->tail, curr);
+	if (prev == OSQ_UNLOCKED_VAL)
 		return true;
 
-	prev = decode_cpu(old);
+	prev_ptr = decode_cpu(prev);
 	node->prev = prev;
 
 	/*
@@ -147,7 +141,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 */
 	smp_wmb();
 
-	WRITE_ONCE(prev->next, node);
+	WRITE_ONCE(prev_ptr->next, node);
 
 	/*
 	 * Normally @prev is untouchable after the above store; because at that
@@ -165,7 +159,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * polling, be careful.
 	 */
 	if (smp_cond_load_relaxed(&node->locked, VAL || need_resched() ||
-				  vcpu_is_preempted(node_cpu(node->prev))))
+				  vcpu_is_preempted(node->prev - 1)))
 		return true;
 
 	/* unqueue */
@@ -182,8 +176,8 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 		 * cpu_relax() below implies a compiler barrier which would
 		 * prevent this comparison being optimized away.
 		 */
-		if (data_race(prev->next) == node &&
-		    cmpxchg(&prev->next, node, NULL) == node)
+		if (data_race(prev_ptr->next) == node &&
+		    cmpxchg(&prev_ptr->next, node, NULL) == node)
 			break;
 
 		/*
@@ -201,6 +195,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 		 * case its step-C will write us a new @node->prev pointer.
 		 */
 		prev = READ_ONCE(node->prev);
+		prev_ptr = decode_cpu(prev);
 	}
 
 	/*
@@ -210,7 +205,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * back to @prev.
 	 */
 
-	next = osq_wait_next(lock, node, prev->cpu);
+	next = osq_wait_next(lock, node, prev);
 	if (!next)
 		return false;
 
@@ -223,7 +218,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 */
 
 	WRITE_ONCE(next->prev, prev);
-	WRITE_ONCE(prev->next, next);
+	WRITE_ONCE(prev_ptr->next, next);
 
 	return false;
 }
