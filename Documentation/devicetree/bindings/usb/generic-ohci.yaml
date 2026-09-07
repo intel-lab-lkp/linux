@@ -237,6 +237,9 @@ allOf:
       required:
         - access-controllers
         - clocks
+    else:
+      properties:
+        access-controllers: false
 
 unevaluatedProperties: false
 
