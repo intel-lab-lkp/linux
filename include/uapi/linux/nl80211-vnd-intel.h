@@ -37,7 +37,7 @@
  *	8) The CSME firmware grants ownership
  *	9) iwlmei tells iwlwifi to lift the RFKILL
  *	10) RFKILL OFF is reported to user space
- *	11) The host boots the device, loads the firwmare, and connects to a
+ *	11) The host boots the device, loads the firmware, and connects to a
  *	    specific BSSID without scanning including IP as fast as it can
  *	12) The host reports to the CSME firmware that there is a connection
  *	13) The TCP connection is preserved and the host has connectivity

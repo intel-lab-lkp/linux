@@ -301,7 +301,7 @@
 #define SIOCSIWPOWER	0x8B2C		/* set Power Management settings */
 #define SIOCGIWPOWER	0x8B2D		/* get Power Management settings */
 
-/* WPA : Generic IEEE 802.11 informatiom element (e.g., for WPA/RSN/WMM).
+/* WPA : Generic IEEE 802.11 information element (e.g., for WPA/RSN/WMM).
  * This ioctl uses struct iw_point and data buffer that includes IE id and len
  * fields. More than one IE may be included in the request. Setting the generic
  * IE to empty buffer (len=0) removes the generic IE from the driver. Drivers
@@ -681,7 +681,7 @@ struct iw_param {
   __s32		value;		/* The value of the parameter itself */
   __u8		fixed;		/* Hardware should not use auto select */
   __u8		disabled;	/* Disable the feature */
-  __u16		flags;		/* Various specifc flags (if any) */
+  __u16		flags;		/* Various specific flags (if any) */
 };
 
 /*
@@ -1083,7 +1083,7 @@ struct iw_event {
 	union iwreq_data	u;		/* IOCTL fixed payload */
 };
 
-/* Size of the Event prefix (including padding and alignement junk) */
+/* Size of the Event prefix (including padding and alignment junk) */
 #define IW_EV_LCP_LEN	(sizeof(struct iw_event) - sizeof(union iwreq_data))
 /* Size of the various events */
 #define IW_EV_CHAR_LEN	(IW_EV_LCP_LEN + IFNAMSIZ)
