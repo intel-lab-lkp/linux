@@ -41,4 +41,6 @@ void update_freq_counters_refs(void);
 
 #include <asm-generic/topology.h>
 
+#define cpu_primary_thread_mask	cpu_none_mask
+
 #endif /* _ASM_ARM_TOPOLOGY_H */

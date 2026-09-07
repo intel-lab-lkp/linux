@@ -7,20 +7,15 @@
 
 #include <linux/const.h>
 
-/* Values for secondary_data.status */
-#define CPU_STUCK_REASON_SHIFT		(8)
-#define CPU_BOOT_STATUS_MASK		((UL(1) << CPU_STUCK_REASON_SHIFT) - 1)
+/* Offsets for early CPU boot reasons */
+#define EARLY_CPU_STUCK_REASON_52_BIT_VA	(0)
+#define EARLY_CPU_STUCK_REASON_NO_GRAN		(1)
+#define EARLY_CPU_STUCK_REASON_MAX		(2)
 
-#define CPU_MMU_OFF			(-1)
-/* The cpu invoked ops->cpu_die, synchronise it with cpu_kill */
-#define CPU_KILL_ME			(1)
-/* The cpu couldn't die gracefully and is looping in the kernel */
-#define CPU_STUCK_IN_KERNEL		(2)
+/* Offsets for late (i.e. MMU-enabled) CPU boot reasons */
 /* Fatal system error detected by secondary CPU, crash the system */
-#define CPU_PANIC_KERNEL		(3)
-
-#define CPU_STUCK_REASON_52_BIT_VA	(UL(1) << CPU_STUCK_REASON_SHIFT)
-#define CPU_STUCK_REASON_NO_GRAN	(UL(2) << CPU_STUCK_REASON_SHIFT)
+#define CPU_PANIC_KERNEL			(0)
+#define CPU_STATUS_FLAGS_MAX			(1)
 
 #ifndef __ASSEMBLER__
 
@@ -81,6 +76,14 @@ static inline void set_smp_ipi_range(int ipi_base, int n)
  */
 asmlinkage void secondary_start_kernel(void);
 
+union secondary_status {
+	u64	val;
+	union {
+		u8	flags[CPU_STATUS_FLAGS_MAX];
+		u8	early_flags[EARLY_CPU_STUCK_REASON_MAX];
+	};
+};
+
 /*
  * Initial data for bringing up a secondary CPU.
  * @status - Result passed back from the secondary CPU to
@@ -88,7 +91,7 @@ asmlinkage void secondary_start_kernel(void);
  */
 struct secondary_data {
 	struct task_struct *task;
-	long status;
+	union secondary_status status;
 	cpumask_t cpu_died_early_mask;
 };
 
@@ -123,9 +126,11 @@ static inline void __noreturn cpu_park_loop(void)
 	}
 }
 
-static inline void update_cpu_boot_status(int val)
+static inline void update_cpu_boot_status(const unsigned int val)
 {
-	WRITE_ONCE(secondary_data.status, val);
+	BUILD_BUG_ON(val >= CPU_STATUS_FLAGS_MAX);
+
+	WRITE_ONCE(secondary_data.status.flags[val], 1);
 	/* Ensure the visibility of the status update */
 	dsb(ishst);
 }
