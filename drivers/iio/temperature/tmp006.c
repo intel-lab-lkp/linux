@@ -256,12 +256,12 @@ static irqreturn_t tmp006_trigger_handler(int irq, void *p)
 	} scan = { };
 	s32 ret;
 
-	ret = i2c_smbus_read_word_data(data->client, TMP006_VOBJECT);
+	ret = i2c_smbus_read_word_swapped(data->client, TMP006_VOBJECT);
 	if (ret < 0)
 		goto err;
 	scan.channels[0] = ret;
 
-	ret = i2c_smbus_read_word_data(data->client, TMP006_TAMBIENT);
+	ret = i2c_smbus_read_word_swapped(data->client, TMP006_TAMBIENT);
 	if (ret < 0)
 		goto err;
 	scan.channels[1] = ret;
