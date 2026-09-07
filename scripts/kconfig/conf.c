@@ -191,7 +191,14 @@ static void conf_set_all_new_symbols(enum conf_def_mode mode)
 		n = 0;
 		while (env && *env) {
 			char *endp;
-			int tmp = strtol(env, &endp, 10);
+			long tmp = strtol(env, &endp, 10);
+
+			if (endp == env || (*endp && *endp != ':') ||
+			    (*endp == ':' && (!endp[1] || n == 2))) {
+				errno = EINVAL;
+				perror("KCONFIG_PROBABILITY");
+				exit(1);
+			}
 
 			if (tmp >= 0 && tmp <= 100) {
 				p[n++] = tmp;
