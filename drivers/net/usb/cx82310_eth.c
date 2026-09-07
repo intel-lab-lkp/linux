@@ -251,6 +251,10 @@ static int cx82310_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 	 * end of that packet at the beginning.
 	 */
 	if (dev->partial_rem) {
+		if (skb->len < dev->partial_rem) {
+			dev->partial_rem = 0;
+			return 0;
+		}
 		len = dev->partial_len + dev->partial_rem;
 		skb2 = alloc_skb(len, GFP_ATOMIC);
 		if (!skb2)
