@@ -1101,6 +1101,32 @@ queue_limits_start_update(struct request_queue *q)
 	mutex_lock(&q->limits_lock);
 	return q->limits;
 }
+
+/**
+ * queue_limits_start_update_trylock - try to start an atomic update of queue
+ *	limits
+ * @q:		queue to update
+ * @lim:	returns a snapshot of the current limits on success
+ *
+ * Like queue_limits_start_update(), but fails instead of waiting when another
+ * update is in flight.  For callers that must not block on q->limits_lock
+ * because they hold something its current owner is waiting for.
+ *
+ * Context: process context.
+ */
+static inline bool
+queue_limits_start_update_trylock(struct request_queue *q,
+				  struct queue_limits *lim)
+	__cond_acquires(true, &q->limits_lock)
+{
+	if (!mutex_trylock(&q->limits_lock))
+		return false;
+
+	*lim = q->limits;
+
+	return true;
+}
+
 int queue_limits_commit_update_frozen(struct request_queue *q,
 		struct queue_limits *lim) __releases(&q->limits_lock);
 int queue_limits_commit_update(struct request_queue *q,
