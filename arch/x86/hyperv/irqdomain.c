@@ -304,7 +304,6 @@ static struct irq_chip hv_pci_msi_controller = {
 	.irq_ack		= irq_chip_ack_parent,
 	.irq_compose_msi_msg	= hv_irq_compose_msi_msg,
 	.irq_set_affinity	= irq_chip_set_affinity_parent,
-	.irq_retrigger		= irq_chip_retrigger_hierarchy,
 };
 
 static bool hv_init_dev_msi_info(struct device *dev, struct irq_domain *domain,
