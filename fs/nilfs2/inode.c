@@ -342,8 +342,6 @@ struct inode *nilfs_new_inode(struct inode *dir, umode_t mode)
 	ii->i_flags = nilfs_mask_flags(
 		mode, NILFS_I(dir)->i_flags & NILFS_FL_INHERITED);
 
-	/* ii->i_file_acl = 0; */
-	/* ii->i_dir_acl = 0; */
 	ii->i_dir_start_lookup = 0;
 	nilfs_set_inode_flags(inode);
 	inode->i_generation = get_random_u32();
@@ -422,11 +420,6 @@ int nilfs_read_inode_common(struct inode *inode,
 
 	inode->i_blocks = le64_to_cpu(raw_inode->i_blocks);
 	ii->i_flags = le32_to_cpu(raw_inode->i_flags);
-#if 0
-	ii->i_file_acl = le32_to_cpu(raw_inode->i_file_acl);
-	ii->i_dir_acl = S_ISREG(inode->i_mode) ?
-		0 : le32_to_cpu(raw_inode->i_dir_acl);
-#endif
 	ii->i_dir_start_lookup = 0;
 	inode->i_generation = le32_to_cpu(raw_inode->i_generation);
 
