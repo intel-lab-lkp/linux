@@ -316,26 +316,32 @@ int roccat_connect(const struct class *klass, struct hid_device *hid, int report
 	if (!device)
 		return -ENOMEM;
 
-	mutex_lock(&devices_lock);
+	init_waitqueue_head(&device->wait);
+	INIT_LIST_HEAD(&device->readers);
+	mutex_init(&device->readers_lock);
+	mutex_init(&device->cbuf_lock);
+	device->hid = hid;
+	device->exist = 1;
+	device->cbuf_end = 0;
+	device->report_size = report_size;
 
+	mutex_lock(&devices_lock);
 	for (minor = 0; minor < ROCCAT_MAX_DEVICES; ++minor) {
 		if (devices[minor])
 			continue;
 		break;
 	}
-
-	if (minor < ROCCAT_MAX_DEVICES) {
-		devices[minor] = device;
-	} else {
+	if (minor >= ROCCAT_MAX_DEVICES) {
 		mutex_unlock(&devices_lock);
 		kfree(device);
 		return -EINVAL;
 	}
+	device->minor = minor;
+	devices[minor] = device;
 
 	device->dev = device_create(klass, &hid->dev,
 			MKDEV(roccat_major, minor), NULL,
 			"%s%s%d", "roccat", hid->driver->name, minor);
-
 	if (IS_ERR(device->dev)) {
 		devices[minor] = NULL;
 		mutex_unlock(&devices_lock);
@@ -343,18 +349,7 @@ int roccat_connect(const struct class *klass, struct hid_device *hid, int report
 		kfree(device);
 		return temp;
 	}
-
 	mutex_unlock(&devices_lock);
-
-	init_waitqueue_head(&device->wait);
-	INIT_LIST_HEAD(&device->readers);
-	mutex_init(&device->readers_lock);
-	mutex_init(&device->cbuf_lock);
-	device->minor = minor;
-	device->hid = hid;
-	device->exist = 1;
-	device->cbuf_end = 0;
-	device->report_size = report_size;
 
 	return minor;
 }
