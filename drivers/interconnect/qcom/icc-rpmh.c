@@ -224,6 +224,9 @@ static int qcom_icc_rpmh_configure_qos(struct qcom_icc_provider *qp)
 	return ret;
 }
 
+static bool enable_qos = true;
+module_param(enable_qos, bool, 0660);
+
 int qcom_icc_rpmh_probe(struct platform_device *pdev)
 {
 	const struct qcom_icc_desc *desc;
@@ -307,6 +310,11 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 	if (desc->config) {
 		struct resource *res;
 		void __iomem *base;
+
+		if (!enable_qos) {
+			dev_info(dev, "Skipping QoS (command line)\n");
+			goto skip_qos_config;
+		}
 
 		/* Try parent's regmap first */
 		qp->regmap = dev_get_regmap(dev->parent, NULL);
