@@ -202,19 +202,10 @@ exit_err_devices:
 
 static int roccat_release(struct inode *inode, struct file *file)
 {
-	unsigned int minor = iminor(inode);
 	struct roccat_reader *reader = file->private_data;
-	struct roccat_device *device;
+	struct roccat_device *device = reader->device;
 
 	mutex_lock(&devices_lock);
-
-	device = devices[minor];
-	if (!device) {
-		mutex_unlock(&devices_lock);
-		pr_emerg("roccat device with minor %d doesn't exist\n", minor);
-		return -ENODEV;
-	}
-
 	mutex_lock(&device->readers_lock);
 	list_del(&reader->node);
 	mutex_unlock(&device->readers_lock);
@@ -229,9 +220,7 @@ static int roccat_release(struct inode *inode, struct file *file)
 			kfree(device);
 		}
 	}
-
 	mutex_unlock(&devices_lock);
-
 	return 0;
 }
 
