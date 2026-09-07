@@ -6109,6 +6109,9 @@ static inline int prepare_klistmount(struct klistmount *kls, struct mnt_id_req *
 	/* The first valid unique mount id is MNT_UNIQUE_ID_OFFSET + 1. */
 	if (last_mnt_id != 0 && last_mnt_id <= MNT_UNIQUE_ID_OFFSET)
 		return -EINVAL;
+	/* U64_MAX would wrap to 0 and restart the iteration. */
+	if (last_mnt_id == U64_MAX)
+		return -EINVAL;
 
 	kls->last_mnt_id = last_mnt_id;
 
