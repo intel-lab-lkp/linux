@@ -764,9 +764,16 @@ static void ntb_free_mw(struct ntb_transport_ctx *nt, int num_mw)
 {
 	struct ntb_transport_mw *mw = &nt->mw_vec[num_mw];
 	struct device *dma_dev = ntb_get_dma_dev(nt->ndev);
+	unsigned int i;
 
 	if (!mw->virt_addr)
 		return;
+
+	/* Drop references from every QP using this MW. */
+	for (i = num_mw; i < nt->qp_count; i += nt->mw_count) {
+		nt->qp_vec[i].rx_buff = NULL;
+		WRITE_ONCE(nt->qp_vec[i].remote_rx_info, NULL);
+	}
 
 	ntb_mw_clear_trans(nt->ndev, PIDX, num_mw);
 	dma_free_attrs(dma_dev, mw->alloc_size, mw->alloc_addr,
