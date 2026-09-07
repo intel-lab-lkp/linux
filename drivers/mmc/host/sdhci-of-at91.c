@@ -38,6 +38,7 @@
 struct sdhci_at91_soc_data {
 	const struct sdhci_pltfm_data *pdata;
 	bool baseclk_is_generated_internally;
+	bool keep_clks_on;
 	unsigned int divider_for_baseclk;
 };
 
@@ -164,7 +165,7 @@ static const struct of_device_id sdhci_at91_dt_match[] = {
 };
 MODULE_DEVICE_TABLE(of, sdhci_at91_dt_match);
 
-static int sdhci_at91_set_clks_presets(struct device *dev)
+static void sdhci_at91_set_clks_presets(struct device *dev)
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -174,7 +175,6 @@ static int sdhci_at91_set_clks_presets(struct device *dev)
 	unsigned int			gck_rate, clk_base_rate;
 	unsigned int			preset_div;
 
-	clk_prepare_enable(priv->hclock);
 	caps0 = readl(host->ioaddr + SDHCI_CAPABILITIES);
 	caps1 = readl(host->ioaddr + SDHCI_CAPABILITIES_1);
 
@@ -222,11 +222,6 @@ static int sdhci_at91_set_clks_presets(struct device *dev)
 	preset_div = DIV_ROUND_UP(gck_rate, 50000000) - 1;
 	writew(SDHCI_AT91_PRESET_COMMON_CONF | preset_div,
 	       host->ioaddr + SDHCI_PRESET_FOR_DDR50);
-
-	clk_prepare_enable(priv->mainck);
-	clk_prepare_enable(priv->gck);
-
-	return 0;
 }
 
 static int sdhci_at91_suspend(struct device *dev)
@@ -254,9 +249,11 @@ static int sdhci_at91_runtime_suspend(struct device *dev)
 	if (host->tuning_mode != SDHCI_TUNING_MODE_3)
 		mmc_retune_needed(host->mmc);
 
-	clk_disable_unprepare(priv->gck);
-	clk_disable_unprepare(priv->hclock);
-	clk_disable_unprepare(priv->mainck);
+	if (!priv->soc_data->keep_clks_on) {
+		clk_disable_unprepare(priv->gck);
+		clk_disable_unprepare(priv->hclock);
+		clk_disable_unprepare(priv->mainck);
+	}
 
 	return 0;
 }
@@ -269,13 +266,22 @@ static int sdhci_at91_runtime_resume(struct device *dev)
 	int ret;
 
 	if (priv->restore_needed) {
-		ret = sdhci_at91_set_clks_presets(dev);
-		if (ret)
-			return ret;
+		if (!priv->soc_data->keep_clks_on)
+			clk_prepare_enable(priv->hclock);
+
+		sdhci_at91_set_clks_presets(dev);
+
+		if (!priv->soc_data->keep_clks_on) {
+			clk_prepare_enable(priv->mainck);
+			clk_prepare_enable(priv->gck);
+		}
 
 		priv->restore_needed = false;
 		goto out;
 	}
+
+	if (priv->soc_data->keep_clks_on)
+		goto out;
 
 	ret = clk_prepare_enable(priv->mainck);
 	if (ret) {
@@ -344,9 +350,10 @@ static int sdhci_at91_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(priv->gck),
 				     "failed to get multclk\n");
 
-	ret = sdhci_at91_set_clks_presets(&pdev->dev);
-	if (ret)
-		return ret;
+	clk_prepare_enable(priv->hclock);
+	sdhci_at91_set_clks_presets(&pdev->dev);
+	clk_prepare_enable(priv->mainck);
+	clk_prepare_enable(priv->gck);
 
 	priv->restore_needed = false;
 
