@@ -436,10 +436,9 @@ ppp_sync_txmunge(struct syncppp *ap, struct sk_buff *skb)
 	int islcp;
 
 	/* Ensure we can safely access protocol field and LCP code */
-	if (!pskb_may_pull(skb, 3)) {
-		kfree_skb(skb);
-		return NULL;
-	}
+	if (!pskb_may_pull(skb, 3))
+		goto free_skb;
+
 	data  = skb->data;
 	proto = get_unaligned_be16(data);
 
@@ -457,10 +456,10 @@ ppp_sync_txmunge(struct syncppp *ap, struct sk_buff *skb)
 	if ((ap->flags & SC_COMP_AC) == 0 || islcp) {
 		if (skb_headroom(skb) < 2) {
 			struct sk_buff *npkt = dev_alloc_skb(skb->len + 2);
-			if (npkt == NULL) {
-				kfree_skb(skb);
-				return NULL;
-			}
+
+			if (!npkt)
+				goto free_skb;
+
 			skb_reserve(npkt,2);
 			skb_copy_from_linear_data(skb,
 				      skb_put(npkt, skb->len), skb->len);
@@ -478,6 +477,10 @@ ppp_sync_txmunge(struct syncppp *ap, struct sk_buff *skb)
 		ppp_print_buffer ("send buffer", skb->data, skb->len);
 
 	return skb;
+
+free_skb:
+	kfree_skb(skb);
+	return NULL;
 }
 
 /*
