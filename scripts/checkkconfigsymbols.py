@@ -150,6 +150,13 @@ def print_undefined_symbols():
             undefined_a = {}
             undefined_b = {}
 
+        commit_a = execute(["git", "rev-parse", "--verify", commit_a + "^{commit}"],
+                           stderr=None).strip()
+        commit_b = execute(["git", "rev-parse", "--verify", commit_b + "^{commit}"],
+                           stderr=None).strip()
+        if args.diff:
+            args.diff = commit_a + ".." + commit_b
+
         # get undefined items before the commit
         reset(commit_a)
         undefined_a, _ = check_symbols(args.ignore)
@@ -223,10 +230,10 @@ def red(string):
     return "\033[31m%s\033[0m" % string if COLOR else string
 
 
-def execute(cmd):
+def execute(cmd, stderr=subprocess.STDOUT):
     """Execute %cmd and return stdout.  Exit in case of error."""
     try:
-        stdout = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=False)
+        stdout = subprocess.check_output(cmd, stderr=stderr, shell=False)
         stdout = stdout.decode(errors='replace')
     except subprocess.CalledProcessError as fail:
         exit(fail)
