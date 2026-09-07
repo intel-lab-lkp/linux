@@ -700,7 +700,7 @@ static struct device_node *__of_get_next_child(const struct device_node *node,
 	     child = __of_get_next_child(parent, child))
 
 /**
- * of_get_next_child - Iterate a node childs
+ * of_get_next_child - Iterate a node children
  * @node:	parent node
  * @prev:	previous child of the parent node, or NULL to get first
  *
