@@ -654,7 +654,7 @@ static int nilfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 			/*
 			 * If nilfs_palloc_count_max_entries() returns
 			 * -ERANGE error code then we simply treat
-			 * curent inodes count as maximum possible and
+			 * current inodes count as maximum possible and
 			 * zero as free inodes value.
 			 */
 			nmaxinodes = atomic64_read(&root->inodes_count);

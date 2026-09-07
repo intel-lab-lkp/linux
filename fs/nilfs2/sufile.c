@@ -1050,7 +1050,7 @@ ssize_t nilfs_sufile_set_suinfo(struct inode *sufile, void *buf,
  * len:		number of Bytes to trim from start
  * minlen:	minimum extent length in Bytes
  *
- * Decription: nilfs_sufile_trim_fs goes through all segments containing bytes
+ * Description: nilfs_sufile_trim_fs goes through all segments containing bytes
  * from start to start+len. start is rounded up to the next block boundary
  * and start+len is rounded down. For each clean segment blkdev_issue_discard
  * function is invoked.
