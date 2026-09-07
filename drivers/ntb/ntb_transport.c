@@ -1251,6 +1251,8 @@ static int ntb_transport_init_queue(struct ntb_transport_ctx *nt,
 
 	INIT_DELAYED_WORK(&qp->link_work, ntb_qp_link_work);
 	INIT_WORK(&qp->link_cleanup, ntb_qp_link_cleanup_work);
+	disable_delayed_work(&qp->link_work);
+	disable_work(&qp->link_cleanup);
 
 	spin_lock_init(&qp->ntb_rx_q_lock);
 	spin_lock_init(&qp->ntb_tx_free_q_lock);
@@ -2164,6 +2166,9 @@ ntb_transport_create_queue(void *data, struct device *client_dev,
 		}
 	}
 
+	enable_work(&qp->link_cleanup);
+	enable_delayed_work(&qp->link_work);
+
 	ntb_db_clear(qp->ndev, qp_bit);
 	ntb_db_clear_mask(qp->ndev, qp_bit);
 
@@ -2209,6 +2214,10 @@ void ntb_transport_free_queue(struct ntb_transport_qp *qp)
 
 	pdev = qp->ndev->pdev;
 
+	qp->client_ready = false;
+	disable_work_sync(&qp->link_cleanup);
+	disable_delayed_work_sync(&qp->link_work);
+	qp->link_is_up = false;
 	qp->active = false;
 
 	if (qp->tx_offload_thread) {
@@ -2255,8 +2264,6 @@ void ntb_transport_free_queue(struct ntb_transport_qp *qp)
 
 	ntb_db_set_mask(qp->ndev, qp_bit);
 	tasklet_kill(&qp->rxc_db_work);
-
-	cancel_delayed_work_sync(&qp->link_work);
 
 	qp->cb_data = NULL;
 	qp->rx_handler = NULL;
