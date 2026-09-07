@@ -929,6 +929,19 @@ config DRM_PANEL_SAMSUNG_AMS639RQ08
 	  Say Y or M here if you want to enable support for the
 	  Samsung AMS639RQ08 FHD Plus (2340x1080@60Hz) CMD mode panel.
 
+config DRM_PANEL_SAMSUNG_AMS662ZS01
+	tristate "Samsung AMS662ZS01 panel"
+	depends on GPIOLIB && OF && REGULATOR
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	select DRM_DISPLAY_HELPER
+	select DRM_DISPLAY_DSC_HELPER
+	help
+	  Say Y or M here if you want to enable support for the
+	  Samsung AMS662ZS01 FHD Plus (1080x2400@60Hz) DSC CMD mode panel.
+	  This panel is connected via MIPI DSI interface and is
+	  primarily found in the OnePlus 9RT smartphone.
+
 config DRM_PANEL_SAMSUNG_S6E88A0_AMS427AP24
 	tristate "Samsung AMS427AP24 panel with S6E88A0 controller"
 	depends on GPIOLIB && OF && REGULATOR
