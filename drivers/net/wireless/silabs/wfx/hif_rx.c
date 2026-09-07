@@ -62,9 +62,15 @@ static int wfx_hif_multi_tx_confirm(struct wfx_dev *wdev,
 				    const struct wfx_hif_msg *hif, const void *buf)
 {
 	const struct wfx_hif_cnf_multi_transmit *body = buf;
+	int hif_body_len = le16_to_cpu(hif->len) - sizeof(*hif);
 	int i;
 
-	WARN(body->num_tx_confs <= 0, "corrupted message");
+	if (hif_body_len < (int)sizeof(*body) ||
+	    body->num_tx_confs > (hif_body_len - sizeof(*body)) /
+				 sizeof(body->tx_conf_payload[0])) {
+		dev_err(wdev->dev, "corrupted multi tx confirm\n");
+		return -EINVAL;
+	}
 	for (i = 0; i < body->num_tx_confs; i++)
 		wfx_tx_confirm_cb(wdev, &body->tx_conf_payload[i]);
 	return 0;
