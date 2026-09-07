@@ -460,6 +460,14 @@ static int ccp_init(struct ccp_device *ccp)
 		tasklet_init(&ccp->irq_tasklet, ccp_irq_bh,
 			     (unsigned long)ccp);
 
+	ccp->backlog_wq = alloc_workqueue("%s-backlog", WQ_MEM_RECLAIM, 0,
+					  ccp->name);
+	if (!ccp->backlog_wq) {
+		dev_err(dev, "unable to allocate backlog workqueue\n");
+		ret = -ENOMEM;
+		goto e_irq;
+	}
+
 	dev_dbg(dev, "Starting threads...\n");
 	/* Create a kthread for each queue */
 	for (i = 0; i < ccp->cmd_q_count; i++) {
@@ -501,10 +509,15 @@ e_hwrng:
 	ccp_unregister_rng(ccp);
 
 e_kthread:
+	ccp_halt_cmds(ccp);
+
 	for (i = 0; i < ccp->cmd_q_count; i++)
 		if (ccp->cmd_q[i].kthread)
 			kthread_stop(ccp->cmd_q[i].kthread);
 
+	destroy_workqueue(ccp->backlog_wq);
+
+e_irq:
 	sp_free_ccp_irq(ccp->sp, ccp);
 
 e_pool:
@@ -519,6 +532,9 @@ static void ccp_destroy(struct ccp_device *ccp)
 	struct ccp_cmd_queue *cmd_q;
 	struct ccp_cmd *cmd;
 	unsigned int i;
+
+	/* Complete pending backlog cmds instead of executing them */
+	ccp_halt_cmds(ccp);
 
 	/* Unregister the DMA engine */
 	ccp_dmaengine_unregister(ccp);
@@ -545,6 +561,9 @@ static void ccp_destroy(struct ccp_device *ccp)
 			kthread_stop(ccp->cmd_q[i].kthread);
 
 	sp_free_ccp_irq(ccp->sp, ccp);
+
+	/* Drain promoted backlog commands before flushing the command lists. */
+	destroy_workqueue(ccp->backlog_wq);
 
 	for (i = 0; i < ccp->cmd_q_count; i++)
 		dma_pool_destroy(ccp->cmd_q[i].dma_pool);

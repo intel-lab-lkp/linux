@@ -374,6 +374,9 @@ struct ccp_device {
 	struct list_head cmd;
 	struct list_head backlog;
 
+	struct workqueue_struct *backlog_wq;
+	bool halting;
+
 	/* The command queues. These represent the queues available on the
 	 * CCP that are available for processing cmds
 	 */
@@ -630,6 +633,7 @@ struct ccp5_desc {
 
 void ccp_add_device(struct ccp_device *ccp);
 void ccp_del_device(struct ccp_device *ccp);
+void ccp_halt_cmds(struct ccp_device *ccp);
 
 extern void ccp_log_error(struct ccp_device *, unsigned int);
 

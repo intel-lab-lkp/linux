@@ -177,6 +177,15 @@ void ccp_del_device(struct ccp_device *ccp)
 	write_unlock_irqrestore(&ccp_unit_lock, flags);
 }
 
+/* Mark the device halting so draining backlog works complete with -ENODEV. */
+void ccp_halt_cmds(struct ccp_device *ccp)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&ccp->cmd_lock, flags);
+	ccp->halting = true;
+	spin_unlock_irqrestore(&ccp->cmd_lock, flags);
+}
 
 
 int ccp_register_rng(struct ccp_device *ccp)
@@ -349,6 +358,20 @@ static void ccp_do_cmd_backlog(struct work_struct *work)
 	unsigned long flags;
 	unsigned int i;
 
+	spin_lock_irqsave(&ccp->cmd_lock, flags);
+	if (ccp->halting) {
+		spin_unlock_irqrestore(&ccp->cmd_lock, flags);
+
+		/* The device is being removed; the cmd can no longer be
+		 * executed, so complete it with an error like the cmds
+		 * still queued on the cmd and backlog lists
+		 */
+		cmd->callback(cmd->data, -ENODEV);
+
+		return;
+	}
+	spin_unlock_irqrestore(&ccp->cmd_lock, flags);
+
 	cmd->callback(cmd->data, -EINPROGRESS);
 
 	spin_lock_irqsave(&ccp->cmd_lock, flags);
@@ -364,11 +387,11 @@ static void ccp_do_cmd_backlog(struct work_struct *work)
 		break;
 	}
 
-	spin_unlock_irqrestore(&ccp->cmd_lock, flags);
-
-	/* If we found an idle queue, wake it up */
-	if (i < ccp->cmd_q_count)
+	/* Keep this under cmd_lock so teardown cannot stop this kthread first. */
+	if (!ccp->halting && i < ccp->cmd_q_count)
 		wake_up_process(ccp->cmd_q[i].kthread);
+
+	spin_unlock_irqrestore(&ccp->cmd_lock, flags);
 }
 
 static struct ccp_cmd *ccp_dequeue_cmd(struct ccp_cmd_queue *cmd_q)
@@ -410,7 +433,7 @@ static struct ccp_cmd *ccp_dequeue_cmd(struct ccp_cmd_queue *cmd_q)
 
 	if (backlog) {
 		INIT_WORK(&backlog->work, ccp_do_cmd_backlog);
-		schedule_work(&backlog->work);
+		queue_work(ccp->backlog_wq, &backlog->work);
 	}
 
 	return cmd;
