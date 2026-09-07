@@ -392,6 +392,53 @@ TRACE_EVENT(mm_vmscan_lru_isolate,
 		__print_symbolic(__entry->lru, LRU_NAMES))
 );
 
+TRACE_EVENT(mm_mglru_isolate_folios,
+
+	TP_PROTO(u64 memcg_id,
+		int type,
+		int swappiness,
+		unsigned long nr_scanned,
+		unsigned long nr_isolated,
+		unsigned long anon_min_seq,
+		unsigned long file_min_seq,
+		unsigned long max_seq),
+
+	TP_ARGS(memcg_id, type, swappiness, nr_scanned, nr_isolated,
+		anon_min_seq, file_min_seq, max_seq),
+
+	TP_STRUCT__entry(
+		__field(u64, memcg_id)
+		__field(int, type)
+		__field(int, swappiness)
+		__field(unsigned long, nr_scanned)
+		__field(unsigned long, nr_isolated)
+		__field(unsigned long, anon_min_seq)
+		__field(unsigned long, file_min_seq)
+		__field(unsigned long, max_seq)
+	),
+
+	TP_fast_assign(
+		__entry->memcg_id = memcg_id;
+		__entry->type = type;
+		__entry->swappiness = swappiness;
+		__entry->nr_scanned = nr_scanned;
+		__entry->nr_isolated = nr_isolated;
+		__entry->anon_min_seq = anon_min_seq;
+		__entry->file_min_seq = file_min_seq;
+		__entry->max_seq = max_seq;
+	),
+
+	TP_printk("memcg_id=%llu type=%s swappiness=%d nr_scanned=%lu nr_isolated=%lu anon_min_seq=%lu file_min_seq=%lu max_seq=%lu",
+		__entry->memcg_id,
+		__entry->type ? "file" : "anon",
+		__entry->swappiness,
+		__entry->nr_scanned,
+		__entry->nr_isolated,
+		__entry->anon_min_seq,
+		__entry->file_min_seq,
+		__entry->max_seq)
+);
+
 TRACE_EVENT(mm_vmscan_write_folio,
 
 	TP_PROTO(struct folio *folio),
