@@ -1135,7 +1135,8 @@ static void otx2_set_txtstamp(struct otx2_nic *pfvf, struct sk_buff *skb,
 	__wsum skb_csum;
 	u64 iova;
 
-	if (unlikely(!skb_shinfo(skb)->gso_size &&
+	if (unlikely(pfvf->ptp && sq->timestamps &&
+		     !skb_shinfo(skb)->gso_size &&
 		     (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP))) {
 		if (unlikely(pfvf->flags & OTX2_FLAG_PTP_ONESTEP_SYNC &&
 			     otx2_ptp_is_sync(skb, &ptp_offset, &udp_csum_crt))) {

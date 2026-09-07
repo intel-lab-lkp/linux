@@ -386,7 +386,7 @@ int otx2_ptp_init(struct otx2_nic *pfvf)
 	struct ptp_req *req;
 	int err;
 
-	if (is_otx2_lbkvf(pfvf->pdev)) {
+	if (is_otx2_lbkvf(pfvf->pdev) || is_otx2_sdp_rep(pfvf->pdev)) {
 		pfvf->ptp = NULL;
 		return 0;
 	}

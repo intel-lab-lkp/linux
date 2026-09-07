@@ -2455,8 +2455,11 @@ int otx2_config_hwtstamp_set(struct net_device *netdev,
 {
 	struct otx2_nic *pfvf = netdev_priv(netdev);
 
-	if (!pfvf->ptp)
-		return -ENODEV;
+	if (!pfvf->ptp) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Hardware timestamping is not supported");
+		return -EOPNOTSUPP;
+	}
 
 	switch (config->tx_type) {
 	case HWTSTAMP_TX_OFF:
