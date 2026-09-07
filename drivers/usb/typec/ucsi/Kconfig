@@ -104,4 +104,20 @@ config UCSI_HUAWEI_GAOKUN
 	  To compile the driver as a module, choose M here: the module will be
 	  called ucsi_huawei_gaokun.
 
+config UCSI_TEARDOWN_RACE_TEST
+	tristate "UCSI teardown race harness"
+	depends on DEBUG_KERNEL
+	help
+	  Software PPM that drives the real UCSI core through the teardown
+	  orderings discussed on the ucsi_acpi use-after-free thread, so they
+	  can be compared under KASAN, lockdep and KCSAN without a PNP0CA0
+	  ACPI device.
+
+	  This is a developer tool, not needed on production systems. Load it
+	  with ucsi_race_test.scenario=N; see the header of ucsi_race_test.c
+	  for the scenario list.
+
+	  To compile this as a module, choose M here: the module will be
+	  called ucsi_race_test.
+
 endif
