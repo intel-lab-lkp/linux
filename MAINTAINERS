@@ -2828,6 +2828,7 @@ F:	Documentation/devicetree/bindings/arm/cix.yaml
 F:	Documentation/devicetree/bindings/dma/cix,sky1-dma350.yaml
 F:	Documentation/devicetree/bindings/mailbox/cix,sky1-mbox.yaml
 F:	arch/arm64/boot/dts/cix/
+F:	drivers/dma/cix-sky1-dma350.c
 F:	drivers/mailbox/cix-mailbox.c
 K:	\bcix\b
 

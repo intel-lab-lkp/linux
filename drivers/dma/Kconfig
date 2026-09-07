@@ -147,6 +147,21 @@ config DMA_BCM2835
 	select DMA_ENGINE
 	select DMA_VIRTUAL_CHANNELS
 
+config CIX_SKY1_DMA350
+	tristate "CIX Sky1 DMA-350 integration support"
+	depends on OF && ARM_DMA350
+	depends on OF_RESERVED_MEM
+	depends on ARCH_CIX || COMPILE_TEST
+	default ARCH_CIX
+	select MFD_SYSCON
+	help
+	  Enable support for the CIX Sky1 integration around Arm
+	  DMA-350 controllers.
+
+	  This driver owns SoC integration resources such as clocks, resets,
+	  reserved memory attachment, and interrupt routing registers, while the
+	  child controller is handled by the generic Arm DMA-350 driver.
+
 config DMA_JZ4780
 	tristate "JZ4780 DMA support"
 	depends on MIPS || COMPILE_TEST
