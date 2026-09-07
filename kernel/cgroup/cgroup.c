@@ -5290,6 +5290,7 @@ void css_task_iter_start(struct cgroup_subsys_state *css, unsigned int flags,
  */
 struct task_struct *css_task_iter_next(struct css_task_iter *it)
 {
+	struct task_struct *task;
 	unsigned long irqflags;
 
 	if (it->cur_task) {
@@ -5302,6 +5303,21 @@ struct task_struct *css_task_iter_next(struct css_task_iter *it)
 	/* @it may be half-advanced by skips, finish advancing */
 	if (it->flags & CSS_TASK_ITER_SKIPPED)
 		css_task_iter_advance(it);
+
+	/*
+	 * @it->task_pos was picked on an earlier call. A dying leader stays on
+	 * dying_tasks until cgroup_task_free(), past its last usage ref drop,
+	 * so it may have been reaped since and get_task_struct() on it would
+	 * resurrect a task about to be freed. That last ref is dropped by an
+	 * RCU callback queued from release_task(), after signal->live hit zero,
+	 * so a leader still showing live threads in this irq-disabled section
+	 * can't lose its ref before the section ends.
+	 */
+	while (it->task_pos && it->cur_tasks_head == &it->cur_cset->dying_tasks) {
+		task = list_entry(it->task_pos, struct task_struct, cg_list);
+		if (!atomic_read(&task->signal->live))
+			css_task_iter_advance(it);
+	}
 
 	if (it->task_pos) {
 		it->cur_task = list_entry(it->task_pos, struct task_struct,
