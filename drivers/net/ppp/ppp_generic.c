@@ -1908,11 +1908,9 @@ ppp_push(struct ppp *ppp, struct sk_buff *skb)
 	struct channel *pch;
 
 	list = &ppp->channels;
-	if (list_empty(list)) {
+	if (list_empty(list))
 		/* nowhere to send the packet, just drop it */
-		kfree_skb(skb);
-		return 1;
-	}
+		goto free_skb;
 
 	if ((ppp->flags & SC_MULTILINK) == 0) {
 		struct ppp_channel *chan;
@@ -1946,6 +1944,7 @@ out:
 		return 0;
 #endif /* CONFIG_PPP_MULTILINK */
 
+free_skb:
 	kfree_skb(skb);
 	return 1;
 }
