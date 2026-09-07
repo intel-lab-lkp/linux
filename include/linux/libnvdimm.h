@@ -59,7 +59,7 @@ enum {
 	ND_REGION_PERSIST_CACHE = 1,
 	/*
 	 * Platform provides mechanisms to automatically flush outstanding
-	 * write data from memory controler to pmem on system power loss.
+	 * write data from memory controller to pmem on system power loss.
 	 * (ADR)
 	 */
 	ND_REGION_PERSIST_MEMCTRL = 2,
