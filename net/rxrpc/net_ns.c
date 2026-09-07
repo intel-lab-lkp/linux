@@ -97,10 +97,7 @@ err_proc:
 	return ret;
 }
 
-/*
- * Clean up a per-network namespace record.
- */
-static __net_exit void rxrpc_exit_net(struct net *net)
+static __net_exit void rxrpc_pre_exit_net(struct net *net)
 {
 	struct rxrpc_net *rxnet = rxrpc_net(net);
 
@@ -111,14 +108,24 @@ static __net_exit void rxrpc_exit_net(struct net *net)
 	timer_delete_sync(&rxnet->peer_keepalive_timer);
 	rxrpc_destroy_all_calls(rxnet);
 	rxrpc_destroy_all_connections(rxnet);
+}
+
+/*
+ * Clean up a per-network namespace record.
+ */
+static __net_exit void rxrpc_exit_net(struct net *net)
+{
+	struct rxrpc_net *rxnet = rxrpc_net(net);
+
 	rxrpc_destroy_all_peers(rxnet);
 	rxrpc_destroy_all_locals(rxnet);
 	proc_remove(rxnet->proc_net);
 }
 
 struct pernet_operations rxrpc_net_ops = {
-	.init	= rxrpc_init_net,
-	.exit	= rxrpc_exit_net,
-	.id	= &rxrpc_net_id,
-	.size	= sizeof(struct rxrpc_net),
+	.init		= rxrpc_init_net,
+	.pre_exit	= rxrpc_pre_exit_net,
+	.exit		= rxrpc_exit_net,
+	.id		= &rxrpc_net_id,
+	.size		= sizeof(struct rxrpc_net),
 };
