@@ -39,6 +39,9 @@ static int UVERBS_HANDLER(UVERBS_METHOD_WQ_CREATE)(
 	u64 user_handle;
 	int ret;
 
+	if (IS_ERR(cq))
+		return PTR_ERR(cq);
+
 	ret = uverbs_get_flags32(&wq_init_attr.create_flags, attrs,
 				 UVERBS_ATTR_CREATE_WQ_FLAGS,
 				 IB_UVERBS_WQ_FLAGS_CVLAN_STRIPPING |
