@@ -284,10 +284,13 @@ void list_monitors(void)
 		for (state = 0; state < monitors[mon]->hw_states_num; state++) {
 			s = monitors[mon]->hw_states[state];
 			/*
-			 * ToDo show more state capabilities:
-			 * percent, time (granlarity)
+			 * ToDo show the time granularity of a counter, this
+			 * needs a new cstate_t member every monitor has to
+			 * fill in.
 			 */
-			printf("%s\t[%c] -> %s\n", s.name, range_abbr[s.range],
+			printf("%s\t[%c] [%s] -> %s\n", s.name,
+			       range_abbr[s.range],
+			       s.get_count_percent ? "%" : "abs",
 			       gettext(s.desc));
 		}
 	}
