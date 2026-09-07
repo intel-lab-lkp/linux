@@ -2284,7 +2284,6 @@ skip_mac_set:
 		}
 	}
 
-	WRITE_ONCE(bond->slave_cnt, bond->slave_cnt + 1);
 	netdev_compute_master_upper_features(bond->dev, true);
 	bond_set_carrier(bond);
 
@@ -2331,6 +2330,9 @@ skip_mac_set:
 		if (bond->xdp_prog)
 			bpf_prog_inc(bond->xdp_prog);
 	}
+
+	/* Increase the slave count before rebuilding the slave arrays. */
+	WRITE_ONCE(bond->slave_cnt, bond->slave_cnt + 1);
 
 	/* broadcast mode uses the all_slaves to loop through slaves. */
 	if (bond_mode_can_use_xmit_hash(bond) ||
