@@ -3863,27 +3863,19 @@ static void idpf_q_vector_set_napi(struct idpf_q_vector *q_vector, bool link)
 
 /**
  * idpf_vport_intr_rel_irq - Free the IRQ association with the OS
- * @vport: main vport structure
  * @rsrc: pointer to queue and vector resources
  */
-static void idpf_vport_intr_rel_irq(struct idpf_vport *vport,
-				    struct idpf_q_vec_rsrc *rsrc)
+static void idpf_vport_intr_rel_irq(struct idpf_q_vec_rsrc *rsrc)
 {
-	struct idpf_adapter *adapter = vport->adapter;
-
-	for (u16 vector = 0; vector < rsrc->num_q_vectors; vector++) {
+	for (int vector = 0; vector < rsrc->num_q_vectors; vector++) {
 		struct idpf_q_vector *q_vector = &rsrc->q_vectors[vector];
-		int irq_num, vidx;
 
 		/* free only the irqs that were actually requested */
 		if (!q_vector)
 			continue;
 
-		vidx = rsrc->q_vector_idxs[vector];
-		irq_num = adapter->msix_entries[vidx].vector;
-
 		idpf_q_vector_set_napi(q_vector, false);
-		kfree(free_irq(irq_num, q_vector));
+		kfree(free_irq(q_vector->irq.virq, q_vector));
 	}
 }
 
@@ -4052,7 +4044,7 @@ static int idpf_vport_intr_req_irq(struct idpf_vport *vport,
 {
 	struct idpf_adapter *adapter = vport->adapter;
 	const char *drv_name, *if_name, *vec_name;
-	int vector, err, irq_num, vidx;
+	int vector, err, vidx;
 
 	vidx = rsrc->q_vector_idxs[rsrc->num_q_vectors];
 	adapter->dev_ops.reg_ops.noirq_intr_reg_init(adapter, rsrc, vidx);
@@ -4062,10 +4054,10 @@ static int idpf_vport_intr_req_irq(struct idpf_vport *vport,
 
 	for (vector = 0; vector < rsrc->num_q_vectors; vector++) {
 		struct idpf_q_vector *q_vector = &rsrc->q_vectors[vector];
+		int virq = q_vector->irq.virq;
 		char *name;
 
 		vidx = rsrc->q_vector_idxs[vector];
-		irq_num = adapter->msix_entries[vidx].vector;
 
 		adapter->dev_ops.reg_ops.intr_reg_init(adapter, q_vector, vidx);
 
@@ -4081,8 +4073,8 @@ static int idpf_vport_intr_req_irq(struct idpf_vport *vport,
 		name = kasprintf(GFP_KERNEL, "%s-%s-%s-%d", drv_name, if_name,
 				 vec_name, vector);
 
-		err = request_irq(irq_num, idpf_vport_intr_clean_queues, 0,
-				  name, q_vector);
+		err = request_irq(virq, idpf_vport_intr_clean_queues, 0, name,
+				  q_vector);
 		if (err) {
 			netdev_err(vport->netdev,
 				   "Request_irq failed, error: %d\n", err);
@@ -4096,9 +4088,9 @@ static int idpf_vport_intr_req_irq(struct idpf_vport *vport,
 
 free_q_irqs:
 	while (--vector >= 0) {
-		vidx = rsrc->q_vector_idxs[vector];
-		irq_num = adapter->msix_entries[vidx].vector;
-		kfree(free_irq(irq_num, &rsrc->q_vectors[vector]));
+		int virq = rsrc->q_vectors[vector].irq.virq;
+
+		kfree(free_irq(virq, &rsrc->q_vectors[vector]));
 	}
 
 	return err;
@@ -4194,7 +4186,7 @@ void idpf_vport_intr_deinit(struct idpf_vport *vport,
 	idpf_vport_intr_napi_dis_all(rsrc);
 	idpf_vport_intr_dis_dim_all(rsrc);
 	idpf_vport_intr_napi_del_all(rsrc);
-	idpf_vport_intr_rel_irq(vport, rsrc);
+	idpf_vport_intr_rel_irq(rsrc);
 }
 
 /**
@@ -4507,18 +4499,30 @@ static void idpf_vport_intr_map_vector_to_qs(struct idpf_vport *vport,
  * @rsrc: pointer to queue and vector resources
  *
  * Initialize vector indexes with values returned over mailbox.
+ *
+ * Return: 0 on success, negative on failure
  */
-static void idpf_vport_intr_init_vec_idx(struct idpf_vport *vport,
-					 struct idpf_q_vec_rsrc *rsrc)
+static int idpf_vport_intr_init_vec_idx(struct idpf_vport *vport,
+					struct idpf_q_vec_rsrc *rsrc)
 {
 	struct idpf_adapter *adapter = vport->adapter;
 	int i;
 
-	for (i = 0; i < rsrc->num_q_vectors; i++)
-		rsrc->q_vectors[i].v_idx =
+	for (i = 0; i < rsrc->num_q_vectors; i++) {
+		struct idpf_q_vector *q_vector = &rsrc->q_vectors[i];
+
+		q_vector->v_idx =
 			adapter->irq_info.vectors[rsrc->q_vector_idxs[i]].idx;
+		q_vector->irq.index = rsrc->q_vector_idxs[i];
+		q_vector->irq.virq = pci_irq_vector(adapter->pdev,
+						    q_vector->irq.index);
+		if (q_vector->irq.virq < 0)
+			return q_vector->irq.virq;
+	}
 
 	rsrc->noirq_v_idx = adapter->irq_info.vectors[rsrc->q_vector_idxs[i]].idx;
+
+	return 0;
 }
 
 /**
@@ -4530,8 +4534,6 @@ static void idpf_vport_intr_napi_add_all(struct idpf_vport *vport,
 					 struct idpf_q_vec_rsrc *rsrc)
 {
 	int (*napi_poll)(struct napi_struct *napi, int budget);
-	int irq_num;
-	u16 qv_idx;
 
 	if (idpf_is_queue_model_split(rsrc->txq_model))
 		napi_poll = idpf_vport_splitq_napi_poll;
@@ -4541,12 +4543,9 @@ static void idpf_vport_intr_napi_add_all(struct idpf_vport *vport,
 	for (u16 v_idx = 0; v_idx < rsrc->num_q_vectors; v_idx++) {
 		struct idpf_q_vector *q_vector = &rsrc->q_vectors[v_idx];
 
-		qv_idx = rsrc->q_vector_idxs[v_idx];
-		irq_num = vport->adapter->msix_entries[qv_idx].vector;
-
 		netif_napi_add_config(vport->netdev, &q_vector->napi,
 				      napi_poll, v_idx);
-		netif_napi_set_irq(&q_vector->napi, irq_num);
+		netif_napi_set_irq(&q_vector->napi, q_vector->irq.virq);
 	}
 }
 
@@ -4649,7 +4648,9 @@ int idpf_vport_intr_init(struct idpf_vport *vport, struct idpf_q_vec_rsrc *rsrc)
 {
 	int err;
 
-	idpf_vport_intr_init_vec_idx(vport, rsrc);
+	err = idpf_vport_intr_init_vec_idx(vport, rsrc);
+	if (err)
+		return err;
 
 	idpf_vport_intr_map_vector_to_qs(vport, rsrc);
 	idpf_vport_intr_napi_add_all(vport, rsrc);

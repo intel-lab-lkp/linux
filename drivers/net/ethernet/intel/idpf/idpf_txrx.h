@@ -6,6 +6,7 @@
 
 #include <linux/dim.h>
 #include <linux/net/intel/virtchnl2_lan_desc.h>
+#include <linux/pci.h>
 
 #include <net/libeth/cache.h>
 #include <net/libeth/types.h>
@@ -377,6 +378,7 @@ struct idpf_intr_reg {
  * @rx_intr_mode: Dynamic ITR or not
  * @rx_itr_idx: RX ITR index
  * @v_idx: Vector index
+ * @irq: kernel and driver irq numbers
  */
 struct idpf_q_vector {
 	__cacheline_group_begin_aligned(read_mostly);
@@ -418,12 +420,13 @@ struct idpf_q_vector {
 	__cacheline_group_begin_aligned(cold);
 	u16 v_idx;
 
+	struct msi_map irq;
 	__cacheline_group_end_aligned(cold);
 };
 libeth_cacheline_set_assert(struct idpf_q_vector, 136,
 			    56 + sizeof(struct napi_struct) +
 			    2 * sizeof(struct dim),
-			    8);
+			    8 + sizeof(struct msi_map));
 
 struct idpf_rx_queue_stats {
 	u64_stats_t packets;
