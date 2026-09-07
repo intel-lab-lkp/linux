@@ -639,6 +639,8 @@ static void dm_test_helper_check_state_viewport_reject(struct kunit *test)
 	state->crtc_y = 0;
 	state->crtc_w = 100;
 	state->crtc_h = 100;
+	new_crtc_state->mode.hdisplay = 100;
+	new_crtc_state->mode.vdisplay = 100;
 	new_crtc_state->mode.crtc_hdisplay = 100;
 	new_crtc_state->mode.crtc_vdisplay = 100;
 
@@ -2273,6 +2275,8 @@ static void dm_test_helper_check_state_small_viewport_width(struct kunit *test)
 	state->crtc_y = 0;
 	state->crtc_w = 10;
 	state->crtc_h = 100;
+	new_crtc_state->mode.hdisplay = 1920;
+	new_crtc_state->mode.vdisplay = 1080;
 	new_crtc_state->mode.crtc_hdisplay = 1920;
 	new_crtc_state->mode.crtc_vdisplay = 1080;
 
@@ -2314,6 +2318,8 @@ static void dm_test_helper_check_state_small_viewport_height(struct kunit *test)
 	state->crtc_y = -95;
 	state->crtc_w = 100;
 	state->crtc_h = 100;
+	new_crtc_state->mode.hdisplay = 1920;
+	new_crtc_state->mode.vdisplay = 1080;
 	new_crtc_state->mode.crtc_hdisplay = 1920;
 	new_crtc_state->mode.crtc_vdisplay = 1080;
 
@@ -2356,6 +2362,8 @@ static void dm_test_helper_check_state_bottom_clipped_height(struct kunit *test)
 	state->crtc_y = 95;
 	state->crtc_w = 100;
 	state->crtc_h = 100;
+	new_crtc_state->mode.hdisplay = 1920;
+	new_crtc_state->mode.vdisplay = 100;
 	new_crtc_state->mode.crtc_hdisplay = 1920;
 	new_crtc_state->mode.crtc_vdisplay = 100;
 
@@ -2416,6 +2424,8 @@ static void dm_test_helper_check_state_scaling_caps(struct kunit *test)
 	state->crtc_w = 200;
 	state->crtc_h = 200;
 	new_crtc_state->crtc = crtc;
+	new_crtc_state->mode.hdisplay = 1920;
+	new_crtc_state->mode.vdisplay = 1080;
 	new_crtc_state->mode.crtc_hdisplay = 1920;
 	new_crtc_state->mode.crtc_vdisplay = 1080;
 
@@ -2725,6 +2735,8 @@ static struct amdgpu_device *dm_test_init_atomic_check_state(struct kunit *test,
 
 	(*new_crtc_state)->crtc = crtc;
 	(*new_crtc_state)->enable = true;
+	(*new_crtc_state)->mode.hdisplay = 1920;
+	(*new_crtc_state)->mode.vdisplay = 1080;
 	(*new_crtc_state)->mode.crtc_hdisplay = 1920;
 	(*new_crtc_state)->mode.crtc_vdisplay = 1080;
 
