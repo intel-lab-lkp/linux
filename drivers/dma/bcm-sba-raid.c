@@ -734,7 +734,7 @@ sba_prep_dma_memcpy(struct dma_chan *dchan, dma_addr_t dst, dma_addr_t src,
 	struct sba_device *sba = to_sba_device(dchan);
 	struct sba_request *first = NULL, *req;
 
-	/* Create chained requests where each request is upto hw_buf_size */
+	/* Create chained requests where each request is up to hw_buf_size */
 	while (len) {
 		req_len = (len < sba->hw_buf_size) ? len : sba->hw_buf_size;
 
@@ -877,7 +877,7 @@ sba_prep_dma_xor(struct dma_chan *dchan, dma_addr_t dst, dma_addr_t *src,
 	if (unlikely(src_cnt > sba->max_xor_srcs))
 		return NULL;
 
-	/* Create chained requests where each request is upto hw_buf_size */
+	/* Create chained requests where each request is up to hw_buf_size */
 	while (len) {
 		req_len = (len < sba->hw_buf_size) ? len : sba->hw_buf_size;
 
@@ -1356,7 +1356,7 @@ sba_prep_dma_pq(struct dma_chan *dchan, dma_addr_t *dst, dma_addr_t *src,
 	if (!(flags & DMA_PREP_PQ_DISABLE_Q))
 		dst_q = &dst[1];
 
-	/* Create chained requests where each request is upto hw_buf_size */
+	/* Create chained requests where each request is up to hw_buf_size */
 	while (len) {
 		req_len = (len < sba->hw_buf_size) ? len : sba->hw_buf_size;
 
@@ -1626,7 +1626,7 @@ static int sba_probe(struct platform_device *pdev)
 	sba->dev = &pdev->dev;
 	platform_set_drvdata(pdev, sba);
 
-	/* Number of mailbox channels should be atleast 1 */
+	/* Number of mailbox channels should be at least 1 */
 	ret = of_count_phandle_with_args(pdev->dev.of_node,
 					 "mboxes", "#mbox-cells");
 	if (ret <= 0)

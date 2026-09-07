@@ -1032,7 +1032,7 @@ static int xilinx_dpdma_chan_wait_no_ostand(struct xilinx_dpdma_chan *chan)
 {
 	int ret;
 
-	/* Wait for a no outstanding transaction interrupt upto 50msec */
+	/* Wait for a no outstanding transaction interrupt up to 50msec */
 	ret = wait_event_interruptible_timeout(chan->wait_to_stop,
 					       !xilinx_dpdma_chan_ostand(chan),
 					       msecs_to_jiffies(50));
