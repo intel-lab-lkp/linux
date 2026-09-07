@@ -343,7 +343,7 @@ static int conf_string(struct menu *menu)
 			}
 			/* fall through */
 		default:
-			line[strlen(line)-1] = 0;
+			line[strcspn(line, "\n")] = 0;
 			def = line;
 		}
 		if (def && sym_set_string_value(sym, def))
