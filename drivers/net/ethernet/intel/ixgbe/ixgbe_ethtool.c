@@ -3751,8 +3751,7 @@ ixgbe_get_eee_fw(struct ixgbe_adapter *adapter, struct ethtool_keee *edata)
 	edata->eee_enabled = !linkmode_empty(edata->advertised);
 	edata->tx_lpi_enabled = edata->eee_enabled;
 
-	linkmode_and(common, edata->advertised, edata->lp_advertised);
-	edata->eee_active = !linkmode_empty(common);
+	edata->eee_active = linkmode_and(common, edata->advertised, edata->lp_advertised);
 
 	return 0;
 }
