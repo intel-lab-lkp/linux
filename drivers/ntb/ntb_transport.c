@@ -487,6 +487,7 @@ EXPORT_SYMBOL_GPL(ntb_transport_unregister_client);
 static int ntb_qp_debugfs_stats_show(struct seq_file *s, void *v)
 {
 	struct ntb_transport_qp *qp = s->private;
+	struct ntb_rx_info *remote_rx_info;
 
 	if (!qp || !qp->link_is_up)
 		return 0;
@@ -514,7 +515,9 @@ static int ntb_qp_debugfs_stats_show(struct seq_file *s, void *v)
 	seq_printf(s, "tx_err_no_buf - %llu\n", qp->tx_err_no_buf);
 	seq_printf(s, "tx_mw - \t0x%p\n", qp->tx_mw);
 	seq_printf(s, "tx_index (H) - \t%u\n", qp->tx_index);
-	seq_printf(s, "RRI (T) - \t%u\n", qp->remote_rx_info->entry);
+	remote_rx_info = READ_ONCE(qp->remote_rx_info);
+	if (remote_rx_info)
+		seq_printf(s, "RRI (T) - \t%u\n", remote_rx_info->entry);
 	seq_printf(s, "tx_max_entry - \t%u\n", qp->tx_max_entry);
 	seq_printf(s, "free tx - \t%u\n", ntb_transport_tx_free_entry(qp));
 	seq_putc(s, '\n');
@@ -609,7 +612,7 @@ static int ntb_transport_setup_qp_mw(struct ntb_transport_ctx *nt,
 	qp->rx_buff = mw->virt_addr + rx_size * (qp_num / mw_count);
 	rx_size -= sizeof(struct ntb_rx_info);
 
-	qp->remote_rx_info = qp->rx_buff + rx_size;
+	WRITE_ONCE(qp->remote_rx_info, qp->rx_buff + rx_size);
 
 	/* Due to housekeeping, there must be atleast 2 buffs */
 	qp->rx_max_frame = min(transport_mtu, rx_size / 2);
@@ -917,9 +920,12 @@ static void ntb_qp_link_context_reset(struct ntb_transport_qp *qp)
 
 static void ntb_qp_link_down_reset(struct ntb_transport_qp *qp)
 {
+	struct ntb_rx_info *remote_rx_info;
+
 	ntb_qp_link_context_reset(qp);
-	if (qp->remote_rx_info)
-		qp->remote_rx_info->entry = qp->rx_max_entry - 1;
+	remote_rx_info = READ_ONCE(qp->remote_rx_info);
+	if (remote_rx_info)
+		remote_rx_info->entry = qp->rx_max_entry - 1;
 }
 
 static void ntb_qp_link_cleanup(struct ntb_transport_qp *qp)
@@ -2487,8 +2493,14 @@ EXPORT_SYMBOL_GPL(ntb_transport_max_size);
 
 unsigned int ntb_transport_tx_free_entry(struct ntb_transport_qp *qp)
 {
+	struct ntb_rx_info *remote_rx_info = READ_ONCE(qp->remote_rx_info);
 	unsigned int head = qp->tx_index;
-	unsigned int tail = qp->remote_rx_info->entry;
+	unsigned int tail;
+
+	if (!remote_rx_info)
+		return 0;
+
+	tail = remote_rx_info->entry;
 
 	return tail >= head ? tail - head : qp->tx_max_entry + tail - head;
 }
