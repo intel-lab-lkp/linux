@@ -8,6 +8,7 @@
 
 #define pr_fmt(fmt) "genirq: " fmt
 
+#include <linux/cpuhplock.h>
 #include <linux/irq.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -1044,8 +1045,9 @@ static void irq_thread_check_affinity(struct irq_desc *desc, struct irqaction *a
 		m = irq_data_get_effective_affinity_mask(&desc->irq_data);
 		cpumask_copy(mask, m);
 	}
-
-	set_cpus_allowed_ptr(current, mask);
+	scoped_guard(cpus_read_lock) {
+		set_cpus_allowed_ptr(current, mask);
+	}
 	free_cpumask_var(mask);
 }
 #else

@@ -2674,6 +2674,8 @@ static int migration_cpu_stop(void *data)
 		if (task_on_rq_queued(p)) {
 			update_rq_clock(rq);
 			rq = __migrate_task(rq, &rf, p, arg->dest_cpu);
+			if (rq != cpu_rq(arg->dest_cpu))
+				cpumask_set_cpu(rq->cpu, &p->cpus_mask);
 		} else {
 			p->wake_cpu = arg->dest_cpu;
 		}
