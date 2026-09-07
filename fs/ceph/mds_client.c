@@ -2315,22 +2315,28 @@ static int trim_caps_cb(struct inode *inode, int mds, void *arg)
 		ceph_remove_cap(mdsc, cap, ci, true);
 		(*remaining)--;
 	} else {
-		struct dentry *dentry;
+		int count;
+
 		/* try dropping referring dentries */
 		spin_unlock(&ci->i_ceph_lock);
-		dentry = d_find_any_alias(inode);
-		if (dentry && drop_negative_children(dentry)) {
-			int count;
+		if (S_ISDIR(inode->i_mode)) {
+			struct dentry *dentry = d_find_any_alias(inode);
+			bool prune;
+
+			if (!dentry)
+				return 0;
+			prune = drop_negative_children(dentry);
 			dput(dentry);
-			d_prune_aliases(inode);
-			count = icount_read_once(inode);
-			if (count == 1)
-				(*remaining)--;
-			doutc(cl, "%p %llx.%llx cap %p pruned, count now %d\n",
-			      inode, ceph_vinop(inode), cap, count);
-		} else {
-			dput(dentry);
+			if (!prune)
+				return 0;
 		}
+		/* The iterator's inode reference is sufficient to prune aliases. */
+		d_prune_aliases(inode);
+		count = icount_read_once(inode);
+		if (count == 1)
+			(*remaining)--;
+		doutc(cl, "%p %llx.%llx cap %p pruned, count now %d\n",
+		      inode, ceph_vinop(inode), cap, count);
 		return 0;
 	}
 
