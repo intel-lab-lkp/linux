@@ -35,7 +35,6 @@
 
 struct optimistic_spin_node {
 	struct optimistic_spin_node *next;
-	int locked; /* 1 if lock acquired */
 	int prev; /* CPU number offset by 1 */
 };
 
@@ -113,7 +112,6 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	int curr = encode_cpu(smp_processor_id());
 	int prev;
 
-	node->locked = 0;
 	node->next = NULL;
 
 	/*
@@ -158,45 +156,46 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * is implemented with a monitor-wait. vcpu_is_preempted() relies on
 	 * polling, be careful.
 	 */
-	if (smp_cond_load_relaxed(&node->locked, VAL || need_resched() ||
-				  vcpu_is_preempted(node->prev - 1)))
-		return true;
+	prev = smp_cond_load_relaxed(&node->prev, !VAL || need_resched() ||
+				     vcpu_is_preempted(VAL - 1));
 
-	/* unqueue */
 	/*
-	 * Step - A  -- stabilize @prev
+	 * Step - A
 	 *
-	 * Undo our @prev->next assignment; this will make @prev's
-	 * unlock()/unqueue() wait for a next pointer since @lock points to us
-	 * (or later).
+	 * Loop until either node->prev is zero (lock acquired) or we
+	 * atomically change prev->next from node to NULL (stopping prev
+	 * handing on the lock).
+	 * Note that 'prev' can unlink itself concurrently with this
+	 * test so that prev/prev_ptr can be stale, but since it
+	 * is per-cpu data the memory can always be read.
 	 */
 
-	for (;;) {
-		/*
-		 * cpu_relax() below implies a compiler barrier which would
-		 * prevent this comparison being optimized away.
-		 */
+	for (;; prev = READ_ONCE(node->prev)) {
+		if (!prev)
+			/* Lock acquired */
+			return true;
+
+		prev_ptr = decode_cpu(prev);
+
 		if (data_race(prev_ptr->next) == node &&
 		    cmpxchg(&prev_ptr->next, node, NULL) == node)
 			break;
 
 		/*
-		 * We can only fail the cmpxchg() racing against an unlock(),
-		 * in which case we should observe @node->locked becoming
-		 * true.
+		 * 'prev' must have unlinked (or be in the process of unlinking)
+		 * itself from the list.
 		 */
-		if (smp_load_acquire(&node->locked))
-			return true;
 
 		cpu_relax();
-
-		/*
-		 * Or we race against a concurrent unqueue()'s step-B, in which
-		 * case its step-C will write us a new @node->prev pointer.
-		 */
-		prev = READ_ONCE(node->prev);
-		prev_ptr = decode_cpu(prev);
 	}
+
+	/*
+	 * If 'prev' tries to remove itself from the list before we write
+	 * a new value to prev->next it will spin in osq_wait_next().
+	 */
+
+	/* Invalidate prev_cpu matching osq_unlock() */
+	node->prev = 0;
 
 	/*
 	 * Step - B -- stabilize @next
@@ -240,11 +239,11 @@ void osq_unlock(struct optimistic_spin_queue *lock)
 	node = this_cpu_ptr(&osq_node);
 	next = xchg(&node->next, NULL);
 	if (next) {
-		WRITE_ONCE(next->locked, 1);
+		WRITE_ONCE(next->prev, 0);
 		return;
 	}
 
 	next = osq_wait_next(lock, node, OSQ_UNLOCKED_VAL);
 	if (next)
-		WRITE_ONCE(next->locked, 1);
+		WRITE_ONCE(next->prev, 0);
 }
