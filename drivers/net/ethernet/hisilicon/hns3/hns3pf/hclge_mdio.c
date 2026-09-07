@@ -205,7 +205,6 @@ int hclge_mac_connect_phy(struct hnae3_handle *handle)
 	struct hclge_dev *hdev = vport->back;
 	struct net_device *netdev = hdev->vport[0].nic.netdev;
 	struct phy_device *phydev = hdev->hw.mac.phydev;
-	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 	int ret;
 
 	if (!phydev)
@@ -223,8 +222,8 @@ int hclge_mac_connect_phy(struct hnae3_handle *handle)
 		return ret;
 	}
 
-	linkmode_copy(mask, hdev->hw.mac.supported);
-	linkmode_and(phydev->supported, phydev->supported, mask);
+	linkmode_and(phydev->supported, phydev->supported,
+		     hdev->hw.mac.supported);
 	linkmode_copy(phydev->advertising, phydev->supported);
 
 	/* supported flag is Pause and Asym Pause, but default advertising

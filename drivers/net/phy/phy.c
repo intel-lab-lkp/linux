@@ -1160,6 +1160,7 @@ int phy_ethtool_ksettings_set(struct phy_device *phydev,
 			      const struct ethtool_link_ksettings *cmd)
 {
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(advertising);
+	bool has_advertising;
 	u8 autoneg = cmd->base.autoneg;
 	u8 duplex = cmd->base.duplex;
 	u32 speed = cmd->base.speed;
@@ -1167,17 +1168,15 @@ int phy_ethtool_ksettings_set(struct phy_device *phydev,
 	if (cmd->base.phy_address != phydev->mdio.addr)
 		return -EINVAL;
 
-	linkmode_copy(advertising, cmd->link_modes.advertising);
-
 	/* We make sure that we don't pass unsupported values in to the PHY */
-	linkmode_and(advertising, advertising, phydev->supported);
+	has_advertising = linkmode_and(advertising, cmd->link_modes.advertising, phydev->supported);
 
 	/* Verify the settings we care about. */
 	if (autoneg != AUTONEG_ENABLE && autoneg != AUTONEG_DISABLE)
 		return -EINVAL;
 
 	if (autoneg == AUTONEG_ENABLE &&
-	    (linkmode_empty(advertising) ||
+	    (!has_advertising ||
 	     !linkmode_test_bit(ETHTOOL_LINK_MODE_Autoneg_BIT,
 				phydev->supported)))
 		return -EINVAL;
