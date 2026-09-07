@@ -192,11 +192,21 @@ SYM_CODE_END(preserve_boot_args)
 	 * its location in the task stack. We reserve the entire pt_regs space
 	 * for consistency with user tasks and kthreads.
 	 */
-	.macro	init_cpu_task tsk, tmp1, tmp2
+	.macro	init_cpu_task tsk, tmp1, tmp2, check_mpidr=
 	msr	sp_el0, \tsk
 
 	ldr	\tmp1, [\tsk, #TSK_STACK]
-	add	sp, \tmp1, #THREAD_SIZE
+	mov	sp, \tmp1
+	.ifnb	\check_mpidr
+	mov_q	\tmp1, MPIDR_HWID_BITMASK
+	mrs	\tmp2, mpidr_el1
+	and	\tmp2, \tmp2, \tmp1
+	ldr	\tmp1, [sp]
+	sub	\tmp1, \tmp1, \tmp2
+	cbnz	\tmp1, __cpu_secondary_broken_psci_arg
+	.endif
+
+	add	sp, sp, #THREAD_SIZE
 	sub	sp, sp, #PT_REGS_SIZE
 
 	stp	xzr, xzr, [sp, #S_STACKFRAME]
@@ -401,11 +411,12 @@ SYM_FUNC_START_LOCAL(__secondary_switched)
 	cbnz	x2, 1f
 	adr_l	x0, secondary_data
 	ldr	x2, [x0, #CPU_BOOT_TASK]
-	cbz	x2, __secondary_too_slow
-
-1:
 	init_cpu_task x2, x1, x3
-
+	cbnz	x2, 2f
+	b	__secondary_too_slow
+1:
+	init_cpu_task x2, x1, x3, check_mpidr=1
+2:
 #ifdef CONFIG_ARM64_PTR_AUTH
 	ptrauth_keys_init_cpu x2, x3, x4, x5
 #endif
@@ -450,6 +461,22 @@ SYM_FUNC_END(set_cpu_boot_mode_flag)
 	dmb	sy
 	dc	ivac, \tmp1			// Invalidate potentially stale cache line
 	.endm
+
+	.macro	update_cpu_boot_status status, tmp1, tmp2
+	adr_l	\tmp1, secondary_data
+	add	\tmp1, \tmp1, #CPU_BOOT_STATUS_FLAGS + \status
+	mov	\tmp2, #1
+	strb	w\tmp2, [\tmp1]
+	.endm
+
+SYM_FUNC_START_LOCAL(__cpu_secondary_broken_psci_arg)
+	update_cpu_boot_status CPU_BROKEN_PSCI_ARG, x0, x1
+1:
+	wfe
+	wfi
+	b	1b
+SYM_FUNC_END(__cpu_secondary_broken_psci_arg)
+
 
 /*
  * Enable the MMU.

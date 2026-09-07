@@ -119,10 +119,12 @@ int arch_cpuhp_kick_ap_alive(unsigned int cpu, struct task_struct *idle)
 	 * We need to tell the secondary core where to find its stack and the
 	 * page tables.
 	 */
-	if (smp_parallel_bringup)
+	if (smp_parallel_bringup) {
+		*((u64 *)idle->stack) = cpu_logical_map(cpu);
 		arg = idle;
-	else
+	} else {
 		secondary_data.task = idle;
+	}
 
 	/* Now bring the CPU into our world */
 	if (ops->cpu_boot)
@@ -158,6 +160,11 @@ void arch_cpuhp_cleanup_kick_cpu(unsigned int cpu, bool is_alive)
 	}
 
 	status = READ_ONCE(secondary_data.status);
+	if (status.flags[CPU_BROKEN_PSCI_ARG]) {
+		pr_crit_once("CPU%u detected broken PSCI v0.2+ CPU_ON argument passing\n",
+			     cpu);
+	}
+
 	if (status.flags[CPU_PANIC_KERNEL])
 		panic("CPU%u detected unsupported configuration\n", cpu);
 
