@@ -374,6 +374,13 @@ static int net1080_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 		nc_ensure_sync(dev);
 		// switch (vendor/product ids) { ... }
 	}
+	if (hdr_len + sizeof(*trailer) > skb->len) {
+		dev->net->stats.rx_frame_errors++;
+		netdev_dbg(dev->net, "header too long for frame, %d\n",
+			   hdr_len);
+		nc_ensure_sync(dev);
+		return 0;
+	}
 	skb_pull(skb, hdr_len);
 
 	trailer = (struct nc_trailer *)
