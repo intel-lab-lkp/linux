@@ -39,6 +39,14 @@
 #define PFGEN_CTRL			0x0840700C	/* PFR trigger */
 #define PFGEN_CTRL_PFSWR		BIT(0)
 
+/* Default register mapping */
+#define PF_PCI_0			0x0
+#define PF_PCI_0_SIZE			0x08400000
+#define PF_PCI_1			0x08401000
+#define PF_PCI_1_SIZE			0x6000
+#define PF_PCI_2			0x08408000
+#define PF_PCI_2_SIZE			0x37F8000
+
 /**
  * struct ixd_bar_region - BAR region description
  * @offset: BAR region offset

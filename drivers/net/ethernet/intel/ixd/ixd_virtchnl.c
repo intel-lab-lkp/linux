@@ -3,6 +3,7 @@
 
 #include "ixd.h"
 #include "ixd_ctlq.h"
+#include "ixd_lan_regs.h"
 #include "ixd_virtchnl.h"
 
 /**
@@ -160,6 +161,66 @@ static int ixd_req_vc_version(struct ixd_adapter *adapter)
 	return ixd_ctlq_do_req(adapter, &req);
 }
 
+static void ixd_fill_lan_mmio_regions(struct ixd_adapter *adapter,
+				      void *send_buff, void *ctx)
+{
+	struct virtchnl2_get_lan_memory_regions *lan = send_buff;
+
+	/* Needed to be parsed correctly, this mem_region doesn't matter. */
+	lan->num_memory_regions = cpu_to_le16(1);
+}
+
+static int ixd_handle_lan_mmio_regions(struct ixd_adapter *adapter,
+				       void *recv_buff, size_t recv_size,
+				       void *ctx)
+{
+	struct libie_mmio_info *mmio_info = &adapter->cp_ctx.mmio_info;
+	struct virtchnl2_get_lan_memory_regions *recv_mmio = recv_buff;
+	int num_regions, err = 0;
+
+	if (recv_size < sizeof(*recv_mmio))
+		return -EBADMSG;
+
+	num_regions = le16_to_cpu(recv_mmio->num_memory_regions);
+	if (!num_regions)
+		return -EBADMSG;
+
+	if (recv_size < sizeof(*recv_mmio) +
+			sizeof(struct virtchnl2_mem_region) * num_regions)
+		return -EBADMSG;
+
+	for (int i = 0; i < num_regions; i++) {
+		struct virtchnl2_mem_region *reg = &recv_mmio->mem_reg[i];
+		bool map_ok;
+
+		map_ok = libie_pci_map_mmio_region(mmio_info,
+						   le64_to_cpu(reg->start_offset),
+						   le64_to_cpu(reg->size));
+		if (!map_ok) {
+			/* Unmap already mapped */
+			libie_pci_unmap_fltr_regs(mmio_info,
+						  ixd_iomap_is_not_start_region);
+			return -EIO;
+		}
+	}
+
+	return err;
+}
+
+static int ixd_req_lan_mmio_regions(struct ixd_adapter *adapter)
+{
+	const struct ixd_ctlq_req req = {
+		.opcode = VIRTCHNL2_OP_GET_LAN_MEMORY_REGIONS,
+		.send_size = sizeof(struct virtchnl2_get_lan_memory_regions) +
+			     sizeof(struct virtchnl2_mem_region),
+		.ctx = NULL,
+		.send_buff_init = ixd_fill_lan_mmio_regions,
+		.recv_process = ixd_handle_lan_mmio_regions,
+	};
+
+	return ixd_ctlq_do_req(adapter, &req);
+}
+
 /**
  * ixd_vc_dev_init - virtchnl device core initialization
  * @adapter: device information
@@ -184,6 +245,15 @@ int ixd_vc_dev_init(struct ixd_adapter *adapter)
 			 "Getting virtchnl capabilities failed, error=%pe\n",
 			 ERR_PTR(err));
 		return err;
+	}
+
+	/* Error here isn't critical; map running regions in this case */
+	err = ixd_req_lan_mmio_regions(adapter);
+	if (err) {
+		dev_warn(ixd_to_dev(adapter),
+			 "Getting virtchnl LAN mmio regions failed, error=%pe\n",
+			 ERR_PTR(err));
+		err = ixd_iomap_running_regions(adapter);
 	}
 
 	return err;

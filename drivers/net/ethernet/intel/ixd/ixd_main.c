@@ -48,40 +48,121 @@ static void ixd_shutdown(struct pci_dev *pdev)
 
 /**
  * ixd_iomap_regions - iomap PCI BARs
- * @adapter: adapter to map memory regions for
+ * @mmio_info: PCI resources info
+ * @num: number of regions to map
+ * @regions: array of regions to map (offset and size)
  *
  * Returns: %0 on success, negative on failure
  */
-static int ixd_iomap_regions(struct ixd_adapter *adapter)
+static int ixd_iomap_regions(struct libie_mmio_info *mmio_info, int num,
+			     const struct ixd_bar_region *regions)
 {
-	const struct ixd_bar_region regions[] = {
-		{
-			.offset = PFGEN_RTRIG,
-			.size = PFGEN_RTRIG_REG_LEN,
-		},
-		{
-			.offset = PF_FW_MBX,
-			.size = PF_FW_MBX_REG_LEN,
-		},
-	};
-
-	for (int i = 0; i < ARRAY_SIZE(regions); i++) {
-		struct libie_mmio_info *mmio_info = &adapter->cp_ctx.mmio_info;
+	for (int i = 0; i < num; i++) {
 		bool map_ok;
 
 		map_ok = libie_pci_map_mmio_region(mmio_info,
 						   regions[i].offset,
 						   regions[i].size);
-		if (!map_ok) {
-			dev_err(ixd_to_dev(adapter),
-				"Failed to map PCI device MMIO region\n");
-
-			libie_pci_unmap_all_mmio_regions(mmio_info);
+		if (!map_ok)
 			return -EIO;
-		}
 	}
 
 	return 0;
+}
+
+const struct ixd_bar_region ixd_start_regions[] = {
+	{
+		.offset = PFGEN_RTRIG,
+		.size = PFGEN_RTRIG_REG_LEN,
+	},
+	{
+		.offset = PF_FW_MBX,
+		.size = PF_FW_MBX_REG_LEN,
+	},
+};
+
+static const struct ixd_bar_region ixd_running_regions[] = {
+	{
+		.offset = PF_PCI_0,
+		.size = PF_PCI_0_SIZE,
+	},
+	{
+		.offset = PF_PCI_1,
+		.size = PF_PCI_1_SIZE,
+	},
+	{
+		.offset = PF_PCI_2,
+		.size = PF_PCI_2_SIZE,
+	},
+};
+
+/**
+ * ixd_iomap_is_not_start_region - check if it is the start region
+ * @mmio_info: PCI resources info
+ * @reg: region to check
+ *
+ * Return: %true if it isn't start region, %false otherwise
+ *
+ */
+bool ixd_iomap_is_not_start_region(struct libie_mmio_info *info,
+				   struct libie_pci_mmio_region *reg)
+{
+	for (uint i = 0; i < ARRAY_SIZE(ixd_start_regions); i++) {
+		if (reg->bar_idx == 0 &&
+		    reg->offset == ixd_start_regions[i].offset &&
+		    reg->size == ixd_start_regions[i].size)
+			return false;
+	}
+
+	return true;
+}
+
+/**
+ * ixd_iomap_start_regions - iomap PCI BARs needed for driver startup
+ * @adapter: adapter to map memory regions for
+ *
+ * Returns: %0 on success, negative on failure
+ */
+static int ixd_iomap_start_regions(struct ixd_adapter *adapter)
+{
+	struct libie_mmio_info *mmio_info = &adapter->cp_ctx.mmio_info;
+	int err;
+
+	err = ixd_iomap_regions(mmio_info, ARRAY_SIZE(ixd_start_regions),
+				ixd_start_regions);
+	if (err) {
+		dev_err(ixd_to_dev(adapter),
+			"Failed to map startup PCI device MMIO region\n");
+
+		libie_pci_unmap_all_mmio_regions(mmio_info);
+	}
+
+	return err;
+}
+
+/**
+ * ixd_iomap_running_regions - iomap PCI BARs needed for driver when running
+ * @adapter: adapter to map memory regions for
+ *
+ * It should be called only if GET_LAN_MEMORY_REGIONS virtchnl message fails.
+ * Returns: %0 on success, negative on failure
+ */
+int ixd_iomap_running_regions(struct ixd_adapter *adapter)
+{
+	struct libie_mmio_info *mmio_info = &adapter->cp_ctx.mmio_info;
+	int err;
+
+	err = ixd_iomap_regions(mmio_info, ARRAY_SIZE(ixd_running_regions),
+				ixd_running_regions);
+	if (err) {
+		dev_err(ixd_to_dev(adapter),
+			"Failed to map running PCI device MMIO region\n");
+
+		libie_pci_unmap_fltr_regs(mmio_info,
+					  ixd_iomap_is_not_start_region);
+	}
+
+	return err;
 }
 
 /**
@@ -109,7 +190,7 @@ static int ixd_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	pci_set_drvdata(pdev, adapter);
 
-	err = ixd_iomap_regions(adapter);
+	err = ixd_iomap_start_regions(adapter);
 	if (err)
 		goto free_adapter;
 
