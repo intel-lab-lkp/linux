@@ -857,8 +857,8 @@ err_unregister_subdev:
 }
 
 static const struct acpi_device_id gc2235_acpi_match[] = {
-	{ "INT33F8" },
-	{},
+	{ .id = "INT33F8" },
+	{ }
 };
 MODULE_DEVICE_TABLE(acpi, gc2235_acpi_match);
 
