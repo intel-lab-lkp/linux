@@ -231,6 +231,7 @@ static int xgbe_set_link_ksettings(struct net_device *netdev,
 	struct xgbe_prv_data *pdata = netdev_priv(netdev);
 	struct ethtool_link_ksettings *lks = &pdata->phy.lks;
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(advertising);
+	bool has_advertising;
 	u32 speed;
 	int ret;
 
@@ -267,11 +268,11 @@ static int xgbe_set_link_ksettings(struct net_device *netdev,
 		  __ETHTOOL_LINK_MODE_MASK_NBITS, cmd->link_modes.advertising,
 		  __ETHTOOL_LINK_MODE_MASK_NBITS, lks->link_modes.supported);
 
-	linkmode_and(advertising, cmd->link_modes.advertising,
-		     lks->link_modes.supported);
+	has_advertising = linkmode_and(advertising,
+				       cmd->link_modes.advertising,
+				       lks->link_modes.supported);
 
-	if ((cmd->base.autoneg == AUTONEG_ENABLE) &&
-	    bitmap_empty(advertising, __ETHTOOL_LINK_MODE_MASK_NBITS)) {
+	if (!has_advertising && cmd->base.autoneg == AUTONEG_ENABLE) {
 		netdev_err(netdev,
 			   "unsupported requested advertisement\n");
 		return -EINVAL;
