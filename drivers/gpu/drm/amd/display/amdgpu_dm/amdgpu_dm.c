@@ -143,7 +143,8 @@ static void amdgpu_dm_destroy_drm_device(struct amdgpu_display_manager *dm);
 
 static int amdgpu_dm_atomic_setup_commit(struct drm_atomic_commit *state);
 static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state);
-STATIC_IFN_KUNIT void dm_enable_per_frame_crtc_master_sync(struct dc_state *context);
+VISIBLE_IF_KUNIT void dm_enable_per_frame_crtc_master_sync(
+	struct dc_state *context);
 
 static int amdgpu_dm_atomic_check(struct drm_device *dev,
 				  struct drm_atomic_commit *state);
@@ -167,7 +168,7 @@ static inline void amdgpu_dm_exit_ips_for_hw_access(struct dc *dc)
  * @return
  * Counter for vertical blanks
  */
-STATIC_IFN_KUNIT u32 dm_vblank_get_counter(struct amdgpu_device *adev, int crtc)
+VISIBLE_IF_KUNIT u32 dm_vblank_get_counter(struct amdgpu_device *adev, int crtc)
 {
 	struct amdgpu_crtc *acrtc = NULL;
 
@@ -186,7 +187,7 @@ STATIC_IFN_KUNIT u32 dm_vblank_get_counter(struct amdgpu_device *adev, int crtc)
 }
 EXPORT_IF_KUNIT(dm_vblank_get_counter);
 
-STATIC_IFN_KUNIT int dm_crtc_get_scanoutpos(struct amdgpu_device *adev, int crtc,
+VISIBLE_IF_KUNIT int dm_crtc_get_scanoutpos(struct amdgpu_device *adev, int crtc,
 					    u32 *vbl, u32 *position)
 {
 	u32 v_blank_start = 0, v_blank_end = 0, h_position = 0, v_position = 0;
@@ -224,21 +225,21 @@ STATIC_IFN_KUNIT int dm_crtc_get_scanoutpos(struct amdgpu_device *adev, int crtc
 }
 EXPORT_IF_KUNIT(dm_crtc_get_scanoutpos);
 
-STATIC_IFN_KUNIT bool dm_is_idle(struct amdgpu_ip_block *ip_block)
+VISIBLE_IF_KUNIT bool dm_is_idle(struct amdgpu_ip_block *ip_block)
 {
 	/* XXX todo */
 	return true;
 }
 EXPORT_IF_KUNIT(dm_is_idle);
 
-STATIC_IFN_KUNIT int dm_wait_for_idle(struct amdgpu_ip_block *ip_block)
+VISIBLE_IF_KUNIT int dm_wait_for_idle(struct amdgpu_ip_block *ip_block)
 {
 	/* XXX todo */
 	return 0;
 }
 EXPORT_IF_KUNIT(dm_wait_for_idle);
 
-STATIC_IFN_KUNIT int dm_soft_reset(struct amdgpu_ip_block *ip_block)
+VISIBLE_IF_KUNIT int dm_soft_reset(struct amdgpu_ip_block *ip_block)
 {
 	/* XXX todo */
 	return 0;
@@ -250,7 +251,7 @@ EXPORT_IF_KUNIT(dm_soft_reset);
  * in the dc_surface_updates array. This comparator is used to sort them
  * by descending zpos.
  */
-STATIC_IFN_KUNIT int dm_plane_layer_index_cmp(const void *a, const void *b)
+VISIBLE_IF_KUNIT int dm_plane_layer_index_cmp(const void *a, const void *b)
 {
 	const struct dc_surface_update *sa = (struct dc_surface_update *)a;
 	const struct dc_surface_update *sb = (struct dc_surface_update *)b;
@@ -299,14 +300,14 @@ static inline bool update_planes_and_stream_adapter(struct dc *dc,
 					   stream_update);
 }
 
-STATIC_IFN_KUNIT int dm_set_clockgating_state(struct amdgpu_ip_block *ip_block,
+VISIBLE_IF_KUNIT int dm_set_clockgating_state(struct amdgpu_ip_block *ip_block,
 					      enum amd_clockgating_state state)
 {
 	return 0;
 }
 EXPORT_IF_KUNIT(dm_set_clockgating_state);
 
-STATIC_IFN_KUNIT int dm_set_powergating_state(struct amdgpu_ip_block *ip_block,
+VISIBLE_IF_KUNIT int dm_set_powergating_state(struct amdgpu_ip_block *ip_block,
 					      enum amd_powergating_state state)
 {
 	return 0;
@@ -2145,7 +2146,7 @@ int dm_atomic_get_state(struct drm_atomic_commit *state,
 	return 0;
 }
 
-STATIC_IFN_KUNIT struct dm_atomic_state *
+VISIBLE_IF_KUNIT struct dm_atomic_state *
 dm_atomic_get_new_state(struct drm_atomic_commit *state)
 {
 	struct drm_device *dev = state->dev;
@@ -2188,7 +2189,7 @@ dm_atomic_duplicate_state(struct drm_private_obj *obj)
 	return &new_state->base;
 }
 
-STATIC_IFN_KUNIT void dm_atomic_destroy_state(struct drm_private_obj *obj,
+VISIBLE_IF_KUNIT void dm_atomic_destroy_state(struct drm_private_obj *obj,
 					      struct drm_private_state *state)
 {
 	struct dm_atomic_state *dm_state = to_dm_atomic_state(state);
@@ -2671,7 +2672,7 @@ static void amdgpu_dm_destroy_drm_device(struct amdgpu_display_manager *dm)
  *
  * Calculate and program the display watermarks and line buffer allocation.
  */
-STATIC_IFN_KUNIT void dm_bandwidth_update(struct amdgpu_device *adev)
+VISIBLE_IF_KUNIT void dm_bandwidth_update(struct amdgpu_device *adev)
 {
 	/* TODO: implement later */
 }
@@ -2876,13 +2877,13 @@ static int dm_early_init(struct amdgpu_ip_block *ip_block)
 	return dm_init_microcode(adev);
 }
 
-STATIC_IFN_KUNIT bool modereset_required(struct drm_crtc_state *crtc_state)
+VISIBLE_IF_KUNIT bool modereset_required(struct drm_crtc_state *crtc_state)
 {
 	return !crtc_state->active && drm_atomic_crtc_needs_modeset(crtc_state);
 }
 EXPORT_IF_KUNIT(modereset_required);
 
-STATIC_IFN_KUNIT int
+VISIBLE_IF_KUNIT int
 fill_plane_color_attributes(const struct drm_plane_state *plane_state,
 			    const enum surface_pixel_format format,
 			    enum dc_color_space *color_space)
@@ -3442,7 +3443,7 @@ static void dm_update_pflip_irq_state(struct amdgpu_device *adev,
 	amdgpu_irq_update(adev, &adev->pageflip_irq, irq_type);
 }
 
-STATIC_IFN_KUNIT bool
+VISIBLE_IF_KUNIT bool
 is_scaling_state_different(const struct dm_connector_state *dm_state,
 			   const struct dm_connector_state *old_dm_state)
 {
@@ -3461,7 +3462,7 @@ is_scaling_state_different(const struct dm_connector_state *dm_state,
 }
 EXPORT_IF_KUNIT(is_scaling_state_different);
 
-STATIC_IFN_KUNIT bool
+VISIBLE_IF_KUNIT bool
 is_content_protection_different(struct drm_crtc_state *new_crtc_state,
 				struct drm_crtc_state *old_crtc_state,
 				struct drm_connector_state *new_conn_state,
@@ -4925,7 +4926,7 @@ static int amdgpu_dm_atomic_setup_commit(struct drm_atomic_commit *state)
 	return 0;
 }
 
-STATIC_IFN_KUNIT void set_multisync_trigger_params(
+VISIBLE_IF_KUNIT void set_multisync_trigger_params(
 		struct dc_stream_state *stream)
 {
 	struct dc_stream_state *master = NULL;
@@ -4940,7 +4941,7 @@ STATIC_IFN_KUNIT void set_multisync_trigger_params(
 }
 EXPORT_IF_KUNIT(set_multisync_trigger_params);
 
-STATIC_IFN_KUNIT void set_master_stream(struct dc_stream_state *stream_set[],
+VISIBLE_IF_KUNIT void set_master_stream(struct dc_stream_state *stream_set[],
 					int stream_count)
 {
 	int j, highest_rfr = 0, master_stream = 0;
@@ -4964,7 +4965,7 @@ STATIC_IFN_KUNIT void set_master_stream(struct dc_stream_state *stream_set[],
 }
 EXPORT_IF_KUNIT(set_master_stream);
 
-STATIC_IFN_KUNIT void dm_enable_per_frame_crtc_master_sync(struct dc_state *context)
+VISIBLE_IF_KUNIT void dm_enable_per_frame_crtc_master_sync(struct dc_state *context)
 {
 	int i = 0;
 	struct dc_stream_state *stream;

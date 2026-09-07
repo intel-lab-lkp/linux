@@ -173,7 +173,7 @@ bool amdgpu_dm_should_update_native_cursor(struct drm_atomic_commit *state,
 }
 EXPORT_IF_KUNIT(amdgpu_dm_should_update_native_cursor);
 
-STATIC_IFN_KUNIT void dm_get_oriented_plane_size(struct drm_plane_state *plane_state,
+VISIBLE_IF_KUNIT void dm_get_oriented_plane_size(struct drm_plane_state *plane_state,
 					 int *src_w, int *src_h)
 {
 	switch (plane_state->rotation & DRM_MODE_ROTATE_MASK) {
@@ -192,7 +192,7 @@ STATIC_IFN_KUNIT void dm_get_oriented_plane_size(struct drm_plane_state *plane_s
 }
 EXPORT_IF_KUNIT(dm_get_oriented_plane_size);
 
-STATIC_IFN_KUNIT void
+VISIBLE_IF_KUNIT void
 dm_get_plane_scale(struct drm_plane_state *plane_state,
 		   int *out_plane_scale_w, int *out_plane_scale_h)
 {
