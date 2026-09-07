@@ -1402,9 +1402,14 @@ void amdgpu_dm_update_stream_scaling_settings(struct drm_device *dev,
 	if (!mode)
 		return;
 
-	/* Full screen scaling by default */
-	src.width = mode->hdisplay;
-	src.height = mode->vdisplay;
+	/*
+	 * Full screen scaling by default. A frame-packed 3D mode scans out the
+	 * doubled timing, so the source size is the CRTC size, not vdisplay:
+	 * with 1080 lines against a 2205-line destination the aspect fit would
+	 * keep 1080 lines and centre them, putting the first view across both
+	 * eye windows and none of the second.
+	 */
+	drm_mode_get_hv_timing(mode, &src.width, &src.height);
 	dst.width = stream->timing.h_addressable;
 	dst.height = stream->timing.v_addressable;
 

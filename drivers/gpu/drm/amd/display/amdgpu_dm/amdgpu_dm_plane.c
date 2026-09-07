@@ -1399,16 +1399,21 @@ int amdgpu_dm_plane_helper_check_state(struct drm_plane_state *state,
 		if (state->plane->type != DRM_PLANE_TYPE_CURSOR) {
 			int viewport_width = state->crtc_w;
 			int viewport_height = state->crtc_h;
+			int mode_hdisplay, mode_vdisplay;
+
+			/* frame-packed 3D scans out the doubled timing */
+			drm_mode_get_hv_timing(&new_crtc_state->mode,
+					       &mode_hdisplay, &mode_vdisplay);
 
 			if (state->crtc_x < 0)
 				viewport_width += state->crtc_x;
-			else if (state->crtc_x + state->crtc_w > new_crtc_state->mode.crtc_hdisplay)
-				viewport_width = new_crtc_state->mode.crtc_hdisplay - state->crtc_x;
+			else if (state->crtc_x + state->crtc_w > mode_hdisplay)
+				viewport_width = mode_hdisplay - state->crtc_x;
 
 			if (state->crtc_y < 0)
 				viewport_height += state->crtc_y;
-			else if (state->crtc_y + state->crtc_h > new_crtc_state->mode.crtc_vdisplay)
-				viewport_height = new_crtc_state->mode.crtc_vdisplay - state->crtc_y;
+			else if (state->crtc_y + state->crtc_h > mode_vdisplay)
+				viewport_height = mode_vdisplay - state->crtc_y;
 
 			if (viewport_width < 0 || viewport_height < 0) {
 				DRM_DEBUG_ATOMIC("Plane completely outside of screen\n");
