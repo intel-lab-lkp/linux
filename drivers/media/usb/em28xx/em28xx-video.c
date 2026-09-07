@@ -2992,13 +2992,19 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 		goto unregister_dev;
 	}
 
+	v4l2->vb_vbiq.lock = &v4l2->vb_vbi_queue_lock;
+	ret = em28xx_vb2_setup(dev);
+	if (ret) {
+		dev_err(&dev->intf->dev, "unable to setup device queues, error %d\n", ret);
+		goto unregister_dev;
+	}
+
 	/* Allocate and fill vbi video_device struct */
 	if (em28xx_vbi_supported(dev) == 1) {
 		em28xx_vdev_init(dev, &v4l2->vbi_dev, &em28xx_video_template,
 				 "vbi");
 
 		v4l2->vbi_dev.queue = &v4l2->vb_vbiq;
-		v4l2->vbi_dev.queue->lock = &v4l2->vb_vbi_queue_lock;
 		v4l2->vbi_dev.device_caps = V4L2_CAP_STREAMING |
 			V4L2_CAP_READWRITE | V4L2_CAP_VBI_CAPTURE;
 		if ((v4l2->vdev.device_caps & V4L2_CAP_TUNER) == 0)
@@ -3067,9 +3073,6 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 
 	/* Save some power by putting tuner to sleep */
 	v4l2_device_call_all(&v4l2->v4l2_dev, 0, tuner, standby);
-
-	/* initialize videobuf2 stuff */
-	em28xx_vb2_setup(dev);
 
 	dev_info(&dev->intf->dev,
 		 "V4L2 extension successfully initialized\n");
