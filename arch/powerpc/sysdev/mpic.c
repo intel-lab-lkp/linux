@@ -1105,7 +1105,7 @@ static int mpic_host_xlate(struct irq_domain *h, struct device_node *ct,
 		 * First two cells are as usual.  Third specifies
 		 * an "interrupt type".  Fourth is type-specific data.
 		 *
-		 * See Documentation/devicetree/bindings/powerpc/fsl/mpic.txt
+		 * See Documentation/devicetree/bindings/interrupt-controller/chrp,open-pic.yaml
 		 */
 		switch (intspec[2]) {
 		case 0:
