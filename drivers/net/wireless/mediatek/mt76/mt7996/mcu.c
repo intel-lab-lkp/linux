@@ -497,10 +497,18 @@ mt7996_mcu_ie_countdown(struct mt7996_dev *dev, struct sk_buff *skb)
 
 	tail = skb->data + skb->len;
 	data += sizeof(*hdr);
-	while (data + sizeof(*tlv) < tail && le16_to_cpu(tlv->len)) {
+	while (data + sizeof(*tlv) <= tail) {
+		u16 tag_len = le16_to_cpu(tlv->len);
+
+		if (tag_len < sizeof(*tlv) || data + tag_len > tail)
+			break;
+
 		event = (struct mt7996_mcu_countdown_notify *)tlv->data;
 
-		cdata.omac_idx = event->omac_idx;
+		if (tag_len >= sizeof(*tlv) + sizeof(*event))
+			cdata.omac_idx = event->omac_idx;
+		else
+			break;
 
 		switch (le16_to_cpu(tlv->tag)) {
 		case UNI_EVENT_IE_COUNTDOWN_CSA:
@@ -517,7 +525,7 @@ mt7996_mcu_ie_countdown(struct mt7996_dev *dev, struct sk_buff *skb)
 			break;
 		}
 
-		data += le16_to_cpu(tlv->len);
+		data += tag_len;
 		tlv = (struct tlv *)data;
 	}
 }
