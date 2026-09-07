@@ -28,6 +28,7 @@
 #include <linux/kobject.h>
 #include <linux/workqueue.h>
 #include <linux/sysfs.h>
+#include <net/net_namespace.h>
 
 struct idletimer_tg {
 	struct list_head entry;
@@ -308,6 +309,9 @@ static int idletimer_tg_checkentry(const struct xt_tgchk_param *par)
 	struct idletimer_tg_info *info = par->targinfo;
 	int ret;
 
+	if (!net_eq(par->net, &init_net))
+		return -EOPNOTSUPP;
+
 	ret = idletimer_tg_helper(info);
 	if(ret < 0)
 		return -EINVAL;
@@ -340,6 +344,9 @@ static int idletimer_tg_checkentry_v1(const struct xt_tgchk_param *par)
 {
 	struct idletimer_tg_info_v1 *info = par->targinfo;
 	int ret;
+
+	if (!net_eq(par->net, &init_net))
+		return -EOPNOTSUPP;
 
 	if (info->send_nl_msg)
 		return -EOPNOTSUPP;
