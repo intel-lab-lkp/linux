@@ -188,6 +188,7 @@ struct dentry *ovl_create_real(struct ovl_fs *ofs, struct dentry *parent,
 			if (!err && ofs->casefold != ovl_dentry_casefolded(newdentry)) {
 				pr_warn_ratelimited("wrong inherited casefold (%pd2)\n",
 						    newdentry);
+				ovl_cleanup_locked(ofs, dir, newdentry);
 				err = -EINVAL;
 			}
 			break;
