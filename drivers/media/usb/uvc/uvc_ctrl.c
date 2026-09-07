@@ -2156,11 +2156,16 @@ void uvc_ctrl_status_event(struct uvc_video_chain *chain,
 		uvc_ctrl_clear_handle(ctrl);
 
 	list_for_each_entry(mapping, &ctrl->info.mappings, list) {
-		s32 value;
+		s32 value = 0;
 
-		if (uvc_ctrl_mapping_is_compound(mapping))
-			value = 0;
-		else
+		/*
+		 * The offset is validated against the control size, not
+		 * against the event payload, so a mapping can reach past
+		 * bValue[].
+		 */
+		if (!uvc_ctrl_mapping_is_compound(mapping) &&
+		    mapping->offset + mapping->size <=
+			8 * sizeof_field(struct uvc_status_control, bValue))
 			value = uvc_mapping_get_s32(mapping, UVC_GET_CUR, data);
 
 		/*
