@@ -9149,9 +9149,8 @@ static int r8152_get_eee(struct r8152 *tp, struct ethtool_keee *eee)
 	if (speed & _100bps)
 		linkmode_set_bit(ETHTOOL_LINK_MODE_100baseT_Full_BIT, common);
 
-	linkmode_and(common, common, eee->advertised);
-	linkmode_and(common, common, eee->lp_advertised);
-	eee->eee_active = !linkmode_empty(common);
+	eee->eee_active = linkmode_and_and(common, common, eee->advertised,
+					   eee->lp_advertised);
 
 	return 0;
 }
@@ -9222,9 +9221,8 @@ static int r8153_get_eee(struct r8152 *tp, struct ethtool_keee *eee)
 	if (speed & _100bps)
 		linkmode_set_bit(ETHTOOL_LINK_MODE_100baseT_Full_BIT, common);
 
-	linkmode_and(common, common, eee->advertised);
-	linkmode_and(common, common, eee->lp_advertised);
-	eee->eee_active = !linkmode_empty(common);
+	eee->eee_active = linkmode_and_and(common, common, eee->advertised,
+					   eee->lp_advertised);
 
 	return 0;
 }
