@@ -110,7 +110,7 @@ struct virtio_rpmsg_channel {
 /*
  * We're allocating buffers of 512 bytes each for communications. The
  * number of buffers will be computed from the number of buffers supported
- * by the vring, upto a maximum of 512 buffers (256 in each direction).
+ * by the vring, up to a maximum of 512 buffers (256 in each direction).
  *
  * Each buffer will have 16 bytes for the msg header and 496 bytes for
  * the payload.
