@@ -50,7 +50,7 @@ bool amdgpu_dm_is_dc_timing_adjust_needed(struct dm_crtc_state *old_state,
 	else
 		return false;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_is_dc_timing_adjust_needed);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_is_dc_timing_adjust_needed);
 
 bool
 amdgpu_dm_is_timing_unchanged_for_freesync(struct drm_crtc_state *old_crtc_state,
@@ -81,7 +81,7 @@ amdgpu_dm_is_timing_unchanged_for_freesync(struct drm_crtc_state *old_crtc_state
 
 	return false;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_is_timing_unchanged_for_freesync);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_is_timing_unchanged_for_freesync);
 
 void amdgpu_dm_set_freesync_fixed_config(struct dm_crtc_state *dm_new_crtc_state)
 {
@@ -97,7 +97,7 @@ void amdgpu_dm_set_freesync_fixed_config(struct dm_crtc_state *dm_new_crtc_state
 	res = div_u64(num, den);
 	dm_new_crtc_state->freesync_config.fixed_refresh_in_uhz = res;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_set_freesync_fixed_config);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_set_freesync_fixed_config);
 
 void amdgpu_dm_reset_freesync_config_for_crtc(
 	struct dm_crtc_state *new_crtc_state)
@@ -107,7 +107,7 @@ void amdgpu_dm_reset_freesync_config_for_crtc(
 	memset(&new_crtc_state->vrr_infopacket, 0,
 	       sizeof(new_crtc_state->vrr_infopacket));
 }
-EXPORT_IF_KUNIT(amdgpu_dm_reset_freesync_config_for_crtc);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_reset_freesync_config_for_crtc);
 
 void amdgpu_dm_get_freesync_config_for_crtc(
 	struct dm_crtc_state *new_crtc_state,
@@ -152,7 +152,7 @@ void amdgpu_dm_get_freesync_config_for_crtc(
 out:
 	new_crtc_state->freesync_config = config;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_get_freesync_config_for_crtc);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_get_freesync_config_for_crtc);
 
 void amdgpu_dm_update_freesync_state_on_stream(
 	struct amdgpu_display_manager *dm,

@@ -95,7 +95,7 @@ VISIBLE_IF_KUNIT u32 edid_extract_panel_id(struct edid *edid)
 	       (u32)edid->mfg_id[1] << 16   |
 	       (u32)EDID_PRODUCT_ID(edid);
 }
-EXPORT_IF_KUNIT(edid_extract_panel_id);
+EXPORT_SYMBOL_IF_KUNIT(edid_extract_panel_id);
 
 VISIBLE_IF_KUNIT void apply_edid_quirks(struct dc_link *link, struct edid *edid,
 			      struct dc_edid_caps *edid_caps)
@@ -151,7 +151,7 @@ VISIBLE_IF_KUNIT void apply_edid_quirks(struct dc_link *link, struct edid *edid,
 		return;
 	}
 }
-EXPORT_IF_KUNIT(apply_edid_quirks);
+EXPORT_SYMBOL_IF_KUNIT(apply_edid_quirks);
 
 /**
  * dm_helpers_parse_edid_caps() - Parse edid caps
@@ -248,7 +248,7 @@ enum dc_edid_status dm_helpers_parse_edid_caps(
 
 	return result;
 }
-EXPORT_IF_KUNIT(dm_helpers_parse_edid_caps);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_parse_edid_caps);
 
 VISIBLE_IF_KUNIT void
 fill_dc_mst_payload_table_from_drm(struct dc_link *link,
@@ -300,13 +300,13 @@ fill_dc_mst_payload_table_from_drm(struct dc_link *link,
 	/* Overwrite the old table */
 	*table = new_table;
 }
-EXPORT_IF_KUNIT(fill_dc_mst_payload_table_from_drm);
+EXPORT_SYMBOL_IF_KUNIT(fill_dc_mst_payload_table_from_drm);
 
 void dm_helpers_dp_update_branch_info(
 	struct dc_context *ctx,
 	const struct dc_link *link)
 {}
-EXPORT_IF_KUNIT(dm_helpers_dp_update_branch_info);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_update_branch_info);
 
 VISIBLE_IF_KUNIT void dm_helpers_construct_old_payload(
 			struct drm_dp_mst_topology_mgr *mgr,
@@ -339,7 +339,7 @@ VISIBLE_IF_KUNIT void dm_helpers_construct_old_payload(
 	old_payload->time_slots = allocated_time_slots;
 	old_payload->pbn = allocated_time_slots * pbn_per_slot;
 }
-EXPORT_IF_KUNIT(dm_helpers_construct_old_payload);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_construct_old_payload);
 
 /*
  * Writes payload allocation table in immediate downstream device.
@@ -392,7 +392,7 @@ bool dm_helpers_dp_mst_write_payload_allocation_table(
 
 	return true;
 }
-EXPORT_IF_KUNIT(dm_helpers_dp_mst_write_payload_allocation_table);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_mst_write_payload_allocation_table);
 
 /*
  * poll pending down reply
@@ -401,7 +401,7 @@ void dm_helpers_dp_mst_poll_pending_down_reply(
 	struct dc_context *ctx,
 	const struct dc_link *link)
 {}
-EXPORT_IF_KUNIT(dm_helpers_dp_mst_poll_pending_down_reply);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_mst_poll_pending_down_reply);
 
 /*
  * Clear payload allocation table before enable MST DP link.
@@ -410,7 +410,7 @@ void dm_helpers_dp_mst_clear_payload_allocation_table(
 	struct dc_context *ctx,
 	const struct dc_link *link)
 {}
-EXPORT_IF_KUNIT(dm_helpers_dp_mst_clear_payload_allocation_table);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_mst_clear_payload_allocation_table);
 
 /*
  * Polls for ACT (allocation change trigger) handled and sends
@@ -441,7 +441,7 @@ enum act_return_status dm_helpers_dp_mst_poll_for_allocation_change_trigger(
 
 	return ACT_SUCCESS;
 }
-EXPORT_IF_KUNIT(dm_helpers_dp_mst_poll_for_allocation_change_trigger);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_mst_poll_for_allocation_change_trigger);
 
 void dm_helpers_dp_mst_send_payload_allocation(
 		struct dc_context *ctx,
@@ -476,7 +476,7 @@ void dm_helpers_dp_mst_send_payload_allocation(
 			clr_flag, false);
 	}
 }
-EXPORT_IF_KUNIT(dm_helpers_dp_mst_send_payload_allocation);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_mst_send_payload_allocation);
 
 void dm_helpers_dp_mst_update_mst_mgr_for_deallocation(
 		struct dc_context *ctx,
@@ -505,7 +505,7 @@ void dm_helpers_dp_mst_update_mst_mgr_for_deallocation(
 	amdgpu_dm_set_mst_status(&aconnector->mst_status, set_flag, true);
 	amdgpu_dm_set_mst_status(&aconnector->mst_status, clr_flag, false);
  }
-EXPORT_IF_KUNIT(dm_helpers_dp_mst_update_mst_mgr_for_deallocation);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_mst_update_mst_mgr_for_deallocation);
 
 void dm_dtn_log_begin(struct dc_context *ctx,
 	struct dc_log_buffer_ctx *log_ctx)
@@ -519,7 +519,7 @@ void dm_dtn_log_begin(struct dc_context *ctx,
 
 	dm_dtn_log_append_v(ctx, log_ctx, "%s", msg);
 }
-EXPORT_IF_KUNIT(dm_dtn_log_begin);
+EXPORT_SYMBOL_IF_KUNIT(dm_dtn_log_begin);
 
 __printf(3, 4)
 void dm_dtn_log_append_v(struct dc_context *ctx,
@@ -582,7 +582,7 @@ void dm_dtn_log_append_v(struct dc_context *ctx,
 	if (n > 0)
 		log_ctx->pos += n;
 }
-EXPORT_IF_KUNIT(dm_dtn_log_append_v);
+EXPORT_SYMBOL_IF_KUNIT(dm_dtn_log_append_v);
 
 void dm_dtn_log_end(struct dc_context *ctx,
 	struct dc_log_buffer_ctx *log_ctx)
@@ -596,7 +596,7 @@ void dm_dtn_log_end(struct dc_context *ctx,
 
 	dm_dtn_log_append_v(ctx, log_ctx, "%s", msg);
 }
-EXPORT_IF_KUNIT(dm_dtn_log_end);
+EXPORT_SYMBOL_IF_KUNIT(dm_dtn_log_end);
 
 bool dm_helpers_dp_mst_start_top_mgr(
 		struct dc_context *ctx,
@@ -631,7 +631,7 @@ bool dm_helpers_dp_mst_start_top_mgr(
 
 	return true;
 }
-EXPORT_IF_KUNIT(dm_helpers_dp_mst_start_top_mgr);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_mst_start_top_mgr);
 
 bool dm_helpers_dp_mst_stop_top_mgr(
 		struct dc_context *ctx,
@@ -654,7 +654,7 @@ bool dm_helpers_dp_mst_stop_top_mgr(
 
 	return false;
 }
-EXPORT_IF_KUNIT(dm_helpers_dp_mst_stop_top_mgr);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_mst_stop_top_mgr);
 
 bool dm_helpers_dp_read_dpcd(
 		struct dc_context *ctx,
@@ -672,7 +672,7 @@ bool dm_helpers_dp_read_dpcd(
 	return drm_dp_dpcd_read(&aconnector->dm_dp_aux.aux, address, data,
 				size) == size;
 }
-EXPORT_IF_KUNIT(dm_helpers_dp_read_dpcd);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_read_dpcd);
 
 bool dm_helpers_dp_write_dpcd(
 		struct dc_context *ctx,
@@ -689,7 +689,7 @@ bool dm_helpers_dp_write_dpcd(
 	return drm_dp_dpcd_write(&aconnector->dm_dp_aux.aux,
 			address, (uint8_t *)data, size) > 0;
 }
-EXPORT_IF_KUNIT(dm_helpers_dp_write_dpcd);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_write_dpcd);
 
 bool dm_helpers_submit_i2c(
 		struct dc_context *ctx,
@@ -725,7 +725,7 @@ bool dm_helpers_submit_i2c(
 
 	return result;
 }
-EXPORT_IF_KUNIT(dm_helpers_submit_i2c);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_submit_i2c);
 
 bool dm_helpers_execute_fused_io(
 		struct dc_context *ctx,
@@ -739,7 +739,7 @@ bool dm_helpers_execute_fused_io(
 
 	return amdgpu_dm_execute_fused_io(dev, link, commands, count, timeout_us);
 }
-EXPORT_IF_KUNIT(dm_helpers_execute_fused_io);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_execute_fused_io);
 
 VISIBLE_IF_KUNIT bool execute_synaptics_rc_command(struct drm_dp_aux *aux,
 		bool is_write_cmd,
@@ -813,7 +813,7 @@ err:
 	DRM_ERROR("%s: write cmd ..., err = %d\n",  __func__, ret);
 	return false;
 }
-EXPORT_IF_KUNIT(execute_synaptics_rc_command);
+EXPORT_SYMBOL_IF_KUNIT(execute_synaptics_rc_command);
 
 VISIBLE_IF_KUNIT void apply_synaptics_fifo_reset_wa(struct drm_dp_aux *aux)
 {
@@ -879,7 +879,7 @@ VISIBLE_IF_KUNIT void apply_synaptics_fifo_reset_wa(struct drm_dp_aux *aux)
 
 	drm_dbg_dp(aux->drm_dev, "Done\n");
 }
-EXPORT_IF_KUNIT(apply_synaptics_fifo_reset_wa);
+EXPORT_SYMBOL_IF_KUNIT(apply_synaptics_fifo_reset_wa);
 
 /* MST Dock */
 static const uint8_t SYNAPTICS_DEVICE_ID[] = "SYNA";
@@ -920,7 +920,7 @@ VISIBLE_IF_KUNIT uint8_t write_dsc_enable_synaptics_non_virtual_dpcd_mst(
 
 	return ret;
 }
-EXPORT_IF_KUNIT(write_dsc_enable_synaptics_non_virtual_dpcd_mst);
+EXPORT_SYMBOL_IF_KUNIT(write_dsc_enable_synaptics_non_virtual_dpcd_mst);
 
 bool dm_helpers_dp_write_dsc_enable(
 		struct dc_context *ctx,
@@ -1004,20 +1004,20 @@ bool dm_helpers_dp_write_dsc_enable(
 
 	return ret;
 }
-EXPORT_IF_KUNIT(dm_helpers_dp_write_dsc_enable);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_write_dsc_enable);
 
 #if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
 uint dm_helpers_get_dc_debug_mask(void)
 {
 	return amdgpu_dc_debug_mask;
 }
-EXPORT_IF_KUNIT(dm_helpers_get_dc_debug_mask);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_get_dc_debug_mask);
 
 void dm_helpers_set_dc_debug_mask(uint debug_mask)
 {
 	amdgpu_dc_debug_mask = debug_mask;
 }
-EXPORT_IF_KUNIT(dm_helpers_set_dc_debug_mask);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_set_dc_debug_mask);
 #endif
 
 bool dm_helpers_dp_write_hblank_reduction(struct dc_context *ctx, const struct dc_stream_state *stream)
@@ -1025,7 +1025,7 @@ bool dm_helpers_dp_write_hblank_reduction(struct dc_context *ctx, const struct d
 	// TODO
 	return false;
 }
-EXPORT_IF_KUNIT(dm_helpers_dp_write_hblank_reduction);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_write_hblank_reduction);
 
 bool dm_helpers_is_dp_sink_present(struct dc_link *link)
 {
@@ -1042,7 +1042,7 @@ bool dm_helpers_is_dp_sink_present(struct dc_link *link)
 	mutex_unlock(&aconnector->dm_dp_aux.aux.hw_mutex);
 	return dp_sink_present;
 }
-EXPORT_IF_KUNIT(dm_helpers_is_dp_sink_present);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_is_dp_sink_present);
 
 VISIBLE_IF_KUNIT int
 dm_helpers_probe_acpi_edid(void *data, u8 *buf, unsigned int block, size_t len)
@@ -1082,7 +1082,7 @@ cleanup:
 
 	return r;
 }
-EXPORT_IF_KUNIT(dm_helpers_probe_acpi_edid);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_probe_acpi_edid);
 
 VISIBLE_IF_KUNIT const struct drm_edid *
 dm_helpers_read_acpi_edid(struct amdgpu_dm_connector *aconnector)
@@ -1105,7 +1105,7 @@ dm_helpers_read_acpi_edid(struct amdgpu_dm_connector *aconnector)
 
 	return drm_edid_read_custom(connector, dm_helpers_probe_acpi_edid, connector);
 }
-EXPORT_IF_KUNIT(dm_helpers_read_acpi_edid);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_read_acpi_edid);
 
 VISIBLE_IF_KUNIT const struct drm_edid *
 dm_helpers_read_vbios_hardcoded_edid(struct dc_link *link, struct amdgpu_dm_connector *aconnector)
@@ -1145,7 +1145,7 @@ dm_helpers_read_vbios_hardcoded_edid(struct dc_link *link, struct amdgpu_dm_conn
 
 	return edid;
 }
-EXPORT_IF_KUNIT(dm_helpers_read_vbios_hardcoded_edid);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_read_vbios_hardcoded_edid);
 
 VISIBLE_IF_KUNIT uint8_t get_max_frl_rate(uint8_t max_lanes, uint8_t max_rate_per_lane)
 {
@@ -1168,7 +1168,7 @@ VISIBLE_IF_KUNIT uint8_t get_max_frl_rate(uint8_t max_lanes, uint8_t max_rate_pe
 
 	return max_frl_rate;
 }
-EXPORT_IF_KUNIT(get_max_frl_rate);
+EXPORT_SYMBOL_IF_KUNIT(get_max_frl_rate);
 
 VISIBLE_IF_KUNIT uint8_t get_dsc_max_slices(uint8_t max_slices, int clk_per_slice)
 {
@@ -1193,7 +1193,7 @@ VISIBLE_IF_KUNIT uint8_t get_dsc_max_slices(uint8_t max_slices, int clk_per_slic
 
 	return dsc_max_slices;
 }
-EXPORT_IF_KUNIT(get_dsc_max_slices);
+EXPORT_SYMBOL_IF_KUNIT(get_dsc_max_slices);
 
 void populate_hdmi_info_from_connector(bool enable_frl, struct drm_hdmi_info *hdmi, struct dc_edid_caps *edid_caps)
 {
@@ -1214,7 +1214,7 @@ void populate_hdmi_info_from_connector(bool enable_frl, struct drm_hdmi_info *hd
 		}
 	}
 }
-EXPORT_IF_KUNIT(populate_hdmi_info_from_connector);
+EXPORT_SYMBOL_IF_KUNIT(populate_hdmi_info_from_connector);
 
 enum dc_edid_status dm_helpers_read_local_edid(
 		struct dc_context *ctx,
@@ -1346,7 +1346,7 @@ int dm_helper_dmub_aux_transfer_sync(
 	return amdgpu_dm_process_dmub_aux_transfer_sync(ctx, link->link_index, payload,
 			operation_result);
 }
-EXPORT_IF_KUNIT(dm_helper_dmub_aux_transfer_sync);
+EXPORT_SYMBOL_IF_KUNIT(dm_helper_dmub_aux_transfer_sync);
 
 int dm_helpers_dmub_set_config_sync(struct dc_context *ctx,
 		const struct dc_link *link,
@@ -1361,21 +1361,21 @@ void dm_set_dcn_clocks(struct dc_context *ctx, struct dc_clocks *clks)
 {
 	/* TODO: something */
 }
-EXPORT_IF_KUNIT(dm_set_dcn_clocks);
+EXPORT_SYMBOL_IF_KUNIT(dm_set_dcn_clocks);
 
 void dm_helpers_dmu_timeout(struct dc_context *ctx)
 {
 	// TODO:
 	//amdgpu_device_gpu_recover(dc_context->driver-context, NULL);
 }
-EXPORT_IF_KUNIT(dm_helpers_dmu_timeout);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dmu_timeout);
 
 void dm_helpers_smu_timeout(struct dc_context *ctx, unsigned int msg_id, unsigned int param, unsigned int timeout_us)
 {
 	// TODO:
 	//amdgpu_device_gpu_recover(dc_context->driver-context, NULL);
 }
-EXPORT_IF_KUNIT(dm_helpers_smu_timeout);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_smu_timeout);
 
 void dm_helpers_init_panel_settings(
 	struct dc_context *ctx,
@@ -1394,7 +1394,7 @@ void dm_helpers_init_panel_settings(
 	panel_config->dsc.disable_dsc_edp = false;
 	panel_config->dsc.force_dsc_edp_policy = 0;
 }
-EXPORT_IF_KUNIT(dm_helpers_init_panel_settings);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_init_panel_settings);
 
 void dm_helpers_override_panel_settings(
 	struct dc_context *ctx,
@@ -1412,7 +1412,7 @@ void dm_helpers_override_panel_settings(
 		link->panel_config.psr.disallow_replay = true;
 	}
 }
-EXPORT_IF_KUNIT(dm_helpers_override_panel_settings);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_override_panel_settings);
 
 void *dm_helpers_allocate_gpu_mem(
 		struct dc_context *ctx,
@@ -1448,7 +1448,7 @@ bool dm_helpers_dmub_outbox_interrupt_control(struct dc_context *ctx, bool enabl
 			 enable ? "en" : "dis", ret);
 	return ret;
 }
-EXPORT_IF_KUNIT(dm_helpers_dmub_outbox_interrupt_control);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dmub_outbox_interrupt_control);
 
 void dm_helpers_mst_enable_stream_features(const struct dc_stream_state *stream)
 {
@@ -1474,7 +1474,7 @@ void dm_helpers_mst_enable_stream_features(const struct dc_stream_state *stream)
 					 &new_downspread.raw,
 					 sizeof(new_downspread));
 }
-EXPORT_IF_KUNIT(dm_helpers_mst_enable_stream_features);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_mst_enable_stream_features);
 
 bool dm_helpers_dp_handle_test_pattern_request(
 		struct dc_context *ctx,
@@ -1613,13 +1613,13 @@ bool dm_helpers_dp_handle_test_pattern_request(
 
 	return false;
 }
-EXPORT_IF_KUNIT(dm_helpers_dp_handle_test_pattern_request);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_handle_test_pattern_request);
 
 void dm_set_phyd32clk(struct dc_context *ctx, int freq_khz)
 {
        // TODO
 }
-EXPORT_IF_KUNIT(dm_set_phyd32clk);
+EXPORT_SYMBOL_IF_KUNIT(dm_set_phyd32clk);
 
 void dm_helpers_enable_periodic_detection(struct dc_context *ctx, bool enable)
 {
@@ -1631,7 +1631,7 @@ void dm_helpers_enable_periodic_detection(struct dc_context *ctx, bool enable)
 			schedule_work(&adev->dm.idle_workqueue->work);
 	}
 }
-EXPORT_IF_KUNIT(dm_helpers_enable_periodic_detection);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_enable_periodic_detection);
 
 void dm_helpers_dp_mst_update_branch_bandwidth(
 		struct dc_context *ctx,
@@ -1639,7 +1639,7 @@ void dm_helpers_dp_mst_update_branch_bandwidth(
 {
 	// TODO
 }
-EXPORT_IF_KUNIT(dm_helpers_dp_mst_update_branch_bandwidth);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_dp_mst_update_branch_bandwidth);
 
 VISIBLE_IF_KUNIT const uint32_t dm_freesync_pcon_whitelist[] = {
 	DP_BRANCH_DEVICE_ID_0060AD,
@@ -1648,13 +1648,13 @@ VISIBLE_IF_KUNIT const uint32_t dm_freesync_pcon_whitelist[] = {
 	DP_BRANCH_DEVICE_ID_001CF8,
 	DP_BRANCH_DEVICE_ID_001FF2,
 };
-EXPORT_IF_KUNIT(dm_freesync_pcon_whitelist);
+EXPORT_SYMBOL_IF_KUNIT(dm_freesync_pcon_whitelist);
 
 VISIBLE_IF_KUNIT uint32_t dm_freesync_pcon_whitelist_count(void)
 {
 	return ARRAY_SIZE(dm_freesync_pcon_whitelist);
 }
-EXPORT_IF_KUNIT(dm_freesync_pcon_whitelist_count);
+EXPORT_SYMBOL_IF_KUNIT(dm_freesync_pcon_whitelist_count);
 
 VISIBLE_IF_KUNIT bool dm_is_freesync_pcon_whitelist(const uint32_t branch_dev_id)
 {
@@ -1666,7 +1666,7 @@ VISIBLE_IF_KUNIT bool dm_is_freesync_pcon_whitelist(const uint32_t branch_dev_id
 
 	return false;
 }
-EXPORT_IF_KUNIT(dm_is_freesync_pcon_whitelist);
+EXPORT_SYMBOL_IF_KUNIT(dm_is_freesync_pcon_whitelist);
 
 enum adaptive_sync_type dm_get_adaptive_sync_support_type(struct dc_link *link)
 {
@@ -1686,21 +1686,21 @@ enum adaptive_sync_type dm_get_adaptive_sync_support_type(struct dc_link *link)
 
 	return as_type;
 }
-EXPORT_IF_KUNIT(dm_get_adaptive_sync_support_type);
+EXPORT_SYMBOL_IF_KUNIT(dm_get_adaptive_sync_support_type);
 
 bool dm_helpers_is_fullscreen(struct dc_context *ctx, struct dc_stream_state *stream)
 {
 	// TODO
 	return false;
 }
-EXPORT_IF_KUNIT(dm_helpers_is_fullscreen);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_is_fullscreen);
 
 bool dm_helpers_is_hdr_on(struct dc_context *ctx, struct dc_stream_state *stream)
 {
 	// TODO
 	return false;
 }
-EXPORT_IF_KUNIT(dm_helpers_is_hdr_on);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_is_hdr_on);
 
 static int mccs_operation_vcp_request(unsigned int vcp_code, struct dc_link *link,
 				union vcp_reply *reply)
@@ -1826,7 +1826,7 @@ void dm_helpers_read_mccs_caps(struct dc_context *ctx, struct dc_link *link,
 		}
 	}
 }
-EXPORT_IF_KUNIT(dm_helpers_read_mccs_caps);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_read_mccs_caps);
 
 static int mccs_operation_vcp_set(unsigned int vcp_code, struct dc_link *link, uint16_t value)
 {
@@ -1901,7 +1901,7 @@ void dm_helpers_mccs_vcp_set(struct dc_context *ctx, struct dc_link *link,
 		drm_dbg_driver(dev, "%s: Failed to set VCP code %d", __func__,
 				sink->edid_caps.freesync_vcp_code);
 }
-EXPORT_IF_KUNIT(dm_helpers_mccs_vcp_set);
+EXPORT_SYMBOL_IF_KUNIT(dm_helpers_mccs_vcp_set);
 
 bool dm_helpers_submit_i2c_over_aux(struct ddc_service *ddc, uint32_t address, uint8_t offset,
 				    uint8_t *cmdBuffer, uint32_t len, bool read)

@@ -45,7 +45,7 @@
 {
 	return current_time_stamp - last_time_stamp;
 }
-EXPORT_IF_KUNIT(dm_get_elapse_time_in_ns);
+EXPORT_SYMBOL_IF_KUNIT(dm_get_elapse_time_in_ns);
 
 void dm_perf_trace_timestamp(const char *func_name, unsigned int line, struct dc_context *ctx)
 {
@@ -55,17 +55,17 @@ void dm_perf_trace_timestamp(const char *func_name, unsigned int line, struct dc
 				    &ctx->perf_trace->last_entry_write,
 				    func_name, line);
 }
-EXPORT_IF_KUNIT(dm_perf_trace_timestamp);
+EXPORT_SYMBOL_IF_KUNIT(dm_perf_trace_timestamp);
 
 void dm_trace_smu_enter(uint32_t msg_id, uint32_t param_in, unsigned int delay, struct dc_context *ctx)
 {
 }
-EXPORT_IF_KUNIT(dm_trace_smu_enter);
+EXPORT_SYMBOL_IF_KUNIT(dm_trace_smu_enter);
 
 void dm_trace_smu_exit(bool success, uint32_t response, struct dc_context *ctx)
 {
 }
-EXPORT_IF_KUNIT(dm_trace_smu_exit);
+EXPORT_SYMBOL_IF_KUNIT(dm_trace_smu_exit);
 
 /**** power component interfaces ****/
 
@@ -95,7 +95,7 @@ bool dm_query_extended_brightness_caps(struct dc_context *ctx,
 			sizeof(struct dm_bl_data_point) * pCaps->num_data_points);
 	return true;
 }
-EXPORT_IF_KUNIT(dm_query_extended_brightness_caps);
+EXPORT_SYMBOL_IF_KUNIT(dm_query_extended_brightness_caps);
 
 void*
 dm_allocate_gpu_mem(
