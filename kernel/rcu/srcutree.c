@@ -916,7 +916,6 @@ static void srcu_gp_start(struct srcu_struct *ssp)
 {
 	int state;
 
-	/*&&&&*/pr_alert("%s() start: ->srcu_gp_seq: %lx ->srcu_gp_seq_needed: %lx\n", __func__, ssp->srcu_sup->srcu_gp_seq, ssp->srcu_sup->srcu_gp_seq_needed);
 	lockdep_assert_held(&ACCESS_PRIVATE(ssp->srcu_sup, lock));
 	WARN_ON_ONCE(ULONG_CMP_GE(ssp->srcu_sup->srcu_gp_seq, ssp->srcu_sup->srcu_gp_seq_needed));
 	WRITE_ONCE(ssp->srcu_sup->srcu_gp_start, jiffies);
@@ -2152,7 +2151,6 @@ void synchronize_srcu_atomic(struct srcu_struct *ssp)
 	// OK, we really have to do it ourselves.  Start the grace period.
 	non_block_start();  // We must not voluntarily block!
 	smp_store_release(&sup->srcu_gp_seq_needed, srcu_state); // See srcu_funnel_gp_start().
-	/*&&&&*/pr_alert("%s() start: ->srcu_gp_seq: %lx ->srcu_gp_seq_needed: %lx\n", __func__, ssp->srcu_sup->srcu_gp_seq, ssp->srcu_sup->srcu_gp_seq_needed);
 	ASSERT_EXCLUSIVE_WRITER(ssp->srcu_sup->srcu_gp_seq);
 	srcu_gp_start(ssp);
 	raw_spin_unlock_irq_rcu_node(sup);
@@ -2208,7 +2206,6 @@ void synchronize_srcu_atomic(struct srcu_struct *ssp)
 		cpu_relax();
 		srcu_advance_state(ssp, true);
 	}
-	/*&&&&*/pr_alert("%s() end: ->srcu_gp_seq: %lx ->srcu_gp_seq_needed: %lx\n", __func__, ssp->srcu_sup->srcu_gp_seq, ssp->srcu_sup->srcu_gp_seq_needed);
 	ASSERT_EXCLUSIVE_WRITER(sup->srcu_atomic_gp_flag);
 	atomic_set_release(&sup->srcu_atomic_gp_flag, 0);
 	preempt_enable();
