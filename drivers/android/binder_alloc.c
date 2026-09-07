@@ -325,34 +325,34 @@ static int binder_install_single_page(struct binder_alloc *alloc,
 		goto out;
 	}
 
-	ret = binder_page_insert(alloc, addr, page);
-	switch (ret) {
-	case -EBUSY:
-		/*
-		 * EBUSY is ok. Someone installed the pte first but the
-		 * alloc->pages[index] has not been updated yet. Discard
-		 * our page and look up the one already installed.
-		 */
-		ret = 0;
+	mutex_lock(&alloc->install_mutex);
+
+	/* Someone may have installed it already; check under alloc->lock */
+	spin_lock(&alloc->lock);
+	if (binder_get_installed_page(alloc, index)) {
+		spin_unlock(&alloc->lock);
+		mutex_unlock(&alloc->install_mutex);
 		binder_free_page(page);
-		page = binder_page_lookup(alloc, addr);
-		if (!page) {
-			pr_err("%d: failed to find page at offset %lx\n",
-			       alloc->pid, addr - alloc->vm_start);
-			ret = -ESRCH;
-			break;
-		}
-		fallthrough;
-	case 0:
-		/* Mark page installation complete and safe to use */
-		binder_set_installed_page(alloc, index, page);
-		break;
-	default:
+		ret = 0;
+		goto out;
+	}
+	spin_unlock(&alloc->lock);
+
+	ret = binder_page_insert(alloc, addr, page);
+	if (ret) {
 		binder_free_page(page);
 		pr_err("%d: %s failed to insert page at offset %lx with %d\n",
 		       alloc->pid, __func__, addr - alloc->vm_start, ret);
-		break;
+		mutex_unlock(&alloc->install_mutex);
+		goto out;
 	}
+
+	/* Mark page installation complete under alloc->lock */
+	spin_lock(&alloc->lock);
+	binder_set_installed_page(alloc, index, page);
+	spin_unlock(&alloc->lock);
+
+	mutex_unlock(&alloc->install_mutex);
 out:
 	mmput_async(alloc->mm);
 	return ret;
@@ -1161,6 +1161,14 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 		vma = vma_lookup(mm, page_addr);
 	}
 
+	/*
+	 * Use trylock: the install side may hold install_mutex while its
+	 * vm_insert_page() recurses into reclaim and re-enters this shrinker
+	 * on the same thread, so blocking here would self-deadlock.
+	 */
+	if (!mutex_trylock(&alloc->install_mutex))
+		goto err_get_install_mutex_failed;
+
 	if (!spin_trylock(&alloc->lock))
 		goto err_get_alloc_lock_failed;
 
@@ -1191,6 +1199,8 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 		trace_binder_unmap_user_end(alloc, index);
 	}
 
+	mutex_unlock(&alloc->install_mutex);
+
 	if (mm_locked)
 		mmap_read_unlock(mm);
 	else
@@ -1203,6 +1213,8 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 err_invalid_vma:
 	spin_unlock(&alloc->lock);
 err_get_alloc_lock_failed:
+	mutex_unlock(&alloc->install_mutex);
+err_get_install_mutex_failed:
 	if (mm_locked)
 		mmap_read_unlock(mm);
 	else
@@ -1236,6 +1248,7 @@ VISIBLE_IF_KUNIT void __binder_alloc_init(struct binder_alloc *alloc,
 	alloc->mm = current->mm;
 	mmgrab(alloc->mm);
 	spin_lock_init(&alloc->lock);
+	mutex_init(&alloc->install_mutex);
 	INIT_LIST_HEAD(&alloc->buffers);
 	alloc->freelist = freelist;
 }
