@@ -72,6 +72,7 @@
 #include "memcontrol-v1.h"
 
 #include <linux/uaccess.h>
+#include <linux/irq_work.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/memcg.h>
