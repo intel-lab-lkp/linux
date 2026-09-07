@@ -509,7 +509,7 @@ static inline void cpuhp_online_idle(enum cpuhp_state state) { }
 struct task_struct;
 
 void cpuhp_ap_sync_alive(void);
-void arch_cpuhp_sync_state_poll(void);
+void arch_cpuhp_sync_state_poll(atomic_t *st, int old);
 void arch_cpuhp_cleanup_kick_cpu(unsigned int cpu);
 int arch_cpuhp_kick_ap_alive(unsigned int cpu, struct task_struct *tidle);
 bool arch_cpuhp_init_parallel_bringup(void);

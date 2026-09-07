@@ -303,7 +303,13 @@ static inline void cpuhp_ap_update_sync_state(enum cpuhp_sync_state state)
 	(void)atomic_xchg(st, state);
 }
 
-void __weak arch_cpuhp_sync_state_poll(void) { cpu_relax(); }
+void __weak arch_cpuhp_sync_state_poll(atomic_t *st, int old)
+{
+	if (old < SYNC_STATE_ALIVE)
+		cpu_relax();
+	else
+		atomic_cond_read_relaxed(st, VAL != old);
+}
 
 static bool cpuhp_wait_for_sync_state(unsigned int cpu, enum cpuhp_sync_state state,
 				      enum cpuhp_sync_state next_state)
@@ -328,7 +334,7 @@ static bool cpuhp_wait_for_sync_state(unsigned int cpu, enum cpuhp_sync_state st
 			return false;
 		} else if (now - start < NSEC_PER_MSEC) {
 			/* Poll for one millisecond */
-			arch_cpuhp_sync_state_poll();
+			arch_cpuhp_sync_state_poll(st, sync);
 		} else {
 			usleep_range(USEC_PER_MSEC, 2 * USEC_PER_MSEC);
 		}
@@ -395,8 +401,7 @@ void cpuhp_ap_sync_alive(void)
 	cpuhp_ap_update_sync_state(SYNC_STATE_ALIVE);
 
 	/* Wait for the control CPU to release it. */
-	while (atomic_read(st) != SYNC_STATE_SHOULD_ONLINE)
-		cpu_relax();
+	atomic_cond_read_acquire(st, VAL == SYNC_STATE_SHOULD_ONLINE);
 }
 
 static bool cpuhp_can_boot_ap(unsigned int cpu)

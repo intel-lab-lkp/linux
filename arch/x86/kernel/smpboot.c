@@ -1138,7 +1138,7 @@ void arch_cpuhp_cleanup_dead_cpu(unsigned int cpu)
 		pr_info("CPU %u is now offline\n", cpu);
 }
 
-void arch_cpuhp_sync_state_poll(void)
+void arch_cpuhp_sync_state_poll(atomic_t *st, int old)
 {
 	if (smp_ops.poll_sync_state)
 		smp_ops.poll_sync_state();
