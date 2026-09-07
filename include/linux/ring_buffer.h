@@ -100,6 +100,13 @@ struct trace_buffer *__ring_buffer_alloc_range(unsigned long size, unsigned flag
 void *ring_buffer_meta_scratch(struct trace_buffer *buffer, unsigned int *size);
 
 /*
+ * A minimum of 2 pages ensures we can always swap a page out of the ring
+ * buffer. This does not account for the reader page or any other page
+ * containing meta data used by static ring buffers.
+ */
+#define RING_BUFFER_MIN_NR_PAGES 2UL
+
+/*
  * Because the ring buffer is generic, if other users of the ring buffer get
  * traced by ftrace, it can produce lockdep warnings. We need to keep each
  * ring buffer's lock class separate.
@@ -281,10 +288,15 @@ static inline struct ring_buffer_desc *__first_ring_buffer_desc(struct trace_buf
 	return (struct ring_buffer_desc *)(&desc->__data[0]);
 }
 
+static inline unsigned long __ring_buffer_size_to_desc_pages(size_t size)
+{
+	/* Takes into account the reader page */
+	return max(DIV_ROUND_UP(size, PAGE_SIZE - BUF_PAGE_HDR_SIZE), RING_BUFFER_MIN_NR_PAGES) + 1;
+}
+
 static inline size_t trace_buffer_desc_size(size_t buffer_size, unsigned int nr_cpus)
 {
-	unsigned long nr_pages =
-		max(DIV_ROUND_UP(buffer_size, PAGE_SIZE - BUF_PAGE_HDR_SIZE), 2UL) + 1;
+	unsigned long nr_pages = __ring_buffer_size_to_desc_pages(buffer_size);
 	struct ring_buffer_desc *rbdesc;
 
 	/* Capped by ring_buffer_desc::nr_page_va */

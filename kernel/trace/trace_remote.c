@@ -994,7 +994,7 @@ int trace_remote_alloc_buffer(struct trace_buffer_desc *desc, size_t desc_size, 
 	desc->struct_len = min_desc_size;
 
 	rb_desc = __first_ring_buffer_desc(desc);
-	nr_pages = max(DIV_ROUND_UP(buffer_size, PAGE_SIZE - BUF_PAGE_HDR_SIZE), 2UL) + 1;
+	nr_pages = __ring_buffer_size_to_desc_pages(buffer_size);
 
 	for_each_cpu(cpu, cpumask) {
 		unsigned int id;
