@@ -42,18 +42,34 @@ TEST(unshare_EMFILE)
 
 	ASSERT_EQ(0, getrlimit(RLIMIT_NOFILE, &rlimit));
 
-	/* bump fs.nr_open */
-	n2 = sprintf(buf2, "%d\n", nr_open + 1024);
-	lseek(fd, 0, SEEK_SET);
-	write(fd, buf2, n2);
-
-	/* bump ulimit -n */
-	rlimit.rlim_cur = nr_open + 1024;
-	rlimit.rlim_max = nr_open + 1024;
-	EXPECT_EQ(0, setrlimit(RLIMIT_NOFILE, &rlimit)) {
+	/*
+	 * Only bump fs.nr_open and RLIMIT_NOFILE if nr_open is not already
+	 * at or near INT_MAX. Adding 1024 to INT_MAX would overflow.
+	 */
+	if (nr_open < INT_MAX - 1024) {
+		n2 = sprintf(buf2, "%d\n", nr_open + 1024);
 		lseek(fd, 0, SEEK_SET);
-		write(fd, buf, n);
-		exit(EXIT_FAILURE);
+		write(fd, buf2, n2);
+
+		rlimit.rlim_cur = nr_open + 1024;
+		rlimit.rlim_max = nr_open + 1024;
+		EXPECT_EQ(0, setrlimit(RLIMIT_NOFILE, &rlimit)) {
+			lseek(fd, 0, SEEK_SET);
+			write(fd, buf, n);
+			exit(EXIT_FAILURE);
+		}
+	} else {
+		/*
+		 * If nr_open is already at maximum, use a fallback value
+		 * for RLIMIT_NOFILE that is large enough for the test.
+		 */
+		rlimit.rlim_cur = 1048576;
+		rlimit.rlim_max = 1048576;
+		EXPECT_EQ(0, setrlimit(RLIMIT_NOFILE, &rlimit)) {
+			lseek(fd, 0, SEEK_SET);
+			write(fd, buf, n);
+			exit(EXIT_FAILURE);
+		}
 	}
 
 	/* get a descriptor past the old fs.nr_open */
