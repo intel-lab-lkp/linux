@@ -407,6 +407,9 @@ int plfxlc_mac_rx(struct ieee80211_hw *hw, const u8 *buffer,
 	if (!mac->vif)
 		return 0;
 
+	if (length < sizeof(struct rx_status) + sizeof(u32))
+		return -EINVAL;
+
 	status = (struct rx_status *)buffer;
 
 	memset(&stats, 0, sizeof(stats));
@@ -425,19 +428,19 @@ int plfxlc_mac_rx(struct ieee80211_hw *hw, const u8 *buffer,
 
 	mac->crc_errors = be64_to_cpu(status->crc_error_count);
 
-	/* TODO bad frame check for CRC error*/
-	if (plfxlc_filter_ack(hw, (struct ieee80211_hdr *)buffer, &stats) &&
-	    !mac->pass_ctrl)
-		return 0;
-
 	buffer += sizeof(struct rx_status);
 	payload_length = get_unaligned_be32(buffer);
+	buffer += sizeof(u32);
 
-	if (payload_length > 1560) {
+	if (payload_length > 1560 ||
+	    payload_length + sizeof(struct rx_status) + sizeof(u32) > length) {
 		dev_err(plfxlc_mac_dev(mac), " > MTU %u\n", payload_length);
 		return 0;
 	}
-	buffer += sizeof(u32);
+
+	if (plfxlc_filter_ack(hw, (struct ieee80211_hdr *)buffer, &stats) &&
+	    !mac->pass_ctrl)
+		return 0;
 
 	fc = get_unaligned((__le16 *)buffer);
 	need_padding = ieee80211_is_data_qos(fc) ^ ieee80211_has_a4(fc);

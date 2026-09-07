@@ -117,10 +117,9 @@ static void rx_urb_complete(struct urb *urb)
 	}
 
 	buffer = urb->transfer_buffer;
-	length = le32_to_cpu(*(__le32 *)(buffer + sizeof(struct rx_status)))
-		 + sizeof(u32);
+	length = urb->actual_length;
 
-	if (urb->actual_length != (PLF_MSG_STATUS_OFFSET + 1)) {
+	if (length != (PLF_MSG_STATUS_OFFSET + 1)) {
 		if (usb->initialized && usb->link_up)
 			handle_rx_packet(usb, buffer, length);
 		goto resubmit;
