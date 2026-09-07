@@ -967,9 +967,11 @@ static int cdns_dsi_bridge_atomic_check(struct drm_bridge *bridge,
 	struct videomode vm;
 	long pclk;
 
-	/* cdns-dsi requires negative syncs */
-	adjusted_mode->flags &= ~(DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC);
-	adjusted_mode->flags |= DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC;
+	/* cdns-dsi requires negative syncs, and DE high */
+	adjusted_mode->flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC;
+	bridge_state->input_bus_cfg.flags = DRM_BUS_FLAG_DE_HIGH |
+					    DRM_BUS_FLAG_PIXDATA_DRIVE_POSEDGE |
+					    DRM_BUS_FLAG_SYNC_DRIVE_POSEDGE;
 
 	/*
 	 * The DPHY PLL has quite a coarsely grained clock rate options. See
