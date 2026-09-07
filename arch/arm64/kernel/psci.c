@@ -38,8 +38,8 @@ static int __init cpu_psci_cpu_prepare(unsigned int cpu)
 
 static int cpu_psci_cpu_boot(unsigned int cpu, unsigned long context)
 {
-	phys_addr_t pa_secondary_entry = __pa_symbol(secondary_entry);
-	int err = psci_ops.cpu_on(cpu_logical_map(cpu), pa_secondary_entry,
+	void *entry_va = context ? secondary_entry_with_arg : secondary_entry;
+	int err = psci_ops.cpu_on(cpu_logical_map(cpu), __pa_symbol(entry_va),
 				  context);
 	if (err && err != -EPERM)
 		pr_err("failed to boot CPU%d (%d)\n", cpu, err);

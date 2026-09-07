@@ -335,6 +335,7 @@ SYM_FUNC_END(init_kernel_el)
 	 * cores are held until we're ready for them to initialise.
 	 */
 SYM_FUNC_START(secondary_holding_pen)
+	mov	x19, xzr
 	mov	x0, xzr
 	bl	init_kernel_el			// w0=cpu_boot_mode
 	mrs	x2, mpidr_el1
@@ -354,9 +355,15 @@ SYM_FUNC_END(secondary_holding_pen)
 	 */
 SYM_FUNC_START(secondary_entry)
 	mov	x0, xzr
+	b	secondary_entry_with_arg
+SYM_FUNC_END(secondary_entry)
+
+SYM_FUNC_START(secondary_entry_with_arg)
+	mov	x19, x0
+	mov	x0, xzr
 	bl	init_kernel_el			// w0=cpu_boot_mode
 	b	secondary_startup
-SYM_FUNC_END(secondary_entry)
+SYM_FUNC_END(secondary_entry_with_arg)
 
 SYM_FUNC_START_LOCAL(secondary_startup)
 	/*
@@ -391,10 +398,13 @@ SYM_FUNC_START_LOCAL(__secondary_switched)
 	msr	vbar_el1, x5
 	isb
 
+	mov	x2, x19
+	cbnz	x2, 1f
 	adr_l	x0, secondary_data
 	ldr	x2, [x0, #CPU_BOOT_TASK]
 	cbz	x2, __secondary_too_slow
 
+1:
 	init_cpu_task x2, x1, x3
 
 #ifdef CONFIG_ARM64_PTR_AUTH
