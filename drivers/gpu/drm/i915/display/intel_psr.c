@@ -58,6 +58,7 @@
 #include "intel_vdsc.h"
 #include "intel_vrr.h"
 #include "skl_universal_plane.h"
+#include "skl_universal_plane_regs.h"
 
 /**
  * DOC: Panel Self Refresh (PSR/SRD)
@@ -2162,6 +2163,33 @@ no_err:
 	return true;
 }
 
+/*
+ * A plane disabled while selective fetch was off keeps its selective fetch
+ * enable bit set in hardware. The bit does nothing until selective fetch is
+ * turned back on, at which point the hardware would resume fetching for a
+ * plane that is no longer enabled and keep its DDB range reserved. Drop the
+ * bit for every inactive plane as selective fetch is enabled. The active
+ * planes are programmed by the selective fetch update that follows.
+ */
+static void psr2_sel_fetch_clear_inactive_planes(struct intel_display *display,
+						 const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	enum pipe pipe = crtc->pipe;
+	struct intel_plane *plane;
+
+	for_each_intel_plane_on_crtc(display->drm, crtc, plane) {
+		if (crtc_state->active_planes & BIT(plane->id))
+			continue;
+
+		if (plane->id == PLANE_CURSOR)
+			intel_de_write(display, SEL_FETCH_CUR_CTL(pipe), 0);
+		else
+			intel_de_write(display,
+				       SEL_FETCH_PLANE_CTL(pipe, plane->id), 0);
+	}
+}
+
 static void intel_psr_enable_locked(struct intel_dp *intel_dp,
 				    const struct intel_crtc_state *crtc_state)
 {
@@ -2180,6 +2208,8 @@ static void intel_psr_enable_locked(struct intel_dp *intel_dp,
 	val = usecs_to_jiffies(intel_get_frame_time_us(crtc_state) * 6);
 	intel_dp->psr.dc3co_exit_delay = val;
 	intel_dp->psr.psr2_sel_fetch_enabled = crtc_state->enable_psr2_sel_fetch;
+	if (crtc_state->enable_psr2_sel_fetch)
+		psr2_sel_fetch_clear_inactive_planes(display, crtc_state);
 	intel_dp->psr.su_region_et_enabled = crtc_state->enable_psr2_su_region_et;
 	intel_dp->psr.psr2_sel_fetch_cff_enabled = false;
 	intel_dp->psr.req_psr2_sdp_prior_scanline =
