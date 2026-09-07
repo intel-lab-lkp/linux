@@ -19577,6 +19577,7 @@ M:	Lakshay Piplani <lakshay.piplani@nxp.com>
 L:	linux-rtc@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/rtc/nxp,pcf85053.yaml
+F:	drivers/rtc/rtc-pcf85053.c
 
 NXP SGTL5000 DRIVER
 M:	Fabio Estevam <festevam@gmail.com>
