@@ -557,7 +557,7 @@ static void i5100_check_error(struct mem_ctl_info *mci)
 }
 
 /* The i5100 chipset will scrub the entire memory once, then
- * set a done bit. Continuous scrubbing is achieved by enqueing
+ * set a done bit. Continuous scrubbing is achieved by enqueuing
  * delayed work to a workqueue, checking every few minutes if
  * the scrubbing has completed and if so reinitiating it.
  */
