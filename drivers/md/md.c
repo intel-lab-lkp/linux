@@ -6344,19 +6344,40 @@ static bool mddev_stack_limits_trylock(struct mddev *mddev,
 }
 
 /* update the optimal I/O size after a reshape */
-void mddev_update_io_opt(struct mddev *mddev, unsigned int nr_stripes)
+void mddev_update_io_opt(struct mddev *mddev, unsigned int nr_stripes,
+			 struct queue_limits *lim)
 {
-	struct queue_limits lim;
+	struct queue_limits own;
 
 	if (mddev_is_dm(mddev))
 		return;
 
-	/* don't bother updating io_opt if we can't suspend the array */
-	if (mddev_suspend(mddev, false) < 0)
+	/*
+	 * With an update owned by the caller just change it in place; it is
+	 * committed, and the array resumed, by whoever started it.  Taking
+	 * q->limits_lock here would nest it inside reconfig_mutex and the
+	 * suspend, which deadlocks, see md_start_sync().
+	 */
+	if (lim) {
+		lim->io_opt = lim->io_min * nr_stripes;
 		return;
-	lim = queue_limits_start_update(mddev->gendisk->queue);
-	lim.io_opt = lim.io_min * nr_stripes;
-	queue_limits_commit_update(mddev->gendisk->queue, &lim);
+	}
+
+	/*
+	 * Called from the sync thread, which md_reap_sync_thread() waits for
+	 * with reconfig_mutex held, so don't wait for q->limits_lock here.
+	 * io_opt is a hint, skipping it on a contended pass is fine.
+	 */
+	if (!mddev_stack_limits_trylock(mddev, &own))
+		return;
+
+	/* don't bother updating io_opt if we can't suspend the array */
+	if (mddev_suspend(mddev, false) < 0) {
+		queue_limits_cancel_update(mddev->gendisk->queue);
+		return;
+	}
+	own.io_opt = own.io_min * nr_stripes;
+	queue_limits_commit_update(mddev->gendisk->queue, &own);
 	mddev_resume(mddev);
 }
 EXPORT_SYMBOL_GPL(mddev_update_io_opt);

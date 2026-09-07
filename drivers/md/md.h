@@ -1050,7 +1050,8 @@ int mddev_stack_rdev_limits(struct mddev *mddev, struct queue_limits *lim,
 int mddev_stack_new_rdev(struct mddev *mddev, struct md_rdev *rdev);
 int mddev_stack_rdev_into(struct mddev *mddev, struct md_rdev *rdev,
 			  struct queue_limits *lim);
-void mddev_update_io_opt(struct mddev *mddev, unsigned int nr_stripes);
+void mddev_update_io_opt(struct mddev *mddev, unsigned int nr_stripes,
+			 struct queue_limits *lim);
 
 extern const struct block_device_operations md_fops;
 
