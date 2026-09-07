@@ -521,6 +521,9 @@ void mod_build_hf_vsif_infopacket(const struct dc_stream_state *stream,
 		format = stream->timing.timing_3d_format;
 		if (stream->view_format == VIEW_3D_FORMAT_NONE)
 			format = TIMING_3D_FORMAT_NONE;
+		/* a 2D scanout of a frame the source packed itself */
+		if (format == TIMING_3D_FORMAT_NONE)
+			format = stream->vsif_3d_format;
 
 		if (stream->timing.hdmi_vic != 0
 				&& stream->timing.h_total >= 3840

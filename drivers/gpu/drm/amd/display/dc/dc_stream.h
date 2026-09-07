@@ -235,6 +235,13 @@ struct dc_stream_state {
 
 	enum view_3d_format view_format;
 
+	/**
+	 * @vsif_3d_format: 3D layout announced in the HDMI vendor infoframe when
+	 * the source packs both views into the frame itself and the timing is
+	 * therefore left at TIMING_3D_FORMAT_NONE.
+	 */
+	enum dc_timing_3d_format vsif_3d_format;
+
 	bool use_vsc_sdp_for_colorimetry;
 	bool ignore_msa_timing_param;
 
