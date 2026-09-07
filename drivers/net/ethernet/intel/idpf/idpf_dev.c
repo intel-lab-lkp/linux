@@ -87,7 +87,7 @@ static void idpf_noirq_intr_reg_init(struct idpf_adapter *adapter,
 static void idpf_intr_reg_init(struct idpf_adapter *adapter,
 			       struct idpf_q_vector *q_vector, u16 idx)
 {
-	struct idpf_hw_vector *v = &adapter->irq_info.vectors[idx];
+	struct libie_hw_vector *v = &adapter->irq_info.vectors[idx];
 	struct idpf_intr_reg *intr = &q_vector->intr_reg;
 	struct libie_mmio_info *mmio;
 	u32 rx_itr, tx_itr;
