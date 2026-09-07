@@ -2727,6 +2727,7 @@ struct ieee80211_link_sta {
  * @nan_sched: NAN peer schedule for this station. Valid only for NMI stations.
  * @ext_mld_capa_ops: the MLD's extended MLD capabilities and operations
  *	NOTE: currently only tracked for AP STAs
+ * @smd_params: SMD parameters of the STA
  */
 struct ieee80211_sta {
 	u8 addr[ETH_ALEN] __aligned(2);
@@ -2760,6 +2761,8 @@ struct ieee80211_sta {
 
 	/* should only be accessed with the wiphy mutex held */
 	struct ieee80211_nan_peer_sched *nan_sched;
+
+	struct cfg80211_sta_smd_params smd_params;
 
 	/* must be last */
 	u8 drv_priv[] __aligned(sizeof(void *));
