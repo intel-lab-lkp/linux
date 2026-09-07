@@ -86,6 +86,9 @@ osq_unlink_from_next(struct optimistic_spin_queue *lock, int prev)
 			 * We were the last queued, lock->tail now references
 			 * prev (or is 0 if the list is now empty).
 			 * If prev was spinning in this loop it can continue.
+			 *
+			 * Since we are the tail of the list, node->next
+			 * must be NULL.
 			 */
 			return NULL;
 		}
@@ -122,12 +125,9 @@ osq_unlink_from_next(struct optimistic_spin_queue *lock, int prev)
 
 bool osq_lock(struct optimistic_spin_queue *lock)
 {
-	struct optimistic_spin_node *node = this_cpu_ptr(&osq_node);
-	struct optimistic_spin_node *prev_ptr, *next;
+	struct optimistic_spin_node *node, *prev_ptr, *next;
 	int curr = encode_cpu(smp_processor_id());
 	int prev;
-
-	node->next = NULL;
 
 	/*
 	 * We need both ACQUIRE (pairs with corresponding RELEASE in
@@ -139,6 +139,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	if (prev == OSQ_UNLOCKED_VAL)
 		return true;
 
+	node = this_cpu_ptr(&osq_node);
 	prev_ptr = decode_cpu(prev);
 	node->prev = prev;
 
