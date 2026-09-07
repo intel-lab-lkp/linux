@@ -848,6 +848,25 @@ STATIC_IFN_KUNIT bool adjust_colour_depth_from_display_info(
 }
 EXPORT_IF_KUNIT(adjust_colour_depth_from_display_info);
 
+/*
+ * 3D layout to announce in the HDMI vendor infoframe for a DRM 3D mode. The
+ * stream timing itself stays 2D (see fill_stream_properties_from_drm_display_mode).
+ */
+static enum dc_timing_3d_format amdgpu_dm_vsif_3d_format(unsigned int mode_flags)
+{
+	switch (mode_flags & DRM_MODE_FLAG_3D_MASK) {
+	case DRM_MODE_FLAG_3D_FRAME_PACKING:
+		return TIMING_3D_FORMAT_SW_FRAME_PACKING;
+	case DRM_MODE_FLAG_3D_TOP_AND_BOTTOM:
+		return TIMING_3D_FORMAT_TB_SW_PACKED;
+	case DRM_MODE_FLAG_3D_SIDE_BY_SIDE_HALF:
+	case DRM_MODE_FLAG_3D_SIDE_BY_SIDE_FULL:
+		return TIMING_3D_FORMAT_SBS_SW_PACKED;
+	default:
+		return TIMING_3D_FORMAT_NONE;
+	}
+}
+
 STATIC_IFN_KUNIT void fill_stream_properties_from_drm_display_mode(
 	struct dc_stream_state *stream,
 	const struct drm_display_mode *mode_in,
@@ -884,7 +903,15 @@ STATIC_IFN_KUNIT void fill_stream_properties_from_drm_display_mode(
 	 */
 	timing_out->pixel_encoding = requested_encoding;
 
+	/*
+	 * The source packs both views into the frame itself (side-by-side,
+	 * top-and-bottom, or the doubled frame-packing timing), so the display
+	 * core scans it out as a plain 2D stream and only the HDMI vendor
+	 * infoframe tells the sink how the frame is laid out. Any DC stereo
+	 * timing format would make the hardware treat the surface as two views.
+	 */
 	timing_out->timing_3d_format = TIMING_3D_FORMAT_NONE;
+	stream->vsif_3d_format = amdgpu_dm_vsif_3d_format(mode_in->flags);
 	timing_out->display_color_depth = amdgpu_dm_convert_color_depth_from_display_info(
 		connector,
 		(timing_out->pixel_encoding == PIXEL_ENCODING_YCBCR420),
@@ -989,6 +1016,15 @@ decide_crtc_timing_for_drm_display_mode(struct drm_display_mode *drm_mode,
 					const struct drm_display_mode *native_mode,
 					bool scale_enabled)
 {
+	/*
+	 * A stereo mode has to go out at its own timing: frame packing's CRTC
+	 * timing is the doubled one, and a side-by-side or top-and-bottom mode
+	 * scaled to the native timing would announce a layout the sink cannot
+	 * pair with what it receives.
+	 */
+	if (drm_mode->flags & DRM_MODE_FLAG_3D_MASK)
+		return;
+
 	if (scale_enabled || (
 	    native_mode->clock == drm_mode->clock &&
 	    native_mode->htotal == drm_mode->htotal &&
@@ -1115,6 +1151,10 @@ bool amdgpu_dm_is_freesync_video_mode(const struct drm_display_mode *mode,
 
 	high_mode = amdgpu_dm_get_highest_refresh_rate_mode(aconnector, false);
 	if (!high_mode || !mode)
+		return false;
+
+	/* a stereo mode is never one of the inserted FreeSync video modes */
+	if (mode->flags & DRM_MODE_FLAG_3D_MASK)
 		return false;
 
 	timing_diff = high_mode->vtotal - mode->vtotal;
@@ -1448,6 +1488,9 @@ create_stream_for_sink(struct drm_connector *connector,
 	struct dc_sink *sink = NULL;
 
 	drm_mode_init(&mode, drm_mode);
+	/* frame packing scans out both views plus the active space in one frame */
+	if (mode.flags & DRM_MODE_FLAG_3D_FRAME_PACKING)
+		drm_mode_set_crtcinfo(&mode, CRTC_STEREO_DOUBLE);
 	memset(&saved_mode, 0, sizeof(saved_mode));
 
 	if (connector->connector_type != DRM_MODE_CONNECTOR_WRITEBACK) {
@@ -1527,7 +1570,9 @@ create_stream_for_sink(struct drm_connector *connector,
 	}
 
 	if (recalculate_timing)
-		drm_mode_set_crtcinfo(&saved_mode, 0);
+		drm_mode_set_crtcinfo(&saved_mode,
+				      (saved_mode.flags & DRM_MODE_FLAG_3D_FRAME_PACKING) ?
+				      CRTC_STEREO_DOUBLE : 0);
 
 	/*
 	 * If scaling is enabled and refresh rate didn't change
@@ -2493,7 +2538,9 @@ enum drm_mode_status amdgpu_dm_connector_mode_valid(struct drm_connector *connec
 	if (!test_mode)
 		goto fail;
 
-	drm_mode_set_crtcinfo(test_mode, 0);
+	drm_mode_set_crtcinfo(test_mode,
+			      (test_mode->flags & DRM_MODE_FLAG_3D_FRAME_PACKING) ?
+			      CRTC_STEREO_DOUBLE : 0);
 
 	stream = amdgpu_dm_create_validate_stream_for_sink(connector, test_mode,
 						 to_dm_connector_state(connector->state),
@@ -3188,7 +3235,8 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 	aconnector->dc_link = link;
 	aconnector->base.interlace_allowed = false;
 	aconnector->base.doublescan_allowed = false;
-	aconnector->base.stereo_allowed = false;
+	/* HDMI 1.4 3D only; DP-to-HDMI converters reject the timings in link validation */
+	aconnector->base.stereo_allowed = connector_type == DRM_MODE_CONNECTOR_HDMIA;
 	aconnector->base.dpms = DRM_MODE_DPMS_OFF;
 	aconnector->hpd.hpd = AMDGPU_HPD_NONE; /* not used */
 	aconnector->audio_inst = -1;

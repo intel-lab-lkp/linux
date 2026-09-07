@@ -1427,6 +1427,46 @@ static void dm_test_decide_crtc_timing_no_crtc_clock(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, drm_mode.crtc_hdisplay, 0);
 }
 
+/**
+ * dm_test_decide_crtc_timing_keeps_stereo_mode - A stereo mode keeps its own CRTC timing
+ * @test: The KUnit test context
+ */
+static void dm_test_decide_crtc_timing_keeps_stereo_mode(struct kunit *test)
+{
+	struct drm_display_mode drm_mode = {};
+	struct drm_display_mode native_mode = {};
+
+	/* The native mode is the 2D twin of the frame-packed one: same base timing ... */
+	native_mode.clock = 74250;
+	native_mode.htotal = 2750;
+	native_mode.vtotal = 1125;
+	native_mode.crtc_clock = 74250;
+	native_mode.crtc_hdisplay = 1920;
+	native_mode.crtc_vdisplay = 1080;
+	native_mode.crtc_htotal = 2750;
+	native_mode.crtc_vtotal = 1125;
+
+	/* ... so it matches, but the stereo mode's CRTC timing is the doubled one and must stay */
+	drm_mode.clock = 74250;
+	drm_mode.hdisplay = 1920;
+	drm_mode.vdisplay = 1080;
+	drm_mode.hsync_start = 2558;
+	drm_mode.hsync_end = 2602;
+	drm_mode.htotal = 2750;
+	drm_mode.vsync_start = 1084;
+	drm_mode.vsync_end = 1089;
+	drm_mode.vtotal = 1125;
+	drm_mode.flags = DRM_MODE_FLAG_3D_FRAME_PACKING;
+	drm_mode_set_crtcinfo(&drm_mode, CRTC_STEREO_DOUBLE);
+	KUNIT_ASSERT_EQ(test, drm_mode.crtc_vdisplay, 2205);
+
+	decide_crtc_timing_for_drm_display_mode(&drm_mode, &native_mode, false);
+
+	KUNIT_EXPECT_EQ(test, drm_mode.crtc_vdisplay, 2205);
+	KUNIT_EXPECT_EQ(test, drm_mode.crtc_vtotal, 2250);
+	KUNIT_EXPECT_EQ(test, drm_mode.crtc_clock, 148500);
+}
+
 /* Tests for amdgpu_dm_connector_funcs_reset() */
 
 static const struct drm_connector_funcs dm_test_connector_funcs = {
@@ -2170,6 +2210,44 @@ static void dm_test_is_freesync_video_mode_match(struct kunit *test)
 	candidate.vtotal = 1125;
 
 	KUNIT_EXPECT_TRUE(test, amdgpu_dm_is_freesync_video_mode(&candidate, aconnector));
+}
+
+/**
+ * dm_test_is_freesync_video_mode_rejects_stereo - A stereo mode with matching timing returns false
+ * @test: The KUnit test context
+ */
+static void dm_test_is_freesync_video_mode_rejects_stereo(struct kunit *test)
+{
+	struct amdgpu_dm_connector *aconnector;
+	struct drm_display_mode candidate = {};
+
+	aconnector = kunit_kzalloc(test, sizeof(*aconnector), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, aconnector);
+
+	/* Cached high mode acts as reference */
+	aconnector->base.connector_type = DRM_MODE_CONNECTOR_HDMIA;
+	aconnector->freesync_vid_base.clock = 148500;
+	aconnector->freesync_vid_base.hdisplay = 1920;
+	aconnector->freesync_vid_base.vdisplay = 1080;
+	aconnector->freesync_vid_base.hsync_start = 2008;
+	aconnector->freesync_vid_base.hsync_end = 2052;
+	aconnector->freesync_vid_base.htotal = 2200;
+	aconnector->freesync_vid_base.vsync_start = 1084;
+	aconnector->freesync_vid_base.vsync_end = 1089;
+	aconnector->freesync_vid_base.vtotal = 1125;
+
+	candidate.clock = 148500;
+	candidate.hdisplay = 1920;
+	candidate.vdisplay = 1080;
+	candidate.hsync_start = 2008;
+	candidate.hsync_end = 2052;
+	candidate.htotal = 2200;
+	candidate.vsync_start = 1084;
+	candidate.vsync_end = 1089;
+	candidate.vtotal = 1125;
+	candidate.flags = DRM_MODE_FLAG_3D_SIDE_BY_SIDE_HALF;
+
+	KUNIT_EXPECT_FALSE(test, amdgpu_dm_is_freesync_video_mode(&candidate, aconnector));
 }
 
 /**
@@ -5481,6 +5559,7 @@ static struct kunit_case amdgpu_dm_connector_tests[] = {
 	KUNIT_CASE(dm_test_decide_crtc_timing_matching_mode),
 	KUNIT_CASE(dm_test_decide_crtc_timing_no_copy),
 	KUNIT_CASE(dm_test_decide_crtc_timing_no_crtc_clock),
+	KUNIT_CASE(dm_test_decide_crtc_timing_keeps_stereo_mode),
 	/* amdgpu_dm_connector_funcs_reset */
 	KUNIT_CASE(dm_test_funcs_reset_sets_defaults),
 	KUNIT_CASE(dm_test_funcs_reset_edp_abm_level),
@@ -5521,6 +5600,7 @@ static struct kunit_case amdgpu_dm_connector_tests[] = {
 	KUNIT_CASE(dm_test_is_freesync_video_mode_null_mode),
 	KUNIT_CASE(dm_test_is_freesync_video_mode_match),
 	KUNIT_CASE(dm_test_is_freesync_video_mode_no_match),
+	KUNIT_CASE(dm_test_is_freesync_video_mode_rejects_stereo),
 	/* update_subconnector_property */
 	KUNIT_CASE(dm_test_update_subconnector_dp_with_sink),
 	KUNIT_CASE(dm_test_update_subconnector_dp_no_sink),
