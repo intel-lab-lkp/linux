@@ -9,6 +9,7 @@
 MODULE_DESCRIPTION("Intel(R) Control Plane Function Device Driver");
 MODULE_IMPORT_NS("LIBIE_CP");
 MODULE_IMPORT_NS("LIBIE_PCI");
+MODULE_IMPORT_NS("LIBIE_IRQ");
 MODULE_LICENSE("GPL");
 
 /**
@@ -28,6 +29,7 @@ static void ixd_remove(struct pci_dev *pdev)
 	if (adapter->xnm)
 		libie_ctlq_xn_shutdown(adapter->xnm);
 	ixd_trigger_reset(adapter);
+	ixd_deinit_interrupts(adapter);
 	ixd_deinit_dflt_mbx(adapter);
 
 	libie_pci_unmap_all_mmio_regions(&adapter->cp_ctx.mmio_info);
