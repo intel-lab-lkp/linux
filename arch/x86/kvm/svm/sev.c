@@ -40,7 +40,9 @@
 #define GHCB_VERSION_MAX	2ULL
 #define GHCB_VERSION_MIN	1ULL
 
-#define GHCB_HV_FT_SUPPORTED	(GHCB_HV_FT_SNP | GHCB_HV_FT_SNP_AP_CREATION)
+#define GHCB_HV_FT_SUPPORTED	(GHCB_HV_FT_SNP | \
+				 GHCB_HV_FT_SNP_AP_CREATION | \
+				 GHCB_HV_FT_APIC_ID_LIST)
 
 /*
  * The GHCB spec essentially states that all non-zero error codes other than
@@ -3493,7 +3495,8 @@ static bool sev_es_are_required_ghcb_fields_valid(struct vcpu_svm *svm)
 	case SVM_VMGEXIT_AP_CREATION:
 		return kvm_ghcb_rax_is_valid(svm) ||
 		       lower_32_bits(control->exit_info_1) == SVM_VMGEXIT_AP_DESTROY;
-		break;
+	case SVM_VMGEXIT_GET_APIC_IDS:
+		return kvm_ghcb_rax_is_valid(svm);
 	case SVM_VMGEXIT_MMIO_READ:
 	case SVM_VMGEXIT_MMIO_WRITE:
 	case SVM_VMGEXIT_PSC:
@@ -4215,6 +4218,63 @@ static int sev_snp_ap_creation(struct vcpu_svm *svm)
 	return 0;
 }
 
+struct sev_apic_id_desc {
+	u32 num_entries;
+	u32 apic_ids[];
+};
+
+static int sev_snp_get_apic_ids(struct vcpu_svm *svm)
+{
+	struct kvm_vcpu *vcpu = &svm->vcpu;
+	struct kvm *kvm = vcpu->kvm;
+	struct sev_apic_id_desc *desc;
+	unsigned int nr_vcpus, size;
+	unsigned int i;
+	gpa_t gpa, end_gpa;
+	u64 pages;
+
+	nr_vcpus = atomic_read(&kvm->online_vcpus);
+	size = sizeof(*desc) + (nr_vcpus * sizeof(desc->apic_ids[0]));
+
+	pages = vcpu->arch.regs[VCPU_REGS_RAX];
+	if (pages < PFN_UP(size)) {
+		vcpu->arch.regs[VCPU_REGS_RAX] = PFN_UP(size);
+		return 1;
+	}
+
+	gpa = svm->vmcb->control.exit_info_1;
+	if (!PAGE_ALIGNED(gpa) ||
+	    check_add_overflow(gpa, size - 1, &end_gpa) ||
+	    !page_address_valid(vcpu, gpa) ||
+	    !page_address_valid(vcpu, end_gpa & PAGE_MASK))
+		goto invalid_buffer;
+
+	desc = kvzalloc(size, GFP_KERNEL_ACCOUNT);
+	if (!desc)
+		return -ENOMEM;
+
+	desc->num_entries = nr_vcpus;
+	for (i = 0; i < nr_vcpus; i++) {
+		struct kvm_vcpu *listed_vcpu = kvm_get_vcpu(kvm, i);
+
+		if (WARN_ON_ONCE(!listed_vcpu))
+			goto invalid_buffer_free;
+		desc->apic_ids[i] = listed_vcpu->vcpu_id;
+	}
+
+	if (kvm_write_guest(kvm, gpa, desc, size))
+		goto invalid_buffer_free;
+
+	kvfree(desc);
+	return 1;
+
+invalid_buffer_free:
+	kvfree(desc);
+invalid_buffer:
+	svm_vmgexit_bad_input(svm, GHCB_ERR_INVALID_INPUT);
+	return 1;
+}
+
 static int snp_handle_guest_req(struct vcpu_svm *svm, gpa_t req_gpa, gpa_t resp_gpa)
 {
 	struct sev_data_snp_guest_request data = {0};
@@ -4494,6 +4554,7 @@ static bool is_snp_only_vmgexit(u64 exit_code)
 {
 	switch (exit_code) {
 	case SVM_VMGEXIT_AP_CREATION:
+	case SVM_VMGEXIT_GET_APIC_IDS:
 	case SVM_VMGEXIT_GUEST_REQUEST:
 	case SVM_VMGEXIT_EXT_GUEST_REQUEST:
 	case SVM_VMGEXIT_PSC:
@@ -4665,6 +4726,8 @@ int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 		if (sev_snp_ap_creation(svm))
 			svm_vmgexit_bad_input(svm, GHCB_ERR_INVALID_INPUT);
 		return 1;
+	case SVM_VMGEXIT_GET_APIC_IDS:
+		return sev_snp_get_apic_ids(svm);
 	case SVM_VMGEXIT_GUEST_REQUEST:
 	case SVM_VMGEXIT_EXT_GUEST_REQUEST:
 		if (!PAGE_ALIGNED(control->exit_info_1) ||
