@@ -611,6 +611,7 @@ struct joycon_ctlr {
 	unsigned int consecutive_valid_report_deltas;
 	unsigned int subcmd_rate_exhaustions;
 	bool subcmd_rate_relaxed;
+	bool subcmd_rate_unproven;
 
 	/* factory calibration data */
 	struct joycon_stick_cal left_stick_cal_x;
@@ -917,7 +918,7 @@ static void joycon_enforce_subcmd_rate_legacy(struct joycon_ctlr *ctlr)
 
 static void joycon_enforce_subcmd_rate(struct joycon_ctlr *ctlr)
 {
-	if (ctlr->subcmd_rate_relaxed)
+	if (ctlr->subcmd_rate_relaxed || READ_ONCE(ctlr->subcmd_rate_unproven))
 		joycon_enforce_subcmd_rate_legacy(ctlr);
 	else
 		joycon_enforce_subcmd_rate_strict(ctlr);
@@ -1797,8 +1798,11 @@ static void joycon_parse_report(struct joycon_ctlr *ctlr,
 	 */
 	if (report_delta_ms >= JC_INPUT_REPORT_MIN_DELTA &&
 	    report_delta_ms <= JC_INPUT_REPORT_MAX_DELTA) {
-		if (ctlr->consecutive_valid_report_deltas < JC_SUBCMD_VALID_DELTA_REQ)
+		if (ctlr->consecutive_valid_report_deltas < JC_SUBCMD_VALID_DELTA_REQ) {
 			ctlr->consecutive_valid_report_deltas++;
+			if (ctlr->consecutive_valid_report_deltas == JC_SUBCMD_VALID_DELTA_REQ)
+				WRITE_ONCE(ctlr->subcmd_rate_unproven, false);
+		}
 	} else {
 		ctlr->consecutive_valid_report_deltas = 0;
 	}
@@ -2730,6 +2734,7 @@ static int nintendo_hid_probe(struct hid_device *hdev,
 
 	ctlr->hdev = hdev;
 	ctlr->ctlr_state = JOYCON_CTLR_STATE_INIT;
+	ctlr->subcmd_rate_unproven = hdev->bus != BUS_USB;
 	ctlr->rumble_queue_head = 0;
 	ctlr->rumble_queue_tail = 0;
 	hid_set_drvdata(hdev, ctlr);
