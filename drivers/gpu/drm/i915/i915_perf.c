@@ -3900,14 +3900,24 @@ i915_perf_open_ioctl_locked(struct i915_perf *perf,
 	if (param->flags & I915_PERF_FLAG_FD_NONBLOCK)
 		f_flags |= O_NONBLOCK;
 
+	/*
+	 * Enable the stream before installing the fd. Once the fd is visible
+	 * to userspace, file operations can run concurrently with this thread
+	 * and they only take stream->lock, which is not held here. In
+	 * particular, an I915_PERF_IOCTL_DISABLE racing with the middle of
+	 * i915_perf_enable_locked() could clear stream->enabled and cancel a
+	 * poll timer that has not been started yet, leaving the stream with
+	 * enabled == false and the timer armed. Nothing would then cancel that
+	 * timer before the stream is freed on release.
+	 */
+	if (!(param->flags & I915_PERF_FLAG_DISABLED))
+		i915_perf_enable_locked(stream);
+
 	stream_fd = anon_inode_getfd("[i915_perf]", &fops, stream, f_flags);
 	if (stream_fd < 0) {
 		ret = stream_fd;
-		goto err_flags;
+		goto err_enable;
 	}
-
-	if (!(param->flags & I915_PERF_FLAG_DISABLED))
-		i915_perf_enable_locked(stream);
 
 	/* Take a reference on the driver that will be kept with stream_fd
 	 * until its release.
@@ -3916,6 +3926,8 @@ i915_perf_open_ioctl_locked(struct i915_perf *perf,
 
 	return stream_fd;
 
+err_enable:
+	i915_perf_disable_locked(stream);
 err_flags:
 	if (stream->ops->destroy)
 		stream->ops->destroy(stream);
