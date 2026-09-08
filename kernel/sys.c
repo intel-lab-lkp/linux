@@ -60,6 +60,7 @@
 #include <linux/sched/stat.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/coredump.h>
+#include <linux/sched/numa_balancing.h>
 #include <linux/sched/task.h>
 #include <linux/sched/cputime.h>
 #include <linux/rcupdate.h>
@@ -2906,6 +2907,23 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 			break;
 		if (arg3 & PR_CFI_LOCK && !(arg3 & PR_CFI_DISABLE))
 			error = arch_prctl_lock_branch_landing_pad_state(me);
+		break;
+	case PR_SET_NUMA_BALANCING:
+		if (arg3 || arg4 || arg5)
+			return -EINVAL;
+		if (arg2 != PR_NUMA_BALANCING_DISABLE &&
+		    arg2 != PR_NUMA_BALANCING_ENABLE)
+			return -EINVAL;
+		error = task_numa_balancing_set_current(arg2 ==
+							 PR_NUMA_BALANCING_ENABLE);
+		break;
+	case PR_GET_NUMA_BALANCING:
+		if (arg2 || arg3 || arg4 || arg5)
+			return -EINVAL;
+		error = task_numa_balancing_get_current();
+		if (error >= 0)
+			error = error ? PR_NUMA_BALANCING_ENABLE :
+				PR_NUMA_BALANCING_DISABLE;
 		break;
 	default:
 		trace_task_prctl_unknown(option, arg2, arg3, arg4, arg5);
