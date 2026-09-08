@@ -6,6 +6,12 @@ GENERIC_VDSO_DIR := $(dir $(GENERIC_VDSO_MK_PATH))
 c-gettimeofday-$(CONFIG_GENERIC_GETTIMEOFDAY) := $(addprefix $(GENERIC_VDSO_DIR), gettimeofday.c)
 c-getrandom-$(CONFIG_VDSO_GETRANDOM) := $(addprefix $(GENERIC_VDSO_DIR), getrandom.c)
 
+ifeq ($(CONFIG_RUST_IS_AVAILABLE)$(CONFIG_VDSO_CHECK),yy)
+vdsocheck := lib/vdso/check/vdsocheck
+else
+vdsocheck :=
+endif
+
 # This cmd checks that the vdso library does not contain dynamic relocations.
 # It has to be called after the linking of the vdso library and requires it
 # as a parameter.
@@ -13,6 +19,14 @@ c-getrandom-$(CONFIG_VDSO_GETRANDOM) := $(addprefix $(GENERIC_VDSO_DIR), getrand
 # As a workaround for some GNU ld ports which produce unneeded R_*_NONE
 # dynamic relocations, ignore R_*_NONE.
 quiet_cmd_vdso_check = VDSOCHK $@
+ifneq ($(vdsocheck),)
+      cmd_vdso_check = $(vdsocheck) $(filter %.o, $(real-prereqs)) $@
+else
       cmd_vdso_check = if $(READELF) -rW $@ | grep -v _NONE | grep -q " R_\w*_"; \
 		       then (echo >&2 "$@: dynamic relocations are not supported"; \
 			     rm -f $@; /bin/false); fi
+endif
+
+# Variant of cmd_ld which does not try to link the vdsocheck tool.
+quiet_cmd_ld_vdso = VDSOLD $@
+      cmd_ld_vdso = $(LD) $(ld_flags) $(filter-out $(vdsocheck), $(real-prereqs)) -o $@

@@ -1560,6 +1560,25 @@ vdso_install:
 	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.vdsoinst
 
 # ---------------------------------------------------------------------------
+# vDSO check
+
+ifdef CONFIG_RUST_IS_AVAILABLE
+ifdef CONFIG_VDSO_CHECK
+
+# Build the checker early.
+prepare: vdsocheck
+
+# If the architecture builds the vDSO early, make sure to be earlier.
+PHONY += vdso_prepare
+vdso_prepare: vdsocheck
+
+PHONY += vdsocheck
+vdsocheck:
+	$(Q)$(MAKE) $(build)=lib/vdso/check $@
+endif
+endif
+
+# ---------------------------------------------------------------------------
 # Tools
 
 ifdef CONFIG_OBJTOOL
