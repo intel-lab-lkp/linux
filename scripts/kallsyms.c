@@ -5,7 +5,10 @@
  * This software may be used and distributed according to the terms
  * of the GNU General Public License, incorporated herein by reference.
  *
- * Usage: kallsyms [--all-symbols] in.map > out.S
+ * Usage: kallsyms [--all-symbols] [--pc-relative] in.map out.bin > out.S
+ *
+ *      The byte tables go to out.bin and are pulled into out.S with .incbin;
+ *  wider tables stay assembler source for endianness and relocations.
  *
  *      Table compression uses all the unused char codes on the symbols and
  *  maps these to the most used substrings (tokens). For instance, it might
@@ -102,7 +105,7 @@ static void sym_arr_free(struct sym_arr *arr)
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: kallsyms [--all-symbols] in.map > out.S\n");
+	fprintf(stderr, "Usage: kallsyms [--all-symbols] [--pc-relative] in.map out.bin > out.S\n");
 	exit(1);
 }
 
@@ -319,6 +322,40 @@ static void output_label(const char *label)
 	printf("%s:\n", label);
 }
 
+static void write_bin(FILE *file, const void *data, size_t len)
+{
+	if (fwrite(data, 1, len, file) == len)
+		return;
+
+	perror("kallsyms: write");
+	exit(EXIT_FAILURE);
+}
+
+static void write_byte_bin(FILE *file, unsigned char byte)
+{
+	write_bin(file, &byte, 1);
+}
+
+static long bin_pos(FILE *file)
+{
+	const long pos = ftell(file);
+
+	if (pos < 0) {
+		perror("kallsyms: ftell");
+		exit(EXIT_FAILURE);
+	}
+
+	return pos;
+}
+
+static void write_incbin(const char *filename, long start, long end)
+{
+	if (start >= end)
+		return;
+
+	printf("\t.incbin \"%s\", %ld, %ld\n", filename, start, end - start);
+}
+
 /* uncompress a compressed symbol. When this function is called, the best table
  * might still be compressed itself, so the function needs to be recursive */
 static int expand_symbol(const unsigned char *data, int len, char *result)
@@ -371,11 +408,12 @@ static void sort_symbols_by_name(void)
 	qsort(table, table_cnt, sizeof(table[0]), compare_names);
 }
 
-static void write_src(void)
+static void write_src(FILE *out_bin_file, const char *out_bin_name)
 {
-	unsigned int i, k, off;
+	unsigned int i, off;
 	unsigned int best_idx[256];
 	unsigned int *markers, markers_cnt;
+	long bin_start;
 	char buf[KSYM_NAME_LEN];
 
 	printf("\t.section .rodata, \"a\"\n");
@@ -390,6 +428,7 @@ static void write_src(void)
 	markers = xmalloc(sizeof(*markers) * markers_cnt);
 
 	output_label("kallsyms_names");
+	bin_start = bin_pos(out_bin_file);
 	off = 0;
 	for (i = 0; i < table_cnt; i++) {
 		if ((i & 0xFF) == 0)
@@ -413,26 +452,24 @@ static void write_src(void)
 		/* Encode length with ULEB128. */
 		if (table[i]->len <= 0x7F) {
 			/* Most symbols use a single byte for the length. */
-			printf("\t.byte 0x%02x", table[i]->len);
+			write_byte_bin(out_bin_file, table[i]->len);
 			off += table[i]->len + 1;
 		} else {
 			/* "Big" symbols use two bytes. */
-			printf("\t.byte 0x%02x, 0x%02x",
-				(table[i]->len & 0x7F) | 0x80,
-				(table[i]->len >> 7) & 0x7F);
+			write_byte_bin(out_bin_file, (table[i]->len & 0x7F) | 0x80);
+			write_byte_bin(out_bin_file, (table[i]->len >> 7) & 0x7F);
 			off += table[i]->len + 2;
 		}
-		for (k = 0; k < table[i]->len; k++)
-			printf(", 0x%02x", table[i]->sym[k]);
+		write_bin(out_bin_file, table[i]->sym, table[i]->len);
 
 		/*
 		 * Now that we wrote out the compressed symbol name, restore the
-		 * original name and print it in the comment.
+		 * original name for the comments below.
 		 */
 		expand_symbol(table[i]->sym, table[i]->len, buf);
 		strcpy((char *)table[i]->sym, buf);
-		printf("\t/* %s */\n", table[i]->sym);
 	}
+	write_incbin(out_bin_name, bin_start, bin_pos(out_bin_file));
 	printf(".size kallsyms_names, . - kallsyms_names\n");
 	printf("\n");
 
@@ -445,13 +482,15 @@ static void write_src(void)
 	free(markers);
 
 	output_label("kallsyms_token_table");
+	bin_start = bin_pos(out_bin_file);
 	off = 0;
 	for (i = 0; i < 256; i++) {
 		best_idx[i] = off;
 		expand_symbol(best_table[i], best_table_len[i], buf);
-		printf("\t.asciz\t\"%s\"\n", buf);
+		write_bin(out_bin_file, buf, strlen(buf) + 1);
 		off += strlen(buf) + 1;
 	}
+	write_incbin(out_bin_name, bin_start, bin_pos(out_bin_file));
 	printf(".size kallsyms_token_table, . - kallsyms_token_table\n");
 	printf("\n");
 
@@ -484,12 +523,13 @@ static void write_src(void)
 
 	sort_symbols_by_name();
 	output_label("kallsyms_seqs_of_names");
-	for (i = 0; i < table_cnt; i++)
-		printf("\t.byte 0x%02x, 0x%02x, 0x%02x\t/* %s */\n",
-			(unsigned char)(table[i]->seq >> 16),
-			(unsigned char)(table[i]->seq >> 8),
-			(unsigned char)(table[i]->seq >> 0),
-		       table[i]->sym);
+	bin_start = bin_pos(out_bin_file);
+	for (i = 0; i < table_cnt; i++) {
+		write_byte_bin(out_bin_file, table[i]->seq >> 16);
+		write_byte_bin(out_bin_file, table[i]->seq >> 8);
+		write_byte_bin(out_bin_file, table[i]->seq >> 0);
+	}
+	write_incbin(out_bin_name, bin_start, bin_pos(out_bin_file));
 	printf("\n");
 }
 
@@ -798,6 +838,9 @@ static void sort_symbols(void)
 
 int main(int argc, char **argv)
 {
+	const char *out_bin_name;
+	FILE *out_bin_file;
+
 	while (1) {
 		static const struct option long_options[] = {
 			{"all-symbols",     no_argument, &all_symbols,     1},
@@ -813,14 +856,26 @@ int main(int argc, char **argv)
 			usage();
 	}
 
-	if (optind >= argc)
+	if (optind + 2 != argc)
 		usage();
+
+	out_bin_name = argv[optind + 1];
+	out_bin_file = fopen(out_bin_name, "w");
+	if (!out_bin_file) {
+		perror(out_bin_name);
+		exit(EXIT_FAILURE);
+	}
 
 	read_map(argv[optind]);
 	shrink_table();
 	sort_symbols();
 	optimize_token_table();
-	write_src();
+	write_src(out_bin_file, out_bin_name);
+
+	if (fclose(out_bin_file)) {
+		perror(out_bin_name);
+		exit(EXIT_FAILURE);
+	}
 
 	return 0;
 }
