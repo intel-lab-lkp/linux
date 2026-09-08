@@ -26,6 +26,7 @@
 #include <list.h>
 #include <xalloc.h>
 #include "modpost.h"
+#include "module-offsets.h"
 #include "../../include/linux/license.h"
 
 #define MODULE_NS_PREFIX "module:"
@@ -1920,39 +1921,6 @@ static void check_modname_len(struct module *mod)
 		mod_error(mod, "module name is too long\n");
 }
 
-/**
- * Header for the generated file
- **/
-static void add_header(struct buffer *b, struct module *mod)
-{
-	buf_printf(b, "#include <linux/module.h>\n");
-	buf_printf(b, "#include <linux/export-internal.h>\n");
-	buf_printf(b, "#include <linux/compiler.h>\n");
-	buf_printf(b, "\n");
-	buf_printf(b, "MODULE_INFO(name, KBUILD_MODNAME);\n");
-	buf_printf(b, "\n");
-	buf_printf(b, "__visible struct module __this_module\n");
-	buf_printf(b, "__section(\".gnu.linkonce.this_module\") = {\n");
-	buf_printf(b, "\t.name = KBUILD_MODNAME,\n");
-	if (mod->has_init)
-		buf_printf(b, "\t.init = init_module,\n");
-	if (mod->has_cleanup)
-		buf_printf(b, "#ifdef CONFIG_MODULE_UNLOAD\n"
-			      "\t.exit = cleanup_module,\n"
-			      "#endif\n");
-	buf_printf(b, "\t.arch = MODULE_ARCH_INIT,\n");
-	buf_printf(b, "};\n");
-
-	if (!external_module)
-		buf_printf(b, "\nMODULE_INFO(intree, \"Y\");\n");
-
-	if (strstarts(mod->name, "drivers/staging"))
-		buf_printf(b, "\nMODULE_INFO(staging, \"Y\");\n");
-
-	if (strstarts(mod->name, "tools/testing"))
-		buf_printf(b, "\nMODULE_INFO(test, \"Y\");\n");
-}
-
 static void add_exported_symbols(struct buffer *buf, struct module *mod)
 {
 	struct symbol *sym;
@@ -1987,123 +1955,6 @@ static void add_exported_symbols(struct buffer *buf, struct module *mod)
 
 		buf_printf(buf, "SYMBOL_CRC(%s, 0x%08x);\n",
 			   sym->name, sym->crc);
-	}
-}
-
-/**
- * Record CRCs for unresolved symbols, supporting long names
- */
-static void add_extended_versions(struct buffer *b, struct module *mod)
-{
-	struct symbol *s;
-
-	if (!extended_modversions)
-		return;
-
-	buf_printf(b, "\n");
-	buf_printf(b, "static const u32 ____version_ext_crcs[]\n");
-	buf_printf(b, "__used __section(\"__version_ext_crcs\") = {\n");
-	list_for_each_entry(s, &mod->unresolved_symbols, list) {
-		if (!s->module)
-			continue;
-		if (!s->crc_valid) {
-			mod_warn(mod, "symbol '%s' has no CRC!\n", s->name);
-			continue;
-		}
-		buf_printf(b, "\t0x%08x,\n", s->crc);
-	}
-	buf_printf(b, "};\n");
-
-	buf_printf(b, "static const char ____version_ext_names[]\n");
-	buf_printf(b, "__used __section(\"__version_ext_names\") =\n");
-	list_for_each_entry(s, &mod->unresolved_symbols, list) {
-		if (!s->module)
-			continue;
-		if (!s->crc_valid)
-			/*
-			 * We already warned on this when producing the crc
-			 * table.
-			 * We need to skip its name too, as the indexes in
-			 * both tables need to align.
-			 */
-			continue;
-		buf_printf(b, "\t\"%s\\0\"\n", s->name);
-	}
-	buf_printf(b, ";\n");
-}
-
-/**
- * Record CRCs for unresolved symbols
- **/
-static void add_versions(struct buffer *b, struct module *mod)
-{
-	struct symbol *s;
-
-	if (!basic_modversions)
-		return;
-
-	buf_printf(b, "\n");
-	buf_printf(b, "static const struct modversion_info ____versions[]\n");
-	buf_printf(b, "__used __section(\"__versions\") = {\n");
-
-	list_for_each_entry(s, &mod->unresolved_symbols, list) {
-		if (!s->module)
-			continue;
-		if (!s->crc_valid) {
-			mod_warn(mod, "symbol '%s' has no CRC!\n", s->name);
-			continue;
-		}
-		if (strlen(s->name) >= MODULE_NAME_LEN) {
-			if (extended_modversions) {
-				/* this symbol will only be in the extended info */
-				continue;
-			} else {
-				mod_error(mod, "too long symbol '%s'\n", s->name);
-				break;
-			}
-		}
-		buf_printf(b, "\t{ 0x%08x, \"%s\" },\n",
-			   s->crc, s->name);
-	}
-
-	buf_printf(b, "};\n");
-}
-
-static void add_depends(struct buffer *b, struct module *mod)
-{
-	struct symbol *s;
-	int first = 1;
-
-	/* Clear ->seen flag of modules that own symbols needed by this. */
-	list_for_each_entry(s, &mod->unresolved_symbols, list) {
-		if (s->module)
-			s->module->seen = s->module->is_vmlinux;
-	}
-
-	buf_printf(b, "\n");
-	buf_printf(b, "MODULE_INFO(depends, \"");
-	list_for_each_entry(s, &mod->unresolved_symbols, list) {
-		const char *p;
-		if (!s->module)
-			continue;
-
-		if (s->module->seen)
-			continue;
-
-		s->module->seen = true;
-		p = get_basename(s->module->name);
-		buf_printf(b, "%s%s", first ? "" : ",", p);
-		first = 0;
-	}
-	buf_printf(b, "\");\n");
-}
-
-static void add_srcversion(struct buffer *b, struct module *mod)
-{
-	if (mod->srcversion[0]) {
-		buf_printf(b, "\n");
-		buf_printf(b, "MODULE_INFO(srcversion, \"%s\");\n",
-			   mod->srcversion);
 	}
 }
 
@@ -2191,30 +2042,465 @@ static void write_vmlinux_export_c_file(struct module *mod)
 	free(buf.p);
 }
 
-/* do sanity checks, and generate *.mod.c file */
-static void write_mod_c_file(struct module *mod)
+#if MOD_SIZEOF_LONG == 8
+#define MOD_PTR_DIRECTIVE	".quad"
+#else
+#define MOD_PTR_DIRECTIVE	".long"
+#endif
+
+/* See KSYM_FUNC() in include/linux/export-internal.h. */
+#if MOD_FUNC_PLABEL
+#define MOD_FUNC_PREFIX		"P%"
+#else
+#define MOD_FUNC_PREFIX		""
+#endif
+
+/* See __KSYM_ALIGN in include/linux/export-internal.h. */
+#if MOD_PREL32_RELOCATIONS || MOD_SIZEOF_LONG == 4
+#define KSYM_ALIGN		4
+#else
+#define KSYM_ALIGN		8
+#endif
+
+/* Append the body of an assembler string literal, escaped as needed. */
+static void buf_escaped(struct buffer *buf, const char *str)
 {
-	struct buffer buf = { };
+	unsigned char chr;
+
+	while ((chr = *str++)) {
+		if (chr == '"' || chr == '\\')
+			buf_printf(buf, "\\%c", chr);
+		else if (isprint(chr))
+			buf_printf(buf, "%c", chr);
+		else
+			buf_printf(buf, "\\%03o", chr);
+	}
+}
+
+static void buf_asciz(struct buffer *buf, const char *str)
+{
+	buf_printf(buf, "\t.asciz \"");
+	buf_escaped(buf, str);
+	buf_printf(buf, "\"\n");
+}
+
+/* The equivalent of MODULE_INFO(tag, info). */
+static void add_asm_modinfo(struct buffer *buf, const char *tag,
+			    const char *info)
+{
+	buf_printf(buf, "\t.section .modinfo,\"a\",%%progbits\n");
+	buf_printf(buf, "\t.asciz \"%s=", tag);
+	buf_escaped(buf, info);
+	buf_printf(buf, "\"\n");
+}
+
+/* See __KSYM_REF() in include/linux/export-internal.h. */
+static void add_asm_ksym_ref(struct buffer *buf, const char *prefix,
+			     const char *sym)
+{
+#if MOD_PREL32_RELOCATIONS
+	buf_printf(buf, "\t.long %s%s - .\n", prefix, sym);
+#else
+	buf_printf(buf, "\t" MOD_PTR_DIRECTIVE " %s%s\n", prefix, sym);
+#endif
+}
+
+/* The name and namespace strings a ksymtab entry refers to. */
+static void add_asm_kstrtab(struct buffer *buf, const struct symbol *sym)
+{
+	buf_printf(buf, "\t.section \"__ksymtab_strings\",\"aMS\",%%progbits,1\n");
+	buf_printf(buf, "__kstrtab_%s:\n", sym->name);
+	buf_asciz(buf, sym->name);
+	buf_printf(buf, "__kstrtabns_%s:\n", sym->name);
+	buf_asciz(buf, sym->namespace);
+	buf_printf(buf, "\t.previous\n");
+}
+
+/* The equivalent of SYMBOL_FLAGS(). */
+static void add_asm_kflagstab(struct buffer *buf, const struct symbol *sym)
+{
+	buf_printf(buf, "\t.section \"___kflagstab+%s\", \"a\"\n", sym->name);
+	buf_printf(buf, "__flags_%s:\n", sym->name);
+	buf_printf(buf, "\t.byte 0x%02x\n", get_symbol_flags(sym));
+	buf_printf(buf, "\t.previous\n");
+}
+
+/* The equivalent of KSYMTAB_FUNC()/KSYMTAB_DATA(). */
+static void add_asm_ksymtab(struct buffer *buf, const struct symbol *sym)
+{
+	const char *name = sym->name;
+
+	add_asm_kstrtab(buf, sym);
+
+	buf_printf(buf, "\t.section \"___ksymtab+%s\", \"a\"\n", name);
+	buf_printf(buf, "\t.balign %d\n", KSYM_ALIGN);
+	buf_printf(buf, "__ksymtab_%s:\n", name);
+	add_asm_ksym_ref(buf, sym->is_func ? MOD_FUNC_PREFIX : "", name);
+	add_asm_ksym_ref(buf, "__kstrtab_", name);
+	add_asm_ksym_ref(buf, "__kstrtabns_", name);
+	buf_printf(buf, "\t.previous\n");
+
+	add_asm_kflagstab(buf, sym);
+}
+
+/* The equivalent of SYMBOL_CRC(). */
+static void add_asm_crc(struct buffer *buf, const struct symbol *sym)
+{
+	buf_printf(buf, "\t.section \"___kcrctab+%s\",\"a\"\n", sym->name);
+	buf_printf(buf, "\t.balign 4\n");
+	buf_printf(buf, "__crc_%s:\n", sym->name);
+	buf_printf(buf, "\t.long 0x%08x\n", sym->crc);
+	buf_printf(buf, "\t.previous\n");
+}
+
+static bool export_is_kept(const struct symbol *sym)
+{
+	return !trim_unused_exports || sym->used;
+}
+
+/* Record the CRCs of the exported symbols. */
+static void add_asm_crcs(struct buffer *buf, struct module *mod)
+{
+	struct symbol *sym;
+
+	list_for_each_entry(sym, &mod->exported_symbols, list) {
+		if (!export_is_kept(sym))
+			continue;
+
+		if (!sym->crc_valid)
+			mod_warn(mod, "EXPORT symbol '%s' version generation failed, symbol will not be versioned.\n"
+				 "Is '%s' prototyped in <asm/asm-prototypes.h>?\n",
+				 sym->name, sym->name);
+		add_asm_crc(buf, sym);
+	}
+}
+
+static void add_asm_exported_symbols(struct buffer *buf, struct module *mod)
+{
+	struct symbol *sym;
+
+	list_for_each_entry(sym, &mod->exported_symbols, list) {
+		if (export_is_kept(sym))
+			add_asm_ksymtab(buf, sym);
+	}
+
+	if (modversions)
+		add_asm_crcs(buf, mod);
+}
+
+/* Zero fill up to the offset. */
+static void asm_skip_to(struct buffer *buf, unsigned int *pos,
+			unsigned int offset)
+{
+	if (offset > *pos)
+		buf_printf(buf, "\t.skip %u\n", offset - *pos);
+
+	*pos = offset;
+}
+
+/* A pointer field of __this_module: its offset and an assembler expression. */
+struct this_module_field {
+	unsigned int offset;
+	const char *value;
+};
+
+#define THIS_MODULE_MAX_FIELDS	4
+
+static int compare_field_offsets(const void *ptr_a, const void *ptr_b)
+{
+	const struct this_module_field *field_a = ptr_a, *field_b = ptr_b;
+
+	if (field_a->offset != field_b->offset)
+		return field_a->offset < field_b->offset ? -1 : 1;
+
+	return 0;
+}
+
+/* The fields of __this_module which are not zero, in offset order. */
+static unsigned int get_this_module_fields(const struct module *mod,
+					   struct this_module_field *fields)
+{
+	unsigned int nr_fields = 0;
+
+	if (mod->has_init)
+		fields[nr_fields++] = (struct this_module_field)
+			{ MOD_OFF_module_init, MOD_FUNC_PREFIX "init_module" };
+#ifdef MOD_OFF_module_exit
+	if (mod->has_cleanup)
+		fields[nr_fields++] = (struct this_module_field)
+			{ MOD_OFF_module_exit, MOD_FUNC_PREFIX "cleanup_module" };
+#endif
+#ifdef MOD_OFF_module_arch_fixup_start
+	fields[nr_fields++] = (struct this_module_field)
+		{ MOD_OFF_module_arch_fixup_start, "__start_fixup" };
+	fields[nr_fields++] = (struct this_module_field)
+		{ MOD_OFF_module_arch_fixup_end, "__stop_fixup" };
+#endif
+	qsort(fields, nr_fields, sizeof(*fields), compare_field_offsets);
+
+	return nr_fields;
+}
+
+/*
+ * The equivalent of:
+ *
+ *	__visible struct module __this_module __section(".gnu.linkonce.this_module")
+ *		= { .name = KBUILD_MODNAME, .init = init_module, .exit = cleanup_module,
+ *		    .arch = MODULE_ARCH_INIT };
+ *
+ * Everything not listed is zero, MODULE_ARCH_INIT included, except on m68k.
+ */
+static void add_asm_this_module(struct buffer *buf, const struct module *mod,
+				const char *modname)
+{
+	struct this_module_field fields[THIS_MODULE_MAX_FIELDS];
+	const unsigned int nr_fields = get_this_module_fields(mod, fields);
+	unsigned int pos = 0, i;
+
+	buf_printf(buf, "\n\t.section .gnu.linkonce.this_module,\"aw\",%%progbits\n");
+	buf_printf(buf, "\t.balign %d\n", MOD_ALIGNOF_struct_module);
+	buf_printf(buf, "\t.globl __this_module\n");
+	buf_printf(buf, "\t.type __this_module, %%object\n");
+	buf_printf(buf, "\t.size __this_module, %d\n", MOD_SIZEOF_struct_module);
+	buf_printf(buf, "__this_module:\n");
+
+	asm_skip_to(buf, &pos, MOD_OFF_module_name);
+	buf_printf(buf, "\t.ascii \"%s\"\n", modname);
+	pos += strlen(modname);
+
+	for (i = 0; i < nr_fields; i++) {
+		asm_skip_to(buf, &pos, fields[i].offset);
+		buf_printf(buf, "\t" MOD_PTR_DIRECTIVE " %s\n", fields[i].value);
+		pos += MOD_SIZEOF_LONG;
+	}
+
+	asm_skip_to(buf, &pos, MOD_SIZEOF_struct_module);
+}
+
+/*
+ * An unresolved symbol without a module is not versioned; one without a CRC
+ * cannot be, so warn about it.
+ */
+static bool skip_unversioned(struct module *mod, const struct symbol *sym)
+{
+	if (!sym->module)
+		return true;
+	if (sym->crc_valid)
+		return false;
+
+	mod_warn(mod, "symbol '%s' has no CRC!\n", sym->name);
+	return true;
+}
+
+/* One struct modversion_info: the CRC, then the name padded to the end. */
+static void add_asm_version(struct buffer *buf, const struct symbol *sym)
+{
+	buf_printf(buf, "\t" MOD_PTR_DIRECTIVE " 0x%08x\n", sym->crc);
+	buf_printf(buf, "\t.ascii \"%s\"\n", sym->name);
+	buf_printf(buf, "\t.skip %zu\n", MOD_SIZEOF_struct_modversion_info -
+		   MOD_OFF_modversion_info_name - strlen(sym->name));
+}
+
+/*
+ * The equivalent of:
+ *
+ *	static const struct modversion_info ____versions[]
+ *	__used __section("__versions") = { { crc, "name" }, ... };
+ *
+ * for unresolved symbols.
+ */
+static void add_asm_versions(struct buffer *buf, struct module *mod)
+{
+	struct symbol *sym;
+
+	if (!basic_modversions)
+		return;
+
+	buf_printf(buf, "\n\t.section __versions,\"a\",%%progbits\n");
+	buf_printf(buf, "\t.balign %d\n", MOD_ALIGNOF_struct_modversion_info);
+	list_for_each_entry(sym, &mod->unresolved_symbols, list) {
+		if (skip_unversioned(mod, sym))
+			continue;
+
+		if (strlen(sym->name) >= MOD_NAME_LEN) {
+			/* Only the extended table can hold it. */
+			if (extended_modversions)
+				continue;
+
+			mod_error(mod, "too long symbol '%s'\n", sym->name);
+			break;
+		}
+
+		add_asm_version(buf, sym);
+	}
+}
+
+static void add_asm_version_ext_crcs(struct buffer *buf, struct module *mod)
+{
+	struct symbol *sym;
+
+	buf_printf(buf, "\n\t.section __version_ext_crcs,\"a\",%%progbits\n");
+	buf_printf(buf, "\t.balign 4\n");
+	list_for_each_entry(sym, &mod->unresolved_symbols, list) {
+		if (skip_unversioned(mod, sym))
+			continue;
+
+		buf_printf(buf, "\t.long 0x%08x\n", sym->crc);
+	}
+}
+
+/*
+ * A symbol without a CRC was warned about with the CRCs, and is skipped here
+ * too so that the names line up with them.
+ */
+static void add_asm_version_ext_names(struct buffer *buf, struct module *mod)
+{
+	struct symbol *sym;
+
+	buf_printf(buf, "\t.section __version_ext_names,\"a\",%%progbits\n");
+	list_for_each_entry(sym, &mod->unresolved_symbols, list) {
+		if (!sym->module || !sym->crc_valid)
+			continue;
+
+		buf_asciz(buf, sym->name);
+	}
+	/* The terminator of the string literal this used to be. */
+	buf_printf(buf, "\t.byte 0\n");
+}
+
+/*
+ * The equivalent of:
+ *	static const u32 ____version_ext_crcs[] __section("__version_ext_crcs") = { crc, ... };
+ *	static const char ____version_ext_names[] __section("__version_ext_names") = "name\0" ...;
+ *
+ * for unresolved symbols.
+ */
+static void add_asm_extended_versions(struct buffer *buf, struct module *mod)
+{
+	if (!extended_modversions)
+		return;
+
+	add_asm_version_ext_crcs(buf, mod);
+	add_asm_version_ext_names(buf, mod);
+}
+
+/* Clear ->seen of the modules that own symbols this one needs. */
+static void clear_seen_dependencies(struct module *mod)
+{
+	struct symbol *sym;
+
+	list_for_each_entry(sym, &mod->unresolved_symbols, list) {
+		if (sym->module)
+			sym->module->seen = sym->module->is_vmlinux;
+	}
+}
+
+/* The modules this one depends on, each once, comma separated. */
+static void collect_dependencies(struct module *mod, struct buffer *deps)
+{
+	struct symbol *sym;
+	bool first = true;
+
+	clear_seen_dependencies(mod);
+
+	list_for_each_entry(sym, &mod->unresolved_symbols, list) {
+		struct module *owner = sym->module;
+
+		if (!owner || owner->seen)
+			continue;
+
+		owner->seen = true;
+		buf_printf(deps, "%s%s", first ? "" : ",",
+			   get_basename(owner->name));
+		first = false;
+	}
+	buf_write(deps, "", 1);
+}
+
+static void add_asm_depends(struct buffer *buf, struct module *mod)
+{
+	struct buffer deps = { };
+
+	collect_dependencies(mod, &deps);
+	buf_printf(buf, "\n");
+	add_asm_modinfo(buf, "depends", deps.p);
+	free(deps.p);
+}
+
+/*
+ * KBUILD_MODNAME: the basename of the module with '-' and ',' replaced by
+ * '_' (see name-fix in scripts/Makefile.lib).
+ */
+static char *get_kbuild_modname(const struct module *mod)
+{
+	char *name = xstrdup(get_basename(mod->name));
+	char *curr;
+
+	for (curr = name; *curr; curr++) {
+		if (*curr == '-' || *curr == ',')
+			*curr = '_';
+	}
+
+	return name;
+}
+
+/* The module's name, its descriptor, and where it comes from. */
+static void add_asm_header(struct buffer *buf, const struct module *mod,
+			   const char *modname)
+{
+	buf_printf(buf, "/* Generated by modpost, see scripts/Makefile.modfinal */\n\n");
+
+	add_asm_modinfo(buf, "name", modname);
+	add_asm_this_module(buf, mod, modname);
+	buf_printf(buf, "\n");
+
+	if (!external_module)
+		add_asm_modinfo(buf, "intree", "Y");
+	if (strstarts(mod->name, "drivers/staging"))
+		add_asm_modinfo(buf, "staging", "Y");
+	if (strstarts(mod->name, "tools/testing"))
+		add_asm_modinfo(buf, "test", "Y");
+}
+
+static void add_asm_aliases(struct buffer *buf, struct module *mod)
+{
 	struct module_alias *alias, *next;
-	char fname[PATH_MAX];
-	int ret;
 
-	add_header(&buf, mod);
-	add_exported_symbols(&buf, mod);
-	add_versions(&buf, mod);
-	add_extended_versions(&buf, mod);
-	add_depends(&buf, mod);
-
-	buf_printf(&buf, "\n");
+	buf_printf(buf, "\n");
 	list_for_each_entry_safe(alias, next, &mod->aliases, node) {
-		buf_printf(&buf, "MODULE_ALIAS(\"%s\");\n", alias->str);
+		add_asm_modinfo(buf, "alias", alias->str);
 		list_del(&alias->node);
 		free(alias);
 	}
+}
 
-	add_srcversion(&buf, mod);
+static void add_asm_srcversion(struct buffer *buf, const struct module *mod)
+{
+	if (!mod->srcversion[0])
+		return;
 
-	ret = snprintf(fname, sizeof(fname), "%s.mod.c", mod->name);
+	buf_printf(buf, "\n");
+	add_asm_modinfo(buf, "srcversion", mod->srcversion);
+}
+
+static void write_mod_S_file(struct module *mod)
+{
+	struct buffer buf = { };
+	char fname[PATH_MAX];
+	char *modname = get_kbuild_modname(mod);
+	int ret;
+
+	add_asm_header(&buf, mod, modname);
+	buf_printf(&buf, "\n");
+	add_asm_exported_symbols(&buf, mod);
+	add_asm_versions(&buf, mod);
+	add_asm_extended_versions(&buf, mod);
+	add_asm_depends(&buf, mod);
+	add_asm_aliases(&buf, mod);
+	add_asm_srcversion(&buf, mod);
+	buf_printf(&buf, "\n\t.section .note.GNU-stack,\"\",%%progbits\n");
+
+	ret = snprintf(fname, sizeof(fname), "%s.mod.S", mod->name);
 	if (ret >= sizeof(fname)) {
 		error("%s: too long path was truncated\n", fname);
 		goto free;
@@ -2223,6 +2509,7 @@ static void write_mod_c_file(struct module *mod)
 	write_if_changed(&buf, fname);
 
 free:
+	free(modname);
 	free(buf.p);
 }
 
@@ -2462,7 +2749,7 @@ int main(int argc, char **argv)
 		if (mod->is_vmlinux)
 			write_vmlinux_export_c_file(mod);
 		else
-			write_mod_c_file(mod);
+			write_mod_S_file(mod);
 	}
 
 	if (missing_namespace_deps)
