@@ -919,7 +919,7 @@ static unsigned int agilent_82357a_update_status(struct gpib_board *board,
 static int agilent_82357a_primary_address(struct gpib_board *board, unsigned int address)
 {
 	struct agilent_82357a_priv *a_priv = board->private_data;
-	struct usb_device *usb_dev = interface_to_usbdev(a_priv->bus_interface);
+	struct usb_device *usb_dev;
 	struct agilent_82357a_register_pairlet write;
 	int retval;
 
