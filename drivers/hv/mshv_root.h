@@ -8,6 +8,7 @@
 
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
+#include <linux/rwsem.h>
 #include <linux/semaphore.h>
 #include <linux/sched.h>
 #include <linux/srcu.h>
@@ -88,10 +89,15 @@ struct mshv_mem_region {
 	u64 start_gfn;
 	u64 start_uaddr;
 	u32 hv_map_flags;
+	/* True until a checked hypervisor unmap has completed. */
+	bool mapping_may_exist;
 	struct mshv_partition *partition;
 	enum mshv_region_type mreg_type;
 	struct mmu_interval_notifier mreg_mni;
 	struct mutex mreg_mutex;	/* protects region pages remapping */
+	struct rw_semaphore mreg_fault_lock;
+	bool faults_blocked;
+	bool mni_registered;
 	struct page *mreg_pages[];
 };
 
@@ -139,6 +145,7 @@ struct mshv_partition {
 	struct mshv_girq_routing_table __rcu *pt_girq_tbl;
 	u64 isolation_type;
 	bool import_completed;
+	bool teardown_quarantined;
 	bool pt_initialized;
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	struct dentry *pt_stats_dentry;
@@ -281,9 +288,11 @@ int hv_call_create_partition(u64 flags,
 int hv_call_initialize_partition(u64 partition_id);
 int hv_call_finalize_partition(u64 partition_id);
 int hv_call_delete_partition(u64 partition_id);
-int hv_call_map_mmio_pages(u64 partition_id, u64 gfn, u64 mmio_spa, u64 numpgs);
+int hv_call_map_mmio_pages(u64 partition_id, u64 gfn, u64 mmio_spa,
+			   u64 numpgs, bool *mapping_may_exist);
 int hv_call_map_gpa_pages(u64 partition_id, u64 gpa_target, u64 page_count,
-			  u32 flags, struct page **pages);
+			  u32 flags, struct page **pages,
+			  bool *mapping_may_exist);
 int hv_call_unmap_gpa_pages(u64 partition_id, u64 gpa_target, u64 page_count,
 			    u32 flags);
 int hv_call_delete_vp(u64 partition_id, u32 vp_index);
@@ -370,6 +379,7 @@ struct mshv_mem_region *mshv_region_create(u64 guest_pfn, u64 nr_pages,
 int mshv_region_share(struct mshv_mem_region *region);
 int mshv_region_unshare(struct mshv_mem_region *region);
 int mshv_region_map(struct mshv_mem_region *region);
+int mshv_region_unmap(struct mshv_mem_region *region);
 void mshv_region_invalidate(struct mshv_mem_region *region);
 int mshv_region_pin(struct mshv_mem_region *region);
 void mshv_region_put(struct mshv_mem_region *region);

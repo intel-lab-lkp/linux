@@ -188,6 +188,8 @@ struct mshv_mem_region *mshv_region_create(u64 guest_pfn, u64 nr_pages,
 		region->hv_map_flags |= HV_MAP_GPA_EXECUTABLE;
 
 	kref_init(&region->mreg_refcount);
+	mutex_init(&region->mreg_mutex);
+	init_rwsem(&region->mreg_fault_lock);
 
 	return region;
 }
@@ -245,13 +247,21 @@ static int mshv_region_chunk_remap(struct mshv_mem_region *region,
 				   u64 page_offset, u64 page_count,
 				   bool huge_page)
 {
+	bool chunk_mapping_may_exist;
+	int ret;
+
 	if (huge_page)
 		flags |= HV_MAP_GPA_LARGE_PAGE;
 
-	return hv_call_map_gpa_pages(region->partition->pt_id,
-				     region->start_gfn + page_offset,
-				     page_count, flags,
-				     region->mreg_pages + page_offset);
+	ret = hv_call_map_gpa_pages(region->partition->pt_id,
+				    region->start_gfn + page_offset,
+				    page_count, flags,
+				    region->mreg_pages + page_offset,
+				    &chunk_mapping_may_exist);
+	if (chunk_mapping_may_exist)
+		region->mapping_may_exist = true;
+
+	return ret;
 }
 
 static int mshv_region_remap_pages(struct mshv_mem_region *region,
@@ -337,37 +347,39 @@ static int mshv_region_chunk_unmap(struct mshv_mem_region *region,
 				       page_count, flags);
 }
 
-static int mshv_region_unmap(struct mshv_mem_region *region)
+int mshv_region_unmap(struct mshv_mem_region *region)
 {
-	return mshv_region_process_range(region, 0,
-					 0, region->nr_pages,
-					 mshv_region_chunk_unmap);
+	int ret;
+
+	if (!region->mapping_may_exist)
+		return 0;
+
+	if (region->mreg_type == MSHV_REGION_TYPE_MEM_PINNED)
+		ret = mshv_region_process_range(region, 0, 0, region->nr_pages,
+						mshv_region_chunk_unmap);
+	else
+		ret = hv_call_unmap_gpa_pages(region->partition->pt_id,
+					      region->start_gfn,
+					      region->nr_pages, 0);
+	if (!ret)
+		region->mapping_may_exist = false;
+
+	return ret;
 }
 
 static void mshv_region_destroy(struct kref *ref)
 {
 	struct mshv_mem_region *region =
 		container_of(ref, struct mshv_mem_region, mreg_refcount);
-	struct mshv_partition *partition = region->partition;
-	int ret;
+
+	/* Callers must retain the list reference until cleanup is certain. */
+	if (WARN_ON_ONCE(region->mapping_may_exist))
+		return;
 
 	if (region->mreg_type == MSHV_REGION_TYPE_MEM_MOVABLE)
 		mshv_region_movable_fini(region);
 
-	if (mshv_partition_encrypted(partition)) {
-		ret = mshv_region_share(region);
-		if (ret) {
-			pt_err(partition,
-			       "Failed to regain access to memory, unpinning user pages will fail and crash the host error: %d\n",
-			       ret);
-			return;
-		}
-	}
-
-	mshv_region_unmap(region);
-
 	mshv_region_invalidate(region);
-
 	vfree(region);
 }
 
@@ -382,54 +394,18 @@ int mshv_region_get(struct mshv_mem_region *region)
 }
 
 /**
- * mshv_region_hmm_fault_and_lock - Handle HMM faults and lock the memory region
- * @region: Pointer to the memory region structure
- * @range: Pointer to the HMM range structure
+ * mshv_region_range_fault - Fault and map pages for a movable region.
+ * @region: Memory region receiving the GPA fault.
+ * @page_offset: First page in the region.
+ * @page_count: Number of pages to fault.
  *
- * This function performs the following steps:
- * 1. Reads the notifier sequence for the HMM range.
- * 2. Acquires a read lock on the memory map.
- * 3. Handles HMM faults for the specified range.
- * 4. Releases the read lock on the memory map.
- * 5. If successful, locks the memory region mutex.
- * 6. Verifies if the notifier sequence has changed during the operation.
- *    If it has, releases the mutex and returns -EBUSY to match with
- *    hmm_range_fault() return code for repeating.
+ * mreg_fault_lock is only an admission and lifetime gate. A teardown writer
+ * sets faults_blocked before taking the write side, which prevents new faults
+ * and drains faults that can still remap the region. On an HMM retry, drop the
+ * gate and mmap_lock before trying again so a waiting writer cannot create a
+ * fairness cycle. The notifier never takes mreg_fault_lock.
  *
- * Return: 0 on success, a negative error code otherwise.
- */
-static int mshv_region_hmm_fault_and_lock(struct mshv_mem_region *region,
-					  struct hmm_range *range)
-{
-	int ret;
-
-	range->notifier_seq = mmu_interval_read_begin(range->notifier);
-	mmap_read_lock(region->mreg_mni.mm);
-	ret = hmm_range_fault(range);
-	mmap_read_unlock(region->mreg_mni.mm);
-	if (ret)
-		return ret;
-
-	mutex_lock(&region->mreg_mutex);
-
-	if (mmu_interval_read_retry(range->notifier, range->notifier_seq)) {
-		mutex_unlock(&region->mreg_mutex);
-		cond_resched();
-		return -EBUSY;
-	}
-
-	return 0;
-}
-
-/**
- * mshv_region_range_fault - Handle memory range faults for a given region.
- * @region: Pointer to the memory region structure.
- * @page_offset: Offset of the page within the region.
- * @page_count: Number of pages to handle.
- *
- * This function resolves memory faults for a specified range of pages
- * within a memory region. It uses HMM (Heterogeneous Memory Management)
- * to fault in the required pages and updates the region's page array.
+ * Lock order for one attempt is mreg_fault_lock -> mmap_lock -> mreg_mutex.
  *
  * Return: 0 on success, negative error code on failure.
  */
@@ -440,6 +416,7 @@ static int mshv_region_range_fault(struct mshv_mem_region *region,
 		.notifier = &region->mreg_mni,
 		.default_flags = HMM_PFN_REQ_FAULT | HMM_PFN_REQ_WRITE,
 	};
+	struct mm_struct *mm;
 	unsigned long *pfns;
 	int ret;
 	u64 i;
@@ -452,21 +429,44 @@ static int mshv_region_range_fault(struct mshv_mem_region *region,
 	range.start = region->start_uaddr + page_offset * HV_HYP_PAGE_SIZE;
 	range.end = range.start + page_count * HV_HYP_PAGE_SIZE;
 
-	do {
-		ret = mshv_region_hmm_fault_and_lock(region, &range);
-	} while (ret == -EBUSY);
+retry:
+	down_read(&region->mreg_fault_lock);
+	if (READ_ONCE(region->faults_blocked) ||
+	    !mmget_not_zero(region->mreg_mni.mm)) {
+		ret = -ECANCELED;
+		goto out_unlock_faults;
+	}
+	mm = region->mreg_mni.mm;
 
+	mmap_read_lock(mm);
+	range.notifier_seq = mmu_interval_read_begin(range.notifier);
+	ret = hmm_range_fault(&range);
 	if (ret)
-		goto out;
+		goto out_unlock_mmap;
+
+	mutex_lock(&region->mreg_mutex);
+	if (mmu_interval_read_retry(range.notifier, range.notifier_seq)) {
+		mutex_unlock(&region->mreg_mutex);
+		ret = -EBUSY;
+		goto out_unlock_mmap;
+	}
 
 	for (i = 0; i < page_count; i++)
 		region->mreg_pages[page_offset + i] = hmm_pfn_to_page(pfns[i]);
 
 	ret = mshv_region_remap_pages(region, region->hv_map_flags,
 				      page_offset, page_count);
-
 	mutex_unlock(&region->mreg_mutex);
-out:
+
+out_unlock_mmap:
+	mmap_read_unlock(mm);
+	mmput(mm);
+out_unlock_faults:
+	up_read(&region->mreg_fault_lock);
+	if (ret == -EBUSY) {
+		cond_resched();
+		goto retry;
+	}
 	kfree(pfns);
 	return ret;
 }
@@ -486,10 +486,11 @@ bool mshv_region_handle_gfn_fault(struct mshv_mem_region *region, u64 gfn)
 
 	ret = mshv_region_range_fault(region, page_offset, page_count);
 
-	WARN_ONCE(ret,
+	WARN_ONCE(ret && ret != -ECANCELED,
 		  "p%llu: GPA intercept failed: region %#llx-%#llx, gfn %#llx, page_offset %llu, page_count %llu\n",
 		  region->partition->pt_id, region->start_uaddr,
-		  region->start_uaddr + (region->nr_pages << HV_HYP_PAGE_SHIFT),
+		  region->start_uaddr +
+		  (region->nr_pages << HV_HYP_PAGE_SHIFT),
 		  gfn, page_offset, page_count);
 
 	return !ret;
@@ -531,6 +532,12 @@ static bool mshv_region_interval_invalidate(struct mmu_interval_notifier *mni,
 	page_offset = HVPFN_DOWN(mstart - region->start_uaddr);
 	page_count = HVPFN_DOWN(mend - mstart);
 
+	/*
+	 * mmap_lock is already held by the notifier core. Take only the region
+	 * mutex here; taking the fair fault rwsem would deadlock behind an unmap
+	 * writer that is waiting for this mutex. Publish the sequence after the
+	 * mutex is acquired even when a checked unmap proved no mapping remains.
+	 */
 	if (mmu_notifier_range_blockable(range))
 		mutex_lock(&region->mreg_mutex);
 	else if (!mutex_trylock(&region->mreg_mutex))
@@ -538,15 +545,15 @@ static bool mshv_region_interval_invalidate(struct mmu_interval_notifier *mni,
 
 	mmu_interval_set_seq(mni, cur_seq);
 
-	ret = mshv_region_remap_pages(region, HV_MAP_GPA_NO_ACCESS,
-				      page_offset, page_count);
-	if (ret)
-		goto out_unlock;
+	if (READ_ONCE(region->mapping_may_exist)) {
+		ret = mshv_region_remap_pages(region, HV_MAP_GPA_NO_ACCESS,
+					      page_offset, page_count);
+		if (ret)
+			goto out_unlock;
+	}
 
 	mshv_region_invalidate_pages(region, page_offset, page_count);
-
 	mutex_unlock(&region->mreg_mutex);
-
 	return true;
 
 out_unlock:
@@ -567,7 +574,11 @@ static const struct mmu_interval_notifier_ops mshv_region_mni_ops = {
 
 void mshv_region_movable_fini(struct mshv_mem_region *region)
 {
+	if (!region->mni_registered)
+		return;
+
 	mmu_interval_notifier_remove(&region->mreg_mni);
+	region->mni_registered = false;
 }
 
 bool mshv_region_movable_init(struct mshv_mem_region *region)
@@ -581,7 +592,6 @@ bool mshv_region_movable_init(struct mshv_mem_region *region)
 	if (ret)
 		return false;
 
-	mutex_init(&region->mreg_mutex);
-
+	region->mni_registered = true;
 	return true;
 }
