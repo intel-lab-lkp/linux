@@ -16,6 +16,7 @@
 #include <linux/reboot.h>
 #include <linux/sched.h>
 #include <linux/sched/task_stack.h>
+#include <linux/annotate.h>
 
 #include <asm/bootinfo.h>
 #include <asm/cacheflush.h>
@@ -296,3 +297,4 @@ void machine_kexec(struct kimage *image)
 
 	kexec_reboot();
 }
+ANNOTATE_IGNORE_NORETURN(machine_kexec);
