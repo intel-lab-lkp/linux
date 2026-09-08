@@ -1388,6 +1388,8 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	*cnt = 0;
 	for (i = 0; i < nsegs; i++) {
+		struct iov_iter saved_iter = segments[i].iter;
+
 		kiocb->ki_flags = segments[i].flags;
 		if (kiocb->ki_flags & IOCB_DIRECT)
 			trace_nfsd_write_direct(rqstp, fhp, kiocb->ki_pos,
@@ -1406,6 +1408,33 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		expected = iov_iter_count(&segments[i].iter);
 
 		host_err = vfs_iocb_iter_write(file, kiocb, &segments[i].iter);
+		if (unlikely(host_err == -EINVAL &&
+			     (kiocb->ki_flags & IOCB_DIRECT))) {
+			/*
+			 * nfsd_dio_iter_is_aligned() approves the iterator
+			 * against the file's STATX_DIOALIGN attributes, but
+			 * the block stack applies stricter geometry tests at
+			 * split time (bio_split_io_at() checks each bvec's
+			 * offset and length against the queue's dma_alignment
+			 * and may find no valid block-size-aligned split).
+			 * A receive-buffer iterator can pass the former and
+			 * still fail the latter at split time, so treat
+			 * -EINVAL from the direct attempt as "not direct-able"
+			 * and retry the segment as (uncached) buffered I/O
+			 * rather than failing the WRITE.  ki_pos is not
+			 * advanced on error, and any sectors the failed
+			 * attempt already reached are rewritten with the
+			 * same data.
+			 */
+			segments[i].iter = saved_iter;
+			kiocb->ki_flags &= ~IOCB_DIRECT;
+			if (file->f_op->fop_flags & FOP_DONTCACHE)
+				kiocb->ki_flags |= IOCB_DONTCACHE;
+			trace_nfsd_write_vector(rqstp, fhp, kiocb->ki_pos,
+						segments[i].iter.count);
+			host_err = vfs_iocb_iter_write(file, kiocb,
+						       &segments[i].iter);
+		}
 		if (host_err < 0)
 			return host_err;
 		*cnt += host_err;
