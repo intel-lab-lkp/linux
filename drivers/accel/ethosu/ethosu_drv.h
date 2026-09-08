@@ -11,6 +11,8 @@ struct ethosu_device;
 struct drm_device;
 struct drm_file;
 
+int ethosu_device_reset(struct ethosu_device *ethosudev);
+
 struct ethosu_file_priv {
 	struct ethosu_device *edev;
 	struct drm_sched_entity sched_entity;
