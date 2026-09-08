@@ -91,7 +91,9 @@ def emit_pointer_definition(environment: Environment, node: _XdrPointer) -> None
 
 
 def emit_pointer_member_decoder(
-    environment: Environment, field: _XdrDeclaration
+    environment: Environment,
+    field: _XdrDeclaration,
+    struct_name: str,
 ) -> None:
     """Emit a decoder for one field in an XDR pointer"""
     if isinstance(field, _XdrBasic):
@@ -164,14 +166,16 @@ def emit_pointer_decoder(environment: Environment, node: _XdrPointer) -> None:
     print(template.render(name=node.name))
 
     for field in node.fields[0:-1]:
-        emit_pointer_member_decoder(environment, field)
+        emit_pointer_member_decoder(environment, field, node.name)
 
     template = get_jinja2_template(environment, "decoder", "close")
     print(template.render())
 
 
 def emit_pointer_member_encoder(
-    environment: Environment, field: _XdrDeclaration
+    environment: Environment,
+    field: _XdrDeclaration,
+    struct_name: str,
 ) -> None:
     """Emit an encoder for one field in a XDR pointer"""
     if isinstance(field, _XdrBasic):
@@ -241,7 +245,7 @@ def emit_pointer_encoder(environment: Environment, node: _XdrPointer) -> None:
     print(template.render(name=node.name))
 
     for field in node.fields[0:-1]:
-        emit_pointer_member_encoder(environment, field)
+        emit_pointer_member_encoder(environment, field, node.name)
 
     template = get_jinja2_template(environment, "encoder", "close")
     print(template.render())
