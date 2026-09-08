@@ -37,6 +37,7 @@ void __init __weak mem_map_via_hcall(struct boot_params *ptr __maybe_unused)
 	xen_raw_printk("Error: Could not find memory map\n");
 	BUG();
 }
+ANNOTATE_IGNORE_NORETURN(mem_map_via_hcall);
 
 static void __init init_pvh_bootparams(bool xen_guest)
 {
