@@ -134,12 +134,24 @@ static void brd_free_pages(struct brd_device *brd)
 /*
  * Process a single segment.  The segment is capped to not cross page boundaries
  * in both the bio and the brd backing memory.
+ *
+ * The device position is @pos, a byte offset maintained by the caller --
+ * not bio->bi_iter.bi_sector: bio_advance_iter_single() advances bi_sector
+ * by bytes >> SECTOR_SHIFT, so a bvec whose length is not a multiple of the
+ * sector size silently skews bi_sector against the bytes actually consumed
+ * and corrupts everything that follows.  Byte-granular bvec boundaries
+ * reach us from ITER_BVEC direct I/O submitters whose caller's bio_vec
+ * array is passed through as-is (bio_iov_bvec_set()).
+ *
+ * Returns the number of bytes processed, or 0 on error (the bio has then
+ * been completed).
  */
-static bool brd_rw_bvec(struct brd_device *brd, struct bio *bio)
+static unsigned int brd_rw_bvec(struct brd_device *brd, struct bio *bio,
+				loff_t pos)
 {
 	struct bio_vec bv = bio_iter_iovec(bio, bio->bi_iter);
-	sector_t sector = bio->bi_iter.bi_sector;
-	u32 offset = (sector & (PAGE_SECTORS - 1)) << SECTOR_SHIFT;
+	sector_t sector = pos >> SECTOR_SHIFT;
+	u32 offset = pos & (PAGE_SIZE - 1);
 	blk_opf_t opf = bio->bi_opf;
 	struct page *page;
 	void *kaddr;
@@ -167,14 +179,14 @@ static bool brd_rw_bvec(struct brd_device *brd, struct bio *bio)
 	bio_advance_iter_single(bio, &bio->bi_iter, bv.bv_len);
 	if (page)
 		put_page(page);
-	return true;
+	return bv.bv_len;
 
 out_error:
 	if (PTR_ERR(page) == -ENOMEM && (opf & REQ_NOWAIT))
 		bio_wouldblock_error(bio);
 	else
 		bio_io_error(bio);
-	return false;
+	return 0;
 }
 
 static void brd_do_discard(struct brd_device *brd, sector_t sector, u32 size)
@@ -202,6 +214,7 @@ static void brd_do_discard(struct brd_device *brd, sector_t sector, u32 size)
 static void brd_submit_bio(struct bio *bio)
 {
 	struct brd_device *brd = bio->bi_bdev->bd_disk->private_data;
+	loff_t pos;
 
 	if (unlikely(op_is_discard(bio->bi_opf))) {
 		brd_do_discard(brd, bio->bi_iter.bi_sector,
@@ -210,9 +223,13 @@ static void brd_submit_bio(struct bio *bio)
 		return;
 	}
 
+	pos = (loff_t)bio->bi_iter.bi_sector << SECTOR_SHIFT;
 	do {
-		if (!brd_rw_bvec(brd, bio))
+		unsigned int len = brd_rw_bvec(brd, bio, pos);
+
+		if (!len)
 			return;
+		pos += len;
 	} while (bio->bi_iter.bi_size);
 
 	bio_endio(bio);
