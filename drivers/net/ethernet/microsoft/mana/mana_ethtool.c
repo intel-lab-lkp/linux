@@ -737,6 +737,36 @@ static int mana_set_channels(struct net_device *ndev,
 		goto clear_flag;
 	}
 
+	if (new_count < apc->num_queues) {
+		struct mana_qset tailq;
+
+		err = mana_split_qset(apc, scratch, new_count, &newq, &tailq);
+		if (err)
+			goto free_scratch;
+
+		err = mana_publish_qset(apc, &newq, &oldq);
+		if (err) {
+			/* Discard containers only; their queues still belong to
+			 * the old set.
+			 */
+			mana_discard_split(&newq, &tailq);
+			goto free_scratch;
+		}
+
+		/* Wait for ndo_select_queue() readers of oldq.indir_table. Free
+		 * only containers; the queues belong to the kept set or tail.
+		 */
+		synchronize_net();
+
+		kfree(oldq.tx_qp);
+		kfree(oldq.rxqs);
+		kfree(oldq.indir_table);
+		kfree(oldq.rxobj_table);
+
+		mana_free_qset(scratch, &tailq);
+		goto free_scratch;
+	}
+
 	err = mana_alloc_qset(apc, scratch, new_count, apc->rx_queue_size,
 			      apc->tx_queue_size, apc->priv_flags,
 			      apc->configured_mtu, apc->bpf_prog, &newq);
