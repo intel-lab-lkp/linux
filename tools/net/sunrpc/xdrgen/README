@@ -201,8 +201,10 @@ For example:
 The hooks are supplied by hand. Their names derive from the pragma
 header and the containing struct, so that two programs sharing a
 type name resolve to distinct symbols. All marked members of one
-struct share a hook set; the cursor's member_id field selects the
-member:
+struct share a hook set, so they share one element type as well;
+xdrgen rejects a marked member whose element type differs from
+that of a member already marked in the same struct. The cursor's
+member_id field selects the member:
 
   nfs_acl2_secattr_encode_begin()
   nfs_acl2_secattr_encode()
