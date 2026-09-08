@@ -1488,7 +1488,7 @@ xrep_dir_swap_prep(
 			.geo		= sc->mp->m_dir_geo,
 			.whichfork	= XFS_DATA_FORK,
 			.trans		= sc->tp,
-			.total		= 1,
+			.total		= sc->mp->m_dir_geo->fsbcount,
 			.owner		= I_INO(sc->ip),
 		};
 
