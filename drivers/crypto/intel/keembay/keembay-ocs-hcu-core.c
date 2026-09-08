@@ -246,8 +246,11 @@ static int kmb_ocs_dma_prepare(struct ahash_request *req)
 	 * HCU must be aligned to the block size; compute the remainder data to
 	 * be processed in the next request.
 	 */
-	if (!(rctx->flags & REQ_FINAL))
+	if (!(rctx->flags & REQ_FINAL)) {
 		remainder = total % rctx->blk_sz;
+		if (rctx->sg_data_total < remainder)
+			return -EINVAL;
+	}
 
 	/* Determine the number of scatter gather list entries to process. */
 	nents = sg_nents_for_len(req->src, rctx->sg_data_total - remainder);
