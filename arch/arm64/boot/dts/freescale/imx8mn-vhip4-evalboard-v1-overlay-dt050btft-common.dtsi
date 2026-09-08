@@ -1,0 +1,155 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2021-2026 Marek Vasut
+ */
+
+#include <dt-bindings/gpio/gpio.h>
+
+#include "imx8mn-pinfunc.h"
+
+&{/} {
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		/* FIXME: 200 Hz, since DT050BTFT-PTS datasheet does not say */
+		pwms = <&pwm4 0 5000000 0>;
+		brightness-levels = <0 100>;
+		num-interpolated-steps = <100>;
+		default-brightness-level = <75>;
+	};
+
+	lvds-decoder {
+		compatible = "ti,sn65lvds822", "lvds-decoder";
+		powerdown-gpios = <&gpio5 19 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_lvds_bridge>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				lvds_dpi_bridge_in: endpoint {
+					data-mapping = "vesa-24";
+					remote-endpoint = <&sn65dsi83_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				lvds_bridge_out: endpoint {
+					remote-endpoint = <&lvds_panel_in>;
+				};
+			};
+		};
+	};
+
+	panel {
+		compatible = "displaytech,dt050btft-pts";
+		backlight = <&backlight>;
+		power-supply = <&reg_panel_3v3>;
+
+		port {
+			lvds_panel_in: endpoint {
+				remote-endpoint = <&lvds_bridge_out>;
+			};
+		};
+	};
+
+	reg_panel_3v3: regulator-panel-3v3 {
+		compatible = "regulator-fixed";
+		regulator-always-on;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-name = "VCC_DISPL";
+	};
+};
+
+&i2c3 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	bridge@2d {
+		compatible = "ti,sn65dsi83";
+		enable-gpios = <&gpio2 1 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_dsi_bridge>;
+		reg = <0x2d>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				sn65dsi83_in: endpoint {
+					data-lanes = <1>;
+					remote-endpoint = <&mipi_dsi_bridge1_out>;
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+				sn65dsi83_out: endpoint {
+					remote-endpoint = <&lvds_dpi_bridge_in>;
+				};
+			};
+		};
+	};
+};
+
+&iomuxc {
+	pinctrl_dsi_bridge: dsibridge-grp {
+		fsl,pins = <
+			/* nRESET_BRIDGE */
+			MX8MN_IOMUXC_SD1_CMD_GPIO2_IO1                  0x100
+		>;
+	};
+
+	pinctrl_lvds_bridge: lvdsbridge-grp {
+		fsl,pins = <
+			/* LVDS_RGB_SHTDN_n */
+			MX8MN_IOMUXC_I2C3_SDA_GPIO5_IO19                0x100
+		>;
+	};
+
+	pinctrl_pwm4: pwm4-grp {
+		fsl,pins = <
+			/* LCD PWM */
+			MX8MN_IOMUXC_I2C3_SCL_PWM4_OUT			0x0116
+		>;
+	};
+};
+
+&lcdif {
+	status = "okay";
+};
+
+&mipi_dsi {
+	samsung,burst-clock-frequency = <891000000>;
+	samsung,esc-clock-frequency = <10000000>;
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@1 {
+			reg = <1>;
+
+			mipi_dsi_bridge1_out: endpoint {
+				data-lanes = <1>;
+				remote-endpoint = <&sn65dsi83_in>;
+			};
+		};
+	};
+};
+
+&pwm4 {	/* LCD backlight PWM */
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_pwm4>;
+	status = "okay";
+};

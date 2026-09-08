@@ -319,6 +319,12 @@ dtb-$(CONFIG_ARCH_MXC) += imx8mn-var-som-symphony.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mn-var-som-symphony-legacy.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mn-venice-gw7902.dtb
 
+imx8mn-vhip4-evalboard-v1-overlay-dt050btft-1lane-dtbs := imx8mn-vhip4-evalboard-v1.dtb \
+							  imx8mn-vhip4-evalboard-v1-overlay-dt050btft-1lane.dtbo
+imx8mn-vhip4-evalboard-v1-overlay-dt050btft-2lane-dtbs := imx8mn-vhip4-evalboard-v1.dtb \
+							  imx8mn-vhip4-evalboard-v1-overlay-dt050btft-2lane.dtbo
+imx8mn-vhip4-evalboard-v1-overlay-dt050btft-4lane-dtbs := imx8mn-vhip4-evalboard-v1.dtb \
+							  imx8mn-vhip4-evalboard-v1-overlay-dt050btft-4lane.dtbo
 imx8mn-vhip4-evalboard-v1-overlay-eeprom-1000-dtbs := imx8mn-vhip4-evalboard-v1.dtb \
 						      imx8mn-vhip4-overlay-eeprom-1000.dtbo
 imx8mn-vhip4-evalboard-v1-overlay-eeprom-1100-dtbs := imx8mn-vhip4-evalboard-v1.dtb \
@@ -327,6 +333,8 @@ imx8mn-vhip4-evalboard-v1-overlay-ksz8794-dtbs := imx8mn-vhip4-evalboard-v1.dtb 
 						  imx8mn-vhip4-evalboard-v1-overlay-ksz8794.dtbo
 imx8mn-vhip4-evalboard-v1-overlay-ksz9031-dtbs := imx8mn-vhip4-evalboard-v1.dtb \
 						  imx8mn-vhip4-evalboard-v1-overlay-ksz9031.dtbo
+imx8mn-vhip4-evalboard-v1-overlay-nxp-adv7533-hdmi-dtbs := imx8mn-vhip4-evalboard-v1.dtb \
+							   imx8mn-vhip4-evalboard-v1-overlay-nxp-adv7533-hdmi.dtbo
 imx8mn-vhip4-evalboard-v2-overlay-adin1300-dtbs := imx8mn-vhip4-evalboard-v2.dtb \
 						   imx8mn-vhip4-evalboard-v2-overlay-adin1300.dtbo
 imx8mn-vhip4-evalboard-v2-overlay-eeprom-1100-dtbs := imx8mn-vhip4-evalboard-v2.dtb \
@@ -336,12 +344,20 @@ imx8mn-vhip4-evalboard-v2-overlay-eeprom-2000-dtbs := imx8mn-vhip4-evalboard-v2.
 imx8mn-vhip4-evalboard-v2-overlay-ksz8794-dtbs := imx8mn-vhip4-evalboard-v2.dtb \
 						  imx8mn-vhip4-evalboard-v2-overlay-ksz8794.dtbo
 dtb-$(CONFIG_ARCH_MXC) += imx8mn-vhip4-evalboard-v1.dtb \
+			  imx8mn-vhip4-evalboard-v1-overlay-dt050btft-1lane.dtb \
+			  imx8mn-vhip4-evalboard-v1-overlay-dt050btft-1lane.dtbo \
+			  imx8mn-vhip4-evalboard-v1-overlay-dt050btft-2lane.dtb \
+			  imx8mn-vhip4-evalboard-v1-overlay-dt050btft-2lane.dtbo \
+			  imx8mn-vhip4-evalboard-v1-overlay-dt050btft-4lane.dtb \
+			  imx8mn-vhip4-evalboard-v1-overlay-dt050btft-4lane.dtbo \
 			  imx8mn-vhip4-evalboard-v1-overlay-eeprom-1000.dtb \
 			  imx8mn-vhip4-evalboard-v1-overlay-eeprom-1100.dtb \
 			  imx8mn-vhip4-evalboard-v1-overlay-ksz8794.dtb \
 			  imx8mn-vhip4-evalboard-v1-overlay-ksz8794.dtbo \
 			  imx8mn-vhip4-evalboard-v1-overlay-ksz9031.dtb \
 			  imx8mn-vhip4-evalboard-v1-overlay-ksz9031.dtbo \
+			  imx8mn-vhip4-evalboard-v1-overlay-nxp-adv7533-hdmi.dtb \
+			  imx8mn-vhip4-evalboard-v1-overlay-nxp-adv7533-hdmi.dtbo \
 			  imx8mn-vhip4-evalboard-v2.dtb \
 			  imx8mn-vhip4-evalboard-v2-overlay-adin1300.dtb \
 			  imx8mn-vhip4-evalboard-v2-overlay-adin1300.dtbo \
