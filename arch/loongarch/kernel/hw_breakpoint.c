@@ -487,6 +487,7 @@ bool breakpoint_handler(struct pt_regs *regs)
 	int i;
 	struct perf_event *bp, **slots;
 	bool need_sigtrap = false;
+	unsigned int clear_mask = 0;
 
 	slots = this_cpu_ptr(bp_on_reg);
 
@@ -500,10 +501,13 @@ bool breakpoint_handler(struct pt_regs *regs)
 			if (bp->attr.sigtrap)
 				need_sigtrap = true;
 
-			csr_write32(0x1 << i, LOONGARCH_CSR_FWPS);
-			update_bp_registers(regs, 0, 0);
+			clear_mask |= (0x1 << i);
+			update_bp_registers(regs, 1, 0);
 		}
 	}
+
+	if (clear_mask)
+		csr_write32(clear_mask | CSR_FWPS_SKIP, LOONGARCH_CSR_FWPS);
 
 	return need_sigtrap;
 }
@@ -514,6 +518,7 @@ bool watchpoint_handler(struct pt_regs *regs)
 	int i;
 	struct perf_event *wp, **slots;
 	bool need_sigtrap = false;
+	unsigned int clear_mask = 0;
 
 	slots = this_cpu_ptr(wp_on_reg);
 
@@ -527,10 +532,13 @@ bool watchpoint_handler(struct pt_regs *regs)
 			if (wp->attr.sigtrap)
 				need_sigtrap = true;
 
-			csr_write32(0x1 << i, LOONGARCH_CSR_MWPS);
-			update_bp_registers(regs, 0, 1);
+			clear_mask |= (0x1 << i);
+			update_bp_registers(regs, 1, 1);
 		}
 	}
+
+	if (clear_mask)
+		csr_write32(clear_mask | CSR_MWPS_SKIP, LOONGARCH_CSR_MWPS);
 
 	return need_sigtrap;
 }
