@@ -4037,6 +4037,7 @@ static void __sev_snp_reload_vmsa(struct kvm_vcpu *vcpu, gpa_t gpa)
 	unsigned long mmu_seq;
 	struct page *page;
 	kvm_pfn_t pfn;
+	int idx;
 
 	lockdep_assert_held(&svm->sev_es.snp_vmsa_mutex);
 
@@ -4068,9 +4069,10 @@ static void __sev_snp_reload_vmsa(struct kvm_vcpu *vcpu, gpa_t gpa)
 	if (!VALID_PAGE(gpa))
 		return;
 
-	slot = gfn_to_memslot(vcpu->kvm, gfn);
+	idx = srcu_read_lock(&kvm->srcu);
+	slot = gfn_to_memslot(kvm, gfn);
 	if (!slot)
-		return;
+		goto out_unlock;
 
 	mmu_seq = kvm->mmu_invalidate_seq;
 	smp_rmb();
@@ -4079,8 +4081,8 @@ static void __sev_snp_reload_vmsa(struct kvm_vcpu *vcpu, gpa_t gpa)
 	 * The new VMSA will be private memory guest memory, so retrieve the
 	 * PFN from the gmem backend.
 	 */
-	if (kvm_gmem_get_pfn(vcpu->kvm, slot, gfn, &pfn, &page, NULL))
-		return;
+	if (kvm_gmem_get_pfn(kvm, slot, gfn, &pfn, &page, NULL))
+		goto out_unlock;
 
 	read_lock(&kvm->mmu_lock);
 	/*
@@ -4097,6 +4099,8 @@ static void __sev_snp_reload_vmsa(struct kvm_vcpu *vcpu, gpa_t gpa)
 	read_unlock(&kvm->mmu_lock);
 
 	kvm_release_page_clean(page);
+out_unlock:
+	srcu_read_unlock(&kvm->srcu, idx);
 }
 
 /*
