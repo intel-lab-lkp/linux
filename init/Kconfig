@@ -144,6 +144,44 @@ config CC_HAS_ASSUME
 config CC_HAS_NO_PROFILE_FN_ATTR
 	def_bool $(success,echo '__attribute__((no_profile_instrument_function)) int x();' | $(CC) -x c - -c -o /dev/null -Werror)
 
+config CC_HAS_ZERO_INIT_PADDING_BITS
+	def_bool $(cc-option,-fzero-init-padding-bits=all)
+
+config CC_HAS_NO_STACK_CLASH_PROTECTION
+	def_bool $(cc-option,-fno-stack-clash-protection)
+
+config CC_HAS_NO_ADDRSIG
+	def_bool $(cc-option,-fno-addrsig)
+
+config CC_HAS_DIAGNOSTICS_SHOW_CONTEXT
+	def_bool $(cc-option,-fdiagnostics-show-context=2)
+
+config CC_HAS_DIAGNOSTICS_SHOW_INLINING_CHAIN
+	def_bool $(cc-option,-fdiagnostics-show-inlining-chain)
+
+config CC_HAS_STRICT_FLEX_ARRAYS
+	def_bool $(cc-option,-fstrict-flex-arrays=3)
+
+# gcc-10 renamed --param=allow-store-data-races=0 to -fno-allow-store-data-races
+config CC_HAS_ALLOW_STORE_DATA_RACES_PARAM
+	def_bool CC_IS_GCC && $(cc-option,--param=allow-store-data-races=0)
+
+config CC_HAS_NO_ALLOW_STORE_DATA_RACES
+	def_bool CC_IS_GCC && $(cc-option,-fno-allow-store-data-races)
+
+config CC_HAS_MNOP_MCOUNT
+	def_bool $(cc-option,-mnop-mcount)
+
+# s390-linux-gnu-gcc did not support -mfentry until gcc-9.
+config CC_HAS_MFENTRY
+	def_bool $(cc-option,-mfentry)
+
+config LD_HAS_FORCE_GROUP_ALLOCATION
+	def_bool $(ld-option,--force-group-allocation)
+
+config LD_HAS_NO_WARN_RWX_SEGMENTS
+	def_bool $(ld-option,--no-warn-rwx-segments)
+
 config CC_HAS_COUNTED_BY
 	bool
 	# clang needs to be at least 20.1.0 to avoid potential crashes
@@ -1005,6 +1043,45 @@ config CC_NO_STRINGOP_OVERFLOW
 config CC_STRINGOP_OVERFLOW
 	bool
 	default y if CC_IS_GCC && !CC_NO_STRINGOP_OVERFLOW
+
+config CC_HAS_WNO_ADDRESS_OF_PACKED_MEMBER
+	def_bool $(cc-option,-Wno-address-of-packed-member)
+
+config CC_HAS_WNO_FORMAT_OVERFLOW_NON_KPRINTF
+	def_bool CC_IS_CLANG && $(cc-option,-Wno-format-overflow-non-kprintf)
+
+config CC_HAS_WNO_FORMAT_TRUNCATION_NON_KPRINTF
+	def_bool CC_IS_CLANG && $(cc-option,-Wno-format-truncation-non-kprintf)
+
+config CC_HAS_WNO_DEFAULT_CONST_INIT_UNSAFE
+	def_bool CC_IS_CLANG && $(cc-option,-Wno-default-const-init-unsafe)
+
+config CC_HAS_WNO_DANGLING_POINTER
+	def_bool $(cc-option,-Wno-dangling-pointer)
+
+config CC_HAS_WVLA_LARGER_THAN
+	def_bool $(cc-option,-Wvla-larger-than=1)
+
+config CC_HAS_WSTRINGOP_OVERFLOW
+	def_bool $(cc-option,-Wstringop-overflow)
+
+config CC_HAS_WNO_UNTERMINATED_STRING_INITIALIZATION
+	def_bool $(cc-option,-Wno-unterminated-string-initialization)
+
+config CC_HAS_WERROR_DESIGNATED_INIT
+	def_bool $(cc-option,-Werror=designated-init)
+
+config CC_HAS_WENUM_CONVERSION
+	def_bool $(cc-option,-Wenum-conversion)
+
+config CC_HAS_WNO_PACKED_NOT_ALIGNED
+	def_bool $(cc-option,-Wno-packed-not-aligned)
+
+config CC_HAS_WNO_FORMAT_OVERFLOW
+	def_bool $(cc-option,-Wno-format-overflow)
+
+config CC_HAS_WNO_STRINGOP_TRUNCATION
+	def_bool $(cc-option,-Wno-stringop-truncation)
 
 #
 # For architectures that know their GCC __int128 support is sound
