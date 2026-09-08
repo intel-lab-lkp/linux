@@ -3247,15 +3247,17 @@ def render_uapi(family, cw):
                 continue
 
             if enum.has_doc():
-                if enum.has_entry_doc():
+                if enum.has_entry_doc() and enum.enum_name:
                     cw.p('/**')
                     doc = ''
                     if 'doc' in enum:
                         doc = ' - ' + enum['doc']
                     cw.write_doc_line(enum.enum_name + doc)
                 else:
+                    # Render a plain comment, no kdoc identifier available
                     cw.p('/*')
-                    cw.write_doc_line(enum['doc'], indent=False)
+                    if 'doc' in enum:
+                        cw.write_doc_line(enum['doc'], indent=False)
                 for entry in enum.entries.values():
                     if entry.has_doc():
                         doc = '@' + entry.c_name + ': ' + entry['doc']
