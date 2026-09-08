@@ -37,6 +37,10 @@ required:
   - reg
   - clocks
 
+dependentRequired:
+  hot-join-capable: [ in-band-interrupt-capable ]
+  in-band-interrupt-capable: [ interrupts ]
+
 allOf:
   - $ref: i3c.yaml#
 
@@ -54,5 +58,7 @@ examples:
         interrupts = <GIC_SPI 89 IRQ_TYPE_LEVEL_HIGH>;
         #address-cells = <3>;
         #size-cells = <0>;
+        hot-join-capable;
+        in-band-interrupt-capable;
     };
 ...

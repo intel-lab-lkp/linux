@@ -63,6 +63,21 @@ properties:
       Indicates that the system is accessible via this bus as an endpoint for
       MCTP over I3C transport.
 
+  in-band-interrupt-capable:
+    type: boolean
+    description:
+      The controller supports In-Band Interrupts. A target can request
+      attention on SDA/SCL by driving its dynamic address during bus
+      arbitration, instead of using a dedicated side-band interrupt line.
+
+  hot-join-capable:
+    type: boolean
+    description:
+      The controller supports Hot-Join. A target attached or powered up
+      after the bus is already running can announce itself using the
+      reserved Hot-Join address so the controller can assign it a dynamic
+      address.
+
 required:
   - "#address-cells"
   - "#size-cells"
