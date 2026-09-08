@@ -6,6 +6,7 @@
 
 #include <linux/completion.h>
 #include <linux/if_ether.h>
+#include <linux/limits.h>
 #include <linux/types.h>
 
 struct fbnic_dev;
@@ -43,6 +44,12 @@ struct fbnic_fw_ver {
 	u32 version;
 	char commit[FBNIC_FW_CAP_RESP_COMMIT_MAX_SIZE];
 };
+
+/* Sentinel for a sensor value the driver does not have: a threshold the
+ * firmware never populated (older firmware) or a cache entry not yet
+ * refreshed.
+ */
+#define FBNIC_SENSOR_NO_DATA			S32_MIN
 
 struct fbnic_fw_cap {
 	struct {
