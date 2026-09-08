@@ -352,8 +352,17 @@ int bnge_reserve_rings(struct bnge_dev *bd)
 	if (!bnge_rings_ok(&hwr))
 		return -ENOMEM;
 
-	if (old_rx_rings != bd->hw_resc.resv_rx_rings)
-		bnge_set_dflt_rss_indir_tbl(bd);
+	if (old_rx_rings != bd->hw_resc.resv_rx_rings) {
+		bnge_set_dflt_rss_indir_tbl(bd, NULL);
+
+		if (bd->netdev) {
+			struct ethtool_rxfh_context *ctx;
+			unsigned long context;
+
+			xa_for_each(&bd->netdev->ethtool->rss_ctx, context, ctx)
+				bnge_set_dflt_rss_indir_tbl(bd, ctx);
+		}
+	}
 
 	if (!bnge_aux_registered(bd)) {
 		u16 resv_msix, resv_ctx, aux_ctxs;
