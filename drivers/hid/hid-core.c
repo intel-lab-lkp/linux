@@ -1802,6 +1802,9 @@ static void hid_report_process_ordering(struct hid_device *hid,
 	unsigned int a, u, usages;
 	unsigned int count = 0;
 
+	if (report->field_entries)
+		return;
+
 	/* count the number of individual fields in the report */
 	for (a = 0; a < report->maxfield; a++) {
 		field = report->field[a];
