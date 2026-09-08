@@ -32,6 +32,7 @@ LD="$1"
 KBUILD_LDFLAGS="$2"
 LDFLAGS_vmlinux="$3"
 VMLINUX="$4"
+LDFLAGS_vmlinux_relocs="$5"
 
 is_enabled() {
 	grep -q "^$1=y" include/config/auto.conf
@@ -94,6 +95,11 @@ vmlinux_link()
 	# The kallsyms linking does not need debug symbols included.
 	if [ -n "${strip_debug}" ] ; then
 		ldflags="${ldflags} ${wl}--strip-debug"
+	fi
+
+	# Only the final link actually requires the relocations.
+	if [ "${output}" = "${VMLINUX}" ] && [ -n "${LDFLAGS_vmlinux_relocs}" ]; then
+		ldflags="${ldflags} ${wl}${LDFLAGS_vmlinux_relocs}"
 	fi
 
 	if [ -n "${generate_map}" ];  then
