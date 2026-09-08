@@ -195,7 +195,7 @@ unsigned int nf_confirm(void *priv,
 	}
 
 	if (seqadj_needed &&
-	    !nf_ct_seq_adjust(skb, ct, ctinfo, protoff)) {
+	    nf_ct_seq_adjust(skb, ct, ctinfo, protoff) < 0) {
 		NF_CT_STAT_INC_ATOMIC(nf_ct_net(ct), drop);
 		return NF_DROP;
 	}
