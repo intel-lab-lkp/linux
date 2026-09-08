@@ -3941,15 +3941,18 @@ static bool inc_max_seq(struct lruvec *lruvec, unsigned long seq, int swappiness
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 restart:
 	if (seq < READ_ONCE(lrugen->max_seq))
-		return false;
+		return true;
 
 	lruvec_lock_irq(lruvec);
 
 	VM_WARN_ON_ONCE(!seq_is_valid(lruvec));
 
 	success = seq == lrugen->max_seq;
-	if (!success)
+	if (!success) {
+		/* Concurrent aging advanced max_seq first; goal achieved. */
+		success = true;
 		goto unlock;
+	}
 
 	for (type = 0; type < ANON_AND_FILE; type++) {
 		if (get_nr_gens(lruvec, type) != MAX_NR_GENS)
@@ -4044,10 +4047,8 @@ static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long seq,
 			walk_mm(mm, walk);
 	} while (mm);
 done:
-	if (success) {
+	if (success)
 		success = inc_max_seq(lruvec, seq, swappiness);
-		WARN_ON_ONCE(!success);
-	}
 
 	return success;
 }
