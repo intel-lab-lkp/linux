@@ -224,6 +224,22 @@ static bool might_return(struct objtool_file *file, struct symbol *func)
 	return false;
 }
 
+static bool is_noreturn_candidate(struct objtool_file *file, struct symbol *func)
+{
+	struct instruction *insn;
+
+	if (!is_func_sym(func) || is_undef_sym(func) ||
+	    is_prefix_func(func) || func->embedded_insn ||
+	    func != func->alias->pfunc)
+		return false;
+
+	insn = find_insn(file, func->sec, func->offset);
+	if (!insn || insn_func(insn) != func)
+		return false;
+
+	return true;
+}
+
 static void detect_noreturns(struct objtool_file *file)
 {
 	struct symbol *func, *dest;
@@ -232,15 +248,7 @@ static void detect_noreturns(struct objtool_file *file)
 
 	/* Mark all functions guilty until proven innocent */
 	for_each_sym(file->elf, func) {
-
-		/* Aliases and cold subfunctions inherit the parent's verdict */
-		if (!is_func_sym(func) || is_undef_sym(func) ||
-		    is_prefix_func(func) || func->embedded_insn ||
-		    func != func->alias->pfunc)
-			continue;
-
-		insn = find_insn(file, func->sec, func->offset);
-		if (!insn || insn_func(insn) != func)
+		if (!is_noreturn_candidate(file, func))
 			continue;
 
 		func->_noreturn = 1;
@@ -410,7 +418,36 @@ static void read_annotate_noreturn(struct objtool_file *file)
 
 		if (is_undef_sym(func))
 			func->_noreturn = 1;
+
+		func->annotate_noreturn = 1;
 	}
+}
+
+static int validate_noreturns(struct objtool_file *file)
+{
+	struct symbol *func;
+	int warnings = 0;
+
+	for_each_sym(file->elf, func) {
+		if (!is_noreturn_candidate(file, func))
+			continue;
+
+		if (opts.module && is_noreturn(func) && func->exported &&
+		    !func->annotate_noreturn) {
+			WARN("%s() is exported and noreturn, its declaration needs __noreturn and ANNOTATE_EXPORTED_NORETURN()",
+			     func->name);
+			warnings++;
+		}
+
+		if (func->annotate_noreturn && !func->ignore_noreturn &&
+		    !is_noreturn(func)) {
+			WARN("%s() has ANNOTATE_EXPORTED_NORETURN() but returns",
+			     func->name);
+			warnings++;
+		}
+	}
+
+	return warnings;
 }
 
 static void init_cfi_state(struct cfi_state *cfi)
@@ -5004,8 +5041,10 @@ int check(struct objtool_file *file)
 
 		w += validate_functions(file);
 		w += validate_unwind_hints(file, NULL);
-		if (!w)
+		if (!w) {
 			w += validate_reachable_instructions(file);
+			w += validate_noreturns(file);
+		}
 
 		warnings += w;
 

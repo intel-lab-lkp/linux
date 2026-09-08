@@ -100,6 +100,7 @@ struct symbol {
 	u8 fake		     : 1;
 	u8 _noreturn         : 1;
 	u8 ignore_noreturn   : 1;
+	u8 annotate_noreturn : 1;
 	u8 exported          : 1;
 	struct list_head pv_target;
 	struct reloc *relocs;
