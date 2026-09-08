@@ -598,7 +598,7 @@ do {										\
 
 extern void __try_cmpxchg_user_wrong_size(void);
 
-#if defined(CONFIG_X86_32) || !defined(X86_FEATURE_CX16)
+#ifdef CONFIG_X86_32
 /*
  * Always fail on 32 bit arch or 64 arch without 128 bit cmpxchg support
  */

@@ -263,6 +263,9 @@ struct operand {
 	union {
 		unsigned long orig_val;
 		u64 orig_val64;
+#ifdef CONFIG_X86_64
+		u128 orig_val128;
+#endif
 	};
 	union {
 		unsigned long *reg;
@@ -276,6 +279,9 @@ struct operand {
 	union {
 		unsigned long val;
 		u64 val64;
+#ifdef CONFIG_X86_64
+		u128 val128;
+#endif
 		char valptr[sizeof(avx256_t)];
 		sse128_t vec_val;
 		avx256_t vec_val2;
