@@ -194,10 +194,16 @@ unsigned int nf_confirm(void *priv,
 		}
 	}
 
-	if (seqadj_needed &&
-	    nf_ct_seq_adjust(skb, ct, ctinfo, protoff) < 0) {
-		NF_CT_STAT_INC_ATOMIC(nf_ct_net(ct), drop);
-		return NF_DROP;
+	if (seqadj_needed) {
+		int ret = nf_ct_seq_adjust(skb, ct, ctinfo, protoff);
+
+		if (ret == -EINVAL) {
+			NF_CT_STAT_INC_ATOMIC(nf_ct_net(ct), invalid);
+			return NF_DROP;
+		} else if (ret < 0) {
+			NF_CT_STAT_INC_ATOMIC(nf_ct_net(ct), drop);
+			return NF_DROP;
+		}
 	}
 
 	/* We've seen it coming out the other side: confirm it */
