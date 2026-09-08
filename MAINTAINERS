@@ -7972,6 +7972,7 @@ F:	include/linux/fwnode.h
 F:	include/linux/kobj*
 F:	include/linux/ksysfs.h
 F:	include/linux/property.h
+F:	include/linux/revocable.h
 F:	include/linux/sys_soc.h
 F:	include/linux/sysfs.h
 F:	kernel/ksysfs.c
@@ -23408,6 +23409,15 @@ F:	include/trace/events/rseq.h
 F:	include/uapi/linux/rseq.h
 F:	kernel/rseq.c
 F:	tools/testing/selftests/rseq/
+
+REVOCABLE RESOURCE MANAGEMENT
+M:	Tzung-Bi Shih <tzungbi@kernel.org>
+L:	driver-core@lists.linux.dev
+S:	Maintained
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/driver-core/driver-core.git
+F:	Documentation/driver-api/driver-model/revocable.rst
+F:	drivers/base/revocable.c
+F:	include/linux/revocable.h
 
 RFKILL
 M:	Johannes Berg <johannes@sipsolutions.net>
