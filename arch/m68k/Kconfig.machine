@@ -130,6 +130,7 @@ config VIRT
 	depends on MMU
 	select GENERIC_CLOCKEVENTS
 	select GOLDFISH
+	select GOLDFISH_PIC
 	select GOLDFISH_TIMER
 	select GOLDFISH_TTY
 	select M68040
