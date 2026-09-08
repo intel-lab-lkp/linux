@@ -2792,7 +2792,8 @@ config STACKDEPOT_KUNIT_TEST
 	default KUNIT_ALL_TESTS
 	help
 	  Enable this option to test stack depot API behavior at boot.
-	  This test is built in, so KUNIT must also be built in.
+	  This test is built in because it exercises internal, non-exported
+	  stack depot helpers, so KUNIT must also be built in.
 
 	  KUnit tests run during boot and output the results to the debug log
 	  in TAP format (https://testanything.org/). Only useful for kernel

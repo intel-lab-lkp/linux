@@ -53,7 +53,8 @@ union handle_parts {
 struct stack_record {
 	struct list_head hash_list;	/* Links in the hash table */
 	u32 hash;			/* Hash in hash table */
-	u32 size;			/* Number of stored frames */
+	u16 size;			/* Number of stored frames */
+	u16 flags;
 	union handle_parts handle;	/* Constant after initialization */
 	refcount_t count;
 	union {
@@ -84,8 +85,9 @@ typedef u32 depot_flags_t;
  */
 #define STACK_DEPOT_FLAG_CAN_ALLOC	((depot_flags_t)0x0001)
 #define STACK_DEPOT_FLAG_GET		((depot_flags_t)0x0002)
+#define STACK_DEPOT_FLAG_COUNTABLE	((depot_flags_t)0x0004)
 
-#define STACK_DEPOT_FLAGS_NUM	2
+#define STACK_DEPOT_FLAGS_NUM	3
 #define STACK_DEPOT_FLAGS_MASK	((depot_flags_t)((1 << STACK_DEPOT_FLAGS_NUM) - 1))
 
 /*
@@ -144,6 +146,11 @@ static inline int stack_depot_early_init(void)	{ return 0; }
  * Users of this flag must also call stack_depot_put() when keeping the stack
  * trace is no longer required to avoid overflowing the refcount.
  *
+ * If STACK_DEPOT_FLAG_COUNTABLE is set in @depot_flags, stack depot stores the
+ * stack in hash-backed storage for callers that need direct stack_record count
+ * access. This flag does not imply %STACK_DEPOT_FLAG_CAN_ALLOC and is mutually
+ * exclusive with %STACK_DEPOT_FLAG_GET.
+ *
  * If the provided stack trace comes from the interrupt context, only the part
  * up to the interrupt entry is saved.
  *
@@ -178,11 +185,12 @@ depot_stack_handle_t stack_depot_save(unsigned long *entries,
 				      unsigned int nr_entries, gfp_t alloc_flags);
 
 /**
- * __stack_depot_get_stack_record - Get a pointer to a stack_record struct
+ * __stack_depot_get_stack_record - Get a hash-backed stack record
  *
  * @handle: Stack depot handle
  *
- * This function is only for internal purposes.
+ * This function is only for internal purposes. @handle must have been saved
+ * with %STACK_DEPOT_FLAG_COUNTABLE.
  *
  * Return: Returns a pointer to a stack_record struct
  */
@@ -260,10 +268,14 @@ int stack_depot_snprint(depot_stack_handle_t handle, char *buf, size_t size,
  *
  * @handle:	Stack depot handle returned from stack_depot_save()
  *
- * The stack trace is evicted from stack depot once all references to it have
- * been dropped (once the number of stack_depot_evict() calls matches the
- * number of stack_depot_save_flags() calls with STACK_DEPOT_FLAG_GET set for
- * this stack trace).
+ * Drop a reference acquired by stack_depot_save_flags() with
+ * %STACK_DEPOT_FLAG_GET. Calling this for a handle saved without
+ * %STACK_DEPOT_FLAG_GET is invalid; persistent handles are owned by stack depot
+ * for the lifetime of the system.
+ *
+ * The stack trace is evicted once the number of stack_depot_put() calls matches
+ * the number of successful stack_depot_save_flags() calls with
+ * %STACK_DEPOT_FLAG_GET for this stack trace.
  */
 void stack_depot_put(depot_stack_handle_t handle);
 
