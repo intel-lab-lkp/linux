@@ -19,9 +19,10 @@ public_apis = []
 structs = set()
 pass_by_reference = set()
 
-# (type_name, member_name) pairs whose variable-length array member is
-# marked "pragma aggregate" -- codec emission streams the member through
-# application hooks instead of iterating a materialized C array.
+# (type_name, member_name) pairs whose variable-length array or
+# optional-data list member is marked "pragma aggregate" -- codec
+# emission streams the member through application hooks instead of
+# iterating a materialized C array.
 aggregate_members = set()
 
 # Source position of each "pragma aggregate" marker, so a directive
