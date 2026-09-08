@@ -161,14 +161,10 @@ static const struct dmi_system_id dmi_lid_quirks[] = {
 static int acpi_button_probe(struct platform_device *pdev);
 static void acpi_button_remove(struct platform_device *pdev);
 
-#ifdef CONFIG_PM_SLEEP
 static int acpi_button_suspend(struct device *dev);
 static int acpi_button_resume(struct device *dev);
-#else
-#define acpi_button_suspend NULL
-#define acpi_button_resume NULL
-#endif
-static SIMPLE_DEV_PM_OPS(acpi_button_pm, acpi_button_suspend, acpi_button_resume);
+
+static DEFINE_SIMPLE_DEV_PM_OPS(acpi_button_pm, acpi_button_suspend, acpi_button_resume);
 
 static struct platform_driver acpi_button_driver = {
 	.probe = acpi_button_probe,
