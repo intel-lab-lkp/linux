@@ -94,3 +94,40 @@ void platform_device_msi_free_irqs_all(struct device *dev)
 	msi_remove_device_irq_domain(dev, MSI_DEFAULT_DOMAIN);
 }
 EXPORT_SYMBOL_GPL(platform_device_msi_free_irqs_all);
+
+/**
+ * platform_device_msi_rewrite - Rewrite the MSI config for a platform device
+ * @dev:		The device for which to rewrite interrupt
+ * @irq:		The interrupt number to be rewritten.
+ * @write_msi_msg:	Callback to write the interrupt message for @dev
+ *
+ * Rewrites the cached MSI message for a platform device.
+ *
+ * Note: Platform MSI does not automatically cache composed messages. The caller's
+ * @write_msi_msg callback is expected to cache the message (e.g. into desc->msg)
+ * during initial configuration so it can be rewritten on resume.
+ */
+void platform_device_msi_rewrite(struct device *dev, unsigned int irq,
+				 irq_write_msi_msg_t write_msi_msg)
+{
+	struct msi_desc *desc;
+	struct msi_msg msg;
+
+	if (!irq || !write_msi_msg)
+		return;
+
+	desc = irq_get_msi_desc(irq);
+	if (!desc) {
+		dev_err(dev, "Failed to get MSI descriptor for irq %u\n", irq);
+		return;
+	}
+
+	__get_cached_msi_msg(desc, &msg);
+	if (!msg.address_hi && !msg.address_lo) {
+		dev_warn(dev, "No cached MSI message found for irq %u\n", irq);
+		return;
+	}
+
+	write_msi_msg(desc, &msg);
+}
+EXPORT_SYMBOL_GPL(platform_device_msi_rewrite);

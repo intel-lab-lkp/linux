@@ -673,6 +673,8 @@ struct msi_domain_info *msi_get_domain_info(struct irq_domain *domain);
 int platform_device_msi_init_and_alloc_irqs(struct device *dev, unsigned int nvec,
 					    irq_write_msi_msg_t write_msi_msg);
 void platform_device_msi_free_irqs_all(struct device *dev);
+void platform_device_msi_rewrite(struct device *dev, unsigned int irq,
+				 irq_write_msi_msg_t write_msi_msg);
 
 bool msi_device_has_isolated_msi(struct device *dev);
 
