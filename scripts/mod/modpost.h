@@ -127,6 +127,7 @@ struct module {
 	bool has_init;
 	bool has_cleanup;
 	char	     srcversion[25];
+	bool need_srcversion;
 	// Missing namespace dependencies
 	struct list_head missing_namespaces;
 	// Actual imported namespaces
@@ -213,6 +214,7 @@ void handle_moddevtable(struct module *mod, struct elf_info *info,
 			Elf_Sym *sym, const char *symname);
 
 /* sumversion.c */
+void sumversion_init(void);
 void get_src_version(const char *modname, char sum[], unsigned sumlen);
 
 /* from modpost.c */

@@ -16,6 +16,7 @@
 #include <fnmatch.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <pthread.h>
 #include <string.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -1717,8 +1718,7 @@ static void read_symbols(const char *modname)
 	if (!mod->is_vmlinux) {
 		version = get_modinfo(&info, "version");
 		if (version || all_versions)
-			get_src_version(mod->name, mod->srcversion,
-					sizeof(mod->srcversion) - 1);
+			mod->need_srcversion = true;
 	}
 
 	parse_elf_finish(&info);
@@ -1734,6 +1734,72 @@ static void read_symbols(const char *modname)
 
 		mod_set_crcs(mod);
 	}
+}
+
+static struct module **srcversion_mods;
+static unsigned int nr_srcversion_mods, next_srcversion_mod;
+
+static bool get_next_src_version(void)
+{
+	struct module *mod;
+	unsigned int idx;
+
+	idx = __sync_fetch_and_add(&next_srcversion_mod, 1);
+	if (idx >= nr_srcversion_mods)
+		return false;
+	mod = srcversion_mods[idx];
+
+	get_src_version(mod->name, mod->srcversion,
+			sizeof(mod->srcversion) - 1);
+	return true;
+}
+
+static void *srcversion_worker(void *arg)
+{
+	while (get_next_src_version())
+		;
+
+	return NULL;
+}
+
+static void hash_srcversions(void)
+{
+	unsigned int i = 0;
+	struct module *mod;
+	pthread_t *threads;
+	long nr_threads;
+
+	list_for_each_entry(mod, &modules, list)
+		if (mod->need_srcversion)
+			nr_srcversion_mods++;
+
+	if (!nr_srcversion_mods)
+		return;
+
+	srcversion_mods = xmalloc(nr_srcversion_mods * sizeof(*srcversion_mods));
+
+	list_for_each_entry(mod, &modules, list)
+		if (mod->need_srcversion)
+			srcversion_mods[i++] = mod;
+
+	nr_threads = sysconf(_SC_NPROCESSORS_ONLN);
+	nr_threads = nr_threads < 1 ? 1 : nr_threads; /* On error assume 1. */
+	if (nr_threads > nr_srcversion_mods)
+		nr_threads = nr_srcversion_mods;
+
+	sumversion_init();
+	threads = xmalloc(nr_threads * sizeof(*threads));
+	for (i = 0; i < nr_threads; i++) {
+		if (pthread_create(&threads[i], NULL, srcversion_worker, NULL)) {
+			perror("pthread_create");
+			exit(1);
+		}
+	}
+	for (i = 0; i < nr_threads; i++)
+		pthread_join(threads[i], NULL);
+
+	free(threads);
+	free(srcversion_mods);
 }
 
 static void read_symbols_from_files(const char *filename)
@@ -2728,6 +2794,8 @@ int main(int argc, char **argv)
 
 	if (files_source)
 		read_symbols_from_files(files_source);
+
+	hash_srcversions();
 
 	list_for_each_entry(mod, &modules, list) {
 		keep_no_trim_symbols(mod);

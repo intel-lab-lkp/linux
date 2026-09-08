@@ -249,7 +249,7 @@ static int parse_comment(const char *file, unsigned long len)
 /* FIXME: Handle .s files differently (eg. # starts comments) --RR */
 static bool stop_char[256];
 
-static void sumversion_init(void)
+void sumversion_init(void)
 {
 	static bool done;
 	int chr;
@@ -402,7 +402,6 @@ static int parse_source_files(const char *objfile, struct md4_ctx *md)
 				     line, strerror(errno));
 				goto out_file;
 			}
-
 		}
 
 	}

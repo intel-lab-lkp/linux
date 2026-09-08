@@ -5,6 +5,7 @@ hostprogs-always-y	+= modpost mk_elfconfig
 always-y		+= empty.o
 
 modpost-objs	:= modpost.o file2alias.o sumversion.o symsearch.o
+HOSTLDLIBS_modpost := -lpthread
 
 devicetable-offsets-file := devicetable-offsets.h
 
