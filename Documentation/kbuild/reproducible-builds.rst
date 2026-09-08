@@ -76,6 +76,22 @@ include generated files.  You should ensure the source tree is
 pristine by running ``make mrproper`` or ``git clean -d -f -x`` before
 building a source package.
 
+Compression tools
+-----------------
+
+The compressed kernel image, compressed modules and packages are produced
+using the binary specified by the environment variable ``KGZIP`` (described
+in Documentation/kbuild/kbuild.rst).
+
+This variable defaults to ``pigz`` if installed (a parallel implementation
+of gzip), or ``gzip`` otherwise.
+
+The generated output between two invocations of identical builds with
+either of the default tools will be byte-for-byte equivalent.
+
+However, for reproducible builds, ensure the same tool is used on all build
+hosts, as different tools may generate different output from one another.
+
 Module signing
 --------------
 

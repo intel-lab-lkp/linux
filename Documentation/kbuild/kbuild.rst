@@ -110,6 +110,19 @@ HOSTLDLIBS
 ----------
 Additional libraries to link against when building host programs.
 
+KGZIP
+-----
+The gzip compressor used for the compressed kernel image, compressed
+modules and packaging.
+
+If unset, it defaults to pigz (a parallel implementation of gzip) if available,
+otherwise gzip.
+
+KBZIP2, KLZOP, LZMA, LZ4, XZ, ZSTD
+----------------------------------
+The compressor programs for the other formats. Each defaults to the program
+of the same name.
+
 .. _userkbuildflags:
 
 USERCFLAGS
