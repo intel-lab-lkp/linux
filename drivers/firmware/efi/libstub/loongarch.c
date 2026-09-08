@@ -5,6 +5,7 @@
  * Copyright (C) 2020-2022 Loongson Technology Corporation Limited
  */
 
+#include <linux/objtool.h>
 #include <asm/efi.h>
 #include <asm/addrspace.h>
 #include "efistub.h"
@@ -103,3 +104,10 @@ efi_status_t efi_boot_kernel(void *handle, efi_loaded_image_t *image,
 	real_kernel_entry(true, (unsigned long)cmdline_ptr,
 			  (unsigned long)efi_system_table);
 }
+
+/*
+ * Objtool has no way of knowing the real_kernel_entry() indirect call is
+ * noreturn. Just tell it to ignore this function: it's boot code anyway, so
+ * ORC coverage isn't needed.
+ */
+STACK_FRAME_NON_STANDARD(efi_boot_kernel);
