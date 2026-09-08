@@ -536,6 +536,7 @@ Returns: 0 on success, < 0 on error, -EAGAIN if caller should retry
 where the allowed values for page_type are #define'd as::
 
         KVM_SEV_SNP_PAGE_TYPE_NORMAL
+        KVM_SEV_SNP_PAGE_TYPE_VMSA
         KVM_SEV_SNP_PAGE_TYPE_ZERO
         KVM_SEV_SNP_PAGE_TYPE_UNMEASURED
         KVM_SEV_SNP_PAGE_TYPE_SECRETS
@@ -544,7 +545,68 @@ where the allowed values for page_type are #define'd as::
 See the SEV-SNP spec [snp-fw-abi]_ for further details on how each page type is
 used/measured.
 
-20. KVM_SEV_SNP_LAUNCH_FINISH
+``KVM_SEV_SNP_PAGE_TYPE_VMSA`` creates VMSA pages as part of the measured
+initial image.  A request must contain exactly one 4 KiB VMSA page, but the
+command may be used multiple times.  Creating a VMSA page does not associate it
+with a vCPU; use ``KVM_SEV_SNP_SET_VCPU_STATE`` on the intended vCPU file
+descriptor before launch finish to make that association.  KVM treats the
+VMSA contents as guest-owned data, but requires VMPL 0 and a ``sev_features``
+value that matches the VM's configured VMSA features.
+
+20. KVM_SEV_SNP_GET_VCPU_STATE / KVM_SEV_SNP_SET_VCPU_STATE
+------------------------------------------------------------
+
+These commands get or set the VMSA and GHCB addresses for the vCPU on whose
+file descriptor the command is issued.  Unlike the other SEV commands,
+userspace must issue KVM_MEMORY_ENCRYPT_OP on a vCPU file descriptor.  The
+capability is reported as ``KVM_CAP_SNP_VCPU_STATE``.
+
+Parameters (in/out): struct kvm_sev_snp_vcpu_state
+
+Returns: 0 on success, -negative on error
+
+::
+
+        #define KVM_SEV_SNP_VCPU_STATE_VMSA_VALID        _BITULL(0)
+        #define KVM_SEV_SNP_VCPU_STATE_GHCB_VALID        _BITULL(1)
+
+        struct kvm_sev_snp_vcpu_state {
+                __u64 valid_fields;
+                __u64 vmsa_gpa;
+                __u64 ghcb_gpa;
+                __u64 pad[5];           /* Must be zero */
+        };
+
+``KVM_SEV_SNP_GET_VCPU_STATE`` returns the current addresses and sets the
+corresponding bit in ``valid_fields`` for each valid address.
+
+``KVM_SEV_SNP_SET_VCPU_STATE`` sets addresses whose validity bits are present
+and invalidates addresses whose bits are absent.  The command must be issued
+after launch start and before KVM_SEV_SNP_LAUNCH_FINISH, and the VM must have
+enabled ``KVM_CAP_SNP_DIRECT_VMSA``.  A valid VMSA GPA must be backed by
+guest_memfd and populated.  The GPA must be 4-KiB aligned.  A valid GHCB
+address is copied without inspecting its backing page.  Nonzero reserved
+fields or unknown validity bits are rejected.
+
+``KVM_CAP_SNP_DIRECT_VMSA`` is a VM-scoped capability that selects direct-VMSA
+mode.  Userspace enables it with ``KVM_ENABLE_CAP`` on an SNP VM before
+creating any vCPUs.  ``flags`` and all elements of ``args`` must be zero.
+Enabling the capability on a non-SNP VM or after creating a vCPU is rejected.
+
+In direct-VMSA mode, KVM does not allocate a KVM-owned VMSA when a vCPU is
+created and does not generate or measure one at launch finish.  All launch
+VMSAs are owned and supplied by userspace.  Valid VMSAs selected with
+``KVM_SEV_SNP_SET_VCPU_STATE`` are preserved, while vCPUs without a valid VMSA
+have no runnable VMSA until the guest uses SNP AP creation to supply one.  If
+the capability is not enabled, launch finish retains the legacy behavior of
+generating and measuring a KVM-owned VMSA for every vCPU.  VMSAs that were
+measured but not selected remain ordinary valid pages in the initial image.
+
+Direct VMSAs make the launch measurement independent of KVM's selected VMSA
+GPA and of the configured vCPU count.  This gives VMMs a stable launch
+measurement across hypervisors.
+
+21. KVM_SEV_SNP_LAUNCH_FINISH
 -----------------------------
 
 After completion of the SNP guest launch flow, the KVM_SEV_SNP_LAUNCH_FINISH
@@ -572,7 +634,7 @@ Returns: 0 on success, -negative on error
 See SNP_LAUNCH_FINISH in the SEV-SNP specification [snp-fw-abi]_ for further
 details on the input parameters in ``struct kvm_sev_snp_launch_finish``.
 
-21. KVM_SEV_SNP_ENABLE_REQ_CERTS
+22. KVM_SEV_SNP_ENABLE_REQ_CERTS
 --------------------------------
 
 The KVM_SEV_SNP_ENABLE_REQ_CERTS command will configure KVM to exit to
