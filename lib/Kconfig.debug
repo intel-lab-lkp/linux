@@ -599,7 +599,8 @@ config OBJTOOL_CONTROL_FLOW
 config OBJTOOL_DEFERRED
 	def_bool y
 	depends on OBJTOOL
-	depends on LTO_CLANG || X86_KERNEL_IBT || KLP_BUILD
+	depends on OBJTOOL_CONTROL_FLOW || NOINSTR_VALIDATION || LTO_CLANG || \
+		   X86_KERNEL_IBT || KLP_BUILD
 
 config VMLINUX_MAP
 	bool "Generate vmlinux.map file when linking"
