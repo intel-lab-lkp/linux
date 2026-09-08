@@ -360,6 +360,7 @@ static bool is_special_section(struct section *sec)
 
 	static const char * const non_special_discards[] = {
 		".discard.addressable",
+		".discard.annotate_noreturn",
 		".discard.sym_checksum",
 	};
 
@@ -2216,6 +2217,34 @@ static int copy_import_ns(struct elfs *e)
 	return 0;
 }
 
+/*
+ * ANNOTATE_EXPORTED_NORETURN() annotations reference their functions by name
+ * rather than by relocation, so individual entries can't be extracted.  Copy
+ * the (tiny) section as-is.
+ */
+static int copy_annotate_noreturn(struct elfs *e)
+{
+	struct section *patched_sec, *out_sec;
+
+	patched_sec = find_section_by_name(e->patched, ".discard.annotate_noreturn");
+	if (!patched_sec || !patched_sec->data || !sec_size(patched_sec))
+		return 0;
+
+	out_sec = elf_create_section(e->out, patched_sec->name, 0,
+				     patched_sec->sh.sh_entsize,
+				     patched_sec->sh.sh_type,
+				     patched_sec->sh.sh_addralign,
+				     patched_sec->sh.sh_flags);
+	if (!out_sec)
+		return -1;
+
+	if (!elf_add_data(e->out, out_sec, patched_sec->data->d_buf,
+			  sec_size(patched_sec)))
+		return -1;
+
+	return 0;
+}
+
 int cmd_klp_diff(int argc, const char **argv)
 {
 	struct elfs e = {0};
@@ -2285,6 +2314,9 @@ int cmd_klp_diff(int argc, const char **argv)
 		return -1;
 
 	if (copy_import_ns(&e))
+		return -1;
+
+	if (copy_annotate_noreturn(&e))
 		return -1;
 
 	if  (elf_write(e.out))
