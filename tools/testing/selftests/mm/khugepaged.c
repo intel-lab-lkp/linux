@@ -1230,6 +1230,7 @@ static void collapse_fork_cow_race(struct collapse_context *c, struct mem_ops *o
 	close(sync[1]);
 	if (read(sync[0], &go, 1) != 1)
 		ksft_exit_fail_msg("child never reached the collapse\n");
+	close(sync[0]);
 
 	/*
 	 * Unshare one page at a time: a burst would break CoW on the whole
@@ -1237,12 +1238,17 @@ static void collapse_fork_cow_race(struct collapse_context *c, struct mem_ops *o
 	 */
 	i = 0;
 	for (;;) {
+		pid_t ret;
+
 		if (i < n)
 			ip[i * stride] = i + 0xbeef0000;
 		i++;
 		usleep(10 * 1000);
-		if (waitpid(child, &wstatus, WNOHANG))
+		ret = waitpid(child, &wstatus, WNOHANG);
+		if (ret == child)
 			break;
+		if (ret < 0)
+			ksft_exit_fail_perror("waitpid()");
 	}
 
 	/* Finish whatever the paced sweep did not reach */
