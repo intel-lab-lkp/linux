@@ -136,6 +136,11 @@ hwinfo_db_validate(struct nfp_cpp *cpp, struct nfp_hwinfo *db, u32 len)
 		return -EINVAL;
 	}
 
+	if (size < sizeof(*db) + sizeof(u32)) {
+		nfp_err(cpp, "Truncated hwinfo table, size %u\n", size);
+		return -EINVAL;
+	}
+
 	size -= sizeof(u32);
 	crc = crc32_posix(db, size);
 	if (crc != get_unaligned_le32(db->start + size)) {
