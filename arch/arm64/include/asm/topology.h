@@ -17,6 +17,12 @@ int pcibus_to_node(struct pci_bus *bus);
 
 #include <linux/arch_topology.h>
 
+static inline bool this_cpu_has_broken_amu_constcnt(void)
+{
+	return this_cpu_has_cap(ARM64_WORKAROUND_2457168) ||
+	       this_cpu_has_cap(ARM64_WORKAROUND_3821522);
+}
+
 void update_freq_counters_refs(void);
 
 /* Replace task scheduler's default frequency-invariant accounting */

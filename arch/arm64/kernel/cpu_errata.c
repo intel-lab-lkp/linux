@@ -926,6 +926,16 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		CAP_MIDR_RANGE(MIDR_CORTEX_A510, 0, 0, 1, 1)
 	},
 #endif
+#ifdef CONFIG_ARM64_ERRATUM_3821522
+	{
+		.desc = "ARM erratum 3821522",
+		.capability = ARM64_WORKAROUND_3821522,
+		.type = ARM64_CPUCAP_WEAK_LOCAL_CPU_FEATURE,
+
+		/* Cortex-A725 r0p0 - r0p2 */
+		CAP_MIDR_RANGE(MIDR_CORTEX_A725, 0, 0, 0, 2)
+	},
+#endif
 #ifdef CONFIG_ARM64_ERRATUM_2038923
 	{
 		.desc = "ARM erratum 2038923",
