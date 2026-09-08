@@ -2472,6 +2472,8 @@ static void wm8962_configure_bclk(struct snd_soc_component *component)
 	int clocking2 = 0;
 	int clocking4 = 0;
 	int aif2 = 0;
+	int sysclk;
+	bool sysclk_was_ena;
 
 	if (!wm8962->sysclk_rate) {
 		dev_dbg(component->dev, "No SYSCLK configured\n");
@@ -2504,8 +2506,19 @@ static void wm8962_configure_bclk(struct snd_soc_component *component)
 	/* DSPCLK_DIV can be only generated correctly after enabling SYSCLK.
 	 * So we here provisionally enable it and then disable it afterward
 	 * if current bias_level hasn't reached SND_SOC_BIAS_ON.
+	 *
+	 * SYSCLK_ENA is owned by the "SYSCLK" DAPM supply widget, which may
+	 * already have it set even below SND_SOC_BIAS_ON: wm8962_mic_detect()
+	 * force-enables that pin, so on boards using it (the Tegra machine
+	 * driver) the bit is set once at card init and DAPM never writes it
+	 * again. If we unconditionally clear it here, SYSCLK stays off for
+	 * every stream, DAPM still believes it is on, and the codec is
+	 * silent with "DC servo timed out" errors. Only undo what we did.
 	 */
-	if (snd_soc_dapm_get_bias_level(dapm) != SND_SOC_BIAS_ON)
+	sysclk = snd_soc_component_read(component, WM8962_CLOCKING2);
+	sysclk_was_ena = sysclk >= 0 && (sysclk & WM8962_SYSCLK_ENA);
+	if (!sysclk_was_ena &&
+	    snd_soc_dapm_get_bias_level(dapm) != SND_SOC_BIAS_ON)
 		snd_soc_component_update_bits(component, WM8962_CLOCKING2,
 				WM8962_SYSCLK_ENA_MASK, WM8962_SYSCLK_ENA);
 
@@ -2519,7 +2532,8 @@ static void wm8962_configure_bclk(struct snd_soc_component *component)
 	usleep_range(500, 1000);
 	dspclk = snd_soc_component_read(component, WM8962_CLOCKING1);
 
-	if (snd_soc_dapm_get_bias_level(dapm) != SND_SOC_BIAS_ON)
+	if (!sysclk_was_ena &&
+	    snd_soc_dapm_get_bias_level(dapm) != SND_SOC_BIAS_ON)
 		snd_soc_component_update_bits(component, WM8962_CLOCKING2,
 				WM8962_SYSCLK_ENA_MASK, 0);
 
