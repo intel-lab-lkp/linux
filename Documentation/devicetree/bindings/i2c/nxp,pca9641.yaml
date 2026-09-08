@@ -1,0 +1,109 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/i2c/nxp,pca9641.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP PCA9641 2-to-1 I2C bus master arbiter
+
+maintainers:
+  - Shiv Prakash Gupta <shivprakash.gupta@nxp.com>
+
+description: |
+  The PCA9641 is a 2-to-1 I2C bus master arbiter that manages two upstream
+  I2C masters competing for a single downstream slave bus. It uses a
+  lock/grant ownership model: a master requests the downstream bus by setting
+  LOCK_REQ, waits for the arbiter to assert LOCK_GRANT, then explicitly
+  connects to the bus via BUS_CONNECT before issuing transactions.
+
+  Key features compared to the PCA9541:
+    - Lock/grant ownership model (LOCK_REQ + LOCK_GRANT bits in CONTR register)
+    - BUS_CONNECT bit must be set explicitly after receiving LOCK_GRANT
+    - Reserve Time register (RT): guarantees bus ownership for 1-255 ms
+    - INT0 and INT1 interrupt outputs (one per upstream master) and INT_IN
+      interrupt input that propagates downstream slave interrupts upstream
+    - 16-bit shared mailbox (MB_LO + MB_HI) for inter-master communication
+    - ID register (read-only, value 0x38) to distinguish from PCA9541
+    - Four address pins (AD0-AD3) allowing up to 112 unique I2C addresses
+
+properties:
+  compatible:
+    const: nxp,pca9641
+
+  reg:
+    maxItems: 1
+    description:
+      7-bit I2C slave address of the PCA9641 on the upstream bus. The address
+      is set by hardware pins AD0-AD3 at power-on or hardware reset.
+
+  interrupts:
+    maxItems: 1
+    description:
+      Optional interrupt from the INT0 or INT1 output pin. When provided the
+      driver uses interrupt-assisted arbitration (waits on LOCK_GRANT interrupt)
+      instead of polling the CONTR register. Either INT0 or INT1 can be
+      connected depending on which upstream master port is used.
+
+  i2c-arb:
+    type: object
+    $ref: /schemas/i2c/i2c-controller.yaml
+    unevaluatedProperties: false
+    description:
+      I2C bus node representing the downstream slave bus controlled by the
+      PCA9641. Downstream slave devices are declared as child nodes here.
+
+required:
+  - compatible
+  - reg
+  - i2c-arb
+
+additionalProperties: false
+
+examples:
+  - |
+    /* Minimal example: polling mode (no interrupt wiring) */
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        i2c-arbiter@74 {
+            compatible = "nxp,pca9641";
+            reg = <0x74>;
+
+            i2c-arb {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                eeprom@50 {
+                    compatible = "atmel,24c32";
+                    reg = <0x50>;
+                };
+            };
+        };
+    };
+
+  - |
+    /* Interrupt mode: INT0 wired to SoC GPIO */
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        i2c-arbiter@70 {
+            compatible = "nxp,pca9641";
+            reg = <0x70>;
+            interrupt-parent = <&gpio1>;
+            interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
+
+            i2c-arb {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                temperature-sensor@48 {
+                    compatible = "national,lm75";
+                    reg = <0x48>;
+                };
+            };
+        };
+    };
