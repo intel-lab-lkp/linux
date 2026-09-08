@@ -2557,6 +2557,17 @@ static void calc_vtime_cost_builtin(struct bio *bio, struct ioc_gq *iocg,
 		coef_randio	= ioc->params.lcoefs[LCOEF_WRANDIO];
 		coef_page	= ioc->params.lcoefs[LCOEF_WPAGE];
 		break;
+	case REQ_OP_ZONE_APPEND:
+		/*
+		 * A zone append advances the zone write pointer and is
+		 * therefore sequential from the device's perspective, so
+		 * the cursor-based classification below doesn't apply.
+		 * Compute the full cost here.
+		 */
+		if (!is_merge)
+			cost += ioc->params.lcoefs[LCOEF_WSEQIO];
+		cost += pages * ioc->params.lcoefs[LCOEF_WPAGE];
+		goto out;
 	default:
 		goto out;
 	}
@@ -2717,7 +2728,9 @@ static void ioc_rqos_throttle(struct rq_qos *rqos, struct bio *bio)
 	if (!iocg_activate(iocg, &now))
 		return;
 
-	iocg->cursor = bio_end_sector(bio);
+	/* ZA bi_sector is zone start, not the write position */
+	if (bio_op(bio) != REQ_OP_ZONE_APPEND)
+		iocg->cursor = bio_end_sector(bio);
 	vtime = atomic64_read(&iocg->vtime);
 	cost = adjust_inuse_and_calc_cost(iocg, vtime, abs_cost, &now);
 
