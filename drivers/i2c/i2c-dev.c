@@ -67,7 +67,7 @@ found:
 
 static struct i2c_dev *get_free_i2c_dev(struct i2c_adapter *adap)
 {
-	struct i2c_dev *i2c_dev;
+	struct i2c_dev *i2c_dev, *tmp;
 
 	if (adap->nr >= I2C_MINORS) {
 		pr_err("Out of device minors (%d)\n", adap->nr);
@@ -80,6 +80,13 @@ static struct i2c_dev *get_free_i2c_dev(struct i2c_adapter *adap)
 	i2c_dev->adap = adap;
 
 	spin_lock(&i2c_dev_list_lock);
+	list_for_each_entry(tmp, &i2c_dev_list, list) {
+		if (tmp->adap->nr == adap->nr) {
+			spin_unlock(&i2c_dev_list_lock);
+			kfree(i2c_dev);
+			return ERR_PTR(-EBUSY);
+		}
+	}
 	list_add_tail(&i2c_dev->list, &i2c_dev_list);
 	spin_unlock(&i2c_dev_list_lock);
 	return i2c_dev;
