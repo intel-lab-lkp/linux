@@ -608,9 +608,9 @@ out:
 	return ret;
 }
 
-static inline void gfs2_indirect_init(struct metapath *mp,
-				      struct gfs2_glock *gl, unsigned int i,
-				      unsigned offset, u64 bn)
+static inline int gfs2_indirect_init(struct metapath *mp,
+				     struct gfs2_glock *gl, unsigned int i,
+				     unsigned int offset, u64 bn)
 {
 	__be64 *ptr = (__be64 *)(mp->mp_bh[i - 1]->b_data +
 		       ((i > 1) ? sizeof(struct gfs2_meta_header) :
@@ -618,11 +618,14 @@ static inline void gfs2_indirect_init(struct metapath *mp,
 	BUG_ON(i < 1);
 	BUG_ON(mp->mp_bh[i] != NULL);
 	mp->mp_bh[i] = gfs2_meta_new(gl, bn);
+	if (!mp->mp_bh[i])
+		return -EIO;
 	gfs2_trans_add_meta(gl, mp->mp_bh[i]);
 	gfs2_metatype_set(mp->mp_bh[i], GFS2_METATYPE_IN, GFS2_FORMAT_IN);
 	gfs2_buffer_clear_tail(mp->mp_bh[i], sizeof(struct gfs2_meta_header));
 	ptr += offset;
 	*ptr = cpu_to_be64(bn);
+	return 0;
 }
 
 enum alloc_state {
@@ -723,8 +726,11 @@ static int __gfs2_iomap_alloc(struct inode *inode, struct iomap *iomap,
 				zero_bn = *ptr;
 			}
 			for (; i - 1 < mp->mp_fheight - ip->i_height && n > 0;
-			     i++, n--)
-				gfs2_indirect_init(mp, ip->i_gl, i, 0, bn++);
+			     i++, n--) {
+				ret = gfs2_indirect_init(mp, ip->i_gl, i, 0, bn++);
+				if (ret)
+					goto out;
+			}
 			if (i - 1 == mp->mp_fheight - ip->i_height) {
 				i--;
 				gfs2_buffer_copy_tail(mp->mp_bh[i],
@@ -751,9 +757,12 @@ static int __gfs2_iomap_alloc(struct inode *inode, struct iomap *iomap,
 		case ALLOC_GROW_DEPTH:
 			if (i > 1 && i < mp->mp_fheight)
 				gfs2_trans_add_meta(ip->i_gl, mp->mp_bh[i-1]);
-			for (; i < mp->mp_fheight && n > 0; i++, n--)
-				gfs2_indirect_init(mp, ip->i_gl, i,
-						   mp->mp_list[i-1], bn++);
+			for (; i < mp->mp_fheight && n > 0; i++, n--) {
+				ret = gfs2_indirect_init(mp, ip->i_gl, i,
+							 mp->mp_list[i-1], bn++);
+				if (ret)
+					goto out;
+			}
 			if (i == mp->mp_fheight)
 				state = ALLOC_DATA;
 			if (n == 0)

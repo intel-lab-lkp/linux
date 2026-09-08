@@ -801,6 +801,10 @@ static int buf_lo_scan_elements(struct gfs2_jdesc *jd, u32 start,
 			return error;
 
 		bh_ip = gfs2_meta_new(gl, blkno);
+		if (!bh_ip) {
+			brelse(bh_log);
+			return -EIO;
+		}
 		memcpy(bh_ip->b_data, bh_log->b_data, bh_log->b_size);
 
 		if (gfs2_meta_check(sdp, bh_ip))
@@ -1026,6 +1030,10 @@ static int databuf_lo_scan_elements(struct gfs2_jdesc *jd, u32 start,
 			return error;
 
 		bh_ip = gfs2_meta_new(gl, blkno);
+		if (!bh_ip) {
+			brelse(bh_log);
+			return -EIO;
+		}
 		memcpy(bh_ip->b_data, bh_log->b_data, bh_log->b_size);
 
 		/* Unescape */

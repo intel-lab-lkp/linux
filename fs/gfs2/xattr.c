@@ -648,6 +648,8 @@ static int ea_alloc_blk(struct gfs2_inode *ip, struct buffer_head **bhp)
 		return error;
 	gfs2_trans_remove_revoke(sdp, block, 1);
 	*bhp = gfs2_meta_new(ip->i_gl, block);
+	if (!*bhp)
+		return -EIO;
 	gfs2_trans_add_meta(ip->i_gl, *bhp);
 	gfs2_metatype_set(*bhp, GFS2_METATYPE_EA, GFS2_FORMAT_EA);
 	gfs2_buffer_clear_tail(*bhp, sizeof(struct gfs2_meta_header));
@@ -710,6 +712,8 @@ static int ea_write(struct gfs2_inode *ip, struct gfs2_ea_header *ea,
 				return error;
 			gfs2_trans_remove_revoke(sdp, block, 1);
 			bh = gfs2_meta_new(ip->i_gl, block);
+			if (!bh)
+				return -EIO;
 			gfs2_trans_add_meta(ip->i_gl, bh);
 			gfs2_metatype_set(bh, GFS2_METATYPE_ED, GFS2_FORMAT_ED);
 
@@ -1011,6 +1015,8 @@ static int ea_set_block(struct gfs2_inode *ip, struct gfs2_ea_request *er,
 			return error;
 		gfs2_trans_remove_revoke(sdp, blk, 1);
 		indbh = gfs2_meta_new(ip->i_gl, blk);
+		if (!indbh)
+			return -EIO;
 		gfs2_trans_add_meta(ip->i_gl, indbh);
 		gfs2_metatype_set(indbh, GFS2_METATYPE_IN, GFS2_FORMAT_IN);
 		gfs2_buffer_clear_tail(indbh, mh_size);

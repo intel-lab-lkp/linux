@@ -544,13 +544,15 @@ static void gfs2_init_dir(struct buffer_head *dibh,
  * take any ACLs, LSM xattrs, etc.
  */
 
-static void gfs2_init_xattr(struct gfs2_inode *ip)
+static int gfs2_init_xattr(struct gfs2_inode *ip)
 {
 	struct gfs2_sbd *sdp = GFS2_SB(&ip->i_inode);
 	struct buffer_head *bh;
 	struct gfs2_ea_header *ea;
 
 	bh = gfs2_meta_new(ip->i_gl, ip->i_eattr);
+	if (!bh)
+		return -EIO;
 	gfs2_trans_add_meta(ip->i_gl, bh);
 	gfs2_metatype_set(bh, GFS2_METATYPE_EA, GFS2_FORMAT_EA);
 	gfs2_buffer_clear_tail(bh, sizeof(struct gfs2_meta_header));
@@ -561,6 +563,7 @@ static void gfs2_init_xattr(struct gfs2_inode *ip)
 	ea->ea_flags = GFS2_EAFLAG_LAST;
 
 	brelse(bh);
+	return 0;
 }
 
 /**
@@ -571,13 +574,15 @@ static void gfs2_init_xattr(struct gfs2_inode *ip)
  *
  */
 
-static void init_dinode(struct gfs2_inode *dip, struct gfs2_inode *ip,
-			const char *symname)
+static int init_dinode(struct gfs2_inode *dip, struct gfs2_inode *ip,
+		       const char *symname)
 {
 	struct gfs2_dinode *di;
 	struct buffer_head *dibh;
 
 	dibh = gfs2_meta_new(ip->i_gl, ip->i_no_addr);
+	if (!dibh)
+		return -EIO;
 	gfs2_trans_add_meta(ip->i_gl, dibh);
 	di = (struct gfs2_dinode *)dibh->b_data;
 	gfs2_dinode_out(ip, di);
@@ -602,6 +607,7 @@ static void init_dinode(struct gfs2_inode *dip, struct gfs2_inode *ip,
 
 	set_buffer_uptodate(dibh);
 	brelse(dibh);
+	return 0;
 }
 
 /**
@@ -864,10 +870,14 @@ retry:
 		goto fail_gunlock3;
 
 	if (blocks > 1) {
-		gfs2_init_xattr(ip);
+		error = gfs2_init_xattr(ip);
+		if (error)
+			goto fail_gunlock3;
 		xattr_initialized = true;
 	}
-	init_dinode(dip, ip, symname);
+	error = init_dinode(dip, ip, symname);
+	if (error)
+		goto fail_gunlock3;
 	gfs2_trans_end(sdp);
 
 	glock_set_object(ip->i_gl, ip);

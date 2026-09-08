@@ -93,6 +93,8 @@ int gfs2_dir_get_new_buffer(struct gfs2_inode *ip, u64 block,
 	struct buffer_head *bh;
 
 	bh = gfs2_meta_new(ip->i_gl, block);
+	if (!bh)
+		return -EIO;
 	gfs2_trans_add_meta(ip->i_gl, bh);
 	gfs2_metatype_set(bh, GFS2_METATYPE_JD, GFS2_FORMAT_JD);
 	gfs2_buffer_clear_tail(bh, sizeof(struct gfs2_meta_header));
