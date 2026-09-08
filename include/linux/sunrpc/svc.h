@@ -567,6 +567,7 @@ static inline void svcxdr_init_encode(struct svc_rqst *rqstp)
 	xdr->page_ptr = buf->pages - 1;
 	buf->buflen = PAGE_SIZE * (rqstp->rq_page_end - buf->pages);
 	xdr->rqst = NULL;
+	xdr->xdrgen_ctx = NULL;
 }
 
 /**

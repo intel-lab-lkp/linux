@@ -4609,6 +4609,7 @@ static void svcxdr_init_encode_from_buffer(struct xdr_stream *xdr,
 	xdr->p = p;
 	xdr->end = (void *)p + bytes;
 	buf->buflen = bytes;
+	xdr->xdrgen_ctx = NULL;
 }
 
 __be32 nfsd4_encode_fattr_to_buf(__be32 **p, int words,
