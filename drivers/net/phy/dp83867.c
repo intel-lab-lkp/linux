@@ -196,6 +196,8 @@ struct dp83867_private {
 	bool set_clk_output;
 	u32 clk_output_sel;
 	bool sgmii_ref_clk_en;
+	u16 led_polarity;
+	u16 led_polarity_mask;
 };
 
 static int dp83867_ack_interrupt(struct phy_device *phydev)
@@ -896,6 +898,15 @@ static int dp83867_config_init(struct phy_device *phydev)
 			       mask, val);
 	}
 
+	/* Restore the LED polarity dropped by the soft reset in phy_init_hw() */
+	if (dp83867->led_polarity_mask) {
+		ret = phy_modify(phydev, DP83867_LEDCR2,
+				 dp83867->led_polarity_mask,
+				 dp83867->led_polarity);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
@@ -1141,8 +1152,10 @@ static int dp83867_led_hw_control_get(struct phy_device *phydev, u8 index,
 static int dp83867_led_polarity_set(struct phy_device *phydev, int index,
 				    unsigned long modes)
 {
+	struct dp83867_private *dp83867 = phydev->priv;
+	u16 mask = DP83867_LED_POLARITY(index);
 	/* Default active high */
-	u16 polarity = DP83867_LED_POLARITY(index);
+	u16 polarity = mask;
 	u32 mode;
 
 	for_each_set_bit(mode, &modes, __PHY_LED_MODES_NUM) {
@@ -1154,8 +1167,11 @@ static int dp83867_led_polarity_set(struct phy_device *phydev, int index,
 			return -EINVAL;
 		}
 	}
-	return phy_modify(phydev, DP83867_LEDCR2,
-			  DP83867_LED_POLARITY(index), polarity);
+
+	dp83867->led_polarity_mask |= mask;
+	dp83867->led_polarity = (dp83867->led_polarity & ~mask) | polarity;
+
+	return phy_modify(phydev, DP83867_LEDCR2, mask, polarity);
 }
 
 static unsigned int dp83867_inband_caps(struct phy_device *phydev,
