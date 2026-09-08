@@ -1864,13 +1864,15 @@ static int mpam_discovery_cpu_online(unsigned int cpu)
 			continue;
 
 		mutex_lock(&msc->probe_lock);
-		if (!msc->probed)
+		if (!msc->probed) {
 			err = mpam_msc_hw_probe(msc);
+			if (!err)
+				new_device_probed = true;
+		}
 		mutex_unlock(&msc->probe_lock);
 
 		if (err)
 			break;
-		new_device_probed = true;
 	}
 
 	if (new_device_probed && !err)
