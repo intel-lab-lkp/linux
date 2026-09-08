@@ -189,7 +189,8 @@ def _setup_queue_count(cfg, num_queues):
 
 
 def _run_gro_bin(cfg, test_name, protocol=None, num_flows=None,
-                 order_check=False, verbose=False, fail=False):
+                 order_check=False, verbose=False, fail=False,
+                 common_args=None):
     """Run gro binary with given test and return the process result."""
     if not hasattr(cfg, "bin_remote"):
         cfg.bin_local = cfg.net_lib_dir / "gro"
@@ -217,6 +218,8 @@ def _run_gro_bin(cfg, test_name, protocol=None, num_flows=None,
         base_args.append("--order-check")
     if verbose:
         base_args.append("--verbose")
+    if common_args:
+        base_args += common_args
 
     args = " ".join(base_args)
 
@@ -341,8 +344,11 @@ def _gro_variants():
                 yield protocol, test_name
 
 
-def run_test(cfg, mode, protocol, test_name):
-    """Run a single GRO test with retries."""
+def run_test(cfg, mode, protocol, test_name, common_args=None):
+    """Run a single GRO test with retries.
+
+    common_args are extra arguments passed to both gro sender and receiver.
+    """
 
     ipver = "6" if protocol[-1] == "6" else "4"
     cfg.require_ipver(ipver)
@@ -356,7 +362,8 @@ def run_test(cfg, mode, protocol, test_name):
     for attempt in range(max_retries):
         fail_now = attempt >= max_retries - 1
         rx_proc = _run_gro_bin(cfg, test_name, protocol=protocol,
-                               verbose=True, fail=fail_now)
+                               verbose=True, fail=fail_now,
+                               common_args=common_args)
 
         if rx_proc.ret == 0:
             return

@@ -13,6 +13,20 @@ else
 $(warning excluding iouring tests, liburing not installed or too old)
 endif
 
+# psp_gro.py uses the gro binary in PSP mode, which requires OpenSSL.
+PKG_CONFIG ?= pkg-config
+HAVE_OPENSSL := $(shell echo 'int main(void) { return 0; }' | \
+		  $(CC) -x c - -include openssl/evp.h \
+		  $(shell $(PKG_CONFIG) --cflags --libs libcrypto 2>/dev/null \
+			  || echo -lcrypto) \
+		  -o /dev/null >/dev/null 2>&1 && echo 1)
+
+ifeq ($(HAVE_OPENSSL),1)
+COND_PROGS += psp_gro.py
+else
+$(warning excluding PSP GRO tests, libcrypto not installed)
+endif
+
 TEST_GEN_FILES := \
 	$(COND_GEN_FILES) \
 # end of TEST_GEN_FILES
@@ -40,6 +54,7 @@ TEST_PROGS = \
 	nk_qlease.py \
 	ntuple.py \
 	pp_alloc_fail.py \
+	$(COND_PROGS) \
 	rss_api.py \
 	rss_ctx.py \
 	rss_drv.py \
@@ -64,6 +79,8 @@ TEST_FILES := \
 
 TEST_INCLUDES := \
 	$(wildcard lib/py/*.py ../lib/py/*.py) \
+	../gro_lib.py \
+	../psp_lib.py \
 	../../../net/lib.sh \
 	../../../net/forwarding/ipip_lib.sh \
 	../../../net/forwarding/lib.sh \
