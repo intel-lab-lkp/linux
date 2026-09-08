@@ -231,6 +231,13 @@ config RUSTC_HAS_FILE_AS_C_STR
 config RUSTC_HAS_SUSPICIOUS_RUNTIME_SYMBOL_DEFINITIONS
 	def_bool RUSTC_VERSION >= 109800
 
+# rustc's parallel front end: -j is the coming spelling, -Zthreads the current one
+config RUSTC_HAS_JOBS
+	def_bool $(rustc-option,-j8)
+
+config RUSTC_HAS_ZTHREADS
+	def_bool $(rustc-option,-Zthreads=8)
+
 config PAHOLE_VERSION
 	int
 	default "$(PAHOLE_VERSION)"
