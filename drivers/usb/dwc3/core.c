@@ -2739,6 +2739,18 @@ int dwc3_runtime_resume(struct dwc3 *dwc)
 		}
 		break;
 	case DWC3_GCTL_PRTCAP_HOST:
+		/*
+		 * Only the xHCI child's resume re-arms root hub polling, which
+		 * is what rediscovers a device plugged in while suspended.
+		 * Runtime PM doesn't resume children, so request it here.
+		 * Keep it asynchronous to avoid waiting for the parent's resume
+		 * callback to finish from inside it. Glue drivers may also
+		 * resume xHCI directly, but runtime PM will serialize those
+		 * requests and skips an already-active device.
+		 */
+		if (dwc->xhci)
+			pm_request_resume(&dwc->xhci->dev);
+		break;
 	default:
 		/* do nothing */
 		break;
