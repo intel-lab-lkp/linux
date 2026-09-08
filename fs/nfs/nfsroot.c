@@ -144,7 +144,7 @@ static int __init nfs_root_setup(char *line)
 		size_t n = strlen(line) + sizeof(NFS_ROOT) - 1;
 		if (n >= sizeof(nfs_root_parms))
 			line[sizeof(nfs_root_parms) - sizeof(NFS_ROOT) - 2] = '\0';
-		sprintf(nfs_root_parms, NFS_ROOT, line);
+		snprintf(nfs_root_parms, sizeof(nfs_root_parms), NFS_ROOT, line);
 	}
 
 	/*
