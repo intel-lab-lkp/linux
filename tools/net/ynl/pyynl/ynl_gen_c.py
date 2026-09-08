@@ -3449,7 +3449,12 @@ def find_kernel_root(full_path):
     sub_path = ''
     while True:
         sub_path = os.path.join(os.path.basename(full_path), sub_path)
-        full_path = os.path.dirname(full_path)
+        parent = os.path.dirname(full_path)
+        if parent == full_path:
+            # Reached the filesystem root without finding a kernel tree, fall
+            # back to the path given.
+            return None, sub_path[:-1]
+        full_path = parent
         maintainers = os.path.join(full_path, "MAINTAINERS")
         if os.path.exists(maintainers):
             return full_path, sub_path[:-1]
