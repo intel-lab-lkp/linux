@@ -465,7 +465,6 @@ static irqreturn_t sata_dwc_isr(int irq, void *dev_instance)
 	int handled, port = 0;
 	uint intpr, sactive, sactive2, tag_mask;
 	struct sata_dwc_device_port *hsdevp;
-	hsdev->sactive_issued = 0;
 
 	spin_lock_irqsave(&host->lock, flags);
 
@@ -517,8 +516,11 @@ static irqreturn_t sata_dwc_isr(int irq, void *dev_instance)
 	sata_dwc_scr_read(&ap->link, SCR_ACTIVE, &sactive);
 	tag_mask = (hsdev->sactive_issued | sactive) ^ sactive;
 
-	/* If no sactive issued and tag_mask is zero then this is not NCQ */
-	if (hsdev->sactive_issued == 0 && tag_mask == 0) {
+	/*
+	 * If tag_mask is zero and the active command is not NCQ this is a
+	 * non-NCQ completion.
+	 */
+	if (tag_mask == 0) {
 		if (ap->link.active_tag == ATA_TAG_POISON)
 			tag = 0;
 		else
@@ -530,6 +532,12 @@ static irqreturn_t sata_dwc_isr(int irq, void *dev_instance)
 			dev_err(ap->dev,
 				"%s interrupt with no active qc qc=%p\n",
 				__func__, qc);
+			ap->ops->sff_check_status(ap);
+			handled = 1;
+			goto DONE;
+		}
+		if (ata_is_ncq(qc->tf.protocol)) {
+			/* NCQ commands still in flight; no tag completed. */
 			ap->ops->sff_check_status(ap);
 			handled = 1;
 			goto DONE;
@@ -612,9 +620,9 @@ DRVSTILLBUSY:
 		tag_mask &= ~(1U << tag);
 		qc = ata_qc_from_tag(ap, tag);
 		if (unlikely(!qc)) {
-			dev_err(ap->dev, "failed to get qc");
-			handled = 1;
-			goto DONE;
+			dev_err(ap->dev, "stale tag %d in NCQ completion",
+				tag);
+			continue;
 		}
 
 		/* To be picked up by completion functions */
@@ -1043,6 +1051,8 @@ static int sata_dwc_hardreset(struct ata_link *link, unsigned int *class,
 	int ret;
 
 	ret = sata_sff_hardreset(link, class, deadline);
+
+	hsdev->sactive_issued = 0;
 
 	sata_dwc_enable_interrupts(hsdev);
 
