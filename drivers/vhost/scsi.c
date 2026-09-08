@@ -2008,6 +2008,40 @@ out:
 	return -ENOMEM;
 }
 
+/* Callers must hold dev mutex. */
+static int vhost_scsi_activate_vqs(struct vhost_scsi *vs)
+{
+	struct vhost_virtqueue *vq;
+	int i, ret = 0;
+
+	if (!vs->vs_tpg)
+		return 0;
+
+	for (i = VHOST_SCSI_VQ_IO; i < vs->dev.nvqs; i++) {
+		vq = &vs->vqs[i].vq;
+		mutex_lock(&vq->mutex);
+		if (vhost_vq_get_backend(vq) || !vhost_vq_is_setup(vq))
+			goto unlock;
+
+		ret = vhost_scsi_setup_vq_cmds(vq, vq->num);
+		if (ret)
+			goto unlock;
+
+		vhost_vq_set_backend(vq, vs->vs_tpg);
+		ret = vhost_vq_init_access(vq);
+		if (ret) {
+			vhost_vq_set_backend(vq, NULL);
+			vhost_scsi_destroy_vq_cmds(vq);
+		}
+unlock:
+		mutex_unlock(&vq->mutex);
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
 /*
  * Called from vhost_scsi_ioctl() context to walk the list of available
  * vhost_scsi_tpg with an active struct vhost_scsi_nexus
@@ -2105,6 +2139,9 @@ vhost_scsi_set_endpoint(struct vhost_scsi *vs,
 
 		for (i = 0; i < vs->dev.nvqs; i++) {
 			vq = &vs->vqs[i].vq;
+			if (i >= VHOST_SCSI_VQ_IO && !vs->vqs[i].scsi_cmds)
+				continue;
+
 			mutex_lock(&vq->mutex);
 			vhost_vq_set_backend(vq, vs_tpg);
 			vhost_vq_init_access(vq);
@@ -2466,10 +2503,13 @@ vhost_scsi_ioctl(struct file *f,
 	default:
 		mutex_lock(&vs->dev.mutex);
 		r = vhost_dev_ioctl(&vs->dev, ioctl, argp);
-		if (r == -ENOIOCTLCMD)
+		if (r == -ENOIOCTLCMD) {
 			r = vhost_vring_ioctl(&vs->dev, ioctl, argp);
-		else
+			if (!r && ioctl == VHOST_SET_VRING_ADDR)
+				r = vhost_scsi_activate_vqs(vs);
+		} else {
 			vhost_scsi_flush(vs);
+		}
 		mutex_unlock(&vs->dev.mutex);
 		return r;
 	}
