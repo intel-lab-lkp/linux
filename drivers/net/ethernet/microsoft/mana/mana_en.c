@@ -90,6 +90,17 @@ static int mana_open(struct net_device *ndev)
 	smp_wmb();
 
 	netif_tx_wake_all_queues(ndev);
+
+	/* Undo a forced carrier-off unless a disconnect is pending behind RTNL.
+	 */
+	if (apc->carrier_forced_off) {
+		u32 ev = READ_ONCE(apc->ac->link_event);
+
+		apc->carrier_forced_off = false;
+		if (ev != HWC_DATA_HW_LINK_DISCONNECT)
+			netif_carrier_on(ndev);
+	}
+
 	netdev_dbg(ndev, "%s successful\n", __func__);
 	return 0;
 }
@@ -106,6 +117,7 @@ static int mana_close(struct net_device *ndev)
 
 static void mana_link_state_handle(struct work_struct *w)
 {
+	struct mana_port_context *apc;
 	struct mana_context *ac;
 	struct net_device *ndev;
 	u32 link_event;
@@ -130,6 +142,9 @@ static void mana_link_state_handle(struct work_struct *w)
 		ndev = ac->ports[i];
 		if (!ndev)
 			continue;
+
+		apc = netdev_priv(ndev);
+		apc->carrier_forced_off = false;
 
 		if (link_up) {
 			netif_carrier_on(ndev);
@@ -312,8 +327,8 @@ static void mana_per_port_queue_reset_work_handler(struct work_struct *work)
 
 	rtnl_lock();
 
-	/* Block RDMA from grabbing the vport during the detach/attach
-	 * window, same as mana_set_channels().
+	/* Exclude RDMA across detach/attach; RTNL serializes channel_changing
+	 * writers.
 	 */
 	mutex_lock(&apc->vport_mutex);
 	apc->channel_changing = true;
@@ -365,6 +380,15 @@ netdev_tx_t mana_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 
 	if (unlikely(!apc->port_is_up))
 		goto tx_drop;
+
+	/* Pair with mana_publish_qset()'s pre-gate smp_wmb(): observe queue
+	 * fields after reading port_is_up.
+	 */
+	smp_rmb();
+
+	/* Retiring RXQs may use indices beyond the live queue count. */
+	if (unlikely(txq_idx >= apc->num_queues))
+		goto tx_drop_count;
 
 	if (skb_cow_head(skb, MANA_HEADROOM))
 		goto tx_drop_count;
@@ -1045,6 +1069,7 @@ static void mana_cleanup_indir_table(struct mana_port_context *apc)
 
 static int mana_init_port_context(struct mana_port_context *apc)
 {
+	kfree(apc->rxqs);
 	apc->rxqs = kzalloc_objs(struct mana_rxq *, apc->num_queues);
 
 	return !apc->rxqs ? -ENOMEM : 0;
@@ -2077,6 +2102,7 @@ static void mana_poll_tx_cq(struct mana_cq *cq)
 	/* Ensure checking txq_stopped before apc->port_is_up. */
 	smp_rmb();
 
+	/* Order the stopped-state read before the retiring read. */
 	if (txq_stopped && !READ_ONCE(txq->retiring) && apc->port_is_up &&
 	    avail_space >= MAX_TX_WQE_SIZE) {
 		netif_tx_wake_queue(net_txq);
@@ -3993,9 +4019,213 @@ out_err:
 	return err;
 }
 
+/* Destroy caller-owned CQs before closing this dead-end port: closing also
+ * frees the shared EQ pool. Requires RTNL.
+ */
+void mana_publish_close_if_needed(struct mana_port_context *apc)
+{
+	ASSERT_RTNL();
+
+	if (!apc->publish_dead_end)
+		return;
+
+	apc->publish_dead_end = false;
+
+	if (mana_dealloc_queues(apc->ndev))
+		netdev_err(apc->ndev,
+			   "failed to close the port after a failed rollback\n");
+}
+
+/* Carried-over queues may still have full rings. */
+static void mana_start_txqs(struct mana_port_context *apc)
+{
+	struct net_device *ndev = apc->ndev;
+	unsigned int i;
+
+	if (!apc->tx_qp)
+		return;
+
+	/* Order port_is_up=true before ring reads to avoid a missed wakeup.
+	 * Pair with mana_poll_tx_cq()'s full barrier after its tail update.
+	 */
+	smp_mb();
+
+	for (i = 0; i < apc->num_queues; i++) {
+		if (!apc->tx_qp[i])
+			continue;
+
+		if (mana_can_tx(apc->tx_qp[i]->txq.gdma_sq))
+			netif_tx_wake_queue(netdev_get_tx_queue(ndev, i));
+	}
+}
+
+/* Retiring completions must not wake replacement queues. Mark the leaving set
+ * before unmarking the incoming set.
+ */
+static void mana_qset_set_retiring(struct mana_qset *qset, bool retiring)
+{
+	unsigned int q;
+
+	if (!qset->tx_qp)
+		return;
+
+	for (q = 0; q < qset->num_queues; q++) {
+		if (qset->tx_qp[q])
+			WRITE_ONCE(qset->tx_qp[q]->txq.retiring, retiring);
+	}
+}
+
+/* Leave TX stopped and request RX disable; steering may be unrecoverable. */
+static void mana_publish_give_up(struct mana_port_context *apc)
+{
+	int err;
+
+	apc->rss_state = TRI_STATE_FALSE;
+
+	err = mana_disable_vport_rx(apc);
+	if (err && mana_en_need_log(apc, err))
+		netdev_err(apc->ndev, "failed to disable vPort RX: %d\n", err);
+
+	apc->carrier_forced_off = netif_carrier_ok(apc->ndev);
+	netif_carrier_off(apc->ndev);
+	apc->publish_dead_end = true;
+}
+
+/* Keep the RX count high until retiring RQs stop delivering their indices. */
+static int mana_raise_real_num_rx(struct net_device *ndev, unsigned int count)
+{
+	if (count <= ndev->real_num_rx_queues)
+		return 0;
+
+	return netif_set_real_num_rx_queues(ndev, count);
+}
+
+/* Publish under RTNL with TX gated. An error restores old pointers, not
+ * necessarily service. Free only owned queues.
+ */
+int mana_publish_qset(struct mana_port_context *apc, struct mana_qset *newq,
+		      struct mana_qset *out_old)
+{
+	struct net_device *ndev = apc->ndev;
+	int err;
+
+	ASSERT_RTNL();
+
+	/* Close the XDP gate before stopping TX queues. Pair with
+	 * mana_poll_tx_cq()'s smp_rmb() to prevent mid-swap wakeups.
+	 */
+	WRITE_ONCE(apc->port_is_up, false);
+
+	/* Ensure port state updated before txq state */
+	smp_wmb();
+
+	netif_tx_disable(ndev);
+
+	mana_qset_snapshot(apc, out_old);
+
+	/* Mark before the grace period so old completions cannot wake the
+	 * replacement's stopped queue.
+	 */
+	mana_qset_set_retiring(out_old, true);
+
+	/* Drain TX/XDP readers past the gate and polls missing retiring. */
+	synchronize_net();
+
+	mana_qset_set_retiring(newq, false);
+
+	mana_qset_install(apc, newq);
+	apc->rss_state = apc->num_queues > 1 ? TRI_STATE_TRUE : TRI_STATE_FALSE;
+
+	err = netif_set_real_num_tx_queues(ndev, apc->num_queues);
+	if (err)
+		goto rollback;
+
+	err = mana_raise_real_num_rx(ndev, apc->num_queues);
+	if (err)
+		goto rollback;
+
+	/* Install XDP and per-RXQ references before steering reaches new
+	 * queues.
+	 */
+	mana_chn_setxdp(apc, mana_xdp_get(apc));
+
+	err = mana_config_rss(apc, TRI_STATE_TRUE, true, true);
+	if (err)
+		goto rollback;
+
+	/* Publish fields before opening the gate; pair with TX/XDP read
+	 * barriers. The post-gate full barrier cannot replace this.
+	 */
+	smp_wmb();
+
+	WRITE_ONCE(apc->port_is_up, true);
+	mana_start_txqs(apc);
+
+	return 0;
+
+rollback:
+	netdev_err(ndev, "%s failed: %d, restoring previous queue set\n",
+		   __func__, err);
+
+	mana_qset_set_retiring(newq, true);
+	mana_qset_set_retiring(out_old, false);
+
+	mana_qset_install(apc, out_old);
+	apc->rss_state = apc->num_queues > 1 ? TRI_STATE_TRUE : TRI_STATE_FALSE;
+
+	if (netif_set_real_num_tx_queues(ndev, apc->num_queues) ||
+	    mana_raise_real_num_rx(ndev, apc->num_queues)) {
+		/* Inconsistent restored queue counts prohibit TX; leave the
+		 * port stopped.
+		 */
+		netdev_err(ndev, "failed to restore queue counts, closing the port\n");
+		mana_publish_give_up(apc);
+		return err;
+	}
+
+	if (mana_config_rss(apc, TRI_STATE_TRUE, true, true)) {
+		/* Do not reopen TX with mismatched steering; RX disable is
+		 * best-effort.
+		 */
+		netdev_err(ndev, "failed to restore RSS steering, closing the port\n");
+		mana_publish_give_up(apc);
+		return err;
+	}
+
+	/* Publish restored fields before reopening the gate, as on success. */
+	smp_wmb();
+
+	WRITE_ONCE(apc->port_is_up, true);
+	mana_start_txqs(apc);
+
+	return err;
+}
+
+/* Create missing debugfs nodes once retiring names are gone. */
+static void mana_qset_debugfs_publish(struct mana_port_context *apc)
+{
+	unsigned int i;
+
+	ASSERT_RTNL();
+
+	if (IS_ERR_OR_NULL(apc->mana_port_debugfs))
+		return;
+
+	for (i = 0; i < apc->num_queues; i++) {
+		if (apc->tx_qp && apc->tx_qp[i] &&
+		    IS_ERR_OR_NULL(apc->tx_qp[i]->mana_tx_debugfs))
+			mana_create_txq_debugfs(apc, i);
+
+		if (apc->rxqs && apc->rxqs[i] &&
+		    IS_ERR_OR_NULL(apc->rxqs[i]->mana_rx_debugfs))
+			mana_create_rxq_debugfs(apc, i);
+	}
+}
+
 /* Under RTNL, free only queues no longer shared with the installed set. */
 void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset)
 {
+	struct mana_port_context *apc = netdev_priv(scratch->ndev);
 	struct bpf_prog *retiring_prog;
 	unsigned int retiring_queues;
 
@@ -4020,7 +4250,9 @@ void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset)
 
 	mana_qset_install(scratch, qset);
 
-	/* Keep retiring RXQs' XDP programs and references until RX teardown. */
+	/* Keep retiring RXQs' XDP programs and references until RX teardown.
+	 * Read the program from the queues, not queue-set metadata.
+	 */
 	retiring_prog = mana_chn_xdp_peek(scratch);
 	retiring_queues = scratch->num_queues;
 
@@ -4029,7 +4261,6 @@ void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset)
 		/* FLR also destroys the HWC; rebuilding ports is best-effort.
 		 * This path does not reinitialize the device.
 		 */
-		struct mana_port_context *apc = netdev_priv(scratch->ndev);
 		struct mana_context *ac = apc->ac;
 		struct mana_port_context *sib;
 		unsigned int i;
@@ -4059,6 +4290,13 @@ void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset)
 	scratch->rxqs = NULL;
 
 	memset(qset, 0, sizeof(*qset));
+
+	/* Retiring RQs can no longer deliver indices beyond the live queue
+	 * count.
+	 */
+	netif_set_real_num_rx_queues(apc->ndev, apc->num_queues);
+
+	mana_qset_debugfs_publish(apc);
 }
 
 int mana_detach(struct net_device *ndev, bool from_close)
