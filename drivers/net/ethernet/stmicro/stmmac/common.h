@@ -634,6 +634,7 @@ struct mac_device_info {
 	bool vlan_fail_q_en;
 	u8 vlan_fail_q;
 	bool hw_vlan_en;
+	bool hw_svlan_en;
 	bool reverse_sgmii_enable;
 
 	/* This spinlock protects read-modify-write of the interrupt
