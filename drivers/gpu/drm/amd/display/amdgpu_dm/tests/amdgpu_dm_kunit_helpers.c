@@ -7,6 +7,7 @@
 
 #include <kunit/test.h>
 #include <linux/module.h>
+#include <drm/drm_backlight.h>
 #include <drm/drm_kunit_helpers.h>
 #include <drm/drm_managed.h>
 
@@ -32,7 +33,11 @@ struct amdgpu_device *dm_kunit_alloc_adev(struct kunit *test)
 						   DRIVER_MODESET | DRIVER_ATOMIC);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, drm);
 
-	return drm_to_adev(drm);
+	struct amdgpu_device *adev = drm_to_adev(drm);
+
+	mutex_init(&adev->dm.dc_lock);
+
+	return adev;
 }
 EXPORT_SYMBOL(dm_kunit_alloc_adev);
 
@@ -172,6 +177,7 @@ struct amdgpu_dm_connector *dm_kunit_alloc_connector(struct kunit *test,
 	if (adev)
 		aconnector->base.dev = &adev->ddev;
 	aconnector->dc_link = link;
+	drm_backlight_connector_init(&aconnector->base);
 
 	return aconnector;
 }
