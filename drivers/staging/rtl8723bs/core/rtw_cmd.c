@@ -391,7 +391,8 @@ int rtw_cmd_thread(void *context)
 	while (1) {
 		if (wait_for_completion_interruptible(&pcmdpriv->cmd_queue_comp)) {
 			netdev_dbg(padapter->pnetdev,
-				   FUNC_ADPT_FMT " wait_for_completion_interruptible(&pcmdpriv->cmd_queue_comp) return != 0, break\n",
+				   FUNC_ADPT_FMT " wait_for_completion_interruptible"
+				   "(&pcmdpriv->cmd_queue_comp) return != 0, break\n",
 				   FUNC_ADPT_ARG(padapter));
 			break;
 		}
@@ -482,7 +483,8 @@ post_process:
 				rtw_free_cmd_obj(pcmd);
 			} else {
 				/* todo: !!! fill rsp_buf to pcmd->rsp if (pcmd->rsp!= NULL) */
-				pcmd_callback(pcmd->padapter, pcmd);/* need consider that free cmd_obj in rtw_cmd_callback */
+				/* need consider that free cmd_obj in rtw_cmd_callback */
+				pcmd_callback(pcmd->padapter, pcmd);
 			}
 		} else {
 			rtw_free_cmd_obj(pcmd);
@@ -555,7 +557,8 @@ u8 rtw_sitesurvey_cmd(struct adapter  *padapter, struct ndis_802_11_ssid *ssid, 
 
 		for (i = 0; i < ssid_num && i < RTW_SSID_SCAN_AMOUNT; i++) {
 			if (ssid[i].ssid_length) {
-				memcpy(&survey_para->ssid[i], &ssid[i], sizeof(struct ndis_802_11_ssid));
+				memcpy(&survey_para->ssid[i], &ssid[i],
+				       sizeof(struct ndis_802_11_ssid));
 				survey_para->ssid_num++;
 			}
 		}
@@ -567,7 +570,8 @@ u8 rtw_sitesurvey_cmd(struct adapter  *padapter, struct ndis_802_11_ssid *ssid, 
 
 		for (i = 0; i < ch_num && i < RTW_CHANNEL_SCAN_AMOUNT; i++) {
 			if (ch[i].hw_value && !(ch[i].flags & RTW_IEEE80211_CHAN_DISABLED)) {
-				memcpy(&survey_para->ch[i], &ch[i], sizeof(struct rtw_ieee80211_channel));
+				memcpy(&survey_para->ch[i], &ch[i],
+				       sizeof(struct rtw_ieee80211_channel));
 				survey_para->ch_num++;
 			}
 		}
