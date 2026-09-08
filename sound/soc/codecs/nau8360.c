@@ -719,6 +719,11 @@ static int nau8360_dac_mux_put_enum(struct snd_kcontrol *kcontrol,
 		return ret;
 	}
 
+	if (item[0] == NAU8360_DAC_SRC_DSP && !nau8360->load_fw_done) {
+		dev_warn(nau8360->dev, "Cannot enable DSP: Firmware not ready or disabled\n");
+		return ret;
+	}
+
 	mutex_lock(&nau8360->lock);
 
 	ret = snd_soc_dapm_put_enum_double(kcontrol, ucontrol);
