@@ -21,6 +21,7 @@
 #ifndef _LINUX_RTC_DS1685_H_
 #define _LINUX_RTC_DS1685_H_
 
+#include <linux/annotate.h>
 #include <linux/rtc.h>
 #include <linux/platform_device.h>
 #include <linux/workqueue.h>
@@ -362,5 +363,6 @@ struct ds1685_rtc_platform_data {
  */
 extern void __noreturn
 ds1685_rtc_poweroff(struct platform_device *pdev);
+ANNOTATE_EXPORTED_NORETURN(ds1685_rtc_poweroff);
 
 #endif /* _LINUX_RTC_DS1685_H_ */

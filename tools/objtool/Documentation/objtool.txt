@@ -330,7 +330,7 @@ the objtool maintainers.
    traces and want objtool to ignore it, see "Adding exceptions" below.
 
 
-3. file.o: warning: objtool: foo+0x48c: bar() missing __noreturn in .c/.h or NORETURN() in noreturns.h
+3. file.o: warning: objtool: foo+0x48c: bar() is missing __noreturn in .c/.h
 
    The call from foo() to bar() doesn't return, but bar() is incorrectly
    annotated.  A noreturn function must be marked __noreturn in both its
